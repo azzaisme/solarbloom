@@ -4,7 +4,7 @@ Moved out of the `azzaisme/mouthwash-brigade` repo (where it started in a `solar
 
 # Round 2 (plan: `docs/ROUND_2_PLAN.md`)
 
-Round 1 checkpoint: tag `round-1` (commit `3b79a23`). Round 1 saves migrate to the v2 format automatically.
+Round 1 checkpoint: commit `3b79a23` (tag it with `git tag round-1 3b79a23 && git push origin round-1` if you want a named marker). Round 1 saves migrate to the v2 format automatically.
 
 | | Milestone | Status |
 |---|---|---|
