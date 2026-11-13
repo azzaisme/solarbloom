@@ -187,7 +187,10 @@ export class Game {
       if (this.sim.hood.isBuilt(l.id)) this.scene.buildBridgeDeck(l.id, true);
       else this.scene.showScaffold(l.id, this.sim.hood.linkAvailable(l.id));
     }
-    if (state.progression.neighbourhoodBloomAt >= 0) this.scene.showDistrict(true);
+    if (state.progression.neighbourhoodBloomAt >= 0) {
+      this.scene.showDistrict(true);
+      this.scene.bloomFacades(true);
+    }
 
     this.wireEvents();
     new InputController(canvas, {
@@ -234,6 +237,9 @@ export class Game {
     this.tileFx.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
     this.cat.softSparkle = rm || s.lowVfx;
+    // Quality: lighter shadows with fewer effects.
+    const sun = this.scene.sun.light;
+    if (sun) sun.shadowResolution = s.lowVfx ? 1024 : 2048;
     document.body.classList.toggle('reduced', rm);
     this.hud.settings = s;
     if (!s.debug) this.hud.setDebug(null);
@@ -1207,17 +1213,103 @@ export class Game {
   }
 
   private onNeighbourhoodBloom(restored: string[]) {
-    for (const id of restored) {
-      const t = this.sim.grid.byTileId(id);
-      if (t) this.grid.refresh(t, false);
-    }
-    this.scene.showDistrict(false);
-    this.save();
+    this.save(); // claimed before any presentation: a reload can never pay twice
+    this.runBloomSequence(restored, false);
   }
 
   private playNeighbourhoodBloom(replay: boolean) {
     if (this.cinematic) return;
     if (!replay) this.sim.hood.neighbourhoodBloom();
+    else if (this.sim.state.progression.neighbourhoodBloomAt >= 0) this.runBloomSequence([], true);
+  }
+
+  /**
+   * The climax: cores gather energy, relays light the path across the bridges, green waves roll over all
+   * three rooftops, facades turn white, resources shower in and a new district rises on the horizon.
+   * Skippable (Skip ⏭ fast-forwards every beat). A replay changes nothing in the game.
+   */
+  private runBloomSequence(restored: string[], replay: boolean) {
+    const s = this.sim;
+    const T = TUNING.neighbourhood.bloom.seconds;
+    const at = (delay: number, fn: () => void) => this.tweens.add(0.01, () => {}, { delay, done: fn });
+    this.cinematic = true;
+    this.select(undefined);
+    this.overlays.hideFrame();
+    this.overlays.hideGhost();
+    this.hud.hideTip();
+    this.hud.cinematic(true, replay ? 'The Neighbourhood Bloom' : 'The Neighbourhood Blooms!');
+    this.sfx.fanfare();
+    // Frame the whole neighbourhood.
+    const roofs = s.state.rooftops;
+    const cx = roofs.reduce((a, r) => a + r.origin[0] + r.width / 2, 0) / roofs.length;
+    const cz = roofs.reduce((a, r) => a + r.origin[2] + r.depth / 2, 0) / roofs.length;
+    this.camera.focus(cx, 0.3, cz, this.camera.minZoom + 0.04, 2.2);
+    // 1. Energy gathers at each rooftop's core.
+    const coreIds = ['r1', 'r2', 'r3'];
+    coreIds.forEach((id, i) => {
+      const w = this.machines.coreWorld(id);
+      if (!w) return;
+      const p = new pc.Vec3(w[0], w[1], w[2]);
+      for (let k = 0; k < 3; k++)
+        at(0.4 + i * 0.25 + k * 0.45, () => {
+          this.vfx.ring(new pc.Vec3(p.x, p.y - 1.4, p.z), k % 2 ? PALETTE.gold : PALETTE.coreGlow, 2.4 - k * 0.6, 0.6);
+          this.vfx.burst(p, 10, { up: 2.5, size: 0.07 });
+        });
+    });
+    // 2. Each relay lights and a pulse runs over every bridge.
+    at(2.2, () => {
+      for (const br of this.scene.bridges.values()) {
+        if (!br.built) continue;
+        this.relayFiringUntil.set(br.link.id, this.clock + 6);
+        this.presentRelay(br.link.id, br.link.from, 1.2);
+      }
+      this.sfx.chainEnd(8);
+    });
+    // 3. Green waves roll outward from each core across its rooftop.
+    const waveStart = 3.4;
+    for (const r of roofs) {
+      const core = s.state.machines.find((m) => m.type === 'core' && m.roofId === r.id);
+      const ox = core ? core.x + 1 : r.width / 2;
+      const oz = core ? core.z + 1 : r.depth / 2;
+      for (const t of r.tiles) {
+        if (t.blocked || t.occupantId) continue;
+        const d = Math.hypot(t.x + 0.5 - ox, t.z + 0.5 - oz);
+        const fresh = restored.includes(t.id);
+        at(waveStart + Math.min(3.6, d * 0.35), () => {
+          if (fresh) this.grid.refresh(t, true);
+          this.tileFx.flash(t, fresh ? '#38d94a' : '#b6ffe0', fresh ? 0.6 : 0.35, 0.9);
+          if (fresh && t.variant % 3 === 0) this.vfx.burst(this.tileVec(t), 4, { up: 1.6, size: 0.05 });
+        });
+      }
+    }
+    // 4. Facades turn white, vines and gardens unfold everywhere.
+    at(4.8, () => {
+      if (!replay) this.scene.bloomFacades(false);
+      for (const id of ['r2', 'r3']) this.scene.wakeRoof(id, false);
+    });
+    // 5. Final bloom and the reward shower.
+    at(7.6, () => {
+      const c = new pc.Vec3(cx, 0.4, cz);
+      for (let k = 0; k < 4; k++) at(k * 0.2, () => this.vfx.ring(c, k % 2 ? PALETTE.gold : PALETTE.coreGlow, 6 + k * 3, 1.2));
+      this.vfx.burst(new pc.Vec3(cx, 2, cz), 60, { up: 5, speed: 3, size: 0.09, life: 1.6 });
+      this.camera.shake(0.12);
+      this.sfx.fanfare();
+      if (!replay) {
+        const r = TUNING.neighbourhood.bloom.reward;
+        (['biomass', 'water', 'energy'] as const).forEach((k, i) => at(i * 0.15, () => this.flyGain(k, r[k])));
+      }
+    });
+    // 6. Something new on the horizon.
+    at(8.6, () => this.scene.showDistrict(false));
+    this.cinematicEnd = () => {
+      if (!this.cinematic) return;
+      this.cinematic = false;
+      this.hud.cinematic(false);
+      if (!replay)
+        this.hud.toast(`🌸 The neighbourhood lives!<small>Storage +${Math.round(TUNING.neighbourhood.bloom.capBonus * 100)}% · biomass ×${TUNING.neighbourhood.bloom.biomassMult} everywhere. A new district glows on the horizon…</small>`, 'gold', 7);
+      this.save();
+    };
+    at(T, () => this.cinematicEnd?.());
   }
 
   private selectedRelay?: string;

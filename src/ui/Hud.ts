@@ -381,7 +381,7 @@ export class Hud {
       const avg = s.chains ? (s.chainEffects / s.chains).toFixed(1) : '—';
       $(this.root, '#statsBox').innerHTML =
         `Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Avg: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b> 🐱 · Play time: <b>${Math.floor(this.sim.time / 60)}m</b>` +
-        `<details style="margin-top:6px"><summary>Playtest timings</summary>First upgrade ${t('upgrade')} · ×5 chain ${t('chain5')} · ×10 chain ${t('chain10')}<br>Drone Hub ${t('droneHub')} · first cat ${t('cat')} · Mother Tree ${t('motherTree')} (pulse ${t('treePulse')}) · Core ${t('core')}<br>Time with nothing to do: ${Math.round(s.stuckSeconds)} s</details>`;
+        `<details style="margin-top:6px"><summary>Playtest timings</summary>First upgrade ${t('upgrade')} · ×5 chain ${t('chain5')} · ×10 chain ${t('chain10')}<br>Drone Hub ${t('droneHub')} · first cat ${t('cat')} · Mother Tree ${t('motherTree')} (pulse ${t('treePulse')}) · Core ${t('core')}<br>Skybridge ${t('bridge:seed-reservoir')} · first cross-roof chain ${t('remoteChain')} · Cistern ${t('core:r2')} · Canopy Bridge ${t('bridge:seed-canopy')} · Elder Tree ${t('core:r3')} · Neighbourhood Bloom ${t('neighbourhoodBloom')}<br>Biggest chain ×${s.maxCombo} · cats found ${s.catsFound}<br>Time with nothing to do: ${Math.round(s.stuckSeconds)} s</details>`;
       this.root.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => (inp.checked = this.settings[inp.dataset.set as keyof Settings]));
     }
   }

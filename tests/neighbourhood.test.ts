@@ -108,3 +108,55 @@ describe('first expansion: the Skybridge Relay', () => {
     expect(sim.production.rates().water).toBeGreaterThan(TUNING.rainBarrelRate + TUNING.neighbourhood.reservoir.cisternWater - 1e-9);
   });
 });
+
+describe('the Neighbourhood Bloom', () => {
+  const ready = () => {
+    const sim = makeSim(17);
+    rich(sim);
+    awakenSeed(sim);
+    sim.hood.buildLink('seed-reservoir');
+    sim.state.progression.cores.r2 = true;
+    sim.hood.buildLink('seed-canopy');
+    return sim;
+  };
+
+  it('is only available once all three Cores are awake and both bridges are built', () => {
+    const sim = ready();
+    expect(sim.hood.bloomReady()).toBe(false);
+    expect(sim.hood.neighbourhoodBloom()).toBe(false);
+    sim.state.progression.cores.r3 = true;
+    expect(sim.hood.bloomReady()).toBe(true);
+    expect(sim.hood.objective().step).toBe('bloom');
+  });
+
+  it('fires once, pays once (even across a reload), and never touches the player’s machines', () => {
+    const sim = ready();
+    sim.state.progression.cores.r3 = true;
+    ground(sim, 'r2', 3, 3, 'restored');
+    sim.build.place('pollinator', 'r2', 3, 3);
+    ground(sim, 'r1', 5, 5, 'restored');
+    sim.build.place('solar', 'r1', 5, 5);
+    const machines = JSON.stringify(sim.state.machines.map((m) => [m.id, m.type, m.roofId, m.x, m.z]));
+    sim.state.resources.biomass = 0;
+    let fired = 0;
+    sim.bus.on('neighbourhood.bloom', () => fired++);
+    expect(sim.hood.neighbourhoodBloom()).toBe(true);
+    const got = sim.state.resources.biomass;
+    expect(got).toBeGreaterThan(0);
+    expect(sim.hood.neighbourhoodBloom()).toBe(false);
+    expect(sim.state.resources.biomass).toBe(got);
+    expect(fired).toBe(1);
+    expect(JSON.stringify(sim.state.machines.map((m) => [m.id, m.type, m.roofId, m.x, m.z]))).toBe(machines);
+    for (const r of sim.state.rooftops)
+      for (const t of r.tiles) {
+        if (t.blocked || t.occupantId) continue; // ground under machines is left exactly as the player built it
+        expect(t.ground).toBe('restored');
+      }
+    expect(sim.hood.objective().step).toBe('done');
+    const copy = new Sim(saver.deserialize(saver.serialize(sim.state))!);
+    expect(copy.hood.bloomReady()).toBe(false);
+    expect(copy.hood.neighbourhoodBloom()).toBe(false);
+    expect(copy.state.resources.biomass).toBe(got);
+    expect(copy.state.caps.biomass).toBeGreaterThanOrEqual(sim.state.caps.biomass);
+  });
+});

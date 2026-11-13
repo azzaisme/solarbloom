@@ -90,7 +90,7 @@ export class SceneBuilder {
     this.r1 = this.building(r1, true);
     const others = roofs.filter((r) => r.id !== 'r1');
     for (const r of others) {
-      this.building(r, false);
+      this.others.set(r.id, this.building(r, false));
       if (r.id === 'r2') this.dressReservoir(r);
       if (r.id === 'r3') this.dressCanopy(r);
     }
@@ -170,9 +170,10 @@ export class SceneBuilder {
     const cx = ox + w / 2;
     const cz = oz + d / 2;
     const g = group(this.world, `building-${roof.id}`);
-    const facadeMat = main ? uniqueMat(PALETTE.facadeGrey, { gloss: 0.2 }) : mat(PALETTE.facadeGrey, { gloss: 0.2 });
-    const windowMat = main ? uniqueMat(PALETTE.window, { gloss: 0.6 }) : mat(PALETTE.window, { gloss: 0.6 });
-    const parapetMat = main ? uniqueMat(PALETTE.parapet) : mat(PALETTE.parapet);
+    // Every building gets its own materials so each can turn white on its own schedule.
+    const facadeMat = uniqueMat(PALETTE.facadeGrey, { gloss: 0.2 });
+    const windowMat = uniqueMat(PALETTE.window, { gloss: 0.6 });
+    const parapetMat = uniqueMat(PALETTE.parapet);
     const rng = new R(main ? 11 : 23);
 
     // Deck & body. The main roof has an L-shaped service ledge behind the garden (back and left).
@@ -357,6 +358,27 @@ export class SceneBuilder {
     leafy.enabled = false;
     wake.push(leafy);
     this.roofWake.set(roof.id, wake);
+  }
+
+  private others = new Map<string, Restorable>();
+
+  /** Neighbourhood Bloom: the other buildings' facades turn clean white and their windows light up. */
+  bloomFacades(instant: boolean, delay = 0) {
+    for (const r of this.others.values()) {
+      const f0 = r.facadeMat.diffuse.clone();
+      const w0 = r.windowMat.diffuse.clone();
+      const p0 = r.parapetMat.diffuse.clone();
+      this.tweens.add(instant ? 0.001 : 1.8, (k) => {
+        r.facadeMat.diffuse = new pc.Color().lerp(f0, color(PALETTE.whiteWarm), k);
+        r.facadeMat.update();
+        r.parapetMat.diffuse = new pc.Color().lerp(p0, color(PALETTE.parapetClean), k);
+        r.parapetMat.update();
+        r.windowMat.diffuse = new pc.Color().lerp(w0, color(PALETTE.windowLit), k);
+        r.windowMat.emissive = new pc.Color().lerp(new pc.Color(0, 0, 0), color('#ffcf73'), k);
+        r.windowMat.emissiveIntensity = 0.8;
+        r.windowMat.update();
+      }, { delay: instant ? 0 : delay, ease: ease.inOutCubic });
+    }
   }
 
   /** A rooftop's own Core woke up: its dressing comes alive. */
