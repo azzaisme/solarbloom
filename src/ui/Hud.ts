@@ -1,9 +1,9 @@
 import { formatCost, KINDS } from '../core/Economy';
+import type { Cost } from '../core/types';
 import type { BuildableType, MachineData, ResourceKind } from '../core/types';
 import { BUILDABLE, MACHINES } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
-import { TUTORIAL } from '../gameplay/ProgressionSystem';
 
 export type Tool = 'inspect' | 'pulse' | BuildableType;
 
@@ -90,6 +90,7 @@ export class Hud {
       <div id="obj" class="panel">
         <h3 id="objTitle">Wake the Rooftop Core</h3>
         <div class="pct" id="objPct">0% restored</div>
+        <div class="next" id="objNext"></div>
         <div class="pbar"><i id="objBar" style="width:0%"></i></div>
         <ul id="objList"></ul>
         <button id="coreBtn">✨ Awaken the Core</button>
@@ -105,6 +106,16 @@ export class Hud {
       <div id="hotbar" class="panel">${slots}</div>
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
       <div id="toasts"></div>
+      <div id="intro" hidden><div class="panel card-intro">
+        <h2>🌱 Welcome to Solarbloom</h2>
+        <p>This rooftop is dead concrete. Bring it back to life.</p>
+        <ol>
+          <li><b>Tap a grey tile</b> to restore it. Each tap uses a little ⚡ energy and 💧 water, which refill on their own.</li>
+          <li><b>Green tiles grow 🌿 biomass.</b> Spend it on machines and upgrades. Tap a green tile again to grow flowers.</li>
+          <li><b>Goal:</b> wake the ancient Rooftop Core. The checklist is in the top-right corner.</li>
+        </ol>
+        <button id="introGo">Start restoring ✨</button>
+      </div></div>
       <div id="tip" class="panel"></div>
       <div id="fail"></div>
       <div id="upgrades" class="drawer panel"><h2>Upgrades <button aria-label="Close upgrades">×</button></h2><div id="upgList"></div></div>
@@ -162,6 +173,10 @@ export class Hud {
       }, 4100);
     });
     $(r, '#skipBtn').addEventListener('click', () => this.cb.skipCinematic());
+    $(r, '#introGo').addEventListener('click', () => {
+      $(r, '#intro').hidden = true;
+      this.sim.state.progression.introSeen = true;
+    });
     r.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => {
       const key = inp.dataset.set as keyof Settings;
       inp.checked = this.settings[key];
@@ -186,6 +201,69 @@ export class Hud {
     else if (prop === 'html') el.innerHTML = value;
     else if (prop === 'width') el.style.width = value;
     else if (prop === 'cls' && cls) el.classList.toggle(cls, value === '1');
+  }
+
+  showIntro() {
+    $(this.root, '#intro').hidden = false;
+  }
+
+  get introOpen() {
+    return !$(this.root, '#intro').hidden;
+  }
+
+  private nudgeUntil = 0;
+  private nudgeSel = '';
+  /** Briefly highlight a control (e.g. Harvest when energy runs out). */
+  nudge(sel: string, secs = 4) {
+    this.nudgeSel = sel;
+    this.nudgeUntil = performance.now() + secs * 1000;
+  }
+
+  private costNote(cost: Cost): string {
+    const s = this.sim;
+    if (s.econ.canAfford(cost)) return `Cost ${formatCost(cost)}, and you can afford it now.`;
+    const short = KINDS.filter((k) => (cost[k] ?? 0) > s.econ.get(k)).map((k) => `${Math.floor(s.econ.get(k))}/${Math.ceil(cost[k]!)}${RES_META[k].icon}`);
+    return `Cost ${formatCost(cost)}. You have ${short.join(', ')}. Keep restoring!`;
+  }
+
+  /** The current tutorial hint, written from live numbers, plus the control it refers to. */
+  private hintFor(step: number): { text: string; target?: string } {
+    const s = this.sim;
+    const n = s.progression.restoredCount('r1');
+    const build = (t: BuildableType, what: string) => ({
+      text: `${what} Tap ${MACHINES[t].icon} ${MACHINES[t].name}, then a green or mossy tile. ${this.costNote(s.build.cost(t))}`,
+      target: `[data-tool="${t}"]`,
+    });
+    switch (step) {
+      case 0:
+        return { text: 'Tap a grey tile to bring it back to life ✨ (the bouncing marker is a good start).' };
+      case 1:
+      case 2: {
+        if (step === 1) return { text: `Nice! Green tiles grow 🌿 biomass. Restore a few more (${n}/4). Brown mossy tiles are cheaper.` };
+        const cheapest = Math.min(...s.upgrades.all().filter((u) => s.upgrades.level(u.id) < u.maxLevel && (!u.available || u.available(s.state))).map((u) => s.upgrades.cost(u)));
+        return s.econ.get('biomass') >= cheapest
+          ? { text: 'You can afford an upgrade! Tap ⬆️ Upgrades and pick one.', target: '#upgBtn' }
+          : { text: `Keep restoring to earn 🌿. Your first upgrade costs ${cheapest}🌿 (you have ${Math.floor(s.econ.get('biomass'))}).` };
+      }
+      case 3:
+        return build('condenser', 'Water is the slowest resource. Build a Water Condenser for steady water:');
+      case 4:
+        return build('pollinator', 'Plants and machines help each other. Build a Pollinator Garden:');
+      case 5:
+        return { text: 'Tap brown mossy tiles right next to your 🌸 garden: the bloom jumps from tile to tile in a Bloom Chain!' };
+      case 6:
+        return build('droneHub', 'Let a drone take over the small jobs. Build a Drone Hub:');
+      case 7: {
+        const full = s.progression.fullBloomCount('r1');
+        const missing = BUILDABLE.filter((t) => !s.progression.built(t));
+        if (missing.length) return build(missing[0], `The Core also needs a ${MACHINES[missing[0]].name}.`);
+        return { text: `Wake the Core: restore 42 tiles (${n}/42) and tap green tiles again until 16 are in full bloom 🌳 (${full}/16).`, target: '#obj' };
+      }
+      case 8:
+        return { text: 'The Core is ready! Tap ✨ Awaken the Core in the top-right panel.', target: '#coreBtn' };
+      default:
+        return { text: 'The building lives again! Keep growing every tile to full bloom while Rooftop 2 gets ready.' };
+    }
   }
 
   setTool(t: Tool) {
@@ -451,9 +529,22 @@ export class Hud {
     // Hint
     const step = s.state.progression.tutorialStep;
     const hint = $(this.root, '#hint');
-    const showHint = this.settings.hints && step !== this.hintDismissedStep && TUTORIAL[step];
-    this.set('hintText', $(this.root, '#hintText'), 'text', TUTORIAL[step] ?? '');
+    const h = this.hintFor(step);
+    const showHint = this.settings.hints && step !== this.hintDismissedStep && !this.introOpen;
+    this.set('hintText', $(this.root, '#hintText'), 'text', h.text);
     this.set('hintShow', hint, 'cls', showHint ? '0' : '1', 'hide');
+    // Glow the control the hint talks about (or a temporary nudge). On phones, machine cards live in the Build tray.
+    let target = performance.now() < this.nudgeUntil ? this.nudgeSel : this.settings.hints ? (h.target ?? '') : '';
+    const tray = $(this.root, '#buildTray');
+    if (target.startsWith('[data-tool') && getComputedStyle($(this.root, '#buildToggle')).display !== 'none' && !tray.classList.contains('open')) target = '#buildToggle';
+    if (this.last.get('nudgeTarget') !== target) {
+      this.root.querySelectorAll('.nudge').forEach((e) => e.classList.remove('nudge'));
+      if (target) this.root.querySelector(target)?.classList.add('nudge');
+      this.last.set('nudgeTarget', target);
+    }
+    // "Next:" line (visible on phones, where the checklist is collapsed)
+    const nextReq = s.state.progression.coreActivated ? undefined : p.requirements().find((r) => !r.done);
+    this.set('objNext', $(this.root, '#objNext'), 'text', ready ? 'Next: awaken the Core ✨' : nextReq ? `Next: ${nextReq.label}` : '');
 
     if (this.comboTimer > 0) {
       this.comboTimer -= dt;

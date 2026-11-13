@@ -19,6 +19,9 @@ export class Overlays {
   private time = 0;
   private frameSize = 1;
   private gridLines: pc.Entity;
+  private beacon: pc.Entity;
+  private beaconArrow: pc.Entity;
+  private beaconBase = new pc.Vec3();
 
   constructor(
     private sim: Sim,
@@ -41,6 +44,13 @@ export class Overlays {
       for (let i = 0; i <= r.depth; i++) shape(this.gridLines, 'box', lineMat, { pos: [r.origin[0] + r.width / 2, y, r.origin[2] + i], scale: [r.width, 0.01, 0.04], receive: false });
     }
     this.gridLines.enabled = false;
+    // First-tile beacon: a bobbing golden arrow + soft glow plate.
+    this.beacon = group(root, 'beacon');
+    this.beaconArrow = group(this.beacon, 'arrow');
+    shape(this.beaconArrow, 'cone', mat('#ffc428', { emissive: '#ffb000', emissiveIntensity: 0.6 }), { rot: [180, 0, 0], scale: [0.28, 0.34, 0.28] });
+    shape(this.beaconArrow, 'cylinder', mat('#ffc428', { emissive: '#ffb000', emissiveIntensity: 0.6 }), { pos: [0, 0.3, 0], scale: [0.11, 0.3, 0.11] });
+    shape(this.beacon, 'box', mat('#fff3a0', { opacity: 0.5, unlit: true }), { pos: [0, -0.5, 0], scale: [0.9, 0.02, 0.9], receive: false });
+    this.beacon.enabled = false;
     this.radiusRoot = group(root, 'radius');
     for (let i = 0; i < 80; i++) {
       const e = shape(this.radiusRoot, 'box', mat(TONE.info, { opacity: 0.45, unlit: true }), { scale: [0.9, 0.02, 0.9], receive: false });
@@ -82,6 +92,16 @@ export class Overlays {
     this.gridLines.enabled = on;
   }
 
+  showBeacon(roofId: string, x: number, z: number) {
+    const p = this.footprintCenter(roofId, x, z, 1);
+    this.beaconBase.set(p.x, p.y + 0.55, p.z);
+    this.beacon.enabled = true;
+  }
+
+  hideBeacon() {
+    this.beacon.enabled = false;
+  }
+
   hideFrame() {
     this.frame.enabled = false;
   }
@@ -119,6 +139,12 @@ export class Overlays {
 
   update(dt: number) {
     this.time += dt;
+    if (this.beacon.enabled) {
+      const b = this.beaconBase;
+      this.beacon.setPosition(b.x, b.y, b.z);
+      this.beaconArrow.setLocalPosition(0, 0.25 + Math.abs(Math.sin(this.time * 3)) * 0.25, 0);
+      this.beaconArrow.setLocalEulerAngles(0, this.time * 90, 0);
+    }
     if (this.frame.enabled) {
       const s = 1 + Math.sin(this.time * 6) * 0.015;
       this.frame.setLocalScale(s, 1, s);

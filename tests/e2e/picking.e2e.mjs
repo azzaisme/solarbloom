@@ -41,6 +41,7 @@ try {
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom);
+    if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
     for (const zoom of ZOOMS) {
       const res = await page.evaluate(
         ({ zoom, OFFSETS }) => {

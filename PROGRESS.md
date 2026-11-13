@@ -25,6 +25,22 @@ Extra beyond the plan: **Nurture**. Pulsing a restored tile grows it through thr
 - Lucky Cat discovery panel: nooks found, reward types collected. Saved in the discovery log, and old saves load with an empty log.
 - Automated pointer→tile test (`npm run test:e2e`): every on-screen tile at 5 points each, at 1280×800, 820×1180 and 390×844, zoom 0.6 / 1 / 1.8, plus a real mouse click and a hotbar click that must not touch the world. 2,778 checks pass.
 
+## Phone playtest fixes
+
+**Frame rate fell apart after lots of tapping.** Cause: every tile change rebuilt one dynamic batch holding *all* tile decoration (~300-vertex spheres), so each rebuild got slower as the garden grew. Measured on a 150-tap storm in headless Chromium: batch rebuilds took 11.2 s in total, average JS frame 165 ms, worst frame 9.2 s.
+- Tiles now batch in small regions (4×2 tiles), so a tap only rebuilds its own region.
+- Tile decoration uses low-poly meshes with baked vertex colours and one shared material, so each region draws in about one call.
+- Up to 8 flying "+🌿" numbers at once (extras just flash the counter); no backdrop blur on touch devices.
+- Adaptive resolution: render scale steps down after 1.5 s of slow frames and back up when there's headroom (shown in the F3 overlay).
+- After: batch work 0.22 s in total, average frame 10 ms, worst frame 28 ms on the same storm; 150–230 draw calls.
+
+**"Not clear what to do."**
+- A welcome card for new players (three steps and the goal).
+- A bouncing golden marker on the first tile to tap.
+- Hints now use live numbers ("costs 20🌿 10⚡, you have 7🌿") and say exactly which button to tap.
+- The control a hint refers to glows (on phones, the 🔨 Build button when the machine is in the tray). Harvest glows when you run out of energy.
+- A "Next: …" line on the objective panel on phones, where the checklist is collapsed.
+
 ## Verified
 
 - `npm test`: 32 tests pass (grid, economy, placement, chains, drones, lucky cat, save/progression, and a scripted first session that reaches the Core).

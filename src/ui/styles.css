@@ -215,3 +215,22 @@ button:focus-visible { outline: 3px solid #2f7de1; outline-offset: 2px; }
   #buildTray { background: rgba(255,255,255,.97); }
   #obj .chip { padding: 4px 8px; min-height: 30px; }
 }
+/* Touch devices: skip live background blur (costly on phone GPUs while numbers fly over panels). */
+@media (hover: none) {
+  .panel, .chip { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .panel { background: rgba(255,255,255,.88); }
+}
+
+/* Onboarding */
+#intro { position: absolute; inset: 0; display: grid; place-items: center; z-index: 9; background: rgba(30,60,50,.18); padding: 16px; }
+#intro[hidden] { display: none; }
+.card-intro { max-width: 380px; padding: 18px 20px; background: var(--panel-strong); animation: toastIn .35s cubic-bezier(.2,1.6,.4,1); }
+.card-intro h2 { margin: 0 0 4px; font-size: 20px; color: #2c6e49; }
+.card-intro p { margin: 0 0 10px; color: var(--ink-soft); font-weight: 700; }
+.card-intro ol { margin: 0 0 14px; padding-left: 20px; display: grid; gap: 8px; font-size: 14px; line-height: 1.4; }
+#introGo { width: 100%; padding: 12px; border-radius: 12px; font-weight: 900; font-size: 15px; color: white; background: linear-gradient(180deg, #8be06b, #4fb543); min-height: 46px; }
+.nudge { position: relative; animation: nudge 1.3s ease-in-out infinite; }
+@keyframes nudge { 0%,100% { box-shadow: 0 0 0 0 rgba(255,196,40,.0), inset 0 0 0 3px #ffc428; } 50% { box-shadow: 0 0 0 8px rgba(255,196,40,.35), inset 0 0 0 3px #ffc428; } }
+#obj.nudge { animation: nudge 1.6s ease-in-out infinite; }
+#obj .next { font-size: 12px; font-weight: 800; color: #2c6e49; margin: -2px 0 6px; display: none; }
+@media (max-width: 760px) { #obj .next { display: block; } }

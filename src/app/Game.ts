@@ -18,6 +18,7 @@ import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
+import { initLowPoly } from '../rendering/Shapes';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
 import { FlyText } from '../ui/Fly';
@@ -84,6 +85,9 @@ export class Game {
   private solarFeedAt = new Map<string, number>();
   private fpsAcc = { t: 0, n: 0, fps: 0 };
   private clock = 0;
+  private slowFor = 0;
+  private fastFor = 0;
+  private maxDpr = 2;
 
   constructor(canvas: HTMLCanvasElement) {
     this.settings = loadSettings();
@@ -96,9 +100,11 @@ export class Game {
     });
     this.app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
     this.app.setCanvasResolution(pc.RESOLUTION_AUTO);
-    this.app.graphicsDevice.maxPixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    this.maxDpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.app.graphicsDevice.maxPixelRatio = this.maxDpr;
     window.addEventListener('resize', () => this.app.resizeCanvas());
 
+    initLowPoly(this.app.graphicsDevice);
     this.scene = new SceneBuilder(this.app, this.tweens);
     this.scene.build(state.rooftops);
     this.camera = new CameraController(this.app, this.tweens);
@@ -170,7 +176,8 @@ export class Game {
 
     this.app.on('update', (dt: number) => this.update(dt));
     this.app.start();
-    if (loaded) setTimeout(() => this.hud.toast('Welcome back! Your garden kept its shape. 🌱', '', 2.6), 400);
+    if (!state.progression.introSeen && state.stats.tilesRestored === 0) this.hud.showIntro();
+    else if (loaded) setTimeout(() => this.hud.toast('Welcome back! Your garden kept its shape. 🌱', '', 2.6), 400);
   }
 
   // ───────────────────────── settings / persistence ─────────────────────────
@@ -655,7 +662,10 @@ export class Game {
     b.on('action.failed', ({ reason }) => {
       this.hud.showFail(reason, this.pointer.x, this.pointer.y);
       this.sfx.error();
-      if (reason.includes('⚡')) this.hud.flashResource('energy', 'short');
+      if (reason.includes('⚡')) {
+        this.hud.flashResource('energy', 'short');
+        if (s.state.time >= s.state.harvestReadyAt) this.hud.nudge('#harvestBtn', 5);
+      }
       if (reason.includes('💧')) this.hud.flashResource('water', 'short');
       if (reason.includes('🌿')) this.hud.flashResource('biomass', 'short');
     });
@@ -754,9 +764,32 @@ export class Game {
 
   // ───────────────────────── frame loop ─────────────────────────
 
+  /** Drops render resolution when frames are slow for a while, and restores it when there's headroom. */
+  private adaptQuality(rawDt: number) {
+    if (document.hidden || rawDt > 0.5) return;
+    const dev = this.app.graphicsDevice;
+    if (rawDt > 1 / 40) {
+      this.slowFor += rawDt;
+      this.fastFor = 0;
+    } else if (rawDt < 1 / 55) {
+      this.fastFor += rawDt;
+      this.slowFor = Math.max(0, this.slowFor - rawDt);
+    }
+    if (this.slowFor > 1.5 && dev.maxPixelRatio > 1) {
+      dev.maxPixelRatio = Math.max(1, dev.maxPixelRatio - 0.25);
+      this.app.resizeCanvas();
+      this.slowFor = 0;
+    } else if (this.fastFor > 8 && dev.maxPixelRatio < this.maxDpr) {
+      dev.maxPixelRatio = Math.min(this.maxDpr, dev.maxPixelRatio + 0.25);
+      this.app.resizeCanvas();
+      this.fastFor = 0;
+    }
+  }
+
   private update(rawDt: number) {
     const dt = Math.min(rawDt, TUNING.maxFrameDt);
     this.clock += dt;
+    this.adaptQuality(rawDt);
     if (!this.paused && !this.hiddenPause && !this.hud.modalOpen) {
       this.acc += dt * this.speed;
       let n = 0;
@@ -774,6 +807,12 @@ export class Game {
     this.cat.update(dt);
     this.butterflies.update(dt);
     this.vfx.update(dt);
+    // First-tile beacon until the player restores something.
+    if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic) {
+      const tiles = this.sim.grid.roof('r1')!.tiles;
+      const t = tiles.find((x) => x.ground === 'prepared' && !x.occupantId) ?? tiles.find((x) => x.ground === 'polluted' && !x.blocked && !x.occupantId);
+      if (t) this.overlays.showBeacon('r1', t.x, t.z);
+    } else this.overlays.hideBeacon();
     this.overlays.update(dt);
     this.camera.update(dt);
     this.hud.update(dt);
@@ -815,7 +854,7 @@ export class Game {
         this.fpsAcc.n = 0;
         const st = this.sim.state;
         this.hud.setDebug(
-          `FPS ${this.fpsAcc.fps.toFixed(0)}  sim ${st.time.toFixed(1)}s ×${this.speed}\n` +
+          `FPS ${this.fpsAcc.fps.toFixed(0)}  dpr ${this.app.graphicsDevice.maxPixelRatio}  sim ${st.time.toFixed(1)}s ×${this.speed}\n` +
             `chains ${this.sim.chains.activeRuns} queued ${this.sim.chains.pendingSteps}\n` +
             `drones ${st.drones.length}  machines ${st.machines.length}\n` +
             `cat ${st.cat.active ? st.cat.active.anchorId : `next ${st.cat.firstSpawned ? st.cat.nextSpawnAt.toFixed(0) : 'first'}`}\n` +

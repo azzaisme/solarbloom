@@ -19,7 +19,8 @@ export class FlyText {
   }
 
   spawn(kind: ResourceKind, amount: number, from: { x: number; y: number }, to: DOMRect, onArrive?: () => void) {
-    const el = this.pool.pop();
+    // Cap simultaneous flyers: past 8, the counter just flashes (keeps phones smooth during chains).
+    const el = this.active < 8 ? this.pool.pop() : undefined;
     if (!el) {
       onArrive?.();
       return;

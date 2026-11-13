@@ -82,6 +82,7 @@ export interface Progression {
   coreActivatedAt: number;
   tutorialStep: number;
   hintsDismissed: boolean;
+  introSeen: boolean;
 }
 
 export interface Stats {
