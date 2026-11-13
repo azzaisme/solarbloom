@@ -137,8 +137,16 @@ export class Hud {
     $(r, '#modal').addEventListener('click', (e) => {
       if (e.target === $(r, '#modal')) this.openSettings(false);
     });
-    $(r, '#newGame').addEventListener('click', () => {
-      if (confirm('Start a brand new rooftop? Your current garden will be cleared.')) this.cb.newGame();
+    // In-page two-tap confirmation (native confirm() dialogs are blocked in some embeds).
+    let armed = 0;
+    const ng = $<HTMLButtonElement>(r, '#newGame');
+    ng.addEventListener('click', () => {
+      if (Date.now() - armed < 4000) return this.cb.newGame();
+      armed = Date.now();
+      ng.textContent = 'Tap again to clear your garden';
+      setTimeout(() => {
+        if (Date.now() - armed >= 4000) ng.textContent = 'New game';
+      }, 4100);
     });
     $(r, '#skipBtn').addEventListener('click', () => this.cb.skipCinematic());
     r.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => {
