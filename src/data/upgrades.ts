@@ -82,6 +82,28 @@ export const UPGRADES: UpgradeDef[] = [
     available: has('pollinator'),
     lockedReason: 'Build a Pollinator Garden first',
   },
+  {
+    id: 'waterBloom',
+    name: 'Water Bloom',
+    icon: '🌧️',
+    baseCost: 30,
+    costMult: 2,
+    maxLevel: 2,
+    describe: () => 'Condensers charge 25% faster, water 1 more tile and also grow green tiles beside them',
+    available: has('condenser'),
+    lockedReason: 'Build a Water Condenser first',
+  },
+  {
+    id: 'treeResonance',
+    name: 'Mother Tree Resonance',
+    icon: '🌳',
+    baseCost: 60,
+    costMult: 2,
+    maxLevel: 2,
+    describe: () => 'Mother Tree charges from, and pulses, 1 tile further',
+    available: has('motherTree'),
+    lockedReason: 'Plant a Mother Tree first',
+  },
 ];
 
 export const UPGRADE_BY_ID: Record<string, UpgradeDef> = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));

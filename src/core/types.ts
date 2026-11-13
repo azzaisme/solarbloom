@@ -1,10 +1,10 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
-export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'core';
+export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'core';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
 export type Resources = Record<ResourceKind, number>;
 export type Cost = Partial<Resources>;
-export type RestoreSource = 'pulse' | 'broad' | 'drone' | 'chain' | 'condenser' | 'mega';
+export type RestoreSource = 'pulse' | 'broad' | 'drone' | 'chain' | 'condenser' | 'mega' | 'pollinate' | 'motherTree';
 
 export interface TileData {
   id: string;
@@ -94,6 +94,10 @@ export interface Stats {
   chains: number;
   catsFound: number;
   droneJobs: number;
+  /** Playtest metrics: sim-time of first milestones, chain sizes, time with nothing affordable to do. */
+  firsts: Record<string, number>;
+  chainEffects: number;
+  stuckSeconds: number;
 }
 
 export interface GameState {

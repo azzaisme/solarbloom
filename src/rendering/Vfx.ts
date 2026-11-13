@@ -52,6 +52,7 @@ export class Vfx {
     }
     // Thin unit ring (radius 1) so scaling never thickens the tube.
     const ringMesh = pc.Mesh.fromGeometry(device, new pc.TorusGeometry({ tubeRadius: 0.035, ringRadius: 1, segments: 40, sides: 6 }));
+    ringMesh.incRefCount();
     for (let i = 0; i < 16; i++) {
       const m = uniqueMat(PALETTE.eyeCyan, { opacity: 0.8, emissive: PALETTE.eyeCyan, emissiveIntensity: 1.5 });
       const e = new pc.Entity('ring');

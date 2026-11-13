@@ -16,6 +16,11 @@ export interface PlacementCheck {
 export class BuildSystem {
   constructor(private sim: Sim) {}
 
+  isUnlocked(type: BuildableType) {
+    const u = MACHINES[type].unlock;
+    return !u || this.sim.state.machines.some((m) => m.type === u.needs);
+  }
+
   count(type: BuildableType) {
     return this.sim.state.machines.filter((m) => m.type === type && !m.starter).length;
   }
@@ -35,6 +40,7 @@ export class BuildSystem {
     const def = MACHINES[type];
     const cost = this.cost(type);
     const fail = (reason: string): PlacementCheck => ({ ok: false, reason, cost, spotOk: false });
+    if (def.unlock && !s.state.machines.some((m) => m.type === def.unlock!.needs)) return fail(def.unlock.label);
     const roof = s.grid.roof(roofId);
     if (!roof || !roof.unlocked || roof.preview) return fail('This rooftop is not reachable yet');
     const cells = s.grid.footprint(roofId, x, z, def.size);

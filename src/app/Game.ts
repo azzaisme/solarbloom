@@ -6,6 +6,7 @@ import type { MachineData, ResourceKind, TileData } from '../core/types';
 import { MACHINES } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
+import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
 import { Sim } from '../gameplay/Sim';
 import { Butterflies } from '../rendering/Butterflies';
@@ -254,7 +255,7 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement) return;
       const k = e.key.toLowerCase();
-      const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub' };
+      const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree' };
       if (map[k]) this.selectTool(map[k]);
       else if (k === 'h') this.harvest();
       else if (k === 'u') this.hud.toggleUpgrades();
@@ -471,6 +472,8 @@ export class Game {
         return g.tilesNear(m, this.sim.upgrades.pollinatorReach);
       case 'droneHub':
         return g.tilesNear(m, TUNING.drone.hubRadius);
+      case 'motherTree':
+        return g.tilesNear(m, this.sim.upgrades.treeRadius);
       default:
         return [];
     }
@@ -511,14 +514,15 @@ export class Game {
       case 'condenser': {
         const near = s.grid.tilesNear(m, TUNING.condenser.radius);
         const mossy = near.filter((t) => t.ground === 'prepared').length;
-        extra = `<p class="stat">💧 +1 water/s</p><p class="stat">🌱 Irrigates a mossy neighbour every ${TUNING.condenser.irrigateEvery}s for ${TUNING.condenser.irrigateWater}💧 (${mossy} waiting)</p>`;
+        const pct = Math.round(((m.charge ?? 0) / TUNING.condenser.threshold) * 100);
+        extra = `<p class="stat">💧 +1 water/s</p><p class="stat">🌧️ Watering charge ${pct}% · ${mossy} dry tile${mossy === 1 ? '' : 's'} beside it</p><p>When full, it waters the dry soil next to it into bloom and starts a chain. ${mossy ? '' : 'Pulse a neighbour so moss appears beside it.'}</p>${this.upgradeButton('waterBloom')}`;
         break;
       }
       case 'pollinator': {
         const zone = s.grid.tilesNear(m, s.upgrades.pollinatorReach);
         const mossy = zone.filter((t) => t.ground === 'prepared').length;
         const green = zone.filter((t) => t.ground === 'restored').length;
-        extra = `<p class="stat">🌸 Zone radius ${s.upgrades.pollinatorReach} · ${green}/${zone.length} blooming (×2 🌿)</p><p class="stat">✨ ${mossy} mossy tiles ready to chain</p><p>Restore any tile in the zone: the bloom leaps to mossy neighbours.</p>${this.upgradeButton('pollinatorReach')}`;
+        extra = `<p class="stat">🌸 Zone radius ${s.upgrades.pollinatorReach} · ${green}/${zone.length} blooming (×2 🌿)</p><p class="stat">✨ ${mossy} mossy tiles ready to chain</p><p>Restore a tile right next to it: it pollinates another neighbour (up to ${TUNING.pollinator.triggersPerChain}× per chain). Line gardens, panels and the Mother Tree up so chains jump between them.</p>${this.upgradeButton('pollinatorReach')}`;
         break;
       }
       case 'droneHub': {
@@ -527,6 +531,11 @@ export class Game {
         extra = ds
           .map((d, i) => `<p class="stat">🛸 Drone ${i + 1}${d.expiresAt ? ' (party!)' : ''}: ${label[s.drones.statusOf(d)]} · ${d.jobs} jobs</p>`)
           .join('') + `<p>Works within ${TUNING.drone.hubRadius} tiles, paying the normal pulse cost.</p>${this.upgradeButton('droneSpeed')}`;
+        break;
+      }
+      case 'motherTree': {
+        const pct = Math.round(((m.charge ?? 0) / TUNING.motherTree.threshold) * 100);
+        extra = `<p class="stat">🌳 Charge ${m.charge ?? 0}/${TUNING.motherTree.threshold} (${pct}%)</p><p>Each restoration or new bloom within ${s.upgrades.treeRadius} tiles adds charge. When full, it releases a Bloom Pulse over that whole area. Its own pulse can't recharge it.</p>${this.upgradeButton('treeResonance')}`;
         break;
       }
       case 'core': {
@@ -634,8 +643,9 @@ export class Game {
       const msg: Partial<Record<MachineData['type'], string>> = {
         solar: '☀️ Solar Panel online! More energy, more pulses.',
         condenser: '💧 Water Condenser online — water now flows on its own.',
-        pollinator: '🌸 Pollinator Garden planted! Restore mossy tiles in its zone to start a Bloom Chain.',
-        droneHub: '🛸 Drone Hub built! Your drone can handle the small jobs now.',
+        pollinator: '🌸 Pollinator Garden planted! Restore a tile right next to it to start a Bloom Chain.',
+        droneHub: '🛸 Drone Hub built! Your drone can handle the small jobs now. The Mother Tree is unlocked too 🌳',
+        motherTree: '🌳 Mother Tree planted! Restore tiles around it to charge its Bloom Pulse.',
       };
       if (first && msg[machine.type]) this.hud.toast(msg[machine.type]!, 'gold', 4);
     });
@@ -643,23 +653,29 @@ export class Game {
       const o = s.grid.byTileId(originTileId);
       if (o) this.tileFx.hold(`chain${chainId}`, o);
     });
-    b.on('chain.step', ({ tileId, fromTileId, combo }) => {
-      const a = s.grid.byTileId(fromTileId);
-      const t = s.grid.byTileId(tileId);
-      // Ordered waves: each step glows, shifting green → gold → pink as the chain grows.
-      if (t) this.tileFx.flash(t, combo >= 10 ? '#ff5fb8' : combo >= 5 ? '#ffb81f' : '#38d94a', 0.45, 0.9);
-      if (a && t) this.vfx.arc(this.tileVec(a), this.tileVec(t), combo >= 5 ? PALETTE.pink : PALETTE.flowerCore, 0.5);
-      if (combo >= 2) this.hud.combo(combo);
-      this.sfx.bloom(combo);
+    b.on('chain.event', ({ event: ev, combo }) => this.presentChainEvent(ev, combo));
+    b.on('chain.fastForward', () => this.hud.feed('⏩ Huge chain! Fast-forwarding the rest…'));
+    b.on('tree.discharged', ({ machineId }) => {
+      const m = s.machine(machineId);
+      if (!m) return;
+      const w = this.machines.worldOf(m);
+      const p = new pc.Vec3(w[0], w[1], w[2]);
+      for (let i = 0; i < 3; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.18, done: () => this.vfx.ring(p, i % 2 ? PALETTE.gold : '#7cf7c8', (s.upgrades.treeRadius + 1.2) * (0.6 + i * 0.25), 0.9) });
+      this.vfx.burst(new pc.Vec3(p.x, p.y + 1.4, p.z), 30, { up: 4, speed: 2.2, size: 0.08, life: 1.3 });
+      this.machines.pulseTree(machineId);
+      this.camera.shake(0.08);
+      this.sfx.chainEnd(10);
+      if (!s.state.stats.firsts.treePulse || s.state.stats.firsts.treePulse === Math.round(s.time)) this.hud.toast('🌳 Mother Tree Bloom Pulse!<small>Everything around it bursts into life.</small>', 'gold', 3);
     });
-    b.on('chain.ended', ({ chainId, combo, bonus, total }) => {
+    b.on('chain.ended', ({ chainId, combo, bonus, total, milestonePct, energy }) => {
       this.tileFx.release(`chain${chainId}`);
       if (combo < 2) return;
-      this.hud.combo(combo, `+${Math.round(total)}🌿 earned${bonus ? ` · bonus +${bonus}` : ''}`);
+      const ms = milestonePct ? ` · ×${combo >= 20 ? 20 : combo >= 10 ? 10 : 5} milestone +${Math.round(milestonePct * 100)}%` : '';
+      this.hud.combo(combo, `+${Math.round(total)}🌿${energy >= 1 ? ` +${Math.round(energy)}⚡` : ''} earned${ms}`);
       this.hud.feed(`🌸 Bloom chain ×${combo}${bonus ? ` · +${bonus}🌿 bonus` : ''}`);
       this.sfx.chainEnd(combo);
       if (combo >= 5) {
-        this.hud.toast(`🌸 BLOOM ×${combo}!${bonus ? `<small>Chain bonus +${bonus} 🌿</small>` : ''}`, 'gold', 2.6);
+        this.hud.toast(`🌸 BLOOM CHAIN ×${combo}!${bonus ? `<small>Chain bonus +${bonus} 🌿${ms}</small>` : ''}`, 'gold', 2.6);
         this.camera.shake(0.04);
       }
     });
@@ -734,6 +750,55 @@ export class Game {
   }
 
   private lastCatPos?: pc.Vec3;
+
+  /** World position of a tile or machine id (chain sources/targets can be either). */
+  private posOf(id: string | undefined): pc.Vec3 | undefined {
+    if (!id) return undefined;
+    const t = this.sim.grid.byTileId(id);
+    if (t) return this.tileVec(t);
+    const m = this.sim.machine(id);
+    if (!m) return undefined;
+    const w = this.machines.worldOf(m);
+    return new pc.Vec3(w[0], w[1] + 0.25, w[2]);
+  }
+
+  /** Replays one deterministic chain event as light, motion and sound. */
+  private presentChainEvent(ev: ChainEvent, combo: number) {
+    const s = this.sim;
+    const from = this.posOf(ev.source);
+    const to = this.posOf(ev.target);
+    const wave = combo >= 10 ? '#ff5fb8' : combo >= 5 ? '#ffb81f' : '#38d94a';
+    switch (ev.type) {
+      case 'RESTORE':
+      case 'GROW': {
+        const t = s.grid.byTileId(ev.target);
+        if (t) this.tileFx.flash(t, wave, 0.45, 0.9);
+        if (from && to && ev.cause !== 'motherTree') this.vfx.arc(from, to, combo >= 5 ? PALETTE.pink : PALETTE.flowerCore, 0.5);
+        if (combo >= 2) this.hud.combo(combo);
+        this.sfx.bloom(combo);
+        break;
+      }
+      case 'POLLINATE':
+        if (from && to) {
+          this.vfx.arc(from, to, PALETTE.pink, 0.6);
+          this.vfx.burst(to, 6, { up: 1.2, size: 0.04, speed: 0.6 });
+        }
+        break;
+      case 'PRODUCE_ENERGY':
+        if (from && to) this.vfx.arc(from, to, PALETTE.gold, 0.5);
+        if (combo >= 2) this.hud.combo(combo);
+        break;
+      case 'PRODUCE_WATER':
+        if (to) this.vfx.ring(to, PALETTE.water, 1.4, 0.6);
+        this.sfx.pulse();
+        break;
+      case 'CHARGE':
+        if (from && to && !this.settings.reducedMotion) this.vfx.arc(from, to, '#7cf7c8', 0.35);
+        break;
+      default:
+        break;
+    }
+  }
 
   // ───────────────────────── core sequence ─────────────────────────
 

@@ -1,3 +1,4 @@
+import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import type { BuffType, CatRewardType, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
@@ -10,8 +11,10 @@ export interface GameEvents {
   'resource.full': { kind: ResourceKind };
   'machine.built': { machine: MachineData };
   'chain.started': { chainId: number; originTileId: string };
-  'chain.step': { chainId: number; tileId: string; fromTileId: string; combo: number };
-  'chain.ended': { chainId: number; combo: number; bonus: number; total: number };
+  'chain.event': { event: ChainEvent; combo: number };
+  'chain.fastForward': { chainId: number };
+  'chain.ended': { chainId: number; combo: number; bonus: number; total: number; milestonePct: number; energy: number };
+  'tree.discharged': { machineId: string };
   'solar.boost': { machineId: string };
   'pulse.fired': { tileId: string; extra: string[] };
   'action.failed': { reason: string; tileId?: string };

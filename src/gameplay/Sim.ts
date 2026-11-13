@@ -7,6 +7,7 @@ import { BloomChainSystem } from './BloomChainSystem';
 import { BuildSystem } from './BuildSystem';
 import { DroneSystem } from './DroneSystem';
 import { LuckyCatSystem } from './LuckyCatSystem';
+import { Metrics } from './Metrics';
 import { ProductionSystem } from './ProductionSystem';
 import { ProgressionSystem } from './ProgressionSystem';
 import { RestorationSystem } from './RestorationSystem';
@@ -29,6 +30,7 @@ export class Sim {
   readonly drones: DroneSystem;
   readonly cat: LuckyCatSystem;
   readonly progression: ProgressionSystem;
+  readonly metrics: Metrics;
 
   constructor(
     readonly state: GameState,
@@ -45,6 +47,7 @@ export class Sim {
     this.drones = new DroneSystem(this);
     this.cat = new LuckyCatSystem(this);
     this.progression = new ProgressionSystem(this);
+    this.metrics = new Metrics(this);
     this.upgrades.applyCaps();
   }
 
@@ -79,6 +82,7 @@ export class Sim {
     this.drones.tick(dt);
     this.cat.tick();
     this.progression.tick();
+    this.metrics.tick(dt);
     s.rngState = this.rng.state;
   }
 

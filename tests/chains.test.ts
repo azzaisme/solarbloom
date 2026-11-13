@@ -1,78 +1,180 @@
 import { describe, expect, it } from 'vitest';
+import { createInitialState } from '../src/core/GameState';
+import type { ChainEvent } from '../src/gameplay/BloomChainSystem';
+import { Sim } from '../src/gameplay/Sim';
 import { TUNING } from '../src/data/tuning';
 import { fill, makeSim, rich, setGround } from './helpers';
 
-function setupGarden() {
-  const sim = makeSim();
-  rich(sim);
-  fill(sim, 0, 0, 7, 7, 'polluted');
-  setGround(sim, 4, 4, 'restored');
-  sim.build.place('pollinator', 'r1', 4, 4);
-  sim.state.upgrades.pollinatorReach = 1; // zone radius 2
-  return sim;
+function place(sim: Sim, type: Parameters<Sim['build']['place']>[0], x: number, z: number) {
+  const size = type === 'droneHub' || type === 'motherTree' ? 2 : 1;
+  for (let dz = 0; dz < size; dz++) for (let dx = 0; dx < size; dx++) setGround(sim, x + dx, z + dz, 'restored');
+  const m = sim.build.place(type, 'r1', x, z);
+  expect(m, `place ${type} at ${x},${z}`).toBeTruthy();
+  return m!;
 }
 
-describe('bloom chains', () => {
-  it('spreads through mossy tiles in the pollinator zone with a matching combo count', () => {
-    const sim = setupGarden();
-    for (const [x, z] of [[4, 3], [4, 2], [5, 2], [3, 3]]) setGround(sim, x, z, 'prepared');
-    const steps: number[] = [];
-    let ended: { combo: number; bonus: number } | undefined;
-    sim.bus.on('chain.step', (e) => steps.push(e.combo));
-    sim.bus.on('chain.ended', (e) => (ended = e));
-    const origin = setGround(sim, 4, 5, 'polluted');
-    origin.pollution = 100;
-    sim.restoration.pulse(setGround(sim, 3, 4, 'prepared').id);
-    sim.advance(4);
-    expect(ended).toBeDefined();
-    expect(ended!.combo).toBe(steps.length);
-    expect(steps).toEqual(steps.map((_, i) => i + 1));
-    expect(ended!.combo).toBeGreaterThanOrEqual(3);
-    expect(ended!.bonus).toBeGreaterThan(0);
-  });
+function collect(sim: Sim) {
+  const events: ChainEvent[] = [];
+  const ended: { combo: number; bonus: number; total: number; milestonePct: number }[] = [];
+  sim.bus.on('chain.event', (e) => events.push(e.event));
+  sim.bus.on('chain.ended', (e) => ended.push(e));
+  return { events, ended };
+}
 
-  it('never restores the same tile twice and always terminates under the event cap', () => {
+describe('bloom chain engine', () => {
+  it('a restored tile next to a garden pollinates a neighbour, at most N times per garden per chain', () => {
     const sim = makeSim();
     rich(sim);
     fill(sim, 0, 0, 7, 7, 'prepared');
-    for (const [x, z] of [[2, 2], [5, 5], [2, 5], [5, 2]]) {
-      setGround(sim, x, z, 'restored');
-      sim.build.place('pollinator', 'r1', x, z);
+    const p = place(sim, 'pollinator', 4, 4);
+    const { events, ended } = collect(sim);
+    sim.restoration.complete(sim.grid.get('r1', 4, 3)!, 'pulse');
+    sim.advance(3);
+    const pol = events.filter((e) => e.type === 'POLLINATE' && e.source === p.id);
+    expect(pol.length).toBe(TUNING.pollinator.triggersPerChain);
+    // every pollinated tile is adjacent to the garden
+    for (const e of pol) {
+      const t = sim.grid.byTileId(e.target)!;
+      expect(Math.abs(t.x - 4) + Math.abs(t.z - 4)).toBe(1);
+      expect(t.ground).toBe('restored');
     }
+    expect(ended.length).toBe(1);
+    expect(ended[0].combo).toBe(pol.length);
+  });
+
+  it('only grid adjacency triggers synergies (a garden two tiles away does nothing)', () => {
+    const sim = makeSim();
+    rich(sim);
+    fill(sim, 0, 0, 7, 7, 'prepared');
+    place(sim, 'pollinator', 4, 4);
+    const { events } = collect(sim);
+    sim.restoration.complete(sim.grid.get('r1', 4, 2)!, 'pulse');
+    sim.advance(3);
+    expect(events.filter((e) => e.type === 'POLLINATE')).toHaveLength(0);
+  });
+
+  it('a solar panel bursts once per chain however many neighbours bloom', () => {
+    const sim = makeSim();
+    rich(sim);
+    fill(sim, 0, 0, 7, 7, 'prepared');
+    const solar = place(sim, 'solar', 5, 5);
+    place(sim, 'pollinator', 6, 4);
+    const { events } = collect(sim);
+    // (5,4) touches both the panel and the garden; the garden then pollinates (6,5), which touches the panel again.
+    sim.restoration.complete(sim.grid.get('r1', 5, 4)!, 'pulse');
+    sim.advance(4);
+    expect(events.filter((e) => e.type === 'PRODUCE_ENERGY' && e.target === solar.id)).toHaveLength(1);
+    expect(solar.boostUntil).toBeGreaterThan(0);
+  });
+
+  it('Mother Tree charges from nearby restorations, pulses at full charge, and never recharges from its own pulse', () => {
+    const sim = makeSim();
+    rich(sim);
+    fill(sim, 0, 0, 7, 7, 'polluted');
+    place(sim, 'droneHub', 0, 5); // unlock
+    const tree = place(sim, 'motherTree', 3, 3);
+    tree.charge = TUNING.motherTree.threshold - 1;
+    const { events } = collect(sim);
+    sim.restoration.complete(sim.grid.get('r1', 3, 2)!, 'pulse');
+    sim.advance(5);
+    const dis = events.filter((e) => e.type === 'DISCHARGE' && e.target === tree.id);
+    expect(dis).toHaveLength(1);
+    const afterPulse = events.filter((e) => e.type === 'CHARGE' && e.target === tree.id && e.seq > dis[0].seq && e.chainId === dis[0].chainId);
+    expect(afterPulse).toHaveLength(0);
+    expect(tree.charge).toBe(0);
+    // the pulse restored tiles all around it
+    expect(events.filter((e) => e.cause === 'motherTree' && (e.type === 'RESTORE' || e.type === 'GROW')).length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('a Water Condenser waters dry soil beside it when its charge fills', () => {
+    const sim = makeSim();
+    rich(sim);
+    fill(sim, 0, 0, 7, 7, 'polluted');
+    const c = place(sim, 'condenser', 4, 4);
+    setGround(sim, 4, 3, 'prepared');
+    const { events } = collect(sim);
+    sim.advance(TUNING.condenser.threshold + 0.5);
+    expect(events.some((e) => e.type === 'PRODUCE_WATER' && e.target === c.id)).toBe(true);
+    expect(sim.grid.get('r1', 4, 3)!.ground).toBe('restored');
+  });
+
+  it('a ×10+ chain can be built deliberately through placement', () => {
+    const sim = makeSim();
+    rich(sim);
+    fill(sim, 0, 0, 7, 7, 'prepared');
+    // A row of gardens flanked by solar panels: each new bloom touches the next element.
+    for (const x of [1, 3, 5, 7]) place(sim, 'pollinator', x, 4);
+    for (const x of [2, 4, 6]) {
+      place(sim, 'solar', x, 3);
+      place(sim, 'solar', x, 5);
+    }
+    const { ended } = collect(sim);
+    sim.restoration.complete(sim.grid.get('r1', 0, 4)!, 'pulse');
+    sim.advance(6);
+    expect(Math.max(...ended.map((e) => e.combo))).toBeGreaterThanOrEqual(10);
+    const big = ended.find((e) => e.combo >= 10)!;
+    expect(big.milestonePct).toBeGreaterThanOrEqual(0.25);
+  });
+
+  it('cyclic machine layouts always terminate under the caps, with no tile transitioning twice in a chain', () => {
+    const sim = makeSim();
+    rich(sim);
+    fill(sim, 0, 0, 7, 7, 'prepared');
+    place(sim, 'droneHub', 0, 5);
+    for (const [x, z] of [[2, 2], [5, 2], [2, 5], [5, 5]]) place(sim, 'pollinator', x, z);
+    for (const [x, z] of [[3, 2], [2, 3], [4, 5], [5, 4]]) place(sim, 'solar', x, z);
+    const tree = place(sim, 'motherTree', 3, 3);
+    tree.charge = TUNING.motherTree.threshold - 2;
     sim.state.upgrades.pollinatorReach = 2;
-    const restoredIds: string[] = [];
-    sim.bus.on('tile.restored', (e) => restoredIds.push(e.tile.id));
-    let combo = 0;
-    sim.bus.on('chain.ended', (e) => (combo = Math.max(combo, e.combo)));
-    sim.restoration.complete(sim.grid.get('r1', 3, 3)!, 'pulse');
-    for (let i = 0; i < 100; i++) sim.tick();
-    expect(new Set(restoredIds).size).toBe(restoredIds.length);
-    expect(restoredIds.length).toBeLessThanOrEqual(TUNING.chain.maxEvents);
-    expect(combo).toBeGreaterThanOrEqual(10);
+    const { events } = collect(sim);
+    sim.restoration.complete(sim.grid.get('r1', 1, 2)!, 'pulse');
+    for (let i = 0; i < 200; i++) sim.tick();
+    const perChain = new Map<number, ChainEvent[]>();
+    for (const e of events) perChain.set(e.chainId, [...(perChain.get(e.chainId) ?? []), e]);
+    for (const evs of perChain.values()) {
+      expect(evs.length).toBeLessThanOrEqual(TUNING.chain.maxEvents + 60);
+      const tileTransitions = evs.filter((e) => e.type === 'RESTORE' || e.type === 'GROW').map((e) => e.target);
+      expect(new Set(tileTransitions).size).toBe(tileTransitions.length);
+    }
     expect(sim.chains.pendingSteps).toBe(0);
     expect(sim.chains.activeRuns).toBe(0);
   });
 
-  it('does not spread outside pollinator zones or through concrete', () => {
-    const sim = setupGarden();
-    setGround(sim, 0, 7, 'prepared'); // vent, irrelevant
-    let steps = 0;
-    sim.bus.on('chain.step', () => steps++);
-    sim.restoration.complete(setGround(sim, 4, 3, 'polluted'), 'pulse');
-    sim.advance(2);
-    expect(steps).toBe(0);
+  it('is deterministic: the same action on the same state gives the same events and state', () => {
+    const build = () => {
+      const sim = new Sim(createInitialState(99));
+      rich(sim);
+      fill(sim, 0, 0, 7, 7, 'prepared');
+      place(sim, 'pollinator', 3, 3);
+      place(sim, 'solar', 4, 3);
+      place(sim, 'pollinator', 5, 3);
+      return sim;
+    };
+    const run = (sim: Sim) => {
+      const { events } = collect(sim);
+      sim.restoration.pulse('r1:2:3');
+      sim.advance(6);
+      return { events: events.map((e) => `${e.type}:${e.source}>${e.target}@${e.depth}`), state: JSON.stringify(sim.state) };
+    };
+    const a = run(build());
+    const b = run(build());
+    expect(a.events).toEqual(b.events);
+    expect(a.state).toBe(b.state);
   });
 
-  it('solar boost from blooms is terminal (no feedback loop)', () => {
+  it('applies only the highest milestone, plus a small per-effect bonus', () => {
     const sim = makeSim();
     rich(sim);
-    const panel = sim.state.machines.find((m) => m.starter)!;
-    let boosts = 0;
-    sim.bus.on('solar.boost', () => boosts++);
-    sim.restoration.complete(setGround(sim, panel.x + 1, panel.z, 'polluted'), 'pulse');
-    sim.advance(3);
-    expect(boosts).toBe(1);
-    expect(panel.boostUntil).toBeGreaterThan(0);
+    fill(sim, 0, 0, 7, 7, 'prepared');
+    for (const x of [1, 3, 5, 7]) place(sim, 'pollinator', x, 4);
+    for (const x of [2, 4, 6]) place(sim, 'solar', x, 5);
+    const { ended } = collect(sim);
+    sim.restoration.complete(sim.grid.get('r1', 0, 4)!, 'pulse');
+    sim.advance(6);
+    const e = ended.reduce((a, b) => (b.combo > a.combo ? b : a));
+    const pct = [...TUNING.chain.milestones].reverse().find((m) => e.combo >= m.effects)!.pct;
+    expect(e.milestonePct).toBe(pct);
+    expect(e.bonus).toBeGreaterThan(TUNING.chain.perEffectBiomass * e.combo - 0.01);
   });
 
   it('mega bloom is bounded by its budget and may break concrete', () => {
@@ -84,6 +186,6 @@ describe('bloom chains', () => {
     expect(sim.chains.startMega(6)).toBe(true);
     sim.advance(4);
     expect(combo).toBeGreaterThan(0);
-    expect(combo).toBeLessThanOrEqual(6);
+    expect(combo).toBeLessThanOrEqual(6 + 4); // budget tiles + at most a few solar/garden reactions
   });
 });

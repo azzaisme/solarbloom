@@ -59,6 +59,8 @@ export class TileFx {
     parent.addChild(this.root);
     this.quad = this.quadMesh([[0, 0]], 0.94);
     this.frameMesh = this.frameMeshBuild();
+    this.quad.incRefCount(); // shared by pooled flashes; never let the engine free it
+    this.frameMesh.incRefCount();
     this.glowMat = additive('#ffe27a', 0.16);
     this.glow = new pc.Entity('glow');
     this.root.addChild(this.glow);

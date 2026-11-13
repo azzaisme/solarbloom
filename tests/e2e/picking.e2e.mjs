@@ -87,6 +87,13 @@ try {
     const after = await page.evaluate(() => JSON.stringify(window.solarbloom.sim.state.resources));
     checks++;
     if (before !== after) fail(`${vp.name}: clicking the hotbar changed resources`);
+    // Regression: when the last tile using a colour (e.g. all moss) disappears, shared meshes must survive.
+    await page.evaluate(() => {
+      const s = window.solarbloom.sim;
+      for (const t of s.grid.roof('r1').tiles) if (t.ground === 'prepared') s.restoration.complete(t, 'pulse');
+      for (const t of s.grid.roof('r1').tiles) if (t.ground === 'polluted' && !t.blocked) { t.ground = 'prepared'; t.pollution = 0; window.solarbloom.grid.refresh(t, false); break; }
+    });
+    await page.waitForTimeout(1500);
     if (errors.length) fail(`${vp.name}: page errors: ${errors.join(' | ')}`);
     console.log(`  ${failures ? '·' : '✓'} ${vp.name} ${vp.width}×${vp.height}`);
     await page.close();

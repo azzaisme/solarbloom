@@ -9,6 +9,7 @@ export interface MachineDef {
   allowedGround: GroundState[];
   blurb: string;
   hotkey?: string;
+  unlock?: { needs: MachineType; label: string };
 }
 
 export const MACHINES: Record<MachineType, MachineDef> = {
@@ -29,7 +30,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     size: 1,
     cost: { biomass: 20, energy: 10 },
     allowedGround: ['restored', 'prepared'],
-    blurb: '+1 water/s. Every 5 s it irrigates a mossy tile beside it into bloom.',
+    blurb: '+1 water/s. Its charge meter fills, then it waters the dry soil beside it into bloom, starting a chain.',
     hotkey: '4',
   },
   pollinator: {
@@ -52,6 +53,17 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     blurb: 'Launches a little drone that restores tiles within 3 tiles of the hub, paying the usual pulse cost.',
     hotkey: '6',
   },
+  motherTree: {
+    type: 'motherTree',
+    name: 'Mother Tree',
+    icon: '🌳',
+    size: 2,
+    cost: { biomass: 80, water: 25 },
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Every restoration within 2 tiles charges it. At full charge it releases a Bloom Pulse that restores and grows everything around it.',
+    hotkey: '7',
+    unlock: { needs: 'droneHub', label: 'Build a Drone Hub to unlock' },
+  },
   core: {
     type: 'core',
     name: 'Rooftop Core',
@@ -63,4 +75,4 @@ export const MACHINES: Record<MachineType, MachineDef> = {
   },
 };
 
-export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub'];
+export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree'];

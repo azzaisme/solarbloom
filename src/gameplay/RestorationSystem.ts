@@ -66,7 +66,7 @@ export class RestorationSystem {
     }
     this.sim.econ.spend(chk.cost);
     if (t.ground === 'restored') {
-      this.nurture(t);
+      this.grow(t);
       this.sim.bus.emit('pulse.fired', { tileId, extra: [] });
       return true;
     }
@@ -87,13 +87,16 @@ export class RestorationSystem {
     return true;
   }
 
-  /** Grows an already-restored tile one bloom level (grass → flowers → shrubs). */
-  private nurture(t: TileData) {
+  /** Grows an already-restored tile one bloom level (grass → flowers → shrubs). Can start or continue a chain. */
+  grow(t: TileData, chainId?: number) {
+    if (t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom) return;
     t.bloom = Math.min(TUNING.restore.maxBloom, t.bloom + 1);
     const b = this.sim.econ.add('biomass', TUNING.restore.nurtureBiomass * this.sim.upgrades.soilMult);
     if (b > 0) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: b, tileId: t.id });
     this.sim.production.markDirty();
     this.sim.bus.emit('tile.nurtured', { tile: t, level: t.bloom });
+    const id = this.sim.chains.onGrown(t, chainId);
+    this.sim.chains.addReward(id, b);
   }
 
   beginGrowth(t: TileData, source: RestoreSource, seconds: number) {

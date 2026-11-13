@@ -74,20 +74,14 @@ export class ProductionSystem {
     this.tickCondensers(dt);
   }
 
+  /** Water Condensers fill a charge meter; when full they water the dry soil beside them (a chain). */
   private tickCondensers(dt: number) {
     const s = this.sim;
+    const rate = TUNING.condenser.chargePerSec * (1 + 0.25 * s.upgrades.waterBloom);
     for (const m of s.state.machines) {
       if (m.type !== 'condenser') continue;
-      m.timer += dt;
-      if (m.timer < TUNING.condenser.irrigateEvery) continue;
-      m.timer = 0;
-      if (s.econ.get('water') < TUNING.condenser.irrigateWater) continue;
-      const target = s.grid
-        .tilesNear(m, TUNING.condenser.radius)
-        .find((t) => t.ground === 'prepared' && s.restoration.isEligible(t, false));
-      if (!target) continue;
-      s.econ.spend({ water: TUNING.condenser.irrigateWater });
-      s.restoration.beginGrowth(target, 'condenser', 0.6);
+      m.charge = Math.min(TUNING.condenser.threshold, (m.charge ?? 0) + rate * dt);
+      if (m.charge >= TUNING.condenser.threshold && s.chains.startWater(m)) m.charge = 0;
     }
   }
 }

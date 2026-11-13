@@ -58,6 +58,9 @@ export function vcMesh(type: VPrim, hex: string): pc.Mesh {
   }
   g.colors = colors;
   m = pc.Mesh.fromGeometry(vcDevice!, g);
+  // The cache holds its own reference: otherwise the engine frees a shared mesh when the last
+  // entity using it is destroyed, and the next tile with that colour would get a dead mesh.
+  m.incRefCount();
   vcCache.set(key, m);
   return m;
 }

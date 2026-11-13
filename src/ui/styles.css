@@ -246,3 +246,5 @@ button:focus-visible { outline: 3px solid #2f7de1; outline-offset: 2px; }
   #combo .big { font-size: 20px; }
   #combo .big.tier3 { font-size: 24px; }
 }
+.slot.locked { opacity: .55; }
+.slot.locked .si { filter: grayscale(1); }

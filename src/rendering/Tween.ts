@@ -32,6 +32,10 @@ export class Tweens {
     return tw;
   }
 
+  has(owner: object) {
+    return this.list.some((t) => t.owner === owner);
+  }
+
   cancel(owner: object) {
     this.list = this.list.filter((t) => t.owner !== owner);
   }

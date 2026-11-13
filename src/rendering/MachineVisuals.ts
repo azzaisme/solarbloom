@@ -3,6 +3,7 @@ import type { MachineData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { color, mat, PALETTE, uniqueMat } from './Materials';
 import { group, shape } from './Shapes';
+import { TUNING } from '../data/tuning';
 import { SLAB_TOP } from './SceneBuilder';
 import { ease, type Tweens } from './Tween';
 
@@ -18,10 +19,14 @@ interface MachineView {
   coreMat?: pc.StandardMaterial;
   coreBase?: pc.StandardMaterial;
   rings?: pc.Entity[];
+  orbs?: pc.Entity[];
+  canopy?: pc.Entity;
   level: number;
   extras: pc.Entity;
 }
 
+const orbOn = () => mat('#b6ffe0', { emissive: '#7cf7c8', emissiveIntensity: 1.6 });
+const orbOff = () => mat('#3f6b4a', { gloss: 0.6 });
 const panelMat = () => mat(PALETTE.panel, { gloss: 0.85, metal: 0.2 });
 const panelBoost = () => mat(PALETTE.panelGlint, { gloss: 0.9, emissive: '#ffd56a', emissiveIntensity: 0.6 });
 
@@ -68,6 +73,9 @@ export class MachineVisuals {
         break;
       case 'droneHub':
         this.hub(v);
+        break;
+      case 'motherTree':
+        this.motherTree(v);
         break;
       case 'core':
         this.core(v);
@@ -192,6 +200,56 @@ export class MachineVisuals {
     for (const [x, z] of [[0.7, -0.62], [-0.62, 0.72]]) shape(b, 'sphere', mat(PALETTE.leafFin), { pos: [x, 0.26, z], scale: [0.32, 0.14, 0.2] });
   }
 
+  private motherTree(v: MachineView) {
+    const b = v.body;
+    // Round white planter ring, a twisting trunk, layered canopy and charge orbs.
+    shape(b, 'cylinder', mat(PALETTE.shell), { pos: [0, 0.1, 0], scale: [1.7, 0.2, 1.7], shadow: true });
+    shape(b, 'cylinder', mat(PALETTE.soil), { pos: [0, 0.205, 0], scale: [1.5, 0.02, 1.5] });
+    for (let i = 0; i < 3; i++) {
+      const seg = shape(b, 'cylinder', mat(PALETTE.trunk), { pos: [Math.sin(i) * 0.06, 0.45 + i * 0.36, Math.cos(i) * 0.06], scale: [0.32 - i * 0.05, 0.42, 0.32 - i * 0.05], rot: [6 - i * 5, i * 30, 8 - i * 6], shadow: true });
+      void seg;
+    }
+    for (let r = 0; r < 4; r++) {
+      const a = r * 1.7;
+      shape(b, 'capsule', mat(PALETTE.trunk), { pos: [Math.cos(a) * 0.3, 0.28, Math.sin(a) * 0.3], scale: [0.07, 0.12, 0.07], rot: [Math.sin(a) * 70, 0, Math.cos(a) * 70] });
+    }
+    const canopy = group(b, 'canopy', [0, 1.55, 0]);
+    const leaves: [number, number, number, number, string][] = [
+      [0, 0.3, 0, 1.25, PALETTE.shrub[0]],
+      [0.45, 0.05, 0.2, 0.85, PALETTE.shrub[1]],
+      [-0.42, 0.1, -0.15, 0.9, PALETTE.shrub[2]],
+      [0.1, 0.05, -0.48, 0.8, PALETTE.shrub[1]],
+      [-0.2, 0.0, 0.45, 0.8, PALETTE.shrub[0]],
+      [0, 0.75, 0, 0.75, '#5fc25a'],
+    ];
+    for (const [x, y, z, sz, c] of leaves) shape(canopy, 'sphere', mat(c), { pos: [x, y, z], scale: [sz, sz * 0.78, sz], shadow: true });
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      shape(canopy, 'sphere', mat(PALETTE.flower[i % 5]), { pos: [Math.cos(a) * 0.62, 0.15 + (i % 2) * 0.3, Math.sin(a) * 0.62], scale: 0.1 });
+    }
+    v.canopy = canopy;
+    // Charge orbs hang in the canopy; they light up as the tree charges.
+    v.orbs = [];
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + 0.3;
+      const o = shape(canopy, 'sphere', mat('#3f6b4a', { gloss: 0.6 }), { pos: [Math.cos(a) * 0.55, -0.22 + (i % 2) * 0.12, Math.sin(a) * 0.55], scale: 0.12 });
+      v.orbs.push(o);
+    }
+    v.light = shape(b, 'sphere', mat('#7cf7c8', { emissive: '#7cf7c8', emissiveIntensity: 1.2 }), { pos: [0, 0.24, 0.72], scale: 0.07 });
+  }
+
+  /** Bloom Pulse: canopy swells and the orbs flash. */
+  pulseTree(id: string) {
+    const v = this.views.get(id);
+    if (!v?.canopy) return;
+    const c = v.canopy;
+    this.tweens.cancel(c);
+    this.tweens.add(0.9, (k) => {
+      const s = 1 + Math.sin(k * Math.PI) * 0.25 * (1 - k * 0.5);
+      c.setLocalScale(s, s, s);
+    }, { owner: c, ease: ease.linear, done: () => c.setLocalScale(1, 1, 1) });
+  }
+
   private core(v: MachineView) {
     const b = v.body;
     v.coreBase = uniqueMat(PALETTE.coreDormant, { gloss: 0.3 });
@@ -294,9 +352,25 @@ export class MachineVisuals {
           v.light!.setLocalScale(s, s, s);
           break;
         }
-        case 'condenser':
+        case 'condenser': {
           if (!rm) v.bob[0].setLocalPosition(0, 0.7 + Math.sin(t * 2 + v.root.getPosition().x) * 0.03, 0);
+          // Water level shows the watering charge.
+          const f = 0.35 + 0.65 * Math.min(1, (v.m.charge ?? 0) / TUNING.condenser.threshold);
+          v.bob[0].setLocalScale(0.3 * f + 0.06, 0.3 * f + 0.06, 0.3 * f + 0.06);
           break;
+        }
+        case 'motherTree': {
+          const lit = Math.round(((v.m.charge ?? 0) / TUNING.motherTree.threshold) * v.orbs!.length);
+          v.orbs!.forEach((o, i) => {
+            const on = i < lit;
+            const want = on ? orbOn() : orbOff();
+            if (o.render!.material !== want) o.render!.material = want;
+            const sc = on ? 0.12 + (rm ? 0 : Math.sin(t * 4 + i) * 0.015) : 0.1;
+            o.setLocalScale(sc, sc, sc);
+          });
+          if (!rm && v.canopy && !this.tweens.has(v.canopy)) v.canopy.setLocalEulerAngles(Math.sin(t * 0.8) * 1.5, 0, Math.cos(t * 0.6) * 1.5);
+          break;
+        }
         case 'pollinator': {
           if (rm) break;
           v.bob.forEach((f, i) => f.setLocalEulerAngles(Math.sin(t * 1.8 + i) * 6, 0, Math.cos(t * 1.4 + i) * 6));

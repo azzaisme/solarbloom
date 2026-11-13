@@ -78,7 +78,7 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): Game
     harvestReadyAt: 0,
     cat: { nextSpawnAt: -1, found: 0, stash: 0, firstSpawned: false, log: [] },
     progression: { coreActivated: false, coreActivatedAt: -1, tutorialStep: 0, hintsDismissed: false, introSeen: false },
-    stats: { tilesRestored: 0, maxCombo: 0, chains: 0, catsFound: 0, droneJobs: 0 },
+    stats: { tilesRestored: 0, maxCombo: 0, chains: 0, catsFound: 0, droneJobs: 0, firsts: {}, chainEffects: 0, stuckSeconds: 0 },
   };
 }
 

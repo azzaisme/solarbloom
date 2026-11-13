@@ -250,9 +250,9 @@ export class Hud {
       case 4:
         return build('pollinator', 'Plants and machines help each other. Build a Pollinator Garden:');
       case 5:
-        return { text: 'Tap brown mossy tiles right next to your 🌸 garden: the bloom jumps from tile to tile in a Bloom Chain!' };
+        return { text: 'Restore a tile right next to your 🌸 garden: it pollinates a neighbour, which can set off solar panels and other gardens in a Bloom Chain!' };
       case 6:
-        return build('droneHub', 'Let a drone take over the small jobs. Build a Drone Hub:');
+        return build('droneHub', 'Let a drone take over the small jobs (it also unlocks the 🌳 Mother Tree). Build a Drone Hub:');
       case 7: {
         const full = s.progression.fullBloomCount('r1');
         const missing = BUILDABLE.filter((t) => !s.progression.built(t));
@@ -493,6 +493,9 @@ export class Hud {
       const cost = s.build.cost(t);
       this.set(`hc-${t}`, $(btn, '.sc'), 'text', formatCost(cost));
       this.set(`hk-${t}`, btn, 'cls', s.econ.canAfford(cost) ? '0' : '1', 'cant');
+      const locked = !s.build.isUnlocked(t);
+      this.set(`hl-${t}`, btn, 'cls', locked ? '1' : '0', 'locked');
+      if (locked) this.set(`hc-${t}`, $(btn, '.sc'), 'text', '🔒 Drone Hub');
     }
     const cd = Math.max(0, s.state.harvestReadyAt - s.time);
     const hb = $(this.root, '#harvestBtn');

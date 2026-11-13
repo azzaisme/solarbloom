@@ -38,7 +38,7 @@ export class SaveService {
       migrate(s);
       // Fill any fields added after this save was written.
       const base = createInitialState(s.seed);
-      return { ...base, ...s, cat: { ...base.cat, ...s.cat }, progression: { ...base.progression, ...s.progression }, stats: { ...base.stats, ...s.stats } };
+      return { ...base, ...s, cat: { ...base.cat, ...s.cat }, progression: { ...base.progression, ...s.progression }, stats: { ...base.stats, ...s.stats, firsts: { ...(s.stats?.firsts ?? {}) } } };
     } catch {
       return undefined;
     }

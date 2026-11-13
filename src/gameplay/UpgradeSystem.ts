@@ -68,6 +68,12 @@ export class UpgradeSystem {
   get droneFlyMult() {
     return 1 + 0.3 * this.level('droneSpeed');
   }
+  get waterBloom() {
+    return this.level('waterBloom');
+  }
+  get treeRadius() {
+    return TUNING.motherTree.radius + this.level('treeResonance');
+  }
   get pollinatorReach() {
     return TUNING.pollinator.reach + this.level('pollinatorReach');
   }

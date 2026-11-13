@@ -38,24 +38,32 @@ export const TUNING = {
     pollutionMax: 100,
   },
 
+  /** Bloom Chain engine (Round 2): a deterministic, capped event queue. */
   chain: {
-    stepDelay: 0.15,
-    maxEvents: 32,
-    maxDuration: 3,
-    spreadPerStep: 2,
+    stepDelay: 0.15, // seconds between waves, so chains are readable
+    maxEvents: 100, // processed events per chain before the rest fast-forwards
+    maxDepth: 40,
+    fastForwardAfter: 6, // seconds; long chains resolve the remainder instantly
+    perEffectBiomass: 0.5, // modest bonus for each unique triggered effect
+    // Highest milestone reached applies (not stacked): % bonus on everything the chain earned.
     milestones: [
-      { combo: 3, biomass: 3 },
-      { combo: 5, biomass: 5 },
-      { combo: 10, biomass: 12 },
-      { combo: 20, biomass: 20 },
+      { effects: 5, pct: 0.1 },
+      { effects: 10, pct: 0.25 },
+      { effects: 20, pct: 0.5 },
     ],
   },
 
-  solarBloomBoost: { mult: 2, seconds: 5 },
+  /** Solar Panel synergy: a bloom right next to it → one burst per panel per chain. */
+  solarBloomBoost: { mult: 2, seconds: 5, burstEnergy: 3 },
 
-  condenser: { irrigateEvery: 5, irrigateWater: 2, radius: 1 },
+  /** Water Condenser ("Rain Collector"): fills a charge meter, then waters dry soil beside it. */
+  condenser: { radius: 1, chargePerSec: 1, threshold: 6, targets: 2 },
 
-  pollinator: { reach: 1, biomassMult: 2 },
+  /** Pollinator Garden: a newly restored neighbour triggers a bonus restore/grow nearby. */
+  pollinator: { reach: 1, biomassMult: 2, triggersPerChain: 2 },
+
+  /** Mother Tree: charges from restorations nearby; at full charge releases an area Bloom Pulse. */
+  motherTree: { radius: 2, threshold: 12 },
 
   drone: {
     hubRadius: 3,
