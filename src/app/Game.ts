@@ -91,7 +91,8 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement) {
     this.settings = loadSettings();
-    const loaded = this.saver.load();
+    const lr = this.saver.loadResult();
+    const loaded = lr.state;
     const state = loaded ?? createInitialState();
     this.sim = new Sim(state, this.bus);
 
@@ -176,6 +177,7 @@ export class Game {
 
     this.app.on('update', (dt: number) => this.update(dt));
     this.app.start();
+    if (lr.backedUpAs) setTimeout(() => this.hud.toast(`Your old save couldn't be read by this version, so it was kept safely as a backup and a new rooftop started.<small>${lr.backedUpAs}</small>`, '', 8), 400);
     if (!state.progression.introSeen && state.stats.tilesRestored === 0) this.hud.showIntro();
     else if (loaded) setTimeout(() => this.hud.toast('Welcome back! Your garden kept its shape. 🌱', '', 2.6), 400);
   }

@@ -43,6 +43,7 @@ export interface MachineData {
   starter?: boolean;
   boostUntil: number; // solar bloom boost
   timer: number; // per-machine automation timer
+  charge: number; // condenser / Mother Tree charge meter
 }
 
 export type DroneMode = 'idle' | 'flying' | 'working' | 'cooldown' | 'returning';
@@ -71,6 +72,8 @@ export interface CatState {
   active?: { anchorId: string; spawnedAt: number };
   nextSpawnAt: number; // -1 until the first (milestone-based) spawn
   found: number;
+  /** Extra rewards a missed cat has saved up (it never blocks later rewards). */
+  stash: number;
   firstSpawned: boolean;
   lastReward?: CatRewardType;
   /** Discovery log: every cat found, where, and what it gave. */

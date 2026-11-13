@@ -15,7 +15,7 @@ describe('save & progression', () => {
     expect(copy.progression.restoredCount('r1')).toBe(sim.progression.restoredCount('r1'));
     expect(copy.state.machines.length).toBe(sim.state.machines.length);
     expect(copy.upgrades.level('solarArray')).toBe(1);
-    expect(saver.deserialize('{"version":999}')).toBeUndefined();
+    expect(saver.deserialize(JSON.stringify({ version: 999, rooftops: [] }))).toBeUndefined();
     expect(saver.deserialize('nope')).toBeUndefined();
   });
 
@@ -64,5 +64,37 @@ describe('save & progression', () => {
     }
     expect(sim.state.progression.coreActivated).toBe(true);
     expect(t / 10).toBeLessThan(15 * 60);
+  });
+});
+
+describe('save migration', () => {
+  it('upgrades a Round 1 (v1) save and keeps its progress', async () => {
+    const { SaveService } = await import('../src/app/SaveService');
+    const sim = makeSim(3);
+    rich(sim);
+    fill(sim, 2, 2, 5, 5, 'restored');
+    sim.build.place('condenser', 'r1', 3, 3);
+    const old = JSON.parse(JSON.stringify(sim.state));
+    old.version = 1;
+    for (const m of old.machines) delete m.charge;
+    delete old.cat.stash;
+    delete old.cat.log;
+    const s = new SaveService(undefined).deserialize(JSON.stringify(old))!;
+    expect(s.version).toBe(2);
+    expect(s.machines.every((m) => m.charge === 0)).toBe(true);
+    expect(s.cat.stash).toBe(0);
+    expect(new Sim(s).progression.restoredCount('r1')).toBe(sim.progression.restoredCount('r1'));
+  });
+
+  it('backs up a save from a newer version instead of overwriting it', async () => {
+    const { SaveService, SAVE_KEY } = await import('../src/app/SaveService');
+    const store = new Map<string, string>();
+    const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
+    const future = JSON.stringify({ ...makeSim().state, version: 99 });
+    store.set(SAVE_KEY, future);
+    const r = new SaveService(storage).loadResult();
+    expect(r.state).toBeUndefined();
+    expect(r.backedUpAs).toBeDefined();
+    expect(store.get(r.backedUpAs!)).toBe(future);
   });
 });

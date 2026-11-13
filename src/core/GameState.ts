@@ -4,7 +4,7 @@ import { tileId } from './Grid';
 import { Rng } from './Rng';
 import type { GameState, MachineData, RooftopData, TileData } from './types';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): GameState {
   const rng = new Rng(seed);
@@ -45,7 +45,7 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): Game
   let nextId = 1;
   const place = (roofId: string, type: MachineData['type'], x: number, z: number, size: number, starter = false) => {
     const roof = rooftops.find((r) => r.id === roofId)!;
-    const m: MachineData = { id: `m${nextId++}`, type, roofId, x, z, size, starter, boostUntil: 0, timer: 0 };
+    const m: MachineData = { id: `m${nextId++}`, type, roofId, x, z, size, starter, boostUntil: 0, timer: 0, charge: 0 };
     machines.push(m);
     for (let dz = 0; dz < size; dz++)
       for (let dx = 0; dx < size; dx++) {
@@ -76,7 +76,7 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): Game
     upgrades: {},
     buffs: [],
     harvestReadyAt: 0,
-    cat: { nextSpawnAt: -1, found: 0, firstSpawned: false, log: [] },
+    cat: { nextSpawnAt: -1, found: 0, stash: 0, firstSpawned: false, log: [] },
     progression: { coreActivated: false, coreActivatedAt: -1, tutorialStep: 0, hintsDismissed: false, introSeen: false },
     stats: { tilesRestored: 0, maxCombo: 0, chains: 0, catsFound: 0, droneJobs: 0 },
   };

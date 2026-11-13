@@ -1,6 +1,8 @@
 import * as pc from 'playcanvas';
 
 export type Prim = 'box' | 'sphere' | 'cylinder' | 'cone' | 'capsule' | 'plane' | 'torus';
+/** Vertex-coloured primitives; 'sphereHi' is a smoother sphere for big canopies and domes. */
+export type VPrim = Prim | 'sphereHi';
 
 export function initLowPoly(device: pc.GraphicsDevice) {
   vcDevice = device;
@@ -19,8 +21,10 @@ const vcCache = new Map<string, pc.Mesh>();
 let vcDevice: pc.GraphicsDevice | undefined;
 let vcMaterial: pc.StandardMaterial | undefined;
 
-function lowGeometry(type: Prim): pc.Geometry {
+function lowGeometry(type: VPrim): pc.Geometry {
   switch (type) {
+    case 'sphereHi':
+      return new pc.SphereGeometry({ radius: 0.5, latitudeBands: 9, longitudeBands: 12 });
     case 'sphere':
       return new pc.SphereGeometry({ radius: 0.5, latitudeBands: 5, longitudeBands: 7 });
     case 'cone':
@@ -35,7 +39,7 @@ function lowGeometry(type: Prim): pc.Geometry {
 }
 
 /** Shared low-poly mesh with a baked colour (sRGB hex → linear, matching material colours). */
-export function vcMesh(type: Prim, hex: string): pc.Mesh {
+export function vcMesh(type: VPrim, hex: string): pc.Mesh {
   const key = `${type}|${hex}`;
   let m = vcCache.get(key);
   if (m) return m;
@@ -59,7 +63,7 @@ export function vcMesh(type: Prim, hex: string): pc.Mesh {
 }
 
 /** A primitive whose colour is baked into its vertices (shares one material for batching). */
-export function vshape(parent: pc.Entity, type: Prim, hex: string, o: ShapeOpts = {}): pc.Entity {
+export function vshape(parent: pc.Entity, type: VPrim, hex: string, o: ShapeOpts = {}): pc.Entity {
   const e = new pc.Entity(o.name ?? type);
   e.addComponent('render', { meshInstances: [new pc.MeshInstance(vcMesh(type, hex), vcMaterial!)], castShadows: o.shadow ?? false, receiveShadows: o.receive ?? true });
   if (o.pos) e.setLocalPosition(o.pos[0], o.pos[1], o.pos[2]);
@@ -73,7 +77,7 @@ export function vshape(parent: pc.Entity, type: Prim, hex: string, o: ShapeOpts 
   return e;
 }
 
-export function setVColor(e: pc.Entity, type: Prim, hex: string) {
+export function setVColor(e: pc.Entity, type: VPrim, hex: string) {
   const mi = e.render?.meshInstances[0];
   if (mi) mi.mesh = vcMesh(type, hex);
 }

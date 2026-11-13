@@ -1,5 +1,6 @@
 import { createInitialState, SAVE_VERSION } from '../core/GameState';
 import type { GameState } from '../core/types';
+import { migrate } from './migrations';
 
 export const SAVE_KEY = 'solarbloom.save';
 
@@ -25,10 +26,16 @@ export class SaveService {
     return JSON.stringify(state);
   }
 
+  /**
+   * Parses a save, migrating older versions forward. Returns undefined for anything unreadable
+   * or from a newer game version (the caller backs those up rather than overwriting them).
+   */
   deserialize(json: string): GameState | undefined {
     try {
       const s = JSON.parse(json) as GameState;
-      if (!s || s.version !== SAVE_VERSION || !Array.isArray(s.rooftops)) return undefined;
+      if (!s || typeof s.version !== 'number' || !Array.isArray(s.rooftops)) return undefined;
+      if (s.version > SAVE_VERSION) return undefined;
+      migrate(s);
       // Fill any fields added after this save was written.
       const base = createInitialState(s.seed);
       return { ...base, ...s, cat: { ...base.cat, ...s.cat }, progression: { ...base.progression, ...s.progression }, stats: { ...base.stats, ...s.stats } };
@@ -47,11 +54,21 @@ export class SaveService {
   }
 
   load(): GameState | undefined {
+    return this.loadResult().state;
+  }
+
+  /** Loads the save. An unreadable/incompatible save is copied to a backup key first, never silently lost. */
+  loadResult(): { state?: GameState; backedUpAs?: string } {
     try {
       const raw = this.storage?.getItem(SAVE_KEY);
-      return raw ? this.deserialize(raw) : undefined;
+      if (!raw) return {};
+      const state = this.deserialize(raw);
+      if (state) return { state };
+      const key = `${SAVE_KEY}.backup.${Date.now()}`;
+      this.storage?.setItem(key, raw);
+      return { backedUpAs: key };
     } catch {
-      return undefined;
+      return {};
     }
   }
 

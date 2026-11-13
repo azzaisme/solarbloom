@@ -68,7 +68,7 @@ export class BuildSystem {
     }
     s.econ.spend(chk.cost);
     const def = MACHINES[type];
-    const m: MachineData = { id: s.newId('m'), type, roofId, x, z, size: def.size, boostUntil: 0, timer: 0 };
+    const m: MachineData = { id: s.newId('m'), type, roofId, x, z, size: def.size, boostUntil: 0, timer: 0, charge: 0 };
     s.state.machines.push(m);
     for (const c of s.grid.footprint(roofId, x, z, def.size)) if (c) c.occupantId = m.id;
     s.production.markDirty();
