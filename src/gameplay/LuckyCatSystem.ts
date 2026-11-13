@@ -49,7 +49,15 @@ export class LuckyCatSystem {
   tick() {
     const c = this.sim.state.cat;
     const t = this.sim.time;
-    if (c.active) return;
+    if (c.active) {
+      // A missed cat never blocks rewards: when the next one would have appeared, it saves up an extra.
+      if (c.nextSpawnAt >= 0 && t >= c.nextSpawnAt) {
+        c.stash = Math.min(TUNING.cat.stashMax, (c.stash ?? 0) + 1);
+        c.nextSpawnAt = t + this.sim.rng.range(TUNING.cat.laterMin, TUNING.cat.laterMax);
+        this.sim.bus.emit('cat.stash', { stash: c.stash });
+      }
+      return;
+    }
     if (!c.firstSpawned) {
       const ready = (t >= TUNING.cat.firstMinTime && this.restoredCount() >= TUNING.cat.firstMinRestored) || t >= TUNING.cat.firstForceTime;
       if (ready) this.spawn();
@@ -69,7 +77,7 @@ export class LuckyCatSystem {
     }
     c.active = { anchorId: a.id, spawnedAt: this.sim.time };
     c.firstSpawned = true;
-    c.nextSpawnAt = -1;
+    c.nextSpawnAt = this.sim.time + this.sim.rng.range(TUNING.cat.laterMin, TUNING.cat.laterMax);
     this.sim.bus.emit('cat.spawned', { anchorId: a.id });
     return true;
   }
@@ -89,17 +97,18 @@ export class LuckyCatSystem {
 
   rollReward(): CatRewardType {
     const hasHub = this.sim.state.machines.some((m) => m.type === 'droneHub');
+    const w = TUNING.cat.weights;
     const table: [CatRewardType, number][] = [
-      ['luckyHarvest', 35],
-      ['solarFrenzy', 30],
-      ['megaBloom', 20],
-      ['droneParty', hasHub ? 10 : 0],
-      ['jackpot', 5],
+      ['luckyHarvest', w.luckyHarvest],
+      ['solarFrenzy', w.solarFrenzy],
+      ['megaBloom', w.megaBloom],
+      ['droneParty', hasHub ? w.droneParty : 0],
+      ['jackpot', w.jackpot],
     ];
-    const total = table.reduce((a, [, w]) => a + w, 0);
+    const total = table.reduce((a, [, x]) => a + x, 0);
     let r = this.sim.rng.next() * total;
-    for (const [type, w] of table) {
-      if ((r -= w) < 0) return type;
+    for (const [type, x] of table) {
+      if ((r -= x) < 0) return type;
     }
     return 'luckyHarvest';
   }
@@ -117,20 +126,26 @@ export class LuckyCatSystem {
     const hidden = Math.min(1, (s.time - active.spawnedAt) / TUNING.cat.hiddenBonusCapSec);
     const mult = 1 + TUNING.cat.hiddenBonusMax * hidden;
     const type: CatRewardType = first ? 'luckyHarvest' : this.rollReward();
-    const summary = this.apply(type, mult);
+    const parts = [this.apply(type, mult, hidden)];
+    // Saved-up rewards from while it was hiding: extra Lucky Harvests.
+    const extras = c.stash ?? 0;
+    for (let i = 0; i < extras; i++) parts.push(this.apply('luckyHarvest', 1, 0));
+    c.stash = 0;
+    const summary = parts.join(' · ');
     c.lastReward = type;
     c.log = [...(c.log ?? []), { anchorId: active.anchorId, reward: type, at: s.time }];
     c.nextSpawnAt = s.time + s.rng.range(TUNING.cat.laterMin, TUNING.cat.laterMax);
-    s.bus.emit('cat.found', { anchorId: active.anchorId, reward: type, summary });
+    s.bus.emit('cat.found', { anchorId: active.anchorId, reward: type, summary, extras });
     return { type, summary };
   }
 
-  private apply(type: CatRewardType, mult: number): string {
+  private apply(type: CatRewardType, mult: number, hidden: number): string {
     const s = this.sim;
     const parts: string[] = [];
     const harvest = () => {
       const rate = s.production.rates().biomass;
-      const amt = Math.max(TUNING.cat.harvestMin, rate * TUNING.cat.harvestSeconds) * mult;
+      const secs = TUNING.cat.harvestSecondsMin + (TUNING.cat.harvestSecondsMax - TUNING.cat.harvestSecondsMin) * hidden;
+      const amt = Math.max(TUNING.cat.harvestMin, rate * secs);
       const got = s.econ.add('biomass', amt);
       const w = s.econ.add('water', 10 * mult);
       const e = s.econ.add('energy', 15 * mult);
@@ -172,11 +187,18 @@ export class LuckyCatSystem {
       case 'droneParty':
         party();
         break;
-      case 'jackpot':
-        harvest();
-        mega();
-        frenzy();
+      case 'jackpot': {
+        // Two different compatible rewards together.
+        const pool: (() => void)[] = [harvest, frenzy, mega];
+        if (s.state.machines.some((m) => m.type === 'droneHub')) pool.push(party);
+        const i = Math.floor(s.rng.next() * pool.length);
+        let j = Math.floor(s.rng.next() * (pool.length - 1));
+        if (j >= i) j++;
+        parts.push('JACKPOT!');
+        pool[i]();
+        pool[j]();
         break;
+      }
     }
     return parts.join(' · ');
   }

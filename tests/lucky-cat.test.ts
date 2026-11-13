@@ -65,7 +65,7 @@ describe('lucky cat', () => {
       sim.state.cat.found = 1; // skip the guaranteed first reward
       sim.cat.spawn();
       sim.cat.claim();
-      sim.advance(40);
+      sim.advance(TUNING.cat.dronePartySeconds * 1.6);
       for (const k of ['energy', 'water', 'biomass'] as const) {
         expect(sim.state.resources[k]).toBeGreaterThanOrEqual(0);
         expect(sim.state.resources[k]).toBeLessThanOrEqual(sim.state.caps[k] + 1e-9);
@@ -92,5 +92,36 @@ describe('lucky cat', () => {
     expect(d.anchors.find((a) => a.id === 'parapet-back')!.found).toBe(true);
     expect(d.anchors.filter((a) => a.found).length).toBe(1);
     expect(d.rewards.luckyHarvest).toBe(1);
+  });
+
+  it('a missed cat never blocks rewards: it stashes extras (capped) and pays them on discovery', () => {
+    const sim = makeSim();
+    sim.cat.spawn('parapet-back');
+    sim.state.cat.found = 1;
+    sim.advance(TUNING.cat.laterMax * (TUNING.cat.stashMax + 2));
+    expect(sim.state.cat.active?.anchorId).toBe('parapet-back'); // still discoverable, only one cat
+    expect(sim.state.cat.stash).toBe(TUNING.cat.stashMax);
+    let extras = -1;
+    sim.bus.on('cat.found', (e) => (extras = e.extras));
+    sim.cat.claim();
+    expect(extras).toBe(TUNING.cat.stashMax);
+    expect(sim.state.cat.stash).toBe(0);
+  });
+
+  it('jackpot grants two different rewards', () => {
+    for (let seed = 1; seed < 30; seed++) {
+      const sim = makeSim(seed);
+      rich(sim);
+      fill(sim, 2, 2, 5, 5, 'restored');
+      sim.state.cat.found = 1;
+      sim.cat.rollReward = () => 'jackpot';
+      sim.cat.spawn();
+      let summary = '';
+      sim.bus.on('cat.found', (e) => (summary = e.summary));
+      sim.cat.claim();
+      expect(summary).toMatch(/JACKPOT/);
+      const kinds = [/🌿/, /Solar ×3/, /Mega Bloom|already blooming/, /party drones/].filter((r) => r.test(summary)).length;
+      expect(kinds).toBeGreaterThanOrEqual(2);
+    }
   });
 });

@@ -76,19 +76,22 @@ export const TUNING = {
   machineCostGrowth: 1.5, // each extra copy of a machine costs this much more
 
   cat: {
-    firstMinTime: 180, // seconds of play
+    firstMinTime: 240, // first cat: 4–6 minutes of active play, once the player knows the grid
     firstMinRestored: 10,
-    firstForceTime: 300,
-    laterMin: 180,
-    laterMax: 420,
-    hiddenBonusCapSec: 180, // reward grows with hidden time up to this
+    firstForceTime: 360,
+    laterMin: 240, // later cats: every 4–8 minutes of active play
+    laterMax: 480,
+    hiddenBonusCapSec: 180, // reward grows a little with hidden time, up to this
     hiddenBonusMax: 0.5,
-    harvestSeconds: 60,
+    harvestSecondsMin: 60, // Lucky Harvest: 60–120 s of current biomass production
+    harvestSecondsMax: 120,
     harvestMin: 15,
-    frenzySeconds: 30,
+    frenzySeconds: 45,
     frenzyMult: 3,
     megaBloomTiles: 8,
-    dronePartySeconds: 20,
+    dronePartySeconds: 45,
+    stashMax: 2, // a missed cat saves up to this many extra rewards instead of blocking new ones
+    weights: { luckyHarvest: 40, solarFrenzy: 25, megaBloom: 20, droneParty: 12, jackpot: 3 },
   },
 
   core: {

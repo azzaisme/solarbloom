@@ -71,5 +71,6 @@ export const CAT_ANCHORS: CatAnchor[] = [
   { id: 'parapet-left', roofId: 'r1', pos: [-0.12, PARAPET_TOP, 4.6], rotY: 250, hint: 'on the left railing' },
   { id: 'rain-barrel', roofId: 'r1', pos: [6.55, PARAPET_TOP, -0.12], rotY: 210, hint: 'by the rain barrel' },
   { id: 'corner-ledge', roofId: 'r1', pos: [8.12, PARAPET_TOP, 8.12], rotY: 45, hint: 'on the front corner ledge' },
+  { id: 'between-solar', roofId: 'r1', pos: [2.82, 0.08, 1.18], rotY: 230, needsFreeTile: [2, 1], hint: 'between the solar panels' },
   { id: 'core-step', roofId: 'r1', pos: [2.1, 0.08, 0.2], rotY: 200, needsFreeTile: [2, 0], hint: 'by the Core' },
 ];

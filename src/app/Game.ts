@@ -785,7 +785,7 @@ export class Game {
       this.meowTimer = 20;
       this.save();
     });
-    b.on('cat.found', ({ reward, summary }) => {
+    b.on('cat.found', ({ reward, summary, extras }) => {
       const p = this.cat.targetWorld();
       if (p) {
         this.lastCatPos = p.clone();
@@ -793,10 +793,18 @@ export class Game {
         this.vfx.ring(p, PALETTE.gold, 1.6, 0.8);
       }
       this.cat.hide(true);
+      this.hud.hideTip();
       this.sfx.meow();
       setTimeout(() => this.sfx.fanfare(), 250);
-      this.hud.toast(`🐱 Lucky Cat Found!<small>${CAT_REWARD_NAMES[reward]} — ${summary}</small>`, 'cat', 4.5);
+      this.hud.toast('🐱 LUCKY CAT FOUND!', 'cat', 2.4);
+      this.hud.catReward(`${CAT_REWARD_NAMES[reward]}${extras ? ` + ${extras} saved-up harvest${extras > 1 ? 's' : ''}` : ''}`, summary);
       this.save();
+    });
+    b.on('cat.stash', () => {
+      // A soft hint that something lucky is still waiting, never a pointer.
+      this.sfx.meow(true);
+      const p = this.cat.targetWorld();
+      if (p) this.vfx.burst(p, 6, { up: 1.5, size: 0.04, speed: 0.4 });
     });
     b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Frenzy ×3 for ${Math.round(seconds)}s`));
     b.on('harvest', () => this.sfx.coin());

@@ -106,6 +106,7 @@ export class Hud {
       <div id="hotbar" class="panel">${slots}</div>
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
       <div id="toasts"></div>
+      <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
       <div id="intro" hidden><div class="panel card-intro">
         <h2>🌱 Welcome to Solarbloom</h2>
         <p>This rooftop is dead concrete. Bring it back to life.</p>
@@ -173,6 +174,7 @@ export class Hud {
       }, 4100);
     });
     $(r, '#skipBtn').addEventListener('click', () => this.cb.skipCinematic());
+    $(r, '#catPanel button').addEventListener('click', () => ($(r, '#catPanel').hidden = true));
     $(r, '#introGo').addEventListener('click', () => {
       $(r, '#intro').hidden = true;
       this.sim.state.progression.introSeen = true;
@@ -201,6 +203,16 @@ export class Hud {
     else if (prop === 'html') el.innerHTML = value;
     else if (prop === 'width') el.style.width = value;
     else if (prop === 'cls' && cls) el.classList.toggle(cls, value === '1');
+  }
+
+  private catPanelTimer?: number;
+  /** Lucky Cat reward summary: stays in the corner until dismissed (or fades after a while). */
+  catReward(title: string, detail: string) {
+    const p = $(this.root, '#catPanel');
+    $(this.root, '#catPanelBody').innerHTML = `<b>🐱 ${esc(title)}</b><span>${esc(detail)}</span>`;
+    p.hidden = false;
+    window.clearTimeout(this.catPanelTimer);
+    this.catPanelTimer = window.setTimeout(() => (p.hidden = true), 16000);
   }
 
   showIntro() {

@@ -23,7 +23,8 @@ export interface GameEvents {
   'drone.despawned': { droneId: string };
   'drone.jobStarted': { droneId: string; tileId: string };
   'cat.spawned': { anchorId: string };
-  'cat.found': { anchorId: string; reward: CatRewardType; summary: string };
+  'cat.found': { anchorId: string; reward: CatRewardType; summary: string; extras: number };
+  'cat.stash': { stash: number };
   'buff.started': { type: BuffType; seconds: number };
   'harvest': { amount: number };
   'rooftop.coreReady': Record<string, never>;
