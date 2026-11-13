@@ -54,7 +54,7 @@ export const UPGRADES: UpgradeDef[] = [
     baseCost: 25,
     costMult: 2,
     maxLevel: 3,
-    describe: () => 'Restored tile biomass +50%',
+    describe: () => 'Restored tile biomass +30%',
   },
   {
     id: 'seedVault',

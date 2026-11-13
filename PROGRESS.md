@@ -1,5 +1,59 @@
 # Solarbloom: progress
 
+# Round 2 (plan: `docs/ROUND_2_PLAN.md`)
+
+Round 1 checkpoint: commit `d6486b0` (local tag `solarbloom-round1`; the remote doesn't accept tag pushes from this session). Round 1 saves migrate to the v2 format automatically.
+
+| | Milestone | Status |
+|---|---|---|
+| M1 | Grid juice: boosted-tile glow, ordered chain waves with an origin marker, neighbour softening highlights, shake on blocked actions, BLOOM CHAIN ×N counter under the resources with end-of-chain totals | ✅ |
+| M2 | Deterministic chain engine (typed event queue, 100-event cap + fast-forward), Solar burst / Condenser watering / Pollinator triggers / new Mother Tree, milestone bonuses, determinism + cyclic-layout tests | ✅ |
+| M3 | Drone Dash, Work Radius, Chain Intelligence, Second Drone; clickable drones show range + jobs; trails; drones nurture once the roof is green; Wide Pulse + Overcharge for the manual pulse | ✅ |
+| M4 | Lucky Cat at 4–6 min then every 4–8 min, 40/25/20/12/3 rewards, 2-reward Jackpot, missed cats stash rewards instead of blocking, corner reward panel, 5 new hiding spots | ✅ |
+| M5 | Layered hazy solarpunk city, foreground terraces, service ledge with props, 25/50/75% stages, Rooftop Core finale, richer planting, seamless lawns, HUD restyle | ✅ |
+| M6 | Pacing bot + playtest metrics, rebalance, perf check, docs | ✅ |
+
+## How to test Round 2
+
+- `npm test`: 47 unit tests, including `chains.test.ts` (adjacency-only triggers, per-garden limits, once-per-chain solar, Mother Tree can't self-recharge, a placement-built ×10, cyclic layouts terminate, same action + same state = same events) and `pacing.test.ts` (scripted player reaches every beat with no dead time).
+- `npm run test:e2e`: pointer→tile picking at 3 sizes × 3 zooms, real clicks, HUD clicks never touch the world, and a regression check for the shared-mesh bug.
+- In the game: Settings → *Playtest timings* shows time to first upgrade, ×5 and ×10 chains, Drone Hub, first cat, Mother Tree and its first pulse, Core, and seconds with nothing affordable to do.
+- A ×10 recipe: a row of gardens two tiles apart with solar panels between and beside them; tap the grey tile at one end.
+
+## Round 2 balance (all in `src/data/tuning.ts` / `machines.ts` / `upgrades.ts`)
+
+Scripted player, one action every 3 s (people are roughly 2× slower):
+
+| Beat | Bot | ≈ Person | Plan |
+|---|---|---|---|
+| Water Condenser | 1:03 | ~2:00 | 1:30–3:00 |
+| Pollinator Garden | 1:36 | ~3:10 | 3:00–5:00 |
+| First Lucky Cat | 4:00–6:00 of real play | same | 4:00–6:00 |
+| Drone Hub | 3:06 | ~6:10 | 5:00–8:00 |
+| Mother Tree | 7:03 | ~14 | 11:00–13:00 |
+| Rooftop Core | 7:15 | ~14:30 | 13:00–15:00 |
+| Time with nothing to do | 0 s | | none |
+
+Changes from Round 1: Solar 20🌿, Condenser 35🌿 12⚡, Garden 50🌿 12💧, Drone Hub 110🌿 35⚡, Mother Tree 170🌿 40💧 (unlocked by the hub); Core needs 42 tiles, 24 in full bloom, every machine and a Mother Tree, and costs 60⚡ 170🌿. Start storage 60/40/100. Bloom multipliers 1/2/3 (was 1/2.5/5), Rich Soil +30%/level, garden zone ×1.5. Each garden pollinates up to 4 times per chain, from newly restored *or* newly grown plants.
+
+## Round 2 known limitations
+
+- The pacing bot builds poor synergy layouts, so it rarely chains above ×2; chain reach is proven by deliberate layouts in tests instead. Human playtests should check how quickly people find ×5 and ×10.
+- The Mother Tree lands slightly after the plan's 11–13 min window for an average player.
+- Frame rate on real phones still needs measuring with the new scenery (draw calls ~150–170 in the busiest tested scenes; game logic 1.3 ms median, 12 ms worst frame during a chain with 4 drones).
+- Rooftop 2 is still a preview (the plan says not to build multi-rooftop yet).
+
+## Round 2 next steps
+
+1. Human playtest with the plan's six questions; read Settings → Playtest timings afterwards.
+2. Tune the Mother Tree cost/unlock from those numbers.
+3. Teach layouts in-game: a "ghost" hint showing where a second garden would link the chain.
+4. Then the plan's stretch list (alternative layouts, more synergies, cat variants, weather).
+
+---
+
+# Round 1
+
 ## Milestones
 
 | | Milestone | Status |

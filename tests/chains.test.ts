@@ -31,7 +31,8 @@ describe('bloom chain engine', () => {
     sim.restoration.complete(sim.grid.get('r1', 4, 3)!, 'pulse');
     sim.advance(3);
     const pol = events.filter((e) => e.type === 'POLLINATE' && e.source === p.id);
-    expect(pol.length).toBe(TUNING.pollinator.triggersPerChain);
+    // a 1×1 garden has 4 neighbours; one is the tile that triggered it
+    expect(pol.length).toBe(Math.min(TUNING.pollinator.triggersPerChain, 3));
     // every pollinated tile is adjacent to the garden
     for (const e of pol) {
       const t = sim.grid.byTileId(e.target)!;

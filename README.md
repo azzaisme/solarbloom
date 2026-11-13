@@ -39,20 +39,19 @@ Node 20+ is required. The build is a static site (`base: './'`), so `dist/` can 
 
 ## How it plays
 
-- **Pulse** a cracked concrete tile (6⚡ 1💧). It sprouts, and about a second later it is grass. Restoring a tile also softens its neighbours, so concrete gradually turns into **mossy soil**, which costs half as much to restore.
-- **Nurture**: pulse a green tile again to grow it from grass to wildflowers to full bloom (shrubs and little trees). Each level yields more biomass.
-- **Machines** (no cables or pipes; everything connects automatically):
-  - ☀️ **Solar Panel**: energy. A tile blooming right next to a panel doubles its output for 5 s.
-  - 💧 **Water Condenser**: water. Every 5 s it also irrigates an adjacent mossy tile into bloom.
-  - 🌸 **Pollinator Garden**: doubles biomass in its zone. Restoring any tile in the zone makes the bloom leap from tile to tile through mossy neighbours. That is a **Bloom Chain**, with a `BLOOM ×N` combo and biomass bonuses at ×3, ×5, ×10 and ×20.
-  - 🛸 **Drone Hub (2×2)**: launches a drone that restores tiles within 3 tiles of the hub. It pays the normal pulse cost and naps when there is nothing to do.
-- **Upgrades** (biomass): Efficient Pulse, Solar Array, Broad Pulse, Rich Soil, Seed Vault (storage), Drone Speed, Pollinator Reach. Solar, drone and pollinator upgrades also change how those machines look.
-- 🐱 **Hidden Lucky Cat**: a tiny ceramic maneki-neko first shows up a few minutes in, tucked into a nook of the rooftop. Nothing points at it. It waves now and then, and you may hear a soft meow. Click it for a reward: Lucky Harvest, Solar Frenzy (×3 solar), Mega Bloom (a free chain), Drone Party (two extra drones) or a rare Jackpot. It waits as long as it needs to, and the reward grows a little the longer it stays hidden.
-- ✨ **Rooftop Core**: restore 42 tiles, grow 16 to full bloom and build one of each machine, then awaken the Core (40⚡ 60🌿). A skippable 7 s sequence plays: the facade turns white, windows light up, vines and planters climb the walls, banners unfurl, and a bridge extends to the Greenhouse Tower (Rooftop 2, preview only for now). The awakened Core adds +25% biomass.
+- **Pulse** a cracked concrete tile. It sprouts, and a moment later it is grass. Restoring a tile softens its neighbours into **mossy soil**, which is cheaper. Tap a green tile again to **nurture** it: grass → wildflowers → full bloom (shrubs, little trees, sunflowers, lavender).
+- **Machines** connect automatically (no cables or pipes):
+  - ☀️ **Solar Panel**: energy. When a tile right next to it blooms, it bursts (+⚡ now, ×2 for 5 s), once per chain.
+  - 💧 **Water Condenser**: water, plus a charge meter. When full, it waters the dry soil beside it into bloom, starting a chain.
+  - 🌸 **Pollinator Garden**: when a plant right next to it is restored or grows, it pollinates its other neighbours (up to 4 per chain). Line gardens and panels up and the chain jumps between them.
+  - 🛸 **Drone Hub (2×2)**: drones restore tiles in range, then nurture them toward full bloom. Click a drone to see its range and current job.
+  - 🌳 **Mother Tree (2×2)**: every restoration or new bloom within 2 tiles charges it. At full charge it releases a Bloom Pulse over the whole area. Its own pulse can't recharge it.
+- **Bloom Chains** run on a deterministic event queue: you see waves spread outward from a gold-outlined origin tile, a `BLOOM CHAIN ×N` counter, and the totals at the end. Milestones at ×5 / ×10 / ×20 add +10% / +25% / +50% (highest only), and the 100-event cap fast-forwards the rest.
+- **Upgrades** come in four groups. Pulse: Efficient, Wide Pulse, Overcharge. Machines: Solar Array, Rich Soil, Water Bloom, Pollinator Reach, Mother Tree Resonance. Drones: Dash, Work Radius, Chain Intelligence, Second Drone. Storage: Seed Vault, which gates the big machines.
+- 🐱 **Hidden Lucky Cat**: a little maneki-neko first appears 4–6 minutes in, hidden somewhere in the scenery (12 spots, including the service ledge). Nothing points at it. Click it for Lucky Harvest, Solar Frenzy, Mega Bloom, Drone Party or a two-reward Jackpot. If you miss one, it saves up extra rewards instead of blocking new ones.
+- **The rooftop transforms** as you restore it. At 25%, moss and wildflowers creep over the ledge and the concrete looks cleaner. At 50%, a solar array unfolds on the stairwell roof, planters bloom and ivy hangs from the rails. At 75%, the facade brightens and balconies and vines fill in. At 100% you awaken the **Rooftop Core**, which plays the building-wide restoration and reveals Greenhouse Tower across a new bridge.
 
-A first session takes about 10–15 minutes. A scripted greedy player that clicks every 3 s reaches the Core in roughly 4 minutes.
-
-![After the Core awakens](docs/core-restored.png)
+A first session takes about 13–15 minutes (see PROGRESS.md for the pacing data).
 
 ## Architecture
 
@@ -66,7 +65,8 @@ src/
   gameplay/               headless, deterministic systems; no rendering imports
     Sim.ts                owns the state and steps every system on a fixed 0.1 s tick
     RestorationSystem     pulse validation and costs, growth timers, nurture, seeping
-    BloomChainSystem      bounded event-queue cascades (visited set, 32-event cap, 3 s lifetime)
+    BloomChainSystem      typed event queue (RESTORE/GROW/POLLINATE/PRODUCE_*/CHARGE/DISCHARGE/REWARD), caps, fast-forward
+    Metrics               playtest timings saved with the game (Settings → Playtest timings)
     BuildSystem           placement rules, footprints, scaling costs
     ProductionSystem      cached rates, solar boosts, condenser irrigation
     DroneSystem           job search, tile reservation, flight, cost paying, idling
@@ -74,7 +74,9 @@ src/
     UpgradeSystem / ProgressionSystem (Core requirements, tutorial steps)
   data/                   every balance knob: tuning.ts, machines.ts, upgrades.ts, rooftops.ts (layouts + cat anchors)
   rendering/              PlayCanvas only; listens to state and never decides rules
-    SceneBuilder          lights, building, skyline, Rooftop 2, bridge, building restoration sequence
+    SceneBuilder          lights, fog, building + service ledge, Rooftop 2, bridge, stage changes, Core sequence
+    Scenery               layered hazy city, foreground terraces, ledge props, stage-driven greenery
+    TileFx                boosted-tile glow, chain waves, origin/job outlines
     GridRenderer          per-tile slabs + procedural decoration, squash/grow animations
     MachineVisuals, DroneVisuals, CatVisuals, Vfx (pooled rings/particles/arcs), Overlays (hover frame, ghost, radius)
     CameraController      fixed 45°/35° orthographic camera, bounded pan, smooth zoom, cinematic focus

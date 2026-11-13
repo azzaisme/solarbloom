@@ -84,6 +84,20 @@ export class DroneSystem {
         best = t;
       }
     }
+    if (best) return best;
+    // Nothing left to restore in range: nurture green tiles toward full bloom instead.
+    for (const t of roof.tiles) {
+      if (distToFootprint(t.x, t.z, hub.x, hub.z, hub.size) > this.radius()) continue;
+      if (t.ground !== 'restored' || t.occupantId || t.bloom >= TUNING.restore.maxBloom || this.isReserved(t.id)) continue;
+      const dx = t.x + 0.5 - d.px;
+      const dz = t.z + 0.5 - d.pz;
+      let score = dx * dx + dz * dz + t.bloom * 2;
+      if (intel) score -= this.synergyScore(t) * 6;
+      if (score < bestD - 1e-9) {
+        bestD = score;
+        best = t;
+      }
+    }
     return best;
   }
 
@@ -165,6 +179,10 @@ export class DroneSystem {
           d.targetTileId = undefined;
           if (t && t.ground !== 'restored' && t.ground !== 'growing') {
             s.restoration.beginGrowth(t, 'drone', TUNING.pulse.growSeconds);
+            d.jobs++;
+            s.state.stats.droneJobs++;
+          } else if (t && t.ground === 'restored' && t.bloom < TUNING.restore.maxBloom) {
+            s.restoration.grow(t);
             d.jobs++;
             s.state.stats.droneJobs++;
           }

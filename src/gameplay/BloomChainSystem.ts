@@ -170,7 +170,8 @@ export class BloomChainSystem {
       if (m.type === 'solar' && d === 1 && !run.solarFired.has(m.id)) {
         run.solarFired.add(m.id);
         this.enqueue(run, { type: 'PRODUCE_ENERGY', source: tile.id, target: m.id, cause: 'solar', depth: depth + 1 });
-      } else if (m.type === 'pollinator' && kind === 'RESTORE' && d >= 1 && d <= s.upgrades.pollinatorReach) {
+      } else if (m.type === 'pollinator' && d >= 1 && d <= s.upgrades.pollinatorReach) {
+        // Newly restored *or* newly grown plants pollinate (limited per garden per chain).
         const used = run.pollinatorUses.get(m.id) ?? 0;
         if (used >= TUNING.pollinator.triggersPerChain) continue;
         const target = this.pollinationTarget(run, m, tile);

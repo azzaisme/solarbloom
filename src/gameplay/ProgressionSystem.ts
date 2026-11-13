@@ -17,7 +17,7 @@ export const TUTORIAL: string[] = [
   'Plants and machines make each other stronger. Build a Pollinator Garden (5).',
   'Pulse mossy tiles inside the garden’s zone to set off a Bloom Chain.',
   'Build a Drone Hub (6). Your drone can handle the small jobs now.',
-  'Restore 42 tiles, grow 16 to full bloom and build all four machines to wake the Rooftop Core.',
+  'Restore 42 tiles, grow 24 to full bloom, build every machine and plant a Mother Tree to wake the Rooftop Core.',
   'The Core is ready! Click it to awaken the building.',
   'The building lives again. Rooftop 2 awaits across the bridge…',
 ];
@@ -57,6 +57,7 @@ export class ProgressionSystem {
       { label: `Build a ${MACHINES.condenser.name}`, done: this.built('condenser') },
       { label: `Build a ${MACHINES.pollinator.name}`, done: this.built('pollinator') },
       { label: `Build a ${MACHINES.droneHub.name}`, done: this.built('droneHub') },
+      { label: `Plant a ${MACHINES.motherTree.name}`, done: this.built('motherTree') },
     ];
   }
 

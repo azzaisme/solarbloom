@@ -6,7 +6,7 @@ export const TUNING = {
 
   start: {
     resources: { energy: 20, water: 12, biomass: 0 },
-    caps: { energy: 50, water: 30, biomass: 60 },
+    caps: { energy: 60, water: 40, biomass: 100 },
   },
 
   // Energy / water income that always exists, so the player can never softlock.
@@ -24,7 +24,7 @@ export const TUNING = {
   restore: {
     instantBiomass: 1.5,
     biomassPerSec: 0.04, // per restored tile (bloom level 1)
-    bloomRateMult: [0, 1, 2.5, 5], // biomass multiplier per bloom level
+    bloomRateMult: [0, 1, 2, 3], // biomass multiplier per bloom level
     nurture: [
       { energy: 0, water: 0 },
       { energy: 0, water: 0 },
@@ -60,7 +60,7 @@ export const TUNING = {
   condenser: { radius: 1, chargePerSec: 1, threshold: 6, targets: 2 },
 
   /** Pollinator Garden: a newly restored neighbour triggers a bonus restore/grow nearby. */
-  pollinator: { reach: 1, biomassMult: 2, triggersPerChain: 2 },
+  pollinator: { reach: 1, biomassMult: 1.5, triggersPerChain: 4 },
 
   /** Mother Tree: charges from restorations nearby; at full charge releases an area Bloom Pulse. */
   motherTree: { radius: 2, threshold: 12 },
@@ -96,8 +96,8 @@ export const TUNING = {
 
   core: {
     restoredTiles: 42,
-    fullBloomTiles: 16,
-    cost: { energy: 40, biomass: 60 },
+    fullBloomTiles: 24,
+    cost: { energy: 60, biomass: 170 },
     resonanceBiomassMult: 1.25,
     sequenceSeconds: 7,
   },

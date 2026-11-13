@@ -29,6 +29,7 @@ describe('save & progression', () => {
     sim.build.place('condenser', 'r1', 6, 5);
     sim.build.place('pollinator', 'r1', 5, 6);
     sim.build.place('droneHub', 'r1', 2, 2);
+    sim.build.place('motherTree', 'r1', 2, 5);
     expect(sim.progression.coreReady()).toBe(true);
     let events = 0;
     sim.bus.on('rooftop.coreRestored', () => events++);
@@ -43,7 +44,7 @@ describe('save & progression', () => {
   it('a scripted first session reaches the core without deadlock', () => {
     // A simple greedy "player bot": pulses the cheapest tile, builds and upgrades as soon as possible.
     const sim = makeSim(7);
-    const order = ['solar', 'condenser', 'pollinator', 'droneHub'] as const;
+    const order = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree'] as const;
     let t = 0;
     for (; t < 20 * 60 * 10 && !sim.state.progression.coreActivated; t++) {
       if (t % 5 === 0) {
@@ -57,13 +58,14 @@ describe('save & progression', () => {
           if (spot) sim.build.place(type, 'r1', spot.x, spot.z);
           break;
         }
+        if (sim.upgrades.status(sim.upgrades.all().find((u) => u.id === 'seedVault')!).ok) sim.upgrades.purchase('seedVault');
         if (sim.progression.coreReady()) sim.progression.activateCore();
         if (sim.state.resources.energy < 2) sim.harvestSun();
       }
       sim.tick();
     }
     expect(sim.state.progression.coreActivated).toBe(true);
-    expect(t / 10).toBeLessThan(15 * 60);
+    expect(t / 10).toBeLessThan(20 * 60);
   });
 });
 

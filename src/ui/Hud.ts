@@ -260,16 +260,16 @@ export class Hud {
       case 3:
         return build('condenser', 'Water is the slowest resource. Build a Water Condenser for steady water:');
       case 4:
-        return build('pollinator', 'Plants and machines help each other. Build a Pollinator Garden:');
+        return build('pollinator', 'Plants and machines help each other. Build a Pollinator Garden, ideally right next to a solar panel:');
       case 5:
-        return { text: 'Restore a tile right next to your 🌸 garden: it pollinates a neighbour, which can set off solar panels and other gardens in a Bloom Chain!' };
+        return { text: 'Restore a grey tile right next to your 🌸 garden: it pollinates its other neighbours, and any that touch a solar panel or another garden keep the Bloom Chain going!' };
       case 6:
         return build('droneHub', 'Let a drone take over the small jobs (it also unlocks the 🌳 Mother Tree). Build a Drone Hub:');
       case 7: {
         const full = s.progression.fullBloomCount('r1');
         const missing = BUILDABLE.filter((t) => !s.progression.built(t));
         if (missing.length) return build(missing[0], `The Core also needs a ${MACHINES[missing[0]].name}.`);
-        return { text: `Wake the Core: restore 42 tiles (${n}/42) and tap green tiles again until 16 are in full bloom 🌳 (${full}/16).`, target: '#obj' };
+        return { text: `Wake the Core: restore ${TUNING.core.restoredTiles} tiles (${n}/${TUNING.core.restoredTiles}) and tap green tiles again until ${TUNING.core.fullBloomTiles} are in full bloom 🌳 (${full}/${TUNING.core.fullBloomTiles}).`, target: '#obj' };
       }
       case 8:
         return { text: 'The Core is ready! Tap ✨ Awaken the Core in the top-right panel.', target: '#coreBtn' };
@@ -313,7 +313,12 @@ export class Hud {
       this.renderDiscoveries();
       if (focusCats) $(this.root, '#disc').scrollIntoView({ block: 'nearest' });
       const s = this.sim.state.stats;
-      $(this.root, '#statsBox').innerHTML = `Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best combo: <b>×${s.maxCombo}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats found: <b>${s.catsFound}</b> 🐱 · Play time: <b>${Math.floor(this.sim.time / 60)}m</b>`;
+      const f = s.firsts ?? {};
+      const t = (k: string) => (f[k] === undefined ? '—' : `${Math.floor(f[k] / 60)}:${String(f[k] % 60).padStart(2, '0')}`);
+      const avg = s.chains ? (s.chainEffects / s.chains).toFixed(1) : '—';
+      $(this.root, '#statsBox').innerHTML =
+        `Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Avg: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b> 🐱 · Play time: <b>${Math.floor(this.sim.time / 60)}m</b>` +
+        `<details style="margin-top:6px"><summary>Playtest timings</summary>First upgrade ${t('upgrade')} · ×5 chain ${t('chain5')} · ×10 chain ${t('chain10')}<br>Drone Hub ${t('droneHub')} · first cat ${t('cat')} · Mother Tree ${t('motherTree')} (pulse ${t('treePulse')}) · Core ${t('core')}<br>Time with nothing to do: ${Math.round(s.stuckSeconds)} s</details>`;
       this.root.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => (inp.checked = this.settings[inp.dataset.set as keyof Settings]));
     }
   }

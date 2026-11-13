@@ -60,7 +60,7 @@ export class UpgradeSystem {
     return 1 + 0.5 * this.level('solarArray');
   }
   get soilMult() {
-    return 1 + 0.5 * this.level('richSoil');
+    return 1 + 0.3 * this.level('richSoil');
   }
   get droneCycleMult() {
     return Math.pow(0.75, this.level('droneSpeed'));
