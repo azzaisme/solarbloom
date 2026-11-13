@@ -19,12 +19,12 @@ describe('save & progression', () => {
     expect(saver.deserialize('nope')).toBeUndefined();
   });
 
-  it('core activates once, needs all machines and 40 tiles, and unlocks roof 2', () => {
+  it('core activates once, needs all machines, tiles and full blooms, and unlocks roof 2', () => {
     const sim = makeSim();
     rich(sim);
     fill(sim, 0, 0, 7, 7, 'restored');
     expect(sim.progression.activateCore()).toBe(false);
-    for (const t of sim.grid.roof('r1')!.tiles.slice(10, 20)) t.bloom = 3;
+    for (const t of sim.grid.roof('r1')!.tiles.slice(10, 40)) t.bloom = 3;
     sim.build.place('solar', 'r1', 5, 5);
     sim.build.place('condenser', 'r1', 6, 5);
     sim.build.place('pollinator', 'r1', 5, 6);
