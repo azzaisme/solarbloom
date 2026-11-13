@@ -22,7 +22,7 @@ export class ProductionSystem {
 
   solarOutput(m: MachineData): number {
     const t = this.sim.time;
-    let v = TUNING.starterSolarRate * this.sim.upgrades.solarMult;
+    let v = (m.starter ? TUNING.starterSolarRate : TUNING.solarRate) * this.sim.upgrades.solarMult;
     if (m.boostUntil > t) v *= TUNING.solarBloomBoost.mult;
     if (this.frenzyActive()) v *= TUNING.cat.frenzyMult;
     return v;
@@ -38,7 +38,7 @@ export class ProductionSystem {
 
   tileBiomassRate(t: TileData): number {
     if (t.ground !== 'restored') return 0;
-    let v = TUNING.restore.biomassPerSec * this.sim.upgrades.soilMult;
+    let v = TUNING.restore.biomassPerSec * TUNING.restore.bloomRateMult[Math.max(1, t.bloom)] * this.sim.upgrades.soilMult;
     if (this.inPollinatorZone(t)) v *= TUNING.pollinator.biomassMult;
     if (this.sim.state.progression.coreActivated) v *= TUNING.core.resonanceBiomassMult;
     return v;

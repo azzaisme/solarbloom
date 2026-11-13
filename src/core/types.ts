@@ -18,6 +18,7 @@ export interface TileData {
   blocked: boolean;
   growthRemainingSec: number;
   growSource?: RestoreSource;
+  bloom: number; // 0 until restored, then 1..3 (grass → flowers → shrubs)
 }
 
 export interface RooftopData {

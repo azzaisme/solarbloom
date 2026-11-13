@@ -6,24 +6,34 @@ export const TUNING = {
 
   start: {
     resources: { energy: 20, water: 12, biomass: 0 },
-    caps: { energy: 60, water: 40, biomass: 40 },
+    caps: { energy: 50, water: 30, biomass: 60 },
   },
 
   // Energy / water income that always exists, so the player can never softlock.
-  starterSolarRate: 2, // energy/sec from the pre-placed panel
+  starterSolarRate: 1, // energy/sec from the pre-placed (damaged) panel
+  solarRate: 1.2, // energy/sec from each panel the player builds
   rainBarrelRate: 0.15, // water/sec trickle from the rain barrel
-  harvest: { energy: 8, cooldown: 8 },
+  harvest: { energy: 8, cooldown: 12 },
 
   pulse: {
-    polluted: { energy: 4, water: 1 },
-    prepared: { energy: 2, water: 1 },
+    polluted: { energy: 6, water: 1 },
+    prepared: { energy: 3, water: 1 },
     growSeconds: 0.8,
   },
 
   restore: {
-    instantBiomass: 2,
-    biomassPerSec: 0.1, // per restored tile
-    seep: 35, // pollution removed from orthogonal neighbours when a tile restores
+    instantBiomass: 1.5,
+    biomassPerSec: 0.04, // per restored tile (bloom level 1)
+    bloomRateMult: [0, 1, 2.5, 5], // biomass multiplier per bloom level
+    nurture: [
+      { energy: 0, water: 0 },
+      { energy: 0, water: 0 },
+      { energy: 8, water: 2 }, // → level 2
+      { energy: 12, water: 3 }, // → level 3
+    ],
+    nurtureBiomass: 1,
+    maxBloom: 3,
+    seep: 25, // pollution removed from orthogonal neighbours when a tile restores
     pollutionMin: 55,
     pollutionMax: 100,
   },
@@ -45,7 +55,7 @@ export const TUNING = {
 
   condenser: { irrigateEvery: 5, irrigateWater: 2, radius: 1 },
 
-  pollinator: { reach: 2, biomassMult: 2 },
+  pollinator: { reach: 1, biomassMult: 2 },
 
   drone: {
     hubRadius: 3,
@@ -55,7 +65,7 @@ export const TUNING = {
     retrySeconds: 1,
   },
 
-  machineCostGrowth: 1.35, // each extra copy of a machine costs this much more
+  machineCostGrowth: 1.5, // each extra copy of a machine costs this much more
 
   cat: {
     firstMinTime: 180, // seconds of play
@@ -74,8 +84,9 @@ export const TUNING = {
   },
 
   core: {
-    restoredTiles: 40,
-    cost: { energy: 30, biomass: 30 },
+    restoredTiles: 42,
+    fullBloomTiles: 16,
+    cost: { energy: 40, biomass: 60 },
     resonanceBiomassMult: 1.25,
     sequenceSeconds: 7,
   },

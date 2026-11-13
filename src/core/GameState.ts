@@ -25,6 +25,7 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): Game
           variant: rng.int(0, 9999),
           blocked: isIn(def.blocked, x, z),
           growthRemainingSec: 0,
+          bloom: 0,
         });
       }
     }

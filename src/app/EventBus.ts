@@ -4,6 +4,7 @@ export interface GameEvents {
   'tile.restoring': { tile: TileData; source: RestoreSource };
   'tile.restored': { tile: TileData; source: RestoreSource; chainId: number; biomass: number };
   'tile.prepared': { tile: TileData };
+  'tile.nurtured': { tile: TileData; level: number };
   'resource.gain': { kind: ResourceKind; amount: number; tileId?: string; reason?: string };
   'resource.full': { kind: ResourceKind };
   'machine.built': { machine: MachineData };

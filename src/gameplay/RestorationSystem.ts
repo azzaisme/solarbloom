@@ -13,6 +13,10 @@ export class RestorationSystem {
   constructor(private sim: Sim) {}
 
   pulseCost(t: TileData): Cost {
+    if (t.ground === 'restored') {
+      const n = TUNING.restore.nurture[Math.min(TUNING.restore.maxBloom, t.bloom + 1)];
+      return { energy: Math.round(n.energy * this.sim.upgrades.pulseEnergyMult * 100) / 100, water: n.water };
+    }
     const base = t.ground === 'prepared' ? TUNING.pulse.prepared : TUNING.pulse.polluted;
     return { energy: Math.round(base.energy * this.sim.upgrades.pulseEnergyMult * 100) / 100, water: base.water };
   }
@@ -34,7 +38,7 @@ export class RestorationSystem {
     if (!roof || !roof.unlocked || roof.preview) return { ok: false, reason: 'This rooftop is not reachable yet', cost };
     if (t.blocked) return { ok: false, reason: 'A rusty vent — nothing grows here', cost };
     if (this.sim.isCoreTile(t)) return { ok: false, reason: 'The Rooftop Core — awaken it when it is ready', cost };
-    if (t.ground === 'restored') return { ok: false, reason: 'Already in full bloom', cost };
+    if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in full bloom', cost };
     if (t.ground === 'growing') return { ok: false, reason: 'Already growing', cost };
     if (this.sim.drones.isReserved(t.id)) return { ok: false, reason: 'Your drone is on its way here', cost };
     const short = this.sim.econ.shortfall(cost);
@@ -61,6 +65,11 @@ export class RestorationSystem {
       return false;
     }
     this.sim.econ.spend(chk.cost);
+    if (t.ground === 'restored') {
+      this.nurture(t);
+      this.sim.bus.emit('pulse.fired', { tileId, extra: [] });
+      return true;
+    }
     this.beginGrowth(t, 'pulse', TUNING.pulse.growSeconds);
     const extra: string[] = [];
     const n = this.sim.upgrades.broadExtra;
@@ -76,6 +85,15 @@ export class RestorationSystem {
     }
     this.sim.bus.emit('pulse.fired', { tileId, extra });
     return true;
+  }
+
+  /** Grows an already-restored tile one bloom level (grass → flowers → shrubs). */
+  private nurture(t: TileData) {
+    t.bloom = Math.min(TUNING.restore.maxBloom, t.bloom + 1);
+    const b = this.sim.econ.add('biomass', TUNING.restore.nurtureBiomass * this.sim.upgrades.soilMult);
+    if (b > 0) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: b, tileId: t.id });
+    this.sim.production.markDirty();
+    this.sim.bus.emit('tile.nurtured', { tile: t, level: t.bloom });
   }
 
   beginGrowth(t: TileData, source: RestoreSource, seconds: number) {
@@ -100,6 +118,7 @@ export class RestorationSystem {
   complete(t: TileData, source: RestoreSource, chainId?: number): number {
     if (t.ground === 'restored') return chainId ?? -1;
     t.ground = 'restored';
+    t.bloom = Math.max(1, t.bloom);
     t.pollution = 0;
     t.growthRemainingSec = 0;
     t.growSource = undefined;

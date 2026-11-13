@@ -11,13 +11,13 @@ export interface Requirement {
 
 export const TUTORIAL: string[] = [
   'Tap a grey tile to bring it back to life.',
-  'Restored tiles grow Biomass 🌿. Your solar panel keeps recharging Energy ⚡.',
+  'Restored tiles grow Biomass 🌿. Pulse a green tile again to nurture it into flowers.',
   'Spend Biomass on an upgrade — open Upgrades (U).',
   'Build a Water Condenser (4) on living ground for steady water.',
   'Plants and machines make each other stronger. Build a Pollinator Garden (5).',
   'Pulse mossy tiles inside the garden’s zone to set off a Bloom Chain.',
   'Build a Drone Hub (6). Your drone can handle the small jobs now.',
-  'Restore 40 tiles and build all four machines to wake the Rooftop Core.',
+  'Restore 42 tiles, grow 16 to full bloom and build all four machines to wake the Rooftop Core.',
   'The Core is ready! Click it to awaken the building.',
   'The building lives again. Rooftop 2 awaits across the bridge…',
 ];
@@ -31,6 +31,11 @@ export class ProgressionSystem {
     const r = this.sim.grid.roof(roofId);
     if (!r) return 0;
     return r.tiles.filter((t) => t.ground === 'restored' && isRestorable(t, this.sim.state.machines)).length;
+  }
+
+  fullBloomCount(roofId: string): number {
+    const r = this.sim.grid.roof(roofId);
+    return r ? r.tiles.filter((t) => t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom).length : 0;
   }
 
   restorableCount(roofId: string): number {
@@ -47,6 +52,7 @@ export class ProgressionSystem {
     const n = this.restoredCount('r1');
     return [
       { label: `Restore tiles ${Math.min(n, TUNING.core.restoredTiles)}/${TUNING.core.restoredTiles}`, done: n >= TUNING.core.restoredTiles },
+      { label: `Grow full-bloom tiles ${Math.min(this.fullBloomCount('r1'), TUNING.core.fullBloomTiles)}/${TUNING.core.fullBloomTiles}`, done: this.fullBloomCount('r1') >= TUNING.core.fullBloomTiles },
       { label: `Build a ${MACHINES.solar.name}`, done: this.built('solar') },
       { label: `Build a ${MACHINES.condenser.name}`, done: this.built('condenser') },
       { label: `Build a ${MACHINES.pollinator.name}`, done: this.built('pollinator') },
