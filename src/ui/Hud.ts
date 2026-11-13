@@ -4,6 +4,7 @@ import type { BuildableType, MachineData, ResourceKind } from '../core/types';
 import { BUILDABLE, MACHINES } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
+import { SEED_CORE_MACHINES } from '../gameplay/ProgressionSystem';
 
 export type Tool = 'inspect' | 'pulse' | BuildableType;
 
@@ -24,6 +25,10 @@ export interface HudCallbacks {
   closeInspect(): void;
   togglePause(): void;
   cycleSpeed(): number;
+  focusRoof(roofId: string): void;
+  buildLink(linkId: string): void;
+  activateRoofCore(roofId: string): void;
+  neighbourhoodBloom(replay: boolean): void;
 }
 
 export interface Settings {
@@ -32,6 +37,8 @@ export interface Settings {
   reducedMotion: boolean;
   hints: boolean;
   debug: boolean;
+  /** Fewer particles and softer sparkles (Lucky Cat, chains), independent of motion. */
+  lowVfx: boolean;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
@@ -101,6 +108,7 @@ export class Hud {
           <button class="chip" id="setBtn" aria-label="Settings">⚙️<span class="lbl"> Settings</span></button>
           <button class="chip" id="objToggle" aria-label="Toggle objective list">📋</button>
         </div>
+        <div class="tools" id="roofNav" hidden></div>
       </div>
       <div id="combo"><div class="big" id="comboBig">BLOOM CHAIN ×0</div><div class="total" id="comboTotal"></div><div id="feed"></div></div>
       <div id="hotbar" class="panel">${slots}</div>
@@ -126,6 +134,7 @@ export class Hud {
         <label>Sound effects <input type="checkbox" data-set="sound"></label>
         <label>Music <input type="checkbox" data-set="music"></label>
         <label>Reduced motion &amp; effects <input type="checkbox" data-set="reducedMotion"></label>
+        <label>Fewer particles &amp; softer sparkles <input type="checkbox" data-set="lowVfx"></label>
         <label>Tutorial hints <input type="checkbox" data-set="hints"></label>
         <label>Debug / FPS (F3) <input type="checkbox" data-set="debug"></label>
         <div class="stats" id="statsBox"></div>
@@ -133,7 +142,7 @@ export class Hud {
         <div class="row"><button id="closeModal">Back to the garden</button><button class="danger" id="newGame">New game</button></div>
       </div></div>
       <div id="cine"><div class="bar t"></div><div class="bar b"></div><div class="title" id="cineTitle"></div><button id="skipBtn">Skip ⏭</button></div>
-      <div class="wlabel panel" id="roof2Label"></div>
+      <div id="wlabels"></div>
       <div id="fps"></div>
     `;
   }
@@ -187,6 +196,29 @@ export class Hud {
     $(r, '#upgList').addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-buy]');
       if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
+    });
+    // World labels can carry actions (build a bridge, awaken a rooftop).
+    $(r, '#wlabels').addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      const link = t.closest<HTMLButtonElement>('[data-link]');
+      if (link && !link.disabled) this.cb.buildLink(link.dataset.link!);
+      const core = t.closest<HTMLButtonElement>('[data-core]');
+      if (core && !core.disabled) this.cb.activateRoofCore(core.dataset.core!);
+      const roof = t.closest<HTMLElement>('[data-roof]');
+      if (roof && !link && !core) this.cb.focusRoof(roof.dataset.roof!);
+    });
+    $(r, '#roofNav').addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-roof]');
+      if (b) this.cb.focusRoof(b.dataset.roof!);
+    });
+    $(r, '#obj').addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      const link = t.closest<HTMLButtonElement>('[data-link]');
+      if (link && !link.disabled) this.cb.buildLink(link.dataset.link!);
+      const core = t.closest<HTMLButtonElement>('[data-core]');
+      if (core && !core.disabled) this.cb.activateRoofCore(core.dataset.core!);
+      const nb = t.closest<HTMLButtonElement>('[data-bloom]');
+      if (nb && !nb.disabled) this.cb.neighbourhoodBloom(nb.dataset.bloom === 'replay');
     });
     $(r, '#inspect').addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
@@ -267,7 +299,7 @@ export class Hud {
         return build('droneHub', 'Let a drone take over the small jobs (it also unlocks the 🌳 Mother Tree). Build a Drone Hub:');
       case 7: {
         const full = s.progression.fullBloomCount('r1');
-        const missing = BUILDABLE.filter((t) => !s.progression.built(t));
+        const missing = SEED_CORE_MACHINES.filter((t) => !s.progression.built(t));
         if (missing.length) return build(missing[0], `The Core also needs a ${MACHINES[missing[0]].name}.`);
         return { text: `Wake the Core: restore ${TUNING.core.restoredTiles} tiles (${n}/${TUNING.core.restoredTiles}) and tap green tiles again until ${TUNING.core.fullBloomTiles} are in full bloom 🌳 (${full}/${TUNING.core.fullBloomTiles}).`, target: '#obj' };
       }
@@ -457,8 +489,17 @@ export class Hud {
     }
   }
 
-  worldLabel(id: string, html: string | null, x = 0, y = 0) {
-    const el = $(this.root, `#${id}`);
+  /** A label pinned to a world point. Created on demand; `action` labels take clicks. */
+  worldLabel(id: string, html: string | null, x = 0, y = 0, action = false) {
+    let el = this.root.querySelector<HTMLElement>(`#${id}`);
+    if (!el) {
+      if (!html) return;
+      el = document.createElement('div');
+      el.id = id;
+      el.className = 'wlabel panel';
+      $(this.root, '#wlabels').appendChild(el);
+    }
+    el.classList.toggle('act', action);
     if (!html) {
       el.style.display = 'none';
       return;
@@ -467,6 +508,13 @@ export class Hud {
     el.style.display = 'block';
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
+  }
+
+  /** Rooftop chips (shown once a second rooftop is revealed). */
+  roofNav(html: string | null) {
+    const nav = $(this.root, '#roofNav');
+    nav.hidden = !html;
+    if (html) this.set('roofNav', nav, 'html', html);
   }
 
   /** Rectangles the Lucky Cat must never hide under. */
@@ -517,7 +565,10 @@ export class Hud {
       this.set(`hk-${t}`, btn, 'cls', s.econ.canAfford(cost) ? '0' : '1', 'cant');
       const locked = !s.build.isUnlocked(t);
       this.set(`hl-${t}`, btn, 'cls', locked ? '1' : '0', 'locked');
-      if (locked) this.set(`hc-${t}`, $(btn, '.sc'), 'text', '🔒 Drone Hub');
+      // A rooftop's specialty piece only appears once that rooftop is reachable.
+      const roofOnly = MACHINES[t].roofs;
+      btn.hidden = !!roofOnly && !roofOnly.some((id) => s.grid.isPlayable(id));
+      if (locked) this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.lockLabel(t));
     }
     // Overcharge countdown on the Pulse button
     const every = s.upgrades.overchargeEvery;

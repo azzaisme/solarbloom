@@ -32,6 +32,16 @@ export class Grid {
     return this.roofs.get(id);
   }
 
+  /** Revealed and reachable: tiles can be restored and built on. */
+  isPlayable(roofId: string): boolean {
+    const r = this.roofs.get(roofId);
+    return !!r && r.unlocked && !r.preview;
+  }
+
+  get rooftops(): RooftopData[] {
+    return [...this.roofs.values()];
+  }
+
   get(roofId: string, x: number, z: number): TileData | undefined {
     return this.byId.get(tileId(roofId, x, z));
   }

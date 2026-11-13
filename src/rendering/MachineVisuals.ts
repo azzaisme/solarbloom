@@ -21,6 +21,10 @@ interface MachineView {
   rings?: pc.Entity[];
   orbs?: pc.Entity[];
   canopy?: pc.Entity;
+  /** Reservoir: water surface inside the cistern / garden basin. */
+  water?: pc.Entity;
+  /** Elder Tree: the dormant bare branches (hidden once its canopy unfolds). */
+  bare?: pc.Entity;
   level: number;
   extras: pc.Entity;
 }
@@ -78,7 +82,12 @@ export class MachineVisuals {
         this.motherTree(v);
         break;
       case 'core':
-        this.core(v);
+        if (m.roofId === 'r2') this.cistern(v);
+        else if (m.roofId === 'r3') this.elderTree(v);
+        else this.core(v);
+        break;
+      case 'reservoirGarden':
+        this.reservoirGarden(v);
         break;
     }
     this.views.set(m.id, v);
@@ -272,6 +281,125 @@ export class MachineVisuals {
     shape(b, 'box', mat(PALETTE.crack), { pos: [0.22, 0.9, 0.0], scale: [0.02, 0.6, 0.02], rot: [0, 45, 12] });
   }
 
+  /** The Reservoir's Old Cistern: a big round tank, dry and rusty until it wakes. */
+  private cistern(v: MachineView) {
+    const b = v.body;
+    v.coreBase = uniqueMat('#8a8478', { gloss: 0.25 });
+    v.coreMat = uniqueMat('#6e7a80', { gloss: 0.8, emissive: '#000000', emissiveIntensity: 1 });
+    shape(b, 'cylinder', v.coreBase, { pos: [0, 0.45, 0], scale: [1.7, 0.9, 1.7], shadow: true });
+    shape(b, 'torus', v.coreBase, { pos: [0, 0.9, 0], scale: [1.72, 0.14, 1.72] });
+    for (let i = 0; i < 3; i++) shape(b, 'torus', mat('#7a6553'), { pos: [0, 0.2 + i * 0.25, 0], scale: [1.74, 0.05, 1.74] });
+    shape(b, 'cylinder', mat('#3d3a35'), { pos: [0, 0.88, 0], scale: [1.5, 0.02, 1.5] });
+    const water = shape(b, 'cylinder', mat(PALETTE.water, { gloss: 0.9, opacity: 0.85 }), { pos: [0, 0.3, 0], scale: [1.48, 0.02, 1.48] });
+    water.enabled = false;
+    v.water = water;
+    // spout + pipe down to the roof
+    shape(b, 'cylinder', mat(PALETTE.white), { pos: [0.95, 0.6, 0], scale: [0.14, 0.2, 0.14], rot: [0, 0, 90] });
+    shape(b, 'box', mat(PALETTE.white), { pos: [1.02, 0.3, 0], scale: [0.1, 0.6, 0.1] });
+    // gauge crystal: lights up when the cistern wakes
+    const crystal = group(b, 'crystal', [0, 1.35, 0]);
+    shape(crystal, 'sphere', v.coreMat, { scale: [0.3, 0.42, 0.3], shadow: true });
+    v.spin.push(crystal);
+    v.rings = [];
+    for (let i = 0; i < 2; i++) {
+      const r = shape(b, 'torus', mat(PALETTE.water, { emissive: PALETTE.water, emissiveIntensity: 1.2 }), { pos: [0, 1.2 + i * 0.4, 0], scale: [1.0 - i * 0.3, 0.08, 1.0 - i * 0.3] });
+      r.enabled = false;
+      v.rings.push(r);
+    }
+    shape(b, 'box', mat(PALETTE.crack), { pos: [0.6, 0.5, 0.62], scale: [0.03, 0.5, 0.03], rot: [0, 45, 14] });
+  }
+
+  /** The Canopy's Elder Tree: bare and dormant, with a charge ring of seed-lights around its roots. */
+  private elderTree(v: MachineView) {
+    const b = v.body;
+    v.coreBase = uniqueMat('#7d6a58', { gloss: 0.2 });
+    v.coreMat = uniqueMat('#55604f', { gloss: 0.5, emissive: '#000000', emissiveIntensity: 1 });
+    shape(b, 'cylinder', mat('#6b6156'), { pos: [0, 0.08, 0], scale: [1.85, 0.16, 1.85], shadow: true });
+    for (let i = 0; i < 4; i++)
+      shape(b, 'cylinder', v.coreBase, { pos: [Math.sin(i * 1.3) * 0.08, 0.45 + i * 0.5, Math.cos(i * 1.3) * 0.08], scale: [0.62 - i * 0.1, 0.56, 0.62 - i * 0.1], rot: [5 - i * 3, i * 25, 6 - i * 4], shadow: true });
+    for (let r = 0; r < 5; r++) {
+      const a = r * 1.25;
+      shape(b, 'capsule', v.coreBase, { pos: [Math.cos(a) * 0.5, 0.2, Math.sin(a) * 0.5], scale: [0.12, 0.26, 0.12], rot: [Math.sin(a) * 75, 0, Math.cos(a) * 75] });
+    }
+    const bare = group(b, 'bare', [0, 2.2, 0]);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * 360;
+      const br = group(bare, 'branch');
+      br.setLocalEulerAngles(0, a, 0);
+      shape(br, 'cylinder', v.coreBase, { pos: [0.35, 0.25, 0], scale: [0.08, 0.8, 0.08], rot: [0, 0, -50], shadow: true });
+      shape(br, 'cylinder', v.coreBase, { pos: [0.62, 0.62, 0], scale: [0.05, 0.4, 0.05], rot: [0, 0, -15] });
+    }
+    v.bare = bare;
+    const canopy = group(b, 'canopy', [0, 2.45, 0]);
+    const leaves: [number, number, number, number, string][] = [
+      [0, 0.4, 0, 2.3, PALETTE.shrub[0]],
+      [0.8, 0.0, 0.35, 1.5, PALETTE.shrub[1]],
+      [-0.75, 0.1, -0.3, 1.6, PALETTE.shrub[2]],
+      [0.2, 0.05, -0.85, 1.4, PALETTE.shrub[1]],
+      [-0.35, 0.0, 0.8, 1.4, PALETTE.shrub[0]],
+      [0, 1.1, 0, 1.3, '#5fc25a'],
+    ];
+    for (const [x, y, z, sz, c] of leaves) shape(canopy, 'sphere', mat(c), { pos: [x, y, z], scale: [sz, sz * 0.75, sz], shadow: true });
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      shape(canopy, 'sphere', mat(PALETTE.flower[i % 5]), { pos: [Math.cos(a) * 1.1, 0.2 + (i % 3) * 0.3, Math.sin(a) * 1.1], scale: 0.16 });
+    }
+    canopy.setLocalScale(0.0001, 0.0001, 0.0001);
+    canopy.enabled = false;
+    v.canopy = canopy;
+    // Charge ring: one seed-light per point of charge, around the roots (readable from any zoom).
+    v.orbs = [];
+    const n = TUNING.neighbourhood.canopy.threshold;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      v.orbs.push(shape(b, 'sphere', orbOff(), { pos: [Math.cos(a) * 0.86, 0.2, Math.sin(a) * 0.86], scale: 0.12 }));
+    }
+    v.rings = [];
+    const crystal = group(b, 'crystal', [0, 1.4, 0]);
+    shape(crystal, 'sphere', v.coreMat, { pos: [0, 0, 0.3], scale: [0.16, 0.2, 0.1] });
+    v.spin.push(crystal);
+  }
+
+  /** Reservoir Garden: a white basin with a lily pad garden; its water level shows the Overflow fill. */
+  private reservoirGarden(v: MachineView) {
+    const b = v.body;
+    shape(b, 'cylinder', mat(PALETTE.shell), { pos: [0, 0.14, 0], scale: [0.86, 0.28, 0.86], shadow: true });
+    shape(b, 'torus', mat(PALETTE.white), { pos: [0, 0.28, 0], scale: [0.86, 0.1, 0.86] });
+    v.water = shape(b, 'cylinder', mat(PALETTE.water, { gloss: 0.9, emissive: '#1a6f8a', emissiveIntensity: 0.3 }), { pos: [0, 0.12, 0], scale: [0.74, 0.02, 0.74] });
+    for (let i = 0; i < 3; i++) {
+      const a = i * 2.1;
+      v.bob.push(shape(b, 'cylinder', mat('#5fb24a'), { pos: [Math.cos(a) * 0.2, 0.26, Math.sin(a) * 0.2], scale: [0.18, 0.015, 0.18] }));
+    }
+    shape(b, 'sphere', mat('#ff9fd0'), { pos: [0.18, 0.3, 0.05], scale: 0.07 });
+    // little fountain spout
+    shape(b, 'cylinder', mat(PALETTE.white), { pos: [0, 0.38, 0], scale: [0.08, 0.3, 0.08] });
+    v.light = shape(b, 'sphere', mat(PALETTE.water, { emissive: PALETTE.water, emissiveIntensity: 1.4 }), { pos: [0, 0.56, 0], scale: 0.07 });
+  }
+
+  /** Reservoir Overflow: the basin spills over with a splash. */
+  splash(id: string) {
+    const v = this.views.get(id);
+    if (!v) return;
+    this.tweens.cancel(v.body);
+    this.tweens.add(0.6, (k) => {
+      const s = 1 + Math.sin(k * Math.PI) * 0.18;
+      v.body.setLocalScale(s, 1 / s, s);
+    }, { owner: v.body, ease: ease.linear, done: () => v.body.setLocalScale(1, 1, 1) });
+  }
+
+  /** Canopy Burst: the Elder Tree swells. */
+  burstTree(id: string) {
+    const v = this.views.get(id);
+    if (!v) return;
+    const target = v.canopy?.enabled ? v.canopy : v.bare;
+    if (!target) return;
+    const base = target.getLocalScale().clone();
+    this.tweens.add(0.9, (k) => {
+      const s = 1 + Math.sin(k * Math.PI) * 0.2;
+      target.setLocalScale(base.x * s, base.y * s, base.z * s);
+    }, { ease: ease.linear, done: () => target.setLocalScale(base) });
+  }
+
   /** "World-as-upgrade-tree": upgrades visibly change machines. */
   applyUpgrades(v: MachineView) {
     const u = this.sim.upgrades;
@@ -310,11 +438,44 @@ export class MachineVisuals {
   }
 
   /** Core look: dormant / ready (pulsing gold) / awakened. */
-  setCoreState(state: 'dormant' | 'ready' | 'awake', instant = false) {
-    const v = [...this.views.values()].find((x) => x.m.type === 'core');
+  setCoreState(state: 'dormant' | 'ready' | 'awake', instant = false, roofId = 'r1') {
+    const v = this.coreView(roofId);
     if (!v || !v.coreMat || !v.coreBase) return;
+    if (v.root.tags.has('awake') && state !== 'awake') return;
     v.root.tags.remove('ready', 'awake', 'dormant');
     v.root.tags.add(state);
+    if (state === 'awake' && roofId === 'r2') {
+      const from = v.coreBase.diffuse.clone();
+      this.tweens.add(instant ? 0.01 : 1.4, (k) => {
+        v.coreBase!.diffuse = new pc.Color().lerp(from, color(PALETTE.white), k);
+        v.coreBase!.update();
+        v.coreMat!.emissive = new pc.Color().lerp(new pc.Color(0, 0, 0), color(PALETTE.water), k);
+        v.coreMat!.update();
+        if (v.water) {
+          v.water.enabled = true;
+          v.water.setLocalPosition(0, 0.3 + 0.55 * k, 0);
+        }
+      });
+      v.rings!.forEach((r) => (r.enabled = true));
+      return;
+    }
+    if (state === 'awake' && roofId === 'r3') {
+      const from = v.coreBase.diffuse.clone();
+      this.tweens.add(instant ? 0.01 : 1.6, (k) => {
+        v.coreBase!.diffuse = new pc.Color().lerp(from, color(PALETTE.trunk), k);
+        v.coreBase!.update();
+      });
+      const c = v.canopy!;
+      c.enabled = true;
+      this.tweens.add(instant ? 0.01 : 2.2, (k) => c.setLocalScale(Math.max(0.0001, k), Math.max(0.0001, k), Math.max(0.0001, k)), {
+        delay: instant ? 0 : 0.4,
+        ease: ease.outBack,
+        done: () => {
+          if (v.bare) v.bare.enabled = false;
+        },
+      });
+      return;
+    }
     if (state === 'awake') {
       const from = v.coreBase.diffuse.clone();
       const to = color(PALETTE.white);
@@ -330,8 +491,12 @@ export class MachineVisuals {
     }
   }
 
-  coreWorld(): [number, number, number] | undefined {
-    const v = [...this.views.values()].find((x) => x.m.type === 'core');
+  private coreView(roofId: string) {
+    return [...this.views.values()].find((x) => x.m.type === 'core' && x.m.roofId === roofId);
+  }
+
+  coreWorld(roofId = 'r1'): [number, number, number] | undefined {
+    const v = this.coreView(roofId);
     if (!v) return undefined;
     const p = v.root.getPosition();
     return [p.x, p.y + 1.8, p.z];
@@ -390,7 +555,19 @@ export class MachineVisuals {
           if (!rm) v.rings![0].setLocalEulerAngles(0, t * 30, 0);
           break;
         }
+        case 'reservoirGarden': {
+          const f = Math.min(1, (v.m.charge ?? 0) / TUNING.neighbourhood.reservoir.threshold);
+          v.water!.setLocalPosition(0, 0.08 + 0.18 * f, 0);
+          if (!rm) v.bob.forEach((p, i) => p.setLocalPosition(Math.cos(i * 2.1 + t * 0.3) * 0.2, 0.1 + 0.18 * f + 0.03, Math.sin(i * 2.1 + t * 0.3) * 0.2));
+          const s = 0.06 + (f >= 1 ? 0.03 * (1 + Math.sin(t * 8)) : 0.01 * Math.sin(t * 2));
+          v.light!.setLocalScale(s, s, s);
+          break;
+        }
         case 'core': {
+          if (v.m.roofId !== 'r1') {
+            this.updateRoofCore(v, t, rm);
+            break;
+          }
           const awake = v.root.tags.has('awake');
           const ready = v.root.tags.has('ready');
           if (!rm) v.spin[0].setLocalEulerAngles(0, t * (awake ? 50 : 8), 0);
@@ -409,5 +586,32 @@ export class MachineVisuals {
         }
       }
     }
+  }
+
+  private updateRoofCore(v: MachineView, t: number, rm: boolean) {
+    const awake = v.root.tags.has('awake');
+    const ready = v.root.tags.has('ready');
+    if (v.m.roofId === 'r3') {
+      // Elder Tree charge ring: lit seeds = charge.
+      const lit = Math.round(Math.min(1, (v.m.charge ?? 0) / TUNING.neighbourhood.canopy.threshold) * v.orbs!.length);
+      v.orbs!.forEach((o, i) => {
+        const on = i < lit;
+        const want = on ? orbOn() : orbOff();
+        if (o.render!.material !== want) o.render!.material = want;
+        const sc = on ? 0.13 + (rm ? 0 : Math.sin(t * 4 + i) * 0.02) : 0.1;
+        o.setLocalScale(sc, sc, sc);
+      });
+      if (!rm && v.canopy?.enabled && !this.tweens.has(v.canopy)) v.canopy.setLocalEulerAngles(Math.sin(t * 0.6) * 1.2, 0, Math.cos(t * 0.5) * 1.2);
+    } else if (!rm) v.spin[0].setLocalEulerAngles(0, t * (awake ? 40 : 6), 0);
+    if (ready && !awake) {
+      v.coreMat!.emissive = color(PALETTE.gold);
+      v.coreMat!.emissiveIntensity = 0.4 + 0.5 * (0.5 + 0.5 * Math.sin(t * 4));
+      v.coreMat!.update();
+    }
+    if (awake && !rm)
+      v.rings!.forEach((r, i) => {
+        r.setLocalEulerAngles(0, t * (30 + i * 20), 0);
+        r.setLocalPosition(0, 1.2 + i * 0.4 + Math.sin(t * 1.5 + i) * 0.08, 0);
+      });
   }
 }

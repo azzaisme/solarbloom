@@ -20,6 +20,13 @@ class VRng {
   }
 }
 
+/** Per-rooftop look of unrestored ground: grey concrete, sun-baked clay, withered leaf litter. */
+const DEAD_LOOK: Record<string, { base: readonly string[]; dark: string; crack: string; debris: string }> = {
+  r1: { base: PALETTE.concrete, dark: PALETTE.concreteDark, crack: PALETTE.crack, debris: PALETTE.debris },
+  r2: { base: ['#bda78a', '#b29c7f', '#c6b195', '#a99377'], dark: '#97806a', crack: '#6e5a48', debris: '#8a7560' },
+  r3: { base: ['#867c6a', '#7c7261', '#908571', '#776d5d'], dark: '#655c4e', crack: '#4e463b', debris: '#6b5a45' },
+};
+
 interface TileView {
   tile: TileData;
   root: pc.Entity;
@@ -59,7 +66,6 @@ export class GridRenderer {
 
   build() {
     for (const roof of this.sim.state.rooftops) {
-      if (roof.preview) continue; // preview rooftops are drawn by SceneBuilder
       const g = group(this.parent, `tiles-${roof.id}`);
       for (const t of roof.tiles) {
         if (t.blocked) continue;
@@ -78,13 +84,24 @@ export class GridRenderer {
     return this.views.get(id);
   }
 
-  /** Rooftop transformation stage (0–4). From 25% on, leftover concrete looks cleaner and weedier. */
-  stage = 0;
+  /** Per-rooftop transformation stage (0–4). From 25% on, leftover dead ground looks cleaner and weedier. */
+  readonly stages: Record<string, number> = {};
+  private stageOf(t: TileData) {
+    return this.stages[t.roofId] ?? 0;
+  }
+
+  /** Changes one roof's stage and refreshes only its tiles. */
+  setStage(roofId: string, stage: number) {
+    if (this.stages[roofId] === stage) return;
+    this.stages[roofId] = stage;
+    for (const v of this.views.values()) if (v.tile.roofId === roofId) this.refresh(v.tile, false);
+  }
 
   private keyOf(t: TileData) {
     const occ = t.occupantId ? 'o' : '';
     const band = t.ground === 'polluted' ? (t.pollution > 80 ? 2 : t.pollution > 40 ? 1 : 0) : 0;
-    const clean = t.ground === 'polluted' ? Math.min(2, Math.floor(this.stage / 2) + (this.stage >= 1 ? 1 : 0)) : 0;
+    const st = this.stageOf(t);
+    const clean = t.ground === 'polluted' ? Math.min(2, Math.floor(st / 2) + (st >= 1 ? 1 : 0)) : 0;
     return `${t.ground}|${t.bloom}|${occ}|${band}|${clean}`;
   }
 
@@ -125,23 +142,25 @@ export class GridRenderer {
 
     switch (t.ground) {
       case 'polluted': {
-        const shade = t.pollution > 80 ? PALETTE.concreteDark : PALETTE.concrete[t.variant % PALETTE.concrete.length];
+        const look = DEAD_LOOK[t.roofId] ?? DEAD_LOOK.r1;
+        const shade = t.pollution > 80 ? look.dark : look.base[t.variant % look.base.length];
         setVColor(v.slab, 'box', shade);
         const cracks = 1 + (t.variant % 3 === 0 ? 1 : 0) + (t.pollution > 80 ? 1 : 0);
         for (let i = 0; i < cracks; i++)
-          add(shape(deco, 'box', PALETTE.crack, { pos: [r.range(-0.2, 0.2), 0.004, r.range(-0.2, 0.2)], scale: [r.range(0.35, 0.7), 0.01, 0.035], rot: [0, r.range(0, 180), 0] }));
-        const clean = this.stage >= 1;
+          add(shape(deco, 'box', look.crack, { pos: [r.range(-0.2, 0.2), 0.004, r.range(-0.2, 0.2)], scale: [r.range(0.35, 0.7), 0.01, 0.035], rot: [0, r.range(0, 180), 0] }));
+        const st = this.stageOf(t);
+        const clean = st >= 1;
         if (!clean && r.next() < 0.55)
           for (let i = 0; i < 1 + (t.variant % 2); i++) {
             const s = r.range(0.06, 0.12);
-            add(shape(deco, 'box', PALETTE.debris, { pos: [r.range(-0.35, 0.35), s / 2, r.range(-0.35, 0.35)], scale: s, rot: [r.range(0, 40), r.range(0, 90), r.range(0, 40)], shadow: true }));
+            add(shape(deco, 'box', look.debris, { pos: [r.range(-0.35, 0.35), s / 2, r.range(-0.35, 0.35)], scale: s, rot: [r.range(0, 40), r.range(0, 90), r.range(0, 40)], shadow: true }));
           }
         if (r.next() < 0.3) add(shape(deco, 'cone', PALETTE.weed, { pos: [r.range(-0.3, 0.3), 0.05, r.range(-0.3, 0.3)], scale: [0.06, 0.1, 0.06] }));
         if (clean) {
           // Life finds the cracks: weeds and the odd tiny flower.
-          const n = this.stage >= 2 ? 3 : 2;
+          const n = st >= 2 ? 3 : 2;
           for (let i = 0; i < n; i++) add(shape(deco, 'cone', '#79a957', { pos: [r.range(-0.35, 0.35), 0.05, r.range(-0.35, 0.35)], scale: [0.05, 0.1, 0.05] }));
-          if (this.stage >= 2 && t.variant % 2) add(shape(deco, 'sphere', r.pick(PALETTE.flower), { pos: [r.range(-0.3, 0.3), 0.08, r.range(-0.3, 0.3)], scale: 0.06 }));
+          if (st >= 2 && t.variant % 2) add(shape(deco, 'sphere', r.pick(PALETTE.flower), { pos: [r.range(-0.3, 0.3), 0.08, r.range(-0.3, 0.3)], scale: 0.06 }));
         }
         break;
       }

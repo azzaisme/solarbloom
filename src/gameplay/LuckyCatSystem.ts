@@ -14,6 +14,8 @@ export const CAT_REWARD_NAMES: Record<CatRewardType, string> = {
   megaBloom: 'Mega Bloom',
   droneParty: 'Drone Party',
   jackpot: 'JACKPOT',
+  goldenRelay: 'Golden Relay',
+  catsGarden: "Cat's Garden",
 };
 
 /**

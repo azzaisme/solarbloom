@@ -90,6 +90,17 @@ export class BloomChainSystem {
     return run;
   }
 
+  /** Canopy Burst reach from the Elder Tree's footprint. */
+  canopyBurstRadius(): number {
+    const c = TUNING.neighbourhood.canopy;
+    return this.sim.hood.coreAwake('r3') ? c.burstRadiusAwake : c.burstRadius;
+  }
+
+  /** A Pollinator Garden inside the Elder Tree's burst amplifies it. */
+  inCanopyBurst(tree: MachineData, garden: MachineData): boolean {
+    return garden.roofId === tree.roofId && distToFootprint(garden.x, garden.z, tree.x, tree.z, tree.size) <= this.canopyBurstRadius();
+  }
+
   addReward(chainId: number, biomass: number) {
     const run = this.runs.get(chainId);
     if (run) run.biomass += biomass;

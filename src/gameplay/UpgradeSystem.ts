@@ -41,7 +41,7 @@ export class UpgradeSystem {
   }
 
   applyCaps() {
-    const mult = 1 + 0.5 * this.level('seedVault');
+    const mult = 1 + 0.5 * this.level('seedVault') + (this.sim.hood?.capBonus() ?? 0);
     for (const k of KINDS) this.sim.state.caps[k] = Math.max(this.sim.state.caps[k], TUNING.start.caps[k] * mult);
   }
 

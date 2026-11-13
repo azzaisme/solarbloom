@@ -4,6 +4,7 @@ import { formatCost } from '../core/Economy';
 import { createInitialState } from '../core/GameState';
 import type { MachineData, ResourceKind, TileData } from '../core/types';
 import { MACHINES } from '../data/machines';
+import { LINK_BY_ID, LINKS, ROOF_BY_ID } from '../data/rooftops';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
@@ -30,6 +31,7 @@ import { SaveService } from './SaveService';
 
 const SETTINGS_KEY = 'solarbloom.settings';
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Full bloom'];
+const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 interface Pick {
   roofId: string;
@@ -39,7 +41,7 @@ interface Pick {
 }
 
 function loadSettings(): Settings {
-  const def: Settings = { sound: true, music: true, reducedMotion: false, hints: true, debug: false };
+  const def: Settings = { sound: true, music: true, reducedMotion: false, hints: true, debug: false, lowVfx: false };
   try {
     if (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) def.reducedMotion = true;
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -144,6 +146,17 @@ export class Game {
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
         togglePause: () => this.setPaused(!this.paused),
+        focusRoof: (id) => this.focusRoof(id),
+        buildLink: (id) => {
+          if (this.cinematic) return;
+          this.sfx.click();
+          this.sim.hood.buildLink(id);
+        },
+        activateRoofCore: (id) => {
+          if (this.cinematic) return;
+          this.sim.hood.activateRoofCore(id);
+        },
+        neighbourhoodBloom: (replay) => this.playNeighbourhoodBloom(replay),
         cycleSpeed: () => {
           this.speed = this.speed === 1 ? 2 : this.speed === 2 ? 3 : 1;
           this.hud.toast(this.speed === 1 ? '▶ Normal speed' : `⏩ ${this.speed}× speed`, '', 1.4);
@@ -158,11 +171,22 @@ export class Game {
 
     this.sim.cat.isAnchorVisible = (a) => this.anchorVisible(this.cat.anchorWorld(a));
     if (state.cat.active) this.cat.show(state.cat.active.anchorId, false);
+    this.camera.setBoundsFor(state.rooftops);
     if (state.progression.coreActivated) {
       this.scene.restoreBuilding(true);
       this.machines.setCoreState('awake', true);
-      this.camera.bounds.maxX = 20;
     } else if (this.sim.progression.coreReady()) this.machines.setCoreState('ready');
+    for (const id of ['r2', 'r3']) {
+      if (this.sim.hood.coreAwake(id)) {
+        this.machines.setCoreState('awake', true, id);
+        this.scene.wakeRoof(id, true);
+      } else if (this.sim.hood.coreReady(id)) this.machines.setCoreState('ready', true, id);
+    }
+    for (const l of LINKS) {
+      if (this.sim.hood.isBuilt(l.id)) this.scene.buildBridgeDeck(l.id, true);
+      else this.scene.showScaffold(l.id, this.sim.hood.linkAvailable(l.id));
+    }
+    if (state.progression.neighbourhoodBloomAt >= 0) this.scene.showDistrict(true);
 
     this.wireEvents();
     new InputController(canvas, {
@@ -207,7 +231,8 @@ export class Game {
     this.sfx.setMusic(s.music);
     const rm = s.reducedMotion;
     this.tileFx.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
-    this.vfx.density = rm ? 0.35 : 1;
+    this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
+    this.cat.softSparkle = rm || s.lowVfx;
     document.body.classList.toggle('reduced', rm);
     this.hud.settings = s;
     if (!s.debug) this.hud.setDebug(null);
@@ -261,6 +286,7 @@ export class Game {
       const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree' };
       if (map[k]) this.selectTool(map[k]);
       else if (k === 'h') this.harvest();
+      else if (k === 'f') this.focusNextRoof();
       else if (k === 'u') this.hud.toggleUpgrades();
       else if (k === 'p') this.setPaused(!this.paused);
       else if (k === 'f3' || k === '`') {
@@ -376,7 +402,7 @@ export class Game {
     if (roof.preview) {
       this.overlays.hideFrame();
       this.overlays.hideGhost();
-      this.hud.showTip(x, y, `<b>${roof.name}</b>${roof.unlocked ? 'The bridge is open — this rooftop becomes playable in the next update.' : 'Still grey and quiet. Awaken your Core to reach it.'}`);
+      this.hud.showTip(x, y, `<b>🔒 ${roof.name}</b>${this.lockedReason(roof.id)}`);
       return;
     }
     const t = p.tile;
@@ -397,7 +423,7 @@ export class Game {
     const occ = this.sim.occupant(t);
     if (occ) {
       this.overlays.showFrame(occ.roofId, occ.x, occ.z, occ.size, 'info');
-      const ready = occ.type === 'core' && this.sim.progression.coreReady();
+      const ready = occ.type === 'core' && this.sim.hood.coreReady(occ.roofId);
       this.hud.showTip(x, y, `<b>${MACHINES[occ.type].icon} ${MACHINES[occ.type].name}</b>${ready ? '<span class="ok">Ready! Click to awaken.</span>' : 'Click to inspect'}`);
       return;
     }
@@ -458,7 +484,7 @@ export class Game {
     }
     const roof = this.sim.grid.roof(p.roofId)!;
     if (roof.preview) {
-      this.hud.showFail(roof.unlocked ? 'Greenhouse Tower opens in the next update 🌉' : 'Awaken the Core to reach this rooftop', x, y);
+      this.hud.showFail(this.lockedReason(roof.id), x, y);
       return;
     }
     const tool = this.hud.currentTool;
@@ -474,8 +500,8 @@ export class Game {
     }
     const occ = this.sim.occupant(t);
     if (occ) {
-      if (occ.type === 'core' && this.sim.progression.coreReady()) {
-        this.sim.progression.activateCore();
+      if (occ.type === 'core' && this.sim.hood.coreReady(occ.roofId)) {
+        this.sim.hood.activateRoofCore(occ.roofId);
         return;
       }
       this.select(occ.id);
@@ -586,10 +612,16 @@ export class Game {
         break;
       }
       case 'core': {
-        const reqs = s.progression.requirements();
-        extra = s.state.progression.coreActivated
-          ? '<p class="stat">✨ Awake. The building breathes again.</p>'
-          : `<ul style="margin:6px 0;padding-left:18px;font-size:12.5px">${reqs.map((r) => `<li>${r.done ? '✅' : '⬜'} ${r.label}</li>`).join('')}</ul><p>Awakening costs ${formatCost(TUNING.core.cost)}.</p>`;
+        const reqs = s.hood.requirements(m.roofId);
+        const awakeText: Record<string, string> = {
+          r1: '✨ Awake. The building breathes again.',
+          r2: '💧 Awake. The Old Cistern fills the basin and adds steady water.',
+          r3: '🌳 Awake. The Elder Tree spreads its canopy; its bursts reach further.',
+        };
+        extra = s.hood.coreAwake(m.roofId)
+          ? `<p class="stat">${awakeText[m.roofId] ?? '✨ Awake.'}</p>`
+          : `<ul style="margin:6px 0;padding-left:18px;font-size:12.5px">${reqs.map((r) => `<li>${r.done ? '✅' : '⬜'} ${r.label}</li>`).join('')}</ul><p>Awakening costs ${formatCost(s.hood.coreCost(m.roofId))}.</p>`;
+        if (m.roofId === 'r3') extra = this.elderTreeInfo(m) + extra;
         break;
       }
     }
@@ -816,6 +848,9 @@ export class Game {
       this.sfx.chainEnd(10);
     });
     b.on('rooftop.coreRestored', () => this.playCoreSequence());
+    b.on('link.built', ({ linkId, roofId }) => this.onLinkBuilt(linkId, roofId));
+    b.on('roof.coreAwake', ({ roofId }) => this.onRoofCoreAwake(roofId));
+    b.on('neighbourhood.bloom', ({ restored }) => this.onNeighbourhoodBloom(restored));
   }
 
   private lastCatPos?: pc.Vec3;
@@ -824,14 +859,17 @@ export class Game {
   /** Rooftop transformation stages from restored coverage (25/50/75%), plus 4 once the Core is awake. */
   private updateStage(initial: boolean) {
     const p = this.sim.progression;
-    const frac = p.restoredCount('r1') / Math.max(1, p.restorableCount('r1'));
-    const stage = this.sim.state.progression.coreActivated ? 4 : frac >= 0.75 ? 3 : frac >= 0.5 ? 2 : frac >= 0.25 ? 1 : 0;
+    const stageOf = (roofId: string) => {
+      const frac = p.restoredCount(roofId) / Math.max(1, p.restorableCount(roofId));
+      return this.sim.hood.coreAwake(roofId) ? 4 : frac >= 0.75 ? 3 : frac >= 0.5 ? 2 : frac >= 0.25 ? 1 : 0;
+    };
+    for (const r of this.sim.state.rooftops) if (r.id !== 'r1') this.grid.setStage(r.id, stageOf(r.id));
+    const stage = stageOf('r1');
     if (stage === this.stage) return;
     const first = this.stage < 0;
     this.stage = stage;
     const grew = this.scene.setStage(stage, initial || first);
-    this.grid.stage = stage;
-    this.grid.refreshAll();
+    this.grid.setStage('r1', stage);
     if (grew && stage < 4) {
       const msg = ['', '🌱 25% — moss and wildflowers creep over the ledge', '☀️ 50% — the solar array unfolds and planters bloom', '🏛️ 75% — the building brightens and balconies fill with green'][stage];
       this.hud.toast(`${msg}`, 'gold', 4);
@@ -912,13 +950,14 @@ export class Game {
           this.vfx.burst(cp, 24, { up: 4.5, speed: 2.4, size: 0.08, life: 1.5 });
         },
       });
-    this.camera.bounds.maxX = 20;
-    this.scene.restoreBuilding(false, () => this.camera.focus(9.5, 0.4, 0.5, 0.62, 2.6));
+    this.scene.restoreBuilding(false, () => this.camera.focus(10.5, 0.6, 1.5, 0.6, 2.6));
+    for (const l of LINKS) this.scene.showScaffold(l.id, this.sim.hood.linkAvailable(l.id));
     this.cinematicEnd = () => {
       if (!this.cinematic) return;
       this.cinematic = false;
       this.hud.cinematic(false);
-      this.hud.toast('🌉 A bridge to the Greenhouse Tower!<small>Your rooftop now produces +25% biomass. Rooftop 2 opens in the next update.</small>', 'gold', 6);
+      const l = LINK_BY_ID['seed-reservoir'];
+      this.hud.toast(`🌉 The Reservoir is in sight!<small>Your rooftop now produces +25% biomass. Build the ${l.name} (${formatCost(l.cost)}) to reach it.</small>`, 'gold', 6);
       this.save();
     };
     this.tweens.add(0.01, () => {}, { delay: TUNING.core.sequenceSeconds, done: () => this.cinematicEnd?.() });
@@ -929,6 +968,187 @@ export class Game {
     if (!this.cinematic) return;
     for (let i = 0; i < 4; i++) this.tweens.update(10);
     this.cinematicEnd?.();
+  }
+
+  // ───────────────────────── neighbourhood ─────────────────────────
+
+  private roofCenter(id: string, up = 0): pc.Vec3 {
+    const r = this.sim.grid.roof(id)!;
+    return new pc.Vec3(r.origin[0] + r.width / 2, r.origin[1] + r.height + up, r.origin[2] + r.depth / 2);
+  }
+
+  /** The rooftop closest to the middle of the view. */
+  private nearestRoof(): string {
+    const g = this.camera.goalPoint;
+    let best = 'r1';
+    let bd = Infinity;
+    for (const r of this.sim.state.rooftops) {
+      const c = this.roofCenter(r.id);
+      const d = Math.hypot(c.x - g.x, c.z - g.z);
+      if (d < bd) {
+        bd = d;
+        best = r.id;
+      }
+    }
+    return best;
+  }
+
+  /** Smoothly frames a rooftop. Never fires during a cinematic; player input takes over at once. */
+  private focusRoof(id: string) {
+    if (this.cinematic) return;
+    const r = this.sim.grid.roof(id);
+    if (!r) return;
+    const c = this.roofCenter(id);
+    this.camera.glide(c.x, c.y, c.z, Math.min(1, 8.5 / Math.max(r.width, r.depth)));
+  }
+
+  /** F: cycle through the rooftops you can see (revealed or playable). */
+  private focusNextRoof() {
+    const ids = this.sim.state.rooftops.filter((r) => r.unlocked).map((r) => r.id);
+    if (ids.length <= 1) return this.focusRoof('r1');
+    const i = ids.indexOf(this.nearestRoof());
+    this.focusRoof(ids[(i + 1) % ids.length]);
+  }
+
+  private lockedReason(id: string): string {
+    const def = ROOF_BY_ID[id];
+    const link = def?.unlockLink ? LINK_BY_ID[def.unlockLink] : undefined;
+    if (!link) return 'Not reachable yet.';
+    const hood = this.sim.hood;
+    if (!hood.coreAwake(link.requiresCore)) {
+      const where = this.sim.grid.roof(link.requiresCore)?.name ?? '';
+      return `Still dormant. Awaken the ${hood.coreName(link.requiresCore)} on ${where} to open a way across.`;
+    }
+    return `Build the ${link.name} (${formatCost(link.cost)}) to reach it — look for the dashed outline.`;
+  }
+
+  private elderTreeInfo(m: MachineData): string {
+    const c = TUNING.neighbourhood.canopy;
+    const radius = this.sim.chains.canopyBurstRadius();
+    const gardens = this.sim.grid.tilesNear(m, c.chargeRadius).length ? this.sim.state.machines.filter((g) => g.type === 'pollinator' && g.roofId === m.roofId && this.sim.chains.inCanopyBurst(m, g)).length : 0;
+    return `<p class="stat">🌳 Charge ${Math.floor(m.charge ?? 0)}/${c.threshold} · every restoration or bloom within ${c.chargeRadius} tiles adds 1</p><p class="stat">💥 Canopy Burst: restores and grows everything within ${radius} tiles${gardens ? ` · ${gardens} 🌸 garden${gardens > 1 ? 's' : ''} amplify it (+${gardens * c.gardenBonusTargets} blooms beyond)` : ' · 🌸 gardens inside the burst amplify it'}</p>`;
+  }
+
+  private onLinkBuilt(linkId: string, roofId: string) {
+    const link = LINK_BY_ID[linkId];
+    const dur = this.scene.buildBridgeDeck(linkId, false);
+    const br = this.scene.bridges.get(linkId);
+    this.sfx.fanfare();
+    this.camera.shake(0.06);
+    if (br) {
+      for (const e of br.ends) {
+        this.vfx.ring(new pc.Vec3(e.x, e.y - 0.9, e.z), PALETTE.coreGlow, 1.6, 0.8);
+        this.vfx.burst(e, 18, { up: 3, size: 0.07 });
+      }
+      br.path.forEach((p, i) => this.tweens.add(0.01, () => {}, { delay: (i / br.path.length) * dur, done: () => this.vfx.burst(p, 4, { up: 1.5, size: 0.05 }) }));
+    }
+    const roof = this.sim.grid.roof(roofId)!;
+    const blurb: Record<string, string> = {
+      r2: 'A dry basin around an old cistern. Water Condensers + ⛲ Reservoir Gardens make it Overflow.',
+      r3: 'An overgrown, dormant roof. Bloom around the Elder Tree to charge its Canopy Burst.',
+    };
+    this.hud.toast(`🌉 ${link.name} built — ${roof.name} is open!<small>${blurb[roofId] ?? ''} Chains near the relay pylons now cross the bridge.</small>`, 'gold', 6);
+    // Reveal the new canvas, unless the player is in the middle of placing something.
+    const tool = this.hud.currentTool;
+    if (tool === 'pulse' || tool === 'inspect') this.tweens.add(0.01, () => {}, { delay: 0.4, done: () => this.focusRoof(roofId) });
+    this.grid.refreshAll();
+    this.save();
+  }
+
+  private onRoofCoreAwake(roofId: string) {
+    this.machines.setCoreState('awake', false, roofId);
+    this.scene.wakeRoof(roofId, false);
+    const w = this.machines.coreWorld(roofId);
+    if (w) {
+      const p = new pc.Vec3(w[0], w[1], w[2]);
+      const base = this.roofCenter(roofId, 0.1);
+      for (let i = 0; i < 4; i++)
+        this.tweens.add(0.01, () => {}, {
+          delay: i * 0.3,
+          done: () => {
+            this.vfx.ring(base, i % 2 ? PALETTE.gold : roofId === 'r2' ? PALETTE.water : PALETTE.coreGlow, 2.5 + i * 1.6, 1.1);
+            this.vfx.burst(p, 20, { up: 4, speed: 2.2, size: 0.08, life: 1.4 });
+          },
+        });
+    }
+    this.sfx.fanfare();
+    this.camera.shake(0.08);
+    const msg: Record<string, string> = {
+      r2: `💧 The Old Cistern wakes!<small>The basin cascades with water (+${TUNING.neighbourhood.reservoir.cisternWater}💧/s). The Canopy is in sight — build the ${LINK_BY_ID['seed-canopy'].name}.</small>`,
+      r3: '🌳 The Elder Tree wakes!<small>Its canopy unfolds and its bursts reach further. Every rooftop is alive…</small>',
+    };
+    this.hud.toast(msg[roofId] ?? '✨ A rooftop wakes!', 'gold', 6);
+    for (const l of LINKS) this.scene.showScaffold(l.id, this.sim.hood.linkAvailable(l.id));
+    this.save();
+  }
+
+  private onNeighbourhoodBloom(restored: string[]) {
+    for (const id of restored) {
+      const t = this.sim.grid.byTileId(id);
+      if (t) this.grid.refresh(t, false);
+    }
+    this.scene.showDistrict(false);
+    this.save();
+  }
+
+  private playNeighbourhoodBloom(replay: boolean) {
+    if (this.cinematic) return;
+    if (!replay) this.sim.hood.neighbourhoodBloom();
+  }
+
+  /** Labels pinned over rooftops and bridges: locked roofs, bridges you can build, Cores ready to wake. */
+  private updateRoofLabels(_dt: number) {
+    const hood = this.sim.hood;
+    const show = !this.cinematic && !this.hud.introOpen;
+    const zoomedOut = this.camera.zoom < 0.68;
+    for (const r of this.sim.state.rooftops) {
+      const id = `roofLabel-${r.id}`;
+      if (!show) {
+        this.hud.worldLabel(id, null);
+        continue;
+      }
+      const top = this.roofCenter(r.id, 1.8);
+      const sp = this.camera.toScreen(top);
+      let html: string | null = null;
+      let act = false;
+      if (!this.sim.grid.isPlayable(r.id)) {
+        html = `<span data-roof="${r.id}">🔒 ${r.name}</span><small>${r.unlocked ? 'Build the bridge to reach it' : 'Dormant'}</small>`;
+        act = true;
+      } else if (r.id !== 'r1' && hood.coreReady(r.id)) {
+        html = `✨ ${hood.coreName(r.id)} is ready<button data-core="${r.id}">Awaken · ${formatCost(hood.coreCost(r.id))}</button>`;
+        act = true;
+      } else if (zoomedOut) {
+        const p = this.sim.progression;
+        const pct = Math.round((p.restoredCount(r.id) / Math.max(1, p.restorableCount(r.id))) * 100);
+        // Read-only: it must never swallow clicks meant for the tiles underneath.
+        html = `${hood.coreAwake(r.id) ? '✨' : '🌱'} ${r.name}<small>${pct}% restored</small>`;
+      }
+      this.hud.worldLabel(id, html, sp.x, sp.y, act);
+    }
+    for (const l of LINKS) {
+      const id = `linkLabel-${l.id}`;
+      const br = this.scene.bridges.get(l.id);
+      if (!show || !br || !hood.linkAvailable(l.id)) {
+        this.hud.worldLabel(id, null);
+        continue;
+      }
+      const mid = br.path[Math.floor(br.path.length / 2)];
+      const sp = this.camera.toScreen(new pc.Vec3(mid.x, mid.y + 0.6, mid.z));
+      const st = hood.linkStatus(l.id);
+      const to = this.sim.grid.roof(l.to)!;
+      this.hud.worldLabel(id, `🌉 ${l.name}<small>Opens ${to.name}</small><button data-link="${l.id}" ${st.ok ? '' : 'disabled'}>${st.ok ? `Build · ${formatCost(st.cost)}` : esc(st.reason ?? '')}</button>`, sp.x, sp.y, true);
+    }
+    // Rooftop chips once a second rooftop is in sight.
+    const revealed = this.sim.state.rooftops.filter((r) => r.unlocked);
+    if (revealed.length > 1) {
+      const near = this.nearestRoof();
+      const icon: Record<string, string> = { r1: '🏠', r2: '💧', r3: '🌳' };
+      this.hud.roofNav(
+        revealed
+          .map((r) => `<button class="chip${r.id === near ? ' on' : ''}${this.sim.grid.isPlayable(r.id) ? '' : ' locked'}" data-roof="${r.id}" title="Focus ${r.name} (F)">${icon[r.id] ?? '🏙️'} ${ROOF_BY_ID[r.id]?.short ?? r.name}${this.sim.grid.isPlayable(r.id) ? '' : ' 🔒'}</button>`)
+          .join(''),
+      );
+    } else this.hud.roofNav(null);
   }
 
   // ───────────────────────── frame loop ─────────────────────────
@@ -1005,12 +1225,7 @@ export class Game {
         this.sfx.meow(true);
       }
     }
-    // Roof 2 world label
-    const r2 = this.sim.grid.roof('r2');
-    if (r2 && r2.unlocked && !this.cinematic) {
-      const sp = this.camera.toScreen(new pc.Vec3(r2.origin[0] + r2.width / 2, r2.origin[1] + r2.height + 2.2, r2.origin[2] + r2.depth / 2));
-      this.hud.worldLabel('roof2Label', `🌱 ${r2.name}<small>Rooftop 2 · next update</small>`, sp.x, sp.y);
-    } else this.hud.worldLabel('roof2Label', null);
+    this.updateRoofLabels(dt);
 
     this.saveTimer += dt;
     if (this.saveTimer >= TUNING.autosaveSeconds) {

@@ -22,6 +22,9 @@ export const TUTORIAL: string[] = [
   'The building lives again. Rooftop 2 awaits across the bridge…',
 ];
 
+/** Machines the Seed's Core asks for (Round 2 rules; later specialty pieces are not required). */
+export const SEED_CORE_MACHINES: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree'];
+
 export class ProgressionSystem {
   private readyAnnounced = false;
 
@@ -79,8 +82,9 @@ export class ProgressionSystem {
     }
     p.coreActivated = true;
     p.coreActivatedAt = s.time;
+    p.cores = { ...p.cores, r1: true };
     const r2 = s.grid.roof('r2');
-    if (r2) r2.unlocked = true; // visible as a preview; playable in M7
+    if (r2) r2.unlocked = true; // revealed; playable once the Skybridge Relay is built
     s.production.markDirty();
     s.bus.emit('rooftop.coreRestored', {});
     return true;

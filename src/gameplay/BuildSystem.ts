@@ -17,8 +17,19 @@ export class BuildSystem {
   constructor(private sim: Sim) {}
 
   isUnlocked(type: BuildableType) {
-    const u = MACHINES[type].unlock;
-    return !u || this.sim.state.machines.some((m) => m.type === u.needs);
+    const def = MACHINES[type];
+    const u = def.unlock;
+    if (u && !this.sim.state.machines.some((m) => m.type === u.needs)) return false;
+    if (def.roofs && !def.roofs.some((id) => this.sim.grid.isPlayable(id))) return false;
+    return true;
+  }
+
+  /** Short reason a machine is still locked (hotbar label). */
+  lockLabel(type: BuildableType): string {
+    const def = MACHINES[type];
+    if (def.unlock && !this.sim.state.machines.some((m) => m.type === def.unlock!.needs)) return `🔒 ${MACHINES[def.unlock.needs].name}`;
+    if (def.roofs) return `🔒 ${def.roofs.map((id) => this.sim.grid.roof(id)?.name ?? id).join(', ')}`;
+    return '';
   }
 
   count(type: BuildableType) {
@@ -43,6 +54,7 @@ export class BuildSystem {
     if (def.unlock && !s.state.machines.some((m) => m.type === def.unlock!.needs)) return fail(def.unlock.label);
     const roof = s.grid.roof(roofId);
     if (!roof || !roof.unlocked || roof.preview) return fail('This rooftop is not reachable yet');
+    if (def.roofs && !def.roofs.includes(roofId)) return fail(`Only grows on ${def.roofs.map((id) => s.grid.roof(id)?.name ?? id).join(', ')}`);
     const cells = s.grid.footprint(roofId, x, z, def.size);
     if (cells.some((c) => !c)) return fail('Too close to the edge');
     for (const c of cells) {

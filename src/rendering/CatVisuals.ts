@@ -13,6 +13,8 @@ export class CatVisuals {
   private time = 0;
   private anchorId?: string;
   reducedMotion = false;
+  /** Accessibility: softer, smaller sparkles. */
+  softSparkle = false;
 
   constructor(
     private sim: Sim,

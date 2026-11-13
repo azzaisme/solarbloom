@@ -1,4 +1,5 @@
-// Data-defined rooftop layouts. Coordinates are roof-local integer grid cells.
+// Data-defined rooftop layouts. Coordinates are roof-local integer grid cells (x, z).
+// Every tile has a stable key `roofId:x:z`; world placement comes only from `origin` + `height`.
 
 export interface CatAnchor {
   id: string;
@@ -11,9 +12,14 @@ export interface CatAnchor {
   hint: string;
 }
 
+export type RoofSpecialty = 'starter' | 'reservoir' | 'canopy';
+
 export interface RooftopDef {
   id: string;
   name: string;
+  /** short label for HUD chips */
+  short: string;
+  specialty: RoofSpecialty;
   width: number;
   depth: number;
   height: number;
@@ -24,12 +30,33 @@ export interface RooftopDef {
   prepared: [number, number][];
   core?: [number, number];
   starterSolar?: [number, number];
+  /** Link that has to be built before this roof is playable (undefined for the Seed). */
+  unlockLink?: string;
+}
+
+/**
+ * An explicit cross-roof connection. The bridge is the visual link; the relay pylons at each end are the
+ * mechanical connection. Pylons stand just outside the grid; `fromTile` / `toTile` are the edge tiles whose
+ * neighbourhood (Manhattan ≤ relay.zoneRadius) charges the relay.
+ */
+export interface RoofLinkDef {
+  id: string;
+  name: string;
+  from: string;
+  to: string;
+  fromTile: [number, number];
+  toTile: [number, number];
+  cost: { biomass: number; energy: number };
+  /** Rooftop Core that must be awake before this link can be built. */
+  requiresCore: string;
 }
 
 export const ROOFTOPS: RooftopDef[] = [
   {
     id: 'r1',
     name: 'Old Ferry Building',
+    short: 'The Seed',
+    specialty: 'starter',
     width: 8,
     depth: 8,
     height: 0,
@@ -50,17 +77,76 @@ export const ROOFTOPS: RooftopDef[] = [
   },
   {
     id: 'r2',
-    name: 'Greenhouse Tower',
-    width: 6,
-    depth: 6,
+    name: 'The Reservoir',
+    short: 'Reservoir',
+    specialty: 'reservoir',
+    width: 8,
+    depth: 8,
     height: 1.2,
-    origin: [11, 0, -4.5],
+    origin: [11, 0, -5],
     unlocked: false,
     preview: true,
-    blocked: [],
-    prepared: [],
+    blocked: [
+      [7, 0],
+      [0, 0],
+    ], // dry overflow drains
+    prepared: [
+      [0, 6],
+      [1, 7],
+    ],
+    core: [5, 2], // the Old Cistern
+    unlockLink: 'seed-reservoir',
+  },
+  {
+    id: 'r3',
+    name: 'The Canopy',
+    short: 'Canopy',
+    specialty: 'canopy',
+    width: 10,
+    depth: 8,
+    height: -0.6,
+    origin: [-13, 0, 4],
+    unlocked: false,
+    preview: true,
+    blocked: [
+      [0, 0],
+      [1, 7],
+    ], // dead stumps
+    prepared: [
+      [9, 2],
+      [8, 1],
+    ],
+    core: [4, 3], // the Elder Tree
+    unlockLink: 'seed-canopy',
   },
 ];
+
+export const ROOF_BY_ID: Record<string, RooftopDef> = Object.fromEntries(ROOFTOPS.map((r) => [r.id, r]));
+
+export const LINKS: RoofLinkDef[] = [
+  {
+    id: 'seed-reservoir',
+    name: 'Skybridge Relay',
+    from: 'r1',
+    to: 'r2',
+    fromTile: [7, 2],
+    toTile: [0, 7],
+    cost: { biomass: 160, energy: 60 },
+    requiresCore: 'r1',
+  },
+  {
+    id: 'seed-canopy',
+    name: 'Canopy Bridge',
+    from: 'r1',
+    to: 'r3',
+    fromTile: [0, 5],
+    toTile: [9, 1],
+    cost: { biomass: 260, energy: 120 },
+    requiresCore: 'r2',
+  },
+];
+
+export const LINK_BY_ID: Record<string, RoofLinkDef> = Object.fromEntries(LINKS.map((l) => [l.id, l]));
 
 export const PARAPET_TOP = 0.32;
 
@@ -73,8 +159,18 @@ export const CAT_ANCHORS: CatAnchor[] = [
   { id: 'corner-ledge', roofId: 'r1', pos: [8.12, PARAPET_TOP, 8.12], rotY: 45, hint: 'on the front corner ledge' },
   { id: 'between-solar', roofId: 'r1', pos: [2.82, 0.08, 1.18], rotY: 230, needsFreeTile: [2, 1], hint: 'between the solar panels' },
   { id: 'ac-unit', roofId: 'r1', pos: [1.35, 0.57, -0.85], rotY: 210, hint: 'on top of the old AC unit' },
-  { id: 'crates', roofId: 'r1', pos: [-1.0, 0.99, 6.4], rotY: 240, hint: 'on the stacked crates' },
+  { id: 'crates', roofId: 'r1', pos: [-1.0, 0.99, 7.0], rotY: 240, hint: 'on the stacked crates' },
   { id: 'hut-roof', roofId: 'r1', pos: [5.55, 1.4, -0.55], rotY: 200, hint: 'on the stairwell roof' },
   { id: 'water-tower', roofId: 'r1', pos: [-0.72, 1.21, 3.75], rotY: 220, hint: 'under the water tower' },
   { id: 'core-step', roofId: 'r1', pos: [2.1, 0.08, 0.2], rotY: 200, needsFreeTile: [2, 0], hint: 'by the Core' },
+  // The Reservoir
+  { id: 'cistern-rim', roofId: 'r2', pos: [7.2, 0.08, 2.4], rotY: 220, needsFreeTile: [7, 2], hint: 'beside the Old Cistern' },
+  { id: 'drain-nook', roofId: 'r2', pos: [0.85, 0.08, 0.6], rotY: 210, needsFreeTile: [1, 0], hint: 'by the dry drain' },
+  { id: 'res-railing', roofId: 'r2', pos: [3.6, PARAPET_TOP, -0.12], rotY: 200, hint: 'on the Reservoir railing' },
+  { id: 'res-corner', roofId: 'r2', pos: [8.12, PARAPET_TOP, 8.12], rotY: 45, hint: 'on the Reservoir front corner' },
+  // The Canopy
+  { id: 'stump-west', roofId: 'r3', pos: [0.82, 0.08, 0.85], rotY: 225, needsFreeTile: [1, 0], hint: 'beside the old stump' },
+  { id: 'canopy-rail', roofId: 'r3', pos: [5.6, PARAPET_TOP, -0.12], rotY: 200, hint: 'on the Canopy back wall' },
+  { id: 'canopy-left', roofId: 'r3', pos: [-0.12, PARAPET_TOP, 3.6], rotY: 250, hint: 'on the Canopy side wall' },
+  { id: 'root-nook', roofId: 'r3', pos: [2.3, 0.08, 7.1], rotY: 230, needsFreeTile: [2, 7], hint: 'among the dead roots' },
 ];

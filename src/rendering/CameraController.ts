@@ -12,7 +12,7 @@ export class CameraController {
   private dist = 40;
   zoom = 1;
   private zoomGoal = 1;
-  minZoom = 0.55;
+  minZoom = 0.42;
   maxZoom = 1.9;
   bounds = { minX: -3, maxX: 18, minZ: -6, maxZ: 12 };
   private shakeT = 0;
@@ -64,8 +64,36 @@ export class CameraController {
     return (2 * this.cam.orthoHeight) / Math.max(1, c.clientHeight);
   }
 
+  /** How fast the view follows its goal; a glide (roof focus) is gentler than direct input. */
+  private follow = 12;
+
+  /** Pan bounds that cover every rooftop footprint (plus a margin). */
+  setBoundsFor(roofs: { origin: [number, number, number]; width: number; depth: number }[]) {
+    const m = 2;
+    this.bounds = {
+      minX: Math.min(...roofs.map((r) => r.origin[0])) - m,
+      maxX: Math.max(...roofs.map((r) => r.origin[0] + r.width)) + m,
+      minZ: Math.min(...roofs.map((r) => r.origin[2])) - m,
+      maxZ: Math.max(...roofs.map((r) => r.origin[2] + r.depth)) + m,
+    };
+  }
+
+  /** Smoothly pans/zooms toward a point; any player pan or zoom takes over immediately. */
+  glide(x: number, y: number, z: number, zoom?: number) {
+    if (this.cinematic) return;
+    this.goal.set(x, y, z);
+    this.clamp();
+    if (zoom !== undefined) this.zoomGoal = pc.math.clamp(zoom, this.minZoom, this.maxZoom);
+    this.follow = this.reducedMotion ? 30 : 3.2;
+  }
+
+  get goalPoint() {
+    return this.goal;
+  }
+
   pan(dxPx: number, dyPx: number) {
     if (this.cinematic) return;
+    this.follow = 12;
     const wpp = this.worldPerPixel();
     const yr = (this.yaw * Math.PI) / 180;
     const right = new pc.Vec3(Math.cos(yr), 0, -Math.sin(yr));
@@ -85,6 +113,10 @@ export class CameraController {
 
   zoomBy(factor: number) {
     if (this.cinematic) return;
+    if (this.follow < 12) {
+      this.goal.copy(this.target); // stop a glide where it is
+      this.follow = 12;
+    }
     this.zoomGoal = pc.math.clamp(this.zoomGoal * factor, this.minZoom, this.maxZoom);
   }
 
@@ -107,6 +139,7 @@ export class CameraController {
   }
 
   reset() {
+    this.follow = 12;
     this.goal.set(4, 0, 4);
     this.zoomGoal = 1;
   }
@@ -119,7 +152,7 @@ export class CameraController {
 
   update(dt: number) {
     if (!this.cinematic) {
-      const k = 1 - Math.exp(-dt * 12);
+      const k = 1 - Math.exp(-dt * this.follow);
       this.zoom += (this.zoomGoal - this.zoom) * k;
       this.target.lerp(this.target, this.goal, k);
     }
@@ -129,6 +162,19 @@ export class CameraController {
       const a = this.shakeAmp * Math.max(0, this.shakeT / 0.4);
       const p = this.entity.getPosition();
       this.entity.setPosition(p.x + (Math.random() - 0.5) * a, p.y + (Math.random() - 0.5) * a, p.z + (Math.random() - 0.5) * a);
+      this.markDirty();
+    }
+  }
+
+  /**
+   * PlayCanvas only refreshes a camera's view matrix once per rendered frame. Picking and labels run between
+   * frames (and several camera moves can happen in one), so invalidate it whenever the camera moves.
+   */
+  private markDirty() {
+    const c = (this.cam as unknown as { camera?: { _viewMatDirty: boolean; _viewProjMatDirty: boolean } }).camera;
+    if (c) {
+      c._viewMatDirty = true;
+      c._viewProjMatDirty = true;
     }
   }
 
@@ -143,6 +189,7 @@ export class CameraController {
     );
     this.entity.lookAt(t);
     this.cam.orthoHeight = this.fitHeight() / this.zoom;
+    this.markDirty();
   }
 
   /** Ray (origin, direction) for a CSS-pixel screen point. */

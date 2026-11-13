@@ -10,6 +10,8 @@ export interface MachineDef {
   blurb: string;
   hotkey?: string;
   unlock?: { needs: MachineType; label: string };
+  /** Only buildable on these rooftops (a roof's specialty piece). */
+  roofs?: string[];
 }
 
 export const MACHINES: Record<MachineType, MachineDef> = {
@@ -64,6 +66,17 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     hotkey: '7',
     unlock: { needs: 'droneHub', label: 'Build a Drone Hub to unlock' },
   },
+  reservoirGarden: {
+    type: 'reservoirGarden',
+    name: 'Reservoir Garden',
+    icon: '⛲',
+    size: 1,
+    cost: { biomass: 60, water: 20 },
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Water Condensers within 2 tiles fill its basin. When full it Overflows: up to 3 dry tiles nearby burst into lush bloom (×2 🌿 for a while).',
+    hotkey: '8',
+    roofs: ['r2'],
+  },
   core: {
     type: 'core',
     name: 'Rooftop Core',
@@ -75,4 +88,4 @@ export const MACHINES: Record<MachineType, MachineDef> = {
   },
 };
 
-export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree'];
+export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden'];

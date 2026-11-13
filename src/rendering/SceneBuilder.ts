@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import type { RooftopData } from '../core/types';
+import { LINKS, type RoofLinkDef } from '../data/rooftops';
 import { color, mat, PALETTE, uniqueMat } from './Materials';
 import { assignBatch, group, shape, vshape } from './Shapes';
 import { Scenery } from './Scenery';
@@ -23,6 +24,27 @@ class R {
   }
 }
 
+/** A bridge + its two relay pylons. `ends` are world points at the pylon lamps. */
+export interface BridgeView {
+  link: RoofLinkDef;
+  root: pc.Entity;
+  scaffold: pc.Entity;
+  lamps: pc.StandardMaterial[];
+  pylons: pc.Entity[];
+  ends: [pc.Vec3, pc.Vec3];
+  /** points along the deck (for pulses travelling across) */
+  path: pc.Vec3[];
+  built: boolean;
+}
+
+/** Outward direction of the roof edge a tile sits on. */
+function edgeDir(roof: RooftopData, x: number, z: number): [number, number] {
+  if (x === roof.width - 1) return [1, 0];
+  if (x === 0) return [-1, 0];
+  if (z === roof.depth - 1) return [0, 1];
+  return [0, -1];
+}
+
 interface Restorable {
   facadeMat: pc.StandardMaterial;
   windowMat: pc.StandardMaterial;
@@ -43,11 +65,13 @@ export class SceneBuilder {
   sun!: pc.Entity;
   private turbines: pc.Entity[] = [];
   private r1!: Restorable;
-  bridge!: pc.Entity;
+  /** Bridges by link id. */
+  readonly bridges = new Map<string, BridgeView>();
   get restorable() {
     return this.r1;
   }
-  roof2Group!: pc.Entity;
+  /** Each rooftop's dressing that changes when its Core wakes (Reservoir basin water, Canopy flower bridge…). */
+  private roofWake = new Map<string, pc.Entity[]>();
 
   constructor(
     private app: pc.AppBase,
@@ -64,11 +88,19 @@ export class SceneBuilder {
     this.lights();
     const r1 = roofs.find((r) => r.id === 'r1')!;
     this.r1 = this.building(r1, true);
-    const r2 = roofs.find((r) => r.id === 'r2');
-    if (r2) this.buildRoof2(r2);
-    this.buildBridge(r1, r2);
+    const others = roofs.filter((r) => r.id !== 'r1');
+    for (const r of others) {
+      this.building(r, false);
+      if (r.id === 'r2') this.dressReservoir(r);
+      if (r.id === 'r3') this.dressCanopy(r);
+    }
+    for (const l of LINKS) {
+      const a = roofs.find((r) => r.id === l.from);
+      const b = roofs.find((r) => r.id === l.to);
+      if (a && b) this.buildBridge(l, a, b);
+    }
     this.scenery = new Scenery(this.world, this.tweens);
-    this.scenery.build(r1);
+    this.scenery.build(r1, others);
     // Static batching for everything that never moves; animated restoration props stay separate.
     const staticGroup = this.app.batcher!.addGroup('static-world', false, 40);
     const cityGroup = this.app.batcher!.addGroup('static-city', false, 400);
@@ -76,7 +108,16 @@ export class SceneBuilder {
     assignBatch(this.scenery.staticRoot, cityGroup.id);
     assignBatch(this.scenery.stageRoot, stageGroup.id);
     this.scenery.forEachStageItem((e) => assignBatch(e, stageGroup.id));
-    const animated = new Set<pc.Entity>([...this.r1.vines, ...this.r1.planters, ...this.r1.banners, ...this.r1.boards, ...this.r1.rubble, this.bridge, ...this.turbines.map((t) => t.parent as pc.Entity)]);
+    const animated = new Set<pc.Entity>([
+      ...this.r1.vines,
+      ...this.r1.planters,
+      ...this.r1.banners,
+      ...this.r1.boards,
+      ...this.r1.rubble,
+      ...[...this.bridges.values()].map((b) => b.root),
+      ...[...this.roofWake.values()].flat(),
+      ...this.turbines.map((t) => t.parent as pc.Entity),
+    ]);
     const walk = (e: pc.Entity) => {
       if (animated.has(e) || e === this.scenery.staticRoot || e === this.scenery.stageRoot) return;
       if (e.render) e.render.batchGroupId = staticGroup.id;
@@ -250,51 +291,111 @@ export class SceneBuilder {
     return { facadeMat, windowMat, parapetMat, vines, planters, banners, rubble, boards };
   }
 
-  private buildRoof2(roof: RooftopData) {
-    const r = this.building(roof, false);
-    void r;
+  /** Reservoir: dry terraced planters, an old pipe run and a dry basin channel that fill with water when it wakes. */
+  private dressReservoir(roof: RooftopData) {
     const [ox, oy, oz] = roof.origin;
     const top = oy + roof.height;
-    const g = group(this.world, 'roof2-preview');
-    this.roof2Group = g;
-    for (const t of roof.tiles) {
-      const c = PALETTE.concrete[t.variant % PALETTE.concrete.length];
-      shape(g, 'box', mat(c), { pos: [ox + t.x + 0.5, top, oz + t.z + 0.5], scale: [0.96, 0.16, 0.96] });
+    const g = group(this.world, 'reservoir-dressing');
+    // Stepped dry terraces down the back wall (outside the grid).
+    for (let i = 0; i < 4; i++) {
+      const tx = ox + 1 + i * 2;
+      shape(g, 'box', mat('#d8d2c6'), { pos: [tx, top + 0.16, oz - 0.42], scale: [1.6, 0.32, 0.5], shadow: true });
+      shape(g, 'box', mat('#a8946f'), { pos: [tx, top + 0.33, oz - 0.42], scale: [1.45, 0.03, 0.38] });
+      for (let k = 0; k < 3; k++) shape(g, 'cone', mat('#8d7f62'), { pos: [tx - 0.5 + k * 0.5, top + 0.42, oz - 0.42], scale: [0.06, 0.16, 0.06] });
     }
-    // Greenhouse frame teaser
-    const fx0 = ox + 1;
-    const fx1 = ox + roof.width - 1;
-    const fz0 = oz + 1;
-    const fz1 = oz + roof.depth - 1;
-    const fh = 1.7;
-    const post = (x: number, z: number) => shape(g, 'box', mat(PALETTE.white), { pos: [x, top + fh / 2, z], scale: [0.09, fh, 0.09], shadow: true });
-    for (const x of [fx0, (fx0 + fx1) / 2, fx1]) for (const z of [fz0, fz1]) post(x, z);
-    for (const z of [fz0, fz1]) shape(g, 'box', mat(PALETTE.white), { pos: [(fx0 + fx1) / 2, top + fh, z], scale: [fx1 - fx0 + 0.09, 0.08, 0.08] });
-    for (const x of [fx0, (fx0 + fx1) / 2, fx1]) {
-      for (const s of [-1, 1]) {
-        const rafter = group(g, 'rafter', [x, top + fh + 0.45, (fz0 + fz1) / 2 + s * (fz1 - fz0) / 4]);
-        rafter.setLocalEulerAngles(s * 21, 0, 0);
-        shape(rafter, 'box', mat(PALETTE.white), { scale: [0.08, 0.08, (fz1 - fz0) / 2 + 0.2] });
-      }
+    // Old pipe run along the left edge.
+    shape(g, 'cylinder', mat('#9a6a4a'), { pos: [ox - 0.32, top + 0.14, oz + roof.depth / 2], scale: [0.14, roof.depth, 0.14], rot: [90, 0, 0] });
+    // Dry channels on the back terrace that run with water once the Cistern wakes.
+    const wake: pc.Entity[] = [];
+    for (let i = 0; i < 3; i++) {
+      const w = group(g, 'cascade', [ox + 1.2 + i * 2.8, top + 0.2, oz - 0.5]);
+      shape(w, 'box', mat(PALETTE.water, { gloss: 0.9, emissive: '#1a6f8a', emissiveIntensity: 0.3 }), { pos: [0, 0.32, -0.3], scale: [0.5, 0.06, 1.2], rot: [-30, 0, 0] });
+      for (let k = 0; k < 3; k++) shape(w, 'sphere', mat(PALETTE.flower[(i + k) % 5]), { pos: [-0.35 + k * 0.35, 0.5 + (k % 2) * 0.1, -0.1], scale: 0.12 });
+      shape(w, 'sphere', mat(PALETTE.shrub[i % 3]), { pos: [0.45, 0.45, -0.2], scale: [0.4, 0.3, 0.4] });
+      w.setLocalScale(1, 0.0001, 1);
+      w.enabled = false;
+      wake.push(w);
     }
-    shape(g, 'box', mat(PALETTE.white), { pos: [(fx0 + fx1) / 2, top + fh + 0.85, (fz0 + fz1) / 2], scale: [fx1 - fx0 + 0.1, 0.08, 0.08] });
-    shape(g, 'box', mat(PALETTE.glass, { opacity: 0.25 }), { pos: [(fx0 + fx1) / 2, top + fh / 2, fz1], scale: [fx1 - fx0, fh, 0.02] });
+    // A waterfall spilling off the front of the building.
+    const fall = group(g, 'waterfall', [ox + roof.width + 0.28, top - 0.2, oz + 2.5]);
+    shape(fall, 'box', mat('#a8ecff', { opacity: 0.85, emissive: '#3aa6c8', emissiveIntensity: 0.25 }), { pos: [0, -2.5, 0], scale: [0.06, 5, 0.9] });
+    fall.setLocalScale(1, 0.0001, 1);
+    fall.enabled = false;
+    wake.push(fall);
+    this.roofWake.set(roof.id, wake);
   }
 
-  private buildBridge(r1: RooftopData, r2?: RooftopData) {
-    const g = group(this.world, 'bridge');
-    this.bridge = g;
-    if (!r2) return;
-    const x0 = r1.origin[0] + r1.width + 0.2;
-    const x1 = r2.origin[0] - 0.2;
-    const y0 = r1.origin[1] + r1.height + 0.02;
-    const y1 = r2.origin[1] + r2.height + 0.02;
-    const z = r2.origin[2] + 5.4;
-    const len = Math.hypot(x1 - x0, y1 - y0);
-    const ang = (Math.atan2(y1 - y0, x1 - x0) * 180) / Math.PI;
-    g.setPosition(x0, y0, z);
-    const span = group(g, 'span');
-    span.setLocalEulerAngles(0, 0, ang);
+  /** Canopy: dead vines on the walls and a dormant trellis; a flower arch and hanging gardens appear when it wakes. */
+  private dressCanopy(roof: RooftopData) {
+    const [ox, oy, oz] = roof.origin;
+    const top = oy + roof.height;
+    const g = group(this.world, 'canopy-dressing');
+    const rng = new R(31);
+    for (let i = 0; i < 8; i++) {
+      const a = ox + 0.6 + i * (roof.width / 8);
+      shape(g, 'box', mat('#7a6a55'), { pos: [a, top - 0.9, oz + roof.depth + 0.3], scale: [0.08, rng.range(1, 2.2), 0.05], rot: [0, 0, rng.range(-12, 12)] });
+    }
+    // Trellis along the back wall
+    for (let i = 0; i <= 5; i++) shape(g, 'box', mat('#9b8c78'), { pos: [ox + 0.5 + i * ((roof.width - 1) / 5), top + 0.7, oz - 0.2], scale: [0.07, 1.4, 0.07] });
+    shape(g, 'box', mat('#9b8c78'), { pos: [ox + roof.width / 2, top + 1.4, oz - 0.2], scale: [roof.width - 0.9, 0.07, 0.07] });
+    const wake: pc.Entity[] = [];
+    // Hanging gardens down the front face
+    for (let i = 0; i < 9; i++) {
+      const a = ox + 0.5 + i * ((roof.width - 1) / 8);
+      const len = rng.range(1.5, 4);
+      const vine = group(g, 'hang', [a, top - 0.2, oz + roof.depth + 0.33]);
+      shape(vine, 'box', mat(PALETTE.shrub[i % 3]), { pos: [0, -len / 2, 0], scale: [0.3, len, 0.06] });
+      shape(vine, 'sphere', mat(PALETTE.flower[i % 5]), { pos: [0, -len * 0.7, 0.05], scale: 0.14 });
+      vine.setLocalScale(1, 0.0001, 1);
+      vine.enabled = false;
+      wake.push(vine);
+    }
+    // Leafy trellis
+    const leafy = group(g, 'trellisLeaves', [ox + roof.width / 2, top + 1.0, oz - 0.2]);
+    for (let i = 0; i < 12; i++) shape(leafy, 'sphere', mat(i % 4 === 0 ? PALETTE.pink : PALETTE.shrub[i % 3]), { pos: [-roof.width / 2 + 0.6 + i * ((roof.width - 1.2) / 11), rng.range(-0.3, 0.45), 0], scale: [0.5, 0.42, 0.25] });
+    leafy.setLocalScale(0.0001, 0.0001, 0.0001);
+    leafy.enabled = false;
+    wake.push(leafy);
+    this.roofWake.set(roof.id, wake);
+  }
+
+  /** A rooftop's own Core woke up: its dressing comes alive. */
+  wakeRoof(roofId: string, instant: boolean) {
+    const list = this.roofWake.get(roofId) ?? [];
+    list.forEach((e, i) => {
+      if (e.enabled && !instant) return;
+      e.enabled = true;
+      const all = e.name === 'trellisLeaves';
+      this.tweens.add(instant ? 0.001 : 1.2, (k) => e.setLocalScale(all ? Math.max(0.0001, k) : 1, Math.max(0.0001, k), all ? Math.max(0.0001, k) : 1), {
+        delay: instant ? 0 : 0.3 + i * 0.12,
+        ease: ease.outCubic,
+      });
+    });
+  }
+
+  /** World point just outside a roof edge tile (where the relay pylon stands). */
+  private edgePoint(roof: RooftopData, tile: [number, number], out: number): pc.Vec3 {
+    const [dx, dz] = edgeDir(roof, tile[0], tile[1]);
+    return new pc.Vec3(roof.origin[0] + tile[0] + 0.5 + dx * (0.5 + out), roof.origin[1] + roof.height, roof.origin[2] + tile[1] + 0.5 + dz * (0.5 + out));
+  }
+
+  private buildBridge(link: RoofLinkDef, a: RooftopData, b: RooftopData) {
+    const root = group(this.world, `bridge-${link.id}`);
+    const p0 = this.edgePoint(a, link.fromTile, 0.12);
+    const p1 = this.edgePoint(b, link.toTile, 0.12);
+    const deckY = 0.26; // decks sit on the parapets, clear of ledge props
+    const s0 = new pc.Vec3(p0.x, p0.y + deckY, p0.z);
+    const s1 = new pc.Vec3(p1.x, p1.y + deckY, p1.z);
+    const dx = s1.x - s0.x;
+    const dy = s1.y - s0.y;
+    const dz = s1.z - s0.z;
+    const flat = Math.hypot(dx, dz);
+    const len = Math.hypot(flat, dy);
+    const yaw = (Math.atan2(dx, dz) * 180) / Math.PI - 90;
+    const pitch = (Math.atan2(dy, flat) * 180) / Math.PI;
+    const deck = group(root, 'deck', [s0.x, s0.y, s0.z]);
+    deck.setLocalEulerAngles(0, yaw, pitch);
+    const span = group(deck, 'span');
     shape(span, 'box', mat(PALETTE.bridge), { pos: [len / 2, 0, 0], scale: [len, 0.12, 1.1], shadow: true });
     shape(span, 'box', mat('#83c46a'), { pos: [len / 2, 0.07, 0], scale: [len, 0.03, 0.5] });
     for (const side of [-0.52, 0.52]) {
@@ -302,8 +403,92 @@ export class SceneBuilder {
       for (let i = 0; i <= 4; i++) shape(span, 'box', mat(PALETTE.white), { pos: [(i / 4) * len, 0.18, side], scale: [0.06, 0.34, 0.06] });
     }
     for (let i = 0; i < 6; i++) shape(span, 'sphere', mat(PALETTE.flower[i % 5]), { pos: [0.3 + (i / 5) * (len - 0.6), 0.42, i % 2 ? 0.52 : -0.52], scale: 0.12 });
-    g.setLocalScale(0.0001, 1, 1);
-    g.enabled = false;
+    span.setLocalScale(0.0001, 1, 1);
+    span.enabled = false;
+    // Scaffold: a dashed white outline of where the bridge will go (shown once it can be built).
+    const scaffold = group(deck, 'scaffold');
+    for (let i = 0; i < Math.floor(len / 0.5); i++) shape(scaffold, 'box', mat(PALETTE.white, { opacity: 0.55 }), { pos: [0.25 + i * 0.5, 0, 0], scale: [0.28, 0.05, 0.9] });
+    scaffold.enabled = false;
+    // Relay pylons at both ends.
+    const lamps: pc.StandardMaterial[] = [];
+    const pylons: pc.Entity[] = [];
+    const ends: pc.Vec3[] = [];
+    for (const p of [p0, p1]) {
+      const py = group(root, 'pylon', [p.x, p.y + 0.12, p.z]);
+      shape(py, 'cylinder', mat(PALETTE.shell), { pos: [0, 0.08, 0], scale: [0.36, 0.16, 0.36], shadow: true });
+      shape(py, 'cylinder', mat(PALETTE.white), { pos: [0, 0.48, 0], scale: [0.12, 0.7, 0.12], shadow: true });
+      shape(py, 'torus', mat(PALETTE.white), { pos: [0, 0.82, 0], scale: [0.34, 0.06, 0.34] });
+      const lm = uniqueMat('#55605a', { gloss: 0.7, emissive: '#000000', emissiveIntensity: 1 });
+      shape(py, 'sphere', lm, { pos: [0, 0.92, 0], scale: 0.2 });
+      lamps.push(lm);
+      pylons.push(py);
+      ends.push(new pc.Vec3(p.x, p.y + 1.04, p.z));
+    }
+    const path: pc.Vec3[] = [];
+    for (let i = 0; i <= 8; i++) {
+      const k = i / 8;
+      path.push(new pc.Vec3(s0.x + dx * k, s0.y + dy * k + 0.45 + Math.sin(k * Math.PI) * 0.35, s0.z + dz * k));
+    }
+    this.bridges.set(link.id, { link, root, scaffold, lamps, pylons, ends: [ends[0], ends[1]], path, built: false });
+    (root as pc.Entity & { span?: pc.Entity }).span = span;
+  }
+
+  private district?: pc.Entity;
+  /** After the Neighbourhood Bloom: a new district silhouette appears on the horizon (the next goal). */
+  showDistrict(instant: boolean) {
+    if (!this.district) {
+      const g = group(this.world, 'next-district');
+      const rng = new R(808);
+      // Far behind the Reservoir, toward the upper right of the screen.
+      for (let i = 0; i < 7; i++) {
+        const x = 30 + i * 2.4 + rng.range(-0.5, 0.5);
+        const z = -26 + i * 1.1 + rng.range(-0.5, 0.5);
+        const h = rng.range(5, 11);
+        shape(g, 'box', mat('#d9efe0'), { pos: [x, h / 2 - 4, z], scale: [1.8, h, 1.8] });
+        shape(g, 'sphere', mat('#8fd17a'), { pos: [x, h - 4 + 0.3, z], scale: [1.6, 0.8, 1.6] });
+        if (i % 2) shape(g, 'cylinder', mat(PALETTE.white), { pos: [x, h - 4 + 1.5, z], scale: [0.12, 2.4, 0.12] });
+      }
+      // a soft green beacon: something is waiting there
+      shape(g, 'cylinder', mat('#b6ffe0', { emissive: '#7cf7c8', emissiveIntensity: 1.2, opacity: 0.35 }), { pos: [37, 6, -22], scale: [0.6, 22, 0.6] });
+      this.district = g;
+    }
+    const g = this.district;
+    g.enabled = true;
+    this.tweens.add(instant ? 0.001 : 2.5, (k) => g.setLocalPosition(0, -12 * (1 - k), 0), { ease: ease.outCubic });
+  }
+
+  /** The bridge can be built: show its dashed outline. */
+  showScaffold(linkId: string, on: boolean) {
+    const b = this.bridges.get(linkId);
+    if (b && !b.built) b.scaffold.enabled = on;
+  }
+
+  /** Grows the bridge deck across (`instant` on load). Returns the animation length. */
+  buildBridgeDeck(linkId: string, instant: boolean): number {
+    const b = this.bridges.get(linkId);
+    if (!b || b.built) return 0;
+    b.built = true;
+    b.scaffold.enabled = false;
+    const span = (b.root as pc.Entity & { span?: pc.Entity }).span!;
+    span.enabled = true;
+    this.tweens.add(instant ? 0.001 : 1.4, (k) => span.setLocalScale(Math.max(0.0001, k), 1, 1), { ease: ease.outCubic });
+    return instant ? 0 : 1.4;
+  }
+
+  /** Relay lamp: green when ready, dim while recharging, off until the bridge is built. */
+  setRelayLamp(linkId: string, state: 'off' | 'ready' | 'cooldown' | 'firing') {
+    const b = this.bridges.get(linkId);
+    if (!b) return;
+    const key = `lamp:${state}`;
+    if ((b.root as pc.Entity & { lampState?: string }).lampState === key) return;
+    (b.root as pc.Entity & { lampState?: string }).lampState = key;
+    const hex = state === 'ready' ? '#7cf7c8' : state === 'firing' ? '#fff3a0' : state === 'cooldown' ? '#3f8f6a' : '#000000';
+    for (const m of b.lamps) {
+      m.diffuse = color(state === 'off' ? '#55605a' : '#d8fff0');
+      m.emissive = color(hex);
+      m.emissiveIntensity = state === 'firing' ? 2.2 : state === 'ready' ? 1.4 : 0.5;
+      m.update();
+    }
   }
 
   /**
@@ -369,8 +554,6 @@ export class SceneBuilder {
     r.vines.forEach((v, i) => tw.add(1.4 * D, (k) => v.setLocalScale(1, Math.max(0.0001, k), 1), { delay: (2.2 + i * 0.12) * D, ease: ease.outCubic }));
     r.planters.forEach((p, i) => tw.add(0.45 * D, (k) => p.setLocalScale(k, k, k), { delay: (2.8 + i * 0.05) * D, ease: ease.outBack }));
     r.banners.forEach((b, i) => tw.add(0.9 * D, (k) => b.setLocalScale(1, Math.max(0.0001, k), 1), { delay: (3.6 + i * 0.2) * D, ease: ease.outElastic }));
-    this.bridge.enabled = true;
-    tw.add(1.4 * D, (k) => this.bridge.setLocalScale(Math.max(0.0001, k), 1, 1), { delay: 4.4 * D, ease: ease.outCubic });
     if (onCamera) tw.add(0.01, () => {}, { delay: 4.0 * D, done: onCamera });
     return 7 * D;
   }

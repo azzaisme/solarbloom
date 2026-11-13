@@ -60,7 +60,15 @@ export class Scenery {
     this.stageRoot = group(parent, 'scenery-stage');
   }
 
-  build(main: RooftopData) {
+  /** World-space footprints (other rooftops' buildings) the city and terraces must stay clear of. */
+  private avoid: { x0: number; x1: number; z0: number; z1: number }[] = [];
+
+  private blocked(x: number, z: number, half: number) {
+    return this.avoid.some((a) => x + half > a.x0 && x - half < a.x1 && z + half > a.z0 && z - half < a.z1);
+  }
+
+  build(main: RooftopData, others: RooftopData[] = []) {
+    this.avoid = others.map((r) => ({ x0: r.origin[0] - 1.5, x1: r.origin[0] + r.width + 1.5, z0: r.origin[2] - 1.5, z1: r.origin[2] + r.depth + 1.5 }));
     this.backdrop();
     this.foreground();
     this.ledge(main);
@@ -149,7 +157,18 @@ export class Scenery {
         const [x, z] = worldOf(u, v);
         const w = rng.range(L.w[0], L.w[1]);
         const top = topFor(S, v);
-        const r = this.tower(g, rng, x, z, top, w, rng.range(L.w[0], L.w[1]), L.lush, layer);
+        const d = rng.range(L.w[0], L.w[1]);
+        if (this.blocked(x, z, Math.max(w, d) / 2)) {
+          // Keep the random sequence identical so the rest of the skyline doesn't change.
+          const tmp = new pc.Entity();
+          const items = this.items.length;
+          this.tower(tmp, rng, x, z, top, w, d, L.lush, layer);
+          this.items.length = items;
+          tmp.destroy();
+          if (layer === 0) rng.next();
+          continue;
+        }
+        const r = this.tower(g, rng, x, z, top, w, d, L.lush, layer);
         if (layer === 0) nearTops.push({ x, z, y: r.y, u });
         // waterfalls pour off some near towers once the city wakes (stage 3)
         if (layer === 0 && rng.next() < 0.3) {
@@ -195,6 +214,7 @@ export class Scenery {
       const [x, z] = worldOf(sp.u, sp.v);
       const top = topFor(sp.S, sp.v);
       const w = rng.range(3, 4.5);
+      if (this.blocked(x, z, w / 2)) continue;
       V(g, 'box', '#efe9de', [x, top - 6, z], [w, 12, w]);
       V(g, 'box', '#5fae45', [x, top + 0.08, z], [w * 0.96, 0.16, w * 0.96]);
       for (let k = 0; k < 4; k++) {
@@ -256,10 +276,11 @@ export class Scenery {
       V(c, 'box', '#8d6a45', [0, 0, s / 2 + 0.005], [s, 0.06, 0.01]);
       V(c, 'box', '#8d6a45', [s / 2 + 0.005, 0, 0], [0.01, 0.06, s]);
     };
-    V(g, 'box', '#a58a68', [-0.9, top + 0.05, 6.6], [1.1, 0.1, 1.3]);
-    crate(-1.05, 0.1, 6.3, 0.5, 8);
-    crate(-0.75, 0.1, 6.95, 0.42, -12);
-    crate(-1.0, 0.6, 6.4, 0.38, 20);
+    // (kept clear of the Canopy Bridge, which crosses the left strip at z ≈ 5.5)
+    V(g, 'box', '#a58a68', [-0.9, top + 0.05, 7.2], [1.1, 0.1, 1.2]);
+    crate(-1.05, 0.1, 6.95, 0.5, 8);
+    crate(-0.75, 0.1, 7.55, 0.42, -12);
+    crate(-1.0, 0.6, 7.0, 0.38, 20);
     // weeds in ledge cracks (grey-green, before restoration)
     for (let i = 0; i < 14; i++) {
       const p: [number, number, number] = rng.next() < 0.6 ? [rng.range(-1.6, 8), top + 0.04, rng.range(-1.6, -0.5)] : [rng.range(-1.6, -0.5), top + 0.04, rng.range(0, 8)];

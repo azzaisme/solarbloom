@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { Sim } from '../src/gameplay/Sim';
+import { SAVE_VERSION } from '../src/core/GameState';
 import { fill, makeSim, rich } from './helpers';
 
 describe('save & progression', () => {
@@ -82,7 +83,7 @@ describe('save migration', () => {
     delete old.cat.stash;
     delete old.cat.log;
     const s = new SaveService(undefined).deserialize(JSON.stringify(old))!;
-    expect(s.version).toBe(2);
+    expect(s.version).toBe(SAVE_VERSION);
     expect(s.machines.every((m) => m.charge === 0)).toBe(true);
     expect(s.cat.stash).toBe(0);
     expect(new Sim(s).progression.restoredCount('r1')).toBe(sim.progression.restoredCount('r1'));

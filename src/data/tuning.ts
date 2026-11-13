@@ -91,7 +91,9 @@ export const TUNING = {
     megaBloomTiles: 8,
     dronePartySeconds: 45,
     stashMax: 2, // a missed cat saves up to this many extra rewards instead of blocking new ones
-    weights: { luckyHarvest: 40, solarFrenzy: 25, megaBloom: 20, droneParty: 12, jackpot: 3 },
+    weights: { luckyHarvest: 40, solarFrenzy: 25, megaBloom: 20, droneParty: 12, jackpot: 3, goldenRelay: 14, catsGarden: 14 },
+    goldenRelayExtra: 1, // Golden Relay: extra remote blooms on the next crossing
+    catsGardenTiles: 6, // Cat's Garden: tiles restored (and decorated) on a random unlocked roof
   },
 
   core: {
@@ -103,4 +105,50 @@ export const TUNING = {
   },
 
   autosaveSeconds: 10,
+
+  /** Phase 3: the connected neighbourhood. Everything here is a starting point for playtesting. */
+  neighbourhood: {
+    /** Each unlocked extra rooftop raises every storage cap by this share of the starting cap. */
+    roofCapBonus: 0.5,
+    relay: {
+      zoneRadius: 1, // Manhattan distance from the relay's edge tile that charges it
+      cooldown: 8, // seconds between cross-roof pulses on one link
+      cooldownRelay2: 6,
+      targets: 1, // remote blooms per crossing (Relay I)
+      targetsRelay2: 2,
+      remoteRadius: 4, // remote blooms land within this distance of the arriving relay
+      travelSeconds: 0.9, // pulse travel time across a bridge (also the chain step delay)
+    },
+    /** Reservoir Overflow: condensers in range fill a Reservoir Garden; when full it spills. */
+    reservoir: {
+      condenserRange: 2, // condenser footprint → garden footprint (Manhattan)
+      fillPerCharge: 1, // garden fill per completed condenser charge
+      threshold: 3,
+      targets: 3, // dry tiles irrigated per Overflow
+      radius: 2,
+      lushSeconds: 25, // newly irrigated plants grow extra biomass for a while
+      lushMult: 2,
+      cisternWater: 1, // water/s from the Old Cistern once awake
+    },
+    /** Canopy: the Elder Tree charges from blooms around it and releases a Canopy Burst. */
+    canopy: {
+      chargeRadius: 3,
+      threshold: 12,
+      burstRadius: 2,
+      burstRadiusAwake: 3,
+      gardenBonusTargets: 2, // each Pollinator Garden inside the burst adds this many extra blooms beyond it
+    },
+    cores: {
+      r2: { restoredTiles: 28, overflows: 1, cost: { water: 50, biomass: 140 } },
+      r3: { restoredTiles: 36, bursts: 2, cost: { energy: 90, biomass: 220 } },
+    },
+    /** Manual pulse right next to a machine boosts its next trigger. */
+    overchargeSeconds: 12,
+    bloom: {
+      seconds: 10, // presentation length (skippable)
+      capBonus: 0.5, // permanent storage boost
+      reward: { energy: 200, water: 120, biomass: 400 },
+      biomassMult: 1.15, // neighbourhood-wide resonance afterwards
+    },
+  },
 } as const;
