@@ -32,6 +32,8 @@ export interface RooftopDef {
   starterSolar?: [number, number];
   /** Link that has to be built before this roof is playable (undefined for the Seed). */
   unlockLink?: string;
+  /** Dead ground here is tougher: pulse costs are multiplied (dry clay, matted roots). */
+  pulseCostMult?: number;
 }
 
 /**
@@ -49,6 +51,11 @@ export interface RoofLinkDef {
   cost: { biomass: number; energy: number };
   /** Rooftop Core that must be awake before this link can be built. */
   requiresCore: string;
+  /**
+   * A visible milestone on the near rooftop: this share of its open garden tiles (no machine on them)
+   * grown to full bloom. A share, so building more machines can never make it unreachable.
+   */
+  requiresFullBloom?: { roofId: string; share: number };
 }
 
 export const ROOFTOPS: RooftopDef[] = [
@@ -96,6 +103,7 @@ export const ROOFTOPS: RooftopDef[] = [
     ],
     core: [5, 2], // the Old Cistern
     unlockLink: 'seed-reservoir',
+    pulseCostMult: 2,
   },
   {
     id: 'r3',
@@ -118,6 +126,7 @@ export const ROOFTOPS: RooftopDef[] = [
     ],
     core: [4, 3], // the Elder Tree
     unlockLink: 'seed-canopy',
+    pulseCostMult: 2,
   },
 ];
 
@@ -131,8 +140,9 @@ export const LINKS: RoofLinkDef[] = [
     to: 'r2',
     fromTile: [7, 2],
     toTile: [0, 7],
-    cost: { biomass: 160, energy: 60 },
+    cost: { biomass: 220, energy: 90 },
     requiresCore: 'r1',
+    requiresFullBloom: { roofId: 'r1', share: 1 },
   },
   {
     id: 'seed-canopy',
@@ -141,8 +151,9 @@ export const LINKS: RoofLinkDef[] = [
     to: 'r3',
     fromTile: [0, 5],
     toTile: [9, 1],
-    cost: { biomass: 260, energy: 120 },
+    cost: { biomass: 300, energy: 140 },
     requiresCore: 'r2',
+    requiresFullBloom: { roofId: 'r2', share: 0.75 },
   },
 ];
 

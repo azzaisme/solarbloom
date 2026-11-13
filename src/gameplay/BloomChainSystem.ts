@@ -15,6 +15,7 @@ export type ChainEventType =
   | 'RELAY' // a pulse arrives across a bridge (target = link id)
   | 'OVERFLOW' // a Reservoir Garden spills over (target = garden id)
   | 'CANOPY_BURST' // the Elder Tree releases its charge (target = tree id)
+  | 'LUSH' // a relay pulse lands on a tile already in full bloom: it turns lush and its neighbours respond
   | 'REWARD';
 
 /** One step of a Bloom Chain. Presentation replays these; it never decides outcomes. */
@@ -60,7 +61,7 @@ interface ChainRun {
 }
 
 /** Effects that count toward the BLOOM CHAIN ×N combo and milestones. */
-const COUNTED: ChainEventType[] = ['RESTORE', 'GROW', 'PRODUCE_ENERGY', 'PRODUCE_WATER', 'DISCHARGE', 'RELAY', 'OVERFLOW', 'CANOPY_BURST'];
+const COUNTED: ChainEventType[] = ['RESTORE', 'GROW', 'PRODUCE_ENERGY', 'PRODUCE_WATER', 'DISCHARGE', 'RELAY', 'OVERFLOW', 'CANOPY_BURST', 'LUSH'];
 
 /**
  * Bloom Chains: `action → tile event → synergy checks → new events → reward aggregation`.
@@ -175,26 +176,39 @@ export class BloomChainSystem {
     return true;
   }
 
-  /** Dry tiles a Reservoir Garden's Overflow would irrigate, nearest first. */
+  /**
+   * Tiles a Reservoir Garden's Overflow waters, nearest first: dry ground (mossy before concrete) is
+   * irrigated into bloom; with nothing dry left, green tiles that can still grow get a bloom level instead.
+   */
   overflowTargets(g: MachineData, count: number, visited?: Set<string>): TileData[] {
     const s = this.sim;
+    const rank = (t: TileData) => (t.ground === 'prepared' ? 0 : t.ground === 'polluted' ? 1 : 2);
     return s.grid
       .tilesNear(g, TUNING.neighbourhood.reservoir.radius)
-      .filter((t) => (!visited || !visited.has(t.id)) && s.restoration.isEligible(t) && !t.occupantId)
+      .filter((t) => (!visited || !visited.has(t.id)) && !t.occupantId)
+      .filter((t) => s.restoration.isEligible(t) || (t.ground === 'restored' && t.bloom < TUNING.restore.maxBloom))
       .map((t) => ({ t, d: distToFootprint(t.x, t.z, g.x, g.z, g.size) }))
-      .sort((a, b) => (a.t.ground === 'prepared' ? 0 : 1) - (b.t.ground === 'prepared' ? 0 : 1) || a.d - b.d || a.t.z - b.t.z || a.t.x - b.t.x)
+      .sort((a, b) => rank(a.t) - rank(b.t) || a.d - b.d || a.t.z - b.t.z || a.t.x - b.t.x)
       .slice(0, count)
       .map((x) => x.t);
   }
 
-  /** Reservoir Garden basin is full: it spills over (a chain). False if there is nothing dry to irrigate. */
+  /** Reservoir Garden basin is full: it spills over (a chain). It never waits: with nothing to water it just splashes. */
   startOverflow(g: MachineData): boolean {
-    const first = this.overflowTargets(g, 1)[0];
-    if (!first) return false;
     const origin = this.sim.grid.get(g.roofId, g.x, g.z)!;
     const run = this.newRun(origin);
     run.visited.delete(origin.id);
     this.enqueue(run, { type: 'OVERFLOW', source: g.id, target: g.id, cause: 'overflow', depth: 0 }, 0);
+    return true;
+  }
+
+  /** The Elder Tree's ring filled outside a chain (its slow self-charge): release a Canopy Burst. */
+  startCanopyBurst(tree: MachineData): boolean {
+    const origin = this.sim.grid.get(tree.roofId, tree.x, tree.z)!;
+    const run = this.newRun(origin);
+    run.visited.delete(origin.id);
+    run.dischargedTrees.add(tree.id);
+    this.enqueue(run, { type: 'CANOPY_BURST', source: tree.id, target: tree.id, cause: 'canopy', depth: 0 }, 0.2);
     return true;
   }
 
@@ -307,7 +321,11 @@ export class BloomChainSystem {
     }
   }
 
-  /** Where a relay pulse blooms on the far roof: synergy spots near the arriving pylon first. */
+  /**
+   * Where a relay pulse lands on the far roof: synergy spots near the arriving pylon first. Dead ground
+   * restores and grass grows; if everything nearby is already in full bloom, those tiles turn lush, so a
+   * crossing always does something visible (and the machines beside it respond).
+   */
   remoteTargets(run: ChainRun | undefined, l: RoofLinkDef, roofId: string, count: number): TileData[] {
     const s = this.sim;
     const roof = s.grid.roof(roofId);
@@ -315,12 +333,16 @@ export class BloomChainSystem {
     const [rx, rz] = this.relayTile(l, roofId);
     const R = TUNING.neighbourhood.relay.remoteRadius;
     const growable = (t: TileData) => t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom;
-    const cands = roof.tiles
-      .filter((t) => (!run || !run.visited.has(t.id)) && Math.abs(t.x - rx) + Math.abs(t.z - rz) <= R)
-      .filter((t) => s.restoration.isEligible(t) || growable(t))
-      .map((t) => ({ t, score: this.synergyAt(t), d: Math.abs(t.x - rx) + Math.abs(t.z - rz) }))
-      .sort((a, b) => b.score - a.score || a.d - b.d || a.t.z - b.t.z || a.t.x - b.t.x);
-    return cands.slice(0, count).map((c) => c.t);
+    const lushable = (t: TileData) => t.ground === 'restored' && !t.occupantId && !t.blocked;
+    const near = roof.tiles.filter((t) => (!run || !run.visited.has(t.id)) && Math.abs(t.x - rx) + Math.abs(t.z - rz) <= R);
+    const rank = (list: TileData[]) =>
+      list
+        .map((t) => ({ t, score: this.synergyAt(t), d: Math.abs(t.x - rx) + Math.abs(t.z - rz) }))
+        .sort((a, b) => b.score - a.score || a.d - b.d || a.t.z - b.t.z || a.t.x - b.t.x)
+        .map((c) => c.t);
+    const live = rank(near.filter((t) => s.restoration.isEligible(t) || growable(t)));
+    const lush = live.length >= count ? [] : rank(near.filter((t) => !live.includes(t) && lushable(t)));
+    return [...live, ...lush].slice(0, count);
   }
 
   /** How likely a bloom here is to set something off (relay targeting; mirrors the drone heuristic). */
@@ -497,14 +519,18 @@ export class BloomChainSystem {
         const R = TUNING.neighbourhood.reservoir;
         const n = R.targets + (this.consumeOvercharge(g) ? 1 : 0);
         const targets = this.overflowTargets(g, n, run.visited);
-        if (!targets.length) return;
         g.charge = 0;
+        // Nothing to water: the spill still freshens the green around it (lush), so it always counts.
+        if (!targets.length)
+          for (const t of s.grid.tilesNear(g, TUNING.neighbourhood.reservoir.radius))
+            if (t.ground === 'restored' && !t.occupantId) t.lushUntil = s.time + TUNING.neighbourhood.reservoir.lushSeconds;
+        s.production.markDirty();
         s.state.progression.overflows = (s.state.progression.overflows ?? 0) + 1;
         this.emit(run, { ...ev, amount: targets.length });
         s.bus.emit('reservoir.overflow', { machineId: g.id, tiles: targets.map((t) => t.id) });
         targets.forEach((t, i) => {
           run.visited.add(t.id);
-          this.enqueue(run, { type: 'RESTORE', source: g.id, target: t.id, cause: 'overflow', depth: ev.depth + 1 }, 0.15 + i * 0.12);
+          this.enqueue(run, { type: t.ground === 'restored' ? 'GROW' : 'RESTORE', source: g.id, target: t.id, cause: 'overflow', depth: ev.depth + 1 }, 0.15 + i * 0.12);
         });
         return;
       }
@@ -580,8 +606,19 @@ export class BloomChainSystem {
         this.emit(run, { ...ev, amount: targets.length });
         targets.forEach((t, i) => {
           run.visited.add(t.id);
-          this.enqueue(run, { type: t.ground === 'restored' ? 'GROW' : 'RESTORE', source: ev.target, target: t.id, cause: 'relay', depth: ev.depth + 1 }, 0.12 + i * 0.12);
+          const type = t.ground !== 'restored' ? 'RESTORE' : t.bloom < TUNING.restore.maxBloom ? 'GROW' : 'LUSH';
+          this.enqueue(run, { type, source: ev.target, target: t.id, cause: 'relay', depth: ev.depth + 1 }, 0.12 + i * 0.12);
         });
+        return;
+      }
+      case 'LUSH': {
+        const t = s.grid.byTileId(ev.target);
+        if (!t || t.ground !== 'restored') return;
+        t.lushUntil = s.time + TUNING.neighbourhood.reservoir.lushSeconds;
+        s.production.markDirty();
+        run.roofs.add(t.roofId);
+        this.emit(run, ev);
+        this.react(run, t, 'GROW', ev.depth);
         return;
       }
       case 'REWARD':

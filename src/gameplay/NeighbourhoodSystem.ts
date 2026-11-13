@@ -63,6 +63,8 @@ export class NeighbourhoodSystem {
     if (!l) return { ok: false, reason: 'Unknown bridge', cost };
     if (this.isBuilt(id)) return { ok: false, reason: 'Already built', cost };
     if (!this.coreAwake(l.requiresCore)) return { ok: false, reason: `Awaken the ${this.coreName(l.requiresCore)} first`, cost };
+    const fb = this.bloomMilestone(id);
+    if (fb && fb.have < fb.need) return { ok: false, reason: `Grow ${fb.need} tiles on ${fb.roofName} to full bloom (${fb.have}/${fb.need})`, cost };
     const e = this.sim.econ;
     const tooBig = (Object.keys(cost) as (keyof Cost)[]).find((k) => (cost[k] ?? 0) > e.cap(k));
     if (tooBig) return { ok: false, reason: 'Needs more storage — try Seed Vault', cost };
@@ -92,6 +94,17 @@ export class NeighbourhoodSystem {
     s.production.markDirty();
     s.bus.emit('link.built', { linkId: id, roofId: l.to });
     return true;
+  }
+
+  /** A link's full-bloom milestone, counted over the near roof's open garden tiles. */
+  bloomMilestone(id: string): { roofId: string; roofName: string; have: number; need: number } | undefined {
+    const fb = LINK_BY_ID[id]?.requiresFullBloom;
+    if (!fb) return undefined;
+    const r = this.sim.grid.roof(fb.roofId);
+    if (!r) return undefined;
+    const open = r.tiles.filter((t) => isRestorable(t, this.sim.state.machines) && !t.occupantId);
+    const have = open.filter((t) => t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom).length;
+    return { roofId: fb.roofId, roofName: r.name, have, need: Math.max(1, Math.ceil(open.length * fb.share)) };
   }
 
   // ───────────── relays ─────────────
@@ -235,11 +248,16 @@ export class NeighbourhoodSystem {
     const link = (id: string, title: string, roofId: string): HoodObjective => {
       const st = this.linkStatus(id);
       const l = LINK_BY_ID[id];
+      const fbm = this.bloomMilestone(id);
+      const milestoneOpen = !!fbm && fbm.have < fbm.need;
       return {
         step: id === 'seed-reservoir' ? 'link1' : 'link2',
         title,
-        roofId,
-        items: [{ label: `Build the ${l.name} (${formatCost(st.cost)})`, done: false }],
+        roofId: milestoneOpen ? fbm!.roofId : roofId,
+        items: [
+          ...(fbm ? [{ label: `Grow ${fbm.roofName} tiles to full bloom ${Math.min(fbm.have, fbm.need)}/${fbm.need}`, done: fbm.have >= fbm.need }] : []),
+          { label: `Build the ${l.name} (${formatCost(st.cost)})`, done: false },
+        ],
         action: { kind: 'link', id, label: `🌉 Build the ${l.name} · ${formatCost(st.cost)}`, ok: st.ok, reason: st.reason },
       };
     };

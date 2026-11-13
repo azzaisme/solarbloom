@@ -1015,8 +1015,10 @@ export class Game {
     const wave = combo >= 10 ? '#ff5fb8' : combo >= 5 ? '#ffb81f' : '#38d94a';
     switch (ev.type) {
       case 'RESTORE':
-      case 'GROW': {
+      case 'GROW':
+      case 'LUSH': {
         const t = s.grid.byTileId(ev.target);
+        if (t && ev.type === 'LUSH') this.vfx.burst(this.tileVec(t, 0.3), 8, { up: 1.6, size: 0.06 });
         if (t) this.tileFx.flash(t, wave, 0.45, 0.9);
         if (from && to && ev.cause !== 'motherTree' && ev.cause !== 'canopy')
           this.vfx.arc(from, to, ev.cause === 'overflow' ? PALETTE.water : ev.cause === 'relay' ? PALETTE.coreGlow : combo >= 5 ? PALETTE.pink : PALETTE.flowerCore, 0.5);

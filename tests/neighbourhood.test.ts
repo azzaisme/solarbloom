@@ -3,7 +3,8 @@ import { SaveService } from '../src/app/SaveService';
 import { Sim } from '../src/gameplay/Sim';
 import { LINK_BY_ID } from '../src/data/rooftops';
 import { TUNING } from '../src/data/tuning';
-import { awakenSeed, ground, makeSim, rich } from './helpers';
+import { LINK_BY_ID as LINKS_BY_ID } from '../src/data/rooftops';
+import { awakenSeed, ground, makeSim, MILESTONES, rich } from './helpers';
 
 const saver = new SaveService(undefined);
 
@@ -25,17 +26,42 @@ describe('first expansion: the Skybridge Relay', () => {
     expect(sim.grid.isPlayable('r3')).toBe(false);
   });
 
+  it('also needs a visible milestone: Seed tiles grown to full bloom', () => {
+    const l = LINKS_BY_ID['seed-reservoir'];
+    l.requiresFullBloom = MILESTONES['seed-reservoir'];
+    try {
+      const sim = makeSim();
+      rich(sim);
+      awakenSeed(sim);
+      const need = sim.hood.bloomMilestone('seed-reservoir')!.need;
+      const st = sim.hood.linkStatus('seed-reservoir');
+      expect(st.ok).toBe(false);
+      expect(st.reason).toMatch(/full bloom/);
+      expect(sim.hood.objective().roofId).toBe('r1'); // the objective points at the Seed until it's done
+      let n = 0;
+      for (const t of sim.grid.roof('r1')!.tiles) if (!t.blocked && !t.occupantId && n++ < need) {
+        ground(sim, 'r1', t.x, t.z, 'restored');
+        t.bloom = 3;
+      }
+      expect(sim.hood.linkStatus('seed-reservoir').ok).toBe(true);
+      expect(sim.hood.objective().roofId).toBe('r2');
+    } finally {
+      delete l.requiresFullBloom;
+    }
+  });
+
   it('opens the Reservoir for restoration, building and production without touching the Seed', () => {
     const sim = makeSim();
     rich(sim);
     awakenSeed(sim);
     const seedBefore = JSON.stringify(sim.grid.roof('r1')!.tiles);
-    sim.state.upgrades.seedVault = 2;
-    sim.state.caps.biomass = TUNING.start.caps.biomass * 2;
-    sim.state.resources.biomass = 200;
+    sim.state.upgrades.seedVault = 3;
+    sim.state.caps.biomass = TUNING.start.caps.biomass * 2.5;
+    sim.state.resources.biomass = 250;
     const capBefore = sim.state.caps.biomass;
     sim.hood.buildLink('seed-reservoir');
     expect(sim.state.caps.biomass).toBeGreaterThan(capBefore); // a new roof brings storage
+    rich(sim);
     const t = sim.grid.get('r2', 2, 4)!;
     expect(sim.restoration.pulse(t.id)).toBe(true);
     sim.advance(2);
@@ -98,7 +124,7 @@ describe('first expansion: the Skybridge Relay', () => {
     for (const t of r2.tiles) if (!t.blocked && !t.occupantId && n++ < TUNING.neighbourhood.cores.r2.restoredTiles) ground(sim, 'r2', t.x, t.z, 'restored');
     ground(sim, 'r2', 1, 4, 'restored');
     sim.build.place('reservoirGarden', 'r2', 1, 4);
-    sim.state.progression.overflows = 1;
+    sim.state.progression.overflows = TUNING.neighbourhood.cores.r2.overflows;
     expect(sim.hood.coreReady('r2')).toBe(true);
     expect(sim.hood.activateRoofCore('r2')).toBe(true);
     expect(sim.hood.activateRoofCore('r2')).toBe(false);

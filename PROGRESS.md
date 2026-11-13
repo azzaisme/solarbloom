@@ -2,6 +2,91 @@
 
 Moved out of the `azzaisme/mouthwash-brigade` repo (where it started in a `solarbloom/` folder) with its full history.
 
+# Phase 3: the living neighbourhood (plan: `docs/PHASE_3_PLAN.md`)
+
+## What already existed vs what the plan assumed
+
+Checked against the code before starting:
+
+| Plan assumption | What the code had | What Phase 3 did |
+|---|---|---|
+| Roof-scoped tile ids | Already `roofId:x:z`, and every system took a `roofId` | Kept; the Seed's ids are unchanged |
+| A second rooftop | A 6×6 "Greenhouse Tower" drawn by the scene as a never-playable preview | Rebuilt as the 8×8 Reservoir; added the 10×8 Canopy |
+| Mother Tree | Already a buildable machine (Round 2) | Kept; the Canopy got its own fixed Elder Tree with a different mechanic |
+| Water overflow | The condenser already watered dry soil beside it | Added the Reservoir Garden + Overflow on top of it |
+| Wide Pulse / Overcharge | Both already upgrades (Overcharge = every Nth pulse) | Kept; added the plan's "Overcharge Pulse" as a boost to machines next to a manual pulse (no new button) |
+| Bridge | A purely visual bridge that grew during the Core finale | Real links with relay pylons; built by the player |
+| Chain engine with event ids, visited sets, caps | Yes: deterministic queue, visited set, 100-event cap, depth cap | Extended with RELAY/OVERFLOW/CANOPY_BURST/LUSH events and per-chain link tracking |
+| Save versioning | v2 with migrations | v3 + migration; tested on real Round 2 saves |
+
+## Milestones
+
+| | Milestone | Status |
+|---|---|---|
+| P3-M1 | Three authored rooftops, roof-scoped ids, save v3 + migration (real Round 2 fixtures), per-roof rendering, camera bounds/focus/F key/roof chips, picking on every roof (e2e), view-matrix fix | ✅ |
+| P3-M2 | Skybridge Relay unlock and objective flow, Reservoir playable (restore, build, drones, production), Cistern water, lush tiles | ✅ |
+| P3-M3 | Relay endpoints, bounded cross-roof chains, pulse over the bridge, relay lamps/inspect, Relay II, loop/determinism tests | ✅ |
+| P3-M4 | Reservoir Overflow, Elder Tree + Canopy Burst, Overcharge Pulse, Drone Dispatch, per-roof Core panels | ✅ |
+| P3-M5 | Lucky Cat on every playable roof (8 new nooks), Golden Relay, Cat's Garden, cat never blocks a build | ✅ |
+| P3-M6 | Neighbourhood Bloom finale (skippable, replayable without rewards), white facades, horizon district, quality option | ✅ |
+| P3-M7 | Neighbourhood pacing bots (two styles), two no-stall fixes, retuning, phone objective button, docs | ✅ |
+
+## How to test Phase 3
+
+- `npm test`: 80 unit tests. The Phase 3 files:
+  - `phase3-save.test.ts`: two real Round 2 saves (`tests/fixtures/`, written by the Round 2 build with its own bot) migrate with the Seed kept tile for tile. Machines, drones, upgrades, resources and an active cat survive. Save → load → save is byte-identical.
+  - `neighbourhood.test.ts`: bridge gating, costs paid once, the full-bloom milestone, the Reservoir playable, drones stay on their roof, the objective walk, and the Neighbourhood Bloom (once, across a reload, machines untouched).
+  - `relay.test.ts`: crossing, no crossing when unbuilt, outside the zone or recharging, synergy targeting, a closed three-link loop that terminates with each tile changing once, determinism, Relay II and Golden Relay.
+  - `specialties.test.ts`: Overflow fill/burst/eligibility, the no-stall fallback, lush expiry, the Elder Tree burst amplified by a garden, solar and garden boosts, Drone Dispatch.
+  - `lucky-cat-hood.test.ts`: the reward pool only offers useful rewards, one cat at a time on all three roofs across 60 games, the HUD veto, Golden Relay once, Cat's Garden, the cat hopping off a nook, claim once after reload.
+  - `pacing-hood.test.ts`: two scripted play styles finish the neighbourhood with no dead time, plus a slower player at one action per 6 s.
+- `npm run test:e2e`: pointer → tile picking on all three rooftops at 3 sizes × 3 zooms (8,964 checks), a real click, and HUD clicks that never reach the world.
+- In the game: Settings → *Playtest timings* records the time to each bridge, the first cross-roof chain, each Core, the Bloom, the biggest chain and the cats found.
+
+Quick recipes:
+- **Cross-roof chain:** a Pollinator Garden next to the Seed's relay tile (east edge, third row) and a pulse beside it. Watch the pulse cross and bloom the Reservoir's corner.
+- **Overflow:** two condensers within 2 tiles of a Reservoir Garden and some mossy tiles around it.
+- **Big Canopy Burst:** Pollinator Gardens two tiles from the Elder Tree, then restore around the trunk.
+
+## Phase 3 balance (`TUNING.neighbourhood`, `data/rooftops.ts`)
+
+| Step | Requirement | Cost |
+|---|---|---|
+| Skybridge Relay | Seed Core awake, every open Seed tile in full bloom | 220🌿 90⚡ |
+| Old Cistern | 48 Reservoir tiles restored, a Reservoir Garden, 3 Overflows | 200🌿 80💧 |
+| Canopy Bridge | Cistern awake, 75% of open Reservoir tiles in full bloom | 300🌿 140⚡ |
+| Elder Tree | 64 Canopy tiles restored, 5 Canopy Bursts | 300🌿 120⚡ |
+| Neighbourhood Bloom | All Cores awake, both bridges | free; +200⚡ +120💧 +400🌿, storage +50%, biomass ×1.15 |
+
+Dead ground on the new roofs costs ×2 to pulse. Each new roof adds +50% storage. Relays: 1 remote bloom, 8 s recharge (Relay II: 2, 6 s). Overflow: 3 condenser fills, 3 tiles, lush ×2 for 25 s. Elder Tree: 12 charge, burst radius 2 (3 awake), +2 blooms per garden inside.
+
+Scripted players (minutes of game time; the 6 s player is about how fast people tap):
+
+| Player | Core | Skybridge | first cross-roof chain | Cistern | Canopy Bridge | Elder Tree | Bloom |
+|---|---|---|---|---|---|---|---|
+| solar, 1 action/3 s | 7:39 | 7:51 | 7:53 | 8:39 | 10:33 | 10:54 | 10:57 |
+| water, 1 action/3 s | 7:00 | 7:18 | 7:20 | 8:09 | 11:00 | 11:39 | 11:42 |
+| solar, 1 action/6 s | 8:30 | 9:36 | 9:38 | 10:36 | 13:06 | 13:42 | 13:48 |
+| water, 1 action/6 s | 8:18 | 9:30 | 9:32 | 10:12 | 17:18 | 18:36 | 18:42 |
+
+No dead time in any run. Water + pollinator builds chain bigger (biggest ×25–36 vs ×21–26) and finishes later, so the two styles feel different.
+
+## Phase 3 known limitations
+
+- The bots are much better at Round 2 than the Round 2 notes assumed (the Core at about 7–8 min instead of 14). The Seed is nearly in full bloom by then, so the Skybridge follows quickly. For people, expect the first bridge a few minutes after the Core. A human playtest should check the plan's 5–10 min target. The full-bloom share and costs in `data/rooftops.ts` are the knobs.
+- With every Round 2 upgrade, Wide Pulse III clears new rooftops very fast. The time sinks are nurturing to full bloom, Overflows and Canopy Bursts, all of which are active play.
+- Real-GPU frame rate is still unmeasured (the sandbox renders with SwiftShader). Three rooftops add about 140 tile regions to the batcher. Rebuilds stay per region.
+- The relay zone is radius 1 around one edge tile per side. Small and readable, but new players may need the pylon tooltip to find it.
+
+## Phase 3 next steps
+
+1. Human playtest with the plan's seven questions; read Settings → Playtest timings afterwards.
+2. If the Skybridge comes too soon for people, raise the Seed requirement or the bridge cost; if a stage drags, lower its Overflow/Burst count.
+3. Zoomed-out simplification (per-roof aggregate effects) if the frame rate needs it on phones.
+4. The new district on the horizon.
+
+---
+
 # Round 2 (plan: `docs/ROUND_2_PLAN.md`)
 
 Round 1 checkpoint: commit `3b79a23` (tag it with `git tag round-1 3b79a23 && git push origin round-1` if you want a named marker). Round 1 saves migrate to the v2 format automatically.

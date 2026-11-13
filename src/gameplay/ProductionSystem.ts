@@ -83,6 +83,7 @@ export class ProductionSystem {
       this.wasFull[k] = full;
     }
     this.tickCondensers(dt);
+    this.tickElderTree(dt);
   }
 
   /** Water Condensers fill a charge meter; when full they water the dry soil beside them (a chain). */
@@ -110,6 +111,21 @@ export class ProductionSystem {
       if (s.chains.startOverflow(g)) this.overflowing.add(g.id);
     }
     if (this.overflowing.size) for (const id of [...this.overflowing]) if ((s.machine(id)?.charge ?? 0) < R.threshold) this.overflowing.delete(id);
+  }
+
+  /** The Elder Tree slowly charges by itself once the Canopy is partly alive (a no-stall guarantee). */
+  private tickElderTree(dt: number) {
+    const s = this.sim;
+    if (!s.grid.isPlayable('r3')) return;
+    const c = TUNING.neighbourhood.canopy;
+    const tree = s.state.machines.find((m) => m.type === 'core' && m.roofId === 'r3');
+    // A full ring is already releasing (a chain queued its burst): wait for it.
+    if (!tree || tree.charge >= c.threshold - 1e-9) return;
+    const p = s.progression;
+    if (p.restoredCount('r3') < p.restorableCount('r3') * c.selfChargeFrom) return;
+    tree.charge = Math.min(c.threshold, tree.charge + dt / c.selfChargeSeconds);
+    // Only a fill that happened right here starts a burst (chain fills start their own).
+    if (tree.charge >= c.threshold - 1e-9) s.chains.startCanopyBurst(tree);
   }
 
   /** Gardens whose Overflow chain is queued (so it doesn't start twice before it resolves). */

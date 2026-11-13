@@ -57,19 +57,27 @@ describe('Reservoir Overflow', () => {
     expect(g.charge).toBeLessThan(N.reservoir.threshold);
   });
 
-  it('a full basin with nothing dry nearby waits (no event, no count) and spills once dry ground appears', () => {
+  it('a full basin never stalls: with nothing dry nearby it grows the green tiles, or just splashes', () => {
     const sim = open();
-    for (const t of sim.grid.roof('r2')!.tiles) if (!t.occupantId && !t.blocked) ground(sim, 'r2', t.x, t.z, 'restored');
+    for (const t of sim.grid.roof('r2')!.tiles) if (!t.occupantId && !t.blocked) {
+      ground(sim, 'r2', t.x, t.z, 'restored');
+      t.bloom = 3;
+    }
     const g = sim.build.place('reservoirGarden', 'r2', 4, 5)!;
+    sim.grid.get('r2', 4, 6)!.bloom = 1; // one green tile that can still grow
     g.charge = N.reservoir.threshold;
     const ev = events(sim);
-    sim.advance(5);
-    expect(ev.filter((e) => e.type === 'OVERFLOW')).toHaveLength(0);
-    expect(sim.state.progression.overflows).toBe(0);
-    ground(sim, 'r2', 4, 6, 'prepared');
     sim.advance(3);
     expect(ev.filter((e) => e.type === 'OVERFLOW')).toHaveLength(1);
+    expect(ev.filter((e) => e.cause === 'overflow' && e.type === 'GROW').map((e) => e.target)).toEqual(['r2:4:6']);
     expect(sim.state.progression.overflows).toBe(1);
+    // Everything in full bloom: it still spills (and counts), freshening the green around it.
+    sim.grid.get('r2', 4, 6)!.bloom = 3;
+    g.charge = N.reservoir.threshold;
+    sim.advance(3);
+    expect(ev.filter((e) => e.type === 'OVERFLOW')).toHaveLength(2);
+    expect(sim.state.progression.overflows).toBe(2);
+    expect(sim.grid.get('r2', 4, 4)!.lushUntil).toBeGreaterThan(sim.time);
   });
 
   it('lush tiles grow extra biomass, then go back to normal', () => {

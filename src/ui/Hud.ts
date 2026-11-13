@@ -107,6 +107,7 @@ export class Hud {
         <div class="next" id="objNext"></div>
         <div class="pbar"><i id="objBar" style="width:0%"></i></div>
         <ul id="objList"></ul>
+        <div id="objAct"></div>
         <button id="coreBtn">✨ Awaken the Core</button>
         <div class="tools">
           <button class="chip" id="pauseBtn" aria-label="Pause">⏸<span class="lbl"> Pause</span></button>
@@ -638,16 +639,28 @@ export class Hud {
       const rt = p.restorableCount(o.roofId);
       const rp = Math.round((rn / Math.max(1, rt)) * 100);
       this.set('objTitle', $(this.root, '#objTitle'), 'text', o.title);
-      this.set('objPct', $(this.root, '#objPct'), 'text', s.grid.isPlayable(o.roofId) ? `${roof.name}: ${rp}% restored · ${rn}/${rt} tiles` : `${roof.name} is waiting across the bridge`);
-      this.set('objBar', $(this.root, '#objBar'), 'width', `${s.grid.isPlayable(o.roofId) ? rp : 0}%`);
+      if (o.step === 'done' || o.step === 'bloom') {
+        const rs = s.state.rooftops;
+        const all = rs.reduce((a, r) => a + p.restorableCount(r.id), 0);
+        const full = rs.reduce((a, r) => a + p.fullBloomCount(r.id), 0);
+        const fp = Math.round((full / Math.max(1, all)) * 100);
+        this.set('objPct', $(this.root, '#objPct'), 'text', `The neighbourhood: ${fp}% in full bloom`);
+        this.set('objBar', $(this.root, '#objBar'), 'width', `${fp}%`);
+      } else {
+        this.set('objPct', $(this.root, '#objPct'), 'text', s.grid.isPlayable(o.roofId) ? `${roof.name}: ${rp}% restored · ${rn}/${rt} tiles` : `${roof.name} is waiting across the bridge`);
+        this.set('objBar', $(this.root, '#objBar'), 'width', `${s.grid.isPlayable(o.roofId) ? rp : 0}%`);
+      }
       const items = o.items.map((r) => `<li class="${r.done ? 'done' : ''}"><span class="ck">${r.done ? '✓' : ''}</span>${esc(r.label)}</li>`).join('');
       const a = o.action;
       const attr = a ? (a.kind === 'link' ? `data-link="${a.id}"` : a.kind === 'core' ? `data-core="${a.id}"` : a.kind === 'bloom' ? 'data-bloom="go"' : 'data-bloom="replay"') : '';
-      const btn = a ? `<li style="display:block"><button class="act${a.kind === 'replay' ? ' green' : ''}" ${attr} ${a.ok ? '' : 'disabled'}>${esc(a.ok || !a.reason ? a.label : `${a.label} — ${a.reason}`)}</button></li>` : '';
-      this.set('objList', $(this.root, '#objList'), 'html', items + btn);
+      // The action sits outside the checklist so it stays visible when the list is collapsed (phones).
+      const btn = a ? `<button class="act${a.kind === 'replay' ? ' green' : ''}" ${attr} ${a.ok ? '' : 'disabled'}>${esc(a.ok || !a.reason ? a.label : `${a.label} — ${a.reason}`)}</button>` : '';
+      this.set('objList', $(this.root, '#objList'), 'html', items);
+      this.set('objAct', $(this.root, '#objAct'), 'html', btn);
       const nx = o.items.find((r) => !r.done);
-      hoodNext = a && a.ok && a.kind !== 'replay' ? `Next: ${a.label.replace(/^\S+ /, '')}` : nx ? `Next: ${nx.label}` : '';
+      hoodNext = a && a.ok && a.kind !== 'replay' ? '' : nx ? `Next: ${nx.label}` : ''; // a ready action is its own button
     } else {
+      this.set('objAct', $(this.root, '#objAct'), 'html', '');
       this.set('objPct', $(this.root, '#objPct'), 'text', `${pct}% of the rooftop restored · ${restored}/${total} tiles`);
       this.set('objBar', $(this.root, '#objBar'), 'width', `${pct}%`);
       const reqs = p.requirements();

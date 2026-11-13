@@ -1,5 +1,6 @@
 import { formatCost } from '../core/Economy';
 import { distToFootprint } from '../core/Grid';
+import { ROOF_BY_ID } from '../data/rooftops';
 import type { Cost, RestoreSource, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
@@ -14,12 +15,13 @@ export class RestorationSystem {
   constructor(private sim: Sim) {}
 
   pulseCost(t: TileData): Cost {
+    const roofMult = ROOF_BY_ID[t.roofId]?.pulseCostMult ?? 1;
     if (t.ground === 'restored') {
       const n = TUNING.restore.nurture[Math.min(TUNING.restore.maxBloom, t.bloom + 1)];
       return { energy: Math.round(n.energy * this.sim.upgrades.pulseEnergyMult * 100) / 100, water: n.water };
     }
     const base = t.ground === 'prepared' ? TUNING.pulse.prepared : TUNING.pulse.polluted;
-    return { energy: Math.round(base.energy * this.sim.upgrades.pulseEnergyMult * 100) / 100, water: base.water };
+    return { energy: Math.round(base.energy * this.sim.upgrades.pulseEnergyMult * roofMult * 100) / 100, water: Math.ceil(base.water * roofMult) };
   }
 
   /** Can this tile be turned into a restoration target at all (ignoring cost)? */

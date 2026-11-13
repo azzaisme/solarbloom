@@ -1,6 +1,15 @@
 import { createInitialState } from '../src/core/GameState';
 import type { GroundState } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
+import { LINKS, type RoofLinkDef } from '../src/data/rooftops';
+
+/**
+ * Mechanics tests build bridges directly, so the bridges' full-bloom milestones are relaxed in files that
+ * use these helpers (each test file has its own module graph). neighbourhood.test.ts restores and tests them;
+ * the pacing tests don't import this file and play with the real milestones.
+ */
+export const MILESTONES: Record<string, RoofLinkDef['requiresFullBloom']> = Object.fromEntries(LINKS.map((l) => [l.id, l.requiresFullBloom]));
+for (const l of LINKS) delete l.requiresFullBloom;
 
 export function makeSim(seed = 1234) {
   return new Sim(createInitialState(seed));

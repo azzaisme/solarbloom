@@ -138,10 +138,14 @@ export const TUNING = {
       burstRadius: 2,
       burstRadiusAwake: 3,
       gardenBonusTargets: 2, // each Pollinator Garden inside the burst adds this many extra blooms beyond it
+      // Slow self-charge once the Canopy is partly alive, so the tree can never get stuck
+      // (blooming near it is many times faster).
+      selfChargeSeconds: 12,
+      selfChargeFrom: 0.5, // share of the Canopy restored
     },
     cores: {
-      r2: { restoredTiles: 28, overflows: 1, cost: { water: 50, biomass: 140 } },
-      r3: { restoredTiles: 36, bursts: 2, cost: { energy: 90, biomass: 220 } },
+      r2: { restoredTiles: 48, overflows: 3, cost: { water: 80, biomass: 200 } },
+      r3: { restoredTiles: 64, bursts: 5, cost: { energy: 120, biomass: 300 } },
     },
     /** Manual pulse right next to a machine boosts its next trigger. */
     overchargeSeconds: 12,
