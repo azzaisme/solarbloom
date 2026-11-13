@@ -295,7 +295,7 @@ export class Game {
       } else if (k === 'escape') {
         if (this.hud.modalOpen) this.hud.openSettings(false);
         else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
-        else if (this.selected) this.select(undefined);
+        else if (this.selected || this.selectedRelay) this.select(undefined);
         else this.selectTool('pulse');
       } else if (k === '+' || k === '=') this.camera.zoomBy(1.15);
       else if (k === '-') this.camera.zoomBy(1 / 1.15);
@@ -388,6 +388,15 @@ export class Game {
       document.body.style.cursor = 'pointer';
       return;
     }
+    const relay = this.relayHit(x, y);
+    if (relay && (this.hud.currentTool === 'pulse' || this.hud.currentTool === 'inspect')) {
+      this.overlays.hideFrame();
+      this.overlays.hideGhost();
+      if (!this.selected && !this.selectedRelay) this.overlays.showRadius(this.relayZones(relay), 'info');
+      this.hud.showTip(x, y, `<b>🔌 ${LINK_BY_ID[relay].name}</b>${this.relayStatusLine(relay)}<br>Click for details`);
+      document.body.style.cursor = 'pointer';
+      return;
+    }
     document.body.style.cursor = '';
     const p = this.pick(x, y);
     const tool = this.hud.currentTool;
@@ -468,6 +477,12 @@ export class Game {
     }
     if (this.catHit(x, y)) {
       this.sim.cat.claim();
+      return;
+    }
+    const relay = this.relayHit(x, y);
+    if (relay && (this.hud.currentTool === 'pulse' || this.hud.currentTool === 'inspect')) {
+      this.selectRelay(relay);
+      this.sfx.click();
       return;
     }
     const droneId = this.droneHit(x, y);
@@ -551,6 +566,7 @@ export class Game {
 
   private select(id: string | undefined) {
     this.selected = id;
+    if (id || this.selectedRelay) this.selectedRelay = undefined;
     this.showDroneTasks();
     const m = this.sim.machine(id);
     if (!m) {
@@ -571,6 +587,7 @@ export class Game {
   }
 
   private renderInspect() {
+    if (this.selectedRelay) return this.renderRelayInspect(this.selectedRelay);
     const m = this.sim.machine(this.selected);
     if (!m) return this.hud.renderInspect(null);
     const s = this.sim;
@@ -760,8 +777,14 @@ export class Game {
       this.sfx.chainEnd(10);
       if (!s.state.stats.firsts.treePulse || s.state.stats.firsts.treePulse === Math.round(s.time)) this.hud.toast('🌳 Mother Tree Bloom Pulse!<small>Everything around it bursts into life.</small>', 'gold', 3);
     });
-    b.on('chain.ended', ({ chainId, combo, bonus, total, milestonePct, energy }) => {
+    b.on('chain.ended', ({ chainId, combo, bonus, total, milestonePct, energy, roofs, crossings }) => {
       this.tileFx.release(`chain${chainId}`);
+      if (crossings > 0) {
+        const names = roofs.map((r) => ROOF_BY_ID[r]?.short ?? r).join(' → ');
+        this.crossChains++;
+        if (this.crossChains <= 3 || combo >= 8) this.hud.toast(`🌉 Cross-roof chain ×${combo}!<small>It travelled ${names}</small>`, 'gold', 3);
+        this.hud.feed(`🌉 Chain crossed ${crossings} bridge${crossings > 1 ? 's' : ''}: ${names}`);
+      }
       if (combo < 2) return;
       const ms = milestonePct ? ` · ×${combo >= 20 ? 20 : combo >= 10 ? 10 : 5} milestone +${Math.round(milestonePct * 100)}%` : '';
       this.hud.combo(combo, `+${Math.round(total)}🌿${energy >= 1 ? ` +${Math.round(energy)}⚡` : ''} earned${ms}`);
@@ -849,6 +872,7 @@ export class Game {
     });
     b.on('rooftop.coreRestored', () => this.playCoreSequence());
     b.on('link.built', ({ linkId, roofId }) => this.onLinkBuilt(linkId, roofId));
+    b.on('relay.sent', ({ linkId, fromRoof, travel }) => this.presentRelay(linkId, fromRoof, travel));
     b.on('roof.coreAwake', ({ roofId }) => this.onRoofCoreAwake(roofId));
     b.on('neighbourhood.bloom', ({ restored }) => this.onNeighbourhoodBloom(restored));
   }
@@ -878,10 +902,12 @@ export class Game {
   }
 
   /** World position of a tile or machine id (chain sources/targets can be either). */
-  private posOf(id: string | undefined): pc.Vec3 | undefined {
+  private posOf(id: string | undefined, towardRoof?: string): pc.Vec3 | undefined {
     if (!id) return undefined;
     const t = this.sim.grid.byTileId(id);
     if (t) return this.tileVec(t);
+    const br = this.scene.bridges.get(id);
+    if (br) return (towardRoof && br.link.from === towardRoof ? br.ends[0] : br.ends[1]).clone();
     const m = this.sim.machine(id);
     if (!m) return undefined;
     const w = this.machines.worldOf(m);
@@ -891,7 +917,8 @@ export class Game {
   /** Replays one deterministic chain event as light, motion and sound. */
   private presentChainEvent(ev: ChainEvent, combo: number) {
     const s = this.sim;
-    const from = this.posOf(ev.source);
+    const targetRoof = s.grid.byTileId(ev.target)?.roofId;
+    const from = this.posOf(ev.source, targetRoof);
     const to = this.posOf(ev.target);
     const wave = combo >= 10 ? '#ff5fb8' : combo >= 5 ? '#ffb81f' : '#38d94a';
     switch (ev.type) {
@@ -921,6 +948,16 @@ export class Game {
       case 'CHARGE':
         if (from && to && !this.settings.reducedMotion) this.vfx.arc(from, to, '#7cf7c8', 0.35);
         break;
+      case 'RELAY': {
+        const br = this.scene.bridges.get(ev.target);
+        if (!br) break;
+        const arrive = br.link.from === ev.roofId ? br.ends[0] : br.ends[1];
+        this.vfx.ring(new pc.Vec3(arrive.x, arrive.y - 0.9, arrive.z), PALETTE.coreGlow, 1.8, 0.7);
+        this.vfx.burst(arrive, 16, { up: 2.5, size: 0.07 });
+        this.sfx.chainEnd(Math.min(10, 3 + combo));
+        if (combo >= 2) this.hud.combo(combo);
+        break;
+      }
       default:
         break;
     }
@@ -1096,6 +1133,87 @@ export class Game {
     if (!replay) this.sim.hood.neighbourhoodBloom();
   }
 
+  private selectedRelay?: string;
+  private crossChains = 0;
+  private relayFiringUntil = new Map<string, number>();
+
+  /** Screen-space hit test for relay pylons (generous, like drones). */
+  private relayHit(x: number, y: number): string | undefined {
+    const r = Math.max(24, 0.4 / this.camera.worldPerPixel());
+    for (const [id, br] of this.scene.bridges) {
+      if (!br.built) continue;
+      for (const e of br.ends) {
+        const sp = this.camera.toScreen(new pc.Vec3(e.x, e.y - 0.45, e.z));
+        if (Math.hypot(sp.x - x, sp.y - y) <= r) return id;
+      }
+    }
+    return undefined;
+  }
+
+  /** Both relay zones of a link (the tiles whose chain effects send a pulse across). */
+  private relayZones(linkId: string): TileData[] {
+    const l = LINK_BY_ID[linkId];
+    return [...this.sim.chains.relayZone(l, l.from), ...this.sim.chains.relayZone(l, l.to)];
+  }
+
+  private relayStatusLine(linkId: string): string {
+    const st = this.sim.state.links[linkId];
+    const wait = st ? Math.max(0, st.readyAt - this.sim.time) : 0;
+    const a = this.sim.grid.roof(LINK_BY_ID[linkId].from)!.name;
+    const b = this.sim.grid.roof(LINK_BY_ID[linkId].to)!.name;
+    return `Connected: 2 roofs (${a} ↔ ${b})<br>Next cross-roof pulse: ${wait > 0.05 ? `${wait.toFixed(1)} s` : '<span class="ok">ready</span>'}`;
+  }
+
+  private selectRelay(linkId: string) {
+    this.select(undefined);
+    this.selectedRelay = linkId;
+    this.overlays.showRadius(this.relayZones(linkId), 'ok');
+    this.renderRelayInspect(linkId);
+  }
+
+  private renderRelayInspect(linkId: string) {
+    const l = LINK_BY_ID[linkId];
+    const st = this.sim.state.links[linkId];
+    const hood = this.sim.hood;
+    const bonus = this.sim.state.relayBonus > 0 ? ` <b>+${this.sim.state.relayBonus} 🐱 Golden Relay</b>` : '';
+    const html = `<h4><span>🔌 ${esc(l.name)}</span><button data-close aria-label="Close">×</button></h4>
+      <p>A chain effect on the highlighted tiles next to either pylon sends a pulse across the bridge. It blooms the best spots near the far pylon (next to gardens, panels and trees first), and the chain carries on over there.</p>
+      <p class="stat">${this.relayStatusLine(linkId)}</p>
+      <p class="stat">🌸 Remote blooms per pulse: ${hood.relayTargets()}${bonus} · recharge ${hood.relayCooldown()} s</p>
+      <p class="stat">🌉 Crossings so far: ${st?.crossings ?? 0}</p>
+      ${this.upgradeButton('relay2')}`;
+    this.hud.renderInspect(html);
+  }
+
+  /** A pulse gathers at the sending pylon and travels over the bridge; the far side blooms on arrival. */
+  private presentRelay(linkId: string, fromRoof: string, travel: number) {
+    const br = this.scene.bridges.get(linkId);
+    if (!br) return;
+    const forward = br.link.from === fromRoof;
+    const start = forward ? br.ends[0] : br.ends[1];
+    const end = forward ? br.ends[1] : br.ends[0];
+    this.relayFiringUntil.set(linkId, this.clock + travel + 0.6);
+    this.vfx.ring(new pc.Vec3(start.x, start.y - 0.9, start.z), PALETTE.coreGlow, 1.2, 0.5);
+    this.vfx.burst(start, 10, { up: 1.5, size: 0.06, speed: 0.8 });
+    const path = forward ? br.path : [...br.path].reverse();
+    const steps = this.settings.reducedMotion ? 3 : path.length;
+    for (let i = 0; i < steps; i++) {
+      const p = path[Math.round((i / Math.max(1, steps - 1)) * (path.length - 1))];
+      this.tweens.add(0.01, () => {}, { delay: (i / Math.max(1, steps - 1)) * travel, done: () => this.vfx.burst(p, 3, { up: 0.6, size: 0.08, speed: 0.3, life: 0.6 }) });
+    }
+    this.vfx.arc(start, end, PALETTE.coreGlow, travel);
+    this.sfx.pulse();
+  }
+
+  /** Relay lamps: green when ready, dim while recharging, bright while a pulse is crossing. */
+  private updateRelayLamps() {
+    for (const l of LINKS) {
+      const st = this.sim.state.links[l.id];
+      const state = !st?.built ? 'off' : (this.relayFiringUntil.get(l.id) ?? 0) > this.clock ? 'firing' : this.sim.hood.relayReady(l.id) ? 'ready' : 'cooldown';
+      this.scene.setRelayLamp(l.id, state);
+    }
+  }
+
   /** Labels pinned over rooftops and bridges: locked roofs, bridges you can build, Cores ready to wake. */
   private updateRoofLabels(_dt: number) {
     const hood = this.sim.hood;
@@ -1210,7 +1328,7 @@ export class Game {
     this.sfx.layers = Math.min(3, Math.floor(this.sim.progression.restoredCount('r1') / 12));
     this.sfx.update(dt);
 
-    if (this.selected) {
+    if (this.selected || this.selectedRelay) {
       this.inspectTimer -= dt;
       if (this.inspectTimer <= 0) {
         this.inspectTimer = 0.3;
@@ -1226,6 +1344,7 @@ export class Game {
       }
     }
     this.updateRoofLabels(dt);
+    this.updateRelayLamps();
 
     this.saveTimer += dt;
     if (this.saveTimer >= TUNING.autosaveSeconds) {

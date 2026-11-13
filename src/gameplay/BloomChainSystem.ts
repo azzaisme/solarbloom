@@ -1,9 +1,21 @@
 import { distToFootprint } from '../core/Grid';
+import { LINKS, type RoofLinkDef } from '../data/rooftops';
 import type { MachineData, RestoreSource, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
-export type ChainEventType = 'RESTORE' | 'GROW' | 'POLLINATE' | 'PRODUCE_ENERGY' | 'PRODUCE_WATER' | 'CHARGE' | 'DISCHARGE' | 'REWARD';
+export type ChainEventType =
+  | 'RESTORE'
+  | 'GROW'
+  | 'POLLINATE'
+  | 'PRODUCE_ENERGY'
+  | 'PRODUCE_WATER'
+  | 'CHARGE'
+  | 'DISCHARGE'
+  | 'RELAY' // a pulse arrives across a bridge (target = link id)
+  | 'OVERFLOW' // a Reservoir Garden spills over (target = garden id)
+  | 'CANOPY_BURST' // the Elder Tree releases its charge (target = tree id)
+  | 'REWARD';
 
 /** One step of a Bloom Chain. Presentation replays these; it never decides outcomes. */
 export interface ChainEvent {
@@ -16,6 +28,8 @@ export interface ChainEvent {
   /** tile id or machine id it acts on */
   target: string;
   cause: RestoreSource | 'solar' | 'charge' | 'reward';
+  /** RELAY: the rooftop the pulse arrives on. */
+  roofId?: string;
   at: number;
   amount?: number;
 }
@@ -31,6 +45,10 @@ interface ChainRun {
   solarFired: Set<string>;
   pollinatorUses: Map<string, number>;
   dischargedTrees: Set<string>;
+  /** Links this chain already crossed (each at most once, in either direction: no loops through relays). */
+  relaysFired: Set<string>;
+  /** Rooftops this chain touched. */
+  roofs: Set<string>;
   mode: 'normal' | 'mega';
   budget: number;
   announced: boolean;
@@ -40,7 +58,7 @@ interface ChainRun {
 }
 
 /** Effects that count toward the BLOOM CHAIN ×N combo and milestones. */
-const COUNTED: ChainEventType[] = ['RESTORE', 'GROW', 'PRODUCE_ENERGY', 'PRODUCE_WATER', 'DISCHARGE'];
+const COUNTED: ChainEventType[] = ['RESTORE', 'GROW', 'PRODUCE_ENERGY', 'PRODUCE_WATER', 'DISCHARGE', 'RELAY', 'OVERFLOW', 'CANOPY_BURST'];
 
 /**
  * Bloom Chains: `action → tile event → synergy checks → new events → reward aggregation`.
@@ -79,6 +97,8 @@ export class BloomChainSystem {
       solarFired: new Set(),
       pollinatorUses: new Map(),
       dischargedTrees: new Set(),
+      relaysFired: new Set(),
+      roofs: new Set([origin.roofId]),
       mode,
       budget,
       announced: false,
@@ -195,6 +215,78 @@ export class BloomChainSystem {
       }
     }
     if (run.mode === 'mega' && kind === 'RESTORE') this.spreadMega(run, tile, depth);
+    this.reactRelays(run, tile, depth);
+  }
+
+  // ───────────── cross-roof relays ─────────────
+
+  /** The edge tile of a link on a given roof. */
+  private relayTile(l: RoofLinkDef, roofId: string): [number, number] {
+    return l.from === roofId ? l.fromTile : l.toTile;
+  }
+
+  /** Tiles whose chain effects charge a link's relay on this roof. */
+  relayZone(l: RoofLinkDef, roofId: string): TileData[] {
+    const [rx, rz] = this.relayTile(l, roofId);
+    const R = TUNING.neighbourhood.relay.zoneRadius;
+    const roof = this.sim.grid.roof(roofId);
+    return roof ? roof.tiles.filter((t) => Math.abs(t.x - rx) + Math.abs(t.z - rz) <= R) : [];
+  }
+
+  /**
+   * A chain effect inside a relay's zone sends one pulse across its bridge (once per link per chain,
+   * only when the relay has recharged, and only if something on the far side can bloom).
+   */
+  private reactRelays(run: ChainRun, tile: TileData, depth: number) {
+    const s = this.sim;
+    if (!this.canGrow(run, depth)) return;
+    for (const l of LINKS) {
+      if (l.from !== tile.roofId && l.to !== tile.roofId) continue;
+      if (run.relaysFired.has(l.id) || !s.hood.relayReady(l.id)) continue;
+      const [rx, rz] = this.relayTile(l, tile.roofId);
+      if (Math.abs(tile.x - rx) + Math.abs(tile.z - rz) > TUNING.neighbourhood.relay.zoneRadius) continue;
+      const remote = l.from === tile.roofId ? l.to : l.from;
+      if (!s.grid.isPlayable(remote) || !this.remoteTargets(run, l, remote, 1).length) continue;
+      run.relaysFired.add(l.id);
+      const st = s.state.links[l.id];
+      st.readyAt = s.time + s.hood.relayCooldown();
+      const travel = TUNING.neighbourhood.relay.travelSeconds;
+      this.enqueue(run, { type: 'RELAY', source: tile.id, target: l.id, cause: 'relay', depth: depth + 1, roofId: remote }, travel);
+      s.bus.emit('relay.sent', { linkId: l.id, fromRoof: tile.roofId, toRoof: remote, chainId: run.id, travel });
+    }
+  }
+
+  /** Where a relay pulse blooms on the far roof: synergy spots near the arriving pylon first. */
+  remoteTargets(run: ChainRun | undefined, l: RoofLinkDef, roofId: string, count: number): TileData[] {
+    const s = this.sim;
+    const roof = s.grid.roof(roofId);
+    if (!roof || count <= 0) return [];
+    const [rx, rz] = this.relayTile(l, roofId);
+    const R = TUNING.neighbourhood.relay.remoteRadius;
+    const growable = (t: TileData) => t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom;
+    const cands = roof.tiles
+      .filter((t) => (!run || !run.visited.has(t.id)) && Math.abs(t.x - rx) + Math.abs(t.z - rz) <= R)
+      .filter((t) => s.restoration.isEligible(t) || growable(t))
+      .map((t) => ({ t, score: this.synergyAt(t), d: Math.abs(t.x - rx) + Math.abs(t.z - rz) }))
+      .sort((a, b) => b.score - a.score || a.d - b.d || a.t.z - b.t.z || a.t.x - b.t.x);
+    return cands.slice(0, count).map((c) => c.t);
+  }
+
+  /** How likely a bloom here is to set something off (relay targeting; mirrors the drone heuristic). */
+  synergyAt(t: TileData): number {
+    const s = this.sim;
+    let score = 0;
+    for (const m of s.state.machines) {
+      if (m.roofId !== t.roofId) continue;
+      const d = distToFootprint(t.x, t.z, m.x, m.z, m.size);
+      if (d < 1) continue;
+      if (m.type === 'pollinator' && d <= s.upgrades.pollinatorReach) score += 3;
+      else if (m.type === 'solar' && d === 1) score += 1.5;
+      else if (m.type === 'motherTree' && d <= s.upgrades.treeRadius) score += 2;
+      else if (m.type === 'core' && m.roofId === 'r3' && d <= TUNING.neighbourhood.canopy.chargeRadius) score += 2;
+      else if (m.type === 'reservoirGarden' && d <= TUNING.neighbourhood.reservoir.radius) score += 1;
+    }
+    return score;
   }
 
   /** Deterministic choice: mossy soil first, then concrete, then a green tile that can still grow. */
@@ -280,6 +372,7 @@ export class BloomChainSystem {
       case 'RESTORE': {
         const t = s.grid.byTileId(ev.target);
         if (!t || !s.restoration.isEligible(t, true)) return;
+        run.roofs.add(t.roofId);
         this.emit(run, ev);
         s.restoration.complete(t, ev.cause as RestoreSource, run.id);
         return;
@@ -363,6 +456,26 @@ export class BloomChainSystem {
         }
         return;
       }
+      case 'RELAY': {
+        const l = LINKS.find((x) => x.id === ev.target);
+        const remote = ev.roofId;
+        if (!l || !remote) return;
+        let n = s.hood.relayTargets();
+        if (s.state.relayBonus > 0) {
+          n += s.state.relayBonus; // Golden Relay (Lucky Cat): spent on this crossing
+          s.state.relayBonus = 0;
+        }
+        const targets = this.remoteTargets(run, l, remote, n);
+        const st = s.state.links[l.id];
+        if (st) st.crossings++;
+        run.roofs.add(remote);
+        this.emit(run, { ...ev, amount: targets.length });
+        targets.forEach((t, i) => {
+          run.visited.add(t.id);
+          this.enqueue(run, { type: t.ground === 'restored' ? 'GROW' : 'RESTORE', source: ev.target, target: t.id, cause: 'relay', depth: ev.depth + 1 }, 0.12 + i * 0.12);
+        });
+        return;
+      }
       case 'REWARD':
         return;
     }
@@ -383,7 +496,17 @@ export class BloomChainSystem {
     const reward: ChainEvent = { seq: this.seq++, type: 'REWARD', chainId: run.id, depth: 0, target: run.originTileId, cause: 'reward', at: s.time, amount: got };
     this.history.push(reward);
     s.bus.emit('chain.event', { event: reward, combo: run.combo });
-    s.bus.emit('chain.ended', { chainId: run.id, combo: run.combo, bonus: Math.round(got * 10) / 10, total: run.biomass + got, milestonePct: pct, energy: run.energy });
+    s.bus.emit('chain.ended', {
+      chainId: run.id,
+      combo: run.combo,
+      bonus: Math.round(got * 10) / 10,
+      total: run.biomass + got,
+      milestonePct: pct,
+      energy: run.energy,
+      roofs: [...run.roofs],
+      crossings: run.relaysFired.size,
+    });
+    if (run.relaysFired.size) s.metrics.first('remoteChain');
     if (got > 0) s.bus.emit('resource.gain', { kind: 'biomass', amount: got, reason: 'chain' });
     s.metrics.onChain(run.combo);
   }

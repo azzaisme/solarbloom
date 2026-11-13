@@ -409,8 +409,12 @@ export class Hud {
   renderUpgrades(force = false) {
     if (!this.upgradesOpen && !force) return;
     const u = this.sim.upgrades;
-    const order = ['Pulse', 'Machines', 'Drones', 'Storage'];
-    const sorted = [...u.all()].sort((a, b) => order.indexOf(a.group ?? 'Storage') - order.indexOf(b.group ?? 'Storage'));
+    const order = ['Pulse', 'Machines', 'Drones', 'Neighbourhood', 'Storage'];
+    // Neighbourhood upgrades appear once there is a neighbourhood to connect.
+    const hood = this.sim.state.progression.coreActivated;
+    const sorted = [...u.all()]
+      .filter((d) => d.group !== 'Neighbourhood' || hood)
+      .sort((a, b) => order.indexOf(a.group ?? 'Storage') - order.indexOf(b.group ?? 'Storage'));
     let lastGroup = '';
     const html = sorted
       .map((def) => {

@@ -4,7 +4,7 @@ export interface UpgradeDef {
   id: string;
   name: string;
   icon: string;
-  group?: 'Pulse' | 'Machines' | 'Drones' | 'Storage';
+  group?: 'Pulse' | 'Machines' | 'Drones' | 'Storage' | 'Neighbourhood';
   baseCost: number; // biomass
   costMult: number;
   maxLevel: number;
@@ -159,6 +159,30 @@ export const UPGRADES: UpgradeDef[] = [
     describe: () => 'Your first hub launches a second drone',
     available: has('droneHub'),
     lockedReason: 'Build a Drone Hub first',
+  },
+  {
+    id: 'relay2',
+    group: 'Neighbourhood',
+    name: 'Relay II',
+    icon: '🔌',
+    baseCost: 140,
+    costMult: 1,
+    maxLevel: 1,
+    describe: () => 'Each cross-roof pulse splits into 2 remote blooms, and relays recharge in 6 s instead of 8',
+    available: (s) => Object.values(s.links ?? {}).some((l) => l.built),
+    lockedReason: 'Build a bridge first',
+  },
+  {
+    id: 'droneDispatch',
+    group: 'Neighbourhood',
+    name: 'Drone Dispatch',
+    icon: '🛰️',
+    baseCost: 120,
+    costMult: 1,
+    maxLevel: 1,
+    describe: () => 'Idle drones fly across bridges to help on connected rooftops (near the relay)',
+    available: (s) => Object.values(s.links ?? {}).some((l) => l.built) && s.machines.some((m) => m.type === 'droneHub'),
+    lockedReason: 'Build a bridge and a Drone Hub first',
   },
 ];
 
