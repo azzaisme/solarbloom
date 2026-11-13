@@ -41,21 +41,31 @@ export class ProductionSystem {
     let v = TUNING.restore.biomassPerSec * TUNING.restore.bloomRateMult[Math.max(1, t.bloom)] * this.sim.upgrades.soilMult;
     if (this.inPollinatorZone(t)) v *= TUNING.pollinator.biomassMult;
     if (this.sim.state.progression.coreActivated) v *= TUNING.core.resonanceBiomassMult;
+    if (this.sim.state.progression.neighbourhoodBloomAt >= 0) v *= TUNING.neighbourhood.bloom.biomassMult;
+    if ((t.lushUntil ?? 0) > this.sim.time) v *= TUNING.neighbourhood.reservoir.lushMult;
     return v;
   }
+
+  /** Earliest moment a lush (Overflow) tile goes back to normal, so cached rates refresh then. */
+  private lushExpiry = Infinity;
 
   rates(): Resources {
     if (this.dirty) {
       this.dirty = false;
       let b = 0;
+      this.lushExpiry = Infinity;
+      const now = this.sim.time;
       for (const r of this.sim.state.rooftops) {
         if (!r.unlocked || r.preview) continue;
-        for (const t of r.tiles) if (isRestorable(t, this.sim.state.machines)) b += this.tileBiomassRate(t);
+        for (const t of r.tiles) {
+          if (isRestorable(t, this.sim.state.machines)) b += this.tileBiomassRate(t);
+          if ((t.lushUntil ?? 0) > now) this.lushExpiry = Math.min(this.lushExpiry, t.lushUntil!);
+        }
       }
       this.biomassRate = b;
     }
     let energy = 0;
-    let water = TUNING.rainBarrelRate;
+    let water = TUNING.rainBarrelRate + (this.sim.hood.coreAwake('r2') ? TUNING.neighbourhood.reservoir.cisternWater : 0);
     for (const m of this.sim.state.machines) {
       if (m.type === 'solar') energy += this.solarOutput(m);
       else if (m.type === 'condenser') water += 1;
@@ -64,6 +74,7 @@ export class ProductionSystem {
   }
 
   tick(dt: number) {
+    if (this.sim.time >= this.lushExpiry) this.dirty = true;
     const r = this.rates();
     for (const k of KINDS) {
       this.sim.econ.add(k, r[k] * dt);

@@ -29,3 +29,18 @@ export function fill(sim: Sim, x0: number, z0: number, x1: number, z1: number, g
     setGround(sim, x, z, g);
   }
 }
+
+/** Skips the Round 2 game: the Seed's Core is awake (as if activated). */
+export function awakenSeed(sim: Sim) {
+  const p = sim.state.progression;
+  p.coreActivated = true;
+  p.coreActivatedAt = sim.time;
+  p.cores = { ...p.cores, r1: true };
+  sim.grid.roof('r2')!.unlocked = true;
+  sim.production.markDirty();
+}
+
+/** Sets a tile's ground on any roof. */
+export function ground(sim: Sim, roof: string, x: number, z: number, g: GroundState) {
+  return setGround(sim, x, z, g, roof);
+}

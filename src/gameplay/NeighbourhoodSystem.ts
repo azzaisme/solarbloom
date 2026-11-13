@@ -9,6 +9,15 @@ import type { Sim } from './Sim';
 
 const N = TUNING.neighbourhood;
 
+/** What the objective panel shows after the Seed's Core wakes: one clear next goal at a time. */
+export interface HoodObjective {
+  step: 'link1' | 'core2' | 'link2' | 'core3' | 'bloom' | 'done';
+  title: string;
+  roofId: string;
+  items: Requirement[];
+  action?: { kind: 'link' | 'core' | 'bloom' | 'replay'; id: string; label: string; ok: boolean; reason?: string };
+}
+
 /**
  * Phase 3 progression across rooftops: bridges (links), relays, the Reservoir and Canopy Cores, and
  * the one-time Neighbourhood Bloom. All costs/thresholds come from TUNING.neighbourhood and data/rooftops.
@@ -220,6 +229,55 @@ export class NeighbourhoodSystem {
     const s = this.sim;
     const extraRoofs = ROOFTOPS.filter((r) => r.id !== 'r1' && s.grid.isPlayable(r.id)).length;
     return extraRoofs * N.roofCapBonus + (s.state.progression.neighbourhoodBloomAt >= 0 ? N.bloom.capBonus : 0);
+  }
+
+  objective(): HoodObjective {
+    const link = (id: string, title: string, roofId: string): HoodObjective => {
+      const st = this.linkStatus(id);
+      const l = LINK_BY_ID[id];
+      return {
+        step: id === 'seed-reservoir' ? 'link1' : 'link2',
+        title,
+        roofId,
+        items: [{ label: `Build the ${l.name} (${formatCost(st.cost)})`, done: false }],
+        action: { kind: 'link', id, label: `🌉 Build the ${l.name} · ${formatCost(st.cost)}`, ok: st.ok, reason: st.reason },
+      };
+    };
+    const core = (roofId: string, title: string): HoodObjective => {
+      const ready = this.coreReady(roofId);
+      return {
+        step: roofId === 'r2' ? 'core2' : 'core3',
+        title,
+        roofId,
+        items: this.requirements(roofId),
+        action: ready ? { kind: 'core', id: roofId, label: `✨ Awaken the ${this.coreName(roofId)} · ${formatCost(this.coreCost(roofId))}`, ok: this.sim.econ.canAfford(this.coreCost(roofId)) } : undefined,
+      };
+    };
+    if (!this.isBuilt('seed-reservoir')) return link('seed-reservoir', '🌉 Reach the Reservoir', 'r2');
+    if (!this.coreAwake('r2')) return core('r2', '💧 Wake the Old Cistern');
+    if (!this.isBuilt('seed-canopy')) return link('seed-canopy', '🌉 Reach the Canopy', 'r3');
+    if (!this.coreAwake('r3')) return core('r3', '🌳 Wake the Elder Tree');
+    if (this.bloomReady())
+      return {
+        step: 'bloom',
+        title: '🌸 The Neighbourhood Bloom',
+        roofId: 'r1',
+        items: [{ label: 'Every rooftop is awake and connected', done: true }],
+        action: { kind: 'bloom', id: 'bloom', label: '🌸 Activate the Neighbourhood Bloom', ok: true },
+      };
+    const full = ROOFTOPS.reduce((a, r) => a + this.sim.progression.fullBloomCount(r.id), 0);
+    const total = ROOFTOPS.reduce((a, r) => a + this.restorableCount(r.id), 0);
+    return {
+      step: 'done',
+      title: '✨ The neighbourhood lives',
+      roofId: 'r1',
+      items: [
+        { label: 'Neighbourhood Bloom', done: true },
+        { label: `Grow every tile to full bloom (${full}/${total})`, done: full >= total },
+        { label: 'A new district glows on the horizon…', done: false },
+      ],
+      action: { kind: 'replay', id: 'replay', label: '🎬 Replay the Neighbourhood Bloom', ok: true },
+    };
   }
 
   roofDef(id: string) {

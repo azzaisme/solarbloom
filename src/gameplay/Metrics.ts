@@ -10,9 +10,12 @@ export class Metrics {
     b.on('cat.found', () => this.first('cat'));
     b.on('tree.discharged', () => this.first('treePulse'));
     b.on('rooftop.coreRestored', () => this.first('core'));
+    b.on('link.built', ({ linkId }) => this.first(`bridge:${linkId}`));
+    b.on('roof.coreAwake', ({ roofId }) => this.first(`core:${roofId}`));
+    b.on('neighbourhood.bloom', () => this.first('neighbourhoodBloom'));
   }
 
-  private first(key: string) {
+  first(key: string) {
     const f = this.sim.state.stats.firsts;
     if (f[key] === undefined) f[key] = Math.round(this.sim.time);
   }

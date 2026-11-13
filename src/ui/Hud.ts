@@ -306,7 +306,31 @@ export class Hud {
       case 8:
         return { text: 'The Core is ready! Tap ✨ Awaken the Core in the top-right panel.', target: '#coreBtn' };
       default:
-        return { text: 'The building lives again! Keep growing every tile to full bloom while Rooftop 2 gets ready.' };
+        return this.hoodHint();
+    }
+  }
+
+  /** Phase 3 hints follow the neighbourhood objective. */
+  private hoodHint(): { text: string; target?: string } {
+    const s = this.sim;
+    const o = s.hood.objective();
+    switch (o.step) {
+      case 'link1':
+        return { text: `The Reservoir is just across the gap. Build the 🌉 Skybridge Relay (button in the objective panel, or on the dashed bridge). ${o.action?.ok ? '' : o.action?.reason ?? ''}`, target: '[data-link]' };
+      case 'core2': {
+        const gardens = s.state.machines.some((m) => m.type === 'reservoirGarden');
+        if (!gardens) return { text: 'Restore the dry Reservoir, then build a ⛲ Reservoir Garden (8) within 2 tiles of a 💧 Water Condenser. Condensers fill its basin; when full it Overflows.', target: '[data-tool="reservoirGarden"]' };
+        if (!o.items[2]?.done) return { text: 'Water Condensers within 2 tiles fill a ⛲ Reservoir Garden each time their meter fills. Full basin → Overflow! Select the garden to see its reach.' };
+        return { text: o.action ? 'The Old Cistern is ready — awaken it from the objective panel or click it.' : 'Keep restoring the Reservoir to wake the Old Cistern.', target: o.action ? '[data-core]' : undefined };
+      }
+      case 'link2':
+        return { text: 'Chains near a relay pylon jump across its bridge. Next, open the Canopy with the 🌉 Canopy Bridge.', target: '[data-link]' };
+      case 'core3':
+        return { text: 'Restorations and blooms near the 🌳 Elder Tree charge its ring. Full ring → Canopy Burst. 🌸 Gardens inside its reach make the burst spread further.' };
+      case 'bloom':
+        return { text: 'Every rooftop is awake! Press 🌸 Activate the Neighbourhood Bloom.', target: '[data-bloom]' };
+      default:
+        return { text: 'The neighbourhood lives. Keep growing every tile to full bloom — and look at the horizon…' };
     }
   }
 
@@ -595,12 +619,26 @@ export class Hud {
     const restored = p.restoredCount('r1');
     const total = p.restorableCount('r1');
     const pct = Math.round((restored / Math.max(1, total)) * 100);
-    this.set('objPct', $(this.root, '#objPct'), 'text', `${pct}% of the rooftop restored · ${restored}/${total} tiles`);
-    this.set('objBar', $(this.root, '#objBar'), 'width', `${pct}%`);
+    let hoodNext = '';
     if (s.state.progression.coreActivated) {
-      this.set('objTitle', $(this.root, '#objTitle'), 'text', '🌉 Next: Greenhouse Tower');
-      this.set('objList', $(this.root, '#objList'), 'html', `<li class="done"><span class="ck">✓</span>Rooftop Core awakened</li><li><span class="ck"></span>Grow every tile to full bloom (${p.fullBloomCount('r1')}/${total})</li><li><span class="ck"></span>Rooftop 2 opens in the next update</li>`);
+      const o = s.hood.objective();
+      const roof = s.grid.roof(o.roofId)!;
+      const rn = p.restoredCount(o.roofId);
+      const rt = p.restorableCount(o.roofId);
+      const rp = Math.round((rn / Math.max(1, rt)) * 100);
+      this.set('objTitle', $(this.root, '#objTitle'), 'text', o.title);
+      this.set('objPct', $(this.root, '#objPct'), 'text', s.grid.isPlayable(o.roofId) ? `${roof.name}: ${rp}% restored · ${rn}/${rt} tiles` : `${roof.name} is waiting across the bridge`);
+      this.set('objBar', $(this.root, '#objBar'), 'width', `${s.grid.isPlayable(o.roofId) ? rp : 0}%`);
+      const items = o.items.map((r) => `<li class="${r.done ? 'done' : ''}"><span class="ck">${r.done ? '✓' : ''}</span>${esc(r.label)}</li>`).join('');
+      const a = o.action;
+      const attr = a ? (a.kind === 'link' ? `data-link="${a.id}"` : a.kind === 'core' ? `data-core="${a.id}"` : a.kind === 'bloom' ? 'data-bloom="go"' : 'data-bloom="replay"') : '';
+      const btn = a ? `<li style="display:block"><button class="act${a.kind === 'replay' ? ' green' : ''}" ${attr} ${a.ok ? '' : 'disabled'}>${esc(a.ok || !a.reason ? a.label : `${a.label} — ${a.reason}`)}</button></li>` : '';
+      this.set('objList', $(this.root, '#objList'), 'html', items + btn);
+      const nx = o.items.find((r) => !r.done);
+      hoodNext = a && a.ok && a.kind !== 'replay' ? `Next: ${a.label.replace(/^\S+ /, '')}` : nx ? `Next: ${nx.label}` : '';
     } else {
+      this.set('objPct', $(this.root, '#objPct'), 'text', `${pct}% of the rooftop restored · ${restored}/${total} tiles`);
+      this.set('objBar', $(this.root, '#objBar'), 'width', `${pct}%`);
       const reqs = p.requirements();
       const html = reqs.map((r) => `<li class="${r.done ? 'done' : ''}"><span class="ck">${r.done ? '✓' : ''}</span>${esc(r.label)}</li>`).join('');
       this.set('objList', $(this.root, '#objList'), 'html', html);
@@ -628,7 +666,7 @@ export class Hud {
     }
     // "Next:" line (visible on phones, where the checklist is collapsed)
     const nextReq = s.state.progression.coreActivated ? undefined : p.requirements().find((r) => !r.done);
-    this.set('objNext', $(this.root, '#objNext'), 'text', ready ? 'Next: awaken the Core ✨' : nextReq ? `Next: ${nextReq.label}` : '');
+    this.set('objNext', $(this.root, '#objNext'), 'text', s.state.progression.coreActivated ? hoodNext : ready ? 'Next: awaken the Core ✨' : nextReq ? `Next: ${nextReq.label}` : '');
 
     if (this.comboTimer > 0) {
       this.comboTimer -= dt;
