@@ -1,8 +1,10 @@
 # Solarbloom: progress
 
+Moved out of the `azzaisme/mouthwash-brigade` repo (where it started in a `solarbloom/` folder) with its full history.
+
 # Round 2 (plan: `docs/ROUND_2_PLAN.md`)
 
-Round 1 checkpoint: commit `d6486b0` (local tag `solarbloom-round1`; the remote doesn't accept tag pushes from this session). Round 1 saves migrate to the v2 format automatically.
+Round 1 checkpoint: tag `round-1` (commit `3b79a23`). Round 1 saves migrate to the v2 format automatically.
 
 | | Milestone | Status |
 |---|---|---|

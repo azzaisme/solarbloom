@@ -9,7 +9,6 @@ Built with **PlayCanvas Engine 2 + TypeScript + Vite**. The isometric camera is 
 ## Run it
 
 ```bash
-cd solarbloom
 npm install
 npm run dev        # http://localhost:5173
 npm test           # unit tests (vitest)
