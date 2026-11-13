@@ -115,6 +115,10 @@ export class Sfx {
     this.tone(880, 0.12, { vol: 0.08, delay: 0.12, type: 'square' });
     this.tone(1320, 0.2, { vol: 0.06, delay: 0.2 });
   }
+  powerUp() {
+    this.tone(330, 0.25, { glide: 2, vol: 0.08, type: 'triangle' });
+    this.tone(this.note(7), 0.35, { vol: 0.09, delay: 0.18 });
+  }
   coin() {
     this.tone(988, 0.1, { vol: 0.08, type: 'square' });
     this.tone(1319, 0.25, { vol: 0.08, delay: 0.08, type: 'square' });

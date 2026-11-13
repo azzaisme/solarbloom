@@ -18,6 +18,7 @@ export class Overlays {
   private radiusRoot: pc.Entity;
   private time = 0;
   private frameSize = 1;
+  private gridLines: pc.Entity;
 
   constructor(
     private sim: Sim,
@@ -28,8 +29,18 @@ export class Overlays {
     for (let i = 0; i < 4; i++) this.bars.push(shape(this.frame, 'box', mat('#ffffff', { unlit: true }), { scale: 0.05, receive: false }));
     this.frame.enabled = false;
     this.ghost = group(root, 'ghost');
-    this.ghostBox = shape(this.ghost, 'box', mat(TONE.ok, { opacity: 0.35, unlit: true }), { receive: false });
+    this.ghostBox = shape(this.ghost, 'box', mat(TONE.ok, { opacity: 0.5, unlit: true }), { receive: false });
     this.ghost.enabled = false;
+    // Faint tile boundaries, shown only while building.
+    this.gridLines = group(root, 'buildGrid');
+    const lineMat = mat('#1d3640', { opacity: 0.45, unlit: true });
+    for (const r of sim.state.rooftops) {
+      if (!r.unlocked || r.preview) continue;
+      const y = r.origin[1] + r.height + SLAB_TOP + 0.012;
+      for (let i = 0; i <= r.width; i++) shape(this.gridLines, 'box', lineMat, { pos: [r.origin[0] + i, y, r.origin[2] + r.depth / 2], scale: [0.04, 0.01, r.depth], receive: false });
+      for (let i = 0; i <= r.depth; i++) shape(this.gridLines, 'box', lineMat, { pos: [r.origin[0] + r.width / 2, y, r.origin[2] + i], scale: [r.width, 0.01, 0.04], receive: false });
+    }
+    this.gridLines.enabled = false;
     this.radiusRoot = group(root, 'radius');
     for (let i = 0; i < 80; i++) {
       const e = shape(this.radiusRoot, 'box', mat(TONE.info, { opacity: 0.45, unlit: true }), { scale: [0.9, 0.02, 0.9], receive: false });
@@ -67,6 +78,10 @@ export class Overlays {
     this.frame.enabled = true;
   }
 
+  showGrid(on: boolean) {
+    this.gridLines.enabled = on;
+  }
+
   hideFrame() {
     this.frame.enabled = false;
   }
@@ -75,8 +90,9 @@ export class Overlays {
     const p = this.footprintCenter(roofId, x, z, size);
     this.ghost.setPosition(p.x, p.y + height / 2, p.z);
     this.ghostBox.setLocalScale(size * 0.92, height, size * 0.92);
-    this.ghostBox.render!.material = mat(ok ? TONE.ok : TONE.bad, { opacity: 0.35, unlit: true });
+    this.ghostBox.render!.material = mat(ok ? TONE.ok : TONE.bad, { opacity: 0.5, unlit: true });
     this.ghost.enabled = true;
+    this.showFrame(roofId, x, z, size, ok ? 'ok' : 'bad');
   }
 
   hideGhost() {

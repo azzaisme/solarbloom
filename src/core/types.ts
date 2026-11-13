@@ -73,6 +73,8 @@ export interface CatState {
   found: number;
   firstSpawned: boolean;
   lastReward?: CatRewardType;
+  /** Discovery log: every cat found, where, and what it gave. */
+  log: { anchorId: string; reward: CatRewardType; at: number }[];
 }
 
 export interface Progression {

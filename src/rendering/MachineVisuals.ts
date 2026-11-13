@@ -30,6 +30,8 @@ export class MachineVisuals {
   private views = new Map<string, MachineView>();
   private time = 0;
   reducedMotion = false;
+  /** Called when a newly built machine "powers on" (for VFX + sound). */
+  onActivated?: (m: MachineData, at: pc.Vec3) => void;
 
   constructor(
     private sim: Sim,
@@ -73,12 +75,43 @@ export class MachineVisuals {
     }
     this.views.set(m.id, v);
     this.applyUpgrades(v);
-    if (animate) {
-      // Foundation pops, shell unfolds.
-      body.setLocalScale(0.01, 0.01, 0.01);
-      this.tweens.add(0.55, (k) => body.setLocalScale(k, k, k), { ease: ease.outBack });
-      this.tweens.add(0.35, (k) => body.setLocalPosition(0, Math.sin(k * Math.PI) * 0.35, 0), { delay: 0.05 });
-    }
+    if (animate) this.playBuild(v);
+  }
+
+  /** Three beats: foundation pops up, the white shell unfolds, the light switches on. */
+  private playBuild(v: MachineView) {
+    const { root, body, m } = v;
+    const s = m.size;
+    const pad = shape(root, 'box', mat(PALETTE.shell), { pos: [0, 0.02, 0], scale: [0.01, 0.04, 0.01] });
+    const tw = this.tweens;
+    // 1. Foundation
+    tw.add(0.28, (k) => pad.setLocalScale(s * 0.94 * k, 0.04 + 0.08 * Math.sin(k * Math.PI), s * 0.94 * k), { ease: ease.outBack });
+    // 2. Shell unfolds: rises flat, widens, then stands up with a quarter twist
+    body.setLocalScale(0.01, 0.01, 0.01);
+    tw.add(0.5, (k) => {
+      const xz = Math.min(1, k * 1.6);
+      body.setLocalScale(xz, Math.max(0.01, k), xz);
+      body.setLocalEulerAngles(0, (1 - k) * -90, 0);
+    }, { delay: 0.22, ease: ease.outBack });
+    tw.add(0.35, (k) => body.setLocalPosition(0, Math.sin(k * Math.PI) * 0.25, 0), { delay: 0.25 });
+    // 3. Light activates
+    const lamp = v.light;
+    const orig = lamp ? lamp.getLocalScale().clone() : undefined;
+    if (lamp) lamp.enabled = false;
+    tw.add(0.4, (k) => {
+      if (lamp && orig) {
+        lamp.enabled = true;
+        const f = 1 + Math.sin(k * Math.PI) * 2.5;
+        lamp.setLocalScale(orig.x * f, orig.y * f, orig.z * f);
+      }
+    }, {
+      delay: 0.75,
+      done: () => {
+        if (lamp && orig) lamp.setLocalScale(orig);
+        tw.add(0.3, (k) => pad.setLocalScale(s * 0.94 * (1 - k), 0.04, s * 0.94 * (1 - k)), { done: () => pad.destroy() });
+        this.onActivated?.(m, root.getPosition().clone());
+      },
+    });
   }
 
   private solar(v: MachineView) {
@@ -104,6 +137,7 @@ export class MachineVisuals {
     shape(b, 'sphere', mat(PALETTE.glass, { opacity: 0.45, gloss: 0.95 }), { pos: [0, 0.74, 0], scale: 0.5 });
     const water = shape(b, 'sphere', mat(PALETTE.water, { emissive: '#2aa6d6', emissiveIntensity: 0.4, gloss: 0.9 }), { pos: [0, 0.7, 0], scale: 0.3 });
     v.bob.push(water);
+    v.light = shape(b, 'sphere', mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1.5 }), { pos: [0, 0.17, 0.33], scale: 0.05 });
     for (let i = 0; i < 3; i++) {
       const fin = group(b, 'fin');
       fin.setLocalEulerAngles(0, i * 120, 0);
@@ -125,6 +159,7 @@ export class MachineVisuals {
       shape(f, 'sphere', mat(PALETTE.flowerCore), { pos: [0, h + 0.04, 0], scale: 0.05 });
       v.bob.push(f);
     }
+    v.light = shape(b, 'sphere', mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1.2 }), { pos: [0.34, 0.46, -0.27], scale: 0.04 });
     // Bee house
     shape(b, 'box', mat(PALETTE.gold), { pos: [0.34, 0.45, -0.34], scale: [0.12, 0.16, 0.12], shadow: true });
     shape(b, 'cone', mat(PALETTE.trunk), { pos: [0.34, 0.57, -0.34], scale: [0.16, 0.1, 0.16] });

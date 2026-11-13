@@ -13,6 +13,7 @@ cd solarbloom
 npm install
 npm run dev        # http://localhost:5173
 npm test           # unit tests (vitest)
+npm run test:e2e   # pointer→tile picking at 3 screen sizes × 3 zooms (needs Playwright + Chromium)
 npm run build      # type-check + production build into dist/
 npm run preview    # serve the production build
 ```
@@ -24,13 +25,15 @@ Node 20+ is required. The build is a static site (`base: './'`), so `dist/` can 
 | Action | Mouse / keyboard | Touch |
 |---|---|---|
 | Restore a tile (or nurture a green one) | Left-click with **Pulse** (2) | Tap |
-| Build a machine | Pick it in the hotbar (3–6), then click | Tap the card, then tap |
+| Build a machine | Pick it in the hotbar (3–6), then click | Tap 🔨 Build, pick a machine, then tap |
 | Inspect a machine | Click it, or use **Inspect** (1) | Tap it |
 | Pan | Drag the world (or middle/right drag) | Drag |
 | Zoom | Mouse wheel, `+` / `-` | Pinch |
 | Harvest sunlight (emergency energy) | `H` | 🌞 button |
 | Upgrades | `U` | ⬆️ button |
 | Pause | `P` | ⏸ chip |
+| Game speed 1× / 2× / 3× | `1×` chip | `1×` chip |
+| Lucky Cat discoveries | 🐱 chip (after your first cat) | 🐱 chip |
 | Cancel, close or deselect | `Esc` | Tap empty space |
 | Debug / FPS overlay | `F3` or `` ` `` | Settings |
 
@@ -90,6 +93,8 @@ tests/                    vitest: grid, economy, placement, chains, drones, luck
 - **Picking** casts a camera ray against each rooftop's slab plane and floors the hit into a cell. Cat clicks use a screen-space radius (at least 26 px) instead of the tiny mesh.
 - **Performance.** World geometry uses a static batch group and tiles use a dynamic one, which takes the scene from about 1,000 draw calls to about 140–300. Materials are cached and VFX entities are pooled. Shadows come from one directional light with one cascade.
 - **Saves.** The game autosaves every 10 s and on key events (machine built, upgrade, cat spawned/found, Core). A Lucky Cat claim clears the cat *before* paying out, so reloading can't pay twice. Offline progress is deliberately not simulated.
+
+While building, a faint tile grid appears, and the placement ghost shows its outline and range. Placing a machine plays three beats: the foundation pops up, the white shell unfolds, then its light switches on. Butterflies drift between restored tiles, more of them as the garden grows. The 🐱 discovery panel (in Settings, or the 🐱 chip) lists which nooks you've found cats in and which rewards you've had.
 
 ## Limitations and next steps
 

@@ -74,6 +74,19 @@ export class LuckyCatSystem {
     return true;
   }
 
+  /** Summary for the discovery panel. */
+  discoveries() {
+    const log = this.sim.state.cat.log ?? [];
+    const spots = new Set(log.map((e) => e.anchorId));
+    const rewards: Partial<Record<CatRewardType, number>> = {};
+    for (const e of log) rewards[e.reward] = (rewards[e.reward] ?? 0) + 1;
+    return {
+      found: this.sim.state.cat.found,
+      anchors: CAT_ANCHORS.filter((a) => this.sim.grid.roof(a.roofId)).map((a) => ({ id: a.id, hint: a.hint, found: spots.has(a.id) })),
+      rewards,
+    };
+  }
+
   rollReward(): CatRewardType {
     const hasHub = this.sim.state.machines.some((m) => m.type === 'droneHub');
     const table: [CatRewardType, number][] = [
@@ -106,6 +119,7 @@ export class LuckyCatSystem {
     const type: CatRewardType = first ? 'luckyHarvest' : this.rollReward();
     const summary = this.apply(type, mult);
     c.lastReward = type;
+    c.log = [...(c.log ?? []), { anchorId: active.anchorId, reward: type, at: s.time }];
     c.nextSpawnAt = s.time + s.rng.range(TUNING.cat.laterMin, TUNING.cat.laterMax);
     s.bus.emit('cat.found', { anchorId: active.anchorId, reward: type, summary });
     return { type, summary };

@@ -8,6 +8,7 @@ import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
 import { Sim } from '../gameplay/Sim';
+import { Butterflies } from '../rendering/Butterflies';
 import { CameraController } from '../rendering/CameraController';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
@@ -58,6 +59,7 @@ export class Game {
   readonly machines: MachineVisuals;
   readonly drones: DroneVisuals;
   readonly cat: CatVisuals;
+  readonly butterflies: Butterflies;
   readonly vfx: Vfx;
   readonly overlays: Overlays;
   readonly hud: Hud;
@@ -108,6 +110,12 @@ export class Game {
     this.drones.sync();
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
+    this.butterflies = new Butterflies(this.sim, this.scene.world);
+    this.machines.onActivated = (_m, at) => {
+      this.vfx.ring(at, PALETTE.gold, 1.3, 0.55);
+      this.vfx.burst(new pc.Vec3(at.x, at.y + 0.5, at.z), 10, { up: 2.5, size: 0.05 });
+      this.sfx.powerUp();
+    };
     this.overlays = new Overlays(this.sim, this.scene.world);
 
     this.hud = new Hud(
@@ -122,6 +130,11 @@ export class Game {
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
         togglePause: () => this.setPaused(!this.paused),
+        cycleSpeed: () => {
+          this.speed = this.speed === 1 ? 2 : this.speed === 2 ? 3 : 1;
+          this.hud.toast(this.speed === 1 ? '▶ Normal speed' : `⏩ ${this.speed}× speed`, '', 1.4);
+          return this.speed;
+        },
       },
       this.settings,
     );
@@ -177,7 +190,7 @@ export class Game {
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
     const rm = s.reducedMotion;
-    this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
+    this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     this.vfx.density = rm ? 0.35 : 1;
     document.body.classList.toggle('reduced', rm);
     this.hud.settings = s;
@@ -209,6 +222,7 @@ export class Game {
     this.hud.setTool(t);
     this.overlays.hideGhost();
     this.overlays.hideRadius();
+    this.overlays.showGrid(t !== 'inspect' && t !== 'pulse');
     if (t !== 'inspect') this.select(undefined);
     if (this.pointer.inside) this.onHover(this.pointer.x, this.pointer.y);
   }
@@ -335,7 +349,6 @@ export class Game {
       const a = this.sim.build.anchorFor(tool, p.fx, p.fz);
       const chk = this.sim.build.check(tool, p.roofId, a.x, a.z);
       const def = MACHINES[tool];
-      this.overlays.hideFrame();
       this.overlays.showGhost(p.roofId, a.x, a.z, def.size, chk.ok || chk.spotOk, def.size === 2 ? 0.35 : 0.5);
       this.overlays.showRadius(this.radiusTiles({ type: tool, roofId: p.roofId, x: a.x, z: a.z, size: def.size }), chk.ok ? 'ok' : 'info');
       this.hud.showTip(
@@ -759,6 +772,7 @@ export class Game {
     this.machines.update(dt);
     this.drones.update(dt);
     this.cat.update(dt);
+    this.butterflies.update(dt);
     this.vfx.update(dt);
     this.overlays.update(dt);
     this.camera.update(dt);

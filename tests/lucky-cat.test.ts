@@ -88,5 +88,9 @@ describe('lucky cat', () => {
     expect(again.state.cat.active).toBeUndefined();
     expect(again.cat.claim()).toBeUndefined();
     expect(again.state.cat.found).toBe(1);
+    const d = again.cat.discoveries();
+    expect(d.anchors.find((a) => a.id === 'parapet-back')!.found).toBe(true);
+    expect(d.anchors.filter((a) => a.found).length).toBe(1);
+    expect(d.rewards.luckyHarvest).toBe(1);
   });
 });

@@ -15,12 +15,22 @@
 
 Extra beyond the plan: **Nurture**. Pulsing a restored tile grows it through three bloom levels (grass → wildflowers → shrubs/trees). This keeps something useful to click after the roof is green, and gives the garden its lushness.
 
+## Gaps filled after the first pass
+
+- Faint tile grid while building; the ghost now has a coloured outline.
+- Expandable 🔨 Build tray on phones (machine cards are always visible on wide screens).
+- Game speed chip: 1× / 2× / 3×.
+- Butterflies over restored tiles (up to 10, one per 5 restored tiles).
+- Placement animation: foundation pops, shell unfolds with a quarter twist, the light switches on with a ripple and chime.
+- Lucky Cat discovery panel: nooks found, reward types collected. Saved in the discovery log, and old saves load with an empty log.
+- Automated pointer→tile test (`npm run test:e2e`): every on-screen tile at 5 points each, at 1280×800, 820×1180 and 390×844, zoom 0.6 / 1 / 1.8, plus a real mouse click and a hotbar click that must not touch the world. 2,778 checks pass.
+
 ## Verified
 
 - `npm test`: 32 tests pass (grid, economy, placement, chains, drones, lucky cat, save/progression, and a scripted first session that reaches the Core).
 - `npm run build`: type-check and production build pass.
 - Headless Chromium (SwiftShader): the page loads with **no console errors or warnings**. Restoring, building, the drone, inspect, the cat click and the full Core sequence (including Skip) were driven through the real canvas picker and checked in screenshots at 1280×800 and 390×844.
-- Pointer → tile picking was checked at desktop and phone sizes.
+- Pointer → tile picking is covered by the automated e2e test above.
 - Save → reload keeps tiles, machines, upgrades and the active cat.
 - Draw calls: about 140 early game, about 300 with a full garden (static + dynamic batching).
 

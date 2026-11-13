@@ -23,6 +23,7 @@ export interface HudCallbacks {
   skipCinematic(): void;
   closeInspect(): void;
   togglePause(): void;
+  cycleSpeed(): number;
 }
 
 export interface Settings {
@@ -73,10 +74,13 @@ export class Hud {
       `<button class="slot" data-tool="inspect" aria-label="Inspect tool (1)"><span class="key">1</span><span class="si">🔍</span><span class="sl">Inspect</span><span class="sc">&nbsp;</span></button>`,
       `<button class="slot" data-tool="pulse" aria-label="Restoration Pulse (2)"><span class="key">2</span><span class="si">✨</span><span class="sl">Pulse</span><span class="sc">restore</span></button>`,
       `<span class="sep"></span>`,
+      `<button class="slot" id="buildToggle" aria-label="Build menu" aria-expanded="false"><span class="si">🔨</span><span class="sl">Build</span><span class="sc">machines</span></button>`,
+      `<div id="buildTray">`,
       ...BUILDABLE.map(
         (t) =>
           `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name} (${MACHINES[t].hotkey})"><span class="key">${MACHINES[t].hotkey}</span><span class="si">${MACHINES[t].icon}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
       ),
+      `</div>`,
       `<span class="sep"></span>`,
       `<button class="slot" id="harvestBtn" aria-label="Harvest sunlight (H)"><span class="key">H</span><span class="si">🌞</span><span class="sl">Harvest</span><span class="sc">+${TUNING.harvest.energy}⚡</span><span class="cd"></span></button>`,
       `<button class="slot" id="upgBtn" aria-label="Upgrades (U)"><span class="key">U</span><span class="si">⬆️</span><span class="sl">Upgrades</span><span class="sc">🌿</span><span class="badge">!</span></button>`,
@@ -91,6 +95,8 @@ export class Hud {
         <button id="coreBtn">✨ Awaken the Core</button>
         <div class="tools">
           <button class="chip" id="pauseBtn" aria-label="Pause">⏸<span class="lbl"> Pause</span></button>
+          <button class="chip" id="speedBtn" aria-label="Game speed">1×</button>
+          <button class="chip" id="catBtn" aria-label="Lucky Cat discoveries" hidden>🐱 <span id="catCount">0</span></button>
           <button class="chip" id="setBtn" aria-label="Settings">⚙️<span class="lbl"> Settings</span></button>
           <button class="chip" id="objToggle" aria-label="Toggle objective list">📋</button>
         </div>
@@ -111,6 +117,7 @@ export class Hud {
         <label>Tutorial hints <input type="checkbox" data-set="hints"></label>
         <label>Debug / FPS (F3) <input type="checkbox" data-set="debug"></label>
         <div class="stats" id="statsBox"></div>
+        <div id="disc"></div>
         <div class="row"><button id="closeModal">Back to the garden</button><button class="danger" id="newGame">New game</button></div>
       </div></div>
       <div id="cine"><div class="bar t"></div><div class="bar b"></div><div class="title" id="cineTitle"></div><button id="skipBtn">Skip ⏭</button></div>
@@ -131,6 +138,12 @@ export class Hud {
       $(r, '#hint').classList.add('hide');
     });
     $(r, '#setBtn').addEventListener('click', () => this.openSettings(true));
+    $(r, '#speedBtn').addEventListener('click', () => {
+      const sp = this.cb.cycleSpeed();
+      $(r, '#speedBtn').textContent = `${sp}×`;
+    });
+    $(r, '#catBtn').addEventListener('click', () => this.openSettings(true, true));
+    $(r, '#buildToggle').addEventListener('click', () => this.toggleTray());
     $(r, '#pauseBtn').addEventListener('click', () => this.cb.togglePause());
     $(r, '#objToggle').addEventListener('click', () => $(r, '#obj').classList.toggle('expanded'));
     $(r, '#closeModal').addEventListener('click', () => this.openSettings(false));
@@ -178,6 +191,20 @@ export class Hud {
   setTool(t: Tool) {
     this.tool = t;
     this.root.querySelectorAll<HTMLElement>('[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === t));
+    const building = t !== 'pulse' && t !== 'inspect';
+    const tg = $(this.root, '#buildToggle');
+    tg.classList.toggle('active', building);
+    $(tg, '.si').textContent = building ? MACHINES[t].icon : '🔨';
+    $(tg, '.sl').textContent = building ? 'Building' : 'Build';
+    this.toggleTray(false);
+  }
+
+  /** Phone-only build tray (on wide screens the machine cards are always in the hotbar). */
+  toggleTray(open?: boolean) {
+    const tray = $(this.root, '#buildTray');
+    const o = open ?? !tray.classList.contains('open');
+    tray.classList.toggle('open', o);
+    $(this.root, '#buildToggle').setAttribute('aria-expanded', String(o));
   }
 
   toggleUpgrades(open = !this.upgradesOpen) {
@@ -190,13 +217,27 @@ export class Hud {
     return this.upgradesOpen;
   }
 
-  openSettings(open: boolean) {
+  openSettings(open: boolean, focusCats = false) {
     $(this.root, '#modal').classList.toggle('open', open);
     if (open) {
+      this.renderDiscoveries();
+      if (focusCats) $(this.root, '#disc').scrollIntoView({ block: 'nearest' });
       const s = this.sim.state.stats;
       $(this.root, '#statsBox').innerHTML = `Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best combo: <b>×${s.maxCombo}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats found: <b>${s.catsFound}</b> 🐱 · Play time: <b>${Math.floor(this.sim.time / 60)}m</b>`;
       this.root.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => (inp.checked = this.settings[inp.dataset.set as keyof Settings]));
     }
+  }
+
+  private renderDiscoveries() {
+    const d = this.sim.cat.discoveries();
+    const names: Record<string, string> = { luckyHarvest: 'Lucky Harvest', solarFrenzy: 'Solar Frenzy', megaBloom: 'Mega Bloom', droneParty: 'Drone Party', jackpot: 'Jackpot' };
+    const spots = d.anchors
+      .map((a) => `<li class="${a.found ? 'found' : ''}"><span>${a.found ? '🐱' : '❔'}</span>${a.found ? esc(a.hint) : 'Undiscovered nook'}</li>`)
+      .join('');
+    const rewards = Object.entries(names)
+      .map(([k, n]) => `<span class="rw ${d.rewards[k as keyof typeof d.rewards] ? 'got' : ''}">${n}${d.rewards[k as keyof typeof d.rewards] ? ` ×${d.rewards[k as keyof typeof d.rewards]}` : ''}</span>`)
+      .join('');
+    $(this.root, '#disc').innerHTML = `<h3>🐱 Lucky Cat discoveries · ${d.found}</h3><ul class="spots">${spots}</ul><div class="rws">${rewards}</div>`;
   }
 
   get modalOpen() {
@@ -382,6 +423,10 @@ export class Hud {
     this.set('badge', badge, 'text', String(affordable));
     this.set('badgeOn', badge, 'cls', affordable > 0 ? '1' : '0', 'on');
     this.renderUpgrades();
+
+    const cats = s.state.cat.found;
+    this.set('catCount', $(this.root, '#catCount'), 'text', String(cats));
+    if (cats > 0) $(this.root, '#catBtn').hidden = false;
 
     // Objective
     const p = s.progression;

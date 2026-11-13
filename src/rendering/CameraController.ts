@@ -68,6 +68,12 @@ export class CameraController {
     this.target.copy(this.goal);
   }
 
+  /** Immediate zoom (tests, resets). */
+  setZoom(z: number) {
+    this.zoom = this.zoomGoal = pc.math.clamp(z, this.minZoom, this.maxZoom);
+    this.apply();
+  }
+
   zoomBy(factor: number) {
     if (this.cinematic) return;
     this.zoomGoal = pc.math.clamp(this.zoomGoal * factor, this.minZoom, this.maxZoom);
