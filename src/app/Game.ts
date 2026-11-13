@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import { Sfx } from '../audio/Sfx';
 import { formatCost } from '../core/Economy';
 import { createInitialState } from '../core/GameState';
+import { distToFootprint } from '../core/Grid';
 import type { MachineData, ResourceKind, TileData } from '../core/types';
 import { MACHINES } from '../data/machines';
 import { LINK_BY_ID, LINKS, ROOF_BY_ID } from '../data/rooftops';
@@ -25,7 +26,7 @@ import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
 import { FlyText } from '../ui/Fly';
-import { Hud, type Settings, type Tool } from '../ui/Hud';
+import { CORE_TEXT, Hud, type Settings, type Tool } from '../ui/Hud';
 import { EventBus } from './EventBus';
 import { SaveService } from './SaveService';
 
@@ -283,7 +284,7 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement) return;
       const k = e.key.toLowerCase();
-      const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree' };
+      const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden' };
       if (map[k]) this.selectTool(map[k]);
       else if (k === 'h') this.harvest();
       else if (k === 'f') this.focusNextRoof();
@@ -433,7 +434,9 @@ export class Game {
     if (occ) {
       this.overlays.showFrame(occ.roofId, occ.x, occ.z, occ.size, 'info');
       const ready = occ.type === 'core' && this.sim.hood.coreReady(occ.roofId);
-      this.hud.showTip(x, y, `<b>${MACHINES[occ.type].icon} ${MACHINES[occ.type].name}</b>${ready ? '<span class="ok">Ready! Click to awaken.</span>' : 'Click to inspect'}`);
+      const ct = occ.type === 'core' ? CORE_TEXT[occ.roofId] : undefined;
+      const boost = (occ.overchargeUntil ?? 0) > this.sim.time ? '<br><span class="ok">⚡ Boosted: next trigger +1</span>' : '';
+      this.hud.showTip(x, y, `<b>${ct?.icon ?? MACHINES[occ.type].icon} ${ct?.name ?? MACHINES[occ.type].name}</b>${ready ? '<span class="ok">Ready! Click to awaken.</span>' : 'Click to inspect'}${boost}`);
       return;
     }
     if (tool === 'inspect') {
@@ -464,7 +467,8 @@ export class Game {
         return 'Almost there…';
       case 'restored': {
         const rate = this.sim.production.tileBiomassRate(t);
-        return `+${rate.toFixed(2)}🌿/s${zone ? ' (garden ×2)' : ''}${t.bloom >= TUNING.restore.maxBloom ? ' · full bloom ✓' : ''}`;
+        const lush = (t.lushUntil ?? 0) > this.sim.time ? ` · 💧 lush ${Math.ceil(t.lushUntil! - this.sim.time)} s` : '';
+        return `+${rate.toFixed(2)}🌿/s${zone ? ' (garden ×2)' : ''}${lush}${t.bloom >= TUNING.restore.maxBloom ? ' · full bloom ✓' : ''}`;
       }
     }
   }
@@ -536,14 +540,22 @@ export class Game {
     switch (m.type) {
       case 'solar':
         return g.tilesNear(m, 1);
-      case 'condenser':
-        return g.tilesNear(m, TUNING.condenser.radius);
+      case 'condenser': {
+        // Its own watering reach, plus any Reservoir Garden it fills (so the link is visible).
+        const R = TUNING.neighbourhood.reservoir;
+        const gardens = this.sim.state.machines.filter((x) => x.type === 'reservoirGarden' && x.roofId === m.roofId && distToFootprint(x.x, x.z, m.x, m.z, m.size) <= R.condenserRange);
+        return [...g.tilesNear(m, TUNING.condenser.radius), ...gardens.map((x) => g.get(x.roofId, x.x, x.z)!)];
+      }
       case 'pollinator':
         return g.tilesNear(m, this.sim.upgrades.pollinatorReach);
       case 'droneHub':
         return g.tilesNear(m, this.sim.upgrades.droneRadius);
       case 'motherTree':
         return g.tilesNear(m, this.sim.upgrades.treeRadius);
+      case 'reservoirGarden':
+        return g.tilesNear(m, TUNING.neighbourhood.reservoir.radius);
+      case 'core':
+        return m.roofId === 'r3' ? g.tilesNear(m, this.sim.chains.canopyBurstRadius()) : [];
       default:
         return [];
     }
@@ -628,6 +640,13 @@ export class Game {
         extra = `<p class="stat">🌳 Charge ${m.charge ?? 0}/${TUNING.motherTree.threshold} (${pct}%)</p><p>Each restoration or new bloom within ${s.upgrades.treeRadius} tiles adds charge. When full, it releases a Bloom Pulse over that whole area. Its own pulse can't recharge it.</p>${this.upgradeButton('treeResonance')}`;
         break;
       }
+      case 'reservoirGarden': {
+        const R = TUNING.neighbourhood.reservoir;
+        const conds = s.state.machines.filter((x) => x.type === 'condenser' && x.roofId === m.roofId && distToFootprint(x.x, x.z, m.x, m.z, m.size) <= R.condenserRange).length;
+        const dry = s.chains.overflowTargets(m, 99).length;
+        extra = `<p class="stat">⛲ Basin ${Math.floor(m.charge ?? 0)}/${R.threshold} · ${conds} 💧 condenser${conds === 1 ? '' : 's'} within ${R.condenserRange} tiles fill it</p><p class="stat">🌱 ${dry} dry tile${dry === 1 ? '' : 's'} within ${R.radius} tiles (highlighted) · Overflow irrigates up to ${R.targets}</p><p>Each time a nearby Water Condenser fills its meter, the basin rises. Full → Overflow: the closest dry tiles burst into lush bloom (×${R.lushMult} 🌿 for ${R.lushSeconds} s).${conds ? '' : ' <b>Build a Water Condenser within 2 tiles to fill it.</b>'}</p>`;
+        break;
+      }
       case 'core': {
         const reqs = s.hood.requirements(m.roofId);
         const awakeText: Record<string, string> = {
@@ -642,6 +661,7 @@ export class Game {
         break;
       }
     }
+    if ((m.overchargeUntil ?? 0) > s.time) extra = `<p class="stat" style="color:#1d8fb0">⚡ Boosted by your pulse — next trigger +1 (${Math.ceil(m.overchargeUntil! - s.time)} s)</p>` + extra;
     this.hud.renderInspect(this.hud.machineHtml(m, extra));
   }
 
@@ -677,6 +697,7 @@ export class Game {
         this.sfx.pulse();
       } else if (source === 'broad') this.vfx.ring(p, PALETTE.eyeCyan, 0.8, 0.45);
       else if (source === 'condenser') this.vfx.ring(p, PALETTE.water, 0.8, 0.5);
+      else if (source === 'overflow') this.vfx.ring(p, '#a8ecff', 0.9, 0.5);
       else if (source === 'drone') this.vfx.ring(p, PALETTE.leafFin, 0.8, 0.5);
     });
     b.on('pulse.fired', ({ tileId, overcharged }) => {
@@ -756,6 +777,7 @@ export class Game {
         pollinator: '🌸 Pollinator Garden planted! Restore a tile right next to it to start a Bloom Chain.',
         droneHub: '🛸 Drone Hub built! Your drone can handle the small jobs now. The Mother Tree is unlocked too 🌳',
         motherTree: '🌳 Mother Tree planted! Restore tiles around it to charge its Bloom Pulse.',
+        reservoirGarden: '⛲ Reservoir Garden built! Water Condensers within 2 tiles fill its basin — full basin = Overflow.',
       };
       if (first && msg[machine.type]) this.hud.toast(msg[machine.type]!, 'gold', 4);
     });
@@ -873,6 +895,59 @@ export class Game {
     b.on('rooftop.coreRestored', () => this.playCoreSequence());
     b.on('link.built', ({ linkId, roofId }) => this.onLinkBuilt(linkId, roofId));
     b.on('relay.sent', ({ linkId, fromRoof, travel }) => this.presentRelay(linkId, fromRoof, travel));
+    b.on('machine.boosted', ({ machineId }) => {
+      const m = s.machine(machineId);
+      if (!m) return;
+      const w = this.machines.worldOf(m);
+      this.vfx.ring(new pc.Vec3(w[0], w[1] + 0.05, w[2]), '#6ff3ff', 0.9 * m.size, 0.5);
+      if (this.clock - this.lastBoostFeed > 6) {
+        this.lastBoostFeed = this.clock;
+        this.hud.feed(`⚡ Pulse boost: ${MACHINES[m.type].name} — its next trigger gets +1`);
+      }
+      if (this.selected === machineId) this.inspectTimer = 0;
+    });
+    b.on('machine.boostUsed', ({ machineId }) => {
+      const m = s.machine(machineId);
+      if (!m) return;
+      const w = this.machines.worldOf(m);
+      this.vfx.ring(new pc.Vec3(w[0], w[1] + 0.05, w[2]), PALETTE.gold, 1.3 * m.size, 0.6);
+      this.vfx.burst(new pc.Vec3(w[0], w[1] + 0.5, w[2]), 10, { up: 2, size: 0.06 });
+    });
+    b.on('reservoir.fill', ({ machineId, from }) => {
+      const a = this.posOf(from);
+      const b2 = this.posOf(machineId);
+      if (a && b2) this.vfx.arc(a, b2, PALETTE.water, 0.6);
+      if (b2) this.vfx.burst(b2, 4, { up: 1, size: 0.04, speed: 0.4 });
+    });
+    b.on('reservoir.overflow', ({ machineId }) => {
+      const p = this.posOf(machineId);
+      this.machines.splash(machineId);
+      if (p) {
+        for (let i = 0; i < 3; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.15, done: () => this.vfx.ring(p, i % 2 ? '#a8ecff' : PALETTE.water, 1.4 + i * 0.9, 0.7) });
+        this.vfx.burst(new pc.Vec3(p.x, p.y + 0.3, p.z), 24, { up: 3.2, speed: 1.6, size: 0.07 });
+      }
+      this.sfx.pulse();
+      this.camera.shake(0.04);
+      if ((s.state.progression.overflows ?? 0) <= 1) this.hud.toast(`⛲ Reservoir Overflow!<small>Water spills into the dry planters: they bloom lush (×${TUNING.neighbourhood.reservoir.lushMult} 🌿 for a while).</small>`, 'gold', 3.5);
+      else this.hud.feed('⛲ Overflow! Dry tiles burst into lush bloom');
+    });
+    b.on('canopy.burst', ({ machineId, radius, gardens }) => {
+      const p = this.posOf(machineId);
+      this.machines.burstTree(machineId);
+      if (p) {
+        const base = new pc.Vec3(p.x, p.y - 0.2, p.z);
+        for (let i = 0; i < 4; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.18, done: () => this.vfx.ring(base, i % 2 ? PALETTE.gold : '#7cf7c8', (radius + 1.2) * (0.5 + i * 0.25), 0.9) });
+        this.vfx.burst(new pc.Vec3(p.x, p.y + 2.2, p.z), 36, { up: 4.2, speed: 2.4, size: 0.09, life: 1.4 });
+        for (const g of gardens) {
+          const gp = this.posOf(g);
+          if (gp) this.vfx.arc(p, gp, PALETTE.pink, 0.7);
+        }
+      }
+      this.camera.shake(0.09);
+      this.sfx.chainEnd(10);
+      if ((s.state.progression.canopyBursts ?? 0) <= 1) this.hud.toast(`🌳 Canopy Burst!<small>The Elder Tree releases its charge.${gardens.length ? ` ${gardens.length} 🌸 garden${gardens.length > 1 ? 's' : ''} carried it further!` : ' 🌸 Gardens inside its reach would carry it further.'}</small>`, 'gold', 3.5);
+      else this.hud.feed(`🌳 Canopy Burst${gardens.length ? ` · amplified by ${gardens.length} garden${gardens.length > 1 ? 's' : ''}` : ''}`);
+    });
     b.on('roof.coreAwake', ({ roofId }) => this.onRoofCoreAwake(roofId));
     b.on('neighbourhood.bloom', ({ restored }) => this.onNeighbourhoodBloom(restored));
   }
@@ -926,7 +1001,8 @@ export class Game {
       case 'GROW': {
         const t = s.grid.byTileId(ev.target);
         if (t) this.tileFx.flash(t, wave, 0.45, 0.9);
-        if (from && to && ev.cause !== 'motherTree') this.vfx.arc(from, to, combo >= 5 ? PALETTE.pink : PALETTE.flowerCore, 0.5);
+        if (from && to && ev.cause !== 'motherTree' && ev.cause !== 'canopy')
+          this.vfx.arc(from, to, ev.cause === 'overflow' ? PALETTE.water : ev.cause === 'relay' ? PALETTE.coreGlow : combo >= 5 ? PALETTE.pink : PALETTE.flowerCore, 0.5);
         if (combo >= 2) this.hud.combo(combo);
         this.sfx.bloom(combo);
         break;
@@ -1134,6 +1210,19 @@ export class Game {
   }
 
   private selectedRelay?: string;
+  private lastBoostFeed = -99;
+  private boostPulseT = 0;
+  /** A soft cyan ring keeps pulsing on machines your taps have boosted. */
+  private updateBoostRings(dt: number) {
+    this.boostPulseT -= dt;
+    if (this.boostPulseT > 0) return;
+    this.boostPulseT = 1.1;
+    for (const m of this.sim.state.machines) {
+      if ((m.overchargeUntil ?? 0) <= this.sim.time) continue;
+      const w = this.machines.worldOf(m);
+      this.vfx.ring(new pc.Vec3(w[0], w[1] + 0.05, w[2]), '#6ff3ff', 0.75 * m.size, 0.8);
+    }
+  }
   private crossChains = 0;
   private relayFiringUntil = new Map<string, number>();
 
@@ -1345,6 +1434,7 @@ export class Game {
     }
     this.updateRoofLabels(dt);
     this.updateRelayLamps();
+    this.updateBoostRings(dt);
 
     this.saveTimer += dt;
     if (this.saveTimer >= TUNING.autosaveSeconds) {

@@ -89,10 +89,29 @@ export class ProductionSystem {
   private tickCondensers(dt: number) {
     const s = this.sim;
     const rate = TUNING.condenser.chargePerSec * (1 + 0.25 * s.upgrades.waterBloom);
+    const R = TUNING.neighbourhood.reservoir;
     for (const m of s.state.machines) {
       if (m.type !== 'condenser') continue;
-      m.charge = Math.min(TUNING.condenser.threshold, (m.charge ?? 0) + rate * dt);
-      if (m.charge >= TUNING.condenser.threshold && s.chains.startWater(m)) m.charge = 0;
+      const was = m.charge ?? 0;
+      m.charge = Math.min(TUNING.condenser.threshold, was + rate * dt);
+      if (m.charge < TUNING.condenser.threshold) continue;
+      // A full condenser waters the dry soil beside it, and/or tops up Reservoir Gardens in range.
+      const gardens = s.state.machines.filter(
+        (g) => g.type === 'reservoirGarden' && g.roofId === m.roofId && g.charge < R.threshold && distToFootprint(g.x, g.z, m.x, m.z, m.size) <= R.condenserRange,
+      );
+      for (const g of gardens) {
+        g.charge = Math.min(R.threshold, g.charge + R.fillPerCharge);
+        s.bus.emit('reservoir.fill', { machineId: g.id, from: m.id });
+      }
+      if (s.chains.startWater(m) || gardens.length) m.charge = 0;
     }
+    // Full Reservoir Gardens spill over when there is dry ground to irrigate.
+    for (const g of s.state.machines) if (g.type === 'reservoirGarden' && g.charge >= R.threshold && !this.overflowing.has(g.id)) {
+      if (s.chains.startOverflow(g)) this.overflowing.add(g.id);
+    }
+    if (this.overflowing.size) for (const id of [...this.overflowing]) if ((s.machine(id)?.charge ?? 0) < R.threshold) this.overflowing.delete(id);
   }
+
+  /** Gardens whose Overflow chain is queued (so it doesn't start twice before it resolves). */
+  private overflowing = new Set<string>();
 }

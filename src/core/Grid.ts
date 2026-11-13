@@ -16,6 +16,20 @@ export function distToFootprint(x: number, z: number, fx: number, fz: number, si
   return dx + dz;
 }
 
+/** Outward direction of the roof edge an edge tile sits on. */
+export function edgeDir(roof: Pick<RooftopData, 'width' | 'depth'>, x: number, z: number): [number, number] {
+  if (x === roof.width - 1) return [1, 0];
+  if (x === 0) return [-1, 0];
+  if (z === roof.depth - 1) return [0, 1];
+  return [0, -1];
+}
+
+/** Roof-local point where a link's relay pylon stands (just outside the edge tile). */
+export function relayLocal(roof: Pick<RooftopData, 'width' | 'depth'>, tile: [number, number]): [number, number] {
+  const [dx, dz] = edgeDir(roof, tile[0], tile[1]);
+  return [tile[0] + 0.5 + dx * 0.62, tile[1] + 0.5 + dz * 0.62];
+}
+
 /** Fast lookups over the canonical rooftop data. Holds no state of its own besides indexes. */
 export class Grid {
   private byId = new Map<string, TileData>();

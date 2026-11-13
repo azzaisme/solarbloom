@@ -14,6 +14,11 @@ export interface GameEvents {
   'chain.event': { event: ChainEvent; combo: number };
   'chain.fastForward': { chainId: number };
   'chain.ended': { chainId: number; combo: number; bonus: number; total: number; milestonePct: number; energy: number; roofs: string[]; crossings: number };
+  'machine.boosted': { machineId: string };
+  'machine.boostUsed': { machineId: string };
+  'reservoir.overflow': { machineId: string; tiles: string[] };
+  'reservoir.fill': { machineId: string; from: string };
+  'canopy.burst': { machineId: string; radius: number; gardens: string[] };
   'relay.sent': { linkId: string; fromRoof: string; toRoof: string; chainId: number; travel: number };
   'tree.discharged': { machineId: string };
   'solar.boost': { machineId: string };

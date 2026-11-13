@@ -35,9 +35,8 @@ export class DroneVisuals {
   ) {}
 
   private world(d: DroneData): [number, number] {
-    const hub = this.sim.machine(d.hubId)!;
-    const r = this.sim.grid.roof(hub.roofId)!;
-    return [r.origin[0] + d.px, r.origin[2] + d.pz];
+    const w = this.sim.drones.worldOf(d);
+    return [w[0], w[2]];
   }
 
   add(d: DroneData, animate: boolean) {
@@ -96,8 +95,8 @@ export class DroneVisuals {
       if (!v) continue;
       const hub = this.sim.machine(d.hubId);
       if (!hub) continue;
-      const r = this.sim.grid.roof(hub.roofId)!;
-      let [tx, tz] = this.world(d);
+      const w = this.sim.drones.worldOf(d);
+      let [tx, tz] = [w[0], w[2]];
       const idle = d.mode === 'idle' || d.mode === 'returning';
       if (idle && !this.reducedMotion) {
         // Lazy figure-eight while napping
@@ -109,7 +108,7 @@ export class DroneVisuals {
       const dz = tz - v.z;
       v.x += dx * k;
       v.z += dz * k;
-      const baseY = r.origin[1] + r.height + (d.mode === 'working' ? 0.55 : idle ? 1.05 : 0.9);
+      const baseY = w[1] + (d.mode === 'working' ? 0.55 : idle ? 1.05 : d.cross ? 1.3 : 0.9);
       v.y += (baseY - v.y) * (1 - Math.exp(-dt * 5));
       const bob = this.reducedMotion ? 0 : Math.sin(t * 3 + v.phase) * 0.05;
       v.root.setPosition(v.x, v.y + bob, v.z);

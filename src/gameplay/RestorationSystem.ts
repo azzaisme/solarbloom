@@ -1,4 +1,5 @@
 import { formatCost } from '../core/Economy';
+import { distToFootprint } from '../core/Grid';
 import type { Cost, RestoreSource, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
@@ -67,10 +68,12 @@ export class RestorationSystem {
     this.sim.econ.spend(chk.cost);
     if (t.ground === 'restored') {
       this.grow(t);
+      this.boostNeighbours(t);
       this.sim.bus.emit('pulse.fired', { tileId, extra: [], overcharged: false });
       return true;
     }
     this.beginGrowth(t, 'pulse', TUNING.pulse.growSeconds);
+    this.boostNeighbours(t);
     // Overcharge: every Nth manual pulse restores everything within 2 tiles.
     const every = this.sim.upgrades.overchargeEvery;
     const prog = this.sim.state.progression;
@@ -98,6 +101,21 @@ export class RestorationSystem {
     }
     this.sim.bus.emit('pulse.fired', { tileId, extra, overcharged });
     return true;
+  }
+
+  /**
+   * Overcharge Pulse: a manual pulse right next to a machine boosts its next trigger
+   * (+1 target, or more output for a solar burst). Automation never does this; only your taps.
+   */
+  boostNeighbours(t: TileData) {
+    const s = this.sim;
+    for (const m of s.state.machines) {
+      if (m.roofId !== t.roofId || m.type === 'droneHub' || (m.type === 'core' && m.roofId !== 'r3')) continue;
+      if (distToFootprint(t.x, t.z, m.x, m.z, m.size) !== 1) continue;
+      const fresh = (m.overchargeUntil ?? 0) <= s.time;
+      m.overchargeUntil = s.time + TUNING.neighbourhood.overchargeSeconds;
+      if (fresh) s.bus.emit('machine.boosted', { machineId: m.id });
+    }
   }
 
   /** Grows an already-restored tile one bloom level (grass → flowers → shrubs). Can start or continue a chain. */
@@ -138,6 +156,7 @@ export class RestorationSystem {
     t.pollution = 0;
     t.growthRemainingSec = 0;
     t.growSource = undefined;
+    if (source === 'overflow') t.lushUntil = this.sim.time + TUNING.neighbourhood.reservoir.lushSeconds;
     this.sim.state.stats.tilesRestored++;
     const biomass = this.sim.econ.add('biomass', TUNING.restore.instantBiomass * this.sim.upgrades.soilMult);
     if (biomass > 0) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: biomass, tileId: t.id });

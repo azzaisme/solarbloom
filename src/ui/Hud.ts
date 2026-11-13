@@ -41,6 +41,13 @@ export interface Settings {
   lowVfx: boolean;
 }
 
+/** Each rooftop's Core landmark. */
+export const CORE_TEXT: Record<string, { name: string; icon: string; blurb: string }> = {
+  r1: { name: 'Rooftop Core', icon: '✨', blurb: 'An ancient bloom engine. Awaken it to restore the whole building.' },
+  r2: { name: 'Old Cistern', icon: '💧', blurb: 'A dry rainwater cistern. Wake it to fill the basin with cascading water and steady 💧.' },
+  r3: { name: 'Elder Tree', icon: '🌳', blurb: 'A dormant giant. Blooms around it charge its ring; a full ring releases a Canopy Burst.' },
+};
+
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
 
 function esc(s: string) {
@@ -687,7 +694,11 @@ export class Hud {
 
   machineHtml(m: MachineData, extra: string): string {
     const def = MACHINES[m.type];
-    return `<h4><span>${def.icon} ${esc(def.name)}${m.starter ? ' <small style="font-weight:700;color:var(--ink-soft)">(old)</small>' : ''}</span><button data-close aria-label="Close">×</button></h4><p>${esc(def.blurb)}</p>${extra}`;
+    const core = m.type === 'core' ? CORE_TEXT[m.roofId] : undefined;
+    const name = core?.name ?? def.name;
+    const icon = core?.icon ?? def.icon;
+    const blurb = core?.blurb ?? def.blurb;
+    return `<h4><span>${icon} ${esc(name)}${m.starter ? ' <small style="font-weight:700;color:var(--ink-soft)">(old)</small>' : ''}</span><button data-close aria-label="Close">×</button></h4><p>${esc(blurb)}</p>${extra}`;
   }
 
   get currentTool() {
