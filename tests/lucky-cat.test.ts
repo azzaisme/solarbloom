@@ -49,7 +49,7 @@ describe('lucky cat', () => {
 
   it('skips anchors whose tile has a machine, and vetoed (invisible) anchors', () => {
     const sim = makeSim();
-    sim.cat.isAnchorVisible = (a) => a.id === 'vent-east' || a.id === 'core-step';
+    sim.cat.anchorView = (a) => (a.id === 'vent-east' || a.id === 'core-step' ? 'visible' : 'covered');
     rich(sim);
     fill(sim, 2, 0, 2, 0, 'restored');
     sim.build.place('solar', 'r1', 2, 0);

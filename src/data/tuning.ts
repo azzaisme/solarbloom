@@ -93,6 +93,7 @@ export const TUNING = {
     stashMax: 2, // a missed cat saves up to this many extra rewards instead of blocking new ones
     weights: { luckyHarvest: 40, solarFrenzy: 25, megaBloom: 20, droneParty: 12, jackpot: 3, goldenRelay: 14, catsGarden: 14 },
     goldenRelayExtra: 1, // Golden Relay: extra remote blooms on the next crossing
+    preferVisible: 0.75, // chance a cat hides somewhere already on screen (when there is such a spot)
     catsGardenTiles: 6, // Cat's Garden: tiles restored (and decorated) on a random unlocked roof
   },
 

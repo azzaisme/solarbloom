@@ -198,6 +198,19 @@ export class BloomChainSystem {
     return true;
   }
 
+  /** Lucky Cat's Garden: restores and decorates a small cluster as one free chain. */
+  startCatGarden(tiles: TileData[]): boolean {
+    if (!tiles.length) return false;
+    const run = this.newRun(tiles[0], 'mega', tiles.length * 2);
+    run.visited.delete(tiles[0].id);
+    tiles.forEach((t, i) => {
+      run.visited.add(t.id);
+      if (t.ground !== 'restored') this.enqueue(run, { type: 'RESTORE', source: tiles[0].id, target: t.id, cause: 'cat', depth: 1 }, 0.2 + i * 0.12);
+      this.enqueue(run, { type: 'GROW', source: tiles[0].id, target: t.id, cause: 'cat', depth: 1 }, 0.55 + i * 0.12);
+    });
+    return true;
+  }
+
   /** Lucky Cat Mega Bloom: a free chain that may break through concrete too. */
   startMega(budget: number = TUNING.cat.megaBloomTiles): boolean {
     const s = this.sim;

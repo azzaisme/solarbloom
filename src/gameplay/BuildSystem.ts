@@ -1,6 +1,5 @@
 import { formatCost, scaleCost } from '../core/Economy';
 import type { BuildableType, Cost, MachineData } from '../core/types';
-import { CAT_ANCHORS } from '../data/rooftops';
 import { MACHINES } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
@@ -65,14 +64,6 @@ export class BuildSystem {
       if (c.ground === 'growing') return fail('Let it finish growing first');
       if (!def.allowedGround.includes(c.ground)) return fail('Needs restored or mossy ground — pulse it first');
     }
-    const active = s.state.cat.active;
-    if (active) {
-      const a = CAT_ANCHORS.find((a) => a.id === active.anchorId);
-      if (a?.needsFreeTile && a.roofId === roofId) {
-        const [ax, az] = a.needsFreeTile;
-        if (ax >= x && ax < x + def.size && az >= z && az < z + def.size) return fail('Something small and lucky is sitting there…');
-      }
-    }
     if (!s.econ.canAfford(cost)) return { ok: false, reason: `Need ${formatCost(cost)}`, cost, spotOk: true };
     return { ok: true, cost, spotOk: true };
   }
@@ -91,6 +82,7 @@ export class BuildSystem {
     for (const c of s.grid.footprint(roofId, x, z, def.size)) if (c) c.occupantId = m.id;
     s.production.markDirty();
     s.bus.emit('machine.built', { machine: m });
+    s.cat.relocateIfBlocked(); // the Lucky Cat never blocks a build: it hops to another nook
     if (type === 'droneHub') s.drones.spawn(m); // more drones (upgrade) are topped up by DroneSystem
     return m;
   }

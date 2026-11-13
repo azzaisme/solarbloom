@@ -170,7 +170,7 @@ export class Game {
     this.hud.setTool('pulse');
     this.applySettings();
 
-    this.sim.cat.isAnchorVisible = (a) => this.anchorVisible(this.cat.anchorWorld(a));
+    this.sim.cat.anchorView = (a) => this.anchorView(this.cat.anchorWorld(a));
     if (state.cat.active) this.cat.show(state.cat.active.anchorId, false);
     this.camera.setBoundsFor(state.rooftops);
     if (state.progression.coreActivated) {
@@ -338,16 +338,18 @@ export class Game {
     const p = this.cat.targetWorld();
     if (!p) return false;
     const s = this.camera.toScreen(p);
-    const r = Math.max(26, 0.32 / this.camera.worldPerPixel());
+    // Generous enough to tap, small enough that a tile next to the cat still gets its own click.
+    const r = Math.max(20, 0.26 / this.camera.worldPerPixel());
     return Math.hypot(s.x - x, s.y - y) <= r;
   }
 
-  private anchorVisible(p: pc.Vec3): boolean {
+  /** On screen and clear of the HUD, off screen (reachable by panning) or covered by a HUD panel. */
+  private anchorView(p: pc.Vec3): 'visible' | 'offscreen' | 'covered' {
     const s = this.camera.toScreen(p);
     const w = window.innerWidth;
     const h = window.innerHeight;
-    if (s.x < 40 || s.y < 40 || s.x > w - 40 || s.y > h - 40) return false;
-    return !this.hud.blockedRects().some((r) => s.x > r.left - 16 && s.x < r.right + 16 && s.y > r.top - 16 && s.y < r.bottom + 16);
+    if (s.x < 40 || s.y < 40 || s.x > w - 40 || s.y > h - 40) return 'offscreen';
+    return this.hud.blockedRects().some((r) => s.x > r.left - 16 && s.x < r.right + 16 && s.y > r.top - 16 && s.y < r.bottom + 16) ? 'covered' : 'visible';
   }
 
   private onLeave() {
@@ -868,8 +870,9 @@ export class Game {
       const p = this.cat.targetWorld();
       if (p) {
         this.lastCatPos = p.clone();
-        this.vfx.burst(p, 40, { up: 4, speed: 2, size: 0.07, life: 1.4 });
-        this.vfx.ring(p, PALETTE.gold, 1.6, 0.8);
+        const soft = this.cat.softSparkle;
+        this.vfx.burst(p, soft ? 12 : 40, { up: soft ? 2 : 4, speed: soft ? 1 : 2, size: soft ? 0.05 : 0.07, life: soft ? 1 : 1.4 });
+        this.vfx.ring(p, PALETTE.gold, soft ? 0.9 : 1.6, 0.8);
       }
       this.cat.hide(true);
       this.hud.hideTip();
@@ -878,6 +881,14 @@ export class Game {
       this.hud.toast('🐱 LUCKY CAT FOUND!', 'cat', 2.4);
       this.hud.catReward(`${CAT_REWARD_NAMES[reward]}${extras ? ` + ${extras} saved-up harvest${extras > 1 ? 's' : ''}` : ''}`, summary);
       this.save();
+    });
+    b.on('cat.moved', ({ anchorId }) => {
+      this.cat.show(anchorId, true);
+      this.save();
+    });
+    b.on('cat.goldenRelay', () => {
+      for (const br of this.scene.bridges.values()) if (br.built) for (const e of br.ends) this.vfx.ring(new pc.Vec3(e.x, e.y - 0.9, e.z), PALETTE.gold, 1.4, 0.8);
+      this.hud.feed('🐱✨ Golden Relay: your next cross-roof chain blooms one extra tile');
     });
     b.on('cat.stash', () => {
       // A soft hint that something lucky is still waiting, never a pointer.

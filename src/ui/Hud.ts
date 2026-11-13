@@ -388,7 +388,7 @@ export class Hud {
 
   private renderDiscoveries() {
     const d = this.sim.cat.discoveries();
-    const names: Record<string, string> = { luckyHarvest: 'Lucky Harvest', solarFrenzy: 'Solar Frenzy', megaBloom: 'Mega Bloom', droneParty: 'Drone Party', jackpot: 'Jackpot' };
+    const names: Record<string, string> = { luckyHarvest: 'Lucky Harvest', solarFrenzy: 'Solar Frenzy', megaBloom: 'Mega Bloom', droneParty: 'Drone Party', jackpot: 'Jackpot', goldenRelay: 'Golden Relay', catsGarden: "Cat's Garden" };
     const spots = d.anchors
       .map((a) => `<li class="${a.found ? 'found' : ''}"><span>${a.found ? '🐱' : '❔'}</span>${a.found ? esc(a.hint) : 'Undiscovered nook'}</li>`)
       .join('');

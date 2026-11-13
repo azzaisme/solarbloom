@@ -12,7 +12,7 @@ import { Sim } from '../src/gameplay/Sim';
  */
 export function playSession(seed: number, actionEvery = 3, minutes = 20) {
   const sim = new Sim(createInitialState(seed));
-  sim.cat.isAnchorVisible = () => true;
+  sim.cat.anchorView = () => 'visible';
   const order: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'pollinator', 'motherTree', 'solar', 'pollinator'];
   const built: Record<string, number> = {};
   let next = 0;

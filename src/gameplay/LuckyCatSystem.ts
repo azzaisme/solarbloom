@@ -1,4 +1,4 @@
-import type { CatRewardType } from '../core/types';
+import type { CatRewardType, TileData } from '../core/types';
 import { CAT_ANCHORS, type CatAnchor } from '../data/rooftops';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
@@ -18,12 +18,16 @@ export const CAT_REWARD_NAMES: Record<CatRewardType, string> = {
   catsGarden: "Cat's Garden",
 };
 
+/** How an anchor looks from the current camera: on screen, off screen (reachable by panning) or under the HUD. */
+export type AnchorView = 'visible' | 'offscreen' | 'covered';
+
 /**
  * Hidden Lucky Cat: spawning, claiming and rewards. Visual hiding/VFX live in the renderer.
- * `isAnchorVisible` can be injected by the renderer to veto anchors that are off-screen or under HUD.
+ * `anchorView` is injected by the renderer: anchors under the HUD are never used; on-screen ones are preferred,
+ * but a cat can hide on any playable rooftop (the player can pan there; it never expires).
  */
 export class LuckyCatSystem {
-  isAnchorVisible: (a: CatAnchor) => boolean = () => true;
+  anchorView: (a: CatAnchor) => AnchorView = () => 'visible';
 
   constructor(private sim: Sim) {}
 
@@ -40,8 +44,30 @@ export class LuckyCatSystem {
         const t = s.grid.get(a.roofId, a.needsFreeTile[0], a.needsFreeTile[1]);
         if (!t || t.occupantId) return false;
       }
-      return this.isAnchorVisible(a);
+      return this.anchorView(a) !== 'covered';
     });
+  }
+
+  /** Picks a hiding spot: one in view most of the time, otherwise anywhere on a playable rooftop. */
+  private pickAnchor(cands: CatAnchor[]): CatAnchor | undefined {
+    if (!cands.length) return undefined;
+    const rng = this.sim.rng;
+    const visible = cands.filter((a) => this.anchorView(a) === 'visible');
+    const pool = visible.length && (rng.next() < TUNING.cat.preferVisible || visible.length === cands.length) ? visible : cands;
+    return rng.pick(pool);
+  }
+
+  /** A machine was built on the cat's nook: it hops to another spot instead of blocking the build. */
+  relocateIfBlocked(): void {
+    const c = this.sim.state.cat;
+    const a = this.anchor(c.active?.anchorId);
+    if (!c.active || !a?.needsFreeTile) return;
+    const t = this.sim.grid.get(a.roofId, a.needsFreeTile[0], a.needsFreeTile[1]);
+    if (!t?.occupantId) return;
+    const next = this.pickAnchor(this.candidates().filter((x) => x.id !== a.id));
+    if (!next) return; // nowhere else: it stays put (still clickable)
+    c.active = { ...c.active, anchorId: next.id }; // same spawn time and reward roll: nothing lost or gained
+    this.sim.bus.emit('cat.moved', { from: a.id, anchorId: next.id });
   }
 
   restoredCount() {
@@ -72,7 +98,7 @@ export class LuckyCatSystem {
     const c = this.sim.state.cat;
     if (c.active) return false;
     const cands = this.candidates();
-    const a = anchorId ? cands.find((x) => x.id === anchorId) : cands.length ? this.sim.rng.pick(cands) : undefined;
+    const a = anchorId ? cands.find((x) => x.id === anchorId) : this.pickAnchor(cands);
     if (!a) {
       c.nextSpawnAt = this.sim.time + 10;
       return false;
@@ -82,6 +108,34 @@ export class LuckyCatSystem {
     c.nextSpawnAt = this.sim.time + this.sim.rng.range(TUNING.cat.laterMin, TUNING.cat.laterMax);
     this.sim.bus.emit('cat.spawned', { anchorId: a.id });
     return true;
+  }
+
+  /**
+   * Cat's Garden: a small cluster of dead or plain tiles on one playable rooftop (rng-chosen, deterministic),
+   * grown outward from a seed tile.
+   */
+  catsGardenTiles(): TileData[] {
+    const s = this.sim;
+    const ok = (t: TileData) => !t.occupantId && !t.blocked && !s.isCoreTile(t) && (s.restoration.isEligible(t) || (t.ground === 'restored' && t.bloom < 2));
+    const roofs = s.state.rooftops.filter((r) => s.grid.isPlayable(r.id) && r.tiles.some(ok));
+    if (!roofs.length) return [];
+    // Prefer a rooftop other than the one the player started on, so the reward shows up somewhere new.
+    const away = roofs.filter((r) => r.id !== 'r1');
+    const pool = away.length ? away : roofs;
+    const roof = pool[Math.floor(this.sim.rng.next() * pool.length)];
+    const seeds = roof.tiles.filter(ok);
+    const start = seeds[Math.floor(this.sim.rng.next() * seeds.length)];
+    const out: TileData[] = [start];
+    const seen = new Set([start.id]);
+    for (let i = 0; i < out.length && out.length < TUNING.cat.catsGardenTiles; i++) {
+      for (const n of s.grid.neighbors(out[i])) {
+        if (seen.has(n.id) || !ok(n)) continue;
+        seen.add(n.id);
+        out.push(n);
+        if (out.length >= TUNING.cat.catsGardenTiles) break;
+      }
+    }
+    return out;
   }
 
   /** Summary for the discovery panel. */
@@ -97,6 +151,15 @@ export class LuckyCatSystem {
     };
   }
 
+  /** Golden Relay needs a built bridge (and no unspent one); Cat's Garden needs a second rooftop. Never useless. */
+  goldenRelayAvailable() {
+    return this.sim.hood.builtLinks().length > 0 && this.sim.state.relayBonus <= 0;
+  }
+
+  catsGardenAvailable() {
+    return this.sim.state.rooftops.filter((r) => this.sim.grid.isPlayable(r.id)).length >= 2 && this.catsGardenTiles().length > 0;
+  }
+
   rollReward(): CatRewardType {
     const hasHub = this.sim.state.machines.some((m) => m.type === 'droneHub');
     const w = TUNING.cat.weights;
@@ -106,6 +169,8 @@ export class LuckyCatSystem {
       ['megaBloom', w.megaBloom],
       ['droneParty', hasHub ? w.droneParty : 0],
       ['jackpot', w.jackpot],
+      ['goldenRelay', this.goldenRelayAvailable() ? w.goldenRelay : 0],
+      ['catsGarden', this.catsGardenAvailable() ? w.catsGarden : 0],
     ];
     const total = table.reduce((a, [, x]) => a + x, 0);
     let r = this.sim.rng.next() * total;
@@ -176,6 +241,18 @@ export class LuckyCatSystem {
       s.drones.spawn(hub, TUNING.cat.dronePartySeconds * mult);
       parts.push(`2 party drones for ${Math.round(TUNING.cat.dronePartySeconds * mult)} s`);
     };
+    const golden = () => {
+      if (!this.goldenRelayAvailable()) return harvest(); // degrade gracefully, never useless
+      s.state.relayBonus = TUNING.cat.goldenRelayExtra;
+      s.bus.emit('cat.goldenRelay', {});
+      parts.push(`Your next cross-roof chain sends +${TUNING.cat.goldenRelayExtra} extra remote bloom`);
+    };
+    const garden = () => {
+      const tiles = this.catsGardenTiles();
+      if (!tiles.length || !s.chains.startCatGarden(tiles)) return harvest();
+      const roof = s.grid.roof(tiles[0].roofId)!;
+      parts.push(`A little garden blooms on ${roof.name} (${tiles.length} tiles)`);
+    };
     switch (type) {
       case 'luckyHarvest':
         harvest();
@@ -189,10 +266,18 @@ export class LuckyCatSystem {
       case 'droneParty':
         party();
         break;
+      case 'goldenRelay':
+        golden();
+        break;
+      case 'catsGarden':
+        garden();
+        break;
       case 'jackpot': {
         // Two different compatible rewards together.
         const pool: (() => void)[] = [harvest, frenzy, mega];
         if (s.state.machines.some((m) => m.type === 'droneHub')) pool.push(party);
+        if (this.goldenRelayAvailable()) pool.push(golden);
+        if (this.catsGardenAvailable()) pool.push(garden);
         const i = Math.floor(s.rng.next() * pool.length);
         let j = Math.floor(s.rng.next() * (pool.length - 1));
         if (j >= i) j++;
