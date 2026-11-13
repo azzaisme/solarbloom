@@ -50,6 +50,15 @@ export class CameraController {
     return aspect < 1 ? Math.max(7, 6.3 / aspect) : Math.max(small ? 7 : 6.5, 8.4 / aspect);
   }
 
+  /**
+   * PlayCanvas computes fog depth as gl_FragCoord.z / gl_FragCoord.w. With an orthographic camera that
+   * is the 0–1 depth-buffer value (linear between near and far), so fog distances must be converted.
+   */
+  fogDepth(distance: number): number {
+    const c = this.cam;
+    return (distance - c.nearClip) / (c.farClip - c.nearClip);
+  }
+
   worldPerPixel(): number {
     const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
     return (2 * this.cam.orthoHeight) / Math.max(1, c.clientHeight);

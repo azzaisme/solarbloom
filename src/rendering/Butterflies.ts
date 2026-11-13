@@ -1,8 +1,8 @@
 import * as pc from 'playcanvas';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
-import { mat, PALETTE } from './Materials';
-import { group, shape } from './Shapes';
+import { PALETTE } from './Materials';
+import { assignBatch, group, vshape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
 
 interface Fly {
@@ -27,6 +27,7 @@ export class Butterflies {
   constructor(
     private sim: Sim,
     private parent: pc.Entity,
+    private batchId = -1,
   ) {}
 
   private gardenTiles(): TileData[] {
@@ -47,15 +48,16 @@ export class Butterflies {
     const wings: pc.Entity[] = [];
     for (const s of [-1, 1]) {
       const w = group(root, 'wing');
-      shape(w, 'box', mat(col, { doubleSided: true }), { pos: [s * 0.045, 0, 0], scale: [0.08, 0.004, 0.065] });
-      shape(w, 'box', mat(col, { doubleSided: true }), { pos: [s * 0.035, 0, -0.045], scale: [0.05, 0.004, 0.04] });
+      vshape(w, 'box', col, { pos: [s * 0.045, 0, 0], scale: [0.08, 0.004, 0.065] });
+      vshape(w, 'box', col, { pos: [s * 0.035, 0, -0.045], scale: [0.05, 0.004, 0.04] });
       wings.push(w);
     }
-    shape(root, 'capsule', mat('#3b3b45'), { scale: [0.014, 0.05, 0.014], rot: [90, 0, 0] });
+    vshape(root, 'capsule', '#3b3b45', { scale: [0.014, 0.05, 0.014], rot: [90, 0, 0] });
     const f: Fly = { root, wings, pos: new pc.Vec3(), target: new pc.Vec3(), rest: 0, phase: Math.random() * 10, speed: 0.6 + Math.random() * 0.4 };
     this.pickTarget(f, tiles);
     f.pos.copy(f.target).add(new pc.Vec3((Math.random() - 0.5) * 3, 1.5, (Math.random() - 0.5) * 3));
     root.setLocalScale(0, 0, 0);
+    if (this.batchId >= 0) assignBatch(root, this.batchId); // moving every frame: dynamic batch
     this.flies.push(f);
   }
 

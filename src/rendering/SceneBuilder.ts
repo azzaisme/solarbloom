@@ -1,11 +1,14 @@
 import * as pc from 'playcanvas';
 import type { RooftopData } from '../core/types';
 import { color, mat, PALETTE, uniqueMat } from './Materials';
-import { assignBatch, group, shape } from './Shapes';
+import { assignBatch, group, shape, vshape } from './Shapes';
+import { Scenery } from './Scenery';
 import { ease, type Tweens } from './Tween';
 
 /** Rooftop surface sits slightly below the slabs so the gaps read as a soft grid. */
 export const SLAB_TOP = 0.08;
+/** Depth of the service ledge behind the main garden. */
+export const LEDGE = 1.8;
 
 class R {
   constructor(private s: number) {}
@@ -41,6 +44,9 @@ export class SceneBuilder {
   private turbines: pc.Entity[] = [];
   private r1!: Restorable;
   bridge!: pc.Entity;
+  get restorable() {
+    return this.r1;
+  }
   roof2Group!: pc.Entity;
 
   constructor(
@@ -51,35 +57,53 @@ export class SceneBuilder {
     app.root.addChild(this.world);
   }
 
+  scenery!: Scenery;
+  private stage = -1;
+
   build(roofs: RooftopData[]) {
     this.lights();
-    this.skyline();
     const r1 = roofs.find((r) => r.id === 'r1')!;
     this.r1 = this.building(r1, true);
     const r2 = roofs.find((r) => r.id === 'r2');
     if (r2) this.buildRoof2(r2);
     this.buildBridge(r1, r2);
+    this.scenery = new Scenery(this.world, this.tweens);
+    this.scenery.build(r1);
     // Static batching for everything that never moves; animated restoration props stay separate.
     const staticGroup = this.app.batcher!.addGroup('static-world', false, 40);
+    const cityGroup = this.app.batcher!.addGroup('static-city', false, 400);
+    const stageGroup = this.app.batcher!.addGroup('stage-props', true, 400);
+    assignBatch(this.scenery.staticRoot, cityGroup.id);
+    assignBatch(this.scenery.stageRoot, stageGroup.id);
+    this.scenery.forEachStageItem((e) => assignBatch(e, stageGroup.id));
     const animated = new Set<pc.Entity>([...this.r1.vines, ...this.r1.planters, ...this.r1.banners, ...this.r1.boards, ...this.r1.rubble, this.bridge, ...this.turbines.map((t) => t.parent as pc.Entity)]);
     const walk = (e: pc.Entity) => {
-      if (animated.has(e)) return;
+      if (animated.has(e) || e === this.scenery.staticRoot || e === this.scenery.stageRoot) return;
       if (e.render) e.render.batchGroupId = staticGroup.id;
       for (const c of e.children) walk(c as pc.Entity);
     };
     walk(this.world);
+    // Restoration props animate (scale), so they use a dynamic batch with the shared vertex-colour material.
+    const propGroup = this.app.batcher!.addGroup('restore-props', true, 400);
+    for (const e of [...this.r1.vines, ...this.r1.planters, ...this.r1.banners]) assignBatch(e, propGroup.id);
     for (const e of [...this.r1.vines, ...this.r1.planters, ...this.r1.banners]) e.enabled = false;
     void assignBatch;
   }
 
   private lights() {
     const scene = this.app.scene;
-    scene.ambientLight = color('#7b8aa0');
+    scene.ambientLight = color('#8a90a3');
+    // Aerial perspective: the distant city fades into warm haze; the roof (≈40 units away) stays crisp.
+    scene.fog.type = pc.FOG_LINEAR;
+    scene.fog.color = color('#bcd9e6');
+    // Distances (from the camera) are converted to ortho depth by Game once the camera exists.
+    scene.fog.start = 46;
+    scene.fog.end = 84;
     const sun = new pc.Entity('sun');
     sun.addComponent('light', {
       type: 'directional',
-      color: color('#fff1d6'),
-      intensity: 2.0,
+      color: color('#ffe6bd'),
+      intensity: 2.15,
       castShadows: true,
       shadowResolution: 2048,
       shadowDistance: 45,
@@ -97,42 +121,6 @@ export class SceneBuilder {
     this.app.root.addChild(fill);
   }
 
-  private skyline() {
-    const g = group(this.world, 'skyline');
-    const rng = new R(77);
-    // Screen-right and "away from camera" axes for the fixed 45° yaw.
-    const R2 = Math.SQRT1_2;
-    for (let i = 0; i < 52; i++) {
-      const u = -30 + (i / 52) * 60 + rng.range(-1, 1);
-      const side = Math.abs(u) > 12;
-      const v = side ? rng.range(-26, -2) : rng.range(-30, -14);
-      // world = centre + u * right(1,0,-1)/√2 + v * toward-camera(1,0,1)/√2  (v < 0 → behind)
-      const x = 4 + (u + v) * R2;
-      const z = 4 + (v - u) * R2;
-      const w = rng.range(2.2, 4.5);
-      const dpt = rng.range(2.2, 4.5);
-      // Ortho camera: things further back sit higher on screen, so sink them to read as a distant skyline.
-      const top = v * 0.72 + rng.range(-1.5, 3);
-      const h = 40;
-      const col = PALETTE.skyline[i % PALETTE.skyline.length];
-      shape(g, 'box', mat(col, { gloss: 0.1 }), { pos: [x, top - h / 2, z], scale: [w, h, dpt] });
-      if (rng.next() < 0.5) shape(g, 'box', mat(PALETTE.skylineGreen), { pos: [x, top + 0.15, z], scale: [w * 0.9, 0.3, dpt * 0.9] });
-      if (rng.next() < 0.2) {
-        const t = group(g, 'turbine', [x, top, z]);
-        shape(t, 'cylinder', mat('#eef2f4'), { pos: [0, 1.2, 0], scale: [0.12, 2.4, 0.12] });
-        const hub = group(t, 'hub', [0, 2.4, 0.08]);
-        hub.setLocalEulerAngles(0, 45, 0);
-        const spin = group(hub, 'spin');
-        for (let b = 0; b < 3; b++) {
-          const blade = group(spin, 'blade');
-          blade.setLocalEulerAngles(0, 0, b * 120);
-          shape(blade, 'box', mat('#f6f8f9'), { pos: [0, 0.7, 0], scale: [0.12, 1.4, 0.04] });
-        }
-        this.turbines.push(spin);
-      }
-    }
-  }
-
   private building(roof: RooftopData, main: boolean): Restorable {
     const [ox, oy, oz] = roof.origin;
     const top = oy + roof.height;
@@ -146,11 +134,20 @@ export class SceneBuilder {
     const parapetMat = main ? uniqueMat(PALETTE.parapet) : mat(PALETTE.parapet);
     const rng = new R(main ? 11 : 23);
 
-    // Deck & body
+    // Deck & body. The main roof has an L-shaped service ledge behind the garden (back and left).
+    const L = main ? LEDGE : 0;
+    const bx = cx - L / 2;
+    const bz = cz - L / 2;
     shape(g, 'box', mat('#565a5f'), { pos: [cx, top - 0.06, cz], scale: [w + 0.3, 0.12, d + 0.3] });
+    if (main) shape(g, 'box', mat('#8e8b84'), { pos: [bx, top - 0.07, bz], scale: [w + L + 0.3, 0.12, d + L + 0.3] });
     const bodyH = 16;
-    shape(g, 'box', facadeMat, { pos: [cx, top - 0.12 - bodyH / 2, cz], scale: [w + 0.5, bodyH, d + 0.5], shadow: true });
-    shape(g, 'box', parapetMat, { pos: [cx, top - 0.35, cz], scale: [w + 0.8, 0.22, d + 0.8] });
+    shape(g, 'box', facadeMat, { pos: [bx, top - 0.12 - bodyH / 2, bz], scale: [w + L + 0.5, bodyH, d + L + 0.5], shadow: true });
+    shape(g, 'box', parapetMat, { pos: [bx, top - 0.35, bz], scale: [w + L + 0.8, 0.22, d + L + 0.8] });
+    if (main) {
+      // low outer wall around the ledge
+      shape(g, 'box', parapetMat, { pos: [bx, top + 0.1, oz - L - 0.07], scale: [w + L + 0.3, 0.26, 0.14], shadow: true });
+      shape(g, 'box', parapetMat, { pos: [ox - L - 0.07, top + 0.1, bz], scale: [0.14, 0.26, d + L + 0.3], shadow: true });
+    }
 
     // Parapets: solid wall at the back, low rail at the front so tiles stay visible.
     const ph = 0.32;
@@ -170,8 +167,8 @@ export class SceneBuilder {
     const rubble: pc.Entity[] = [];
     const boards: pc.Entity[] = [];
     const faces: { along: 'x' | 'z'; fixed: number; len: number; start: number }[] = [
-      { along: 'x', fixed: oz + d + 0.26, len: w, start: ox },
-      { along: 'z', fixed: ox + w + 0.26, len: d, start: oz },
+      { along: 'x', fixed: oz + d + 0.26, len: w + (main ? LEDGE : 0), start: ox - (main ? LEDGE : 0) },
+      { along: 'z', fixed: ox + w + 0.26, len: d + (main ? LEDGE : 0), start: oz - (main ? LEDGE : 0) },
     ];
     for (const f of faces) {
       for (let row = 0; row < 6; row++) {
@@ -189,12 +186,12 @@ export class SceneBuilder {
           if (main && row < 3) {
             const pp: [number, number, number] = f.along === 'x' ? [a, y - 0.62, f.fixed + 0.12] : [f.fixed + 0.12, y - 0.62, a];
             const planter = group(g, 'planter', pp);
-            shape(planter, 'box', mat(PALETTE.white), { scale: f.along === 'x' ? [1.0, 0.16, 0.24] : [0.24, 0.16, 1.0] });
+            vshape(planter, 'box', PALETTE.white, { scale: f.along === 'x' ? [1.0, 0.16, 0.24] : [0.24, 0.16, 1.0] });
             for (let k = 0; k < 4; k++) {
               const off = -0.36 + k * 0.24;
               const fp: [number, number, number] = f.along === 'x' ? [off, 0.14, 0] : [0, 0.14, off];
-              shape(planter, 'sphere', mat(PALETTE.flower[(k + row + i) % PALETTE.flower.length]), { pos: fp, scale: 0.13 });
-              shape(planter, 'sphere', mat(PALETTE.shrub[k % 3]), { pos: [fp[0] * 0.9, 0.07, fp[2] * 0.9], scale: [0.18, 0.12, 0.18] });
+              vshape(planter, 'sphere', PALETTE.flower[(k + row + i) % PALETTE.flower.length], { pos: fp, scale: 0.13 });
+              vshape(planter, 'sphere', PALETTE.shrub[k % 3], { pos: [fp[0] * 0.9, 0.07, fp[2] * 0.9], scale: [0.18, 0.12, 0.18] });
             }
             planter.setLocalScale(0, 0, 0);
             planters.push(planter);
@@ -208,10 +205,10 @@ export class SceneBuilder {
           const anchor: [number, number, number] = f.along === 'x' ? [a, top - 0.3, f.fixed + 0.05] : [f.fixed + 0.05, top - 0.3, a];
           const vine = group(g, 'vine', anchor);
           const len = rng.range(2.5, 6.5);
-          shape(vine, 'box', mat(PALETTE.shrub[i % 3]), { pos: [0, -len / 2, 0], scale: f.along === 'x' ? [0.12, len, 0.05] : [0.05, len, 0.12] });
+          vshape(vine, 'box', PALETTE.shrub[i % 3], { pos: [0, -len / 2, 0], scale: f.along === 'x' ? [0.12, len, 0.05] : [0.05, len, 0.12] });
           for (let k = 0; k < len / 0.6; k++) {
             const lp: [number, number, number] = f.along === 'x' ? [rng.range(-0.12, 0.12), -k * 0.6 - 0.3, 0.04] : [0.04, -k * 0.6 - 0.3, rng.range(-0.12, 0.12)];
-            shape(vine, 'sphere', mat(k % 4 === 3 ? PALETTE.pink : PALETTE.grassTuft[k % 3]), { pos: lp, scale: [0.2, 0.16, 0.2] });
+            vshape(vine, 'sphere', k % 4 === 3 ? PALETTE.pink : PALETTE.grassTuft[k % 3], { pos: lp, scale: [0.2, 0.16, 0.2] });
           }
           vine.setLocalScale(1, 0, 1);
           vines.push(vine);
@@ -221,8 +218,8 @@ export class SceneBuilder {
           const anchor: [number, number, number] = f.along === 'x' ? [a, top - 0.5, f.fixed + 0.1] : [f.fixed + 0.1, top - 0.5, a];
           const banner = group(g, 'banner', anchor);
           const col = i === 0 ? '#ffd23f' : '#6cc24a';
-          shape(banner, 'box', mat(col), { pos: [0, -1.1, 0], scale: f.along === 'x' ? [0.7, 2.2, 0.03] : [0.03, 2.2, 0.7] });
-          shape(banner, 'sphere', mat(PALETTE.white), { pos: [0, -1.0, f.along === 'x' ? 0.03 : 0], scale: [0.35, 0.35, 0.05] });
+          vshape(banner, 'box', col, { pos: [0, -1.1, 0], scale: f.along === 'x' ? [0.7, 2.2, 0.03] : [0.03, 2.2, 0.7] });
+          vshape(banner, 'sphere', PALETTE.white, { pos: [0, -1.0, f.along === 'x' ? 0.03 : 0], scale: [0.35, 0.35, 0.05] });
           banner.setLocalScale(1, 0, 1);
           banners.push(banner);
         }
@@ -239,8 +236,8 @@ export class SceneBuilder {
         shape(v, 'cylinder', mat(PALETTE.rust), { pos: [0, 0.5, 0], scale: [0.36, 0.25, 0.36], shadow: true });
         shape(v, 'cylinder', mat('#4d4540'), { pos: [0, 0.63, 0], scale: [0.42, 0.04, 0.42] });
       }
-      // Rain barrel on the back parapet
-      const rb = group(g, 'rainBarrel', [ox + 6.0, top, oz + 0.25]);
+      // Rain barrel on the service ledge
+      const rb = group(g, 'rainBarrel', [ox + 3.1, top, oz - 0.85]);
       shape(rb, 'cylinder', mat('#6d8fa3'), { pos: [0, 0.28, 0], scale: [0.36, 0.5, 0.36], shadow: true });
       shape(rb, 'cylinder', mat(PALETTE.water, { gloss: 0.8 }), { pos: [0, 0.54, 0], scale: [0.3, 0.02, 0.3] });
       // Rubble chunks at the foot of the parapet
@@ -309,6 +306,37 @@ export class SceneBuilder {
     g.enabled = false;
   }
 
+  /**
+   * Visual progress stages from restored coverage: 1 = 25%, 2 = 50%, 3 = 75% (4 = Core awake).
+   * Stage 3 brightens the facade part-way and fills the first balconies and vines.
+   */
+  setStage(stage: number, instant: boolean): boolean {
+    if (stage === this.stage) return false;
+    const prev = this.stage;
+    this.stage = stage;
+    const grew = this.scenery.setStage(stage, instant);
+    const r = this.r1;
+    if (stage >= 3 && prev < 3 && stage < 4) {
+      const from = r.facadeMat.diffuse.clone();
+      const to = new pc.Color().lerp(color(PALETTE.facadeGrey), color(PALETTE.whiteWarm), 0.45);
+      this.tweens.add(instant ? 0.001 : 2, (k) => {
+        r.facadeMat.diffuse = new pc.Color().lerp(from, to, k);
+        r.facadeMat.update();
+      });
+      const half = (arr: pc.Entity[]) => arr.filter((_, i) => i % 2 === 0);
+      half(r.boards).forEach((b) => (b.enabled = false));
+      half(r.vines).forEach((v, i) => {
+        v.enabled = true;
+        this.tweens.add(instant ? 0.001 : 1.2, (k) => v.setLocalScale(1, Math.max(0.0001, k * 0.6), 1), { delay: instant ? 0 : i * 0.1 });
+      });
+      half(r.planters).forEach((p, i) => {
+        p.enabled = true;
+        this.tweens.add(instant ? 0.001 : 0.4, (k) => p.setLocalScale(k, k, k), { delay: instant ? 0 : 0.5 + i * 0.04, ease: ease.outBack });
+      });
+    }
+    return grew;
+  }
+
   update(dt: number) {
     for (const t of this.turbines) t.rotateLocal(0, 0, dt * 40);
   }
@@ -316,7 +344,7 @@ export class SceneBuilder {
   /** Building-scale transformation. `instant` applies the end state (used on load and on skip). */
   restoreBuilding(instant: boolean, onCamera?: () => void): number {
     const r = this.r1;
-    const fromF = color(PALETTE.facadeGrey);
+    const fromF = r.facadeMat.diffuse.clone(); // stage 3 may have brightened it already
     const toF = color(PALETTE.whiteWarm);
     const fromW = color(PALETTE.window);
     const toW = color(PALETTE.windowLit);

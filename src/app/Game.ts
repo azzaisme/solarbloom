@@ -112,6 +112,8 @@ export class Game {
     this.scene = new SceneBuilder(this.app, this.tweens);
     this.scene.build(state.rooftops);
     this.camera = new CameraController(this.app, this.tweens);
+    this.app.scene.fog.start = this.camera.fogDepth(46);
+    this.app.scene.fog.end = this.camera.fogDepth(84);
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.grid.build();
     this.machines = new MachineVisuals(this.sim, this.scene.world, this.tweens);
@@ -121,7 +123,7 @@ export class Game {
     this.drones.sync();
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
-    this.butterflies = new Butterflies(this.sim, this.scene.world);
+    this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
     this.tileFx = new TileFx(this.sim, this.scene.world, this.app.graphicsDevice);
     this.machines.onActivated = (_m, at) => {
       this.vfx.ring(at, PALETTE.gold, 1.3, 0.55);
@@ -817,6 +819,25 @@ export class Game {
   }
 
   private lastCatPos?: pc.Vec3;
+  private stage = -1;
+
+  /** Rooftop transformation stages from restored coverage (25/50/75%), plus 4 once the Core is awake. */
+  private updateStage(initial: boolean) {
+    const p = this.sim.progression;
+    const frac = p.restoredCount('r1') / Math.max(1, p.restorableCount('r1'));
+    const stage = this.sim.state.progression.coreActivated ? 4 : frac >= 0.75 ? 3 : frac >= 0.5 ? 2 : frac >= 0.25 ? 1 : 0;
+    if (stage === this.stage) return;
+    const first = this.stage < 0;
+    this.stage = stage;
+    const grew = this.scene.setStage(stage, initial || first);
+    this.grid.stage = stage;
+    this.grid.refreshAll();
+    if (grew && stage < 4) {
+      const msg = ['', '🌱 25% — moss and wildflowers creep over the ledge', '☀️ 50% — the solar array unfolds and planters bloom', '🏛️ 75% — the building brightens and balconies fill with green'][stage];
+      this.hud.toast(`${msg}`, 'gold', 4);
+      this.sfx.chainEnd(5);
+    }
+  }
 
   /** World position of a tile or machine id (chain sources/targets can be either). */
   private posOf(id: string | undefined): pc.Vec3 | undefined {
@@ -956,6 +977,7 @@ export class Game {
     this.butterflies.update(dt);
     this.tileFx.update(dt);
     this.vfx.update(dt);
+    this.updateStage(false);
     // First-tile beacon until the player restores something.
     if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic) {
       const tiles = this.sim.grid.roof('r1')!.tiles;

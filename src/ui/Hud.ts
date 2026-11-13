@@ -499,7 +499,8 @@ export class Hud {
       const c = s.econ.cap(k);
       this.set(`v-${k}`, $(row, '.n'), 'text', String(Math.floor(v)));
       this.set(`c-${k}`, $(row, '.c'), 'text', String(Math.floor(c)));
-      this.set(`r-${k}`, $(row, '.rate'), 'text', `+${rates[k] < 10 ? rates[k].toFixed(1) : Math.round(rates[k])}/s`);
+      const perMin = rates[k] * 60;
+      this.set(`r-${k}`, $(row, '.rate'), 'text', `+${perMin < 10 ? perMin.toFixed(1) : Math.round(perMin)}/min`);
       this.set(`b-${k}`, $(row, '.bar i'), 'width', `${Math.round((v / c) * 100)}%`);
       this.set(`f-${k}`, row, 'cls', s.econ.isFull(k) ? '1' : '0', 'full');
     }

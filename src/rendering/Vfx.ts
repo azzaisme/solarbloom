@@ -1,9 +1,13 @@
 import * as pc from 'playcanvas';
-import { mat, PALETTE, uniqueMat } from './Materials';
+import { PALETTE, uniqueMat } from './Materials';
 import { shape } from './Shapes';
 
 interface Particle {
-  e: pc.Entity;
+  x: number;
+  y: number;
+  z: number;
+  rot: number;
+  color: [number, number, number];
   vx: number;
   vy: number;
   vz: number;
@@ -33,9 +37,21 @@ interface Arc {
   active: boolean;
 }
 
-/** Pooled effects: expanding rings, leaf/confetti bursts, chain arcs. */
+// Octahedron: 6 vertices, 8 faces. Every particle is one of these inside a single shared mesh.
+const OCT = [
+  [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1],
+];
+const OCT_IDX = [0, 2, 4, 2, 1, 4, 1, 3, 4, 3, 0, 4, 2, 0, 5, 1, 2, 5, 3, 1, 5, 0, 3, 5];
+const MAX_PARTICLES = 240;
+
+/** Pooled effects: expanding rings, leaf/confetti bursts (one draw call for all of them), chain arcs. */
 export class Vfx {
   private particles: Particle[] = [];
+  private pMesh: pc.Mesh;
+  private pPos: Float32Array;
+  private pNrm: Float32Array;
+  private pCol: Uint8Array;
+  private anyActive = false;
   private rings: Ring[] = [];
   private arcs: Arc[] = [];
   private root: pc.Entity;
@@ -44,12 +60,37 @@ export class Vfx {
   constructor(parent: pc.Entity, device: pc.GraphicsDevice) {
     this.root = new pc.Entity('vfx');
     parent.addChild(this.root);
-    const leafMats = [...PALETTE.grassTuft, ...PALETTE.flower, PALETTE.gold].map((c) => mat(c));
-    for (let i = 0; i < 220; i++) {
-      const e = shape(this.root, i % 3 === 0 ? 'sphere' : 'box', leafMats[i % leafMats.length], { scale: 0.05 });
-      e.enabled = false;
-      this.particles.push({ e, vx: 0, vy: 0, vz: 0, life: 0, max: 1, size: 0.05, spin: 0, gravity: 4, active: false });
-    }
+    const colors = [...PALETTE.grassTuft, ...PALETTE.flower, PALETTE.gold].map((h) => {
+      const c = new pc.Color();
+      c.fromString(h);
+      return [c.r, c.g, c.b].map((v) => Math.round(Math.pow(v, 2.2) * 255)) as [number, number, number];
+    });
+    for (let i = 0; i < MAX_PARTICLES; i++)
+      this.particles.push({ x: 0, y: 0, z: 0, rot: 0, color: colors[i % colors.length], vx: 0, vy: 0, vz: 0, life: 0, max: 1, size: 0.05, spin: 0, gravity: 4, active: false });
+    const n = MAX_PARTICLES * 6;
+    this.pPos = new Float32Array(n * 3);
+    this.pNrm = new Float32Array(n * 3);
+    this.pCol = new Uint8Array(n * 4);
+    const idx: number[] = [];
+    for (let i = 0; i < MAX_PARTICLES; i++) for (const k of OCT_IDX) idx.push(i * 6 + k);
+    this.pMesh = new pc.Mesh(device);
+    this.pMesh.setPositions(this.pPos);
+    this.pMesh.setNormals(this.pNrm);
+    this.pMesh.setColors32(this.pCol);
+    this.pMesh.setIndices(idx);
+    this.pMesh.update();
+    this.pMesh.incRefCount();
+    const pm = new pc.StandardMaterial();
+    pm.diffuseVertexColor = true;
+    pm.useMetalness = true;
+    pm.metalness = 0;
+    pm.gloss = 0.4;
+    pm.emissive = new pc.Color(0.15, 0.15, 0.12);
+    pm.update();
+    const pe = new pc.Entity('particles');
+    pe.addComponent('render', { meshInstances: [new pc.MeshInstance(this.pMesh, pm)], castShadows: false, receiveShadows: false });
+    pe.render!.meshInstances[0].cull = false;
+    this.root.addChild(pe);
     // Thin unit ring (radius 1) so scaling never thickens the tube.
     const ringMesh = pc.Mesh.fromGeometry(device, new pc.TorusGeometry({ tubeRadius: 0.035, ringRadius: 1, segments: 40, sides: 6 }));
     ringMesh.incRefCount();
@@ -104,9 +145,10 @@ export class Vfx {
       p.size = (opts.size ?? 0.06) * (0.6 + Math.random() * 0.8);
       p.spin = (Math.random() - 0.5) * 720;
       p.gravity = opts.gravity ?? 5;
-      p.e.enabled = true;
-      p.e.setPosition(pos.x + (Math.random() - 0.5) * 0.3, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 0.3);
-      p.e.setEulerAngles(Math.random() * 360, Math.random() * 360, 0);
+      p.x = pos.x + (Math.random() - 0.5) * 0.3;
+      p.y = pos.y + 0.1;
+      p.z = pos.z + (Math.random() - 0.5) * 0.3;
+      p.rot = Math.random() * 6.28;
     }
   }
 
@@ -123,8 +165,9 @@ export class Vfx {
     p.size = 0.05;
     p.spin = 90;
     p.gravity = 0;
-    p.e.enabled = true;
-    p.e.setPosition(pos.x, pos.y, pos.z);
+    p.x = pos.x;
+    p.y = pos.y;
+    p.z = pos.z;
   }
 
   /** A short glowing streak between two tiles: explains a chain's cause → effect. */
@@ -143,23 +186,61 @@ export class Vfx {
     s.e.setLocalScale(0.07, 0.04, len);
   }
 
-  update(dt: number) {
-    for (const p of this.particles) {
-      if (!p.active) continue;
-      p.life += dt;
-      if (p.life >= p.max) {
-        p.active = false;
-        p.e.enabled = false;
-        continue;
+  /** Simulates all particles and rewrites the one shared mesh. */
+  private updateParticles(dt: number) {
+    let any = false;
+    const P = this.pPos;
+    const N = this.pNrm;
+    const C = this.pCol;
+    this.particles.forEach((p, i) => {
+      const base = i * 6;
+      let s = 0;
+      if (p.active) {
+        p.life += dt;
+        if (p.life >= p.max) p.active = false;
+        else {
+          any = true;
+          p.vy -= p.gravity * dt;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.z += p.vz * dt;
+          p.rot += (p.spin * Math.PI * dt) / 180;
+          const k = 1 - p.life / p.max;
+          s = p.size * Math.min(1, k * 3) * 0.6;
+        }
       }
-      p.vy -= p.gravity * dt;
-      const pos = p.e.getPosition();
-      p.e.setPosition(pos.x + p.vx * dt, pos.y + p.vy * dt, pos.z + p.vz * dt);
-      p.e.rotateLocal(p.spin * dt, p.spin * dt * 0.5, 0);
-      const k = 1 - p.life / p.max;
-      const s = p.size * Math.min(1, k * 3);
-      p.e.setLocalScale(s, s * 0.5, s);
+      const c = Math.cos(p.rot);
+      const sn = Math.sin(p.rot);
+      for (let v = 0; v < 6; v++) {
+        const [ox, oy, oz] = OCT[v];
+        // spin around Y, flatten a little so they read as leaves/petals
+        const rx = ox * c - oz * sn;
+        const rz = ox * sn + oz * c;
+        const j = (base + v) * 3;
+        P[j] = p.x + rx * s;
+        P[j + 1] = p.y + oy * s * 0.5;
+        P[j + 2] = p.z + rz * s;
+        N[j] = rx;
+        N[j + 1] = oy;
+        N[j + 2] = rz;
+        const q = (base + v) * 4;
+        C[q] = p.color[0];
+        C[q + 1] = p.color[1];
+        C[q + 2] = p.color[2];
+        C[q + 3] = 255;
+      }
+    });
+    if (any || this.anyActive) {
+      this.pMesh.setPositions(P);
+      this.pMesh.setNormals(N);
+      this.pMesh.setColors32(C);
+      this.pMesh.update(pc.PRIMITIVE_TRIANGLES, false);
     }
+    this.anyActive = any;
+  }
+
+  update(dt: number) {
+    this.updateParticles(dt);
     for (const r of this.rings) {
       if (!r.active) continue;
       r.life += dt;
