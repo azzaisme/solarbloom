@@ -220,6 +220,18 @@ export class GridRenderer {
     }
   }
 
+  /** Gentle "no" wiggle when an action can't happen on this tile. */
+  shake(t: TileData) {
+    const v = this.views.get(t.id);
+    if (!v) return;
+    const [x, y, z] = this.sim.grid.tileWorld(t);
+    this.tweens.cancel(v.root);
+    this.tweens.add(0.35, (k) => {
+      const a = this.reducedMotion ? 0 : Math.sin(k * Math.PI * 6) * 0.06 * (1 - k);
+      v.root.setPosition(x + a, y, z - a);
+    }, { owner: v.root, ease: ease.linear, done: () => v.root.setPosition(x, y, z) });
+  }
+
   refreshAll() {
     for (const v of this.views.values()) this.refresh(v.tile, false);
   }

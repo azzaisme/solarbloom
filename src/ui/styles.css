@@ -234,3 +234,15 @@ button:focus-visible { outline: 3px solid #2f7de1; outline-offset: 2px; }
 #obj.nudge { animation: nudge 1.6s ease-in-out infinite; }
 #obj .next { font-size: 12px; font-weight: 800; color: #2c6e49; margin: -2px 0 6px; display: none; }
 @media (max-width: 760px) { #obj .next { display: block; } }
+
+/* Chain counter sits right under the resources */
+#combo { top: calc(12px + var(--safe-t) + 178px); left: calc(14px + var(--safe-l)); }
+#combo .big { font-size: 26px; transform-origin: left center; }
+#combo .big.tier3 { font-size: 32px; }
+#combo .total { font-size: 13px; font-weight: 900; color: #2c6e49; background: var(--panel); border-radius: 999px; padding: 2px 10px; width: max-content; margin-top: 2px; opacity: 0; transition: opacity .3s; }
+#combo .total.on { opacity: 1; }
+@media (max-width: 760px) {
+  #combo { top: calc(92px + var(--safe-t)); left: 8px; }
+  #combo .big { font-size: 20px; }
+  #combo .big.tier3 { font-size: 24px; }
+}

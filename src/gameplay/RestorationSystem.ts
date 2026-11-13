@@ -132,10 +132,11 @@ export class RestorationSystem {
       if (nb.pollution <= 0) {
         nb.ground = 'prepared';
         this.sim.bus.emit('tile.prepared', { tile: nb });
-      }
+      } else this.sim.bus.emit('tile.softened', { tile: nb });
     }
     this.sim.production.markDirty();
     const id = this.sim.chains.onRestored(t, source, chainId);
+    this.sim.chains.addReward(id, biomass);
     this.sim.bus.emit('tile.restored', { tile: t, source, chainId: id, biomass });
     return id;
   }

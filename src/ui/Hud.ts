@@ -102,7 +102,7 @@ export class Hud {
           <button class="chip" id="objToggle" aria-label="Toggle objective list">📋</button>
         </div>
       </div>
-      <div id="combo"><div class="big" id="comboBig">BLOOM ×0</div><div id="feed"></div></div>
+      <div id="combo"><div class="big" id="comboBig">BLOOM CHAIN ×0</div><div class="total" id="comboTotal"></div><div id="feed"></div></div>
       <div id="hotbar" class="panel">${slots}</div>
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
       <div id="toasts"></div>
@@ -124,7 +124,7 @@ export class Hud {
         <h2>Settings</h2>
         <label>Sound effects <input type="checkbox" data-set="sound"></label>
         <label>Music <input type="checkbox" data-set="music"></label>
-        <label>Reduced motion <input type="checkbox" data-set="reducedMotion"></label>
+        <label>Reduced motion &amp; effects <input type="checkbox" data-set="reducedMotion"></label>
         <label>Tutorial hints <input type="checkbox" data-set="hints"></label>
         <label>Debug / FPS (F3) <input type="checkbox" data-set="debug"></label>
         <div class="stats" id="statsBox"></div>
@@ -408,16 +408,19 @@ export class Hud {
     }, 2600);
   }
 
-  combo(n: number) {
+  combo(n: number, total?: string) {
     const el = $(this.root, '#comboBig');
-    el.textContent = `BLOOM ×${n}`;
+    el.textContent = `BLOOM CHAIN ×${n}`;
     el.classList.add('on');
     el.classList.toggle('tier2', n >= 5 && n < 10);
     el.classList.toggle('tier3', n >= 10);
     el.classList.remove('pop');
     void el.offsetWidth;
     el.classList.add('pop');
-    this.comboTimer = 2.2;
+    const tot = $(this.root, '#comboTotal');
+    tot.textContent = total ?? '';
+    tot.classList.toggle('on', !!total);
+    this.comboTimer = total ? 3.2 : 2.2;
   }
 
   cinematic(on: boolean, title = '') {
@@ -548,7 +551,10 @@ export class Hud {
 
     if (this.comboTimer > 0) {
       this.comboTimer -= dt;
-      if (this.comboTimer <= 0) $(this.root, '#comboBig').classList.remove('on');
+      if (this.comboTimer <= 0) {
+        $(this.root, '#comboBig').classList.remove('on');
+        $(this.root, '#comboTotal').classList.remove('on');
+      }
     }
     if (this.failTimer > 0) {
       this.failTimer -= dt;

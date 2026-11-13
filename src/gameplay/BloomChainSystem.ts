@@ -14,6 +14,7 @@ interface ChainRun {
   mode: 'normal' | 'mega';
   budget: number; // max secondary restorations (mega mode)
   announced: boolean;
+  biomass: number; // everything this chain earned (tiles + bonus), for the end-of-chain total
 }
 
 interface QueuedStep {
@@ -59,6 +60,7 @@ export class BloomChainSystem {
       mode,
       budget,
       announced: false,
+      biomass: 0,
     };
     this.runs.set(run.id, run);
     return run;
@@ -73,6 +75,11 @@ export class BloomChainSystem {
     this.boostAdjacentSolar(tile);
     this.expand(run, tile);
     return run.id;
+  }
+
+  addReward(chainId: number, biomass: number) {
+    const run = this.runs.get(chainId);
+    if (run) run.biomass += biomass;
   }
 
   /** Lucky Cat Mega Bloom: a free chain that may break through concrete too. */
@@ -156,7 +163,7 @@ export class BloomChainSystem {
       const got = bonus ? s.econ.add('biomass', bonus) : 0;
       s.state.stats.chains++;
       s.state.stats.maxCombo = Math.max(s.state.stats.maxCombo, run.combo);
-      s.bus.emit('chain.ended', { chainId: run.id, combo: run.combo, bonus: got });
+      s.bus.emit('chain.ended', { chainId: run.id, combo: run.combo, bonus: got, total: run.biomass + got });
       if (got > 0) s.bus.emit('resource.gain', { kind: 'biomass', amount: got, reason: 'chain' });
     }
   }

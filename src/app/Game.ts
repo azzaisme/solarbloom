@@ -19,6 +19,7 @@ import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { initLowPoly } from '../rendering/Shapes';
+import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
 import { FlyText } from '../ui/Fly';
@@ -61,6 +62,7 @@ export class Game {
   readonly drones: DroneVisuals;
   readonly cat: CatVisuals;
   readonly butterflies: Butterflies;
+  readonly tileFx: TileFx;
   readonly vfx: Vfx;
   readonly overlays: Overlays;
   readonly hud: Hud;
@@ -118,6 +120,7 @@ export class Game {
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.butterflies = new Butterflies(this.sim, this.scene.world);
+    this.tileFx = new TileFx(this.sim, this.scene.world, this.app.graphicsDevice);
     this.machines.onActivated = (_m, at) => {
       this.vfx.ring(at, PALETTE.gold, 1.3, 0.55);
       this.vfx.burst(new pc.Vec3(at.x, at.y + 0.5, at.z), 10, { up: 2.5, size: 0.05 });
@@ -199,7 +202,7 @@ export class Game {
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
     const rm = s.reducedMotion;
-    this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
+    this.tileFx.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     this.vfx.density = rm ? 0.35 : 1;
     document.body.classList.toggle('reduced', rm);
     this.hud.settings = s;
@@ -582,8 +585,10 @@ export class Game {
       for (const n of s.grid.neighbors(tile)) this.grid.refresh(n, true); // neighbours may have softened
       if (this.selected) this.inspectTimer = 0;
     });
+    b.on('tile.softened', ({ tile }) => this.tileFx.flash(tile, '#7fcf5a', 0.22, 0.5, 0.1));
     b.on('tile.prepared', ({ tile }) => {
       this.grid.refresh(tile, true);
+      this.tileFx.flash(tile, '#6cc24a', 0.35, 0.7, 0.1);
       this.vfx.burst(this.tileVec(tile), 3, { up: 1, size: 0.04, speed: 0.6 });
     });
     b.on('tile.nurtured', ({ tile, level }) => {
@@ -634,16 +639,23 @@ export class Game {
       };
       if (first && msg[machine.type]) this.hud.toast(msg[machine.type]!, 'gold', 4);
     });
+    b.on('chain.started', ({ chainId, originTileId }) => {
+      const o = s.grid.byTileId(originTileId);
+      if (o) this.tileFx.hold(`chain${chainId}`, o);
+    });
     b.on('chain.step', ({ tileId, fromTileId, combo }) => {
       const a = s.grid.byTileId(fromTileId);
       const t = s.grid.byTileId(tileId);
+      // Ordered waves: each step glows, shifting green → gold → pink as the chain grows.
+      if (t) this.tileFx.flash(t, combo >= 10 ? '#ff5fb8' : combo >= 5 ? '#ffb81f' : '#38d94a', 0.45, 0.9);
       if (a && t) this.vfx.arc(this.tileVec(a), this.tileVec(t), combo >= 5 ? PALETTE.pink : PALETTE.flowerCore, 0.5);
       if (combo >= 2) this.hud.combo(combo);
       this.sfx.bloom(combo);
     });
-    b.on('chain.ended', ({ combo, bonus }) => {
+    b.on('chain.ended', ({ chainId, combo, bonus, total }) => {
+      this.tileFx.release(`chain${chainId}`);
       if (combo < 2) return;
-      this.hud.combo(combo);
+      this.hud.combo(combo, `+${Math.round(total)}🌿 earned${bonus ? ` · bonus +${bonus}` : ''}`);
       this.hud.feed(`🌸 Bloom chain ×${combo}${bonus ? ` · +${bonus}🌿 bonus` : ''}`);
       this.sfx.chainEnd(combo);
       if (combo >= 5) {
@@ -661,7 +673,9 @@ export class Game {
         this.hud.feed('☀️ Blooming neighbour — solar ×2 for 5s');
       }
     });
-    b.on('action.failed', ({ reason }) => {
+    b.on('action.failed', ({ reason, tileId }) => {
+      const ft = tileId ? s.grid.byTileId(tileId) : undefined;
+      if (ft) this.grid.shake(ft);
       this.hud.showFail(reason, this.pointer.x, this.pointer.y);
       this.sfx.error();
       if (reason.includes('⚡')) {
@@ -808,6 +822,7 @@ export class Game {
     this.drones.update(dt);
     this.cat.update(dt);
     this.butterflies.update(dt);
+    this.tileFx.update(dt);
     this.vfx.update(dt);
     // First-tile beacon until the player restores something.
     if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic) {
