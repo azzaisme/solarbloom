@@ -54,7 +54,7 @@ export const ROOFTOPS: RooftopDef[] = [
     width: 6,
     depth: 6,
     height: 1.2,
-    origin: [11.5, 0, 1],
+    origin: [11, 0, -4.5],
     unlocked: false,
     preview: true,
     blocked: [],
