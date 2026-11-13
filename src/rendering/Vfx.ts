@@ -110,6 +110,23 @@ export class Vfx {
     }
   }
 
+  /** One small, slow, fading particle (drone flight trails). */
+  trail(pos: pc.Vec3) {
+    const p = this.particles.find((x) => !x.active);
+    if (!p) return;
+    p.active = true;
+    p.vx = (Math.random() - 0.5) * 0.2;
+    p.vz = (Math.random() - 0.5) * 0.2;
+    p.vy = -0.15;
+    p.life = 0;
+    p.max = 0.5;
+    p.size = 0.05;
+    p.spin = 90;
+    p.gravity = 0;
+    p.e.enabled = true;
+    p.e.setPosition(pos.x, pos.y, pos.z);
+  }
+
   /** A short glowing streak between two tiles: explains a chain's cause → effect. */
   arc(a: pc.Vec3, b: pc.Vec3, hex: string = PALETTE.flowerCore, dur = 0.5) {
     const s = this.arcs.find((x) => !x.active) ?? this.arcs[0];

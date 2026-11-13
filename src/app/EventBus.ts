@@ -16,7 +16,7 @@ export interface GameEvents {
   'chain.ended': { chainId: number; combo: number; bonus: number; total: number; milestonePct: number; energy: number };
   'tree.discharged': { machineId: string };
   'solar.boost': { machineId: string };
-  'pulse.fired': { tileId: string; extra: string[] };
+  'pulse.fired': { tileId: string; extra: string[]; overcharged: boolean };
   'action.failed': { reason: string; tileId?: string };
   'upgrade.purchased': { id: string; level: number };
   'drone.spawned': { droneId: string };

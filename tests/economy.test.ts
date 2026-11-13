@@ -87,7 +87,27 @@ describe('economy & restoration', () => {
     const e0 = sim.state.resources.energy;
     sim.restoration.pulse(t.id);
     sim.advance(1.5);
-    expect(sim.state.stats.tilesRestored).toBe(2);
+    expect(sim.state.stats.tilesRestored).toBe(3); // Wide Pulse I: target + 2 neighbours
     expect(sim.state.resources.energy).toBeGreaterThan(e0 - TUNING.pulse.polluted.energy - 0.01);
+  });
+
+  it('Overcharge: every Nth manual pulse restores everything within 2 tiles', () => {
+    const sim = makeSim();
+    sim.state.upgrades.overcharge = 1; // every 6th pulse
+    const every = sim.upgrades.overchargeEvery;
+    const fired: boolean[] = [];
+    sim.bus.on('pulse.fired', (e) => fired.push(e.overcharged));
+    const ids = ['r1:2:3', 'r1:6:2', 'r1:2:6', 'r1:6:6', 'r1:4:7', 'r1:4:4'];
+    for (const id of ids.slice(0, every)) {
+      sim.state.resources.energy = 50;
+      sim.state.resources.water = 30;
+      expect(sim.restoration.pulse(id)).toBe(true);
+    }
+    expect(fired.filter(Boolean)).toHaveLength(1);
+    expect(fired[every - 1]).toBe(true);
+    sim.advance(2);
+    // the overcharged pulse restored its whole radius-2 diamond (where eligible)
+    const around = sim.grid.roof('r1')!.tiles.filter((t) => Math.abs(t.x - 4) + Math.abs(t.z - 4) <= 2 && !t.blocked && !sim.isCoreTile(t));
+    expect(around.every((t) => t.ground === 'restored')).toBe(true);
   });
 });

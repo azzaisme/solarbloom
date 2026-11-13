@@ -68,6 +68,13 @@ export class UpgradeSystem {
   get droneFlyMult() {
     return 1 + 0.3 * this.level('droneSpeed');
   }
+  get droneRadius() {
+    return TUNING.drone.hubRadius + this.level('droneRadius');
+  }
+  get overchargeEvery() {
+    const l = this.level('overcharge');
+    return l > 0 ? 7 - l : 0;
+  }
   get waterBloom() {
     return this.level('waterBloom');
   }

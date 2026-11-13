@@ -117,6 +117,7 @@ export class Game {
     this.machines = new MachineVisuals(this.sim, this.scene.world, this.tweens);
     this.machines.buildAll();
     this.drones = new DroneVisuals(this.sim, this.scene.world, this.tweens);
+    this.drones.onTrail = (p) => this.vfx.trail(p);
     this.drones.sync();
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
@@ -292,6 +293,18 @@ export class Game {
     return best;
   }
 
+  /** Screen-space hit test for drones (generous target, like the cat). Returns the drone id. */
+  private droneHit(x: number, y: number): string | undefined {
+    const r = Math.max(26, 0.35 / this.camera.worldPerPixel());
+    for (const d of this.sim.state.drones) {
+      const p = this.drones.worldPos(d.id);
+      if (!p) continue;
+      const sp = this.camera.toScreen(p);
+      if (Math.hypot(sp.x - x, sp.y - y) <= r) return d.id;
+    }
+    return undefined;
+  }
+
   private catHit(x: number, y: number): boolean {
     const p = this.cat.targetWorld();
     if (!p) return false;
@@ -337,6 +350,13 @@ export class Game {
       this.overlays.hideFrame();
       this.overlays.hideGhost();
       this.hud.showTip(x, y, `<b>🐱 …is that a cat?</b>Click it!`);
+      document.body.style.cursor = 'pointer';
+      return;
+    }
+    if (this.droneHit(x, y)) {
+      this.overlays.hideFrame();
+      this.overlays.hideGhost();
+      this.hud.showTip(x, y, `<b>🛸 Drone</b>Click to see its work area and current job`);
       document.body.style.cursor = 'pointer';
       return;
     }
@@ -422,6 +442,13 @@ export class Game {
       this.sim.cat.claim();
       return;
     }
+    const droneId = this.droneHit(x, y);
+    if (droneId) {
+      const d = this.sim.state.drones.find((q) => q.id === droneId);
+      if (d) this.select(d.hubId);
+      this.sfx.drone();
+      return;
+    }
     const p = this.pick(x, y);
     if (!p || !p.tile) {
       this.select(undefined);
@@ -471,7 +498,7 @@ export class Game {
       case 'pollinator':
         return g.tilesNear(m, this.sim.upgrades.pollinatorReach);
       case 'droneHub':
-        return g.tilesNear(m, TUNING.drone.hubRadius);
+        return g.tilesNear(m, this.sim.upgrades.droneRadius);
       case 'motherTree':
         return g.tilesNear(m, this.sim.upgrades.treeRadius);
       default:
@@ -479,8 +506,24 @@ export class Game {
     }
   }
 
+  private taskKeys: string[] = [];
+  /** While a Drone Hub is selected, outline each drone's current target tile. */
+  private showDroneTasks() {
+    const m = this.sim.machine(this.selected);
+    const targets = m?.type === 'droneHub' ? this.sim.state.drones.filter((d) => d.hubId === m.id && d.targetTileId).map((d) => d.targetTileId!) : [];
+    const keys = targets.map((t) => `task:${t}`);
+    if (keys.join() === this.taskKeys.join()) return;
+    for (const k of this.taskKeys) this.tileFx.release(k);
+    this.taskKeys = keys;
+    for (const t of targets) {
+      const tile = this.sim.grid.byTileId(t);
+      if (tile) this.tileFx.hold(`task:${t}`, tile, '#6ff3ff');
+    }
+  }
+
   private select(id: string | undefined) {
     this.selected = id;
+    this.showDroneTasks();
     const m = this.sim.machine(id);
     if (!m) {
       this.hud.renderInspect(null);
@@ -530,7 +573,9 @@ export class Game {
         const label = { working: 'restoring a tile', travelling: 'flying to a job', napping: 'napping — nothing to do in range', waitingEnergy: 'waiting for energy ⚡' } as const;
         extra = ds
           .map((d, i) => `<p class="stat">🛸 Drone ${i + 1}${d.expiresAt ? ' (party!)' : ''}: ${label[s.drones.statusOf(d)]} · ${d.jobs} jobs</p>`)
-          .join('') + `<p>Works within ${TUNING.drone.hubRadius} tiles, paying the normal pulse cost.</p>${this.upgradeButton('droneSpeed')}`;
+          .join('') +
+          `<p>Works within ${s.upgrades.droneRadius} tiles (highlighted), paying the normal pulse cost. Blue outlines show current jobs.</p>` +
+          ['droneSpeed', 'droneRadius', 'chainIntel', 'secondDrone'].map((u) => this.upgradeButton(u)).join('');
         break;
       }
       case 'motherTree': {
@@ -583,11 +628,25 @@ export class Game {
       else if (source === 'condenser') this.vfx.ring(p, PALETTE.water, 0.8, 0.5);
       else if (source === 'drone') this.vfx.ring(p, PALETTE.leafFin, 0.8, 0.5);
     });
+    b.on('pulse.fired', ({ tileId, overcharged }) => {
+      if (!overcharged) return;
+      const t = s.grid.byTileId(tileId);
+      if (!t) return;
+      const p = this.tileVec(t);
+      this.vfx.ring(p, PALETTE.gold, 2.8, 0.8);
+      this.tweens.add(0.01, () => {}, { delay: 0.15, done: () => this.vfx.ring(p, '#fff3a0', 2.2, 0.7) });
+      this.vfx.burst(p, 30, { up: 3.5, speed: 2.2, size: 0.07 });
+      this.camera.shake(0.07);
+      this.sfx.chainEnd(5);
+      this.hud.feed('🌟 OVERCHARGE! Everything within 2 tiles blooms');
+    });
     b.on('tile.restored', ({ tile, source }) => {
       this.grid.refresh(tile, true);
       const p = this.tileVec(tile);
-      this.vfx.burst(p, source === 'chain' || source === 'mega' ? 10 : 14, { up: 2.6, size: 0.07 });
-      if (source !== 'chain' && source !== 'mega' && this.clock - this.lastRestoreSound > 0.06) {
+      // Player actions get the full burst; automation (drones, machines, chains) is quieter.
+      const manual = source === 'pulse' || source === 'broad';
+      this.vfx.burst(p, manual ? 14 : source === 'drone' || source === 'condenser' ? 6 : 9, { up: manual ? 2.6 : 1.8, size: manual ? 0.07 : 0.055 });
+      if (manual && this.clock - this.lastRestoreSound > 0.06) {
         this.lastRestoreSound = this.clock;
         this.sfx.restored(this.restoreSoundIdx++);
       }
@@ -906,6 +965,7 @@ export class Game {
       if (this.inspectTimer <= 0) {
         this.inspectTimer = 0.3;
         this.renderInspect();
+        this.showDroneTasks();
       }
     }
     if (this.sim.state.cat.active && !this.paused) {

@@ -248,3 +248,4 @@ button:focus-visible { outline: 3px solid #2f7de1; outline-offset: 2px; }
 }
 .slot.locked { opacity: .55; }
 .slot.locked .si { filter: grayscale(1); }
+.ugroup { margin: 10px 4px 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-soft); }

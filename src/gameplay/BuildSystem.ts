@@ -79,7 +79,7 @@ export class BuildSystem {
     for (const c of s.grid.footprint(roofId, x, z, def.size)) if (c) c.occupantId = m.id;
     s.production.markDirty();
     s.bus.emit('machine.built', { machine: m });
-    if (type === 'droneHub') s.drones.spawn(m);
+    if (type === 'droneHub') s.drones.spawn(m); // more drones (upgrade) are topped up by DroneSystem
     return m;
   }
 }

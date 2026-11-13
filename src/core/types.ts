@@ -86,6 +86,8 @@ export interface Progression {
   tutorialStep: number;
   hintsDismissed: boolean;
   introSeen: boolean;
+  /** manual pulses since the last Overcharge */
+  pulseCharge: number;
 }
 
 export interface Stats {

@@ -67,23 +67,36 @@ export class RestorationSystem {
     this.sim.econ.spend(chk.cost);
     if (t.ground === 'restored') {
       this.grow(t);
-      this.sim.bus.emit('pulse.fired', { tileId, extra: [] });
+      this.sim.bus.emit('pulse.fired', { tileId, extra: [], overcharged: false });
       return true;
     }
     this.beginGrowth(t, 'pulse', TUNING.pulse.growSeconds);
+    // Overcharge: every Nth manual pulse restores everything within 2 tiles.
+    const every = this.sim.upgrades.overchargeEvery;
+    const prog = this.sim.state.progression;
+    let overcharged = false;
+    if (every > 0) {
+      prog.pulseCharge = (prog.pulseCharge ?? 0) + 1;
+      if (prog.pulseCharge >= every) {
+        prog.pulseCharge = 0;
+        overcharged = true;
+      }
+    }
     const extra: string[] = [];
-    const n = this.sim.upgrades.broadExtra;
-    if (n > 0) {
-      const cands = this.sim.grid
-        .neighbors(t)
-        .filter((nb) => this.isEligible(nb))
-        .sort((a, b) => a.pollution - b.pollution || a.id.localeCompare(b.id));
-      for (const nb of cands.slice(0, n)) {
-        this.beginGrowth(nb, 'broad', TUNING.pulse.growSeconds + 0.15 * (extra.length + 1));
+    const radius = overcharged ? 2 : this.sim.upgrades.broadExtra >= 3 ? 2 : this.sim.upgrades.broadExtra > 0 ? 1 : 0;
+    const limit = overcharged || this.sim.upgrades.broadExtra >= 2 ? Infinity : 2;
+    if (radius > 0) {
+      const roof = this.sim.grid.roof(t.roofId)!;
+      const cands = roof.tiles
+        .map((nb) => ({ nb, d: Math.abs(nb.x - t.x) + Math.abs(nb.z - t.z) }))
+        .filter(({ nb, d }) => d >= 1 && d <= radius && this.isEligible(nb))
+        .sort((a, b) => a.d - b.d || a.nb.pollution - b.nb.pollution || a.nb.id.localeCompare(b.nb.id));
+      for (const { nb, d } of cands.slice(0, limit)) {
+        this.beginGrowth(nb, 'broad', TUNING.pulse.growSeconds + 0.12 * d + 0.03 * extra.length);
         extra.push(nb.id);
       }
     }
-    this.sim.bus.emit('pulse.fired', { tileId, extra });
+    this.sim.bus.emit('pulse.fired', { tileId, extra, overcharged });
     return true;
   }
 

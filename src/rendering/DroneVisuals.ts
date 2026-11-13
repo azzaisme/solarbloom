@@ -25,6 +25,8 @@ export class DroneVisuals {
   private views = new Map<string, DroneView>();
   private time = 0;
   reducedMotion = false;
+  onTrail?: (p: pc.Vec3) => void;
+  private trailT = 0;
 
   constructor(
     private sim: Sim,
@@ -86,6 +88,9 @@ export class DroneVisuals {
   update(dt: number) {
     this.time += dt;
     const t = this.time;
+    this.trailT -= dt;
+    const emitTrail = this.trailT <= 0 && !this.reducedMotion;
+    if (emitTrail) this.trailT = 0.07;
     for (const d of this.sim.state.drones) {
       const v = this.views.get(d.id);
       if (!v) continue;
@@ -122,6 +127,7 @@ export class DroneVisuals {
       const flap = this.reducedMotion ? 0 : Math.sin(t * (d.mode === 'flying' ? 30 : 10) + v.phase) * 18;
       v.finL.setLocalEulerAngles(0, 0, flap);
       v.finR.setLocalEulerAngles(0, 0, -flap);
+      if (emitTrail && d.mode === 'flying' && speed > 0.01) this.onTrail?.(new pc.Vec3(v.x, v.y + bob - 0.12, v.z));
       v.beam.enabled = d.mode === 'working';
       if (v.beam.enabled) {
         const p = 0.22 + Math.sin(t * 20) * 0.04;

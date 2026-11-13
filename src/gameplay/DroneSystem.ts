@@ -39,7 +39,27 @@ export class DroneSystem {
   }
 
   radius() {
-    return TUNING.drone.hubRadius;
+    return this.sim.upgrades.droneRadius;
+  }
+
+  /** Chain Intelligence: how likely a tile is to set off a synergy if restored now. */
+  private synergyScore(t: TileData): number {
+    const s = this.sim;
+    let score = 0;
+    for (const m of s.state.machines) {
+      if (m.roofId !== t.roofId) continue;
+      const d = distToFootprint(t.x, t.z, m.x, m.z, m.size);
+      if (m.type === 'pollinator' && d >= 1 && d <= s.upgrades.pollinatorReach) score += 3;
+      else if (m.type === 'solar' && d === 1 && m.boostUntil <= s.time) score += 1.5;
+      else if (m.type === 'motherTree' && d >= 1 && d <= s.upgrades.treeRadius && m.charge >= TUNING.motherTree.threshold * 0.6) score += 4;
+    }
+    return score;
+  }
+
+  /** Permanent drones a hub should have: the first hub gets a second with the upgrade. */
+  private wanted(hub: MachineData): number {
+    const firstHub = this.sim.state.machines.find((m) => m.type === 'droneHub');
+    return 1 + (firstHub?.id === hub.id ? this.sim.upgrades.level('secondDrone') : 0);
   }
 
   findJob(d: DroneData): TileData | undefined {
@@ -50,13 +70,15 @@ export class DroneSystem {
     if (!roof) return undefined;
     let best: TileData | undefined;
     let bestD = Infinity;
+    const intel = s.upgrades.level('chainIntel') > 0;
     for (const t of roof.tiles) {
       if (distToFootprint(t.x, t.z, hub.x, hub.z, hub.size) > this.radius()) continue;
       if (!s.restoration.isEligible(t)) continue;
       const dx = t.x + 0.5 - d.px;
       const dz = t.z + 0.5 - d.pz;
-      // Prefer mossy tiles (cheaper), then nearest.
-      const score = dx * dx + dz * dz + (t.ground === 'prepared' ? 0 : 1.5);
+      // Prefer mossy tiles (cheaper), then nearest; Chain Intelligence strongly prefers synergy tiles.
+      let score = dx * dx + dz * dz + (t.ground === 'prepared' ? 0 : 1.5);
+      if (intel) score -= this.synergyScore(t) * 6;
       if (score < bestD - 1e-9) {
         bestD = score;
         best = t;
@@ -83,6 +105,11 @@ export class DroneSystem {
 
   tick(dt: number) {
     const s = this.sim;
+    for (const hub of s.state.machines) {
+      if (hub.type !== 'droneHub') continue;
+      const have = s.state.drones.filter((d) => d.hubId === hub.id && d.expiresAt === undefined).length;
+      for (let i = have; i < this.wanted(hub); i++) this.spawn(hub);
+    }
     for (const d of [...s.state.drones]) {
       const hub = s.machine(d.hubId);
       if (!hub) continue;
@@ -169,5 +196,5 @@ export class DroneSystem {
 }
 
 export function hubCoverage(sim: Sim, hub: MachineData): TileData[] {
-  return sim.grid.tilesNear(hub, TUNING.drone.hubRadius);
+  return sim.grid.tilesNear(hub, sim.upgrades.droneRadius);
 }

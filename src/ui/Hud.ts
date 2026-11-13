@@ -336,15 +336,19 @@ export class Hud {
   renderUpgrades(force = false) {
     if (!this.upgradesOpen && !force) return;
     const u = this.sim.upgrades;
-    const html = u
-      .all()
+    const order = ['Pulse', 'Machines', 'Drones', 'Storage'];
+    const sorted = [...u.all()].sort((a, b) => order.indexOf(a.group ?? 'Storage') - order.indexOf(b.group ?? 'Storage'));
+    let lastGroup = '';
+    const html = sorted
       .map((def) => {
+        const head = def.group !== lastGroup ? `<h3 class="ugroup">${def.group}</h3>` : '';
+        lastGroup = def.group ?? '';
         const lvl = u.level(def.id);
         const st = u.status(def);
         const maxed = lvl >= def.maxLevel;
         const pips = Array.from({ length: def.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('');
         const roman = ['I', 'II', 'III', 'IV', 'V'][Math.min(lvl, def.maxLevel - 1)];
-        return `<div class="card"><span class="ci">${def.icon}</span><span class="cn">${esc(def.name)} ${maxed ? '' : roman}<em>${maxed ? 'MAX' : ''}</em></span>
+        return `${head}<div class="card"><span class="ci">${def.icon}</span><span class="cn">${esc(def.name)} ${maxed ? '' : roman}<em>${maxed ? 'MAX' : ''}</em></span>
           <button class="buy" data-buy="${def.id}" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : `${st.cost} 🌿`}</button>
           <span class="cd2">${esc(def.describe(lvl + 1))}</span><span class="pips">${pips}</span>
           ${!st.ok && !maxed && st.reason && !st.reason.startsWith('Need ') ? `<span class="why">${esc(st.reason)}</span>` : ''}</div>`;
@@ -497,6 +501,11 @@ export class Hud {
       this.set(`hl-${t}`, btn, 'cls', locked ? '1' : '0', 'locked');
       if (locked) this.set(`hc-${t}`, $(btn, '.sc'), 'text', '🔒 Drone Hub');
     }
+    // Overcharge countdown on the Pulse button
+    const every = s.upgrades.overchargeEvery;
+    const pc0 = s.state.progression.pulseCharge ?? 0;
+    const pulseSc = every ? (pc0 === every - 1 ? '🌟 next!' : '●'.repeat(pc0) + '○'.repeat(every - pc0)) : 'restore';
+    this.set('pulseSc', $(this.root, '[data-tool="pulse"] .sc'), 'text', pulseSc);
     const cd = Math.max(0, s.state.harvestReadyAt - s.time);
     const hb = $(this.root, '#harvestBtn');
     this.set('hcd', $(hb, '.cd'), 'html', '');

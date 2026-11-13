@@ -4,6 +4,7 @@ export interface UpgradeDef {
   id: string;
   name: string;
   icon: string;
+  group?: 'Pulse' | 'Machines' | 'Drones' | 'Storage';
   baseCost: number; // biomass
   costMult: number;
   maxLevel: number;
@@ -17,6 +18,7 @@ const has = (type: string) => (s: GameState) => s.machines.some((m) => m.type ==
 export const UPGRADES: UpgradeDef[] = [
   {
     id: 'efficientPulse',
+    group: 'Pulse',
     name: 'Efficient Pulse',
     icon: '⚡',
     baseCost: 10,
@@ -26,6 +28,7 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'solarArray',
+    group: 'Machines',
     name: 'Solar Array',
     icon: '☀️',
     baseCost: 14,
@@ -35,15 +38,17 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'broadPulse',
-    name: 'Broad Pulse',
+    group: 'Pulse',
+    name: 'Wide Pulse',
     icon: '💠',
     baseCost: 22,
     costMult: 2.2,
     maxLevel: 3,
-    describe: (n) => `Each pulse also restores ${n} neighbouring tile${n > 1 ? 's' : ''} for free`,
+    describe: (n) => (n === 1 ? 'Each pulse also restores 2 neighbouring tiles for free' : n === 2 ? 'Each pulse restores all 4 neighbours for free' : 'Each pulse restores everything within 2 tiles for free'),
   },
   {
     id: 'richSoil',
+    group: 'Machines',
     name: 'Rich Soil',
     icon: '🌱',
     baseCost: 25,
@@ -53,6 +58,7 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'seedVault',
+    group: 'Storage',
     name: 'Seed Vault',
     icon: '🏺',
     baseCost: 20,
@@ -62,17 +68,19 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'droneSpeed',
-    name: 'Drone Speed',
+    group: 'Drones',
+    name: 'Drone Dash',
     icon: '🛸',
     baseCost: 35,
     costMult: 1.8,
     maxLevel: 3,
-    describe: () => 'Drone cycle time −25%, flies faster',
+    describe: () => 'Drones fly 30% faster and wait 25% less between jobs',
     available: has('droneHub'),
     lockedReason: 'Build a Drone Hub first',
   },
   {
     id: 'pollinatorReach',
+    group: 'Machines',
     name: 'Pollinator Reach',
     icon: '🦋',
     baseCost: 28,
@@ -84,6 +92,7 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'waterBloom',
+    group: 'Machines',
     name: 'Water Bloom',
     icon: '🌧️',
     baseCost: 30,
@@ -95,6 +104,7 @@ export const UPGRADES: UpgradeDef[] = [
   },
   {
     id: 'treeResonance',
+    group: 'Machines',
     name: 'Mother Tree Resonance',
     icon: '🌳',
     baseCost: 60,
@@ -103,6 +113,52 @@ export const UPGRADES: UpgradeDef[] = [
     describe: () => 'Mother Tree charges from, and pulses, 1 tile further',
     available: has('motherTree'),
     lockedReason: 'Plant a Mother Tree first',
+  },
+  {
+    id: 'overcharge',
+    group: 'Pulse',
+    name: 'Overcharge',
+    icon: '🌟',
+    baseCost: 26,
+    costMult: 2,
+    maxLevel: 3,
+    describe: (n) => `Every ${7 - n}th pulse is Overcharged: it restores everything within 2 tiles`,
+  },
+  {
+    id: 'droneRadius',
+    group: 'Drones',
+    name: 'Drone Work Radius',
+    icon: '📡',
+    baseCost: 40,
+    costMult: 2,
+    maxLevel: 2,
+    describe: () => 'Drones reach 1 tile further from their hub',
+    available: has('droneHub'),
+    lockedReason: 'Build a Drone Hub first',
+  },
+  {
+    id: 'chainIntel',
+    group: 'Drones',
+    name: 'Chain Intelligence',
+    icon: '🧠',
+    baseCost: 45,
+    costMult: 1,
+    maxLevel: 1,
+    describe: () => 'Drones pick tiles next to gardens, idle solar panels and charged Mother Trees first',
+    available: has('droneHub'),
+    lockedReason: 'Build a Drone Hub first',
+  },
+  {
+    id: 'secondDrone',
+    group: 'Drones',
+    name: 'Second Drone',
+    icon: '🛸',
+    baseCost: 70,
+    costMult: 1,
+    maxLevel: 1,
+    describe: () => 'Your first hub launches a second drone',
+    available: has('droneHub'),
+    lockedReason: 'Build a Drone Hub first',
   },
 ];
 
