@@ -47,7 +47,7 @@ The browser scripts need Playwright with Chromium (`npm i -D playwright && npx p
 | Go to the area that needs you | `F` cycles areas that need attention; `Home` returns to the park | Area labels when zoomed out |
 | Inspect a machine | Click it, or use **Inspect** (1) | Tap it |
 | Pan | Drag the world (or middle/right drag) | Drag |
-| Zoom (down to a city overview) | Mouse wheel, `+` / `-` | Pinch |
+| Zoom (down to a city overview) | Mouse wheel, `+` / `-` | Pinch (a quick pinch-out snaps to the overview) |
 | Harvest sunlight (emergency energy) | `H` | 🌞 button |
 | Upgrades | `U` | ⬆️ button |
 | Pause | `P` | ⏸ chip |

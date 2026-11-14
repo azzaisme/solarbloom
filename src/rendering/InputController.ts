@@ -4,6 +4,8 @@ export interface InputHandlers {
   click(x: number, y: number, button: number): void;
   pan(dx: number, dy: number): void;
   zoom(factor: number): void;
+  /** A two-finger pinch finished: its overall zoom factor (spread end / start) and how long it took. */
+  pinchEnd?(factor: number, ms: number): void;
 }
 
 /**
@@ -14,6 +16,8 @@ export class InputController {
   private pointers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
   private dragging = false;
   private pinchDist = 0;
+  /** spread and time when the current pinch began */
+  private pinchStart?: { d: number; at: number };
   private suppressClick = false;
   static DRAG_PX = 7;
 
@@ -39,7 +43,11 @@ export class InputController {
 
   private down = (e: PointerEvent) => {
     const p = this.local(e);
-    this.el.setPointerCapture?.(e.pointerId);
+    try {
+      this.el.setPointerCapture?.(e.pointerId);
+    } catch {
+      // not an active pointer (e.g. synthetic events): input still works without capture
+    }
     this.pointers.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y });
     if (this.pointers.size === 1) {
       this.dragging = e.button === 1 || e.button === 2;
@@ -47,6 +55,7 @@ export class InputController {
     } else {
       this.suppressClick = true;
       this.pinchDist = this.spread();
+      if (this.pointers.size === 2) this.pinchStart = { d: this.pinchDist, at: performance.now() };
     }
   };
 
@@ -96,6 +105,12 @@ export class InputController {
       this.suppressClick = false;
       if (e.pointerType !== 'mouse') this.h.leave();
     } else {
+      // A pinch just ended (two fingers → one): report the whole gesture.
+      if (this.pinchStart && this.pointers.size === 1) {
+        const lastSpread = this.pinchDist;
+        if (this.pinchStart.d > 0 && lastSpread > 0) this.h.pinchEnd?.(lastSpread / this.pinchStart.d, performance.now() - this.pinchStart.at);
+        this.pinchStart = undefined;
+      }
       this.pinchDist = this.spread();
     }
   };

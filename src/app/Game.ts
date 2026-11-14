@@ -234,6 +234,10 @@ export class Game {
       click: (x, y, b) => this.onClick(x, y, b),
       pan: (dx, dy) => this.camera.pan(dx, dy),
       zoom: (f) => this.camera.zoomBy(f),
+      // A quick, strong pinch-out snaps to the city overview (one gesture from anywhere).
+      pinchEnd: (f, ms) => {
+        if (this.city && !this.cinematic && f < 0.6 && ms < 450) this.camera.glide(this.camera.target.x, 0, this.camera.target.z, this.camera.minZoom);
+      },
     });
     this.wireKeys();
     const unlock = () => this.sfx.unlock();

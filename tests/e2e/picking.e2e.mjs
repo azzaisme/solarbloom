@@ -44,7 +44,8 @@ try {
     if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
     // The city ground, focused at a few spots (the park and its surroundings), at each zoom.
     for (const [fx, fz] of [[8, 8], [24, -10], [-12, 20]]) {
-      for (const zoom of ZOOMS) {
+      // On the phone, also at both zoom limits (the far overview and the closest view).
+      for (const zoom of vp.name === 'phone' ? [...ZOOMS, 0.22, 1.9] : ZOOMS) {
         const res = await page.evaluate(
           ({ zoom, OFFSETS, fx, fz }) => {
             const g = window.solarbloom;
@@ -116,6 +117,32 @@ try {
     await page.waitForTimeout(1500);
     if (errors.length) fail(`${vp.name}: page errors: ${errors.join(' | ')}`);
     console.log(`  ${failures ? '·' : '✓'} ${vp.name} ${vp.width}×${vp.height}`);
+    if (vp.name === 'phone') {
+      // A quick two-finger pinch-out snaps to the city overview.
+      const snapped = await page.evaluate(async () => {
+        const g = window.solarbloom;
+        g.camera.setZoom(1.2);
+        const c = g.app.graphicsDevice.canvas;
+        const r = c.getBoundingClientRect();
+        const ev = (type, id, x, y) => c.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', clientX: r.left + x, clientY: r.top + y, bubbles: true, isPrimary: id === 1 }));
+        const cx = r.width / 2;
+        const cy = r.height / 2;
+        ev('pointerdown', 1, cx - 150, cy);
+        ev('pointerdown', 2, cx + 150, cy);
+        for (let i = 1; i <= 6; i++) {
+          const half = 150 - i * 20;
+          ev('pointermove', 1, cx - half, cy);
+          ev('pointermove', 2, cx + half, cy);
+          await new Promise((res) => setTimeout(res, 16));
+        }
+        ev('pointerup', 2, cx + 30, cy);
+        ev('pointerup', 1, cx - 30, cy);
+        for (let i = 0; i < 300; i++) g.camera.update(0.05);
+        return g.camera.zoom;
+      });
+      checks++;
+      if (snapped > 0.25) fail(`phone: a quick pinch-out left the camera at zoom ${snapped.toFixed(2)} instead of the overview`);
+    }
     await page.close();
   }
 } finally {
