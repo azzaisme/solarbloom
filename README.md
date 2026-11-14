@@ -15,6 +15,7 @@ npm install
 npm run dev        # http://localhost:5173
 npm test           # unit tests (vitest)
 npm run test:e2e   # pointer→tile picking at 3 screen sizes × 3 zooms (needs Playwright + Chromium)
+npm run test:perf  # benchmarks: world lookups and saves for a ~1,000-area city
 npm run build      # type-check + production build into dist/
 npm run preview    # serve the production build
 ```
@@ -81,7 +82,10 @@ src/
   app/Game.ts             glue: PlayCanvas app, fixed-step loop, input → tools, events → VFX/sound/HUD, autosave
   app/EventBus.ts         typed event bus (tile.restored, chain.step, cat.found, rooftop.coreRestored, …)
   app/SaveService.ts      versioned localStorage save
-  core/                   pure data + math: types, Grid (lookups, footprints, world↔cell), Economy (caps, never negative), Rng, GameState factory
+  core/                   pure data + math: types, Economy (caps, never negative), Rng, GameState factory
+    Grid                  the world: layers of 16×16 chunks generated on demand; O(r²) tile and machine lookups
+    Generation            order-independent tile generation from a hash of (seed, layer, x, z)
+    TilePack              save encoding: per-chunk deltas from generation
   gameplay/               headless, deterministic systems; no rendering imports
     NeighbourhoodSystem   bridges/links, relay status, Reservoir and Canopy Cores, objectives, the Neighbourhood Bloom
     Sim.ts                owns the state and steps every system on a fixed 0.1 s tick
@@ -117,7 +121,8 @@ tests/                    vitest: grid, economy, placement, chains, drones, luck
 - **No softlock.** The starter panel and the rain barrel always produce, Harvest Sunlight is always available, and costs can never push a balance below zero.
 - **Picking** casts a camera ray against each rooftop's slab plane and floors the hit into a cell. Cat clicks use a screen-space radius (at least 26 px) instead of the tiny mesh.
 - **Performance.** World geometry uses a static batch group and tiles use a dynamic one, which takes the scene from about 1,000 draw calls to about 140–300. Materials are cached and VFX entities are pooled. Shadows come from one directional light with one cascade.
-- **Saves.** The game autosaves every 10 s and on key events (machine built, upgrade, cat spawned/found, Core, bridge, Neighbourhood Bloom). A Lucky Cat claim clears the cat *before* paying out, and one-time unlocks are marked claimed before anything is paid, so reloading can't pay twice. Offline progress is deliberately not simulated. Save format v3 migrates Round 1 and Round 2 saves; the Seed is kept tile for tile.
+- **Saves.** The game autosaves every 10 s and on key events (machine built, upgrade, cat spawned/found, Core, bridge, Neighbourhood Bloom). A Lucky Cat claim clears the cat *before* paying out, and one-time unlocks are marked claimed before anything is paid, so reloading can't pay twice. Offline progress is deliberately not simulated. Save format v4 stores only chunks that differ from generation, gzip-compressed (autosave runs at an idle moment; page unload saves plainly). Older saves (v1–v3) are discarded with a notice.
+- **The world is chunked.** Every surface is a layer: the endless ground (not playable yet) and each rooftop. Tiles live in 16×16 chunks generated on demand, deterministically, so the world is the same whatever order you explore it in. Adjacency never crosses layers; bridges and relays do.
 - **Cross-roof links are explicit.** Rooftops never become adjacent by world position. A chain only crosses at a built link's relay zone, at most once per link per chain, on a recharge. Relay loops can't retrigger themselves.
 - **No stalls.** Overflow always fires when a basin is full (watering green tiles or just splashing if nothing is dry). The Elder Tree slowly charges on its own once the Canopy is half alive. Bridge milestones are a share of the open tiles, so building more machines can never make one unreachable.
 

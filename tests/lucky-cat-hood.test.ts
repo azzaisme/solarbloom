@@ -35,9 +35,9 @@ describe('Lucky Cat across the neighbourhood', () => {
     expect(seen2.has('catsGarden')).toBe(true);
   });
 
-  it('spawns one cat at a time, on all three rooftops over many games, never under the HUD', () => {
+  it('spawns one cat at a time, on all three rooftops over 200 games, never under the HUD', () => {
     const roofs = new Set<string>();
-    for (let seed = 1; seed <= 60; seed++) {
+    for (let seed = 1; seed <= 200; seed++) {
       const sim = neighbourhood(seed);
       sim.cat.anchorView = (a) => (a.id === 'res-corner' ? 'covered' : a.roofId === 'r1' ? 'visible' : 'offscreen');
       expect(sim.cat.spawn()).toBe(true);
@@ -60,8 +60,8 @@ describe('Lucky Cat across the neighbourhood', () => {
     expect(sim.state.relayBonus).toBe(TUNING.cat.goldenRelayExtra);
     const copy = new Sim(saver.deserialize(saver.serialize(sim.state))!);
     expect(copy.state.relayBonus).toBe(TUNING.cat.goldenRelayExtra);
-    for (const t of copy.grid.roof('r1')!.tiles) if (!t.blocked && !t.occupantId) ground(copy, 'r1', t.x, t.z, 'prepared');
-    for (const t of copy.grid.roof('r2')!.tiles) if (!t.blocked && !t.occupantId) ground(copy, 'r2', t.x, t.z, 'prepared');
+    for (const t of copy.grid.tilesOf('r1')) if (!t.blocked && !t.occupantId) ground(copy, 'r1', t.x, t.z, 'prepared');
+    for (const t of copy.grid.tilesOf('r2')) if (!t.blocked && !t.occupantId) ground(copy, 'r2', t.x, t.z, 'prepared');
     copy.restoration.complete(copy.grid.get('r1', 6, 2)!, 'pulse');
     copy.advance(4);
     expect(copy.state.relayBonus).toBe(0);
@@ -69,11 +69,11 @@ describe('Lucky Cat across the neighbourhood', () => {
 
   it("Cat's Garden restores a small cluster of eligible tiles on one playable rooftop", () => {
     const sim = neighbourhood(12);
-    const before = new Map(sim.state.rooftops.flatMap((r) => r.tiles).map((t) => [t.id, `${t.ground}${t.bloom}`]));
+    const before = new Map(sim.grid.rooftops.flatMap((r) => sim.grid.tilesOf(r.id)).map((t) => [t.id, `${t.ground}${t.bloom}`]));
     const summary = (sim.cat as unknown as Applier).apply('catsGarden', 1, 0);
     expect(summary).toMatch(/garden blooms on/);
     sim.advance(5);
-    const changed = sim.state.rooftops.flatMap((r) => r.tiles).filter((t) => before.get(t.id) !== `${t.ground}${t.bloom}`);
+    const changed = sim.grid.rooftops.flatMap((r) => sim.grid.tilesOf(r.id)).filter((t) => before.get(t.id) !== `${t.ground}${t.bloom}`);
     expect(changed.length).toBeGreaterThanOrEqual(2);
     expect(changed.length).toBeLessThanOrEqual(TUNING.cat.catsGardenTiles);
     expect(new Set(changed.map((t) => t.roofId)).size).toBe(1);

@@ -132,9 +132,9 @@ export class TileFx {
     const out: TileData[] = [];
     const now = s.time;
     const boostedSolar = s.state.machines.filter((m) => m.type === 'solar' && m.boostUntil > now);
-    for (const r of s.state.rooftops) {
+    for (const r of s.grid.rooftops) {
       if (!r.unlocked || r.preview) continue;
-      for (const t of r.tiles) {
+      for (const t of s.grid.tilesOf(r.id)) {
         if (t.ground !== 'restored' || t.occupantId) continue;
         if (s.production.inPollinatorZone(t)) out.push(t);
         else if (boostedSolar.some((m) => m.roofId === t.roofId && Math.abs(t.x - m.x) + Math.abs(t.z - m.z) === 1)) out.push(t);

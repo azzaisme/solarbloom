@@ -36,17 +36,28 @@ export interface TileData {
   lushUntil?: number;
 }
 
-export interface RooftopData {
+/**
+ * A layer is one continuous grid surface. The ground is unbounded (an endless city, generated on demand);
+ * a raised layer (a rooftop) is bounded and sits at its own height. Adjacency never crosses layers:
+ * only explicit links (bridges, relays) connect them. Tiles are NOT stored here: they live in the
+ * world's chunks (see core/Grid) and are saved as deltas from what generation would produce.
+ */
+export interface LayerData {
   id: string;
   name: string;
+  kind: 'ground' | 'raised';
+  /** Bounded layers only (raised): size in tiles. 0 for the unbounded ground. */
   width: number;
   depth: number;
   height: number;
+  /** World position of local cell (0, 0). */
   origin: [number, number, number];
   unlocked: boolean;
   preview: boolean; // visible but not yet playable
-  tiles: TileData[];
 }
+
+/** Kept as an alias while the rooftop-era code is ported (City 12 removes it). */
+export type RooftopData = LayerData;
 
 export interface MachineData {
   id: string;
@@ -146,7 +157,9 @@ export interface GameState {
   nextId: number;
   resources: Resources;
   caps: Resources;
-  rooftops: RooftopData[];
+  layers: LayerData[];
+  /** Only present in a save being loaded: packed tile deltas per chunk (consumed by Sim). */
+  tiles?: Record<string, string>;
   machines: MachineData[];
   drones: DroneData[];
   upgrades: Record<string, number>;

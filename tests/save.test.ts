@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { Sim } from '../src/gameplay/Sim';
-import { SAVE_VERSION } from '../src/core/GameState';
 import { fill, makeSim, rich } from './helpers';
 
 describe('save & progression', () => {
@@ -25,7 +24,7 @@ describe('save & progression', () => {
     rich(sim);
     fill(sim, 0, 0, 7, 7, 'restored');
     expect(sim.progression.activateCore()).toBe(false);
-    for (const t of sim.grid.roof('r1')!.tiles.slice(10, 40)) t.bloom = 3;
+    for (const t of sim.grid.tilesOf('r1').slice(10, 40)) t.bloom = 3;
     sim.build.place('solar', 'r1', 5, 5);
     sim.build.place('condenser', 'r1', 6, 5);
     sim.build.place('pollinator', 'r1', 5, 6);
@@ -49,13 +48,13 @@ describe('save & progression', () => {
     let t = 0;
     for (; t < 20 * 60 * 10 && !sim.state.progression.coreActivated; t++) {
       if (t % 5 === 0) {
-        const tiles = sim.grid.roof('r1')!.tiles.filter((x) => sim.restoration.checkPulse(x).ok);
+        const tiles = sim.grid.tilesOf('r1').filter((x) => sim.restoration.checkPulse(x).ok);
         const rank = (x: { ground: string }) => (x.ground === 'prepared' ? 0 : x.ground === 'polluted' ? 1 : 2);
         tiles.sort((a, b) => rank(a) - rank(b) || a.pollution - b.pollution);
         if (tiles[0]) sim.restoration.pulse(tiles[0].id);
         for (const type of order) {
           if (sim.progression.built(type)) continue;
-          const spot = sim.grid.roof('r1')!.tiles.find((x) => sim.build.check(type, 'r1', x.x, x.z).ok);
+          const spot = sim.grid.tilesOf('r1').find((x) => sim.build.check(type, 'r1', x.x, x.z).ok);
           if (spot) sim.build.place(type, 'r1', spot.x, spot.z);
           break;
         }
@@ -70,23 +69,18 @@ describe('save & progression', () => {
   });
 });
 
-describe('save migration', () => {
-  it('upgrades a Round 1 (v1) save and keeps its progress', async () => {
-    const { SaveService } = await import('../src/app/SaveService');
-    const sim = makeSim(3);
-    rich(sim);
-    fill(sim, 2, 2, 5, 5, 'restored');
-    sim.build.place('condenser', 'r1', 3, 3);
-    const old = JSON.parse(JSON.stringify(sim.state));
-    old.version = 1;
-    for (const m of old.machines) delete m.charge;
-    delete old.cat.stash;
-    delete old.cat.log;
-    const s = new SaveService(undefined).deserialize(JSON.stringify(old))!;
-    expect(s.version).toBe(SAVE_VERSION);
-    expect(s.machines.every((m) => m.charge === 0)).toBe(true);
-    expect(s.cat.stash).toBe(0);
-    expect(new Sim(s).progression.restoredCount('r1')).toBe(sim.progression.restoredCount('r1'));
+describe('save format v4', () => {
+  it('discards a pre-city (v1–v3) save: the game starts fresh and says so', async () => {
+    const { SaveService, SAVE_KEY } = await import('../src/app/SaveService');
+    const store = new Map<string, string>();
+    const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
+    for (const version of [1, 2, 3]) {
+      store.set(SAVE_KEY, JSON.stringify({ version, seed: 5, rooftops: [], machines: [] }));
+      const r = new SaveService(storage).loadResult();
+      expect(r.scrapped).toBe(true);
+      expect(r.state).toBeUndefined();
+      expect(store.has(SAVE_KEY)).toBe(false);
+    }
   });
 
   it('backs up a save from a newer version instead of overwriting it', async () => {

@@ -91,8 +91,8 @@ export class RestorationSystem {
     const radius = overcharged ? 2 : this.sim.upgrades.broadExtra >= 3 ? 2 : this.sim.upgrades.broadExtra > 0 ? 1 : 0;
     const limit = overcharged || this.sim.upgrades.broadExtra >= 2 ? Infinity : 2;
     if (radius > 0) {
-      const roof = this.sim.grid.roof(t.roofId)!;
-      const cands = roof.tiles
+      const cands = this.sim.grid
+        .tilesWithin(t.roofId, t.x, t.z, radius)
         .map((nb) => ({ nb, d: Math.abs(nb.x - t.x) + Math.abs(nb.z - t.z) }))
         .filter(({ nb, d }) => d >= 1 && d <= radius && this.isEligible(nb))
         .sort((a, b) => a.d - b.d || a.nb.pollution - b.nb.pollution || a.nb.id.localeCompare(b.nb.id));
@@ -111,8 +111,8 @@ export class RestorationSystem {
    */
   boostNeighbours(t: TileData) {
     const s = this.sim;
-    for (const m of s.state.machines) {
-      if (m.roofId !== t.roofId || m.type === 'droneHub' || (m.type === 'core' && m.roofId !== 'r3')) continue;
+    for (const m of s.grid.machinesNear(t.roofId, t.x, t.z, 1)) {
+      if (m.type === 'droneHub' || (m.type === 'core' && m.roofId !== 'r3')) continue;
       if (distToFootprint(t.x, t.z, m.x, m.z, m.size) !== 1) continue;
       const fresh = (m.overchargeUntil ?? 0) <= s.time;
       m.overchargeUntil = s.time + TUNING.neighbourhood.overchargeSeconds;
@@ -124,6 +124,7 @@ export class RestorationSystem {
   grow(t: TileData, chainId?: number) {
     if (t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom) return;
     t.bloom = Math.min(TUNING.restore.maxBloom, t.bloom + 1);
+    this.sim.grid.touch(t);
     const b = this.sim.econ.add('biomass', TUNING.restore.nurtureBiomass * this.sim.upgrades.soilMult);
     if (b > 0) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: b, tileId: t.id });
     this.sim.production.markDirty();
@@ -137,28 +138,43 @@ export class RestorationSystem {
     t.pollution = 0;
     t.growthRemainingSec = seconds;
     t.growSource = source;
+    this.growing.set(t.id, t);
+    this.sim.grid.touch(t);
     this.sim.bus.emit('tile.restoring', { tile: t, source });
   }
 
+  /** Tiles currently growing (kept as a set so a tick never scans the world). In world order for determinism. */
+  private growing = new Map<string, TileData>();
+
+  /** Picks up tiles that were mid-growth in a loaded save. */
+  adoptGrowing() {
+    for (const c of this.sim.grid.loadedChunks()) for (const t of c.tiles) if (t && t.ground === 'growing') this.growing.set(t.id, t);
+  }
+
   tick(dt: number) {
-    for (const r of this.sim.state.rooftops) {
-      for (const t of r.tiles) {
-        if (t.ground !== 'growing') continue;
-        t.growthRemainingSec -= dt;
-        if (t.growthRemainingSec <= 1e-6) this.complete(t, t.growSource ?? 'pulse');
+    if (!this.growing.size) return;
+    for (const t of [...this.growing.values()]) {
+      if (t.ground !== 'growing') {
+        this.growing.delete(t.id);
+        continue;
       }
+      t.growthRemainingSec -= dt;
+      this.sim.grid.touch(t);
+      if (t.growthRemainingSec <= 1e-6) this.complete(t, t.growSource ?? 'pulse');
     }
   }
 
   /** Finalises a tile as restored. Used by growth completion and chain steps. Idempotent. */
   complete(t: TileData, source: RestoreSource, chainId?: number): number {
     if (t.ground === 'restored') return chainId ?? -1;
+    this.growing.delete(t.id);
     t.ground = 'restored';
     t.bloom = Math.max(1, t.bloom);
     t.pollution = 0;
     t.growthRemainingSec = 0;
     t.growSource = undefined;
     if (source === 'overflow') t.lushUntil = this.sim.time + TUNING.neighbourhood.reservoir.lushSeconds;
+    this.sim.grid.touch(t);
     this.sim.state.stats.tilesRestored++;
     const biomass = this.sim.econ.add('biomass', TUNING.restore.instantBiomass * this.sim.upgrades.soilMult);
     if (biomass > 0) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: biomass, tileId: t.id });
@@ -166,6 +182,7 @@ export class RestorationSystem {
     for (const nb of this.sim.grid.neighbors(t)) {
       if (nb.ground !== 'polluted' || nb.blocked) continue;
       nb.pollution = Math.max(0, nb.pollution - TUNING.restore.seep);
+      this.sim.grid.touch(nb);
       if (nb.pollution <= 0) {
         nb.ground = 'prepared';
         this.sim.bus.emit('tile.prepared', { tile: nb });

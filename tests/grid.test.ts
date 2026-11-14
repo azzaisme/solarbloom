@@ -5,8 +5,7 @@ import { makeSim } from './helpers';
 describe('grid', () => {
   it('has stable ids and an 8x8 first rooftop', () => {
     const sim = makeSim();
-    const r = sim.grid.roof('r1')!;
-    expect(r.tiles.length).toBe(64);
+    expect(sim.grid.tilesOf('r1').length).toBe(64);
     expect(sim.grid.get('r1', 3, 5)!.id).toBe(tileId('r1', 3, 5));
     expect(sim.grid.get('r1', 8, 0)).toBeUndefined();
   });
@@ -20,7 +19,7 @@ describe('grid', () => {
 
   it('world <-> cell conversion round-trips for every tile', () => {
     const sim = makeSim();
-    for (const t of sim.grid.roof('r1')!.tiles) {
+    for (const t of sim.grid.tilesOf('r1')) {
       const [wx, , wz] = sim.grid.tileWorld(t);
       expect(sim.grid.worldToCell('r1', wx + 0.49, wz - 0.49)).toEqual({ x: t.x, z: t.z });
     }

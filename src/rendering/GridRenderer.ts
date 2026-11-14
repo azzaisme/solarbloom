@@ -65,9 +65,9 @@ export class GridRenderer {
   }
 
   build() {
-    for (const roof of this.sim.state.rooftops) {
+    for (const roof of this.sim.grid.rooftops) {
       const g = group(this.parent, `tiles-${roof.id}`);
-      for (const t of roof.tiles) {
+      for (const t of this.sim.grid.tilesOf(roof.id)) {
         if (t.blocked) continue;
         const [x, y, z] = this.sim.grid.tileWorld(t);
         const root = group(g, t.id, [x, y, z]);

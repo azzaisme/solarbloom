@@ -39,7 +39,7 @@ describe('first expansion: the Skybridge Relay', () => {
       expect(st.reason).toMatch(/full bloom/);
       expect(sim.hood.objective().roofId).toBe('r1'); // the objective points at the Seed until it's done
       let n = 0;
-      for (const t of sim.grid.roof('r1')!.tiles) if (!t.blocked && !t.occupantId && n++ < need) {
+      for (const t of sim.grid.tilesOf('r1')) if (!t.blocked && !t.occupantId && n++ < need) {
         ground(sim, 'r1', t.x, t.z, 'restored');
         t.bloom = 3;
       }
@@ -54,7 +54,7 @@ describe('first expansion: the Skybridge Relay', () => {
     const sim = makeSim();
     rich(sim);
     awakenSeed(sim);
-    const seedBefore = JSON.stringify(sim.grid.roof('r1')!.tiles);
+    const seedBefore = JSON.stringify(sim.grid.tilesOf('r1'));
     sim.state.upgrades.seedVault = 3;
     sim.state.caps.biomass = TUNING.start.caps.biomass * 2.5;
     sim.state.resources.biomass = 250;
@@ -70,7 +70,7 @@ describe('first expansion: the Skybridge Relay', () => {
     ground(sim, 'r2', 3, 5, 'restored');
     expect(sim.build.place('condenser', 'r2', 3, 5)).toBeTruthy();
     // the Seed's tiles changed only by time passing (no restoration there)
-    expect(JSON.parse(seedBefore).map((x: { ground: string }) => x.ground)).toEqual(sim.grid.roof('r1')!.tiles.map((x) => x.ground));
+    expect(JSON.parse(seedBefore).map((x: { ground: string }) => x.ground)).toEqual(sim.grid.tilesOf('r1').map((x) => x.ground));
     // Reservoir Gardens only grow on the Reservoir
     ground(sim, 'r1', 5, 5, 'restored');
     expect(sim.build.check('reservoirGarden', 'r1', 5, 5).ok).toBe(false);
@@ -121,7 +121,7 @@ describe('first expansion: the Skybridge Relay', () => {
     // Meet the Reservoir requirements directly.
     const r2 = sim.grid.roof('r2')!;
     let n = 0;
-    for (const t of r2.tiles) if (!t.blocked && !t.occupantId && n++ < TUNING.neighbourhood.cores.r2.restoredTiles) ground(sim, 'r2', t.x, t.z, 'restored');
+    for (const t of sim.grid.tilesOf(r2.id)) if (!t.blocked && !t.occupantId && n++ < TUNING.neighbourhood.cores.r2.restoredTiles) ground(sim, 'r2', t.x, t.z, 'restored');
     ground(sim, 'r2', 1, 4, 'restored');
     sim.build.place('reservoirGarden', 'r2', 1, 4);
     sim.state.progression.overflows = TUNING.neighbourhood.cores.r2.overflows;
@@ -173,8 +173,8 @@ describe('the Neighbourhood Bloom', () => {
     expect(sim.state.resources.biomass).toBe(got);
     expect(fired).toBe(1);
     expect(JSON.stringify(sim.state.machines.map((m) => [m.id, m.type, m.roofId, m.x, m.z]))).toBe(machines);
-    for (const r of sim.state.rooftops)
-      for (const t of r.tiles) {
+    for (const r of sim.grid.rooftops)
+      for (const t of sim.grid.tilesOf(r.id)) {
         if (t.blocked || t.occupantId) continue; // ground under machines is left exactly as the player built it
         expect(t.ground).toBe('restored');
       }

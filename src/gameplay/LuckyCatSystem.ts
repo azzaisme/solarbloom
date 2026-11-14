@@ -117,13 +117,13 @@ export class LuckyCatSystem {
   catsGardenTiles(): TileData[] {
     const s = this.sim;
     const ok = (t: TileData) => !t.occupantId && !t.blocked && !s.isCoreTile(t) && (s.restoration.isEligible(t) || (t.ground === 'restored' && t.bloom < 2));
-    const roofs = s.state.rooftops.filter((r) => s.grid.isPlayable(r.id) && r.tiles.some(ok));
+    const roofs = s.grid.playableLayers().filter((r) => s.grid.tilesOf(r.id).some(ok));
     if (!roofs.length) return [];
     // Prefer a rooftop other than the one the player started on, so the reward shows up somewhere new.
     const away = roofs.filter((r) => r.id !== 'r1');
     const pool = away.length ? away : roofs;
     const roof = pool[Math.floor(this.sim.rng.next() * pool.length)];
-    const seeds = roof.tiles.filter(ok);
+    const seeds = s.grid.tilesOf(roof.id).filter(ok);
     const start = seeds[Math.floor(this.sim.rng.next() * seeds.length)];
     const out: TileData[] = [start];
     const seen = new Set([start.id]);
@@ -157,7 +157,7 @@ export class LuckyCatSystem {
   }
 
   catsGardenAvailable() {
-    return this.sim.state.rooftops.filter((r) => this.sim.grid.isPlayable(r.id)).length >= 2 && this.catsGardenTiles().length > 0;
+    return this.sim.grid.playableLayers().length >= 2 && this.catsGardenTiles().length > 0;
   }
 
   rollReward(): CatRewardType {

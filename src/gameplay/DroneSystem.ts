@@ -80,9 +80,9 @@ export class DroneSystem {
       const remote = l.from === hub.roofId ? l.to : l.from;
       if (!s.grid.isPlayable(remote)) continue;
       const [rx, rz] = l.from === remote ? l.fromTile : l.toTile;
-      for (const t of s.grid.roof(remote)!.tiles) {
+      for (const t of s.grid.tilesWithin(remote, rx, rz, this.radius())) {
         const dist = Math.abs(t.x - rx) + Math.abs(t.z - rz);
-        if (dist > this.radius() || !s.restoration.isEligible(t)) continue;
+        if (!s.restoration.isEligible(t)) continue;
         const score = dist + (t.ground === 'prepared' ? 0 : 1.5);
         if (score < bestScore) {
           bestScore = score;
@@ -132,8 +132,7 @@ export class DroneSystem {
   private synergyScore(t: TileData): number {
     const s = this.sim;
     let score = 0;
-    for (const m of s.state.machines) {
-      if (m.roofId !== t.roofId) continue;
+    for (const m of s.grid.machinesNear(t.roofId, t.x, t.z, s.chains.synergyReach())) {
       const d = distToFootprint(t.x, t.z, m.x, m.z, m.size);
       if (m.type === 'pollinator' && d >= 1 && d <= s.upgrades.pollinatorReach) score += 3;
       else if (m.type === 'solar' && d === 1 && m.boostUntil <= s.time) score += 1.5;
@@ -152,13 +151,11 @@ export class DroneSystem {
     const s = this.sim;
     const hub = s.machine(d.hubId);
     if (!hub) return undefined;
-    const roof = s.grid.roof(hub.roofId);
-    if (!roof) return undefined;
+    const inRange = s.grid.tilesInRange(hub, this.radius());
     let best: TileData | undefined;
     let bestD = Infinity;
     const intel = s.upgrades.level('chainIntel') > 0;
-    for (const t of roof.tiles) {
-      if (distToFootprint(t.x, t.z, hub.x, hub.z, hub.size) > this.radius()) continue;
+    for (const t of inRange) {
       if (!s.restoration.isEligible(t)) continue;
       const dx = t.x + 0.5 - d.px;
       const dz = t.z + 0.5 - d.pz;
@@ -172,8 +169,7 @@ export class DroneSystem {
     }
     if (best) return best;
     // Nothing left to restore in range: nurture green tiles toward full bloom instead.
-    for (const t of roof.tiles) {
-      if (distToFootprint(t.x, t.z, hub.x, hub.z, hub.size) > this.radius()) continue;
+    for (const t of inRange) {
       if (t.ground !== 'restored' || t.occupantId || t.bloom >= TUNING.restore.maxBloom || this.isReserved(t.id)) continue;
       const dx = t.x + 0.5 - d.px;
       const dz = t.z + 0.5 - d.pz;

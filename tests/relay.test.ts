@@ -24,7 +24,7 @@ function connected(seed = 5) {
   sim.hood.buildLink('seed-reservoir');
   sim.state.progression.cores.r2 = true;
   sim.hood.buildLink('seed-canopy');
-  for (const r of sim.state.rooftops) for (const t of r.tiles) if (!t.blocked && !t.occupantId) ground(sim, r.id, t.x, t.z, 'prepared');
+  for (const r of sim.grid.rooftops) for (const t of sim.grid.tilesOf(r.id)) if (!t.blocked && !t.occupantId) ground(sim, r.id, t.x, t.z, 'prepared');
   return sim;
 }
 
@@ -61,7 +61,7 @@ describe('cross-roof Bloom Chains', () => {
     const sim = makeSim();
     rich(sim);
     awakenSeed(sim);
-    for (const t of sim.grid.roof('r1')!.tiles) if (!t.blocked && !t.occupantId) ground(sim, 'r1', t.x, t.z, 'prepared');
+    for (const t of sim.grid.tilesOf('r1')) if (!t.blocked && !t.occupantId) ground(sim, 'r1', t.x, t.z, 'prepared');
     const c = collect(sim);
     sim.restoration.complete(sim.grid.get('r1', 6, 2)!, 'pulse');
     sim.advance(3);

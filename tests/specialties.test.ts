@@ -27,7 +27,7 @@ function events(sim: Sim) {
 describe('Reservoir Overflow', () => {
   it('condensers fill a Reservoir Garden; a full basin overflows into up to 3 eligible dry tiles, once', () => {
     const sim = open();
-    for (const t of sim.grid.roof('r2')!.tiles) if (!t.occupantId && !t.blocked) ground(sim, 'r2', t.x, t.z, 'restored');
+    for (const t of sim.grid.tilesOf('r2')) if (!t.occupantId && !t.blocked) ground(sim, 'r2', t.x, t.z, 'restored');
     const c = sim.build.place('condenser', 'r2', 2, 3)!;
     const g = sim.build.place('reservoirGarden', 'r2', 2, 5)!;
     expect(distToFootprint(g.x, g.z, c.x, c.z, c.size)).toBeLessThanOrEqual(N.reservoir.condenserRange);
@@ -59,7 +59,7 @@ describe('Reservoir Overflow', () => {
 
   it('a full basin never stalls: with nothing dry nearby it grows the green tiles, or just splashes', () => {
     const sim = open();
-    for (const t of sim.grid.roof('r2')!.tiles) if (!t.occupantId && !t.blocked) {
+    for (const t of sim.grid.tilesOf('r2')) if (!t.occupantId && !t.blocked) {
       ground(sim, 'r2', t.x, t.z, 'restored');
       t.bloom = 3;
     }
@@ -100,7 +100,7 @@ describe('Canopy: the Elder Tree', () => {
   it('charges from blooms around it and releases one Canopy Burst, amplified by gardens inside its reach', () => {
     const sim = open();
     const tree = sim.state.machines.find((m) => m.type === 'core' && m.roofId === 'r3')!;
-    for (const t of sim.grid.roof('r3')!.tiles) if (!t.occupantId && !t.blocked) ground(sim, 'r3', t.x, t.z, 'polluted');
+    for (const t of sim.grid.tilesOf('r3')) if (!t.occupantId && !t.blocked) ground(sim, 'r3', t.x, t.z, 'polluted');
     ground(sim, 'r3', 2, 3, 'restored');
     const garden = sim.build.place('pollinator', 'r3', 2, 3)!; // 2 tiles from the trunk: inside the burst
     expect(sim.chains.inCanopyBurst(tree, garden)).toBe(true);
@@ -131,7 +131,7 @@ describe('Canopy: the Elder Tree', () => {
 describe('Overcharge Pulse (active play near machines)', () => {
   it('a manual pulse next to a solar panel doubles its next burst, once; drones never boost', () => {
     const sim = open();
-    for (const t of sim.grid.roof('r1')!.tiles) if (!t.occupantId && !t.blocked) ground(sim, 'r1', t.x, t.z, 'prepared');
+    for (const t of sim.grid.tilesOf('r1')) if (!t.occupantId && !t.blocked) ground(sim, 'r1', t.x, t.z, 'prepared');
     ground(sim, 'r1', 5, 5, 'restored');
     const solar = sim.build.place('solar', 'r1', 5, 5)!;
     const ev = events(sim);
@@ -151,7 +151,7 @@ describe('Overcharge Pulse (active play near machines)', () => {
   it('a boosted Pollinator Garden pollinates one extra neighbour in its next chain', () => {
     const count = (boost: boolean) => {
       const sim = open(11);
-      for (const t of sim.grid.roof('r1')!.tiles) if (!t.occupantId && !t.blocked) ground(sim, 'r1', t.x, t.z, 'prepared');
+      for (const t of sim.grid.tilesOf('r1')) if (!t.occupantId && !t.blocked) ground(sim, 'r1', t.x, t.z, 'prepared');
       ground(sim, 'r1', 4, 4, 'restored');
       const g = sim.build.place('pollinator', 'r1', 4, 4)!;
       sim.upgrades.purchase('pollinatorReach');
@@ -168,7 +168,7 @@ describe('Overcharge Pulse (active play near machines)', () => {
 describe('Drone Dispatch', () => {
   it('an idle drone flies over the bridge, restores near the far relay, then comes home', () => {
     const sim = open();
-    for (const t of sim.grid.roof('r1')!.tiles) if (!t.occupantId && !t.blocked) {
+    for (const t of sim.grid.tilesOf('r1')) if (!t.occupantId && !t.blocked) {
       ground(sim, 'r1', t.x, t.z, 'restored');
       t.bloom = 3;
     }

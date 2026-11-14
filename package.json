@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:perf": "PERF=1 vitest run",
     "test:e2e": "vite build && node tests/e2e/picking.e2e.mjs"
   },
   "dependencies": {

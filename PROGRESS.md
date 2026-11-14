@@ -2,6 +2,42 @@
 
 Moved out of the `azzaisme/mouthwash-brigade` repo (where it started in a `solarbloom/` folder) with its full history.
 
+# City scale (epic #1)
+
+The game is growing into an endless, fog-covered city (see issue #1 and its sub-epics).
+
+| Sub-epic | Status |
+|---|---|
+| #2 City 01: endless chunked world model | ✅ |
+| #3 City 02: save format v4 (old saves scrapped, sparse deltas) | ✅ |
+| #4–#16 | not started |
+
+## City 01: world model
+
+- `Grid` is the world: a set of layers (the unbounded ground `g`, and each rooftop as a bounded raised layer), each made of 16×16 chunks generated on first touch. Tile ids stay `layer:x:z`.
+- Generation is a pure function of `(seed, layer, x, z)` (a hash, not the game RNG), so the world is identical whatever order chunks are visited in.
+- `tilesNear`, `tilesInRange`, `tilesWithin`, `neighbors` and `machinesNear` (a per-chunk machine index) cost the same in a 64-tile world and a 512k-tile one. Every per-tick "what's nearby" scan in the systems now goes through them; growing tiles are tracked in a set instead of scanning tiles each tick.
+- Adjacency never crosses layers. The ground exists but stays unplayable until the park (City 05).
+- `GameState` no longer holds tiles (`rooftops` is gone; `layers` describes the surfaces). Occupancy is rebuilt from the machine list.
+
+## City 02: save format v4
+
+- Saves older than v4 are discarded with a notice ("A new city awaits…"). Newer or unreadable saves are still backed up, never overwritten. The Round 1–Phase 3 migrations and fixtures are deleted.
+- Only chunks that differ from generation are saved, as compact columns (ground, bloom, pollution, plus a short list of timers). Chunks are re-packed only when touched, and the tiles JSON is spliced from cached fragments.
+- Autosave gzip-compresses at an idle moment (`SB4z:` + base64); page unload saves plain JSON synchronously; a full or blocked storage shows a message once. Saved chunks of the ground load lazily (chunks with growth in progress load at once).
+
+Benchmarks (`npm run test:perf`, Node, synthetic city of ~2,000 chunks ≈ 1,000 areas, 512k tiles, 2,000 machines):
+
+| | Result | Target |
+|---|---|---|
+| Lookup set (tilesNear + tilesWithin + machinesNear + neighbors) | ~7–9 µs, same as a 64-tile world | flat |
+| Autosave serialize | ~5 ms | < 8 ms |
+| Stored size (gzip) | 0.79 MB (2.37 MB plain) | < 1 MB |
+| Load | ~12 ms | < 50 ms |
+| First full pack / gzip | ~80 ms / ~250 ms (async) | — |
+
+---
+
 # Phase 3: the living neighbourhood (plan: `docs/PHASE_3_PLAN.md`)
 
 ## What already existed vs what the plan assumed

@@ -37,7 +37,7 @@ export class Overlays {
     // Faint tile boundaries, shown only while building.
     this.gridLines = group(root, 'buildGrid');
     const lineMat = mat('#1d3640', { opacity: 0.45, unlit: true });
-    for (const r of sim.state.rooftops) {
+    for (const r of sim.grid.rooftops) {
       if (!r.unlocked || r.preview) continue;
       const y = r.origin[1] + r.height + SLAB_TOP + 0.012;
       for (let i = 0; i <= r.width; i++) shape(this.gridLines, 'box', lineMat, { pos: [r.origin[0] + i, y, r.origin[2] + r.depth / 2], scale: [0.04, 0.01, r.depth], receive: false });

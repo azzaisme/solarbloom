@@ -114,6 +114,12 @@ export class BloomChainSystem {
     return run;
   }
 
+  /** The furthest any machine reacts to a tile change (machine lookups only need to look this far). */
+  synergyReach(): number {
+    const u = this.sim.upgrades;
+    return Math.max(1, u.pollinatorReach, u.treeRadius, TUNING.neighbourhood.canopy.chargeRadius, TUNING.neighbourhood.reservoir.radius);
+  }
+
   /** Canopy Burst reach from the Elder Tree's footprint. */
   canopyBurstRadius(): number {
     const c = TUNING.neighbourhood.canopy;
@@ -228,9 +234,8 @@ export class BloomChainSystem {
   /** Lucky Cat Mega Bloom: a free chain that may break through concrete too. */
   startMega(budget: number = TUNING.cat.megaBloomTiles): boolean {
     const s = this.sim;
-    const restored = s.state.rooftops
-      .filter((r) => r.unlocked && !r.preview)
-      .flatMap((r) => r.tiles)
+    const restored = s.grid
+      .playableTiles()
       .filter((t) => t.ground === 'restored' && s.grid.neighbors(t).some((n) => s.restoration.isEligible(n)));
     if (!restored.length) return false;
     const origin = s.rng.pick(restored);
@@ -256,7 +261,7 @@ export class BloomChainSystem {
   private react(run: ChainRun, tile: TileData, kind: 'RESTORE' | 'GROW', depth: number) {
     const s = this.sim;
     if (!this.canGrow(run, depth)) return;
-    const machines = s.state.machines.filter((m) => m.roofId === tile.roofId);
+    const machines = s.grid.machinesNear(tile.roofId, tile.x, tile.z, this.synergyReach());
     for (const m of machines) {
       const d = distToFootprint(tile.x, tile.z, m.x, m.z, m.size);
       if (m.type === 'solar' && d === 1 && !run.solarFired.has(m.id)) {
@@ -294,8 +299,7 @@ export class BloomChainSystem {
   relayZone(l: RoofLinkDef, roofId: string): TileData[] {
     const [rx, rz] = this.relayTile(l, roofId);
     const R = TUNING.neighbourhood.relay.zoneRadius;
-    const roof = this.sim.grid.roof(roofId);
-    return roof ? roof.tiles.filter((t) => Math.abs(t.x - rx) + Math.abs(t.z - rz) <= R) : [];
+    return this.sim.grid.tilesWithin(roofId, rx, rz, R);
   }
 
   /**
@@ -334,7 +338,7 @@ export class BloomChainSystem {
     const R = TUNING.neighbourhood.relay.remoteRadius;
     const growable = (t: TileData) => t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom;
     const lushable = (t: TileData) => t.ground === 'restored' && !t.occupantId && !t.blocked;
-    const near = roof.tiles.filter((t) => (!run || !run.visited.has(t.id)) && Math.abs(t.x - rx) + Math.abs(t.z - rz) <= R);
+    const near = s.grid.tilesWithin(roofId, rx, rz, R).filter((t) => !run || !run.visited.has(t.id));
     const rank = (list: TileData[]) =>
       list
         .map((t) => ({ t, score: this.synergyAt(t), d: Math.abs(t.x - rx) + Math.abs(t.z - rz) }))
@@ -349,8 +353,7 @@ export class BloomChainSystem {
   synergyAt(t: TileData): number {
     const s = this.sim;
     let score = 0;
-    for (const m of s.state.machines) {
-      if (m.roofId !== t.roofId) continue;
+    for (const m of s.grid.machinesNear(t.roofId, t.x, t.z, this.synergyReach())) {
       const d = distToFootprint(t.x, t.z, m.x, m.z, m.size);
       if (d < 1) continue;
       if (m.type === 'pollinator' && d <= s.upgrades.pollinatorReach) score += 3;

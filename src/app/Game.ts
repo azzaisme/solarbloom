@@ -28,7 +28,7 @@ import { Vfx } from '../rendering/Vfx';
 import { FlyText } from '../ui/Fly';
 import { CORE_TEXT, Hud, type Settings, type Tool } from '../ui/Hud';
 import { EventBus } from './EventBus';
-import { SaveService } from './SaveService';
+import { type LoadResult, SaveService } from './SaveService';
 
 const SETTINGS_KEY = 'solarbloom.settings';
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Full bloom'];
@@ -95,9 +95,8 @@ export class Game {
   private fastFor = 0;
   private maxDpr = 2;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, lr: LoadResult = new SaveService().loadResult()) {
     this.settings = loadSettings();
-    const lr = this.saver.loadResult();
     const loaded = lr.state;
     const state = loaded ?? createInitialState();
     this.sim = new Sim(state, this.bus);
@@ -113,7 +112,7 @@ export class Game {
 
     initLowPoly(this.app.graphicsDevice);
     this.scene = new SceneBuilder(this.app, this.tweens);
-    this.scene.build(state.rooftops);
+    this.scene.build(this.sim.grid.rooftops, (id) => this.sim.grid.tilesOf(id));
     this.camera = new CameraController(this.app, this.tweens);
     this.app.scene.fog.start = this.camera.fogDepth(46);
     this.app.scene.fog.end = this.camera.fogDepth(84);
@@ -172,7 +171,7 @@ export class Game {
 
     this.sim.cat.anchorView = (a) => this.anchorView(this.cat.anchorWorld(a));
     if (state.cat.active) this.cat.show(state.cat.active.anchorId, false);
-    this.camera.setBoundsFor(state.rooftops);
+    this.camera.setBoundsFor(this.sim.grid.rooftops);
     if (state.progression.coreActivated) {
       this.scene.restoreBuilding(true);
       this.machines.setCoreState('awake', true);
@@ -206,12 +205,13 @@ export class Game {
     window.addEventListener('keydown', unlock);
     document.addEventListener('visibilitychange', () => {
       this.hiddenPause = document.hidden;
-      if (document.hidden) this.save();
+      if (document.hidden) this.saveNow();
     });
-    window.addEventListener('beforeunload', () => this.save());
+    window.addEventListener('beforeunload', () => this.saveNow());
 
     this.app.on('update', (dt: number) => this.update(dt));
     this.app.start();
+    if (lr.scrapped) setTimeout(() => this.hud.toast('A new city awaits — older gardens were cleared for this update. 🌱', '', 7), 400);
     if (lr.backedUpAs) setTimeout(() => this.hud.toast(`Your old save couldn't be read by this version, so it was kept safely as a backup and a new rooftop started.<small>${lr.backedUpAs}</small>`, '', 8), 400);
     if (!state.progression.introSeen && state.stats.tilesRestored === 0) this.hud.showIntro();
     else if (loaded) setTimeout(() => this.hud.toast('Welcome back! Your garden kept its shape. 🌱', '', 2.6), 400);
@@ -245,8 +245,36 @@ export class Game {
     if (!s.debug) this.hud.setDebug(null);
   }
 
+  private saving = false;
+  /** Autosave: compressed, off the frame (the next idle moment). Unload uses the plain synchronous save. */
   save() {
+    if (this.resetting || this.saving) return;
+    this.saving = true;
+    const seq = ++this.saveSeq;
+    const run = () =>
+      void this.saver
+        .serializeCompressed(this.sim.state)
+        .then((data) => {
+          // A newer synchronous save (unload) or a New Game wins over this one.
+          if (this.resetting || seq !== this.saveSeq) return;
+          const ok = this.saver.write(data);
+          if (!ok && !this.warnedStorage) {
+            this.warnedStorage = true;
+            this.hud.toast("Couldn't save your garden: this browser's storage is full or blocked.", '', 6);
+          }
+        })
+        .finally(() => (this.saving = false));
+    const idle = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+    if (idle) idle(run, { timeout: 2000 });
+    else setTimeout(run, 0);
+  }
+  private warnedStorage = false;
+  private saveSeq = 0;
+
+  /** Immediate, uncompressed save for page unload (no time to compress). */
+  saveNow() {
     if (this.resetting) return;
+    this.saveSeq++;
     this.saver.save(this.sim.state);
   }
 
@@ -313,7 +341,7 @@ export class Game {
     const { o, d } = this.camera.ray(x, y);
     let best: Pick | undefined;
     let bestT = Infinity;
-    for (const r of this.sim.state.rooftops) {
+    for (const r of this.sim.grid.rooftops) {
       if (!r.unlocked && !r.preview) continue;
       if (Math.abs(d.y) < 1e-6) continue;
       const planeY = r.origin[1] + r.height + SLAB_TOP;
@@ -979,7 +1007,7 @@ export class Game {
       const frac = p.restoredCount(roofId) / Math.max(1, p.restorableCount(roofId));
       return this.sim.hood.coreAwake(roofId) ? 4 : frac >= 0.75 ? 3 : frac >= 0.5 ? 2 : frac >= 0.25 ? 1 : 0;
     };
-    for (const r of this.sim.state.rooftops) if (r.id !== 'r1') this.grid.setStage(r.id, stageOf(r.id));
+    for (const r of this.sim.grid.rooftops) if (r.id !== 'r1') this.grid.setStage(r.id, stageOf(r.id));
     const stage = stageOf('r1');
     if (stage === this.stage) return;
     const first = this.stage < 0;
@@ -1114,7 +1142,7 @@ export class Game {
     const g = this.camera.goalPoint;
     let best = 'r1';
     let bd = Infinity;
-    for (const r of this.sim.state.rooftops) {
+    for (const r of this.sim.grid.rooftops) {
       const c = this.roofCenter(r.id);
       const d = Math.hypot(c.x - g.x, c.z - g.z);
       if (d < bd) {
@@ -1136,7 +1164,7 @@ export class Game {
 
   /** F: cycle through the rooftops you can see (revealed or playable). */
   private focusNextRoof() {
-    const ids = this.sim.state.rooftops.filter((r) => r.unlocked).map((r) => r.id);
+    const ids = this.sim.grid.rooftops.filter((r) => r.unlocked).map((r) => r.id);
     if (ids.length <= 1) return this.focusRoof('r1');
     const i = ids.indexOf(this.nearestRoof());
     this.focusRoof(ids[(i + 1) % ids.length]);
@@ -1242,7 +1270,7 @@ export class Game {
     this.hud.cinematic(true, replay ? 'The Neighbourhood Bloom' : 'The Neighbourhood Blooms!');
     this.sfx.fanfare();
     // Frame the whole neighbourhood.
-    const roofs = s.state.rooftops;
+    const roofs = s.grid.rooftops;
     const cx = roofs.reduce((a, r) => a + r.origin[0] + r.width / 2, 0) / roofs.length;
     const cz = roofs.reduce((a, r) => a + r.origin[2] + r.depth / 2, 0) / roofs.length;
     this.camera.focus(cx, 0.3, cz, this.camera.minZoom + 0.04, 2.2);
@@ -1273,7 +1301,7 @@ export class Game {
       const core = s.state.machines.find((m) => m.type === 'core' && m.roofId === r.id);
       const ox = core ? core.x + 1 : r.width / 2;
       const oz = core ? core.z + 1 : r.depth / 2;
-      for (const t of r.tiles) {
+      for (const t of s.grid.tilesOf(r.id)) {
         if (t.blocked || t.occupantId) continue;
         const d = Math.hypot(t.x + 0.5 - ox, t.z + 0.5 - oz);
         const fresh = restored.includes(t.id);
@@ -1413,7 +1441,7 @@ export class Game {
     const hood = this.sim.hood;
     const show = !this.cinematic && !this.hud.introOpen;
     const zoomedOut = this.camera.zoom < 0.68;
-    for (const r of this.sim.state.rooftops) {
+    for (const r of this.sim.grid.rooftops) {
       const id = `roofLabel-${r.id}`;
       if (!show) {
         this.hud.worldLabel(id, null);
@@ -1451,7 +1479,7 @@ export class Game {
       this.hud.worldLabel(id, `🌉 ${l.name}<small>Opens ${to.name}</small><button data-link="${l.id}" ${st.ok ? '' : 'disabled'}>${st.ok ? `Build · ${formatCost(st.cost)}` : esc(st.reason ?? '')}</button>`, sp.x, sp.y, true);
     }
     // Rooftop chips once a second rooftop is in sight.
-    const revealed = this.sim.state.rooftops.filter((r) => r.unlocked);
+    const revealed = this.sim.grid.rooftops.filter((r) => r.unlocked);
     if (revealed.length > 1) {
       const near = this.nearestRoof();
       const icon: Record<string, string> = { r1: '🏠', r2: '💧', r3: '🌳' };
@@ -1512,7 +1540,7 @@ export class Game {
     this.updateStage(false);
     // First-tile beacon until the player restores something.
     if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic) {
-      const tiles = this.sim.grid.roof('r1')!.tiles;
+      const tiles = this.sim.grid.tilesOf('r1');
       const t = tiles.find((x) => x.ground === 'prepared' && !x.occupantId) ?? tiles.find((x) => x.ground === 'polluted' && !x.blocked && !x.occupantId);
       if (t) this.overlays.showBeacon('r1', t.x, t.z);
     } else this.overlays.hideBeacon();

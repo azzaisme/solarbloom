@@ -640,7 +640,7 @@ export class Hud {
       const rp = Math.round((rn / Math.max(1, rt)) * 100);
       this.set('objTitle', $(this.root, '#objTitle'), 'text', o.title);
       if (o.step === 'done' || o.step === 'bloom') {
-        const rs = s.state.rooftops;
+        const rs = s.grid.rooftops;
         const all = rs.reduce((a, r) => a + p.restorableCount(r.id), 0);
         const full = rs.reduce((a, r) => a + p.fullBloomCount(r.id), 0);
         const fp = Math.round((full / Math.max(1, all)) * 100);

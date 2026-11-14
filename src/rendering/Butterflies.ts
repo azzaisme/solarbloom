@@ -31,7 +31,7 @@ export class Butterflies {
   ) {}
 
   private gardenTiles(): TileData[] {
-    return this.sim.state.rooftops.filter((r) => r.unlocked && !r.preview).flatMap((r) => r.tiles.filter((t) => t.ground === 'restored' && !t.occupantId));
+    return this.sim.grid.rooftops.filter((r) => r.unlocked && !r.preview).flatMap((r) => this.sim.grid.tilesOf(r.id).filter((t) => t.ground === 'restored' && !t.occupantId));
   }
 
   private pickTarget(f: Fly, tiles: TileData[]) {

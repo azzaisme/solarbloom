@@ -26,6 +26,7 @@ export function setGround(sim: Sim, x: number, z: number, g: GroundState, roof =
   t.ground = g;
   t.pollution = g === 'polluted' ? 100 : 0;
   t.bloom = g === 'restored' ? Math.max(1, t.bloom) : 0;
+  sim.grid.touch(t);
   sim.production.markDirty();
   return t;
 }

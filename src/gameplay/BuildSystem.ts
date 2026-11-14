@@ -80,6 +80,7 @@ export class BuildSystem {
     const m: MachineData = { id: s.newId('m'), type, roofId, x, z, size: def.size, boostUntil: 0, timer: 0, charge: 0 };
     s.state.machines.push(m);
     for (const c of s.grid.footprint(roofId, x, z, def.size)) if (c) c.occupantId = m.id;
+    s.grid.indexMachine(m);
     s.production.markDirty();
     s.bus.emit('machine.built', { machine: m });
     s.cat.relocateIfBlocked(); // the Lucky Cat never blocks a build: it hops to another nook

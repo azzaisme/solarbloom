@@ -31,20 +31,15 @@ export class ProgressionSystem {
   constructor(private sim: Sim) {}
 
   restoredCount(roofId: string): number {
-    const r = this.sim.grid.roof(roofId);
-    if (!r) return 0;
-    return r.tiles.filter((t) => t.ground === 'restored' && isRestorable(t, this.sim.state.machines)).length;
+    return this.sim.grid.tilesOf(roofId).filter((t) => t.ground === 'restored' && isRestorable(t, this.sim.state.machines)).length;
   }
 
   fullBloomCount(roofId: string): number {
-    const r = this.sim.grid.roof(roofId);
-    return r ? r.tiles.filter((t) => t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom).length : 0;
+    return this.sim.grid.tilesOf(roofId).filter((t) => t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom).length;
   }
 
   restorableCount(roofId: string): number {
-    const r = this.sim.grid.roof(roofId);
-    if (!r) return 0;
-    return r.tiles.filter((t) => isRestorable(t, this.sim.state.machines)).length;
+    return this.sim.grid.tilesOf(roofId).filter((t) => isRestorable(t, this.sim.state.machines)).length;
   }
 
   built(type: BuildableType) {

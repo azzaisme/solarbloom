@@ -45,7 +45,7 @@ try {
     // Every rooftop, each focused in turn (all unlocked for the test), at each zoom.
     await page.evaluate(() => {
       const g = window.solarbloom;
-      for (const r of g.sim.state.rooftops) {
+      for (const r of g.sim.grid.rooftops) {
         r.unlocked = true;
         r.preview = false;
       }
@@ -61,7 +61,7 @@ try {
             g.camera.glide(roof.origin[0] + roof.width / 2, cy, roof.origin[2] + roof.depth / 2, zoom);
             for (let i = 0; i < 200; i++) g.camera.update(0.05);
             const out = [];
-            for (const t of roof.tiles) {
+            for (const t of g.sim.grid.tilesOf(roofId)) {
               for (const [ox, oz] of OFFSETS) {
                 const s = g.camera.toScreen(new V(roof.origin[0] + t.x + ox, cy + 0.08, roof.origin[2] + t.z + oz));
                 // Only points actually on screen can be clicked by a player.
@@ -120,8 +120,8 @@ try {
     // Regression: when the last tile using a colour (e.g. all moss) disappears, shared meshes must survive.
     await page.evaluate(() => {
       const s = window.solarbloom.sim;
-      for (const t of s.grid.roof('r1').tiles) if (t.ground === 'prepared') s.restoration.complete(t, 'pulse');
-      for (const t of s.grid.roof('r1').tiles) if (t.ground === 'polluted' && !t.blocked) { t.ground = 'prepared'; t.pollution = 0; window.solarbloom.grid.refresh(t, false); break; }
+      for (const t of s.grid.tilesOf('r1')) if (t.ground === 'prepared') s.restoration.complete(t, 'pulse');
+      for (const t of s.grid.tilesOf('r1')) if (t.ground === 'polluted' && !t.blocked) { t.ground = 'prepared'; t.pollution = 0; window.solarbloom.grid.refresh(t, false); break; }
     });
     await page.waitForTimeout(1500);
     if (errors.length) fail(`${vp.name}: page errors: ${errors.join(' | ')}`);

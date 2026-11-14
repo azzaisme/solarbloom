@@ -102,7 +102,7 @@ export class NeighbourhoodSystem {
     if (!fb) return undefined;
     const r = this.sim.grid.roof(fb.roofId);
     if (!r) return undefined;
-    const open = r.tiles.filter((t) => isRestorable(t, this.sim.state.machines) && !t.occupantId);
+    const open = this.sim.grid.tilesOf(r.id).filter((t) => isRestorable(t, this.sim.state.machines) && !t.occupantId);
     const have = open.filter((t) => t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom).length;
     return { roofId: fb.roofId, roofName: r.name, have, need: Math.max(1, Math.ceil(open.length * fb.share)) };
   }
@@ -215,9 +215,8 @@ export class NeighbourhoodSystem {
     }
     s.state.progression.neighbourhoodBloomAt = s.time; // claimed first: reloading can never pay twice
     const restored: string[] = [];
-    for (const r of s.state.rooftops) {
-      if (!s.grid.isPlayable(r.id)) continue;
-      for (const t of r.tiles) {
+    for (const r of s.grid.playableLayers()) {
+      for (const t of s.grid.tilesOf(r.id)) {
         if (!isRestorable(t, s.state.machines) || t.occupantId) continue;
         if (t.ground === 'restored') continue;
         t.ground = 'restored';
@@ -225,6 +224,7 @@ export class NeighbourhoodSystem {
         t.pollution = 0;
         t.growthRemainingSec = 0;
         t.growSource = undefined;
+        s.grid.touch(t);
         restored.push(t.id);
       }
     }

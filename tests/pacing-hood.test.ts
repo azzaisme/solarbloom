@@ -78,12 +78,12 @@ export function playNeighbourhood(seed: number, style: Style, actionEvery = 3, m
       if (want && sim.build.isUnlocked(want)) {
         const cost = sim.build.cost(want);
         if (sim.econ.canAfford(cost)) {
-          const spots = roof.tiles.filter((t) => sim.build.check(want, roofId, t.x, t.z).ok).sort((a, b) => spotScore(want, b) - spotScore(want, a) || a.x + a.z - (b.x + b.z));
+          const spots = sim.grid.tilesOf(roof.id).filter((t) => sim.build.check(want, roofId, t.x, t.z).ok).sort((a, b) => spotScore(want, b) - spotScore(want, a) || a.x + a.z - (b.x + b.z));
           if (spots[0]) sim.build.place(want, roofId, spots[0].x, spots[0].z);
         } else goalCost = Math.max(goalCost, cost.biomass ?? 0);
       }
       // 3. pulse the most promising tile (the active roof first, then anywhere playable)
-      const pool = sim.state.rooftops.filter((r) => sim.grid.isPlayable(r.id)).flatMap((r) => r.tiles);
+      const pool = sim.grid.rooftops.filter((r) => sim.grid.isPlayable(r.id)).flatMap((r) => sim.grid.tilesOf(r.id));
       const cands = pool.filter((t) => sim.restoration.checkPulse(t).ok);
       const rank = (t: TileData) => (t.roofId === roofId ? 0 : 20) + (t.ground === 'restored' ? 30 : 0) - synergy(t) * 4 + (t.ground === 'prepared' ? 0 : 3);
       cands.sort((a, b) => rank(a) - rank(b) || a.pollution - b.pollution);

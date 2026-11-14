@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import type { RooftopData } from '../core/types';
+import type { RooftopData, TileData } from '../core/types';
 import { LINKS, type RoofLinkDef } from '../data/rooftops';
 import { color, mat, PALETTE, uniqueMat } from './Materials';
 import { assignBatch, group, shape, vshape } from './Shapes';
@@ -84,7 +84,10 @@ export class SceneBuilder {
   scenery!: Scenery;
   private stage = -1;
 
-  build(roofs: RooftopData[]) {
+  private tilesOf: (layerId: string) => TileData[] = () => [];
+
+  build(roofs: RooftopData[], tilesOf: (layerId: string) => TileData[]) {
+    this.tilesOf = tilesOf;
     this.lights();
     const r1 = roofs.find((r) => r.id === 'r1')!;
     this.r1 = this.building(r1, true);
@@ -270,7 +273,7 @@ export class SceneBuilder {
 
     if (main) {
       // Rusty vents on blocked tiles
-      for (const tile of roof.tiles.filter((t) => t.blocked)) {
+      for (const tile of this.tilesOf(roof.id).filter((t) => t.blocked)) {
         const vx = ox + tile.x + 0.5;
         const vz = oz + tile.z + 0.5;
         const v = group(g, 'vent', [vx, top, vz]);

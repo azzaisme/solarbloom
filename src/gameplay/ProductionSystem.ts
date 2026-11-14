@@ -31,9 +31,7 @@ export class ProductionSystem {
   /** True if the tile lies inside any pollinator's zone. */
   inPollinatorZone(t: TileData): boolean {
     const reach = this.sim.upgrades.pollinatorReach;
-    return this.sim.state.machines.some(
-      (m) => m.type === 'pollinator' && m.roofId === t.roofId && distToFootprint(t.x, t.z, m.x, m.z, m.size) <= reach,
-    );
+    return this.sim.grid.machinesNear(t.roofId, t.x, t.z, reach).some((m) => m.type === 'pollinator');
   }
 
   tileBiomassRate(t: TileData): number {
@@ -55,12 +53,9 @@ export class ProductionSystem {
       let b = 0;
       this.lushExpiry = Infinity;
       const now = this.sim.time;
-      for (const r of this.sim.state.rooftops) {
-        if (!r.unlocked || r.preview) continue;
-        for (const t of r.tiles) {
-          if (isRestorable(t, this.sim.state.machines)) b += this.tileBiomassRate(t);
-          if ((t.lushUntil ?? 0) > now) this.lushExpiry = Math.min(this.lushExpiry, t.lushUntil!);
-        }
+      for (const t of this.sim.grid.playableTiles()) {
+        if (isRestorable(t, this.sim.state.machines)) b += this.tileBiomassRate(t);
+        if ((t.lushUntil ?? 0) > now) this.lushExpiry = Math.min(this.lushExpiry, t.lushUntil!);
       }
       this.biomassRate = b;
     }

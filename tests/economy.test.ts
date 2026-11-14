@@ -35,7 +35,7 @@ describe('economy & restoration', () => {
     expect(sim.restoration.pulse(t.id)).toBe(false);
     expect(sim.state.resources.energy).toBe(3);
     for (let i = 0; i < 200; i++) {
-      for (const tile of sim.grid.roof('r1')!.tiles) sim.restoration.pulse(tile.id);
+      for (const tile of sim.grid.tilesOf('r1')) sim.restoration.pulse(tile.id);
       sim.tick();
       for (const k of ['energy', 'water', 'biomass'] as const) {
         expect(sim.state.resources[k]).toBeGreaterThanOrEqual(0);
@@ -107,7 +107,7 @@ describe('economy & restoration', () => {
     expect(fired[every - 1]).toBe(true);
     sim.advance(2);
     // the overcharged pulse restored its whole radius-2 diamond (where eligible)
-    const around = sim.grid.roof('r1')!.tiles.filter((t) => Math.abs(t.x - 4) + Math.abs(t.z - 4) <= 2 && !t.blocked && !sim.isCoreTile(t));
+    const around = sim.grid.tilesOf('r1').filter((t) => Math.abs(t.x - 4) + Math.abs(t.z - 4) <= 2 && !t.blocked && !sim.isCoreTile(t));
     expect(around.every((t) => t.ground === 'restored')).toBe(true);
   });
 });

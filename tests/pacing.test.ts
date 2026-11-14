@@ -16,7 +16,7 @@ export function playSession(seed: number, actionEvery = 3, minutes = 20) {
   const order: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'pollinator', 'motherTree', 'solar', 'pollinator'];
   const built: Record<string, number> = {};
   let next = 0;
-  const tiles = () => sim.grid.roof('r1')!.tiles;
+  const tiles = () => sim.grid.tilesOf('r1');
   const synergy = (t: TileData) =>
     sim.state.machines.reduce((a, m) => {
       const d = distToFootprint(t.x, t.z, m.x, m.z, m.size);

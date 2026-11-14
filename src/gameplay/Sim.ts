@@ -1,6 +1,7 @@
 import { EventBus } from '../app/EventBus';
 import { Economy } from '../core/Economy';
 import { Grid } from '../core/Grid';
+import { hasGrowth, unpackChunk } from '../core/TilePack';
 import { Rng } from '../core/Rng';
 import type { GameState, MachineData, TileData } from '../core/types';
 import { BloomChainSystem } from './BloomChainSystem';
@@ -38,7 +39,27 @@ export class Sim {
     readonly state: GameState,
     readonly bus: EventBus = new EventBus(),
   ) {
-    this.grid = new Grid(state.rooftops);
+    this.grid = new Grid(state.seed, state.layers);
+    // Saved tile deltas are applied as each chunk is generated; occupancy is rebuilt from the machines.
+    this.grid.pending = { ...(state.tiles ?? {}) };
+    delete state.tiles;
+    for (const m of state.machines) this.grid.indexMachine(m);
+    this.grid.onChunkCreated = (c) => {
+      const p = this.grid.pending[c.key];
+      delete this.grid.pending[c.key];
+      if (p) unpackChunk(c, p);
+      c.packed = p ?? '';
+      for (const m of this.grid.machinesInChunk(c.key)) for (const t of this.grid.footprint(m.roofId, m.x, m.z, m.size)) if (t) t.occupantId = m.id;
+    };
+    // The world travels with the state (for saving) but is never part of its JSON.
+    Object.defineProperty(state, 'world', { value: this.grid, enumerable: false, configurable: true, writable: true });
+    for (const l of this.grid.rooftops) this.grid.tilesOf(l.id);
+    // Other saved chunks load lazily when first touched, except ones with something in progress (growth).
+    for (const [key, p] of Object.entries(this.grid.pending)) {
+      if (!hasGrowth(p)) continue;
+      const [layer, cx, cz] = key.split('|');
+      this.grid.chunkAt(layer, Number(cx), Number(cz));
+    }
     this.econ = new Economy(state.resources, state.caps);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
@@ -51,6 +72,7 @@ export class Sim {
     this.progression = new ProgressionSystem(this);
     this.hood = new NeighbourhoodSystem(this);
     this.metrics = new Metrics(this);
+    this.restoration.adoptGrowing();
     this.upgrades.applyCaps();
   }
 
