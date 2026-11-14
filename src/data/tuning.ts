@@ -167,12 +167,12 @@ export const TUNING = {
     firstMinTime: 180, // Phase 4 E08.1: first cat at about minute 3–4 (was 4–6), once the player knows the grid
     firstMinRestored: 10,
     firstForceTime: 240,
-    laterMin: 240, // later cats: every 4–8 minutes of active play
-    laterMax: 480,
+    laterMin: 180, // Phase 4 E08.1: later cats every 3–5 minutes of active play (was 4–8)
+    laterMax: 300,
     hiddenBonusCapSec: 180, // reward grows a little with hidden time, up to this
     hiddenBonusMax: 0.5,
-    harvestSecondsMin: 60, // Lucky Harvest: 60–120 s of current biomass production
-    harvestSecondsMax: 120,
+    harvestSecondsMin: 30, // Phase 4 E08.4: Lucky Harvest: 30–60 s of sustained biomass production (no temporary boosts)
+    harvestSecondsMax: 60,
     harvestMin: 15,
     frenzySeconds: 45,
     frenzyMult: 3,

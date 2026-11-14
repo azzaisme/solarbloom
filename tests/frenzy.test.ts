@@ -115,3 +115,25 @@ describe('Phase 4 E07: automation', () => {
     for (const n of restored.values()) expect(n).toBe(1);
   });
 });
+
+describe('Phase 4 E08: Lucky Cat rewards', () => {
+  it('a Lucky Harvest is the same with or without a Frenzy running (sustained income), and says what did not fit', () => {
+    const run = (frenzy: boolean) => {
+      const sim = charged(12);
+      sim.state.cat.found = 0; // the first cat is always a Lucky Harvest
+      if (frenzy) sim.frenzy.activate();
+      sim.cat.spawn();
+      const b0 = sim.state.resources.biomass;
+      const r = sim.cat.claim()!;
+      return { got: sim.state.resources.biomass - b0, summary: r.summary };
+    };
+    const a = run(false);
+    const b = run(true);
+    expect(b.got).toBeCloseTo(a.got, 6);
+    const tight = charged(12);
+    tight.state.caps.biomass = tight.state.resources.biomass + 1;
+    tight.state.cat.found = 0;
+    tight.cat.spawn();
+    expect(tight.cat.claim()!.summary).toMatch(/didn't fit/);
+  });
+});

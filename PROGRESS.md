@@ -16,7 +16,8 @@ Plan: `docs/PHASE_4_EPICS.md`. Audit, baseline and results: `docs/PHASE_4_AUDIT.
 | E05 Evolving tiles | ✅ a fifth stage: Radiant (bloom 4) above Thriving/full bloom, production weights 0/1/2/4/8, golden Radiant look in both renderers, goals still count full bloom (Radiant included), drones finish tiles to full bloom first. Fountain now costs 100 🌿 only (an energy price could never fill once Radiant gave taps and drones endless work); the advisor saves up for fountain machines and points at green tiles when full blooms are missing |
 | E06 Bloom Frenzy | ✅ 0–100 meter from taps, chains, automation and capped overflow; waits until fired (button above the hotbar, Q); 15 s of +2 pulse tiers, biomass ×10, drones ×3; central `Modifiers` (strongest boost per stat); golden vignette and faster music; save/pause/reload safe; never charges offline or while ready/active. Bots: first Frenzy 3:48–4:00, 3–4 in 15 min |
 | E07 Automation | ✅ Drone Dash ×1.5/×2/×3, Work Radius +2 per level, Drone Squad (every hub +1/+2 drones), Drone Sweep (each drone restore also restores 2/4 tiles around it), drone tile lists and networks cached and own reach searched first (30-min city run 36 s → 13 s). Hands-off 30–36% of active (was 13–27%) |
-| E08–E11 | in progress |
+| E08 Lucky Cat | ✅ first cat ~3–4 min, then every 3–5 min of active play; Lucky Harvest = 30–60 s of sustained income (no Frenzy ×10), floor 15, age bonus; overflow named in the reward; composes with Frenzy. Existing: claim-once, no expiry, stash for missed cats, seeded rewards, save-safe. Not done: golden flowers / butterflies as extra discoveries (optional) |
+| E09–E11 | in progress |
 
 # City scale (epic #1)
 

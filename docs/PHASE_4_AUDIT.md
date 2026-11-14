@@ -310,3 +310,16 @@ Two softlocks the bots found, both fixed:
 | Hands-off fountain | 7:42–8:12 | 8:09–8:39 |
 
 Still below the 40–60% target. Active play got much stronger in E04 (reach tiers) and E06 (Frenzy), and both need a player. I'm leaving it here rather than weakening active play.
+
+---
+
+# E08 — Hidden Lucky Cat
+
+Already in the game: generated nooks beside obstacles (never inside geometry, in locked or fogged areas, or under the HUD), a cat that waits until found with only a soft hint after a while, a stash so a missed cat never blocks later rewards, claim-once (cleared before paying), and a seeded reward pool with Golden/rare variants. The cat, its anchor, age and claim state are all saved.
+
+Changed:
+- **Timing:** first cat at about **minute 3–4** of active play (from E04), then every **3–5 minutes** (was 4–8). Spawn timers run on sim time, so a closed game never spawns or ages a cat.
+- **Lucky Harvest** pays **30–60 s of sustained biomass income** (was 60–120 s of current income), with a floor of 15 🌿 and a bonus up to ×1.5 for a long-hidden cat. Sustained means without Bloom Frenzy, so a cat found mid-Frenzy pays the same (tested).
+- **No silent losses:** if storage can't hold the harvest, the reward line says "(N🌿 didn't fit)". That excess then turns into a little Frenzy charge through the overflow path.
+- **Composes with Frenzy** through `Modifiers` (Solar Surge is solar only; Frenzy is biomass, drones and reach).
+- **Not done:** the optional rare golden flowers or butterflies as extra discoveries (E08.7). The core cat came first.

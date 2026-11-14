@@ -360,16 +360,19 @@ export class LuckyCatSystem {
     const s = this.sim;
     const parts: string[] = [];
     const harvest = () => {
-      const rate = s.production.rates().biomass;
+      // Sustained rate: a cat found mid-Frenzy doesn't pay ×10 (Phase 4 E08.4).
+      const rate = s.production.rates(true).biomass;
       const secs = TUNING.cat.harvestSecondsMin + (TUNING.cat.harvestSecondsMax - TUNING.cat.harvestSecondsMin) * hidden;
       const amt = Math.max(TUNING.cat.harvestMin, rate * secs);
       const got = s.econ.add('biomass', amt);
+      const spilled = amt - got;
       const w = s.econ.add('water', 10 * mult);
       const e = s.econ.add('energy', 15 * mult);
       if (got) s.bus.emit('resource.gain', { kind: 'biomass', amount: got, reason: 'cat' });
       if (w) s.bus.emit('resource.gain', { kind: 'water', amount: w, reason: 'cat' });
       if (e) s.bus.emit('resource.gain', { kind: 'energy', amount: e, reason: 'cat' });
-      parts.push(`+${Math.floor(got)}🌿 +${Math.floor(w)}💧 +${Math.floor(e)}⚡`);
+      // Say plainly when storage couldn't hold it all (it turns into a little Frenzy charge instead).
+      parts.push(`+${Math.floor(got)}🌿 +${Math.floor(w)}💧 +${Math.floor(e)}⚡${spilled >= 1 ? ` (${Math.floor(spilled)}🌿 didn't fit)` : ''}`);
     };
     const frenzy = () => {
       const secs = TUNING.cat.frenzySeconds * mult;
