@@ -1,3 +1,4 @@
+import { HOME } from './ProgressionSystem';
 import type { CatRewardType, TileData } from '../core/types';
 import { CAT_ANCHORS, type CatAnchor } from '../data/rooftops';
 import { TUNING } from '../data/tuning';
@@ -71,7 +72,7 @@ export class LuckyCatSystem {
   }
 
   restoredCount() {
-    return this.sim.progression.restoredCount('r1');
+    return this.sim.progression.restoredCount(HOME);
   }
 
   tick() {

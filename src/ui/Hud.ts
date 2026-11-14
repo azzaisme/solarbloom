@@ -1,7 +1,9 @@
+import { HOME } from '../gameplay/ProgressionSystem';
 import { formatCost, KINDS } from '../core/Economy';
 import type { Cost } from '../core/types';
 import type { BuildableType, MachineData, ResourceKind } from '../core/types';
 import { BUILDABLE, MACHINES } from '../data/machines';
+import { AREA_TYPES } from '../data/city';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
 import { SEED_CORE_MACHINES } from '../gameplay/ProgressionSystem';
@@ -29,6 +31,8 @@ export interface HudCallbacks {
   buildLink(linkId: string): void;
   activateRoofCore(roofId: string): void;
   neighbourhoodBloom(replay: boolean): void;
+  /** Wake a city landmark (by machine id). */
+  wake(machineId: string): void;
 }
 
 export interface Settings {
@@ -102,7 +106,7 @@ export class Hud {
     return `
       <div id="res" class="panel"><div class="logo"><span class="sun"></span>Solarbloom</div>${rows}</div>
       <div id="obj" class="panel">
-        <h3 id="objTitle">Wake the Rooftop Core</h3>
+        <h3 id="objTitle">Wake the fountain</h3>
         <div class="pct" id="objPct">0% restored</div>
         <div class="next" id="objNext"></div>
         <div class="pbar"><i id="objBar" style="width:0%"></i></div>
@@ -125,11 +129,11 @@ export class Hud {
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
       <div id="intro" hidden><div class="panel card-intro">
         <h2>🌱 Welcome to Solarbloom</h2>
-        <p>This rooftop is dead concrete. Bring it back to life.</p>
+        <p>This old park is dead and grey, and the city around it is lost in a gloomy fog. Bring it back to life.</p>
         <ol>
           <li><b>Tap a grey tile</b> to restore it. Each tap uses a little ⚡ energy and 💧 water, which refill on their own.</li>
           <li><b>Green tiles grow 🌿 biomass.</b> Spend it on machines and upgrades. Tap a green tile again to grow flowers.</li>
-          <li><b>Goal:</b> wake the ancient Rooftop Core. The checklist is in the top-right corner.</li>
+          <li><b>Goal:</b> wake the dry fountain. Then the fog starts to lift. The checklist is in the top-right corner.</li>
         </ol>
         <button id="introGo">Start restoring ✨</button>
       </div></div>
@@ -225,12 +229,16 @@ export class Hud {
       if (link && !link.disabled) this.cb.buildLink(link.dataset.link!);
       const core = t.closest<HTMLButtonElement>('[data-core]');
       if (core && !core.disabled) this.cb.activateRoofCore(core.dataset.core!);
+      const wk = t.closest<HTMLButtonElement>('[data-wake]');
+      if (wk && !wk.disabled) this.cb.wake(wk.dataset.wake!);
       const nb = t.closest<HTMLButtonElement>('[data-bloom]');
       if (nb && !nb.disabled) this.cb.neighbourhoodBloom(nb.dataset.bloom === 'replay');
     });
     $(r, '#inspect').addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
       if (t.closest('[data-close]')) this.cb.closeInspect();
+      const w = t.closest<HTMLButtonElement>('[data-wake]');
+      if (w && !w.disabled) this.cb.wake(w.dataset.wake!);
       const b = t.closest<HTMLButtonElement>('[data-buy]');
       if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
     });
@@ -281,7 +289,7 @@ export class Hud {
   /** The current tutorial hint, written from live numbers, plus the control it refers to. */
   private hintFor(step: number): { text: string; target?: string } {
     const s = this.sim;
-    const n = s.progression.restoredCount('r1');
+    const n = s.progression.restoredCount(HOME);
     const build = (t: BuildableType, what: string) => ({
       text: `${what} Tap ${MACHINES[t].icon} ${MACHINES[t].name}, then a green or mossy tile. ${this.costNote(s.build.cost(t))}`,
       target: `[data-tool="${t}"]`,
@@ -306,21 +314,63 @@ export class Hud {
       case 6:
         return build('droneHub', 'Let a drone take over the small jobs (it also unlocks the 🌳 Mother Tree). Build a Drone Hub:');
       case 7: {
-        const full = s.progression.fullBloomCount('r1');
+        const full = s.progression.fullBloomCount(HOME);
         const missing = SEED_CORE_MACHINES.filter((t) => !s.progression.built(t));
         if (missing.length) return build(missing[0], `The Core also needs a ${MACHINES[missing[0]].name}.`);
-        return { text: `Wake the Core: restore ${TUNING.core.restoredTiles} tiles (${n}/${TUNING.core.restoredTiles}) and tap green tiles again until ${TUNING.core.fullBloomTiles} are in full bloom 🌳 (${full}/${TUNING.core.fullBloomTiles}).`, target: '#obj' };
+        const g = s.progression.homeIsPark ? TUNING.park : TUNING.core;
+        const what = s.progression.homeIsPark ? 'the fountain' : 'the Core';
+        return { text: `Wake ${what}: restore ${g.restoredTiles} tiles (${n}/${g.restoredTiles}) and tap green tiles again until ${g.fullBloomTiles} are in full bloom 🌳 (${full}/${g.fullBloomTiles}).`, target: '#obj' };
       }
       case 8:
-        return { text: 'The Core is ready! Tap ✨ Awaken the Core in the top-right panel.', target: '#coreBtn' };
+        return { text: s.progression.homeIsPark ? 'The fountain is ready! Tap ✨ Wake the fountain in the top-right panel.' : 'The Core is ready! Tap ✨ Awaken the Core in the top-right panel.', target: '#coreBtn' };
       default:
         return this.hoodHint();
     }
   }
 
+  /** The city objective after the fountain: the next area to clear. Returns the "Next:" line. */
+  private cityObjective(): string {
+    const s = this.sim;
+    const id = s.areas.nextGoal();
+    const objList = $(this.root, '#objList');
+    if (!id) {
+      this.set('objTitle', $(this.root, '#objTitle'), 'text', '🌫️ Push back the fog');
+      this.set('objList', objList, 'html', '');
+      this.set('objAct', $(this.root, '#objAct'), 'html', '');
+      return '';
+    }
+    const a = s.areas.info(id);
+    const def = AREA_TYPES[a.type];
+    const c = s.areas.counts(id);
+    const need = s.areas.need(id);
+    const pct = Math.min(100, Math.round((c.restored / Math.max(1, need)) * 100));
+    const cleared = s.areas.revealed().filter((x) => s.areas.fog(x) === 'cleared').length;
+    this.set('objTitle', $(this.root, '#objTitle'), 'text', `${def.icon} Clear the ${def.name.toLowerCase()}`);
+    this.set('objPct', $(this.root, '#objPct'), 'text', `${a.landmarkName}: ${Math.min(c.restored, need)}/${need} tiles · ${cleared} area${cleared === 1 ? '' : 's'} cleared`);
+    this.set('objBar', $(this.root, '#objBar'), 'width', `${pct}%`);
+    const ready = s.areas.ready(id);
+    this.set(
+      'objList',
+      objList,
+      'html',
+      `<li class="${c.restored >= need ? 'done' : ''}"><span class="ck">${c.restored >= need ? '✓' : ''}</span>Restore ${need} tiles of the ${esc(def.name.toLowerCase())} (next to clear ground first)</li><li><span class="ck"></span>Wake the ${esc(a.landmarkName)}</li>`,
+    );
+    const lm = s.areas.landmark(id);
+    this.set('objAct', $(this.root, '#objAct'), 'html', ready && lm ? `<button class="act" data-wake="${lm.id}">✨ Wake the ${esc(a.landmarkName)}</button>` : '');
+    return ready ? '' : `Next: restore the ${def.name.toLowerCase()} (${Math.min(c.restored, need)}/${need})`;
+  }
+
   /** Phase 3 hints follow the neighbourhood objective. */
   private hoodHint(): { text: string; target?: string } {
     const s = this.sim;
+    if (s.progression.homeIsPark) {
+      const id = s.areas.nextGoal();
+      if (!id) return { text: 'The fog is gone from everything you can reach. Keep growing your gardens.' };
+      const a = s.areas.info(id);
+      return s.areas.ready(id)
+        ? { text: `The ${a.landmarkName} is ready. Wake it to clear this area's fog and reveal what lies beyond.`, target: '#objAct [data-wake]' }
+        : { text: `The fog recedes tile by tile: restore tiles touching clear ground. Drones, chains and Wide Pulse all help push it back.` };
+    }
     const o = s.hood.objective();
     switch (o.step) {
       case 'link1':
@@ -628,11 +678,13 @@ export class Hud {
 
     // Objective
     const p = s.progression;
-    const restored = p.restoredCount('r1');
-    const total = p.restorableCount('r1');
+    const restored = p.restoredCount(HOME);
+    const total = p.restorableCount(HOME);
     const pct = Math.round((restored / Math.max(1, total)) * 100);
     let hoodNext = '';
-    if (s.state.progression.coreActivated) {
+    if (s.state.progression.coreActivated && p.homeIsPark) {
+      hoodNext = this.cityObjective();
+    } else if (s.state.progression.coreActivated) {
       const o = s.hood.objective();
       const roof = s.grid.roof(o.roofId)!;
       const rn = p.restoredCount(o.roofId);
@@ -661,7 +713,7 @@ export class Hud {
       hoodNext = a && a.ok && a.kind !== 'replay' ? '' : nx ? `Next: ${nx.label}` : ''; // a ready action is its own button
     } else {
       this.set('objAct', $(this.root, '#objAct'), 'html', '');
-      this.set('objPct', $(this.root, '#objPct'), 'text', `${pct}% of the rooftop restored · ${restored}/${total} tiles`);
+      this.set('objPct', $(this.root, '#objPct'), 'text', `${pct}% of the ${p.homeIsPark ? 'park' : 'rooftop'} restored · ${restored}/${total} tiles`);
       this.set('objBar', $(this.root, '#objBar'), 'width', `${pct}%`);
       const reqs = p.requirements();
       const html = reqs.map((r) => `<li class="${r.done ? 'done' : ''}"><span class="ck">${r.done ? '✓' : ''}</span>${esc(r.label)}</li>`).join('');
@@ -670,7 +722,7 @@ export class Hud {
     const ready = p.coreReady();
     const coreBtn = $(this.root, '#coreBtn');
     this.set('coreBtn', coreBtn, 'cls', ready ? '1' : '0', 'show');
-    this.set('coreBtnText', coreBtn, 'text', `✨ Awaken the Core · ${formatCost(TUNING.core.cost)}`);
+    this.set('coreBtnText', coreBtn, 'text', `✨ ${p.homeIsPark ? 'Wake the fountain' : 'Awaken the Core'} · ${formatCost(TUNING.core.cost)}`);
 
     // Hint
     const step = s.state.progression.tutorialStep;

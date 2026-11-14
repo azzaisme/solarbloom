@@ -30,7 +30,7 @@ const PLAN: Record<Style, Record<string, BuildableType[]>> = {
  * A pacing guard, not a balance oracle: people are roughly 2× slower and less optimal.
  */
 export function playNeighbourhood(seed: number, style: Style, actionEvery = 3, minutes = 75) {
-  const sim = new Sim(createInitialState(seed));
+  const sim = new Sim(createInitialState(seed, { rooftops: true }));
   sim.cat.anchorView = () => 'visible';
   const done: Record<string, number> = {};
   const synergy = (t: TileData) =>

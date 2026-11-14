@@ -12,7 +12,7 @@ export const MILESTONES: Record<string, RoofLinkDef['requiresFullBloom']> = Obje
 for (const l of LINKS) delete l.requiresFullBloom;
 
 export function makeSim(seed = 1234) {
-  return new Sim(createInitialState(seed));
+  return new Sim(createInitialState(seed, { rooftops: true }));
 }
 
 export function rich(sim: Sim) {

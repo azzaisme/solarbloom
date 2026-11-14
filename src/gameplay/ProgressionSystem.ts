@@ -1,8 +1,12 @@
+import { PARK } from '../core/Areas';
 import { isRestorable } from '../core/GameState';
-import type { BuildableType } from '../core/types';
+import type { BuildableType, TileData } from '../core/types';
 import { MACHINES } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
+
+/** The player's starting area (the park in the city). */
+export const HOME = 'home';
 
 export interface Requirement {
   label: string;
@@ -30,16 +34,36 @@ export class ProgressionSystem {
 
   constructor(private sim: Sim) {}
 
-  restoredCount(roofId: string): number {
-    return this.sim.grid.tilesOf(roofId).filter((t) => t.ground === 'restored' && isRestorable(t, this.sim.state.machines)).length;
+  /** The starting area: the park in the city, or the Seed rooftop in the legacy rooftop layout (tests). */
+  get homeIsPark(): boolean {
+    return !this.sim.grid.layer('r1');
   }
 
-  fullBloomCount(roofId: string): number {
-    return this.sim.grid.tilesOf(roofId).filter((t) => t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom).length;
+  /**
+   * Tiles of a place: `'home'`, a layer id (a rooftop) or a city area id. Everything that used to mean
+   * "the Seed rooftop" asks for 'home'.
+   */
+  tilesFor(id: string): TileData[] {
+    if (id === HOME) return this.homeIsPark ? this.sim.areas.tiles(PARK) : this.sim.grid.tilesOf('r1');
+    if (this.sim.grid.layer(id)) return this.sim.grid.tilesOf(id);
+    return this.sim.areas.tiles(id);
   }
 
-  restorableCount(roofId: string): number {
-    return this.sim.grid.tilesOf(roofId).filter((t) => isRestorable(t, this.sim.state.machines)).length;
+  restoredCount(id: string): number {
+    return this.tilesFor(id).filter((t) => t.ground === 'restored' && isRestorable(t, this.sim.state.machines)).length;
+  }
+
+  fullBloomCount(id: string): number {
+    return this.tilesFor(id).filter((t) => t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom).length;
+  }
+
+  restorableCount(id: string): number {
+    return this.tilesFor(id).filter((t) => isRestorable(t, this.sim.state.machines)).length;
+  }
+
+  /** Core requirement sizes for the home (the park is bigger than the old Seed rooftop). */
+  private goals() {
+    return this.homeIsPark ? TUNING.park : TUNING.core;
   }
 
   built(type: BuildableType) {
@@ -47,10 +71,12 @@ export class ProgressionSystem {
   }
 
   requirements(): Requirement[] {
-    const n = this.restoredCount('r1');
+    const n = this.restoredCount(HOME);
+    const g = this.goals();
+    const full = this.fullBloomCount(HOME);
     return [
-      { label: `Restore tiles ${Math.min(n, TUNING.core.restoredTiles)}/${TUNING.core.restoredTiles}`, done: n >= TUNING.core.restoredTiles },
-      { label: `Grow full-bloom tiles ${Math.min(this.fullBloomCount('r1'), TUNING.core.fullBloomTiles)}/${TUNING.core.fullBloomTiles}`, done: this.fullBloomCount('r1') >= TUNING.core.fullBloomTiles },
+      { label: `Restore tiles ${Math.min(n, g.restoredTiles)}/${g.restoredTiles}`, done: n >= g.restoredTiles },
+      { label: `Grow full-bloom tiles ${Math.min(full, g.fullBloomTiles)}/${g.fullBloomTiles}`, done: full >= g.fullBloomTiles },
       { label: `Build a ${MACHINES.solar.name}`, done: this.built('solar') },
       { label: `Build a ${MACHINES.condenser.name}`, done: this.built('condenser') },
       { label: `Build a ${MACHINES.pollinator.name}`, done: this.built('pollinator') },
@@ -80,6 +106,8 @@ export class ProgressionSystem {
     p.cores = { ...p.cores, r1: true };
     const r2 = s.grid.roof('r2');
     if (r2) r2.unlocked = true; // revealed; playable once the Skybridge Relay is built
+    // In the city, waking the park's fountain clears the park's fog and reveals the first ring of areas.
+    if (this.homeIsPark) s.areas.clear(PARK, true);
     s.production.markDirty();
     s.bus.emit('rooftop.coreRestored', {});
     return true;
@@ -88,7 +116,7 @@ export class ProgressionSystem {
   private computeStep(): number {
     const s = this.sim.state;
     const has = (t: BuildableType) => this.built(t);
-    const n = this.restoredCount('r1');
+    const n = this.restoredCount(HOME);
     if (s.progression.coreActivated) return 9;
     if (this.coreReady()) return 8;
     if (has('droneHub')) return 7;

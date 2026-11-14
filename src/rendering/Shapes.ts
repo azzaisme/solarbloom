@@ -21,7 +21,12 @@ const vcCache = new Map<string, pc.Mesh>();
 let vcDevice: pc.GraphicsDevice | undefined;
 let vcMaterial: pc.StandardMaterial | undefined;
 
-function lowGeometry(type: VPrim): pc.Geometry {
+/** The shared vertex-colour material (merged chunk meshes use it too). */
+export function vertexColourMaterial(): pc.StandardMaterial {
+  return vcMaterial!;
+}
+
+export function lowGeometry(type: VPrim): pc.Geometry {
   switch (type) {
     case 'sphereHi':
       return new pc.SphereGeometry({ radius: 0.5, latitudeBands: 9, longitudeBands: 12 });

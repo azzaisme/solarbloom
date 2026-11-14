@@ -107,10 +107,18 @@ export const TUNING = {
 
   autosaveSeconds: 10,
 
+  /** The starting park's Core (the fountain): replaces TUNING.core when the game starts in the city. */
+  park: {
+    restoredTiles: 130,
+    fullBloomTiles: 52,
+  },
+
   /** City scale: areas under the fog. */
   city: {
     /** share of an area's restorable tiles to restore before its landmark can be woken */
     clearShare: 0.6,
+    /** …but never more than this many tiles (× the area's distance difficulty), so big areas stay a session's goal */
+    clearCap: 160,
     /** fog density at 0% restored and just before clearing (it thins linearly in between) */
     fogFull: 1,
     fogThin: 0.25,

@@ -1,7 +1,10 @@
+import { HOME } from '../gameplay/ProgressionSystem';
 import * as pc from 'playcanvas';
 import { Sfx } from '../audio/Sfx';
 import { formatCost } from '../core/Economy';
-import { createInitialState } from '../core/GameState';
+import { PARK } from '../core/Areas';
+import { createInitialState, GROUND } from '../core/GameState';
+import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
 import type { MachineData, ResourceKind, TileData } from '../core/types';
 import { MACHINES } from '../data/machines';
@@ -15,6 +18,7 @@ import { Butterflies } from '../rendering/Butterflies';
 import { CameraController } from '../rendering/CameraController';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
+import { ChunkRenderer } from '../rendering/ChunkRenderer';
 import { GridRenderer } from '../rendering/GridRenderer';
 import { InputController } from '../rendering/InputController';
 import { MachineVisuals } from '../rendering/MachineVisuals';
@@ -62,6 +66,8 @@ export class Game {
   readonly scene: SceneBuilder;
   readonly camera: CameraController;
   readonly grid: GridRenderer;
+  /** The city ground (streamed chunk meshes + fog). */
+  readonly chunks: ChunkRenderer;
   readonly machines: MachineVisuals;
   readonly drones: DroneVisuals;
   readonly cat: CatVisuals;
@@ -117,6 +123,7 @@ export class Game {
     this.app.scene.fog.start = this.camera.fogDepth(46);
     this.app.scene.fog.end = this.camera.fogDepth(84);
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
+    this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
     this.grid.build();
     this.machines = new MachineVisuals(this.sim, this.scene.world, this.tweens);
     this.machines.buildAll();
@@ -157,6 +164,10 @@ export class Game {
           this.sim.hood.activateRoofCore(id);
         },
         neighbourhoodBloom: (replay) => this.playNeighbourhoodBloom(replay),
+        wake: (id) => {
+          const m = this.sim.machine(id);
+          if (m && this.landmarkReady(m)) this.wakeLandmark(m);
+        },
         cycleSpeed: () => {
           this.speed = this.speed === 1 ? 2 : this.speed === 2 ? 3 : 1;
           this.hud.toast(this.speed === 1 ? '▶ Normal speed' : `⏩ ${this.speed}× speed`, '', 1.4);
@@ -172,6 +183,15 @@ export class Game {
     this.sim.cat.anchorView = (a) => this.anchorView(this.cat.anchorWorld(a));
     if (state.cat.active) this.cat.show(state.cat.active.anchorId, false);
     this.camera.setBoundsFor(this.sim.grid.rooftops);
+    if (this.city) {
+      this.updateCityBounds();
+      this.camera.target.set(8, 0, 8);
+      this.camera.glide(8, 0, 8);
+      for (const id of this.sim.areas.revealed()) {
+        const lm = this.sim.areas.landmark(id);
+        if (lm && this.sim.areas.fog(id) === 'cleared') this.machines.setLandmarkState(lm.id, 'awake', true);
+      }
+    }
     if (state.progression.coreActivated) {
       this.scene.restoreBuilding(true);
       this.machines.setCoreState('awake', true);
@@ -353,7 +373,66 @@ export class Game {
       bestT = t;
       best = { roofId: r.id, fx: lx, fz: lz, tile: this.sim.grid.get(r.id, Math.floor(lx), Math.floor(lz)) };
     }
+    // The endless city ground (unbounded).
+    const g = this.sim.grid.layer(GROUND);
+    if (g && g.unlocked && Math.abs(d.y) > 1e-6) {
+      const t = (g.origin[1] + g.height + SLAB_TOP - o.y) / d.y;
+      if (t >= 0 && t < bestT) {
+        const lx = o.x + d.x * t - g.origin[0];
+        const lz = o.z + d.z * t - g.origin[2];
+        best = { roofId: GROUND, fx: lx, fz: lz, tile: this.sim.grid.get(GROUND, Math.floor(lx), Math.floor(lz)) };
+      }
+    }
     return best;
+  }
+
+  /** The game is in the city (the park and beyond), not the legacy rooftop layout. */
+  get city(): boolean {
+    return this.sim.progression.homeIsPark;
+  }
+
+  /** Pan bounds: revealed areas plus a margin (the fog beyond is visible, the far city is not). */
+  private updateCityBounds() {
+    const ids = this.sim.areas.revealed();
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let z0 = Infinity;
+    let z1 = -Infinity;
+    for (const id of ids)
+      for (const [cx, cz] of this.sim.areas.info(id).chunks) {
+        x0 = Math.min(x0, cx * 16);
+        x1 = Math.max(x1, cx * 16 + 16);
+        z0 = Math.min(z0, cz * 16);
+        z1 = Math.max(z1, cz * 16 + 16);
+      }
+    this.camera.bounds = { minX: x0 - 8, maxX: x1 + 8, minZ: z0 - 8, maxZ: z1 + 8 };
+  }
+
+  /** Visible ground rectangle (world x/z) from the four screen corners. */
+  private groundRect() {
+    const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    const w = c.clientWidth;
+    const h = c.clientHeight;
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let z0 = Infinity;
+    let z1 = -Infinity;
+    for (const [sx, sy] of [[0, 0], [w, 0], [0, h], [w, h]]) {
+      const { o, d } = this.camera.ray(sx, sy);
+      if (Math.abs(d.y) < 1e-6) continue;
+      const t = -o.y / d.y;
+      const x = o.x + d.x * t;
+      const z = o.z + d.z * t;
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x);
+      z0 = Math.min(z0, z);
+      z1 = Math.max(z1, z);
+    }
+    // Never stream an unbounded amount at extreme zoom-out.
+    const cx = this.camera.target.x;
+    const cz = this.camera.target.z;
+    const R = 90;
+    return { x0: Math.max(x0, cx - R), x1: Math.min(x1, cx + R), z0: Math.max(z0, cz - R), z1: Math.min(z1, cz + R) };
   }
 
   /** Screen-space hit test for drones (generous target, like the cat). Returns the drone id. */
@@ -469,8 +548,9 @@ export class Game {
     const occ = this.sim.occupant(t);
     if (occ) {
       this.overlays.showFrame(occ.roofId, occ.x, occ.z, occ.size, 'info');
-      const ready = occ.type === 'core' && this.sim.hood.coreReady(occ.roofId);
-      const ct = occ.type === 'core' ? CORE_TEXT[occ.roofId] : undefined;
+      const ready = occ.type === 'core' && this.landmarkReady(occ);
+      const area = occ.type === 'core' && occ.roofId === GROUND ? this.sim.areas.areaOf(occ) : undefined;
+      const ct = area ? { icon: AREA_TYPES[this.sim.areas.info(area).type].icon, name: this.sim.areas.info(area).landmarkName } : occ.type === 'core' ? CORE_TEXT[occ.roofId] : undefined;
       const boost = (occ.overchargeUntil ?? 0) > this.sim.time ? '<br><span class="ok">⚡ Boosted: next trigger +1</span>' : '';
       this.hud.showTip(x, y, `<b>${ct?.icon ?? MACHINES[occ.type].icon} ${ct?.name ?? MACHINES[occ.type].name}</b>${ready ? '<span class="ok">Ready! Click to awaken.</span>' : 'Click to inspect'}${boost}`);
       return;
@@ -555,8 +635,8 @@ export class Game {
     }
     const occ = this.sim.occupant(t);
     if (occ) {
-      if (occ.type === 'core' && this.sim.hood.coreReady(occ.roofId)) {
-        this.sim.hood.activateRoofCore(occ.roofId);
+      if (occ.type === 'core' && this.landmarkReady(occ)) {
+        this.wakeLandmark(occ);
         return;
       }
       this.select(occ.id);
@@ -684,6 +764,10 @@ export class Game {
         break;
       }
       case 'core': {
+        if (m.roofId === GROUND) {
+          this.hud.renderInspect(this.landmarkHtml(m));
+          return;
+        }
         const reqs = s.hood.requirements(m.roofId);
         const awakeText: Record<string, string> = {
           r1: '✨ Awake. The building breathes again.',
@@ -724,6 +808,23 @@ export class Game {
   private wireEvents() {
     const b = this.bus;
     const s = this.sim;
+    for (const ev of ['tile.restoring', 'tile.restored', 'tile.prepared', 'tile.softened', 'tile.nurtured'] as const) b.on(ev, ({ tile }) => this.chunks.markTile(tile));
+    b.on('machine.built', ({ machine }) => {
+      for (const t of s.grid.footprint(machine.roofId, machine.x, machine.z, machine.size)) if (t) this.chunks.markTile(t);
+    });
+    b.on('area.revealed', ({ areaId }) => {
+      this.chunks.markArea(areaId);
+      const lm = s.areas.landmark(areaId);
+      if (lm && !this.machines.view(lm.id)) this.machines.add(lm, true);
+      this.updateCityBounds();
+    });
+    b.on('area.fogChanged', ({ areaId }) => this.chunks.markArea(areaId));
+    b.on('area.ready', ({ areaId }) => {
+      const lm = s.areas.landmark(areaId);
+      if (lm) this.machines.setLandmarkState(lm.id, 'ready');
+      if (areaId !== PARK) this.hud.toast(`✨ ${s.areas.info(areaId).landmarkName} is ready to wake!<small>Click it to clear this ${AREA_TYPES[s.areas.info(areaId).type].name.toLowerCase()}'s fog.</small>`, 'gold', 4);
+    });
+    b.on('area.cleared', ({ areaId }) => this.onAreaCleared(areaId));
     b.on('tile.restoring', ({ tile, source }) => {
       this.grid.refresh(tile, true);
       const p = this.tileVec(tile);
@@ -1094,11 +1195,12 @@ export class Game {
     this.overlays.hideFrame();
     this.overlays.hideGhost();
     this.hud.hideTip();
-    const roof = this.sim.grid.roof('r1')!;
-    this.hud.cinematic(true, `${roof.name} lives again!`);
-    this.machines.setCoreState('awake');
+    const park = this.city ? this.sim.areas.landmark(PARK) : undefined;
+    this.hud.cinematic(true, this.city ? 'The fountain flows again!' : `${this.sim.grid.roof('r1')!.name} lives again!`);
+    if (park) this.machines.setLandmarkState(park.id, 'awake');
+    else this.machines.setCoreState('awake');
     this.sfx.fanfare();
-    const core = this.machines.coreWorld();
+    const core = park ? this.machines.coreWorld(GROUND, park.id) : this.machines.coreWorld();
     const cp = core ? new pc.Vec3(core[0], core[1], core[2]) : new pc.Vec3(1, 1.5, 1);
     const base = new pc.Vec3(cp.x, 0.1, cp.z);
     this.camera.shake(0.12);
@@ -1110,14 +1212,18 @@ export class Game {
           this.vfx.burst(cp, 24, { up: 4.5, speed: 2.4, size: 0.08, life: 1.5 });
         },
       });
-    this.scene.restoreBuilding(false, () => this.camera.focus(10.5, 0.6, 1.5, 0.6, 2.6));
+    if (this.city) this.tweens.add(0.01, () => {}, { delay: 2.2, done: () => this.camera.focus(8, 0, 8, Math.max(this.camera.minZoom, 0.5), 2.4) });
+    else this.scene.restoreBuilding(false, () => this.camera.focus(10.5, 0.6, 1.5, 0.6, 2.6));
     for (const l of LINKS) this.scene.showScaffold(l.id, this.sim.hood.linkAvailable(l.id));
     this.cinematicEnd = () => {
       if (!this.cinematic) return;
       this.cinematic = false;
       this.hud.cinematic(false);
-      const l = LINK_BY_ID['seed-reservoir'];
-      this.hud.toast(`🌉 The Reservoir is in sight!<small>Your rooftop now produces +25% biomass. Build the ${l.name} (${formatCost(l.cost)}) to reach it.</small>`, 'gold', 6);
+      if (this.city) this.hud.toast('🌫️ The fog rolls back!<small>The park now grows +25% biomass. Restore the areas around it — tiles next to clear ground first — and wake their landmarks.</small>', 'gold', 7);
+      else {
+        const l = LINK_BY_ID['seed-reservoir'];
+        this.hud.toast(`🌉 The Reservoir is in sight!<small>Your rooftop now produces +25% biomass. Build the ${l.name} (${formatCost(l.cost)}) to reach it.</small>`, 'gold', 6);
+      }
       this.save();
     };
     this.tweens.add(0.01, () => {}, { delay: TUNING.core.sequenceSeconds, done: () => this.cinematicEnd?.() });
@@ -1128,6 +1234,71 @@ export class Game {
     if (!this.cinematic) return;
     for (let i = 0; i < 4; i++) this.tweens.update(10);
     this.cinematicEnd?.();
+  }
+
+  // ───────────────────────── the city ─────────────────────────
+
+  /** A Core (rooftop or city landmark) that can be woken now. */
+  private landmarkReady(m: MachineData): boolean {
+    if (m.roofId !== GROUND) return this.sim.hood.coreReady(m.roofId);
+    const id = this.sim.areas.areaOf(m)!;
+    return id === PARK ? this.sim.progression.coreReady() : this.sim.areas.ready(id);
+  }
+
+  private wakeLandmark(m: MachineData) {
+    if (this.cinematic) return;
+    if (m.roofId !== GROUND) {
+      this.sim.hood.activateRoofCore(m.roofId);
+      return;
+    }
+    const id = this.sim.areas.areaOf(m)!;
+    if (id === PARK) this.sim.progression.activateCore();
+    else this.sim.areas.clear(id);
+  }
+
+  private landmarkHtml(m: MachineData): string {
+    const s = this.sim;
+    const id = s.areas.areaOf(m)!;
+    const a = s.areas.info(id);
+    const def = AREA_TYPES[a.type];
+    const fog = s.areas.fog(id);
+    const c = s.areas.counts(id);
+    const need = s.areas.need(id);
+    let body: string;
+    if (id === PARK) {
+      const reqs = s.progression.requirements();
+      body = s.state.progression.coreActivated
+        ? '<p class="stat">⛲ Flowing again. The park is home.</p>'
+        : `<ul style="margin:6px 0;padding-left:18px;font-size:12.5px">${reqs.map((r) => `<li>${r.done ? '✅' : '⬜'} ${r.label}</li>`).join('')}</ul><p>Waking it costs ${formatCost(TUNING.core.cost)} and rolls the fog back from the first ring of the city.</p>`;
+    } else if (fog === 'cleared') body = `<p class="stat">✨ Awake. The ${def.name.toLowerCase()} is clear of fog.</p>`;
+    else
+      body = `<p class="stat">🌫️ ${fog === 'frontier' ? 'Thick fog' : 'Thinning fog'} · ${c.restored}/${need} tiles restored to wake it</p><p>Restore tiles next to clear ground: the fog recedes tile by tile. Wake the ${a.landmarkName} to clear this ${def.name.toLowerCase()} and reveal its neighbours.</p>${s.areas.ready(id) ? `<button class="buy" data-wake="${m.id}">✨ Wake the ${esc(a.landmarkName)}</button>` : ''}`;
+    const tag = a.authored ? ' · <b>a rare landmark</b>' : '';
+    return `<h4><span>${def.icon} ${esc(a.landmarkName)}</span><button data-close aria-label="Close">×</button></h4><p class="stat">${def.name} · ${a.distance} blocks from the park${tag}</p>${body}`;
+  }
+
+  private onAreaCleared(id: string) {
+    const s = this.sim;
+    this.chunks.markArea(id, true);
+    for (const nb of s.areas.info(id).neighbours) this.chunks.markArea(nb);
+    this.updateCityBounds();
+    if (id === PARK) return; // the fountain has its own finale
+    const lm = s.areas.landmark(id);
+    if (lm) {
+      this.machines.setLandmarkState(lm.id, 'awake');
+      const w = this.machines.coreWorld(GROUND, lm.id);
+      if (w) {
+        const p = new pc.Vec3(w[0], 0.1, w[2]);
+        for (let i = 0; i < 3; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.25, done: () => this.vfx.ring(p, i % 2 ? PALETTE.gold : PALETTE.coreGlow, 4 + i * 4, 1.2) });
+        this.vfx.burst(new pc.Vec3(w[0], w[1], w[2]), 30, { up: 4, speed: 2.2, size: 0.08, life: 1.4 });
+      }
+    }
+    this.sfx.fanfare();
+    this.camera.shake(0.06);
+    const a = s.areas.info(id);
+    const fresh = a.neighbours.filter((n) => s.areas.fog(n) === 'frontier').length;
+    this.hud.toast(`🌫️ The fog lifts from the ${AREA_TYPES[a.type].name.toLowerCase()}!<small>${a.landmarkName} wakes${fresh ? ` · ${fresh} new area${fresh > 1 ? 's' : ''} emerge from the gloom` : ''}.</small>`, 'gold', 4.5);
+    this.save();
   }
 
   // ───────────────────────── neighbourhood ─────────────────────────
@@ -1531,6 +1702,7 @@ export class Game {
     this.tweens.update(dt);
     this.scene.update(dt);
     this.grid.update(dt);
+    if (this.city) this.chunks.update(dt, this.groundRect(), this.camera.target);
     this.machines.update(dt);
     this.drones.update(dt);
     this.cat.update(dt);
@@ -1540,14 +1712,14 @@ export class Game {
     this.updateStage(false);
     // First-tile beacon until the player restores something.
     if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic) {
-      const tiles = this.sim.grid.tilesOf('r1');
+      const tiles = this.sim.progression.tilesFor(HOME);
       const t = tiles.find((x) => x.ground === 'prepared' && !x.occupantId) ?? tiles.find((x) => x.ground === 'polluted' && !x.blocked && !x.occupantId);
-      if (t) this.overlays.showBeacon('r1', t.x, t.z);
+      if (t) this.overlays.showBeacon(t.roofId, t.x, t.z);
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
     this.camera.update(dt);
     this.hud.update(dt);
-    this.sfx.layers = Math.min(3, Math.floor(this.sim.progression.restoredCount('r1') / 12));
+    this.sfx.layers = Math.min(3, Math.floor(this.sim.progression.restoredCount(HOME) / 12));
     this.sfx.update(dt);
 
     if (this.selected || this.selectedRelay) {
@@ -1587,7 +1759,7 @@ export class Game {
             `chains ${this.sim.chains.activeRuns} queued ${this.sim.chains.pendingSteps}\n` +
             `drones ${st.drones.length}  machines ${st.machines.length}\n` +
             `cat ${st.cat.active ? st.cat.active.anchorId : `next ${st.cat.firstSpawned ? st.cat.nextSpawnAt.toFixed(0) : 'first'}`}\n` +
-            `restored ${this.sim.progression.restoredCount('r1')} full ${this.sim.progression.fullBloomCount('r1')}`,
+            `restored ${this.sim.progression.restoredCount(HOME)} full ${this.sim.progression.fullBloomCount(HOME)}`,
         );
       }
     }

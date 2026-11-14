@@ -1,0 +1,501 @@
+import * as pc from 'playcanvas';
+import { CHUNK } from '../core/Hash';
+import { GROUND } from '../core/GameState';
+import { chunkKey } from '../core/Grid';
+import type { TileData } from '../core/types';
+import type { Sim } from '../gameplay/Sim';
+import { PARK_LAYOUT } from '../data/city';
+import { PALETTE } from './Materials';
+import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
+
+/** Small seeded RNG for decoration placement (looks only). */
+class VRng {
+  constructor(private s: number) {}
+  next() {
+    this.s = (this.s * 1664525 + 1013904223) >>> 0;
+    return this.s / 4294967296;
+  }
+  range(a: number, b: number) {
+    return a + (b - a) * this.next();
+  }
+}
+
+interface Template {
+  pos: Float32Array;
+  nrm: Float32Array;
+  idx: Uint32Array;
+}
+
+const TEMPLATES = new Map<VPrim, Template>();
+function template(type: VPrim): Template {
+  let t = TEMPLATES.get(type);
+  if (!t) {
+    const g = lowGeometry(type);
+    t = { pos: new Float32Array(g.positions!), nrm: new Float32Array(g.normals!), idx: new Uint32Array(g.indices!) };
+    TEMPLATES.set(type, t);
+  }
+  return t;
+}
+
+const linCache = new Map<string, [number, number, number]>();
+/** sRGB hex → linear 0–1 (matches the vertex-colour material). */
+function lin(hex: string): [number, number, number] {
+  let c = linCache.get(hex);
+  if (!c) {
+    const col = new pc.Color();
+    col.fromString(hex);
+    c = [Math.pow(col.r, 2.2), Math.pow(col.g, 2.2), Math.pow(col.b, 2.2)];
+    linCache.set(hex, c);
+  }
+  return c;
+}
+
+/** Accumulates transformed primitives into one vertex-coloured mesh. */
+class MeshBuilder {
+  pos: number[] = [];
+  nrm: number[] = [];
+  col: number[] = [];
+  idx: number[] = [];
+  /** 0 = full colour … 1 = fully grey (fog / desaturation) */
+  grey = 0;
+
+  add(type: VPrim, hex: string, p: [number, number, number], s: [number, number, number] | number) {
+    const t = template(type);
+    const [sx, sy, sz] = typeof s === 'number' ? [s, s, s] : s;
+    const base = this.pos.length / 3;
+    let [r, g, b] = lin(hex);
+    if (this.grey > 0) {
+      const l = 0.3 * r + 0.59 * g + 0.11 * b;
+      const k = this.grey;
+      r = r + (l * 0.85 - r) * k;
+      g = g + (l * 0.88 - g) * k;
+      b = b + (l * 0.95 - b) * k;
+    }
+    const R = Math.round(r * 255);
+    const G = Math.round(g * 255);
+    const B = Math.round(b * 255);
+    for (let i = 0; i < t.pos.length; i += 3) {
+      this.pos.push(p[0] + t.pos[i] * sx, p[1] + t.pos[i + 1] * sy, p[2] + t.pos[i + 2] * sz);
+      // non-uniform scale: approximate normals by inverse scale, renormalised
+      let nx = t.nrm[i] / sx;
+      let ny = t.nrm[i + 1] / sy;
+      let nz = t.nrm[i + 2] / sz;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      nx /= len;
+      ny /= len;
+      nz /= len;
+      this.nrm.push(nx, ny, nz);
+      this.col.push(R, G, B, 255);
+    }
+    for (let i = 0; i < t.idx.length; i++) this.idx.push(base + t.idx[i]);
+  }
+
+  build(device: pc.GraphicsDevice): pc.Mesh | undefined {
+    if (!this.idx.length) return undefined;
+    const m = new pc.Mesh(device);
+    m.setPositions(this.pos);
+    m.setNormals(this.nrm);
+    m.setColors32(this.col);
+    m.setIndices(this.idx);
+    m.update(pc.PRIMITIVE_TRIANGLES);
+    return m;
+  }
+}
+
+/** Ground colours per material, dead → alive. */
+const DEAD: Record<string, string[]> = {
+  lawn: ['#8a7b5f', '#837357', '#91825f'],
+  paving: ['#9a9890', '#8f8d86', '#a3a097'],
+  road: ['#55585c', '#4e5155', '#5b5e62'],
+  water: ['#4e5a52', '#475249', '#56625a'],
+  clay: ['#bda78a', '#b29c7f', '#c6b195'],
+  litter: ['#867c6a', '#7c7261', '#908571'],
+  obstacle: ['#7d7b74', '#76746d', '#85837b'],
+};
+const ALIVE: Record<string, string> = { lawn: '', paving: '#e9e4d8', road: '', water: '#5cc6e6', clay: '', litter: '', obstacle: '#d9d4c8' };
+
+interface ChunkView {
+  key: string;
+  cx: number;
+  cz: number;
+  ground?: pc.Entity;
+  fog?: pc.Entity;
+  fogMat?: pc.StandardMaterial;
+  dirty: boolean;
+  fogDirty: boolean;
+  fading?: boolean;
+}
+
+/**
+ * Renders the endless city ground: one merged, vertex-coloured mesh per 16×16 chunk (slabs + decoration),
+ * streamed in around the camera and rebuilt within a per-frame budget when its tiles change, plus a per-tile
+ * fog mesh that hangs over fogged areas and recedes tile by tile as the player restores.
+ */
+export class ChunkRenderer {
+  private views = new Map<string, ChunkView>();
+  private root: pc.Entity;
+  reducedMotion = false;
+  /** Max chunk meshes rebuilt per frame (keeps frames smooth while panning or during big chains). */
+  budget = 2;
+  private time = 0;
+
+  constructor(
+    private sim: Sim,
+    parent: pc.Entity,
+    private device: pc.GraphicsDevice,
+  ) {
+    this.root = new pc.Entity('city-ground');
+    parent.addChild(this.root);
+  }
+
+  get loadedCount() {
+    return this.views.size;
+  }
+
+  /** A tile changed: rebuild its chunk (and fog) soon. */
+  markTile(t: TileData) {
+    if (t.roofId !== GROUND) return;
+    const v = this.views.get(chunkKey(GROUND, Math.floor(t.x / CHUNK), Math.floor(t.z / CHUNK)));
+    if (v) {
+      v.dirty = true;
+      v.fogDirty = true;
+    }
+    // Fog alpha is smoothed across tile corners, so neighbouring chunks may need a fog refresh too.
+    const lx = t.x - Math.floor(t.x / CHUNK) * CHUNK;
+    const lz = t.z - Math.floor(t.z / CHUNK) * CHUNK;
+    if (lx === 0 || lz === 0 || lx === CHUNK - 1 || lz === CHUNK - 1)
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const n = this.views.get(chunkKey(GROUND, Math.floor((t.x + dx) / CHUNK), Math.floor((t.z + dz) / CHUNK)));
+        if (n) n.fogDirty = true;
+      }
+  }
+
+  /** An area's fog state changed: refresh its chunks (and their neighbours, for soft edges). */
+  markArea(id: string, fade = false) {
+    for (const [cx, cz] of this.sim.areas.info(id).chunks)
+      for (let dz = -1; dz <= 1; dz++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const v = this.views.get(chunkKey(GROUND, cx + dx, cz + dz));
+          if (!v) continue;
+          v.dirty = true;
+          if (fade && dx === 0 && dz === 0 && v.fogMat && !this.reducedMotion) v.fading = true;
+          else v.fogDirty = true;
+        }
+  }
+
+  markAll() {
+    for (const v of this.views.values()) {
+      v.dirty = true;
+      v.fogDirty = true;
+    }
+  }
+
+  /**
+   * Streams chunks for the visible ground rectangle (world x/z), keeping a margin loaded and dropping
+   * chunks further away. Rebuilds at most `budget` dirty chunks per frame, nearest first.
+   */
+  update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number }, focus: { x: number; z: number }) {
+    this.time += dt;
+    const cx0 = Math.floor(rect.x0 / CHUNK) - 1;
+    const cx1 = Math.floor(rect.x1 / CHUNK) + 1;
+    const cz0 = Math.floor(rect.z0 / CHUNK) - 1;
+    const cz1 = Math.floor(rect.z1 / CHUNK) + 1;
+    const want = new Set<string>();
+    for (let cz = cz0; cz <= cz1; cz++)
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const key = chunkKey(GROUND, cx, cz);
+        want.add(key);
+        if (!this.views.has(key)) this.views.set(key, { key, cx, cz, dirty: true, fogDirty: true });
+      }
+    // Drop chunks well outside the view (one extra ring of hysteresis).
+    for (const [key, v] of this.views) {
+      if (want.has(key)) continue;
+      if (v.cx < cx0 - 1 || v.cx > cx1 + 1 || v.cz < cz0 - 1 || v.cz > cz1 + 1) this.drop(v);
+    }
+    // Fog fades (area cleared): opacity → 0, then rebuild.
+    for (const v of this.views.values()) {
+      if (!v.fading || !v.fogMat) continue;
+      v.fogMat.opacity = Math.max(0, v.fogMat.opacity - dt * 0.8);
+      v.fogMat.update();
+      if (v.fogMat.opacity <= 0) {
+        v.fading = false;
+        v.fogDirty = true;
+      }
+    }
+    const dirty = [...this.views.values()].filter((v) => v.dirty || (v.fogDirty && !v.fading));
+    dirty.sort((a, b) => dist(a, focus) - dist(b, focus));
+    let n = 0;
+    for (const v of dirty) {
+      if (n >= this.budget) break;
+      if (v.dirty) this.buildGround(v);
+      if (v.fogDirty && !v.fading) this.buildFog(v);
+      n++;
+    }
+    // Gentle drift of the fog sheets.
+    if (!this.reducedMotion)
+      for (const v of this.views.values()) if (v.fog) v.fog.setLocalPosition(0, Math.sin(this.time * 0.4 + v.cx * 0.7 + v.cz) * 0.04, 0);
+  }
+
+  private drop(v: ChunkView) {
+    v.ground?.destroy();
+    v.fog?.destroy();
+    this.views.delete(v.key);
+  }
+
+  private setMesh(holder: pc.Entity | undefined, name: string, mesh: pc.Mesh | undefined, material: pc.Material, shadows: boolean): pc.Entity | undefined {
+    holder?.destroy();
+    if (!mesh) return undefined;
+    const e = new pc.Entity(name);
+    e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, material)], castShadows: shadows, receiveShadows: true });
+    this.root.addChild(e);
+    return e;
+  }
+
+  // ───────────── ground mesh ─────────────
+
+  private buildGround(v: ChunkView) {
+    v.dirty = false;
+    const s = this.sim;
+    const c = s.grid.chunkAt(GROUND, v.cx, v.cz);
+    if (!c) return;
+    const b = new MeshBuilder();
+    const area = s.areas.map.areaOfChunk(v.cx, v.cz);
+    const fog = s.areas.fog(area);
+    const h = s.grid.layer(GROUND)!.height;
+    for (const t of c.tiles) {
+      if (!t) continue;
+      // Hidden ground is grey; fogged ground is greyed unless restored.
+      b.grey = fog === 'hidden' ? 0.75 : fog === 'cleared' || t.ground === 'restored' ? 0 : 0.35;
+      this.tile(b, t, h);
+    }
+    v.ground = this.setMesh(v.ground, `chunk-${v.key}`, b.build(this.device), vertexColourMaterial(), true);
+  }
+
+  private tile(b: MeshBuilder, t: TileData, h: number) {
+    const x = t.x + 0.5;
+    const z = t.z + 0.5;
+    const f = t.feature ?? 'lawn';
+    const r = new VRng(t.variant * 7919 + 13);
+    const dead = DEAD[f] ?? DEAD.lawn;
+    if (t.blocked) {
+      b.add('box', dead[t.variant % dead.length], [x, h, z], [0.96, 0.16, 0.96]);
+      this.prop(b, t.prop ?? 'stump', x, h + 0.08, z, r);
+      return;
+    }
+    if (t.occupantId) {
+      b.add('box', t.ground === 'restored' ? PALETTE.grass[t.variant % PALETTE.grass.length] : PALETTE.soil, [x, h, z], [1, 0.16, 1]);
+      return;
+    }
+    const top = h + 0.08;
+    switch (t.ground) {
+      case 'polluted': {
+        const shade = t.pollution > 80 ? dead[(t.variant + 1) % dead.length] : dead[t.variant % dead.length];
+        b.add('box', shade, [x, h, z], [0.96, 0.16, 0.96]);
+        if (f === 'road') {
+          if (t.variant % 3 === 0) b.add('box', '#c9c38f', [x, top + 0.004, z], [0.12, 0.01, 0.4]);
+        } else if (f === 'water') {
+          b.add('box', '#3e4a43', [x, top + 0.005, z], [0.8, 0.01, 0.8]);
+        } else {
+          for (let i = 0; i < 1 + (t.variant % 2); i++) b.add('box', '#5f5c55', [x + r.range(-0.25, 0.25), top + 0.004, z + r.range(-0.25, 0.25)], [r.range(0.3, 0.6), 0.01, 0.035]);
+          if (r.next() < 0.4) b.add('cone', '#7d8a5c', [x + r.range(-0.3, 0.3), top + 0.05, z + r.range(-0.3, 0.3)], [0.06, 0.1, 0.06]);
+          if (f === 'litter') for (let i = 0; i < 3; i++) b.add('sphere', '#6b5a45', [x + r.range(-0.35, 0.35), top + 0.01, z + r.range(-0.35, 0.35)], [0.16, 0.03, 0.1]);
+        }
+        break;
+      }
+      case 'prepared':
+      case 'growing': {
+        b.add('box', f === 'water' ? '#4f7f86' : PALETTE.soil, [x, h, z], [0.96, 0.16, 0.96]);
+        const n = t.ground === 'growing' ? 5 : 3 + (t.variant % 3);
+        for (let i = 0; i < n; i++) {
+          const sx = x + r.range(-0.3, 0.3);
+          const sz = z + r.range(-0.3, 0.3);
+          if (t.ground === 'growing') b.add('cone', PALETTE.grassTuft[i % 3], [sx, top + 0.06, sz], [0.05, 0.12, 0.05]);
+          else b.add('sphere', PALETTE.moss, [sx, top + 0.005, sz], [r.range(0.14, 0.26), 0.05, r.range(0.12, 0.24)]);
+        }
+        break;
+      }
+      case 'restored': {
+        if (f === 'water') {
+          b.add('box', ALIVE.water, [x, h - 0.02, z], [1, 0.12, 1]);
+          if (t.variant % 2) b.add('cylinder', '#5fb24a', [x + r.range(-0.25, 0.25), top - 0.035, z + r.range(-0.25, 0.25)], [0.22, 0.01, 0.22]);
+          if (t.bloom >= 2 && t.variant % 3 === 0) b.add('sphere', '#ff9fd0', [x + r.range(-0.2, 0.2), top - 0.02, z + r.range(-0.2, 0.2)], 0.07);
+          break;
+        }
+        if (f === 'paving') {
+          // Clean stone with a planted bed.
+          b.add('box', ALIVE.paving, [x, h, z], [0.98, 0.16, 0.98]);
+          b.add('box', PALETTE.grass[t.variant % PALETTE.grass.length], [x, top + 0.01, z], [0.6, 0.02, 0.6]);
+        } else b.add('box', PALETTE.grass[t.variant % PALETTE.grass.length], [x, h, z], [1, 0.16, 1]);
+        const tufts = f === 'paving' ? 3 : 6;
+        for (let i = 0; i < tufts; i++) {
+          const ht = r.range(0.09, 0.2);
+          const span = f === 'paving' ? 0.25 : 0.42;
+          b.add('cone', PALETTE.grassTuft[i % 3], [x + r.range(-span, span), top + ht / 2, z + r.range(-span, span)], [0.055, ht, 0.055]);
+        }
+        if (t.bloom >= 2)
+          for (let i = 0; i < 3 + (t.variant % 2); i++) {
+            const ht = r.range(0.14, 0.26);
+            const fx = x + r.range(-0.32, 0.32);
+            const fz = z + r.range(-0.32, 0.32);
+            b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.02, ht, 0.02]);
+            b.add('sphere', PALETTE.flower[(t.variant + i) % PALETTE.flower.length], [fx, top + ht, fz], [0.11, 0.07, 0.11]);
+          }
+        if (t.bloom >= 3) {
+          const kind = t.variant % 4;
+          if (kind === 1) {
+            b.add('cylinder', PALETTE.trunk, [x, top + 0.22, z], [0.07, 0.44, 0.07]);
+            b.add('sphere', PALETTE.shrub[0], [x, top + 0.55, z], [0.48, 0.42, 0.48]);
+            b.add('sphere', PALETTE.shrub[1], [x + 0.12, top + 0.72, z + 0.05], [0.3, 0.26, 0.3]);
+          } else
+            for (let i = 0; i < 3; i++) {
+              const s = r.range(0.24, 0.34);
+              b.add('sphere', PALETTE.shrub[i], [x + r.range(-0.15, 0.15), top + s / 2.2, z + r.range(-0.15, 0.15)], [s, s * 0.85, s]);
+            }
+        }
+        break;
+      }
+    }
+  }
+
+  /** Small props on obstacle tiles (benches, stalls, stumps…). */
+  private prop(b: MeshBuilder, prop: string, x: number, y: number, z: number, r: VRng) {
+    switch (prop) {
+      case 'bench':
+        b.add('box', '#8a6a4a', [x, y + 0.18, z], [0.8, 0.05, 0.3]);
+        b.add('box', '#8a6a4a', [x, y + 0.32, z - 0.13], [0.8, 0.2, 0.04]);
+        b.add('box', '#5b5d60', [x - 0.32, y + 0.08, z], [0.05, 0.16, 0.28]);
+        b.add('box', '#5b5d60', [x + 0.32, y + 0.08, z], [0.05, 0.16, 0.28]);
+        break;
+      case 'bandstand': {
+        // One structure over its 2×2 footprint: drawn from its first (min x, min z) tile only.
+        const first = PARK_LAYOUT.props.find((p) => p.prop === 'bandstand')!.at;
+        if (Math.floor(x) !== first[0] || Math.floor(z) !== first[1]) break;
+        const cx = x + 0.5;
+        const cz = z + 0.5;
+        b.add('cylinder', '#cfc8b8', [cx, y + 0.1, cz], [1.9, 0.2, 1.9]);
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          b.add('cylinder', '#b9b2a2', [cx + Math.cos(a) * 0.78, y + 0.65, cz + Math.sin(a) * 0.78], [0.07, 0.9, 0.07]);
+        }
+        b.add('cone', '#9a6a4a', [cx, y + 1.3, cz], [2.1, 0.55, 2.1]);
+        b.add('sphere', '#c9a24a', [cx, y + 1.62, cz], 0.12);
+        break;
+      }
+      case 'lamp':
+        b.add('box', '#4a4c50', [x, y + 0.05, z], [0.9, 0.06, 0.08]); // toppled
+        b.add('sphere', '#d9d2a0', [x + 0.42, y + 0.07, z], 0.12);
+        break;
+      case 'barrel':
+        b.add('cylinder', '#6d8fa3', [x, y + 0.25, z], [0.4, 0.5, 0.4]);
+        break;
+      case 'bollard':
+        b.add('cylinder', '#6f7175', [x, y + 0.2, z], [0.14, 0.4, 0.14]);
+        break;
+      case 'pillar':
+        b.add('box', '#b8b4aa', [x, y + 0.45, z], [0.32, 0.9, 0.32]);
+        b.add('box', '#9d998f', [x + 0.1, y + 0.95, z], [0.2, 0.12, 0.3]);
+        break;
+      case 'post':
+        b.add('cylinder', '#5a4636', [x, y + 0.3, z], [0.12, 0.6, 0.12]);
+        break;
+      case 'stall':
+        b.add('box', '#9a8a70', [x, y + 0.25, z], [0.8, 0.5, 0.6]);
+        b.add('box', r.next() < 0.5 ? '#b5655a' : '#5a7fb5', [x, y + 0.62, z], [0.95, 0.06, 0.75]);
+        break;
+      case 'drain':
+        b.add('box', '#3d3a35', [x, y + 0.02, z], [0.6, 0.04, 0.6]);
+        break;
+      default:
+        b.add('cylinder', '#6b5a45', [x, y + 0.12, z], [0.36, 0.24, 0.36]);
+        b.add('cylinder', '#7d6a55', [x, y + 0.25, z], [0.3, 0.02, 0.3]);
+    }
+  }
+
+  // ───────────── fog ─────────────
+
+  /** Fog alpha of one tile cell (0 clear … 1 thick). Uses area state for chunks not generated yet. */
+  private fogAt(x: number, z: number): number {
+    const s = this.sim;
+    const id = s.areas.map.areaOfCell(x, z);
+    const fog = s.areas.fog(id);
+    if (fog === 'cleared') return 0;
+    if (fog === 'hidden') return 0.95;
+    const t = s.grid.peek(GROUND, x, z);
+    if (!t) return s.areas.density(id);
+    if (t.ground === 'restored' || t.ground === 'growing') return 0;
+    if (id === 'park') return 0;
+    if (s.areas.canTouch(t)) return 0.3;
+    return 0.35 + 0.6 * s.areas.density(id);
+  }
+
+  private buildFog(v: ChunkView) {
+    v.fogDirty = false;
+    const N = CHUNK;
+    const x0 = v.cx * N;
+    const z0 = v.cz * N;
+    // Per-cell alpha with a one-cell border, then each grid vertex takes the average of its four cells,
+    // which gives soft, rolling fog edges.
+    const A: number[] = [];
+    let any = false;
+    for (let z = -1; z <= N; z++)
+      for (let x = -1; x <= N; x++) {
+        const a = this.fogAt(x0 + x, z0 + z);
+        A.push(a);
+        if (a > 0.01) any = true;
+      }
+    if (!any) {
+      v.fog = this.setMesh(v.fog, 'fog', undefined, vertexColourMaterial(), false);
+      return;
+    }
+    const W = N + 2;
+    const cell = (x: number, z: number) => A[(z + 1) * W + (x + 1)];
+    const pos: number[] = [];
+    const col: number[] = [];
+    const idx: number[] = [];
+    const h = this.sim.grid.layer(GROUND)!.height;
+    const sheets = [
+      { y: 0.32, alpha: 0.62, tint: [104, 113, 124] },
+      { y: 0.85, alpha: 0.5, tint: [128, 136, 146] },
+    ];
+    for (const sh of sheets) {
+      const base = pos.length / 3;
+      for (let z = 0; z <= N; z++)
+        for (let x = 0; x <= N; x++) {
+          const a = (cell(x - 1, z - 1) + cell(x, z - 1) + cell(x - 1, z) + cell(x, z)) / 4;
+          const wob = 0.9 + 0.2 * Math.sin((x0 + x) * 0.9 + (z0 + z) * 1.3);
+          pos.push(x0 + x, h + sh.y + a * 0.25, z0 + z);
+          col.push(sh.tint[0], sh.tint[1], sh.tint[2], Math.round(Math.min(1, a * sh.alpha * wob) * 255));
+        }
+      for (let z = 0; z < N; z++)
+        for (let x = 0; x < N; x++) {
+          const i = base + z * (N + 1) + x;
+          idx.push(i, i + N + 1, i + 1, i + 1, i + N + 1, i + N + 2);
+        }
+    }
+    const m = new pc.Mesh(this.device);
+    m.setPositions(pos);
+    m.setColors32(col);
+    m.setIndices(idx);
+    m.update(pc.PRIMITIVE_TRIANGLES);
+    if (!v.fogMat) {
+      const mat = new pc.StandardMaterial();
+      mat.useLighting = false;
+      mat.diffuse = new pc.Color(0, 0, 0);
+      mat.emissive = new pc.Color(1, 1, 1);
+      mat.emissiveVertexColor = true;
+      mat.opacityVertexColor = true;
+      mat.opacityVertexColorChannel = 'a';
+      mat.blendType = pc.BLEND_NORMAL;
+      mat.depthWrite = false;
+      mat.cull = pc.CULLFACE_NONE;
+      v.fogMat = mat;
+    }
+    v.fogMat.opacity = 1;
+    v.fogMat.update();
+    v.fog = this.setMesh(v.fog, 'fog', m, v.fogMat, false);
+  }
+}
+
+function dist(v: ChunkView, f: { x: number; z: number }) {
+  return Math.hypot(v.cx * CHUNK + 8 - f.x, v.cz * CHUNK + 8 - f.z);
+}

@@ -6,7 +6,7 @@ import { Rng } from '../src/core/Rng';
 import { Sim } from '../src/gameplay/Sim';
 import { makeSim } from './helpers';
 
-const layers = () => createInitialState(1).layers;
+const layers = () => createInitialState(1, { rooftops: true }).layers;
 
 describe('world model: global grid and chunks (City 01.1)', () => {
   it('keys round-trip, including negative coordinates and chunk borders', () => {
@@ -120,7 +120,7 @@ describe('world model: layers (City 01.4)', () => {
   });
 
   it('the endless ground exists but is not playable until the park arrives', () => {
-    const sim = new Sim(createInitialState(4));
+    const sim = new Sim(createInitialState(4, { rooftops: true }));
     expect(sim.grid.layer(GROUND)!.kind).toBe('ground');
     expect(sim.grid.isPlayable(GROUND)).toBe(false);
     expect(sim.restoration.checkPulse(sim.grid.get(GROUND, 3, 3)!).ok).toBe(false);

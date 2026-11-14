@@ -1,6 +1,8 @@
 # Solarbloom
 
-A cozy solarpunk restoration game for the browser. You start with a grey, cracked rooftop and a single damaged solar panel. You pulse tiles back to life, grow them into wildflowers and shrubs, and build machines that feed each other. Bloom Chains ripple across the garden. A little drone takes over the routine work. When the rooftop is alive, its ancient Core wakes and the whole building turns white and green.
+A cozy solarpunk restoration game for the browser, set in an endless city lost in a gloomy fog. You start in a dead, grey park with a dry fountain and one old solar lamp. Wake the fountain and the fog starts to roll back: every area you restore reveals the ones around it, forever outward.
+
+The rest of this README still describes the rooftop campaign (Rounds 1–3), which the city is replacing step by step (see PROGRESS.md and issue #1). You start with a grey, cracked rooftop and a single damaged solar panel. You pulse tiles back to life, grow them into wildflowers and shrubs, and build machines that feed each other. Bloom Chains ripple across the garden. A little drone takes over the routine work. When the rooftop is alive, its ancient Core wakes and the whole building turns white and green.
 
 Then the neighbourhood opens up. Build the Skybridge Relay to reach **the Reservoir**, a dry basin around an old cistern. Make it overflow and the **Canopy Bridge** leads to **the Canopy**, an overgrown roof with a dormant Elder Tree. Relay pylons carry Bloom Chains across the bridges, so a well-placed pulse on one rooftop makes another one bloom. Wake all three rooftops for the **Neighbourhood Bloom**.
 

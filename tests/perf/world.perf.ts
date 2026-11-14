@@ -13,7 +13,7 @@ const log = (s: string) => console.log(`  ⏱ ${s}`); // eslint-disable-line no-
 
 /** About 1,000 areas: 2,000 ground chunks (512k tiles), most restored, 2,000 machines. */
 function syntheticCity(seed = 99) {
-  const sim = new Sim(createInitialState(seed));
+  const sim = new Sim(createInitialState(seed, { rooftops: true }));
   const side = 45; // 45×45 ≈ 2,025 chunks
   let n = 0;
   for (let cz = 0; cz < side; cz++)
@@ -39,7 +39,7 @@ function syntheticCity(seed = 99) {
 
 describe('performance: world model (City 01.3)', () => {
   it('lookups cost the same in a 100-tile world and a 100,000+-tile world', () => {
-    const small = new Sim(createInitialState(1));
+    const small = new Sim(createInitialState(1, { rooftops: true }));
     const big = syntheticCity();
     const probe = (sim: Sim, layer: string, x: number, z: number) => () => {
       sim.grid.tilesNear({ roofId: layer, x, z, size: 2 }, 2);

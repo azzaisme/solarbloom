@@ -11,7 +11,7 @@ const saver = new SaveService(undefined);
 type Applier = { apply(t: CatRewardType, mult: number, hidden: number): string };
 
 function neighbourhood(seed: number) {
-  const sim = new Sim(createInitialState(seed));
+  const sim = new Sim(createInitialState(seed, { rooftops: true }));
   rich(sim);
   awakenSeed(sim);
   sim.hood.buildLink('seed-reservoir');

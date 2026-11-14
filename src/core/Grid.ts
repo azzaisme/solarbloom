@@ -135,6 +135,12 @@ export class Grid {
     return c?.tiles[(z - c.cz * CHUNK) * CHUNK + (x - c.cx * CHUNK)];
   }
 
+  /** A tile only if its chunk is already generated (never generates). */
+  peek(layerId: string, x: number, z: number): TileData | undefined {
+    const c = this.chunks.get(chunkKey(layerId, Math.floor(x / CHUNK), Math.floor(z / CHUNK)));
+    return c?.tiles[(z - c.cz * CHUNK) * CHUNK + (x - c.cx * CHUNK)];
+  }
+
   byTileId(id: string): TileData | undefined {
     const i = id.lastIndexOf(':');
     const j = id.lastIndexOf(':', i - 1);

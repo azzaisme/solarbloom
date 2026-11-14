@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { distToFootprint } from '../src/core/Grid';
-import { createInitialState } from '../src/core/GameState';
+import { createInitialState, GROUND } from '../src/core/GameState';
+import { HOME } from '../src/gameplay/ProgressionSystem';
 import type { BuildableType, TileData } from '../src/core/types';
 import { MACHINES } from '../src/data/machines';
 import { Sim } from '../src/gameplay/Sim';
@@ -10,13 +11,14 @@ import { Sim } from '../src/gameplay/Sim';
  * other, aims pulses at synergy tiles, buys upgrades when nothing better is pending.
  * It is a pacing guard, not a balance oracle: real players are slower and less optimal.
  */
-export function playSession(seed: number, actionEvery = 3, minutes = 20) {
-  const sim = new Sim(createInitialState(seed));
+export function playSession(seed: number, actionEvery = 3, minutes = 20, park = false) {
+  const sim = new Sim(createInitialState(seed, { rooftops: !park }));
+  const layer = park ? GROUND : 'r1';
   sim.cat.anchorView = () => 'visible';
   const order: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'pollinator', 'motherTree', 'solar', 'pollinator'];
   const built: Record<string, number> = {};
   let next = 0;
-  const tiles = () => sim.grid.tilesOf('r1');
+  const tiles = () => sim.progression.tilesFor(HOME);
   const synergy = (t: TileData) =>
     sim.state.machines.reduce((a, m) => {
       const d = distToFootprint(t.x, t.z, m.x, m.z, m.size);
@@ -38,9 +40,9 @@ export function playSession(seed: number, actionEvery = 3, minutes = 20) {
         } else if (sim.build.isUnlocked(want) && sim.econ.canAfford(sim.build.cost(want))) {
           const size = MACHINES[want].size;
           const spots = tiles()
-            .filter((t) => sim.build.check(want, 'r1', t.x, t.z).ok)
+            .filter((t) => sim.build.check(want, layer, t.x, t.z).ok)
             .sort((a, b) => synergy(b) - synergy(a) || a.x + a.z - (b.x + b.z));
-          if (spots[0] && sim.build.place(want, 'r1', spots[0].x, spots[0].z)) {
+          if (spots[0] && sim.build.place(want, layer, spots[0].x, spots[0].z)) {
             built[want] = (built[want] ?? 0) + 1;
             next++;
             void size;
@@ -65,7 +67,7 @@ export function playSession(seed: number, actionEvery = 3, minutes = 20) {
       if (c && sim.time - c.spawnedAt > 40) sim.cat.claim();
     }
     sim.tick();
-    if (i % 600 === 0 && (globalThis as { PACE_DEBUG?: boolean }).PACE_DEBUG) console.log(`${i / 600}m rates ${JSON.stringify(sim.production.rates())} restored ${sim.progression.restoredCount('r1')}`);
+    if (i % 600 === 0 && (globalThis as { PACE_DEBUG?: boolean }).PACE_DEBUG) console.log(`${i / 600}m rates ${JSON.stringify(sim.production.rates())} restored ${sim.progression.restoredCount(HOME)}`);
   }
   const st = sim.state.stats;
   return {
@@ -89,6 +91,25 @@ describe('pacing (scripted player)', () => {
       expect(r.core).toBeGreaterThan(0);
       // Chain size depends on deliberate layouts (proven in chains.test.ts); the bot just must chain at all.
       expect(r.maxCombo).toBeGreaterThanOrEqual(2);
+      expect(r.firsts.cat).toBeDefined();
+      expect(r.stuck).toBeLessThan(90);
+    }
+  });
+});
+
+describe('pacing in the city park (scripted player)', () => {
+  it('hits the Round 2 beats in the park and wakes the fountain without long dead time', () => {
+    for (const seed of [7, 21, 99]) {
+      const r = playSession(seed, 3, 25, true);
+      const fmt = (s?: number) => (s === undefined ? '—' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
+      // eslint-disable-next-line no-console
+      console.log(
+        `park seed ${seed}: upgrade ${fmt(r.firsts.upgrade)} condenser ${fmt(r.firsts.condenser)} garden ${fmt(r.firsts.pollinator)} cat ${fmt(r.firsts.cat)} drone ${fmt(r.firsts.droneHub)} tree ${fmt(r.firsts.motherTree)} fountain ${fmt(r.core)} | stuck ${r.stuck}s maxCombo ${r.maxCombo}`,
+      );
+      expect(r.core).toBeGreaterThan(0);
+      expect(r.core).toBeLessThan(10 * 60); // the Round 2 window for the bot (people take about twice as long)
+      expect(r.core).toBeGreaterThan(5 * 60);
+      expect(r.firsts.condenser).toBeLessThan(3 * 60);
       expect(r.firsts.cat).toBeDefined();
       expect(r.stuck).toBeLessThan(90);
     }

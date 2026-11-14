@@ -9,7 +9,7 @@ import { awakenSeed, ground, rich } from './helpers';
 const N = TUNING.neighbourhood;
 
 function open(seed = 3) {
-  const sim = new Sim(createInitialState(seed));
+  const sim = new Sim(createInitialState(seed, { rooftops: true }));
   rich(sim);
   awakenSeed(sim);
   sim.hood.buildLink('seed-reservoir');

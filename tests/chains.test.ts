@@ -143,7 +143,7 @@ describe('bloom chain engine', () => {
 
   it('is deterministic: the same action on the same state gives the same events and state', () => {
     const build = () => {
-      const sim = new Sim(createInitialState(99));
+      const sim = new Sim(createInitialState(99, { rooftops: true }));
       rich(sim);
       fill(sim, 0, 0, 7, 7, 'prepared');
       place(sim, 'pollinator', 3, 3);

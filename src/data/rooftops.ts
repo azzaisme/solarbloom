@@ -184,4 +184,10 @@ export const CAT_ANCHORS: CatAnchor[] = [
   { id: 'canopy-rail', roofId: 'r3', pos: [5.6, PARAPET_TOP, -0.12], rotY: 200, hint: 'on the Canopy back wall' },
   { id: 'canopy-left', roofId: 'r3', pos: [-0.12, PARAPET_TOP, 3.6], rotY: 250, hint: 'on the Canopy side wall' },
   { id: 'root-nook', roofId: 'r3', pos: [2.3, 0.08, 7.1], rotY: 230, needsFreeTile: [2, 7], hint: 'among the dead roots' },
+  // The city park (ground layer, park cells)
+  { id: 'park-bench', roofId: 'g', pos: [3.5, 0.08, 7.25], rotY: 210, needsFreeTile: [3, 7], hint: 'under a park bench' },
+  { id: 'bandstand-steps', roofId: 'g', pos: [11.6, 0.08, 4.25], rotY: 200, needsFreeTile: [11, 4], hint: 'on the bandstand steps' },
+  { id: 'fountain-rim', roofId: 'g', pos: [9.25, 0.08, 8.4], rotY: 230, needsFreeTile: [9, 8], hint: 'by the fountain rim' },
+  { id: 'toppled-lamp', roofId: 'g', pos: [5.3, 0.08, 12.5], rotY: 220, needsFreeTile: [5, 12], hint: 'beside the toppled lamp' },
+  { id: 'hedge-gap', roofId: 'g', pos: [0.35, 0.08, 10.5], rotY: 250, needsFreeTile: [0, 10], hint: 'in a gap in the hedge' },
 ];

@@ -14,23 +14,51 @@ export interface AreaTypeDef {
   /** share of tiles that are small obstacles (stumps, stalls, pillars…) */
   obstacles: number;
   obstacleName: string;
+  /** renderer prop for its obstacles */
+  prop: string;
   landmark: { kind: string; name: string };
   /** how much rarer/commoner it is in each district theme */
   weights: Record<Theme, number>;
 }
 
 export const AREA_TYPES: Record<AreaType, AreaTypeDef> = {
-  park: { type: 'park', name: 'Parkland', icon: '🌳', ground: 'lawn', obstacles: 0.04, obstacleName: 'old stump', landmark: { kind: 'fountain', name: 'Dry Fountain' }, weights: { oldtown: 2, docks: 1, towers: 2, parkland: 6 } },
-  street: { type: 'street', name: 'Street', icon: '🛣️', ground: 'paving', obstacles: 0.03, obstacleName: 'rusty bollard', landmark: { kind: 'mast', name: 'Signal Mast' }, weights: { oldtown: 4, docks: 3, towers: 5, parkland: 2 } },
-  plaza: { type: 'plaza', name: 'Plaza', icon: '⛲', ground: 'paving', obstacles: 0.05, obstacleName: 'cracked pillar', landmark: { kind: 'clock', name: 'Clock Tower' }, weights: { oldtown: 4, docks: 1, towers: 3, parkland: 1 } },
-  canal: { type: 'canal', name: 'Canal', icon: '🛶', ground: 'paving', obstacles: 0.02, obstacleName: 'mooring post', landmark: { kind: 'lock', name: 'Lock Gate' }, weights: { oldtown: 1, docks: 6, towers: 1, parkland: 2 } },
-  market: { type: 'market', name: 'Market', icon: '🧺', ground: 'paving', obstacles: 0.08, obstacleName: 'broken stall', landmark: { kind: 'hall', name: 'Market Hall' }, weights: { oldtown: 3, docks: 3, towers: 1, parkland: 1 } },
-  reservoir: { type: 'reservoir', name: 'Reservoir', icon: '💧', ground: 'clay', obstacles: 0.03, obstacleName: 'dry drain', landmark: { kind: 'cistern', name: 'Old Cistern' }, weights: { oldtown: 1, docks: 2, towers: 1, parkland: 2 } },
-  grove: { type: 'grove', name: 'Grove', icon: '🍂', ground: 'litter', obstacles: 0.06, obstacleName: 'dead stump', landmark: { kind: 'elder', name: 'Elder Tree' }, weights: { oldtown: 1, docks: 1, towers: 1, parkland: 4 } },
+  park: { type: 'park', prop: 'stump', name: 'Parkland', icon: '🌳', ground: 'lawn', obstacles: 0.04, obstacleName: 'old stump', landmark: { kind: 'fountain', name: 'Dry Fountain' }, weights: { oldtown: 2, docks: 1, towers: 2, parkland: 6 } },
+  street: { type: 'street', prop: 'bollard', name: 'Street', icon: '🛣️', ground: 'paving', obstacles: 0.03, obstacleName: 'rusty bollard', landmark: { kind: 'mast', name: 'Signal Mast' }, weights: { oldtown: 4, docks: 3, towers: 5, parkland: 2 } },
+  plaza: { type: 'plaza', prop: 'pillar', name: 'Plaza', icon: '⛲', ground: 'paving', obstacles: 0.05, obstacleName: 'cracked pillar', landmark: { kind: 'clock', name: 'Clock Tower' }, weights: { oldtown: 4, docks: 1, towers: 3, parkland: 1 } },
+  canal: { type: 'canal', prop: 'post', name: 'Canal', icon: '🛶', ground: 'paving', obstacles: 0.02, obstacleName: 'mooring post', landmark: { kind: 'lock', name: 'Lock Gate' }, weights: { oldtown: 1, docks: 6, towers: 1, parkland: 2 } },
+  market: { type: 'market', prop: 'stall', name: 'Market', icon: '🧺', ground: 'paving', obstacles: 0.08, obstacleName: 'broken stall', landmark: { kind: 'hall', name: 'Market Hall' }, weights: { oldtown: 3, docks: 3, towers: 1, parkland: 1 } },
+  reservoir: { type: 'reservoir', prop: 'drain', name: 'Reservoir', icon: '💧', ground: 'clay', obstacles: 0.03, obstacleName: 'dry drain', landmark: { kind: 'cistern', name: 'Old Cistern' }, weights: { oldtown: 1, docks: 2, towers: 1, parkland: 2 } },
+  grove: { type: 'grove', prop: 'stump', name: 'Grove', icon: '🍂', ground: 'litter', obstacles: 0.06, obstacleName: 'dead stump', landmark: { kind: 'elder', name: 'Elder Tree' }, weights: { oldtown: 1, docks: 1, towers: 1, parkland: 4 } },
 };
 
 export const AREA_TYPE_LIST = Object.keys(AREA_TYPES) as AreaType[];
 export const THEMES: Theme[] = ['oldtown', 'docks', 'towers', 'parkland'];
+
+/**
+ * The starting park, hand-made (chunk 0,0; cells are park-local = ground cells). The fountain is its landmark
+ * (from Areas: cell 7,7, 2×2). Paths cross at the fountain; props are obstacles with names for the renderer.
+ */
+export const PARK_LAYOUT = {
+  paths: { cols: [7, 8], rows: [7, 8] },
+  props: [
+    { at: [3, 6], prop: 'bench' },
+    { at: [12, 6], prop: 'bench' },
+    { at: [3, 9], prop: 'bench' },
+    { at: [12, 9], prop: 'bench' },
+    { at: [11, 2], prop: 'bandstand' },
+    { at: [12, 2], prop: 'bandstand' },
+    { at: [11, 3], prop: 'bandstand' },
+    { at: [12, 3], prop: 'bandstand' },
+    { at: [4, 12], prop: 'lamp' },
+    { at: [1, 1], prop: 'barrel' },
+  ] as { at: [number, number]; prop: string }[],
+  starterSolar: [5, 5] as [number, number],
+  prepared: [
+    [6, 5],
+    [5, 6],
+    [6, 6],
+  ] as [number, number][],
+};
 
 export const CITY_GEN = {
   /** district themes are chosen per region of this many chunks */

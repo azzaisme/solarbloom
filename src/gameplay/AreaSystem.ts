@@ -105,6 +105,13 @@ export class AreaSystem {
     return c;
   }
 
+  /** Tiles to restore before the landmark can be woken: a share of the area, capped (scaled by difficulty). */
+  need(id: string): number {
+    const c = this.counts(id);
+    const cap = Math.round(TUNING.city.clearCap * this.info(id).difficulty);
+    return Math.max(1, Math.min(Math.ceil(c.restorable * TUNING.city.clearShare), cap));
+  }
+
   /** 0 = untouched, 1 = everything restored. */
   share(id: string): number {
     const c = this.counts(id);
@@ -116,14 +123,14 @@ export class AreaSystem {
     const fog = this.fog(id);
     if (fog === 'cleared') return 0;
     if (fog === 'hidden') return TUNING.city.fogFull;
-    const k = Math.min(1, this.share(id) / TUNING.city.clearShare);
+    const k = Math.min(1, this.counts(id).restored / this.need(id));
     return TUNING.city.fogFull + (TUNING.city.fogThin - TUNING.city.fogFull) * k;
   }
 
   /** The landmark can be woken (milestone met, area not yet cleared). City 09 adds specialty actions. */
   ready(id: string): boolean {
     const f = this.fog(id);
-    return (f === 'frontier' || f === 'thinning') && this.share(id) >= TUNING.city.clearShare - 1e-9;
+    return (f === 'frontier' || f === 'thinning') && this.counts(id).restored >= this.need(id);
   }
 
   /** A ground tile was restored: its area's fog starts thinning. */
@@ -143,13 +150,14 @@ export class AreaSystem {
   private announced = new Set<string>();
 
   /** Wakes an area's landmark: clears its fog (claimed once, before anything else) and reveals its neighbours. */
-  clear(id: string): boolean {
+  clear(id: string, force = false): boolean {
     const s = this.sim;
-    if (!this.ready(id)) {
+    if (!force && !this.ready(id)) {
       s.bus.emit('action.failed', { reason: this.fog(id) === 'cleared' ? 'Already clear' : 'Restore more of this area first' });
       return false;
     }
-    const st = s.state.areas[id]!;
+    if (this.fog(id) === 'cleared') return false;
+    const st = (s.state.areas[id] ??= { fog: 'thinning', revealedAt: s.time });
     st.fog = 'cleared';
     st.clearedAt = s.time;
     s.bus.emit('area.cleared', { areaId: id });
@@ -186,6 +194,18 @@ export class AreaSystem {
     t.unblocked = true;
     this.sim.grid.touch(t);
     return true;
+  }
+
+  /**
+   * The next goal in the city: an area whose landmark can be woken (nearest the park first), otherwise the
+   * fogged area that is furthest along, otherwise the nearest frontier.
+   */
+  nextGoal(): string | undefined {
+    const open = this.revealed().filter((id) => this.fog(id) !== 'cleared' && id !== PARK);
+    if (!open.length) return undefined;
+    const ready = open.filter((id) => this.ready(id)).sort((a, b) => this.info(a).distance - this.info(b).distance);
+    if (ready.length) return ready[0];
+    return open.sort((a, b) => this.share(b) - this.share(a) || this.info(a).distance - this.info(b).distance || (a < b ? -1 : 1))[0];
   }
 
   /** Revealed areas (frontier, thinning or cleared). */

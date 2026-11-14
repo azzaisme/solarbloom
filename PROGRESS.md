@@ -12,7 +12,9 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #3 City 02: save format v4 (old saves scrapped, sparse deltas) | ✅ |
 | #4 City 03: areas and the fog | ✅ (simulation; fog visuals are #8) |
 | #5 City 04: endless city generator | ✅ except the visual review (#37, needs ground rendering) |
-| #6–#16 | not started |
+| #6 City 05: the dilapidated park | ✅ layout, onboarding, fountain finale, pacing, cat nooks (open: 25/50/75% park stages #39, nook screenshots) |
+| #8 City 07: rendering | first pass ✅ chunk streaming, merged chunk meshes, fog (open: far LOD #52, instancing #53, buildings #54, device numbers #56) |
+| #7, #9–#16 | not started |
 
 ## City 01: world model
 
@@ -40,6 +42,14 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - Authored landmarks (Great Greenhouse at 6 chunks, Solar Cathedral at 12, Sky Observatory at 20, then one every 10 chunks) sit in a seeded direction at their distance.
 - Difficulty grows with distance: pulse cost ×(1 + 0.04/chunk, max ×2) and a rising pollution floor (max 85).
 - Tests: skeleton determinism, themes, every type's ground/obstacles/landmark clearance, authored landmarks for 10 seeds, difficulty caps, and a 500+-area variety soak (under 30% same-type neighbours; every type within 12 chunks of the park).
+
+## City 05 + City 07 (first pass): the park and the city on screen
+
+- A new game starts in the city: only the endless ground layer, the park at chunk (0, 0) (paths crossing at the fountain, benches, a bandstand, a toppled lamp, a rain barrel, the old solar lamp as the starter panel, three mossy tiles to start on). The rooftop layout is still supported and used by the mechanics tests (`createInitialState(seed, { rooftops: true })`).
+- The park's goal (the fountain) replaces the Seed Core: restore 130 tiles, grow 52 to full bloom, build every machine, then wake it. That clears the park's fog and reveals the first ring of areas. The park pacing bot wakes the fountain at about 6:30 (Round 2 window), with chains up to ×36 thanks to the extra room.
+- After the fountain the objective points at the next area (one with a ready landmark first, otherwise the one furthest along). Landmarks are clickable, with an inspect panel and a Wake button. City areas ask for 60% of their tiles, capped at 160 × distance difficulty.
+- `ChunkRenderer` draws the ground: one merged, vertex-coloured mesh per 16×16 chunk (slabs, decoration, props), streamed around the camera and rebuilt (at most 2 per frame, nearest first) when its tiles change. Fog is a per-chunk mesh of two translucent sheets whose per-vertex alpha is averaged across tile corners: hidden areas are thick, frontier fog thins with progress, tiles next to clear ground are lighter, and restored tiles are clear, so the gloom visibly recedes tile by tile. Cleared areas fade their fog out.
+- The ground is picked as an unbounded plane. Picking e2e now covers the city ground (55k checks). Camera bounds follow the revealed areas.
 
 ## City 02: save format v4
 

@@ -18,7 +18,7 @@ function collect(sim: Sim) {
 
 /** A neighbourhood with every link built and every roof playable. */
 function connected(seed = 5) {
-  const sim = new Sim(createInitialState(seed));
+  const sim = new Sim(createInitialState(seed, { rooftops: true }));
   rich(sim);
   awakenSeed(sim);
   sim.hood.buildLink('seed-reservoir');

@@ -36,6 +36,8 @@ export interface TileData {
   lushUntil?: number;
   /** City ground: what the tile is made of (generated, not saved). */
   feature?: import('../data/city').TileFeature;
+  /** City ground obstacles: which prop stands here (bench, stall, stump…), for the renderer. */
+  prop?: string;
   /** A generated obstacle was cleared so a fogged area stays reachable (saved). */
   unblocked?: boolean;
 }

@@ -1,3 +1,4 @@
+import { PARK_LAYOUT } from '../data/city';
 import { ROOFTOPS, type RooftopDef } from '../data/rooftops';
 import { TUNING } from '../data/tuning';
 import { Rng } from './Rng';
@@ -23,8 +24,18 @@ export function layerFromDef(def: RooftopDef): LayerData {
   };
 }
 
-export function groundLayer(): LayerData {
-  return { id: GROUND, name: 'The City', kind: 'ground', width: 0, depth: 0, height: -40, origin: [0, 0, 0], unlocked: false, preview: true };
+/** The endless city ground. Playable from the start in the city; locked in the legacy rooftop layout. */
+export function groundLayer(playable = true): LayerData {
+  return { id: GROUND, name: 'The City', kind: 'ground', width: 0, depth: 0, height: playable ? 0 : -40, origin: [0, 0, 0], unlocked: playable, preview: !playable };
+}
+
+export interface NewGameOptions {
+  /**
+   * Legacy layout: the Seed, Reservoir and Canopy rooftops (Phase 3), with the city ground locked. The game
+   * starts in the city park; mechanics tests use this small, bounded layout until rooftops return as city
+   * areas (City 12).
+   */
+  rooftops?: boolean;
 }
 
 /** Adds a fixed structure (Core, starter panel). Tile occupancy is derived from machines by the world. */
@@ -40,9 +51,10 @@ export function placeRoofFixtures(state: Pick<GameState, 'machines' | 'nextId'>,
   if (def.starterSolar) placeFixed(state, def.id, 'solar', def.starterSolar[0], def.starterSolar[1], 1, true);
 }
 
-export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): GameState {
+export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0, opts: NewGameOptions = {}): GameState {
   const holder = { machines: [] as MachineData[], nextId: 1 };
-  for (const def of ROOFTOPS) placeRoofFixtures(holder, def);
+  if (opts.rooftops) for (const def of ROOFTOPS) placeRoofFixtures(holder, def);
+  else placeFixed(holder, GROUND, 'solar', PARK_LAYOUT.starterSolar[0], PARK_LAYOUT.starterSolar[1], 1, true);
   return {
     version: SAVE_VERSION,
     seed,
@@ -51,7 +63,7 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): Game
     nextId: holder.nextId,
     resources: { ...TUNING.start.resources },
     caps: { ...TUNING.start.caps },
-    layers: [...ROOFTOPS.map(layerFromDef), groundLayer()],
+    layers: opts.rooftops ? [...ROOFTOPS.map(layerFromDef), groundLayer(false)] : [groundLayer(true)],
     machines: holder.machines,
     drones: [],
     upgrades: {},

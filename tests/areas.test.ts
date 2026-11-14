@@ -21,7 +21,8 @@ function city(seed = 4) {
 /** Restores enough of an area to wake its landmark (directly, like a very fast player). */
 function restoreArea(sim: Sim, id: string, share: number = TUNING.city.clearShare, fast = false) {
   const tiles = sim.areas.tiles(id).filter((t) => isRestorable(t, sim.state.machines) && t.ground !== 'restored');
-  const need = Math.ceil(sim.areas.counts(id).restorable * share) - sim.areas.counts(id).restored;
+  const target = share >= 1 ? sim.areas.counts(id).restorable : sim.areas.need(id);
+  const need = target - sim.areas.counts(id).restored;
   for (const t of tiles.slice(0, Math.max(0, need))) {
     if (!fast) {
       sim.restoration.complete(t, 'pulse');

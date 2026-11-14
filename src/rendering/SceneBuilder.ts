@@ -89,7 +89,12 @@ export class SceneBuilder {
   build(roofs: RooftopData[], tilesOf: (layerId: string) => TileData[]) {
     this.tilesOf = tilesOf;
     this.lights();
-    const r1 = roofs.find((r) => r.id === 'r1')!;
+    const r1 = roofs.find((r) => r.id === 'r1');
+    if (!r1) {
+      // The city: the ground is drawn by ChunkRenderer; the haze is the scene fog.
+      this.city = true;
+      return;
+    }
     this.r1 = this.building(r1, true);
     const others = roofs.filter((r) => r.id !== 'r1');
     for (const r of others) {
@@ -520,7 +525,11 @@ export class SceneBuilder {
    * Visual progress stages from restored coverage: 1 = 25%, 2 = 50%, 3 = 75% (4 = Core awake).
    * Stage 3 brightens the facade part-way and fills the first balconies and vines.
    */
+  /** No rooftop buildings: the game takes place in the city. */
+  city = false;
+
   setStage(stage: number, instant: boolean): boolean {
+    if (this.city) return false;
     if (stage === this.stage) return false;
     const prev = this.stage;
     this.stage = stage;
@@ -553,6 +562,10 @@ export class SceneBuilder {
 
   /** Building-scale transformation. `instant` applies the end state (used on load and on skip). */
   restoreBuilding(instant: boolean, onCamera?: () => void): number {
+    if (this.city) {
+      if (onCamera) this.tweens.add(0.01, () => {}, { delay: instant ? 0 : 1.2, done: onCamera });
+      return instant ? 0 : 1.2;
+    }
     const r = this.r1;
     const fromF = r.facadeMat.diffuse.clone(); // stage 3 may have brightened it already
     const toF = color(PALETTE.whiteWarm);

@@ -25,6 +25,8 @@ interface MachineView {
   water?: pc.Entity;
   /** Elder Tree: the dormant bare branches (hidden once its canopy unfolds). */
   bare?: pc.Entity;
+  /** Which Core model this is (decides how it wakes). */
+  coreKind?: 'crystal' | 'cistern' | 'elder' | 'fountain';
   level: number;
   extras: pc.Entity;
 }
@@ -81,11 +83,15 @@ export class MachineVisuals {
       case 'motherTree':
         this.motherTree(v);
         break;
-      case 'core':
-        if (m.roofId === 'r2') this.cistern(v);
-        else if (m.roofId === 'r3') this.elderTree(v);
+      case 'core': {
+        const kind = m.roofId === 'r2' ? 'cistern' : m.roofId === 'r3' ? 'elder' : m.roofId === 'g' && this.landmarkKind(m) === 'fountain' ? 'fountain' : 'crystal';
+        v.coreKind = kind;
+        if (kind === 'cistern') this.cistern(v);
+        else if (kind === 'elder') this.elderTree(v);
+        else if (kind === 'fountain') this.fountain(v);
         else this.core(v);
         break;
+      }
       case 'reservoirGarden':
         this.reservoirGarden(v);
         break;
@@ -281,6 +287,36 @@ export class MachineVisuals {
     shape(b, 'box', mat(PALETTE.crack), { pos: [0.22, 0.9, 0.0], scale: [0.02, 0.6, 0.02], rot: [0, 45, 12] });
   }
 
+  private landmarkKind(m: MachineData): string {
+    const id = this.sim.areas.areaOf({ roofId: m.roofId, x: m.x, z: m.z });
+    return id ? this.sim.areas.info(id).landmarkKind : '';
+  }
+
+  /** The park's dry fountain: a cracked stone basin that fills and sprays when it wakes. */
+  private fountain(v: MachineView) {
+    const b = v.body;
+    v.coreBase = uniqueMat('#8f8b82', { gloss: 0.25 });
+    v.coreMat = uniqueMat('#6e7a80', { gloss: 0.8, emissive: '#000000', emissiveIntensity: 1 });
+    shape(b, 'cylinder', v.coreBase, { pos: [0, 0.16, 0], scale: [1.8, 0.32, 1.8], shadow: true });
+    shape(b, 'torus', v.coreBase, { pos: [0, 0.32, 0], scale: [1.8, 0.16, 1.8] });
+    shape(b, 'cylinder', mat('#4a463f'), { pos: [0, 0.31, 0], scale: [1.6, 0.02, 1.6] });
+    const water = shape(b, 'cylinder', mat(PALETTE.water, { gloss: 0.9, opacity: 0.85 }), { pos: [0, 0.2, 0], scale: [1.58, 0.02, 1.58] });
+    water.enabled = false;
+    v.water = water;
+    shape(b, 'cylinder', v.coreBase, { pos: [0, 0.65, 0], scale: [0.22, 0.7, 0.22], shadow: true });
+    shape(b, 'cylinder', v.coreBase, { pos: [0, 1.02, 0], scale: [0.7, 0.1, 0.7], shadow: true });
+    const crystal = group(b, 'crystal', [0, 1.22, 0]);
+    shape(crystal, 'sphere', v.coreMat, { scale: [0.22, 0.3, 0.22], shadow: true });
+    v.spin.push(crystal);
+    v.rings = [];
+    for (let i = 0; i < 2; i++) {
+      const r = shape(b, 'torus', mat(PALETTE.water, { emissive: PALETTE.water, emissiveIntensity: 1.2 }), { pos: [0, 1.1 + i * 0.3, 0], scale: [0.8 - i * 0.25, 0.06, 0.8 - i * 0.25] });
+      r.enabled = false;
+      v.rings.push(r);
+    }
+    shape(b, 'box', mat(PALETTE.crack), { pos: [0.55, 0.2, 0.6], scale: [0.03, 0.3, 0.03], rot: [0, 45, 14] });
+  }
+
   /** The Reservoir's Old Cistern: a big round tank, dry and rusty until it wakes. */
   private cistern(v: MachineView) {
     const b = v.body;
@@ -440,11 +476,21 @@ export class MachineVisuals {
   /** Core look: dormant / ready (pulsing gold) / awakened. */
   setCoreState(state: 'dormant' | 'ready' | 'awake', instant = false, roofId = 'r1') {
     const v = this.coreView(roofId);
-    if (!v || !v.coreMat || !v.coreBase) return;
+    if (v) this.applyCoreState(v, state, instant);
+  }
+
+  /** A specific landmark (city areas have many Cores on one layer). */
+  setLandmarkState(machineId: string, state: 'dormant' | 'ready' | 'awake', instant = false) {
+    const v = this.views.get(machineId);
+    if (v) this.applyCoreState(v, state, instant);
+  }
+
+  private applyCoreState(v: MachineView, state: 'dormant' | 'ready' | 'awake', instant: boolean) {
+    if (!v.coreMat || !v.coreBase) return;
     if (v.root.tags.has('awake') && state !== 'awake') return;
     v.root.tags.remove('ready', 'awake', 'dormant');
     v.root.tags.add(state);
-    if (state === 'awake' && roofId === 'r2') {
+    if (state === 'awake' && (v.coreKind === 'cistern' || v.coreKind === 'fountain')) {
       const from = v.coreBase.diffuse.clone();
       this.tweens.add(instant ? 0.01 : 1.4, (k) => {
         v.coreBase!.diffuse = new pc.Color().lerp(from, color(PALETTE.white), k);
@@ -453,13 +499,13 @@ export class MachineVisuals {
         v.coreMat!.update();
         if (v.water) {
           v.water.enabled = true;
-          v.water.setLocalPosition(0, 0.3 + 0.55 * k, 0);
+          v.water.setLocalPosition(0, v.coreKind === 'fountain' ? 0.2 + 0.1 * k : 0.3 + 0.55 * k, 0);
         }
       });
       v.rings!.forEach((r) => (r.enabled = true));
       return;
     }
-    if (state === 'awake' && roofId === 'r3') {
+    if (state === 'awake' && v.coreKind === 'elder') {
       const from = v.coreBase.diffuse.clone();
       this.tweens.add(instant ? 0.01 : 1.6, (k) => {
         v.coreBase!.diffuse = new pc.Color().lerp(from, color(PALETTE.trunk), k);
@@ -495,8 +541,9 @@ export class MachineVisuals {
     return [...this.views.values()].find((x) => x.m.type === 'core' && x.m.roofId === roofId);
   }
 
-  coreWorld(roofId = 'r1'): [number, number, number] | undefined {
-    const v = this.coreView(roofId);
+  /** World point above a Core (by roof, or a specific landmark machine id). */
+  coreWorld(roofId = 'r1', machineId?: string): [number, number, number] | undefined {
+    const v = machineId ? this.views.get(machineId) : this.coreView(roofId);
     if (!v) return undefined;
     const p = v.root.getPosition();
     return [p.x, p.y + 1.8, p.z];
@@ -564,7 +611,7 @@ export class MachineVisuals {
           break;
         }
         case 'core': {
-          if (v.m.roofId !== 'r1') {
+          if (v.coreKind !== 'crystal') {
             this.updateRoofCore(v, t, rm);
             break;
           }
@@ -591,7 +638,7 @@ export class MachineVisuals {
   private updateRoofCore(v: MachineView, t: number, rm: boolean) {
     const awake = v.root.tags.has('awake');
     const ready = v.root.tags.has('ready');
-    if (v.m.roofId === 'r3') {
+    if (v.coreKind === 'elder') {
       // Elder Tree charge ring: lit seeds = charge.
       const lit = Math.round(Math.min(1, (v.m.charge ?? 0) / TUNING.neighbourhood.canopy.threshold) * v.orbs!.length);
       v.orbs!.forEach((o, i) => {

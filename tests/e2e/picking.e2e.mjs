@@ -42,51 +42,41 @@ try {
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom);
     if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
-    // Every rooftop, each focused in turn (all unlocked for the test), at each zoom.
-    await page.evaluate(() => {
-      const g = window.solarbloom;
-      for (const r of g.sim.grid.rooftops) {
-        r.unlocked = true;
-        r.preview = false;
-      }
-    });
-    for (const roofId of ['r1', 'r2', 'r3']) {
+    // The city ground, focused at a few spots (the park and its surroundings), at each zoom.
+    for (const [fx, fz] of [[8, 8], [24, -10], [-12, 20]]) {
       for (const zoom of ZOOMS) {
         const res = await page.evaluate(
-          ({ zoom, OFFSETS, roofId }) => {
+          ({ zoom, OFFSETS, fx, fz }) => {
             const g = window.solarbloom;
-            const roof = g.sim.grid.roof(roofId);
             const V = g.camera.target.constructor;
-            const cy = roof.origin[1] + roof.height;
-            g.camera.glide(roof.origin[0] + roof.width / 2, cy, roof.origin[2] + roof.depth / 2, zoom);
+            g.camera.bounds = { minX: -1e4, maxX: 1e4, minZ: -1e4, maxZ: 1e4 };
+            g.camera.glide(fx, 0, fz, zoom);
             for (let i = 0; i < 200; i++) g.camera.update(0.05);
             const out = [];
-            for (const t of g.sim.grid.tilesOf(roofId)) {
-              for (const [ox, oz] of OFFSETS) {
-                const s = g.camera.toScreen(new V(roof.origin[0] + t.x + ox, cy + 0.08, roof.origin[2] + t.z + oz));
-                // Only points actually on screen can be clicked by a player.
-                if (s.x < 0 || s.y < 0 || s.x > innerWidth || s.y > innerHeight) continue;
-                const p = g.pick(s.x, s.y);
-                // A taller rooftop in front may legitimately cover this point; never a wrong tile on the same roof.
-                out.push({ want: t.id, got: p?.tile?.id ?? null, sameRoof: !p || p.roofId === roofId });
+            for (let z = fz - 14; z < fz + 14; z++)
+              for (let x = fx - 14; x < fx + 14; x++) {
+                const t = g.sim.grid.get('g', x, z);
+                for (const [ox, oz] of OFFSETS) {
+                  const s = g.camera.toScreen(new V(x + ox, 0.08, z + oz));
+                  if (s.x < 0 || s.y < 0 || s.x > innerWidth || s.y > innerHeight) continue;
+                  const p = g.pick(s.x, s.y);
+                  out.push({ want: t.id, got: p?.tile?.id ?? null, sameRoof: true });
+                }
               }
-            }
-            if (!out.length) out.push({ want: 'camera', got: JSON.stringify([g.camera.target, g.camera.zoom, g.camera.goalPoint]), sameRoof: false });
+            if (!out.length) out.push({ want: 'camera', got: JSON.stringify([g.camera.target, g.camera.zoom]), sameRoof: false });
             return out;
           },
-          { zoom, OFFSETS, roofId },
+          { zoom, OFFSETS, fx, fz },
         );
-        const own = res.filter((r) => r.sameRoof);
-        checks += own.length;
-        const bad = own.filter((r) => r.want !== r.got);
-        if (own.length < res.length * 0.7) fail(`${vp.name} ${roofId} zoom ${zoom}: only ${own.length}/${res.length} points reach their own roof`);
-        if (res.length === 1 && res[0].want === 'camera') fail(`${vp.name} ${roofId} zoom ${zoom}: no tiles on screen, camera ${res[0].got}`);
-        if (bad.length) fail(`${vp.name} ${roofId} zoom ${zoom}: ${bad.length}/${own.length} mispicked, e.g. ${JSON.stringify(bad[0])}`);
+        checks += res.length;
+        const bad = res.filter((r) => r.want !== r.got);
+        if (res.length === 1 && res[0].want === 'camera') fail(`${vp.name} (${fx},${fz}) zoom ${zoom}: no tiles on screen, camera ${res[0].got}`);
+        if (bad.length) fail(`${vp.name} (${fx},${fz}) zoom ${zoom}: ${bad.length}/${res.length} mispicked, e.g. ${JSON.stringify(bad[0])}`);
       }
     }
     await page.evaluate(() => {
       const g = window.solarbloom;
-      g.camera.reset();
+      g.camera.glide(8, 0, 8, 1);
       for (let i = 0; i < 200; i++) g.camera.update(0.05);
     });
     await page.waitForTimeout(1500); // let the HUD catch up (world labels follow the camera)
@@ -96,11 +86,11 @@ try {
       const g = window.solarbloom;
       g.paused = true; // keep state still while we inspect it
       const V = g.camera.target.constructor;
-      const s = g.camera.toScreen(new V(5.5, 0.08, 5.5));
+      const s = g.camera.toScreen(new V(2.5, 0.08, 4.5));
       return { x: s.x, y: s.y };
     });
     await page.mouse.click(target.x, target.y);
-    const clicked = await page.evaluate(() => window.solarbloom.sim.grid.get('r1', 5, 5).ground);
+    const clicked = await page.evaluate(() => window.solarbloom.sim.grid.get('g', 2, 4).ground);
     checks++;
     if (clicked !== 'growing') {
       const why = await page.evaluate(({ x, y }) => {
@@ -108,7 +98,7 @@ try {
         const el = document.elementFromPoint(x, y);
         return { pick: g.pick(x, y)?.tile?.id, el: el?.id || el?.className, res: g.sim.state.resources, tool: g.hud.currentTool };
       }, target);
-      fail(`${vp.name}: real click on r1:5:5 left it '${clicked}' ${JSON.stringify(why)}`);
+      fail(`${vp.name}: real click on g:2:4 left it '${clicked}' ${JSON.stringify(why)}`);
     }
     // Clicking the HUD must never act on the world underneath.
     const before = await page.evaluate(() => JSON.stringify(window.solarbloom.sim.state.resources));
@@ -120,8 +110,8 @@ try {
     // Regression: when the last tile using a colour (e.g. all moss) disappears, shared meshes must survive.
     await page.evaluate(() => {
       const s = window.solarbloom.sim;
-      for (const t of s.grid.tilesOf('r1')) if (t.ground === 'prepared') s.restoration.complete(t, 'pulse');
-      for (const t of s.grid.tilesOf('r1')) if (t.ground === 'polluted' && !t.blocked) { t.ground = 'prepared'; t.pollution = 0; window.solarbloom.grid.refresh(t, false); break; }
+      for (const t of s.progression.tilesFor('home')) if (t.ground === 'prepared') s.restoration.complete(t, 'pulse');
+      for (const t of s.progression.tilesFor('home')) if (t.ground === 'polluted' && !t.blocked) { t.ground = 'prepared'; t.pollution = 0; window.solarbloom.chunks.markTile(t); break; }
     });
     await page.waitForTimeout(1500);
     if (errors.length) fail(`${vp.name}: page errors: ${errors.join(' | ')}`);
