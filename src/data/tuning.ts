@@ -189,6 +189,17 @@ export const TUNING = {
     rewardGrowth: 0.25, // each earlier district bloom adds this share to the next reward
   },
 
+  /** City 10.4: buildable Bloom Relays (any two within range link; range is measured in world space). */
+  relay: {
+    range: 16, // tiles between relays (+rangePerLevel per Relay Lens level)
+    rangePerLevel: 6,
+    zoneRadius: 1, // a bloom this close to a relay sends its pulses
+    cooldown: 6, // seconds before a link carries another pulse
+    targets: 2, // blooms around the far relay per crossing (+1 per Relay Lens level)
+    remoteRadius: 3,
+    travelPerTile: 0.03, // seconds of travel per tile of distance (presentation and chain timing)
+  },
+
   /** Phase 3: the connected neighbourhood. Everything here is a starting point for playtesting. */
   neighbourhood: {
     /** Each unlocked extra rooftop raises every storage cap by this share of the starting cap. */

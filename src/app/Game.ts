@@ -28,6 +28,7 @@ import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { pickLayers } from '../core/Picking';
+import { relayLinkId } from '../gameplay/RelaySystem';
 import { initLowPoly } from '../rendering/Shapes';
 import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
@@ -391,7 +392,7 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement) return;
       const k = e.key.toLowerCase();
-      const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden' };
+      const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden', '9': 'relay' };
       if (map[k]) this.selectTool(map[k]);
       else if (k === 'h') this.harvest();
       else if (k === 'f') {
@@ -706,6 +707,11 @@ export class Game {
         return g.tilesNear(m, this.sim.upgrades.treeRadius);
       case 'reservoirGarden':
         return g.tilesNear(m, TUNING.neighbourhood.reservoir.radius);
+      case 'relay': {
+        // Its zone, plus every relay it links to (so the network shows).
+        const linked = 'id' in m ? this.sim.relays.linked(m as MachineData) : [];
+        return [...g.tilesNear(m, TUNING.relay.zoneRadius), ...linked.map((o) => g.get(o.roofId, o.x, o.z)!)];
+      }
       case 'core':
         return this.sim.chains.isElder(m) ? g.tilesNear(m, this.sim.chains.canopyBurstRadius(m)) : [];
       default:
@@ -785,6 +791,12 @@ export class Game {
           .join('') +
           `<p>Works within ${s.upgrades.droneRadius} tiles (highlighted), paying the normal pulse cost. Blue outlines show current jobs.</p>` +
           ['droneSpeed', 'droneRadius', 'chainIntel', 'secondDrone'].map((u) => this.upgradeButton(u)).join('');
+        break;
+      }
+      case 'relay': {
+        const linked = s.relays.linked(m);
+        const ready = linked.filter((o) => s.relays.ready(relayLinkId(m, o))).length;
+        extra = `<p class="stat">📡 Linked to ${linked.length} relay${linked.length === 1 ? '' : 's'} within ${s.relays.range()} tiles · ${ready} ready</p><p>Each pulse blooms ${s.relays.targets()} tiles around the far relay, which can pass it on. Links recharge for ${TUNING.relay.cooldown} s.${linked.length ? '' : ' <b>Build another Bloom Relay within range to link them.</b>'}</p>`;
         break;
       }
       case 'motherTree': {
@@ -983,6 +995,7 @@ export class Game {
         pollinator: '🌸 Pollinator Garden planted! Restore a tile right next to it to start a Bloom Chain.',
         droneHub: '🛸 Drone Hub built! Your drone can handle the small jobs now. The Mother Tree is unlocked too 🌳',
         motherTree: '🌳 Mother Tree planted! Restore tiles around it to charge its Bloom Pulse.',
+        relay: '📡 Bloom Relay built! Build another within range: a bloom beside one sends a pulse to the other.',
         reservoirGarden: '⛲ Reservoir Garden built! Water Condensers within 2 tiles fill its basin — full basin = Overflow.',
       };
       if (first && msg[machine.type]) this.hud.toast(msg[machine.type]!, 'gold', 4);
@@ -1120,6 +1133,18 @@ export class Game {
     b.on('rooftop.coreRestored', () => this.playCoreSequence());
     b.on('link.built', ({ linkId, roofId }) => this.onLinkBuilt(linkId, roofId));
     b.on('relay.sent', ({ linkId, fromRoof, travel }) => this.presentRelay(linkId, fromRoof, travel));
+    // City 10.4: a pulse arcs from one Bloom Relay to the next, landing as a ring.
+    b.on('relay.city', ({ from, to, travel }) => {
+      const a = this.posOf(from);
+      const b2 = this.posOf(to);
+      if (!a || !b2) return;
+      this.machines.splash(from);
+      this.vfx.arc(new pc.Vec3(a.x, a.y + 1.2, a.z), new pc.Vec3(b2.x, b2.y + 1.2, b2.z), '#9ff7ff', travel);
+      this.tweens.add(0.01, () => {}, { delay: travel, done: () => {
+        this.vfx.ring(new pc.Vec3(b2.x, b2.y + 0.05, b2.z), '#9ff7ff', 2.2, 0.6);
+        this.machines.splash(to);
+      } });
+    });
     b.on('machine.boosted', ({ machineId }) => {
       const m = s.machine(machineId);
       if (!m) return;

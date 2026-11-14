@@ -4,6 +4,7 @@ import { LINKS, type RoofLinkDef } from '../data/rooftops';
 import type { MachineData, RestoreSource, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
+import { relayLinkId } from './RelaySystem';
 
 export type ChainEventType =
   | 'RESTORE'
@@ -462,6 +463,7 @@ export class BloomChainSystem {
     }
     if (run.mode === 'mega' && kind === 'RESTORE') this.spreadMega(run, tile, depth);
     this.reactRelays(run, tile, depth);
+    this.reactCityRelays(run, tile, depth);
   }
 
   // ───────────── cross-roof relays ─────────────
@@ -502,6 +504,30 @@ export class BloomChainSystem {
   }
 
   /**
+   * City 10.4: a bloom beside a Bloom Relay sends one pulse down each of its ready links (once per link per
+   * chain), if something around the far relay can bloom. Arriving blooms can set the far relay's other links
+   * off in turn, so a pulse can run through a whole network; every link fires at most once, so it ends.
+   */
+  private reactCityRelays(run: ChainRun, tile: TileData, depth: number) {
+    const s = this.sim;
+    if (!this.canGrow(run, depth)) return;
+    const zone = TUNING.relay.zoneRadius;
+    for (const r of s.grid.machinesNear(tile.roofId, tile.x, tile.z, zone)) {
+      if (r.type !== 'relay' || distToFootprint(tile.x, tile.z, r.x, r.z, r.size) < 1) continue;
+      for (const o of s.relays.linked(r)) {
+        const id = relayLinkId(r, o);
+        if (run.relaysFired.has(id) || !s.relays.ready(id)) continue;
+        if (!this.remoteTargetsAt(run, o.roofId, o.x, o.z, 1, TUNING.relay.remoteRadius).length) continue;
+        run.relaysFired.add(id);
+        s.relays.state(id).readyAt = s.time + TUNING.relay.cooldown;
+        const travel = Math.min(1.5, 0.25 + s.relays.distance(r, o) * TUNING.relay.travelPerTile);
+        this.enqueue(run, { type: 'RELAY', source: r.id, target: id, cause: 'relay', depth: depth + 1, roofId: o.roofId }, travel);
+        s.bus.emit('relay.city', { from: r.id, to: o.id, linkId: id, chainId: run.id, travel });
+      }
+    }
+  }
+
+  /**
    * Where a relay pulse lands on the far roof: synergy spots near the arriving pylon first. Dead ground
    * restores and grass grows; if everything nearby is already in full bloom, those tiles turn lush, so a
    * crossing always does something visible (and the machines beside it respond).
@@ -511,7 +537,13 @@ export class BloomChainSystem {
     const roof = s.grid.roof(roofId);
     if (!roof || count <= 0) return [];
     const [rx, rz] = this.relayTile(l, roofId);
-    const R = TUNING.neighbourhood.relay.remoteRadius;
+    return this.remoteTargetsAt(run, roofId, rx, rz, count, TUNING.neighbourhood.relay.remoteRadius);
+  }
+
+  /** Remote blooms around a point: live (restorable or growable) tiles by synergy, then lush ones. */
+  remoteTargetsAt(run: ChainRun | undefined, roofId: string, rx: number, rz: number, count: number, R: number): TileData[] {
+    const s = this.sim;
+    if (!s.grid.roof(roofId) || count <= 0) return [];
     const growable = (t: TileData) => t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom;
     const lushable = (t: TileData) => t.ground === 'restored' && !t.occupantId && !t.blocked;
     const near = s.grid.tilesWithin(roofId, rx, rz, R).filter((t) => !run || !run.visited.has(t.id));
@@ -802,6 +834,26 @@ export class BloomChainSystem {
         return;
       }
       case 'RELAY': {
+        if (ev.target.startsWith('relay:')) {
+          // City 10.4: a pulse arrives at the far Bloom Relay.
+          const dest = s.relays.otherEnd(ev.target, ev.source!);
+          if (!dest) return;
+          let n = s.relays.targets();
+          if (s.state.relayBonus > 0) {
+            n += s.state.relayBonus;
+            s.state.relayBonus = 0;
+          }
+          const targets = this.remoteTargetsAt(run, dest.roofId, dest.x, dest.z, n, TUNING.relay.remoteRadius);
+          s.relays.state(ev.target).crossings++;
+          run.roofs.add(dest.roofId);
+          this.emit(run, { ...ev, amount: targets.length });
+          targets.forEach((t, i) => {
+            run.visited.add(t.id);
+            const type = t.ground !== 'restored' ? 'RESTORE' : t.bloom < TUNING.restore.maxBloom ? 'GROW' : 'LUSH';
+            this.enqueue(run, { type, source: dest.id, target: t.id, cause: 'relay', depth: ev.depth + 1 }, 0.12 + i * 0.12);
+          });
+          return;
+        }
         const l = LINKS.find((x) => x.id === ev.target);
         const remote = ev.roofId;
         if (!l || !remote) return;

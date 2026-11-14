@@ -49,6 +49,8 @@ export function upgradeHighlights(sim: Sim, id: string): Spot[] {
     case 'pollinatorReach':
     case 'corridorReach':
       return of('pollinator');
+    case 'relayLens':
+      return of('relay');
     case 'waterBloom':
       return of('condenser');
     case 'treeResonance':

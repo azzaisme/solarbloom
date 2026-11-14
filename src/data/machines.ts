@@ -14,6 +14,8 @@ export interface MachineDef {
   roofs?: string[];
   /** In the city: only buildable in these area types. */
   areaTypes?: string[];
+  /** Only in the endless city (not the rooftop campaign). */
+  cityOnly?: boolean;
 }
 
 export const MACHINES: Record<MachineType, MachineDef> = {
@@ -80,6 +82,18 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     roofs: ['r2'],
     areaTypes: ['reservoir', 'canal'],
   },
+  relay: {
+    type: 'relay',
+    name: 'Bloom Relay',
+    icon: '📡',
+    size: 1,
+    cost: { biomass: 90, energy: 40 },
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Links with every other relay in range. A bloom right beside it sends a pulse to each linked relay, which blooms the ground there (once per link per chain, then it recharges).',
+    hotkey: '9',
+    unlock: { needs: 'droneHub', label: 'Build a Drone Hub to unlock' },
+    cityOnly: true,
+  },
   core: {
     type: 'core',
     name: 'Rooftop Core',
@@ -91,4 +105,4 @@ export const MACHINES: Record<MachineType, MachineDef> = {
   },
 };
 
-export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden'];
+export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay'];

@@ -1,5 +1,5 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
-export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'core';
+export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'core';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
 export type Resources = Record<ResourceKind, number>;

@@ -24,6 +24,8 @@ export interface GameEvents {
   /** City 10.3: water travels along a canal (tile ids in order) from one machine to another. */
   /** A street garden passes its chain on along a green corridor. */
   'corridor.sent': { from: string; to: string; chainId: number };
+  /** City 10.4: a pulse leaves one Bloom Relay for another. */
+  'relay.city': { from: string; to: string; linkId: string; chainId: number; travel: number };
   'canal.flow': { from: string; to: string; path: string[]; kind: 'fill' | 'overflow'; chainId?: number };
   'canopy.burst': { machineId: string; radius: number; gardens: string[] };
   'relay.sent': { linkId: string; fromRoof: string; toRoof: string; chainId: number; travel: number };

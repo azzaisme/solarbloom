@@ -17,7 +17,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #7 City 06: simulation at city scale | ✅ active-region ticking ✅ (#44: 0.107 ms per tick with 1,046 areas and 5 active chunks) frame budget and catch-up ✅ (#48) |
 | #10 City 09: endless progression | ✅ storage, area bonuses, machine permits, endless pacing bot no-stall guarantees ✅ (an advisor-only bot progresses from empty pockets: fountain in 22.7 min, next area with the park packed and broke in 14.3 min) playtest timings ✅ (time to each area, areas per hour, biggest chain, cats, stuck time; Copy button) upgrade tree for scale ✅ (Lit Landmarks; every upgrade has an effect test and sparkles the spots it changes) area milestone generator ✅ (#62: one specialty action per area type) |
 | #9 City 08: camera and overview | ✅ bounds, zoom-out to 0.22 with far level of detail, area labels, F / Home overview mode ✅ (labels show fog progress, 🔗 active chains and 🐱 cat finds; one tap flies to an area and opens its panel — e2e) phone gestures ✅ (a quick pinch-out snaps to the overview; picking e2e at 390×844 at both zoom limits) |
-| #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries district blooms ✅ (#75) canal water network ✅ (#71) (open: buildable relays #72, huge-chain presentation #74) |
+| #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries district blooms ✅ (#75) canal water network ✅ (#71) buildable relays ✅ (#72) (open: huge-chain presentation #74) |
 | #14 City 13: Lucky Cat in the city | ✅ generated nooks, spawn rules, Fog Whisker and Golden Corridor (scaled with the city, capped: a cat never wakes an area alone), discovery log grouped by area type (`docs/discoveries-500-areas.png`) |
 | #12 City 11: automation at scale | ✅ drone networks, fog-edge priority, 50-hub safety soak Mega Pulse and scaled Overcharge ✅ (the city bot's own taps start 18–19 big chains an hour vs 2–4 by automation) area automation switches ✅ (Keep blooming, Focus the frontier, Leave alone; saved) far drones by the clock ✅ (#79) |
 | #13 City 12: Phase 3 content in the city | ✅ specialties on generic landmarks (grove Elder Trees, reservoir/canal Reservoir Gardens), cat rewards on areas (open: rooftop cluster areas #82, remove fixed rooftop data #85) |
@@ -91,6 +91,14 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - City props follow their area: broken until it clears.
 - `ChunkRenderer` rebuilds only the park chunk when the stage changes; Game shows a short line for stages 1–3.
 - `npm run shots:park` renders every stage; `tests/city.test.ts` checks the thresholds and that the park never looks lush before the fountain.
+
+## City 10.4: buildable relays
+
+- New machine **Bloom Relay** (📡, hotkey 9, 90🌿 40⚡, city only, after a Drone Hub). `gameplay/RelaySystem.ts`: any two relays within range (16 tiles, measured between centres in world space so ground and raised layers can link) form a link; links are derived from the relays, so nothing needs bookkeeping beyond each link's recharge and crossings in `state.links`.
+- A bloom beside a relay sends one pulse down each ready link (once per link per chain, then a 6 s recharge), if something around the far relay can bloom. It arrives after a short travel and blooms 2 tiles there (synergy spots first, lush if all is in full bloom); those blooms can set the far relay's other links off, so a pulse runs through a network and always ends.
+- **Relay Lens** (Networks, 2 levels): +6 range and +1 bloom per pulse per level.
+- Presentation: an arc between the relays and a ring where it lands; the inspect panel lists links and readiness, and the range overlay highlights linked relays.
+- Tests (`tests/relay-city.test.ts`, the Phase 3 relay checks ported to the city plus new ones): one pulse per crossing that blooms the far side; never from outside the zone, out of range or while recharging; only valid tiles (never hidden fog, obstacles or machines); Relay Lens range and targets; a ring of 10 relays where one chain fires every link once, reaches every relay and ends; placement rules; recharge survives a reload. The rooftop relay tests are unchanged and pass.
 
 ## City 10.3: canal water network
 

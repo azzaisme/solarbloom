@@ -21,6 +21,7 @@ export class BuildSystem {
     const def = MACHINES[type];
     const u = def.unlock;
     if (u && !this.sim.state.machines.some((m) => m.type === u.needs)) return false;
+    if (def.cityOnly && !this.sim.grid.isPlayable(GROUND)) return false;
     if (def.roofs) {
       const onRoof = def.roofs.some((id) => this.sim.grid.isPlayable(id));
       // In the city, a specialty piece unlocks once an area of its type is revealed.
@@ -61,6 +62,7 @@ export class BuildSystem {
     const cost = this.cost(type);
     const fail = (reason: string): PlacementCheck => ({ ok: false, reason, cost, spotOk: false });
     if (def.unlock && !s.state.machines.some((m) => m.type === def.unlock!.needs)) return fail(def.unlock.label);
+    if (def.cityOnly && !s.grid.isPlayable(GROUND)) return fail('Only in the city');
     const roof = s.grid.roof(roofId);
     if (!roof || !roof.unlocked || roof.preview) return fail('This rooftop is not reachable yet');
     if (roofId === GROUND && def.areaTypes) {

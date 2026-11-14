@@ -32,6 +32,7 @@ exports[`upgrades drawer grouped by system (City 14.4) > the city drawer: Pulse,
   {
     "cards": [
       "🛤️ Green Corridors: Street gardens pass a chain to the next one up to 8 tiles away (from 6) [locked: Plant a Pollinator Garden in the city first]",
+      "📡 Relay Lens: Bloom Relays link up to 22 tiles apart (from 16) and bloom 3 tiles per pulse [locked: Build a Bloom Relay first]",
       "🕸️ Drone Mesh: Drone Hubs up to 16 tiles apart share one network (from 12), so their drones roam all of it [locked: Build two Drone Hubs first]",
     ],
     "group": "Networks",

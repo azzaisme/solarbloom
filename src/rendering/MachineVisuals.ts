@@ -134,6 +134,9 @@ export class MachineVisuals {
       case 'reservoirGarden':
         this.reservoirGarden(v);
         break;
+      case 'relay':
+        this.relay(v);
+        break;
     }
     this.views.set(m.id, v);
     this.applyUpgrades(v);
@@ -452,6 +455,20 @@ export class MachineVisuals {
     // little fountain spout
     shape(b, 'cylinder', mat(PALETTE.white), { pos: [0, 0.38, 0], scale: [0.08, 0.3, 0.08] });
     v.light = shape(b, 'sphere', mat(PALETTE.water, { emissive: PALETTE.water, emissiveIntensity: 1.4 }), { pos: [0, 0.56, 0], scale: 0.07 });
+  }
+
+  /** Bloom Relay: a slim white mast with a leafy dish and a glowing tip. */
+  private relay(v: MachineView) {
+    const b = v.body;
+    shape(b, 'cylinder', mat(PALETTE.shell), { pos: [0, 0.06, 0], scale: [0.6, 0.12, 0.6], shadow: true });
+    shape(b, 'cylinder', mat(PALETTE.white), { pos: [0, 0.6, 0], scale: [0.09, 1.0, 0.09], shadow: true });
+    shape(b, 'torus', mat('#5fb24a'), { pos: [0, 0.95, 0], scale: [0.42, 0.08, 0.42] });
+    shape(b, 'cone', mat(PALETTE.white), { pos: [0, 1.12, 0], scale: [0.3, 0.16, 0.3] });
+    v.light = shape(b, 'sphere', mat('#9ff7ff', { emissive: '#9ff7ff', emissiveIntensity: 1.6 }), { pos: [0, 1.28, 0], scale: 0.1 });
+    for (let i = 0; i < 3; i++) {
+      const a = i * 2.1;
+      v.bob.push(shape(b, 'sphere', mat(PALETTE.flower[i % PALETTE.flower.length]), { pos: [Math.cos(a) * 0.22, 0.16, Math.sin(a) * 0.22], scale: 0.07 }));
+    }
   }
 
   /** Reservoir Overflow: the basin spills over with a splash. */

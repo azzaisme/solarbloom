@@ -14,7 +14,7 @@ function world(rooftops: boolean) {
   st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
   const roof = rooftops ? 'r1' : GROUND;
   let x = rooftops ? 0 : 2;
-  for (const type of ['solar', 'condenser', 'pollinator', 'droneHub', 'droneHub', 'motherTree'] as MachineData['type'][]) {
+  for (const type of ['solar', 'condenser', 'pollinator', 'droneHub', 'droneHub', 'motherTree', ...(rooftops ? [] : ['relay'])] as MachineData['type'][]) {
     const size = type === 'droneHub' || type === 'motherTree' ? 2 : 1;
     const m = placeFixed(st, roof, type, x, rooftops ? 5 : 2, size);
     sim.grid.indexMachine(m);
@@ -58,6 +58,7 @@ const PROBES: Record<string, (s: Sim) => number> = {
   droneDispatch: (s) => s.upgrades.level('droneDispatch'),
   corridorReach: (s) => s.upgrades.corridorRange,
   droneMesh: (s) => s.upgrades.networkRange,
+  relayLens: (s) => s.relays.range() + s.relays.targets(),
   fogLantern: (s) => s.upgrades.wakeNeedMult,
   landmarkLights: (s) => s.areas.bonusIncome().biomass + s.areas.bonusIncome().energy + s.areas.bonusIncome().water,
 };
@@ -86,7 +87,7 @@ describe('upgrade tree for scale (City 09.4)', () => {
       // The lock names the very thing the upgrade works on.
       const words = def.lockedReason.toLowerCase();
       const subject = def.describe(1).toLowerCase() + ' ' + def.name.toLowerCase();
-      const related = ['drone', 'pollinator', 'garden', 'condenser', 'mother tree', 'landmark', 'fountain', 'bridge', 'hub'].some((w) => words.includes(w) && (subject.includes(w) || subject.includes(w.split(' ')[0])));
+      const related = ['drone', 'pollinator', 'garden', 'condenser', 'mother tree', 'landmark', 'fountain', 'bridge', 'hub', 'relay'].some((w) => words.includes(w) && (subject.includes(w) || subject.includes(w.split(' ')[0])));
       expect(related || /fountain|landmark/.test(words), `${def.id}: "${def.lockedReason}" vs "${def.describe(1)}"`).toBe(true);
     }
   });

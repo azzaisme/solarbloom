@@ -285,6 +285,7 @@ button:focus-visible { outline: 3px solid #2f7de1; outline-offset: 2px; }
 #hotbar [data-tool="droneHub"] { order: 6; }
 #hotbar [data-tool="motherTree"] { order: 7; }
 #hotbar [data-tool="reservoirGarden"] { order: 7; }
+#hotbar [data-tool="relay"] { order: 7; }
 #hotbar .sep { order: 8; }
 #hotbar .sep:first-of-type { display: none; }
 #hotbar #harvestBtn { order: 9; }
