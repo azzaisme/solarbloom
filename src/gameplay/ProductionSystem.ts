@@ -1,19 +1,76 @@
 import { KINDS } from '../core/Economy';
-import { distToFootprint } from '../core/Grid';
+import { chunkKey, distToFootprint, type Chunk } from '../core/Grid';
+import { CHUNK } from '../core/Hash';
+import { bloomCounts } from '../core/TilePack';
 import { isRestorable } from '../core/GameState';
 import type { MachineData, Resources, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
+/**
+ * Passive income. Biomass is cached per chunk: a tile change only re-sums its own chunk, so the cost of
+ * restoring a tile does not grow with the city. Global changes (upgrades, new machines, Cores) re-sum all.
+ */
 export class ProductionSystem {
   private dirty = true;
   private biomassRate = 0;
   private wasFull: Record<string, boolean> = {};
+  private chunkRate = new Map<string, number>();
+  private dirtyChunks = new Set<string>();
+  /** chunk → earliest lush expiry inside it */
+  private lushAt = new Map<string, number>();
 
-  constructor(private sim: Sim) {}
+  constructor(private sim: Sim) {
+    sim.grid.touchListeners.push((t) => this.dirtyChunks.add(chunkKey(t.roofId, Math.floor(t.x / CHUNK), Math.floor(t.z / CHUNK))));
+  }
 
+  /** A chunk was generated (or loaded with saved progress): include it, and drop its saved-data estimate. */
+  chunkLoaded(key: string) {
+    this.dirtyChunks.add(key);
+    const est = this.pendingEstimate.get(key);
+    if (est !== undefined) {
+      this.biomassRate -= est;
+      this.pendingEstimate.delete(key);
+    }
+  }
+
+  /** Income of saved chunks not loaded yet, estimated from their packed columns (no pollinator/lush bonus). */
+  private pendingEstimate = new Map<string, number>();
+
+  private estimatePending(): number {
+    this.pendingEstimate.clear();
+    const R = TUNING.restore;
+    let mult = this.sim.upgrades.soilMult;
+    if (this.sim.state.progression.coreActivated) mult *= TUNING.core.resonanceBiomassMult;
+    if (this.sim.state.progression.neighbourhoodBloomAt >= 0) mult *= TUNING.neighbourhood.bloom.biomassMult;
+    let sum = 0;
+    for (const [key, packed] of Object.entries(this.sim.grid.pending)) {
+      if (!this.sim.grid.isPlayable(key.split('|')[0])) continue;
+      const c = bloomCounts(packed);
+      const r = R.biomassPerSec * mult * (c[1] * R.bloomRateMult[1] + c[2] * R.bloomRateMult[2] + c[3] * R.bloomRateMult[3]);
+      this.pendingEstimate.set(key, r);
+      sum += r;
+    }
+    return sum;
+  }
+
+  /** Something global changed (upgrade, machine, Core): re-sum every chunk. */
   markDirty() {
     this.dirty = true;
+  }
+
+  private sumChunk(c: Chunk): number {
+    let b = 0;
+    let lush = Infinity;
+    const now = this.sim.time;
+    for (const t of c.tiles) {
+      if (!t) continue;
+      if (isRestorable(t, this.sim.state.machines)) b += this.tileBiomassRate(t);
+      if ((t.lushUntil ?? 0) > now) lush = Math.min(lush, t.lushUntil!);
+    }
+    if (lush < Infinity) this.lushAt.set(c.key, lush);
+    else this.lushAt.delete(c.key);
+    return b;
   }
 
   frenzyActive() {
@@ -44,20 +101,35 @@ export class ProductionSystem {
     return v;
   }
 
-  /** Earliest moment a lush (Overflow) tile goes back to normal, so cached rates refresh then. */
-  private lushExpiry = Infinity;
 
   rates(): Resources {
+    const grid = this.sim.grid;
     if (this.dirty) {
       this.dirty = false;
+      this.dirtyChunks.clear();
+      this.chunkRate.clear();
+      this.lushAt.clear();
       let b = 0;
-      this.lushExpiry = Infinity;
-      const now = this.sim.time;
-      for (const t of this.sim.grid.playableTiles()) {
-        if (isRestorable(t, this.sim.state.machines)) b += this.tileBiomassRate(t);
-        if ((t.lushUntil ?? 0) > now) this.lushExpiry = Math.min(this.lushExpiry, t.lushUntil!);
+      for (const l of grid.playableLayers()) {
+        if (l.kind === 'raised') grid.tilesOf(l.id); // make sure a rooftop is fully generated
+        for (const c of grid.loadedChunks(l.id)) {
+          const r = this.sumChunk(c);
+          this.chunkRate.set(c.key, r);
+          b += r;
+        }
       }
-      this.biomassRate = b;
+      this.biomassRate = b + this.estimatePending();
+    } else if (this.dirtyChunks.size) {
+      for (const key of this.dirtyChunks) {
+        const [layer, cx, cz] = key.split('|');
+        if (!grid.isPlayable(layer)) continue;
+        const c = grid.chunkAt(layer, Number(cx), Number(cz));
+        if (!c) continue;
+        const r = this.sumChunk(c);
+        this.biomassRate += r - (this.chunkRate.get(key) ?? 0);
+        this.chunkRate.set(key, r);
+      }
+      this.dirtyChunks.clear();
     }
     let energy = 0;
     let water = TUNING.rainBarrelRate + (this.sim.hood.coreAwake('r2') ? TUNING.neighbourhood.reservoir.cisternWater : 0);
@@ -69,7 +141,7 @@ export class ProductionSystem {
   }
 
   tick(dt: number) {
-    if (this.sim.time >= this.lushExpiry) this.dirty = true;
+    for (const [key, at] of this.lushAt) if (this.sim.time >= at) this.dirtyChunks.add(key);
     const r = this.rates();
     for (const k of KINDS) {
       this.sim.econ.add(k, r[k] * dt);

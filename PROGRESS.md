@@ -14,7 +14,8 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #5 City 04: endless city generator | ✅ except the visual review (#37, needs ground rendering) |
 | #6 City 05: the dilapidated park | ✅ layout, onboarding, fountain finale, pacing, cat nooks (open: 25/50/75% park stages #39, nook screenshots) |
 | #8 City 07: rendering | first pass ✅ chunk streaming, merged chunk meshes, fog (open: far LOD #52, instancing #53, buildings #54, device numbers #56) |
-| #7, #9–#16 | not started |
+| #7 City 06: simulation at city scale | ✅ (open: active-region equivalence test #44, catch-up budget #48) |
+| #9–#16 | not started |
 
 ## City 01: world model
 
@@ -42,6 +43,14 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - Authored landmarks (Great Greenhouse at 6 chunks, Solar Cathedral at 12, Sky Observatory at 20, then one every 10 chunks) sit in a seeded direction at their distance.
 - Difficulty grows with distance: pulse cost ×(1 + 0.04/chunk, max ×2) and a rising pollution floor (max 85).
 - Tests: skeleton determinism, themes, every type's ground/obstacles/landmark clearance, authored landmarks for 10 seeds, difficulty caps, and a 500+-area variety soak (under 30% same-type neighbours; every type within 12 chunks of the park).
+
+## City 06: simulation at city scale
+
+- Biomass income is cached per chunk: a tile change re-sums only its chunk (via the grid's touch listeners); upgrades, new machines and Cores re-sum everything. Lush timers schedule their own chunk refresh.
+- Saved city chunks load lazily; until a chunk loads, its income is estimated from its packed save columns (restored tiles × bloom level), then the exact sum takes over. A ~1,000-area city loads in about 10 ms.
+- The Bloom Chain queue is a binary heap ordered by (time, sequence); fast-forward re-heapifies. Machine lookups by id are O(1); Core occupancy checks use a cached id set.
+- Growing tiles are tracked in a set; drone jobs and synergy checks use O(r²) lookups and the per-chunk machine index.
+- `npm run test:perf`: a 0.1 s step takes ~0.4–0.5 ms with 10k restored tiles, 343 machines and 30 drones (target < 2 ms). `tests/sim-scale.test.ts` fails if a tick ever sweeps every tile or chunk.
 
 ## City 05 + City 07 (first pass): the park and the city on screen
 

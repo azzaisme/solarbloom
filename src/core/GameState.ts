@@ -94,5 +94,12 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0, opts:
 export function isRestorable(t: TileData, machines: MachineData[]): boolean {
   if (t.blocked) return false;
   if (!t.occupantId) return true;
-  return machines.find((m) => m.id === t.occupantId)?.type !== 'core';
+  return coreIds(machines).has(t.occupantId) === false;
+}
+
+/** Ids of Core machines (cached per machine list length: machines are only ever added). */
+let coreCache: { list?: MachineData[]; n: number; ids: Set<string> } = { n: -1, ids: new Set() };
+function coreIds(machines: MachineData[]): Set<string> {
+  if (coreCache.list !== machines || coreCache.n !== machines.length) coreCache = { list: machines, n: machines.length, ids: new Set(machines.filter((m) => m.type === 'core').map((m) => m.id)) };
+  return coreCache.ids;
 }

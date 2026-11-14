@@ -53,6 +53,15 @@ export function packChunk(c: Chunk, seed: number, layer: LayerData): string {
   return [g.join(''), b.join(''), p.join(''), '|', extras.join(';')].join('');
 }
 
+/** Restored tiles per bloom level (index 1..3) in a packed chunk, without generating it. */
+export function bloomCounts(packed: string): number[] {
+  const out = [0, 0, 0, 0];
+  if (packed.length < N * 2) return out;
+  for (let i = 0; i < N; i++) if (packed[i] === 'r') out[Math.max(1, Math.min(3, Number(packed[N + i]) || 1))]++;
+  return out;
+}
+
+/** True if a packed chunk has a tile mid-growth (it must be loaded so the growth finishes). */
 export function hasGrowth(packed: string): boolean {
   const i = packed.indexOf('g');
   return i >= 0 && i < N;

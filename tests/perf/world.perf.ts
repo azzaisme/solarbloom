@@ -13,7 +13,7 @@ const log = (s: string) => console.log(`  ⏱ ${s}`); // eslint-disable-line no-
 
 /** About 1,000 areas: 2,000 ground chunks (512k tiles), most restored, 2,000 machines. */
 function syntheticCity(seed = 99) {
-  const sim = new Sim(createInitialState(seed, { rooftops: true }));
+  const sim = new Sim(createInitialState(seed)); // the city: saved ground chunks load eagerly
   const side = 45; // 45×45 ≈ 2,025 chunks
   let n = 0;
   for (let cz = 0; cz < side; cz++)
@@ -78,5 +78,62 @@ describe('performance: saves (City 02.5)', () => {
     expect(incremental).toBeLessThan(8);
     expect(z.length).toBeLessThan(1_000_000);
     expect(loadMs).toBeLessThan(50);
+  });
+});
+
+describe('performance: simulation at city scale (City 06.6)', () => {
+  it('a 0.1 s step with 10k restored tiles, 300 machines and 30 drones stays under 2 ms', () => {
+    const sim = new Sim(createInitialState(5));
+    const st = sim.state;
+    st.caps.energy = st.caps.water = st.caps.biomass = 1e9;
+    st.resources.energy = st.resources.water = st.resources.biomass = 1e8;
+    // ~40 chunks of city around the park, mostly restored.
+    let restored = 0;
+    for (let cz = -3; cz <= 3; cz++)
+      for (let cx = -3; cx <= 3; cx++) {
+        const c = sim.grid.chunkAt(GROUND, cx, cz)!;
+        for (const t of c.tiles) {
+          if (!t || t.blocked || restored >= 10000) continue;
+          t.ground = 'restored';
+          t.bloom = 1 + (t.variant % 3);
+          t.pollution = 0;
+          sim.grid.touch(t);
+          restored++;
+        }
+      }
+    for (let cz = -3; cz <= 3; cz++) for (let cx = -3; cx <= 3; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
+    // 300 machines spread around (solar, condensers, gardens) + 30 drone hubs, inserted directly: machine costs
+    // grow ×1.5 per copy, and this measures the simulation, not the economy.
+    const types = ['solar', 'condenser', 'pollinator'] as const;
+    let n = 0;
+    const add = (type: MachineData['type'], x: number, z: number, size: number) => {
+      const cells = sim.grid.footprint(GROUND, x, z, size);
+      if (cells.some((c) => !c || c.blocked || c.occupantId)) return false;
+      const m: MachineData = { id: sim.newId('m'), type, roofId: GROUND, x, z, size, boostUntil: 0, timer: 0, charge: 0 };
+      sim.state.machines.push(m);
+      sim.grid.indexMachine(m);
+      for (const c of cells) c!.occupantId = m.id;
+      if (type === 'droneHub') sim.drones.spawn(m);
+      return true;
+    };
+    let hubs = 0;
+    for (let z = -46; z < 60 && n < 300; z += 4)
+      for (let x = -46; x < 60 && n < 300; x += 4) {
+        const hub = hubs < 30 && (x + z) % 3 === 0;
+        if (add(hub ? 'droneHub' : types[n % 3], x, z, hub ? 2 : 1)) {
+          n++;
+          if (hub) hubs++;
+        }
+      }
+    sim.production.markDirty();
+    for (let i = 0; i < 50; i++) sim.tick();
+    const steps = 300;
+    const t0 = performance.now();
+    for (let i = 0; i < steps; i++) sim.tick();
+    const per = (performance.now() - t0) / steps;
+    log(`sim step: ${per.toFixed(3)} ms with ${restored} restored tiles, ${sim.state.machines.length} machines, ${sim.state.drones.length} drones`);
+    expect(sim.state.machines.length).toBeGreaterThanOrEqual(300);
+    expect(sim.state.drones.length).toBeGreaterThanOrEqual(30);
+    expect(per).toBeLessThan(2);
   });
 });

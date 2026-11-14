@@ -60,6 +60,62 @@ interface ChainRun {
   fastForward: boolean;
 }
 
+/** Earlier (time, then sequence) first. Times within 1e-9 count as equal. */
+function before(a: ChainEvent, b: ChainEvent) {
+  return Math.abs(a.at - b.at) < 1e-9 ? a.seq < b.seq : a.at < b.at;
+}
+
+/** Binary min-heap of queued chain events: O(log n) push/pop instead of a scan per event. */
+class EventHeap {
+  private a: ChainEvent[] = [];
+  get length() {
+    return this.a.length;
+  }
+  push(e: ChainEvent) {
+    const a = this.a;
+    a.push(e);
+    let i = a.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (!before(a[i], a[p])) break;
+      [a[i], a[p]] = [a[p], a[i]];
+      i = p;
+    }
+  }
+  peek(): ChainEvent | undefined {
+    return this.a[0];
+  }
+  pop(): ChainEvent | undefined {
+    const a = this.a;
+    if (!a.length) return undefined;
+    const top = a[0];
+    const last = a.pop()!;
+    if (a.length) {
+      a[0] = last;
+      this.down(0);
+    }
+    return top;
+  }
+  private down(i: number) {
+    const a = this.a;
+    for (;;) {
+      const l = i * 2 + 1;
+      const r = l + 1;
+      let m = i;
+      if (l < a.length && before(a[l], a[m])) m = l;
+      if (r < a.length && before(a[r], a[m])) m = r;
+      if (m === i) return;
+      [a[i], a[m]] = [a[m], a[i]];
+      i = m;
+    }
+  }
+  /** Changes event times in place (fast-forward), then restores heap order. */
+  update(fn: (e: ChainEvent) => void) {
+    for (const e of this.a) fn(e);
+    for (let i = (this.a.length >> 1) - 1; i >= 0; i--) this.down(i);
+  }
+}
+
 /** Effects that count toward the BLOOM CHAIN ×N combo and milestones. */
 const COUNTED: ChainEventType[] = ['RESTORE', 'GROW', 'PRODUCE_ENERGY', 'PRODUCE_WATER', 'DISCHARGE', 'RELAY', 'OVERFLOW', 'CANOPY_BURST', 'LUSH'];
 
@@ -72,7 +128,7 @@ const COUNTED: ChainEventType[] = ['RESTORE', 'GROW', 'PRODUCE_ENERGY', 'PRODUCE
  */
 export class BloomChainSystem {
   private runs = new Map<number, ChainRun>();
-  private queue: ChainEvent[] = [];
+  private queue = new EventHeap();
   private nextChainId = 1;
   private seq = 0;
   /** Event log of recent processed events (tests, debug overlay). */
@@ -401,7 +457,9 @@ export class BloomChainSystem {
     for (const run of this.runs.values()) {
       if (!run.fastForward && (now - run.startedAt > TUNING.chain.fastForwardAfter || run.processed >= TUNING.chain.maxEvents)) {
         run.fastForward = true;
-        for (const q of this.queue) if (q.chainId === run.id) q.at = Math.min(q.at, now);
+        this.queue.update((q) => {
+          if (q.chainId === run.id) q.at = Math.min(q.at, now);
+        });
         s.bus.emit('chain.fastForward', { chainId: run.id });
       }
     }
@@ -409,14 +467,9 @@ export class BloomChainSystem {
     // except fast-forwarded ones, so loop until nothing due remains (bounded by caps).
     let guard = 0;
     while (guard++ < 1000) {
-      let idx = -1;
-      for (let i = 0; i < this.queue.length; i++) {
-        const q = this.queue[i];
-        if (q.at > now + 1e-9) continue;
-        if (idx < 0 || q.at < this.queue[idx].at - 1e-9 || (Math.abs(q.at - this.queue[idx].at) < 1e-9 && q.seq < this.queue[idx].seq)) idx = i;
-      }
-      if (idx < 0) break;
-      const ev = this.queue.splice(idx, 1)[0];
+      const next = this.queue.peek();
+      if (!next || next.at > now + 1e-9) break;
+      const ev = this.queue.pop()!;
       const run = this.runs.get(ev.chainId);
       if (!run) continue;
       run.pending--;
@@ -526,8 +579,10 @@ export class BloomChainSystem {
         // Nothing to water: the spill still freshens the green around it (lush), so it always counts.
         if (!targets.length)
           for (const t of s.grid.tilesNear(g, TUNING.neighbourhood.reservoir.radius))
-            if (t.ground === 'restored' && !t.occupantId) t.lushUntil = s.time + TUNING.neighbourhood.reservoir.lushSeconds;
-        s.production.markDirty();
+            if (t.ground === 'restored' && !t.occupantId) {
+              t.lushUntil = s.time + TUNING.neighbourhood.reservoir.lushSeconds;
+              s.grid.touch(t);
+            }
         s.state.progression.overflows = (s.state.progression.overflows ?? 0) + 1;
         this.emit(run, { ...ev, amount: targets.length });
         s.bus.emit('reservoir.overflow', { machineId: g.id, tiles: targets.map((t) => t.id) });
@@ -618,7 +673,7 @@ export class BloomChainSystem {
         const t = s.grid.byTileId(ev.target);
         if (!t || t.ground !== 'restored') return;
         t.lushUntil = s.time + TUNING.neighbourhood.reservoir.lushSeconds;
-        s.production.markDirty();
+        s.grid.touch(t);
         run.roofs.add(t.roofId);
         this.emit(run, ev);
         this.react(run, t, 'GROW', ev.depth);

@@ -126,3 +126,29 @@ describe('save v4: compression (City 02.4)', () => {
     expect(new Sim(r.state!).progression.restoredCount('r1')).toBe(sim.progression.restoredCount('r1'));
   });
 });
+
+describe('save v4: lazy city chunks keep producing', () => {
+  it('income right after loading matches before saving (estimated until chunks load, then exact)', async () => {
+    const { createInitialState, GROUND: G } = await import('../src/core/GameState');
+    const sim = new Sim(createInitialState(21));
+    for (let cx = 2; cx < 6; cx++) {
+      const c = sim.grid.chunkAt(G, cx, 3)!;
+      for (const t of c.tiles) {
+        if (!t || t.blocked) continue;
+        t.ground = 'restored';
+        t.bloom = 1 + (t.variant % 3);
+        t.pollution = 0;
+        sim.grid.touch(t);
+      }
+    }
+    sim.production.markDirty();
+    const before = sim.production.rates().biomass;
+    const copy = new Sim(saver.deserialize(saver.serialize(sim.state))!);
+    expect(copy.grid.loadedChunks(G).length).toBeLessThan(sim.grid.loadedChunks(G).length); // lazy
+    const est = copy.production.rates().biomass;
+    expect(est).toBeGreaterThan(before * 0.9);
+    expect(est).toBeLessThan(before * 1.1);
+    for (let cx = 2; cx < 6; cx++) copy.grid.chunkAt(G, cx, 3);
+    expect(copy.production.rates().biomass).toBeCloseTo(before, 6);
+  });
+});

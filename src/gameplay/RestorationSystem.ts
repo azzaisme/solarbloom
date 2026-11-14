@@ -131,7 +131,6 @@ export class RestorationSystem {
     this.sim.grid.touch(t);
     const b = this.sim.econ.add('biomass', TUNING.restore.nurtureBiomass * this.sim.upgrades.soilMult);
     if (b > 0) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: b, tileId: t.id });
-    this.sim.production.markDirty();
     this.sim.bus.emit('tile.nurtured', { tile: t, level: t.bloom });
     const id = this.sim.chains.onGrown(t, chainId);
     this.sim.chains.addReward(id, b);
@@ -192,7 +191,6 @@ export class RestorationSystem {
         this.sim.bus.emit('tile.prepared', { tile: nb });
       } else this.sim.bus.emit('tile.softened', { tile: nb });
     }
-    this.sim.production.markDirty();
     this.sim.areas.onRestored(t);
     const id = this.sim.chains.onRestored(t, source, chainId);
     this.sim.chains.addReward(id, biomass);

@@ -52,11 +52,13 @@ export class Sim {
       if (p) unpackChunk(c, p);
       c.packed = p ?? '';
       for (const m of this.grid.machinesInChunk(c.key)) for (const t of this.grid.footprint(m.roofId, m.x, m.z, m.size)) if (t) t.occupantId = m.id;
+      this.production?.chunkLoaded(c.key);
     };
     // The world travels with the state (for saving) but is never part of its JSON.
     Object.defineProperty(state, 'world', { value: this.grid, enumerable: false, configurable: true, writable: true });
     for (const l of this.grid.rooftops) this.grid.tilesOf(l.id);
-    // Other saved chunks load lazily when first touched, except ones with something in progress (growth).
+    // Saved chunks load lazily when first touched (production estimates them meanwhile), except chunks
+    // with growth in progress, which must keep growing.
     for (const [key, p] of Object.entries(this.grid.pending)) {
       if (!hasGrowth(p)) continue;
       const [layer, cx, cz] = key.split('|');
@@ -87,8 +89,18 @@ export class Sim {
     return `${prefix}${this.state.nextId++}`;
   }
 
+  private machineMap = new Map<string, MachineData>();
+  private machineCount = -1;
+  /** O(1) machine lookup (the index rebuilds when machines are added). */
   machine(id: string | undefined): MachineData | undefined {
-    return id ? this.state.machines.find((m) => m.id === id) : undefined;
+    if (!id) return undefined;
+    const ms = this.state.machines;
+    if (this.machineCount !== ms.length) {
+      this.machineMap.clear();
+      for (const m of ms) this.machineMap.set(m.id, m);
+      this.machineCount = ms.length;
+    }
+    return this.machineMap.get(id);
   }
 
   occupant(t: TileData): MachineData | undefined {

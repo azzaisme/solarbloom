@@ -17,9 +17,9 @@ export class AreaSystem {
     this.map = areaMapFor(sim.state.seed);
     sim.state.areas ??= { [PARK]: { fog: 'thinning', revealedAt: 0 } };
     for (const id of Object.keys(sim.state.areas)) this.placeLandmark(id);
-    sim.grid.onTouch = (t) => {
+    sim.grid.touchListeners.push((t) => {
       if (t.roofId === GROUND) this.countCache.delete(this.map.areaOfCell(t.x, t.z));
-    };
+    });
   }
 
   /** Restored / restorable per area, recounted only after a tile in the area changed. */
