@@ -1,3 +1,4 @@
+import type { AreaMode } from '../core/types';
 import { HOME } from '../gameplay/ProgressionSystem';
 import { formatCost, KINDS } from '../core/Economy';
 import type { Cost } from '../core/types';
@@ -35,6 +36,8 @@ export interface HudCallbacks {
   wake(machineId: string): void;
   /** Open an area's panel (from its label in the overview). */
   openArea(areaId: string): void;
+  /** An area's automation switch (from the area panel). */
+  setAreaMode(areaId: string, mode: AreaMode | undefined): void;
   /** Fly the camera to a ground tile and point at it (the objective's suggestion). */
   focusTile(x: number, z: number): void;
 }
@@ -258,6 +261,11 @@ export class Hud {
       if (w && !w.disabled) this.cb.wake(w.dataset.wake!);
       const b = t.closest<HTMLButtonElement>('[data-buy]');
       if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
+      const am = t.closest<HTMLButtonElement>('[data-area-mode]');
+      if (am) {
+        const [id, mode] = am.dataset.areaMode!.split('|');
+        this.cb.setAreaMode(id, (mode || undefined) as AreaMode | undefined);
+      }
     });
   }
 

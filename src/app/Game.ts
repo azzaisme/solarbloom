@@ -166,6 +166,12 @@ export class Game {
         },
         neighbourhoodBloom: (replay) => this.playNeighbourhoodBloom(replay),
         openArea: (id) => this.openArea(id),
+        setAreaMode: (id, mode) => {
+          if (this.sim.areas.setMode(id, mode)) {
+            this.inspectTimer = 0;
+            this.save();
+          }
+        },
         focusTile: (x, z) => {
           if (this.cinematic) return;
           this.camera.glide(x + 0.5, 0, z + 0.5, Math.max(this.camera.zoom, 0.9));

@@ -154,10 +154,15 @@ export interface Stats {
 /** Fog over a city area. Areas without an entry are hidden. */
 export type FogState = 'hidden' | 'frontier' | 'thinning' | 'cleared';
 
+/** Area automation switch (unset = normal). */
+export type AreaMode = 'bloom' | 'frontier' | 'off';
+
 export interface AreaState {
   fog: Exclude<FogState, 'hidden'>;
   revealedAt: number;
   clearedAt?: number;
+  /** what drones do here: keep it blooming, push from it into the fog, or leave it alone */
+  mode?: AreaMode;
 }
 
 export interface LinkState {

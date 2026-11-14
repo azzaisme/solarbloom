@@ -95,6 +95,19 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     .join(' · ');
   const wake = d.ready && landmarkId && !cleared && !parkAwake ? `<button class="buy" data-wake="${landmarkId}">✨ Wake the ${esc(a.landmarkName)}</button>` : '';
   const tag = a.authored ? ' · <b>a rare landmark</b>' : '';
+  // Automation switches (revealed areas; no logistics, just what the drones do here).
+  const mode = s.areas.mode(id) ?? '';
+  const modes: [string, string, string][] = [
+    ['', '⚙️ Normal', 'Drones work wherever is best'],
+    ['bloom', '🌸 Keep blooming', 'Drones nurture this area first'],
+    ['frontier', '🌫️ Focus the frontier', "This area's drones push into the fog"],
+    ['off', '✋ Leave alone', 'Drones skip this area'],
+  ];
+  const switches = s.state.areas[id]
+    ? `<div class="modes" role="group" aria-label="Drones in this area">${modes
+        .map(([m, label, tip]) => `<button class="mode${m === mode ? ' on' : ''}" data-area-mode="${esc(id)}|${m}" title="${esc(tip)}" aria-pressed="${m === mode}">${label}</button>`)
+        .join('')}</div>`
+    : '';
   return (
     `<h4><span>${def.icon} ${esc(d.name)}</span><button data-close aria-label="Close">×</button></h4>` +
     `<p class="stat" data-area-panel="${esc(id)}">${esc(a.landmarkName)} · ${a.distance} block${a.distance === 1 ? '' : 's'} from the park${tag}</p>` +
@@ -104,6 +117,7 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     `<ul style="margin:6px 0;padding-left:18px;font-size:12.5px;list-style:none">${checklist}</ul>` +
     (id === PARK ? '' : `<p class="stat">${cleared ? 'Bonus' : 'Bonus once clear'}: ${bonusText || '—'}</p>`) +
     `<p class="stat">Machines: ${machineText || 'none yet'}</p>` +
+    switches +
     wake
   );
 }

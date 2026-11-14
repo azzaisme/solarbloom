@@ -105,6 +105,7 @@ The city is generated forever outward from the park: the same seed always gives 
 - **Overcharge.** A manual pulse right next to a machine boosts its next trigger (a cyan ring shows it), by more with each Overcharge upgrade level. Automation never does.
 - **Mega Pulse.** Once the fountain is awake, every manual pulse charges the meter on the Pulse button. After 40 taps it glows, and your next pulse sets off a city-scale bloom from that tile (40 tiles, +3 per cleared area, up to 300). Your own taps start most of the big chains.
 - **The Lucky Cat** hides in nooks beside obstacles in cleared areas (and around the park early on). Nothing points at it. Rewards: Lucky Harvest, Solar Frenzy, Mega Bloom, Drone Party, Jackpot, **Golden Relay** (the next green corridor hop blooms 5 extra tiles), **Cat's Garden** (a little garden blooms in one of your cleared areas) and **Fog Whisker** (the next fogged area thins from its edge). No reward ever touches the fog. If you miss a cat, it saves up extra rewards instead of blocking new ones.
+- **Area switches.** Each area's panel has four drone switches: Normal, 🌸 Keep blooming (its green tiles come first), 🌫️ Focus the frontier (drones from its hubs push hard into the fog) and ✋ Leave alone (drones skip it). No routing or logistics.
 - **The camera** zooms out to a city overview with a far level of detail and area labels; `F` jumps to the next area that needs you.
 
 ## Architecture

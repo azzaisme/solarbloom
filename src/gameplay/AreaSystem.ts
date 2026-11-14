@@ -1,6 +1,6 @@
 import { areaMapFor, AreaMap, PARK, type AreaInfo } from '../core/Areas';
 import { GROUND, isRestorable } from '../core/GameState';
-import type { FogState, TileData } from '../core/types';
+import type { AreaMode, FogState, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
@@ -240,6 +240,21 @@ export class AreaSystem {
   /** Extra storage share from cleared areas (diminishing). */
   storageBonus(): number {
     return TUNING.city.storagePerArea * Math.pow(this.clearedCount(), TUNING.city.storageExponent);
+  }
+
+  /** An area's automation switch (undefined = normal). */
+  mode(id: string | undefined): AreaMode | undefined {
+    return id ? this.sim.state.areas[id]?.mode : undefined;
+  }
+
+  /** Sets an area's automation switch (a revealed area only); undefined goes back to normal. */
+  setMode(id: string, mode: AreaMode | undefined): boolean {
+    const st = this.sim.state.areas[id];
+    if (!st) return false;
+    if (mode) st.mode = mode;
+    else delete st.mode;
+    this.sim.bus.emit('area.modeChanged', { areaId: id, mode });
+    return true;
   }
 
   /** Revealed areas (frontier, thinning or cleared). */

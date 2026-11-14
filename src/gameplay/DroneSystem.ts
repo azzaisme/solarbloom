@@ -190,16 +190,28 @@ export class DroneSystem {
     const hub = s.machine(d.hubId);
     if (!hub) return undefined;
     const inRange = this.networkTiles(hub);
-    const edge = (t: TileData) => (t.roofId === GROUND && s.areas.fog(s.areas.areaOf(t)!) !== 'cleared' && s.areas.canTouch(t) ? TUNING.drone.frontierBonus : 0);
+    // Area switches: "Focus the frontier" on the hub's area makes its drones push hard into the fog.
+    const focus = s.areas.mode(s.areas.areaOf(hub)) === 'frontier';
+    const edgeBonus = TUNING.drone.frontierBonus * (focus ? TUNING.drone.focusMult : 1);
+    const edge = (t: TileData) => (t.roofId === GROUND && s.areas.fog(s.areas.areaOf(t)!) !== 'cleared' && s.areas.canTouch(t) ? edgeBonus : 0);
+    const modeOf = (t: TileData) => (t.roofId === GROUND ? s.areas.mode(s.areas.areaOf(t)) : undefined);
+    const nurturable = (t: TileData) => t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom && !this.isReserved(t.id);
     let best: TileData | undefined;
     let bestD = Infinity;
     const intel = s.upgrades.level('chainIntel') > 0;
     for (const t of inRange) {
-      if (!s.restoration.isEligible(t)) continue;
+      const mode = modeOf(t);
+      if (mode === 'off') continue; // "Leave this area alone"
       const dx = t.x + 0.5 - d.px;
       const dz = t.z + 0.5 - d.pz;
-      // Prefer mossy tiles (cheaper), then nearest; Chain Intelligence strongly prefers synergy tiles.
-      let score = dx * dx + dz * dz + (t.ground === 'prepared' ? 0 : 1.5) - edge(t);
+      let score: number;
+      if (s.restoration.isEligible(t)) {
+        // Prefer mossy tiles (cheaper), then nearest; Chain Intelligence strongly prefers synergy tiles.
+        score = dx * dx + dz * dz + (t.ground === 'prepared' ? 0 : 1.5) - edge(t);
+      } else if (mode === 'bloom' && !focus && nurturable(t)) {
+        // "Keep this area blooming": its green tiles compete with (and usually beat) restoration elsewhere.
+        score = dx * dx + dz * dz + t.bloom * 2 - TUNING.drone.bloomBonus;
+      } else continue;
       if (intel) score -= this.synergyScore(t) * 6;
       if (score < bestD - 1e-9) {
         bestD = score;
@@ -209,7 +221,7 @@ export class DroneSystem {
     if (best) return best;
     // Nothing left to restore in range: nurture green tiles toward full bloom instead.
     for (const t of inRange) {
-      if (t.ground !== 'restored' || t.occupantId || t.bloom >= TUNING.restore.maxBloom || this.isReserved(t.id)) continue;
+      if (!nurturable(t) || modeOf(t) === 'off') continue;
       const dx = t.x + 0.5 - d.px;
       const dz = t.z + 0.5 - d.pz;
       let score = dx * dx + dz * dz + t.bloom * 2;

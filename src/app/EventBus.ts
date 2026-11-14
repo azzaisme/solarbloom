@@ -16,6 +16,7 @@ export interface GameEvents {
   'chain.ended': { chainId: number; combo: number; bonus: number; total: number; milestonePct: number; energy: number; roofs: string[]; crossings: number; areas: number; starter: 'player' | 'auto' };
   'mega.released': { tileId: string; budget: number };
   'mega.ready': Record<string, never>;
+  'area.modeChanged': { areaId: string; mode: 'bloom' | 'frontier' | 'off' | undefined };
   'machine.boosted': { machineId: string };
   'machine.boostUsed': { machineId: string };
   'reservoir.overflow': { machineId: string; tiles: string[] };

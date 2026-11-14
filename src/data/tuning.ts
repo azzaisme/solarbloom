@@ -78,6 +78,8 @@ export const TUNING = {
     networkRange: 12,
     /** City: preference for restoring at the fog's edge (score bonus, in tiles²). */
     frontierBonus: 12,
+    focusMult: 6, // "Focus the frontier": the fog edge counts this many times more
+    bloomBonus: 60, // "Keep this area blooming": its green tiles beat restoring up to ~8 tiles further away
   },
 
   machineCostGrowth: 1.5, // each extra copy of a machine costs this much more
