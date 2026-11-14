@@ -258,8 +258,21 @@ export class ChunkRenderer {
   /** Chunks further than this (in chunks) from the view centre draw as plain slabs when zoomed out. */
   farFrom = Infinity;
 
+  /** City 05.2: the park's current look (0 dilapidated … 4 lush); a change rebuilds the park chunk. */
+  parkStage = -1;
+  /** Called when the park's stage rises (Game shows a line and a sparkle). */
+  onParkStage?: (stage: number, prev: number) => void;
+
   update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number }, focus: { x: number; z: number }, zoom = 1) {
     this.time += dt;
+    const ps = this.sim.grid.isPlayable(GROUND) ? this.sim.progression.parkStage() : 0;
+    if (ps !== this.parkStage) {
+      const prev = this.parkStage;
+      this.parkStage = ps;
+      const v = this.views.get(chunkKey(GROUND, 0, 0));
+      if (v) v.dirty = true;
+      if (prev >= 0 && ps > prev) this.onParkStage?.(ps, prev);
+    }
     this.farFrom = zoom < 0.55 ? 2 : Infinity;
     for (const v of this.views.values()) {
       const far = dist(v, focus) / CHUNK > this.farFrom;
@@ -335,6 +348,9 @@ export class ChunkRenderer {
     const fog = s.areas.fog(area);
     const h = s.grid.layer(GROUND)!.height;
     v.far = dist(v, this.lastFocus) / CHUNK > this.farFrom;
+    // Props in the park follow its stage; elsewhere they're broken until their area clears.
+    this.level = area === 'park' ? Math.max(0, this.parkStage) : fog === 'cleared' ? 4 : 0;
+    this.inPark = area === 'park';
     for (const t of c.tiles) {
       if (!t) continue;
       // Hidden ground is grey; fogged ground is greyed unless restored.
@@ -363,6 +379,10 @@ export class ChunkRenderer {
     if (t.ground === 'restored' && t.bloom >= 3 && f !== 'water') b.add('box', PALETTE.shrub[t.variant % 3], [t.x + 0.5, h + 0.2, t.z + 0.5], [0.6, 0.3, 0.6]);
   }
 
+  /** Look of the chunk being built: prop level 0–4, and whether it's the park. */
+  private level = 0;
+  private inPark = false;
+
   private tile(b: MeshBuilder, t: TileData, h: number) {
     const x = t.x + 0.5;
     const z = t.z + 0.5;
@@ -387,10 +407,16 @@ export class ChunkRenderer {
           if (t.variant % 3 === 0) b.add('box', '#c9c38f', [x, top + 0.004, z], [0.12, 0.01, 0.4]);
         } else if (f === 'water') {
           b.add('box', '#3e4a43', [x, top + 0.005, z], [0.8, 0.01, 0.8]);
+        } else if (this.inPark && this.level >= 1) {
+          // Swept: the litter is gone, a few weeds remain; paving is scrubbed lighter.
+          if (f === 'paving') b.add('box', '#b4b1a8', [x, h + 0.001, z], [0.9, 0.161, 0.9]);
+          if (t.variant % 3 === 0) b.add('box', '#6d6a62', [x + r.range(-0.2, 0.2), top + 0.004, z + r.range(-0.2, 0.2)], [r.range(0.2, 0.4), 0.01, 0.03]);
+          if (r.next() < 0.3) b.add('cone', '#86965f', [x + r.range(-0.3, 0.3), top + 0.05, z + r.range(-0.3, 0.3)], [0.06, 0.1, 0.06]);
         } else {
           for (let i = 0; i < 1 + (t.variant % 2); i++) b.add('box', '#5f5c55', [x + r.range(-0.25, 0.25), top + 0.004, z + r.range(-0.25, 0.25)], [r.range(0.3, 0.6), 0.01, 0.035]);
           if (r.next() < 0.4) b.add('cone', '#7d8a5c', [x + r.range(-0.3, 0.3), top + 0.05, z + r.range(-0.3, 0.3)], [0.06, 0.1, 0.06]);
-          if (f === 'litter') for (let i = 0; i < 3; i++) b.add('sphere', '#6b5a45', [x + r.range(-0.35, 0.35), top + 0.01, z + r.range(-0.35, 0.35)], [0.16, 0.03, 0.1]);
+          // Leaf litter: groves always, the dilapidated park until its paths are swept.
+          if (f === 'litter' || this.inPark) for (let i = 0; i < (this.inPark ? 2 + (t.variant % 3) : 3); i++) b.add('sphere', ['#6b5a45', '#8a6b3f', '#7a4f32'][i % 3], [x + r.range(-0.35, 0.35), top + 0.01, z + r.range(-0.35, 0.35)], [0.16, 0.03, 0.1]);
         }
         break;
       }
@@ -489,35 +515,80 @@ export class ChunkRenderer {
     }
   }
 
+  /** A tree in a stone planter: bare twigs until it leafs out. */
+  private planterTree(b: MeshBuilder, x: number, y: number, z: number, leafy: boolean) {
+    b.add('box', leafy ? '#d8d1c0' : '#9d978a', [x, y + 0.09, z], [0.26, 0.18, 0.26]);
+    b.add('cylinder', PALETTE.trunk, [x, y + 0.36, z], [0.04, 0.4, 0.04]);
+    if (leafy) {
+      b.add('sphere', PALETTE.shrub[0], [x, y + 0.62, z], [0.36, 0.3, 0.36]);
+      b.add('sphere', PALETTE.shrub[1], [x + 0.06, y + 0.74, z - 0.04], [0.22, 0.2, 0.22]);
+    } else {
+      b.add('box', '#6b5a45', [x + 0.05, y + 0.58, z], [0.14, 0.02, 0.02]);
+      b.add('box', '#6b5a45', [x - 0.04, y + 0.52, z + 0.03], [0.02, 0.02, 0.12]);
+    }
+  }
+
   private prop(b: MeshBuilder, prop: string, x: number, y: number, z: number, r: VRng) {
     switch (prop) {
-      case 'bench':
-        b.add('box', '#8a6a4a', [x, y + 0.18, z], [0.8, 0.05, 0.3]);
-        b.add('box', '#8a6a4a', [x, y + 0.32, z - 0.13], [0.8, 0.2, 0.04]);
-        b.add('box', '#5b5d60', [x - 0.32, y + 0.08, z], [0.05, 0.16, 0.28]);
-        b.add('box', '#5b5d60', [x + 0.32, y + 0.08, z], [0.05, 0.16, 0.28]);
+      case 'bench': {
+        const L = this.level;
+        if (L >= 2) {
+          // Repaired: fresh slats, green iron legs, and a planter tree beside it that leafs out at 75%.
+          b.add('box', '#b9824f', [x, y + 0.18, z], [0.8, 0.05, 0.3]);
+          b.add('box', '#b9824f', [x, y + 0.32, z - 0.13], [0.8, 0.2, 0.04]);
+          b.add('box', '#3f7a52', [x - 0.32, y + 0.08, z], [0.05, 0.16, 0.28]);
+          b.add('box', '#3f7a52', [x + 0.32, y + 0.08, z], [0.05, 0.16, 0.28]);
+        } else {
+          // Broken: a weathered seat sagging onto one leg, the backrest fallen behind it.
+          b.add('box', '#6e5a48', [x + 0.05, y + 0.14, z], [0.8, 0.05, 0.3]);
+          b.add('box', '#5f4d3d', [x - 0.05, y + 0.03, z - 0.3], [0.7, 0.04, 0.18]);
+          b.add('box', '#5b5d60', [x + 0.32, y + 0.08, z], [0.05, 0.16, 0.28]);
+        }
+        if (this.inPark) this.planterTree(b, x + 0.38, y, z + 0.32, L >= 3);
         break;
+      }
       case 'bandstand': {
         // One structure over its 2×2 footprint: drawn from its first (min x, min z) tile only.
         const first = PARK_LAYOUT.props.find((p) => p.prop === 'bandstand')!.at;
         if (Math.floor(x) !== first[0] || Math.floor(z) !== first[1]) break;
+        const L = this.level;
         const cx = x + 0.5;
         const cz = z + 0.5;
-        b.add('cylinder', '#cfc8b8', [cx, y + 0.1, cz], [1.9, 0.2, 1.9]);
+        b.add('cylinder', L >= 2 ? '#e6dfcf' : '#cfc8b8', [cx, y + 0.1, cz], [1.9, 0.2, 1.9]);
         for (let i = 0; i < 6; i++) {
+          if (L < 2 && i === 4) continue; // a missing column until it's repaired
           const a = (i / 6) * Math.PI * 2;
-          b.add('cylinder', '#b9b2a2', [cx + Math.cos(a) * 0.78, y + 0.65, cz + Math.sin(a) * 0.78], [0.07, 0.9, 0.07]);
+          b.add('cylinder', L >= 2 ? '#f3efe4' : '#a9a293', [cx + Math.cos(a) * 0.78, y + 0.65, cz + Math.sin(a) * 0.78], [0.07, 0.9, 0.07]);
         }
-        b.add('cone', '#9a6a4a', [cx, y + 1.3, cz], [2.1, 0.55, 2.1]);
-        b.add('sphere', '#c9a24a', [cx, y + 1.62, cz], 0.12);
+        b.add('cone', L >= 4 ? '#d2553f' : L >= 2 ? '#a8714c' : '#7d6656', [cx, y + 1.3, cz], [2.1, 0.55, 2.1]);
+        b.add('sphere', L >= 2 ? '#e8c04f' : '#8f8160', [cx, y + 1.62, cz], 0.12);
+        if (L >= 3) {
+          // Bunting: little flags strung between the columns.
+          const flags = ['#ff6f91', '#ffd25e', '#6fd3ff', '#8be06b', '#c38bff'];
+          for (let i = 0; i < 18; i++) {
+            const a = (i / 18) * Math.PI * 2;
+            const sag = Math.abs(Math.sin((i / 3) * Math.PI)) * 0.08;
+            b.add('box', flags[i % flags.length], [cx + Math.cos(a) * 0.95, y + 1.0 - sag, cz + Math.sin(a) * 0.95], [0.1, 0.12, 0.02]);
+          }
+        }
         break;
       }
       case 'lamp':
-        b.add('box', '#4a4c50', [x, y + 0.05, z], [0.9, 0.06, 0.08]); // toppled
-        b.add('sphere', '#d9d2a0', [x + 0.42, y + 0.07, z], 0.12);
+        if (this.level >= 3) {
+          // Relit: standing again, with a warm glowing lantern.
+          b.add('cylinder', '#3f4246', [x, y + 0.04, z], [0.22, 0.08, 0.22]);
+          b.add('cylinder', '#4a4c50', [x, y + 0.55, z], [0.06, 1.0, 0.06]);
+          b.add('box', '#4a4c50', [x, y + 1.06, z], [0.22, 0.04, 0.22]);
+          b.add('sphere', '#fff1b8', [x, y + 0.96, z], 0.16);
+          b.add('cylinder', '#ffe58a', [x, y + 0.002, z], [0.9, 0.004, 0.9]); // its pool of light
+        } else {
+          b.add('box', '#4a4c50', [x, y + 0.05, z], [0.9, 0.06, 0.08]); // toppled
+          b.add('sphere', '#8d8a78', [x + 0.42, y + 0.07, z], 0.12);
+        }
         break;
       case 'barrel':
-        b.add('cylinder', '#6d8fa3', [x, y + 0.25, z], [0.4, 0.5, 0.4]);
+        b.add('cylinder', this.level >= 2 ? '#5aa3c9' : '#6b7378', [x, y + 0.25, z], [0.4, 0.5, 0.4]);
+        if (this.level >= 2) b.add('cylinder', '#7fd0f0', [x, y + 0.505, z], [0.34, 0.01, 0.34]);
         break;
       case 'bollard':
         b.add('cylinder', '#6f7175', [x, y + 0.2, z], [0.14, 0.4, 0.14]);

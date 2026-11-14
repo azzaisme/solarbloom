@@ -126,6 +126,16 @@ export class Game {
     this.app.scene.fog.end = this.camera.fogDepth(84);
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
+    // City 05.2: the park cheers up in stages as you restore it.
+    this.chunks.onParkStage = (stage) => {
+      const lines: Record<number, string> = {
+        1: '🧹 The park paths are swept clean.<small>A quarter of the way to waking the fountain.</small>',
+        2: '🪑 The benches are mended.<small>Halfway there: people will want to sit here again.</small>',
+        3: '💡 The lamps are lit again!<small>The planter trees leaf out and bunting goes up on the bandstand.</small>',
+      };
+      if (lines[stage]) this.hud.toast(lines[stage], 'gold', 4);
+      this.vfx.ring(new pc.Vec3(8, 0.3, 8), PALETTE.gold, 6, 1.0);
+    };
     this.grid.build();
     this.machines = new MachineVisuals(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.machines.buildAll();

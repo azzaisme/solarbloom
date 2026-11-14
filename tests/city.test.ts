@@ -164,3 +164,33 @@ describe('city generator: buildings (City 07.5)', () => {
     }
   });
 });
+
+describe('park art stages (City 05.2)', () => {
+  it('the park looks dilapidated at the start and cheers up at 25/50/75% of its goal, lush once the fountain wakes', async () => {
+    const { createInitialState: create } = await import('../src/core/GameState');
+    const { Sim: S } = await import('../src/gameplay/Sim');
+    const { TUNING: T } = await import('../src/data/tuning');
+    const sim = new S(create(5));
+    expect(sim.progression.parkStage()).toBe(0);
+    const goal = T.park.restoredTiles;
+    const tiles = sim.areas.tiles('park').filter((t) => !t.blocked && !t.occupantId && t.ground !== 'restored');
+    const seen: number[] = [];
+    let n = sim.areas.counts('park').restored;
+    for (const t of tiles) {
+      t.ground = 'restored';
+      t.bloom = 1;
+      sim.grid.touch(t);
+      n++;
+      const st = sim.progression.parkStage();
+      if (st !== seen[seen.length - 1]) seen.push(st);
+      if (n === Math.ceil(goal * 0.25) - 1) expect(st).toBe(0);
+      if (n === Math.ceil(goal * 0.25)) expect(st).toBe(1);
+      if (n === Math.ceil(goal * 0.5)) expect(st).toBe(2);
+      if (n === Math.ceil(goal * 0.75)) expect(st).toBe(3);
+    }
+    expect(seen).toEqual([0, 1, 2, 3]); // never jumps to "lush" before the fountain
+    sim.state.progression.coreActivated = true;
+    expect(sim.progression.parkStage()).toBe(4);
+    expect(new S(create(5, { rooftops: true })).progression.parkStage()).toBe(0);
+  });
+});

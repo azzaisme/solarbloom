@@ -12,7 +12,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #3 City 02: save format v4 (old saves scrapped, sparse deltas) | ✅ |
 | #4 City 03: areas and the fog | ✅ (simulation; fog visuals are #8) |
 | #5 City 04: endless city generator | ✅ except the visual review (#37, needs ground rendering) |
-| #6 City 05: the dilapidated park | ✅ layout, onboarding, fountain finale, pacing, cat nooks (open: 25/50/75% park stages #39, nook screenshots) |
+| #6 City 05: the dilapidated park | ✅ layout, onboarding, fountain finale, pacing, cat nooks park art stages ✅ (#39: `docs/review/park-stage-0/2/4.png`) (open: nook screenshots) |
 | #8 City 07: rendering | first pass ✅ chunk streaming, merged chunk meshes, fog machine batching ✅ (#53), procedural buildings ✅ (#54: `docs/city-overview.png`, `docs/city-near.png`) (open: device numbers #56) |
 | #7 City 06: simulation at city scale | ✅ (open: active-region equivalence test #44, catch-up budget #48) |
 | #10 City 09: endless progression | ✅ storage, area bonuses, machine permits, endless pacing bot no-stall guarantees ✅ (an advisor-only bot progresses from empty pockets: fountain in 22.7 min, next area with the park packed and broke in 14.3 min) playtest timings ✅ (time to each area, areas per hour, biggest chain, cats, stuck time; Copy button) upgrade tree for scale ✅ (Lit Landmarks; every upgrade has an effect test and sparkles the spots it changes) (open: specialty milestone actions #62) |
@@ -70,6 +70,14 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - City chains may run up to 500 events and travel for 20 s before the rest resolves at once (rooftop chains keep 100 / 6 s).
 - Chain results report how many areas they swept: a feed line from 3 areas, a toast from 6.
 - Tests: crossing borders and stopping at fog, a 10-garden corridor end to end (deterministic, once per garden), and a ×200+ chain sweeping 12+ areas that terminates and pays once.
+
+## City 05.2: park art stages
+
+- `ProgressionSystem.parkStage()`: 0 at the start, 1/2/3 at 25/50/75% of the park's restoration goal, 4 once the fountain is awake. Presentation only.
+- Dead park ground is strewn with leaf litter and cracks until stage 1 (the paths are swept: litter gone, paving scrubbed lighter). Stage 2 mends the benches (fresh slats, green legs; broken ones sag onto one leg with the backrest fallen), refills the rain barrel and repairs the bandstand (missing column back, white columns). Stage 3 stands the toppled lamp back up with a warm lantern and a pool of light, leafs out the planter trees beside each bench and strings bunting round the bandstand. Stage 4 repaints its roof red.
+- City props follow their area: broken until it clears.
+- `ChunkRenderer` rebuilds only the park chunk when the stage changes; Game shows a short line for stages 1–3.
+- `npm run shots:park` renders every stage; `tests/city.test.ts` checks the thresholds and that the park never looks lush before the fountain.
 
 ## City 10.3: canal water network
 

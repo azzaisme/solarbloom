@@ -85,6 +85,17 @@ export class ProgressionSystem {
     ];
   }
 
+  /**
+   * City 05.2: the park's look, 0 (dilapidated) to 4 (fountain awake): 1 at 25% of the restoration goal (paths
+   * swept), 2 at 50% (benches repaired), 3 at 75% (lamps relit, trees leaf out, bunting). Presentation only.
+   */
+  parkStage(): number {
+    if (!this.homeIsPark) return 0;
+    if (this.sim.state.progression.coreActivated) return 4;
+    const k = this.sim.areas.counts(PARK).restored / TUNING.park.restoredTiles;
+    return Math.min(3, Math.floor(k * 4 + 1e-9));
+  }
+
   coreReady(): boolean {
     return !this.sim.state.progression.coreActivated && this.requirements().every((r) => r.done);
   }
