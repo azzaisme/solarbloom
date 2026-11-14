@@ -3,6 +3,7 @@ import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
 import { TUNING } from '../src/data/tuning';
+import type { MachineData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
 
 type Applier = { apply(t: string, mult: number, hidden: number): string };
@@ -84,5 +85,96 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     expect(summary).toMatch(/fog thins/);
     sim.advance(5);
     for (const t of tiles) expect(t.ground).toBe('restored');
+  });
+
+  /** Every changed ground tile sits in a cleared or thinning area, never in fog. */
+  function watchFog(sim: Sim) {
+    const bad: string[] = [];
+    sim.grid.touchListeners.push((t) => {
+      if (t.roofId !== GROUND) return;
+      if (t.ground !== 'restored' && t.ground !== 'growing') return;
+      const fog = sim.areas.fog(sim.areas.areaOf(t)!);
+      if (fog === 'hidden') bad.push(`${t.id}:${fog}`);
+      else if (fog === 'frontier' && !sim.grid.neighbors(t).some((n) => sim.areas.isClear(n))) bad.push(`${t.id}:${fog}`);
+    });
+    return bad;
+  }
+
+  it("Cat's Garden blooms inside one cleared area away from the park", () => {
+    const sim = grownCity(5, 4);
+    expect(sim.cat.catsGardenAvailable()).toBe(true);
+    for (let i = 0; i < 20; i++) {
+      const tiles = sim.cat.catsGardenTiles();
+      expect(tiles.length).toBeGreaterThan(0);
+      const area = sim.areas.areaOf(tiles[0])!;
+      expect(area).not.toBe(PARK);
+      expect(sim.areas.fog(area)).toBe('cleared');
+      for (const t of tiles) expect(sim.areas.areaOf(t)).toBe(area);
+    }
+    const bad = watchFog(sim);
+    expect((sim.cat as unknown as Applier).apply('catsGarden', 1, 0)).toMatch(/garden blooms in the /);
+    sim.advance(5);
+    expect(bad).toEqual([]);
+  });
+
+  it('Golden Relay rides a green corridor: the next hop blooms extra tiles, then it is spent', () => {
+    const sim = grownCity(6, 3);
+    const st = sim.state;
+    st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
+    st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
+    expect(sim.cat.goldenRelayAvailable()).toBe(false); // no corridor yet: it never rolls
+    // Two street gardens five tiles apart inside the cleared park.
+    const spots = sim.areas.tiles(PARK).filter((t) => !t.blocked && !t.occupantId && !sim.isCoreTile(t));
+    const a = spots.find((t) => spots.some((o) => o.z === t.z && o.x === t.x + 5))!;
+    const gardens = [a.x, a.x + 5].map((x) => {
+      const t = sim.grid.get(GROUND, x, a.z)!;
+      t.feature = 'paving';
+      const m: MachineData = { id: sim.newId('m'), type: 'pollinator', roofId: GROUND, x, z: a.z, size: 1, boostUntil: 0, timer: 0, charge: 0 };
+      st.machines.push(m);
+      sim.grid.indexMachine(m);
+      t.occupantId = m.id;
+      return m;
+    });
+    expect(sim.cat.goldenRelayAvailable()).toBe(true);
+    expect((sim.cat as unknown as Applier).apply('goldenRelay', 1, 0)).toMatch(/green corridor/);
+    expect(st.relayBonus).toBe(TUNING.cat.goldenCorridorTiles);
+    expect(sim.cat.goldenRelayAvailable()).toBe(false); // one at a time
+    const bad = watchFog(sim);
+    const relayed: string[] = [];
+    sim.bus.on('chain.event', (e) => {
+      if (e.event.cause === 'relay') relayed.push(e.event.target);
+    });
+    const start = sim.grid.neighbors(sim.grid.get(GROUND, gardens[0].x, a.z)!).find((t) => !t.blocked && !t.occupantId)!;
+    start.ground = 'polluted';
+    sim.restoration.complete(start, 'pulse');
+    sim.advance(10);
+    expect(st.relayBonus).toBe(0);
+    expect(relayed.length).toBeGreaterThan(0);
+    expect(relayed.length).toBeLessThanOrEqual(TUNING.cat.goldenCorridorTiles);
+    expect(bad).toEqual([]);
+  });
+
+  it('Mega Bloom and Drone Party pick from the player’s network and never touch fog', () => {
+    const sim = grownCity(7, 5);
+    const bad = watchFog(sim);
+    for (let i = 0; i < 5; i++) (sim.cat as unknown as Applier).apply('megaBloom', 1, 0);
+    sim.advance(30);
+    expect(bad).toEqual([]);
+    // With no hub, a party degrades to a harvest.
+    expect((sim.cat as unknown as Applier).apply('droneParty', 1, 0)).toMatch(/🌿/);
+  });
+
+  it('every reward stays out of the fog over many claims', { timeout: 60000 }, () => {
+    const sim = grownCity(8, 8);
+    const bad = watchFog(sim);
+    sim.state.cat.found = 1;
+    for (let i = 0; i < 60; i++) {
+      sim.state.cat.active = undefined;
+      sim.cat.spawn();
+      expect(sim.cat.claim()).toBeDefined();
+      sim.advance(3);
+    }
+    sim.advance(20);
+    expect(bad).toEqual([]);
   });
 });

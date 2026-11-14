@@ -332,9 +332,9 @@ export class BloomChainSystem {
   /** Lucky Cat Mega Bloom: a free chain that may break through concrete too. */
   startMega(budget: number = TUNING.cat.megaBloomTiles): boolean {
     const s = this.sim;
-    const restored = s.grid
-      .playableTiles()
-      .filter((t) => t.ground === 'restored' && s.grid.neighbors(t).some((n) => s.restoration.isEligible(n)));
+    // In the city, only the player's revealed areas (never a whole-world scan, never fog).
+    const pool = s.grid.isPlayable(GROUND) ? s.areas.revealed().flatMap((id) => s.areas.tiles(id)) : s.grid.playableTiles();
+    const restored = pool.filter((t) => t.ground === 'restored' && s.grid.neighbors(t).some((n) => s.restoration.isEligible(n)));
     if (!restored.length) return false;
     const origin = s.rng.pick(restored);
     const run = this.newRun(origin, 'mega', budget);
@@ -578,6 +578,20 @@ export class BloomChainSystem {
         this.emit(run, ev);
         run.visited.add(target.id);
         this.enqueue(run, { type: target.ground === 'restored' ? 'GROW' : 'RESTORE', source: g.id, target: target.id, cause: 'pollinate', depth: ev.depth + 1 }, TUNING.chain.stepDelay * 0.6);
+        if (s.state.relayBonus > 0) {
+          // Golden Relay (Lucky Cat) in the city: this hop blooms extra tiles around the garden, then it's spent.
+          const extra = s.grid
+            .tilesNear(g, 3)
+            .filter((t) => !run.visited.has(t.id) && !t.occupantId && !t.blocked && (s.restoration.isEligible(t) || (t.ground === 'restored' && t.bloom < TUNING.restore.maxBloom)))
+            .map((t) => ({ t, d: distToFootprint(t.x, t.z, g.x, g.z, g.size) }))
+            .sort((a, b) => a.d - b.d || a.t.z - b.t.z || a.t.x - b.t.x)
+            .slice(0, s.state.relayBonus);
+          s.state.relayBonus = 0;
+          extra.forEach(({ t }, i) => {
+            run.visited.add(t.id);
+            this.enqueue(run, { type: t.ground === 'restored' ? 'GROW' : 'RESTORE', source: g.id, target: t.id, cause: 'relay', depth: ev.depth + 1 }, 0.2 + i * 0.1);
+          });
+        }
         return;
       }
       case 'POLLINATE': {

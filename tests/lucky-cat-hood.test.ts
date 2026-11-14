@@ -71,7 +71,7 @@ describe('Lucky Cat across the neighbourhood', () => {
     const sim = neighbourhood(12);
     const before = new Map(sim.grid.rooftops.flatMap((r) => sim.grid.tilesOf(r.id)).map((t) => [t.id, `${t.ground}${t.bloom}`]));
     const summary = (sim.cat as unknown as Applier).apply('catsGarden', 1, 0);
-    expect(summary).toMatch(/garden blooms on/);
+    expect(summary).toMatch(/garden blooms (on|in)/);
     sim.advance(5);
     const changed = sim.grid.rooftops.flatMap((r) => sim.grid.tilesOf(r.id)).filter((t) => before.get(t.id) !== `${t.ground}${t.bloom}`);
     expect(changed.length).toBeGreaterThanOrEqual(2);

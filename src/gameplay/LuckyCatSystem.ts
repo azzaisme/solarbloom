@@ -1,5 +1,5 @@
 import { HOME } from './ProgressionSystem';
-import type { CatRewardType, TileData } from '../core/types';
+import type { CatRewardType, MachineData, TileData } from '../core/types';
 import { PARK } from '../core/Areas';
 import { GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
@@ -168,19 +168,31 @@ export class LuckyCatSystem {
   catsGardenTiles(): TileData[] {
     const s = this.sim;
     const ok = (t: TileData) => !t.occupantId && !t.blocked && !s.isCoreTile(t) && (s.restoration.isEligible(t) || (t.ground === 'restored' && t.bloom < 2));
-    const roofs = s.grid.playableLayers().filter((r) => s.grid.tilesOf(r.id).some(ok));
-    if (!roofs.length) return [];
-    // Prefer a rooftop other than the one the player started on, so the reward shows up somewhere new.
-    const away = roofs.filter((r) => r.id !== 'r1');
-    const pool = away.length ? away : roofs;
-    const roof = pool[Math.floor(this.sim.rng.next() * pool.length)];
-    const seeds = s.grid.tilesOf(roof.id).filter(ok);
+    let seeds: TileData[];
+    if (this.city()) {
+      // In the city: one of the player's cleared areas (away from the park when possible). Never fog.
+      const areas = s.areas.revealed().filter((id) => s.areas.fog(id) === 'cleared' && s.areas.tiles(id).some(ok));
+      if (!areas.length) return [];
+      const away = areas.filter((id) => id !== PARK);
+      const pool = away.length ? away : areas;
+      const id = pool[Math.floor(this.sim.rng.next() * pool.length)];
+      seeds = s.areas.tiles(id).filter(ok);
+    } else {
+      const roofs = s.grid.playableLayers().filter((r) => s.grid.tilesOf(r.id).some(ok));
+      if (!roofs.length) return [];
+      // Prefer a rooftop other than the one the player started on, so the reward shows up somewhere new.
+      const away = roofs.filter((r) => r.id !== 'r1');
+      const pool = away.length ? away : roofs;
+      const roof = pool[Math.floor(this.sim.rng.next() * pool.length)];
+      seeds = s.grid.tilesOf(roof.id).filter(ok);
+    }
     const start = seeds[Math.floor(this.sim.rng.next() * seeds.length)];
+    const home = s.areas.areaOf(start);
     const out: TileData[] = [start];
     const seen = new Set([start.id]);
     for (let i = 0; i < out.length && out.length < TUNING.cat.catsGardenTiles; i++) {
       for (const n of s.grid.neighbors(out[i])) {
-        if (seen.has(n.id) || !ok(n)) continue;
+        if (seen.has(n.id) || !ok(n) || s.areas.areaOf(n) !== home) continue;
         seen.add(n.id);
         out.push(n);
         if (out.length >= TUNING.cat.catsGardenTiles) break;
@@ -227,13 +239,36 @@ export class LuckyCatSystem {
     };
   }
 
-  /** Golden Relay needs a built bridge (and no unspent one); Cat's Garden needs a second rooftop. Never useless. */
+  /** The endless city (ground layer) rather than the legacy rooftop layout. */
+  private city() {
+    return this.sim.grid.isPlayable(GROUND);
+  }
+
+  /**
+   * Golden Relay needs a way to send it (a built bridge, or in the city a green corridor of street gardens)
+   * and no unspent one; Cat's Garden needs somewhere new to bloom. Never useless.
+   */
   goldenRelayAvailable() {
-    return this.sim.hood.builtLinks().length > 0 && this.sim.state.relayBonus <= 0;
+    const s = this.sim;
+    if (s.state.relayBonus > 0) return false;
+    if (this.city()) return s.state.machines.some((m) => s.chains.isCorridor(m) && s.chains.corridorNext(m).length > 0);
+    return s.hood.builtLinks().length > 0;
   }
 
   catsGardenAvailable() {
-    return this.sim.grid.playableLayers().length >= 2 && this.catsGardenTiles().length > 0;
+    if (!this.city() && this.sim.grid.playableLayers().length < 2) return false;
+    return this.catsGardenTiles().length > 0;
+  }
+
+  /** The drone hub a Drone Party launches from: in the city, the hub nearest the fog the player is pushing into. */
+  partyHub(): MachineData | undefined {
+    const s = this.sim;
+    const hubs = s.state.machines.filter((m) => m.type === 'droneHub');
+    if (hubs.length <= 1 || !this.city()) return hubs[0];
+    const goal = s.areas.nextGoal();
+    const entry = goal ? s.areas.entryTiles(goal)[0] : undefined;
+    if (!entry) return hubs[0];
+    return hubs.reduce((a, b) => (Math.hypot(b.x - entry.x, b.z - entry.z) < Math.hypot(a.x - entry.x, a.z - entry.z) ? b : a));
   }
 
   rollReward(): CatRewardType {
@@ -312,7 +347,7 @@ export class LuckyCatSystem {
       if (!ok) harvest();
     };
     const party = () => {
-      const hub = s.state.machines.find((m) => m.type === 'droneHub');
+      const hub = this.partyHub();
       if (!hub) return harvest();
       s.drones.spawn(hub, TUNING.cat.dronePartySeconds * mult);
       s.drones.spawn(hub, TUNING.cat.dronePartySeconds * mult);
@@ -320,15 +355,20 @@ export class LuckyCatSystem {
     };
     const golden = () => {
       if (!this.goldenRelayAvailable()) return harvest(); // degrade gracefully, never useless
-      s.state.relayBonus = TUNING.cat.goldenRelayExtra;
+      s.state.relayBonus = this.city() ? TUNING.cat.goldenCorridorTiles : TUNING.cat.goldenRelayExtra;
       s.bus.emit('cat.goldenRelay', {});
-      parts.push(`Your next cross-roof chain sends +${TUNING.cat.goldenRelayExtra} extra remote bloom`);
+      parts.push(
+        this.city()
+          ? `Your next green corridor hop blooms +${TUNING.cat.goldenCorridorTiles} extra tiles`
+          : `Your next cross-roof chain sends +${TUNING.cat.goldenRelayExtra} extra remote bloom`,
+      );
     };
     const garden = () => {
       const tiles = this.catsGardenTiles();
       if (!tiles.length || !s.chains.startCatGarden(tiles)) return harvest();
-      const roof = s.grid.roof(tiles[0].roofId)!;
-      parts.push(`A little garden blooms on ${roof.name} (${tiles.length} tiles)`);
+      const area = s.areas.areaOf(tiles[0]);
+      const where = area ? `the ${AREA_TYPES[s.areas.info(area).type].name.toLowerCase()}` : s.grid.roof(tiles[0].roofId)!.name;
+      parts.push(`A little garden blooms in ${where} (${tiles.length} tiles)`);
     };
     const whisker = () => {
       const tiles = this.fogWhiskerTiles();

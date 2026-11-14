@@ -1029,7 +1029,11 @@ export class Game {
     });
     b.on('cat.goldenRelay', () => {
       for (const br of this.scene.bridges.values()) if (br.built) for (const e of br.ends) this.vfx.ring(new pc.Vec3(e.x, e.y - 0.9, e.z), PALETTE.gold, 1.4, 0.8);
-      this.hud.feed('🐱✨ Golden Relay: your next cross-roof chain blooms one extra tile');
+      this.hud.feed(
+        this.city
+          ? `🐱✨ Golden Relay: your next green corridor hop blooms ${TUNING.cat.goldenCorridorTiles} extra tiles`
+          : '🐱✨ Golden Relay: your next cross-roof chain blooms one extra tile',
+      );
     });
     b.on('cat.stash', () => {
       // A soft hint that something lucky is still waiting, never a pointer.

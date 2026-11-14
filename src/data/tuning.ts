@@ -101,6 +101,7 @@ export const TUNING = {
     weights: { luckyHarvest: 40, solarFrenzy: 25, megaBloom: 20, droneParty: 12, jackpot: 3, goldenRelay: 14, catsGarden: 14, fogWhisker: 18 },
     fogWhiskerTiles: 10, // Fog Whisker: tiles of the next fogged area restored from its edge, capped
     goldenRelayExtra: 1, // Golden Relay: extra remote blooms on the next crossing
+    goldenCorridorTiles: 5, // Golden Relay in the city: extra blooms on the next green corridor hop
     preferVisible: 0.75, // chance a cat hides somewhere already on screen (when there is such a spot)
     catsGardenTiles: 6, // Cat's Garden: tiles restored (and decorated) on a random unlocked roof
   },
