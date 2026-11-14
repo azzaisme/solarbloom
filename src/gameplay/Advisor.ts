@@ -1,7 +1,9 @@
 import { PARK } from '../core/Areas';
 import { GROUND } from '../core/GameState';
+import { distToFootprint } from '../core/Grid';
 import type { BuildableType, TileData } from '../core/types';
 import { MACHINES } from '../data/machines';
+import { formatCost } from '../core/Economy';
 import { TUNING } from '../data/tuning';
 import { AREA_TYPES } from '../data/city';
 import type { Sim } from './Sim';
@@ -87,6 +89,11 @@ export class Advisor {
     // 3. Before the fountain: a machine it still needs, if one can be built now.
     const build = city && !s.state.progression.coreActivated ? this.neededBuild() : undefined;
     if (build) return build;
+    // 3b. The goal's landmark wants its specialty action (City 09.1): the next step towards it, if one is possible now.
+    const specGoal = city && s.state.progression.coreActivated ? s.areas.nextGoal() : undefined;
+    const spec = specGoal ? this.specialtyStep(specGoal) : undefined;
+    // Saving up only once the restore share is met (until then, restoring is progress too).
+    if (spec && (spec.action.kind !== 'wait' || s.areas.counts(specGoal!).restored >= s.areas.need(specGoal!))) return spec;
     // 4. Push the fog back: an affordable tile at the edge of the current goal (or anywhere in the park).
     const goal = city && s.state.progression.coreActivated ? s.areas.nextGoal() : undefined;
     const edge = this.edgeTile(goal) ?? (city ? this.parkTile() : undefined);
@@ -100,6 +107,106 @@ export class Advisor {
     // 6. Nothing to do this instant: solar and the rain barrel always refill, and so does the harvest.
     const secs = Math.ceil(cd);
     return { text: `Solar panels are recharging. Sunlight can be harvested again in ${secs} s.`, label: `🌞 Harvest in ${secs} s`, action: { kind: 'wait', seconds: secs } };
+  }
+
+  /**
+   * City 09.1: one achievable step towards an area's specialty action (a build or a pulse), or undefined when
+   * nothing can be done towards it right now (waiting for a basin or a meter, short of resources, still in fog).
+   */
+  specialtyStep(id: string): Suggestion | undefined {
+    const s = this.sim;
+    if (id === PARK || s.areas.fog(id) === 'cleared' || s.milestones.met(id)) return undefined;
+    const sp = s.milestones.specialty(id);
+    const a = s.areas.info(id);
+    const tiles = s.areas.tiles(id);
+    const max = TUNING.restore.maxBloom;
+    const why = `The ${a.landmarkName} also wants: ${sp.label.replace(/ \(.*\)$/, '')}.`;
+    const ok = (t: TileData) => s.restoration.checkPulse(t).ok;
+    const growable = (t: TileData) => t.ground === 'restored' && !t.occupantId && t.bloom < max;
+    const focus = (t: TileData | undefined, what: string): Suggestion | undefined => (t ? { text: `${why} ${what}`, label: '🌱 Show me where', action: { kind: 'focus', x: t.x, z: t.z } } : undefined);
+    const build = (type: BuildableType, cands: TileData[], what: string): Suggestion | undefined => {
+      const def = MACHINES[type];
+      const cost = s.build.cost(type);
+      const spot = cands.find((c) => s.build.check(type, GROUND, c.x, c.z).spotOk);
+      if (!spot) return undefined;
+      // A spot is ready but the purchase isn't: save up (resources always refill), unless storage can't hold it.
+      if (s.econ.shortfall(cost)) {
+        if ((['energy', 'water', 'biomass'] as const).some((k) => (cost[k] ?? 0) > s.state.caps[k])) return undefined;
+        return { text: `${why} Save up for a ${def.name} (${formatCost(cost)}).`, label: `${def.icon} Saving up…`, action: { kind: 'wait', seconds: 5 } };
+      }
+      return { text: `${why} ${what}`, label: `${def.icon} Build a ${def.name}`, action: { kind: 'build', type, x: spot.x, z: spot.z } };
+    };
+    // Room to bloom beside a spot: tiles next to it that can still be restored or grown (machines need it to fire).
+    const room = (t: { x: number; z: number }) => s.grid.tilesNear({ roofId: GROUND, x: t.x, z: t.z, size: 1 }, 1).filter((n) => s.restoration.isEligible(n) || growable(n)).length;
+    const roomy = (cands: TileData[]) => cands.filter((t) => room(t) >= 2).sort((x, y) => room(y) - room(x) || x.z - y.z || x.x - y.x);
+    const mine = (type: BuildableType) => s.state.machines.filter((m) => m.type === type && s.areas.areaOf(m) === id);
+    const beside = (m: { x: number; z: number; size: number }, r = 1) => s.grid.tilesNear({ roofId: GROUND, x: m.x, z: m.z, size: m.size }, r);
+    switch (sp.kind) {
+      case 'fullBloom':
+        return focus(tiles.filter((t) => growable(t) && ok(t)).sort((x, y) => y.bloom - x.bloom)[0], 'Pulse a green tile to grow it.');
+      case 'canopy': {
+        const lm = s.areas.landmark(id);
+        if (!lm) return undefined;
+        const near = beside(lm, TUNING.neighbourhood.canopy.chargeRadius);
+        return focus(near.find((t) => t.ground !== 'restored' && ok(t)) ?? near.find((t) => growable(t) && ok(t)), 'Bloom tiles around the Elder Tree to charge it.');
+      }
+      case 'solarBoost': {
+        const panel = mine('solar')[0];
+        if (!panel || room(panel) === 0) return build('solar', roomy(tiles), 'Build a Solar Panel beside ground that can still bloom.');
+        return focus(beside(panel).find((t) => (s.restoration.isEligible(t) || growable(t)) && ok(t)), 'Bloom a tile right next to the Solar Panel.');
+      }
+      case 'chain': {
+        const gardens = mine('pollinator');
+        if (gardens.filter((g) => room(g) > 0).length < 2) return build('pollinator', roomy(tiles), 'Pollinator Gardens with room around them set each other off.');
+        for (const g of gardens) {
+          const t = beside(g).find((n) => (s.restoration.isEligible(n) || growable(n)) && ok(n));
+          if (t) return focus(t, 'Pulse beside a Pollinator Garden to start a big chain.');
+        }
+        return undefined;
+      }
+      case 'corridor': {
+        // Two street gardens within corridor range of each other.
+        const paved = (t: TileData) => t.feature === 'road' || t.feature === 'paving';
+        const gardens = mine('pollinator').filter((m) => s.chains.isCorridor(m));
+        const R = s.upgrades.corridorRange;
+        const gap = 1;
+        const md = (p: { x: number; z: number }, q: { x: number; z: number }) => Math.abs(p.x - q.x) + Math.abs(p.z - q.z);
+        const pairs = gardens.filter((g) => gardens.some((o) => o !== g && md(g, o) >= gap && md(g, o) <= R));
+        if (!pairs.some((g) => room(g) > 0)) {
+          // A (new) garden with room around it, within range of another street garden if there is one.
+          const g0 = gardens[0];
+          return build('pollinator', roomy(tiles.filter((t) => paved(t) && (!g0 || (md(t, g0) >= 2 && md(t, g0) <= R)))), 'Two gardens on the paving form a green corridor: put this one where the ground can still bloom.');
+        }
+        for (const g of pairs) {
+          const t = beside(g).find((n) => (s.restoration.isEligible(n) || growable(n)) && ok(n));
+          if (t) return focus(t, 'Pulse beside a street garden: the chain runs along the corridor.');
+        }
+        return undefined;
+      }
+      case 'overflow': {
+        const R = TUNING.neighbourhood.reservoir.condenserRange;
+        const garden = mine('reservoirGarden')[0];
+        if (!garden) return build('reservoirGarden', tiles.filter((t) => beside({ ...t, size: 1 }, R).some((c) => !c.blocked && !c.occupantId && s.areas.areaOf(c) === id)), 'A Reservoir Garden overflows when its basin fills.');
+        const conds = s.state.machines.filter((m) => m.type === 'condenser' && distToFootprint(m.x, m.z, garden.x, garden.z, garden.size) <= R);
+        if (!conds.length) return build('condenser', beside(garden, R), 'A Water Condenser within 2 tiles fills its basin.');
+        return undefined;
+      }
+      case 'canalFlow': {
+        const plan = s.milestones.canalPlan(id);
+        if (!plan) return undefined;
+        const path = plan.path.map(([x, z]) => s.grid.get(GROUND, x, z)!);
+        const dirty = path.find((t) => t.ground !== 'restored' && t.ground !== 'growing');
+        if (dirty) return focus(path.find((t) => t.ground !== 'restored' && ok(t)), 'Restore the canal water so it can flow.');
+        for (const [type, [x, z]] of [['reservoirGarden', plan.garden], ['condenser', plan.condenser]] as [BuildableType, [number, number]][]) {
+          const t = s.grid.get(GROUND, x, z)!;
+          if (s.occupant(t)?.type === type) continue;
+          if (t.occupantId) return undefined; // something else stands there: the player can still do it by hand
+          if (t.ground === 'polluted') return focus(ok(t) ? t : undefined, `Clear the bank for a ${MACHINES[type].name}.`);
+          return build(type, [t], type === 'reservoirGarden' ? 'A garden on one bank…' : '…and a condenser further along sends it water down the canal.');
+        }
+        return undefined;
+      }
+    }
   }
 
   /** The first machine the fountain still needs that is affordable, at a valid spot nearest the fountain. */

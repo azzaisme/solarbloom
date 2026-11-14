@@ -167,6 +167,8 @@ export interface AreaState {
   clearedAt?: number;
   /** what drones do here: keep it blooming, push from it into the fog, or leave it alone */
   mode?: AreaMode;
+  /** City 09.1: progress on the landmark's specialty action (a count, or the best chain for 'chain') */
+  spec?: number;
 }
 
 export interface LinkState {

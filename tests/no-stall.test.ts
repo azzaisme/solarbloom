@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { meetSpecialty } from './city-helpers';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
@@ -94,6 +95,7 @@ describe('no-stall guarantees (City 09.5)', () => {
     for (let i = 0; i < 40; i++) {
       const id = sim.areas.nextGoal()!;
       fill(sim, id);
+      meetSpecialty(sim, id);
       sim.areas.clear(id);
     }
     broke(sim);
@@ -120,6 +122,7 @@ describe('no-stall guarantees (City 09.5)', () => {
       // Machines built all over part of it shrink what can be restored; the need follows.
       pack(sim, id);
       fill(sim, id);
+      meetSpecialty(sim, id);
       sim.areas.clear(id);
     }
   });

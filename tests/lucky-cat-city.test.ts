@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { meetSpecialty } from './city-helpers';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
@@ -23,6 +24,7 @@ function grownCity(seed: number, n: number) {
       t.pollution = 0;
       sim.grid.touch(t);
     }
+    meetSpecialty(sim, id);
     sim.areas.clear(id);
   }
   return sim;

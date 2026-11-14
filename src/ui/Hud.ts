@@ -410,17 +410,21 @@ export class Hud {
     this.set('objPct', $(this.root, '#objPct'), 'text', `${a.landmarkName}: ${Math.min(c.restored, need)}/${need} tiles · ${cleared} area${cleared === 1 ? '' : 's'} cleared`);
     this.set('objBar', $(this.root, '#objBar'), 'width', `${pct}%`);
     const ready = s.areas.ready(id);
+    const sp = s.milestones.specialty(id); // City 09.1: the landmark's specialty action
     const fr = s.advisor.nearestFrontier();
     const frontier = fr && fr.areaId !== id ? `<li><span class="ck">·</span>Nearest frontier: the ${esc(fr.name.toLowerCase())}, ${fr.distance} block${fr.distance === 1 ? '' : 's'} out (${Math.round(fr.share * 100)}% restored)</li>` : '';
     this.set(
       'objList',
       objList,
       'html',
-      `<li class="${c.restored >= need ? 'done' : ''}"><span class="ck">${c.restored >= need ? '✓' : ''}</span>Restore ${need} tiles of the ${esc(def.name.toLowerCase())} (next to clear ground first)</li><li><span class="ck"></span>Wake the ${esc(a.landmarkName)}</li>${frontier}`,
+      `<li class="${c.restored >= need ? 'done' : ''}"><span class="ck">${c.restored >= need ? '✓' : ''}</span>Restore ${need} tiles of the ${esc(def.name.toLowerCase())} (next to clear ground first)</li>` +
+        `<li class="${sp.met ? 'done' : ''}" title="${esc(sp.hint)}"><span class="ck">${sp.met ? '✓' : ''}</span>${esc(sp.label)}</li>` +
+        `<li><span class="ck"></span>Wake the ${esc(a.landmarkName)}</li>${frontier}`,
     );
     // The suggested next step sits outside the checklist, so it stays visible when the list is collapsed.
     this.set('objAct', $(this.root, '#objAct'), 'html', this.suggestionHtml());
-    return ready ? '' : `Next: restore the ${def.name.toLowerCase()} (${Math.min(c.restored, need)}/${need})`;
+    if (ready) return '';
+    return c.restored >= need && !sp.met ? `Next: ${sp.label.charAt(0).toLowerCase()}${sp.label.slice(1)}` : `Next: restore the ${def.name.toLowerCase()} (${Math.min(c.restored, need)}/${need})`;
   }
 
   /** Phase 3 hints follow the neighbourhood objective. */
@@ -432,7 +436,9 @@ export class Hud {
       const a = s.areas.info(id);
       return s.areas.ready(id)
         ? { text: `The ${a.landmarkName} is ready. Wake it to clear this area's fog and reveal what lies beyond.`, target: '#objAct [data-wake]' }
-        : { text: `The fog recedes tile by tile: restore tiles touching clear ground. Drones, chains and Wide Pulse all help push it back.` };
+        : s.areas.counts(id).restored >= s.areas.need(id) && !s.milestones.met(id)
+          ? { text: `The ${a.landmarkName} wants one more thing: ${s.milestones.specialty(id).hint}` }
+          : { text: `The fog recedes tile by tile: restore tiles touching clear ground. Drones, chains and Wide Pulse all help push it back.` };
     }
     const o = s.hood.objective();
     switch (o.step) {

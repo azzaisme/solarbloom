@@ -23,7 +23,7 @@ export class AreaSystem {
   }
 
   /** Restored / restorable per area, recounted only after a tile in the area changed. */
-  private countCache = new Map<string, { restored: number; restorable: number }>();
+  private countCache = new Map<string, { restored: number; restorable: number; fullBloom: number; growable: number }>();
 
   /** The landmark machine (a Core on the ground layer) of a revealed area, if placed. */
   landmark(id: string) {
@@ -89,18 +89,25 @@ export class AreaSystem {
 
   // ───────────── progress ─────────────
 
-  counts(id: string): { restored: number; restorable: number } {
+  counts(id: string): { restored: number; restorable: number; fullBloom: number; growable: number } {
     const hit = this.countCache.get(id);
     if (hit) return hit;
     const machines = this.sim.state.machines;
     let restored = 0;
     let restorable = 0;
+    let fullBloom = 0;
+    let growable = 0; // free tiles that can still bloom or grow
     for (const t of this.tiles(id)) {
       if (!isRestorable(t, machines)) continue;
       restorable++;
-      if (t.ground === 'restored') restored++;
+      const full = t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom;
+      if (t.ground === 'restored') {
+        restored++;
+        if (full) fullBloom++;
+      }
+      if (!full && !t.occupantId) growable++;
     }
-    const c = { restored, restorable };
+    const c = { restored, restorable, fullBloom, growable };
     this.countCache.set(id, c);
     return c;
   }
@@ -128,10 +135,18 @@ export class AreaSystem {
     return TUNING.city.fogFull + (TUNING.city.fogThin - TUNING.city.fogFull) * k;
   }
 
-  /** The landmark can be woken (milestone met, area not yet cleared). City 09 adds specialty actions. */
+  /** The landmark can be woken: enough restored, its specialty action done (City 09.1), not yet cleared. */
   ready(id: string): boolean {
     const f = this.fog(id);
-    return (f === 'frontier' || f === 'thinning') && this.counts(id).restored >= this.need(id);
+    return (f === 'frontier' || f === 'thinning') && this.counts(id).restored >= this.need(id) && this.sim.milestones.met(id);
+  }
+
+  /** Announces an area that has just become ready (once). */
+  checkReady(id: string) {
+    if (this.ready(id) && !this.announced.has(id)) {
+      this.announced.add(id);
+      this.sim.bus.emit('area.ready', { areaId: id });
+    }
   }
 
   /** A ground tile was restored: its area's fog starts thinning. */
@@ -143,10 +158,7 @@ export class AreaSystem {
       st.fog = 'thinning';
       this.sim.bus.emit('area.fogChanged', { areaId: id, fog: 'thinning' });
     }
-    if (this.ready(id) && !this.announced.has(id)) {
-      this.announced.add(id);
-      this.sim.bus.emit('area.ready', { areaId: id });
-    }
+    this.checkReady(id);
   }
   private announced = new Set<string>();
 
@@ -154,7 +166,7 @@ export class AreaSystem {
   clear(id: string, force = false): boolean {
     const s = this.sim;
     if (!force && !this.ready(id)) {
-      s.bus.emit('action.failed', { reason: this.fog(id) === 'cleared' ? 'Already clear' : 'Restore more of this area first' });
+      s.bus.emit('action.failed', { reason: this.fog(id) === 'cleared' ? 'Already clear' : this.counts(id).restored >= this.need(id) ? `The landmark wants something more: ${this.sim.milestones.specialty(id).label}` : 'Restore more of this area first' });
       return false;
     }
     if (this.fog(id) === 'cleared') return false;

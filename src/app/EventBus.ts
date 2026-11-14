@@ -13,7 +13,7 @@ export interface GameEvents {
   'chain.started': { chainId: number; originTileId: string };
   'chain.event': { event: ChainEvent; combo: number };
   'chain.fastForward': { chainId: number };
-  'chain.ended': { chainId: number; combo: number; bonus: number; total: number; milestonePct: number; energy: number; roofs: string[]; crossings: number; areas: number; starter: 'player' | 'auto' };
+  'chain.ended': { chainId: number; combo: number; bonus: number; total: number; milestonePct: number; energy: number; roofs: string[]; crossings: number; areas: number; areaIds?: string[]; starter: 'player' | 'auto' };
   'mega.released': { tileId: string; budget: number };
   'mega.ready': Record<string, never>;
   'area.modeChanged': { areaId: string; mode: 'bloom' | 'frontier' | 'off' | undefined };
@@ -22,6 +22,8 @@ export interface GameEvents {
   'reservoir.overflow': { machineId: string; tiles: string[] };
   'reservoir.fill': { machineId: string; from: string };
   /** City 10.3: water travels along a canal (tile ids in order) from one machine to another. */
+  /** A street garden passes its chain on along a green corridor. */
+  'corridor.sent': { from: string; to: string; chainId: number };
   'canal.flow': { from: string; to: string; path: string[]; kind: 'fill' | 'overflow'; chainId?: number };
   'canopy.burst': { machineId: string; radius: number; gardens: string[] };
   'relay.sent': { linkId: string; fromRoof: string; toRoof: string; chainId: number; travel: number };
@@ -49,6 +51,8 @@ export interface GameEvents {
   'area.cleared': { areaId: string };
   'link.built': { linkId: string; roofId: string };
   'roof.coreAwake': { roofId: string };
+  /** City 09.1: progress on an area's specialty action. */
+  'area.specialty': { areaId: string; have: number; need: number; met: boolean };
   'district.ready': { districtId: string };
   'district.bloom': { districtId: string; restored: string[]; lusher: string[]; reward: Partial<Record<ResourceKind, number>>; replay: boolean };
   'neighbourhood.bloom': { restored: string[]; reward: Partial<Record<ResourceKind, number>> };

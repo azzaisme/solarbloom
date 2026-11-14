@@ -101,10 +101,22 @@ The city is generated forever outward from the park: the same seed always gives 
 | Thinning | You've started restoring it; the fog thins as you go (from full to a quarter). |
 | Cleared | Its landmark is awake. The fog is gone, its bonus applies and its neighbours become frontiers. |
 
-  A landmark can be woken once 60% of the area's restorable tiles are restored (at most 160 × its difficulty).
+  A landmark can be woken once 60% of the area's restorable tiles are restored (at most 160 × its difficulty) **and** its specialty action for the area's type is done:
+
+| Type | Specialty action |
+|---|---|
+| 🌳 Parkland | grow a few tiles to full bloom |
+| 🛣️ Street | pass a chain along a green corridor (two street gardens) |
+| ⛲ Plaza | boost a Solar Panel with blooms beside it |
+| 🛶 Canal | send water along the canal (a garden on one bank, a condenser further along) |
+| 🧺 Market | set off a big enough Bloom Chain here |
+| 💧 Reservoir | overflow a Reservoir Garden |
+| 🍂 Grove | release a Canopy Burst from the Elder Tree |
+
+  Sizes grow a little with distance (capped). The objective panel, the area panel and the suggestion button all show the next step. An area whose layout can't host its type's action asks for full blooms instead, and a fogged area that is entirely in full bloom never waits on its specialty.
 
 - **Difficulty grows with distance.** Pulse costs rise 4% per chunk from the park (up to ×2), and outer areas start more polluted.
-- **The economy keeps up.** Each cleared area raises storage (+35% of the starting caps each, with diminishing returns) and waives one step of the ×1.5 cost growth for every machine type. A bot playing the city clears 16–20 areas an hour with no dead time.
+- **The economy keeps up.** Each cleared area raises storage (+35% of the starting caps each, with diminishing returns) and waives one step of the ×1.5 cost growth for every machine type. A bot playing the city clears 26–31 areas an hour with no dead time, specialty actions included.
 - **Specialties travel.** Grove landmarks are Elder Trees: blooms around them charge a Canopy Burst. Reservoir and canal areas grow Reservoir Gardens.
 - **Canal water networks.** Restored canal water carries flow. Water Condensers and Reservoir Gardens built beside clean water join that canal's network: a condenser with no garden beside it fills the emptiest basin on its canal, and an overflowing basin also spills at the connected garden with the most dry ground (once per chain). The water visibly runs along the canal.
 - **Overcharge.** A manual pulse right next to a machine boosts its next trigger (a cyan ring shows it), by more with each Overcharge upgrade level. Automation never does.
@@ -137,6 +149,7 @@ src/
     DroneSystem           hub networks, fog-edge job search, reservations, flight
     LuckyCatSystem        generated nooks, spawn rules, seeded rewards, claim-once
     CanalNetwork          canal water networks: clean water tiles linking condensers and Reservoir Gardens, routing, paths
+    Milestones            area milestone generator: each landmark's specialty action, layout checks, progress, canal plans
     DistrictSystem        district membership, district bloom availability, claim-once reward and replays
     BuildSystem, UpgradeSystem, ProgressionSystem, NeighbourhoodSystem (legacy rooftops), Metrics
   data/                   every balance knob: tuning.ts (TUNING.city, TUNING.park, …), city.ts (area types, park layout, generator), machines.ts, upgrades.ts

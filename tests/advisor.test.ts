@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { meetSpecialty } from './city-helpers';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
@@ -47,6 +48,7 @@ describe('objective advisor (City 14.1)', () => {
     sim.areas.clear(PARK, true);
     const id = sim.areas.nextGoal()!;
     restoreArea(sim, id);
+    meetSpecialty(sim, id);
     const g = check(sim, 'ready');
     expect(g.action).toEqual({ kind: 'wake', machineId: sim.areas.landmark(id)!.id });
   });
@@ -92,6 +94,7 @@ describe('objective advisor (City 14.1)', () => {
           const id = sim.areas.nextGoal();
           if (id) {
             restoreArea(sim, id, rng.next() < 0.3);
+            if (rng.next() < 0.5) meetSpecialty(sim, id);
             if (rng.next() < 0.6) sim.areas.clear(id);
           }
         }

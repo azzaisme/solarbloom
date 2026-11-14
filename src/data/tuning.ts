@@ -164,6 +164,21 @@ export const TUNING = {
     } as Record<string, Partial<Record<'energy' | 'water' | 'biomass', number>>>,
   },
 
+  /**
+   * City 09.1: each area's landmark also asks for one specialty action for its type. Sizes grow with distance
+   * from the park (base + perChunk × distance, capped at max); `share` caps a size by the area's own restorable
+   * tiles, so building can never put it out of reach.
+   */
+  milestones: {
+    park: { kind: 'fullBloom', base: 4, perChunk: 0.5, max: 16, share: 0.08 },
+    street: { kind: 'corridor', base: 1, perChunk: 0.1, max: 3 },
+    plaza: { kind: 'solarBoost', base: 2, perChunk: 0.2, max: 6 },
+    canal: { kind: 'canalFlow', base: 1, perChunk: 0.05, max: 2 },
+    market: { kind: 'chain', base: 6, perChunk: 0.5, max: 20, share: 0.12 },
+    reservoir: { kind: 'overflow', base: 1, perChunk: 0.05, max: 2 },
+    grove: { kind: 'canopy', base: 1, perChunk: 0, max: 1 },
+  } as Record<string, { kind: 'fullBloom' | 'corridor' | 'solarBoost' | 'canalFlow' | 'chain' | 'overflow' | 'canopy'; base: number; perChunk: number; max: number; share?: number }>,
+
   /** City 10.7: district-wide blooms (a district is one CITY_GEN.districtChunks square of chunks). */
   district: {
     minAwake: 4, // neighbouring awake landmarks (one connected group) needed in the district

@@ -13,6 +13,7 @@ import { Advisor } from './Advisor';
 import { LuckyCatSystem } from './LuckyCatSystem';
 import { AreaSystem } from './AreaSystem';
 import { Metrics } from './Metrics';
+import { MilestoneSystem } from './Milestones';
 import { NeighbourhoodSystem } from './NeighbourhoodSystem';
 import { ProductionSystem } from './ProductionSystem';
 import { ProgressionSystem } from './ProgressionSystem';
@@ -42,6 +43,7 @@ export class Sim {
   readonly areas: AreaSystem;
   readonly districts: DistrictSystem;
   readonly canals: CanalNetwork;
+  readonly milestones: MilestoneSystem;
 
   constructor(
     readonly state: GameState,
@@ -85,6 +87,7 @@ export class Sim {
     this.hood = new NeighbourhoodSystem(this);
     this.areas = new AreaSystem(this);
     this.districts = new DistrictSystem(this);
+    this.milestones = new MilestoneSystem(this);
     this.metrics = new Metrics(this);
     this.restoration.adoptGrowing();
     this.upgrades.applyCaps();
@@ -131,6 +134,7 @@ export class Sim {
     this.drones.tick(dt);
     this.cat.tick();
     this.progression.tick();
+    this.milestones.tick();
     this.metrics.tick(dt);
     s.rngState = this.rng.state;
   }

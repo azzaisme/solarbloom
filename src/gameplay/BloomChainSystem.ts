@@ -429,16 +429,19 @@ export class BloomChainSystem {
         }
         if (used >= TUNING.pollinator.triggersPerChain + (run.pollinatorBonus.get(m.id) ?? 0)) continue;
         const target = this.pollinationTarget(run, m, tile);
-        if (!target) continue;
-        run.pollinatorUses.set(m.id, used + 1);
-        run.visited.add(target.id);
-        this.enqueue(run, { type: 'POLLINATE', source: m.id, target: target.id, cause: 'pollinate', depth: depth + 1 });
-        // A street garden passes the chain along its green corridor (once per garden per chain).
+        if (target) {
+          run.pollinatorUses.set(m.id, used + 1);
+          run.visited.add(target.id);
+          this.enqueue(run, { type: 'POLLINATE', source: m.id, target: target.id, cause: 'pollinate', depth: depth + 1 });
+        }
+        // A street garden passes the chain along its green corridor (once per garden per chain), even when
+        // everything around it is already in full bloom.
         if (!run.corridorFired.has(m.id) && this.isCorridor(m)) {
           run.corridorFired.add(m.id);
           for (const o of this.corridorNext(m)) {
             if (run.corridorFired.has(o.id)) continue;
             this.enqueue(run, { type: 'CORRIDOR', source: m.id, target: o.id, cause: 'pollinate', depth: depth + 1 }, TUNING.chain.stepDelay * 0.8);
+            s.bus.emit('corridor.sent', { from: m.id, to: o.id, chainId: run.id });
           }
         }
       } else if (m.type === 'motherTree' && d >= 1 && d <= s.upgrades.treeRadius && !run.dischargedTrees.has(m.id)) {
@@ -850,6 +853,7 @@ export class BloomChainSystem {
       roofs: [...run.roofs],
       crossings: run.relaysFired.size,
       areas: run.areas.size,
+      areaIds: [...run.areas],
       starter: run.starter,
     });
     if (run.combo >= TUNING.mega.bigChain) {

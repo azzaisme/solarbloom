@@ -93,6 +93,7 @@ export class Game {
   private selected?: string;
   private inspectTimer = 0;
   private cinematic = false;
+  private specialtyToasted = new Set<string>();
   private cinematicEnd?: () => void;
   private meowTimer = 35;
   private restoreSoundIdx = 0;
@@ -865,6 +866,12 @@ export class Game {
       if (areaId !== PARK) this.hud.toast(`✨ ${s.areas.info(areaId).landmarkName} is ready to wake!<small>Click it to clear this ${AREA_TYPES[s.areas.info(areaId).type].name.toLowerCase()}'s fog.</small>`, 'gold', 4);
     });
     b.on('area.cleared', ({ areaId }) => this.onAreaCleared(areaId));
+    // City 09.1: the landmark's specialty action is done (the wake itself has its own toast once ready).
+    b.on('area.specialty', ({ areaId, met }) => {
+      if (!met || s.areas.ready(areaId) || this.specialtyToasted.has(areaId)) return;
+      this.specialtyToasted.add(areaId);
+      this.hud.toast(`✓ ${s.areas.info(areaId).landmarkName}: specialty done!<small>Restore the rest of its share to wake it.</small>`, 'gold', 3.5);
+    });
     b.on('tile.restoring', ({ tile, source }) => {
       this.grid.refresh(tile, true);
       const p = this.tileVec(tile);
