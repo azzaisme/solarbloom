@@ -30,7 +30,7 @@ Node 20+ is required. The build is a static site (`base: './'`), so `dist/` can 
 | `npm test` | Unit and simulation tests (vitest, headless): world, saves, areas, generator, chains, drones, cat, pacing bots | ~1 min |
 | `npm run test:perf` | Node benchmarks: lookups, save size and speed, sim step for a ~1,000-area world (`tests/perf/*.perf.ts`) | ~10 s |
 | `npm run test:soak` | Headless soak: a 1,000-area city over 6 h of game time; fails on tick time, heap, save size, stalls, unreachable frontiers or non-determinism (`SOAK_AREAS`, `SOAK_HOURS`, `SOAK_PROFILE=1`) | ~1 min |
-| `npm run test:e2e` | Build, then check pointer → tile picking at 3 screen sizes × 3 zooms (55k checks), that the area panel opens from labels and landmarks, that every cleared area on the overview is one label tap away, and that no HUD panels overlap on phone or desktop at any zoom (screenshots to `docs/review/hud-*.png`) | ~5 min |
+| `npm run test:e2e` | Build, then check pointer → tile picking at 3 screen sizes × 3 zooms (55k checks), that the area panel opens from labels and landmarks, that every cleared area on the overview is one label tap away, that a district bloom pays once, leaves machines alone and replays for free, and that no HUD panels overlap on phone or desktop at any zoom (screenshots to `docs/review/hud-*.png`) | ~5 min |
 | `npm run test:perf:browser` | Build, then load a 150-area save in Chromium, pan, zoom through every band and play a ×600 chain; gates update time, hitches, draw calls and reload time (`PERF_AREAS`, `PERF_JSON`, `PERF_VERBOSE=1`) | ~4 min |
 | `npm run shots:city` | Build, then render the city overview and a close-up of a cleared area of every type into `docs/review/` for visual review | ~2 min |
 | `npm run test:leak` | Build, then pan back and forth across a big city for 10 minutes; entities, materials, GPU memory and heap must return to baseline (`LEAK_MINUTES`) | ~12 min |
@@ -108,6 +108,7 @@ The city is generated forever outward from the park: the same seed always gives 
 - **Overcharge.** A manual pulse right next to a machine boosts its next trigger (a cyan ring shows it), by more with each Overcharge upgrade level. Automation never does.
 - **Mega Pulse.** Once the fountain is awake, every manual pulse charges the meter on the Pulse button. After 40 taps it glows, and your next pulse sets off a city-scale bloom from that tile (40 tiles, +3 per cleared area, up to 300). Your own taps start most of the big chains.
 - **The Lucky Cat** hides in nooks beside obstacles in cleared areas (and around the park early on). Nothing points at it. Rewards: Lucky Harvest, Solar Frenzy, Mega Bloom, Drone Party, Jackpot, **Golden Relay** (the next green corridor hop blooms 5 extra tiles), **Cat's Garden** (a little garden blooms in one of your cleared areas) and **Fog Whisker** (the next fogged area thins from its edge). No reward ever touches the fog. If you miss a cat, it saves up extra rewards instead of blocking new ones.
+- **District blooms.** The city is divided into districts (Old Town, the Docks, the Towers, the Parklands; an area belongs to the district its landmark stands in). Once 4 neighbouring landmarks in a district are awake, its **district bloom** is ready (a toast, the objective panel and every one of its area panels offer it). It's a one-time reward: resources (a little more for each district you've bloomed) and every free tile of its cleared areas grows lusher. Your machines are never touched. The presentation is skippable, and the area panel can replay it for free.
 - **Area switches.** Each area's panel has four drone switches: Normal, 🌸 Keep blooming (its green tiles come first), 🌫️ Focus the frontier (drones from its hubs push hard into the fog) and ✋ Leave alone (drones skip it). No routing or logistics.
 - **The camera** zooms out to a city overview with a far level of detail and area labels; `F` jumps to the next area that needs you.
 
@@ -133,6 +134,7 @@ src/
     ProductionSystem      per-chunk cached rates, re-summed only near changes; area bonus income
     DroneSystem           hub networks, fog-edge job search, reservations, flight
     LuckyCatSystem        generated nooks, spawn rules, seeded rewards, claim-once
+    DistrictSystem        district membership, district bloom availability, claim-once reward and replays
     BuildSystem, UpgradeSystem, ProgressionSystem, NeighbourhoodSystem (legacy rooftops), Metrics
   data/                   every balance knob: tuning.ts (TUNING.city, TUNING.park, …), city.ts (area types, park layout, generator), machines.ts, upgrades.ts
   rendering/              PlayCanvas only; listens to state and never decides rules

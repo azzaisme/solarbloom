@@ -6,6 +6,7 @@ import { Rng } from '../core/Rng';
 import type { GameState, MachineData, TileData } from '../core/types';
 import { BloomChainSystem } from './BloomChainSystem';
 import { BuildSystem } from './BuildSystem';
+import { DistrictSystem } from './DistrictSystem';
 import { DroneSystem } from './DroneSystem';
 import { Advisor } from './Advisor';
 import { LuckyCatSystem } from './LuckyCatSystem';
@@ -38,6 +39,7 @@ export class Sim {
   readonly metrics: Metrics;
   readonly hood: NeighbourhoodSystem;
   readonly areas: AreaSystem;
+  readonly districts: DistrictSystem;
 
   constructor(
     readonly state: GameState,
@@ -79,6 +81,7 @@ export class Sim {
     this.progression = new ProgressionSystem(this);
     this.hood = new NeighbourhoodSystem(this);
     this.areas = new AreaSystem(this);
+    this.districts = new DistrictSystem(this);
     this.metrics = new Metrics(this);
     this.restoration.adoptGrowing();
     this.upgrades.applyCaps();

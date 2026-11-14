@@ -47,6 +47,8 @@ export interface GameEvents {
   'area.cleared': { areaId: string };
   'link.built': { linkId: string; roofId: string };
   'roof.coreAwake': { roofId: string };
+  'district.ready': { districtId: string };
+  'district.bloom': { districtId: string; restored: string[]; lusher: string[]; reward: Partial<Record<ResourceKind, number>>; replay: boolean };
   'neighbourhood.bloom': { restored: string[]; reward: Partial<Record<ResourceKind, number>> };
 }
 

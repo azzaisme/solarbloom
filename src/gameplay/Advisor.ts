@@ -9,6 +9,7 @@ import type { Sim } from './Sim';
 /** What the suggestion's button does. */
 export type SuggestionAction =
   | { kind: 'wake'; machineId: string }
+  | { kind: 'district'; districtId: string }
   | { kind: 'focus'; x: number; z: number }
   | { kind: 'upgrades' }
   | { kind: 'harvest' }
@@ -76,6 +77,9 @@ export class Advisor {
         const a = s.areas.info(id);
         if (lm) return { text: `The ${a.landmarkName} is ready to wake.`, label: `✨ Wake the ${a.landmarkName}`, action: { kind: 'wake', machineId: lm.id } };
       }
+      // 1b. A district bloom waiting to be set off (free: a reward and lusher ground).
+      const d = s.districts.ready()[0];
+      if (d) return { text: `${s.districts.title(d)} has ${s.districts.awakeGroup(d)} neighbouring landmarks awake: its district bloom is ready.`, label: '🌸 Set off the district bloom', action: { kind: 'district', districtId: d } };
     }
     // 2. An upgrade you can buy now.
     const up = s.upgrades.all().find((d) => s.upgrades.status(d).ok);

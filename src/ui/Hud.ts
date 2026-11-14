@@ -32,6 +32,8 @@ export interface HudCallbacks {
   buildLink(linkId: string): void;
   activateRoofCore(roofId: string): void;
   neighbourhoodBloom(replay: boolean): void;
+  /** City 10.7: set off (or replay) a district bloom. */
+  districtBloom(id: string, replay: boolean): void;
   /** Wake a city landmark (by machine id). */
   wake(machineId: string): void;
   /** Open an area's panel (from its label in the overview). */
@@ -264,7 +266,9 @@ export class Hud {
       }
       if (t.closest('[data-upg]')) this.toggleUpgrades(true);
       if (t.closest('[data-harvest]')) this.cb.harvest();
-      if (fo || wk || t.closest('[data-upg]') || t.closest('[data-harvest]')) this.suggestionAt = -1;
+      const db = t.closest<HTMLButtonElement>('[data-district]');
+      if (db && !db.disabled) this.cb.districtBloom(db.dataset.district!, db.dataset.replay === '1');
+      if (fo || wk || db || t.closest('[data-upg]') || t.closest('[data-harvest]')) this.suggestionAt = -1;
       const nb = t.closest<HTMLButtonElement>('[data-bloom]');
       if (nb && !nb.disabled) this.cb.neighbourhoodBloom(nb.dataset.bloom === 'replay');
     });
@@ -273,6 +277,8 @@ export class Hud {
       if (t.closest('[data-close]')) this.cb.closeInspect();
       const w = t.closest<HTMLButtonElement>('[data-wake]');
       if (w && !w.disabled) this.cb.wake(w.dataset.wake!);
+      const db = t.closest<HTMLButtonElement>('[data-district]');
+      if (db && !db.disabled) this.cb.districtBloom(db.dataset.district!, db.dataset.replay === '1');
       const b = t.closest<HTMLButtonElement>('[data-buy]');
       if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
       const am = t.closest<HTMLButtonElement>('[data-area-mode]');
@@ -379,7 +385,7 @@ export class Hud {
     const g = this.sim.advisor.suggest();
     const a = g.action;
     const attr =
-      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'focus' ? `data-focus="${a.x},${a.z}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
+      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x},${a.z}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
     this.suggestionBtn = `<p class="sugg">${esc(g.text)}</p><button class="act" ${attr}>${esc(g.label)}</button>`;
     return this.suggestionBtn;
   }

@@ -17,7 +17,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #7 City 06: simulation at city scale | ✅ (open: active-region equivalence test #44, catch-up budget #48) |
 | #10 City 09: endless progression | ✅ storage, area bonuses, machine permits, endless pacing bot no-stall guarantees ✅ (an advisor-only bot progresses from empty pockets: fountain in 22.7 min, next area with the park packed and broke in 14.3 min) playtest timings ✅ (time to each area, areas per hour, biggest chain, cats, stuck time; Copy button) upgrade tree for scale ✅ (Lit Landmarks; every upgrade has an effect test and sparkles the spots it changes) (open: specialty milestone actions #62) |
 | #9 City 08: camera and overview | ✅ bounds, zoom-out to 0.22 with far level of detail, area labels, F / Home overview mode ✅ (labels show fog progress, 🔗 active chains and 🐱 cat finds; one tap flies to an area and opens its panel — e2e) phone gestures ✅ (a quick pinch-out snaps to the overview; picking e2e at 390×844 at both zoom limits) |
-| #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries (open: canal network #71, buildable relays #72, huge-chain presentation #74, district blooms #75) |
+| #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries district blooms ✅ (#75) (open: canal network #71, buildable relays #72, huge-chain presentation #74) |
 | #14 City 13: Lucky Cat in the city | ✅ generated nooks, spawn rules, Fog Whisker and Golden Corridor (scaled with the city, capped: a cat never wakes an area alone), discovery log grouped by area type (`docs/discoveries-500-areas.png`) |
 | #12 City 11: automation at scale | ✅ drone networks, fog-edge priority, 50-hub safety soak Mega Pulse and scaled Overcharge ✅ (the city bot's own taps start 18–19 big chains an hour vs 2–4 by automation) area automation switches ✅ (Keep blooming, Focus the frontier, Leave alone; saved) (open: far drones as rates #79) |
 | #13 City 12: Phase 3 content in the city | ✅ specialties on generic landmarks (grove Elder Trees, reservoir/canal Reservoir Gardens), cat rewards on areas (open: rooftop cluster areas #82, remove fixed rooftop data #85) |
@@ -70,6 +70,14 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - City chains may run up to 500 events and travel for 20 s before the rest resolves at once (rooftop chains keep 100 / 6 s).
 - Chain results report how many areas they swept: a feed line from 3 areas, a toast from 6.
 - Tests: crossing borders and stopping at fog, a 10-garden corridor end to end (deterministic, once per garden), and a ×200+ chain sweeping 12+ areas that terminates and pays once.
+
+## City 10.7: district blooms
+
+- A district is one theme region (6×6 chunks); an area belongs to the district its landmark stands in, so membership is static (`DistrictSystem.members`).
+- A district bloom is available once its largest group of neighbouring awake landmarks reaches `TUNING.district.minAwake` (4). Scattered landmarks don't count.
+- Setting it off is claimed first (`state.districts[id]`, saved), then pays `TUNING.district.reward` (+25% for each earlier district bloom) and makes every free restorable tile in the district's cleared areas lusher: dead ground restored at bloom 1, restored ground one bloom level up. Machines and their tiles are never touched. A replay emits the presentation only.
+- Surfaced by a toast when it becomes ready, the Advisor (right after a ready landmark), and the area panel (district progress line, Set off / Replay button). The presentation frames the district, rings each awake landmark, rolls a green wave outward and flies the reward; Skip lands everything at once.
+- Tests (`tests/district-bloom.test.ts`): static membership, availability (connected vs scattered), once-only across a reload, machines untouched, replays change nothing, rooftops have none. `tests/e2e/district-bloom.e2e.mjs` plays it in the browser. The pacing bots don't use it, so their numbers are unchanged (city seeds 7/21: 25/29 areas an hour); the advisor-only no-stall bot sets it off when offered.
 
 ## City 08: getting around the city
 

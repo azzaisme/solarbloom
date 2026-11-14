@@ -310,6 +310,8 @@ button:focus-visible { outline: 3px solid #2f7de1; outline-offset: 2px; }
 @keyframes megaPulse { 50% { box-shadow: 0 0 0 4px #ffe08a, 0 0 28px #ffb84d; } }
 #inspect .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 6px 0; }
 #inspect .mode { font: inherit; font-size: 11.5px; font-weight: 800; padding: 5px 6px; border-radius: 9px; background: rgba(0,0,0,.05); color: var(--ink-soft); cursor: pointer; }
+#inspect > .buy { display: block; width: 100%; margin-top: 6px; font: inherit; font-weight: 800; font-size: 13px; border: 0; border-radius: 12px; padding: 8px 10px; background: linear-gradient(#ffe27a, #ffc93c); color: #4a3500; cursor: pointer; box-shadow: 0 2px 0 #c99a1a; }
+#inspect > .mode[data-replay] { display: block; width: 100%; margin-top: 6px; }
 #inspect .mode.on { background: #dff3d2; color: #1f5a2e; box-shadow: inset 0 0 0 2px #7cc576; }
 /* Phones: the tutorial hint steps aside while a panel is open at the bottom. */
 @media (max-width: 760px) { .inspecting #hint { opacity: 0; pointer-events: none; } }

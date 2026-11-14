@@ -94,6 +94,16 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     .map(([t, n]) => `${MACHINES[t as keyof typeof MACHINES]?.icon ?? '⚙️'} ${n} ${MACHINES[t as keyof typeof MACHINES]?.name ?? t}${n === 1 ? '' : 's'}`)
     .join(' · ');
   const wake = d.ready && landmarkId && !cleared && !parkAwake ? `<button class="buy" data-wake="${landmarkId}">✨ Wake the ${esc(a.landmarkName)}</button>` : '';
+  // City 10.7: the district this area belongs to, and its bloom.
+  const ds = id === PARK && !parkAwake ? undefined : s.districts.status(s.districts.districtOf(id));
+  const district = !ds
+    ? ''
+    : `<p class="stat" data-district-line="${esc(ds.id)}">🌸 District: ${esc(ds.name)} · ${ds.claimed ? 'bloomed' : `${Math.min(ds.awake, ds.need)}/${ds.need} neighbouring landmarks awake`}</p>` +
+      (ds.available
+        ? `<button class="buy" data-district="${esc(ds.id)}">🌸 Set off the district bloom</button>`
+        : ds.claimed
+          ? `<button class="mode" data-district="${esc(ds.id)}" data-replay="1" title="Plays it again; changes nothing">↻ Replay the district bloom</button>`
+          : '');
   const tag = a.authored ? ' · <b>a rare landmark</b>' : '';
   // Automation switches (revealed areas; no logistics, just what the drones do here).
   const mode = s.areas.mode(id) ?? '';
@@ -117,6 +127,7 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     `<ul style="margin:6px 0;padding-left:18px;font-size:12.5px;list-style:none">${checklist}</ul>` +
     (id === PARK ? '' : `<p class="stat">${cleared ? 'Bonus' : 'Bonus once clear'}: ${bonusText || '—'}</p>`) +
     `<p class="stat">Machines: ${machineText || 'none yet'}</p>` +
+    district +
     switches +
     wake
   );

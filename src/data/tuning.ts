@@ -164,6 +164,14 @@ export const TUNING = {
     } as Record<string, Partial<Record<'energy' | 'water' | 'biomass', number>>>,
   },
 
+  /** City 10.7: district-wide blooms (a district is one CITY_GEN.districtChunks square of chunks). */
+  district: {
+    minAwake: 4, // neighbouring awake landmarks (one connected group) needed in the district
+    seconds: 8, // presentation length (skippable)
+    reward: { energy: 150, water: 100, biomass: 300 },
+    rewardGrowth: 0.25, // each earlier district bloom adds this share to the next reward
+  },
+
   /** Phase 3: the connected neighbourhood. Everything here is a starting point for playtesting. */
   neighbourhood: {
     /** Each unlocked extra rooftop raises every storage cap by this share of the starting cap. */

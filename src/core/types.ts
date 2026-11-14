@@ -202,4 +202,6 @@ export interface GameState {
   cat: CatState;
   progression: Progression;
   stats: Stats;
+  /** City 10.7: district blooms claimed, by district id (sim time). Optional: older saves have none. */
+  districts?: Record<string, number>;
 }

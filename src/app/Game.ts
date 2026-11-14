@@ -166,6 +166,7 @@ export class Game {
           this.sim.hood.activateRoofCore(id);
         },
         neighbourhoodBloom: (replay) => this.playNeighbourhoodBloom(replay),
+        districtBloom: (id, replay) => this.playDistrictBloom(id, replay),
         openArea: (id) => this.openArea(id),
         setAreaMode: (id, mode) => {
           if (this.sim.areas.setMode(id, mode)) {
@@ -1158,6 +1159,13 @@ export class Game {
     });
     b.on('roof.coreAwake', ({ roofId }) => this.onRoofCoreAwake(roofId));
     b.on('neighbourhood.bloom', ({ restored }) => this.onNeighbourhoodBloom(restored));
+    b.on('district.ready', ({ districtId }) =>
+      this.hud.toast(`🌸 ${this.sim.districts.title(districtId)} is ready to bloom!<small>${TUNING.district.minAwake} neighbouring landmarks are awake. Open any of its areas to set off the district bloom.</small>`, 'gold', 5),
+    );
+    b.on('district.bloom', (e) => {
+      if (!e.replay) this.save(); // claimed before any presentation: a reload can never pay twice
+      this.runDistrictBloom(e.districtId, e.restored.length + e.lusher.length, e.reward, e.replay);
+    });
   }
 
   private lastCatPos?: pc.Vec3;
@@ -1432,6 +1440,79 @@ export class Game {
     const fresh = a.neighbours.filter((n) => s.areas.fog(n) === 'frontier').length;
     this.hud.toast(`🌫️ The fog lifts from the ${AREA_TYPES[a.type].name.toLowerCase()}!<small>${a.landmarkName} wakes${fresh ? ` · ${fresh} new area${fresh > 1 ? 's' : ''} emerge from the gloom` : ''}.</small>`, 'gold', 4.5);
     this.save();
+  }
+
+  // ───────────────────────── district blooms (City 10.7) ─────────────────────────
+
+  private playDistrictBloom(id: string, replay: boolean) {
+    if (this.cinematic) return;
+    if (replay) this.sim.districts.replay(id);
+    else this.sim.districts.bloom(id);
+  }
+
+  /**
+   * A district bloom on screen: the camera pulls back over the district, each awake landmark sends out a ring,
+   * a green wave rolls outward over its cleared areas, then the reward. Skippable; a replay changes nothing.
+   */
+  private runDistrictBloom(id: string, changed: number, reward: Partial<Record<'energy' | 'water' | 'biomass', number>>, replay: boolean) {
+    const s = this.sim;
+    const at = (delay: number, fn: () => void) => this.tweens.add(0.01, () => {}, { delay, done: fn });
+    const awake = s.districts.members(id).filter((a) => s.areas.fog(a) === 'cleared');
+    if (!awake.length) return;
+    const name = s.districts.title(id);
+    this.cinematic = true;
+    this.select(undefined);
+    this.overlays.hideFrame();
+    this.overlays.hideGhost();
+    this.hud.hideTip();
+    this.hud.cinematic(true, replay ? `${name}: the district bloom` : `${name} blooms!`);
+    this.sfx.fanfare();
+    const lms = awake.map((a) => s.areas.info(a).landmark);
+    const cx = lms.reduce((a, l) => a + l[0] + 1, 0) / lms.length;
+    const cz = lms.reduce((a, l) => a + l[1] + 1, 0) / lms.length;
+    this.camera.focus(cx, 0, cz, Math.max(this.camera.minZoom, 0.3), 1.8);
+    // 1. Every awake landmark rings out, nearest the middle first.
+    lms.forEach((l, i) => {
+      const p = new pc.Vec3(l[0] + 1, 0.1, l[1] + 1);
+      at(0.6 + Math.min(1.6, Math.hypot(l[0] - cx, l[1] - cz) * 0.02) + i * 0.05, () => {
+        this.vfx.ring(p, i % 2 ? PALETTE.gold : PALETTE.coreGlow, 5, 1.1);
+        this.vfx.burst(new pc.Vec3(p.x, 1.5, p.z), 16, { up: 3, size: 0.08 });
+      });
+    });
+    // 2. The green wave: the ground re-renders lusher, area by area, outward from the middle.
+    awake.forEach((a) => {
+      const [ax, az] = s.areas.info(a).landmark;
+      at(2.4 + Math.min(2.6, Math.hypot(ax - cx, az - cz) * 0.03), () => {
+        if (!replay) this.chunks.markArea(a, true);
+        const tiles = s.areas.tiles(a);
+        for (let i = 0; i < tiles.length; i += 23) {
+          const t = tiles[i];
+          if (t.blocked || t.occupantId) continue;
+          this.tileFx.flash(t, '#38d94a', 0.5, 0.9, (i % 7) * 0.05);
+        }
+      });
+    });
+    // 3. Reward.
+    at(5.6, () => {
+      const c = new pc.Vec3(cx, 0.4, cz);
+      for (let k = 0; k < 4; k++) at(k * 0.2, () => this.vfx.ring(c, k % 2 ? PALETTE.gold : PALETTE.coreGlow, 10 + k * 6, 1.2));
+      this.vfx.burst(new pc.Vec3(cx, 3, cz), 60, { up: 5, speed: 3, size: 0.09, life: 1.6 });
+      this.camera.shake(0.1);
+      this.sfx.chainEnd(8);
+      if (!replay) (['biomass', 'water', 'energy'] as const).forEach((k, i) => reward[k] && at(i * 0.15, () => this.flyGain(k, reward[k]!)));
+    });
+    this.cinematicEnd = () => {
+      if (!this.cinematic) return;
+      this.cinematic = false;
+      this.hud.cinematic(false);
+      if (!replay) {
+        // A skip lands every tile at once.
+        for (const a of awake) this.chunks.markArea(a, true);
+        this.hud.toast(`🌸 ${name} is in full bloom!<small>${changed} tiles grew lusher · +${reward.biomass ?? 0}🌿 +${reward.water ?? 0}💧 +${reward.energy ?? 0}⚡. Your machines are just as you left them.</small>`, 'gold', 6);
+      }
+      this.save();
+    };
+    at(TUNING.district.seconds, () => this.cinematicEnd?.());
   }
 
   // ───────────────────────── neighbourhood ─────────────────────────
