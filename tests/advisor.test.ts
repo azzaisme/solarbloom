@@ -17,6 +17,7 @@ function check(sim: Sim, label: string) {
     expect(id === PARK ? sim.progression.coreReady() : sim.areas.ready(id), label).toBe(true);
   } else if (a.kind === 'focus') expect(sim.restoration.checkPulse(sim.grid.get(GROUND, a.x, a.z)!).ok, label).toBe(true);
   else if (a.kind === 'upgrades') expect(sim.upgrades.all().some((d) => sim.upgrades.status(d).ok), label).toBe(true);
+  else if (a.kind === 'build') expect(sim.build.check(a.type, GROUND, a.x, a.z).ok, label).toBe(true);
   else if (a.kind === 'harvest') expect(sim.state.harvestReadyAt <= sim.time, label).toBe(true);
   else expect(a.seconds, label).toBeGreaterThan(0);
   return g;

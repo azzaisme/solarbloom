@@ -15,7 +15,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #6 City 05: the dilapidated park | ✅ layout, onboarding, fountain finale, pacing, cat nooks (open: 25/50/75% park stages #39, nook screenshots) |
 | #8 City 07: rendering | first pass ✅ chunk streaming, merged chunk meshes, fog (open: far LOD #52, instancing #53, buildings #54, device numbers #56) |
 | #7 City 06: simulation at city scale | ✅ (open: active-region equivalence test #44, catch-up budget #48) |
-| #10 City 09: endless progression | ✅ storage, area bonuses, machine permits, endless pacing bot (open: specialty milestone actions #62, upgrade tree #65, playtest panel #68) |
+| #10 City 09: endless progression | ✅ storage, area bonuses, machine permits, endless pacing bot no-stall guarantees ✅ (an advisor-only bot progresses from empty pockets: fountain in 22.7 min, next area with the park packed and broke in 14.3 min) (open: specialty milestone actions #62, upgrade tree #65, playtest panel #68) |
 | #9 City 08: camera and overview | ✅ bounds, zoom-out to 0.22 with far level of detail, area labels, F / Home (open: overview click-to-fly #59, phone gestures #61) |
 | #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries (open: canal network #71, buildable relays #72, huge-chain presentation #74, district blooms #75) |
 | #14 City 13: Lucky Cat in the city | ✅ generated nooks, spawn rules, Fog Whisker (open: Golden Corridor #88, discovery log by area type #89) |

@@ -1,6 +1,8 @@
 import { PARK } from '../core/Areas';
 import { GROUND } from '../core/GameState';
-import type { TileData } from '../core/types';
+import type { BuildableType, TileData } from '../core/types';
+import { MACHINES } from '../data/machines';
+import { TUNING } from '../data/tuning';
 import { AREA_TYPES } from '../data/city';
 import type { Sim } from './Sim';
 
@@ -10,6 +12,7 @@ export type SuggestionAction =
   | { kind: 'focus'; x: number; z: number }
   | { kind: 'upgrades' }
   | { kind: 'harvest' }
+  | { kind: 'build'; type: BuildableType; x: number; z: number }
   | { kind: 'wait'; seconds: number };
 
 export interface Suggestion {
@@ -63,7 +66,7 @@ export class Advisor {
     const city = s.grid.isPlayable(GROUND);
     // 1. A landmark that can be woken.
     if (city) {
-      if (!s.state.progression.coreActivated && s.progression.coreReady()) {
+      if (!s.state.progression.coreActivated && s.progression.coreReady() && !s.econ.shortfall(TUNING.core.cost)) {
         const lm = s.areas.landmark(PARK);
         if (lm) return { text: 'The fountain is ready. Wake it to roll back the fog.', label: '✨ Wake the fountain', action: { kind: 'wake', machineId: lm.id } };
       }
@@ -77,19 +80,40 @@ export class Advisor {
     // 2. An upgrade you can buy now.
     const up = s.upgrades.all().find((d) => s.upgrades.status(d).ok);
     if (up) return { text: `${up.icon} ${up.name} is affordable: ${up.describe(s.upgrades.level(up.id) + 1)}.`, label: '⬆️ Upgrades', action: { kind: 'upgrades' } };
-    // 3. Push the fog back: an affordable tile at the edge of the current goal (or anywhere in the park).
+    // 3. Before the fountain: a machine it still needs, if one can be built now.
+    const build = city && !s.state.progression.coreActivated ? this.neededBuild() : undefined;
+    if (build) return build;
+    // 4. Push the fog back: an affordable tile at the edge of the current goal (or anywhere in the park).
     const goal = city && s.state.progression.coreActivated ? s.areas.nextGoal() : undefined;
     const edge = this.edgeTile(goal) ?? (city ? this.parkTile() : undefined);
     if (edge) {
       const where = goal && s.areas.areaOf(edge) === goal ? `the ${AREA_TYPES[s.areas.info(goal).type].name.toLowerCase()}'s fog edge` : 'the park';
       return { text: `Restore tiles at ${where}: each one pushes the fog back.`, label: '🌱 Show me where', action: { kind: 'focus', x: edge.x, z: edge.z } };
     }
-    // 4. Short of energy: Harvest Sunlight is always there (on a cooldown).
+    // 5. Short of energy: Harvest Sunlight is always there (on a cooldown).
     const cd = Math.max(0, s.state.harvestReadyAt - s.time);
     if (cd <= 0) return { text: 'Low on energy? Harvest a burst of sunlight.', label: '🌞 Harvest sunlight', action: { kind: 'harvest' } };
-    // 5. Nothing to do this instant: solar and the rain barrel always refill, and so does the harvest.
+    // 6. Nothing to do this instant: solar and the rain barrel always refill, and so does the harvest.
     const secs = Math.ceil(cd);
     return { text: `Solar panels are recharging. Sunlight can be harvested again in ${secs} s.`, label: `🌞 Harvest in ${secs} s`, action: { kind: 'wait', seconds: secs } };
+  }
+
+  /** The first machine the fountain still needs that is affordable, at a valid spot nearest the fountain. */
+  private neededBuild(): Suggestion | undefined {
+    const s = this.sim;
+    const order: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree'];
+    const [fx, fz] = s.areas.info(PARK).landmark;
+    const tiles = s.areas.tiles(PARK).sort((a, b) => Math.abs(a.x - fx) + Math.abs(a.z - fz) - (Math.abs(b.x - fx) + Math.abs(b.z - fz)) || a.z - b.z || a.x - b.x);
+    for (const type of order) {
+      if (s.state.machines.some((m) => m.type === type && !m.starter)) continue;
+      if (s.econ.shortfall(s.build.cost(type))) continue;
+      for (const t of tiles) {
+        if (!s.build.check(type, GROUND, t.x, t.z).ok) continue;
+        const def = MACHINES[type];
+        return { text: `The fountain needs a ${def.name}, and you can afford one.`, label: `${def.icon} Build a ${def.name}`, action: { kind: 'build', type, x: t.x, z: t.z } };
+      }
+    }
+    return undefined;
   }
 
   /** Before the fountain: an affordable dead tile in the park, nearest the fountain. */

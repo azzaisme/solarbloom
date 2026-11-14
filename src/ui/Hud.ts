@@ -243,6 +243,7 @@ export class Hud {
       if (fo) {
         const [x, z] = fo.dataset.focus!.split(',').map(Number);
         this.cb.focusTile(x, z);
+        if (fo.dataset.tool) this.cb.selectTool(fo.dataset.tool as Tool);
       }
       if (t.closest('[data-upg]')) this.toggleUpgrades(true);
       if (t.closest('[data-harvest]')) this.cb.harvest();
@@ -355,7 +356,7 @@ export class Hud {
     const g = this.sim.advisor.suggest();
     const a = g.action;
     const attr =
-      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'focus' ? `data-focus="${a.x},${a.z}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
+      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'focus' ? `data-focus="${a.x},${a.z}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
     this.suggestionBtn = `<p class="sugg">${esc(g.text)}</p><button class="act" ${attr}>${esc(g.label)}</button>`;
     return this.suggestionBtn;
   }
