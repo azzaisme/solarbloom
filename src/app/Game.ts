@@ -861,6 +861,16 @@ export class Game {
       else if (source === 'overflow') this.vfx.ring(p, '#a8ecff', 0.9, 0.5);
       else if (source === 'drone') this.vfx.ring(p, PALETTE.leafFin, 0.8, 0.5);
     });
+    b.on('mega.ready', () => {
+      this.hud.toast('💥 Mega Pulse charged!<small>Your next pulse sets off a city-scale bloom from that tile.</small>', 'gold', 4);
+      this.hud.nudge('[data-tool="pulse"]', 4);
+    });
+    b.on('mega.released', ({ tileId, budget }) => {
+      const t = s.grid.byTileId(tileId);
+      if (t) for (let i = 0; i < 4; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.18, done: () => this.vfx.ring(this.tileVec(t), i % 2 ? PALETTE.gold : PALETTE.coreGlow, 3 + i * 3, 1.1) });
+      this.camera.shake?.(0.25);
+      this.hud.feed(`💥 Mega Pulse: up to ${budget} tiles bloom outward`);
+    });
     b.on('pulse.fired', ({ tileId, overcharged }) => {
       if (!overcharged) return;
       const t = s.grid.byTileId(tileId);

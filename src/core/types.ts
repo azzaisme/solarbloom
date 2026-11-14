@@ -126,6 +126,8 @@ export interface Progression {
   introSeen: boolean;
   /** manual pulses since the last Overcharge */
   pulseCharge: number;
+  /** Mega Pulse meter: manual taps since the last Mega Pulse (full at TUNING.mega.charge) */
+  megaCharge?: number;
   /** Phase 3: which Rooftop Cores are awake (r1 mirrors coreActivated). */
   cores: Record<string, boolean>;
   /** Reservoir Overflow bursts and Canopy Bursts so far (core milestones). */
@@ -136,6 +138,8 @@ export interface Progression {
 }
 
 export interface Stats {
+  /** chains of at least TUNING.mega.bigChain, by who started them */
+  bigChains?: { player: number; auto: number };
   tilesRestored: number;
   maxCombo: number;
   chains: number;

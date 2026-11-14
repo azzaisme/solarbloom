@@ -73,12 +73,15 @@ describe('pacing in the endless city (scripted player)', () => {
       const avg = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : Infinity;
       // eslint-disable-next-line no-console
       console.log(
-        `city seed ${seed}: fountain ${fmt(r.fountain)} · ${r.clears.length} areas in 60 min · first ${fmt(r.clears[0])} · avg ${fmt(avg)} per area · slowest ${fmt(Math.max(...gaps))} · stuck ${Math.round(r.stuck)}s · max chain ×${r.maxCombo} · storage ${Math.round(r.sim.state.caps.biomass)}🌿`,
+        `city seed ${seed}: fountain ${fmt(r.fountain)} · ${r.clears.length} areas in 60 min · first ${fmt(r.clears[0])} · avg ${fmt(avg)} per area · slowest ${fmt(Math.max(...gaps))} · stuck ${Math.round(r.stuck)}s · max chain ×${r.maxCombo} · big chains by you ${r.sim.state.stats.bigChains?.player ?? 0} / automation ${r.sim.state.stats.bigChains?.auto ?? 0} · storage ${Math.round(r.sim.state.caps.biomass)}🌿`,
       );
       expect(r.fountain).toBeDefined();
       expect(r.clears.length).toBeGreaterThanOrEqual(8);
       expect(avg).toBeLessThan(6 * 60);
       expect(r.stuck).toBeLessThan(60 * 60 * 0.02);
+      // Active play stays the most powerful thing: the player's own taps start most big chains.
+      const big = r.sim.state.stats.bigChains ?? { player: 0, auto: 0 };
+      expect(big.player).toBeGreaterThan(big.auto);
     }
   });
 });

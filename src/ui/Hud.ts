@@ -261,13 +261,14 @@ export class Hud {
     });
   }
 
-  private set(key: string, el: HTMLElement, prop: 'text' | 'html' | 'width' | 'cls', value: string, cls?: string) {
+  private set(key: string, el: HTMLElement, prop: 'text' | 'html' | 'width' | 'cls' | 'style', value: string, cls?: string) {
     if (this.last.get(key) === value) return;
     this.last.set(key, value);
     if (prop === 'text') el.textContent = value;
     else if (prop === 'html') el.innerHTML = value;
     else if (prop === 'width') el.style.width = value;
     else if (prop === 'cls' && cls) el.classList.toggle(cls, value === '1');
+    else if (prop === 'style' && cls) el.style.setProperty(cls, value);
   }
 
   private catPanelTimer?: number;
@@ -726,8 +727,14 @@ export class Hud {
     // Overcharge countdown on the Pulse button
     const every = s.upgrades.overchargeEvery;
     const pc0 = s.state.progression.pulseCharge ?? 0;
-    const pulseSc = every ? (pc0 === every - 1 ? '🌟 next!' : '●'.repeat(pc0) + '○'.repeat(every - pc0)) : 'restore';
+    const mega = s.restoration.megaReady();
+    const pulseSc = mega ? '💥 MEGA next!' : every ? (pc0 === every - 1 ? '🌟 next!' : '●'.repeat(pc0) + '○'.repeat(every - pc0)) : 'restore';
     this.set('pulseSc', $(this.root, '[data-tool="pulse"] .sc'), 'text', pulseSc);
+    // Mega Pulse meter: a fill along the bottom of the Pulse button.
+    const mf = s.state.progression.coreActivated ? Math.min(1, (s.state.progression.megaCharge ?? 0) / TUNING.mega.charge) : 0;
+    const pb = $(this.root, '[data-tool="pulse"]');
+    this.set('megaFill', pb, 'style', mf.toFixed(2), '--mega');
+    this.set('megaOn', pb, 'cls', mega ? '1' : '0', 'mega');
     const cd = Math.max(0, s.state.harvestReadyAt - s.time);
     const hb = $(this.root, '#harvestBtn');
     this.set('hcd', $(hb, '.cd'), 'html', '');

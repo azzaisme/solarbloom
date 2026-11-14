@@ -303,3 +303,8 @@ button:focus-visible { outline: 3px solid #2f7de1; outline-offset: 2px; }
 #inspect .bar { height: 6px; background: rgba(0,0,0,.08); border-radius: 4px; overflow: hidden; margin: 4px 0 2px; }
 #inspect .bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #8fd36f, #4fb66a); transition: width .2s; }
 #objAct .sugg { margin: 6px 0 4px; font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+/* Mega Pulse meter along the bottom of the Pulse button; glows when charged. */
+.slot[data-tool="pulse"] { --mega: 0; }
+.slot[data-tool="pulse"]::after { content: ''; position: absolute; left: 10px; bottom: 6px; height: 4px; width: calc((100% - 20px) * var(--mega)); border-radius: 3px; background: linear-gradient(90deg, #ffd56a, #ff9f43); pointer-events: none; }
+.slot[data-tool="pulse"].mega { box-shadow: 0 0 0 3px #ffd56a, 0 0 18px #ffb84d; animation: megaPulse 1.2s ease-in-out infinite; }
+@keyframes megaPulse { 50% { box-shadow: 0 0 0 4px #ffe08a, 0 0 28px #ffb84d; } }

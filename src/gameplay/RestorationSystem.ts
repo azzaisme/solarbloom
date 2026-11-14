@@ -72,8 +72,10 @@ export class RestorationSystem {
       return false;
     }
     this.sim.econ.spend(chk.cost);
+    if (this.megaReady()) return this.releaseMega(t);
+    this.chargeMega();
     if (t.ground === 'restored') {
-      this.grow(t);
+      this.grow(t, undefined, 'player');
       this.boostNeighbours(t);
       this.sim.bus.emit('pulse.fired', { tileId, extra: [], overcharged: false });
       return true;
@@ -125,14 +127,43 @@ export class RestorationSystem {
   }
 
   /** Grows an already-restored tile one bloom level (grass → flowers → shrubs). Can start or continue a chain. */
-  grow(t: TileData, chainId?: number) {
+  // ───────────── Mega Pulse ─────────────
+
+  megaReady(): boolean {
+    return (this.sim.state.progression.megaCharge ?? 0) >= TUNING.mega.charge;
+  }
+
+  /** Tiles the next Mega Pulse can bloom: grows with the city, capped. */
+  megaBudget(): number {
+    const M = TUNING.mega;
+    return Math.min(M.maxTiles, M.baseTiles + M.tilesPerArea * (this.sim.areas?.clearedCount() ?? 0));
+  }
+
+  /** The Mega Pulse is the city's tool: it starts charging once the fountain is awake. */
+  private chargeMega() {
+    const p = this.sim.state.progression;
+    if (!p.coreActivated) return;
+    const was = p.megaCharge ?? 0;
+    p.megaCharge = Math.min(TUNING.mega.charge, was + 1);
+    if (p.megaCharge >= TUNING.mega.charge && was < TUNING.mega.charge) this.sim.bus.emit('mega.ready', {});
+  }
+
+  private releaseMega(t: TileData): boolean {
+    this.sim.state.progression.megaCharge = 0;
+    this.boostNeighbours(t);
+    this.sim.chains.startMegaPulse(t, this.megaBudget());
+    this.sim.bus.emit('pulse.fired', { tileId: t.id, extra: [], overcharged: true });
+    return true;
+  }
+
+  grow(t: TileData, chainId?: number, starter: 'player' | 'auto' = 'auto') {
     if (t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom) return;
     t.bloom = Math.min(TUNING.restore.maxBloom, t.bloom + 1);
     this.sim.grid.touch(t);
     const b = this.sim.econ.add('biomass', TUNING.restore.nurtureBiomass * this.sim.upgrades.soilMult);
     if (b > 0) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: b, tileId: t.id });
     this.sim.bus.emit('tile.nurtured', { tile: t, level: t.bloom });
-    const id = this.sim.chains.onGrown(t, chainId);
+    const id = this.sim.chains.onGrown(t, chainId, starter);
     this.sim.chains.addReward(id, b);
   }
 

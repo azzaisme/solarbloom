@@ -53,13 +53,15 @@ interface ChainRun {
   /** Rooftops this chain touched. */
   roofs: Set<string>;
   /** Gardens boosted by an Overcharge Pulse in this chain (+1 pollination). */
-  pollinatorBonus: Set<string>;
+  pollinatorBonus: Map<string, number>;
   /** Corridor gardens that already passed the chain on (once each per chain). */
   corridorFired: Set<string>;
   /** City areas this chain touched (for the summary). */
   areas: Set<string>;
   mode: 'normal' | 'mega';
   budget: number;
+  /** who set it off: a manual action, or automation (drones, condensers, timers, rewards) */
+  starter: ChainStarter;
   announced: boolean;
   biomass: number;
   energy: number;
@@ -128,6 +130,10 @@ const COUNTED: ChainEventType[] = ['RESTORE', 'GROW', 'PRODUCE_ENERGY', 'PRODUCE
 /** Pollinator Gardens standing on streets and paths form green corridors. */
 const CORRIDOR_GROUND = new Set(['road', 'paving']);
 
+export type ChainStarter = 'player' | 'auto';
+/** Restorations that are the player's own taps. */
+const PLAYER_SOURCES = new Set<RestoreSource>(['pulse', 'broad', 'mega']);
+
 /**
  * Bloom Chains: `action → tile event → synergy checks → new events → reward aggregation`.
  * - Events are queued with a delay (never recursive) and processed in (time, sequence) order: reproducible.
@@ -153,8 +159,9 @@ export class BloomChainSystem {
     return this.queue.length;
   }
 
-  private newRun(origin: TileData, mode: ChainRun['mode'] = 'normal', budget = Infinity): ChainRun {
+  private newRun(origin: TileData, mode: ChainRun['mode'] = 'normal', budget = Infinity, starter: ChainStarter = 'auto'): ChainRun {
     const run: ChainRun = {
+      starter,
       id: this.nextChainId++,
       originTileId: origin.id,
       startedAt: this.sim.time,
@@ -166,7 +173,7 @@ export class BloomChainSystem {
       pollinatorUses: new Map(),
       dischargedTrees: new Set(),
       relaysFired: new Set(),
-      pollinatorBonus: new Set(),
+      pollinatorBonus: new Map(),
       corridorFired: new Set(),
       areas: new Set(),
       roofs: new Set([origin.roofId]),
@@ -237,16 +244,16 @@ export class BloomChainSystem {
   // ───────────── entry points (called by RestorationSystem and machines) ─────────────
 
   /** A tile became restored. Starts a chain if it isn't part of one. Returns the chain id. */
-  onRestored(tile: TileData, _source: RestoreSource, chainId?: number): number {
-    const run = (chainId !== undefined && this.runs.get(chainId)) || this.newRun(tile);
+  onRestored(tile: TileData, source: RestoreSource, chainId?: number): number {
+    const run = (chainId !== undefined && this.runs.get(chainId)) || this.newRun(tile, 'normal', Infinity, PLAYER_SOURCES.has(source) ? 'player' : 'auto');
     run.visited.add(tile.id);
     this.react(run, tile, 'RESTORE', this.depthOf(tile.id, run));
     return run.id;
   }
 
   /** A restored tile grew a bloom level (nurture, pollination, watering, tree pulse). */
-  onGrown(tile: TileData, chainId?: number): number {
-    const run = (chainId !== undefined && this.runs.get(chainId)) || this.newRun(tile);
+  onGrown(tile: TileData, chainId?: number, starter: ChainStarter = 'auto'): number {
+    const run = (chainId !== undefined && this.runs.get(chainId)) || this.newRun(tile, 'normal', Infinity, starter);
     run.visited.add(tile.id);
     this.react(run, tile, 'GROW', this.depthOf(tile.id, run));
     return run.id;
@@ -272,12 +279,15 @@ export class BloomChainSystem {
     return true;
   }
 
-  /** Overcharge Pulse: a manual pulse right next to a machine boosts its next trigger (used up here). */
-  consumeOvercharge(m: MachineData): boolean {
-    if ((m.overchargeUntil ?? 0) <= this.sim.time) return false;
+  /**
+   * Overcharge Pulse: a manual pulse right next to a machine boosts its next trigger (used up here). Returns the
+   * boost: 0 when not overcharged, else 1 plus the Overcharge upgrade's level, so active play scales with upgrades.
+   */
+  consumeOvercharge(m: MachineData): number {
+    if ((m.overchargeUntil ?? 0) <= this.sim.time) return 0;
     m.overchargeUntil = 0;
     this.sim.bus.emit('machine.boostUsed', { machineId: m.id });
-    return true;
+    return 1 + this.sim.upgrades.level('overcharge');
   }
 
   /**
@@ -342,6 +352,21 @@ export class BloomChainSystem {
     return true;
   }
 
+  /**
+   * Mega Pulse (the player's charged tap): a city-scale chain seeded from the chosen tile. It restores the tile
+   * if it can, then spreads outward through everything eligible, up to its budget.
+   */
+  startMegaPulse(origin: TileData, budget: number): number {
+    const s = this.sim;
+    const run = this.newRun(origin, 'mega', budget, 'player');
+    if (s.restoration.isEligible(origin)) {
+      run.visited.delete(origin.id); // the origin itself is the first restoration
+      this.enqueue(run, { type: 'RESTORE', source: origin.id, target: origin.id, cause: 'mega', depth: 0 }, 0);
+    } else this.spreadMega(run, origin, 0);
+    s.bus.emit('mega.released', { tileId: origin.id, budget });
+    return run.id;
+  }
+
   // ───────────── synergy checks ─────────────
 
   private canGrow(run: ChainRun, depth: number) {
@@ -368,8 +393,11 @@ export class BloomChainSystem {
       } else if (m.type === 'pollinator' && d >= 1 && d <= s.upgrades.pollinatorReach) {
         // Newly restored *or* newly grown plants pollinate (limited per garden per chain).
         const used = run.pollinatorUses.get(m.id) ?? 0;
-        if (used === 0 && this.consumeOvercharge(m)) run.pollinatorBonus.add(m.id);
-        if (used >= TUNING.pollinator.triggersPerChain + (run.pollinatorBonus.has(m.id) ? 1 : 0)) continue;
+        if (used === 0) {
+          const b = this.consumeOvercharge(m);
+          if (b) run.pollinatorBonus.set(m.id, b);
+        }
+        if (used >= TUNING.pollinator.triggersPerChain + (run.pollinatorBonus.get(m.id) ?? 0)) continue;
         const target = this.pollinationTarget(run, m, tile);
         if (!target) continue;
         run.pollinatorUses.set(m.id, used + 1);
@@ -613,7 +641,7 @@ export class BloomChainSystem {
         const m = s.machine(ev.target);
         if (!m) return;
         m.boostUntil = s.time + TUNING.solarBloomBoost.seconds;
-        const boost = this.consumeOvercharge(m) ? 2 : 1;
+        const boost = 1 + this.consumeOvercharge(m);
         const got = s.econ.add('energy', TUNING.solarBloomBoost.burstEnergy * s.upgrades.solarMult * boost);
         run.energy += got;
         this.emit(run, { ...ev, amount: got });
@@ -627,7 +655,7 @@ export class BloomChainSystem {
         m.charge = 0;
         this.emit(run, ev);
         const near = s.grid.tilesNear(m, TUNING.condenser.radius);
-        const targets = TUNING.condenser.targets + s.upgrades.waterBloom + (this.consumeOvercharge(m) ? 1 : 0);
+        const targets = TUNING.condenser.targets + s.upgrades.waterBloom + this.consumeOvercharge(m);
         const dry = near.filter((t) => t.ground === 'prepared' && s.restoration.isEligible(t, false) && !run.visited.has(t.id));
         const grow = s.upgrades.waterBloom > 0 ? near.filter((t) => t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom && !run.visited.has(t.id)) : [];
         for (const t of [...dry, ...grow].slice(0, targets)) {
@@ -654,7 +682,7 @@ export class BloomChainSystem {
         const g = s.machine(ev.target);
         if (!g) return;
         const R = TUNING.neighbourhood.reservoir;
-        const n = R.targets + (this.consumeOvercharge(g) ? 1 : 0);
+        const n = R.targets + this.consumeOvercharge(g);
         const targets = this.overflowTargets(g, n, run.visited);
         g.charge = 0;
         // Nothing to water: the spill still freshens the green around it (lush), so it always counts.
@@ -679,7 +707,7 @@ export class BloomChainSystem {
         m.charge = 0;
         s.state.progression.canopyBursts = (s.state.progression.canopyBursts ?? 0) + 1;
         this.emit(run, ev);
-        const radius = this.canopyBurstRadius(m) + (this.consumeOvercharge(m) ? 1 : 0);
+        const radius = this.canopyBurstRadius(m) + Math.min(2, this.consumeOvercharge(m));
         const ok = (t: TileData) => !run.visited.has(t.id) && (s.restoration.isEligible(t) || (t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom));
         const inside = s.grid
           .tilesNear(m, radius)
@@ -716,7 +744,7 @@ export class BloomChainSystem {
         this.emit(run, ev);
         s.bus.emit('tree.discharged', { machineId: m.id });
         const tiles = s.grid
-          .tilesNear(m, s.upgrades.treeRadius + (this.consumeOvercharge(m) ? 1 : 0))
+          .tilesNear(m, s.upgrades.treeRadius + Math.min(2, this.consumeOvercharge(m)))
           .filter((t) => !run.visited.has(t.id))
           .filter((t) => s.restoration.isEligible(t) || (t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom))
           .map((t) => ({ t, d: distToFootprint(t.x, t.z, m.x, m.z, m.size) }))
@@ -790,7 +818,13 @@ export class BloomChainSystem {
       roofs: [...run.roofs],
       crossings: run.relaysFired.size,
       areas: run.areas.size,
+      starter: run.starter,
     });
+    if (run.combo >= TUNING.mega.bigChain) {
+      const st = s.state.stats;
+      st.bigChains = st.bigChains ?? { player: 0, auto: 0 };
+      st.bigChains[run.starter]++;
+    }
     if (run.relaysFired.size) s.metrics.first('remoteChain');
     if (got > 0) s.bus.emit('resource.gain', { kind: 'biomass', amount: got, reason: 'chain' });
     s.metrics.onChain(run.combo);
