@@ -43,6 +43,7 @@ export function upgradeHighlights(sim: Sim, id: string): Spot[] {
     case 'droneRadius':
     case 'chainIntel':
     case 'secondDrone':
+    case 'droneSweep':
     case 'droneMesh':
     case 'droneDispatch':
       return of('droneHub');

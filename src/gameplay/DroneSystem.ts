@@ -103,8 +103,21 @@ export class DroneSystem {
    * Hubs in the city link into networks (any two within `networkRange`, transitively). A drone works the
    * whole network's reach; on rooftops it keeps to its own hub's range.
    */
+  private netCache = new Map<string, MachineData[]>();
+  private netStamp = '';
   network(hub: MachineData): MachineData[] {
     if (hub.roofId !== GROUND || hub.type !== 'droneHub') return [hub];
+    const stamp = `${this.sim.state.machines.length}|${this.sim.upgrades.networkRange}`;
+    if (stamp !== this.netStamp) {
+      this.netCache.clear();
+      this.netStamp = stamp;
+    }
+    let v = this.netCache.get(hub.id);
+    if (!v) this.netCache.set(hub.id, (v = this.computeNetwork(hub)));
+    return v;
+  }
+
+  private computeNetwork(hub: MachineData): MachineData[] {
     const s = this.sim;
     const R = this.sim.upgrades.networkRange;
     const out = [hub];
@@ -122,11 +135,34 @@ export class DroneSystem {
   }
 
   /** Tiles a hub's drones may work: its network's combined reach (rows in order, no duplicates). */
+  /** Cached tile lists (hub reach and network reach); dropped whenever hubs or reach upgrades change. */
+  private tileCache = new Map<string, TileData[]>();
+  private tileCacheStamp = '';
+  private cached(key: string, make: () => TileData[]): TileData[] {
+    const stamp = `${this.sim.state.machines.length}|${this.radius()}|${this.sim.upgrades.networkRange}`;
+    if (stamp !== this.tileCacheStamp) {
+      this.tileCache.clear();
+      this.tileCacheStamp = stamp;
+    }
+    let v = this.tileCache.get(key);
+    if (!v) this.tileCache.set(key, (v = make()));
+    return v;
+  }
+
+  /** Tiles within one hub's own reach. */
+  ownTiles(hub: MachineData): TileData[] {
+    return this.cached(`own|${hub.id}`, () => this.sim.grid.tilesInRange(hub, this.radius()));
+  }
+
   networkTiles(hub: MachineData): TileData[] {
     // The old drone keeps to its own short range around the old solar lamp.
-    if (hub.type !== 'droneHub') return this.sim.grid.tilesInRange(hub, TUNING.drone.old.radius);
+    if (hub.type !== 'droneHub') return this.cached(`old|${hub.id}`, () => this.sim.grid.tilesInRange(hub, TUNING.drone.old.radius));
     const hubs = this.network(hub);
-    if (hubs.length === 1) return this.sim.grid.tilesInRange(hub, this.radius());
+    if (hubs.length === 1) return this.ownTiles(hub);
+    return this.cached(`net|${hubs.map((h) => h.id).sort().join(',')}`, () => this.mergeTiles(hubs));
+  }
+
+  private mergeTiles(hubs: MachineData[]): TileData[] {
     const seen = new Set<string>();
     const out: TileData[] = [];
     for (const h of hubs)
@@ -157,16 +193,25 @@ export class DroneSystem {
   }
 
   /** Permanent drones a hub should have: the first hub gets a second with the upgrade. */
-  private wanted(hub: MachineData): number {
-    const firstHub = this.sim.state.machines.find((m) => m.type === 'droneHub');
-    return 1 + (firstHub?.id === hub.id ? this.sim.upgrades.level('secondDrone') : 0);
+  private wanted(_hub: MachineData): number {
+    return 1 + this.sim.upgrades.level('secondDrone'); // Phase 4 E07: Drone Squad, on every hub
   }
 
+  /**
+   * The drone's next job: its own hub's reach first, then the rest of the hub's network (Phase 4 E07: with many
+   * linked hubs, scanning the whole network for every drone was the city's biggest per-tick cost).
+   */
   findJob(d: DroneData): TileData | undefined {
-    const s = this.sim;
-    const hub = s.machine(d.hubId);
+    const hub = this.sim.machine(d.hubId);
     if (!hub) return undefined;
-    const inRange = this.networkTiles(hub);
+    const own = hub.type === 'droneHub' ? this.ownTiles(hub) : this.networkTiles(hub);
+    const job = this.findJobIn(d, hub, own);
+    if (job || hub.type !== 'droneHub' || this.network(hub).length === 1) return job;
+    return this.findJobIn(d, hub, this.networkTiles(hub));
+  }
+
+  private findJobIn(d: DroneData, hub: MachineData, inRange: TileData[]): TileData | undefined {
+    const s = this.sim;
     // Area switches: "Focus the frontier" on the hub's area makes its drones push hard into the fog.
     const focus = s.areas.mode(s.areas.areaOf(hub)) === 'frontier';
     const edgeBonus = TUNING.drone.frontierBonus * (focus ? TUNING.drone.focusMult : 1);
@@ -336,6 +381,16 @@ export class DroneSystem {
           this.setTarget(d, undefined);
           if (t && t.ground !== 'restored' && t.ground !== 'growing') {
             s.restoration.beginGrowth(t, 'drone', TUNING.pulse.growSeconds);
+            // Phase 4 E07: Drone Sweep restores a few tiles around it for free (never another drone's target).
+            const sweep = d.old ? 0 : s.upgrades.droneSweep;
+            if (sweep > 0) {
+              const around = s.grid
+                .neighbors(t)
+                .concat(s.grid.tilesNear({ roofId: t.roofId, x: t.x, z: t.z, size: 1 }, 1))
+                .filter((n, i, a) => a.indexOf(n) === i && n !== t && s.restoration.isEligible(n))
+                .sort((a, b) => Math.abs(a.x - t.x) + Math.abs(a.z - t.z) - (Math.abs(b.x - t.x) + Math.abs(b.z - t.z)) || a.pollution - b.pollution || (a.id < b.id ? -1 : 1));
+              for (const n of around.slice(0, sweep)) s.restoration.beginGrowth(n, 'drone', TUNING.pulse.growSeconds + 0.15);
+            }
             d.jobs++;
             s.state.stats.droneJobs++;
           } else if (t && t.ground === 'restored' && t.bloom < TUNING.restore.maxBloom) {

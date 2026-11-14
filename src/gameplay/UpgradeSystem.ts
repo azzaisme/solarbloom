@@ -74,14 +74,22 @@ export class UpgradeSystem {
   get soilMult() {
     return 1 + 0.3 * this.level('richSoil');
   }
+  /** Phase 4 E07: Drone Dash makes drones ×1.5, ×2, then ×3 faster overall (flight and rest). */
+  get droneSpeed() {
+    return [1, 1.5, 2, 3][Math.min(3, this.level('droneSpeed'))];
+  }
   get droneCycleMult() {
-    return Math.pow(0.75, this.level('droneSpeed'));
+    return 1 / this.droneSpeed;
   }
   get droneFlyMult() {
-    return 1 + 0.3 * this.level('droneSpeed');
+    return this.droneSpeed;
   }
   get droneRadius() {
-    return TUNING.drone.hubRadius + this.level('droneRadius');
+    return TUNING.drone.hubRadius + 2 * this.level('droneRadius'); // Phase 4 E07: +2 per level
+  }
+  /** Phase 4 E07: extra free tiles a drone restores around each tile it restores (Drone Sweep). */
+  get droneSweep() {
+    return 2 * this.level('droneSweep');
   }
   get overchargeEvery() {
     const l = this.level('overcharge');

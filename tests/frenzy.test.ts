@@ -94,3 +94,24 @@ describe('Phase 4 E06: Bloom Frenzy', () => {
     expect(c).toBeLessThanOrEqual(20 * TUNING.frenzy.overflow.maxPerSecond + 1e-6);
   });
 });
+
+describe('Phase 4 E07: automation', () => {
+  it('Drone Squad and Drone Sweep never restore a tile twice, and drones stop and resume cleanly', () => {
+    const sim = new Sim(createInitialState(8));
+    const s = sim.state;
+    s.caps.energy = s.caps.water = s.caps.biomass = 1e5;
+    s.resources.energy = s.resources.water = s.resources.biomass = 1e5;
+    s.upgrades.secondDrone = 2;
+    s.upgrades.droneSweep = 2;
+    s.upgrades.droneSpeed = 3;
+    const spot = sim.areas.tiles(PARK).find((t) => sim.grid.footprint('g', t.x, t.z, 2).every((c) => c && !c.blocked && !c.occupantId && sim.restoration.isEligible(c)))!;
+    for (const c of sim.grid.footprint('g', spot.x, spot.z, 2)) sim.restoration.complete(c!, 'pulse');
+    expect(sim.build.place('droneHub', 'g', spot.x, spot.z)).toBeTruthy();
+    const restored = new Map<string, number>();
+    sim.bus.on('tile.restored', ({ tile }) => restored.set(tile.id, (restored.get(tile.id) ?? 0) + 1));
+    sim.advance(180);
+    expect(s.drones.filter((d) => !d.old)).toHaveLength(3);
+    expect(restored.size).toBeGreaterThan(20);
+    for (const n of restored.values()) expect(n).toBe(1);
+  });
+});

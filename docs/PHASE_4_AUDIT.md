@@ -287,3 +287,26 @@ Two softlocks the bots found, both fixed:
   - offline never charges it;
   - overflow charge stays within its cap.
 - **Bots.** First Frenzy at 3:48–4:00, then 3–4 in the first 15 minutes, about one every 3 minutes. Hands-off players get their first at about 11 minutes, from overflow and automation alone.
+
+---
+
+# E07 — hybrid automation and chains
+
+- **Drone Dash:** drones work ×1.5 / ×2 / ×3 as fast (flight and rest), up from +30% per level.
+- **Work Radius:** +2 tiles per level (was +1).
+- **Drone Squad** (was Second Drone, which only helped the first hub): every hub launches 2, then 3, drones.
+- **Drone Sweep** (new, 120 / 360 🌿): each tile a drone restores also restores up to 2 / 4 free tiles around it. It never touches another drone's target, so a restore is never paid twice (tested with 3 drones per hub plus Sweep).
+- **Performance:**
+  - each hub's reach and each network's tile list are now cached, until hubs or reach upgrades change;
+  - a drone searches its own hub's reach before the whole network;
+  - the city bot's 30-minute run went from 36 s to 13 s, with the same result;
+  - the sim-equivalence, soak (1,000 areas, 6 h) and benchmark suites pass.
+- **Chain safeguards** (E07 chain section) were already in place: an iterative priority queue, root chain ids, visited sets, per-chain budgets (100 events, 1,500 in the city), depth 40, fast-forward, and payment once at the end. Unchanged.
+- **Manual play still leads.** City bot: big chains started by taps vs automation, 22–25 vs 1–3 an hour. Overcharge and Mega Pulse remain tap-only.
+
+| | After E04 | After E07 |
+|---|---|---|
+| Hands-off: tiles after the hub vs active | 13–27% | **30–36%** |
+| Hands-off fountain | 7:42–8:12 | 8:09–8:39 |
+
+Still below the 40–60% target. Active play got much stronger in E04 (reach tiers) and E06 (Frenzy), and both need a player. I'm leaving it here rather than weakening active play.

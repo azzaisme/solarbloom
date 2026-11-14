@@ -51,6 +51,7 @@ const PROBES: Record<string, (s: Sim) => number> = {
   droneRadius: (s) => s.upgrades.droneRadius,
   chainIntel: (s) => s.upgrades.level('chainIntel'),
   secondDrone: (s) => s.upgrades.level('secondDrone'),
+  droneSweep: (s) => s.upgrades.droneSweep,
   pollinatorReach: (s) => s.upgrades.pollinatorReach,
   waterBloom: (s) => s.upgrades.waterBloom,
   treeResonance: (s) => s.upgrades.treeRadius,

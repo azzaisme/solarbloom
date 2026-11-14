@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TUNING } from '../src/data/tuning';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
@@ -38,7 +39,7 @@ function finish(sim: Sim, x0: number, z0: number, x1: number, z1: number) {
       const t = sim.grid.get(GROUND, x, z)!;
       if (t.blocked) continue;
       t.ground = 'restored';
-      t.bloom = 3;
+      t.bloom = TUNING.restore.maxBloom;
       t.pollution = 0;
       sim.grid.touch(t);
     }
@@ -75,7 +76,7 @@ describe('drone networks (City 11)', () => {
     st.progression.coreActivated = true;
     for (const t of sim.areas.tiles(PARK)) if (!t.blocked && !t.occupantId) {
       t.ground = 'restored';
-      t.bloom = 3;
+      t.bloom = TUNING.restore.maxBloom;
       sim.grid.touch(t);
     }
     sim.areas.clear(PARK, true);
