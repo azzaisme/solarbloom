@@ -151,6 +151,13 @@ export class BloomChainSystem {
 
   constructor(private sim: Sim) {}
 
+  /** Areas that a running chain is blooming right now (overview icons). */
+  activeAreas(): Set<string> {
+    const out = new Set<string>();
+    for (const r of this.runs.values()) for (const a of r.areas) out.add(a);
+    return out;
+  }
+
   get activeRuns() {
     return this.runs.size;
   }

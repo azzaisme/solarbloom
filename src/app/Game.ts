@@ -1346,6 +1346,17 @@ export class Game {
     const live = new Set<string>();
     if (show) {
       const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+      // Overview icons: a chain blooming there now, and where you've found the Lucky Cat.
+      const chaining = zoomedOut ? s.chains.activeAreas() : new Set<string>();
+      const catAreas = new Set<string>();
+      if (zoomedOut)
+        for (const e of s.state.cat.log ?? []) {
+          const a = s.cat.anchor(e.anchorId);
+          if (a?.roofId === GROUND && a.needsFreeTile) {
+            const ar = s.areas.areaOf({ roofId: GROUND, x: a.needsFreeTile[0], z: a.needsFreeTile[1] });
+            if (ar) catAreas.add(ar);
+          }
+        }
       for (const id of s.areas.revealed()) {
         const a = s.areas.info(id);
         const fog = s.areas.fog(id);
@@ -1358,9 +1369,10 @@ export class Game {
         live.add(key);
         const lm = s.areas.landmark(id);
         let html: string;
+        const icons = `${chaining.has(id) ? ' 🔗' : ''}${catAreas.has(id) ? ' 🐱' : ''}`;
         if (ready && lm) html = `✨ ${esc(a.landmarkName)}<button data-wake="${lm.id}">Wake it</button>`;
-        else if (fog === 'cleared') html = `<span data-area="${id}">${def.icon} ${esc(id === PARK ? 'The Park' : def.name)}<small>clear${a.authored ? ' · ' + esc(a.landmarkName) : ''}</small></span>`;
-        else html = `<span data-area="${id}">${def.icon} ${esc(def.name)}<small>🌫️ ${Math.min(100, Math.round((s.areas.counts(id).restored / s.areas.need(id)) * 100))}%</small></span>`;
+        else if (fog === 'cleared') html = `<span data-area="${id}">${def.icon} ${esc(id === PARK ? 'The Park' : def.name)}${icons}<small>clear${a.authored ? ' · ' + esc(a.landmarkName) : ''}</small></span>`;
+        else html = `<span data-area="${id}">${def.icon} ${esc(def.name)}${icons}<small>🌫️ ${Math.min(100, Math.round((s.areas.counts(id).restored / s.areas.need(id)) * 100))}%</small></span>`;
         // Zoomed out, every label is a button to its area's panel.
         this.hud.worldLabel(key, html, sp.x, sp.y, ready || zoomedOut);
       }
