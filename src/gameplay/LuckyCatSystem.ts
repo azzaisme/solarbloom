@@ -214,7 +214,8 @@ export class LuckyCatSystem {
     const seen = new Set<string>();
     const queue = s.areas.entryTiles(id).slice(0, 2);
     for (const t of queue) seen.add(t.id);
-    while (queue.length && out.length < TUNING.cat.fogWhiskerTiles) {
+    const cap = this.fogWhiskerCap(id);
+    while (queue.length && out.length < cap) {
       const t = queue.shift()!;
       out.push(t);
       for (const n of s.grid.neighbors(t)) {
@@ -226,6 +227,21 @@ export class LuckyCatSystem {
     return out;
   }
 
+  /**
+   * How many tiles a Fog Whisker restores in an area: more in harder (further) areas, but never enough to reach
+   * its wake requirement on its own (the last tiles are always the player's).
+   */
+  fogWhiskerCap(id: string): number {
+    const s = this.sim;
+    const scaled = Math.round(TUNING.cat.fogWhiskerTiles * Math.min(2, s.areas.info(id).difficulty));
+    return Math.max(0, Math.min(scaled, s.areas.need(id) - s.areas.counts(id).restored - 1));
+  }
+
+  /** Golden Relay's extra corridor blooms: grows with the city, capped. */
+  goldenCorridorTiles(): number {
+    return Math.min(TUNING.cat.goldenCorridorMax, TUNING.cat.goldenCorridorTiles + Math.floor(this.sim.areas.clearedCount() / 10));
+  }
+
   /** Summary for the discovery panel. */
   discoveries() {
     const log = this.sim.state.cat.log ?? [];
@@ -234,9 +250,41 @@ export class LuckyCatSystem {
     for (const e of log) rewards[e.reward] = (rewards[e.reward] ?? 0) + 1;
     return {
       found: this.sim.state.cat.found,
-      anchors: CAT_ANCHORS.filter((a) => this.sim.grid.roof(a.roofId)).map((a) => ({ id: a.id, hint: a.hint, found: spots.has(a.id) })),
+      anchors: this.city() ? [] : CAT_ANCHORS.filter((a) => this.sim.grid.roof(a.roofId)).map((a) => ({ id: a.id, hint: a.hint, found: spots.has(a.id) })),
+      byType: this.city() ? this.discoveriesByType() : [],
       rewards,
     };
+  }
+
+  /** The area type a logged find happened in (park anchors count as the park). */
+  private areaTypeOf(anchorId: string): string {
+    const a = this.anchor(anchorId);
+    if (!a || a.roofId !== GROUND) return 'park';
+    const [x, z] = a.needsFreeTile ?? [Math.floor(a.pos[0]), Math.floor(a.pos[2])];
+    const id = this.sim.areas.areaOf({ roofId: GROUND, x, z });
+    return id ? this.sim.areas.info(id).type : 'park';
+  }
+
+  /**
+   * Finds grouped by area type ("Canal nooks: 3 cats, 2/8 kinds of reward"), so the log stays a few lines long
+   * however big the city grows. Every type is listed, so undiscovered ones read as a goal.
+   */
+  discoveriesByType(): { type: string; name: string; icon: string; cats: number; kinds: number; totalKinds: number; nooks: number }[] {
+    const log = this.sim.state.cat.log ?? [];
+    const per = new Map<string, { cats: number; kinds: Set<string>; nooks: Set<string> }>();
+    for (const e of log) {
+      const type = this.areaTypeOf(e.anchorId);
+      const p = per.get(type) ?? { cats: 0, kinds: new Set(), nooks: new Set() };
+      p.cats++;
+      p.kinds.add(e.reward);
+      p.nooks.add(e.anchorId);
+      per.set(type, p);
+    }
+    const totalKinds = Object.keys(CAT_REWARD_NAMES).length;
+    return Object.values(AREA_TYPES).map((d) => {
+      const p = per.get(d.type);
+      return { type: d.type, name: d.name, icon: d.icon, cats: p?.cats ?? 0, kinds: p?.kinds.size ?? 0, totalKinds, nooks: p?.nooks.size ?? 0 };
+    });
   }
 
   /** The endless city (ground layer) rather than the legacy rooftop layout. */
@@ -355,11 +403,11 @@ export class LuckyCatSystem {
     };
     const golden = () => {
       if (!this.goldenRelayAvailable()) return harvest(); // degrade gracefully, never useless
-      s.state.relayBonus = this.city() ? TUNING.cat.goldenCorridorTiles : TUNING.cat.goldenRelayExtra;
+      s.state.relayBonus = this.city() ? this.goldenCorridorTiles() : TUNING.cat.goldenRelayExtra;
       s.bus.emit('cat.goldenRelay', {});
       parts.push(
         this.city()
-          ? `Your next green corridor hop blooms +${TUNING.cat.goldenCorridorTiles} extra tiles`
+          ? `Your next green corridor hop blooms +${s.state.relayBonus} extra tiles`
           : `Your next cross-roof chain sends +${TUNING.cat.goldenRelayExtra} extra remote bloom`,
       );
     };

@@ -474,9 +474,15 @@ export class Hud {
   private renderDiscoveries() {
     const d = this.sim.cat.discoveries();
     const names: Record<string, string> = { luckyHarvest: 'Lucky Harvest', solarFrenzy: 'Solar Frenzy', megaBloom: 'Mega Bloom', droneParty: 'Drone Party', jackpot: 'Jackpot', goldenRelay: 'Golden Relay', catsGarden: "Cat's Garden", fogWhisker: 'Fog Whisker' };
-    const spots = d.anchors
-      .map((a) => `<li class="${a.found ? 'found' : ''}"><span>${a.found ? '🐱' : '❔'}</span>${a.found ? esc(a.hint) : 'Undiscovered nook'}</li>`)
-      .join('');
+    // In the city, finds are grouped by area type (the city is endless; the list never grows).
+    const spots = d.byType.length
+      ? d.byType
+          .map(
+            (t) =>
+              `<li class="${t.cats ? 'found' : ''}"><span>${t.cats ? t.icon : '❔'}</span>${esc(t.name)} nooks: ${t.cats ? `${t.cats} cat${t.cats === 1 ? '' : 's'} in ${t.nooks} nook${t.nooks === 1 ? '' : 's'} · ${t.kinds}/${t.totalKinds} kinds of reward` : 'none found yet'}</li>`,
+          )
+          .join('')
+      : d.anchors.map((a) => `<li class="${a.found ? 'found' : ''}"><span>${a.found ? '🐱' : '❔'}</span>${a.found ? esc(a.hint) : 'Undiscovered nook'}</li>`).join('');
     const rewards = Object.entries(names)
       .map(([k, n]) => `<span class="rw ${d.rewards[k as keyof typeof d.rewards] ? 'got' : ''}">${n}${d.rewards[k as keyof typeof d.rewards] ? ` ×${d.rewards[k as keyof typeof d.rewards]}` : ''}</span>`)
       .join('');

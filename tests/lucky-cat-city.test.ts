@@ -79,7 +79,7 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     const id = sim.areas.nextGoal()!;
     const tiles = sim.cat.fogWhiskerTiles();
     expect(tiles.length).toBeGreaterThan(3);
-    expect(tiles.length).toBeLessThanOrEqual(TUNING.cat.fogWhiskerTiles);
+    expect(tiles.length).toBeLessThanOrEqual(sim.cat.fogWhiskerCap(id));
     for (const t of tiles) expect(sim.areas.areaOf(t)).toBe(id);
     const summary = (sim.cat as unknown as Applier).apply('fogWhisker', 1, 0);
     expect(summary).toMatch(/fog thins/);
@@ -137,7 +137,7 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     });
     expect(sim.cat.goldenRelayAvailable()).toBe(true);
     expect((sim.cat as unknown as Applier).apply('goldenRelay', 1, 0)).toMatch(/green corridor/);
-    expect(st.relayBonus).toBe(TUNING.cat.goldenCorridorTiles);
+    expect(st.relayBonus).toBe(sim.cat.goldenCorridorTiles());
     expect(sim.cat.goldenRelayAvailable()).toBe(false); // one at a time
     const bad = watchFog(sim);
     const relayed: string[] = [];
@@ -150,7 +150,7 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     sim.advance(10);
     expect(st.relayBonus).toBe(0);
     expect(relayed.length).toBeGreaterThan(0);
-    expect(relayed.length).toBeLessThanOrEqual(TUNING.cat.goldenCorridorTiles);
+    expect(relayed.length).toBeLessThanOrEqual(sim.cat.goldenCorridorTiles());
     expect(bad).toEqual([]);
   });
 
@@ -176,5 +176,53 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     }
     sim.advance(20);
     expect(bad).toEqual([]);
+  });
+
+  it('city-scale rewards are capped: Fog Whisker never wakes an area alone, Golden Corridor tops out', { timeout: 60000 }, () => {
+    const sim = grownCity(21, 2);
+    const id = sim.areas.nextGoal()!;
+    // Nearly ready: the whisker may only take it to one tile short.
+    const need = sim.areas.need(id);
+    const fillTo = (n: number) => {
+      for (const t of sim.areas.tiles(id)) {
+        if (sim.areas.counts(id).restored >= n) break;
+        if (!isRestorable(t, sim.state.machines) || t.ground === 'restored') continue;
+        t.ground = 'restored';
+        t.bloom = 1;
+        sim.grid.touch(t);
+      }
+    };
+    fillTo(need - 4);
+    expect(sim.areas.counts(id).restored).toBe(need - 4);
+    expect(sim.cat.fogWhiskerCap(id)).toBe(3);
+    expect(sim.cat.fogWhiskerTiles().length).toBeLessThanOrEqual(3);
+    (sim.cat as unknown as Applier).apply('fogWhisker', 1, 0);
+    sim.advance(5);
+    expect(sim.areas.counts(id).restored).toBeLessThanOrEqual(need - 1);
+    expect(sim.areas.ready(id)).toBe(false);
+    // One tile short of ready: no Fog Whisker at all (it would be useless), so it degrades to a harvest.
+    fillTo(need - 1);
+    expect(sim.cat.fogWhiskerTiles()).toEqual([]);
+    expect((sim.cat as unknown as Applier).apply('fogWhisker', 1, 0)).toMatch(/🌿/);
+    // A huge city: the corridor bonus is capped.
+    const big = grownCity(22, 150);
+    expect(big.cat.goldenCorridorTiles()).toBe(TUNING.cat.goldenCorridorMax);
+    expect(new Sim(createInitialState(22)).cat.goldenCorridorTiles()).toBe(TUNING.cat.goldenCorridorTiles);
+  });
+
+  it('the discovery log groups finds by area type and stays short in a huge city', { timeout: 120000 }, () => {
+    const sim = grownCity(23, 500);
+    sim.state.cat.found = 1;
+    for (let i = 0; i < 300; i++) {
+      sim.state.cat.active = undefined;
+      sim.cat.spawn();
+      sim.cat.claim();
+    }
+    const d = sim.cat.discoveries();
+    expect(d.anchors).toEqual([]);
+    expect(d.byType.length).toBeLessThanOrEqual(8); // one line per area type, however many areas
+    expect(d.byType.reduce((a, t) => a + t.cats, 0)).toBe(300);
+    expect(d.byType.filter((t) => t.cats > 0).length).toBeGreaterThan(3);
+    for (const t of d.byType) expect(t.kinds).toBeLessThanOrEqual(t.totalKinds);
   });
 });
