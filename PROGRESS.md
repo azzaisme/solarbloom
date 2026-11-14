@@ -19,7 +19,8 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #9 City 08: camera and overview | ✅ bounds, zoom-out to 0.22 with far level of detail, area labels, F / Home (open: overview click-to-fly #59, phone gestures #61) |
 | #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries (open: canal network #71, buildable relays #72, huge-chain presentation #74, district blooms #75) |
 | #14 City 13: Lucky Cat in the city | ✅ generated nooks, spawn rules, Fog Whisker (open: Golden Corridor #88, discovery log by area type #89) |
-| #12, #13, #15, #16 | not started |
+| #12 City 11: automation at scale | ✅ drone networks, fog-edge priority, 50-hub safety soak (open: area switches #78, far drones as rates #79, Mega Pulse #80) |
+| #13, #15, #16 | not started |
 
 ## City 01: world model
 
@@ -47,6 +48,12 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - Authored landmarks (Great Greenhouse at 6 chunks, Solar Cathedral at 12, Sky Observatory at 20, then one every 10 chunks) sit in a seeded direction at their distance.
 - Difficulty grows with distance: pulse cost ×(1 + 0.04/chunk, max ×2) and a rising pollution floor (max 85).
 - Tests: skeleton determinism, themes, every type's ground/obstacles/landmark clearance, authored landmarks for 10 seeds, difficulty caps, and a 500+-area variety soak (under 30% same-type neighbours; every type within 12 chunks of the park).
+
+## City 11: drone networks
+
+- In the city, Drone Hubs within 12 tiles of each other (transitively) form a network, and an idle drone takes work anywhere within the network's combined reach. Rooftop hubs keep to their own range.
+- Drones prefer restoring tiles at the fog's edge (a frontier tile next to clear ground), so automation pushes the fog back on its own.
+- Tests: linked hubs share work, distant hubs don't, edge preference, and 50 hubs for 60 s never targeting hidden, blocked, finished or double-booked tiles.
 
 ## City 13: the Lucky Cat in an endless city
 

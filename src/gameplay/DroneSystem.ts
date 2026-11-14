@@ -1,3 +1,4 @@
+import { GROUND } from '../core/GameState';
 import { distToFootprint, relayLocal } from '../core/Grid';
 import { LINKS, type RoofLinkDef } from '../data/rooftops';
 import type { DroneData, MachineData, TileData } from '../core/types';
@@ -66,6 +67,43 @@ export class DroneSystem {
     const r = this.sim.grid.roof(roofId)!;
     const [px, pz] = relayLocal(r, l.from === roofId ? l.fromTile : l.toTile);
     return [r.origin[0] + px, r.origin[1] + r.height, r.origin[2] + pz];
+  }
+
+  /**
+   * Hubs in the city link into networks (any two within `networkRange`, transitively). A drone works the
+   * whole network's reach; on rooftops it keeps to its own hub's range.
+   */
+  network(hub: MachineData): MachineData[] {
+    if (hub.roofId !== GROUND) return [hub];
+    const s = this.sim;
+    const R = TUNING.drone.networkRange;
+    const out = [hub];
+    const seen = new Set([hub.id]);
+    for (let i = 0; i < out.length; i++) {
+      const h = out[i];
+      for (const o of s.grid.machinesNear(GROUND, h.x, h.z, R + 1)) {
+        if (o.type !== 'droneHub' || seen.has(o.id)) continue;
+        if (distToFootprint(o.x, o.z, h.x, h.z, h.size) - (o.size - 1) > R) continue;
+        seen.add(o.id);
+        out.push(o);
+      }
+    }
+    return out;
+  }
+
+  /** Tiles a hub's drones may work: its network's combined reach (rows in order, no duplicates). */
+  networkTiles(hub: MachineData): TileData[] {
+    const hubs = this.network(hub);
+    if (hubs.length === 1) return this.sim.grid.tilesInRange(hub, this.radius());
+    const seen = new Set<string>();
+    const out: TileData[] = [];
+    for (const h of hubs)
+      for (const t of this.sim.grid.tilesInRange(h, this.radius())) {
+        if (seen.has(t.id)) continue;
+        seen.add(t.id);
+        out.push(t);
+      }
+    return out;
   }
 
   /** Drone Dispatch: an idle drone helps on a connected rooftop, near the arriving relay. */
@@ -151,7 +189,8 @@ export class DroneSystem {
     const s = this.sim;
     const hub = s.machine(d.hubId);
     if (!hub) return undefined;
-    const inRange = s.grid.tilesInRange(hub, this.radius());
+    const inRange = this.networkTiles(hub);
+    const edge = (t: TileData) => (t.roofId === GROUND && s.areas.fog(s.areas.areaOf(t)!) !== 'cleared' && s.areas.canTouch(t) ? TUNING.drone.frontierBonus : 0);
     let best: TileData | undefined;
     let bestD = Infinity;
     const intel = s.upgrades.level('chainIntel') > 0;
@@ -160,7 +199,7 @@ export class DroneSystem {
       const dx = t.x + 0.5 - d.px;
       const dz = t.z + 0.5 - d.pz;
       // Prefer mossy tiles (cheaper), then nearest; Chain Intelligence strongly prefers synergy tiles.
-      let score = dx * dx + dz * dz + (t.ground === 'prepared' ? 0 : 1.5);
+      let score = dx * dx + dz * dz + (t.ground === 'prepared' ? 0 : 1.5) - edge(t);
       if (intel) score -= this.synergyScore(t) * 6;
       if (score < bestD - 1e-9) {
         bestD = score;

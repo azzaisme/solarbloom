@@ -74,6 +74,10 @@ export const TUNING = {
     flySpeed: 3, // tiles/sec
     workSeconds: 0.5,
     retrySeconds: 1,
+    /** City: hubs this close (footprint to footprint) link into one network; drones work its whole reach. */
+    networkRange: 12,
+    /** City: preference for restoring at the fog's edge (score bonus, in tiles²). */
+    frontierBonus: 12,
   },
 
   machineCostGrowth: 1.5, // each extra copy of a machine costs this much more
