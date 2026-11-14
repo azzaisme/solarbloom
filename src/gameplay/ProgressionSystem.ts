@@ -126,9 +126,9 @@ export class ProgressionSystem {
 
   private computeStep(): number {
     const s = this.sim.state;
+    if (s.progression.coreActivated) return 9; // before any scan: after the fountain this runs every tick for nothing
     const has = (t: BuildableType) => this.built(t);
     const n = this.restoredCount(HOME);
-    if (s.progression.coreActivated) return 9;
     if (this.coreReady()) return 8;
     if (has('droneHub')) return 7;
     if (has('pollinator') && s.stats.maxCombo >= 3) return 6;

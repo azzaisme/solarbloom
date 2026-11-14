@@ -95,6 +95,10 @@ class EventHeap {
   peek(): ChainEvent | undefined {
     return this.a[0];
   }
+  /** Every queued event (heap order, not time order). */
+  items(): readonly ChainEvent[] {
+    return this.a;
+  }
   pop(): ChainEvent | undefined {
     const a = this.a;
     if (!a.length) return undefined;
@@ -158,6 +162,11 @@ export class BloomChainSystem {
     const out = new Set<string>();
     for (const r of this.runs.values()) for (const a of r.areas) out.add(a);
     return out;
+  }
+
+  /** Targets of every queued chain event (tile or machine ids): where chains are working right now. */
+  queuedTargets(): string[] {
+    return this.queue.items().map((e) => e.target);
   }
 
   get activeRuns() {

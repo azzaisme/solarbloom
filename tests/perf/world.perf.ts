@@ -137,3 +137,64 @@ describe('performance: simulation at city scale (City 06.6)', () => {
     expect(per).toBeLessThan(2);
   });
 });
+
+describe('performance: active-region ticking (City 06.1)', () => {
+  it('a 1,000-area world with 5 active chunks ticks in under 0.3 ms', () => {
+    const sim = new Sim(createInitialState(8));
+    const st = sim.state;
+    st.caps.energy = st.caps.water = st.caps.biomass = 1e9;
+    st.resources.energy = st.resources.water = st.resources.biomass = 1e8;
+    st.progression.coreActivated = true;
+    // Clear 1,000 areas ring by ring.
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (let r = 0; ids.length < 1000; r++)
+      for (let cz = -r; cz <= r; cz++)
+        for (let cx = -r; cx <= r; cx++) {
+          if (Math.max(Math.abs(cx), Math.abs(cz)) !== r) continue;
+          const id = sim.areas.map.areaOfChunk(cx, cz);
+          if (seen.has(id)) continue;
+          seen.add(id);
+          ids.push(id);
+        }
+    for (const id of ids) sim.areas.clear(id, true);
+    // At rest everywhere: two passive machines (solar, garden) on every area's landmark chunk, ground restored.
+    const add = (type: MachineData['type'], x: number, z: number, size = 1) => {
+      const cells = sim.grid.footprint(GROUND, x, z, size);
+      if (cells.some((c) => !c || c.blocked || c.occupantId)) return undefined;
+      const m: MachineData = { id: sim.newId('m'), type, roofId: GROUND, x, z, size, boostUntil: 0, timer: 0, charge: 0 };
+      st.machines.push(m);
+      sim.grid.indexMachine(m);
+      for (const c of cells) c!.occupantId = m.id;
+      if (type === 'droneHub') sim.drones.spawn(m);
+      return m;
+    };
+    for (const id of ids) {
+      const [x, z] = sim.areas.info(id).landmark;
+      add('solar', x + 3, z);
+      add('pollinator', x, z + 3);
+    }
+    // Five busy chunks next to the park: a condenser, a drone hub and growing tiles in each.
+    for (let k = 0; k < 5; k++) {
+      const x0 = 16 * (k - 2) + 4;
+      const z0 = 20;
+      add('condenser', x0, z0);
+      if (k < 2) add('droneHub', x0 + 4, z0 + 4, 2);
+      for (let i = 0; i < 6; i++) {
+        const t = sim.grid.get(GROUND, x0 + 2 + i, z0 + 8)!;
+        if (!t.blocked && !t.occupantId && t.ground !== 'restored') sim.restoration.pulse(t.id);
+      }
+    }
+    sim.production.markDirty();
+    for (let i = 0; i < 20; i++) sim.tick();
+    const active = sim.activeChunks().size;
+    const steps = 400;
+    const t0 = performance.now();
+    for (let i = 0; i < steps; i++) sim.tick();
+    const per = (performance.now() - t0) / steps;
+    log(`active-region tick: ${per.toFixed(3)} ms · ${ids.length} areas, ${sim.grid.loadedChunks().length} chunks loaded, ${st.machines.length} machines, ${active} active chunks`);
+    expect(active).toBeLessThanOrEqual(8); // 5 busy chunks (+ drones flying into neighbours)
+    expect(per).toBeLessThan(0.3);
+  });
+});
+

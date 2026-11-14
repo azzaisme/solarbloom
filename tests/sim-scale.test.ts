@@ -32,3 +32,33 @@ describe('simulation at city scale (City 06)', () => {
     expect(sweeps).toEqual([]);
   });
 });
+
+describe('active-region ticking (City 06.1)', () => {
+  it('indexed, active-only ticking plays out exactly like scanning every machine every tick', { timeout: 120000 }, async () => {
+    const { playCity } = await import('./pacing-city.test');
+    const { SaveService } = await import('../src/app/SaveService');
+    const saver = new SaveService(undefined);
+    const fast = playCity(21, 3, 20);
+    const full = playCity(21, 3, 20, (sim) => (sim.fullScan = true));
+    expect(fast.clears.length).toBeGreaterThan(3);
+    expect(saver.serialize(fast.sim.state)).toBe(saver.serialize(full.sim.state));
+  });
+
+  it('only chunks with something happening are active, and they leave the set when they go quiet', () => {
+    const sim = new Sim(createInitialState(4));
+    const st = sim.state;
+    st.caps.energy = st.caps.water = st.caps.biomass = 1e6;
+    st.resources.energy = st.resources.water = st.resources.biomass = 1e5;
+    sim.advance(1);
+    const base = sim.activeChunks();
+    // A pulse far out: its chunk is active while the tile grows, then quiet again.
+    for (let cz = -2; cz <= 2; cz++) for (let cx = -2; cx <= 2; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
+    const t = sim.grid.get(GROUND, 40, 40)!;
+    t.blocked = false;
+    expect(sim.restoration.pulse(t.id)).toBe(true);
+    expect(sim.activeChunks().has(`${GROUND}|2|2`)).toBe(true);
+    sim.advance(10);
+    expect(sim.activeChunks().has(`${GROUND}|2|2`)).toBe(false);
+    expect(sim.activeChunks().size).toBeLessThanOrEqual(base.size + 1);
+  });
+});

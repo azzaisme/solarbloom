@@ -11,8 +11,9 @@ import { Sim } from '../src/gameplay/Sim';
  * other, pulses at synergy spots), then area after area: it works the area the objective points at,
  * pulses tiles at the fog's edge, builds a few machines there and wakes each landmark when ready.
  */
-export function playCity(seed: number, actionEvery = 3, minutes = 60) {
+export function playCity(seed: number, actionEvery = 3, minutes = 60, setup?: (sim: Sim) => void) {
   const sim = new Sim(createInitialState(seed));
+  setup?.(sim);
   sim.cat.anchorView = () => 'visible';
   const parkOrder: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'pollinator', 'motherTree', 'solar', 'pollinator'];
   const areaOrder: BuildableType[] = ['pollinator', 'droneHub', 'solar', 'pollinator'];

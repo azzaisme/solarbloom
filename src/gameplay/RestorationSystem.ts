@@ -185,6 +185,11 @@ export class RestorationSystem {
     for (const c of this.sim.grid.loadedChunks()) for (const t of c.tiles) if (t && t.ground === 'growing') this.growing.set(t.id, t);
   }
 
+  /** Tiles growing right now (the active set). */
+  growingTiles(): Iterable<TileData> {
+    return this.growing.values();
+  }
+
   tick(dt: number) {
     if (!this.growing.size) return;
     for (const t of [...this.growing.values()]) {

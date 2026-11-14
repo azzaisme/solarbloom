@@ -170,15 +170,16 @@ export class ProductionSystem {
     const s = this.sim;
     const rate = TUNING.condenser.chargePerSec * (1 + 0.25 * s.upgrades.waterBloom);
     const R = TUNING.neighbourhood.reservoir;
-    for (const m of s.state.machines) {
-      if (m.type !== 'condenser') continue;
+    const num = (id: string) => Number(id.slice(1)) || 0;
+    for (const m of s.machinesOfType('condenser')) {
       const was = m.charge ?? 0;
       m.charge = Math.min(TUNING.condenser.threshold, was + rate * dt);
       if (m.charge < TUNING.condenser.threshold) continue;
       // A full condenser waters the dry soil beside it, and/or tops up Reservoir Gardens in range.
-      const gardens = s.state.machines.filter(
-        (g) => g.type === 'reservoirGarden' && g.roofId === m.roofId && g.charge < R.threshold && distToFootprint(g.x, g.z, m.x, m.z, m.size) <= R.condenserRange,
-      );
+      const near = s.fullScan ? s.state.machines : s.grid.machinesNear(m.roofId, m.x, m.z, R.condenserRange + 1);
+      const gardens = near
+        .filter((g) => g.type === 'reservoirGarden' && g.roofId === m.roofId && g.charge < R.threshold && distToFootprint(g.x, g.z, m.x, m.z, m.size) <= R.condenserRange)
+        .sort((a, b) => num(a.id) - num(b.id)); // build order, whichever way they were found
       // City 10.3: with no garden beside it, a condenser on a canal fills the emptiest garden on that network.
       if (!gardens.length) {
         const far = s.canals.of(m)?.gardens.filter((g) => g.charge < R.threshold).sort((a, b) => a.charge - b.charge || (a.id < b.id ? -1 : 1))[0];
@@ -194,7 +195,7 @@ export class ProductionSystem {
       if (s.chains.startWater(m) || gardens.length) m.charge = 0;
     }
     // Full Reservoir Gardens spill over when there is dry ground to irrigate.
-    for (const g of s.state.machines) if (g.type === 'reservoirGarden' && g.charge >= R.threshold && !this.overflowing.has(g.id)) {
+    for (const g of s.machinesOfType('reservoirGarden')) if (g.charge >= R.threshold && !this.overflowing.has(g.id)) {
       if (s.chains.startOverflow(g)) this.overflowing.add(g.id);
     }
     if (this.overflowing.size) for (const id of [...this.overflowing]) if ((s.machine(id)?.charge ?? 0) < R.threshold) this.overflowing.delete(id);

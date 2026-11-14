@@ -115,6 +115,47 @@ export class Sim {
     return this.machineMap.get(id);
   }
 
+  /** Test switch: every per-tick machine lookup scans the whole machine list (the active-region equivalence test). */
+  fullScan = false;
+  private byType = new Map<string, MachineData[]>();
+  private byTypeCount = -1;
+  /** Machines of one type, in build order (the index rebuilds when machines are added; they're never removed). */
+  machinesOfType(type: MachineData['type']): MachineData[] {
+    const ms = this.state.machines;
+    if (this.fullScan) return ms.filter((m) => m.type === type);
+    if (this.byTypeCount !== ms.length) {
+      this.byType.clear();
+      for (const m of ms) {
+        let list = this.byType.get(m.type);
+        if (!list) this.byType.set(m.type, (list = []));
+        list.push(m);
+      }
+      this.byTypeCount = ms.length;
+    }
+    return this.byType.get(type) ?? [];
+  }
+
+  /**
+   * City 06.1: the chunks where anything happens on its own this tick: growing tiles, charging machines
+   * (condensers, filling basins), drones and their hubs, and queued chain events. Everything else is at rest:
+   * no system visits it per tick (diagnostic; the systems keep these sets themselves).
+   */
+  activeChunks(): Set<string> {
+    const out = new Set<string>();
+    const key = (layer: string, x: number, z: number) => `${layer}|${Math.floor(x / 16)}|${Math.floor(z / 16)}`;
+    for (const t of this.restoration.growingTiles()) out.add(key(t.roofId, t.x, t.z));
+    for (const type of ['condenser', 'reservoirGarden', 'droneHub'] as const) for (const m of this.machinesOfType(type)) out.add(key(m.roofId, m.x, m.z));
+    for (const d of this.state.drones) {
+      const hub = this.machine(d.hubId);
+      if (hub) out.add(key(hub.roofId, d.px ?? hub.x, d.pz ?? hub.z));
+    }
+    for (const id of this.chains.queuedTargets()) {
+      const t = this.grid.byTileId(id) ?? this.machine(id);
+      if (t) out.add(key(t.roofId, t.x, t.z));
+    }
+    return out;
+  }
+
   occupant(t: TileData): MachineData | undefined {
     return this.machine(t.occupantId);
   }
