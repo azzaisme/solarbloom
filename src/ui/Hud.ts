@@ -135,7 +135,7 @@ export class Hud {
         </div>
         <div class="tools" id="roofNav" hidden></div>
       </div>
-      <div id="combo"><div class="big" id="comboBig">BLOOM CHAIN ×0</div><div class="total" id="comboTotal"></div><div id="feed"></div></div>
+      <div id="combo"><div class="big" id="comboBig">BLOOM CHAIN ×0</div><div class="total" id="comboTotal"></div><div id="chainAreas"></div><div id="feed"></div></div>
       <div id="hotbar" class="panel">${slots}</div>
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
       <div id="toasts"></div>
@@ -660,6 +660,11 @@ export class Hud {
     tot.textContent = total ?? '';
     tot.classList.toggle('on', !!total);
     this.comboTimer = total ? 3.2 : 2.2;
+  }
+
+  /** City 10.6: the running chain's per-area summary under the combo (empty hides it). */
+  chainAreas(lines: string[]) {
+    this.set('chainAreas', $(this.root, '#chainAreas'), 'html', lines.map((l) => `<div>${esc(l)}</div>`).join(''));
   }
 
   cinematic(on: boolean, title = '') {

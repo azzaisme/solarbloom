@@ -17,7 +17,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #7 City 06: simulation at city scale | ✅ active-region ticking ✅ (#44: 0.107 ms per tick with 1,046 areas and 5 active chunks) frame budget and catch-up ✅ (#48) |
 | #10 City 09: endless progression | ✅ storage, area bonuses, machine permits, endless pacing bot no-stall guarantees ✅ (an advisor-only bot progresses from empty pockets: fountain in 22.7 min, next area with the park packed and broke in 14.3 min) playtest timings ✅ (time to each area, areas per hour, biggest chain, cats, stuck time; Copy button) upgrade tree for scale ✅ (Lit Landmarks; every upgrade has an effect test and sparkles the spots it changes) area milestone generator ✅ (#62: one specialty action per area type) |
 | #9 City 08: camera and overview | ✅ bounds, zoom-out to 0.22 with far level of detail, area labels, F / Home overview mode ✅ (labels show fog progress, 🔗 active chains and 🐱 cat finds; one tap flies to an area and opens its panel — e2e) phone gestures ✅ (a quick pinch-out snaps to the overview; picking e2e at 390×844 at both zoom limits) |
-| #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries district blooms ✅ (#75) canal water network ✅ (#71) buildable relays ✅ (#72) (open: huge-chain presentation #74) |
+| #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries district blooms ✅ (#75) canal water network ✅ (#71) buildable relays ✅ (#72) huge-chain presentation built (#74: waits on a real-phone recording) |
 | #14 City 13: Lucky Cat in the city | ✅ generated nooks, spawn rules, Fog Whisker and Golden Corridor (scaled with the city, capped: a cat never wakes an area alone), discovery log grouped by area type (`docs/discoveries-500-areas.png`) |
 | #12 City 11: automation at scale | ✅ drone networks, fog-edge priority, 50-hub safety soak Mega Pulse and scaled Overcharge ✅ (the city bot's own taps start 18–19 big chains an hour vs 2–4 by automation) area automation switches ✅ (Keep blooming, Focus the frontier, Leave alone; saved) far drones by the clock ✅ (#79) |
 | #13 City 12: Phase 3 content in the city | ✅ specialties on generic landmarks (grove Elder Trees, reservoir/canal Reservoir Gardens), cat rewards on areas (open: rooftop cluster areas #82, remove fixed rooftop data #85) |
@@ -91,6 +91,15 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - City props follow their area: broken until it clears.
 - `ChunkRenderer` rebuilds only the park chunk when the stage changes; Game shows a short line for stages 1–3.
 - `npm run shots:park` renders every stage; `tests/city.test.ts` checks the thresholds and that the park never looks lush before the fountain.
+
+## City 10.6: readable huge chains
+
+- `ui/ChainSummary.ts` follows every running chain from its events: blooms per area and a smoothed wave front. Under the combo the HUD lists the area the wave is in now and the biggest others (at most three, "🛶 Canal ×7") and a running total ("14 blooms across 3 areas"); see `docs/review/chain-summary.png`.
+- A ring marks the wave front every 0.3 s on chains of 20+ blooms; the camera-follow setting now follows that smoothed front instead of each bloom.
+- Audio changes instead of stacking: at most one bloom voice every 60–180 ms, pitch climbing with the combo (logarithmically past ×20) and the texture moving from sine to triangle to an octave shimmer (`bloomVoice`).
+- VFX coalesce: past ×30, events beyond 18 per frame only flash their tile (no arcs or bursts), on top of the particle pool cap; toasts stay capped at two.
+- Tests (`tests/chain-presentation.test.ts`): a ×200+ chain's per-area counts always add up to its total, at most three areas plus the total are listed, finished chains are dropped; the front moves far less than the blooms jump; 1,000 blooms in 10 s make under 120 voices with non-decreasing pitch and three textures; the per-frame budget. Browser perf still passes (chain ×635, update median 6.6 ms).
+- Still open: the "done" check is a ×1,000 chain at 30 fps or more recorded on a real phone.
 
 ## City 10.4: buildable relays
 

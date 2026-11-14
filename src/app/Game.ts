@@ -28,6 +28,7 @@ import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { pickLayers } from '../core/Picking';
+import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
 import { initLowPoly } from '../rendering/Shapes';
 import { TileFx } from '../rendering/TileFx';
@@ -135,6 +136,7 @@ export class Game {
     this.app.scene.fog.end = this.camera.fogDepth(84);
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.chainSummary = new ChainSummary(this.sim);
     // City 05.2: the park cheers up in stages as you restore it.
     this.chunks.onParkStage = (stage) => {
       const lines: Record<number, string> = {
@@ -1263,17 +1265,47 @@ export class Game {
   /** Replays one deterministic chain event as light, motion and sound. */
   private lastPanAt = 0;
   private followAt = 0;
+  /** City 10.6: per-area chain summaries, the wave front and a per-frame VFX budget. */
+  private chainSummary!: ChainSummary;
+  private vfxBudget = new VfxBudget(18);
+  private frameNo = 0;
+  private frontAt = 0;
+  private summaryAt = 0;
+
+  /** Wave front ring and per-area summary lines for the biggest running chain (throttled). */
+  private updateChainPresentation(dt: number) {
+    this.frontAt -= dt;
+    this.summaryAt -= dt;
+    const tr = this.chainSummary.biggest();
+    if (this.summaryAt <= 0) {
+      this.summaryAt = 0.25;
+      this.hud.chainAreas(tr && tr.total >= 12 && tr.perArea.size > 1 ? this.chainSummary.lines(tr) : []);
+    }
+    if (!tr || tr.total < 20 || this.frontAt > 0 || this.settings.reducedMotion) return;
+    this.frontAt = 0.3;
+    this.vfx.ring(new pc.Vec3(tr.fx, 0.12, tr.fz), tr.total >= 100 ? '#ff5fb8' : '#ffd25e', 3.2, 0.6);
+  }
 
   private presentChainEvent(ev: ChainEvent, combo: number) {
     const s = this.sim;
     // Camera follows big chains (setting): glide toward the wave front now and then, never against the player.
     if (this.settings.followChains && combo >= 20 && !this.cinematic) {
       const now = performance.now();
-      const t = s.grid.byTileId(ev.target);
-      if (t && t.roofId === GROUND && now - this.followAt > 1500 && now - this.lastPanAt > 4000) {
+      const tr = this.chainSummary.tracks.get(ev.chainId);
+      if (tr && this.city && now - this.followAt > 1500 && now - this.lastPanAt > 4000) {
         this.followAt = now;
-        this.camera.glide(t.x + 0.5, 0, t.z + 0.5);
+        this.camera.glide(tr.fx, 0, tr.fz); // the smoothed wave front, not each bloom
       }
+    }
+    // Huge chains: beyond the per-frame budget, events only flash their tile (no arcs or bursts).
+    if (combo >= 30 && !this.vfxBudget.take(this.frameNo)) {
+      const t = s.grid.byTileId(ev.target);
+      if (t && (ev.type === 'RESTORE' || ev.type === 'GROW' || ev.type === 'LUSH')) {
+        this.tileFx.flash(t, combo >= 100 ? '#ff5fb8' : '#ffb81f', 0.45, 0.9);
+        this.sfx.bloom(combo);
+      }
+      if (combo >= 2) this.hud.combo(combo);
+      return;
     }
     const targetRoof = s.grid.byTileId(ev.target)?.roofId;
     const from = this.posOf(ev.source, targetRoof);
@@ -2016,6 +2048,8 @@ export class Game {
     this.cat.update(dt);
     this.butterflies.update(dt);
     this.tileFx.update(dt);
+    this.frameNo++;
+    this.updateChainPresentation(dt);
     this.vfx.update(dt);
     this.updateStage(false);
     // First-tile beacon until the player restores something.

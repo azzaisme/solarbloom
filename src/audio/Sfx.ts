@@ -1,3 +1,4 @@
+import { bloomVoice } from '../ui/ChainSummary';
 /** Synthesised sound effects (no audio files). Voice-capped; silent until the first user gesture. */
 const PENTA = [0, 2, 4, 7, 9];
 
@@ -101,10 +102,16 @@ export class Sfx {
     this.tone(this.note(level * 2), 0.4, { vol: 0.14, type: 'triangle' });
     this.tone(this.note(level * 2 + 2), 0.45, { vol: 0.1, delay: 0.07 });
   }
+  private lastBloom = -1;
+  /** City 10.6: blooms change pitch and texture with the combo instead of stacking (see bloomVoice). */
   bloom(combo: number) {
-    const f = this.note(Math.min(combo, 14));
-    this.tone(f, 0.5, { vol: 0.16 });
-    this.tone(f * 2, 0.3, { vol: 0.05, type: 'triangle' });
+    const now = performance.now() / 1000;
+    const v = bloomVoice(combo, now, this.lastBloom);
+    if (!v) return;
+    this.lastBloom = now;
+    const f = this.note(v.step);
+    this.tone(f, 0.5, { vol: v.vol, type: v.type });
+    this.tone(f * 2, 0.3, { vol: v.octave ? 0.07 : 0.05, type: 'triangle' });
   }
   chainEnd(combo: number) {
     const n = combo >= 10 ? 5 : combo >= 5 ? 4 : 3;

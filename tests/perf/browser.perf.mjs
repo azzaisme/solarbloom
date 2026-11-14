@@ -321,6 +321,7 @@ try {
   phase('chain set up');
   results.chainSetup = setup;
   await measure('chain', 150, '');
+  if (process.env.PERF_SHOT) await page.screenshot({ path: process.env.PERF_SHOT }); // mid-chain: per-area summary and wave front
   // Software frames are slow, so finish the chain in simulation time and read its final combo.
   results.chainCombo = await page.evaluate(() => {
     const s = window.solarbloom.sim;
