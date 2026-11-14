@@ -164,7 +164,7 @@ export class AreaSystem {
     s.upgrades.applyCaps();
     s.bus.emit('area.cleared', { areaId: id });
     for (const nb of this.info(id).neighbours) this.reveal(nb);
-    s.production.markDirty();
+    // No production re-sum: tile rates don't depend on fog, and the area bonus is read live by rates().
     return true;
   }
 

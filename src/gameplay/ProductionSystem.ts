@@ -54,9 +54,19 @@ export class ProductionSystem {
     return sum;
   }
 
-  /** Something global changed (upgrade, machine, Core): re-sum every chunk. */
+  /** Something global changed (upgrade, Core, a new rooftop): re-sum every chunk. */
   markDirty() {
     this.dirty = true;
+  }
+
+  /**
+   * A machine appeared or moved: only tiles under it or inside a garden's reach change rate, so re-sum just
+   * the chunks around it (a full re-sum of a 1,000-area city takes hundreds of ms).
+   */
+  markNear(roofId: string, x: number, z: number, size = 1) {
+    const r = this.sim.upgrades.pollinatorReach + 1;
+    for (let cz = Math.floor((z - r) / CHUNK); cz <= Math.floor((z + size + r) / CHUNK); cz++)
+      for (let cx = Math.floor((x - r) / CHUNK); cx <= Math.floor((x + size + r) / CHUNK); cx++) this.dirtyChunks.add(chunkKey(roofId, cx, cz));
   }
 
   private sumChunk(c: Chunk): number {

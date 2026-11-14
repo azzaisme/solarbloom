@@ -95,7 +95,7 @@ export class BuildSystem {
     s.state.machines.push(m);
     for (const c of s.grid.footprint(roofId, x, z, def.size)) if (c) c.occupantId = m.id;
     s.grid.indexMachine(m);
-    s.production.markDirty();
+    s.production.markNear(roofId, x, z, def.size);
     s.bus.emit('machine.built', { machine: m });
     s.cat.relocateIfBlocked(); // the Lucky Cat never blocks a build: it hops to another nook
     if (type === 'droneHub') s.drones.spawn(m); // more drones (upgrade) are topped up by DroneSystem

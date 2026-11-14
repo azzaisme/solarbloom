@@ -20,7 +20,9 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries (open: canal network #71, buildable relays #72, huge-chain presentation #74, district blooms #75) |
 | #14 City 13: Lucky Cat in the city | ✅ generated nooks, spawn rules, Fog Whisker (open: Golden Corridor #88, discovery log by area type #89) |
 | #12 City 11: automation at scale | ✅ drone networks, fog-edge priority, 50-hub safety soak (open: area switches #78, far drones as rates #79, Mega Pulse #80) |
-| #13, #15, #16 | not started |
+| #13 City 12: Phase 3 content in the city | ✅ specialties on generic landmarks (grove Elder Trees, reservoir/canal Reservoir Gardens), cat rewards on areas (open: rooftop cluster areas #82, remove fixed rooftop data #85) |
+| #15 City 14: HUD | toast cap ✅ (open: area panel #92, upgrades drawer #94, phone pass #95) |
+| #16 City 15: proof | headless soak ✅ (`npm run test:soak`), CI workflow ✅ (open: browser perf #97, leak test #98, device log #99, docs #100) |
 
 ## City 01: world model
 
@@ -320,3 +322,28 @@ Extra beyond the plan: **Nurture**. Pulsing a restored tile grows it through thr
 3. A Lucky Cat discovery log, more anchors on Rooftop 2.
 4. Art pass: rounded meshes, instanced foliage, butterflies over restored tiles, softer shadows.
 5. Human playtest and tuning pass; consider an optional 2× speed toggle.
+
+## City 15: proof
+
+### Headless soak (`npm run test:soak`)
+
+A deterministic "very fast player" clears 1,000 areas over 6 hours of game time (one every 21.6 s, a third of them picked at random from the frontier), builds 4 machines per area and a drone hub every 25, taps the fog edge and claims every cat. The soak fails if any limit is crossed:
+
+| Check | Limit | Measured (seed 31) |
+|---|---|---|
+| Areas cleared | 1,000 | 1,000 |
+| Stalls (no next goal) | 0 s | 0 s |
+| Unreachable frontiers | 0 | 0 |
+| Tick, mean | < 3 ms | 0.15 ms |
+| Tick, p99 | < 25 ms | 0.77 ms |
+| Tick, worst | < 120 ms | 17 ms |
+| Save, stored | < 6 MB | 0.60 MB |
+| Save, serialize + gzip | < 400 ms | 260 ms |
+| JS heap after the run | < 900 MB | 253 MB (871k tiles loaded, 5,117 machines) |
+| Save round trip | identical | identical |
+| Production bookkeeping | equals a full re-sum | equal |
+| Determinism (same seed twice, 60 areas) | identical saves | identical |
+
+The first run found a real hitch: every area clear and every build re-summed production over the whole loaded world (296 ms per clear at 1,000 areas). Clears no longer re-sum, and a build only re-sums the chunks inside its reach (`ProductionSystem.markNear`), so the worst tick dropped to 17 ms. `SOAK_AREAS`, `SOAK_HOURS` and `SOAK_PROFILE=1` (per-system timing of slow ticks) help when working on it locally.
+
+CI (`.github/workflows/ci.yml`) runs the typecheck, unit tests, benchmarks and the soak on every push to main.
