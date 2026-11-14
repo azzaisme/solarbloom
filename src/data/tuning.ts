@@ -42,6 +42,9 @@ export const TUNING = {
   chain: {
     stepDelay: 0.15, // seconds between waves, so chains are readable
     maxEvents: 100, // processed events per chain before the rest fast-forwards
+    maxEventsCity: 500, // in the endless city chains can sweep many areas
+    fastForwardAfterCity: 20, // …and travel for longer before the rest resolves at once
+    corridorRange: 6, // Pollinator Gardens on streets/paths pass a chain to another within this many tiles
     maxDepth: 40,
     fastForwardAfter: 6, // seconds; long chains resolve the remainder instantly
     perEffectBiomass: 0.5, // modest bonus for each unique triggered effect

@@ -17,7 +17,8 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #7 City 06: simulation at city scale | ✅ (open: active-region equivalence test #44, catch-up budget #48) |
 | #10 City 09: endless progression | ✅ storage, area bonuses, machine permits, endless pacing bot (open: specialty milestone actions #62, upgrade tree #65, playtest panel #68) |
 | #9 City 08: camera and overview | ✅ bounds, zoom-out to 0.22 with far level of detail, area labels, F / Home (open: overview click-to-fly #59, phone gestures #61) |
-| #11–#16 | not started |
+| #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries (open: canal network #71, buildable relays #72, huge-chain presentation #74, district blooms #75) |
+| #12–#16 | not started |
 
 ## City 01: world model
 
@@ -45,6 +46,14 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - Authored landmarks (Great Greenhouse at 6 chunks, Solar Cathedral at 12, Sky Observatory at 20, then one every 10 chunks) sit in a seeded direction at their distance.
 - Difficulty grows with distance: pulse cost ×(1 + 0.04/chunk, max ×2) and a rising pollution floor (max 85).
 - Tests: skeleton determinism, themes, every type's ground/obstacles/landmark clearance, authored landmarks for 10 seeds, difficulty caps, and a 500+-area variety soak (under 30% same-type neighbours; every type within 12 chunks of the park).
+
+## City 10: massive blooming systems
+
+- Chains follow plain adjacency across area borders on the ground and stop at hidden fog (fog-edge rules apply to every chain effect).
+- Green corridors: a Pollinator Garden standing on a street or path passes its chain to every other corridor garden within 6 tiles (once per garden per chain), which blooms a spot beside it and sets it off in turn. Lines of street gardens carry a bloom right across the city.
+- City chains may run up to 500 events and travel for 20 s before the rest resolves at once (rooftop chains keep 100 / 6 s).
+- Chain results report how many areas they swept: a feed line from 3 areas, a toast from 6.
+- Tests: crossing borders and stopping at fog, a 10-garden corridor end to end (deterministic, once per garden), and a ×200+ chain sweeping 12+ areas that terminates and pays once.
 
 ## City 08: getting around the city
 

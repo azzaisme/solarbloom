@@ -13,7 +13,7 @@ export interface GameEvents {
   'chain.started': { chainId: number; originTileId: string };
   'chain.event': { event: ChainEvent; combo: number };
   'chain.fastForward': { chainId: number };
-  'chain.ended': { chainId: number; combo: number; bonus: number; total: number; milestonePct: number; energy: number; roofs: string[]; crossings: number };
+  'chain.ended': { chainId: number; combo: number; bonus: number; total: number; milestonePct: number; energy: number; roofs: string[]; crossings: number; areas: number };
   'machine.boosted': { machineId: string };
   'machine.boostUsed': { machineId: string };
   'reservoir.overflow': { machineId: string; tiles: string[] };

@@ -940,7 +940,9 @@ export class Game {
       this.sfx.chainEnd(10);
       if (!s.state.stats.firsts.treePulse || s.state.stats.firsts.treePulse === Math.round(s.time)) this.hud.toast('🌳 Mother Tree Bloom Pulse!<small>Everything around it bursts into life.</small>', 'gold', 3);
     });
-    b.on('chain.ended', ({ chainId, combo, bonus, total, milestonePct, energy, roofs, crossings }) => {
+    b.on('chain.ended', ({ chainId, combo, bonus, total, milestonePct, energy, roofs, crossings, areas }) => {
+      if (areas >= 3) this.hud.feed(`🌸 Bloom chain ×${combo} swept ${areas} areas`);
+      if (areas >= 6) this.hud.toast(`🌸 A city-wide bloom! ×${combo}<small>It swept across ${areas} areas.</small>`, 'gold', 3);
       this.tileFx.release(`chain${chainId}`);
       if (crossings > 0) {
         const names = roofs.map((r) => ROOF_BY_ID[r]?.short ?? r).join(' → ');
@@ -1159,6 +1161,13 @@ export class Game {
         this.sfx.bloom(combo);
         break;
       }
+      case 'CORRIDOR':
+        if (from && to) {
+          this.vfx.arc(from, to, '#7fe07a', 0.7);
+          this.vfx.burst(to, 8, { up: 1.6, size: 0.05 });
+        }
+        if (combo >= 2) this.hud.combo(combo);
+        break;
       case 'POLLINATE':
         if (from && to) {
           this.vfx.arc(from, to, PALETTE.pink, 0.6);

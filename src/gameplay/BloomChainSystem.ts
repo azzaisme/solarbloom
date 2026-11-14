@@ -16,6 +16,7 @@ export type ChainEventType =
   | 'OVERFLOW' // a Reservoir Garden spills over (target = garden id)
   | 'CANOPY_BURST' // the Elder Tree releases its charge (target = tree id)
   | 'LUSH' // a relay pulse lands on a tile already in full bloom: it turns lush and its neighbours respond
+  | 'CORRIDOR' // a street garden passes the chain to the next garden along the street (target = garden id)
   | 'REWARD';
 
 /** One step of a Bloom Chain. Presentation replays these; it never decides outcomes. */
@@ -52,6 +53,10 @@ interface ChainRun {
   roofs: Set<string>;
   /** Gardens boosted by an Overcharge Pulse in this chain (+1 pollination). */
   pollinatorBonus: Set<string>;
+  /** Corridor gardens that already passed the chain on (once each per chain). */
+  corridorFired: Set<string>;
+  /** City areas this chain touched (for the summary). */
+  areas: Set<string>;
   mode: 'normal' | 'mega';
   budget: number;
   announced: boolean;
@@ -119,6 +124,9 @@ class EventHeap {
 /** Effects that count toward the BLOOM CHAIN ×N combo and milestones. */
 const COUNTED: ChainEventType[] = ['RESTORE', 'GROW', 'PRODUCE_ENERGY', 'PRODUCE_WATER', 'DISCHARGE', 'RELAY', 'OVERFLOW', 'CANOPY_BURST', 'LUSH'];
 
+/** Pollinator Gardens standing on streets and paths form green corridors. */
+const CORRIDOR_GROUND = new Set(['road', 'paving']);
+
 /**
  * Bloom Chains: `action → tile event → synergy checks → new events → reward aggregation`.
  * - Events are queued with a delay (never recursive) and processed in (time, sequence) order: reproducible.
@@ -158,6 +166,8 @@ export class BloomChainSystem {
       dischargedTrees: new Set(),
       relaysFired: new Set(),
       pollinatorBonus: new Set(),
+      corridorFired: new Set(),
+      areas: new Set(),
       roofs: new Set([origin.roofId]),
       mode,
       budget,
@@ -174,6 +184,27 @@ export class BloomChainSystem {
   synergyReach(): number {
     const u = this.sim.upgrades;
     return Math.max(1, u.pollinatorReach, u.treeRadius, TUNING.neighbourhood.canopy.chargeRadius, TUNING.neighbourhood.reservoir.radius);
+  }
+
+  /** Event cap per chain: bigger in the endless city. */
+  maxEvents(): number {
+    return this.sim.progression.homeIsPark ? TUNING.chain.maxEventsCity : TUNING.chain.maxEvents;
+  }
+
+  /** Is this garden part of a green corridor (standing on a street or path)? */
+  isCorridor(m: MachineData): boolean {
+    if (m.type !== 'pollinator') return false;
+    const t = this.sim.grid.get(m.roofId, m.x, m.z);
+    return !!t && CORRIDOR_GROUND.has(t.feature ?? '');
+  }
+
+  /** The other corridor gardens within reach of one (nearest first, deterministic). */
+  corridorNext(m: MachineData): MachineData[] {
+    const R = TUNING.chain.corridorRange;
+    return this.sim.grid
+      .machinesNear(m.roofId, m.x, m.z, R)
+      .filter((o) => o !== m && this.isCorridor(o))
+      .sort((a, b) => distToFootprint(a.x, a.z, m.x, m.z, 1) - distToFootprint(b.x, b.z, m.x, m.z, 1) || (a.id < b.id ? -1 : 1));
   }
 
   /** Canopy Burst reach from the Elder Tree's footprint. */
@@ -303,7 +334,7 @@ export class BloomChainSystem {
   // ───────────── synergy checks ─────────────
 
   private canGrow(run: ChainRun, depth: number) {
-    return !run.fastForward && run.processed + run.pending < TUNING.chain.maxEvents && depth < TUNING.chain.maxDepth;
+    return !run.fastForward && run.processed + run.pending < this.maxEvents() && depth < TUNING.chain.maxDepth;
   }
 
   private enqueue(run: ChainRun, e: Omit<ChainEvent, 'seq' | 'chainId' | 'at'>, delay: number = TUNING.chain.stepDelay) {
@@ -333,6 +364,14 @@ export class BloomChainSystem {
         run.pollinatorUses.set(m.id, used + 1);
         run.visited.add(target.id);
         this.enqueue(run, { type: 'POLLINATE', source: m.id, target: target.id, cause: 'pollinate', depth: depth + 1 });
+        // A street garden passes the chain along its green corridor (once per garden per chain).
+        if (!run.corridorFired.has(m.id) && this.isCorridor(m)) {
+          run.corridorFired.add(m.id);
+          for (const o of this.corridorNext(m)) {
+            if (run.corridorFired.has(o.id)) continue;
+            this.enqueue(run, { type: 'CORRIDOR', source: m.id, target: o.id, cause: 'pollinate', depth: depth + 1 }, TUNING.chain.stepDelay * 0.8);
+          }
+        }
       } else if (m.type === 'motherTree' && d >= 1 && d <= s.upgrades.treeRadius && !run.dischargedTrees.has(m.id)) {
         this.enqueue(run, { type: 'CHARGE', source: tile.id, target: m.id, cause: 'charge', depth: depth + 1 }, TUNING.chain.stepDelay * 0.6);
       } else if (m.type === 'core' && m.roofId === 'r3' && d >= 1 && d <= TUNING.neighbourhood.canopy.chargeRadius && !run.dischargedTrees.has(m.id)) {
@@ -455,7 +494,8 @@ export class BloomChainSystem {
     const now = s.time;
     // Long chains fast-forward: stop growing, resolve what's queued right away.
     for (const run of this.runs.values()) {
-      if (!run.fastForward && (now - run.startedAt > TUNING.chain.fastForwardAfter || run.processed >= TUNING.chain.maxEvents)) {
+      const ffAfter = this.sim.progression.homeIsPark ? TUNING.chain.fastForwardAfterCity : TUNING.chain.fastForwardAfter;
+      if (!run.fastForward && (now - run.startedAt > ffAfter || run.processed >= this.maxEvents())) {
         run.fastForward = true;
         this.queue.update((q) => {
           if (q.chainId === run.id) q.at = Math.min(q.at, now);
@@ -502,6 +542,8 @@ export class BloomChainSystem {
         const t = s.grid.byTileId(ev.target);
         if (!t || !s.restoration.isEligible(t, true)) return;
         run.roofs.add(t.roofId);
+        const ar = s.areas.areaOf(t);
+        if (ar) run.areas.add(ar);
         this.emit(run, ev);
         s.restoration.complete(t, ev.cause as RestoreSource, run.id);
         return;
@@ -509,8 +551,22 @@ export class BloomChainSystem {
       case 'GROW': {
         const t = s.grid.byTileId(ev.target);
         if (!t || t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom) return;
+        const ga = s.areas.areaOf(t);
+        if (ga) run.areas.add(ga);
         this.emit(run, ev);
         s.restoration.grow(t, run.id);
+        return;
+      }
+      case 'CORRIDOR': {
+        // The pollen arrives at the next garden: it blooms a spot beside it, which sets that garden off.
+        const g = s.machine(ev.target);
+        if (!g || run.corridorFired.has(g.id)) return;
+        const origin = s.grid.get(g.roofId, g.x, g.z)!;
+        const target = this.pollinationTarget(run, g, origin);
+        if (!target) return;
+        this.emit(run, ev);
+        run.visited.add(target.id);
+        this.enqueue(run, { type: target.ground === 'restored' ? 'GROW' : 'RESTORE', source: g.id, target: target.id, cause: 'pollinate', depth: ev.depth + 1 }, TUNING.chain.stepDelay * 0.6);
         return;
       }
       case 'POLLINATE': {
@@ -708,6 +764,7 @@ export class BloomChainSystem {
       energy: run.energy,
       roofs: [...run.roofs],
       crossings: run.relaysFired.size,
+      areas: run.areas.size,
     });
     if (run.relaysFired.size) s.metrics.first('remoteChain');
     if (got > 0) s.bus.emit('resource.gain', { kind: 'biomass', amount: got, reason: 'chain' });
