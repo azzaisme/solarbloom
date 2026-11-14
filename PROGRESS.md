@@ -160,7 +160,7 @@ For each phase it records the game's update time per frame (`app.stats.frame.upd
 | Zoom | 10.0 ms | 20.1 ms | 24 ms | 0 (limit 6) | 161 (limit 400) |
 | Chain ×746 | 5.7 ms | 28.9 ms | 63 ms | 1 (limit 8) | 239 (limit 400) |
 
-Reload with the 150-area save: 3.7 s under SwiftShader (limit 8 s).
+Reload with the 150-area save: about 4 s under SwiftShader (limit 8 s). Autosave's main-thread steps with that save loaded (worst of 5): serialize 2.2 ms, base64 3.5 ms, storage write 0.7 ms (each limited to 16 ms; gzip runs off the main thread in a CompressionStream, at an idle moment). A full or blocked storage makes the save report failure (tested), keeps the previous save and shows one toast.
 
 What the first runs found, and the fixes:
 

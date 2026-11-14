@@ -93,10 +93,19 @@ export class SaveService {
 
   /** gzip + base64 when the platform has CompressionStream; plain JSON otherwise. */
   async serializeCompressed(state: GameState): Promise<string> {
+    let t = performance.now();
     const json = this.serialize(state);
+    this.timings.serialize = performance.now() - t;
     if (typeof CompressionStream === 'undefined') return json;
-    return Z + toBase64(await pipe(new TextEncoder().encode(json), new CompressionStream('gzip')));
+    const gz = await pipe(new TextEncoder().encode(json), new CompressionStream('gzip')); // off the main thread
+    t = performance.now();
+    const out = Z + toBase64(gz);
+    this.timings.encode = performance.now() - t;
+    return out;
   }
+
+  /** Main-thread cost of the last autosave's steps, ms (the perf harness checks each stays under a frame). */
+  readonly timings = { serialize: 0, encode: 0, write: 0 };
 
   static async decode(raw: string): Promise<string> {
     if (!raw.startsWith(Z)) return raw;
@@ -142,8 +151,10 @@ export class SaveService {
 
   /** Writes an already-serialized save. False if storage refused it (full, private mode). */
   write(data: string): boolean {
+    const t = performance.now();
     try {
       this.storage?.setItem(SAVE_KEY, data);
+      this.timings.write = performance.now() - t;
       return !!this.storage;
     } catch {
       return false;

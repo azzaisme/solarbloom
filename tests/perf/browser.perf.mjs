@@ -39,6 +39,7 @@ const LIMITS = {
   // mesh per chunk). The chain phase's worst frames are the instant 800 gardens appear, before they batch.
   drawCalls: { pan: 400, zoom: 400, chain: 400 },
   chainMinCombo: CHAIN,
+  saveStepMs: 16, // each main-thread step of an autosave (serialize, base64, storage write) fits in a frame
 };
 
 const server = await preview({ preview: { port: 4183, strictPort: true }, logLevel: 'silent' });
@@ -112,6 +113,18 @@ try {
   await page.waitForFunction(() => !!window.solarbloom && window.solarbloom.sim.state.machines.length > 50, null, { timeout: 60000 });
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   results.loadMs = Date.now() - t0;
+  // Autosave with the big save loaded: the steps on the main thread, five saves, worst of each.
+  results.autosave = await page.evaluate(async () => {
+    const g = window.solarbloom;
+    const worst = { serialize: 0, encode: 0, write: 0 };
+    for (let i = 0; i < 5; i++) {
+      const data = await g.saver.serializeCompressed(g.sim.state);
+      g.saver.write(data);
+      for (const k of Object.keys(worst)) worst[k] = Math.max(worst[k], g.saver.timings[k]);
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return worst;
+  });
   const loaded = await page.evaluate(() => ({ areas: Object.values(window.solarbloom.sim.state.areas).filter((a) => a.fog === 'cleared').length }));
   if (loaded.areas < built.areas) failures.push(`reload lost areas: ${loaded.areas}/${built.areas}`);
 
@@ -301,6 +314,7 @@ try {
   const r = results;
   if (errors.length) failures.push(`page errors: ${errors.slice(0, 3).join(' | ')}`);
   if (r.loadMs > LIMITS.loadMs) failures.push(`load ${r.loadMs} ms > ${LIMITS.loadMs}`);
+  for (const [k, v] of Object.entries(r.autosave)) if (v > LIMITS.saveStepMs) failures.push(`autosave ${k} ${v.toFixed(1)} ms > ${LIMITS.saveStepMs}`);
   for (const k of ['pan', 'zoom', 'chain']) {
     if (r[k].updateMedian > LIMITS.updateMedianMs) failures.push(`${k} update median ${r[k].updateMedian.toFixed(1)} ms > ${LIMITS.updateMedianMs}`);
     if (r[k].hitches > LIMITS.hitches[k]) failures.push(`${k} hitches ${r[k].hitches} (update > ${LIMITS.hitchMs} ms) > ${LIMITS.hitches[k]}`);
@@ -318,6 +332,7 @@ for (const k of ['pan', 'zoom', 'chain']) {
   const r = results[k];
   if (r) console.log(`${k.padEnd(5)} ${r.frames} frames · update median ${f(r.updateMedian)} p95 ${f(r.updateP95)} worst ${f(r.updateWorst)} ms · hitches ${r.hitches} · draw calls ${r.drawCalls} (worst ${r.drawCallsWorst}) · render ${f(r.renderMedian)} ms · frame ${f(r.median)} ms`);
 }
+if (results.autosave) console.log(`autosave (main thread, worst of 5): serialize ${f(results.autosave.serialize)} ms · base64 ${f(results.autosave.encode)} ms · write ${f(results.autosave.write)} ms`);
 console.log(`chain: ×${results.chainCombo} along a ${results.chainSetup?.row.len}-tile corridor of ${results.chainSetup?.gardens} gardens`);
 if (process.env.PERF_JSON) writeFileSync(process.env.PERF_JSON, JSON.stringify(results, null, 2));
 if (failures.length) {
