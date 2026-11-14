@@ -19,6 +19,7 @@ import { CameraController } from '../rendering/CameraController';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
 import { ChunkRenderer } from '../rendering/ChunkRenderer';
+import { areaPanelHtml } from '../ui/AreaPanel';
 import { GridRenderer } from '../rendering/GridRenderer';
 import { InputController } from '../rendering/InputController';
 import { MachineVisuals } from '../rendering/MachineVisuals';
@@ -164,6 +165,7 @@ export class Game {
           this.sim.hood.activateRoofCore(id);
         },
         neighbourhoodBloom: (replay) => this.playNeighbourhoodBloom(replay),
+        openArea: (id) => this.openArea(id),
         wake: (id) => {
           const m = this.sim.machine(id);
           if (m && this.landmarkReady(m)) this.wakeLandmark(m);
@@ -1285,24 +1287,15 @@ export class Game {
   }
 
   private landmarkHtml(m: MachineData): string {
-    const s = this.sim;
-    const id = s.areas.areaOf(m)!;
-    const a = s.areas.info(id);
-    const def = AREA_TYPES[a.type];
-    const fog = s.areas.fog(id);
-    const c = s.areas.counts(id);
-    const need = s.areas.need(id);
-    let body: string;
-    if (id === PARK) {
-      const reqs = s.progression.requirements();
-      body = s.state.progression.coreActivated
-        ? '<p class="stat">⛲ Flowing again. The park is home.</p>'
-        : `<ul style="margin:6px 0;padding-left:18px;font-size:12.5px">${reqs.map((r) => `<li>${r.done ? '✅' : '⬜'} ${r.label}</li>`).join('')}</ul><p>Waking it costs ${formatCost(TUNING.core.cost)} and rolls the fog back from the first ring of the city.</p>`;
-    } else if (fog === 'cleared') body = `<p class="stat">✨ Awake. The ${def.name.toLowerCase()} is clear of fog.</p>`;
-    else
-      body = `<p class="stat">🌫️ ${fog === 'frontier' ? 'Thick fog' : 'Thinning fog'} · ${c.restored}/${need} tiles restored to wake it</p><p>Restore tiles next to clear ground: the fog recedes tile by tile. Wake the ${a.landmarkName} to clear this ${def.name.toLowerCase()} and reveal its neighbours.</p>${s.areas.ready(id) ? `<button class="buy" data-wake="${m.id}">✨ Wake the ${esc(a.landmarkName)}</button>` : ''}`;
-    const tag = a.authored ? ' · <b>a rare landmark</b>' : '';
-    return `<h4><span>${def.icon} ${esc(a.landmarkName)}</span><button data-close aria-label="Close">×</button></h4><p class="stat">${def.name} · ${a.distance} blocks from the park${tag}</p>${body}`;
+    return areaPanelHtml(this.sim, this.sim.areas.areaOf(m)!, m.id);
+  }
+
+  /** Opens an area's panel (from its label in the overview): selects its landmark and flies there. */
+  private openArea(id: string) {
+    const lm = this.sim.areas.landmark(id);
+    if (!lm) return;
+    this.select(lm.id);
+    this.focusArea(id);
   }
 
   /** Flies the camera to an area's landmark (never during a cinematic; player input takes over). */
@@ -1343,9 +1336,10 @@ export class Game {
         const lm = s.areas.landmark(id);
         let html: string;
         if (ready && lm) html = `✨ ${esc(a.landmarkName)}<button data-wake="${lm.id}">Wake it</button>`;
-        else if (fog === 'cleared') html = `${def.icon} ${esc(id === PARK ? 'The Park' : def.name)}<small>clear${a.authored ? ' · ' + esc(a.landmarkName) : ''}</small>`;
-        else html = `${def.icon} ${esc(def.name)}<small>🌫️ ${Math.min(100, Math.round((s.areas.counts(id).restored / s.areas.need(id)) * 100))}%</small>`;
-        this.hud.worldLabel(key, html, sp.x, sp.y, ready);
+        else if (fog === 'cleared') html = `<span data-area="${id}">${def.icon} ${esc(id === PARK ? 'The Park' : def.name)}<small>clear${a.authored ? ' · ' + esc(a.landmarkName) : ''}</small></span>`;
+        else html = `<span data-area="${id}">${def.icon} ${esc(def.name)}<small>🌫️ ${Math.min(100, Math.round((s.areas.counts(id).restored / s.areas.need(id)) * 100))}%</small></span>`;
+        // Zoomed out, every label is a button to its area's panel.
+        this.hud.worldLabel(key, html, sp.x, sp.y, ready || zoomedOut);
       }
     }
     for (const key of this.areaLabels) if (!live.has(key)) this.hud.worldLabel(key, null);

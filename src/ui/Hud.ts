@@ -33,6 +33,8 @@ export interface HudCallbacks {
   neighbourhoodBloom(replay: boolean): void;
   /** Wake a city landmark (by machine id). */
   wake(machineId: string): void;
+  /** Open an area's panel (from its label in the overview). */
+  openArea(areaId: string): void;
 }
 
 export interface Settings {
@@ -220,6 +222,8 @@ export class Hud {
       if (roof && !link && !core) this.cb.focusRoof(roof.dataset.roof!);
       const wake = t.closest<HTMLButtonElement>('[data-wake]');
       if (wake && !wake.disabled) this.cb.wake(wake.dataset.wake!);
+      const area = t.closest<HTMLElement>('[data-area]') ?? t.closest<HTMLElement>('.wlabel')?.querySelector<HTMLElement>('[data-area]');
+      if (area && !wake && !link && !core) this.cb.openArea(area.dataset.area!);
     });
     $(r, '#roofNav').addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-roof]');

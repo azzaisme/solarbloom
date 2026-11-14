@@ -1,0 +1,75 @@
+import { describe, expect, it } from 'vitest';
+import { PARK } from '../src/core/Areas';
+import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
+import type { MachineData } from '../src/core/types';
+import { TUNING } from '../src/data/tuning';
+import { Sim } from '../src/gameplay/Sim';
+import { AREA_SPECIALTY, areaPanelData, areaPanelHtml } from '../src/ui/AreaPanel';
+
+function city(seed = 3) {
+  const sim = new Sim(createInitialState(seed));
+  sim.state.progression.coreActivated = true;
+  sim.areas.clear(PARK, true);
+  return sim;
+}
+
+function restore(sim: Sim, id: string, n: number) {
+  const tiles = sim.areas.tiles(id).filter((t) => isRestorable(t, sim.state.machines) && t.ground !== 'restored');
+  for (const t of tiles.slice(0, n)) {
+    t.ground = 'restored';
+    t.bloom = 1;
+    t.pollution = 0;
+    sim.grid.touch(t);
+  }
+}
+
+describe('area panel (City 14.2)', () => {
+  it('shows type, specialty, live fog progress, the checklist, the bonus and machines', () => {
+    const sim = city();
+    const id = sim.areas.nextGoal()!;
+    const lm = sim.areas.landmark(id)!;
+    const a = sim.areas.info(id);
+    let d = areaPanelData(sim, id);
+    expect(d.fog).toBe('frontier');
+    expect(d.restored).toBe(0);
+    expect(d.need).toBe(sim.areas.need(id));
+    let html = areaPanelHtml(sim, id, lm.id);
+    expect(html).toContain(AREA_SPECIALTY[a.type]);
+    expect(html).toContain(`Restore ${d.need} tiles (0/${d.need})`);
+    expect(html).toContain('Bonus once clear');
+    expect(html).toContain('Machines: none yet');
+    expect(html).not.toContain('data-wake');
+
+    // Progress updates live.
+    restore(sim, id, 10);
+    d = areaPanelData(sim, id);
+    expect(d.restored).toBe(10);
+    expect(areaPanelHtml(sim, id, lm.id)).toContain(`(10/${d.need})`);
+
+    // A machine inside it is listed.
+    const spot = sim.areas.tiles(id).find((t) => t.ground === 'restored' && !t.occupantId)!;
+    const m: MachineData = { id: sim.newId('m'), type: 'solar', roofId: GROUND, x: spot.x, z: spot.z, size: 1, boostUntil: 0, timer: 0, charge: 0 };
+    sim.state.machines.push(m);
+    sim.grid.indexMachine(m);
+    expect(areaPanelData(sim, id).machines).toEqual({ solar: 1 });
+    expect(areaPanelHtml(sim, id, lm.id)).toContain('1 Solar Panel');
+
+    // Ready: the wake button appears; cleared: the bonus is its share of the type's total.
+    restore(sim, id, 999);
+    expect(areaPanelHtml(sim, id, lm.id)).toContain(`data-wake="${lm.id}"`);
+    expect(sim.areas.clear(id)).toBe(true);
+    html = areaPanelHtml(sim, id, lm.id);
+    expect(html).toContain('🌫️ Clear');
+    expect(html).not.toContain('data-wake');
+    const per = TUNING.city.bonuses[a.type];
+    const first = Object.entries(per)[0];
+    expect(areaPanelData(sim, id).bonus[first[0] as 'energy']).toBeCloseTo(first[1] * 60, 1); // the first area of its type
+  });
+
+  it('the park lists its fountain milestones', () => {
+    const sim = new Sim(createInitialState(4));
+    const html = areaPanelHtml(sim, PARK, sim.areas.landmark(PARK)?.id);
+    for (const r of sim.progression.requirements()) expect(html).toContain(r.label);
+    expect(html).toContain('Wake the');
+  });
+});

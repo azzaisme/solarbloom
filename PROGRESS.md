@@ -21,7 +21,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #14 City 13: Lucky Cat in the city | ✅ generated nooks, spawn rules, Fog Whisker (open: Golden Corridor #88, discovery log by area type #89) |
 | #12 City 11: automation at scale | ✅ drone networks, fog-edge priority, 50-hub safety soak (open: area switches #78, far drones as rates #79, Mega Pulse #80) |
 | #13 City 12: Phase 3 content in the city | ✅ specialties on generic landmarks (grove Elder Trees, reservoir/canal Reservoir Gardens), cat rewards on areas (open: rooftop cluster areas #82, remove fixed rooftop data #85) |
-| #15 City 14: HUD | toast cap ✅, upgrades drawer grouped by system ✅ (Networks: Green Corridors, Drone Mesh; Fog: Fog Lanterns) (open: area panel #92, phone pass #95) |
+| #15 City 14: HUD | toast cap ✅, upgrades drawer grouped by system ✅, area panel ✅ (from landmarks and overview labels) (Networks: Green Corridors, Drone Mesh; Fog: Fog Lanterns) (open: phone pass #95, objective panel #91) |
 | #16 City 15: proof | headless soak ✅ (`npm run test:soak`), browser perf ✅ (`npm run test:perf:browser`), CI workflow ✅ leak test ✅ (`npm run test:leak`), docs ✅ (open: device log #99) |
 
 ## City 01: world model

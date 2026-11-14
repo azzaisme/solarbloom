@@ -28,7 +28,7 @@ Node 20+ is required. The build is a static site (`base: './'`), so `dist/` can 
 | `npm test` | Unit and simulation tests (vitest, headless): world, saves, areas, generator, chains, drones, cat, pacing bots | ~1 min |
 | `npm run test:perf` | Node benchmarks: lookups, save size and speed, sim step for a ~1,000-area world (`tests/perf/*.perf.ts`) | ~10 s |
 | `npm run test:soak` | Headless soak: a 1,000-area city over 6 h of game time; fails on tick time, heap, save size, stalls, unreachable frontiers or non-determinism (`SOAK_AREAS`, `SOAK_HOURS`, `SOAK_PROFILE=1`) | ~1 min |
-| `npm run test:e2e` | Build, then check pointer → tile picking at 3 screen sizes × 3 zooms (55k checks) | ~2 min |
+| `npm run test:e2e` | Build, then check pointer → tile picking at 3 screen sizes × 3 zooms (55k checks), and that the area panel opens from labels and landmarks | ~3 min |
 | `npm run test:perf:browser` | Build, then load a 150-area save in Chromium, pan, zoom through every band and play a ×600 chain; gates update time, hitches, draw calls and reload time (`PERF_AREAS`, `PERF_JSON`, `PERF_VERBOSE=1`) | ~4 min |
 | `npm run test:leak` | Build, then pan back and forth across a big city for 10 minutes; entities, materials, GPU memory and heap must return to baseline (`LEAK_MINUTES`) | ~12 min |
 
