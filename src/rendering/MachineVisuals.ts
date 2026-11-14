@@ -30,6 +30,8 @@ interface MachineView {
   coreKind?: 'crystal' | 'cistern' | 'elder' | 'fountain';
   level: number;
   extras: pc.Entity;
+  /** joined its region's dynamic batch (after its build animation) */
+  batched?: boolean;
 }
 
 const orbOn = () => mat('#b6ffe0', { emissive: '#7cf7c8', emissiveIntensity: 1.6 });
@@ -49,7 +51,42 @@ export class MachineVisuals {
     private sim: Sim,
     private parent: pc.Entity,
     private tweens: Tweens,
+    /** When given, city machines are merged into per-region dynamic batches (draw-call budget). */
+    private batcher?: pc.BatchManager,
   ) {}
+
+  /** Region size (tiles) of one machine batch group: a build or upgrade only re-batches its own region. */
+  static readonly BATCH_REGION = 64;
+  private batchGroups = new Map<string, number>();
+
+  private batchGroupFor(m: MachineData): number | undefined {
+    if (!this.batcher || m.roofId !== GROUND || m.type === 'core') return undefined;
+    const R = MachineVisuals.BATCH_REGION;
+    const key = `${Math.floor(m.x / R)}:${Math.floor(m.z / R)}`;
+    let id = this.batchGroups.get(key);
+    if (id === undefined) {
+      id = this.batcher.addGroup(`machines:${key}`, true, R).id;
+      this.batchGroups.set(key, id);
+    }
+    return id;
+  }
+
+  /**
+   * Merges a machine's parts into its region's batch. Parts whose material swaps at runtime (solar panels,
+   * Mother Tree orbs) and the status light (toggled during builds) stay separate.
+   */
+  private batch(v: MachineView) {
+    const id = this.batchGroupFor(v.m);
+    if (id === undefined) return;
+    v.batched = true;
+    const skip = new Set<pc.Entity>([...(v.panel ?? []), ...(v.orbs ?? []), ...(v.light ? [v.light] : [])]);
+    const walk = (e: pc.Entity) => {
+      if (skip.has(e)) return;
+      if (e.render && e.render.batchGroupId !== id) e.render.batchGroupId = id;
+      for (const c of e.children) walk(c as pc.Entity);
+    };
+    walk(v.root);
+  }
 
   worldOf(m: MachineData): [number, number, number] {
     const r = this.sim.grid.roof(m.roofId)!;
@@ -100,7 +137,10 @@ export class MachineVisuals {
     }
     this.views.set(m.id, v);
     this.applyUpgrades(v);
-    if (animate) this.playBuild(v);
+    if (animate) {
+      this.playBuild(v);
+      this.tweens.add(1.4, () => {}, { done: () => this.views.get(m.id) === v && this.batch(v) });
+    } else this.batch(v);
   }
 
   /** Three beats: foundation pops up, the white shell unfolds, the light switches on. */
@@ -447,6 +487,7 @@ export class MachineVisuals {
     v.level = lvl;
     v.extras.destroy();
     v.extras = group(v.body, 'extras');
+    if (v.batched) this.tweens.add(0.01, () => {}, { done: () => this.views.get(v.m.id) === v && this.batch(v) }); // once the new extras exist
     const ex = v.extras;
     if (v.m.type === 'solar') {
       // Extra wing panels per Solar Array level

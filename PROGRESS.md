@@ -156,9 +156,9 @@ For each phase it records the game's update time per frame (`app.stats.frame.upd
 
 | Phase | Update median | p95 | Worst | Hitches | Draw calls |
 |---|---|---|---|---|---|
-| Pan | 11.7 ms (limit 20) | 18.1 ms | 57 ms | 1 (limit 8) | 452 (limit 900) |
-| Zoom | 10.1 ms | 17.9 ms | 41 ms | 0 (limit 6) | 269 (limit 900) |
-| Chain ×614 | 4.4 ms | 28.1 ms | 77 ms | 1 (limit 8) | 2,678 (limit 4,500; machines aren't instanced yet, #53) |
+| Pan | 11.2 ms (limit 20) | 20.5 ms | 34 ms | 0 (limit 8) | 175 (limit 400) |
+| Zoom | 10.0 ms | 20.1 ms | 24 ms | 0 (limit 6) | 161 (limit 400) |
+| Chain ×746 | 5.7 ms | 28.9 ms | 63 ms | 1 (limit 8) | 239 (limit 400) |
 
 Reload with the 150-area save: 3.7 s under SwiftShader (limit 8 s).
 
@@ -167,6 +167,7 @@ What the first runs found, and the fixes:
 - **Chunk meshes were slow to build** (25–60 ms each, 2 per frame): `MeshBuilder` now writes into growable typed arrays and copies normals for boxes and uniform scales instead of renormalising, and rebuilds run within a 6 ms budget per frame. Pan p95 went from 45 to 18 ms, and the zoom's worst frame from 1.35 s to 41 ms.
 - **Every machine animated every frame**, on screen or not (17–33 ms with 1,500 machines): only machines inside the visible ground rectangle animate now. The chain-phase median went from 24.6 to 4.4 ms.
 - **Big chains thrashed layout**: each resource gain forced a layout to restart the counter flash and measured the counter for a flying number. Flashes are throttled, and flying gains coalesce per resource every 120 ms.
+- **Machines cost a draw call per part** (2,678 with 800 gardens on screen): city machines now merge into dynamic batches per 64×64-tile region (a build or upgrade re-batches only its region; panels, orbs and status lights whose materials or visibility change stay separate). Draw calls dropped to 160–240 at every zoom. The debug overlay (F3) shows draw calls against the 400 budget.
 - **A ×500 chain was impossible**: the city event cap (500) allowed about ×220 at most. It is now 1,500.
 
 ### Leak test (`npm run test:leak`)

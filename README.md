@@ -132,7 +132,7 @@ src/
   data/                   every balance knob: tuning.ts (TUNING.city, TUNING.park, …), city.ts (area types, park layout, generator), machines.ts, upgrades.ts
   rendering/              PlayCanvas only; listens to state and never decides rules
     ChunkRenderer         streams merged vertex-coloured chunk meshes and fog sheets around the camera, far LOD
-    MachineVisuals        machines and landmarks (only on-screen ones animate), DroneVisuals, CatVisuals, Vfx, Overlays
+    MachineVisuals        machines (merged into per-region dynamic batches) and landmarks; only on-screen ones animate. DroneVisuals, CatVisuals, Vfx, Overlays
     CameraController      fixed 45°/35° orthographic camera, glide, bounds, zoom to the overview
     SceneBuilder, Scenery, InputController
   ui/                     DOM HUD (Hud.ts, styles.css) and pooled flying "+2🌿" numbers
@@ -152,7 +152,6 @@ tests/                    vitest suites, perf/ (benchmarks, browser perf, leak),
 
 ## Limitations
 
-- Machines are separate entities (not instanced yet), so screens full of street gardens cost thousands of draw calls (#53).
 - Chunk meshes are dense: about 2 MB of GPU memory per streamed chunk at near zoom.
 - No buildings on city blocks yet (#54); areas are flat ground with props.
 - The rooftop campaign (three linked rooftops) is still in the code behind `createInitialState(seed, { rooftops: true })` for its tests; turning it into city rooftop clusters is #82.

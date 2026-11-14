@@ -126,7 +126,7 @@ export class Game {
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
     this.grid.build();
-    this.machines = new MachineVisuals(this.sim, this.scene.world, this.tweens);
+    this.machines = new MachineVisuals(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.machines.buildAll();
     this.drones = new DroneVisuals(this.sim, this.scene.world, this.tweens);
     this.drones.onTrail = (p) => this.vfx.trail(p);
@@ -1828,6 +1828,7 @@ export class Game {
         const st = this.sim.state;
         this.hud.setDebug(
           `FPS ${this.fpsAcc.fps.toFixed(0)}  dpr ${this.app.graphicsDevice.maxPixelRatio}  sim ${st.time.toFixed(1)}s ×${this.speed}\n` +
+            `draw calls ${this.app.stats.drawCalls.total} (budget 400)  chunks ${this.chunks?.loadedCount ?? 0}\n` +
             `chains ${this.sim.chains.activeRuns} queued ${this.sim.chains.pendingSteps}\n` +
             `drones ${st.drones.length}  machines ${st.machines.length}\n` +
             `cat ${st.cat.active ? st.cat.active.anchorId : `next ${st.cat.firstSpawned ? st.cat.nextSpawnAt.toFixed(0) : 'first'}`}\n` +

@@ -35,9 +35,9 @@ const LIMITS = {
   updateMedianMs: 20, // measured 12–15 ms on a 4-core cloud container
   hitchMs: 50, // a frame whose update crosses this is a hitch
   hitches: { pan: 8, zoom: 6, chain: 8 },
-  // Per frame, phase median. Each machine is still its own entity (instancing is #53), so the chain phase —
-  // 400+ street gardens on screen — is far higher than normal play.
-  drawCalls: { pan: 900, zoom: 900, chain: 4500 },
+  // Per frame, phase median: under 400 at every zoom (machines merge into per-region batches, ground is one
+  // mesh per chunk). The chain phase's worst frames are the instant 800 gardens appear, before they batch.
+  drawCalls: { pan: 400, zoom: 400, chain: 400 },
   chainMinCombo: CHAIN,
 };
 
