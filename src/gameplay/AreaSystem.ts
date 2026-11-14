@@ -160,6 +160,8 @@ export class AreaSystem {
     const st = (s.state.areas[id] ??= { fog: 'thinning', revealedAt: s.time });
     st.fog = 'cleared';
     st.clearedAt = s.time;
+    this.typeCache = undefined;
+    s.upgrades.applyCaps();
     s.bus.emit('area.cleared', { areaId: id });
     for (const nb of this.info(id).neighbours) this.reveal(nb);
     s.production.markDirty();
@@ -206,6 +208,37 @@ export class AreaSystem {
     const ready = open.filter((id) => this.ready(id)).sort((a, b) => this.info(a).distance - this.info(b).distance);
     if (ready.length) return ready[0];
     return open.sort((a, b) => this.share(b) - this.share(a) || this.info(a).distance - this.info(b).distance || (a < b ? -1 : 1))[0];
+  }
+
+  /** Cleared areas other than the park, by type (cached until the next clear). */
+  clearedByType(): Record<string, number> {
+    if (this.typeCache) return this.typeCache;
+    const out: Record<string, number> = {};
+    for (const [id, st] of Object.entries(this.sim.state.areas)) if (st.fog === 'cleared' && id !== PARK) out[this.info(id).type] = (out[this.info(id).type] ?? 0) + 1;
+    this.typeCache = out;
+    return out;
+  }
+  private typeCache?: Record<string, number>;
+
+  clearedCount(): number {
+    return Object.values(this.clearedByType()).reduce((a, b) => a + b, 0);
+  }
+
+  /** Permanent income from cleared areas (soft-scaled per type). */
+  bonusIncome(): { energy: number; water: number; biomass: number } {
+    const out = { energy: 0, water: 0, biomass: 0 };
+    const C = TUNING.city;
+    for (const [type, n] of Object.entries(this.clearedByType())) {
+      const b = C.bonuses[type] ?? {};
+      const k = Math.pow(n, C.bonusExponent);
+      for (const r of ['energy', 'water', 'biomass'] as const) out[r] += (b[r] ?? 0) * k;
+    }
+    return out;
+  }
+
+  /** Extra storage share from cleared areas (diminishing). */
+  storageBonus(): number {
+    return TUNING.city.storagePerArea * Math.pow(this.clearedCount(), TUNING.city.storageExponent);
   }
 
   /** Revealed areas (frontier, thinning or cleared). */

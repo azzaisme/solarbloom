@@ -15,7 +15,8 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #6 City 05: the dilapidated park | ✅ layout, onboarding, fountain finale, pacing, cat nooks (open: 25/50/75% park stages #39, nook screenshots) |
 | #8 City 07: rendering | first pass ✅ chunk streaming, merged chunk meshes, fog (open: far LOD #52, instancing #53, buildings #54, device numbers #56) |
 | #7 City 06: simulation at city scale | ✅ (open: active-region equivalence test #44, catch-up budget #48) |
-| #9–#16 | not started |
+| #10 City 09: endless progression | ✅ storage, area bonuses, machine permits, endless pacing bot (open: specialty milestone actions #62, upgrade tree #65, playtest panel #68) |
+| #9, #11–#16 | not started |
 
 ## City 01: world model
 
@@ -43,6 +44,14 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - Authored landmarks (Great Greenhouse at 6 chunks, Solar Cathedral at 12, Sky Observatory at 20, then one every 10 chunks) sit in a seeded direction at their distance.
 - Difficulty grows with distance: pulse cost ×(1 + 0.04/chunk, max ×2) and a rising pollution floor (max 85).
 - Tests: skeleton determinism, themes, every type's ground/obstacles/landmark clearance, authored landmarks for 10 seeds, difficulty caps, and a 500+-area variety soak (under 30% same-type neighbours; every type within 12 chunks of the park).
+
+## City 09: an economy that never ends
+
+- Storage grows with cleared areas: +35% of the starting caps per area, with diminishing returns (n^0.85), on top of Seed Vault.
+- Each cleared area gives a small permanent income by type (parkland and groves biomass, streets and plazas energy, canals and reservoirs water, markets both), soft-scaled per type (n^0.75) so numbers stay readable.
+- Machine permits: each cleared area waives one copy's worth of the ×1.5 cost growth for every machine type, so building keeps pace with the city.
+- `tests/pacing-city.test.ts`: a scripted player wakes the fountain at ~6:40, then clears 16–20 areas in an hour (average 2.5–3.3 min per area, slowest ~4.5 min) with zero dead time. People play roughly twice as slowly.
+- Metrics record when the 1st, 5th, 10th, 25th, 50th and 100th areas are cleared.
 
 ## City 06: simulation at city scale
 

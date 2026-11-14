@@ -13,6 +13,11 @@ export class Metrics {
     b.on('link.built', ({ linkId }) => this.first(`bridge:${linkId}`));
     b.on('roof.coreAwake', ({ roofId }) => this.first(`core:${roofId}`));
     b.on('neighbourhood.bloom', () => this.first('neighbourhoodBloom'));
+    b.on('area.cleared', ({ areaId }) => {
+      if (areaId === 'park') return;
+      const n = sim.areas.clearedCount();
+      for (const k of [1, 5, 10, 25, 50, 100]) if (n >= k) this.first(`areas${k}`);
+    });
   }
 
   first(key: string) {

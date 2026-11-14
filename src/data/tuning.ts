@@ -122,6 +122,25 @@ export const TUNING = {
     /** fog density at 0% restored and just before clearing (it thins linearly in between) */
     fogFull: 1,
     fogThin: 0.25,
+    /** Each cleared area (beyond the park) adds this share of the starting storage, with diminishing returns. */
+    storagePerArea: 0.35,
+    storageExponent: 0.85,
+    /** Each cleared area waives one copy's worth of the ×machineCostGrowth for every machine type. */
+    permitsPerArea: 1,
+    /**
+     * Permanent bonus per cleared area, by type (per second). Soft-scaled: n areas of a type give
+     * base × n^bonusExponent, so numbers stay readable after hundreds of areas.
+     */
+    bonusExponent: 0.75,
+    bonuses: {
+      park: { biomass: 0.3 },
+      street: { energy: 0.25 },
+      plaza: { energy: 0.35 },
+      canal: { water: 0.35 },
+      market: { biomass: 0.25, energy: 0.1 },
+      reservoir: { water: 0.5 },
+      grove: { biomass: 0.4 },
+    } as Record<string, Partial<Record<'energy' | 'water' | 'biomass', number>>>,
   },
 
   /** Phase 3: the connected neighbourhood. Everything here is a starting point for playtesting. */

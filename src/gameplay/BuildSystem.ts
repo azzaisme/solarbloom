@@ -36,7 +36,9 @@ export class BuildSystem {
   }
 
   cost(type: BuildableType): Cost {
-    return scaleCost(MACHINES[type].cost, Math.pow(TUNING.machineCostGrowth, this.count(type)));
+    // Cleared city areas grant permits: each waives one copy's worth of cost growth.
+    const permits = (this.sim.areas?.clearedCount() ?? 0) * TUNING.city.permitsPerArea;
+    return scaleCost(MACHINES[type].cost, Math.pow(TUNING.machineCostGrowth, Math.max(0, this.count(type) - permits)));
   }
 
   /** Converts a cursor cell into the footprint anchor so the ghost centres on the pointer. */

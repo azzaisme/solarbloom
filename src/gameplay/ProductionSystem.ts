@@ -132,12 +132,14 @@ export class ProductionSystem {
       this.dirtyChunks.clear();
     }
     let energy = 0;
-    let water = TUNING.rainBarrelRate + (this.sim.hood.coreAwake('r2') ? TUNING.neighbourhood.reservoir.cisternWater : 0);
+    const bonus = this.sim.areas.bonusIncome();
+    energy += bonus.energy;
+    let water = TUNING.rainBarrelRate + bonus.water + (this.sim.hood.coreAwake('r2') ? TUNING.neighbourhood.reservoir.cisternWater : 0);
     for (const m of this.sim.state.machines) {
       if (m.type === 'solar') energy += this.solarOutput(m);
       else if (m.type === 'condenser') water += 1;
     }
-    return { energy, water, biomass: this.biomassRate };
+    return { energy, water, biomass: this.biomassRate + bonus.biomass };
   }
 
   tick(dt: number) {

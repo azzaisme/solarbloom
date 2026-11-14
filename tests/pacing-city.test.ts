@@ -1,0 +1,84 @@
+import { describe, expect, it } from 'vitest';
+import { PARK } from '../src/core/Areas';
+import { createInitialState, GROUND } from '../src/core/GameState';
+import { distToFootprint } from '../src/core/Grid';
+import type { BuildableType, TileData } from '../src/core/types';
+import { HOME } from '../src/gameplay/ProgressionSystem';
+import { Sim } from '../src/gameplay/Sim';
+
+/**
+ * The endless city, played by a scripted "reasonable player": the park first (machines next to each
+ * other, pulses at synergy spots), then area after area: it works the area the objective points at,
+ * pulses tiles at the fog's edge, builds a few machines there and wakes each landmark when ready.
+ */
+export function playCity(seed: number, actionEvery = 3, minutes = 60) {
+  const sim = new Sim(createInitialState(seed));
+  sim.cat.anchorView = () => 'visible';
+  const parkOrder: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'pollinator', 'motherTree', 'solar', 'pollinator'];
+  const areaOrder: BuildableType[] = ['pollinator', 'droneHub', 'solar', 'pollinator'];
+  const clears: number[] = [];
+  sim.bus.on('area.cleared', ({ areaId }) => areaId !== PARK && clears.push(sim.time));
+  const synergy = (t: TileData) =>
+    sim.grid.machinesNear(t.roofId, t.x, t.z, 2).reduce((a, m) => {
+      const d = distToFootprint(t.x, t.z, m.x, m.z, m.size);
+      if (m.type === 'pollinator' && d === 1) return a + 3;
+      if (m.type === 'motherTree' && d >= 1 && d <= sim.upgrades.treeRadius) return a + 2;
+      if (m.type === 'solar' && d === 1) return a + 1;
+      return a;
+    }, 0);
+  const builtIn = (area: string, type: BuildableType) => sim.state.machines.filter((m) => m.type === type && !m.starter && sim.areas.areaOf(m) === area).length;
+  const steps = Math.round((minutes * 60) / 0.1);
+  for (let i = 0; i < steps; i++) {
+    if (i % Math.round(actionEvery / 0.1) === 0) {
+      const inPark = !sim.state.progression.coreActivated;
+      const goal = inPark ? PARK : sim.areas.nextGoal();
+      if (!inPark && goal && sim.areas.ready(goal)) sim.areas.clear(goal);
+      const area = inPark ? PARK : sim.areas.nextGoal();
+      const tiles = area ? (inPark ? sim.progression.tilesFor(HOME) : sim.areas.tiles(area)) : [];
+      // 1. the next machine for this area, on the best synergy spot that's clear of fog
+      const order = inPark ? parkOrder : areaOrder;
+      const want = area ? order.find((t, k) => builtIn(area, t) < order.slice(0, k + 1).filter((x) => x === t).length) : undefined;
+      if (want && sim.build.isUnlocked(want) && sim.econ.canAfford(sim.build.cost(want))) {
+        const spot = tiles.filter((t) => sim.build.check(want, GROUND, t.x, t.z).ok).sort((a, b) => synergy(b) - synergy(a) || a.x + a.z - (b.x + b.z))[0];
+        if (spot) sim.build.place(want, GROUND, spot.x, spot.z);
+      }
+      // 2. pulse the most promising tile in the area (restore first, nurture in the park)
+      const cands = tiles.filter((t) => sim.restoration.checkPulse(t).ok && (inPark || t.ground !== 'restored'));
+      const rank = (t: TileData) => (t.ground === 'restored' ? 30 : 0) - synergy(t) * 4 + (t.ground === 'prepared' ? 0 : 3);
+      cands.sort((a, b) => rank(a) - rank(b) || a.pollution - b.pollution);
+      if (cands[0]) sim.restoration.pulse(cands[0].id);
+      else if (sim.state.resources.energy < 3) sim.harvestSun();
+      // 3. upgrades, keeping enough for the next machine
+      const nextCost = want ? (sim.build.cost(want).biomass ?? 0) : 0;
+      for (const u of sim.upgrades.all()) {
+        const st = sim.upgrades.status(u);
+        if (st.ok && sim.state.resources.biomass - st.cost >= Math.min(nextCost, sim.state.caps.biomass * 0.6)) sim.upgrades.purchase(u.id);
+      }
+      if (sim.progression.coreReady()) sim.progression.activateCore();
+      const c = sim.state.cat.active;
+      if (c && sim.time - c.spawnedAt > 40) sim.cat.claim();
+    }
+    sim.tick();
+  }
+  return { sim, clears, fountain: sim.state.stats.firsts.core, stuck: sim.state.stats.stuckSeconds, maxCombo: sim.state.stats.maxCombo };
+}
+
+const fmt = (s?: number) => (s === undefined ? '—' : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`);
+
+describe('pacing in the endless city (scripted player)', () => {
+  it('after the fountain, keeps clearing areas at a steady pace with no dead time', { timeout: 120000 }, () => {
+    for (const seed of [7, 21]) {
+      const r = playCity(seed, 3, 60);
+      const gaps = r.clears.map((t, i) => t - (i ? r.clears[i - 1] : r.fountain ?? 0));
+      const avg = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : Infinity;
+      // eslint-disable-next-line no-console
+      console.log(
+        `city seed ${seed}: fountain ${fmt(r.fountain)} · ${r.clears.length} areas in 60 min · first ${fmt(r.clears[0])} · avg ${fmt(avg)} per area · slowest ${fmt(Math.max(...gaps))} · stuck ${Math.round(r.stuck)}s · max chain ×${r.maxCombo} · storage ${Math.round(r.sim.state.caps.biomass)}🌿`,
+      );
+      expect(r.fountain).toBeDefined();
+      expect(r.clears.length).toBeGreaterThanOrEqual(8);
+      expect(avg).toBeLessThan(6 * 60);
+      expect(r.stuck).toBeLessThan(60 * 60 * 0.02);
+    }
+  });
+});
