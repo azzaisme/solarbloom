@@ -14,7 +14,7 @@ export class AreaSystem {
   readonly map: AreaMap;
 
   constructor(private sim: Sim) {
-    this.map = areaMapFor(sim.state.seed);
+    this.map = areaMapFor(sim.state.seed, sim.grid.layer(GROUND)?.gen ?? 1);
     sim.state.areas ??= { [PARK]: { fog: 'thinning', revealedAt: 0 } };
     for (const id of Object.keys(sim.state.areas)) this.placeLandmark(id);
     sim.grid.touchListeners.push((t) => {
@@ -27,19 +27,32 @@ export class AreaSystem {
 
   /** The landmark machine (a Core on the ground layer) of a revealed area, if placed. */
   landmark(id: string) {
-    const [x, z] = this.info(id).landmark;
-    return this.sim.state.machines.find((m) => m.type === 'core' && m.roofId === GROUND && m.x === x && m.z === z);
+    const [x, z] = this.landmarkCell(id);
+    const layer = this.landmarkLayer(id);
+    return this.sim.state.machines.find((m) => m.type === 'core' && m.roofId === layer && m.x === x && m.z === z);
+  }
+
+  /** City 12.1: a rooftop cluster's landmark is its roof's Core (standing right over the landmark cell). */
+  private landmarkLayer(id: string): string {
+    return this.map.rooftop(id) ? `roof:${id}` : GROUND;
+  }
+
+  private landmarkCell(id: string): [number, number] {
+    const plan = this.map.rooftop(id);
+    return plan ? plan.core : this.info(id).landmark;
   }
 
   /** Every revealed area has its landmark (a 2×2 Core). Idempotent. */
   private placeLandmark(id: string) {
     if (this.landmark(id)) return;
-    const [x, z] = this.info(id).landmark;
     const s = this.sim;
-    const m = { id: s.newId('m'), type: 'core' as const, roofId: GROUND, x, z, size: 2, boostUntil: 0, timer: 0, charge: 0 };
+    if (this.map.rooftop(id)) s.clusters.ensure(id, this.map);
+    const [x, z] = this.landmarkCell(id);
+    const layer = this.landmarkLayer(id);
+    const m = { id: s.newId('m'), type: 'core' as const, roofId: layer, x, z, size: 2, boostUntil: 0, timer: 0, charge: 0 };
     s.state.machines.push(m);
     s.grid.indexMachine(m);
-    for (const t of s.grid.footprint(GROUND, x, z, 2)) if (t) t.occupantId = m.id;
+    for (const t of s.grid.footprint(layer, x, z, 2)) if (t) t.occupantId = m.id;
     this.countCache.delete(id);
   }
 
@@ -47,8 +60,9 @@ export class AreaSystem {
     return this.map.info(id);
   }
 
+  /** The area a tile or machine belongs to: by cell on the ground; a city rooftop belongs to its cluster's area. */
   areaOf(t: Pick<TileData, 'roofId' | 'x' | 'z'>): string | undefined {
-    return t.roofId === GROUND ? this.map.areaOfCell(t.x, t.z) : undefined;
+    return t.roofId === GROUND ? this.map.areaOfCell(t.x, t.z) : this.sim.grid.layer(t.roofId)?.cluster;
   }
 
   fog(id: string): FogState {

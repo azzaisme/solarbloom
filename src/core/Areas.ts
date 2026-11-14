@@ -1,5 +1,11 @@
 import { AREA_TYPE_LIST, AREA_TYPES, CITY_GEN, THEMES, type AreaType, type Theme } from '../data/city';
 import { CHUNK, hashString, tileRandom } from './Hash';
+import { ROOF_BY_ID } from '../data/rooftops';
+
+/** Size and Core position of the campaign rooftops used as cluster templates. */
+const ROOF_TEMPLATES: Record<string, { width: number; depth: number; core: [number, number] }> = Object.fromEntries(
+  ['r1', 'r2', 'r3'].map((id) => [id, { width: ROOF_BY_ID[id].width, depth: ROOF_BY_ID[id].depth, core: (ROOF_BY_ID[id].core ?? [0, 0]) as [number, number] }]),
+);
 
 /**
  * Static area layout of the endless ground: a pure function of the seed, so every area's shape, neighbours
@@ -31,14 +37,28 @@ export interface AreaInfo {
   authored: boolean;
 }
 
-/** Shared map per seed (generation and the area system use the same cache). */
-const MAPS = new Map<number, AreaMap>();
-export function areaMapFor(seed: number): AreaMap {
-  let m = MAPS.get(seed);
+/** City 12.1: a rooftop cluster's raised roof (ground cells; a template from the old campaign). */
+export interface RooftopPlan {
+  template: string;
+  /** ground cell under the roof's local (0, 0) */
+  x: number;
+  z: number;
+  width: number;
+  depth: number;
+  height: number;
+  /** roof-local cell of its Core (the area's landmark) */
+  core: [number, number];
+}
+
+/** Shared map per seed and ground generation (generation and the area system use the same cache). */
+const MAPS = new Map<string, AreaMap>();
+export function areaMapFor(seed: number, gen = 2): AreaMap {
+  const key = `${seed}|${gen >= 3 ? 3 : 2}`;
+  let m = MAPS.get(key);
   if (!m) {
     if (MAPS.size > 8) MAPS.clear();
-    m = new AreaMap(seed);
-    MAPS.set(seed, m);
+    m = new AreaMap(seed, gen);
+    MAPS.set(key, m);
   }
   return m;
 }
@@ -69,7 +89,11 @@ export class AreaMap {
   private byChunk = new Map<string, string>();
   private infos = new Map<string, AreaInfo>();
 
-  constructor(readonly seed: number) {}
+  constructor(
+    readonly seed: number,
+    /** ground generation version: 3 places rooftop clusters */
+    readonly gen = 2,
+  ) {}
 
   /** Area id of a ground chunk. */
   areaOfChunk(cx: number, cz: number): string {
@@ -128,8 +152,17 @@ export class AreaMap {
     const off = id === PARK ? [7, 7] : [5 + Math.floor(tileRandom(this.seed, salt, lcx, lcz, 31) * 5), 5 + Math.floor(tileRandom(this.seed, salt, lcx, lcz, 32) * 5)];
     const distance = Math.round(Math.hypot(mx - 0.5, mz - 0.5));
     const theme = this.theme(lcx, lcz);
-    const type = this.typeOf(id, [...nb].sort(), theme);
+    let type = this.typeOf(id, [...nb].sort(), theme);
     const authored = this.authoredLandmark(id, distance);
+    // Generation 3: a few streets, plazas and markets carry a rooftop cluster instead.
+    const RT = CITY_GEN.rooftops;
+    if (this.gen >= 3 && !authored && distance >= RT.minDistance && RT.from.includes(type) && tileRandom(this.seed, salt, hashString(id), 0, 71) < RT.chance) {
+      type = 'rooftops';
+      // The roof must fit inside the landmark's chunk: nudge the landmark so its Core can stand over it.
+      const t = ROOF_TEMPLATES[this.templateOf(id)];
+      off[0] = Math.min(Math.max(off[0], t.core[0]), CHUNK - t.width + t.core[0]);
+      off[1] = Math.min(Math.max(off[1], t.core[1]), CHUNK - t.depth + t.core[1]);
+    }
     const D = CITY_GEN.difficulty;
     const info: AreaInfo = {
       id,
@@ -147,6 +180,31 @@ export class AreaMap {
     };
     this.infos.set(id, info);
     return info;
+  }
+
+  /**
+   * City 12.1: the raised roof of a rooftop cluster: a campaign template placed so its Core stands exactly over
+   * the area's landmark cell (so labels, the camera and the advisor need no special case). Pure.
+   */
+  rooftop(id: string): RooftopPlan | undefined {
+    const a = this.info(id);
+    if (a.type !== 'rooftops') return undefined;
+    const RT = CITY_GEN.rooftops;
+    const template = this.templateOf(id);
+    const t = ROOF_TEMPLATES[template];
+    const core: [number, number] = [t.core[0], t.core[1]];
+    return { template, x: a.landmark[0] - core[0], z: a.landmark[1] - core[1], width: t.width, depth: t.depth, height: RT.height, core };
+  }
+
+  private templateOf(id: string): string {
+    const T = CITY_GEN.rooftops.templates;
+    return T[Math.floor(tileRandom(this.seed, salt, hashString(id), 1, 73) * T.length)];
+  }
+
+  /** Is a ground cell under this area's rooftop? */
+  underRoof(id: string, x: number, z: number): boolean {
+    const r = this.rooftop(id);
+    return !!r && x >= r.x && z >= r.z && x < r.x + r.width && z < r.z + r.depth;
   }
 
   /** District theme of a chunk (coarse regions, so neighbouring areas feel related). */

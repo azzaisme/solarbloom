@@ -27,7 +27,7 @@ export function generateTile(seed: number, layer: LayerData, x: number, z: numbe
   if (layer.kind === 'ground') return generateGround(seed, layer, x, z);
   if (x < 0 || z < 0 || x >= layer.width || z >= layer.depth) return undefined;
   const lh = hashString(layer.id);
-  const def = ROOF_BY_ID[layer.id];
+  const def = ROOF_BY_ID[layer.template ?? layer.id];
   const prepared = inList(def?.prepared, x, z) || (!!def?.starterSolar && def.starterSolar[0] === x && def.starterSolar[1] === z);
   const blocked = inList(def?.blocked, x, z);
   const ground: GroundState = prepared ? 'prepared' : 'polluted';
@@ -88,12 +88,12 @@ const plotCache = new Map<string, BuildingPlot[]>();
  * The buildings of one ground chunk (generation 2): at most one per quarter, on the quarter's outer corner,
  * never on roads, canals, footpaths or near the landmark, and never in the park. A pure function of the seed.
  */
-export function buildingPlots(seed: number, cx: number, cz: number): BuildingPlot[] {
-  const key = `${seed}|${cx}|${cz}`;
+export function buildingPlots(seed: number, cx: number, cz: number, gen = 2): BuildingPlot[] {
+  const key = `${seed}|${cx}|${cz}|${gen >= 3 ? 3 : 2}`;
   const hit = plotCache.get(key);
   if (hit) return hit;
   const out: BuildingPlot[] = [];
-  const map = areaMapFor(seed);
+  const map = areaMapFor(seed, gen);
   const area = map.info(map.areaOfChunk(cx, cz));
   if (area.id !== PARK) {
     const B = CITY_GEN.buildings;
@@ -120,6 +120,7 @@ export function buildingPlots(seed: number, cx: number, cz: number): BuildingPlo
           if (road.canal && (lz === 3 || lz === 4)) ok = false;
           if (path && (lx === 3 || lz === 12)) ok = false;
           if (distToFootprintRaw(cx * CHUNK + lx, cz * CHUNK + lz, mx, mz, 2) <= CITY_GEN.landmarkClearance + 1) ok = false;
+          if (map.underRoof(area.id, cx * CHUNK + lx, cz * CHUNK + lz)) ok = false; // the cluster's own building
         }
       if (!ok) continue;
       out.push({ x, z, w, d, storeys: lo + Math.floor(r(4) * (hi - lo + 1)), style: Math.floor(r(5) * 10) });
@@ -131,10 +132,10 @@ export function buildingPlots(seed: number, cx: number, cz: number): BuildingPlo
 }
 
 /** The building standing on a tile (generation 2), if any. */
-export function buildingAt(seed: number, x: number, z: number): BuildingPlot | undefined {
+export function buildingAt(seed: number, x: number, z: number, gen = 2): BuildingPlot | undefined {
   const cx = Math.floor(x / CHUNK);
   const cz = Math.floor(z / CHUNK);
-  return buildingPlots(seed, cx, cz).find((b) => x >= b.x && x < b.x + b.w && z >= b.z && z < b.z + b.d);
+  return buildingPlots(seed, cx, cz, gen).find((b) => x >= b.x && x < b.x + b.w && z >= b.z && z < b.z + b.d);
 }
 
 /**
@@ -144,7 +145,7 @@ export function buildingAt(seed: number, x: number, z: number): BuildingPlot | u
  */
 function generateGround(seed: number, layer: LayerData, x: number, z: number): TileData {
   const lh = hashString(layer.id);
-  const map = areaMapFor(seed);
+  const map = areaMapFor(seed, layer.gen ?? 1);
   const cx = Math.floor(x / CHUNK);
   const cz = Math.floor(z / CHUNK);
   const lx = x - cx * CHUNK;
@@ -163,7 +164,8 @@ function generateGround(seed: number, layer: LayerData, x: number, z: number): T
   }
   const [mx, mz] = area.landmark;
   const nearLandmark = distToFootprintRaw(x, z, mx, mz, 2) <= CITY_GEN.landmarkClearance;
-  const building = (layer.gen ?? 1) >= 2 && !!buildingAt(seed, x, z);
+  // Generation 3: a rooftop cluster's ground under its roof is the building that holds it up.
+  const building = ((layer.gen ?? 1) >= 2 && !!buildingAt(seed, x, z, layer.gen ?? 1)) || ((layer.gen ?? 1) >= 3 && feature !== 'road' && feature !== 'water' && map.underRoof(area.id, x, z)); // roads and canals run on underneath
   const blocked = building || (!nearLandmark && feature !== 'road' && feature !== 'water' && tileRandom(seed, lh, x, z, 5) < def.obstacles);
   if (building) feature = 'building';
   else if (blocked) feature = 'obstacle';

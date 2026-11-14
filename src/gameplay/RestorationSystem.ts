@@ -16,7 +16,12 @@ export class RestorationSystem {
   constructor(private sim: Sim) {}
 
   pulseCost(t: TileData): Cost {
-    const roofMult = t.roofId === GROUND ? this.sim.areas.info(this.sim.areas.areaOf(t)!).difficulty : (ROOF_BY_ID[t.roofId]?.pulseCostMult ?? 1);
+    const layer = this.sim.grid.layer(t.roofId);
+    // City rooftops cost like their template's ground, scaled by their area's distance difficulty.
+    const roofMult =
+      t.roofId === GROUND
+        ? this.sim.areas.info(this.sim.areas.areaOf(t)!).difficulty
+        : (ROOF_BY_ID[layer?.template ?? t.roofId]?.pulseCostMult ?? 1) * (layer?.cluster ? this.sim.areas.info(layer.cluster).difficulty : 1);
     if (t.ground === 'restored') {
       const n = TUNING.restore.nurture[Math.min(TUNING.restore.maxBloom, t.bloom + 1)];
       return { energy: Math.round(n.energy * this.sim.upgrades.pulseEnergyMult * 100) / 100, water: n.water };

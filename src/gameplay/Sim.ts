@@ -8,6 +8,7 @@ import { BloomChainSystem } from './BloomChainSystem';
 import { BuildSystem } from './BuildSystem';
 import { CanalNetwork } from './CanalNetwork';
 import { RelaySystem } from './RelaySystem';
+import { RooftopClusters } from './RooftopClusters';
 import { DistrictSystem } from './DistrictSystem';
 import { DroneSystem } from './DroneSystem';
 import { Advisor } from './Advisor';
@@ -45,6 +46,7 @@ export class Sim {
   readonly districts: DistrictSystem;
   readonly canals: CanalNetwork;
   readonly relays: RelaySystem;
+  readonly clusters: RooftopClusters;
   readonly milestones: MilestoneSystem;
 
   constructor(
@@ -81,6 +83,7 @@ export class Sim {
     this.restoration = new RestorationSystem(this);
     this.canals = new CanalNetwork(this);
     this.relays = new RelaySystem(this);
+    this.clusters = new RooftopClusters(this);
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
     this.drones = new DroneSystem(this);

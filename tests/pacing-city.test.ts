@@ -39,7 +39,7 @@ export function playCity(seed: number, actionEvery = 3, minutes = 60, setup?: (s
       // 0. the landmark's specialty action (City 09.1) comes first: follow the advisor's next step for it
       const sp = !inPark && area ? sim.advisor.specialtyStep(area) : undefined;
       if (sp?.action.kind === 'build') sim.build.place(sp.action.type, GROUND, sp.action.x, sp.action.z);
-      if (sp?.action.kind === 'focus') sim.restoration.pulse(sim.grid.get(GROUND, sp.action.x, sp.action.z)!.id);
+      if (sp?.action.kind === 'focus') sim.restoration.pulse(sim.grid.get(sp.action.layer ?? GROUND, sp.action.x, sp.action.z)!.id);
       // 1. the next machine for this area, on the best synergy spot that's clear of fog
       const order = inPark ? parkOrder : areaOrder;
       const want = area ? order.find((t, k) => builtIn(area, t) < order.slice(0, k + 1).filter((x) => x === t).length) : undefined;

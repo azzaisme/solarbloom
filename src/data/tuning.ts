@@ -163,6 +163,7 @@ export const TUNING = {
       market: { biomass: 0.25, energy: 0.1 },
       reservoir: { water: 0.5 },
       grove: { biomass: 0.4 },
+      rooftops: { energy: 0.3, biomass: 0.15 },
     } as Record<string, Partial<Record<'energy' | 'water' | 'biomass', number>>>,
   },
 
@@ -179,7 +180,8 @@ export const TUNING = {
     market: { kind: 'chain', base: 6, perChunk: 0.5, max: 20, share: 0.12 },
     reservoir: { kind: 'overflow', base: 1, perChunk: 0.05, max: 2 },
     grove: { kind: 'canopy', base: 1, perChunk: 0, max: 1 },
-  } as Record<string, { kind: 'fullBloom' | 'corridor' | 'solarBoost' | 'canalFlow' | 'chain' | 'overflow' | 'canopy'; base: number; perChunk: number; max: number; share?: number }>,
+    rooftops: { kind: 'roofBloom', base: 10, perChunk: 0.5, max: 24, share: 0.5 },
+  } as Record<string, { kind: 'fullBloom' | 'corridor' | 'solarBoost' | 'canalFlow' | 'chain' | 'overflow' | 'canopy' | 'roofBloom'; base: number; perChunk: number; max: number; share?: number }>,
 
   /** City 10.7: district-wide blooms (a district is one CITY_GEN.districtChunks square of chunks). */
   district: {

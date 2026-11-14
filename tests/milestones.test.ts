@@ -50,7 +50,7 @@ function solve(sim: Sim, id: string, limit = 15 * 60): number {
     st.energy = st.water = st.biomass = 1e6;
     const step = sim.advisor.specialtyStep(id);
     if (step?.action.kind === 'build') sim.build.place(step.action.type, GROUND, step.action.x, step.action.z);
-    else if (step?.action.kind === 'focus') sim.restoration.pulse(sim.grid.get(GROUND, step.action.x, step.action.z)!.id);
+    else if (step?.action.kind === 'focus') sim.restoration.pulse(sim.grid.get(step.action.layer ?? GROUND, step.action.x, step.action.z)!.id);
     else {
       const edge = sim.areas.entryTiles(id).find((t) => sim.restoration.checkPulse(t).ok);
       if (edge) sim.restoration.pulse(edge.id);
@@ -122,7 +122,7 @@ describe('area milestone generator (City 09.1)', () => {
         seen.set(kind, (seen.get(kind) ?? 0) + 1);
       }
     }
-    expect([...seen.keys()].sort()).toEqual(['canalFlow', 'canopy', 'chain', 'corridor', 'fullBloom', 'overflow', 'solarBoost']);
+    expect([...seen.keys()].sort()).toEqual(['canalFlow', 'canopy', 'chain', 'corridor', 'fullBloom', 'overflow', 'roofBloom', 'solarBoost']);
   });
 
   it('the wake needs the specialty as well as the restored share', () => {

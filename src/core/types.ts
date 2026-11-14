@@ -60,8 +60,12 @@ export interface LayerData {
   origin: [number, number, number];
   unlocked: boolean;
   preview: boolean; // visible but not yet playable
-  /** Ground generation version: 2 adds buildings. Saves from before it keep generating as version 1. */
+  /** Ground generation version: 2 adds buildings, 3 rooftop clusters. Saves keep the version they began with. */
   gen?: number;
+  /** City 12.1: a generated rooftop uses this template's layout and look ('r1' Seed, 'r2' Reservoir, 'r3' Canopy). */
+  template?: string;
+  /** City 12.1: the city area whose rooftop cluster this is (such roofs are not part of the rooftop campaign). */
+  cluster?: string;
 }
 
 /** Kept as an alias while the rooftop-era code is ported (City 12 removes it). */

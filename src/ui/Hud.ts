@@ -385,7 +385,7 @@ export class Hud {
     const g = this.sim.advisor.suggest();
     const a = g.action;
     const attr =
-      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x},${a.z}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
+      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
     this.suggestionBtn = `<p class="sugg">${esc(g.text)}</p><button class="act" ${attr}>${esc(g.label)}</button>`;
     return this.suggestionBtn;
   }

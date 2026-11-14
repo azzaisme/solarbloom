@@ -886,6 +886,21 @@ export class Game {
       this.updateCityBounds();
     });
     b.on('area.fogChanged', ({ areaId }) => this.chunks.markArea(areaId));
+    // City 12.1: rooftop clusters appear with their area and come alive when a Bloom Relay reaches them.
+    b.on('layer.added', ({ layerId }) => {
+      const l = s.grid.layer(layerId);
+      if (l) this.grid.addRoof(l);
+    });
+    b.on('layer.unlocked', ({ layerId }) => {
+      const l = s.grid.layer(layerId);
+      if (!l?.cluster) return;
+      this.grid.clusterBuilding(l);
+      for (const t of s.grid.tilesOf(l.id)) this.grid.refresh(t, false);
+      const c = new pc.Vec3(l.origin[0] + l.width / 2, l.height + 0.3, l.origin[2] + l.depth / 2);
+      this.vfx.ring(c, '#9ff7ff', Math.max(l.width, l.depth) * 0.7, 1.0);
+      this.sfx.powerUp();
+      this.hud.toast(`📡 The relay reaches the rooftop!<small>${l.name}: restore its tiles and wake the Rooftop Core.</small>`, 'gold', 4);
+    });
     b.on('area.ready', ({ areaId }) => {
       const lm = s.areas.landmark(areaId);
       if (lm) this.machines.setLandmarkState(lm.id, 'ready');

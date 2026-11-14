@@ -26,6 +26,9 @@ export interface GameEvents {
   'corridor.sent': { from: string; to: string; chainId: number };
   /** City 10.4: a pulse leaves one Bloom Relay for another. */
   'relay.city': { from: string; to: string; linkId: string; chainId: number; travel: number };
+  /** City 12.1: a rooftop cluster's roof was added to the world, or became reachable. */
+  'layer.added': { layerId: string };
+  'layer.unlocked': { layerId: string };
   'canal.flow': { from: string; to: string; path: string[]; kind: 'fill' | 'overflow'; chainId?: number };
   'canopy.burst': { machineId: string; radius: number; gardens: string[] };
   'relay.sent': { linkId: string; fromRoof: string; toRoof: string; chainId: number; travel: number };

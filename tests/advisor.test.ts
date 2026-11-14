@@ -16,7 +16,7 @@ function check(sim: Sim, label: string) {
     const m = sim.machine(a.machineId)!;
     const id = sim.areas.areaOf(m)!;
     expect(id === PARK ? sim.progression.coreReady() : sim.areas.ready(id), label).toBe(true);
-  } else if (a.kind === 'focus') expect(sim.restoration.checkPulse(sim.grid.get(GROUND, a.x, a.z)!).ok, label).toBe(true);
+  } else if (a.kind === 'focus') expect(sim.restoration.checkPulse(sim.grid.get(a.layer ?? GROUND, a.x, a.z)!).ok, label).toBe(true);
   else if (a.kind === 'upgrades') expect(sim.upgrades.all().some((d) => sim.upgrades.status(d).ok), label).toBe(true);
   else if (a.kind === 'build') expect(sim.build.check(a.type, GROUND, a.x, a.z).ok, label).toBe(true);
   else if (a.kind === 'district') expect(sim.districts.available(a.districtId), label).toBe(true);

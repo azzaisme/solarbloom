@@ -12,7 +12,7 @@ import type { Sim } from './Sim';
 export type SuggestionAction =
   | { kind: 'wake'; machineId: string }
   | { kind: 'district'; districtId: string }
-  | { kind: 'focus'; x: number; z: number }
+  | { kind: 'focus'; x: number; z: number; /** a raised layer (a city rooftop); the ground when absent */ layer?: string }
   | { kind: 'upgrades' }
   | { kind: 'harvest' }
   | { kind: 'build'; type: BuildableType; x: number; z: number }
@@ -123,7 +123,8 @@ export class Advisor {
     const why = `The ${a.landmarkName} also wants: ${sp.label.replace(/ \(.*\)$/, '')}.`;
     const ok = (t: TileData) => s.restoration.checkPulse(t).ok;
     const growable = (t: TileData) => t.ground === 'restored' && !t.occupantId && t.bloom < max;
-    const focus = (t: TileData | undefined, what: string): Suggestion | undefined => (t ? { text: `${why} ${what}`, label: '🌱 Show me where', action: { kind: 'focus', x: t.x, z: t.z } } : undefined);
+    const focus = (t: TileData | undefined, what: string): Suggestion | undefined =>
+      t ? { text: `${why} ${what}`, label: '🌱 Show me where', action: t.roofId === GROUND ? { kind: 'focus', x: t.x, z: t.z } : { kind: 'focus', x: t.x, z: t.z, layer: t.roofId } } : undefined;
     const build = (type: BuildableType, cands: TileData[], what: string): Suggestion | undefined => {
       const def = MACHINES[type];
       const cost = s.build.cost(type);
@@ -144,6 +145,21 @@ export class Advisor {
     switch (sp.kind) {
       case 'fullBloom':
         return focus(tiles.filter((t) => growable(t) && ok(t)).sort((x, y) => y.bloom - x.bloom)[0], 'Pulse a green tile to grow it.');
+      case 'roofBloom': {
+        const roof = s.clusters.roof(id);
+        if (!roof) return undefined;
+        if (!s.grid.isPlayable(roof.id)) {
+          // Reach it with a Bloom Relay on the street (within range of the roof).
+          if (!s.build.isUnlocked('relay')) return build('droneHub', tiles, 'Relays need a Drone Hub first.');
+          const spots = s.clusters.relaySpots(id);
+          const b = build('relay', spots, 'A Bloom Relay here reaches the rooftop.');
+          if (b) return b;
+          // No ground in reach is ready to build on yet: restore a spot first.
+          return focus(spots.find((t) => t.ground !== 'restored' && !t.occupantId && ok(t)), 'Restore a spot within reach of the rooftop for a Bloom Relay.');
+        }
+        const roofTiles = s.grid.tilesOf(roof.id);
+        return focus(roofTiles.find((t) => t.ground !== 'restored' && ok(t)), 'Restore the rooftop.');
+      }
       case 'canopy': {
         const lm = s.areas.landmark(id);
         if (!lm) return undefined;

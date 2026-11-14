@@ -361,7 +361,7 @@ export class ChunkRenderer {
     // Buildings (generation 2): grey and shuttered in the fog, white with roof gardens once the area is clear.
     if ((s.grid.layer(GROUND)!.gen ?? 1) >= 2) {
       b.grey = fog === 'hidden' ? 0.75 : fog === 'cleared' ? 0 : 0.45;
-      for (const p of buildingPlots(s.grid.seed, v.cx, v.cz)) {
+      for (const p of buildingPlots(s.grid.seed, v.cx, v.cz, s.grid.layer(GROUND)!.gen ?? 1)) {
         // An entry fix may have opened one of its tiles: then it's rubble, not a building.
         const whole = s.grid.peek(GROUND, p.x, p.z)?.feature === 'building' && s.grid.peek(GROUND, p.x + p.w - 1, p.z + p.d - 1)?.feature === 'building';
         if (whole) this.building(b, p, h, fog === 'cleared', v.far);

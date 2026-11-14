@@ -87,9 +87,22 @@ export class Grid {
     return [...this.layers.values()];
   }
 
-  /** Bounded (raised) layers: the rooftops. */
+  /** Bounded (raised) layers of the rooftop campaign (generated city rooftops are separate: `clusterRoofs`). */
   get rooftops(): LayerData[] {
-    return this.allLayers.filter((l) => l.kind === 'raised');
+    return this.allLayers.filter((l) => l.kind === 'raised' && !l.cluster);
+  }
+
+  /** City 12.1: generated rooftops standing in city areas. */
+  get clusterRoofs(): LayerData[] {
+    return this.allLayers.filter((l) => l.kind === 'raised' && !!l.cluster);
+  }
+
+  /** Adds a layer at runtime (a rooftop cluster revealed in the city). Idempotent. */
+  addLayer(l: LayerData): LayerData {
+    const had = this.layers.get(l.id);
+    if (had) return had;
+    this.layers.set(l.id, l);
+    return l;
   }
 
   /** Revealed and reachable: tiles can be restored and built on. */

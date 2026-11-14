@@ -5,7 +5,7 @@ import type { TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
-export type SpecialtyKind = 'fullBloom' | 'corridor' | 'solarBoost' | 'canalFlow' | 'chain' | 'overflow' | 'canopy';
+export type SpecialtyKind = 'fullBloom' | 'corridor' | 'solarBoost' | 'canalFlow' | 'chain' | 'overflow' | 'canopy' | 'roofBloom';
 
 export interface Specialty {
   kind: SpecialtyKind;
@@ -65,8 +65,10 @@ export class MilestoneSystem {
         }
       }
     });
-    // Full bloom is counted live: any tile change in a fogged parkland can complete it.
+    // Full bloom and rooftop restores are counted live: any tile change can complete them.
     sim.grid.touchListeners.push((t) => {
+      const cl = t.roofId !== GROUND ? sim.grid.layer(t.roofId)?.cluster : undefined;
+      if (cl && t.ground === 'restored' && this.counting(cl)) this.pending.add(cl);
       if (t.roofId !== GROUND || t.ground !== 'restored' || t.bloom < TUNING.restore.maxBloom) return;
       const id = sim.areas.map.areaOfCell(t.x, t.z);
       if (this.counting(id) && this.kind(id) === 'fullBloom') this.pending.add(id);
@@ -123,7 +125,7 @@ export class MilestoneSystem {
     const def = TUNING.milestones[a.type];
     const d = def && def.kind === kind ? def : TUNING.milestones.park;
     let n = Math.min(d.max, Math.floor(d.base + d.perChunk * a.distance));
-    if (d.share !== undefined) n = Math.min(n, Math.floor(this.sim.areas.counts(id).restorable * d.share));
+    if (d.share !== undefined) n = Math.min(n, Math.floor((kind === 'roofBloom' ? this.sim.clusters.counts(id).restorable : this.sim.areas.counts(id).restorable) * d.share));
     return Math.max(1, n);
   }
 
@@ -136,6 +138,8 @@ export class MilestoneSystem {
       case 'fullBloom':
       case 'chain':
         return true; // shares of restorable tiles
+      case 'roofBloom':
+        return !!s.areas.map.rooftop(id);
       case 'solarBoost':
         // A panel spot with a restorable tile beside it.
         return tiles.some((t) => free(t) && s.grid.neighbors(t).some((n) => !n.blocked && !s.isCoreTile(n) && s.areas.areaOf(n) === id));
@@ -246,6 +250,7 @@ export class MilestoneSystem {
     const cleared = s.areas.fog(id) === 'cleared';
     let have = st?.spec ?? 0;
     if (kind === 'fullBloom') have = Math.max(have, s.areas.counts(id).fullBloom);
+    if (kind === 'roofBloom') have = Math.max(have, s.clusters.counts(id).restored);
     // Safety valve: once every free tile here is in full bloom nothing can happen any more, so the landmark is
     // content with that (a fully bloomed area never stalls).
     const c = s.areas.counts(id);
@@ -258,6 +263,7 @@ export class MilestoneSystem {
       canalFlow: [`Send water along the canal${need > 1 ? ` ${need} times` : ''} (${shown}/${need})`, 'Restore the canal water, then build a Reservoir Garden on one bank and a Water Condenser further along.'],
       chain: [`Set off a ×${need} Bloom Chain here (best ×${have})`, 'Build Pollinator Gardens here and pulse next to them: their blooms set each other off.'],
       overflow: [`Overflow a Reservoir Garden here${need > 1 ? ` ${need} times` : ''} (${shown}/${need})`, 'Build a Reservoir Garden here with a Water Condenser within 2 tiles to fill its basin.'],
+      roofBloom: [`Restore ${need} tiles on the rooftop (${shown}/${need})`, 'Build a Bloom Relay on the street within reach of the rooftop to get up there, then restore its tiles.'],
       canopy: [`Release a Canopy Burst from the Elder Tree (${shown}/${need})`, 'Restore and grow the tiles around the Elder Tree: every bloom within 3 tiles charges it.'],
     };
     return { kind, need, have, met, label: text[kind][0], hint: text[kind][1] };
@@ -269,9 +275,19 @@ export class MilestoneSystem {
    * costs more than storage can ever hold right now. Then the landmark settles for the restored share.
    */
   private stuck(id: string, kind: SpecialtyKind): boolean {
+    const s = this.sim;
+    const tooDear = (type: 'relay' | 'droneHub' | 'solar' | 'pollinator') => {
+      const cost = s.build.cost(type);
+      return (['energy', 'water', 'biomass'] as const).some((k) => (cost[k] ?? 0) > s.state.caps[k]);
+    };
+    if (kind === 'roofBloom') {
+      // The roof can't be reached and the relay that would reach it can never be afforded right now.
+      const roof = s.clusters.roof(id);
+      if (!roof || s.grid.isPlayable(roof.id)) return false;
+      return s.build.isUnlocked('relay') ? tooDear('relay') : tooDear('droneHub');
+    }
     const type = kind === 'solarBoost' ? 'solar' : kind === 'corridor' || kind === 'chain' ? 'pollinator' : undefined;
     if (!type) return false;
-    const s = this.sim;
     const max = TUNING.restore.maxBloom;
     const roomy = s.state.machines.some(
       (m) =>

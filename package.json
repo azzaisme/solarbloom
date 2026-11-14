@@ -15,7 +15,8 @@
     "test:perf:browser": "vite build && node tests/perf/browser.perf.mjs",
     "test:leak": "vite build && node tests/perf/leak.perf.mjs",
     "shots:city": "vite build && node tests/e2e/city-shots.mjs",
-    "shots:park": "vite build && node tests/e2e/park-shots.mjs"
+    "shots:park": "vite build && node tests/e2e/park-shots.mjs",
+    "shots:rooftops": "vite build && node tests/e2e/rooftop-shots.mjs"
   },
   "dependencies": {
     "playcanvas": "^2.23.0"

@@ -33,6 +33,7 @@ Node 20+ is required. The build is a static site (`base: './'`), so `dist/` can 
 | `npm run test:e2e` | Build, then check pointer → tile picking at 3 screen sizes × 3 zooms (55k checks), that the area panel opens from labels and landmarks, that every cleared area on the overview is one label tap away, that a district bloom pays once, leaves machines alone and replays for free, and that no HUD panels overlap on phone or desktop at any zoom (screenshots to `docs/review/hud-*.png`) | ~5 min |
 | `npm run test:perf:browser` | Build, then load a 150-area save in Chromium, pan, zoom through every band, catch up 5 minutes away and play a ×600 chain; gates update time, hitches, draw calls, catch-up simulation time per frame and reload time (`PERF_AREAS`, `PERF_JSON`, `PERF_VERBOSE=1`) | ~4 min |
 | `npm run shots:park` | Build, then render the park at each art stage (0, 25, 50, 75%, fountain awake) into `docs/review/park-stage-*.png` | ~1 min |
+| `npm run shots:rooftops` | Build, then find a rooftop cluster, screenshot it out of reach, reach it with a Bloom Relay and restore part of it (fails if that doesn't work) into `docs/review/rooftop-cluster-*.png` | ~1 min |
 | `npm run shots:city` | Build, then render the city overview and a close-up of a cleared area of every type into `docs/review/` for visual review | ~2 min |
 | `npm run test:leak` | Build, then pan back and forth across a big city for 10 minutes; entities, materials, GPU memory and heap must return to baseline (`LEAK_MINUTES`) | ~12 min |
 
@@ -91,6 +92,7 @@ The city is generated forever outward from the park: the same seed always gives 
 | 🧺 Market | paving | Market Hall | +0.25 🌿/s, +0.1 ⚡/s |
 | 💧 Reservoir | clay | Old Cistern | +0.5 💧/s |
 | 🍂 Grove | leaf litter | Elder Tree | +0.4 🌿/s |
+| 🏢 Rooftops | paving, with a raised rooftop | Rooftop Core (on the roof) | +0.3 ⚡/s, +0.15 🌿/s |
 
   \* Soft-scaled: *n* areas of a type give base × *n*^0.75, so numbers stay readable after hundreds of areas. Districts (old town, docks, towers, parkland) favour different types and building heights. Buildings stand on block corners (more in streets and markets, few in groves): grey and shuttered in the fog, white with roof gardens, solar panels and vines once their area clears. Roads and canals run through the city. Rare authored landmarks (the Great Greenhouse, the Solar Cathedral, the Sky Observatory, then one every 10 chunks) stand out on the way.
 
@@ -114,12 +116,14 @@ The city is generated forever outward from the park: the same seed always gives 
 | 🧺 Market | set off a big enough Bloom Chain here |
 | 💧 Reservoir | overflow a Reservoir Garden |
 | 🍂 Grove | release a Canopy Burst from the Elder Tree |
+| 🏢 Rooftops | reach the roof with a Bloom Relay and restore part of it |
 
   Sizes grow a little with distance (capped). The objective panel, the area panel and the suggestion button all show the next step. An area whose layout can't host its type's action asks for full blooms instead, and a fogged area that is entirely in full bloom never waits on its specialty.
 
 - **Difficulty grows with distance.** Pulse costs rise 4% per chunk from the park (up to ×2), and outer areas start more polluted.
 - **The economy keeps up.** Each cleared area raises storage (+35% of the starting caps each, with diminishing returns) and waives one step of the ×1.5 cost growth for every machine type. A bot playing the city clears 26–31 areas an hour with no dead time, specialty actions included.
 - **Specialties travel.** Grove landmarks are Elder Trees: blooms around them charge a Canopy Burst. Reservoir and canal areas grow Reservoir Gardens.
+- **Rooftop clusters.** A few streets, plazas and markets (2+ blocks out) are Rooftops instead: an old building carries a raised roof laid out like one of the original rooftops (the Seed, the Reservoir or the Canopy, with their concrete, clay and leaf-litter looks), and its Rooftop Core is the area's landmark. The roof stays grey and out of reach until a Bloom Relay on the ground comes within range; then it's playable like any ground, and relays link across.
 - **Bloom Relays** (📡, after a Drone Hub). Any two relays within 16 tiles link up. A bloom beside one sends a pulse to each linked relay, blooming the ground there, and the far relay can pass it on: once per link per chain, then a 6 s recharge. Relay Lens reaches further and blooms more.
 - **Canal water networks.** Restored canal water carries flow. Water Condensers and Reservoir Gardens built beside clean water join that canal's network: a condenser with no garden beside it fills the emptiest basin on its canal, and an overflowing basin also spills at the connected garden with the most dry ground (once per chain). The water visibly runs along the canal.
 - **Overcharge.** A manual pulse right next to a machine boosts its next trigger (a cyan ring shows it), by more with each Overcharge upgrade level. Automation never does.
@@ -151,6 +155,7 @@ src/
     ProductionSystem      per-chunk cached rates, re-summed only near changes; area bonus income
     DroneSystem           hub networks, fog-edge job search, reservations, flight
     LuckyCatSystem        generated nooks, spawn rules, seeded rewards, claim-once
+    RooftopClusters       generated city rooftops: roof layers, reach by relays, roof counts
     RelaySystem           Bloom Relay links (range in world space), recharge, crossings
     CanalNetwork          canal water networks: clean water tiles linking condensers and Reservoir Gardens, routing, paths
     Milestones            area milestone generator: each landmark's specialty action, layout checks, progress, canal plans

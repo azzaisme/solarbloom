@@ -21,11 +21,11 @@ function followAdvisor(sim: Sim, seconds: number, until: () => boolean): number 
     } else if (a.kind === 'focus') {
       // Pulse there, and every other affordable edge tile nearby (as a player would, tapping along the edge).
       for (let i = 0; i < 6; i++) {
-        const t = sim.grid.get(GROUND, a.x, a.z)!;
+        const t = sim.grid.get(a.layer ?? GROUND, a.x, a.z)!;
         if (!sim.restoration.pulse(t.id)) break;
         const g2 = sim.advisor.suggest();
         if (g2.action.kind !== 'focus') break;
-        Object.assign(a, g2.action);
+        Object.assign(a, { layer: undefined }, g2.action);
       }
     } else if (a.kind === 'district') sim.districts.bloom(a.districtId);
     else if (a.kind === 'build') sim.build.place(a.type, GROUND, a.x, a.z);

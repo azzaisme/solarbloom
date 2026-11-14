@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import type { TileData } from '../core/types';
+import type { LayerData, TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { PALETTE } from './Materials';
 import { assignBatch, group, setVColor, vshape as shape } from './Shapes';
@@ -65,19 +65,52 @@ export class GridRenderer {
   }
 
   build() {
-    for (const roof of this.sim.grid.rooftops) {
-      const g = group(this.parent, `tiles-${roof.id}`);
-      for (const t of this.sim.grid.tilesOf(roof.id)) {
-        if (t.blocked) continue;
-        const [x, y, z] = this.sim.grid.tileWorld(t);
-        const root = group(g, t.id, [x, y, z]);
-        const slab = shape(root, 'box', PALETTE.concrete[0], { scale: [0.96, 0.16, 0.96] });
-        const deco = group(root, 'deco', [0, SLAB_TOP, 0]);
-        const v: TileView = { tile: t, root, slab, deco, key: '', sway: [], swayPhase: (t.variant % 100) / 16 };
-        this.views.set(t.id, v);
-        this.refresh(t, false);
-      }
+    for (const roof of this.sim.grid.rooftops) this.addRoof(roof);
+    for (const roof of this.sim.grid.clusterRoofs) this.addRoof(roof);
+  }
+
+  /** Tile views for one raised layer (a campaign rooftop, or a city rooftop cluster as it's revealed). */
+  addRoof(roof: LayerData) {
+    if (this.parent.findByName(`tiles-${roof.id}`)) return;
+    const g = group(this.parent, `tiles-${roof.id}`);
+    if (roof.cluster) this.clusterBuilding(roof);
+    for (const t of this.sim.grid.tilesOf(roof.id)) {
+      if (t.blocked) continue;
+      const [x, y, z] = this.sim.grid.tileWorld(t);
+      const root = group(g, t.id, [x, y, z]);
+      const slab = shape(root, 'box', PALETTE.concrete[0], { scale: [0.96, 0.16, 0.96] });
+      const deco = group(root, 'deco', [0, SLAB_TOP, 0]);
+      const v: TileView = { tile: t, root, slab, deco, key: '', sway: [], swayPhase: (t.variant % 100) / 16 };
+      this.views.set(t.id, v);
+      this.refresh(t, false);
     }
+  }
+
+  /**
+   * City 12.1: the old building holding a rooftop cluster up: walls with window bands under the roof, a parapet
+   * and a stair hut. Grey and shuttered while out of reach, white once a relay reaches it.
+   */
+  clusterBuilding(roof: LayerData) {
+    this.parent.findByName(`building-${roof.id}`)?.destroy();
+    const alive = roof.unlocked && !roof.preview;
+    const b = group(this.parent, `building-${roof.id}`, [roof.origin[0] + roof.width / 2, 0, roof.origin[2] + roof.depth / 2]);
+    const H = roof.height - 0.02;
+    const wall = alive ? '#f1ede3' : '#9d978c';
+    shape(b, 'box', wall, { pos: [0, H / 2, 0], scale: [roof.width + 0.3, H, roof.depth + 0.3], shadow: true });
+    const glass = alive ? '#9fd6e8' : '#4b4f54';
+    for (let i = 0; i < 3; i++) {
+      const y = H * (0.25 + i * 0.27);
+      shape(b, 'box', glass, { pos: [0, y, roof.depth / 2 + 0.16], scale: [roof.width * 0.84, H * 0.11, 0.02] });
+      shape(b, 'box', glass, { pos: [roof.width / 2 + 0.16, y, 0], scale: [0.02, H * 0.11, roof.depth * 0.84] });
+    }
+    // Parapet around the roof edge.
+    const top = roof.height + 0.12;
+    const pc = alive ? '#e2ddd0' : '#7f7b72';
+    shape(b, 'box', pc, { pos: [0, top, -roof.depth / 2 - 0.1], scale: [roof.width + 0.3, 0.24, 0.1] });
+    shape(b, 'box', pc, { pos: [0, top, roof.depth / 2 + 0.1], scale: [roof.width + 0.3, 0.24, 0.1] });
+    shape(b, 'box', pc, { pos: [-roof.width / 2 - 0.1, top, 0], scale: [0.1, 0.24, roof.depth + 0.3] });
+    shape(b, 'box', pc, { pos: [roof.width / 2 + 0.1, top, 0], scale: [0.1, 0.24, roof.depth + 0.3] });
+    if (alive) for (let i = 0; i < 2; i++) shape(b, 'box', '#4f9a4a', { pos: [-roof.width / 2 + 0.6 + i * (roof.width - 1.2), H * 0.5, roof.depth / 2 + 0.17], scale: [0.14, H * 0.9, 0.03] });
   }
 
   view(id: string) {
@@ -142,7 +175,7 @@ export class GridRenderer {
 
     switch (t.ground) {
       case 'polluted': {
-        const look = DEAD_LOOK[t.roofId] ?? DEAD_LOOK.r1;
+        const look = DEAD_LOOK[this.sim.grid.layer(t.roofId)?.template ?? t.roofId] ?? DEAD_LOOK.r1;
         const shade = t.pollution > 80 ? look.dark : look.base[t.variant % look.base.length];
         setVColor(v.slab, 'box', shade);
         const cracks = 1 + (t.variant % 3 === 0 ? 1 : 0) + (t.pollution > 80 ? 1 : 0);

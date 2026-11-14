@@ -128,7 +128,7 @@ describe('city generator: difficulty and variety (City 04.5–04.6)', () => {
 describe('city generator: buildings (City 07.5)', () => {
   it('new games have buildings; saves from before generation 2 keep generating without them', () => {
     const seed = 3;
-    const fresh = new Grid(seed, createInitialState(seed).layers);
+    const fresh = new Grid(seed, createInitialState(seed).layers.map((l) => ({ ...l, gen: 2 })));
     const oldLayers = createInitialState(seed).layers.map((l) => ({ ...l, gen: undefined }));
     const old = new Grid(seed, oldLayers);
     let built = 0;
@@ -148,7 +148,7 @@ describe('city generator: buildings (City 07.5)', () => {
   it('buildings never sit on roads, water, the park or near a landmark', () => {
     for (const seed of [1, 5, 9]) {
       const g = new Grid(seed, createInitialState(seed).layers);
-      const map = new AreaMap(seed);
+      const map = new AreaMap(seed, 3);
       for (let cz = -8; cz <= 8; cz++)
         for (let cx = -8; cx <= 8; cx++) {
           const id = map.areaOfChunk(cx, cz);

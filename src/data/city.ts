@@ -1,6 +1,6 @@
 // The endless city: area types, district themes, landmarks and distance scaling. All data, no rules.
 
-export type AreaType = 'park' | 'street' | 'plaza' | 'canal' | 'market' | 'reservoir' | 'grove';
+export type AreaType = 'park' | 'street' | 'plaza' | 'canal' | 'market' | 'reservoir' | 'grove' | 'rooftops';
 export type Theme = 'oldtown' | 'docks' | 'towers' | 'parkland';
 /** What a ground tile is made of (look + specialty hooks). Obstacles are blocked. */
 export type TileFeature = 'lawn' | 'paving' | 'road' | 'water' | 'clay' | 'litter' | 'obstacle' | 'building';
@@ -28,10 +28,13 @@ export const AREA_TYPES: Record<AreaType, AreaTypeDef> = {
   canal: { type: 'canal', prop: 'post', name: 'Canal', icon: '🛶', ground: 'paving', obstacles: 0.02, obstacleName: 'mooring post', landmark: { kind: 'lock', name: 'Lock Gate' }, weights: { oldtown: 1, docks: 6, towers: 1, parkland: 2 } },
   market: { type: 'market', prop: 'stall', name: 'Market', icon: '🧺', ground: 'paving', obstacles: 0.08, obstacleName: 'broken stall', landmark: { kind: 'hall', name: 'Market Hall' }, weights: { oldtown: 3, docks: 3, towers: 1, parkland: 1 } },
   reservoir: { type: 'reservoir', prop: 'drain', name: 'Reservoir', icon: '💧', ground: 'clay', obstacles: 0.03, obstacleName: 'dry drain', landmark: { kind: 'cistern', name: 'Old Cistern' }, weights: { oldtown: 1, docks: 2, towers: 1, parkland: 2 } },
+  // City 12.1: never picked by weight; a few streets, plazas and markets become rooftop clusters (CITY_GEN.rooftops).
+  rooftops: { type: 'rooftops', prop: 'bollard', name: 'Rooftops', icon: '🏢', ground: 'paving', obstacles: 0.03, obstacleName: 'rusty bollard', landmark: { kind: 'crystal', name: 'Rooftop Core' }, weights: { oldtown: 0, docks: 0, towers: 0, parkland: 0 } },
   grove: { type: 'grove', prop: 'stump', name: 'Grove', icon: '🍂', ground: 'litter', obstacles: 0.06, obstacleName: 'dead stump', landmark: { kind: 'elder', name: 'Elder Tree' }, weights: { oldtown: 1, docks: 1, towers: 1, parkland: 4 } },
 };
 
-export const AREA_TYPE_LIST = Object.keys(AREA_TYPES) as AreaType[];
+/** Types picked by weight (rooftop clusters are placed separately). */
+export const AREA_TYPE_LIST: AreaType[] = (Object.keys(AREA_TYPES) as AreaType[]).filter((t) => t !== 'rooftops');
 export const THEMES: Theme[] = ['oldtown', 'docks', 'towers', 'parkland'];
 
 /**
@@ -74,6 +77,11 @@ export const CITY_GEN = {
     { distance: 12, kind: 'cathedral', name: 'Solar Cathedral' },
     { distance: 20, kind: 'observatory', name: 'Sky Observatory' },
   ],
+  /**
+   * City 12.1 (generation 3): rooftop clusters. This share of streets, plazas and markets at least `minDistance`
+   * chunks out carry a raised rooftop (one of the old campaign's layouts) whose Core is the area's landmark.
+   */
+  rooftops: { chance: 0.14, minDistance: 2, from: ['street', 'plaza', 'market'], templates: ['r1', 'r2', 'r3'], height: 2.6 },
   /** Further out, one authored landmark every this many chunks of distance. */
   authoredEvery: 10,
   /**
@@ -81,7 +89,7 @@ export const CITY_GEN = {
    * They stand on the quarter's outer corner, clear of roads, canals, footpaths and landmarks.
    */
   buildings: {
-    chance: { park: 0.1, street: 0.6, plaza: 0.35, canal: 0.45, market: 0.5, reservoir: 0.12, grove: 0.08 } as Record<string, number>,
+    chance: { park: 0.1, street: 0.6, plaza: 0.35, canal: 0.45, market: 0.5, reservoir: 0.12, grove: 0.08, rooftops: 0.4 } as Record<string, number>,
     storeys: { oldtown: [2, 4], docks: [1, 3], towers: [3, 6], parkland: [1, 2] } as Record<string, [number, number]>,
     /** height of one storey in world units */
     storey: 0.42,
