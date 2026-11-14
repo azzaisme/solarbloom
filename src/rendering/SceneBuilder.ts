@@ -7,7 +7,7 @@ import { Scenery } from './Scenery';
 import { ease, type Tweens } from './Tween';
 
 /** Rooftop surface sits slightly below the slabs so the gaps read as a soft grid. */
-export const SLAB_TOP = 0.08;
+export { SLAB_TOP } from '../core/Picking';
 /** Depth of the service ledge behind the main garden. */
 export const LEDGE = 1.8;
 

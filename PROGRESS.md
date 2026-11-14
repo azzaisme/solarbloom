@@ -8,7 +8,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 
 | Sub-epic | Status |
 |---|---|
-| #2 City 01: endless chunked world model | ✅ |
+| #2 City 01: endless chunked world model | ✅ (height layers and multi-layer picking ✅ #20) |
 | #3 City 02: save format v4 (old saves scrapped, sparse deltas) | ✅ |
 | #4 City 03: areas and the fog | ✅ (simulation; fog visuals are #8) |
 | #5 City 04: endless city generator | ✅ except the visual review (#37, needs ground rendering) |
@@ -30,6 +30,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - Generation is a pure function of `(seed, layer, x, z)` (a hash, not the game RNG), so the world is identical whatever order chunks are visited in.
 - `tilesNear`, `tilesInRange`, `tilesWithin`, `neighbors` and `machinesNear` (a per-chunk machine index) cost the same in a 64-tile world and a 512k-tile one. Every per-tick "what's nearby" scan in the systems now goes through them; growing tiles are tracked in a set instead of scanning tiles each tick.
 - Adjacency never crosses layers. The ground exists but stays unplayable until the park (City 05).
+- Height layers (#20): `core/Picking.ts` `pickLayers` casts the pointer ray against every pickable layer's plane (height + slab top; raised layers only inside their footprint) and returns the nearest hit; `Game.pick` uses it. Tests cover a roof directly above the ground (never neighbours, in either direction), overlapping and stacked layers, slanted camera rays, locked and preview layers. The browser picking e2e still passes (69k checks).
 - `GameState` no longer holds tiles (`rooftops` is gone; `layers` describes the surfaces). Occupancy is rebuilt from the machine list.
 
 ## City 03: areas and the fog

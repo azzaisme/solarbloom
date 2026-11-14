@@ -1,3 +1,5 @@
+import { pickLayers } from '../src/core/Picking';
+import type { LayerData } from '../src/core/types';
 import { describe, expect, it } from 'vitest';
 import { CHUNK, generateTile } from '../src/core/Generation';
 import { createInitialState, GROUND } from '../src/core/GameState';
@@ -124,5 +126,57 @@ describe('world model: layers (City 01.4)', () => {
     expect(sim.grid.layer(GROUND)!.kind).toBe('ground');
     expect(sim.grid.isPlayable(GROUND)).toBe(false);
     expect(sim.restoration.checkPulse(sim.grid.get(GROUND, 3, 3)!).ok).toBe(false);
+  });
+});
+
+describe('raised layers over the ground (City 01.4)', () => {
+  const ground = (): LayerData => ({ id: GROUND, name: 'City', kind: 'ground', width: 0, depth: 0, height: 0, origin: [0, 0, 0], unlocked: true, preview: false });
+  const roof = (over: Partial<LayerData> = {}): LayerData => ({ id: 'roofA', name: 'Roof', kind: 'raised', width: 4, depth: 4, height: 3, origin: [2, 0, 2], unlocked: true, preview: false, ...over });
+
+  it('a raised tile directly above (or beside) a ground tile is never its neighbour', () => {
+    const g = new Grid(9, [ground(), roof()]);
+    for (const t of g.tilesOf('roofA')) {
+      // The ground cell right under it, and every ground cell around it.
+      const under = g.get(GROUND, t.x + 2, t.z + 2)!;
+      for (const n of g.neighbors(t)) expect(n.roofId).toBe('roofA');
+      for (const n of g.neighbors(under)) expect(n.roofId).toBe(GROUND);
+      for (const n of g.tilesWithin('roofA', t.x, t.z, 6)) expect(n.roofId).toBe('roofA');
+      for (const n of g.tilesWithin(GROUND, under.x, under.z, 2)) expect(n.roofId).toBe(GROUND);
+    }
+  });
+
+  it('picking returns the nearest layer hit where layers overlap', () => {
+    const layers = [ground(), roof()];
+    const down = { x: 0, y: -1, z: 0 };
+    // Straight down over the roof: the roof (its top is nearer), in roof-local coordinates.
+    const a = pickLayers(layers, { x: 3.5, y: 20, z: 4.25 }, down)!;
+    expect(a.layerId).toBe('roofA');
+    expect(a.fx).toBeCloseTo(1.5);
+    expect(a.fz).toBeCloseTo(2.25);
+    // Straight down beside it: the ground.
+    expect(pickLayers(layers, { x: 8.5, y: 20, z: 3.5 }, down)!.layerId).toBe(GROUND);
+    // A slanted (camera-like) ray that reaches the ground below the roof's footprint only after passing
+    // through the roof's plane inside its footprint: the roof wins.
+    const d = { x: 0.5, y: -1, z: 0.5 };
+    const hit = pickLayers(layers, { x: 1, y: 6, z: 1 }, d)!;
+    expect(hit.layerId).toBe('roofA');
+    // The same ray order doesn't matter.
+    expect(pickLayers([...layers].reverse(), { x: 1, y: 6, z: 1 }, d)!.layerId).toBe('roofA');
+    // A slanted ray that passes the roof's plane outside its footprint lands on the ground behind it.
+    const miss = pickLayers(layers, { x: -6, y: 6, z: -6 }, d)!;
+    expect(miss.layerId).toBe(GROUND);
+    // Locked layers can't be picked; previews can.
+    expect(pickLayers([ground(), roof({ unlocked: false })], { x: 3.5, y: 20, z: 3.5 }, down)!.layerId).toBe(GROUND);
+    expect(pickLayers([ground(), roof({ unlocked: false, preview: true })], { x: 3.5, y: 20, z: 3.5 }, down)!.layerId).toBe('roofA');
+    // A ray parallel to the layers, or pointing away, hits nothing.
+    expect(pickLayers(layers, { x: 0, y: 5, z: 0 }, { x: 1, y: 0, z: 0 })).toBeUndefined();
+    expect(pickLayers(layers, { x: 0, y: 5, z: 0 }, { x: 0, y: 1, z: 0 })).toBeUndefined();
+  });
+
+  it('two raised layers stacked over each other: the higher one is picked where they overlap', () => {
+    const layers = [ground(), roof(), roof({ id: 'roofB', height: 6, origin: [4, 0, 4] })];
+    const down = { x: 0, y: -1, z: 0 };
+    expect(pickLayers(layers, { x: 5, y: 20, z: 5 }, down)!.layerId).toBe('roofB');
+    expect(pickLayers(layers, { x: 3, y: 20, z: 3 }, down)!.layerId).toBe('roofA');
   });
 });

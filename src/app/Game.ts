@@ -27,6 +27,7 @@ import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
+import { pickLayers } from '../core/Picking';
 import { initLowPoly } from '../rendering/Shapes';
 import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
@@ -401,31 +402,11 @@ export class Game {
 
   pick(x: number, y: number): Pick | undefined {
     const { o, d } = this.camera.ray(x, y);
-    let best: Pick | undefined;
-    let bestT = Infinity;
-    for (const r of this.sim.grid.rooftops) {
-      if (!r.unlocked && !r.preview) continue;
-      if (Math.abs(d.y) < 1e-6) continue;
-      const planeY = r.origin[1] + r.height + SLAB_TOP;
-      const t = (planeY - o.y) / d.y;
-      if (t < 0 || t >= bestT) continue;
-      const lx = o.x + d.x * t - r.origin[0];
-      const lz = o.z + d.z * t - r.origin[2];
-      if (lx < 0 || lz < 0 || lx >= r.width || lz >= r.depth) continue;
-      bestT = t;
-      best = { roofId: r.id, fx: lx, fz: lz, tile: this.sim.grid.get(r.id, Math.floor(lx), Math.floor(lz)) };
-    }
-    // The endless city ground (unbounded).
-    const g = this.sim.grid.layer(GROUND);
-    if (g && g.unlocked && Math.abs(d.y) > 1e-6) {
-      const t = (g.origin[1] + g.height + SLAB_TOP - o.y) / d.y;
-      if (t >= 0 && t < bestT) {
-        const lx = o.x + d.x * t - g.origin[0];
-        const lz = o.z + d.z * t - g.origin[2];
-        best = { roofId: GROUND, fx: lx, fz: lz, tile: this.sim.grid.get(GROUND, Math.floor(lx), Math.floor(lz)) };
-      }
-    }
-    return best;
+    // The endless ground only once it's playable (the rooftop campaign shows it as scenery).
+    const layers = this.sim.grid.allLayers.filter((l) => l.kind === 'raised' || l.unlocked);
+    const hit = pickLayers(layers, o, d);
+    if (!hit) return undefined;
+    return { roofId: hit.layerId, fx: hit.fx, fz: hit.fz, tile: this.sim.grid.get(hit.layerId, Math.floor(hit.fx), Math.floor(hit.fz)) };
   }
 
   /** The game is in the city (the park and beyond), not the legacy rooftop layout. */
