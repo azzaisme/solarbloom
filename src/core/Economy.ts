@@ -4,6 +4,9 @@ export const KINDS: ResourceKind[] = ['energy', 'water', 'biomass'];
 
 /** Resource arithmetic with the invariant 0 <= value <= cap. */
 export class Economy {
+  /** Phase 4 E00/E01: told about income lost to a full store (debug tracking; never a currency). */
+  onOverflow?: (kind: ResourceKind, amount: number) => void;
+
   constructor(
     private res: Resources,
     private caps: Resources,
@@ -36,7 +39,9 @@ export class Economy {
     if (!(amount > 0)) return 0;
     const before = this.res[kind];
     this.res[kind] = Math.min(this.caps[kind], before + amount);
-    return this.res[kind] - before;
+    const got = this.res[kind] - before;
+    if (got < amount - 1e-9) this.onOverflow?.(kind, amount - got);
+    return got;
   }
 
   isFull(kind: ResourceKind) {

@@ -14,6 +14,7 @@ import { DroneSystem } from './DroneSystem';
 import { Advisor } from './Advisor';
 import { LuckyCatSystem } from './LuckyCatSystem';
 import { AreaSystem } from './AreaSystem';
+import { DebugLog } from './DebugLog';
 import { Metrics } from './Metrics';
 import { MilestoneSystem } from './Milestones';
 import { ProductionSystem } from './ProductionSystem';
@@ -40,6 +41,7 @@ export class Sim {
   readonly advisor: Advisor;
   readonly progression: ProgressionSystem;
   readonly metrics: Metrics;
+  readonly log: DebugLog;
   readonly areas: AreaSystem;
   readonly districts: DistrictSystem;
   readonly canals: CanalNetwork;
@@ -92,6 +94,8 @@ export class Sim {
     this.districts = new DistrictSystem(this);
     this.milestones = new MilestoneSystem(this);
     this.metrics = new Metrics(this);
+    this.log = new DebugLog(this);
+    this.econ.onOverflow = (k, a) => this.log.onOverflow(k, a);
     this.restoration.adoptGrowing();
     this.upgrades.applyCaps();
   }

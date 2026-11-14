@@ -1,0 +1,223 @@
+import { distToFootprint } from '../src/core/Grid';
+import { createInitialState, GROUND } from '../src/core/GameState';
+import { KINDS } from '../src/core/Economy';
+import type { BuildableType, GameState, ResourceKind, TileData } from '../src/core/types';
+import { HOME } from '../src/gameplay/ProgressionSystem';
+import { Sim } from '../src/gameplay/Sim';
+
+/**
+ * Phase 4 E00.3: scripted baseline players. These are deterministic bots, not people: they measure pacing
+ * and economy (when things become affordable, how long storage sits full, how far automation gets alone).
+ *
+ * - `active`: one action every few seconds; builds machines next to each other, aims pulses at synergy tiles,
+ *   buys upgrades when nothing better is pending, claims the cat ~40 s after it appears. After the fountain it
+ *   pushes the fog back where the objective panel points.
+ * - `handsOff`: plays exactly like `active` until its first Drone Hub stands, then never touches anything
+ *   again. Compared with `active` over the same window it says how idle the game is.
+ */
+export interface BotOptions {
+  seed: number;
+  minutes: number;
+  mode?: 'active' | 'handsOff';
+  /** seconds between bot actions */
+  actionEvery?: number;
+  /** start from this state instead of a fresh one */
+  state?: GameState;
+  /** called once per simulated second (for extra measurements) */
+  onSecond?: (sim: Sim) => void;
+}
+
+export interface BotReport {
+  seed: number;
+  mode: 'active' | 'handsOff';
+  minutes: number;
+  firsts: Record<string, number>;
+  /** sim time the bot stopped acting (handsOff), else undefined */
+  handsOffAt?: number;
+  fountain: number;
+  /** sim time the Drone Hub first became affordable (cost within balance and caps) */
+  hubAffordable: number;
+  /** sim time the biomass cap first reached the Drone Hub's biomass cost */
+  hubFitsCap: number;
+  upgrades: { t: number; id: string; level: number }[];
+  machines: { t: number; type: string }[];
+  /** seconds each store spent full */
+  capped: Record<ResourceKind, number>;
+  /** income lost to full stores */
+  overflow: Record<ResourceKind, number>;
+  /** gross income actually banked */
+  earned: Record<ResourceKind, number>;
+  tilesRestored: number;
+  parkRestored: number;
+  maxCombo: number;
+  chains: number;
+  /** longest stretch (s) without a "meaningful improvement": upgrade, machine, cat, chain ×5+ or milestone */
+  longestGap: number;
+  stuck: number;
+  pulses: number;
+  /** per-minute snapshot */
+  minutesLog: { m: number; parkRestored: number; tiles: number; res: Record<ResourceKind, number>; caps: Record<ResourceKind, number>; rates: Record<ResourceKind, number> }[];
+}
+
+const ORDER: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'pollinator', 'motherTree', 'solar', 'pollinator', 'droneHub', 'condenser'];
+
+export function runBot(opts: BotOptions): BotReport {
+  const mode = opts.mode ?? 'active';
+  const actionEvery = opts.actionEvery ?? 3;
+  const sim = new Sim(opts.state ?? createInitialState(opts.seed));
+  sim.cat.anchorView = () => 'visible';
+  const s = sim.state;
+  const earned: Record<ResourceKind, number> = { energy: 0, water: 0, biomass: 0 };
+  const add = sim.econ.add.bind(sim.econ);
+  sim.econ.add = (k, a) => {
+    const got = add(k, a);
+    earned[k] += got;
+    return got;
+  };
+  const upgrades: BotReport['upgrades'] = [];
+  const machines: BotReport['machines'] = [];
+  let lastMeaningful = 0;
+  let longestGap = 0;
+  const meaningful = () => {
+    longestGap = Math.max(longestGap, sim.time - lastMeaningful);
+    lastMeaningful = sim.time;
+  };
+  sim.bus.on('upgrade.purchased', ({ id, level }) => {
+    upgrades.push({ t: Math.round(sim.time), id, level });
+    meaningful();
+  });
+  sim.bus.on('machine.built', ({ machine }) => {
+    machines.push({ t: Math.round(sim.time), type: machine.type });
+    meaningful();
+  });
+  sim.bus.on('cat.found', meaningful);
+  sim.bus.on('rooftop.coreRestored', meaningful);
+  sim.bus.on('area.cleared', meaningful);
+  sim.bus.on('chain.ended', ({ combo }) => combo >= 5 && meaningful());
+  let pulses = 0;
+  sim.bus.on('pulse.fired', () => pulses++);
+
+  const built: Record<string, number> = {};
+  let next = 0;
+  let handsOffAt: number | undefined;
+  let hubAffordable = -1;
+  let hubFitsCap = -1;
+  const capped: Record<ResourceKind, number> = { energy: 0, water: 0, biomass: 0 };
+  const minutesLog: BotReport['minutesLog'] = [];
+  const park = () => sim.progression.tilesFor(HOME);
+  const synergy = (t: TileData) =>
+    s.machines.reduce((a, m) => {
+      const d = distToFootprint(t.x, t.z, m.x, m.z, m.size);
+      if (m.type === 'pollinator' && d === 1) return a + 3;
+      if (m.type === 'motherTree' && d >= 1 && d <= sim.upgrades.treeRadius) return a + 2;
+      if (m.type === 'solar' && d === 1) return a + 1;
+      return a;
+    }, 0);
+
+  const act = () => {
+    // 1. build the next machine if affordable, next to existing ones
+    const want = ORDER[next];
+    if (want) {
+      const have = s.machines.filter((m) => m.type === want && !m.starter).length;
+      if (have > (built[want] ?? 0)) {
+        built[want] = have;
+        next++;
+      } else if (sim.build.isUnlocked(want) && sim.econ.canAfford(sim.build.cost(want))) {
+        const spots = park()
+          .filter((t) => sim.build.check(want, GROUND, t.x, t.z).ok)
+          .sort((a, b) => synergy(b) - synergy(a) || a.x + a.z - (b.x + b.z));
+        if (spots[0] && sim.build.place(want, GROUND, spots[0].x, spots[0].z)) {
+          built[want] = (built[want] ?? 0) + 1;
+          next++;
+        }
+      }
+    }
+    // 2. pulse the most promising tile (the park first; after the fountain, where the advisor points)
+    let target: TileData | undefined;
+    const cands = park().filter((t) => sim.restoration.checkPulse(t).ok);
+    const rank = (t: TileData) => (t.ground === 'restored' ? 30 : 0) - synergy(t) * 4 + (t.ground === 'prepared' ? 0 : 3);
+    cands.sort((a, b) => rank(a) - rank(b) || a.pollution - b.pollution);
+    target = cands[0];
+    if (s.progression.coreActivated && (!target || target.ground === 'restored')) {
+      const sug = sim.advisor.suggest();
+      if (sug.action.kind === 'focus' && !sug.action.layer) {
+        const t = sim.grid.get(GROUND, sug.action.x, sug.action.z);
+        if (t && sim.restoration.checkPulse(t).ok) target = t;
+      } else if (sug.action.kind === 'wake') {
+        const m = sim.machine(sug.action.machineId);
+        const id = m && sim.areas.areaOf(m);
+        if (id) sim.areas.clear(id);
+      }
+      if (!target || target.ground === 'restored') {
+        // Otherwise the cheapest restorable tile at the edge of the next goal area.
+        const goal = sim.areas.nextGoal();
+        const edge = goal ? sim.areas.entryTiles(goal).find((t) => sim.restoration.checkPulse(t).ok) : undefined;
+        if (edge) target = edge;
+      }
+    }
+    if (target) sim.restoration.pulse(target.id);
+    else if (s.resources.energy < 3) sim.harvestSun();
+    // 3. upgrades when the next machine is far off
+    const nextCost = ORDER[next] ? (sim.build.cost(ORDER[next]).biomass ?? 0) : 0;
+    for (const u of sim.upgrades.all()) {
+      const st = sim.upgrades.status(u);
+      if (st.ok && s.resources.biomass - st.cost >= Math.min(nextCost, s.caps.biomass * 0.6)) sim.upgrades.purchase(u.id);
+    }
+    if (sim.progression.coreReady()) sim.progression.activateCore();
+    // 4. find the cat ~40 s after it appears
+    const c = s.cat.active;
+    if (c && sim.time - c.spawnedAt > 40) sim.cat.claim();
+  };
+
+  const stepsPerAction = Math.round(actionEvery / 0.1);
+  const steps = Math.round((opts.minutes * 60) / 0.1);
+  for (let i = 0; i < steps; i++) {
+    if (handsOffAt === undefined && mode === 'handsOff' && s.machines.some((m) => m.type === 'droneHub')) handsOffAt = Math.round(sim.time);
+    if (handsOffAt === undefined && i % stepsPerAction === 0) act();
+    sim.tick();
+    if (i % 10 === 0) {
+      const hub = sim.build.cost('droneHub');
+      if (hubFitsCap < 0 && s.caps.biomass >= (hub.biomass ?? 0)) hubFitsCap = Math.round(sim.time);
+      if (hubAffordable < 0 && sim.econ.canAfford(hub)) hubAffordable = Math.round(sim.time);
+      for (const k of KINDS) if (sim.econ.isFull(k)) capped[k] += 1;
+      opts.onSecond?.(sim);
+    }
+    if (i % 600 === 599) {
+      const r = sim.production.rates();
+      minutesLog.push({
+        m: Math.round(sim.time / 60),
+        parkRestored: sim.progression.restoredCount(HOME),
+        tiles: s.stats.tilesRestored,
+        res: { energy: Math.round(s.resources.energy), water: Math.round(s.resources.water), biomass: Math.round(s.resources.biomass) },
+        caps: { ...s.caps },
+        rates: { energy: Math.round(r.energy * 60), water: Math.round(r.water * 60), biomass: Math.round(r.biomass * 60) },
+      });
+    }
+  }
+  longestGap = Math.max(longestGap, sim.time - lastMeaningful);
+  return {
+    seed: opts.seed,
+    mode,
+    minutes: opts.minutes,
+    firsts: { ...s.stats.firsts },
+    handsOffAt,
+    fountain: s.progression.coreActivated ? Math.round(s.progression.coreActivatedAt) : -1,
+    hubAffordable,
+    hubFitsCap,
+    upgrades,
+    machines,
+    capped,
+    overflow: { ...sim.log.overflow },
+    earned,
+    tilesRestored: s.stats.tilesRestored,
+    parkRestored: sim.progression.restoredCount(HOME),
+    maxCombo: s.stats.maxCombo,
+    chains: s.stats.chains,
+    longestGap: Math.round(longestGap),
+    stuck: Math.round(s.stats.stuckSeconds),
+    pulses,
+    minutesLog,
+  };
+}
+
+export const mmss = (t?: number) => (t === undefined || t < 0 ? '—' : `${Math.floor(t / 60)}:${String(Math.round(t) % 60).padStart(2, '0')}`);

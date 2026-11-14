@@ -9,6 +9,8 @@ new SaveService()
   .then((lr) => {
     const game = new Game(canvas, lr);
     (window as unknown as { solarbloom: Game }).solarbloom = game;
+    // Debug tools (Phase 4 E00.5) exist only on the dev server; production builds drop this branch.
+    if (import.meta.env.DEV) void import('./app/DevTools').then((m) => m.installDevTools(game));
     requestAnimationFrame(() => document.getElementById('boot')?.classList.add('gone'));
   })
   .catch((err) => {
