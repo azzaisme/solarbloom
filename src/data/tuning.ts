@@ -11,6 +11,16 @@ export const TUNING = {
     caps: { energy: 60, water: 40, biomass: 100 },
   },
 
+  /**
+   * Phase 4 E01.3: storage tiers, one per Seed Vault level (tier 0 is the starting store). Cleared city areas
+   * still multiply these (see city.storagePerArea). Every purchase the fountain requires fits in tier 0.
+   */
+  storageTiers: {
+    energy: [60, 150, 400, 1000, 2500],
+    water: [40, 100, 250, 600, 1500],
+    biomass: [100, 250, 600, 1500, 4000],
+  },
+
   // Energy / water income that always exists, so the player can never softlock.
   starterSolarRate: 1, // energy/sec from the pre-placed (damaged) panel
   solarRate: 1.2, // energy/sec from each panel the player builds
@@ -71,7 +81,7 @@ export const TUNING = {
   motherTree: { radius: 2, threshold: 12 },
 
   drone: {
-    hubRadius: 3,
+    hubRadius: 6, // Phase 4 E01: was 3; a lone hub ran out of work within a minute (see docs/PHASE_4_AUDIT.md)
     cycleSeconds: 4,
     flySpeed: 3, // tiles/sec
     workSeconds: 0.5,
@@ -82,6 +92,18 @@ export const TUNING = {
     frontierBonus: 12,
     focusMult: 6, // "Focus the frontier": the fog edge counts this many times more
     bloomBonus: 60, // "Keep this area blooming": its green tiles beat restoring up to ~8 tiles further away
+    /**
+     * Phase 4 E01: the old drone that lives by the park's old solar lamp from the very start. Slow, short-ranged
+     * and free (sun-powered): it restores and nurtures nearby tiles on its own, but tapping always outpaces it.
+     * Upgrades don't affect it.
+     */
+    /**
+     * Phase 4 E01: drones never spend a store below this share of its cap, so the player's own taps always have
+     * something left (without it, drones drained city water and slowed the scripted player by a third). After a
+     * big purchase drones wait for the stores to refill past it.
+     */
+    reserve: 0.25,
+    old: { enabled: true, radius: 6, cycleSeconds: 7, flySpeed: 1.5, workSeconds: 0.8 },
   },
 
   machineCostGrowth: 1.5, // each extra copy of a machine costs this much more
@@ -114,12 +136,24 @@ export const TUNING = {
   core: {
     restoredTiles: 42,
     fullBloomTiles: 24,
-    cost: { energy: 60, biomass: 170 },
+    cost: { energy: 40, biomass: 100 }, // Phase 4 E01.1: fits the starting store with room to spare, since drones keep spending energy (was 60 ⚡ / 170 🌿)
     resonanceBiomassMult: 1.25,
     sequenceSeconds: 7,
   },
 
   autosaveSeconds: 10,
+
+  /**
+   * Phase 4 E01: progress while the game is closed (or a tab hidden for longer than catchUp.maxSeconds).
+   * Only steady production and drone work, at a reduced rate, for a bounded time. Landmarks, cats, Frenzy,
+   * chains, milestones and other one-time rewards never happen while away. Nothing is lost by staying away longer.
+   */
+  offline: {
+    minSeconds: 60, // shorter absences earn nothing extra
+    maxSeconds: 4 * 3600,
+    rate: 0.5, // share of the sustained rate (no temporary boosts)
+    maxDroneJobs: 300, // drone jobs credited per absence, across all drones
+  },
 
   /** The starting park's Core (the fountain): replaces TUNING.core when the game starts in the city. */
   /** Mega Pulse: manual taps charge it; the next tap after it is full releases a city-scale chain. */

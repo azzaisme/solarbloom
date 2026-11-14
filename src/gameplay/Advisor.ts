@@ -73,6 +73,10 @@ export class Advisor {
         const lm = s.areas.landmark(PARK);
         if (lm) return { text: 'The fountain is ready. Wake it to roll back the fog.', label: '✨ Wake the fountain', action: { kind: 'wake', machineId: lm.id } };
       }
+      // Phase 4 E01: ready but short (drones keep spending): say what it's waiting for instead of something else.
+      if (!s.state.progression.coreActivated && s.progression.coreReady() && s.econ.shortfall(TUNING.core.cost)) {
+        return { text: `The fountain is ready. It needs ${formatCost(TUNING.core.cost)} to wake: let your stores fill up.`, label: '⛲ Filling up…', action: { kind: 'wait', seconds: 5 } };
+      }
       for (const id of s.areas.revealed()) {
         if (id === PARK || s.areas.fog(id) === 'cleared' || !s.areas.ready(id)) continue;
         const lm = s.areas.landmark(id);
@@ -132,7 +136,8 @@ export class Advisor {
       if (!spot) return undefined;
       // A spot is ready but the purchase isn't: save up (resources always refill), unless storage can't hold it.
       if (s.econ.shortfall(cost)) {
-        if ((['energy', 'water', 'biomass'] as const).some((k) => (cost[k] ?? 0) > s.state.caps[k])) return undefined;
+        // Phase 4 E01: more than storage can hold → say so and point at the Seed Vault, if it can still grow.
+        if ((['energy', 'water', 'biomass'] as const).some((k) => (cost[k] ?? 0) > s.state.caps[k])) return this.storageStep(def.name);
         return { text: `${why} Save up for a ${def.name} (${formatCost(cost)}).`, label: `${def.icon} Saving up…`, action: { kind: 'wait', seconds: 5 } };
       }
       return { text: `${why} ${what}`, label: `${def.icon} Build a ${def.name}`, action: { kind: 'build', type, x: spot.x, z: spot.z } };
@@ -223,6 +228,13 @@ export class Advisor {
         return undefined;
       }
     }
+  }
+
+  /** A purchase is bigger than storage: the Seed Vault's next tier, if there is one (Phase 4 E01). */
+  storageStep(what: string): Suggestion | undefined {
+    const vault = this.sim.upgrades.all().find((u) => u.id === 'seedVault');
+    if (!vault || this.sim.upgrades.level(vault.id) >= vault.maxLevel) return undefined;
+    return { text: `A ${what} needs more storage than you have. Upgrade the Seed Vault to hold more.`, label: '🏺 Upgrades', action: { kind: 'upgrades' } };
   }
 
   /** The first machine the fountain still needs that is affordable, at a valid spot nearest the fountain. */

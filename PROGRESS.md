@@ -2,6 +2,16 @@
 
 Moved out of the `azzaisme/mouthwash-brigade` repo (where it started in a `solarbloom/` folder) with its full history.
 
+# Phase 4: Dopamine Overdrive
+
+Plan: `docs/PHASE_4_EPICS.md`. Audit, baseline and results: `docs/PHASE_4_AUDIT.md`. Timings are from scripted bots, not people.
+
+| Epic | Status |
+|---|---|
+| E00 Audit, instrumentation, baseline | ✅ audit, bot baseline (active + hands-off), local event log, dev-only debug tools, phone HUD check |
+| E01 Economy rescue and overflow | ✅ fountain purchases fit starting stores, storage tiers, old drone, hub at ~2 min, drone reserve, offline progress (4 h, half rate), Solar Surge rename, HUD spending/boosts. Open: hands-off reaches 22–26% of active (target 40–60%, E07); overflow feeds Frenzy in E06 |
+| E02–E11 | not started |
+
 # City scale (epic #1)
 
 The game is growing into an endless, fog-covered city (see issue #1 and its sub-epics).

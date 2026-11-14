@@ -14,7 +14,7 @@ export interface CatReward {
 
 export const CAT_REWARD_NAMES: Record<CatRewardType, string> = {
   luckyHarvest: 'Lucky Harvest',
-  solarFrenzy: 'Solar Frenzy',
+  solarFrenzy: 'Solar Surge',
   megaBloom: 'Mega Bloom',
   droneParty: 'Drone Party',
   jackpot: 'JACKPOT',

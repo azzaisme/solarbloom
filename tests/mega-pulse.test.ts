@@ -66,6 +66,11 @@ describe('Mega Pulse and scaled Overcharge (City 11.5)', () => {
 
   it('chains remember who started them: taps are the player, drones and condensers are automation', () => {
     const sim = city();
+    // The park's old drone would start chains of its own: switch it off for this test.
+    const old = TUNING.drone.old as { enabled: boolean };
+    old.enabled = false;
+    sim.state.drones = [];
+    try {
     const ended: string[] = [];
     sim.bus.on('chain.ended', (e) => ended.push(e.starter));
     // Gardens in two places, so restoring next to each makes a real chain.
@@ -84,6 +89,9 @@ describe('Mega Pulse and scaled Overcharge (City 11.5)', () => {
     sim.restoration.complete(b[0], 'drone');
     sim.advance(6);
     expect(ended).toEqual(['player', 'auto']);
+    } finally {
+      old.enabled = true;
+    }
   });
 
   it('Overcharge boosts scale with the Overcharge upgrade', () => {

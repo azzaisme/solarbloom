@@ -12,6 +12,7 @@ import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
+import type { OfflineReport } from '../gameplay/OfflineSystem';
 import { Sim } from '../gameplay/Sim';
 import { Butterflies } from '../rendering/Butterflies';
 import { CameraController } from '../rendering/CameraController';
@@ -117,6 +118,10 @@ export class Game {
     const loaded = lr.state;
     const state = loaded ?? createInitialState();
     this.sim = new Sim(state, this.bus);
+    // Phase 4 E01: time away since the last save earns bounded offline progress (before anything renders).
+    // A clock that went backwards earns nothing; the result is saved right away so a reload can't count it twice.
+    const awayMs = loaded?.savedAt !== undefined ? Date.now() - loaded.savedAt : 0;
+    const offline = awayMs > 0 ? this.sim.offline.apply(awayMs / 1000) : undefined;
 
     this.app = new pc.Application(canvas, {
       graphicsDeviceOptions: { antialias: true, alpha: true, powerPreference: 'high-performance' },
@@ -257,7 +262,10 @@ export class Game {
     if (lr.scrapped) setTimeout(() => this.hud.toast('A new city awaits — older gardens were cleared for this update. 🌱', '', 7), 400);
     if (lr.backedUpAs) setTimeout(() => this.hud.toast(`Your old save couldn't be read by this version, so it was kept safely as a backup and a new rooftop started.<small>${lr.backedUpAs}</small>`, '', 8), 400);
     if (!state.progression.introSeen && state.stats.tilesRestored === 0) this.hud.showIntro();
-    else if (loaded) setTimeout(() => this.hud.toast('Welcome back! Your garden kept its shape. 🌱', '', 2.6), 400);
+    else if (offline) {
+      this.saveNow();
+      setTimeout(() => this.hud.toast(offlineToast(offline, 'Welcome back!'), 'gold', 6), 400);
+    } else if (loaded) setTimeout(() => this.hud.toast('Welcome back! Your garden kept its shape. 🌱', '', 2.6), 400);
   }
 
   // ───────────────────────── settings / persistence ─────────────────────────
@@ -720,7 +728,7 @@ export class Game {
       case 'solar': {
         const out = s.production.solarOutput(m);
         const boosted = m.boostUntil > s.time;
-        extra = `<p class="stat">⚡ ${out.toFixed(1)} energy/s${boosted ? ' · 🌸 bloom boost!' : ''}${s.production.frenzyActive() ? ' · 🐱 Frenzy ×3' : ''}</p><p>Restore tiles right next to it for a 5 s ×2 boost.</p>${this.upgradeButton('solarArray')}`;
+        extra = `<p class="stat">⚡ ${out.toFixed(1)} energy/s${boosted ? ' · 🌸 bloom boost!' : ''}${s.production.surgeActive() ? ` · 🐱 Solar Surge ×${TUNING.cat.frenzyMult}` : ''}</p><p>Restore tiles right next to it for a 5 s ×2 boost.</p>${this.upgradeButton('solarArray')}`;
         break;
       }
       case 'condenser': {
@@ -1072,7 +1080,7 @@ export class Game {
       const p = this.cat.targetWorld();
       if (p) this.vfx.burst(p, 6, { up: 1.5, size: 0.04, speed: 0.4 });
     });
-    b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Frenzy ×3 for ${Math.round(seconds)}s`));
+    b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Surge ×${TUNING.cat.frenzyMult} for ${Math.round(seconds)}s`));
     b.on('harvest', () => this.sfx.coin());
     b.on('rooftop.coreReady', () => {
       this.machines.setCoreState('ready');
@@ -1558,6 +1566,15 @@ export class Game {
   awayFor(seconds: number) {
     if (!(seconds > 0)) return;
     const C = TUNING.catchUp;
+    // Phase 4 E01: time beyond what the live catch-up covers becomes offline progress (reduced, bounded).
+    const beyond = seconds - Math.max(0, C.maxSeconds - this.catchUpDebt);
+    if (beyond > 0) {
+      const r = this.sim.offline.apply(beyond);
+      if (r) {
+        this.hud.toast(offlineToast(r, 'While you were away'), 'gold', 6);
+        this.saveNow();
+      }
+    }
     const was = this.catchUpDebt;
     this.catchUpDebt = Math.min(C.maxSeconds, this.catchUpDebt + seconds);
     if (was < C.toastFrom && this.catchUpDebt >= C.toastFrom) {
@@ -1669,4 +1686,19 @@ export class Game {
       }
     }
   }
+}
+
+/** "While you were away" summary for the offline report (Phase 4 E01). */
+export function offlineToast(r: OfflineReport, title: string): string {
+  const h = Math.floor(r.away / 3600);
+  const m = Math.round((r.away % 3600) / 60);
+  const away = h ? `${h} h ${m} min` : `${m} min`;
+  const icons = { energy: '⚡', water: '💧', biomass: '🌿' } as const;
+  const fmt = (n: number) => (n >= 10000 ? `${Math.round(n / 1000)}k` : String(Math.round(n)));
+  const got = (['energy', 'water', 'biomass'] as const).filter((k) => r.credited[k] >= 1).map((k) => `+${fmt(r.credited[k])}${icons[k]}`);
+  const lost = (['energy', 'water', 'biomass'] as const).filter((k) => r.lost[k] >= 1).map((k) => `${fmt(r.lost[k])}${icons[k]}`);
+  const lines = [`🌙 ${title} (${away})`];
+  const capped = r.away > r.seconds + 1 ? ` · counted up to ${Math.round(r.seconds / 3600)} h` : '';
+  lines.push(`<small>Your garden kept growing at half pace${capped}: ${got.join(' ') || 'nothing new'}${r.droneJobs ? ` · drones restored ${r.restored} and nurtured ${r.grown} tiles` : ''}${lost.length ? ` · ${lost.join(' ')} didn't fit in storage` : ''}</small>`);
+  return lines.join('');
 }

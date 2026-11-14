@@ -261,10 +261,14 @@ export class Hud {
     });
   }
 
-  private set(key: string, el: HTMLElement, prop: 'text' | 'html' | 'width' | 'cls' | 'style', value: string, cls?: string) {
+  /** Spending totals sampled about once a second of sim time (Phase 4 E01.2). */
+  private spendSamples: { t: number; v: Record<string, number> }[] = [];
+
+  private set(key: string, el: HTMLElement, prop: 'text' | 'html' | 'width' | 'cls' | 'style' | 'title', value: string, cls?: string) {
     if (this.last.get(key) === value) return;
     this.last.set(key, value);
     if (prop === 'text') el.textContent = value;
+    else if (prop === 'title') el.title = value;
     else if (prop === 'html') el.innerHTML = value;
     else if (prop === 'width') el.style.width = value;
     else if (prop === 'cls' && cls) el.classList.toggle(cls, value === '1');
@@ -460,7 +464,7 @@ export class Hud {
 
   private renderDiscoveries() {
     const d = this.sim.cat.discoveries();
-    const names: Record<string, string> = { luckyHarvest: 'Lucky Harvest', solarFrenzy: 'Solar Frenzy', megaBloom: 'Mega Bloom', droneParty: 'Drone Party', jackpot: 'Jackpot', goldenRelay: 'Golden Relay', catsGarden: "Cat's Garden", fogWhisker: 'Fog Whisker' };
+    const names: Record<string, string> = { luckyHarvest: 'Lucky Harvest', solarFrenzy: 'Solar Surge', megaBloom: 'Mega Bloom', droneParty: 'Drone Party', jackpot: 'Jackpot', goldenRelay: 'Golden Relay', catsGarden: "Cat's Garden", fogWhisker: 'Fog Whisker' };
     // In the city, finds are grouped by area type (the city is endless; the list never grows).
     const spots = d.byType.length
       ? d.byType
@@ -700,6 +704,13 @@ export class Hud {
     this.layoutToasts();
     const s = this.sim;
     const rates = s.production.rates();
+    // Phase 4 E01.2: spending per minute over the last ~20 s of sim time, shown beside the income.
+    const sp = this.spendSamples;
+    if (!sp.length || s.time - sp[sp.length - 1].t >= 1) {
+      sp.push({ t: s.time, v: { ...s.econ.spent } });
+      while (sp.length > 21) sp.shift();
+    }
+    const surge = s.production.surgeActive();
     for (const k of KINDS) {
       const row = $(this.root, `[data-res="${k}"]`);
       const v = s.econ.get(k);
@@ -707,7 +718,17 @@ export class Hud {
       this.set(`v-${k}`, $(row, '.n'), 'text', String(Math.floor(v)));
       this.set(`c-${k}`, $(row, '.c'), 'text', String(Math.floor(c)));
       const perMin = rates[k] * 60;
-      this.set(`r-${k}`, $(row, '.rate'), 'text', `+${perMin < 10 ? perMin.toFixed(1) : Math.round(perMin)}/min`);
+      const span = sp.length > 1 ? sp[sp.length - 1].t - sp[0].t : 0;
+      const spend = span > 0 ? ((sp[sp.length - 1].v[k] - sp[0].v[k]) / span) * 60 : 0;
+      const n = (x: number) => (x < 10 ? x.toFixed(1) : x >= 10000 ? `${Math.round(x / 1000)}k` : String(Math.round(x)));
+      const boost = k === 'energy' && surge ? ` ☀️×${TUNING.cat.frenzyMult}` : '';
+      this.set(`r-${k}`, $(row, '.rate'), 'html', `+${n(perMin)}/min${boost}${spend >= 0.5 ? ` <span class="spend">−${n(spend)}</span>` : ''}`);
+      this.set(
+        `t-${k}`,
+        row,
+        'title',
+        `${RES_META[k].name}: making ${n(perMin)}/min${spend >= 0.5 ? `, spending about ${n(spend)}/min` : ''}${boost ? ' (Solar Surge from the Lucky Cat: temporary)' : ''}`,
+      );
       this.set(`b-${k}`, $(row, '.bar i'), 'width', `${Math.round((v / c) * 100)}%`);
       this.set(`f-${k}`, row, 'cls', s.econ.isFull(k) ? '1' : '0', 'full');
     }

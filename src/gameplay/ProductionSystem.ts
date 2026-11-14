@@ -82,15 +82,18 @@ export class ProductionSystem {
     return b;
   }
 
-  frenzyActive() {
+  /** The Lucky Cat's Solar Surge buff (saved as 'solarFrenzy'; renamed so "Frenzy" means only Bloom Frenzy). */
+  surgeActive() {
     return this.sim.state.buffs.some((b) => b.type === 'solarFrenzy');
   }
 
-  solarOutput(m: MachineData): number {
+  /** `sustained`: without temporary boosts (bloom boosts, Solar Surge), for offline progress and cat rewards. */
+  solarOutput(m: MachineData, sustained = false): number {
     const t = this.sim.time;
     let v = (m.starter ? TUNING.starterSolarRate : TUNING.solarRate) * this.sim.upgrades.solarMult;
+    if (sustained) return v;
     if (m.boostUntil > t) v *= TUNING.solarBloomBoost.mult;
-    if (this.frenzyActive()) v *= TUNING.cat.frenzyMult;
+    if (this.surgeActive()) v *= TUNING.cat.frenzyMult;
     return v;
   }
 
@@ -110,7 +113,11 @@ export class ProductionSystem {
   }
 
 
-  rates(): Resources {
+  /**
+   * Income per second. `sustained` leaves out temporary solar boosts (Phase 4 E01: offline progress). Biomass
+   * from briefly lush tiles is still counted (it lasts 25 s and is a small share).
+   */
+  rates(sustained = false): Resources {
     const grid = this.sim.grid;
     if (this.dirty) {
       this.dirty = false;
@@ -144,7 +151,7 @@ export class ProductionSystem {
     energy += bonus.energy;
     let water = TUNING.rainBarrelRate + bonus.water;
     for (const m of this.sim.state.machines) {
-      if (m.type === 'solar') energy += this.solarOutput(m);
+      if (m.type === 'solar') energy += this.solarOutput(m, sustained);
       else if (m.type === 'condenser') water += 1;
     }
     return { energy, water, biomass: this.biomassRate + bonus.biomass };

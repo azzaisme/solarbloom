@@ -60,6 +60,11 @@ async function pipe(data: Uint8Array, stream: CompressionStream | DecompressionS
 export class SaveService {
   constructor(private storage: StorageLike | undefined = safeStorage()) {}
 
+  /** Wall clock for `savedAt`, shared by every SaveService (tests fix it to compare saves byte for byte). */
+  static clock: () => number = () => Date.now();
+  /** This service's clock (defaults to the shared one). */
+  now: () => number = () => SaveService.clock();
+
   /** Packs changed chunks (re-packing only chunks touched since the last save). */
   packTiles(state: GameState): Record<string, string> {
     const world = worldOf(state);
@@ -84,7 +89,7 @@ export class SaveService {
    */
   serialize(state: GameState): string {
     const tiles = this.packTiles(state);
-    const base = JSON.stringify({ ...state, tiles: undefined });
+    const base = JSON.stringify({ ...state, savedAt: this.now(), tiles: undefined });
     const frag = Object.keys(tiles)
       .map((k) => `"${k}":"${tiles[k]}"`)
       .join(',');

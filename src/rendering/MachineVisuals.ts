@@ -623,7 +623,7 @@ export class MachineVisuals {
       if (view && v.m.roofId === GROUND && (v.m.x + v.m.size < view.x0 - M || v.m.x > view.x1 + M || v.m.z + v.m.size < view.z0 - M || v.m.z > view.z1 + M)) continue;
       switch (v.m.type) {
         case 'solar': {
-          const boosted = v.m.boostUntil > now || this.sim.production.frenzyActive();
+          const boosted = v.m.boostUntil > now || this.sim.production.surgeActive();
           const m = boosted ? panelBoost() : panelMat();
           for (const p of v.panel!) if (p.render!.material !== m) p.render!.material = m;
           const s = 0.05 + (boosted ? 0.025 * (1 + Math.sin(t * 10)) : 0.01 * Math.sin(t * 2));

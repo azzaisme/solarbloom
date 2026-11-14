@@ -43,7 +43,8 @@ button:focus-visible { outline: 3px solid #2f7de1; outline-offset: 2px; }
 .res-row .rate { font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; text-align: right; }
 .res-row .bar { grid-column: 2 / 4; height: 6px; background: rgba(0,0,0,.08); border-radius: 4px; overflow: hidden; }
 .res-row .bar i { display: block; height: 100%; border-radius: 4px; transition: width .2s; }
-.res-row.full .rate::after { content: ' · FULL'; color: var(--bad); font-weight: 800; }
+.res-row.full .rate::after { content: ' · full'; color: var(--ink-soft); font-weight: 800; } /* full is fine, not an error (Phase 4) */
+.res-row .rate .spend { color: var(--ink-soft); font-weight: 700; }
 .res-row.flash .val { animation: flash .5s; }
 @keyframes flash { 0% { transform: scale(1.25); color: #2c8f3b; } 100% { transform: scale(1); } }
 .res-row.short .val { animation: shake .4s; color: var(--bad); }

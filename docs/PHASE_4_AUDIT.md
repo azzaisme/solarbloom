@@ -130,3 +130,50 @@ the hint text runs to 5–9 lines.
 3. The first meaningful upgrade must come sooner, with something worth buying about every 30–60 s.
 4. Automation must matter when hands-off: the old starter drone, the hub at ~2–3 min, and drones that don't run out of work.
 5. Bounded offline progress, built on the same rates, sharing the hidden-tab catch-up path.
+
+---
+
+# E01 — economy rescue: what changed and what it measured
+
+## Changes
+
+| Story | Change |
+|---|---|
+| E01.1 | Drone Hub **80 🌿 + 30 ⚡** (was 110 / 35), Mother Tree **90 🌿 + 30 💧** (was 170 / 40), fountain **40 ⚡ + 100 🌿** (was 60 / 170). Everything the fountain needs fits in the starting stores, with a quarter to spare for energy and water. The bots found that drones spend energy all the time, so a 60 ⚡ fountain could never be paid from a 60 ⚡ store: a real softlock, now covered by a test. The advisor says when the fountain is ready but its price isn't, and points at the Seed Vault when a purchase is bigger than storage. |
+| E01.2 | Resource HUD: income per minute plus spending per minute (rolling ~20 s), a ☀️×3 marker and tooltip during the cat's Solar Surge, and a neutral "· full" instead of a red "FULL". |
+| E01.3 | Storage tiers in `TUNING.storageTiers`, one per Seed Vault level: 🌿 100 → 250 → 600 → 1,500 → 4,000, ⚡ 60 → 150 → 400 → 1,000 → 2,500, 💧 40 → 100 → 250 → 600 → 1,500. Costs 20 / 50 / 125 / 313 🌿; each level fits the store before it. Cleared areas still multiply the tier. |
+| E01.4 | No new sinks yet. Early choices exist (Efficient Pulse 10, Solar Array 14, Seed Vault 20, Wide Pulse 22 🌿). The real gap is later: the city bot owns **every upgrade by about minute 5**, so there's nothing left to buy afterwards. That belongs to E04 (cost growth against production). |
+| E01.5 | Income lost to full stores is tracked (`sim.log.overflow`) and not yet spent. It becomes Frenzy charge in E06. |
+| E01.6 | Recovery from empty stores is tested (Harvest Sunlight, then a pulse). Nothing decays while away. |
+| Old drone | A drone lives by the park's old solar lamp from the start: radius 6, slow (1.5 tiles/s, 7 s rest), free, no upgrades. It's not a Drone Hub, so it unlocks nothing. Saves made before it existed get it too. |
+| Drone Hub | Base work radius 3 → **6** (a lone hub ran dry within a minute). Drones never spend a store below **25% of its cap** (`TUNING.drone.reserve`), so taps always have something left. Without the reserve, the bigger radius let drones drain city water and the city bot cleared a third fewer areas. |
+| Offline | `OfflineSystem`: time away earns **half** the sustained rate for up to **4 h**. Drone jobs go through the normal pay-and-restore path (with the reserve) but set off no chains. The sim clock doesn't move, so cats, buffs, landmarks and milestones wait. Saves stamp `savedAt`; a clock that went backwards earns nothing; the result is saved at once so a reload can't count it twice. A tab hidden longer than the 10-minute live catch-up gets the rest as offline time. Old v4 saves load fine (no version bump). |
+| Rename | The cat reward "Solar Frenzy" is now **Solar Surge** on screen. Saved ids (`solarFrenzy`) are unchanged. |
+
+## Measured (bots, seeds 7 / 21 / 99, first 15 minutes)
+
+| | E00 baseline | After E01 |
+|---|---|---|
+| Drone Hub fits in storage | 2:36–2:39 (after Seed Vault) | from the start |
+| Drone Hub built | 2:51–2:54 | 1:51–2:00 |
+| Mother Tree | 4:09–4:15 | 2:48–2:57 |
+| Fountain (active) | 5:39–5:54 | 5:45–6:09 |
+| Tiles restored by 15:00 (active) | 880–937 | 1,024–1,054 |
+| Longest gap with no meaningful improvement | 164–170 s | 116–123 s |
+| 🌿 lost to full stores (active) | 46,000–51,000 | 37,000–46,000 |
+| Hands-off: tiles after the hub vs active | 1–2% (old definition: no actions at all) | **22–26%** (no taps; still buys and wakes landmarks) |
+| Hands-off fountain | never | 8:33–9:06 |
+| Fountain without upgrades or cats | — | wakes (test, seeds 7 and 21, within 20 min) |
+| City bot, areas in 60 min, 12 seeds | 25.5 (6 seeds) | 25.7 |
+
+## Still open after E01
+
+- **Hands-off reaches 22–26% of active, below the 40–60% target.** Raising the hub radius to 6 got it to ~43%,
+  but the drone reserve needed to protect taps brought it back down. The levers are in E07 (drone speed, extra
+  drones, multi-tile jobs) rather than more radius.
+- **Biomass income still far outruns storage after the fountain** (stores hold about 4 seconds of late income).
+  Tiers help early on. The fix is E04's cost-growth pass plus E06 turning overflow into Frenzy charge.
+- **The fountain arrives at ~6 minutes**, well before the plan's 9–12. That's left for E04 and E10, which own the park's milestones and pacing.
+- **The city bot is chaotic**: tiny early changes swing a seed by ±10 areas, and its longest stalls are on street
+  corridor and canal flow specialties (already there before Phase 4). Means over 12 seeds are the comparison used here.
+- No human playtests and no real-device numbers yet.

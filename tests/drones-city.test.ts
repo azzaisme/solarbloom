@@ -8,7 +8,7 @@ function city(seed = 6, r = 3) {
   const sim = new Sim(createInitialState(seed));
   const st = sim.state;
   st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
-  st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
+  st.resources.energy = st.resources.water = st.resources.biomass = 1e7; // full: drones keep a reserve of the cap
   st.progression.coreActivated = true;
   sim.areas.clear(PARK, true);
   for (let cz = -r; cz <= r; cz++) for (let cx = -r; cx <= r; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
@@ -71,7 +71,7 @@ describe('drone networks (City 11)', () => {
     const sim = new Sim(createInitialState(8));
     const st = sim.state;
     st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
-    st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
+    st.resources.energy = st.resources.water = st.resources.biomass = 1e7; // full: drones keep a reserve of the cap
     st.progression.coreActivated = true;
     for (const t of sim.areas.tiles(PARK)) if (!t.blocked && !t.occupantId) {
       t.ground = 'restored';
@@ -82,7 +82,7 @@ describe('drone networks (City 11)', () => {
     // A hub near the park's edge: frontier tiles beyond the edge are its first jobs.
     hub(sim, 13, 7);
     const first: string[] = [];
-    sim.bus.on('drone.jobStarted', ({ tileId }) => first.length < 3 && first.push(tileId));
+    sim.bus.on('drone.jobStarted', ({ droneId, tileId }) => !st.drones.find((d) => d.id === droneId)?.old && first.length < 3 && first.push(tileId));
     sim.advance(20);
     expect(first.length).toBeGreaterThan(0);
     for (const id of first) {
@@ -121,7 +121,7 @@ describe('far-away drones as work rates (City 11.4)', () => {
     const sim = new S(create(seed));
     const st = sim.state;
     st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
-    st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
+    st.resources.energy = st.resources.water = st.resources.biomass = 1e7; // full: drones keep a reserve of the cap
     st.progression.coreActivated = true;
     for (let cz = -3; cz <= 3; cz++) for (let cx = -3; cx <= 3; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
     let n = 0;

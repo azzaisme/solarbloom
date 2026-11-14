@@ -1,4 +1,5 @@
 import type { GameState } from '../core/types';
+import { TUNING } from './tuning';
 
 /** Upgrade drawer sections, in order. Each groups what one system of the world does. */
 export const UPGRADE_GROUPS = ['Pulse', 'Machines', 'Drones', 'Networks', 'Fog', 'Storage'] as const;
@@ -72,9 +73,12 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Seed Vault',
     icon: '🏺',
     baseCost: 20,
-    costMult: 1.8,
+    costMult: 2.5,
     maxLevel: 4,
-    describe: () => 'All storage caps +50%',
+    describe: (n) => {
+      const t = TUNING.storageTiers;
+      return `Storage ⚡ ${t.energy[n - 1]}→${t.energy[n]} · 💧 ${t.water[n - 1]}→${t.water[n]} · 🌿 ${t.biomass[n - 1]}→${t.biomass[n]}`;
+    },
   },
   {
     id: 'droneSpeed',

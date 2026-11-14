@@ -80,7 +80,7 @@ describe('lucky cat', () => {
         expect(sim.state.resources[k]).toBeGreaterThanOrEqual(0);
         expect(sim.state.resources[k]).toBeLessThanOrEqual(sim.state.caps[k] + 1e-9);
       }
-      expect(sim.state.drones.length).toBe(1); // party drones expired
+      expect(sim.state.drones.filter((d) => !d.old).length).toBe(1); // party drones expired (the park's old drone stays)
     }
   });
 

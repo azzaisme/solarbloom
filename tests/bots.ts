@@ -12,8 +12,10 @@ import { Sim } from '../src/gameplay/Sim';
  * - `active`: one action every few seconds; builds machines next to each other, aims pulses at synergy tiles,
  *   buys upgrades when nothing better is pending, claims the cat ~40 s after it appears. After the fountain it
  *   pushes the fog back where the objective panel points.
- * - `handsOff`: plays exactly like `active` until its first Drone Hub stands, then never touches anything
- *   again. Compared with `active` over the same window it says how idle the game is.
+ * - `handsOff`: plays exactly like `active` until its first Drone Hub stands, then never taps the ground
+ *   again (no pulses, no Harvest, no cat). It still makes the decisions an idle player checks in for: buying
+ *   machines and upgrades, and waking landmarks. Compared with `active` over the same window it says how idle
+ *   the game is.
  */
 export interface BotOptions {
   seed: number;
@@ -23,6 +25,10 @@ export interface BotOptions {
   actionEvery?: number;
   /** start from this state instead of a fresh one */
   state?: GameState;
+  /** never buy upgrades (checks the main path doesn't depend on them) */
+  noUpgrades?: boolean;
+  /** never claim a Lucky Cat (checks the main path doesn't depend on luck) */
+  noCats?: boolean;
   /** called once per simulated second (for extra measurements) */
   onSecond?: (sim: Sim) => void;
 }
@@ -98,6 +104,7 @@ export function runBot(opts: BotOptions): BotReport {
   sim.bus.on('pulse.fired', () => pulses++);
 
   const built: Record<string, number> = {};
+  const hubFor = new Set<string>();
   let next = 0;
   let handsOffAt: number | undefined;
   let hubAffordable = -1;
@@ -114,7 +121,7 @@ export function runBot(opts: BotOptions): BotReport {
       return a;
     }, 0);
 
-  const act = () => {
+  const act = (taps = true) => {
     // 1. build the next machine if affordable, next to existing ones
     const want = ORDER[next];
     if (want) {
@@ -130,6 +137,18 @@ export function runBot(opts: BotOptions): BotReport {
           built[want] = (built[want] ?? 0) + 1;
           next++;
         }
+      }
+    }
+    // 1b. after the fountain: wake any landmark that's ready, and put a Drone Hub at the edge of the next goal
+    if (s.progression.coreActivated) {
+      for (const id of sim.areas.revealed()) if (sim.areas.fog(id) !== 'cleared' && sim.areas.ready(id)) sim.areas.clear(id);
+      const goal = sim.areas.nextGoal();
+      if (goal && !ORDER[next] && !hubFor.has(goal) && sim.econ.canAfford(sim.build.cost('droneHub'))) {
+        const entry = sim.areas.entryTiles(goal).slice(0, 12);
+        const near = new Map<string, TileData>();
+        for (const e of entry) for (const t of sim.grid.tilesNear({ ...e, size: 1 }, 3)) near.set(t.id, t);
+        const spot = [...near.values()].filter((t) => t.ground === 'restored' && sim.build.check('droneHub', GROUND, t.x, t.z).ok).sort((a, b) => a.z - b.z || a.x - b.x)[0];
+        if (spot && sim.build.place('droneHub', GROUND, spot.x, spot.z)) hubFor.add(goal);
       }
     }
     // 2. pulse the most promising tile (the park first; after the fountain, where the advisor points)
@@ -155,25 +174,27 @@ export function runBot(opts: BotOptions): BotReport {
         if (edge) target = edge;
       }
     }
-    if (target) sim.restoration.pulse(target.id);
-    else if (s.resources.energy < 3) sim.harvestSun();
+    if (taps) {
+      if (target) sim.restoration.pulse(target.id);
+      else if (s.resources.energy < 3) sim.harvestSun();
+    }
     // 3. upgrades when the next machine is far off
     const nextCost = ORDER[next] ? (sim.build.cost(ORDER[next]).biomass ?? 0) : 0;
-    for (const u of sim.upgrades.all()) {
+    for (const u of opts.noUpgrades ? [] : sim.upgrades.all()) {
       const st = sim.upgrades.status(u);
       if (st.ok && s.resources.biomass - st.cost >= Math.min(nextCost, s.caps.biomass * 0.6)) sim.upgrades.purchase(u.id);
     }
     if (sim.progression.coreReady()) sim.progression.activateCore();
     // 4. find the cat ~40 s after it appears
     const c = s.cat.active;
-    if (c && sim.time - c.spawnedAt > 40) sim.cat.claim();
+    if (taps && !opts.noCats && c && sim.time - c.spawnedAt > 40) sim.cat.claim();
   };
 
   const stepsPerAction = Math.round(actionEvery / 0.1);
   const steps = Math.round((opts.minutes * 60) / 0.1);
   for (let i = 0; i < steps; i++) {
     if (handsOffAt === undefined && mode === 'handsOff' && s.machines.some((m) => m.type === 'droneHub')) handsOffAt = Math.round(sim.time);
-    if (handsOffAt === undefined && i % stepsPerAction === 0) act();
+    if (i % stepsPerAction === 0) act(handsOffAt === undefined);
     sim.tick();
     if (i % 10 === 0) {
       const hub = sim.build.cost('droneHub');

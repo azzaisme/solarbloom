@@ -161,13 +161,15 @@ export class RestorationSystem {
     return true;
   }
 
-  grow(t: TileData, chainId?: number, starter: 'player' | 'auto' = 'auto') {
+  /** `quiet`: offline drone work (Phase 4 E01) grows the tile and pays its yield but sets off no chain. */
+  grow(t: TileData, chainId?: number, starter: 'player' | 'auto' = 'auto', quiet = false) {
     if (t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom) return;
     t.bloom = Math.min(TUNING.restore.maxBloom, t.bloom + 1);
     this.sim.grid.touch(t);
     const b = this.sim.econ.add('biomass', TUNING.restore.nurtureBiomass * this.sim.upgrades.soilMult);
     if (b > 0) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: b, tileId: t.id });
     this.sim.bus.emit('tile.nurtured', { tile: t, level: t.bloom });
+    if (quiet) return;
     const id = this.sim.chains.onGrown(t, chainId, starter);
     this.sim.chains.addReward(id, b);
   }
@@ -208,8 +210,11 @@ export class RestorationSystem {
     }
   }
 
-  /** Finalises a tile as restored. Used by growth completion and chain steps. Idempotent. */
-  complete(t: TileData, source: RestoreSource, chainId?: number): number {
+  /**
+   * Finalises a tile as restored. Used by growth completion and chain steps. Idempotent. `quiet`: offline drone
+   * work (Phase 4 E01) restores the tile and pays its yield but sets off no chain.
+   */
+  complete(t: TileData, source: RestoreSource, chainId?: number, quiet = false): number {
     if (t.ground === 'restored') return chainId ?? -1;
     this.growing.delete(t.id);
     t.ground = 'restored';
@@ -233,6 +238,10 @@ export class RestorationSystem {
       } else this.sim.bus.emit('tile.softened', { tile: nb });
     }
     this.sim.areas.onRestored(t);
+    if (quiet) {
+      this.sim.bus.emit('tile.restored', { tile: t, source, chainId: -1, biomass });
+      return -1;
+    }
     const id = this.sim.chains.onRestored(t, source, chainId);
     this.sim.chains.addReward(id, biomass);
     this.sim.bus.emit('tile.restored', { tile: t, source, chainId: id, biomass });

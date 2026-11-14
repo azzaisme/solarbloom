@@ -1,6 +1,7 @@
 import { GROUND } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
-import type { DroneData, MachineData, TileData } from '../core/types';
+import { KINDS } from '../core/Economy';
+import type { Cost, DroneData, MachineData, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
@@ -61,7 +62,7 @@ export class DroneSystem {
     return this.status.get(d.id) ?? 'napping';
   }
 
-  spawn(hub: MachineData, temporarySec?: number): DroneData {
+  spawn(hub: MachineData, temporarySec?: number, old = false): DroneData {
     const d: DroneData = {
       id: this.sim.newId('d'),
       hubId: hub.id,
@@ -72,6 +73,7 @@ export class DroneSystem {
       jobs: 0,
       expiresAt: temporarySec ? this.sim.time + temporarySec : undefined,
     };
+    if (old) d.old = true;
     this.sim.state.drones.push(d);
     this.sim.bus.emit('drone.spawned', { droneId: d.id });
     return d;
@@ -102,7 +104,7 @@ export class DroneSystem {
    * whole network's reach; on rooftops it keeps to its own hub's range.
    */
   network(hub: MachineData): MachineData[] {
-    if (hub.roofId !== GROUND) return [hub];
+    if (hub.roofId !== GROUND || hub.type !== 'droneHub') return [hub];
     const s = this.sim;
     const R = this.sim.upgrades.networkRange;
     const out = [hub];
@@ -121,6 +123,8 @@ export class DroneSystem {
 
   /** Tiles a hub's drones may work: its network's combined reach (rows in order, no duplicates). */
   networkTiles(hub: MachineData): TileData[] {
+    // The old drone keeps to its own short range around the old solar lamp.
+    if (hub.type !== 'droneHub') return this.sim.grid.tilesInRange(hub, TUNING.drone.old.radius);
     const hubs = this.network(hub);
     if (hubs.length === 1) return this.sim.grid.tilesInRange(hub, this.radius());
     const seen = new Set<string>();
@@ -207,8 +211,29 @@ export class DroneSystem {
     return best;
   }
 
+  /**
+   * Phase 4 E01: pays for a drone job unless that would take a store below the drone reserve (a share of its
+   * cap kept for the player's own taps). All-or-nothing, like any purchase.
+   */
+  payJob(cost: Cost): boolean {
+    const s = this.sim;
+    for (const k of KINDS) if ((cost[k] ?? 0) > 0 && s.econ.get(k) - (cost[k] ?? 0) < TUNING.drone.reserve * s.econ.cap(k) - 1e-9) return false;
+    return s.econ.spend(cost);
+  }
+
+  /** Tiles per second (the old drone is slow and ignores upgrades). */
+  speedOf(d: DroneData): number {
+    return d.old ? TUNING.drone.old.flySpeed : TUNING.drone.flySpeed * this.sim.upgrades.droneFlyMult;
+  }
+
+  /** The old solar lamp the old drone lives by (the park's starter panel), if this game has one. */
+  private oldHome(): MachineData | undefined {
+    if (!TUNING.drone.old.enabled) return undefined;
+    return this.sim.state.machines.find((m) => m.starter && m.type === 'solar' && m.roofId === GROUND);
+  }
+
   private moveToward(d: DroneData, tx: number, tz: number, dt: number): boolean {
-    const speed = TUNING.drone.flySpeed * this.sim.upgrades.droneFlyMult;
+    const speed = this.speedOf(d);
     const dx = tx - d.px;
     const dz = tz - d.pz;
     const dist = Math.hypot(dx, dz);
@@ -231,6 +256,9 @@ export class DroneSystem {
       const have = permanent.get(hub.id) ?? 0;
       for (let i = have; i < this.wanted(hub); i++) this.spawn(hub);
     }
+    // The old drone (also added to games saved before it existed).
+    const home = this.oldHome();
+    if (home && !permanent.has(home.id)) this.spawn(home, undefined, true);
     for (const d of [...s.state.drones]) {
       const hub = s.machine(d.hubId);
       if (!hub) continue;
@@ -254,8 +282,8 @@ export class DroneSystem {
             d.timer = TUNING.drone.retrySeconds;
             break;
           }
-          const cost = s.restoration.pulseCost(job);
-          if (!s.econ.spend(cost)) {
+          const cost = d.old ? {} : s.restoration.pulseCost(job); // the old drone runs on sunlight
+          if (!this.payJob(cost)) {
             this.status.set(d.id, 'waitingEnergy');
             d.timer = TUNING.drone.retrySeconds;
             break;
@@ -264,7 +292,7 @@ export class DroneSystem {
           d.mode = 'flying';
           // Far from the camera the flight is timed, not stepped: same arrival tick, no per-tick moves.
           if (job.roofId === hub.roofId && this.roofOf(d) === hub.roofId && this.isFar(hub)) {
-            const speed = TUNING.drone.flySpeed * s.upgrades.droneFlyMult;
+            const speed = this.speedOf(d);
             d.far = { fx: d.px, fz: d.pz, t0: s.time, t1: s.time + Math.hypot(job.x + 0.5 - d.px, job.z + 0.5 - d.pz) / speed };
           }
           this.status.set(d.id, 'travelling');
@@ -284,7 +312,7 @@ export class DroneSystem {
               d.pz = t.z + 0.5;
               d.far = undefined;
               d.mode = 'working';
-              d.timer = TUNING.drone.workSeconds;
+              d.timer = d.old ? TUNING.drone.old.workSeconds : TUNING.drone.workSeconds;
               this.status.set(d.id, 'working');
             } else if (!this.isFar(hub)) {
               // The camera arrived: carry on from where it would be by now, flying for real.
@@ -295,7 +323,7 @@ export class DroneSystem {
           }
           if (this.travel(d, t.roofId, t.x + 0.5, t.z + 0.5, dt)) {
             d.mode = 'working';
-            d.timer = TUNING.drone.workSeconds;
+            d.timer = d.old ? TUNING.drone.old.workSeconds : TUNING.drone.workSeconds;
             this.status.set(d.id, 'working');
           }
           break;
@@ -315,7 +343,7 @@ export class DroneSystem {
             s.state.stats.droneJobs++;
           }
           d.mode = 'cooldown';
-          d.timer = TUNING.drone.cycleSeconds * s.upgrades.droneCycleMult;
+          d.timer = d.old ? TUNING.drone.old.cycleSeconds : TUNING.drone.cycleSeconds * s.upgrades.droneCycleMult;
           break;
         }
         case 'cooldown': {

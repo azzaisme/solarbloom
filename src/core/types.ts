@@ -97,6 +97,8 @@ export interface DroneData {
   targetTileId?: string;
   timer: number;
   expiresAt?: number; // temporary (Drone Party) drones
+  /** Phase 4 E01: the old drone that lives by the park's starter solar lamp (its `hubId`). */
+  old?: boolean;
   jobs: number;
   /** Roof the drone is currently over (px/pz are local to it). Defaults to the hub's roof. */
   roofId?: string;
@@ -208,6 +210,8 @@ export interface GameState {
   cat: CatState;
   progression: Progression;
   stats: Stats;
+  /** Phase 4 E01: wall-clock time (ms since 1970) this state was last saved, for offline progress. */
+  savedAt?: number;
   /** City 10.7: district blooms claimed, by district id (sim time). Optional: older saves have none. */
   districts?: Record<string, number>;
 }

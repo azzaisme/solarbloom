@@ -41,8 +41,13 @@ export class UpgradeSystem {
   }
 
   applyCaps() {
-    const mult = 1 + 0.5 * this.level('seedVault') + (this.sim.areas?.storageBonus() ?? 0);
-    for (const k of KINDS) this.sim.state.caps[k] = Math.max(this.sim.state.caps[k], TUNING.start.caps[k] * mult);
+    // Phase 4 E01.3: Seed Vault steps through explicit storage tiers; cleared areas multiply the tier.
+    const mult = 1 + (this.sim.areas?.storageBonus() ?? 0);
+    for (const k of KINDS) {
+      const tiers = TUNING.storageTiers[k];
+      const tier = tiers[Math.min(tiers.length - 1, this.level('seedVault'))];
+      this.sim.state.caps[k] = Math.max(this.sim.state.caps[k], tier * mult);
+    }
   }
 
   /** The upgrades that exist in this game. */

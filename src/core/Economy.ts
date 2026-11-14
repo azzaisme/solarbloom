@@ -4,6 +4,8 @@ export const KINDS: ResourceKind[] = ['energy', 'water', 'biomass'];
 
 /** Resource arithmetic with the invariant 0 <= value <= cap. */
 export class Economy {
+  /** Everything spent so far this session, per resource (the HUD shows spending per minute from it). */
+  readonly spent: Resources = { energy: 0, water: 0, biomass: 0 };
   /** Phase 4 E00/E01: told about income lost to a full store (debug tracking; never a currency). */
   onOverflow?: (kind: ResourceKind, amount: number) => void;
 
@@ -30,7 +32,10 @@ export class Economy {
 
   spend(cost: Cost): boolean {
     if (!this.canAfford(cost)) return false;
-    for (const k of KINDS) this.res[k] = Math.max(0, this.res[k] - (cost[k] ?? 0));
+    for (const k of KINDS) {
+      this.res[k] = Math.max(0, this.res[k] - (cost[k] ?? 0));
+      this.spent[k] += cost[k] ?? 0;
+    }
     return true;
   }
 

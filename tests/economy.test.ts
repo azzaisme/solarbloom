@@ -76,7 +76,7 @@ describe('economy & restoration', () => {
     expect(sim.restoration.pulseCost(setGround(sim, 6, 6, 'polluted')).energy).toBeCloseTo(TUNING.pulse.polluted.energy * 0.75);
     sim.state.resources.biomass = 40;
     expect(sim.upgrades.purchase('seedVault')).toBe(true);
-    expect(sim.state.caps.biomass).toBe(TUNING.start.caps.biomass * 1.5);
+    expect(sim.state.caps.biomass).toBe(TUNING.storageTiers.biomass[1]);
     expect(sim.upgrades.purchase('droneSpeed')).toBe(false); // needs hub
   });
 

@@ -46,7 +46,7 @@ exports[`upgrades drawer grouped by system (City 14.4) > the city drawer: Pulse,
   },
   {
     "cards": [
-      "🏺 Seed Vault: All storage caps +50%",
+      "🏺 Seed Vault: Storage ⚡ 60→150 · 💧 40→100 · 🌿 100→250",
     ],
     "group": "Storage",
   },
