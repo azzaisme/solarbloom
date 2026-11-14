@@ -22,7 +22,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #12 City 11: automation at scale | ✅ drone networks, fog-edge priority, 50-hub safety soak (open: area switches #78, far drones as rates #79, Mega Pulse #80) |
 | #13 City 12: Phase 3 content in the city | ✅ specialties on generic landmarks (grove Elder Trees, reservoir/canal Reservoir Gardens), cat rewards on areas (open: rooftop cluster areas #82, remove fixed rooftop data #85) |
 | #15 City 14: HUD | toast cap ✅, upgrades drawer grouped by system ✅ (Networks: Green Corridors, Drone Mesh; Fog: Fog Lanterns) (open: area panel #92, phone pass #95) |
-| #16 City 15: proof | headless soak ✅ (`npm run test:soak`), browser perf ✅ (`npm run test:perf:browser`), CI workflow ✅ (open: leak test #98, device log #99, docs #100) |
+| #16 City 15: proof | headless soak ✅ (`npm run test:soak`), browser perf ✅ (`npm run test:perf:browser`), CI workflow ✅ leak test ✅ (`npm run test:leak`), docs ✅ (open: device log #99) |
 
 ## City 01: world model
 
@@ -168,6 +168,20 @@ What the first runs found, and the fixes:
 - **Every machine animated every frame**, on screen or not (17–33 ms with 1,500 machines): only machines inside the visible ground rectangle animate now. The chain-phase median went from 24.6 to 4.4 ms.
 - **Big chains thrashed layout**: each resource gain forced a layout to restart the counter flash and measured the counter for a flying number. Flashes are throttled, and flying gains coalesce per resource every 120 ms.
 - **A ×500 chain was impossible**: the city event cap (500) allowed about ×220 at most. It is now 1,500.
+
+### Leak test (`npm run test:leak`)
+
+Pans out and back across a 120-area city in a new direction every lap for 10 minutes (12 laps), sampling after a forced GC at the park. Baseline after 3 warm-up laps → after 10 minutes:
+
+| | Baseline | After 10 min | Limit |
+|---|---|---|---|
+| Scene entities | 3,185 | 3,185 | +10% |
+| Mesh instances | 2,401 | 2,401 | +10% |
+| Materials | 434 | 434 | +10% |
+| GPU memory per streamed chunk | 2.34 MB | 2.30 MB | +10% |
+| JS heap | 177 MB | 177 MB | +25% |
+
+Dropped chunks release their meshes and buffers; nothing accumulates.
 
 # History: the rooftop campaign (before the city)
 
