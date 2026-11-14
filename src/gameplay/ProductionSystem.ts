@@ -179,6 +179,14 @@ export class ProductionSystem {
       const gardens = s.state.machines.filter(
         (g) => g.type === 'reservoirGarden' && g.roofId === m.roofId && g.charge < R.threshold && distToFootprint(g.x, g.z, m.x, m.z, m.size) <= R.condenserRange,
       );
+      // City 10.3: with no garden beside it, a condenser on a canal fills the emptiest garden on that network.
+      if (!gardens.length) {
+        const far = s.canals.of(m)?.gardens.filter((g) => g.charge < R.threshold).sort((a, b) => a.charge - b.charge || (a.id < b.id ? -1 : 1))[0];
+        if (far) {
+          gardens.push(far);
+          s.bus.emit('canal.flow', { from: m.id, to: far.id, path: s.canals.path(m, far), kind: 'fill' });
+        }
+      }
       for (const g of gardens) {
         g.charge = Math.min(R.threshold, g.charge + R.fillPerCharge);
         s.bus.emit('reservoir.fill', { machineId: g.id, from: m.id });

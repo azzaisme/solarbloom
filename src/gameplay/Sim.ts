@@ -6,6 +6,7 @@ import { Rng } from '../core/Rng';
 import type { GameState, MachineData, TileData } from '../core/types';
 import { BloomChainSystem } from './BloomChainSystem';
 import { BuildSystem } from './BuildSystem';
+import { CanalNetwork } from './CanalNetwork';
 import { DistrictSystem } from './DistrictSystem';
 import { DroneSystem } from './DroneSystem';
 import { Advisor } from './Advisor';
@@ -40,6 +41,7 @@ export class Sim {
   readonly hood: NeighbourhoodSystem;
   readonly areas: AreaSystem;
   readonly districts: DistrictSystem;
+  readonly canals: CanalNetwork;
 
   constructor(
     readonly state: GameState,
@@ -73,6 +75,7 @@ export class Sim {
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
     this.restoration = new RestorationSystem(this);
+    this.canals = new CanalNetwork(this);
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
     this.drones = new DroneSystem(this);

@@ -21,6 +21,8 @@ export interface GameEvents {
   'machine.boostUsed': { machineId: string };
   'reservoir.overflow': { machineId: string; tiles: string[] };
   'reservoir.fill': { machineId: string; from: string };
+  /** City 10.3: water travels along a canal (tile ids in order) from one machine to another. */
+  'canal.flow': { from: string; to: string; path: string[]; kind: 'fill' | 'overflow'; chainId?: number };
   'canopy.burst': { machineId: string; radius: number; gardens: string[] };
   'relay.sent': { linkId: string; fromRoof: string; toRoof: string; chainId: number; travel: number };
   'tree.discharged': { machineId: string };

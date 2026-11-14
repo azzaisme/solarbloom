@@ -17,7 +17,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #7 City 06: simulation at city scale | ✅ (open: active-region equivalence test #44, catch-up budget #48) |
 | #10 City 09: endless progression | ✅ storage, area bonuses, machine permits, endless pacing bot no-stall guarantees ✅ (an advisor-only bot progresses from empty pockets: fountain in 22.7 min, next area with the park packed and broke in 14.3 min) playtest timings ✅ (time to each area, areas per hour, biggest chain, cats, stuck time; Copy button) upgrade tree for scale ✅ (Lit Landmarks; every upgrade has an effect test and sparkles the spots it changes) (open: specialty milestone actions #62) |
 | #9 City 08: camera and overview | ✅ bounds, zoom-out to 0.22 with far level of detail, area labels, F / Home overview mode ✅ (labels show fog progress, 🔗 active chains and 🐱 cat finds; one tap flies to an area and opens its panel — e2e) phone gestures ✅ (a quick pinch-out snaps to the overview; picking e2e at 390×844 at both zoom limits) |
-| #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries district blooms ✅ (#75) (open: canal network #71, buildable relays #72, huge-chain presentation #74) |
+| #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries district blooms ✅ (#75) canal water network ✅ (#71) (open: buildable relays #72, huge-chain presentation #74) |
 | #14 City 13: Lucky Cat in the city | ✅ generated nooks, spawn rules, Fog Whisker and Golden Corridor (scaled with the city, capped: a cat never wakes an area alone), discovery log grouped by area type (`docs/discoveries-500-areas.png`) |
 | #12 City 11: automation at scale | ✅ drone networks, fog-edge priority, 50-hub safety soak Mega Pulse and scaled Overcharge ✅ (the city bot's own taps start 18–19 big chains an hour vs 2–4 by automation) area automation switches ✅ (Keep blooming, Focus the frontier, Leave alone; saved) (open: far drones as rates #79) |
 | #13 City 12: Phase 3 content in the city | ✅ specialties on generic landmarks (grove Elder Trees, reservoir/canal Reservoir Gardens), cat rewards on areas (open: rooftop cluster areas #82, remove fixed rooftop data #85) |
@@ -70,6 +70,14 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - City chains may run up to 500 events and travel for 20 s before the rest resolves at once (rooftop chains keep 100 / 6 s).
 - Chain results report how many areas they swept: a feed line from 3 areas, a toast from 6.
 - Tests: crossing borders and stopping at fog, a 10-garden corridor end to end (deterministic, once per garden), and a ×200+ chain sweeping 12+ areas that terminates and pays once.
+
+## City 10.3: canal water network
+
+- `gameplay/CanalNetwork.ts`: restored water tiles ("clean water") carry flow. A Water Condenser or Reservoir Garden whose footprint touches one (8 neighbours) is on that canal's network. Networks are flood-filled lazily from a machine's bank and cached until a water tile changes or the machine count changes, so ticks never sweep the world.
+- A full condenser with no garden within 2 tiles fills the emptiest basin on its network (lowest charge, then id).
+- When a basin overflows on its own, it also spills at one other connected garden: the one with the most dry ground to water (then lowest id), after a travel delay along the canal. Each garden sends and receives at most once per chain; routed spills never route again and leave the receiving basin's own water alone, so a network can't loop.
+- `canal.flow` events carry the water path (BFS along the canal) and the presentation runs a white flash and droplets tile by tile; the garden's inspect panel shows its network.
+- Tests (`tests/canal-network.test.ts`): connectivity (dirty water and gaps break it), condenser routing, deterministic overflow routing, ten gardens all overflowing at once (one crossing per chain, 20 overflows, no loops), rooftops have none. Pacing unchanged (park 6:39/5:54/6:27, city 25/29 areas an hour).
 
 ## City 10.7: district blooms
 

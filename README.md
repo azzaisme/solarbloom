@@ -105,6 +105,7 @@ The city is generated forever outward from the park: the same seed always gives 
 - **Difficulty grows with distance.** Pulse costs rise 4% per chunk from the park (up to ×2), and outer areas start more polluted.
 - **The economy keeps up.** Each cleared area raises storage (+35% of the starting caps each, with diminishing returns) and waives one step of the ×1.5 cost growth for every machine type. A bot playing the city clears 16–20 areas an hour with no dead time.
 - **Specialties travel.** Grove landmarks are Elder Trees: blooms around them charge a Canopy Burst. Reservoir and canal areas grow Reservoir Gardens.
+- **Canal water networks.** Restored canal water carries flow. Water Condensers and Reservoir Gardens built beside clean water join that canal's network: a condenser with no garden beside it fills the emptiest basin on its canal, and an overflowing basin also spills at the connected garden with the most dry ground (once per chain). The water visibly runs along the canal.
 - **Overcharge.** A manual pulse right next to a machine boosts its next trigger (a cyan ring shows it), by more with each Overcharge upgrade level. Automation never does.
 - **Mega Pulse.** Once the fountain is awake, every manual pulse charges the meter on the Pulse button. After 40 taps it glows, and your next pulse sets off a city-scale bloom from that tile (40 tiles, +3 per cleared area, up to 300). Your own taps start most of the big chains.
 - **The Lucky Cat** hides in nooks beside obstacles in cleared areas (and around the park early on). Nothing points at it. Rewards: Lucky Harvest, Solar Frenzy, Mega Bloom, Drone Party, Jackpot, **Golden Relay** (the next green corridor hop blooms 5 extra tiles), **Cat's Garden** (a little garden blooms in one of your cleared areas) and **Fog Whisker** (the next fogged area thins from its edge). No reward ever touches the fog. If you miss a cat, it saves up extra rewards instead of blocking new ones.
@@ -134,6 +135,7 @@ src/
     ProductionSystem      per-chunk cached rates, re-summed only near changes; area bonus income
     DroneSystem           hub networks, fog-edge job search, reservations, flight
     LuckyCatSystem        generated nooks, spawn rules, seeded rewards, claim-once
+    CanalNetwork          canal water networks: clean water tiles linking condensers and Reservoir Gardens, routing, paths
     DistrictSystem        district membership, district bloom availability, claim-once reward and replays
     BuildSystem, UpgradeSystem, ProgressionSystem, NeighbourhoodSystem (legacy rooftops), Metrics
   data/                   every balance knob: tuning.ts (TUNING.city, TUNING.park, …), city.ts (area types, park layout, generator), machines.ts, upgrades.ts

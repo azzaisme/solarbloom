@@ -792,7 +792,13 @@ export class Game {
         const R = TUNING.neighbourhood.reservoir;
         const conds = s.state.machines.filter((x) => x.type === 'condenser' && x.roofId === m.roofId && distToFootprint(x.x, x.z, m.x, m.z, m.size) <= R.condenserRange).length;
         const dry = s.chains.overflowTargets(m, 99).length;
-        extra = `<p class="stat">⛲ Basin ${Math.floor(m.charge ?? 0)}/${R.threshold} · ${conds} 💧 condenser${conds === 1 ? '' : 's'} within ${R.condenserRange} tiles fill it</p><p class="stat">🌱 ${dry} dry tile${dry === 1 ? '' : 's'} within ${R.radius} tiles (highlighted) · Overflow irrigates up to ${R.targets}</p><p>Each time a nearby Water Condenser fills its meter, the basin rises. Full → Overflow: the closest dry tiles burst into lush bloom (×${R.lushMult} 🌿 for ${R.lushSeconds} s).${conds ? '' : ' <b>Build a Water Condenser within 2 tiles to fill it.</b>'}</p>`;
+        const net = s.canals.of(m);
+        const canal = net
+          ? `<p class="stat">🛶 On a canal: ${net.gardens.length} garden${net.gardens.length === 1 ? '' : 's'} · ${net.condensers.length} condenser${net.condensers.length === 1 ? '' : 's'} share its water</p><p>Condensers along the canal fill the emptiest basin on it, and when this basin overflows it also spills at the connected garden with the most dry ground (once per chain).</p>`
+          : m.roofId === GROUND
+            ? '<p>Build it beside clean canal water to join a canal network.</p>'
+            : '';
+        extra = canal + `<p class="stat">⛲ Basin ${Math.floor(m.charge ?? 0)}/${R.threshold} · ${conds} 💧 condenser${conds === 1 ? '' : 's'} within ${R.condenserRange} tiles fill it</p><p class="stat">🌱 ${dry} dry tile${dry === 1 ? '' : 's'} within ${R.radius} tiles (highlighted) · Overflow irrigates up to ${R.targets}</p><p>Each time a nearby Water Condenser fills its meter, the basin rises. Full → Overflow: the closest dry tiles burst into lush bloom (×${R.lushMult} 🌿 for ${R.lushSeconds} s).${conds ? '' : ' <b>Build a Water Condenser within 2 tiles to fill it.</b>'}</p>`;
         break;
       }
       case 'core': {
@@ -1127,6 +1133,20 @@ export class Game {
       const b2 = this.posOf(machineId);
       if (a && b2) this.vfx.arc(a, b2, PALETTE.water, 0.6);
       if (b2) this.vfx.burst(b2, 4, { up: 1, size: 0.04, speed: 0.4 });
+    });
+    // City 10.3: water runs along the canal, tile by tile, from one machine to another.
+    b.on('canal.flow', ({ from, to, path, kind }) => {
+      const step = Math.min(0.04, 1.6 / Math.max(1, path.length));
+      path.forEach((id, i) => {
+        const t = s.grid.byTileId(id);
+        if (!t) return;
+        this.tileFx.flash(t, '#f2fdff', kind === 'overflow' ? 0.85 : 0.55, 0.55, i * step);
+        if (kind === 'overflow' && i % 3 === 0) this.tweens.add(0.01, () => {}, { delay: i * step, done: () => this.vfx.burst(this.tileVec(t), 3, { up: 1.2, size: 0.045, speed: 0.6 }) });
+      });
+      const a = this.posOf(from);
+      const b2 = this.posOf(to);
+      if (b2) this.tweens.add(0.01, () => {}, { delay: path.length * step, done: () => this.vfx.burst(b2, kind === 'overflow' ? 14 : 5, { up: 1.6, size: 0.05, speed: 0.8 }) });
+      if (a && !path.length && b2) this.vfx.arc(a, b2, PALETTE.water, 0.6);
     });
     b.on('reservoir.overflow', ({ machineId }) => {
       const p = this.posOf(machineId);
