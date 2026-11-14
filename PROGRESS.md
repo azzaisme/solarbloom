@@ -14,7 +14,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #5 City 04: endless city generator | ✅ except the visual review (#37, needs ground rendering) |
 | #6 City 05: the dilapidated park | ✅ layout, onboarding, fountain finale, pacing, cat nooks park art stages ✅ (#39: `docs/review/park-stage-0/2/4.png`) (open: nook screenshots) |
 | #8 City 07: rendering | first pass ✅ chunk streaming, merged chunk meshes, fog machine batching ✅ (#53), procedural buildings ✅ (#54: `docs/city-overview.png`, `docs/city-near.png`) (open: device numbers #56) |
-| #7 City 06: simulation at city scale | ✅ active-region ticking ✅ (#44: 0.107 ms per tick with 1,046 areas and 5 active chunks) (open: catch-up budget #48) |
+| #7 City 06: simulation at city scale | ✅ active-region ticking ✅ (#44: 0.107 ms per tick with 1,046 areas and 5 active chunks) frame budget and catch-up ✅ (#48) |
 | #10 City 09: endless progression | ✅ storage, area bonuses, machine permits, endless pacing bot no-stall guarantees ✅ (an advisor-only bot progresses from empty pockets: fountain in 22.7 min, next area with the park packed and broke in 14.3 min) playtest timings ✅ (time to each area, areas per hour, biggest chain, cats, stuck time; Copy button) upgrade tree for scale ✅ (Lit Landmarks; every upgrade has an effect test and sparkles the spots it changes) area milestone generator ✅ (#62: one specialty action per area type) |
 | #9 City 08: camera and overview | ✅ bounds, zoom-out to 0.22 with far level of detail, area labels, F / Home overview mode ✅ (labels show fog progress, 🔗 active chains and 🐱 cat finds; one tap flies to an area and opens its panel — e2e) phone gestures ✅ (a quick pinch-out snaps to the overview; picking e2e at 390×844 at both zoom limits) |
 | #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries district blooms ✅ (#75) canal water network ✅ (#71) (open: buildable relays #72, huge-chain presentation #74) |
@@ -127,6 +127,8 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - The Bloom Chain queue is a binary heap ordered by (time, sequence); fast-forward re-heapifies. Machine lookups by id are O(1); Core occupancy checks use a cached id set.
 - Growing tiles are tracked in a set; drone jobs and synergy checks use O(r²) lookups and the per-chunk machine index.
 - Active-region ticking (#44): every per-tick system visits only its own active set (growing tiles, condensers and filling basins via a by-type machine index, drones, queued chain events); `Sim.activeChunks()` reports where anything happens. Condensers find gardens through the per-chunk machine index instead of the whole list, and the park's tutorial step no longer scans the park once the fountain is awake. `tests/sim-scale.test.ts` plays 20 minutes of the city bot with `sim.fullScan` (scan every machine every tick) and without, and requires byte-identical saves; `npm run test:perf` ticks a 1,046-area world (3,528 chunks, 3,276 machines, 5 active chunks) in 0.107 ms (limit 0.3).
+- Frame budget and catch-up (#48): `Game.runSim` spends at most `TUNING.catchUp.frameBudgetMs` (8 ms) on simulation per frame (always at least one tick). Time lost to a hitch (frame gaps over 0.25 s) or a hidden tab becomes catch-up debt (capped at 10 minutes, with a toast from 20 s), paid back within the same budget over the next frames; work beyond the budget carries over as debt instead of piling up. Browser perf: 300 s away is caught up over 6–7 frames, with at most 11.2 ms of simulation in any frame (limit 16).
+- Metrics are incremental: stuck time caches the cheapest upgrade that could be bought and re-derives it only on a purchase, build, clear or storage change (a test checks it matches checking every upgrade every tick).
 - `npm run test:perf`: a 0.1 s step takes ~0.4–0.5 ms with 10k restored tiles, 343 machines and 30 drones (target < 2 ms). `tests/sim-scale.test.ts` fails if a tick ever sweeps every tile or chunk.
 
 ## City 05 + City 07 (first pass): the park and the city on screen
@@ -195,6 +197,7 @@ For each phase it records the game's update time per frame (`app.stats.frame.upd
 | Pan | 11.2 ms (limit 20) | 20.5 ms | 34 ms | 0 (limit 8) | 175 (limit 400) |
 | Zoom | 10.0 ms | 20.1 ms | 24 ms | 0 (limit 6) | 161 (limit 400) |
 | Chain ×746 | 5.7 ms | 28.9 ms | 63 ms | 1 (limit 8) | 239 (limit 400) |
+| Catch-up (300 s away) | — | — | 11.2 ms of simulation (limit 16) | — | — |
 
 Reload with the 150-area save: about 4 s under SwiftShader (limit 8 s). Autosave's main-thread steps with that save loaded (worst of 5): serialize 2.2 ms, base64 3.5 ms, storage write 0.7 ms (each limited to 16 ms; gzip runs off the main thread in a CompressionStream, at an idle moment). A full or blocked storage makes the save report failure (tested), keeps the previous save and shows one toast.
 

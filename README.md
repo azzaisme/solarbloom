@@ -31,7 +31,7 @@ Node 20+ is required. The build is a static site (`base: './'`), so `dist/` can 
 | `npm run test:perf` | Node benchmarks: lookups, save size and speed, sim step for a ~1,000-area world (`tests/perf/*.perf.ts`) | ~10 s |
 | `npm run test:soak` | Headless soak: a 1,000-area city over 6 h of game time; fails on tick time, heap, save size, stalls, unreachable frontiers or non-determinism (`SOAK_AREAS`, `SOAK_HOURS`, `SOAK_PROFILE=1`) | ~1 min |
 | `npm run test:e2e` | Build, then check pointer → tile picking at 3 screen sizes × 3 zooms (55k checks), that the area panel opens from labels and landmarks, that every cleared area on the overview is one label tap away, that a district bloom pays once, leaves machines alone and replays for free, and that no HUD panels overlap on phone or desktop at any zoom (screenshots to `docs/review/hud-*.png`) | ~5 min |
-| `npm run test:perf:browser` | Build, then load a 150-area save in Chromium, pan, zoom through every band and play a ×600 chain; gates update time, hitches, draw calls and reload time (`PERF_AREAS`, `PERF_JSON`, `PERF_VERBOSE=1`) | ~4 min |
+| `npm run test:perf:browser` | Build, then load a 150-area save in Chromium, pan, zoom through every band, catch up 5 minutes away and play a ×600 chain; gates update time, hitches, draw calls, catch-up simulation time per frame and reload time (`PERF_AREAS`, `PERF_JSON`, `PERF_VERBOSE=1`) | ~4 min |
 | `npm run shots:park` | Build, then render the park at each art stage (0, 25, 50, 75%, fountain awake) into `docs/review/park-stage-*.png` | ~1 min |
 | `npm run shots:city` | Build, then render the city overview and a close-up of a cleared area of every type into `docs/review/` for visual review | ~2 min |
 | `npm run test:leak` | Build, then pan back and forth across a big city for 10 minutes; entities, materials, GPU memory and heap must return to baseline (`LEAK_MINUTES`) | ~12 min |
@@ -56,6 +56,8 @@ The browser scripts need Playwright with Chromium (`npm i -D playwright && npx p
 | Lucky Cat discoveries | 🐱 chip (after your first cat) | 🐱 chip |
 | Cancel, close or deselect | `Esc` | Tap empty space |
 | Debug / FPS overlay | `F3` or `` ` `` | Settings |
+
+Switching to another tab doesn't stop the city: when you come back, up to 10 minutes are caught up over a few frames (Pause still pauses).
 
 ## How it plays
 

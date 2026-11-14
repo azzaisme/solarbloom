@@ -86,6 +86,12 @@ export class Game {
   private acc = 0;
   paused = false;
   private hiddenPause = false;
+  /** City 06.5: simulated seconds still owed after a hitch or a hidden tab, run within the frame budget. */
+  catchUpDebt = 0;
+  private hiddenAt = 0;
+  /** Simulation milliseconds spent in the last frame, and the worst since the counter was reset (perf harness). */
+  simMs = 0;
+  simMsWorst = 0;
   speed = 1;
   private saveTimer = 0;
   private resetting = false;
@@ -262,7 +268,13 @@ export class Game {
     window.addEventListener('keydown', unlock);
     document.addEventListener('visibilitychange', () => {
       this.hiddenPause = document.hidden;
-      if (document.hidden) this.saveNow();
+      if (document.hidden) {
+        this.hiddenAt = performance.now();
+        this.saveNow();
+      } else if (this.hiddenAt) {
+        this.awayFor((performance.now() - this.hiddenAt) / 1000);
+        this.hiddenAt = 0;
+      }
     });
     window.addEventListener('beforeunload', () => this.saveNow());
 
@@ -1918,18 +1930,53 @@ export class Game {
     }
   }
 
+  /**
+   * City 06.5: time passed without frames (a hidden tab, a long hitch) is owed to the simulation, up to a cap,
+   * and paid back a few milliseconds per frame so no frame stalls.
+   */
+  awayFor(seconds: number) {
+    if (!(seconds > 0)) return;
+    const C = TUNING.catchUp;
+    const was = this.catchUpDebt;
+    this.catchUpDebt = Math.min(C.maxSeconds, this.catchUpDebt + seconds);
+    if (was < C.toastFrom && this.catchUpDebt >= C.toastFrom) {
+      const m = Math.round(this.catchUpDebt / 60);
+      this.hud.toast(`⏩ Catching up${m >= 1 ? ` ${m} min` : ''}…<small>Your city kept growing while you were away.</small>`, '', 3);
+    }
+  }
+
+  /** Runs simulation ticks within the frame budget: the frame's own time first, then any catch-up owed. */
+  private runSim(dt: number) {
+    const budget = TUNING.catchUp.frameBudgetMs;
+    const t0 = performance.now();
+    this.acc += dt * this.speed;
+    let n = 0;
+    while (this.acc >= TUNING.simStep && (n === 0 || performance.now() - t0 < budget)) {
+      this.sim.tick(TUNING.simStep);
+      this.acc -= TUNING.simStep;
+      n++;
+    }
+    // More owed than the budget allows (a slow device at high speed): carry it as catch-up, not a backlog.
+    if (this.acc > 1) {
+      this.catchUpDebt = Math.min(TUNING.catchUp.maxSeconds, this.catchUpDebt + this.acc - TUNING.simStep);
+      this.acc = TUNING.simStep;
+    }
+    while (this.catchUpDebt >= TUNING.simStep && performance.now() - t0 < budget) {
+      this.sim.tick(TUNING.simStep);
+      this.catchUpDebt -= TUNING.simStep;
+    }
+    if (this.catchUpDebt < TUNING.simStep) this.catchUpDebt = 0;
+    this.simMs = performance.now() - t0;
+    this.simMsWorst = Math.max(this.simMsWorst, this.simMs);
+  }
+
   private update(rawDt: number) {
     const dt = Math.min(rawDt, TUNING.maxFrameDt);
     this.clock += dt;
     this.adaptQuality(rawDt);
     if (!this.paused && !this.hiddenPause && !this.hud.modalOpen) {
-      this.acc += dt * this.speed;
-      let n = 0;
-      while (this.acc >= TUNING.simStep && n < 20) {
-        this.sim.tick(TUNING.simStep);
-        this.acc -= TUNING.simStep;
-        n++;
-      }
+      if (rawDt > TUNING.maxFrameDt && !this.hiddenAt) this.awayFor(Math.min(rawDt, 30) - TUNING.maxFrameDt); // a hitch
+      this.runSim(dt);
     }
     this.tweens.update(dt);
     this.scene.update(dt);

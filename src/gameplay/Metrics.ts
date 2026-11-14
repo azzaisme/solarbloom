@@ -5,8 +5,15 @@ import type { Sim } from './Sim';
 export class Metrics {
   constructor(private sim: Sim) {
     const b = sim.bus;
-    b.on('upgrade.purchased', () => this.first('upgrade'));
-    b.on('machine.built', ({ machine }) => this.first(machine.type));
+    b.on('upgrade.purchased', () => {
+      this.first('upgrade');
+      this.invalidate();
+    });
+    b.on('machine.built', ({ machine }) => {
+      this.first(machine.type);
+      this.invalidate();
+    });
+    for (const e of ['area.cleared', 'link.built', 'roof.coreAwake', 'rooftop.coreRestored', 'neighbourhood.bloom', 'district.bloom'] as const) b.on(e, () => this.invalidate());
     b.on('cat.found', () => this.first('cat'));
     b.on('tree.discharged', () => this.first('treePulse'));
     b.on('rooftop.coreRestored', () => this.first('core'));
@@ -57,13 +64,40 @@ export class Metrics {
     return lines.join('\n');
   }
 
-  /** "Unable to act": can't afford even a mossy-tile pulse, Harvest is cooling down, and nothing is buyable. */
+  /**
+   * "Unable to act": can't afford even a mossy-tile pulse, Harvest is cooling down, and nothing is buyable.
+   * Incremental (City 06.5): the cheapest buyable upgrade's cost is cached and re-derived only when something
+   * that changes it happens (a purchase, a build, an area cleared, storage growing), not by checking every
+   * upgrade every tick.
+   */
   tick(dt: number) {
     const s = this.sim;
     const minPulse = TUNING.pulse.prepared.energy * s.upgrades.pulseEnergyMult;
     if (s.econ.get('energy') >= minPulse && s.econ.get('water') >= 1) return;
     if (s.time >= s.state.harvestReadyAt) return;
-    if (s.upgrades.all().some((u) => s.upgrades.status(u).ok)) return;
+    if (this.cheapest === undefined || this.capSeen !== s.econ.cap('biomass') || this.machinesSeen !== s.state.machines.length) this.recount();
+    if (s.econ.get('biomass') >= this.cheapest!) return;
     s.state.stats.stuckSeconds += dt;
+  }
+
+  /** Cost of the cheapest upgrade that could be bought with enough biomass (Infinity if none). */
+  private cheapest?: number;
+  private capSeen = -1;
+  private machinesSeen = -1;
+  private recount() {
+    const s = this.sim;
+    this.capSeen = s.econ.cap('biomass');
+    this.machinesSeen = s.state.machines.length;
+    let min = Infinity;
+    for (const u of s.upgrades.all()) {
+      const st = s.upgrades.status(u);
+      // Buyable except for the price: every status reason other than "Need N 🌿" is a hard block.
+      if (st.ok || st.reason?.startsWith('Need ')) min = Math.min(min, st.cost);
+    }
+    this.cheapest = min;
+  }
+  /** Something that may change which upgrades can be bought happened. */
+  invalidate() {
+    this.cheapest = undefined;
   }
 }

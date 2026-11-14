@@ -40,6 +40,7 @@ const LIMITS = {
   drawCalls: { pan: 400, zoom: 400, chain: 400 },
   chainMinCombo: CHAIN,
   saveStepMs: 16, // each main-thread step of an autosave (serialize, base64, storage write) fits in a frame
+  catchUpSimMs: 16, // City 06.5: catching up 5 minutes away never spends more than this on simulation in one frame
 };
 
 const server = await preview({ preview: { port: 4183, strictPort: true }, logLevel: 'silent' });
@@ -240,6 +241,24 @@ try {
   );
 
   phase('zoomed');
+  // 4b. Back after 5 minutes in another tab: the city catches up within the per-frame simulation budget.
+  results.catchUp = await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const g = window.solarbloom;
+        const t0 = g.sim.time;
+        g.simMsWorst = 0;
+        g.awayFor(300);
+        let frames = 0;
+        const tick = () => {
+          frames++;
+          if (g.catchUpDebt > 0 && frames < 3000) return requestAnimationFrame(tick);
+          resolve({ frames, simMsWorst: g.simMsWorst, simulated: g.sim.time - t0 });
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+  phase(`caught up ${results.catchUp.simulated.toFixed(0)} s in ${results.catchUp.frames} frames`);
   // 5. A ×500 chain: a long green corridor of street gardens through the cleared city, set off by one pulse.
   const setup = await page.evaluate(() => {
     const g = window.solarbloom;
@@ -320,6 +339,8 @@ try {
     if (r[k].hitches > LIMITS.hitches[k]) failures.push(`${k} hitches ${r[k].hitches} (update > ${LIMITS.hitchMs} ms) > ${LIMITS.hitches[k]}`);
   }
   for (const k of ['pan', 'zoom', 'chain']) if (r[k].drawCalls > LIMITS.drawCalls[k]) failures.push(`${k} draw calls ${r[k].drawCalls} > ${LIMITS.drawCalls[k]}`);
+  if (r.catchUp.simMsWorst > LIMITS.catchUpSimMs) failures.push(`catch-up spent ${r.catchUp.simMsWorst.toFixed(1)} ms of simulation in one frame > ${LIMITS.catchUpSimMs}`);
+  if (r.catchUp.simulated < 299) failures.push(`catch-up simulated only ${r.catchUp.simulated.toFixed(0)} s of 300`);
   if (r.chainCombo < LIMITS.chainMinCombo) failures.push(`chain reached ×${r.chainCombo} < ×${LIMITS.chainMinCombo}`);
 } finally {
   await browser.close();
@@ -332,6 +353,7 @@ for (const k of ['pan', 'zoom', 'chain']) {
   const r = results[k];
   if (r) console.log(`${k.padEnd(5)} ${r.frames} frames · update median ${f(r.updateMedian)} p95 ${f(r.updateP95)} worst ${f(r.updateWorst)} ms · hitches ${r.hitches} · draw calls ${r.drawCalls} (worst ${r.drawCallsWorst}) · render ${f(r.renderMedian)} ms · frame ${f(r.median)} ms`);
 }
+if (results.catchUp) console.log(`catch-up: 300 s away → ${results.catchUp.simulated.toFixed(0)} s simulated over ${results.catchUp.frames} frames · worst frame ${f(results.catchUp.simMsWorst)} ms of simulation`);
 if (results.autosave) console.log(`autosave (main thread, worst of 5): serialize ${f(results.autosave.serialize)} ms · base64 ${f(results.autosave.encode)} ms · write ${f(results.autosave.write)} ms`);
 console.log(`chain: ×${results.chainCombo} along a ${results.chainSetup?.row.len}-tile corridor of ${results.chainSetup?.gardens} gardens`);
 if (process.env.PERF_JSON) writeFileSync(process.env.PERF_JSON, JSON.stringify(results, null, 2));
