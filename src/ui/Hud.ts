@@ -806,7 +806,8 @@ export class Hud {
       hoodNext = this.cityObjective();
     } else {
       this.set('objAct', $(this.root, '#objAct'), 'html', p.homeIsPark ? this.suggestionHtml() : '');
-      this.set('objPct', $(this.root, '#objPct'), 'text', `${pct}% of the ${p.homeIsPark ? 'park' : 'rooftop'} restored · ${restored}/${total} tiles`);
+      const nm = p.nextMilestone();
+      this.set('objPct', $(this.root, '#objPct'), 'text', `${restored}/${total} park tiles${nm ? ` · next reward at ${nm.at} 🌱` : ''}`);
       this.set('objBar', $(this.root, '#objBar'), 'width', `${pct}%`);
       const reqs = p.requirements();
       const html = reqs.map((r) => `<li class="${r.done ? 'done' : ''}"><span class="ck">${r.done ? '✓' : ''}</span>${esc(r.label)}</li>`).join('');
@@ -835,7 +836,8 @@ export class Hud {
     }
     // "Next:" line (visible on phones, where the checklist is collapsed)
     const nextReq = s.state.progression.coreActivated ? undefined : p.requirements().find((r) => !r.done);
-    const nextText = s.state.progression.coreActivated ? hoodNext : ready ? 'Next: wake the fountain ✨' : nextReq ? `Next: ${nextReq.label}` : '';
+    const nm = s.state.progression.coreActivated ? undefined : p.nextMilestone();
+    const nextText = s.state.progression.coreActivated ? hoodNext : ready ? 'Next: wake the fountain ✨' : nextReq ? `Next: ${nextReq.label}${nm && nextReq.label.startsWith('Restore') ? ` · 🌱 reward at ${nm.at}` : ''}` : '';
     // "Next:" is dropped on phones (CSS), so the goal itself fits on one line.
     this.set('objNext', $(this.root, '#objNext'), 'html', nextText.startsWith('Next: ') ? `<span class="nx">Next: </span>${esc(nextText.slice(6))}` : esc(nextText));
 

@@ -49,6 +49,8 @@ export interface GameEvents {
   'rooftop.coreReady': Record<string, never>;
   'rooftop.coreRestored': Record<string, never>;
   'tutorial.step': { step: number };
+  /** Phase 4 E04.3: a park milestone was reached and paid (once). */
+  'milestone.reached': { at: number; credited: Partial<Record<ResourceKind, number>>; next?: number };
   'area.revealed': { areaId: string };
   'area.fogChanged': { areaId: string; fog: string };
   'area.ready': { areaId: string };

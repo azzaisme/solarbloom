@@ -134,6 +134,8 @@ export interface Progression {
   introSeen: boolean;
   /** manual pulses since the last Overcharge */
   pulseCharge: number;
+  /** Phase 4 E04.3: park milestones already paid (restored-tile thresholds). Missing in older saves. */
+  parkMilestones?: number[];
   /** Mega Pulse meter: manual taps since the last Mega Pulse (full at TUNING.mega.charge) */
   megaCharge?: number;
   /** Old saves only (the rooftop campaign's Cores). */

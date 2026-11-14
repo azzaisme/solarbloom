@@ -100,7 +100,7 @@ export class RestorationSystem {
     }
     const extra: string[] = [];
     for (const { tile: nb, d } of this.footprint(t, overcharged)) {
-      this.beginGrowth(nb, 'broad', TUNING.pulse.growSeconds + 0.12 * d + 0.03 * extra.length);
+      this.beginGrowth(nb, 'broad', TUNING.pulse.growSeconds + Math.min(1.2, 0.12 * d + 0.01 * extra.length)); // ripple outward, done within ~2 s
       extra.push(nb.id);
     }
     this.sim.bus.emit('pulse.fired', { tileId, extra, overcharged });
@@ -118,15 +118,22 @@ export class RestorationSystem {
    * grid distance. Pure: the HUD previews exactly this before you tap (Phase 4 E03.1).
    */
   footprint(t: TileData, overcharged = this.nextIsOvercharged()): { tile: TileData; d: number }[] {
-    const radius = overcharged ? 2 : this.sim.upgrades.broadExtra >= 3 ? 2 : this.sim.upgrades.broadExtra > 0 ? 1 : 0;
-    const limit = overcharged || this.sim.upgrades.broadExtra >= 2 ? Infinity : 2;
+    const radius = this.pulseRadius(overcharged);
     if (radius <= 0) return [];
+    const r2 = radius * radius;
     return this.sim.grid
-      .tilesWithin(t.roofId, t.x, t.z, radius)
-      .map((nb) => ({ tile: nb, d: Math.abs(nb.x - t.x) + Math.abs(nb.z - t.z) }))
-      .filter(({ tile, d }) => d >= 1 && d <= radius && this.isEligible(tile))
-      .sort((a, b) => a.d - b.d || a.tile.pollution - b.tile.pollution || a.tile.id.localeCompare(b.tile.id))
-      .slice(0, limit);
+      .tilesWithin(t.roofId, t.x, t.z, Math.ceil(radius * Math.SQRT2)) // Manhattan bound around the circle
+      .map((nb) => ({ tile: nb, d2: (nb.x - t.x) ** 2 + (nb.z - t.z) ** 2 }))
+      .filter(({ tile, d2 }) => d2 >= 1 && d2 <= r2 + 1e-9 && this.isEligible(tile))
+      .sort((a, b) => a.d2 - b.d2 || a.tile.pollution - b.tile.pollution || a.tile.id.localeCompare(b.tile.id))
+      .map(({ tile, d2 }) => ({ tile, d: Math.sqrt(d2) }));
+  }
+
+  /** Phase 4 E04.2: the pulse's reach (Euclidean, in tiles) from Pulse Reach; Overcharge reaches a tier further. */
+  pulseRadius(overcharged = false): number {
+    const tiers = TUNING.pulseTiers;
+    const lvl = Math.min(tiers.length - 1, this.sim.upgrades.broadExtra + (overcharged ? 1 : 0));
+    return overcharged ? Math.max(tiers[2].radius, tiers[lvl].radius) : tiers[lvl].radius;
   }
 
   /**

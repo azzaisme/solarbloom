@@ -36,6 +36,7 @@ export class DebugLog {
     b.on('harvest', ({ amount }) => this.push('harvest', { amount: Math.round(amount) }));
     b.on('tree.discharged', () => this.push('tree.discharged'));
     b.on('mega.ready', () => this.push('mega.ready'));
+    b.on('milestone.reached', ({ at }) => this.push('milestone', { id: `park${at}` }));
     b.on('rooftop.coreReady', () => this.push('milestone', { id: 'fountainReady' }));
     b.on('rooftop.coreRestored', () => this.push('milestone', { id: 'fountain' }));
     b.on('area.cleared', ({ areaId }) => this.push('milestone', { id: `area:${areaId}` }));

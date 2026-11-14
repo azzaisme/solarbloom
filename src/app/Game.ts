@@ -1040,6 +1040,13 @@ export class Game {
       if (reason.includes('💧')) this.hud.flashResource('water', 'short');
       if (reason.includes('🌿')) this.hud.flashResource('biomass', 'short');
     });
+    b.on('milestone.reached', ({ at, credited, next }) => {
+      const icons = { energy: '⚡', water: '💧', biomass: '🌿' } as const;
+      const got = (Object.entries(credited) as [keyof typeof icons, number][]).filter(([, v]) => v >= 1).map(([k, v]) => `+${Math.round(v)}${icons[k]}`).join(' ');
+      this.hud.toast(`🌱 ${at} tiles restored!<small>${got || 'Storage was full'}${next ? ` · next reward at ${next}` : ''}</small>`, 'gold', 2.6);
+      this.sfx.powerUp();
+      this.hud.flashResource('biomass', 'flash');
+    });
     b.on('upgrade.purchased', ({ id, level }) => {
       const def = UPGRADE_BY_ID[id];
       this.hud.toast(`${def.icon} ${def.name} ${['I', 'II', 'III', 'IV', 'V'][level - 1]}<small>${def.describe(level)}</small>`, 'gold', 2.6);

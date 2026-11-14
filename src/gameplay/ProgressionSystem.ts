@@ -137,7 +137,33 @@ export class ProgressionSystem {
     return 0;
   }
 
+  /** The next park milestone not yet reached (restored-tile threshold), if any. */
+  nextMilestone(): { at: number; reward: Partial<Record<'energy' | 'water' | 'biomass', number>> } | undefined {
+    const got = this.sim.state.progression.parkMilestones ?? [];
+    return TUNING.parkMilestones.find((m) => !got.includes(m.at));
+  }
+
+  /**
+   * Phase 4 E04.3: pays each park milestone once. Marked before paying, so a reload can't pay twice. A save
+   * from before milestones existed counts the ones it already passed as paid (no surprise windfall).
+   */
+  private checkMilestones() {
+    const s = this.sim;
+    const p = s.state.progression;
+    const n = s.areas.counts(PARK).restored;
+    if (!p.parkMilestones) {
+      p.parkMilestones = TUNING.parkMilestones.filter((m) => m.at <= n).map((m) => m.at);
+    }
+    const next = this.nextMilestone();
+    if (!next || n < next.at) return;
+    p.parkMilestones.push(next.at);
+    const credited: Partial<Record<'energy' | 'water' | 'biomass', number>> = {};
+    for (const [k, v] of Object.entries(next.reward) as ['energy' | 'water' | 'biomass', number][]) credited[k] = s.econ.add(k, v);
+    s.bus.emit('milestone.reached', { at: next.at, credited, next: this.nextMilestone()?.at });
+  }
+
   tick() {
+    this.checkMilestones();
     const p = this.sim.state.progression;
     const step = this.computeStep();
     if (step !== p.tutorialStep) {

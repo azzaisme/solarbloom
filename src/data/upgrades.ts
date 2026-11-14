@@ -43,19 +43,23 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Solar Array',
     icon: '☀️',
     baseCost: 14,
-    costMult: 2,
-    maxLevel: 3,
+    costMult: 3,
+    maxLevel: 6, // Phase 4 E04.5: later levels keep something worth buying after the fountain
     describe: () => 'All solar output +50%',
   },
   {
     id: 'broadPulse',
     group: 'Pulse',
-    name: 'Wide Pulse',
+    name: 'Pulse Reach',
     icon: '💠',
     baseCost: 22,
-    costMult: 2.2,
-    maxLevel: 3,
-    describe: (n) => (n === 1 ? 'Each pulse also restores 2 neighbouring tiles for free' : n === 2 ? 'Each pulse restores all 4 neighbours for free' : 'Each pulse restores everything within 2 tiles for free'),
+    costMult: 4.4,
+    maxLevel: 4,
+    describe: (n) => {
+      const t = TUNING.pulseTiers[n];
+      const tiles = [1, 9, 25, 69, 161][n];
+      return `${t.name}: each pulse restores up to ${tiles} tiles around it for free`;
+    },
   },
   {
     id: 'richSoil',
@@ -63,8 +67,8 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Rich Soil',
     icon: '🌱',
     baseCost: 25,
-    costMult: 2,
-    maxLevel: 3,
+    costMult: 2.6,
+    maxLevel: 6, // Phase 4 E04.5
     describe: () => 'Restored tile biomass +30%',
   },
   {

@@ -5,7 +5,7 @@ exports[`upgrades drawer grouped by system (City 14.4) > the city drawer: Pulse,
   {
     "cards": [
       "⚡ Efficient Pulse: Pulse energy cost −25%",
-      "💠 Wide Pulse: Each pulse also restores 2 neighbouring tiles for free",
+      "💠 Pulse Reach: Sprout: each pulse restores up to 9 tiles around it for free",
       "🌟 Overcharge: Every 6th pulse is Overcharged: it restores everything within 2 tiles",
     ],
     "group": "Pulse",

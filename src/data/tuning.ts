@@ -27,6 +27,34 @@ export const TUNING = {
   rainBarrelRate: 0.15, // water/sec trickle from the rain barrel
   harvest: { energy: 8, cooldown: 12 },
 
+  /**
+   * Phase 4 E04.2: pulse reach tiers (Pulse Reach levels 0–4). Euclidean radius on the integer grid, so the
+   * footprints are 1, 9, 25, 69 and 161 tiles on open ground (clipped to eligible tiles). An Overcharged pulse
+   * reaches one tier further (at least Bloom).
+   */
+  pulseTiers: [
+    { name: 'Seed', radius: 0 },
+    { name: 'Sprout', radius: 1.5 },
+    { name: 'Bloom', radius: 2.9 },
+    { name: 'Grove', radius: 4.5 },
+    { name: 'Radiant', radius: 7.1 },
+  ],
+
+  /**
+   * Phase 4 E04.3: rewarded milestones for restored park tiles (unique tiles, not bloom stages), paid once each.
+   * The fountain still needs 130; these fill the gap on the way there.
+   */
+  parkMilestones: [
+    { at: 5, reward: { biomass: 10 } },
+    { at: 10, reward: { biomass: 15, water: 10 } },
+    { at: 20, reward: { biomass: 25, energy: 20 } },
+    { at: 35, reward: { biomass: 40, water: 15 } },
+    { at: 50, reward: { biomass: 60, energy: 30 } },
+    { at: 75, reward: { biomass: 80, water: 25 } },
+    { at: 100, reward: { biomass: 100, energy: 40 } },
+    { at: 130, reward: { biomass: 120, energy: 40 } },
+  ] as { at: number; reward: Partial<Record<'energy' | 'water' | 'biomass', number>> }[],
+
   pulse: {
     polluted: { energy: 6, water: 1 },
     prepared: { energy: 3, water: 1 },
@@ -109,9 +137,9 @@ export const TUNING = {
   machineCostGrowth: 1.5, // each extra copy of a machine costs this much more
 
   cat: {
-    firstMinTime: 240, // first cat: 4–6 minutes of active play, once the player knows the grid
+    firstMinTime: 180, // Phase 4 E08.1: first cat at about minute 3–4 (was 4–6), once the player knows the grid
     firstMinRestored: 10,
-    firstForceTime: 360,
+    firstForceTime: 240,
     laterMin: 240, // later cats: every 4–8 minutes of active play
     laterMax: 480,
     hiddenBonusCapSec: 180, // reward grows a little with hidden time, up to this

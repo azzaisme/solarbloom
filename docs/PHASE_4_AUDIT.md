@@ -213,3 +213,34 @@ Added:
 - **High contrast** setting (from E11.5): solid panels, darker secondary text, outlined buttons.
 
 Not done: there are no new sounds beyond the existing synthesised set (restore pop, rising chain notes, upgrade flourish, meow, fanfare).
+
+---
+
+# E04 — power progression and reward cadence
+
+- **Pulse Reach** (was Wide Pulse) steps through explicit footprint tiers in `TUNING.pulseTiers`, using Euclidean radius on the integer grid: Seed 0 (1 tile), Sprout 1.5 (9), Bloom 2.9 (25), Grove 4.5 (69), Radiant 7.1 (161). Footprints are clipped to eligible tiles, and a test checks the sizes. It costs 22 / 97 / 426 / 1,874 🌿.
+  - An Overcharged pulse reaches one tier further (at least Bloom).
+  - The hover preview from E03 shows the exact cells.
+  - The growth ripple is capped, so even a 161-tile pulse finishes in about 2 s.
+- **Park milestones** (`TUNING.parkMilestones`) at 5 / 10 / 20 / 35 / 50 / 75 / 100 / 130 restored park tiles, each with a small resource reward.
+  - They count unique restored tiles, so bloom stages don't count.
+  - Each is marked before it pays, so it can't pay twice across a reload.
+  - A save from before milestones counts the ones it already passed as paid (no windfall).
+  - The objective shows "🌱 reward at N", and reaching one shows a toast.
+- **Cost growth:** Solar Array and Rich Soil now have 6 levels each (×3 and ×2.6 per level), so there's still something to buy after the fountain.
+- **First Lucky Cat** comes at about minute 3–4 (`firstMinTime` 180 s, forced by 240 s), from E08.1. Without this the fountain would come before the first cat.
+
+## Measured (bots)
+
+| | After E01 | After E04 |
+|---|---|---|
+| First ×5 chain | 3:55–4:13 | 2:52–3:01 |
+| Fountain (park bot) | 6:09–6:18 | 4:21–4:42 |
+| First cat | 4:42 | 3:42 |
+| City bot, areas in 60 min (seeds 7, 21) | 32, 18 | 57, 50 |
+| Hands-off vs active (tiles after the hub) | 22–26% | 13–27% |
+
+- **The power curve now shows:** later taps restore up to 161 tiles, against 1 at the start.
+- **It is strong.** The city bot roughly doubled its pace. This is the plan's "visibly exceeds early actions", but it should be watched in play.
+- **Hands-off fell further behind** because active play got stronger. E07 is where automation catches up.
+- **The fountain is now about 4½ minutes for the bot.** That's faster than before, as you chose. The pacing test's lower bound is now 4 minutes (was 5).

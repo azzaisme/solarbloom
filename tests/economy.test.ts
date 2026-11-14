@@ -87,7 +87,7 @@ describe('economy & restoration', () => {
     const e0 = sim.state.resources.energy;
     sim.restoration.pulse(t.id);
     sim.advance(1.5);
-    expect(sim.state.stats.tilesRestored).toBe(3); // Wide Pulse I: target + 2 neighbours
+    expect(sim.state.stats.tilesRestored).toBe(9); // Pulse Reach I (Sprout): the 3×3 around the target
     expect(sim.state.resources.energy).toBeGreaterThan(e0 - TUNING.pulse.polluted.energy - 0.01);
   });
 
