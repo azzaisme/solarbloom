@@ -504,6 +504,9 @@ export class MachineVisuals {
     v.level = lvl;
     v.extras.destroy();
     v.extras = group(v.body, 'extras');
+    // The old wing panels were just destroyed: keep only the base panel (Phase 4 E11: a second Solar Array level
+    // used to leave destroyed panels in this list, and the next frame crashed on them).
+    if (v.panel) v.panel = v.panel.slice(0, 1);
     if (v.batched) this.tweens.add(0.01, () => {}, { done: () => this.views.get(v.m.id) === v && this.batch(v) }); // once the new extras exist
     const ex = v.extras;
     if (v.m.type === 'solar') {
@@ -625,7 +628,7 @@ export class MachineVisuals {
         case 'solar': {
           const boosted = v.m.boostUntil > now || this.sim.production.surgeActive();
           const m = boosted ? panelBoost() : panelMat();
-          for (const p of v.panel!) if (p.render!.material !== m) p.render!.material = m;
+          for (const p of v.panel!) if (p.render && p.render.material !== m) p.render.material = m;
           const s = 0.05 + (boosted ? 0.025 * (1 + Math.sin(t * 10)) : 0.01 * Math.sin(t * 2));
           v.light!.setLocalScale(s, s, s);
           break;

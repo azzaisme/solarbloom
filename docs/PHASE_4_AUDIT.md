@@ -359,3 +359,41 @@ Not done, and listed as open: new machine models, solar panel and flower-bed sil
 - **Longest stretch with nothing new** (no upgrade, machine, cat, chain ×5+, milestone or Frenzy): 112–168 s for the active bot. That's above the plan's 30–60 s guide. It mostly happens in the city, between area clears, where the bot works one area at a time.
 - **Hands-off** (no taps after the hub; still buys and wakes landmarks): **28–46%** of the active bot's tiles (agreed target 40–60%). The fountain's Frenzy helps idle players too. Hands-off fountain at 8:09–8:39.
 - **People will be slower than the bot**, probably 1.5–2× on every timing. No human playtests were done.
+
+---
+
+# E11 — performance, accessibility, saves and validation
+
+## What was run (all on this branch, headless Linux, Chromium with SwiftShader software rendering)
+
+| Check | Result |
+|---|---|
+| `npm run typecheck`, `npm run build` | pass |
+| `npm test` (37 files, 206 tests: unit, save, chain, drone, cat, pacing bots, Phase 4 economy/Frenzy/tiles/feedback) | pass |
+| `npm run test:perf` | pass: 0.93 ms sim step (10k tiles, 343 machines, 31 drones); 0.22 ms active-region tick (1,046 areas); 0.79 MB save, 10 ms load |
+| `npm run test:soak` (1,000 areas, 6 h game time; determinism) | pass |
+| `npm run test:e2e` (pointer → tile picking) | pass, 69,445 checks |
+| `npm run test:perf:browser` (150-area city, pan, zoom, ×618 chain, 5-min catch-up) | within limits: update median 5.5–11.3 ms, 1 hitch in the chain run, catch-up worst frame 11.7 ms |
+| `node tests/e2e/hud-overlap.e2e.mjs`, `npm run test:hud` | pass, no overlaps at any tested size |
+| `npm run test:session`: 15 minutes in the real page | **no page errors** (after two fixes, below). Fountain at 8:19, 5 areas, 3 Frenzies, 4 cats, 1,702 tiles |
+| `npm run shots:phase4` | pass, no page errors |
+| `npm run test:leak` (12 min) | **not run** (CI doesn't run it either) |
+
+The browser session found two real crashes, both now fixed:
+1. **Solar panels.** A second Solar Array level left destroyed wing panels in the list the animation updates, and the next frame crashed. The bug was already in the game, and the six Solar Array levels made it easy to hit.
+2. **The hotbar update grabbed the wrong button.** The objective panel's "Build a …" suggestion carries the same `data-tool` attribute as the hotbar and comes earlier in the page. The hotbar and hint lookups are now scoped to the hotbar and the Build tray.
+
+A flaky HUD-overlap failure (the hint was still fading out under an open panel) is fixed by hiding the hint instantly.
+
+## Saves
+- Still format v4, with no version bump. Older saves (v1–v3) are discarded with a notice, as agreed. Phase 4 only adds optional fields (`savedAt`, `frenzy`, `progression.parkMilestones`), so existing v4 saves load. New saves load in older Phase 4 builds of this branch too.
+- Tested: round trips mid-Frenzy, offline time (never twice; a clock going backwards earns nothing), milestones paid once, cats claimed once, the old drone added to older saves, and corrupt or newer saves backed up (existing tests).
+- No real old-player save fixtures were available; the tests build saves in code.
+
+## Accessibility
+Reduced motion (also stops the Frenzy vignette pulsing), fewer particles, separate sound and music on/off and volume, **high contrast**, non-colour cues (⏳ for unaffordable, a dot for "worth buying", "· full"), keyboard shortcuts (1–9, B, Q, U, H, P, F, Home, Esc), aria-labels on icon buttons, and touch and mouse parity. No flashing.
+
+## Not done (needs people or devices)
+- **Real-device performance:** no phone was measured. The browser numbers above are software-rendered on a server.
+- **Human playtests:** none. All pacing is from scripted bots, and people will be slower.
+- The 12-minute leak test, real old-save fixtures.

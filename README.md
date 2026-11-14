@@ -35,6 +35,9 @@ Node 20+ is required. The build is a static site (`base: './'`), so `dist/` can 
 | `npm run shots:park` | Build, then render the park at each art stage (0, 25, 50, 75%, fountain awake) into `docs/review/park-stage-*.png` | ~1 min |
 | `npm run shots:rooftops` | Build, then find a rooftop cluster, screenshot it out of reach, reach it with a Bloom Relay and restore part of it (fails if that doesn't work) into `docs/review/rooftop-cluster-*.png` | ~1 min |
 | `npm run shots:city` | Build, then render the city overview and a close-up of a cleared area of every type into `docs/review/` for visual review | ~2 min |
+| `npm run test:hud` | Build, then check the HUD at 320–430 px, phone landscape, tablet and desktop: no overlaps, Build tray on screen | ~2 min |
+| `npm run test:session` | Build, then play 15 minutes in the real page (taps, builds, upgrades, Frenzy, cats); fails on any page error | ~4 min |
+| `npm run shots:phase4` | Build, then before/after park screenshots (fresh, half, grown with Radiant tiles, Frenzy) into `docs/review/` | ~2 min |
 | `npm run test:leak` | Build, then pan back and forth across a big city for 10 minutes; entities, materials, GPU memory and heap must return to baseline (`LEAK_MINUTES`) | ~12 min |
 
 The browser scripts need Playwright with Chromium (`npm i -D playwright && npx playwright install chromium`) and run headless with software rendering, as in CI. CI (`.github/workflows/ci.yml`) runs the typecheck, unit tests, benchmarks, soak, browser perf and picking on every push to `main`.
@@ -56,6 +59,8 @@ The browser scripts need Playwright with Chromium (`npm i -D playwright && npx p
 | Game speed 1× / 2× / 3× | `1×` chip | `1×` chip |
 | Lucky Cat discoveries | 🐱 chip (after your first cat) | 🐱 chip |
 | Cancel, close or deselect | `Esc` | Tap empty space |
+| Build tray | `B` (machines `3`–`9`) | Build button |
+| Bloom Frenzy (when full) | `Q` | ✨ meter above the hotbar |
 | Debug / FPS overlay | `F3` or `` ` `` | Settings |
 
 Switching to another tab doesn't stop the city: when you come back, up to 10 minutes are caught up over a few frames (Pause still pauses).

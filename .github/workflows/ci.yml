@@ -32,3 +32,4 @@ jobs:
       - run: npm run test:perf:browser
       - run: npm run test:e2e
       - run: STRICT=1 node tests/e2e/phase4-hud.e2e.mjs
+      - run: node tests/e2e/phase4-session.e2e.mjs

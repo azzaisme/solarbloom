@@ -337,7 +337,7 @@ export class Hud {
     // Phase 4 E02.3: one short line each, written from live numbers ("Build a Drone Hub · 24/80🌿").
     const build = (t: BuildableType, why: string) => ({
       text: `${why} Build a ${MACHINES[t].icon} ${MACHINES[t].name} · ${this.costShort(s.build.cost(t))}`,
-      target: `[data-tool="${t}"]`,
+      target: `#buildTray [data-tool="${t}"]`,
     });
     switch (step) {
       case 0:
@@ -774,7 +774,7 @@ export class Hud {
     this.set('frTitle', fb, 'title', fActive ? 'Bloom Frenzy! Pulse reach +2 tiers, biomass ×10, drones ×3' : fReady ? 'Bloom Frenzy is ready: tap to fire it (Q)' : 'Bloom Frenzy charges as you restore, chain and overflow');
     // Hotbar costs
     for (const t of BUILDABLE) {
-      const btn = $(this.root, `[data-tool="${t}"]`);
+      const btn = $(this.root, `#hotbar [data-tool="${t}"]`);
       const cost = s.build.cost(t);
       this.set(`hc-${t}`, $(btn, '.sc'), 'text', formatCost(cost));
       this.set(`hk-${t}`, btn, 'cls', s.econ.canAfford(cost) ? '0' : '1', 'cant');
@@ -844,7 +844,7 @@ export class Hud {
     // Glow the control the hint talks about (or a temporary nudge). On phones, machine cards live in the Build tray.
     let target = performance.now() < this.nudgeUntil ? this.nudgeSel : this.settings.hints ? (h.target ?? '') : '';
     const tray = $(this.root, '#buildTray');
-    if (target.startsWith('[data-tool') && !target.includes('pulse') && !target.includes('inspect') && !tray.classList.contains('open')) target = '#buildToggle';
+    if (target.startsWith('#buildTray') && !tray.classList.contains('open')) target = '#buildToggle';
     if (this.last.get('nudgeTarget') !== target) {
       this.root.querySelectorAll('.nudge').forEach((e) => e.classList.remove('nudge'));
       if (target) this.root.querySelector(target)?.classList.add('nudge');
