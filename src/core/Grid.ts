@@ -164,7 +164,10 @@ export class Grid {
   touch(t: TileData) {
     const c = this.chunks.get(chunkKey(t.roofId, Math.floor(t.x / CHUNK), Math.floor(t.z / CHUNK)));
     if (c) c.dirty = true;
+    this.onTouch?.(t);
   }
+  /** Observers of tile changes (area progress caches). */
+  onTouch?: (t: TileData) => void;
 
   neighbors(t: TileData): TileData[] {
     const out: TileData[] = [];

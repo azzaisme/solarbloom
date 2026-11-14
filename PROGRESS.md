@@ -10,7 +10,8 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 |---|---|
 | #2 City 01: endless chunked world model | ✅ |
 | #3 City 02: save format v4 (old saves scrapped, sparse deltas) | ✅ |
-| #4–#16 | not started |
+| #4 City 03: areas and the fog | ✅ (simulation; fog visuals are #8) |
+| #5–#16 | not started |
 
 ## City 01: world model
 
@@ -19,6 +20,16 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - `tilesNear`, `tilesInRange`, `tilesWithin`, `neighbors` and `machinesNear` (a per-chunk machine index) cost the same in a 64-tile world and a 512k-tile one. Every per-tick "what's nearby" scan in the systems now goes through them; growing tiles are tracked in a set instead of scanning tiles each tick.
 - Adjacency never crosses layers. The ground exists but stays unplayable until the park (City 05).
 - `GameState` no longer holds tiles (`rooftops` is gone; `layers` describes the surfaces). Occupancy is rebuilt from the machine list.
+
+## City 03: areas and the fog
+
+- `core/Areas.ts`: the city ground is split into areas of whole chunks (a seeded jittered Voronoi over 2×2-chunk super-cells, one or two seeds each; the park is always chunk (0, 0)). Shapes, neighbours and landmark spots are a pure function of the seed, so they are never saved. Areas average about 2–3 chunks.
+- `gameplay/AreaSystem.ts`: fog per area (hidden → frontier → thinning → cleared), saved in `state.areas`.
+  - Hidden tiles can never change. In a frontier area only tiles touching clear ground (a cleared area or any restored tile) can be restored, so the fog recedes tile by tile. The park is home: no edge rule.
+  - Restoring `clearShare` (60%) of an area lets its landmark (a 2×2 Core placed when the area is revealed) be woken: the area clears, once, and its hidden neighbours become frontier.
+  - Every revealed area is guaranteed a way in: if obstacles wall off its edge, one is cleared and saved (`unblocked`).
+  - Pulses, drones, chains and building all go through the same rules.
+- Tests: partition coverage and symmetry, order independence, every transition, reveal ring, tile-by-tile recession, save round trip, and a soak clearing 500 areas in random order with no unreachable frontier.
 
 ## City 02: save format v4
 

@@ -8,6 +8,7 @@ import { BloomChainSystem } from './BloomChainSystem';
 import { BuildSystem } from './BuildSystem';
 import { DroneSystem } from './DroneSystem';
 import { LuckyCatSystem } from './LuckyCatSystem';
+import { AreaSystem } from './AreaSystem';
 import { Metrics } from './Metrics';
 import { NeighbourhoodSystem } from './NeighbourhoodSystem';
 import { ProductionSystem } from './ProductionSystem';
@@ -34,6 +35,7 @@ export class Sim {
   readonly progression: ProgressionSystem;
   readonly metrics: Metrics;
   readonly hood: NeighbourhoodSystem;
+  readonly areas: AreaSystem;
 
   constructor(
     readonly state: GameState,
@@ -71,6 +73,7 @@ export class Sim {
     this.cat = new LuckyCatSystem(this);
     this.progression = new ProgressionSystem(this);
     this.hood = new NeighbourhoodSystem(this);
+    this.areas = new AreaSystem(this);
     this.metrics = new Metrics(this);
     this.restoration.adoptGrowing();
     this.upgrades.applyCaps();

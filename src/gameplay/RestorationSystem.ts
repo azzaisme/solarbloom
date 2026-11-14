@@ -30,6 +30,7 @@ export class RestorationSystem {
     if (!roof || !roof.unlocked || roof.preview) return false;
     if (t.blocked || this.sim.isCoreTile(t)) return false;
     if (t.ground === 'restored' || t.ground === 'growing') return false;
+    if (!this.sim.areas.canTouch(t)) return false;
     if (t.ground === 'polluted' && !allowPolluted) return false;
     if (this.sim.drones.isReserved(t.id)) return false;
     return true;
@@ -39,6 +40,8 @@ export class RestorationSystem {
     const cost = this.pulseCost(t);
     const roof = this.sim.grid.roof(t.roofId);
     if (!roof || !roof.unlocked || roof.preview) return { ok: false, reason: 'This rooftop is not reachable yet', cost };
+    const fog = this.sim.areas.fogReason(t);
+    if (fog) return { ok: false, reason: fog, cost };
     if (t.blocked) return { ok: false, reason: 'A rusty vent — nothing grows here', cost };
     if (this.sim.isCoreTile(t)) return { ok: false, reason: 'The Rooftop Core — awaken it when it is ready', cost };
     if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in full bloom', cost };
@@ -189,6 +192,7 @@ export class RestorationSystem {
       } else this.sim.bus.emit('tile.softened', { tile: nb });
     }
     this.sim.production.markDirty();
+    this.sim.areas.onRestored(t);
     const id = this.sim.chains.onRestored(t, source, chainId);
     this.sim.chains.addReward(id, biomass);
     this.sim.bus.emit('tile.restored', { tile: t, source, chainId: id, biomass });

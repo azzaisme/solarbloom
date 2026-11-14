@@ -17,7 +17,7 @@ const N = CHUNK * CHUNK;
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 
 function same(a: TileData, b: TileData) {
-  return a.ground === b.ground && a.bloom === b.bloom && Math.round(a.pollution) === b.pollution && !a.growthRemainingSec && !a.growSource && !a.lushUntil;
+  return a.ground === b.ground && a.bloom === b.bloom && Math.round(a.pollution) === b.pollution && !a.growthRemainingSec && !a.growSource && !a.lushUntil && !a.unblocked;
 }
 
 export function packChunk(c: Chunk, seed: number, layer: LayerData): string {
@@ -47,8 +47,8 @@ export function packChunk(c: Chunk, seed: number, layer: LayerData): string {
     b[i] = String(Math.max(0, Math.min(9, t.bloom)));
     const pv = Math.max(0, Math.min(1295, Math.round(t.pollution)));
     p[i] = pv < 36 ? '0' + pv.toString(36) : pv.toString(36);
-    if (t.growthRemainingSec || t.growSource || t.lushUntil)
-      extras.push(`${i},${t.growthRemainingSec ? r3(t.growthRemainingSec) : ''},${t.growSource ? SOURCES.indexOf(t.growSource) : ''},${t.lushUntil ? r3(t.lushUntil) : ''}`);
+    if (t.growthRemainingSec || t.growSource || t.lushUntil || t.unblocked)
+      extras.push(`${i},${t.growthRemainingSec ? r3(t.growthRemainingSec) : ''},${t.growSource ? SOURCES.indexOf(t.growSource) : ''},${t.lushUntil ? r3(t.lushUntil) : ''}${t.unblocked ? ',u' : ''}`);
   }
   return [g.join(''), b.join(''), p.join(''), '|', extras.join(';')].join('');
 }
@@ -77,11 +77,15 @@ export function unpackChunk(c: Chunk, packed: string) {
   if (bar < 0) return;
   for (const e of packed.slice(bar + 1).split(';')) {
     if (!e) continue;
-    const [is, gs, ss, ls] = e.split(',');
+    const [is, gs, ss, ls, us] = e.split(',');
     const t = c.tiles[Number(is)];
     if (!t) continue;
     if (gs) t.growthRemainingSec = Number(gs);
     if (ss) t.growSource = SOURCES[Number(ss)];
     if (ls) t.lushUntil = Number(ls);
+    if (us === 'u') {
+      t.unblocked = true;
+      t.blocked = false;
+    }
   }
 }

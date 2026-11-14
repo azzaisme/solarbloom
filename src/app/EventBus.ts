@@ -38,6 +38,10 @@ export interface GameEvents {
   'rooftop.coreReady': Record<string, never>;
   'rooftop.coreRestored': Record<string, never>;
   'tutorial.step': { step: number };
+  'area.revealed': { areaId: string };
+  'area.fogChanged': { areaId: string; fog: string };
+  'area.ready': { areaId: string };
+  'area.cleared': { areaId: string };
   'link.built': { linkId: string; roofId: string };
   'roof.coreAwake': { roofId: string };
   'neighbourhood.bloom': { restored: string[]; reward: Partial<Record<ResourceKind, number>> };

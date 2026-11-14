@@ -58,6 +58,7 @@ export class BuildSystem {
     if (cells.some((c) => !c)) return fail('Too close to the edge');
     for (const c of cells) {
       if (!c) continue;
+      if (!s.areas.isClear(c) && !s.areas.canTouch(c)) return fail('Lost in the fog — clear the ground here first');
       if (c.blocked) return fail('A rusty vent is in the way');
       if (c.occupantId) return fail(`${MACHINES[s.occupant(c)!.type].name} is already here`);
       if (s.drones.isReserved(c.id)) return fail('Your drone is about to work here');

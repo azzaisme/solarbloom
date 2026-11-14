@@ -58,6 +58,8 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): Game
     buffs: [],
     harvestReadyAt: 0,
     links: {},
+    // The park is home: its fog thins as you restore it, with no edge rule.
+    areas: { park: { fog: 'thinning', revealedAt: 0 } },
     relayBonus: 0,
     cat: { nextSpawnAt: -1, found: 0, stash: 0, firstSpawned: false, log: [] },
     progression: {

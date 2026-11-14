@@ -107,6 +107,15 @@ export const TUNING = {
 
   autosaveSeconds: 10,
 
+  /** City scale: areas under the fog. */
+  city: {
+    /** share of an area's restorable tiles to restore before its landmark can be woken */
+    clearShare: 0.6,
+    /** fog density at 0% restored and just before clearing (it thins linearly in between) */
+    fogFull: 1,
+    fogThin: 0.25,
+  },
+
   /** Phase 3: the connected neighbourhood. Everything here is a starting point for playtesting. */
   neighbourhood: {
     /** Each unlocked extra rooftop raises every storage cap by this share of the starting cap. */

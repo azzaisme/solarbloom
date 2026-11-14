@@ -34,6 +34,8 @@ export interface TileData {
   bloom: number; // 0 until restored, then 1..3 (grass → flowers → shrubs)
   /** Reservoir Overflow: biomass bonus on this tile until this sim time. */
   lushUntil?: number;
+  /** A generated obstacle was cleared so a fogged area stays reachable (saved). */
+  unblocked?: boolean;
 }
 
 /**
@@ -141,6 +143,15 @@ export interface Stats {
   stuckSeconds: number;
 }
 
+/** Fog over a city area. Areas without an entry are hidden. */
+export type FogState = 'hidden' | 'frontier' | 'thinning' | 'cleared';
+
+export interface AreaState {
+  fog: Exclude<FogState, 'hidden'>;
+  revealedAt: number;
+  clearedAt?: number;
+}
+
 export interface LinkState {
   built: boolean;
   builtAt: number;
@@ -165,6 +176,8 @@ export interface GameState {
   upgrades: Record<string, number>;
   buffs: Buff[];
   harvestReadyAt: number;
+  /** City areas that have been revealed (frontier or further). Static area data comes from the seed. */
+  areas: Record<string, AreaState>;
   /** Bridges and relays by link id (see data/rooftops LINKS). */
   links: Record<string, LinkState>;
   /** Golden Relay (Lucky Cat): extra remote blooms on the next cross-roof chain. */
