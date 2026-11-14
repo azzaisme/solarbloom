@@ -46,11 +46,18 @@ describe('city generator: area types and layouts (City 04.3)', () => {
         const def = AREA_TYPES[a.type];
         const own = tiles.filter((t) => t.feature === def.ground).length / tiles.length;
         expect(own, `${a.type} ground share`).toBeGreaterThan(0.4);
-        const obstacles = tiles.filter((t) => t.blocked);
+        const obstacles = tiles.filter((t) => t.blocked && t.feature !== 'building');
         expect(obstacles.length / tiles.length, `${a.type} obstacles`).toBeLessThan(def.obstacles * 2.5 + 0.01);
         for (const t of obstacles) {
           expect(t.feature).toBe('obstacle');
           expect(distToFootprint(t.x, t.z, a.landmark[0], a.landmark[1], 2)).toBeGreaterThan(CITY_GEN.landmarkClearance);
+        }
+        // Buildings keep clear of the landmark, roads and canals, and leave most of the area to restore.
+        const buildings = tiles.filter((t) => t.feature === 'building');
+        expect(buildings.length / tiles.length, `${a.type} buildings`).toBeLessThan(0.3);
+        for (const t of buildings) {
+          expect(t.blocked).toBe(true);
+          expect(distToFootprint(t.x, t.z, a.landmark[0], a.landmark[1], 2)).toBeGreaterThan(CITY_GEN.landmarkClearance + 1);
         }
       }
     }
@@ -114,6 +121,46 @@ describe('city generator: difficulty and variety (City 04.5–04.6)', () => {
       expect(same / pairs).toBeLessThan(0.3);
       const near = new Set(areasAround(map, 12).map((id) => map.info(id).type));
       expect([...near].sort()).toEqual([...AREA_TYPE_LIST].sort());
+    }
+  });
+});
+
+describe('city generator: buildings (City 07.5)', () => {
+  it('new games have buildings; saves from before generation 2 keep generating without them', () => {
+    const seed = 3;
+    const fresh = new Grid(seed, createInitialState(seed).layers);
+    const oldLayers = createInitialState(seed).layers.map((l) => ({ ...l, gen: undefined }));
+    const old = new Grid(seed, oldLayers);
+    let built = 0;
+    for (let cz = -6; cz <= 6; cz++)
+      for (let cx = -6; cx <= 6; cx++) {
+        const a = fresh.chunkAt(GROUND, cx, cz)!.tiles;
+        const b = old.chunkAt(GROUND, cx, cz)!.tiles;
+        a.forEach((t, i) => {
+          if (t!.feature === 'building') built++;
+          expect(b[i]!.feature).not.toBe('building');
+          if (t!.feature !== 'building') expect(b[i]).toEqual(t); // everything else is identical
+        });
+      }
+    expect(built).toBeGreaterThan(200);
+  });
+
+  it('buildings never sit on roads, water, the park or near a landmark', () => {
+    for (const seed of [1, 5, 9]) {
+      const g = new Grid(seed, createInitialState(seed).layers);
+      const map = new AreaMap(seed);
+      for (let cz = -8; cz <= 8; cz++)
+        for (let cx = -8; cx <= 8; cx++) {
+          const id = map.areaOfChunk(cx, cz);
+          for (const t of g.chunkAt(GROUND, cx, cz)!.tiles) {
+            if (t!.feature !== 'building') continue;
+            expect(id).not.toBe(PARK);
+            const lx = t!.x - cx * 16;
+            const lz = t!.z - cz * 16;
+            expect([7, 8].includes(lz) && roadRow(seed, cz)).toBe(false);
+            expect([7, 8].includes(lx) && roadCol(seed, cx)).toBe(false);
+          }
+        }
     }
   });
 });

@@ -25,8 +25,11 @@ export function layerFromDef(def: RooftopDef): LayerData {
 }
 
 /** The endless city ground. Playable from the start in the city; locked in the legacy rooftop layout. */
+/** The current ground generation version (new games). */
+export const GROUND_GEN = 2;
+
 export function groundLayer(playable = true): LayerData {
-  return { id: GROUND, name: 'The City', kind: 'ground', width: 0, depth: 0, height: playable ? 0 : -40, origin: [0, 0, 0], unlocked: playable, preview: !playable };
+  return { id: GROUND, name: 'The City', kind: 'ground', width: 0, depth: 0, height: playable ? 0 : -40, origin: [0, 0, 0], unlocked: playable, preview: !playable, gen: GROUND_GEN };
 }
 
 export interface NewGameOptions {

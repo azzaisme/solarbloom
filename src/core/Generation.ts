@@ -71,6 +71,72 @@ function generatePark(seed: number, lh: number, x: number, z: number): TileData 
 
 const GROUND_ID = 'g';
 
+export interface BuildingPlot {
+  /** world tile of its north-west corner, and its footprint */
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+  storeys: number;
+  /** look variant (0–9) */
+  style: number;
+}
+
+const plotCache = new Map<string, BuildingPlot[]>();
+
+/**
+ * The buildings of one ground chunk (generation 2): at most one per quarter, on the quarter's outer corner,
+ * never on roads, canals, footpaths or near the landmark, and never in the park. A pure function of the seed.
+ */
+export function buildingPlots(seed: number, cx: number, cz: number): BuildingPlot[] {
+  const key = `${seed}|${cx}|${cz}`;
+  const hit = plotCache.get(key);
+  if (hit) return hit;
+  const out: BuildingPlot[] = [];
+  const map = areaMapFor(seed);
+  const area = map.info(map.areaOfChunk(cx, cz));
+  if (area.id !== PARK) {
+    const B = CITY_GEN.buildings;
+    const lh = hashString('buildings');
+    const road = { row: roadRow(seed, cz), col: roadCol(seed, cx), canal: canalRow(seed, cz) || area.type === 'canal' };
+    const path = area.type === 'park' || area.type === 'plaza';
+    const [mx, mz] = area.landmark;
+    const [lo, hi] = B.storeys[area.theme] ?? [1, 3];
+    for (const [qx, qz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+      const r = (salt: number) => tileRandom(seed, lh, cx * 2 + qx, cz * 2 + qz, salt);
+      if (r(1) >= (B.chance[area.type] ?? 0)) continue;
+      const w = 2 + Math.floor(r(2) * 3);
+      const d = 2 + Math.floor(r(3) * 3);
+      // Outer corner of the quarter (quarters are 0–6 and 9–15, leaving room for the road cross).
+      const lx0 = qx === 0 ? 0 : CHUNK - w;
+      const lz0 = qz === 0 ? 0 : CHUNK - d;
+      const x = cx * CHUNK + lx0;
+      const z = cz * CHUNK + lz0;
+      let ok = true;
+      for (let lz = lz0; lz < lz0 + d && ok; lz++)
+        for (let lx = lx0; lx < lx0 + w && ok; lx++) {
+          if (road.row && (lz === 7 || lz === 8)) ok = false;
+          if (road.col && (lx === 7 || lx === 8)) ok = false;
+          if (road.canal && (lz === 3 || lz === 4)) ok = false;
+          if (path && (lx === 3 || lz === 12)) ok = false;
+          if (distToFootprintRaw(cx * CHUNK + lx, cz * CHUNK + lz, mx, mz, 2) <= CITY_GEN.landmarkClearance + 1) ok = false;
+        }
+      if (!ok) continue;
+      out.push({ x, z, w, d, storeys: lo + Math.floor(r(4) * (hi - lo + 1)), style: Math.floor(r(5) * 10) });
+    }
+  }
+  if (plotCache.size > 4096) plotCache.clear();
+  plotCache.set(key, out);
+  return out;
+}
+
+/** The building standing on a tile (generation 2), if any. */
+export function buildingAt(seed: number, x: number, z: number): BuildingPlot | undefined {
+  const cx = Math.floor(x / CHUNK);
+  const cz = Math.floor(z / CHUNK);
+  return buildingPlots(seed, cx, cz).find((b) => x >= b.x && x < b.x + b.w && z >= b.z && z < b.z + b.d);
+}
+
 /**
  * A city ground tile: its area's base material, the road and canal network running through (restorable into
  * green avenues and clean water, never walls), and a few small obstacles away from the landmark.
@@ -97,9 +163,11 @@ function generateGround(seed: number, layer: LayerData, x: number, z: number): T
   }
   const [mx, mz] = area.landmark;
   const nearLandmark = distToFootprintRaw(x, z, mx, mz, 2) <= CITY_GEN.landmarkClearance;
-  const blocked = !nearLandmark && feature !== 'road' && feature !== 'water' && tileRandom(seed, lh, x, z, 5) < def.obstacles;
-  if (blocked) feature = 'obstacle';
-  const prop = blocked ? def.prop : undefined;
+  const building = (layer.gen ?? 1) >= 2 && !!buildingAt(seed, x, z);
+  const blocked = building || (!nearLandmark && feature !== 'road' && feature !== 'water' && tileRandom(seed, lh, x, z, 5) < def.obstacles);
+  if (building) feature = 'building';
+  else if (blocked) feature = 'obstacle';
+  const prop = building ? 'building' : blocked ? def.prop : undefined;
   const { pollutionMin, pollutionMax } = TUNING.restore;
   const lo = Math.max(pollutionMin, area.pollutionFloor);
   return {

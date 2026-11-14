@@ -60,6 +60,8 @@ export interface LayerData {
   origin: [number, number, number];
   unlocked: boolean;
   preview: boolean; // visible but not yet playable
+  /** Ground generation version: 2 adds buildings. Saves from before it keep generating as version 1. */
+  gen?: number;
 }
 
 /** Kept as an alias while the rooftop-era code is ported (City 12 removes it). */

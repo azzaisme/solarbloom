@@ -6,6 +6,8 @@ Built with **PlayCanvas Engine 2 + TypeScript + Vite**. The isometric camera is 
 
 ![The park, early on](docs/park.png)
 
+![A cleared stretch of the city: white buildings with roof gardens around the park](docs/city-overview.png)
+
 ## Run it
 
 ```bash
@@ -86,7 +88,7 @@ The city is generated forever outward from the park: the same seed always gives 
 | 💧 Reservoir | clay | Old Cistern | +0.5 💧/s |
 | 🍂 Grove | leaf litter | Elder Tree | +0.4 🌿/s |
 
-  \* Soft-scaled: *n* areas of a type give base × *n*^0.75, so numbers stay readable after hundreds of areas. Districts (old town, docks, towers, parkland) favour different types. Roads and canals run through the city. Rare authored landmarks (the Great Greenhouse, the Solar Cathedral, the Sky Observatory, then one every 10 chunks) stand out on the way.
+  \* Soft-scaled: *n* areas of a type give base × *n*^0.75, so numbers stay readable after hundreds of areas. Districts (old town, docks, towers, parkland) favour different types and building heights. Buildings stand on block corners (more in streets and markets, few in groves): grey and shuttered in the fog, white with roof gardens, solar panels and vines once their area clears. Roads and canals run through the city. Rare authored landmarks (the Great Greenhouse, the Solar Cathedral, the Sky Observatory, then one every 10 chunks) stand out on the way.
 
 - **The fog.** Every area is in one of four states:
 
@@ -155,7 +157,6 @@ tests/                    vitest suites, perf/ (benchmarks, browser perf, leak),
 ## Limitations
 
 - Chunk meshes are dense: about 2 MB of GPU memory per streamed chunk at near zoom.
-- No buildings on city blocks yet (#54); areas are flat ground with props.
 - The rooftop campaign (three linked rooftops) is still in the code behind `createInitialState(seed, { rooftops: true })` for its tests; turning it into city rooftop clusters is #82.
 - Balance has been checked by scripted bots, not human playtests. `src/data/tuning.ts` and `src/data/city.ts` are the places to adjust it.
 - Real-device performance numbers are still to be logged (#99). No camera rotation.

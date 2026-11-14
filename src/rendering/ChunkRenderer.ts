@@ -4,7 +4,8 @@ import { GROUND } from '../core/GameState';
 import { chunkKey } from '../core/Grid';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
-import { PARK_LAYOUT } from '../data/city';
+import { CITY_GEN, PARK_LAYOUT } from '../data/city';
+import { buildingPlots, type BuildingPlot } from '../core/Generation';
 import { PALETTE } from './Materials';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 
@@ -162,6 +163,7 @@ const DEAD: Record<string, string[]> = {
   clay: ['#bda78a', '#b29c7f', '#c6b195'],
   litter: ['#867c6a', '#7c7261', '#908571'],
   obstacle: ['#7d7b74', '#76746d', '#85837b'],
+  building: ['#8d8a82', '#86837b', '#94918a'],
 };
 const ALIVE: Record<string, string> = { lawn: '', paving: '#e9e4d8', road: '', water: '#5cc6e6', clay: '', litter: '', obstacle: '#d9d4c8' };
 
@@ -337,7 +339,16 @@ export class ChunkRenderer {
       if (v.far) this.farTile(b, t, h);
       else this.tile(b, t, h);
     }
-    v.ground = this.setMesh(v.ground, `chunk-${v.key}`, b.build(this.device), vertexColourMaterial(), true);
+    // Buildings (generation 2): grey and shuttered in the fog, white with roof gardens once the area is clear.
+    if ((s.grid.layer(GROUND)!.gen ?? 1) >= 2) {
+      b.grey = fog === 'hidden' ? 0.75 : fog === 'cleared' ? 0 : 0.45;
+      for (const p of buildingPlots(s.grid.seed, v.cx, v.cz)) {
+        // An entry fix may have opened one of its tiles: then it's rubble, not a building.
+        const whole = s.grid.peek(GROUND, p.x, p.z)?.feature === 'building' && s.grid.peek(GROUND, p.x + p.w - 1, p.z + p.d - 1)?.feature === 'building';
+        if (whole) this.building(b, p, h, fog === 'cleared', v.far);
+      }
+    }
+    v.ground = this.setMesh(v.ground, `chunk-${v.key}`, b.build(this.device), vertexColourMaterial(), !v.far); // far chunks: no shadow pass (invisible at that distance, halves their draw calls)
   }
 
   /** Far level of detail: one coloured slab per tile, with a bump for full bloom. */
@@ -357,7 +368,7 @@ export class ChunkRenderer {
     const dead = DEAD[f] ?? DEAD.lawn;
     if (t.blocked) {
       b.add('box', dead[t.variant % dead.length], [x, h, z], [0.96, 0.16, 0.96]);
-      this.prop(b, t.prop ?? 'stump', x, h + 0.08, z, r);
+      if (t.feature !== 'building') this.prop(b, t.prop ?? 'stump', x, h + 0.08, z, r);
       return;
     }
     if (t.occupantId) {
@@ -436,6 +447,45 @@ export class ChunkRenderer {
   }
 
   /** Small props on obstacle tiles (benches, stalls, stumps…). */
+  /** A procedural building from a small kit: body, window bands, parapet, and a roof that blooms when clear. */
+  private building(b: MeshBuilder, p: BuildingPlot, h: number, alive: boolean, far = false) {
+    const H = p.storeys * CITY_GEN.buildings.storey;
+    const cx = p.x + p.w / 2;
+    const cz = p.z + p.d / 2;
+    const bw = p.w - 0.25;
+    const bd = p.d - 0.25;
+    const top = h + 0.08 + H;
+    const wallsDead = ['#a19d93', '#9a8f80', '#8f969a', '#a8a093', '#97928a'];
+    const wallsAlive = ['#f4f1e8', '#eef2ea', '#f6efe4', '#e9f1f0', '#f3f0f5'];
+    const wall = (alive ? wallsAlive : wallsDead)[p.style % 5];
+    b.add('box', wall, [cx, h + 0.08 + H / 2, cz], [bw, H, bd]);
+    if (far) {
+      b.add('box', alive ? '#7cc576' : '#7d7a73', [cx, top + 0.03, cz], [bw * 0.9, 0.06, bd * 0.9]);
+      return;
+    }
+    // Window bands on the two faces the camera sees (south and east), one per storey.
+    const glass = alive ? '#9fd6e8' : '#4b4f54';
+    for (let i = 0; i < p.storeys; i++) {
+      const y = h + 0.08 + CITY_GEN.buildings.storey * (i + 0.55);
+      b.add('box', glass, [cx, y, p.z + p.d - 0.12 + 0.005], [bw * 0.82, CITY_GEN.buildings.storey * 0.38, 0.02]);
+      b.add('box', glass, [p.x + p.w - 0.12 + 0.005, y, cz], [0.02, CITY_GEN.buildings.storey * 0.38, bd * 0.82]);
+    }
+    // Parapet and roof.
+    b.add('box', alive ? '#e2ddd0' : '#7f7b72', [cx, top + 0.04, cz], [bw + 0.06, 0.08, bd + 0.06]);
+    if (alive) {
+      // A roof garden, a solar panel or two, and vines down the sunny face.
+      b.add('box', '#6fbf5e', [cx, top + 0.09, cz], [bw * 0.86, 0.05, bd * 0.86]);
+      const r = new VRng(p.style * 131 + p.x * 7 + p.z * 13);
+      for (let i = 0; i < 1 + (p.style % 2); i++) b.add('box', PALETTE.panel, [p.x + 0.6 + i * 0.7, top + 0.2, p.z + 0.6], [0.5, 0.04, 0.4]);
+      for (let i = 0; i < 3; i++) b.add('sphere', PALETTE.shrub[i % 3], [p.x + r.range(0.5, p.w - 0.5), top + 0.18, p.z + r.range(0.9, p.d - 0.4)], [0.32, 0.22, 0.32]);
+      for (let i = 0; i < 2; i++) b.add('box', '#4f9a4a', [p.x + 0.4 + i * (p.w - 0.8), h + 0.08 + H * 0.5, p.z + p.d - 0.1], [0.12, H * 0.9, 0.03]);
+    } else {
+      // A rusty water tank or a dead antenna on the roof.
+      if (p.style % 3 === 0) b.add('cylinder', '#6e655a', [p.x + 0.6, top + 0.3, p.z + 0.6], [0.4, 0.45, 0.4]);
+      else b.add('box', '#5f5c55', [p.x + p.w - 0.5, top + 0.4, p.z + 0.5], [0.04, 0.7, 0.04]);
+    }
+  }
+
   private prop(b: MeshBuilder, prop: string, x: number, y: number, z: number, r: VRng) {
     switch (prop) {
       case 'bench':

@@ -3,7 +3,7 @@
 export type AreaType = 'park' | 'street' | 'plaza' | 'canal' | 'market' | 'reservoir' | 'grove';
 export type Theme = 'oldtown' | 'docks' | 'towers' | 'parkland';
 /** What a ground tile is made of (look + specialty hooks). Obstacles are blocked. */
-export type TileFeature = 'lawn' | 'paving' | 'road' | 'water' | 'clay' | 'litter' | 'obstacle';
+export type TileFeature = 'lawn' | 'paving' | 'road' | 'water' | 'clay' | 'litter' | 'obstacle' | 'building';
 
 export interface AreaTypeDef {
   type: AreaType;
@@ -76,6 +76,16 @@ export const CITY_GEN = {
   ],
   /** Further out, one authored landmark every this many chunks of distance. */
   authoredEvery: 10,
+  /**
+   * Buildings (generation 2): the chance each quarter of a chunk holds one, by area type, and storeys by district.
+   * They stand on the quarter's outer corner, clear of roads, canals, footpaths and landmarks.
+   */
+  buildings: {
+    chance: { park: 0.1, street: 0.6, plaza: 0.35, canal: 0.45, market: 0.5, reservoir: 0.12, grove: 0.08 } as Record<string, number>,
+    storeys: { oldtown: [2, 4], docks: [1, 3], towers: [3, 6], parkland: [1, 2] } as Record<string, [number, number]>,
+    /** height of one storey in world units */
+    storey: 0.42,
+  },
   /** Difficulty with distance (chunks): pulse cost multiplier and pollution floor, both capped. */
   difficulty: { perChunk: 0.04, max: 2, pollutionPerChunk: 1.5, pollutionFloorMax: 85 },
 };

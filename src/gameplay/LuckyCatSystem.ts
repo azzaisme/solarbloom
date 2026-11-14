@@ -58,7 +58,7 @@ export class LuckyCatSystem {
     const dz = (ob.z - z) * 0.32;
     const area = this.sim.areas.areaOf(t);
     const type = area ? AREA_TYPES[this.sim.areas.info(area).type] : undefined;
-    return { id, roofId: GROUND, pos: [x + 0.5 + dx, 0.08, z + 0.5 + dz], rotY: 200 + ((x * 37 + z * 11) % 60), needsFreeTile: [x, z], hint: `beside a ${type?.obstacleName ?? 'quiet corner'}` };
+    return { id, roofId: GROUND, pos: [x + 0.5 + dx, 0.08, z + 0.5 + dz], rotY: 200 + ((x * 37 + z * 11) % 60), needsFreeTile: [x, z], hint: ob.prop === 'building' ? 'beside an old building' : `beside a ${type?.obstacleName ?? 'quiet corner'}` };
   }
 
   /** Up to three nooks per cleared area (deterministic: the first obstacles in tile order). */

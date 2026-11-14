@@ -41,7 +41,7 @@ describe('Lucky Cat in the endless city (City 13)', () => {
       expect(t.blocked).toBe(false);
       expect(sim.areas.fog(sim.areas.areaOf(t)!)).toBe('cleared');
       expect(sim.grid.neighbors(t).some((n) => n.blocked && !!n.prop)).toBe(true);
-      expect(a.hint).toMatch(/^beside a /);
+      expect(a.hint).toMatch(/^beside an? /);
     }
   });
 
