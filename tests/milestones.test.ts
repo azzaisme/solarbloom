@@ -199,9 +199,7 @@ describe('area milestone generator (City 09.1)', () => {
     expect(sim.areas.ready(id)).toBe(true);
   });
 
-  it('the park and the rooftop campaign have no specialty to meet', () => {
+  it('the park has no specialty to meet', () => {
     expect(city(1).milestones.met(PARK)).toBe(true);
-    const roofs = new Sim(createInitialState(1, { rooftops: true }));
-    expect(roofs.milestones.met('anything')).toBe(true);
   });
 });

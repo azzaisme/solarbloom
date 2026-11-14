@@ -3,6 +3,7 @@ import { SaveService } from '../../src/app/SaveService';
 import { createInitialState, GROUND } from '../../src/core/GameState';
 import type { MachineData } from '../../src/core/types';
 import { Sim } from '../../src/gameplay/Sim';
+import { makeSim } from '../helpers';
 
 const ms = (fn: () => void, reps = 1) => {
   const t0 = performance.now();
@@ -39,7 +40,7 @@ function syntheticCity(seed = 99) {
 
 describe('performance: world model (City 01.3)', () => {
   it('lookups cost the same in a 100-tile world and a 100,000+-tile world', () => {
-    const small = new Sim(createInitialState(1, { rooftops: true }));
+    const small = makeSim(1);
     const big = syntheticCity();
     const probe = (sim: Sim, layer: string, x: number, z: number) => () => {
       sim.grid.tilesNear({ roofId: layer, x, z, size: 2 }, 2);

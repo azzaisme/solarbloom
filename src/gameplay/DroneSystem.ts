@@ -1,6 +1,5 @@
 import { GROUND } from '../core/GameState';
-import { distToFootprint, relayLocal } from '../core/Grid';
-import { LINKS, type RoofLinkDef } from '../data/rooftops';
+import { distToFootprint } from '../core/Grid';
 import type { DroneData, MachineData, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
@@ -84,30 +83,19 @@ export class DroneSystem {
 
   /** Roof the drone is over right now. */
   roofOf(d: DroneData): string {
-    return d.roofId ?? this.sim.machine(d.hubId)?.roofId ?? 'r1';
+    return d.roofId ?? this.sim.machine(d.hubId)?.roofId ?? GROUND;
   }
 
-  /** World position (x, roof-surface y, z) of a drone, including mid-bridge crossings. */
+  /** World position (x, surface y, z) of a drone. */
   worldOf(d: DroneData): [number, number, number] {
     const g = this.sim.grid;
-    if (d.cross) {
-      const l = LINKS.find((x) => x.id === d.cross!.linkId)!;
-      const a = this.pylonWorld(l, d.cross.fromRoof);
-      const b = this.pylonWorld(l, d.cross.fromRoof === l.from ? l.to : l.from);
-      const k = d.cross.t;
-      return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
-    }
     const r = g.roof(this.roofOf(d))!;
     const t = d.far && d.targetTileId ? g.byTileId(d.targetTileId) : undefined;
     const [px, pz] = t ? this.farPos(d, t) : [d.px, d.pz];
     return [r.origin[0] + px, r.origin[1] + r.height, r.origin[2] + pz];
   }
 
-  private pylonWorld(l: RoofLinkDef, roofId: string): [number, number, number] {
-    const r = this.sim.grid.roof(roofId)!;
-    const [px, pz] = relayLocal(r, l.from === roofId ? l.fromTile : l.toTile);
-    return [r.origin[0] + px, r.origin[1] + r.height, r.origin[2] + pz];
-  }
+
 
   /**
    * Hubs in the city link into networks (any two within `networkRange`, transitively). A drone works the
@@ -146,64 +134,9 @@ export class DroneSystem {
     return out;
   }
 
-  /** Drone Dispatch: an idle drone helps on a connected rooftop, near the arriving relay. */
-  private findRemoteJob(d: DroneData): TileData | undefined {
-    const s = this.sim;
-    if (s.upgrades.level('droneDispatch') <= 0) return undefined;
-    const hub = s.machine(d.hubId);
-    if (!hub) return undefined;
-    let best: TileData | undefined;
-    let bestScore = Infinity;
-    for (const l of s.hood.linksOf(hub.roofId)) {
-      const remote = l.from === hub.roofId ? l.to : l.from;
-      if (!s.grid.isPlayable(remote)) continue;
-      const [rx, rz] = l.from === remote ? l.fromTile : l.toTile;
-      for (const t of s.grid.tilesWithin(remote, rx, rz, this.radius())) {
-        const dist = Math.abs(t.x - rx) + Math.abs(t.z - rz);
-        if (!s.restoration.isEligible(t)) continue;
-        const score = dist + (t.ground === 'prepared' ? 0 : 1.5);
-        if (score < bestScore) {
-          bestScore = score;
-          best = t;
-        }
-      }
-    }
-    return best;
-  }
-
-  /** Moves toward a point on any roof, flying over the bridge when it's on another roof. True on arrival. */
-  private travel(d: DroneData, roofId: string, x: number, z: number, dt: number): boolean {
-    const s = this.sim;
-    const here = this.roofOf(d);
-    if (d.cross) {
-      const l = LINKS.find((q) => q.id === d.cross!.linkId)!;
-      const a = this.pylonWorld(l, d.cross.fromRoof);
-      const to = d.cross.fromRoof === l.from ? l.to : l.from;
-      const b = this.pylonWorld(l, to);
-      const len = Math.max(0.5, Math.hypot(b[0] - a[0], b[2] - a[2]));
-      d.cross.t += (TUNING.drone.flySpeed * s.upgrades.droneFlyMult * dt) / len;
-      if (d.cross.t >= 1) {
-        const r = s.grid.roof(to)!;
-        const [px, pz] = relayLocal(r, l.from === to ? l.fromTile : l.toTile);
-        d.roofId = to;
-        d.px = px;
-        d.pz = pz;
-        d.cross = undefined;
-      }
-      return false;
-    }
-    if (here === roofId) return this.moveToward(d, x, z, dt);
-    const l = s.hood.linksOf(here).find((q) => q.from === roofId || q.to === roofId);
-    if (!l) {
-      // No bridge any more (shouldn't happen): hop home.
-      d.roofId = roofId;
-      d.px = x;
-      d.pz = z;
-      return true;
-    }
-    const [px, pz] = relayLocal(s.grid.roof(here)!, l.from === here ? l.fromTile : l.toTile);
-    if (this.moveToward(d, px, pz, dt)) d.cross = { linkId: l.id, fromRoof: here, t: 0 };
-    return false;
+  /** Moves toward a point on its own layer. True on arrival. */
+  private travel(d: DroneData, _roofId: string, x: number, z: number, dt: number): boolean {
+    return this.moveToward(d, x, z, dt);
   }
 
   /** Chain Intelligence: how likely a tile is to set off a synergy if restored now. */
@@ -312,11 +245,7 @@ export class DroneSystem {
         case 'idle': {
           d.timer -= dt;
           if (d.timer > 0) break;
-          if (this.roofOf(d) !== hub.roofId) {
-            d.mode = 'returning'; // finished a dispatch job: head home over the bridge
-            break;
-          }
-          const job = this.findJob(d) ?? this.findRemoteJob(d);
+          const job = this.findJob(d);
           if (!job) {
             this.status.set(d.id, 'napping');
             const hx = hub.x + hub.size / 2;
@@ -401,7 +330,7 @@ export class DroneSystem {
           if (this.travel(d, hub.roofId, hub.x + hub.size / 2, hub.z + hub.size / 2, dt)) {
             d.mode = 'idle';
             d.timer = TUNING.drone.retrySeconds;
-          } else if (!d.cross && this.roofOf(d) === hub.roofId && this.findJob(d)) {
+          } else if (this.roofOf(d) === hub.roofId && this.findJob(d)) {
             d.mode = 'idle';
             d.timer = 0;
           }

@@ -191,6 +191,5 @@ describe('park art stages (City 05.2)', () => {
     expect(seen).toEqual([0, 1, 2, 3]); // never jumps to "lush" before the fountain
     sim.state.progression.coreActivated = true;
     expect(sim.progression.parkStage()).toBe(4);
-    expect(new S(create(5, { rooftops: true })).progression.parkStage()).toBe(0);
   });
 });

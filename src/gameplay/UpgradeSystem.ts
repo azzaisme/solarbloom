@@ -41,14 +41,13 @@ export class UpgradeSystem {
   }
 
   applyCaps() {
-    const mult = 1 + 0.5 * this.level('seedVault') + (this.sim.hood?.capBonus() ?? 0) + (this.sim.areas?.storageBonus() ?? 0);
+    const mult = 1 + 0.5 * this.level('seedVault') + (this.sim.areas?.storageBonus() ?? 0);
     for (const k of KINDS) this.sim.state.caps[k] = Math.max(this.sim.state.caps[k], TUNING.start.caps[k] * mult);
   }
 
-  /** The upgrades that exist in this game (the city and the rooftop campaign each have their own few). */
+  /** The upgrades that exist in this game. */
   all() {
-    const city = this.sim.grid.isPlayable('g');
-    return UPGRADES.filter((d) => !d.mode || d.mode === (city ? 'city' : 'rooftops'));
+    return UPGRADES;
   }
 
   /** Upgrades in drawer order: grouped by system, then as listed. */

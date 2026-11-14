@@ -1,6 +1,5 @@
 import { GROUND } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
-import { LINKS, type RoofLinkDef } from '../data/rooftops';
 import type { MachineData, RestoreSource, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
@@ -235,19 +234,18 @@ export class BloomChainSystem {
       .sort((a, b) => distToFootprint(a.x, a.z, m.x, m.z, 1) - distToFootprint(b.x, b.z, m.x, m.z, 1) || (a.id < b.id ? -1 : 1));
   }
 
-  /** An Elder Tree: the Canopy rooftop's Core, or a city grove's landmark. */
+  /** An Elder Tree: a grove's landmark. */
   isElder(m: Pick<MachineData, 'type' | 'roofId' | 'x' | 'z'>): boolean {
     if (m.type !== 'core') return false;
-    if (m.roofId === 'r3') return true;
     const id = m.roofId === GROUND ? this.sim.areas.areaOf(m) : undefined;
     return !!id && this.sim.areas.info(id).landmarkKind === 'elder';
   }
 
-  /** Canopy Burst reach from an Elder Tree's footprint (further once its area/rooftop is awake). */
+  /** Canopy Burst reach from an Elder Tree's footprint (further once its grove is awake). */
   canopyBurstRadius(tree?: Pick<MachineData, 'roofId' | 'x' | 'z'>): number {
     const c = TUNING.neighbourhood.canopy;
-    const id = tree && tree.roofId === GROUND ? this.sim.areas.areaOf(tree) : undefined;
-    const awake = id ? this.sim.areas.fog(id) === 'cleared' : this.sim.hood.coreAwake('r3');
+    const id = tree ? this.sim.areas.areaOf(tree) : undefined;
+    const awake = !!id && this.sim.areas.fog(id) === 'cleared';
     return awake ? c.burstRadiusAwake : c.burstRadius;
   }
 
@@ -462,46 +460,10 @@ export class BloomChainSystem {
       }
     }
     if (run.mode === 'mega' && kind === 'RESTORE') this.spreadMega(run, tile, depth);
-    this.reactRelays(run, tile, depth);
     this.reactCityRelays(run, tile, depth);
   }
 
-  // ───────────── cross-roof relays ─────────────
-
-  /** The edge tile of a link on a given roof. */
-  private relayTile(l: RoofLinkDef, roofId: string): [number, number] {
-    return l.from === roofId ? l.fromTile : l.toTile;
-  }
-
-  /** Tiles whose chain effects charge a link's relay on this roof. */
-  relayZone(l: RoofLinkDef, roofId: string): TileData[] {
-    const [rx, rz] = this.relayTile(l, roofId);
-    const R = TUNING.neighbourhood.relay.zoneRadius;
-    return this.sim.grid.tilesWithin(roofId, rx, rz, R);
-  }
-
-  /**
-   * A chain effect inside a relay's zone sends one pulse across its bridge (once per link per chain,
-   * only when the relay has recharged, and only if something on the far side can bloom).
-   */
-  private reactRelays(run: ChainRun, tile: TileData, depth: number) {
-    const s = this.sim;
-    if (!this.canGrow(run, depth)) return;
-    for (const l of LINKS) {
-      if (l.from !== tile.roofId && l.to !== tile.roofId) continue;
-      if (run.relaysFired.has(l.id) || !s.hood.relayReady(l.id)) continue;
-      const [rx, rz] = this.relayTile(l, tile.roofId);
-      if (Math.abs(tile.x - rx) + Math.abs(tile.z - rz) > TUNING.neighbourhood.relay.zoneRadius) continue;
-      const remote = l.from === tile.roofId ? l.to : l.from;
-      if (!s.grid.isPlayable(remote) || !this.remoteTargets(run, l, remote, 1).length) continue;
-      run.relaysFired.add(l.id);
-      const st = s.state.links[l.id];
-      st.readyAt = s.time + s.hood.relayCooldown();
-      const travel = TUNING.neighbourhood.relay.travelSeconds;
-      this.enqueue(run, { type: 'RELAY', source: tile.id, target: l.id, cause: 'relay', depth: depth + 1, roofId: remote }, travel);
-      s.bus.emit('relay.sent', { linkId: l.id, fromRoof: tile.roofId, toRoof: remote, chainId: run.id, travel });
-    }
-  }
+  // ───────────── Bloom Relays ─────────────
 
   /**
    * City 10.4: a bloom beside a Bloom Relay sends one pulse down each of its ready links (once per link per
@@ -525,19 +487,6 @@ export class BloomChainSystem {
         s.bus.emit('relay.city', { from: r.id, to: o.id, linkId: id, chainId: run.id, travel });
       }
     }
-  }
-
-  /**
-   * Where a relay pulse lands on the far roof: synergy spots near the arriving pylon first. Dead ground
-   * restores and grass grows; if everything nearby is already in full bloom, those tiles turn lush, so a
-   * crossing always does something visible (and the machines beside it respond).
-   */
-  remoteTargets(run: ChainRun | undefined, l: RoofLinkDef, roofId: string, count: number): TileData[] {
-    const s = this.sim;
-    const roof = s.grid.roof(roofId);
-    if (!roof || count <= 0) return [];
-    const [rx, rz] = this.relayTile(l, roofId);
-    return this.remoteTargetsAt(run, roofId, rx, rz, count, TUNING.neighbourhood.relay.remoteRadius);
   }
 
   /** Remote blooms around a point: live (restorable or growable) tiles by synergy, then lush ones. */
@@ -834,7 +783,7 @@ export class BloomChainSystem {
         return;
       }
       case 'RELAY': {
-        if (ev.target.startsWith('relay:')) {
+        {
           // City 10.4: a pulse arrives at the far Bloom Relay.
           const dest = s.relays.otherEnd(ev.target, ev.source!);
           if (!dest) return;
@@ -854,24 +803,6 @@ export class BloomChainSystem {
           });
           return;
         }
-        const l = LINKS.find((x) => x.id === ev.target);
-        const remote = ev.roofId;
-        if (!l || !remote) return;
-        let n = s.hood.relayTargets();
-        if (s.state.relayBonus > 0) {
-          n += s.state.relayBonus; // Golden Relay (Lucky Cat): spent on this crossing
-          s.state.relayBonus = 0;
-        }
-        const targets = this.remoteTargets(run, l, remote, n);
-        const st = s.state.links[l.id];
-        if (st) st.crossings++;
-        run.roofs.add(remote);
-        this.emit(run, { ...ev, amount: targets.length });
-        targets.forEach((t, i) => {
-          run.visited.add(t.id);
-          const type = t.ground !== 'restored' ? 'RESTORE' : t.bloom < TUNING.restore.maxBloom ? 'GROW' : 'LUSH';
-          this.enqueue(run, { type, source: ev.target, target: t.id, cause: 'relay', depth: ev.depth + 1 }, 0.12 + i * 0.12);
-        });
         return;
       }
       case 'LUSH': {

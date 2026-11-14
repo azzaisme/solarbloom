@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createInitialState } from '../src/core/GameState';
 import type { ChainEvent } from '../src/gameplay/BloomChainSystem';
 import { Sim } from '../src/gameplay/Sim';
 import { TUNING } from '../src/data/tuning';
-import { fill, makeSim, rich, setGround } from './helpers';
+import { fill, GROUND, makeSim, rich, setGround } from './helpers';
 
 function place(sim: Sim, type: Parameters<Sim['build']['place']>[0], x: number, z: number) {
   const size = type === 'droneHub' || type === 'motherTree' ? 2 : 1;
@@ -143,7 +142,7 @@ describe('bloom chain engine', () => {
 
   it('is deterministic: the same action on the same state gives the same events and state', () => {
     const build = () => {
-      const sim = new Sim(createInitialState(99, { rooftops: true }));
+      const sim = makeSim(99);
       rich(sim);
       fill(sim, 0, 0, 7, 7, 'prepared');
       place(sim, 'pollinator', 3, 3);
@@ -181,7 +180,7 @@ describe('bloom chain engine', () => {
   it('mega bloom is bounded by its budget and may break concrete', () => {
     const sim = makeSim();
     rich(sim);
-    setGround(sim, 4, 4, 'restored');
+    setGround(sim, 4, 4, 'restored', GROUND); // in the park: a Mega Bloom only ever starts in revealed city areas
     let combo = 0;
     sim.bus.on('chain.ended', (e) => (combo = e.combo));
     expect(sim.chains.startMega(6)).toBe(true);

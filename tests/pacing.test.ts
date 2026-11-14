@@ -11,9 +11,9 @@ import { Sim } from '../src/gameplay/Sim';
  * other, aims pulses at synergy tiles, buys upgrades when nothing better is pending.
  * It is a pacing guard, not a balance oracle: real players are slower and less optimal.
  */
-export function playSession(seed: number, actionEvery = 3, minutes = 20, park = false) {
-  const sim = new Sim(createInitialState(seed, { rooftops: !park }));
-  const layer = park ? GROUND : 'r1';
+export function playSession(seed: number, actionEvery = 3, minutes = 20) {
+  const sim = new Sim(createInitialState(seed));
+  const layer = GROUND;
   sim.cat.anchorView = () => 'visible';
   const order: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'pollinator', 'motherTree', 'solar', 'pollinator'];
   const built: Record<string, number> = {};
@@ -79,28 +79,10 @@ export function playSession(seed: number, actionEvery = 3, minutes = 20, park = 
   };
 }
 
-describe('pacing (scripted player)', () => {
-  it('reaches every Round 2 beat and the Core without long dead time', () => {
-    for (const seed of [7, 21, 99]) {
-      const r = playSession(seed);
-      const fmt = (s?: number) => (s === undefined ? '—' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
-      // eslint-disable-next-line no-console
-      console.log(
-        `seed ${seed}: upgrade ${fmt(r.firsts.upgrade)} condenser ${fmt(r.firsts.condenser)} garden ${fmt(r.firsts.pollinator)} ×5 ${fmt(r.firsts.chain5)} cat ${fmt(r.firsts.cat)} drone ${fmt(r.firsts.droneHub)} ×10 ${fmt(r.firsts.chain10)} tree ${fmt(r.firsts.motherTree)} pulse ${fmt(r.firsts.treePulse)} core ${fmt(r.core)} | stuck ${r.stuck}s maxCombo ${r.maxCombo} avg ${r.avgChain}`,
-      );
-      expect(r.core).toBeGreaterThan(0);
-      // Chain size depends on deliberate layouts (proven in chains.test.ts); the bot just must chain at all.
-      expect(r.maxCombo).toBeGreaterThanOrEqual(2);
-      expect(r.firsts.cat).toBeDefined();
-      expect(r.stuck).toBeLessThan(90);
-    }
-  });
-});
-
 describe('pacing in the city park (scripted player)', () => {
   it('hits the Round 2 beats in the park and wakes the fountain without long dead time', () => {
     for (const seed of [7, 21, 99]) {
-      const r = playSession(seed, 3, 25, true);
+      const r = playSession(seed, 3, 25);
       const fmt = (s?: number) => (s === undefined ? '—' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
       // eslint-disable-next-line no-console
       console.log(

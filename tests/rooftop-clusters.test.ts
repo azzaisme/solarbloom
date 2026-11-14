@@ -5,7 +5,7 @@ import { createInitialState, GROUND, isRestorable } from '../src/core/GameState'
 import { Grid } from '../src/core/Grid';
 import type { MachineData } from '../src/core/types';
 import { CITY_GEN } from '../src/data/city';
-import { ROOF_BY_ID } from '../src/data/rooftops';
+import { ROOF_TEMPLATES as ROOF_BY_ID } from '../src/data/templates';
 import { Sim } from '../src/gameplay/Sim';
 
 const saver = new SaveService(undefined);

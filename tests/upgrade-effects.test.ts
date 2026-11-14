@@ -8,7 +8,7 @@ import { upgradeHighlights } from '../src/gameplay/UpgradeEffects';
 
 /** A game with one of every machine, a cleared area beyond the park and money to burn. */
 function world(rooftops: boolean) {
-  const sim = new Sim(createInitialState(4, rooftops ? { rooftops: true } : {}));
+  const sim = new Sim(createInitialState(4));
   const st = sim.state;
   st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
   st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
@@ -54,8 +54,6 @@ const PROBES: Record<string, (s: Sim) => number> = {
   pollinatorReach: (s) => s.upgrades.pollinatorReach,
   waterBloom: (s) => s.upgrades.waterBloom,
   treeResonance: (s) => s.upgrades.treeRadius,
-  relay2: (s) => s.hood.relayTargets(),
-  droneDispatch: (s) => s.upgrades.level('droneDispatch'),
   corridorReach: (s) => s.upgrades.corridorRange,
   droneMesh: (s) => s.upgrades.networkRange,
   relayLens: (s) => s.relays.range() + s.relays.targets(),
@@ -64,7 +62,7 @@ const PROBES: Record<string, (s: Sim) => number> = {
 };
 
 describe('upgrade tree for scale (City 09.4)', () => {
-  for (const rooftops of [false, true]) {
+  for (const rooftops of [false]) {
     it(`${rooftops ? 'rooftops' : 'city'}: every upgrade changes what it says, and shows where in the world`, () => {
       const sim = world(rooftops);
       for (const def of sim.upgrades.all()) {

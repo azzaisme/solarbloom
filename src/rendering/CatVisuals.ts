@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import type { CatAnchor } from '../data/rooftops';
+import type { CatAnchor } from '../data/templates';
 import type { Sim } from '../gameplay/Sim';
 import { mat, PALETTE } from './Materials';
 import { group, shape } from './Shapes';

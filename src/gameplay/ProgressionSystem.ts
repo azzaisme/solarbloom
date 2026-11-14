@@ -34,9 +34,9 @@ export class ProgressionSystem {
 
   constructor(private sim: Sim) {}
 
-  /** The starting area: the park in the city, or the Seed rooftop in the legacy rooftop layout (tests). */
+  /** The starting area is the park (the fixed rooftop campaign is gone, City 12.4). */
   get homeIsPark(): boolean {
-    return !this.sim.grid.layer('r1');
+    return true;
   }
 
   /**
@@ -44,7 +44,7 @@ export class ProgressionSystem {
    * "the Seed rooftop" asks for 'home'.
    */
   tilesFor(id: string): TileData[] {
-    if (id === HOME) return this.homeIsPark ? this.sim.areas.tiles(PARK) : this.sim.grid.tilesOf('r1');
+    if (id === HOME) return this.sim.areas.tiles(PARK);
     if (this.sim.grid.layer(id)) return this.sim.grid.tilesOf(id);
     return this.sim.areas.tiles(id);
   }
@@ -114,11 +114,8 @@ export class ProgressionSystem {
     }
     p.coreActivated = true;
     p.coreActivatedAt = s.time;
-    p.cores = { ...p.cores, r1: true };
-    const r2 = s.grid.roof('r2');
-    if (r2) r2.unlocked = true; // revealed; playable once the Skybridge Relay is built
-    // In the city, waking the park's fountain clears the park's fog and reveals the first ring of areas.
-    if (this.homeIsPark) s.areas.clear(PARK, true);
+    // Waking the park's fountain clears the park's fog and reveals the first ring of areas.
+    s.areas.clear(PARK, true);
     s.production.markDirty();
     s.bus.emit('rooftop.coreRestored', {});
     return true;

@@ -160,7 +160,7 @@ src/
     CanalNetwork          canal water networks: clean water tiles linking condensers and Reservoir Gardens, routing, paths
     Milestones            area milestone generator: each landmark's specialty action, layout checks, progress, canal plans
     DistrictSystem        district membership, district bloom availability, claim-once reward and replays
-    BuildSystem, UpgradeSystem, ProgressionSystem, NeighbourhoodSystem (legacy rooftops), Metrics
+    BuildSystem, UpgradeSystem, ProgressionSystem, Metrics
   data/                   every balance knob: tuning.ts (TUNING.city, TUNING.park, …), city.ts (area types, park layout, generator), machines.ts, upgrades.ts
   rendering/              PlayCanvas only; listens to state and never decides rules
     ChunkRenderer         streams merged vertex-coloured chunk meshes and fog sheets around the camera, far LOD
@@ -185,7 +185,6 @@ tests/                    vitest suites, perf/ (benchmarks, browser perf, leak),
 ## Limitations
 
 - Chunk meshes are dense: about 2 MB of GPU memory per streamed chunk at near zoom.
-- The rooftop campaign (three linked rooftops) is still in the code behind `createInitialState(seed, { rooftops: true })` for its tests; turning it into city rooftop clusters is #82.
 - Balance has been checked by scripted bots, not human playtests. `src/data/tuning.ts` and `src/data/city.ts` are the places to adjust it.
 - Real-device performance numbers are still to be logged (#99). No camera rotation.
 

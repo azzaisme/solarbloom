@@ -16,7 +16,6 @@ import { LuckyCatSystem } from './LuckyCatSystem';
 import { AreaSystem } from './AreaSystem';
 import { Metrics } from './Metrics';
 import { MilestoneSystem } from './Milestones';
-import { NeighbourhoodSystem } from './NeighbourhoodSystem';
 import { ProductionSystem } from './ProductionSystem';
 import { ProgressionSystem } from './ProgressionSystem';
 import { RestorationSystem } from './RestorationSystem';
@@ -41,7 +40,6 @@ export class Sim {
   readonly advisor: Advisor;
   readonly progression: ProgressionSystem;
   readonly metrics: Metrics;
-  readonly hood: NeighbourhoodSystem;
   readonly areas: AreaSystem;
   readonly districts: DistrictSystem;
   readonly canals: CanalNetwork;
@@ -90,7 +88,6 @@ export class Sim {
     this.cat = new LuckyCatSystem(this);
     this.advisor = new Advisor(this);
     this.progression = new ProgressionSystem(this);
-    this.hood = new NeighbourhoodSystem(this);
     this.areas = new AreaSystem(this);
     this.districts = new DistrictSystem(this);
     this.milestones = new MilestoneSystem(this);

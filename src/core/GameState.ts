@@ -1,5 +1,4 @@
 import { PARK_LAYOUT } from '../data/city';
-import { ROOFTOPS, type RooftopDef } from '../data/rooftops';
 import { TUNING } from '../data/tuning';
 import { Rng } from './Rng';
 import type { GameState, LayerData, MachineData, TileData } from './types';
@@ -7,38 +6,14 @@ import type { GameState, LayerData, MachineData, TileData } from './types';
 /** v1 Round 1 · v2 Round 2 · v3 Phase 3 · v4 the endless city (chunked world, tile deltas; older saves are scrapped). */
 export const SAVE_VERSION = 4;
 
-/** Id of the endless ground layer (the city). Not playable until the park arrives (City 05). */
+/** Id of the endless ground layer (the city). */
 export const GROUND = 'g';
 
-export function layerFromDef(def: RooftopDef): LayerData {
-  return {
-    id: def.id,
-    name: def.name,
-    kind: 'raised',
-    width: def.width,
-    depth: def.depth,
-    height: def.height,
-    origin: [...def.origin] as [number, number, number],
-    unlocked: def.unlocked,
-    preview: def.preview,
-  };
-}
-
-/** The endless city ground. Playable from the start in the city; locked in the legacy rooftop layout. */
 /** The current ground generation version (new games). */
 export const GROUND_GEN = 3;
 
 export function groundLayer(playable = true): LayerData {
   return { id: GROUND, name: 'The City', kind: 'ground', width: 0, depth: 0, height: playable ? 0 : -40, origin: [0, 0, 0], unlocked: playable, preview: !playable, gen: GROUND_GEN };
-}
-
-export interface NewGameOptions {
-  /**
-   * Legacy layout: the Seed, Reservoir and Canopy rooftops (Phase 3), with the city ground locked. The game
-   * starts in the city park; mechanics tests use this small, bounded layout until rooftops return as city
-   * areas (City 12).
-   */
-  rooftops?: boolean;
 }
 
 /** Adds a fixed structure (Core, starter panel). Tile occupancy is derived from machines by the world. */
@@ -48,16 +23,9 @@ export function placeFixed(state: Pick<GameState, 'machines' | 'nextId'>, roofId
   return m;
 }
 
-/** The fixed structures a rooftop starts with. */
-export function placeRoofFixtures(state: Pick<GameState, 'machines' | 'nextId'>, def: RooftopDef) {
-  if (def.core) placeFixed(state, def.id, 'core', def.core[0], def.core[1], 2);
-  if (def.starterSolar) placeFixed(state, def.id, 'solar', def.starterSolar[0], def.starterSolar[1], 1, true);
-}
-
-export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0, opts: NewGameOptions = {}): GameState {
+export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): GameState {
   const holder = { machines: [] as MachineData[], nextId: 1 };
-  if (opts.rooftops) for (const def of ROOFTOPS) placeRoofFixtures(holder, def);
-  else placeFixed(holder, GROUND, 'solar', PARK_LAYOUT.starterSolar[0], PARK_LAYOUT.starterSolar[1], 1, true);
+  placeFixed(holder, GROUND, 'solar', PARK_LAYOUT.starterSolar[0], PARK_LAYOUT.starterSolar[1], 1, true);
   return {
     version: SAVE_VERSION,
     seed,
@@ -66,7 +34,7 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0, opts:
     nextId: holder.nextId,
     resources: { ...TUNING.start.resources },
     caps: { ...TUNING.start.caps },
-    layers: opts.rooftops ? [...ROOFTOPS.map(layerFromDef), groundLayer(false)] : [groundLayer(true)],
+    layers: [groundLayer(true)],
     machines: holder.machines,
     drones: [],
     upgrades: {},
@@ -84,10 +52,8 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0, opts:
       hintsDismissed: false,
       introSeen: false,
       pulseCharge: 0,
-      cores: {},
       overflows: 0,
       canopyBursts: 0,
-      neighbourhoodBloomAt: -1,
     },
     stats: { tilesRestored: 0, maxCombo: 0, chains: 0, catsFound: 0, droneJobs: 0, firsts: {}, chainEffects: 0, stuckSeconds: 0 },
   };

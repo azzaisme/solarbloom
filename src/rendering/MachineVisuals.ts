@@ -122,8 +122,8 @@ export class MachineVisuals {
         this.motherTree(v);
         break;
       case 'core': {
-        const lk = m.roofId === 'g' ? this.landmarkKind(m) : '';
-        const kind = m.roofId === 'r2' || lk === 'cistern' ? 'cistern' : m.roofId === 'r3' || lk === 'elder' ? 'elder' : lk === 'fountain' || lk === 'lock' ? 'fountain' : 'crystal';
+        const lk = this.landmarkKind(m);
+        const kind = lk === 'cistern' ? 'cistern' : lk === 'elder' ? 'elder' : lk === 'fountain' || lk === 'lock' ? 'fountain' : 'crystal';
         v.coreKind = kind;
         if (kind === 'cistern') this.cistern(v);
         else if (kind === 'elder') this.elderTree(v);
@@ -534,7 +534,7 @@ export class MachineVisuals {
   }
 
   /** Core look: dormant / ready (pulsing gold) / awakened. */
-  setCoreState(state: 'dormant' | 'ready' | 'awake', instant = false, roofId = 'r1') {
+  setCoreState(state: 'dormant' | 'ready' | 'awake', instant = false, roofId = GROUND) {
     const v = this.coreView(roofId);
     if (v) this.applyCoreState(v, state, instant);
   }
@@ -602,7 +602,7 @@ export class MachineVisuals {
   }
 
   /** World point above a Core (by roof, or a specific landmark machine id). */
-  coreWorld(roofId = 'r1', machineId?: string): [number, number, number] | undefined {
+  coreWorld(roofId = GROUND, machineId?: string): [number, number, number] | undefined {
     const v = machineId ? this.views.get(machineId) : this.coreView(roofId);
     if (!v) return undefined;
     const p = v.root.getPosition();

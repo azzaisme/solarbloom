@@ -3,7 +3,7 @@ import type { CatRewardType, MachineData, TileData } from '../core/types';
 import { PARK } from '../core/Areas';
 import { GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
-import { CAT_ANCHORS, type CatAnchor } from '../data/rooftops';
+import { CAT_ANCHORS, type CatAnchor } from '../data/templates';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
@@ -177,15 +177,7 @@ export class LuckyCatSystem {
       const pool = away.length ? away : areas;
       const id = pool[Math.floor(this.sim.rng.next() * pool.length)];
       seeds = s.areas.tiles(id).filter(ok);
-    } else {
-      const roofs = s.grid.playableLayers().filter((r) => s.grid.tilesOf(r.id).some(ok));
-      if (!roofs.length) return [];
-      // Prefer a rooftop other than the one the player started on, so the reward shows up somewhere new.
-      const away = roofs.filter((r) => r.id !== 'r1');
-      const pool = away.length ? away : roofs;
-      const roof = pool[Math.floor(this.sim.rng.next() * pool.length)];
-      seeds = s.grid.tilesOf(roof.id).filter(ok);
-    }
+    } else return [];
     const start = seeds[Math.floor(this.sim.rng.next() * seeds.length)];
     const home = s.areas.areaOf(start);
     const out: TileData[] = [start];
@@ -299,12 +291,10 @@ export class LuckyCatSystem {
   goldenRelayAvailable() {
     const s = this.sim;
     if (s.state.relayBonus > 0) return false;
-    if (this.city()) return s.state.machines.some((m) => s.chains.isCorridor(m) && s.chains.corridorNext(m).length > 0);
-    return s.hood.builtLinks().length > 0;
+    return s.state.machines.some((m) => s.chains.isCorridor(m) && s.chains.corridorNext(m).length > 0);
   }
 
   catsGardenAvailable() {
-    if (!this.city() && this.sim.grid.playableLayers().length < 2) return false;
     return this.catsGardenTiles().length > 0;
   }
 

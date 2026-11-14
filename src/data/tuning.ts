@@ -202,19 +202,8 @@ export const TUNING = {
     travelPerTile: 0.03, // seconds of travel per tile of distance (presentation and chain timing)
   },
 
-  /** Phase 3: the connected neighbourhood. Everything here is a starting point for playtesting. */
+  /** Reservoir Gardens, the Elder Tree's Canopy Burst and Overcharge (first built for the rooftops, used by the city). */
   neighbourhood: {
-    /** Each unlocked extra rooftop raises every storage cap by this share of the starting cap. */
-    roofCapBonus: 0.5,
-    relay: {
-      zoneRadius: 1, // Manhattan distance from the relay's edge tile that charges it
-      cooldown: 8, // seconds between cross-roof pulses on one link
-      cooldownRelay2: 6,
-      targets: 1, // remote blooms per crossing (Relay I)
-      targetsRelay2: 2,
-      remoteRadius: 4, // remote blooms land within this distance of the arriving relay
-      travelSeconds: 0.9, // pulse travel time across a bridge (also the chain step delay)
-    },
     /** Reservoir Overflow: condensers in range fill a Reservoir Garden; when full it spills. */
     reservoir: {
       condenserRange: 2, // condenser footprint → garden footprint (Manhattan)
@@ -224,7 +213,6 @@ export const TUNING = {
       radius: 2,
       lushSeconds: 25, // newly irrigated plants grow extra biomass for a while
       lushMult: 2,
-      cisternWater: 1, // water/s from the Old Cistern once awake
     },
     /** Canopy: the Elder Tree charges from blooms around it and releases a Canopy Burst. */
     canopy: {
@@ -233,22 +221,8 @@ export const TUNING = {
       burstRadius: 2,
       burstRadiusAwake: 3,
       gardenBonusTargets: 2, // each Pollinator Garden inside the burst adds this many extra blooms beyond it
-      // Slow self-charge once the Canopy is partly alive, so the tree can never get stuck
-      // (blooming near it is many times faster).
-      selfChargeSeconds: 12,
-      selfChargeFrom: 0.5, // share of the Canopy restored
-    },
-    cores: {
-      r2: { restoredTiles: 48, overflows: 3, cost: { water: 80, biomass: 200 } },
-      r3: { restoredTiles: 64, bursts: 5, cost: { energy: 120, biomass: 300 } },
     },
     /** Manual pulse right next to a machine boosts its next trigger. */
     overchargeSeconds: 12,
-    bloom: {
-      seconds: 10, // presentation length (skippable)
-      capBonus: 0.5, // permanent storage boost
-      reward: { energy: 200, water: 120, biomass: 400 },
-      biomassMult: 1.15, // neighbourhood-wide resonance afterwards
-    },
   },
 } as const;

@@ -1,11 +1,6 @@
 import { AREA_TYPE_LIST, AREA_TYPES, CITY_GEN, THEMES, type AreaType, type Theme } from '../data/city';
 import { CHUNK, hashString, tileRandom } from './Hash';
-import { ROOF_BY_ID } from '../data/rooftops';
-
-/** Size and Core position of the campaign rooftops used as cluster templates. */
-const ROOF_TEMPLATES: Record<string, { width: number; depth: number; core: [number, number] }> = Object.fromEntries(
-  ['r1', 'r2', 'r3'].map((id) => [id, { width: ROOF_BY_ID[id].width, depth: ROOF_BY_ID[id].depth, core: (ROOF_BY_ID[id].core ?? [0, 0]) as [number, number] }]),
-);
+import { ROOF_TEMPLATES } from '../data/templates';
 
 /**
  * Static area layout of the endless ground: a pure function of the seed, so every area's shape, neighbours

@@ -8,7 +8,6 @@ import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
 import type { MachineData, ResourceKind, TileData } from '../core/types';
 import { MACHINES } from '../data/machines';
-import { LINK_BY_ID, LINKS, ROOF_BY_ID } from '../data/rooftops';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
@@ -35,7 +34,7 @@ import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
 import { FlyText } from '../ui/Fly';
-import { CORE_TEXT, Hud, type Settings, type Tool } from '../ui/Hud';
+import { Hud, type Settings, type Tool } from '../ui/Hud';
 import { EventBus } from './EventBus';
 import { type LoadResult, SaveService } from './SaveService';
 
@@ -130,7 +129,7 @@ export class Game {
 
     initLowPoly(this.app.graphicsDevice);
     this.scene = new SceneBuilder(this.app, this.tweens);
-    this.scene.build(this.sim.grid.rooftops, (id) => this.sim.grid.tilesOf(id));
+    this.scene.build();
     this.camera = new CameraController(this.app, this.tweens);
     this.app.scene.fog.start = this.camera.fogDepth(46);
     this.app.scene.fog.end = this.camera.fogDepth(84);
@@ -176,17 +175,6 @@ export class Game {
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
         togglePause: () => this.setPaused(!this.paused),
-        focusRoof: (id) => this.focusRoof(id),
-        buildLink: (id) => {
-          if (this.cinematic) return;
-          this.sfx.click();
-          this.sim.hood.buildLink(id);
-        },
-        activateRoofCore: (id) => {
-          if (this.cinematic) return;
-          this.sim.hood.activateRoofCore(id);
-        },
-        neighbourhoodBloom: (replay) => this.playNeighbourhoodBloom(replay),
         districtBloom: (id, replay) => this.playDistrictBloom(id, replay),
         openArea: (id) => this.openArea(id),
         setAreaMode: (id, mode) => {
@@ -220,8 +208,7 @@ export class Game {
 
     this.sim.cat.anchorView = (a) => this.anchorView(this.cat.anchorWorld(a));
     if (state.cat.active) this.cat.show(state.cat.active.anchorId, false);
-    this.camera.setBoundsFor(this.sim.grid.rooftops);
-    if (this.city) {
+    {
       this.camera.minZoom = 0.22; // the city overview
       this.updateCityBounds();
       this.camera.target.set(8, 0, 8);
@@ -231,24 +218,8 @@ export class Game {
         if (lm && this.sim.areas.fog(id) === 'cleared') this.machines.setLandmarkState(lm.id, 'awake', true);
       }
     }
-    if (state.progression.coreActivated) {
-      this.scene.restoreBuilding(true);
-      this.machines.setCoreState('awake', true);
-    } else if (this.sim.progression.coreReady()) this.machines.setCoreState('ready');
-    for (const id of ['r2', 'r3']) {
-      if (this.sim.hood.coreAwake(id)) {
-        this.machines.setCoreState('awake', true, id);
-        this.scene.wakeRoof(id, true);
-      } else if (this.sim.hood.coreReady(id)) this.machines.setCoreState('ready', true, id);
-    }
-    for (const l of LINKS) {
-      if (this.sim.hood.isBuilt(l.id)) this.scene.buildBridgeDeck(l.id, true);
-      else this.scene.showScaffold(l.id, this.sim.hood.linkAvailable(l.id));
-    }
-    if (state.progression.neighbourhoodBloomAt >= 0) {
-      this.scene.showDistrict(true);
-      this.scene.bloomFacades(true);
-    }
+    if (state.progression.coreActivated) this.machines.setCoreState('awake', true);
+    else if (this.sim.progression.coreReady()) this.machines.setCoreState('ready');
 
     this.wireEvents();
     new InputController(canvas, {
@@ -397,10 +368,8 @@ export class Game {
       const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden', '9': 'relay' };
       if (map[k]) this.selectTool(map[k]);
       else if (k === 'h') this.harvest();
-      else if (k === 'f') {
-        if (this.city) this.focusNextArea();
-        else this.focusNextRoof();
-      } else if (k === 'home' && this.city) this.focusArea(PARK);
+      else if (k === 'f') this.focusNextArea();
+      else if (k === 'home') this.focusArea(PARK);
       else if (k === 'u') this.hud.toggleUpgrades();
       else if (k === 'p') this.setPaused(!this.paused);
       else if (k === 'f3' || k === '`') {
@@ -409,7 +378,7 @@ export class Game {
       } else if (k === 'escape') {
         if (this.hud.modalOpen) this.hud.openSettings(false);
         else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
-        else if (this.selected || this.selectedRelay) this.select(undefined);
+        else if (this.selected) this.select(undefined);
         else this.selectTool('pulse');
       } else if (k === '+' || k === '=') this.camera.zoomBy(1.15);
       else if (k === '-') this.camera.zoomBy(1 / 1.15);
@@ -543,15 +512,6 @@ export class Game {
       document.body.style.cursor = 'pointer';
       return;
     }
-    const relay = this.relayHit(x, y);
-    if (relay && (this.hud.currentTool === 'pulse' || this.hud.currentTool === 'inspect')) {
-      this.overlays.hideFrame();
-      this.overlays.hideGhost();
-      if (!this.selected && !this.selectedRelay) this.overlays.showRadius(this.relayZones(relay), 'info');
-      this.hud.showTip(x, y, `<b>🔌 ${LINK_BY_ID[relay].name}</b>${this.relayStatusLine(relay)}<br>Click for details`);
-      document.body.style.cursor = 'pointer';
-      return;
-    }
     document.body.style.cursor = '';
     const p = this.pick(x, y);
     const tool = this.hud.currentTool;
@@ -588,8 +548,8 @@ export class Game {
     if (occ) {
       this.overlays.showFrame(occ.roofId, occ.x, occ.z, occ.size, 'info');
       const ready = occ.type === 'core' && this.landmarkReady(occ);
-      const area = occ.type === 'core' && occ.roofId === GROUND ? this.sim.areas.areaOf(occ) : undefined;
-      const ct = area ? { icon: AREA_TYPES[this.sim.areas.info(area).type].icon, name: this.sim.areas.info(area).landmarkName } : occ.type === 'core' ? CORE_TEXT[occ.roofId] : undefined;
+      const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
+      const ct = area ? { icon: AREA_TYPES[this.sim.areas.info(area).type].icon, name: this.sim.areas.info(area).landmarkName } : undefined;
       const boost = (occ.overchargeUntil ?? 0) > this.sim.time ? '<br><span class="ok">⚡ Boosted: next trigger +1</span>' : '';
       this.hud.showTip(x, y, `<b>${ct?.icon ?? MACHINES[occ.type].icon} ${ct?.name ?? MACHINES[occ.type].name}</b>${ready ? '<span class="ok">Ready! Click to awaken.</span>' : 'Click to inspect'}${boost}`);
       return;
@@ -636,12 +596,6 @@ export class Game {
     }
     if (this.catHit(x, y)) {
       this.sim.cat.claim();
-      return;
-    }
-    const relay = this.relayHit(x, y);
-    if (relay && (this.hud.currentTool === 'pulse' || this.hud.currentTool === 'inspect')) {
-      this.selectRelay(relay);
-      this.sfx.click();
       return;
     }
     const droneId = this.droneHit(x, y);
@@ -738,7 +692,6 @@ export class Game {
 
   private select(id: string | undefined) {
     this.selected = id;
-    if (id || this.selectedRelay) this.selectedRelay = undefined;
     this.showDroneTasks();
     const m = this.sim.machine(id);
     if (!m) {
@@ -759,7 +712,6 @@ export class Game {
   }
 
   private renderInspect() {
-    if (this.selectedRelay) return this.renderRelayInspect(this.selectedRelay);
     const m = this.sim.machine(this.selected);
     if (!m) return this.hud.renderInspect(null);
     const s = this.sim;
@@ -820,21 +772,9 @@ export class Game {
         break;
       }
       case 'core': {
-        if (m.roofId === GROUND) {
-          this.hud.renderInspect(this.landmarkHtml(m));
-          return;
-        }
-        const reqs = s.hood.requirements(m.roofId);
-        const awakeText: Record<string, string> = {
-          r1: '✨ Awake. The building breathes again.',
-          r2: '💧 Awake. The Old Cistern fills the basin and adds steady water.',
-          r3: '🌳 Awake. The Elder Tree spreads its canopy; its bursts reach further.',
-        };
-        extra = s.hood.coreAwake(m.roofId)
-          ? `<p class="stat">${awakeText[m.roofId] ?? '✨ Awake.'}</p>`
-          : `<ul style="margin:6px 0;padding-left:18px;font-size:12.5px">${reqs.map((r) => `<li>${r.done ? '✅' : '⬜'} ${r.label}</li>`).join('')}</ul><p>Awakening costs ${formatCost(s.hood.coreCost(m.roofId))}.</p>`;
-        if (m.roofId === 'r3') extra = this.elderTreeInfo(m) + extra;
-        break;
+        // Every Core is an area landmark now (on the ground, or on a city rooftop).
+        this.hud.renderInspect(this.landmarkHtml(m));
+        return;
       }
     }
     if ((m.overchargeUntil ?? 0) > s.time) extra = `<p class="stat" style="color:#1d8fb0">⚡ Boosted by your pulse — next trigger +1 (${Math.ceil(m.overchargeUntil! - s.time)} s)</p>` + extra;
@@ -1035,16 +975,11 @@ export class Game {
       this.sfx.chainEnd(10);
       if (!s.state.stats.firsts.treePulse || s.state.stats.firsts.treePulse === Math.round(s.time)) this.hud.toast('🌳 Mother Tree Bloom Pulse!<small>Everything around it bursts into life.</small>', 'gold', 3);
     });
-    b.on('chain.ended', ({ chainId, combo, bonus, total, milestonePct, energy, roofs, crossings, areas }) => {
+    b.on('chain.ended', ({ chainId, combo, bonus, total, milestonePct, energy, crossings, areas }) => {
       if (areas >= 3) this.hud.feed(`🌸 Bloom chain ×${combo} swept ${areas} areas`);
       if (areas >= 6) this.hud.toast(`🌸 A city-wide bloom! ×${combo}<small>It swept across ${areas} areas.</small>`, 'gold', 3);
       this.tileFx.release(`chain${chainId}`);
-      if (crossings > 0) {
-        const names = roofs.map((r) => ROOF_BY_ID[r]?.short ?? r).join(' → ');
-        this.crossChains++;
-        if (this.crossChains <= 3 || combo >= 8) this.hud.toast(`🌉 Cross-roof chain ×${combo}!<small>It travelled ${names}</small>`, 'gold', 3);
-        this.hud.feed(`🌉 Chain crossed ${crossings} bridge${crossings > 1 ? 's' : ''}: ${names}`);
-      }
+      if (crossings > 0) this.hud.feed(`📡 Chain crossed ${crossings} Bloom Relay link${crossings > 1 ? 's' : ''}`);
       if (combo < 2) return;
       const ms = milestonePct ? ` · ×${combo >= 20 ? 20 : combo >= 10 ? 10 : 5} milestone +${Math.round(milestonePct * 100)}%` : '';
       this.hud.combo(combo, `+${Math.round(total)}🌿${energy >= 1 ? ` +${Math.round(energy)}⚡` : ''} earned${ms}`);
@@ -1127,11 +1062,8 @@ export class Game {
       this.save();
     });
     b.on('cat.goldenRelay', () => {
-      for (const br of this.scene.bridges.values()) if (br.built) for (const e of br.ends) this.vfx.ring(new pc.Vec3(e.x, e.y - 0.9, e.z), PALETTE.gold, 1.4, 0.8);
       this.hud.feed(
-        this.city
-          ? `🐱✨ Golden Relay: your next green corridor hop blooms ${this.sim.state.relayBonus} extra tiles`
-          : '🐱✨ Golden Relay: your next cross-roof chain blooms one extra tile',
+        `🐱✨ Golden Relay: your next green corridor hop blooms ${this.sim.state.relayBonus} extra tiles`,
       );
     });
     b.on('cat.stash', () => {
@@ -1148,8 +1080,6 @@ export class Game {
       this.sfx.chainEnd(10);
     });
     b.on('rooftop.coreRestored', () => this.playCoreSequence());
-    b.on('link.built', ({ linkId, roofId }) => this.onLinkBuilt(linkId, roofId));
-    b.on('relay.sent', ({ linkId, fromRoof, travel }) => this.presentRelay(linkId, fromRoof, travel));
     // City 10.4: a pulse arcs from one Bloom Relay to the next, landing as a ring.
     b.on('relay.city', ({ from, to, travel }) => {
       const a = this.posOf(from);
@@ -1229,8 +1159,6 @@ export class Game {
       if ((s.state.progression.canopyBursts ?? 0) <= 1) this.hud.toast(`🌳 Canopy Burst!<small>The Elder Tree releases its charge.${gardens.length ? ` ${gardens.length} 🌸 garden${gardens.length > 1 ? 's' : ''} carried it further!` : ' 🌸 Gardens inside its reach would carry it further.'}</small>`, 'gold', 3.5);
       else this.hud.feed(`🌳 Canopy Burst${gardens.length ? ` · amplified by ${gardens.length} garden${gardens.length > 1 ? 's' : ''}` : ''}`);
     });
-    b.on('roof.coreAwake', ({ roofId }) => this.onRoofCoreAwake(roofId));
-    b.on('neighbourhood.bloom', ({ restored }) => this.onNeighbourhoodBloom(restored));
     b.on('district.ready', ({ districtId }) =>
       this.hud.toast(`🌸 ${this.sim.districts.title(districtId)} is ready to bloom!<small>${TUNING.district.minAwake} neighbouring landmarks are awake. Open any of its areas to set off the district bloom.</small>`, 'gold', 5),
     );
@@ -1241,36 +1169,11 @@ export class Game {
   }
 
   private lastCatPos?: pc.Vec3;
-  private stage = -1;
-
-  /** Rooftop transformation stages from restored coverage (25/50/75%), plus 4 once the Core is awake. */
-  private updateStage(initial: boolean) {
-    const p = this.sim.progression;
-    const stageOf = (roofId: string) => {
-      const frac = p.restoredCount(roofId) / Math.max(1, p.restorableCount(roofId));
-      return this.sim.hood.coreAwake(roofId) ? 4 : frac >= 0.75 ? 3 : frac >= 0.5 ? 2 : frac >= 0.25 ? 1 : 0;
-    };
-    for (const r of this.sim.grid.rooftops) if (r.id !== 'r1') this.grid.setStage(r.id, stageOf(r.id));
-    const stage = stageOf('r1');
-    if (stage === this.stage) return;
-    const first = this.stage < 0;
-    this.stage = stage;
-    const grew = this.scene.setStage(stage, initial || first);
-    this.grid.setStage('r1', stage);
-    if (grew && stage < 4) {
-      const msg = ['', '🌱 25% — moss and wildflowers creep over the ledge', '☀️ 50% — the solar array unfolds and planters bloom', '🏛️ 75% — the building brightens and balconies fill with green'][stage];
-      this.hud.toast(`${msg}`, 'gold', 4);
-      this.sfx.chainEnd(5);
-    }
-  }
-
   /** World position of a tile or machine id (chain sources/targets can be either). */
-  private posOf(id: string | undefined, towardRoof?: string): pc.Vec3 | undefined {
+  private posOf(id: string | undefined, _towardRoof?: string): pc.Vec3 | undefined {
     if (!id) return undefined;
     const t = this.sim.grid.byTileId(id);
     if (t) return this.tileVec(t);
-    const br = this.scene.bridges.get(id);
-    if (br) return (towardRoof && br.link.from === towardRoof ? br.ends[0] : br.ends[1]).clone();
     const m = this.sim.machine(id);
     if (!m) return undefined;
     const w = this.machines.worldOf(m);
@@ -1364,11 +1267,10 @@ export class Game {
         if (from && to && !this.settings.reducedMotion) this.vfx.arc(from, to, '#7cf7c8', 0.35);
         break;
       case 'RELAY': {
-        const br = this.scene.bridges.get(ev.target);
-        if (!br) break;
-        const arrive = br.link.from === ev.roofId ? br.ends[0] : br.ends[1];
-        this.vfx.ring(new pc.Vec3(arrive.x, arrive.y - 0.9, arrive.z), PALETTE.coreGlow, 1.8, 0.7);
-        this.vfx.burst(arrive, 16, { up: 2.5, size: 0.07 });
+        // A Bloom Relay pulse arrives (the arc itself is drawn on relay.city).
+        const dest = this.sim.relays.otherEnd(ev.target, ev.source ?? '');
+        const arrive = this.posOf(dest?.id);
+        if (arrive) this.vfx.burst(new pc.Vec3(arrive.x, arrive.y + 1, arrive.z), 16, { up: 2.5, size: 0.07 });
         this.sfx.chainEnd(Math.min(10, 3 + combo));
         if (combo >= 2) this.hud.combo(combo);
         break;
@@ -1386,8 +1288,8 @@ export class Game {
     this.overlays.hideFrame();
     this.overlays.hideGhost();
     this.hud.hideTip();
-    const park = this.city ? this.sim.areas.landmark(PARK) : undefined;
-    this.hud.cinematic(true, this.city ? 'The fountain flows again!' : `${this.sim.grid.roof('r1')!.name} lives again!`);
+    const park = this.sim.areas.landmark(PARK);
+    this.hud.cinematic(true, 'The fountain flows again!');
     if (park) this.machines.setLandmarkState(park.id, 'awake');
     else this.machines.setCoreState('awake');
     this.sfx.fanfare();
@@ -1403,18 +1305,12 @@ export class Game {
           this.vfx.burst(cp, 24, { up: 4.5, speed: 2.4, size: 0.08, life: 1.5 });
         },
       });
-    if (this.city) this.tweens.add(0.01, () => {}, { delay: 2.2, done: () => this.camera.focus(8, 0, 8, Math.max(this.camera.minZoom, 0.5), 2.4) });
-    else this.scene.restoreBuilding(false, () => this.camera.focus(10.5, 0.6, 1.5, 0.6, 2.6));
-    for (const l of LINKS) this.scene.showScaffold(l.id, this.sim.hood.linkAvailable(l.id));
+    this.tweens.add(0.01, () => {}, { delay: 2.2, done: () => this.camera.focus(8, 0, 8, Math.max(this.camera.minZoom, 0.5), 2.4) });
     this.cinematicEnd = () => {
       if (!this.cinematic) return;
       this.cinematic = false;
       this.hud.cinematic(false);
-      if (this.city) this.hud.toast('🌫️ The fog rolls back!<small>The park now grows +25% biomass. Restore the areas around it — tiles next to clear ground first — and wake their landmarks.</small>', 'gold', 7);
-      else {
-        const l = LINK_BY_ID['seed-reservoir'];
-        this.hud.toast(`🌉 The Reservoir is in sight!<small>Your rooftop now produces +25% biomass. Build the ${l.name} (${formatCost(l.cost)}) to reach it.</small>`, 'gold', 6);
-      }
+      this.hud.toast('🌫️ The fog rolls back!<small>The park now grows +25% biomass. Restore the areas around it — tiles next to clear ground first — and wake their landmarks.</small>', 'gold', 7);
       this.save();
     };
     this.tweens.add(0.01, () => {}, { delay: TUNING.core.sequenceSeconds, done: () => this.cinematicEnd?.() });
@@ -1429,19 +1325,14 @@ export class Game {
 
   // ───────────────────────── the city ─────────────────────────
 
-  /** A Core (rooftop or city landmark) that can be woken now. */
+  /** A landmark Core (on the ground or a city rooftop) that can be woken now. */
   private landmarkReady(m: MachineData): boolean {
-    if (m.roofId !== GROUND) return this.sim.hood.coreReady(m.roofId);
     const id = this.sim.areas.areaOf(m)!;
     return id === PARK ? this.sim.progression.coreReady() : this.sim.areas.ready(id);
   }
 
   private wakeLandmark(m: MachineData) {
     if (this.cinematic) return;
-    if (m.roofId !== GROUND) {
-      this.sim.hood.activateRoofCore(m.roofId);
-      return;
-    }
     const id = this.sim.areas.areaOf(m)!;
     if (id === PARK) this.sim.progression.activateCore();
     else this.sim.areas.clear(id);
@@ -1617,222 +1508,14 @@ export class Game {
     at(TUNING.district.seconds, () => this.cinematicEnd?.());
   }
 
-  // ───────────────────────── neighbourhood ─────────────────────────
-
-  private roofCenter(id: string, up = 0): pc.Vec3 {
-    const r = this.sim.grid.roof(id)!;
-    return new pc.Vec3(r.origin[0] + r.width / 2, r.origin[1] + r.height + up, r.origin[2] + r.depth / 2);
-  }
-
-  /** The rooftop closest to the middle of the view. */
-  private nearestRoof(): string {
-    const g = this.camera.goalPoint;
-    let best = 'r1';
-    let bd = Infinity;
-    for (const r of this.sim.grid.rooftops) {
-      const c = this.roofCenter(r.id);
-      const d = Math.hypot(c.x - g.x, c.z - g.z);
-      if (d < bd) {
-        bd = d;
-        best = r.id;
-      }
-    }
-    return best;
-  }
-
-  /** Smoothly frames a rooftop. Never fires during a cinematic; player input takes over at once. */
-  private focusRoof(id: string) {
-    if (this.cinematic) return;
-    const r = this.sim.grid.roof(id);
-    if (!r) return;
-    const c = this.roofCenter(id);
-    this.camera.glide(c.x, c.y, c.z, Math.min(1, 8.5 / Math.max(r.width, r.depth)));
-  }
-
-  /** F: cycle through the rooftops you can see (revealed or playable). */
-  private focusNextRoof() {
-    const ids = this.sim.grid.rooftops.filter((r) => r.unlocked).map((r) => r.id);
-    if (ids.length <= 1) return this.focusRoof('r1');
-    const i = ids.indexOf(this.nearestRoof());
-    this.focusRoof(ids[(i + 1) % ids.length]);
-  }
-
-  private lockedReason(id: string): string {
-    const def = ROOF_BY_ID[id];
-    const link = def?.unlockLink ? LINK_BY_ID[def.unlockLink] : undefined;
-    if (!link) return 'Not reachable yet.';
-    const hood = this.sim.hood;
-    if (!hood.coreAwake(link.requiresCore)) {
-      const where = this.sim.grid.roof(link.requiresCore)?.name ?? '';
-      return `Still dormant. Awaken the ${hood.coreName(link.requiresCore)} on ${where} to open a way across.`;
-    }
-    return `Build the ${link.name} (${formatCost(link.cost)}) to reach it — look for the dashed outline.`;
-  }
-
-  private elderTreeInfo(m: MachineData): string {
-    const c = TUNING.neighbourhood.canopy;
-    const radius = this.sim.chains.canopyBurstRadius();
-    const gardens = this.sim.grid.tilesNear(m, c.chargeRadius).length ? this.sim.state.machines.filter((g) => g.type === 'pollinator' && g.roofId === m.roofId && this.sim.chains.inCanopyBurst(m, g)).length : 0;
-    return `<p class="stat">🌳 Charge ${Math.floor(m.charge ?? 0)}/${c.threshold} · every restoration or bloom within ${c.chargeRadius} tiles adds 1</p><p class="stat">💥 Canopy Burst: restores and grows everything within ${radius} tiles${gardens ? ` · ${gardens} 🌸 garden${gardens > 1 ? 's' : ''} amplify it (+${gardens * c.gardenBonusTargets} blooms beyond)` : ' · 🌸 gardens inside the burst amplify it'}</p>`;
-  }
-
-  private onLinkBuilt(linkId: string, roofId: string) {
-    const link = LINK_BY_ID[linkId];
-    const dur = this.scene.buildBridgeDeck(linkId, false);
-    const br = this.scene.bridges.get(linkId);
-    this.sfx.fanfare();
-    this.camera.shake(0.06);
-    if (br) {
-      for (const e of br.ends) {
-        this.vfx.ring(new pc.Vec3(e.x, e.y - 0.9, e.z), PALETTE.coreGlow, 1.6, 0.8);
-        this.vfx.burst(e, 18, { up: 3, size: 0.07 });
-      }
-      br.path.forEach((p, i) => this.tweens.add(0.01, () => {}, { delay: (i / br.path.length) * dur, done: () => this.vfx.burst(p, 4, { up: 1.5, size: 0.05 }) }));
-    }
-    const roof = this.sim.grid.roof(roofId)!;
-    const blurb: Record<string, string> = {
-      r2: 'A dry basin around an old cistern. Water Condensers + ⛲ Reservoir Gardens make it Overflow.',
-      r3: 'An overgrown, dormant roof. Bloom around the Elder Tree to charge its Canopy Burst.',
-    };
-    this.hud.toast(`🌉 ${link.name} built — ${roof.name} is open!<small>${blurb[roofId] ?? ''} Chains near the relay pylons now cross the bridge.</small>`, 'gold', 6);
-    // Reveal the new canvas, unless the player is in the middle of placing something.
-    const tool = this.hud.currentTool;
-    if (tool === 'pulse' || tool === 'inspect') this.tweens.add(0.01, () => {}, { delay: 0.4, done: () => this.focusRoof(roofId) });
-    this.grid.refreshAll();
-    this.save();
-  }
-
-  private onRoofCoreAwake(roofId: string) {
-    this.machines.setCoreState('awake', false, roofId);
-    this.scene.wakeRoof(roofId, false);
-    const w = this.machines.coreWorld(roofId);
-    if (w) {
-      const p = new pc.Vec3(w[0], w[1], w[2]);
-      const base = this.roofCenter(roofId, 0.1);
-      for (let i = 0; i < 4; i++)
-        this.tweens.add(0.01, () => {}, {
-          delay: i * 0.3,
-          done: () => {
-            this.vfx.ring(base, i % 2 ? PALETTE.gold : roofId === 'r2' ? PALETTE.water : PALETTE.coreGlow, 2.5 + i * 1.6, 1.1);
-            this.vfx.burst(p, 20, { up: 4, speed: 2.2, size: 0.08, life: 1.4 });
-          },
-        });
-    }
-    this.sfx.fanfare();
-    this.camera.shake(0.08);
-    const msg: Record<string, string> = {
-      r2: `💧 The Old Cistern wakes!<small>The basin cascades with water (+${TUNING.neighbourhood.reservoir.cisternWater}💧/s). The Canopy is in sight — build the ${LINK_BY_ID['seed-canopy'].name}.</small>`,
-      r3: '🌳 The Elder Tree wakes!<small>Its canopy unfolds and its bursts reach further. Every rooftop is alive…</small>',
-    };
-    this.hud.toast(msg[roofId] ?? '✨ A rooftop wakes!', 'gold', 6);
-    for (const l of LINKS) this.scene.showScaffold(l.id, this.sim.hood.linkAvailable(l.id));
-    this.save();
-  }
-
-  private onNeighbourhoodBloom(restored: string[]) {
-    this.save(); // claimed before any presentation: a reload can never pay twice
-    this.runBloomSequence(restored, false);
-  }
-
-  private playNeighbourhoodBloom(replay: boolean) {
-    if (this.cinematic) return;
-    if (!replay) this.sim.hood.neighbourhoodBloom();
-    else if (this.sim.state.progression.neighbourhoodBloomAt >= 0) this.runBloomSequence([], true);
-  }
-
-  /**
-   * The climax: cores gather energy, relays light the path across the bridges, green waves roll over all
-   * three rooftops, facades turn white, resources shower in and a new district rises on the horizon.
-   * Skippable (Skip ⏭ fast-forwards every beat). A replay changes nothing in the game.
-   */
-  private runBloomSequence(restored: string[], replay: boolean) {
-    const s = this.sim;
-    const T = TUNING.neighbourhood.bloom.seconds;
-    const at = (delay: number, fn: () => void) => this.tweens.add(0.01, () => {}, { delay, done: fn });
-    this.cinematic = true;
-    this.select(undefined);
-    this.overlays.hideFrame();
-    this.overlays.hideGhost();
-    this.hud.hideTip();
-    this.hud.cinematic(true, replay ? 'The Neighbourhood Bloom' : 'The Neighbourhood Blooms!');
-    this.sfx.fanfare();
-    // Frame the whole neighbourhood.
-    const roofs = s.grid.rooftops;
-    const cx = roofs.reduce((a, r) => a + r.origin[0] + r.width / 2, 0) / roofs.length;
-    const cz = roofs.reduce((a, r) => a + r.origin[2] + r.depth / 2, 0) / roofs.length;
-    this.camera.focus(cx, 0.3, cz, this.camera.minZoom + 0.04, 2.2);
-    // 1. Energy gathers at each rooftop's core.
-    const coreIds = ['r1', 'r2', 'r3'];
-    coreIds.forEach((id, i) => {
-      const w = this.machines.coreWorld(id);
-      if (!w) return;
-      const p = new pc.Vec3(w[0], w[1], w[2]);
-      for (let k = 0; k < 3; k++)
-        at(0.4 + i * 0.25 + k * 0.45, () => {
-          this.vfx.ring(new pc.Vec3(p.x, p.y - 1.4, p.z), k % 2 ? PALETTE.gold : PALETTE.coreGlow, 2.4 - k * 0.6, 0.6);
-          this.vfx.burst(p, 10, { up: 2.5, size: 0.07 });
-        });
-    });
-    // 2. Each relay lights and a pulse runs over every bridge.
-    at(2.2, () => {
-      for (const br of this.scene.bridges.values()) {
-        if (!br.built) continue;
-        this.relayFiringUntil.set(br.link.id, this.clock + 6);
-        this.presentRelay(br.link.id, br.link.from, 1.2);
-      }
-      this.sfx.chainEnd(8);
-    });
-    // 3. Green waves roll outward from each core across its rooftop.
-    const waveStart = 3.4;
-    for (const r of roofs) {
-      const core = s.state.machines.find((m) => m.type === 'core' && m.roofId === r.id);
-      const ox = core ? core.x + 1 : r.width / 2;
-      const oz = core ? core.z + 1 : r.depth / 2;
-      for (const t of s.grid.tilesOf(r.id)) {
-        if (t.blocked || t.occupantId) continue;
-        const d = Math.hypot(t.x + 0.5 - ox, t.z + 0.5 - oz);
-        const fresh = restored.includes(t.id);
-        at(waveStart + Math.min(3.6, d * 0.35), () => {
-          if (fresh) this.grid.refresh(t, true);
-          this.tileFx.flash(t, fresh ? '#38d94a' : '#b6ffe0', fresh ? 0.6 : 0.35, 0.9);
-          if (fresh && t.variant % 3 === 0) this.vfx.burst(this.tileVec(t), 4, { up: 1.6, size: 0.05 });
-        });
-      }
-    }
-    // 4. Facades turn white, vines and gardens unfold everywhere.
-    at(4.8, () => {
-      if (!replay) this.scene.bloomFacades(false);
-      for (const id of ['r2', 'r3']) this.scene.wakeRoof(id, false);
-    });
-    // 5. Final bloom and the reward shower.
-    at(7.6, () => {
-      const c = new pc.Vec3(cx, 0.4, cz);
-      for (let k = 0; k < 4; k++) at(k * 0.2, () => this.vfx.ring(c, k % 2 ? PALETTE.gold : PALETTE.coreGlow, 6 + k * 3, 1.2));
-      this.vfx.burst(new pc.Vec3(cx, 2, cz), 60, { up: 5, speed: 3, size: 0.09, life: 1.6 });
-      this.camera.shake(0.12);
-      this.sfx.fanfare();
-      if (!replay) {
-        const r = TUNING.neighbourhood.bloom.reward;
-        (['biomass', 'water', 'energy'] as const).forEach((k, i) => at(i * 0.15, () => this.flyGain(k, r[k])));
-      }
-    });
-    // 6. Something new on the horizon.
-    at(8.6, () => this.scene.showDistrict(false));
-    this.cinematicEnd = () => {
-      if (!this.cinematic) return;
-      this.cinematic = false;
-      this.hud.cinematic(false);
-      if (!replay)
-        this.hud.toast(`🌸 The neighbourhood lives!<small>Storage +${Math.round(TUNING.neighbourhood.bloom.capBonus * 100)}% · biomass ×${TUNING.neighbourhood.bloom.biomassMult} everywhere. A new district glows on the horizon…</small>`, 'gold', 7);
-      this.save();
-    };
-    at(T, () => this.cinematicEnd?.());
-  }
-
-  private selectedRelay?: string;
   private lastBoostFeed = -99;
   private boostPulseT = 0;
   /** A soft cyan ring keeps pulsing on machines your taps have boosted. */
+  /** Why a raised layer can't be played yet (city rooftops wait for a Bloom Relay). */
+  private lockedReason(_id: string): string {
+    return `Out of reach: build a 📡 Bloom Relay on the street within ${this.sim.relays.range()} tiles of this rooftop.`;
+  }
+
   private updateBoostRings(dt: number) {
     this.boostPulseT -= dt;
     if (this.boostPulseT > 0) return;
@@ -1842,140 +1525,6 @@ export class Game {
       const w = this.machines.worldOf(m);
       this.vfx.ring(new pc.Vec3(w[0], w[1] + 0.05, w[2]), '#6ff3ff', 0.75 * m.size, 0.8);
     }
-  }
-  private crossChains = 0;
-  private relayFiringUntil = new Map<string, number>();
-
-  /** Screen-space hit test for relay pylons (generous, like drones). */
-  private relayHit(x: number, y: number): string | undefined {
-    const r = Math.max(24, 0.4 / this.camera.worldPerPixel());
-    for (const [id, br] of this.scene.bridges) {
-      if (!br.built) continue;
-      for (const e of br.ends) {
-        const sp = this.camera.toScreen(new pc.Vec3(e.x, e.y - 0.45, e.z));
-        if (Math.hypot(sp.x - x, sp.y - y) <= r) return id;
-      }
-    }
-    return undefined;
-  }
-
-  /** Both relay zones of a link (the tiles whose chain effects send a pulse across). */
-  private relayZones(linkId: string): TileData[] {
-    const l = LINK_BY_ID[linkId];
-    return [...this.sim.chains.relayZone(l, l.from), ...this.sim.chains.relayZone(l, l.to)];
-  }
-
-  private relayStatusLine(linkId: string): string {
-    const st = this.sim.state.links[linkId];
-    const wait = st ? Math.max(0, st.readyAt - this.sim.time) : 0;
-    const a = this.sim.grid.roof(LINK_BY_ID[linkId].from)!.name;
-    const b = this.sim.grid.roof(LINK_BY_ID[linkId].to)!.name;
-    return `Connected: 2 roofs (${a} ↔ ${b})<br>Next cross-roof pulse: ${wait > 0.05 ? `${wait.toFixed(1)} s` : '<span class="ok">ready</span>'}`;
-  }
-
-  private selectRelay(linkId: string) {
-    this.select(undefined);
-    this.selectedRelay = linkId;
-    this.overlays.showRadius(this.relayZones(linkId), 'ok');
-    this.renderRelayInspect(linkId);
-  }
-
-  private renderRelayInspect(linkId: string) {
-    const l = LINK_BY_ID[linkId];
-    const st = this.sim.state.links[linkId];
-    const hood = this.sim.hood;
-    const bonus = this.sim.state.relayBonus > 0 ? ` <b>+${this.sim.state.relayBonus} 🐱 Golden Relay</b>` : '';
-    const html = `<h4><span>🔌 ${esc(l.name)}</span><button data-close aria-label="Close">×</button></h4>
-      <p>A chain effect on the highlighted tiles next to either pylon sends a pulse across the bridge. It blooms the best spots near the far pylon (next to gardens, panels and trees first), and the chain carries on over there.</p>
-      <p class="stat">${this.relayStatusLine(linkId)}</p>
-      <p class="stat">🌸 Remote blooms per pulse: ${hood.relayTargets()}${bonus} · recharge ${hood.relayCooldown()} s</p>
-      <p class="stat">🌉 Crossings so far: ${st?.crossings ?? 0}</p>
-      ${this.upgradeButton('relay2')}`;
-    this.hud.renderInspect(html);
-  }
-
-  /** A pulse gathers at the sending pylon and travels over the bridge; the far side blooms on arrival. */
-  private presentRelay(linkId: string, fromRoof: string, travel: number) {
-    const br = this.scene.bridges.get(linkId);
-    if (!br) return;
-    const forward = br.link.from === fromRoof;
-    const start = forward ? br.ends[0] : br.ends[1];
-    const end = forward ? br.ends[1] : br.ends[0];
-    this.relayFiringUntil.set(linkId, this.clock + travel + 0.6);
-    this.vfx.ring(new pc.Vec3(start.x, start.y - 0.9, start.z), PALETTE.coreGlow, 1.2, 0.5);
-    this.vfx.burst(start, 10, { up: 1.5, size: 0.06, speed: 0.8 });
-    const path = forward ? br.path : [...br.path].reverse();
-    const steps = this.settings.reducedMotion ? 3 : path.length;
-    for (let i = 0; i < steps; i++) {
-      const p = path[Math.round((i / Math.max(1, steps - 1)) * (path.length - 1))];
-      this.tweens.add(0.01, () => {}, { delay: (i / Math.max(1, steps - 1)) * travel, done: () => this.vfx.burst(p, 3, { up: 0.6, size: 0.08, speed: 0.3, life: 0.6 }) });
-    }
-    this.vfx.arc(start, end, PALETTE.coreGlow, travel);
-    this.sfx.pulse();
-  }
-
-  /** Relay lamps: green when ready, dim while recharging, bright while a pulse is crossing. */
-  private updateRelayLamps() {
-    for (const l of LINKS) {
-      const st = this.sim.state.links[l.id];
-      const state = !st?.built ? 'off' : (this.relayFiringUntil.get(l.id) ?? 0) > this.clock ? 'firing' : this.sim.hood.relayReady(l.id) ? 'ready' : 'cooldown';
-      this.scene.setRelayLamp(l.id, state);
-    }
-  }
-
-  /** Labels pinned over rooftops and bridges: locked roofs, bridges you can build, Cores ready to wake. */
-  private updateRoofLabels(_dt: number) {
-    const hood = this.sim.hood;
-    const show = !this.cinematic && !this.hud.introOpen;
-    const zoomedOut = this.camera.zoom < 0.68;
-    for (const r of this.sim.grid.rooftops) {
-      const id = `roofLabel-${r.id}`;
-      if (!show) {
-        this.hud.worldLabel(id, null);
-        continue;
-      }
-      const top = this.roofCenter(r.id, 1.8);
-      const sp = this.camera.toScreen(top);
-      let html: string | null = null;
-      let act = false;
-      if (!this.sim.grid.isPlayable(r.id)) {
-        html = `<span data-roof="${r.id}">🔒 ${r.name}</span><small>${r.unlocked ? 'Build the bridge to reach it' : 'Dormant'}</small>`;
-        act = true;
-      } else if (r.id !== 'r1' && hood.coreReady(r.id)) {
-        html = `✨ ${hood.coreName(r.id)} is ready<button data-core="${r.id}">Awaken · ${formatCost(hood.coreCost(r.id))}</button>`;
-        act = true;
-      } else if (zoomedOut) {
-        const p = this.sim.progression;
-        const pct = Math.round((p.restoredCount(r.id) / Math.max(1, p.restorableCount(r.id))) * 100);
-        // Read-only: it must never swallow clicks meant for the tiles underneath.
-        html = `${hood.coreAwake(r.id) ? '✨' : '🌱'} ${r.name}<small>${pct}% restored</small>`;
-      }
-      this.hud.worldLabel(id, html, sp.x, sp.y, act);
-    }
-    for (const l of LINKS) {
-      const id = `linkLabel-${l.id}`;
-      const br = this.scene.bridges.get(l.id);
-      if (!show || !br || !hood.linkAvailable(l.id)) {
-        this.hud.worldLabel(id, null);
-        continue;
-      }
-      const mid = br.path[Math.floor(br.path.length / 2)];
-      const sp = this.camera.toScreen(new pc.Vec3(mid.x, mid.y + 0.6, mid.z));
-      const st = hood.linkStatus(l.id);
-      const to = this.sim.grid.roof(l.to)!;
-      this.hud.worldLabel(id, `🌉 ${l.name}<small>Opens ${to.name}</small><button data-link="${l.id}" ${st.ok ? '' : 'disabled'}>${st.ok ? `Build · ${formatCost(st.cost)}` : esc(st.reason ?? '')}</button>`, sp.x, sp.y, true);
-    }
-    // Rooftop chips once a second rooftop is in sight.
-    const revealed = this.sim.grid.rooftops.filter((r) => r.unlocked);
-    if (revealed.length > 1) {
-      const near = this.nearestRoof();
-      const icon: Record<string, string> = { r1: '🏠', r2: '💧', r3: '🌳' };
-      this.hud.roofNav(
-        revealed
-          .map((r) => `<button class="chip${r.id === near ? ' on' : ''}${this.sim.grid.isPlayable(r.id) ? '' : ' locked'}" data-roof="${r.id}" title="Focus ${r.name} (F)">${icon[r.id] ?? '🏙️'} ${ROOF_BY_ID[r.id]?.short ?? r.name}${this.sim.grid.isPlayable(r.id) ? '' : ' 🔒'}</button>`)
-          .join(''),
-      );
-    } else this.hud.roofNav(null);
   }
 
   // ───────────────────────── frame loop ─────────────────────────
@@ -2066,7 +1615,6 @@ export class Game {
     this.frameNo++;
     this.updateChainPresentation(dt);
     this.vfx.update(dt);
-    this.updateStage(false);
     // First-tile beacon until the player restores something.
     if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic) {
       const tiles = this.sim.progression.tilesFor(HOME);
@@ -2079,7 +1627,7 @@ export class Game {
     this.sfx.layers = Math.min(3, Math.floor(this.sim.progression.restoredCount(HOME) / 12));
     this.sfx.update(dt);
 
-    if (this.selected || this.selectedRelay) {
+    if (this.selected) {
       this.inspectTimer -= dt;
       if (this.inspectTimer <= 0) {
         this.inspectTimer = 0.3;
@@ -2094,9 +1642,7 @@ export class Game {
         this.sfx.meow(true);
       }
     }
-    this.updateRoofLabels(dt);
     this.updateAreaLabels();
-    this.updateRelayLamps();
     this.updateBoostRings(dt);
 
     this.saveTimer += dt;

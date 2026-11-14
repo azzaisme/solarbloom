@@ -4,7 +4,7 @@ import { CHUNK } from '../src/core/Generation';
 import { GROUND } from '../src/core/GameState';
 import { packChunk } from '../src/core/TilePack';
 import { Sim } from '../src/gameplay/Sim';
-import { awakenSeed, fill, ground, makeSim, rich } from './helpers';
+import { fill, ground, makeSim, rich } from './helpers';
 
 const saver = new SaveService(undefined);
 const tilesOfSave = (json: string) => (JSON.parse(json) as { tiles: Record<string, string> }).tiles;
@@ -28,8 +28,6 @@ describe('save v4: tile deltas (City 02.2)', () => {
   it('only chunks touched since the last save are re-packed, with the same result as a full re-pack', () => {
     const sim = makeSim(6);
     rich(sim);
-    awakenSeed(sim);
-    sim.hood.buildLink('seed-reservoir');
     for (let i = 0; i < 300; i++) {
       if (i % 5 === 0) {
         const t = sim.grid.playableTiles().find((x) => sim.restoration.checkPulse(x).ok);
@@ -48,17 +46,15 @@ describe('save v4: round trips (City 02.3)', () => {
   it('save → load → save is byte-identical, mid-growth, mid-chain, with lush tiles and drones', () => {
     const sim = makeSim(11);
     rich(sim);
-    awakenSeed(sim);
-    sim.hood.buildLink('seed-reservoir');
     fill(sim, 0, 0, 7, 7, 'prepared');
     ground(sim, 'r1', 5, 5, 'restored');
     sim.build.place('pollinator', 'r1', 5, 5);
-    ground(sim, 'r2', 2, 2, 'restored');
-    ground(sim, 'r2', 3, 2, 'restored');
-    ground(sim, 'r2', 2, 3, 'restored');
-    ground(sim, 'r2', 3, 3, 'restored');
-    sim.build.place('droneHub', 'r2', 2, 2);
-    sim.restoration.complete(sim.grid.get('r2', 5, 6)!, 'overflow'); // lush
+    ground(sim, 'r1', 1, 3, 'restored');
+    ground(sim, 'r1', 2, 3, 'restored');
+    ground(sim, 'r1', 1, 4, 'restored');
+    ground(sim, 'r1', 2, 4, 'restored');
+    sim.build.place('droneHub', 'r1', 1, 3);
+    sim.restoration.complete(sim.grid.get('r1', 6, 2)!, 'overflow'); // lush
     sim.restoration.pulse('r1:5:4'); // growing
     sim.advance(0.3);
     const a = saver.serialize(sim.state);

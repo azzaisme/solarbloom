@@ -37,21 +37,11 @@ describe('upgrades drawer grouped by system (City 14.4)', () => {
     const d = drawer(sim);
     expect(d.map((g) => g.group)).toEqual(['Pulse', 'Machines', 'Drones', 'Networks', 'Fog', 'Storage']);
     expect(d).toMatchSnapshot();
-    expect(sim.upgrades.all().some((u) => u.group === 'Neighbourhood')).toBe(false);
-    expect(sim.upgrades.purchase('relay2')).toBe(false);
-  });
-
-  it('the rooftop campaign keeps its Neighbourhood upgrades and has no city ones', () => {
-    const sim = new Sim(createInitialState(3, { rooftops: true }));
-    const groups = sim.upgrades.grouped().map((g) => g.group);
-    expect(groups).toContain('Neighbourhood');
-    expect(groups).not.toContain('Networks');
-    expect(groups).not.toContain('Fog');
   });
 
   it('every card says what it changes, and every locked card says exactly what unlocks it', () => {
-    for (const opts of [{}, { rooftops: true }]) {
-      const sim = new Sim(createInitialState(5, opts));
+    {
+      const sim = new Sim(createInitialState(5));
       rich(sim);
       for (const d of sim.upgrades.all()) {
         expect(UPGRADE_GROUPS).toContain(d.group);

@@ -81,7 +81,7 @@ export const CITY_GEN = {
    * City 12.1 (generation 3): rooftop clusters. This share of streets, plazas and markets at least `minDistance`
    * chunks out carry a raised rooftop (one of the old campaign's layouts) whose Core is the area's landmark.
    */
-  rooftops: { chance: 0.14, minDistance: 2, from: ['street', 'plaza', 'market'], templates: ['r1', 'r2', 'r3'], height: 2.6 },
+  rooftops: { chance: 0.14, minDistance: 2, from: ['street', 'plaza', 'market'], templates: ['seed', 'reservoir', 'canopy'], height: 2.6 },
   /** Further out, one authored landmark every this many chunks of distance. */
   authoredEvery: 10,
   /**

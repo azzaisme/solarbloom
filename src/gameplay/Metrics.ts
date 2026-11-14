@@ -13,13 +13,10 @@ export class Metrics {
       this.first(machine.type);
       this.invalidate();
     });
-    for (const e of ['area.cleared', 'link.built', 'roof.coreAwake', 'rooftop.coreRestored', 'neighbourhood.bloom', 'district.bloom'] as const) b.on(e, () => this.invalidate());
+    for (const e of ['area.cleared', 'rooftop.coreRestored', 'district.bloom'] as const) b.on(e, () => this.invalidate());
     b.on('cat.found', () => this.first('cat'));
     b.on('tree.discharged', () => this.first('treePulse'));
     b.on('rooftop.coreRestored', () => this.first('core'));
-    b.on('link.built', ({ linkId }) => this.first(`bridge:${linkId}`));
-    b.on('roof.coreAwake', ({ roofId }) => this.first(`core:${roofId}`));
-    b.on('neighbourhood.bloom', () => this.first('neighbourhoodBloom'));
     b.on('area.cleared', ({ areaId }) => {
       if (areaId === 'park') return;
       (sim.state.stats.areaTimes ??= []).push(Math.round(sim.time));

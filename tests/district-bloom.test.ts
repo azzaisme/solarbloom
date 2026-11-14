@@ -144,9 +144,4 @@ describe('district-wide blooms (City 10.7)', () => {
     sim.state.districts = { dX: 0 };
     expect(sim.districts.reward().biomass).toBeGreaterThan(first.biomass);
   });
-
-  it('the rooftop campaign has no district blooms', () => {
-    const sim = new Sim(createInitialState(3, { rooftops: true }));
-    expect(sim.districts.ready()).toEqual([]);
-  });
 });

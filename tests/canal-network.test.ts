@@ -170,10 +170,4 @@ describe('canal water network (City 10.3)', () => {
     expect(sim.chains.activeRuns).toBe(0);
     for (const g of gardens) expect(g.charge).toBe(0);
   });
-
-  it('the rooftop campaign has no canals', () => {
-    const sim = new Sim(createInitialState(3, { rooftops: true }));
-    const g = sim.state.machines[0];
-    expect(sim.canals.of(g)).toBeUndefined();
-  });
 });

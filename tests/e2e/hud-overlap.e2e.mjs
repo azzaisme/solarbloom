@@ -11,7 +11,7 @@ mkdirSync(dir, { recursive: true });
 const server = await preview({ preview: { port: 4197, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let fails = 0;
-const PANELS = ['#res', '#obj', '#hotbar', '#hint', '#inspect', '#toasts', '#catPanel', '#roofNav'];
+const PANELS = ['#res', '#obj', '#hotbar', '#hint', '#inspect', '#toasts', '#catPanel'];
 try {
   for (const [name, w, h] of [['phone', 390, 844], ['desktop', 1280, 800]]) {
     const page = await browser.newPage({ viewport: { width: w, height: h } });

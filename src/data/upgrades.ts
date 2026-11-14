@@ -1,7 +1,7 @@
 import type { GameState } from '../core/types';
 
 /** Upgrade drawer sections, in order. Each groups what one system of the world does. */
-export const UPGRADE_GROUPS = ['Pulse', 'Machines', 'Drones', 'Networks', 'Fog', 'Storage', 'Neighbourhood'] as const;
+export const UPGRADE_GROUPS = ['Pulse', 'Machines', 'Drones', 'Networks', 'Fog', 'Storage'] as const;
 export type UpgradeGroup = (typeof UPGRADE_GROUPS)[number];
 
 /** Whether this is the endless city (vs the rooftop campaign). */
@@ -13,7 +13,8 @@ export interface UpgradeDef {
   icon: string;
   group: UpgradeGroup;
   /** Only in this kind of game: the endless city, or the legacy rooftop campaign. Both when unset. */
-  mode?: 'city' | 'rooftops';
+  /** Only in the endless city (all upgrades are now). */
+  mode?: 'city';
   baseCost: number; // biomass
   costMult: number;
   maxLevel: number;
@@ -168,32 +169,6 @@ export const UPGRADES: UpgradeDef[] = [
     describe: () => 'Your first hub launches a second drone',
     available: has('droneHub'),
     lockedReason: 'Build a Drone Hub first',
-  },
-  {
-    id: 'relay2',
-    group: 'Neighbourhood',
-    mode: 'rooftops',
-    name: 'Relay II',
-    icon: '🔌',
-    baseCost: 140,
-    costMult: 1,
-    maxLevel: 1,
-    describe: () => 'Each cross-roof pulse splits into 2 remote blooms, and relays recharge in 6 s instead of 8',
-    available: (s) => Object.values(s.links ?? {}).some((l) => l.built),
-    lockedReason: 'Build a bridge first',
-  },
-  {
-    id: 'droneDispatch',
-    group: 'Neighbourhood',
-    mode: 'rooftops',
-    name: 'Drone Dispatch',
-    icon: '🛰️',
-    baseCost: 120,
-    costMult: 1,
-    maxLevel: 1,
-    describe: () => 'Idle drones fly across bridges to help on connected rooftops (near the relay)',
-    available: (s) => Object.values(s.links ?? {}).some((l) => l.built) && s.machines.some((m) => m.type === 'droneHub'),
-    lockedReason: 'Build a bridge and a Drone Hub first',
   },
   // ───────────── the endless city ─────────────
   {

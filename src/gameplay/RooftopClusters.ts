@@ -1,7 +1,7 @@
 import { GROUND } from '../core/GameState';
 import type { AreaMap } from '../core/Areas';
 import type { LayerData, MachineData, TileData } from '../core/types';
-import { ROOF_BY_ID } from '../data/rooftops';
+import { ROOF_TEMPLATES } from '../data/templates';
 import type { Sim } from './Sim';
 
 /**
@@ -37,7 +37,7 @@ export class RooftopClusters {
     const id = RooftopClusters.layerId(areaId);
     const had = s.grid.layer(id);
     if (had) return had;
-    const def = ROOF_BY_ID[plan.template];
+    const def = ROOF_TEMPLATES[plan.template];
     const layer: LayerData = {
       id,
       name: def?.name ?? 'Rooftop',

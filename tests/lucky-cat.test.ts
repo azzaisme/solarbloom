@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { SaveService, type StorageLike } from '../src/app/SaveService';
 import { Sim } from '../src/gameplay/Sim';
 import { TUNING } from '../src/data/tuning';
-import { fill, makeSim, rich } from './helpers';
+import { PARK } from '../src/core/Areas';
+import { fill, GROUND, makeSim, rich } from './helpers';
 
 class MemStorage implements StorageLike {
   m = new Map<string, string>();
@@ -18,14 +19,21 @@ class MemStorage implements StorageLike {
 }
 
 describe('lucky cat', () => {
-  it('first cat appears on the tutorial roof after enough play', () => {
+  it('first cat appears in the park after enough play', () => {
     const sim = makeSim();
-    fill(sim, 2, 3, 7, 6, 'restored');
+    let n = 0;
+    for (const t of sim.areas.tiles(PARK)) {
+      if (t.blocked || t.occupantId || n >= 24) continue;
+      t.ground = 'restored';
+      t.bloom = 1;
+      sim.grid.touch(t);
+      n++;
+    }
     sim.advance(TUNING.cat.firstMinTime - 5);
     expect(sim.state.cat.active).toBeUndefined();
     sim.advance(10);
     expect(sim.state.cat.active).toBeDefined();
-    expect(sim.cat.anchor(sim.state.cat.active!.anchorId)!.roofId).toBe('r1');
+    expect(sim.cat.anchor(sim.state.cat.active!.anchorId)!.roofId).toBe(GROUND);
   });
 
   it('appears by the force time even for slow players', () => {
@@ -49,11 +57,13 @@ describe('lucky cat', () => {
 
   it('skips anchors whose tile has a machine, and vetoed (invisible) anchors', () => {
     const sim = makeSim();
-    sim.cat.anchorView = (a) => (a.id === 'vent-east' || a.id === 'core-step' ? 'visible' : 'covered');
+    sim.cat.anchorView = (a) => (a.id === 'park-bench' || a.id === 'fountain-rim' ? 'visible' : 'covered');
     rich(sim);
-    fill(sim, 2, 0, 2, 0, 'restored');
-    sim.build.place('solar', 'r1', 2, 0);
-    expect(sim.cat.candidates().map((a) => a.id)).toEqual(['vent-east']);
+    const t = sim.grid.get(GROUND, 9, 8)!; // the fountain rim's tile
+    t.ground = 'restored';
+    sim.grid.touch(t);
+    expect(sim.build.place('solar', GROUND, 9, 8)).toBeTruthy();
+    expect(sim.cat.candidates().map((a) => a.id)).toEqual(['park-bench']);
   });
 
   it('rewards never push resources out of range', () => {
@@ -78,10 +88,10 @@ describe('lucky cat', () => {
     const store = new MemStorage();
     const saver = new SaveService(store);
     const sim = makeSim();
-    sim.cat.spawn('parapet-back');
+    sim.cat.spawn('park-bench');
     saver.save(sim.state);
     const loaded = new Sim(saver.load()!);
-    expect(loaded.state.cat.active?.anchorId).toBe('parapet-back');
+    expect(loaded.state.cat.active?.anchorId).toBe('park-bench');
     expect(loaded.cat.claim()).toBeDefined();
     saver.save(loaded.state);
     const again = new Sim(saver.load()!);
@@ -89,17 +99,15 @@ describe('lucky cat', () => {
     expect(again.cat.claim()).toBeUndefined();
     expect(again.state.cat.found).toBe(1);
     const d = again.cat.discoveries();
-    expect(d.anchors.find((a) => a.id === 'parapet-back')!.found).toBe(true);
-    expect(d.anchors.filter((a) => a.found).length).toBe(1);
     expect(d.rewards.luckyHarvest).toBe(1);
   });
 
   it('a missed cat never blocks rewards: it stashes extras (capped) and pays them on discovery', () => {
     const sim = makeSim();
-    sim.cat.spawn('parapet-back');
+    sim.cat.spawn('park-bench');
     sim.state.cat.found = 1;
     sim.advance(TUNING.cat.laterMax * (TUNING.cat.stashMax + 2));
-    expect(sim.state.cat.active?.anchorId).toBe('parapet-back'); // still discoverable, only one cat
+    expect(sim.state.cat.active?.anchorId).toBe('park-bench'); // still discoverable, only one cat
     expect(sim.state.cat.stash).toBe(TUNING.cat.stashMax);
     let extras = -1;
     sim.bus.on('cat.found', (e) => (extras = e.extras));

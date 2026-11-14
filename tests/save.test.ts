@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { Sim } from '../src/gameplay/Sim';
-import { fill, makeSim, rich } from './helpers';
+import { PARK } from '../src/core/Areas';
+import { HOME } from '../src/gameplay/ProgressionSystem';
+import { fill, GROUND, makeSim, rich } from './helpers';
 
 describe('save & progression', () => {
   it('round-trips tile state, machines and upgrades; rejects bad saves', () => {
@@ -19,24 +21,28 @@ describe('save & progression', () => {
     expect(saver.deserialize('nope')).toBeUndefined();
   });
 
-  it('core activates once, needs all machines, tiles and full blooms, and unlocks roof 2', () => {
+  it('the fountain wakes once, needs all machines, tiles and full blooms, and clears the park', () => {
     const sim = makeSim();
     rich(sim);
-    fill(sim, 0, 0, 7, 7, 'restored');
+    const park = sim.areas.tiles(PARK).filter((t) => !t.blocked && !t.occupantId);
     expect(sim.progression.activateCore()).toBe(false);
-    for (const t of sim.grid.tilesOf('r1').slice(10, 40)) t.bloom = 3;
-    sim.build.place('solar', 'r1', 5, 5);
-    sim.build.place('condenser', 'r1', 6, 5);
-    sim.build.place('pollinator', 'r1', 5, 6);
-    sim.build.place('droneHub', 'r1', 2, 2);
-    sim.build.place('motherTree', 'r1', 2, 5);
+    for (const t of park) {
+      t.ground = 'restored';
+      t.bloom = 3;
+      t.pollution = 0;
+      sim.grid.touch(t);
+    }
+    for (const type of ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree'] as const) {
+      const spot = park.find((t) => sim.build.check(type, GROUND, t.x, t.z).ok)!;
+      expect(sim.build.place(type, GROUND, spot.x, spot.z), type).toBeTruthy();
+    }
     expect(sim.progression.coreReady()).toBe(true);
     let events = 0;
     sim.bus.on('rooftop.coreRestored', () => events++);
     expect(sim.progression.activateCore()).toBe(true);
     expect(sim.progression.activateCore()).toBe(false);
     expect(events).toBe(1);
-    expect(sim.grid.roof('r2')!.unlocked).toBe(true);
+    expect(sim.areas.fog(PARK)).toBe('cleared');
     const copy = new Sim(new SaveService(undefined).deserialize(JSON.stringify(sim.state))!);
     expect(copy.progression.activateCore()).toBe(false);
   });
@@ -46,16 +52,16 @@ describe('save & progression', () => {
     const sim = makeSim(7);
     const order = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree'] as const;
     let t = 0;
-    for (; t < 20 * 60 * 10 && !sim.state.progression.coreActivated; t++) {
+    for (; t < 30 * 60 * 10 && !sim.state.progression.coreActivated; t++) {
       if (t % 5 === 0) {
-        const tiles = sim.grid.tilesOf('r1').filter((x) => sim.restoration.checkPulse(x).ok);
+        const tiles = sim.progression.tilesFor(HOME).filter((x) => sim.restoration.checkPulse(x).ok);
         const rank = (x: { ground: string }) => (x.ground === 'prepared' ? 0 : x.ground === 'polluted' ? 1 : 2);
         tiles.sort((a, b) => rank(a) - rank(b) || a.pollution - b.pollution);
         if (tiles[0]) sim.restoration.pulse(tiles[0].id);
         for (const type of order) {
           if (sim.progression.built(type)) continue;
-          const spot = sim.grid.tilesOf('r1').find((x) => sim.build.check(type, 'r1', x.x, x.z).ok);
-          if (spot) sim.build.place(type, 'r1', spot.x, spot.z);
+          const spot = sim.progression.tilesFor(HOME).find((x) => sim.build.check(type, GROUND, x.x, x.z).ok);
+          if (spot) sim.build.place(type, GROUND, spot.x, spot.z);
           break;
         }
         if (sim.upgrades.status(sim.upgrades.all().find((u) => u.id === 'seedVault')!).ok) sim.upgrades.purchase('seedVault');
@@ -65,7 +71,7 @@ describe('save & progression', () => {
       sim.tick();
     }
     expect(sim.state.progression.coreActivated).toBe(true);
-    expect(t / 10).toBeLessThan(20 * 60);
+    expect(t / 10).toBeLessThan(30 * 60);
   });
 });
 

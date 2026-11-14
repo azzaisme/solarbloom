@@ -173,8 +173,6 @@ describe('buildable Bloom Relays (City 10.4)', () => {
     expect(sim.build.check('relay', GROUND, 2, 2).ok).toBe(true);
     const polluted = sim.areas.tiles(PARK).find((t) => t.ground === 'polluted' && !t.blocked && !t.occupantId);
     if (polluted) expect(sim.build.check('relay', GROUND, polluted.x, polluted.z).ok).toBe(false);
-    const roofs = new Sim(createInitialState(2, { rooftops: true }));
-    expect(roofs.build.isUnlocked('relay')).toBe(false);
     // A link's recharge is saved.
     const a = sim.build.place('relay', GROUND, 2, 2)!;
     const b = sim.build.place('relay', GROUND, 6, 6)!;

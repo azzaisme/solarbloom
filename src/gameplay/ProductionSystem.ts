@@ -42,7 +42,6 @@ export class ProductionSystem {
     const R = TUNING.restore;
     let mult = this.sim.upgrades.soilMult;
     if (this.sim.state.progression.coreActivated) mult *= TUNING.core.resonanceBiomassMult;
-    if (this.sim.state.progression.neighbourhoodBloomAt >= 0) mult *= TUNING.neighbourhood.bloom.biomassMult;
     let sum = 0;
     for (const [key, packed] of Object.entries(this.sim.grid.pending)) {
       if (!this.sim.grid.isPlayable(key.split('|')[0])) continue;
@@ -106,7 +105,6 @@ export class ProductionSystem {
     let v = TUNING.restore.biomassPerSec * TUNING.restore.bloomRateMult[Math.max(1, t.bloom)] * this.sim.upgrades.soilMult;
     if (this.inPollinatorZone(t)) v *= TUNING.pollinator.biomassMult;
     if (this.sim.state.progression.coreActivated) v *= TUNING.core.resonanceBiomassMult;
-    if (this.sim.state.progression.neighbourhoodBloomAt >= 0) v *= TUNING.neighbourhood.bloom.biomassMult;
     if ((t.lushUntil ?? 0) > this.sim.time) v *= TUNING.neighbourhood.reservoir.lushMult;
     return v;
   }
@@ -144,7 +142,7 @@ export class ProductionSystem {
     let energy = 0;
     const bonus = this.sim.areas.bonusIncome();
     energy += bonus.energy;
-    let water = TUNING.rainBarrelRate + bonus.water + (this.sim.hood.coreAwake('r2') ? TUNING.neighbourhood.reservoir.cisternWater : 0);
+    let water = TUNING.rainBarrelRate + bonus.water;
     for (const m of this.sim.state.machines) {
       if (m.type === 'solar') energy += this.solarOutput(m);
       else if (m.type === 'condenser') water += 1;
@@ -162,7 +160,6 @@ export class ProductionSystem {
       this.wasFull[k] = full;
     }
     this.tickCondensers(dt);
-    this.tickElderTree(dt);
   }
 
   /** Water Condensers fill a charge meter; when full they water the dry soil beside them (a chain). */
@@ -199,21 +196,6 @@ export class ProductionSystem {
       if (s.chains.startOverflow(g)) this.overflowing.add(g.id);
     }
     if (this.overflowing.size) for (const id of [...this.overflowing]) if ((s.machine(id)?.charge ?? 0) < R.threshold) this.overflowing.delete(id);
-  }
-
-  /** The Elder Tree slowly charges by itself once the Canopy is partly alive (a no-stall guarantee). */
-  private tickElderTree(dt: number) {
-    const s = this.sim;
-    if (!s.grid.isPlayable('r3')) return;
-    const c = TUNING.neighbourhood.canopy;
-    const tree = s.state.machines.find((m) => m.type === 'core' && m.roofId === 'r3');
-    // A full ring is already releasing (a chain queued its burst): wait for it.
-    if (!tree || tree.charge >= c.threshold - 1e-9) return;
-    const p = s.progression;
-    if (p.restoredCount('r3') < p.restorableCount('r3') * c.selfChargeFrom) return;
-    tree.charge = Math.min(c.threshold, tree.charge + dt / c.selfChargeSeconds);
-    // Only a fill that happened right here starts a burst (chain fills start their own).
-    if (tree.charge >= c.threshold - 1e-9) s.chains.startCanopyBurst(tree);
   }
 
   /** Gardens whose Overflow chain is queued (so it doesn't start twice before it resolves). */

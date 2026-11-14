@@ -1,18 +1,21 @@
-import { createInitialState } from '../src/core/GameState';
-import type { GroundState } from '../src/core/types';
+import { createInitialState, GROUND, placeFixed } from '../src/core/GameState';
+import type { GroundState, LayerData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
-import { LINKS, type RoofLinkDef } from '../src/data/rooftops';
 
 /**
- * Mechanics tests build bridges directly, so the bridges' full-bloom milestones are relaxed in files that
- * use these helpers (each test file has its own module graph). neighbourhood.test.ts restores and tests them;
- * the pacing tests don't import this file and play with the real milestones.
+ * Mechanics tests run on a small bounded test layer (`PAD`, 8×8, laid out like the Seed rooftop template:
+ * vents at (7,0) and (0,7), a few mossy tiles, a Core in the corner and an old solar panel), standing in a
+ * normal city far from the park, so its tiles never touch the city's fog or areas.
  */
-export const MILESTONES: Record<string, RoofLinkDef['requiresFullBloom']> = Object.fromEntries(LINKS.map((l) => [l.id, l.requiresFullBloom]));
-for (const l of LINKS) delete l.requiresFullBloom;
+export const PAD = 'r1';
 
 export function makeSim(seed = 1234) {
-  return new Sim(createInitialState(seed, { rooftops: true }));
+  const state = createInitialState(seed);
+  const pad: LayerData = { id: PAD, name: 'Test pad', kind: 'raised', width: 8, depth: 8, height: 0, origin: [-200, 0, -200], unlocked: true, preview: false, template: 'seed' };
+  state.layers.push(pad);
+  placeFixed(state, PAD, 'core', 0, 0, 2);
+  placeFixed(state, PAD, 'solar', 3, 1, 1, true);
+  return new Sim(state);
 }
 
 export function rich(sim: Sim) {
@@ -21,7 +24,7 @@ export function rich(sim: Sim) {
   s.resources.energy = s.resources.water = s.resources.biomass = 5000;
 }
 
-export function setGround(sim: Sim, x: number, z: number, g: GroundState, roof = 'r1') {
+export function setGround(sim: Sim, x: number, z: number, g: GroundState, roof = PAD) {
   const t = sim.grid.get(roof, x, z)!;
   t.ground = g;
   t.pollution = g === 'polluted' ? 100 : 0;
@@ -31,26 +34,19 @@ export function setGround(sim: Sim, x: number, z: number, g: GroundState, roof =
   return t;
 }
 
-/** Fills a rectangle of tiles with a ground state. */
+/** Fills a rectangle of the test pad with a ground state. */
 export function fill(sim: Sim, x0: number, z0: number, x1: number, z1: number, g: GroundState) {
-  for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
-    const t = sim.grid.get('r1', x, z)!;
-    if (t.blocked || sim.isCoreTile(t)) continue;
-    setGround(sim, x, z, g);
-  }
+  for (let z = z0; z <= z1; z++)
+    for (let x = x0; x <= x1; x++) {
+      const t = sim.grid.get(PAD, x, z)!;
+      if (t.blocked || sim.isCoreTile(t)) continue;
+      setGround(sim, x, z, g);
+    }
 }
 
-/** Skips the Round 2 game: the Seed's Core is awake (as if activated). */
-export function awakenSeed(sim: Sim) {
-  const p = sim.state.progression;
-  p.coreActivated = true;
-  p.coreActivatedAt = sim.time;
-  p.cores = { ...p.cores, r1: true };
-  sim.grid.roof('r2')!.unlocked = true;
-  sim.production.markDirty();
-}
-
-/** Sets a tile's ground on any roof. */
+/** Sets a tile's ground on any layer. */
 export function ground(sim: Sim, roof: string, x: number, z: number, g: GroundState) {
   return setGround(sim, x, z, g, roof);
 }
+
+export { GROUND };

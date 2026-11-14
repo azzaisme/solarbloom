@@ -62,7 +62,7 @@ export interface LayerData {
   preview: boolean; // visible but not yet playable
   /** Ground generation version: 2 adds buildings, 3 rooftop clusters. Saves keep the version they began with. */
   gen?: number;
-  /** City 12.1: a generated rooftop uses this template's layout and look ('r1' Seed, 'r2' Reservoir, 'r3' Canopy). */
+  /** City 12.1: a generated rooftop uses this template's layout and look ('seed', 'reservoir' or 'canopy'). */
   template?: string;
   /** City 12.1: the city area whose rooftop cluster this is (such roofs are not part of the rooftop campaign). */
   cluster?: string;
@@ -100,8 +100,6 @@ export interface DroneData {
   jobs: number;
   /** Roof the drone is currently over (px/pz are local to it). Defaults to the hub's roof. */
   roofId?: string;
-  /** Drone Dispatch: crossing a bridge. t goes 0 → 1 from `fromRoof` to the link's other end. */
-  cross?: { linkId: string; fromRoof: string; t: number };
   /** City 11.4: a flight far from the camera, resolved by time instead of per-tick moves (from, departure, arrival). */
   far?: { fx: number; fz: number; t0: number; t1: number };
 }
@@ -136,13 +134,13 @@ export interface Progression {
   pulseCharge: number;
   /** Mega Pulse meter: manual taps since the last Mega Pulse (full at TUNING.mega.charge) */
   megaCharge?: number;
-  /** Phase 3: which Rooftop Cores are awake (r1 mirrors coreActivated). */
-  cores: Record<string, boolean>;
+  /** Old saves only (the rooftop campaign's Cores). */
+  cores?: Record<string, boolean>;
   /** Reservoir Overflow bursts and Canopy Bursts so far (core milestones). */
   overflows: number;
   canopyBursts: number;
-  /** One-time Neighbourhood Bloom reward claimed (sim time, -1 if not). */
-  neighbourhoodBloomAt: number;
+  /** Old saves only (the rooftop campaign's Neighbourhood Bloom). */
+  neighbourhoodBloomAt?: number;
 }
 
 export interface Stats {

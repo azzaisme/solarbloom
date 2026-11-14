@@ -22,9 +22,9 @@ class VRng {
 
 /** Per-rooftop look of unrestored ground: grey concrete, sun-baked clay, withered leaf litter. */
 const DEAD_LOOK: Record<string, { base: readonly string[]; dark: string; crack: string; debris: string }> = {
-  r1: { base: PALETTE.concrete, dark: PALETTE.concreteDark, crack: PALETTE.crack, debris: PALETTE.debris },
-  r2: { base: ['#bda78a', '#b29c7f', '#c6b195', '#a99377'], dark: '#97806a', crack: '#6e5a48', debris: '#8a7560' },
-  r3: { base: ['#867c6a', '#7c7261', '#908571', '#776d5d'], dark: '#655c4e', crack: '#4e463b', debris: '#6b5a45' },
+  seed: { base: PALETTE.concrete, dark: PALETTE.concreteDark, crack: PALETTE.crack, debris: PALETTE.debris },
+  reservoir: { base: ['#bda78a', '#b29c7f', '#c6b195', '#a99377'], dark: '#97806a', crack: '#6e5a48', debris: '#8a7560' },
+  canopy: { base: ['#867c6a', '#7c7261', '#908571', '#776d5d'], dark: '#655c4e', crack: '#4e463b', debris: '#6b5a45' },
 };
 
 interface TileView {
@@ -175,7 +175,7 @@ export class GridRenderer {
 
     switch (t.ground) {
       case 'polluted': {
-        const look = DEAD_LOOK[this.sim.grid.layer(t.roofId)?.template ?? t.roofId] ?? DEAD_LOOK.r1;
+        const look = DEAD_LOOK[this.sim.grid.layer(t.roofId)?.template ?? t.roofId] ?? DEAD_LOOK.seed;
         const shade = t.pollution > 80 ? look.dark : look.base[t.variant % look.base.length];
         setVColor(v.slab, 'box', shade);
         const cracks = 1 + (t.variant % 3 === 0 ? 1 : 0) + (t.pollution > 80 ? 1 : 0);

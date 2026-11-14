@@ -20,7 +20,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries district blooms ✅ (#75) canal water network ✅ (#71) buildable relays ✅ (#72) huge-chain presentation built (#74: waits on a real-phone recording) |
 | #14 City 13: Lucky Cat in the city | ✅ generated nooks, spawn rules, Fog Whisker and Golden Corridor (scaled with the city, capped: a cat never wakes an area alone), discovery log grouped by area type (`docs/discoveries-500-areas.png`) |
 | #12 City 11: automation at scale | ✅ drone networks, fog-edge priority, 50-hub safety soak Mega Pulse and scaled Overcharge ✅ (the city bot's own taps start 18–19 big chains an hour vs 2–4 by automation) area automation switches ✅ (Keep blooming, Focus the frontier, Leave alone; saved) far drones by the clock ✅ (#79) |
-| #13 City 12: Phase 3 content in the city | ✅ specialties on generic landmarks (grove Elder Trees, reservoir/canal Reservoir Gardens), cat rewards on areas rooftop cluster areas ✅ (#82) (open: remove fixed rooftop data #85) |
+| #13 City 12: Phase 3 content in the city | ✅ specialties on generic landmarks (grove Elder Trees, reservoir/canal Reservoir Gardens), cat rewards on areas rooftop cluster areas ✅ (#82) fixed rooftop data removed ✅ (#85) |
 | #15 City 14: HUD | toast cap ✅, upgrades drawer grouped by system ✅, area panel ✅ (from landmarks and overview labels) (Networks: Green Corridors, Drone Mesh; Fog: Fog Lanterns) (open: phone pass #95, objective panel #91) |
 | #16 City 15: proof | headless soak ✅ (`npm run test:soak`), browser perf ✅ (`npm run test:perf:browser`), CI workflow ✅ leak test ✅ (`npm run test:leak`), docs ✅ (open: device log #99) |
 
@@ -84,6 +84,13 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - Tests (`tests/milestones.test.ts`): every area within 8 chunks of the park for 3 seeds has a supported, capped specialty; sizes grow with distance; every kind is actually played out to completion on real areas (two of each, two seeds); the wake needs both; progress is saved; machines can't make share-sized ones unreachable; a fully bloomed area is never stuck.
 - Pacing, before → after: the city bot clears 25 → 26 (seed 7) and 29 → 31 (seed 21) areas an hour (it now saves up for specialty machines instead of spending everything on pulses); its slowest area went from 4:12/3:27 to 5:18/6:18. The advisor-only no-stall bot's "park packed and broke" case went from 14.3 to 27.0 min (limit 45). Park pacing unchanged. Soak: 1,000 areas, tick mean 0.115 ms.
 
+## City 12.4: the fixed rooftop campaign is gone
+
+- Deleted `data/rooftops.ts` (ROOFTOPS, LINKS, campaign cat anchors), `NeighbourhoodSystem`, the campaign's scenery (`Scenery.ts`, the buildings, bridges, relay pylons, skyline and Neighbourhood Bloom in `SceneBuilder`), its HUD objective, roof chips and labels, the bridge relays and Drone Dispatch, the Old Cistern water and Canopy self-charge, the rooftop-only upgrades (Relay II, Drone Dispatch) and the `rooftops` new-game option. `src` has no `'r1'`/`'r2'`/`'r3'` literals left.
+- The three layouts survive as `data/templates.ts` (`seed`, `reservoir`, `canopy`), used by rooftop clusters; the park's cat nooks moved there too. Reservoir Gardens, the Elder Tree's Canopy Burst, Overcharge and Golden Relay all live on in the city. Old saves' `cores`/`neighbourhoodBloomAt` fields are optional and ignored.
+- Tests: the campaign-only suites (neighbourhood, its pacing bot and cat, bridge relays, rooftop specialties) are deleted; each has a city counterpart (`relay-city`, `specialties-city`, `lucky-cat-city`, park and city pacing). Generic mechanics tests (chains, drones, placement, economy, saves, world) now run on a small test layer laid out like the Seed template inside a normal city (`tests/helpers.ts`); the save and Lucky Cat tests that relied on the rooftop Core and anchors now use the park's fountain and nooks.
+- Everything passes: 177 unit tests, the e2e suite (69k picking checks, area panel, overview, HUD overlap, district bloom), the soak (tick mean 0.096 ms). Pacing is unchanged (park 6:39/5:54/6:27; city 27/32 areas an hour).
+
 ## City 12.1: rooftop cluster areas
 
 - Ground generation 3 (new games; saves keep their generation): `CITY_GEN.rooftops` turns 14% of streets, plazas and markets at least 2 chunks out into **Rooftops**. Nothing else in the city changes (tested against generation 2).
@@ -117,7 +124,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - A bloom beside a relay sends one pulse down each ready link (once per link per chain, then a 6 s recharge), if something around the far relay can bloom. It arrives after a short travel and blooms 2 tiles there (synergy spots first, lush if all is in full bloom); those blooms can set the far relay's other links off, so a pulse runs through a network and always ends.
 - **Relay Lens** (Networks, 2 levels): +6 range and +1 bloom per pulse per level.
 - Presentation: an arc between the relays and a ring where it lands; the inspect panel lists links and readiness, and the range overlay highlights linked relays.
-- Tests (`tests/relay-city.test.ts`, the Phase 3 relay checks ported to the city plus new ones): one pulse per crossing that blooms the far side; never from outside the zone, out of range or while recharging; only valid tiles (never hidden fog, obstacles or machines); Relay Lens range and targets; a ring of 10 relays where one chain fires every link once, reaches every relay and ends; placement rules; recharge survives a reload. The rooftop relay tests are unchanged and pass.
+- Tests (`tests/relay-city.test.ts`, the Phase 3 relay checks ported to the city plus new ones): one pulse per crossing that blooms the far side; never from outside the zone, out of range or while recharging; only valid tiles (never hidden fog, obstacles or machines); Relay Lens range and targets; a ring of 10 relays where one chain fires every link once, reaches every relay and ends; placement rules; recharge survives a reload. (The campaign's own bridge-relay tests went with the campaign in #85.)
 
 ## City 10.3: canal water network
 
@@ -162,7 +169,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 
 ## City 05 + City 07 (first pass): the park and the city on screen
 
-- A new game starts in the city: only the endless ground layer, the park at chunk (0, 0) (paths crossing at the fountain, benches, a bandstand, a toppled lamp, a rain barrel, the old solar lamp as the starter panel, three mossy tiles to start on). The rooftop layout is still supported and used by the mechanics tests (`createInitialState(seed, { rooftops: true })`).
+- A new game starts in the city: only the endless ground layer, the park at chunk (0, 0) (paths crossing at the fountain, benches, a bandstand, a toppled lamp, a rain barrel, the old solar lamp as the starter panel, three mossy tiles to start on).
 - The park's goal (the fountain) replaces the Seed Core: restore 130 tiles, grow 52 to full bloom, build every machine, then wake it. That clears the park's fog and reveals the first ring of areas. The park pacing bot wakes the fountain at about 6:30 (Round 2 window), with chains up to ×36 thanks to the extra room.
 - After the fountain the objective points at the next area (one with a ready landmark first, otherwise the one furthest along). Landmarks are clickable, with an inspect panel and a Wake button. City areas ask for 60% of their tiles, capped at 160 × distance difficulty.
 - `ChunkRenderer` draws the ground: one merged, vertex-coloured mesh per 16×16 chunk (slabs, decoration, props), streamed around the camera and rebuilt (at most 2 per frame, nearest first) when its tiles change. Fog is a per-chunk mesh of two translucent sheets whose per-vertex alpha is averaged across tile corners: hidden areas are thick, frontier fog thins with progress, tiles next to clear ground are lighter, and restored tiles are clear, so the gloom visibly recedes tile by tile. Cleared areas fade their fog out.
@@ -254,10 +261,9 @@ Dropped chunks release their meshes and buffers; nothing accumulates.
 
 # History: the rooftop campaign (before the city)
 
-Before the city, Solarbloom was a fixed campaign on rooftops. It is kept in the code behind
-`createInitialState(seed, { rooftops: true })`, where its mechanics tests still run, and will become generated
-rooftop clusters inside the city (#82). Its plans are in `docs/ROUND_2_PLAN.md` and `docs/PHASE_3_PLAN.md`, and
-the full write-ups are in git history (this file before the City 15 docs pass).
+Before the city, Solarbloom was a fixed campaign on rooftops. Its three rooftops live on as the templates of
+generated rooftop clusters (#82); the fixed campaign itself was removed in #85 (see "City 12.4" above). Its plans are
+in `docs/ROUND_2_PLAN.md` and `docs/PHASE_3_PLAN.md`, and the full write-ups are in git history.
 
 - **Round 1:** one 8×8 rooftop, Pulse, solar, condensers, pollinator gardens, Bloom Chains, a drone, the Rooftop Core finale.
 - **Round 2:** the Mother Tree, upgrades in groups, the hidden Lucky Cat, rooftop transformation stages, phone layout, the scripted pacing bots.

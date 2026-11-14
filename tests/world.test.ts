@@ -2,13 +2,12 @@ import { pickLayers } from '../src/core/Picking';
 import type { LayerData } from '../src/core/types';
 import { describe, expect, it } from 'vitest';
 import { CHUNK, generateTile } from '../src/core/Generation';
-import { createInitialState, GROUND } from '../src/core/GameState';
+import { GROUND } from '../src/core/GameState';
 import { chunkOf, Grid, tileId } from '../src/core/Grid';
 import { Rng } from '../src/core/Rng';
-import { Sim } from '../src/gameplay/Sim';
 import { makeSim } from './helpers';
 
-const layers = () => createInitialState(1, { rooftops: true }).layers;
+const layers = () => makeSim(1).state.layers.map((l) => ({ ...l }));
 
 describe('world model: global grid and chunks (City 01.1)', () => {
   it('keys round-trip, including negative coordinates and chunk borders', () => {
@@ -119,13 +118,6 @@ describe('world model: layers (City 01.4)', () => {
     // r1's edge tile (7,2) and the ground cell that would sit next to it in world space are not neighbours.
     const edge = sim.grid.get('r1', 7, 2)!;
     expect(sim.grid.neighbors(edge).some((n) => n.roofId === GROUND)).toBe(false);
-  });
-
-  it('the endless ground exists but is not playable until the park arrives', () => {
-    const sim = new Sim(createInitialState(4, { rooftops: true }));
-    expect(sim.grid.layer(GROUND)!.kind).toBe('ground');
-    expect(sim.grid.isPlayable(GROUND)).toBe(false);
-    expect(sim.restoration.checkPulse(sim.grid.get(GROUND, 3, 3)!).ok).toBe(false);
   });
 });
 

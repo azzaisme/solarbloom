@@ -28,10 +28,6 @@ export interface HudCallbacks {
   closeInspect(): void;
   togglePause(): void;
   cycleSpeed(): number;
-  focusRoof(roofId: string): void;
-  buildLink(linkId: string): void;
-  activateRoofCore(roofId: string): void;
-  neighbourhoodBloom(replay: boolean): void;
   /** City 10.7: set off (or replay) a district bloom. */
   districtBloom(id: string, replay: boolean): void;
   /** Wake a city landmark (by machine id). */
@@ -57,13 +53,6 @@ export interface Settings {
   /** The camera glides along with big chains. */
   followChains?: boolean;
 }
-
-/** Each rooftop's Core landmark. */
-export const CORE_TEXT: Record<string, { name: string; icon: string; blurb: string }> = {
-  r1: { name: 'Rooftop Core', icon: '✨', blurb: 'An ancient bloom engine. Awaken it to restore the whole building.' },
-  r2: { name: 'Old Cistern', icon: '💧', blurb: 'A dry rainwater cistern. Wake it to fill the basin with cascading water and steady 💧.' },
-  r3: { name: 'Elder Tree', icon: '🌳', blurb: 'A dormant giant. Blooms around it charge its ring; a full ring releases a Canopy Burst.' },
-};
 
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
 
@@ -133,7 +122,6 @@ export class Hud {
           <button class="chip" id="setBtn" aria-label="Settings">⚙️<span class="lbl"> Settings</span></button>
           <button class="chip" id="objToggle" aria-label="Toggle objective list">📋</button>
         </div>
-        <div class="tools" id="roofNav" hidden></div>
       </div>
       <div id="combo"><div class="big" id="comboBig">BLOOM CHAIN ×0</div><div class="total" id="comboTotal"></div><div id="chainAreas"></div><div id="feed"></div></div>
       <div id="hotbar" class="panel">${slots}</div>
@@ -232,30 +220,16 @@ export class Hud {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-buy]');
       if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
     });
-    // World labels can carry actions (build a bridge, awaken a rooftop).
+    // World labels can carry actions (wake a landmark, open an area).
     $(r, '#wlabels').addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
-      const link = t.closest<HTMLButtonElement>('[data-link]');
-      if (link && !link.disabled) this.cb.buildLink(link.dataset.link!);
-      const core = t.closest<HTMLButtonElement>('[data-core]');
-      if (core && !core.disabled) this.cb.activateRoofCore(core.dataset.core!);
-      const roof = t.closest<HTMLElement>('[data-roof]');
-      if (roof && !link && !core) this.cb.focusRoof(roof.dataset.roof!);
       const wake = t.closest<HTMLButtonElement>('[data-wake]');
       if (wake && !wake.disabled) this.cb.wake(wake.dataset.wake!);
       const area = t.closest<HTMLElement>('[data-area]') ?? t.closest<HTMLElement>('.wlabel')?.querySelector<HTMLElement>('[data-area]');
-      if (area && !wake && !link && !core) this.cb.openArea(area.dataset.area!);
-    });
-    $(r, '#roofNav').addEventListener('click', (e) => {
-      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-roof]');
-      if (b) this.cb.focusRoof(b.dataset.roof!);
+      if (area && !wake) this.cb.openArea(area.dataset.area!);
     });
     $(r, '#obj').addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
-      const link = t.closest<HTMLButtonElement>('[data-link]');
-      if (link && !link.disabled) this.cb.buildLink(link.dataset.link!);
-      const core = t.closest<HTMLButtonElement>('[data-core]');
-      if (core && !core.disabled) this.cb.activateRoofCore(core.dataset.core!);
       const wk = t.closest<HTMLButtonElement>('[data-wake]');
       if (wk && !wk.disabled) this.cb.wake(wk.dataset.wake!);
       const fo = t.closest<HTMLButtonElement>('[data-focus]');
@@ -269,8 +243,6 @@ export class Hud {
       const db = t.closest<HTMLButtonElement>('[data-district]');
       if (db && !db.disabled) this.cb.districtBloom(db.dataset.district!, db.dataset.replay === '1');
       if (fo || wk || db || t.closest('[data-upg]') || t.closest('[data-harvest]')) this.suggestionAt = -1;
-      const nb = t.closest<HTMLButtonElement>('[data-bloom]');
-      if (nb && !nb.disabled) this.cb.neighbourhoodBloom(nb.dataset.bloom === 'replay');
     });
     $(r, '#inspect').addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
@@ -427,10 +399,10 @@ export class Hud {
     return c.restored >= need && !sp.met ? `Next: ${sp.label.charAt(0).toLowerCase()}${sp.label.slice(1)}` : `Next: restore the ${def.name.toLowerCase()} (${Math.min(c.restored, need)}/${need})`;
   }
 
-  /** Phase 3 hints follow the neighbourhood objective. */
+  /** After the fountain: hints follow the city objective. */
   private hoodHint(): { text: string; target?: string } {
     const s = this.sim;
-    if (s.progression.homeIsPark) {
+    {
       const id = s.areas.nextGoal();
       if (!id) return { text: 'The fog is gone from everything you can reach. Keep growing your gardens.' };
       const a = s.areas.info(id);
@@ -440,25 +412,7 @@ export class Hud {
           ? { text: `The ${a.landmarkName} wants one more thing: ${s.milestones.specialty(id).hint}` }
           : { text: `The fog recedes tile by tile: restore tiles touching clear ground. Drones, chains and Wide Pulse all help push it back.` };
     }
-    const o = s.hood.objective();
-    switch (o.step) {
-      case 'link1':
-        return { text: `The Reservoir is just across the gap. Build the 🌉 Skybridge Relay (button in the objective panel, or on the dashed bridge). ${o.action?.ok ? '' : o.action?.reason ?? ''}`, target: '[data-link]' };
-      case 'core2': {
-        const gardens = s.state.machines.some((m) => m.type === 'reservoirGarden');
-        if (!gardens) return { text: 'Restore the dry Reservoir, then build a ⛲ Reservoir Garden (8) within 2 tiles of a 💧 Water Condenser. Condensers fill its basin; when full it Overflows.', target: '[data-tool="reservoirGarden"]' };
-        if (!o.items[2]?.done) return { text: 'Water Condensers within 2 tiles fill a ⛲ Reservoir Garden each time their meter fills. Full basin → Overflow! Select the garden to see its reach.' };
-        return { text: o.action ? 'The Old Cistern is ready — awaken it from the objective panel or click it.' : 'Keep restoring the Reservoir to wake the Old Cistern.', target: o.action ? '[data-core]' : undefined };
-      }
-      case 'link2':
-        return { text: 'Chains near a relay pylon jump across its bridge. Next, open the Canopy with the 🌉 Canopy Bridge.', target: '[data-link]' };
-      case 'core3':
-        return { text: 'Restorations and blooms near the 🌳 Elder Tree charge its ring. Full ring → Canopy Burst. 🌸 Gardens inside its reach make the burst spread further.' };
-      case 'bloom':
-        return { text: 'Every rooftop is awake! Press 🌸 Activate the Neighbourhood Bloom.', target: '[data-bloom]' };
-      default:
-        return { text: 'The neighbourhood lives. Keep growing every tile to full bloom — and look at the horizon…' };
-    }
+    return { text: 'Restore the park and wake its fountain.' };
   }
 
   setTool(t: Tool) {
@@ -548,11 +502,9 @@ export class Hud {
   renderUpgrades(force = false) {
     if (!this.upgradesOpen && !force) return;
     const u = this.sim.upgrades;
-    // Grouped by system. Rooftop-campaign Neighbourhood upgrades appear once there is a neighbourhood.
-    const hood = this.sim.state.progression.coreActivated;
+    // Grouped by system.
     const sorted = u
       .grouped()
-      .filter((g) => g.group !== 'Neighbourhood' || hood)
       .flatMap((g) => g.upgrades);
     let lastGroup = '';
     const html = sorted
@@ -701,13 +653,6 @@ export class Hud {
     el.style.top = `${y}px`;
   }
 
-  /** Rooftop chips (shown once a second rooftop is revealed). */
-  roofNav(html: string | null) {
-    const nav = $(this.root, '#roofNav');
-    nav.hidden = !html;
-    if (html) this.set('roofNav', nav, 'html', html);
-  }
-
   /** Rectangles the Lucky Cat must never hide under. */
   blockedRects(): DOMRect[] {
     return ['#res', '#obj', '#hotbar', '#hint', '#combo'].map((s) => $(this.root, s).getBoundingClientRect());
@@ -811,35 +756,8 @@ export class Hud {
     const total = p.restorableCount(HOME);
     const pct = Math.round((restored / Math.max(1, total)) * 100);
     let hoodNext = '';
-    if (s.state.progression.coreActivated && p.homeIsPark) {
+    if (s.state.progression.coreActivated) {
       hoodNext = this.cityObjective();
-    } else if (s.state.progression.coreActivated) {
-      const o = s.hood.objective();
-      const roof = s.grid.roof(o.roofId)!;
-      const rn = p.restoredCount(o.roofId);
-      const rt = p.restorableCount(o.roofId);
-      const rp = Math.round((rn / Math.max(1, rt)) * 100);
-      this.set('objTitle', $(this.root, '#objTitle'), 'text', o.title);
-      if (o.step === 'done' || o.step === 'bloom') {
-        const rs = s.grid.rooftops;
-        const all = rs.reduce((a, r) => a + p.restorableCount(r.id), 0);
-        const full = rs.reduce((a, r) => a + p.fullBloomCount(r.id), 0);
-        const fp = Math.round((full / Math.max(1, all)) * 100);
-        this.set('objPct', $(this.root, '#objPct'), 'text', `The neighbourhood: ${fp}% in full bloom`);
-        this.set('objBar', $(this.root, '#objBar'), 'width', `${fp}%`);
-      } else {
-        this.set('objPct', $(this.root, '#objPct'), 'text', s.grid.isPlayable(o.roofId) ? `${roof.name}: ${rp}% restored · ${rn}/${rt} tiles` : `${roof.name} is waiting across the bridge`);
-        this.set('objBar', $(this.root, '#objBar'), 'width', `${s.grid.isPlayable(o.roofId) ? rp : 0}%`);
-      }
-      const items = o.items.map((r) => `<li class="${r.done ? 'done' : ''}"><span class="ck">${r.done ? '✓' : ''}</span>${esc(r.label)}</li>`).join('');
-      const a = o.action;
-      const attr = a ? (a.kind === 'link' ? `data-link="${a.id}"` : a.kind === 'core' ? `data-core="${a.id}"` : a.kind === 'bloom' ? 'data-bloom="go"' : 'data-bloom="replay"') : '';
-      // The action sits outside the checklist so it stays visible when the list is collapsed (phones).
-      const btn = a ? `<button class="act${a.kind === 'replay' ? ' green' : ''}" ${attr} ${a.ok ? '' : 'disabled'}>${esc(a.ok || !a.reason ? a.label : `${a.label} — ${a.reason}`)}</button>` : '';
-      this.set('objList', $(this.root, '#objList'), 'html', items);
-      this.set('objAct', $(this.root, '#objAct'), 'html', btn);
-      const nx = o.items.find((r) => !r.done);
-      hoodNext = a && a.ok && a.kind !== 'replay' ? '' : nx ? `Next: ${nx.label}` : ''; // a ready action is its own button
     } else {
       this.set('objAct', $(this.root, '#objAct'), 'html', p.homeIsPark ? this.suggestionHtml() : '');
       this.set('objPct', $(this.root, '#objPct'), 'text', `${pct}% of the ${p.homeIsPark ? 'park' : 'rooftop'} restored · ${restored}/${total} tiles`);
@@ -888,10 +806,9 @@ export class Hud {
 
   machineHtml(m: MachineData, extra: string): string {
     const def = MACHINES[m.type];
-    const core = m.type === 'core' ? CORE_TEXT[m.roofId] : undefined;
-    const name = core?.name ?? def.name;
-    const icon = core?.icon ?? def.icon;
-    const blurb = core?.blurb ?? def.blurb;
+    const name = def.name;
+    const icon = def.icon;
+    const blurb = def.blurb;
     return `<h4><span>${icon} ${esc(name)}${m.starter ? ' <small style="font-weight:700;color:var(--ink-soft)">(old)</small>' : ''}</span><button data-close aria-label="Close">×</button></h4><p>${esc(blurb)}</p>${extra}`;
   }
 

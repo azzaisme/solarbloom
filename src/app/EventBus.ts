@@ -31,7 +31,6 @@ export interface GameEvents {
   'layer.unlocked': { layerId: string };
   'canal.flow': { from: string; to: string; path: string[]; kind: 'fill' | 'overflow'; chainId?: number };
   'canopy.burst': { machineId: string; radius: number; gardens: string[] };
-  'relay.sent': { linkId: string; fromRoof: string; toRoof: string; chainId: number; travel: number };
   'tree.discharged': { machineId: string };
   'solar.boost': { machineId: string };
   'pulse.fired': { tileId: string; extra: string[]; overcharged: boolean };
@@ -54,13 +53,10 @@ export interface GameEvents {
   'area.fogChanged': { areaId: string; fog: string };
   'area.ready': { areaId: string };
   'area.cleared': { areaId: string };
-  'link.built': { linkId: string; roofId: string };
-  'roof.coreAwake': { roofId: string };
   /** City 09.1: progress on an area's specialty action. */
   'area.specialty': { areaId: string; have: number; need: number; met: boolean };
   'district.ready': { districtId: string };
   'district.bloom': { districtId: string; restored: string[]; lusher: string[]; reward: Partial<Record<ResourceKind, number>>; replay: boolean };
-  'neighbourhood.bloom': { restored: string[]; reward: Partial<Record<ResourceKind, number>> };
 }
 
 type Handler<T> = (payload: T) => void;

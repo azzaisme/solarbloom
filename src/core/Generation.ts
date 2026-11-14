@@ -1,5 +1,5 @@
 import { AREA_TYPES, CITY_GEN, PARK_LAYOUT, type TileFeature } from '../data/city';
-import { ROOF_BY_ID } from '../data/rooftops';
+import { ROOF_TEMPLATES } from '../data/templates';
 import { TUNING } from '../data/tuning';
 import { areaMapFor, PARK } from './Areas';
 import { distToFootprintRaw } from './Footprint';
@@ -27,8 +27,8 @@ export function generateTile(seed: number, layer: LayerData, x: number, z: numbe
   if (layer.kind === 'ground') return generateGround(seed, layer, x, z);
   if (x < 0 || z < 0 || x >= layer.width || z >= layer.depth) return undefined;
   const lh = hashString(layer.id);
-  const def = ROOF_BY_ID[layer.template ?? layer.id];
-  const prepared = inList(def?.prepared, x, z) || (!!def?.starterSolar && def.starterSolar[0] === x && def.starterSolar[1] === z);
+  const def = layer.template ? ROOF_TEMPLATES[layer.template] : undefined;
+  const prepared = inList(def?.prepared, x, z);
   const blocked = inList(def?.blocked, x, z);
   const ground: GroundState = prepared ? 'prepared' : 'polluted';
   const { pollutionMin, pollutionMax } = TUNING.restore;

@@ -108,7 +108,7 @@ export class DroneVisuals {
       const dz = tz - v.z;
       v.x += dx * k;
       v.z += dz * k;
-      const baseY = w[1] + (d.mode === 'working' ? 0.55 : idle ? 1.05 : d.cross ? 1.3 : 0.9);
+      const baseY = w[1] + (d.mode === 'working' ? 0.55 : idle ? 1.05 : 0.9);
       v.y += (baseY - v.y) * (1 - Math.exp(-dt * 5));
       const bob = this.reducedMotion ? 0 : Math.sin(t * 3 + v.phase) * 0.05;
       v.root.setPosition(v.x, v.y + bob, v.z);
