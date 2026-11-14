@@ -11,7 +11,8 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #2 City 01: endless chunked world model | ✅ |
 | #3 City 02: save format v4 (old saves scrapped, sparse deltas) | ✅ |
 | #4 City 03: areas and the fog | ✅ (simulation; fog visuals are #8) |
-| #5–#16 | not started |
+| #5 City 04: endless city generator | ✅ except the visual review (#37, needs ground rendering) |
+| #6–#16 | not started |
 
 ## City 01: world model
 
@@ -30,6 +31,15 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
   - Every revealed area is guaranteed a way in: if obstacles wall off its edge, one is cleared and saved (`unblocked`).
   - Pulses, drones, chains and building all go through the same rules.
 - Tests: partition coverage and symmetry, order independence, every transition, reveal ring, tile-by-tile recession, save round trip, and a soak clearing 500 areas in random order with no unreachable frontier.
+
+## City 04: the endless city generator
+
+- `data/city.ts`: seven area types (parkland, street, plaza, canal, market, reservoir, grove) with their ground material, obstacle share, landmark, and weights per district theme (old town, docks, towers, parkland).
+- District themes are coarse 6×6-chunk regions. A type is a weighted pick from the theme, re-rolled once if it would match its first neighbour (order-independent, depth-limited).
+- A road network (35% of chunk rows/columns, two tiles wide) and canals (12%, plus every canal area) run through the city. They restore into green avenues and clean water, so they never wall anything off. Small obstacles never sit within 2 tiles of a landmark.
+- Authored landmarks (Great Greenhouse at 6 chunks, Solar Cathedral at 12, Sky Observatory at 20, then one every 10 chunks) sit in a seeded direction at their distance.
+- Difficulty grows with distance: pulse cost ×(1 + 0.04/chunk, max ×2) and a rising pollution floor (max 85).
+- Tests: skeleton determinism, themes, every type's ground/obstacles/landmark clearance, authored landmarks for 10 seeds, difficulty caps, and a 500+-area variety soak (under 30% same-type neighbours; every type within 12 chunks of the park).
 
 ## City 02: save format v4
 

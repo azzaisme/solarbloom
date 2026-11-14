@@ -1,6 +1,7 @@
 import { formatCost } from '../core/Economy';
 import { distToFootprint } from '../core/Grid';
 import { ROOF_BY_ID } from '../data/rooftops';
+import { GROUND } from '../core/GameState';
 import type { Cost, RestoreSource, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
@@ -15,7 +16,7 @@ export class RestorationSystem {
   constructor(private sim: Sim) {}
 
   pulseCost(t: TileData): Cost {
-    const roofMult = ROOF_BY_ID[t.roofId]?.pulseCostMult ?? 1;
+    const roofMult = t.roofId === GROUND ? this.sim.areas.info(this.sim.areas.areaOf(t)!).difficulty : (ROOF_BY_ID[t.roofId]?.pulseCostMult ?? 1);
     if (t.ground === 'restored') {
       const n = TUNING.restore.nurture[Math.min(TUNING.restore.maxBloom, t.bloom + 1)];
       return { energy: Math.round(n.energy * this.sim.upgrades.pulseEnergyMult * 100) / 100, water: n.water };

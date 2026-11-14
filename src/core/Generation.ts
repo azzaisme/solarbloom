@@ -1,40 +1,31 @@
+import { CITY_GEN, AREA_TYPES, type TileFeature } from '../data/city';
 import { ROOF_BY_ID } from '../data/rooftops';
 import { TUNING } from '../data/tuning';
+import { areaMapFor, PARK } from './Areas';
+import { distToFootprintRaw } from './Footprint';
+import { CHUNK, hashString, tileId, tileRandom } from './Hash';
 import type { GroundState, LayerData, TileData } from './types';
 
-/** Stable tile key: layer id + layer-local integer cell. */
-export const tileId = (layerId: string, x: number, z: number) => `${layerId}:${x}:${z}`;
-
-/** Chunk size in tiles (square). */
-export const CHUNK = 16;
-
-/** 32-bit string hash (FNV-1a), for layer ids. */
-export function hashString(s: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return h >>> 0;
-}
-
-/**
- * Order-independent per-tile randomness: a pure function of (seed, layer, x, z, salt). Generation never touches
- * the game's own RNG stream, so the world is identical however and whenever chunks are first visited.
- */
-export function tileRandom(seed: number, layerHash: number, x: number, z: number, salt = 0): number {
-  let h = (seed ^ Math.imul(layerHash, 0x9e3779b1) ^ Math.imul(x | 0, 0x85ebca6b) ^ Math.imul(z | 0, 0xc2b2ae35) ^ Math.imul(salt, 0x27d4eb2f)) >>> 0;
-  h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
-  h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
-  h ^= h >>> 16;
-  return (h >>> 0) / 4294967296;
-}
+export { CHUNK, hashString, tileId, tileRandom };
 
 const inList = (list: readonly (readonly [number, number])[] | undefined, x: number, z: number) => !!list && list.some(([a, b]) => a === x && b === z);
+const NET = hashString('network');
+
+/** Is there a road (or canal) along this chunk row / column? Two tiles wide, seeded per row/column. */
+export function roadRow(seed: number, cz: number) {
+  return tileRandom(seed, NET, 0, cz, 1) < CITY_GEN.roadChance;
+}
+export function roadCol(seed: number, cx: number) {
+  return tileRandom(seed, NET, cx, 0, 2) < CITY_GEN.roadChance;
+}
+export function canalRow(seed: number, cz: number) {
+  return tileRandom(seed, NET, 0, cz, 3) < CITY_GEN.canalChance;
+}
 
 /** The starting state of one tile, before any play. `undefined` outside a bounded layer. */
 export function generateTile(seed: number, layer: LayerData, x: number, z: number): TileData | undefined {
-  if (layer.kind === 'raised' && (x < 0 || z < 0 || x >= layer.width || z >= layer.depth)) return undefined;
+  if (layer.kind === 'ground') return generateGround(seed, layer, x, z);
+  if (x < 0 || z < 0 || x >= layer.width || z >= layer.depth) return undefined;
   const lh = hashString(layer.id);
   const def = ROOF_BY_ID[layer.id];
   const prepared = inList(def?.prepared, x, z) || (!!def?.starterSolar && def.starterSolar[0] === x && def.starterSolar[1] === z);
@@ -50,6 +41,50 @@ export function generateTile(seed: number, layer: LayerData, x: number, z: numbe
     pollution: prepared ? 0 : Math.round(pollutionMin + (pollutionMax - pollutionMin) * tileRandom(seed, lh, x, z, 1)),
     variant: Math.floor(tileRandom(seed, lh, x, z, 2) * 10000),
     blocked,
+    growthRemainingSec: 0,
+    bloom: 0,
+  };
+}
+
+/**
+ * A city ground tile: its area's base material, the road and canal network running through (restorable into
+ * green avenues and clean water, never walls), and a few small obstacles away from the landmark.
+ * Pollution is heavier further from the park.
+ */
+function generateGround(seed: number, layer: LayerData, x: number, z: number): TileData {
+  const lh = hashString(layer.id);
+  const map = areaMapFor(seed);
+  const cx = Math.floor(x / CHUNK);
+  const cz = Math.floor(z / CHUNK);
+  const lx = x - cx * CHUNK;
+  const lz = z - cz * CHUNK;
+  const area = map.info(map.areaOfChunk(cx, cz));
+  const def = AREA_TYPES[area.type];
+  let feature: TileFeature = def.ground;
+  const park = area.id === PARK;
+  // Footpaths cross parkland and plazas through the landmark chunk.
+  if ((area.type === 'park' || area.type === 'plaza') && (lx === 3 || lz === 12)) feature = 'paving';
+  if (!park) {
+    if (roadRow(seed, cz) && (lz === 7 || lz === 8)) feature = 'road';
+    if (roadCol(seed, cx) && (lx === 7 || lx === 8)) feature = 'road';
+    if ((canalRow(seed, cz) || area.type === 'canal') && (lz === 3 || lz === 4)) feature = 'water';
+  }
+  const [mx, mz] = area.landmark;
+  const nearLandmark = distToFootprintRaw(x, z, mx, mz, 2) <= CITY_GEN.landmarkClearance;
+  const blocked = !nearLandmark && feature !== 'road' && feature !== 'water' && tileRandom(seed, lh, x, z, 5) < def.obstacles;
+  if (blocked) feature = 'obstacle';
+  const { pollutionMin, pollutionMax } = TUNING.restore;
+  const lo = Math.max(pollutionMin, area.pollutionFloor);
+  return {
+    id: tileId(layer.id, x, z),
+    roofId: layer.id,
+    x,
+    z,
+    ground: 'polluted',
+    pollution: Math.min(100, Math.round(lo + (Math.max(lo, pollutionMax) - lo) * tileRandom(seed, lh, x, z, 1))),
+    variant: Math.floor(tileRandom(seed, lh, x, z, 2) * 10000),
+    blocked,
+    feature,
     growthRemainingSec: 0,
     bloom: 0,
   };

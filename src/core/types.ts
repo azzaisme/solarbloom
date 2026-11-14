@@ -34,6 +34,8 @@ export interface TileData {
   bloom: number; // 0 until restored, then 1..3 (grass → flowers → shrubs)
   /** Reservoir Overflow: biomass bonus on this tile until this sim time. */
   lushUntil?: number;
+  /** City ground: what the tile is made of (generated, not saved). */
+  feature?: import('../data/city').TileFeature;
   /** A generated obstacle was cleared so a fogged area stays reachable (saved). */
   unblocked?: boolean;
 }

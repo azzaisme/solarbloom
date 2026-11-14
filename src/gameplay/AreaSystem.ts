@@ -1,4 +1,4 @@
-import { AreaMap, PARK, type AreaInfo } from '../core/Areas';
+import { areaMapFor, AreaMap, PARK, type AreaInfo } from '../core/Areas';
 import { GROUND, isRestorable } from '../core/GameState';
 import type { FogState, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
@@ -14,7 +14,7 @@ export class AreaSystem {
   readonly map: AreaMap;
 
   constructor(private sim: Sim) {
-    this.map = new AreaMap(sim.state.seed);
+    this.map = areaMapFor(sim.state.seed);
     sim.state.areas ??= { [PARK]: { fog: 'thinning', revealedAt: 0 } };
     for (const id of Object.keys(sim.state.areas)) this.placeLandmark(id);
     sim.grid.onTouch = (t) => {
