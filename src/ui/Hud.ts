@@ -25,6 +25,7 @@ export interface HudCallbacks {
   activateCore(): void;
   newGame(): void;
   setSetting(key: keyof Settings, v: boolean): void;
+  setVolume(key: 'sfxVolume' | 'musicVolume', v: number): void;
   skipCinematic(): void;
   closeInspect(): void;
   togglePause(): void;
@@ -53,6 +54,11 @@ export interface Settings {
   lowFog?: boolean;
   /** The camera glides along with big chains. */
   followChains?: boolean;
+  /** Phase 4 E03.4 / E11.5: volumes 0..100 (sound and music still have their on/off switches). */
+  sfxVolume?: number;
+  musicVolume?: number;
+  /** Phase 4 E11.5: stronger outlines and text contrast. */
+  highContrast?: boolean;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
@@ -146,7 +152,10 @@ export class Hud {
       <div id="modal"><div class="panel">
         <h2>Settings</h2>
         <label>Sound effects <input type="checkbox" data-set="sound"></label>
+        <label>Sound volume <input type="range" min="0" max="100" step="5" data-vol="sfxVolume" aria-label="Sound volume"></label>
         <label>Music <input type="checkbox" data-set="music"></label>
+        <label>Music volume <input type="range" min="0" max="100" step="5" data-vol="musicVolume" aria-label="Music volume"></label>
+        <label>High contrast <input type="checkbox" data-set="highContrast"></label>
         <label>Reduced motion &amp; effects <input type="checkbox" data-set="reducedMotion"></label>
         <label>Fewer particles &amp; softer sparkles <input type="checkbox" data-set="lowVfx"></label>
         <label>Simple fog (faster on phones) <input type="checkbox" data-set="lowFog"></label>
@@ -203,6 +212,11 @@ export class Hud {
     $(r, '#introGo').addEventListener('click', () => {
       $(r, '#intro').hidden = true;
       this.sim.state.progression.introSeen = true;
+    });
+    r.querySelectorAll<HTMLInputElement>('[data-vol]').forEach((inp) => {
+      const key = inp.dataset.vol as 'sfxVolume' | 'musicVolume';
+      inp.value = String(this.settings[key] ?? 100);
+      inp.addEventListener('input', () => this.cb.setVolume(key, Number(inp.value)));
     });
     r.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => {
       const key = inp.dataset.set as keyof Settings;

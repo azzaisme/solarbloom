@@ -99,21 +99,34 @@ export class RestorationSystem {
       }
     }
     const extra: string[] = [];
-    const radius = overcharged ? 2 : this.sim.upgrades.broadExtra >= 3 ? 2 : this.sim.upgrades.broadExtra > 0 ? 1 : 0;
-    const limit = overcharged || this.sim.upgrades.broadExtra >= 2 ? Infinity : 2;
-    if (radius > 0) {
-      const cands = this.sim.grid
-        .tilesWithin(t.roofId, t.x, t.z, radius)
-        .map((nb) => ({ nb, d: Math.abs(nb.x - t.x) + Math.abs(nb.z - t.z) }))
-        .filter(({ nb, d }) => d >= 1 && d <= radius && this.isEligible(nb))
-        .sort((a, b) => a.d - b.d || a.nb.pollution - b.nb.pollution || a.nb.id.localeCompare(b.nb.id));
-      for (const { nb, d } of cands.slice(0, limit)) {
-        this.beginGrowth(nb, 'broad', TUNING.pulse.growSeconds + 0.12 * d + 0.03 * extra.length);
-        extra.push(nb.id);
-      }
+    for (const { tile: nb, d } of this.footprint(t, overcharged)) {
+      this.beginGrowth(nb, 'broad', TUNING.pulse.growSeconds + 0.12 * d + 0.03 * extra.length);
+      extra.push(nb.id);
     }
     this.sim.bus.emit('pulse.fired', { tileId, extra, overcharged });
     return true;
+  }
+
+  /** Whether the next manual pulse on a dead tile will be Overcharged. */
+  nextIsOvercharged(): boolean {
+    const every = this.sim.upgrades.overchargeEvery;
+    return every > 0 && (this.sim.state.progression.pulseCharge ?? 0) + 1 >= every;
+  }
+
+  /**
+   * The extra tiles a pulse on dead tile `t` restores for free (beyond `t` itself), nearest first, with their
+   * grid distance. Pure: the HUD previews exactly this before you tap (Phase 4 E03.1).
+   */
+  footprint(t: TileData, overcharged = this.nextIsOvercharged()): { tile: TileData; d: number }[] {
+    const radius = overcharged ? 2 : this.sim.upgrades.broadExtra >= 3 ? 2 : this.sim.upgrades.broadExtra > 0 ? 1 : 0;
+    const limit = overcharged || this.sim.upgrades.broadExtra >= 2 ? Infinity : 2;
+    if (radius <= 0) return [];
+    return this.sim.grid
+      .tilesWithin(t.roofId, t.x, t.z, radius)
+      .map((nb) => ({ tile: nb, d: Math.abs(nb.x - t.x) + Math.abs(nb.z - t.z) }))
+      .filter(({ tile, d }) => d >= 1 && d <= radius && this.isEligible(tile))
+      .sort((a, b) => a.d - b.d || a.tile.pollution - b.tile.pollution || a.tile.id.localeCompare(b.tile.id))
+      .slice(0, limit);
   }
 
   /**

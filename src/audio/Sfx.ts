@@ -6,6 +6,11 @@ export class Sfx {
   private ctx?: AudioContext;
   private master?: GainNode;
   private musicGain?: GainNode;
+  /** Phase 4 E03.4: effects have their own gain, so sound and music switch and scale separately. */
+  private sfxGain?: GainNode;
+  /** 0..1 */
+  sfxVolume = 1;
+  musicVolume = 1;
   private voices = 0;
   private maxVoices = 12;
   muted = false;
@@ -23,10 +28,13 @@ export class Sfx {
       const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.muted ? 0 : 0.5;
+      this.master.gain.value = 0.5;
       this.master.connect(this.ctx.destination);
+      this.sfxGain = this.ctx.createGain();
+      this.sfxGain.gain.value = this.muted ? 0 : this.sfxVolume;
+      this.sfxGain.connect(this.master);
       this.musicGain = this.ctx.createGain();
-      this.musicGain.gain.value = this.music ? 0.22 : 0;
+      this.musicGain.gain.value = this.music ? 0.22 * this.musicVolume : 0;
       this.musicGain.connect(this.master);
     } catch {
       this.ctx = undefined;
@@ -35,17 +43,26 @@ export class Sfx {
 
   setMuted(m: boolean) {
     this.muted = m;
-    if (this.master && this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.5, this.ctx.currentTime, 0.05);
+    if (this.sfxGain && this.ctx) this.sfxGain.gain.setTargetAtTime(m ? 0 : this.sfxVolume, this.ctx.currentTime, 0.05);
+  }
+
+  /** Volumes 0..1 for effects and music (Settings sliders). */
+  setVolumes(sfx: number, music: number) {
+    this.sfxVolume = Math.max(0, Math.min(1, sfx));
+    this.musicVolume = Math.max(0, Math.min(1, music));
+    this.setMuted(this.muted);
+    this.setMusic(this.music);
   }
 
   setMusic(on: boolean) {
     this.music = on;
-    if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(on ? 0.22 : 0, this.ctx.currentTime, 0.2);
+    if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(on ? 0.22 * this.musicVolume : 0, this.ctx.currentTime, 0.2);
   }
 
   private tone(freq: number, dur: number, opts: { type?: OscillatorType; vol?: number; attack?: number; glide?: number; delay?: number; dest?: AudioNode } = {}) {
     const ctx = this.ctx;
-    if (!ctx || !this.master || this.muted) return;
+    const music = !!opts.dest && opts.dest === this.musicGain;
+    if (!ctx || !this.master || (this.muted && !music)) return;
     if (this.voices >= this.maxVoices) return;
     this.voices++;
     const t0 = ctx.currentTime + (opts.delay ?? 0);
@@ -58,7 +75,7 @@ export class Sfx {
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(v, t0 + (opts.attack ?? 0.01));
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    o.connect(g).connect(opts.dest ?? this.master);
+    o.connect(g).connect(opts.dest ?? this.sfxGain ?? this.master);
     o.start(t0);
     o.stop(t0 + dur + 0.05);
     o.onended = () => this.voices--;
@@ -79,7 +96,7 @@ export class Sfx {
     f.frequency.exponentialRampToValueAtTime(freq * 3, ctx.currentTime + dur);
     const g = ctx.createGain();
     g.gain.value = vol;
-    src.connect(f).connect(g).connect(this.master);
+    src.connect(f).connect(g).connect(this.sfxGain ?? this.master);
     src.start();
     src.onended = () => this.voices--;
   }
@@ -152,7 +169,7 @@ export class Sfx {
 
   /** Gentle generative pad; layers grow with the garden. */
   update(dt: number) {
-    if (!this.ctx || !this.musicGain || !this.music || this.muted) return;
+    if (!this.ctx || !this.musicGain || !this.music) return;
     this.musicTimer -= dt;
     if (this.musicTimer > 0) return;
     this.musicTimer = 2.4;

@@ -177,6 +177,7 @@ export class Game {
         activateCore: () => this.sim.progression.activateCore(),
         newGame: () => this.newGame(),
         setSetting: (k, v) => this.setSetting(k, v),
+        setVolume: (k, v) => this.setVolume(k, v),
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
         togglePause: () => this.setPaused(!this.paused),
@@ -270,8 +271,13 @@ export class Game {
 
   // ───────────────────────── settings / persistence ─────────────────────────
 
+  private setVolume(k: 'sfxVolume' | 'musicVolume', v: number) {
+    this.settings[k] = Math.max(0, Math.min(100, v));
+    this.setSetting('sound', this.settings.sound);
+  }
+
   private setSetting(k: keyof Settings, v: boolean) {
-    this.settings[k] = v;
+    (this.settings as unknown as Record<string, unknown>)[k] = v;
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
     } catch {
@@ -282,8 +288,10 @@ export class Game {
 
   private applySettings() {
     const s = this.settings;
+    this.sfx.setVolumes((s.sfxVolume ?? 100) / 100, (s.musicVolume ?? 100) / 100);
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
+    document.body.classList.toggle('contrast', !!s.highContrast);
     const rm = s.reducedMotion;
     this.tileFx.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
@@ -573,9 +581,13 @@ export class Game {
     const maxed = t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom;
     this.overlays.showFrame(t.roofId, t.x, t.z, 1, chk.ok ? 'ok' : maxed || t.ground === 'growing' ? 'hover' : 'bad');
     let action = '';
+    // Phase 4 E03.1: preview exactly which tiles this pulse will restore.
+    const fp = chk.ok && t.ground !== 'restored' ? this.sim.restoration.footprint(t) : [];
+    if (fp.length) this.overlays.showRadius([t, ...fp.map((f) => f.tile)], 'ok');
+    else if (!this.selected) this.overlays.hideRadius();
     if (chk.ok) {
-      const verb = t.ground === 'restored' ? `Nurture → ${BLOOM_NAMES[t.bloom + 1]}` : 'Pulse';
-      action = `<span class="ok">${verb}: ${formatCost(chk.cost)}</span>`;
+      const verb = t.ground === 'restored' ? `Nurture → ${BLOOM_NAMES[t.bloom + 1]}` : this.sim.restoration.nextIsOvercharged() ? '🌟 Overcharged pulse' : 'Pulse';
+      action = `<span class="ok">${verb}: ${formatCost(chk.cost)}${fp.length ? ` · restores ${fp.length + 1} tiles` : ''}</span>`;
     } else if (chk.reason && !maxed) action = `<span class="bad">${chk.reason}</span>`;
     this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${action ? '<br>' + action : ''}`);
   }
@@ -885,11 +897,17 @@ export class Game {
       this.camera.shake?.(0.25);
       this.hud.feed(`💥 Mega Pulse: up to ${budget} tiles bloom outward`);
     });
-    b.on('pulse.fired', ({ tileId, overcharged }) => {
-      if (!overcharged) return;
+    b.on('pulse.fired', ({ tileId, extra, overcharged }) => {
       const t = s.grid.byTileId(tileId);
       if (!t) return;
       const p = this.tileVec(t);
+      if (!overcharged) {
+        // Phase 4 E03.2: a restore already rings (tile.restoring); a nurture tap answers with its own quick ring,
+        // and a Wide Pulse adds one ring spanning its whole footprint.
+        if (t.ground === 'restored') this.vfx.ring(p, '#ffe9a0', 0.8, 0.22);
+        else if (extra.length) this.vfx.ring(p, '#c8ffa8', 1.4 + 0.25 * Math.min(8, extra.length), 0.25);
+        return;
+      }
       this.vfx.ring(p, PALETTE.gold, 2.8, 0.8);
       this.tweens.add(0.01, () => {}, { delay: 0.15, done: () => this.vfx.ring(p, '#fff3a0', 2.2, 0.7) });
       this.vfx.burst(p, 30, { up: 3.5, speed: 2.2, size: 0.07 });

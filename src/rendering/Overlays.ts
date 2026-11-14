@@ -52,7 +52,7 @@ export class Overlays {
     shape(this.beacon, 'box', mat('#fff3a0', { opacity: 0.5, unlit: true }), { pos: [0, -0.5, 0], scale: [0.9, 0.02, 0.9], receive: false });
     this.beacon.enabled = false;
     this.radiusRoot = group(root, 'radius');
-    for (let i = 0; i < 80; i++) {
+    for (let i = 0; i < 180; i++) { // Phase 4: room for the largest pulse footprint preview (161 tiles)
       const e = shape(this.radiusRoot, 'box', mat(TONE.info, { opacity: 0.45, unlit: true }), { scale: [0.9, 0.02, 0.9], receive: false });
       e.enabled = false;
       this.radius.push(e);

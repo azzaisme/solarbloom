@@ -387,3 +387,11 @@ button:focus-visible { outline: 3px solid #2f7de1; outline-offset: 2px; }
   #obj { right: auto; width: min(460px, 58vw); }
 }
 .chip .icon { width: 15px; height: 15px; }
+
+/* Phase 4 E11.5: high contrast: solid panels, darker secondary text, outlined buttons and tiles' HUD labels. */
+body.contrast { --ink-soft: #2a3a40; }
+body.contrast .panel, body.contrast .chip { background: #fff; border: 2px solid #1d2b30; backdrop-filter: none; }
+body.contrast .slot { background: #fff; outline: 2px solid #1d2b30; }
+body.contrast .slot.active, body.contrast .slot[data-tool="pulse"].active { outline: 4px solid #0b5d1e; }
+body.contrast .res-row .rate, body.contrast .slot .sc { color: #1d2b30; }
+#modal input[type="range"] { width: 140px; accent-color: #4fb543; }

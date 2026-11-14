@@ -199,3 +199,17 @@ the hint text runs to 5–9 lines.
 | 820×1180 / 1280×800 | 21% → 16% / 15% | none |
 
 The Build tray stays on screen at every size (checked by `npm run test:hud`, which CI now runs). These are headless Chromium checks; no real phone was used.
+
+---
+
+# E03 — restoration feedback
+
+Already in the game and kept: a ring and burst on every restore, quieter bursts for automation, pooled numbers that fly to the counters (at most 8 at once; past that the counter just flashes), chain notes rising in pitch, a chain summary scaled by size, a soft failure message with a tile shake and a resource flash, a Harvest nudge when energy runs out, and reduced motion / fewer particles settings.
+
+Added:
+- **Pulse preview** (E03.1): hovering with Pulse highlights exactly the tiles the tap will restore (Wide Pulse neighbours, Overcharge radius) and the tooltip says "restores N tiles" with the cost. `RestorationSystem.footprint()` is pure and is the same code the pulse uses; `tests/feedback-phase4.test.ts` checks the preview matches the real pulse at every Wide Pulse level and on Overcharge. The overlay pool grew to 180 tiles for the larger E04 footprints.
+- **Every tap answers** (E03.2): nurture taps and Wide Pulses get their own quick ring (0.22–0.25 s); restores already had one.
+- **Sound** (E03.4): effects and music have separate gains, so turning sound off no longer silences the music. Volume sliders for both are in Settings.
+- **High contrast** setting (from E11.5): solid panels, darker secondary text, outlined buttons.
+
+Not done: there are no new sounds beyond the existing synthesised set (restore pop, rising chain notes, upgrade flourish, meow, fanfare).
