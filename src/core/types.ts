@@ -149,6 +149,8 @@ export interface Stats {
   droneJobs: number;
   /** Playtest metrics: sim-time of first milestones, chain sizes, time with nothing affordable to do. */
   firsts: Record<string, number>;
+  /** game time (s) each area was cleared, in order (playtest timings) */
+  areaTimes?: number[];
   chainEffects: number;
   stuckSeconds: number;
 }

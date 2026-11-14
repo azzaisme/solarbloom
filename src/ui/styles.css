@@ -313,3 +313,5 @@ button:focus-visible { outline: 3px solid #2f7de1; outline-offset: 2px; }
 #inspect .mode.on { background: #dff3d2; color: #1f5a2e; box-shadow: inset 0 0 0 2px #7cc576; }
 /* Phones: the tutorial hint steps aside while a panel is open at the bottom. */
 @media (max-width: 760px) { .inspecting #hint { opacity: 0; pointer-events: none; } }
+#statsBox .ptime { white-space: pre-wrap; font: 11.5px/1.45 ui-monospace, monospace; background: rgba(0,0,0,.04); border-radius: 8px; padding: 8px; margin: 6px 0; max-height: 180px; overflow: auto; }
+#statsBox .copyT { font: inherit; font-size: 12px; font-weight: 800; padding: 5px 10px; border-radius: 9px; background: rgba(0,0,0,.06); cursor: pointer; }

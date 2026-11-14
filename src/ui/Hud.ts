@@ -218,6 +218,14 @@ export class Hud {
       inp.checked = !!this.settings[key];
       inp.addEventListener('change', () => this.cb.setSetting(key, inp.checked));
     });
+    $(r, '#statsBox').addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-copy-timings]');
+      if (!b) return;
+      const text = this.sim.metrics.summary();
+      const done = () => (b.textContent = '✓ Copied');
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, () => (b.textContent = 'Copy failed: select the text above'));
+      else b.textContent = 'Select the text above to copy';
+    });
     $(r, '#upgList').addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-buy]');
       if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
@@ -476,12 +484,10 @@ export class Hud {
       this.renderDiscoveries();
       if (focusCats) $(this.root, '#disc').scrollIntoView({ block: 'nearest' });
       const s = this.sim.state.stats;
-      const f = s.firsts ?? {};
-      const t = (k: string) => (f[k] === undefined ? '—' : `${Math.floor(f[k] / 60)}:${String(f[k] % 60).padStart(2, '0')}`);
       const avg = s.chains ? (s.chainEffects / s.chains).toFixed(1) : '—';
       $(this.root, '#statsBox').innerHTML =
         `Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Avg: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b> 🐱 · Play time: <b>${Math.floor(this.sim.time / 60)}m</b>` +
-        `<details style="margin-top:6px"><summary>Playtest timings</summary>First upgrade ${t('upgrade')} · ×5 chain ${t('chain5')} · ×10 chain ${t('chain10')}<br>Drone Hub ${t('droneHub')} · first cat ${t('cat')} · Mother Tree ${t('motherTree')} (pulse ${t('treePulse')}) · Core ${t('core')}<br>Skybridge ${t('bridge:seed-reservoir')} · first cross-roof chain ${t('remoteChain')} · Cistern ${t('core:r2')} · Canopy Bridge ${t('bridge:seed-canopy')} · Elder Tree ${t('core:r3')} · Neighbourhood Bloom ${t('neighbourhoodBloom')}<br>Biggest chain ×${s.maxCombo} · cats found ${s.catsFound}<br>Time with nothing to do: ${Math.round(s.stuckSeconds)} s</details>`;
+        `<details style="margin-top:6px"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre><button class="copyT" data-copy-timings>📋 Copy</button></details>`;
       this.root.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => (inp.checked = !!this.settings[inp.dataset.set as keyof Settings]));
     }
   }
