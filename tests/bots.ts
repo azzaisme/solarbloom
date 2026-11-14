@@ -61,6 +61,8 @@ export interface BotReport {
   longestGap: number;
   stuck: number;
   pulses: number;
+  /** Bloom Frenzies fired */
+  frenzies: number;
   /** per-minute snapshot */
   minutesLog: { m: number; parkRestored: number; tiles: number; res: Record<ResourceKind, number>; caps: Record<ResourceKind, number>; rates: Record<ResourceKind, number> }[];
 }
@@ -188,6 +190,8 @@ export function runBot(opts: BotOptions): BotReport {
     // 4. find the cat ~40 s after it appears
     const c = s.cat.active;
     if (taps && !opts.noCats && c && sim.time - c.spawnedAt > 40) sim.cat.claim();
+    // 5. fire Bloom Frenzy as soon as it's ready (an idle player checking in would too)
+    if (sim.frenzy.ready()) sim.frenzy.activate();
   };
 
   const stepsPerAction = Math.round(actionEvery / 0.1);
@@ -237,6 +241,7 @@ export function runBot(opts: BotOptions): BotReport {
     longestGap: Math.round(longestGap),
     stuck: Math.round(s.stats.stuckSeconds),
     pulses,
+    frenzies: s.frenzy?.count ?? 0,
     minutesLog,
   };
 }

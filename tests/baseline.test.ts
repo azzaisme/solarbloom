@@ -16,7 +16,7 @@ function line(r: BotReport) {
   const over = KINDS.map((k) => `${k[0]}${Math.round(r.overflow[k])}`).join('/');
   return (
     `seed ${r.seed} ${r.mode}: upgrade ${mmss(f.upgrade)} condenser ${mmss(f.condenser)} garden ${mmss(f.pollinator)} hub-fits-cap ${mmss(r.hubFitsCap)} hub-affordable ${mmss(r.hubAffordable)} hub ${mmss(f.droneHub)} ` +
-    `tree ${mmss(f.motherTree)} cat ${mmss(f.cat)} chain5 ${mmss(f.chain5)} chain10 ${mmss(f.chain10)} fountain ${mmss(r.fountain)} | park ${r.parkRestored} tiles ${r.tilesRestored} ` +
+    `tree ${mmss(f.motherTree)} cat ${mmss(f.cat)} frenzy ${mmss(f.frenzy)} (${r.frenzies}×) chain5 ${mmss(f.chain5)} chain10 ${mmss(f.chain10)} fountain ${mmss(r.fountain)} | park ${r.parkRestored} tiles ${r.tilesRestored} ` +
     `maxCombo ${r.maxCombo} gap ${r.longestGap}s stuck ${r.stuck}s capped ${cap} lost ${over} earned🌿 ${Math.round(r.earned.biomass)} pulses ${r.pulses}\n    upgrades: ${ups}`
   );
 }

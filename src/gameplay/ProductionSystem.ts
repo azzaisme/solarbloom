@@ -93,7 +93,7 @@ export class ProductionSystem {
     let v = (m.starter ? TUNING.starterSolarRate : TUNING.solarRate) * this.sim.upgrades.solarMult;
     if (sustained) return v;
     if (m.boostUntil > t) v *= TUNING.solarBloomBoost.mult;
-    if (this.surgeActive()) v *= TUNING.cat.frenzyMult;
+    v *= this.sim.mods.solarMult(); // Solar Surge (composed centrally, Phase 4 E06.6)
     return v;
   }
 
@@ -154,7 +154,9 @@ export class ProductionSystem {
       if (m.type === 'solar') energy += this.solarOutput(m, sustained);
       else if (m.type === 'condenser') water += 1;
     }
-    return { energy, water, biomass: this.biomassRate + bonus.biomass };
+    // Phase 4 E06: temporary biomass boosts (Bloom Frenzy) apply to the total, never to the sustained rate.
+    const bm = sustained ? 1 : this.sim.mods.biomassMult();
+    return { energy, water, biomass: (this.biomassRate + bonus.biomass) * bm };
   }
 
   tick(dt: number) {

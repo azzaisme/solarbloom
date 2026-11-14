@@ -55,6 +55,28 @@ export const TUNING = {
     { at: 130, reward: { biomass: 120, energy: 40 } },
   ] as { at: number; reward: Partial<Record<'energy' | 'water' | 'biomass', number>> }[],
 
+  /**
+   * Phase 4 E06: Bloom Frenzy. Charge is earned by play (taps count most); first Frenzy aimed at about minute
+   * 4–6 of active play. While it runs: pulse reach +2 tiers (at least Bloom), biomass ×10, drones ×3 faster.
+   */
+  frenzy: {
+    seconds: 15,
+    biomassMult: 10,
+    droneSpeedMult: 3,
+    pulseTierBonus: 2,
+    charge: {
+      restoreTap: 0.9, // a tap that restores a dead tile
+      perFootprintTile: 0.05, // …plus a little per extra tile its reach restores
+      footprintMax: 1.5,
+      nurtureTap: 0.3,
+      autoRestore: 0.05, // a tile restored by drones, machines or chains
+      perChainStep: 0.4, // per activation beyond the first, when a chain ends…
+      chainMax: 8, // …capped per chain
+    },
+    /** Income lost to full storage: charge per unit, capped per second (E01.5). */
+    overflow: { perUnit: { energy: 0.1, water: 0.1, biomass: 0.05 }, maxPerSecond: 0.15 },
+  },
+
   pulse: {
     polluted: { energy: 6, water: 1 },
     prepared: { energy: 3, water: 1 },

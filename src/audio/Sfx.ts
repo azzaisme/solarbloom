@@ -18,6 +18,8 @@ export class Sfx {
   private musicTimer = 0;
   private bar = 0;
   layers = 0; // 0..3, grows with restoration
+  /** Phase 4 E06: while Bloom Frenzy runs, the pad plays faster and fuller. */
+  frenzy = false;
 
   unlock() {
     if (this.ctx) {
@@ -172,7 +174,7 @@ export class Sfx {
     if (!this.ctx || !this.musicGain || !this.music) return;
     this.musicTimer -= dt;
     if (this.musicTimer > 0) return;
-    this.musicTimer = 2.4;
+    this.musicTimer = this.frenzy ? 1.2 : 2.4; // Phase 4 E06: Bloom Frenzy doubles the music's pace
     const roots = [0, 3, 1, 4];
     const r = roots[this.bar++ % roots.length];
     const base = 196;

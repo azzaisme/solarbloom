@@ -212,6 +212,8 @@ export interface GameState {
   cat: CatState;
   progression: Progression;
   stats: Stats;
+  /** Phase 4 E06: the Bloom Frenzy meter (0–100), the sim time a running Frenzy ends, and how many so far. */
+  frenzy?: { charge: number; until?: number; count?: number };
   /** Phase 4 E01: wall-clock time (ms since 1970) this state was last saved, for offline progress. */
   savedAt?: number;
   /** City 10.7: district blooms claimed, by district id (sim time). Optional: older saves have none. */

@@ -49,6 +49,9 @@ export interface GameEvents {
   'rooftop.coreReady': Record<string, never>;
   'rooftop.coreRestored': Record<string, never>;
   'tutorial.step': { step: number };
+  'frenzy.ready': Record<string, never>;
+  'frenzy.started': { seconds: number };
+  'frenzy.ended': Record<string, never>;
   /** Phase 4 E04.3: a park milestone was reached and paid (once). */
   'milestone.reached': { at: number; credited: Partial<Record<ResourceKind, number>>; next?: number };
   'area.revealed': { areaId: string };

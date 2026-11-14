@@ -39,6 +39,7 @@ export class OfflineSystem {
     const eff = seconds * O.rate;
     const credited: Resources = { energy: 0, water: 0, biomass: 0 };
     const lost: Resources = { energy: 0, water: 0, biomass: 0 };
+    s.frenzy.suspended = true; // time away never charges Bloom Frenzy
     const rates = s.production.rates(true);
     for (const k of KINDS) {
       const amount = rates[k] * eff;
@@ -49,6 +50,7 @@ export class OfflineSystem {
     }
     const report: OfflineReport = { seconds, away: awaySeconds, credited, lost, droneJobs: 0, restored: 0, grown: 0 };
     this.droneWork(eff, report);
+    s.frenzy.suspended = false;
     s.production.markDirty();
     return report;
   }
@@ -62,7 +64,7 @@ export class OfflineSystem {
     let total = 0;
     for (const d of drones) {
       // One job: the cooldown, the work, and about two tiles of flight each way.
-      const per = d.old ? D.old.cycleSeconds + D.old.workSeconds + 4 / D.old.flySpeed : D.cycleSeconds * s.upgrades.droneCycleMult + D.workSeconds + 4 / s.drones.speedOf(d);
+      const per = d.old ? D.old.cycleSeconds + D.old.workSeconds + 4 / D.old.flySpeed : D.cycleSeconds * s.upgrades.droneCycleMult + D.workSeconds + 4 / (s.drones.speedOf(d) / s.mods.droneSpeedMult()); // sustained pace, no boosts
       const n = Math.floor(eff / per);
       budget.set(d.id, n);
       total += n;

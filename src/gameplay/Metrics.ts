@@ -15,6 +15,8 @@ export class Metrics {
     });
     for (const e of ['area.cleared', 'rooftop.coreRestored', 'district.bloom'] as const) b.on(e, () => this.invalidate());
     b.on('cat.found', () => this.first('cat'));
+    b.on('frenzy.ready', () => this.first('frenzyReady'));
+    b.on('frenzy.started', () => this.first('frenzy'));
     b.on('milestone.reached', ({ at }) => this.first(`park${at}`));
     b.on('tree.discharged', () => this.first('treePulse'));
     b.on('rooftop.coreRestored', () => this.first('core'));

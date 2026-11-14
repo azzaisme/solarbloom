@@ -177,6 +177,7 @@ export class Game {
         activateCore: () => this.sim.progression.activateCore(),
         newGame: () => this.newGame(),
         setSetting: (k, v) => this.setSetting(k, v),
+        activateFrenzy: () => this.sim.frenzy.activate(),
         setVolume: (k, v) => this.setVolume(k, v),
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
@@ -262,6 +263,7 @@ export class Game {
     this.app.start();
     if (lr.scrapped) setTimeout(() => this.hud.toast('A new city awaits — older gardens were cleared for this update. 🌱', '', 7), 400);
     if (lr.backedUpAs) setTimeout(() => this.hud.toast(`Your old save couldn't be read by this version, so it was kept safely as a backup and a new rooftop started.<small>${lr.backedUpAs}</small>`, '', 8), 400);
+    this.sfx.frenzy = this.sim.frenzy.active(); // loaded mid-Frenzy
     if (!state.progression.introSeen && state.stats.tilesRestored === 0) this.hud.showIntro();
     else if (offline) {
       this.saveNow();
@@ -388,6 +390,7 @@ export class Game {
       else if (k === 'home') this.focusArea(PARK);
       else if (k === 'u') this.hud.toggleUpgrades();
       else if (k === 'b') this.hud.toggleTray();
+      else if (k === 'q') this.sim.frenzy.activate();
       else if (k === 'p') this.setPaused(!this.paused);
       else if (k === 'f3' || k === '`') {
         e.preventDefault();
@@ -1039,6 +1042,24 @@ export class Game {
       }
       if (reason.includes('💧')) this.hud.flashResource('water', 'short');
       if (reason.includes('🌿')) this.hud.flashResource('biomass', 'short');
+    });
+    b.on('frenzy.ready', () => {
+      this.hud.feed('✨ Bloom Frenzy is ready: fire it whenever you like (Q)');
+      this.sfx.powerUp();
+    });
+    b.on('frenzy.started', ({ seconds }) => {
+      document.body.classList.add('frenzy');
+      this.sfx.frenzy = true;
+      this.hud.toast(`✨ BLOOM FRENZY! ${seconds}s<small>Pulse reach +${TUNING.frenzy.pulseTierBonus} tiers · biomass ×${TUNING.frenzy.biomassMult} · drones ×${TUNING.frenzy.droneSpeedMult}</small>`, 'gold', 3);
+      this.sfx.fanfare();
+      const g = this.camera.goalPoint;
+      const c = new pc.Vec3(g.x, g.y, g.z);
+      for (let i = 0; i < 3; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.18, done: () => this.vfx.ring(c, i % 2 ? '#c8ff8a' : PALETTE.gold, 3 + i * 1.5, 0.8) });
+    });
+    b.on('frenzy.ended', () => {
+      document.body.classList.remove('frenzy');
+      this.sfx.frenzy = false;
+      this.hud.feed('🌿 Bloom Frenzy is over: back to normal power');
     });
     b.on('milestone.reached', ({ at, credited, next }) => {
       const icons = { energy: '⚡', water: '💧', biomass: '🌿' } as const;

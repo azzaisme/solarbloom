@@ -259,3 +259,31 @@ Not done: there are no new sounds beyond the existing synthesised set (restore p
 Two softlocks the bots found, both fixed:
 1. **The fountain's energy price could never be paid.** With Radiant, taps and drones always find something to spend energy on, so the store never filled to 40 ⚡. The fountain now costs **100 🌿 only**: biomass is never spent automatically, and 100 fits the starting store.
 2. **The advisor-only player never planted the Mother Tree.** It kept tapping and spending its water. The advisor now says "save up" when the fountain needs a machine that's short only on resources that refill, and once restoring is done it points at green tiles when full blooms are still missing. That bot now wakes the fountain from empty stores in 7.4 min (test limit 30).
+
+---
+
+# E06 — Bloom Frenzy
+
+- **Meter (0–100).** Charged by:
+  - restore taps: +0.9, plus a little per footprint tile (up to +1.5);
+  - nurture taps: +0.3;
+  - automation restores: +0.05;
+  - a finished chain: +0.4 per activation after the first, up to +8;
+  - income lost to full storage: 0.1/⚡, 0.1/💧, 0.05/🌿, capped at 0.15 per second.
+
+  All in `TUNING.frenzy`.
+- **No banking.** At 100 it waits as long as it takes, and nothing charges it while it's ready or running. Offline time never charges it.
+- **Firing it.** The round button above the hotbar (or Q) starts **15 s of sim time**: pulse reach +2 tiers (at least Bloom), biomass ×10, drones ×3 faster.
+- **Composition.** All boosts go through one place, `gameplay/Modifiers.ts`, which takes the strongest boost on each stat rather than multiplying them. The cat's Solar Surge only touches solar, so the two stack cleanly.
+  - Boosts are read from saved state on every call, so they end exactly on time, also after a pause or reload.
+  - Sustained rates (offline progress, cat rewards) leave them out.
+- **Presentation.** Golden-green vignette (static with reduced motion), a pad at double pace, a fanfare, rings and a toast listing the boosts. Play never stops for it.
+- **Tests** (`tests/frenzy.test.ts`):
+  - earned by normal play without cats;
+  - waits while ready, and a double tap fires only once;
+  - exact end with everything back to normal;
+  - save and load mid-Frenzy keeps the time left;
+  - strongest-boost composition;
+  - offline never charges it;
+  - overflow charge stays within its cap.
+- **Bots.** First Frenzy at 3:48–4:00, then 3–4 in the first 15 minutes, about one every 3 minutes. Hands-off players get their first at about 11 minutes, from overflow and automation alone.

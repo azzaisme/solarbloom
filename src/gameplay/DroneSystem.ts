@@ -224,7 +224,7 @@ export class DroneSystem {
 
   /** Tiles per second (the old drone is slow and ignores upgrades). */
   speedOf(d: DroneData): number {
-    return d.old ? TUNING.drone.old.flySpeed : TUNING.drone.flySpeed * this.sim.upgrades.droneFlyMult;
+    return d.old ? TUNING.drone.old.flySpeed : TUNING.drone.flySpeed * this.sim.upgrades.droneFlyMult * this.sim.mods.droneSpeedMult();
   }
 
   /** The old solar lamp the old drone lives by (the park's starter panel), if this game has one. */
@@ -344,7 +344,7 @@ export class DroneSystem {
             s.state.stats.droneJobs++;
           }
           d.mode = 'cooldown';
-          d.timer = d.old ? TUNING.drone.old.cycleSeconds : TUNING.drone.cycleSeconds * s.upgrades.droneCycleMult;
+          d.timer = d.old ? TUNING.drone.old.cycleSeconds : (TUNING.drone.cycleSeconds * s.upgrades.droneCycleMult) / s.mods.droneSpeedMult();
           break;
         }
         case 'cooldown': {

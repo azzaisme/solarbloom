@@ -23,6 +23,8 @@ export interface HudCallbacks {
   harvest(): void;
   buyUpgrade(id: string): void;
   activateCore(): void;
+  /** Phase 4 E06: fire Bloom Frenzy. */
+  activateFrenzy(): void;
   newGame(): void;
   setSetting(key: keyof Settings, v: boolean): void;
   setVolume(key: 'sfxVolume' | 'musicVolume', v: number): void;
@@ -132,6 +134,7 @@ export class Hud {
       </div>
       <div id="combo"><div class="big" id="comboBig">BLOOM CHAIN ×0</div><div class="total" id="comboTotal"></div><div id="chainAreas"></div><div id="feed"></div></div>
       <div id="hotbar" class="panel">${slots}</div>
+      <button id="frenzyBtn" class="frenzy-btn" aria-label="Bloom Frenzy (Q)" hidden><span class="fill"></span><span class="fi">${ICONS.frenzy}</span><span class="ft">0%</span></button>
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
       <div id="toasts"></div>
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
@@ -176,6 +179,7 @@ export class Hud {
     const r = this.root;
     r.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((b) => b.addEventListener('click', () => this.cb.selectTool(b.dataset.tool as Tool)));
     $(r, '#harvestBtn').addEventListener('click', () => this.cb.harvest());
+    $(r, '#frenzyBtn').addEventListener('click', () => this.cb.activateFrenzy());
     $(r, '#upgBtn').addEventListener('click', () => this.toggleUpgrades());
     $(r, '#upgrades h2 button').addEventListener('click', () => this.toggleUpgrades(false));
     $(r, '#coreBtn').addEventListener('click', () => this.cb.activateCore());
@@ -756,6 +760,18 @@ export class Hud {
       this.set(`b-${k}`, $(row, '.bar i'), 'width', `${Math.round((v / c) * 100)}%`);
       this.set(`f-${k}`, row, 'cls', s.econ.isFull(k) ? '1' : '0', 'full');
     }
+    // Phase 4 E06: the Bloom Frenzy meter (appears with the first restored tile).
+    const fb = $(this.root, '#frenzyBtn');
+    if (fb.hidden && s.state.stats.tilesRestored > 0) fb.hidden = false;
+    const fActive = s.frenzy.active();
+    const fReady = s.frenzy.ready();
+    const fill = fActive ? s.frenzy.remaining() / TUNING.frenzy.seconds : s.frenzy.charge / 100;
+    this.set('frFill', fb, 'style', fill.toFixed(3), '--fill');
+    this.set('frReady', fb, 'cls', fReady ? '1' : '0', 'ready');
+    this.set('frActive', fb, 'cls', fActive ? '1' : '0', 'active');
+    this.set('frBody', document.body, 'cls', fActive ? '1' : '0', 'frenzy'); // also right after loading mid-Frenzy
+    this.set('frText', $(fb, '.ft'), 'text', fActive ? `${Math.ceil(s.frenzy.remaining())}s` : fReady ? 'FRENZY!' : `${Math.floor(s.frenzy.charge)}%`);
+    this.set('frTitle', fb, 'title', fActive ? 'Bloom Frenzy! Pulse reach +2 tiers, biomass ×10, drones ×3' : fReady ? 'Bloom Frenzy is ready: tap to fire it (Q)' : 'Bloom Frenzy charges as you restore, chain and overflow');
     // Hotbar costs
     for (const t of BUILDABLE) {
       const btn = $(this.root, `[data-tool="${t}"]`);
