@@ -73,8 +73,10 @@ export function playCity(seed: number, actionEvery = 3, minutes = 60, setup?: (s
 const fmt = (s?: number) => (s === undefined || !isFinite(s) ? '—' : `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, '0')}`);
 
 describe('pacing in the endless city (scripted player)', () => {
-  it('after the fountain, keeps clearing areas at a steady pace with no dead time', { timeout: 120000 }, () => {
-    for (const seed of [7, 21]) {
+  // One test per seed: a single synchronous test over ~60 s starves the Vitest worker's RPC (CI timeout).
+  for (const seed of [7, 21])
+  it(`after the fountain, keeps clearing areas at a steady pace with no dead time (seed ${seed})`, { timeout: 120000 }, () => {
+    {
       const r = playCity(seed, 3, 60);
       const gaps = r.clears.map((t, i) => t - (i ? r.clears[i - 1] : r.fountain ?? 0));
       const avg = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : Infinity;

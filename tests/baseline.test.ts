@@ -22,9 +22,11 @@ function line(r: BotReport) {
 }
 
 describe('Phase 4 baseline (scripted bots)', () => {
-  it('records the first 15 minutes, active and hands-off', { timeout: 120_000 }, () => {
+  // One test per seed, so no single synchronous test runs long enough to starve the Vitest worker.
+  for (const seed of SEEDS)
+  it(`records the first 15 minutes, active and hands-off (seed ${seed})`, { timeout: 120_000 }, () => {
     const verbose = !!(globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.BASELINE;
-    for (const seed of SEEDS) {
+    {
       const a = runBot({ seed, minutes: MIN });
       const h = runBot({ seed, minutes: MIN, mode: 'handsOff' });
       const after = (r: BotReport, k: 'tiles' | 'biomass') => {
