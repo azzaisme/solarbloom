@@ -1,10 +1,19 @@
 import type { GameState } from '../core/types';
 
+/** Upgrade drawer sections, in order. Each groups what one system of the world does. */
+export const UPGRADE_GROUPS = ['Pulse', 'Machines', 'Drones', 'Networks', 'Fog', 'Storage', 'Neighbourhood'] as const;
+export type UpgradeGroup = (typeof UPGRADE_GROUPS)[number];
+
+/** Whether this is the endless city (vs the rooftop campaign). */
+const inCity = (s: GameState) => s.layers.some((l) => l.id === 'g' && l.unlocked && !l.preview);
+
 export interface UpgradeDef {
   id: string;
   name: string;
   icon: string;
-  group?: 'Pulse' | 'Machines' | 'Drones' | 'Storage' | 'Neighbourhood';
+  group: UpgradeGroup;
+  /** Only in this kind of game: the endless city, or the legacy rooftop campaign. Both when unset. */
+  mode?: 'city' | 'rooftops';
   baseCost: number; // biomass
   costMult: number;
   maxLevel: number;
@@ -163,6 +172,7 @@ export const UPGRADES: UpgradeDef[] = [
   {
     id: 'relay2',
     group: 'Neighbourhood',
+    mode: 'rooftops',
     name: 'Relay II',
     icon: '🔌',
     baseCost: 140,
@@ -175,6 +185,7 @@ export const UPGRADES: UpgradeDef[] = [
   {
     id: 'droneDispatch',
     group: 'Neighbourhood',
+    mode: 'rooftops',
     name: 'Drone Dispatch',
     icon: '🛰️',
     baseCost: 120,
@@ -183,6 +194,46 @@ export const UPGRADES: UpgradeDef[] = [
     describe: () => 'Idle drones fly across bridges to help on connected rooftops (near the relay)',
     available: (s) => Object.values(s.links ?? {}).some((l) => l.built) && s.machines.some((m) => m.type === 'droneHub'),
     lockedReason: 'Build a bridge and a Drone Hub first',
+  },
+  // ───────────── the endless city ─────────────
+  {
+    id: 'corridorReach',
+    group: 'Networks',
+    mode: 'city',
+    name: 'Green Corridors',
+    icon: '🛤️',
+    baseCost: 180,
+    costMult: 2,
+    maxLevel: 2,
+    describe: (n) => `Street gardens pass a chain to the next one up to ${6 + 2 * n} tiles away (from ${6 + 2 * (n - 1)})`,
+    available: (s) => inCity(s) && s.machines.some((m) => m.type === 'pollinator' && m.roofId === 'g'),
+    lockedReason: 'Plant a Pollinator Garden in the city first',
+  },
+  {
+    id: 'droneMesh',
+    group: 'Networks',
+    mode: 'city',
+    name: 'Drone Mesh',
+    icon: '🕸️',
+    baseCost: 200,
+    costMult: 2,
+    maxLevel: 2,
+    describe: (n) => `Drone Hubs up to ${12 + 4 * n} tiles apart share one network (from ${12 + 4 * (n - 1)}), so their drones roam all of it`,
+    available: (s) => s.machines.filter((m) => m.type === 'droneHub').length >= 2,
+    lockedReason: 'Build two Drone Hubs first',
+  },
+  {
+    id: 'fogLantern',
+    group: 'Fog',
+    mode: 'city',
+    name: 'Fog Lanterns',
+    icon: '🏮',
+    baseCost: 150,
+    costMult: 2.5,
+    maxLevel: 3,
+    describe: (n) => `Landmarks wake with ${10 * n}% fewer tiles restored`,
+    available: (s) => s.progression.coreActivated,
+    lockedReason: 'Wake the fountain first',
   },
 ];
 

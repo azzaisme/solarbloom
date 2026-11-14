@@ -1,0 +1,52 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`upgrades drawer grouped by system (City 14.4) > the city drawer: Pulse, Machines, Drones, Networks, Fog, Storage; no rooftop-only cards 1`] = `
+[
+  {
+    "cards": [
+      "⚡ Efficient Pulse: Pulse energy cost −25%",
+      "💠 Wide Pulse: Each pulse also restores 2 neighbouring tiles for free",
+      "🌟 Overcharge: Every 6th pulse is Overcharged: it restores everything within 2 tiles",
+    ],
+    "group": "Pulse",
+  },
+  {
+    "cards": [
+      "☀️ Solar Array: All solar output +50%",
+      "🌱 Rich Soil: Restored tile biomass +30%",
+      "🦋 Pollinator Reach: Pollinator zone radius +1 [locked: Build a Pollinator Garden first]",
+      "🌧️ Water Bloom: Condensers charge 25% faster, water 1 more tile and also grow green tiles beside them [locked: Build a Water Condenser first]",
+      "🌳 Mother Tree Resonance: Mother Tree charges from, and pulses, 1 tile further [locked: Plant a Mother Tree first]",
+    ],
+    "group": "Machines",
+  },
+  {
+    "cards": [
+      "🛸 Drone Dash: Drones fly 30% faster and wait 25% less between jobs [locked: Build a Drone Hub first]",
+      "📡 Drone Work Radius: Drones reach 1 tile further from their hub [locked: Build a Drone Hub first]",
+      "🧠 Chain Intelligence: Drones pick tiles next to gardens, idle solar panels and charged Mother Trees first [locked: Build a Drone Hub first]",
+      "🛸 Second Drone: Your first hub launches a second drone [locked: Build a Drone Hub first]",
+    ],
+    "group": "Drones",
+  },
+  {
+    "cards": [
+      "🛤️ Green Corridors: Street gardens pass a chain to the next one up to 8 tiles away (from 6) [locked: Plant a Pollinator Garden in the city first]",
+      "🕸️ Drone Mesh: Drone Hubs up to 16 tiles apart share one network (from 12), so their drones roam all of it [locked: Build two Drone Hubs first]",
+    ],
+    "group": "Networks",
+  },
+  {
+    "cards": [
+      "🏮 Fog Lanterns: Landmarks wake with 10% fewer tiles restored [locked: Wake the fountain first]",
+    ],
+    "group": "Fog",
+  },
+  {
+    "cards": [
+      "🏺 Seed Vault: All storage caps +50%",
+    ],
+    "group": "Storage",
+  },
+]
+`;

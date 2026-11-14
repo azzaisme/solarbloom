@@ -1,5 +1,5 @@
 import { TUNING } from '../data/tuning';
-import { UPGRADE_BY_ID, UPGRADES, type UpgradeDef } from '../data/upgrades';
+import { UPGRADE_BY_ID, UPGRADE_GROUPS, UPGRADES, type UpgradeDef, type UpgradeGroup } from '../data/upgrades';
 import { KINDS } from '../core/Economy';
 import type { Sim } from './Sim';
 
@@ -25,7 +25,7 @@ export class UpgradeSystem {
 
   purchase(id: string): boolean {
     const def = UPGRADE_BY_ID[id];
-    if (!def) return false;
+    if (!def || !this.all().includes(def)) return false; // e.g. a rooftop-only upgrade in the city
     const st = this.status(def);
     if (!st.ok) {
       this.sim.bus.emit('action.failed', { reason: st.reason ?? 'Unavailable' });
@@ -45,8 +45,16 @@ export class UpgradeSystem {
     for (const k of KINDS) this.sim.state.caps[k] = Math.max(this.sim.state.caps[k], TUNING.start.caps[k] * mult);
   }
 
+  /** The upgrades that exist in this game (the city and the rooftop campaign each have their own few). */
   all() {
-    return UPGRADES;
+    const city = this.sim.grid.isPlayable('g');
+    return UPGRADES.filter((d) => !d.mode || d.mode === (city ? 'city' : 'rooftops'));
+  }
+
+  /** Upgrades in drawer order: grouped by system, then as listed. */
+  grouped(): { group: UpgradeGroup; upgrades: UpgradeDef[] }[] {
+    const list = this.all();
+    return UPGRADE_GROUPS.map((group) => ({ group, upgrades: list.filter((d) => d.group === group) })).filter((g) => g.upgrades.length);
   }
 
   // Effects
@@ -80,6 +88,16 @@ export class UpgradeSystem {
   }
   get treeRadius() {
     return TUNING.motherTree.radius + this.level('treeResonance');
+  }
+  get corridorRange() {
+    return TUNING.chain.corridorRange + 2 * this.level('corridorReach');
+  }
+  get networkRange() {
+    return TUNING.drone.networkRange + 4 * this.level('droneMesh');
+  }
+  /** Multiplier on the tiles a landmark needs restored before it can wake. */
+  get wakeNeedMult() {
+    return 1 - 0.1 * this.level('fogLantern');
   }
   get pollinatorReach() {
     return TUNING.pollinator.reach + this.level('pollinatorReach');

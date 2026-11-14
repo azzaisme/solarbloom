@@ -201,7 +201,7 @@ export class BloomChainSystem {
 
   /** The other corridor gardens within reach of one (nearest first, deterministic). */
   corridorNext(m: MachineData): MachineData[] {
-    const R = TUNING.chain.corridorRange;
+    const R = this.sim.upgrades.corridorRange;
     return this.sim.grid
       .machinesNear(m.roofId, m.x, m.z, R)
       .filter((o) => o !== m && this.isCorridor(o))

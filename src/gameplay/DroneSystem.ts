@@ -76,7 +76,7 @@ export class DroneSystem {
   network(hub: MachineData): MachineData[] {
     if (hub.roofId !== GROUND) return [hub];
     const s = this.sim;
-    const R = TUNING.drone.networkRange;
+    const R = this.sim.upgrades.networkRange;
     const out = [hub];
     const seen = new Set([hub.id]);
     for (let i = 0; i < out.length; i++) {

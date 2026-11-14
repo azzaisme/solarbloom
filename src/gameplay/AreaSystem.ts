@@ -109,7 +109,8 @@ export class AreaSystem {
   need(id: string): number {
     const c = this.counts(id);
     const cap = Math.round(TUNING.city.clearCap * this.info(id).difficulty);
-    return Math.max(1, Math.min(Math.ceil(c.restorable * TUNING.city.clearShare), cap));
+    const mult = this.sim.upgrades.wakeNeedMult; // Fog Lanterns
+    return Math.max(1, Math.ceil(Math.min(c.restorable * TUNING.city.clearShare, cap) * mult));
   }
 
   /** 0 = untouched, 1 = everything restored. */

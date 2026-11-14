@@ -477,17 +477,17 @@ export class Hud {
   renderUpgrades(force = false) {
     if (!this.upgradesOpen && !force) return;
     const u = this.sim.upgrades;
-    const order = ['Pulse', 'Machines', 'Drones', 'Neighbourhood', 'Storage'];
-    // Neighbourhood upgrades appear once there is a neighbourhood to connect.
+    // Grouped by system. Rooftop-campaign Neighbourhood upgrades appear once there is a neighbourhood.
     const hood = this.sim.state.progression.coreActivated;
-    const sorted = [...u.all()]
-      .filter((d) => d.group !== 'Neighbourhood' || hood)
-      .sort((a, b) => order.indexOf(a.group ?? 'Storage') - order.indexOf(b.group ?? 'Storage'));
+    const sorted = u
+      .grouped()
+      .filter((g) => g.group !== 'Neighbourhood' || hood)
+      .flatMap((g) => g.upgrades);
     let lastGroup = '';
     const html = sorted
       .map((def) => {
         const head = def.group !== lastGroup ? `<h3 class="ugroup">${def.group}</h3>` : '';
-        lastGroup = def.group ?? '';
+        lastGroup = def.group;
         const lvl = u.level(def.id);
         const st = u.status(def);
         const maxed = lvl >= def.maxLevel;

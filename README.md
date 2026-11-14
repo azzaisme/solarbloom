@@ -1,40 +1,50 @@
 # Solarbloom
 
-A cozy solarpunk restoration game for the browser, set in an endless city lost in a gloomy fog. You start in a dead, grey park with a dry fountain and one old solar lamp. Wake the fountain and the fog starts to roll back: every area you restore reveals the ones around it, forever outward.
+A cozy solarpunk restoration game for the browser, set in an endless city lost in a gloomy fog. You start in a dead, grey park with a dry fountain and one old solar lamp. Pulse the ground back to life, build machines that feed each other and set off Bloom Chains. Wake the fountain and the fog starts to roll back: every area you restore reveals the ones around it, forever outward, so your blooming systems can grow as big as you like.
 
-The rest of this README still describes the rooftop campaign (Rounds 1–3), which the city is replacing step by step (see PROGRESS.md and issue #1). You start with a grey, cracked rooftop and a single damaged solar panel. You pulse tiles back to life, grow them into wildflowers and shrubs, and build machines that feed each other. Bloom Chains ripple across the garden. A little drone takes over the routine work. When the rooftop is alive, its ancient Core wakes and the whole building turns white and green.
+Built with **PlayCanvas Engine 2 + TypeScript + Vite**. The isometric camera is orthographic, and the world is a logical square grid rendered in 3D. All art is procedural primitives and all sound is synthesised; there are no asset files.
 
-Then the neighbourhood opens up. Build the Skybridge Relay to reach **the Reservoir**, a dry basin around an old cistern. Make it overflow and the **Canopy Bridge** leads to **the Canopy**, an overgrown roof with a dormant Elder Tree. Relay pylons carry Bloom Chains across the bridges, so a well-placed pulse on one rooftop makes another one bloom. Wake all three rooftops for the **Neighbourhood Bloom**.
-
-Built with **PlayCanvas Engine 2 + TypeScript + Vite**. The isometric camera is orthographic, and the world is a logical square grid rendered in 3D. All art is procedural primitives; there are no asset files.
-
-![The neighbourhood after the Neighbourhood Bloom](docs/neighbourhood.png)
+![The park, early on](docs/park.png)
 
 ## Run it
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
-npm test           # unit tests (vitest)
-npm run test:e2e   # pointer→tile picking at 3 screen sizes × 3 zooms (needs Playwright + Chromium)
-npm run test:perf  # benchmarks: world lookups and saves for a ~1,000-area city
-npm run build      # type-check + production build into dist/
-npm run preview    # serve the production build
+npm run dev                # http://localhost:5173
+npm run build              # type-check + production build into dist/
+npm run preview            # serve the production build
 ```
 
 Node 20+ is required. The build is a static site (`base: './'`), so `dist/` can be hosted anywhere.
+
+### Every npm script
+
+| Script | What it does | Time |
+|---|---|---|
+| `npm run dev` | Vite dev server with hot reload | — |
+| `npm run build` | Type-check, then production build into `dist/` | ~10 s |
+| `npm run preview` | Serve `dist/` | — |
+| `npm run typecheck` | `tsc --noEmit` | ~5 s |
+| `npm test` | Unit and simulation tests (vitest, headless): world, saves, areas, generator, chains, drones, cat, pacing bots | ~1 min |
+| `npm run test:perf` | Node benchmarks: lookups, save size and speed, sim step for a ~1,000-area world (`tests/perf/*.perf.ts`) | ~10 s |
+| `npm run test:soak` | Headless soak: a 1,000-area city over 6 h of game time; fails on tick time, heap, save size, stalls, unreachable frontiers or non-determinism (`SOAK_AREAS`, `SOAK_HOURS`, `SOAK_PROFILE=1`) | ~1 min |
+| `npm run test:e2e` | Build, then check pointer → tile picking at 3 screen sizes × 3 zooms (55k checks) | ~2 min |
+| `npm run test:perf:browser` | Build, then load a 150-area save in Chromium, pan, zoom through every band and play a ×600 chain; gates update time, hitches, draw calls and reload time (`PERF_AREAS`, `PERF_JSON`, `PERF_VERBOSE=1`) | ~4 min |
+| `npm run test:leak` | Build, then pan back and forth across a big city for 10 minutes; entities, materials, GPU memory and heap must return to baseline (`LEAK_MINUTES`) | ~12 min |
+
+The browser scripts need Playwright with Chromium (`npm i -D playwright && npx playwright install chromium`) and run headless with software rendering, as in CI. CI (`.github/workflows/ci.yml`) runs the typecheck, unit tests, benchmarks, soak, browser perf and picking on every push to `main`.
 
 ## Controls
 
 | Action | Mouse / keyboard | Touch |
 |---|---|---|
 | Restore a tile (or nurture a green one) | Left-click with **Pulse** (2) | Tap |
-| Build a machine | Pick it in the hotbar (3–8), then click | Tap 🔨 Build, pick a machine, then tap |
-| Focus an area (city) / a rooftop | `F` cycles areas that need attention; `Home` returns to the park | Area labels when zoomed out |
-| Build a bridge / wake a rooftop | The objective panel button, or the button over the dashed bridge | Same |
+| Build a machine | Pick it in the hotbar (3–7), then click | Pick it, then tap |
+| Wake a landmark | Click it when it glows, or the objective panel's button | Tap |
+| Go to the area that needs you | `F` cycles areas that need attention; `Home` returns to the park | Area labels when zoomed out |
 | Inspect a machine | Click it, or use **Inspect** (1) | Tap it |
 | Pan | Drag the world (or middle/right drag) | Drag |
-| Zoom | Mouse wheel, `+` / `-` | Pinch |
+| Zoom (down to a city overview) | Mouse wheel, `+` / `-` | Pinch |
 | Harvest sunlight (emergency energy) | `H` | 🌞 button |
 | Upgrades | `U` | ⬆️ button |
 | Pause | `P` | ⏸ chip |
@@ -45,96 +55,108 @@ Node 20+ is required. The build is a static site (`base: './'`), so `dist/` can 
 
 ## How it plays
 
-### The first rooftop (Rounds 1–2)
+### The park
 
-- **Pulse** a cracked concrete tile. It sprouts, and a moment later it is grass. Restoring a tile softens its neighbours into **mossy soil**, which is cheaper. Tap a green tile again to **nurture** it: grass → wildflowers → full bloom (shrubs, little trees, sunflowers, lavender).
+You start in the **dilapidated park**: 242 restorable tiles of dead lawn and cracked paths around a dry fountain, a bandstand and benches, with fog all around.
+
+- **Pulse** a dead tile. It sprouts, and a moment later it is grass. Restoring a tile softens its neighbours into **mossy soil**, which is cheaper. Tap a green tile again to **nurture** it: grass → wildflowers → full bloom.
 - **Machines** connect automatically (no cables or pipes):
   - ☀️ **Solar Panel**: energy. When a tile right next to it blooms, it bursts (+⚡ now, ×2 for 5 s), once per chain.
   - 💧 **Water Condenser**: water, plus a charge meter. When full, it waters the dry soil beside it into bloom, starting a chain.
-  - 🌸 **Pollinator Garden**: when a plant right next to it is restored or grows, it pollinates its other neighbours (up to 4 per chain). Line gardens and panels up and the chain jumps between them.
-  - 🛸 **Drone Hub (2×2)**: drones restore tiles in range, then nurture them toward full bloom. Click a drone to see its range and current job.
-  - 🌳 **Mother Tree (2×2)**: every restoration or new bloom within 2 tiles charges it. At full charge it releases a Bloom Pulse over the whole area. Its own pulse can't recharge it.
-- **Bloom Chains** run on a deterministic event queue: you see waves spread outward from a gold-outlined origin tile, a `BLOOM CHAIN ×N` counter, and the totals at the end. Milestones at ×5 / ×10 / ×20 add +10% / +25% / +50% (highest only), and the 100-event cap fast-forwards the rest.
-- **Upgrades** come in four groups. Pulse: Efficient, Wide Pulse, Overcharge. Machines: Solar Array, Rich Soil, Water Bloom, Pollinator Reach, Mother Tree Resonance. Drones: Dash, Work Radius, Chain Intelligence, Second Drone. Storage: Seed Vault, which gates the big machines.
-- 🐱 **Hidden Lucky Cat**: a little maneki-neko first appears 4–6 minutes in, hidden somewhere in the scenery (12 spots, including the service ledge). Nothing points at it. Click it for Lucky Harvest, Solar Frenzy, Mega Bloom, Drone Party or a two-reward Jackpot. If you miss one, it saves up extra rewards instead of blocking new ones.
-- **The rooftop transforms** as you restore it. At 25%, moss and wildflowers creep over the ledge and the concrete looks cleaner. At 50%, a solar array unfolds on the stairwell roof, planters bloom and ivy hangs from the rails. At 75%, the facade brightens and balconies and vines fill in. At 100% you awaken the **Rooftop Core**, which plays the building-wide restoration and reveals Greenhouse Tower across a new bridge.
+  - 🌸 **Pollinator Garden**: when a plant next to it is restored or grows, it pollinates its neighbours. On a road or paving it is a **street garden**, and passes the chain to the next street garden within 6 tiles: a **green corridor**.
+  - 🛸 **Drone Hub (2×2)**: drones restore tiles in range, then nurture them. Hubs within 12 tiles link into a network, and drones prefer the fog edge.
+  - 🌳 **Mother Tree (2×2)**: blooms within 2 tiles charge it; at full charge it releases a Bloom Pulse over the whole area.
+  - ⛲ **Reservoir Garden** (reservoir and canal areas only): fills from nearby condensers and overflows into lush bloom.
+- **Bloom Chains** run on a deterministic event queue: waves spread outward from a gold-outlined origin, a `BLOOM CHAIN ×N` counter climbs, and the totals show at the end. A chain can run up to 1,500 events and 20 s of travel in the city before the rest resolves at once.
+- Restore 130 tiles and bring 52 to full bloom, then **wake the fountain** (about 6½ minutes in). The park's fog lifts and the first ring of areas appears.
 
-A first session to the Seed's Core takes about 13–15 minutes (see PROGRESS.md for the pacing data).
+### The endless city
 
-### The neighbourhood (Phase 3)
+The city is generated forever outward from the park: the same seed always gives the same city, whatever order you explore it in.
 
-![The garden mid-game](docs/garden.png)
+- **Areas.** The world is split into areas of about 2–4 chunks (16×16 tiles each). Each has a type, a landmark and a permanent bonus once cleared:
 
-- **Three rooftops, one grid feel.** The Seed (8×8), the Reservoir (8×8, sun-baked clay) and the Canopy (10×8, withered leaf litter). Each has its own roof-local grid, tile ids like `r2:3:5`, and the same hover, tap and build controls. Locked rooftops are visible and tell you how to reach them.
-- **Bridges and relays.** After the Seed's Core wakes and the Seed is in full bloom, build the 🌉 **Skybridge Relay** (220🌿 90⚡). The bridge is the visual link and the relay pylons are the mechanical one: a chain effect on a tile right next to a pylon sends a pulse across. It travels over the bridge and blooms the best spots near the far pylon (gardens, panels and trees first), and the chain carries on over there. Each link fires at most once per chain and recharges in 8 s. Click a pylon to see `Connected: 2 roofs` and when the next cross-roof pulse is ready.
-- **The Reservoir: Overflow.** ⛲ Reservoir Gardens (key 8, Reservoir only) fill whenever a Water Condenser within 2 tiles fills its meter. A full basin overflows: up to 3 dry tiles nearby burst into **lush** bloom (×2 🌿 for 25 s). Wake the 💧 **Old Cistern** (48 tiles restored, 3 Overflows) for steady water and a cascading basin.
-- **The Canopy: Canopy Burst.** Blooms within 3 tiles charge the 🌳 **Elder Tree**'s ring of seed-lights. A full ring releases a Canopy Burst over 2 tiles (3 once it's awake). 🌸 Pollinator Gardens inside the burst carry it 2 blooms further. Wake the tree (64 tiles, 5 bursts).
-- **Active play near machines.** A manual pulse right next to a machine boosts its next trigger: +1 target, a double solar burst, or +1 radius for trees. A cyan ring shows the boost. Automation never boosts.
-- **Neighbourhood upgrades.** Relay II (2 remote blooms, 6 s recharge) and Drone Dispatch (idle drones fly over the bridges to help near the far relay).
-- **Lucky Cat, everywhere.** The cat hides on any playable rooftop (never under the HUD, usually somewhere already on screen). Two new rewards: **Golden Relay** (the next crossing blooms one extra tile) and **Cat's Garden** (a little cluster blooms on a rooftop, usually a new one). It never blocks a build: build on its nook and it hops elsewhere.
-- **The Neighbourhood Bloom.** With all three Cores awake, one button plays the 10-second finale: energy gathers at the Cores, relays light, green waves roll across all three rooftops, the buildings turn white, resources shower in and a new district rises on the horizon. Skippable, and replayable from the objective panel without rewards.
+| Type | Ground | Landmark | Bonus per cleared area* |
+|---|---|---|---|
+| 🌳 Park | lawn | Dry Fountain | +0.3 🌿/s |
+| 🛣️ Street | paving | Signal Mast | +0.25 ⚡/s |
+| ⛲ Plaza | paving | Clock Tower | +0.35 ⚡/s |
+| 🛶 Canal | paving and water | Lock Gate | +0.35 💧/s |
+| 🧺 Market | paving | Market Hall | +0.25 🌿/s, +0.1 ⚡/s |
+| 💧 Reservoir | clay | Old Cistern | +0.5 💧/s |
+| 🍂 Grove | leaf litter | Elder Tree | +0.4 🌿/s |
 
-Two play styles work: **solar + drone** (steady throughput, many small chains) and **water + pollinator** (slower, bigger bursts). The scripted bots in `tests/pacing-hood.test.ts` finish the neighbourhood both ways.
+  \* Soft-scaled: *n* areas of a type give base × *n*^0.75, so numbers stay readable after hundreds of areas. Districts (old town, docks, towers, parkland) favour different types. Roads and canals run through the city. Rare authored landmarks (the Great Greenhouse, the Solar Cathedral, the Sky Observatory, then one every 10 chunks) stand out on the way.
+
+- **The fog.** Every area is in one of four states:
+
+| State | What it means |
+|---|---|
+| Hidden | Deep fog, grey ground. Nothing can be touched. |
+| Frontier | Revealed next to clear ground. You can restore tiles that touch clear ground, so the fog is pushed back from its edge inward. Every frontier is guaranteed a way in. |
+| Thinning | You've started restoring it; the fog thins as you go (from full to a quarter). |
+| Cleared | Its landmark is awake. The fog is gone, its bonus applies and its neighbours become frontiers. |
+
+  A landmark can be woken once 60% of the area's restorable tiles are restored (at most 160 × its difficulty).
+
+- **Difficulty grows with distance.** Pulse costs rise 4% per chunk from the park (up to ×2), and outer areas start more polluted.
+- **The economy keeps up.** Each cleared area raises storage (+35% of the starting caps each, with diminishing returns) and waives one step of the ×1.5 cost growth for every machine type. A bot playing the city clears 16–20 areas an hour with no dead time.
+- **Specialties travel.** Grove landmarks are Elder Trees: blooms around them charge a Canopy Burst. Reservoir and canal areas grow Reservoir Gardens.
+- **Overcharge.** A manual pulse right next to a machine boosts its next trigger (a cyan ring shows it). Automation never does.
+- **The Lucky Cat** hides in nooks beside obstacles in cleared areas (and around the park early on). Nothing points at it. Rewards: Lucky Harvest, Solar Frenzy, Mega Bloom, Drone Party, Jackpot, **Golden Relay** (the next green corridor hop blooms 5 extra tiles), **Cat's Garden** (a little garden blooms in one of your cleared areas) and **Fog Whisker** (the next fogged area thins from its edge). No reward ever touches the fog. If you miss a cat, it saves up extra rewards instead of blocking new ones.
+- **The camera** zooms out to a city overview with a far level of detail and area labels; `F` jumps to the next area that needs you.
 
 ## Architecture
 
 ```
 src/
-  main.ts                 boot
+  main.ts                 boot (async save load)
   app/Game.ts             glue: PlayCanvas app, fixed-step loop, input → tools, events → VFX/sound/HUD, autosave
-  app/EventBus.ts         typed event bus (tile.restored, chain.step, cat.found, rooftop.coreRestored, …)
-  app/SaveService.ts      versioned localStorage save
-  core/                   pure data + math: types, Economy (caps, never negative), Rng, GameState factory
+  app/EventBus.ts         typed event bus (tile.restored, chain.event, area.cleared, cat.found, …)
+  app/SaveService.ts      save v4: per-chunk deltas, gzip + base64, async; older saves discarded with a notice
+  core/
     Grid                  the world: layers of 16×16 chunks generated on demand; O(r²) tile and machine lookups
-    Generation            order-independent tile generation from a hash of (seed, layer, x, z)
-    TilePack              save encoding: per-chunk deltas from generation
+    Hash / Generation     order-independent generation from a hash of (seed, layer, x, z); the park layout
+    Areas                 jittered Voronoi of chunks into areas: type, theme, difficulty, landmark, neighbours
+    TilePack              save encoding: per-chunk columns of changes from generation
+    GameState, Economy, Rng, types
   gameplay/               headless, deterministic systems; no rendering imports
-    NeighbourhoodSystem   bridges/links, relay status, Reservoir and Canopy Cores, objectives, the Neighbourhood Bloom
-    Sim.ts                owns the state and steps every system on a fixed 0.1 s tick
-    RestorationSystem     pulse validation and costs, growth timers, nurture, seeping
-    BloomChainSystem      typed event queue (RESTORE/GROW/POLLINATE/PRODUCE_*/CHARGE/DISCHARGE/RELAY/OVERFLOW/CANOPY_BURST/LUSH/REWARD), caps, fast-forward
-    Metrics               playtest timings saved with the game (Settings → Playtest timings)
-    BuildSystem           placement rules, footprints, scaling costs
-    ProductionSystem      cached rates, solar boosts, condenser irrigation
-    DroneSystem           job search, tile reservation, flight, cost paying, idling
-    LuckyCatSystem        anchors, visibility veto, seeded reward rolls, claim-once
-    UpgradeSystem / ProgressionSystem (Core requirements, tutorial steps)
-  data/                   every balance knob: tuning.ts (Phase 3 under TUNING.neighbourhood), machines.ts, upgrades.ts, rooftops.ts (layouts, links, cat anchors)
+    Sim                   owns the state and steps every system on a fixed 0.1 s tick
+    AreaSystem            fog states, the edge rule, wake requirements, reveals, bonuses, storage, reachability
+    RestorationSystem     pulse validation and costs (with distance difficulty), growth timers, nurture, seeping
+    BloomChainSystem      priority-queue chains (RESTORE/GROW/POLLINATE/CORRIDOR/PRODUCE_*/CHARGE/OVERFLOW/CANOPY_BURST/LUSH/…), caps, fast-forward
+    ProductionSystem      per-chunk cached rates, re-summed only near changes; area bonus income
+    DroneSystem           hub networks, fog-edge job search, reservations, flight
+    LuckyCatSystem        generated nooks, spawn rules, seeded rewards, claim-once
+    BuildSystem, UpgradeSystem, ProgressionSystem, NeighbourhoodSystem (legacy rooftops), Metrics
+  data/                   every balance knob: tuning.ts (TUNING.city, TUNING.park, …), city.ts (area types, park layout, generator), machines.ts, upgrades.ts
   rendering/              PlayCanvas only; listens to state and never decides rules
-    SceneBuilder          lights, fog, building + service ledge, Rooftop 2, bridge, stage changes, Core sequence
-    Scenery               layered hazy city, foreground terraces, ledge props, stage-driven greenery
-    TileFx                boosted-tile glow, chain waves, origin/job outlines
-    GridRenderer          per-tile slabs + procedural decoration, squash/grow animations
-    MachineVisuals, DroneVisuals, CatVisuals, Vfx (pooled rings/particles/arcs), Overlays (hover frame, ghost, radius)
-    CameraController      fixed 45°/35° orthographic camera, bounded pan, smooth zoom, cinematic focus
-    InputController       pointer/touch/pinch on the canvas only, click-vs-drag threshold
+    ChunkRenderer         streams merged vertex-coloured chunk meshes and fog sheets around the camera, far LOD
+    MachineVisuals        machines and landmarks (only on-screen ones animate), DroneVisuals, CatVisuals, Vfx, Overlays
+    CameraController      fixed 45°/35° orthographic camera, glide, bounds, zoom to the overview
+    SceneBuilder, Scenery, InputController
   ui/                     DOM HUD (Hud.ts, styles.css) and pooled flying "+2🌿" numbers
-  audio/Sfx.ts            WebAudio-synthesised effects and a small generative pad (no audio files)
-tests/                    vitest: grid, economy, placement, chains, drones, lucky cat, save, scripted sessions,
-                          Phase 3: save migration (real Round 2 saves in tests/fixtures), relays, specialties,
-                          neighbourhood flow, multi-roof cat, neighbourhood pacing bots
+  audio/Sfx.ts            WebAudio-synthesised effects and a small generative pad
+tests/                    vitest suites, perf/ (benchmarks, browser perf, leak), soak/, e2e/ (picking)
 ```
 
 ### Design decisions
 
-- **Game state is separate from rendering.** The `Sim` runs headless in tests. The renderer only reacts to events and reads state, so picking, coordinates and occupancy never depend on meshes.
-- **Ground and occupancy are separate fields.** A machine sits on a restored tile without erasing its restoration record (`ground`, `bloom`, `pollution` and `occupantId` are independent).
-- **Chains are queued, never recursive.** Each step is scheduled 0.15 s later, which also drives the visible cause → effect arcs. Solar boosts are terminal, so a solar → pulse → solar loop can't happen.
-- **No softlock.** The starter panel and the rain barrel always produce, Harvest Sunlight is always available, and costs can never push a balance below zero.
-- **Picking** casts a camera ray against each rooftop's slab plane and floors the hit into a cell. Cat clicks use a screen-space radius (at least 26 px) instead of the tiny mesh.
-- **Performance.** World geometry uses a static batch group and tiles use a dynamic one, which takes the scene from about 1,000 draw calls to about 140–300. Materials are cached and VFX entities are pooled. Shadows come from one directional light with one cascade.
-- **Saves.** The game autosaves every 10 s and on key events (machine built, upgrade, cat spawned/found, Core, bridge, Neighbourhood Bloom). A Lucky Cat claim clears the cat *before* paying out, and one-time unlocks are marked claimed before anything is paid, so reloading can't pay twice. Offline progress is deliberately not simulated. Save format v4 stores only chunks that differ from generation, gzip-compressed (autosave runs at an idle moment; page unload saves plainly). Older saves (v1–v3) are discarded with a notice.
-- **The world is chunked.** Every surface is a layer: the endless ground (not playable yet) and each rooftop. Tiles live in 16×16 chunks generated on demand, deterministically, so the world is the same whatever order you explore it in. Adjacency never crosses layers; bridges and relays do.
-- **Cross-roof links are explicit.** Rooftops never become adjacent by world position. A chain only crosses at a built link's relay zone, at most once per link per chain, on a recharge. Relay loops can't retrigger themselves.
-- **No stalls.** Overflow always fires when a basin is full (watering green tiles or just splashing if nothing is dry). The Elder Tree slowly charges on its own once the Canopy is half alive. Bridge milestones are a share of the open tiles, so building more machines can never make one unreachable.
+- **Game state is separate from rendering.** The `Sim` runs headless in tests, soaks and bots. The renderer only reacts to events and reads state.
+- **Generation is a pure function.** A tile is a hash of (seed, layer, x, z), so the city never depends on visiting order, and saves only store what you changed.
+- **Everything nearby is O(1) in world size.** Lookups go through chunks and a per-chunk machine index; growing tiles, production and fog counts are cached and updated incrementally.
+- **The fog moves from its edge.** Only tiles touching clear ground can change, so restoration always reads as pushing the fog back, and every revealed area is guaranteed an entry.
+- **Chains are queued, never recursive,** and capped, so even a ×600 chain across a dozen areas terminates and pays once.
+- **No softlock.** The starter panel and rain barrel always produce, Harvest Sunlight is always available, costs can't push a balance below zero, overflow always fires and the Elder Tree self-charges.
+- **Saves are small and safe.** Autosave every 10 s (gzip at an idle moment; page unload saves plainly). A 1,000-area city stores in about 0.6 MB. Lucky Cat claims and one-time unlocks are marked before paying out, so reloading can't pay twice. Offline progress is deliberately not simulated.
 
-While building, a faint tile grid appears, and the placement ghost shows its outline and range. Placing a machine plays three beats: the foundation pops up, the white shell unfolds, then its light switches on. Butterflies drift between restored tiles, more of them as the garden grows. The 🐱 discovery panel (in Settings, or the 🐱 chip) lists which nooks you've found cats in and which rewards you've had.
+## Limitations
 
-## Limitations and next steps
+- Machines are separate entities (not instanced yet), so screens full of street gardens cost thousands of draw calls (#53).
+- Chunk meshes are dense: about 2 MB of GPU memory per streamed chunk at near zoom.
+- No buildings on city blocks yet (#54); areas are flat ground with props.
+- The rooftop campaign (three linked rooftops) is still in the code behind `createInitialState(seed, { rooftops: true })` for its tests; turning it into city rooftop clusters is #82.
+- Balance has been checked by scripted bots, not human playtests. `src/data/tuning.ts` and `src/data/city.ts` are the places to adjust it.
+- Real-device performance numbers are still to be logged (#99). No camera rotation.
 
-- The district that appears after the Neighbourhood Bloom is a horizon silhouette, a goal for a later phase.
-- Art is primitive-based. Rounded custom meshes, instancing and decor LOD would come next.
-- Balance has been checked by scripted bots, not by human playtests. `src/data/tuning.ts` (`TUNING.neighbourhood`) and `src/data/rooftops.ts` are the places to adjust it.
-- No camera rotation (out of scope).
-
-![Phone layout](docs/mobile.png)
+See [PROGRESS.md](PROGRESS.md) for the status of every part of the city epic (#1), measured numbers and pacing data.
