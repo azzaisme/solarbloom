@@ -30,7 +30,7 @@ Node 20+ is required. The build is a static site (`base: './'`), so `dist/` can 
 |---|---|---|
 | Restore a tile (or nurture a green one) | Left-click with **Pulse** (2) | Tap |
 | Build a machine | Pick it in the hotbar (3–8), then click | Tap 🔨 Build, pick a machine, then tap |
-| Focus a rooftop | `F` cycles rooftops, or the rooftop chips under the objective | Rooftop chips |
+| Focus an area (city) / a rooftop | `F` cycles areas that need attention; `Home` returns to the park | Area labels when zoomed out |
 | Build a bridge / wake a rooftop | The objective panel button, or the button over the dashed bridge | Same |
 | Inspect a machine | Click it, or use **Inspect** (1) | Tap it |
 | Pan | Drag the world (or middle/right drag) | Drag |

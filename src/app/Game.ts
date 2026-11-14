@@ -184,6 +184,7 @@ export class Game {
     if (state.cat.active) this.cat.show(state.cat.active.anchorId, false);
     this.camera.setBoundsFor(this.sim.grid.rooftops);
     if (this.city) {
+      this.camera.minZoom = 0.22; // the city overview
       this.updateCityBounds();
       this.camera.target.set(8, 0, 8);
       this.camera.glide(8, 0, 8);
@@ -341,7 +342,10 @@ export class Game {
       const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden' };
       if (map[k]) this.selectTool(map[k]);
       else if (k === 'h') this.harvest();
-      else if (k === 'f') this.focusNextRoof();
+      else if (k === 'f') {
+        if (this.city) this.focusNextArea();
+        else this.focusNextRoof();
+      } else if (k === 'home' && this.city) this.focusArea(PARK);
       else if (k === 'u') this.hud.toggleUpgrades();
       else if (k === 'p') this.setPaused(!this.paused);
       else if (k === 'f3' || k === '`') {
@@ -1277,6 +1281,54 @@ export class Game {
     return `<h4><span>${def.icon} ${esc(a.landmarkName)}</span><button data-close aria-label="Close">×</button></h4><p class="stat">${def.name} · ${a.distance} blocks from the park${tag}</p>${body}`;
   }
 
+  /** Flies the camera to an area's landmark (never during a cinematic; player input takes over). */
+  private focusArea(id: string) {
+    if (this.cinematic) return;
+    const [x, z] = this.sim.areas.info(id).landmark;
+    this.camera.glide(x + 1, 0, z + 1, Math.max(this.camera.zoom, 0.8));
+  }
+
+  private attentionIndex = 0;
+  /** F: cycle through areas that need attention (landmark ready, then fog in progress). */
+  private focusNextArea() {
+    const s = this.sim;
+    const open = s.areas.revealed().filter((id) => s.areas.fog(id) !== 'cleared' && id !== PARK);
+    const list = [...open.filter((id) => s.areas.ready(id)), ...open.filter((id) => !s.areas.ready(id)).sort((a, b) => s.areas.share(b) - s.areas.share(a))];
+    if (!list.length) return this.focusArea(PARK);
+    this.focusArea(list[this.attentionIndex++ % list.length]);
+  }
+
+  /** Labels over revealed city areas: a ready landmark always; names and progress when zoomed out. */
+  private updateAreaLabels() {
+    const s = this.sim;
+    const show = this.city && !this.cinematic && !this.hud.introOpen;
+    const zoomedOut = this.camera.zoom < 0.6;
+    const live = new Set<string>();
+    if (show) {
+      const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+      for (const id of s.areas.revealed()) {
+        const a = s.areas.info(id);
+        const fog = s.areas.fog(id);
+        const ready = id !== PARK && s.areas.ready(id);
+        if (!ready && !zoomedOut) continue;
+        const sp = this.camera.toScreen(new pc.Vec3(a.landmark[0] + 1, 2.4, a.landmark[1] + 1));
+        if (sp.x < -50 || sp.y < -50 || sp.x > c.clientWidth + 50 || sp.y > c.clientHeight + 50) continue;
+        const def = AREA_TYPES[a.type];
+        const key = `areaLabel-${id}`;
+        live.add(key);
+        const lm = s.areas.landmark(id);
+        let html: string;
+        if (ready && lm) html = `✨ ${esc(a.landmarkName)}<button data-wake="${lm.id}">Wake it</button>`;
+        else if (fog === 'cleared') html = `${def.icon} ${esc(id === PARK ? 'The Park' : def.name)}<small>clear${a.authored ? ' · ' + esc(a.landmarkName) : ''}</small>`;
+        else html = `${def.icon} ${esc(def.name)}<small>🌫️ ${Math.min(100, Math.round((s.areas.counts(id).restored / s.areas.need(id)) * 100))}%</small>`;
+        this.hud.worldLabel(key, html, sp.x, sp.y, ready);
+      }
+    }
+    for (const key of this.areaLabels) if (!live.has(key)) this.hud.worldLabel(key, null);
+    this.areaLabels = live;
+  }
+  private areaLabels = new Set<string>();
+
   private onAreaCleared(id: string) {
     const s = this.sim;
     this.chunks.markArea(id, true);
@@ -1702,7 +1754,7 @@ export class Game {
     this.tweens.update(dt);
     this.scene.update(dt);
     this.grid.update(dt);
-    if (this.city) this.chunks.update(dt, this.groundRect(), this.camera.target);
+    if (this.city) this.chunks.update(dt, this.groundRect(), this.camera.target, this.camera.zoom);
     this.machines.update(dt);
     this.drones.update(dt);
     this.cat.update(dt);
@@ -1738,6 +1790,7 @@ export class Game {
       }
     }
     this.updateRoofLabels(dt);
+    this.updateAreaLabels();
     this.updateRelayLamps();
     this.updateBoostRings(dt);
 

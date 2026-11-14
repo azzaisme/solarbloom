@@ -16,7 +16,8 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #8 City 07: rendering | first pass ✅ chunk streaming, merged chunk meshes, fog (open: far LOD #52, instancing #53, buildings #54, device numbers #56) |
 | #7 City 06: simulation at city scale | ✅ (open: active-region equivalence test #44, catch-up budget #48) |
 | #10 City 09: endless progression | ✅ storage, area bonuses, machine permits, endless pacing bot (open: specialty milestone actions #62, upgrade tree #65, playtest panel #68) |
-| #9, #11–#16 | not started |
+| #9 City 08: camera and overview | ✅ bounds, zoom-out to 0.22 with far level of detail, area labels, F / Home (open: overview click-to-fly #59, phone gestures #61) |
+| #11–#16 | not started |
 
 ## City 01: world model
 
@@ -44,6 +45,12 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - Authored landmarks (Great Greenhouse at 6 chunks, Solar Cathedral at 12, Sky Observatory at 20, then one every 10 chunks) sit in a seeded direction at their distance.
 - Difficulty grows with distance: pulse cost ×(1 + 0.04/chunk, max ×2) and a rising pollution floor (max 85).
 - Tests: skeleton determinism, themes, every type's ground/obstacles/landmark clearance, authored landmarks for 10 seeds, difficulty caps, and a 500+-area variety soak (under 30% same-type neighbours; every type within 12 chunks of the park).
+
+## City 08: getting around the city
+
+- In the city the camera zooms out to 0.22 (a district at a glance). Chunks more than two chunks from the view centre draw at a far level of detail (one slab per tile, a bump for full bloom) when zoomed out; streaming is capped to a 90-unit radius.
+- Labels over revealed areas: a ready landmark always shows a Wake button; when zoomed out every area shows its type and fog progress (or "clear").
+- `F` cycles areas that need attention (ready landmarks first, then the fog furthest along); `Home` flies back to the park. Pan bounds follow revealed areas.
 
 ## City 09: an economy that never ends
 

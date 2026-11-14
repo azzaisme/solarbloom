@@ -218,6 +218,8 @@ export class Hud {
       if (core && !core.disabled) this.cb.activateRoofCore(core.dataset.core!);
       const roof = t.closest<HTMLElement>('[data-roof]');
       if (roof && !link && !core) this.cb.focusRoof(roof.dataset.roof!);
+      const wake = t.closest<HTMLButtonElement>('[data-wake]');
+      if (wake && !wake.disabled) this.cb.wake(wake.dataset.wake!);
     });
     $(r, '#roofNav').addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-roof]');

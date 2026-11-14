@@ -124,6 +124,8 @@ interface ChunkView {
   dirty: boolean;
   fogDirty: boolean;
   fading?: boolean;
+  /** built at far level of detail (slabs only) */
+  far?: boolean;
 }
 
 /**
@@ -138,6 +140,7 @@ export class ChunkRenderer {
   /** Max chunk meshes rebuilt per frame (keeps frames smooth while panning or during big chains). */
   budget = 2;
   private time = 0;
+  private lastFocus = { x: 8, z: 8 };
 
   constructor(
     private sim: Sim,
@@ -194,8 +197,16 @@ export class ChunkRenderer {
    * Streams chunks for the visible ground rectangle (world x/z), keeping a margin loaded and dropping
    * chunks further away. Rebuilds at most `budget` dirty chunks per frame, nearest first.
    */
-  update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number }, focus: { x: number; z: number }) {
+  /** Chunks further than this (in chunks) from the view centre draw as plain slabs when zoomed out. */
+  farFrom = Infinity;
+
+  update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number }, focus: { x: number; z: number }, zoom = 1) {
     this.time += dt;
+    this.farFrom = zoom < 0.55 ? 2 : Infinity;
+    for (const v of this.views.values()) {
+      const far = dist(v, focus) / CHUNK > this.farFrom;
+      if (v.ground && !!v.far !== far) v.dirty = true;
+    }
     const cx0 = Math.floor(rect.x0 / CHUNK) - 1;
     const cx1 = Math.floor(rect.x1 / CHUNK) + 1;
     const cz0 = Math.floor(rect.z0 / CHUNK) - 1;
@@ -222,6 +233,7 @@ export class ChunkRenderer {
         v.fogDirty = true;
       }
     }
+    this.lastFocus = focus;
     const dirty = [...this.views.values()].filter((v) => v.dirty || (v.fogDirty && !v.fading));
     dirty.sort((a, b) => dist(a, focus) - dist(b, focus));
     let n = 0;
@@ -262,13 +274,24 @@ export class ChunkRenderer {
     const area = s.areas.map.areaOfChunk(v.cx, v.cz);
     const fog = s.areas.fog(area);
     const h = s.grid.layer(GROUND)!.height;
+    v.far = dist(v, this.lastFocus) / CHUNK > this.farFrom;
     for (const t of c.tiles) {
       if (!t) continue;
       // Hidden ground is grey; fogged ground is greyed unless restored.
       b.grey = fog === 'hidden' ? 0.75 : fog === 'cleared' || t.ground === 'restored' ? 0 : 0.35;
-      this.tile(b, t, h);
+      if (v.far) this.farTile(b, t, h);
+      else this.tile(b, t, h);
     }
     v.ground = this.setMesh(v.ground, `chunk-${v.key}`, b.build(this.device), vertexColourMaterial(), true);
+  }
+
+  /** Far level of detail: one coloured slab per tile, with a bump for full bloom. */
+  private farTile(b: MeshBuilder, t: TileData, h: number) {
+    const f = t.feature ?? 'lawn';
+    const dead = DEAD[f] ?? DEAD.lawn;
+    const col = t.blocked ? dead[0] : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? ALIVE.paving : PALETTE.grass[t.variant % PALETTE.grass.length]) : t.ground === 'polluted' ? dead[t.variant % dead.length] : PALETTE.soil;
+    b.add('box', col, [t.x + 0.5, h, t.z + 0.5], [1, 0.16, 1]);
+    if (t.ground === 'restored' && t.bloom >= 3 && f !== 'water') b.add('box', PALETTE.shrub[t.variant % 3], [t.x + 0.5, h + 0.2, t.z + 0.5], [0.6, 0.3, 0.6]);
   }
 
   private tile(b: MeshBuilder, t: TileData, h: number) {
