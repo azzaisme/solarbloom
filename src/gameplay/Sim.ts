@@ -7,6 +7,7 @@ import type { GameState, MachineData, TileData } from '../core/types';
 import { BloomChainSystem } from './BloomChainSystem';
 import { BuildSystem } from './BuildSystem';
 import { DroneSystem } from './DroneSystem';
+import { Advisor } from './Advisor';
 import { LuckyCatSystem } from './LuckyCatSystem';
 import { AreaSystem } from './AreaSystem';
 import { Metrics } from './Metrics';
@@ -32,6 +33,7 @@ export class Sim {
   readonly build: BuildSystem;
   readonly drones: DroneSystem;
   readonly cat: LuckyCatSystem;
+  readonly advisor: Advisor;
   readonly progression: ProgressionSystem;
   readonly metrics: Metrics;
   readonly hood: NeighbourhoodSystem;
@@ -73,6 +75,7 @@ export class Sim {
     this.build = new BuildSystem(this);
     this.drones = new DroneSystem(this);
     this.cat = new LuckyCatSystem(this);
+    this.advisor = new Advisor(this);
     this.progression = new ProgressionSystem(this);
     this.hood = new NeighbourhoodSystem(this);
     this.areas = new AreaSystem(this);

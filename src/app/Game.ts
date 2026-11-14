@@ -166,6 +166,13 @@ export class Game {
         },
         neighbourhoodBloom: (replay) => this.playNeighbourhoodBloom(replay),
         openArea: (id) => this.openArea(id),
+        focusTile: (x, z) => {
+          if (this.cinematic) return;
+          this.camera.glide(x + 0.5, 0, z + 0.5, Math.max(this.camera.zoom, 0.9));
+          const t = this.sim.grid.get(GROUND, x, z);
+          if (t) this.vfx.ring(this.tileVec(t), PALETTE.gold, 1.2, 0.9);
+          this.selectTool?.('pulse');
+        },
         wake: (id) => {
           const m = this.sim.machine(id);
           if (m && this.landmarkReady(m)) this.wakeLandmark(m);

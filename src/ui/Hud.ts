@@ -35,6 +35,8 @@ export interface HudCallbacks {
   wake(machineId: string): void;
   /** Open an area's panel (from its label in the overview). */
   openArea(areaId: string): void;
+  /** Fly the camera to a ground tile and point at it (the objective's suggestion). */
+  focusTile(x: number, z: number): void;
 }
 
 export interface Settings {
@@ -237,6 +239,14 @@ export class Hud {
       if (core && !core.disabled) this.cb.activateRoofCore(core.dataset.core!);
       const wk = t.closest<HTMLButtonElement>('[data-wake]');
       if (wk && !wk.disabled) this.cb.wake(wk.dataset.wake!);
+      const fo = t.closest<HTMLButtonElement>('[data-focus]');
+      if (fo) {
+        const [x, z] = fo.dataset.focus!.split(',').map(Number);
+        this.cb.focusTile(x, z);
+      }
+      if (t.closest('[data-upg]')) this.toggleUpgrades(true);
+      if (t.closest('[data-harvest]')) this.cb.harvest();
+      if (fo || wk || t.closest('[data-upg]') || t.closest('[data-harvest]')) this.suggestionAt = -1;
       const nb = t.closest<HTMLButtonElement>('[data-bloom]');
       if (nb && !nb.disabled) this.cb.neighbourhoodBloom(nb.dataset.bloom === 'replay');
     });
@@ -335,6 +345,21 @@ export class Hud {
   }
 
   /** The city objective after the fountain: the next area to clear. Returns the "Next:" line. */
+  private suggestionAt = -1;
+  private suggestionBtn = '';
+  /** The advisor's next step as a button (recomputed twice a second; it scans the fog edge). */
+  private suggestionHtml(): string {
+    const now = performance.now();
+    if (now - this.suggestionAt < 500) return this.suggestionBtn;
+    this.suggestionAt = now;
+    const g = this.sim.advisor.suggest();
+    const a = g.action;
+    const attr =
+      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'focus' ? `data-focus="${a.x},${a.z}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
+    this.suggestionBtn = `<p class="sugg">${esc(g.text)}</p><button class="act" ${attr}>${esc(g.label)}</button>`;
+    return this.suggestionBtn;
+  }
+
   private cityObjective(): string {
     const s = this.sim;
     const id = s.areas.nextGoal();
@@ -342,7 +367,7 @@ export class Hud {
     if (!id) {
       this.set('objTitle', $(this.root, '#objTitle'), 'text', '🌫️ Push back the fog');
       this.set('objList', objList, 'html', '');
-      this.set('objAct', $(this.root, '#objAct'), 'html', '');
+      this.set('objAct', $(this.root, '#objAct'), 'html', this.suggestionHtml());
       return '';
     }
     const a = s.areas.info(id);
@@ -355,14 +380,16 @@ export class Hud {
     this.set('objPct', $(this.root, '#objPct'), 'text', `${a.landmarkName}: ${Math.min(c.restored, need)}/${need} tiles · ${cleared} area${cleared === 1 ? '' : 's'} cleared`);
     this.set('objBar', $(this.root, '#objBar'), 'width', `${pct}%`);
     const ready = s.areas.ready(id);
+    const fr = s.advisor.nearestFrontier();
+    const frontier = fr && fr.areaId !== id ? `<li><span class="ck">·</span>Nearest frontier: the ${esc(fr.name.toLowerCase())}, ${fr.distance} block${fr.distance === 1 ? '' : 's'} out (${Math.round(fr.share * 100)}% restored)</li>` : '';
     this.set(
       'objList',
       objList,
       'html',
-      `<li class="${c.restored >= need ? 'done' : ''}"><span class="ck">${c.restored >= need ? '✓' : ''}</span>Restore ${need} tiles of the ${esc(def.name.toLowerCase())} (next to clear ground first)</li><li><span class="ck"></span>Wake the ${esc(a.landmarkName)}</li>`,
+      `<li class="${c.restored >= need ? 'done' : ''}"><span class="ck">${c.restored >= need ? '✓' : ''}</span>Restore ${need} tiles of the ${esc(def.name.toLowerCase())} (next to clear ground first)</li><li><span class="ck"></span>Wake the ${esc(a.landmarkName)}</li>${frontier}`,
     );
-    const lm = s.areas.landmark(id);
-    this.set('objAct', $(this.root, '#objAct'), 'html', ready && lm ? `<button class="act" data-wake="${lm.id}">✨ Wake the ${esc(a.landmarkName)}</button>` : '');
+    // The suggested next step sits outside the checklist, so it stays visible when the list is collapsed.
+    this.set('objAct', $(this.root, '#objAct'), 'html', this.suggestionHtml());
     return ready ? '' : `Next: restore the ${def.name.toLowerCase()} (${Math.min(c.restored, need)}/${need})`;
   }
 
@@ -745,7 +772,7 @@ export class Hud {
       const nx = o.items.find((r) => !r.done);
       hoodNext = a && a.ok && a.kind !== 'replay' ? '' : nx ? `Next: ${nx.label}` : ''; // a ready action is its own button
     } else {
-      this.set('objAct', $(this.root, '#objAct'), 'html', '');
+      this.set('objAct', $(this.root, '#objAct'), 'html', p.homeIsPark ? this.suggestionHtml() : '');
       this.set('objPct', $(this.root, '#objPct'), 'text', `${pct}% of the ${p.homeIsPark ? 'park' : 'rooftop'} restored · ${restored}/${total} tiles`);
       this.set('objBar', $(this.root, '#objBar'), 'width', `${pct}%`);
       const reqs = p.requirements();

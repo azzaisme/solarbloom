@@ -302,3 +302,4 @@ button:focus-visible { outline: 3px solid #2f7de1; outline-offset: 2px; }
 .slot[hidden] { display: none; }
 #inspect .bar { height: 6px; background: rgba(0,0,0,.08); border-radius: 4px; overflow: hidden; margin: 4px 0 2px; }
 #inspect .bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #8fd36f, #4fb66a); transition: width .2s; }
+#objAct .sugg { margin: 6px 0 4px; font-size: 12px; font-weight: 700; color: var(--ink-soft); }
