@@ -16,8 +16,46 @@ export class DroneSystem {
 
   constructor(private sim: Sim) {}
 
+  /** Tiles drones are on their way to (kept as a set: findJob asks for every tile in reach). */
+  private reserved = new Set<string>();
+  private reservedFor: DroneData[] | undefined;
+  private reservedCount = -1;
+
   isReserved(tileId: string): boolean {
-    return this.sim.state.drones.some((d) => d.targetTileId === tileId);
+    const ds = this.sim.state.drones;
+    if (this.reservedFor !== ds || this.reservedCount !== ds.length) {
+      this.reserved.clear();
+      for (const d of ds) if (d.targetTileId) this.reserved.add(d.targetTileId);
+      this.reservedFor = ds;
+      this.reservedCount = ds.length;
+    }
+    return this.reserved.has(tileId);
+  }
+
+  private setTarget(d: DroneData, tileId: string | undefined) {
+    this.isReserved(''); // make sure the set matches the drone list first
+    if (d.targetTileId) this.reserved.delete(d.targetTileId);
+    d.targetTileId = tileId;
+    if (tileId) this.reserved.add(tileId);
+  }
+
+  /**
+   * City 11.4: where the camera is. Drones whose hub is further than `radius` tiles from it fly by the clock
+   * (same timing, no per-tick moves); undefined (headless) simulates every flight in full.
+   */
+  focus?: { x: number; z: number; radius: number };
+
+  private isFar(hub: MachineData): boolean {
+    const f = this.focus;
+    if (!f || hub.roofId !== GROUND) return false;
+    return Math.hypot(hub.x + hub.size / 2 - f.x, hub.z + hub.size / 2 - f.z) > f.radius;
+  }
+
+  /** A far flight's position right now (on the straight line it would have flown). */
+  private farPos(d: DroneData, t: TileData): [number, number] {
+    const f = d.far!;
+    const k = f.t1 > f.t0 ? Math.min(1, Math.max(0, (this.sim.time - f.t0) / (f.t1 - f.t0))) : 1;
+    return [f.fx + (t.x + 0.5 - f.fx) * k, f.fz + (t.z + 0.5 - f.fz) * k];
   }
 
   statusOf(d: DroneData): DroneStatus {
@@ -60,7 +98,9 @@ export class DroneSystem {
       return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
     }
     const r = g.roof(this.roofOf(d))!;
-    return [r.origin[0] + d.px, r.origin[1] + r.height, r.origin[2] + d.pz];
+    const t = d.far && d.targetTileId ? g.byTileId(d.targetTileId) : undefined;
+    const [px, pz] = t ? this.farPos(d, t) : [d.px, d.pz];
+    return [r.origin[0] + px, r.origin[1] + r.height, r.origin[2] + pz];
   }
 
   private pylonWorld(l: RoofLinkDef, roofId: string): [number, number, number] {
@@ -252,9 +292,10 @@ export class DroneSystem {
 
   tick(dt: number) {
     const s = this.sim;
-    for (const hub of s.state.machines) {
-      if (hub.type !== 'droneHub') continue;
-      const have = s.state.drones.filter((d) => d.hubId === hub.id && d.expiresAt === undefined).length;
+    const permanent = new Map<string, number>();
+    for (const d of s.state.drones) if (d.expiresAt === undefined) permanent.set(d.hubId, (permanent.get(d.hubId) ?? 0) + 1);
+    for (const hub of s.machinesOfType('droneHub')) {
+      const have = permanent.get(hub.id) ?? 0;
       for (let i = have; i < this.wanted(hub); i++) this.spawn(hub);
     }
     for (const d of [...s.state.drones]) {
@@ -290,8 +331,13 @@ export class DroneSystem {
             d.timer = TUNING.drone.retrySeconds;
             break;
           }
-          d.targetTileId = job.id;
+          this.setTarget(d, job.id);
           d.mode = 'flying';
+          // Far from the camera the flight is timed, not stepped: same arrival tick, no per-tick moves.
+          if (job.roofId === hub.roofId && this.roofOf(d) === hub.roofId && this.isFar(hub)) {
+            const speed = TUNING.drone.flySpeed * s.upgrades.droneFlyMult;
+            d.far = { fx: d.px, fz: d.pz, t0: s.time, t1: s.time + Math.hypot(job.x + 0.5 - d.px, job.z + 0.5 - d.pz) / speed };
+          }
           this.status.set(d.id, 'travelling');
           s.bus.emit('drone.jobStarted', { droneId: d.id, tileId: job.id });
           break;
@@ -300,6 +346,22 @@ export class DroneSystem {
           const t = d.targetTileId ? s.grid.byTileId(d.targetTileId) : undefined;
           if (!t) {
             d.mode = 'idle';
+            d.far = undefined;
+            break;
+          }
+          if (d.far) {
+            if (s.time >= d.far.t1 - 1e-9) {
+              d.px = t.x + 0.5;
+              d.pz = t.z + 0.5;
+              d.far = undefined;
+              d.mode = 'working';
+              d.timer = TUNING.drone.workSeconds;
+              this.status.set(d.id, 'working');
+            } else if (!this.isFar(hub)) {
+              // The camera arrived: carry on from where it would be by now, flying for real.
+              [d.px, d.pz] = this.farPos(d, t);
+              d.far = undefined;
+            }
             break;
           }
           if (this.travel(d, t.roofId, t.x + 0.5, t.z + 0.5, dt)) {
@@ -313,7 +375,7 @@ export class DroneSystem {
           d.timer -= dt;
           if (d.timer > 0) break;
           const t = d.targetTileId ? s.grid.byTileId(d.targetTileId) : undefined;
-          d.targetTileId = undefined;
+          this.setTarget(d, undefined);
           if (t && t.ground !== 'restored' && t.ground !== 'growing') {
             s.restoration.beginGrowth(t, 'drone', TUNING.pulse.growSeconds);
             d.jobs++;

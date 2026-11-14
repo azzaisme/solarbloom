@@ -112,3 +112,84 @@ describe('drone networks (City 11)', () => {
     expect(bad).toEqual([]);
   });
 });
+
+describe('far-away drones as work rates (City 11.4)', () => {
+  /** A cleared ring of areas with eight hubs spread around, some of it still to restore. */
+  async function fleet(seed = 21) {
+    const { createInitialState: create, GROUND: G } = await import('../src/core/GameState');
+    const { Sim: S } = await import('../src/gameplay/Sim');
+    const sim = new S(create(seed));
+    const st = sim.state;
+    st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
+    st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
+    st.progression.coreActivated = true;
+    for (let cz = -3; cz <= 3; cz++) for (let cx = -3; cx <= 3; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
+    let n = 0;
+    for (const [x, z] of [[-40, -40], [-40, 0], [-40, 40], [0, -40], [0, 40], [40, -40], [40, 0], [40, 40]]) {
+      const cells = sim.grid.footprint(G, x, z, 2);
+      for (const c of cells) if (c) c.blocked = false;
+      const m = { id: sim.newId('m'), type: 'droneHub' as const, roofId: G, x, z, size: 2, boostUntil: 0, timer: 0, charge: 0 };
+      st.machines.push(m);
+      sim.grid.indexMachine(m);
+      for (const c of cells) c!.occupantId = m.id;
+      n++;
+    }
+    expect(n).toBe(8);
+    return sim;
+  }
+
+  it('over 10 minutes, drones far from the camera get as much done as fully simulated ones (within 5%)', async () => {
+    const full = await fleet();
+    const far = await fleet();
+    far.drones.focus = { x: 5000, z: 5000, radius: 50 }; // the camera is somewhere else entirely
+    let farFlights = 0;
+    far.bus.on('drone.jobStarted', ({ droneId }) => {
+      if (far.state.drones.find((d) => d.id === droneId)?.far) farFlights++;
+    });
+    full.advance(600);
+    far.advance(600);
+    const a = full.state.stats.droneJobs;
+    const b = far.state.stats.droneJobs;
+    expect(a).toBeGreaterThan(100);
+    expect(farFlights).toBeGreaterThan(100);
+    expect(Math.abs(a - b) / a).toBeLessThan(0.05);
+    // Throughput and outcome: the same ground restored.
+    expect(Math.abs(full.state.stats.tilesRestored - far.state.stats.tilesRestored) / full.state.stats.tilesRestored).toBeLessThan(0.05);
+  });
+
+  it('no drone teleports when the camera arrives mid-flight', async () => {
+    const sim = await fleet(5);
+    sim.drones.focus = { x: 5000, z: 5000, radius: 50 };
+    let checked = 0;
+    for (let i = 0; i < 3000 && checked < 6; i++) {
+      sim.tick();
+      for (const d of sim.state.drones) {
+        if (!d.far || sim.time - d.far.t0 < 0.1 || d.far.t1 - sim.time < 0.15) continue;
+        // Where the renderer would draw it now, and after the camera flies over and a tick passes.
+        const before = sim.drones.worldOf(d);
+        const hub = sim.machine(d.hubId)!;
+        sim.drones.focus = { x: hub.x, z: hub.z, radius: 50 };
+        sim.tick();
+        const after = sim.drones.worldOf(d);
+        expect(d.far).toBeUndefined();
+        const step = 3 * 0.1 * sim.upgrades.droneFlyMult + 1e-6; // at most one tick of flight apart
+        expect(Math.hypot(after[0] - before[0], after[2] - before[2])).toBeLessThanOrEqual(step * 1.01 + 0.31);
+        checked++;
+        sim.drones.focus = { x: 5000, z: 5000, radius: 50 };
+        break;
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it('reservations stay right: no two drones ever head for the same tile', async () => {
+    const sim = await fleet(9);
+    sim.drones.focus = { x: 0, z: -40, radius: 30 }; // some near, most far
+    for (let i = 0; i < 1200; i++) {
+      sim.tick();
+      const targets = sim.state.drones.map((d) => d.targetTileId).filter(Boolean);
+      expect(new Set(targets).size).toBe(targets.length);
+      for (const t of targets) expect(sim.drones.isReserved(t!)).toBe(true);
+    }
+  });
+});

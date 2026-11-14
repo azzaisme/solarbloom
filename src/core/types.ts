@@ -98,6 +98,8 @@ export interface DroneData {
   roofId?: string;
   /** Drone Dispatch: crossing a bridge. t goes 0 → 1 from `fromRoof` to the link's other end. */
   cross?: { linkId: string; fromRoof: string; t: number };
+  /** City 11.4: a flight far from the camera, resolved by time instead of per-tick moves (from, departure, arrival). */
+  far?: { fx: number; fz: number; t0: number; t1: number };
 }
 
 export type BuffType = 'solarFrenzy';

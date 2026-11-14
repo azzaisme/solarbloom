@@ -1974,6 +1974,9 @@ export class Game {
     const dt = Math.min(rawDt, TUNING.maxFrameDt);
     this.clock += dt;
     this.adaptQuality(rawDt);
+    // City 11.4: drones well outside the view fly by the clock (no per-tick moves); near ones fly for real.
+    const view = this.city ? this.groundRect() : undefined;
+    this.sim.drones.focus = view ? { x: (view.x0 + view.x1) / 2, z: (view.z0 + view.z1) / 2, radius: Math.hypot(view.x1 - view.x0, view.z1 - view.z0) / 2 + 24 } : undefined;
     if (!this.paused && !this.hiddenPause && !this.hud.modalOpen) {
       if (rawDt > TUNING.maxFrameDt && !this.hiddenAt) this.awayFor(Math.min(rawDt, 30) - TUNING.maxFrameDt); // a hitch
       this.runSim(dt);
