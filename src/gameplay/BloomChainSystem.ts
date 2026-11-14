@@ -664,6 +664,7 @@ export class BloomChainSystem {
         const m = s.machine(ev.target);
         if (!m) return;
         m.boostUntil = s.time + TUNING.solarBloomBoost.seconds;
+        s.production.solarBoosted(m);
         const boost = 1 + this.consumeOvercharge(m);
         const got = s.econ.add('energy', TUNING.solarBloomBoost.burstEnergy * s.upgrades.solarMult * boost);
         run.energy += got;
