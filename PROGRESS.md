@@ -18,7 +18,8 @@ Plan: `docs/PHASE_4_EPICS.md`. Audit, baseline and results: `docs/PHASE_4_AUDIT.
 | E07 Automation | ✅ Drone Dash ×1.5/×2/×3, Work Radius +2 per level, Drone Squad (every hub +1/+2 drones), Drone Sweep (each drone restore also restores 2/4 tiles around it), drone tile lists and networks cached and own reach searched first (30-min city run 36 s → 13 s). Hands-off 30–36% of active (was 13–27%) |
 | E08 Lucky Cat | ✅ first cat ~3–4 min, then every 3–5 min of active play; Lucky Harvest = 30–60 s of sustained income (no Frenzy ×10), floor 15, age bonus; overflow named in the reward; composes with Frenzy. Existing: claim-once, no expiry, stash for missed cats, seeded rewards, save-safe. Not done: golden flowers / butterflies as extra discoveries (optional) |
 | E09 Art | ✅ (scoped) distinct old drone (worn cream shell, rust patch, amber eyes, bent antenna, smaller), hub drone trim by Drone Dash level, Radiant tiles (E05), Frenzy vignette (E06); `tests/e2e/phase4-shots.mjs` before/after shots with no page errors. Not done: machine models beyond the existing procedural set, solar/flower-bed upgrade silhouettes, new flora/birds |
-| E10–E11 | in progress |
+| E10 First 15 minutes | ✅ no blocking welcome card (first tap works at once, a short welcome toast), the fountain fills Bloom Frenzy, pacing table from bots (first upgrade 0:21 for an eager buyer, hub 1:15–1:18, fountain 4:12–4:24, 4–5 Frenzies in 15 min); hands-off now 28–46% of active |
+| E11 Validation | in progress |
 
 # City scale (epic #1)
 

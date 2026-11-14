@@ -27,6 +27,8 @@ export interface BotOptions {
   state?: GameState;
   /** never buy upgrades (checks the main path doesn't depend on them) */
   noUpgrades?: boolean;
+  /** buy any affordable upgrade at once instead of saving for the next machine */
+  eager?: boolean;
   /** never claim a Lucky Cat (checks the main path doesn't depend on luck) */
   noCats?: boolean;
   /** called once per simulated second (for extra measurements) */
@@ -57,7 +59,7 @@ export interface BotReport {
   parkRestored: number;
   maxCombo: number;
   chains: number;
-  /** longest stretch (s) without a "meaningful improvement": upgrade, machine, cat, chain ×5+ or milestone */
+  /** longest stretch (s) without a "meaningful improvement": upgrade, machine, cat, chain ×5+, milestone or Frenzy */
   longestGap: number;
   stuck: number;
   pulses: number;
@@ -99,6 +101,8 @@ export function runBot(opts: BotOptions): BotReport {
     meaningful();
   });
   sim.bus.on('cat.found', meaningful);
+  sim.bus.on('milestone.reached', meaningful);
+  sim.bus.on('frenzy.started', meaningful);
   sim.bus.on('rooftop.coreRestored', meaningful);
   sim.bus.on('area.cleared', meaningful);
   sim.bus.on('chain.ended', ({ combo }) => combo >= 5 && meaningful());
@@ -184,7 +188,7 @@ export function runBot(opts: BotOptions): BotReport {
     const nextCost = ORDER[next] ? (sim.build.cost(ORDER[next]).biomass ?? 0) : 0;
     for (const u of opts.noUpgrades ? [] : sim.upgrades.all()) {
       const st = sim.upgrades.status(u);
-      if (st.ok && s.resources.biomass - st.cost >= Math.min(nextCost, s.caps.biomass * 0.6)) sim.upgrades.purchase(u.id);
+      if (st.ok && (opts.eager || s.resources.biomass - st.cost >= Math.min(nextCost, s.caps.biomass * 0.6))) sim.upgrades.purchase(u.id);
     }
     if (sim.progression.coreReady()) sim.progression.activateCore();
     // 4. find the cat ~40 s after it appears

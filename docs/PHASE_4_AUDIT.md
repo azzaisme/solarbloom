@@ -335,3 +335,27 @@ The procedural art from earlier rounds was kept: park stages from dilapidated to
 - **Before/after screenshots** at the same camera angle: `tests/e2e/phase4-shots.mjs` → `docs/review/phase4-desktop-0-fresh.png`, `-1-half`, `-2-grown`, `-3-frenzy`, plus phone shots. The script fails on any page error; none occurred.
 
 Not done, and listed as open: new machine models, solar panel and flower-bed silhouettes that change with upgrades, more flora variety, and birds. Asset-free art is limited, and the plan's scope lock puts tile transitions, HUD and feedback first.
+
+---
+
+# E10 — landmark payoff and the first 15 minutes
+
+- **Onboarding** (E10.1): the blocking welcome card is gone. The first pulse works at once. A short welcome toast says what the park is, a one-line live hint and a bouncing marker point at a tile, and the objective panel always offers one next step.
+- **On the way to the fountain** (E10.2): eight rewarded park milestones (E04), the park's look changing at 25 / 50 / 75%, and machines and chains appearing as the hints suggest them.
+- **The climax** (E10.3): the existing fountain sequence (skippable; play continues), the fog rolling back from the first ring of areas, +25% park biomass, and now **a full Bloom Frenzy meter**, so the payoff leads straight into a burst of power at the new fog edge. The expansion is real (the city), so there's no fake "next area" button.
+
+## Pacing (E10.4), scripted bots, seeds 7 / 21 / 99
+
+| Plan target | Plan time | Measured |
+|---|---|---|
+| First restoration | 0–10 s | first tap; first milestone (5 tiles) at 0:10 |
+| Mini goal + first upgrade | 10–30 s | milestone 10 at 0:20; first upgrade at **0:21** when bought as soon as it's affordable (the main bot saves for machines and buys at 1:36–1:45) |
+| Solar / water / flowers, bigger pulse | 0:30–2:00 | condenser 0:33, garden 0:51, Pulse Reach Sprout soon after |
+| First chain, first drone, first cat chance | 2–4 min | hub 1:15–1:18 (the old drone works from 0:00), first ×5 chain 2:52–2:55, Mother Tree 2:09–2:18, first cat 3:42 |
+| First Frenzy, tile evolution | 4–6 min | first Frenzy 3:33–3:54; Radiant tiles from the start of nurturing |
+| Fountain | 9–12 min (plan) | **4:12–4:24**: fast by your choice |
+| Another Frenzy or new area | 12–15 min | 4–5 Frenzies in 15 min; the city opens at ~4:20, and the city bot clears 43–68 areas an hour |
+
+- **Longest stretch with nothing new** (no upgrade, machine, cat, chain ×5+, milestone or Frenzy): 112–168 s for the active bot. That's above the plan's 30–60 s guide. It mostly happens in the city, between area clears, where the bot works one area at a time.
+- **Hands-off** (no taps after the hub; still buys and wakes landmarks): **28–46%** of the active bot's tiles (agreed target 40–60%). The fountain's Frenzy helps idle players too. Hands-off fountain at 8:09–8:39.
+- **People will be slower than the bot**, probably 1.5–2× on every timing. No human playtests were done.
