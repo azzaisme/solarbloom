@@ -17,8 +17,26 @@ export interface ActiveModifier {
 export class Modifiers {
   constructor(private sim: Sim) {}
 
+  /** Cached per sim time and boost state: solar output asks for every panel on every tick (E11 perf). */
+  private cache?: { time: number; frenzy: number | undefined; buffs: unknown; nBuffs: number; list: ActiveModifier[]; best: Record<string, number> };
+
+  private current() {
+    const s = this.sim;
+    const c = this.cache;
+    // Valid for this sim instant while the boosts themselves are unchanged (no allocation on a hit).
+    if (c && c.time === s.time && c.frenzy === s.state.frenzy?.until && c.buffs === s.state.buffs && c.nBuffs === s.state.buffs.length) return c;
+    const list = this.build();
+    const best: Record<string, number> = {};
+    for (const m of list) best[m.stat] = Math.max(best[m.stat] ?? -Infinity, m.value);
+    return (this.cache = { time: s.time, frenzy: s.state.frenzy?.until, buffs: s.state.buffs, nBuffs: s.state.buffs.length, list, best });
+  }
+
   /** Boosts running right now, for the HUD. */
   list(): ActiveModifier[] {
+    return this.current().list;
+  }
+
+  private build(): ActiveModifier[] {
     const s = this.sim;
     const out: ActiveModifier[] = [];
     const F = TUNING.frenzy;
@@ -34,9 +52,8 @@ export class Modifiers {
   }
 
   private strongest(stat: ActiveModifier['stat'], base = 1): number {
-    let v = base;
-    for (const m of this.list()) if (m.stat === stat) v = Math.max(v, m.value);
-    return v;
+    const b = this.current().best[stat];
+    return b === undefined ? base : Math.max(base, b);
   }
 
   biomassMult(): number {

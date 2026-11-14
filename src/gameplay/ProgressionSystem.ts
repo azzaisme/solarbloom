@@ -154,6 +154,7 @@ export class ProgressionSystem {
   private checkMilestones() {
     const s = this.sim;
     const p = s.state.progression;
+    if (p.parkMilestones && !this.nextMilestone()) return; // all paid: nothing to count any more
     const n = s.areas.counts(PARK).restored;
     if (!p.parkMilestones) {
       p.parkMilestones = TUNING.parkMilestones.filter((m) => m.at <= n).map((m) => m.at);

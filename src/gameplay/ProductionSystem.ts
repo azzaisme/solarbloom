@@ -88,12 +88,12 @@ export class ProductionSystem {
   }
 
   /** `sustained`: without temporary boosts (bloom boosts, Solar Surge), for offline progress and cat rewards. */
-  solarOutput(m: MachineData, sustained = false): number {
+  solarOutput(m: MachineData, sustained = false, boost = sustained ? 1 : this.sim.mods.solarMult()): number {
     const t = this.sim.time;
     let v = (m.starter ? TUNING.starterSolarRate : TUNING.solarRate) * this.sim.upgrades.solarMult;
     if (sustained) return v;
     if (m.boostUntil > t) v *= TUNING.solarBloomBoost.mult;
-    v *= this.sim.mods.solarMult(); // Solar Surge (composed centrally, Phase 4 E06.6)
+    v *= boost; // Solar Surge (composed centrally, Phase 4 E06.6; looked up once per rates() call)
     return v;
   }
 
@@ -150,8 +150,9 @@ export class ProductionSystem {
     const bonus = this.sim.areas.bonusIncome();
     energy += bonus.energy;
     let water = TUNING.rainBarrelRate + bonus.water;
+    const solarBoost = sustained ? 1 : this.sim.mods.solarMult();
     for (const m of this.sim.state.machines) {
-      if (m.type === 'solar') energy += this.solarOutput(m, sustained);
+      if (m.type === 'solar') energy += this.solarOutput(m, sustained, solarBoost);
       else if (m.type === 'condenser') water += 1;
     }
     // Phase 4 E06: temporary biomass boosts (Bloom Frenzy) apply to the total, never to the sustained rate.
