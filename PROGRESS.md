@@ -18,7 +18,8 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #10 City 09: endless progression | ✅ storage, area bonuses, machine permits, endless pacing bot (open: specialty milestone actions #62, upgrade tree #65, playtest panel #68) |
 | #9 City 08: camera and overview | ✅ bounds, zoom-out to 0.22 with far level of detail, area labels, F / Home (open: overview click-to-fly #59, phone gestures #61) |
 | #11 City 10: massive blooms | ✅ chains across areas, green corridors, city chain caps, area summaries (open: canal network #71, buildable relays #72, huge-chain presentation #74, district blooms #75) |
-| #12–#16 | not started |
+| #14 City 13: Lucky Cat in the city | ✅ generated nooks, spawn rules, Fog Whisker (open: Golden Corridor #88, discovery log by area type #89) |
+| #12, #13, #15, #16 | not started |
 
 ## City 01: world model
 
@@ -46,6 +47,12 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - Authored landmarks (Great Greenhouse at 6 chunks, Solar Cathedral at 12, Sky Observatory at 20, then one every 10 chunks) sit in a seeded direction at their distance.
 - Difficulty grows with distance: pulse cost ×(1 + 0.04/chunk, max ×2) and a rising pollution floor (max 85).
 - Tests: skeleton determinism, themes, every type's ground/obstacles/landmark clearance, authored landmarks for 10 seeds, difficulty caps, and a 500+-area variety soak (under 30% same-type neighbours; every type within 12 chunks of the park).
+
+## City 13: the Lucky Cat in an endless city
+
+- Besides the park's five nooks, every cleared area offers up to three generated nooks: a free tile of that area beside one of its obstacles (bench, stall, pillar…), hint "beside a broken stall". Only the 12 most recently cleared areas are considered, so the cat stays near where the player has been; nooks are never in fog. Nook ids (`nook:x:z`) resolve from the world, so a hiding cat survives a reload.
+- New reward, **Fog Whisker**: up to 10 tiles of the next fogged area restored outward from its edge (each opens the next, so the fog's rules hold). Only offered once the fountain is awake and there is fog to thin.
+- Tests: nook validity, 200 spawns in a 40-area city (all valid, one at a time, never in fog), reload in a city nook with a single payout, Fog Whisker order and cap.
 
 ## City 10: massive blooming systems
 

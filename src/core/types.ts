@@ -104,7 +104,7 @@ export interface Buff {
   until: number;
 }
 
-export type CatRewardType = 'luckyHarvest' | 'solarFrenzy' | 'megaBloom' | 'droneParty' | 'jackpot' | 'goldenRelay' | 'catsGarden';
+export type CatRewardType = 'luckyHarvest' | 'solarFrenzy' | 'megaBloom' | 'droneParty' | 'jackpot' | 'goldenRelay' | 'catsGarden' | 'fogWhisker';
 
 export interface CatState {
   active?: { anchorId: string; spawnedAt: number };

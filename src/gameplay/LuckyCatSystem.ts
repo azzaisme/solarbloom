@@ -1,5 +1,8 @@
 import { HOME } from './ProgressionSystem';
 import type { CatRewardType, TileData } from '../core/types';
+import { PARK } from '../core/Areas';
+import { GROUND } from '../core/GameState';
+import { AREA_TYPES } from '../data/city';
 import { CAT_ANCHORS, type CatAnchor } from '../data/rooftops';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
@@ -17,6 +20,7 @@ export const CAT_REWARD_NAMES: Record<CatRewardType, string> = {
   jackpot: 'JACKPOT',
   goldenRelay: 'Golden Relay',
   catsGarden: "Cat's Garden",
+  fogWhisker: 'Fog Whisker',
 };
 
 /** How an anchor looks from the current camera: on screen, off screen (reachable by panning) or under the HUD. */
@@ -33,12 +37,58 @@ export class LuckyCatSystem {
   constructor(private sim: Sim) {}
 
   anchor(id: string | undefined): CatAnchor | undefined {
+    if (!id) return undefined;
+    if (id.startsWith('nook:')) return this.nookAnchor(id);
     return CAT_ANCHORS.find((a) => a.id === id);
+  }
+
+  /**
+   * City nooks: generated beside each cleared area's obstacles (benches, stalls, pillars…). A nook id is
+   * `nook:x:z` (the free tile the cat sits on); its look and hint come from the obstacle next to it.
+   */
+  private nookAnchor(id: string): CatAnchor | undefined {
+    const [, xs, zs] = id.split(':');
+    const x = Number(xs);
+    const z = Number(zs);
+    const t = this.sim.grid.get(GROUND, x, z);
+    if (!t) return undefined;
+    const ob = this.sim.grid.neighbors(t).find((n) => n.blocked && n.prop);
+    if (!ob) return undefined;
+    const dx = (ob.x - x) * 0.32;
+    const dz = (ob.z - z) * 0.32;
+    const area = this.sim.areas.areaOf(t);
+    const type = area ? AREA_TYPES[this.sim.areas.info(area).type] : undefined;
+    return { id, roofId: GROUND, pos: [x + 0.5 + dx, 0.08, z + 0.5 + dz], rotY: 200 + ((x * 37 + z * 11) % 60), needsFreeTile: [x, z], hint: `beside a ${type?.obstacleName ?? 'quiet corner'}` };
+  }
+
+  /** Up to three nooks per cleared area (deterministic: the first obstacles in tile order). */
+  private cityNooks(): CatAnchor[] {
+    const s = this.sim;
+    if (!s.grid.isPlayable(GROUND)) return [];
+    const out: CatAnchor[] = [];
+    const cleared = s.areas.revealed().filter((id) => id !== PARK && s.areas.fog(id) === 'cleared');
+    // Most recently cleared first, and only a handful: the cat stays near where the player has been.
+    cleared.sort((a, b) => (s.state.areas[b].clearedAt ?? 0) - (s.state.areas[a].clearedAt ?? 0));
+    for (const id of cleared.slice(0, 12)) {
+      let n = 0;
+      for (const t of s.areas.tiles(id)) {
+        if (n >= 3) break;
+        if (!t.blocked || !t.prop) continue;
+        const spot = s.grid.neighbors(t).find((nb) => !nb.blocked && !nb.occupantId && s.areas.areaOf(nb) === id);
+        if (!spot) continue;
+        const a = this.nookAnchor(`nook:${spot.x}:${spot.z}`);
+        if (a) {
+          out.push(a);
+          n++;
+        }
+      }
+    }
+    return out;
   }
 
   candidates(): CatAnchor[] {
     const s = this.sim;
-    return CAT_ANCHORS.filter((a) => {
+    return [...CAT_ANCHORS, ...this.cityNooks()].filter((a) => {
       const roof = s.grid.roof(a.roofId);
       if (!roof || !roof.unlocked || roof.preview) return false;
       if (a.needsFreeTile) {
@@ -139,6 +189,31 @@ export class LuckyCatSystem {
     return out;
   }
 
+  /**
+   * Fog Whisker: up to N tiles of the next fogged area, grown outward from its fog edge in order, so each
+   * restoration opens the next (the cat never skips the fog's rules, it just walks them quickly).
+   */
+  fogWhiskerTiles(): TileData[] {
+    const s = this.sim;
+    if (!s.grid.isPlayable(GROUND) || !s.state.progression.coreActivated) return [];
+    const id = s.areas.nextGoal();
+    if (!id || s.areas.fog(id) === 'cleared') return [];
+    const out: TileData[] = [];
+    const seen = new Set<string>();
+    const queue = s.areas.entryTiles(id).slice(0, 2);
+    for (const t of queue) seen.add(t.id);
+    while (queue.length && out.length < TUNING.cat.fogWhiskerTiles) {
+      const t = queue.shift()!;
+      out.push(t);
+      for (const n of s.grid.neighbors(t)) {
+        if (seen.has(n.id) || n.blocked || n.occupantId || n.ground === 'restored' || s.areas.areaOf(n) !== id) continue;
+        seen.add(n.id);
+        queue.push(n);
+      }
+    }
+    return out;
+  }
+
   /** Summary for the discovery panel. */
   discoveries() {
     const log = this.sim.state.cat.log ?? [];
@@ -172,6 +247,7 @@ export class LuckyCatSystem {
       ['jackpot', w.jackpot],
       ['goldenRelay', this.goldenRelayAvailable() ? w.goldenRelay : 0],
       ['catsGarden', this.catsGardenAvailable() ? w.catsGarden : 0],
+      ['fogWhisker', this.fogWhiskerTiles().length ? w.fogWhisker : 0],
     ];
     const total = table.reduce((a, [, x]) => a + x, 0);
     let r = this.sim.rng.next() * total;
@@ -254,6 +330,12 @@ export class LuckyCatSystem {
       const roof = s.grid.roof(tiles[0].roofId)!;
       parts.push(`A little garden blooms on ${roof.name} (${tiles.length} tiles)`);
     };
+    const whisker = () => {
+      const tiles = this.fogWhiskerTiles();
+      if (!tiles.length || !s.chains.startCatGarden(tiles)) return harvest();
+      const a = s.areas.info(s.areas.areaOf(tiles[0])!);
+      parts.push(`The fog thins over the ${AREA_TYPES[a.type].name.toLowerCase()} (${tiles.length} tiles)`);
+    };
     switch (type) {
       case 'luckyHarvest':
         harvest();
@@ -272,6 +354,9 @@ export class LuckyCatSystem {
         break;
       case 'catsGarden':
         garden();
+        break;
+      case 'fogWhisker':
+        whisker();
         break;
       case 'jackpot': {
         // Two different compatible rewards together.
