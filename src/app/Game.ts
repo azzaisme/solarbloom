@@ -15,6 +15,7 @@ import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
 import type { OfflineReport } from '../gameplay/OfflineSystem';
 import { Sim } from '../gameplay/Sim';
 import { Butterflies } from '../rendering/Butterflies';
+import { Birds } from '../rendering/Birds';
 import { CameraController } from '../rendering/CameraController';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
@@ -77,6 +78,7 @@ export class Game {
   readonly drones: DroneVisuals;
   readonly cat: CatVisuals;
   readonly butterflies: Butterflies;
+  private birds: Birds;
   readonly tileFx: TileFx;
   readonly vfx: Vfx;
   readonly overlays: Overlays;
@@ -159,6 +161,7 @@ export class Game {
     this.drones.sync();
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
+    this.birds = new Birds(this.scene.world);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
     this.tileFx = new TileFx(this.sim, this.scene.world, this.app.graphicsDevice);
     this.machines.onActivated = (_m, at) => {
@@ -299,7 +302,7 @@ export class Game {
     this.sfx.setMusic(s.music);
     document.body.classList.toggle('contrast', !!s.highContrast);
     const rm = s.reducedMotion;
-    this.tileFx.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
+    this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
     this.cat.softSparkle = rm || s.lowVfx;
     // Quality: lighter shadows with fewer effects.
@@ -1681,6 +1684,7 @@ export class Game {
     this.drones.update(dt);
     this.cat.update(dt);
     this.butterflies.update(dt);
+    this.birds.update(dt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2);
     this.tileFx.update(dt);
     this.frameNo++;
     this.updateChainPresentation(dt);

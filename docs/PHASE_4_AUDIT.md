@@ -326,15 +326,34 @@ Changed:
 
 ---
 
-# E09 — art and environment (scoped)
+# E09 — art and environment
 
-The procedural art from earlier rounds was kept: park stages from dilapidated to lush, seeded flora per tile, machine models with moving parts, butterflies, fog and buildings. Phase 4 added:
-- **The old drone** looks its age: worn cream shell, a rust patch, amber eyes, a bent antenna, and it's 80% the size. It's recognisable at a glance beside hub drones.
-- **Upgrades show on drones:** Drone Dash level 2 gives cyan trim, level 3 gold (E09.6).
-- **Radiant tiles** (E05) get a soft golden glow and luminous gold flowers. **Bloom Frenzy** (E06) gets a golden-green vignette, static with reduced motion.
-- **Before/after screenshots** at the same camera angle: `tests/e2e/phase4-shots.mjs` → `docs/review/phase4-desktop-0-fresh.png`, `-1-half`, `-2-grown`, `-3-frenzy`, plus phone shots. The script fails on any page error; none occurred.
+The procedural art from earlier rounds was kept: park stages from dilapidated to lush, seeded flora per tile, machine models, butterflies, fog and buildings. Phase 4 added:
 
-Not done, and listed as open: new machine models, solar panel and flower-bed silhouettes that change with upgrades, more flora variety, and birds. Asset-free art is limited, and the plan's scope lock puts tile transitions, HUD and feedback first.
+**Upgrades change silhouettes on every machine** (E09.6, `MachineVisuals.applyUpgrades`; rebuilt only when a relevant level changes):
+
+| Machine | Upgrade | Look |
+|---|---|---|
+| Solar Panel | Solar Array 1–6 | wing panels fanning out into a wide array; gold base trim from level 4 |
+| Water Condenser | Water Bloom | an extra water tank per level, and a ring of mist beads |
+| Pollinator Garden | Pollinator Reach / Rich Soil | a ring of flowers around the bed / taller blooms spilling over |
+| Drone Hub | Drone Dash / Drone Squad / Drone Sweep / Work Radius | antennas and fins / a glowing landing pad per extra drone / leafy sweeper arms / a taller mast and a dish |
+| Mother Tree | Resonance | a wider canopy with glowing gold lanterns |
+| Bloom Relay | Relay Lens | glowing lens rings on the mast |
+| Drones | Drone Dash 2 / 3 | cyan / gold trim |
+
+**Machine personality and life:**
+- Solar panels slowly track the sun.
+- The old drone looks its age (worn shell, rust patch, amber eyes, bent antenna).
+- Once the park is half restored, a small flock of birds crosses the view now and then. It's pooled (built once), never allocates per frame, and is off with reduced motion.
+
+**Tiles and Frenzy:** Radiant tiles get a soft golden glow and gold flowers (E05). Bloom Frenzy gets a golden-green vignette (E06).
+
+**Screenshots** (`npm run shots:phase4`, which fails on any page error):
+- the park fresh, half, grown and in Frenzy: `docs/review/phase4-desktop-*.png`, `phase4-phone-*.png`;
+- every machine as built and fully upgraded: `docs/review/phase4-machines-base.png`, `phase4-machines-upgraded.png`.
+
+Not done: visually joining the edges of neighbouring restored tiles (E09.1) and a new lighting/colour grade (E09.5). The existing look and mobile quality settings are unchanged.
 
 ---
 
