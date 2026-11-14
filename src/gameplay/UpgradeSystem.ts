@@ -99,6 +99,10 @@ export class UpgradeSystem {
   get wakeNeedMult() {
     return 1 - 0.1 * this.level('fogLantern');
   }
+  /** Lit Landmarks: multiplier on every cleared area's bonus income. */
+  get landmarkBonusMult() {
+    return 1 + 0.25 * this.level('landmarkLights');
+  }
   get pollinatorReach() {
     return TUNING.pollinator.reach + this.level('pollinatorReach');
   }

@@ -20,6 +20,7 @@ import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
 import { ChunkRenderer } from '../rendering/ChunkRenderer';
 import { areaPanelHtml } from '../ui/AreaPanel';
+import { upgradeHighlights } from '../gameplay/UpgradeEffects';
 import { GridRenderer } from '../rendering/GridRenderer';
 import { InputController } from '../rendering/InputController';
 import { MachineVisuals } from '../rendering/MachineVisuals';
@@ -1034,11 +1035,15 @@ export class Game {
       this.hud.toast(`${def.icon} ${def.name} ${['I', 'II', 'III', 'IV', 'V'][level - 1]}<small>${def.describe(level)}</small>`, 'gold', 2.6);
       this.machines.refreshUpgrades();
       this.sfx.coin();
-      for (const m of s.state.machines) {
-        if ((id === 'solarArray' && m.type === 'solar') || (id === 'droneSpeed' && m.type === 'droneHub') || (id === 'pollinatorReach' && m.type === 'pollinator')) {
-          const w = this.machines.worldOf(m);
-          this.vfx.burst(new pc.Vec3(w[0], w[1] + 0.4, w[2]), 12, { up: 2.5 });
-        }
+      // Show where it changed the world: the machines, landmarks or fog it affects (nearest the view first).
+      const spots = upgradeHighlights(s, id)
+        .map((p) => ({ p, d: Math.hypot(p.x - this.camera.target.x, p.z - this.camera.target.z) }))
+        .sort((a, b) => a.d - b.d)
+        .slice(0, 24);
+      for (const { p } of spots) {
+        const r = s.grid.roof(p.roofId);
+        if (!r) continue;
+        this.vfx.burst(new pc.Vec3(r.origin[0] + p.x, r.origin[1] + r.height + 0.5, r.origin[2] + p.z), 12, { up: 2.5 });
       }
       if (this.selected) this.inspectTimer = 0;
       this.save();

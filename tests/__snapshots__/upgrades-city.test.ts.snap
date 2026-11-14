@@ -39,6 +39,7 @@ exports[`upgrades drawer grouped by system (City 14.4) > the city drawer: Pulse,
   {
     "cards": [
       "🏮 Fog Lanterns: Landmarks wake with 10% fewer tiles restored [locked: Wake the fountain first]",
+      "🗼 Lit Landmarks: Every cleared area's bonus +25% [locked: Wake a landmark beyond the park first]",
     ],
     "group": "Fog",
   },

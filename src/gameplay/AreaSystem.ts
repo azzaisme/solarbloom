@@ -231,7 +231,7 @@ export class AreaSystem {
     const C = TUNING.city;
     for (const [type, n] of Object.entries(this.clearedByType())) {
       const b = C.bonuses[type] ?? {};
-      const k = Math.pow(n, C.bonusExponent);
+      const k = Math.pow(n, C.bonusExponent) * this.sim.upgrades.landmarkBonusMult;
       for (const r of ['energy', 'water', 'biomass'] as const) out[r] += (b[r] ?? 0) * k;
     }
     return out;

@@ -235,6 +235,19 @@ export const UPGRADES: UpgradeDef[] = [
     available: (s) => s.progression.coreActivated,
     lockedReason: 'Wake the fountain first',
   },
+  {
+    id: 'landmarkLights',
+    group: 'Fog',
+    mode: 'city',
+    name: 'Lit Landmarks',
+    icon: '🗼',
+    baseCost: 220,
+    costMult: 2.2,
+    maxLevel: 3,
+    describe: (n) => `Every cleared area's bonus +${25 * n}%`,
+    available: (s) => Object.entries(s.areas ?? {}).some(([id, a]) => id !== 'park' && a.fog === 'cleared'),
+    lockedReason: 'Wake a landmark beyond the park first',
+  },
 ];
 
 export const UPGRADE_BY_ID: Record<string, UpgradeDef> = Object.fromEntries(UPGRADES.map((u) => [u.id, u]));
