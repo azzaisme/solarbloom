@@ -1069,6 +1069,7 @@ export class Game {
       this.hud.flashResource('biomass', 'flash');
     });
     b.on('upgrade.purchased', ({ id, level }) => {
+      if (id === 'droneSpeed') this.drones.restyle();
       const def = UPGRADE_BY_ID[id];
       this.hud.toast(`${def.icon} ${def.name} ${['I', 'II', 'III', 'IV', 'V'][level - 1]}<small>${def.describe(level)}</small>`, 'gold', 2.6);
       this.machines.refreshUpgrades();

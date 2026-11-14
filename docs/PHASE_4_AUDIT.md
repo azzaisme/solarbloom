@@ -323,3 +323,15 @@ Changed:
 - **No silent losses:** if storage can't hold the harvest, the reward line says "(N🌿 didn't fit)". That excess then turns into a little Frenzy charge through the overflow path.
 - **Composes with Frenzy** through `Modifiers` (Solar Surge is solar only; Frenzy is biomass, drones and reach).
 - **Not done:** the optional rare golden flowers or butterflies as extra discoveries (E08.7). The core cat came first.
+
+---
+
+# E09 — art and environment (scoped)
+
+The procedural art from earlier rounds was kept: park stages from dilapidated to lush, seeded flora per tile, machine models with moving parts, butterflies, fog and buildings. Phase 4 added:
+- **The old drone** looks its age: worn cream shell, a rust patch, amber eyes, a bent antenna, and it's 80% the size. It's recognisable at a glance beside hub drones.
+- **Upgrades show on drones:** Drone Dash level 2 gives cyan trim, level 3 gold (E09.6).
+- **Radiant tiles** (E05) get a soft golden glow and luminous gold flowers. **Bloom Frenzy** (E06) gets a golden-green vignette, static with reduced motion.
+- **Before/after screenshots** at the same camera angle: `tests/e2e/phase4-shots.mjs` → `docs/review/phase4-desktop-0-fresh.png`, `-1-half`, `-2-grown`, `-3-frenzy`, plus phone shots. The script fails on any page error; none occurred.
+
+Not done, and listed as open: new machine models, solar panel and flower-bed silhouettes that change with upgrades, more flora variety, and birds. Asset-free art is limited, and the plan's scope lock puts tile transitions, HUD and feedback first.
