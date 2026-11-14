@@ -12,6 +12,8 @@ export interface MachineDef {
   unlock?: { needs: MachineType; label: string };
   /** Only buildable on these rooftops (a roof's specialty piece). */
   roofs?: string[];
+  /** In the city: only buildable in these area types. */
+  areaTypes?: string[];
 }
 
 export const MACHINES: Record<MachineType, MachineDef> = {
@@ -76,6 +78,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     blurb: 'Water Condensers within 2 tiles fill its basin. When full it Overflows: up to 3 dry tiles nearby burst into lush bloom (×2 🌿 for a while).',
     hotkey: '8',
     roofs: ['r2'],
+    areaTypes: ['reservoir', 'canal'],
   },
   core: {
     type: 'core',

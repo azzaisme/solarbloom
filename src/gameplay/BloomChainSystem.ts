@@ -1,3 +1,4 @@
+import { GROUND } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
 import { LINKS, type RoofLinkDef } from '../data/rooftops';
 import type { MachineData, RestoreSource, TileData } from '../core/types';
@@ -207,15 +208,25 @@ export class BloomChainSystem {
       .sort((a, b) => distToFootprint(a.x, a.z, m.x, m.z, 1) - distToFootprint(b.x, b.z, m.x, m.z, 1) || (a.id < b.id ? -1 : 1));
   }
 
-  /** Canopy Burst reach from the Elder Tree's footprint. */
-  canopyBurstRadius(): number {
+  /** An Elder Tree: the Canopy rooftop's Core, or a city grove's landmark. */
+  isElder(m: Pick<MachineData, 'type' | 'roofId' | 'x' | 'z'>): boolean {
+    if (m.type !== 'core') return false;
+    if (m.roofId === 'r3') return true;
+    const id = m.roofId === GROUND ? this.sim.areas.areaOf(m) : undefined;
+    return !!id && this.sim.areas.info(id).landmarkKind === 'elder';
+  }
+
+  /** Canopy Burst reach from an Elder Tree's footprint (further once its area/rooftop is awake). */
+  canopyBurstRadius(tree?: Pick<MachineData, 'roofId' | 'x' | 'z'>): number {
     const c = TUNING.neighbourhood.canopy;
-    return this.sim.hood.coreAwake('r3') ? c.burstRadiusAwake : c.burstRadius;
+    const id = tree && tree.roofId === GROUND ? this.sim.areas.areaOf(tree) : undefined;
+    const awake = id ? this.sim.areas.fog(id) === 'cleared' : this.sim.hood.coreAwake('r3');
+    return awake ? c.burstRadiusAwake : c.burstRadius;
   }
 
   /** A Pollinator Garden inside the Elder Tree's burst amplifies it. */
   inCanopyBurst(tree: MachineData, garden: MachineData): boolean {
-    return garden.roofId === tree.roofId && distToFootprint(garden.x, garden.z, tree.x, tree.z, tree.size) <= this.canopyBurstRadius();
+    return garden.roofId === tree.roofId && distToFootprint(garden.x, garden.z, tree.x, tree.z, tree.size) <= this.canopyBurstRadius(tree);
   }
 
   addReward(chainId: number, biomass: number) {
@@ -374,7 +385,7 @@ export class BloomChainSystem {
         }
       } else if (m.type === 'motherTree' && d >= 1 && d <= s.upgrades.treeRadius && !run.dischargedTrees.has(m.id)) {
         this.enqueue(run, { type: 'CHARGE', source: tile.id, target: m.id, cause: 'charge', depth: depth + 1 }, TUNING.chain.stepDelay * 0.6);
-      } else if (m.type === 'core' && m.roofId === 'r3' && d >= 1 && d <= TUNING.neighbourhood.canopy.chargeRadius && !run.dischargedTrees.has(m.id)) {
+      } else if (m.type === 'core' && d >= 1 && d <= TUNING.neighbourhood.canopy.chargeRadius && !run.dischargedTrees.has(m.id) && this.isElder(m)) {
         // The Canopy's Elder Tree charges from blooms around it (dormant or awake).
         this.enqueue(run, { type: 'CHARGE', source: tile.id, target: m.id, cause: 'charge', depth: depth + 1 }, TUNING.chain.stepDelay * 0.6);
       }
@@ -454,7 +465,7 @@ export class BloomChainSystem {
       if (m.type === 'pollinator' && d <= s.upgrades.pollinatorReach) score += 3;
       else if (m.type === 'solar' && d === 1) score += 1.5;
       else if (m.type === 'motherTree' && d <= s.upgrades.treeRadius) score += 2;
-      else if (m.type === 'core' && m.roofId === 'r3' && d <= TUNING.neighbourhood.canopy.chargeRadius) score += 2;
+      else if (m.type === 'core' && d <= TUNING.neighbourhood.canopy.chargeRadius && this.isElder(m)) score += 2;
       else if (m.type === 'reservoirGarden' && d <= TUNING.neighbourhood.reservoir.radius) score += 1;
     }
     return score;
@@ -654,7 +665,7 @@ export class BloomChainSystem {
         m.charge = 0;
         s.state.progression.canopyBursts = (s.state.progression.canopyBursts ?? 0) + 1;
         this.emit(run, ev);
-        const radius = this.canopyBurstRadius() + (this.consumeOvercharge(m) ? 1 : 0);
+        const radius = this.canopyBurstRadius(m) + (this.consumeOvercharge(m) ? 1 : 0);
         const ok = (t: TileData) => !run.visited.has(t.id) && (s.restoration.isEligible(t) || (t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom));
         const inside = s.grid
           .tilesNear(m, radius)

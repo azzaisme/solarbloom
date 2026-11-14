@@ -116,7 +116,7 @@ export class RestorationSystem {
   boostNeighbours(t: TileData) {
     const s = this.sim;
     for (const m of s.grid.machinesNear(t.roofId, t.x, t.z, 1)) {
-      if (m.type === 'droneHub' || (m.type === 'core' && m.roofId !== 'r3')) continue;
+      if (m.type === 'droneHub' || (m.type === 'core' && !s.chains.isElder(m))) continue;
       if (distToFootprint(t.x, t.z, m.x, m.z, m.size) !== 1) continue;
       const fresh = (m.overchargeUntil ?? 0) <= s.time;
       m.overchargeUntil = s.time + TUNING.neighbourhood.overchargeSeconds;

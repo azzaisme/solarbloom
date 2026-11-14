@@ -1,6 +1,8 @@
 import { formatCost, scaleCost } from '../core/Economy';
 import type { BuildableType, Cost, MachineData } from '../core/types';
 import { MACHINES } from '../data/machines';
+import { AREA_TYPES, type AreaType } from '../data/city';
+import { GROUND } from '../core/GameState';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
@@ -19,7 +21,12 @@ export class BuildSystem {
     const def = MACHINES[type];
     const u = def.unlock;
     if (u && !this.sim.state.machines.some((m) => m.type === u.needs)) return false;
-    if (def.roofs && !def.roofs.some((id) => this.sim.grid.isPlayable(id))) return false;
+    if (def.roofs) {
+      const onRoof = def.roofs.some((id) => this.sim.grid.isPlayable(id));
+      // In the city, a specialty piece unlocks once an area of its type is revealed.
+      const inCity = !!def.areaTypes && this.sim.grid.isPlayable(GROUND) && this.sim.areas.revealed().some((id) => def.areaTypes!.includes(this.sim.areas.info(id).type));
+      if (!onRoof && !inCity) return false;
+    }
     return true;
   }
 
@@ -27,6 +34,7 @@ export class BuildSystem {
   lockLabel(type: BuildableType): string {
     const def = MACHINES[type];
     if (def.unlock && !this.sim.state.machines.some((m) => m.type === def.unlock!.needs)) return `🔒 ${MACHINES[def.unlock.needs].name}`;
+    if (def.roofs && this.sim.grid.isPlayable(GROUND) && def.areaTypes) return `🔒 ${def.areaTypes.map((t) => AREA_TYPES[t as AreaType].name).join(' / ')}`;
     if (def.roofs) return `🔒 ${def.roofs.map((id) => this.sim.grid.roof(id)?.name ?? id).join(', ')}`;
     return '';
   }
@@ -55,7 +63,10 @@ export class BuildSystem {
     if (def.unlock && !s.state.machines.some((m) => m.type === def.unlock!.needs)) return fail(def.unlock.label);
     const roof = s.grid.roof(roofId);
     if (!roof || !roof.unlocked || roof.preview) return fail('This rooftop is not reachable yet');
-    if (def.roofs && !def.roofs.includes(roofId)) return fail(`Only grows on ${def.roofs.map((id) => s.grid.roof(id)?.name ?? id).join(', ')}`);
+    if (roofId === GROUND && def.areaTypes) {
+      const t = AREA_TYPES[s.areas.info(s.areas.map.areaOfCell(x, z)).type];
+      if (!def.areaTypes.includes(t.type)) return fail(`Only grows in a ${def.areaTypes.map((a) => AREA_TYPES[a as AreaType].name.toLowerCase()).join(' or ')} area`);
+    } else if (def.roofs && !def.roofs.includes(roofId)) return fail(`Only grows on ${def.roofs.map((id) => s.grid.roof(id)?.name ?? id).join(', ')}`);
     const cells = s.grid.footprint(roofId, x, z, def.size);
     if (cells.some((c) => !c)) return fail('Too close to the edge');
     for (const c of cells) {

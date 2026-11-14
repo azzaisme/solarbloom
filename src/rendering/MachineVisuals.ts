@@ -84,7 +84,8 @@ export class MachineVisuals {
         this.motherTree(v);
         break;
       case 'core': {
-        const kind = m.roofId === 'r2' ? 'cistern' : m.roofId === 'r3' ? 'elder' : m.roofId === 'g' && this.landmarkKind(m) === 'fountain' ? 'fountain' : 'crystal';
+        const lk = m.roofId === 'g' ? this.landmarkKind(m) : '';
+        const kind = m.roofId === 'r2' || lk === 'cistern' ? 'cistern' : m.roofId === 'r3' || lk === 'elder' ? 'elder' : lk === 'fountain' || lk === 'lock' ? 'fountain' : 'crystal';
         v.coreKind = kind;
         if (kind === 'cistern') this.cistern(v);
         else if (kind === 'elder') this.elderTree(v);

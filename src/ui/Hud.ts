@@ -523,14 +523,33 @@ export class Hud {
     this.failTimer = 2.2;
   }
 
+  /**
+   * Toasts: at most two on screen. A toast with the same headline as one showing just refreshes it
+   * (with a ×N count) instead of stacking, so a burst of area clears or chains stays calm.
+   */
   toast(html: string, kind: '' | 'gold' | 'cat' = '', secs = 3.2) {
     const box = $(this.root, '#toasts');
-    while (box.children.length >= 3) box.firstElementChild!.remove();
+    const head = html.split('<small>')[0].replace(/[×x]\d+|\d+/g, '#');
+    for (const c of Array.from(box.children) as HTMLElement[]) {
+      if (c.dataset.head !== head || c.style.opacity === '0') continue;
+      const n = Number(c.dataset.n ?? '1') + 1;
+      c.dataset.n = String(n);
+      c.innerHTML = `${html.replace('<small>', ` <b class="tn">×${n}</b><small>`)}${html.includes('<small>') ? '' : ` <b class="tn">×${n}</b>`}`;
+      clearTimeout(Number(c.dataset.timer));
+      c.dataset.timer = String(this.fadeLater(c, secs));
+      return;
+    }
+    while (box.children.length >= 2) box.firstElementChild!.remove();
     const el = document.createElement('div');
+    el.dataset.head = head;
     el.className = `toast panel ${kind}`;
     el.innerHTML = html;
     box.appendChild(el);
-    setTimeout(() => {
+    el.dataset.timer = String(this.fadeLater(el, secs));
+  }
+
+  private fadeLater(el: HTMLElement, secs: number): number {
+    return window.setTimeout(() => {
       el.style.opacity = '0';
       el.style.transform = 'translateY(-10px)';
       setTimeout(() => el.remove(), 600);
@@ -655,7 +674,7 @@ export class Hud {
       this.set(`hl-${t}`, btn, 'cls', locked ? '1' : '0', 'locked');
       // A rooftop's specialty piece only appears once that rooftop is reachable.
       const roofOnly = MACHINES[t].roofs;
-      btn.hidden = !!roofOnly && !roofOnly.some((id) => s.grid.isPlayable(id));
+      btn.hidden = !!roofOnly && !s.build.isUnlocked(t);
       if (locked) this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.lockLabel(t));
     }
     // Overcharge countdown on the Pulse button

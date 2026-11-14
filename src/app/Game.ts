@@ -675,7 +675,7 @@ export class Game {
       case 'reservoirGarden':
         return g.tilesNear(m, TUNING.neighbourhood.reservoir.radius);
       case 'core':
-        return m.roofId === 'r3' ? g.tilesNear(m, this.sim.chains.canopyBurstRadius()) : [];
+        return this.sim.chains.isElder(m) ? g.tilesNear(m, this.sim.chains.canopyBurstRadius(m)) : [];
       default:
         return [];
     }
