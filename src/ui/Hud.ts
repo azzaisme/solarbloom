@@ -459,7 +459,15 @@ export class Hud {
     return $(this.root, `[data-res="${kind}"] .ic`).getBoundingClientRect();
   }
 
+  private flashedAt = new Map<string, number>();
+
   flashResource(kind: ResourceKind, cls: 'flash' | 'short') {
+    // Restarting the animation forces a layout: at most a few times a second per counter (big chains call
+    // this hundreds of times).
+    const now = performance.now();
+    const key = `${kind}|${cls}`;
+    if (now - (this.flashedAt.get(key) ?? -1e9) < 180) return;
+    this.flashedAt.set(key, now);
     const el = $(this.root, `[data-res="${kind}"]`);
     el.classList.remove(cls);
     void el.offsetWidth;

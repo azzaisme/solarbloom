@@ -22,7 +22,7 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 | #12 City 11: automation at scale | ✅ drone networks, fog-edge priority, 50-hub safety soak (open: area switches #78, far drones as rates #79, Mega Pulse #80) |
 | #13 City 12: Phase 3 content in the city | ✅ specialties on generic landmarks (grove Elder Trees, reservoir/canal Reservoir Gardens), cat rewards on areas (open: rooftop cluster areas #82, remove fixed rooftop data #85) |
 | #15 City 14: HUD | toast cap ✅ (open: area panel #92, upgrades drawer #94, phone pass #95) |
-| #16 City 15: proof | headless soak ✅ (`npm run test:soak`), CI workflow ✅ (open: browser perf #97, leak test #98, device log #99, docs #100) |
+| #16 City 15: proof | headless soak ✅ (`npm run test:soak`), browser perf ✅ (`npm run test:perf:browser`), CI workflow ✅ (open: leak test #98, device log #99, docs #100) |
 
 ## City 01: world model
 
@@ -347,3 +347,28 @@ A deterministic "very fast player" clears 1,000 areas over 6 hours of game time 
 The first run found a real hitch: every area clear and every build re-summed production over the whole loaded world (296 ms per clear at 1,000 areas). Clears no longer re-sum, and a build only re-sums the chunks inside its reach (`ProductionSystem.markNear`), so the worst tick dropped to 17 ms. `SOAK_AREAS`, `SOAK_HOURS` and `SOAK_PROFILE=1` (per-system timing of slow ticks) help when working on it locally.
 
 CI (`.github/workflows/ci.yml`) runs the typecheck, unit tests, benchmarks and the soak on every push to main.
+
+### Browser perf (`npm run test:perf:browser`)
+
+Playwright builds a 150-area city in the page (790 machines), reloads it from the save like a returning player, then:
+
+1. pans in a widening loop across the city at mid zoom (120 frames);
+2. zooms from near to the far overview and back over the park (90 frames);
+3. lines a 350-tile strip with a grid of about 730 street gardens and sets off one chain (×600+).
+
+For each phase it records the game's update time per frame (`app.stats.frame.updateTime`: simulation, chunk streaming and mesh building, labels, VFX), hitches (update over 50 ms), draw calls, render submission and wall-clock frame time. Update time, hitches, draw calls, reload time and the chain's combo are gated; render and wall time are only reported, because under SwiftShader the GL calls block on the software rasteriser and measure the runner rather than the game. `PERF_AREAS`, `PERF_JSON=file` and `PERF_VERBOSE=1` (per-method timing of slow frames) help locally.
+
+| Phase | Update median | p95 | Worst | Hitches | Draw calls |
+|---|---|---|---|---|---|
+| Pan | 11.7 ms (limit 20) | 18.1 ms | 57 ms | 1 (limit 8) | 452 (limit 900) |
+| Zoom | 10.1 ms | 17.9 ms | 41 ms | 0 (limit 6) | 269 (limit 900) |
+| Chain ×614 | 4.4 ms | 28.1 ms | 77 ms | 1 (limit 8) | 2,678 (limit 4,500; machines aren't instanced yet, #53) |
+
+Reload with the 150-area save: 3.7 s under SwiftShader (limit 8 s).
+
+What the first runs found, and the fixes:
+
+- **Chunk meshes were slow to build** (25–60 ms each, 2 per frame): `MeshBuilder` now writes into growable typed arrays and copies normals for boxes and uniform scales instead of renormalising, and rebuilds run within a 6 ms budget per frame. Pan p95 went from 45 to 18 ms, and the zoom's worst frame from 1.35 s to 41 ms.
+- **Every machine animated every frame**, on screen or not (17–33 ms with 1,500 machines): only machines inside the visible ground rectangle animate now. The chain-phase median went from 24.6 to 4.4 ms.
+- **Big chains thrashed layout**: each resource gain forced a layout to restart the counter flash and measured the counter for a flying number. Flashes are throttled, and flying gains coalesce per resource every 120 ms.
+- **A ×500 chain was impossible**: the city event cap (500) allowed about ×220 at most. It is now 1,500.

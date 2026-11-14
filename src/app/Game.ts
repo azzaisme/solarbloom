@@ -804,9 +804,20 @@ export class Game {
     return new pc.Vec3(x, y + up, z);
   }
 
+  /** Gains waiting to fly, per resource: big chains coalesce into a few numbers instead of hundreds. */
+  private flyPending = new Map<ResourceKind, { amount: number; at: number }>();
+
   private flyGain(kind: ResourceKind, amount: number, from?: { x: number; y: number }) {
+    const now = performance.now();
+    const p = this.flyPending.get(kind) ?? { amount: 0, at: -1e9 };
+    p.amount += amount;
+    this.flyPending.set(kind, p);
+    if (now - p.at < 120) return; // the next one carries the sum
+    p.at = now;
+    const total = p.amount;
+    p.amount = 0;
     const src = from ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-    this.fly.spawn(kind, amount, src, this.hud.resourceRect(kind), () => this.hud.flashResource(kind, 'flash'));
+    this.fly.spawn(kind, total, src, this.hud.resourceRect(kind), () => this.hud.flashResource(kind, 'flash'));
   }
 
   private wireEvents() {
@@ -1767,8 +1778,9 @@ export class Game {
     this.tweens.update(dt);
     this.scene.update(dt);
     this.grid.update(dt);
-    if (this.city) this.chunks.update(dt, this.groundRect(), this.camera.target, this.camera.zoom);
-    this.machines.update(dt);
+    const rect = this.city ? this.groundRect() : undefined;
+    if (rect) this.chunks.update(dt, rect, this.camera.target, this.camera.zoom);
+    this.machines.update(dt, rect);
     this.drones.update(dt);
     this.cat.update(dt);
     this.butterflies.update(dt);

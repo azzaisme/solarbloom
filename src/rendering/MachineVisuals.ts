@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import type { MachineData } from '../core/types';
+import { GROUND } from '../core/GameState';
 import type { Sim } from '../gameplay/Sim';
 import { color, mat, PALETTE, uniqueMat } from './Materials';
 import { group, shape } from './Shapes';
@@ -550,12 +551,18 @@ export class MachineVisuals {
     return [p.x, p.y + 1.8, p.z];
   }
 
-  update(dt: number) {
+  /**
+   * Animates the machines. With `view` (the visible ground rectangle), ground machines outside it are skipped:
+   * a big city has thousands of machines and only a few hundred are ever on screen.
+   */
+  update(dt: number, view?: { x0: number; x1: number; z0: number; z1: number }) {
     this.time += dt;
     const t = this.time;
     const now = this.sim.time;
     const rm = this.reducedMotion;
+    const M = 3;
     for (const v of this.views.values()) {
+      if (view && v.m.roofId === GROUND && (v.m.x + v.m.size < view.x0 - M || v.m.x > view.x1 + M || v.m.z + v.m.size < view.z0 - M || v.m.z > view.z1 + M)) continue;
       switch (v.m.type) {
         case 'solar': {
           const boosted = v.m.boostUntil > now || this.sim.production.frenzyActive();

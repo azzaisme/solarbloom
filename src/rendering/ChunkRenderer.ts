@@ -24,6 +24,8 @@ interface Template {
   pos: Float32Array;
   nrm: Float32Array;
   idx: Uint32Array;
+  /** every normal lies along an axis (a box): scaling never changes their direction */
+  axis: boolean;
 }
 
 const TEMPLATES = new Map<VPrim, Template>();
@@ -31,10 +33,30 @@ function template(type: VPrim): Template {
   let t = TEMPLATES.get(type);
   if (!t) {
     const g = lowGeometry(type);
-    t = { pos: new Float32Array(g.positions!), nrm: new Float32Array(g.normals!), idx: new Uint32Array(g.indices!) };
+    const nrm = new Float32Array(g.normals!);
+    let axis = true;
+    for (let i = 0; i < nrm.length; i += 3) if ((nrm[i] !== 0 ? 1 : 0) + (nrm[i + 1] !== 0 ? 1 : 0) + (nrm[i + 2] !== 0 ? 1 : 0) > 1) axis = false;
+    t = { pos: new Float32Array(g.positions!), nrm, idx: new Uint32Array(g.indices!), axis };
     TEMPLATES.set(type, t);
   }
   return t;
+}
+
+/** A growable typed array (no per-element boxing; one copy per doubling). */
+class Grow<T extends Float32Array | Uint8Array | Uint32Array> {
+  n = 0;
+  constructor(public a: T) {}
+  reserve(k: number) {
+    if (this.n + k <= this.a.length) return;
+    let cap = this.a.length * 2;
+    while (cap < this.n + k) cap *= 2;
+    const b = new (this.a.constructor as new (n: number) => T)(cap);
+    b.set(this.a);
+    this.a = b;
+  }
+  view(): T {
+    return this.a.subarray(0, this.n) as T;
+  }
 }
 
 const linCache = new Map<string, [number, number, number]>();
@@ -52,17 +74,18 @@ function lin(hex: string): [number, number, number] {
 
 /** Accumulates transformed primitives into one vertex-coloured mesh. */
 class MeshBuilder {
-  pos: number[] = [];
-  nrm: number[] = [];
-  col: number[] = [];
-  idx: number[] = [];
+  private pos = new Grow(new Float32Array(1 << 15));
+  private nrm = new Grow(new Float32Array(1 << 15));
+  private col = new Grow(new Uint8Array(1 << 15));
+  private idx = new Grow(new Uint32Array(1 << 14));
   /** 0 = full colour … 1 = fully grey (fog / desaturation) */
   grey = 0;
 
   add(type: VPrim, hex: string, p: [number, number, number], s: [number, number, number] | number) {
     const t = template(type);
-    const [sx, sy, sz] = typeof s === 'number' ? [s, s, s] : s;
-    const base = this.pos.length / 3;
+    let sx: number, sy: number, sz: number;
+    if (typeof s === 'number') sx = sy = sz = s;
+    else [sx, sy, sz] = s;
     let [r, g, b] = lin(hex);
     if (this.grey > 0) {
       const l = 0.3 * r + 0.59 * g + 0.11 * b;
@@ -74,29 +97,57 @@ class MeshBuilder {
     const R = Math.round(r * 255);
     const G = Math.round(g * 255);
     const B = Math.round(b * 255);
-    for (let i = 0; i < t.pos.length; i += 3) {
-      this.pos.push(p[0] + t.pos[i] * sx, p[1] + t.pos[i + 1] * sy, p[2] + t.pos[i + 2] * sz);
-      // non-uniform scale: approximate normals by inverse scale, renormalised
-      let nx = t.nrm[i] / sx;
-      let ny = t.nrm[i + 1] / sy;
-      let nz = t.nrm[i + 2] / sz;
-      const len = Math.hypot(nx, ny, nz) || 1;
-      nx /= len;
-      ny /= len;
-      nz /= len;
-      this.nrm.push(nx, ny, nz);
-      this.col.push(R, G, B, 255);
+    const nv = t.pos.length;
+    const base = this.pos.n / 3;
+    this.pos.reserve(nv);
+    this.nrm.reserve(nv);
+    this.col.reserve((nv / 3) * 4);
+    this.idx.reserve(t.idx.length);
+    const P = this.pos.a;
+    const N = this.nrm.a;
+    const C = this.col.a;
+    const I = this.idx.a;
+    let o = this.pos.n;
+    let c = this.col.n;
+    // Uniform scale or axis-aligned normals: the direction survives scaling, so copy it.
+    const copy = t.axis || (sx === sy && sy === sz);
+    for (let i = 0; i < nv; i += 3, o += 3, c += 4) {
+      P[o] = p[0] + t.pos[i] * sx;
+      P[o + 1] = p[1] + t.pos[i + 1] * sy;
+      P[o + 2] = p[2] + t.pos[i + 2] * sz;
+      if (copy) {
+        N[o] = t.nrm[i];
+        N[o + 1] = t.nrm[i + 1];
+        N[o + 2] = t.nrm[i + 2];
+      } else {
+        // non-uniform scale: approximate normals by inverse scale, renormalised
+        const nx = t.nrm[i] / sx;
+        const ny = t.nrm[i + 1] / sy;
+        const nz = t.nrm[i + 2] / sz;
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+        N[o] = nx / len;
+        N[o + 1] = ny / len;
+        N[o + 2] = nz / len;
+      }
+      C[c] = R;
+      C[c + 1] = G;
+      C[c + 2] = B;
+      C[c + 3] = 255;
     }
-    for (let i = 0; i < t.idx.length; i++) this.idx.push(base + t.idx[i]);
+    this.pos.n = this.nrm.n = o;
+    this.col.n = c;
+    let k = this.idx.n;
+    for (let i = 0; i < t.idx.length; i++) I[k++] = base + t.idx[i];
+    this.idx.n = k;
   }
 
   build(device: pc.GraphicsDevice): pc.Mesh | undefined {
-    if (!this.idx.length) return undefined;
+    if (!this.idx.n) return undefined;
     const m = new pc.Mesh(device);
-    m.setPositions(this.pos);
-    m.setNormals(this.nrm);
-    m.setColors32(this.col);
-    m.setIndices(this.idx);
+    m.setPositions(this.pos.view());
+    m.setNormals(this.nrm.view());
+    m.setColors32(this.col.view());
+    m.setIndices(this.idx.view());
     m.update(pc.PRIMITIVE_TRIANGLES);
     return m;
   }
@@ -138,7 +189,9 @@ export class ChunkRenderer {
   private root: pc.Entity;
   reducedMotion = false;
   /** Max chunk meshes rebuilt per frame (keeps frames smooth while panning or during big chains). */
-  budget = 2;
+  /** most chunk rebuilds per frame, and the time they may take (ms) */
+  budget = 4;
+  budgetMs = 6;
   private time = 0;
   private lastFocus = { x: 8, z: 8 };
 
@@ -236,9 +289,11 @@ export class ChunkRenderer {
     this.lastFocus = focus;
     const dirty = [...this.views.values()].filter((v) => v.dirty || (v.fogDirty && !v.fading));
     dirty.sort((a, b) => dist(a, focus) - dist(b, focus));
+    // Rebuild nearest first, within a time budget (at least one per frame so streaming always progresses).
+    const t0 = performance.now();
     let n = 0;
     for (const v of dirty) {
-      if (n >= this.budget) break;
+      if (n >= this.budget || (n > 0 && performance.now() - t0 > this.budgetMs)) break;
       if (v.dirty) this.buildGround(v);
       if (v.fogDirty && !v.fading) this.buildFog(v);
       n++;
