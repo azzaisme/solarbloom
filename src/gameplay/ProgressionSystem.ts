@@ -1,6 +1,7 @@
 import { PARK } from '../core/Areas';
 import { isRestorable } from '../core/GameState';
 import type { BuildableType, TileData } from '../core/types';
+import { formatCost } from '../core/Economy';
 import { MACHINES } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
@@ -54,7 +55,7 @@ export class ProgressionSystem {
   }
 
   fullBloomCount(id: string): number {
-    return this.tilesFor(id).filter((t) => t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom).length;
+    return this.tilesFor(id).filter((t) => t.ground === 'restored' && t.bloom >= TUNING.restore.fullBloom).length;
   }
 
   restorableCount(id: string): number {
@@ -109,7 +110,7 @@ export class ProgressionSystem {
       return false;
     }
     if (!s.econ.spend(TUNING.core.cost)) {
-      s.bus.emit('action.failed', { reason: `Awakening needs ${TUNING.core.cost.energy}⚡ and ${TUNING.core.cost.biomass}🌿` });
+      s.bus.emit('action.failed', { reason: `Waking the fountain needs ${formatCost(TUNING.core.cost)}` });
       return false;
     }
     p.coreActivated = true;

@@ -40,7 +40,7 @@ import { EventBus } from './EventBus';
 import { type LoadResult, SaveService } from './SaveService';
 
 const SETTINGS_KEY = 'solarbloom.settings';
-const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Full bloom'];
+const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Thriving (full bloom)', 'Radiant'];
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 interface Pick {
@@ -605,7 +605,7 @@ export class Game {
       case 'restored': {
         const rate = this.sim.production.tileBiomassRate(t);
         const lush = (t.lushUntil ?? 0) > this.sim.time ? ` · 💧 lush ${Math.ceil(t.lushUntil! - this.sim.time)} s` : '';
-        return `+${rate.toFixed(2)}🌿/s${zone ? ' (garden ×2)' : ''}${lush}${t.bloom >= TUNING.restore.maxBloom ? ' · full bloom ✓' : ''}`;
+        return `+${rate.toFixed(2)}🌿/s${zone ? ' (garden ×2)' : ''}${lush}${t.bloom >= TUNING.restore.maxBloom ? ' · radiant ✦' : t.bloom >= TUNING.restore.fullBloom ? ' · full bloom ✓' : ''}`;
       }
     }
   }

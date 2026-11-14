@@ -46,7 +46,7 @@ export class ProductionSystem {
     for (const [key, packed] of Object.entries(this.sim.grid.pending)) {
       if (!this.sim.grid.isPlayable(key.split('|')[0])) continue;
       const c = bloomCounts(packed);
-      const r = R.biomassPerSec * mult * (c[1] * R.bloomRateMult[1] + c[2] * R.bloomRateMult[2] + c[3] * R.bloomRateMult[3]);
+      const r = R.biomassPerSec * mult * c.reduce((a, n, lvl) => a + n * (R.bloomRateMult[lvl] ?? 0), 0);
       this.pendingEstimate.set(key, r);
       sum += r;
     }

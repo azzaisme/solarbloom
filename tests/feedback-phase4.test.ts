@@ -72,3 +72,30 @@ describe('Phase 4 E04: power progression', () => {
     expect(paid).toEqual([]);
   });
 });
+
+describe('Phase 4 E05: evolving tiles', () => {
+  it('stages only go up, Radiant pays the most, and counts once toward restored tiles and as full bloom', async () => {
+    const { TUNING } = await import('../src/data/tuning');
+    const sim = new Sim(createInitialState(9));
+    const s = sim.state;
+    s.caps.energy = s.caps.water = 1000;
+    s.resources.energy = s.resources.water = 1000;
+    const t = sim.areas.tiles(PARK).find((x) => x.ground === 'polluted' && sim.restoration.checkPulse(x).ok)!;
+    sim.restoration.complete(t, 'pulse');
+    const rates: number[] = [];
+    const seen: number[] = [t.bloom];
+    for (let i = 0; i < 6; i++) {
+      rates.push(sim.production.tileBiomassRate(t));
+      sim.restoration.pulse(t.id);
+      seen.push(t.bloom);
+    }
+    expect(seen).toEqual([1, 2, 3, 4, 4, 4, 4]);
+    for (let i = 1; i < 4; i++) expect(rates[i]).toBeGreaterThan(rates[i - 1]);
+    expect(sim.progression.restoredCount('home')).toBe(1);
+    expect(sim.progression.fullBloomCount('home')).toBe(1);
+    expect(t.bloom).toBe(TUNING.restore.maxBloom);
+    const saver = new (await import('../src/app/SaveService')).SaveService(undefined);
+    const copy = new Sim(saver.deserialize(saver.serialize(s))!);
+    expect(copy.grid.byTileId(t.id)!.bloom).toBe(4);
+  });
+});

@@ -64,15 +64,20 @@ export const TUNING = {
   restore: {
     instantBiomass: 1.5,
     biomassPerSec: 0.04, // per restored tile (bloom level 1)
-    bloomRateMult: [0, 1, 2, 3], // biomass multiplier per bloom level
+    // Phase 4 E05: production weight per stage (0 barren, 1 restored, 2 blooming, 3 thriving, 4 radiant)
+    bloomRateMult: [0, 1, 2, 4, 8],
     nurture: [
       { energy: 0, water: 0 },
       { energy: 0, water: 0 },
       { energy: 8, water: 2 }, // → level 2
       { energy: 12, water: 3 }, // → level 3
+      { energy: 18, water: 5 }, // → level 4 (Radiant, Phase 4 E05)
     ],
     nurtureBiomass: 1,
-    maxBloom: 3,
+    /** Phase 4 E05: the last stage (Radiant). */
+    maxBloom: 4,
+    /** "Full bloom" (Thriving): what the fountain and area goals count. Radiant counts too. */
+    fullBloom: 3,
     seep: 25, // pollution removed from orthogonal neighbours when a tile restores
     pollutionMin: 55,
     pollutionMax: 100,
@@ -164,7 +169,9 @@ export const TUNING = {
   core: {
     restoredTiles: 42,
     fullBloomTiles: 24,
-    cost: { energy: 40, biomass: 100 }, // Phase 4 E01.1: fits the starting store with room to spare, since drones keep spending energy (was 60 ⚡ / 170 🌿)
+    // Phase 4: biomass only (was 60 ⚡ / 170 🌿). Taps and drones always find something to spend energy on
+    // (nurturing up to Radiant), so an energy price could never fill; biomass is never spent automatically.
+    cost: { biomass: 100 } as { energy?: number; biomass: number },
     resonanceBiomassMult: 1.25,
     sequenceSeconds: 7,
   },

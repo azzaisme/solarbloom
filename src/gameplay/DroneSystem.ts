@@ -201,7 +201,8 @@ export class DroneSystem {
       if (!nurturable(t) || modeOf(t) === 'off') continue;
       const dx = t.x + 0.5 - d.px;
       const dz = t.z + 0.5 - d.pz;
-      let score = dx * dx + dz * dz + t.bloom * 2;
+      // Phase 4 E05: finish tiles to full bloom (what goals count) before taking any on to Radiant.
+      let score = dx * dx + dz * dz + t.bloom * 2 + (t.bloom >= TUNING.restore.fullBloom ? 400 : 0);
       if (intel) score -= this.synergyScore(t) * 6;
       if (score < bestD - 1e-9) {
         bestD = score;

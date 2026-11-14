@@ -22,6 +22,10 @@ describe('economy & restoration', () => {
     sim.state.resources.water = 20;
     expect(sim.restoration.pulse(t.id)).toBe(true);
     expect(t.bloom).toBe(3);
+    sim.state.resources.energy = 50;
+    sim.state.resources.water = 20;
+    expect(sim.restoration.pulse(t.id)).toBe(true); // Phase 4 E05: Thriving → Radiant
+    expect(t.bloom).toBe(4);
     const b = sim.state.resources.biomass;
     expect(sim.restoration.pulse(t.id)).toBe(false);
     expect(sim.state.stats.tilesRestored).toBe(1);

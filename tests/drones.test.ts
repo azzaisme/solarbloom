@@ -37,7 +37,7 @@ describe('drones', () => {
     const sim = makeSim();
     rich(sim);
     fill(sim, 0, 0, 7, 7, 'restored');
-    for (const t of sim.grid.tilesOf('r1')) t.bloom = 3; // nothing to restore or nurture
+    for (const t of sim.grid.tilesOf('r1')) t.bloom = TUNING.restore.maxBloom; // nothing to restore or nurture
     sim.build.place('droneHub', 'r1', 4, 4);
     sim.advance(20);
     const d = sim.state.drones[0];
@@ -102,7 +102,7 @@ describe('drones', () => {
     const sim = makeSim();
     rich(sim);
     fill(sim, 0, 0, 7, 7, 'restored');
-    for (const t of sim.grid.tilesOf('r1')) t.bloom = 3;
+    for (const t of sim.grid.tilesOf('r1')) t.bloom = TUNING.restore.maxBloom;
     setGround(sim, 6, 4, 'polluted'); // 4 tiles from the hub's footprint; base radius is 3
     sim.build.place('droneHub', 'r1', 2, 2);
     expect(sim.drones.findJob(sim.state.drones[0])).toBeUndefined();

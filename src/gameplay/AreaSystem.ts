@@ -114,7 +114,7 @@ export class AreaSystem {
     for (const t of this.tiles(id)) {
       if (!isRestorable(t, machines)) continue;
       restorable++;
-      const full = t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom;
+      const full = t.ground === 'restored' && t.bloom >= TUNING.restore.fullBloom;
       if (t.ground === 'restored') {
         restored++;
         if (full) fullBloom++;

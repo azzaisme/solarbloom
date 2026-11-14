@@ -244,3 +244,18 @@ Not done: there are no new sounds beyond the existing synthesised set (restore p
 - **It is strong.** The city bot roughly doubled its pace. This is the plan's "visibly exceeds early actions", but it should be watched in play.
 - **Hands-off fell further behind** because active play got stronger. E07 is where automation catches up.
 - **The fountain is now about 4½ minutes for the bot.** That's faster than before, as you chose. The pacing test's lower bound is now 4 minutes (was 5).
+
+---
+
+# E05 — evolving tiles
+
+- **Stages:** Barren → Restored (grass) → Blooming (wildflowers) → Thriving (full bloom: shrubs, small trees, sunflowers) → **Radiant** (new: luminous gold flowers on a soft glow). `bloom` 0–4; saves already stored one digit per tile, so no format change.
+- **Production weights:** 0 / 1 / 2 / 4 / 8 (`TUNING.restore.bloomRateMult`). Nurturing to Radiant costs 18 ⚡ + 5 💧.
+- **Goals:** the fountain, area milestones and specialties count **full bloom** (`TUNING.restore.fullBloom` = 3), and Radiant counts too. Restored-tile counts stay unique, so a Radiant tile still counts once (tested).
+- **Drones:** they finish nearby tiles to full bloom before taking any to Radiant, so automation always has work and still helps goals first.
+- **Synergies (E05.4/E05.5):** already in the game. A solar burst beside a bloom; condensers watering and, with Water Bloom, growing neighbours; Mother Tree charging and releasing a Bloom Pulse; range previews before building. No new recipes added.
+- Growth is still one stage per nurture, not "growth units". Simpler, and it already gives taps, chains and drones a job.
+
+Two softlocks the bots found, both fixed:
+1. **The fountain's energy price could never be paid.** With Radiant, taps and drones always find something to spend energy on, so the store never filled to 40 ⚡. The fountain now costs **100 🌿 only**: biomass is never spent automatically, and 100 fits the starting store.
+2. **The advisor-only player never planted the Mother Tree.** It kept tapping and spending its water. The advisor now says "save up" when the fountain needs a machine that's short only on resources that refill, and once restoring is done it points at green tiles when full blooms are still missing. That bot now wakes the fountain from empty stores in 7.4 min (test limit 30).
