@@ -70,6 +70,18 @@ try {
     console.log(`   ${rects.map((r) => `${r.sel} ${Math.round(r.r - r.l)}×${Math.round(r.b - r.t)}@${Math.round(r.l)},${Math.round(r.t)}`).join('  ')}`);
     problems += issues.length;
     await page.screenshot({ path: `${dir}/phase4-hud-${name}.png` });
+    // The Build tray opens above the hotbar and stays on screen.
+    await page.click('#buildToggle');
+    await page.waitForTimeout(400);
+    const tray = await page.evaluate(() => {
+      const r = document.querySelector('#buildTray').getBoundingClientRect();
+      return { l: r.left, t: r.top, r: r.right, b: r.bottom, open: document.querySelector('#buildTray').classList.contains('open') };
+    });
+    if (!tray.open || tray.l < -1 || tray.t < -1 || tray.r > w + 1 || tray.b > h + 1) {
+      console.log(`   build tray problem: ${JSON.stringify(tray)}`);
+      problems++;
+    }
+    await page.screenshot({ path: `${dir}/phase4-hud-${name}-tray.png` });
     await page.close();
   }
 } finally {

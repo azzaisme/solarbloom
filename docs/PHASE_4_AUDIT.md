@@ -177,3 +177,25 @@ the hint text runs to 5–9 lines.
 - **The city bot is chaotic**: tiny early changes swing a seed by ±10 areas, and its longest stalls are on street
   corridor and canal flow specialties (already there before Phase 4). Means over 12 seeds are the comparison used here.
 - No human playtests and no real-device numbers yet.
+
+---
+
+# E02 — mobile-first interface
+
+- **Hotbar:** the same five buttons at every size (Inspect · Build · **Pulse** · Harvest · Upgrades). Machines and their costs pop up in the Build tray (B, Esc closes it). Once a machine is picked, the Build button shows it.
+- **Phones and short landscape screens** (≤ 760 px wide or ≤ 500 px tall): a compact resource strip of three icon/value/rate cells, and under it a one-line objective with a thin progress bar, the chips, and a compact suggestion button. The full checklist and the suggestion text open with 📋.
+- **Hints:** one short line from live numbers, e.g. "Steady water: Build a 💧 Water Condenser · 24/35🌿". They glow the control they mean (the Build button when the machine is in the closed tray).
+- **Icons:** one inline SVG set for energy, water, biomass, the five tools, pause/play and Frenzy (`src/ui/Icons.ts`). Machines keep their emoji as placeholders. Every icon has a text label or aria-label.
+- **Affordability:** Upgrades shows a dot plus the price of something worth buying now, instead of a count. Unaffordable machines show ⏳ beside their cost, not red text.
+- **Input:** a drag already never restores or buys anything (drag threshold), and UI taps never reach the canvas. Both were checked, not changed.
+
+| Size | HUD covers (E00 → E02) | Overlaps |
+|---|---|---|
+| 320×640 | 50% → 34% | none |
+| 360×740 | 39% → 28% | none |
+| 390×844 | 33% → 24% | none |
+| 430×932 | 27% → 21% | none |
+| 844×390 landscape | 64% → 31% | none (was objective × hint) |
+| 820×1180 / 1280×800 | 21% → 16% / 15% | none |
+
+The Build tray stays on screen at every size (checked by `npm run test:hud`, which CI now runs). These are headless Chromium checks; no real phone was used.

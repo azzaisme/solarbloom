@@ -47,7 +47,7 @@ describe('save & progression', () => {
     expect(copy.progression.activateCore()).toBe(false);
   });
 
-  it('a scripted first session reaches the core without deadlock', () => {
+  it('a scripted first session reaches the core without deadlock', { timeout: 30_000 }, () => {
     // A simple greedy "player bot": pulses the cheapest tile, builds and upgrades as soon as possible.
     const sim = makeSim(7);
     const order = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree'] as const;

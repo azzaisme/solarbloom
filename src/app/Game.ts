@@ -379,6 +379,7 @@ export class Game {
       else if (k === 'f') this.focusNextArea();
       else if (k === 'home') this.focusArea(PARK);
       else if (k === 'u') this.hud.toggleUpgrades();
+      else if (k === 'b') this.hud.toggleTray();
       else if (k === 'p') this.setPaused(!this.paused);
       else if (k === 'f3' || k === '`') {
         e.preventDefault();
@@ -386,6 +387,7 @@ export class Game {
       } else if (k === 'escape') {
         if (this.hud.modalOpen) this.hud.openSettings(false);
         else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
+        else if (this.hud.trayOpen) this.hud.toggleTray(false);
         else if (this.selected) this.select(undefined);
         else this.selectTool('pulse');
       } else if (k === '+' || k === '=') this.camera.zoomBy(1.15);

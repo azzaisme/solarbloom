@@ -10,7 +10,8 @@ Plan: `docs/PHASE_4_EPICS.md`. Audit, baseline and results: `docs/PHASE_4_AUDIT.
 |---|---|
 | E00 Audit, instrumentation, baseline | ✅ audit, bot baseline (active + hands-off), local event log, dev-only debug tools, phone HUD check |
 | E01 Economy rescue and overflow | ✅ fountain purchases fit starting stores, storage tiers, old drone, hub at ~2 min, drone reserve, offline progress (4 h, half rate), Solar Surge rename, HUD spending/boosts. Open: hands-off reaches 22–26% of active (target 40–60%, E07); overflow feeds Frenzy in E06 |
-| E02–E11 | not started |
+| E02 Mobile-first interface | ✅ five-button hotbar (Inspect · Build · Pulse · Harvest · Upgrades) with a Build tray at every size, compact resource strip and one-line objective on phones and short landscape screens, one-line live hints, SVG icons for resources and tools, upgrade dot instead of a count, B / Esc for the tray, `npm run test:hud` (no overlaps at 320–430 px, landscape, tablet, desktop; HUD covers 34% at 320 px, was 50%) |
+| E03–E11 | in progress |
 
 # City scale (epic #1)
 
