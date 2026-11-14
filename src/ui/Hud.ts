@@ -50,6 +50,10 @@ export interface Settings {
   debug: boolean;
   /** Fewer particles and softer sparkles (Lucky Cat, chains), independent of motion. */
   lowVfx: boolean;
+  /** One fog layer instead of two (less overdraw on phones). */
+  lowFog?: boolean;
+  /** The camera glides along with big chains. */
+  followChains?: boolean;
 }
 
 /** Each rooftop's Core landmark. */
@@ -154,6 +158,8 @@ export class Hud {
         <label>Music <input type="checkbox" data-set="music"></label>
         <label>Reduced motion &amp; effects <input type="checkbox" data-set="reducedMotion"></label>
         <label>Fewer particles &amp; softer sparkles <input type="checkbox" data-set="lowVfx"></label>
+        <label>Simple fog (faster on phones) <input type="checkbox" data-set="lowFog"></label>
+        <label>Camera follows big chains <input type="checkbox" data-set="followChains"></label>
         <label>Tutorial hints <input type="checkbox" data-set="hints"></label>
         <label>Debug / FPS (F3) <input type="checkbox" data-set="debug"></label>
         <div class="stats" id="statsBox"></div>
@@ -209,7 +215,7 @@ export class Hud {
     });
     r.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => {
       const key = inp.dataset.set as keyof Settings;
-      inp.checked = this.settings[key];
+      inp.checked = !!this.settings[key];
       inp.addEventListener('change', () => this.cb.setSetting(key, inp.checked));
     });
     $(r, '#upgList').addEventListener('click', (e) => {
@@ -476,7 +482,7 @@ export class Hud {
       $(this.root, '#statsBox').innerHTML =
         `Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Avg: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b> 🐱 · Play time: <b>${Math.floor(this.sim.time / 60)}m</b>` +
         `<details style="margin-top:6px"><summary>Playtest timings</summary>First upgrade ${t('upgrade')} · ×5 chain ${t('chain5')} · ×10 chain ${t('chain10')}<br>Drone Hub ${t('droneHub')} · first cat ${t('cat')} · Mother Tree ${t('motherTree')} (pulse ${t('treePulse')}) · Core ${t('core')}<br>Skybridge ${t('bridge:seed-reservoir')} · first cross-roof chain ${t('remoteChain')} · Cistern ${t('core:r2')} · Canopy Bridge ${t('bridge:seed-canopy')} · Elder Tree ${t('core:r3')} · Neighbourhood Bloom ${t('neighbourhoodBloom')}<br>Biggest chain ×${s.maxCombo} · cats found ${s.catsFound}<br>Time with nothing to do: ${Math.round(s.stuckSeconds)} s</details>`;
-      this.root.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => (inp.checked = this.settings[inp.dataset.set as keyof Settings]));
+      this.root.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => (inp.checked = !!this.settings[inp.dataset.set as keyof Settings]));
     }
   }
 
@@ -698,14 +704,32 @@ export class Hud {
     const el = $(this.root, '#inspect');
     if (html === null) {
       el.classList.remove('open');
+      this.root.classList.remove('inspecting');
       this.last.delete('inspect');
       return;
     }
     el.classList.add('open');
+    this.root.classList.add('inspecting');
     this.set('inspect', el, 'html', html);
   }
 
+  private toastLayoutAt = 0;
+  /** On narrow screens the top panels sit side by side: toasts drop below them instead of covering them. */
+  private layoutToasts() {
+    const now = performance.now();
+    if (now - this.toastLayoutAt < 500) return;
+    this.toastLayoutAt = now;
+    const t = $(this.root, '#toasts');
+    if (window.innerWidth > 760) {
+      t.style.top = '';
+      return;
+    }
+    const below = Math.max($(this.root, '#res').getBoundingClientRect().bottom, $(this.root, '#obj').getBoundingClientRect().bottom);
+    t.style.top = `${Math.round(below + 8)}px`;
+  }
+
   update(dt: number) {
+    this.layoutToasts();
     const s = this.sim;
     const rates = s.production.rates();
     for (const k of KINDS) {

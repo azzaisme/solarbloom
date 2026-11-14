@@ -47,7 +47,7 @@ interface Pick {
 }
 
 function loadSettings(): Settings {
-  const def: Settings = { sound: true, music: true, reducedMotion: false, hints: true, debug: false, lowVfx: false };
+  const def: Settings = { sound: true, music: true, reducedMotion: false, hints: true, debug: false, lowVfx: false, lowFog: false, followChains: false };
   try {
     if (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) def.reducedMotion = true;
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -232,7 +232,10 @@ export class Game {
       hover: (x, y) => this.onHover(x, y),
       leave: () => this.onLeave(),
       click: (x, y, b) => this.onClick(x, y, b),
-      pan: (dx, dy) => this.camera.pan(dx, dy),
+      pan: (dx, dy) => {
+        this.lastPanAt = performance.now();
+        this.camera.pan(dx, dy);
+      },
       zoom: (f) => this.camera.zoomBy(f),
       // A quick, strong pinch-out snaps to the city overview (one gesture from anywhere).
       pinchEnd: (f, ms) => {
@@ -280,6 +283,10 @@ export class Game {
     // Quality: lighter shadows with fewer effects.
     const sun = this.scene.sun.light;
     if (sun) sun.shadowResolution = s.lowVfx ? 1024 : 2048;
+    if (this.chunks && this.chunks.lowFog !== !!s.lowFog) {
+      this.chunks.lowFog = !!s.lowFog;
+      this.chunks.markAll();
+    }
     document.body.classList.toggle('reduced', rm);
     this.hud.settings = s;
     if (!s.debug) this.hud.setDebug(null);
@@ -1186,8 +1193,20 @@ export class Game {
   }
 
   /** Replays one deterministic chain event as light, motion and sound. */
+  private lastPanAt = 0;
+  private followAt = 0;
+
   private presentChainEvent(ev: ChainEvent, combo: number) {
     const s = this.sim;
+    // Camera follows big chains (setting): glide toward the wave front now and then, never against the player.
+    if (this.settings.followChains && combo >= 20 && !this.cinematic) {
+      const now = performance.now();
+      const t = s.grid.byTileId(ev.target);
+      if (t && t.roofId === GROUND && now - this.followAt > 1500 && now - this.lastPanAt > 4000) {
+        this.followAt = now;
+        this.camera.glide(t.x + 0.5, 0, t.z + 0.5);
+      }
+    }
     const targetRoof = s.grid.byTileId(ev.target)?.roofId;
     const from = this.posOf(ev.source, targetRoof);
     const to = this.posOf(ev.target);

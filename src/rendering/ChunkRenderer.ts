@@ -241,6 +241,9 @@ export class ChunkRenderer {
         }
   }
 
+  /** Settings → Simple fog: one fog layer instead of two. */
+  lowFog = false;
+
   markAll() {
     for (const v of this.views.values()) {
       v.dirty = true;
@@ -581,10 +584,12 @@ export class ChunkRenderer {
     const col: number[] = [];
     const idx: number[] = [];
     const h = this.sim.grid.layer(GROUND)!.height;
-    const sheets = [
-      { y: 0.32, alpha: 0.62, tint: [104, 113, 124] },
-      { y: 0.85, alpha: 0.5, tint: [128, 136, 146] },
-    ];
+    const sheets = this.lowFog
+      ? [{ y: 0.5, alpha: 0.82, tint: [112, 121, 132] }]
+      : [
+          { y: 0.32, alpha: 0.62, tint: [104, 113, 124] },
+          { y: 0.85, alpha: 0.5, tint: [128, 136, 146] },
+        ];
     for (const sh of sheets) {
       const base = pos.length / 3;
       for (let z = 0; z <= N; z++)
