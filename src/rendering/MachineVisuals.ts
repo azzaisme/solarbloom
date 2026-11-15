@@ -29,6 +29,8 @@ interface MachineView {
   /** Which Core model this is (decides how it wakes). */
   coreKind?: 'crystal' | 'cistern' | 'elder' | 'fountain';
   level: number;
+  /** the upgrade levels its extras were built for (Phase 4 E09.6) */
+  vkey?: string;
   extras: pc.Entity;
   /** joined its region's dynamic batch (after its build animation) */
   batched?: boolean;
@@ -193,6 +195,7 @@ export class MachineVisuals {
     shape(tilt, 'box', mat(PALETTE.gold, { metal: 0.6, gloss: 0.7 }), { pos: [0, 0.035, -0.31], scale: [0.86, 0.02, 0.03] });
     for (let i = -1; i <= 1; i++) shape(tilt, 'box', mat(PALETTE.panelGlint), { pos: [i * 0.26, 0.042, 0], scale: [0.012, 0.005, 0.58] });
     v.panel = [cells];
+    v.spin.push(tilt); // Phase 4 E09.3: the panel slowly tracks the sun
     v.light = shape(b, 'sphere', mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1 }), { pos: [0.2, 0.12, 0.2], scale: 0.06 });
     if (v.m.starter) shape(b, 'box', mat(PALETTE.rust), { pos: [-0.18, 0.12, 0.16], scale: [0.12, 0.05, 0.1], rot: [0, 30, 0] });
   }
@@ -495,37 +498,118 @@ export class MachineVisuals {
     }, { ease: ease.linear, done: () => target.setLocalScale(base) });
   }
 
-  /** "World-as-upgrade-tree": upgrades visibly change machines. */
+  /**
+   * "World-as-upgrade-tree": upgrades visibly change machines' silhouettes (Phase 4 E09.6: every machine type).
+   * Solar Array adds wing panels; Water Bloom adds tanks and a mist ring; Drone Dash antennas, Drone Squad
+   * landing pads, Drone Sweep sweeper arms and Work Radius a taller mast and dish; Pollinator Reach and Rich Soil
+   * more flowers; Mother Tree Resonance a wider canopy with gold lanterns; Relay Lens a lens ring on the mast.
+   */
   applyUpgrades(v: MachineView) {
     const u = this.sim.upgrades;
-    const lvl =
-      v.m.type === 'solar' ? u.level('solarArray') : v.m.type === 'droneHub' ? u.level('droneSpeed') : v.m.type === 'pollinator' ? u.level('pollinatorReach') : 0;
-    if (lvl === v.level) return;
-    v.level = lvl;
+    const L = (id: string) => u.level(id);
+    const key =
+      v.m.type === 'solar' ? `${L('solarArray')}`
+      : v.m.type === 'droneHub' ? `${L('droneSpeed')}|${L('secondDrone')}|${L('droneSweep')}|${L('droneRadius')}`
+      : v.m.type === 'pollinator' ? `${L('pollinatorReach')}|${L('richSoil')}`
+      : v.m.type === 'condenser' ? `${L('waterBloom')}`
+      : v.m.type === 'motherTree' ? `${L('treeResonance')}`
+      : v.m.type === 'relay' ? `${L('relayLens')}`
+      : '';
+    if (key === v.vkey) return;
+    v.vkey = key;
+    v.level = Number(key.split('|')[0]) || 0;
     v.extras.destroy();
     v.extras = group(v.body, 'extras');
+    // The old wing panels were just destroyed: keep only the base panel (Phase 4 E11: a second Solar Array level
+    // used to leave destroyed panels in this list, and the next frame crashed on them).
+    if (v.panel) v.panel = v.panel.slice(0, 1);
     if (v.batched) this.tweens.add(0.01, () => {}, { done: () => this.views.get(v.m.id) === v && this.batch(v) }); // once the new extras exist
     const ex = v.extras;
     if (v.m.type === 'solar') {
-      // Extra wing panels per Solar Array level
+      // Extra wing panels per Solar Array level: two rows of up to three, fanning out.
+      const lvl = L('solarArray');
       for (let i = 0; i < lvl; i++) {
         const side = i % 2 ? -1 : 1;
-        const w = group(ex, 'wing', [side * 0.33 * (1 + Math.floor(i / 2) * 0.4), 0.48 + i * 0.06, -0.05]);
-        w.setLocalEulerAngles(-28, 45, side * 12);
+        const row = Math.floor(i / 2);
+        // Fanned out sideways along the panel's long edge (a wider array), not stacked upwards.
+        const w = group(ex, 'wing', [side * (0.3 + row * 0.26), 0.42 + row * 0.02, side * (0.3 + row * 0.26) * -0.15]);
+        w.setLocalEulerAngles(-28, 45, side * 8);
         shape(w, 'box', mat(PALETTE.white), { scale: [0.36, 0.04, 0.5], shadow: true });
         const c = shape(w, 'box', panelMat(), { pos: [0, 0.025, 0], scale: [0.31, 0.02, 0.44] });
         v.panel!.push(c);
       }
+      if (lvl >= 4) shape(ex, 'cylinder', mat(PALETTE.gold, { metal: 0.6, gloss: 0.7 }), { pos: [0, 0.11, 0], scale: [0.56, 0.03, 0.56] });
     } else if (v.m.type === 'droneHub') {
-      for (let i = 0; i < lvl; i++) {
+      const dash = L('droneSpeed');
+      for (let i = 0; i < dash; i++) {
         shape(ex, 'cylinder', mat(PALETTE.white), { pos: [-0.6 + 0.12 * (i + 1), 0.95 + i * 0.1, -0.6], scale: [0.02, 0.5 + i * 0.15, 0.02] });
         shape(ex, 'sphere', mat(PALETTE.leafFin), { pos: [-0.6, 0.8, -0.6 + 0.2 * (i + 1)], scale: [0.25, 0.06, 0.12], rot: [0, 30 * i, 20] });
       }
+      // Drone Squad: a glowing landing pad per extra drone.
+      const pads: [number, number][] = [[0.62, 0.62], [0.62, -0.25]];
+      for (let i = 0; i < L('secondDrone'); i++) {
+        const [x, z] = pads[i];
+        shape(ex, 'cylinder', mat(PALETTE.shell), { pos: [x, 0.22, z], scale: [0.42, 0.06, 0.42], shadow: true });
+        shape(ex, 'torus', mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1 }), { pos: [x, 0.26, z], scale: [0.36, 0.08, 0.36] });
+      }
+      // Drone Sweep: little sweeper arms with leafy brushes either side of the tower.
+      for (let i = 0; i < L('droneSweep'); i++) {
+        const arm = group(ex, 'sweep', [-0.6, 0.35 + i * 0.12, -0.6]);
+        arm.setLocalEulerAngles(0, 45 + i * 90, 0);
+        shape(arm, 'box', mat(PALETTE.white), { pos: [0.32, 0, 0], scale: [0.5, 0.04, 0.05] });
+        shape(arm, 'sphere', mat(PALETTE.shrub[1]), { pos: [0.6, -0.04, 0], scale: [0.16, 0.1, 0.16] });
+      }
+      // Work Radius: a taller mast and a dish.
+      const rad = L('droneRadius');
+      if (rad > 0) {
+        shape(ex, 'cylinder', mat(PALETTE.white), { pos: [-0.6, 1.2 + rad * 0.12, -0.6], scale: [0.025, 0.3 + rad * 0.25, 0.025] });
+        const dish = group(ex, 'dish', [-0.6, 1.3 + rad * 0.25, -0.6]);
+        dish.setLocalEulerAngles(-35, 45, 0);
+        shape(dish, 'cylinder', mat(PALETTE.white, { gloss: 0.7 }), { scale: [0.2 + rad * 0.06, 0.03, 0.2 + rad * 0.06] });
+      }
     } else if (v.m.type === 'pollinator') {
+      const lvl = L('pollinatorReach');
       for (let i = 0; i < lvl * 4; i++) {
         const a = (i / (lvl * 4)) * Math.PI * 2;
         shape(ex, 'sphere', mat(PALETTE.flower[i % 5]), { pos: [Math.cos(a) * 0.46, 0.3, Math.sin(a) * 0.46], scale: 0.1 });
       }
+      // Rich Soil: the bed spills over with taller blooms.
+      for (let i = 0; i < Math.min(6, L('richSoil')); i++) {
+        const a = i * 1.05 + 0.4;
+        const h = 0.34 + (i % 3) * 0.06;
+        shape(ex, 'cylinder', mat(PALETTE.stem), { pos: [Math.cos(a) * 0.3, 0.27 + h / 2, Math.sin(a) * 0.3], scale: [0.02, h, 0.02] });
+        shape(ex, 'sphere', mat(i % 2 ? '#fff6c2' : PALETTE.flower[(i + 2) % 5]), { pos: [Math.cos(a) * 0.3, 0.27 + h, Math.sin(a) * 0.3], scale: [0.13, 0.09, 0.13] });
+      }
+    } else if (v.m.type === 'condenser') {
+      // Water Bloom: an extra tank per level and a ring of mist beads.
+      const lvl = L('waterBloom');
+      for (let i = 0; i < lvl; i++) {
+        const a = i * Math.PI + 0.8;
+        shape(ex, 'cylinder', mat(PALETTE.white), { pos: [Math.cos(a) * 0.36, 0.22, Math.sin(a) * 0.36], scale: [0.18, 0.3, 0.18], shadow: true });
+        shape(ex, 'sphere', mat(PALETTE.water, { emissive: '#2aa6d6', emissiveIntensity: 0.5, gloss: 0.9 }), { pos: [Math.cos(a) * 0.36, 0.42, Math.sin(a) * 0.36], scale: 0.14 });
+      }
+      if (lvl > 0)
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          shape(ex, 'sphere', mat('#d8f4ff', { opacity: 0.7 }), { pos: [Math.cos(a) * 0.42, 0.95, Math.sin(a) * 0.42], scale: 0.05 });
+        }
+    } else if (v.m.type === 'motherTree') {
+      // Resonance: a wider canopy and glowing gold lanterns.
+      const lvl = L('treeResonance');
+      if (lvl > 0 && v.canopy) {
+        const c = group(ex, 'canopyPlus', [0, 1.55, 0]);
+        for (let i = 0; i < 4 * lvl; i++) {
+          const a = (i / (4 * lvl)) * Math.PI * 2;
+          shape(c, 'sphere', mat(PALETTE.shrub[i % 3]), { pos: [Math.cos(a) * (0.75 + lvl * 0.1), 0.05 + (i % 2) * 0.2, Math.sin(a) * (0.75 + lvl * 0.1)], scale: [0.55, 0.42, 0.55], shadow: true });
+        }
+        for (let i = 0; i < 3 * lvl; i++) {
+          const a = (i / (3 * lvl)) * Math.PI * 2 + 0.5;
+          shape(c, 'sphere', mat('#ffe27a', { emissive: '#ffd34d', emissiveIntensity: 1.2 }), { pos: [Math.cos(a) * 0.95, -0.35, Math.sin(a) * 0.95], scale: 0.09 });
+        }
+      }
+    } else if (v.m.type === 'relay') {
+      const lvl = L('relayLens');
+      for (let i = 0; i < lvl; i++) shape(ex, 'torus', mat('#9ff7ff', { emissive: '#9ff7ff', emissiveIntensity: 0.8, opacity: 0.8 }), { pos: [0, 1.02 + i * 0.12, 0], scale: [0.5 + i * 0.1, 0.05, 0.5 + i * 0.1] });
     }
   }
 
@@ -623,9 +707,10 @@ export class MachineVisuals {
       if (view && v.m.roofId === GROUND && (v.m.x + v.m.size < view.x0 - M || v.m.x > view.x1 + M || v.m.z + v.m.size < view.z0 - M || v.m.z > view.z1 + M)) continue;
       switch (v.m.type) {
         case 'solar': {
-          const boosted = v.m.boostUntil > now || this.sim.production.frenzyActive();
+          const boosted = v.m.boostUntil > now || this.sim.production.surgeActive();
           const m = boosted ? panelBoost() : panelMat();
-          for (const p of v.panel!) if (p.render!.material !== m) p.render!.material = m;
+          for (const p of v.panel!) if (p.render && p.render.material !== m) p.render.material = m;
+          if (!rm && v.spin[0]) v.spin[0].setLocalEulerAngles(-28 + Math.sin(t * 0.25 + v.m.x) * 5, 45 + Math.sin(t * 0.18 + v.m.z) * 14, 0);
           const s = 0.05 + (boosted ? 0.025 * (1 + Math.sin(t * 10)) : 0.01 * Math.sin(t * 2));
           v.light!.setLocalScale(s, s, s);
           break;

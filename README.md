@@ -35,6 +35,9 @@ Node 20+ is required. The build is a static site (`base: './'`), so `dist/` can 
 | `npm run shots:park` | Build, then render the park at each art stage (0, 25, 50, 75%, fountain awake) into `docs/review/park-stage-*.png` | ~1 min |
 | `npm run shots:rooftops` | Build, then find a rooftop cluster, screenshot it out of reach, reach it with a Bloom Relay and restore part of it (fails if that doesn't work) into `docs/review/rooftop-cluster-*.png` | ~1 min |
 | `npm run shots:city` | Build, then render the city overview and a close-up of a cleared area of every type into `docs/review/` for visual review | ~2 min |
+| `npm run test:hud` | Build, then check the HUD at 320–430 px, phone landscape, tablet and desktop: no overlaps, Build tray on screen | ~2 min |
+| `npm run test:session` | Build, then play 15 minutes in the real page (taps, builds, upgrades, Frenzy, cats); fails on any page error | ~4 min |
+| `npm run shots:phase4` | Build, then before/after park screenshots (fresh, half, grown with Radiant tiles, Frenzy) into `docs/review/` | ~2 min |
 | `npm run test:leak` | Build, then pan back and forth across a big city for 10 minutes; entities, materials, GPU memory and heap must return to baseline (`LEAK_MINUTES`) | ~12 min |
 
 The browser scripts need Playwright with Chromium (`npm i -D playwright && npx playwright install chromium`) and run headless with software rendering, as in CI. CI (`.github/workflows/ci.yml`) runs the typecheck, unit tests, benchmarks, soak, browser perf and picking on every push to `main`.
@@ -56,9 +59,17 @@ The browser scripts need Playwright with Chromium (`npm i -D playwright && npx p
 | Game speed 1× / 2× / 3× | `1×` chip | `1×` chip |
 | Lucky Cat discoveries | 🐱 chip (after your first cat) | 🐱 chip |
 | Cancel, close or deselect | `Esc` | Tap empty space |
+| Build tray | `B` (machines `3`–`9`) | Build button |
+| Bloom Frenzy (when full) | `Q` | ✨ meter above the hotbar |
 | Debug / FPS overlay | `F3` or `` ` `` | Settings |
 
 Switching to another tab doesn't stop the city: when you come back, up to 10 minutes are caught up over a few frames (Pause still pauses).
+
+**Away for longer, or closed the game?** Your garden keeps growing at half pace for up to 4 hours: steady production and drone work only. Landmarks, Lucky Cats, chains and milestones wait for you, and nothing is lost by staying away. A small "Welcome back" note shows what came in and anything that didn't fit in storage.
+
+### Dev tools (Phase 4)
+
+On the dev server only (`npm run dev`), the browser console has `sbDev`: `sbDev.reset(seed)`, `sbDev.preset('fresh' | 'screenshot' | 'rich')`, `sbDev.simulate(seconds)`, `sbDev.log()` (the local event log), `sbDev.counts()` and `sbDev.overflow()` (income lost to full storage). None of it ships in `npm run build`. The scripted first-15-minute baseline is `npx vitest run tests/baseline.test.ts` (`BASELINE=1` for per-minute detail), and the phone HUD check is `node tests/e2e/phase4-hud.e2e.mjs` after a build. Phase 4 plan and status: `docs/PHASE_4_EPICS.md`, `docs/PHASE_4_AUDIT.md`.
 
 ## How it plays
 
@@ -66,16 +77,18 @@ Switching to another tab doesn't stop the city: when you come back, up to 10 min
 
 You start in the **dilapidated park**: 242 restorable tiles of dead lawn and cracked paths around a dry fountain, a bandstand and benches, with fog all around.
 
+- An **old drone** lives by the old solar lamp. It slowly restores and nurtures the tiles around the lamp for free; your taps are much faster.
 - **Pulse** a dead tile. It sprouts, and a moment later it is grass. Restoring a tile softens its neighbours into **mossy soil**, which is cheaper. Tap a green tile again to **nurture** it: grass → wildflowers → full bloom.
 - **Machines** connect automatically (no cables or pipes):
   - ☀️ **Solar Panel**: energy. When a tile right next to it blooms, it bursts (+⚡ now, ×2 for 5 s), once per chain.
   - 💧 **Water Condenser**: water, plus a charge meter. When full, it waters the dry soil beside it into bloom, starting a chain.
   - 🌸 **Pollinator Garden**: when a plant next to it is restored or grows, it pollinates its neighbours. On a road or paving it is a **street garden**, and passes the chain to the next street garden within 6 tiles: a **green corridor**.
-  - 🛸 **Drone Hub (2×2)**: drones restore tiles in range, then nurture them. Hubs within 12 tiles link into a network, and drones prefer the fog edge.
+  - 🛸 **Drone Hub (2×2)**: drones restore tiles within 6 tiles, then nurture them, paying the usual pulse cost. They never spend the last quarter of a store, so your own taps always have something left. Hubs within 12 tiles link into a network, and drones prefer the fog edge.
   - 🌳 **Mother Tree (2×2)**: blooms within 2 tiles charge it; at full charge it releases a Bloom Pulse over the whole area.
   - ⛲ **Reservoir Garden** (reservoir and canal areas only): fills from nearby condensers and overflows into lush bloom.
 - **Bloom Chains** run on a deterministic event queue: waves spread outward from a gold-outlined origin, a `BLOOM CHAIN ×N` counter climbs, and the totals show at the end. A chain can run up to 1,500 events and 20 s of travel in the city before the rest resolves at once.
-- Restore 130 tiles and bring 52 to full bloom, then **wake the fountain** (about 6½ minutes in). The park's fog lifts and the first ring of areas appears.
+- **Storage** grows in tiers with the 🏺 Seed Vault (🌿 100 → 250 → 600 → 1,500 → 4,000; ⚡ and 💧 likewise). Everything the fountain needs fits in the starting stores.
+- Restore 130 tiles and bring 52 to full bloom, then **wake the fountain** (40 ⚡ + 100 🌿, about 6 minutes in for the scripted player). The park's fog lifts and the first ring of areas appears.
 
 ### The endless city
 
@@ -128,7 +141,7 @@ The city is generated forever outward from the park: the same seed always gives 
 - **Canal water networks.** Restored canal water carries flow. Water Condensers and Reservoir Gardens built beside clean water join that canal's network: a condenser with no garden beside it fills the emptiest basin on its canal, and an overflowing basin also spills at the connected garden with the most dry ground (once per chain). The water visibly runs along the canal.
 - **Overcharge.** A manual pulse right next to a machine boosts its next trigger (a cyan ring shows it), by more with each Overcharge upgrade level. Automation never does.
 - **Mega Pulse.** Once the fountain is awake, every manual pulse charges the meter on the Pulse button. After 40 taps it glows, and your next pulse sets off a city-scale bloom from that tile (40 tiles, +3 per cleared area, up to 300). Your own taps start most of the big chains.
-- **The Lucky Cat** hides in nooks beside obstacles in cleared areas (and around the park early on). Nothing points at it. Rewards: Lucky Harvest, Solar Frenzy, Mega Bloom, Drone Party, Jackpot, **Golden Relay** (the next green corridor hop blooms 5 extra tiles), **Cat's Garden** (a little garden blooms in one of your cleared areas) and **Fog Whisker** (the next fogged area thins from its edge). No reward ever touches the fog. If you miss a cat, it saves up extra rewards instead of blocking new ones.
+- **The Lucky Cat** hides in nooks beside obstacles in cleared areas (and around the park early on). Nothing points at it. Rewards: Lucky Harvest, Solar Surge (solar ×3 for a while), Mega Bloom, Drone Party, Jackpot, **Golden Relay** (the next green corridor hop blooms 5 extra tiles), **Cat's Garden** (a little garden blooms in one of your cleared areas) and **Fog Whisker** (the next fogged area thins from its edge). No reward ever touches the fog. If you miss a cat, it saves up extra rewards instead of blocking new ones.
 - **District blooms.** The city is divided into districts (Old Town, the Docks, the Towers, the Parklands; an area belongs to the district its landmark stands in). Once 4 neighbouring landmarks in a district are awake, its **district bloom** is ready (a toast, the objective panel and every one of its area panels offer it). It's a one-time reward: resources (a little more for each district you've bloomed) and every free tile of its cleared areas grows lusher. Your machines are never touched. The presentation is skippable, and the area panel can replay it for free.
 - **Area switches.** Each area's panel has four drone switches: Normal, 🌸 Keep blooming (its green tiles come first), 🌫️ Focus the frontier (drones from its hubs push hard into the fog) and ✋ Leave alone (drones skip it). No routing or logistics.
 - **The camera** zooms out to a city overview with a far level of detail and area labels; `F` jumps to the next area that needs you.
@@ -179,8 +192,8 @@ tests/                    vitest suites, perf/ (benchmarks, browser perf, leak),
 - **Everything nearby is O(1) in world size.** Lookups go through chunks and a per-chunk machine index; growing tiles, production and fog counts are cached and updated incrementally.
 - **The fog moves from its edge.** Only tiles touching clear ground can change, so restoration always reads as pushing the fog back, and every revealed area is guaranteed an entry.
 - **Chains are queued, never recursive,** and capped, so even a ×600 chain across a dozen areas terminates and pays once.
-- **No softlock.** The starter panel and rain barrel always produce, Harvest Sunlight is always available, costs can't push a balance below zero, overflow always fires and the Elder Tree self-charges.
-- **Saves are small and safe.** Autosave every 10 s (gzip at an idle moment; page unload saves plainly). A 1,000-area city stores in about 0.6 MB. Lucky Cat claims and one-time unlocks are marked before paying out, so reloading can't pay twice. Offline progress is deliberately not simulated.
+- **No softlock.** Every purchase the fountain needs fits in the starting stores (with room to spare for energy and water, which drones spend). The starter panel and rain barrel always produce, Harvest Sunlight is always available, costs can't push a balance below zero, overflow always fires and the Elder Tree self-charges.
+- **Saves are small and safe.** Autosave every 10 s (gzip at an idle moment; page unload saves plainly). A 1,000-area city stores in about 0.6 MB. Lucky Cat claims and one-time unlocks are marked before paying out, so reloading can't pay twice. Every save stamps the time it was written; time away earns bounded offline progress (`OfflineSystem`: half rate, 4 h cap, no one-time rewards, no chains), and the result is saved at once so a reload can't count it twice.
 
 ## Limitations
 

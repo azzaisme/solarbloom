@@ -2,6 +2,25 @@
 
 Moved out of the `azzaisme/mouthwash-brigade` repo (where it started in a `solarbloom/` folder) with its full history.
 
+# Phase 4: Dopamine Overdrive
+
+Plan: `docs/PHASE_4_EPICS.md`. Audit, baseline and results: `docs/PHASE_4_AUDIT.md`. Timings are from scripted bots, not people.
+
+| Epic | Status |
+|---|---|
+| E00 Audit, instrumentation, baseline | ✅ audit, bot baseline (active + hands-off), local event log, dev-only debug tools, phone HUD check |
+| E01 Economy rescue and overflow | ✅ fountain purchases fit starting stores, storage tiers, old drone, hub at ~2 min, drone reserve, offline progress (4 h, half rate), Solar Surge rename, HUD spending/boosts. Open: hands-off reaches 22–26% of active (target 40–60%, E07); overflow feeds Frenzy in E06 |
+| E02 Mobile-first interface | ✅ five-button hotbar (Inspect · Build · Pulse · Harvest · Upgrades) with a Build tray at every size, compact resource strip and one-line objective on phones and short landscape screens, one-line live hints, SVG icons for resources and tools, upgrade dot instead of a count, B / Esc for the tray, `npm run test:hud` (no overlaps at 320–430 px, landscape, tablet, desktop; HUD covers 34% at 320 px, was 50%) |
+| E03 Restoration feedback | ✅ hover preview of the exact pulse footprint and its cost (tested to match the real pulse), quick rings for nurture and Wide Pulse taps, separate sound/music volume sliders, high-contrast setting. Already in place and kept: restore rings and bursts, pooled flying numbers capped at 8, rising chain notes, chain summary, soft failure feedback, reduced motion |
+| E04 Power progression | ✅ Pulse Reach tiers (Seed 1 → Sprout 9 → Bloom 25 → Grove 69 → Radiant 161 tiles, Euclidean on the grid; Overcharge reaches a tier further), rewarded park milestones at 5/10/20/35/50/75/100/130 tiles (paid once, save-safe, no windfall for older saves), six levels of Solar Array and Rich Soil, first Lucky Cat at ~3–4 min. Bot: fountain 4:21–4:42, city 50–60 areas/hour (was ~25) |
+| E05 Evolving tiles | ✅ a fifth stage: Radiant (bloom 4) above Thriving/full bloom, production weights 0/1/2/4/8, golden Radiant look in both renderers, goals still count full bloom (Radiant included), drones finish tiles to full bloom first. Fountain now costs 100 🌿 only (an energy price could never fill once Radiant gave taps and drones endless work); the advisor saves up for fountain machines and points at green tiles when full blooms are missing |
+| E06 Bloom Frenzy | ✅ 0–100 meter from taps, chains, automation and capped overflow; waits until fired (button above the hotbar, Q); 15 s of +2 pulse tiers, biomass ×10, drones ×3; central `Modifiers` (strongest boost per stat); golden vignette and faster music; save/pause/reload safe; never charges offline or while ready/active. Bots: first Frenzy 3:48–4:00, 3–4 in 15 min |
+| E07 Automation | ✅ Drone Dash ×1.5/×2/×3, Work Radius +2 per level, Drone Squad (every hub +1/+2 drones), Drone Sweep (each drone restore also restores 2/4 tiles around it), drone tile lists and networks cached and own reach searched first (30-min city run 36 s → 13 s). Hands-off 30–36% of active (was 13–27%) |
+| E08 Lucky Cat | ✅ first cat ~3–4 min, then every 3–5 min of active play; Lucky Harvest = 30–60 s of sustained income (no Frenzy ×10), floor 15, age bonus; overflow named in the reward; composes with Frenzy. Existing: claim-once, no expiry, stash for missed cats, seeded rewards, save-safe. Not done: golden flowers / butterflies as extra discoveries (optional) |
+| E09 Art | ✅ upgrades change every machine's silhouette (Solar Array wing array, Water Bloom tanks and mist, Drone Hub pads / sweeper arms / mast and dish / antennas, Rich Soil and Pollinator Reach blooms, Mother Tree canopy and gold lanterns, Relay Lens rings), sun-tracking solar panels, birds crossing a lively park, distinct old drone, drone trim by Drone Dash, Radiant tiles, Frenzy vignette; before/after and machine screenshots (`npm run shots:phase4`). Not done: connected tile edges, new lighting grade |
+| E10 First 15 minutes | ✅ no blocking welcome card (first tap works at once, a short welcome toast), the fountain fills Bloom Frenzy, pacing table from bots (first upgrade 0:21 for an eager buyer, hub 1:15–1:18, fountain 4:12–4:24, 4–5 Frenzies in 15 min); hands-off now 28–46% of active |
+| E11 Validation | ✅ 15-minute in-browser session with no page errors (`npm run test:session`, in CI) after fixing two real crashes it found (stale Solar Array panels; the objective's build button hijacking the hotbar lookup); all unit, soak, benchmark, picking (69,445 checks), HUD and browser-perf checks pass; accessibility: reduced motion, separate sound/music volumes, high contrast, keyboard (B, Q, U, H, P, Esc). Not done: real-device numbers, human playtests, the 12-minute leak test |
+
 # City scale (epic #1)
 
 The game is growing into an endless, fog-covered city (see issue #1 and its sub-epics).

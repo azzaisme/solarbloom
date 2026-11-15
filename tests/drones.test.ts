@@ -1,3 +1,4 @@
+import { TUNING } from '../src/data/tuning';
 import { describe, expect, it } from 'vitest';
 import { fill, makeSim, rich, setGround } from './helpers';
 
@@ -36,7 +37,7 @@ describe('drones', () => {
     const sim = makeSim();
     rich(sim);
     fill(sim, 0, 0, 7, 7, 'restored');
-    for (const t of sim.grid.tilesOf('r1')) t.bloom = 3; // nothing to restore or nurture
+    for (const t of sim.grid.tilesOf('r1')) t.bloom = TUNING.restore.maxBloom; // nothing to restore or nurture
     sim.build.place('droneHub', 'r1', 4, 4);
     sim.advance(20);
     const d = sim.state.drones[0];
@@ -63,12 +64,13 @@ describe('drones', () => {
     rich(sim);
     fill(sim, 4, 4, 5, 5, 'restored');
     sim.build.place('droneHub', 'r1', 4, 4);
-    expect(sim.state.drones).toHaveLength(1);
+    const hubDrones = () => sim.state.drones.filter((d) => !d.old); // not the park's old drone
+    expect(hubDrones()).toHaveLength(1);
     sim.state.upgrades.secondDrone = 1;
     sim.tick();
-    expect(sim.state.drones.filter((d) => d.expiresAt === undefined)).toHaveLength(2);
+    expect(hubDrones().filter((d) => d.expiresAt === undefined)).toHaveLength(2);
     sim.advance(5);
-    expect(sim.state.drones).toHaveLength(2);
+    expect(hubDrones()).toHaveLength(2);
   });
 
   it('Chain Intelligence prefers a tile next to a garden over a closer plain tile', () => {
@@ -92,15 +94,23 @@ describe('drones', () => {
   });
 
   it('Work Radius lets the drone reach further', () => {
+    // Laid out for a base radius of 3 on the 8×8 pad (Phase 4 raised the real base radius).
+    const R = TUNING.drone as { hubRadius: number };
+    const was = R.hubRadius;
+    R.hubRadius = 3;
+    try {
     const sim = makeSim();
     rich(sim);
     fill(sim, 0, 0, 7, 7, 'restored');
-    for (const t of sim.grid.tilesOf('r1')) t.bloom = 3;
+    for (const t of sim.grid.tilesOf('r1')) t.bloom = TUNING.restore.maxBloom;
     setGround(sim, 6, 4, 'polluted'); // 4 tiles from the hub's footprint; base radius is 3
     sim.build.place('droneHub', 'r1', 2, 2);
     expect(sim.drones.findJob(sim.state.drones[0])).toBeUndefined();
     sim.state.upgrades.droneRadius = 1;
     expect(sim.drones.findJob(sim.state.drones[0])?.id).toBe('r1:6:4');
+    } finally {
+      R.hubRadius = was;
+    }
   });
 
   it('nurtures green tiles toward full bloom once nothing is left to restore', () => {

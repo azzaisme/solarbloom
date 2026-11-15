@@ -14,6 +14,10 @@ import { DroneSystem } from './DroneSystem';
 import { Advisor } from './Advisor';
 import { LuckyCatSystem } from './LuckyCatSystem';
 import { AreaSystem } from './AreaSystem';
+import { DebugLog } from './DebugLog';
+import { OfflineSystem } from './OfflineSystem';
+import { FrenzySystem } from './FrenzySystem';
+import { Modifiers } from './Modifiers';
 import { Metrics } from './Metrics';
 import { MilestoneSystem } from './Milestones';
 import { ProductionSystem } from './ProductionSystem';
@@ -40,6 +44,10 @@ export class Sim {
   readonly advisor: Advisor;
   readonly progression: ProgressionSystem;
   readonly metrics: Metrics;
+  readonly log: DebugLog;
+  readonly offline: OfflineSystem;
+  readonly frenzy: FrenzySystem;
+  readonly mods: Modifiers;
   readonly areas: AreaSystem;
   readonly districts: DistrictSystem;
   readonly canals: CanalNetwork;
@@ -92,6 +100,14 @@ export class Sim {
     this.districts = new DistrictSystem(this);
     this.milestones = new MilestoneSystem(this);
     this.metrics = new Metrics(this);
+    this.log = new DebugLog(this);
+    this.offline = new OfflineSystem(this);
+    this.frenzy = new FrenzySystem(this);
+    this.mods = new Modifiers(this);
+    this.econ.onOverflow = (k, a) => {
+      this.log.onOverflow(k, a);
+      this.frenzy.onOverflow(k, a);
+    };
     this.restoration.adoptGrowing();
     this.upgrades.applyCaps();
   }
@@ -172,6 +188,7 @@ export class Sim {
     const s = this.state;
     s.time += dt;
     s.buffs = s.buffs.filter((b) => b.until > s.time);
+    this.frenzy.tick();
     this.production.tick(dt);
     this.restoration.tick(dt);
     this.chains.tick();

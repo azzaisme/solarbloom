@@ -22,6 +22,10 @@ describe('economy & restoration', () => {
     sim.state.resources.water = 20;
     expect(sim.restoration.pulse(t.id)).toBe(true);
     expect(t.bloom).toBe(3);
+    sim.state.resources.energy = 50;
+    sim.state.resources.water = 20;
+    expect(sim.restoration.pulse(t.id)).toBe(true); // Phase 4 E05: Thriving → Radiant
+    expect(t.bloom).toBe(4);
     const b = sim.state.resources.biomass;
     expect(sim.restoration.pulse(t.id)).toBe(false);
     expect(sim.state.stats.tilesRestored).toBe(1);
@@ -76,7 +80,7 @@ describe('economy & restoration', () => {
     expect(sim.restoration.pulseCost(setGround(sim, 6, 6, 'polluted')).energy).toBeCloseTo(TUNING.pulse.polluted.energy * 0.75);
     sim.state.resources.biomass = 40;
     expect(sim.upgrades.purchase('seedVault')).toBe(true);
-    expect(sim.state.caps.biomass).toBe(TUNING.start.caps.biomass * 1.5);
+    expect(sim.state.caps.biomass).toBe(TUNING.storageTiers.biomass[1]);
     expect(sim.upgrades.purchase('droneSpeed')).toBe(false); // needs hub
   });
 
@@ -87,7 +91,7 @@ describe('economy & restoration', () => {
     const e0 = sim.state.resources.energy;
     sim.restoration.pulse(t.id);
     sim.advance(1.5);
-    expect(sim.state.stats.tilesRestored).toBe(3); // Wide Pulse I: target + 2 neighbours
+    expect(sim.state.stats.tilesRestored).toBe(9); // Pulse Reach I (Sprout): the 3×3 around the target
     expect(sim.state.resources.energy).toBeGreaterThan(e0 - TUNING.pulse.polluted.energy - 0.01);
   });
 

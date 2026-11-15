@@ -114,7 +114,7 @@ export class AreaSystem {
     for (const t of this.tiles(id)) {
       if (!isRestorable(t, machines)) continue;
       restorable++;
-      const full = t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom;
+      const full = t.ground === 'restored' && t.bloom >= TUNING.restore.fullBloom;
       if (t.ground === 'restored') {
         restored++;
         if (full) fullBloom++;
@@ -253,6 +253,17 @@ export class AreaSystem {
 
   /** Permanent income from cleared areas (soft-scaled per type). */
   bonusIncome(): { energy: number; water: number; biomass: number } {
+    // Cached until the cleared set or Lit Landmarks changes (asked every tick by production).
+    const types = this.clearedByType();
+    const mult = this.sim.upgrades.landmarkBonusMult;
+    if (this.bonusCache && this.bonusCache.types === types && this.bonusCache.mult === mult) return this.bonusCache.out;
+    const out = this.computeBonus();
+    this.bonusCache = { types, mult, out };
+    return out;
+  }
+  private bonusCache?: { types: Record<string, number>; mult: number; out: { energy: number; water: number; biomass: number } };
+
+  private computeBonus(): { energy: number; water: number; biomass: number } {
     const out = { energy: 0, water: 0, biomass: 0 };
     const C = TUNING.city;
     for (const [type, n] of Object.entries(this.clearedByType())) {

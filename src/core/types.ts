@@ -97,6 +97,8 @@ export interface DroneData {
   targetTileId?: string;
   timer: number;
   expiresAt?: number; // temporary (Drone Party) drones
+  /** Phase 4 E01: the old drone that lives by the park's starter solar lamp (its `hubId`). */
+  old?: boolean;
   jobs: number;
   /** Roof the drone is currently over (px/pz are local to it). Defaults to the hub's roof. */
   roofId?: string;
@@ -132,6 +134,8 @@ export interface Progression {
   introSeen: boolean;
   /** manual pulses since the last Overcharge */
   pulseCharge: number;
+  /** Phase 4 E04.3: park milestones already paid (restored-tile thresholds). Missing in older saves. */
+  parkMilestones?: number[];
   /** Mega Pulse meter: manual taps since the last Mega Pulse (full at TUNING.mega.charge) */
   megaCharge?: number;
   /** Old saves only (the rooftop campaign's Cores). */
@@ -208,6 +212,10 @@ export interface GameState {
   cat: CatState;
   progression: Progression;
   stats: Stats;
+  /** Phase 4 E06: the Bloom Frenzy meter (0–100), the sim time a running Frenzy ends, and how many so far. */
+  frenzy?: { charge: number; until?: number; count?: number };
+  /** Phase 4 E01: wall-clock time (ms since 1970) this state was last saved, for offline progress. */
+  savedAt?: number;
   /** City 10.7: district blooms claimed, by district id (sim time). Optional: older saves have none. */
   districts?: Record<string, number>;
 }

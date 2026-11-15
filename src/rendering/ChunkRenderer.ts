@@ -470,6 +470,17 @@ export class ChunkRenderer {
               b.add('sphere', PALETTE.shrub[i], [x + r.range(-0.15, 0.15), top + s / 2.2, z + r.range(-0.15, 0.15)], [s, s * 0.85, s]);
             }
         }
+        if (t.bloom >= 4) {
+          // Phase 4 E05: Radiant: a pale golden glow on the ground and luminous gold flowers above the shrubs.
+          b.add('cylinder', '#fff1b8', [x, top + 0.005, z], [0.86, 0.01, 0.86]);
+          for (let i = 0; i < 4; i++) {
+            const fx = x + r.range(-0.34, 0.34);
+            const fz = z + r.range(-0.34, 0.34);
+            const ht = r.range(0.3, 0.46);
+            b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.02, ht, 0.02]);
+            b.add('sphere', i % 2 ? '#ffe066' : '#fff6c2', [fx, top + ht, fz], [0.13, 0.1, 0.13]);
+          }
+        }
         break;
       }
     }

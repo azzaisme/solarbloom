@@ -1,6 +1,7 @@
 import { PARK } from '../core/Areas';
 import { isRestorable } from '../core/GameState';
 import type { BuildableType, TileData } from '../core/types';
+import { formatCost } from '../core/Economy';
 import { MACHINES } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
@@ -54,7 +55,7 @@ export class ProgressionSystem {
   }
 
   fullBloomCount(id: string): number {
-    return this.tilesFor(id).filter((t) => t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom).length;
+    return this.tilesFor(id).filter((t) => t.ground === 'restored' && t.bloom >= TUNING.restore.fullBloom).length;
   }
 
   restorableCount(id: string): number {
@@ -109,7 +110,7 @@ export class ProgressionSystem {
       return false;
     }
     if (!s.econ.spend(TUNING.core.cost)) {
-      s.bus.emit('action.failed', { reason: `Awakening needs ${TUNING.core.cost.energy}⚡ and ${TUNING.core.cost.biomass}🌿` });
+      s.bus.emit('action.failed', { reason: `Waking the fountain needs ${formatCost(TUNING.core.cost)}` });
       return false;
     }
     p.coreActivated = true;
@@ -118,6 +119,9 @@ export class ProgressionSystem {
     s.areas.clear(PARK, true);
     s.production.markDirty();
     s.bus.emit('rooftop.coreRestored', {});
+    // Phase 4 E10.3: the fountain's blessing: a full Bloom Frenzy meter, so the climax leads straight into a
+    // burst of power in the newly revealed city (fired whenever the player likes).
+    s.frenzy.add(100);
     return true;
   }
 
@@ -137,7 +141,34 @@ export class ProgressionSystem {
     return 0;
   }
 
+  /** The next park milestone not yet reached (restored-tile threshold), if any. */
+  nextMilestone(): { at: number; reward: Partial<Record<'energy' | 'water' | 'biomass', number>> } | undefined {
+    const got = this.sim.state.progression.parkMilestones ?? [];
+    return TUNING.parkMilestones.find((m) => !got.includes(m.at));
+  }
+
+  /**
+   * Phase 4 E04.3: pays each park milestone once. Marked before paying, so a reload can't pay twice. A save
+   * from before milestones existed counts the ones it already passed as paid (no surprise windfall).
+   */
+  private checkMilestones() {
+    const s = this.sim;
+    const p = s.state.progression;
+    if (p.parkMilestones && !this.nextMilestone()) return; // all paid: nothing to count any more
+    const n = s.areas.counts(PARK).restored;
+    if (!p.parkMilestones) {
+      p.parkMilestones = TUNING.parkMilestones.filter((m) => m.at <= n).map((m) => m.at);
+    }
+    const next = this.nextMilestone();
+    if (!next || n < next.at) return;
+    p.parkMilestones.push(next.at);
+    const credited: Partial<Record<'energy' | 'water' | 'biomass', number>> = {};
+    for (const [k, v] of Object.entries(next.reward) as ['energy' | 'water' | 'biomass', number][]) credited[k] = s.econ.add(k, v);
+    s.bus.emit('milestone.reached', { at: next.at, credited, next: this.nextMilestone()?.at });
+  }
+
   tick() {
+    this.checkMilestones();
     const p = this.sim.state.progression;
     const step = this.computeStep();
     if (step !== p.tutorialStep) {

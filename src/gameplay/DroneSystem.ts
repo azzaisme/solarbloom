@@ -1,6 +1,7 @@
 import { GROUND } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
-import type { DroneData, MachineData, TileData } from '../core/types';
+import { KINDS } from '../core/Economy';
+import type { Cost, DroneData, MachineData, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
@@ -61,7 +62,7 @@ export class DroneSystem {
     return this.status.get(d.id) ?? 'napping';
   }
 
-  spawn(hub: MachineData, temporarySec?: number): DroneData {
+  spawn(hub: MachineData, temporarySec?: number, old = false): DroneData {
     const d: DroneData = {
       id: this.sim.newId('d'),
       hubId: hub.id,
@@ -72,6 +73,7 @@ export class DroneSystem {
       jobs: 0,
       expiresAt: temporarySec ? this.sim.time + temporarySec : undefined,
     };
+    if (old) d.old = true;
     this.sim.state.drones.push(d);
     this.sim.bus.emit('drone.spawned', { droneId: d.id });
     return d;
@@ -101,8 +103,21 @@ export class DroneSystem {
    * Hubs in the city link into networks (any two within `networkRange`, transitively). A drone works the
    * whole network's reach; on rooftops it keeps to its own hub's range.
    */
+  private netCache = new Map<string, MachineData[]>();
+  private netStamp = '';
   network(hub: MachineData): MachineData[] {
-    if (hub.roofId !== GROUND) return [hub];
+    if (hub.roofId !== GROUND || hub.type !== 'droneHub') return [hub];
+    const stamp = `${this.sim.state.machines.length}|${this.sim.upgrades.networkRange}`;
+    if (stamp !== this.netStamp) {
+      this.netCache.clear();
+      this.netStamp = stamp;
+    }
+    let v = this.netCache.get(hub.id);
+    if (!v) this.netCache.set(hub.id, (v = this.computeNetwork(hub)));
+    return v;
+  }
+
+  private computeNetwork(hub: MachineData): MachineData[] {
     const s = this.sim;
     const R = this.sim.upgrades.networkRange;
     const out = [hub];
@@ -120,9 +135,34 @@ export class DroneSystem {
   }
 
   /** Tiles a hub's drones may work: its network's combined reach (rows in order, no duplicates). */
+  /** Cached tile lists (hub reach and network reach); dropped whenever hubs or reach upgrades change. */
+  private tileCache = new Map<string, TileData[]>();
+  private tileCacheStamp = '';
+  private cached(key: string, make: () => TileData[]): TileData[] {
+    const stamp = `${this.sim.state.machines.length}|${this.radius()}|${this.sim.upgrades.networkRange}`;
+    if (stamp !== this.tileCacheStamp) {
+      this.tileCache.clear();
+      this.tileCacheStamp = stamp;
+    }
+    let v = this.tileCache.get(key);
+    if (!v) this.tileCache.set(key, (v = make()));
+    return v;
+  }
+
+  /** Tiles within one hub's own reach. */
+  ownTiles(hub: MachineData): TileData[] {
+    return this.cached(`own|${hub.id}`, () => this.sim.grid.tilesInRange(hub, this.radius()));
+  }
+
   networkTiles(hub: MachineData): TileData[] {
+    // The old drone keeps to its own short range around the old solar lamp.
+    if (hub.type !== 'droneHub') return this.cached(`old|${hub.id}`, () => this.sim.grid.tilesInRange(hub, TUNING.drone.old.radius));
     const hubs = this.network(hub);
-    if (hubs.length === 1) return this.sim.grid.tilesInRange(hub, this.radius());
+    if (hubs.length === 1) return this.ownTiles(hub);
+    return this.cached(`net|${hubs.map((h) => h.id).sort().join(',')}`, () => this.mergeTiles(hubs));
+  }
+
+  private mergeTiles(hubs: MachineData[]): TileData[] {
     const seen = new Set<string>();
     const out: TileData[] = [];
     for (const h of hubs)
@@ -153,16 +193,25 @@ export class DroneSystem {
   }
 
   /** Permanent drones a hub should have: the first hub gets a second with the upgrade. */
-  private wanted(hub: MachineData): number {
-    const firstHub = this.sim.state.machines.find((m) => m.type === 'droneHub');
-    return 1 + (firstHub?.id === hub.id ? this.sim.upgrades.level('secondDrone') : 0);
+  private wanted(_hub: MachineData): number {
+    return 1 + this.sim.upgrades.level('secondDrone'); // Phase 4 E07: Drone Squad, on every hub
   }
 
+  /**
+   * The drone's next job: its own hub's reach first, then the rest of the hub's network (Phase 4 E07: with many
+   * linked hubs, scanning the whole network for every drone was the city's biggest per-tick cost).
+   */
   findJob(d: DroneData): TileData | undefined {
-    const s = this.sim;
-    const hub = s.machine(d.hubId);
+    const hub = this.sim.machine(d.hubId);
     if (!hub) return undefined;
-    const inRange = this.networkTiles(hub);
+    const own = hub.type === 'droneHub' ? this.ownTiles(hub) : this.networkTiles(hub);
+    const job = this.findJobIn(d, hub, own);
+    if (job || hub.type !== 'droneHub' || this.network(hub).length === 1) return job;
+    return this.findJobIn(d, hub, this.networkTiles(hub));
+  }
+
+  private findJobIn(d: DroneData, hub: MachineData, inRange: TileData[]): TileData | undefined {
+    const s = this.sim;
     // Area switches: "Focus the frontier" on the hub's area makes its drones push hard into the fog.
     const focus = s.areas.mode(s.areas.areaOf(hub)) === 'frontier';
     const edgeBonus = TUNING.drone.frontierBonus * (focus ? TUNING.drone.focusMult : 1);
@@ -197,7 +246,8 @@ export class DroneSystem {
       if (!nurturable(t) || modeOf(t) === 'off') continue;
       const dx = t.x + 0.5 - d.px;
       const dz = t.z + 0.5 - d.pz;
-      let score = dx * dx + dz * dz + t.bloom * 2;
+      // Phase 4 E05: finish tiles to full bloom (what goals count) before taking any on to Radiant.
+      let score = dx * dx + dz * dz + t.bloom * 2 + (t.bloom >= TUNING.restore.fullBloom ? 400 : 0);
       if (intel) score -= this.synergyScore(t) * 6;
       if (score < bestD - 1e-9) {
         bestD = score;
@@ -207,8 +257,29 @@ export class DroneSystem {
     return best;
   }
 
+  /**
+   * Phase 4 E01: pays for a drone job unless that would take a store below the drone reserve (a share of its
+   * cap kept for the player's own taps). All-or-nothing, like any purchase.
+   */
+  payJob(cost: Cost): boolean {
+    const s = this.sim;
+    for (const k of KINDS) if ((cost[k] ?? 0) > 0 && s.econ.get(k) - (cost[k] ?? 0) < TUNING.drone.reserve * s.econ.cap(k) - 1e-9) return false;
+    return s.econ.spend(cost);
+  }
+
+  /** Tiles per second (the old drone is slow and ignores upgrades). */
+  speedOf(d: DroneData): number {
+    return d.old ? TUNING.drone.old.flySpeed : TUNING.drone.flySpeed * this.sim.upgrades.droneFlyMult * this.sim.mods.droneSpeedMult();
+  }
+
+  /** The old solar lamp the old drone lives by (the park's starter panel), if this game has one. */
+  private oldHome(): MachineData | undefined {
+    if (!TUNING.drone.old.enabled) return undefined;
+    return this.sim.state.machines.find((m) => m.starter && m.type === 'solar' && m.roofId === GROUND);
+  }
+
   private moveToward(d: DroneData, tx: number, tz: number, dt: number): boolean {
-    const speed = TUNING.drone.flySpeed * this.sim.upgrades.droneFlyMult;
+    const speed = this.speedOf(d);
     const dx = tx - d.px;
     const dz = tz - d.pz;
     const dist = Math.hypot(dx, dz);
@@ -231,6 +302,9 @@ export class DroneSystem {
       const have = permanent.get(hub.id) ?? 0;
       for (let i = have; i < this.wanted(hub); i++) this.spawn(hub);
     }
+    // The old drone (also added to games saved before it existed).
+    const home = this.oldHome();
+    if (home && !permanent.has(home.id)) this.spawn(home, undefined, true);
     for (const d of [...s.state.drones]) {
       const hub = s.machine(d.hubId);
       if (!hub) continue;
@@ -254,8 +328,8 @@ export class DroneSystem {
             d.timer = TUNING.drone.retrySeconds;
             break;
           }
-          const cost = s.restoration.pulseCost(job);
-          if (!s.econ.spend(cost)) {
+          const cost = d.old ? {} : s.restoration.pulseCost(job); // the old drone runs on sunlight
+          if (!this.payJob(cost)) {
             this.status.set(d.id, 'waitingEnergy');
             d.timer = TUNING.drone.retrySeconds;
             break;
@@ -264,7 +338,7 @@ export class DroneSystem {
           d.mode = 'flying';
           // Far from the camera the flight is timed, not stepped: same arrival tick, no per-tick moves.
           if (job.roofId === hub.roofId && this.roofOf(d) === hub.roofId && this.isFar(hub)) {
-            const speed = TUNING.drone.flySpeed * s.upgrades.droneFlyMult;
+            const speed = this.speedOf(d);
             d.far = { fx: d.px, fz: d.pz, t0: s.time, t1: s.time + Math.hypot(job.x + 0.5 - d.px, job.z + 0.5 - d.pz) / speed };
           }
           this.status.set(d.id, 'travelling');
@@ -284,7 +358,7 @@ export class DroneSystem {
               d.pz = t.z + 0.5;
               d.far = undefined;
               d.mode = 'working';
-              d.timer = TUNING.drone.workSeconds;
+              d.timer = d.old ? TUNING.drone.old.workSeconds : TUNING.drone.workSeconds;
               this.status.set(d.id, 'working');
             } else if (!this.isFar(hub)) {
               // The camera arrived: carry on from where it would be by now, flying for real.
@@ -295,7 +369,7 @@ export class DroneSystem {
           }
           if (this.travel(d, t.roofId, t.x + 0.5, t.z + 0.5, dt)) {
             d.mode = 'working';
-            d.timer = TUNING.drone.workSeconds;
+            d.timer = d.old ? TUNING.drone.old.workSeconds : TUNING.drone.workSeconds;
             this.status.set(d.id, 'working');
           }
           break;
@@ -307,6 +381,16 @@ export class DroneSystem {
           this.setTarget(d, undefined);
           if (t && t.ground !== 'restored' && t.ground !== 'growing') {
             s.restoration.beginGrowth(t, 'drone', TUNING.pulse.growSeconds);
+            // Phase 4 E07: Drone Sweep restores a few tiles around it for free (never another drone's target).
+            const sweep = d.old ? 0 : s.upgrades.droneSweep;
+            if (sweep > 0) {
+              const around = s.grid
+                .neighbors(t)
+                .concat(s.grid.tilesNear({ roofId: t.roofId, x: t.x, z: t.z, size: 1 }, 1))
+                .filter((n, i, a) => a.indexOf(n) === i && n !== t && s.restoration.isEligible(n))
+                .sort((a, b) => Math.abs(a.x - t.x) + Math.abs(a.z - t.z) - (Math.abs(b.x - t.x) + Math.abs(b.z - t.z)) || a.pollution - b.pollution || (a.id < b.id ? -1 : 1));
+              for (const n of around.slice(0, sweep)) s.restoration.beginGrowth(n, 'drone', TUNING.pulse.growSeconds + 0.15);
+            }
             d.jobs++;
             s.state.stats.droneJobs++;
           } else if (t && t.ground === 'restored' && t.bloom < TUNING.restore.maxBloom) {
@@ -315,7 +399,7 @@ export class DroneSystem {
             s.state.stats.droneJobs++;
           }
           d.mode = 'cooldown';
-          d.timer = TUNING.drone.cycleSeconds * s.upgrades.droneCycleMult;
+          d.timer = d.old ? TUNING.drone.old.cycleSeconds : (TUNING.drone.cycleSeconds * s.upgrades.droneCycleMult) / s.mods.droneSpeedMult();
           break;
         }
         case 'cooldown': {

@@ -46,7 +46,7 @@ export class ProductionSystem {
     for (const [key, packed] of Object.entries(this.sim.grid.pending)) {
       if (!this.sim.grid.isPlayable(key.split('|')[0])) continue;
       const c = bloomCounts(packed);
-      const r = R.biomassPerSec * mult * (c[1] * R.bloomRateMult[1] + c[2] * R.bloomRateMult[2] + c[3] * R.bloomRateMult[3]);
+      const r = R.biomassPerSec * mult * c.reduce((a, n, lvl) => a + n * (R.bloomRateMult[lvl] ?? 0), 0);
       this.pendingEstimate.set(key, r);
       sum += r;
     }
@@ -82,15 +82,18 @@ export class ProductionSystem {
     return b;
   }
 
-  frenzyActive() {
+  /** The Lucky Cat's Solar Surge buff (saved as 'solarFrenzy'; renamed so "Frenzy" means only Bloom Frenzy). */
+  surgeActive() {
     return this.sim.state.buffs.some((b) => b.type === 'solarFrenzy');
   }
 
-  solarOutput(m: MachineData): number {
+  /** `sustained`: without temporary boosts (bloom boosts, Solar Surge), for offline progress and cat rewards. */
+  solarOutput(m: MachineData, sustained = false, boost = sustained ? 1 : this.sim.mods.solarMult()): number {
     const t = this.sim.time;
     let v = (m.starter ? TUNING.starterSolarRate : TUNING.solarRate) * this.sim.upgrades.solarMult;
+    if (sustained) return v;
     if (m.boostUntil > t) v *= TUNING.solarBloomBoost.mult;
-    if (this.frenzyActive()) v *= TUNING.cat.frenzyMult;
+    v *= boost; // Solar Surge (composed centrally, Phase 4 E06.6; looked up once per rates() call)
     return v;
   }
 
@@ -110,7 +113,11 @@ export class ProductionSystem {
   }
 
 
-  rates(): Resources {
+  /**
+   * Income per second. `sustained` leaves out temporary solar boosts (Phase 4 E01: offline progress). Biomass
+   * from briefly lush tiles is still counted (it lasts 25 s and is a small share).
+   */
+  rates(sustained = false): Resources {
     const grid = this.sim.grid;
     if (this.dirty) {
       this.dirty = false;
@@ -139,15 +146,49 @@ export class ProductionSystem {
       }
       this.dirtyChunks.clear();
     }
-    let energy = 0;
     const bonus = this.sim.areas.bonusIncome();
-    energy += bonus.energy;
-    let water = TUNING.rainBarrelRate + bonus.water;
-    for (const m of this.sim.state.machines) {
-      if (m.type === 'solar') energy += this.solarOutput(m);
-      else if (m.type === 'condenser') water += 1;
+    const solarBoost = sustained ? 1 : this.sim.mods.solarMult();
+    const sums = this.machineSums();
+    // Phase 4 E11: solar and condenser totals are cached (they only change with machines and upgrades); only the
+    // few panels in a bloom boost right now are visited each tick.
+    let energy = bonus.energy + sums.solar * solarBoost;
+    if (!sustained) {
+      const now = this.sim.time;
+      for (const m of this.boostedSolar) {
+        if (m.boostUntil > now) energy += this.solarOutput(m, true) * (TUNING.solarBloomBoost.mult - 1) * solarBoost;
+        else this.boostedSolar.delete(m);
+      }
     }
-    return { energy, water, biomass: this.biomassRate + bonus.biomass };
+    const water = TUNING.rainBarrelRate + bonus.water + sums.condensers;
+    // Phase 4 E06: temporary biomass boosts (Bloom Frenzy) apply to the total, never to the sustained rate.
+    const bm = sustained ? 1 : this.sim.mods.biomassMult();
+    return { energy, water, biomass: (this.biomassRate + bonus.biomass) * bm };
+  }
+
+  /** Solar panels in a bloom boost (kept small: boosts last seconds). */
+  private boostedSolar = new Set<MachineData>();
+  private sums?: { key: string; solar: number; condensers: number };
+
+  /** A solar panel just got a bloom boost (BloomChainSystem). */
+  solarBoosted(m: MachineData) {
+    this.boostedSolar.add(m);
+  }
+
+  private machineSums() {
+    const ms = this.sim.state.machines;
+    const key = `${ms.length}|${this.sim.upgrades.solarMult}`;
+    if (this.sums?.key === key) return this.sums;
+    let solar = 0;
+    let condensers = 0;
+    const now = this.sim.time;
+    this.boostedSolar.clear();
+    for (const m of ms) {
+      if (m.type === 'solar') {
+        solar += this.solarOutput(m, true);
+        if (m.boostUntil > now) this.boostedSolar.add(m);
+      } else if (m.type === 'condenser') condensers += 1;
+    }
+    return (this.sums = { key, solar, condensers });
   }
 
   tick(dt: number) {

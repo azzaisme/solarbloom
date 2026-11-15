@@ -54,7 +54,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Drone Hub',
     icon: '🛸',
     size: 2,
-    cost: { biomass: 110, energy: 35 },
+    cost: { biomass: 80, energy: 30 }, // Phase 4 E01.1: fits the starting store (was 110 🌿 / 35 ⚡)
     allowedGround: ['restored', 'prepared'],
     blurb: 'Launches a little drone that restores tiles within 3 tiles of the hub, paying the usual pulse cost.',
     hotkey: '6',
@@ -64,7 +64,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Mother Tree',
     icon: '🌳',
     size: 2,
-    cost: { biomass: 170, water: 40 },
+    cost: { biomass: 90, water: 30 }, // Phase 4 E01.1: fits the starting store (was 170 🌿 / 40 💧)
     allowedGround: ['restored', 'prepared'],
     blurb: 'Every restoration within 2 tiles charges it. At full charge it releases a Bloom Pulse that restores and grows everything around it.',
     hotkey: '7',

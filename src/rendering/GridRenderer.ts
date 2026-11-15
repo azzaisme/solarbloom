@@ -293,6 +293,18 @@ export class GridRenderer {
           }
           v.sway.push(g);
         }
+        if (t.bloom >= 4 && (!keepOld || prevBloom < 4)) {
+          // Phase 4 E05: Radiant: luminous golden flowers and a soft glow disk.
+          const g = add(group(deco, 'radiant', [0, 0, 0]));
+          shape(g, 'cylinder', '#fff1b8', { pos: [0, 0.005, 0], scale: [0.86, 0.01, 0.86] });
+          for (let i = 0; i < 4; i++) {
+            const h = fr.range(0.3, 0.46);
+            const f = group(g, 'gold', [fr.range(-0.34, 0.34), 0, fr.range(-0.34, 0.34)]);
+            shape(f, 'cylinder', PALETTE.stem, { pos: [0, h / 2, 0], scale: [0.02, h, 0.02] });
+            shape(f, 'sphere', i % 2 ? '#ffe066' : '#fff6c2', { pos: [0, h, 0], scale: [0.13, 0.1, 0.13] });
+            v.sway.push(f);
+          }
+        }
         break;
       }
     }

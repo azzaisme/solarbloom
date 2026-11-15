@@ -69,7 +69,7 @@ export class MilestoneSystem {
     sim.grid.touchListeners.push((t) => {
       const cl = t.roofId !== GROUND ? sim.grid.layer(t.roofId)?.cluster : undefined;
       if (cl && t.ground === 'restored' && this.counting(cl)) this.pending.add(cl);
-      if (t.roofId !== GROUND || t.ground !== 'restored' || t.bloom < TUNING.restore.maxBloom) return;
+      if (t.roofId !== GROUND || t.ground !== 'restored' || t.bloom < TUNING.restore.fullBloom) return;
       const id = sim.areas.map.areaOfCell(t.x, t.z);
       if (this.counting(id) && this.kind(id) === 'fullBloom') this.pending.add(id);
     });

@@ -1,4 +1,5 @@
 import type { GameState } from '../core/types';
+import { TUNING } from './tuning';
 
 /** Upgrade drawer sections, in order. Each groups what one system of the world does. */
 export const UPGRADE_GROUPS = ['Pulse', 'Machines', 'Drones', 'Networks', 'Fog', 'Storage'] as const;
@@ -42,19 +43,23 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Solar Array',
     icon: '☀️',
     baseCost: 14,
-    costMult: 2,
-    maxLevel: 3,
+    costMult: 3,
+    maxLevel: 6, // Phase 4 E04.5: later levels keep something worth buying after the fountain
     describe: () => 'All solar output +50%',
   },
   {
     id: 'broadPulse',
     group: 'Pulse',
-    name: 'Wide Pulse',
+    name: 'Pulse Reach',
     icon: '💠',
     baseCost: 22,
-    costMult: 2.2,
-    maxLevel: 3,
-    describe: (n) => (n === 1 ? 'Each pulse also restores 2 neighbouring tiles for free' : n === 2 ? 'Each pulse restores all 4 neighbours for free' : 'Each pulse restores everything within 2 tiles for free'),
+    costMult: 4.4,
+    maxLevel: 4,
+    describe: (n) => {
+      const t = TUNING.pulseTiers[n];
+      const tiles = [1, 9, 25, 69, 161][n];
+      return `${t.name}: each pulse restores up to ${tiles} tiles around it for free`;
+    },
   },
   {
     id: 'richSoil',
@@ -62,8 +67,8 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Rich Soil',
     icon: '🌱',
     baseCost: 25,
-    costMult: 2,
-    maxLevel: 3,
+    costMult: 2.6,
+    maxLevel: 6, // Phase 4 E04.5
     describe: () => 'Restored tile biomass +30%',
   },
   {
@@ -72,9 +77,12 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Seed Vault',
     icon: '🏺',
     baseCost: 20,
-    costMult: 1.8,
+    costMult: 2.5,
     maxLevel: 4,
-    describe: () => 'All storage caps +50%',
+    describe: (n) => {
+      const t = TUNING.storageTiers;
+      return `Storage ⚡ ${t.energy[n - 1]}→${t.energy[n]} · 💧 ${t.water[n - 1]}→${t.water[n]} · 🌿 ${t.biomass[n - 1]}→${t.biomass[n]}`;
+    },
   },
   {
     id: 'droneSpeed',
@@ -84,7 +92,7 @@ export const UPGRADES: UpgradeDef[] = [
     baseCost: 35,
     costMult: 1.8,
     maxLevel: 3,
-    describe: () => 'Drones fly 30% faster and wait 25% less between jobs',
+    describe: (n) => `Drones work ×${[1, 1.5, 2, 3][n]} as fast (flight and rest)`,
     available: has('droneHub'),
     lockedReason: 'Build a Drone Hub first',
   },
@@ -142,7 +150,7 @@ export const UPGRADES: UpgradeDef[] = [
     baseCost: 40,
     costMult: 2,
     maxLevel: 2,
-    describe: () => 'Drones reach 1 tile further from their hub',
+    describe: (n) => `Drones reach ${2 * n} tiles further from their hub`,
     available: has('droneHub'),
     lockedReason: 'Build a Drone Hub first',
   },
@@ -161,12 +169,24 @@ export const UPGRADES: UpgradeDef[] = [
   {
     id: 'secondDrone',
     group: 'Drones',
-    name: 'Second Drone',
+    name: 'Drone Squad',
     icon: '🛸',
     baseCost: 70,
-    costMult: 1,
-    maxLevel: 1,
-    describe: () => 'Your first hub launches a second drone',
+    costMult: 4,
+    maxLevel: 2,
+    describe: (n) => `Every Drone Hub launches ${n + 1} drones`,
+    available: has('droneHub'),
+    lockedReason: 'Build a Drone Hub first',
+  },
+  {
+    id: 'droneSweep',
+    group: 'Drones',
+    name: 'Drone Sweep',
+    icon: '🧹',
+    baseCost: 120,
+    costMult: 3,
+    maxLevel: 2,
+    describe: (n) => `Each tile a drone restores also restores up to ${2 * n} tiles around it for free`,
     available: has('droneHub'),
     lockedReason: 'Build a Drone Hub first',
   },

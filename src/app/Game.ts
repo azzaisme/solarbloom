@@ -12,8 +12,10 @@ import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
+import type { OfflineReport } from '../gameplay/OfflineSystem';
 import { Sim } from '../gameplay/Sim';
 import { Butterflies } from '../rendering/Butterflies';
+import { Birds } from '../rendering/Birds';
 import { CameraController } from '../rendering/CameraController';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
@@ -39,7 +41,7 @@ import { EventBus } from './EventBus';
 import { type LoadResult, SaveService } from './SaveService';
 
 const SETTINGS_KEY = 'solarbloom.settings';
-const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Full bloom'];
+const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Thriving (full bloom)', 'Radiant'];
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 interface Pick {
@@ -76,6 +78,7 @@ export class Game {
   readonly drones: DroneVisuals;
   readonly cat: CatVisuals;
   readonly butterflies: Butterflies;
+  private birds: Birds;
   readonly tileFx: TileFx;
   readonly vfx: Vfx;
   readonly overlays: Overlays;
@@ -117,6 +120,10 @@ export class Game {
     const loaded = lr.state;
     const state = loaded ?? createInitialState();
     this.sim = new Sim(state, this.bus);
+    // Phase 4 E01: time away since the last save earns bounded offline progress (before anything renders).
+    // A clock that went backwards earns nothing; the result is saved right away so a reload can't count it twice.
+    const awayMs = loaded?.savedAt !== undefined ? Date.now() - loaded.savedAt : 0;
+    const offline = awayMs > 0 ? this.sim.offline.apply(awayMs / 1000) : undefined;
 
     this.app = new pc.Application(canvas, {
       graphicsDeviceOptions: { antialias: true, alpha: true, powerPreference: 'high-performance' },
@@ -154,6 +161,7 @@ export class Game {
     this.drones.sync();
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
+    this.birds = new Birds(this.scene.world);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
     this.tileFx = new TileFx(this.sim, this.scene.world, this.app.graphicsDevice);
     this.machines.onActivated = (_m, at) => {
@@ -172,6 +180,8 @@ export class Game {
         activateCore: () => this.sim.progression.activateCore(),
         newGame: () => this.newGame(),
         setSetting: (k, v) => this.setSetting(k, v),
+        activateFrenzy: () => this.sim.frenzy.activate(),
+        setVolume: (k, v) => this.setVolume(k, v),
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
         togglePause: () => this.setPaused(!this.paused),
@@ -256,14 +266,27 @@ export class Game {
     this.app.start();
     if (lr.scrapped) setTimeout(() => this.hud.toast('A new city awaits — older gardens were cleared for this update. 🌱', '', 7), 400);
     if (lr.backedUpAs) setTimeout(() => this.hud.toast(`Your old save couldn't be read by this version, so it was kept safely as a backup and a new rooftop started.<small>${lr.backedUpAs}</small>`, '', 8), 400);
-    if (!state.progression.introSeen && state.stats.tilesRestored === 0) this.hud.showIntro();
-    else if (loaded) setTimeout(() => this.hud.toast('Welcome back! Your garden kept its shape. 🌱', '', 2.6), 400);
+    this.sfx.frenzy = this.sim.frenzy.active(); // loaded mid-Frenzy
+    // Phase 4 E10.1: no blocking welcome card. The first pulse works at once; a short note says what this is.
+    if (!state.progression.introSeen && state.stats.tilesRestored === 0) {
+      state.progression.introSeen = true;
+      setTimeout(() => this.hud.toast('🌱 Welcome to Solarbloom<small>This park is dead and grey. Tap a grey tile to bring it back to life.</small>', 'gold', 5), 600);
+    }
+    else if (offline) {
+      this.saveNow();
+      setTimeout(() => this.hud.toast(offlineToast(offline, 'Welcome back!'), 'gold', 6), 400);
+    } else if (loaded) setTimeout(() => this.hud.toast('Welcome back! Your garden kept its shape. 🌱', '', 2.6), 400);
   }
 
   // ───────────────────────── settings / persistence ─────────────────────────
 
+  private setVolume(k: 'sfxVolume' | 'musicVolume', v: number) {
+    this.settings[k] = Math.max(0, Math.min(100, v));
+    this.setSetting('sound', this.settings.sound);
+  }
+
   private setSetting(k: keyof Settings, v: boolean) {
-    this.settings[k] = v;
+    (this.settings as unknown as Record<string, unknown>)[k] = v;
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
     } catch {
@@ -274,10 +297,12 @@ export class Game {
 
   private applySettings() {
     const s = this.settings;
+    this.sfx.setVolumes((s.sfxVolume ?? 100) / 100, (s.musicVolume ?? 100) / 100);
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
+    document.body.classList.toggle('contrast', !!s.highContrast);
     const rm = s.reducedMotion;
-    this.tileFx.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
+    this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
     this.cat.softSparkle = rm || s.lowVfx;
     // Quality: lighter shadows with fewer effects.
@@ -371,6 +396,8 @@ export class Game {
       else if (k === 'f') this.focusNextArea();
       else if (k === 'home') this.focusArea(PARK);
       else if (k === 'u') this.hud.toggleUpgrades();
+      else if (k === 'b') this.hud.toggleTray();
+      else if (k === 'q') this.sim.frenzy.activate();
       else if (k === 'p') this.setPaused(!this.paused);
       else if (k === 'f3' || k === '`') {
         e.preventDefault();
@@ -378,6 +405,7 @@ export class Game {
       } else if (k === 'escape') {
         if (this.hud.modalOpen) this.hud.openSettings(false);
         else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
+        else if (this.hud.trayOpen) this.hud.toggleTray(false);
         else if (this.selected) this.select(undefined);
         else this.selectTool('pulse');
       } else if (k === '+' || k === '=') this.camera.zoomBy(1.15);
@@ -563,9 +591,13 @@ export class Game {
     const maxed = t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom;
     this.overlays.showFrame(t.roofId, t.x, t.z, 1, chk.ok ? 'ok' : maxed || t.ground === 'growing' ? 'hover' : 'bad');
     let action = '';
+    // Phase 4 E03.1: preview exactly which tiles this pulse will restore.
+    const fp = chk.ok && t.ground !== 'restored' ? this.sim.restoration.footprint(t) : [];
+    if (fp.length) this.overlays.showRadius([t, ...fp.map((f) => f.tile)], 'ok');
+    else if (!this.selected) this.overlays.hideRadius();
     if (chk.ok) {
-      const verb = t.ground === 'restored' ? `Nurture → ${BLOOM_NAMES[t.bloom + 1]}` : 'Pulse';
-      action = `<span class="ok">${verb}: ${formatCost(chk.cost)}</span>`;
+      const verb = t.ground === 'restored' ? `Nurture → ${BLOOM_NAMES[t.bloom + 1]}` : this.sim.restoration.nextIsOvercharged() ? '🌟 Overcharged pulse' : 'Pulse';
+      action = `<span class="ok">${verb}: ${formatCost(chk.cost)}${fp.length ? ` · restores ${fp.length + 1} tiles` : ''}</span>`;
     } else if (chk.reason && !maxed) action = `<span class="bad">${chk.reason}</span>`;
     this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${action ? '<br>' + action : ''}`);
   }
@@ -583,7 +615,7 @@ export class Game {
       case 'restored': {
         const rate = this.sim.production.tileBiomassRate(t);
         const lush = (t.lushUntil ?? 0) > this.sim.time ? ` · 💧 lush ${Math.ceil(t.lushUntil! - this.sim.time)} s` : '';
-        return `+${rate.toFixed(2)}🌿/s${zone ? ' (garden ×2)' : ''}${lush}${t.bloom >= TUNING.restore.maxBloom ? ' · full bloom ✓' : ''}`;
+        return `+${rate.toFixed(2)}🌿/s${zone ? ' (garden ×2)' : ''}${lush}${t.bloom >= TUNING.restore.maxBloom ? ' · radiant ✦' : t.bloom >= TUNING.restore.fullBloom ? ' · full bloom ✓' : ''}`;
       }
     }
   }
@@ -720,7 +752,7 @@ export class Game {
       case 'solar': {
         const out = s.production.solarOutput(m);
         const boosted = m.boostUntil > s.time;
-        extra = `<p class="stat">⚡ ${out.toFixed(1)} energy/s${boosted ? ' · 🌸 bloom boost!' : ''}${s.production.frenzyActive() ? ' · 🐱 Frenzy ×3' : ''}</p><p>Restore tiles right next to it for a 5 s ×2 boost.</p>${this.upgradeButton('solarArray')}`;
+        extra = `<p class="stat">⚡ ${out.toFixed(1)} energy/s${boosted ? ' · 🌸 bloom boost!' : ''}${s.production.surgeActive() ? ` · 🐱 Solar Surge ×${TUNING.cat.frenzyMult}` : ''}</p><p>Restore tiles right next to it for a 5 s ×2 boost.</p>${this.upgradeButton('solarArray')}`;
         break;
       }
       case 'condenser': {
@@ -875,11 +907,17 @@ export class Game {
       this.camera.shake?.(0.25);
       this.hud.feed(`💥 Mega Pulse: up to ${budget} tiles bloom outward`);
     });
-    b.on('pulse.fired', ({ tileId, overcharged }) => {
-      if (!overcharged) return;
+    b.on('pulse.fired', ({ tileId, extra, overcharged }) => {
       const t = s.grid.byTileId(tileId);
       if (!t) return;
       const p = this.tileVec(t);
+      if (!overcharged) {
+        // Phase 4 E03.2: a restore already rings (tile.restoring); a nurture tap answers with its own quick ring,
+        // and a Wide Pulse adds one ring spanning its whole footprint.
+        if (t.ground === 'restored') this.vfx.ring(p, '#ffe9a0', 0.8, 0.22);
+        else if (extra.length) this.vfx.ring(p, '#c8ffa8', 1.4 + 0.25 * Math.min(8, extra.length), 0.25);
+        return;
+      }
       this.vfx.ring(p, PALETTE.gold, 2.8, 0.8);
       this.tweens.add(0.01, () => {}, { delay: 0.15, done: () => this.vfx.ring(p, '#fff3a0', 2.2, 0.7) });
       this.vfx.burst(p, 30, { up: 3.5, speed: 2.2, size: 0.07 });
@@ -1012,7 +1050,33 @@ export class Game {
       if (reason.includes('💧')) this.hud.flashResource('water', 'short');
       if (reason.includes('🌿')) this.hud.flashResource('biomass', 'short');
     });
+    b.on('frenzy.ready', () => {
+      this.hud.feed('✨ Bloom Frenzy is ready: fire it whenever you like (Q)');
+      this.sfx.powerUp();
+    });
+    b.on('frenzy.started', ({ seconds }) => {
+      document.body.classList.add('frenzy');
+      this.sfx.frenzy = true;
+      this.hud.toast(`✨ BLOOM FRENZY! ${seconds}s<small>Pulse reach +${TUNING.frenzy.pulseTierBonus} tiers · biomass ×${TUNING.frenzy.biomassMult} · drones ×${TUNING.frenzy.droneSpeedMult}</small>`, 'gold', 3);
+      this.sfx.fanfare();
+      const g = this.camera.goalPoint;
+      const c = new pc.Vec3(g.x, g.y, g.z);
+      for (let i = 0; i < 3; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.18, done: () => this.vfx.ring(c, i % 2 ? '#c8ff8a' : PALETTE.gold, 3 + i * 1.5, 0.8) });
+    });
+    b.on('frenzy.ended', () => {
+      document.body.classList.remove('frenzy');
+      this.sfx.frenzy = false;
+      this.hud.feed('🌿 Bloom Frenzy is over: back to normal power');
+    });
+    b.on('milestone.reached', ({ at, credited, next }) => {
+      const icons = { energy: '⚡', water: '💧', biomass: '🌿' } as const;
+      const got = (Object.entries(credited) as [keyof typeof icons, number][]).filter(([, v]) => v >= 1).map(([k, v]) => `+${Math.round(v)}${icons[k]}`).join(' ');
+      this.hud.toast(`🌱 ${at} tiles restored!<small>${got || 'Storage was full'}${next ? ` · next reward at ${next}` : ''}</small>`, 'gold', 2.6);
+      this.sfx.powerUp();
+      this.hud.flashResource('biomass', 'flash');
+    });
     b.on('upgrade.purchased', ({ id, level }) => {
+      if (id === 'droneSpeed') this.drones.restyle();
       const def = UPGRADE_BY_ID[id];
       this.hud.toast(`${def.icon} ${def.name} ${['I', 'II', 'III', 'IV', 'V'][level - 1]}<small>${def.describe(level)}</small>`, 'gold', 2.6);
       this.machines.refreshUpgrades();
@@ -1072,7 +1136,7 @@ export class Game {
       const p = this.cat.targetWorld();
       if (p) this.vfx.burst(p, 6, { up: 1.5, size: 0.04, speed: 0.4 });
     });
-    b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Frenzy ×3 for ${Math.round(seconds)}s`));
+    b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Surge ×${TUNING.cat.frenzyMult} for ${Math.round(seconds)}s`));
     b.on('harvest', () => this.sfx.coin());
     b.on('rooftop.coreReady', () => {
       this.machines.setCoreState('ready');
@@ -1310,7 +1374,7 @@ export class Game {
       if (!this.cinematic) return;
       this.cinematic = false;
       this.hud.cinematic(false);
-      this.hud.toast('🌫️ The fog rolls back!<small>The park now grows +25% biomass. Restore the areas around it — tiles next to clear ground first — and wake their landmarks.</small>', 'gold', 7);
+      this.hud.toast('🌫️ The fog rolls back!<small>The park now grows +25% biomass, and the fountain filled your ✨ Bloom Frenzy: fire it at the fog’s edge. Restore the areas around it and wake their landmarks.</small>', 'gold', 7);
       this.save();
     };
     this.tweens.add(0.01, () => {}, { delay: TUNING.core.sequenceSeconds, done: () => this.cinematicEnd?.() });
@@ -1558,6 +1622,15 @@ export class Game {
   awayFor(seconds: number) {
     if (!(seconds > 0)) return;
     const C = TUNING.catchUp;
+    // Phase 4 E01: time beyond what the live catch-up covers becomes offline progress (reduced, bounded).
+    const beyond = seconds - Math.max(0, C.maxSeconds - this.catchUpDebt);
+    if (beyond > 0) {
+      const r = this.sim.offline.apply(beyond);
+      if (r) {
+        this.hud.toast(offlineToast(r, 'While you were away'), 'gold', 6);
+        this.saveNow();
+      }
+    }
     const was = this.catchUpDebt;
     this.catchUpDebt = Math.min(C.maxSeconds, this.catchUpDebt + seconds);
     if (was < C.toastFrom && this.catchUpDebt >= C.toastFrom) {
@@ -1611,6 +1684,7 @@ export class Game {
     this.drones.update(dt);
     this.cat.update(dt);
     this.butterflies.update(dt);
+    this.birds.update(dt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2);
     this.tileFx.update(dt);
     this.frameNo++;
     this.updateChainPresentation(dt);
@@ -1669,4 +1743,19 @@ export class Game {
       }
     }
   }
+}
+
+/** "While you were away" summary for the offline report (Phase 4 E01). */
+export function offlineToast(r: OfflineReport, title: string): string {
+  const h = Math.floor(r.away / 3600);
+  const m = Math.round((r.away % 3600) / 60);
+  const away = h ? `${h} h ${m} min` : `${m} min`;
+  const icons = { energy: '⚡', water: '💧', biomass: '🌿' } as const;
+  const fmt = (n: number) => (n >= 10000 ? `${Math.round(n / 1000)}k` : String(Math.round(n)));
+  const got = (['energy', 'water', 'biomass'] as const).filter((k) => r.credited[k] >= 1).map((k) => `+${fmt(r.credited[k])}${icons[k]}`);
+  const lost = (['energy', 'water', 'biomass'] as const).filter((k) => r.lost[k] >= 1).map((k) => `${fmt(r.lost[k])}${icons[k]}`);
+  const lines = [`🌙 ${title} (${away})`];
+  const capped = r.away > r.seconds + 1 ? ` · counted up to ${Math.round(r.seconds / 3600)} h` : '';
+  lines.push(`<small>Your garden kept growing at half pace${capped}: ${got.join(' ') || 'nothing new'}${r.droneJobs ? ` · drones restored ${r.restored} and nurtured ${r.grown} tiles` : ''}${lost.length ? ` · ${lost.join(' ')} didn't fit in storage` : ''}</small>`);
+  return lines.join('');
 }

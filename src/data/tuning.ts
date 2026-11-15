@@ -11,11 +11,71 @@ export const TUNING = {
     caps: { energy: 60, water: 40, biomass: 100 },
   },
 
+  /**
+   * Phase 4 E01.3: storage tiers, one per Seed Vault level (tier 0 is the starting store). Cleared city areas
+   * still multiply these (see city.storagePerArea). Every purchase the fountain requires fits in tier 0.
+   */
+  storageTiers: {
+    energy: [60, 150, 400, 1000, 2500],
+    water: [40, 100, 250, 600, 1500],
+    biomass: [100, 250, 600, 1500, 4000],
+  },
+
   // Energy / water income that always exists, so the player can never softlock.
   starterSolarRate: 1, // energy/sec from the pre-placed (damaged) panel
   solarRate: 1.2, // energy/sec from each panel the player builds
   rainBarrelRate: 0.15, // water/sec trickle from the rain barrel
   harvest: { energy: 8, cooldown: 12 },
+
+  /**
+   * Phase 4 E04.2: pulse reach tiers (Pulse Reach levels 0–4). Euclidean radius on the integer grid, so the
+   * footprints are 1, 9, 25, 69 and 161 tiles on open ground (clipped to eligible tiles). An Overcharged pulse
+   * reaches one tier further (at least Bloom).
+   */
+  pulseTiers: [
+    { name: 'Seed', radius: 0 },
+    { name: 'Sprout', radius: 1.5 },
+    { name: 'Bloom', radius: 2.9 },
+    { name: 'Grove', radius: 4.5 },
+    { name: 'Radiant', radius: 7.1 },
+  ],
+
+  /**
+   * Phase 4 E04.3: rewarded milestones for restored park tiles (unique tiles, not bloom stages), paid once each.
+   * The fountain still needs 130; these fill the gap on the way there.
+   */
+  parkMilestones: [
+    { at: 5, reward: { biomass: 10 } },
+    { at: 10, reward: { biomass: 15, water: 10 } },
+    { at: 20, reward: { biomass: 25, energy: 20 } },
+    { at: 35, reward: { biomass: 40, water: 15 } },
+    { at: 50, reward: { biomass: 60, energy: 30 } },
+    { at: 75, reward: { biomass: 80, water: 25 } },
+    { at: 100, reward: { biomass: 100, energy: 40 } },
+    { at: 130, reward: { biomass: 120, energy: 40 } },
+  ] as { at: number; reward: Partial<Record<'energy' | 'water' | 'biomass', number>> }[],
+
+  /**
+   * Phase 4 E06: Bloom Frenzy. Charge is earned by play (taps count most); first Frenzy aimed at about minute
+   * 4–6 of active play. While it runs: pulse reach +2 tiers (at least Bloom), biomass ×10, drones ×3 faster.
+   */
+  frenzy: {
+    seconds: 15,
+    biomassMult: 10,
+    droneSpeedMult: 3,
+    pulseTierBonus: 2,
+    charge: {
+      restoreTap: 0.9, // a tap that restores a dead tile
+      perFootprintTile: 0.05, // …plus a little per extra tile its reach restores
+      footprintMax: 1.5,
+      nurtureTap: 0.3,
+      autoRestore: 0.05, // a tile restored by drones, machines or chains
+      perChainStep: 0.4, // per activation beyond the first, when a chain ends…
+      chainMax: 8, // …capped per chain
+    },
+    /** Income lost to full storage: charge per unit, capped per second (E01.5). */
+    overflow: { perUnit: { energy: 0.1, water: 0.1, biomass: 0.05 }, maxPerSecond: 0.15 },
+  },
 
   pulse: {
     polluted: { energy: 6, water: 1 },
@@ -26,15 +86,20 @@ export const TUNING = {
   restore: {
     instantBiomass: 1.5,
     biomassPerSec: 0.04, // per restored tile (bloom level 1)
-    bloomRateMult: [0, 1, 2, 3], // biomass multiplier per bloom level
+    // Phase 4 E05: production weight per stage (0 barren, 1 restored, 2 blooming, 3 thriving, 4 radiant)
+    bloomRateMult: [0, 1, 2, 4, 8],
     nurture: [
       { energy: 0, water: 0 },
       { energy: 0, water: 0 },
       { energy: 8, water: 2 }, // → level 2
       { energy: 12, water: 3 }, // → level 3
+      { energy: 18, water: 5 }, // → level 4 (Radiant, Phase 4 E05)
     ],
     nurtureBiomass: 1,
-    maxBloom: 3,
+    /** Phase 4 E05: the last stage (Radiant). */
+    maxBloom: 4,
+    /** "Full bloom" (Thriving): what the fountain and area goals count. Radiant counts too. */
+    fullBloom: 3,
     seep: 25, // pollution removed from orthogonal neighbours when a tile restores
     pollutionMin: 55,
     pollutionMax: 100,
@@ -71,7 +136,7 @@ export const TUNING = {
   motherTree: { radius: 2, threshold: 12 },
 
   drone: {
-    hubRadius: 3,
+    hubRadius: 6, // Phase 4 E01: was 3; a lone hub ran out of work within a minute (see docs/PHASE_4_AUDIT.md)
     cycleSeconds: 4,
     flySpeed: 3, // tiles/sec
     workSeconds: 0.5,
@@ -82,20 +147,32 @@ export const TUNING = {
     frontierBonus: 12,
     focusMult: 6, // "Focus the frontier": the fog edge counts this many times more
     bloomBonus: 60, // "Keep this area blooming": its green tiles beat restoring up to ~8 tiles further away
+    /**
+     * Phase 4 E01: the old drone that lives by the park's old solar lamp from the very start. Slow, short-ranged
+     * and free (sun-powered): it restores and nurtures nearby tiles on its own, but tapping always outpaces it.
+     * Upgrades don't affect it.
+     */
+    /**
+     * Phase 4 E01: drones never spend a store below this share of its cap, so the player's own taps always have
+     * something left (without it, drones drained city water and slowed the scripted player by a third). After a
+     * big purchase drones wait for the stores to refill past it.
+     */
+    reserve: 0.25,
+    old: { enabled: true, radius: 6, cycleSeconds: 7, flySpeed: 1.5, workSeconds: 0.8 },
   },
 
   machineCostGrowth: 1.5, // each extra copy of a machine costs this much more
 
   cat: {
-    firstMinTime: 240, // first cat: 4–6 minutes of active play, once the player knows the grid
+    firstMinTime: 180, // Phase 4 E08.1: first cat at about minute 3–4 (was 4–6), once the player knows the grid
     firstMinRestored: 10,
-    firstForceTime: 360,
-    laterMin: 240, // later cats: every 4–8 minutes of active play
-    laterMax: 480,
+    firstForceTime: 240,
+    laterMin: 180, // Phase 4 E08.1: later cats every 3–5 minutes of active play (was 4–8)
+    laterMax: 300,
     hiddenBonusCapSec: 180, // reward grows a little with hidden time, up to this
     hiddenBonusMax: 0.5,
-    harvestSecondsMin: 60, // Lucky Harvest: 60–120 s of current biomass production
-    harvestSecondsMax: 120,
+    harvestSecondsMin: 30, // Phase 4 E08.4: Lucky Harvest: 30–60 s of sustained biomass production (no temporary boosts)
+    harvestSecondsMax: 60,
     harvestMin: 15,
     frenzySeconds: 45,
     frenzyMult: 3,
@@ -114,12 +191,26 @@ export const TUNING = {
   core: {
     restoredTiles: 42,
     fullBloomTiles: 24,
-    cost: { energy: 60, biomass: 170 },
+    // Phase 4: biomass only (was 60 ⚡ / 170 🌿). Taps and drones always find something to spend energy on
+    // (nurturing up to Radiant), so an energy price could never fill; biomass is never spent automatically.
+    cost: { biomass: 100 } as { energy?: number; biomass: number },
     resonanceBiomassMult: 1.25,
     sequenceSeconds: 7,
   },
 
   autosaveSeconds: 10,
+
+  /**
+   * Phase 4 E01: progress while the game is closed (or a tab hidden for longer than catchUp.maxSeconds).
+   * Only steady production and drone work, at a reduced rate, for a bounded time. Landmarks, cats, Frenzy,
+   * chains, milestones and other one-time rewards never happen while away. Nothing is lost by staying away longer.
+   */
+  offline: {
+    minSeconds: 60, // shorter absences earn nothing extra
+    maxSeconds: 4 * 3600,
+    rate: 0.5, // share of the sustained rate (no temporary boosts)
+    maxDroneJobs: 300, // drone jobs credited per absence, across all drones
+  },
 
   /** The starting park's Core (the fountain): replaces TUNING.core when the game starts in the city. */
   /** Mega Pulse: manual taps charge it; the next tap after it is full releases a city-scale chain. */

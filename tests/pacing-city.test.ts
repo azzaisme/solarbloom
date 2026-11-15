@@ -11,7 +11,7 @@ import { Sim } from '../src/gameplay/Sim';
  * other, pulses at synergy spots), then area after area: it works the area the objective points at,
  * pulses tiles at the fog's edge, builds a few machines there and wakes each landmark when ready.
  */
-export function playCity(seed: number, actionEvery = 3, minutes = 60, setup?: (sim: Sim) => void) {
+export async function playCity(seed: number, actionEvery = 3, minutes = 60, setup?: (sim: Sim) => void) {
   const sim = new Sim(createInitialState(seed));
   setup?.(sim);
   sim.cat.anchorView = () => 'visible';
@@ -66,6 +66,8 @@ export function playCity(seed: number, actionEvery = 3, minutes = 60, setup?: (s
       if (c && sim.time - c.spawnedAt > 40) sim.cat.claim();
     }
     sim.tick();
+    // Yield now and then: a long synchronous run starves the Vitest worker's RPC (CI "Timeout calling onTaskUpdate").
+    if (i % 3000 === 2999) await new Promise((r) => setTimeout(r, 0));
   }
   return { sim, clears, fountain: sim.state.stats.firsts.core, stuck: sim.state.stats.stuckSeconds, maxCombo: sim.state.stats.maxCombo };
 }
@@ -73,9 +75,11 @@ export function playCity(seed: number, actionEvery = 3, minutes = 60, setup?: (s
 const fmt = (s?: number) => (s === undefined || !isFinite(s) ? '—' : `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, '0')}`);
 
 describe('pacing in the endless city (scripted player)', () => {
-  it('after the fountain, keeps clearing areas at a steady pace with no dead time', { timeout: 120000 }, () => {
-    for (const seed of [7, 21]) {
-      const r = playCity(seed, 3, 60);
+  // One test per seed: a single synchronous test over ~60 s starves the Vitest worker's RPC (CI timeout).
+  for (const seed of [7, 21])
+  it(`after the fountain, keeps clearing areas at a steady pace with no dead time (seed ${seed})`, { timeout: 120000 }, async () => {
+    {
+      const r = await playCity(seed, 3, 60);
       const gaps = r.clears.map((t, i) => t - (i ? r.clears[i - 1] : r.fountain ?? 0));
       const avg = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : Infinity;
       // eslint-disable-next-line no-console

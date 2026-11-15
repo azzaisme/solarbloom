@@ -73,6 +73,10 @@ export class Advisor {
         const lm = s.areas.landmark(PARK);
         if (lm) return { text: 'The fountain is ready. Wake it to roll back the fog.', label: '✨ Wake the fountain', action: { kind: 'wake', machineId: lm.id } };
       }
+      // Phase 4 E01: ready but short (drones keep spending): say what it's waiting for instead of something else.
+      if (!s.state.progression.coreActivated && s.progression.coreReady() && s.econ.shortfall(TUNING.core.cost)) {
+        return { text: `The fountain is ready. It needs ${formatCost(TUNING.core.cost)} to wake: let your stores fill up.`, label: '⛲ Filling up…', action: { kind: 'wait', seconds: 5 } };
+      }
       for (const id of s.areas.revealed()) {
         if (id === PARK || s.areas.fog(id) === 'cleared' || !s.areas.ready(id)) continue;
         const lm = s.areas.landmark(id);
@@ -94,6 +98,18 @@ export class Advisor {
     const spec = specGoal ? this.specialtyStep(specGoal) : undefined;
     // Saving up only once the restore share is met (until then, restoring is progress too).
     if (spec && (spec.action.kind !== 'wait' || s.areas.counts(specGoal!).restored >= s.areas.need(specGoal!))) return spec;
+    // 3c. Before the fountain, once enough tiles are restored: grow green tiles to full bloom (Phase 4 E05).
+    if (city && !s.state.progression.coreActivated) {
+      const g = TUNING.park;
+      const restored = s.progression.restoredCount('home');
+      if (restored >= g.restoredTiles && s.progression.fullBloomCount('home') < g.fullBloomTiles) {
+        const t = s.areas
+          .tiles(PARK)
+          .filter((x) => x.ground === 'restored' && !x.occupantId && x.bloom < TUNING.restore.fullBloom && s.restoration.checkPulse(x).ok)
+          .sort((a, b) => b.bloom - a.bloom || a.z - b.z || a.x - b.x)[0];
+        if (t) return { text: 'The fountain wants full-bloom gardens: tap green tiles to grow them.', label: '🌸 Show me where', action: { kind: 'focus', x: t.x, z: t.z } };
+      }
+    }
     // 4. Push the fog back: an affordable tile at the edge of the current goal (or anywhere in the park).
     const goal = city && s.state.progression.coreActivated ? s.areas.nextGoal() : undefined;
     const edge = this.edgeTile(goal) ?? (city ? this.parkTile() : undefined);
@@ -132,7 +148,8 @@ export class Advisor {
       if (!spot) return undefined;
       // A spot is ready but the purchase isn't: save up (resources always refill), unless storage can't hold it.
       if (s.econ.shortfall(cost)) {
-        if ((['energy', 'water', 'biomass'] as const).some((k) => (cost[k] ?? 0) > s.state.caps[k])) return undefined;
+        // Phase 4 E01: more than storage can hold → say so and point at the Seed Vault, if it can still grow.
+        if ((['energy', 'water', 'biomass'] as const).some((k) => (cost[k] ?? 0) > s.state.caps[k])) return this.storageStep(def.name);
         return { text: `${why} Save up for a ${def.name} (${formatCost(cost)}).`, label: `${def.icon} Saving up…`, action: { kind: 'wait', seconds: 5 } };
       }
       return { text: `${why} ${what}`, label: `${def.icon} Build a ${def.name}`, action: { kind: 'build', type, x: spot.x, z: spot.z } };
@@ -144,7 +161,7 @@ export class Advisor {
     const beside = (m: { x: number; z: number; size: number }, r = 1) => s.grid.tilesNear({ roofId: GROUND, x: m.x, z: m.z, size: m.size }, r);
     switch (sp.kind) {
       case 'fullBloom':
-        return focus(tiles.filter((t) => growable(t) && ok(t)).sort((x, y) => y.bloom - x.bloom)[0], 'Pulse a green tile to grow it.');
+        return focus(tiles.filter((t) => growable(t) && t.bloom < TUNING.restore.fullBloom && ok(t)).sort((x, y) => y.bloom - x.bloom)[0], 'Pulse a green tile to grow it.');
       case 'roofBloom': {
         const roof = s.clusters.roof(id);
         if (!roof) return undefined;
@@ -225,15 +242,33 @@ export class Advisor {
     }
   }
 
+  /** A purchase is bigger than storage: the Seed Vault's next tier, if there is one (Phase 4 E01). */
+  storageStep(what: string): Suggestion | undefined {
+    const vault = this.sim.upgrades.all().find((u) => u.id === 'seedVault');
+    if (!vault || this.sim.upgrades.level(vault.id) >= vault.maxLevel) return undefined;
+    return { text: `A ${what} needs more storage than you have. Upgrade the Seed Vault to hold more.`, label: '🏺 Upgrades', action: { kind: 'upgrades' } };
+  }
+
   /** The first machine the fountain still needs that is affordable, at a valid spot nearest the fountain. */
   private neededBuild(): Suggestion | undefined {
     const s = this.sim;
     const order: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree'];
     const [fx, fz] = s.areas.info(PARK).landmark;
     const tiles = s.areas.tiles(PARK).sort((a, b) => Math.abs(a.x - fx) + Math.abs(a.z - fz) - (Math.abs(b.x - fx) + Math.abs(b.z - fz)) || a.z - b.z || a.x - b.x);
+    const rates = s.production.rates();
     for (const type of order) {
       if (s.state.machines.some((m) => m.type === type && !m.starter)) continue;
-      if (s.econ.shortfall(s.build.cost(type))) continue;
+      const cost = s.build.cost(type);
+      if (s.econ.shortfall(cost)) {
+        // Phase 4: short only of things that refill on their own (and fit in storage): save up instead of
+        // tapping it all away. Otherwise keep restoring (biomass only comes from restored tiles).
+        const short = (['energy', 'water', 'biomass'] as const).filter((k) => (cost[k] ?? 0) > s.econ.get(k));
+        if (s.build.isUnlocked(type) && short.every((k) => rates[k] > 0 && (cost[k] ?? 0) <= s.econ.cap(k))) {
+          const def = MACHINES[type];
+          return { text: `The fountain needs a ${def.name}: let your stores fill up (${formatCost(cost)}).`, label: `${def.icon} Saving up…`, action: { kind: 'wait', seconds: 5 } };
+        }
+        continue;
+      }
       for (const t of tiles) {
         if (!s.build.check(type, GROUND, t.x, t.z).ok) continue;
         const def = MACHINES[type];

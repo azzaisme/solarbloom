@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
+
+// Saves stamp the wall clock (Phase 4 offline progress); fix it so saves compare byte for byte.
+SaveService.clock = () => 0;
 import { CHUNK } from '../src/core/Generation';
 import { GROUND } from '../src/core/GameState';
 import { packChunk } from '../src/core/TilePack';

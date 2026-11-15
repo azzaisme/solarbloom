@@ -90,7 +90,7 @@ describe('pacing in the city park (scripted player)', () => {
       );
       expect(r.core).toBeGreaterThan(0);
       expect(r.core).toBeLessThan(10 * 60); // the Round 2 window for the bot (people take about twice as long)
-      expect(r.core).toBeGreaterThan(5 * 60);
+      expect(r.core).toBeGreaterThan(3 * 60); // Phase 4: a fast first climax by choice (people take ~1.5–2× the bot)
       expect(r.firsts.condenser).toBeLessThan(3 * 60);
       expect(r.firsts.cat).toBeDefined();
       expect(r.stuck).toBeLessThan(90);
