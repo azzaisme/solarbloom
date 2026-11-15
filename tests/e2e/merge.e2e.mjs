@@ -61,6 +61,9 @@ try {
     return [p.x, p.y];
   }, [x, z]);
   const tap = async (x, z) => {
+    // Drones have a generous tap radius (tapping one selects its hub): move them out of the way first.
+    await page.evaluate(() => { for (const d of window.solarbloom.sim.state.drones) { d.px = -40; d.pz = -40; d.mode = 'cooldown'; d.timer = 30; } });
+    await page.waitForFunction(([x, z]) => { const g = window.solarbloom; return g.sim.state.drones.every((d) => { const p = g.drones.worldPos(d.id); return !p || Math.hypot(p.x - x, p.z - z) > 3; }); }, [x, z], { timeout: 15000 });
     const [sx, sy] = await screenOf(x, z);
     await page.mouse.click(sx, sy);
     await page.waitForTimeout(300);
