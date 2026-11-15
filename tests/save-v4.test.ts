@@ -1,3 +1,4 @@
+import { toNum } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 
@@ -141,13 +142,13 @@ describe('save v4: lazy city chunks keep producing', () => {
       }
     }
     sim.production.markDirty();
-    const before = sim.production.rates().biomass;
+    const before = toNum(sim.production.rates().biomass);
     const copy = new Sim(saver.deserialize(saver.serialize(sim.state))!);
     expect(copy.grid.loadedChunks(G).length).toBeLessThan(sim.grid.loadedChunks(G).length); // lazy
-    const est = copy.production.rates().biomass;
+    const est = toNum(copy.production.rates().biomass);
     expect(est).toBeGreaterThan(before * 0.9);
     expect(est).toBeLessThan(before * 1.1);
     for (let cx = 2; cx < 6; cx++) copy.grid.chunkAt(G, cx, 3);
-    expect(copy.production.rates().biomass).toBeCloseTo(before, 6);
+    expect(toNum(copy.production.rates().biomass)).toBeCloseTo(before, 6);
   });
 });

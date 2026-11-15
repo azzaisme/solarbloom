@@ -1,3 +1,4 @@
+import { big, toNum } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
@@ -9,8 +10,8 @@ import { runBot } from './bots';
 function charged(seed = 3) {
   const sim = new Sim(createInitialState(seed));
   const s = sim.state;
-  s.caps.energy = s.caps.water = s.caps.biomass = 5000;
-  s.resources.energy = s.resources.water = 2000;
+  s.caps.energy = big(5000); s.caps.water = big(5000);
+  s.resources.energy = big(2000); s.resources.water = big(2000);
   for (const t of sim.areas.tiles(PARK).filter((x) => sim.restoration.isEligible(x)).slice(0, 40)) sim.restoration.complete(t, 'pulse');
   sim.advance(1);
   s.frenzy = { charge: 100 };
@@ -35,11 +36,11 @@ describe('Phase 4 E06: Bloom Frenzy', () => {
 
   it('boosts for exactly its duration, then everything is back to normal; no charge while it runs', () => {
     const sim = charged();
-    const biomass0 = sim.production.rates().biomass;
+    const biomass0 = toNum(sim.production.rates().biomass);
     const radius0 = sim.restoration.pulseRadius();
     expect(sim.frenzy.activate()).toBe(true);
     expect(sim.frenzy.activate()).toBe(false); // a second tap does nothing
-    expect(sim.production.rates().biomass).toBeCloseTo(biomass0 * TUNING.frenzy.biomassMult, 6);
+    expect(toNum(sim.production.rates().biomass)).toBeCloseTo(biomass0 * TUNING.frenzy.biomassMult, 6);
     expect(sim.restoration.pulseRadius()).toBeGreaterThan(radius0);
     expect(sim.mods.droneSpeedMult()).toBe(TUNING.frenzy.droneSpeedMult);
     const t = sim.areas.tiles(PARK).find((x) => sim.restoration.checkPulse(x).ok && x.ground !== 'restored')!;
@@ -51,7 +52,7 @@ describe('Phase 4 E06: Bloom Frenzy', () => {
     expect(sim.frenzy.active()).toBe(false);
     expect(sim.mods.droneSpeedMult()).toBe(1);
     expect(sim.restoration.pulseRadius()).toBe(radius0);
-    expect(sim.production.rates(true).biomass).toBeCloseTo(sim.production.rates().biomass, 6);
+    expect(toNum(sim.production.rates(true).biomass)).toBeCloseTo(toNum(sim.production.rates().biomass), 6);
   });
 
   it('survives save/load mid-Frenzy with the same time left, and pausing (no ticks) freezes it', () => {
@@ -77,7 +78,7 @@ describe('Phase 4 E06: Bloom Frenzy', () => {
     expect(sim.mods.solarMult()).toBe(TUNING.cat.frenzyMult);
     expect(sim.mods.biomassMult()).toBe(TUNING.frenzy.biomassMult);
     const fresh = new Sim(createInitialState(4));
-    fresh.state.resources.energy = fresh.state.caps.energy;
+    fresh.state.resources.energy = big(fresh.state.caps.energy);
     fresh.offline.apply(3600);
     expect(fresh.state.frenzy?.charge ?? 0).toBe(0);
   });
@@ -85,11 +86,14 @@ describe('Phase 4 E06: Bloom Frenzy', () => {
   it('overflow charges it, but at most 0.15 per second', () => {
     const sim = new Sim(createInitialState(6));
     const s = sim.state;
-    s.resources.energy = s.caps.energy;
-    s.resources.water = s.caps.water;
-    s.resources.biomass = s.caps.biomass;
+    s.resources.energy = big(s.caps.energy);
+    s.resources.water = big(s.caps.water);
+    // The old drone keeps working meanwhile: its restores and growth charge the meter separately.
+    let auto = 0;
+    sim.bus.on('tile.restored', ({ source }) => source !== 'pulse' && source !== 'broad' && (auto += TUNING.frenzy.charge.autoRestore));
+    sim.bus.on('tile.nurtured', ({ auto: a }) => a && (auto += TUNING.frenzy.charge.autoNurture));
     sim.advance(20);
-    const c = s.frenzy?.charge ?? 0;
+    const c = (s.frenzy?.charge ?? 0) - auto;
     expect(c).toBeGreaterThan(0);
     expect(c).toBeLessThanOrEqual(20 * TUNING.frenzy.overflow.maxPerSecond + 1e-6);
   });
@@ -99,14 +103,13 @@ describe('Phase 4 E07: automation', () => {
   it('Drone Squad and Drone Sweep never restore a tile twice, and drones stop and resume cleanly', () => {
     const sim = new Sim(createInitialState(8));
     const s = sim.state;
-    s.caps.energy = s.caps.water = s.caps.biomass = 1e5;
-    s.resources.energy = s.resources.water = s.resources.biomass = 1e5;
-    s.upgrades.secondDrone = 2;
-    s.upgrades.droneSweep = 2;
-    s.upgrades.droneSpeed = 3;
+    s.caps.energy = big(1e5); s.caps.water = big(1e5);
+    s.resources.energy = big(1e5); s.resources.water = big(1e5); s.resources.biomass = big(1e5);
     const spot = sim.areas.tiles(PARK).find((t) => sim.grid.footprint('g', t.x, t.z, 2).every((c) => c && !c.blocked && !c.occupantId && sim.restoration.isEligible(c)))!;
     for (const c of sim.grid.footprint('g', spot.x, spot.z, 2)) sim.restoration.complete(c!, 'pulse');
-    expect(sim.build.place('droneHub', 'g', spot.x, spot.z)).toBeTruthy();
+    const hub = sim.build.place('droneHub', 'g', spot.x, spot.z)!;
+    expect(hub).toBeTruthy();
+    hub.upg = { secondDrone: 2, droneSweep: 2, droneSpeed: 3 }; // Phase 5 E12: per-hub upgrades
     const restored = new Map<string, number>();
     sim.bus.on('tile.restored', ({ tile }) => restored.set(tile.id, (restored.get(tile.id) ?? 0) + 1));
     sim.advance(180);
@@ -117,23 +120,21 @@ describe('Phase 4 E07: automation', () => {
 });
 
 describe('Phase 4 E08: Lucky Cat rewards', () => {
-  it('a Lucky Harvest is the same with or without a Frenzy running (sustained income), and says what did not fit', () => {
+  it('a Lucky Harvest is the same with or without a Frenzy running (sustained income), and always lands whole', () => {
     const run = (frenzy: boolean) => {
       const sim = charged(12);
       sim.state.cat.found = 0; // the first cat is always a Lucky Harvest
       if (frenzy) sim.frenzy.activate();
       sim.cat.spawn();
-      const b0 = sim.state.resources.biomass;
+      const b0 = toNum(sim.state.resources.biomass);
       const r = sim.cat.claim()!;
-      return { got: sim.state.resources.biomass - b0, summary: r.summary };
+      return { got: toNum(sim.state.resources.biomass) - b0, summary: r.summary };
     };
     const a = run(false);
     const b = run(true);
     expect(b.got).toBeCloseTo(a.got, 6);
-    const tight = charged(12);
-    tight.state.caps.biomass = tight.state.resources.biomass + 1;
-    tight.state.cat.found = 0;
-    tight.cat.spawn();
-    expect(tight.cat.claim()!.summary).toMatch(/didn't fit/);
+    // Phase 5 E12: biomass has no cap, so nothing is ever lost from a harvest.
+    expect(a.got).toBeGreaterThan(0);
+    expect(a.summary).not.toMatch(/didn't fit/);
   });
 });

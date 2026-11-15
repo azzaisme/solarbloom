@@ -3,7 +3,8 @@ import { chunkKey, distToFootprint, type Chunk } from '../core/Grid';
 import { CHUNK } from '../core/Hash';
 import { bloomCounts } from '../core/TilePack';
 import { isRestorable } from '../core/GameState';
-import type { MachineData, Resources, TileData } from '../core/types';
+import type { MachineData, Rates, TileData } from '../core/types';
+import { big } from '../core/Big';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
@@ -63,7 +64,7 @@ export class ProductionSystem {
    * the chunks around it (a full re-sum of a 1,000-area city takes hundreds of ms).
    */
   markNear(roofId: string, x: number, z: number, size = 1) {
-    const r = this.sim.upgrades.pollinatorReach + 1;
+    const r = this.sim.upgrades.maxPollinatorReach + 1;
     for (let cz = Math.floor((z - r) / CHUNK); cz <= Math.floor((z + size + r) / CHUNK); cz++)
       for (let cx = Math.floor((x - r) / CHUNK); cx <= Math.floor((x + size + r) / CHUNK); cx++) this.dirtyChunks.add(chunkKey(roofId, cx, cz));
   }
@@ -90,7 +91,7 @@ export class ProductionSystem {
   /** `sustained`: without temporary boosts (bloom boosts, Solar Surge), for offline progress and cat rewards. */
   solarOutput(m: MachineData, sustained = false, boost = sustained ? 1 : this.sim.mods.solarMult()): number {
     const t = this.sim.time;
-    let v = (m.starter ? TUNING.starterSolarRate : TUNING.solarRate) * this.sim.upgrades.solarMult;
+    let v = (m.starter ? TUNING.starterSolarRate : TUNING.solarRate) * this.sim.upgrades.solarMult(m);
     if (sustained) return v;
     if (m.boostUntil > t) v *= TUNING.solarBloomBoost.mult;
     v *= boost; // Solar Surge (composed centrally, Phase 4 E06.6; looked up once per rates() call)
@@ -99,8 +100,11 @@ export class ProductionSystem {
 
   /** True if the tile lies inside any pollinator's zone. */
   inPollinatorZone(t: TileData): boolean {
-    const reach = this.sim.upgrades.pollinatorReach;
-    return this.sim.grid.machinesNear(t.roofId, t.x, t.z, reach).some((m) => m.type === 'pollinator');
+    // Phase 5 E12: each garden has its own reach (Pollinator Reach is bought per garden).
+    const u = this.sim.upgrades;
+    return this.sim.grid
+      .machinesNear(t.roofId, t.x, t.z, u.maxPollinatorReach)
+      .some((m) => m.type === 'pollinator' && distToFootprint(t.x, t.z, m.x, m.z, m.size) <= u.pollinatorReach(m));
   }
 
   tileBiomassRate(t: TileData): number {
@@ -117,7 +121,7 @@ export class ProductionSystem {
    * Income per second. `sustained` leaves out temporary solar boosts (Phase 4 E01: offline progress). Biomass
    * from briefly lush tiles is still counted (it lasts 25 s and is a small share).
    */
-  rates(sustained = false): Resources {
+  rates(sustained = false): Rates {
     const grid = this.sim.grid;
     if (this.dirty) {
       this.dirty = false;
@@ -162,7 +166,8 @@ export class ProductionSystem {
     const water = TUNING.rainBarrelRate + bonus.water + sums.condensers;
     // Phase 4 E06: temporary biomass boosts (Bloom Frenzy) apply to the total, never to the sustained rate.
     const bm = sustained ? 1 : this.sim.mods.biomassMult();
-    return { energy, water, biomass: (this.biomassRate + bonus.biomass) * bm };
+    // Phase 5 E12: per-tile and per-machine coefficients are plain numbers; the totals are big numbers.
+    return { energy: big(energy), water: big(water), biomass: big(this.biomassRate + bonus.biomass).mul(bm) };
   }
 
   /** Solar panels in a bloom boost (kept small: boosts last seconds). */
@@ -176,7 +181,7 @@ export class ProductionSystem {
 
   private machineSums() {
     const ms = this.sim.state.machines;
-    const key = `${ms.length}|${this.sim.upgrades.solarMult}`;
+    const key = `${ms.length}|${this.sim.upgrades.version}`;
     if (this.sums?.key === key) return this.sums;
     let solar = 0;
     let condensers = 0;
@@ -195,7 +200,9 @@ export class ProductionSystem {
     for (const [key, at] of this.lushAt) if (this.sim.time >= at) this.dirtyChunks.add(key);
     const r = this.rates();
     for (const k of KINDS) {
-      this.sim.econ.add(k, r[k] * dt);
+      const amt = r[k].mul(dt);
+      if (k !== 'biomass') this.sim.frenzy.onProduced(k, amt);
+      this.sim.econ.add(k, amt);
       const full = this.sim.econ.isFull(k);
       if (full && !this.wasFull[k]) this.sim.bus.emit('resource.full', { kind: k });
       this.wasFull[k] = full;
@@ -206,10 +213,10 @@ export class ProductionSystem {
   /** Water Condensers fill a charge meter; when full they water the dry soil beside them (a chain). */
   private tickCondensers(dt: number) {
     const s = this.sim;
-    const rate = TUNING.condenser.chargePerSec * (1 + 0.25 * s.upgrades.waterBloom);
     const R = TUNING.neighbourhood.reservoir;
     const num = (id: string) => Number(id.slice(1)) || 0;
     for (const m of s.machinesOfType('condenser')) {
+      const rate = TUNING.condenser.chargePerSec * (1 + 0.25 * s.upgrades.waterBloom(m));
       const was = m.charge ?? 0;
       m.charge = Math.min(TUNING.condenser.threshold, was + rate * dt);
       if (m.charge < TUNING.condenser.threshold) continue;

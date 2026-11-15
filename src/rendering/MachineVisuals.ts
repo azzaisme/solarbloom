@@ -506,7 +506,9 @@ export class MachineVisuals {
    */
   applyUpgrades(v: MachineView) {
     const u = this.sim.upgrades;
-    const L = (id: string) => u.level(id);
+    // Phase 5 E12: machine upgrades are per machine, so each machine shows its own levels (Rich Soil stays global).
+    // Silhouette extras are capped so long-tail levels never pile up meshes.
+    const L = (id: string) => Math.min(6, id === 'richSoil' ? u.level(id) : u.levelOf(v.m, id));
     const key =
       v.m.type === 'solar' ? `${L('solarArray')}`
       : v.m.type === 'droneHub' ? `${L('droneSpeed')}|${L('secondDrone')}|${L('droneSweep')}|${L('droneRadius')}`
@@ -739,7 +741,7 @@ export class MachineVisuals {
           v.bob.forEach((f, i) => f.setLocalEulerAngles(Math.sin(t * 1.8 + i) * 6, 0, Math.cos(t * 1.4 + i) * 6));
           v.butterflies!.forEach((bf, i) => {
             const a = t * (0.9 + i * 0.3) + i * 3;
-            const r = 0.55 + Math.sin(t * 0.7 + i) * 0.25 + this.sim.upgrades.pollinatorReach * 0.15;
+            const r = 0.55 + Math.sin(t * 0.7 + i) * 0.25 + this.sim.upgrades.pollinatorReach(v.m) * 0.15;
             bf.setLocalPosition(Math.cos(a) * r, 0.65 + Math.sin(t * 2.3 + i) * 0.15, Math.sin(a) * r);
             bf.setLocalEulerAngles(0, (-a * 180) / Math.PI, 0);
             const flap = Math.sin(t * 22 + i) * 55;

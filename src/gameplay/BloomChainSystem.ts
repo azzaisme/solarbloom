@@ -1,3 +1,4 @@
+import { big, type Big } from '../core/Big';
 import { GROUND } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
 import type { MachineData, RestoreSource, TileData } from '../core/types';
@@ -34,7 +35,8 @@ export interface ChainEvent {
   /** RELAY: the rooftop the pulse arrives on. */
   roofId?: string;
   at: number;
-  amount?: number;
+  /** Presentation only: a resource amount (Decimal) or a count of targets / charge. */
+  amount?: Big | number;
 }
 
 interface ChainRun {
@@ -65,8 +67,8 @@ interface ChainRun {
   /** who set it off: a manual action, or automation (drones, condensers, timers, rewards) */
   starter: ChainStarter;
   announced: boolean;
-  biomass: number;
-  energy: number;
+  biomass: Big;
+  energy: Big;
   fastForward: boolean;
 }
 
@@ -199,8 +201,8 @@ export class BloomChainSystem {
       mode,
       budget,
       announced: false,
-      biomass: 0,
-      energy: 0,
+      biomass: big(0),
+      energy: big(0),
       fastForward: false,
     };
     this.runs.set(run.id, run);
@@ -210,7 +212,7 @@ export class BloomChainSystem {
   /** The furthest any machine reacts to a tile change (machine lookups only need to look this far). */
   synergyReach(): number {
     const u = this.sim.upgrades;
-    return Math.max(1, u.pollinatorReach, u.treeRadius, TUNING.neighbourhood.canopy.chargeRadius, TUNING.neighbourhood.reservoir.radius);
+    return Math.max(1, u.maxPollinatorReach, TUNING.motherTree.radius + u.maxLevelOf('treeResonance'), TUNING.neighbourhood.canopy.chargeRadius, TUNING.neighbourhood.reservoir.radius);
   }
 
   /** Event cap per chain: bigger in the endless city. */
@@ -254,9 +256,9 @@ export class BloomChainSystem {
     return garden.roofId === tree.roofId && distToFootprint(garden.x, garden.z, tree.x, tree.z, tree.size) <= this.canopyBurstRadius(tree);
   }
 
-  addReward(chainId: number, biomass: number) {
+  addReward(chainId: number, biomass: Big) {
     const run = this.runs.get(chainId);
-    if (run) run.biomass += biomass;
+    if (run) run.biomass = run.biomass.add(biomass);
   }
 
   // ───────────── entry points (called by RestorationSystem and machines) ─────────────
@@ -285,7 +287,7 @@ export class BloomChainSystem {
   /** Water Condenser at full charge: waters the dry soil beside it. Returns false if there is nothing to water. */
   startWater(m: MachineData): boolean {
     const s = this.sim;
-    const extra = s.upgrades.waterBloom;
+    const extra = s.upgrades.waterBloom(m);
     const near = s.grid.tilesNear(m, TUNING.condenser.radius);
     const dry = near.filter((t) => t.ground === 'prepared' && s.restoration.isEligible(t, false));
     const growable = extra > 0 ? near.filter((t) => t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom) : [];
@@ -428,14 +430,14 @@ export class BloomChainSystem {
       if (m.type === 'solar' && d === 1 && !run.solarFired.has(m.id)) {
         run.solarFired.add(m.id);
         this.enqueue(run, { type: 'PRODUCE_ENERGY', source: tile.id, target: m.id, cause: 'solar', depth: depth + 1 });
-      } else if (m.type === 'pollinator' && d >= 1 && d <= s.upgrades.pollinatorReach) {
+      } else if (m.type === 'pollinator' && d >= 1 && d <= s.upgrades.pollinatorReach(m)) {
         // Newly restored *or* newly grown plants pollinate (limited per garden per chain).
         const used = run.pollinatorUses.get(m.id) ?? 0;
         if (used === 0) {
           const b = this.consumeOvercharge(m);
           if (b) run.pollinatorBonus.set(m.id, b);
         }
-        if (used >= TUNING.pollinator.triggersPerChain + (run.pollinatorBonus.get(m.id) ?? 0)) continue;
+        if (used >= s.upgrades.pollinatorTriggers + (run.pollinatorBonus.get(m.id) ?? 0)) continue;
         const target = this.pollinationTarget(run, m, tile);
         if (target) {
           run.pollinatorUses.set(m.id, used + 1);
@@ -452,7 +454,7 @@ export class BloomChainSystem {
             s.bus.emit('corridor.sent', { from: m.id, to: o.id, chainId: run.id });
           }
         }
-      } else if (m.type === 'motherTree' && d >= 1 && d <= s.upgrades.treeRadius && !run.dischargedTrees.has(m.id)) {
+      } else if (m.type === 'motherTree' && d >= 1 && d <= s.upgrades.treeRadius(m) && !run.dischargedTrees.has(m.id)) {
         this.enqueue(run, { type: 'CHARGE', source: tile.id, target: m.id, cause: 'charge', depth: depth + 1 }, TUNING.chain.stepDelay * 0.6);
       } else if (m.type === 'core' && d >= 1 && d <= TUNING.neighbourhood.canopy.chargeRadius && !run.dischargedTrees.has(m.id) && this.isElder(m)) {
         // The Canopy's Elder Tree charges from blooms around it (dormant or awake).
@@ -513,9 +515,9 @@ export class BloomChainSystem {
     for (const m of s.grid.machinesNear(t.roofId, t.x, t.z, this.synergyReach())) {
       const d = distToFootprint(t.x, t.z, m.x, m.z, m.size);
       if (d < 1) continue;
-      if (m.type === 'pollinator' && d <= s.upgrades.pollinatorReach) score += 3;
+      if (m.type === 'pollinator' && d <= s.upgrades.pollinatorReach(m)) score += 3;
       else if (m.type === 'solar' && d === 1) score += 1.5;
-      else if (m.type === 'motherTree' && d <= s.upgrades.treeRadius) score += 2;
+      else if (m.type === 'motherTree' && d <= s.upgrades.treeRadius(m)) score += 2;
       else if (m.type === 'core' && d <= TUNING.neighbourhood.canopy.chargeRadius && this.isElder(m)) score += 2;
       else if (m.type === 'reservoirGarden' && d <= TUNING.neighbourhood.reservoir.radius) score += 1;
     }
@@ -525,7 +527,7 @@ export class BloomChainSystem {
   /** Deterministic choice: mossy soil first, then concrete, then a green tile that can still grow. */
   private pollinationTarget(run: ChainRun, p: MachineData, from: TileData): TileData | undefined {
     const s = this.sim;
-    const reach = s.upgrades.pollinatorReach;
+    const reach = s.upgrades.pollinatorReach(p);
     const cands = s.grid
       .tilesNear(p, reach)
       .filter((t) => !run.visited.has(t.id) && !t.occupantId)
@@ -666,11 +668,11 @@ export class BloomChainSystem {
         m.boostUntil = s.time + TUNING.solarBloomBoost.seconds;
         s.production.solarBoosted(m);
         const boost = 1 + this.consumeOvercharge(m);
-        const got = s.econ.add('energy', TUNING.solarBloomBoost.burstEnergy * s.upgrades.solarMult * boost);
-        run.energy += got;
+        const got = s.econ.add('energy', TUNING.solarBloomBoost.burstEnergy * s.upgrades.solarMult(m) * boost);
+        run.energy = run.energy.add(got);
         this.emit(run, { ...ev, amount: got });
         s.bus.emit('solar.boost', { machineId: m.id });
-        if (got > 0) s.bus.emit('resource.gain', { kind: 'energy', amount: got, reason: `machine:${m.id}` });
+        if (got.gt(0)) s.bus.emit('resource.gain', { kind: 'energy', amount: got, reason: `machine:${m.id}` });
         return;
       }
       case 'PRODUCE_WATER': {
@@ -679,9 +681,9 @@ export class BloomChainSystem {
         m.charge = 0;
         this.emit(run, ev);
         const near = s.grid.tilesNear(m, TUNING.condenser.radius);
-        const targets = TUNING.condenser.targets + s.upgrades.waterBloom + this.consumeOvercharge(m);
+        const targets = TUNING.condenser.targets + Math.min(TUNING.condenser.maxExtraTargets, s.upgrades.waterBloom(m)) + this.consumeOvercharge(m);
         const dry = near.filter((t) => t.ground === 'prepared' && s.restoration.isEligible(t, false) && !run.visited.has(t.id));
-        const grow = s.upgrades.waterBloom > 0 ? near.filter((t) => t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom && !run.visited.has(t.id)) : [];
+        const grow = s.upgrades.waterBloom(m) > 0 ? near.filter((t) => t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom && !run.visited.has(t.id)) : [];
         for (const t of [...dry, ...grow].slice(0, targets)) {
           run.visited.add(t.id);
           this.enqueue(run, { type: t.ground === 'restored' ? 'GROW' : 'RESTORE', source: m.id, target: t.id, cause: 'condenser', depth: ev.depth + 1 });
@@ -746,7 +748,7 @@ export class BloomChainSystem {
         const taken = new Set(inside.map((x) => x.t.id));
         for (const g of gardens) {
           const beyond = s.grid
-            .tilesNear(g, s.upgrades.pollinatorReach + 2)
+            .tilesNear(g, s.upgrades.pollinatorReach(g) + 2)
             .filter((t) => ok(t) && !taken.has(t.id) && distToFootprint(t.x, t.z, m.x, m.z, m.size) > radius)
             .sort((a, b) => distToFootprint(a.x, a.z, g.x, g.z, 1) - distToFootprint(b.x, b.z, g.x, g.z, 1) || a.z - b.z || a.x - b.x)
             .slice(0, TUNING.neighbourhood.canopy.gardenBonusTargets);
@@ -770,7 +772,7 @@ export class BloomChainSystem {
         this.emit(run, ev);
         s.bus.emit('tree.discharged', { machineId: m.id });
         const tiles = s.grid
-          .tilesNear(m, s.upgrades.treeRadius + Math.min(2, this.consumeOvercharge(m)))
+          .tilesNear(m, s.upgrades.treeRadius(m) + Math.min(2, this.consumeOvercharge(m)))
           .filter((t) => !run.visited.has(t.id))
           .filter((t) => s.restoration.isEligible(t) || (t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom))
           .map((t) => ({ t, d: distToFootprint(t.x, t.z, m.x, m.z, m.size) }))
@@ -788,7 +790,7 @@ export class BloomChainSystem {
           // City 10.4: a pulse arrives at the far Bloom Relay.
           const dest = s.relays.otherEnd(ev.target, ev.source!);
           if (!dest) return;
-          let n = s.relays.targets();
+          let n = s.relays.targets(dest);
           if (s.state.relayBonus > 0) {
             n += s.state.relayBonus;
             s.state.relayBonus = 0;
@@ -829,8 +831,8 @@ export class BloomChainSystem {
     const milestone = [...TUNING.chain.milestones].reverse().find((m) => run.combo >= m.effects);
     const pct = milestone?.pct ?? 0;
     const perEffect = run.combo > 1 ? TUNING.chain.perEffectBiomass * run.combo : 0;
-    const bonus = Math.round((perEffect + (run.biomass + perEffect) * pct) * 10) / 10;
-    const got = bonus > 0 ? s.econ.add('biomass', bonus) : 0;
+    const bonus = run.biomass.add(perEffect).mul(pct).add(perEffect);
+    const got = bonus.gt(0) ? s.econ.add('biomass', bonus) : big(0);
     s.state.stats.chains++;
     s.state.stats.maxCombo = Math.max(s.state.stats.maxCombo, run.combo);
     const reward: ChainEvent = { seq: this.seq++, type: 'REWARD', chainId: run.id, depth: 0, target: run.originTileId, cause: 'reward', at: s.time, amount: got };
@@ -839,8 +841,8 @@ export class BloomChainSystem {
     s.bus.emit('chain.ended', {
       chainId: run.id,
       combo: run.combo,
-      bonus: Math.round(got * 10) / 10,
-      total: run.biomass + got,
+      bonus: got,
+      total: run.biomass.add(got),
       milestonePct: pct,
       energy: run.energy,
       roofs: [...run.roofs],
@@ -855,7 +857,7 @@ export class BloomChainSystem {
       st.bigChains[run.starter]++;
     }
     if (run.relaysFired.size) s.metrics.first('remoteChain');
-    if (got > 0) s.bus.emit('resource.gain', { kind: 'biomass', amount: got, reason: 'chain' });
+    if (got.gt(0)) s.bus.emit('resource.gain', { kind: 'biomass', amount: got, reason: 'chain' });
     s.metrics.onChain(run.combo);
   }
 }

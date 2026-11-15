@@ -251,10 +251,12 @@ export class MilestoneSystem {
     let have = st?.spec ?? 0;
     if (kind === 'fullBloom') have = Math.max(have, s.areas.counts(id).fullBloom);
     if (kind === 'roofBloom') have = Math.max(have, s.clusters.counts(id).restored);
-    // Safety valve: once every free tile here is in full bloom nothing can happen any more, so the landmark is
-    // content with that (a fully bloomed area never stalls).
+    // Safety valves: once every free tile here is in full bloom nothing can happen any more, so the landmark is
+    // content with that (a fully bloomed area never stalls). Phase 5 E12: the same once every restorable tile
+    // here is restored (the scripted player sat 24 minutes on a 922/922 street whose corridor never fired).
     const c = s.areas.counts(id);
-    const met = cleared || have >= need || (c.restored >= s.areas.need(id) && (c.growable === 0 || this.stuck(id, kind)));
+    const allRestored = c.restorable > 0 && c.restored >= c.restorable;
+    const met = cleared || have >= need || (c.restored >= s.areas.need(id) && (c.growable === 0 || allRestored || this.stuck(id, kind)));
     const shown = Math.min(have, need);
     const text: Record<SpecialtyKind, [string, string]> = {
       fullBloom: [`Grow ${need} tiles to full bloom (${shown}/${need})`, 'Pulse green tiles here to grow them, or let gardens and drones nurture them.'],
@@ -276,10 +278,9 @@ export class MilestoneSystem {
    */
   private stuck(id: string, kind: SpecialtyKind): boolean {
     const s = this.sim;
-    const tooDear = (type: 'relay' | 'droneHub' | 'solar' | 'pollinator') => {
-      const cost = s.build.cost(type);
-      return (['energy', 'water', 'biomass'] as const).some((k) => (cost[k] ?? 0) > s.state.caps[k]);
-    };
+    // Judged on the unclamped price (Phase 5 E12 clamps what you pay to fit storage; a price that has outgrown
+    // storage still means the landmark shouldn't wait on another such machine).
+    const tooDear = (type: 'relay' | 'droneHub' | 'solar' | 'pollinator') => !!s.econ.exceedsStorage(s.build.rawCost(type));
     if (kind === 'roofBloom') {
       // The roof can't be reached and the relay that would reach it can never be afforded right now.
       const roof = s.clusters.roof(id);
@@ -296,8 +297,7 @@ export class MilestoneSystem {
         s.grid.tilesNear(m, 1).some((n) => s.restoration.isEligible(n) || (n.ground === 'restored' && !n.occupantId && n.bloom < max)),
     );
     if (roomy) return false;
-    const cost = s.build.cost(type);
-    return (['energy', 'water', 'biomass'] as const).some((k) => (cost[k] ?? 0) > s.state.caps[k]);
+    return tooDear(type);
   }
 
   /** The landmark's specialty is done (always true for the park and cleared areas). */

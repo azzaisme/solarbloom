@@ -1,3 +1,4 @@
+import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
@@ -12,8 +13,8 @@ import { Sim } from '../src/gameplay/Sim';
 function city(seed = 6) {
   const sim = new Sim(createInitialState(seed));
   const st = sim.state;
-  st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
-  st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
+  st.caps.energy = big(1e7); st.caps.water = big(1e7);
+  st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
   st.progression.coreActivated = true;
   for (let cz = -3; cz <= 3; cz++) for (let cx = -3; cx <= 3; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
   return sim;
@@ -134,10 +135,11 @@ describe('buildable Bloom Relays (City 10.4)', () => {
     const b = relay(sim, 10, 0); // 20 apart: out of base range
     expect(sim.relays.linked(a)).toEqual([]);
     relay(sim, -20, 3); // a relay exists, so the upgrade is available
-    const before = sim.relays.targets();
-    expect(sim.upgrades.purchase('relayLens')).toBe(true);
+    const before = sim.relays.targets(a);
+    expect(sim.upgrades.purchase('relayLens', a.id)).toBe(true); // Phase 5 E12: per relay
     expect(sim.relays.linked(a).map((m) => m.id)).toContain(b.id);
-    expect(sim.relays.targets()).toBe(before + 1);
+    expect(sim.relays.linked(b).map((m) => m.id)).toContain(a.id); // the stronger lens links both ways
+    expect(sim.relays.targets(a)).toBe(before + 1);
   });
 
   it('a ring of 10 relays: one chain fires every link at most once, travels the ring and ends', () => {

@@ -20,8 +20,8 @@ try {
   const spot = await page.evaluate(() => {
     const g = window.solarbloom;
     const s = g.sim;
-    s.state.caps.energy = s.state.caps.water = s.state.caps.biomass = 1e6;
-    s.state.resources.energy = s.state.resources.water = s.state.resources.biomass = 1e6;
+    s.state.caps.energy = new (s.state.resources.energy.constructor)(1e6); s.state.caps.water = new (s.state.resources.energy.constructor)(1e6);
+    s.state.resources.energy = new (s.state.resources.energy.constructor)(1e6); s.state.resources.water = new (s.state.resources.energy.constructor)(1e6); s.state.resources.biomass = new (s.state.resources.energy.constructor)(1e6);
     for (const t of s.areas.tiles('park')) if (s.restoration.isEligible(t)) s.restoration.complete(t, 'pulse');
     s.state.progression.coreActivated = true;
     s.areas.clear('park', true);

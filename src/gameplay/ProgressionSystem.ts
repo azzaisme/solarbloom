@@ -1,3 +1,4 @@
+import type { Big } from '../core/Big';
 import { PARK } from '../core/Areas';
 import { isRestorable } from '../core/GameState';
 import type { BuildableType, TileData } from '../core/types';
@@ -162,7 +163,7 @@ export class ProgressionSystem {
     const next = this.nextMilestone();
     if (!next || n < next.at) return;
     p.parkMilestones.push(next.at);
-    const credited: Partial<Record<'energy' | 'water' | 'biomass', number>> = {};
+    const credited: Partial<Record<'energy' | 'water' | 'biomass', Big>> = {};
     for (const [k, v] of Object.entries(next.reward) as ['energy' | 'water' | 'biomass', number][]) credited[k] = s.econ.add(k, v);
     s.bus.emit('milestone.reached', { at: next.at, credited, next: this.nextMilestone()?.at });
   }

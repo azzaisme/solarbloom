@@ -17,12 +17,15 @@ export function relayLinkId(a: MachineData, b: MachineData): string {
 export class RelaySystem {
   constructor(private sim: Sim) {}
 
-  range(): number {
-    return TUNING.relay.range + TUNING.relay.rangePerLevel * this.sim.upgrades.level('relayLens');
+  /** Phase 5 E12: Relay Lens is bought per relay. A relay reaches this far. */
+  range(m?: MachineData): number {
+    const lvl = m ? this.sim.upgrades.relayLens(m) : this.sim.upgrades.maxLevelOf('relayLens');
+    return TUNING.relay.range + TUNING.relay.rangePerLevel * lvl;
   }
 
-  targets(): number {
-    return TUNING.relay.targets + this.sim.upgrades.level('relayLens');
+  /** Blooms around the far relay per crossing (its own lens). */
+  targets(m?: MachineData): number {
+    return TUNING.relay.targets + (m ? this.sim.upgrades.relayLens(m) : 0);
   }
 
   /** World-space centre of a relay (x, z). */
@@ -40,10 +43,11 @@ export class RelaySystem {
 
   /** The relays a relay links to (in range), nearest first, deterministic. */
   linked(m: MachineData): MachineData[] {
-    const R = this.range();
+    // Two relays link when either one's lens reaches the other (the stronger lens wins).
+    const R = this.range(m);
     return this.sim
       .machinesOfType('relay')
-      .filter((o) => o !== m && this.sim.grid.isPlayable(o.roofId) && this.distance(m, o) <= R + 1e-9)
+      .filter((o) => o !== m && this.sim.grid.isPlayable(o.roofId) && this.distance(m, o) <= Math.max(R, this.range(o)) + 1e-9)
       .sort((a, b) => this.distance(m, a) - this.distance(m, b) || (Number(a.id.slice(1)) || 0) - (Number(b.id.slice(1)) || 0));
   }
 

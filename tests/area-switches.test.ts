@@ -1,3 +1,4 @@
+import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
@@ -9,8 +10,8 @@ import { Sim } from '../src/gameplay/Sim';
 function setup(seed = 8) {
   const sim = new Sim(createInitialState(seed));
   const st = sim.state;
-  st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
-  st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
+  st.caps.energy = big(1e7); st.caps.water = big(1e7);
+  st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
   st.progression.coreActivated = true;
   sim.areas.clear(PARK, true);
   return sim;

@@ -188,8 +188,8 @@ export class RestorationSystem {
     t.bloom = Math.min(TUNING.restore.maxBloom, t.bloom + 1);
     this.sim.grid.touch(t);
     const b = this.sim.econ.add('biomass', TUNING.restore.nurtureBiomass * this.sim.upgrades.soilMult);
-    if (b > 0) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: b, tileId: t.id });
-    this.sim.bus.emit('tile.nurtured', { tile: t, level: t.bloom });
+    if (b.gt(0)) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: b, tileId: t.id });
+    this.sim.bus.emit('tile.nurtured', { tile: t, level: t.bloom, auto: starter === 'auto' });
     if (quiet) return;
     const id = this.sim.chains.onGrown(t, chainId, starter);
     this.sim.chains.addReward(id, b);
@@ -247,7 +247,7 @@ export class RestorationSystem {
     this.sim.grid.touch(t);
     this.sim.state.stats.tilesRestored++;
     const biomass = this.sim.econ.add('biomass', TUNING.restore.instantBiomass * this.sim.upgrades.soilMult);
-    if (biomass > 0) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: biomass, tileId: t.id });
+    if (biomass.gt(0)) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: biomass, tileId: t.id });
     // Life seeps outward: neighbours soften from concrete into moss.
     for (const nb of this.sim.grid.neighbors(t)) {
       if (nb.ground !== 'polluted' || nb.blocked) continue;

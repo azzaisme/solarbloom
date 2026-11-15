@@ -1,7 +1,8 @@
+import { big, fmt, type Big } from '../core/Big';
 import { HOME } from '../gameplay/ProgressionSystem';
 import * as pc from 'playcanvas';
 import { Sfx } from '../audio/Sfx';
-import { formatCost } from '../core/Economy';
+import { formatCost, RES_ICON } from '../core/Economy';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
@@ -176,7 +177,12 @@ export class Game {
       {
         selectTool: (t) => this.selectTool(t),
         harvest: () => this.harvest(),
-        buyUpgrade: (id) => this.sim.upgrades.purchase(id),
+        // Phase 5 E12: "id" (global or cheapest machine), "id|machineId" (that machine) or "id|*" (Upgrade all).
+        buyUpgrade: (key) => {
+          const [id, target] = key.split('|');
+          if (target === '*') this.sim.upgrades.purchaseAll(id);
+          else this.sim.upgrades.purchase(id, target || undefined);
+        },
         activateCore: () => this.sim.progression.activateCore(),
         newGame: () => this.newGame(),
         setSetting: (k, v) => this.setSetting(k, v),
@@ -688,11 +694,11 @@ export class Game {
         return [...g.tilesNear(m, TUNING.condenser.radius), ...gardens.map((x) => g.get(x.roofId, x.x, x.z)!)];
       }
       case 'pollinator':
-        return g.tilesNear(m, this.sim.upgrades.pollinatorReach);
+        return g.tilesNear(m, this.sim.upgrades.pollinatorReach(m as MachineData)); // a ghost has no levels: base reach
       case 'droneHub':
-        return g.tilesNear(m, this.sim.upgrades.droneRadius);
+        return g.tilesNear(m, this.sim.upgrades.droneRadius(m as MachineData));
       case 'motherTree':
-        return g.tilesNear(m, this.sim.upgrades.treeRadius);
+        return g.tilesNear(m, this.sim.upgrades.treeRadius(m as MachineData));
       case 'reservoirGarden':
         return g.tilesNear(m, TUNING.neighbourhood.reservoir.radius);
       case 'relay': {
@@ -735,12 +741,18 @@ export class Game {
     this.renderInspect();
   }
 
-  private upgradeButton(id: string) {
+  /** Phase 5 E12: this machine's own upgrade (per-machine levels), plus "all of this type" when there are several. */
+  private upgradeButton(id: string, m: MachineData) {
     const def = UPGRADE_BY_ID[id];
-    const st = this.sim.upgrades.status(def);
-    const lvl = this.sim.upgrades.level(id);
+    const u = this.sim.upgrades;
+    if (def.available && !def.available(this.sim.state)) return '';
+    const st = u.status(def, m);
+    const lvl = u.levelOf(m, id);
     if (lvl >= def.maxLevel) return `<p class="stat">${def.icon} ${def.name}: MAX</p>`;
-    return `<div class="card" style="margin-top:8px"><span class="ci">${def.icon}</span><span class="cn">${def.name}</span><button class="buy" data-buy="${id}" ${st.ok ? '' : 'disabled'}>${st.cost} 🌿</button><span class="cd2">${def.describe(lvl + 1)}</span></div>`;
+    const n = u.targets(def).length;
+    const all = u.status(def);
+    const allBtn = n > 1 ? `<button class="buy all" data-buy="${id}|*" ${all.ok ? '' : 'disabled'} title="Buys levels cheapest-first on every ${def.machine}">All ${n}</button>` : '';
+    return `<div class="card" style="margin-top:8px"><span class="ci">${def.icon}</span><span class="cn">${def.name} <em>Lv ${lvl}</em></span><button class="buy" data-buy="${id}|${m.id}" ${st.ok ? '' : 'disabled'}>${fmt(st.cost)} 🌿</button>${allBtn}<span class="cd2">${def.describe(lvl + 1)}</span></div>`;
   }
 
   private renderInspect() {
@@ -752,21 +764,21 @@ export class Game {
       case 'solar': {
         const out = s.production.solarOutput(m);
         const boosted = m.boostUntil > s.time;
-        extra = `<p class="stat">⚡ ${out.toFixed(1)} energy/s${boosted ? ' · 🌸 bloom boost!' : ''}${s.production.surgeActive() ? ` · 🐱 Solar Surge ×${TUNING.cat.frenzyMult}` : ''}</p><p>Restore tiles right next to it for a 5 s ×2 boost.</p>${this.upgradeButton('solarArray')}`;
+        extra = `<p class="stat">⚡ ${out.toFixed(1)} energy/s${boosted ? ' · 🌸 bloom boost!' : ''}${s.production.surgeActive() ? ` · 🐱 Solar Surge ×${TUNING.cat.frenzyMult}` : ''}</p><p>Restore tiles right next to it for a 5 s ×2 boost.</p>${this.upgradeButton('solarArray', m)}`;
         break;
       }
       case 'condenser': {
         const near = s.grid.tilesNear(m, TUNING.condenser.radius);
         const mossy = near.filter((t) => t.ground === 'prepared').length;
         const pct = Math.round(((m.charge ?? 0) / TUNING.condenser.threshold) * 100);
-        extra = `<p class="stat">💧 +1 water/s</p><p class="stat">🌧️ Watering charge ${pct}% · ${mossy} dry tile${mossy === 1 ? '' : 's'} beside it</p><p>When full, it waters the dry soil next to it into bloom and starts a chain. ${mossy ? '' : 'Pulse a neighbour so moss appears beside it.'}</p>${this.upgradeButton('waterBloom')}`;
+        extra = `<p class="stat">💧 +1 water/s</p><p class="stat">🌧️ Watering charge ${pct}% · ${mossy} dry tile${mossy === 1 ? '' : 's'} beside it</p><p>When full, it waters the dry soil next to it into bloom and starts a chain. ${mossy ? '' : 'Pulse a neighbour so moss appears beside it.'}</p>${this.upgradeButton('waterBloom', m)}`;
         break;
       }
       case 'pollinator': {
-        const zone = s.grid.tilesNear(m, s.upgrades.pollinatorReach);
+        const zone = s.grid.tilesNear(m, s.upgrades.pollinatorReach(m));
         const mossy = zone.filter((t) => t.ground === 'prepared').length;
         const green = zone.filter((t) => t.ground === 'restored').length;
-        extra = `<p class="stat">🌸 Zone radius ${s.upgrades.pollinatorReach} · ${green}/${zone.length} blooming (×2 🌿)</p><p class="stat">✨ ${mossy} mossy tiles ready to chain</p><p>Restore a tile right next to it: it pollinates another neighbour (up to ${TUNING.pollinator.triggersPerChain}× per chain). Line gardens, panels and the Mother Tree up so chains jump between them.</p>${this.upgradeButton('pollinatorReach')}`;
+        extra = `<p class="stat">🌸 Zone radius ${s.upgrades.pollinatorReach(m)} · ${green}/${zone.length} blooming (×2 🌿)</p><p class="stat">✨ ${mossy} mossy tiles ready to chain</p><p>Restore a tile right next to it: it pollinates another neighbour (up to ${s.upgrades.pollinatorTriggers}× per chain). Line gardens, panels and the Mother Tree up so chains jump between them.</p>${this.upgradeButton('pollinatorReach', m)}`;
         break;
       }
       case 'droneHub': {
@@ -775,19 +787,19 @@ export class Game {
         extra = ds
           .map((d, i) => `<p class="stat">🛸 Drone ${i + 1}${d.expiresAt ? ' (party!)' : ''}: ${label[s.drones.statusOf(d)]} · ${d.jobs} jobs</p>`)
           .join('') +
-          `<p>Works within ${s.upgrades.droneRadius} tiles (highlighted), paying the normal pulse cost. Blue outlines show current jobs.</p>` +
-          ['droneSpeed', 'droneRadius', 'chainIntel', 'secondDrone'].map((u) => this.upgradeButton(u)).join('');
+          `<p>Works within ${s.upgrades.droneRadius(m)} tiles (highlighted), paying the normal pulse cost. Blue outlines show current jobs.</p>` +
+          ['droneSpeed', 'droneRadius', 'secondDrone', 'droneSweep', 'chainIntel'].map((u) => this.upgradeButton(u, m)).join('');
         break;
       }
       case 'relay': {
         const linked = s.relays.linked(m);
         const ready = linked.filter((o) => s.relays.ready(relayLinkId(m, o))).length;
-        extra = `<p class="stat">📡 Linked to ${linked.length} relay${linked.length === 1 ? '' : 's'} within ${s.relays.range()} tiles · ${ready} ready</p><p>Each pulse blooms ${s.relays.targets()} tiles around the far relay, which can pass it on. Links recharge for ${TUNING.relay.cooldown} s.${linked.length ? '' : ' <b>Build another Bloom Relay within range to link them.</b>'}</p>`;
+        extra = `<p class="stat">📡 Linked to ${linked.length} relay${linked.length === 1 ? '' : 's'} within ${s.relays.range(m)} tiles · ${ready} ready</p><p>Each pulse blooms ${s.relays.targets(m)} tiles around this relay when a chain arrives, and can pass it on. Links recharge for ${TUNING.relay.cooldown} s.${linked.length ? '' : ' <b>Build another Bloom Relay within range to link them.</b>'}</p>${this.upgradeButton('relayLens', m)}`;
         break;
       }
       case 'motherTree': {
         const pct = Math.round(((m.charge ?? 0) / TUNING.motherTree.threshold) * 100);
-        extra = `<p class="stat">🌳 Charge ${m.charge ?? 0}/${TUNING.motherTree.threshold} (${pct}%)</p><p>Each restoration or new bloom within ${s.upgrades.treeRadius} tiles adds charge. When full, it releases a Bloom Pulse over that whole area. Its own pulse can't recharge it.</p>${this.upgradeButton('treeResonance')}`;
+        extra = `<p class="stat">🌳 Charge ${m.charge ?? 0}/${TUNING.motherTree.threshold} (${pct}%)</p><p>Each restoration or new bloom within ${s.upgrades.treeRadius(m)} tiles adds charge. When full, it releases a Bloom Pulse over that whole area. Its own pulse can't recharge it.</p>${this.upgradeButton('treeResonance', m)}`;
         break;
       }
       case 'reservoirGarden': {
@@ -829,17 +841,17 @@ export class Game {
   }
 
   /** Gains waiting to fly, per resource: big chains coalesce into a few numbers instead of hundreds. */
-  private flyPending = new Map<ResourceKind, { amount: number; at: number }>();
+  private flyPending = new Map<ResourceKind, { amount: Big; at: number }>();
 
-  private flyGain(kind: ResourceKind, amount: number, from?: { x: number; y: number }) {
+  private flyGain(kind: ResourceKind, amount: Big, from?: { x: number; y: number }) {
     const now = performance.now();
-    const p = this.flyPending.get(kind) ?? { amount: 0, at: -1e9 };
-    p.amount += amount;
+    const p = this.flyPending.get(kind) ?? { amount: big(0), at: -1e9 };
+    p.amount = p.amount.add(amount);
     this.flyPending.set(kind, p);
     if (now - p.at < 120) return; // the next one carries the sum
     p.at = now;
     const total = p.amount;
-    p.amount = 0;
+    p.amount = big(0);
     const src = from ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     this.fly.spawn(kind, total, src, this.hud.resourceRect(kind), () => this.hud.flashResource(kind, 'flash'));
   }
@@ -952,7 +964,7 @@ export class Game {
       this.sfx.nurture(level);
     });
     b.on('resource.gain', ({ kind, amount, tileId, reason }) => {
-      if (amount < 0.05) return;
+      if (amount.lt(0.05)) return;
       let from = tileId ? this.tileScreen(tileId) : undefined;
       if (!from && reason === 'cat') {
         const c = this.cat.targetWorld() ?? this.lastCatPos;
@@ -970,9 +982,6 @@ export class Game {
         }
       }
       this.flyGain(kind, amount, from);
-    });
-    b.on('resource.full', ({ kind }) => {
-      if (kind === 'biomass') this.hud.feed('🌿 Biomass storage full — spend it or build a Seed Vault');
     });
     b.on('machine.built', ({ machine }) => {
       this.machines.add(machine, true);
@@ -1006,7 +1015,7 @@ export class Game {
       if (!m) return;
       const w = this.machines.worldOf(m);
       const p = new pc.Vec3(w[0], w[1], w[2]);
-      for (let i = 0; i < 3; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.18, done: () => this.vfx.ring(p, i % 2 ? PALETTE.gold : '#7cf7c8', (s.upgrades.treeRadius + 1.2) * (0.6 + i * 0.25), 0.9) });
+      for (let i = 0; i < 3; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.18, done: () => this.vfx.ring(p, i % 2 ? PALETTE.gold : '#7cf7c8', (s.upgrades.treeRadius(m) + 1.2) * (0.6 + i * 0.25), 0.9) });
       this.vfx.burst(new pc.Vec3(p.x, p.y + 1.4, p.z), 30, { up: 4, speed: 2.2, size: 0.08, life: 1.3 });
       this.machines.pulseTree(machineId);
       this.camera.shake(0.08);
@@ -1020,8 +1029,8 @@ export class Game {
       if (crossings > 0) this.hud.feed(`📡 Chain crossed ${crossings} Bloom Relay link${crossings > 1 ? 's' : ''}`);
       if (combo < 2) return;
       const ms = milestonePct ? ` · ×${combo >= 20 ? 20 : combo >= 10 ? 10 : 5} milestone +${Math.round(milestonePct * 100)}%` : '';
-      this.hud.combo(combo, `+${Math.round(total)}🌿${energy >= 1 ? ` +${Math.round(energy)}⚡` : ''} earned${ms}`);
-      this.hud.feed(`🌸 Bloom chain ×${combo}${bonus ? ` · +${bonus}🌿 bonus` : ''}`);
+      this.hud.combo(combo, `+${fmt(total)}🌿${energy.gte(1) ? ` +${fmt(energy)}⚡` : ''} earned${ms}`);
+      this.hud.feed(`🌸 Bloom chain ×${combo}${bonus.gte(1) ? ` · +${fmt(bonus)}🌿 bonus` : ''}`);
       this.sfx.chainEnd(combo);
       if (combo >= 5) {
         this.hud.toast(`🌸 BLOOM CHAIN ×${combo}!${bonus ? `<small>Chain bonus +${bonus} 🌿${ms}</small>` : ''}`, 'gold', 2.6);
@@ -1068,31 +1077,30 @@ export class Game {
       this.sfx.frenzy = false;
       this.hud.feed('🌿 Bloom Frenzy is over: back to normal power');
     });
+    b.on('area.step', ({ areaId, step, share, credited }) => {
+      const a = s.areas.info(areaId);
+      const got = (['biomass', 'energy', 'water'] as const).filter((k) => credited[k]?.gte(1)).map((k) => `+${fmt(credited[k]!)}${RES_ICON[k]}`).join(' ');
+      this.hud.toast(`🌱 ${a.landmarkName}: ${Math.round(share * 100)}% of the way<small>${got}${step < TUNING.areaSteps.at.length ? '' : ' · the landmark is close'}</small>`, 'gold', 2.4);
+      this.sfx.powerUp();
+      this.hud.flashResource('biomass', 'flash');
+    });
     b.on('milestone.reached', ({ at, credited, next }) => {
       const icons = { energy: '⚡', water: '💧', biomass: '🌿' } as const;
-      const got = (Object.entries(credited) as [keyof typeof icons, number][]).filter(([, v]) => v >= 1).map(([k, v]) => `+${Math.round(v)}${icons[k]}`).join(' ');
+      const got = (Object.entries(credited) as [keyof typeof icons, Big][]).filter(([, v]) => v.gte(1)).map(([k, v]) => `+${fmt(v)}${icons[k]}`).join(' ');
       this.hud.toast(`🌱 ${at} tiles restored!<small>${got || 'Storage was full'}${next ? ` · next reward at ${next}` : ''}</small>`, 'gold', 2.6);
       this.sfx.powerUp();
       this.hud.flashResource('biomass', 'flash');
     });
-    b.on('upgrade.purchased', ({ id, level }) => {
+    b.on('upgrade.purchased', ({ id, level, bulk, machineId }) => {
       if (id === 'droneSpeed') this.drones.restyle();
-      const def = UPGRADE_BY_ID[id];
-      this.hud.toast(`${def.icon} ${def.name} ${['I', 'II', 'III', 'IV', 'V'][level - 1]}<small>${def.describe(level)}</small>`, 'gold', 2.6);
       this.machines.refreshUpgrades();
-      this.sfx.coin();
-      // Show where it changed the world: the machines, landmarks or fog it affects (nearest the view first).
-      const spots = upgradeHighlights(s, id)
-        .map((p) => ({ p, d: Math.hypot(p.x - this.camera.target.x, p.z - this.camera.target.z) }))
-        .sort((a, b) => a.d - b.d)
-        .slice(0, 24);
-      for (const { p } of spots) {
-        const r = s.grid.roof(p.roofId);
-        if (!r) continue;
-        this.vfx.burst(new pc.Vec3(r.origin[0] + p.x, r.origin[1] + r.height + 0.5, r.origin[2] + p.z), 12, { up: 2.5 });
-      }
-      if (this.selected) this.inspectTimer = 0;
-      this.save();
+      if (bulk) return; // "Upgrade all" celebrates once, at the end (upgrade.bulk)
+      const def = UPGRADE_BY_ID[id];
+      this.celebrateUpgrade(id, `${def.icon} ${def.name} · level ${level}<small>${def.describe(level)}</small>`, machineId);
+    });
+    b.on('upgrade.bulk', ({ id, count }) => {
+      const def = UPGRADE_BY_ID[id];
+      this.celebrateUpgrade(id, `${def.icon} ${def.name} ×${count}<small>${count} level${count === 1 ? '' : 's'} bought across your ${def.machine ? MACHINES[def.machine].name : ''}s, cheapest first</small>`);
     });
     b.on('drone.spawned', ({ droneId }) => {
       const d = s.state.drones.find((x) => x.id === droneId);
@@ -1230,6 +1238,25 @@ export class Game {
       if (!e.replay) this.save(); // claimed before any presentation: a reload can never pay twice
       this.runDistrictBloom(e.districtId, e.restored.length + e.lusher.length, e.reward, e.replay);
     });
+  }
+
+  /** A purchase's moment: toast, coin, and sparkles where it changed the world (one machine, or all it affects). */
+  private celebrateUpgrade(id: string, text: string, machineId?: string) {
+    const s = this.sim;
+    this.hud.toast(text, 'gold', 2.6);
+    this.sfx.coin();
+    const one = machineId ? s.machine(machineId) : undefined;
+    const spots = (one ? [{ roofId: one.roofId, x: one.x + one.size / 2, z: one.z + one.size / 2 }] : upgradeHighlights(s, id))
+      .map((p) => ({ p, d: Math.hypot(p.x - this.camera.target.x, p.z - this.camera.target.z) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 24);
+    for (const { p } of spots) {
+      const r = s.grid.roof(p.roofId);
+      if (!r) continue;
+      this.vfx.burst(new pc.Vec3(r.origin[0] + p.x, r.origin[1] + r.height + 0.5, r.origin[2] + p.z), 12, { up: 2.5 });
+    }
+    if (this.selected) this.inspectTimer = 0;
+    this.save();
   }
 
   private lastCatPos?: pc.Vec3;
@@ -1511,7 +1538,7 @@ export class Game {
    * A district bloom on screen: the camera pulls back over the district, each awake landmark sends out a ring,
    * a green wave rolls outward over its cleared areas, then the reward. Skippable; a replay changes nothing.
    */
-  private runDistrictBloom(id: string, changed: number, reward: Partial<Record<'energy' | 'water' | 'biomass', number>>, replay: boolean) {
+  private runDistrictBloom(id: string, changed: number, reward: Partial<Record<'energy' | 'water' | 'biomass', Big>>, replay: boolean) {
     const s = this.sim;
     const at = (delay: number, fn: () => void) => this.tweens.add(0.01, () => {}, { delay, done: fn });
     const awake = s.districts.members(id).filter((a) => s.areas.fog(a) === 'cleared');
@@ -1751,9 +1778,8 @@ export function offlineToast(r: OfflineReport, title: string): string {
   const m = Math.round((r.away % 3600) / 60);
   const away = h ? `${h} h ${m} min` : `${m} min`;
   const icons = { energy: '⚡', water: '💧', biomass: '🌿' } as const;
-  const fmt = (n: number) => (n >= 10000 ? `${Math.round(n / 1000)}k` : String(Math.round(n)));
-  const got = (['energy', 'water', 'biomass'] as const).filter((k) => r.credited[k] >= 1).map((k) => `+${fmt(r.credited[k])}${icons[k]}`);
-  const lost = (['energy', 'water', 'biomass'] as const).filter((k) => r.lost[k] >= 1).map((k) => `${fmt(r.lost[k])}${icons[k]}`);
+  const got = (['energy', 'water', 'biomass'] as const).filter((k) => r.credited[k].gte(1)).map((k) => `+${fmt(r.credited[k])}${icons[k]}`);
+  const lost = (['energy', 'water', 'biomass'] as const).filter((k) => r.lost[k].gte(1)).map((k) => `${fmt(r.lost[k])}${icons[k]}`);
   const lines = [`🌙 ${title} (${away})`];
   const capped = r.away > r.seconds + 1 ? ` · counted up to ${Math.round(r.seconds / 3600)} h` : '';
   lines.push(`<small>Your garden kept growing at half pace${capped}: ${got.join(' ') || 'nothing new'}${r.droneJobs ? ` · drones restored ${r.restored} and nurtured ${r.grown} tiles` : ''}${lost.length ? ` · ${lost.join(' ')} didn't fit in storage` : ''}</small>`);

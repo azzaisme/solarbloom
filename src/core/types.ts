@@ -2,8 +2,16 @@ export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
 export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'core';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
+/** Plain per-resource numbers (tuning tables, small per-second coefficients). */
 export type Resources = Record<ResourceKind, number>;
-export type Cost = Partial<Resources>;
+/** Phase 5 E12: resource quantities are big numbers (see core/Big). */
+export type Amounts = Record<ResourceKind, import('./Big').Big>;
+/** Only energy and water have storage; biomass is uncapped. */
+export type CappedKind = Exclude<ResourceKind, 'biomass'>;
+export type Caps = Record<CappedKind, import('./Big').Big>;
+/** Income per second, per resource (totals are big numbers too). */
+export type Rates = Amounts;
+export type Cost = Partial<Record<ResourceKind, import('./Big').BigLike>>;
 export type RestoreSource =
   | 'pulse'
   | 'broad'
@@ -84,6 +92,8 @@ export interface MachineData {
   charge: number; // condenser / Mother Tree / Reservoir Garden / Elder Tree charge meter
   /** Overcharge Pulse: a manual restoration right next to it boosts its next trigger until this time. */
   overchargeUntil?: number;
+  /** Phase 5 E12: this machine's own upgrade levels, by upgrade id (per-machine upgrades only). */
+  upg?: Record<string, number>;
 }
 
 export type DroneMode = 'idle' | 'flying' | 'working' | 'cooldown' | 'returning';
@@ -177,6 +187,8 @@ export interface AreaState {
   mode?: AreaMode;
   /** City 09.1: progress on the landmark's specialty action (a count, or the best chain for 'chain') */
   spec?: number;
+  /** Phase 5 E12: rewarded progress steps already paid here (count of TUNING.areaSteps.at reached). */
+  steps?: number;
 }
 
 export interface LinkState {
@@ -193,8 +205,8 @@ export interface GameState {
   rngState: number;
   time: number;
   nextId: number;
-  resources: Resources;
-  caps: Resources;
+  resources: Amounts;
+  caps: Caps;
   layers: LayerData[];
   /** Only present in a save being loaded: packed tile deltas per chunk (consumed by Sim). */
   tiles?: Record<string, string>;

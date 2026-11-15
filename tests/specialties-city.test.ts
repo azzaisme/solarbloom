@@ -1,3 +1,4 @@
+import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
@@ -8,8 +9,8 @@ function cityWith(type: string, seed = 2) {
   for (let sd = seed; sd < seed + 40; sd++) {
     const sim = new Sim(createInitialState(sd));
     const st = sim.state;
-    st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
-    st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
+    st.caps.energy = big(1e7); st.caps.water = big(1e7);
+    st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
     st.progression.coreActivated = true;
     sim.areas.clear(PARK, true);
     for (let r = 1; r <= 4; r++)

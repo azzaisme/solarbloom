@@ -1,3 +1,4 @@
+import { toNum } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import type { ChainEvent } from '../src/gameplay/BloomChainSystem';
 import { Sim } from '../src/gameplay/Sim';
@@ -16,7 +17,7 @@ function collect(sim: Sim) {
   const events: ChainEvent[] = [];
   const ended: { combo: number; bonus: number; total: number; milestonePct: number }[] = [];
   sim.bus.on('chain.event', (e) => events.push(e.event));
-  sim.bus.on('chain.ended', (e) => ended.push(e));
+  sim.bus.on('chain.ended', (e) => ended.push({ combo: e.combo, bonus: toNum(e.bonus), total: toNum(e.total), milestonePct: e.milestonePct }));
   return { events, ended };
 }
 

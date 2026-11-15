@@ -69,8 +69,7 @@ export class RooftopClusters {
 
   /** Can a relay reach this roof right now? */
   reachable(roof: LayerData): boolean {
-    const R = this.sim.relays.range();
-    return this.sim.machinesOfType('relay').some((m) => m.roofId !== roof.id && this.sim.grid.isPlayable(m.roofId) && this.reach(m, roof) <= R);
+    return this.sim.machinesOfType('relay').some((m) => m.roofId !== roof.id && this.sim.grid.isPlayable(m.roofId) && this.reach(m, roof) <= this.sim.relays.range(m));
   }
 
   /** Unlocks every roof a relay now reaches (a newly reached roof can reach further roofs in turn). */

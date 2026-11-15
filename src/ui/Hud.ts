@@ -1,6 +1,7 @@
 import type { AreaMode } from '../core/types';
 import { HOME } from '../gameplay/ProgressionSystem';
-import { formatCost, KINDS } from '../core/Economy';
+import { Economy, formatCost, KINDS } from '../core/Economy';
+import { fmt, toNum, type Big } from '../core/Big';
 import type { Cost } from '../core/types';
 import type { BuildableType, MachineData, ResourceKind } from '../core/types';
 import { BUILDABLE, MACHINES } from '../data/machines';
@@ -116,6 +117,7 @@ export class Hud {
     ].join('');
     return `
       <div id="res" class="panel"><div class="logo"><span class="sun"></span>Solarbloom</div>${rows}</div>
+      <div id="resInfo" class="panel" role="status" hidden></div>
       <div id="obj" class="panel">
         <h3 id="objTitle">Wake the fountain</h3>
         <div class="pct" id="objPct">0% restored</div>
@@ -150,7 +152,7 @@ export class Hud {
       </div></div>
       <div id="tip" class="panel"></div>
       <div id="fail"></div>
-      <div id="upgrades" class="drawer panel"><h2>Upgrades <button aria-label="Close upgrades">×</button></h2><div id="upgList"></div></div>
+      <div id="upgrades" class="drawer panel"><h2>Upgrades <button aria-label="Close upgrades">×</button></h2><p id="upgNext" class="upg-next"></p><div id="upgList"></div></div>
       <div id="inspect" class="panel"></div>
       <div id="modal"><div class="panel">
         <h2>Settings</h2>
@@ -235,6 +237,27 @@ export class Hud {
       if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, () => (b.textContent = 'Copy failed: select the text above'));
       else b.textContent = 'Select the text above to copy';
     });
+    // Phase 5 E12: tap a resource for where its numbers come from (tap again, or elsewhere, to close).
+    $(r, '#res').addEventListener('click', (e) => {
+      const row = (e.target as HTMLElement).closest<HTMLElement>('[data-res]');
+      const k = row?.dataset.res as ResourceKind | undefined;
+      this.resInfo = k && this.resInfo !== k ? k : undefined;
+      const box = $(r, '#resInfo');
+      box.hidden = !this.resInfo;
+      if (this.resInfo) {
+        this.last.delete('resInfo');
+        const rect = row!.getBoundingClientRect();
+        box.style.top = `${Math.round(rect.bottom + 6)}px`;
+        box.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - 248, rect.left)))}px`;
+        box.innerHTML = this.resourceBreakdown(this.resInfo);
+      }
+    });
+    // Any tap outside the resource strip closes it (it never sits over the game).
+    document.addEventListener('pointerdown', (e) => {
+      if (!this.resInfo || (e.target as HTMLElement).closest?.('#res')) return;
+      this.resInfo = undefined;
+      $(r, '#resInfo').hidden = true;
+    });
     $(r, '#upgList').addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-buy]');
       if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
@@ -281,7 +304,26 @@ export class Hud {
   }
 
   /** Spending totals sampled about once a second of sim time (Phase 4 E01.2). */
-  private spendSamples: { t: number; v: Record<string, number> }[] = [];
+  /** Phase 5 E12: the resource whose breakdown popover is open (tap a resource cell). */
+  private resInfo?: ResourceKind;
+
+  /** Where a resource's numbers come from right now (popover and tooltip). */
+  private resourceBreakdown(k: ResourceKind, plain = false): string {
+    const s = this.sim;
+    const L = s.ledger;
+    const pm = (x: Big) => `${fmt(x.mul(60), 1)}/min`;
+    const c = s.econ.cap(k);
+    const lines: [string, string][] = [
+      ['Producing', pm(L.warm ? L.gross(k) : s.production.rates()[k])],
+      ['Spending', pm(L.spent(k))],
+    ];
+    if (c) lines.push(['Lost to full storage', `${pm(L.wasted(k))}${L.wasted(k).gt(0) ? ' (charges Bloom Frenzy)' : ''}`]);
+    const net = L.net(k);
+    lines.push(['Net', `${net.lt(0) ? '−' : '+'}${pm(net.abs())}`]);
+    lines.push(['Stored', c ? `${fmt(s.econ.get(k))} / ${fmt(c)}` : `${fmt(s.econ.get(k))} (no limit)`]);
+    if (plain) return `${RES_META[k].name}: ${lines.map(([a, b]) => `${a} ${b}`).join(' · ')}`;
+    return `<b>${RES_META[k].icon} ${RES_META[k].name}</b>${lines.map(([a, b]) => `<div><span>${a}</span><span>${b}</span></div>`).join('')}`;
+  }
 
   private set(key: string, el: HTMLElement, prop: 'text' | 'html' | 'width' | 'cls' | 'style' | 'title', value: string, cls?: string) {
     if (this.last.get(key) === value) return;
@@ -324,8 +366,8 @@ export class Hud {
   private costShort(cost: Cost): string {
     const s = this.sim;
     if (s.econ.canAfford(cost)) return formatCost(cost);
-    return KINDS.filter((k) => (cost[k] ?? 0) > s.econ.get(k))
-      .map((k) => `${Math.floor(s.econ.get(k))}/${Math.ceil(cost[k]!)}${RES_META[k].icon}`)
+    return KINDS.filter((k) => Economy.part(cost, k).gt(s.econ.get(k)))
+      .map((k) => `${fmt(s.econ.get(k))}/${fmt(Economy.part(cost, k).ceil())}${RES_META[k].icon}`)
       .join(' ');
   }
 
@@ -345,10 +387,11 @@ export class Hud {
       case 1:
       case 2: {
         if (step === 1) return { text: `Green tiles grow 🌿. Restore a few more · ${n}/4` };
-        const cheapest = Math.min(...s.upgrades.all().filter((u) => s.upgrades.level(u.id) < u.maxLevel && (!u.available || u.available(s.state))).map((u) => s.upgrades.cost(u)));
-        return s.econ.get('biomass') >= cheapest
+        const open = s.upgrades.all().map((u) => s.upgrades.status(u)).filter((st) => st.ok || st.reason?.startsWith('Need '));
+        const cheapest = open.reduce<Big | undefined>((m, st) => (m && m.lte(st.cost) ? m : st.cost), undefined);
+        return !cheapest || s.econ.get('biomass').gte(cheapest)
           ? { text: 'An upgrade is ready: open Upgrades', target: '#upgBtn' }
-          : { text: `First upgrade · ${Math.floor(s.econ.get('biomass'))}/${cheapest}🌿` };
+          : { text: `First upgrade · ${fmt(s.econ.get('biomass'))}/${fmt(cheapest)}🌿` };
       }
       case 3:
         return build('condenser', 'Steady water:');
@@ -543,14 +586,22 @@ export class Hud {
       .map((def) => {
         const head = def.group !== lastGroup ? `<h3 class="ugroup">${def.group}</h3>` : '';
         lastGroup = def.group;
-        const lvl = u.level(def.id);
+        // Phase 5 E12: per-machine upgrades show the type's range of levels and an "Upgrade all" button that buys
+        // cheapest-first; long-tail upgrades (no last level) show their level number instead of pips.
+        const per = !!def.machine;
         const st = u.status(def);
-        const maxed = lvl >= def.maxLevel;
-        const pips = Array.from({ length: def.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('');
-        const roman = ['I', 'II', 'III', 'IV', 'V'][Math.min(lvl, def.maxLevel - 1)];
-        return `${head}<div class="card"><span class="ci">${def.icon}</span><span class="cn">${esc(def.name)} ${maxed ? '' : roman}<em>${maxed ? 'MAX' : ''}</em></span>
-          <button class="buy" data-buy="${def.id}" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : `${st.cost} 🌿`}</button>
-          <span class="cd2">${esc(def.describe(lvl + 1))}</span><span class="pips">${pips}</span>
+        const n = per ? u.targets(def).length : 0;
+        const lvl = per ? (st.machine ? u.levelOf(st.machine, def.id) : u.maxLevelOf(def.id)) : u.level(def.id);
+        const maxed = st.reason === 'Maxed';
+        const finite = Number.isFinite(def.maxLevel) && def.maxLevel <= 8;
+        const pips = finite && !per ? `<span class="pips">${Array.from({ length: def.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</span>` : '';
+        const lvTxt = maxed ? '<em>MAX</em>' : per ? `<em>${n} built · next Lv ${lvl + 1}</em>` : `<em>Lv ${lvl}</em>`;
+        const btn = per
+          ? `<button class="buy" data-buy="${def.id}|*" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : `All · ${fmt(st.cost)}🌿`}</button>`
+          : `<button class="buy" data-buy="${def.id}" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : `${fmt(st.cost)} 🌿`}</button>`;
+        return `${head}<div class="card"><span class="ci">${def.icon}</span><span class="cn">${esc(def.name)} ${lvTxt}</span>
+          ${btn}
+          <span class="cd2">${esc(def.describe(lvl + 1))}${per && n ? ' · tap a machine to upgrade just that one' : ''}</span>${pips}
           ${!st.ok && !maxed && st.reason && !st.reason.startsWith('Need ') ? `<span class="why">${esc(st.reason)}</span>` : ''}</div>`;
       })
       .join('');
@@ -732,34 +783,28 @@ export class Hud {
     this.layoutToasts();
     const s = this.sim;
     const rates = s.production.rates();
-    // Phase 4 E01.2: spending per minute over the last ~20 s of sim time, shown beside the income.
-    const sp = this.spendSamples;
-    if (!sp.length || s.time - sp[sp.length - 1].t >= 1) {
-      sp.push({ t: s.time, v: { ...s.econ.spent } });
-      while (sp.length > 21) sp.shift();
-    }
+    // Phase 5 E12: the rate shown is NET (banked − spent over the last ~20 s), so production lost to a full store
+    // is never shown as income. Tap a resource for the breakdown (gross, spending, overflow).
+    const L = s.ledger;
     const surge = s.production.surgeActive();
     for (const k of KINDS) {
       const row = $(this.root, `[data-res="${k}"]`);
       const v = s.econ.get(k);
       const c = s.econ.cap(k);
-      this.set(`v-${k}`, $(row, '.n'), 'text', String(Math.floor(v)));
-      this.set(`c-${k}`, $(row, '.c'), 'text', String(Math.floor(c)));
-      const perMin = rates[k] * 60;
-      const span = sp.length > 1 ? sp[sp.length - 1].t - sp[0].t : 0;
-      const spend = span > 0 ? ((sp[sp.length - 1].v[k] - sp[0].v[k]) / span) * 60 : 0;
-      const n = (x: number) => (x < 10 ? x.toFixed(1) : x >= 10000 ? `${Math.round(x / 1000)}k` : String(Math.round(x)));
+      this.set(`v-${k}`, $(row, '.n'), 'text', fmt(v));
+      this.set(`c-${k}`, $(row, '.c'), 'text', c ? fmt(c) : '');
+      this.set(`cw-${k}`, $(row, '.capw'), 'cls', c ? '0' : '1', 'nocap');
+      const full = s.econ.isFull(k);
+      const net = (L.warm ? L.net(k) : rates[k]).mul(60);
       const boost = k === 'energy' && surge ? ` ☀️×${TUNING.cat.frenzyMult}` : '';
-      this.set(`r-${k}`, $(row, '.rate'), 'html', `+${n(perMin)}/min${boost}${spend >= 0.5 ? ` <span class="spend">−${n(spend)}</span>` : ''}`);
-      this.set(
-        `t-${k}`,
-        row,
-        'title',
-        `${RES_META[k].name}: making ${n(perMin)}/min${spend >= 0.5 ? `, spending about ${n(spend)}/min` : ''}${boost ? ' (Solar Surge from the Lucky Cat: temporary)' : ''}`,
-      );
-      this.set(`b-${k}`, $(row, '.bar i'), 'width', `${Math.round((v / c) * 100)}%`);
-      this.set(`f-${k}`, row, 'cls', s.econ.isFull(k) ? '1' : '0', 'full');
+      const sign = net.lt(0) ? '−' : '+';
+      const rateTxt = `${sign}${fmt(net.abs(), 1)}/min`; // "· full" comes from the .full class
+      this.set(`r-${k}`, $(row, '.rate'), 'html', `${rateTxt}${boost}`);
+      this.set(`t-${k}`, row, 'title', this.resourceBreakdown(k, true));
+      this.set(`b-${k}`, $(row, '.bar i'), 'width', c ? `${Math.round(Math.min(1, toNum(v) / Math.max(1e-9, toNum(c))) * 100)}%` : '100%');
+      this.set(`f-${k}`, row, 'cls', full ? '1' : '0', 'full');
     }
+    if (this.resInfo) this.set('resInfo', $(this.root, '#resInfo'), 'html', this.resourceBreakdown(this.resInfo));
     // Phase 4 E06: the Bloom Frenzy meter (appears with the first restored tile).
     const fb = $(this.root, '#frenzyBtn');
     if (fb.hidden && s.state.stats.tilesRestored > 0) fb.hidden = false;
@@ -805,7 +850,10 @@ export class Hud {
     const useful = s.upgrades.all().find((u) => s.upgrades.status(u).ok);
     const badge = $(this.root, '#upgBtn .badge');
     this.set('badgeOn', badge, 'cls', useful ? '1' : '0', 'on');
-    this.set('upgSc', $(this.root, '#upgBtn .sc'), 'text', useful ? `${s.upgrades.status(useful).cost}🌿` : '\u00a0');
+    // Phase 5 E12: otherwise, how long until the next thing (seconds of current net income).
+    const next = useful ? undefined : s.advisor.nextPurchase();
+    this.set('upgSc', $(this.root, '#upgBtn .sc'), 'text', useful ? `${fmt(s.upgrades.status(useful).cost)}🌿` : next ? `~${etaText(next.eta)}` : '\u00a0');
+    this.set('upgNext', $(this.root, '#upgNext'), 'html', next ? `Next: ${next.icon} ${esc(next.name)} · ${formatCost(next.cost)} · ${next.eta < 0.5 ? 'affordable now' : `~${etaText(next.eta)}`}` : useful ? '' : '');
     this.renderUpgrades();
 
     const cats = s.state.cat.found;
@@ -881,4 +929,12 @@ export class Hud {
   get currentTool() {
     return this.tool;
   }
+}
+
+/** "12 s", "3 min", "2 h": time-to-afford at the current net income (Phase 5 E12). */
+export function etaText(sec: number): string {
+  if (!Number.isFinite(sec)) return '—';
+  if (sec < 60) return `${Math.max(1, Math.ceil(sec))} s`;
+  if (sec < 3600) return `${Math.ceil(sec / 60)} min`;
+  return `${Math.round(sec / 360) / 10} h`;
 }

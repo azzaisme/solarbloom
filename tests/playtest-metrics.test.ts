@@ -1,3 +1,4 @@
+import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
@@ -52,7 +53,7 @@ describe('incremental metrics (City 06.5)', () => {
     const naiveTick = () => {
       const s = sim;
       const minPulse = T.pulse.prepared.energy * s.upgrades.pulseEnergyMult;
-      if (s.econ.get('energy') >= minPulse && s.econ.get('water') >= 1) return;
+      if (s.econ.get('energy').gte(minPulse) && s.econ.get('water').gte(1)) return;
       if (s.time >= s.state.harvestReadyAt) return;
       if (s.upgrades.all().some((u) => s.upgrades.status(u).ok)) return;
       naive += T.simStep;
@@ -60,9 +61,9 @@ describe('incremental metrics (City 06.5)', () => {
     const st = sim.state;
     for (let round = 0; round < 6; round++) {
       // Broke, harvest cooling down: stuck until income buys something; sometimes an upgrade gets bought.
-      st.resources.energy = 0;
-      st.resources.water = 0;
-      st.resources.biomass = round * 15;
+      st.resources.energy = big(0);
+      st.resources.water = big(0);
+      st.resources.biomass = big(round * 15);
       st.harvestReadyAt = sim.time + 40;
       for (let i = 0; i < 300; i++) {
         sim.tick();

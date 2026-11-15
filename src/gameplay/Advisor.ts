@@ -1,9 +1,9 @@
+import { Economy, formatCost, KINDS } from '../core/Economy';
 import { PARK } from '../core/Areas';
 import { GROUND } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
-import type { BuildableType, TileData } from '../core/types';
-import { MACHINES } from '../data/machines';
-import { formatCost } from '../core/Economy';
+import type { BuildableType, Cost, TileData } from '../core/types';
+import { BUILDABLE, MACHINES } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { AREA_TYPES } from '../data/city';
 import type { Sim } from './Sim';
@@ -39,7 +39,27 @@ export interface Frontier {
  * in every game state (headless, so tests can check it never comes up empty).
  */
 export class Advisor {
-  constructor(private sim: Sim) {}
+  /** Sim time of the last upgrade purchase (the upgrade hint's cooldown). */
+  private lastPurchaseAt = -Infinity;
+
+  /**
+   * Phase 5 E12: what the advisor is telling the player to save up for, and when it last said so. Drones leave
+   * its energy and water alone while the hint is fresh (DroneSystem.payJob); otherwise they spend everything
+   * above their 25% reserve and a price above that could never fill.
+   */
+  private saving?: { cost: Cost; at: number };
+  private saveFor(cost: Cost) {
+    this.saving = { cost, at: this.sim.time };
+  }
+  /** The price being saved for, while the hint is fresh. */
+  savingFor(): Cost | undefined {
+    const sv = this.saving;
+    return sv && this.sim.time - sv.at <= TUNING.advisor.savingFreshSeconds ? sv.cost : undefined;
+  }
+
+  constructor(private sim: Sim) {
+    sim.bus.on('upgrade.purchased', () => (this.lastPurchaseAt = sim.time));
+  }
 
   /** The open (revealed, not cleared) area closest to the park. */
   nearestFrontier(): Frontier | undefined {
@@ -87,9 +107,15 @@ export class Advisor {
       const d = s.districts.ready()[0];
       if (d) return { text: `${s.districts.title(d)} has ${s.districts.awakeGroup(d)} neighbouring landmarks awake: its district bloom is ready.`, label: '🌸 Set off the district bloom', action: { kind: 'district', districtId: d } };
     }
-    // 2. An upgrade you can buy now.
-    const up = s.upgrades.all().find((d) => s.upgrades.status(d).ok);
-    if (up) return { text: `${up.icon} ${up.name} is affordable: ${up.describe(s.upgrades.level(up.id) + 1)}.`, label: '⬆️ Upgrades', action: { kind: 'upgrades' } };
+    // 2. An upgrade you can buy now. Phase 5 E12: not again right after a purchase, so with per-machine
+    // upgrades on hundreds of machines the hint never loops on "buy one more level" instead of progress.
+    const recent = s.time - this.lastPurchaseAt < TUNING.advisor.upgradeHintCooldown;
+    const up = recent ? undefined : s.upgrades.all().find((d) => s.upgrades.status(d).ok);
+    if (up) {
+      const st = s.upgrades.status(up);
+      const lvl = up.machine ? s.upgrades.levelOf(st.machine, up.id) : s.upgrades.level(up.id);
+      return { text: `${up.icon} ${up.name} is affordable: ${up.describe(lvl + 1)}.`, label: '⬆️ Upgrades', action: { kind: 'upgrades' } };
+    }
     // 3. Before the fountain: a machine it still needs, if one can be built now.
     const build = city && !s.state.progression.coreActivated ? this.neededBuild() : undefined;
     if (build) return build;
@@ -149,7 +175,8 @@ export class Advisor {
       // A spot is ready but the purchase isn't: save up (resources always refill), unless storage can't hold it.
       if (s.econ.shortfall(cost)) {
         // Phase 4 E01: more than storage can hold → say so and point at the Seed Vault, if it can still grow.
-        if ((['energy', 'water', 'biomass'] as const).some((k) => (cost[k] ?? 0) > s.state.caps[k])) return this.storageStep(def.name);
+        if (s.econ.exceedsStorage(cost)) return this.storageStep(def.name);
+        this.saveFor(cost);
         return { text: `${why} Save up for a ${def.name} (${formatCost(cost)}).`, label: `${def.icon} Saving up…`, action: { kind: 'wait', seconds: 5 } };
       }
       return { text: `${why} ${what}`, label: `${def.icon} Build a ${def.name}`, action: { kind: 'build', type, x: spot.x, z: spot.z } };
@@ -242,6 +269,33 @@ export class Advisor {
     }
   }
 
+  /**
+   * Phase 5 E12: the next purchase worth saving for, and how long until it's affordable at the current net
+   * income (sim seconds). Affordable things come first (eta 0), then the soonest. Upgrades and machines both
+   * count; a price bigger than a capped store is skipped (the Seed Vault hint covers that).
+   */
+  nextPurchase(): { name: string; icon: string; cost: Cost; eta: number; kind: 'upgrade' | 'machine' } | undefined {
+    const s = this.sim;
+    let best: { name: string; icon: string; cost: Cost; eta: number; kind: 'upgrade' | 'machine' } | undefined;
+    const etaOf = (cost: Cost) => Math.max(0, ...KINDS.map((k) => s.ledger.eta(k, Economy.part(cost, k).sub(s.econ.get(k)))));
+    const consider = (name: string, icon: string, cost: Cost, kind: 'upgrade' | 'machine') => {
+      if (s.econ.exceedsStorage(cost)) return;
+      const eta = etaOf(cost);
+      if (!Number.isFinite(eta)) return;
+      if (!best || eta < best.eta - 1e-9) best = { name, icon, cost, eta, kind };
+    };
+    for (const def of s.upgrades.all()) {
+      const st = s.upgrades.status(def);
+      if (!st.ok && st.reason && !st.reason.startsWith('Need ')) continue;
+      consider(def.name, def.icon, { biomass: st.cost }, 'upgrade');
+    }
+    for (const type of BUILDABLE) {
+      if (!s.build.isUnlocked(type) || MACHINES[type].areaTypes) continue;
+      consider(MACHINES[type].name, MACHINES[type].icon, s.build.cost(type), 'machine');
+    }
+    return best;
+  }
+
   /** A purchase is bigger than storage: the Seed Vault's next tier, if there is one (Phase 4 E01). */
   storageStep(what: string): Suggestion | undefined {
     const vault = this.sim.upgrades.all().find((u) => u.id === 'seedVault');
@@ -262,9 +316,10 @@ export class Advisor {
       if (s.econ.shortfall(cost)) {
         // Phase 4: short only of things that refill on their own (and fit in storage): save up instead of
         // tapping it all away. Otherwise keep restoring (biomass only comes from restored tiles).
-        const short = (['energy', 'water', 'biomass'] as const).filter((k) => (cost[k] ?? 0) > s.econ.get(k));
-        if (s.build.isUnlocked(type) && short.every((k) => rates[k] > 0 && (cost[k] ?? 0) <= s.econ.cap(k))) {
+        const short = KINDS.filter((k) => Economy.part(cost, k).gt(s.econ.get(k)));
+        if (s.build.isUnlocked(type) && !s.econ.exceedsStorage(cost) && short.every((k) => rates[k].gt(0))) {
           const def = MACHINES[type];
+          this.saveFor(cost);
           return { text: `The fountain needs a ${def.name}: let your stores fill up (${formatCost(cost)}).`, label: `${def.icon} Saving up…`, action: { kind: 'wait', seconds: 5 } };
         }
         continue;

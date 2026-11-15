@@ -1,3 +1,5 @@
+import { caps } from '../src/core/Economy';
+import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { meetSpecialty } from './city-helpers';
 import { PARK } from '../src/core/Areas';
@@ -62,7 +64,9 @@ function pack(sim: Sim, id: string, type: MachineData['type'] = 'solar') {
 
 const broke = (sim: Sim) => {
   const r = sim.state.resources;
-  r.energy = r.water = r.biomass = 0;
+  r.energy = big(0);
+  r.water = big(0);
+  r.biomass = big(0);
 };
 
 describe('no-stall guarantees (City 09.5)', () => {
@@ -99,7 +103,7 @@ describe('no-stall guarantees (City 09.5)', () => {
       sim.areas.clear(id);
     }
     broke(sim);
-    Object.assign(sim.state.caps, TUNING.start.caps); // and back to the starting storage
+    Object.assign(sim.state.caps, caps(TUNING.start.caps)); // and back to the starting storage
     const goal = sim.areas.revealed().filter((id) => sim.areas.fog(id) !== 'cleared').sort((a, b) => sim.areas.info(b).distance - sim.areas.info(a).distance)[0];
     expect(sim.areas.info(goal).difficulty).toBeGreaterThan(1.3);
     const before = cleared(sim);

@@ -1,3 +1,4 @@
+import type { Big } from '../core/Big';
 import { CHUNK } from '../core/Hash';
 import type { Theme } from '../data/city';
 import { CITY_GEN } from '../data/city';
@@ -185,7 +186,7 @@ export class DistrictSystem {
       }
     }
     s.state.stats.tilesRestored += restored.length;
-    const got: Partial<Record<ResourceKind, number>> = {};
+    const got: Partial<Record<ResourceKind, Big>> = {};
     for (const k of ['energy', 'water', 'biomass'] as const) got[k] = s.econ.add(k, reward[k]);
     s.production.markDirty();
     s.bus.emit('district.bloom', { districtId: id, restored, lusher, reward: got, replay: false });

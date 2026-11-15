@@ -1,5 +1,5 @@
-import { KINDS } from '../core/Economy';
-import type { Cost, Resources } from '../core/types';
+import { amounts, KINDS } from '../core/Economy';
+import type { Amounts, Cost } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
@@ -10,9 +10,9 @@ export interface OfflineReport {
   /** seconds actually away */
   away: number;
   /** resources banked */
-  credited: Resources;
+  credited: Amounts;
   /** income that didn't fit in storage */
-  lost: Resources;
+  lost: Amounts;
   droneJobs: number;
   restored: number;
   grown: number;
@@ -37,16 +37,16 @@ export class OfflineSystem {
     const s = this.sim;
     const seconds = Math.min(awaySeconds, O.maxSeconds);
     const eff = seconds * O.rate;
-    const credited: Resources = { energy: 0, water: 0, biomass: 0 };
-    const lost: Resources = { energy: 0, water: 0, biomass: 0 };
+    const credited: Amounts = amounts({});
+    const lost: Amounts = amounts({});
     s.frenzy.suspended = true; // time away never charges Bloom Frenzy
     const rates = s.production.rates(true);
     for (const k of KINDS) {
-      const amount = rates[k] * eff;
-      if (!(amount > 0)) continue;
-      const got = s.econ.add(k, amount);
-      credited[k] += got;
-      lost[k] += amount - got;
+      const amount = rates[k].mul(eff);
+      if (amount.lte(0)) continue;
+      const got = s.econ.add(k, amount, { frenzy: false });
+      credited[k] = credited[k].add(got);
+      lost[k] = lost[k].add(amount.sub(got).max(0));
     }
     const report: OfflineReport = { seconds, away: awaySeconds, credited, lost, droneJobs: 0, restored: 0, grown: 0 };
     this.droneWork(eff, report);
@@ -64,7 +64,7 @@ export class OfflineSystem {
     let total = 0;
     for (const d of drones) {
       // One job: the cooldown, the work, and about two tiles of flight each way.
-      const per = d.old ? D.old.cycleSeconds + D.old.workSeconds + 4 / D.old.flySpeed : D.cycleSeconds * s.upgrades.droneCycleMult + D.workSeconds + 4 / (s.drones.speedOf(d) / s.mods.droneSpeedMult()); // sustained pace, no boosts
+      const per = d.old ? D.old.cycleSeconds + D.old.workSeconds + 4 / D.old.flySpeed : D.cycleSeconds / s.upgrades.droneSpeed(s.machine(d.hubId)) + D.workSeconds + 4 / (s.drones.speedOf(d) / s.mods.droneSpeedMult()); // sustained pace, no boosts
       const n = Math.floor(eff / per);
       budget.set(d.id, n);
       total += n;

@@ -1,3 +1,4 @@
+import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState } from '../src/core/GameState';
@@ -8,8 +9,8 @@ describe('Phase 4 E03: the pulse preview is exactly what the pulse does', () => 
     for (const [broad, over] of [[0, 0], [1, 0], [2, 0], [3, 0], [0, 3]]) {
       const sim = new Sim(createInitialState(11));
       const s = sim.state;
-      s.caps.energy = s.caps.water = 1000;
-      s.resources.energy = s.resources.water = 1000;
+      s.caps.energy = big(1000); s.caps.water = big(1000);
+      s.resources.energy = big(1000); s.resources.water = big(1000);
       s.upgrades.broadPulse = broad;
       s.upgrades.overcharge = over;
       if (over) s.progression.pulseCharge = 99; // the next pulse is Overcharged
@@ -78,8 +79,8 @@ describe('Phase 4 E05: evolving tiles', () => {
     const { TUNING } = await import('../src/data/tuning');
     const sim = new Sim(createInitialState(9));
     const s = sim.state;
-    s.caps.energy = s.caps.water = 1000;
-    s.resources.energy = s.resources.water = 1000;
+    s.caps.energy = big(1000); s.caps.water = big(1000);
+    s.resources.energy = big(1000); s.resources.water = big(1000);
     const t = sim.areas.tiles(PARK).find((x) => x.ground === 'polluted' && sim.restoration.checkPulse(x).ok)!;
     sim.restoration.complete(t, 'pulse');
     const rates: number[] = [];

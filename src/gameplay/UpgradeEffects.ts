@@ -35,7 +35,10 @@ export function upgradeHighlights(sim: Sim, id: string): Spot[] {
       return goal ? s.areas.entryTiles(goal).slice(0, 6).map((t) => ({ roofId: GROUND, x: t.x + 0.5, z: t.z + 0.5 })) : [];
     }
     case 'solarArray':
+    case 'harvestBurst': // Harvest gathers at the solar panels
       return of('solar');
+    case 'chainHops':
+      return of('pollinator').length ? of('pollinator') : of('solar');
     case 'richSoil':
     case 'seedVault':
       return of('core').slice(0, 1).concat(landmarks(true)).slice(0, 8);

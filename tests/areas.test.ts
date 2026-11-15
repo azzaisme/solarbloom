@@ -1,3 +1,4 @@
+import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { meetSpecialty } from './city-helpers';
 import { SaveService } from '../src/app/SaveService';
@@ -14,8 +15,8 @@ function city(seed = 4) {
   g.unlocked = true;
   g.preview = false;
   const s = sim.state;
-  s.caps.energy = s.caps.water = s.caps.biomass = 1e6;
-  s.resources.energy = s.resources.water = s.resources.biomass = 1e5;
+  s.caps.energy = big(1e6); s.caps.water = big(1e6);
+  s.resources.energy = big(1e5); s.resources.water = big(1e5); s.resources.biomass = big(1e5);
   return sim;
 }
 

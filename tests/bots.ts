@@ -1,3 +1,4 @@
+import { big, toNum } from '../src/core/Big';
 import { distToFootprint } from '../src/core/Grid';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { KINDS } from '../src/core/Economy';
@@ -79,9 +80,9 @@ export function runBot(opts: BotOptions): BotReport {
   const s = sim.state;
   const earned: Record<ResourceKind, number> = { energy: 0, water: 0, biomass: 0 };
   const add = sim.econ.add.bind(sim.econ);
-  sim.econ.add = (k, a) => {
-    const got = add(k, a);
-    earned[k] += got;
+  sim.econ.add = (k, a, o) => {
+    const got = add(k, a, o);
+    earned[k] += toNum(got);
     return got;
   };
   const upgrades: BotReport['upgrades'] = [];
@@ -102,6 +103,7 @@ export function runBot(opts: BotOptions): BotReport {
   });
   sim.bus.on('cat.found', meaningful);
   sim.bus.on('milestone.reached', meaningful);
+  sim.bus.on('area.step', meaningful);
   sim.bus.on('frenzy.started', meaningful);
   sim.bus.on('rooftop.coreRestored', meaningful);
   sim.bus.on('area.cleared', meaningful);
@@ -122,7 +124,7 @@ export function runBot(opts: BotOptions): BotReport {
     s.machines.reduce((a, m) => {
       const d = distToFootprint(t.x, t.z, m.x, m.z, m.size);
       if (m.type === 'pollinator' && d === 1) return a + 3;
-      if (m.type === 'motherTree' && d >= 1 && d <= sim.upgrades.treeRadius) return a + 2;
+      if (m.type === 'motherTree' && d >= 1 && d <= sim.upgrades.treeRadius(m)) return a + 2;
       if (m.type === 'solar' && d === 1) return a + 1;
       return a;
     }, 0);
@@ -182,13 +184,18 @@ export function runBot(opts: BotOptions): BotReport {
     }
     if (taps) {
       if (target) sim.restoration.pulse(target.id);
-      else if (s.resources.energy < 3) sim.harvestSun();
+      else if (s.resources.energy.lt(3)) sim.harvestSun();
     }
     // 3. upgrades when the next machine is far off
-    const nextCost = ORDER[next] ? (sim.build.cost(ORDER[next]).biomass ?? 0) : 0;
+    // Phase 5 E12: biomass is uncapped, so keep back only the next machine's price. Per-machine upgrades go to
+    // the cheapest machine of the type (as "Upgrade all" would), a few levels per action.
+    const nextCost = ORDER[next] ? big(sim.build.cost(ORDER[next]).biomass ?? 0) : big(0);
     for (const u of opts.noUpgrades ? [] : sim.upgrades.all()) {
-      const st = sim.upgrades.status(u);
-      if (st.ok && (opts.eager || s.resources.biomass - st.cost >= Math.min(nextCost, s.caps.biomass * 0.6))) sim.upgrades.purchase(u.id);
+      for (let i = 0; i < 4; i++) {
+        const st = sim.upgrades.status(u);
+        if (!(st.ok && (opts.eager || s.resources.biomass.sub(st.cost).gte(nextCost)))) break;
+        if (!sim.upgrades.purchase(u.id)) break;
+      }
     }
     if (sim.progression.coreReady()) sim.progression.activateCore();
     // 4. find the cat ~40 s after it appears
@@ -206,7 +213,7 @@ export function runBot(opts: BotOptions): BotReport {
     sim.tick();
     if (i % 10 === 0) {
       const hub = sim.build.cost('droneHub');
-      if (hubFitsCap < 0 && s.caps.biomass >= (hub.biomass ?? 0)) hubFitsCap = Math.round(sim.time);
+      if (hubFitsCap < 0 && !sim.econ.exceedsStorage(hub)) hubFitsCap = Math.round(sim.time);
       if (hubAffordable < 0 && sim.econ.canAfford(hub)) hubAffordable = Math.round(sim.time);
       for (const k of KINDS) if (sim.econ.isFull(k)) capped[k] += 1;
       opts.onSecond?.(sim);
@@ -217,9 +224,9 @@ export function runBot(opts: BotOptions): BotReport {
         m: Math.round(sim.time / 60),
         parkRestored: sim.progression.restoredCount(HOME),
         tiles: s.stats.tilesRestored,
-        res: { energy: Math.round(s.resources.energy), water: Math.round(s.resources.water), biomass: Math.round(s.resources.biomass) },
-        caps: { ...s.caps },
-        rates: { energy: Math.round(r.energy * 60), water: Math.round(r.water * 60), biomass: Math.round(r.biomass * 60) },
+        res: { energy: Math.round(toNum(s.resources.energy)), water: Math.round(toNum(s.resources.water)), biomass: Math.round(toNum(s.resources.biomass)) },
+        caps: { energy: toNum(s.caps.energy), water: toNum(s.caps.water), biomass: Infinity },
+        rates: { energy: Math.round(toNum(r.energy) * 60), water: Math.round(toNum(r.water) * 60), biomass: Math.round(toNum(r.biomass) * 60) },
       });
     }
   }

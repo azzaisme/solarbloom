@@ -1,3 +1,4 @@
+import { big, toNum } from '../src/core/Big';
 import { TUNING } from '../src/data/tuning';
 import { describe, expect, it } from 'vitest';
 import { fill, makeSim, rich, setGround } from './helpers';
@@ -26,10 +27,10 @@ describe('drones', () => {
     fill(sim, 4, 4, 5, 5, 'restored');
     sim.build.place('droneHub', 'r1', 4, 4);
     sim.state.machines = sim.state.machines.filter((m) => m.type !== 'solar');
-    sim.state.resources.energy = 0;
+    sim.state.resources.energy = big(0);
     sim.advance(10);
     expect(sim.state.stats.droneJobs).toBe(0);
-    expect(sim.state.resources.energy).toBeGreaterThanOrEqual(0);
+    expect(toNum(sim.state.resources.energy)).toBeGreaterThanOrEqual(0);
     expect(sim.drones.statusOf(sim.state.drones[0])).toBe('waitingEnergy');
   });
 
@@ -63,10 +64,10 @@ describe('drones', () => {
     const sim = makeSim();
     rich(sim);
     fill(sim, 4, 4, 5, 5, 'restored');
-    sim.build.place('droneHub', 'r1', 4, 4);
+    const hub = sim.build.place('droneHub', 'r1', 4, 4)!;
     const hubDrones = () => sim.state.drones.filter((d) => !d.old); // not the park's old drone
     expect(hubDrones()).toHaveLength(1);
-    sim.state.upgrades.secondDrone = 1;
+    expect(sim.upgrades.purchase('secondDrone', hub.id)).toBe(true); // Phase 5 E12: per hub
     sim.tick();
     expect(hubDrones().filter((d) => d.expiresAt === undefined)).toHaveLength(2);
     sim.advance(5);
@@ -79,11 +80,11 @@ describe('drones', () => {
     fill(sim, 0, 0, 7, 7, 'polluted');
     fill(sim, 3, 3, 4, 4, 'restored');
     setGround(sim, 6, 3, 'restored');
-    sim.build.place('droneHub', 'r1', 3, 3);
+    const hub = sim.build.place('droneHub', 'r1', 3, 3)!;
     sim.build.place('pollinator', 'r1', 6, 3);
     const d = sim.state.drones[0];
     const plain = sim.drones.findJob(d)!;
-    sim.state.upgrades.chainIntel = 1;
+    expect(sim.upgrades.purchase('chainIntel', hub.id)).toBe(true);
     const smart = sim.drones.findJob(d)!;
     const near = (id: string) => {
       const t = sim.grid.byTileId(id)!;
@@ -104,9 +105,9 @@ describe('drones', () => {
     fill(sim, 0, 0, 7, 7, 'restored');
     for (const t of sim.grid.tilesOf('r1')) t.bloom = TUNING.restore.maxBloom;
     setGround(sim, 6, 4, 'polluted'); // 4 tiles from the hub's footprint; base radius is 3
-    sim.build.place('droneHub', 'r1', 2, 2);
+    const hub = sim.build.place('droneHub', 'r1', 2, 2)!;
     expect(sim.drones.findJob(sim.state.drones[0])).toBeUndefined();
-    sim.state.upgrades.droneRadius = 1;
+    expect(sim.upgrades.purchase('droneRadius', hub.id)).toBe(true);
     expect(sim.drones.findJob(sim.state.drones[0])?.id).toBe('r1:6:4');
     } finally {
       R.hubRadius = was;

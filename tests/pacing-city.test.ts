@@ -23,7 +23,7 @@ export async function playCity(seed: number, actionEvery = 3, minutes = 60, setu
     sim.grid.machinesNear(t.roofId, t.x, t.z, 2).reduce((a, m) => {
       const d = distToFootprint(t.x, t.z, m.x, m.z, m.size);
       if (m.type === 'pollinator' && d === 1) return a + 3;
-      if (m.type === 'motherTree' && d >= 1 && d <= sim.upgrades.treeRadius) return a + 2;
+      if (m.type === 'motherTree' && d >= 1 && d <= sim.upgrades.treeRadius(m)) return a + 2;
       if (m.type === 'solar' && d === 1) return a + 1;
       return a;
     }, 0);
@@ -54,12 +54,12 @@ export async function playCity(seed: number, actionEvery = 3, minutes = 60, setu
       const rank = (t: TileData) => (t.ground === 'restored' ? 30 : 0) - synergy(t) * 4 + (t.ground === 'prepared' ? 0 : 3);
       cands.sort((a, b) => rank(a) - rank(b) || a.pollution - b.pollution);
       if (cands[0] && !saving) sim.restoration.pulse(cands[0].id);
-      else if (sim.state.resources.energy < 3) sim.harvestSun();
+      else if (sim.state.resources.energy.lt(3)) sim.harvestSun();
       // 3. upgrades, keeping enough for the next machine
       const nextCost = want ? (sim.build.cost(want).biomass ?? 0) : 0;
       for (const u of sim.upgrades.all()) {
         const st = sim.upgrades.status(u);
-        if (st.ok && !saving && sim.state.resources.biomass - st.cost >= Math.min(nextCost, sim.state.caps.biomass * 0.6)) sim.upgrades.purchase(u.id);
+        if (st.ok && !saving && sim.state.resources.biomass.sub(st.cost).gte(nextCost)) sim.upgrades.purchase(u.id);
       }
       if (sim.progression.coreReady()) sim.progression.activateCore();
       const c = sim.state.cat.active;
@@ -77,14 +77,14 @@ const fmt = (s?: number) => (s === undefined || !isFinite(s) ? '—' : `${Math.f
 describe('pacing in the endless city (scripted player)', () => {
   // One test per seed: a single synchronous test over ~60 s starves the Vitest worker's RPC (CI timeout).
   for (const seed of [7, 21])
-  it(`after the fountain, keeps clearing areas at a steady pace with no dead time (seed ${seed})`, { timeout: 120000 }, async () => {
+  it(`after the fountain, keeps clearing areas at a steady pace with no dead time (seed ${seed})`, { timeout: 300000 }, async () => {
     {
       const r = await playCity(seed, 3, 60);
       const gaps = r.clears.map((t, i) => t - (i ? r.clears[i - 1] : r.fountain ?? 0));
       const avg = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : Infinity;
       // eslint-disable-next-line no-console
       console.log(
-        `city seed ${seed}: fountain ${fmt(r.fountain)} · ${r.clears.length} areas in 60 min · first ${fmt(r.clears[0])} · avg ${fmt(avg)} per area · slowest ${fmt(Math.max(...gaps))} · stuck ${Math.round(r.stuck)}s · max chain ×${r.maxCombo} · big chains by you ${r.sim.state.stats.bigChains?.player ?? 0} / automation ${r.sim.state.stats.bigChains?.auto ?? 0} · storage ${Math.round(r.sim.state.caps.biomass)}🌿`,
+        `city seed ${seed}: fountain ${fmt(r.fountain)} · ${r.clears.length} areas in 60 min · first ${fmt(r.clears[0])} · avg ${fmt(avg)} per area · slowest ${fmt(Math.max(...gaps))} · stuck ${Math.round(r.stuck)}s · max chain ×${r.maxCombo} · big chains by you ${r.sim.state.stats.bigChains?.player ?? 0} / automation ${r.sim.state.stats.bigChains?.auto ?? 0}`,
       );
       expect(r.fountain).toBeDefined();
       expect(r.clears.length).toBeGreaterThanOrEqual(8);

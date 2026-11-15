@@ -1,3 +1,4 @@
+import { toNum, type Big } from '../core/Big';
 import type { ResourceKind } from '../core/types';
 import type { Sim } from './Sim';
 
@@ -27,19 +28,20 @@ export class DebugLog {
     b.on('pulse.fired', ({ extra, overcharged }) => this.push('pulse.cast', { extra: extra.length, overcharged }));
     b.on('tile.restored', ({ source }) => this.count(`tile.${source}`));
     b.on('tile.nurtured', ({ level }) => this.count(`tile.bloom${level}`));
-    b.on('chain.ended', ({ combo, total, starter, areas }) => this.push('chain.resolved', { combo, total: Math.round(total), starter, areas }));
+    b.on('chain.ended', ({ combo, total, starter, areas }) => this.push('chain.resolved', { combo, total: toNum(total), starter, areas }));
     b.on('upgrade.purchased', ({ id, level }) => this.push('upgrade.purchased', { id, level }));
     b.on('machine.built', ({ machine }) => this.push('machine.built', { type: machine.type, id: machine.id }));
     b.on('cat.found', ({ reward, extras }) => this.push('cat.found', { reward, extras }));
     b.on('cat.spawned', ({ anchorId }) => this.push('cat.spawned', { anchorId }));
     b.on('resource.full', ({ kind }) => this.push('resource.full', { kind }));
-    b.on('harvest', ({ amount }) => this.push('harvest', { amount: Math.round(amount) }));
+    b.on('harvest', ({ amount }) => this.push('harvest', { amount: toNum(amount) }));
     b.on('tree.discharged', () => this.push('tree.discharged'));
     b.on('mega.ready', () => this.push('mega.ready'));
     b.on('frenzy.ready', () => this.push('frenzy.ready'));
     b.on('frenzy.started', () => this.push('frenzy.activated'));
     b.on('frenzy.ended', () => this.push('frenzy.ended'));
     b.on('milestone.reached', ({ at }) => this.push('milestone', { id: `park${at}` }));
+    b.on('area.step', ({ areaId, step }) => this.push('milestone', { id: `${areaId}:step${step}` }));
     b.on('rooftop.coreReady', () => this.push('milestone', { id: 'fountainReady' }));
     b.on('rooftop.coreRestored', () => this.push('milestone', { id: 'fountain' }));
     b.on('area.cleared', ({ areaId }) => this.push('milestone', { id: `area:${areaId}` }));
@@ -58,8 +60,8 @@ export class DebugLog {
   }
 
   /** Called by the Economy when income is lost to a full store. */
-  onOverflow(kind: ResourceKind, amount: number) {
-    this.overflow[kind] += amount;
+  onOverflow(kind: ResourceKind, amount: Big) {
+    this.overflow[kind] += toNum(amount);
   }
 
   /** Entries of one type (newest last). */

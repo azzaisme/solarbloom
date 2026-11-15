@@ -76,7 +76,7 @@ try {
     const g = window.solarbloom;
     const s = g.sim;
     const st = s.state;
-    st.caps.energy = st.caps.water = st.caps.biomass = 1e9;
+    st.caps.energy = new (st.resources.energy.constructor)(1e9); st.caps.water = new (st.resources.energy.constructor)(1e9);
     st.progression.coreActivated = true;
     s.areas.clear('park', true);
     const insert = (type, t) => {
@@ -264,7 +264,7 @@ try {
     const g = window.solarbloom;
     const s = g.sim;
     const st = s.state;
-    st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
+    st.resources.energy = new (st.resources.energy.constructor)(1e6); st.resources.water = new (st.resources.energy.constructor)(1e6); st.resources.biomass = new (st.resources.energy.constructor)(1e6);
     const cleared = new Set(s.areas.revealed().filter((id) => s.areas.fog(id) === 'cleared'));
     const ok = (x, z) => {
       const t = s.grid.get('g', x, z);

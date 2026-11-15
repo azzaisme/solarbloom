@@ -2,6 +2,19 @@
 
 Moved out of the `azzaisme/mouthwash-brigade` repo (where it started in a `solarbloom/` folder) with its full history.
 
+# Phase 5: Ecological Overdrive
+
+Plan: `docs/PHASE_5_EPICS.md`. Decisions, audit and results: `docs/PHASE_5_AUDIT.md`. Timings are from scripted bots, not people.
+
+| Epic | Status |
+|---|---|
+| E12 Economy scaling | ✅ big numbers everywhere (`break_infinity.js`, K/M/B/T… display, saves as strings, save v5), uncapped biomass (Seed Vault grows energy and water only), net income in the HUD with a tap-for-breakdown (producing / spending / lost to full storage), spec overflow rule for Frenzy (share of income wasted, ≤ 0.15/s; Harvest into a full store never counts) plus charge from automation growth, per-machine upgrades with "Upgrade all" (cheapest first), long-tail Solar Wings and Rich Soil, Harvest Burst and Chain Hops, next purchase with time-to-afford, rewarded 25/50/75 % steps in every city area, no specialty stall once an area is fully restored, no impossible machine prices. Bots: always something to buy for 30 min (Phase 4: nothing after ~5 min); city 76 / 82 areas an hour with the player still starting most big chains |
+| E13 Machine merging | next |
+| E14 Superstructures | after E13 |
+| E15 World events | after E12 |
+| E16 Living ecosystems | after E14 |
+| E17 | replaced (agreed): park → suburbs → skyscrapers in the endless city, houses and towers solarpunkified as staged projects, after the E12–E16 gate |
+
 # Phase 4: Dopamine Overdrive
 
 Plan: `docs/PHASE_4_EPICS.md`. Audit, baseline and results: `docs/PHASE_4_AUDIT.md`. Timings are from scripted bots, not people.

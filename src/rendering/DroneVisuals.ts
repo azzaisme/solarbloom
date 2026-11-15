@@ -47,7 +47,7 @@ export class DroneVisuals {
     // Phase 4 E09: the old drone looks its age (worn cream shell, a rust patch, amber eyes, a bent antenna);
     // hub drones' trim shows Drone Dash: cyan at level 2, gold at level 3.
     const old = !!d.old;
-    const dash = this.sim.upgrades.level('droneSpeed');
+    const dash = this.sim.upgrades.levelOf(this.sim.machine(d.hubId), 'droneSpeed'); // Phase 5 E12: per hub
     const eyeCol = old ? '#ffb347' : PALETTE.eyeCyan;
     shape(body, 'sphere', mat(old ? '#d9cbb0' : PALETTE.white, { gloss: old ? 0.2 : 0.7 }), { scale: [0.36, 0.3, 0.36], shadow: true });
     shape(body, 'cylinder', mat(old ? '#9a8a70' : dash >= 3 ? '#ffd34d' : dash >= 2 ? '#6fd3ff' : PALETTE.shell), { pos: [0, -0.1, 0], scale: [0.26, 0.06, 0.26] });

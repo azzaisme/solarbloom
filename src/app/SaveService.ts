@@ -1,3 +1,5 @@
+import { amounts, caps } from '../core/Economy';
+import type { BigLike } from '../core/Big';
 import { createInitialState, SAVE_VERSION } from '../core/GameState';
 import type { Grid } from '../core/Grid';
 import { packChunk } from '../core/TilePack';
@@ -126,9 +128,13 @@ export class SaveService {
       if (s.version > SAVE_VERSION || !Array.isArray(s.layers)) return undefined;
       // Fill any fields added after this save was written.
       const base = createInitialState(s.seed);
+      // Phase 5 E12: resource quantities are saved as Decimal strings.
+      const raw = s as unknown as { resources?: Record<string, BigLike>; caps?: Record<string, BigLike> };
       return {
         ...base,
         ...s,
+        resources: amounts(raw.resources ?? {}),
+        caps: caps(raw.caps ?? {}),
         cat: { ...base.cat, ...s.cat },
         progression: { ...base.progression, ...s.progression },
         stats: { ...base.stats, ...s.stats, firsts: { ...(s.stats?.firsts ?? {}) } },

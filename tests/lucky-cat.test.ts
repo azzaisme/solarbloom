@@ -1,3 +1,4 @@
+import { toNum } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService, type StorageLike } from '../src/app/SaveService';
 import { Sim } from '../src/gameplay/Sim';
@@ -45,13 +46,13 @@ describe('lucky cat', () => {
   it('pays exactly once; first reward is a Lucky Harvest', () => {
     const sim = makeSim();
     sim.cat.spawn();
-    const b0 = sim.state.resources.biomass;
+    const b0 = toNum(sim.state.resources.biomass);
     const r = sim.cat.claim();
     expect(r?.type).toBe('luckyHarvest');
-    expect(sim.state.resources.biomass).toBeGreaterThan(b0);
-    const b1 = sim.state.resources.biomass;
+    expect(toNum(sim.state.resources.biomass)).toBeGreaterThan(b0);
+    const b1 = toNum(sim.state.resources.biomass);
     expect(sim.cat.claim()).toBeUndefined();
-    expect(sim.state.resources.biomass).toBe(b1);
+    expect(toNum(sim.state.resources.biomass)).toBe(b1);
     expect(sim.state.cat.nextSpawnAt).toBeGreaterThan(sim.time);
   });
 
@@ -77,8 +78,9 @@ describe('lucky cat', () => {
       sim.cat.claim();
       sim.advance(TUNING.cat.dronePartySeconds * 1.6);
       for (const k of ['energy', 'water', 'biomass'] as const) {
-        expect(sim.state.resources[k]).toBeGreaterThanOrEqual(0);
-        expect(sim.state.resources[k]).toBeLessThanOrEqual(sim.state.caps[k] + 1e-9);
+        expect(toNum(sim.state.resources[k])).toBeGreaterThanOrEqual(0);
+        const cap = sim.econ.cap(k);
+        if (cap) expect(toNum(sim.state.resources[k])).toBeLessThanOrEqual(toNum(cap) + 1e-9);
       }
       expect(sim.state.drones.filter((d) => !d.old).length).toBe(1); // party drones expired (the park's old drone stays)
     }

@@ -1,3 +1,4 @@
+import { Economy } from '../core/Economy';
 import { GROUND } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
 import { KINDS } from '../core/Economy';
@@ -79,8 +80,9 @@ export class DroneSystem {
     return d;
   }
 
-  radius() {
-    return this.sim.upgrades.droneRadius;
+  /** A hub's work radius (Phase 5 E12: Work Radius is bought per hub). */
+  radius(hub: MachineData) {
+    return this.sim.upgrades.droneRadius(hub);
   }
 
   /** Roof the drone is over right now. */
@@ -139,7 +141,7 @@ export class DroneSystem {
   private tileCache = new Map<string, TileData[]>();
   private tileCacheStamp = '';
   private cached(key: string, make: () => TileData[]): TileData[] {
-    const stamp = `${this.sim.state.machines.length}|${this.radius()}|${this.sim.upgrades.networkRange}`;
+    const stamp = `${this.sim.state.machines.length}|${this.sim.upgrades.version}`;
     if (stamp !== this.tileCacheStamp) {
       this.tileCache.clear();
       this.tileCacheStamp = stamp;
@@ -151,7 +153,7 @@ export class DroneSystem {
 
   /** Tiles within one hub's own reach. */
   ownTiles(hub: MachineData): TileData[] {
-    return this.cached(`own|${hub.id}`, () => this.sim.grid.tilesInRange(hub, this.radius()));
+    return this.cached(`own|${hub.id}`, () => this.sim.grid.tilesInRange(hub, this.radius(hub)));
   }
 
   networkTiles(hub: MachineData): TileData[] {
@@ -166,7 +168,7 @@ export class DroneSystem {
     const seen = new Set<string>();
     const out: TileData[] = [];
     for (const h of hubs)
-      for (const t of this.sim.grid.tilesInRange(h, this.radius())) {
+      for (const t of this.sim.grid.tilesInRange(h, this.radius(h))) {
         if (seen.has(t.id)) continue;
         seen.add(t.id);
         out.push(t);
@@ -181,20 +183,21 @@ export class DroneSystem {
 
   /** Chain Intelligence: how likely a tile is to set off a synergy if restored now. */
   private synergyScore(t: TileData): number {
+    const u = this.sim.upgrades;
     const s = this.sim;
     let score = 0;
     for (const m of s.grid.machinesNear(t.roofId, t.x, t.z, s.chains.synergyReach())) {
       const d = distToFootprint(t.x, t.z, m.x, m.z, m.size);
-      if (m.type === 'pollinator' && d >= 1 && d <= s.upgrades.pollinatorReach) score += 3;
+      if (m.type === 'pollinator' && d >= 1 && d <= u.pollinatorReach(m)) score += 3;
       else if (m.type === 'solar' && d === 1 && m.boostUntil <= s.time) score += 1.5;
-      else if (m.type === 'motherTree' && d >= 1 && d <= s.upgrades.treeRadius && m.charge >= TUNING.motherTree.threshold * 0.6) score += 4;
+      else if (m.type === 'motherTree' && d >= 1 && d <= u.treeRadius(m) && m.charge >= TUNING.motherTree.threshold * 0.6) score += 4;
     }
     return score;
   }
 
-  /** Permanent drones a hub should have: the first hub gets a second with the upgrade. */
-  private wanted(_hub: MachineData): number {
-    return 1 + this.sim.upgrades.level('secondDrone'); // Phase 4 E07: Drone Squad, on every hub
+  /** Permanent drones a hub should have (Drone Squad, bought per hub). */
+  private wanted(hub: MachineData): number {
+    return this.sim.upgrades.squad(hub);
   }
 
   /**
@@ -220,7 +223,7 @@ export class DroneSystem {
     const nurturable = (t: TileData) => t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom && !this.isReserved(t.id);
     let best: TileData | undefined;
     let bestD = Infinity;
-    const intel = s.upgrades.level('chainIntel') > 0;
+    const intel = s.upgrades.chainIntel(hub);
     for (const t of inRange) {
       const mode = modeOf(t);
       if (mode === 'off') continue; // "Leave this area alone"
@@ -263,13 +266,21 @@ export class DroneSystem {
    */
   payJob(cost: Cost): boolean {
     const s = this.sim;
-    for (const k of KINDS) if ((cost[k] ?? 0) > 0 && s.econ.get(k) - (cost[k] ?? 0) < TUNING.drone.reserve * s.econ.cap(k) - 1e-9) return false;
+    const saving = s.advisor.savingFor(); // Phase 5 E12: leave what the player is saving up for
+    for (const k of KINDS) {
+      const p = Economy.part(cost, k);
+      const cap = s.econ.cap(k);
+      if (!cap || p.lte(0)) continue; // biomass is uncapped: no reserve to keep
+      let floor = cap.mul(TUNING.drone.reserve);
+      if (saving) floor = floor.max(Economy.part(saving, k).min(cap.mul(TUNING.machineCostMaxShare)));
+      if (s.econ.get(k).sub(p).lt(floor.sub(1e-9))) return false;
+    }
     return s.econ.spend(cost);
   }
 
   /** Tiles per second (the old drone is slow and ignores upgrades). */
   speedOf(d: DroneData): number {
-    return d.old ? TUNING.drone.old.flySpeed : TUNING.drone.flySpeed * this.sim.upgrades.droneFlyMult * this.sim.mods.droneSpeedMult();
+    return d.old ? TUNING.drone.old.flySpeed : TUNING.drone.flySpeed * this.sim.upgrades.droneSpeed(this.sim.machine(d.hubId)) * this.sim.mods.droneSpeedMult();
   }
 
   /** The old solar lamp the old drone lives by (the park's starter panel), if this game has one. */
@@ -382,7 +393,7 @@ export class DroneSystem {
           if (t && t.ground !== 'restored' && t.ground !== 'growing') {
             s.restoration.beginGrowth(t, 'drone', TUNING.pulse.growSeconds);
             // Phase 4 E07: Drone Sweep restores a few tiles around it for free (never another drone's target).
-            const sweep = d.old ? 0 : s.upgrades.droneSweep;
+            const sweep = d.old ? 0 : s.upgrades.droneSweep(s.machine(d.hubId));
             if (sweep > 0) {
               const around = s.grid
                 .neighbors(t)
@@ -399,7 +410,7 @@ export class DroneSystem {
             s.state.stats.droneJobs++;
           }
           d.mode = 'cooldown';
-          d.timer = d.old ? TUNING.drone.old.cycleSeconds : (TUNING.drone.cycleSeconds * s.upgrades.droneCycleMult) / s.mods.droneSpeedMult();
+          d.timer = d.old ? TUNING.drone.old.cycleSeconds : TUNING.drone.cycleSeconds / s.upgrades.droneSpeed(s.machine(d.hubId)) / s.mods.droneSpeedMult();
           break;
         }
         case 'cooldown': {
@@ -426,5 +437,5 @@ export class DroneSystem {
 }
 
 export function hubCoverage(sim: Sim, hub: MachineData): TileData[] {
-  return sim.grid.tilesNear(hub, sim.upgrades.droneRadius);
+  return sim.grid.tilesNear(hub, sim.upgrades.droneRadius(hub));
 }

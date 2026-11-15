@@ -1,3 +1,4 @@
+import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { Sim } from '../src/gameplay/Sim';
@@ -6,8 +7,8 @@ describe('simulation at city scale (City 06)', () => {
   it('ticks never scan the whole world: no per-tick full-tile or full-chunk sweeps', () => {
     const sim = new Sim(createInitialState(3));
     const st = sim.state;
-    st.caps.energy = st.caps.water = st.caps.biomass = 1e6;
-    st.resources.energy = st.resources.water = st.resources.biomass = 1e5;
+    st.caps.energy = big(1e6); st.caps.water = big(1e6);
+    st.resources.energy = big(1e5); st.resources.water = big(1e5); st.resources.biomass = big(1e5);
     for (let cz = -4; cz <= 4; cz++) for (let cx = -4; cx <= 4; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
     sim.advance(1); // warm-up (first full sum is allowed)
     const g = sim.grid as unknown as Record<string, (...a: unknown[]) => unknown>;
@@ -48,8 +49,8 @@ describe('active-region ticking (City 06.1)', () => {
   it('only chunks with something happening are active, and they leave the set when they go quiet', () => {
     const sim = new Sim(createInitialState(4));
     const st = sim.state;
-    st.caps.energy = st.caps.water = st.caps.biomass = 1e6;
-    st.resources.energy = st.resources.water = st.resources.biomass = 1e5;
+    st.caps.energy = big(1e6); st.caps.water = big(1e6);
+    st.resources.energy = big(1e5); st.resources.water = big(1e5); st.resources.biomass = big(1e5);
     sim.advance(1);
     const base = sim.activeChunks();
     // A pulse far out: its chunk is active while the tile grows, then quiet again.

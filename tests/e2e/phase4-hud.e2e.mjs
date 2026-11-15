@@ -38,9 +38,9 @@ try {
       const s = window.solarbloom.sim;
       const tiles = s.areas.tiles('park').filter((t) => s.restoration.isEligible(t)).slice(0, 19);
       for (const t of tiles) s.restoration.complete(t, 'pulse');
-      s.state.resources.energy = s.state.caps.energy;
-      s.state.resources.water = s.state.caps.water;
-      s.state.resources.biomass = 24;
+      s.state.resources.energy = new (s.state.resources.energy.constructor)(s.state.caps.energy);
+      s.state.resources.water = new (s.state.resources.energy.constructor)(s.state.caps.water);
+      s.state.resources.biomass = new (s.state.resources.energy.constructor)(24);
     });
     await page.waitForTimeout(1500);
     const rects = await page.evaluate((PANELS) => {

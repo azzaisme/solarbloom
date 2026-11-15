@@ -17,8 +17,8 @@ try {
   if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
   const found = await page.evaluate(() => {
     const g = window.solarbloom, s = g.sim, st = s.state;
-    st.caps.energy = st.caps.water = st.caps.biomass = 1e6;
-    st.resources.energy = st.resources.water = st.resources.biomass = 1e5;
+    st.caps.energy = new (st.resources.energy.constructor)(1e6); st.caps.water = new (st.resources.energy.constructor)(1e6);
+    st.resources.energy = new (st.resources.energy.constructor)(1e5); st.resources.water = new (st.resources.energy.constructor)(1e5); st.resources.biomass = new (st.resources.energy.constructor)(1e5);
     st.progression.coreActivated = true;
     s.areas.clear('park', true);
     let id;

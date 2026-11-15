@@ -1,3 +1,5 @@
+import { caps } from '../src/core/Economy';
+import { big, toNum } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, placeFixed } from '../src/core/GameState';
@@ -10,8 +12,8 @@ import { upgradeHighlights } from '../src/gameplay/UpgradeEffects';
 function world(rooftops: boolean) {
   const sim = new Sim(createInitialState(4));
   const st = sim.state;
-  st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
-  st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
+  st.caps.energy = big(1e7); st.caps.water = big(1e7);
+  st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
   const roof = rooftops ? 'r1' : GROUND;
   let x = rooftops ? 0 : 2;
   for (const type of ['solar', 'condenser', 'pollinator', 'droneHub', 'droneHub', 'motherTree', ...(rooftops ? [] : ['relay'])] as MachineData['type'][]) {
@@ -31,33 +33,38 @@ function world(rooftops: boolean) {
   return sim;
 }
 
+const best = (s: Sim, type: MachineData['type'], f: (m: MachineData) => number) => Math.max(0, ...s.machinesOfType(type).map(f));
+
 /** What each upgrade changes, as a number to compare before and after buying it. */
 const PROBES: Record<string, (s: Sim) => number> = {
   efficientPulse: (s) => s.upgrades.pulseEnergyMult,
   broadPulse: (s) => s.upgrades.broadExtra,
   overcharge: (s) => s.upgrades.overchargeEvery,
-  solarArray: (s) => s.upgrades.solarMult,
+  // Phase 5 E12: per-machine upgrades: the best level on any machine of the type.
+  solarArray: (s) => best(s, 'solar', (m) => s.upgrades.solarMult(m)),
   richSoil: (s) => s.upgrades.soilMult,
   seedVault: (s) => {
     // The caps it produces from the starting storage (the test world's caps are huge).
     const keep = { ...s.state.caps };
-    Object.assign(s.state.caps, TUNING.start.caps);
+    Object.assign(s.state.caps, caps(TUNING.start.caps));
     s.upgrades.applyCaps();
-    const v = s.state.caps.biomass;
+    const v = toNum(s.state.caps.energy);
     Object.assign(s.state.caps, keep);
     return v;
   },
-  droneSpeed: (s) => s.upgrades.droneFlyMult,
-  droneRadius: (s) => s.upgrades.droneRadius,
-  chainIntel: (s) => s.upgrades.level('chainIntel'),
-  secondDrone: (s) => s.upgrades.level('secondDrone'),
-  droneSweep: (s) => s.upgrades.droneSweep,
-  pollinatorReach: (s) => s.upgrades.pollinatorReach,
-  waterBloom: (s) => s.upgrades.waterBloom,
-  treeResonance: (s) => s.upgrades.treeRadius,
+  droneSpeed: (s) => best(s, 'droneHub', (m) => s.upgrades.droneSpeed(m)),
+  droneRadius: (s) => best(s, 'droneHub', (m) => s.upgrades.droneRadius(m)),
+  chainIntel: (s) => best(s, 'droneHub', (m) => (s.upgrades.chainIntel(m) ? 1 : 0)),
+  secondDrone: (s) => best(s, 'droneHub', (m) => s.upgrades.squad(m)),
+  droneSweep: (s) => best(s, 'droneHub', (m) => s.upgrades.droneSweep(m)),
+  pollinatorReach: (s) => best(s, 'pollinator', (m) => s.upgrades.pollinatorReach(m)),
+  waterBloom: (s) => best(s, 'condenser', (m) => s.upgrades.waterBloom(m)),
+  treeResonance: (s) => best(s, 'motherTree', (m) => s.upgrades.treeRadius(m)),
+  harvestBurst: (s) => s.upgrades.harvestBurstSeconds,
+  chainHops: (s) => s.upgrades.pollinatorTriggers,
   corridorReach: (s) => s.upgrades.corridorRange,
   droneMesh: (s) => s.upgrades.networkRange,
-  relayLens: (s) => s.relays.range() + s.relays.targets(),
+  relayLens: (s) => best(s, 'relay', (m) => s.relays.range(m) + s.relays.targets(m)),
   fogLantern: (s) => s.upgrades.wakeNeedMult,
   landmarkLights: (s) => s.areas.bonusIncome().biomass + s.areas.bonusIncome().energy + s.areas.bonusIncome().water,
 };

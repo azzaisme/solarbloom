@@ -172,7 +172,27 @@ export class AreaSystem {
       st.fog = 'thinning';
       this.sim.bus.emit('area.fogChanged', { areaId: id, fog: 'thinning' });
     }
+    this.checkSteps(id);
     this.checkReady(id);
+  }
+
+  /**
+   * Phase 5 E12: rewarded steps at 25 / 50 / 75% of the tiles a landmark needs (not the park: it has its own
+   * milestones). Marked paid before paying, so a reload can never pay twice; unique restored tiles only.
+   */
+  checkSteps(id: string) {
+    const st = this.sim.state.areas[id];
+    if (!st || id === PARK || st.fog === 'cleared') return;
+    const A = TUNING.areaSteps;
+    const share = this.counts(id).restored / this.need(id);
+    const s = this.sim;
+    while ((st.steps ?? 0) < A.at.length && share >= A.at[st.steps ?? 0]) {
+      const step = st.steps ?? 0;
+      st.steps = step + 1;
+      const bio = s.production.rates(true).biomass.mul(A.incomeSeconds[step]).max(A.min);
+      const credited = { biomass: s.econ.add('biomass', bio), energy: s.econ.add('energy', A.energy), water: s.econ.add('water', A.water) };
+      s.bus.emit('area.step', { areaId: id, step: step + 1, share: A.at[step], credited });
+    }
   }
   private announced = new Set<string>();
 

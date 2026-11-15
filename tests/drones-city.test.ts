@@ -1,3 +1,4 @@
+import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { TUNING } from '../src/data/tuning';
 import { PARK } from '../src/core/Areas';
@@ -8,8 +9,8 @@ import { Sim } from '../src/gameplay/Sim';
 function city(seed = 6, r = 3) {
   const sim = new Sim(createInitialState(seed));
   const st = sim.state;
-  st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
-  st.resources.energy = st.resources.water = st.resources.biomass = 1e7; // full: drones keep a reserve of the cap
+  st.caps.energy = big(1e7); st.caps.water = big(1e7);
+  st.resources.energy = big(1e7); st.resources.water = big(1e7); st.resources.biomass = big(1e7); // full: drones keep a reserve of the cap
   st.progression.coreActivated = true;
   sim.areas.clear(PARK, true);
   for (let cz = -r; cz <= r; cz++) for (let cx = -r; cx <= r; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
@@ -71,8 +72,8 @@ describe('drone networks (City 11)', () => {
   it('drones prefer restoring at the fog’s edge', () => {
     const sim = new Sim(createInitialState(8));
     const st = sim.state;
-    st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
-    st.resources.energy = st.resources.water = st.resources.biomass = 1e7; // full: drones keep a reserve of the cap
+    st.caps.energy = big(1e7); st.caps.water = big(1e7);
+    st.resources.energy = big(1e7); st.resources.water = big(1e7); st.resources.biomass = big(1e7); // full: drones keep a reserve of the cap
     st.progression.coreActivated = true;
     for (const t of sim.areas.tiles(PARK)) if (!t.blocked && !t.occupantId) {
       t.ground = 'restored';
@@ -121,8 +122,8 @@ describe('far-away drones as work rates (City 11.4)', () => {
     const { Sim: S } = await import('../src/gameplay/Sim');
     const sim = new S(create(seed));
     const st = sim.state;
-    st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
-    st.resources.energy = st.resources.water = st.resources.biomass = 1e7; // full: drones keep a reserve of the cap
+    st.caps.energy = big(1e7); st.caps.water = big(1e7);
+    st.resources.energy = big(1e7); st.resources.water = big(1e7); st.resources.biomass = big(1e7); // full: drones keep a reserve of the cap
     st.progression.coreActivated = true;
     for (let cz = -3; cz <= 3; cz++) for (let cx = -3; cx <= 3; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
     let n = 0;
@@ -173,7 +174,7 @@ describe('far-away drones as work rates (City 11.4)', () => {
         sim.tick();
         const after = sim.drones.worldOf(d);
         expect(d.far).toBeUndefined();
-        const step = 3 * 0.1 * sim.upgrades.droneFlyMult + 1e-6; // at most one tick of flight apart
+        const step = 3 * 0.1 * Math.max(...sim.machinesOfType('droneHub').map((h) => sim.upgrades.droneSpeed(h))) + 1e-6; // at most one tick of flight apart
         expect(Math.hypot(after[0] - before[0], after[2] - before[2])).toBeLessThanOrEqual(step * 1.01 + 0.31);
         checked++;
         sim.drones.focus = { x: 5000, z: 5000, radius: 50 };

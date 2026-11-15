@@ -23,7 +23,7 @@ export function playSession(seed: number, actionEvery = 3, minutes = 20) {
     sim.state.machines.reduce((a, m) => {
       const d = distToFootprint(t.x, t.z, m.x, m.z, m.size);
       if (m.type === 'pollinator' && d === 1) return a + 3;
-      if (m.type === 'motherTree' && d >= 1 && d <= sim.upgrades.treeRadius) return a + 2;
+      if (m.type === 'motherTree' && d >= 1 && d <= sim.upgrades.treeRadius(m)) return a + 2;
       if (m.type === 'solar' && d === 1) return a + 1;
       return a;
     }, 0);
@@ -54,12 +54,12 @@ export function playSession(seed: number, actionEvery = 3, minutes = 20) {
       const rank = (t: TileData) => (t.ground === 'restored' ? 30 : 0) - synergy(t) * 4 + (t.ground === 'prepared' ? 0 : 3);
       cands.sort((a, b) => rank(a) - rank(b) || a.pollution - b.pollution);
       if (cands[0]) sim.restoration.pulse(cands[0].id);
-      else if (sim.state.resources.energy < 3) sim.harvestSun();
+      else if (sim.state.resources.energy.lt(3)) sim.harvestSun();
       // 3. upgrades when the next machine is far off
       const nextCost = order[next] ? sim.build.cost(order[next]).biomass ?? 0 : 0;
       for (const u of sim.upgrades.all()) {
         const st = sim.upgrades.status(u);
-        if (st.ok && sim.state.resources.biomass - st.cost >= Math.min(nextCost, sim.state.caps.biomass * 0.6)) sim.upgrades.purchase(u.id);
+        if (st.ok && sim.state.resources.biomass.sub(st.cost).gte(nextCost)) sim.upgrades.purchase(u.id);
       }
       if (sim.progression.coreReady()) sim.progression.activateCore();
       // 4. find the cat ~40 s after it appears (players notice it eventually)

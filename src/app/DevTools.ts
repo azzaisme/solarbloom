@@ -1,3 +1,4 @@
+import { big } from '../core/Big';
 import { createInitialState, GROUND } from '../core/GameState';
 import { PARK } from '../core/Areas';
 import { Sim } from '../gameplay/Sim';
@@ -13,12 +14,13 @@ import type { Game } from './Game';
  *   sbDev.log()                the local event log (sim time, event, small numbers)
  *   sbDev.overflow()           income lost to full storage so far
  */
-export type PresetName = 'fresh' | 'screenshot' | 'rich';
+export type PresetName = 'fresh' | 'screenshot' | 'rich' | 'wealthy';
 
 export const PRESETS: Record<PresetName, string> = {
   fresh: 'A brand-new park.',
   screenshot: 'The Phase 4 screenshot: 19 park tiles restored, energy 60/60, water 40/40, biomass 24/100.',
   rich: 'A fresh park with large stores, for testing builds and upgrades.',
+  wealthy: 'A fresh park with 1e15 biomass: for checking big-number display and long-tail upgrades.',
 };
 
 /** Builds a preset's starting state headlessly (also used by tests). */
@@ -34,10 +36,15 @@ export function presetSim(name: PresetName, seed: number): Sim {
     for (const t of tiles.slice(0, 19)) sim.restoration.complete(t, 'pulse');
     s.resources.energy = s.caps.energy;
     s.resources.water = s.caps.water;
-    s.resources.biomass = 24;
+    s.resources.biomass = big(24);
   } else if (name === 'rich') {
-    s.caps.energy = s.caps.water = s.caps.biomass = 5000;
-    s.resources.energy = s.resources.water = s.resources.biomass = 4000;
+    s.caps.energy = big(5000);
+    s.caps.water = big(5000);
+    s.resources.energy = big(4000);
+    s.resources.water = big(4000);
+    s.resources.biomass = big(4000);
+  } else if (name === 'wealthy') {
+    s.resources.biomass = big('1e15');
   }
   void GROUND;
   return sim;

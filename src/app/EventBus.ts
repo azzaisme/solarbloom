@@ -1,19 +1,20 @@
+import type { Big } from '../core/Big';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import type { BuffType, CatRewardType, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
   'tile.restoring': { tile: TileData; source: RestoreSource };
-  'tile.restored': { tile: TileData; source: RestoreSource; chainId: number; biomass: number };
+  'tile.restored': { tile: TileData; source: RestoreSource; chainId: number; biomass: Big };
   'tile.prepared': { tile: TileData };
   'tile.softened': { tile: TileData };
-  'tile.nurtured': { tile: TileData; level: number };
-  'resource.gain': { kind: ResourceKind; amount: number; tileId?: string; reason?: string };
+  'tile.nurtured': { tile: TileData; level: number; auto?: boolean };
+  'resource.gain': { kind: ResourceKind; amount: Big; tileId?: string; reason?: string };
   'resource.full': { kind: ResourceKind };
   'machine.built': { machine: MachineData };
   'chain.started': { chainId: number; originTileId: string };
   'chain.event': { event: ChainEvent; combo: number };
   'chain.fastForward': { chainId: number };
-  'chain.ended': { chainId: number; combo: number; bonus: number; total: number; milestonePct: number; energy: number; roofs: string[]; crossings: number; areas: number; areaIds?: string[]; starter: 'player' | 'auto' };
+  'chain.ended': { chainId: number; combo: number; bonus: Big; total: Big; milestonePct: number; energy: Big; roofs: string[]; crossings: number; areas: number; areaIds?: string[]; starter: 'player' | 'auto' };
   'mega.released': { tileId: string; budget: number };
   'mega.ready': Record<string, never>;
   'area.modeChanged': { areaId: string; mode: 'bloom' | 'frontier' | 'off' | undefined };
@@ -35,7 +36,9 @@ export interface GameEvents {
   'solar.boost': { machineId: string };
   'pulse.fired': { tileId: string; extra: string[]; overcharged: boolean };
   'action.failed': { reason: string; tileId?: string };
-  'upgrade.purchased': { id: string; level: number };
+  'upgrade.purchased': { id: string; level: number; machineId?: string; bulk?: boolean };
+  /** Phase 5 E12: "Upgrade all" finished: `count` levels bought across machines of one type. */
+  'upgrade.bulk': { id: string; count: number };
   'drone.spawned': { droneId: string };
   'drone.despawned': { droneId: string };
   'drone.jobStarted': { droneId: string; tileId: string };
@@ -45,7 +48,7 @@ export interface GameEvents {
   'cat.moved': { from: string; anchorId: string };
   'cat.goldenRelay': Record<string, never>;
   'buff.started': { type: BuffType; seconds: number };
-  'harvest': { amount: number };
+  'harvest': { amount: Big };
   'rooftop.coreReady': Record<string, never>;
   'rooftop.coreRestored': Record<string, never>;
   'tutorial.step': { step: number };
@@ -53,7 +56,9 @@ export interface GameEvents {
   'frenzy.started': { seconds: number };
   'frenzy.ended': Record<string, never>;
   /** Phase 4 E04.3: a park milestone was reached and paid (once). */
-  'milestone.reached': { at: number; credited: Partial<Record<ResourceKind, number>>; next?: number };
+  /** Phase 5 E12: a rewarded step on the way to an area's landmark (25 / 50 / 75% of the tiles it needs). */
+  'area.step': { areaId: string; step: number; share: number; credited: Partial<Record<ResourceKind, Big>> };
+  'milestone.reached': { at: number; credited: Partial<Record<ResourceKind, Big>>; next?: number };
   'area.revealed': { areaId: string };
   'area.fogChanged': { areaId: string; fog: string };
   'area.ready': { areaId: string };
@@ -61,7 +66,7 @@ export interface GameEvents {
   /** City 09.1: progress on an area's specialty action. */
   'area.specialty': { areaId: string; have: number; need: number; met: boolean };
   'district.ready': { districtId: string };
-  'district.bloom': { districtId: string; restored: string[]; lusher: string[]; reward: Partial<Record<ResourceKind, number>>; replay: boolean };
+  'district.bloom': { districtId: string; restored: string[]; lusher: string[]; reward: Partial<Record<ResourceKind, Big>>; replay: boolean };
 }
 
 type Handler<T> = (payload: T) => void;

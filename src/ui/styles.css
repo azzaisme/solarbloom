@@ -414,3 +414,15 @@ body.frenzy.reduced #hud::before { animation: none; }
   .frenzy-btn { width: 56px; height: 56px; right: calc(8px + var(--safe-r)); bottom: calc(150px + var(--safe-b)); }
   .frenzy-btn .ft { bottom: 9px; }
 }
+
+/* Phase 5 E12: uncapped biomass, resource breakdown, next purchase, per-machine "All" buttons */
+.res-row .capw.nocap { display: none; }
+.res-row { cursor: pointer; }
+#resInfo {
+  position: fixed; z-index: 30; width: 240px; padding: 8px 10px; font-size: 12px; line-height: 1.5;
+  pointer-events: auto;
+}
+#resInfo div { display: flex; justify-content: space-between; gap: 8px; }
+#resInfo div span:last-child { font-variant-numeric: tabular-nums; text-align: right; }
+.upg-next { margin: 0 0 6px; font-size: 12px; opacity: 0.85; min-height: 1em; }
+.card .buy.all { margin-left: 4px; }

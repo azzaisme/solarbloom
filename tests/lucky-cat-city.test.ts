@@ -1,3 +1,4 @@
+import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { meetSpecialty } from './city-helpers';
 import { SaveService } from '../src/app/SaveService';
@@ -122,8 +123,8 @@ describe('Lucky Cat in the endless city (City 13)', () => {
   it('Golden Relay rides a green corridor: the next hop blooms extra tiles, then it is spent', () => {
     const sim = grownCity(6, 3);
     const st = sim.state;
-    st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
-    st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
+    st.caps.energy = big(1e7); st.caps.water = big(1e7);
+    st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
     expect(sim.cat.goldenRelayAvailable()).toBe(false); // no corridor yet: it never rolls
     // Two street gardens five tiles apart inside the cleared park.
     const spots = sim.areas.tiles(PARK).filter((t) => !t.blocked && !t.occupantId && !sim.isCoreTile(t));

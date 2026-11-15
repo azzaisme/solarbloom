@@ -1,3 +1,4 @@
+import { big } from '../../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../../src/app/SaveService';
 import { createInitialState, GROUND } from '../../src/core/GameState';
@@ -86,8 +87,8 @@ describe('performance: simulation at city scale (City 06.6)', () => {
   it('a 0.1 s step with 10k restored tiles, 300 machines and 30 drones stays under 2 ms', () => {
     const sim = new Sim(createInitialState(5));
     const st = sim.state;
-    st.caps.energy = st.caps.water = st.caps.biomass = 1e9;
-    st.resources.energy = st.resources.water = st.resources.biomass = 1e8;
+    st.caps.energy = big(1e9); st.caps.water = big(1e9);
+    st.resources.energy = big(1e8); st.resources.water = big(1e8); st.resources.biomass = big(1e8);
     // ~40 chunks of city around the park, mostly restored.
     let restored = 0;
     for (let cz = -3; cz <= 3; cz++)
@@ -143,8 +144,8 @@ describe('performance: active-region ticking (City 06.1)', () => {
   it('a 1,000-area world with 5 active chunks ticks in under 0.3 ms', () => {
     const sim = new Sim(createInitialState(8));
     const st = sim.state;
-    st.caps.energy = st.caps.water = st.caps.biomass = 1e9;
-    st.resources.energy = st.resources.water = st.resources.biomass = 1e8;
+    st.caps.energy = big(1e9); st.caps.water = big(1e9);
+    st.resources.energy = big(1e8); st.resources.water = big(1e8); st.resources.biomass = big(1e8);
     st.progression.coreActivated = true;
     // Clear 1,000 areas ring by ring.
     const ids: string[] = [];

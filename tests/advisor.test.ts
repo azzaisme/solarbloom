@@ -1,3 +1,4 @@
+import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { meetSpecialty } from './city-helpers';
 import { PARK } from '../src/core/Areas';
@@ -55,7 +56,7 @@ describe('objective advisor (City 14.1)', () => {
 
   it('broke, with the harvest on cooldown: an honest wait, never nothing', () => {
     const sim = new Sim(createInitialState(3));
-    sim.state.resources.energy = sim.state.resources.water = sim.state.resources.biomass = 0;
+    sim.state.resources.energy = big(0); sim.state.resources.water = big(0); sim.state.resources.biomass = big(0);
     sim.state.harvestReadyAt = sim.time + 12;
     const g = check(sim, 'broke');
     expect(g.action).toEqual({ kind: 'wait', seconds: 12 });
@@ -76,7 +77,7 @@ describe('objective advisor (City 14.1)', () => {
       t.occupantId = m.id;
     }
     check(sim, 'all bloomed');
-    sim.state.resources.energy = sim.state.resources.water = sim.state.resources.biomass = 0;
+    sim.state.resources.energy = big(0); sim.state.resources.water = big(0); sim.state.resources.biomass = big(0);
     sim.state.harvestReadyAt = sim.time + 5;
     check(sim, 'all bloomed, broke');
   });
@@ -99,9 +100,9 @@ describe('objective advisor (City 14.1)', () => {
           }
         }
         const st = sim.state.resources;
-        st.energy = rng.next() < 0.3 ? 0 : rng.next() * 200;
-        st.water = rng.next() < 0.3 ? 0 : rng.next() * 50;
-        st.biomass = rng.next() < 0.3 ? 0 : rng.next() * 500;
+        st.energy = big(rng.next() < 0.3 ? 0 : rng.next() * 200);
+        st.water = big(rng.next() < 0.3 ? 0 : rng.next() * 50);
+        st.biomass = big(rng.next() < 0.3 ? 0 : rng.next() * 500);
         sim.state.harvestReadyAt = rng.next() < 0.5 ? sim.time + rng.range(1, 30) : 0;
         sim.advance(rng.range(0.1, 3));
         check(sim, `seed ${seed} step ${i}`);

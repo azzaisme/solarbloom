@@ -17,6 +17,7 @@ import { AreaSystem } from './AreaSystem';
 import { DebugLog } from './DebugLog';
 import { OfflineSystem } from './OfflineSystem';
 import { FrenzySystem } from './FrenzySystem';
+import { EconomyLedger } from './EconomyLedger';
 import { Modifiers } from './Modifiers';
 import { Metrics } from './Metrics';
 import { MilestoneSystem } from './Milestones';
@@ -47,6 +48,7 @@ export class Sim {
   readonly log: DebugLog;
   readonly offline: OfflineSystem;
   readonly frenzy: FrenzySystem;
+  readonly ledger: EconomyLedger;
   readonly mods: Modifiers;
   readonly areas: AreaSystem;
   readonly districts: DistrictSystem;
@@ -103,10 +105,11 @@ export class Sim {
     this.log = new DebugLog(this);
     this.offline = new OfflineSystem(this);
     this.frenzy = new FrenzySystem(this);
+    this.ledger = new EconomyLedger(this);
     this.mods = new Modifiers(this);
-    this.econ.onOverflow = (k, a) => {
+    this.econ.onOverflow = (k, a, frenzy) => {
       this.log.onOverflow(k, a);
-      this.frenzy.onOverflow(k, a);
+      if (frenzy) this.frenzy.onOverflow(k, a);
     };
     this.restoration.adoptGrowing();
     this.upgrades.applyCaps();
@@ -197,6 +200,7 @@ export class Sim {
     this.progression.tick();
     this.milestones.tick();
     this.metrics.tick(dt);
+    this.ledger.tick();
     s.rngState = this.rng.state;
   }
 
@@ -212,10 +216,17 @@ export class Sim {
       this.bus.emit('action.failed', { reason: `Sunlight gathers again in ${Math.ceil(s.harvestReadyAt - s.time)} s` });
       return false;
     }
-    const got = this.econ.add('energy', TUNING.harvest.energy);
+    // Phase 5 E12: Harvest on a full store never charges Bloom Frenzy (no tapping a maxed store for charge).
+    const got = this.econ.add('energy', TUNING.harvest.energy, { frenzy: false });
     s.harvestReadyAt = s.time + TUNING.harvest.cooldown;
     this.bus.emit('harvest', { amount: got });
-    if (got > 0) this.bus.emit('resource.gain', { kind: 'energy', amount: got, reason: 'harvest' });
+    if (got.gt(0)) this.bus.emit('resource.gain', { kind: 'energy', amount: got, reason: 'harvest' });
+    // Phase 5 E12: Harvest Burst also gathers seconds of steady biomass income (no temporary boosts).
+    const burst = this.upgrades.harvestBurstSeconds;
+    if (burst > 0) {
+      const b = this.econ.add('biomass', this.production.rates(true).biomass.mul(burst));
+      if (b.gt(0)) this.bus.emit('resource.gain', { kind: 'biomass', amount: b, reason: 'harvest' });
+    }
     return true;
   }
 }

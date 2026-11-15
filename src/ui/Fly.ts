@@ -1,3 +1,4 @@
+import { fmt, type Big } from '../core/Big';
 import type { ResourceKind } from '../core/types';
 
 const ICON: Record<ResourceKind, string> = { energy: '⚡', water: '💧', biomass: '🌿' };
@@ -18,7 +19,7 @@ export class FlyText {
     }
   }
 
-  spawn(kind: ResourceKind, amount: number, from: { x: number; y: number }, to: DOMRect, onArrive?: () => void) {
+  spawn(kind: ResourceKind, amount: Big, from: { x: number; y: number }, to: DOMRect, onArrive?: () => void) {
     // Cap simultaneous flyers: past 8, the counter just flashes (keeps phones smooth during chains).
     const el = this.active < 8 ? this.pool.pop() : undefined;
     if (!el) {
@@ -26,8 +27,7 @@ export class FlyText {
       return;
     }
     this.active++;
-    const shown = amount >= 10 ? Math.round(amount) : Math.round(amount * 10) / 10;
-    el.textContent = `+${shown}${ICON[kind]}`;
+    el.textContent = `+${fmt(amount, 1)}${ICON[kind]}`;
     el.className = `fly ${kind}`;
     el.style.display = 'block';
     const tx = to.left + to.width / 2 - 10;

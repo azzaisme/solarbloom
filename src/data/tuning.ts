@@ -25,7 +25,8 @@ export const TUNING = {
   starterSolarRate: 1, // energy/sec from the pre-placed (damaged) panel
   solarRate: 1.2, // energy/sec from each panel the player builds
   rainBarrelRate: 0.15, // water/sec trickle from the rain barrel
-  harvest: { energy: 8, cooldown: 12 },
+  /** burstSeconds: Phase 5 E12 Harvest Burst: seconds of steady biomass income per level, paid on each Harvest. */
+  harvest: { energy: 8, cooldown: 12, burstSeconds: 4 },
 
   /**
    * Phase 4 E04.2: pulse reach tiers (Pulse Reach levels 0–4). Euclidean radius on the integer grid, so the
@@ -70,11 +71,17 @@ export const TUNING = {
       footprintMax: 1.5,
       nurtureTap: 0.3,
       autoRestore: 0.05, // a tile restored by drones, machines or chains
+      autoNurture: 0.03, // Phase 5 E12: a tile grown a stage by automation (keeps charging once an area is restored)
       perChainStep: 0.4, // per activation beyond the first, when a chain ends…
       chainMax: 8, // …capped per chain
     },
-    /** Income lost to full storage: charge per unit, capped per second (E01.5). */
-    overflow: { perUnit: { energy: 0.1, water: 0.1, biomass: 0.05 }, maxPerSecond: 0.15 },
+    /**
+     * Phase 5 E12 (spec rule): wasted production charges the meter by `perResource` × the share of a capped
+     * store's steady income lost to its cap, per second (0.1/s at 100% waste ≈ 17 min from overflow alone),
+     * summed over energy and water and capped at `maxPerSecond`. Biomass is uncapped, so it never overflows.
+     * Harvest Sunlight into a full store never counts.
+     */
+    overflow: { perResource: 0.1, maxPerSecond: 0.15 },
   },
 
   pulse: {
@@ -127,7 +134,7 @@ export const TUNING = {
   solarBloomBoost: { mult: 2, seconds: 5, burstEnergy: 3 },
 
   /** Water Condenser ("Rain Collector"): fills a charge meter, then waters dry soil beside it. */
-  condenser: { radius: 1, chargePerSec: 1, threshold: 6, targets: 2 },
+  condenser: { radius: 1, chargePerSec: 1, threshold: 6, targets: 2, maxExtraTargets: 2 }, // Phase 5: Water Bloom's extra waterings stop at +2 (automation chains stay below taps)
 
   /** Pollinator Garden: a newly restored neighbour triggers a bonus restore/grow nearby. */
   pollinator: { reach: 1, biomassMult: 1.5, triggersPerChain: 4 },
@@ -161,7 +168,14 @@ export const TUNING = {
     old: { enabled: true, radius: 6, cycleSeconds: 7, flySpeed: 1.5, workSeconds: 0.8 },
   },
 
+  /** Phase 5 E12: long-tail upgrade strength (see UpgradeSystem.soilMult). */
+  upgradeCurve: { soilStep: 1.2 },
+
   machineCostGrowth: 1.5, // each extra copy of a machine costs this much more
+  /** Phase 5 E12: a machine's energy or water price never passes this share of that store (drones keep 25%). */
+  machineCostMaxShare: 0.6,
+  /** Phase 5 E12: a machine's energy/water price grows for this many copies, then only its biomass price does. */
+  machineCappedGrowthCopies: 9,
 
   cat: {
     firstMinTime: 180, // Phase 4 E08.1: first cat at about minute 3–4 (was 4–6), once the player knows the grid
@@ -197,6 +211,16 @@ export const TUNING = {
     resonanceBiomassMult: 1.25,
     sequenceSeconds: 7,
   },
+
+  /**
+   * Phase 5 E12: smaller payoffs on the way to each city area's landmark: at these shares of the tiles it
+   * needs, a reward of this many seconds of steady biomass income (no temporary boosts), at least `min`, plus a
+   * little energy and water. Paid once each, in order.
+   */
+  areaSteps: { at: [0.25, 0.5, 0.75], incomeSeconds: [10, 15, 20], min: 20, energy: 20, water: 10 },
+
+  /** Phase 5 E12: after any upgrade purchase, the advisor points at progress for this long before upgrades again. */
+  advisor: { upgradeHintCooldown: 15, savingFreshSeconds: 10 },
 
   autosaveSeconds: 10,
 

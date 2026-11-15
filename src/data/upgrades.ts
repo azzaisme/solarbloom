@@ -1,4 +1,4 @@
-import type { GameState } from '../core/types';
+import type { GameState, MachineType } from '../core/types';
 import { TUNING } from './tuning';
 
 /** Upgrade drawer sections, in order. Each groups what one system of the world does. */
@@ -18,11 +18,31 @@ export interface UpgradeDef {
   mode?: 'city';
   baseCost: number; // biomass
   costMult: number;
+  /** Infinity = no last level (Phase 5 E12: long-tail upgrades). */
   maxLevel: number;
+  /**
+   * Phase 5 E12: a per-machine upgrade, bought for one machine of this type at a time (tap it, or "Upgrade all"
+   * in the drawer, which buys cheapest-first). Its level lives on the machine. Unset = global.
+   */
+  machine?: MachineType;
   describe: (nextLevel: number) => string;
   available?: (s: GameState) => boolean;
   lockedReason?: string;
 }
+
+/** Drone Dash speed per level (Phase 5 E12: three more levels). */
+export const DRONE_DASH = [1, 1.5, 2, 3, 4, 5, 6];
+
+/**
+ * Phase 5 E12: long-tail upgrade strength. +`step` per level, doubled at every 10th level, so each level is
+ * felt and every tenth is a milestone: L=10 → ×12, L=20 → ×44 for step 0.5.
+ */
+export function powerMult(step: number, level: number): number {
+  const l = Math.max(0, level);
+  return (1 + step * l) * Math.pow(2, Math.floor(l / 10));
+}
+
+export const fmtMult = (x: number) => (x < 10 ? String(Math.round(x * 100) / 100) : x < 1e6 ? String(Math.round(x)) : x.toExponential(2));
 
 const has = (type: string) => (s: GameState) => s.machines.some((m) => m.type === type);
 
@@ -38,14 +58,15 @@ export const UPGRADES: UpgradeDef[] = [
     describe: () => 'Pulse energy cost −25%',
   },
   {
-    id: 'solarArray',
+    id: 'solarArray', // saved id kept; shown as Solar Wings (Phase 5: "Array" becomes the merged T2 panel's name)
     group: 'Machines',
-    name: 'Solar Array',
+    machine: 'solar',
+    name: 'Solar Wings',
     icon: '☀️',
     baseCost: 14,
-    costMult: 3,
-    maxLevel: 6, // Phase 4 E04.5: later levels keep something worth buying after the fountain
-    describe: () => 'All solar output +50%',
+    costMult: 1.65,
+    maxLevel: Infinity,
+    describe: (n) => `This panel's output ×${fmtMult(powerMult(0.5, n))} (from ×${fmtMult(powerMult(0.5, n - 1))}); doubles every 10 levels`,
   },
   {
     id: 'broadPulse',
@@ -66,10 +87,10 @@ export const UPGRADES: UpgradeDef[] = [
     group: 'Machines',
     name: 'Rich Soil',
     icon: '🌱',
-    baseCost: 25,
-    costMult: 2.6,
-    maxLevel: 6, // Phase 4 E04.5
-    describe: () => 'Restored tile biomass +30%',
+    baseCost: 40,
+    costMult: 1.55, // Phase 5 E12: clearly faster than its ×1.2 effect, so a windfall (Frenzy ×10) buys only ~5 levels
+    maxLevel: Infinity, // the long-tail biomass multiplier
+    describe: (n) => `Every restored tile's biomass ×${fmtMult(TUNING.upgradeCurve.soilStep ** n)} (from ×${fmtMult(TUNING.upgradeCurve.soilStep ** (n - 1))})`,
   },
   {
     id: 'seedVault',
@@ -81,54 +102,58 @@ export const UPGRADES: UpgradeDef[] = [
     maxLevel: 4,
     describe: (n) => {
       const t = TUNING.storageTiers;
-      return `Storage ⚡ ${t.energy[n - 1]}→${t.energy[n]} · 💧 ${t.water[n - 1]}→${t.water[n]} · 🌿 ${t.biomass[n - 1]}→${t.biomass[n]}`;
+      return `Storage ⚡ ${t.energy[n - 1]}→${t.energy[n]} · 💧 ${t.water[n - 1]}→${t.water[n]} (biomass has no limit)`;
     },
   },
   {
     id: 'droneSpeed',
     group: 'Drones',
+    machine: 'droneHub',
     name: 'Drone Dash',
     icon: '🛸',
     baseCost: 35,
-    costMult: 1.8,
-    maxLevel: 3,
-    describe: (n) => `Drones work ×${[1, 1.5, 2, 3][n]} as fast (flight and rest)`,
+    costMult: 1.65,
+    maxLevel: DRONE_DASH.length - 1,
+    describe: (n) => `This hub's drones work ×${DRONE_DASH[n]} as fast (flight and rest)`,
     available: has('droneHub'),
     lockedReason: 'Build a Drone Hub first',
   },
   {
     id: 'pollinatorReach',
     group: 'Machines',
+    machine: 'pollinator',
     name: 'Pollinator Reach',
     icon: '🦋',
     baseCost: 28,
-    costMult: 2,
-    maxLevel: 2,
-    describe: () => 'Pollinator zone radius +1',
+    costMult: 1.65,
+    maxLevel: 3,
+    describe: (n) => `This garden's zone radius ${TUNING.pollinator.reach + n} (from ${TUNING.pollinator.reach + n - 1})`,
     available: has('pollinator'),
     lockedReason: 'Build a Pollinator Garden first',
   },
   {
     id: 'waterBloom',
     group: 'Machines',
+    machine: 'condenser',
     name: 'Water Bloom',
     icon: '🌧️',
     baseCost: 30,
-    costMult: 2,
-    maxLevel: 2,
-    describe: () => 'Condensers charge 25% faster, water 1 more tile and also grow green tiles beside them',
+    costMult: 1.65,
+    maxLevel: 4,
+    describe: () => 'This condenser charges 25% faster, waters 1 more tile and also grows green tiles beside it',
     available: has('condenser'),
     lockedReason: 'Build a Water Condenser first',
   },
   {
     id: 'treeResonance',
     group: 'Machines',
+    machine: 'motherTree',
     name: 'Mother Tree Resonance',
     icon: '🌳',
     baseCost: 60,
-    costMult: 2,
-    maxLevel: 2,
-    describe: () => 'Mother Tree charges from, and pulses, 1 tile further',
+    costMult: 1.65,
+    maxLevel: 3,
+    describe: () => 'This Mother Tree charges from, and pulses, 1 tile further',
     available: has('motherTree'),
     lockedReason: 'Plant a Mother Tree first',
   },
@@ -143,50 +168,74 @@ export const UPGRADES: UpgradeDef[] = [
     describe: (n) => `Every ${7 - n}th pulse is Overcharged: it restores everything within 2 tiles`,
   },
   {
+    id: 'harvestBurst',
+    group: 'Pulse',
+    name: 'Harvest Burst',
+    icon: '🌾',
+    baseCost: 60,
+    costMult: 2.4,
+    maxLevel: 5,
+    describe: (n) => `Harvest Sunlight also gathers ${TUNING.harvest.burstSeconds * n} s of your steady biomass income`,
+  },
+  {
+    id: 'chainHops',
+    group: 'Pulse',
+    name: 'Chain Hops',
+    icon: '🔗',
+    baseCost: 90,
+    costMult: 2.2,
+    maxLevel: 5,
+    describe: (n) => `Each Pollinator Garden passes a chain on up to ${TUNING.pollinator.triggersPerChain + 2 * n} times (from ${TUNING.pollinator.triggersPerChain + 2 * (n - 1)})`,
+  },
+  {
     id: 'droneRadius',
     group: 'Drones',
+    machine: 'droneHub',
     name: 'Drone Work Radius',
     icon: '📡',
     baseCost: 40,
-    costMult: 2,
-    maxLevel: 2,
-    describe: (n) => `Drones reach ${2 * n} tiles further from their hub`,
+    costMult: 1.65,
+    maxLevel: 4,
+    describe: (n) => `This hub's drones reach ${2 * n} tiles further`,
     available: has('droneHub'),
     lockedReason: 'Build a Drone Hub first',
   },
   {
     id: 'chainIntel',
     group: 'Drones',
+    machine: 'droneHub',
     name: 'Chain Intelligence',
     icon: '🧠',
     baseCost: 45,
     costMult: 1,
     maxLevel: 1,
-    describe: () => 'Drones pick tiles next to gardens, idle solar panels and charged Mother Trees first',
+    describe: () => "This hub's drones pick tiles next to gardens, idle solar panels and charged Mother Trees first",
     available: has('droneHub'),
     lockedReason: 'Build a Drone Hub first',
   },
   {
     id: 'secondDrone',
     group: 'Drones',
+    machine: 'droneHub',
     name: 'Drone Squad',
     icon: '🛸',
     baseCost: 70,
-    costMult: 4,
-    maxLevel: 2,
-    describe: (n) => `Every Drone Hub launches ${n + 1} drones`,
+    costMult: 2.5,
+    maxLevel: 4,
+    describe: (n) => `This hub launches ${n + 1} drones`,
     available: has('droneHub'),
     lockedReason: 'Build a Drone Hub first',
   },
   {
     id: 'droneSweep',
     group: 'Drones',
+    machine: 'droneHub',
     name: 'Drone Sweep',
     icon: '🧹',
     baseCost: 120,
-    costMult: 3,
-    maxLevel: 2,
-    describe: (n) => `Each tile a drone restores also restores up to ${2 * n} tiles around it for free`,
+    costMult: 2,
+    maxLevel: 4,
+    describe: (n) => `Each tile this hub's drones restore also restores up to ${2 * n} tiles around it for free`,
     available: has('droneHub'),
     lockedReason: 'Build a Drone Hub first',
   },
@@ -208,12 +257,13 @@ export const UPGRADES: UpgradeDef[] = [
     id: 'relayLens',
     group: 'Networks',
     mode: 'city',
+    machine: 'relay',
     name: 'Relay Lens',
     icon: '📡',
     baseCost: 180,
-    costMult: 2,
-    maxLevel: 2,
-    describe: (n) => `Bloom Relays link up to ${16 + 6 * n} tiles apart (from ${16 + 6 * (n - 1)}) and bloom ${2 + n} tiles per pulse`,
+    costMult: 1.65,
+    maxLevel: 4,
+    describe: (n) => `This relay links up to ${16 + 6 * n} tiles away (from ${16 + 6 * (n - 1)}) and blooms ${2 + n} tiles per pulse`,
     available: (s) => s.machines.some((m) => m.type === 'relay'),
     lockedReason: 'Build a Bloom Relay first',
   },
@@ -250,9 +300,9 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Lit Landmarks',
     icon: '🗼',
     baseCost: 220,
-    costMult: 2.2,
-    maxLevel: 3,
-    describe: (n) => `Every cleared area's bonus +${25 * n}%`,
+    costMult: 1.65,
+    maxLevel: Infinity, // Phase 5 E12: grows with the city
+    describe: (n) => `Every cleared area's bonus +${25 * n}% (from +${25 * (n - 1)}%)`,
     available: (s) => Object.entries(s.areas ?? {}).some(([id, a]) => id !== 'park' && a.fog === 'cleared'),
     lockedReason: 'Wake a landmark beyond the park first',
   },

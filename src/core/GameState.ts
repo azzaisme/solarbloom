@@ -1,10 +1,14 @@
 import { PARK_LAYOUT } from '../data/city';
 import { TUNING } from '../data/tuning';
 import { Rng } from './Rng';
+import { amounts, caps } from './Economy';
 import type { GameState, LayerData, MachineData, TileData } from './types';
 
-/** v1 Round 1 · v2 Round 2 · v3 Phase 3 · v4 the endless city (chunked world, tile deltas; older saves are scrapped). */
-export const SAVE_VERSION = 4;
+/**
+ * v1 Round 1 · v2 Round 2 · v3 Phase 3 · v4 the endless city (chunked world, tile deltas) · v5 Phase 5: big-number
+ * resources, uncapped biomass, per-machine upgrades. Older saves are scrapped with a notice (no players yet).
+ */
+export const SAVE_VERSION = 5;
 
 /** Id of the endless ground layer (the city). */
 export const GROUND = 'g';
@@ -32,8 +36,8 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): Game
     rngState: new Rng(seed).state,
     time: 0,
     nextId: holder.nextId,
-    resources: { ...TUNING.start.resources },
-    caps: { ...TUNING.start.caps },
+    resources: amounts(TUNING.start.resources),
+    caps: caps(TUNING.start.caps),
     layers: [groundLayer(true)],
     machines: holder.machines,
     drones: [],

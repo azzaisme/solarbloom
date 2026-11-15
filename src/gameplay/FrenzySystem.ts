@@ -1,4 +1,5 @@
-import type { ResourceKind } from '../core/types';
+import { toNum, type Big } from '../core/Big';
+import type { CappedKind } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
@@ -9,8 +10,13 @@ import type { Sim } from './Sim';
  * a banked second one); offline time never charges it. The sim clock stops when paused, so does the timer.
  */
 export class FrenzySystem {
-  /** Overflow charge already granted this tick (capped per second). */
-  private overflowThisTick = 0;
+  /**
+   * Phase 5 E12 (spec overflow rule): steady income lost to a full store and steady income produced, per
+   * capped resource, over the last tick. Charge = perResource × (lost ÷ produced) per second, summed over
+   * energy and water, capped at maxPerSecond. A full store at 100% waste gives 0.1/s, both full 0.15/s.
+   */
+  private lost: Record<CappedKind, number> = { energy: 0, water: 0 };
+  private produced: Record<CappedKind, number> = { energy: 0, water: 0 };
   /** True while offline progress is being credited: nothing charges the meter. */
   suspended = false;
 
@@ -25,6 +31,10 @@ export class FrenzySystem {
     });
     b.on('tile.restored', ({ source }) => {
       if (source !== 'pulse' && source !== 'broad') this.add(F.autoRestore);
+    });
+    // Phase 5 E12: productive automation in finished areas (drones, gardens, chains growing tiles) charges too.
+    b.on('tile.nurtured', ({ auto }) => {
+      if (auto) this.add(F.autoNurture);
     });
     b.on('chain.ended', ({ combo }) => {
       if (combo >= 2) this.add(Math.min(F.chainMax, (combo - 1) * F.perChainStep));
@@ -67,14 +77,26 @@ export class FrenzySystem {
     if (st.charge >= 100) this.sim.bus.emit('frenzy.ready', {});
   }
 
-  /** Income lost to a full store feeds the meter, a little, capped per second (E01.5). */
-  onOverflow(kind: ResourceKind, amount: number) {
+  /** Income lost to a full store (any source except Harvest, which the Economy filters out). */
+  onOverflow(kind: CappedKind, amount: Big) {
+    this.lost[kind] += toNum(amount);
+  }
+
+  /** Steady production credited this tick (ProductionSystem). */
+  onProduced(kind: CappedKind, amount: Big) {
+    this.produced[kind] += toNum(amount);
+  }
+
+  /** Charge earned from wasted production over the last tick (pure; tests read it). */
+  overflowCharge(dt: number): number {
     const O = TUNING.frenzy.overflow;
-    const cap = O.maxPerSecond * TUNING.simStep - this.overflowThisTick;
-    if (cap <= 0) return;
-    const got = Math.min(cap, amount * O.perUnit[kind]);
-    this.overflowThisTick += got;
-    this.add(got);
+    let perSec = 0;
+    for (const k of ['energy', 'water'] as const) {
+      const made = this.produced[k];
+      if (!(made > 0)) continue;
+      perSec += O.perResource * Math.min(1, this.lost[k] / made);
+    }
+    return Math.min(O.maxPerSecond, perSec) * dt;
   }
 
   /** Fires the Frenzy. False (and nothing happens) unless the meter is full and none is running. */
@@ -93,7 +115,8 @@ export class FrenzySystem {
   }
 
   tick() {
-    this.overflowThisTick = 0;
+    this.add(this.overflowCharge(TUNING.simStep));
+    this.lost.energy = this.lost.water = this.produced.energy = this.produced.water = 0;
     const st = this.sim.state.frenzy;
     if (st?.until !== undefined && this.sim.time >= st.until) {
       st.until = undefined;

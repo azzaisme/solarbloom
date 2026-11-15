@@ -1,3 +1,4 @@
+import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
@@ -12,8 +13,8 @@ const saver = new SaveService(undefined);
 function city(seed: number) {
   const sim = new Sim(createInitialState(seed));
   const st = sim.state;
-  st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
-  st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
+  st.caps.energy = big(1e7); st.caps.water = big(1e7);
+  st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
   st.progression.coreActivated = true;
   sim.areas.clear(PARK, true);
   return sim;
@@ -47,7 +48,9 @@ function solve(sim: Sim, id: string, limit = 15 * 60): number {
   while (sim.time - t0 < limit) {
     if (sim.milestones.specialty(id).met) return sim.time - t0;
     const st = sim.state.resources;
-    st.energy = st.water = st.biomass = 1e6;
+    st.energy = big(1e6);
+    st.water = big(1e6);
+    st.biomass = big(1e6);
     const step = sim.advisor.specialtyStep(id);
     if (step?.action.kind === 'build') sim.build.place(step.action.type, GROUND, step.action.x, step.action.z);
     else if (step?.action.kind === 'focus') sim.restoration.pulse(sim.grid.get(step.action.layer ?? GROUND, step.action.x, step.action.z)!.id);

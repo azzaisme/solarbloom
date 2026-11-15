@@ -1,7 +1,8 @@
+import { big, Decimal, toNum } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
-import { KINDS } from '../src/core/Economy';
+import { CAPPED, KINDS } from '../src/core/Economy';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { MACHINES } from '../src/data/machines';
 import { TUNING } from '../src/data/tuning';
@@ -15,23 +16,23 @@ const fresh = (seed = 7) => new Sim(createInitialState(seed));
 
 describe('Phase 4 E01: economy rescue', () => {
   it('config: costs are finite and non-negative, storage tiers grow, every Seed Vault level fits the storage before it', () => {
-    for (const def of Object.values(MACHINES)) for (const k of KINDS) expect(Number.isFinite(def.cost[k] ?? 0) && (def.cost[k] ?? 0) >= 0).toBe(true);
+    for (const def of Object.values(MACHINES)) for (const k of KINDS) expect(Number.isFinite(toNum(def.cost[k] ?? 0)) && toNum(def.cost[k] ?? 0) >= 0).toBe(true);
     for (const k of KINDS) {
       const t = TUNING.storageTiers[k];
       expect(t[0]).toBe(TUNING.start.caps[k]);
       for (let i = 1; i < t.length; i++) expect(t[i]).toBeGreaterThan(t[i - 1]);
     }
     const vault = UPGRADES.find((u) => u.id === 'seedVault')!;
-    expect(vault.maxLevel).toBe(TUNING.storageTiers.biomass.length - 1);
-    const biggest = TUNING.storageTiers.biomass[vault.maxLevel];
+    expect(vault.maxLevel).toBe(TUNING.storageTiers.energy.length - 1);
+    // Phase 5 E12: biomass is uncapped, so upgrade prices no longer have to fit a store; they must stay finite
+    // and positive, also far into the long tail (checked as big numbers).
     for (const u of UPGRADES) {
-      for (let lvl = 0; lvl < u.maxLevel; lvl++) {
-        const cost = Math.ceil(u.baseCost * Math.pow(u.costMult, lvl));
-        expect(Number.isFinite(cost) && cost > 0).toBe(true);
-        expect(cost, `${u.id} level ${lvl + 1}`).toBeLessThanOrEqual(biggest);
+      const last = Math.min(u.maxLevel, 400);
+      for (let lvl = 0; lvl < last; lvl++) {
+        const cost = big(u.baseCost).mul(Decimal.pow(u.costMult, lvl));
+        expect(Number.isFinite(cost.mantissa) && cost.gt(0), `${u.id} level ${lvl + 1}`).toBe(true);
       }
     }
-    for (let lvl = 0; lvl < vault.maxLevel; lvl++) expect(Math.ceil(vault.baseCost * Math.pow(vault.costMult, lvl))).toBeLessThanOrEqual(TUNING.storageTiers.biomass[lvl]);
   });
 
   it('every purchase the fountain requires fits in the starting store (E01.1)', () => {
@@ -43,9 +44,9 @@ describe('Phase 4 E01: economy rescue', () => {
       for (const type of SEED_CORE_MACHINES) expect(MACHINES[type].cost[k] ?? 0, `${type} ${k}`).toBeLessThanOrEqual(caps[k] * 0.75);
       expect((TUNING.core.cost as Partial<Record<string, number>>)[k] ?? 0).toBeLessThanOrEqual(caps[k] * 0.75);
     }
-    // The Phase 4 screenshot's economy: the Drone Hub is now buyable once enough biomass grows.
+    // The Phase 4 screenshot's economy: the Drone Hub is now buyable once enough biomass grows (Phase 5: no cap).
     const sim = presetSim('screenshot', 7);
-    expect(sim.econ.cap('biomass')).toBeGreaterThanOrEqual(sim.build.cost('droneHub').biomass ?? 0);
+    expect(sim.econ.exceedsStorage(sim.build.cost('droneHub'))).toBeUndefined();
   });
 
   it('the fountain wakes from a fresh save without upgrades or Lucky Cats', { timeout: 60_000 }, () => {
@@ -68,37 +69,37 @@ describe('Phase 4 E01: economy rescue', () => {
   it('Seed Vault steps through the storage tiers, and cleared areas still multiply them', () => {
     const sim = fresh();
     const s = sim.state;
-    s.resources.biomass = 100;
+    s.resources.biomass = big(100);
     expect(sim.upgrades.purchase('seedVault')).toBe(true);
-    for (const k of KINDS) expect(s.caps[k]).toBe(TUNING.storageTiers[k][1]);
-    s.caps.biomass = 1e6;
-    s.resources.biomass = 1e5;
+    for (const k of CAPPED) expect(toNum(s.caps[k])).toBe(TUNING.storageTiers[k][1]);
+    // (biomass has no cap since Phase 5)
+    s.resources.biomass = big(1e5);
     for (let i = 0; i < 10; i++) sim.upgrades.purchase('seedVault');
     expect(sim.upgrades.level('seedVault')).toBe(4);
-    for (const k of KINDS) expect(s.caps[k]).toBeGreaterThanOrEqual(TUNING.storageTiers[k][4]);
+    for (const k of CAPPED) expect(toNum(s.caps[k])).toBeGreaterThanOrEqual(TUNING.storageTiers[k][4]);
   });
 
   it('rapid repeated purchases never overspend or go negative (E01 acceptance)', () => {
     const sim = fresh();
     const s = sim.state;
-    s.resources.biomass = 95;
+    s.resources.biomass = big(95);
     let bought = 0;
     for (let i = 0; i < 50; i++) if (sim.upgrades.purchase('efficientPulse')) bought++;
     expect(bought).toBeLessThanOrEqual(3);
-    for (const k of KINDS) expect(s.resources[k]).toBeGreaterThanOrEqual(0);
+    for (const k of KINDS) expect(toNum(s.resources[k])).toBeGreaterThanOrEqual(0);
     // The same tile pulsed many times in one tick is paid once.
-    s.resources.energy = 60;
-    s.resources.water = 40;
+    s.resources.energy = big(60);
+    s.resources.water = big(40);
     const t = sim.areas.tiles(PARK).find((x) => sim.restoration.checkPulse(x).ok)!;
-    const before = s.resources.energy;
+    const before = toNum(s.resources.energy);
     for (let i = 0; i < 20; i++) sim.restoration.pulse(t.id);
-    expect(before - s.resources.energy).toBeLessThanOrEqual(TUNING.pulse.polluted.energy + 1e-9);
+    expect(before - toNum(s.resources.energy)).toBeLessThanOrEqual(TUNING.pulse.polluted.energy + 1e-9);
   });
 
   it('from empty stores the player can always act again (E01.6)', () => {
     const sim = fresh();
     const s = sim.state;
-    s.resources.energy = s.resources.water = s.resources.biomass = 0;
+    s.resources.energy = big(0); s.resources.water = big(0); s.resources.biomass = big(0);
     expect(sim.harvestSun()).toBe(true);
     sim.advance(10);
     const t = sim.areas.tiles(PARK).find((x) => x.ground !== 'restored' && sim.restoration.isEligible(x))!;
@@ -108,9 +109,9 @@ describe('Phase 4 E01: economy rescue', () => {
   it('income lost to full stores is tracked, never banked beyond the cap', () => {
     const sim = fresh();
     const s = sim.state;
-    s.resources.energy = s.caps.energy;
+    s.resources.energy = big(s.caps.energy);
     sim.advance(10);
-    expect(s.resources.energy).toBeLessThanOrEqual(s.caps.energy);
+    expect(toNum(s.resources.energy)).toBeLessThanOrEqual(toNum(s.caps.energy));
     expect(sim.log.overflow.energy).toBeGreaterThan(5);
   });
 });
@@ -124,8 +125,8 @@ describe('Phase 4 E01: the old drone', () => {
     const lamp = sim.machine(old[0].hubId)!;
     expect(lamp.starter && lamp.type === 'solar').toBe(true);
     const s = sim.state;
-    s.caps.energy = s.caps.water = 1000;
-    s.resources.energy = s.resources.water = 1000;
+    s.caps.energy = big(1000); s.caps.water = big(1000);
+    s.resources.energy = big(1000); s.resources.water = big(1000);
     const restored: { x: number; z: number }[] = [];
     sim.bus.on('tile.restored', ({ tile, source }) => source === 'drone' && restored.push(tile));
     const spent = { ...sim.econ.spent };
@@ -157,8 +158,8 @@ describe('Phase 4 E01: offline progress', () => {
   const grown = () => {
     const sim = fresh(21);
     const s = sim.state;
-    s.caps.energy = s.caps.water = s.caps.biomass = 1000;
-    s.resources.energy = s.resources.water = 200;
+    s.caps.energy = big(1000); s.caps.water = big(1000);
+    s.resources.energy = big(200); s.resources.water = big(200);
     for (const t of sim.areas.tiles(PARK).filter((x) => sim.restoration.isEligible(x)).slice(0, 30)) sim.restoration.complete(t, 'pulse');
     sim.advance(1);
     return sim;
@@ -177,18 +178,19 @@ describe('Phase 4 E01: offline progress', () => {
     const rate = a.production.rates(true);
     const r = a.offline.apply(600)!;
     expect(r.seconds).toBe(600);
-    expect(r.credited.water + r.lost.water).toBeCloseTo(rate.water * 600 * TUNING.offline.rate, 3);
+    expect(toNum(r.credited.water.add(r.lost.water))).toBeCloseTo(toNum(rate.water) * 600 * TUNING.offline.rate, 3);
     const b = grown();
     const c = grown();
     const four = b.offline.apply(TUNING.offline.maxSeconds)!;
     const ten = c.offline.apply(10 * 3600)!;
     expect(ten.seconds).toBe(TUNING.offline.maxSeconds);
     for (const k of KINDS) {
-      expect(ten.credited[k] + ten.lost[k]).toBeCloseTo(four.credited[k] + four.lost[k], 3);
-      expect(c.state.resources[k]).toBeLessThanOrEqual(c.state.caps[k] + 1e-9);
-      expect(c.state.resources[k]).toBeGreaterThanOrEqual(0);
+      expect(toNum(ten.credited[k].add(ten.lost[k]))).toBeCloseTo(toNum(four.credited[k].add(four.lost[k])), 3);
+      const cap = c.econ.cap(k);
+      if (cap) expect(toNum(c.state.resources[k])).toBeLessThanOrEqual(toNum(cap) + 1e-9);
+      expect(toNum(c.state.resources[k])).toBeGreaterThanOrEqual(0);
     }
-    expect(ten.lost.biomass + ten.lost.energy + ten.lost.water).toBeGreaterThan(0);
+    expect(toNum(ten.lost.energy.add(ten.lost.water))).toBeGreaterThan(0);
   });
 
   it('never advances the clock, cats, landmarks or chains; drone jobs are bounded and never repeat a restore', () => {

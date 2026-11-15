@@ -16,7 +16,7 @@ describe('save & progression', () => {
     const copy = new Sim(saver.deserialize(saver.serialize(sim.state))!);
     expect(copy.progression.restoredCount('r1')).toBe(sim.progression.restoredCount('r1'));
     expect(copy.state.machines.length).toBe(sim.state.machines.length);
-    expect(copy.upgrades.level('solarArray')).toBe(1);
+    expect(copy.upgrades.maxLevelOf('solarArray')).toBe(1); // Phase 5 E12: per-machine levels survive the round trip
     expect(saver.deserialize(JSON.stringify({ version: 999, rooftops: [] }))).toBeUndefined();
     expect(saver.deserialize('nope')).toBeUndefined();
   });
@@ -66,7 +66,7 @@ describe('save & progression', () => {
         }
         if (sim.upgrades.status(sim.upgrades.all().find((u) => u.id === 'seedVault')!).ok) sim.upgrades.purchase('seedVault');
         if (sim.progression.coreReady()) sim.progression.activateCore();
-        if (sim.state.resources.energy < 2) sim.harvestSun();
+        if (sim.state.resources.energy.lt(2)) sim.harvestSun();
       }
       sim.tick();
     }

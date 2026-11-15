@@ -1,52 +1,134 @@
 import { TUNING } from '../data/tuning';
-import { UPGRADE_BY_ID, UPGRADE_GROUPS, UPGRADES, type UpgradeDef, type UpgradeGroup } from '../data/upgrades';
-import { KINDS } from '../core/Economy';
+import { DRONE_DASH, powerMult, UPGRADE_BY_ID, UPGRADE_GROUPS, UPGRADES, type UpgradeDef, type UpgradeGroup } from '../data/upgrades';
+import { CAPPED } from '../core/Economy';
+import { big, Decimal, fmt, type Big } from '../core/Big';
+import type { MachineData } from '../core/types';
 import type { Sim } from './Sim';
 
+export interface UpgradeStatus {
+  ok: boolean;
+  reason?: string;
+  cost: Big;
+  /** Per-machine upgrade without a machine ("Upgrade all"): the machine the next purchase goes to. */
+  machine?: MachineData;
+}
+
+/**
+ * Upgrades. Global ones (pulse, soil, storage, fog, networks) have one level; per-machine ones (Phase 5 E12)
+ * keep a level on each machine and are bought for one machine at a time, or for all of a type cheapest-first.
+ * Every purchase is one atomic transaction: check, pay once, apply once.
+ */
 export class UpgradeSystem {
+  /** Bumped by every purchase: systems that cache upgrade-dependent values (reach, networks) compare it. */
+  version = 0;
+
   constructor(private sim: Sim) {}
 
+  /** A global upgrade's level (0 for per-machine upgrades: use levelOf). */
   level(id: string): number {
     return this.sim.state.upgrades[id] ?? 0;
   }
 
-  cost(def: UpgradeDef): number {
-    return Math.round(def.baseCost * Math.pow(def.costMult, this.level(def.id)));
+  /** A per-machine upgrade's level on one machine. */
+  levelOf(m: MachineData | undefined, id: string): number {
+    return m?.upg?.[id] ?? 0;
   }
 
-  status(def: UpgradeDef): { ok: boolean; reason?: string; cost: number } {
-    const cost = this.cost(def);
-    if (this.level(def.id) >= def.maxLevel) return { ok: false, reason: 'Maxed', cost };
-    if (def.available && !def.available(this.sim.state)) return { ok: false, reason: def.lockedReason, cost };
-    if (cost > this.sim.econ.cap('biomass')) return { ok: false, reason: 'Needs more storage — try Seed Vault', cost };
-    if (this.sim.econ.get('biomass') < cost) return { ok: false, reason: `Need ${cost} 🌿`, cost };
-    return { ok: true, cost };
-  }
-
-  purchase(id: string): boolean {
+  /** The highest level of a per-machine upgrade on any machine (visual and preview defaults). */
+  maxLevelOf(id: string): number {
     const def = UPGRADE_BY_ID[id];
-    if (!def || !this.all().includes(def)) return false; // e.g. a rooftop-only upgrade in the city
-    const st = this.status(def);
+    if (!def?.machine) return this.level(id);
+    let best = 0;
+    for (const m of this.sim.machinesOfType(def.machine)) best = Math.max(best, this.levelOf(m, id));
+    return best;
+  }
+
+  /** Machines a per-machine upgrade can be bought for (the starter panel counts: it's the player's first). */
+  targets(def: UpgradeDef): MachineData[] {
+    return def.machine ? this.sim.machinesOfType(def.machine) : [];
+  }
+
+  /** Next level's price: baseCost × costMult^level (per machine for per-machine upgrades). */
+  cost(def: UpgradeDef, m?: MachineData): Big {
+    const lvl = def.machine ? this.levelOf(m, def.id) : this.level(def.id);
+    return big(def.baseCost).mul(Decimal.pow(def.costMult, lvl)).ceil();
+  }
+
+  /**
+   * Can the next level be bought? For a per-machine upgrade without `m`, answers for "Upgrade all": the cheapest
+   * machine that isn't maxed.
+   */
+  status(def: UpgradeDef, m?: MachineData): UpgradeStatus {
+    if (def.available && !def.available(this.sim.state)) return { ok: false, reason: def.lockedReason, cost: this.cost(def, m) };
+    if (def.machine && !m) {
+      // Cost depends only on level, so the cheapest machine is the lowest-level one (first built on ties).
+      const all = this.targets(def);
+      if (!all.length) return { ok: false, reason: def.lockedReason ?? 'Build one first', cost: this.cost(def) };
+      let cheapest = all[0];
+      for (const t of all) if (this.levelOf(t, def.id) < this.levelOf(cheapest, def.id)) cheapest = t;
+      if (this.levelOf(cheapest, def.id) >= def.maxLevel) return { ok: false, reason: 'Maxed', cost: this.cost(def, cheapest) };
+      return { ...this.status(def, cheapest), machine: cheapest };
+    }
+    const lvl = def.machine ? this.levelOf(m, def.id) : this.level(def.id);
+    const cost = this.cost(def, m);
+    if (lvl >= def.maxLevel) return { ok: false, reason: 'Maxed', cost };
+    if (def.machine && m?.type !== def.machine) return { ok: false, reason: 'Not for this machine', cost };
+    if (this.sim.econ.get('biomass').lt(cost)) return { ok: false, reason: `Need ${fmt(cost)} 🌿`, cost };
+    return { ok: true, cost, machine: m };
+  }
+
+  /**
+   * Buys one level. `machineId` picks the machine for a per-machine upgrade; without it the cheapest one is
+   * upgraded. Nothing changes unless the whole purchase goes through.
+   */
+  purchase(id: string, machineId?: string, bulk = false): boolean {
+    const def = UPGRADE_BY_ID[id];
+    if (!def || !this.all().includes(def)) return false;
+    const m = def.machine ? (machineId ? this.sim.machine(machineId) : undefined) : undefined;
+    if (def.machine && machineId && !m) return false; // stale button: the machine is gone
+    const st = this.status(def, m);
     if (!st.ok) {
       this.sim.bus.emit('action.failed', { reason: st.reason ?? 'Unavailable' });
       return false;
     }
-    this.sim.econ.spend({ biomass: st.cost });
-    const lvl = this.level(id) + 1;
-    this.sim.state.upgrades[id] = lvl;
+    if (!this.sim.econ.spend({ biomass: st.cost })) return false;
+    let lvl: number;
+    if (def.machine) {
+      const target = st.machine!;
+      target.upg ??= {};
+      lvl = target.upg[id] = (target.upg[id] ?? 0) + 1;
+    } else lvl = this.sim.state.upgrades[id] = this.level(id) + 1;
+    this.version++;
     if (id === 'seedVault') this.applyCaps();
     this.sim.production.markDirty();
-    this.sim.bus.emit('upgrade.purchased', { id, level: lvl });
+    this.sim.bus.emit('upgrade.purchased', { id, level: lvl, machineId: st.machine?.id, bulk });
     return true;
   }
 
+  /** "Upgrade all": buys levels cheapest-first across every machine of the type while biomass lasts. */
+  purchaseAll(id: string, limit = 500): number {
+    const def = UPGRADE_BY_ID[id];
+    if (!def?.machine) return this.purchase(id) ? 1 : 0;
+    let n = 0;
+    while (n < limit) {
+      const st = this.status(def);
+      if (!st.ok || !st.machine) break;
+      if (!this.purchase(id, st.machine.id, true)) break;
+      n++;
+    }
+    if (n === 0) this.sim.bus.emit('action.failed', { reason: this.status(def).reason ?? 'Unavailable' });
+    else this.sim.bus.emit('upgrade.bulk', { id, count: n });
+    return n;
+  }
+
   applyCaps() {
-    // Phase 4 E01.3: Seed Vault steps through explicit storage tiers; cleared areas multiply the tier.
+    // Phase 4 E01.3 / Phase 5 E12: Seed Vault steps energy and water through storage tiers; cleared areas
+    // multiply the tier. Biomass has no cap.
     const mult = 1 + (this.sim.areas?.storageBonus() ?? 0);
-    for (const k of KINDS) {
+    for (const k of CAPPED) {
       const tiers = TUNING.storageTiers[k];
       const tier = tiers[Math.min(tiers.length - 1, this.level('seedVault'))];
-      this.sim.state.caps[k] = Math.max(this.sim.state.caps[k], tier * mult);
+      this.sim.state.caps[k] = big(this.sim.state.caps[k]).max(tier * mult); // big(): tolerate a plain number from tooling
     }
   }
 
@@ -61,45 +143,29 @@ export class UpgradeSystem {
     return UPGRADE_GROUPS.map((group) => ({ group, upgrades: list.filter((d) => d.group === group) })).filter((g) => g.upgrades.length);
   }
 
-  // Effects
+  // ───────────── global effects ─────────────
   get pulseEnergyMult() {
     return Math.pow(0.75, this.level('efficientPulse'));
   }
   get broadExtra() {
     return this.level('broadPulse');
   }
-  get solarMult() {
-    return 1 + 0.5 * this.level('solarArray');
-  }
+  /** Phase 5 E12: the long-tail biomass engine: ×soilStep per level, against costs ×1.6, so every level takes
+   *  about the same time and income grows exponentially (with a slight drag, so it can't run away). */
   get soilMult() {
-    return 1 + 0.3 * this.level('richSoil');
-  }
-  /** Phase 4 E07: Drone Dash makes drones ×1.5, ×2, then ×3 faster overall (flight and rest). */
-  get droneSpeed() {
-    return [1, 1.5, 2, 3][Math.min(3, this.level('droneSpeed'))];
-  }
-  get droneCycleMult() {
-    return 1 / this.droneSpeed;
-  }
-  get droneFlyMult() {
-    return this.droneSpeed;
-  }
-  get droneRadius() {
-    return TUNING.drone.hubRadius + 2 * this.level('droneRadius'); // Phase 4 E07: +2 per level
-  }
-  /** Phase 4 E07: extra free tiles a drone restores around each tile it restores (Drone Sweep). */
-  get droneSweep() {
-    return 2 * this.level('droneSweep');
+    return Math.pow(TUNING.upgradeCurve.soilStep, this.level('richSoil'));
   }
   get overchargeEvery() {
     const l = this.level('overcharge');
     return l > 0 ? 7 - l : 0;
   }
-  get waterBloom() {
-    return this.level('waterBloom');
+  /** Phase 5 E12: seconds of steady biomass income each Harvest also pays. */
+  get harvestBurstSeconds() {
+    return TUNING.harvest.burstSeconds * this.level('harvestBurst');
   }
-  get treeRadius() {
-    return TUNING.motherTree.radius + this.level('treeResonance');
+  /** Phase 5 E12: how many times one Pollinator Garden passes a chain on. */
+  get pollinatorTriggers() {
+    return TUNING.pollinator.triggersPerChain + 2 * this.level('chainHops');
   }
   get corridorRange() {
     return TUNING.chain.corridorRange + 2 * this.level('corridorReach');
@@ -115,7 +181,47 @@ export class UpgradeSystem {
   get landmarkBonusMult() {
     return 1 + 0.25 * this.level('landmarkLights');
   }
-  get pollinatorReach() {
-    return TUNING.pollinator.reach + this.level('pollinatorReach');
+
+  // ───────────── per-machine effects (Phase 5 E12) ─────────────
+  solarMult(m: MachineData) {
+    return powerMult(0.5, this.levelOf(m, 'solarArray'));
+  }
+  waterBloom(m: MachineData) {
+    return this.levelOf(m, 'waterBloom');
+  }
+  pollinatorReach(m: MachineData) {
+    return TUNING.pollinator.reach + this.levelOf(m, 'pollinatorReach');
+  }
+  /** The widest garden zone anywhere (a search radius; filter each garden by its own reach). */
+  get maxPollinatorReach() {
+    if (this.reachCache?.v !== this.version || this.reachCache.n !== this.sim.state.machines.length) {
+      this.reachCache = { v: this.version, n: this.sim.state.machines.length, r: TUNING.pollinator.reach + this.maxLevelOf('pollinatorReach') };
+    }
+    return this.reachCache.r;
+  }
+  private reachCache?: { v: number; n: number; r: number };
+  treeRadius(m: MachineData) {
+    return TUNING.motherTree.radius + this.levelOf(m, 'treeResonance');
+  }
+  /** Drone Dash: ×1.5, ×2, ×3 … ×6 as fast overall (flight and rest), per hub. */
+  droneSpeed(hub: MachineData | undefined) {
+    return DRONE_DASH[Math.min(DRONE_DASH.length - 1, this.levelOf(hub, 'droneSpeed'))];
+  }
+  droneRadius(hub: MachineData | undefined) {
+    return TUNING.drone.hubRadius + 2 * this.levelOf(hub, 'droneRadius');
+  }
+  /** Extra free tiles a drone restores around each tile it restores (Drone Sweep). */
+  droneSweep(hub: MachineData | undefined) {
+    return 2 * this.levelOf(hub, 'droneSweep');
+  }
+  /** Drones a hub launches (Drone Squad). */
+  squad(hub: MachineData | undefined) {
+    return 1 + this.levelOf(hub, 'secondDrone');
+  }
+  chainIntel(hub: MachineData | undefined) {
+    return this.levelOf(hub, 'chainIntel') > 0;
+  }
+  relayLens(relay: MachineData | undefined) {
+    return this.levelOf(relay, 'relayLens');
   }
 }

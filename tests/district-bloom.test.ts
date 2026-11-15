@@ -1,3 +1,4 @@
+import { big, toNum } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 
@@ -15,8 +16,8 @@ const N = TUNING.district.minAwake;
 function setup(seed = 8) {
   const sim = new Sim(createInitialState(seed));
   const st = sim.state;
-  st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
-  st.resources.energy = st.resources.water = st.resources.biomass = 1000;
+  st.caps.energy = big(1e7); st.caps.water = big(1e7);
+  st.resources.energy = big(1000); st.resources.water = big(1000); st.resources.biomass = big(1000);
   st.progression.coreActivated = true;
   sim.areas.clear(PARK, true);
   return sim;
@@ -110,8 +111,9 @@ describe('district-wide blooms (City 10.7)', () => {
     expect(sim.areas.tiles(area).filter((t) => t.occupantId).map((t) => `${t.id}:${t.ground}:${t.bloom}`)).toEqual(occupied);
     for (const t of tiles.slice(0, 20)) expect(t.bloom).toBe(2);
     for (const t of tiles) expect(t.ground).toBe('restored');
-    expect(sim.state.resources.energy - before.energy).toBe(expected.energy);
-    expect(sim.state.resources.biomass - before.biomass).toBe(expected.biomass);
+    // Energy is capped (it may not all fit); biomass is uncapped, so the whole reward lands.
+    expect(toNum(sim.state.resources.energy.sub(before.energy))).toBeLessThanOrEqual(expected.energy + 1e-6);
+    expect(toNum(sim.state.resources.biomass.sub(before.biomass))).toBeCloseTo(expected.biomass, 6);
     // Areas still in fog are not touched.
     for (const a of sim.districts.members(d)) if (sim.areas.fog(a) !== 'cleared') expect(sim.areas.tiles(a).every((t) => t.ground !== 'restored' || t.bloom <= 1)).toBe(true);
 

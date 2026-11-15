@@ -1,3 +1,4 @@
+import { big, toNum } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { fill, makeSim, rich } from './helpers';
 
@@ -23,21 +24,21 @@ describe('placement', () => {
   it('insufficient resources is reported separately from a bad spot', () => {
     const sim = makeSim();
     fill(sim, 0, 0, 7, 7, 'restored');
-    sim.state.resources.biomass = 0;
+    sim.state.resources.biomass = big(0);
     const c = sim.build.check('solar', 'r1', 5, 5);
     expect(c.ok).toBe(false);
     expect(c.spotOk).toBe(true);
     expect(sim.build.place('solar', 'r1', 5, 5)).toBeUndefined();
-    expect(sim.state.resources.biomass).toBe(0);
+    expect(toNum(sim.state.resources.biomass)).toBe(0);
   });
 
   it('costs grow with each copy; the anchor centres 2x2 footprints on the cursor', () => {
     const sim = makeSim();
     rich(sim);
     fill(sim, 0, 0, 7, 7, 'restored');
-    const c0 = sim.build.cost('solar').biomass!;
+    const c0 = toNum(sim.build.cost('solar').biomass!);
     sim.build.place('solar', 'r1', 5, 5);
-    expect(sim.build.cost('solar').biomass!).toBeGreaterThan(c0);
+    expect(toNum(sim.build.cost('solar').biomass!)).toBeGreaterThan(c0);
     expect(sim.build.anchorFor('droneHub', 4.6, 4.6)).toEqual({ x: 4, z: 4 });
     expect(sim.build.anchorFor('droneHub', 4.4, 4.4)).toEqual({ x: 3, z: 3 });
     expect(sim.build.anchorFor('solar', 4.4, 4.9)).toEqual({ x: 4, z: 4 });

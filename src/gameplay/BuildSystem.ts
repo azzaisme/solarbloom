@@ -1,4 +1,5 @@
-import { formatCost, scaleCost } from '../core/Economy';
+import { CAPPED, formatCost, scaleCost } from '../core/Economy';
+import { big, Decimal } from '../core/Big';
 import type { BuildableType, Cost, MachineData } from '../core/types';
 import { MACHINES } from '../data/machines';
 import { AREA_TYPES, type AreaType } from '../data/city';
@@ -44,10 +45,29 @@ export class BuildSystem {
     return this.sim.state.machines.filter((m) => m.type === type && !m.starter).length;
   }
 
-  cost(type: BuildableType): Cost {
+  /** The price before Phase 5's storage clamp: copies × machineCostGrowth, less permits (the specialty safety valve reads it). */
+  rawCost(type: BuildableType): Cost {
     // Cleared city areas grant permits: each waives one copy's worth of cost growth.
     const permits = (this.sim.areas?.clearedCount() ?? 0) * TUNING.city.permitsPerArea;
-    return scaleCost(MACHINES[type].cost, Math.pow(TUNING.machineCostGrowth, Math.max(0, this.count(type) - permits)));
+    return scaleCost(MACHINES[type].cost, Decimal.pow(TUNING.machineCostGrowth, Math.max(0, this.count(type) - permits)));
+  }
+
+  cost(type: BuildableType): Cost {
+    const cost = this.rawCost(type);
+    // Phase 5 E12: never an impossible price. Energy and water incomes barely grow while biomass has no cap, so
+    // the energy/water part grows for the first few copies only (further copies cost more biomass), and never
+    // passes a share of that store. While the advisor says "save up", drones leave that much alone.
+    const permits = (this.sim.areas?.clearedCount() ?? 0) * TUNING.city.permitsPerArea;
+    const copies = Math.min(TUNING.machineCappedGrowthCopies, Math.max(0, this.count(type) - permits));
+    const base = MACHINES[type].cost;
+    for (const k of CAPPED) {
+      const cap = this.sim.econ.cap(k);
+      if (base[k] === undefined) continue;
+      let v = big(base[k]).mul(Decimal.pow(TUNING.machineCostGrowth, copies)).ceil();
+      if (cap) v = v.min(cap.mul(TUNING.machineCostMaxShare).floor());
+      cost[k] = v;
+    }
+    return cost;
   }
 
   /** Converts a cursor cell into the footprint anchor so the ghost centres on the pointer. */

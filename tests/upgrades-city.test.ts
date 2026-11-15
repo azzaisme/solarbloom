@@ -1,3 +1,4 @@
+import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
@@ -8,8 +9,8 @@ import { Sim } from '../src/gameplay/Sim';
 
 function rich(sim: Sim) {
   const st = sim.state;
-  st.caps.energy = st.caps.water = st.caps.biomass = 1e7;
-  st.resources.energy = st.resources.water = st.resources.biomass = 1e6;
+  st.caps.energy = big(1e7); st.caps.water = big(1e7);
+  st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
 }
 
 function insert(sim: Sim, type: MachineData['type'], x: number, z: number, size = 1) {
@@ -45,7 +46,7 @@ describe('upgrades drawer grouped by system (City 14.4)', () => {
       rich(sim);
       for (const d of sim.upgrades.all()) {
         expect(UPGRADE_GROUPS).toContain(d.group);
-        for (let n = 1; n <= d.maxLevel; n++) expect(d.describe(n).length, d.id).toBeGreaterThan(12);
+        for (let n = 1; n <= Math.min(d.maxLevel, 60); n++) expect(d.describe(n).length, d.id).toBeGreaterThan(12); // long-tail upgrades have no last level
         const st = sim.upgrades.status(d);
         if (!st.ok && d.available && !d.available(sim.state)) {
           expect(st.reason, d.id).toBe(d.lockedReason);

@@ -49,7 +49,7 @@ try {
     const g = window.solarbloom;
     const s = g.sim;
     const st = s.state;
-    st.caps.energy = st.caps.water = st.caps.biomass = 1e9;
+    st.caps.energy = new (st.resources.energy.constructor)(1e9); st.caps.water = new (st.resources.energy.constructor)(1e9);
     st.progression.coreActivated = true;
     s.areas.clear('park', true);
     for (let n = 1; n < AREAS; n++) {
