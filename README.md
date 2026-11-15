@@ -40,7 +40,7 @@ Node 20+ is required. The build is a static site (`base: './'`), so `dist/` can 
 | `npm run shots:phase4` | Build, then before/after park screenshots (fresh, half, grown with Radiant tiles, Frenzy) into `docs/review/` | ~2 min |
 | `npm run test:leak` | Build, then pan back and forth across a big city for 10 minutes; entities, materials, GPU memory and heap must return to baseline (`LEAK_MINUTES`) | ~12 min |
 
-The browser scripts need Playwright with Chromium (`npm i -D playwright && npx playwright install chromium`) and run headless with software rendering, as in CI. CI (`.github/workflows/ci.yml`) runs the typecheck, unit tests, benchmarks, soak, browser perf and picking on every push to `main`.
+The browser scripts need Playwright with Chromium (`npm i -D playwright && npx playwright install chromium`) and run headless with software rendering, as in CI. GitHub Actions (`.github/workflows/ci.yml`) only builds (typecheck and production bundle, uploaded as `solarbloom-dist`) on pushes to `main` and pull requests. All tests run locally with the commands above.
 
 ## Controls
 

@@ -1,12 +1,13 @@
-name: CI
+name: Build
+# Builds only (typecheck + production bundle). Tests run locally, not on GitHub Actions.
 on:
   push:
     branches: [main]
   pull_request:
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -14,22 +15,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run test:perf
-      - run: npm run test:soak
-  browser-perf:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm i --no-save playwright && npx playwright install --with-deps chromium
-      - run: npm run test:perf:browser
-      - run: npm run test:e2e
-      - run: STRICT=1 node tests/e2e/phase4-hud.e2e.mjs
-      - run: node tests/e2e/phase4-session.e2e.mjs
+          name: solarbloom-dist
+          path: dist
