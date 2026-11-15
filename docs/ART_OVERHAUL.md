@@ -1,6 +1,6 @@
 # Solarpunk art overhaul
 
-Starting revision: `68aabaefe46c1abc06cd094684514ec64fad9f8c`, from `ccr-1ec5ff4e-if1699`.
+Starting revision: `68aabaefe46c1abc06cd094684514ec64fad9f8c`, from `ccr-1ec5ff4e-if1699`. Reconciled with that branch at `1640b60`, preserving its newer machine-merge feature, perspective camera, tree generation/growth, and Drone Squad fix.
 
 The reference direction is a lush, sunlit solarpunk garden: functioning machines with soft ivory shells, warm metal fittings and botanical details. This is a stylized realtime art implementation, not a reproduction of the reference's offline-rendered fidelity.
 
@@ -32,7 +32,7 @@ The browser scripts require Playwright/Chromium, like the existing project scree
 
 ## Matched before / after renders
 
-These are renders of the running game, not concept images. The restored garden is a staged test state used on both revisions; starting progression is unchanged.
+These are renders of the running game, not concept images. The final comparison uses the updated `1640b60` baseline on both sides, so its perspective camera and new trees are present before and after. The restored garden is a staged test state used on both revisions; starting progression is unchanged.
 
 | Before | After |
 | --- | --- |
@@ -47,9 +47,9 @@ These are renders of the running game, not concept images. The restored garden i
 ### Validation
 
 - Production build and TypeScript checks pass.
-- All 226 existing tests pass (39 files).
+- All 226 tests on the initial base pass (39 files). After reconciling the updated base, all 35 targeted merge/upgrade/save/grid checks pass; the real-browser preview → swap partner → confirm merge flow also passes with the new models.
 - New browser checks verify all ten glTF assets and their animation pivots, model motion, reduced motion, and that visual updates do not mutate simulation state.
 - HUD and build tray fit 320×640, 360×740, 390×844, 430×932, 844×390, 820×1180 and 1280×800. Settings, upgrades and tool selection pass.
 - Matched before/after capture completes without browser errors.
 
-This pass preserves the existing world layout and isometric camera. The reference's dense architectural dressing and cinematic texture detail remain a direction for further art work; real-device GPU performance has not been profiled here.
+This pass preserves the current world layout and the source branch’s perspective camera. The reference's dense architectural dressing and cinematic texture detail remain a direction for further art work; real-device GPU performance has not been profiled here.

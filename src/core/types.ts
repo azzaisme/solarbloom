@@ -94,6 +94,8 @@ export interface MachineData {
   overchargeUntil?: number;
   /** Phase 5 E12: this machine's own upgrade levels, by upgrade id (per-machine upgrades only). */
   upg?: Record<string, number>;
+  /** Phase 5 E13: merge tier (unset = 1). Three connected tier-1 machines of a type merge into one tier 2. */
+  tier?: number;
 }
 
 export type DroneMode = 'idle' | 'flying' | 'working' | 'cooldown' | 'returning';
@@ -171,6 +173,10 @@ export interface Stats {
   areaTimes?: number[];
   chainEffects: number;
   stuckSeconds: number;
+  /** Phase 5 E13: machines ever built, by type (prices count these, so merging never makes building cheaper). */
+  built?: Record<string, number>;
+  /** Phase 5 E13: merges made, by machine type (the first of each type is free). */
+  merges?: Record<string, number>;
 }
 
 /** Fog over a city area. Areas without an entry are hidden. */

@@ -1,3 +1,7 @@
+import { machinesStamp } from '../core/GameState';
+import { tierOf } from '../data/machines';
+
+const tier2 = (m: { tier?: number }) => tierOf(m) >= 2;
 import { TUNING } from '../data/tuning';
 import { DRONE_DASH, powerMult, UPGRADE_BY_ID, UPGRADE_GROUPS, UPGRADES, type UpgradeDef, type UpgradeGroup } from '../data/upgrades';
 import { CAPPED } from '../core/Economy';
@@ -183,19 +187,32 @@ export class UpgradeSystem {
   }
 
   // ───────────── per-machine effects (Phase 5 E12) ─────────────
+  /** Solar Wings levels, times ×4 for a Solar Array (E13 tier 2). */
   solarMult(m: MachineData) {
-    return powerMult(0.5, this.levelOf(m, 'solarArray'));
+    return powerMult(0.5, this.levelOf(m, 'solarArray')) * (tier2(m) ? TUNING.merge.solarMult : 1);
+  }
+  /** Water a condenser makes, relative to one tier-1 condenser (E13: a Condenser Array makes ×4). */
+  waterMult(m: MachineData) {
+    return tier2(m) ? TUNING.merge.waterMult : 1;
+  }
+  /** Extra tiles a condenser's watering burst reaches beyond the base (E13: a Condenser Array +2). */
+  condenserTierTargets(m: MachineData) {
+    return tier2(m) ? TUNING.merge.condenserExtraTargets : 0;
+  }
+  /** Biomass multiplier inside a garden's zone (E13: a Bloom Garden ×2, a Pollinator Garden ×1.5). */
+  gardenMult(m: MachineData) {
+    return tier2(m) ? TUNING.merge.gardenBiomassMult : TUNING.pollinator.biomassMult;
   }
   waterBloom(m: MachineData) {
     return this.levelOf(m, 'waterBloom');
   }
   pollinatorReach(m: MachineData) {
-    return TUNING.pollinator.reach + this.levelOf(m, 'pollinatorReach');
+    return TUNING.pollinator.reach + this.levelOf(m, 'pollinatorReach') + (tier2(m) ? TUNING.merge.gardenReachBonus : 0);
   }
   /** The widest garden zone anywhere (a search radius; filter each garden by its own reach). */
   get maxPollinatorReach() {
-    if (this.reachCache?.v !== this.version || this.reachCache.n !== this.sim.state.machines.length) {
-      this.reachCache = { v: this.version, n: this.sim.state.machines.length, r: TUNING.pollinator.reach + this.maxLevelOf('pollinatorReach') };
+    if (this.reachCache?.v !== this.version || this.reachCache.n !== machinesStamp(this.sim.state.machines)) {
+      this.reachCache = { v: this.version, n: machinesStamp(this.sim.state.machines), r: TUNING.pollinator.reach + this.maxLevelOf('pollinatorReach') + (this.sim.machinesOfType('pollinator').some(tier2) ? TUNING.merge.gardenReachBonus : 0) };
     }
     return this.reachCache.r;
   }
@@ -208,7 +225,7 @@ export class UpgradeSystem {
     return DRONE_DASH[Math.min(DRONE_DASH.length - 1, this.levelOf(hub, 'droneSpeed'))];
   }
   droneRadius(hub: MachineData | undefined) {
-    return TUNING.drone.hubRadius + 2 * this.levelOf(hub, 'droneRadius');
+    return TUNING.drone.hubRadius + 2 * this.levelOf(hub, 'droneRadius') + (hub && tier2(hub) ? TUNING.merge.fleetRadiusBonus : 0);
   }
   /** Extra free tiles a drone restores around each tile it restores (Drone Sweep). */
   droneSweep(hub: MachineData | undefined) {
@@ -216,7 +233,8 @@ export class UpgradeSystem {
   }
   /** Drones a hub launches (Drone Squad). */
   squad(hub: MachineData | undefined) {
-    return 1 + this.levelOf(hub, 'secondDrone');
+    const n = 1 + this.levelOf(hub, 'secondDrone');
+    return hub && tier2(hub) ? Math.min(TUNING.merge.fleetDroneCap, n * TUNING.merge.fleetDroneMult) : n;
   }
   chainIntel(hub: MachineData | undefined) {
     return this.levelOf(hub, 'chainIntel') > 0;

@@ -681,7 +681,7 @@ export class BloomChainSystem {
         m.charge = 0;
         this.emit(run, ev);
         const near = s.grid.tilesNear(m, TUNING.condenser.radius);
-        const targets = TUNING.condenser.targets + Math.min(TUNING.condenser.maxExtraTargets, s.upgrades.waterBloom(m)) + this.consumeOvercharge(m);
+        const targets = TUNING.condenser.targets + Math.min(TUNING.condenser.maxExtraTargets, s.upgrades.waterBloom(m)) + s.upgrades.condenserTierTargets(m) + this.consumeOvercharge(m);
         const dry = near.filter((t) => t.ground === 'prepared' && s.restoration.isEligible(t, false) && !run.visited.has(t.id));
         const grow = s.upgrades.waterBloom(m) > 0 ? near.filter((t) => t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom && !run.visited.has(t.id)) : [];
         for (const t of [...dry, ...grow].slice(0, targets)) {

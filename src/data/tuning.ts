@@ -138,6 +138,24 @@ export const TUNING = {
 
   /** Pollinator Garden: a newly restored neighbour triggers a bonus restore/grow nearby. */
   pollinator: { reach: 1, biomassMult: 1.5, triggersPerChain: 4 },
+  /**
+   * Phase 5 E13: merging. Three edge-connected tier-1 machines → one tier 2. Output index 1 → 4 (3 → 4 overall),
+   * and the merge frees two footprints. The first merge of each type is free; later ones cost `feeSeconds` of
+   * steady biomass income (at least `minFee`).
+   */
+  merge: {
+    count: 3,
+    feeSeconds: 20,
+    minFee: 20,
+    solarMult: 4,
+    waterMult: 4,
+    condenserExtraTargets: 2,
+    gardenBiomassMult: 2,
+    gardenReachBonus: 1,
+    fleetDroneMult: 3,
+    fleetDroneCap: 12,
+    fleetRadiusBonus: 2,
+  },
 
   /** Mother Tree: charges from restorations nearby; at full charge releases an area Bloom Pulse. */
   motherTree: { radius: 2, threshold: 12 },

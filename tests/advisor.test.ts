@@ -22,6 +22,7 @@ function check(sim: Sim, label: string) {
   else if (a.kind === 'build') expect(sim.build.check(a.type, GROUND, a.x, a.z).ok, label).toBe(true);
   else if (a.kind === 'district') expect(sim.districts.available(a.districtId), label).toBe(true);
   else if (a.kind === 'harvest') expect(sim.state.harvestReadyAt <= sim.time, label).toBe(true);
+  else if (a.kind === 'merge') expect(sim.merge.plan(a.machineId)?.ok, label).toBe(true);
   else expect(a.seconds, label).toBeGreaterThan(0);
   return g;
 }

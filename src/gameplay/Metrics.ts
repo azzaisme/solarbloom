@@ -1,3 +1,4 @@
+import { machinesStamp } from '../core/GameState';
 import { big, type Big } from '../core/Big';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
@@ -76,7 +77,7 @@ export class Metrics {
     const minPulse = TUNING.pulse.prepared.energy * s.upgrades.pulseEnergyMult;
     if (s.econ.get('energy').gte(minPulse) && s.econ.get('water').gte(1)) return;
     if (s.time >= s.state.harvestReadyAt) return;
-    if (this.cheapest === undefined || this.machinesSeen !== s.state.machines.length) this.recount();
+    if (this.cheapest === undefined || this.machinesSeen !== machinesStamp(s.state.machines)) this.recount();
     if (s.econ.get('biomass').gte(this.cheapest!)) return;
     s.state.stats.stuckSeconds += dt;
   }
@@ -86,7 +87,7 @@ export class Metrics {
   private machinesSeen = -1;
   private recount() {
     const s = this.sim;
-    this.machinesSeen = s.state.machines.length;
+    this.machinesSeen = machinesStamp(s.state.machines);
     let min: Big | undefined;
     for (const u of s.upgrades.all()) {
       const st = s.upgrades.status(u);

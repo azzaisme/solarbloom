@@ -1,5 +1,5 @@
 import { Economy } from '../core/Economy';
-import { GROUND } from '../core/GameState';
+import { GROUND, machinesStamp } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
 import { KINDS } from '../core/Economy';
 import type { Cost, DroneData, MachineData, TileData } from '../core/types';
@@ -63,6 +63,21 @@ export class DroneSystem {
     return this.status.get(d.id) ?? 'napping';
   }
 
+  /**
+   * Phase 5 E13: a hub merged away. Its drones go at once; a job in flight is dropped (nothing was paid yet, and
+   * its tile is released for any other drone), so no restore is ever paid twice or lost half-done.
+   */
+  removeHub(hubId: string) {
+    const s = this.sim;
+    const mine = s.state.drones.filter((d) => d.hubId === hubId);
+    if (!mine.length) return;
+    s.state.drones = s.state.drones.filter((d) => d.hubId !== hubId); // a new list: the reservation set rebuilds
+    for (const d of mine) {
+      this.status.delete(d.id);
+      s.bus.emit('drone.despawned', { droneId: d.id });
+    }
+  }
+
   spawn(hub: MachineData, temporarySec?: number, old = false): DroneData {
     const d: DroneData = {
       id: this.sim.newId('d'),
@@ -109,7 +124,7 @@ export class DroneSystem {
   private netStamp = '';
   network(hub: MachineData): MachineData[] {
     if (hub.roofId !== GROUND || hub.type !== 'droneHub') return [hub];
-    const stamp = `${this.sim.state.machines.length}|${this.sim.upgrades.networkRange}`;
+    const stamp = `${machinesStamp(this.sim.state.machines)}|${this.sim.upgrades.networkRange}`;
     if (stamp !== this.netStamp) {
       this.netCache.clear();
       this.netStamp = stamp;
@@ -141,7 +156,7 @@ export class DroneSystem {
   private tileCache = new Map<string, TileData[]>();
   private tileCacheStamp = '';
   private cached(key: string, make: () => TileData[]): TileData[] {
-    const stamp = `${this.sim.state.machines.length}|${this.sim.upgrades.version}`;
+    const stamp = `${machinesStamp(this.sim.state.machines)}|${this.sim.upgrades.version}`;
     if (stamp !== this.tileCacheStamp) {
       this.tileCache.clear();
       this.tileCacheStamp = stamp;

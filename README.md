@@ -2,7 +2,7 @@
 
 A cozy solarpunk restoration game for the browser, set in an endless city lost in a gloomy fog. You start in a dead, grey park with a dry fountain and one old solar lamp. Pulse the ground back to life, build machines that feed each other and set off Bloom Chains. Wake the fountain and the fog starts to roll back: every area you restore reveals the ones around it, forever outward, so your blooming systems can grow as big as you like.
 
-Built with **PlayCanvas Engine 2 + TypeScript + Vite**. The isometric camera is orthographic, and the world is a logical square grid rendered in 3D. Art combines an original glTF machine kit with procedural botanical terrain; all sound is synthesised. See [the art overhaul and render review](docs/ART_OVERHAUL.md) and [model authoring notes](public/models/README.md).
+Built with **PlayCanvas Engine 2 + TypeScript + Vite**. The isometric camera uses perspective, and the world is a logical square grid rendered in 3D. Art combines an original glTF machine kit with procedural botanical terrain; all sound is synthesised. See [the art overhaul and render review](docs/ART_OVERHAUL.md) and [model authoring notes](public/models/README.md).
 
 ![The park, early on](docs/park.png)
 
@@ -178,7 +178,7 @@ src/
   rendering/              PlayCanvas only; listens to state and never decides rules
     ChunkRenderer         streams merged vertex-coloured chunk meshes and fog sheets around the camera, far LOD
     MachineVisuals        machines (merged into per-region dynamic batches) and landmarks; only on-screen ones animate. DroneVisuals, CatVisuals, Vfx, Overlays
-    CameraController      fixed 45°/35° orthographic camera, glide, bounds, zoom to the overview
+    CameraController      fixed-angle perspective camera, glide, bounds, zoom to the overview
     SceneBuilder, Scenery, InputController
   ui/                     DOM HUD (Hud.ts, styles.css) and pooled flying "+2🌿" numbers
   audio/Sfx.ts            WebAudio-synthesised effects and a small generative pad

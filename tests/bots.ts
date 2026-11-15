@@ -34,6 +34,11 @@ export interface BotOptions {
   noCats?: boolean;
   /** called once per simulated second (for extra measurements) */
   onSecond?: (sim: Sim) => void;
+  /**
+   * Phase 5 E13: after the build list, keep buying panels, gardens and condensers beside matching ones and merge
+   * every ready group (off by default so earlier pacing measurements stay comparable).
+   */
+  merges?: boolean | 'buildOnly';
 }
 
 export interface BotReport {
@@ -66,6 +71,8 @@ export interface BotReport {
   pulses: number;
   /** Bloom Frenzies fired */
   frenzies: number;
+  /** Phase 5 E13: merges made, and when */
+  merges: { t: number; type: string }[];
   /** per-minute snapshot */
   minutesLog: { m: number; parkRestored: number; tiles: number; res: Record<ResourceKind, number>; caps: Record<ResourceKind, number>; rates: Record<ResourceKind, number> }[];
 }
@@ -112,6 +119,8 @@ export function runBot(opts: BotOptions): BotReport {
   sim.bus.on('pulse.fired', () => pulses++);
 
   const built: Record<string, number> = {};
+  const merges: BotReport['merges'] = [];
+  sim.bus.on('machine.merged', meaningful);
   const hubFor = new Set<string>();
   let next = 0;
   let handsOffAt: number | undefined;
@@ -198,6 +207,30 @@ export function runBot(opts: BotOptions): BotReport {
       }
     }
     if (sim.progression.coreReady()) sim.progression.activateCore();
+    // 3b. Phase 5 E13: grow groups of matching machines and merge them.
+    if (opts.merges && !ORDER[next]) {
+      for (const type of ['solar', 'pollinator', 'condenser'] as const) {
+        const cost = sim.build.cost(type);
+        if (!sim.econ.canAfford(cost) || s.resources.biomass.lt(big(cost.biomass ?? 0).mul(2))) continue;
+        let best: TileData | undefined;
+        let bestN = 1;
+        for (const t of park()) {
+          if (t.ground !== 'restored' || !sim.build.check(type, GROUND, t.x, t.z).ok) continue;
+          const n = sim.merge.groupIfPlaced(type, GROUND, t.x, t.z, 1);
+          if (n > bestN) {
+            best = t;
+            bestN = n;
+          }
+        }
+        // No group to join yet: start one beside the fewest other machines.
+        best ??= park().find((t) => t.ground === 'restored' && sim.build.check(type, GROUND, t.x, t.z).ok);
+        if (best && sim.build.place(type, GROUND, best.x, best.z)) break;
+      }
+      for (const c of opts.merges === 'buildOnly' ? [] : sim.merge.ready(4)) {
+        const p = sim.merge.plan(c[0].id);
+        if (p?.ok && sim.merge.commit(c[0].id, p.partners.map((m) => m.id), p.key, p.fee)) merges.push({ t: Math.round(sim.time), type: c[0].type });
+      }
+    }
     // 4. find the cat ~40 s after it appears
     const c = s.cat.active;
     if (taps && !opts.noCats && c && sim.time - c.spawnedAt > 40) sim.cat.claim();
@@ -253,6 +286,7 @@ export function runBot(opts: BotOptions): BotReport {
     stuck: Math.round(s.stats.stuckSeconds),
     pulses,
     frenzies: s.frenzy?.count ?? 0,
+    merges,
     minutesLog,
   };
 }

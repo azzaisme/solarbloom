@@ -1,3 +1,4 @@
+import { machinesStamp } from '../core/GameState';
 import { EventBus } from '../app/EventBus';
 import { Economy } from '../core/Economy';
 import { Grid } from '../core/Grid';
@@ -21,6 +22,7 @@ import { EconomyLedger } from './EconomyLedger';
 import { Modifiers } from './Modifiers';
 import { Metrics } from './Metrics';
 import { MilestoneSystem } from './Milestones';
+import { MergeSystem } from './MergeSystem';
 import { ProductionSystem } from './ProductionSystem';
 import { ProgressionSystem } from './ProgressionSystem';
 import { RestorationSystem } from './RestorationSystem';
@@ -56,6 +58,7 @@ export class Sim {
   readonly relays: RelaySystem;
   readonly clusters: RooftopClusters;
   readonly milestones: MilestoneSystem;
+  readonly merge: MergeSystem;
 
   constructor(
     readonly state: GameState,
@@ -101,6 +104,7 @@ export class Sim {
     this.areas = new AreaSystem(this);
     this.districts = new DistrictSystem(this);
     this.milestones = new MilestoneSystem(this);
+    this.merge = new MergeSystem(this);
     this.metrics = new Metrics(this);
     this.log = new DebugLog(this);
     this.offline = new OfflineSystem(this);
@@ -129,10 +133,10 @@ export class Sim {
   machine(id: string | undefined): MachineData | undefined {
     if (!id) return undefined;
     const ms = this.state.machines;
-    if (this.machineCount !== ms.length) {
+    if (this.machineCount !== machinesStamp(ms)) {
       this.machineMap.clear();
       for (const m of ms) this.machineMap.set(m.id, m);
-      this.machineCount = ms.length;
+      this.machineCount = machinesStamp(ms);
     }
     return this.machineMap.get(id);
   }
@@ -141,18 +145,18 @@ export class Sim {
   fullScan = false;
   private byType = new Map<string, MachineData[]>();
   private byTypeCount = -1;
-  /** Machines of one type, in build order (the index rebuilds when machines are added; they're never removed). */
+  /** Machines of one type, in build order (the index rebuilds whenever machines are added or removed). */
   machinesOfType(type: MachineData['type']): MachineData[] {
     const ms = this.state.machines;
     if (this.fullScan) return ms.filter((m) => m.type === type);
-    if (this.byTypeCount !== ms.length) {
+    if (this.byTypeCount !== machinesStamp(ms)) {
       this.byType.clear();
       for (const m of ms) {
         let list = this.byType.get(m.type);
         if (!list) this.byType.set(m.type, (list = []));
         list.push(m);
       }
-      this.byTypeCount = ms.length;
+      this.byTypeCount = machinesStamp(ms);
     }
     return this.byType.get(type) ?? [];
   }

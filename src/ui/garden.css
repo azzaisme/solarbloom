@@ -144,3 +144,8 @@ body.contrast .slot.active { outline: 3px solid #fff0a1; }
 /* Closed drawers cannot peek into the taller mobile dock or receive focus. */
 .drawer { visibility: hidden; pointer-events: none; }
 .drawer.open { visibility: visible; pointer-events: auto; }
+/* Match the source branch's newer machine-merge inspector to the botanical palette. */
+#inspect .merge { background: #d9e3b910; box-shadow: inset 0 0 0 1px #d9cf8f88; }
+#inspect .merge .gain { color: #c7e89e; }
+#inspect .merge .loss { color: #f3d08a; }
+#inspect .merge .row [data-merge=cancel] { background: #ffffff14; }

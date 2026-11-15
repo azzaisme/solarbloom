@@ -8,7 +8,7 @@ import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
 import type { MachineData, ResourceKind, TileData } from '../core/types';
-import { MACHINES } from '../data/machines';
+import { MACHINES, TIER2, machineIcon, machineName } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
@@ -18,6 +18,7 @@ import { Sim } from '../gameplay/Sim';
 import { Butterflies } from '../rendering/Butterflies';
 import { Birds } from '../rendering/Birds';
 import { CameraController } from '../rendering/CameraController';
+import { setTreeCursor } from '../rendering/Foliage';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
 import { ChunkRenderer } from '../rendering/ChunkRenderer';
@@ -151,8 +152,7 @@ export class Game {
     this.scene = new SceneBuilder(this.app, this.tweens);
     this.scene.build();
     this.camera = new CameraController(this.app, this.tweens);
-    this.app.scene.fog.start = this.camera.fogDepth(46);
-    this.app.scene.fog.end = this.camera.fogDepth(84);
+    this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
     this.chainSummary = new ChainSummary(this.sim);
@@ -202,6 +202,16 @@ export class Game {
         setVolume: (k, v) => this.setVolume(k, v),
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
+        mergeAt: (id) => {
+          const m = this.sim.machine(id);
+          if (!m) return;
+          const w = this.machines.worldOf(m);
+          this.camera.glide(w[0], 0, w[2], Math.max(this.camera.zoom, 1));
+          this.selectTool('pulse');
+          this.select(id);
+          this.startMerge();
+        },
+        merge: (action) => (action === 'start' ? this.startMerge() : action === 'confirm' ? this.confirmMerge() : this.cancelMerge()),
         togglePause: () => this.setPaused(!this.paused),
         districtBloom: (id, replay) => this.playDistrictBloom(id, replay),
         openArea: (id) => this.openArea(id),
@@ -321,6 +331,7 @@ export class Game {
     document.body.classList.toggle('contrast', !!s.highContrast);
     const rm = s.reducedMotion;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
+    if (this.chunks) this.chunks.reducedMotion = rm;
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
     this.cat.softSparkle = rm || s.lowVfx;
     // Quality: lighter shadows with fewer effects.
@@ -421,7 +432,8 @@ export class Game {
         e.preventDefault();
         this.setSetting('debug', !this.settings.debug);
       } else if (k === 'escape') {
-        if (this.hud.modalOpen) this.hud.openSettings(false);
+        if (this.mergeSel) this.cancelMerge();
+        else if (this.hud.modalOpen) this.hud.openSettings(false);
         else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
         else if (this.hud.trayOpen) this.hud.toggleTray(false);
         else if (this.selected) this.select(undefined);
@@ -438,6 +450,33 @@ export class Game {
     const hit = pickLayers(layers, o, d);
     if (!hit) return undefined;
     return { roofId: hit.layerId, fx: hit.fx, fz: hit.fz, tile: this.sim.grid.get(hit.layerId, Math.floor(hit.fx), Math.floor(hit.fz)) };
+  }
+
+  /** See-through trees: 0..1, eases in while the cursor rests on the world and out when it leaves or pans. */
+  private treeFade = 0;
+  private updateTreeCursor(dt: number) {
+    const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    const w = c.clientWidth, h = c.clientHeight;
+    const on = this.pointer.inside && !this.cinematic && performance.now() - this.lastPanAt > 120;
+    this.treeFade += ((on ? 1 : 0) - this.treeFade) * Math.min(1, dt * (on ? 10 : 6));
+    if (this.treeFade < 0.002 || !w || !h) return setTreeCursor(0, 0, 0, 0, w || 1, h || 1);
+    const { o, d } = this.camera.ray(this.pointer.x, this.pointer.y);
+    // The ground under the cursor (or far away if the ray misses it) as a view depth.
+    const t = d.y < -1e-3 ? -o.y / d.y : 400;
+    const cam = this.camera.entity;
+    const fwd = cam.forward;
+    const p = cam.getPosition();
+    const depth = (o.x + d.x * t - p.x) * fwd.x + (o.y + d.y * t - p.y) * fwd.y + (o.z + d.z * t - p.z) * fwd.z;
+    setTreeCursor((this.pointer.x / w) * 2 - 1, 1 - (this.pointer.y / h) * 2, depth, this.treeFade, w, h);
+  }
+
+  /** Haze and shadow reach follow the zoom-dependent camera (its distance changes with the zoom). */
+  private syncView() {
+    const c = this.camera;
+    this.app.scene.fog.start = c.fogDepth(c.dist + c.hazeStart);
+    this.app.scene.fog.end = c.fogDepth(c.dist + c.hazeEnd);
+    const sun = this.scene.sun.light;
+    if (sun) sun.shadowDistance = c.shadowDistance();
   }
 
   /** The game is in the city (the park and beyond), not the legacy rooftop layout. */
@@ -473,8 +512,8 @@ export class Game {
     let z1 = -Infinity;
     for (const [sx, sy] of [[0, 0], [w, 0], [0, h], [w, h]]) {
       const { o, d } = this.camera.ray(sx, sy);
-      if (Math.abs(d.y) < 1e-6) continue;
-      const t = -o.y / d.y;
+      // A ray at or above the horizon (the low close-up view) reaches as far as streaming goes.
+      const t = d.y < -1e-3 ? -o.y / d.y : 400;
       const x = o.x + d.x * t;
       const z = o.z + d.z * t;
       x0 = Math.min(x0, x);
@@ -585,7 +624,7 @@ export class Game {
       this.hud.showTip(
         x,
         y,
-        `<b>${def.icon} ${def.name}</b>${def.blurb}<br>${chk.ok ? `<span class="ok">Click to build · ${formatCost(chk.cost)}</span>` : `<span class="bad">${chk.reason}</span>`}`,
+        `<b>${def.icon} ${def.name}</b>${def.blurb}<br>${this.mergeHint(tool, p.roofId, a.x, a.z, def.size)}${chk.ok ? `<span class="ok">Click to build · ${formatCost(chk.cost)}</span>` : `<span class="bad">${chk.reason}</span>`}`,
       );
       return;
     }
@@ -597,7 +636,7 @@ export class Game {
       const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
       const ct = area ? { icon: AREA_TYPES[this.sim.areas.info(area).type].icon, name: this.sim.areas.info(area).landmarkName } : undefined;
       const boost = (occ.overchargeUntil ?? 0) > this.sim.time ? '<br><span class="ok">⚡ Boosted: next trigger +1</span>' : '';
-      this.hud.showTip(x, y, `<b>${ct?.icon ?? MACHINES[occ.type].icon} ${ct?.name ?? MACHINES[occ.type].name}</b>${ready ? '<span class="ok">Ready! Click to awaken.</span>' : 'Click to inspect'}${boost}`);
+      this.hud.showTip(x, y, `<b>${ct?.icon ?? machineIcon(occ)} ${ct?.name ?? machineName(occ)}</b>${ready ? '<span class="ok">Ready! Click to awaken.</span>' : 'Click to inspect'}${boost}`);
       return;
     }
     if (tool === 'inspect') {
@@ -677,6 +716,18 @@ export class Game {
       return;
     }
     const occ = this.sim.occupant(t);
+    if (occ && this.mergeSel) {
+      const plan = this.sim.merge.plan(this.mergeSel.anchor, this.mergeSel.partners);
+      if (occ.id === this.mergeSel.anchor || (plan && plan.partners.some((p) => p.id === occ.id))) return;
+      const ids = plan && this.sim.merge.swap(plan, occ.id);
+      if (ids) {
+        this.mergeSel = { anchor: this.mergeSel.anchor, partners: ids };
+        this.sfx.click();
+        this.showMergeHighlights();
+        this.renderInspect();
+        return;
+      }
+    }
     if (occ) {
       if (occ.type === 'core' && this.landmarkReady(occ)) {
         this.wakeLandmark(occ);
@@ -740,7 +791,96 @@ export class Game {
     }
   }
 
+  // ───────────── Phase 5 E13: merging ─────────────
+  /** The merge being previewed: the anchor (the selected machine) and its two partners. */
+  private mergeSel?: { anchor: string; partners: string[] };
+  private mergeKeys: string[] = [];
+
+  private startMerge() {
+    const plan = this.selected ? this.sim.merge.plan(this.selected) : undefined;
+    if (!plan || plan.partners.length < 2) return;
+    this.mergeSel = { anchor: plan.anchor.id, partners: plan.partners.map((p) => p.id) };
+    this.sfx.click();
+    this.showMergeHighlights();
+    this.renderInspect();
+  }
+
+  private cancelMerge(render = true) {
+    if (!this.mergeSel) return;
+    this.mergeSel = undefined;
+    this.showMergeHighlights();
+    if (render) this.renderInspect();
+  }
+
+  private confirmMerge() {
+    const sel = this.mergeSel;
+    if (!sel) return;
+    const plan = this.sim.merge.plan(sel.anchor, sel.partners);
+    this.cancelMerge(false);
+    if (plan?.ok) this.sim.merge.commit(sel.anchor, sel.partners, plan.key, plan.fee);
+    this.renderInspect();
+  }
+
+  /** Gold: the three that merge (the anchor brighter); pale blue: others you can tap to swap in. */
+  private showMergeHighlights() {
+    for (const k of this.mergeKeys) this.tileFx.release(k);
+    this.mergeKeys = [];
+    const sel = this.mergeSel;
+    if (!sel) return;
+    const plan = this.sim.merge.plan(sel.anchor, sel.partners);
+    if (!plan) return;
+    const mark = (m: MachineData, tone: string) => {
+      for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size)) {
+        if (!t) continue;
+        const k = `merge:${t.id}`;
+        this.tileFx.hold(k, t, tone);
+        this.mergeKeys.push(k);
+      }
+    };
+    for (const o of plan.options) if (!plan.partners.includes(o)) mark(o, '#9fe8ff');
+    for (const p of plan.partners) mark(p, '#ffd34d');
+    mark(plan.anchor, '#fff1a0');
+  }
+
+  /** Phase 5 E13: a build tooltip line when this spot joins machines of the same kind. */
+  private mergeHint(type: MachineData['type'], roofId: string, x: number, z: number, size: number): string {
+    const n = this.sim.merge.groupIfPlaced(type, roofId, x, z, size);
+    const t2 = TIER2[type];
+    if (!t2 || n < 2) return '';
+    const name = MACHINES[type].name;
+    return n >= TUNING.merge.count
+      ? `<span class="ok">🔀 Completes a merge: ${TUNING.merge.count} ${name}s → ${t2.icon} ${t2.name}</span><br>`
+      : `🔀 Touches a ${name}: one more alongside makes a ${t2.icon} ${t2.name}<br>`;
+  }
+
+  /** The merge section of a machine's inspect panel. */
+  private mergeHtml(m: MachineData): string {
+    const s = this.sim;
+    if (!s.merge.canMerge(m)) return (m.tier ?? 1) >= 2 ? '<p class="stat">✨ Tier 2: the top tier until superstructures arrive</p>' : '';
+    const sel = this.mergeSel?.anchor === m.id ? this.mergeSel : undefined;
+    const plan = s.merge.plan(m.id, sel?.partners);
+    if (!plan) return '';
+    const t2 = TIER2[m.type]!;
+    if (!sel) {
+      if (plan.partners.length < 2) return `<p class="sphint">🔀 Place ${TUNING.merge.count} ${esc(plan.fromName)}s touching edge to edge to merge them into a <b>${esc(plan.toName)}</b>.</p>`;
+      return `<button class="merge-btn" data-merge="start">🔀 Merge ${TUNING.merge.count} → ${t2.icon} ${esc(plan.toName)}</button>`;
+    }
+    const freed = plan.freed.length;
+    const lost = plan.lost.map((l) => `<p class="loss">⚠️ ${esc(l.name)}: keeps Lv ${l.kept}, loses Lv ${l.lost.join(' and ')}</p>`).join('');
+    const swap = plan.options.length > 2 ? `<p>Tap another highlighted ${esc(plan.fromName)} to swap it in.</p>` : '';
+    return (
+      `<div class="merge"><b>🔀 ${TUNING.merge.count} × ${esc(plan.fromName)} → ${t2.icon} ${esc(plan.toName)}</b>` +
+      `<p class="gain">Output ${plan.before} → ${plan.after} (+${Math.round((plan.after / plan.before - 1) * 100)}%) · ${esc(t2.blurb)}</p>` +
+      `<p>💰 ${plan.free ? 'Free: your first ' + esc(plan.fromName) + ' merge' : 'Fee ' + formatCost(plan.fee)} · 🧩 Frees ${freed} tile${freed === 1 ? '' : 's'}</p>` +
+      lost +
+      swap +
+      (plan.ok ? '' : `<p class="why">${esc(plan.reason ?? '')}</p>`) +
+      `<div class="row"><button data-merge="confirm" ${plan.ok ? '' : 'disabled'}>Merge</button><button data-merge="cancel">Cancel</button></div></div>`
+    );
+  }
+
   private select(id: string | undefined) {
+    if (this.mergeSel && this.mergeSel.anchor !== id) this.cancelMerge(false);
     this.selected = id;
     this.showDroneTasks();
     const m = this.sim.machine(id);
@@ -783,14 +923,14 @@ export class Game {
         const near = s.grid.tilesNear(m, TUNING.condenser.radius);
         const mossy = near.filter((t) => t.ground === 'prepared').length;
         const pct = Math.round(((m.charge ?? 0) / TUNING.condenser.threshold) * 100);
-        extra = `<p class="stat">💧 +1 water/s</p><p class="stat">🌧️ Watering charge ${pct}% · ${mossy} dry tile${mossy === 1 ? '' : 's'} beside it</p><p>When full, it waters the dry soil next to it into bloom and starts a chain. ${mossy ? '' : 'Pulse a neighbour so moss appears beside it.'}</p>${this.upgradeButton('waterBloom', m)}`;
+        extra = `<p class="stat">💧 +${s.upgrades.waterMult(m)} water/s</p><p class="stat">🌧️ Watering charge ${pct}% · ${mossy} dry tile${mossy === 1 ? '' : 's'} beside it</p><p>When full, it waters the dry soil next to it into bloom and starts a chain. ${mossy ? '' : 'Pulse a neighbour so moss appears beside it.'}</p>${this.upgradeButton('waterBloom', m)}`;
         break;
       }
       case 'pollinator': {
         const zone = s.grid.tilesNear(m, s.upgrades.pollinatorReach(m));
         const mossy = zone.filter((t) => t.ground === 'prepared').length;
         const green = zone.filter((t) => t.ground === 'restored').length;
-        extra = `<p class="stat">🌸 Zone radius ${s.upgrades.pollinatorReach(m)} · ${green}/${zone.length} blooming (×2 🌿)</p><p class="stat">✨ ${mossy} mossy tiles ready to chain</p><p>Restore a tile right next to it: it pollinates another neighbour (up to ${s.upgrades.pollinatorTriggers}× per chain). Line gardens, panels and the Mother Tree up so chains jump between them.</p>${this.upgradeButton('pollinatorReach', m)}`;
+        extra = `<p class="stat">🌸 Zone radius ${s.upgrades.pollinatorReach(m)} · ${green}/${zone.length} blooming (×${s.upgrades.gardenMult(m)} 🌿)</p><p class="stat">✨ ${mossy} mossy tiles ready to chain</p><p>Restore a tile right next to it: it pollinates another neighbour (up to ${s.upgrades.pollinatorTriggers}× per chain). Line gardens, panels and the Mother Tree up so chains jump between them.</p>${this.upgradeButton('pollinatorReach', m)}`;
         break;
       }
       case 'droneHub': {
@@ -833,6 +973,7 @@ export class Game {
         return;
       }
     }
+    extra += this.mergeHtml(m);
     if ((m.overchargeUntil ?? 0) > s.time) extra = `<p class="stat" style="color:#1d8fb0">⚡ Boosted by your pulse — next trigger +1 (${Math.ceil(m.overchargeUntil! - s.time)} s)</p>` + extra;
     this.hud.renderInspect(this.hud.machineHtml(m, extra));
   }
@@ -872,6 +1013,9 @@ export class Game {
     const b = this.bus;
     const s = this.sim;
     for (const ev of ['tile.restoring', 'tile.restored', 'tile.prepared', 'tile.softened', 'tile.nurtured'] as const) b.on(ev, ({ tile }) => this.chunks.markTile(tile));
+    // Phase 5: trees grow into their next stage with a bounce (restored → sapling, then with each bloom stage).
+    b.on('tile.restored', ({ tile }) => this.chunks.growTree(tile, 0));
+    b.on('tile.nurtured', ({ tile, level }) => this.chunks.growTree(tile, level - 1));
     b.on('machine.built', ({ machine }) => {
       for (const t of s.grid.footprint(machine.roofId, machine.x, machine.z, machine.size)) if (t) this.chunks.markTile(t);
     });
@@ -1015,6 +1159,40 @@ export class Game {
         reservoirGarden: '⛲ Reservoir Garden built! Water Condensers within 2 tiles fill its basin — full basin = Overflow.',
       };
       if (first && msg[machine.type]) this.hud.toast(msg[machine.type]!, 'gold', 4);
+    });
+    b.on('machine.merged', ({ machine, consumed, fee, lost }) => {
+      for (const c of consumed)
+        for (const t of s.grid.footprint(c.roofId, c.x, c.z, c.size))
+          if (t) {
+            this.grid.refresh(t, false);
+            this.chunks.markTile(t);
+          }
+      const land = this.machines.merged(machine, consumed);
+      const w = this.machines.worldOf(machine);
+      const p = new pc.Vec3(w[0], w[1], w[2]);
+      for (const c of consumed) {
+        const cw = this.machines.worldOf(c);
+        this.vfx.arc(new pc.Vec3(cw[0], cw[1] + 0.4, cw[2]), new pc.Vec3(p.x, p.y + 0.6, p.z), PALETTE.gold);
+      }
+      this.sfx.powerUp();
+      this.tweens.add(0.01, () => {}, {
+        delay: land,
+        done: () => {
+          this.vfx.ring(p, PALETTE.gold, machine.size * 1.6, 0.8);
+          this.vfx.ring(p, '#ffffff', machine.size * 2.4, 1.0);
+          this.vfx.burst(new pc.Vec3(p.x, p.y + 0.8, p.z), 36, { up: 4, speed: 2.4, size: 0.08, life: 1.2 });
+          this.camera.shake(0.08);
+          this.sfx.fanfare();
+        },
+      });
+      const t2 = TIER2[machine.type];
+      const first = (s.state.stats.merges?.[machine.type] ?? 0) === 1;
+      this.hud.toast(
+        `${t2?.icon ?? '✨'} ${esc(machineName(machine))}!<small>${consumed.length + 1} ${esc(MACHINES[machine.type].name)}s → 1 · ${esc(t2?.blurb ?? '')}${fee.biomass ? ` · fee ${formatCost(fee)}` : first ? ' · first merge free' : ''}${lost.length ? ' · some upgrade levels merged away' : ''}</small>`,
+        'gold',
+        4,
+      );
+      if (this.selected === machine.id) this.renderInspect();
     });
     b.on('chain.started', ({ chainId, originTileId }) => {
       const o = s.grid.byTileId(originTileId);
@@ -1736,6 +1914,8 @@ export class Game {
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
     this.camera.update(dt);
+    this.syncView();
+    this.updateTreeCursor(dt);
     this.hud.update(dt);
     this.sfx.layers = Math.min(3, Math.floor(this.sim.progression.restoredCount(HOME) / 12));
     this.sfx.update(dt);

@@ -1,4 +1,4 @@
-import { GROUND } from '../core/GameState';
+import { GROUND, machinesStamp } from '../core/GameState';
 import type { MachineData, TileData } from '../core/types';
 import type { Sim } from './Sim';
 
@@ -29,7 +29,7 @@ export class CanalNetwork {
   }
 
   private fresh() {
-    const n = this.sim.state.machines.length;
+    const n = machinesStamp(this.sim.state.machines);
     if (n !== this.machineCount) {
       this.machineCount = n;
       this.byTile.clear();

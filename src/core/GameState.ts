@@ -70,9 +70,22 @@ export function isRestorable(t: TileData, machines: MachineData[]): boolean {
   return coreIds(machines).has(t.occupantId) === false;
 }
 
-/** Ids of Core machines (cached per machine list length: machines are only ever added). */
+/**
+ * Phase 5 E13: machines can now be removed (merging). Caches keyed on the machine list stamp it with this:
+ * additions change the length, removals bump the revision, so a removal followed by an addition never
+ * leaves a cache that looks current.
+ */
+let machineRev = 0;
+export function machinesRemoved() {
+  machineRev++;
+}
+export function machinesStamp(machines: readonly unknown[]): number {
+  return machineRev * 1e7 + machines.length;
+}
+
+/** Ids of Core machines (cached per machine list stamp). */
 let coreCache: { list?: MachineData[]; n: number; ids: Set<string> } = { n: -1, ids: new Set() };
 function coreIds(machines: MachineData[]): Set<string> {
-  if (coreCache.list !== machines || coreCache.n !== machines.length) coreCache = { list: machines, n: machines.length, ids: new Set(machines.filter((m) => m.type === 'core').map((m) => m.id)) };
+  if (coreCache.list !== machines || coreCache.n !== machinesStamp(machines)) coreCache = { list: machines, n: machinesStamp(machines), ids: new Set(machines.filter((m) => m.type === 'core').map((m) => m.id)) };
   return coreCache.ids;
 }

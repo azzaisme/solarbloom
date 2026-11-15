@@ -113,3 +113,85 @@ because the scripted city now grows to ~80 areas an hour); its per-seed time lim
 - Per-machine upgrades in a big city are many purchases. "Upgrade all" is one tap; it is not yet available
   as a single automatic setting.
 - No human playtests and no real-device numbers.
+
+# E13 — Merge and evolve machines
+
+## Decisions agreed before starting
+
+- **Merging stops at Tier 2** until E14, as the spec says (no Tier 3 that does nothing).
+- **Which machines merge:** the four spec families map to Solar Panel, Water Condenser, Pollinator Garden and
+  Drone Hub. Mother Tree, Reservoir Garden, Bloom Relay and landmarks don't merge.
+- **Tier 2 effects ("stronger + reach"):** Solar Array ×4 energy (and ×4 bloom bursts); Condenser Array ×4
+  water and each watering burst wets 2 more tiles; Bloom Garden biomass bonus ×2 (was ×1.5) and zone radius +1;
+  Fleet Hub ×3 drones (at most 12) and work radius +2. Upgrades still multiply on top.
+- **Selection:** tap a machine (the anchor; the merged machine stays on its footprint). The game picks the two
+  nearest connected partners; tap another highlighted machine to swap it in. Confirm or Cancel; Esc cancels.
+- **Fee:** the first merge of each type is free; later ones cost 20 s of steady biomass income (at least 20 🌿).
+  The fee charged never exceeds the one shown in the preview.
+- From the E12 discussion: machine prices count **lifetime builds**, so merging never makes building cheaper;
+  a merged Drone Hub stays **2×2** (two footprints freed); the **starter panel and the old drone's lamp never
+  merge**; the merged machine keeps the **highest level of each upgrade** and the preview lists what's lost.
+
+## What changed
+
+| Area | Change |
+|---|---|
+| Rules | `MergeSystem`: three same-type, same-tier machines whose footprints share an edge (corners don't count), as any connected shape (row or L). Any member can be the anchor. `plan()` is the preview (partners, fee, output 3 → 4, upgrade levels lost, tiles freed); `commit()` re-validates everything and changes nothing on a stale preview, a repeated tap, a wrong key or a fee that can't be paid |
+| Commit | One transaction: fee, partners' footprints freed (tiles keep restoration and bloom), grid index, partner hubs' drones removed (a job in flight is dropped before it is paid, and its tile is released), anchor tier 2 with the highest upgrade levels, caches refreshed |
+| Machines can now be removed | Every cache that assumed machines are only ever added (machine lookup, by-type index, drone networks and reach, garden reach, production sums, canals, metrics, core ids) now uses a stamp that also changes on removal, so a merge followed by new builds can't leave a cache that looks current |
+| Prices | `stats.built` counts machines ever built per type; prices use it |
+| Tier 2 effects | In `UpgradeSystem` per-machine getters (`solarMult`, `waterMult`, `condenserTierTargets`, `gardenMult`, `pollinatorReach`, `squad`, `droneRadius`). Overlapping garden zones use the strongest multiplier (they don't stack) |
+| Inspect panel | Merge button on a machine with two touching partners, or a hint to place three; the preview card with output, fee, tiles freed, levels lost, swap hint, Merge / Cancel |
+| Highlights | Gold: the three that merge (anchor brightest); pale blue: other machines you can tap to swap in |
+| Animation | Partners hop into the anchor and shrink, the anchor squashes, rebuilds as its Tier 2 model and bounces up; gold arcs, rings, sparkles, a rising power-up then a fanfare. The simulation commits once, before any of it; visuals grant nothing |
+| Tier 2 look | Bigger body on a cream plinth with a gold ring and a floating gem in the family colour (gold, cyan, pink, mint). Solar Array gets two extra wing panels that track the sun with it; Condenser Array two side tanks; Bloom Garden a ring of petals; Fleet Hub a second mast |
+| Guidance | The advisor suggests a ready, affordable merge (its button flies there and opens the preview). The build tooltip says when a spot touches a matching machine ("one more alongside makes a Solar Array") or completes a merge |
+| Saves | `tier` on machines, `stats.built`, `stats.merges`; no version change (no players yet, as agreed) |
+
+## Measured (scripted bots, not people)
+
+`tests/bots.ts` has an opt-in merge behaviour: after its usual build list the bot keeps buying panels, gardens
+and condensers beside matching ones and merges every ready group. The control bot builds the same way and never
+merges, so the difference is merging itself. Steady biomass income per minute:
+
+| Seed | Bot | First merge | Merges by 15 / 30 / 60 min | 15 min | 30 min | 45 min |
+|---|---|---|---|---:|---:|---:|
+| 7 | builds, no merges | — | — | 762K | 10.0M | 39.7M |
+| 7 | merges | 2:45 | 5 / 15 / 27 | 1.03M | 13.4M | 83.7M |
+| 21 | builds, no merges | — | — | 962K | 13.2M | 93.0M |
+| 21 | merges | 2:48 | 6 / 15 / 47 | 740K | 16.0M | 91.4M |
+
+- Merging is a real but modest gain: +21–35% at 30 minutes, which is the spec's 3 → 4 output plus freed tiles.
+  At 15 minutes on seed 21 it was behind (fees and three gardens covering more ground than one Bloom Garden).
+  The spec puts the big multipliers in E14's superstructures.
+- The bot merges from about minute 3 because it deliberately builds matching machines side by side; the spec's
+  "first merge at 5–15 minutes" is for people, who won't plan that early.
+- Longest stretch without a meaningful event: 25–29 s with merging (the Phase 5 bot without extra building: ~130 s).
+
+## Bug found while validating
+
+- **Drone Squad crashed the hub model at level 3 (from E12).** E12 raised Drone Squad to 4 levels (5 drones),
+  but the hub model had landing pads for only 2 extra drones, so buying the third level threw while refreshing
+  the model, every time. The 15-minute session test found it (its bot buys every upgrade). Now there's a pad for
+  each level.
+
+## Tests run (E13)
+
+All on this branch, headless Linux, Chromium with SwiftShader software rendering.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck`, `npm run build` | pass |
+| Unit tests, file by file (40 files, 238 tests, including the new `merge.test.ts` with 12) | pass |
+| `tests/e2e/merge.e2e.mjs` (new): tap a panel, open the preview, tap a fourth panel to swap it in, confirm | pass, no page or console errors; the merged and kept machines are the expected ones |
+| picking e2e (74,299 checks), area-panel, overview, `STRICT=1 phase4-hud` | pass |
+| `hud-overlap` | one failure (a toast 3 px over the objective panel on the phone layout, the known toast-timing flake), then 3 passes in a row |
+| `phase4-session` (15 minutes in the real page) | pass after the Drone Squad fix |
+| `npm run test:perf:browser` (150 areas) | within limits: 0 pan / 0 zoom / 1 chain hitches, chain ×743 |
+| `npm run test:perf`, `npm run test:soak` | pass |
+
+## Still open after E13
+
+- Merging is a modest gain on its own (spec: 3 → 4); E14's superstructures carry the big multipliers.
+- No Tier 3 yet (E14), so a Tier 2 machine shows "top tier until superstructures arrive".
+- No human playtests: whether picking partners by tapping feels good needs people.

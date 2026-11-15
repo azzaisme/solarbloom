@@ -32,6 +32,10 @@ function followAdvisor(sim: Sim, seconds: number, until: () => boolean): number 
     } else if (a.kind === 'district') sim.districts.bloom(a.districtId);
     else if (a.kind === 'build') sim.build.place(a.type, GROUND, a.x, a.z);
     else if (a.kind === 'harvest') sim.harvestSun();
+    else if (a.kind === 'merge') {
+      const p = sim.merge.plan(a.machineId)!;
+      sim.merge.commit(a.machineId, p.partners.map((m) => m.id), p.key, p.fee);
+    }
     else if (a.kind === 'upgrades') {
       const up = sim.upgrades.all().find((d) => sim.upgrades.status(d).ok);
       if (up) sim.upgrades.purchase(up.id);

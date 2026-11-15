@@ -8,6 +8,9 @@ import { CITY_GEN, PARK_LAYOUT } from '../data/city';
 import { buildingPlots, type BuildingPlot } from '../core/Generation';
 import { PALETTE } from './Materials';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
+import { FoliageBuilder, foliageMaterial, treeMesh, updateWind } from './Foliage';
+import { shrubGeo, treeGeo, warmTemplates } from './TreeGen';
+import { treeSpot, treeStage } from './TreePlacement';
 
 /** Small seeded RNG for decoration placement (looks only). */
 class VRng {
@@ -172,6 +175,8 @@ interface ChunkView {
   cx: number;
   cz: number;
   ground?: pc.Entity;
+  /** Phase 5: trees and shrubs (merged, vertex-coloured, swaying in the wind) */
+  trees?: pc.Entity;
   fog?: pc.Entity;
   fogMat?: pc.StandardMaterial;
   dirty: boolean;
@@ -265,6 +270,9 @@ export class ChunkRenderer {
 
   update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number }, focus: { x: number; z: number }, zoom = 1) {
     this.time += dt;
+    this.warmTrees();
+    this.tickGrowing(dt);
+    updateWind(this.time, this.reducedMotion ? 0 : 1); // Phase 5: trees sway (still with reduced motion)
     const ps = this.sim.grid.isPlayable(GROUND) ? this.sim.progression.parkStage() : 0;
     if (ps !== this.parkStage) {
       const prev = this.parkStage;
@@ -323,6 +331,7 @@ export class ChunkRenderer {
 
   private drop(v: ChunkView) {
     v.ground?.destroy();
+    v.trees?.destroy();
     v.fog?.destroy();
     this.views.delete(v.key);
   }
@@ -344,7 +353,10 @@ export class ChunkRenderer {
     const c = s.grid.chunkAt(GROUND, v.cx, v.cz);
     if (!c) return;
     const b = new MeshBuilder();
+    const fb = new FoliageBuilder();
+    this.fb = fb;
     const area = s.areas.map.areaOfChunk(v.cx, v.cz);
+    this.areaType = s.areas.info(area).type;
     const fog = s.areas.fog(area);
     const h = s.grid.layer(GROUND)!.height;
     v.far = dist(v, this.lastFocus) / CHUNK > this.farFrom;
@@ -355,6 +367,7 @@ export class ChunkRenderer {
       if (!t) continue;
       // Hidden ground is grey; fogged ground is greyed unless restored.
       b.grey = fog === 'hidden' ? 0.75 : fog === 'cleared' || t.ground === 'restored' ? 0 : 0.35;
+      fb.grey = b.grey;
       if (v.far) this.farTile(b, t, h);
       else this.tile(b, t, h);
     }
@@ -368,6 +381,8 @@ export class ChunkRenderer {
       }
     }
     v.ground = this.setMesh(v.ground, `chunk-${v.key}`, b.build(this.device), vertexColourMaterial(), !v.far); // far chunks: no shadow pass (invisible at that distance, halves their draw calls)
+    v.trees = this.setMesh(v.trees, `trees-${v.key}`, fb.build(this.device), foliageMaterial(), !v.far);
+    this.treeTris.set(v.key, fb.tris);
   }
 
   /** Far level of detail: one coloured slab per tile, with a bump for full bloom. */
@@ -376,7 +391,89 @@ export class ChunkRenderer {
     const dead = DEAD[f] ?? DEAD.lawn;
     const col = t.blocked ? dead[0] : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? ALIVE.paving : PALETTE.grass[t.variant % PALETTE.grass.length]) : t.ground === 'polluted' ? dead[t.variant % dead.length] : PALETTE.soil;
     b.add('box', col, [t.x + 0.5, h, t.z + 0.5], [1, 0.16, 1]);
-    if (t.ground === 'restored' && t.bloom >= 3 && f !== 'water') b.add('box', PALETTE.shrub[t.variant % 3], [t.x + 0.5, h + 0.2, t.z + 0.5], [0.6, 0.3, 0.6]);
+    if (this.addTree(t, h, 0)) return;
+    if (t.ground === 'restored' && t.bloom >= 3 && f !== 'water') this.fb.add(shrubGeo(t.variant, 0), t.x + 0.5, h + 0.08, t.z + 0.5, t.variant, 1);
+  }
+
+  // ───────────── trees (Phase 5) ─────────────
+
+  /** The foliage builder of the chunk being built, and its area type (tree species follow it). */
+  private fb = new FoliageBuilder();
+  private areaType = 'park';
+  /** Foliage triangles per loaded chunk (perf readout). */
+  readonly treeTris = new Map<string, number>();
+
+  /** Adds the tile's tree at its stage, unless it's growing on its own right now. True if the tile has one. */
+  private addTree(t: TileData, h: number, lod: 0 | 1): boolean {
+    if ((t.feature ?? 'lawn') === 'water') return false;
+    const spot = treeSpot(t, this.areaType);
+    if (!spot) return false;
+    const stage = treeStage(t);
+    if (!stage) return false;
+    if (this.growing.has(t.id)) return true;
+    this.fb.add(treeGeo(spot.species, stage, spot.variant, lod), t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5, spot.rot, spot.scale);
+    return true;
+  }
+
+  /** Fills the tree template cache a few milliseconds per frame after load (no first-pan generation spike). */
+  private warm: Generator<void> | undefined = warmTemplates();
+  private warmTrees() {
+    if (!this.warm) return;
+    const t0 = performance.now();
+    while (performance.now() - t0 < 3) if (this.warm.next().done) return void (this.warm = undefined);
+  }
+
+  /** Trees growing to a new stage right now: a pooled entity bounces up while the chunk leaves the tree out. */
+  private growing = new Map<string, { e: pc.Entity; t: number; from: number; to: number; tile: TileData }>();
+  static readonly GROW_SECONDS = 0.9;
+  static readonly MAX_GROWING = 24;
+
+  /** A tile's bloom stage rose (or it was restored): grow its tree, if it has one. */
+  growTree(t: TileData, prevStage: number) {
+    if (t.roofId !== GROUND || this.reducedMotion || this.growing.size >= ChunkRenderer.MAX_GROWING) return;
+    const view = this.views.get(chunkKey(GROUND, Math.floor(t.x / CHUNK), Math.floor(t.z / CHUNK)));
+    if (!view || view.far) return;
+    const spot = treeSpot(t, this.sim.areas.info(this.sim.areas.areaOf(t)!).type);
+    const stage = treeStage(t);
+    if (!spot || !stage || (t.feature ?? 'lawn') === 'water') return;
+    const old = this.growing.get(t.id);
+    old?.e.destroy();
+    const e = new pc.Entity(`grow-${t.id}`);
+    e.addComponent('render', { meshInstances: [new pc.MeshInstance(treeMesh(this.device, treeGeo(spot.species, stage, spot.variant, 1)), foliageMaterial())], castShadows: true, receiveShadows: true });
+    const h = this.sim.grid.layer(GROUND)!.height;
+    e.setLocalPosition(t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5);
+    e.setLocalEulerAngles(0, (-spot.rot * 180) / Math.PI, 0);
+    this.root.addChild(e);
+    // Relative size of the previous stage, so a young tree swells into a full one rather than popping from zero.
+    const SIZE = [0, 0.32, 0.62, 1, 1.08];
+    const from = prevStage >= 1 ? SIZE[prevStage] / SIZE[stage] : 0.05;
+    this.growing.set(t.id, { e, t: 0, from, to: spot.scale, tile: t });
+    e.setLocalScale(from * spot.scale, from * spot.scale, from * spot.scale);
+    view.dirty = true;
+  }
+
+  private tickGrowing(dt: number) {
+    for (const [id, g] of this.growing) {
+      g.t += dt;
+      const k = Math.min(1, g.t / ChunkRenderer.GROW_SECONDS);
+      // ease-out with a soft overshoot: the tree springs up and settles
+      const e = 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2);
+      const sc = g.to * (g.from + (1 - g.from) * e);
+      g.e.setLocalScale(sc, sc * (1 + 0.06 * Math.sin(k * Math.PI)), sc);
+      if (k >= 1) {
+        this.growing.delete(id);
+        this.markTile(g.tile); // the chunk takes the tree back…
+        const ge = g.e;
+        setTimeout(() => ge.destroy(), 120); // …and the stand-in goes once that rebuild has had a frame to land
+      }
+    }
+  }
+
+  /** Dev/perf readout: foliage triangles in loaded chunks. */
+  foliageTris(): number {
+    let n = 0;
+    for (const k of this.views.keys()) n += this.treeTris.get(k) ?? 0;
+    return n;
   }
 
   /** Look of the chunk being built: prop level 0–4, and whether it's the park. */
@@ -442,7 +539,12 @@ export class ChunkRenderer {
         if (f === 'paving') {
           // Clean stone with a planted bed.
           b.add('box', ALIVE.paving, [x, h, z], [0.98, 0.16, 0.98]);
-          b.add('box', PALETTE.grass[t.variant % PALETTE.grass.length], [x, top + 0.01, z], [0.6, 0.02, 0.6]);
+          if (treeSpot(t, this.areaType)?.planter) {
+            // a cream planter with a brass rim for the street tree
+            b.add('box', '#f2ece0', [x, top + 0.08, z], [0.62, 0.16, 0.62]);
+            b.add('box', '#d9a441', [x, top + 0.162, z], [0.66, 0.02, 0.66]);
+            b.add('box', PALETTE.soil, [x, top + 0.165, z], [0.54, 0.01, 0.54]);
+          } else b.add('box', PALETTE.grass[t.variant % PALETTE.grass.length], [x, top + 0.01, z], [0.6, 0.02, 0.6]);
         } else b.add('box', PALETTE.grass[t.variant % PALETTE.grass.length], [x, h, z], [1, 0.16, 1]);
         const tufts = f === 'paving' ? 5 : 10;
         for (let i = 0; i < tufts; i++) {
@@ -460,20 +562,8 @@ export class ChunkRenderer {
             b.add('sphere', PALETTE.flowerCore, [fx, top + ht + 0.016, fz], [0.055, 0.035, 0.055]);
             b.add('leaf', PALETTE.grassTuft[i % 3], [fx + 0.025, top + ht * 0.48, fz], [0.13, ht * 0.5, 0.14]);
           }
-        if (t.bloom >= 3) {
-          const kind = t.variant % 4;
-          if (kind === 1) {
-            b.add('sphere', PALETTE.shrub[0], [x, top + 0.16, z], [0.44, 0.25, 0.44]);
-            for (let i = 0; i < 6; i++) {
-              const a = i * 2.4;
-              b.add('leaf', PALETTE.grassTuft[i % 3], [x + Math.cos(a) * 0.17, top + 0.28, z + Math.sin(a) * 0.17], [0.23, 0.48, 0.22]);
-            }
-          } else
-            for (let i = 0; i < 3; i++) {
-              const s = r.range(0.24, 0.34);
-              b.add('sphere', PALETTE.shrub[i], [x + r.range(-0.15, 0.15), top + s / 2.2, z + r.range(-0.15, 0.15)], [s, s * 0.85, s]);
-            }
-        }
+        // Phase 5: a tree tile grows its tree from a sapling (Restored) to Radiant; other full-bloom tiles get shrubs.
+        if (!this.addTree(t, h, 1) && t.bloom >= 3) this.fb.add(shrubGeo(t.variant, 1), x + (t.variant % 3) * 0.06 - 0.06, top, z, t.variant * 1.7, 1);
         if (t.bloom >= 4) {
           // Phase 4 E05: Radiant: a pale golden glow on the ground and luminous gold flowers above the shrubs.
           b.add('cylinder', '#b4c46a', [x, top + 0.005, z], [0.72, 0.008, 0.72]);
@@ -541,11 +631,9 @@ export class ChunkRenderer {
   /** A tree in a stone planter: bare twigs until it leafs out. */
   private planterTree(b: MeshBuilder, x: number, y: number, z: number, leafy: boolean) {
     b.add('box', leafy ? '#d8d1c0' : '#9d978a', [x, y + 0.09, z], [0.26, 0.18, 0.26]);
-    b.add('cylinder', PALETTE.trunk, [x, y + 0.36, z], [0.04, 0.4, 0.04]);
-    if (leafy) {
-      b.add('sphere', PALETTE.shrub[0], [x, y + 0.62, z], [0.36, 0.3, 0.36]);
-      b.add('sphere', PALETTE.shrub[1], [x + 0.06, y + 0.74, z - 0.04], [0.22, 0.2, 0.22]);
-    } else {
+    if (leafy) this.fb.add(treeGeo('cherry', 2, 1, 1), x, y + 0.18, z, 0.7, 0.55); // Phase 5: a real little tree
+    else {
+      b.add('cylinder', PALETTE.trunk, [x, y + 0.36, z], [0.04, 0.4, 0.04]);
       b.add('box', '#6b5a45', [x + 0.05, y + 0.58, z], [0.14, 0.02, 0.02]);
       b.add('box', '#6b5a45', [x - 0.04, y + 0.52, z + 0.03], [0.02, 0.02, 0.12]);
     }

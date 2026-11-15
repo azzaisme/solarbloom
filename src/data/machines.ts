@@ -105,3 +105,35 @@ export const MACHINES: Record<MachineType, MachineDef> = {
 };
 
 export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay'];
+
+/**
+ * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the
+ * anchor's footprint. Tier 3 (superstructures) arrives with E14; until then tier 2 is the top.
+ */
+export interface TierDef {
+  name: string;
+  icon: string;
+  /** what tier 2 does, for previews */
+  blurb: string;
+}
+export const TIER2: Partial<Record<MachineType, TierDef>> = {
+  solar: { name: 'Solar Array', icon: '🔆', blurb: '×4 energy (and ×4 bloom bursts)' },
+  condenser: { name: 'Condenser Array', icon: '💠', blurb: '×4 water, and each watering wets 2 more tiles' },
+  pollinator: { name: 'Bloom Garden', icon: '💮', blurb: 'Biomass bonus ×2 (was ×1.5) and zone radius +1' },
+  droneHub: { name: 'Fleet Hub', icon: '🚀', blurb: '×3 drones (up to 12) and work radius +2' },
+};
+export const MAX_TIER = 2;
+
+export function isMergeable(type: MachineType): boolean {
+  return !!TIER2[type];
+}
+export function tierOf(m: { tier?: number }): number {
+  return m.tier ?? 1;
+}
+/** A machine's display name for its tier. */
+export function machineName(m: { type: MachineType; tier?: number }): string {
+  return tierOf(m) >= 2 && TIER2[m.type] ? TIER2[m.type]!.name : MACHINES[m.type].name;
+}
+export function machineIcon(m: { type: MachineType; tier?: number }): string {
+  return tierOf(m) >= 2 && TIER2[m.type] ? TIER2[m.type]!.icon : MACHINES[m.type].icon;
+}
