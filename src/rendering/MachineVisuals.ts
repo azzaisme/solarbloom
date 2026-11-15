@@ -7,6 +7,8 @@ import { group, shape } from './Shapes';
 import { TUNING } from '../data/tuning';
 import { SLAB_TOP } from './SceneBuilder';
 import { ease, type Tweens } from './Tween';
+import { foliageMaterial, treeMesh } from './Foliage';
+import { treeGeo } from './TreeGen';
 
 interface MachineView {
   m: MachineData;
@@ -34,6 +36,8 @@ interface MachineView {
   extras: pc.Entity;
   /** panels built with the model (not upgrade extras): the base panel, plus a Solar Array's two wings */
   basePanels?: number;
+  /** Phase 5 E14: a superstructure (its own model, stages and animation; no tier-1 update logic) */
+  super?: { stage: number; head?: pc.Entity; spin: pc.Entity[]; bob: pc.Entity[]; glow: pc.Entity[]; scaffold?: pc.Entity };
   /** Phase 5 E13: the floating crown gem of a tier-2 machine */
   crown?: pc.Entity;
   /** joined its region's dynamic batch (after its build animation) */
@@ -111,6 +115,12 @@ export class MachineVisuals {
     const root = group(this.parent, `machine-${m.id}`, this.worldOf(m));
     const body = group(root, 'body');
     const v: MachineView = { m, root, body, spin: [], bob: [], level: -1, extras: group(body, 'extras') };
+    if ((m.tier ?? 1) >= 3) {
+      this.superModel(v);
+      this.views.set(m.id, v);
+      if (animate) this.playBuild(v);
+      return;
+    }
     switch (m.type) {
       case 'solar':
         this.solar(v);
@@ -193,6 +203,126 @@ export class MachineVisuals {
     shape(crown, 'sphere', mat(gem, { emissive: gem, emissiveIntensity: 1.3, gloss: 0.9 }), { pos: [0, 0, 0], scale: [0.16, 0.22, 0.16] });
     shape(crown, 'torus', mat(PALETTE.gold, { metal: 0.6, gloss: 0.75 }), { pos: [0, 0, 0], scale: [0.3, 0.05, 0.3] });
     v.crown = crown;
+  }
+
+  /**
+   * Phase 5 E14: superstructure models. Cream rounded shells, solar gold and water cyan accents, foliage. While
+   * under construction: a foundation slab with scaffold poles (stage 1), then the structure half-raised inside its
+   * scaffold (stage 2); built, the full model.
+   */
+  private superModel(v: MachineView) {
+    const m = v.m;
+    const s = m.size;
+    const stage = m.project ? m.project.stage : 3;
+    const sv: NonNullable<MachineView['super']> = { stage, spin: [], bob: [], glow: [] };
+    v.super = sv;
+    const b = v.body;
+    // Foundation: a rounded cream plinth with a gold rim (every stage).
+    shape(v.root, 'cylinder', mat(PALETTE.shell), { pos: [0, 0.06, 0], scale: [s * 0.96, 0.12, s * 0.96], shadow: true });
+    shape(v.root, 'torus', mat(PALETTE.gold, { metal: 0.6, gloss: 0.75 }), { pos: [0, 0.12, 0], scale: [s * 0.97, 0.08, s * 0.97] });
+    if (stage < 3) {
+      const sc = group(v.root, 'scaffold');
+      const h = stage === 1 ? 0.9 : 1.8;
+      for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) shape(sc, 'box', mat('#c9a77a'), { pos: [x * s * 0.42, h / 2, z * s * 0.42], scale: [0.06, h, 0.06], shadow: true });
+      for (const y of stage === 1 ? [0.5] : [0.6, 1.4]) for (const [x, z, rx] of [[0, -1, 0], [0, 1, 0], [-1, 0, 90], [1, 0, 90]]) shape(sc, 'box', mat('#d8b98d'), { pos: [x * s * 0.42, y, z * s * 0.42], scale: [s * 0.84, 0.05, 0.05], rot: [0, rx, 0] });
+      sv.scaffold = sc;
+      if (stage === 1) return; // just the foundation
+      b.setLocalScale(0.62, 0.62, 0.62);
+    }
+    if (m.type === 'solar') {
+      // Solar Megaflower: a giant sunflower whose petals are solar panels, its gold face tracking the sun.
+      shape(b, 'cylinder', mat(PALETTE.white), { pos: [0, 0.8, 0], scale: [0.16, 1.5, 0.16], shadow: true });
+      for (const side of [-1, 1]) shape(b, 'sphere', mat(PALETTE.leafFin), { pos: [side * 0.32, 0.7, 0], scale: [0.5, 0.08, 0.24], rot: [0, 0, side * -25], shadow: true });
+      const head = group(b, 'head', [0, 1.65, 0]);
+      head.setLocalEulerAngles(-35, 45, 0);
+      shape(head, 'cylinder', mat(PALETTE.gold, { metal: 0.5, gloss: 0.8, emissive: '#ffcf4a', emissiveIntensity: 0.25 }), { scale: [0.7, 0.14, 0.7], shadow: true });
+      shape(head, 'cylinder', mat('#8a5a1c'), { pos: [0, 0.08, 0], scale: [0.5, 0.04, 0.5] });
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * 360;
+        const pet = group(head, 'petal');
+        pet.setLocalEulerAngles(0, a, 0);
+        shape(pet, 'box', mat(PALETTE.white), { pos: [0.66, 0, 0], scale: [0.62, 0.05, 0.3], rot: [0, 0, -8], shadow: true });
+        const cell = shape(pet, 'box', mat(PALETTE.panel, { gloss: 0.85, metal: 0.2 }), { pos: [0.68, 0.03, 0], scale: [0.54, 0.02, 0.24], rot: [0, 0, -8] });
+        sv.glow.push(cell);
+      }
+      sv.head = head;
+    } else if (m.type === 'condenser') {
+      // Water Nexus: a cream tower under a glass dome full of swirling water, rings of cyan around it.
+      shape(b, 'cylinder', mat(PALETTE.white), { pos: [0, 0.55, 0], scale: [1.0, 0.9, 1.0], shadow: true });
+      shape(b, 'torus', mat(PALETTE.gold, { metal: 0.6, gloss: 0.75 }), { pos: [0, 1.0, 0], scale: [1.08, 0.18, 1.08] });
+      shape(b, 'sphere', mat(PALETTE.glass, { opacity: 0.4, gloss: 0.95 }), { pos: [0, 1.45, 0], scale: 1.0 });
+      const water = shape(b, 'sphere', mat(PALETTE.water, { emissive: '#2aa6d6', emissiveIntensity: 0.6, gloss: 0.9 }), { pos: [0, 1.4, 0], scale: 0.62 });
+      sv.bob.push(water);
+      for (let i = 0; i < 3; i++) {
+        const r = shape(b, 'torus', mat(PALETTE.water, { emissive: PALETTE.water, emissiveIntensity: 1.1 }), { pos: [0, 0.4 + i * 0.32, 0], scale: [1.35 + i * 0.1, 0.05, 1.35 + i * 0.1] });
+        sv.spin.push(r);
+      }
+      for (const [x, z] of [[-0.75, -0.75], [0.75, -0.75], [-0.75, 0.75], [0.75, 0.75]]) shape(b, 'cylinder', mat(PALETTE.white), { pos: [x, 0.35, z], scale: [0.18, 0.5, 0.18], shadow: true });
+    } else if (m.type === 'pollinator') {
+      // Tree of Life: a towering radiant tree (real foliage: it sways and turns see-through over the cursor).
+      shape(b, 'cylinder', mat(PALETTE.soil), { pos: [0, 0.15, 0], scale: [s * 0.82, 0.04, s * 0.82] });
+      const tree = new pc.Entity('treeOfLife');
+      tree.addComponent('render', { meshInstances: [new pc.MeshInstance(treeMesh(this.device(), treeGeo('oak', 4, 1, 1)), foliageMaterial())], castShadows: true, receiveShadows: true });
+      tree.setLocalPosition(0, 0.12, 0);
+      tree.setLocalScale(2.5, 2.5, 2.5);
+      b.addChild(tree);
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const orb = shape(b, 'sphere', mat('#fff3b0', { emissive: '#ffe27a', emissiveIntensity: 1.4 }), { pos: [Math.cos(a) * 1.2, 1.6 + (i % 3) * 0.5, Math.sin(a) * 1.2], scale: 0.1 });
+        sv.bob.push(orb);
+      }
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        shape(b, 'sphere', mat(i % 2 ? '#ffb3d9' : '#fff2a8'), { pos: [Math.cos(a) * 1.25, 0.2, Math.sin(a) * 1.25], scale: [0.16, 0.1, 0.16] });
+      }
+    } else if (m.type === 'droneHub') {
+      // Drone Megahub: a cream dome hangar with a cyan landing ring, a gold mast and drones parked on the rim.
+      shape(b, 'sphere', mat(PALETTE.shell), { pos: [0, 0.2, 0], scale: [1.7, 1.0, 1.7], shadow: true });
+      shape(b, 'cylinder', mat(PALETTE.darkFace, { gloss: 0.6 }), { pos: [0, 0.72, 0], scale: [0.7, 0.03, 0.7] });
+      const ring = shape(b, 'torus', mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1.3 }), { pos: [0, 0.74, 0], scale: [0.9, 0.08, 0.9] });
+      sv.spin.push(ring);
+      shape(b, 'cylinder', mat(PALETTE.gold, { metal: 0.6, gloss: 0.75 }), { pos: [0.55, 1.2, -0.55], scale: [0.05, 1.2, 0.05] });
+      const dish = group(b, 'dish', [0.55, 1.85, -0.55]);
+      dish.setLocalEulerAngles(-35, 45, 0);
+      shape(dish, 'cylinder', mat(PALETTE.white, { gloss: 0.7 }), { scale: [0.45, 0.04, 0.45] });
+      sv.head = dish;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + 0.4;
+        const d = shape(b, 'sphere', mat(PALETTE.white), { pos: [Math.cos(a) * 0.95, 0.55, Math.sin(a) * 0.95], scale: [0.18, 0.1, 0.18] });
+        sv.bob.push(d);
+      }
+    }
+  }
+
+  private device(): pc.GraphicsDevice {
+    return pc.AppBase.getApplication()!.graphicsDevice;
+  }
+
+  /** Phase 5 E14: a superstructure's stage changed: rebuild its model; on completion it unfolds. */
+  superStage(m: MachineData, stage: number) {
+    const old = this.views.get(m.id);
+    old?.root.destroy();
+    this.views.delete(m.id);
+    this.add(m, false);
+    const v = this.views.get(m.id)!;
+    if (this.reducedMotion) return;
+    if (stage >= 3) {
+      v.body.setLocalScale(0.3, 0.05, 0.3);
+      this.tweens.add(1.1, (k) => v.body.setLocalScale(0.3 + 0.7 * k, 0.05 + 0.95 * k, 0.3 + 0.7 * k), { ease: ease.outElastic });
+    } else {
+      v.root.setLocalScale(0.9, 0.9, 0.9);
+      this.tweens.add(0.5, (k) => v.root.setLocalScale(0.9 + 0.1 * k, 0.9 + 0.1 * k, 0.9 + 0.1 * k), { ease: ease.outBack });
+    }
+  }
+
+  /** Phase 5 E14: the ability fired: the model pulses (presentation only). */
+  superPulse(id: string) {
+    const v = this.views.get(id);
+    if (!v || this.reducedMotion) return;
+    this.tweens.add(0.6, (k) => {
+      const p = 1 + 0.12 * Math.sin(k * Math.PI);
+      v.body.setLocalScale(p, p, p);
+    });
   }
 
   /** Removes a machine's model (merged away). With `to`, it flies into that point and shrinks first. */
@@ -804,6 +934,19 @@ export class MachineVisuals {
     const M = 3;
     for (const v of this.views.values()) {
       if (view && v.m.roofId === GROUND && (v.m.x + v.m.size < view.x0 - M || v.m.x > view.x1 + M || v.m.z + v.m.size < view.z0 - M || v.m.z > view.z1 + M)) continue;
+      if (v.super) {
+        const sv = v.super;
+        if (!rm) {
+          if (sv.head && v.m.type === 'solar') sv.head.setLocalEulerAngles(-35 + Math.sin(t * 0.25 + v.m.x) * 6, 45 + Math.sin(t * 0.18 + v.m.z) * 18, 0);
+          if (sv.head && v.m.type === 'droneHub') sv.head.setLocalEulerAngles(-35, t * 25, 0);
+          sv.spin.forEach((e, i) => e.setLocalEulerAngles(0, t * (30 + i * 15) * (i % 2 ? -1 : 1), 0));
+          sv.bob.forEach((e, i) => {
+            const p = e.getLocalPosition();
+            e.setLocalPosition(p.x, p.y + Math.sin(t * 1.7 + i) * 0.002, p.z);
+          });
+        }
+        continue;
+      }
       if (v.crown && !rm) {
         v.crown.setLocalEulerAngles(0, t * 60, 0);
         v.crown.setLocalPosition(0, 1.0 + (v.m.size - 1) * 0.3 + Math.sin(t * 1.6 + v.m.x) * 0.06, 0);

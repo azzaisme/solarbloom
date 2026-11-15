@@ -171,6 +171,11 @@ export class BloomChainSystem {
     return this.queue.items().map((e) => e.target);
   }
 
+  /** Phase 5 E14: is this chain still being processed? */
+  isRunning(id: number): boolean {
+    return this.runs.has(id);
+  }
+
   get activeRuns() {
     return this.runs.size;
   }
@@ -366,6 +371,23 @@ export class BloomChainSystem {
     return true;
   }
 
+  /**
+   * Phase 5 E14: a superstructure's ability as one bounded chain. Each tile is restored if it can be, else grown a
+   * stage; `delay(i)` staggers them (a wave). Reactions are budgeted like a Mega Bloom, so it always ends.
+   * Returns the chain id.
+   */
+  startAbility(tiles: TileData[], delay: (i: number) => number): number | undefined {
+    if (!tiles.length) return undefined;
+    const run = this.newRun(tiles[0], 'mega', tiles.length * 2);
+    run.visited.delete(tiles[0].id);
+    tiles.forEach((t, i) => {
+      run.visited.add(t.id);
+      if (t.ground !== 'restored') this.enqueue(run, { type: 'RESTORE', source: tiles[0].id, target: t.id, cause: 'super', depth: 1 }, delay(i));
+      else this.enqueue(run, { type: 'GROW', source: tiles[0].id, target: t.id, cause: 'super', depth: 1 }, delay(i));
+    });
+    return run.id;
+  }
+
   /** Lucky Cat's Garden: restores and decorates a small cluster as one free chain. */
   startCatGarden(tiles: TileData[]): boolean {
     if (!tiles.length) return false;
@@ -426,6 +448,7 @@ export class BloomChainSystem {
     if (!this.canGrow(run, depth)) return;
     const machines = s.grid.machinesNear(tile.roofId, tile.x, tile.z, this.synergyReach());
     for (const m of machines) {
+      if (m.project && m.project.stage < 3) continue; // Phase 5 E14: a superstructure under construction does nothing yet
       const d = distToFootprint(tile.x, tile.z, m.x, m.z, m.size);
       if (m.type === 'solar' && d === 1 && !run.solarFired.has(m.id)) {
         run.solarFired.add(m.id);

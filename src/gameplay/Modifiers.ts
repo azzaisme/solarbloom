@@ -48,6 +48,9 @@ export class Modifiers {
     }
     const surge = s.state.buffs.find((b) => b.type === 'solarFrenzy');
     if (surge) out.push({ label: 'Solar Surge', stat: 'solar', value: TUNING.cat.frenzyMult, left: surge.until - s.time });
+    // Phase 5 E14: the Solar Megaflower's burst (the strongest solar boost wins, never a product).
+    const burst = s.state.buffs.find((b) => b.type === 'megaflower' && b.until > s.time);
+    if (burst) out.push({ label: 'Solar Burst', stat: 'solar', value: TUNING.super.megaflower.mult, left: burst.until - s.time });
     return out;
   }
 

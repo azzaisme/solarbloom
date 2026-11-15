@@ -23,6 +23,7 @@ import { Modifiers } from './Modifiers';
 import { Metrics } from './Metrics';
 import { MilestoneSystem } from './Milestones';
 import { MergeSystem } from './MergeSystem';
+import { SuperSystem } from './SuperSystem';
 import { ProductionSystem } from './ProductionSystem';
 import { ProgressionSystem } from './ProgressionSystem';
 import { RestorationSystem } from './RestorationSystem';
@@ -59,6 +60,7 @@ export class Sim {
   readonly clusters: RooftopClusters;
   readonly milestones: MilestoneSystem;
   readonly merge: MergeSystem;
+  readonly supers: SuperSystem;
 
   constructor(
     readonly state: GameState,
@@ -105,6 +107,7 @@ export class Sim {
     this.districts = new DistrictSystem(this);
     this.milestones = new MilestoneSystem(this);
     this.merge = new MergeSystem(this);
+    this.supers = new SuperSystem(this);
     this.metrics = new Metrics(this);
     this.log = new DebugLog(this);
     this.offline = new OfflineSystem(this);
@@ -200,6 +203,7 @@ export class Sim {
     this.restoration.tick(dt);
     this.chains.tick();
     this.drones.tick(dt);
+    this.supers.tick(dt);
     this.cat.tick();
     this.progression.tick();
     this.milestones.tick();

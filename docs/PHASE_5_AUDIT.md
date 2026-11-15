@@ -195,3 +195,49 @@ All on this branch, headless Linux, Chromium with SwiftShader software rendering
 - Merging is a modest gain on its own (spec: 3 → 4); E14's superstructures carry the big multipliers.
 - No Tier 3 yet (E14), so a Tier 2 machine shows "top tier until superstructures arrive".
 - No human playtests: whether picking partners by tapping feels good needs people.
+
+# E14 — Superstructures
+
+## Decisions agreed before starting
+
+- **Tree of Life = three Bloom Gardens; the Mother Tree stays** ("the Tree of Life is the Supreme Kai, the
+  Mother Tree is King Kai"): the Mother Tree remains the cheap, local radius-2 pulse; the Tree of Life is the
+  3×3 tier 3 of the garden family.
+- **Store a core, place it anywhere:** merging three tier-2 machines gives a Superstructure Core; it is placed
+  like a building (footprint ghost, all three stage prices shown first). A blocked spot never uses a core.
+- **Solar Megaflower burst: ×3 energy only, 15 s.**
+- **Construction priced from income, locked at placement:** three stages, paid when the player can (no timer).
+
+## What changed
+
+| Area | Change |
+|---|---|
+| Cores | `MergeSystem`: three edge-connected tier-2 machines of a type merge into a core (`state.cores`); all three leave the grid (tiles keep their state). First core merge of each type free, then 20 s of income. Upgrade levels: the highest of each, kept on the core and on the superstructure |
+| Placement | `SuperSystem.check/place`: same footprint rules as building (fog, vents, occupied, drone targets, growing tiles); 2×2, Tree of Life 3×3. Placing pays the foundation and uses the core |
+| Construction | `project: { stage, costs }`. Stage prices: 30 / 90 / 180 s of steady biomass income (at least 300 / 600 / 900), plus 40 % of the energy store for assembly and 40 % of energy and water for activation; locked at placement and saved. Nothing works until activation (no production, drones, zones or chain reactions) |
+| Built | Tier 3 keeps its family's job at output index 18 (three tier 2s = 12): Megaflower ×18 energy, Nexus ×18 water, Tree of Life biomass ×2.5 within 3 tiles, Megahub fleet drones and work radius +4 |
+| Abilities | Solar Burst (every panel ×3 energy, 15 s; the strongest solar boost wins, never a product). Irrigation Wave (up to 24 connected dry or growing tiles, nearest first, as one bounded chain). Evolution (the 12 least-grown tiles within 4 grow a stage; stores up to 3 charges). Swarm (6 temporary drones for 30 s, each restoring 3 extra tiles per job, normal pulse costs) |
+| Charge | Productive events and real flow, not time alone: restorations within 4 tiles (the Tree of Life also counts tiles growing a stage), plus the structure's own banked production (Megaflower and Nexus only while their store isn't full; ~90 s to fill, Tree of Life ~120 s). Megahub: its own drones' finished jobs (swarm jobs don't count). The ability's own chain never charges anything. Fired by hand; automatic firing unlocks after the first manual use. With nothing to act on it says so and keeps its charge |
+| Bounds | Each release returns less charge than it uses; ability chains are budgeted like a Mega Bloom; tested with two Water Nexuses on auto beside each other (they settle, chains end) |
+| Presentation | Core slots in the Build tray (with a "✨ n cores" badge on Build); placement ghost and tooltip with every stage price; inspect card with stage checklist and pay button, then the ability's charge bar, Fire and Auto. Models: Megaflower (a giant sunflower whose petals are solar panels, its face tracking the sun), Water Nexus (cream tower, glass dome of water, spinning cyan rings), Tree of Life (a towering radiant tree with real foliage, so it sways and turns see-through over the cursor, glowing orbs), Drone Megahub (cream dome hangar, landing ring, gold mast and dish). Scaffold for foundation and assembly; on activation the structure unfolds with light rings, a sound crescendo and a toast stating the permanent output gain; the first one nudges the camera (not with reduced motion) |
+| Advisor | Suggests a stage you can pay, a charged ability to fire, or placing a waiting core (when the foundation is affordable) |
+| Saves | `cores`, `project`, `ability` on machines, `stats.supers` / `superAbilities`; no version change |
+
+## Measured (scripted bots, not people)
+
+The merging bot (`tests/bots.ts`, `merges: true`) now also merges tier 2s, places cores (park first, then any
+cleared area), saves up for stages and fires abilities, then leaves them on auto. 60 minutes:
+
+| Seed | First core | First superstructure | Built in 60 min | Abilities fired | Steady biomass/min 15 / 30 / 45 min |
+|---|---|---|---|---|---|
+| 7 | 25:54 | 39:00 | 4 | 3 | 1.03M / 14.5M / 82.5M |
+| 21 | 31:12 | 54:12 | 6 | 2 | 740K / 16.0M / 61.5M |
+
+- **Later than the spec's window** (first superstructure at 15–30 minutes): a core needs nine tier-1 machines,
+  each priced on lifetime builds, and the bot had to save for the stages. People may be faster or slower.
+- **Not a biomass multiplier yet:** Megaflower and Nexus produce energy and water; biomass at 45 minutes was the
+  same (seed 7) or lower while saving for stages (seed 21) than merging alone.
+- **Abilities fire rarely late in the game:** the Megaflower and Nexus only charge while their store isn't full,
+  and finished areas have little left to restore.
+- Two bugs this found in my first version: cores never got placed once the park was full (now any cleared area),
+  and abilities never charged in finished areas (now they also charge from their own production).

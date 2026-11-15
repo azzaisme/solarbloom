@@ -23,6 +23,8 @@ function check(sim: Sim, label: string) {
   else if (a.kind === 'district') expect(sim.districts.available(a.districtId), label).toBe(true);
   else if (a.kind === 'harvest') expect(sim.state.harvestReadyAt <= sim.time, label).toBe(true);
   else if (a.kind === 'merge') expect(sim.merge.plan(a.machineId)?.ok, label).toBe(true);
+  else if (a.kind === 'placeCore') expect(sim.supers.coreCount(a.type), label).toBeGreaterThan(0);
+  else if (a.kind === 'super') expect(a.action === 'stage' ? sim.econ.canAfford(sim.supers.nextCost(sim.machine(a.machineId)!)!) : !sim.supers.blocked(sim.machine(a.machineId)!), label).toBe(true);
   else expect(a.seconds, label).toBeGreaterThan(0);
   return g;
 }

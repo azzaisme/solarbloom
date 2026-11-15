@@ -25,7 +25,9 @@ export type RestoreSource =
   | 'overflow'
   | 'canopy'
   | 'cat'
-  | 'neighbourhood';
+  | 'neighbourhood'
+  /** Phase 5 E14: a superstructure's ability (Water Nexus wave, Tree of Life evolution) */
+  | 'super';
 
 export interface TileData {
   id: string;
@@ -96,6 +98,13 @@ export interface MachineData {
   upg?: Record<string, number>;
   /** Phase 5 E13: merge tier (unset = 1). Three connected tier-1 machines of a type merge into one tier 2. */
   tier?: number;
+  /**
+   * Phase 5 E14: a superstructure under construction. `stage` = stages paid (1 foundation, 2 assembly,
+   * 3 activation = built); `costs` = the three stage prices locked at placement (Decimal strings).
+   */
+  project?: { stage: number; costs: Partial<Record<ResourceKind, string>>[] };
+  /** Phase 5 E14: a superstructure's ability: charge (events), uses, automation switch. */
+  ability?: { charge: number; used: number; auto?: boolean };
 }
 
 export type DroneMode = 'idle' | 'flying' | 'working' | 'cooldown' | 'returning';
@@ -111,6 +120,8 @@ export interface DroneData {
   expiresAt?: number; // temporary (Drone Party) drones
   /** Phase 4 E01: the old drone that lives by the park's starter solar lamp (its `hubId`). */
   old?: boolean;
+  /** Phase 5 E14: one of a Drone Megahub's swarm (temporary; restores extra tiles around each job). */
+  swarm?: boolean;
   jobs: number;
   /** Roof the drone is currently over (px/pz are local to it). Defaults to the hub's roof. */
   roofId?: string;
@@ -118,7 +129,7 @@ export interface DroneData {
   far?: { fx: number; fz: number; t0: number; t1: number };
 }
 
-export type BuffType = 'solarFrenzy';
+export type BuffType = 'solarFrenzy' | 'megaflower';
 export interface Buff {
   type: BuffType;
   until: number;
@@ -177,6 +188,9 @@ export interface Stats {
   built?: Record<string, number>;
   /** Phase 5 E13: merges made, by machine type (the first of each type is free). */
   merges?: Record<string, number>;
+  /** Phase 5 E14: superstructures finished, and abilities fired. */
+  supers?: number;
+  superAbilities?: number;
 }
 
 /** Fog over a city area. Areas without an entry are hidden. */
@@ -217,6 +231,8 @@ export interface GameState {
   /** Only present in a save being loaded: packed tile deltas per chunk (consumed by Sim). */
   tiles?: Record<string, string>;
   machines: MachineData[];
+  /** Phase 5 E14: Superstructure Cores waiting to be placed (from merging three tier-2 machines). */
+  cores?: { type: MachineType; upg?: Record<string, number> }[];
   drones: DroneData[];
   upgrades: Record<string, number>;
   buffs: Buff[];

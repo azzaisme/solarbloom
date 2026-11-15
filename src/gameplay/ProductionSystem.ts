@@ -223,6 +223,7 @@ export class ProductionSystem {
     const R = TUNING.neighbourhood.reservoir;
     const num = (id: string) => Number(id.slice(1)) || 0;
     for (const m of s.machinesOfType('condenser')) {
+      if (m.project && m.project.stage < 3) continue; // Phase 5 E14: still being built
       const rate = TUNING.condenser.chargePerSec * (1 + 0.25 * s.upgrades.waterBloom(m));
       const was = m.charge ?? 0;
       m.charge = Math.min(TUNING.condenser.threshold, was + rate * dt);

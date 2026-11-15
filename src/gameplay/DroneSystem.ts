@@ -408,7 +408,7 @@ export class DroneSystem {
           if (t && t.ground !== 'restored' && t.ground !== 'growing') {
             s.restoration.beginGrowth(t, 'drone', TUNING.pulse.growSeconds);
             // Phase 4 E07: Drone Sweep restores a few tiles around it for free (never another drone's target).
-            const sweep = d.old ? 0 : s.upgrades.droneSweep(s.machine(d.hubId));
+            const sweep = d.old ? 0 : s.upgrades.droneSweep(s.machine(d.hubId)) + (d.swarm ? TUNING.super.megahub.sweep : 0);
             if (sweep > 0) {
               const around = s.grid
                 .neighbors(t)
@@ -419,10 +419,12 @@ export class DroneSystem {
             }
             d.jobs++;
             s.state.stats.droneJobs++;
+            if (!d.swarm) s.supers.onDroneJob(s.machine(d.hubId));
           } else if (t && t.ground === 'restored' && t.bloom < TUNING.restore.maxBloom) {
             s.restoration.grow(t);
             d.jobs++;
             s.state.stats.droneJobs++;
+            if (!d.swarm) s.supers.onDroneJob(s.machine(d.hubId));
           }
           d.mode = 'cooldown';
           d.timer = d.old ? TUNING.drone.old.cycleSeconds : TUNING.drone.cycleSeconds / s.upgrades.droneSpeed(s.machine(d.hubId)) / s.mods.droneSpeedMult();

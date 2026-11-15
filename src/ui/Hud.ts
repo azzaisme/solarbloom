@@ -4,14 +4,18 @@ import { Economy, formatCost, KINDS } from '../core/Economy';
 import { fmt, toNum, type Big } from '../core/Big';
 import type { Cost } from '../core/types';
 import type { BuildableType, MachineData, ResourceKind } from '../core/types';
-import { BUILDABLE, MACHINES, TIER2 } from '../data/machines';
+import { BUILDABLE, MACHINES, TIER2, TIER3 } from '../data/machines';
 import { AREA_TYPES } from '../data/city';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
 import { SEED_CORE_MACHINES } from '../gameplay/ProgressionSystem';
 import { ICONS } from './Icons';
 
-export type Tool = 'inspect' | 'pulse' | BuildableType;
+/** Phase 5 E14: `super:<type>` places a Superstructure Core of that family. */
+export type SuperTool = `super:${'solar' | 'condenser' | 'pollinator' | 'droneHub'}`;
+export type Tool = 'inspect' | 'pulse' | BuildableType | SuperTool;
+export const SUPER_TOOLS: SuperTool[] = ['super:solar', 'super:condenser', 'super:pollinator', 'super:droneHub'];
+export const superType = (t: Tool) => (t.startsWith('super:') ? (t.slice(6) as 'solar' | 'condenser' | 'pollinator' | 'droneHub') : undefined);
 
 const RES_META: Record<ResourceKind, { icon: string; name: string; color: string }> = {
   energy: { icon: '⚡', name: 'Energy', color: 'var(--energy)' },
@@ -47,6 +51,8 @@ export interface HudCallbacks {
   merge(action: 'start' | 'confirm' | 'cancel'): void;
   /** Phase 5 E13: the advisor's merge button (select the machine and open its merge preview). */
   mergeAt(machineId: string): void;
+  /** Phase 5 E14: superstructure panel buttons: pay the next stage, fire the ability, toggle automatic firing. */
+  superAction(action: 'stage' | 'activate' | 'auto', machineId: string): void;
 }
 
 export interface Settings {
@@ -114,6 +120,10 @@ export class Hud {
         (t) =>
           `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name} (${MACHINES[t].hotkey})"><span class="key">${MACHINES[t].hotkey}</span><span class="si">${MACHINES[t].icon}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
       ),
+      ...SUPER_TOOLS.map((t) => {
+        const d = TIER3[superType(t)!]!;
+        return `<button class="slot super" data-tool="${t}" hidden aria-label="Place ${d.name} core"><span class="si">${d.icon}</span><span class="sl">${d.name.split(' ').pop()}</span><span class="sc"></span></button>`;
+      }),
       `</div>`,
       `<span class="sep"></span>`,
       `<button class="slot" id="harvestBtn" aria-label="Harvest sunlight (H)"><span class="key">H</span><span class="si">${ICONS.harvest}</span><span class="sl">Harvest</span><span class="sc">+${TUNING.harvest.energy}⚡</span><span class="cd"></span></button>`,
@@ -288,9 +298,16 @@ export class Hud {
       if (t.closest('[data-harvest]')) this.cb.harvest();
       const mg = t.closest<HTMLButtonElement>('[data-merge-at]');
       if (mg) this.cb.mergeAt(mg.dataset.mergeAt!);
+      const ct = t.closest<HTMLButtonElement>('[data-core-tool]');
+      if (ct) this.cb.selectTool(ct.dataset.coreTool as Tool);
+      const su = t.closest<HTMLButtonElement>('[data-super]');
+      if (su) {
+        const [action, id] = su.dataset.super!.split('|');
+        this.cb.superAction(action as 'stage' | 'activate', id);
+      }
       const db = t.closest<HTMLButtonElement>('[data-district]');
       if (db && !db.disabled) this.cb.districtBloom(db.dataset.district!, db.dataset.replay === '1');
-      if (fo || wk || db || mg || t.closest('[data-upg]') || t.closest('[data-harvest]')) this.suggestionAt = -1;
+      if (fo || wk || db || mg || ct || su || t.closest('[data-upg]') || t.closest('[data-harvest]')) this.suggestionAt = -1;
     });
     $(r, '#inspect').addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
@@ -301,6 +318,11 @@ export class Hud {
       if (db && !db.disabled) this.cb.districtBloom(db.dataset.district!, db.dataset.replay === '1');
       const b = t.closest<HTMLButtonElement>('[data-buy]');
       if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
+      const sp = t.closest<HTMLButtonElement>('[data-super]');
+      if (sp && !sp.disabled) {
+        const [action, id] = sp.dataset.super!.split('|');
+        this.cb.superAction(action as 'stage' | 'activate' | 'auto', id);
+      }
       const mg = t.closest<HTMLButtonElement>('[data-merge]');
       if (mg && !mg.disabled) this.cb.merge(mg.dataset.merge as 'start' | 'confirm' | 'cancel');
       const am = t.closest<HTMLButtonElement>('[data-area-mode]');
@@ -436,7 +458,7 @@ export class Hud {
     const g = this.sim.advisor.suggest();
     const a = g.action;
     const attr =
-      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'merge' ? `data-merge-at="${a.machineId}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
+      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'merge' ? `data-merge-at="${a.machineId}"` : a.kind === 'placeCore' ? `data-core-tool="super:${a.type}"` : a.kind === 'super' ? `data-super="${a.action}|${a.machineId}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
     this.suggestionBtn = `<p class="sugg">${esc(g.text)}</p><button class="act" ${attr}>${esc(g.label)}</button>`;
     return this.suggestionBtn;
   }
@@ -500,8 +522,10 @@ export class Hud {
     const building = t !== 'pulse' && t !== 'inspect';
     const tg = $(this.root, '#buildToggle');
     tg.classList.toggle('active', building);
-    $(tg, '.si').innerHTML = building ? MACHINES[t].icon : ICONS.build;
-    $(tg, '.sl').textContent = building ? MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '') : 'Build';
+    const st = superType(t);
+    const def = st ? TIER3[st]! : building ? MACHINES[t as BuildableType] : undefined;
+    $(tg, '.si').innerHTML = def ? def.icon : ICONS.build;
+    $(tg, '.sl').textContent = def ? (st ? def.name.split(' ').pop()! : def.name.replace('Water ', '').replace('Pollinator ', '')) : 'Build';
     this.toggleTray(false);
   }
 
@@ -838,6 +862,16 @@ export class Hud {
       btn.hidden = !!roofOnly && !s.build.isUnlocked(t);
       if (locked) this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.lockLabel(t));
     }
+    // Phase 5 E14: core slots appear while a core waits to be placed; the Build button shows a badge.
+    let cores = 0;
+    for (const t of SUPER_TOOLS) {
+      const n = s.supers.coreCount(superType(t)!);
+      cores += n;
+      const btn = $(this.root, `#hotbar [data-tool="${t}"]`);
+      btn.hidden = !n;
+      this.set(`hcs-${t}`, $(btn, '.sc'), 'text', n ? `core ×${n}` : '');
+    }
+    this.set('coresBadge', $(this.root, '#buildToggle .sc'), 'text', cores ? `✨ ${cores} core${cores > 1 ? 's' : ''}` : 'machines');
     // Overcharge countdown on the Pulse button
     const every = s.upgrades.overchargeEvery;
     const pc0 = s.state.progression.pulseCharge ?? 0;
@@ -928,10 +962,12 @@ export class Hud {
 
   machineHtml(m: MachineData, extra: string): string {
     const def = MACHINES[m.type];
-    const t2 = (m.tier ?? 1) >= 2 ? TIER2[m.type] : undefined;
-    const name = t2?.name ?? def.name;
-    const icon = t2?.icon ?? def.icon;
-    const blurb = t2 ? `Tier 2 (three merged): ${t2.blurb}. ${def.blurb}` : def.blurb;
+    const tier = m.tier ?? 1;
+    const t3 = tier >= 3 ? TIER3[m.type] : undefined;
+    const t2 = tier === 2 ? TIER2[m.type] : undefined;
+    const name = t3?.name ?? t2?.name ?? def.name;
+    const icon = t3?.icon ?? t2?.icon ?? def.icon;
+    const blurb = t3 ? `Superstructure (nine machines in one): ${t3.blurb}.` : t2 ? `Tier 2 (three merged): ${t2.blurb}. ${def.blurb}` : def.blurb;
     return `<h4><span>${icon} ${esc(name)}${m.starter ? ' <small style="font-weight:700;color:var(--ink-soft)">(old)</small>' : ''}</span><button data-close aria-label="Close">×</button></h4><p>${esc(blurb)}</p>${extra}`;
   }
 

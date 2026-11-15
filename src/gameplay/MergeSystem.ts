@@ -2,7 +2,7 @@ import { ceilBig, Decimal } from '../core/Big';
 import { formatCost } from '../core/Economy';
 import { machinesRemoved } from '../core/GameState';
 import type { Cost, MachineData, TileData } from '../core/types';
-import { MAX_TIER, isMergeable, machineName, tierOf } from '../data/machines';
+import { MAX_MERGE_TIER, isMergeable, machineName, tierOf } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { UPGRADES } from '../data/upgrades';
 import type { Sim } from './Sim';
@@ -46,7 +46,9 @@ export interface MergePlan {
   before: number;
   after: number;
   lost: LostLevels[];
-  /** tiles freed (the partners' footprints) */
+  /** Phase 5 E14: three tier 2s make a Superstructure Core (all three leave the grid; the core is placed later) */
+  core: boolean;
+  /** tiles freed (the partners' footprints; all three for a core) */
   freed: TileData[];
   /** identifies this exact merge for commit (anchor, partners, tiers) */
   key: string;
@@ -71,7 +73,7 @@ export class MergeSystem {
 
   /** Can this machine take part in a merge at all (type, tier, not a starter)? */
   canMerge(m: MachineData | undefined): boolean {
-    return !!m && isMergeable(m.type) && !m.starter && tierOf(m) < MAX_TIER;
+    return !!m && isMergeable(m.type) && !m.starter && tierOf(m) <= MAX_MERGE_TIER && !m.project;
   }
 
   private sameKind(a: MachineData, b: MachineData) {
@@ -147,10 +149,15 @@ export class MergeSystem {
     return second.length ? [b, second[0]] : [b];
   }
 
-  /** The fee for the next merge of this type (free for the first). */
-  fee(type: MachineData['type']): { fee: Cost; free: boolean } {
+  /** Merge counter key: per type for tier 1 → 2, per type and tier above (the first of each is free). */
+  static countKey(type: MachineData['type'], fromTier: number) {
+    return fromTier <= 1 ? type : `${type}:${fromTier}`;
+  }
+
+  /** The fee for the next merge of this type and tier (free for the first). */
+  fee(type: MachineData['type'], fromTier = 1): { fee: Cost; free: boolean } {
     const s = this.sim;
-    if (!(s.state.stats.merges?.[type] ?? 0)) return { fee: {}, free: true };
+    if (!(s.state.stats.merges?.[MergeSystem.countKey(type, fromTier)] ?? 0)) return { fee: {}, free: true };
     const rate = s.production.rates(true).biomass;
     const v = Decimal.max(TUNING.merge.minFee, ceilBig(rate.mul(TUNING.merge.feeSeconds)));
     return { fee: { biomass: v }, free: false };
@@ -174,6 +181,7 @@ export class MergeSystem {
       free: false,
       fromName: machineName(anchor),
       toName: machineName({ type: anchor.type, tier: tierOf(anchor) + 1 }),
+      core: tierOf(anchor) >= MAX_MERGE_TIER,
       before: 0,
       after: 0,
       lost: [],
@@ -182,7 +190,7 @@ export class MergeSystem {
     });
     if (!isMergeable(anchor.type)) return fail(`${machineName(anchor)}s don't merge`);
     if (anchor.starter) return fail('The starter machine stays as it is');
-    if (tierOf(anchor) >= MAX_TIER) return fail(`${machineName(anchor)} is the top tier for now`);
+    if (anchor.project || tierOf(anchor) > MAX_MERGE_TIER) return fail(`${machineName(anchor)} is a superstructure: the top tier`);
     const options = this.cluster(anchor).slice(1);
     let partners: MachineData[];
     if (partnerIds) {
@@ -192,7 +200,8 @@ export class MergeSystem {
       if (!connected3(anchor, partners[0], partners[1])) return fail('The three must touch edge to edge (corners don’t count)', partners, options);
     } else partners = this.autoPartners(anchor);
     if (partners.length < 2) return fail(`Place ${TUNING.merge.count} ${machineName(anchor)}s touching edge to edge to merge them`, partners, options);
-    const { fee, free } = this.fee(anchor.type);
+    const { fee, free } = this.fee(anchor.type, tierOf(anchor));
+    const core = tierOf(anchor) >= MAX_MERGE_TIER;
     // Upgrade levels: the merged machine keeps the highest of each; the rest are listed as lost.
     const lost: LostLevels[] = [];
     const all = [anchor, ...partners];
@@ -207,7 +216,7 @@ export class MergeSystem {
       if (gone.length) lost.push({ upgrade: u.id, name: u.name, kept, lost: gone });
     }
     const freed: TileData[] = [];
-    for (const p of partners) for (const t of s.grid.footprint(p.roofId, p.x, p.z, p.size)) if (t) freed.push(t);
+    for (const p of core ? [anchor, ...partners] : partners) for (const t of s.grid.footprint(p.roofId, p.x, p.z, p.size)) if (t) freed.push(t);
     const plan: MergePlan = {
       ok: true,
       anchor,
@@ -217,8 +226,10 @@ export class MergeSystem {
       free,
       fromName: machineName(anchor),
       toName: machineName({ type: anchor.type, tier: tierOf(anchor) + 1 }),
-      before: TUNING.merge.count,
-      after: 4,
+      core,
+      // Output index: tier 1 = 1, tier 2 = 4, tier 3 = 18.
+      before: TUNING.merge.count * (core ? TUNING.merge.solarMult : 1),
+      after: core ? TUNING.super.outputMult : TUNING.merge.solarMult,
       lost,
       freed,
       key: `${anchor.id}>${tierOf(anchor)}|${partners.map((p) => `${p.id}>${tierOf(p)}`).sort().join(',')}`,
@@ -261,15 +272,29 @@ export class MergeSystem {
     // Upgrades: highest level of each.
     const upg: Record<string, number> = { ...(anchor.upg ?? {}) };
     for (const p of partners) for (const [k, v] of Object.entries(p.upg ?? {})) upg[k] = Math.max(upg[k] ?? 0, v);
-    // Free the partners' footprints (tiles keep their state), their index entries and drones.
-    const gone = new Set(partners.map((p) => p.id));
-    for (const p of partners) {
+    // Free the partners' footprints (tiles keep their state), their index entries and drones. A core merge takes
+    // the anchor too: the three become a stored Superstructure Core (placed later, so a merge never needs room).
+    const leaving = plan.core ? [anchor, ...partners] : partners;
+    const gone = new Set(leaving.map((p) => p.id));
+    for (const p of leaving) {
       for (const t of s.grid.footprint(p.roofId, p.x, p.z, p.size)) if (t && t.occupantId === p.id) t.occupantId = undefined;
       s.grid.unindexMachine(p);
       s.drones.removeHub(p.id);
     }
     s.state.machines = s.state.machines.filter((m) => !gone.has(m.id));
     machinesRemoved();
+    const stats = s.state.stats;
+    const ck = MergeSystem.countKey(anchor.type, tierOf(anchor));
+    stats.merges = { ...(stats.merges ?? {}), [ck]: (stats.merges?.[ck] ?? 0) + 1 };
+    if (plan.core) {
+      s.state.cores = [...(s.state.cores ?? []), { type: anchor.type, ...(Object.keys(upg).length ? { upg } : {}) }];
+      s.upgrades.version++;
+      for (const m of leaving) s.production.markNear(m.roofId, m.x, m.z, m.size);
+      s.production.markDirty();
+      if (stats.firsts.firstCore === undefined) stats.firsts.firstCore = s.time;
+      s.bus.emit('core.created', { type: anchor.type, consumed: leaving, fee, lost: plan.lost });
+      return anchor;
+    }
     anchor.tier = tierOf(anchor) + 1;
     if (Object.keys(upg).length) anchor.upg = upg;
     anchor.charge = Math.max(anchor.charge, ...partners.map((p) => p.charge));
@@ -277,8 +302,6 @@ export class MergeSystem {
     s.upgrades.version++; // per-machine caches (drone reach, production sums)
     for (const m of [anchor, ...partners]) s.production.markNear(m.roofId, m.x, m.z, m.size);
     s.production.markDirty();
-    const stats = s.state.stats;
-    stats.merges = { ...(stats.merges ?? {}), [anchor.type]: (stats.merges?.[anchor.type] ?? 0) + 1 };
     if (stats.firsts.firstMerge === undefined) stats.firsts.firstMerge = s.time;
     s.bus.emit('machine.merged', { machine: anchor, consumed: partners, fee, lost: plan.lost });
     return anchor;

@@ -1,7 +1,11 @@
 import { machinesStamp } from '../core/GameState';
-import { tierOf } from '../data/machines';
+import { isBuilt, tierOf } from '../data/machines';
 
 const tier2 = (m: { tier?: number }) => tierOf(m) >= 2;
+const tier3 = (m: { tier?: number }) => tierOf(m) >= 3;
+/** Output relative to one tier-1 machine: 1, 4 (tier 2), 18 (tier 3); 0 while a superstructure is being built. */
+const tierOutput = (m: { tier?: number; project?: { stage: number } }, t2: number) =>
+  !isBuilt(m) ? 0 : tier3(m) ? TUNING.super.outputMult : tier2(m) ? t2 : 1;
 import { TUNING } from '../data/tuning';
 import { DRONE_DASH, powerMult, UPGRADE_BY_ID, UPGRADE_GROUPS, UPGRADES, type UpgradeDef, type UpgradeGroup } from '../data/upgrades';
 import { CAPPED } from '../core/Economy';
@@ -189,11 +193,11 @@ export class UpgradeSystem {
   // ───────────── per-machine effects (Phase 5 E12) ─────────────
   /** Solar Wings levels, times ×4 for a Solar Array (E13 tier 2). */
   solarMult(m: MachineData) {
-    return powerMult(0.5, this.levelOf(m, 'solarArray')) * (tier2(m) ? TUNING.merge.solarMult : 1);
+    return powerMult(0.5, this.levelOf(m, 'solarArray')) * tierOutput(m, TUNING.merge.solarMult);
   }
   /** Water a condenser makes, relative to one tier-1 condenser (E13: a Condenser Array makes ×4). */
   waterMult(m: MachineData) {
-    return tier2(m) ? TUNING.merge.waterMult : 1;
+    return tierOutput(m, TUNING.merge.waterMult);
   }
   /** Extra tiles a condenser's watering burst reaches beyond the base (E13: a Condenser Array +2). */
   condenserTierTargets(m: MachineData) {
@@ -201,18 +205,19 @@ export class UpgradeSystem {
   }
   /** Biomass multiplier inside a garden's zone (E13: a Bloom Garden ×2, a Pollinator Garden ×1.5). */
   gardenMult(m: MachineData) {
-    return tier2(m) ? TUNING.merge.gardenBiomassMult : TUNING.pollinator.biomassMult;
+    if (!isBuilt(m)) return 1;
+    return tier3(m) ? TUNING.super.treeOfLife.gardenMult : tier2(m) ? TUNING.merge.gardenBiomassMult : TUNING.pollinator.biomassMult;
   }
   waterBloom(m: MachineData) {
     return this.levelOf(m, 'waterBloom');
   }
   pollinatorReach(m: MachineData) {
-    return TUNING.pollinator.reach + this.levelOf(m, 'pollinatorReach') + (tier2(m) ? TUNING.merge.gardenReachBonus : 0);
+    return TUNING.pollinator.reach + this.levelOf(m, 'pollinatorReach') + (tier3(m) ? TUNING.super.treeOfLife.gardenReachBonus : tier2(m) ? TUNING.merge.gardenReachBonus : 0);
   }
   /** The widest garden zone anywhere (a search radius; filter each garden by its own reach). */
   get maxPollinatorReach() {
     if (this.reachCache?.v !== this.version || this.reachCache.n !== machinesStamp(this.sim.state.machines)) {
-      this.reachCache = { v: this.version, n: machinesStamp(this.sim.state.machines), r: TUNING.pollinator.reach + this.maxLevelOf('pollinatorReach') + (this.sim.machinesOfType('pollinator').some(tier2) ? TUNING.merge.gardenReachBonus : 0) };
+      this.reachCache = { v: this.version, n: machinesStamp(this.sim.state.machines), r: TUNING.pollinator.reach + this.maxLevelOf('pollinatorReach') + (this.sim.machinesOfType('pollinator').some(tier3) ? TUNING.super.treeOfLife.gardenReachBonus : this.sim.machinesOfType('pollinator').some(tier2) ? TUNING.merge.gardenReachBonus : 0) };
     }
     return this.reachCache.r;
   }
@@ -225,7 +230,7 @@ export class UpgradeSystem {
     return DRONE_DASH[Math.min(DRONE_DASH.length - 1, this.levelOf(hub, 'droneSpeed'))];
   }
   droneRadius(hub: MachineData | undefined) {
-    return TUNING.drone.hubRadius + 2 * this.levelOf(hub, 'droneRadius') + (hub && tier2(hub) ? TUNING.merge.fleetRadiusBonus : 0);
+    return TUNING.drone.hubRadius + 2 * this.levelOf(hub, 'droneRadius') + (hub && tier3(hub) ? TUNING.super.megahub.radiusBonus : hub && tier2(hub) ? TUNING.merge.fleetRadiusBonus : 0);
   }
   /** Extra free tiles a drone restores around each tile it restores (Drone Sweep). */
   droneSweep(hub: MachineData | undefined) {
@@ -233,6 +238,7 @@ export class UpgradeSystem {
   }
   /** Drones a hub launches (Drone Squad). */
   squad(hub: MachineData | undefined) {
+    if (hub && !isBuilt(hub)) return 0;
     const n = 1 + this.levelOf(hub, 'secondDrone');
     return hub && tier2(hub) ? Math.min(TUNING.merge.fleetDroneCap, n * TUNING.merge.fleetDroneMult) : n;
   }

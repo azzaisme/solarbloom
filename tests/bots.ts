@@ -198,7 +198,10 @@ export function runBot(opts: BotOptions): BotReport {
     // 3. upgrades when the next machine is far off
     // Phase 5 E12: biomass is uncapped, so keep back only the next machine's price. Per-machine upgrades go to
     // the cheapest machine of the type (as "Upgrade all" would), a few levels per action.
-    const nextCost = ORDER[next] ? big(sim.build.cost(ORDER[next]).biomass ?? 0) : big(0);
+    // Phase 5 E14: a waiting core or a pending stage is saved for too (as a player saving up would).
+    const proj = opts.merges === true ? s.machines.find((m) => m.project) : undefined;
+    const superCost = proj ? big(sim.supers.nextCost(proj)!.biomass ?? 0) : opts.merges === true && sim.supers.cores().length ? big(sim.supers.stageCosts()[0].biomass ?? 0) : big(0);
+    const nextCost = (ORDER[next] ? big(sim.build.cost(ORDER[next]).biomass ?? 0) : big(0)).add(superCost);
     for (const u of opts.noUpgrades ? [] : sim.upgrades.all()) {
       for (let i = 0; i < 4; i++) {
         const st = sim.upgrades.status(u);
@@ -211,7 +214,9 @@ export function runBot(opts: BotOptions): BotReport {
     if (opts.merges && !ORDER[next]) {
       for (const type of ['solar', 'pollinator', 'condenser'] as const) {
         const cost = sim.build.cost(type);
-        if (!sim.econ.canAfford(cost) || s.resources.biomass.lt(big(cost.biomass ?? 0).mul(2))) continue;
+        const pending = s.machines.find((m) => m.project);
+        const reserve = pending ? big(sim.supers.nextCost(pending)!.biomass ?? 0) : sim.supers.cores().length ? big(sim.supers.stageCosts()[0].biomass ?? 0) : big(0);
+        if (!sim.econ.canAfford(cost) || s.resources.biomass.lt(big(cost.biomass ?? 0).mul(2).add(reserve))) continue;
         let best: TileData | undefined;
         let bestN = 1;
         for (const t of park()) {
@@ -228,7 +233,25 @@ export function runBot(opts: BotOptions): BotReport {
       }
       for (const c of opts.merges === 'buildOnly' ? [] : sim.merge.ready(4)) {
         const p = sim.merge.plan(c[0].id);
-        if (p?.ok && sim.merge.commit(c[0].id, p.partners.map((m) => m.id), p.key, p.fee)) merges.push({ t: Math.round(sim.time), type: c[0].type });
+        if (p?.ok && sim.merge.commit(c[0].id, p.partners.map((m) => m.id), p.key, p.fee)) merges.push({ t: Math.round(sim.time), type: p.core ? `${c[0].type}:core` : c[0].type });
+      }
+      // Phase 5 E14: place cores (nearest the park's middle that fits), pay stages, fire abilities.
+      if (opts.merges === true) {
+        for (const core of sim.supers.cores().slice(0, 1)) {
+          // The park first, then any cleared area (a packed park has no 2×2 room left).
+          const pool = [...park(), ...sim.areas.revealed().filter((id) => sim.areas.fog(id) === 'cleared').flatMap((id) => sim.areas.tiles(id))];
+          const spots: TileData[] = [];
+          for (const t of pool) {
+            if (sim.supers.check(core.type, GROUND, t.x, t.z).ok) spots.push(t);
+            if (spots.length >= 40) break;
+          }
+          spots.sort((a, b) => Math.hypot(a.x - 8, a.z - 8) - Math.hypot(b.x - 8, b.z - 8));
+          if (spots[0]) sim.supers.place(core.type, GROUND, spots[0].x, spots[0].z);
+        }
+        for (const m of s.machines) {
+          if (m.project && sim.econ.canAfford(sim.supers.nextCost(m)!)) sim.supers.advance(m.id);
+          if (sim.supers.ready(m) && !m.ability?.auto && sim.supers.activate(m.id, true)) sim.supers.setAuto(m.id, true);
+        }
       }
     }
     // 4. find the cat ~40 s after it appears

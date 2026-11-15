@@ -1,7 +1,7 @@
 import { CAPPED, formatCost, scaleCost } from '../core/Economy';
 import { big, Decimal } from '../core/Big';
-import type { BuildableType, Cost, MachineData } from '../core/types';
-import { MACHINES } from '../data/machines';
+import type { BuildableType, Cost, GroundState, MachineData } from '../core/types';
+import { MACHINES, machineName } from '../data/machines';
 import { AREA_TYPES, type AreaType } from '../data/city';
 import { GROUND } from '../core/GameState';
 import { TUNING } from '../data/tuning';
@@ -89,6 +89,23 @@ export class BuildSystem {
     return cost;
   }
 
+  /** Why a footprint can't be built on (edge, fog, vent, occupied, drone target, growing, wrong ground), if it can't. */
+  footprintProblem(roofId: string, x: number, z: number, size: number, allowed: GroundState[]): string | undefined {
+    const s = this.sim;
+    const cells = s.grid.footprint(roofId, x, z, size);
+    if (cells.some((c) => !c)) return 'Too close to the edge';
+    for (const c of cells) {
+      if (!c) continue;
+      if (!s.areas.isClear(c) && !s.areas.canTouch(c)) return 'Lost in the fog — clear the ground here first';
+      if (c.blocked) return 'A rusty vent is in the way';
+      if (c.occupantId) return `${machineName(s.occupant(c)!)} is already here`;
+      if (s.drones.isReserved(c.id)) return 'Your drone is about to work here';
+      if (c.ground === 'growing') return 'Let it finish growing first';
+      if (!allowed.includes(c.ground)) return 'Needs restored or mossy ground — pulse it first';
+    }
+    return undefined;
+  }
+
   /** Converts a cursor cell into the footprint anchor so the ghost centres on the pointer. */
   anchorFor(type: BuildableType, fx: number, fz: number): { x: number; z: number } {
     const size = MACHINES[type].size;
@@ -108,17 +125,8 @@ export class BuildSystem {
       const t = AREA_TYPES[s.areas.info(s.areas.map.areaOfCell(x, z)).type];
       if (!def.areaTypes.includes(t.type)) return fail(`Only grows in a ${def.areaTypes.map((a) => AREA_TYPES[a as AreaType].name.toLowerCase()).join(' or ')} area`);
     } else if (def.roofs && !def.roofs.includes(roofId)) return fail(`Only grows on ${def.roofs.map((id) => s.grid.roof(id)?.name ?? id).join(', ')}`);
-    const cells = s.grid.footprint(roofId, x, z, def.size);
-    if (cells.some((c) => !c)) return fail('Too close to the edge');
-    for (const c of cells) {
-      if (!c) continue;
-      if (!s.areas.isClear(c) && !s.areas.canTouch(c)) return fail('Lost in the fog — clear the ground here first');
-      if (c.blocked) return fail('A rusty vent is in the way');
-      if (c.occupantId) return fail(`${MACHINES[s.occupant(c)!.type].name} is already here`);
-      if (s.drones.isReserved(c.id)) return fail('Your drone is about to work here');
-      if (c.ground === 'growing') return fail('Let it finish growing first');
-      if (!def.allowedGround.includes(c.ground)) return fail('Needs restored or mossy ground — pulse it first');
-    }
+    const why = this.footprintProblem(roofId, x, z, def.size, def.allowedGround);
+    if (why) return fail(why);
     if (!s.econ.canAfford(cost)) return { ok: false, reason: `Need ${formatCost(cost)}`, cost, spotOk: true };
     return { ok: true, cost, spotOk: true };
   }
