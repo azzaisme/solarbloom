@@ -9,7 +9,7 @@ import { buildingPlots, type BuildingPlot } from '../core/Generation';
 import { PALETTE } from './Materials';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { FoliageBuilder, foliageMaterial, treeMesh, updateWind } from './Foliage';
-import { shrubGeo, treeGeo } from './TreeGen';
+import { shrubGeo, treeGeo, warmTemplates } from './TreeGen';
 import { treeSpot, treeStage } from './TreePlacement';
 
 /** Small seeded RNG for decoration placement (looks only). */
@@ -270,6 +270,7 @@ export class ChunkRenderer {
 
   update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number }, focus: { x: number; z: number }, zoom = 1) {
     this.time += dt;
+    this.warmTrees();
     this.tickGrowing(dt);
     updateWind(this.time, this.reducedMotion ? 0 : 1); // Phase 5: trees sway (still with reduced motion)
     const ps = this.sim.grid.isPlayable(GROUND) ? this.sim.progression.parkStage() : 0;
@@ -412,6 +413,14 @@ export class ChunkRenderer {
     if (this.growing.has(t.id)) return true;
     this.fb.add(treeGeo(spot.species, stage, spot.variant, lod), t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5, spot.rot, spot.scale);
     return true;
+  }
+
+  /** Fills the tree template cache a few milliseconds per frame after load (no first-pan generation spike). */
+  private warm: Generator<void> | undefined = warmTemplates();
+  private warmTrees() {
+    if (!this.warm) return;
+    const t0 = performance.now();
+    while (performance.now() - t0 < 3) if (this.warm.next().done) return void (this.warm = undefined);
   }
 
   /** Trees growing to a new stage right now: a pooled entity bounces up while the chunk leaves the tree out. */

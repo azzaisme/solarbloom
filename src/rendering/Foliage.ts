@@ -261,6 +261,9 @@ export function treeMesh(device: pc.GraphicsDevice, g: TreeGeo): pc.Mesh {
     const b = new FoliageBuilder();
     b.add(g, 0, 0, 0, 0, 1);
     m = b.build(device)!;
+    // The cache owns a reference: otherwise the engine destroys the mesh when the last growing tree using it is
+    // destroyed, and the next tree handed this cached mesh fails to render ("reading 'impl'").
+    m.incRefCount();
     meshCache.set(g, m);
   }
   return m;

@@ -550,3 +550,22 @@ export function shrubGeo(variant: number, lod: Lod = 1): TreeGeo {
   if (!g) cache.set(key, (g = buildShrub(variant % 6, lod)));
   return g;
 }
+
+/**
+ * Every template the world uses (far and normal detail, all species, stages and variants, and shrubs), so the
+ * cache can be filled ahead of need in small slices instead of all at once when a pan reaches new chunks.
+ */
+export function* warmTemplates(): Generator<void> {
+  for (const lod of [1, 0] as const) {
+    for (const sp of SPECIES)
+      for (const st of [1, 2, 3, 4] as const)
+        for (let v = 0; v < TREE_VARIANTS; v++) {
+          treeGeo(sp, st, v, lod);
+          yield;
+        }
+    for (let v = 0; v < 6; v++) {
+      shrubGeo(v, lod);
+      yield;
+    }
+  }
+}
