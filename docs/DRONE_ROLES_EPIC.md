@@ -2,6 +2,8 @@
 
 **Design doc and epic | Existing PlayCanvas + TypeScript project | Follows Phase 5 (`docs/PHASE_5_EPICS.md`)**
 
+Tracked in GitHub: epic #199, stories #200–#208 (E18.0–E18.8). Drone Frenzy look: #209.
+
 > One Drone Hub, many jobs. Pick what each hub's drones are good at and watch your park run itself in a way you designed.
 
 ## 0. Instructions for Claude
@@ -182,6 +184,7 @@ The art-direction epic (#102) is rebuilding the drone, the Drone Hub, the icons 
 | Role and resource icons | Look 5.2 (#159) icon set | Role icons (Restorer, Gardener, Scout, Courier, Spark, Harvester) and the resource icons used inside **mixed prices** (🌿 + ⚡ + 💧) |
 | Role picker and mixed prices | Look 5.10 (#167) drawers and inspect panel | The role picker in the hub's inspect panel (icon, one-line job, refit price or "owned", lock reason), and upgrade buttons that show two- or three-resource prices, with the short resource marked |
 | Phone fit | Look 5.11 (#168) | The role picker and three-resource prices fit at 320 and 390 px wide |
+| Drones in Bloom Frenzy | Look 3.20 (#209) | Gold fins, trim, trail and beam while Frenzy runs, on every role; role parts keep their shape |
 | Cultivator | Look 6.8 (#177) gameplay | Priced by what it does (2.3): biomass to build, energy to run (it's solar), its "better seed mix" upgrade in biomass, its width upgrade in energy. It shares the drone reservation set, so drones and the Cultivator never take the same tile |
 
 Sound: delivery and work sounds reuse the drone sound set with a per-role pitch or timbre. Keep the existing rule of no constant overlapping beeps.
@@ -192,15 +195,15 @@ Sound: delivery and work sounds reuse the drone sound set with a per-role pitch 
 
 | Story | Priority | Depends on |
 |---|---|---|
-| E18.0 Baseline | P0 | — |
-| E18.1 Role framework | P0 | E18.0 |
-| E18.2 Gardener | P0 | E18.1 |
-| E18.3 Scout | P0 | E18.1 |
-| E18.4 Courier | P0 | E18.1 |
-| E18.5 Look, sound and panel | P0 | E18.2–E18.4 |
-| E18.6 Spark and Harvester | P1 | E18.1 |
-| E18.7 Upgrade prices by job | P0 | E18.0 (can ship before the roles) |
-| E18.8 Merge slots | P1 | E13 (and E14 for the Megahub) |
+| E18.0 Baseline (#200) | P0 | — |
+| E18.1 Role framework (#201) | P0 | E18.0 |
+| E18.2 Gardener (#202) | P0 | E18.1 |
+| E18.3 Scout (#203) | P0 | E18.1 |
+| E18.4 Courier (#204) | P0 | E18.1 |
+| E18.5 Look, sound and panel (#205) | P0 | E18.2–E18.4 |
+| E18.6 Spark and Harvester (#206) | P1 | E18.1 |
+| E18.7 Upgrade prices by job (#207) | P0 | E18.0 (can ship before the roles) |
+| E18.8 Merge slots (#208) | P1 | E13 (and E14 for the Megahub) |
 
 ### Stories
 
