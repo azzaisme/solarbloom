@@ -18,6 +18,7 @@ import { Sim } from '../gameplay/Sim';
 import { Butterflies } from '../rendering/Butterflies';
 import { Birds } from '../rendering/Birds';
 import { CameraController } from '../rendering/CameraController';
+import { setTreeCursor } from '../rendering/Foliage';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
 import { ChunkRenderer } from '../rendering/ChunkRenderer';
@@ -426,6 +427,24 @@ export class Game {
     const hit = pickLayers(layers, o, d);
     if (!hit) return undefined;
     return { roofId: hit.layerId, fx: hit.fx, fz: hit.fz, tile: this.sim.grid.get(hit.layerId, Math.floor(hit.fx), Math.floor(hit.fz)) };
+  }
+
+  /** See-through trees: 0..1, eases in while the cursor rests on the world and out when it leaves or pans. */
+  private treeFade = 0;
+  private updateTreeCursor(dt: number) {
+    const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    const w = c.clientWidth, h = c.clientHeight;
+    const on = this.pointer.inside && !this.cinematic && performance.now() - this.lastPanAt > 120;
+    this.treeFade += ((on ? 1 : 0) - this.treeFade) * Math.min(1, dt * (on ? 10 : 6));
+    if (this.treeFade < 0.002 || !w || !h) return setTreeCursor(0, 0, 0, 0, w || 1, h || 1);
+    const { o, d } = this.camera.ray(this.pointer.x, this.pointer.y);
+    // The ground under the cursor (or far away if the ray misses it) as a view depth.
+    const t = d.y < -1e-3 ? -o.y / d.y : 400;
+    const cam = this.camera.entity;
+    const fwd = cam.forward;
+    const p = cam.getPosition();
+    const depth = (o.x + d.x * t - p.x) * fwd.x + (o.y + d.y * t - p.y) * fwd.y + (o.z + d.z * t - p.z) * fwd.z;
+    setTreeCursor((this.pointer.x / w) * 2 - 1, 1 - (this.pointer.y / h) * 2, depth, this.treeFade, w, h);
   }
 
   /** Haze and shadow reach follow the zoom-dependent camera (its distance changes with the zoom). */
@@ -1737,6 +1756,7 @@ export class Game {
     this.overlays.update(dt);
     this.camera.update(dt);
     this.syncView();
+    this.updateTreeCursor(dt);
     this.hud.update(dt);
     this.sfx.layers = Math.min(3, Math.floor(this.sim.progression.restoredCount(HOME) / 12));
     this.sfx.update(dt);

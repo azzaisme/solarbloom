@@ -9,6 +9,10 @@ import type { TreeGeo } from './TreeGen';
  * overrides PlayCanvas's GLSL `transformVS` chunk so the vertex moves by a gust that travels across the world,
  * a smaller side sway and a leaf flutter, all scaled by flex. Shadows use the same chunk, so they sway too.
  * Reduced motion sets the strength to 0.
+ *
+ * See-through trees: every vertex also carries its tree's base (x, y, z) and height (`vertex_tree`). A tree whose
+ * screen silhouette (a capsule from base to top) covers the cursor, and that stands in front of the ground under
+ * the cursor, turns see-through with an ordered dither, so the tile behind it stays visible. Shadows stay solid.
  */
 
 const WIND_TRANSFORM = /* glsl */ `
@@ -59,6 +63,39 @@ vec3 getWorldPosition() {
 }
 `;
 
+/** Declares the per-vertex tree attribute and the cursor uniforms. */
+const TREE_USER_CODE = /* glsl */ `
+attribute vec4 vertex_tree;
+uniform vec4 uTreeCursor; // cursor in NDC (x, y), view depth of the ground under it, strength 0..1
+uniform vec2 uTreeScreen; // canvas size in pixels
+`;
+
+/** Fades the vertex's alpha when its tree covers the cursor (forward pass; shadows ignore opacity). */
+const TREE_MAIN_END = /* glsl */ `
+	#ifdef VERTEX_COLOR
+	if (uTreeCursor.w > 0.001 && vertex_tree.w > 0.0) {
+		vec4 b = dModelMatrix * vec4(vertex_tree.xyz, 1.0);
+		float h = vertex_tree.w * length(dModelMatrix[1].xyz);
+		vec4 cb = matrix_viewProjection * b;
+		vec4 ct = matrix_viewProjection * vec4(b.xyz + vec3(0.0, h, 0.0), 1.0);
+		if (cb.w > 0.0 && ct.w > 0.0 && uTreeCursor.z > cb.w + 0.25) {
+			vec2 hs = uTreeScreen * 0.5;
+			vec2 pb = cb.xy / cb.w * hs;
+			vec2 pt = ct.xy / ct.w * hs;
+			vec2 pc0 = uTreeCursor.xy * hs;
+			vec2 seg = pt - pb;
+			float len = max(length(seg), 1.0);
+			float t = clamp(dot(pc0 - pb, seg) / (len * len), 0.0, 1.0);
+			float d = length(pc0 - (pb + seg * t));
+			// Canopies are roughly 0.42 of the height across; the trunk's foot needs less.
+			float r = len * mix(0.18, 0.42, smoothstep(0.0, 0.45, t));
+			float cover = 1.0 - smoothstep(r * 0.85, r * 1.25, d);
+			vVertexColor.a *= 1.0 - 0.72 * cover * uTreeCursor.w;
+		}
+	}
+	#endif
+`;
+
 let material: pc.StandardMaterial | undefined;
 let windStrength = 1;
 
@@ -71,11 +108,22 @@ export function foliageMaterial(): pc.StandardMaterial {
   m.useMetalness = true;
   m.metalness = 0;
   m.gloss = 0.22;
+  // Opacity comes from the vertex alpha, which only the see-through effect lowers; dithered, so no sorting.
+  m.opacityVertexColor = true;
+  m.opacityVertexColorChannel = 'a';
+  m.opacityDither = pc.DITHER_BAYER8;
+  m.opacityShadowDither = pc.DITHER_NONE;
+  m.setAttribute('vertex_tree', pc.SEMANTIC_ATTR12);
   try {
-    m.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set('transformVS', WIND_TRANSFORM);
+    const chunks = m.getShaderChunks(pc.SHADERLANGUAGE_GLSL);
+    chunks.set('transformVS', WIND_TRANSFORM);
+    chunks.set('litUserCodeVS', TREE_USER_CODE);
+    chunks.set('litUserMainEndVS', TREE_MAIN_END);
   } catch {
-    /* an engine without per-material chunks: trees simply don't sway */
+    /* an engine without per-material chunks: trees simply don't sway or fade */
   }
+  m.setParameter('uTreeCursor', [0, 0, 0, 0]);
+  m.setParameter('uTreeScreen', [1, 1]);
   m.setParameter('uWindTime', 0);
   m.setParameter('uWindStrength', windStrength);
   m.update();
@@ -88,6 +136,16 @@ export function updateWind(time: number, strength = windStrength) {
   const m = foliageMaterial();
   m.setParameter('uWindTime', time);
   m.setParameter('uWindStrength', strength);
+}
+
+/**
+ * Where the cursor is for see-through trees: NDC position, the view depth of the ground under it and a strength
+ * (0 = off). Called once per frame.
+ */
+export function setTreeCursor(ndcX: number, ndcY: number, depth: number, strength: number, w: number, h: number) {
+  const m = foliageMaterial();
+  m.setParameter('uTreeCursor', [ndcX, ndcY, depth, strength]);
+  m.setParameter('uTreeScreen', [w, h]);
 }
 
 class Grow<T extends Float32Array | Uint8Array | Uint32Array> {
@@ -111,6 +169,7 @@ export class FoliageBuilder {
   private pos = new Grow(new Float32Array(1 << 14));
   private nrm = new Grow(new Float32Array(1 << 14));
   private col = new Grow(new Uint8Array(1 << 14));
+  private tree = new Grow(new Float32Array(1 << 14));
   private idx = new Grow(new Uint32Array(1 << 14));
   /** 0 = full colour … 1 = grey (fog), as in the chunk builder */
   grey = 0;
@@ -122,10 +181,12 @@ export class FoliageBuilder {
     this.pos.reserve(nv * 4);
     this.nrm.reserve(nv * 3);
     this.col.reserve(nv * 4);
+    this.tree.reserve(nv * 4);
     this.idx.reserve(g.idx.length);
     const c = Math.cos(rotY), s = Math.sin(rotY);
-    const P = this.pos.a, N = this.nrm.a, C = this.col.a, I = this.idx.a;
-    let p = this.pos.n, n = this.nrm.n, k = this.col.n;
+    const P = this.pos.a, N = this.nrm.a, C = this.col.a, I = this.idx.a, T = this.tree.a;
+    let p = this.pos.n, n = this.nrm.n, k = this.col.n, q4 = this.tree.n;
+    const th = g.height * scale;
     const grey = this.grey;
     for (let i = 0; i < nv; i++) {
       const px = g.pos[i * 4], py = g.pos[i * 4 + 1], pz = g.pos[i * 4 + 2];
@@ -148,7 +209,12 @@ export class FoliageBuilder {
       C[k++] = gg;
       C[k++] = b;
       C[k++] = 255;
+      T[q4++] = x;
+      T[q4++] = y;
+      T[q4++] = z;
+      T[q4++] = th;
     }
+    this.tree.n = q4;
     this.pos.n = p;
     this.nrm.n = n;
     this.col.n = k;
@@ -164,6 +230,7 @@ export class FoliageBuilder {
     m.setPositions(this.pos.view(), 4);
     m.setNormals(this.nrm.view());
     m.setColors32(this.col.view());
+    m.setVertexStream(pc.SEMANTIC_ATTR12, this.tree.view(), 4);
     m.setIndices(this.idx.view());
     m.update(pc.PRIMITIVE_TRIANGLES);
     // The engine's bounds assume 3-component positions; ours carry flex in the 4th, so set them ourselves
