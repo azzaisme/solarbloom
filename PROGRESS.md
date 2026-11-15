@@ -14,7 +14,7 @@ Plan: `docs/PHASE_5_EPICS.md`. Decisions, audit and results: `docs/PHASE_5_AUDIT
 | E15 World events | after E12 |
 | E16 Living ecosystems | after E14 |
 | E17 | replaced (agreed): park → suburbs → skyscrapers in the endless city, houses and towers solarpunkified as staged projects, after the E12–E16 gate |
-| E18 Drone roles | planned: `docs/DRONE_ROLES_EPIC.md` (Restorer, Gardener, Scout, Courier; later Spark, Harvester, Seeder) |
+| E18 Drone roles | planned: `docs/DRONE_ROLES_EPIC.md` (Restorer, Gardener, Scout, Courier; later Spark, Harvester), each priced in the resource its job uses, drone upgrades too |
 
 # Phase 4: Dopamine Overdrive
 
