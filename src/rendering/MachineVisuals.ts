@@ -32,6 +32,8 @@ interface MachineView {
   /** the upgrade levels its extras were built for (Phase 4 E09.6) */
   vkey?: string;
   extras: pc.Entity;
+  /** panels built with the model (not upgrade extras): the base panel, plus a Solar Array's two wings */
+  basePanels?: number;
   /** Phase 5 E13: the floating crown gem of a tier-2 machine */
   crown?: pc.Entity;
   /** joined its region's dynamic batch (after its build animation) */
@@ -172,6 +174,7 @@ export class MachineVisuals {
         shape(wing, 'box', mat(PALETTE.gold, { metal: 0.6, gloss: 0.7 }), { pos: [0, 0.035, -0.29], scale: [0.46, 0.02, 0.03] });
         v.panel?.push(cells);
       }
+      v.basePanels = v.panel?.length;
     } else if (v.m.type === 'condenser') {
       for (const side of [-1, 1]) {
         shape(v.body, 'cylinder', mat(PALETTE.white), { pos: [side * 0.36, 0.22, side * -0.18], scale: [0.2, 0.36, 0.2], shadow: true });
@@ -617,7 +620,7 @@ export class MachineVisuals {
     v.extras = group(v.body, 'extras');
     // The old wing panels were just destroyed: keep only the base panel (Phase 4 E11: a second Solar Array level
     // used to leave destroyed panels in this list, and the next frame crashed on them).
-    if (v.panel) v.panel = v.panel.slice(0, 1);
+    if (v.panel) v.panel = v.panel.slice(0, v.basePanels ?? 1);
     if (v.batched) this.tweens.add(0.01, () => {}, { done: () => this.views.get(v.m.id) === v && this.batch(v) }); // once the new extras exist
     const ex = v.extras;
     if (v.m.type === 'solar') {
@@ -641,8 +644,9 @@ export class MachineVisuals {
         shape(ex, 'sphere', mat(PALETTE.leafFin), { pos: [-0.6, 0.8, -0.6 + 0.2 * (i + 1)], scale: [0.25, 0.06, 0.12], rot: [0, 30 * i, 20] });
       }
       // Drone Squad: a glowing landing pad per extra drone.
-      const pads: [number, number][] = [[0.62, 0.62], [0.62, -0.25]];
-      for (let i = 0; i < L('secondDrone'); i++) {
+      // Phase 5 E12 raised Drone Squad to 4 levels (5 drones): a pad for each (the third level used to crash here).
+      const pads: [number, number][] = [[0.62, 0.62], [0.62, -0.25], [-0.25, 0.62], [0.05, 0.05]];
+      for (let i = 0; i < Math.min(pads.length, L('secondDrone')); i++) {
         const [x, z] = pads[i];
         shape(ex, 'cylinder', mat(PALETTE.shell), { pos: [x, 0.22, z], scale: [0.42, 0.06, 0.42], shadow: true });
         shape(ex, 'torus', mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1 }), { pos: [x, 0.26, z], scale: [0.36, 0.08, 0.36] });

@@ -167,3 +167,31 @@ merges, so the difference is merging itself. Steady biomass income per minute:
 - The bot merges from about minute 3 because it deliberately builds matching machines side by side; the spec's
   "first merge at 5–15 minutes" is for people, who won't plan that early.
 - Longest stretch without a meaningful event: 25–29 s with merging (the Phase 5 bot without extra building: ~130 s).
+
+## Bug found while validating
+
+- **Drone Squad crashed the hub model at level 3 (from E12).** E12 raised Drone Squad to 4 levels (5 drones),
+  but the hub model had landing pads for only 2 extra drones, so buying the third level threw while refreshing
+  the model, every time. The 15-minute session test found it (its bot buys every upgrade). Now there's a pad for
+  each level.
+
+## Tests run (E13)
+
+All on this branch, headless Linux, Chromium with SwiftShader software rendering.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck`, `npm run build` | pass |
+| Unit tests, file by file (40 files, 238 tests, including the new `merge.test.ts` with 12) | pass |
+| `tests/e2e/merge.e2e.mjs` (new): tap a panel, open the preview, tap a fourth panel to swap it in, confirm | pass, no page or console errors; the merged and kept machines are the expected ones |
+| picking e2e (74,299 checks), area-panel, overview, `STRICT=1 phase4-hud` | pass |
+| `hud-overlap` | one failure (a toast 3 px over the objective panel on the phone layout, the known toast-timing flake), then 3 passes in a row |
+| `phase4-session` (15 minutes in the real page) | pass after the Drone Squad fix |
+| `npm run test:perf:browser` (150 areas) | within limits: 0 pan / 0 zoom / 1 chain hitches, chain ×743 |
+| `npm run test:perf`, `npm run test:soak` | pass |
+
+## Still open after E13
+
+- Merging is a modest gain on its own (spec: 3 → 4); E14's superstructures carry the big multipliers.
+- No Tier 3 yet (E14), so a Tier 2 machine shows "top tier until superstructures arrive".
+- No human playtests: whether picking partners by tapping feels good needs people.
