@@ -1,6 +1,6 @@
 import type { Big } from '../core/Big';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
-import type { BuffType, CatRewardType, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
+import type { BuffType, CatRewardType, Cost, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
   'tile.restoring': { tile: TileData; source: RestoreSource };
@@ -11,6 +11,8 @@ export interface GameEvents {
   'resource.gain': { kind: ResourceKind; amount: Big; tileId?: string; reason?: string };
   'resource.full': { kind: ResourceKind };
   'machine.built': { machine: MachineData };
+  /** Phase 5 E13: `consumed` are gone (snapshots); `machine` is the anchor, now one tier higher. */
+  'machine.merged': { machine: MachineData; consumed: MachineData[]; fee: Cost; lost: { upgrade: string; name: string; kept: number; lost: number[] }[] };
   'chain.started': { chainId: number; originTileId: string };
   'chain.event': { event: ChainEvent; combo: number };
   'chain.fastForward': { chainId: number };

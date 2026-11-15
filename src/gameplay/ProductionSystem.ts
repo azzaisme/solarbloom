@@ -1,3 +1,4 @@
+import { machinesStamp } from '../core/GameState';
 import { KINDS } from '../core/Economy';
 import { chunkKey, distToFootprint, type Chunk } from '../core/Grid';
 import { CHUNK } from '../core/Hash';
@@ -100,17 +101,23 @@ export class ProductionSystem {
 
   /** True if the tile lies inside any pollinator's zone. */
   inPollinatorZone(t: TileData): boolean {
-    // Phase 5 E12: each garden has its own reach (Pollinator Reach is bought per garden).
+    return this.gardenZoneMult(t) > 1;
+  }
+
+  /** The strongest garden multiplier over this tile (1 outside every zone; zones don't stack). */
+  gardenZoneMult(t: TileData): number {
+    // Phase 5 E12: each garden has its own reach (Pollinator Reach is bought per garden); E13: a Bloom Garden ×2.
     const u = this.sim.upgrades;
-    return this.sim.grid
-      .machinesNear(t.roofId, t.x, t.z, u.maxPollinatorReach)
-      .some((m) => m.type === 'pollinator' && distToFootprint(t.x, t.z, m.x, m.z, m.size) <= u.pollinatorReach(m));
+    let best = 1;
+    for (const m of this.sim.grid.machinesNear(t.roofId, t.x, t.z, u.maxPollinatorReach))
+      if (m.type === 'pollinator' && distToFootprint(t.x, t.z, m.x, m.z, m.size) <= u.pollinatorReach(m)) best = Math.max(best, u.gardenMult(m));
+    return best;
   }
 
   tileBiomassRate(t: TileData): number {
     if (t.ground !== 'restored') return 0;
     let v = TUNING.restore.biomassPerSec * TUNING.restore.bloomRateMult[Math.max(1, t.bloom)] * this.sim.upgrades.soilMult;
-    if (this.inPollinatorZone(t)) v *= TUNING.pollinator.biomassMult;
+    v *= this.gardenZoneMult(t);
     if (this.sim.state.progression.coreActivated) v *= TUNING.core.resonanceBiomassMult;
     if ((t.lushUntil ?? 0) > this.sim.time) v *= TUNING.neighbourhood.reservoir.lushMult;
     return v;
@@ -181,7 +188,7 @@ export class ProductionSystem {
 
   private machineSums() {
     const ms = this.sim.state.machines;
-    const key = `${ms.length}|${this.sim.upgrades.version}`;
+    const key = `${machinesStamp(ms)}|${this.sim.upgrades.version}`;
     if (this.sums?.key === key) return this.sums;
     let solar = 0;
     let condensers = 0;
@@ -191,7 +198,7 @@ export class ProductionSystem {
       if (m.type === 'solar') {
         solar += this.solarOutput(m, true);
         if (m.boostUntil > now) this.boostedSolar.add(m);
-      } else if (m.type === 'condenser') condensers += 1;
+      } else if (m.type === 'condenser') condensers += this.sim.upgrades.waterMult(m);
     }
     return (this.sums = { key, solar, condensers });
   }

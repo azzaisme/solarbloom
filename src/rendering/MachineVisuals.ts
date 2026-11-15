@@ -32,6 +32,8 @@ interface MachineView {
   /** the upgrade levels its extras were built for (Phase 4 E09.6) */
   vkey?: string;
   extras: pc.Entity;
+  /** Phase 5 E13: the floating crown gem of a tier-2 machine */
+  crown?: pc.Entity;
   /** joined its region's dynamic batch (after its build animation) */
   batched?: boolean;
 }
@@ -140,12 +142,103 @@ export class MachineVisuals {
         this.relay(v);
         break;
     }
+    if ((m.tier ?? 1) >= 2) this.tier2(v);
     this.views.set(m.id, v);
     this.applyUpgrades(v);
     if (animate) {
       this.playBuild(v);
       this.tweens.add(1.4, () => {}, { done: () => this.views.get(m.id) === v && this.batch(v) });
     } else this.batch(v);
+  }
+
+  /**
+   * Phase 5 E13: a tier-2 machine reads bigger and richer: its body grows, a gold-trimmed cream plinth sits under
+   * it and a gem in its family colour floats above (solar gold, water cyan, garden pink, drone mint).
+   */
+  private tier2(v: MachineView) {
+    const s = v.m.size;
+    v.body.setLocalScale(1.16, 1.16, 1.16);
+    const gem = { solar: '#ffd34d', condenser: '#6fe3ff', pollinator: '#ff9ccf', droneHub: '#8ff0c2' }[v.m.type as string] ?? '#ffd34d';
+    shape(v.root, 'cylinder', mat(PALETTE.shell), { pos: [0, 0.03, 0], scale: [s * 0.98, 0.06, s * 0.98], shadow: true });
+    shape(v.root, 'torus', mat(PALETTE.gold, { metal: 0.6, gloss: 0.75 }), { pos: [0, 0.06, 0], scale: [s * 1.0, 0.06, s * 1.0] });
+    // Family touches that make the three-in-one readable.
+    const tilt = v.spin[0];
+    if (v.m.type === 'solar' && tilt) {
+      for (const side of [-1, 1]) {
+        const wing = group(tilt, 'wing', [side * 0.66, 0.02, 0]);
+        wing.setLocalEulerAngles(0, 0, side * 14);
+        shape(wing, 'box', mat(PALETTE.white), { scale: [0.46, 0.05, 0.62], shadow: true });
+        const cells = shape(wing, 'box', panelMat(), { pos: [0, 0.03, 0], scale: [0.4, 0.02, 0.54] });
+        shape(wing, 'box', mat(PALETTE.gold, { metal: 0.6, gloss: 0.7 }), { pos: [0, 0.035, -0.29], scale: [0.46, 0.02, 0.03] });
+        v.panel?.push(cells);
+      }
+    } else if (v.m.type === 'condenser') {
+      for (const side of [-1, 1]) {
+        shape(v.body, 'cylinder', mat(PALETTE.white), { pos: [side * 0.36, 0.22, side * -0.18], scale: [0.2, 0.36, 0.2], shadow: true });
+        shape(v.body, 'sphere', mat(PALETTE.water, { emissive: '#2aa6d6', emissiveIntensity: 0.5, gloss: 0.9 }), { pos: [side * 0.36, 0.44, side * -0.18], scale: 0.16 });
+      }
+    } else if (v.m.type === 'pollinator') {
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        shape(v.body, 'sphere', mat(i % 2 ? '#ffb3d9' : '#fff2a8'), { pos: [Math.cos(a) * 0.42, 0.16, Math.sin(a) * 0.42], scale: [0.16, 0.1, 0.16] });
+      }
+    } else if (v.m.type === 'droneHub') {
+      shape(v.body, 'cylinder', mat(PALETTE.white), { pos: [0.6, 0.5, 0.6], scale: [0.26, 0.7, 0.26], shadow: true });
+      shape(v.body, 'torus', mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1.2 }), { pos: [0.6, 0.86, 0.6], scale: [0.4, 0.08, 0.4] });
+    }
+    const crown = group(v.root, 'crown', [0, 1.0 + (s - 1) * 0.3, 0]);
+    shape(crown, 'sphere', mat(gem, { emissive: gem, emissiveIntensity: 1.3, gloss: 0.9 }), { pos: [0, 0, 0], scale: [0.16, 0.22, 0.16] });
+    shape(crown, 'torus', mat(PALETTE.gold, { metal: 0.6, gloss: 0.75 }), { pos: [0, 0, 0], scale: [0.3, 0.05, 0.3] });
+    v.crown = crown;
+  }
+
+  /** Removes a machine's model (merged away). With `to`, it flies into that point and shrinks first. */
+  remove(id: string, to?: [number, number, number], delay = 0) {
+    const v = this.views.get(id);
+    if (!v) return;
+    this.views.delete(id);
+    if (!to || this.reducedMotion) return void v.root.destroy();
+    const from = v.root.getPosition().clone();
+    this.tweens.add(
+      0.42,
+      (k) => {
+        const h = Math.sin(k * Math.PI) * 0.8;
+        v.root.setPosition(from.x + (to[0] - from.x) * k, from.y + (to[1] - from.y) * k + h, from.z + (to[2] - from.z) * k);
+        const sc = 1 - k * 0.85;
+        v.root.setLocalScale(sc, sc, sc);
+      },
+      { delay, ease: ease.inOutCubic, done: () => v.root.destroy() },
+    );
+  }
+
+  /**
+   * Phase 5 E13: the partners fly into the anchor, then the anchor is rebuilt as its new tier and bounces up
+   * bigger. Returns the seconds until the new machine lands (for the sound and sparkles).
+   */
+  merged(anchor: MachineData, consumed: MachineData[]): number {
+    const at = this.worldOf(anchor);
+    consumed.forEach((c, i) => this.remove(c.id, at, i * 0.06));
+    const old = this.views.get(anchor.id);
+    const land = this.reducedMotion ? 0 : 0.5;
+    const rebuild = () => {
+      old?.root.destroy();
+      this.views.delete(anchor.id);
+      const m = this.sim.machine(anchor.id);
+      if (!m) return;
+      this.add(m, false);
+      const v = this.views.get(anchor.id)!;
+      if (this.reducedMotion) return;
+      v.root.setLocalScale(0.4, 0.4, 0.4);
+      this.tweens.add(0.7, (k) => {
+        const sc = 0.4 + 0.6 * k;
+        v.root.setLocalScale(sc, sc, sc);
+      }, { ease: ease.outElastic ?? ease.outBack });
+    };
+    if (land) {
+      old?.root && this.tweens.add(land, (k) => old.root.setLocalScale(1 + 0.25 * Math.sin(k * Math.PI * 3) * k, 1 - 0.2 * k, 1 + 0.25 * Math.sin(k * Math.PI * 3) * k), { done: rebuild });
+      if (!old) rebuild();
+    } else rebuild();
+    return land;
   }
 
   /** Three beats: foundation pops up, the white shell unfolds, the light switches on. */
@@ -707,6 +800,10 @@ export class MachineVisuals {
     const M = 3;
     for (const v of this.views.values()) {
       if (view && v.m.roofId === GROUND && (v.m.x + v.m.size < view.x0 - M || v.m.x > view.x1 + M || v.m.z + v.m.size < view.z0 - M || v.m.z > view.z1 + M)) continue;
+      if (v.crown && !rm) {
+        v.crown.setLocalEulerAngles(0, t * 60, 0);
+        v.crown.setLocalPosition(0, 1.0 + (v.m.size - 1) * 0.3 + Math.sin(t * 1.6 + v.m.x) * 0.06, 0);
+      }
       switch (v.m.type) {
         case 'solar': {
           const boosted = v.m.boostUntil > now || this.sim.production.surgeActive();

@@ -4,7 +4,7 @@ import { Economy, formatCost, KINDS } from '../core/Economy';
 import { fmt, toNum, type Big } from '../core/Big';
 import type { Cost } from '../core/types';
 import type { BuildableType, MachineData, ResourceKind } from '../core/types';
-import { BUILDABLE, MACHINES } from '../data/machines';
+import { BUILDABLE, MACHINES, TIER2 } from '../data/machines';
 import { AREA_TYPES } from '../data/city';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
@@ -43,6 +43,10 @@ export interface HudCallbacks {
   setAreaMode(areaId: string, mode: AreaMode | undefined): void;
   /** Fly the camera to a ground tile and point at it (the objective's suggestion). */
   focusTile(x: number, z: number): void;
+  /** Phase 5 E13: the inspect panel's merge buttons. */
+  merge(action: 'start' | 'confirm' | 'cancel'): void;
+  /** Phase 5 E13: the advisor's merge button (select the machine and open its merge preview). */
+  mergeAt(machineId: string): void;
 }
 
 export interface Settings {
@@ -282,9 +286,11 @@ export class Hud {
       }
       if (t.closest('[data-upg]')) this.toggleUpgrades(true);
       if (t.closest('[data-harvest]')) this.cb.harvest();
+      const mg = t.closest<HTMLButtonElement>('[data-merge-at]');
+      if (mg) this.cb.mergeAt(mg.dataset.mergeAt!);
       const db = t.closest<HTMLButtonElement>('[data-district]');
       if (db && !db.disabled) this.cb.districtBloom(db.dataset.district!, db.dataset.replay === '1');
-      if (fo || wk || db || t.closest('[data-upg]') || t.closest('[data-harvest]')) this.suggestionAt = -1;
+      if (fo || wk || db || mg || t.closest('[data-upg]') || t.closest('[data-harvest]')) this.suggestionAt = -1;
     });
     $(r, '#inspect').addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
@@ -295,6 +301,8 @@ export class Hud {
       if (db && !db.disabled) this.cb.districtBloom(db.dataset.district!, db.dataset.replay === '1');
       const b = t.closest<HTMLButtonElement>('[data-buy]');
       if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
+      const mg = t.closest<HTMLButtonElement>('[data-merge]');
+      if (mg && !mg.disabled) this.cb.merge(mg.dataset.merge as 'start' | 'confirm' | 'cancel');
       const am = t.closest<HTMLButtonElement>('[data-area-mode]');
       if (am) {
         const [id, mode] = am.dataset.areaMode!.split('|');
@@ -428,7 +436,7 @@ export class Hud {
     const g = this.sim.advisor.suggest();
     const a = g.action;
     const attr =
-      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
+      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'merge' ? `data-merge-at="${a.machineId}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
     this.suggestionBtn = `<p class="sugg">${esc(g.text)}</p><button class="act" ${attr}>${esc(g.label)}</button>`;
     return this.suggestionBtn;
   }
@@ -920,9 +928,10 @@ export class Hud {
 
   machineHtml(m: MachineData, extra: string): string {
     const def = MACHINES[m.type];
-    const name = def.name;
-    const icon = def.icon;
-    const blurb = def.blurb;
+    const t2 = (m.tier ?? 1) >= 2 ? TIER2[m.type] : undefined;
+    const name = t2?.name ?? def.name;
+    const icon = t2?.icon ?? def.icon;
+    const blurb = t2 ? `Tier 2 (three merged): ${t2.blurb}. ${def.blurb}` : def.blurb;
     return `<h4><span>${icon} ${esc(name)}${m.starter ? ' <small style="font-weight:700;color:var(--ink-soft)">(old)</small>' : ''}</span><button data-close aria-label="Close">×</button></h4><p>${esc(blurb)}</p>${extra}`;
   }
 

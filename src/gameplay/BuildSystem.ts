@@ -41,15 +41,34 @@ export class BuildSystem {
     return '';
   }
 
+  /** Copies of a type standing now (a merged machine counts once). */
   count(type: BuildableType) {
     return this.sim.state.machines.filter((m) => m.type === type && !m.starter).length;
+  }
+
+  /**
+   * Phase 5 E13: copies ever built (prices count these). Before the first merge or build this is the copies
+   * standing, which also covers saves and tests that place machines directly.
+   */
+  built(type: BuildableType): number {
+    return this.sim.state.stats.built?.[type] ?? this.count(type);
+  }
+
+  /** Starts the lifetime counts from what stands now (before anything is built or merged away). */
+  ensureBuiltCounts(): Record<string, number> {
+    const st = this.sim.state.stats;
+    if (!st.built) {
+      st.built = {};
+      for (const m of this.sim.state.machines) if (!m.starter && m.type !== 'core') st.built[m.type] = (st.built[m.type] ?? 0) + 1;
+    }
+    return st.built;
   }
 
   /** The price before Phase 5's storage clamp: copies × machineCostGrowth, less permits (the specialty safety valve reads it). */
   rawCost(type: BuildableType): Cost {
     // Cleared city areas grant permits: each waives one copy's worth of cost growth.
     const permits = (this.sim.areas?.clearedCount() ?? 0) * TUNING.city.permitsPerArea;
-    return scaleCost(MACHINES[type].cost, Decimal.pow(TUNING.machineCostGrowth, Math.max(0, this.count(type) - permits)));
+    return scaleCost(MACHINES[type].cost, Decimal.pow(TUNING.machineCostGrowth, Math.max(0, this.built(type) - permits)));
   }
 
   cost(type: BuildableType): Cost {
@@ -58,7 +77,7 @@ export class BuildSystem {
     // the energy/water part grows for the first few copies only (further copies cost more biomass), and never
     // passes a share of that store. While the advisor says "save up", drones leave that much alone.
     const permits = (this.sim.areas?.clearedCount() ?? 0) * TUNING.city.permitsPerArea;
-    const copies = Math.min(TUNING.machineCappedGrowthCopies, Math.max(0, this.count(type) - permits));
+    const copies = Math.min(TUNING.machineCappedGrowthCopies, Math.max(0, this.built(type) - permits));
     const base = MACHINES[type].cost;
     for (const k of CAPPED) {
       const cap = this.sim.econ.cap(k);
@@ -112,6 +131,8 @@ export class BuildSystem {
       return undefined;
     }
     s.econ.spend(chk.cost);
+    const built = this.ensureBuiltCounts();
+    built[type] = (built[type] ?? 0) + 1;
     const def = MACHINES[type];
     const m: MachineData = { id: s.newId('m'), type, roofId, x, z, size: def.size, boostUntil: 0, timer: 0, charge: 0 };
     s.state.machines.push(m);

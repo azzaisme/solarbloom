@@ -16,6 +16,8 @@ export type SuggestionAction =
   | { kind: 'upgrades' }
   | { kind: 'harvest' }
   | { kind: 'build'; type: BuildableType; x: number; z: number }
+  /** Phase 5 E13: open the merge preview for this machine (the anchor) */
+  | { kind: 'merge'; machineId: string; layer?: string }
   | { kind: 'wait'; seconds: number };
 
 export interface Suggestion {
@@ -107,6 +109,9 @@ export class Advisor {
       const d = s.districts.ready()[0];
       if (d) return { text: `${s.districts.title(d)} has ${s.districts.awakeGroup(d)} neighbouring landmarks awake: its district bloom is ready.`, label: '🌸 Set off the district bloom', action: { kind: 'district', districtId: d } };
     }
+    // 2a. Phase 5 E13: three touching machines ready to merge (and the fee affordable).
+    const merge = this.mergeStep();
+    if (merge) return merge;
     // 2. An upgrade you can buy now. Phase 5 E12: not again right after a purchase, so with per-machine
     // upgrades on hundreds of machines the hint never loops on "buy one more level" instead of progress.
     const recent = s.time - this.lastPurchaseAt < TUNING.advisor.upgradeHintCooldown;
@@ -149,6 +154,21 @@ export class Advisor {
     // 6. Nothing to do this instant: solar and the rain barrel always refill, and so does the harvest.
     const secs = Math.ceil(cd);
     return { text: `Solar panels are recharging. Sunlight can be harvested again in ${secs} s.`, label: `🌞 Harvest in ${secs} s`, action: { kind: 'wait', seconds: secs } };
+  }
+
+  /** Phase 5 E13: the first affordable merge, as a suggestion. */
+  mergeStep(): Suggestion | undefined {
+    const s = this.sim;
+    for (const c of s.merge.ready(4)) {
+      const plan = s.merge.plan(c[0].id);
+      if (!plan?.ok) continue;
+      return {
+        text: `🔀 ${TUNING.merge.count} ${plan.fromName}s touch: merge them into a ${plan.toName} (output ${plan.before} → ${plan.after}, frees ${plan.freed.length} tile${plan.freed.length === 1 ? '' : 's'}).`,
+        label: '🔀 Merge',
+        action: { kind: 'merge', machineId: plan.anchor.id, layer: plan.anchor.roofId === GROUND ? undefined : plan.anchor.roofId },
+      };
+    }
+    return undefined;
   }
 
   /**
