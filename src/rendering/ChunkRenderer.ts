@@ -444,26 +444,30 @@ export class ChunkRenderer {
           b.add('box', ALIVE.paving, [x, h, z], [0.98, 0.16, 0.98]);
           b.add('box', PALETTE.grass[t.variant % PALETTE.grass.length], [x, top + 0.01, z], [0.6, 0.02, 0.6]);
         } else b.add('box', PALETTE.grass[t.variant % PALETTE.grass.length], [x, h, z], [1, 0.16, 1]);
-        const tufts = f === 'paving' ? 3 : 6;
+        const tufts = f === 'paving' ? 5 : 10;
         for (let i = 0; i < tufts; i++) {
           const ht = r.range(0.09, 0.2);
           const span = f === 'paving' ? 0.25 : 0.42;
-          b.add('cone', PALETTE.grassTuft[i % 3], [x + r.range(-span, span), top + ht / 2, z + r.range(-span, span)], [0.055, ht, 0.055]);
+          b.add('leaf', PALETTE.grassTuft[i % 3], [x + r.range(-span, span), top + ht / 2, z + r.range(-span, span)], [0.08, ht * 1.35, 0.12]);
         }
         if (t.bloom >= 2)
-          for (let i = 0; i < 3 + (t.variant % 2); i++) {
-            const ht = r.range(0.14, 0.26);
+          for (let i = 0; i < 5 + (t.variant % 3); i++) {
+            const ht = r.range(0.19, 0.38);
             const fx = x + r.range(-0.32, 0.32);
             const fz = z + r.range(-0.32, 0.32);
             b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.02, ht, 0.02]);
-            b.add('sphere', PALETTE.flower[(t.variant + i) % PALETTE.flower.length], [fx, top + ht, fz], [0.11, 0.07, 0.11]);
+            b.add('blossom', PALETTE.flower[(t.variant + i) % PALETTE.flower.length], [fx, top + ht, fz], [0.23, 0.24, 0.23]);
+            b.add('sphere', PALETTE.flowerCore, [fx, top + ht + 0.016, fz], [0.055, 0.035, 0.055]);
+            b.add('leaf', PALETTE.grassTuft[i % 3], [fx + 0.025, top + ht * 0.48, fz], [0.13, ht * 0.5, 0.14]);
           }
         if (t.bloom >= 3) {
           const kind = t.variant % 4;
           if (kind === 1) {
-            b.add('cylinder', PALETTE.trunk, [x, top + 0.22, z], [0.07, 0.44, 0.07]);
-            b.add('sphere', PALETTE.shrub[0], [x, top + 0.55, z], [0.48, 0.42, 0.48]);
-            b.add('sphere', PALETTE.shrub[1], [x + 0.12, top + 0.72, z + 0.05], [0.3, 0.26, 0.3]);
+            b.add('sphere', PALETTE.shrub[0], [x, top + 0.16, z], [0.44, 0.25, 0.44]);
+            for (let i = 0; i < 6; i++) {
+              const a = i * 2.4;
+              b.add('leaf', PALETTE.grassTuft[i % 3], [x + Math.cos(a) * 0.17, top + 0.28, z + Math.sin(a) * 0.17], [0.23, 0.48, 0.22]);
+            }
           } else
             for (let i = 0; i < 3; i++) {
               const s = r.range(0.24, 0.34);
@@ -472,13 +476,13 @@ export class ChunkRenderer {
         }
         if (t.bloom >= 4) {
           // Phase 4 E05: Radiant: a pale golden glow on the ground and luminous gold flowers above the shrubs.
-          b.add('cylinder', '#fff1b8', [x, top + 0.005, z], [0.86, 0.01, 0.86]);
+          b.add('cylinder', '#b4c46a', [x, top + 0.005, z], [0.72, 0.008, 0.72]);
           for (let i = 0; i < 4; i++) {
             const fx = x + r.range(-0.34, 0.34);
             const fz = z + r.range(-0.34, 0.34);
             const ht = r.range(0.3, 0.46);
             b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.02, ht, 0.02]);
-            b.add('sphere', i % 2 ? '#ffe066' : '#fff6c2', [fx, top + ht, fz], [0.13, 0.1, 0.13]);
+            b.add('blossom', i % 2 ? '#ffe066' : '#fff6c2', [fx, top + ht, fz], [0.26, 0.3, 0.26]);
           }
         }
         break;
@@ -518,7 +522,15 @@ export class ChunkRenderer {
       const r = new VRng(p.style * 131 + p.x * 7 + p.z * 13);
       for (let i = 0; i < 1 + (p.style % 2); i++) b.add('box', PALETTE.panel, [p.x + 0.6 + i * 0.7, top + 0.2, p.z + 0.6], [0.5, 0.04, 0.4]);
       for (let i = 0; i < 3; i++) b.add('sphere', PALETTE.shrub[i % 3], [p.x + r.range(0.5, p.w - 0.5), top + 0.18, p.z + r.range(0.9, p.d - 0.4)], [0.32, 0.22, 0.32]);
-      for (let i = 0; i < 2; i++) b.add('box', '#4f9a4a', [p.x + 0.4 + i * (p.w - 0.8), h + 0.08 + H * 0.5, p.z + p.d - 0.1], [0.12, H * 0.9, 0.03]);
+      for (let i = 0; i < 2; i++) {
+        const vx = p.x + 0.4 + i * (p.w - 0.8);
+        b.add('box', '#52764b', [vx, h + 0.08 + H * 0.5, p.z + p.d - 0.1], [0.035, H * 0.9, 0.03]);
+        for (let j = 0; j < Math.min(20, Math.ceil(H * 5)); j++) {
+          const vy = top - j * 0.18;
+          b.add('leaf', PALETTE.shrub[j % 3], [vx + Math.sin(j * 2.4) * 0.12, vy, p.z + p.d - 0.04], [0.22, 0.28, 0.18]);
+          if (j % 4 === 0) b.add('blossom', PALETTE.flower[(j + i) % 5], [vx, vy, p.z + p.d + 0.04], [0.2, 0.2, 0.2]);
+        }
+      }
     } else {
       // A rusty water tank or a dead antenna on the roof.
       if (p.style % 3 === 0) b.add('cylinder', '#6e655a', [p.x + 0.6, top + 0.3, p.z + 0.6], [0.4, 0.45, 0.4]);

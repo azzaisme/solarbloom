@@ -225,7 +225,7 @@ export class GridRenderer {
           const tufts = 8 + (t.variant % 3);
           for (let i = 0; i < tufts; i++) {
             const h = r.range(0.09, 0.2);
-            add(shape(deco, 'cone', PALETTE.grassTuft[i % 3], { pos: [r.range(-0.44, 0.44), h / 2, r.range(-0.44, 0.44)], scale: [0.055, h, 0.055], rot: [r.range(-12, 12), 0, r.range(-12, 12)] }));
+            add(shape(deco, 'leaf', PALETTE.grassTuft[i % 3], { pos: [r.range(-0.44, 0.44), h / 2, r.range(-0.44, 0.44)], scale: [0.085, h * 1.2, 0.1], rot: [r.range(-12, 12), 0, r.range(-12, 12)] }));
           }
           if (t.variant % 4 === 0) add(shape(deco, 'sphere', '#9be07a', { pos: [r.range(-0.3, 0.3), 0.02, r.range(-0.3, 0.3)], scale: [0.2, 0.05, 0.2] }));
         }
@@ -238,11 +238,11 @@ export class GridRenderer {
             shape(f, 'cylinder', PALETTE.stem, { pos: [0, h / 2, 0], scale: [0.02, h, 0.02] });
             switch ((t.variant + i) % 4) {
               case 0: // cosmos
-                shape(f, 'sphere', fr.pick(PALETTE.flower), { pos: [0, h, 0], scale: [0.11, 0.07, 0.11] });
+                shape(f, 'blossom', fr.pick(PALETTE.flower), { pos: [0, h, 0], scale: [0.22, 0.22, 0.22] });
                 shape(f, 'sphere', PALETTE.flowerCore, { pos: [0, h + 0.03, 0], scale: 0.04 });
                 break;
               case 1: // daisy
-                shape(f, 'sphere', '#ffffff', { pos: [0, h, 0], scale: [0.13, 0.025, 0.13] });
+                shape(f, 'blossom', '#fff8e3', { pos: [0, h, 0], scale: [0.24, 0.2, 0.24] });
                 shape(f, 'sphere', '#ffc93c', { pos: [0, h + 0.015, 0], scale: [0.05, 0.03, 0.05] });
                 break;
               case 2: // lavender spike
@@ -296,12 +296,12 @@ export class GridRenderer {
         if (t.bloom >= 4 && (!keepOld || prevBloom < 4)) {
           // Phase 4 E05: Radiant: luminous golden flowers and a soft glow disk.
           const g = add(group(deco, 'radiant', [0, 0, 0]));
-          shape(g, 'cylinder', '#fff1b8', { pos: [0, 0.005, 0], scale: [0.86, 0.01, 0.86] });
+          shape(g, 'cylinder', '#b4c46a', { pos: [0, 0.005, 0], scale: [0.72, 0.008, 0.72] });
           for (let i = 0; i < 4; i++) {
             const h = fr.range(0.3, 0.46);
             const f = group(g, 'gold', [fr.range(-0.34, 0.34), 0, fr.range(-0.34, 0.34)]);
             shape(f, 'cylinder', PALETTE.stem, { pos: [0, h / 2, 0], scale: [0.02, h, 0.02] });
-            shape(f, 'sphere', i % 2 ? '#ffe066' : '#fff6c2', { pos: [0, h, 0], scale: [0.13, 0.1, 0.13] });
+            shape(f, 'blossom', i % 2 ? '#ffe066' : '#fff6c2', { pos: [0, h, 0], scale: [0.26, 0.3, 0.26] });
             v.sway.push(f);
           }
         }

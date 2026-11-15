@@ -24,7 +24,7 @@ export class SceneBuilder {
 
   build() {
     const scene = this.app.scene;
-    scene.ambientLight = color('#8a90a3');
+    scene.ambientLight = color('#809184');
     // Aerial perspective: the distant city fades into warm haze.
     scene.fog.type = pc.FOG_LINEAR;
     scene.fog.color = color('#bcd9e6');
@@ -34,12 +34,12 @@ export class SceneBuilder {
     const sun = new pc.Entity('sun');
     sun.addComponent('light', {
       type: 'directional',
-      color: color('#ffe6bd'),
-      intensity: 2.15,
+      color: color('#fff0d4'),
+      intensity: 1.65,
       castShadows: true,
       shadowResolution: 2048,
       shadowDistance: 45,
-      shadowBias: 0.25,
+      shadowBias: 0.12,
       normalOffsetBias: 0.04,
       numCascades: 1,
       shadowType: pc.SHADOW_PCF3_32F,

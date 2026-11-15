@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import type { DroneData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { mat, PALETTE } from './Materials';
+import { model, pivot } from './ModelKit';
 import { group, shape } from './Shapes';
 import { ease, type Tweens } from './Tween';
 
@@ -41,35 +42,18 @@ export class DroneVisuals {
 
   add(d: DroneData, animate: boolean) {
     const [x, z] = this.world(d);
-    const party = d.expiresAt !== undefined;
     const root = group(this.parent, `drone-${d.id}`, [x, 0.9, z]);
     const body = group(root, 'body');
-    // Phase 4 E09: the old drone looks its age (worn cream shell, a rust patch, amber eyes, a bent antenna);
-    // hub drones' trim shows Drone Dash: cyan at level 2, gold at level 3.
     const old = !!d.old;
-    const dash = this.sim.upgrades.levelOf(this.sim.machine(d.hubId), 'droneSpeed'); // Phase 5 E12: per hub
-    const eyeCol = old ? '#ffb347' : PALETTE.eyeCyan;
-    shape(body, 'sphere', mat(old ? '#d9cbb0' : PALETTE.white, { gloss: old ? 0.2 : 0.7 }), { scale: [0.36, 0.3, 0.36], shadow: true });
-    shape(body, 'cylinder', mat(old ? '#9a8a70' : dash >= 3 ? '#ffd34d' : dash >= 2 ? '#6fd3ff' : PALETTE.shell), { pos: [0, -0.1, 0], scale: [0.26, 0.06, 0.26] });
-    if (old) {
-      shape(body, 'sphere', mat(PALETTE.rust), { pos: [0.12, 0.06, 0.1], scale: [0.1, 0.07, 0.06] });
-      shape(body, 'box', mat('#8a7a60'), { pos: [-0.1, 0.12, 0.06], scale: [0.08, 0.02, 0.06], rot: [0, 20, 0] });
-    }
-    if (!old && dash >= 2) shape(body, 'cylinder', mat(dash >= 3 ? '#ffe27a' : '#a8ecff', { emissive: dash >= 3 ? '#ffd34d' : '#6fd3ff', emissiveIntensity: 0.6 }), { pos: [0, 0.02, 0], scale: [0.37, 0.025, 0.37] });
-    const face = shape(body, 'box', mat(PALETTE.darkFace, { gloss: 0.8 }), { pos: [0, 0.02, 0.15], scale: [0.22, 0.14, 0.06] });
-    void face;
-    const eyes = [-0.05, 0.05].map((ex) =>
-      shape(body, 'sphere', mat(eyeCol, { emissive: eyeCol, emissiveIntensity: 2 }), { pos: [ex, 0.03, 0.185], scale: [0.04, 0.05, 0.02] }),
-    );
-    const finCol = party ? PALETTE.pink : old ? '#b5a27e' : PALETTE.leafFin;
-    const finL = group(body, 'finL', [-0.17, 0.04, -0.02]);
-    shape(finL, 'sphere', mat(finCol), { pos: [-0.1, 0, 0], scale: [0.22, 0.03, 0.12] });
-    const finR = group(body, 'finR', [0.17, 0.04, -0.02]);
-    shape(finR, 'sphere', mat(finCol), { pos: [0.1, 0, 0], scale: [0.22, 0.03, 0.12] });
-    shape(body, 'sphere', mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1.5 }), { pos: [0, -0.15, 0], scale: 0.06 });
-    shape(body, 'cylinder', mat(PALETTE.white), { pos: [0, 0.18, -0.04], scale: [0.015, 0.1, 0.015], rot: old ? [0, 0, 28] : [0, 0, 0] });
-    shape(body, 'sphere', mat(PALETTE.leafFin), { pos: [0, 0.24, -0.04], scale: [0.08, 0.03, 0.05] });
-    const beam = shape(root, 'cylinder', mat(PALETTE.eyeCyan, { opacity: 0.35, emissive: PALETTE.eyeCyan, emissiveIntensity: 1 }), { pos: [0, -0.4, 0], scale: [0.25, 0.7, 0.25] });
+    const kit = model('drone', body);
+    const finL = pivot(kit, 'wing-left');
+    const finR = pivot(kit, 'wing-right');
+    const eyes = [pivot(kit, 'eye-left'), pivot(kit, 'eye-right')];
+    // Preserve the starter's age and upgraded drones' visual identity.
+    const dash = this.sim.upgrades.levelOf(this.sim.machine(d.hubId), 'droneSpeed');
+    if (old) shape(body, 'sphere', mat(PALETTE.rust), { pos: [0.13, 0.09, 0.1], scale: [0.09, 0.04, 0.05] });
+    if (dash >= 2 || d.expiresAt !== undefined) shape(body, 'torus', mat(d.expiresAt !== undefined ? PALETTE.pink : dash >= 3 ? PALETTE.gold : PALETTE.eyeCyan), { pos: [0, -0.08, 0], scale: [0.65, 0.08, 0.65] });
+    const beam = shape(root, 'cone', mat(PALETTE.eyeCyan, { opacity: 0.22, emissive: PALETTE.eyeCyan, emissiveIntensity: 1 }), { pos: [0, -0.4, 0], scale: [0.6, 0.7, 0.6] });
     beam.enabled = false;
     if (old) body.setLocalScale(0.8, 0.8, 0.8);
     const v: DroneView = { root, body, finL, finR, beam, eyes, yaw: 0, x, z, y: 0.9, phase: Math.random() * 6, blink: 2 };
@@ -140,7 +124,7 @@ export class DroneVisuals {
         while (diff < -180) diff += 360;
         v.yaw += diff * Math.min(1, dt * 6);
       } else if (idle && !this.reducedMotion) v.yaw += Math.sin(t * 0.5 + v.phase) * dt * 20;
-      const tilt = Math.min(20, speed * 60);
+      const tilt = this.reducedMotion ? 0 : Math.min(20, speed * 60);
       v.body.setLocalEulerAngles(tilt, 0, 0);
       v.root.setEulerAngles(0, v.yaw, 0);
       const flap = this.reducedMotion ? 0 : Math.sin(t * (d.mode === 'flying' ? 30 : 10) + v.phase) * 18;
@@ -149,7 +133,7 @@ export class DroneVisuals {
       if (emitTrail && d.mode === 'flying' && speed > 0.01) this.onTrail?.(new pc.Vec3(v.x, v.y + bob - 0.12, v.z));
       v.beam.enabled = d.mode === 'working';
       if (v.beam.enabled) {
-        const p = 0.22 + Math.sin(t * 20) * 0.04;
+        const p = this.reducedMotion ? 0.52 : 0.52 + Math.sin(t * 9) * 0.06;
         v.beam.setLocalScale(p, 0.55, p);
         v.beam.setLocalPosition(0, -0.32, 0);
       }

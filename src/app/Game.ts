@@ -26,6 +26,7 @@ import { upgradeHighlights } from '../gameplay/UpgradeEffects';
 import { GridRenderer } from '../rendering/GridRenderer';
 import { InputController } from '../rendering/InputController';
 import { MachineVisuals } from '../rendering/MachineVisuals';
+import { loadModelKit } from '../rendering/ModelKit';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
@@ -116,7 +117,20 @@ export class Game {
   private fastFor = 0;
   private maxDpr = 2;
 
-  constructor(canvas: HTMLCanvasElement, lr: LoadResult = new SaveService().loadResult()) {
+  static async create(canvas: HTMLCanvasElement, lr: LoadResult) {
+    const app = new pc.Application(canvas, {
+      graphicsDeviceOptions: { antialias: true, alpha: true, powerPreference: 'high-performance' },
+    });
+    try {
+      await loadModelKit(app);
+      return new Game(canvas, lr, app);
+    } catch (error) {
+      app.destroy();
+      throw error;
+    }
+  }
+
+  private constructor(canvas: HTMLCanvasElement, lr: LoadResult, app: pc.Application) {
     this.settings = loadSettings();
     const loaded = lr.state;
     const state = loaded ?? createInitialState();
@@ -126,9 +140,7 @@ export class Game {
     const awayMs = loaded?.savedAt !== undefined ? Date.now() - loaded.savedAt : 0;
     const offline = awayMs > 0 ? this.sim.offline.apply(awayMs / 1000) : undefined;
 
-    this.app = new pc.Application(canvas, {
-      graphicsDeviceOptions: { antialias: true, alpha: true, powerPreference: 'high-performance' },
-    });
+    this.app = app;
     this.app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
     this.app.setCanvasResolution(pc.RESOLUTION_AUTO);
     this.maxDpr = Math.min(window.devicePixelRatio || 1, 2);

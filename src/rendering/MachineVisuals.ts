@@ -3,6 +3,7 @@ import type { MachineData } from '../core/types';
 import { GROUND } from '../core/GameState';
 import type { Sim } from '../gameplay/Sim';
 import { color, mat, PALETTE, uniqueMat } from './Materials';
+import { model, pivot, replaceMaterial } from './ModelKit';
 import { group, shape } from './Shapes';
 import { TUNING } from '../data/tuning';
 import { SLAB_TOP } from './SceneBuilder';
@@ -41,7 +42,7 @@ const orbOff = () => mat('#3f6b4a', { gloss: 0.6 });
 const panelMat = () => mat(PALETTE.panel, { gloss: 0.85, metal: 0.2 });
 const panelBoost = () => mat(PALETTE.panelGlint, { gloss: 0.9, emissive: '#ffd56a', emissiveIntensity: 0.6 });
 
-/** Procedural low-poly machine models. Visual upgrades (bigger arrays, antennas, flowers) follow upgrade levels. */
+/** Instanced glTF machines and procedural landmark models. Visual upgrades (bigger arrays, antennas, flowers) follow upgrade levels. */
 export class MachineVisuals {
   private views = new Map<string, MachineView>();
   private time = 0;
@@ -150,6 +151,7 @@ export class MachineVisuals {
 
   /** Three beats: foundation pops up, the white shell unfolds, the light switches on. */
   private playBuild(v: MachineView) {
+    if (this.reducedMotion) { this.onActivated?.(v.m, v.root.getPosition().clone()); return; }
     const { root, body, m } = v;
     const s = m.size;
     const pad = shape(root, 'box', mat(PALETTE.shell), { pos: [0, 0.02, 0], scale: [0.01, 0.04, 0.01] });
@@ -164,6 +166,17 @@ export class MachineVisuals {
       body.setLocalEulerAngles(0, (1 - k) * -90, 0);
     }, { delay: 0.22, ease: ease.outBack });
     tw.add(0.35, (k) => body.setLocalPosition(0, Math.sin(k * Math.PI) * 0.25, 0), { delay: 0.25 });
+    // Model pivots assemble independently: the solar gimbal unfolds and planted stems unfurl.
+    if (m.type === 'solar' && v.spin[0]) {
+      const hinge = v.spin[0];
+      tw.add(0.8, k => hinge.setLocalEulerAngles(-90 + 62 * k, 45, 0), {
+        delay: 0.25, ease: ease.outCubic, owner: hinge,
+      });
+    }
+    if (m.type === 'pollinator') v.bob.forEach((stem, i) => {
+      stem.setLocalScale(0.01, 0.01, 0.01);
+      tw.add(0.65, k => stem.setLocalScale(k, k, k), { delay: 0.3 + i * 0.035, ease: ease.outBack });
+    });
     // 3. Light activates
     const lamp = v.light;
     const orig = lamp ? lamp.getLocalScale().clone() : undefined;
@@ -185,55 +198,25 @@ export class MachineVisuals {
   }
 
   private solar(v: MachineView) {
-    const b = v.body;
-    shape(b, 'cylinder', mat(PALETTE.shell), { pos: [0, 0.05, 0], scale: [0.5, 0.1, 0.5], shadow: true });
-    shape(b, 'cylinder', mat(PALETTE.white), { pos: [0, 0.22, 0], scale: [0.09, 0.3, 0.09], shadow: true });
-    const tilt = group(b, 'tilt', [0, 0.4, 0]);
-    tilt.setLocalEulerAngles(-28, 45, 0);
-    shape(tilt, 'box', mat(PALETTE.white), { scale: [0.86, 0.05, 0.66], shadow: true });
-    const cells = shape(tilt, 'box', panelMat(), { pos: [0, 0.03, 0], scale: [0.78, 0.02, 0.58] });
-    shape(tilt, 'box', mat(PALETTE.gold, { metal: 0.6, gloss: 0.7 }), { pos: [0, 0.035, -0.31], scale: [0.86, 0.02, 0.03] });
-    for (let i = -1; i <= 1; i++) shape(tilt, 'box', mat(PALETTE.panelGlint), { pos: [i * 0.26, 0.042, 0], scale: [0.012, 0.005, 0.58] });
-    v.panel = [cells];
-    v.spin.push(tilt); // Phase 4 E09.3: the panel slowly tracks the sun
-    v.light = shape(b, 'sphere', mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1 }), { pos: [0.2, 0.12, 0.2], scale: 0.06 });
-    if (v.m.starter) shape(b, 'box', mat(PALETTE.rust), { pos: [-0.18, 0.12, 0.16], scale: [0.12, 0.05, 0.1], rot: [0, 30, 0] });
+    const kit = model('solar', v.body);
+    const panel = pivot(kit, 'panel-pivot');
+    panel.setLocalEulerAngles(-28, 45, 0);
+    v.spin = [panel];
+    // Imported panel materials retain the cell pattern. Upgrade panels still use the boost material.
+    v.panel = [];
+    v.light = pivot(kit, 'status-light');
   }
 
   private condenser(v: MachineView) {
-    const b = v.body;
-    shape(b, 'cylinder', mat(PALETTE.shell), { pos: [0, 0.08, 0], scale: [0.66, 0.16, 0.66], shadow: true });
-    shape(b, 'cylinder', mat(PALETTE.white), { pos: [0, 0.32, 0], scale: [0.5, 0.36, 0.5], shadow: true });
-    shape(b, 'torus', mat(PALETTE.gold, { metal: 0.6, gloss: 0.7 }), { pos: [0, 0.5, 0], scale: [0.85, 0.3, 0.85] });
-    shape(b, 'sphere', mat(PALETTE.glass, { opacity: 0.45, gloss: 0.95 }), { pos: [0, 0.74, 0], scale: 0.5 });
-    const water = shape(b, 'sphere', mat(PALETTE.water, { emissive: '#2aa6d6', emissiveIntensity: 0.4, gloss: 0.9 }), { pos: [0, 0.7, 0], scale: 0.3 });
-    v.bob.push(water);
-    v.light = shape(b, 'sphere', mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1.5 }), { pos: [0, 0.17, 0.33], scale: 0.05 });
-    for (let i = 0; i < 3; i++) {
-      const fin = group(b, 'fin');
-      fin.setLocalEulerAngles(0, i * 120, 0);
-      shape(fin, 'box', mat(PALETTE.shell), { pos: [0.3, 0.32, 0], scale: [0.1, 0.3, 0.03], shadow: true });
-    }
+    const kit = model('condenser', v.body);
+    v.bob = [pivot(kit, 'water-orb')];
+    v.spin = [pivot(kit, 'bubbles')];
+    v.light = pivot(kit, 'status-light');
   }
 
   private pollinator(v: MachineView) {
-    const b = v.body;
-    shape(b, 'box', mat(PALETTE.white), { pos: [0, 0.13, 0], scale: [0.84, 0.26, 0.84], shadow: true });
-    shape(b, 'box', mat(PALETTE.soil), { pos: [0, 0.265, 0], scale: [0.74, 0.02, 0.74] });
-    for (let i = 0; i < 9; i++) {
-      const x = ((i % 3) - 1) * 0.24;
-      const z = (Math.floor(i / 3) - 1) * 0.24;
-      const h = 0.18 + ((i * 37) % 10) / 60;
-      const f = group(b, 'f', [x, 0.27, z]);
-      shape(f, 'cylinder', mat(PALETTE.stem), { pos: [0, h / 2, 0], scale: [0.025, h, 0.025] });
-      shape(f, 'sphere', mat(PALETTE.flower[i % PALETTE.flower.length], { gloss: 0.5 }), { pos: [0, h, 0], scale: [0.15, 0.1, 0.15], shadow: true });
-      shape(f, 'sphere', mat(PALETTE.flowerCore), { pos: [0, h + 0.04, 0], scale: 0.05 });
-      v.bob.push(f);
-    }
-    v.light = shape(b, 'sphere', mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1.2 }), { pos: [0.34, 0.46, -0.27], scale: 0.04 });
-    // Bee house
-    shape(b, 'box', mat(PALETTE.gold), { pos: [0.34, 0.45, -0.34], scale: [0.12, 0.16, 0.12], shadow: true });
-    shape(b, 'cone', mat(PALETTE.trunk), { pos: [0.34, 0.57, -0.34], scale: [0.16, 0.1, 0.16] });
+    const kit = model('pollinator', v.body);
+    v.bob = Array.from({ length: 9 }, (_, i) => pivot(kit, `flower-${i}`));
     v.butterflies = [];
     for (let i = 0; i < 2; i++) {
       const bf = group(v.root, 'butterfly');
@@ -248,48 +231,15 @@ export class MachineVisuals {
   }
 
   private hub(v: MachineView) {
-    const b = v.body;
-    shape(b, 'box', mat(PALETTE.shell), { pos: [0, 0.09, 0], scale: [1.7, 0.18, 1.7], shadow: true });
-    for (const [x, z] of [[-0.85, -0.85], [0.85, -0.85], [-0.85, 0.85], [0.85, 0.85]])
-      shape(b, 'cylinder', mat(PALETTE.shell), { pos: [x, 0.09, z], scale: [0.3, 0.18, 0.3] });
-    shape(b, 'cylinder', mat(PALETTE.darkFace, { gloss: 0.6 }), { pos: [0.1, 0.19, 0.1], scale: [1.1, 0.02, 1.1] });
-    const ring = shape(b, 'torus', mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1.2 }), { pos: [0.1, 0.2, 0.1], scale: [1.55, 0.12, 1.55] });
-    v.rings = [ring];
-    shape(b, 'box', mat(PALETTE.white), { pos: [-0.6, 0.45, -0.6], scale: [0.36, 0.6, 0.36], shadow: true });
-    shape(b, 'box', mat(PALETTE.darkFace), { pos: [-0.6, 0.55, -0.41], scale: [0.24, 0.14, 0.02] });
-    const ant = shape(b, 'cylinder', mat(PALETTE.white), { pos: [-0.6, 0.95, -0.6], scale: [0.03, 0.4, 0.03] });
-    void ant;
-    v.light = shape(b, 'sphere', mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1.5 }), { pos: [-0.6, 1.17, -0.6], scale: 0.08 });
-    for (const [x, z] of [[0.7, -0.62], [-0.62, 0.72]]) shape(b, 'sphere', mat(PALETTE.leafFin), { pos: [x, 0.26, z], scale: [0.32, 0.14, 0.2] });
+    const kit = model('droneHub', v.body);
+    v.rings = [pivot(kit, 'dock-ring')];
+    v.light = pivot(kit, 'status-light');
   }
 
   private motherTree(v: MachineView) {
     const b = v.body;
-    // Round white planter ring, a twisting trunk, layered canopy and charge orbs.
-    shape(b, 'cylinder', mat(PALETTE.shell), { pos: [0, 0.1, 0], scale: [1.7, 0.2, 1.7], shadow: true });
-    shape(b, 'cylinder', mat(PALETTE.soil), { pos: [0, 0.205, 0], scale: [1.5, 0.02, 1.5] });
-    for (let i = 0; i < 3; i++) {
-      const seg = shape(b, 'cylinder', mat(PALETTE.trunk), { pos: [Math.sin(i) * 0.06, 0.45 + i * 0.36, Math.cos(i) * 0.06], scale: [0.32 - i * 0.05, 0.42, 0.32 - i * 0.05], rot: [6 - i * 5, i * 30, 8 - i * 6], shadow: true });
-      void seg;
-    }
-    for (let r = 0; r < 4; r++) {
-      const a = r * 1.7;
-      shape(b, 'capsule', mat(PALETTE.trunk), { pos: [Math.cos(a) * 0.3, 0.28, Math.sin(a) * 0.3], scale: [0.07, 0.12, 0.07], rot: [Math.sin(a) * 70, 0, Math.cos(a) * 70] });
-    }
-    const canopy = group(b, 'canopy', [0, 1.55, 0]);
-    const leaves: [number, number, number, number, string][] = [
-      [0, 0.3, 0, 1.25, PALETTE.shrub[0]],
-      [0.45, 0.05, 0.2, 0.85, PALETTE.shrub[1]],
-      [-0.42, 0.1, -0.15, 0.9, PALETTE.shrub[2]],
-      [0.1, 0.05, -0.48, 0.8, PALETTE.shrub[1]],
-      [-0.2, 0.0, 0.45, 0.8, PALETTE.shrub[0]],
-      [0, 0.75, 0, 0.75, '#5fc25a'],
-    ];
-    for (const [x, y, z, sz, c] of leaves) shape(canopy, 'sphere', mat(c), { pos: [x, y, z], scale: [sz, sz * 0.78, sz], shadow: true });
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      shape(canopy, 'sphere', mat(PALETTE.flower[i % 5]), { pos: [Math.cos(a) * 0.62, 0.15 + (i % 2) * 0.3, Math.sin(a) * 0.62], scale: 0.1 });
-    }
+    const kit = model('motherTree', b);
+    const canopy = pivot(kit, 'canopy');
     v.canopy = canopy;
     // Charge orbs hang in the canopy; they light up as the tree charges.
     v.orbs = [];
@@ -331,6 +281,7 @@ export class MachineVisuals {
       r.enabled = false;
       v.rings.push(r);
     }
+    if (this.landmarkKind(v.m) === 'rooftop' || v.m.roofId !== GROUND) model('coreArch', b);
     // cracks
     shape(b, 'box', mat(PALETTE.crack), { pos: [0.22, 0.9, 0.0], scale: [0.02, 0.6, 0.02], rot: [0, 45, 12] });
   }
@@ -345,14 +296,11 @@ export class MachineVisuals {
     const b = v.body;
     v.coreBase = uniqueMat('#8f8b82', { gloss: 0.25 });
     v.coreMat = uniqueMat('#6e7a80', { gloss: 0.8, emissive: '#000000', emissiveIntensity: 1 });
-    shape(b, 'cylinder', v.coreBase, { pos: [0, 0.16, 0], scale: [1.8, 0.32, 1.8], shadow: true });
-    shape(b, 'torus', v.coreBase, { pos: [0, 0.32, 0], scale: [1.8, 0.16, 1.8] });
-    shape(b, 'cylinder', mat('#4a463f'), { pos: [0, 0.31, 0], scale: [1.6, 0.02, 1.6] });
+    const kit = model('fountain', b);
+    replaceMaterial(kit, 'ivory', v.coreBase);
     const water = shape(b, 'cylinder', mat(PALETTE.water, { gloss: 0.9, opacity: 0.85 }), { pos: [0, 0.2, 0], scale: [1.58, 0.02, 1.58] });
     water.enabled = false;
     v.water = water;
-    shape(b, 'cylinder', v.coreBase, { pos: [0, 0.65, 0], scale: [0.22, 0.7, 0.22], shadow: true });
-    shape(b, 'cylinder', v.coreBase, { pos: [0, 1.02, 0], scale: [0.7, 0.1, 0.7], shadow: true });
     const crystal = group(b, 'crystal', [0, 1.22, 0]);
     shape(crystal, 'sphere', v.coreMat, { scale: [0.22, 0.3, 0.22], shadow: true });
     v.spin.push(crystal);
@@ -447,31 +395,21 @@ export class MachineVisuals {
   /** Reservoir Garden: a white basin with a lily pad garden; its water level shows the Overflow fill. */
   private reservoirGarden(v: MachineView) {
     const b = v.body;
-    shape(b, 'cylinder', mat(PALETTE.shell), { pos: [0, 0.14, 0], scale: [0.86, 0.28, 0.86], shadow: true });
-    shape(b, 'torus', mat(PALETTE.white), { pos: [0, 0.28, 0], scale: [0.86, 0.1, 0.86] });
+    const kit = model('reservoirGarden', b);
     v.water = shape(b, 'cylinder', mat(PALETTE.water, { gloss: 0.9, emissive: '#1a6f8a', emissiveIntensity: 0.3 }), { pos: [0, 0.12, 0], scale: [0.74, 0.02, 0.74] });
     for (let i = 0; i < 3; i++) {
       const a = i * 2.1;
       v.bob.push(shape(b, 'cylinder', mat('#5fb24a'), { pos: [Math.cos(a) * 0.2, 0.26, Math.sin(a) * 0.2], scale: [0.18, 0.015, 0.18] }));
     }
     shape(b, 'sphere', mat('#ff9fd0'), { pos: [0.18, 0.3, 0.05], scale: 0.07 });
-    // little fountain spout
-    shape(b, 'cylinder', mat(PALETTE.white), { pos: [0, 0.38, 0], scale: [0.08, 0.3, 0.08] });
-    v.light = shape(b, 'sphere', mat(PALETTE.water, { emissive: PALETTE.water, emissiveIntensity: 1.4 }), { pos: [0, 0.56, 0], scale: 0.07 });
+    v.light = pivot(kit, 'status-light');
   }
 
   /** Bloom Relay: a slim white mast with a leafy dish and a glowing tip. */
   private relay(v: MachineView) {
-    const b = v.body;
-    shape(b, 'cylinder', mat(PALETTE.shell), { pos: [0, 0.06, 0], scale: [0.6, 0.12, 0.6], shadow: true });
-    shape(b, 'cylinder', mat(PALETTE.white), { pos: [0, 0.6, 0], scale: [0.09, 1.0, 0.09], shadow: true });
-    shape(b, 'torus', mat('#5fb24a'), { pos: [0, 0.95, 0], scale: [0.42, 0.08, 0.42] });
-    shape(b, 'cone', mat(PALETTE.white), { pos: [0, 1.12, 0], scale: [0.3, 0.16, 0.3] });
-    v.light = shape(b, 'sphere', mat('#9ff7ff', { emissive: '#9ff7ff', emissiveIntensity: 1.6 }), { pos: [0, 1.28, 0], scale: 0.1 });
-    for (let i = 0; i < 3; i++) {
-      const a = i * 2.1;
-      v.bob.push(shape(b, 'sphere', mat(PALETTE.flower[i % PALETTE.flower.length]), { pos: [Math.cos(a) * 0.22, 0.16, Math.sin(a) * 0.22], scale: 0.07 }));
-    }
+    const kit = model('relay', v.body);
+    v.spin = [pivot(kit, 'relay-vanes')];
+    v.light = pivot(kit, 'status-light');
   }
 
   /** Reservoir Overflow: the basin spills over with a splash. */
@@ -524,7 +462,7 @@ export class MachineVisuals {
     v.extras = group(v.body, 'extras');
     // The old wing panels were just destroyed: keep only the base panel (Phase 4 E11: a second Solar Array level
     // used to leave destroyed panels in this list, and the next frame crashed on them).
-    if (v.panel) v.panel = v.panel.slice(0, 1);
+    if (v.panel) v.panel = [];
     if (v.batched) this.tweens.add(0.01, () => {}, { done: () => this.views.get(v.m.id) === v && this.batch(v) }); // once the new extras exist
     const ex = v.extras;
     if (v.m.type === 'solar') {
@@ -712,12 +650,16 @@ export class MachineVisuals {
           const boosted = v.m.boostUntil > now || this.sim.production.surgeActive();
           const m = boosted ? panelBoost() : panelMat();
           for (const p of v.panel!) if (p.render && p.render.material !== m) p.render.material = m;
-          if (!rm && v.spin[0]) v.spin[0].setLocalEulerAngles(-28 + Math.sin(t * 0.25 + v.m.x) * 5, 45 + Math.sin(t * 0.18 + v.m.z) * 14, 0);
+          if (!rm && v.spin[0] && !this.tweens.has(v.spin[0])) v.spin[0].setLocalEulerAngles(-28 + Math.sin(t * 0.25 + v.m.x) * 5, 45 + Math.sin(t * 0.18 + v.m.z) * 14, 0);
           const s = 0.05 + (boosted ? 0.025 * (1 + Math.sin(t * 10)) : 0.01 * Math.sin(t * 2));
           v.light!.setLocalScale(s, s, s);
           break;
         }
         case 'condenser': {
+          if (!rm && v.spin[0]) {
+            v.spin[0].setLocalEulerAngles(0, t * 24, 0);
+            v.spin[0].setLocalPosition(0, Math.sin(t * 1.7) * 0.025, 0);
+          }
           if (!rm) v.bob[0].setLocalPosition(0, 0.7 + Math.sin(t * 2 + v.root.getPosition().x) * 0.03, 0);
           // Water level shows the watering charge.
           const f = 0.35 + 0.65 * Math.min(1, (v.m.charge ?? 0) / TUNING.condenser.threshold);
@@ -753,6 +695,10 @@ export class MachineVisuals {
           const s = 0.07 + 0.03 * Math.max(0, Math.sin(t * 4));
           v.light!.setLocalScale(s, s, s);
           if (!rm) v.rings![0].setLocalEulerAngles(0, t * 30, 0);
+          break;
+        }
+        case 'relay': {
+          if (!rm) v.spin[0].setLocalEulerAngles(0, t * 22, 0);
           break;
         }
         case 'reservoirGarden': {

@@ -2,7 +2,7 @@
 
 A cozy solarpunk restoration game for the browser, set in an endless city lost in a gloomy fog. You start in a dead, grey park with a dry fountain and one old solar lamp. Pulse the ground back to life, build machines that feed each other and set off Bloom Chains. Wake the fountain and the fog starts to roll back: every area you restore reveals the ones around it, forever outward, so your blooming systems can grow as big as you like.
 
-Built with **PlayCanvas Engine 2 + TypeScript + Vite**. The isometric camera is orthographic, and the world is a logical square grid rendered in 3D. All art is procedural primitives and all sound is synthesised; there are no asset files.
+Built with **PlayCanvas Engine 2 + TypeScript + Vite**. The isometric camera is orthographic, and the world is a logical square grid rendered in 3D. Art combines an original glTF machine kit with procedural botanical terrain; all sound is synthesised. See [the art overhaul and render review](docs/ART_OVERHAUL.md) and [model authoring notes](public/models/README.md).
 
 ![The park, early on](docs/park.png)
 

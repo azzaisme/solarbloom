@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 
 export type Prim = 'box' | 'sphere' | 'cylinder' | 'cone' | 'capsule' | 'plane' | 'torus';
 /** Vertex-coloured primitives; 'sphereHi' is a smoother sphere for big canopies and domes. */
-export type VPrim = Prim | 'sphereHi';
+export type VPrim = Prim | 'sphereHi' | 'leaf' | 'blossom';
 
 export function initLowPoly(device: pc.GraphicsDevice) {
   vcDevice = device;
@@ -26,8 +26,42 @@ export function vertexColourMaterial(): pc.StandardMaterial {
   return vcMaterial!;
 }
 
+/** Curved botanical meshes shared by all streamed beds; no per-flower entities. */
+function botanicalGeometry(flower: boolean): pc.Geometry {
+  const positions: number[] = [], indices: number[] = [];
+  const sides = flower ? 20 : 6, rings = flower ? 3 : 4;
+  for (let j = 0; j <= rings; j++) {
+    const t = j / rings;
+    for (let i = 0; i <= sides; i++) {
+      const a = i / sides * Math.PI * 2;
+      if (flower) {
+        const r = t * (0.34 + 0.16 * Math.cos(a * 5));
+        positions.push(Math.cos(a) * r, 0.13 * t * t + 0.03 * Math.sin(a * 5), Math.sin(a) * r);
+      } else {
+        const w = Math.sin(t * Math.PI);
+        positions.push(w * Math.cos(a) * 0.45 + t * t * 0.2, t - 0.5, w * Math.sin(a) * 0.08);
+      }
+    }
+  }
+  for (let j = 0; j < rings; j++) for (let i = 0; i < sides; i++) {
+    const a = j * (sides + 1) + i, b = a + sides + 1;
+    if (flower) indices.push(a, a + 1, b, a + 1, b + 1, b);
+    else indices.push(a, b, a + 1, a + 1, b, b + 1);
+    // Petals are thin surfaces, visible from below as well as above.
+    if (flower) indices.push(a, b, a + 1, a + 1, b, b + 1);
+  }
+  const g = new pc.Geometry();
+  g.positions = positions;
+  // Blossom normals face up; duplicate underside triangles must not cancel them.
+  g.normals = flower ? positions.map((_, i) => i % 3 === 1 ? 1 : 0) : pc.calculateNormals(positions, indices);
+  g.indices = indices;
+  return g;
+}
+
 export function lowGeometry(type: VPrim): pc.Geometry {
   switch (type) {
+    case 'leaf': return botanicalGeometry(false);
+    case 'blossom': return botanicalGeometry(true);
     case 'sphereHi':
       return new pc.SphereGeometry({ radius: 0.5, latitudeBands: 9, longitudeBands: 12 });
     case 'sphere':

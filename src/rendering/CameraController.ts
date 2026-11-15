@@ -27,6 +27,8 @@ export class CameraController {
     const e = new pc.Entity('camera');
     e.addComponent('camera', {
       projection: pc.PROJECTION_ORTHOGRAPHIC,
+      toneMapping: pc.TONEMAP_ACES,
+      gammaCorrection: pc.GAMMA_SRGB,
       orthoHeight: 6,
       nearClip: 0.5,
       farClip: 140,

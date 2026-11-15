@@ -95,6 +95,7 @@ export class Hud {
     const rows = KINDS.map(
       (k) => `<div class="res-row" data-res="${k}" title="${RES_META[k].name}">
         <span class="ic" aria-hidden="true">${ICONS[k]}</span>
+        <span class="res-name">${RES_META[k].name}</span>
         <span class="val"><span class="n">0</span> <small class="capw">/ <span class="c">0</span><span class="nm"> ${RES_META[k].name}</span></small></span>
         <span class="rate">+0/s</span>
         <span class="bar"><i style="background:${RES_META[k].color}"></i></span>
@@ -102,13 +103,13 @@ export class Hud {
     ).join('');
     const slots = [
       `<button class="slot" data-tool="inspect" aria-label="Inspect tool (1)"><span class="key">1</span><span class="si">${ICONS.inspect}</span><span class="sl">Inspect</span><span class="sc">&nbsp;</span></button>`,
-      `<button class="slot" data-tool="pulse" aria-label="Restoration Pulse (2)"><span class="key">2</span><span class="si">${ICONS.pulse}</span><span class="sl">Pulse</span><span class="sc">restore</span></button>`,
+      `<button class="slot" data-tool="pulse" aria-label="Restoration Pulse (2)"><span class="key">2</span><span class="si">${ICONS.pulse}</span><span class="sl">Restoration</span><span class="sc">Pulse</span></button>`,
       `<span class="sep"></span>`,
       `<button class="slot" id="buildToggle" aria-label="Build menu (B)" aria-expanded="false"><span class="key">B</span><span class="si">${ICONS.build}</span><span class="sl">Build</span><span class="sc">machines</span></button>`,
       `<div id="buildTray">`,
       ...BUILDABLE.map(
         (t) =>
-          `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name} (${MACHINES[t].hotkey})"><span class="key">${MACHINES[t].hotkey}</span><span class="si">${MACHINES[t].icon}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
+          `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name} (${MACHINES[t].hotkey})"><span class="key">${MACHINES[t].hotkey}</span><span class="si">${ICONS[t]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
       ),
       `</div>`,
       `<span class="sep"></span>`,
@@ -116,9 +117,10 @@ export class Hud {
       `<button class="slot" id="upgBtn" aria-label="Upgrades (U)"><span class="key">U</span><span class="si">${ICONS.upgrades}</span><span class="sl">Upgrades</span><span class="sc">&nbsp;</span><span class="badge" aria-label="Something useful to buy"></span></button>`,
     ].join('');
     return `
-      <div id="res" class="panel"><div class="logo"><span class="sun"></span>Solarbloom</div>${rows}</div>
+      <div id="res" class="panel"><div class="logo"><span class="brand-mark">${ICONS.pulse}</span><span>Solarbloom<small>A LITTLE WORLD, REBORN</small></span></div>${rows}</div>
       <div id="resInfo" class="panel" role="status" hidden></div>
       <div id="obj" class="panel">
+        <div class="objective-label">${ICONS.biomass} YOUR GARDEN</div>
         <h3 id="objTitle">Wake the fountain</h3>
         <div class="pct" id="objPct">0% restored</div>
         <div class="next" id="objNext"></div>
@@ -141,7 +143,7 @@ export class Hud {
       <div id="toasts"></div>
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
       <div id="intro" hidden><div class="panel card-intro">
-        <h2>🌱 Welcome to Solarbloom</h2>
+        <div class="intro-mark">${ICONS.pulse}</div><h2>A little care. A world of life.</h2>
         <p>This old park is dead and grey, and the city around it is lost in a gloomy fog. Bring it back to life.</p>
         <ol>
           <li><b>Tap a grey tile</b> to restore it. Each tap uses a little ⚡ energy and 💧 water, which refill on their own.</li>
@@ -492,7 +494,7 @@ export class Hud {
     const building = t !== 'pulse' && t !== 'inspect';
     const tg = $(this.root, '#buildToggle');
     tg.classList.toggle('active', building);
-    $(tg, '.si').innerHTML = building ? MACHINES[t].icon : ICONS.build;
+    $(tg, '.si').innerHTML = building ? ICONS[t] : ICONS.build;
     $(tg, '.sl').textContent = building ? MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '') : 'Build';
     this.toggleTray(false);
   }
