@@ -139,8 +139,7 @@ export class Game {
     this.scene = new SceneBuilder(this.app, this.tweens);
     this.scene.build();
     this.camera = new CameraController(this.app, this.tweens);
-    this.app.scene.fog.start = this.camera.fogDepth(46);
-    this.app.scene.fog.end = this.camera.fogDepth(84);
+    this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
     this.chainSummary = new ChainSummary(this.sim);
@@ -429,6 +428,15 @@ export class Game {
     return { roofId: hit.layerId, fx: hit.fx, fz: hit.fz, tile: this.sim.grid.get(hit.layerId, Math.floor(hit.fx), Math.floor(hit.fz)) };
   }
 
+  /** Haze and shadow reach follow the zoom-dependent camera (its distance changes with the zoom). */
+  private syncView() {
+    const c = this.camera;
+    this.app.scene.fog.start = c.fogDepth(c.dist + c.hazeStart);
+    this.app.scene.fog.end = c.fogDepth(c.dist + c.hazeEnd);
+    const sun = this.scene.sun.light;
+    if (sun) sun.shadowDistance = c.shadowDistance();
+  }
+
   /** The game is in the city (the park and beyond), not the legacy rooftop layout. */
   get city(): boolean {
     return this.sim.progression.homeIsPark;
@@ -462,8 +470,8 @@ export class Game {
     let z1 = -Infinity;
     for (const [sx, sy] of [[0, 0], [w, 0], [0, h], [w, h]]) {
       const { o, d } = this.camera.ray(sx, sy);
-      if (Math.abs(d.y) < 1e-6) continue;
-      const t = -o.y / d.y;
+      // A ray at or above the horizon (the low close-up view) reaches as far as streaming goes.
+      const t = d.y < -1e-3 ? -o.y / d.y : 400;
       const x = o.x + d.x * t;
       const z = o.z + d.z * t;
       x0 = Math.min(x0, x);
@@ -1728,6 +1736,7 @@ export class Game {
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
     this.camera.update(dt);
+    this.syncView();
     this.hud.update(dt);
     this.sfx.layers = Math.min(3, Math.floor(this.sim.progression.restoredCount(HOME) / 12));
     this.sfx.update(dt);

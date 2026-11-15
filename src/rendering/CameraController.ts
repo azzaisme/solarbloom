@@ -2,14 +2,44 @@ import * as pc from 'playcanvas';
 import { color } from './Materials';
 import { ease, type Tweens } from './Tween';
 
-/** Fixed-angle orthographic isometric camera with bounded pan and smooth zoom. */
+/**
+ * Isometric camera with bounded pan and smooth zoom. Phase 5: the view depends on the zoom. Zoomed out it is a
+ * high, narrow-angle perspective that reads almost like the old orthographic grid (planning, city overview);
+ * zoomed in it drops lower with a wider lens, so trees and machines feel close and the city rises behind them.
+ *
+ * Framing is unchanged: `viewHeight` is the world height visible at the target (what `orthoHeight` used to be),
+ * and the camera distance is chosen so a perspective lens shows exactly that, so zoom levels, pan speed and
+ * hit radii mean what they did.
+ */
+export interface ViewProfile {
+  /** zoom at/below which the view is fully "far" */
+  farZoom: number;
+  /** zoom at/above which the view is fully "near" */
+  nearZoom: number;
+  farPitch: number;
+  nearPitch: number;
+  /** vertical field of view, degrees */
+  farFov: number;
+  nearFov: number;
+}
+
+export const VIEW: ViewProfile = { farZoom: 0.5, nearZoom: 1.7, farPitch: 40, nearPitch: 25, farFov: 12, nearFov: 36 };
+
+const smooth = (t: number) => t * t * (3 - 2 * t);
+
 export class CameraController {
   readonly entity: pc.Entity;
   readonly target = new pc.Vec3(4, 0, 4);
   private goal = new pc.Vec3(4, 0, 4);
   yaw = 45;
+  /** current pitch (degrees); follows the zoom */
   pitch = 35;
-  private dist = 40;
+  /** current vertical field of view (degrees); follows the zoom */
+  fov = 20;
+  /** distance from the camera to the target */
+  dist = 40;
+  /** world height visible at the target */
+  viewHeight = 6;
   zoom = 1;
   private zoomGoal = 1;
   minZoom = 0.42;
@@ -26,8 +56,8 @@ export class CameraController {
   ) {
     const e = new pc.Entity('camera');
     e.addComponent('camera', {
-      projection: pc.PROJECTION_ORTHOGRAPHIC,
-      orthoHeight: 6,
+      projection: pc.PROJECTION_PERSPECTIVE,
+      fov: 20,
       nearClip: 0.5,
       farClip: 140,
       clearColor: color('#00000000'),
@@ -51,17 +81,32 @@ export class CameraController {
   }
 
   /**
-   * PlayCanvas computes fog depth as gl_FragCoord.z / gl_FragCoord.w. With an orthographic camera that
-   * is the 0–1 depth-buffer value (linear between near and far), so fog distances must be converted.
+   * PlayCanvas computes fog depth as gl_FragCoord.z / gl_FragCoord.w. For a perspective camera that is
+   * far × (depth − near) / (far − near): linear in view depth but not equal to it, so convert distances.
    */
   fogDepth(distance: number): number {
     const c = this.cam;
-    return (distance - c.nearClip) / (c.farClip - c.nearClip);
+    return (c.farClip * (distance - c.nearClip)) / (c.farClip - c.nearClip);
   }
 
+  /** How far past the target (along the view) the haze starts and is complete. */
+  hazeStart = 6;
+  hazeEnd = 44;
+
+  /** Shadow reach from the camera: the whole view around the target, not the far city. */
+  shadowDistance(): number {
+    return this.dist + Math.max(5, this.viewHeight * 0.9);
+  }
+
+  /** World units per CSS pixel at the target. */
   worldPerPixel(): number {
     const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
-    return (2 * this.cam.orthoHeight) / Math.max(1, c.clientHeight);
+    return (2 * this.viewHeight) / Math.max(1, c.clientHeight);
+  }
+
+  /** 0 = fully far view … 1 = fully near view, for a zoom. */
+  nearness(zoom = this.zoom): number {
+    return smooth(pc.math.clamp((zoom - VIEW.farZoom) / (VIEW.nearZoom - VIEW.farZoom), 0, 1));
   }
 
   /** How fast the view follows its goal; a glide (roof focus) is gentler than direct input. */
@@ -179,6 +224,17 @@ export class CameraController {
   }
 
   private apply() {
+    const n = this.nearness();
+    this.pitch = VIEW.farPitch + (VIEW.nearPitch - VIEW.farPitch) * n;
+    this.fov = VIEW.farFov + (VIEW.nearFov - VIEW.farFov) * n;
+    this.viewHeight = this.fitHeight() / this.zoom;
+    this.dist = this.viewHeight / Math.tan((this.fov * Math.PI) / 360);
+    const c = this.cam;
+    c.fov = this.fov;
+    // Clip planes hug the view: near just in front of the closest ground on screen (and anything tall on it),
+    // far past the haze, so depth precision stays good from close-up to the city overview.
+    c.nearClip = Math.max(0.3, this.dist - this.viewHeight * 2.2 - 12);
+    c.farClip = this.dist + this.hazeEnd + 60;
     const yr = (this.yaw * Math.PI) / 180;
     const pr = (this.pitch * Math.PI) / 180;
     const t = this.target;
@@ -188,7 +244,6 @@ export class CameraController {
       t.z + this.dist * Math.cos(pr) * Math.cos(yr),
     );
     this.entity.lookAt(t);
-    this.cam.orthoHeight = this.fitHeight() / this.zoom;
     this.markDirty();
   }
 
