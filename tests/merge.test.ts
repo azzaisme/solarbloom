@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { big, toNum } from '../src/core/Big';
+import { createInitialState, SAVE_VERSION } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
@@ -226,5 +227,12 @@ describe('Phase 5 E13: merging', () => {
     const e = toNum(sim.production.rates(true).energy);
     const exp = sim.machinesOfType('solar').reduce((s, m) => s + sim.production.solarOutput(m, true), 0);
     expect(e).toBeGreaterThanOrEqual(exp - 1e-6);
+  });
+
+  it('saves carry tiers at v6; a v5 save (before tiers) is scrapped with the notice, no migration', () => {
+    expect(SAVE_VERSION).toBe(6);
+    const saver = new SaveService(undefined);
+    expect(saver.parse(JSON.stringify({ ...createInitialState(1), version: 5 }))).toBe('scrapped');
+    expect(saver.parse(JSON.stringify(createInitialState(1)))).not.toBe('scrapped');
   });
 });
