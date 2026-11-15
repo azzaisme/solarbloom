@@ -309,6 +309,7 @@ export class Game {
     document.body.classList.toggle('contrast', !!s.highContrast);
     const rm = s.reducedMotion;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
+    if (this.chunks) this.chunks.reducedMotion = rm;
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
     this.cat.softSparkle = rm || s.lowVfx;
     // Quality: lighter shadows with fewer effects.
@@ -860,6 +861,9 @@ export class Game {
     const b = this.bus;
     const s = this.sim;
     for (const ev of ['tile.restoring', 'tile.restored', 'tile.prepared', 'tile.softened', 'tile.nurtured'] as const) b.on(ev, ({ tile }) => this.chunks.markTile(tile));
+    // Phase 5: trees grow into their next stage with a bounce (restored → sapling, then with each bloom stage).
+    b.on('tile.restored', ({ tile }) => this.chunks.growTree(tile, 0));
+    b.on('tile.nurtured', ({ tile, level }) => this.chunks.growTree(tile, level - 1));
     b.on('machine.built', ({ machine }) => {
       for (const t of s.grid.footprint(machine.roofId, machine.x, machine.z, machine.size)) if (t) this.chunks.markTile(t);
     });
