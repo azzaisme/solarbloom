@@ -85,7 +85,8 @@ class MeshBuilder {
   /** 0 = full colour … 1 = fully grey (fog / desaturation) */
   grey = 0;
 
-  add(type: VPrim, hex: string, p: [number, number, number], s: [number, number, number] | number) {
+  /** `glow` (0-1, Look 1.9) makes the primitive emissive: stored in the vertex alpha, read by the vertex-colour material. */
+  add(type: VPrim, hex: string, p: [number, number, number], s: [number, number, number] | number, glow = 0) {
     const t = template(type);
     let sx: number, sy: number, sz: number;
     if (typeof s === 'number') sx = sy = sz = s;
@@ -101,6 +102,7 @@ class MeshBuilder {
     const R = Math.round(r * 255);
     const G = Math.round(g * 255);
     const B = Math.round(b * 255);
+    const A = 255 - Math.round(Math.min(1, Math.max(0, glow)) * 255);
     const nv = t.pos.length;
     const base = this.pos.n / 3;
     this.pos.reserve(nv);
@@ -136,7 +138,7 @@ class MeshBuilder {
       C[c] = R;
       C[c + 1] = G;
       C[c + 2] = B;
-      C[c + 3] = 255;
+      C[c + 3] = A;
     }
     this.pos.n = this.nrm.n = o;
     this.col.n = c;
@@ -564,13 +566,13 @@ export class ChunkRenderer {
         if (!this.addTree(t, h, 1) && t.bloom >= 3) this.fb.add(shrubGeo(t.variant, 1), x + (t.variant % 3) * 0.06 - 0.06, top, z, t.variant * 1.7, 1);
         if (t.bloom >= 4) {
           // Phase 4 E05: Radiant: a pale golden glow on the ground and luminous gold flowers above the shrubs.
-          b.add('cylinder', '#fff1b8', [x, top + 0.005, z], [0.86, 0.01, 0.86]);
+          b.add('cylinder', '#fff1b8', [x, top + 0.005, z], [0.86, 0.01, 0.86], 0.08);
           for (let i = 0; i < 4; i++) {
             const fx = x + r.range(-0.34, 0.34);
             const fz = z + r.range(-0.34, 0.34);
             const ht = r.range(0.3, 0.46);
             b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.02, ht, 0.02]);
-            b.add('sphere', i % 2 ? '#ffe066' : '#fff6c2', [fx, top + ht, fz], [0.13, 0.1, 0.13]);
+            b.add('sphere', i % 2 ? '#ffe066' : '#fff6c2', [fx, top + ht, fz], [0.13, 0.1, 0.13], 0.45);
           }
         }
         break;
@@ -680,8 +682,8 @@ export class ChunkRenderer {
           b.add('cylinder', '#3f4246', [x, y + 0.04, z], [0.22, 0.08, 0.22]);
           b.add('cylinder', '#4a4c50', [x, y + 0.55, z], [0.06, 1.0, 0.06]);
           b.add('box', '#4a4c50', [x, y + 1.06, z], [0.22, 0.04, 0.22]);
-          b.add('sphere', '#fff1b8', [x, y + 0.96, z], 0.16);
-          b.add('cylinder', '#ffe58a', [x, y + 0.002, z], [0.9, 0.004, 0.9]); // its pool of light
+          b.add('sphere', '#fff1b8', [x, y + 0.96, z], 0.16, 1);
+          b.add('cylinder', '#ffe58a', [x, y + 0.002, z], [0.9, 0.004, 0.9], 0.12); // its pool of light
         } else {
           b.add('box', '#4a4c50', [x, y + 0.05, z], [0.9, 0.06, 0.08]); // toppled
           b.add('sphere', '#8d8a78', [x + 0.42, y + 0.07, z], 0.12);

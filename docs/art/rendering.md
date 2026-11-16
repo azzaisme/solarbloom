@@ -55,9 +55,9 @@ offscreen target), then the effects run, then the compose pass applies exposure,
 - **Resizing and the adaptive pixel ratio:** CameraFrame sizes its targets from the canvas every frame. A lost
   WebGL context is handled by the engine (targets are recreated); the generated environment is rebuilt by
   `SceneBuilder` on `devicerestored`.
-- **Bloom:** intensity 0.03 with a scene-referred threshold of 1.6. Sunlit surfaces peak around 1.0–1.3, so only
-  emissives authored at 2 or above glow (see the emissive budget). Checked: the dead park with bloom on and off
-  differs by at most 1/255 on a few pixels.
+- **Bloom:** intensity 0.08 with a scene-referred threshold of 1.5. Sunlit surfaces peak around 1.0–1.3, so only
+  emissives (see the emissive budget below) glow. Checked: the dead park with bloom on and off differs by at most
+  1/255 on a few pixels.
 - **SSAO (High tier):** CameraFrame SSAO, combined into the final colour, 12 samples, blurred. Its radius is in world
   units (a tile is 1), set every frame to 0.12 × the world height in view, clamped to 0.6–2: tight contact
   shadows under bushes, benches and machines up close, soft grounding around buildings and trees at the overview.
@@ -78,3 +78,25 @@ offscreen target), then the effects run, then the compose pass applies exposure,
   the linear haze is already strong, and is complete 18 units further, so haze and blur rise together. The
   playable area around the goal stays sharp at every zoom; the blur reaches the hazy, unrevealed city at the top
   of the view. Radius 3, 3 rings of 4 points, the cheap (not high-quality) path.
+
+## Emissive budget (Look 1.9)
+
+Scene-referred brightness is `linear(colour) × intensity`, before exposure and tone mapping. Bloom starts at 1.5
+and is strong by about 3. Ordinary lit surfaces stay at or below about 1.3 and must not be emissive.
+
+| Element | How it glows | Rendered intensity |
+| --- | --- | --- |
+| Any standard material authored as a glow (`mat(…, { emissive, emissiveIntensity >= 1 })`): drone eyes (2), drone spray beam (1), machine lights and rings (1–1.6), orbs, relay and hub rings, Vfx rings (1.5) and arcs (2) | `glow()` in `Materials.ts` multiplies by `LOOK.emissive.gain` | × 4 (so 4–8) |
+| Emissive tints below 1 (solar boost 0.6, water accents 0.3–0.6, gold trims 0.25, the tap beacon 0.6) | unchanged | < 1, never blooms |
+| The awake core / landmark | `coreMat` at `glow(1.2)` | 4.8 |
+| The ready-to-wake landmark | gold pulse 0.4–0.9 (a hint, not a glow) | < 1 |
+| Condenser tank | emissive 1 (was 0.4) | 4 |
+| Restore-tile flashes, the restore-target glow, the chain hold outline (`TileFx`) | `LOOK.emissive.tile` on the unlit overlay, blended at its opacity | 4 |
+| Pulse footprint preview (`Overlays.showRadius`) | `LOOK.emissive.preview`, blended at 0.45 | 3 |
+| Sparkle particles (bursts, Frenzy, mega-bloom, drone trails) | the particle's own colour, `LOOK.emissive.particles` | 2.5 |
+| Lit lamps (park stage 3), Radiant flowers and their ground glow | vertex alpha in chunk meshes (`MeshBuilder.add(…, glow)`), × `LOOK.emissive.vertexGlow` | lamp globe 4; flowers 1.8; ground pools 0.3–0.5 |
+| Solar panel glints | sun specular on the glossy glass plus environment reflection, no emissive | — |
+
+New content: author a glow at `emissiveIntensity: 1` (or more) and let the gain bring it into bloom; keep tints
+below 1. For geometry merged into chunks, pass a `glow` of 0–1 to `MeshBuilder.add`. Bright unlit overlays that are
+UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.

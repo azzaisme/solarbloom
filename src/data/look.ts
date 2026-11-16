@@ -45,9 +45,17 @@ export const LOOK = {
   exposure: 1.0,
   /**
    * Look 1.5: bloom on emissive and very bright pixels only. The threshold is scene-referred (before exposure and
-   * tone mapping): sunlit grass and paving peak around 1.0–1.3, so glows are authored at 2 and above (Look 1.9).
+   * tone mapping): sunlit grass and paving peak around 1.0–1.3, so glows are authored at 3 and above (Look 1.9).
    */
-  bloom: { intensity: 0.03, threshold: 1.6, blurLevel: 12 },
+  bloom: { intensity: 0.08, threshold: 1.5, blurLevel: 12 },
+  /**
+   * Look 1.9: emissive budget (scene-referred, before exposure; bloom starts at 1.5). See docs/art/rendering.md.
+   * `gain` multiplies every standard material authored as a glow (emissiveIntensity >= 1); weaker emissive tints
+   * stay as they are and never bloom. `vertexGlow` is the glow of chunk geometry flagged in its vertex alpha (lit
+   * lamps, Radiant flowers). `tile` drives restore-tile flashes and glows, `preview` the pulse footprint preview,
+   * `particles` the burst and trail sparkles.
+   */
+  emissive: { gain: 4, vertexGlow: 4, tile: 4, preview: 3, particles: 2.5 },
   /**
    * Look 1.6: screen-space ambient occlusion for contact shadows (High tier). The radius is in world units (a tile
    * is 1): `radiusPerView` × the world height in view, clamped, so close-ups get tight contact shadows under

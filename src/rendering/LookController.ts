@@ -66,6 +66,6 @@ export class LookController {
     if (this.highContrast) this.post.grade(G.contrast, G.contrast, 0, 0);
     else this.post.grade(G.dead, G.warm, this.mood, LOOK.vignette.intensity);
     const R = LOOK.rim;
-    setLookRim(this.app.graphicsDevice, this.rimColour, R.intensity, R.power, this.toSun, this.camera.entity.getPosition());
+    setLookRim(this.app.graphicsDevice, this.rimColour, R.intensity, R.power, this.toSun, this.camera.entity.getPosition(), LOOK.emissive.vertexGlow);
   }
 }

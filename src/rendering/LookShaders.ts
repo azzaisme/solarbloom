@@ -13,7 +13,12 @@ const RIM_GLSL = `
 uniform vec4 look_rim;
 uniform vec3 look_rimDir;
 uniform vec3 look_camPos;
+uniform float look_vcGlow;
 void addLookRim() {
+#if defined(LOOK_VC_GLOW) && defined(STD_DIFFUSE_VERTEX)
+	// Look 1.9: the shared vertex-colour material glows where the vertex alpha is below 1.
+	dEmission += dAlbedo * (1.0 - vVertexColor.a) * look_vcGlow;
+#endif
 #if defined(LIT_NEEDS_NORMAL) && defined(FORWARD_PASS)
 	vec3 v = normalize(look_camPos - vPositionW);
 	float edge = pow(1.0 - clamp(dot(dNormalW, v), 0.0, 1.0), look_rim.a);
@@ -43,7 +48,8 @@ const dir = new Float32Array(3);
 const cam = new Float32Array(3);
 
 /** Per-frame rim uniforms: colour × intensity (linear), edge power, the direction toward the sun, the camera. */
-export function setLookRim(device: pc.GraphicsDevice, colour: pc.Color, intensity: number, power: number, toSun: pc.Vec3, camPos: pc.Vec3) {
+export function setLookRim(device: pc.GraphicsDevice, colour: pc.Color, intensity: number, power: number, toSun: pc.Vec3, camPos: pc.Vec3, vcGlow: number) {
+  device.scope.resolve('look_vcGlow').setValue(vcGlow);
   rim[0] = Math.pow(colour.r, 2.2) * intensity;
   rim[1] = Math.pow(colour.g, 2.2) * intensity;
   rim[2] = Math.pow(colour.b, 2.2) * intensity;
