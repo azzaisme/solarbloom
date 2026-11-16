@@ -23,6 +23,8 @@ export class Birds {
   private dir = new pc.Vec3();
   private pos = new pc.Vec3();
   reducedMotion = false;
+  /** Phase 5 E16: songbirds have arrived (20 thriving tree tiles): flocks pass more often. */
+  resident = false;
 
   constructor(parent: pc.Entity) {
     this.root = group(parent, 'birds');
@@ -72,7 +74,7 @@ export class Birds {
     if (this.t * speed > 44) {
       this.flying = false;
       this.root.enabled = false;
-      this.wait = 25 + Math.random() * 25;
+      this.wait = this.resident ? 12 + Math.random() * 12 : 25 + Math.random() * 25;
     }
   }
 }

@@ -82,6 +82,8 @@ export interface GameEvents {
   /** City 09.1: progress on an area's specialty action. */
   'area.specialty': { areaId: string; have: number; need: number; met: boolean };
   'district.ready': { districtId: string };
+  /** Phase 5 E16: a fauna kind arrived (once per save; cosmetic). */
+  'fauna.unlocked': { id: 'butterflies' | 'birds' | 'koi' | 'robots' };
   'district.bloom': { districtId: string; restored: string[]; lusher: string[]; reward: Partial<Record<ResourceKind, Big>>; replay: boolean };
 }
 

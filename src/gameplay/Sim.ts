@@ -25,6 +25,7 @@ import { Metrics } from './Metrics';
 import { MilestoneSystem } from './Milestones';
 import { MergeSystem } from './MergeSystem';
 import { SuperSystem } from './SuperSystem';
+import { EcosystemSystem } from './Ecosystem';
 import { ProductionSystem } from './ProductionSystem';
 import { ProgressionSystem } from './ProgressionSystem';
 import { RestorationSystem } from './RestorationSystem';
@@ -64,6 +65,8 @@ export class Sim {
   readonly supers: SuperSystem;
   /** Phase 5 E15: world events. */
   readonly events: WorldEventSystem;
+  /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
+  readonly ecosystem: EcosystemSystem;
 
   constructor(
     readonly state: GameState,
@@ -111,6 +114,7 @@ export class Sim {
     this.milestones = new MilestoneSystem(this);
     this.merge = new MergeSystem(this);
     this.supers = new SuperSystem(this);
+    this.ecosystem = new EcosystemSystem(this);
     this.metrics = new Metrics(this);
     this.log = new DebugLog(this);
     this.offline = new OfflineSystem(this);
@@ -212,6 +216,7 @@ export class Sim {
     this.events.tick();
     this.progression.tick();
     this.milestones.tick();
+    this.ecosystem.tick();
     this.metrics.tick(dt);
     this.ledger.tick();
     s.rngState = this.rng.state;

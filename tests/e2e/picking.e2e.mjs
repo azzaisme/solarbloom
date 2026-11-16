@@ -101,6 +101,60 @@ try {
       }, target);
       fail(`${vp.name}: real click on g:2:4 left it '${clicked}' ${JSON.stringify(why)}`);
     }
+    // Phase 5 E16: fauna never take a tap. With every creature unlocked around a lush park, the tile under each
+    // actor picks as that tile, and a real click on a songbird's spot nurtures the lawn under it.
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      const s = g.sim;
+      const st = s.state;
+      for (const t of s.areas.tiles('park')) {
+        if (t.blocked || t.occupantId || t.ground === 'restored') continue;
+        if (t.ground !== 'growing') s.restoration.complete(t, 'pulse');
+        t.ground = 'restored';
+        t.growthRemainingSec = 0;
+        t.bloom = 2;
+        s.grid.touch(t);
+      }
+      const D = st.resources.biomass.constructor;
+      st.caps.energy = new D(1e6);
+      st.caps.water = new D(1e6);
+      for (const k of ['energy', 'water', 'biomass']) st.resources[k] = new D(1e6);
+      st.progression.coreActivated = true;
+      st.fauna = { butterflies: 0, birds: 0, koi: 0, robots: 0 };
+      g.chunks.markAll();
+      g.paused = false;
+    });
+    // Fauna re-plan once a second of frames; software rendering can be slow, so wait for them rather than a fixed time.
+    await page.waitForFunction(() => Object.values(window.solarbloom.fauna.active).some((n) => n > 0), null, { timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(500);
+    const fauna = await page.evaluate(() => {
+      const g = window.solarbloom;
+      g.paused = true;
+      const V = g.camera.target.constructor;
+      const out = [];
+      for (const [kind, pool] of Object.entries(g.fauna.pools))
+        for (const a of pool) {
+          if (!a.used) continue;
+          const p = a.root.getPosition();
+          const s = g.camera.toScreen(new V(p.x, 0.08, p.z));
+          if (s.x < 0 || s.y < 0 || s.x > innerWidth || s.y > innerHeight) continue;
+          out.push({ kind, x: s.x, y: s.y, want: `g:${Math.floor(p.x)}:${Math.floor(p.z)}`, got: g.pick(s.x, s.y)?.tile?.id ?? null });
+        }
+      return out;
+    });
+    checks += fauna.length;
+    if (!fauna.length) fail(`${vp.name}: no fauna on screen to test ${await page.evaluate(() => { const g = window.solarbloom; return JSON.stringify({ active: g.fauna.active, eco: g.sim.ecosystem.unlocked(), city: !!g.city, t: g.camera.target, z: g.camera.zoom, paused: g.paused, modal: g.hud.modalOpen }); })}`);
+    // a hair inside a tile edge can round either way; the actor's own tile or an edge neighbour both mean "not the actor"
+    const wrong = fauna.filter((f) => f.got === null || f.got.split(':').slice(1).some((v, i) => Math.abs(Number(v) - Number(f.want.split(':')[i + 1])) > 1));
+    if (wrong.length) fail(`${vp.name}: ${wrong.length}/${fauna.length} taps on fauna missed the ground, e.g. ${JSON.stringify(wrong[0])}`);
+    const bird = fauna.find((f) => f.kind === 'groundBirds' && f.got === f.want);
+    if (bird) {
+      const before = await page.evaluate((id) => window.solarbloom.sim.grid.byTileId(id).bloom, bird.want);
+      await page.mouse.click(bird.x, bird.y);
+      const after = await page.evaluate((id) => window.solarbloom.sim.grid.byTileId(id).bloom, bird.want);
+      checks++;
+      if (!(after > before)) fail(`${vp.name}: a real click on a songbird at ${bird.want} didn't nurture its tile (${before} → ${after})`);
+    }
     // Clicking the HUD must never act on the world underneath.
     const before = await page.evaluate(() => JSON.stringify(window.solarbloom.sim.state.resources));
     const box = await page.locator('#hotbar').boundingBox();

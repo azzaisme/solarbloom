@@ -9,6 +9,7 @@ import { SLAB_TOP } from './SceneBuilder';
 import { ease, type Tweens } from './Tween';
 import { foliageMaterial, treeMesh } from './Foliage';
 import { treeGeo } from './TreeGen';
+import { machineRunning } from './FaunaPlan';
 
 interface MachineView {
   m: MachineData;
@@ -42,6 +43,9 @@ interface MachineView {
   crown?: pc.Entity;
   /** joined its region's dynamic batch (after its build animation) */
   batched?: boolean;
+  /** Phase 5 E16: really working right now (refreshed twice a second), and when its next active wisp is due */
+  running?: boolean;
+  wispAt?: number;
 }
 
 const orbOn = () => mat('#b6ffe0', { emissive: '#7cf7c8', emissiveIntensity: 1.6 });
@@ -54,6 +58,14 @@ export class MachineVisuals {
   private views = new Map<string, MachineView>();
   private time = 0;
   reducedMotion = false;
+  /**
+   * Phase 5 E16: a running machine in view gives off a small wisp now and then (sun glints, mist, pollen).
+   * Pooled particles (Vfx), at most `wispsPerSecond` across the view; nothing with reduced motion.
+   */
+  onWisp?: (m: MachineData, at: pc.Vec3) => void;
+  wispsPerSecond = 5;
+  private wispBudget = 0;
+  private runCheck = 0;
   /** Called when a newly built machine "powers on" (for VFX + sound). */
   onActivated?: (m: MachineData, at: pc.Vec3) => void;
 
@@ -932,8 +944,23 @@ export class MachineVisuals {
     const now = this.sim.time;
     const rm = this.reducedMotion;
     const M = 3;
+    // Phase 5 E16: which machines really run (twice a second), and a shared budget of active wisps.
+    this.runCheck -= dt;
+    const recheck = this.runCheck <= 0;
+    if (recheck) this.runCheck = 0.5;
+    this.wispBudget = Math.min(this.wispsPerSecond, this.wispBudget + dt * this.wispsPerSecond);
     for (const v of this.views.values()) {
       if (view && v.m.roofId === GROUND && (v.m.x + v.m.size < view.x0 - M || v.m.x > view.x1 + M || v.m.z + v.m.size < view.z0 - M || v.m.z > view.z1 + M)) continue;
+      if (recheck || v.running === undefined) v.running = machineRunning(this.sim, v.m);
+      if (v.running && !rm && this.onWisp && !v.super && (v.wispAt ?? 0) <= t && this.wispBudget >= 1) {
+        // seeded spacing per machine (2–4 s), so a field of panels doesn't sparkle in step
+        v.wispAt = t + 2 + ((v.m.x * 31 + v.m.z * 17) % 20) / 10;
+        if (v.m.type === 'solar' || v.m.type === 'condenser' || v.m.type === 'pollinator' || v.m.type === 'droneHub') {
+          this.wispBudget -= 1;
+          const p = v.root.getPosition();
+          this.onWisp(v.m, new pc.Vec3(p.x, p.y + (v.m.type === 'condenser' ? 1.0 : 0.7) * ((v.m.tier ?? 1) > 1 ? 1.3 : 1), p.z));
+        }
+      }
       if (v.super) {
         const sv = v.super;
         if (!rm) {
@@ -957,12 +984,12 @@ export class MachineVisuals {
           const m = boosted ? panelBoost() : panelMat();
           for (const p of v.panel!) if (p.render && p.render.material !== m) p.render.material = m;
           if (!rm && v.spin[0]) v.spin[0].setLocalEulerAngles(-28 + Math.sin(t * 0.25 + v.m.x) * 5, 45 + Math.sin(t * 0.18 + v.m.z) * 14, 0);
-          const s = 0.05 + (boosted ? 0.025 * (1 + Math.sin(t * 10)) : 0.01 * Math.sin(t * 2));
+          const s = (v.running ? 0.05 : 0.04) + (boosted ? 0.025 * (1 + Math.sin(t * 10)) : v.running ? 0.01 * Math.sin(t * 2) : 0);
           v.light!.setLocalScale(s, s, s);
           break;
         }
         case 'condenser': {
-          if (!rm) v.bob[0].setLocalPosition(0, 0.7 + Math.sin(t * 2 + v.root.getPosition().x) * 0.03, 0);
+          if (!rm && v.running) v.bob[0].setLocalPosition(0, 0.7 + Math.sin(t * 2 + v.root.getPosition().x) * 0.03, 0);
           // Water level shows the watering charge.
           const f = 0.35 + 0.65 * Math.min(1, (v.m.charge ?? 0) / TUNING.condenser.threshold);
           v.bob[0].setLocalScale(0.3 * f + 0.06, 0.3 * f + 0.06, 0.3 * f + 0.06);
@@ -994,9 +1021,10 @@ export class MachineVisuals {
           break;
         }
         case 'droneHub': {
-          const s = 0.07 + 0.03 * Math.max(0, Math.sin(t * 4));
+          // Phase 5 E16: the beacon blinks and the pad ring turns only while its drones are out working.
+          const s = v.running ? 0.07 + 0.03 * Math.max(0, Math.sin(t * 4)) : 0.065 + 0.005 * Math.sin(t * 1.2);
           v.light!.setLocalScale(s, s, s);
-          if (!rm) v.rings![0].setLocalEulerAngles(0, t * 30, 0);
+          if (!rm && v.running) v.rings![0].setLocalEulerAngles(0, t * 30, 0);
           break;
         }
         case 'reservoirGarden': {
