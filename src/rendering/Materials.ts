@@ -1,7 +1,8 @@
 import * as pc from 'playcanvas';
 
 /** Look 2: every colour lives in Palette.ts (docs/art/palette.md); re-exported here for existing imports. */
-export { PALETTE } from './Palette';
+import { PALETTE } from './Palette';
+export { PALETTE };
 
 const cache = new Map<string, pc.StandardMaterial>();
 
@@ -49,6 +50,12 @@ export function mat(hex: string, o: MatOpts = {}): pc.StandardMaterial {
   m.update();
   cache.set(key, m);
   return m;
+}
+
+/** Look 2.8: a shared machine / prop surface from PALETTE.surfaces (cached like every mat()). */
+export function surface(name: keyof typeof PALETTE.surfaces, o: MatOpts = {}): pc.StandardMaterial {
+  const s = PALETTE.surfaces[name];
+  return mat(s.hex, { gloss: s.gloss, metal: s.metal, ...o });
 }
 
 /** A private (uncached) material for things that animate their colour, like the Core. */

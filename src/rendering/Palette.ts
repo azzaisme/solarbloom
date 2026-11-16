@@ -183,7 +183,7 @@ const metal = {
   slate: '#6e7a80',
   steel: '#8a9097',
   drain: '#3d3a35',
-  rust: '#a0623c',
+  rust: '#8a5a40',
   bronze: '#8a5a1c',
   vent: '#8a7d70',
 };
@@ -192,7 +192,8 @@ const metal = {
 const plastic = {
   shell: '#f5f3e8',
   shellLow: '#bebba7',
-  cream: '#f2ece0',
+  /** Look 2.8: machine shells, cream plastic with slight gloss (surface('shell')) */
+  cream: '#f1ede4',
   warm: '#fbf6ec',
   lantern: '#f6efdc',
   aged: '#d9cbb0',
@@ -214,8 +215,9 @@ const trim = {
 };
 
 const solar = {
-  panel: '#1e3a6b',
-  glint: '#3a6fb8',
+  /** Look 2.8: deep navy cells with a lighter grid */
+  panel: '#233f7a',
+  glint: '#4f6fbf',
   navy: '#24406e',
 };
 
@@ -285,8 +287,8 @@ const building = {
 
 /** Park props: benches, gazebo, stalls, lamps. */
 const props = {
-  benchWood: '#b9824f',
-  benchFrame: '#3f7a52',
+  benchWood: '#b98a63',
+  benchFrame: '#5a4a3e',
   benchRotten: '#6e5a48',
   benchRottenLow: '#5f4d3d',
   benchRustFrame: '#5b5d60',
@@ -393,13 +395,30 @@ const light = {
   fill: '#b9d7ff',
 };
 
+/**
+ * Look 2.8: shared surface definitions for machines and props (colour plus gloss and metalness), read through
+ * surface() in Materials.ts so every machine material is one cached definition. Tuned for Look 1's key light:
+ * plastic has a soft sheen, trims a metallic highlight, solar cells a sharp glint. The drone keeps its own
+ * redesign materials (DroneVisuals); these sit around it: same soft gold, same cream family.
+ */
+const surfaces = {
+  shell: { hex: '#f1ede4', gloss: 0.62, metal: 0 },
+  trim: { hex: '#e8ba40', gloss: 0.72, metal: 0.55 },
+  banner: { hex: '#f5b23c', gloss: 0.3, metal: 0 },
+  solar: { hex: '#233f7a', gloss: 0.85, metal: 0.2 },
+  glass: { hex: '#9fe2f8', gloss: 0.9, metal: 0 },
+  rust: { hex: '#8a5a40', gloss: 0.25, metal: 0.4 },
+  wood: { hex: '#b98a63', gloss: 0.2, metal: 0 },
+  visor: { hex: '#101d26', gloss: 0.8, metal: 0 },
+};
+
 const pure = {
   white: '#ffffff',
   black: '#000000',
   clear: '#00000000',
 };
 
-const families = { stone, paving, ground, roof, lawn, flowers, leaf, wood, soil, metal, plastic, trim, solar, aqua, glow, building, props, core, sky, fauna, signal, light, pure };
+const families = { stone, paving, ground, roof, lawn, flowers, leaf, wood, soil, metal, plastic, trim, solar, aqua, glow, building, props, core, sky, fauna, signal, light, surfaces, pure };
 
 export const PALETTE = {
   ...families,
