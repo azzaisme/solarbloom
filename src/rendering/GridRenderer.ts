@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import type { LayerData, TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { PALETTE } from './Materials';
+import { flowerAt, flowerCentre, flowerPick, grassTone } from './Palette';
 import { assignBatch, group, setVColor, vshape as shape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
 import { ease, type Tweens } from './Tween';
@@ -27,8 +28,8 @@ function paintSlab(e: pc.Entity, hex: string) {
 /** Per-rooftop look of unrestored ground: grey concrete, sun-baked clay, withered leaf litter. */
 const DEAD_LOOK: Record<string, { base: readonly string[]; dark: string; crack: string; debris: string }> = {
   seed: { base: PALETTE.concrete, dark: PALETTE.concreteDark, crack: PALETTE.crack, debris: PALETTE.debris },
-  reservoir: { base: ['#bda78a', '#b29c7f', '#c6b195', '#a99377'], dark: '#97806a', crack: '#6e5a48', debris: '#8a7560' },
-  canopy: { base: ['#867c6a', '#7c7261', '#908571', '#776d5d'], dark: '#655c4e', crack: '#4e463b', debris: '#6b5a45' },
+  reservoir: PALETTE.roof.reservoir,
+  canopy: PALETTE.roof.canopy,
 };
 
 interface TileView {
@@ -108,9 +109,9 @@ export class GridRenderer {
     const alive = roof.unlocked && !roof.preview;
     const b = group(this.parent, `building-${roof.id}`, [roof.origin[0] + roof.width / 2, 0, roof.origin[2] + roof.depth / 2]);
     const H = roof.height - 0.02;
-    const wall = alive ? '#f1ede3' : '#9d978c';
+    const wall = alive ? PALETTE.building.wallAlive : PALETTE.building.wallDead;
     shape(b, 'box', wall, { pos: [0, H / 2, 0], scale: [roof.width + 0.3, H, roof.depth + 0.3], shadow: true });
-    const glass = alive ? '#9fd6e8' : '#4b4f54';
+    const glass = alive ? PALETTE.building.glassAlive : PALETTE.building.glassDead;
     for (let i = 0; i < 3; i++) {
       const y = H * (0.25 + i * 0.27);
       shape(b, 'box', glass, { pos: [0, y, roof.depth / 2 + 0.16], scale: [roof.width * 0.84, H * 0.11, 0.02] });
@@ -118,12 +119,12 @@ export class GridRenderer {
     }
     // Parapet around the roof edge.
     const top = roof.height + 0.12;
-    const pc = alive ? '#e2ddd0' : '#7f7b72';
+    const pc = alive ? PALETTE.building.parapetAlive : PALETTE.stone.shadow;
     shape(b, 'box', pc, { pos: [0, top, -roof.depth / 2 - 0.1], scale: [roof.width + 0.3, 0.24, 0.1] });
     shape(b, 'box', pc, { pos: [0, top, roof.depth / 2 + 0.1], scale: [roof.width + 0.3, 0.24, 0.1] });
     shape(b, 'box', pc, { pos: [-roof.width / 2 - 0.1, top, 0], scale: [0.1, 0.24, roof.depth + 0.3] });
     shape(b, 'box', pc, { pos: [roof.width / 2 + 0.1, top, 0], scale: [0.1, 0.24, roof.depth + 0.3] });
-    if (alive) for (let i = 0; i < 2; i++) shape(b, 'box', '#4f9a4a', { pos: [-roof.width / 2 + 0.6 + i * (roof.width - 1.2), H * 0.5, roof.depth / 2 + 0.17], scale: [0.14, H * 0.9, 0.03] });
+    if (alive) for (let i = 0; i < 2; i++) shape(b, 'box', PALETTE.leaf.ivy, { pos: [-roof.width / 2 + 0.6 + i * (roof.width - 1.2), H * 0.5, roof.depth / 2 + 0.17], scale: [0.14, H * 0.9, 0.03] });
   }
 
   view(id: string) {
@@ -213,13 +214,13 @@ export class GridRenderer {
         if (clean) {
           // Life finds the cracks: weeds and the odd tiny flower.
           const n = st >= 2 ? 3 : 2;
-          for (let i = 0; i < n; i++) add(shape(deco, 'cone', '#79a957', { pos: [r.range(-0.35, 0.35), 0.05, r.range(-0.35, 0.35)], scale: [0.05, 0.1, 0.05] }));
-          if (st >= 2 && t.variant % 2) add(shape(deco, 'sphere', r.pick(PALETTE.flower), { pos: [r.range(-0.3, 0.3), 0.08, r.range(-0.3, 0.3)], scale: 0.06 }));
+          for (let i = 0; i < n; i++) add(shape(deco, 'cone', PALETTE.lawn.sprout, { pos: [r.range(-0.35, 0.35), 0.05, r.range(-0.35, 0.35)], scale: [0.05, 0.1, 0.05] }));
+          if (st >= 2 && t.variant % 2) add(shape(deco, 'sphere', flowerPick(r.next()), { pos: [r.range(-0.3, 0.3), 0.08, r.range(-0.3, 0.3)], scale: 0.06 }));
         }
         break;
       }
       case 'prepared': {
-        setVColor(v.slab, 'box', PALETTE.soil);
+        setVColor(v.slab, 'box', PALETTE.ground.prepared);
         if (!t.occupantId) {
           const n = 3 + (t.variant % 3);
           for (let i = 0; i < n; i++) {
@@ -231,24 +232,24 @@ export class GridRenderer {
         break;
       }
       case 'growing': {
-        setVColor(v.slab, 'box', PALETTE.soil);
+        setVColor(v.slab, 'box', PALETTE.ground.growing);
         for (let i = 0; i < 5; i++) {
           const sp = add(group(deco, 'sprout', [r.range(-0.3, 0.3), 0, r.range(-0.3, 0.3)]));
-          shape(sp, 'cone', PALETTE.grassTuft[i % 3], { pos: [0, 0.06, 0], scale: [0.05, 0.12, 0.05] });
-          shape(sp, 'sphere', PALETTE.grassTuft[2], { pos: [0.03, 0.11, 0], scale: [0.06, 0.02, 0.04] });
+          shape(sp, 'cone', PALETTE.lawn.youngTuft[i % 3], { pos: [0, 0.06, 0], scale: [0.05, 0.12, 0.05] });
+          shape(sp, 'sphere', PALETTE.lawn.youngTuftTip[2], { pos: [0.03, 0.11, 0], scale: [0.06, 0.02, 0.04] });
         }
         break;
       }
       case 'restored': {
-        setVColor(v.slab, 'box', PALETTE.grass[t.variant % PALETTE.grass.length]);
+        setVColor(v.slab, 'box', grassTone(Math.max(1, t.bloom || 1), t.x, t.z));
         if (t.occupantId) break;
         if (!keepOld) {
           const tufts = 8 + (t.variant % 3);
           for (let i = 0; i < tufts; i++) {
             const h = r.range(0.09, 0.2);
-            add(shape(deco, 'cone', PALETTE.grassTuft[i % 3], { pos: [r.range(-0.44, 0.44), h / 2, r.range(-0.44, 0.44)], scale: [0.055, h, 0.055], rot: [r.range(-12, 12), 0, r.range(-12, 12)] }));
+            add(shape(deco, 'cone', PALETTE.lawn.tuft[i % 3], { pos: [r.range(-0.44, 0.44), h / 2, r.range(-0.44, 0.44)], scale: [0.055, h, 0.055], rot: [r.range(-12, 12), 0, r.range(-12, 12)] }));
           }
-          if (t.variant % 4 === 0) add(shape(deco, 'sphere', '#9be07a', { pos: [r.range(-0.3, 0.3), 0.02, r.range(-0.3, 0.3)], scale: [0.2, 0.05, 0.2] }));
+          if (t.variant % 4 === 0) add(shape(deco, 'sphere', PALETTE.lawn.clover, { pos: [r.range(-0.3, 0.3), 0.02, r.range(-0.3, 0.3)], scale: [0.2, 0.05, 0.2] }));
         }
         const fr = new VRng(t.variant * 31 + 5);
         if (t.bloom >= 2 && (!keepOld || prevBloom < 2)) {
@@ -258,20 +259,22 @@ export class GridRenderer {
             const f = add(group(deco, 'flower', [fr.range(-0.36, 0.36), 0, fr.range(-0.36, 0.36)]));
             shape(f, 'cylinder', PALETTE.stem, { pos: [0, h / 2, 0], scale: [0.02, h, 0.02] });
             switch ((t.variant + i) % 4) {
-              case 0: // cosmos
-                shape(f, 'sphere', fr.pick(PALETTE.flower), { pos: [0, h, 0], scale: [0.11, 0.07, 0.11] });
-                shape(f, 'sphere', PALETTE.flowerCore, { pos: [0, h + 0.03, 0], scale: 0.04 });
+              case 0: { // cosmos, in the bed's drift colour
+                const petal = fr.next() < 0.8 ? flowerAt(t.x, t.z, 0) : flowerPick(fr.next());
+                shape(f, 'sphere', petal, { pos: [0, h, 0], scale: [0.11, 0.07, 0.11] });
+                shape(f, 'sphere', flowerCentre(petal), { pos: [0, h + 0.03, 0], scale: 0.04 });
                 break;
+              }
               case 1: // daisy
-                shape(f, 'sphere', '#ffffff', { pos: [0, h, 0], scale: [0.13, 0.025, 0.13] });
-                shape(f, 'sphere', '#ffc93c', { pos: [0, h + 0.015, 0], scale: [0.05, 0.03, 0.05] });
+                shape(f, 'sphere', PALETTE.flowers.white, { pos: [0, h, 0], scale: [0.13, 0.025, 0.13] });
+                shape(f, 'sphere', PALETTE.flowers.sunflower, { pos: [0, h + 0.015, 0], scale: [0.05, 0.03, 0.05] });
                 break;
               case 2: // lavender spike
-                for (let k = 0; k < 4; k++) shape(f, 'sphere', k % 2 ? '#9a7be0' : '#b48cff', { pos: [0, h + k * 0.045, 0], scale: 0.055 - k * 0.008 });
+                for (let k = 0; k < 4; k++) shape(f, 'sphere', k % 2 ? PALETTE.flowers.lavenderDeep : PALETTE.flowers.lavender, { pos: [0, h + k * 0.045, 0], scale: 0.055 - k * 0.008 });
                 break;
               default: // tulip
-                shape(f, 'sphere', fr.pick(['#ff6b6b', '#ff9a5a', '#ff7eb6']), { pos: [0, h + 0.02, 0], scale: [0.07, 0.1, 0.07] });
-                shape(f, 'sphere', '#5fb24a', { pos: [0.03, h * 0.45, 0], scale: [0.06, 0.02, 0.03], rot: [0, 0, 40] });
+                shape(f, 'sphere', fr.pick([PALETTE.flowers.red, PALETTE.flowers.orange, PALETTE.flowers.pink]), { pos: [0, h + 0.02, 0], scale: [0.07, 0.1, 0.07] });
+                shape(f, 'sphere', PALETTE.leaf.mid, { pos: [0.03, h * 0.45, 0], scale: [0.06, 0.02, 0.03], rot: [0, 0, 40] });
             }
             v.sway.push(f);
           }
@@ -284,45 +287,45 @@ export class GridRenderer {
             shape(g, 'cylinder', PALETTE.trunk, { pos: [0, 0.22, 0], scale: [0.07, 0.44, 0.07], shadow: true });
             shape(g, 'sphere', PALETTE.shrub[0], { pos: [0, 0.55, 0], scale: [0.48, 0.42, 0.48], shadow: true });
             shape(g, 'sphere', PALETTE.shrub[1], { pos: [0.12, 0.72, 0.05], scale: [0.3, 0.26, 0.3], shadow: true });
-            if (t.variant % 2) shape(g, 'sphere', '#ff9fb8', { pos: [-0.16, 0.62, 0.12], scale: 0.08 });
+            if (t.variant % 2) shape(g, 'sphere', PALETTE.flowers.rose, { pos: [-0.16, 0.62, 0.12], scale: 0.08 });
           } else if (kind === 3) {
             // sunflowers
             for (let i = 0; i < 3; i++) {
               const h = 0.42 + i * 0.08;
               const sx = (i - 1) * 0.14;
-              shape(g, 'cylinder', '#4f9a3c', { pos: [sx, h / 2, (i % 2) * 0.08], scale: [0.03, h, 0.03], shadow: true });
-              shape(g, 'sphere', '#5fb24a', { pos: [sx + 0.05, h * 0.5, (i % 2) * 0.08], scale: [0.11, 0.025, 0.06], rot: [0, 0, 30] });
+              shape(g, 'cylinder', PALETTE.leaf.stalk, { pos: [sx, h / 2, (i % 2) * 0.08], scale: [0.03, h, 0.03], shadow: true });
+              shape(g, 'sphere', PALETTE.leaf.mid, { pos: [sx + 0.05, h * 0.5, (i % 2) * 0.08], scale: [0.11, 0.025, 0.06], rot: [0, 0, 30] });
               const head = group(g, 'head', [sx, h, (i % 2) * 0.08]);
               head.setLocalEulerAngles(-35, 45, 0); // faces the camera
-              shape(head, 'cylinder', '#ffc93c', { scale: [0.19, 0.02, 0.19], shadow: true });
-              shape(head, 'cylinder', '#6b4423', { pos: [0, 0.012, 0], scale: [0.09, 0.02, 0.09] });
+              shape(head, 'cylinder', PALETTE.flowers.sunflower, { scale: [0.19, 0.02, 0.19], shadow: true });
+              shape(head, 'cylinder', PALETTE.flowers.sunflowerCore, { pos: [0, 0.012, 0], scale: [0.09, 0.02, 0.09] });
             }
           } else if (kind === 4) {
             // lavender bed
             for (let i = 0; i < 7; i++) {
               const sp = group(g, 'spike', [fr.range(-0.3, 0.3), 0, fr.range(-0.3, 0.3)]);
               const h = fr.range(0.2, 0.32);
-              shape(sp, 'cylinder', '#6c9a5a', { pos: [0, h / 2, 0], scale: [0.02, h, 0.02] });
-              for (let k = 0; k < 4; k++) shape(sp, 'sphere', k % 2 ? '#8f6fd6' : '#b48cff', { pos: [0, h + k * 0.05, 0], scale: 0.065 - k * 0.01 });
+              shape(sp, 'cylinder', PALETTE.flowers.stemSoft, { pos: [0, h / 2, 0], scale: [0.02, h, 0.02] });
+              for (let k = 0; k < 4; k++) shape(sp, 'sphere', k % 2 ? PALETTE.flowers.purple : PALETTE.flowers.lavender, { pos: [0, h + k * 0.05, 0], scale: 0.065 - k * 0.01 });
             }
           } else {
             for (let i = 0; i < 3; i++) {
               const s = fr.range(0.24, 0.34);
               shape(g, 'sphere', PALETTE.shrub[i], { pos: [fr.range(-0.12, 0.12), s / 2.2, fr.range(-0.12, 0.12)], scale: [s, s * 0.85, s], shadow: true });
             }
-            if (kind === 2) for (let i = 0; i < 4; i++) shape(g, 'sphere', fr.pick(PALETTE.flower), { pos: [fr.range(-0.15, 0.15), 0.26 + fr.range(0, 0.06), fr.range(-0.15, 0.15)], scale: 0.07 });
+            if (kind === 2) for (let i = 0; i < 4; i++) shape(g, 'sphere', flowerPick(fr.next()), { pos: [fr.range(-0.15, 0.15), 0.26 + fr.range(0, 0.06), fr.range(-0.15, 0.15)], scale: 0.07 });
           }
           v.sway.push(g);
         }
         if (t.bloom >= 4 && (!keepOld || prevBloom < 4)) {
           // Phase 4 E05: Radiant: luminous golden flowers and a soft glow disk.
           const g = add(group(deco, 'radiant', [0, 0, 0]));
-          shape(g, 'cylinder', '#fff1b8', { pos: [0, 0.005, 0], scale: [0.86, 0.01, 0.86] });
+          shape(g, 'cylinder', PALETTE.flowers.radiantDisc, { pos: [0, 0.005, 0], scale: [0.86, 0.01, 0.86] });
           for (let i = 0; i < 4; i++) {
             const h = fr.range(0.3, 0.46);
             const f = group(g, 'gold', [fr.range(-0.34, 0.34), 0, fr.range(-0.34, 0.34)]);
             shape(f, 'cylinder', PALETTE.stem, { pos: [0, h / 2, 0], scale: [0.02, h, 0.02] });
-            shape(f, 'sphere', i % 2 ? '#ffe066' : '#fff6c2', { pos: [0, h, 0], scale: [0.13, 0.1, 0.13] });
+            shape(f, 'sphere', PALETTE.flowers.radiant[i % 2 ? 0 : 1], { pos: [0, h, 0], scale: [0.13, 0.1, 0.13] });
             v.sway.push(f);
           }
         }

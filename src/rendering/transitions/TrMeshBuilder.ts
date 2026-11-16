@@ -121,6 +121,8 @@ export class TrMeshBuilder {
   private idx = new Grow(new Uint32Array(1 << 12));
   /** 0 = full colour … 1 = grey (fog), as in the chunk builder */
   grey = 0;
+  /** tip colour (the chunk builder shades tuft tips); transition props draw in their base colour for a few seconds */
+  tip = '';
   pen: Pen = { t0: -1e6, d: 1, mode: 0, inA: 0, inB: 0, outA: 2, outB: 3, groundY: 0 };
   /** surface data for the next slab(s) (mode 3) */
   surf?: SurfaceData;

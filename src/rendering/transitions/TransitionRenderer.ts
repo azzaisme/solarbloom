@@ -12,6 +12,8 @@ import { PALETTE } from '../Materials';
 export interface Sink {
   add(type: 'box' | 'sphere' | 'cylinder' | 'cone' | 'capsule' | 'sphereHi', hex: string, p: [number, number, number], s: [number, number, number] | number): void;
   grey: number;
+  /** a tip colour for the next primitives' upper vertices (grass tufts); '' = none */
+  tip?: string;
 }
 /** Something tree/shrub geometry can be stamped into. */
 export interface GeoSink {

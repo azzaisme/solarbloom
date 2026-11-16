@@ -19,15 +19,15 @@ import type { Vfx } from './Vfx';
 
 const SHELL = PALETTE.shell;
 const GOLD = PALETTE.gold;
-const GLASS = '#bfe8f2';
-const PANEL = '#2b4a7a';
-const TREAD = '#5b5f66';
+const GLASS = PALETTE.glass;
+const PANEL = PALETTE.panel;
+const TREAD = PALETTE.facadeDark;
 
 /** The dock (built by MachineVisuals as the machine's body). */
 export function cultivatorDock(b: pc.Entity) {
   shape(b, 'box', mat(SHELL), { pos: [0, 0.06, 0], scale: [0.9, 0.12, 0.9], shadow: true });
   shape(b, 'box', mat(GOLD, { metal: 0.6, gloss: 0.75 }), { pos: [0, 0.125, 0], scale: [0.92, 0.012, 0.92] });
-  shape(b, 'box', mat('#6b8f4e'), { pos: [0, 0.13, 0], scale: [0.7, 0.01, 0.7] });
+  shape(b, 'box', mat(PALETTE.moss), { pos: [0, 0.13, 0], scale: [0.7, 0.01, 0.7] });
   // charging arch with a canopy
   for (const x of [-0.38, 0.38]) shape(b, 'cylinder', mat(SHELL), { pos: [x, 0.42, -0.36], scale: [0.06, 0.6, 0.06], shadow: true });
   shape(b, 'box', mat(PANEL, { gloss: 0.8 }), { pos: [0, 0.74, -0.2], scale: [0.86, 0.03, 0.46], rot: [18, 0, 0], shadow: true });
@@ -84,7 +84,7 @@ export class CultivatorVisuals {
     const seeds = group(body, 'seeds');
     for (const x of hoppers) {
       shape(body, 'cylinder', mat(GLASS, { gloss: 0.9, opacity: 0.45 }), { pos: [x, 0.98, -0.2], scale: [0.3, 0.36, 0.3] });
-      shape(seeds, 'cylinder', mat('#c9a35a'), { pos: [x, 0.92, -0.2], scale: [0.25, 0.24, 0.25] });
+      shape(seeds, 'cylinder', mat(PALETTE.gold), { pos: [x, 0.92, -0.2], scale: [0.25, 0.24, 0.25] });
     }
     // sun-tracking canopy on a mast
     shape(body, 'cylinder', mat(SHELL), { pos: [0, 1.15, 0.12], scale: [0.06, 0.5, 0.06] });
@@ -102,13 +102,13 @@ export class CultivatorVisuals {
     const n = 4 * w;
     for (let k = 0; k < n; k++) {
       const x = (k / (n - 1) - 0.5) * 0.85 * w;
-      shape(tines, 'cone', mat('#8d8f93', { metal: 0.5, gloss: 0.6 }), { pos: [x, -0.1, 0], scale: [0.07, 0.22, 0.07], rot: [180 + (k % 2) * 30, 0, 0] });
+      shape(tines, 'cone', mat(PALETTE.parapet, { metal: 0.5, gloss: 0.6 }), { pos: [x, -0.1, 0], scale: [0.07, 0.22, 0.07], rot: [180 + (k % 2) * 30, 0, 0] });
     }
     // rear moss roller
     const roller = group(body, 'roller', [0, 0.16, -0.68]);
-    shape(roller, 'cylinder', mat('#5f8f3f'), { scale: [0.32, 0.8 * Math.max(1, w * 0.8), 0.32], rot: [0, 0, 90], shadow: true });
+    shape(roller, 'cylinder', mat(PALETTE.leafVein), { scale: [0.32, 0.8 * Math.max(1, w * 0.8), 0.32], rot: [0, 0, 90], shadow: true });
     // working glow
-    const glow = shape(body, 'sphere', mat('#9bffb0', { emissive: '#9bffb0', emissiveIntensity: 1.4 }), { pos: [0, 0.32, 0.72], scale: [0.6 * w, 0.08, 0.16] });
+    const glow = shape(body, 'sphere', mat(PALETTE.coreGlow, { emissive: PALETTE.coreGlow, emissiveIntensity: 1.4 }), { pos: [0, 0.32, 0.72], scale: [0.6 * w, 0.08, 0.16] });
     return { root, body, canopy, tines, roller, seeds, glow, key: `${w}|${lv('cultSpeed') > 0}|${lv('cultSeed')}|${lv('cultRoute')}`, lastTrail: 0, dust: 0 };
   }
 

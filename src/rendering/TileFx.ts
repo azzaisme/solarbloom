@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { SLAB_TOP } from './SceneBuilder';
+import { PALETTE } from './Palette';
 
 interface Flash {
   e: pc.Entity;
@@ -61,11 +62,11 @@ export class TileFx {
     this.frameMesh = this.frameMeshBuild();
     this.quad.incRefCount(); // shared by pooled flashes; never let the engine free it
     this.frameMesh.incRefCount();
-    this.glowMat = additive('#ffe27a', 0.16);
+    this.glowMat = additive(PALETTE.glow.amber, 0.16);
     this.glow = new pc.Entity('glow');
     this.root.addChild(this.glow);
     for (let i = 0; i < 48; i++) {
-      const m = additive('#ffffff', 0);
+      const m = additive(PALETTE.pure.white, 0);
       const e = new pc.Entity('flash');
       e.addComponent('render', { meshInstances: [new pc.MeshInstance(this.quad, m)], castShadows: false, receiveShadows: false });
       e.enabled = false;
@@ -182,7 +183,7 @@ export class TileFx {
   }
 
   /** Persistent gold outline on the tile that started a chain, until released. */
-  hold(key: string, t: TileData, color = '#ffcf4a') {
+  hold(key: string, t: TileData, color = PALETTE.trim.amber) {
     const f = this.take();
     f.active = true;
     f.hold = true;
