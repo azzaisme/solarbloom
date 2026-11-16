@@ -67,5 +67,11 @@ export const LOOK = {
     /** Seconds for the mood to follow a change in restoration. */
     follow: 2.5,
   },
+  /**
+   * Look 1.8: depth of field (High tier). Focus is on the camera's goal point; the far blur starts `blurFrom` world
+   * units beyond it (where the haze is already strong, so blur and haze rise together) and is complete one
+   * `blurRamp` further. Near blur is off, so nothing in front of the focus is ever blurred.
+   */
+  dof: { blurFrom: 9, blurRamp: 18, blurRadius: 3, blurRings: 3, blurRingPoints: 4 },
   vignette: { intensity: 0.32, inner: 0.55, outer: 1.35, curvature: 0.6, color: '#2a1d14' },
 };

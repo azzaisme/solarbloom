@@ -51,11 +51,16 @@ export class LookController {
     this.app.scene.exposure = LOOK.exposure;
     this.rimColour = color(LOOK.rim.color);
     this.scene.sunDirection(this.toSun).mulScalar(-1);
-    this.post.apply({ post: true, bloom: true, ssao: true, samples: 4 }, this.app.scene.fog.color);
+    this.post.apply({ post: true, bloom: true, ssao: true, dof: true, samples: 4 }, this.app.scene.fog.color);
   }
 
   update(dt: number) {
-    this.post.follow(this.camera.viewHeight);
+    const cam = this.camera;
+    const g = cam.goalPoint;
+    const p = cam.entity.getPosition();
+    const fwd = cam.entity.forward;
+    const focus = (g.x - p.x) * fwd.x + (g.y - p.y) * fwd.y + (g.z - p.z) * fwd.z;
+    this.post.follow(cam.viewHeight, focus);
     const G = LOOK.grade;
     this.mood += (this.moodTarget - this.mood) * (1 - Math.exp(-dt / Math.max(0.01, G.follow)));
     if (this.highContrast) this.post.grade(G.contrast, G.contrast, 0, 0);

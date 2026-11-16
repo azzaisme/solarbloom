@@ -17,13 +17,14 @@ export interface PostSpec {
   post: boolean;
   bloom: boolean;
   ssao: boolean;
+  dof: boolean;
   /** MSAA samples of the HDR scene target (the canvas's own antialiasing doesn't apply to it) */
   samples: number;
 }
 
 /**
  * Look 1.5: the CameraFrame post-processing stack on the main camera, the single home for post effects: the
- * scene renders to an HDR target, SSAO, bloom, colour grading and vignette (and later depth of field) run on it, and
+ * scene renders to an HDR target, SSAO, bloom, depth of field, colour grading and vignette run on it, and
  * the compose pass applies exposure, tone mapping and sRGB output. With post off, the camera itself tone-maps,
  * so the image keeps the same curve.
  *
@@ -77,15 +78,34 @@ export class PostFx {
     f.ssao.minAngle = A.minAngle;
     f.ssao.samples = A.samples;
     f.ssao.blurEnabled = true;
+    const D = LOOK.dof;
+    f.dof.enabled = spec.dof;
+    f.dof.nearBlur = false;
+    f.dof.highQuality = false;
+    f.dof.blurRadius = D.blurRadius;
+    f.dof.blurRings = D.blurRings;
+    f.dof.blurRingPoints = D.blurRingPoints;
     f.update();
   }
 
-  /** Per frame, before grade(): effect parameters that follow the camera (SSAO radius from the view height). */
-  follow(viewHeight: number) {
+  /**
+   * Per frame, before grade(): effect parameters that follow the camera. SSAO's radius scales with the world height
+   * in view; depth of field focuses at `focus` (view depth of the camera's goal point) and blurs only beyond it.
+   */
+  follow(viewHeight: number, focus: number) {
     const f = this.frame;
-    if (!f || f.ssao.type === pc.SSAOTYPE_NONE) return;
-    const A = LOOK.ssao;
-    f.ssao.radius = Math.min(A.maxRadius, Math.max(A.minRadius, A.radiusPerView * viewHeight));
+    if (!f) return;
+    if (f.ssao.type !== pc.SSAOTYPE_NONE) {
+      const A = LOOK.ssao;
+      f.ssao.radius = Math.min(A.maxRadius, Math.max(A.minRadius, A.radiusPerView * viewHeight));
+    }
+    if (f.dof.enabled) {
+      // CameraFrame's far blur starts at focus + range / 2 and is full by focus + 1.5 × range.
+      const D = LOOK.dof;
+      const range = D.blurRamp;
+      f.dof.focusRange = range;
+      f.dof.focusDistance = focus + D.blurFrom - range / 2;
+    }
   }
 
   private tint = new pc.Color();

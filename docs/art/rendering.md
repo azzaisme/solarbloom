@@ -73,3 +73,8 @@ offscreen target), then the effects run, then the compose pass applies exposure,
 - **Live tuning:** `LOOK` is read every frame for the grade, vignette, SSAO and rim. In a dev build,
   `solarbloom.look.cfg.grade.warm.saturation = 1.2` applies at once; light and bloom changes need
   `solarbloom.look.apply()`. No rebuild either way.
+- **Depth of field (High tier):** far blur only (near blur off, so nothing between the camera and the focus is
+  ever blurred). Focus is the view depth of the camera's goal point; blur starts 9 world units beyond it, where
+  the linear haze is already strong, and is complete 18 units further, so haze and blur rise together. The
+  playable area around the goal stays sharp at every zoom; the blur reaches the hazy, unrevealed city at the top
+  of the view. Radius 3, 3 rings of 4 points, the cheap (not high-quality) path.
