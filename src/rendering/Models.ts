@@ -105,6 +105,38 @@ export class ModelLibrary {
     return far && m.parts[1].length ? m.parts[1] : m.parts[0];
   }
 
+  /**
+   * A model's triangles in model space (near version), each with its palette key (the `pal_<key>` material it
+   * uses): for code that bakes models into its own mesh, like the skyline. Empty until loaded.
+   */
+  triangles(name: string): { pos: number[]; keys: string[] } {
+    const pos: number[] = [];
+    const keys: string[] = [];
+    const v = new pc.Vec3();
+    for (const part of this.parts(name)) {
+      const vb = part.mesh.vertexBuffer;
+      const ib = part.mesh.indexBuffer[0];
+      const prim = part.mesh.primitive[0];
+      const el = vb?.format.elements.find((e) => e.name === pc.SEMANTIC_POSITION);
+      if (!vb || !el || !prim) continue;
+      const f32 = new Float32Array(vb.storage);
+      const stride = el.stride / 4;
+      const off = el.offset / 4;
+      const idx = ib ? (ib.format === pc.INDEXFORMAT_UINT32 ? new Uint32Array(ib.storage) : new Uint16Array(ib.storage)) : undefined;
+      const key = part.material.name.replace(/^pal_/, '').replace(/\.\d+$/, '');
+      for (let i = prim.base; i + 2 < prim.base + prim.count; i += 3) {
+        for (let k = 0; k < 3; k++) {
+          const j = idx ? idx[i + k] : i + k;
+          v.set(f32[j * stride + off], f32[j * stride + off + 1], f32[j * stride + off + 2]);
+          part.local.transformPoint(v, v);
+          pos.push(v.x, v.y, v.z);
+        }
+        keys.push(key);
+      }
+    }
+    return { pos, keys };
+  }
+
   /** A fresh entity of the whole model (moving parts are child entities, found by name). */
   instantiate(name: string, far = false, shadows = true): pc.Entity | undefined {
     const m = this.models.get(name);

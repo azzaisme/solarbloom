@@ -64,9 +64,12 @@ const CLUTTER_MODEL: Partial<Record<ClutterKind, [string, number]>> = {
   lantern: ['lamp-post', 0.21],
   niche: ['wall-niche', 0.2],
 };
-/** Clutter as a model if it can be, else procedurally. */
+/** The banner pole model's scale: its crossbar (2.3 m) lands where the procedural pole's does (0.92). */
+const BANNER_POLE = 0.4;
+/** Clutter as a model if it can be, else procedurally. A restored pot is the sandstone planter pot; every fourth vent a satellite dish. */
 function clutter(c: DressCtx, kind: ClutterKind, alive: boolean, variant: number, x: number, y: number, z: number, rot: number, scale: number) {
-  const m = kind === 'pot' ? (alive ? undefined : (['broken-pot', 0.3] as [string, number])) : CLUTTER_MODEL[kind];
+  const m: [string, number] | undefined =
+    kind === 'pot' ? (alive ? ['planter-pot', 0.2] : ['broken-pot', 0.3]) : kind === 'vent' && ((variant % 4) + 4) % 4 === 0 ? ['satellite-dish', 0.28] : CLUTTER_MODEL[kind];
   if (m && c.model?.(m[0], x, y, z, rot, m[1] * scale)) return;
   c.b.addGeo(clutterGeo(kind, alive, variant, 1), x, y, z, rot, scale);
 }
@@ -337,7 +340,15 @@ export function areaEdges(c: DressCtx, t: TileData, top: number) {
     const h = hash01(t.x, t.z, 101 + dx * 3 + dz);
     if (openEdge(t.feature) || openEdge(n?.feature) || (t.feature === 'paving' && n?.feature === 'paving' && !t.blocked)) {
       // an entrance: banner poles either side in restored areas
-      if (alive && h < 0.5) c.fb.add(bannerGeo('pole', true, t.x + t.z, 1), ox + fr.tx * 0.08, top, oz + fr.tz * 0.08, fr.rot, 1);
+      if (alive && h < 0.5) {
+        const px = ox + fr.tx * 0.08, pz = oz + fr.tz * 0.08;
+        // Look 3.19: the hand-built pole (its crossbar on +x, like the procedural one), with the swaying cloth hung
+        // from the bar
+        if (c.model?.('banner-pole', px, top, pz, fr.rot, BANNER_POLE)) {
+          const cx = 0.17;
+          c.fb.add(bannerGeo('rail', true, t.x + t.z, 1), px + Math.cos(fr.rot) * cx, top + 2.3 * BANNER_POLE - 0.012, pz - Math.sin(fr.rot) * cx, fr.rot, 1);
+        } else c.fb.add(bannerGeo('pole', true, t.x + t.z, 1), px, top, pz, fr.rot, 1);
+      }
       continue;
     }
     const kind = RAIL_KIND[c.areaType] ?? 'pipe';

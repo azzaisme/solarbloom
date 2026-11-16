@@ -58,6 +58,9 @@ interface MachineView {
   blooms?: pc.Entity;
   /** Look 3.19: the hand-built model standing in for the procedural body (when loaded) */
   model?: pc.Entity;
+  /** Mother Tree: its procedural planter ring (the collar model replaces it), and how far the tree was raised to stand in the collar */
+  planter?: pc.Entity;
+  treeLift?: number;
 }
 
 /**
@@ -72,6 +75,8 @@ const MACHINE_MODELS: Record<string, [string, number]> = {
   reservoirGarden: ['reservoir-basin', 0.55],
   relay: ['bloom-relay', 0.72],
 };
+/** The Mother Tree's collar model: its scale (the planter fits the procedural ring, radius 0.85) and planter top (model metres). */
+const MotherCollar = { scale: 1.12, top: 0.84 };
 const LANDMARK_MODELS: Record<string, [string, number]> = {
   fountain: ['dry-fountain', 0.56],
   lock: ['lock-gate', 0.62],
@@ -788,9 +793,11 @@ export class MachineVisuals {
   private motherTree(v: MachineView) {
     const b = v.body;
     // Round white planter ring, a twisting trunk, layered canopy and charge orbs.
-    part(b, rcyl(0.85, 0, 0.2, 0.05, 0.01, 28), cream(), { shadow: true });
-    part(b, rcyl(0.855, 0.08, 0.094, 0.005, 0.005, 28), creamSeam(), {});
-    part(b, rcyl(0.76, 0.19, 0.215, 0.01, 0, 24), mat(PALETTE.soil), {});
+    const pl = group(b, 'planter');
+    part(pl, rcyl(0.85, 0, 0.2, 0.05, 0.01, 28), cream(), { shadow: true });
+    part(pl, rcyl(0.855, 0.08, 0.094, 0.005, 0.005, 28), creamSeam(), {});
+    part(pl, rcyl(0.76, 0.19, 0.215, 0.01, 0, 24), mat(PALETTE.soil), {});
+    v.planter = pl;
     const trunk = latheAuto('motherTrunk', [[0.19, 0.18], [0.17, 0.45], [0.15, 0.8], [0.13, 1.15], [0.1, 1.45], [0.08, 1.6]], 10);
     part(b, trunk, mat(PALETTE.trunk), { rot: [3, 0, 4], shadow: true });
     for (let r = 0; r < 4; r++) {
@@ -919,6 +926,7 @@ export class MachineVisuals {
    */
   private applyModel(v: MachineView) {
     if (!MODELS) return;
+    if (v.m.type === 'motherTree') return this.motherCollar(v);
     const pick = v.m.type === 'core' ? LANDMARK_MODELS[this.landmarkKind(v.m)] : MACHINE_MODELS[v.m.type];
     if (!pick) return;
     const e = MODELS.instantiate(pick[0]);
@@ -952,6 +960,29 @@ export class MachineVisuals {
     e.setLocalScale(pick[1], pick[1], pick[1]);
     v.body.addChild(e);
     v.model = e;
+  }
+
+  /**
+   * Look 3.19: the Mother Tree's sandstone planter with its brass collar (the spec's "planter base and collar only";
+   * the tree stays procedural). The planter is taller than the procedural ring, so the tree, its orbs and its
+   * resonance canopy are raised to grow out of the collar, and the charge light moves to the planter's front.
+   */
+  private motherCollar(v: MachineView) {
+    const e = v.planter && MODELS!.instantiate('mother-tree-collar');
+    if (!e || !v.planter) return;
+    const S = MotherCollar.scale;
+    v.planter.enabled = false;
+    e.setLocalScale(S, S, S);
+    v.body.addChild(e);
+    v.model = e;
+    const lift = MotherCollar.top * S - 0.2;
+    v.treeLift = lift;
+    for (const c of v.body.children as pc.Entity[]) {
+      if (c === v.planter || c === e || c === v.extras || c === v.light) continue;
+      const p = c.getLocalPosition();
+      c.setLocalPosition(p.x, p.y + lift, p.z);
+    }
+    v.light?.setLocalPosition(0, 0.46 * S, 0.76 * S);
   }
 
   /** Height of a model entity's meshes (local space, unscaled). */
@@ -1407,7 +1438,7 @@ export class MachineVisuals {
       // Resonance: a wider canopy and glowing gold lanterns (counts capped: each level still adds, and spreads wider).
       const lvl = L('treeResonance');
       if (lvl > 0 && v.canopy) {
-        const c = group(ex, 'canopyPlus', [0, 1.55, 0]);
+        const c = group(ex, 'canopyPlus', [0, 1.55 + (v.treeLift ?? 0), 0]);
         const lumps = Math.min(4 * lvl, 4 + 2 * lvl);
         for (let i = 0; i < lumps; i++) {
           const a = (i / lumps) * Math.PI * 2;
