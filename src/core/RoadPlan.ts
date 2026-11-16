@@ -2,7 +2,7 @@ import { AREA_TYPES, CITY_GEN, PARK_LAYOUT, type AreaType } from '../data/city';
 import { areaMapFor, PARK, type AreaMap } from './Areas';
 import { arterialAcross, type ArterialRun, type ChunkEdge } from './Arterials';
 import { CHUNK } from './Hash';
-import { landmarkKept, rasterArea, type AreaRaster, type RoadCell } from './RoadRaster';
+import { canalCell, landmarkKept, rasterArea, type AreaRaster, type RoadCell } from './RoadRaster';
 import { hashString, tileRandom } from './Hash';
 
 export { arterialAcross, arterialAt, arterialsInChunk, type ArterialRun, type ChunkEdge } from './Arterials';
@@ -210,7 +210,7 @@ export class RoadPlan {
     return { edge: first, offset: want, width };
   }
 
-  /** Are a gate's cells, `width` deep into both chunks, clear of both areas' landmarks and roofs? */
+  /** Are a gate's cells, `width` deep into both chunks, clear of both areas' landmarks and roofs (and canals)? */
   private gateClear(e: ChunkEdge, offset: number, width: number): boolean {
     for (const [cx, cz, inward] of [
       [e.cx, e.cz, -1],
@@ -226,6 +226,8 @@ export class RoadPlan {
           const x = cx * CHUNK + (e.dir === 'e' ? across : along);
           const z = cz * CHUNK + (e.dir === 'e' ? along : across);
           if (landmarkKept(x, z, a.landmark[0], a.landmark[1]) || this.map.underRoof(id, x, z)) return false;
+          // Crossing an east/west edge runs along x, so it must not sit on a canal (canals run along x).
+          if (e.dir === 'e' && canalCell(this, x, z)) return false;
         }
     }
     return true;

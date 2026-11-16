@@ -155,13 +155,25 @@ export function rasterArea(plan: RoadPlan, id: string): AreaRaster {
       base[i] = c;
     }
   const free = (x: number, z: number) => inArea(x, z) && !blockedAt[idx(x, z)];
-  // Brush fits (w×w from the cell, growing +x/+z) for widths 1 and 2.
-  const fits = [new Uint8Array(0), new Uint8Array(W * D), new Uint8Array(W * D)];
+  // The brush: a route's centre cell plus, for a 2-wide road, the cell beside it across its heading (+z when moving
+  // along x, +x when moving along z). Turns fill the 2×2 corner. Nothing is painted ahead of the centre, so a
+  // route ends flush on the road it joins (no overhang).
+  // fitsH / fitsV: does the brush fit for a move along x / along z (index by width).
+  const fitsH = [new Uint8Array(0), new Uint8Array(W * D), new Uint8Array(W * D)];
+  const fitsV = [new Uint8Array(0), new Uint8Array(W * D), new Uint8Array(W * D)];
+  // Canals run along x: a brush touching water may only be entered moving along z, so roads cross canals
+  // straight over as bridges and never run along them.
+  const wetAt = (x: number, z: number) => inArea(x, z) && water[idx(x, z)] === 1;
+  const wetH = [new Uint8Array(0), new Uint8Array(W * D), new Uint8Array(W * D)];
   for (let z = z0; z <= z1; z++)
     for (let x = x0; x <= x1; x++) {
       const i = idx(x, z);
-      fits[1][i] = free(x, z) ? 1 : 0;
-      fits[2][i] = fits[1][i] && free(x + 1, z) && free(x, z + 1) && free(x + 1, z + 1) ? 1 : 0;
+      const f = free(x, z) ? 1 : 0;
+      fitsH[1][i] = fitsV[1][i] = f;
+      fitsH[2][i] = f && free(x, z + 1) ? 1 : 0;
+      fitsV[2][i] = f && free(x + 1, z) ? 1 : 0;
+      wetH[1][i] = wetAt(x, z) ? 1 : 0;
+      wetH[2][i] = wetH[1][i] || wetAt(x, z + 1) ? 1 : 0;
     }
 
   /** -1 none, else RANK of the tier painted there */
@@ -232,35 +244,34 @@ export function rasterArea(plan: RoadPlan, id: string): AreaRaster {
   if (connected) for (let i = 0; i < W * D; i++) if (plaza[i]) network[i] = 1;
   const turn = { grid: 2.5, ring: 2.5, waterside: 1.5, skirt: 1, curve: 0.3 }[style];
   const cost = (i: number) => (network[i] || tierAt[i] === RANK.arterial ? 0.35 + (base[i] - 1) * 0.35 : base[i]);
-  const isGoal = (x: number, z: number, w: number) => {
-    for (let j = 0; j < w; j++)
-      for (let i = 0; i < w; i++) {
-        const cx = x + i;
-        const cz = z + j;
-        if (!inArea(cx, cz)) continue;
-        const k = idx(cx, cz);
-        if (connected ? network[k] : plaza[k]) return true; // only the first route ends at the plaza: one spoke, no gaps
-      }
-    return false;
-  };
   for (const comp of comps) {
     const tier = comp.tier;
     const w = CITY_GEN.roads.width[tier];
     const path = route(comp.cells, w);
     if (path)
-      for (const i of path) {
+      path.forEach((node, k) => {
+        const i = node >> 2;
+        const h = node & 3;
         const x = x0 + (i % W);
         const z = z0 + Math.floor(i / W);
-        for (let j = 0; j < w; j++)
-          for (let k = 0; k < w; k++)
-            if (free(x + k, z + j)) {
-              paint(x + k, z + j, tier);
-              network[idx(x + k, z + j)] = 1;
-            }
-      }
+        const cells: [number, number][] = [[x, z]];
+        if (w === 2) {
+          const next = path[k + 1];
+          const turning = next !== undefined && (next & 3) >> 1 !== h >> 1;
+          if (h < 2 || turning) cells.push([x, z + 1]);
+          if (h >= 2 || turning) cells.push([x + 1, z]);
+          if (turning) cells.push([x + 1, z + 1]);
+        }
+        for (const [cx, cz] of cells)
+          if (free(cx, cz)) {
+            paint(cx, cz, tier);
+            network[idx(cx, cz)] = 1;
+          }
+      });
     for (const i of comp.cells) network[i] = 1;
     connected = true;
   }
+
   const out: AreaRaster = new Map();
   for (let i = 0; i < W * D; i++) {
     if (tierAt[i] < 0) continue;
@@ -268,7 +279,7 @@ export function rasterArea(plan: RoadPlan, id: string): AreaRaster {
   }
   return out;
 
-  /** Least-cost path (cells × heading) from any start to a goal; brush of w×w at each centre cell. */
+  /** Least-cost path over (cell × heading) from any start to a goal; returns its nodes (cell * 4 + heading). */
   function route(starts: number[], w: number): number[] | undefined {
     const N = W * D * 4;
     const dist = new Float64Array(N).fill(Infinity);
@@ -287,9 +298,10 @@ export function rasterArea(plan: RoadPlan, id: string): AreaRaster {
       const h = node & 3;
       const x = x0 + (cell % W);
       const z = z0 + Math.floor(cell / W);
-      if (!startSet.has(cell) && isGoal(x, z, w)) {
+      // Goal: the centre lands on the network (or, for the first route, on the plaza).
+      if (!startSet.has(cell) && (connected ? network[cell] : plaza[cell])) {
         const path: number[] = [];
-        for (let n = node; n >= 0; n = prev[n]) path.push(n >> 2);
+        for (let n = node; n >= 0; n = prev[n]) path.push(n);
         return path.reverse();
       }
       for (let nh = 0; nh < 4; nh++) {
@@ -297,7 +309,7 @@ export function rasterArea(plan: RoadPlan, id: string): AreaRaster {
         const nz = z + DIRS[nh][1];
         if (nx < x0 || nx > x1 || nz < z0 || nz > z1) continue;
         const nc = idx(nx, nz);
-        if (!fits[w][nc]) continue;
+        if (nh < 2 ? !fitsH[w][nc] || wetH[w][nc] : !fitsV[w][nc]) continue;
         const nd = d + cost(nc) + (nh === h || startSet.has(cell) ? 0 : turn);
         const nn = nc * 4 + nh;
         if (nd < dist[nn]) {
@@ -328,11 +340,7 @@ export function gateCells(g: Gate, id: string, plan: RoadPlan): [number, number]
   return out;
 }
 
-/** The centre cell a gate's route starts from (its brush covers the gate width and stays inside the area). */
+/** The centre cell a gate's route starts from: its first tile (the brush covers the rest across the heading). */
 function gateStart(g: Gate, id: string, plan: RoadPlan): [number, number][] {
-  const { cx, cz, dir } = g.edge;
-  const aSide = plan.map.areaOfChunk(cx, cz) === id;
-  const back = aSide ? g.width - 1 : 0; // the brush grows +x/+z, so step back from an east/south edge
-  if (dir === 'e') return [[aSide ? cx * CHUNK + CHUNK - 1 - back : (cx + 1) * CHUNK, cz * CHUNK + g.offset]];
-  return [[cx * CHUNK + g.offset, aSide ? cz * CHUNK + CHUNK - 1 - back : (cz + 1) * CHUNK]];
+  return [gateCells(g, id, plan)[0]];
 }

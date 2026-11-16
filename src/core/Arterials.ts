@@ -48,7 +48,8 @@ const SALT = hashString('roads');
 const R = () => CITY_GEN.roads;
 
 
-const LANES = [1, 12] as const;
+/** Arterial lanes near a chunk edge (0–2 or 12–14): clear of landmarks in the middle and of canal rows (3–4). */
+const LANES = [0, 12] as const;
 
 /** Chunk column of vertical lattice line i (rows use the same rule with another salt). */
 function latticeAt(seed: number, i: number, salt: number): number {
