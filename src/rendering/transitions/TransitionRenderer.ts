@@ -292,9 +292,22 @@ export class TransitionRenderer {
     const x = t.x + 0.5;
     const z = t.z + 0.5;
     const top = h + 0.08;
-    const hard = (t.feature ?? 'lawn') === 'water';
     let s = (t.variant * 2654435761) >>> 0;
     const rnd = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+    const f = t.feature ?? 'lawn';
+    const hard = f === 'water' || f === 'paving'; // these keep their surface: no slab fragments or roots (Look 6.17)
+    if (f === 'water') {
+      // debris sinks, then lily pads and reeds grow
+      for (let i = 0; i < 3; i++) {
+        this.pen(tb, tr.t0, d, 1, [0, 0], [0.05, 0.4], top);
+        tb.add('box', '#5d5442', [x + (rnd() - 0.5) * 0.6, top - 0.02, z + (rnd() - 0.5) * 0.6], [0.12, 0.03, 0.08]);
+      }
+      for (let i = 0; i < 3; i++) {
+        this.pen(tb, tr.t0, d, 1, [0.5, 0.85], [2, 3], top);
+        tb.add('cylinder', '#5fb24a', [x + (rnd() - 0.5) * 0.6, top - 0.03, z + (rnd() - 0.5) * 0.6], [0.2, 0.01, 0.2]);
+      }
+      return;
+    }
     if (!hard) {
       // slab fragments: four quarters split near the middle (the crack lines)
       const cx = 0.5 + (rnd() - 0.5) * 0.16;
@@ -314,6 +327,14 @@ export class TransitionRenderer {
         this.pen(tb, tr.t0, d, 1, [S.fracture[0], S.fracture[1] + 0.05], [S.heave[0] + 0.06, S.heave[1]], top);
         tb.add('box', '#b9ad97', [x + (rnd() - 0.5) * 0.7, top + 0.05 + rnd() * 0.06, z + (rnd() - 0.5) * 0.7], 0.035);
       }
+    }
+    if (f === 'paving') {
+      // tiny flowers come up in the joints
+      for (let i = 0; i < 4; i++) {
+        this.pen(tb, tr.t0, d, 1, [0.55, 0.85], [2, 3], top);
+        tb.add('sphere', ['#ffffff', '#ffd75e', '#ff9fd0', '#b48cff'][i], [x + (rnd() - 0.5) * 0.7, top + 0.025, z + (rnd() - 0.5) * 0.7], 0.05);
+      }
+      return;
     }
     // roots along the cracks
     for (let i = 0; i < 3; i++) {

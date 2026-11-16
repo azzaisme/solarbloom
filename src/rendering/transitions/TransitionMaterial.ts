@@ -229,7 +229,23 @@ void getAlbedo() {
 	float glow = 0.0;
 	// pollution now (soften eases it in from the source edge)
 	float pol = kind > 0.5 && kind < 2.5 ? mix(vTrB.y, vTrB.z, creep) : vTrB.z;
-	if (kind > 2.5 && kind < 3.5) {
+	float feat = vTrC.y;
+	if (kind > 2.5 && kind < 3.5 && feat > 2.5 && feat < 3.5) {
+		// ── water (Look 6.17): murky brown-grey clears to blue from the inflow side, with a shimmer at the front ──
+		float c = trCreep(l, dir, p, n);
+		col = mix(from, to, c);
+		col += vec3(0.05, 0.09, 0.1) * c * (1.0 - c) * 3.0 * (0.6 + 0.4 * sin(l.x * 20.0 + uTrTime * 3.0));
+	} else if (kind > 2.5 && kind < 3.5 && feat > 0.5 && feat < 1.5) {
+		// ── paving (Look 6.17): grime washes off slab by slab, the joints fill with moss; it stays stone ──
+		float c = trCreep(l, dir, p, n);
+		col = mix(from, to, smoothstep(0.0, 1.0, c));
+		if (detail > 0.5) {
+			float d = trCracks(cell, l, dir, 1.0);
+			float joint = 1.0 - smoothstep(0.012, 0.03, d);
+			float m = smoothstep(0.2, 0.7, p);
+			col = mix(col, mix(crackCol, moss * 1.4, m), joint * (1.0 - smoothstep(0.85, 1.0, p) * 0.6));
+		}
+	} else if (kind > 2.5 && kind < 3.5) {
 		// ── restore: fracture → heave → crumble to soil → sprout → knit ──
 		float fr = trWin(p, uTrStages.xy);
 		float cr = trWin(p, vec2(uTrStages.y, uTrStages.z));
@@ -243,7 +259,8 @@ void getAlbedo() {
 		// soil gets clods
 		col *= 0.85 + 0.3 * trNoise(l * 14.0 + cell);
 		// turf knits from the cracks and the edges
-		float edge = min(min(l.x, 1.0 - l.x), min(l.y, 1.0 - l.y));
+		// roads (Look 6.17): green verges creep in from both kerbs rather than from every edge
+		float edge = feat > 1.5 && feat < 2.5 ? min(l.x, 1.0 - l.x) : min(min(l.x, 1.0 - l.x), min(l.y, 1.0 - l.y));
 		float knit = smoothstep(kn * 1.2 - 0.1, kn * 1.2 + 0.05, min(d * 1.6, edge * 2.2) + (n - 0.5) * 0.3);
 		col = mix(col, to, (1.0 - knit) * step(0.001, kn));
 		if (kn >= 1.0) col = to;
