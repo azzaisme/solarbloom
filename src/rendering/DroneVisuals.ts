@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 import type { DroneData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
-import { color, mat, PALETTE } from './Materials';
+import { color, glow as glowGain, mat, PALETTE } from './Materials';
 import { group, shape } from './Shapes';
 import { ease, type Tweens } from './Tween';
 
@@ -289,7 +289,7 @@ export class DroneVisuals {
     m.metalness = 0;
     m.gloss = 0.85;
     m.emissive = new pc.Color(1, 1, 1);
-    m.emissiveIntensity = GLOW[glow];
+    m.emissiveIntensity = glowGain(GLOW[glow]); // Look 1.9: the same bloom gain as mat() glows (dim stays below 1)
     m.emissiveMapTiling = new pc.Vec2(1, 1);
     m.emissiveMapOffset = new pc.Vec2(frame / SHEET_FRAMES, 0);
     m.update();

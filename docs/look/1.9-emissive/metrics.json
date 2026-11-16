@@ -1,0 +1,64 @@
+{
+  "tag": "1.9-emissive",
+  "query": "",
+  "renderer": "headless Chromium, SwiftShader (software GL)",
+  "when": "2026-11-16T02:20:06.062Z",
+  "shots": {
+    "machines-desktop": {
+      "scene": "Machine cluster (solar, condenser, core)",
+      "size": "1280x800",
+      "frameMs": 637.8,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 164,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "ed83850ff6e6"
+    },
+    "drone-desktop": {
+      "scene": "Drone mid-spray",
+      "size": "1280x800",
+      "frameMs": 518.7,
+      "simTime": 1.8,
+      "restored": 0,
+      "drawCalls": 126,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "9920e92a1647"
+    },
+    "half-desktop": {
+      "scene": "Half-restored park, pulse in progress",
+      "size": "1280x800",
+      "frameMs": 528.6,
+      "simTime": 3,
+      "restored": 122,
+      "drawCalls": 124,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "6c3482d6dcc5"
+    },
+    "full-desktop": {
+      "scene": "Fully restored park",
+      "size": "1280x800",
+      "frameMs": 630.9,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 153,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "6e89c465790a"
+    }
+  }
+}

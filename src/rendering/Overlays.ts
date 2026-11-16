@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { LOOK } from '../data/look';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { mat, PALETTE } from './Materials';
@@ -53,7 +54,7 @@ export class Overlays {
     this.beacon.enabled = false;
     this.radiusRoot = group(root, 'radius');
     for (let i = 0; i < 180; i++) { // Phase 4: room for the largest pulse footprint preview (161 tiles)
-      const e = shape(this.radiusRoot, 'box', mat(TONE.info, { opacity: 0.45, unlit: true }), { scale: [0.9, 0.02, 0.9], receive: false });
+      const e = shape(this.radiusRoot, 'box', mat(TONE.info, { opacity: 0.45, unlit: true, emissiveIntensity: LOOK.emissive.preview }), { scale: [0.9, 0.02, 0.9], receive: false });
       e.enabled = false;
       this.radius.push(e);
     }
@@ -128,7 +129,7 @@ export class Overlays {
       }
       const [x, y, z] = this.sim.grid.tileWorld(t);
       e.setPosition(x, y + SLAB_TOP + 0.03, z);
-      e.render!.material = mat(TONE[tone], { opacity: 0.45, unlit: true });
+      e.render!.material = mat(TONE[tone], { opacity: 0.45, unlit: true, emissiveIntensity: LOOK.emissive.preview }); // Look 1.9: the pulse preview glows
       e.enabled = true;
     });
   }

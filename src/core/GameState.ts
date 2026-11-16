@@ -6,7 +6,7 @@ import type { GameState, LayerData, MachineData, TileData } from './types';
 
 /**
  * v1 Round 1 · v2 Round 2 · v3 Phase 3 · v4 the endless city (chunked world, tile deltas) · v5 Phase 5: big-number
- * resources, uncapped biomass, per-machine upgrades · v6 Phase 5 E15: world events, cat ids and rarities. Older saves
+ * resources, uncapped biomass, per-machine upgrades · v6 Phase 5: E13/E14 machine tiers, merges, cores and superstructure projects, E15 world events, cat ids and rarities. Older saves
  * are scrapped with a notice (no players yet, so no migration, as agreed) · v7 Look 6: tile transitions in the
  * chunk extras (a new column layout), the Cultivator.
  */

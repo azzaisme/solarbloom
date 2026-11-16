@@ -343,6 +343,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 #modal h2 { margin: 0 0 10px; font-size: 20px; color: var(--gold); }
 #modal label { display: flex; justify-content: space-between; align-items: center; padding: 8px 2px; font-weight: 700; font-size: 14px; border-bottom: 1px solid var(--edge-soft); }
 #modal input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--leaf); }
+#modal select { font: inherit; font-weight: 600; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--edge-soft); background: var(--glass-hi); color: var(--text); }
 #modal .row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 #modal .row button { flex: 1; padding: 10px; border-radius: 12px; font: 600 14px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge-soft); min-height: 42px; }
 #modal .row button.danger { background: var(--bad-bg); border-color: var(--bad); color: var(--text-strong); }
