@@ -23,16 +23,16 @@ export const LOOK = {
     normalOffsetBias: 0.05,
   },
   /** Look 1.3: a cool, low fill from the side opposite the sun (no shadows). */
-  fill: { color: '#c9dcff', intensity: 0.75 },
+  fill: { color: '#e4e4dc', intensity: 0.6 },
   /**
    * Look 1.3: ambient light from the sky above and the ground below, baked into a tiny environment atlas.
    * Colours are linear-ish sRGB hex; `intensity` scales the whole environment (ambient and reflections).
    */
   env: {
-    zenith: '#8fb8ee',
-    horizon: '#f2efe6',
-    ground: '#b8a57c',
-    intensity: 1.3,
+    zenith: '#9bb8d8',
+    horizon: '#f0eadc',
+    ground: '#a89263',
+    intensity: 1.15,
   },
   /**
    * Look 1.3: a warm rim on silhouettes (a view-dependent term added in the standard shader), stronger on the
@@ -44,7 +44,7 @@ export const LOOK = {
    * bleached the greens and pinks toward yellow-white), and rolls highlights off so nothing clips.
    */
   toneMapping: pc.TONEMAP_NEUTRAL as number,
-  exposure: 1.15,
+  exposure: 1.1,
   /**
    * Look 1.5: bloom on emissive and very bright pixels only. The threshold is scene-referred (before exposure and
    * tone mapping): sunlit grass and paving peak around 1.0–1.3, so glows are authored at 3 and above (Look 1.9).
@@ -70,7 +70,7 @@ export const LOOK = {
    * restore. Read every frame: live edits apply at once.
    */
   grade: {
-    warm: { brightness: 1.03, contrast: 1.0, saturation: 1.12, tint: '#fff4e4', shadows: 0.18, highlights: -0.1, vibrance: 0.22 },
+    warm: { brightness: 1.0, contrast: 1.04, saturation: 1.22, tint: '#fff2de', shadows: 0.12, highlights: -0.1, vibrance: 0.3 },
     dead: { brightness: 0.97, contrast: 1.03, saturation: 0.82, tint: '#e9eef6', shadows: 0.0, highlights: -0.1, vibrance: 0.0 },
     /** High contrast (settings): a flatter grade with no vignette so outlines and text stay readable. */
     contrast: { brightness: 1.02, contrast: 1.0, saturation: 1.0, tint: '#ffffff', shadows: 0.2, highlights: -0.1, vibrance: 0.0 },
