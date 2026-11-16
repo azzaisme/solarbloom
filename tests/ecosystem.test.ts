@@ -281,3 +281,15 @@ describe('E16 cosmetic fauna (planning side; the renderer animates what it retur
     expect(machineRunning(sim, { ...solar, tier: 3, project: { stage: 1, costs: [] } })).toBe(false);
   });
 });
+
+describe('E16 quality tiers', () => {
+  it('fauna caps are plain numbers per tier (low ≤ medium ≤ high), for the graphics tier selector to read', () => {
+    const C = TUNING.ecosystem.caps;
+    expect(Object.keys(C).sort()).toEqual(['high', 'low', 'medium']);
+    for (const k of Object.keys(C.high) as (keyof typeof C.high)[]) {
+      expect(C.low[k]).toBeLessThanOrEqual(C.medium[k]);
+      expect(C.medium[k]).toBeLessThanOrEqual(C.high[k]);
+      expect(C.low[k]).toBeGreaterThan(0);
+    }
+  });
+});

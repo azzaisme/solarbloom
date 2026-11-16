@@ -179,7 +179,8 @@ export const TUNING = {
    * Phase 5 E16: living ecosystem. Biodiversity is a derived score (never stored or spent): points per restored
    * tile by stage (index 1 Restored … 4 Radiant), per tree species and ground kind in bloom, per landmark woken,
    * per superstructure and per fauna kind. Fauna arrive once, when their condition first holds; they are
-   * cosmetic and pay nothing. Caps are per quality tier (low = "Fewer particles"); all are playtest hypotheses.
+   * cosmetic and pay nothing. Caps are per graphics quality tier (the tier selector belongs to the lighting epic;
+   * until then "Fewer particles" means low); all are playtest hypotheses.
    */
   ecosystem: {
     recountSeconds: 1,
@@ -196,8 +197,9 @@ export const TUNING = {
     /** most actors of each kind at once, per quality tier */
     caps: {
       high: { butterflies: 10, groundBirds: 4, koi: 8, robots: 4, cats: 6, fireflies: 24 },
+      medium: { butterflies: 8, groundBirds: 3, koi: 6, robots: 3, cats: 4, fireflies: 16 },
       low: { butterflies: 5, groundBirds: 2, koi: 4, robots: 2, cats: 3, fireflies: 10 },
-    } as Record<'high' | 'low', Record<'butterflies' | 'groundBirds' | 'koi' | 'robots' | 'cats' | 'fireflies', number>>,
+    } as Record<'low' | 'medium' | 'high', Record<'butterflies' | 'groundBirds' | 'koi' | 'robots' | 'cats' | 'fireflies', number>>,
     /** sleeping cats: this share of finished machines (seeded by machine id) on restored ground has one */
     cats: { share: 0.3 },
   },

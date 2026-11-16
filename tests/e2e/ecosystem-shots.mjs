@@ -124,13 +124,13 @@ try {
   }
   await frame(8, 8, 1.6, 2500);
   await page.screenshot({ path: `${dir}/${prefix}-fountain-koi.png` });
-  // Dusk and fireflies (an option in Settings).
+  // Fireflies (an option in Settings).
   await page.evaluate(() => {
     const g = window.solarbloom;
-    g.setSetting?.('dusk', true);
+    g.setSetting?.('fireflies', true);
   });
   await frame(7, 8, GAME_ZOOM, 3000);
-  await page.screenshot({ path: `${dir}/${prefix}-dusk.png` });
+  await page.screenshot({ path: `${dir}/${prefix}-fireflies.png` });
   console.log('fireflies:', await page.evaluate(() => window.solarbloom.fauna.active.fireflies));
 } finally {
   await browser.close();

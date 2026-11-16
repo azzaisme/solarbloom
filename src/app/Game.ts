@@ -87,6 +87,11 @@ export class Game {
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
   readonly fauna: Fauna;
   private eco!: EcoBadge;
+  /**
+   * Phase 5 E16: fauna caps tier (TUNING.ecosystem.caps). Hook for the graphics quality-tier selector (Look 1
+   * lighting epic); until it sets this, "Fewer particles" means low and everything else high.
+   */
+  faunaTier?: 'low' | 'medium' | 'high';
   readonly tileFx: TileFx;
   readonly vfx: Vfx;
   readonly overlays: Overlays;
@@ -339,8 +344,6 @@ export class Game {
     const rm = s.reducedMotion;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
-    // Phase 5 E16: optional warm dusk (ambience only; off with high contrast so the restoration contrast stays sharp).
-    this.scene.setDusk(!!s.dusk && !s.highContrast);
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
     this.cat.softSparkle = rm || s.lowVfx;
     this.machines.wispsPerSecond = s.lowVfx ? 2 : 5;
@@ -2042,7 +2045,7 @@ export class Game {
     this.cat.update(dt);
     // Phase 5 E16: fauna by unlock, capped per quality tier ("Fewer particles" = low).
     const eco = this.sim.ecosystem;
-    const quality = this.settings.lowVfx ? 'low' : 'high';
+    const quality = this.faunaTier ?? (this.settings.lowVfx ? 'low' : 'high');
     this.butterflies.enabled = eco.has('butterflies');
     this.butterflies.cap = TUNING.ecosystem.caps[quality].butterflies;
     // Fauna live around where the camera looks (the ground rect of a low perspective view reaches far beyond it).
@@ -2051,7 +2054,7 @@ export class Game {
     this.butterflies.update(dt, near);
     this.birds.resident = eco.has('birds');
     this.birds.update(dt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
-    this.fauna.update(dt, near, { quality, reducedMotion: this.settings.reducedMotion, dusk: !!this.settings.dusk && !this.settings.highContrast });
+    this.fauna.update(dt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: !!this.settings.fireflies && !this.settings.highContrast });
     this.eco?.update(dt);
     this.tileFx.update(dt);
     this.frameNo++;

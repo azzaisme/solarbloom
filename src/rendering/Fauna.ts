@@ -9,7 +9,7 @@ import { assignBatch, group, shape, vshape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
 
 /**
- * Phase 5 E16: cosmetic fauna (koi, garden robots, songbirds on the lawns, sleeping cats, fireflies at dusk).
+ * Phase 5 E16: cosmetic fauna (koi, garden robots, songbirds on the lawns, sleeping cats, fireflies).
  *
  * - **Pooled:** every actor is made once (lazily, up to the high-tier cap) and parked at scale 0 when unused;
  *   nothing is created or destroyed while playing. Each kind is one dynamic batch (a draw call or two).
@@ -44,9 +44,10 @@ interface Actor {
 }
 
 export interface FaunaOptions {
-  quality: 'high' | 'low';
+  quality: 'low' | 'medium' | 'high';
   reducedMotion: boolean;
-  dusk: boolean;
+  /** Settings → Fireflies (ambience only). */
+  fireflies: boolean;
 }
 
 /** Placeholder scales: songbirds read at gameplay zoom; a sleeping cat stays well under a Lucky Cat's height. */
@@ -296,9 +297,10 @@ export class Fauna {
     );
     // The coat follows the slot, not the pool index: re-tint by rebuilding is costly, so cats keep their pooled coat.
 
-    // Fireflies (dusk only, and not with reduced motion or high contrast): over Thriving and Radiant tiles.
+    // Fireflies (an option; not with reduced motion or high contrast): over Thriving and Radiant tiles. Emissive, so
+    // the lighting epic's bloom picks them up; scene light and grading are left to that epic.
     const flies: { key: string; home: { x: number; z: number }; y: number }[] = [];
-    if (opts.dusk && !opts.reducedMotion) {
+    if (opts.fireflies && !opts.reducedMotion) {
       const lush = tilesIn(s, rect, (t) => t.ground === 'restored' && t.bloom >= 3 && t.feature !== 'water', 160).sort(near);
       for (let i = 0; i < lush.length; i += 4) flies.push({ key: `f:${lush[i].x}:${lush[i].z}`, home: { x: lush[i].x + 0.5, z: lush[i].z + 0.5 }, y: y + 0.35 });
     }
