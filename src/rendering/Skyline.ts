@@ -359,27 +359,35 @@ export class Skyline {
   }
 
   /**
-   * Follow the view. `dist` is the camera distance (the rings stand past it), `nearness` 0 far … 1 near (the
-   * skyline sinks out of view below ~0.3), `yaw` the camera yaw in degrees.
+   * Follow the view. `cam` is the camera position, `dist` its distance to the target, `nearness` 0 far … 1
+   * near (the skyline sinks out of view below ~0.3), `yaw` the camera yaw in degrees.
+   *
+   * The rings stand just past where the haze is complete. The whole skyline is then scaled down toward the
+   * camera (which leaves how it looks unchanged) so it fits well inside the far clip plane, whatever the
+   * zoom: the world's far plane can stop right at the haze. The sky layer is drawn first and the depth
+   * buffer cleared after it (`Sky.clearLayer`), so the world always draws over the backdrop.
    */
-  update(dt: number, target: pc.Vec3, dist: number, nearness: number, yaw: number, hazeEnd: number, farClip: number) {
+  update(dt: number, target: pc.Vec3, cam: pc.Vec3, _dist: number, nearness: number, yaw: number, hazeEnd: number, farClip: number) {
     this.time += dt;
     const t = Math.min(1, Math.max(0, (nearness - 0.3) / 0.4));
     const rise = t * t * (3 - 2 * t);
     this.root.enabled = rise > 0.001;
     if (!this.root.enabled) return;
     if (Math.abs(this.builtClarity - this.clarity) > 0.02) this.recolour();
-    this.root.setPosition(target.x, -70 * (1 - rise), target.z);
     // Sideways pans turn each ring a little (nearer rings more): parallax that never runs out.
     const yr = (yaw * Math.PI) / 180;
     const lateral = target.x * Math.cos(yr) - target.z * Math.sin(yr);
-    // Ring radii: the nearest just past where the haze is complete, the furthest inside the far clip plane
-    // (which stops just past the haze, so the city behind it is never drawn).
     const r0 = hazeEnd + 12;
-    const r2 = Math.max(r0 + 20, farClip * 0.8 - dist); // inside the sky dome (0.97 × far clip) too
+    const r2 = r0 + 34;
     const first = LAYERS[0].r;
     const last = LAYERS[LAYERS.length - 1].r;
     const ringScale = (r: number) => (r0 + ((r - first) / (last - first)) * (r2 - r0)) / r;
+    // Scale about the camera so the furthest ring sits inside 0.75 × the far clip.
+    const reach = Math.hypot(cam.x - target.x, cam.z - target.z) + r2 + 16;
+    const k = Math.min(1, (farClip * 0.75) / reach);
+    const by = -70 * (1 - rise);
+    this.root.setPosition(cam.x + (target.x - cam.x) * k, cam.y + (by - cam.y) * k, cam.z + (target.z - cam.z) * k);
+    this.root.setLocalScale(k, k, k);
     for (const L of this.layers) {
       const s = ringScale(L.r);
       L.e.setLocalScale(s, 1, s);

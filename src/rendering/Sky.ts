@@ -70,6 +70,7 @@ export class Sky {
   clarity = 0.4;
   reducedMotion = false;
   readonly layer: pc.Layer;
+  readonly clearLayer: pc.Layer;
 
   constructor(
     app: pc.AppBase,
@@ -82,6 +83,10 @@ export class Sky {
     const comp = app.scene.layers;
     this.layer = comp.getLayerByName('Sky') ?? new pc.Layer({ name: 'Sky' });
     if (!comp.getLayerByName('Sky')) comp.insert(this.layer, 0);
+    // An empty layer right after it that only clears depth: the sky and skyline are a backdrop, so the world
+    // draws over them wherever it has geometry, and the camera's far plane can stop at the haze.
+    this.clearLayer = comp.getLayerByName('SkyDepthClear') ?? new pc.Layer({ name: 'SkyDepthClear', clearDepthBuffer: true });
+    if (!comp.getLayerByName('SkyDepthClear')) comp.insertOpaque(this.clearLayer, comp.getTransparentIndex(this.layer) + 1);
     const device = app.graphicsDevice;
 
     // The dome: a unit sphere (rings × segments), coloured per vertex.

@@ -341,9 +341,9 @@ export class CameraController {
     // Clip planes hug the view: near just in front of the closest ground on screen (and anything tall on it),
     // far past the haze, so depth precision stays good from close-up to the city overview.
     c.nearClip = Math.max(0.3, this.dist - this.viewHeight * 2.2 - 12);
-    // Past the haze, no further: everything beyond is the haze colour, and a deeper far plane would draw (and
-    // cull) the whole city behind it. The sky dome and the skyline fit themselves inside it (Look 4.7, 4.8).
-    c.farClip = this.dist + this.hazeEnd + 60;
+    // Just past the haze, no further: everything beyond is the haze colour, and a deeper far plane would draw
+    // the city behind it. The sky dome and the skyline are a backdrop that fits itself inside (Look 4.7, 4.8).
+    c.farClip = this.dist + this.hazeEnd + 10;
     const yr = (this.yaw * Math.PI) / 180;
     const pr = (this.pitch * Math.PI) / 180;
     const t = this.target;

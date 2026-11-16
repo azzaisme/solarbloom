@@ -159,7 +159,7 @@ export class Game {
     this.camera = new CameraController(this.app, this.tweens);
     // Look 4.7: the sky behind everything (its own layer, drawn first).
     this.sky = new Sky(this.app, this.scene.sun);
-    this.camera.cam.layers = [this.sky.layer.id, ...this.camera.cam.layers];
+    this.camera.cam.layers = [this.sky.layer.id, this.sky.clearLayer.id, ...this.camera.cam.layers];
     // Look 4.8: the distant terraced city behind the play area (in the sky's layer, drawn before the world).
     this.skyline = new Skyline(this.app, this.sky.layer, this.scene.sun.up);
     this.syncView();
@@ -2258,7 +2258,7 @@ export class Game {
     this.sky.update(dt, this.camera.entity.getPosition(), this.camera.cam.farClip);
     this.skyline.clarity = this.sky.clarity;
     this.skyline.reducedMotion = this.settings.reducedMotion;
-    this.skyline.update(dt, this.camera.target, this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
+    this.skyline.update(dt, this.camera.target, this.camera.entity.getPosition(), this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
     this.syncView();
     this.updateTreeCursor(dt);
     this.hud.update(dt);
