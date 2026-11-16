@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AreaMap, PARK } from '../src/core/Areas';
 import { arterialAcross, arterialsInChunk, RoadPlan } from '../src/core/RoadPlan';
+import { gateCells, LANDMARK_KEEP, landmarkKept } from '../src/core/RoadRaster';
 import { CITY_GEN } from '../src/data/city';
 
 const SEEDS = [1, 42, 9001];
@@ -95,6 +96,64 @@ describe('City 16.3: arterials', () => {
       expect(arterialAcross(seed, { cx: -1, cz: 0, dir: 'e' })).toBeDefined();
       expect(arterialAcross(seed, { cx: 0, cz: 0, dir: 's' })).toBeDefined();
       expect(arterialAcross(seed, { cx: 0, cz: -1, dir: 's' })).toBeDefined();
+    }
+  });
+});
+
+describe.each(SEEDS)('City 16.4: road tiles inside areas (seed %i)', { timeout: 30000 }, (seed) => {
+  const plan = fresh(seed);
+  const ids = areasNear(plan.map, 10).filter((id) => id !== PARK);
+
+  it('never puts road on a landmark or under a rooftop', () => {
+    for (const id of ids) {
+      const a = plan.map.info(id);
+      for (const k of plan.cells(id).keys()) {
+        const [x, z] = k.split(',').map(Number);
+        expect(landmarkKept(x, z, a.landmark[0], a.landmark[1]), `${id} ${k}`).toBe(false);
+        expect(plan.map.underRoof(id, x, z)).toBe(false);
+        expect(plan.map.areaOfCell(x, z)).toBe(id);
+      }
+    }
+  });
+
+  it('every gate lines up with the matching gate in the neighbouring area', () => {
+    for (const id of ids)
+      for (const l of plan.roads(id).links) {
+        if (l.tier === 'arterial' || l.to === PARK) continue;
+        for (const [x, z] of [...gateCells(l.gate, id, plan), ...gateCells(l.gate, l.to, plan)]) expect(plan.roadAt(x, z), `${id}→${l.to} at ${x},${z}`).toBeDefined();
+      }
+  });
+
+  it('has no isolated tiles, and dead ends only at a landmark plaza', () => {
+    for (const id of ids) {
+      const a = plan.map.info(id);
+      for (const k of plan.cells(id).keys()) {
+        const [x, z] = k.split(',').map(Number);
+        const p = plan.pieceAt(x, z)!;
+        expect(p.mask, `${id} ${k}`).not.toBe(0);
+        if (p.kind === 'end') {
+          const atPark = x >= -3 && z >= -3 && x <= 18 && z <= 18; // the avenue's spare lane beside the park's 2-wide path
+          const nearPlaza = atPark || Math.max(Math.abs(x - a.landmark[0] - 0.5), Math.abs(z - a.landmark[1] - 0.5)) <= LANDMARK_KEEP + 4.5 || [-2, -1, 0, 1, 2].some((dx) => [-2, -1, 0, 1, 2].some((dz) => plan.map.underRoof(id, x + dx, z + dz)));
+          expect(nearPlaza, `dead end at ${k} in ${id} (${a.type})`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("each area's roads are one connected network", () => {
+    for (const id of ids) {
+      const cells = plan.cells(id);
+      const start = cells.keys().next().value!;
+      const seen = new Set([start]);
+      const stack = [start];
+      while (stack.length) {
+        const [x, z] = stack.pop()!.split(',').map(Number);
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const k = `${x + dx},${z + dz}`;
+          if (cells.has(k) && !seen.has(k)) seen.add(k), stack.push(k);
+        }
+      }
+      expect(seen.size, `${id} (${plan.map.info(id).type}) has ${cells.size} road tiles`).toBe(cells.size);
     }
   });
 });

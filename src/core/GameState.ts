@@ -16,7 +16,7 @@ export const SAVE_VERSION = 7;
 export const GROUND = 'g';
 
 /** The current ground generation version (new games). */
-export const GROUND_GEN = 3;
+export const GROUND_GEN = 4;
 
 export function groundLayer(playable = true): LayerData {
   return { id: GROUND, name: 'The City', kind: 'ground', width: 0, depth: 0, height: playable ? 0 : -40, origin: [0, 0, 0], unlocked: playable, preview: !playable, gen: GROUND_GEN };

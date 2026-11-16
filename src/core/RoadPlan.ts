@@ -1,6 +1,11 @@
-import { AREA_TYPES, CITY_GEN, type AreaType } from '../data/city';
+import { AREA_TYPES, CITY_GEN, PARK_LAYOUT, type AreaType } from '../data/city';
 import { areaMapFor, PARK, type AreaMap } from './Areas';
-import { CHUNK, hashString, tileRandom } from './Hash';
+import { arterialAcross, type ArterialRun, type ChunkEdge } from './Arterials';
+import { CHUNK } from './Hash';
+import { landmarkKept, rasterArea, type AreaRaster, type RoadCell } from './RoadRaster';
+import { hashString, tileRandom } from './Hash';
+
+export { arterialAcross, arterialAt, arterialsInChunk, type ArterialRun, type ChunkEdge } from './Arterials';
 
 /**
  * City 16: the road network, planned on the area graph (not the chunk lattice). A pure function of the seed,
@@ -18,15 +23,6 @@ import { CHUNK, hashString, tileRandom } from './Hash';
  */
 
 export type RoadTier = 'arterial' | 'street' | 'lane';
-export type Dir = 'n' | 's' | 'e' | 'w';
-
-/** A chunk edge: the chunk on the `a` side and which side of it. Canonical: dir is 'e' or 's'. */
-export interface ChunkEdge {
-  cx: number;
-  cz: number;
-  dir: 'e' | 's';
-}
-
 export interface Gate {
   edge: ChunkEdge;
   /** first tile along the edge (0–15, chunk-local) and width in tiles */
@@ -43,20 +39,6 @@ export interface RoadLink {
   gate: Gate;
 }
 
-/** One straight arterial run: along x (`axis: 'x'`, fixed chunk row `at`) or along z (fixed chunk column). */
-export interface ArterialRun {
-  axis: 'x' | 'z';
-  /** chunk row (axis x) or column (axis z) it runs in */
-  at: number;
-  /** first tile across the run, chunk-local */
-  lane: number;
-  width: number;
-  /** extent along the run, in world tiles, inclusive */
-  from: number;
-  to: number;
-  kind: 'avenue' | 'ring' | 'lattice';
-}
-
 const SALT = hashString('roads');
 const R = () => CITY_GEN.roads;
 
@@ -70,115 +52,6 @@ const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 function edgeBetween(ax: number, az: number, bx: number, bz: number): ChunkEdge {
   if (ax === bx) return { cx: ax, cz: Math.min(az, bz), dir: 's' };
   return { cx: Math.min(ax, bx), cz: az, dir: 'e' };
-}
-
-// ───────────────────────────── arterials ─────────────────────────────
-
-const LANES = [1, 12] as const;
-
-/** Chunk column of vertical lattice line i (rows use the same rule with another salt). */
-function latticeAt(seed: number, i: number, salt: number): number {
-  if (i === 0) return 0;
-  const n = CITY_GEN.districtChunks;
-  const j = Math.floor(tileRandom(seed, SALT, i, 0, salt) * 3) - 1;
-  return i * n + j;
-}
-function latticeLane(seed: number, i: number, salt: number): number {
-  if (i === 0) return R().avenueLane;
-  return LANES[Math.floor(tileRandom(seed, SALT, i, 1, salt) * LANES.length)];
-}
-
-/** Index of the lattice line at or just below chunk coordinate c (lines are monotonic). */
-function latticeIndexBelow(seed: number, c: number, salt: number): number {
-  const n = CITY_GEN.districtChunks;
-  let i = Math.floor(c / n) + 1;
-  while (latticeAt(seed, i, salt) > c) i--;
-  return i;
-}
-
-const ROW = 101; // lines along x (fixed chunk row)
-const COL = 102; // lines along z (fixed chunk column)
-
-/** Does horizontal lattice segment (row line k, between column lines i and i+1) exist? Columns never drop. */
-function rowSegmentKept(seed: number, k: number, i: number): boolean {
-  if (k === 0) return true;
-  return tileRandom(seed, SALT, k, i, 103) >= R().latticeDrop;
-}
-
-/** Centre-ish tile (world) where a lattice line sits, for joining runs. */
-const lineTile = (at: number, lane: number) => at * CHUNK + lane;
-
-/**
- * Every arterial run touching chunk (cx, cz). Runs are straight and pinned to chunk rows/columns, so a chunk
- * can find its own without looking at its neighbours. The park chunk has none (its own paths meet the avenues).
- */
-export function arterialsInChunk(seed: number, cx: number, cz: number): ArterialRun[] {
-  if (cx === 0 && cz === 0) return [];
-  const out: ArterialRun[] = [];
-  const W = R().width.arterial;
-  const avenueEnd = (sign: number) => (sign > 0 ? CHUNK : -1); // avenues stop at the park's edge
-  // Avenues: chunk row 0 and column 0, out from the park both ways, endless.
-  if (cz === 0) {
-    const lane = R().avenueLane;
-    out.push(cx > 0 ? { axis: 'x', at: 0, lane, width: W, from: avenueEnd(1), to: Infinity, kind: 'avenue' } : { axis: 'x', at: 0, lane, width: W, from: -Infinity, to: avenueEnd(-1), kind: 'avenue' });
-  }
-  if (cx === 0) {
-    const lane = R().avenueLane;
-    out.push(cz > 0 ? { axis: 'z', at: 0, lane, width: W, from: avenueEnd(1), to: Infinity, kind: 'avenue' } : { axis: 'z', at: 0, lane, width: W, from: -Infinity, to: avenueEnd(-1), kind: 'avenue' });
-  }
-  // Ring: a square at Chebyshev radius `ring` chunks.
-  const r = R().ring;
-  const ringLane = (side: number) => (side > 0 ? LANES[0] : LANES[1]); // sits on the inner side of its chunk
-  const ringSpan = (lo: number, hi: number, laneLo: number, laneHi: number) => [lo * CHUNK + laneLo, hi * CHUNK + laneHi + W - 1] as const;
-  for (const side of [-1, 1]) {
-    const c = side * r;
-    if (cz === c && Math.abs(cx) <= r) {
-      const [from, to] = ringSpan(-r, r, ringLane(-1), ringLane(1));
-      out.push({ axis: 'x', at: c, lane: ringLane(side), width: W, from, to, kind: 'ring' });
-    }
-    if (cx === c && Math.abs(cz) <= r) {
-      const [from, to] = ringSpan(-r, r, ringLane(-1), ringLane(1));
-      out.push({ axis: 'z', at: c, lane: ringLane(side), width: W, from, to, kind: 'ring' });
-    }
-  }
-  // Lattice: rows (along x) and columns (along z) every ~districtChunks, jittered; row segments sometimes drop.
-  // Columns cross the whole lattice; rows run between columns and end on one, so no row ever ends in nothing.
-  const n = CITY_GEN.districtChunks;
-  for (let k = Math.floor(cz / n) - 1; k <= Math.floor(cz / n) + 1; k++) {
-    if (k === 0 || latticeAt(seed, k, ROW) !== cz) continue;
-    const lane = latticeLane(seed, k, ROW);
-    // Which pair of columns does this chunk sit between?
-    const i = latticeIndexBelow(seed, cx, COL);
-    for (const seg of [i - 1, i]) {
-      if (!rowSegmentKept(seed, k, seg)) continue;
-      const a = latticeAt(seed, seg, COL);
-      const b = latticeAt(seed, seg + 1, COL);
-      const from = lineTile(a, latticeLane(seed, seg, COL));
-      const to = lineTile(b, latticeLane(seed, seg + 1, COL)) + W - 1;
-      if (cx * CHUNK + CHUNK - 1 < from || cx * CHUNK > to) continue;
-      out.push({ axis: 'x', at: cz, lane, width: W, from, to, kind: 'lattice' });
-    }
-  }
-  for (let i = Math.floor(cx / n) - 1; i <= Math.floor(cx / n) + 1; i++) {
-    if (i === 0 || latticeAt(seed, i, COL) !== cx) continue;
-    out.push({ axis: 'z', at: cx, lane: latticeLane(seed, i, COL), width: W, from: -Infinity, to: Infinity, kind: 'lattice' });
-  }
-  // Keep the ring clear of the park chunk rows/cols it never crosses; clip runs into the park chunk.
-  return out.filter((run) => run.from <= run.to);
-}
-
-/** Does an arterial cross this chunk edge? Returns the run (its tiles on the edge are lane..lane+width-1). */
-export function arterialAcross(seed: number, e: ChunkEdge): ArterialRun | undefined {
-  // An 'e' edge is crossed by a run along x in that chunk row reaching both sides; 's' by a run along z.
-  const [bx, bz] = e.dir === 'e' ? [e.cx + 1, e.cz] : [e.cx, e.cz + 1];
-  const axis = e.dir === 'e' ? 'x' : 'z';
-  const crossTile = e.dir === 'e' ? e.cx * CHUNK + CHUNK - 1 : e.cz * CHUNK + CHUNK - 1;
-  const inA = arterialsInChunk(seed, e.cx, e.cz).filter((r) => r.axis === axis);
-  const inB = arterialsInChunk(seed, bx, bz).filter((r) => r.axis === axis);
-  // An avenue meets the park at its edge (the park's own path cross carries on inside).
-  if (e.cx === 0 && e.cz === 0) return inB.find((r) => r.kind === 'avenue');
-  if (bx === 0 && bz === 0) return inA.find((r) => r.kind === 'avenue');
-  return inA.find((r) => r.from <= crossTile && r.to >= crossTile + 1 && inB.some((s) => s.at === r.at && s.lane === r.lane));
 }
 
 // ───────────────────────────── area links ─────────────────────────────
@@ -309,21 +182,53 @@ export class RoadPlan {
     return ia >= 0 && ib >= 0 && ia < this.extraRoom(a) && ib < this.extraRoom(b);
   }
 
-  /** The gate a street or lane link crosses: the parent edge for tree links, else a seeded shared edge. */
+  /**
+   * The gate a street or lane link crosses: the parent edge for tree links, else a seeded shared edge. The offset
+   * starts from the pair hash and moves to the nearest one whose cells, a road-width deep on both sides, are clear
+   * of landmarks and rooftops (so a route can always leave the gate).
+   */
   gate(a: string, b: string, tier: RoadTier): Gate {
     const pa = this.parentOf(a);
     const pb = this.parentOf(b);
-    let edge: ChunkEdge;
-    if (pa?.parent === b) edge = pa.edge;
-    else if (pb?.parent === a) edge = pb.edge;
-    else {
-      const edges = this.sharedEdges(a, b);
-      edge = edges[Math.floor(this.pairRandom(a, b, 3) * edges.length)];
-    }
+    const shared = this.sharedEdges(a, b);
+    let first: ChunkEdge;
+    if (pa?.parent === b) first = pa.edge;
+    else if (pb?.parent === a) first = pb.edge;
+    else first = shared[Math.floor(this.pairRandom(a, b, 3) * shared.length)];
     const width = R().width[tier];
     const [lo, hi] = R().gateRange;
-    const offset = lo + Math.floor(this.pairRandom(a, b, 4) * (hi - lo - width + 2));
-    return { edge, offset, width };
+    const want = lo + Math.floor(this.pairRandom(a, b, 4) * (hi - lo - width + 2));
+    const edges = [first, ...shared.filter((e) => edgeKey(e) !== edgeKey(first))];
+    // Preferred range first; then anywhere along the edge clear of the arterial lanes near its ends.
+    for (const [l, h] of [[lo, hi], [4, 11]])
+      for (const edge of edges)
+        for (let d = 0; d < CHUNK * 2; d++) {
+          const offset = want + (d % 2 ? -1 : 1) * Math.ceil(d / 2);
+          if (offset < l || offset + width - 1 > h) continue;
+          if (this.gateClear(edge, offset, width)) return { edge, offset, width };
+        }
+    return { edge: first, offset: want, width };
+  }
+
+  /** Are a gate's cells, `width` deep into both chunks, clear of both areas' landmarks and roofs? */
+  private gateClear(e: ChunkEdge, offset: number, width: number): boolean {
+    for (const [cx, cz, inward] of [
+      [e.cx, e.cz, -1],
+      [e.dir === 'e' ? e.cx + 1 : e.cx, e.dir === 's' ? e.cz + 1 : e.cz, 1],
+    ] as const) {
+      const id = this.map.areaOfChunk(cx, cz);
+      if (id === PARK) continue;
+      const a = this.map.info(id);
+      for (let i = 0; i < width; i++)
+        for (let d = 0; d <= width; d++) {
+          const along = offset + i;
+          const across = inward < 0 ? CHUNK - 1 - d : d;
+          const x = cx * CHUNK + (e.dir === 'e' ? across : along);
+          const z = cz * CHUNK + (e.dir === 'e' ? along : across);
+          if (landmarkKept(x, z, a.landmark[0], a.landmark[1]) || this.map.underRoof(id, x, z)) return false;
+        }
+    }
+    return true;
   }
 
   /** All road links of an area (symmetric: b is in a's links exactly when a is in b's, with the same gate). */
@@ -350,7 +255,73 @@ export class RoadPlan {
     this.cache.set(id, out);
     return out;
   }
+
+  private rasters = new Map<string, AreaRaster>();
+
+  /** This area's road tiles (cached). */
+  cells(id: string): AreaRaster {
+    let r = this.rasters.get(id);
+    if (!r) {
+      if (this.rasters.size > 4000) this.rasters.clear();
+      r = rasterArea(this, id);
+      this.rasters.set(id, r);
+    }
+    return r;
+  }
+
+  /** The road on a world cell, if any (the park's own paths are not part of the network). */
+  roadAt(x: number, z: number): RoadCell | undefined {
+    const id = this.map.areaOfChunk(Math.floor(x / CHUNK), Math.floor(z / CHUNK));
+    if (id === PARK) return undefined;
+    return this.cells(id).get(`${x},${z}`);
+  }
+
+  /**
+   * Shape of the road tile at a world cell. `mask` is every side with road next to it (kerbs go on the others);
+   * `through` only the sides where the road carries on a full road-width, so a street's own other half doesn't
+   * count and a 2-wide straight reads as straight, not as a junction.
+   */
+  pieceAt(x: number, z: number): RoadPiece | undefined {
+    const c = this.roadAt(x, z);
+    if (!c) return undefined;
+    const w = R().width[c.tier];
+    let mask = 0;
+    let through = 0;
+    // The park's own path cross (tiles 7–8) carries the avenues on into the park.
+    const road = (rx: number, rz: number) => !!this.roadAt(rx, rz) || (rx >= 0 && rz >= 0 && rx < CHUNK && rz < CHUNK && (PARK_LAYOUT.paths.cols.includes(rx) || PARK_LAYOUT.paths.rows.includes(rz)));
+    for (const [dx, dz, b] of SIDE) {
+      if (!road(x + dx, z + dz)) continue;
+      mask |= b;
+      let ok = true;
+      for (let k = 2; k <= w && ok; k++) if (!road(x + dx * k, z + dz * k)) ok = false;
+      if (ok) through |= b;
+    }
+    const n = bits(through);
+    // An end has nothing round it but the way back and its own other lanes; more road than that is a jog in a junction.
+    const kind: RoadPieceKind = n >= 4 ? 'cross' : n === 3 ? 'tee' : n === 2 ? ((through & 3) === 3 || (through & 12) === 12 ? 'straight' : 'corner') : bits(mask) <= w ? 'end' : 'corner';
+    return { tier: c.tier, bridge: c.bridge, mask, through, kind };
+  }
 }
+
+/** What a road tile looks like from above: which sides continue, and the piece that implies. */
+export type RoadPieceKind = 'straight' | 'corner' | 'tee' | 'cross' | 'end';
+export interface RoadPiece {
+  tier: RoadTier;
+  bridge: boolean;
+  /** sides whose neighbour is road: bit 1 = +x (e), 2 = -x (w), 4 = +z (s), 8 = -z (n) */
+  mask: number;
+  /** sides the road continues beyond its own width (centreline view, for markings and piece shape) */
+  through: number;
+  kind: RoadPieceKind;
+}
+
+const SIDE = [
+  [1, 0, 1],
+  [-1, 0, 2],
+  [0, 1, 4],
+  [0, -1, 8],
+] as const;
+const bits = (m: number) => (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1) + ((m >> 3) & 1);
 
 const PLANS = new Map<string, RoadPlan>();
 /** Shared road plan per seed and ground generation (roads exist from generation 4). */
