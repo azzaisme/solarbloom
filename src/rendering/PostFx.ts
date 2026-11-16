@@ -1,6 +1,16 @@
 import * as pc from 'playcanvas';
 import { LOOK } from '../data/look';
 
+export interface GradeValues {
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  tint: string;
+  shadows: number;
+  highlights: number;
+  vibrance: number;
+}
+
 /** Which post effects run (Look 1.11 maps graphics tiers onto this). */
 export interface PostSpec {
   /** CameraFrame on: HDR scene target, effects, tone mapping in the compose pass. Off: the camera tone-maps. */
@@ -13,7 +23,7 @@ export interface PostSpec {
 
 /**
  * Look 1.5: the CameraFrame post-processing stack on the main camera, the single home for post effects: the
- * scene renders to an HDR target, SSAO, bloom (and later depth of field, grading and vignette) run on it, and
+ * scene renders to an HDR target, SSAO, bloom, colour grading and vignette (and later depth of field) run on it, and
  * the compose pass applies exposure, tone mapping and sRGB output. With post off, the camera itself tone-maps,
  * so the image keeps the same curve.
  *
@@ -70,12 +80,48 @@ export class PostFx {
     f.update();
   }
 
-  /** Per frame: effect parameters that follow the camera (SSAO radius from the world height in view). */
+  /** Per frame, before grade(): effect parameters that follow the camera (SSAO radius from the view height). */
   follow(viewHeight: number) {
     const f = this.frame;
     if (!f || f.ssao.type === pc.SSAOTYPE_NONE) return;
     const A = LOOK.ssao;
     f.ssao.radius = Math.min(A.maxRadius, Math.max(A.minRadius, A.radiusPerView * viewHeight));
+  }
+
+  private tint = new pc.Color();
+  private vColour = new pc.Color();
+  private warm = new pc.Color();
+  private dead = new pc.Color();
+
+  /**
+   * Look 1.7: the grade (contrast, saturation, tint, and HDR-aware shadows / highlights / vibrance) blended
+   * between two looks by `k` (0 = a, 1 = b), and the vignette. Both run in the compose pass.
+   */
+  grade(a: GradeValues, b: GradeValues, k: number, vignette: number) {
+    const f = this.frame;
+    if (!f) return;
+    const m = (x: number, y: number) => x + (y - x) * k;
+    f.grading.enabled = true;
+    f.grading.brightness = m(a.brightness, b.brightness);
+    f.grading.contrast = m(a.contrast, b.contrast);
+    f.grading.saturation = m(a.saturation, b.saturation);
+    this.dead.fromString(a.tint);
+    this.warm.fromString(b.tint);
+    this.tint.lerp(this.dead, this.warm, k);
+    f.grading.tint = this.tint;
+    f.colorEnhance.enabled = true;
+    f.colorEnhance.shadows = m(a.shadows, b.shadows);
+    f.colorEnhance.highlights = m(a.highlights, b.highlights);
+    f.colorEnhance.vibrance = m(a.vibrance, b.vibrance);
+    const V = LOOK.vignette;
+    f.vignette.intensity = vignette;
+    f.vignette.inner = V.inner;
+    f.vignette.outer = V.outer;
+    f.vignette.curvature = V.curvature;
+    this.vColour.fromString(V.color);
+    f.vignette.color = this.vColour;
+    // CameraFrame reads its settings only in update(); this runs once per frame, after follow().
+    f.update();
   }
 
   destroy() {

@@ -54,4 +54,18 @@ export const LOOK = {
    * bushes and machines and the overview still shows grounding around buildings and trees.
    */
   ssao: { intensity: 1, power: 2, minAngle: 10, samples: 12, radiusPerView: 0.12, minRadius: 0.6, maxRadius: 2 },
+  /**
+   * Look 1.7: colour grading. `warm` is the restored look; `dead` is the fogged / unrestored mood. The game blends
+   * between them by the restoration of the area in view (0 = dead, 1 = warm), so the light comes back as you
+   * restore. Read every frame: live edits apply at once.
+   */
+  grade: {
+    warm: { brightness: 1.0, contrast: 1.08, saturation: 1.04, tint: '#fff0da', shadows: 0.05, highlights: -0.15, vibrance: 0.1 },
+    dead: { brightness: 0.97, contrast: 1.03, saturation: 0.82, tint: '#e9eef6', shadows: 0.0, highlights: -0.1, vibrance: 0.0 },
+    /** High contrast (settings): a flatter grade with no vignette so outlines and text stay readable. */
+    contrast: { brightness: 1.02, contrast: 1.0, saturation: 1.0, tint: '#ffffff', shadows: 0.2, highlights: -0.1, vibrance: 0.0 },
+    /** Seconds for the mood to follow a change in restoration. */
+    follow: 2.5,
+  },
+  vignette: { intensity: 0.32, inner: 0.55, outer: 1.35, curvature: 0.6, color: '#2a1d14' },
 };

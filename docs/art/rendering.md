@@ -64,3 +64,12 @@ offscreen target), then the effects run, then the compose pass applies exposure,
   It adds a depth prepass (about +50 draw calls in the park shots). Baked vertex occlusion for phones without SSAO
   is not done yet: it means darkening the bases of tufts, stems and props where `ChunkRenderer` and the foliage
   generators write vertex colours, which the parallel E16 vegetation work is rewriting; it should follow E16.
+- **Grading and vignette:** in the compose pass: contrast, saturation, a tint, and HDR-aware shadows / highlights /
+  vibrance (`colorEnhance`). Two looks in `LOOK.grade`: `warm` (restored: warm tint, a little more contrast,
+  highlights held down) and `dead` (cool tint, desaturated). The game blends them by the restoration of the area
+  under the camera (`Game.updateMood`: a cleared area is 1, a fogged one rises toward 1 as restored tiles approach
+  its landmark's need), easing over 2.5 s, so restoring reads as the light coming back. A soft warm-brown vignette
+  (0.32) frames the view. **High contrast** uses a flat grade with lifted shadows and no vignette.
+- **Live tuning:** `LOOK` is read every frame for the grade, vignette, SSAO and rim. In a dev build,
+  `solarbloom.look.cfg.grade.warm.saturation = 1.2` applies at once; light and bloom changes need
+  `solarbloom.look.apply()`. No rebuild either way.

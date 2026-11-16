@@ -17,6 +17,11 @@ export class LookController {
   private toSun = new pc.Vec3();
   private rimColour = new pc.Color();
   readonly post: PostFx;
+  /** Look 1.7: restoration of the area in view, 0 (dead, fogged) … 1 (restored); the grade follows it. */
+  moodTarget = 0;
+  mood = 0;
+  /** Settings: high contrast flattens the grade and drops the vignette so outlines and text stay readable. */
+  highContrast = false;
 
   constructor(
     private app: pc.AppBase,
@@ -35,6 +40,11 @@ export class LookController {
     this.apply();
   }
 
+  /** Jumps the mood straight to its target (a load, or a teleport across the city). */
+  snapMood() {
+    this.mood = this.moodTarget;
+  }
+
   /** Re-reads LOOK (live tuning). */
   apply() {
     this.scene.applyLights();
@@ -44,9 +54,13 @@ export class LookController {
     this.post.apply({ post: true, bloom: true, ssao: true, samples: 4 }, this.app.scene.fog.color);
   }
 
-  update(_dt: number) {
-    const R = LOOK.rim;
+  update(dt: number) {
     this.post.follow(this.camera.viewHeight);
+    const G = LOOK.grade;
+    this.mood += (this.moodTarget - this.mood) * (1 - Math.exp(-dt / Math.max(0.01, G.follow)));
+    if (this.highContrast) this.post.grade(G.contrast, G.contrast, 0, 0);
+    else this.post.grade(G.dead, G.warm, this.mood, LOOK.vignette.intensity);
+    const R = LOOK.rim;
     setLookRim(this.app.graphicsDevice, this.rimColour, R.intensity, R.power, this.toSun, this.camera.entity.getPosition());
   }
 }

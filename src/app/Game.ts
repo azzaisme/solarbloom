@@ -332,6 +332,7 @@ export class Game {
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
     document.body.classList.toggle('contrast', !!s.highContrast);
+    this.look.highContrast = !!s.highContrast;
     const rm = s.reducedMotion;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
@@ -471,6 +472,31 @@ export class Game {
     const p = cam.getPosition();
     const depth = (o.x + d.x * t - p.x) * fwd.x + (o.y + d.y * t - p.y) * fwd.y + (o.z + d.z * t - p.z) * fwd.z;
     setTreeCursor((this.pointer.x / w) * 2 - 1, 1 - (this.pointer.y / h) * 2, depth, this.treeFade, w, h);
+  }
+
+  private moodT = 0;
+  private moodSet = false;
+
+  /**
+   * Look 1.7: the grade follows the restoration of the area under the camera (a cleared area is fully warm; a
+   * fogged one warms as its tiles come back toward the landmark's need), so progress reads as the light returning.
+   */
+  private updateMood(dt: number) {
+    this.moodT -= dt;
+    if (this.moodT > 0) return;
+    this.moodT = 0.5;
+    const s = this.sim;
+    const t = this.camera.target;
+    const id = s.areas.areaOf({ roofId: GROUND, x: Math.floor(t.x), z: Math.floor(t.z) });
+    let mood = 0;
+    if (id) {
+      const fog = s.areas.fog(id);
+      if (fog === 'cleared') mood = 1;
+      else if (fog !== 'hidden') mood = Math.min(1, s.areas.counts(id).restored / s.areas.need(id));
+    }
+    this.look.moodTarget = mood;
+    if (!this.moodSet) this.look.snapMood();
+    this.moodSet = true;
   }
 
   /** Haze and shadow reach follow the zoom-dependent camera (its distance changes with the zoom). */
@@ -2047,6 +2073,7 @@ export class Game {
     this.overlays.update(dt);
     this.camera.update(dt);
     this.syncView();
+    this.updateMood(dt);
     this.look.update(dt);
     this.updateTreeCursor(dt);
     this.hud.update(dt);
