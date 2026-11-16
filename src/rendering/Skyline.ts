@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import { SKY } from '../data/sky';
 import { skyColour, skyMaterial } from './Sky';
+import type { ModelLibrary } from './Models';
 
 type Key = 'stone' | 'green' | 'glass' | 'water' | 'glowWarm';
 const KEYS: Key[] = ['stone', 'green', 'glass', 'water', 'glowWarm'];
@@ -26,9 +27,9 @@ class Kit {
     this.haze.push(Math.min(0.92, this.base + ground * ground * 0.45));
   }
 
-  private face(p: number[][], n: [number, number, number], k: Key) {
+  private face(p: number[][], n: [number, number, number], k: Key, tone = 1) {
     const l = this.light;
-    const s = 0.62 + 0.38 * Math.max(0, n[0] * l.x + n[1] * l.y + n[2] * l.z) + (n[1] > 0.5 ? 0.06 : 0);
+    const s = (0.62 + 0.38 * Math.max(0, n[0] * l.x + n[1] * l.y + n[2] * l.z) + (n[1] > 0.5 ? 0.06 : 0)) * tone;
     const b = this.pos.length / 3;
     for (const v of p) this.vert(v[0], v[1], v[2], k, s);
     for (let i = 1; i < p.length - 1; i++) this.idx.push(b, b + i, b + i + 1);
@@ -77,6 +78,30 @@ class Kit {
     }
   }
 
+  /**
+   * Look 3.19: a hand-built skyline model (`ModelLibrary.triangles`), its base at (x, y, z), scaled (sx across, sy
+   * up, sz deep) and turned `yaw` like `box` (its front, +z, toward the viewer at yaw = face). Its palette keys
+   * fold into the skyline's few colours (stone shades kept as a tone), so it hazes like everything else.
+   */
+  model(m: { pos: number[]; keys: string[] }, x: number, y: number, z: number, sx: number, sy: number, sz: number, yaw: number) {
+    const c = Math.cos(yaw);
+    const s = Math.sin(yaw);
+    const P = (i: number) => {
+      const dx = m.pos[i] * sx, dz = m.pos[i + 2] * sz;
+      return [x + dx * c + dz * s, y + m.pos[i + 1] * sy, z - dx * s + dz * c];
+    };
+    for (let t = 0; t < m.keys.length; t++) {
+      const a = P(t * 9), b = P(t * 9 + 3), d = P(t * 9 + 6);
+      const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+      const vx = d[0] - a[0], vy = d[1] - a[1], vz = d[2] - a[2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      const len = Math.hypot(nx, ny, nz);
+      if (len < 1e-9) continue;
+      const [k, tone] = SKY_KEY[m.keys[t]] ?? SKY_KEY.sandstone;
+      this.face([a, b, d], [nx / len, ny / len, nz / len], k, tone);
+    }
+  }
+
   /** A low dome (glass) with a few ribs. */
   dome(x: number, y: number, z: number, r: number, k: Key) {
     const segs = 10;
@@ -111,6 +136,22 @@ class Kit {
     }
   }
 }
+
+/** How a model's palette keys draw in the skyline: its colour key and a tone (lighter or darker stone). */
+const SKY_KEY: Record<string, [Key, number]> = {
+  sandstone: ['stone', 1],
+  sandstoneDark: ['stone', 0.86],
+  sandstoneLight: ['stone', 1.08],
+  shell: ['stone', 1.12],
+  leafFin: ['green', 1],
+  stem: ['green', 0.85],
+  glass: ['glass', 1],
+  glassPale: ['glass', 1.05],
+  water: ['water', 1],
+  gold: ['glowWarm', 1],
+};
+/** Skyline tower model: the tops of its four terraces (model metres) and of its last storey. */
+const TOWER_TIERS = [6.2, 12.15, 18.1, 24.05];
 
 /** Seeded random numbers (the skyline looks the same every load). */
 function rng(seed: number) {
@@ -160,10 +201,36 @@ export class Skyline {
   clarity = 0.4;
   reducedMotion = false;
 
-  constructor(app: pc.AppBase, layer: pc.Layer, sunDir: pc.Vec3) {
+  constructor(
+    private app: pc.AppBase,
+    private layer: pc.Layer,
+    private sunDir: pc.Vec3,
+  ) {
     this.root = new pc.Entity('skyline');
     app.root.addChild(this.root);
+    this.build();
+  }
+
+  /**
+   * Look 3.19: rebuild with the hand-built skyline models mixed in (terraced towers, glass domes, a waterfall
+   * cliff and bridge spans), baked into the same hazed rings. Call once the models have loaded.
+   */
+  useModels(lib: ModelLibrary) {
+    if (!['skyline-tower', 'skyline-dome', 'skyline-cliff', 'skyline-bridge'].some((n) => lib.has(n))) return;
+    for (const c of [...this.root.children]) c.destroy();
+    this.layers = [];
+    this.fallsHaze = [];
+    this.mistA = [];
+    this.mistHaze = [];
+    this.build(lib);
+    this.builtClarity = -1;
+  }
+
+  private build(lib?: ModelLibrary) {
+    const { app, layer, sunDir } = this;
     const device = app.graphicsDevice;
+    const tri = (n: string) => (lib?.has(n) ? lib.triangles(n) : undefined);
+    const M = { tower: tri('skyline-tower'), dome: tri('skyline-dome'), cliff: tri('skyline-cliff'), bridge: tri('skyline-bridge') };
     const fallsPos: number[] = [];
     const fallsUv: number[] = [];
     const fallsIdx: number[] = [];
@@ -174,7 +241,7 @@ export class Skyline {
       const kit = new Kit(light);
       kit.base = L.haze;
       const rnd = rng(97 + li * 131);
-      const towers: { x: number; z: number; w: number; tiers: number[] }[] = [];
+      const towers: { x: number; z: number; w: number; tiers: number[]; front: number; cliff?: boolean }[] = [];
       for (let i = 0; i < L.n; i++) {
         const a = ((i + rnd() * 0.5) / L.n) * Math.PI * 2;
         const R = L.r + (rnd() - 0.5) * 14;
@@ -183,6 +250,35 @@ export class Skyline {
         const face = Math.atan2(-x, -z); // toward the centre (the viewer)
         const w = (7 + rnd() * 7) * (0.8 + li * 0.15);
         const tiers: number[] = [];
+        // Look 3.19: some of the nearer rings' towers are hand-built models (their own seeded choice, so the
+        // procedural skyline is unchanged without them)
+        const pick = li < 2 && (M.tower || M.dome || M.cliff) ? rnd() : 1;
+        if (pick < 0.42) {
+          let kind: 'tower' | 'dome' | 'cliff' = pick < 0.07 && li === 0 ? 'cliff' : pick < 0.14 ? 'dome' : 'tower';
+          if (!M[kind]) kind = M.tower ? 'tower' : M.dome ? 'dome' : 'cliff';
+          const m = M[kind]!;
+          let front: number;
+          if (kind === 'tower') {
+            const sw = (w / 8.8) * 1.15;
+            const sy = sw * (1.35 + rnd() * 0.6) * L.h;
+            kit.model(m, x, kit.floor, z, sw, sy, sw, face);
+            for (const t of TOWER_TIERS) tiers.push(kit.floor + t * sy);
+            front = 4.4 * sw;
+          } else if (kind === 'dome') {
+            const sd = (w / 15) * 2 * (1 + rnd() * 0.3);
+            kit.model(m, x, kit.floor, z, sd, sd * L.h, sd, face);
+            tiers.push(kit.floor + 3.5 * sd * L.h);
+            front = 7.5 * sd;
+          } else {
+            const sc = (w / 17.5) * 2.4;
+            kit.model(m, x, kit.floor, z, sc, sc * 1.25, sc, face);
+            tiers.push(kit.floor + 19.5 * sc * 1.25);
+            front = 5.9 * sc;
+          }
+          towers.push({ x, z, w, tiers, front, cliff: kind === 'cliff' });
+          if (kind === 'cliff') this.waterfall(fallsPos, fallsUv, fallsIdx, mistPos, mistIdx, kit, L.haze, x, z, face, w * 0.35, front, tiers[0]);
+          continue;
+        }
         let y = kit.floor;
         let tw = w;
         const nt = 3 + Math.floor(rnd() * 4);
@@ -214,40 +310,12 @@ export class Skyline {
         if (top < 0.18) kit.dome(x, y, z, tw * 0.55, 'glass');
         else if (top < 0.45) kit.cyl(x, y, z, tw * 0.08, 6 + rnd() * 8, 6, 'stone');
         else kit.blob(x, y + 1, z, tw * 0.45);
-        towers.push({ x, z, w, tiers });
+        towers.push({ x, z, w, tiers, front: w * 0.5 });
         // Waterfalls from a terrace on some towers, pouring toward the viewer, with mist at the foot.
         if (rnd() < 0.35 && li === 0 && tiers.length > 1) { // nearest ring only: the falls share its scale
           const from = tiers[Math.min(tiers.length - 1, 1 + Math.floor(rnd() * (tiers.length - 1)))];
           const fw = w * (0.18 + rnd() * 0.14);
-          const fx = x + Math.sin(face) * (w * 0.5 + 0.4);
-          const fz = z + Math.cos(face) * (w * 0.5 + 0.4);
-          const cx = Math.cos(face) * fw * 0.5;
-          const cz = -Math.sin(face) * fw * 0.5;
-          const b = fallsPos.length / 3;
-          const h = from - kit.floor;
-          fallsPos.push(fx - cx, kit.floor, fz - cz, fx + cx, kit.floor, fz + cz, fx + cx, from, fz + cz, fx - cx, from, fz - cz);
-          const v = h / 12;
-          fallsUv.push(0, v, 1, v, 1, 0, 0, 0);
-          fallsIdx.push(b, b + 1, b + 2, b, b + 2, b + 3);
-          for (let q = 0; q < 4; q++) this.fallsHaze.push(L.haze);
-          // Mist: a few soft puffs at the foot.
-          for (let m = 0; m < 3; m++) {
-            const mb = mistPos.length / 3;
-            const mx = fx + Math.sin(face) * 1.5 + (m - 1) * fw * 0.6;
-            const mz = fz + Math.cos(face) * 1.5;
-            const my = kit.floor + 2 + m * 0.6;
-            const rad = fw * (0.8 + m * 0.2) + 2;
-            mistPos.push(mx, my, mz);
-            this.mistA.push(0.75);
-            this.mistHaze.push(L.haze);
-            for (let s = 0; s < 10; s++) {
-              const aa = (s / 10) * Math.PI * 2;
-              mistPos.push(mx + Math.cos(face) * Math.cos(aa) * rad, my + Math.sin(aa) * rad * 0.45, mz - Math.sin(face) * Math.cos(aa) * rad);
-              this.mistA.push(0);
-              this.mistHaze.push(L.haze);
-            }
-            for (let s = 0; s < 10; s++) mistIdx.push(mb, mb + 1 + s, mb + 1 + ((s + 1) % 10));
-          }
+          this.waterfall(fallsPos, fallsUv, fallsIdx, mistPos, mistIdx, kit, L.haze, x, z, face, fw, w * 0.5, from);
         }
       }
       // Arched bridges between neighbours on the nearer rings.
@@ -263,6 +331,15 @@ export class Skyline {
           const yaw = Math.atan2(dx, dz) - Math.PI / 2;
           const mx = (A.x + B.x) / 2;
           const mz = (A.z + B.z) / 2;
+          // Look 3.19: every other bridge on the nearest ring is the hand-built span (its deck between the towers'
+          // faces, its piers against them, the deck's ends level with the lower terrace)
+          const gap = len - (A.w + B.w) / 2;
+          if (M.bridge && li === 0 && i % 2 === 0 && gap > 6 && !A.cliff && !B.cliff) {
+            const sx = gap / 22;
+            const sy = Math.min(1.4, Math.max(0.7, sx));
+            kit.model(M.bridge, mx, lvl - 7.8 * sy, mz, sx, sy, sy * 0.8, yaw);
+            continue;
+          }
           kit.box(mx, lvl - 0.4, mz, len, 0.8, 2.2, yaw, 'stone');
           kit.box(mx, lvl + 0.35, mz, len, 0.5, 0.25, yaw, 'green');
           // The arch underneath, in short segments.
@@ -315,6 +392,39 @@ export class Skyline {
     this.mist = new pc.Entity('skyline-mist');
     this.mist.addComponent('render', { meshInstances: [new pc.MeshInstance(this.mistMesh, skyMaterial(true))], castShadows: false, receiveShadows: false, layers: [layer.id] });
     this.root.addChild(this.mist);
+  }
+
+  /** A waterfall from height `from` on a tower's front (`front` from its centre), toward the viewer, with mist at the foot. */
+  private waterfall(fallsPos: number[], fallsUv: number[], fallsIdx: number[], mistPos: number[], mistIdx: number[], kit: Kit, haze: number, x: number, z: number, face: number, fw: number, front: number, from: number) {
+    const fx = x + Math.sin(face) * (front + 0.4);
+    const fz = z + Math.cos(face) * (front + 0.4);
+    const cx = Math.cos(face) * fw * 0.5;
+    const cz = -Math.sin(face) * fw * 0.5;
+    const b = fallsPos.length / 3;
+    const h = from - kit.floor;
+    fallsPos.push(fx - cx, kit.floor, fz - cz, fx + cx, kit.floor, fz + cz, fx + cx, from, fz + cz, fx - cx, from, fz - cz);
+    const v = h / 12;
+    fallsUv.push(0, v, 1, v, 1, 0, 0, 0);
+    fallsIdx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+    for (let q = 0; q < 4; q++) this.fallsHaze.push(haze);
+    // Mist: a few soft puffs at the foot.
+    for (let m = 0; m < 3; m++) {
+      const mb = mistPos.length / 3;
+      const mx = fx + Math.sin(face) * 1.5 + (m - 1) * fw * 0.6;
+      const mz = fz + Math.cos(face) * 1.5;
+      const my = kit.floor + 2 + m * 0.6;
+      const rad = fw * (0.8 + m * 0.2) + 2;
+      mistPos.push(mx, my, mz);
+      this.mistA.push(0.75);
+      this.mistHaze.push(haze);
+      for (let s = 0; s < 10; s++) {
+        const aa = (s / 10) * Math.PI * 2;
+        mistPos.push(mx + Math.cos(face) * Math.cos(aa) * rad, my + Math.sin(aa) * rad * 0.45, mz - Math.sin(face) * Math.cos(aa) * rad);
+        this.mistA.push(0);
+        this.mistHaze.push(haze);
+      }
+      for (let s = 0; s < 10; s++) mistIdx.push(mb, mb + 1 + s, mb + 1 + ((s + 1) % 10));
+    }
   }
 
   get triangles(): number {

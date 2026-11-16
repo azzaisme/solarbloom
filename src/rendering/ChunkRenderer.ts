@@ -694,10 +694,9 @@ export class ChunkRenderer {
           trLive++;
         }
       } else if (v.far) this.farTile(b, t, h);
-      else {
-        this.tile(b, t, h);
-        areaEdges(this.ctx, t, h + 0.08); // Look 3.10: railings, vines, banners and clutter on area boundaries
-      }
+      else this.tile(b, t, h);
+      // Look 3.10: railings, vines, banners and clutter on area boundaries (near chunks; with transitions on too)
+      if (!v.far) areaEdges(this.ctx, t, h + 0.08);
     }
     // Buildings (generation 2): grey and shuttered in the fog, white with roof gardens once the area is clear.
     if ((s.grid.layer(GROUND)!.gen ?? 1) >= 2) {
