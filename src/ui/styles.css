@@ -117,28 +117,35 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, summary:foc
 .btn-green { background: var(--btn-green); color: var(--ink-green); box-shadow: 0 2px 0 var(--btn-green-edge); }
 
 /* Resources (top-left) */
-#res { position: absolute; top: calc(52px + var(--safe-t)); left: calc(12px + var(--safe-l)); padding: 10px 14px 12px; width: 256px; }
+/* Look 5.4: resource pills. One glass pill per resource, stacked: icon, name, bold value / max, the net rate in
+   the resource's colour, and a thin fill bar along the bottom edge. Full stores glow gold; a big gain bumps. */
+#res { position: absolute; top: calc(50px + var(--safe-t)); left: calc(12px + var(--safe-l)); width: 300px; display: flex; flex-direction: column; gap: 7px; }
+.res-row { position: relative; display: grid; grid-template-columns: 24px auto 1fr auto; align-items: center; column-gap: 8px; padding: 7px 14px 10px 12px; border-radius: 999px; overflow: hidden; cursor: pointer; transition: box-shadow .3s, border-color .3s; }
+.res-row .ic { display: grid; place-items: center; }
+.res-row .ic .icon { width: 22px; height: 22px; filter: drop-shadow(0 0 4px var(--gold-glow-soft)); }
+.res-row .nm { font: 600 15.5px var(--font-display); color: var(--text-strong); white-space: nowrap; }
+.res-row .val { justify-self: end; white-space: nowrap; font: 700 16px var(--font-display); font-variant-numeric: tabular-nums; color: var(--text-strong); }
+.res-row .val small { font: 600 13px var(--font-display); color: var(--text-soft); }
+.res-row .rate { min-width: 64px; text-align: right; font: 700 12px var(--font-ui); font-variant-numeric: tabular-nums; color: var(--text-soft); white-space: nowrap; }
+.res-row[data-res="energy"] .rate { color: var(--energy); }
+.res-row[data-res="water"] .rate { color: var(--water); }
+.res-row[data-res="biomass"] .rate { color: var(--biomass); }
+.res-row .bar { position: absolute; left: 16px; right: 16px; bottom: 4px; height: 3px; background: var(--glass-sunk); border-radius: 3px; overflow: hidden; }
+.res-row .bar i { display: block; height: 100%; border-radius: 3px; transition: width .2s; }
+.res-row.full { border-color: var(--edge-strong); box-shadow: var(--shadow), var(--inner-glow), 0 0 12px var(--gold-glow-soft); }
+.res-row.full .rate::after { content: ' · full'; color: var(--text-soft); font-weight: 800; } /* full is fine, not an error (Phase 4) */
+.res-row .rate .spend { color: var(--text-soft); font-weight: 700; }
+.res-row.flash .val { animation: flash .5s; }
+@keyframes flash { 0% { transform: scale(1.25); color: var(--gold-hi); } 100% { transform: scale(1); } }
+.res-row.bump { animation: bump .7s ease-out; }
+@keyframes bump { 0% { box-shadow: var(--shadow), 0 0 0 2px var(--gold-hi), 0 0 22px var(--gold-glow); transform: scale(1.04); } 100% { transform: none; } }
+.res-row.short .val { animation: shake .4s; color: var(--bad); }
+@keyframes shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
 /* Look 5.3: the logo sits on the scene, above the resources: the lotus-and-sun mark and a white wordmark. */
 #logo { position: absolute; top: calc(8px + var(--safe-t)); left: calc(12px + var(--safe-l)); display: flex; align-items: center; gap: 7px; pointer-events: none; font: 600 27px/1 var(--font-display); letter-spacing: .2px; color: var(--text-strong); text-shadow: 0 1px 0 var(--logo-edge), 0 2px 10px var(--text-shade); }
 #logo .mark { width: 36px; height: 36px; filter: drop-shadow(0 1px 3px var(--text-shade)); }
 .card-intro h2 .mark { width: 34px; height: 34px; flex: none; }
 .card-intro h2 { display: flex; align-items: center; gap: 8px; }
-.res-row { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 4px 6px; margin-top: 6px; }
-.res-row .ic { font-size: 16px; text-align: center; }
-.res-row .val { white-space: nowrap; font: 600 16px var(--font-display); font-variant-numeric: tabular-nums; color: var(--text-strong); }
-.res-row .val small { font-weight: 500; color: var(--text-soft); font-size: 12px; }
-.res-row .rate { font-size: 11.5px; font-weight: 800; color: var(--text-soft); font-variant-numeric: tabular-nums; text-align: right; }
-.res-row[data-res="energy"] .rate { color: var(--energy); }
-.res-row[data-res="water"] .rate { color: var(--water); }
-.res-row[data-res="biomass"] .rate { color: var(--biomass); }
-.res-row .bar { grid-column: 2 / 4; height: 5px; background: var(--glass-sunk); border-radius: 4px; overflow: hidden; }
-.res-row .bar i { display: block; height: 100%; border-radius: 4px; transition: width .2s; }
-.res-row.full .rate::after { content: ' · full'; color: var(--text-soft); font-weight: 800; } /* full is fine, not an error (Phase 4) */
-.res-row .rate .spend { color: var(--text-soft); font-weight: 700; }
-.res-row.flash .val { animation: flash .5s; }
-@keyframes flash { 0% { transform: scale(1.25); color: var(--gold-hi); } 100% { transform: scale(1); } }
-.res-row.short .val { animation: shake .4s; color: var(--bad); }
-@keyframes shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
 
 /* Objective (top-right) */
 #obj { position: absolute; top: calc(12px + var(--safe-t)); right: calc(12px + var(--safe-r)); padding: 10px 14px 12px; width: 268px; }
@@ -262,10 +269,6 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, summary:foc
 
 /* Responsive */
 @media (max-width: 760px) {
-  #res { width: auto; min-width: 0; max-width: calc(100vw - 190px - 20px - var(--safe-l) - var(--safe-r)); overflow: hidden; padding: 7px 9px; top: calc(6px + var(--safe-t)); left: calc(6px + var(--safe-l)); }
-  .res-row { margin-top: 2px; grid-template-columns: 18px auto auto; }
-  .res-row .bar { display: none; }
-  .res-row .val { font-size: 13px; }
   #obj { width: 190px; padding: 7px 9px; top: calc(6px + var(--safe-t)); right: calc(6px + var(--safe-r)); }
   #obj ul { display: none; }
   #obj.expanded ul { display: block; }
@@ -414,7 +417,6 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, summary:foc
 .icon { width: 1em; height: 1em; display: inline-block; vertical-align: -0.15em; }
 .slot .si .icon { width: 24px; height: 24px; display: block; }
 .slot[data-tool="pulse"] .si .icon { width: 30px; height: 30px; }
-.res-row .ic .icon { width: 17px; height: 17px; display: block; margin: 0 auto; }
 /* One hotbar everywhere: Inspect · Build · Pulse · Harvest · Upgrades. Machines pop up in the Build tray. */
 #hotbar #buildToggle { display: flex; order: 2; }
 #hotbar [data-tool="pulse"] { order: 3; }
@@ -432,15 +434,17 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, summary:foc
 
 /* Narrow screens and short landscape screens: a compact resource strip, a one-line objective under it. */
 @media (max-width: 760px), (max-height: 500px) {
-  #res { left: calc(6px + var(--safe-l)); right: calc(6px + var(--safe-r)); top: calc(6px + var(--safe-t)); width: auto; max-width: none; display: flex; gap: 6px; padding: 5px 8px; overflow: hidden; }
+  /* Look 5.4 / 5.11: compact pills side by side (no names); value on top, rate under it, bar along the edge. */
+  #res { left: calc(6px + var(--safe-l)); right: calc(6px + var(--safe-r)); top: calc(6px + var(--safe-t)); width: auto; flex-direction: row; gap: 5px; }
   #logo { display: none; }
-  #res .res-row { margin: 0; flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: 18px 1fr; column-gap: 4px; row-gap: 0; }
+  #res .res-row { flex: 1 1 0; min-width: 0; grid-template-columns: 18px 1fr; column-gap: 5px; padding: 4px 9px 7px 7px; border-radius: 14px; }
   #res .res-row .ic { grid-row: 1 / 3; }
-  #res .res-row .val { font-size: 14px; overflow: hidden; text-overflow: ellipsis; }
-  #res .res-row .val .nm { display: none; }
-  #res .res-row .val small { font-size: 10.5px; }
-  #res .res-row .rate { grid-column: 2; text-align: left; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #res .res-row .bar { display: none; }
+  #res .res-row .ic .icon { width: 18px; height: 18px; }
+  #res .res-row .nm { display: none; }
+  #res .res-row .val { justify-self: start; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  #res .res-row .val small { font-size: 11px; }
+  #res .res-row .rate { grid-column: 2; min-width: 0; text-align: left; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; }
+  #res .res-row .bar { left: 10px; right: 10px; bottom: 3px; height: 2px; }
   #obj { top: calc(6px + var(--safe-t) + 46px); left: calc(6px + var(--safe-l)); right: calc(6px + var(--safe-r)); width: auto; padding: 5px 8px; display: grid; grid-template-columns: 1fr auto; column-gap: 8px; align-items: center; }
   #obj > * { grid-column: 1 / -1; }
   #obj h3, #obj .pct { display: none; }
@@ -506,7 +510,6 @@ body.frenzy.reduced #hud::before { animation: none; }
 
 /* Phase 5 E12: uncapped biomass, resource breakdown, next purchase, per-machine "All" buttons */
 .res-row .capw.nocap { display: none; }
-.res-row { cursor: pointer; }
 #resInfo { position: fixed; z-index: 30; width: 240px; padding: 8px 10px; font-size: 12px; line-height: 1.5; pointer-events: auto; background: var(--glass-strong); }
 #resInfo b { font: 600 14px var(--font-display); color: var(--gold); }
 #resInfo div { display: flex; justify-content: space-between; gap: 8px; }

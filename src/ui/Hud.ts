@@ -111,9 +111,10 @@ export class Hud {
 
   private template() {
     const rows = KINDS.map(
-      (k) => `<div class="res-row" data-res="${k}" title="${RES_META[k].name}">
+      (k) => `<div class="res-row panel" data-res="${k}" title="${RES_META[k].name}">
         <span class="ic" aria-hidden="true">${ICONS[k]}</span>
-        <span class="val"><span class="n">0</span> <small class="capw">/ <span class="c">0</span><span class="nm"> ${RES_META[k].name}</span></small></span>
+        <span class="nm">${RES_META[k].name}</span>
+        <span class="val"><span class="n">0</span> <small class="capw">/ <span class="c">0</span></small></span>
         <span class="rate">+0/s</span>
         <span class="bar"><i style="background:${RES_META[k].color}"></i></span>
       </div>`,
@@ -139,7 +140,7 @@ export class Hud {
     ].join('');
     return `
       <div id="logo" role="img" aria-label="Solarbloom">${LOGO_MARK}<span class="wm">Solarbloom</span></div>
-      <div id="res" class="panel">${rows}</div>
+      <div id="res" role="group" aria-label="Resources">${rows}</div>
       <div id="resInfo" class="panel" role="status" hidden></div>
       <div id="obj" class="panel">
         <h3 id="objTitle">Wake the fountain</h3>
@@ -608,8 +609,9 @@ export class Hud {
   }
 
   private flashedAt = new Map<string, number>();
+  private prevRes = new Map<ResourceKind, number>();
 
-  flashResource(kind: ResourceKind, cls: 'flash' | 'short') {
+  flashResource(kind: ResourceKind, cls: 'flash' | 'short' | 'bump') {
     // Restarting the animation forces a layout: at most a few times a second per counter (big chains call
     // this hundreds of times).
     const now = performance.now();
@@ -869,6 +871,11 @@ export class Hud {
       const row = $(this.root, `[data-res="${k}"]`);
       const v = s.econ.get(k);
       const c = s.econ.cap(k);
+      // Look 5.4: a big gain at once (a harvest, a chain payout, a cat reward) bumps the pill.
+      const vn = toNum(v);
+      const prev = this.prevRes.get(k);
+      this.prevRes.set(k, vn);
+      if (prev !== undefined && vn - prev > Math.max(1, 0.15 * (c ? toNum(c) : Math.max(prev, 10)))) this.flashResource(k, 'bump');
       this.set(`v-${k}`, $(row, '.n'), 'text', fmt(v));
       this.set(`c-${k}`, $(row, '.c'), 'text', c ? fmt(c) : '');
       this.set(`cw-${k}`, $(row, '.capw'), 'cls', c ? '0' : '1', 'nocap');
