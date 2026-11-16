@@ -330,6 +330,12 @@ class MeshBuilder {
 /** Ground colours per material, dead → alive (Look 2: PALETTE.ground / PALETTE.lawn). */
 const DEAD = PALETTE.ground.dead;
 const EDGE_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+/**
+ * Curved paths: the radius of the quarter circle that rounds a path's corner (half a tile: stepped tiles join into
+ * one curve), segments per corner, how far the piece stands above the tile top (restored / not), and the width of
+ * the white border along the curve.
+ */
+const PATH_CURVE = { radius: 0.5, arc: 6, lift: 0.052, liftDead: 0.012, border: 0.07 };
 /** City 16.6: the four sides of a road tile and their piece-mask bits (RoadPlan.pieceAt). */
 const ROAD_SIDES = [
   [1, 0, 1],
@@ -807,6 +813,7 @@ export class ChunkRenderer {
       else this.tile(b, t, h);
       // Look 3.10: railings, vines, banners and clutter on area boundaries (near chunks; with transitions on too)
       if (!v.far) areaEdges(this.ctx, t, h + 0.08);
+      if (!v.far && fog !== 'hidden') this.pathCorners(b, t, h);
       if (!v.far && this.isWater(t)) {
         this.poolBanks(b, t, h);
         if (t.ground === 'restored' && fog !== 'hidden') this.poolSurface(pool, t, h);
@@ -1221,6 +1228,75 @@ export class ChunkRenderer {
       case 'restored': {
         this.restoredTile(b, t, h, x, z, top, f, r);
         break;
+      }
+    }
+  }
+
+  // ───────────── curved paths ─────────────
+
+  /** Paving a path can curve through: open, or under a landmark or machine (the plaza runs on under the fountain). */
+  private isPath(t: TileData | undefined): t is TileData {
+    return !!t && !t.blocked && t.feature === 'paving';
+  }
+
+  /** Soft ground a path curves against: open lawn, leaf litter or clay. */
+  private isSoft(t: TileData | undefined): t is TileData {
+    if (!t || t.blocked || t.occupantId) return false;
+    const f = t.feature ?? 'lawn';
+    return f === 'lawn' || f === 'litter' || f === 'clay';
+  }
+
+  /**
+   * Paths are laid on square tiles; this rounds them. Where a paved tile turns an outer corner against soft ground,
+   * the corner is cut back to a quarter circle and the ground beyond grows into it; where soft ground sits in the
+   * crook of a path, the paving fills its corner the same way. Stepped runs of tiles then read as one winding path
+   * and a blocky disc as a round plaza. Each piece takes the colour of the tile it extends, at that tile's state,
+   * and restored paving keeps its white border along the curve.
+   */
+  private pathCorners(b: MeshBuilder, t: TileData, h: number) {
+    const paved = this.isPath(t);
+    if (!paved && !this.isSoft(t)) return;
+    const g = this.sim.grid;
+    const R = PATH_CURVE.radius;
+    const top = h + 0.08;
+    const keep = b.grey;
+    for (const [sx, sz] of CORNERS) {
+      const nx = g.peek(t.roofId, t.x + sx, t.z);
+      const nz = g.peek(t.roofId, t.x, t.z + sz);
+      // both sides of the corner must be the other kind of ground
+      if (paved ? !this.isSoft(nx) || !this.isSoft(nz) : !this.isPath(nx) || !this.isPath(nz)) continue;
+      const from = nx!; // the tile whose ground spreads into this corner
+      const alive = t.ground === 'restored' && from.ground === 'restored' && nz!.ground === 'restored';
+      const cx = t.x + 0.5 + sx * 0.5;
+      const cz = t.z + 0.5 + sz * 0.5;
+      // centre of the quarter circle, and its rim from the x edge round to the z edge
+      const ox = cx - sx * R;
+      const oz = cz - sz * R;
+      const rim = (rad: number): [number, number][] => {
+        const out: [number, number][] = [];
+        for (let i = 0; i <= PATH_CURVE.arc; i++) {
+          const a = (i / PATH_CURVE.arc) * (Math.PI / 2);
+          out.push([ox + sx * rad * Math.cos(a), oz + sz * rad * Math.sin(a)]);
+        }
+        return out;
+      };
+      const y = top + (alive ? PATH_CURVE.lift : PATH_CURVE.liftDead);
+      b.grey = this.greyOf(from);
+      b.prism(this.topColour(from), [cx, cz], rim(R), false, y, top - 0.02);
+      b.grey = keep;
+      if (!alive) continue;
+      // the white border follows the curve, on the paved side of it
+      const w = PATH_CURVE.border;
+      const inner = rim(paved ? R - w : R);
+      const outer = rim(paved ? R : R + w);
+      const yb = y + 0.012;
+      for (let i = 0; i < PATH_CURVE.arc; i++) {
+        const A: V3 = [inner[i][0], yb, inner[i][1]];
+        const B: V3 = [outer[i][0], yb, outer[i][1]];
+        const C: V3 = [outer[i + 1][0], yb, outer[i + 1][1]];
+        const D: V3 = [inner[i + 1][0], yb, inner[i + 1][1]];
+        b.tri(PALETTE.stone.bright, A, B, C, UP);
+        b.tri(PALETTE.stone.bright, A, C, D, UP);
       }
     }
   }
