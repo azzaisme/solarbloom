@@ -206,7 +206,7 @@ export function buildLeafyShrub(variant: number, lod: Lod, flowering = false): T
   const R = rng(variant * 9973 + (flowering ? 501 : 7));
   const k = 0.88 + R() * 0.24;
   const base = scaleC(hex(PALETTE.shrubLeaf[0]), k), light = scaleC(hex(PALETTE.shrubLeaf[1]), k), dark = hex(PALETTE.shrubLeaf[2]);
-  const n = 2 + Math.floor(R() * 2);
+  const n = 2; // two overlapping clusters (each a rounded cauliflower) keep a shrub under ~700 triangles
   const bloom = hex(PALETTE.bougainvillea[variant % PALETTE.bougainvillea.length]);
   for (let i = 0; i < n; i++) {
     const s = 0.11 + R() * 0.07;
@@ -215,7 +215,7 @@ export function buildLeafyShrub(variant: number, lod: Lod, flowering = false): T
     const c: V = [Math.cos(a) * d, s * 0.8, Math.sin(a) * d];
     const r: V = [s, s * 0.82, s];
     // Look 3.6: rounded leaf clusters with dark crevices (no cards: nothing pointy), twigs, and blossom clusters
-    puff(B, { c, r, base, light, dark, flex: 0.25, seed: R() * 1e9, detail: lod === 0 ? 0 : 2, lump: 0.3, clusters: lod === 0 ? 0 : 6 });
+    puff(B, { c, r, base, light, dark, flex: 0.25, seed: R() * 1e9, detail: lod === 0 ? 1 : 2, lump: lod === 0 ? 0 : 0.3, clusters: lod === 0 ? 0 : 6 });
     if (lod > 0) {
       for (let k = 0; k < 2; k++) {
         const u = randDir(R, 0.2);
@@ -228,7 +228,7 @@ export function buildLeafyShrub(variant: number, lod: Lod, flowering = false): T
           const fr = 0.035 + R() * 0.015;
           puff(B, { c: p, r: [fr, fr * 0.8, fr], base: scaleC(bloom, 0.95), light: mix(bloom, [1, 1, 1], 0.25), dark: scaleC(bloom, 0.7), flex: 0.35, seed: k, detail: 1, lump: 0 });
         }
-    } else if (flowering) puff(B, { c: add(c, [0, s * 0.4, 0]), r: [s * 0.7, s * 0.5, s * 0.7], base: bloom, light: mix(bloom, [1, 1, 1], 0.2), dark: scaleC(bloom, 0.7), flex: 0.3, seed: i, detail: 0, lump: 0.2 });
+    } else if (flowering) puff(B, { c: add(c, [0, s * 0.4, 0]), r: [s * 0.7, s * 0.5, s * 0.7], base: bloom, light: mix(bloom, [1, 1, 1], 0.2), dark: scaleC(bloom, 0.7), flex: 0.3, seed: i, detail: 1, lump: 0 });
   }
   return B.done();
 }
@@ -361,25 +361,56 @@ setShrubBuilder((v, lod) => buildLeafyShrub(v, lod)); // far-zoom and planter sh
 
 
 const cache = new Map<string, TreeGeo>();
+/** A non-negative modulo: variants come from world coordinates, which go negative in the city. */
+const pmod = (v: number, n: number) => ((Math.floor(v) % n) + n) % n;
 const get = (key: string, make: () => TreeGeo) => {
   let g = cache.get(key);
   if (!g) cache.set(key, (g = make()));
   return g;
 };
 export const FLORA_VARIANTS = 4;
-export const grassGeo = (stage: number, variant: number, lod: Lod) => get(`g|${stage}|${variant % FLORA_VARIANTS}|${lod}`, () => buildGrass(stage, variant % FLORA_VARIANTS, lod));
+/**
+ * Look 3.3: an even carpet of short blades over a whole tile (−0.5…0.5, spilling a little past the edges), on a
+ * jittered grid so the lawn reads as soft continuous turf rather than scattered tufts. Lighter tips, darker roots;
+ * a slow wave of height across the tile so it isn't a crew cut. ~2 triangles a blade.
+ */
+export function buildTurf(stage: number, variant: number, lod: Lod): TreeGeo {
+  const B = new Buf();
+  const R = rng(variant * 7121 + stage * 59 + lod);
+  const g = lod >= 2 ? 10 : 7;
+  const tall = stage === 1 ? 0.045 : stage === 4 ? 0.07 : 0.06;
+  const baseC = hex(PALETTE.bladeBase[stage]);
+  const tipC = hex(PALETTE.bladeTip[stage]);
+  for (let j = 0; j < g; j++)
+    for (let i = 0; i < g; i++) {
+      const x = -0.5 + (i + 0.15 + R() * 0.7) / g * 1.06 - 0.03;
+      const z = -0.5 + (j + 0.15 + R() * 0.7) / g * 1.06 - 0.03;
+      const h = tall * (0.6 + R() * 0.7) * (0.85 + 0.3 * Math.sin(x * 4 + z * 3 + variant));
+      const a = R() * Math.PI * 2;
+      const lean = 0.2 + R() * 0.45;
+      const tipP: V = [x + Math.cos(a) * h * lean, h, z + Math.sin(a) * h * lean];
+      const k = 0.86 + R() * 0.28;
+      blade(B, [x, 0, z], tipP, 0.02 + R() * 0.012, norm([-Math.sin(a), 0, Math.cos(a)]), scaleC(baseC, k), mix(scaleC(tipC, k), baseC, R() * 0.25), 0.3 + h * 4);
+    }
+  return B.done();
+}
+
+export const grassGeo = (stage: number, variant: number, lod: Lod) => get(`g|${stage}|${pmod(variant, FLORA_VARIANTS)}|${lod}`, () => buildGrass(stage, pmod(variant, FLORA_VARIANTS), lod));
+export const turfGeo = (stage: number, variant: number, lod: Lod) => get(`t|${stage}|${pmod(variant, FLORA_VARIANTS)}|${lod}`, () => buildTurf(stage, pmod(variant, FLORA_VARIANTS), lod));
 export const flowerGeo = (sp: FlowerSpecies, colour: number, open: boolean, variant: number, lod: Lod) =>
-  get(`f|${sp}|${colour % FLOWER_COLOURS[sp].length}|${open}|${variant % 3}|${lod}`, () => buildFlowers(sp, colour % FLOWER_COLOURS[sp].length, open, variant % 3, lod));
-export const leafyShrubGeo = (variant: number, lod: Lod, flowering = false) => get(`s|${variant % 6}|${lod}|${flowering}`, () => buildLeafyShrub(variant % 6, lod, flowering));
+  get(`f|${sp}|${pmod(colour, FLOWER_COLOURS[sp].length)}|${open}|${pmod(variant, 3)}|${lod}`, () => buildFlowers(sp, pmod(colour, FLOWER_COLOURS[sp].length), open, pmod(variant, 3), lod));
+export const leafyShrubGeo = (variant: number, lod: Lod, flowering = false) => get(`s|${pmod(variant, 6)}|${lod}|${flowering}`, () => buildLeafyShrub(pmod(variant, 6), lod, flowering));
 export const vineGeo = (stage: number, hang: number, variant: number, lod: Lod) => {
   const hq = Math.max(1, Math.min(6, Math.round(hang * 4))) / 4; // hang in quarter tiles
-  return get(`v|${stage}|${hq}|${variant % FLORA_VARIANTS}|${lod}`, () => buildVine(stage, hq, variant % FLORA_VARIANTS, lod));
+  return get(`v|${stage}|${hq}|${pmod(variant, FLORA_VARIANTS)}|${lod}`, () => buildVine(stage, hq, pmod(variant, FLORA_VARIANTS), lod));
 };
-export const bannerGeo = (kind: 'pole' | 'rail', alive: boolean, variant: number, lod: Lod) => get(`b|${kind}|${alive}|${variant % 3}|${lod}`, () => buildBanner(kind, alive, variant % 3, lod));
+export const bannerGeo = (kind: 'pole' | 'rail', alive: boolean, variant: number, lod: Lod) => get(`b|${kind}|${alive}|${pmod(variant, 3)}|${lod}`, () => buildBanner(kind, alive, pmod(variant, 3), lod));
 
 /** Everything the ground uses at normal detail, so the caches fill ahead of need (a slice per frame). */
 export function* warmFlora(): Generator<void> {
   for (let st = 0; st <= 4; st++) for (let v = 0; v < FLORA_VARIANTS; v++) (grassGeo(st, v, 1), grassGeo(st, v, 2));
+  yield;
+  for (let st = 1; st <= 4; st++) for (let v = 0; v < FLORA_VARIANTS; v++) (turfGeo(st, v, 1), turfGeo(st, v, 2));
   yield;
   for (const sp of FLOWER_SPECIES)
     for (let c = 0; c < FLOWER_COLOURS[sp].length; c++)

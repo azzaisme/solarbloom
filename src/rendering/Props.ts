@@ -391,6 +391,8 @@ export function buildClutter(kind: ClutterKind, alive: boolean, variant: number,
 // ───────────── caches ─────────────
 
 const cache = new Map<string, TreeGeo>();
+/** A non-negative modulo: variants come from world coordinates, which go negative in the city. */
+const pmod = (v: number, n: number) => ((Math.floor(v) % n) + n) % n;
 const get = (key: string, make: () => TreeGeo) => {
   let g = cache.get(key);
   if (!g) cache.set(key, (g = make()));
@@ -398,7 +400,7 @@ const get = (key: string, make: () => TreeGeo) => {
 };
 export const PROP_VARIANTS = 4;
 export const pavingGeo = (layout: number, variant: number, alive: boolean, shades: string[], lod: Lod) =>
-  get(`p|${layout}|${variant % PROP_VARIANTS}|${alive}|${shades[0]}|${lod}`, () => buildPaving(layout, variant % PROP_VARIANTS, alive, shades, lod));
-export const planterGeo = (w: number, d: number, alive: boolean, variant: number, lod: Lod) => get(`pl|${w}|${d}|${alive}|${variant % PROP_VARIANTS}|${lod}`, () => buildPlanter(w, d, alive, variant % PROP_VARIANTS, lod));
-export const railGeo = (kind: RailKind, alive: boolean, variant: number, broken: boolean, lod: Lod) => get(`r|${kind}|${alive}|${variant % 2}|${broken}|${lod}`, () => buildRail(kind, alive, variant % 2, broken, lod));
-export const clutterGeo = (kind: ClutterKind, alive: boolean, variant: number, lod: Lod) => get(`c|${kind}|${alive}|${variant % PROP_VARIANTS}|${lod}`, () => buildClutter(kind, alive, variant % PROP_VARIANTS, lod));
+  get(`p|${layout}|${pmod(variant, PROP_VARIANTS)}|${alive}|${shades[0]}|${lod}`, () => buildPaving(layout, pmod(variant, PROP_VARIANTS), alive, shades, lod));
+export const planterGeo = (w: number, d: number, alive: boolean, variant: number, lod: Lod) => get(`pl|${w}|${d}|${alive}|${pmod(variant, PROP_VARIANTS)}|${lod}`, () => buildPlanter(w, d, alive, pmod(variant, PROP_VARIANTS), lod));
+export const railGeo = (kind: RailKind, alive: boolean, variant: number, broken: boolean, lod: Lod) => get(`r|${kind}|${alive}|${pmod(variant, 2)}|${broken}|${lod}`, () => buildRail(kind, alive, pmod(variant, 2), broken, lod));
+export const clutterGeo = (kind: ClutterKind, alive: boolean, variant: number, lod: Lod) => get(`c|${kind}|${alive}|${pmod(variant, PROP_VARIANTS)}|${lod}`, () => buildClutter(kind, alive, pmod(variant, PROP_VARIANTS), lod));

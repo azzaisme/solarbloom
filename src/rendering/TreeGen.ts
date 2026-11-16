@@ -525,8 +525,8 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
   const leaf = (p: V, r: V, d: number, seed: number, flex: number, n = 7) => {
     if (det < 2) return puff(B, { c: p, r, base: pal.base, light: pal.light, dark: pal.dark, flex, seed, detail: det > 0 ? Math.max(d, 2) : d, crown: heart, crownR, lump: 0.32, clusters: det > 0 ? n : 0 });
     const Rl = rng(seed);
-    puff(B, { c: p, r: mul(r, 0.66) as V, base: scaleC(pal.base, 0.7), light: pal.base, dark: pal.dark, flex: flex * 0.8, seed, detail: 1, crown: heart, crownR, lump: 0 });
-    const count = Math.round(clamp((r[0] * r[2]) / 0.0055, 7, 22));
+    puff(B, { c: p, r: mul(r, 0.66) as V, base: scaleC(pal.base, 0.7), light: pal.base, dark: pal.dark, flex: flex * 0.8, seed, detail: 0, crown: heart, crownR, lump: 0 }); // hidden core: coarse is fine
+    const count = Math.round(clamp((r[0] * r[2]) / 0.01, 4, 10));
     const big = Math.max(r[0], r[1], r[2]);
     for (let i = 0; i < count; i++) {
       const u = randDir(Rl, -0.3);
@@ -535,7 +535,7 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
       const cr = big * (0.3 + Rl() * 0.14);
       const cs: V = [cr, cr * 0.82, cr];
       puff(B, { c: cp, r: cs, base: pal.base, light: pal.light, dark: pal.dark, flex: flex * (0.8 + 0.3 * depth), seed: Rl() * 1e9, detail: 1, crown: heart, crownR, lump: 0 });
-      if (lod === 3) leafSkin(B, cp, cs, 11, pal, flex * (0.8 + 0.3 * depth), Rl);
+      if (lod === 3) leafSkin(B, cp, cs, 8, pal, flex * (0.8 + 0.3 * depth), Rl);
       if (i % 3 === 0 && u[1] < 0.5) tube(B, [p, add(p, mul(sub(cp, p), 0.85))], [0.012 * S, 0.006 * S], 3, [bark, bark], [flex * 0.6, flex * 0.85], false);
     }
   };
@@ -563,7 +563,7 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
   }
 }
 
-function pine(B: Buf, R: () => number, S: number, pal: Palette, bark: C, det: number, big: number) {
+function pine(B: Buf, R: () => number, S: number, pal: Palette, bark: C, det: number, _big: number) {
   const H = 1.35 * S;
   const trunkR = 0.065 * S;
   tube(B, [[0, 0, 0], [0, H * 0.5, 0], [0, H * 0.9, 0]], [trunkR * 1.3, trunkR * 0.8, trunkR * 0.3], 6, [scaleC(bark, 0.75), bark, bark], [0, 0.15, 0.4], false);
@@ -575,7 +575,7 @@ function pine(B: Buf, R: () => number, S: number, pal: Palette, bark: C, det: nu
     const heart: V = [0, y, 0];
     // a tier: a soft, drooping skirt of needles (squashed lumpy clump), darker underneath
     const tr: V = [r, (0.15 + 0.03 * (1 - k)) * S, r];
-    puff(B, { c: heart, r: tr, base: pal.base, light: pal.light, dark: pal.dark, flex: 0.35 + 0.5 * k, seed: R() * 1e9, detail: det > 0 ? Math.max(big, 2) : 0, lump: 0.28, crown: [0, y - 0.1, 0], crownR: r, clusters: det > 0 ? 8 : 0 });
+    puff(B, { c: heart, r: tr, base: pal.base, light: pal.light, dark: pal.dark, flex: 0.35 + 0.5 * k, seed: R() * 1e9, detail: det > 0 ? 2 : 0, lump: 0.28, crown: [0, y - 0.1, 0], crownR: r, clusters: det > 0 ? 8 : 0 });
   }
   puff(B, { c: [0, H * 0.98, 0], r: [0.07 * S, 0.14 * S, 0.07 * S], base: pal.base, light: pal.light, dark: pal.dark, flex: 1, seed: R() * 1e9, detail: det, lump: 0.1 });
 }

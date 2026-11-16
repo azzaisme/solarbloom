@@ -12,7 +12,7 @@ import type { BuildingPlot } from '../core/Generation';
 import type { TreeGeo, Lod } from './TreeGen';
 import { PALETTE } from './Materials';
 import type { VPrim } from './Shapes';
-import { grassGeo, flowerGeo, leafyShrubGeo, vineGeo, bannerGeo, FLOWER_COLOURS, type FlowerSpecies } from './Flora';
+import { grassGeo, turfGeo, flowerGeo, leafyShrubGeo, vineGeo, bannerGeo, FLOWER_COLOURS, type FlowerSpecies } from './Flora';
 import { pavingGeo, pavingGaps, PAVING_LAYOUTS, planterGeo, railGeo, clutterGeo, CLUTTER_ALIVE, CLUTTER_DEAD, type RailKind, type ClutterKind } from './Props';
 
 export interface SolidSink {
@@ -96,7 +96,7 @@ export function turfTop(c: DressCtx, t: TileData, top: number) {
     }
     const k = n ? [r / n, g / n, b / n] : turfColour(t);
     // a soft mottling across the lawn, a few tiles wide
-    const m = 0.92 + 0.14 * noise2((t.x + cx) * 0.45, (t.z + cz) * 0.45, 7);
+    const m = 0.84 + 0.2 * noise2((t.x + cx) * 0.45, (t.z + cz) * 0.45, 7) + 0.1 * noise2((t.x + cx) * 1.3, (t.z + cz) * 1.3, 8);
     cols.push(k[0] * m, k[1] * m, k[2] * m);
     pos.push(t.x + cx, top + 0.002, t.z + cz);
   }
@@ -105,8 +105,12 @@ export function turfTop(c: DressCtx, t: TileData, top: number) {
 
 /** Grass clumps over a tile (sparse while young, lush in full bloom); blades lean out and spill over edges. */
 export function grassTufts(c: DressCtx, t: TileData, stage: number, x: number, z: number, top: number, span = 0.46, base?: number) {
-  const n = Math.round((base ?? [2, 3, 5, 7, 7][stage]) * c.dens);
   const lod: Lod = c.lod === 2 && c.dens > 0.99 ? 2 : 1;
+  // Look 3.3: lawns get an even carpet of short blades (seeded turn, so it never lines up), then a few taller
+  // tufts on top. The carpet goes at mid zoom too, except on Low, where it waits for near zoom.
+  if (base === undefined && stage >= 1 && (c.lod === 2 || c.dens >= 0.4))
+    c.fb.add(turfGeo(stage, t.variant + Math.floor(hash01(t.x, t.z, 15) * 4), lod), x, top, z, Math.floor(hash01(t.x, t.z, 16) * 4) * (Math.PI / 2), 1);
+  const n = Math.round((base ?? [2, 2, 3, 4, 4][stage]) * c.dens);
   for (let i = 0; i < n; i++) {
     const px = x + (hash01(t.x * 7 + i, t.z, 11) - 0.5) * 2 * span;
     const pz = z + (hash01(t.x, t.z * 7 + i, 13) - 0.5) * 2 * span;
@@ -126,7 +130,7 @@ const colourAt = (x: number, z: number) => Math.floor(noise2(x / 2.4, z / 2.4, 9
 
 function clump(c: DressCtx, t: TileData, sp: FlowerSpecies, open: boolean, px: number, pz: number, top: number, k: number) {
   const col = colourAt(px, pz) % FLOWER_COLOURS[sp].length;
-  c.fb.add(flowerGeo(sp, col, open, t.variant + k, c.lod === 0 ? 0 : 1), px, top, pz, hash01(t.x * 3 + k, t.z, 23) * 6.28, 0.85 + hash01(t.x, t.z * 3 + k, 29) * 0.35);
+  c.fb.add(flowerGeo(sp, col, open, t.variant + k, c.lod === 2 ? 1 : 0), px, top, pz, hash01(t.x * 3 + k, t.z, 23) * 6.28, 0.85 + hash01(t.x, t.z * 3 + k, 29) * 0.35);
 }
 
 /** Is this side of the tile an edge flowers hug (paving, a wall, a planter, another area, water)? */
@@ -147,7 +151,7 @@ export function flowerDrifts(c: DressCtx, t: TileData, stage: number, x: number,
   let k = 0;
   for (const [dx, dz] of SIDES) {
     if (!flowerEdge(c, t, dx, dz)) continue;
-    const want = stage === 1 ? (hash01(t.x + dx, t.z + dz, 31) < 0.35 ? 1 : 0) : stage === 2 ? 1 + (hash01(t.x, t.z + dx, 37) < 0.4 ? 1 : 0) : 3;
+    const want = stage === 1 ? (hash01(t.x + dx, t.z + dz, 31) < 0.35 ? 1 : 0) : stage === 2 ? 1 + (hash01(t.x, t.z + dx, 37) < 0.4 ? 1 : 0) : 2;
     const n = Math.max(want ? 1 : 0, Math.round(want * c.dens));
     for (let i = 0; i < n; i++) {
       const along = (i + 0.5) / n - 0.5 + (hash01(t.x * 5 + i, t.z + dz, 41) - 0.5) * 0.18;
@@ -159,7 +163,7 @@ export function flowerDrifts(c: DressCtx, t: TileData, stage: number, x: number,
   }
   // open lawn: sparse clumps where the drift field is strong
   const f = noise2(t.x / 2.6, t.z / 2.6, 47);
-  const inner = stage === 1 ? 0 : stage === 2 ? (f > 0.5 ? 1 : 0) : (f > 0.2 ? 1 : 0) + (f > 0.5 ? 1 : 0) + (f > 0.78 ? 1 : 0);
+  const inner = stage === 1 ? 0 : stage === 2 ? (f > 0.5 ? 1 : 0) : (f > 0.25 ? 1 : 0) + (f > 0.6 ? 1 : 0);
   for (let i = 0; i < Math.round(inner * Math.max(0.5, c.dens)); i++) {
     const px = x + (hash01(t.x * 11 + i, t.z, 53) - 0.5) * 0.6;
     const pz = z + (hash01(t.x, t.z * 11 + i, 59) - 0.5) * 0.6;
@@ -170,7 +174,7 @@ export function flowerDrifts(c: DressCtx, t: TileData, stage: number, x: number,
 /** Thriving extras on a tile without a tree: a leafy (sometimes flowering) shrub, a flower bed, or a mossy rock. */
 export function thrivingExtras(c: DressCtx, t: TileData, x: number, z: number, top: number) {
   const pick = hash01(t.x, t.z, 61);
-  if (pick < 0.58) c.fb.add(leafyShrubGeo(t.variant, c.lod === 0 ? 0 : 1, hash01(t.x, t.z, 63) < 0.3), x + (t.variant % 3) * 0.06 - 0.06, top, z, t.variant * 1.7, 1);
+  if (pick < 0.58) c.fb.add(leafyShrubGeo(t.variant, c.lod === 2 ? 1 : 0, hash01(t.x, t.z, 63) < 0.3), x + (t.variant % 3) * 0.06 - 0.06, top, z, t.variant * 1.7, 1);
   else if (pick < 0.8) {
     const sp: FlowerSpecies = hash01(t.x, t.z, 65) < 0.35 ? 'sunflower' : 'lavender';
     for (let i = 0; i < 2; i++) clump(c, t, sp, true, x + (i - 0.5) * 0.24, z + (hash01(t.x + i, t.z, 67) - 0.5) * 0.3, top, 20 + i);

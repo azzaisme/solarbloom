@@ -501,13 +501,14 @@ export class MachineVisuals {
     part(b, rbox(0.64, 0.08, 0.64, 0.03), cream(), { pos: [0, 0.04, 0], shadow: true });
     part(b, rbox(0.645, 0.012, 0.645, 0.005), creamSeam(), { pos: [0, 0.03, 0] });
     bolts(b, [[-0.26, 0.082, -0.26], [0.26, 0.082, -0.26], [-0.26, 0.082, 0.26]]);
-    part(b, rbox(0.17, 0.27, 0.17, 0.035), cream(), { pos: [0, 0.2, 0], shadow: true });
+    // a tall pedestal: the tilted panel's low edge clears the edge balustrades and railings (~0.35)
+    part(b, rbox(0.17, 0.47, 0.17, 0.035), cream(), { pos: [0, 0.3, 0], shadow: true });
     part(b, rbox(0.21, 0.04, 0.21, 0.015), creamSeam(), { pos: [0, 0.1, 0] });
-    part(b, rcyl(0.07, 0.33, 0.38, 0.012, 0.005, 12), metal(), {});
+    part(b, rcyl(0.07, 0.53, 0.58, 0.012, 0.005, 12), metal(), {});
     // cable from the pedestal to a little junction box (which carries the status light)
     part(b, tube('solarCable', bezier([0.07, 0.17, 0.05], [0.24, 0.16, 0.06], [0.22, 0.09, 0.2], 7), 0.014, { sides: 6 }), cable(), {});
     part(b, rbox(0.1, 0.05, 0.08, 0.015), creamSeam(), { pos: [0.22, 0.105, 0.22] });
-    const tilt = group(b, 'tilt', [0, 0.42, 0]);
+    const tilt = group(b, 'tilt', [0, 0.62, 0]);
     tilt.setLocalEulerAngles(28, 45, 0);
     part(tilt, rcyl(0.032, -0.13, 0.13, 0.01, 0.01, 10), metal(), { pos: [0, -0.045, 0], rot: [0, 0, 90] });
     part(tilt, rbox(0.34, 0.025, 0.07, 0.01), darkMetal(), { pos: [0, -0.025, 0] });
