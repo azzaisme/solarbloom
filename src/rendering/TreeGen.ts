@@ -399,6 +399,8 @@ const CYAN = hex(PALETTE.aqua.teal);
 const GLOW = hex(PALETTE.glow.honey);
 const NAVY = hex(PALETTE.solar.navy);
 const MULCH = hsl(25, 38, 24);
+/** Phase 6: the glass sun-petals on birches read as blue hexagon stickers at play zoom; off until they're redrawn. */
+const SUN_PETALS = false;
 
 /** One crown "anchor": where a limb ends and a foliage clump sits. */
 interface Anchor {
@@ -559,7 +561,7 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
     puff(B, { c, r, base: hex(PALETTE.treeBlossom[0]), light: hex(PALETTE.treeBlossom[1]), dark: hex(PALETTE.treeBlossom[2]), flex: 0.85, seed: R() * 1e9, detail: det > 0 ? 2 : 0, crown: heart, crownR, clusters: det > 0 ? 5 : 0 });
   }
   // machine side: glass sun-petals on the birch, turned to the light
-  if (birch && det > 0) {
+  if (birch && det > 0 && SUN_PETALS) {
     const n = 3 + Math.floor(R() * 2);
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + 0.6;

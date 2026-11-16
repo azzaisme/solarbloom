@@ -155,7 +155,8 @@ export function grassTufts(c: DressCtx, t: TileData, stage: number, x: number, z
 
 // ───────────── flowers (3.4, 3.5) ─────────────
 
-const SPECIES_FIELD: FlowerSpecies[] = ['daisy', 'cosmos', 'lavender', 'wild', 'daisy', 'cosmos', 'lavender', 'wild', 'cosmos', 'sunflower'];
+// Phase 6: big open heads lead (cosmos, daisies), lavender is an accent rather than every other drift
+const SPECIES_FIELD: FlowerSpecies[] = ['cosmos', 'daisy', 'wild', 'cosmos', 'daisy', 'lavender', 'cosmos', 'wild', 'daisy', 'sunflower'];
 /** One main species and colour per drift: both come from a field a few tiles wide, so neighbouring clumps match. */
 function speciesAt(x: number, z: number, stage: number): FlowerSpecies {
   const sp = SPECIES_FIELD[Math.floor(noise2(x / 3.2, z / 3.2, 91) * SPECIES_FIELD.length * 0.999)];
@@ -164,8 +165,9 @@ function speciesAt(x: number, z: number, stage: number): FlowerSpecies {
 const colourAt = (x: number, z: number) => Math.floor(noise2(x / 2.4, z / 2.4, 93) * 12);
 
 function clump(c: DressCtx, t: TileData, sp: FlowerSpecies, open: boolean, px: number, pz: number, top: number, k: number) {
-  const col = colourAt(px, pz) % FLOWER_COLOURS[sp].length;
-  c.fb.add(flowerGeo(sp, col, open, t.variant + k, c.lod === 2 ? 1 : 0), px, top, pz, hash01(t.x * 3 + k, t.z, 23) * 6.28, 0.85 + hash01(t.x, t.z * 3 + k, 29) * 0.35);
+  // Phase 6: neighbouring clumps step through the colours (mixed beds, like the reference), at about 1.5x the size
+  const col = (colourAt(px, pz) + k) % FLOWER_COLOURS[sp].length;
+  c.fb.add(flowerGeo(sp, col, open, t.variant + k, c.lod === 2 ? 1 : 0), px, top, pz, hash01(t.x * 3 + k, t.z, 23) * 6.28, 1.25 + hash01(t.x, t.z * 3 + k, 29) * 0.4);
 }
 
 /** Is this side of the tile an edge flowers hug (paving, a wall, a planter, another area, water)? */
