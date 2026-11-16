@@ -18,4 +18,21 @@ export const LOOK = {
     shadowBias: 0.2,
     normalOffsetBias: 0.05,
   },
+  /** Look 1.3: a cool, low fill from the side opposite the sun (no shadows). */
+  fill: { color: '#8fb4ff', intensity: 0.42 },
+  /**
+   * Look 1.3: ambient light from the sky above and the ground below, baked into a tiny environment atlas.
+   * Colours are linear-ish sRGB hex; `intensity` scales the whole environment (ambient and reflections).
+   */
+  env: {
+    zenith: '#5d8fd6',
+    horizon: '#cfd9e3',
+    ground: '#7a6a48',
+    intensity: 0.85,
+  },
+  /**
+   * Look 1.3: a warm rim on silhouettes (a view-dependent term added in the standard shader), stronger on the
+   * sun side, so flowers, the drone and machines pick up a bright edge against darker ground.
+   */
+  rim: { color: '#ffc98a', intensity: 0.8, power: 3.0 },
 };

@@ -34,6 +34,7 @@ import { pickLayers } from '../core/Picking';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
 import { initLowPoly } from '../rendering/Shapes';
+import { LookController } from '../rendering/LookController';
 import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
@@ -73,6 +74,8 @@ export class Game {
   readonly sim: Sim;
   readonly tweens = new Tweens();
   readonly scene: SceneBuilder;
+  /** Look 1: lighting, post-processing and graphics quality. */
+  readonly look: LookController;
   readonly camera: CameraController;
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
@@ -141,6 +144,7 @@ export class Game {
     this.scene = new SceneBuilder(this.app, this.tweens);
     this.scene.build();
     this.camera = new CameraController(this.app, this.tweens);
+    this.look = new LookController(this.app, this.scene, this.camera);
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
@@ -2043,6 +2047,7 @@ export class Game {
     this.overlays.update(dt);
     this.camera.update(dt);
     this.syncView();
+    this.look.update(dt);
     this.updateTreeCursor(dt);
     this.hud.update(dt);
     this.sfx.layers = Math.min(3, Math.floor(this.sim.progression.restoredCount(HOME) / 12));
