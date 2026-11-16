@@ -42,6 +42,33 @@ export interface DressCtx {
    * changes colour in place); other primitives are props that grow in or fall away. Defaults to `b.add('box')`.
    */
   slab?(hex: string, p: [number, number, number], s: [number, number, number]): void;
+  /**
+   * Look 3.19: place a hand-built model (assets/raw/models/final) instead of procedural geometry. Returns false
+   * while it isn't loaded (or for hidden ground): the caller then draws its procedural version.
+   */
+  model?(name: string, x: number, y: number, z: number, rotY: number, sx: number, sy?: number, sz?: number): boolean;
+}
+
+/**
+ * Look 3.19: clutter kinds drawn as hand-built models, with the scale that fits each to the procedural prop's size
+ * (the models are full size; the city's props are toy-sized). Bricks and murals stay procedural; so does the
+ * restored pot (a terracotta planter, not the broken one).
+ */
+const CLUTTER_MODEL: Partial<Record<ClutterKind, [string, number]>> = {
+  ac: ['ac-unit', 0.32],
+  pipes: ['copper-pipe', 0.34],
+  crate: ['crate', 0.32],
+  rubble: ['rubble-pile', 0.34],
+  vent: ['vent', 0.3],
+  block: ['stone-block', 0.42],
+  lantern: ['lamp-post', 0.21],
+  niche: ['wall-niche', 0.2],
+};
+/** Clutter as a model if it can be, else procedurally. */
+function clutter(c: DressCtx, kind: ClutterKind, alive: boolean, variant: number, x: number, y: number, z: number, rot: number, scale: number) {
+  const m = kind === 'pot' ? (alive ? undefined : (['broken-pot', 0.3] as [string, number])) : CLUTTER_MODEL[kind];
+  if (m && c.model?.(m[0], x, y, z, rot, m[1] * scale)) return;
+  c.b.addGeo(clutterGeo(kind, alive, variant, 1), x, y, z, rot, scale);
 }
 const slab = (c: DressCtx, hex: string, p: [number, number, number], s: [number, number, number]) => (c.slab ? c.slab(hex, p, s) : c.b.add('box', hex, p, s));
 
@@ -246,7 +273,12 @@ export function paving(c: DressCtx, t: TileData, alive: boolean, x: number, z: n
  * flower bed once restored. `w` × `d` in tiles; the rim stands on `top`.
  */
 export function planterBed(c: DressCtx, t: TileData, alive: boolean, x: number, z: number, top: number, w: number, d: number, rot = 0) {
-  c.b.addGeo(planterGeo(w, d, alive, t.variant, c.lod === 0 ? 0 : 1), x, top, z, rot, 1);
+  // Look 3.19: a long bed is the stone trough, a square one the raised bed, both fitted to w × d (soil kept level)
+  const long = Math.max(w, d) / Math.min(w, d) > 1.5;
+  const along = w >= d ? 0 : Math.PI / 2;
+  const [mw, md, mh] = long ? [1.8, 0.66, 0.42] : [1, 1, 0.59];
+  const [lw, ld] = w >= d ? [w, d] : [d, w];
+  if (!c.model?.(long ? 'planter-trough' : 'planter-bed', x, top, z, rot + along, lw / mw, 0.2 / mh, ld / md)) c.b.addGeo(planterGeo(w, d, alive, t.variant, c.lod === 0 ? 0 : 1), x, top, z, rot, 1);
   const soil = top + 0.185;
   const n = Math.max(1, Math.round((w * d > 0.5 ? 4 : 2) * Math.max(0.6, c.dens)));
   const sp: FlowerSpecies = (['lavender', 'cosmos', 'sunflower', 'daisy'] as const)[Math.floor(hash01(t.x, t.z, 87) * 4)];
@@ -303,7 +335,7 @@ export function areaEdges(c: DressCtx, t: TileData, top: number) {
       const kind2: ClutterKind = kit[Math.floor(hash01(t.x * 2, t.z * 3, 137) * kit.length)];
       if (kind2 === 'niche') continue;
       const along = 0.2 + hash01(t.x, t.z, 139) * 0.6;
-      c.b.addGeo(clutterGeo(kind2, alive, t.x + t.z * 3, 1), ox + fr.tx * along - dx * 0.1, top, oz + fr.tz * along - dz * 0.1, fr.rot + Math.PI, 0.9 + h2);
+      clutter(c, kind2, alive, t.x + t.z * 3, ox + fr.tx * along - dx * 0.1, top, oz + fr.tz * along - dz * 0.1, fr.rot + Math.PI, 0.9 + h2);
     }
   }
 }
@@ -316,7 +348,7 @@ export function obstacleClutter(c: DressCtx, t: TileData, x: number, z: number, 
   const kind = kit[Math.floor(hash01(t.x, t.z, 157) * kit.length)];
   if (kind === 'niche' || kind === 'pipes') return;
   const cx = hash01(t.x, t.z, 163) < 0.5 ? -1 : 1, cz = hash01(t.x, t.z, 167) < 0.5 ? -1 : 1;
-  c.b.addGeo(clutterGeo(kind, alive, t.variant, 1), x + cx * 0.33, top, z + cz * 0.33, hash01(t.x, t.z, 173) * 6.28, 0.85);
+  clutter(c, kind, alive, t.variant, x + cx * 0.33, top, z + cz * 0.33, hash01(t.x, t.z, 173) * 6.28, 0.85);
 }
 
 // ───────────── buildings ─────────────
@@ -351,7 +383,7 @@ export function buildingDressing(c: DressCtx, p: BuildingPlot, h: number, H: num
     const kind = kinds[Math.floor(hash01(p.x, p.z + i, 199) * kinds.length)];
     const y = kind === 'pipes' ? h + 0.08 : h + 0.08 + storey * (0.1 + Math.floor(k * Math.max(1, p.storeys - 1)));
     const gx = p.x + 0.4 + i * ((bw - 0.3) / Math.max(1, Math.min(3, Math.floor(bw))));
-    c.b.addGeo(clutterGeo(kind, alive, p.style + i, 1), gx, y, south + (kind === 'mural' ? 0.075 : kind === 'pipes' ? 0.045 : kind === 'niche' ? 0.04 : 0.08), 0, 1);
+    clutter(c, kind, alive, p.style + i, gx, y, south + (kind === 'mural' ? 0.075 : kind === 'pipes' ? 0.045 : kind === 'niche' ? 0.04 : 0.08), 0, 1);
   }
 }
 

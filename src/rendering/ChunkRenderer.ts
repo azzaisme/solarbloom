@@ -15,6 +15,7 @@ import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './Tree
 import { treeSpot, treeStage } from './TreePlacement';
 import { warmFlora, grassGeo } from './Flora';
 import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, radiantExtras, thrivingExtras, turfTop, type DressCtx, type SolidSink } from './Surfaces';
+import { MODELS, ModelBatch } from './Models';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
 
 /** Small seeded RNG for decoration placement (looks only). */
@@ -289,6 +290,9 @@ interface ChunkView {
   band?: number;
   /** Look 4.9: drawn sunk below the revealed city (an area not revealed yet) */
   sunk?: boolean;
+  /** Look 3.19: the chunk's hand-built models (props, clutter, planters), hardware-instanced */
+  models?: pc.Entity;
+  modelVBs?: pc.VertexBuffer[];
   /** Look 6.12: the living surface (every ground slab) and the props of tiles mid-transition */
   surface?: pc.Entity;
   trans?: pc.Entity;
@@ -527,6 +531,7 @@ export class ChunkRenderer {
   }
 
   private drop(v: ChunkView) {
+    this.dropModels(v);
     v.surface?.destroy();
     v.trans?.destroy();
     this.transitions?.liveByChunk.delete(v.key);
@@ -536,6 +541,63 @@ export class ChunkRenderer {
     this.treeTris.delete(v.key);
     this.groundTris.delete(v.key);
     this.views.delete(v.key);
+  }
+
+  private dropModels(v: ChunkView) {
+    v.models?.destroy();
+    for (const vb of v.modelVBs ?? []) vb.destroy();
+    v.models = undefined;
+    v.modelVBs = undefined;
+  }
+
+  /**
+   * Look 3.19: this chunk's model copies (none in deep fog: hidden ground keeps its cheap grey shapes). The batch
+   * culls as one box round the chunk.
+   */
+  private setModels(v: ChunkView, h: number) {
+    this.dropModels(v);
+    const batch = this.batch;
+    this.batch = undefined;
+    if (!batch?.count) return;
+    const bounds = new pc.BoundingBox(new pc.Vec3(v.cx * CHUNK + CHUNK / 2, h + 3, v.cz * CHUNK + CHUNK / 2), new pc.Vec3(CHUNK / 2 + 2, 6, CHUNK / 2 + 2));
+    const { entity, buffers, tris } = batch.build(this.device, bounds, !v.far);
+    if (!entity) return;
+    this.root.addChild(entity);
+    v.models = entity;
+    v.modelVBs = buffers;
+    this.groundTris.set(v.key, (this.groundTris.get(v.key) ?? 0) + tris);
+  }
+
+  /** Look 3.19: the chunk being built collects model copies here (undefined: draw everything procedurally). */
+  private batch?: ModelBatch;
+
+  /**
+   * Look 3.19: an obstacle prop as its hand-built model: model, scale (to the procedural prop's size) and whether
+   * its turn is seeded (props that face the street keep theirs).
+   */
+  private static readonly PROP_MODELS: Record<string, [string, number, boolean]> = {
+    bench: ['bench', 0.58, false],
+    lamp: ['lamp-post', 0.44, true],
+    barrel: ['barrel', 0.62, true],
+    bollard: ['bollard', 0.66, true],
+    pillar: ['cracked-pillar', 0.55, true],
+    post: ['mooring-post', 0.62, true],
+    stall: ['market-stall', 0.54, false],
+    drain: ['dry-drain', 0.8, true],
+    stump: ['stump', 0.85, true],
+  };
+
+  private propModel(prop: string, x: number, y: number, z: number): boolean {
+    if (!this.batch) return false;
+    if (prop === 'bandstand') {
+      // one structure over its 2×2 footprint, from its first tile only (the others draw nothing)
+      const first = PARK_LAYOUT.props.find((p) => p.prop === 'bandstand')!.at;
+      if (Math.floor(x) !== first[0] || Math.floor(z) !== first[1]) return !!MODELS?.has('bandstand');
+      return this.batch.add('bandstand', x + 0.5, y, z + 0.5, 0, 0.58);
+    }
+    const [name, scale, turn] = ChunkRenderer.PROP_MODELS[prop] ?? ChunkRenderer.PROP_MODELS.stump;
+    const rot = turn ? Math.floor(dhash(Math.floor(x), Math.floor(z), 211) * 4) * (Math.PI / 2) : 0;
+    return this.batch.add(name, x, y, z, rot, scale);
   }
 
   private setMesh(holder: pc.Entity | undefined, name: string, mesh: pc.Mesh | undefined, material: pc.Material, shadows: boolean): pc.Entity | undefined {
@@ -583,6 +645,7 @@ export class ChunkRenderer {
         }
     }
     v.band = this.band;
+    this.batch = MODELS && fog !== 'hidden' ? new ModelBatch(MODELS, !!v.far) : undefined;
     const tierK = this.detail === 'low' ? 0.4 : this.detail === 'medium' ? 0.7 : 1;
     const grid = s.grid;
     const map = s.areas.map;
@@ -605,6 +668,7 @@ export class ChunkRenderer {
       peek: (x, z) => grid.peek(GROUND, x, z),
       areaAt: (x, z) => map.areaOfCell(x, z),
       slab: (hex, p, sc) => self.slab(self.sink, hex, p, sc),
+      model: (name, x, y, z, rot, sx, sy, sz) => !!self.batch?.add(name, x, y, z, rot, sx, sy, sz),
     };
     for (const t of c.tiles) {
       if (!t) continue;
@@ -645,6 +709,7 @@ export class ChunkRenderer {
     v.trees = this.setMesh(v.trees, `trees-${v.key}`, fb.build(this.device), foliageMaterial(), !v.far);
     this.treeTris.set(v.key, fb.tris);
     this.groundTris.set(v.key, b.tris);
+    this.setModels(v, h);
     if (tr && tB) {
       // Look 6.12: the living surface casts no shadow (flat slabs), the moving props do.
       v.surface = this.setMesh(v.surface, `surface-${v.key}`, tB.sb.build(this.device), tr.material, false);
@@ -1186,6 +1251,11 @@ export class ChunkRenderer {
   }
 
   private prop(b: Sink, prop: string, x: number, y: number, z: number, r: VRng) {
+    if (this.propModel(prop, x, y, z)) {
+      // the park bench keeps its little planter tree beside it
+      if (prop === 'bench' && this.inPark) this.planterTree(b, x + 0.38, y, z + 0.32, this.level >= 3);
+      return;
+    }
     switch (prop) {
       case 'bench': {
         const L = this.level;
