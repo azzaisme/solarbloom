@@ -39,12 +39,12 @@ const paving = {
 /** Tile ground by feature: dead (polluted) tones, three per feature. */
 const ground = {
   dead: {
-    lawn: ['#8a7b5f', '#837357', '#91825f'],
+    lawn: ['#837a68', '#7b7262', '#8b8170'],
     paving: ['#9d9486', '#958c7e', '#a59c8d'],
     road: ['#58554f', '#514e49', '#5e5b55'],
     water: ['#4e5a52', '#475249', '#56625a'],
-    clay: ['#bda78a', '#b29c7f', '#c6b195'],
-    litter: ['#867c6a', '#7c7261', '#908571'],
+    clay: ['#ae9c84', '#a49279', '#b8a68d'],
+    litter: ['#7f7563', '#776d5c', '#877c69'],
     obstacle: ['#837b70', '#7b7368', '#8b8377'],
     building: ['#90887c', '#898175', '#978f83'],
   } as Record<string, string[]>,
@@ -55,8 +55,11 @@ const ground = {
   /** dead water surface scum */
   scum: '#3e4a43',
   /** dead debris on unrestored ground */
-  debrisStreak: '#5f5c55',
-  leafLitter: ['#6b5a45', '#8a6b3f', '#7a4f32'],
+  debrisStreak: '#5e564b',
+  leafLitter: ['#6b5d4a', '#7d6648', '#6e5240'],
+  /** Look 2.6: weathering on dead ground: rust streaks, dirt patches */
+  rustStreak: '#7d5a44',
+  dirt: '#6f6352',
 };
 
 /** Rooftop dead looks (GridRenderer): sun-baked clay and withered leaf litter (concrete uses the legacy keys). */
@@ -93,9 +96,10 @@ const lawn = {
   moss: '#8a9a45',
   sprout: '#7fa046',
   clover: '#a3c25e',
-  weed: '#7a8a5c',
-  weedDry: '#86965f',
-  weedDark: '#7d8a5c',
+  /** dead-state weeds: dry and dusty, never fresh green */
+  weed: '#8a8a5a',
+  weedDry: '#9a9460',
+  weedDark: '#6f7550',
 };
 
 const flowers = {

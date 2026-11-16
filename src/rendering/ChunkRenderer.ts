@@ -636,6 +636,10 @@ export class ChunkRenderer {
           if (r.next() < 0.3) b.add('cone', PALETTE.lawn.weedDry, [x + r.range(-0.3, 0.3), top + 0.05, z + r.range(-0.3, 0.3)], [0.06, 0.1, 0.06]);
         } else {
           for (let i = 0; i < 1 + (t.variant % 2); i++) b.add('box', PALETTE.paving.crack, [x + r.range(-0.25, 0.25), top + 0.004, z + r.range(-0.25, 0.25)], [r.range(0.3, 0.6), 0.01, 0.035]);
+          // Look 2.6: weathered, not flat: a rust streak on hard ground, a dirt patch on soft ground (seeded).
+          const wx = hash01(t.x, t.z, 91);
+          if (wx < 0.22 && (f === 'paving' || f === 'obstacle')) b.add('box', PALETTE.ground.rustStreak, [x + (hash01(t.x, t.z, 92) - 0.5) * 0.5, top + 0.003, z], [0.05, 0.008, 0.3 + hash01(t.x, t.z, 93) * 0.3]);
+          else if (wx < 0.3 && f !== 'paving') b.add('sphere', PALETTE.ground.dirt, [x + (hash01(t.x, t.z, 94) - 0.5) * 0.4, top + 0.002, z + (hash01(t.x, t.z, 95) - 0.5) * 0.4], [0.36, 0.02, 0.28]);
           if (r.next() < 0.4) b.add('cone', PALETTE.lawn.weedDark, [x + r.range(-0.3, 0.3), top + 0.05, z + r.range(-0.3, 0.3)], [0.06, 0.1, 0.06]);
           // Leaf litter: groves always, the dilapidated park until its paths are swept.
           if (f === 'litter' || this.inPark) for (let i = 0; i < (this.inPark ? 2 + (t.variant % 3) : 3); i++) b.add('sphere', PALETTE.ground.leafLitter[i % 3], [x + r.range(-0.35, 0.35), top + 0.01, z + r.range(-0.35, 0.35)], [0.16, 0.03, 0.1]);
