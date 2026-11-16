@@ -43,6 +43,7 @@ function measure(seed: number, minutes: number, merges: boolean | 'buildOnly'): 
     seed,
     minutes,
     merges,
+    cultivator: !!env.PACING_CULTIVATOR, // Look 6.8: the same bot, also building Cultivators
     onSecond: (sim) => {
       if (!hooked) {
         hooked = true;

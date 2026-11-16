@@ -45,6 +45,8 @@ export interface BotOptions {
   merges?: boolean | 'buildOnly';
   /** Phase 5 E15: no world events at all (checks nothing depends on them; comparison runs) */
   noEvents?: boolean;
+  /** Look 6.8: build Cultivators (one as soon as it unlocks and is affordable, another after the fountain) */
+  cultivator?: boolean;
 }
 
 export interface BotReport {
@@ -180,6 +182,16 @@ export function runBot(opts: BotOptions): BotReport {
           built[want] = (built[want] ?? 0) + 1;
           next++;
         }
+      }
+    }
+    // 1a. Look 6.8: a Cultivator where the most dead ground is within its reach
+    if (opts.cultivator && sim.build.isUnlocked('cultivator')) {
+      const have = s.machines.filter((m) => m.type === 'cultivator').length;
+      if (have < (s.progression.coreActivated ? 2 : 1) && sim.econ.canAfford(sim.build.cost('cultivator'))) {
+        const pool = s.progression.coreActivated ? [...new Set(sim.areas.revealed().flatMap((a) => sim.areas.tiles(a)))] : park();
+        const dead = (t: TileData) => sim.grid.tilesWithin(GROUND, t.x, t.z, 5).filter((n) => n.ground === 'polluted' || n.ground === 'prepared').length;
+        const spot = pool.filter((t) => sim.build.check('cultivator', GROUND, t.x, t.z).ok).map((t) => ({ t, n: dead(t) })).sort((a, b) => b.n - a.n)[0];
+        if (spot && spot.n > 6) sim.build.place('cultivator', GROUND, spot.t.x, spot.t.z);
       }
     }
     // 1b. after the fountain: wake any landmark that's ready, and put a Drone Hub at the edge of the next goal

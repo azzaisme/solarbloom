@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { color } from './Materials';
+import { color, PALETTE } from './Materials';
 import { ease, type Tweens } from './Tween';
 
 /**
@@ -69,7 +69,7 @@ export class CameraController {
       fov: 20,
       nearClip: 0.5,
       farClip: 140,
-      clearColor: color('#00000000'),
+      clearColor: color(PALETTE.pure.clear),
     });
     app.root.addChild(e);
     this.entity = e;

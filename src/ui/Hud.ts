@@ -1,7 +1,7 @@
 import type { AreaMode } from '../core/types';
 import { HOME } from '../gameplay/ProgressionSystem';
 import { Economy, formatCost, KINDS } from '../core/Economy';
-import { fmt, toNum, type Big } from '../core/Big';
+import { big, fmt, toNum, type Big } from '../core/Big';
 import type { Cost } from '../core/types';
 import type { BuildableType, MachineData, ResourceKind } from '../core/types';
 import { BUILDABLE, MACHINES, TIER2, TIER3 } from '../data/machines';
@@ -9,7 +9,7 @@ import { AREA_TYPES } from '../data/city';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
 import { SEED_CORE_MACHINES } from '../gameplay/ProgressionSystem';
-import { ICONS } from './Icons';
+import { ICONS, GROUP_ICONS, LOGO_MARK, MACHINE_ICONS, hasEmoji, iconize, installIconDefs, plain } from './Icons';
 import { WORLD_EVENT_INFO } from '../gameplay/WorldEventSystem';
 
 /** Phase 5 E14: `super:<type>` places a Superstructure Core of that family. */
@@ -19,10 +19,12 @@ export const SUPER_TOOLS: SuperTool[] = ['super:solar', 'super:condenser', 'supe
 export const superType = (t: Tool) => (t.startsWith('super:') ? (t.slice(6) as 'solar' | 'condenser' | 'pollinator' | 'droneHub') : undefined);
 
 const RES_META: Record<ResourceKind, { icon: string; name: string; color: string }> = {
-  energy: { icon: '⚡', name: 'Energy', color: 'var(--energy)' },
-  water: { icon: '💧', name: 'Water', color: 'var(--water)' },
-  biomass: { icon: '🌿', name: 'Biomass', color: 'var(--biomass)' },
+  energy: { icon: ICONS.energy, name: 'Energy', color: 'var(--energy-bar)' },
+  water: { icon: ICONS.water, name: 'Water', color: 'var(--water-bar)' },
+  biomass: { icon: ICONS.biomass, name: 'Biomass', color: 'var(--biomass-bar)' },
 };
+/** Resource emoji inside game strings (drawn as icons by `iconize`). */
+const RES_EMOJI: Record<ResourceKind, string> = { energy: '⚡', water: '💧', biomass: '🌿' };
 
 export interface HudCallbacks {
   selectTool(t: Tool): void;
@@ -33,6 +35,8 @@ export interface HudCallbacks {
   activateFrenzy(): void;
   /** Phase 5 E15: the 🐾 chip: show where a hinted cat hides. */
   findCat(): void;
+  /** Look 5.9: the house button: the park, or (when something is ready) the next area that needs attention. */
+  goHome(attention: boolean): void;
   newGame(): void;
   setSetting(key: keyof Settings, v: boolean): void;
   setVolume(key: 'sfxVolume' | 'musicVolume', v: number): void;
@@ -102,28 +106,30 @@ export class Hud {
   ) {
     this.settings = settings;
     this.root = document.getElementById('hud')!;
-    this.root.innerHTML = this.template();
+    installIconDefs();
+    this.root.innerHTML = iconize(this.template());
     this.wire();
   }
 
   private template() {
     const rows = KINDS.map(
-      (k) => `<div class="res-row" data-res="${k}" title="${RES_META[k].name}">
+      (k) => `<div class="res-row panel" data-res="${k}" title="${RES_META[k].name}">
         <span class="ic" aria-hidden="true">${ICONS[k]}</span>
-        <span class="val"><span class="n">0</span> <small class="capw">/ <span class="c">0</span><span class="nm"> ${RES_META[k].name}</span></small></span>
+        <span class="nm">${RES_META[k].name}</span>
+        <span class="val"><span class="n">0</span> <small class="capw">/ <span class="c">0</span></small></span>
         <span class="rate">+0/s</span>
         <span class="bar"><i style="background:${RES_META[k].color}"></i></span>
       </div>`,
     ).join('');
     const slots = [
       `<button class="slot" data-tool="inspect" aria-label="Inspect tool (1)"><span class="key">1</span><span class="si">${ICONS.inspect}</span><span class="sl">Inspect</span><span class="sc">&nbsp;</span></button>`,
-      `<button class="slot" data-tool="pulse" aria-label="Restoration Pulse (2)"><span class="key">2</span><span class="si">${ICONS.pulse}</span><span class="sl">Pulse</span><span class="sc">restore</span></button>`,
+      `<button class="slot" data-tool="pulse" aria-label="Restoration Pulse (2)"><span class="key">2</span><span class="si">${ICONS.pulse}</span><span class="sl"><span class="long">Restoration </span>Pulse</span><span class="sc"></span></button>`,
       `<span class="sep"></span>`,
-      `<button class="slot" id="buildToggle" aria-label="Build menu (B)" aria-expanded="false"><span class="key">B</span><span class="si">${ICONS.build}</span><span class="sl">Build</span><span class="sc">machines</span></button>`,
+      `<button class="slot" id="buildToggle" aria-label="Build menu (B)" aria-expanded="false"><span class="key">B</span><span class="si">${ICONS.build}</span><span class="sl">Build</span><span class="sc"></span></button>`,
       `<div id="buildTray">`,
       ...BUILDABLE.map(
         (t) =>
-          `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name} (${MACHINES[t].hotkey})"><span class="key">${MACHINES[t].hotkey}</span><span class="si">${MACHINES[t].icon}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
+          `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name} (${MACHINES[t].hotkey})"><span class="key">${MACHINES[t].hotkey}</span><span class="si">${ICONS[MACHINE_ICONS[t]]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
       ),
       ...SUPER_TOOLS.map((t) => {
         const d = TIER3[superType(t)!]!;
@@ -135,34 +141,44 @@ export class Hud {
       `<button class="slot" id="upgBtn" aria-label="Upgrades (U)"><span class="key">U</span><span class="si">${ICONS.upgrades}</span><span class="sl">Upgrades</span><span class="sc">&nbsp;</span><span class="badge" aria-label="Something useful to buy"></span></button>`,
     ].join('');
     return `
-      <div id="res" class="panel"><div class="logo"><span class="sun"></span>Solarbloom</div>${rows}</div>
+      <div id="logo" role="img" aria-label="Solarbloom">${LOGO_MARK}<span class="wm">Solarbloom</span></div>
+      <div id="res" role="group" aria-label="Resources">${rows}</div>
       <div id="resInfo" class="panel" role="status" hidden></div>
+      <div id="chips" role="toolbar" aria-label="Game controls">
+        <button class="rbtn" id="pauseBtn" aria-label="Pause" title="Pause (P)">${ICONS.pause}</button>
+        <button class="rbtn" id="speedBtn" aria-label="Game speed: 1×" title="Game speed: 1×">${ICONS.fastForward}<span class="mult">1×</span></button>
+        <button class="rbtn" id="setBtn" aria-label="Settings" title="Settings">${ICONS.settings}</button>
+      </div>
       <div id="obj" class="panel">
-        <h3 id="objTitle">Wake the fountain</h3>
-        <div class="pct" id="objPct">0% restored</div>
+        <div class="ohead">
+          <span class="oic" aria-hidden="true">${ICONS.biomass}</span>
+          <div class="otx"><span class="olab">Objective</span><h3 id="objTitle">Wake the fountain</h3></div>
+          <span class="ock" id="objCheck" role="img" aria-label="Not done yet"></span>
+          <button class="otog" id="objToggle" aria-expanded="false" aria-controls="objMore" aria-label="Show objective details" title="Details"><i></i></button>
+        </div>
         <div class="next" id="objNext"></div>
-        <div class="pbar"><i id="objBar" style="width:0%"></i></div>
-        <ul id="objList"></ul>
+        <div id="objMore">
+          <div class="pct" id="objPct">0% restored</div>
+          <div class="pbar"><i id="objBar" style="width:0%"></i></div>
+          <ul id="objList"></ul>
+        </div>
         <div id="objAct"></div>
         <button id="coreBtn">✨ Awaken the Core</button>
-        <div class="tools">
-          <button class="chip" id="pauseBtn" aria-label="Pause">${ICONS.pause}<span class="lbl"> Pause</span></button>
-          <button class="chip" id="speedBtn" aria-label="Game speed">1×</button>
-          <button class="chip" id="catBtn" aria-label="Lucky Cat discoveries" hidden>🐱 <span id="catCount">0</span></button>
-          <button class="chip" id="pawBtn" aria-label="Paw prints: show where a cat is hiding" title="Paw prints: a cat is hiding nearby. Tap to look." hidden>🐾 <span id="pawCount">0</span></button>
-          <button class="chip" id="setBtn" aria-label="Settings">⚙️<span class="lbl"> Settings</span></button>
-          <button class="chip" id="objToggle" aria-label="Toggle objective list">📋</button>
-        </div>
+      </div>
+      <div id="quick" role="toolbar" aria-label="Quick actions">
+        <button class="rbtn qbtn" id="homeBtn" aria-label="Home: fly to the park (Home)" title="Home (Home key)">${ICONS.home}<span class="qbadge" aria-hidden="true"></span></button>
+        <button class="rbtn qbtn" id="catBtn" aria-label="Lucky Cat garden" title="Lucky Cat garden" hidden>${ICONS.garden}<span class="qn" id="catCount">0</span></button>
+        <button class="rbtn qbtn" id="pawBtn" aria-label="Paw prints: show where a cat is hiding" title="Paw prints: a cat is hiding nearby. Tap to look." hidden>${ICONS.paw}<span class="qn" id="pawCount">0</span></button>
       </div>
       <div id="eventBanner" role="status" aria-live="polite" hidden><span class="ei"></span><span class="et"></span><span class="ec"></span><i class="ebar"></i></div>
-      <div id="combo"><div class="big" id="comboBig">BLOOM CHAIN ×0</div><div class="total" id="comboTotal"></div><div id="chainAreas"></div><div id="feed"></div></div>
+      <div id="combo"><div id="comboFx" aria-hidden="true"></div><div class="big" id="comboBig" role="status" aria-label="Bloom chain combo"><span class="cic">${ICONS.biomass}</span><span class="cl">Combo</span> <span class="cx">×0</span></div><div class="cbody panel"><ul id="comboParts"></ul><div class="total" id="comboTotal"></div><div id="chainAreas"></div></div><div id="feed"></div></div>
       <div id="hotbar" class="panel">${slots}</div>
       <button id="frenzyBtn" class="frenzy-btn" aria-label="Bloom Frenzy (Q)" hidden><span class="fill"></span><span class="fi">${ICONS.frenzy}</span><span class="ft">0%</span></button>
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
       <div id="toasts"></div>
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
       <div id="intro" hidden><div class="panel card-intro">
-        <h2>🌱 Welcome to Solarbloom</h2>
+        <h2>${LOGO_MARK}<span>Welcome to Solarbloom</span></h2>
         <p>This old park is dead and grey, and the city around it is lost in a gloomy fog. Bring it back to life.</p>
         <ol>
           <li><b>Tap a grey tile</b> to restore it. Each tap uses a little ⚡ energy and 💧 water, which refill on their own.</li>
@@ -214,13 +230,23 @@ export class Hud {
     $(r, '#setBtn').addEventListener('click', () => this.openSettings(true));
     $(r, '#speedBtn').addEventListener('click', () => {
       const sp = this.cb.cycleSpeed();
-      $(r, '#speedBtn').textContent = `${sp}×`;
+      const b = $(r, '#speedBtn');
+      $(b, '.mult').textContent = `${sp}×`;
+      b.classList.toggle('fast', sp !== 1);
+      b.setAttribute('aria-label', `Game speed: ${sp}×`);
+      b.title = `Game speed: ${sp}×`;
     });
     $(r, '#catBtn').addEventListener('click', () => this.openSettings(true, true));
     $(r, '#pawBtn').addEventListener('click', () => this.cb.findCat());
+    $(r, '#homeBtn').addEventListener('click', () => this.cb.goHome($(r, '#homeBtn').classList.contains('ready')));
     $(r, '#buildToggle').addEventListener('click', () => this.toggleTray());
     $(r, '#pauseBtn').addEventListener('click', () => this.cb.togglePause());
-    $(r, '#objToggle').addEventListener('click', () => $(r, '#obj').classList.toggle('expanded'));
+    $(r, '#objToggle').addEventListener('click', () => {
+      const open = $(r, '#obj').classList.toggle('expanded');
+      const t = $(r, '#objToggle');
+      t.setAttribute('aria-expanded', String(open));
+      t.setAttribute('aria-label', open ? 'Hide objective details' : 'Show objective details');
+    });
     $(r, '#closeModal').addEventListener('click', () => this.openSettings(false));
     $(r, '#modal').addEventListener('click', (e) => {
       if (e.target === $(r, '#modal')) this.openSettings(false);
@@ -367,9 +393,12 @@ export class Hud {
   private set(key: string, el: HTMLElement, prop: 'text' | 'html' | 'width' | 'cls' | 'style' | 'title', value: string, cls?: string) {
     if (this.last.get(key) === value) return;
     this.last.set(key, value);
-    if (prop === 'text') el.textContent = value;
-    else if (prop === 'title') el.title = value;
-    else if (prop === 'html') el.innerHTML = value;
+    // Look 5.2: emoji in game strings are drawn as icons; titles (tooltips) keep plain text.
+    if (prop === 'text') {
+      if (hasEmoji(value)) el.innerHTML = iconize(esc(value));
+      else el.textContent = value;
+    } else if (prop === 'title') el.title = plain(value);
+    else if (prop === 'html') el.innerHTML = iconize(value);
     else if (prop === 'width') el.style.width = value;
     else if (prop === 'cls' && cls) el.classList.toggle(cls, value === '1');
     else if (prop === 'style' && cls) el.style.setProperty(cls, value);
@@ -379,7 +408,7 @@ export class Hud {
   /** Lucky Cat reward summary: stays in the corner until dismissed (or fades after a while). */
   catReward(title: string, detail: string) {
     const p = $(this.root, '#catPanel');
-    $(this.root, '#catPanelBody').innerHTML = `<b>🐱 ${esc(title)}</b><span>${esc(detail)}</span>`;
+    $(this.root, '#catPanelBody').innerHTML = `<b>${ICONS.cat} ${iconize(esc(title))}</b><span>${iconize(esc(detail))}</span>`;
     p.hidden = false;
     window.clearTimeout(this.catPanelTimer);
     this.catPanelTimer = window.setTimeout(() => (p.hidden = true), 16000);
@@ -406,7 +435,7 @@ export class Hud {
     const s = this.sim;
     if (s.econ.canAfford(cost)) return formatCost(cost);
     return KINDS.filter((k) => Economy.part(cost, k).gt(s.econ.get(k)))
-      .map((k) => `${fmt(s.econ.get(k))}/${fmt(Economy.part(cost, k).ceil())}${RES_META[k].icon}`)
+      .map((k) => `${fmt(s.econ.get(k))}/${fmt(Economy.part(cost, k).ceil())}${RES_EMOJI[k]}`)
       .join(' ');
   }
 
@@ -533,7 +562,7 @@ export class Hud {
     tg.classList.toggle('active', building);
     const st = superType(t);
     const def = st ? TIER3[st]! : building ? MACHINES[t as BuildableType] : undefined;
-    $(tg, '.si').innerHTML = def ? def.icon : ICONS.build;
+    $(tg, '.si').innerHTML = st ? iconize(def!.icon) : building ? ICONS[MACHINE_ICONS[t]] : ICONS.build;
     $(tg, '.sl').textContent = def ? (st ? def.name.split(' ').pop()! : def.name.replace('Water ', '').replace('Pollinator ', '')) : 'Build';
     this.toggleTray(false);
   }
@@ -567,9 +596,9 @@ export class Hud {
       if (focusCats) $(this.root, '#disc').scrollIntoView({ block: 'nearest' });
       const s = this.sim.state.stats;
       const avg = s.chains ? (s.chainEffects / s.chains).toFixed(1) : '—';
-      $(this.root, '#statsBox').innerHTML =
+      $(this.root, '#statsBox').innerHTML = iconize(
         `Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Avg: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b> 🐱 · Play time: <b>${Math.floor(this.sim.time / 60)}m</b>` +
-        `<details style="margin-top:6px"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre><button class="copyT" data-copy-timings>📋 Copy</button></details>`;
+        `<details style="margin-top:6px"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre><button class="copyT" data-copy-timings>📋 Copy</button></details>`);
       this.root.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => (inp.checked = !!this.settings[inp.dataset.set as keyof Settings]));
     }
   }
@@ -589,7 +618,7 @@ export class Hud {
     const rewards = Object.entries(names)
       .map(([k, n]) => `<span class="rw ${d.rewards[k as keyof typeof d.rewards] ? 'got' : ''}">${n}${d.rewards[k as keyof typeof d.rewards] ? ` ×${d.rewards[k as keyof typeof d.rewards]}` : ''}</span>`)
       .join('');
-    $(this.root, '#disc').innerHTML = `<h3>🐱 Lucky Cat discoveries · ${d.found}</h3><ul class="spots">${spots}</ul><div class="rws">${rewards}</div>`;
+    $(this.root, '#disc').innerHTML = iconize(`<h3>🐱 Lucky Cat discoveries · ${d.found}</h3><ul class="spots">${spots}</ul><div class="rws">${rewards}</div>`);
   }
 
   get modalOpen() {
@@ -601,8 +630,9 @@ export class Hud {
   }
 
   private flashedAt = new Map<string, number>();
+  private prevRes = new Map<ResourceKind, number>();
 
-  flashResource(kind: ResourceKind, cls: 'flash' | 'short') {
+  flashResource(kind: ResourceKind, cls: 'flash' | 'short' | 'bump') {
     // Restarting the animation forces a layout: at most a few times a second per counter (big chains call
     // this hundreds of times).
     const now = performance.now();
@@ -625,7 +655,7 @@ export class Hud {
     let lastGroup = '';
     const html = sorted
       .map((def) => {
-        const head = def.group !== lastGroup ? `<h3 class="ugroup">${def.group}</h3>` : '';
+        const head = def.group !== lastGroup ? `<h3 class="ugroup">${GROUP_ICONS[def.group] ? ICONS[GROUP_ICONS[def.group]] : ''} ${def.group}</h3>` : '';
         lastGroup = def.group;
         // Phase 5 E12: per-machine upgrades show the type's range of levels and an "Upgrade all" button that buys
         // cheapest-first; long-tail upgrades (no last level) show their level number instead of pips.
@@ -669,7 +699,7 @@ export class Hud {
   private failTimer = 0;
   showFail(msg: string, x?: number, y?: number) {
     const el = $(this.root, '#fail');
-    el.textContent = msg;
+    el.innerHTML = iconize(esc(msg));
     el.style.display = 'block';
     const px = x ?? window.innerWidth / 2 - 100;
     const py = y ?? window.innerHeight - 160;
@@ -689,7 +719,7 @@ export class Hud {
       if (c.dataset.head !== head || c.style.opacity === '0') continue;
       const n = Number(c.dataset.n ?? '1') + 1;
       c.dataset.n = String(n);
-      c.innerHTML = `${html.replace('<small>', ` <b class="tn">×${n}</b><small>`)}${html.includes('<small>') ? '' : ` <b class="tn">×${n}</b>`}`;
+      c.innerHTML = iconize(`${html.replace('<small>', ` <b class="tn">×${n}</b><small>`)}${html.includes('<small>') ? '' : ` <b class="tn">×${n}</b>`}`);
       clearTimeout(Number(c.dataset.timer));
       c.dataset.timer = String(this.fadeLater(c, secs));
       return;
@@ -698,7 +728,7 @@ export class Hud {
     const el = document.createElement('div');
     el.dataset.head = head;
     el.className = `toast panel ${kind}`;
-    el.innerHTML = html;
+    el.innerHTML = iconize(html);
     box.appendChild(el);
     el.dataset.timer = String(this.fadeLater(el, secs));
   }
@@ -706,7 +736,7 @@ export class Hud {
   private fadeLater(el: HTMLElement, secs: number): number {
     return window.setTimeout(() => {
       el.style.opacity = '0';
-      el.style.transform = 'translateY(-10px)';
+      el.style.transform = 'scale(.96)'; // shrink in place: sliding up would overlap the toast above
       setTimeout(() => el.remove(), 600);
     }, secs * 1000);
   }
@@ -715,7 +745,7 @@ export class Hud {
     const f = $(this.root, '#feed');
     while (f.children.length >= 4) f.firstElementChild!.remove();
     const el = document.createElement('div');
-    el.textContent = text;
+    el.innerHTML = iconize(esc(text));
     f.appendChild(el);
     setTimeout(() => {
       el.style.opacity = '0';
@@ -723,19 +753,54 @@ export class Hud {
     }, 2600);
   }
 
+  private comboTier = 0;
   combo(n: number, total?: string) {
     const el = $(this.root, '#comboBig');
-    el.textContent = `BLOOM CHAIN ×${n}`;
+    $(el, '.cx').textContent = `×${n}`;
     el.classList.add('on');
-    el.classList.toggle('tier2', n >= 5 && n < 10);
-    el.classList.toggle('tier3', n >= 10);
+    $(this.root, '#combo').classList.add('on');
+    const tier = n >= 10 ? 3 : n >= 5 ? 2 : 1;
+    el.classList.toggle('tier2', tier === 2);
+    el.classList.toggle('tier3', tier === 3);
+    // Look 5.5: sparkles burst around the panel when the chain reaches a new tier.
+    if (tier > this.comboTier && tier > 1) this.sparkle(tier);
+    this.comboTier = tier;
     el.classList.remove('pop');
     void el.offsetWidth;
     el.classList.add('pop');
     const tot = $(this.root, '#comboTotal');
-    tot.textContent = total ?? '';
+    tot.innerHTML = iconize(esc(total ?? ''));
     tot.classList.toggle('on', !!total);
     this.comboTimer = total ? 3.2 : 2.2;
+  }
+
+  /** Look 5.5: the combo panel's contribution lines, from the running chain (ChainSummary.breakdown). */
+  chainBreakdown(b?: { restored: number; adjacent: number; synergy: number; relay: number }) {
+    if (!b) return;
+    const lines: [string, number][] = [
+      ['Restored Tiles', b.restored],
+      ['Adjacent Blooms', b.adjacent],
+      ['Utility Synergy', b.synergy],
+      ['Relay Links', b.relay],
+    ];
+    this.set('comboParts', $(this.root, '#comboParts'), 'html', lines.filter(([, v]) => v > 0).map(([k, v]) => `<li><span>+ ${k}</span><b>+${fmt(big(v))}</b></li>`).join(''));
+  }
+
+  private sparkle(tier: number) {
+    if (document.body.classList.contains('reduced') || this.settings.lowVfx) return;
+    const box = $(this.root, '#comboFx');
+    const n = tier === 3 ? 12 : 7;
+    for (let i = 0; i < n; i++) {
+      const s = document.createElement('i');
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.5;
+      const d = 40 + Math.random() * 50;
+      s.style.setProperty('--dx', `${Math.round(Math.cos(a) * d)}px`);
+      s.style.setProperty('--dy', `${Math.round(Math.sin(a) * d * 0.6)}px`);
+      s.style.animationDelay = `${Math.round(Math.random() * 120)}ms`;
+      s.className = tier === 3 ? 'pink' : '';
+      box.appendChild(s);
+      setTimeout(() => s.remove(), 1000);
+    }
   }
 
   /** City 10.6: the running chain's per-area summary under the combo (empty hides it). */
@@ -782,11 +847,15 @@ export class Hud {
 
   /** Rectangles the Lucky Cat must never hide under. */
   blockedRects(): DOMRect[] {
-    return ['#res', '#obj', '#hotbar', '#hint', '#combo'].map((s) => $(this.root, s).getBoundingClientRect());
+    return ['#logo', '#res', '#obj', '#hotbar', '#hint', '#combo', '#quick', '#chips'].map((s) => $(this.root, s).getBoundingClientRect());
   }
 
   setPaused(p: boolean) {
-    this.set('pause', $(this.root, '#pauseBtn'), 'html', p ? `${ICONS.play}<span class="lbl"> Resume</span>` : `${ICONS.pause}<span class="lbl"> Pause</span>`);
+    const b = $(this.root, '#pauseBtn');
+    this.set('pause', b, 'html', p ? ICONS.play : ICONS.pause);
+    b.classList.toggle('on', p);
+    b.setAttribute('aria-label', p ? 'Resume' : 'Pause');
+    b.title = p ? 'Resume (P)' : 'Pause (P)';
   }
 
   setDebug(text: string | null) {
@@ -865,6 +934,11 @@ export class Hud {
       const row = $(this.root, `[data-res="${k}"]`);
       const v = s.econ.get(k);
       const c = s.econ.cap(k);
+      // Look 5.4: a big gain at once (a harvest, a chain payout, a cat reward) bumps the pill.
+      const vn = toNum(v);
+      const prev = this.prevRes.get(k);
+      this.prevRes.set(k, vn);
+      if (prev !== undefined && vn - prev > Math.max(1, 0.15 * (c ? toNum(c) : Math.max(prev, 10)))) this.flashResource(k, 'bump');
       this.set(`v-${k}`, $(row, '.n'), 'text', fmt(v));
       this.set(`c-${k}`, $(row, '.c'), 'text', c ? fmt(c) : '');
       this.set(`cw-${k}`, $(row, '.capw'), 'cls', c ? '0' : '1', 'nocap');
@@ -914,12 +988,12 @@ export class Hud {
       btn.hidden = !n;
       this.set(`hcs-${t}`, $(btn, '.sc'), 'text', n ? `core ×${n}` : '');
     }
-    this.set('coresBadge', $(this.root, '#buildToggle .sc'), 'text', cores ? `✨ ${cores} core${cores > 1 ? 's' : ''}` : 'machines');
+    this.set('coresBadge', $(this.root, '#buildToggle .sc'), 'text', cores ? `✨ ${cores} core${cores > 1 ? 's' : ''}` : '');
     // Overcharge countdown on the Pulse button
     const every = s.upgrades.overchargeEvery;
     const pc0 = s.state.progression.pulseCharge ?? 0;
     const mega = s.restoration.megaReady();
-    const pulseSc = mega ? '💥 MEGA next!' : every ? (pc0 === every - 1 ? '🌟 next!' : '●'.repeat(pc0) + '○'.repeat(every - pc0)) : 'restore';
+    const pulseSc = mega ? '💥 MEGA next!' : every ? (pc0 === every - 1 ? '🌟 next!' : '●'.repeat(pc0) + '○'.repeat(every - pc0)) : '';
     this.set('pulseSc', $(this.root, '[data-tool="pulse"] .sc'), 'text', pulseSc);
     // Mega Pulse meter: a fill along the bottom of the Pulse button.
     const mf = s.state.progression.coreActivated ? Math.min(1, (s.state.progression.megaCharge ?? 0) / TUNING.mega.charge) : 0;
@@ -944,6 +1018,11 @@ export class Hud {
     const cats = s.state.cat.found;
     this.set('catCount', $(this.root, '#catCount'), 'text', String(cats));
     if (cats > 0) $(this.root, '#catBtn').hidden = false;
+    // Look 5.9: the house shows a badge while a landmark (or the fountain) is ready to wake; a tap then flies there.
+    const wakeReady = s.state.progression.coreActivated ? s.areas.revealed().some((id) => s.areas.fog(id) !== 'cleared' && s.areas.ready(id)) : s.progression.coreReady();
+    const homeB = $(this.root, '#homeBtn');
+    this.set('homeReady', homeB, 'cls', wakeReady ? '1' : '0', 'ready');
+    this.set('homeTitle', homeB, 'title', wakeReady ? 'A landmark is ready to wake: tap to fly there' : 'Home (Home key)');
 
     // Objective
     const p = s.progression;
@@ -963,6 +1042,12 @@ export class Hud {
       this.set('objList', $(this.root, '#objList'), 'html', html);
     }
     const ready = p.coreReady();
+    // Look 5.8: the card's checkbox ticks (with a flourish) once the current goal is ready to complete.
+    const goal = s.state.progression.coreActivated ? s.areas.nextGoal() : undefined;
+    const done = s.state.progression.coreActivated ? !!goal && s.areas.ready(goal) : ready;
+    this.set('objDone', $(this.root, '#obj'), 'cls', done ? '1' : '0', 'done');
+    this.set('objDoneLabel', $(this.root, '#objCheck'), 'title', done ? 'Ready: complete it now' : 'Not done yet');
+    $(this.root, '#objCheck').setAttribute('aria-label', done ? 'Ready to complete' : 'Not done yet');
     const coreBtn = $(this.root, '#coreBtn');
     this.set('coreBtn', coreBtn, 'cls', ready ? '1' : '0', 'show');
     this.set('coreBtnText', coreBtn, 'text', `✨ ${p.homeIsPark ? 'Wake the fountain' : 'Awaken the Core'} · ${formatCost(TUNING.core.cost)}`);
@@ -994,6 +1079,9 @@ export class Hud {
       this.comboTimer -= dt;
       if (this.comboTimer <= 0) {
         $(this.root, '#comboBig').classList.remove('on');
+        $(this.root, '#combo').classList.remove('on');
+        this.comboTier = 0;
+        this.set('comboParts', $(this.root, '#comboParts'), 'html', '');
         $(this.root, '#comboTotal').classList.remove('on');
       }
     }
@@ -1011,7 +1099,7 @@ export class Hud {
     const name = t3?.name ?? t2?.name ?? def.name;
     const icon = t3?.icon ?? t2?.icon ?? def.icon;
     const blurb = t3 ? `Superstructure (nine machines in one): ${t3.blurb}.` : t2 ? `Tier 2 (three merged): ${t2.blurb}. ${def.blurb}` : def.blurb;
-    return `<h4><span>${icon} ${esc(name)}${m.starter ? ' <small style="font-weight:700;color:var(--ink-soft)">(old)</small>' : ''}</span><button data-close aria-label="Close">×</button></h4><p>${esc(blurb)}</p>${extra}`;
+    return `<h4><span>${icon} ${esc(name)}${m.starter ? ' <small class="dim">(old)</small>' : ''}</span><button data-close aria-label="Close">×</button></h4><p>${esc(blurb)}</p>${extra}`;
   }
 
   get currentTool() {

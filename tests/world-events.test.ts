@@ -480,18 +480,18 @@ describe('Phase 5 E15: Lucky Cat Invasion and rarer cats', () => {
 });
 
 describe('Phase 5 E15: saves', () => {
-  it('saves version 6 with the event and cats; a v5 save is scrapped (no migration, as agreed)', () => {
-    expect(SAVE_VERSION).toBe(6);
+  it('saves the event and cats (version 6, now 7 with Look 6); an older save is scrapped (no migration, as agreed)', () => {
+    expect(SAVE_VERSION).toBeGreaterThanOrEqual(6);
     const sim = parkSim(13);
     sim.state.cat.firstSpawned = true;
     sim.events.trigger('invasion');
     const json = saver.serialize(sim.state);
     const back = saver.deserialize(json)!;
-    expect(back.version).toBe(6);
+    expect(back.version).toBe(SAVE_VERSION);
     expect(back.events).toEqual(sim.state.events);
     expect(back.cat.invasion).toEqual(sim.state.cat.invasion);
     const old = JSON.parse(json) as GameState;
-    old.version = 5;
+    old.version = SAVE_VERSION - 1;
     expect(saver.parse(JSON.stringify(old))).toBe('scrapped');
   });
 });
