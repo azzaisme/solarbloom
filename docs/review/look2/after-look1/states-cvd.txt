@@ -1,0 +1,8 @@
+normal        min dE  21.8 (prepared~growing)   min dL   1.9 (dead~bloom2)
+              dead=#b88b61  prepared=#75431f  growing=#82641a  bloom1=#aea965  bloom2=#88a338  bloom3=#3a2f75  bloom4=#414a31
+protanopia    min dE  14.9 (prepared~bloom4)   min dL   0.8 (prepared~bloom4)
+              dead=#9a8e5e  prepared=#524916  growing=#71640e  bloom1=#b7aa64  bloom2=#ac9929  bloom3=#003c76  bloom4=#4d472e
+deuteranopia  min dE  11.6 (bloom1~bloom2)   min dL   0.3 (dead~bloom2)
+              dead=#a49862  prepared=#5e5420  growing=#786b1e  bloom1=#c0b165  bloom2=#a99940  bloom3=#003873  bloom4=#4b4632
+tritanopia    min dE  13.9 (bloom3~bloom4)   min dL   1.4 (dead~bloom2)
+              dead=#c58180  prepared=#81393b  growing=#8e5a55  bloom1=#b89f9d  bloom2=#8f9a8d  bloom3=#283f4d  bloom4=#424843

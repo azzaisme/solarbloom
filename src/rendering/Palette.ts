@@ -8,39 +8,39 @@
 
 const stone = {
   /** Look 2.3: warm limestone (palette.md) for planters, plinths, basins, statues and clean parapets */
-  light: '#ddd2bf',
-  cream: '#e6dccb',
-  white: '#ece4d4',
-  bright: '#efe7d8',
-  warm: '#d3c6b0',
-  sand: '#c9bca5',
-  mid: '#b9ab95',
-  grey: '#a39886',
-  dark: '#978a76',
-  shadow: '#7d7264',
-  pebble: '#b3a896',
+  light: '#d6d0c6',
+  cream: '#dfdad2',
+  white: '#e6e2da',
+  bright: '#e9e5de',
+  warm: '#cac4b9',
+  sand: '#c0baae',
+  mid: '#b0a99e',
+  grey: '#9c968d',
+  dark: '#8f887e',
+  shadow: '#77716a',
+  pebble: '#aca69d',
 };
 
 const paving = {
   /** restored slab; each slab takes one of `slabs` by hash, set in darker grout */
-  alive: '#c9bfa9',
-  slabs: ['#c9bfa9', '#c0b49e', '#d0c6b1', '#b9ad97'] as string[],
+  alive: '#b4afa5',
+  slabs: ['#b4afa5', '#aba69b', '#bab6ac', '#a4a095'] as string[],
   /** swept but not yet restored */
-  swept: '#b3a999',
-  grout: '#7d705f',
-  crack: '#5e5347',
+  swept: '#9d978c',
+  grout: '#766f67',
+  crack: '#58534d',
   /** raised border where restored paving meets lawn */
-  border: '#e6dccb',
-  roadLine: '#c9b98a',
+  border: '#dfdad2',
+  roadLine: '#b9b19a',
   /** Look 2.5: a restored road keeps its (cleaner) surface */
-  roadAlive: '#6c675e',
+  roadAlive: '#696662',
 };
 
 /** Tile ground by feature: dead (polluted) tones, three per feature. */
 const ground = {
   dead: {
-    lawn: ['#837a68', '#7b7262', '#8b8170'],
-    paving: ['#9d9486', '#958c7e', '#a59c8d'],
+    lawn: ['#968d7c', '#8e8574', '#9d9484'],
+    paving: ['#8a8276', '#827a6f', '#91897d'],
     road: ['#58554f', '#514e49', '#5e5b55'],
     water: ['#4e5a52', '#475249', '#56625a'],
     clay: ['#ae9c84', '#a49279', '#b8a68d'],
@@ -49,7 +49,13 @@ const ground = {
     building: ['#90887c', '#898175', '#978f83'],
   } as Record<string, string[]>,
   /** restored ground that isn't lawn ('' = use the stage grass) */
-  alive: { lawn: '', paving: '#c9bfa9', road: '#6c675e', water: '#5cc6e6', clay: '', litter: '', obstacle: '#ddd2bf' } as Record<string, string>,
+  alive: { lawn: '', paving: '#b4afa5', road: '#6c675e', water: '#5cc6e6', clay: '', litter: '', obstacle: '#d6d0c6' } as Record<string, string>,
+  /**
+   * Look 2.9: prepared and growing must read apart for every vision type, so they differ in lightness, not just
+   * in their small details: prepared is dark tilled soil, growing a lighter olive soil hazed with sprouts.
+   */
+  prepared: '#5f4733',
+  growing: '#6a6536',
   /** prepared / growing water tiles */
   wetSoil: '#4f7f86',
   /** dead water surface scum */
@@ -70,32 +76,32 @@ const roof = {
 
 const lawn = {
   /** Look 2.2: slightly golden, less saturated greens (palette.md). Fresh restored grass, picked per tile by noise. */
-  tones: ['#86ad3e', '#8fb443', '#7ba23a', '#96b84a', '#719a37'],
+  tones: ['#77ad3e', '#80b443', '#6da23a', '#87b84a', '#649a37'],
   /** large sunlit / shaded patches pull the tile tone toward these */
-  sunlit: '#9cba48',
-  shadow: '#3f6a2e',
-  dryTip: '#c2bf5c',
+  sunlit: '#8dba48',
+  shadow: '#376a2e',
+  dryTip: '#b7c25c',
   /**
    * Grass by bloom stage: index 1 Restored … 4 Radiant. Each stage keeps its own brightness so stages read apart:
    * young grass is light and yellow-green, Blooming mid, Thriving deep, Radiant warm and golden.
    */
   stage: [
     [],
-    ['#a9c463', '#b2c96a', '#a0bd5c', '#b8cd72', '#9db75a'],
-    ['#86ad3e', '#8fb443', '#7ba23a', '#96b84a', '#719a37'],
-    ['#5f8f34', '#68973a', '#58872f', '#6f9c3f', '#52802c'],
-    ['#8fae3a', '#99b440', '#86a636', '#a1b946', '#7d9e33'],
+    ['#9cc463', '#a5c96a', '#93bd5c', '#accd72', '#91b75a'],
+    ['#77ad3e', '#80b443', '#6da23a', '#87b84a', '#649a37'],
+    ['#538f34', '#5c973a', '#4c872f', '#639c3f', '#47802c'],
+    ['#80ae3a', '#8ab440', '#77a636', '#92b946', '#6f9e33'],
   ] as string[][],
   /** tufts: darker base, lighter tips (MeshBuilder.tip) */
-  tuft: ['#557f2c', '#5f8a31', '#6b9337'],
-  tuftTip: ['#a8c55a', '#b4c964', '#c2bf5c'],
-  youngTuft: ['#86ab4c', '#8fb254', '#99b85c'],
-  youngTuftTip: ['#c4d282', '#cbd58a', '#d2d38c'],
+  tuft: ['#4a7f2c', '#538a31', '#5f9337'],
+  tuftTip: ['#9ac55a', '#a7c964', '#b7c25c'],
+  youngTuft: ['#79ab4c', '#82b254', '#8db85c'],
+  youngTuftTip: ['#b9d282', '#c1d58a', '#c9d38c'],
   /** trimmed darker edge where lawn meets paving */
-  edge: '#4f7a2c',
-  moss: '#8a9a45',
-  sprout: '#7fa046',
-  clover: '#a3c25e',
+  edge: '#457a2c',
+  moss: '#7f9a45',
+  sprout: '#73a046',
+  clover: '#96c25e',
   /** dead-state weeds: dry and dusty, never fresh green */
   weed: '#8a8a5a',
   weedDry: '#9a9460',

@@ -441,7 +441,7 @@ export class ChunkRenderer {
     const f = t.feature ?? 'lawn';
     const dead = DEAD[f] ?? DEAD.lawn;
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
-    const col = t.blocked ? (this.level >= 4 && f !== 'building' ? PALETTE.stone.light : dead[0]) : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? this.slabTone(t) : f === 'road' ? PALETTE.paving.roadAlive : grassTone(stage, t.x, t.z)) : t.ground === 'polluted' ? dead[t.variant % dead.length] : PALETTE.soil;
+    const col = t.blocked ? (this.level >= 4 && f !== 'building' ? PALETTE.stone.light : dead[0]) : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? this.slabTone(t) : f === 'road' ? PALETTE.paving.roadAlive : grassTone(stage, t.x, t.z)) : t.ground === 'polluted' ? dead[t.variant % dead.length] : t.ground === 'growing' ? PALETTE.ground.growing : PALETTE.ground.prepared;
     b.add('box', col, [t.x + 0.5, h, t.z + 0.5], [1, 0.16, 1]);
     // Phase 5 E16: stages stay apart zoomed out too: a colour patch for Blooming, a gold disc for Radiant.
     if (t.ground === 'restored' && f !== 'water' && f !== 'paving' && f !== 'road') {
@@ -648,7 +648,7 @@ export class ChunkRenderer {
       }
       case 'prepared':
       case 'growing': {
-        b.add('box', f === 'water' ? PALETTE.ground.wetSoil : PALETTE.soil, [x, h, z], [0.96, 0.16, 0.96]);
+        b.add('box', f === 'water' ? PALETTE.ground.wetSoil : t.ground === 'growing' ? PALETTE.ground.growing : PALETTE.ground.prepared, [x, h, z], [0.96, 0.16, 0.96]);
         const n = t.ground === 'growing' ? 5 : 3 + (t.variant % 3);
         for (let i = 0; i < n; i++) {
           const sx = x + r.range(-0.3, 0.3);

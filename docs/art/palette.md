@@ -20,17 +20,17 @@ The colour spec for the art-direction epic (#102, Look 2 #104). Sampled from
 
 | Family | Swatch | Lit (ref) | Shadow (ref) | Game | `PALETTE` key |
 |---|---|---|---|---|---|
-| Limestone | light | `#e0d0db` | `#bea497` | `#ddd2bf` | `stone.light` |
-| | mid | `#e8c6bf` | `#bfa3a8` | `#c4b7a1` | `stone.mid` |
-| | dark | `#6c646d` | `#47454a` | `#9a8d79` | `stone.dark` |
-| Paving | slab (4 tones) | `#a18a8c` | `#7b6d76` | `#cdbfa8` `#c4b59d` `#d4c7b1` `#bcad95` | `paving.slabs` |
-| | grout | `#4b4243` | `#3f3738` | `#7d705f` | `paving.grout` |
-| | crack | | | `#5e5347` | `paving.crack` |
-| Grass | sunlit | `#b1cf2c` | `#9dae1b` | `#9cba48` | `lawn.sunlit` |
-| | mid (tile tones) | `#8b9d14` | `#748911` | `#86ad3e` `#8fb443` `#7ba23a` `#96b84a` `#719a37` | `lawn.tones` |
-| | shadow | `#4a6011` | `#374a0d` | `#3f6a2e` (cool, dark, never grey) | `lawn.shadow` |
-| | dry tips | `#cac523` | `#a9ac1a` | `#c2bf5c` | `lawn.dryTip` |
-| Moss | | `#a4a83b` | `#5a5e17` | `#8a9a45` | `lawn.moss` |
+| Limestone | light | `#e0d0db` | `#bea497` | `#d6d0c6` | `stone.light` |
+| | mid | `#e8c6bf` | `#bfa3a8` | `#b0a99e` | `stone.mid` |
+| | dark | `#6c646d` | `#47454a` | `#8f887e` | `stone.dark` |
+| Paving | slab (4 tones) | `#a18a8c` | `#7b6d76` | `#b4afa5` `#aba69b` `#bab6ac` `#a4a095` | `paving.slabs` |
+| | grout | `#4b4243` | `#3f3738` | `#766f67` | `paving.grout` |
+| | crack | | | `#58534d` | `paving.crack` |
+| Grass | sunlit | `#b1cf2c` | `#9dae1b` | `#8dba48` | `lawn.sunlit` |
+| | mid (tile tones) | `#8b9d14` | `#748911` | `#77ad3e` `#80b443` `#6da23a` `#87b84a` `#649a37` | `lawn.tones` |
+| | shadow | `#4a6011` | `#374a0d` | `#376a2e` (cool, dark, never grey) | `lawn.shadow` |
+| | dry tips | `#cac523` | `#a9ac1a` | `#b7c25c` | `lawn.dryTip` |
+| Moss | | `#a4a83b` | `#5a5e17` | `#7f9a45` | `lawn.moss` |
 | Flowers | hot pink | `#f470a8` | `#cc4481` | `#f2689f` | `flowers.pink` |
 | | magenta | `#d73d84` | `#b42a65` | `#d63d84` | `flowers.magenta` |
 | | lavender | `#b17fd7` | `#7c56b5` | `#a983d6` | `flowers.lavender` |
@@ -84,8 +84,8 @@ Readability is gameplay. Each state must differ in **brightness and texture**, n
 |---|---|
 | fog-covered | greyed toward the fog-of-war colour and dimmed, under the fog sheet |
 | dead | warm grey weathered stone, darker and much less saturated than restored, with dry weeds, rust and debris |
-| prepared | dark soil with moss dots |
-| growing | dark soil with bright young tufts |
+| prepared | dark tilled soil `#5f4733` with moss dots |
+| growing | lighter olive sprouting soil `#6a6536` with young tufts |
 | restored (stage 1) | light young grass, short tufts |
 | blooming (stage 2) | grass with tight one-colour flower clusters |
 | thriving (stage 3) | deep grass with shrubs, spikes or a tree |
@@ -113,3 +113,55 @@ these are the clear values to set there (`PALETTE.sky` holds the same values).
 
 Look 1's haze (`look.ts` `haze.color`, `#e9dcc4` on its branch) should converge on the same horizon colour, or
 be the golden-hour grade of it.
+
+## Calibration under Look 1 (#127)
+
+Calibrated against Look 1's branch (`claude/look1-lighting-0f6196`: Neutral tone mapping, warm key, grade, High
+tier) merged locally onto this branch, with `npm run shots:look2` (`LOOK_QUERY=gfx=high`). Look 1's warm key and
+grade warm every albedo a second time, so the first-pass values were too yellow and too peach. Changes:
+
+- **Grass** (all `lawn` greens, tufts, edge, moss): hue +8°. Rendered median went from hue 63 to **69** (reference
+  grass mid: 68).
+- **Stone and paving**: saturation halved, slabs darkened, so paving renders as warm grey stone with mauve shade
+  like the reference, not peach (rendered slab value 0.94 → ~0.85). Restored slabs (`#b4afa5`) stay clearly above
+  dead paving (`#8a8276`); the swept state sits between (`#9d978c`).
+- **Prepared vs growing**: they rendered as the same bare soil (ΔE 3.6 with normal vision, under 1.5 for protanopia
+  and deuteranopia). They now differ in lightness: prepared `#5f4733`, growing `#6a6536`; dead lawn is a lighter dusty
+  `#968d7c`. Ground lightness ladder: prepared L\*32 < growing ~43 < dead ~58 < Blooming 66 < Restored 79.
+
+### Colour-blind check
+
+`python tests/art/cvd.py <shot> <grid> [states.json]` simulates protanopia, deuteranopia and tritanopia (Machado
+2009, full severity) and measures the median colour of each tile-state block in the states shot. Smallest colour
+difference between any two states, under Look 1 (High):
+
+| Vision | min ΔE (pair) |
+|---|---|
+| normal | 21.8 (prepared / growing) |
+| protanopia | 14.9 (prepared / Radiant) |
+| deuteranopia | 11.6 (Restored / Blooming) |
+| tritanopia | 13.9 (Thriving / Radiant) |
+
+Before the prepared/growing fix the worst pair was 0.9. Hue is never the only cue: stages also differ in lightness
+and shape (moss dots, tufts, flower clusters, shrubs and trees, the Radiant glow disc and gold flowers). Fog-covered
+ground is desaturated under cool grey sheets in every simulation; boosted tiles are an additive glow (a brightness
+cue). Grids: `docs/review/look2/after-look1/*-cvd.png` and `docs/review/look2/after/*-cvd.png`.
+
+### Coverage (done-when)
+
+`python tests/art/coverage.py`, fully restored park ("full" shot, bloom stages mixed), see
+`docs/review/look2/*/coverage.txt`:
+
+| | green | stone | yellow-gold | largest 30° hue bin |
+|---|---|---|---|---|
+| before, park crop | 58% | 17% (+17% pale cream) | 2% | 39% |
+| after under Look 1, park crop | 36% | 38% | 10% | 34% |
+| after under Look 1, whole frame | 27% | 60% | 5% | 24% |
+| after, current renderer (no Look 1), park crop | 48% | 41% | <1% | 42% |
+| after, current renderer, whole frame | 33% | 61% | <1% | 28% |
+
+On the current renderer (before Look 1 merges) the park crop sits at 48% green: right at the limit. Look 1's warm
+light pushes part of the grass into the yellow-gold family, which is where the calibrated numbers come from.
+
+Open: flowers cover ~3% of the screen, under the 8–15% target. The colours and drifts are right but the flower
+meshes are small; bigger beds belong to Look 3's foliage work.

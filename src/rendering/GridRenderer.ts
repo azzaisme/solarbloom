@@ -199,7 +199,7 @@ export class GridRenderer {
         break;
       }
       case 'prepared': {
-        setVColor(v.slab, 'box', PALETTE.soil);
+        setVColor(v.slab, 'box', PALETTE.ground.prepared);
         if (!t.occupantId) {
           const n = 3 + (t.variant % 3);
           for (let i = 0; i < n; i++) {
@@ -211,7 +211,7 @@ export class GridRenderer {
         break;
       }
       case 'growing': {
-        setVColor(v.slab, 'box', PALETTE.soil);
+        setVColor(v.slab, 'box', PALETTE.ground.growing);
         for (let i = 0; i < 5; i++) {
           const sp = add(group(deco, 'sprout', [r.range(-0.3, 0.3), 0, r.range(-0.3, 0.3)]));
           shape(sp, 'cone', PALETTE.lawn.youngTuft[i % 3], { pos: [0, 0.06, 0], scale: [0.05, 0.12, 0.05] });
