@@ -51,7 +51,7 @@ export class RestorationSystem {
     if (t.blocked) return { ok: false, reason: t.feature === 'building' ? 'An old building: its roof garden wakes when this area clears' : 'A rusty vent — nothing grows here', cost };
     if (this.sim.isCoreTile(t)) return { ok: false, reason: 'The Rooftop Core — awaken it when it is ready', cost };
     if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in full bloom', cost };
-    if (t.ground === 'growing') return { ok: false, reason: 'Already growing', cost };
+    if (t.ground === 'growing') return { ok: false, reason: `Roots are breaking through — ${Math.max(1, Math.ceil(t.growthRemainingSec))}s`, cost };
     if (this.sim.drones.isReserved(t.id)) return { ok: false, reason: 'Your drone is on its way here', cost };
     const short = this.sim.econ.shortfall(cost);
     if (short === 'energy')
@@ -186,6 +186,7 @@ export class RestorationSystem {
   grow(t: TileData, chainId?: number, starter: 'player' | 'auto' = 'auto', quiet = false) {
     if (t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom) return;
     t.bloom = Math.min(TUNING.restore.maxBloom, t.bloom + 1);
+    this.sim.transitions.bloom(t, t.bloom, starter === 'auto' || quiet);
     this.sim.grid.touch(t);
     const b = this.sim.econ.add('biomass', TUNING.restore.nurtureBiomass * this.sim.upgrades.soilMult);
     if (b.gt(0)) this.sim.bus.emit('resource.gain', { kind: 'biomass', amount: b, tileId: t.id });
@@ -196,6 +197,8 @@ export class RestorationSystem {
   }
 
   beginGrowth(t: TileData, source: RestoreSource, seconds: number) {
+    // Look 6: the restore sequence starts now and plays on past the sim's (short) growth.
+    this.sim.transitions.restore(t, source, t.ground === 'polluted' ? t.pollution : 0);
     t.ground = 'growing';
     t.pollution = 0;
     t.growthRemainingSec = seconds;
@@ -237,13 +240,15 @@ export class RestorationSystem {
    */
   complete(t: TileData, source: RestoreSource, chainId?: number, quiet = false): number {
     if (t.ground === 'restored') return chainId ?? -1;
+    // Look 6: a tile that grew already plays its restore; one restored straight from dead ground starts it now.
+    if (t.ground !== 'growing' || t.tr?.k !== 'restore') this.sim.transitions.restore(t, source, t.ground === 'polluted' ? t.pollution : 0, { quiet });
     this.growing.delete(t.id);
     t.ground = 'restored';
     t.bloom = Math.max(1, t.bloom);
     t.pollution = 0;
     t.growthRemainingSec = 0;
     t.growSource = undefined;
-    if (source === 'overflow') t.lushUntil = this.sim.time + TUNING.neighbourhood.reservoir.lushSeconds;
+    if (source === 'overflow') this.sim.transitions.lush(t, this.sim.time + TUNING.neighbourhood.reservoir.lushSeconds);
     this.sim.grid.touch(t);
     this.sim.state.stats.tilesRestored++;
     const biomass = this.sim.econ.add('biomass', TUNING.restore.instantBiomass * this.sim.upgrades.soilMult);
@@ -251,12 +256,17 @@ export class RestorationSystem {
     // Life seeps outward: neighbours soften from concrete into moss.
     for (const nb of this.sim.grid.neighbors(t)) {
       if (nb.ground !== 'polluted' || nb.blocked) continue;
+      const before = nb.pollution;
       nb.pollution = Math.max(0, nb.pollution - TUNING.restore.seep);
       this.sim.grid.touch(nb);
       if (nb.pollution <= 0) {
         nb.ground = 'prepared';
+        this.sim.transitions.moss(nb, before, t);
         this.sim.bus.emit('tile.prepared', { tile: nb });
-      } else this.sim.bus.emit('tile.softened', { tile: nb });
+      } else {
+        this.sim.transitions.soften(nb, before, t);
+        this.sim.bus.emit('tile.softened', { tile: nb });
+      }
     }
     this.sim.areas.onRestored(t);
     if (quiet) {

@@ -31,6 +31,7 @@ import { ProgressionSystem } from './ProgressionSystem';
 import { RestorationSystem } from './RestorationSystem';
 import { UpgradeSystem } from './UpgradeSystem';
 import { TUNING } from '../data/tuning';
+import { Transitions } from './Transitions';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -67,12 +68,15 @@ export class Sim {
   readonly events: WorldEventSystem;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
   readonly ecosystem: EcosystemSystem;
+  /** Look 6: living transitions (what each tile is visibly turning into). */
+  readonly transitions: Transitions;
 
   constructor(
     readonly state: GameState,
     readonly bus: EventBus = new EventBus(),
   ) {
     this.grid = new Grid(state.seed, state.layers);
+    this.transitions = new Transitions(this);
     // Saved tile deltas are applied as each chunk is generated; occupancy is rebuilt from the machines.
     this.grid.pending = { ...(state.tiles ?? {}) };
     delete state.tiles;
@@ -82,6 +86,7 @@ export class Sim {
       delete this.grid.pending[c.key];
       if (p) unpackChunk(c, p);
       c.packed = p ?? '';
+      if (p && this.transitions) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
       for (const m of this.grid.machinesInChunk(c.key)) for (const t of this.grid.footprint(m.roofId, m.x, m.z, m.size)) if (t) t.occupantId = m.id;
       this.production?.chunkLoaded(c.key);
     };
@@ -127,6 +132,7 @@ export class Sim {
       if (frenzy) this.frenzy.onOverflow(k, a);
     };
     this.restoration.adoptGrowing();
+    for (const c of this.grid.loadedChunks()) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
     this.upgrades.applyCaps();
   }
 
@@ -209,6 +215,7 @@ export class Sim {
     this.frenzy.tick();
     this.production.tick(dt);
     this.restoration.tick(dt);
+    this.transitions.tick();
     this.chains.tick();
     this.drones.tick(dt);
     this.supers.tick(dt);

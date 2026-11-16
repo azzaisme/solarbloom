@@ -27,7 +27,29 @@ export type RestoreSource =
   | 'cat'
   | 'neighbourhood'
   /** Phase 5 E14: a superstructure's ability (Water Nexus wave, Tree of Life evolution) */
-  | 'super';
+  | 'super'
+  /** Look 6.8: the Cultivator (a solar tiller) */
+  | 'cultivator';
+
+/**
+ * Look 6 (#169): what a tile is visibly turning into. `restore` covers moss/concrete → growing → restored (fracture,
+ * heave, crumble, sprout, knit); `bloom` one nurture step; `unblock` an obstacle crumbling away.
+ */
+export type TransitionKind = 'soften' | 'moss' | 'restore' | 'bloom' | 'unblock';
+
+/**
+ * Look 6.2: a tile's active transition, keyed to sim time (so a reload continues it). `from` is the look it starts
+ * from (pollution for soften/moss/restore, bloom level for bloom). `dir` is the edge facing where the change came
+ * from (0 centre, 1 +x, 2 −x, 3 +z, 4 −z). `g`: gameplay time (the Cultivator's work), not just visual catch-up.
+ */
+export interface TileTransition {
+  k: TransitionKind;
+  t0: number;
+  d: number;
+  dir?: number;
+  from?: number;
+  g?: 1;
+}
 
 export interface TileData {
   id: string;
@@ -44,6 +66,10 @@ export interface TileData {
   bloom: number; // 0 until restored, then 1..3 (grass → flowers → shrubs)
   /** Reservoir Overflow: biomass bonus on this tile until this sim time. */
   lushUntil?: number;
+  /** Look 6.16: when the current lush spell began (the wet mask soaks in from then). */
+  lushAt?: number;
+  /** Look 6.2: the transition playing on this tile, if any (saved). */
+  tr?: TileTransition;
   /** City ground: what the tile is made of (generated, not saved). */
   feature?: import('../data/city').TileFeature;
   /** City ground obstacles: which prop stands here (bench, stall, stump…), for the renderer. */

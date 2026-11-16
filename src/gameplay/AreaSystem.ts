@@ -241,6 +241,7 @@ export class AreaSystem {
     if (!t) return false;
     t.blocked = false;
     t.unblocked = true;
+    this.sim.transitions.unblock(t);
     this.sim.grid.touch(t);
     return true;
   }
