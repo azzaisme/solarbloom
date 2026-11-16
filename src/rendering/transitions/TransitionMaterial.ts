@@ -168,8 +168,17 @@ float trEdge(vec2 e, float axis) {
 // Distance to one warped crack running across the tile from (0, a) to (1, b) in (u, v) space; s = position along it.
 float trCrack(vec2 uv, float a, float b, float seed, out float s) {
 	s = uv.x;
-	float c = mix(a, b, uv.x) + 0.085 * sin(uv.x * 9.0 + seed * 6.2831) * sin(uv.x * 3.14159) + 0.03 * sin(uv.x * 23.0 + seed * 3.0) * sin(uv.x * 3.14159);
-	return abs(uv.y - c);
+	// The path wanders on two scales of value noise (plus a gentle sine), pinned to zero at the tile edges so the
+	// edge points stay shared with the neighbours.
+	float env = sin(uv.x * 3.14159);
+	float c = mix(a, b, uv.x) + env * (
+		0.05 * sin(uv.x * 9.0 + seed * 6.2831) +
+		0.11 * (trNoise(vec2(uv.x * 5.0, seed * 31.0)) - 0.5) +
+		0.045 * (trNoise(vec2(uv.x * 17.0, seed * 57.0 + 3.0)) - 0.5) +
+		0.015 * (trNoise(vec2(uv.x * 46.0, seed * 91.0 + 7.0)) - 0.5));
+	// Width varies along the crack: hairline stretches, then wider gaps.
+	float wv = 0.4 + 1.2 * trNoise(vec2(uv.x * 7.0 + seed * 13.0, seed * 5.0));
+	return abs(uv.y - c) / wv;
 }
 // How far along a crack is from where the change came in (0 = first to crack).
 float trReveal(float s, float dir, float lo, float hi) {
@@ -202,7 +211,9 @@ float trCreep(vec2 l, float dir, float p, float n) {
 	else if (dir < 3.5) d = 1.0 - l.y;
 	else d = l.y;
 	float front = p * 1.4 - 0.2;
-	return 1.0 - smoothstep(front - 0.08, front + 0.08, d + (n - 0.5) * 0.35);
+	// two octaves on the front: broad lobes plus a ragged fringe
+	float n2 = uTrDetail > 0.5 ? trNoise(l * 13.0 + n * 7.0) : 0.5;
+	return 1.0 - smoothstep(front - 0.06, front + 0.06, d + (n - 0.5) * 0.4 + (n2 - 0.5) * 0.16);
 }
 float trWin(float p, vec2 w) {
 	return clamp((p - w.x) / max(w.y - w.x, 0.0001), 0.0, 1.0);
@@ -296,13 +307,14 @@ void getAlbedo() {
 			if (dir > 0.5) reveal = max(reveal, 0.45);
 			float d = trCracks(cell, l, dir, reveal);
 			float w = 0.008 + 0.012 * (1.0 - g) + 0.012 * m;
-			float inCrack = 1.0 - smoothstep(w * 0.5, w, d);
+			float rough = (trNoise(l * 38.0 + cell) - 0.5) * w * 0.7; // ragged crack edges
+			float inCrack = 1.0 - smoothstep(w * 0.5, w, d + rough);
 			float lip = (1.0 - smoothstep(w, w * 2.2, d)) * (1.0 - inCrack);
 			vec3 cc = mix(crackCol, moss * 1.3, m);
 			col = mix(col * (1.0 + 0.12 * lip), cc, inCrack);
 			glow += inCrack * (1.0 - m) * (1.0 - g) * 0.18;
 			// moss patches spread out from the cracks with a fuzzy edge
-			float patchN = trNoise(l * 7.0 + cell * 2.3);
+			float patchN = 0.65 * trNoise(l * 7.0 + cell * 2.3) + 0.35 * trNoise(l * 19.0 + cell * 4.1);
 			float cover = m * smoothstep(0.75, 0.25, patchN - (0.18 - d) * 1.5);
 			col = mix(col, moss * (0.85 + 0.4 * patchN), cover * 0.75);
 			// the creeping front itself is fresh moss green
