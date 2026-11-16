@@ -6,22 +6,22 @@
  */
 export const SKY = {
   /** straight up */
-  zenith: ['#97a3b0', '#5aa4e4'],
+  zenith: ['#97a3b0', '#78afe6'],
   /** about 25° up */
-  upper: ['#b1bac2', '#9ccbef'],
+  upper: ['#b1bac2', '#a4cdee'],
   /** a warm band just above the horizon */
-  glow: ['#cfcfc8', '#fbe6c4'],
+  glow: ['#cfcfc8', '#f6e2c0'],
   /** the horizon and the distance (scene fog colour) */
-  haze: ['#c3c8c8', '#d9e8e8'],
+  haze: ['#c3c8c8', '#e6e2d4'],
   /** extra warmth in the sky toward the sun */
   sunGlow: ['#d8d4c8', '#ffe0a8'],
   sunCore: '#fff7e2',
   cloudLit: ['#e7e9ea', '#ffffff'],
-  cloudShade: ['#b4bac0', '#dfe8f2'],
+  cloudShade: ['#b4bac0', '#dde3ee'],
   /** distant skyline silhouettes: stone, greenery, glass, water; each layer is hazed toward `haze` */
-  stone: ['#9a9d9c', '#d8ccb6'],
-  green: ['#8d978f', '#6dbb5a'],
-  glass: ['#a3adb4', '#86c8e2'],
+  stone: ['#9a9d9c', '#e9e1cf'],
+  green: ['#8d978f', '#a9c98a'],
+  glass: ['#a3adb4', '#bcd6e4'],
   water: ['#b5bdc2', '#bfeaff'],
   glowWarm: ['#9a9a92', '#ffd36a'],
 } as const;
