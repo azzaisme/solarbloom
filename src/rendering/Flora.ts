@@ -216,23 +216,19 @@ export function buildLeafyShrub(variant: number, lod: Lod, flowering = false): T
     const d = i === 0 ? 0 : 0.09 + R() * 0.08;
     const c: V = [Math.cos(a) * d, s * 0.8, Math.sin(a) * d];
     const r: V = [s, s * 0.82, s];
-    // a dark core so gaps between leaves read as depth, then the leaves
-    puff(B, { c, r: mul(r, lod === 0 ? 1 : 0.82) as V, base: lod === 0 ? base : scaleC(base, 0.7), light: lod === 0 ? light : base, dark, flex: 0.2, seed: R() * 1e9, detail: lod === 0 ? 0 : 1, lump: 0.3 });
+    // Look 3.6: rounded leaf clusters with dark crevices (no cards: nothing pointy), twigs, and blossom clusters
+    puff(B, { c, r, base, light, dark, flex: 0.25, seed: R() * 1e9, detail: lod === 0 ? 0 : 2, lump: 0.3, clusters: lod === 0 ? 0 : 6 });
     if (lod > 0) {
-      leafShell(B, c, r, lod === 2 ? 46 : 30, base, light, dark, 0.35, 0.06, R);
-      // twigs poking through
       for (let k = 0; k < 2; k++) {
         const u = randDir(R, 0.2);
-        tube(B, [[c[0], 0, c[2]], add(c, mul(u, s * 1.05))], [0.006, 0.003], 3, [hex('#6b4a32'), hex('#7d5a3c')], [0, 0.35], false);
+        tube(B, [[c[0], 0, c[2]], add(c, mul(u, s * 1.02))], [0.006, 0.003], 3, [hex('#6b4a32'), hex('#7d5a3c')], [0, 0.3], false);
       }
       if (flowering)
-        for (let k = 0; k < 7; k++) {
-          const u = randDir(R, 0.1);
-          const p = add(c, [u[0] * r[0], u[1] * r[1] + 0.01, u[2] * r[2]]);
-          for (let q = 0; q < 3; q++) {
-            const dir = norm(add(u, [(R() - 0.5) * 1.2, 0.3, (R() - 0.5) * 1.2]));
-            card(B, p, dir, u, 0.03, 0.024, scaleC(bloom, 0.9 + R() * 0.2), mix(bloom, [1, 1, 1], 0.2), 0.35, 0.4, 0.5, 0.15);
-          }
+        for (let k = 0; k < 6; k++) {
+          const u = randDir(R, 0.15);
+          const p = add(c, [u[0] * r[0] * 0.95, u[1] * r[1] * 0.95, u[2] * r[2] * 0.95]);
+          const fr = 0.035 + R() * 0.015;
+          puff(B, { c: p, r: [fr, fr * 0.8, fr], base: scaleC(bloom, 0.95), light: mix(bloom, [1, 1, 1], 0.25), dark: scaleC(bloom, 0.7), flex: 0.35, seed: k, detail: 1, lump: 0 });
         }
     } else if (flowering) puff(B, { c: add(c, [0, s * 0.4, 0]), r: [s * 0.7, s * 0.5, s * 0.7], base: bloom, light: mix(bloom, [1, 1, 1], 0.2), dark: scaleC(bloom, 0.7), flex: 0.3, seed: i, detail: 0, lump: 0.2 });
   }

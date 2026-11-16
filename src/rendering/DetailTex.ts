@@ -224,9 +224,9 @@ const FORCE: Record<DetailLayer, [number, number, number, number]> = {
 
 /** Quality-tier settings: strength of albedo and normal detail, and the distance band it fades over. */
 const TIER = {
-  low: [0.55, 0, 6, 14],
-  medium: [0.8, 0.5, 9, 22],
-  high: [0.9, 0.7, 12, 30],
+  low: [0.55, 0, 9, 20],
+  medium: [0.8, 0.5, 14, 32],
+  high: [0.9, 0.7, 18, 45],
 } as const;
 export type DetailTier = keyof typeof TIER;
 

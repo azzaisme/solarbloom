@@ -60,8 +60,10 @@ try {
   await page.evaluate(() => {
     const g = window.solarbloom, s = g.sim;
     for (const t of s.areas.tiles('park')) {
-      if (!s.restoration.isEligible(t)) continue;
-      s.restoration.complete(t, 'pulse');
+      if (t.ground !== 'restored') {
+        if (!s.restoration.isEligible(t)) continue;
+        s.restoration.complete(t, 'pulse');
+      }
       t.bloom = (t.x * 7 + t.z * 3) % 9 === 0 ? 4 : 3;
       s.grid.touch(t);
     }

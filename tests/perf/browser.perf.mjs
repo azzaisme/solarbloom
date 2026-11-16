@@ -46,8 +46,8 @@ const LIMITS = {
   chunkTris: 200000,
 };
 
-const server = await preview({ preview: { port: 4183, strictPort: true }, logLevel: 'silent' });
-const url = 'http://localhost:4183/';
+const server = await preview({ preview: { port: Number(process.env.PORT ?? 4183), strictPort: true }, build: process.env.DIST ? { outDir: process.env.DIST } : undefined, logLevel: 'silent' }); // DIST: compare another build
+const url = `http://localhost:${process.env.PORT ?? 4183}/`;
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
 const results = {};

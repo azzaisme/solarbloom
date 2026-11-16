@@ -9,7 +9,7 @@ import { buildingPlots, type BuildingPlot } from '../core/Generation';
 import { PALETTE } from './Materials';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { FoliageBuilder, foliageMaterial, treeMesh, updateWind } from './Foliage';
-import { shrubGeo, treeGeo, warmTemplates, type TreeGeo } from './TreeGen';
+import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
 import { treeSpot, treeStage } from './TreePlacement';
 import { warmFlora, grassGeo } from './Flora';
 import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, radiantExtras, thrivingExtras, turfTop, type DressCtx } from './Surfaces';
@@ -394,7 +394,9 @@ export class ChunkRenderer {
     }
     this.farFrom = zoom < 0.55 ? 2 : Infinity;
     // Look 3.17: grass, flowers and clutter thin out between the near and mid zoom bands (hysteresis avoids churn)
-    if (zoom > 1.3) this.band = 2;
+    // 3 = super close (trees get individual leaves on their clusters)
+    if (zoom > 2.5) this.band = 3;
+    else if (zoom > 1.3 && (this.band !== 3 || zoom < 2.3)) this.band = 2;
     else if (zoom < 1.15) this.band = 1;
     for (const v of this.views.values()) {
       const far = dist(v, focus) / CHUNK > this.farFrom;
@@ -497,8 +499,8 @@ export class ChunkRenderer {
       b,
       fb,
       // hidden (deep fog) chunks keep only the cheap shapes: nothing fine shows through the fog
-      dens: fog === 'hidden' ? 0 : tierK * (this.band === 2 ? 1 : 0.6),
-      lod: v.far || fog === 'hidden' ? 0 : this.band === 2 ? 2 : 1,
+      dens: fog === 'hidden' ? 0 : tierK * (this.band >= 2 ? 1 : 0.6),
+      lod: v.far || fog === 'hidden' ? 0 : this.band >= 2 ? 2 : 1,
       area,
       areaType: this.areaType,
       level: this.level,
@@ -567,7 +569,9 @@ export class ChunkRenderer {
     const stage = treeStage(t);
     if (!stage) return false;
     if (this.growing.has(t.id)) return true;
-    this.fb.add(treeGeo(spot.species, stage, spot.variant, lod), t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5, spot.rot, spot.scale);
+    // Look 3.7: close-up trees at near zoom on High; the single-clump version at mid zoom and below
+    const tl: Lod = lod === 1 && this.band >= 2 && this.detail === 'high' ? (this.band === 3 ? 3 : 2) : lod;
+    this.fb.add(treeGeo(spot.species, stage, spot.variant, tl), t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5, spot.rot, spot.scale);
     return true;
   }
 
