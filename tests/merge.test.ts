@@ -24,6 +24,20 @@ const merge = (sim: Sim, anchor: MachineData, partners?: MachineData[]) => {
 };
 
 describe('Phase 5 E13: merging', () => {
+  it('pacing pass: tier2Beside counts the touching group of tier 2s of that type (build-tooltip core hint)', () => {
+    const sim = setup();
+    const a = place(sim, 'solar', 2, 2), b = place(sim, 'solar', 3, 2);
+    a.tier = 2;
+    b.tier = 2;
+    expect(sim.merge.tier2Beside('solar', PAD, 4, 2, 1)).toBe(2); // touches b, whose group includes a
+    expect(sim.merge.tier2Beside('solar', PAD, 2, 3, 1)).toBe(2);
+    expect(sim.merge.tier2Beside('solar', PAD, 5, 5, 1)).toBe(0); // touches nothing
+    expect(sim.merge.tier2Beside('pollinator', PAD, 4, 2, 1)).toBe(0); // another type
+    const c = place(sim, 'solar', 2, 4); // tier 1: not counted
+    expect(c.tier ?? 1).toBe(1);
+    expect(sim.merge.tier2Beside('solar', PAD, 2, 5, 1)).toBe(0);
+  });
+
   it('three panels in a row merge into one Solar Array: tier-2 output for 3 consumed, two tiles freed, tiles keep their state', () => {
     const sim = setup();
     const a = place(sim, 'solar', 4, 5), b = place(sim, 'solar', 5, 5), c = place(sim, 'solar', 6, 5);

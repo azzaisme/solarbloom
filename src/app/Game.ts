@@ -873,11 +873,26 @@ export class Game {
   private mergeHint(type: MachineData['type'], roofId: string, x: number, z: number, size: number): string {
     const n = this.sim.merge.groupIfPlaced(type, roofId, x, z, size);
     const t2 = TIER2[type];
-    if (!t2 || n < 2) return '';
+    if (!t2) return '';
     const name = MACHINES[type].name;
-    return n >= TUNING.merge.count
-      ? `<span class="ok">🔀 Completes a merge: ${TUNING.merge.count} ${name}s → ${t2.icon} ${t2.name}</span><br>`
-      : `🔀 Touches a ${name}: one more alongside makes a ${t2.icon} ${t2.name}<br>`;
+    const line =
+      n < 2
+        ? ''
+        : n >= TUNING.merge.count
+          ? `<span class="ok">🔀 Completes a merge: ${TUNING.merge.count} ${name}s → ${t2.icon} ${t2.name}</span><br>`
+          : `🔀 Touches a ${name}: one more alongside makes a ${t2.icon} ${t2.name}<br>`;
+    // Pacing pass: point the way to a superstructure. A tier 2 merged here (tap this one to merge) lands beside the
+    // tier 2s it touches; three touching tier 2s merge into a core.
+    const t3 = TIER3[type];
+    const beside = Math.min(this.sim.merge.tier2Beside(type, roofId, x, z, size), TUNING.merge.count - 1);
+    if (!t3 || !beside) return line;
+    const yours = beside > 1 ? `${beside} ${t2.name}s` : `${t2.name}`;
+    return (
+      line +
+      (beside + 1 >= TUNING.merge.count
+        ? `<span class="ok">✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (tap this one) and the new ${t2.name} completes a ${t3.icon} ${t3.name} core</span><br>`
+        : `✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (tap this one) and ${TUNING.merge.count} touching ${t2.name}s make a ${t3.icon} ${t3.name} core<br>`)
+    );
   }
 
   /** Phase 5 E14: a superstructure's card: construction stages, then its ability (charge, fire, automatic). */

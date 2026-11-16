@@ -329,9 +329,11 @@ Saves are unchanged: no new saved fields, and `SAVE_VERSION` is untouched.
   already passed early on. Stage prices follow income, so this limits itself, but the city expansion needs
   balancing against it. Knobs: `super.biomassBonus` and `biomassExponent`, or stage prices that grow with each
   superstructure built (not tried).
-- **People don't get the bot's plan.** The build tooltip says when a spot completes a tier-1 merge, but nothing
-  suggests building the next three beside your Solar Array to work toward a Megaflower. Without such a hint,
-  people may reach cores much later than the bot. It needs a hint, then a human playtest.
+- **People don't get the bot's plan.** The bot builds its next tier-1 group beside a tier 2 on purpose. The
+  build tooltip now says so too: on a spot touching a tier 2 of the same type, it says "✨ Beside your Solar
+  Array: merge 3 Solar Panels here (tap this one) and 3 touching Solar Arrays make a 🌻 Solar Megaflower core".
+  It is highlighted once the new tier 2 would be the third (`MergeSystem.tier2Beside`). Whether people follow
+  it still needs a human playtest.
 - Gate status: the measurable half (bot timings, biomass, abilities) is met. Whether it is "satisfying" needs people.
 
 ## Tests run (pacing pass)
