@@ -12,7 +12,7 @@ import type { BuildingPlot } from '../core/Generation';
 import type { TreeGeo, Lod } from './TreeGen';
 import { PALETTE } from './Materials';
 import type { VPrim } from './Shapes';
-import { grassGeo, turfGeo, flowerGeo, leafyShrubGeo, vineGeo, bannerGeo, FLOWER_COLOURS, type FlowerSpecies } from './Flora';
+import { grassGeo, flowerGeo, leafyShrubGeo, vineGeo, bannerGeo, FLOWER_COLOURS, type FlowerSpecies } from './Flora';
 import { pavingGeo, pavingGaps, PAVING_LAYOUTS, planterGeo, railGeo, clutterGeo, CLUTTER_ALIVE, CLUTTER_DEAD, type RailKind, type ClutterKind } from './Props';
 
 export interface SolidSink {
@@ -143,8 +143,17 @@ export function grassTufts(c: DressCtx, t: TileData, stage: number, x: number, z
   const lod: Lod = c.lod === 2 && c.dens > 0.99 ? 2 : 1;
   // Look 3.3: lawns get an even carpet of short blades (seeded turn, so it never lines up), then a few taller
   // tufts on top. The carpet goes at mid zoom too, except on Low, where it waits for near zoom.
-  if (base === undefined && stage >= 1 && (c.lod === 2 || c.dens >= 0.4))
-    c.fb.add(turfGeo(stage, t.variant + Math.floor(hash01(t.x, t.z, 15) * 4), lod), x, top, z, Math.floor(hash01(t.x, t.z, 16) * 4) * (Math.PI / 2), 1);
+  // Phase 6: no blade carpet. The lawn is the smooth blended turf quad (turfTop) with soft painted variation, like
+  // the reference; life comes from a sprinkle of small tufts and tiny lawn flowers (daisies, clover) on top.
+  if (base === undefined && stage >= 1) {
+    const sprinkle = Math.round((stage === 1 ? 2 : 3) * c.dens);
+    for (let i = 0; i < sprinkle; i++) {
+      const px = x + (hash01(t.x * 17 + i, t.z, 101) - 0.5) * 0.9;
+      const pz = z + (hash01(t.x, t.z * 17 + i, 103) - 0.5) * 0.9;
+      if (hash01(t.x + i, t.z * 3, 107) < 0.45) c.fb.add(flowerGeo('wild', t.variant + i, true, i, 1), px, top, pz, i * 1.9, 0.8);
+      else c.fb.add(grassGeo(stage, t.variant + i + 1, 1), px, top, pz, hash01(t.x, t.z + i, 109) * 6.28, 0.5);
+    }
+  }
   // Phase 6: open lawn keeps one taller tuft at most (the carpet does the work); edges pass their own `base`
   const n = Math.round((base ?? [2, 1, 1, 1, 1][stage]) * c.dens);
   for (let i = 0; i < n; i++) {

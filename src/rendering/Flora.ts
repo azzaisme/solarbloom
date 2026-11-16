@@ -131,8 +131,10 @@ export function buildFlowers(sp: FlowerSpecies, colour: number, open: boolean, v
   const spread = sp === 'sunflower' ? 0.07 : 0.09;
   const grow = open ? 1 : 0.7;
   // Look 3.5: each clump sits on a low mound of leaves (the reference's flowers grow out of foliage, not bare soil)
-  const mr = spread + 0.035;
-  puff(B, { c: [0, 0.006, 0], r: [mr, sp === 'sunflower' ? 0.04 : 0.032, mr], base: LEAF, light: LEAF_LIGHT, dark: scaleC(LEAF, 0.55), leafy: true, flex: 0.2, seed: variant * 3 + 1, detail: detail ? 1 : 0, lump: 0.3 });
+  // Phase 6: a smaller, rounder tuft of leaves (the wide flat mound read as a lily pad lying on the lawn); the
+  // tiny lawn flowers ('wild') have none.
+  const mr = (spread + 0.035) * 0.62;
+  if (sp !== 'wild') puff(B, { c: [0, 0.02, 0], r: [mr, sp === 'sunflower' ? 0.06 : 0.05, mr], base: LEAF, light: LEAF_LIGHT, dark: scaleC(LEAF, 0.55), leafy: true, flex: 0.2, seed: variant * 3 + 1, detail: detail ? 1 : 0, lump: 0.3 });
   for (let i = 0; i < plants; i++) {
     const a = R() * Math.PI * 2;
     const d = Math.sqrt(R()) * spread;
