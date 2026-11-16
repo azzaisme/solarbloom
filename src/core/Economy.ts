@@ -122,6 +122,18 @@ export function scaleCost(cost: Cost, mult: BigLike): Cost {
 
 export const RES_ICON: Record<ResourceKind, string> = { energy: '⚡', water: '💧', biomass: '🌿' };
 
+/**
+ * E18.7: a price for a buy button, every part shown; the part the player is short of (from `econ.shortfall`) is
+ * wrapped in `<span class="short">` so it reads without colour too (underlined).
+ */
+export function formatPriceHtml(cost: Cost, short?: ResourceKind): string {
+  const parts = KINDS.filter((k) => Economy.part(cost, k).gt(0)).map((k) => {
+    const t = `${fmt(ceilBig(Economy.part(cost, k)))}${RES_ICON[k]}`;
+    return k === short ? `<span class="short">${t}</span>` : t;
+  });
+  return parts.length ? parts.join(' ') : 'free';
+}
+
 export function formatCost(cost: Cost): string {
   const parts = KINDS.filter((k) => Economy.part(cost, k).gt(0)).map((k) => `${fmt(ceilBig(Economy.part(cost, k)))}${RES_ICON[k]}`);
   return parts.length ? parts.join(' ') : 'free';

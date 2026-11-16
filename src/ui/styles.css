@@ -558,6 +558,8 @@ body.frenzy.reduced #hud::before { animation: none; }
 #resInfo div span:last-child { font-variant-numeric: tabular-nums; text-align: right; }
 .upg-next { margin: 0 0 6px; font-size: 12px; color: var(--text-soft); min-height: 1em; }
 .card .buy.all { margin-left: 4px; }
+/* E18.7: the part of a mixed price you're short of (underlined, so it reads without colour) */
+.buy .short { text-decoration: underline wavy; text-underline-offset: 2px; }
 
 /* Phase 5 E13: merging */
 #inspect .merge-btn { display: block; width: 100%; margin-top: 8px; font: 600 14px var(--font-display); border: 0; border-radius: 12px; padding: 9px 10px; background: var(--btn-gold); color: var(--ink-dark); cursor: pointer; box-shadow: 0 2px var(--btn-gold-edge); }

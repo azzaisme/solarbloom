@@ -53,6 +53,18 @@ function droneLine(sim: Sim, p: ReturnType<typeof probe>['p']) {
   );
 }
 
+/** E18.7: when the bot bought drone upgrades (levels across all hubs: how many, first and last). */
+const DRONE_UPGRADES = ['droneSpeed', 'droneRadius', 'secondDrone', 'droneSweep', 'chainIntel', 'droneMesh'];
+function upgradeLine(r: BotReport) {
+  return (
+    'drone upgrades: ' +
+    DRONE_UPGRADES.map((id) => {
+      const ts = r.upgrades.filter((u) => u.id === id).map((u) => u.t);
+      return ts.length ? `${id} ×${ts.length} (${mmss(ts[0])}–${mmss(ts[ts.length - 1])})` : `${id} —`;
+    }).join(' · ')
+  );
+}
+
 /** Same seed, same ticks: these values must match exactly while every hub stays Restorer. */
 function fingerprint(sim: Sim) {
   const s = sim.state;
@@ -91,6 +103,7 @@ describe.skipIf(!run)('E18.0 drone baseline (scripted bots)', () => {
           `seed ${seed} ${mode}: hub ${mmss(r.firsts.droneHub)} park full-bloom goal ${mmss(p.fullBloomAt)} fountain ${mmss(r.fountain)} · areas cleared ${p.areas} · tiles ${r.tilesRestored} · ` +
             `chains ${r.chains} maxCombo ${r.maxCombo} · stuck ${r.stuck}s`,
           `    ${droneLine(last!, p)}`,
+          `    ${upgradeLine(r)}`,
           `    ${fingerprint(last!)}`,
         );
       }
