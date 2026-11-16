@@ -84,6 +84,16 @@ The game is growing into an endless, fog-covered city (see issue #1 and its sub-
 - Difficulty grows with distance: pulse cost ×(1 + 0.04/chunk, max ×2) and a rising pollution floor (max 85).
 - Tests: skeleton determinism, themes, every type's ground/obstacles/landmark clearance, authored landmarks for 10 seeds, difficulty caps, and a 500+-area variety soak (under 30% same-type neighbours; every type within 12 chunks of the park).
 
+## Look 4: camera and composition (#106)
+
+- The camera is a perspective view that changes with the zoom (`VIEW` in `CameraController.ts`): the overview (≤ 0.45) is high and narrow (42°, 12° lens) and reads like the old isometric grid; the default zoom is a close three-quarter view (24°, 52°) with the skyline across the top; zooming in lowers it further (19°, 56°) until the sky shows. Yaw stays 45°.
+- Pan keeps the ground under the finger (raycast at the old and new pointer positions); wheel and pinch zoom toward the cursor or pinch centre; player pans keep the visible ground edges within the bounds plus `edgeSlack`, while glides may centre anywhere inside them (`tests/e2e/camera.e2e.mjs`).
+- World-anchored UI uses `CameraController.onScreen()`: nothing behind the camera or past the haze; area labels scale with distance close up.
+- Sky (`rendering/Sky.ts`): dome, sun along the key light, soft drifting clouds; grey while the city is fogged and clearer as areas wake. The scene fog colour is the sky's horizon colour, so the ground fades into the sky. Skyline (`rendering/Skyline.ts`): three rings of terraced towers with hanging gardens, bridges, domes and scrolling waterfalls, haze baked in, 5 draw calls. All colours in `data/sky.ts` for Look 1 to grade.
+- Height: the early city (park, then suburbs) is at street level. Unrevealed areas are drawn a step lower (`SINK` 0.45) so revealed ground has a stone kerb at its edge; `Game.pick` follows rays down to the lower ground. A drop of 2 or more draws a window-and-balcony facade instead (kept for the skyscraper stage). Fog-of-war has soft vertical curtains at its edges.
+- Streaming loads chunks near the view's ground trapezoid, capped where the haze is complete; far chunks close up use the far level of detail.
+- Screenshots: `node tests/e2e/camera-shots.mjs docs/review/look4 <prefix>` (desktop and phone at every zoom band); before and after in `docs/review/look4`.
+
 ## City 11: drone networks
 
 - Far drones (#79): the game tells `DroneSystem.focus` where the camera is. A drone whose hub is outside the view (plus a margin) flies by the clock: its job's arrival time is computed once (same distance ÷ speed, so the same arrival tick) and nothing moves per tick. `worldOf` interpolates the line it would fly, and when the camera arrives mid-flight the drone carries on from that point for real, so nothing teleports. Reservations are a maintained set (findJob used to scan every drone for every tile it considered), and hub top-ups count drones per hub once per tick. Tests: 8 hubs over 10 minutes far vs full (drone jobs and tiles restored within 5%), the camera arriving mid-flight moves a drone at most one tick's flight, and no two drones ever share a target.
