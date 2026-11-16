@@ -60,10 +60,18 @@ export class DroneRoles {
   roleFor(d: DroneData, hub: MachineData | undefined): DroneRole {
     if (!hub || d.old || hub.type !== 'droneHub') return 'restorer';
     if (!hub.role2 && !hub.droneRoles) return hub.role ?? 'restorer';
-    const mine = this.sim.state.drones.filter((x) => x.hubId === hub.id && x.expiresAt === undefined);
-    const i = mine.indexOf(d);
-    if (hub.droneRoles && i >= 0 && hub.droneRoles[i]) return hub.droneRoles[i]!;
-    if (hub.role2 && i >= Math.ceil(mine.length / 2)) return hub.role2;
+    if (hub.droneRoles) {
+      // Megahub: by order among all its drones (its swarm too).
+      const i = this.sim.state.drones.filter((x) => x.hubId === hub.id).indexOf(d);
+      const r = i >= 0 ? hub.droneRoles[i] : undefined;
+      if (r) return r;
+    }
+    if (hub.role2) {
+      // Fleet Hub: its permanent drones split evenly between the slots (odd counts favour slot 1).
+      const mine = this.sim.state.drones.filter((x) => x.hubId === hub.id && x.expiresAt === undefined);
+      const i = mine.indexOf(d);
+      if (i >= Math.ceil(mine.length / 2)) return hub.role2;
+    }
     return hub.role ?? 'restorer';
   }
 
@@ -152,12 +160,35 @@ export class DroneRoles {
     return true;
   }
 
+  /**
+   * E18.8: roles after merging hubs. Slot 1 keeps the anchor's role; slot 2 takes the most common other role among
+   * the three (ties: the earlier hub); owned refits carry over. Unset slot 2 = every drone takes slot 1.
+   */
+  mergeRoles(anchor: MachineData, partners: MachineData[]): { slot1: DroneRole; slot2?: DroneRole; owned: DroneRole[] } {
+    const slot1 = this.roleOf(anchor);
+    const counts = new Map<DroneRole, number>();
+    for (const h of [anchor, ...partners])
+      for (const r of [h.role ?? 'restorer', ...(h.role2 ? [h.role2] : [])]) if (r !== slot1) counts.set(r, (counts.get(r) ?? 0) + 1);
+    let slot2: DroneRole | undefined;
+    for (const [r, n] of counts) if (!slot2 || n > counts.get(slot2)!) slot2 = r;
+    const owned = [...new Set([anchor, ...partners].flatMap((h) => h.roles ?? []))];
+    return { slot1, slot2, owned };
+  }
+
   /** E18.8: a Megahub drone's own role (by drone order); `undefined` clears it back to the hub's role. */
   chooseForDrone(hubId: string, index: number, role: DroneRole | undefined): boolean {
     const hub = this.sim.machine(hubId);
     if (!hub || tierOf(hub) < 3 || index < 0 || index >= TUNING.super.megahub.drones) return false;
-    if (role && !this.check(hubId, role).ok && !this.owns(hub, role)) return false;
-    if (role && !this.owns(hub, role) && !this.choose(hubId, role)) return false;
+    if (role && !this.owns(hub, role)) {
+      // A role new to this hub: pay its refit once (all or nothing), without changing the hub's own role.
+      const st = this.check(hubId, role);
+      if (!st.ok || !this.sim.econ.spend(st.price)) {
+        this.sim.bus.emit('action.failed', { reason: st.reason ?? 'Unavailable' });
+        return false;
+      }
+      (hub.roles ??= []).push(role);
+      this.sim.bus.emit('drone.roleChanged', { hubId, role, refit: true });
+    }
     hub.droneRoles ??= [];
     while (hub.droneRoles.length <= index) hub.droneRoles.push(null);
     hub.droneRoles[index] = role ?? null;

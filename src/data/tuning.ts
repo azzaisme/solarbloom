@@ -372,7 +372,7 @@ export const TUNING = {
   areaSteps: { at: [0.25, 0.5, 0.75], incomeSeconds: [10, 15, 20], min: 20, energy: 20, water: 10 },
 
   /** Phase 5 E12: after any upgrade purchase, the advisor points at progress for this long before upgrades again. */
-  advisor: { upgradeHintCooldown: 15, savingFreshSeconds: 10 },
+  advisor: { upgradeHintCooldown: 15, savingFreshSeconds: 10, roleHintSeconds: 30 },
 
   autosaveSeconds: 10,
 

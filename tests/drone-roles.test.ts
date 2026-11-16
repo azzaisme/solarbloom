@@ -410,3 +410,102 @@ describe('E18.6 Spark and Harvester', () => {
     expect(sim.roles.lostSeconds).toBeGreaterThan(TUNING.drone.roles.harvester.unlockLostSeconds - 5);
   });
 });
+
+describe('E18.8 role slots for merged hubs', () => {
+  /** Three hubs touching edge to edge (2×2 each), ready to merge. */
+  function trio(sim: Sim, roles: (DroneRole | undefined)[]) {
+    const hs = [put(sim, 'droneHub', 20, 20), put(sim, 'droneHub', 22, 20), put(sim, 'droneHub', 24, 20)];
+    hs.forEach((h, i) => {
+      const r = roles[i];
+      if (r && r !== 'restorer') {
+        h.roles = [r];
+        h.role = r;
+      }
+    });
+    return hs;
+  }
+
+  it('a Fleet Hub keeps the anchor’s role in slot 1 and the most common other role in slot 2; refits carry over', () => {
+    const sim = city();
+    const [a, b, c] = trio(sim, ['gardener', 'courier', 'courier']);
+    const plan = sim.merge.plan(a.id, [b.id, c.id])!;
+    expect(plan.ok, plan.reason).toBe(true);
+    expect(plan.roles).toEqual({ slot1: 'gardener', slot2: 'courier', owned: ['gardener', 'courier'] });
+    const m = sim.merge.commit(a.id, [b.id, c.id], plan.key)!;
+    expect(m.tier).toBe(2);
+    expect(m.role).toBe('gardener');
+    expect(m.role2).toBe('courier');
+    expect(m.roles?.sort()).toEqual(['courier', 'gardener']);
+    // Its drones split evenly between the slots (odd counts favour slot 1).
+    sim.advance(1);
+    const ds = sim.state.drones.filter((d) => d.hubId === m.id && d.expiresAt === undefined);
+    const by = (r: DroneRole) => ds.filter((d) => sim.roles.roleFor(d, m) === r).length;
+    expect(by('gardener')).toBe(Math.ceil(ds.length / 2));
+    expect(by('courier')).toBe(Math.floor(ds.length / 2));
+    // Reload keeps both slots and the refits.
+    const saver = new SaveService(undefined);
+    const copy = new Sim(saver.deserialize(saver.serialize(sim.state))!);
+    const m2 = copy.machine(m.id)!;
+    expect([m2.role, m2.role2, m2.roles?.sort()]).toEqual(['gardener', 'courier', ['courier', 'gardener']]);
+  });
+
+  it('all-Restorer hubs merge into an all-Restorer Fleet Hub (no second slot)', () => {
+    const sim = city();
+    const [a, b, c] = trio(sim, [undefined, undefined, undefined]);
+    const plan = sim.merge.plan(a.id, [b.id, c.id])!;
+    expect(plan.roles).toEqual({ slot1: 'restorer', slot2: undefined, owned: [] });
+    const m = sim.merge.commit(a.id, [b.id, c.id], plan.key)!;
+    expect(m.role).toBeUndefined();
+    expect(m.role2).toBeUndefined();
+    expect(m.roles).toBeUndefined();
+  });
+
+  it('a Fleet Hub’s second slot can be set on its own; a tier-1 hub has no second slot', () => {
+    const sim = city();
+    put(sim, 'condenser', 40, 40);
+    put(sim, 'motherTree', 44, 40);
+    const [a, b, c] = trio(sim, [undefined, undefined, undefined]);
+    const plan = sim.merge.plan(a.id, [b.id, c.id])!;
+    const m = sim.merge.commit(a.id, [b.id, c.id], plan.key)!;
+    expect(sim.roles.choose(m.id, 'gardener', 2)).toBe(true);
+    expect(m.role).toBeUndefined();
+    expect(m.role2).toBe('gardener');
+    const lone = put(sim, 'droneHub', 30, 30);
+    expect(sim.roles.choose(lone.id, 'courier', 2)).toBe(false);
+    expect(lone.role2).toBeUndefined();
+  });
+
+  it('a hub core keeps slot 1’s role and the refits for the Megahub', () => {
+    const sim = city();
+    // Three touching Fleet Hubs (tier 2): the first is a Courier with a Gardener slot 2.
+    const hs = trio(sim, ['courier', 'gardener', undefined]);
+    for (const h of hs) h.tier = 2;
+    hs[0].role2 = 'gardener';
+    hs[0].roles = ['courier', 'gardener'];
+    const p = sim.merge.plan(hs[0].id, [hs[1].id, hs[2].id])!;
+    expect(p.ok, p.reason).toBe(true);
+    expect(p.core).toBe(true);
+    expect(p.roles?.slot1).toBe('courier');
+    sim.merge.commit(hs[0].id, [hs[1].id, hs[2].id], p.key);
+    const core = sim.state.cores!.find((c) => c.type === 'droneHub')!;
+    expect(core.role).toBe('courier');
+    expect(core.roles?.sort()).toEqual(['courier', 'gardener']);
+  });
+
+  it('a Megahub sets each drone’s role; unset drones follow the hub; clearing goes back to the hub’s role', () => {
+    const sim = city();
+    put(sim, 'condenser', 40, 40);
+    const h = put(sim, 'droneHub', 20, 20);
+    h.tier = 3;
+    for (let i = 0; i < 2; i++) sim.drones.spawn(h);
+    const ds = sim.state.drones.filter((d) => d.hubId === h.id);
+    expect(ds.length).toBe(3);
+    expect(sim.roles.chooseForDrone(h.id, 1, 'gardener')).toBe(true); // pays the Gardener refit once
+    expect(h.roles).toEqual(['gardener']);
+    expect(ds.map((d) => sim.roles.roleFor(d, h))).toEqual(['restorer', 'gardener', 'restorer']);
+    expect(sim.roles.chooseForDrone(h.id, 1, undefined)).toBe(true);
+    expect(h.droneRoles).toBeUndefined();
+    const lone = put(sim, 'droneHub', 30, 30); // not a Megahub
+    expect(sim.roles.chooseForDrone(lone.id, 0, 'gardener')).toBe(false);
+  });
+});

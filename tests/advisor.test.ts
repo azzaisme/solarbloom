@@ -25,6 +25,8 @@ function check(sim: Sim, label: string) {
   else if (a.kind === 'merge') expect(sim.merge.plan(a.machineId)?.ok, label).toBe(true);
   else if (a.kind === 'placeCore') expect(sim.supers.coreCount(a.type), label).toBeGreaterThan(0);
   else if (a.kind === 'super') expect(a.action === 'stage' ? sim.econ.canAfford(sim.supers.nextCost(sim.machine(a.machineId)!)!) : !sim.supers.blocked(sim.machine(a.machineId)!), label).toBe(true);
+  // E18.5: a role hint opens a hub that can take a role it doesn't have yet, right now.
+  else if (a.kind === 'role') expect(['gardener', 'scout', 'courier', 'spark', 'harvester'].some((r) => sim.roles.check(a.machineId, r as never).ok), label).toBe(true);
   else expect(a.seconds, label).toBeGreaterThan(0);
   return g;
 }

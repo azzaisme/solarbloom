@@ -30,6 +30,8 @@ export interface HudCallbacks {
   selectTool(t: Tool): void;
   harvest(): void;
   buyUpgrade(id: string): void;
+  /** E18: `hubId|role|slot` (slot 2 on a Fleet Hub), or `hubId|role|drone|index` for a Megahub drone. */
+  chooseRole(key: string): void;
   activateCore(): void;
   /** Phase 4 E06: fire Bloom Frenzy. */
   activateFrenzy(): void;
@@ -60,6 +62,8 @@ export interface HudCallbacks {
   merge(action: 'start' | 'confirm' | 'cancel'): void;
   /** Phase 5 E13: the advisor's merge button (select the machine and open its merge preview). */
   mergeAt(machineId: string): void;
+  /** E18.5: open a machine's panel (the advisor's role hint). */
+  inspectAt(machineId: string): void;
   /** Phase 5 E14: superstructure panel buttons: pay the next stage, fire the ability, toggle automatic firing. */
   superAction(action: 'stage' | 'activate' | 'auto', machineId: string): void;
 }
@@ -343,6 +347,8 @@ export class Hud {
       if (t.closest('[data-harvest]')) this.cb.harvest();
       const mg = t.closest<HTMLButtonElement>('[data-merge-at]');
       if (mg) this.cb.mergeAt(mg.dataset.mergeAt!);
+      const ia = t.closest<HTMLButtonElement>('[data-inspect-at]');
+      if (ia) this.cb.inspectAt(ia.dataset.inspectAt!);
       const ct = t.closest<HTMLButtonElement>('[data-core-tool]');
       if (ct) this.cb.selectTool(ct.dataset.coreTool as Tool);
       const su = t.closest<HTMLButtonElement>('[data-super]');
@@ -363,6 +369,8 @@ export class Hud {
       if (db && !db.disabled) this.cb.districtBloom(db.dataset.district!, db.dataset.replay === '1');
       const b = t.closest<HTMLButtonElement>('[data-buy]');
       if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
+      const rl = t.closest<HTMLButtonElement>('[data-role]');
+      if (rl && !rl.disabled) this.cb.chooseRole(rl.dataset.role!);
       const sp = t.closest<HTMLButtonElement>('[data-super]');
       if (sp && !sp.disabled) {
         const [action, id] = sp.dataset.super!.split('|');
@@ -506,7 +514,7 @@ export class Hud {
     const g = this.sim.advisor.suggest();
     const a = g.action;
     const attr =
-      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'merge' ? `data-merge-at="${a.machineId}"` : a.kind === 'placeCore' ? `data-core-tool="super:${a.type}"` : a.kind === 'super' ? `data-super="${a.action}|${a.machineId}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
+      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'merge' ? `data-merge-at="${a.machineId}"` : a.kind === 'role' ? `data-inspect-at="${a.machineId}"` : a.kind === 'placeCore' ? `data-core-tool="super:${a.type}"` : a.kind === 'super' ? `data-super="${a.action}|${a.machineId}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
     this.suggestionBtn = `<p class="sugg">${esc(g.text)}</p><button class="act" ${attr}>${esc(g.label)}</button>`;
     return this.suggestionBtn;
   }

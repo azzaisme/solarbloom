@@ -73,7 +73,7 @@ export class SuperSystem {
 
   // ───────────── cores and construction ─────────────
 
-  cores(): { type: MachineType; upg?: Record<string, number> }[] {
+  cores(): { type: MachineType; upg?: Record<string, number>; role?: MachineData['role']; roles?: MachineData['roles'] }[] {
     return this.sim.state.cores ?? [];
   }
 
@@ -145,6 +145,8 @@ export class SuperSystem {
       project: { stage: 1, costs: chk.costs.map((c) => toStrings(c)) },
       ability: { charge: 0, used: 0 },
       ...(core.upg ? { upg: { ...core.upg } } : {}),
+      ...(core.role ? { role: core.role } : {}),
+      ...(core.roles ? { roles: [...core.roles] } : {}),
     };
     s.state.machines.push(m);
     for (const c of s.grid.footprint(roofId, x, z, chk.size)) if (c) c.occupantId = m.id;

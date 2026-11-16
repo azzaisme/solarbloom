@@ -344,7 +344,7 @@ export interface GameState {
   tiles?: Record<string, string>;
   machines: MachineData[];
   /** Phase 5 E14: Superstructure Cores waiting to be placed (from merging three tier-2 machines). */
-  cores?: { type: MachineType; upg?: Record<string, number> }[];
+  cores?: { type: MachineType; upg?: Record<string, number>; role?: DroneRole; roles?: DroneRole[] }[];
   drones: DroneData[];
   upgrades: Record<string, number>;
   buffs: Buff[];

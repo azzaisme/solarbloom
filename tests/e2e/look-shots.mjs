@@ -118,6 +118,29 @@ const SCENES = {
     settle: 400,
     afterSettle: 300,
   },
+  roles: {
+    // E18.5: one drone of each role at work (roles read by shape: parts, eyes and work effect).
+    title: 'Drone roles at work (Restorer, Gardener, Scout, Courier, Spark, Harvester)',
+    setup: `
+      const s = g.sim, st = s.state;
+      const B = st.resources.energy.constructor;
+      st.caps.energy = new B(1e6); st.caps.water = new B(1e6);
+      st.resources.energy = new B(1e6); st.resources.water = new B(1e6); st.resources.biomass = new B(1e6);
+      const park = s.areas.tiles('park');
+      park.forEach((t, i) => { if (s.restoration.isEligible(t) && i % 3) { s.restoration.complete(t, 'pulse'); t.bloom = 1 + ((t.x + t.z) % 2); s.grid.touch(t); } });
+      st.progression.coreActivated = true;
+      s.areas.clear('park', true);
+      const at = (type) => { const t = park.find((t) => s.build.check(type, 'g', t.x, t.z).ok); return t && s.build.place(type, 'g', t.x, t.z) ? st.machines[st.machines.length - 1] : undefined; };
+      for (const type of ['condenser', 'motherTree', 'pollinator', 'pollinator', 'pollinator', 'solar']) at(type);
+      const roles = ['restorer', 'gardener', 'scout', 'courier', 'spark', 'harvester'];
+      for (const r of roles) { const h = at('droneHub'); if (h && r !== 'restorer') { h.roles = [r]; h.role = r; } }
+      st.caps.energy = new B(400); st.resources.energy = new B(400); // a full store, so the Harvester works too
+      g.chunks.markAll();
+      g.camera.glide(8, 0, 8, 1.15);
+      return {};`,
+    until: `() => new Set(g.sim.state.drones.filter((d) => d.mode === 'working' || d.mode === 'flying').map((d) => g.sim.roles.roleFor(d, g.sim.machine(d.hubId)))).size >= 4`,
+    settle: 2500,
+  },
   mid: {
     title: 'Mid zoom (restored park)',
     setup: `
