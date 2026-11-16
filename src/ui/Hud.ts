@@ -121,9 +121,9 @@ export class Hud {
     ).join('');
     const slots = [
       `<button class="slot" data-tool="inspect" aria-label="Inspect tool (1)"><span class="key">1</span><span class="si">${ICONS.inspect}</span><span class="sl">Inspect</span><span class="sc">&nbsp;</span></button>`,
-      `<button class="slot" data-tool="pulse" aria-label="Restoration Pulse (2)"><span class="key">2</span><span class="si">${ICONS.pulse}</span><span class="sl">Pulse</span><span class="sc">restore</span></button>`,
+      `<button class="slot" data-tool="pulse" aria-label="Restoration Pulse (2)"><span class="key">2</span><span class="si">${ICONS.pulse}</span><span class="sl"><span class="long">Restoration </span>Pulse</span><span class="sc"></span></button>`,
       `<span class="sep"></span>`,
-      `<button class="slot" id="buildToggle" aria-label="Build menu (B)" aria-expanded="false"><span class="key">B</span><span class="si">${ICONS.build}</span><span class="sl">Build</span><span class="sc">machines</span></button>`,
+      `<button class="slot" id="buildToggle" aria-label="Build menu (B)" aria-expanded="false"><span class="key">B</span><span class="si">${ICONS.build}</span><span class="sl">Build</span><span class="sc"></span></button>`,
       `<div id="buildTray">`,
       ...BUILDABLE.map(
         (t) =>
@@ -960,12 +960,12 @@ export class Hud {
       btn.hidden = !n;
       this.set(`hcs-${t}`, $(btn, '.sc'), 'text', n ? `core ×${n}` : '');
     }
-    this.set('coresBadge', $(this.root, '#buildToggle .sc'), 'text', cores ? `✨ ${cores} core${cores > 1 ? 's' : ''}` : 'machines');
+    this.set('coresBadge', $(this.root, '#buildToggle .sc'), 'text', cores ? `✨ ${cores} core${cores > 1 ? 's' : ''}` : '');
     // Overcharge countdown on the Pulse button
     const every = s.upgrades.overchargeEvery;
     const pc0 = s.state.progression.pulseCharge ?? 0;
     const mega = s.restoration.megaReady();
-    const pulseSc = mega ? '💥 MEGA next!' : every ? (pc0 === every - 1 ? '🌟 next!' : '●'.repeat(pc0) + '○'.repeat(every - pc0)) : 'restore';
+    const pulseSc = mega ? '💥 MEGA next!' : every ? (pc0 === every - 1 ? '🌟 next!' : '●'.repeat(pc0) + '○'.repeat(every - pc0)) : '';
     this.set('pulseSc', $(this.root, '[data-tool="pulse"] .sc'), 'text', pulseSc);
     // Mega Pulse meter: a fill along the bottom of the Pulse button.
     const mf = s.state.progression.coreActivated ? Math.min(1, (s.state.progression.megaCharge ?? 0) / TUNING.mega.charge) : 0;

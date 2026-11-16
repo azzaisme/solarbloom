@@ -89,6 +89,32 @@ try {
       problems++;
     }
     await page.screenshot({ path: `${dir}/phase4-hud-${name}-tray.png` });
+    // Look 5.6: on a keyboard-sized screen every key badge matches the binding it shows.
+    if (name === 'desktop') {
+      await page.keyboard.press('Escape');
+      const badge = (sel) => page.evaluate((sel) => document.querySelector(`${sel} .key`)?.textContent, sel);
+      const checks = [
+        ['1', '[data-tool="inspect"]', () => page.evaluate(() => document.querySelector('[data-tool="inspect"]').classList.contains('active'))],
+        ['2', '[data-tool="pulse"]', () => page.evaluate(() => document.querySelector('[data-tool="pulse"]').classList.contains('active'))],
+        ['B', '#buildToggle', () => page.evaluate(() => document.querySelector('#buildTray').classList.contains('open'))],
+        ['U', '#upgBtn', () => page.evaluate(() => window.solarbloom.hud.isUpgradesOpen)],
+      ];
+      for (const [key, sel, did] of checks) {
+        if ((await badge(sel)) !== key) {
+          console.log(`   key badge ${sel} shows "${await badge(sel)}", not ${key}`);
+          problems++;
+        }
+        await page.keyboard.press(key.toLowerCase());
+        await page.waitForTimeout(250);
+        if (!(await did())) {
+          console.log(`   key ${key} did not act on ${sel}`);
+          problems++;
+        }
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(150);
+      }
+      if ((await badge('#harvestBtn')) !== 'H') problems++;
+    }
     await page.close();
   }
 } finally {
