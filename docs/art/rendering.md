@@ -43,3 +43,18 @@ pipeline, none do.
 Measured on the restored park (`shots:look`, `full-desktop`): lit grass about `(138, 209, 68)` and shadowed grass
 about `(15, 73, 46)`, so a 2.9:1 brightness gap on screen, with the shadow tilted toward blue (blue/red 3.1 in
 shadow vs 0.5 in sun).
+
+## Post-processing (Look 1.5 onward)
+
+The main camera has a PlayCanvas `CameraFrame` (`src/rendering/PostFx.ts`), the one home for post effects. The
+scene renders to an HDR target (11-11-10 float, 4× MSAA because the canvas's own antialiasing doesn't reach an
+offscreen target), then the effects run, then the compose pass applies exposure, tone mapping and sRGB output.
+
+- **Background:** the canvas is transparent over the CSS sky, but no sky is in view at any zoom. With post on, the
+  camera clears to the haze colour, so the HDR target needs no alpha.
+- **Resizing and the adaptive pixel ratio:** CameraFrame sizes its targets from the canvas every frame. A lost
+  WebGL context is handled by the engine (targets are recreated); the generated environment is rebuilt by
+  `SceneBuilder` on `devicerestored`.
+- **Bloom:** intensity 0.03 with a scene-referred threshold of 1.6. Sunlit surfaces peak around 1.0–1.3, so only
+  emissives authored at 2 or above glow (see the emissive budget). Checked: the dead park with bloom on and off
+  differs by at most 1/255 on a few pixels.

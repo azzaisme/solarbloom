@@ -43,4 +43,9 @@ export const LOOK = {
    */
   toneMapping: pc.TONEMAP_NEUTRAL as number,
   exposure: 1.0,
+  /**
+   * Look 1.5: bloom on emissive and very bright pixels only. The threshold is scene-referred (before exposure and
+   * tone mapping): sunlit grass and paving peak around 1.0–1.3, so glows are authored at 2 and above (Look 1.9).
+   */
+  bloom: { intensity: 0.03, threshold: 1.6, blurLevel: 12 },
 };

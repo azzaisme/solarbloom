@@ -13,6 +13,7 @@
 //   LOOK_SCENES=dead,full LOOK_SIZES=desktop node tests/e2e/look-shots.mjs <tag>   (a subset, quicker)
 //   LOOK_QUERY='gfx=low' …                 (appended to the page URL, e.g. to force a graphics tier)
 //   LOOK_RAW=1 …                           (also keep the raw PNG of each shot, for diffing)
+//   LOOK_EVAL='g.look…' …                  (JavaScript run in the page after each scene's setup, `g` = the game)
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -198,6 +199,7 @@ async function shoot(sceneKey, sizeKey) {
   await render(false);
   await page.clock.runFor(500);
   const state = await page.evaluate(`(() => { const g = window.solarbloom; ${scene.setup} })()`);
+  if (process.env.LOOK_EVAL) await page.evaluate(`(() => { const g = window.solarbloom; ${process.env.LOOK_EVAL} })()`);
   await page.clock.runFor(scene.settle);
   if (scene.until && !(await runUntil(page, `(() => { const g = window.solarbloom; return (${scene.until})(); })()`, 60000, 250))) throw new Error(`${sceneKey}/${sizeKey}: scene condition never held`);
   if (scene.after) {

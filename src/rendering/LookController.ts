@@ -3,6 +3,7 @@ import { LOOK } from '../data/look';
 import type { CameraController } from './CameraController';
 import { installLookShaders, setLookRim } from './LookShaders';
 import { color } from './Materials';
+import { PostFx } from './PostFx';
 import type { SceneBuilder } from './SceneBuilder';
 
 /**
@@ -15,6 +16,7 @@ export class LookController {
   readonly cfg = LOOK;
   private toSun = new pc.Vec3();
   private rimColour = new pc.Color();
+  readonly post: PostFx;
 
   constructor(
     private app: pc.AppBase,
@@ -29,6 +31,7 @@ export class LookController {
     // pow 2.2 for materials and vertex colours alike), lit, then ACES tone-mapped and sRGB-encoded on output.
     cam.toneMapping = LOOK.toneMapping;
     cam.gammaCorrection = pc.GAMMA_SRGB;
+    this.post = new PostFx(app, cam);
     this.apply();
   }
 
@@ -38,6 +41,7 @@ export class LookController {
     this.app.scene.exposure = LOOK.exposure;
     this.rimColour = color(LOOK.rim.color);
     this.scene.sunDirection(this.toSun).mulScalar(-1);
+    this.post.apply({ post: true, bloom: true, samples: 4 }, this.app.scene.fog.color);
   }
 
   update(_dt: number) {
