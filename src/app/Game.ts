@@ -158,7 +158,7 @@ export class Game {
     this.grid.build();
     this.machines = new MachineVisuals(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.machines.buildAll();
-    this.drones = new DroneVisuals(this.sim, this.scene.world, this.tweens);
+    this.drones = new DroneVisuals(this.sim, this.scene.world, this.tweens, this.app);
     this.drones.onTrail = (p) => this.vfx.trail(p);
     this.drones.sync();
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);

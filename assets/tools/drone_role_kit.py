@@ -2,7 +2,7 @@
 
 Each coloured piece is its own smooth mesh, so material edges are exact (Tripo's parts had colours
 painted face by face, with ragged edges, and Tripo models thin tubes and blades badly). Drone space: face +X, up +Z,
-origin at the body centre; the shell top is at about z 0.285 and the antenna stands near (0, 0.05).
+origin at the body centre; the shell top is at about z 0.235 and the antenna stands near (0, 0.05).
 
 - scout-periscope: a tall gold periscope rising from the top, its lens looking forward.
 - courier-rotor: a mast on top with a spinning hub of three leaf blades (the game spins `rotor`
@@ -30,16 +30,12 @@ import bpy
 from mathutils import Matrix, Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import drone_shape
 import model_io
 
 parts_dir = os.path.abspath(sys.argv[sys.argv.index("--") + 1])
 ROTOR_PIVOT = (-0.12, -0.04, 0.60)       # the courier rotor's spin axis passes through here, along Z
-BODY_C, BODY_R = Vector((0, 0, -0.05)), 0.335   # body sphere, as in drone_build.py
-
-
-def surf(x, y):
-    """Height of the body's top surface above (x, y): parts are seated on it."""
-    return BODY_C.z + math.sqrt(BODY_R ** 2 - x * x - y * y)
+surf = drone_shape.surface_z             # height of the body's top above (x, y): parts are seated on it
 
 
 

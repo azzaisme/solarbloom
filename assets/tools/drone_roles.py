@@ -5,7 +5,7 @@ axes, drone origin: face +X, up +Z), with an optional Z turn. That placement is 
 so the game parents the part to the drone at the origin with no offsets. Outputs:
 - <parts>/<name>.fit.glb per part (game),
 - <drone>/roles/drone-<role>.blend per role: body, eyes and fitted parts as separate quad objects,
-  with that role's trim colour on pal_gold and its eye sheet on the visor,
+  with that role's colour on pal_gold and pal_trim and its eye sheet on the visor,
 - role-<role>.png renders next to <grid.png> (tile them with roles_grid.py).
 
 blender -b --python assets/tools/drone_roles.py -- assets/raw/drone/drone-base.blend assets/raw/drone/parts assets/raw/drone/preview/roles-grid.png
@@ -38,11 +38,13 @@ ROLES = {
     "Harvester": [("harvester-basket", dict(at=(0.43, 0.0, -0.38), size=0.36, turn=0)),
                   ("harvester-arms", dict(placed=True)), ("harvester-fruit", dict(placed=True))],
 }
-# Role accent: replaces pal_gold (trim) on the body and every part. The game does the same swap.
+# Role accent: replaces pal_gold (metal on the parts) and pal_trim (the glowing grooves in the shell,
+# always emissive at TRIM_GLOW). The game does the same swap.
 # Spark's trim also glows (ACCENT_GLOW), which is what keeps its yellow apart from the Restorer's gold.
 ACCENT = {"Restorer": "#e7b54a", "Gardener": "#5fbf43", "Scout": "#4cc3ea", "Courier": "#ff9a5a",
           "Spark": "#ffe14a", "Harvester": "#b48cff"}
 ACCENT_GLOW = {"Spark": 0.8}
+TRIM_GLOW = 0.9
 ROLES_DIR = os.path.join(os.path.dirname(parts_dir), "roles")
 os.makedirs(ROLES_DIR, exist_ok=True)
 EYES_DIR = os.path.join(os.path.dirname(parts_dir), "eyes")   # drone-eyes-<role>.png
@@ -126,6 +128,11 @@ for role, parts in ROLES.items():
             b.inputs["Base Color"].default_value = srgb_to_linear(ACCENT[role])
             b.inputs["Emission Color"].default_value = srgb_to_linear(ACCENT[role])
             b.inputs["Emission Strength"].default_value = ACCENT_GLOW.get(role, 0.0)
+        elif m.name.startswith("pal_trim"):
+            b = m.node_tree.nodes["Principled BSDF"]
+            b.inputs["Base Color"].default_value = srgb_to_linear(ACCENT[role])
+            b.inputs["Emission Color"].default_value = srgb_to_linear(ACCENT[role])
+            b.inputs["Emission Strength"].default_value = TRIM_GLOW
     eyes = os.path.join(EYES_DIR, f"drone-eyes-{role.lower()}.png")
     for n in bpy.data.materials["visor_eyes"].node_tree.nodes:
         if n.type == "TEX_IMAGE" and os.path.exists(eyes):
