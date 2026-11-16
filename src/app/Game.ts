@@ -13,6 +13,7 @@ import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
+import { WORLD_EVENT_INFO } from '../gameplay/WorldEventSystem';
 import type { OfflineReport } from '../gameplay/OfflineSystem';
 import { Sim } from '../gameplay/Sim';
 import { Butterflies } from '../rendering/Butterflies';
@@ -188,6 +189,7 @@ export class Game {
         newGame: () => this.newGame(),
         setSetting: (k, v) => this.setSetting(k, v),
         activateFrenzy: () => this.sim.frenzy.activate(),
+        findCat: () => this.findCat(),
         setVolume: (k, v) => this.setVolume(k, v),
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
@@ -244,7 +246,9 @@ export class Game {
     this.applySettings();
 
     this.sim.cat.anchorView = (a) => this.anchorView(this.cat.anchorWorld(a));
-    if (state.cat.active) this.cat.show(state.cat.active.anchorId, false);
+    for (const c of this.sim.cat.spots()) this.cat.show(c, false);
+    // Phase 5 E15: world events act where the player is looking.
+    this.sim.events.focus = () => ({ roofId: GROUND, x: this.camera.target.x, z: this.camera.target.z });
     {
       this.camera.minZoom = 0.22; // the city overview
       this.updateCityBounds();
@@ -552,13 +556,48 @@ export class Game {
     return !!t && !!this.sim.occupant(t);
   }
 
-  private catHit(x: number, y: number): boolean {
-    const p = this.cat.targetWorld();
-    if (!p) return false;
-    const s = this.camera.toScreen(p);
+  /** The cat under the pointer (Phase 5 E15: several can hide at once), by id. */
+  private catHit(x: number, y: number): string | undefined {
     // Generous enough to tap, small enough that a tile next to the cat still gets its own click.
     const r = Math.max(20, 0.26 / this.camera.worldPerPixel());
-    return Math.hypot(s.x - x, s.y - y) <= r;
+    let best: string | undefined;
+    let bestD = r;
+    for (const id of this.cat.ids()) {
+      const p = this.cat.targetWorld(id);
+      if (!p) continue;
+      const s = this.camera.toScreen(p);
+      const d = Math.hypot(s.x - x, s.y - y);
+      if (d <= bestD) {
+        best = id;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  /** Phase 5 E15: the 🐾 chip: glide to the longest-hiding hinted cat and say where it is (a hint, not a beacon). */
+  private findCat() {
+    const s = this.sim;
+    const spot = s.cat
+      .spots()
+      .filter((c) => s.cat.hinted(c))
+      .sort((a, b) => a.spawnedAt - b.spawnedAt)[0];
+    const a = spot && s.cat.anchor(spot.anchorId);
+    if (!spot || !a) return;
+    const p = this.cat.anchorWorld(a);
+    this.camera.focus(p.x, 0, p.z, Math.max(this.camera.zoom, 0.9), this.settings.reducedMotion ? 0.01 : 1.2);
+    this.hud.feed(`🐾 Paw prints lead ${a.hint}…`);
+  }
+
+  /** Phase 5 E15 (inspect): a cat hiding within a few tiles leaves a note on the tile tooltip. */
+  private pawHint(t: TileData): string {
+    const s = this.sim;
+    for (const c of s.cat.spots()) {
+      const a = s.cat.anchor(c.anchorId);
+      if (!a || a.roofId !== t.roofId) continue;
+      if (Math.hypot(a.pos[0] - (t.x + 0.5), a.pos[2] - (t.z + 0.5)) <= 4) return '<br><span class="ok">🐾 Faint paw prints… a cat is hiding very close.</span>';
+    }
+    return '';
   }
 
   /** On screen and clear of the HUD, off screen (reachable by panning) or covered by a HUD panel. */
@@ -670,7 +709,7 @@ export class Game {
     }
     if (tool === 'inspect') {
       this.overlays.showFrame(t.roofId, t.x, t.z, 1, 'hover');
-      this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}`);
+      this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${this.pawHint(t)}`);
       return;
     }
     const chk = this.sim.restoration.checkPulse(t);
@@ -712,8 +751,11 @@ export class Game {
       this.hud.toggleUpgrades(false);
       return;
     }
-    if (this.catHit(x, y)) {
-      this.sim.cat.claim();
+    const catId = this.catHit(x, y);
+    if (catId) {
+      this.claimingCat = catId;
+      this.sim.cat.claim(catId);
+      this.claimingCat = undefined;
       return;
     }
     const droneId = this.droneHit(x, y);
@@ -1196,7 +1238,7 @@ export class Game {
       if (amount.lt(0.05)) return;
       let from = tileId ? this.tileScreen(tileId) : undefined;
       if (!from && reason === 'cat') {
-        const c = this.cat.targetWorld() ?? this.lastCatPos;
+        const c = this.cat.targetWorld(this.claimingCat) ?? this.lastCatPos;
         if (c) {
           const sp = this.camera.toScreen(c);
           from = { x: sp.x, y: sp.y };
@@ -1439,29 +1481,70 @@ export class Game {
     });
     b.on('drone.despawned', ({ droneId }) => this.drones.remove(droneId));
     b.on('drone.jobStarted', () => this.sfx.drone());
-    b.on('cat.spawned', ({ anchorId }) => {
-      this.cat.show(anchorId, true);
+    b.on('cat.spawned', ({ catId }) => {
+      const spot = catId ? this.sim.cat.find(catId) : this.sim.state.cat.active;
+      if (spot) this.cat.show(spot, true);
       this.meowTimer = 20;
       this.save();
     });
-    b.on('cat.found', ({ reward, summary, extras }) => {
-      const p = this.cat.targetWorld();
+    b.on('cat.found', ({ reward, summary, extras, catId, variant }) => {
+      const id = catId ?? this.cat.ids()[0];
+      const p = id ? this.cat.targetWorld(id) : undefined;
+      const rare = variant === 'golden' || variant === 'rainbow';
       if (p) {
         this.lastCatPos = p.clone();
         const soft = this.cat.softSparkle;
-        this.vfx.burst(p, soft ? 12 : 40, { up: soft ? 2 : 4, speed: soft ? 1 : 2, size: soft ? 0.05 : 0.07, life: soft ? 1 : 1.4 });
+        this.vfx.burst(p, soft ? 12 : rare ? 60 : 40, { up: soft ? 2 : 4, speed: soft ? 1 : 2, size: soft ? 0.05 : 0.07, life: soft ? 1 : 1.4 });
         this.vfx.ring(p, PALETTE.gold, soft ? 0.9 : 1.6, 0.8);
+        if (variant === 'rainbow') this.vfx.ring(p, PALETTE.pink, soft ? 1.1 : 2.2, 1);
       }
-      this.cat.hide(true);
+      if (id) this.cat.hide(id, true);
       this.hud.hideTip();
       this.sfx.meow();
       setTimeout(() => this.sfx.fanfare(), 250);
-      this.hud.toast('🐱 LUCKY CAT FOUND!', 'cat', 2.4);
-      this.hud.catReward(`${CAT_REWARD_NAMES[reward]}${extras ? ` + ${extras} saved-up harvest${extras > 1 ? 's' : ''}` : ''}`, summary);
+      // Rarer cats are named in words (and shaped differently), never told apart by colour alone.
+      const label = variant === 'rainbow' ? '🌈 RAINBOW CAT FOUND!' : variant === 'golden' ? '👑 GOLDEN CAT FOUND!' : '🐱 LUCKY CAT FOUND!';
+      this.hud.toast(label, 'cat', 2.4);
+      const kind = variant === 'rainbow' ? 'Rainbow Cat: ' : variant === 'golden' ? 'Golden Cat: ' : '';
+      this.hud.catReward(`${kind}${CAT_REWARD_NAMES[reward]}${extras ? ` + ${extras} saved-up harvest${extras > 1 ? 's' : ''}` : ''}`, summary);
       this.save();
     });
-    b.on('cat.moved', ({ anchorId }) => {
-      this.cat.show(anchorId, true);
+    b.on('cat.moved', ({ catId }) => {
+      const spot = catId ? this.sim.cat.find(catId) : this.sim.state.cat.active;
+      if (spot) this.cat.show(spot, true);
+      this.save();
+    });
+    // Phase 5 E15: world events. A small banner (HUD) carries the effect and timer; these are the extras.
+    b.on('world.started', ({ type, fallback }) => {
+      const info = WORLD_EVENT_INFO[type];
+      this.hud.feed(`${info.icon} ${info.name}${type === 'invasion' ? '' : `: ${info.effect}`}`);
+      if (fallback) this.hud.feed(fallback);
+      this.sfx.chainEnd(type === 'supernova' ? 8 : 5);
+      if (type === 'invasion') this.sfx.meow(true);
+      this.save();
+    });
+    b.on('world.wave', ({ tiles, fallback }) => {
+      if (fallback) this.hud.feed(`🌧️ ${fallback}`);
+      const t = tiles[0] ? this.sim.grid.byTileId(tiles[0]) : undefined;
+      if (t) {
+        const [x, y, z] = this.sim.grid.tileWorld(t);
+        this.vfx.ring(new pc.Vec3(x, y + 0.1, z), PALETTE.water, this.cat.softSparkle ? 1.2 : 2.4, 0.9);
+      }
+    });
+    b.on('world.tile', ({ type, tileId }) => {
+      const t = this.sim.grid.byTileId(tileId);
+      if (!t || this.cat.softSparkle) return;
+      const [x, y, z] = this.sim.grid.tileWorld(t);
+      const p = new pc.Vec3(x, y + 0.15, z);
+      if (type === 'rain') this.vfx.ring(p, PALETTE.water, 0.6, 0.5);
+      else this.vfx.burst(p, 6, { up: 1.6, speed: 0.6, size: 0.05, life: 1.1 });
+    });
+    b.on('world.ended', ({ type, done, fallback }) => {
+      const info = WORLD_EVENT_INFO[type];
+      // Only real progress is celebrated: a fallback already said what it paid instead.
+      if (done > 0 && type !== 'invasion') this.hud.feed(`${info.icon} ${info.name}: ${type === 'migration' ? `${done} tiles grew` : `${done} tiles watered`}`);
+      else if (type === 'supernova') this.hud.feed(`${info.icon} ${info.name} fades`);
+      void fallback;
       this.save();
     });
     b.on('cat.goldenRelay', () => {
@@ -1472,7 +1555,7 @@ export class Game {
     b.on('cat.stash', () => {
       // A soft hint that something lucky is still waiting, never a pointer.
       this.sfx.meow(true);
-      const p = this.cat.targetWorld();
+      const p = this.cat.targetWorld(this.sim.state.cat.active?.id);
       if (p) this.vfx.burst(p, 6, { up: 1.5, size: 0.04, speed: 0.4 });
     });
     b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Surge ×${TUNING.cat.frenzyMult} for ${Math.round(seconds)}s`));
@@ -1591,6 +1674,8 @@ export class Game {
   }
 
   private lastCatPos?: pc.Vec3;
+  /** Phase 5 E15: the cat being claimed right now (its rewards fly from it). */
+  private claimingCat?: string;
   /** World position of a tile or machine id (chain sources/targets can be either). */
   private posOf(id: string | undefined, _towardRoof?: string): pc.Vec3 | undefined {
     if (!id) return undefined;
@@ -2069,7 +2154,9 @@ export class Game {
         this.showDroneTasks();
       }
     }
-    if (this.sim.state.cat.active && !this.paused) {
+    if (this.sim.cat.spots().length && !this.paused) {
+      // Phase 5 E15: paw prints appear beside a cat that has been hiding a while.
+      for (const c of this.sim.cat.spots()) this.cat.setHint(c.id, this.sim.cat.hinted(c));
       this.meowTimer -= dt;
       if (this.meowTimer <= 0) {
         this.meowTimer = 30 + Math.random() * 20;

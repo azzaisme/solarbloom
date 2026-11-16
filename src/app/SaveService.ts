@@ -136,6 +136,7 @@ export class SaveService {
         resources: amounts(raw.resources ?? {}),
         caps: caps(raw.caps ?? {}),
         cat: { ...base.cat, ...s.cat },
+        events: { ...base.events!, ...s.events },
         progression: { ...base.progression, ...s.progression },
         stats: { ...base.stats, ...s.stats, firsts: { ...(s.stats?.firsts ?? {}) } },
       };

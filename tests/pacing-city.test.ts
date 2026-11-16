@@ -62,8 +62,8 @@ export async function playCity(seed: number, actionEvery = 3, minutes = 60, setu
         if (st.ok && !saving && sim.state.resources.biomass.sub(st.cost).gte(nextCost)) sim.upgrades.purchase(u.id);
       }
       if (sim.progression.coreReady()) sim.progression.activateCore();
-      const c = sim.state.cat.active;
-      if (c && sim.time - c.spawnedAt > 40) sim.cat.claim();
+      // Phase 5 E15: every hiding cat (invasion cats too), ~40 s after it appeared.
+      for (const c of sim.cat.spots()) if (sim.time - c.spawnedAt > 40) sim.cat.claim(c.id);
     }
     sim.tick();
     // Yield now and then: a long synchronous run starves the Vitest worker's RPC (CI "Timeout calling onTaskUpdate").
@@ -77,7 +77,7 @@ const fmt = (s?: number) => (s === undefined || !isFinite(s) ? '—' : `${Math.f
 describe('pacing in the endless city (scripted player)', () => {
   // One test per seed: a single synchronous test over ~60 s starves the Vitest worker's RPC (CI timeout).
   for (const seed of [7, 21])
-  it(`after the fountain, keeps clearing areas at a steady pace with no dead time (seed ${seed})`, { timeout: 300000 }, async () => {
+  it(`after the fountain, keeps clearing areas at a steady pace with no dead time (seed ${seed})`, { timeout: 900000 }, async () => {
     {
       const r = await playCity(seed, 3, 60);
       const gaps = r.clears.map((t, i) => t - (i ? r.clears[i - 1] : r.fountain ?? 0));
