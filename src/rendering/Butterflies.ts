@@ -4,6 +4,7 @@ import type { Sim } from '../gameplay/Sim';
 import { PALETTE } from './Materials';
 import { assignBatch, group, vshape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
+import { hash01, tilesIn, type Rect } from './FaunaPlan';
 
 interface Fly {
   root: pc.Entity;
@@ -13,16 +14,28 @@ interface Fly {
   rest: number;
   phase: number;
   speed: number;
+  /** route leg (seeded stops) */
+  leg: number;
+  used: boolean;
 }
 
 const COLORS = [PALETTE.pink, PALETTE.flower[1], PALETTE.flower[2], '#ffffff', PALETTE.flower[4], '#8fd3ff'];
 
-/** Butterflies drift between restored tiles. More garden, more butterflies (up to 10). */
+/**
+ * Butterflies drift between blooming tiles near the view. Phase 5 E16: they arrive with the ecosystem's
+ * butterfly unlock (TUNING.ecosystem.fauna), routes are seeded (no Math.random), the count follows the bloom
+ * in view up to the quality tier's cap, and the tiles are gathered once a second instead of every frame.
+ * Pooled: flies are made once and parked at scale 0 when not needed.
+ */
 export class Butterflies {
   private flies: Fly[] = [];
   private time = 0;
   private recount = 0;
+  private tiles: TileData[] = [];
   reducedMotion = false;
+  /** Phase 5 E16: most flies at once (quality tier) and whether they have arrived yet. */
+  cap = 10;
+  enabled = true;
 
   constructor(
     private sim: Sim,
@@ -30,21 +43,28 @@ export class Butterflies {
     private batchId = -1,
   ) {}
 
-  private gardenTiles(): TileData[] {
-    return this.sim.grid.rooftops.filter((r) => r.unlocked && !r.preview).flatMap((r) => this.sim.grid.tilesOf(r.id).filter((t) => t.ground === 'restored' && !t.occupantId));
+  /** Blooming (stage 2+) tiles in view on the ground, plus any unlocked rooftops. */
+  private gardenTiles(rect: Rect | undefined): TileData[] {
+    const ok = (t: TileData) => t.ground === 'restored' && t.bloom >= 2 && !t.occupantId && t.feature !== 'water';
+    const out = rect ? tilesIn(this.sim, rect, ok, 120) : [];
+    for (const r of this.sim.grid.rooftops) if (r.unlocked && !r.preview && out.length < 160) for (const t of this.sim.grid.tilesOf(r.id)) if (ok(t)) out.push(t);
+    return out;
   }
 
-  private pickTarget(f: Fly, tiles: TileData[]) {
-    const t = tiles[Math.floor(Math.random() * tiles.length)];
-    if (!t) return;
+  private pickTarget(f: Fly, i: number) {
+    const tiles = this.tiles;
+    if (!tiles.length) return;
+    f.leg++;
+    const t = tiles[Math.floor(hash01(this.sim.state.seed, i, f.leg, 1) * tiles.length)];
     const [x, y, z] = this.sim.grid.tileWorld(t);
     // Land a bit higher on lush tiles (flowers / shrubs).
-    f.target.set(x + (Math.random() - 0.5) * 0.5, y + SLAB_TOP + 0.12 + t.bloom * 0.1, z + (Math.random() - 0.5) * 0.5);
+    f.target.set(x + (hash01(this.sim.state.seed, i, f.leg, 2) - 0.5) * 0.5, y + SLAB_TOP + 0.12 + t.bloom * 0.1, z + (hash01(this.sim.state.seed, i, f.leg, 3) - 0.5) * 0.5);
   }
 
-  private spawn(tiles: TileData[]) {
+  private spawn() {
+    const i = this.flies.length;
     const root = group(this.parent, 'butterfly');
-    const col = COLORS[this.flies.length % COLORS.length];
+    const col = COLORS[i % COLORS.length];
     const wings: pc.Entity[] = [];
     for (const s of [-1, 1]) {
       const w = group(root, 'wing');
@@ -53,49 +73,65 @@ export class Butterflies {
       wings.push(w);
     }
     vshape(root, 'capsule', '#3b3b45', { scale: [0.014, 0.05, 0.014], rot: [90, 0, 0] });
-    const f: Fly = { root, wings, pos: new pc.Vec3(), target: new pc.Vec3(), rest: 0, phase: Math.random() * 10, speed: 0.6 + Math.random() * 0.4 };
-    this.pickTarget(f, tiles);
-    f.pos.copy(f.target).add(new pc.Vec3((Math.random() - 0.5) * 3, 1.5, (Math.random() - 0.5) * 3));
     root.setLocalScale(0, 0, 0);
     if (this.batchId >= 0) assignBatch(root, this.batchId); // moving every frame: dynamic batch
-    this.flies.push(f);
+    this.flies.push({ root, wings, pos: new pc.Vec3(), target: new pc.Vec3(), rest: 0, phase: i * 1.7, speed: 0.6 + hash01(i, 7, 7) * 0.4, leg: i * 100, used: false });
   }
 
-  update(dt: number) {
+  /** Active flies (perf readout). */
+  get count() {
+    return this.flies.filter((f) => f.used).length;
+  }
+
+  update(dt: number, rect?: Rect) {
     this.time += dt;
     this.recount -= dt;
     if (this.recount <= 0) {
       this.recount = 1;
-      const tiles = this.gardenTiles();
-      const want = Math.min(10, Math.floor(tiles.length / 5));
-      while (this.flies.length < want) this.spawn(tiles);
-      for (const f of this.flies) if (!tiles.length) f.rest = 99;
+      this.tiles = this.enabled ? this.gardenTiles(rect) : [];
+      const want = Math.min(this.cap, Math.floor(this.tiles.length / 5));
+      while (this.flies.length < want) this.spawn();
+      this.flies.forEach((f, i) => {
+        const use = i < want;
+        if (use && !f.used) {
+          // fly in from above the garden
+          this.pickTarget(f, i);
+          f.pos.copy(f.target).add(new pc.Vec3((hash01(i, f.leg, 5) - 0.5) * 3, 1.5, (hash01(i, f.leg, 6) - 0.5) * 3));
+          f.root.setLocalScale(0.01, 0.01, 0.01);
+          f.rest = 0;
+        }
+        if (!use && f.used) f.root.setLocalScale(0, 0, 0);
+        f.used = use;
+      });
     }
-    const tiles = this.flies.length ? this.gardenTiles() : [];
-    for (const f of this.flies) {
+    this.flies.forEach((f, i) => {
+      if (!f.used) return;
       const s = Math.min(1, f.root.getLocalScale().x + dt * 2);
       f.root.setLocalScale(s, s, s);
-      const d = f.target.clone().sub(f.pos);
-      const dist = d.length();
+      const dx = f.target.x - f.pos.x;
+      const dy = f.target.y - f.pos.y;
+      const dz = f.target.z - f.pos.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
       let flap = 0;
       if (f.rest > 0) {
         f.rest -= dt;
         flap = Math.sin(this.time * 3 + f.phase) * 25 + 30; // slow, open wings while resting
-        if (f.rest <= 0) this.pickTarget(f, tiles);
+        if (f.rest <= 0) this.pickTarget(f, i);
       } else if (dist < 0.05) {
-        f.rest = 1.5 + Math.random() * 3;
+        f.rest = 1.5 + hash01(i, f.leg, 4) * 3;
       } else {
-        const step = Math.min(dist, f.speed * dt);
-        d.normalize();
-        f.pos.add(d.mulScalar(step));
+        const step = Math.min(dist, f.speed * dt) / dist;
+        f.pos.x += dx * step;
+        f.pos.y += dy * step;
+        f.pos.z += dz * step;
         const bob = this.reducedMotion ? 0 : Math.sin(this.time * 7 + f.phase) * 0.004;
         f.pos.y += bob + (dist > 0.6 ? Math.min(0.01, (f.target.y + 0.4 - f.pos.y) * dt) : 0);
         flap = this.reducedMotion ? 30 : Math.sin(this.time * 26 + f.phase) * 60;
-        f.root.setEulerAngles(0, (Math.atan2(f.target.x - f.pos.x, f.target.z - f.pos.z) * 180) / Math.PI, 0);
+        f.root.setEulerAngles(0, (Math.atan2(dx, dz) * 180) / Math.PI, 0);
       }
       f.root.setPosition(f.pos);
       f.wings[0].setLocalEulerAngles(0, 0, flap);
       f.wings[1].setLocalEulerAngles(0, 0, -flap);
-    }
+    });
   }
 }

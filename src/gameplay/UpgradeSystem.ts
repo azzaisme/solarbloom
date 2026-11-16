@@ -3,7 +3,7 @@ import { isBuilt, tierOf } from '../data/machines';
 
 const tier2 = (m: { tier?: number }) => tierOf(m) >= 2;
 const tier3 = (m: { tier?: number }) => tierOf(m) >= 3;
-/** Output relative to one tier-1 machine: 1, 4 (tier 2), 18 (tier 3); 0 while a superstructure is being built. */
+/** Output relative to one tier-1 machine: 1, tier 2, tier 3 (TUNING.merge / TUNING.super.outputMult); 0 while a superstructure is being built. */
 const tierOutput = (m: { tier?: number; project?: { stage: number } }, t2: number) =>
   !isBuilt(m) ? 0 : tier3(m) ? TUNING.super.outputMult : tier2(m) ? t2 : 1;
 import { TUNING } from '../data/tuning';
@@ -191,11 +191,11 @@ export class UpgradeSystem {
   }
 
   // ───────────── per-machine effects (Phase 5 E12) ─────────────
-  /** Solar Wings levels, times ×4 for a Solar Array (E13 tier 2). */
+  /** Solar Wings levels, times TUNING.merge.solarMult for a Solar Array (E13 tier 2). */
   solarMult(m: MachineData) {
     return powerMult(0.5, this.levelOf(m, 'solarArray')) * tierOutput(m, TUNING.merge.solarMult);
   }
-  /** Water a condenser makes, relative to one tier-1 condenser (E13: a Condenser Array makes ×4). */
+  /** Water a condenser makes, relative to one tier-1 condenser (E13: a Condenser Array makes TUNING.merge.waterMult). */
   waterMult(m: MachineData) {
     return tierOutput(m, TUNING.merge.waterMult);
   }

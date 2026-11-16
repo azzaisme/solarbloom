@@ -3,6 +3,9 @@ import { createInitialState, GROUND } from '../core/GameState';
 import { PARK } from '../core/Areas';
 import { Sim } from '../gameplay/Sim';
 import type { Game } from './Game';
+import type { FaceName } from '../rendering/DroneVisuals';
+import type { CatVariant, WorldEventType } from '../core/types';
+import { WORLD_EVENTS } from '../gameplay/WorldEventSystem';
 
 /**
  * Phase 4 E00.5: debug helpers for repeatable testing. Loaded only by the Vite dev server
@@ -13,6 +16,9 @@ import type { Game } from './Game';
  *   sbDev.simulate(120)        run 120 s of simulation now (accelerated)
  *   sbDev.log()                the local event log (sim time, event, small numbers)
  *   sbDev.overflow()           income lost to full storage so far
+ *   sbDev.event('supernova')   start a world event now: supernova, migration, rain, invasion (Phase 5 E15)
+ *   sbDev.cat('golden')        hide a cat now (standard, golden or rainbow) somewhere in view
+ *   sbDev.face('excited')      show one drone expression on every drone (no argument: back to normal)
  */
 export type PresetName = 'fresh' | 'screenshot' | 'rich' | 'wealthy';
 
@@ -74,13 +80,32 @@ export function installDevTools(game: Game) {
     log() {
       return game.sim.log.entries;
     },
+    /** Phase 5 E15: start a world event now (false while another runs). */
+    event(type: WorldEventType) {
+      if (!WORLD_EVENTS.includes(type)) throw new Error(`Unknown event. Try: ${WORLD_EVENTS.join(', ')}`);
+      return game.sim.events.trigger(type);
+    },
+    /** Phase 5 E15: hide an extra cat of this rarity now (it behaves like an invasion cat). */
+    cat(variant: CatVariant = 'standard') {
+      const sim = game.sim;
+      if (!sim.cat.invade(1)) return false;
+      const spot = sim.state.cat.invasion![sim.state.cat.invasion!.length - 1];
+      spot.variant = variant;
+      game.cat.show(spot, true);
+      return spot.id;
+    },
     counts() {
       return game.sim.log.counts;
     },
     overflow() {
       return game.sim.log.overflow;
     },
+    /** Drone redesign D03: preview an expression on every drone. */
+    face(name?: FaceName) {
+      game.drones.previewFace = name;
+      return name ? `drones show "${name}"; sbDev.face() to go back` : 'drones show their normal faces';
+    },
   };
   (window as unknown as { sbDev: typeof api }).sbDev = api;
-  console.info('[solarbloom] dev tools: sbDev.reset(seed), sbDev.preset(name), sbDev.simulate(s), sbDev.log()');
+  console.info('[solarbloom] dev tools: sbDev.reset(seed), sbDev.preset(name), sbDev.simulate(s), sbDev.log(), sbDev.face(name)');
 }

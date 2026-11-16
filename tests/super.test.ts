@@ -108,6 +108,39 @@ describe('Phase 5 E14: superstructure cores', () => {
     expect(sim.state.stats.supers).toBe(1);
   });
 
+  it('pacing pass: each built superstructure multiplies all biomass, soft-scaled; one under construction does not', () => {
+    const sim = setup();
+    const base = toNum(sim.production.rates(true).biomass);
+    expect(base).toBeGreaterThan(0);
+    makeCore(sim, 'solar');
+    const m = sim.supers.place('solar', PAD, 2, 3)!;
+    expect(toNum(sim.production.rates(true).biomass)).toBeCloseTo(base, 6); // foundation only
+    sim.supers.advance(m.id);
+    sim.supers.advance(m.id);
+    const S = TUNING.super;
+    expect(sim.supers.biomassMult()).toBeCloseTo(1 + S.biomassBonus, 9);
+    expect(toNum(sim.production.rates(true).biomass)).toBeCloseTo(base * (1 + S.biomassBonus), 3);
+    makeCore(sim, 'condenser', 4, 7);
+    build(sim, 'condenser', 4, 3);
+    expect(sim.supers.biomassMult()).toBeCloseTo(1 + S.biomassBonus * Math.pow(2, S.biomassExponent), 9);
+  });
+
+  it('pacing pass: the Megaflower keeps charging (at a reduced share) while the energy store is full', () => {
+    const sim = setup();
+    makeCore(sim, 'solar');
+    const m = build(sim, 'solar', 2, 3);
+    m.ability!.charge = 0;
+    const S = TUNING.super;
+    sim.state.resources.energy = sim.state.caps.energy;
+    expect(sim.econ.isFull('energy')).toBe(true);
+    sim.supers.tick(10);
+    expect(m.ability!.charge).toBeCloseTo((S.megaflower.charge / S.megaflower.flowSeconds) * S.fullFlowShare * 10, 6);
+    m.ability!.charge = 0;
+    sim.state.resources.energy = big(0);
+    sim.supers.tick(10);
+    expect(m.ability!.charge).toBeCloseTo((S.megaflower.charge / S.megaflower.flowSeconds) * 10, 6);
+  });
+
   it('cores, construction stages and ability charge survive save and load', () => {
     const sim = setup();
     makeCore(sim, 'solar');
@@ -167,7 +200,7 @@ describe('Phase 5 E14: abilities', () => {
     expect(m.ability!.used).toBe(2);
   });
 
-  it('Water Nexus: a wave of at most 24 tiles, nearest first; its own wave never recharges it; nothing to water keeps the charge', () => {
+  it('Water Nexus: a wave of at most 24 tiles, nearest first; its own wave never recharges it; nothing to water pays a bounty', () => {
     const sim = setup();
     makeCore(sim, 'condenser');
     const m = build(sim, 'condenser', 2, 3);
@@ -180,16 +213,23 @@ describe('Phase 5 E14: abilities', () => {
     const n = sim.state.stats.tilesRestored - restoredBefore;
     expect(n).toBeGreaterThan(0);
     expect(n).toBeLessThanOrEqual(TUNING.super.nexus.tiles * 3); // the wave plus bounded chain reactions
-    expect(m.ability!.charge).toBe(0);
-    // Everything in full bloom: nothing to do, charge kept.
+    // Only its own water flow (8 s) charged it, none of the wave's restorations.
+    expect(m.ability!.charge).toBeLessThanOrEqual((TUNING.super.nexus.charge / TUNING.super.nexus.flowSeconds) * 8 + 1e-9);
+    // Everything in full bloom: nothing to grow, so the release pays a bounty of steady biomass income instead.
     for (const t of sim.grid.tilesOf(PAD)) if (!t.occupantId && !t.blocked) {
       t.ground = 'restored';
       t.bloom = TUNING.restore.maxBloom;
     }
-    sim.supers.addCharge(m, TUNING.super.nexus.charge);
-    expect(sim.supers.activate(m.id)).toBe(false);
-    expect(sim.supers.blocked(m)).toMatch(/charge kept/);
-    expect(m.ability!.charge).toBe(TUNING.super.nexus.charge);
+    sim.production.markDirty();
+    m.ability!.charge = TUNING.super.nexus.charge;
+    expect(sim.supers.blocked(m)).toBeUndefined();
+    const b0 = toNum(sim.state.resources.biomass);
+    const rate = toNum(sim.production.rates(true).biomass);
+    const run = sim.state.stats.tilesRestored;
+    expect(sim.supers.activate(m.id)).toBe(true);
+    expect(toNum(sim.state.resources.biomass) - b0).toBeCloseTo(rate * TUNING.super.bountySeconds, -1);
+    expect(sim.state.stats.tilesRestored).toBe(run);
+    expect(m.ability!.charge).toBe(0);
   });
 
   it('Tree of Life: 3×3, stores up to 3 charges, each release grows the 12 least-grown tiles a stage', () => {

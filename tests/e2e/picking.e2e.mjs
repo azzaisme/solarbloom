@@ -101,6 +101,60 @@ try {
       }, target);
       fail(`${vp.name}: real click on g:2:4 left it '${clicked}' ${JSON.stringify(why)}`);
     }
+    // Phase 5 E16: fauna never take a tap. With every creature unlocked around a lush park, the tile under each
+    // actor picks as that tile, and a real click on a songbird's spot nurtures the lawn under it.
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      const s = g.sim;
+      const st = s.state;
+      for (const t of s.areas.tiles('park')) {
+        if (t.blocked || t.occupantId || t.ground === 'restored') continue;
+        if (t.ground !== 'growing') s.restoration.complete(t, 'pulse');
+        t.ground = 'restored';
+        t.growthRemainingSec = 0;
+        t.bloom = 2;
+        s.grid.touch(t);
+      }
+      const D = st.resources.biomass.constructor;
+      st.caps.energy = new D(1e6);
+      st.caps.water = new D(1e6);
+      for (const k of ['energy', 'water', 'biomass']) st.resources[k] = new D(1e6);
+      st.progression.coreActivated = true;
+      st.fauna = { butterflies: 0, birds: 0, koi: 0, robots: 0 };
+      g.chunks.markAll();
+      g.paused = false;
+    });
+    // Fauna re-plan once a second of frames; software rendering can be slow, so wait for them rather than a fixed time.
+    await page.waitForFunction(() => Object.values(window.solarbloom.fauna.active).some((n) => n > 0), null, { timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(500);
+    const fauna = await page.evaluate(() => {
+      const g = window.solarbloom;
+      g.paused = true;
+      const V = g.camera.target.constructor;
+      const out = [];
+      for (const [kind, pool] of Object.entries(g.fauna.pools))
+        for (const a of pool) {
+          if (!a.used) continue;
+          const p = a.root.getPosition();
+          const s = g.camera.toScreen(new V(p.x, 0.08, p.z));
+          if (s.x < 0 || s.y < 0 || s.x > innerWidth || s.y > innerHeight) continue;
+          out.push({ kind, x: s.x, y: s.y, want: `g:${Math.floor(p.x)}:${Math.floor(p.z)}`, got: g.pick(s.x, s.y)?.tile?.id ?? null });
+        }
+      return out;
+    });
+    checks += fauna.length;
+    if (!fauna.length) fail(`${vp.name}: no fauna on screen to test ${await page.evaluate(() => { const g = window.solarbloom; return JSON.stringify({ active: g.fauna.active, eco: g.sim.ecosystem.unlocked(), city: !!g.city, t: g.camera.target, z: g.camera.zoom, paused: g.paused, modal: g.hud.modalOpen }); })}`);
+    // a hair inside a tile edge can round either way; the actor's own tile or an edge neighbour both mean "not the actor"
+    const wrong = fauna.filter((f) => f.got === null || f.got.split(':').slice(1).some((v, i) => Math.abs(Number(v) - Number(f.want.split(':')[i + 1])) > 1));
+    if (wrong.length) fail(`${vp.name}: ${wrong.length}/${fauna.length} taps on fauna missed the ground, e.g. ${JSON.stringify(wrong[0])}`);
+    const bird = fauna.find((f) => f.kind === 'groundBirds' && f.got === f.want);
+    if (bird) {
+      const before = await page.evaluate((id) => window.solarbloom.sim.grid.byTileId(id).bloom, bird.want);
+      await page.mouse.click(bird.x, bird.y);
+      const after = await page.evaluate((id) => window.solarbloom.sim.grid.byTileId(id).bloom, bird.want);
+      checks++;
+      if (!(after > before)) fail(`${vp.name}: a real click on a songbird at ${bird.want} didn't nurture its tile (${before} → ${after})`);
+    }
     // Clicking the HUD must never act on the world underneath.
     const before = await page.evaluate(() => JSON.stringify(window.solarbloom.sim.state.resources));
     const box = await page.locator('#hotbar').boundingBox();
@@ -108,6 +162,69 @@ try {
     const after = await page.evaluate(() => JSON.stringify(window.solarbloom.sim.state.resources));
     checks++;
     if (before !== after) fail(`${vp.name}: clicking the hotbar changed resources`);
+    // Regression (found by merge.e2e in E14): a drone hovering beside a machine took taps meant for the machine
+    // (drones have a generous tap radius). A tap on a machine's footprint selects the machine; a tap right on the
+    // drone still selects the drone's hub. Mouse and touch alike.
+    const dronePick = await page.evaluate(async () => {
+      const g = window.solarbloom;
+      const s = g.sim;
+      const V = g.camera.target.constructor;
+      const B = s.state.resources.energy.constructor;
+      s.state.resources.biomass = new B(1e9);
+      s.state.caps.energy = new B(1e6); s.state.caps.water = new B(1e6);
+      s.state.resources.energy = new B(1e6); s.state.resources.water = new B(1e6);
+      let m;
+      for (let z = 6; z < 14 && !m; z++) for (let x = 4; x < 14 && !m; x++) if (s.build.check('solar', 'g', x, z).ok) m = s.build.place('solar', 'g', x, z);
+      if (!m) return { error: 'no room for a panel' };
+      g.selectTool('pulse');
+      const [wx, wy, wz] = s.grid.tileWorld(s.grid.get('g', m.x, m.z));
+      g.camera.glide(wx, 0, wz, 1);
+      for (let i = 0; i < 200; i++) g.camera.update(0.05);
+      const c = g.app.graphicsDevice.canvas;
+      const r = c.getBoundingClientRect();
+      const tap = g.camera.toScreen(new V(wx, wy + 0.08, wz));
+      // One drone (not this panel's) hovers just beside the tap point on screen: inside the old generous radius,
+      // outside the drone's own body. The others are kept out of the way.
+      const drone = s.state.drones.find((d) => d.hubId !== m.id);
+      const off = Math.max(26, 0.35 / g.camera.worldPerPixel()) * 0.7;
+      const ray = g.camera.ray(tap.x + off * 0.6, tap.y - off * 0.8);
+      const t = (wy + 0.9 - ray.o.y) / ray.d.y;
+      const dp = new V(ray.o.x + ray.d.x * t, ray.o.y + ray.d.y * t, ray.o.z + ray.d.z * t);
+      g.drones.worldPos = (id) => (id === drone.id ? dp : undefined);
+      const ds = g.camera.toScreen(dp);
+      return { id: m.id, hub: drone.hubId, tap: { x: tap.x + r.left, y: tap.y + r.top }, drone: { x: ds.x + r.left, y: ds.y + r.top }, occupant: s.occupant(g.pick(tap.x, tap.y)?.tile)?.id };
+    });
+    if (dronePick.error) fail(`${vp.name}: ${dronePick.error}`);
+    else {
+      if (dronePick.occupant !== dronePick.id) fail(`${vp.name}: the tap point isn't on the panel's footprint (${dronePick.occupant})`);
+      const selectedAfter = async (fn) => {
+        await page.evaluate(() => window.solarbloom.select(undefined));
+        await fn();
+        await page.waitForTimeout(150);
+        return page.evaluate(() => window.solarbloom.selected);
+      };
+      const touchTap = (p) => page.evaluate(({ x, y }) => {
+        const c = window.solarbloom.app.graphicsDevice.canvas;
+        const ev = (type) => c.dispatchEvent(new PointerEvent(type, { pointerId: 7, pointerType: 'touch', clientX: x, clientY: y, bubbles: true, isPrimary: true, button: 0 }));
+        ev('pointerdown');
+        ev('pointerup');
+      }, p);
+      for (const [how, fn] of [
+        ['mouse', (p) => page.mouse.click(p.x, p.y)],
+        ['touch', touchTap],
+      ]) {
+        checks += 2;
+        const onPanel = await selectedAfter(() => fn(dronePick.tap));
+        if (onPanel !== dronePick.id) fail(`${vp.name}: ${how} tap on a panel with a drone beside it selected ${onPanel} instead of ${dronePick.id}`);
+        const onDrone = await selectedAfter(() => fn(dronePick.drone));
+        if (onDrone !== dronePick.hub) fail(`${vp.name}: ${how} tap right on a drone selected ${onDrone} instead of its hub ${dronePick.hub}`);
+      }
+      await page.evaluate(() => {
+        const g = window.solarbloom;
+        delete g.drones.worldPos; // back to the prototype method
+        g.select(undefined);
+      });
+    }
     // Regression: when the last tile using a colour (e.g. all moss) disappears, shared meshes must survive.
     await page.evaluate(() => {
       const s = window.solarbloom.sim;

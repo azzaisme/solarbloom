@@ -1,5 +1,6 @@
 import { big, ceilBig, Decimal } from '../core/Big';
 import { KINDS, formatCost } from '../core/Economy';
+import { machinesStamp } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
 import type { Cost, MachineData, MachineType, ResourceKind, TileData } from '../core/types';
 import { TIER3, isBuilt, machineName } from '../data/machines';
@@ -12,7 +13,7 @@ import type { Sim } from './Sim';
  * and activation are paid when the player can (no timers). Stage prices come from steady biomass income when the
  * core is placed (plus a share of the energy and water stores for the later stages) and are locked then.
  *
- * A built superstructure keeps its family's job at tier 3 (output index 18) and gains an ability:
+ * A built superstructure keeps its family's job at tier 3 (output index TUNING.super.outputMult) and gains an ability:
  * - Solar Megaflower: Solar Burst, every panel's energy ×3 for 15 s (the strongest solar boost wins, never a product)
  * - Water Nexus: Irrigation Wave, up to 24 connected dry or growing tiles bloom, nearest first
  * - Tree of Life: Evolution, the 12 least-grown tiles in reach grow a stage; stores up to 3 charges
@@ -20,7 +21,8 @@ import type { Sim } from './Sim';
  *
  * Abilities charge from restorations within reach (the Megahub from its own drones' finished jobs), never from
  * time alone, and never from the chain of their own release. They're fired by hand, or automatically once used
- * by hand. With nothing to act on, an ability says so and keeps its charge.
+ * by hand. With nothing to act on, the Megahub says so and keeps its charge; the Nexus and the Tree of Life pay a
+ * small biomass bounty instead (pacing pass).
  */
 
 export type SuperKind = 'megaflower' | 'nexus' | 'treeOfLife' | 'megahub';
@@ -161,6 +163,24 @@ export class SuperSystem {
     return fromStrings(p.costs[p.stage]);
   }
 
+  /** The cheapest stage still to pay on any superstructure under construction (drones leave its energy and water). */
+  pendingStage(): Cost | undefined {
+    // Called for every drone job: cached until a machine is added or removed or a stage is paid.
+    const ms = this.sim.state.machines;
+    const key = `${machinesStamp(ms)}|${this.stageRev}`;
+    if (this.pendingCache?.key === key) return this.pendingCache.cost;
+    let best: Cost | undefined;
+    for (const m of ms) {
+      const c = m.project && this.nextCost(m);
+      if (c && (!best || big(c.biomass ?? 0).lt(big(best.biomass ?? 0)))) best = c;
+    }
+    this.pendingCache = { key, cost: best };
+    return best;
+  }
+  private pendingCache?: { key: string; cost: Cost | undefined };
+  /** Bumped whenever a stage is paid. */
+  private stageRev = 0;
+
   /** Pays the next stage (assembly, then activation). True if it advanced. */
   advance(id: string): boolean {
     const s = this.sim;
@@ -172,6 +192,7 @@ export class SuperSystem {
       return false;
     }
     m.project!.stage++;
+    this.stageRev++;
     const done = m.project!.stage >= 3;
     if (done) {
       delete m.project; // built: everything that checks isBuilt now sees a normal tier-3 machine
@@ -185,6 +206,23 @@ export class SuperSystem {
     s.bus.emit('super.stage', { machine: m, stage: done ? 3 : m.project!.stage });
     return true;
   }
+
+  /**
+   * Pacing pass: every built superstructure enriches the whole city's biomass (soft-scaled: n built give
+   * 1 + biomassBonus × n^biomassExponent). Megaflower and Nexus make energy and water, whose stores are capped,
+   * so without this a superstructure barely moved the resource the player spends.
+   */
+  biomassMult(): number {
+    const ms = this.sim.state.machines;
+    const key = machinesStamp(ms);
+    if (this.multCache?.key !== key || this.multCache.v !== this.sim.upgrades.version) {
+      const n = ms.filter((m) => (m.tier ?? 1) >= 3 && isBuilt(m)).length;
+      const S = TUNING.super;
+      this.multCache = { key, v: this.sim.upgrades.version, mult: n ? 1 + S.biomassBonus * Math.pow(n, S.biomassExponent) : 1 };
+    }
+    return this.multCache.mult;
+  }
+  private multCache?: { key: number; v: number; mult: number };
 
   // ───────────── abilities ─────────────
 
@@ -266,8 +304,8 @@ export class SuperSystem {
     if (!isBuilt(m)) return 'Finish building it first';
     if (this.running(m)) return 'Still running';
     if ((m.ability?.charge ?? 0) < this.threshold(m)) return 'Charging';
-    if (k !== 'megaflower' && !this.targets(m).length)
-      return k === 'megahub' ? 'Nothing left to restore in reach: charge kept' : 'Nothing to grow in reach right now: charge kept';
+    // Pacing pass: the Nexus and the Tree of Life fall back to a bounty when nothing in reach can grow.
+    if (k === 'megahub' && !this.targets(m).length) return 'Nothing left to restore in reach: charge kept';
     return undefined;
   }
 
@@ -283,7 +321,14 @@ export class SuperSystem {
       return false;
     }
     let tiles: TileData[] = [];
-    if (k === 'megaflower') {
+    let bounty: Decimal | undefined;
+    if ((k === 'nexus' || k === 'treeOfLife') && !this.targets(m).length) {
+      // Pacing pass (spec: "a defined productive alternative"): with everything in reach fully grown, the release
+      // pays a few seconds of steady biomass income instead of waiting. Charge comes from flow at a fixed pace,
+      // so this is a bounded share of income, never a loop.
+      bounty = ceilBig(s.production.rates(true).biomass.mul(TUNING.super.bountySeconds));
+      s.econ.add('biomass', bounty);
+    } else if (k === 'megaflower') {
       const S = TUNING.super.megaflower;
       s.state.buffs = [...s.state.buffs.filter((b) => b.type !== 'megaflower'), { type: 'megaflower', until: s.time + S.seconds }];
       s.production.markDirty();
@@ -300,7 +345,7 @@ export class SuperSystem {
     a.charge -= this.threshold(m);
     a.used++;
     s.state.stats.superAbilities = (s.state.stats.superAbilities ?? 0) + 1;
-    s.bus.emit('super.ability', { machine: m, tiles: tiles.map((t) => t.id) });
+    s.bus.emit('super.ability', { machine: m, tiles: tiles.map((t) => t.id), ...(bounty ? { bounty } : {}) });
     return true;
   }
 
@@ -318,10 +363,12 @@ export class SuperSystem {
       for (const m of s.machinesOfType(type)) {
         const k = this.kind(m);
         if (!k || !isBuilt(m)) continue;
-        // Resource flow: its own production, while it is actually banked (a full store charges nothing).
+        // Resource flow: its own production. Into a full store it still flows (E12: overflow charges Bloom
+        // Frenzy), but counts for less (pacing pass: at 0 the Megaflower and Nexus stalled once stores filled).
         if (k !== 'megahub') {
           const banked = k === 'megaflower' ? !s.econ.isFull('energy') : k === 'nexus' ? !s.econ.isFull('water') : true;
-          if (banked) this.addCharge(m, (this.threshold(m) / TUNING.super[k].flowSeconds) * dt);
+          const share = banked ? 1 : TUNING.super.fullFlowShare;
+          if (share > 0) this.addCharge(m, ((this.threshold(m) / TUNING.super[k].flowSeconds) * share) * dt);
         }
         if (m.ability?.auto && this.ready(m)) this.activate(m.id, true);
       }

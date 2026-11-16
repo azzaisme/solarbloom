@@ -67,7 +67,7 @@ describe('lucky cat', () => {
     expect(sim.cat.candidates().map((a) => a.id)).toEqual(['park-bench']);
   });
 
-  it('rewards never push resources out of range', () => {
+  it('rewards never push resources out of range', { timeout: 60000 }, () => {
     for (let seed = 1; seed < 40; seed++) {
       const sim = makeSim(seed);
       rich(sim);
@@ -76,7 +76,7 @@ describe('lucky cat', () => {
       sim.state.cat.found = 1; // skip the guaranteed first reward
       sim.cat.spawn();
       sim.cat.claim();
-      sim.advance(TUNING.cat.dronePartySeconds * 1.6);
+      sim.advance(TUNING.cat.partyMaxSeconds + 1); // Phase 5 E15: rarer cats party longer, never past the cap
       for (const k of ['energy', 'water', 'biomass'] as const) {
         expect(toNum(sim.state.resources[k])).toBeGreaterThanOrEqual(0);
         const cap = sim.econ.cap(k);

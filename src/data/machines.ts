@@ -1,3 +1,4 @@
+import { TUNING } from './tuning';
 import type { BuildableType, Cost, GroundState, MachineType } from '../core/types';
 
 export interface MachineDef {
@@ -117,9 +118,9 @@ export interface TierDef {
   blurb: string;
 }
 export const TIER2: Partial<Record<MachineType, TierDef>> = {
-  solar: { name: 'Solar Array', icon: '🔆', blurb: '×4 energy (and ×4 bloom bursts)' },
-  condenser: { name: 'Condenser Array', icon: '💠', blurb: '×4 water, and each watering wets 2 more tiles' },
-  pollinator: { name: 'Bloom Garden', icon: '💮', blurb: 'Biomass bonus ×2 (was ×1.5) and zone radius +1' },
+  solar: { name: 'Solar Array', icon: '🔆', blurb: `×${TUNING.merge.solarMult} energy (and ×${TUNING.merge.solarMult} bloom bursts)` },
+  condenser: { name: 'Condenser Array', icon: '💠', blurb: `×${TUNING.merge.waterMult} water, and each watering wets ${TUNING.merge.condenserExtraTargets} more tiles` },
+  pollinator: { name: 'Bloom Garden', icon: '💮', blurb: `Biomass bonus ×${TUNING.merge.gardenBiomassMult} (was ×${TUNING.pollinator.biomassMult}) and zone radius +${TUNING.merge.gardenReachBonus}` },
   droneHub: { name: 'Fleet Hub', icon: '🚀', blurb: '×3 drones (up to 12) and work radius +2' },
 };
 /** Phase 5 E14: three tier-2 machines merge into a Superstructure Core, placed and built as a tier 3. */
@@ -129,9 +130,9 @@ export interface SuperDef extends TierDef {
   ability: string;
 }
 export const TIER3: Partial<Record<MachineType, SuperDef>> = {
-  solar: { name: 'Solar Megaflower', icon: '🌻', size: 2, blurb: '×18 a panel’s energy', ability: 'Solar Burst: every panel’s energy ×3 for 15 s' },
-  condenser: { name: 'Water Nexus', icon: '🌊', size: 2, blurb: '×18 a condenser’s water', ability: 'Irrigation Wave: up to 24 connected dry or growing tiles bloom' },
-  pollinator: { name: 'Tree of Life', icon: '🌲', size: 3, blurb: 'Biomass ×2.5 within 3 tiles', ability: 'Evolution: the 12 least-grown tiles nearby grow a stage (stores up to 3)' },
+  solar: { name: 'Solar Megaflower', icon: '🌻', size: 2, blurb: `×${TUNING.super.outputMult} a panel’s energy`, ability: 'Solar Burst: every panel’s energy ×3 for 15 s' },
+  condenser: { name: 'Water Nexus', icon: '🌊', size: 2, blurb: `×${TUNING.super.outputMult} a condenser’s water`, ability: 'Irrigation Wave: up to 24 connected dry or growing tiles bloom' },
+  pollinator: { name: 'Tree of Life', icon: '🌲', size: 3, blurb: `Biomass ×${TUNING.super.treeOfLife.gardenMult} within ${TUNING.pollinator.reach + TUNING.super.treeOfLife.gardenReachBonus} tiles`, ability: 'Evolution: the 12 least-grown tiles nearby grow a stage (stores up to 3)' },
   droneHub: { name: 'Drone Megahub', icon: '🛰️', size: 2, blurb: 'Fleet drones, work radius +4', ability: 'Swarm: 6 extra drones for 30 s, each restoring several tiles per job' },
 };
 /** The highest tier a machine can merge from (three tier 2s make a core). */

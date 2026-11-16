@@ -9,6 +9,8 @@ interface Particle {
   z: number;
   rot: number;
   color: [number, number, number];
+  /** The particle's own confetti colour; a coloured burst or mote overrides `color` for one use. */
+  base: [number, number, number];
   vx: number;
   vy: number;
   vz: number;
@@ -56,6 +58,7 @@ export class Vfx {
   private rings: Ring[] = [];
   private arcs: Arc[] = [];
   private root: pc.Entity;
+  private rgbCache = new Map<string, [number, number, number]>();
   density = 1;
 
   constructor(parent: pc.Entity, device: pc.GraphicsDevice) {
@@ -67,7 +70,7 @@ export class Vfx {
       return [c.r, c.g, c.b].map((v) => Math.round(Math.pow(v, 2.2) * 255)) as [number, number, number];
     });
     for (let i = 0; i < MAX_PARTICLES; i++)
-      this.particles.push({ x: 0, y: 0, z: 0, rot: 0, color: colors[i % colors.length], vx: 0, vy: 0, vz: 0, life: 0, max: 1, size: 0.05, spin: 0, gravity: 4, active: false });
+      this.particles.push({ x: 0, y: 0, z: 0, rot: 0, color: colors[i % colors.length], base: colors[i % colors.length], vx: 0, vy: 0, vz: 0, life: 0, max: 1, size: 0.05, spin: 0, gravity: 4, active: false });
     const n = MAX_PARTICLES * 6;
     this.pPos = new Float32Array(n * 3);
     this.pNrm = new Float32Array(n * 3);
@@ -114,6 +117,18 @@ export class Vfx {
     }
   }
 
+  /** A palette colour as the particle mesh's vertex colour (linear 0-255). */
+  private rgb(hex: string): [number, number, number] {
+    let c = this.rgbCache.get(hex);
+    if (!c) {
+      const col = new pc.Color();
+      col.fromString(hex);
+      c = [col.r, col.g, col.b].map((v) => Math.round(Math.pow(v, 2.2) * 255)) as [number, number, number];
+      this.rgbCache.set(hex, c);
+    }
+    return c;
+  }
+
   private setMatColor(m: pc.StandardMaterial, hex: string) {
     const c = new pc.Color();
     c.fromString(hex);
@@ -133,7 +148,7 @@ export class Vfx {
     r.e.setPosition(pos.x, pos.y + 0.12, pos.z);
   }
 
-  burst(pos: pc.Vec3, count: number, opts: { speed?: number; up?: number; size?: number; life?: number; gravity?: number } = {}) {
+  burst(pos: pc.Vec3, count: number, opts: { speed?: number; up?: number; size?: number; life?: number; gravity?: number; hex?: string } = {}) {
     const n = Math.max(1, Math.round(count * this.density));
     for (let i = 0; i < n; i++) {
       const p = this.particles.find((x) => !x.active);
@@ -153,7 +168,32 @@ export class Vfx {
       p.y = pos.y + 0.1;
       p.z = pos.z + (Math.random() - 0.5) * 0.3;
       p.rot = Math.random() * 6.28;
+      p.color = opts.hex ? this.rgb(opts.hex) : p.base;
     }
+  }
+
+  /**
+   * Drone redesign D05: one glowing mote travelling from `a` to `b` in `life` seconds (restoration beam streams).
+   * Uses the shared particle pool, so it costs nothing extra to draw.
+   */
+  mote(a: pc.Vec3, b: pc.Vec3, hex: string, life = 0.45, size = 0.035) {
+    if (Math.random() > this.density) return;
+    const p = this.particles.find((x) => !x.active);
+    if (!p) return;
+    p.active = true;
+    p.life = 0;
+    p.max = life;
+    p.size = size * (0.7 + Math.random() * 0.6);
+    p.spin = 240;
+    p.gravity = 0;
+    const j = 0.04;
+    p.x = a.x + (Math.random() - 0.5) * j;
+    p.y = a.y;
+    p.z = a.z + (Math.random() - 0.5) * j;
+    p.vx = (b.x + (Math.random() - 0.5) * 0.35 - p.x) / life;
+    p.vy = (b.y - p.y) / life;
+    p.vz = (b.z + (Math.random() - 0.5) * 0.35 - p.z) / life;
+    p.color = this.rgb(hex);
   }
 
   /** One small, slow, fading particle (drone flight trails). */
@@ -169,6 +209,7 @@ export class Vfx {
     p.size = 0.05;
     p.spin = 90;
     p.gravity = 0;
+    p.color = p.base;
     p.x = pos.x;
     p.y = pos.y;
     p.z = pos.z;

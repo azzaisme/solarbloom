@@ -13,10 +13,13 @@ import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
+import { WORLD_EVENT_INFO } from '../gameplay/WorldEventSystem';
 import type { OfflineReport } from '../gameplay/OfflineSystem';
 import { Sim } from '../gameplay/Sim';
 import { Butterflies } from '../rendering/Butterflies';
 import { Birds } from '../rendering/Birds';
+import { Fauna } from '../rendering/Fauna';
+import { EcoBadge } from '../ui/EcoBadge';
 import { CameraController } from '../rendering/CameraController';
 import { setTreeCursor } from '../rendering/Foliage';
 import { CatVisuals } from '../rendering/CatVisuals';
@@ -30,7 +33,7 @@ import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
-import { pickLayers } from '../core/Picking';
+import { droneTapRadius, pickDrone, pickLayers } from '../core/Picking';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
 import { initLowPoly } from '../rendering/Shapes';
@@ -87,6 +90,14 @@ export class Game {
   readonly cat: CatVisuals;
   readonly butterflies: Butterflies;
   private birds: Birds;
+  /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
+  readonly fauna: Fauna;
+  private eco!: EcoBadge;
+  /**
+   * Phase 5 E16: fauna caps tier (TUNING.ecosystem.caps). Hook for the graphics quality-tier selector (Look 1
+   * lighting epic); until it sets this, "Fewer particles" means low and everything else high.
+   */
+  faunaTier?: 'low' | 'medium' | 'high';
   readonly tileFx: TileFx;
   readonly vfx: Vfx;
   readonly overlays: Overlays;
@@ -165,14 +176,19 @@ export class Game {
     this.grid.build();
     this.machines = new MachineVisuals(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.machines.buildAll();
-    this.drones = new DroneVisuals(this.sim, this.scene.world, this.tweens);
+    this.drones = new DroneVisuals(this.sim, this.scene.world, this.tweens, this.app);
     this.drones.onTrail = (p) => this.vfx.trail(p);
+    // Drone redesign D05: the restoration beam's travelling motes and ground sparkles (pooled particles).
+    this.drones.onBeamMote = (a, b, hex) => this.vfx.mote(a, b, hex);
+    this.drones.onBeamSparkle = (at, hex) => this.vfx.burst(at, 2, { up: 0.9, speed: 0.6, size: 0.035, life: 0.6, gravity: 2.5, hex });
     this.drones.sync();
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.birds = new Birds(this.scene.world);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
+    this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
     this.tileFx = new TileFx(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.machines.onWisp = (_m, at) => this.vfx.burst(at, 1, { up: 0.5, speed: 0.12, size: 0.035, life: 1.3, gravity: 0 }); // Phase 5 E16: running machines only
     this.machines.onActivated = (_m, at) => {
       this.vfx.ring(at, PALETTE.gold, 1.3, 0.55);
       this.vfx.burst(new pc.Vec3(at.x, at.y + 0.5, at.z), 10, { up: 2.5, size: 0.05 });
@@ -195,6 +211,7 @@ export class Game {
         newGame: () => this.newGame(),
         setSetting: (k, v) => this.setSetting(k, v),
         activateFrenzy: () => this.sim.frenzy.activate(),
+        findCat: () => this.findCat(),
         setVolume: (k, v) => this.setVolume(k, v),
         setGraphics: (v) => this.setGraphics(v),
         skipCinematic: () => this.skipCinematic(),
@@ -248,11 +265,14 @@ export class Game {
       this.settings,
     );
     this.fly = new FlyText(this.hud.root);
+    this.eco = new EcoBadge(this.sim, (h, k, t) => this.hud.toast(h, k, t));
     this.hud.setTool('pulse');
     this.applySettings();
 
     this.sim.cat.anchorView = (a) => this.anchorView(this.cat.anchorWorld(a));
-    if (state.cat.active) this.cat.show(state.cat.active.anchorId, false);
+    for (const c of this.sim.cat.spots()) this.cat.show(c, false);
+    // Phase 5 E15: world events act where the player is looking.
+    this.sim.events.focus = () => ({ roofId: GROUND, x: this.camera.target.x, z: this.camera.target.z });
     {
       this.camera.minZoom = 0.22; // the city overview
       this.updateCityBounds();
@@ -362,12 +382,13 @@ export class Game {
     this.gfxTier = this.resolveTier();
     this.look.setTier(this.gfxTier);
     this.hud.gfxTier = this.gfxTier;
-    // Phase 5 E16's fauna caps follow the tier (its hook on Game; set loosely so the branches merge cleanly).
-    (this as { faunaTier?: GfxTier }).faunaTier = this.gfxTier;
+    // Phase 5 E16's fauna caps (TUNING.ecosystem.caps) follow the graphics tier.
+    this.faunaTier = this.gfxTier;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
     this.cat.softSparkle = rm || s.lowVfx;
+    this.machines.wispsPerSecond = s.lowVfx ? 2 : 5;
     if (this.chunks && this.chunks.lowFog !== !!s.lowFog) {
       this.chunks.lowFog = !!s.lowFog;
       this.chunks.markAll();
@@ -584,25 +605,73 @@ export class Game {
     return { x0: Math.max(x0, cx - R), x1: Math.min(x1, cx + R), z0: Math.max(z0, cz - R), z1: Math.min(z1, cz + R) };
   }
 
-  /** Screen-space hit test for drones (generous target, like the cat). Returns the drone id. */
+  /**
+   * Screen-space hit test for drones. Returns the nearest drone's id. Generous over open ground (like the cat),
+   * but only about the drone's body when a machine or a placement footprint is under the pointer, so a drone
+   * hovering beside a machine never takes the machine's tap (mouse and touch share this path).
+   */
   private droneHit(x: number, y: number): string | undefined {
-    const r = Math.max(26, 0.35 / this.camera.worldPerPixel());
+    const pts: { id: string; x: number; y: number }[] = [];
     for (const d of this.sim.state.drones) {
       const p = this.drones.worldPos(d.id);
       if (!p) continue;
       const sp = this.camera.toScreen(p);
-      if (Math.hypot(sp.x - x, sp.y - y) <= r) return d.id;
+      pts.push({ id: d.id, x: sp.x, y: sp.y });
     }
-    return undefined;
+    if (!pts.length) return undefined;
+    return pickDrone(pts, x, y, droneTapRadius(this.camera.worldPerPixel(), this.machineOrFootprintAt(x, y)));
   }
 
-  private catHit(x: number, y: number): boolean {
-    const p = this.cat.targetWorld();
-    if (!p) return false;
-    const s = this.camera.toScreen(p);
+  /** A machine (or, with a build tool, a placement footprint) under the pointer: it gets the tap over nearby drones. */
+  private machineOrFootprintAt(x: number, y: number): boolean {
+    const tool = this.hud.currentTool;
+    if (tool !== 'inspect' && tool !== 'pulse') return true;
+    const t = this.pick(x, y)?.tile;
+    return !!t && !!this.sim.occupant(t);
+  }
+
+  /** The cat under the pointer (Phase 5 E15: several can hide at once), by id. */
+  private catHit(x: number, y: number): string | undefined {
     // Generous enough to tap, small enough that a tile next to the cat still gets its own click.
     const r = Math.max(20, 0.26 / this.camera.worldPerPixel());
-    return Math.hypot(s.x - x, s.y - y) <= r;
+    let best: string | undefined;
+    let bestD = r;
+    for (const id of this.cat.ids()) {
+      const p = this.cat.targetWorld(id);
+      if (!p) continue;
+      const s = this.camera.toScreen(p);
+      const d = Math.hypot(s.x - x, s.y - y);
+      if (d <= bestD) {
+        best = id;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  /** Phase 5 E15: the 🐾 chip: glide to the longest-hiding hinted cat and say where it is (a hint, not a beacon). */
+  private findCat() {
+    const s = this.sim;
+    const spot = s.cat
+      .spots()
+      .filter((c) => s.cat.hinted(c))
+      .sort((a, b) => a.spawnedAt - b.spawnedAt)[0];
+    const a = spot && s.cat.anchor(spot.anchorId);
+    if (!spot || !a) return;
+    const p = this.cat.anchorWorld(a);
+    this.camera.focus(p.x, 0, p.z, Math.max(this.camera.zoom, 0.9), this.settings.reducedMotion ? 0.01 : 1.2);
+    this.hud.feed(`🐾 Paw prints lead ${a.hint}…`);
+  }
+
+  /** Phase 5 E15 (inspect): a cat hiding within a few tiles leaves a note on the tile tooltip. */
+  private pawHint(t: TileData): string {
+    const s = this.sim;
+    for (const c of s.cat.spots()) {
+      const a = s.cat.anchor(c.anchorId);
+      if (!a || a.roofId !== t.roofId) continue;
+      if (Math.hypot(a.pos[0] - (t.x + 0.5), a.pos[2] - (t.z + 0.5)) <= 4) return '<br><span class="ok">🐾 Faint paw prints… a cat is hiding very close.</span>';
+    }
+    return '';
   }
 
   /** On screen and clear of the HUD, off screen (reachable by panning) or covered by a HUD panel. */
@@ -714,7 +783,7 @@ export class Game {
     }
     if (tool === 'inspect') {
       this.overlays.showFrame(t.roofId, t.x, t.z, 1, 'hover');
-      this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}`);
+      this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${this.pawHint(t)}`);
       return;
     }
     const chk = this.sim.restoration.checkPulse(t);
@@ -756,8 +825,11 @@ export class Game {
       this.hud.toggleUpgrades(false);
       return;
     }
-    if (this.catHit(x, y)) {
-      this.sim.cat.claim();
+    const catId = this.catHit(x, y);
+    if (catId) {
+      this.claimingCat = catId;
+      this.sim.cat.claim(catId);
+      this.claimingCat = undefined;
       return;
     }
     const droneId = this.droneHit(x, y);
@@ -930,11 +1002,26 @@ export class Game {
   private mergeHint(type: MachineData['type'], roofId: string, x: number, z: number, size: number): string {
     const n = this.sim.merge.groupIfPlaced(type, roofId, x, z, size);
     const t2 = TIER2[type];
-    if (!t2 || n < 2) return '';
+    if (!t2) return '';
     const name = MACHINES[type].name;
-    return n >= TUNING.merge.count
-      ? `<span class="ok">🔀 Completes a merge: ${TUNING.merge.count} ${name}s → ${t2.icon} ${t2.name}</span><br>`
-      : `🔀 Touches a ${name}: one more alongside makes a ${t2.icon} ${t2.name}<br>`;
+    const line =
+      n < 2
+        ? ''
+        : n >= TUNING.merge.count
+          ? `<span class="ok">🔀 Completes a merge: ${TUNING.merge.count} ${name}s → ${t2.icon} ${t2.name}</span><br>`
+          : `🔀 Touches a ${name}: one more alongside makes a ${t2.icon} ${t2.name}<br>`;
+    // Pacing pass: point the way to a superstructure. A tier 2 merged here (tap this one to merge) lands beside the
+    // tier 2s it touches; three touching tier 2s merge into a core.
+    const t3 = TIER3[type];
+    const beside = Math.min(this.sim.merge.tier2Beside(type, roofId, x, z, size), TUNING.merge.count - 1);
+    if (!t3 || !beside) return line;
+    const yours = beside > 1 ? `${beside} ${t2.name}s` : `${t2.name}`;
+    return (
+      line +
+      (beside + 1 >= TUNING.merge.count
+        ? `<span class="ok">✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (tap this one) and the new ${t2.name} completes a ${t3.icon} ${t3.name} core</span><br>`
+        : `✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (tap this one) and ${TUNING.merge.count} touching ${t2.name}s make a ${t3.icon} ${t3.name} core<br>`)
+    );
   }
 
   /** Phase 5 E14: a superstructure's card: construction stages, then its ability (charge, fire, automatic). */
@@ -957,7 +1044,12 @@ export class Game {
     const max = sup.maxCharge(m);
     const why = sup.blocked(m);
     const stored = Math.floor(a.charge / th);
-    const charging = sup.kind(m) === 'megahub' ? 'Its own drones’ finished jobs charge it' : `Restorations within ${TUNING.super[sup.kind(m) as "megaflower" | "nexus" | "treeOfLife"].reach} tiles charge it`;
+    const sk = sup.kind(m);
+    const charging =
+      sk === 'megahub'
+        ? 'Its own drones’ finished jobs charge it'
+        : `Restorations within ${TUNING.super[sk as 'megaflower' | 'nexus' | 'treeOfLife'].reach} tiles and its own production charge it` +
+          (sk === 'nexus' || sk === 'treeOfLife' ? `; with everything nearby grown, it pays ${TUNING.super.bountySeconds} s of biomass income instead` : '');
     return (
       `<div class="super"><b>${d.icon} ${esc(d.ability)}</b>` +
       `<div class="bar"><i style="width:${Math.min(100, (a.charge / max) * 100).toFixed(0)}%"></i></div>` +
@@ -1164,6 +1256,7 @@ export class Game {
       if (areaId !== PARK) this.hud.toast(`✨ ${s.areas.info(areaId).landmarkName} is ready to wake!<small>Click it to clear this ${AREA_TYPES[s.areas.info(areaId).type].name.toLowerCase()}'s fog.</small>`, 'gold', 4);
     });
     b.on('area.cleared', ({ areaId }) => this.onAreaCleared(areaId));
+    b.on('fauna.unlocked', ({ id }) => this.eco?.arrived(id)); // Phase 5 E16 (cosmetic; pays nothing)
     // City 09.1: the landmark's specialty action is done (the wake itself has its own toast once ready).
     b.on('area.specialty', ({ areaId, met }) => {
       if (!met || s.areas.ready(areaId) || this.specialtyToasted.has(areaId)) return;
@@ -1215,7 +1308,13 @@ export class Game {
       const p = this.tileVec(tile);
       // Player actions get the full burst; automation (drones, machines, chains) is quieter.
       const manual = source === 'pulse' || source === 'broad';
-      this.vfx.burst(p, manual ? 14 : source === 'drone' || source === 'condenser' ? 6 : 9, { up: manual ? 2.6 : 1.8, size: manual ? 0.07 : 0.055 });
+      this.vfx.burst(p, manual ? 14 : source === 'drone' ? 9 : source === 'condenser' ? 6 : 9, { up: manual ? 2.6 : source === 'drone' ? 2.2 : 1.8, size: manual ? 0.07 : 0.055 });
+      // Drone redesign D05: a drone's restore ends in a small bloom burst (petals above, plus a cyan puff and a
+      // leaf-green ring). Visual only: the reward was paid by the sim.
+      if (source === 'drone') {
+        this.vfx.burst(p, 4, { up: 1.3, speed: 0.8, size: 0.04, life: 0.7, hex: PALETTE.eyeCyan });
+        this.vfx.ring(p, PALETTE.leafFin, 1.0, 0.6);
+      }
       if (manual && this.clock - this.lastRestoreSound > 0.06) {
         this.lastRestoreSound = this.clock;
         this.sfx.restored(this.restoreSoundIdx++);
@@ -1240,7 +1339,7 @@ export class Game {
       if (amount.lt(0.05)) return;
       let from = tileId ? this.tileScreen(tileId) : undefined;
       if (!from && reason === 'cat') {
-        const c = this.cat.targetWorld() ?? this.lastCatPos;
+        const c = this.cat.targetWorld(this.claimingCat) ?? this.lastCatPos;
         if (c) {
           const sp = this.camera.toScreen(c);
           from = { x: sp.x, y: sp.y };
@@ -1324,14 +1423,14 @@ export class Game {
         this.tweens.add(0.01, () => {}, { delay: 1.1, done: () => this.sfx.fanfare() });
         this.camera.shake(0.12);
         this.hud.toast(
-          `${d.icon} ${esc(d.name)} is alive!<small>${esc(d.blurb)}: ${TUNING.super.outputMult}× a single machine, permanently (three tier 2s were 12×). ${esc(d.ability)}: it charges as you play; fire it from its panel.</small>`,
+          `${d.icon} ${esc(d.name)} is alive!<small>${esc(d.blurb)}: ${TUNING.super.outputMult}× a single machine, permanently (three tier 2s were ${3 * TUNING.merge.solarMult}×), and every superstructure enriches all biomass. ${esc(d.ability)}: it charges as you play; fire it from its panel.</small>`,
           'gold',
           first ? 7 : 4.5,
         );
       }
       if (this.selected === machine.id) this.renderInspect();
     });
-    b.on('super.ability', ({ machine, tiles }) => {
+    b.on('super.ability', ({ machine, tiles, bounty }) => {
       this.machines.superPulse(machine.id);
       const w = this.machines.worldOf(machine);
       const p = new pc.Vec3(w[0], w[1], w[2]);
@@ -1341,7 +1440,7 @@ export class Game {
       this.vfx.burst(new pc.Vec3(p.x, p.y + 1.2, p.z), 30, { up: 4, speed: 2.2, size: 0.08, life: 1.2 });
       this.sfx.powerUp();
       const d = TIER3[machine.type]!;
-      const what = k === 'megaflower' ? `every panel ×${TUNING.super.megaflower.mult} for ${TUNING.super.megaflower.seconds} s` : k === 'megahub' ? `${TUNING.super.megahub.drones} swarm drones for ${TUNING.super.megahub.seconds} s` : `${tiles.length} tiles bloom`;
+      const what = k === 'megaflower' ? `every panel ×${TUNING.super.megaflower.mult} for ${TUNING.super.megaflower.seconds} s` : k === 'megahub' ? `${TUNING.super.megahub.drones} swarm drones for ${TUNING.super.megahub.seconds} s` : bounty ? `everything nearby is grown: +${fmt(bounty)} 🌿` : `${tiles.length} tiles bloom`;
       this.hud.feed(`${d.icon} ${d.ability.split(':')[0]}! ${what}`);
       if (this.selected === machine.id) this.renderInspect();
     });
@@ -1483,29 +1582,70 @@ export class Game {
     });
     b.on('drone.despawned', ({ droneId }) => this.drones.remove(droneId));
     b.on('drone.jobStarted', () => this.sfx.drone());
-    b.on('cat.spawned', ({ anchorId }) => {
-      this.cat.show(anchorId, true);
+    b.on('cat.spawned', ({ catId }) => {
+      const spot = catId ? this.sim.cat.find(catId) : this.sim.state.cat.active;
+      if (spot) this.cat.show(spot, true);
       this.meowTimer = 20;
       this.save();
     });
-    b.on('cat.found', ({ reward, summary, extras }) => {
-      const p = this.cat.targetWorld();
+    b.on('cat.found', ({ reward, summary, extras, catId, variant }) => {
+      const id = catId ?? this.cat.ids()[0];
+      const p = id ? this.cat.targetWorld(id) : undefined;
+      const rare = variant === 'golden' || variant === 'rainbow';
       if (p) {
         this.lastCatPos = p.clone();
         const soft = this.cat.softSparkle;
-        this.vfx.burst(p, soft ? 12 : 40, { up: soft ? 2 : 4, speed: soft ? 1 : 2, size: soft ? 0.05 : 0.07, life: soft ? 1 : 1.4 });
+        this.vfx.burst(p, soft ? 12 : rare ? 60 : 40, { up: soft ? 2 : 4, speed: soft ? 1 : 2, size: soft ? 0.05 : 0.07, life: soft ? 1 : 1.4 });
         this.vfx.ring(p, PALETTE.gold, soft ? 0.9 : 1.6, 0.8);
+        if (variant === 'rainbow') this.vfx.ring(p, PALETTE.pink, soft ? 1.1 : 2.2, 1);
       }
-      this.cat.hide(true);
+      if (id) this.cat.hide(id, true);
       this.hud.hideTip();
       this.sfx.meow();
       setTimeout(() => this.sfx.fanfare(), 250);
-      this.hud.toast('🐱 LUCKY CAT FOUND!', 'cat', 2.4);
-      this.hud.catReward(`${CAT_REWARD_NAMES[reward]}${extras ? ` + ${extras} saved-up harvest${extras > 1 ? 's' : ''}` : ''}`, summary);
+      // Rarer cats are named in words (and shaped differently), never told apart by colour alone.
+      const label = variant === 'rainbow' ? '🌈 RAINBOW CAT FOUND!' : variant === 'golden' ? '👑 GOLDEN CAT FOUND!' : '🐱 LUCKY CAT FOUND!';
+      this.hud.toast(label, 'cat', 2.4);
+      const kind = variant === 'rainbow' ? 'Rainbow Cat: ' : variant === 'golden' ? 'Golden Cat: ' : '';
+      this.hud.catReward(`${kind}${CAT_REWARD_NAMES[reward]}${extras ? ` + ${extras} saved-up harvest${extras > 1 ? 's' : ''}` : ''}`, summary);
       this.save();
     });
-    b.on('cat.moved', ({ anchorId }) => {
-      this.cat.show(anchorId, true);
+    b.on('cat.moved', ({ catId }) => {
+      const spot = catId ? this.sim.cat.find(catId) : this.sim.state.cat.active;
+      if (spot) this.cat.show(spot, true);
+      this.save();
+    });
+    // Phase 5 E15: world events. A small banner (HUD) carries the effect and timer; these are the extras.
+    b.on('world.started', ({ type, fallback }) => {
+      const info = WORLD_EVENT_INFO[type];
+      this.hud.feed(`${info.icon} ${info.name}${type === 'invasion' ? '' : `: ${info.effect}`}`);
+      if (fallback) this.hud.feed(fallback);
+      this.sfx.chainEnd(type === 'supernova' ? 8 : 5);
+      if (type === 'invasion') this.sfx.meow(true);
+      this.save();
+    });
+    b.on('world.wave', ({ tiles, fallback }) => {
+      if (fallback) this.hud.feed(`🌧️ ${fallback}`);
+      const t = tiles[0] ? this.sim.grid.byTileId(tiles[0]) : undefined;
+      if (t) {
+        const [x, y, z] = this.sim.grid.tileWorld(t);
+        this.vfx.ring(new pc.Vec3(x, y + 0.1, z), PALETTE.water, this.cat.softSparkle ? 1.2 : 2.4, 0.9);
+      }
+    });
+    b.on('world.tile', ({ type, tileId }) => {
+      const t = this.sim.grid.byTileId(tileId);
+      if (!t || this.cat.softSparkle) return;
+      const [x, y, z] = this.sim.grid.tileWorld(t);
+      const p = new pc.Vec3(x, y + 0.15, z);
+      if (type === 'rain') this.vfx.ring(p, PALETTE.water, 0.6, 0.5);
+      else this.vfx.burst(p, 6, { up: 1.6, speed: 0.6, size: 0.05, life: 1.1 });
+    });
+    b.on('world.ended', ({ type, done, fallback }) => {
+      const info = WORLD_EVENT_INFO[type];
+      // Only real progress is celebrated: a fallback already said what it paid instead.
+      if (done > 0 && type !== 'invasion') this.hud.feed(`${info.icon} ${info.name}: ${type === 'migration' ? `${done} tiles grew` : `${done} tiles watered`}`);
+      else if (type === 'supernova') this.hud.feed(`${info.icon} ${info.name} fades`);
+      void fallback;
       this.save();
     });
     b.on('cat.goldenRelay', () => {
@@ -1516,7 +1656,7 @@ export class Game {
     b.on('cat.stash', () => {
       // A soft hint that something lucky is still waiting, never a pointer.
       this.sfx.meow(true);
-      const p = this.cat.targetWorld();
+      const p = this.cat.targetWorld(this.sim.state.cat.active?.id);
       if (p) this.vfx.burst(p, 6, { up: 1.5, size: 0.04, speed: 0.4 });
     });
     b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Surge ×${TUNING.cat.frenzyMult} for ${Math.round(seconds)}s`));
@@ -1635,6 +1775,8 @@ export class Game {
   }
 
   private lastCatPos?: pc.Vec3;
+  /** Phase 5 E15: the cat being claimed right now (its rewards fly from it). */
+  private claimingCat?: string;
   /** World position of a tile or machine id (chain sources/targets can be either). */
   private posOf(id: string | undefined, _towardRoof?: string): pc.Vec3 | undefined {
     if (!id) return undefined;
@@ -2088,10 +2230,21 @@ export class Game {
     const rect = this.city ? this.groundRect() : undefined;
     if (rect) this.chunks.update(dt, rect, this.camera.target, this.camera.zoom);
     this.machines.update(dt, rect);
-    this.drones.update(dt);
+    this.drones.update(this.paused || this.hiddenPause ? 0 : dt); // drone personality freezes with the game
     this.cat.update(dt);
-    this.butterflies.update(dt);
-    this.birds.update(dt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2);
+    // Phase 5 E16: fauna by unlock, capped per quality tier ("Fewer particles" = low).
+    const eco = this.sim.ecosystem;
+    const quality = this.faunaTier ?? (this.settings.lowVfx ? 'low' : 'high');
+    this.butterflies.enabled = eco.has('butterflies');
+    this.butterflies.cap = TUNING.ecosystem.caps[quality].butterflies;
+    // Fauna live around where the camera looks (the ground rect of a low perspective view reaches far beyond it).
+    const ct = this.camera.target;
+    const near = rect ? { x0: ct.x - 12, x1: ct.x + 12, z0: ct.z - 12, z1: ct.z + 12 } : undefined;
+    this.butterflies.update(dt, near);
+    this.birds.resident = eco.has('birds');
+    this.birds.update(dt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
+    this.fauna.update(dt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: !!this.settings.fireflies && !this.settings.highContrast });
+    this.eco?.update(dt);
     this.tileFx.update(dt);
     this.frameNo++;
     this.updateChainPresentation(dt);
@@ -2120,7 +2273,9 @@ export class Game {
         this.showDroneTasks();
       }
     }
-    if (this.sim.state.cat.active && !this.paused) {
+    if (this.sim.cat.spots().length && !this.paused) {
+      // Phase 5 E15: paw prints appear beside a cat that has been hiding a while.
+      for (const c of this.sim.cat.spots()) this.cat.setHint(c.id, this.sim.cat.hinted(c));
       this.meowTimer -= dt;
       if (this.meowTimer <= 0) {
         this.meowTimer = 30 + Math.random() * 20;
@@ -2148,6 +2303,7 @@ export class Game {
             `draw calls ${this.app.stats.drawCalls.total} (budget 400)  chunks ${this.chunks?.loadedCount ?? 0}\n` +
             `chains ${this.sim.chains.activeRuns} queued ${this.sim.chains.pendingSteps}\n` +
             `drones ${st.drones.length}  machines ${st.machines.length}\n` +
+            `fauna ${Object.entries(this.fauna.active).map(([k, n]) => `${k[0]}${n}`).join(' ')} b${this.butterflies.count}  bio ${this.sim.ecosystem.score().score}\n` +
             `cat ${st.cat.active ? st.cat.active.anchorId : `next ${st.cat.firstSpawned ? st.cat.nextSpawnAt.toFixed(0) : 'first'}`}\n` +
             `restored ${this.sim.progression.restoredCount(HOME)} full ${this.sim.progression.fullBloomCount(HOME)}`,
         );

@@ -139,40 +139,77 @@ export const TUNING = {
   /** Pollinator Garden: a newly restored neighbour triggers a bonus restore/grow nearby. */
   pollinator: { reach: 1, biomassMult: 1.5, triggersPerChain: 4 },
   /**
-   * Phase 5 E13: merging. Three edge-connected tier-1 machines → one tier 2. Output index 1 → 4 (3 → 4 overall),
-   * and the merge frees two footprints. The first merge of each type is free; later ones cost `feeSeconds` of
+   * Phase 5 E13: merging. Three edge-connected tier-1 machines → one tier 2. Output index 1 → 5 (3 → 5 overall;
+   * the pacing pass raised it from the spec's suggested 4, whose first merge felt modest), and the merge frees two
+   * footprints. The first merge of each type is free; later ones cost `feeSeconds` of
    * steady biomass income (at least `minFee`).
    */
   merge: {
     count: 3,
     feeSeconds: 20,
     minFee: 20,
-    solarMult: 4,
-    waterMult: 4,
+    solarMult: 5,
+    waterMult: 5,
     condenserExtraTargets: 2,
-    gardenBiomassMult: 2,
+    gardenBiomassMult: 2.25, // pacing pass: was 2
     gardenReachBonus: 1,
     fleetDroneMult: 3,
     fleetDroneCap: 12,
     fleetRadiusBonus: 2,
   },
   /**
-   * Phase 5 E14: superstructures (tier 3). Output index 18 (three tier 2s = 12). Built in three paid stages
+   * Phase 5 E14: superstructures (tier 3). Output index 22 (three tier 2s = 15; pacing pass: was 18 against 12). Built in three paid stages
    * (foundation on placement, assembly, activation), priced from steady biomass income when the core is placed
    * and locked then. Abilities charge from restorations in reach (the Megahub from its own drones' jobs), are
    * fired by hand or automatically after the first use, and each release gives back less charge than it uses.
    */
   super: {
-    outputMult: 18,
-    stageSeconds: [30, 90, 180],
+    outputMult: 22,
+    /** Pacing pass: n built superstructures multiply all biomass by 1 + biomassBonus × n^biomassExponent. */
+    biomassBonus: 1,
+    biomassExponent: 0.5,
+    /** Pacing pass: share of the Megaflower's / Nexus's flow charge that still counts while its store is full (E14: 0). */
+    fullFlowShare: 0.5,
+    /** Pacing pass: with nothing in reach to grow, a Nexus / Tree of Life release pays this many seconds of steady biomass income. */
+    bountySeconds: 12,
+    stageSeconds: [60, 180, 360], // pacing pass: was 30 / 90 / 180 (the bot that plans its merges built one by minute 14)
     stageMin: [300, 600, 900],
     stageEnergyShare: [0, 0.4, 0.4],
-    stageWaterShare: [0, 0, 0.4],
+    stageWaterShare: [0, 0, 0.3], // pacing pass: was 0.4 (seed 21 waited 8 minutes for water)
     /** `flowSeconds`: also fills in this long from its own production while that is banked (not lost to a full store). */
     megaflower: { mult: 3, seconds: 15, charge: 25, reach: 4, flowSeconds: 90 },
     nexus: { tiles: 24, charge: 30, reach: 4, waveRadius: 8, flowSeconds: 90 },
-    treeOfLife: { tiles: 12, charge: 30, store: 3, reach: 4, gardenMult: 2.5, gardenReachBonus: 2, flowSeconds: 120 },
+    treeOfLife: { tiles: 12, charge: 30, store: 3, reach: 4, gardenMult: 3, gardenReachBonus: 2, flowSeconds: 120 },
     megahub: { drones: 6, seconds: 30, sweep: 3, charge: 20, radiusBonus: 4 },
+  },
+
+  /**
+   * Phase 5 E16: living ecosystem. Biodiversity is a derived score (never stored or spent): points per restored
+   * tile by stage (index 1 Restored … 4 Radiant), per tree species and ground kind in bloom, per landmark woken,
+   * per superstructure and per fauna kind. Fauna arrive once, when their condition first holds; they are
+   * cosmetic and pay nothing. Caps are per graphics quality tier (the tier selector belongs to the lighting epic;
+   * until then "Fewer particles" means low); all are playtest hypotheses.
+   */
+  ecosystem: {
+    recountSeconds: 1,
+    pendingChunksPerRecount: 2,
+    score: { stage: [0, 0.1, 0.3, 0.6, 1], species: 12, feature: 6, landmark: 25, superstructure: 60, fauna: 15 },
+    ranks: [[0, 'Barren'], [20, 'Sprouting'], [150, 'Lively'], [600, 'Flourishing'], [2000, 'Teeming'], [6000, 'Abundant'], [15000, 'Paradise']] as [number, string][],
+    fauna: {
+      butterflies: { bloomingTiles: 10 },
+      birds: { thrivingTreeTiles: 20 },
+      /** the park fountain flowing counts as a restored pond; otherwise this many restored water tiles */
+      koi: { waterTiles: 4, fountain: true },
+      robots: { superstructures: 1 },
+    },
+    /** most actors of each kind at once, per quality tier */
+    caps: {
+      high: { butterflies: 10, groundBirds: 4, koi: 8, robots: 4, cats: 6, fireflies: 24 },
+      medium: { butterflies: 8, groundBirds: 3, koi: 6, robots: 3, cats: 4, fireflies: 16 },
+      low: { butterflies: 5, groundBirds: 2, koi: 4, robots: 2, cats: 3, fireflies: 10 },
+    } as Record<'low' | 'medium' | 'high', Record<'butterflies' | 'groundBirds' | 'koi' | 'robots' | 'cats' | 'fireflies', number>>,
+    /** sleeping cats: this share of finished machines (seeded by machine id) on restored ground has one */
+    cats: { share: 0.3 },
   },
 
   /** Mother Tree: charges from restorations nearby; at full charge releases an area Bloom Pulse. */
@@ -236,6 +273,51 @@ export const TUNING = {
     goldenCorridorMax: 12, // …+1 per 10 cleared areas, up to this
     preferVisible: 0.75, // chance a cat hides somewhere already on screen (when there is such a spot)
     catsGardenTiles: 6, // Cat's Garden: tiles restored (and decorated) on a random unlocked roof
+    /**
+     * Phase 5 E15: rarer cats (rolled when one appears, 80 / 18 / 2). `mult` scales the reward (harvest seconds,
+     * buff and party time, Mega Bloom size); a Rainbow Cat also gives two different rewards. The first cat is
+     * always a standard one with a Lucky Harvest (onboarding).
+     */
+    variants: {
+      standard: { weight: 80, mult: 1 },
+      golden: { weight: 18, mult: 2 },
+      rainbow: { weight: 2, mult: 3 },
+    },
+    /** Phase 5 E15: hard caps, whatever the variant and hidden-time bonus. */
+    maxRewardMult: 4.5,
+    surgeMaxSeconds: 180, // Solar Surge never stacks past this many seconds left
+    partyMaxSeconds: 135,
+    megaBloomMax: 30,
+    /** Phase 5 E15: after this long hiding (sim seconds), a cat leaves faint paw prints (HUD 🐾 chip, inspect). */
+    hintAfter: 90,
+  },
+
+  /**
+   * Phase 5 E15: central stacking policy for temporary boosts (Modifiers). Within one category the strongest
+   * boost wins; boosts from different categories multiply, capped at `maxProduct`. Applied once, to the
+   * baseline rate. Categories: Bloom Frenzy, short boosts (Solar Surge, Solar Burst), world events.
+   */
+  modifiers: { maxProduct: 20 },
+
+  /**
+   * Phase 5 E15: world events. Seeded, in simulation time (pause stops them; nothing happens offline). The first
+   * opportunity comes 3–6 active minutes after automation unlocks (the first Drone Hub), then every 3–6 minutes
+   * after the last one ended. Nothing is lost by missing one; no notifications.
+   */
+  events: {
+    firstMin: 180,
+    firstMax: 360,
+    laterMin: 180,
+    laterMax: 360,
+    /** weights (an event irrelevant right now gets 0; the same event never comes twice in a row) */
+    weights: { supernova: 30, migration: 30, rain: 25, invasion: 15 },
+    supernova: { seconds: 20, mult: 10 },
+    migration: { seconds: 15, tiles: 20, reach: 10 },
+    rain: { seconds: 25, mult: 3, waves: 3, waveTiles: 12, waveRadius: 6 },
+    invasion: { cats: 3 },
+    /** Nothing eligible to grow or water: seconds of steady biomass income instead (at least `fallbackMin`). */
+    fallbackSeconds: { migration: 20, rain: 8 },
+    fallbackMin: 30,
   },
 
   core: {

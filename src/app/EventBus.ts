@@ -1,6 +1,6 @@
 import type { Big } from '../core/Big';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
-import type { BuffType, CatRewardType, Cost, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
+import type { BuffType, CatRewardType, CatVariant, Cost, MachineData, ResourceKind, RestoreSource, TileData, WorldEventType } from '../core/types';
 
 export interface GameEvents {
   'tile.restoring': { tile: TileData; source: RestoreSource };
@@ -17,7 +17,7 @@ export interface GameEvents {
   /** Phase 5 E14: a superstructure was placed (stage 1) or a stage was paid (2, 3 = built). */
   'super.stage': { machine: MachineData; stage: number };
   /** Phase 5 E14: a superstructure's ability fired. `tiles` = tiles it acts on (wave, evolution), if any. */
-  'super.ability': { machine: MachineData; tiles: string[] };
+  'super.ability': { machine: MachineData; tiles: string[]; bounty?: Big };
   'machine.merged': { machine: MachineData; consumed: MachineData[]; fee: Cost; lost: { upgrade: string; name: string; kept: number; lost: number[] }[] };
   'chain.started': { chainId: number; originTileId: string };
   'chain.event': { event: ChainEvent; combo: number };
@@ -50,10 +50,11 @@ export interface GameEvents {
   'drone.spawned': { droneId: string };
   'drone.despawned': { droneId: string };
   'drone.jobStarted': { droneId: string; tileId: string };
-  'cat.spawned': { anchorId: string };
-  'cat.found': { anchorId: string; reward: CatRewardType; summary: string; extras: number };
+  /** Phase 5 E15: `catId` is stable; `invasion` cats come from a Lucky Cat Invasion. */
+  'cat.spawned': { anchorId: string; catId?: string; variant?: CatVariant; invasion?: boolean };
+  'cat.found': { anchorId: string; reward: CatRewardType; summary: string; extras: number; catId?: string; variant?: CatVariant; rewards?: CatRewardType[] };
   'cat.stash': { stash: number };
-  'cat.moved': { from: string; anchorId: string };
+  'cat.moved': { from: string; anchorId: string; catId?: string };
   'cat.goldenRelay': Record<string, never>;
   'buff.started': { type: BuffType; seconds: number };
   'harvest': { amount: Big };
@@ -61,6 +62,13 @@ export interface GameEvents {
   'rooftop.coreRestored': Record<string, never>;
   'tutorial.step': { step: number };
   'frenzy.ready': Record<string, never>;
+  /** Phase 5 E15: a world event began (`tiles`: tiles it will visit, or cats hidden; `fallback`: what it paid instead). */
+  'world.started': { type: WorldEventType; seconds: number; tiles: number; fallback?: string };
+  /** Phase 5 E15: a Super Rain irrigation wave (tile ids it will water), or its fallback. */
+  'world.wave': { type: WorldEventType; tiles: string[]; fallback?: string };
+  /** Phase 5 E15: an event visited one of its tiles (presentation: a butterfly or a raindrop there). */
+  'world.tile': { type: WorldEventType; tileId: string };
+  'world.ended': { type: WorldEventType; done: number; fallback?: string };
   'frenzy.started': { seconds: number };
   'frenzy.ended': Record<string, never>;
   /** Phase 4 E04.3: a park milestone was reached and paid (once). */
@@ -74,6 +82,8 @@ export interface GameEvents {
   /** City 09.1: progress on an area's specialty action. */
   'area.specialty': { areaId: string; have: number; need: number; met: boolean };
   'district.ready': { districtId: string };
+  /** Phase 5 E16: a fauna kind arrived (once per save; cosmetic). */
+  'fauna.unlocked': { id: 'butterflies' | 'birds' | 'koi' | 'robots' };
   'district.bloom': { districtId: string; restored: string[]; lusher: string[]; reward: Partial<Record<ResourceKind, Big>>; replay: boolean };
 }
 

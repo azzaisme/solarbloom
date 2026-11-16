@@ -170,6 +170,16 @@ const DEAD: Record<string, string[]> = {
   obstacle: ['#7d7b74', '#76746d', '#85837b'],
   building: ['#8d8a82', '#86837b', '#94918a'],
 };
+/** Phase 5 E16: grass by stage (index 1 Restored … 4 Radiant), three shades each. */
+const STAGE_GRASS: string[][] = [[], ['#9fd46a', '#a6d871', '#97cd62'], PALETTE.grass, ['#4fae45', '#58b74a', '#48a640'], ['#79c24d', '#82c853', '#74bd49']];
+const STAGE1_TUFT = ['#8cc95a', '#97d062', '#a9da74'];
+const EDGE_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const hash01 = (x: number, z: number, salt: number) => {
+  let h = Math.imul(x | 0, 73856093) ^ Math.imul(z | 0, 19349663) ^ Math.imul(salt, 83492791);
+  h = Math.imul(h ^ (h >>> 13), 0x5bd1e995);
+  h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
+};
 const ALIVE: Record<string, string> = { lawn: '', paving: '#e9e4d8', road: '', water: '#5cc6e6', clay: '', litter: '', obstacle: '#d9d4c8' };
 
 interface ChunkView {
@@ -365,6 +375,16 @@ export class ChunkRenderer {
     // Props in the park follow its stage; elsewhere they're broken until their area clears.
     this.level = area === 'park' ? Math.max(0, this.parkStage) : fog === 'cleared' ? 4 : 0;
     this.inPark = area === 'park';
+    // Phase 5 E16: one obstacle per cleared chunk outside the park becomes a small local landmark (seeded).
+    this.localMark = undefined;
+    if (this.level >= 4 && !this.inPark) {
+      let best = 2;
+      for (const t of c.tiles)
+        if (t && t.blocked && t.feature !== 'building' && t.prop) {
+          const k = hash01(t.x, t.z, 71);
+          if (k < best) [best, this.localMark] = [k, t.id];
+        }
+    }
     for (const t of c.tiles) {
       if (!t) continue;
       // Hidden ground is grey; fogged ground is greyed unless restored.
@@ -391,8 +411,14 @@ export class ChunkRenderer {
   private farTile(b: MeshBuilder, t: TileData, h: number) {
     const f = t.feature ?? 'lawn';
     const dead = DEAD[f] ?? DEAD.lawn;
-    const col = t.blocked ? dead[0] : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? ALIVE.paving : PALETTE.grass[t.variant % PALETTE.grass.length]) : t.ground === 'polluted' ? dead[t.variant % dead.length] : PALETTE.soil;
+    const stage = Math.max(1, Math.min(4, t.bloom || 1));
+    const col = t.blocked ? dead[0] : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? ALIVE.paving : STAGE_GRASS[stage][t.variant % 3]) : t.ground === 'polluted' ? dead[t.variant % dead.length] : PALETTE.soil;
     b.add('box', col, [t.x + 0.5, h, t.z + 0.5], [1, 0.16, 1]);
+    // Phase 5 E16: stages stay apart zoomed out too: a colour patch for Blooming, a gold disc for Radiant.
+    if (t.ground === 'restored' && f !== 'water' && f !== 'paving') {
+      if (stage === 2) b.add('box', PALETTE.flower[t.variant % PALETTE.flower.length], [t.x + 0.4, h + 0.085, t.z + 0.55], [0.34, 0.02, 0.3]);
+      if (stage === 4) b.add('cylinder', '#ffe9a0', [t.x + 0.5, h + 0.085, t.z + 0.5], [0.8, 0.02, 0.8]);
+    }
     if (this.addTree(t, h, 0)) return;
     if (t.ground === 'restored' && t.bloom >= 3 && f !== 'water') this.fb.add(shrubGeo(t.variant, 0), t.x + 0.5, h + 0.08, t.z + 0.5, t.variant, 1);
   }
@@ -481,6 +507,68 @@ export class ChunkRenderer {
   /** Look of the chunk being built: prop level 0–4, and whether it's the park. */
   private level = 0;
   private inPark = false;
+  /** Phase 5 E16: the obstacle tile shown as this chunk's local landmark (cleared areas only). */
+  private localMark?: string;
+
+  /**
+   * Phase 5 E16: a small local landmark on an obstacle cell (never a build cell), by area type: a flower arch on
+   * streets and rooftops, an ivy statue in plazas, a topiary in markets, a lantern post with a hanging basket by
+   * canals, a spouting basin at reservoirs, a mushroom ring in groves. Meshy hook: these are candidates for the
+   * "edge clutter" / obstacle set in docs/art/meshy-assets.md.
+   */
+  private landmark(b: MeshBuilder, x: number, y: number, z: number, variant: number) {
+    const flower = PALETTE.flower[variant % PALETTE.flower.length];
+    switch (this.areaType) {
+      case 'plaza':
+        b.add('box', '#e9e4d8', [x, y + 0.12, z], [0.5, 0.24, 0.5]);
+        b.add('capsule', '#f4f1ea', [x, y + 0.5, z], [0.18, 0.2, 0.16]);
+        b.add('sphere', '#f4f1ea', [x, y + 0.78, z], 0.16);
+        b.add('sphere', '#4f9a4a', [x + 0.12, y + 0.4, z + 0.1], [0.16, 0.3, 0.1]); // ivy
+        b.add('sphere', flower, [x - 0.2, y + 0.26, z + 0.2], 0.1);
+        break;
+      case 'market':
+        b.add('box', '#d8d1c0', [x, y + 0.1, z], [0.4, 0.2, 0.4]);
+        b.add('sphere', '#3e9e46', [x, y + 0.42, z], [0.38, 0.4, 0.38]);
+        b.add('sphere', '#4fb04f', [x, y + 0.74, z], [0.26, 0.28, 0.26]);
+        b.add('sphere', '#5fbf43', [x, y + 0.95, z], 0.14);
+        break;
+      case 'canal':
+        b.add('cylinder', '#3f4246', [x, y + 0.55, z], [0.06, 1.1, 0.06]);
+        b.add('box', '#3f4246', [x + 0.15, y + 1.08, z], [0.34, 0.03, 0.03]);
+        b.add('sphere', '#fff1b8', [x + 0.3, y + 0.98, z], 0.12);
+        b.add('sphere', '#4fb04f', [x, y + 0.7, z], [0.3, 0.16, 0.3]); // hanging basket
+        b.add('sphere', flower, [x + 0.08, y + 0.74, z + 0.08], 0.1);
+        break;
+      case 'reservoir':
+        b.add('cylinder', '#e9e4d8', [x, y + 0.1, z], [0.7, 0.2, 0.7]);
+        b.add('cylinder', PALETTE.water, [x, y + 0.2, z], [0.6, 0.02, 0.6]);
+        b.add('cylinder', '#e9e4d8', [x, y + 0.35, z], [0.1, 0.4, 0.1]);
+        b.add('sphere', '#9fe3f5', [x, y + 0.6, z], [0.14, 0.18, 0.14]);
+        break;
+      case 'grove':
+        b.add('cylinder', '#6b5a45', [x, y + 0.1, z], [0.42, 0.2, 0.42]);
+        b.add('sphere', '#7fb35a', [x, y + 0.21, z], [0.4, 0.06, 0.4]);
+        for (let i = 0; i < 5; i++) {
+          const a = (i / 5) * Math.PI * 2;
+          const mx = x + Math.cos(a) * 0.36;
+          const mz = z + Math.sin(a) * 0.36;
+          b.add('cylinder', '#f4efe6', [mx, y + 0.05, mz], [0.04, 0.1, 0.04]);
+          b.add('sphere', i % 2 ? '#e2483c' : '#ffe9a0', [mx, y + 0.11, mz], [0.12, 0.06, 0.12]);
+        }
+        break;
+      default: {
+        // a white flower arch
+        for (const s of [-1, 1]) b.add('cylinder', '#f4f1ea', [x + s * 0.32, y + 0.4, z], [0.06, 0.8, 0.06]);
+        b.add('box', '#f4f1ea', [x, y + 0.82, z], [0.74, 0.06, 0.1]);
+        for (let i = 0; i < 7; i++) {
+          const k = i / 6;
+          const px = x - 0.32 + k * 0.64;
+          const py = y + 0.3 + Math.sin(k * Math.PI) * 0.56;
+          b.add('sphere', i % 2 ? '#4fb04f' : flower, [px, py, z], 0.13);
+        }
+      }
+    }
+  }
 
   private tile(b: MeshBuilder, t: TileData, h: number) {
     const x = t.x + 0.5;
@@ -490,7 +578,9 @@ export class ChunkRenderer {
     const dead = DEAD[f] ?? DEAD.lawn;
     if (t.blocked) {
       b.add('box', dead[t.variant % dead.length], [x, h, z], [0.96, 0.16, 0.96]);
-      if (t.feature !== 'building') this.prop(b, t.prop ?? 'stump', x, h + 0.08, z, r);
+      if (t.feature === 'building') return;
+      if (t.id === this.localMark) this.landmark(b, x, h + 0.08, z, t.variant);
+      else this.prop(b, t.prop ?? 'stump', x, h + 0.08, z, r);
       return;
     }
     if (t.occupantId) {
@@ -538,45 +628,120 @@ export class ChunkRenderer {
           if (t.bloom >= 2 && t.variant % 3 === 0) b.add('sphere', '#ff9fd0', [x + r.range(-0.2, 0.2), top - 0.02, z + r.range(-0.2, 0.2)], 0.07);
           break;
         }
-        if (f === 'paving') {
-          // Clean stone with a planted bed.
-          b.add('box', ALIVE.paving, [x, h, z], [0.98, 0.16, 0.98]);
-          if (treeSpot(t, this.areaType)?.planter) {
-            // a cream planter with a brass rim for the street tree
-            b.add('box', '#f2ece0', [x, top + 0.08, z], [0.62, 0.16, 0.62]);
-            b.add('box', '#d9a441', [x, top + 0.162, z], [0.66, 0.02, 0.66]);
-            b.add('box', PALETTE.soil, [x, top + 0.165, z], [0.54, 0.01, 0.54]);
-          } else b.add('box', PALETTE.grass[t.variant % PALETTE.grass.length], [x, top + 0.01, z], [0.6, 0.02, 0.6]);
-        } else b.add('box', PALETTE.grass[t.variant % PALETTE.grass.length], [x, h, z], [1, 0.16, 1]);
-        const tufts = f === 'paving' ? 3 : 6;
-        for (let i = 0; i < tufts; i++) {
-          const ht = r.range(0.09, 0.2);
-          const span = f === 'paving' ? 0.25 : 0.42;
-          b.add('cone', PALETTE.grassTuft[i % 3], [x + r.range(-span, span), top + ht / 2, z + r.range(-span, span)], [0.055, ht, 0.055]);
-        }
-        if (t.bloom >= 2)
-          for (let i = 0; i < 3 + (t.variant % 2); i++) {
-            const ht = r.range(0.14, 0.26);
-            const fx = x + r.range(-0.32, 0.32);
-            const fz = z + r.range(-0.32, 0.32);
-            b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.02, ht, 0.02]);
-            b.add('sphere', PALETTE.flower[(t.variant + i) % PALETTE.flower.length], [fx, top + ht, fz], [0.11, 0.07, 0.11]);
-          }
-        // Phase 5: a tree tile grows its tree from a sapling (Restored) to Radiant; other full-bloom tiles get shrubs.
-        if (!this.addTree(t, h, 1) && t.bloom >= 3) this.fb.add(shrubGeo(t.variant, 1), x + (t.variant % 3) * 0.06 - 0.06, top, z, t.variant * 1.7, 1);
-        if (t.bloom >= 4) {
-          // Phase 4 E05: Radiant: a pale golden glow on the ground and luminous gold flowers above the shrubs.
-          b.add('cylinder', '#fff1b8', [x, top + 0.005, z], [0.86, 0.01, 0.86], 0.08);
-          for (let i = 0; i < 4; i++) {
-            const fx = x + r.range(-0.34, 0.34);
-            const fz = z + r.range(-0.34, 0.34);
-            const ht = r.range(0.3, 0.46);
-            b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.02, ht, 0.02]);
-            b.add('sphere', i % 2 ? '#ffe066' : '#fff6c2', [fx, top + ht, fz], [0.13, 0.1, 0.13], 0.45);
-          }
-        }
+        this.restoredTile(b, t, h, x, z, top, f, r);
         break;
       }
+    }
+  }
+
+  /**
+   * Phase 5 E16: a restored tile, by stage. Each stage reads differently at gameplay zoom:
+   *  1 Restored: pale young grass, short tufts;
+   *  2 Blooming: fresh green with two tight flower clusters of one colour each (patches of colour);
+   *  3 Thriving: deep lush green; a tree, or a seeded mix of shrubs, tall flower spikes and mossy rocks;
+   *  4 Radiant: the Thriving tile under a warm golden glow with luminous gold flowers.
+   * Lawns get a darker trimmed edge where they meet paving, and paving a raised white border where it meets
+   * lawn. All of it is low and inside the tile, so the grid and the restored/dead contrast stay readable.
+   */
+  private restoredTile(b: MeshBuilder, t: TileData, h: number, x: number, z: number, top: number, f: string, r: VRng) {
+    const stage = Math.max(1, Math.min(4, t.bloom || 1));
+    const grass = STAGE_GRASS[stage][t.variant % 3];
+    if (f === 'paving') {
+      // Clean stone with a planted bed.
+      b.add('box', ALIVE.paving, [x, h, z], [0.98, 0.16, 0.98]);
+      if (treeSpot(t, this.areaType)?.planter) {
+        // a cream planter with a brass rim for the street tree
+        b.add('box', '#f2ece0', [x, top + 0.08, z], [0.62, 0.16, 0.62]);
+        b.add('box', '#d9a441', [x, top + 0.162, z], [0.66, 0.02, 0.66]);
+        b.add('box', PALETTE.soil, [x, top + 0.165, z], [0.54, 0.01, 0.54]);
+      } else b.add('box', grass, [x, top + 0.01, z], [0.6, 0.02, 0.6]);
+      this.edges(b, t, x, z, top, true);
+    } else {
+      b.add('box', grass, [x, h, z], [1, 0.16, 1]);
+      this.edges(b, t, x, z, top, false);
+    }
+    const tufts = f === 'paving' ? 3 : stage === 1 ? 4 : 5;
+    const tuftH = stage === 1 ? [0.06, 0.12] : [0.09, 0.2];
+    for (let i = 0; i < tufts; i++) {
+      const ht = r.range(tuftH[0], tuftH[1]);
+      const span = f === 'paving' ? 0.25 : 0.42;
+      b.add('cone', (stage === 1 ? STAGE1_TUFT : PALETTE.grassTuft)[i % 3], [x + r.range(-span, span), top + ht / 2, z + r.range(-span, span)], [0.055, ht, 0.055]);
+    }
+    const span = f === 'paving' ? 0.2 : 0.3;
+    if (stage >= 2) {
+      // Flower clusters: tight groups of one colour (seeded), so blooming ground shows patches, not confetti.
+      const clusters = stage === 2 ? 2 : 1;
+      for (let c = 0; c < clusters; c++) {
+        const cx = x + r.range(-span, span);
+        const cz = z + r.range(-span, span);
+        const col = PALETTE.flower[(t.variant + c * 2) % PALETTE.flower.length];
+        const n = 3 + ((t.variant + c) % 2);
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2 + r.next();
+          const fx = cx + Math.cos(a) * 0.09;
+          const fz = cz + Math.sin(a) * 0.09;
+          const ht = r.range(0.12, 0.22);
+          b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.02, ht, 0.02]);
+          b.add('sphere', col, [fx, top + ht, fz], [0.13, 0.08, 0.13]);
+        }
+        b.add('sphere', PALETTE.flowerCore, [cx, top + 0.2, cz], 0.06);
+      }
+    }
+    // Phase 5: a tree tile grows its tree from a sapling (Restored) to Radiant; other Thriving tiles get a seeded mix.
+    if (!this.addTree(t, h, 1) && stage >= 3 && f !== 'paving') {
+      const pick = hash01(t.x, t.z, 61);
+      if (pick < 0.62) this.fb.add(shrubGeo(t.variant, 1), x + (t.variant % 3) * 0.06 - 0.06, top, z, t.variant * 1.7, 1);
+      else if (pick < 0.82) {
+        // tall flower spikes (lupins, foxgloves)
+        const col = ['#b48cff', '#ff7eb6', '#8fb8ff', '#ffffff'][t.variant % 4];
+        for (let i = 0; i < 3; i++) {
+          const fx = x + r.range(-0.25, 0.25);
+          const fz = z + r.range(-0.25, 0.25);
+          const ht = r.range(0.36, 0.52);
+          b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.025, ht, 0.025]);
+          b.add('cone', col, [fx, top + ht + 0.06, fz], [0.09, 0.22, 0.09]);
+        }
+      } else {
+        // a mossy rock with a fern
+        const rx = x + r.range(-0.2, 0.2);
+        const rz = z + r.range(-0.2, 0.2);
+        b.add('sphere', '#a7a39a', [rx, top + 0.06, rz], [0.34, 0.2, 0.28]);
+        b.add('sphere', '#7fb35a', [rx, top + 0.13, rz], [0.24, 0.07, 0.2]);
+        b.add('cone', '#3f9a3a', [rx + 0.18, top + 0.1, rz - 0.1], [0.12, 0.2, 0.12]);
+      }
+    } else if (stage <= 2 && f !== 'paving' && !treeSpot(t, this.areaType) && hash01(t.x, t.z, 67) < 0.07) {
+      // the odd pebble in young lawns (seeded), so open lawn doesn't repeat exactly
+      b.add('sphere', '#b6b2a8', [x + r.range(-0.3, 0.3), top + 0.03, z + r.range(-0.3, 0.3)], [0.16, 0.08, 0.13]);
+    }
+    if (stage >= 4) {
+      // Phase 4 E05: Radiant: a pale golden glow on the ground and luminous gold flowers above the shrubs.
+      b.add('cylinder', '#fff1b8', [x, top + 0.005, z], [0.86, 0.01, 0.86], 0.08);
+      for (let i = 0; i < 4; i++) {
+        const fx = x + r.range(-0.34, 0.34);
+        const fz = z + r.range(-0.34, 0.34);
+        const ht = r.range(0.3, 0.46);
+        b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.02, ht, 0.02]);
+        b.add('sphere', i % 2 ? '#ffe066' : '#fff6c2', [fx, top + ht, fz], [0.13, 0.1, 0.13], 0.45);
+      }
+    }
+  }
+
+  /**
+   * Phase 5 E16: where restored lawn meets restored paving, the lawn gets a trimmed darker edge and the paving a
+   * raised white border (only on that side; neighbours in chunks not generated yet are skipped).
+   */
+  private edges(b: MeshBuilder, t: TileData, x: number, z: number, top: number, paving: boolean) {
+    for (const [dx, dz] of EDGE_DIRS) {
+      const n = this.sim.grid.peek(t.roofId, t.x + dx, t.z + dz);
+      if (!n || n.ground !== 'restored' || n.blocked || n.occupantId) continue;
+      const nf = n.feature ?? 'lawn';
+      if (paving ? nf !== 'lawn' : nf !== 'paving') continue;
+      const ex = x + dx * (paving ? 0.455 : 0.47);
+      const ez = z + dz * (paving ? 0.455 : 0.47);
+      const sx = dx ? (paving ? 0.07 : 0.05) : 0.98;
+      const sz = dz ? (paving ? 0.07 : 0.05) : 0.98;
+      if (paving) b.add('box', '#fdfbf6', [ex, top + 0.015, ez], [sx, 0.05, sz]);
+      else b.add('box', '#3f8f3a', [ex, top - 0.02, ez], [sx, 0.03, sz]);
     }
   }
 
@@ -694,25 +859,36 @@ export class ChunkRenderer {
         if (this.level >= 2) b.add('cylinder', '#7fd0f0', [x, y + 0.505, z], [0.34, 0.01, 0.34]);
         break;
       case 'bollard':
-        b.add('cylinder', '#6f7175', [x, y + 0.2, z], [0.14, 0.4, 0.14]);
+        b.add('cylinder', this.level >= 4 ? '#f2efe8' : '#6f7175', [x, y + 0.2, z], [0.14, 0.4, 0.14]);
+        if (this.level >= 4) b.add('sphere', PALETTE.flower[(((Math.floor(x) + Math.floor(z)) % PALETTE.flower.length) + PALETTE.flower.length) % PALETTE.flower.length], [x, y + 0.44, z], [0.2, 0.12, 0.2]); // a flower cap
         break;
       case 'pillar':
-        b.add('box', '#b8b4aa', [x, y + 0.45, z], [0.32, 0.9, 0.32]);
+        b.add('box', this.level >= 4 ? '#e9e4d8' : '#b8b4aa', [x, y + 0.45, z], [0.32, 0.9, 0.32]);
         b.add('box', '#9d998f', [x + 0.1, y + 0.95, z], [0.2, 0.12, 0.3]);
+        if (this.level >= 4) b.add('sphere', '#4f9a4a', [x + 0.12, y + 0.5, z + 0.12], [0.14, 0.6, 0.12]); // ivy up the sunny side
         break;
       case 'post':
         b.add('cylinder', '#5a4636', [x, y + 0.3, z], [0.12, 0.6, 0.12]);
+        if (this.level >= 4) b.add('cylinder', '#d9a441', [x, y + 0.5, z], [0.16, 0.05, 0.16]); // a brass band
         break;
       case 'stall':
-        b.add('box', '#9a8a70', [x, y + 0.25, z], [0.8, 0.5, 0.6]);
+        b.add('box', this.level >= 4 ? '#c9a77a' : '#9a8a70', [x, y + 0.25, z], [0.8, 0.5, 0.6]);
         b.add('box', r.next() < 0.5 ? '#b5655a' : '#5a7fb5', [x, y + 0.62, z], [0.95, 0.06, 0.75]);
+        if (this.level >= 4) for (let i = 0; i < 3; i++) b.add('sphere', ['#ff9a5a', '#8be06b', '#ffd23f'][i], [x - 0.25 + i * 0.25, y + 0.54, z + 0.1], 0.12); // produce
         break;
       case 'drain':
         b.add('box', '#3d3a35', [x, y + 0.02, z], [0.6, 0.04, 0.6]);
+        if (this.level >= 4) b.add('box', PALETTE.water, [x, y + 0.045, z], [0.5, 0.01, 0.5]);
         break;
       default:
         b.add('cylinder', '#6b5a45', [x, y + 0.12, z], [0.36, 0.24, 0.36]);
-        b.add('cylinder', '#7d6a55', [x, y + 0.25, z], [0.3, 0.02, 0.3]);
+        b.add('cylinder', this.level >= 4 ? '#7fb35a' : '#7d6a55', [x, y + 0.25, z], [0.3, 0.02, 0.3]);
+        if (this.level >= 4) {
+          // a mossy stump with mushrooms
+          b.add('cylinder', '#f4efe6', [x + 0.2, y + 0.05, z + 0.1], [0.04, 0.1, 0.04]);
+          b.add('sphere', '#e2483c', [x + 0.2, y + 0.11, z + 0.1], [0.12, 0.06, 0.12]);
+          b.add('sphere', '#ffe9a0', [x - 0.18, y + 0.06, z + 0.16], [0.08, 0.05, 0.08]);
+        }
     }
   }
 
