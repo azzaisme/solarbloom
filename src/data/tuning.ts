@@ -458,4 +458,53 @@ export const TUNING = {
     /** Manual pulse right next to a machine boosts its next trigger. */
     overchargeSeconds: 12,
   },
+
+  /**
+   * Look 6 (#169, spike #170, docs/design/cultivation.md): every tile state change plays out as a process. The sim
+   * keeps its own timings (visual catch-up); these are the visual durations in sim seconds. Hypotheses, picked by
+   * hand and checked with the pacing bots (not people).
+   */
+  transitions: {
+    /** concrete softening: one `restore.seep` step eases in from the restored neighbour's side */
+    soften: 3,
+    /** concrete → moss creep */
+    moss: 6,
+    /** moss/concrete → growing → restored, by who restored it (the sim still restores at its own moment) */
+    restore: { pulse: 12, broad: 10, auto: 8, fast: 5 },
+    /** stages of the restore sequence, as shares of its duration: [start, end] */
+    restoreStages: { fracture: [0, 0.08], heave: [0.08, 0.34], crumble: [0.34, 0.52], sprout: [0.46, 0.7], knit: [0.7, 1] },
+    /** bloom grow-in, by the level reached (index 2..4); automatic nurtures play at `autoMult` */
+    bloom: [0, 0, 3, 4, 5],
+    autoMult: 0.6,
+    /** lush: soak from the water side, and dry back over the last seconds before `lushUntil` */
+    lushSoak: 2.5,
+    lushDry: 10,
+    /** an obstacle cleared by the entry fix crumbles and greens over */
+    unblock: 2,
+    /** visual duration multiplier per ground feature */
+    feature: { lawn: 1, paving: 0.8, road: 1, water: 1.2, clay: 0.9, litter: 1, obstacle: 1, building: 1 } as Record<string, number>,
+    /** mass changes roll out as a wave: delay per tile of distance from the origin, capped */
+    wave: { perTile: 0.05, max: 3 },
+    /** area clear: props wake in a wave from the landmark; fog rolls back across the area */
+    areaWave: { perTile: 0.04, max: 3, prop: 1.5, fog: 3 },
+    /** a tap on a tile mid-transition knocks it along (visual transitions: share of the whole) */
+    knock: { visual: 0.15, bloom: 0.25 },
+  },
+
+  /**
+   * Look 6.8 (#177): the Cultivator, a solar tiller. The one transition that takes gameplay time: it pushes dead
+   * tiles through softening → moss → growing → restored on its own, for energy instead of pulse costs.
+   */
+  cultivator: {
+    radius: 5,
+    routeRadius: 9, // with Fog Seeker
+    driveSpeed: 0.8, // tiles/s
+    softenRate: 20, // pollution/s
+    growSeconds: 3,
+    energyPerSec: 0.5, // drawn while working; parks below drone.reserve of the energy store
+    speedPerLevel: 0.4, // Tiller Speed: +40 % work and drive speed per level
+    /** a tap on a tile it's working: share of the current phase, at most `max` per phase, `gap` s apart */
+    knock: { share: 0.15, max: 3, gap: 0.4 },
+    seedBloom: 2, // Seed Mix: restored tiles start at this bloom
+  },
 } as const;

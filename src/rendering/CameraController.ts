@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { color } from './Materials';
+import { color, PALETTE } from './Materials';
 import { ease, type Tweens } from './Tween';
 
 /**
@@ -21,9 +21,18 @@ export interface ViewProfile {
   /** vertical field of view, degrees */
   farFov: number;
   nearFov: number;
+  /** Past the default (near) zoom, the camera keeps lowering toward this pitch and lens at `closeZoom`. */
+  closeZoom: number;
+  closePitch: number;
+  closeFov: number;
 }
 
-export const VIEW: ViewProfile = { farZoom: 0.5, nearZoom: 1.7, farPitch: 40, nearPitch: 25, farFov: 12, nearFov: 36 };
+/**
+ * Look 4.10 (#154): zoomed out (≤ farZoom) a high, narrow lens that reads like the old isometric grid; the
+ * default zoom (1) is a close three-quarter view with a wide lens, low enough that the skyline rises behind
+ * the area; zooming in further lowers it until the sky shows above the skyline.
+ */
+export const VIEW: ViewProfile = { farZoom: 0.45, nearZoom: 1.0, farPitch: 42, nearPitch: 24, farFov: 12, nearFov: 52, closeZoom: 1.9, closePitch: 19, closeFov: 56 };
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
@@ -60,7 +69,7 @@ export class CameraController {
       fov: 20,
       nearClip: 0.5,
       farClip: 140,
-      clearColor: color('#00000000'),
+      clearColor: color(PALETTE.pure.clear),
     });
     app.root.addChild(e);
     this.entity = e;
@@ -126,6 +135,7 @@ export class CameraController {
   /** Smoothly pans/zooms toward a point; any player pan or zoom takes over immediately. */
   glide(x: number, y: number, z: number, zoom?: number) {
     if (this.cinematic) return;
+    this.anchor = undefined;
     this.goal.set(x, y, z);
     this.clamp();
     if (zoom !== undefined) this.zoomGoal = pc.math.clamp(zoom, this.minZoom, this.maxZoom);
@@ -136,19 +146,52 @@ export class CameraController {
     return this.goal;
   }
 
-  pan(dxPx: number, dyPx: number) {
+  /**
+   * Look 4.4: drag panning keeps the ground point under the pointer fixed. `x, y` is where the pointer is now
+   * (it moved by `dx, dy` since the last call); the ground under the previous position moves to the new one.
+   * Without a position (keys, tests), or when either point is near the horizon, it falls back to a flat pan at
+   * the target's scale.
+   */
+  pan(dxPx: number, dyPx: number, x?: number, y?: number) {
     if (this.cinematic) return;
     this.follow = 12;
-    const wpp = this.worldPerPixel();
-    const yr = (this.yaw * Math.PI) / 180;
-    const right = new pc.Vec3(Math.cos(yr), 0, -Math.sin(yr));
-    const fwd = new pc.Vec3(-Math.sin(yr), 0, -Math.cos(yr));
-    const pr = (this.pitch * Math.PI) / 180;
-    this.goal.x += -right.x * dxPx * wpp + (fwd.x * dyPx * wpp) / Math.sin(pr);
-    this.goal.z += -right.z * dxPx * wpp + (fwd.z * dyPx * wpp) / Math.sin(pr);
-    this.clamp();
+    this.anchor = undefined;
     this.target.copy(this.goal);
+    this.apply();
+    const from = { x: this.goal.x, z: this.goal.z };
+    const a = x !== undefined && y !== undefined ? this.groundAt(x - dxPx, y - dyPx) : undefined;
+    const b = a && this.groundAt(x!, y!);
+    if (a && b) {
+      this.goal.x += a.x - b.x;
+      this.goal.z += a.z - b.z;
+    } else {
+      const wpp = this.worldPerPixel();
+      const yr = (this.yaw * Math.PI) / 180;
+      const right = new pc.Vec3(Math.cos(yr), 0, -Math.sin(yr));
+      const fwd = new pc.Vec3(-Math.sin(yr), 0, -Math.cos(yr));
+      const pr = (this.pitch * Math.PI) / 180;
+      this.goal.x += -right.x * dxPx * wpp + (fwd.x * dyPx * wpp) / Math.sin(pr);
+      this.goal.z += -right.z * dxPx * wpp + (fwd.z * dyPx * wpp) / Math.sin(pr);
+    }
+    this.clamp(from);
+    this.target.copy(this.goal);
+    this.apply();
   }
+
+  /**
+   * The ground point (y = target height) under a CSS-pixel screen point, or undefined when the ray runs at or
+   * above the horizon or meets the ground too far away to be useful (pan and zoom anchors fall back then).
+   */
+  groundAt(x: number, y: number, maxDist = this.dist * 6 + 40): pc.Vec3 | undefined {
+    const { o, d } = this.ray(x, y);
+    if (d.y > -0.02) return undefined;
+    const t = (this.target.y - o.y) / d.y;
+    if (t < 0 || t > maxDist) return undefined;
+    return new pc.Vec3(o.x + d.x * t, this.target.y, o.z + d.z * t);
+  }
+
+  /** A zoom toward a screen point: the ground there stays under it while the zoom eases in. */
+  private anchor?: { sx: number; sy: number; w: pc.Vec3 };
 
   /** Immediate zoom (tests, resets). */
   setZoom(z: number) {
@@ -156,19 +199,67 @@ export class CameraController {
     this.apply();
   }
 
-  zoomBy(factor: number) {
+  /** Zoom by a factor, toward a screen point (wheel cursor, pinch centre) when one is given. */
+  zoomBy(factor: number, x?: number, y?: number) {
     if (this.cinematic) return;
     if (this.follow < 12) {
       this.goal.copy(this.target); // stop a glide where it is
       this.follow = 12;
     }
     this.zoomGoal = pc.math.clamp(this.zoomGoal * factor, this.minZoom, this.maxZoom);
+    const w = x !== undefined && y !== undefined ? this.groundAt(x, y) : undefined;
+    this.anchor = w ? { sx: x!, sy: y!, w } : undefined;
   }
 
-  private clamp() {
+  /** How far past the pan bounds the edge of the view may show (the fog and the far city are scenery). */
+  edgeSlack = 6;
+
+  /**
+   * Look 4.4: keep the visible ground, not just the centre, inside the bounds. The ground footprint of the
+   * screen's sides and bottom (the top runs to the horizon close up) is measured relative to the target; the
+   * target's range shrinks so those edges stay within the bounds plus `edgeSlack`. Where the view is wider
+   * than the bounds on an axis, it centres on them.
+   */
+  private clamp(from?: { x: number; z: number }) {
     const b = this.bounds;
-    this.goal.x = pc.math.clamp(this.goal.x, b.minX, b.maxX);
-    this.goal.z = pc.math.clamp(this.goal.z, b.minZ, b.maxZ);
+    if (!from) {
+      // A glide or focus may centre anywhere inside the bounds (an area at the edge gets framed too).
+      this.goal.x = pc.math.clamp(this.goal.x, b.minX, b.maxX);
+      this.goal.z = pc.math.clamp(this.goal.z, b.minZ, b.maxZ);
+      return;
+    }
+    const f = this.footprint();
+    const s = this.edgeSlack;
+    // Player input: never move further past the edge than where the view already is (no snapping back).
+    const axis = (v: number, prev: number, lo: number, hi: number, fLo: number, fHi: number) => {
+      let a = Math.max(lo, lo - s - fLo);
+      let z = Math.min(hi, hi + s - fHi);
+      if (a > z) a = z = (lo + hi) / 2 - (fLo + fHi) / 2;
+      a = Math.max(lo, Math.min(a, prev));
+      z = Math.min(hi, Math.max(z, prev));
+      return pc.math.clamp(v, a, z);
+    };
+    this.goal.x = axis(this.goal.x, from.x, b.minX, b.maxX, f.x0, f.x1);
+    this.goal.z = axis(this.goal.z, from.z, b.minZ, b.maxZ, f.z0, f.z1);
+  }
+
+  /** Ground footprint of the screen edges (sides, bottom and, when it meets the ground, the top) around the target. */
+  private footprint() {
+    const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    const w = c.clientWidth;
+    const h = c.clientHeight;
+    const f = { x0: 0, x1: 0, z0: 0, z1: 0 };
+    if (!w || !h) return f;
+    const reach = this.dist * 2.5;
+    for (const [sx, sy] of [[0, h], [w, h], [0, h / 2], [w / 2, h], [w, h / 2], [0, 0], [w, 0], [w / 2, 0]]) {
+      const p = this.groundAt(sx, sy, reach);
+      if (!p) continue;
+      f.x0 = Math.min(f.x0, p.x - this.target.x);
+      f.x1 = Math.max(f.x1, p.x - this.target.x);
+      f.z0 = Math.min(f.z0, p.z - this.target.z);
+      f.z1 = Math.max(f.z1, p.z - this.target.z);
+    }
+    return f;
   }
 
   /** Smooth cinematic move (core reveal). */
@@ -176,6 +267,7 @@ export class CameraController {
     const from = this.target.clone();
     const z0 = this.zoom;
     this.cinematic = true;
+    this.anchor = undefined;
     this.tweens.add(dur, (k) => {
       this.target.set(from.x + (x - from.x) * k, from.y + (y - from.y) * k, from.z + (z - from.z) * k);
       this.goal.copy(this.target);
@@ -185,6 +277,7 @@ export class CameraController {
 
   reset() {
     this.follow = 12;
+    this.anchor = undefined;
     this.goal.set(4, 0, 4);
     this.zoomGoal = 1;
   }
@@ -200,6 +293,19 @@ export class CameraController {
       const k = 1 - Math.exp(-dt * this.follow);
       this.zoom += (this.zoomGoal - this.zoom) * k;
       this.target.lerp(this.target, this.goal, k);
+      if (this.anchor) {
+        // Zoom toward the cursor: move the view so the anchored ground point stays under it.
+        this.apply();
+        const p = this.groundAt(this.anchor.sx, this.anchor.sy);
+        if (p) {
+          const from = { x: this.goal.x, z: this.goal.z };
+          this.goal.x += this.anchor.w.x - p.x;
+          this.goal.z += this.anchor.w.z - p.z;
+          this.clamp(from);
+          this.target.copy(this.goal);
+        }
+        if (!p || Math.abs(this.zoomGoal - this.zoom) < 1e-4 * this.zoomGoal) this.anchor = undefined;
+      }
     }
     this.apply();
     if (this.shakeT > 0) {
@@ -225,8 +331,9 @@ export class CameraController {
 
   private apply() {
     const n = this.nearness();
-    this.pitch = VIEW.farPitch + (VIEW.nearPitch - VIEW.farPitch) * n;
-    this.fov = VIEW.farFov + (VIEW.nearFov - VIEW.farFov) * n;
+    const k = smooth(pc.math.clamp((this.zoom - VIEW.nearZoom) / (VIEW.closeZoom - VIEW.nearZoom), 0, 1));
+    this.pitch = VIEW.farPitch + (VIEW.nearPitch - VIEW.farPitch) * n + (VIEW.closePitch - VIEW.nearPitch) * k;
+    this.fov = VIEW.farFov + (VIEW.nearFov - VIEW.farFov) * n + (VIEW.closeFov - VIEW.nearFov) * k;
     this.viewHeight = this.fitHeight() / this.zoom;
     this.dist = this.viewHeight / Math.tan((this.fov * Math.PI) / 360);
     const c = this.cam;
@@ -234,7 +341,9 @@ export class CameraController {
     // Clip planes hug the view: near just in front of the closest ground on screen (and anything tall on it),
     // far past the haze, so depth precision stays good from close-up to the city overview.
     c.nearClip = Math.max(0.3, this.dist - this.viewHeight * 2.2 - 12);
-    c.farClip = this.dist + this.hazeEnd + 60;
+    // Just past the haze, no further: everything beyond is the haze colour, and a deeper far plane would draw
+    // the city behind it. The sky dome and the skyline are a backdrop that fits itself inside (Look 4.7, 4.8).
+    c.farClip = this.dist + this.hazeEnd + 10;
     const yr = (this.yaw * Math.PI) / 180;
     const pr = (this.pitch * Math.PI) / 180;
     const t = this.target;
@@ -257,5 +366,21 @@ export class CameraController {
 
   toScreen(p: pc.Vec3): pc.Vec3 {
     return this.cam.worldToScreen(p);
+  }
+
+  /**
+   * Look 4.6: a world point as screen-space UI sees it. Undefined when it is behind (or nearly at) the camera,
+   * past the haze, or further than `margin` CSS pixels off screen, so labels are never drawn mirrored from
+   * behind the camera. `scale` shrinks far labels and grows near ones a little (1 at the target's distance).
+   */
+  onScreen(p: pc.Vec3, margin = 60): { x: number; y: number; depth: number; scale: number } | undefined {
+    const e = this.entity.getPosition();
+    const f = this.entity.forward;
+    const depth = (p.x - e.x) * f.x + (p.y - e.y) * f.y + (p.z - e.z) * f.z;
+    if (depth < this.cam.nearClip + 0.2 || depth > this.dist + this.hazeEnd) return undefined;
+    const s = this.cam.worldToScreen(p);
+    const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    if (s.x < -margin || s.y < -margin || s.x > c.clientWidth + margin || s.y > c.clientHeight + margin) return undefined;
+    return { x: s.x, y: s.y, depth, scale: pc.math.clamp(this.dist / depth, 0.7, 1.25) };
   }
 }

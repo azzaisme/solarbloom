@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 import type { MachineData } from '../core/types';
 import { GROUND } from '../core/GameState';
 import type { Sim } from '../gameplay/Sim';
-import { color, mat, PALETTE, uniqueMat } from './Materials';
+import { color, glow, mat, PALETTE, uniqueMat } from './Materials';
 import { group, shape } from './Shapes';
 import { TUNING } from '../data/tuning';
 import { SLAB_TOP } from './SceneBuilder';
@@ -11,6 +11,7 @@ import { foliageMaterial, treeMesh } from './Foliage';
 import { treeGeo } from './TreeGen';
 import { machineRunning } from './FaunaPlan';
 import { arcPath, ball, bezier, dome, latheAuto, matOf, part, rbox, rcyl, ring, setMat, tube } from './MachineParts';
+import { cultivatorDock } from './CultivatorVisuals';
 
 interface MachineView {
   m: MachineData;
@@ -210,6 +211,9 @@ export class MachineVisuals {
         break;
       case 'relay':
         this.relay(v);
+        break;
+      case 'cultivator': // Look 6.9: the dock (its tillers are drawn by CultivatorVisuals)
+        cultivatorDock(v.body);
         break;
     }
     if ((m.tier ?? 1) >= 2) this.tier2(v);
@@ -1097,7 +1101,7 @@ export class MachineVisuals {
     if (state === 'awake' && (v.coreKind === 'cistern' || v.coreKind === 'fountain')) {
       const from = v.coreBase.diffuse.clone();
       this.tweens.add(instant ? 0.01 : 1.4, (k) => {
-        v.coreBase!.diffuse = new pc.Color().lerp(from, color(PALETTE.white), k);
+        v.coreBase!.diffuse = new pc.Color().lerp(from, color(PALETTE.surfaces.shell.hex), k);
         v.coreBase!.update();
         v.coreMat!.emissive = new pc.Color().lerp(new pc.Color(0, 0, 0), color(PALETTE.water), k);
         v.coreMat!.update();
@@ -1128,13 +1132,13 @@ export class MachineVisuals {
     }
     if (state === 'awake') {
       const from = v.coreBase.diffuse.clone();
-      const to = color(PALETTE.white);
+      const to = color(PALETTE.surfaces.shell.hex);
       this.tweens.add(instant ? 0.01 : 1.2, (k) => {
         v.coreBase!.diffuse = new pc.Color().lerp(from, to, k);
         v.coreBase!.update();
         v.coreMat!.diffuse = new pc.Color().lerp(color(PALETTE.coreCrystalDormant), color(PALETTE.coreGlow), k);
         v.coreMat!.emissive = new pc.Color().lerp(new pc.Color(0, 0, 0), color(PALETTE.coreGlow), k);
-        v.coreMat!.emissiveIntensity = 1.2;
+        v.coreMat!.emissiveIntensity = glow(1.2); // Look 1.9: the awake core blooms
         v.coreMat!.update();
         if (v.vineMat) {
           v.vineMat.diffuse = new pc.Color().lerp(color(PALETTE.vineDry[1]), color(PALETTE.vine[1]), k);

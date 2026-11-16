@@ -17,7 +17,7 @@ import { pavingGeo, pavingGaps, PAVING_LAYOUTS, planterGeo, railGeo, clutterGeo,
 
 export interface SolidSink {
   grey: number;
-  add(type: VPrim, hex: string, p: [number, number, number], s: [number, number, number] | number): void;
+  add(type: VPrim, hex: string, p: [number, number, number], s: [number, number, number] | number, glow?: number): void;
   addGeo(g: TreeGeo, x: number, y: number, z: number, rotY: number, scale: number): void;
   /** a quad from 4 corners (x, y, z ×4, counter-clockwise from above) with linear colours (r, g, b ×4) */
   quad(p: number[], cols: number[]): void;

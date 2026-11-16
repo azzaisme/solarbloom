@@ -25,6 +25,11 @@ export interface UpgradeDef {
    * in the drawer, which buys cheapest-first). Its level lives on the machine. Unset = global.
    */
   machine?: MachineType;
+  /**
+   * Look 6.8: what the price is paid in (unset = biomass). Energy prices never pass TUNING.machineCostMaxShare
+   * of the energy store, like machine prices since E12 ("price it by what it does").
+   */
+  costKind?: 'energy';
   describe: (nextLevel: number) => string;
   available?: (s: GameState) => boolean;
   lockedReason?: string;
@@ -305,6 +310,75 @@ export const UPGRADES: UpgradeDef[] = [
     describe: (n) => `Every cleared area's bonus +${25 * n}% (from +${25 * (n - 1)}%)`,
     available: (s) => Object.entries(s.areas ?? {}).some(([id, a]) => id !== 'park' && a.fog === 'cleared'),
     lockedReason: 'Wake a landmark beyond the park first',
+  },
+  // Look 6.8: the Cultivator's own upgrades (per machine). Width and speed are paid in energy (it runs on sun),
+  // the seed mix, routing and a second tiller in biomass.
+  {
+    id: 'cultSpeed',
+    group: 'Machines',
+    machine: 'cultivator',
+    costKind: 'energy',
+    name: 'Tiller Speed',
+    icon: '⚙️',
+    baseCost: 25,
+    costMult: 1.8,
+    maxLevel: 3,
+    describe: (n) => `This Cultivator works and drives ${Math.round(TUNING.cultivator.speedPerLevel * n * 100)}% faster`,
+    available: has('cultivator'),
+    lockedReason: 'Build a Cultivator first',
+  },
+  {
+    id: 'cultWidth',
+    group: 'Machines',
+    machine: 'cultivator',
+    costKind: 'energy',
+    name: 'Wide Tines',
+    icon: '🔱',
+    baseCost: 35,
+    costMult: 1.9,
+    maxLevel: 2,
+    describe: (n) => `Works ${n + 1} tiles side by side`,
+    available: has('cultivator'),
+    lockedReason: 'Build a Cultivator first',
+  },
+  {
+    id: 'cultSeed',
+    group: 'Machines',
+    machine: 'cultivator',
+    name: 'Seed Mix',
+    icon: '🌱',
+    baseCost: 160,
+    costMult: 2,
+    maxLevel: 1,
+    describe: () => `Tiles it restores start at bloom ${TUNING.cultivator.seedBloom}`,
+    available: has('cultivator'),
+    lockedReason: 'Build a Cultivator first',
+  },
+  {
+    id: 'cultRoute',
+    group: 'Machines',
+    machine: 'cultivator',
+    name: 'Fog Seeker',
+    icon: '🧭',
+    baseCost: 120,
+    costMult: 2,
+    maxLevel: 1,
+    describe: () => `Seeks out the fog's edge, up to ${TUNING.cultivator.routeRadius} tiles from the dock`,
+    available: has('cultivator'),
+    lockedReason: 'Build a Cultivator first',
+  },
+  {
+    id: 'cultSecond',
+    group: 'Machines',
+    machine: 'cultivator',
+    name: 'Second Tiller',
+    icon: '🚜',
+    baseCost: 300,
+    costMult: 2,
+    maxLevel: 1,
+    describe: () => 'A second tiller works from the same dock',
+    available: has('cultivator'),
+    lockedReason: 'Build a Cultivator first',
   },
 ];
 

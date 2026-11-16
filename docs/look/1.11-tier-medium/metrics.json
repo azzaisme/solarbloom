@@ -1,0 +1,36 @@
+{
+  "tag": "1.11-tier-medium",
+  "query": "?gfx=medium",
+  "renderer": "headless Chromium, SwiftShader (software GL)",
+  "when": "2026-11-16T02:47:41.854Z",
+  "shots": {
+    "full-desktop": {
+      "scene": "Fully restored park",
+      "size": "1280x800",
+      "frameMs": 545.4,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 108,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "medium",
+      "sha1": "747e4980b0eb"
+    },
+    "machines-desktop": {
+      "scene": "Machine cluster (solar, condenser, core)",
+      "size": "1280x800",
+      "frameMs": 603.5,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 110,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "medium",
+      "sha1": "13817ce1c36b"
+    }
+  }
+}

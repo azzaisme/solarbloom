@@ -19,7 +19,7 @@ interface Fly {
   used: boolean;
 }
 
-const COLORS = [PALETTE.pink, PALETTE.flower[1], PALETTE.flower[2], '#ffffff', PALETTE.flower[4], '#8fd3ff'];
+const COLORS = [PALETTE.pink, PALETTE.flower[1], PALETTE.flower[2], PALETTE.pure.white, PALETTE.flower[4], PALETTE.fauna.butterflyBlue];
 
 /**
  * Butterflies drift between blooming tiles near the view. Phase 5 E16: they arrive with the ecosystem's
@@ -75,7 +75,7 @@ export class Butterflies {
       vshape(w, 'box', col, { pos: [s * 0.035, 0, -0.045], scale: [0.05, 0.004, 0.04] });
       wings.push(w);
     }
-    vshape(body, 'capsule', '#3b3b45', { scale: [0.014, 0.05, 0.014], rot: [90, 0, 0] });
+    vshape(body, 'capsule', PALETTE.fauna.body, { scale: [0.014, 0.05, 0.014], rot: [90, 0, 0] });
     root.setLocalScale(0, 0, 0);
     if (this.batchId >= 0) assignBatch(root, this.batchId); // moving every frame: dynamic batch
     this.flies.push({ root, wings, pos: new pc.Vec3(), target: new pc.Vec3(), rest: 0, phase: i * 1.7, speed: 0.6 + hash01(i, 7, 7) * 0.4, leg: i * 100, used: false });

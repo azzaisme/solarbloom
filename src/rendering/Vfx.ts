@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { LOOK } from '../data/look';
 import { color, PALETTE, uniqueMat } from './Materials';
 import { shape } from './Shapes';
 
@@ -54,35 +55,11 @@ const MAX_PARTICLES = 240;
 /** Confetti's own glow, as before Look 3.14 (an emissive of about 0.15). */
 const BASE_GLOW = 0.15;
 
-/** Look 3.14: the neon green of restore targets, pulse previews and restore shockwaves. */
-export const NEON = '#59ff7d';
-
-/**
- * Look 3.14: older one-off effect colours, retuned toward the palette (Materials.PALETTE). Callers keep passing
- * their colour; rings, arcs and tile outlines draw the palette tone instead.
- */
-const RETUNE: Record<string, string> = {
-  '#38d94a': NEON, // chain wave, small combo
-  '#ffb81f': PALETTE.gold, // chain wave, x5
-  '#ff5fb8': PALETTE.pink, // chain wave, x10
-  '#7fe07a': PALETTE.leafFin, // chain arcs
-  '#c8ffa8': PALETTE.leafFin,
-  '#c8ff8a': PALETTE.leafFin,
-  '#9ff7ff': PALETTE.eyeCyan,
-  '#6ff3ff': PALETTE.eyeCyan,
-  '#a8ecff': PALETTE.glass,
-  '#7cf7c8': PALETTE.coreGlow,
-  '#fff3a0': PALETTE.flowerCore,
-  '#ffe9a0': PALETTE.flowerCore,
-  '#ffd25e': PALETTE.gold,
-  '#ffcf4a': PALETTE.gold,
-  '#7fcf5a': PALETTE.moss,
-  '#6cc24a': PALETTE.grassTuft[2],
-};
-export const tone = (hex: string) => RETUNE[hex.toLowerCase()] ?? hex;
+/** Look 3.14: the neon green of restore targets, pulse previews and restore shockwaves (Look 2's signal green). */
+export const NEON = PALETTE.signal.ok;
 
 /** Sparkle and petal colours of a restore. */
-const SPARKLE = ['#ffffff', PALETTE.flowerCore, NEON, '#e9ffd8'];
+const SPARKLE = [PALETTE.pure.white, PALETTE.flowerCore, NEON, PALETTE.glow.mintPale];
 const PETALS = [PALETTE.pink, PALETTE.flower[0], PALETTE.flower[3], PALETTE.flower[1], PALETTE.flower[2]];
 
 /**
@@ -136,11 +113,10 @@ export class Vfx {
     pm.useMetalness = true;
     pm.metalness = 0;
     pm.gloss = 0.4;
-    // Look 3.14: the vertex colour's alpha says how much each particle glows (sparkles, motes) over its colour.
-    pm.emissive = new pc.Color(1, 1, 0.92);
-    pm.emissiveIntensity = 1;
+    // Look 1.9: sparkles (bursts, frenzy, mega-bloom, drone trails, Look 3.14 motes) glow in their own colour and bloom.
+    pm.emissive = new pc.Color(1, 1, 1);
     pm.emissiveVertexColor = true;
-    pm.emissiveVertexColorChannel = 'a';
+    pm.emissiveIntensity = LOOK.emissive.particles;
     pm.update();
     const pe = new pc.Entity('particles');
     pe.addComponent('render', { meshInstances: [new pc.MeshInstance(this.pMesh, pm)], castShadows: false, receiveShadows: false });
@@ -235,7 +211,7 @@ export class Vfx {
 
   private setMatColor(m: pc.StandardMaterial, hex: string) {
     const c = new pc.Color();
-    c.fromString(tone(hex));
+    c.fromString(hex);
     m.diffuse = c;
     m.emissive = c;
   }

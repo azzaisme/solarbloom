@@ -169,6 +169,43 @@ export class Sfx {
     this.tone(660, 0.12, { vol: 0.04, glide: 1.5, type: 'triangle' });
   }
 
+  /**
+   * Look 6.10: one sound per stage of a living transition, layered across tiles but rate-limited per stage, so
+   * a big chain is a texture of cracks and pops rather than a wall of noise.
+   */
+  private stageAt: Record<string, number> = {};
+  stage(kind: 'crack' | 'grind' | 'creak' | 'thud' | 'sprout' | 'rustle' | 'hum') {
+    const now = performance.now() / 1000;
+    const gap = kind === 'hum' ? 0.9 : kind === 'crack' ? 0.07 : 0.16;
+    if (now - (this.stageAt[kind] ?? -9) < gap) return;
+    this.stageAt[kind] = now;
+    switch (kind) {
+      case 'crack': // stone crack and snap
+        this.noise(0.07, 0.1, 2600);
+        this.tone(1900 + Math.random() * 600, 0.04, { vol: 0.04, type: 'square', glide: 0.5 });
+        break;
+      case 'grind': // grinding, crumbling
+        this.noise(0.28, 0.07, 260);
+        break;
+      case 'creak': // root creak
+        this.tone(120 + Math.random() * 40, 0.32, { vol: 0.05, type: 'sawtooth', glide: 1.45, attack: 0.06 });
+        break;
+      case 'thud': // soft soil thud
+        this.tone(95, 0.16, { vol: 0.12, glide: 0.55 });
+        break;
+      case 'sprout': // sprout pop
+        this.tone(760 + Math.random() * 200, 0.08, { vol: 0.06, glide: 1.6 });
+        break;
+      case 'rustle': // turf rustle
+        this.noise(0.32, 0.035, 1700);
+        break;
+      case 'hum': // the Cultivator's hum and tine whirr
+        this.tone(110, 0.8, { vol: 0.025, type: 'sawtooth', attack: 0.2 });
+        this.tone(440, 0.5, { vol: 0.012, type: 'triangle', glide: 1.1, delay: 0.1 });
+        break;
+    }
+  }
+
   /** Gentle generative pad; layers grow with the garden. */
   update(dt: number) {
     if (!this.ctx || !this.musicGain || !this.music) return;

@@ -12,7 +12,7 @@
  * The machine side of solarpunk: brass irrigation collars with a little status light round grown trunks,
  * glass sun-petals on the Sun-Catcher Birch, and moss-jar lanterns on Radiant trees.
  */
-import { PALETTE } from './Materials';
+import { PALETTE } from './Palette';
 
 export type Species = 'oak' | 'cherry' | 'birch' | 'pine' | 'willow';
 export const SPECIES: Species[] = ['oak', 'cherry', 'birch', 'pine', 'willow'];
@@ -360,20 +360,45 @@ interface Palette {
   dark: C;
 }
 function leafPalette(sp: Species, R: () => number, stage: TreeStage): Palette {
-  // Look 3.7: colours come from PALETTE.treeLeaf; each tree sits somewhere between the species' two ends
-  // (the same one R() draw as before, so variants keep their look). Radiant oaks lean to the warmer end.
-  const [a, b] = PALETTE.treeLeaf[sp];
-  const k = R() * (sp === 'oak' && stage === 4 ? 0.6 : 1);
-  return { base: mix(hex(a[0]), hex(b[0]), k), light: mix(hex(a[1]), hex(b[1]), k), dark: mix(hex(a[2]), hex(b[2]), k) };
+  const j = (a: number, b: number) => lerp(a, b, R());
+  switch (sp) {
+    case 'cherry': {
+      // pink when it first blooms, the full pink crown later; Thriving leafs out a little green
+      const h = j(...PALETTE.leaf.hue.cherry);
+      return { base: hsl(h, 62, 76), light: hsl(h + 8, 70, 88), dark: hsl(h - 6, 45, 56) };
+    }
+    case 'birch': {
+      const h = j(...PALETTE.leaf.hue.birch);
+      return { base: hsl(h, 54, 34), light: hsl(h - 12, 62, 52), dark: hsl(h + 26, 46, 18) };
+    }
+    case 'pine': {
+      const h = j(...PALETTE.leaf.hue.pine);
+      return { base: hsl(h, 42, 32), light: hsl(h - 14, 48, 50), dark: hsl(h + 10, 40, 18) };
+    }
+    case 'willow': {
+      const h = j(...PALETTE.leaf.hue.willow);
+      return { base: hsl(h, 48, 38), light: hsl(h - 12, 58, 56), dark: hsl(h + 22, 42, 20) };
+    }
+    default: {
+      const h = j(...PALETTE.leaf.hue.oak) - (stage === 4 ? 6 : 0);
+      return { base: hsl(h, 52, 30), light: hsl(h - 14, 60, 47), dark: hsl(h + 28, 50, 15) };
+    }
+  }
 }
 
-const BARK = Object.fromEntries(SPECIES.map((s) => [s, hex(PALETTE.treeBark[s])])) as Record<Species, C>;
-const BRASS = hex('#d9a441');
-const CREAM = hex('#f6efdc');
-const CYAN = hex('#6fe3e0');
-const GLOW = hex('#ffe9a3');
-const NAVY = hex('#24406e');
-const MULCH = hex(PALETTE.treeMulch);
+const BARK: Record<Species, C> = {
+  oak: hsl(26, 32, 34),
+  cherry: hsl(12, 30, 32),
+  birch: hsl(40, 18, 92),
+  pine: hsl(22, 30, 28),
+  willow: hsl(30, 26, 36),
+};
+const BRASS = hex(PALETTE.trim.brass);
+const CREAM = hex(PALETTE.plastic.lantern);
+const CYAN = hex(PALETTE.aqua.teal);
+const GLOW = hex(PALETTE.glow.honey);
+const NAVY = hex(PALETTE.solar.navy);
+const MULCH = hsl(25, 38, 24);
 
 /** One crown "anchor": where a limb ends and a foliage clump sits. */
 interface Anchor {
@@ -542,7 +567,7 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
       const face = norm(add(SUN, [Math.cos(a) * 0.4, 0.2, Math.sin(a) * 0.4]));
       plate(B, add(p, mul(face, -0.004)), 0.072 * S, face, BRASS, 0.85);
       plate(B, p, 0.058 * S, face, NAVY, 0.85);
-      plate(B, add(p, mul(face, 0.003)), 0.03 * S, face, hex('#4fb0ad'), 0.85);
+      plate(B, add(p, mul(face, 0.003)), 0.03 * S, face, hex(PALETTE.leaf.teal), 0.85);
     }
   }
 }
@@ -632,7 +657,7 @@ function radiant(B: Buf, R: () => number, sp: Species, S: number) {
     const a = R() * Math.PI * 2;
     const y = (sp === 'pine' ? 0.5 + R() * 0.6 : sp === 'birch' ? 0.95 + R() * 0.35 : 0.68 + R() * 0.3) * S;
     const rr = (sp === 'birch' ? 0.25 : sp === 'pine' ? 0.3 * (1.3 - y) : 0.42) * S;
-    puff(B, { c: [Math.cos(a) * rr, y, Math.sin(a) * rr], r: [0.022, 0.022, 0.022], base: hex('#ffd34d'), light: hex('#fff3b0'), dark: hex('#e7b54a'), flex: 0.9, seed: i, detail: 0, lump: 0 });
+    puff(B, { c: [Math.cos(a) * rr, y, Math.sin(a) * rr], r: [0.022, 0.022, 0.022], base: hex(PALETTE.glow.gold), light: hex(PALETTE.glow.sun), dark: hex(PALETTE.glow.sunDark), flex: 0.9, seed: i, detail: 0, lump: 0 });
   }
 }
 
@@ -640,8 +665,9 @@ function radiant(B: Buf, R: () => number, sp: Species, S: number) {
 export function buildShrub(variant: number, lod: Lod = 1): TreeGeo {
   const B = new Buf();
   const R = rng(variant * 9973 + 7);
-  const h = 98 + R() * 30;
-  const pal = { base: hsl(h, 55, 40), light: hsl(h - 20, 66, 58), dark: hsl(h + 16, 45, 24) };
+  const [h0, h1] = PALETTE.leaf.hue.shrub;
+  const h = h0 + R() * (h1 - h0);
+  const pal = { base: hsl(h, 48, 38), light: hsl(h - 18, 58, 56), dark: hsl(h + 16, 42, 22) };
   const n = 2 + Math.floor(R() * 2);
   const det = lod === 0 ? 0 : 1;
   for (let i = 0; i < n; i++) {
@@ -654,7 +680,7 @@ export function buildShrub(variant: number, lod: Lod = 1): TreeGeo {
   if (R() < 0.35)
     for (let i = 0; i < 4; i++) {
       const a = R() * Math.PI * 2;
-      puff(B, { c: [Math.cos(a) * 0.12, 0.2 + R() * 0.05, Math.sin(a) * 0.12], r: [0.025, 0.02, 0.025], base: hex(['#ff7eb6', '#ffd23f', '#ffffff', '#b48cff'][i % 4]), light: [1, 1, 1], dark: hex('#e88aa8'), flex: 0.3, seed: i, detail: 0, lump: 0 });
+      puff(B, { c: [Math.cos(a) * 0.12, 0.2 + R() * 0.05, Math.sin(a) * 0.12], r: [0.025, 0.02, 0.025], base: hex([PALETTE.flowers.pink, PALETTE.flowers.yellow, PALETTE.flowers.white, PALETTE.flowers.lavender][i % 4]), light: [1, 1, 1], dark: hex(PALETTE.flowers.petalShade), flex: 0.3, seed: i, detail: 0, lump: 0 });
     }
   return B.done();
 }

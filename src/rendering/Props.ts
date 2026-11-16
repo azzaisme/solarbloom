@@ -278,7 +278,7 @@ export type ClutterKind = 'ac' | 'pipes' | 'crate' | 'bricks' | 'rubble' | 'vent
 /** Dead ground gets debris; restored ground tidier, decorative props. */
 export const CLUTTER_DEAD: ClutterKind[] = ['rubble', 'bricks', 'crate', 'pot', 'ac', 'pipes', 'vent', 'block'];
 export const CLUTTER_ALIVE: ClutterKind[] = ['lantern', 'pot', 'crate', 'block', 'ac', 'pipes', 'vent', 'niche'];
-const WOOD: C = hex(PALETTE.wood);
+const WOOD: C = hex(PALETTE.woodPlank);
 const TERRACOTTA: C = hex(PALETTE.terracotta);
 
 /** One clutter prop, standing at the origin, facing +z (its "front", away from a wall at −z). */

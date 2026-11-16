@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 import type { DroneData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
-import { color, mat, type MatOpts, PALETTE, uniqueMat } from './Materials';
+import { color, glow as glowGain, mat, type MatOpts, PALETTE, uniqueMat } from './Materials';
 import { group, shape } from './Shapes';
 import { ease, type Tweens } from './Tween';
 
@@ -42,7 +42,7 @@ const WIGGLE_S = 0.7;
 const FRENZY_FADE_S = 0.3;
 const smooth = (x: number) => x * x * (3 - 2 * x);
 /** Look 3.20: the Drone Dash level-3 gold (trim ring diffuse / glow), reused as the Frenzy "powered up" gold. */
-const DASH_GOLD = { diffuse: '#ffe27a', glow: '#ffd34d', fin: '#ffd34d' } as const;
+const DASH_GOLD = { diffuse: PALETTE.glow.amber, glow: PALETTE.glow.gold, fin: PALETTE.glow.gold } as const;
 
 /**
  * Look 3.20: a drone accent material, shared by every drone using it, that blends from its normal look toward a
@@ -184,7 +184,7 @@ export class DroneVisuals {
     // can stay anchored to both the emitter and the tile while the drone bobs and leans.
     const beam = group(this.parent, `beam-${d.id}`);
     shape(beam, 'cone', this.accent('beam', PALETTE.eyeCyan, { opacity: 0.2, emissive: PALETTE.eyeCyan, emissiveIntensity: 1.1, doubleSided: true }, [DASH_GOLD.diffuse, DASH_GOLD.glow, 1.1]), { pos: [0, 0, 0] });
-    const beamCore = shape(beam, 'cone', this.accent('beamCore', '#d8fdff', { opacity: 0.32, emissive: PALETTE.eyeCyan, emissiveIntensity: 2.2, doubleSided: true }, ['#fff3c4', DASH_GOLD.glow, 2]), {
+    const beamCore = shape(beam, 'cone', this.accent('beamCore', PALETTE.glow.beam, { opacity: 0.32, emissive: PALETTE.eyeCyan, emissiveIntensity: 2.2, doubleSided: true }, [PALETTE.glow.sun, DASH_GOLD.glow, 2]), {
       scale: [0.38, 1, 0.38],
     });
     beam.enabled = false;
@@ -286,20 +286,20 @@ export class DroneVisuals {
   private palMat(name: string, old: boolean, party: boolean): pc.Material | undefined {
     switch (name) {
       case 'pal_shell':
-        return mat(old ? '#d9cbb0' : PALETTE.shell, { gloss: old ? 0.3 : 0.7 });
+        return mat(old ? PALETTE.plastic.aged : PALETTE.shell, { gloss: old ? 0.3 : 0.7 });
       case 'pal_shellLow':
-        return mat(old ? '#9a8a70' : PALETTE.shellLow, { gloss: 0.65, metal: 0.15 });
+        return mat(old ? PALETTE.plastic.agedLow : PALETTE.shellLow, { gloss: 0.65, metal: 0.15 });
       case 'pal_gold':
-        return this.accent(`trim:${old}`, old ? '#a88f5a' : PALETTE.gold, { gloss: old ? 0.45 : 0.72, metal: 0.55 }, [DASH_GOLD.fin, DASH_GOLD.glow, 0.4]);
+        return this.accent(`trim:${old}`, old ? PALETTE.trim.bronzeAged : PALETTE.gold, { gloss: old ? 0.45 : 0.72, metal: 0.55 }, [DASH_GOLD.fin, DASH_GOLD.glow, 0.4]);
       case 'pal_darkFace':
         return mat(PALETTE.darkFace, { gloss: 0.82 });
       case 'pal_leafFin': {
-        const hex = party ? PALETTE.pink : old ? '#b5a27e' : PALETTE.leafFin;
+        const hex = party ? PALETTE.pink : old ? PALETTE.plastic.agedLeaf : PALETTE.leafFin;
         return this.accent(`fin:${hex}`, hex, { gloss: 0.5 }, [DASH_GOLD.fin, DASH_GOLD.glow, 0.45]);
       }
       case 'pal_leafVein': {
-        const hex = old ? '#7d6e50' : PALETTE.leafVein;
-        return this.accent(`vein:${hex}`, hex, { gloss: 0.45 }, ['#d9a53a', DASH_GOLD.glow, 0.25]);
+        const hex = old ? PALETTE.plastic.agedVein : PALETTE.leafVein;
+        return this.accent(`vein:${hex}`, hex, { gloss: 0.45 }, [PALETTE.glow.sunDark, DASH_GOLD.glow, 0.25]);
       }
       case 'pal_eyeCyan':
         return this.accent(`glow:${old}`, PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: old ? 0.8 : 1.6, gloss: 0.75 }, [DASH_GOLD.diffuse, DASH_GOLD.glow, old ? 0.8 : 1.6]);
@@ -310,7 +310,7 @@ export class DroneVisuals {
   /** The Drone Dash belt ring (level 2 cyan, level 3 gold); goes gold in a Frenzy. */
   private dashRing(dash: number) {
     const gold = dash >= 3;
-    return this.accent(`dash:${gold}`, gold ? DASH_GOLD.diffuse : '#a8ecff', { emissive: gold ? DASH_GOLD.glow : '#6fd3ff', emissiveIntensity: 0.6 }, [DASH_GOLD.diffuse, DASH_GOLD.glow, 0.9]);
+    return this.accent(`dash:${gold}`, gold ? DASH_GOLD.diffuse : PALETTE.glow.cyanSoft, { emissive: gold ? DASH_GOLD.glow : PALETTE.glow.cyan, emissiveIntensity: 0.6 }, [DASH_GOLD.diffuse, DASH_GOLD.glow, 0.9]);
   }
 
   /**
@@ -364,7 +364,7 @@ export class DroneVisuals {
     m.metalness = 0;
     m.gloss = 0.85;
     m.emissive = new pc.Color(1, 1, 1);
-    m.emissiveIntensity = GLOW[glow];
+    m.emissiveIntensity = glowGain(GLOW[glow]); // Look 1.9: the same bloom gain as mat() glows (dim stays below 1)
     // The screen's UVs span one frame (u 0..1/SHEET_FRAMES); zoom about that frame's centre.
     const tx = 1 - 0.02 * wide;
     const ty = 1 - 0.045 * wide;
@@ -382,20 +382,20 @@ export class DroneVisuals {
     // hub drones' trim shows Drone Dash: cyan at level 2, gold at level 3.
     const old = !!d.old;
     const dash = this.dash(d);
-    const eyeCol = old ? '#ffb347' : PALETTE.eyeCyan;
-    shape(body, 'sphere', mat(old ? '#d9cbb0' : PALETTE.white, { gloss: old ? 0.2 : 0.7 }), { scale: [0.36, 0.3, 0.36], shadow: true });
-    const belt = old ? '#9a8a70' : dash >= 3 ? '#ffd34d' : dash >= 2 ? '#6fd3ff' : PALETTE.shell;
+    const eyeCol = old ? PALETTE.glow.orange : PALETTE.eyeCyan;
+    shape(body, 'sphere', mat(old ? PALETTE.plastic.aged : PALETTE.white, { gloss: old ? 0.2 : 0.7 }), { scale: [0.36, 0.3, 0.36], shadow: true });
+    const belt = old ? PALETTE.plastic.agedLow : dash >= 3 ? PALETTE.glow.gold : dash >= 2 ? PALETTE.glow.cyan : PALETTE.shell;
     shape(body, 'cylinder', this.accent(`belt:${belt}`, belt, {}, [DASH_GOLD.fin, DASH_GOLD.glow, 0.4]), { pos: [0, -0.1, 0], scale: [0.26, 0.06, 0.26] });
     if (old) {
       shape(body, 'sphere', mat(PALETTE.rust), { pos: [0.12, 0.06, 0.1], scale: [0.1, 0.07, 0.06] });
-      shape(body, 'box', mat('#8a7a60'), { pos: [-0.1, 0.12, 0.06], scale: [0.08, 0.02, 0.06], rot: [0, 20, 0] });
+      shape(body, 'box', mat(PALETTE.plastic.agedDark), { pos: [-0.1, 0.12, 0.06], scale: [0.08, 0.02, 0.06], rot: [0, 20, 0] });
     }
     if (!old && dash >= 2) shape(body, 'cylinder', this.dashRing(dash), { pos: [0, 0.02, 0], scale: [0.37, 0.025, 0.37] });
     shape(body, 'box', mat(PALETTE.darkFace, { gloss: 0.8 }), { pos: [0, 0.02, 0.15], scale: [0.22, 0.14, 0.06] });
     const eyes = [-0.05, 0.05].map((ex) =>
       shape(body, 'sphere', mat(eyeCol, { emissive: eyeCol, emissiveIntensity: 2 }), { pos: [ex, 0.03, 0.185], scale: [0.04, 0.05, 0.02] }),
     );
-    const finCol = party ? PALETTE.pink : old ? '#b5a27e' : PALETTE.leafFin;
+    const finCol = party ? PALETTE.pink : old ? PALETTE.plastic.agedLeaf : PALETTE.leafFin;
     const finMat = this.accent(`cfin:${finCol}`, finCol, {}, [DASH_GOLD.fin, DASH_GOLD.glow, 0.45]);
     const finL = group(body, 'finL', [-0.17, 0.04, -0.02]);
     shape(finL, 'sphere', finMat, { pos: [-0.1, 0, 0], scale: [0.22, 0.03, 0.12] });
@@ -549,7 +549,7 @@ export class DroneVisuals {
           // Look 3.20: a Frenzy trail streams glowing gold motes back along the path, with the odd sparkle.
           const len = Math.hypot(dx, dz) || 1;
           this.onBeamMote(at, new pc.Vec3(at.x - (dx / len) * 0.4, at.y - 0.1, at.z - (dz / len) * 0.4), DASH_GOLD.glow);
-          if (Math.random() < 0.3) this.onBeamSparkle?.(at, '#fff3c4');
+          if (Math.random() < 0.3) this.onBeamSparkle?.(at, PALETTE.glow.sun);
         } else this.onTrail?.(at);
       }
       this.updateBeam(d, v, w, dt, fz);

@@ -16,6 +16,8 @@ export function initLowPoly(device: pc.GraphicsDevice) {
   // Look 3.1: world-space detail textures over the vertex colours (stone, grass, grain), one draw call still.
   detailTextures.init(device);
   detailTextures.apply(vcMaterial);
+  // Look 1.9: vertex alpha below 1 marks glowing geometry (lit lamps, Radiant flowers); see LookShaders.
+  vcMaterial.setDefine('LOOK_VC_GLOW', true);
   vcMaterial.update();
 }
 

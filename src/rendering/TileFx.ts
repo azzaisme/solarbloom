@@ -1,8 +1,10 @@
 import * as pc from 'playcanvas';
+import { LOOK } from '../data/look';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { SLAB_TOP } from './SceneBuilder';
-import { NEON, tone } from './Vfx';
+import { NEON } from './Vfx';
+import { PALETTE } from './Palette';
 
 interface Flash {
   e: pc.Entity;
@@ -28,6 +30,7 @@ function additive(color: string, opacity: number): pc.StandardMaterial {
   m.useLighting = false;
   m.diffuse = new pc.Color(0, 0, 0);
   m.emissive = hex(color);
+  m.emissiveIntensity = LOOK.emissive.tile; // Look 1.9: restore-tile glows reach the bloom range
   m.opacity = opacity;
   m.blendType = pc.BLEND_NORMAL; // normal blend: tints without blowing light tiles out to white
   m.depthWrite = false;
@@ -146,11 +149,11 @@ export class TileFx {
     this.quad = this.quadMesh([[0, 0]], 0.94);
     this.quad.incRefCount();
     this.tileMesh = glowTileMesh(device);
-    this.glowMat = additive('#ffe27a', 0.16);
+    this.glowMat = additive(PALETTE.glow.amber, 0.16);
     this.glow = new pc.Entity('glow');
     this.root.addChild(this.glow);
     for (let i = 0; i < 64; i++) {
-      const m = glowMaterial('#ffffff');
+      const m = glowMaterial(PALETTE.pure.white);
       m.opacity = 0;
       const e = new pc.Entity('flash');
       e.addComponent('render', { meshInstances: [new pc.MeshInstance(this.tileMesh, m)], castShadows: false, receiveShadows: false });
@@ -226,7 +229,7 @@ export class TileFx {
   }
 
   private place(f: Flash, t: TileData, color: string, lift: number) {
-    f.m.emissive = hex(tone(color));
+    f.m.emissive = hex(color);
     f.m.opacity = 0;
     f.m.update();
     const p = this.tilePos(t);
@@ -248,7 +251,7 @@ export class TileFx {
   }
 
   /** Persistent gold outline on the tile that started a chain, until released. */
-  hold(key: string, t: TileData, color = '#ffcf4a') {
+  hold(key: string, t: TileData, color = PALETTE.trim.amber) {
     const f = this.take();
     f.active = true;
     f.hold = true;

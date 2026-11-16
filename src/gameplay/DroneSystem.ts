@@ -30,8 +30,14 @@ export class DroneSystem {
       this.reservedFor = ds;
       this.reservedCount = ds.length;
     }
-    return this.reserved.has(tileId);
+    return this.reserved.has(tileId) || this.external.has(tileId);
   }
+
+  /**
+   * Look 6.8: tiles other workers (the Cultivator's tillers) have claimed. Same reservation check as drones of
+   * every role, so a drone and a tiller never take the same tile.
+   */
+  readonly external = new Set<string>();
 
   private setTarget(d: DroneData, tileId: string | undefined) {
     this.isReserved(''); // make sure the set matches the drone list first

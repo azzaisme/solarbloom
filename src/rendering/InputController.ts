@@ -2,8 +2,10 @@ export interface InputHandlers {
   hover(x: number, y: number): void;
   leave(): void;
   click(x: number, y: number, button: number): void;
-  pan(dx: number, dy: number): void;
-  zoom(factor: number): void;
+  /** a drag moved by dx, dy; the pointer (or pinch centre) is now at x, y */
+  pan(dx: number, dy: number, x: number, y: number): void;
+  /** zoom by a factor toward a screen point (the wheel cursor or pinch centre) */
+  zoom(factor: number, x?: number, y?: number): void;
   /** A two-finger pinch finished: its overall zoom factor (spread end / start) and how long it took. */
   pinchEnd?(factor: number, ms: number): void;
 }
@@ -77,17 +79,20 @@ export class InputController {
     ptr.x = p.x;
     ptr.y = p.y;
     if (this.pointers.size >= 2) {
+      const ps = [...this.pointers.values()];
+      const cx = (ps[0].x + ps[1].x) / 2;
+      const cy = (ps[0].y + ps[1].y) / 2;
       const d = this.spread();
-      if (this.pinchDist > 0 && d > 0) this.h.zoom(d / this.pinchDist);
+      if (this.pinchDist > 0 && d > 0) this.h.zoom(d / this.pinchDist, cx, cy);
       this.pinchDist = d;
-      this.h.pan(dx / 2, dy / 2);
+      this.h.pan(dx / 2, dy / 2, cx, cy);
       return;
     }
     if (!this.dragging && Math.hypot(p.x - ptr.sx, p.y - ptr.sy) > InputController.DRAG_PX) {
       this.dragging = true;
       this.suppressClick = true;
     }
-    if (this.dragging) this.h.pan(dx, dy);
+    if (this.dragging) this.h.pan(dx, dy, p.x, p.y);
     else if (e.pointerType === 'mouse') this.h.hover(p.x, p.y);
   };
 
@@ -125,6 +130,7 @@ export class InputController {
 
   private wheel = (e: WheelEvent) => {
     e.preventDefault();
-    this.h.zoom(Math.exp(-e.deltaY * 0.0015));
+    const p = this.local(e);
+    this.h.zoom(Math.exp(-e.deltaY * 0.0015), p.x, p.y);
   };
 }
