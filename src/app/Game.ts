@@ -1227,6 +1227,9 @@ export class Game {
       if (source === 'pulse') {
         this.vfx.ring(p, PALETTE.eyeCyan, 1.1, 0.55);
         this.vfx.burst(p, 6, { up: 1.5, speed: 1.4, size: 0.05 });
+        // Look 6.4: the slab fractures under your tap: a short, punchy shake and a burst of grit.
+        this.vfx.burst(p, 8, { up: 1.1, speed: 1.6, size: 0.045, life: 0.6, hex: '#b9ad97' });
+        if (!this.settings.reducedMotion) this.camera.shake(0.035);
         this.sfx.pulse();
       } else if (source === 'broad') this.vfx.ring(p, PALETTE.eyeCyan, 0.8, 0.45);
       else if (source === 'condenser') this.vfx.ring(p, PALETTE.water, 0.8, 0.5);
