@@ -2,7 +2,8 @@
 // must map to a drawn icon, and the HUD's iconize() must leave no emoji behind (text or attributes).
 import { describe, expect, it } from 'vitest';
 import { formatCost } from '../src/core/Economy';
-import { EMOJI_ICONS, EMOJI_RE, ICONS, ROLE_ICONS, hasEmoji, iconize, plain } from '../src/ui/Icons';
+import indexHtml from '../index.html?raw';
+import { EMOJI_ICONS, EMOJI_RE, FAVICON_SVG, ICONS, ROLE_ICONS, hasEmoji, iconize, plain } from '../src/ui/Icons';
 
 /** Every source file's text (Vite glob import). */
 const SOURCES = import.meta.glob(['../src/**/*.ts', '../src/**/*.css'], { query: '?raw', import: 'default', eager: true });
@@ -49,5 +50,10 @@ describe('Look 5.2 icon set', () => {
     expect(hasEmoji(html)).toBe(false);
     expect(html.match(/<svg/g)!.length).toBe(3);
     expect(html.replace(/<svg.*?<\/svg>/g, '·')).toBe('10· 5· 25·');
+  });
+
+  it('the favicon is the logo mark (Look 5.3)', () => {
+    const href = /<link rel="icon" href="data:image\/svg\+xml,([^"]*)"/.exec(indexHtml)![1];
+    expect(decodeURIComponent(href).replace(/'/g, '"')).toBe(FAVICON_SVG);
   });
 });

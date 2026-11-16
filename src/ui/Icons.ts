@@ -268,3 +268,19 @@ export function iconize(html: string): string {
 export function plain(text: string): string {
   return HAS_EMOJI.test(text) ? text.replace(EMOJI_RE, '').replace(/\s{2,}/g, ' ').trim() : text;
 }
+
+/**
+ * Look 5.3: the Solarbloom mark: a lotus opening in front of a rising sun (cream petals, gold edges). Used by
+ * the HUD logo, the intro card and the favicon (index.html carries the same drawing as a data URI).
+ */
+const MARK_BODY =
+  rays(12, 9.5, 7.6, 10.4, '#ffd148', 9).replace('stroke-width="2"', 'stroke-width="1.6"') +
+  `<circle cx="12" cy="9.5" r="5.6" fill="#ffd148"/>` +
+  `<g fill="#fff6e4" stroke="#e0a83a" stroke-width="1" stroke-linejoin="round">` +
+  `<path d="M2.6 15.6c3 4.4 15.8 4.4 18.8 0-4.2 1.9-14.6 1.9-18.8 0z" fill="#b8f59a" stroke="#5fae45"/>` +
+  `<path d="M11.2 18.6C8 18 5.4 15.8 4.4 12.2c-.7-2.2-.6-3.4-.4-4 2.7.8 4.9 2.5 6.1 5 .8 1.8 1.2 3.6 1.1 5.4z"/>` +
+  `<path d="M12.8 18.6c3.2-.6 5.8-2.8 6.8-6.4.7-2.2.6-3.4.4-4-2.7.8-4.9 2.5-6.1 5-.8 1.8-1.2 3.6-1.1 5.4z"/>` +
+  `<path d="M12 5.2c2.7 3 3.3 6.4 3.1 9-.2 2.5-1.4 4.4-3.1 5.6-1.7-1.2-2.9-3.1-3.1-5.6-.2-2.6.4-6 3.1-9z"/></g>`;
+export const LOGO_MARK = `<svg class="mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${MARK_BODY}</svg>`;
+/** The favicon: the mark on its own (standalone SVG with the xmlns a browser needs outside the page). */
+export const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${MARK_BODY}</svg>`;

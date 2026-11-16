@@ -9,7 +9,7 @@ import { AREA_TYPES } from '../data/city';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
 import { SEED_CORE_MACHINES } from '../gameplay/ProgressionSystem';
-import { ICONS, GROUP_ICONS, MACHINE_ICONS, hasEmoji, iconize, installIconDefs, plain } from './Icons';
+import { ICONS, GROUP_ICONS, LOGO_MARK, MACHINE_ICONS, hasEmoji, iconize, installIconDefs, plain } from './Icons';
 import { WORLD_EVENT_INFO } from '../gameplay/WorldEventSystem';
 
 /** Phase 5 E14: `super:<type>` places a Superstructure Core of that family. */
@@ -138,7 +138,8 @@ export class Hud {
       `<button class="slot" id="upgBtn" aria-label="Upgrades (U)"><span class="key">U</span><span class="si">${ICONS.upgrades}</span><span class="sl">Upgrades</span><span class="sc">&nbsp;</span><span class="badge" aria-label="Something useful to buy"></span></button>`,
     ].join('');
     return `
-      <div id="res" class="panel"><div class="logo"><span class="sun"></span>Solarbloom</div>${rows}</div>
+      <div id="logo" role="img" aria-label="Solarbloom">${LOGO_MARK}<span class="wm">Solarbloom</span></div>
+      <div id="res" class="panel">${rows}</div>
       <div id="resInfo" class="panel" role="status" hidden></div>
       <div id="obj" class="panel">
         <h3 id="objTitle">Wake the fountain</h3>
@@ -165,7 +166,7 @@ export class Hud {
       <div id="toasts"></div>
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
       <div id="intro" hidden><div class="panel card-intro">
-        <h2>🌱 Welcome to Solarbloom</h2>
+        <h2>${LOGO_MARK}<span>Welcome to Solarbloom</span></h2>
         <p>This old park is dead and grey, and the city around it is lost in a gloomy fog. Bring it back to life.</p>
         <ol>
           <li><b>Tap a grey tile</b> to restore it. Each tap uses a little ⚡ energy and 💧 water, which refill on their own.</li>
@@ -785,7 +786,7 @@ export class Hud {
 
   /** Rectangles the Lucky Cat must never hide under. */
   blockedRects(): DOMRect[] {
-    return ['#res', '#obj', '#hotbar', '#hint', '#combo'].map((s) => $(this.root, s).getBoundingClientRect());
+    return ['#logo', '#res', '#obj', '#hotbar', '#hint', '#combo'].map((s) => $(this.root, s).getBoundingClientRect());
   }
 
   setPaused(p: boolean) {
