@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { detailTextures, type DetailLayer } from './DetailTex';
 import { LOOK } from '../data/look';
 
 /** Look 2: every colour lives in Palette.ts (docs/art/palette.md); re-exported here for existing imports. */
@@ -15,6 +16,8 @@ export interface MatOpts {
   metal?: number;
   unlit?: boolean;
   doubleSided?: boolean;
+  /** Look 3.1: a world-space detail layer (stone, metal, bark, plaster) over the flat colour. */
+  detail?: DetailLayer;
 }
 
 export function color(hex: string): pc.Color {
@@ -57,6 +60,7 @@ export function mat(hex: string, o: MatOpts = {}): pc.StandardMaterial {
     m.depthWrite = false;
   }
   if (o.doubleSided) m.cull = pc.CULLFACE_NONE;
+  if (o.detail && !o.unlit) detailTextures.apply(m, o.detail);
   m.update();
   cache.set(key, m);
   return m;
@@ -71,6 +75,7 @@ export function surface(name: keyof typeof PALETTE.surfaces, o: MatOpts = {}): p
 /** A private (uncached) material for things that animate their colour, like the Core. */
 export function uniqueMat(hex: string, o: MatOpts = {}): pc.StandardMaterial {
   const m = mat(hex, o).clone() as pc.StandardMaterial;
+  if (o.detail && !o.unlit) detailTextures.apply(m, o.detail);
   m.update();
   return m;
 }

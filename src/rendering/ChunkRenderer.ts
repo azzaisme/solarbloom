@@ -8,11 +8,13 @@ import type { Sim } from '../gameplay/Sim';
 import { CITY_GEN, PARK_LAYOUT } from '../data/city';
 import { buildingPlots, type BuildingPlot } from '../core/Generation';
 import { PALETTE } from './Materials';
-import { flowerAt, flowerCentre, grassTone } from './Palette';
+import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { FoliageBuilder, foliageMaterial, treeMesh, updateWind } from './Foliage';
-import { shrubGeo, treeGeo, warmTemplates } from './TreeGen';
+import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
 import { treeSpot, treeStage } from './TreePlacement';
+import { warmFlora, grassGeo } from './Flora';
+import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, radiantExtras, thrivingExtras, turfTop, type DressCtx, type SolidSink } from './Surfaces';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
 
 /** Small seeded RNG for decoration placement (looks only). */
@@ -148,11 +150,10 @@ class MeshBuilder {
     let k = this.idx.n;
     for (let i = 0; i < t.idx.length; i++) I[k++] = base + t.idx[i];
     this.idx.n = k;
+    this.tris += t.idx.length / 3;
   }
 
-  /** A colour as 0–255 linear vertex channels, greyed for fog. */
-  private rgb(hex: string): [number, number, number] {
-    let [r, g, b] = lin(hex);
+  private shade(r: number, g: number, b: number): [number, number, number] {
     if (this.grey > 0) {
       const l = 0.3 * r + 0.59 * g + 0.11 * b;
       const k = this.grey;
@@ -160,6 +161,90 @@ class MeshBuilder {
       g = g + (l * 0.88 - g) * k;
       b = b + (l * 0.95 - b) * k;
     }
+    return [r, g, b];
+  }
+
+  /** Look 3: stamps a cached template (flex ignored: solid props don't sway), turned about Y and scaled. */
+  addGeo(g: TreeGeo, x: number, y: number, z: number, rotY: number, scale: number) {
+    const nv = g.pos.length / 4;
+    const base = this.pos.n / 3;
+    this.pos.reserve(nv * 3);
+    this.nrm.reserve(nv * 3);
+    this.col.reserve(nv * 4);
+    this.idx.reserve(g.idx.length);
+    const c = Math.cos(rotY), s = Math.sin(rotY);
+    const P = this.pos.a, N = this.nrm.a, C = this.col.a, I = this.idx.a;
+    let o = this.pos.n, k = this.col.n;
+    const grey = this.grey > 0;
+    for (let i = 0; i < nv; i++, o += 3, k += 4) {
+      const px = g.pos[i * 4], pz = g.pos[i * 4 + 2];
+      P[o] = x + (px * c - pz * s) * scale;
+      P[o + 1] = y + g.pos[i * 4 + 1] * scale;
+      P[o + 2] = z + (px * s + pz * c) * scale;
+      const nx = g.nrm[i * 3], nz = g.nrm[i * 3 + 2];
+      N[o] = nx * c - nz * s;
+      N[o + 1] = g.nrm[i * 3 + 1];
+      N[o + 2] = nx * s + nz * c;
+      if (grey) {
+        const [r, gg, b] = this.shade(g.col[i * 4] / 255, g.col[i * 4 + 1] / 255, g.col[i * 4 + 2] / 255);
+        C[k] = Math.round(r * 255);
+        C[k + 1] = Math.round(gg * 255);
+        C[k + 2] = Math.round(b * 255);
+      } else {
+        C[k] = g.col[i * 4];
+        C[k + 1] = g.col[i * 4 + 1];
+        C[k + 2] = g.col[i * 4 + 2];
+      }
+      C[k + 3] = 255;
+    }
+    this.pos.n = this.nrm.n = o;
+    this.col.n = k;
+    let q = this.idx.n;
+    for (let i = 0; i < g.idx.length; i++) I[q++] = base + g.idx[i];
+    this.idx.n = q;
+    this.tris += g.tris;
+  }
+
+  /** Look 3.3: an upward quad with its own colour per corner (linear 0–1), for blended lawn tops. */
+  quad(p: number[], cols: number[]) {
+    const base = this.pos.n / 3;
+    this.pos.reserve(12);
+    this.nrm.reserve(12);
+    this.col.reserve(16);
+    this.idx.reserve(6);
+    for (let i = 0; i < 4; i++) {
+      const o = this.pos.n + i * 3;
+      this.pos.a[o] = p[i * 3];
+      this.pos.a[o + 1] = p[i * 3 + 1];
+      this.pos.a[o + 2] = p[i * 3 + 2];
+      this.nrm.a[o] = 0;
+      this.nrm.a[o + 1] = 1;
+      this.nrm.a[o + 2] = 0;
+      const [r, g, b] = this.shade(cols[i * 3], cols[i * 3 + 1], cols[i * 3 + 2]);
+      const k = this.col.n + i * 4;
+      this.col.a[k] = Math.round(Math.min(1, r) * 255);
+      this.col.a[k + 1] = Math.round(Math.min(1, g) * 255);
+      this.col.a[k + 2] = Math.round(Math.min(1, b) * 255);
+      this.col.a[k + 3] = 255;
+    }
+    this.pos.n += 12;
+    this.nrm.n += 12;
+    this.col.n += 16;
+    // corners run (x0,z0) (x0,z1) (x1,z1) (x1,z0): counter-clockwise seen from above
+    const I = this.idx.a;
+    let q = this.idx.n;
+    I[q++] = base; I[q++] = base + 1; I[q++] = base + 2;
+    I[q++] = base; I[q++] = base + 2; I[q++] = base + 3;
+    this.idx.n = q;
+    this.tris += 2;
+  }
+
+  /** triangles added (perf readout) */
+  tris = 0;
+
+  /** A colour as 0–255 linear vertex channels, greyed for fog. */
+  private rgb(hex: string): [number, number, number] {
+    const [r, g, b] = this.shade(...lin(hex));
     return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
   }
 
@@ -200,6 +285,8 @@ interface ChunkView {
   fading?: boolean;
   /** built at far level of detail (slabs only) */
   far?: boolean;
+  /** Look 3.17: zoom band it was built for (1 mid, 2 near) */
+  band?: number;
   /** Look 4.9: drawn sunk below the revealed city (an area not revealed yet) */
   sunk?: boolean;
   /** Look 6.12: the living surface (every ground slab) and the props of tiles mid-transition */
@@ -256,6 +343,10 @@ export class ChunkRenderer {
   budgetMs = 6;
   private time = 0;
   private lastFocus = { x: 8, z: 8 };
+  /** Look 3.17: current zoom band (1 mid, 2 near) */
+  private band = 1;
+  /** Look 3.16: freeze the wind (deterministic screenshots: `?still`) */
+  static still = typeof location !== 'undefined' && /[?&]still/.test(location.search);
 
   constructor(
     private sim: Sim,
@@ -316,6 +407,14 @@ export class ChunkRenderer {
   /** Settings → Simple fog: one fog layer instead of two. */
   lowFog = false;
 
+  /** Look 3.17: quality tier for foliage, grass and prop density (low | medium | high). */
+  detail: 'low' | 'medium' | 'high' = 'high';
+  setDetail(t: 'low' | 'medium' | 'high') {
+    if (t === this.detail) return;
+    this.detail = t;
+    this.markAll();
+  }
+
   markAll() {
     for (const v of this.views.values()) {
       v.dirty = true;
@@ -339,7 +438,8 @@ export class ChunkRenderer {
     this.time += dt;
     this.warmTrees();
     this.tickGrowing(dt);
-    updateWind(this.time, this.reducedMotion ? 0 : 1); // Phase 5: trees sway (still with reduced motion)
+    // Phase 5 / Look 3.16: foliage, grass, flowers, vines and banners sway; still with reduced motion or `?still`
+    updateWind(ChunkRenderer.still ? 0 : this.time, this.reducedMotion || ChunkRenderer.still ? 0 : 1);
     const ps = this.sim.grid.isPlayable(GROUND) ? this.sim.progression.parkStage() : 0;
     if (ps !== this.parkStage) {
       const prev = this.parkStage;
@@ -351,9 +451,14 @@ export class ChunkRenderer {
     // Zoomed out, all but the middle draw as plain slabs; close up, the low view reaches deep into the haze, so
     // chunks well past the focus (where the haze is thick) do too. Mid zooms keep full detail (no LOD churn while panning).
     this.farFrom = zoom < 0.55 ? 2 : zoom >= 0.9 ? 3.2 : Infinity;
+    // Look 3.17: grass, flowers and clutter thin out between the near and mid zoom bands (hysteresis avoids churn)
+    // 3 = super close (trees get individual leaves on their clusters)
+    if (zoom > 2.5) this.band = 3;
+    else if (zoom > 1.3 && (this.band !== 3 || zoom < 2.3)) this.band = 2;
+    else if (zoom < 1.15) this.band = 1;
     for (const v of this.views.values()) {
       const far = dist(v, focus) / CHUNK > this.farFrom;
-      if (v.ground && !!v.far !== far) v.dirty = true;
+      if (v.ground && (!!v.far !== far || (!far && v.band !== this.band))) v.dirty = true;
     }
     const cx0 = Math.floor(rect.x0 / CHUNK) - 1;
     const cx1 = Math.floor(rect.x1 / CHUNK) + 1;
@@ -428,6 +533,8 @@ export class ChunkRenderer {
     v.ground?.destroy();
     v.trees?.destroy();
     v.fog?.destroy();
+    this.treeTris.delete(v.key);
+    this.groundTris.delete(v.key);
     this.views.delete(v.key);
   }
 
@@ -475,6 +582,30 @@ export class ChunkRenderer {
           if (k < best) [best, this.localMark] = [k, t.id];
         }
     }
+    v.band = this.band;
+    const tierK = this.detail === 'low' ? 0.4 : this.detail === 'medium' ? 0.7 : 1;
+    const grid = s.grid;
+    const map = s.areas.map;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    this.sink = b;
+    this.ctx = {
+      get b() {
+        return self.solidSink();
+      },
+      get fb() {
+        return self.fb;
+      },
+      // hidden (deep fog) chunks keep only the cheap shapes: nothing fine shows through the fog
+      dens: fog === 'hidden' ? 0 : tierK * (this.band >= 2 ? 1 : 0.6),
+      lod: v.far || fog === 'hidden' ? 0 : this.band >= 2 ? 2 : 1,
+      area,
+      areaType: this.areaType,
+      level: this.level,
+      peek: (x, z) => grid.peek(GROUND, x, z),
+      areaAt: (x, z) => map.areaOfCell(x, z),
+      slab: (hex, p, sc) => self.slab(self.sink, hex, p, sc),
+    };
     for (const t of c.tiles) {
       if (!t) continue;
       // Hidden ground is grey; fogged ground is greyed unless restored.
@@ -489,7 +620,10 @@ export class ChunkRenderer {
           trLive++;
         }
       } else if (v.far) this.farTile(b, t, h);
-      else this.tile(b, t, h);
+      else {
+        this.tile(b, t, h);
+        areaEdges(this.ctx, t, h + 0.08); // Look 3.10: railings, vines, banners and clutter on area boundaries
+      }
     }
     // Buildings (generation 2): grey and shuttered in the fog, white with roof gardens once the area is clear.
     if ((s.grid.layer(GROUND)!.gen ?? 1) >= 2) {
@@ -510,6 +644,7 @@ export class ChunkRenderer {
     v.ground = this.setMesh(v.ground, `chunk-${v.key}`, b.build(this.device), vertexColourMaterial(), !v.far); // far chunks: no shadow pass (invisible at that distance, halves their draw calls)
     v.trees = this.setMesh(v.trees, `trees-${v.key}`, fb.build(this.device), foliageMaterial(), !v.far);
     this.treeTris.set(v.key, fb.tris);
+    this.groundTris.set(v.key, b.tris);
     if (tr && tB) {
       // Look 6.12: the living surface casts no shadow (flat slabs), the moving props do.
       v.surface = this.setMesh(v.surface, `surface-${v.key}`, tB.sb.build(this.device), tr.material, false);
@@ -520,29 +655,6 @@ export class ChunkRenderer {
     }
   }
 
-  /**
-   * Look 2.5: restored paving stays stone. Moss grows along two grout edges and in the crack, a tuft or two at a
-   * corner; from Blooming on, tiny flowers in the bed's drift colour sit in the cracks. Stage still reads: young
-   * slabs are just clean, blooming ones flower.
-   */
-  private crackGreen(b: Sink, t: TileData, x: number, z: number, top: number, stage: number) {
-    const sx = hash01(t.x, t.z, 51) < 0.5 ? -1 : 1;
-    const sz = hash01(t.x, t.z, 52) < 0.5 ? -1 : 1;
-    b.add('box', PALETTE.lawn.moss, [x + sx * 0.455, top - 0.006, z], [0.05, 0.012, 0.3 + hash01(t.x, t.z, 53) * 0.5]);
-    b.add('box', PALETTE.lawn.moss, [x, top - 0.006, z + sz * 0.455], [0.2 + hash01(t.x, t.z, 54) * 0.5, 0.012, 0.05]);
-    b.tip = PALETTE.lawn.tuftTip[t.variant % 3];
-    b.add('cone', PALETTE.lawn.tuft[t.variant % 3], [x + sx * 0.44, top + 0.04, z + sz * 0.44], [0.05, 0.08, 0.05]);
-    b.tip = '';
-    if (stage < 2) return;
-    const col = flowerAt(t.x, t.z);
-    const n = stage === 2 ? 2 : 3;
-    for (let i = 0; i < n; i++) {
-      const k = hash01(t.x, t.z, 55 + i) - 0.5;
-      b.add('sphere', col, [x + sx * 0.45, top + 0.03, z + k * 0.7], [0.07, 0.04, 0.07]);
-    }
-    b.add('sphere', flowerCentre(col), [x + sx * 0.45, top + 0.05, z], 0.03);
-  }
-
   /** Look 2.3: the warm stone tone of one restored paving slab (stable per tile). */
   private slabTone(t: TileData): string {
     const s = PALETTE.paving.slabs;
@@ -551,6 +663,7 @@ export class ChunkRenderer {
 
   /** Far level of detail: one coloured slab per tile, with a bump for full bloom. */
   private farTile(b: Sink, t: TileData, h: number) {
+    this.sink = b;
     const f = t.feature ?? 'lawn';
     const dead = DEAD[f] ?? DEAD.lawn;
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
@@ -572,6 +685,21 @@ export class ChunkRenderer {
   private areaType = 'park';
   /** Foliage triangles per loaded chunk (perf readout). */
   readonly treeTris = new Map<string, number>();
+  /** Look 3.17: ground + prop triangles per loaded chunk (perf readout). */
+  readonly groundTris = new Map<string, number>();
+  /** Look 3: what the surface builders (Surfaces.ts) need for the chunk being built */
+  private ctx!: DressCtx;
+  /**
+   * Look 3 × Look 6: the sink the tile being drawn goes into. The chunk's own builder takes everything; a transition
+   * sink takes plain primitives only, so template props and blended turf (addGeo / quad) wait for the static rebuild
+   * when the transition ends.
+   */
+  private sink: Sink = { add() {}, grey: 0 };
+  private solidSink(): SolidSink {
+    const b = this.sink;
+    if (b instanceof MeshBuilder) return b;
+    return { get grey() { return b.grey; }, add: (type, hex, p, sc, glow) => b.add(type as 'box', hex, p, sc, glow), addGeo() {}, quad() {} };
+  }
 
   /** Adds the tile's tree at its stage, unless it's growing on its own right now. True if the tile has one. */
   private addTree(t: TileData, h: number, lod: 0 | 1): boolean {
@@ -581,12 +709,17 @@ export class ChunkRenderer {
     const stage = treeStage(t);
     if (!stage) return false;
     if (this.growing.has(t.id)) return true;
-    this.fb.add(treeGeo(spot.species, stage, spot.variant, lod), t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5, spot.rot, spot.scale);
+    // Look 3.7: close-up trees at near zoom on High; the single-clump version at mid zoom and below
+    const tl: Lod = lod === 1 && this.band >= 2 && this.detail === 'high' ? (this.band === 3 ? 3 : 2) : lod;
+    this.fb.add(treeGeo(spot.species, stage, spot.variant, tl), t.x + 0.5, h + 0.08 + (spot.planter ? 0.16 : 0), t.z + 0.5, spot.rot, spot.scale);
     return true;
   }
 
   /** Fills the tree template cache a few milliseconds per frame after load (no first-pan generation spike). */
-  private warm: Generator<void> | undefined = warmTemplates();
+  private warm: Generator<void> | undefined = (function* () {
+    yield* warmFlora(); // Look 3: grass, flowers and shrubs first (every restored tile uses them)
+    yield* warmTemplates();
+  })();
   private warmTrees() {
     if (!this.warm) return;
     const t0 = performance.now();
@@ -645,6 +778,18 @@ export class ChunkRenderer {
     let n = 0;
     for (const k of this.views.keys()) n += this.treeTris.get(k) ?? 0;
     return n;
+  }
+
+  /** Look 3.17 budget readout: triangles in loaded chunks (ground + props, foliage) and the worst chunk. */
+  detailStats() {
+    let ground = 0, foliage = 0, worst = 0;
+    for (const k of this.views.keys()) {
+      const g = this.groundTris.get(k) ?? 0, f = this.treeTris.get(k) ?? 0;
+      ground += g;
+      foliage += f;
+      worst = Math.max(worst, g + f);
+    }
+    return { chunks: this.views.size, ground, foliage, worstChunk: worst, band: this.band, tier: this.detail };
   }
 
   /** Look of the chunk being built: prop level 0–4, and whether it's the park. */
@@ -766,6 +911,7 @@ export class ChunkRenderer {
   private chunkFb = new FoliageBuilder();
 
   private tile(b: Sink, t: TileData, h: number) {
+    this.sink = b;
     const x = t.x + 0.5;
     const z = t.z + 0.5;
     const f = t.feature ?? 'lawn';
@@ -779,7 +925,9 @@ export class ChunkRenderer {
       } else this.slab(b, dead[t.variant % dead.length], [x, h, z], [0.96, 0.16, 0.96]);
       if (t.feature === 'building') return;
       if (t.id === this.localMark) this.landmark(b, x, h + 0.08, z, t.variant);
+      else if ((t.prop ?? 'stump') === 'stump' && dhash(t.x, t.z, 211) < 0.45) planterBed(this.ctx, t, this.level >= 3, x, z, h + 0.08, 0.82, 0.82); // Look 3.9
       else this.prop(b, t.prop ?? 'stump', x, h + 0.08, z, r);
+      obstacleClutter(this.ctx, t, x, z, h + 0.08); // Look 3.11
       return;
     }
     if (t.occupantId) {
@@ -790,23 +938,28 @@ export class ChunkRenderer {
     switch (t.ground) {
       case 'polluted': {
         const shade = t.pollution > 80 ? dead[(t.variant + 1) % dead.length] : dead[t.variant % dead.length];
+        if (f === 'paving') {
+          // Look 3.2: cracked slabs with weeds in the gaps (scrubbed lighter once the park is swept)
+          paving(this.ctx, t, false, x, z, h, this.inPark && this.level >= 1);
+          if (!(this.inPark && this.level >= 1) && this.inPark) for (let i = 0; i < 2; i++) b.add('sphere', [PALETTE.soilDark, PALETTE.soil][i], [x + r.range(-0.35, 0.35), top + 0.04, z + r.range(-0.35, 0.35)], [0.14, 0.025, 0.09]);
+          break;
+        }
         this.slab(b, shade, [x, h, z], [0.96, 0.16, 0.96]);
         if (f === 'road') {
           if (t.variant % 3 === 0) b.add('box', PALETTE.paving.roadLine, [x, top + 0.004, z], [0.12, 0.01, 0.4]);
         } else if (f === 'water') {
           b.add('box', PALETTE.ground.scum, [x, top + 0.005, z], [0.8, 0.01, 0.8]);
         } else if (this.inPark && this.level >= 1) {
-          // Swept: the litter is gone, a few weeds remain; paving is scrubbed lighter.
-          if (f === 'paving') b.add('box', PALETTE.paving.swept, [x, h + 0.001, z], [0.9, 0.161, 0.9]);
+          // Swept: the litter is gone, a few weeds remain.
           if (t.variant % 3 === 0) b.add('box', PALETTE.paving.grout, [x + r.range(-0.2, 0.2), top + 0.004, z + r.range(-0.2, 0.2)], [r.range(0.2, 0.4), 0.01, 0.03]);
-          if (r.next() < 0.3) b.add('cone', PALETTE.lawn.weedDry, [x + r.range(-0.3, 0.3), top + 0.05, z + r.range(-0.3, 0.3)], [0.06, 0.1, 0.06]);
+          if (r.next() < 0.5) this.fb.add(grassGeo(0, t.variant, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant, 1);
         } else {
           for (let i = 0; i < 1 + (t.variant % 2); i++) b.add('box', PALETTE.paving.crack, [x + r.range(-0.25, 0.25), top + 0.004, z + r.range(-0.25, 0.25)], [r.range(0.3, 0.6), 0.01, 0.035]);
           // Look 2.6: weathered, not flat: a rust streak on hard ground, a dirt patch on soft ground (seeded).
           const wx = hash01(t.x, t.z, 91);
-          if (wx < 0.22 && (f === 'paving' || f === 'obstacle')) b.add('box', PALETTE.ground.rustStreak, [x + (hash01(t.x, t.z, 92) - 0.5) * 0.5, top + 0.003, z], [0.05, 0.008, 0.3 + hash01(t.x, t.z, 93) * 0.3]);
-          else if (wx < 0.3 && f !== 'paving') b.add('sphere', PALETTE.ground.dirt, [x + (hash01(t.x, t.z, 94) - 0.5) * 0.4, top + 0.002, z + (hash01(t.x, t.z, 95) - 0.5) * 0.4], [0.36, 0.02, 0.28]);
-          if (r.next() < 0.4) b.add('cone', PALETTE.lawn.weedDark, [x + r.range(-0.3, 0.3), top + 0.05, z + r.range(-0.3, 0.3)], [0.06, 0.1, 0.06]);
+          if (wx < 0.22 && f === 'obstacle') b.add('box', PALETTE.ground.rustStreak, [x + (hash01(t.x, t.z, 92) - 0.5) * 0.5, top + 0.003, z], [0.05, 0.008, 0.3 + hash01(t.x, t.z, 93) * 0.3]);
+          else if (wx < 0.3) b.add('sphere', PALETTE.ground.dirt, [x + (hash01(t.x, t.z, 94) - 0.5) * 0.4, top + 0.002, z + (hash01(t.x, t.z, 95) - 0.5) * 0.4], [0.36, 0.02, 0.28]);
+          if (r.next() < 0.6) this.fb.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant * 2, 1.1);
           // Leaf litter: groves always, the dilapidated park until its paths are swept.
           if (f === 'litter' || this.inPark) for (let i = 0; i < (this.inPark ? 2 + (t.variant % 3) : 3); i++) b.add('sphere', PALETTE.ground.leafLitter[i % 3], [x + r.range(-0.35, 0.35), top + 0.01, z + r.range(-0.35, 0.35)], [0.16, 0.03, 0.1]);
         }
@@ -819,11 +972,7 @@ export class ChunkRenderer {
         for (let i = 0; i < n; i++) {
           const sx = x + r.range(-0.3, 0.3);
           const sz = z + r.range(-0.3, 0.3);
-          if (t.ground === 'growing') {
-            b.tip = PALETTE.lawn.youngTuftTip[i % 3];
-            b.add('cone', PALETTE.lawn.youngTuft[i % 3], [sx, top + 0.06, sz], [0.05, 0.12, 0.05]);
-            b.tip = '';
-          }
+          if (t.ground === 'growing') this.fb.add(grassGeo(1, t.variant + i, 1), sx, top, sz, i * 1.7, 0.8);
           else b.add('sphere', PALETTE.moss, [sx, top + 0.005, sz], [r.range(0.14, 0.26), 0.05, r.range(0.12, 0.24)]);
         }
         break;
@@ -851,19 +1000,14 @@ export class ChunkRenderer {
    * lawn. All of it is low and inside the tile, so the grid and the restored/dead contrast stay readable.
    */
   private restoredTile(b: Sink, t: TileData, h: number, x: number, z: number, top: number, f: string, r: VRng) {
+    void r;
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
     const grass = grassTone(stage, t.x, t.z);
+    const c = this.ctx;
     if (f === 'paving') {
-      // Clean stone with a planted bed. Look 2.3: each slab its own warm tone, set in darker grout, the odd hairline crack.
-      b.add('box', PALETTE.paving.grout, [x, h - 0.004, z], [1, 0.152, 1]);
-      this.slab(b, this.slabTone(t), [x, h, z], [0.92, 0.16, 0.92]);
-      if (hash01(t.x, t.z, 43) < 0.3) b.add('box', PALETTE.paving.crack, [x + (hash01(t.x, t.z, 44) - 0.5) * 0.4, top + 0.002, z + (hash01(t.x, t.z, 45) - 0.5) * 0.4], [0.18 + hash01(t.x, t.z, 46) * 0.2, 0.006, 0.02]);
-      if (treeSpot(t, this.areaType)?.planter) {
-        // a cream planter with a brass rim for the street tree
-        b.add('box', PALETTE.stone.cream, [x, top + 0.08, z], [0.62, 0.16, 0.62]);
-        b.add('box', PALETTE.trim.brass, [x, top + 0.162, z], [0.66, 0.02, 0.66]);
-        b.add('box', PALETTE.soil, [x, top + 0.165, z], [0.54, 0.01, 0.54]);
-      } else this.crackGreen(b, t, x, z, top, stage);
+      // Look 3.2: clean stone slabs, moss and tiny flowers in the gaps; a street tree stands in a stone planter.
+      paving(c, t, true, x, z, h);
+      if (treeSpot(t, this.areaType)?.planter) planterBed(c, t, true, x, z, top, 0.62, 0.62);
       this.edges(b, t, x, z, top, true);
     } else if (f === 'road') {
       // Look 2.5: a restored road keeps its surface (cleaner), with greenery creeping in from the edges.
@@ -883,75 +1027,23 @@ export class ChunkRenderer {
       return;
     } else {
       this.slab(b, grass, [x, h, z], [1, 0.16, 1]);
+      turfTop(c, t, top); // Look 3.3: corner-blended turf, no square seams between lawns
       this.edges(b, t, x, z, top, false);
-    }
-    const tufts = f === 'paving' ? 0 : stage === 1 ? 4 : 5;
-    const tuftH = stage === 1 ? [0.06, 0.12] : [0.09, 0.2];
-    for (let i = 0; i < tufts; i++) {
-      const ht = r.range(tuftH[0], tuftH[1]);
-      const span = f === 'paving' ? 0.25 : 0.42;
-      b.tip = (stage === 1 ? PALETTE.lawn.youngTuftTip : PALETTE.lawn.tuftTip)[i % 3];
-      b.add('cone', (stage === 1 ? PALETTE.lawn.youngTuft : PALETTE.lawn.tuft)[i % 3], [x + r.range(-span, span), top + ht / 2, z + r.range(-span, span)], [0.055, ht, 0.055]);
-      b.tip = '';
-    }
-    const span = f === 'paving' ? 0.2 : 0.3;
-    if (stage >= 2 && f !== 'paving') {
-      // Flower clusters: tight groups of one colour (seeded), so blooming ground shows patches, not confetti.
-      const clusters = stage === 2 ? 2 : 1;
-      for (let c = 0; c < clusters; c++) {
-        const cx = x + r.range(-span, span);
-        const cz = z + r.range(-span, span);
-        const col = flowerAt(t.x, t.z, c);
-        const n = 3 + ((t.variant + c) % 2);
-        for (let i = 0; i < n; i++) {
-          const a = (i / n) * Math.PI * 2 + r.next();
-          const fx = cx + Math.cos(a) * 0.09;
-          const fz = cz + Math.sin(a) * 0.09;
-          const ht = r.range(0.12, 0.22);
-          b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.02, ht, 0.02]);
-          b.add('sphere', col, [fx, top + ht, fz], [0.13, 0.08, 0.13]);
-        }
-        b.add('sphere', flowerCentre(col), [cx, top + 0.2, cz], 0.06);
+      // Look 3.9: some reservoir clay becomes a raised bed
+      if (f === 'clay' && stage >= 2 && dhash(t.x, t.z, 221) < 0.25 && !treeSpot(t, this.areaType)) {
+        planterBed(c, t, true, x, z, top, 0.9, 0.9);
+        return;
       }
     }
+    grassTufts(c, t, stage, x, z, top, f === 'paving' ? 0.2 : 0.46, f === 'paving' ? 1 : undefined);
+    if (f !== 'paving') flowerDrifts(c, t, stage, x, z, top); // Look 3.4/3.5: species drifts hugging edges
     // Phase 5: a tree tile grows its tree from a sapling (Restored) to Radiant; other Thriving tiles get a seeded mix.
-    if (!this.addTree(t, h, 1) && stage >= 3 && f !== 'paving') {
-      const pick = hash01(t.x, t.z, 61);
-      if (pick < 0.62) this.fb.add(shrubGeo(t.variant, 1), x + (t.variant % 3) * 0.06 - 0.06, top, z, t.variant * 1.7, 1);
-      else if (pick < 0.82) {
-        // tall flower spikes (lupins, foxgloves)
-        const col = PALETTE.flowers.spikes[t.variant % 4];
-        for (let i = 0; i < 3; i++) {
-          const fx = x + r.range(-0.25, 0.25);
-          const fz = z + r.range(-0.25, 0.25);
-          const ht = r.range(0.36, 0.52);
-          b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.025, ht, 0.025]);
-          b.add('cone', col, [fx, top + ht + 0.06, fz], [0.09, 0.22, 0.09]);
-        }
-      } else {
-        // a mossy rock with a fern
-        const rx = x + r.range(-0.2, 0.2);
-        const rz = z + r.range(-0.2, 0.2);
-        b.add('sphere', PALETTE.stone.grey, [rx, top + 0.06, rz], [0.34, 0.2, 0.28]);
-        b.add('sphere', PALETTE.leaf.light, [rx, top + 0.13, rz], [0.24, 0.07, 0.2]);
-        b.add('cone', PALETTE.flowers.stem, [rx + 0.18, top + 0.1, rz - 0.1], [0.12, 0.2, 0.12]);
-      }
-    } else if (stage <= 2 && f !== 'paving' && !treeSpot(t, this.areaType) && hash01(t.x, t.z, 67) < 0.07) {
+    if (!this.addTree(t, h, 1) && stage >= 3 && f !== 'paving') thrivingExtras(c, t, x, z, top);
+    else if (stage <= 2 && f !== 'paving' && !treeSpot(t, this.areaType) && dhash(t.x, t.z, 67) < 0.07) {
       // the odd pebble in young lawns (seeded), so open lawn doesn't repeat exactly
-      b.add('sphere', PALETTE.stone.pebble, [x + r.range(-0.3, 0.3), top + 0.03, z + r.range(-0.3, 0.3)], [0.16, 0.08, 0.13]);
+      b.add('sphere', PALETTE.stone.pebble, [x + (dhash(t.x, t.z, 68) - 0.5) * 0.6, top + 0.03, z + (dhash(t.x, t.z, 69) - 0.5) * 0.6], [0.16, 0.08, 0.13]);
     }
-    if (stage >= 4) {
-      // Phase 4 E05: Radiant: a pale golden glow on the ground and luminous gold flowers above the shrubs.
-      // Look 2.5: paving keeps its stone; its Radiant cue is the gold flowers alone.
-      if (f !== 'paving') b.add('cylinder', PALETTE.flowers.radiantDisc, [x, top + 0.005, z], [0.86, 0.01, 0.86], 0.08);
-      for (let i = 0; i < 4; i++) {
-        const fx = x + r.range(-0.34, 0.34);
-        const fz = z + r.range(-0.34, 0.34);
-        const ht = r.range(0.3, 0.46);
-        b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.02, ht, 0.02]);
-        b.add('sphere', PALETTE.flowers.radiant[i % 2 ? 0 : 1], [fx, top + ht, fz], [0.13, 0.1, 0.13], 0.45);
-      }
-    }
+    if (stage >= 4) radiantExtras(c, t, x, z, top); // Phase 4 E05: Radiant gold, now golden daisies and sunflowers
   }
 
   /**
@@ -1005,12 +1097,12 @@ export class ChunkRenderer {
       const r = new VRng(p.style * 131 + p.x * 7 + p.z * 13);
       for (let i = 0; i < 1 + (p.style % 2); i++) b.add('box', PALETTE.panel, [p.x + 0.6 + i * 0.7, top + 0.2, p.z + 0.6], [0.5, 0.04, 0.4]);
       for (let i = 0; i < 3; i++) b.add('sphere', PALETTE.shrub[i % 3], [p.x + r.range(0.5, p.w - 0.5), top + 0.18, p.z + r.range(0.9, p.d - 0.4)], [0.32, 0.22, 0.32]);
-      for (let i = 0; i < 2; i++) b.add('box', PALETTE.leaf.ivy, [p.x + 0.4 + i * (p.w - 0.8), h + 0.08 + H * 0.5, p.z + p.d - 0.1], [0.12, H * 0.9, 0.03]);
     } else {
       // A rusty water tank or a dead antenna on the roof.
       if (p.style % 3 === 0) b.add('cylinder', PALETTE.building.tank, [p.x + 0.6, top + 0.3, p.z + 0.6], [0.4, 0.45, 0.4]);
       else b.add('box', PALETTE.paving.crack, [p.x + p.w - 0.5, top + 0.4, p.z + 0.5], [0.04, 0.7, 0.04]);
     }
+    buildingDressing(this.ctx, p, h, H, alive); // Look 3.8/3.11: ivy down the facades, wall clutter
   }
 
   /**

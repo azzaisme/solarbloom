@@ -1,0 +1,36 @@
+{
+  "tag": "main-before",
+  "query": "?gfx=high",
+  "renderer": "headless Chromium, SwiftShader (software GL)",
+  "when": "2026-11-16T07:51:17.337Z",
+  "shots": {
+    "full-desktop": {
+      "scene": "Fully restored park",
+      "size": "1280x800",
+      "frameMs": 1282.1,
+      "simTime": 34.1,
+      "restored": 242,
+      "drawCalls": 277,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "high",
+      "sha1": "b7c89ef5a8b9"
+    },
+    "mid-desktop": {
+      "scene": "Mid zoom (restored park)",
+      "size": "1280x800",
+      "frameMs": 1122.3,
+      "simTime": 34.1,
+      "restored": 242,
+      "drawCalls": 266,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "high",
+      "sha1": "40c5756d5412"
+    }
+  }
+}
