@@ -1,12 +1,12 @@
 import * as pc from 'playcanvas';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
-import { mat } from './Materials';
+import { mat, PALETTE } from './Materials';
 import { group, shape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
 
 export type OverlayTone = 'hover' | 'ok' | 'bad' | 'info';
-const TONE: Record<OverlayTone, string> = { hover: '#ffffff', ok: '#7dff9a', bad: '#ff6b6b', info: '#fff0a0' };
+const TONE: Record<OverlayTone, string> = { hover: PALETTE.signal.hover, ok: PALETTE.signal.ok, bad: PALETTE.signal.bad, info: PALETTE.signal.info };
 
 /** Hover frame, placement ghost and radius tiles. */
 export class Overlays {
@@ -29,14 +29,14 @@ export class Overlays {
   ) {
     const root = group(parent, 'overlays');
     this.frame = group(root, 'frame');
-    for (let i = 0; i < 4; i++) this.bars.push(shape(this.frame, 'box', mat('#ffffff', { unlit: true }), { scale: 0.05, receive: false }));
+    for (let i = 0; i < 4; i++) this.bars.push(shape(this.frame, 'box', mat(PALETTE.signal.hover, { unlit: true }), { scale: 0.05, receive: false }));
     this.frame.enabled = false;
     this.ghost = group(root, 'ghost');
     this.ghostBox = shape(this.ghost, 'box', mat(TONE.ok, { opacity: 0.5, unlit: true }), { receive: false });
     this.ghost.enabled = false;
     // Faint tile boundaries, shown only while building.
     this.gridLines = group(root, 'buildGrid');
-    const lineMat = mat('#1d3640', { opacity: 0.45, unlit: true });
+    const lineMat = mat(PALETTE.signal.gridLine, { opacity: 0.45, unlit: true });
     for (const r of sim.grid.rooftops) {
       if (!r.unlocked || r.preview) continue;
       const y = r.origin[1] + r.height + SLAB_TOP + 0.012;
@@ -47,9 +47,9 @@ export class Overlays {
     // First-tile beacon: a bobbing golden arrow + soft glow plate.
     this.beacon = group(root, 'beacon');
     this.beaconArrow = group(this.beacon, 'arrow');
-    shape(this.beaconArrow, 'cone', mat('#ffc428', { emissive: '#ffb000', emissiveIntensity: 0.6 }), { rot: [180, 0, 0], scale: [0.28, 0.34, 0.28] });
-    shape(this.beaconArrow, 'cylinder', mat('#ffc428', { emissive: '#ffb000', emissiveIntensity: 0.6 }), { pos: [0, 0.3, 0], scale: [0.11, 0.3, 0.11] });
-    shape(this.beacon, 'box', mat('#fff3a0', { opacity: 0.5, unlit: true }), { pos: [0, -0.5, 0], scale: [0.9, 0.02, 0.9], receive: false });
+    shape(this.beaconArrow, 'cone', mat(PALETTE.signal.beacon, { emissive: PALETTE.signal.beaconGlow, emissiveIntensity: 0.6 }), { rot: [180, 0, 0], scale: [0.28, 0.34, 0.28] });
+    shape(this.beaconArrow, 'cylinder', mat(PALETTE.signal.beacon, { emissive: PALETTE.signal.beaconGlow, emissiveIntensity: 0.6 }), { pos: [0, 0.3, 0], scale: [0.11, 0.3, 0.11] });
+    shape(this.beacon, 'box', mat(PALETTE.signal.beaconPool, { opacity: 0.5, unlit: true }), { pos: [0, -0.5, 0], scale: [0.9, 0.02, 0.9], receive: false });
     this.beacon.enabled = false;
     this.radiusRoot = group(root, 'radius');
     for (let i = 0; i < 180; i++) { // Phase 4: room for the largest pulse footprint preview (161 tiles)

@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { color } from './Materials';
+import { color, PALETTE } from './Materials';
 import type { Tweens } from './Tween';
 
 /** Tile surfaces sit slightly below the slabs so the gaps read as a soft grid. */
@@ -24,17 +24,17 @@ export class SceneBuilder {
 
   build() {
     const scene = this.app.scene;
-    scene.ambientLight = color('#8a90a3');
+    scene.ambientLight = color(PALETTE.light.ambient);
     // Aerial perspective: the distant city fades into warm haze.
     scene.fog.type = pc.FOG_LINEAR;
-    scene.fog.color = color('#bcd9e6');
+    scene.fog.color = color(PALETTE.sky.fog);
     // Distances (from the camera) are converted to ortho depth by Game once the camera exists.
     scene.fog.start = 46;
     scene.fog.end = 84;
     const sun = new pc.Entity('sun');
     sun.addComponent('light', {
       type: 'directional',
-      color: color('#ffe6bd'),
+      color: color(PALETTE.light.sun),
       intensity: 2.15,
       castShadows: true,
       shadowResolution: 2048,
@@ -48,7 +48,7 @@ export class SceneBuilder {
     this.app.root.addChild(sun);
     this.sun = sun;
     const fill = new pc.Entity('fill');
-    fill.addComponent('light', { type: 'directional', color: color('#b9d7ff'), intensity: 0.35, castShadows: false });
+    fill.addComponent('light', { type: 'directional', color: color(PALETTE.light.fill), intensity: 0.35, castShadows: false });
     fill.setEulerAngles(40, 220, 0);
     this.app.root.addChild(fill);
   }

@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { group, shape } from './Shapes';
-import { mat } from './Materials';
+import { mat, PALETTE } from './Materials';
 
 interface Bird {
   root: pc.Entity;
@@ -31,11 +31,11 @@ export class Birds {
     this.root.enabled = false;
     for (let i = 0; i < 5; i++) {
       const b = group(this.root, 'bird');
-      shape(b, 'sphere', mat('#f4efe6'), { scale: [0.16, 0.1, 0.24] });
-      shape(b, 'sphere', mat('#ffb347'), { pos: [0, 0, 0.13], scale: [0.05, 0.04, 0.06] });
+      shape(b, 'sphere', mat(PALETTE.fauna.gull), { scale: [0.16, 0.1, 0.24] });
+      shape(b, 'sphere', mat(PALETTE.fauna.gullBeak), { pos: [0, 0, 0.13], scale: [0.05, 0.04, 0.06] });
       const wings = [-1, 1].map((sd) => {
         const w = group(b, 'wing', [sd * 0.06, 0.02, 0]);
-        shape(w, 'box', mat('#ffffff', { doubleSided: true }), { pos: [sd * 0.14, 0, 0], scale: [0.28, 0.01, 0.12] });
+        shape(w, 'box', mat(PALETTE.pure.white, { doubleSided: true }), { pos: [sd * 0.14, 0, 0], scale: [0.28, 0.01, 0.12] });
         w.tags.add(sd < 0 ? 'L' : 'R');
         return w;
       });
