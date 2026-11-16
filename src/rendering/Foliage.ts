@@ -182,7 +182,8 @@ const TREE_MAIN_END = /* glsl */ `
 
 let material: pc.StandardMaterial | undefined;
 /** Look 3.7: leaf pattern per quality tier: strength, normal tilt, leaves per tile (about 4 cm leaves) */
-const LEAF_TIER = { low: [0.85, 0, 26, 0], medium: [0.95, 0.35, 26, 0], high: [1, 0.5, 26, 0] } as const;
+// Phase 6: much softer and larger leaves: at full strength the pattern read as scales (broccoli) at play zoom
+const LEAF_TIER = { low: [0.3, 0, 14, 0], medium: [0.35, 0.2, 14, 0], high: [0.4, 0.3, 14, 0] } as const;
 let leafTier: keyof typeof LEAF_TIER = 'high';
 
 /** Look 3.7: the leaf pattern's quality tier (Low skips the per-leaf lighting). */

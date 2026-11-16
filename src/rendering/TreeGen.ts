@@ -369,7 +369,7 @@ function leafPalette(sp: Species, R: () => number, stage: TreeStage): Palette {
     }
     case 'birch': {
       const h = j(...PALETTE.leaf.hue.birch);
-      return { base: hsl(h, 54, 34), light: hsl(h - 12, 62, 52), dark: hsl(h + 26, 46, 18) };
+      return { base: hsl(h, 58, 40), light: hsl(h - 18, 70, 60), dark: hsl(h + 18, 48, 22) };
     }
     case 'pine': {
       const h = j(...PALETTE.leaf.hue.pine);
@@ -377,11 +377,12 @@ function leafPalette(sp: Species, R: () => number, stage: TreeStage): Palette {
     }
     case 'willow': {
       const h = j(...PALETTE.leaf.hue.willow);
-      return { base: hsl(h, 48, 38), light: hsl(h - 12, 58, 56), dark: hsl(h + 22, 42, 20) };
+      return { base: hsl(h, 54, 42), light: hsl(h - 16, 66, 62), dark: hsl(h + 18, 46, 24) };
     }
     default: {
       const h = j(...PALETTE.leaf.hue.oak) - (stage === 4 ? 6 : 0);
-      return { base: hsl(h, 52, 30), light: hsl(h - 14, 60, 47), dark: hsl(h + 28, 50, 15) };
+      // Phase 6: brighter crowns with yellow-green sunlit tops and deep green undersides, like the reference
+      return { base: hsl(h, 56, 38), light: hsl(h - 22, 70, 58), dark: hsl(h + 18, 50, 20) };
     }
   }
 }

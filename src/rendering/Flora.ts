@@ -383,9 +383,10 @@ export function buildTurf(stage: number, variant: number, lod: Lod): TreeGeo {
   const B = new Buf();
   const R = rng(variant * 7121 + stage * 59 + lod);
   const g = lod >= 2 ? 10 : 7;
-  const tall = stage === 1 ? 0.045 : stage === 4 ? 0.07 : 0.06;
+  // Phase 6: a short, soft lawn (the reference's grass is a smooth carpet, not a shag rug)
+  const tall = stage === 1 ? 0.03 : stage === 4 ? 0.042 : 0.036;
   const baseC = hex(PALETTE.bladeBase[stage]);
-  const tipC = hex(PALETTE.bladeTip[stage]);
+  const tipC = mix(hex(PALETTE.bladeTip[stage]), baseC, 0.55); // tips only a little lighter than the roots
   for (let j = 0; j < g; j++)
     for (let i = 0; i < g; i++) {
       const x = -0.5 + (i + 0.15 + R() * 0.7) / g * 1.06 - 0.03;

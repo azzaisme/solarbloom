@@ -145,7 +145,8 @@ export function grassTufts(c: DressCtx, t: TileData, stage: number, x: number, z
   // tufts on top. The carpet goes at mid zoom too, except on Low, where it waits for near zoom.
   if (base === undefined && stage >= 1 && (c.lod === 2 || c.dens >= 0.4))
     c.fb.add(turfGeo(stage, t.variant + Math.floor(hash01(t.x, t.z, 15) * 4), lod), x, top, z, Math.floor(hash01(t.x, t.z, 16) * 4) * (Math.PI / 2), 1);
-  const n = Math.round((base ?? [2, 2, 3, 4, 4][stage]) * c.dens);
+  // Phase 6: open lawn keeps one taller tuft at most (the carpet does the work); edges pass their own `base`
+  const n = Math.round((base ?? [2, 1, 1, 1, 1][stage]) * c.dens);
   for (let i = 0; i < n; i++) {
     const px = x + (hash01(t.x * 7 + i, t.z, 11) - 0.5) * 2 * span;
     const pz = z + (hash01(t.x, t.z * 7 + i, 13) - 0.5) * 2 * span;
