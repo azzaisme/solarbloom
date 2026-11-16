@@ -8,6 +8,21 @@ Baseline shots, each next to the target: [`docs/review/phase6-baseline/`](review
 Everything below was read from the code on `main` (689bea6) or seen in those shots. Frame rates are **not** measured:
 this container renders with SwiftShader (software GL, about 5 fps), so only draw calls are meaningful here.
 
+## Re-render after Look 3 and City 16 (2026-11-16, 09:30 UTC)
+
+Main gained Look 3 (surfaces, foliage, machine models) and City 16 (roads). The same shots, on the merged code:
+[`docs/review/phase6-latest/`](review/phase6-latest/). Draw calls rose from 180–300 to 220–390.
+
+- **Better:** restored lawn is now one continuous textured grass carpet, with no checkerboard. Trees are rounded
+  leafy clusters with real trunks, including pink blossom trees. There are fuller flowers and a modelled solar
+  panel.
+- **Unchanged:** the camera framing (24°, wide lens) and the grey columns behind the park. Paths are still square
+  slabs with gaps, and plants still sit on pale hexagonal pads. The fountain is still a small dark cylinder, there
+  is no other water, and the dead park is still tan slabs.
+
+So E20 is now half done (lawn yes, paths and pads no), and the rest of the order below stands. Camera framing,
+paths and pads, then the fountain and water, give the most visible gains.
+
 ## What the renderer already has (E18 is mostly built)
 
 | Spec item | State on `main` | Where |
