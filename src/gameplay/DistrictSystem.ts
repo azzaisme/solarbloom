@@ -167,16 +167,22 @@ export class DistrictSystem {
     const restored: string[] = [];
     const lusher: string[] = [];
     const max = TUNING.restore.maxBloom;
+    // Look 6.18: the bloom rolls out from the district's first landmark (visual only: the sim changes at once).
+    const W = TUNING.transitions.wave;
+    const origin = this.members(id).map((a) => s.areas.landmark(a)).find((m) => !!m);
+    const delayOf = (t: { x: number; z: number }) => (origin ? Math.min(W.max, W.perTile * Math.hypot(t.x - origin.x, t.z - origin.z)) : 0);
     for (const a of this.members(id)) {
       if (s.areas.fog(a) !== 'cleared') continue;
       for (const t of s.areas.tiles(a)) {
         if (t.occupantId || !isRestorable(t, s.state.machines)) continue;
         if (t.ground !== 'restored') {
+          s.transitions.restore(t, 'neighbourhood', t.ground === 'polluted' ? t.pollution : 0, { quiet: true, delay: delayOf(t) });
           t.ground = 'restored';
           t.bloom = Math.max(1, t.bloom);
           restored.push(t.id);
         } else if (t.bloom < max) {
           t.bloom++;
+          s.transitions.bloom(t, t.bloom, true, delayOf(t));
           lusher.push(t.id);
         } else continue;
         t.pollution = 0;

@@ -6,7 +6,10 @@ import { lin } from '../src/rendering/ChunkRenderer';
 import { LOOK } from '../src/data/look';
 import { lowerTier, TIER_ORDER } from '../src/rendering/Quality';
 
-const hexes = Object.values(PALETTE).flatMap((v) => (Array.isArray(v) ? v : [v]));
+// Look 2 groups the palette into nested families: collect every hex string at any depth.
+const flat = (v: unknown): string[] =>
+  typeof v === 'string' ? (v.startsWith('#') ? [v] : []) : Array.isArray(v) ? v.flatMap(flat) : v && typeof v === 'object' ? Object.values(v).flatMap(flat) : [];
+const hexes = flat(PALETTE);
 
 describe('colour pipeline (Look 1.4)', () => {
   it('vertex colours linearise palette hexes exactly like standard materials do', () => {

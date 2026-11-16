@@ -59,7 +59,13 @@ export class UpgradeSystem {
   /** Next level's price: baseCost × costMult^level (per machine for per-machine upgrades). */
   cost(def: UpgradeDef, m?: MachineData): Big {
     const lvl = def.machine ? this.levelOf(m, def.id) : this.level(def.id);
-    return big(def.baseCost).mul(Decimal.pow(def.costMult, lvl)).ceil();
+    const c = big(def.baseCost).mul(Decimal.pow(def.costMult, lvl)).ceil();
+    // Look 6.8: energy prices stay within reach of the store (never more than machineCostMaxShare of the cap).
+    if (def.costKind === 'energy') {
+      const cap = this.sim.econ.cap('energy');
+      return cap ? c.min(cap.mul(TUNING.machineCostMaxShare).floor().max(1)) : c;
+    }
+    return c;
   }
 
   /**
@@ -81,7 +87,8 @@ export class UpgradeSystem {
     const cost = this.cost(def, m);
     if (lvl >= def.maxLevel) return { ok: false, reason: 'Maxed', cost };
     if (def.machine && m?.type !== def.machine) return { ok: false, reason: 'Not for this machine', cost };
-    if (this.sim.econ.get('biomass').lt(cost)) return { ok: false, reason: `Need ${fmt(cost)} 🌿`, cost };
+    const kind = def.costKind ?? 'biomass';
+    if (this.sim.econ.get(kind).lt(cost)) return { ok: false, reason: `Need ${fmt(cost)} ${kind === 'energy' ? '⚡' : '🌿'}`, cost };
     return { ok: true, cost, machine: m };
   }
 
@@ -99,7 +106,7 @@ export class UpgradeSystem {
       this.sim.bus.emit('action.failed', { reason: st.reason ?? 'Unavailable' });
       return false;
     }
-    if (!this.sim.econ.spend({ biomass: st.cost })) return false;
+    if (!this.sim.econ.spend({ [def.costKind ?? 'biomass']: st.cost })) return false;
     let lvl: number;
     if (def.machine) {
       const target = st.machine!;

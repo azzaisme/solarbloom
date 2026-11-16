@@ -121,8 +121,32 @@ try {
       { extent, lap: lap++ },
     );
 
+  // Look 6 (#180): every lap also sets every kind of transition going around the park (restore, bloom, soften,
+  // moss, lush), so transition meshes are built and folded back again and again.
+  const stir = () =>
+    page.evaluate((lap) => {
+      const g = window.solarbloom;
+      const s = g.sim;
+      if (!s.transitions) return;
+      const kinds = ['restore', 'bloom', 'soften', 'moss'];
+      for (let z = -6; z <= 22; z++)
+        for (let x = -6; x <= 22; x++) {
+          const t = s.grid.get('g', x, z);
+          if (!t || t.blocked || t.occupantId || (x + z + lap) % 3) continue;
+          const k = kinds[(x * 7 + z + lap) % 4];
+          if (k === 'bloom' && t.ground === 'restored' && (x + lap) % 2) s.transitions.lush(t, s.time + 6);
+          else s.transitions.begin(t, k, 2 + ((x + z) % 3), { from: k === 'bloom' ? 1 : 60, dir: 1 + ((x + z) & 3) });
+          g.chunks.markTile(t);
+        }
+    }, lap);
+  const runLapOnly = runLap;
+  const runLapStirred = async () => {
+    await stir();
+    await runLapOnly();
+  };
+
   // Warm-up: a few laps in different directions, then the baseline back at the park.
-  for (let i = 0; i < 3; i++) await runLap();
+  for (let i = 0; i < 3; i++) await runLapStirred();
   const settle = () => page.evaluate(() => new Promise((r) => { let n = 0; const f = () => (++n > 60 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); }));
   await settle();
   const base = await sample();
@@ -131,7 +155,7 @@ try {
   const end = Date.now() + MINUTES * 60000;
   const history = [];
   while (Date.now() < end) {
-    await runLap();
+    await runLapStirred();
     if (lap % 4 === 0) {
       await settle();
       const s = await sample();

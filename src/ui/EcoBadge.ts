@@ -1,6 +1,7 @@
 import { fmt } from '../core/Big';
 import { FAUNA, FAUNA_INFO, faunaGoal, type FaunaId } from '../gameplay/Ecosystem';
 import type { Sim } from '../gameplay/Sim';
+import { ICONS } from './Icons';
 
 type Toast = (html: string, kind?: '' | 'gold' | 'cat', secs?: number) => void;
 
@@ -19,7 +20,7 @@ export class EcoBadge {
     private sim: Sim,
     private toast: Toast,
   ) {
-    const tools = document.querySelector('#obj .tools');
+    const tools = document.querySelector('#chips'); // Look 5.7: the top-right row, where the reference has its Day pill
     if (!tools) return;
     if (!document.getElementById('bioStyle')) {
       const st = document.createElement('style');
@@ -28,12 +29,12 @@ export class EcoBadge {
       document.head.appendChild(st);
     }
     const b = document.createElement('button');
-    b.className = 'chip';
+    b.className = 'chip pill';
     b.id = 'bioBtn';
     b.setAttribute('aria-label', 'Biodiversity');
-    b.innerHTML = '🌱 <span id="bioScore">0</span>';
+    b.innerHTML = `${ICONS.sprout} <span id="bioScore">0</span>`;
     b.addEventListener('click', () => this.explain());
-    tools.insertBefore(b, tools.querySelector('#setBtn'));
+    tools.insertBefore(b, tools.firstChild);
     this.el = b;
     this.num = b.querySelector('#bioScore') as HTMLElement;
   }

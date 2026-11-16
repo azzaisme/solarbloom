@@ -94,6 +94,18 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     unlock: { needs: 'droneHub', label: 'Build a Drone Hub to unlock' },
     cityOnly: true,
   },
+  cultivator: {
+    type: 'cultivator',
+    name: 'Cultivator',
+    icon: '🚜',
+    size: 1,
+    cost: { biomass: 140, energy: 30 },
+    allowedGround: ['restored', 'prepared'],
+    blurb: `A solar tiller: drives over dead ground within ${TUNING.cultivator.radius} tiles of its dock and slowly breaks it into bloom on its own, for energy instead of pulses.`,
+    hotkey: '0',
+    unlock: { needs: 'droneHub', label: 'Build a Drone Hub to unlock' },
+    cityOnly: true,
+  },
   core: {
     type: 'core',
     name: 'Rooftop Core',
@@ -105,7 +117,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
   },
 };
 
-export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay'];
+export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

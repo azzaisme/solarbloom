@@ -738,10 +738,7 @@ export class BloomChainSystem {
         // Nothing to water: the spill still freshens the green around it (lush), so it always counts.
         if (!targets.length)
           for (const t of s.grid.tilesNear(g, TUNING.neighbourhood.reservoir.radius))
-            if (t.ground === 'restored' && !t.occupantId) {
-              t.lushUntil = s.time + TUNING.neighbourhood.reservoir.lushSeconds;
-              s.grid.touch(t);
-            }
+            if (t.ground === 'restored' && !t.occupantId) s.transitions.lush(t, s.time + TUNING.neighbourhood.reservoir.lushSeconds);
         s.state.progression.overflows = (s.state.progression.overflows ?? 0) + 1;
         this.emit(run, { ...ev, amount: targets.length });
         s.bus.emit('reservoir.overflow', { machineId: g.id, tiles: targets.map((t) => t.id) });
@@ -834,8 +831,7 @@ export class BloomChainSystem {
       case 'LUSH': {
         const t = s.grid.byTileId(ev.target);
         if (!t || t.ground !== 'restored') return;
-        t.lushUntil = s.time + TUNING.neighbourhood.reservoir.lushSeconds;
-        s.grid.touch(t);
+        s.transitions.lush(t, s.time + TUNING.neighbourhood.reservoir.lushSeconds);
         run.roofs.add(t.roofId);
         this.emit(run, ev);
         this.react(run, t, 'GROW', ev.depth);

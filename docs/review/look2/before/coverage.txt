@@ -1,0 +1,48 @@
+full.png
+  stone         51.8%
+  green         37.3%
+  white          7.0%
+  red-orange     1.5%
+  yellow-gold    0.9%
+  pink           0.5%
+  cyan-blue      0.5%
+  purple         0.3%
+  dark           0.2%
+  families >= 5%: 3 (green, white, stone)
+  largest hue bin: 90-120 deg = 24.5% of frame (neutral/unsaturated 52.2%)
+bloom.png
+  stone         59.5%
+  green         30.0%
+  white          5.7%
+  yellow-gold    1.8%
+  red-orange     1.5%
+  pink           0.5%
+  cyan-blue      0.4%
+  purple         0.3%
+  dark           0.2%
+  families >= 5%: 3 (green, white, stone)
+  largest hue bin: 90-120 deg = 20.8% of frame (neutral/unsaturated 52.8%)
+full.png crop=(300, 150, 1000, 650)
+  green         58.4%
+  stone         17.4%
+  white         17.1%
+  red-orange     2.4%
+  yellow-gold    1.8%
+  cyan-blue      1.2%
+  pink           0.9%
+  purple         0.5%
+  dark           0.4%
+  families >= 5%: 3 (green, white, stone)
+  largest hue bin: 90-120 deg = 38.8% of frame (neutral/unsaturated 26.3%)
+bloom.png crop=(300, 150, 1000, 650)
+  green         49.0%
+  stone         30.2%
+  white         12.4%
+  yellow-gold    3.4%
+  red-orange     2.3%
+  cyan-blue      1.2%
+  pink           0.8%
+  purple         0.5%
+  dark           0.3%
+  families >= 5%: 3 (green, white, stone)
+  largest hue bin: 90-120 deg = 32.9% of frame (neutral/unsaturated 24.6%)

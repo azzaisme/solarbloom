@@ -62,3 +62,26 @@ export function pickDrone(drones: Iterable<{ id: string; x: number; y: number }>
   }
   return best;
 }
+
+/** Distance from a point to a convex polygon (0 inside). */
+export function polyDist(poly: [number, number][], x: number, z: number): number {
+  let inside = true;
+  let best = Infinity;
+  let sign = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [ax, az] = poly[i];
+    const [bx, bz] = poly[(i + 1) % poly.length];
+    const ex = bx - ax;
+    const ez = bz - az;
+    const cross = ex * (z - az) - ez * (x - ax);
+    const sg = Math.sign(cross);
+    if (sg !== 0) {
+      if (sign === 0) sign = sg;
+      else if (sg !== sign) inside = false;
+    }
+    const l2 = ex * ex + ez * ez || 1;
+    const t = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / l2));
+    best = Math.min(best, Math.hypot(x - (ax + ex * t), z - (az + ez * t)));
+  }
+  return inside ? 0 : best;
+}

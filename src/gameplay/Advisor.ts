@@ -336,7 +336,7 @@ export class Advisor {
     for (const def of s.upgrades.all()) {
       const st = s.upgrades.status(def);
       if (!st.ok && st.reason && !st.reason.startsWith('Need ')) continue;
-      consider(def.name, def.icon, { biomass: st.cost }, 'upgrade');
+      consider(def.name, def.icon, { [def.costKind ?? 'biomass']: st.cost }, 'upgrade');
     }
     for (const type of BUILDABLE) {
       if (!s.build.isUnlocked(type) || MACHINES[type].areaTypes) continue;
