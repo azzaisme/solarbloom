@@ -21,7 +21,7 @@ The page runs on Playwright's fake clock, paused, and only moves when the script
 at a time. `Math.random` is seeded before the game loads and the game boots and loads its assets with the clock
 frozen, so the sun, wind, particles and drones are identical every run. Each rendered frame ends with a 1-pixel
 readback, so the screenshot is the final frame. `metrics.json` holds a hash of each raw screenshot. Two runs of
-the baseline build gave identical images for 11 of the 14 shots; in the other four (`full-*`, `machines-desktop`,
+the baseline build gave identical images for 10 of the 14 shots; in the other four (`full-*`, `machines-desktop`,
 `far-desktop`), a few dozen isolated sparkle pixels differ (particle bursts from the whole park blooming at once),
 and nothing else.
 
