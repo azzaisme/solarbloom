@@ -88,6 +88,8 @@ and is strong by about 3. Ordinary lit surfaces stay at or below about 1.3 and m
 | --- | --- | --- |
 | Any standard material authored as a glow (`mat(…, { emissive, emissiveIntensity >= 1 })`): drone eyes (2), drone spray beam (1), machine lights and rings (1–1.6), orbs, relay and hub rings, Vfx rings (1.5) and arcs (2) | `glow()` in `Materials.ts` multiplies by `LOOK.emissive.gain` | × 4 (so 4–8) |
 | Emissive tints below 1 (solar boost 0.6, water accents 0.3–0.6, gold trims 0.25, the tap beacon 0.6) | unchanged | < 1, never blooms |
+| Drone (#211): eyes, thrusters, vent 1.6; beam outer cone 1.1, inner stream 2.2 (blended at 0.2 / 0.32 opacity); eye screen 0.55 asleep / 1.3 / 2.1 restoring (`faceMat`, same `glow()` rule) | `mat()` gain, and `glow()` in `faceMat` | 6.4; 4.4 / 8.8; 0.55 / 5.2 / 8.4 |
+| E16 fireflies (2.2), machine wisps | `mat()` gain | 8.8 |
 | The awake core / landmark | `coreMat` at `glow(1.2)` | 4.8 |
 | The ready-to-wake landmark | gold pulse 0.4–0.9 (a hint, not a glow) | < 1 |
 | Condenser tank | emissive 1 (was 0.4) | 4 |
