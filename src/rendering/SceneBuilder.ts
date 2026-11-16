@@ -53,5 +53,20 @@ export class SceneBuilder {
     this.app.root.addChild(fill);
   }
 
+  /**
+   * Phase 5 E16: optional warm dusk. Only the light changes (warmer, lower sun, rosier haze); nothing in the game
+   * depends on it. Fireflies come with it (Fauna).
+   */
+  setDusk(on: boolean) {
+    const scene = this.app.scene;
+    const l = this.sun?.light;
+    if (!l) return;
+    l.color = color(on ? '#ffc58f' : '#ffe6bd');
+    l.intensity = on ? 1.75 : 2.15;
+    scene.ambientLight = color(on ? '#8f8396' : '#8a90a3');
+    scene.fog.color = color(on ? '#e6c9bb' : '#bcd9e6');
+    this.sun.setEulerAngles(on ? 30 : 48, 62, 0);
+  }
+
   update(_dt: number) {}
 }

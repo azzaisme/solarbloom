@@ -254,3 +254,112 @@ cleared area), saves up for stages and fires abilities, then leaves them on auto
 | `npm run test:perf:browser` | within limits: 0 / 1 / 1 hitches, chain ×666 |
 | `npm run test:perf` | one timing failure in a busy run, then 4 / 4 on rerun |
 | `npm run test:soak` | pass |
+
+# E16 — Living ecosystems and visual differentiation
+
+## Decisions
+
+- **Biodiversity is a readout, not a currency.** It is derived from the world every second and never stored,
+  spent or fed into production. Only the fauna unlocks are saved (`state.fauna`, the sim time each kind arrived),
+  as an optional field, so **no save version change** (the save-version bump stays with the E13 follow-up).
+- **Build on the paused visual overhaul.** Trees stay `TreeGen`/`TreePlacement`/`Foliage`; E16 changes what
+  grows around them and how each stage reads. Every new mesh is procedural; nothing uses the untracked `assets/`
+  folder. The Meshy hooks are listed in `docs/art/meshy-assets.md`.
+- **Extend the existing birds and butterflies** instead of adding second copies.
+
+## What changed
+
+| Area | Change |
+|---|---|
+| Biodiversity | `gameplay/Ecosystem.ts`: points per restored tile by stage (0.1 / 0.3 / 0.6 / 1 for Restored / Blooming / Thriving / Radiant), per tree species at Blooming+ (12), per ground kind in bloom (6), per landmark woken (25), per finished superstructure (60) and per fauna kind (15). Ranks Barren → Sprouting → Lively → Flourishing → Teeming → Abundant → Paradise. Counted per chunk, only chunks touched since the last pass, at most once a second; saved chunks not loaded yet are estimated from their packed data a few per pass. All weights in `TUNING.ecosystem` |
+| Fauna unlocks | Butterflies at 10 Blooming+ tiles, songbirds at 20 Thriving+ tree tiles, koi when the park fountain flows (or 4 restored water tiles), garden robots with the first finished superstructure. Each fires once (`fauna.unlocked`), survives save/load, and stays if its condition later lapses. All four thresholds are reachable on current maps (bot timings below), so none were changed |
+| Showing it | A 🌱 chip in the objective panel's tool row (icon only at 360 px and narrower, so the objective keeps its count); tapping it shows the breakdown, the creatures living here and what the next one needs, as a toast. An arrival toast and a small bounce on the chip when a kind arrives. Nothing blocks or pauses |
+| Fauna actors | `rendering/Fauna.ts` (koi, garden robots, songbirds on the lawns, sleeping cats, fireflies) and `FaunaPlan.ts` (pure planning, unit-tested). Pooled (made once, parked at scale 0), one dynamic batch per kind, at most `TUNING.ecosystem.caps[high/low]` of each near the camera target. Routes are seeded (hash of seed, actor, leg; no `Math.random`). They read the sim and never write it. Picking is plane maths, so no actor can take a tap |
+| Butterflies (existing) | Now arrive with their unlock, use seeded routes, follow the bloom near the view (they used to look only at rooftop layers, so the city park rarely had any), gather their tiles once a second instead of every frame, and respect the quality cap |
+| Birds (existing) | The Phase 4 flocks keep flying from park stage 2; once songbirds arrive, flocks pass about twice as often and songbirds hop and peck on blooming lawns |
+| Koi pond | Once koi arrive, the flowing fountain's basin fills to the brim with lily pads (its rim used to hide the water) and four koi circle in it; more swim restored canal tiles |
+| Sleeping cats | A seeded 30 % of finished machines on restored ground in view (at most 6) have a cat curled on the camera-facing corner of the machine's own footprint: lying down, grey tabby / ginger / black-and-white, no collar, coin or raised paw, about half a Lucky Cat's height, not tappable. A footprint cell can never hold a Lucky Cat anchor (anchors need a free tile), and spots within 0.75 tiles of any park anchor, possible city nook or the active cat are skipped (tested) |
+| Tile stages | Restored: pale young grass, short tufts. Blooming: fresh green with two tight one-colour flower clusters. Thriving: deep green with a tree, or a seeded mix of shrubs (62 %), tall flower spikes (20 %) and mossy rocks with a fern (18 %). Radiant: gold glow and luminous flowers (Phase 4). The far level of detail keeps them apart too (a colour patch for Blooming, a gold disc for Radiant). Everything stays inside the tile and low, so the grid and the dead/restored contrast still read |
+| Edges and borders | Restored lawn meeting restored paving gets a trimmed darker edge; the paving gets a raised white border on that side |
+| Local landmarks | In each cleared chunk outside the park, one obstacle (seeded) becomes a small landmark by area type: flower arch, ivy statue, topiary, lantern post with a hanging basket, spouting basin or mushroom ring. Obstacles get a restored look once their area clears (flower-capped bollards, ivy pillars, produce on stalls, mossy stumps with mushrooms). Only obstacle cells, never build cells |
+| Machines | Idle animation as before; active effects only while a machine really runs (`FaunaPlan.machineRunning`): panels and condensers while their store isn't full, hubs while a drone is out, superstructures once built. A running machine in view gives off a small rising wisp every 2–4 s (pooled particles, at most 5 a second across the view, 2 with "Fewer particles", none with reduced motion); a condenser's water bobs and a hub's ring turns only while working |
+| Dusk | Settings → "Warm dusk & fireflies" (off by default): warmer, lower sun and rosier haze, fireflies over Thriving and Radiant tiles. Ambience only; off with high contrast and no fireflies with reduced motion |
+| Quality tiers | "Fewer particles" selects the low tier: half the fauna caps and fewer wisps. Reduced motion: fauna rest in place. Debug overlay (F3) shows fauna counts and the score |
+
+## Measured (scripted bots, not people)
+
+When each kind arrived (sim time), with the bots in `tests/bots.ts`:
+
+| Seed | Bot | Butterflies | Koi | Songbirds | Robots | Score at 15 / 30 / 45 min |
+|---|---|---|---|---|---|---|
+| 7 | active, 30 min (the unit test) | 3:30 | 5:34 | 28:00 | — | |
+| 7 | merging, 60 min | 3:35 | 5:04 | 6:42 | 40:01 | 915 / 4,150 / 9,038 |
+| 21 | merging, 60 min | 3:19 | 5:04 | 8:04 | 54:12 | 1,039 / 4,492 / 8,064 |
+| 21 | active (no merging), 60 min | 3:37 | 5:13 | 18:05 | — | 628 / 1,395 / 2,054 |
+
+- Koi follow the fountain within a second; songbirds depend on how many gardens push tree tiles to Thriving
+  (7–28 minutes); robots come with the first superstructure (E14 measured 39–54 minutes).
+- The rank ladder was first steeper (Teeming by 15 minutes); it now reaches Flourishing around 15 minutes,
+  Teeming around 30 and Abundant around 45 for the merging bot.
+
+## Performance (headless Chromium, SwiftShader software rendering; not a real device)
+
+`npm run test:perf:browser` (150-area city, ~790 machines), on this Windows laptop **while two or three other
+sessions ran their own test suites and e2e scripts on the same machine**. Under that load the per-frame update
+times swing several-fold between identical runs (main's own HEAD ranged from 11 to 136 ms median on zoom), so treat
+them as noise-dominated. Draw calls, page errors and the chain size are the comparable parts. "Before" is main at
+`432ba3b`, built from a clean checkout; runs listed in the order they ran.
+
+| Run | Pan update median / hitches | Zoom update median / hitches | Chain update median / hitches | Draw calls pan / zoom / chain (median) | Catch-up worst frame | Chain |
+|---|---|---|---|---|---|---|
+| before #1 | 256.1 ms / 100 | 11.4 ms / 17 | 13.6 ms / 25 | 237 / 222 / 348 | 376.9 ms | ×715 |
+| before #2 | 128.7 ms / 76 | 135.7 ms / 72 | 11.7 ms / 16 | 224 / 228 / 242 | 11.1 ms | ×637 |
+| E16 #1 (bug, see below) | 62.8 ms / 60 | 200.8 ms / 79 | 120.7 ms / 80 | 217 / 207 / 225 | 378.6 ms | ×524 |
+| E16 #2 (fixed) | 269.5 ms / 106 | 226.2 ms / 82 | 138.3 ms / 92 | 213 / 212 / 274 | 470.4 ms | ×576 |
+| before #3 | 13.8 ms / 15 | 10.0 ms / 4 | 31.2 ms / 72 | 217 / 214 / 268 | 13.2 ms | ×679 |
+| **E16 #3 (final)** | **13.9 ms / 7** | **12.9 ms / 14** | **3.3 ms / 1** | **229 / 208 / 265** | **10.4 ms** | ×633 |
+| before #4 | 12.9 ms / 24 | 135.5 ms / 78 | 38.1 ms / 71 | 229 / 240 / 221 | 447.5 ms | ×583 |
+
+- **Draw calls are unchanged** within run-to-run variation (all under the 400 budget): fauna are one dynamic batch
+  per kind, decoration is merged into the existing chunk meshes, the koi pond is one entity.
+- **Every run, before and after, failed some timing gates on this machine** (the harness's limits are set for a
+  4-core cloud container). The final E16 run failed only zoom hitches (14 > 6) and two autosave steps (encode
+  32 ms, write 90 ms), which E16 doesn't touch (before #1 showed the same 90 ms write).
+- **Bug found by the first E16 run:** a restored bollard's flower colour used `(x + z) % 5`, which is negative west
+  or north of the park, so building that chunk threw every frame (3 page errors, and the frame times of that run).
+  Fixed with a positive modulo; no page errors since.
+- **Ecosystem cost, measured in Node on the same 150-area city:** the first full count 25.7 ms (once); after a
+  reload the first pass 1.7 ms, then 0.44 ms median and 3.7 ms worst per pass (once a second of sim time), with
+  saved chunks estimated 2 per pass (6 per pass peaked at 17 ms). 300 s of catch-up simulation: 164 ms in total.
+- Not measured: memory, and anything on a phone. The decoration adds geometry to restored chunks (roughly 1.3–1.7×
+  primitives on Blooming-heavy chunks before the cluster trim); the chunk rebuild budget (6 ms, nearest first) is
+  unchanged.
+
+## Tests run (E16)
+
+On this branch, Windows 11 laptop, headless Chromium with SwiftShader for the browser checks, with other
+sessions' test runs sharing the machine.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | pass |
+| `tests/ecosystem.test.ts` (new, 13 tests): score derivation and ranks; score follows the world and is equal after save/load; butterflies at exactly 10, birds at exactly 20 (and the park alone has enough tree tiles); koi with the fountain; robots only with a finished superstructure; each unlock fires once, stays when its condition lapses, survives save/load without a second event; unlocking and counting change no resources, tiles, machines or stats; seeded wander routes; sleeping cats inside footprints and ≥ 0.75 tiles from every Lucky Cat place, within the cap; planning fauna for 300 frames changes nothing; the fauna sources contain no economy, event or state-writing calls; active effects only while a machine runs; a 30-minute bot session reaches butterflies, birds and koi | pass |
+| `npm test` (full, 42 files, 262 tests) | first run: 260 pass, 2 fail. `sim-scale` "no full sweeps" caught my first recount, which walked every loaded chunk each pass (fixed: only touched chunks); `drones-city` "far drones within 5 %" passed on rerun (it took 7.4 s under load, 0.8 s alone). Final run: 252 pass, 10 fail, all timeouts (eight at the 5 s default, two at 300 s) while several sessions shared the CPU |
+| The ten timed-out tests, rerun by file with a longer timeout, plus the quick set a teammate session recommends for this shared machine (26 files, 162 tests) | pass, except `save.test.ts` "first session reaches the core", which hit its own 30 s limit (33 s) in that run and passed alone (5 / 5) |
+| `tests/pacing.test.ts`, `tests/pacing-city.test.ts` (rerun alone) | `pacing.test.ts` passes. The two `pacing-city` tests exceeded their own 300 s limit under load (368 s and 329 s) but printed the same results as the passing first full run: 76 / 82 areas in 60 min, stuck 0 s. Not rerun further |
+| `tests/e2e/picking.e2e.mjs` (now also: with every creature unlocked, taps on each actor's screen spot pick the tile underneath, and a real click on a songbird nurtures its lawn) | pass, 74,326 checks (was 74,299) |
+| `STRICT=1 phase4-hud` (`npm run test:hud`) | pass, no overlaps at 320–430 px, landscape, tablet, desktop |
+| `phase4-session` (`npm run test:session`, 15 min in the real page) | pass, no page errors (run before the bollard fix; that chunk is outside the park) |
+| `tests/e2e/ecosystem-shots.mjs` (new) | no page or console errors; screenshots in `docs/review/e16-*.png`: the four stages one at a time (`e16-stage-1…4`), all four side by side at gameplay zoom and zoomed out (`e16-stages-mixed`, `e16-stages-far`), fauna at gameplay zoom (`e16-fauna`, `e16-fountain-koi`), close-ups (`e16-near-robots`, `-cats`, `-groundBirds`) and dusk (`e16-dusk`) |
+| `npm run test:perf:browser` | see the table above |
+
+## Still open after E16
+
+- **No human playtests and no real-device measurements.** Whether the stages read at a glance, and whether the
+  fauna feel alive rather than busy, needs people and phones.
+- Fauna are small at gameplay zoom (songbirds and cats are easiest to see closer in); the koi pond and the
+  arrival toasts carry the unlocks at gameplay zoom. Real models (Meshy, pending review) should help.
+- On a 320 px phone the objective title has a little less room (the 🌱 chip is icon-only there).
+- Robots arrive late because superstructures do (E14).
+- Persisted field `fauna` is optional and needs no migration, but should be listed in the save fixtures when the
+  save version is bumped by the E13 follow-up.

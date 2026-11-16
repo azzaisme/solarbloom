@@ -72,6 +72,8 @@ export interface Settings {
   musicVolume?: number;
   /** Phase 4 E11.5: stronger outlines and text contrast. */
   highContrast?: boolean;
+  /** Phase 5 E16: warm dusk light and fireflies (ambience only). */
+  dusk?: boolean;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
@@ -178,6 +180,7 @@ export class Hud {
         <label>Reduced motion &amp; effects <input type="checkbox" data-set="reducedMotion"></label>
         <label>Fewer particles &amp; softer sparkles <input type="checkbox" data-set="lowVfx"></label>
         <label>Simple fog (faster on phones) <input type="checkbox" data-set="lowFog"></label>
+        <label>Warm dusk &amp; fireflies <input type="checkbox" data-set="dusk"></label>
         <label>Camera follows big chains <input type="checkbox" data-set="followChains"></label>
         <label>Tutorial hints <input type="checkbox" data-set="hints"></label>
         <label>Debug / FPS (F3) <input type="checkbox" data-set="debug"></label>

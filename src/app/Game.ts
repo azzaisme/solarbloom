@@ -17,6 +17,8 @@ import type { OfflineReport } from '../gameplay/OfflineSystem';
 import { Sim } from '../gameplay/Sim';
 import { Butterflies } from '../rendering/Butterflies';
 import { Birds } from '../rendering/Birds';
+import { Fauna } from '../rendering/Fauna';
+import { EcoBadge } from '../ui/EcoBadge';
 import { CameraController } from '../rendering/CameraController';
 import { setTreeCursor } from '../rendering/Foliage';
 import { CatVisuals } from '../rendering/CatVisuals';
@@ -82,6 +84,9 @@ export class Game {
   readonly cat: CatVisuals;
   readonly butterflies: Butterflies;
   private birds: Birds;
+  /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
+  readonly fauna: Fauna;
+  private eco!: EcoBadge;
   readonly tileFx: TileFx;
   readonly vfx: Vfx;
   readonly overlays: Overlays;
@@ -165,7 +170,9 @@ export class Game {
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.birds = new Birds(this.scene.world);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
+    this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
     this.tileFx = new TileFx(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.machines.onWisp = (_m, at) => this.vfx.burst(at, 1, { up: 0.5, speed: 0.12, size: 0.035, life: 1.3, gravity: 0 }); // Phase 5 E16: running machines only
     this.machines.onActivated = (_m, at) => {
       this.vfx.ring(at, PALETTE.gold, 1.3, 0.55);
       this.vfx.burst(new pc.Vec3(at.x, at.y + 0.5, at.z), 10, { up: 2.5, size: 0.05 });
@@ -240,6 +247,7 @@ export class Game {
       this.settings,
     );
     this.fly = new FlyText(this.hud.root);
+    this.eco = new EcoBadge(this.sim, (h, k, t) => this.hud.toast(h, k, t));
     this.hud.setTool('pulse');
     this.applySettings();
 
@@ -331,8 +339,11 @@ export class Game {
     const rm = s.reducedMotion;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
+    // Phase 5 E16: optional warm dusk (ambience only; off with high contrast so the restoration contrast stays sharp).
+    this.scene.setDusk(!!s.dusk && !s.highContrast);
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
     this.cat.softSparkle = rm || s.lowVfx;
+    this.machines.wispsPerSecond = s.lowVfx ? 2 : 5;
     // Quality: lighter shadows with fewer effects.
     const sun = this.scene.sun.light;
     if (sun) sun.shadowResolution = s.lowVfx ? 1024 : 2048;
@@ -1107,6 +1118,7 @@ export class Game {
       if (areaId !== PARK) this.hud.toast(`✨ ${s.areas.info(areaId).landmarkName} is ready to wake!<small>Click it to clear this ${AREA_TYPES[s.areas.info(areaId).type].name.toLowerCase()}'s fog.</small>`, 'gold', 4);
     });
     b.on('area.cleared', ({ areaId }) => this.onAreaCleared(areaId));
+    b.on('fauna.unlocked', ({ id }) => this.eco?.arrived(id)); // Phase 5 E16 (cosmetic; pays nothing)
     // City 09.1: the landmark's specialty action is done (the wake itself has its own toast once ready).
     b.on('area.specialty', ({ areaId, met }) => {
       if (!met || s.areas.ready(areaId) || this.specialtyToasted.has(areaId)) return;
@@ -2028,8 +2040,19 @@ export class Game {
     this.machines.update(dt, rect);
     this.drones.update(dt);
     this.cat.update(dt);
-    this.butterflies.update(dt);
-    this.birds.update(dt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2);
+    // Phase 5 E16: fauna by unlock, capped per quality tier ("Fewer particles" = low).
+    const eco = this.sim.ecosystem;
+    const quality = this.settings.lowVfx ? 'low' : 'high';
+    this.butterflies.enabled = eco.has('butterflies');
+    this.butterflies.cap = TUNING.ecosystem.caps[quality].butterflies;
+    // Fauna live around where the camera looks (the ground rect of a low perspective view reaches far beyond it).
+    const ct = this.camera.target;
+    const near = rect ? { x0: ct.x - 12, x1: ct.x + 12, z0: ct.z - 12, z1: ct.z + 12 } : undefined;
+    this.butterflies.update(dt, near);
+    this.birds.resident = eco.has('birds');
+    this.birds.update(dt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
+    this.fauna.update(dt, near, { quality, reducedMotion: this.settings.reducedMotion, dusk: !!this.settings.dusk && !this.settings.highContrast });
+    this.eco?.update(dt);
     this.tileFx.update(dt);
     this.frameNo++;
     this.updateChainPresentation(dt);
@@ -2084,6 +2107,7 @@ export class Game {
             `draw calls ${this.app.stats.drawCalls.total} (budget 400)  chunks ${this.chunks?.loadedCount ?? 0}\n` +
             `chains ${this.sim.chains.activeRuns} queued ${this.sim.chains.pendingSteps}\n` +
             `drones ${st.drones.length}  machines ${st.machines.length}\n` +
+            `fauna ${Object.entries(this.fauna.active).map(([k, n]) => `${k[0]}${n}`).join(' ')} b${this.butterflies.count}  bio ${this.sim.ecosystem.score().score}\n` +
             `cat ${st.cat.active ? st.cat.active.anchorId : `next ${st.cat.firstSpawned ? st.cat.nextSpawnAt.toFixed(0) : 'first'}`}\n` +
             `restored ${this.sim.progression.restoredCount(HOME)} full ${this.sim.progression.fullBloomCount(HOME)}`,
         );

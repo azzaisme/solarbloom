@@ -252,4 +252,6 @@ export interface GameState {
   savedAt?: number;
   /** City 10.7: district blooms claimed, by district id (sim time). Optional: older saves have none. */
   districts?: Record<string, number>;
+  /** Phase 5 E16: fauna that has arrived, by kind (sim time). Cosmetic; optional, so no save version change. */
+  fauna?: Partial<Record<'butterflies' | 'birds' | 'koi' | 'robots', number>>;
 }
