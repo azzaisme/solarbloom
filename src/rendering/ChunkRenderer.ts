@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import { CHUNK } from '../core/Hash';
 import { GROUND } from '../core/GameState';
 import { chunkKey } from '../core/Grid';
+import { polyDist } from '../core/Picking';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { CITY_GEN, PARK_LAYOUT } from '../data/city';
@@ -287,7 +288,7 @@ export class ChunkRenderer {
   /** Called when the park's stage rises (Game shows a line and a sparkle). */
   onParkStage?: (stage: number, prev: number) => void;
 
-  update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number }, focus: { x: number; z: number }, zoom = 1) {
+  update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number; poly?: [number, number][] }, focus: { x: number; z: number }, zoom = 1) {
     this.time += dt;
     this.warmTrees();
     this.tickGrowing(dt);
@@ -300,7 +301,9 @@ export class ChunkRenderer {
       if (v) v.dirty = true;
       if (prev >= 0 && ps > prev) this.onParkStage?.(ps, prev);
     }
-    this.farFrom = zoom < 0.55 ? 2 : Infinity;
+    // Zoomed out, all but the middle draw as plain slabs; close up, the low view reaches deep into the haze, so
+    // chunks well past the focus (where the haze is thick) do too.
+    this.farFrom = zoom < 0.55 ? 2 : 3.2;
     for (const v of this.views.values()) {
       const far = dist(v, focus) / CHUNK > this.farFrom;
       if (v.ground && !!v.far !== far) v.dirty = true;
@@ -309,6 +312,9 @@ export class ChunkRenderer {
     const cx1 = Math.floor(rect.x1 / CHUNK) + 1;
     const cz0 = Math.floor(rect.z0 / CHUNK) - 1;
     const cz1 = Math.floor(rect.z1 / CHUNK) + 1;
+    // Look 4.11: only chunks near the view's ground trapezoid (not its whole bounding box), with hysteresis.
+    const poly = rect.poly;
+    const near = (cx: number, cz: number, margin: number) => !poly || polyDist(poly, cx * CHUNK + CHUNK / 2, cz * CHUNK + CHUNK / 2) <= CHUNK * 0.71 + margin;
     const want = new Set<string>();
     for (let cz = cz0; cz <= cz1; cz++)
       for (let cx = cx0; cx <= cx1; cx++) {

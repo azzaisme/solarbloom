@@ -566,31 +566,41 @@ export class Game {
     this.camera.bounds = { minX: x0 - 8, maxX: x1 + 8, minZ: z0 - 8, maxZ: z1 + 8 };
   }
 
-  /** Visible ground rectangle (world x/z) from the four screen corners. */
+  /**
+   * Look 4.11 (#155): the visible ground as the frustum's footprint (a trapezoid reaching toward the horizon)
+   * and its bounding rectangle. Each screen corner's ray meets the (sunk) ground, but never further than the
+   * haze reaches: past it everything is the haze colour, so nothing there needs streaming.
+   */
   private groundRect() {
     const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
     const w = c.clientWidth;
     const h = c.clientHeight;
+    const cam = this.camera;
+    const reach = cam.dist + cam.hazeEnd + 8; // from the camera, along the ground
+    const floor = -SINK;
     let x0 = Infinity;
     let x1 = -Infinity;
     let z0 = Infinity;
     let z1 = -Infinity;
-    for (const [sx, sy] of [[0, 0], [w, 0], [0, h], [w, h]]) {
-      const { o, d } = this.camera.ray(sx, sy);
-      // A ray at or above the horizon (the low close-up view) reaches as far as streaming goes.
-      const t = d.y < -1e-3 ? -o.y / d.y : 400;
+    const poly: [number, number][] = [];
+    for (const [sx, sy] of [[0, 0], [w, 0], [w, h], [0, h]]) {
+      const { o, d } = cam.ray(sx, sy);
+      const flat = Math.max(1e-6, Math.hypot(d.x, d.z));
+      const cap = reach / flat;
+      const t = d.y < -1e-3 ? Math.min(cap, (floor - o.y) / d.y) : cap;
       const x = o.x + d.x * t;
       const z = o.z + d.z * t;
+      poly.push([x, z]);
       x0 = Math.min(x0, x);
       x1 = Math.max(x1, x);
       z0 = Math.min(z0, z);
       z1 = Math.max(z1, z);
     }
     // Never stream an unbounded amount at extreme zoom-out.
-    const cx = this.camera.target.x;
-    const cz = this.camera.target.z;
+    const cx = cam.target.x;
+    const cz = cam.target.z;
     const R = 90;
-    return { x0: Math.max(x0, cx - R), x1: Math.min(x1, cx + R), z0: Math.max(z0, cz - R), z1: Math.min(z1, cz + R) };
+    return { x0: Math.max(x0, cx - R), x1: Math.min(x1, cx + R), z0: Math.max(z0, cz - R), z1: Math.min(z1, cz + R), poly };
   }
 
   /**
@@ -2204,7 +2214,7 @@ export class Game {
     this.tweens.update(dt);
     this.scene.update(dt);
     this.grid.update(dt);
-    const rect = this.city ? this.groundRect() : undefined;
+    const rect = view;
     if (rect) this.chunks.update(dt, rect, this.camera.target, this.camera.zoom);
     this.machines.update(dt, rect);
     this.drones.update(dt);
