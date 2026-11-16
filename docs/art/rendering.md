@@ -1,0 +1,45 @@
+# Rendering pipeline (Look 1)
+
+How Solarbloom turns palette hex values into pixels, so palette and asset work (Look 2 onward) is tuned against
+the final output, not against raw hex. All numbers live in `src/data/look.ts`; run-time code is in
+`src/rendering/LookController.ts`, `SceneBuilder.ts` (lights) and `LookShaders.ts`.
+
+## Colour pipeline (Look 1.4)
+
+1. **Authoring:** colours are sRGB hex (`PALETTE` in `Materials.ts`, tree and foliage generators).
+2. **Linearisation:** every path uses the same curve, `pow(c, 2.2)`:
+   - standard materials: the engine's `Color.linear()` on `diffuse` and `emissive`;
+   - vertex-coloured meshes (chunks, tufts, flowers, props, trees, particles): `lin()` in `ChunkRenderer.ts` and
+     the equivalent in `Shapes.ts`, `TreeGen.ts` and `Vfx.ts`, stored as 8-bit linear with `vertexColorGamma`
+     off.
+
+   `tests/look.test.ts` checks that `lin()` and `Color.linear()` agree for every palette colour, so the same
+   hex looks identical on a chunk and on a standard material. The 8-bit linear store has coarse steps in very dark
+   colours; no palette colour is dark enough for it to show.
+3. **Lighting** in linear space: the sun, the fill, the sky-and-ground environment and the rim (below).
+4. **Exposure:** `LOOK.exposure` (`scene.exposure`), currently 1.0.
+5. **Tone mapping:** Khronos **PBR Neutral** (`TONEMAP_NEUTRAL`). It keeps the palette's hues and saturation up
+   to bright values and rolls highlights off smoothly. ACES was tried first: it bleached the greens and the
+   blossom pinks toward yellow-white.
+6. **Output:** sRGB encoding (`GAMMA_SRGB`).
+
+With post-processing on (Medium and High), steps 4 to 6 run in the `CameraFrame` compose pass after bloom, SSAO,
+depth of field and grading. On Low the camera tone-maps and encodes directly, so the curve is the same.
+
+What this means for palette work: a mid-tone hex lit by the full sun comes out about as bright as authored; in
+shadow it lands at roughly 40% (about 2.5:1) and shifts cool. Nothing except emissive glows should get near white.
+Before Look 1, about 20% of the pixels in the machine-cluster shot had a channel clipped at 255; with this
+pipeline, none do.
+
+## Lights (Look 1.2, 1.3)
+
+| Light | Colour | Intensity | Notes |
+| --- | --- | --- | --- |
+| Sun (key) | `#ffd29a` | 3.1 | 34° elevation; light travels toward world (−0.25, 0.97), so shadows fall to the lower left of the default view. PCF shadows, 2048² (1024² on Low). |
+| Fill | `#8fb4ff` | 0.42 | From the side opposite the sun, from above; no shadows. |
+| Sky and ground | zenith `#5d8fd6`, horizon `#cfd9e3`, ground `#7a6a48` | 0.85 | A 32² cubemap prefiltered into `scene.envAtlas`. It provides all ambient light (the flat ambient is black) and the reflections on glossy materials. Rebuilt after a lost WebGL context. |
+| Rim | `#ffc98a` | 0.8, power 3 | A view-dependent term added to the standard emissive chunk for lit materials, tinted by the surface albedo, stronger on the sun side. |
+
+Measured on the restored park (`shots:look`, `full-desktop`): lit grass about `(138, 209, 68)` and shadowed grass
+about `(15, 73, 46)`, so a 2.9:1 brightness gap on screen, with the shadow tilted toward blue (blue/red 3.1 in
+shadow vs 0.5 in sun).

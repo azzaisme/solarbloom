@@ -1,3 +1,5 @@
+import * as pc from 'playcanvas';
+
 // Look 1 (lighting and post-processing): every rendering knob for the golden-hour look lives here, apart from
 // gameplay tuning (tuning.ts), so the art pass can retune it without touching balance. In a dev build the live
 // object is `window.solarbloom.look.cfg`: change a value, then call `window.solarbloom.look.apply()`.
@@ -35,4 +37,10 @@ export const LOOK = {
    * sun side, so flowers, the drone and machines pick up a bright edge against darker ground.
    */
   rim: { color: '#ffc98a', intensity: 0.8, power: 3.0 },
+  /**
+   * Look 1.4: tone mapping and exposure. Khronos PBR Neutral keeps the palette's hues and saturation (ACES
+   * bleached the greens and pinks toward yellow-white), and rolls highlights off so nothing clips.
+   */
+  toneMapping: pc.TONEMAP_NEUTRAL as number,
+  exposure: 1.0,
 };

@@ -65,7 +65,7 @@ class Grow<T extends Float32Array | Uint8Array | Uint32Array> {
 
 const linCache = new Map<string, [number, number, number]>();
 /** sRGB hex → linear 0–1 (matches the vertex-colour material). */
-function lin(hex: string): [number, number, number] {
+export function lin(hex: string): [number, number, number] {
   let c = linCache.get(hex);
   if (!c) {
     const col = new pc.Color();

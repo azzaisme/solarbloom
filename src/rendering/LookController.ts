@@ -25,12 +25,17 @@ export class LookController {
     // The generated environment is for lighting only: the sky behind the city is the page's CSS gradient.
     const cam = camera.cam;
     cam.layers = cam.layers.filter((id) => id !== pc.LAYERID_SKYBOX);
+    // Look 1.4: a linear HDR-ish workflow with a filmic curve. Colours are linear in the shaders (sRGB hex →
+    // pow 2.2 for materials and vertex colours alike), lit, then ACES tone-mapped and sRGB-encoded on output.
+    cam.toneMapping = LOOK.toneMapping;
+    cam.gammaCorrection = pc.GAMMA_SRGB;
     this.apply();
   }
 
   /** Re-reads LOOK (live tuning). */
   apply() {
     this.scene.applyLights();
+    this.app.scene.exposure = LOOK.exposure;
     this.rimColour = color(LOOK.rim.color);
     this.scene.sunDirection(this.toSun).mulScalar(-1);
   }
