@@ -145,6 +145,7 @@ export class Game {
     this.scene.build();
     this.camera = new CameraController(this.app, this.tweens);
     this.look = new LookController(this.app, this.scene, this.camera);
+    this.look.atmosphere.isLit = (x, z) => this.sim.grid.get(GROUND, x, z)?.ground === 'restored';
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
@@ -334,6 +335,9 @@ export class Game {
     document.body.classList.toggle('contrast', !!s.highContrast);
     this.look.highContrast = !!s.highContrast;
     const rm = s.reducedMotion;
+    this.look.lowVfx = !!s.lowVfx;
+    this.look.reducedMotion = rm;
+    this.look.applyAtmosphere();
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;

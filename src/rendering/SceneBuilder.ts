@@ -34,7 +34,7 @@ export class SceneBuilder {
     const scene = this.app.scene;
     // Aerial perspective: the distant city fades into warm haze.
     scene.fog.type = pc.FOG_LINEAR;
-    scene.fog.color = color('#bcd9e6');
+    scene.fog.color = color(LOOK.haze.color);
     // Distances (from the camera) are converted to fog depth by Game once the camera exists.
     scene.fog.start = 46;
     scene.fog.end = 84;

@@ -100,3 +100,18 @@ and is strong by about 3. Ordinary lit surfaces stay at or below about 1.3 and m
 New content: author a glow at `emissiveIntensity: 1` (or more) and let the gain bring it into bloom; keep tints
 below 1. For geometry merged into chunks, pass a `glow` of 0–1 to `MeshBuilder.add`. Bright unlit overlays that are
 UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
+
+## Atmosphere (Look 1.10)
+
+- **Haze:** the linear fog is a warm golden `#e9dcc4` (was a flat blue-grey `#bcd9e6`). It still starts and ends at
+  the zoom-dependent distances in `CameraController` (`hazeStart` 6, `hazeEnd` 44 past the target), and the camera
+  clears to it when post is on. The gameplay fog over unrevealed areas is a separate mesh and is unchanged.
+- **Motes:** warm light specks (`#ffe9a8`, glow 3, so they catch a little bloom) that drift on slow noise, rise
+  gently and fade in and out over 4–10 s. They only spawn above restored tiles near the camera's focus. One
+  instanced draw call. High 90, Medium 50, Low none; off with *Fewer particles* and with reduced motion.
+- **Light shafts:** a few long soft cards slanting down along the sun from restored ground, turned about their own
+  axis to face the camera, additive with their alpha fading to the edges and ends, breathing in and out over
+  9–17 s. They fade when seen along the light. One instanced draw call. High 5, Medium 3, Low none; off with
+  *Fewer particles*; frozen with reduced motion.
+- CameraFrame's raymarched volumetric fog could give real shadowed shafts, but it marches the shadow map per
+  pixel, which is too expensive for the phone budget; the cards cost almost nothing.

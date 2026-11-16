@@ -81,5 +81,25 @@ export const LOOK = {
    * `blurRamp` further. Near blur is off, so nothing in front of the focus is ever blurred.
    */
   dof: { blurFrom: 9, blurRamp: 18, blurRadius: 3, blurRings: 3, blurRingPoints: 4 },
+  /**
+   * Look 1.10: the warm golden haze toward the horizon (the linear fog; where it starts and ends follows the zoom,
+   * see CameraController.hazeStart / hazeEnd). The camera clears to it when post-processing is on.
+   */
+  haze: { color: '#e9dcc4' },
+  /**
+   * Look 1.10: drifting light motes and soft light shafts over restored ground near the camera's focus. Counts per
+   * graphics tier; `lowVfx` and reduced motion turn the motes off, reduced motion freezes the shafts.
+   */
+  atmosphere: {
+    motes: { high: 90, medium: 50, low: 0 },
+    shafts: { high: 5, medium: 3, low: 0 },
+    moteColor: '#ffe9a8',
+    moteGlow: 3,
+    moteSize: 0.05,
+    shaftColor: '#ffd9a0',
+    shaftGlow: 0.35,
+    shaftWidth: 1.6,
+    shaftLength: 7,
+  },
   vignette: { intensity: 0.32, inner: 0.55, outer: 1.35, curvature: 0.6, color: '#2a1d14' },
 };
