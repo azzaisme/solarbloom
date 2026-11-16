@@ -239,6 +239,37 @@ export const TUNING = {
      */
     reserve: 0.25,
     old: { enabled: true, radius: 6, cycleSeconds: 7, flySpeed: 1.5, workSeconds: 0.8 },
+    /**
+     * E18 (#199, docs/DRONE_ROLES_EPIC.md): drone roles. Starting guesses to tune against the E18.0 baseline
+     * (docs/E18_AUDIT.md), not specs.
+     */
+    roles: {
+      /**
+       * One-time refit per hub (2.3). Energy and water parts are capped at machineCostMaxShare of the store
+       * and never grow; the biomass part grows ×refitGrowth for each other hub already refitted to the role.
+       */
+      refit: {
+        gardener: { biomass: 60, water: 20 },
+        scout: { biomass: 60, energy: 30 },
+        courier: { biomass: 80, energy: 15, water: 15 },
+        spark: { biomass: 120, energy: 30 },
+        harvester: { biomass: 50, energy: 35, water: 20 },
+      },
+      refitGrowth: 1.5,
+      /** Unlocks (2.2). */
+      unlock: { gardenerFullBloom: 10, sparkGardens: 3, harvesterOverflowSeconds: 60 },
+      gardener: { neighbours: 2 },
+      scout: { reachMult: 1.5, speedMult: 1.5, tilesPerEnergy: 4 },
+      courier: {
+        cooldownSeconds: 8,
+        treeCharge: 2,
+        relayRecharge: 0.25,
+        condenserCharge: 1,
+        cost: { motherTree: { water: 4 }, condenser: { energy: 4 }, reservoirGarden: { energy: 4 }, solar: { water: 3 }, relay: { energy: 6 } },
+      },
+      spark: { energy: 10, perHubSeconds: 30 },
+      harvester: { keep: 0.7 },
+    },
   },
 
   /** Phase 5 E12: long-tail upgrade strength (see UpgradeSystem.soilMult). */

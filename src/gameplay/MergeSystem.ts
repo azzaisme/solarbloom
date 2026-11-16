@@ -310,6 +310,10 @@ export class MergeSystem {
     }
     anchor.tier = tierOf(anchor) + 1;
     if (Object.keys(upg).length) anchor.upg = upg;
+    // E18.1: refits are hardware, like upgrade levels: the merged hub owns every role its parts were refitted
+    // for, and keeps the anchor's current role (Fleet Hub role slots are E18.8).
+    const roles = [...new Set([...(anchor.roles ?? []), ...partners.flatMap((p) => p.roles ?? [])])];
+    if (roles.length) anchor.roles = roles;
     anchor.charge = Math.max(anchor.charge, ...partners.map((p) => p.charge));
     anchor.boostUntil = Math.max(anchor.boostUntil, ...partners.map((p) => p.boostUntil));
     s.upgrades.version++; // per-machine caches (drone reach, production sums)

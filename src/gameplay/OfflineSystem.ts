@@ -66,7 +66,8 @@ export class OfflineSystem {
   private droneWork(eff: number, report: OfflineReport) {
     const s = this.sim;
     const D = TUNING.drone;
-    const drones = s.state.drones.filter((d) => d.expiresAt === undefined);
+    // E18.1: only roles that work offline (Restorer, Gardener, Scout) earn while the player is away (2.7).
+    const drones = s.state.drones.filter((d) => d.expiresAt === undefined && s.drones.worksOffline(d));
     const budget = new Map<string, number>();
     let total = 0;
     for (const d of drones) {
@@ -86,18 +87,15 @@ export class OfflineSystem {
           budget.set(d.id, 0);
           continue;
         }
-        const cost: Cost = d.old ? {} : s.restoration.pulseCost(job);
+        const cost: Cost = s.drones.priceOf(d, job);
         if (!s.drones.payJob(cost)) {
           budget.set(d.id, 0);
           continue;
         }
-        if (s.restoration.isEligible(job)) {
-          s.restoration.complete(job, 'drone', undefined, true);
-          report.restored++;
-        } else {
-          s.restoration.grow(job, undefined, 'auto', true);
-          report.grown++;
-        }
+        // E18.1: each role credits its own work (Restorer: restore or grow, as before E18).
+        const did = s.drones.offlineWork(d, job);
+        if (did === 'restored') report.restored++;
+        else if (did === 'grown') report.grown++;
         d.jobs++;
         s.state.stats.droneJobs++;
         report.droneJobs++;

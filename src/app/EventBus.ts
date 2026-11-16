@@ -54,6 +54,8 @@ export interface GameEvents {
   /** Phase 5 E12: "Upgrade all" finished: `count` levels bought across machines of one type. */
   'upgrade.bulk': { id: string; count: number };
   'drone.spawned': { droneId: string };
+  /** E18.1: a Drone Hub took a role (`refit`: bought it just now). */
+  'drone.roleChanged': { hubId: string; role: import('../core/types').DroneRole; refit: boolean };
   'drone.despawned': { droneId: string };
   'drone.jobStarted': { droneId: string; tileId: string };
   /** Phase 5 E15: `catId` is stable; `invasion` cats come from a Lucky Cat Invasion. */

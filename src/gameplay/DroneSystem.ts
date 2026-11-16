@@ -2,11 +2,33 @@ import { Economy } from '../core/Economy';
 import { GROUND, machinesStamp } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
 import { KINDS } from '../core/Economy';
-import type { Cost, DroneData, MachineData, TileData } from '../core/types';
+import type { Cost, DroneData, DroneRole, MachineData, TileData } from '../core/types';
+import { isDroneRole } from '../data/droneRoles';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
 export type DroneStatus = 'working' | 'napping' | 'waitingEnergy' | 'travelling';
+
+/** E18.1: what a finished job did (for sweeps, offline reports and stats). */
+export type DroneWork = 'restored' | 'grown' | undefined;
+
+/**
+ * E18.1 (#201): one drone role's job, in four steps. The framework (reach, networks, reservations, the
+ * reserve, far flights, area switches, offline pacing) is shared; a strategy only answers these.
+ * Restorer is what every drone did before E18, moved here unchanged.
+ */
+export interface RoleStrategy {
+  /** The best target among `inRange` (own reach first, then the network), or undefined to nap. */
+  find(d: DroneData, hub: MachineData, inRange: TileData[]): TileData | undefined;
+  /** What the job costs; paid through `payJob` (reserve and "save up" apply) when the drone sets off. */
+  price(d: DroneData, hub: MachineData, t: TileData): Cost;
+  /** The work on arrival. Returns what it did, or undefined if the target no longer needed it. */
+  work(d: DroneData, t: TileData): DroneWork;
+  /** Extra work around the target after a successful job (Drone Sweep). */
+  sweep?(d: DroneData, t: TileData, did: DroneWork): void;
+  /** One job's worth of offline credit (2.7); omitted = the role does nothing while the player is away. */
+  offline?(d: DroneData, t: TileData): DroneWork;
+}
 
 /**
  * Drone AI runs purely on grid targets. Positions are roof-local continuous coordinates;
@@ -15,7 +37,57 @@ export type DroneStatus = 'working' | 'napping' | 'waitingEnergy' | 'travelling'
 export class DroneSystem {
   private status = new Map<string, DroneStatus>();
 
-  constructor(private sim: Sim) {}
+  constructor(private sim: Sim) {
+    this.strategies.restorer = this.restorer;
+  }
+
+  /** E18.1: the role strategies built so far (Restorer always; later stories register theirs). */
+  private strategies: Partial<Record<DroneRole, RoleStrategy>> = {};
+
+  /** E18.1: registers a role's strategy. A role without one can't be picked (`DroneRoleSystem.available`). */
+  registerRole(role: DroneRole, strategy: RoleStrategy) {
+    this.strategies[role] = strategy;
+  }
+
+  hasStrategy(role: DroneRole): boolean {
+    return !!this.strategies[role];
+  }
+
+  /** A hub's current role (unset, unknown or not yet built = Restorer). */
+  hubRole(hub: MachineData | undefined): DroneRole {
+    const r = hub?.type === 'droneHub' ? hub.role : undefined;
+    return r && isDroneRole(r) && this.strategies[r] ? r : 'restorer';
+  }
+
+  /**
+   * The role a drone works as: the job in flight keeps the role it was paid for; otherwise its hub's role.
+   * The old drone is always a Restorer. Drone Party drones (temporary) follow their hub like any other.
+   */
+  roleOf(d: DroneData): DroneRole {
+    if (d.old) return 'restorer';
+    if (d.mode !== 'idle' && d.mode !== 'cooldown' && d.mode !== 'returning' && d.targetTileId) return d.role && this.strategies[d.role] ? d.role : 'restorer';
+    return this.hubRole(this.sim.machine(d.hubId));
+  }
+
+  private strategyOf(role: DroneRole): RoleStrategy {
+    return this.strategies[role] ?? this.restorer;
+  }
+
+  /** E18.1: what a drone's job on `t` costs in its role (the old drone runs on sunlight). */
+  priceOf(d: DroneData, t: TileData): Cost {
+    const hub = this.sim.machine(d.hubId);
+    return d.old || !hub ? {} : this.strategyOf(this.roleOf(d)).price(d, hub, t);
+  }
+
+  /** E18.1: offline credit for one job by this drone's role (undefined: the role doesn't work offline). */
+  offlineWork(d: DroneData, t: TileData): DroneWork {
+    return this.strategyOf(this.roleOf(d)).offline?.(d, t);
+  }
+
+  /** E18.1: does this drone's role earn while the player is away? */
+  worksOffline(d: DroneData): boolean {
+    return !!this.strategyOf(this.roleOf(d)).offline;
+  }
 
   /** Tiles drones are on their way to (kept as a set: findJob asks for every tile in reach). */
   private reserved = new Set<string>();
@@ -228,13 +300,64 @@ export class DroneSystem {
   findJob(d: DroneData): TileData | undefined {
     const hub = this.sim.machine(d.hubId);
     if (!hub) return undefined;
+    const strat = this.strategyOf(this.roleOf(d));
     const own = hub.type === 'droneHub' ? this.ownTiles(hub) : this.networkTiles(hub);
-    const job = this.findJobIn(d, hub, own);
+    const job = strat.find(d, hub, own);
     if (job || hub.type !== 'droneHub' || this.network(hub).length === 1) return job;
-    return this.findJobIn(d, hub, this.networkTiles(hub));
+    return strat.find(d, hub, this.networkTiles(hub));
   }
 
-  private findJobIn(d: DroneData, hub: MachineData, inRange: TileData[]): TileData | undefined {
+  /** E18.1: an area switch on a tile's area (ground only). "Leave this area alone" (`off`) stops every role. */
+  areaMode(t: TileData) {
+    return t.roofId === GROUND ? this.sim.areas.mode(this.sim.areas.areaOf(t)) : undefined;
+  }
+
+  /** E18.1: may a drone of any role target this restored tile to grow it (not occupied, below Radiant, free)? */
+  nurturable(t: TileData): boolean {
+    return t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom && !this.isReserved(t.id);
+  }
+
+  /** Restorer (the default and the old drone): restore, preferring the fog's edge, then nurture. Pre-E18 code, unchanged. */
+  private readonly restorer: RoleStrategy = {
+    find: (d, hub, inRange) => this.restorerFind(d, hub, inRange),
+    price: (_d, _hub, t) => this.sim.restoration.pulseCost(t),
+    work: (_d, t) => {
+      const s = this.sim;
+      if (t.ground !== 'restored' && t.ground !== 'growing') {
+        s.restoration.beginGrowth(t, 'drone', TUNING.pulse.growSeconds);
+        return 'restored';
+      }
+      if (t.ground === 'restored' && t.bloom < TUNING.restore.maxBloom) {
+        s.restoration.grow(t);
+        return 'grown';
+      }
+      return undefined;
+    },
+    sweep: (d, t, did) => {
+      // Phase 4 E07: Drone Sweep restores a few tiles around it for free (never another drone's target).
+      if (did !== 'restored') return;
+      const s = this.sim;
+      const sweep = d.old ? 0 : s.upgrades.droneSweep(s.machine(d.hubId)) + (d.swarm ? TUNING.super.megahub.sweep : 0);
+      if (sweep <= 0) return;
+      const around = s.grid
+        .neighbors(t)
+        .concat(s.grid.tilesNear({ roofId: t.roofId, x: t.x, z: t.z, size: 1 }, 1))
+        .filter((n, i, a) => a.indexOf(n) === i && n !== t && s.restoration.isEligible(n))
+        .sort((a, b) => Math.abs(a.x - t.x) + Math.abs(a.z - t.z) - (Math.abs(b.x - t.x) + Math.abs(b.z - t.z)) || a.pollution - b.pollution || (a.id < b.id ? -1 : 1));
+      for (const n of around.slice(0, sweep)) s.restoration.beginGrowth(n, 'drone', TUNING.pulse.growSeconds + 0.15);
+    },
+    offline: (_d, t) => {
+      const s = this.sim;
+      if (s.restoration.isEligible(t)) {
+        s.restoration.complete(t, 'drone', undefined, true);
+        return 'restored';
+      }
+      s.restoration.grow(t, undefined, 'auto', true);
+      return 'grown';
+    },
+  };
+
+  private restorerFind(d: DroneData, hub: MachineData, inRange: TileData[]): TileData | undefined {
     const s = this.sim;
     // Area switches: "Focus the frontier" on the hub's area makes its drones push hard into the fog.
     const focus = s.areas.mode(s.areas.areaOf(hub)) === 'frontier';
@@ -363,13 +486,16 @@ export class DroneSystem {
             d.timer = TUNING.drone.retrySeconds;
             break;
           }
-          const cost = d.old ? {} : s.restoration.pulseCost(job); // the old drone runs on sunlight
+          const role = this.roleOf(d);
+          const cost = this.priceOf(d, job); // the old drone runs on sunlight
           if (!this.payJob(cost)) {
             this.status.set(d.id, 'waitingEnergy');
             d.timer = TUNING.drone.retrySeconds;
             break;
           }
           this.setTarget(d, job.id);
+          // E18.1: the job keeps the role it was paid for, even if the hub switches mid-flight.
+          if (role !== 'restorer') d.role = role;
           d.mode = 'flying';
           // Far from the camera the flight is timed, not stepped: same arrival tick, no per-tick moves.
           if (job.roofId === hub.roofId && this.roofOf(d) === hub.roofId && this.isFar(hub)) {
@@ -385,6 +511,7 @@ export class DroneSystem {
           if (!t) {
             d.mode = 'idle';
             d.far = undefined;
+            if (d.role) delete d.role;
             break;
           }
           if (d.far) {
@@ -413,24 +540,12 @@ export class DroneSystem {
           d.timer -= dt;
           if (d.timer > 0) break;
           const t = d.targetTileId ? s.grid.byTileId(d.targetTileId) : undefined;
+          const strat = this.strategyOf(this.roleOf(d));
           this.setTarget(d, undefined);
-          if (t && t.ground !== 'restored' && t.ground !== 'growing') {
-            s.restoration.beginGrowth(t, 'drone', TUNING.pulse.growSeconds);
-            // Phase 4 E07: Drone Sweep restores a few tiles around it for free (never another drone's target).
-            const sweep = d.old ? 0 : s.upgrades.droneSweep(s.machine(d.hubId)) + (d.swarm ? TUNING.super.megahub.sweep : 0);
-            if (sweep > 0) {
-              const around = s.grid
-                .neighbors(t)
-                .concat(s.grid.tilesNear({ roofId: t.roofId, x: t.x, z: t.z, size: 1 }, 1))
-                .filter((n, i, a) => a.indexOf(n) === i && n !== t && s.restoration.isEligible(n))
-                .sort((a, b) => Math.abs(a.x - t.x) + Math.abs(a.z - t.z) - (Math.abs(b.x - t.x) + Math.abs(b.z - t.z)) || a.pollution - b.pollution || (a.id < b.id ? -1 : 1));
-              for (const n of around.slice(0, sweep)) s.restoration.beginGrowth(n, 'drone', TUNING.pulse.growSeconds + 0.15);
-            }
-            d.jobs++;
-            s.state.stats.droneJobs++;
-            if (!d.swarm) s.supers.onDroneJob(s.machine(d.hubId));
-          } else if (t && t.ground === 'restored' && t.bloom < TUNING.restore.maxBloom) {
-            s.restoration.grow(t);
+          if (d.role) delete d.role;
+          const did = t ? strat.work(d, t) : undefined;
+          if (t && did) {
+            strat.sweep?.(d, t, did);
             d.jobs++;
             s.state.stats.droneJobs++;
             if (!d.swarm) s.supers.onDroneJob(s.machine(d.hubId));

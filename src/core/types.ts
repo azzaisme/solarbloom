@@ -107,6 +107,12 @@ export interface LayerData {
 /** Kept as an alias while the rooftop-era code is ported (City 12 removes it). */
 export type RooftopData = LayerData;
 
+/**
+ * E18 (#199): what a Drone Hub's drones do. `restorer` is the default (and what every hub did before E18);
+ * the others are refits bought per hub (see `DroneRoleSystem`).
+ */
+export type DroneRole = 'restorer' | 'gardener' | 'scout' | 'courier' | 'spark' | 'harvester';
+
 export interface MachineData {
   id: string;
   type: MachineType;
@@ -133,6 +139,10 @@ export interface MachineData {
   ability?: { charge: number; used: number; auto?: boolean };
   /** Look 6.8: a Cultivator's tillers (mobile units working dead ground near the dock), and tiles finished. */
   cult?: { units: CultivatorUnit[]; done: number };
+  /** E18.1: a Drone Hub's role (unset = `restorer`, so saves from before E18 load unchanged). */
+  role?: DroneRole;
+  /** E18.1: roles this hub has been refitted for (Restorer is always owned and never listed). */
+  roles?: DroneRole[];
 }
 
 /**
@@ -171,6 +181,12 @@ export interface DroneData {
   roofId?: string;
   /** City 11.4: a flight far from the camera, resolved by time instead of per-tick moves (from, departure, arrival). */
   far?: { fx: number; fz: number; t0: number; t1: number };
+  /**
+   * E18.1: the role of the job in flight, when it isn't a Restorer's (unset otherwise, so Restorer saves are
+   * unchanged). Set when the job is paid, cleared when it's done: a hub that switches role mid-flight lets
+   * the drone finish the job it paid for, and a reload keeps it.
+   */
+  role?: DroneRole;
 }
 
 export type BuffType = 'solarFrenzy' | 'megaflower';
