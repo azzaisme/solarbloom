@@ -459,7 +459,7 @@ function spray(B: Buf, R: () => number, at: Tip, n: number, reach: number, L: nu
 }
 
 /** Leaves per spray and leaf length factor per detail level (far … super close). */
-const LEAVES: Record<Lod, [number, number]> = { 0: [3, 2.1], 1: [18, 1.22], 2: [24, 0.82], 3: [32, 0.72] };
+const LEAVES: Record<Lod, [number, number]> = { 0: [3, 2.1], 1: [17, 1.25], 2: [24, 0.82], 3: [32, 0.72] };
 
 // ───────────── species ─────────────
 
