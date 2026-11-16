@@ -52,6 +52,8 @@ export class RestorationSystem {
     if (this.sim.isCoreTile(t)) return { ok: false, reason: 'The Rooftop Core — awaken it when it is ready', cost };
     if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in full bloom', cost };
     if (t.ground === 'growing') return { ok: false, reason: `Roots are breaking through — ${Math.max(1, Math.ceil(t.growthRemainingSec))}s`, cost };
+    const tilling = this.sim.cultivators?.remaining(t);
+    if (tilling !== undefined) return { ok: false, reason: `The Cultivator is breaking up this slab — ${Math.max(1, Math.ceil(tilling))}s`, cost };
     if (this.sim.drones.isReserved(t.id)) return { ok: false, reason: 'Your drone is on its way here', cost };
     const short = this.sim.econ.shortfall(cost);
     if (short === 'energy')
@@ -73,6 +75,10 @@ export class RestorationSystem {
     if (!t) return false;
     const chk = this.checkPulse(t);
     if (!chk.ok) {
+      // Look 6.10: a tap on a tile mid-process knocks it along instead of failing: a Cultivator's tile (gameplay
+      // time, limited), or one whose growth is still playing out (visual only).
+      if (this.sim.cultivators.knock(t)) return false;
+      if ((t.ground === 'growing' || (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom)) && this.sim.transitions.knock(t)) return false;
       this.sim.bus.emit('action.failed', { reason: chk.reason!, tileId });
       return false;
     }
@@ -276,6 +282,7 @@ export class RestorationSystem {
     const id = this.sim.chains.onRestored(t, source, chainId);
     this.sim.chains.addReward(id, biomass);
     this.sim.bus.emit('tile.restored', { tile: t, source, chainId: id, biomass });
+    if (source === 'cultivator') this.sim.cultivators.onRestored(t);
     return id;
   }
 }

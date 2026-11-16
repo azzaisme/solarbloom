@@ -32,6 +32,7 @@ import { RestorationSystem } from './RestorationSystem';
 import { UpgradeSystem } from './UpgradeSystem';
 import { TUNING } from '../data/tuning';
 import { Transitions } from './Transitions';
+import { CultivatorSystem } from './CultivatorSystem';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -70,6 +71,8 @@ export class Sim {
   readonly ecosystem: EcosystemSystem;
   /** Look 6: living transitions (what each tile is visibly turning into). */
   readonly transitions: Transitions;
+  /** Look 6.8: Cultivators (solar tillers). */
+  readonly cultivators: CultivatorSystem;
 
   constructor(
     readonly state: GameState,
@@ -111,6 +114,7 @@ export class Sim {
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
     this.drones = new DroneSystem(this);
+    this.cultivators = new CultivatorSystem(this);
     this.cat = new LuckyCatSystem(this);
     this.advisor = new Advisor(this);
     this.progression = new ProgressionSystem(this);
@@ -218,6 +222,7 @@ export class Sim {
     this.transitions.tick();
     this.chains.tick();
     this.drones.tick(dt);
+    this.cultivators.tick(dt);
     this.supers.tick(dt);
     this.cat.tick();
     this.events.tick();

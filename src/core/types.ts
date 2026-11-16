@@ -1,5 +1,5 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
-export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'core';
+export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
 /** Plain per-resource numbers (tuning tables, small per-second coefficients). */
@@ -131,6 +131,24 @@ export interface MachineData {
   project?: { stage: number; costs: Partial<Record<ResourceKind, string>>[] };
   /** Phase 5 E14: a superstructure's ability: charge (events), uses, automation switch. */
   ability?: { charge: number; used: number; auto?: boolean };
+  /** Look 6.8: a Cultivator's tillers (mobile units working dead ground near the dock), and tiles finished. */
+  cult?: { units: CultivatorUnit[]; done: number };
+}
+
+/**
+ * Look 6.8: one Cultivator tiller. `px`/`pz` are its continuous position (tile centre = x + 0.5); `work` lists
+ * the tiles it is working side by side (Wide Tines), `knocks`/`knockAt` limit tap knocks per phase.
+ */
+export interface CultivatorUnit {
+  px: number;
+  pz: number;
+  work: string[];
+  /** facing (radians), for the model */
+  rot: number;
+  parked?: boolean;
+  knocks?: number;
+  knockAt?: number;
+  retryAt?: number;
 }
 
 export type DroneMode = 'idle' | 'flying' | 'working' | 'cooldown' | 'returning';
