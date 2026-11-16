@@ -25,6 +25,7 @@ import { setTreeCursor } from '../rendering/Foliage';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
 import { ChunkRenderer } from '../rendering/ChunkRenderer';
+import { TransitionRenderer } from '../rendering/transitions/TransitionRenderer';
 import { areaPanelHtml } from '../ui/AreaPanel';
 import { upgradeHighlights } from '../gameplay/UpgradeEffects';
 import { GridRenderer } from '../rendering/GridRenderer';
@@ -80,6 +81,8 @@ export class Game {
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
   readonly chunks: ChunkRenderer;
+  /** Look 6.12: living transitions (every tile change plays as a process). */
+  readonly transitions: TransitionRenderer;
   readonly machines: MachineVisuals;
   readonly drones: DroneVisuals;
   readonly cat: CatVisuals;
@@ -155,6 +158,8 @@ export class Game {
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.transitions = new TransitionRenderer(this.sim);
+    this.chunks.transitions = this.transitions;
     this.chainSummary = new ChainSummary(this.sim);
     // City 05.2: the park cheers up in stages as you restore it.
     this.chunks.onParkStage = (stage) => {
@@ -351,6 +356,16 @@ export class Game {
     const rm = s.reducedMotion;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
+    if (this.transitions) {
+      // Look 6: reduced motion keeps the timings with simpler visuals; detail follows the quality tier (Look 1's
+      // setting when it lands, the "fewer effects" switch until then).
+      this.transitions.reducedMotion = rm;
+      const tier = (this as { gfxTier?: 'low' | 'medium' | 'high' }).gfxTier ?? (s.lowVfx ? 'low' : 'high');
+      if (this.transitions.tier !== tier) {
+        this.transitions.tier = tier;
+        this.chunks?.markAll();
+      }
+    }
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
     this.cat.softSparkle = rm || s.lowVfx;
     this.machines.wispsPerSecond = s.lowVfx ? 2 : 5;
@@ -1164,7 +1179,7 @@ export class Game {
   private wireEvents() {
     const b = this.bus;
     const s = this.sim;
-    for (const ev of ['tile.restoring', 'tile.restored', 'tile.prepared', 'tile.softened', 'tile.nurtured'] as const) b.on(ev, ({ tile }) => this.chunks.markTile(tile));
+    for (const ev of ['tile.restoring', 'tile.restored', 'tile.prepared', 'tile.softened', 'tile.nurtured', 'tile.lush', 'tile.knocked', 'tile.transition'] as const) b.on(ev, ({ tile }) => this.chunks.markTile(tile));
     // Phase 5: trees grow into their next stage with a bounce (restored → sapling, then with each bloom stage).
     b.on('tile.restored', ({ tile }) => this.chunks.growTree(tile, 0));
     b.on('tile.nurtured', ({ tile, level }) => this.chunks.growTree(tile, level - 1));
@@ -2166,6 +2181,7 @@ export class Game {
     this.scene.update(dt);
     this.grid.update(dt);
     const rect = this.city ? this.groundRect() : undefined;
+    this.transitions.sync(this.sim.time + Math.min(this.acc, TUNING.simStep));
     if (rect) this.chunks.update(dt, rect, this.camera.target, this.camera.zoom);
     this.machines.update(dt, rect);
     this.drones.update(this.paused || this.hiddenPause ? 0 : dt); // drone personality freezes with the game

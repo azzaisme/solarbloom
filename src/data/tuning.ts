@@ -472,7 +472,7 @@ export const TUNING = {
     /** moss/concrete → growing → restored, by who restored it (the sim still restores at its own moment) */
     restore: { pulse: 12, broad: 10, auto: 8, fast: 5 },
     /** stages of the restore sequence, as shares of its duration: [start, end] */
-    restoreStages: { fracture: [0, 0.08], heave: [0.08, 0.3], crumble: [0.3, 0.5], sprout: [0.45, 0.7], knit: [0.7, 1] },
+    restoreStages: { fracture: [0, 0.08], heave: [0.08, 0.34], crumble: [0.34, 0.52], sprout: [0.46, 0.7], knit: [0.7, 1] },
     /** bloom grow-in, by the level reached (index 2..4); automatic nurtures play at `autoMult` */
     bloom: [0, 0, 3, 4, 5],
     autoMult: 0.6,

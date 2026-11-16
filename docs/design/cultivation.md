@@ -47,7 +47,7 @@ visual duration on that ground type: paving 0.8, road 1.0, water 1.2, clay 0.9, 
 |---|---|---|---|---|---|
 | Concrete softening (pollution falls) | `tile.softened` (`restore.seep`) | Visual | **3.0**, from the edge facing the restored neighbour | Stacks: a second seep mid-way continues from the current look | Finishes (no progress kept) |
 | Concrete → moss | `tile.prepared` | Visual | **6.0** creep from the living edge, along the cracks | Stacks over softening (continues smoothly) | Finishes |
-| Moss/concrete → growing → restored: player Pulse | `tile.restoring` (pulse) then `tile.restored` | Visual over sim (sim: 0.8 s as today) | **12.0** total: fracture 0–8 %, heave 8–30 %, crumble to soil 30–50 %, seedlings 45–70 %, turf knit 70–100 % | Tap knock (visual): +15 % per tap | Finishes |
+| Moss/concrete → growing → restored: player Pulse | `tile.restoring` (pulse) then `tile.restored` | Visual over sim (sim: 0.8 s as today) | **12.0** total: fracture 0–8 %, heave 8–34 %, crumble to soil 34–52 %, seedlings 46–70 %, turf knit 70–100 % | Tap knock (visual): +15 % per tap | Finishes |
 | …Wide/Overcharge footprint (`broad`) | same | Visual | **10.0**, plus the existing ripple delay | — | Finishes |
 | …drone, condenser, overflow, Mother Tree, relay, canopy, cat | `tile.restored` | Visual | **8.0** | — | Finishes |
 | …chains, Mega Bloom, Frenzy, E14 abilities, E15 events | `tile.restored` (chain/mega/super/event sources, or any source during Frenzy) | Visual, **fast** | **5.0**; the fracture flash lands on the restore frame | — | Finishes |

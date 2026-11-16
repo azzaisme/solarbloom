@@ -20,6 +20,10 @@ class VRng {
   }
 }
 
+function paintSlab(e: pc.Entity, hex: string) {
+  setVColor(e, 'box', hex);
+}
+
 /** Per-rooftop look of unrestored ground: grey concrete, sun-baked clay, withered leaf litter. */
 const DEAD_LOOK: Record<string, { base: readonly string[]; dark: string; crack: string; debris: string }> = {
   seed: { base: PALETTE.concrete, dark: PALETTE.concreteDark, crack: PALETTE.crack, debris: PALETTE.debris },
@@ -35,6 +39,15 @@ interface TileView {
   key: string;
   sway: pc.Entity[];
   swayPhase: number;
+  /** Look 6.12: the slab colour drawn now (transitions blend from it) */
+  slabHex?: string;
+}
+
+/** Look 6.12: mixes two sRGB hex colours (roof slabs blend in steps; one cached mesh per step). */
+function mixHex(a: string, b: string, k: number): string {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const ch = (sh: number) => Math.round(((pa >> sh) & 255) + (((pb >> sh) & 255) - ((pa >> sh) & 255)) * k);
+  return '#' + ((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, '0');
 }
 
 /** Renders tiles from TileData. Listens to state; never decides rules. */
@@ -157,7 +170,9 @@ export class GridRenderer {
     const keepOld = animate && t.ground === 'restored' && prevGround === 'restored' && !t.occupantId;
     if (animate && !keepOld && old.children.length) {
       old.name = 'retiring';
-      this.tweens.add(0.18, (k) => old.setLocalScale(1 - k, 1 - k, 1 - k), { done: () => old.destroy() });
+      // Look 6.12: old props shrink away over the first part of the transition (not in a blink).
+      const out = Math.max(0.3, (t.tr ? Math.max(0, t.tr.t0 + t.tr.d - this.sim.time) : 0.5) * 0.35);
+      this.tweens.add(out, (k) => old.setLocalScale(1 - k, 1 - k, 1 - k), { done: () => old.destroy() });
     } else if (!keepOld) old.destroy();
     let deco: pc.Entity;
     if (keepOld) deco = old;
@@ -167,6 +182,12 @@ export class GridRenderer {
     }
     v.deco = deco;
     const r = new VRng(t.variant * 7919 + 13);
+    // Look 6.12: the slab colour is recorded, then blended in steps over the tile's transition (never swapped).
+    const prevHex = v.slabHex;
+    let slabHex = prevHex ?? PALETTE.concrete[0];
+    const setVColor = (_e: pc.Entity, _p: 'box', hex: string) => {
+      slabHex = hex;
+    };
     const born: pc.Entity[] = [];
     const add = (e: pc.Entity) => {
       born.push(e);
@@ -309,6 +330,29 @@ export class GridRenderer {
       }
     }
 
+    // Look 6.12: how long this change plays (the tile's transition, from the sim), and its prop windows.
+    const tr = t.tr;
+    const left = tr ? Math.max(0, tr.t0 + tr.d - this.sim.time) : 0;
+    const dur = animate ? Math.max(0.45, left || 0.45) : 0;
+    const inStart = tr?.k === 'restore' ? 0.7 : tr?.k === 'moss' ? 0.3 : 0;
+    const slabFrom = animate && prevHex && prevHex !== slabHex ? prevHex : undefined;
+    v.slabHex = slabHex;
+    paintSlab(v.slab, slabFrom ?? slabHex);
+    if (slabFrom) {
+      const target = slabHex;
+      let step = 0;
+      this.tweens.add(dur * (tr?.k === 'restore' ? 0.9 : 0.8), (k) => {
+        const st = Math.min(6, Math.floor(k * 6.999));
+        if (st === step) return;
+        step = st;
+        paintSlab(v.slab, mixHex(slabFrom, target, st / 6));
+        const g = this.regionGroup(t);
+        if (g >= 0) {
+          assignBatch(v.root, g);
+          this.batcher!.markGroupDirty(g);
+        }
+      }, { ease: ease.linear, done: () => paintSlab(v.slab, target) });
+    }
     const gid = this.regionGroup(t);
     if (gid >= 0) {
       assignBatch(v.root, gid); // slab material may have changed too
@@ -323,13 +367,15 @@ export class GridRenderer {
         const s = 1 + Math.sin(k * Math.PI) * 0.35 * (1 - k);
         v.slab.setLocalScale(size * (2 - s), 0.16 * s, size * (2 - s));
       }, { owner: v.slab, ease: ease.linear, done: () => v.slab.setLocalScale(size, 0.16, size) });
-      const growDur = t.ground === 'growing' ? Math.max(0.3, t.growthRemainingSec) : 0.38;
+      // Look 6.12: new props grow in inside the transition's window, staggered across the tile.
+      const growDur = Math.max(0.3, dur * (1 - inStart) * 0.7);
+      const stagger = born.length > 1 ? (dur * (1 - inStart) * 0.3) / (born.length - 1) : 0;
       born.forEach((e, i) => {
         const base = e.getLocalScale().clone();
         e.setLocalScale(0, 0, 0);
         this.tweens.add(growDur, (k) => e.setLocalScale(base.x * k, base.y * k, base.z * k), {
-          delay: this.reducedMotion ? 0 : i * 0.03,
-          ease: t.ground === 'growing' ? ease.outCubic : ease.outBack,
+          delay: dur * inStart + i * stagger,
+          ease: this.reducedMotion ? ease.outCubic : t.ground === 'growing' ? ease.outCubic : ease.outBack,
         });
       });
     }
