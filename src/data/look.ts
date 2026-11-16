@@ -38,7 +38,8 @@ export const LOOK = {
    * Look 1.3: a warm rim on silhouettes (a view-dependent term added in the standard shader), stronger on the
    * sun side, so flowers, the drone and machines pick up a bright edge against darker ground.
    */
-  rim: { color: '#ffc98a', intensity: 0.8, power: 3.0 },
+  // Phase 6: stronger and more golden (was '#ffc98a', 0.8, power 3.0 on a plain 1 - N·V edge); see LookShaders
+  rim: { color: '#ffd35c', intensity: 2.6, power: 1.3 },
   /**
    * Look 1.4: tone mapping and exposure. Khronos PBR Neutral keeps the palette's hues and saturation (ACES
    * bleached the greens and pinks toward yellow-white), and rolls highlights off so nothing clips.

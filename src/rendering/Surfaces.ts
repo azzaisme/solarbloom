@@ -176,10 +176,10 @@ function speciesAt(x: number, z: number, stage: number): FlowerSpecies {
 }
 const colourAt = (x: number, z: number) => Math.floor(noise2(x / 2.4, z / 2.4, 93) * 12);
 
-function clump(c: DressCtx, t: TileData, sp: FlowerSpecies, open: boolean, px: number, pz: number, top: number, k: number) {
+function clump(c: DressCtx, t: TileData, sp: FlowerSpecies, open: boolean, px: number, pz: number, top: number, k: number, size = 1) {
   // Phase 6: neighbouring clumps step through the colours (mixed beds, like the reference), at about 1.5x the size
   const col = (colourAt(px, pz) + k) % FLOWER_COLOURS[sp].length;
-  c.fb.add(flowerGeo(sp, col, open, t.variant + k, c.lod === 2 ? 1 : 0), px, top, pz, hash01(t.x * 3 + k, t.z, 23) * 6.28, 1.25 + hash01(t.x, t.z * 3 + k, 29) * 0.4);
+  c.fb.add(flowerGeo(sp, col, open, t.variant + k, c.lod === 2 ? 1 : 0), px, top, pz, hash01(t.x * 3 + k, t.z, 23) * 6.28, (1.25 + hash01(t.x, t.z * 3 + k, 29) * 0.4) * size);
 }
 
 /** Is this side of the tile an edge flowers hug (paving, a wall, a planter, another area, water)? */
@@ -200,8 +200,11 @@ export function flowerDrifts(c: DressCtx, t: TileData, stage: number, x: number,
   let k = 0;
   for (const [dx, dz] of SIDES) {
     if (!flowerEdge(c, t, dx, dz)) continue;
-    // Phase 6: beds packed like the reference: 1–2 clumps a side when young, 3–4 once Blooming, 5 when Thriving
-    const want = stage === 1 ? 1 + (hash01(t.x + dx, t.z + dz, 31) < 0.4 ? 1 : 0) : stage === 2 ? 3 + (hash01(t.x, t.z + dx, 37) < 0.5 ? 1 : 0) : 5;
+    // Phase 6: beds packed like the reference: 1–2 clumps a side when young, 3–4 once Blooming, 5 when Thriving;
+    // along a path the bed is solid (two full rows of bigger flowers), so it reads as a border from the default view
+    const nb = c.peek(t.x + dx, t.z + dz);
+    const path = !!nb && (nb.feature ?? 'lawn') === 'paving' && !nb.blocked;
+    const want = stage === 1 ? 1 + (hash01(t.x + dx, t.z + dz, 31) < 0.4 ? 1 : 0) + (path ? 1 : 0) : stage === 2 ? (path ? 5 : 3 + (hash01(t.x, t.z + dx, 37) < 0.5 ? 1 : 0)) : path ? 7 : 5;
     const n = Math.max(want ? 1 : 0, Math.round(want * c.dens));
     for (let i = 0; i < n; i++) {
       const along = (i + 0.5) / n - 0.5 + (hash01(t.x * 5 + i, t.z + dz, 41) - 0.5) * 0.18;
@@ -209,7 +212,7 @@ export function flowerDrifts(c: DressCtx, t: TileData, stage: number, x: number,
       const px = x + dx * inset + (dz ? along * 0.9 : 0);
       const pz = z + dz * inset + (dx ? along * 0.9 : 0);
       const open = stage >= 3 || (stage === 2 && hash01(t.x + i, t.z, 43) < 0.6);
-      clump(c, t, speciesAt(px, pz, stage), open, px, pz, top, k++);
+      clump(c, t, speciesAt(px, pz, stage), open || path, px, pz, top, k++, path ? 1.3 : 1);
     }
   }
   // open lawn: sparse clumps where the drift field is strong

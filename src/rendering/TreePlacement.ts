@@ -63,7 +63,9 @@ export function treeSpot(t: Pick<TileData, 'x' | 'z' | 'feature' | 'blocked'>, a
     species,
     variant: Math.floor(hash01(t.x, t.z, 3) * 4),
     rot: hash01(t.x, t.z, 4) * Math.PI * 2,
-    scale: (planter ? 0.78 : 0.9) + hash01(t.x, t.z, 5) * 0.22,
+    // Phase 6: on natural ground, about a third of the trees are big specimens (a crown about two tiles across,
+    // like the reference); the rest stay ornamental, so the lawn and its flowers still show between them.
+    scale: planter ? 0.86 + hash01(t.x, t.z, 5) * 0.22 : hash01(t.x, t.z, 6) < 0.34 ? 1.65 + hash01(t.x, t.z, 5) * 0.3 : 1.0 + hash01(t.x, t.z, 5) * 0.25,
     planter: !natural,
   };
 }
