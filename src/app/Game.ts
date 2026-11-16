@@ -26,6 +26,7 @@ import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
 import { ChunkRenderer } from '../rendering/ChunkRenderer';
 import { TransitionRenderer } from '../rendering/transitions/TransitionRenderer';
+import { CultivatorVisuals } from '../rendering/CultivatorVisuals';
 import { areaPanelHtml } from '../ui/AreaPanel';
 import { upgradeHighlights } from '../gameplay/UpgradeEffects';
 import { GridRenderer } from '../rendering/GridRenderer';
@@ -83,6 +84,8 @@ export class Game {
   readonly chunks: ChunkRenderer;
   /** Look 6.12: living transitions (every tile change plays as a process). */
   readonly transitions: TransitionRenderer;
+  /** Look 6.9: Cultivator tillers. */
+  readonly tillers: CultivatorVisuals;
   readonly machines: MachineVisuals;
   readonly drones: DroneVisuals;
   readonly cat: CatVisuals;
@@ -182,6 +185,7 @@ export class Game {
     this.drones.sync();
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
+    this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
     this.birds = new Birds(this.scene.world);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
     this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
@@ -360,6 +364,7 @@ export class Game {
       // Look 6: reduced motion keeps the timings with simpler visuals; detail follows the quality tier (Look 1's
       // setting when it lands, the "fewer effects" switch until then).
       this.transitions.reducedMotion = rm;
+      if (this.tillers) this.tillers.reducedMotion = rm;
       const tier = (this as { gfxTier?: 'low' | 'medium' | 'high' }).gfxTier ?? (s.lowVfx ? 'low' : 'high');
       if (this.transitions.tier !== tier) {
         this.transitions.tier = tier;
@@ -454,7 +459,7 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement) return;
       const k = e.key.toLowerCase();
-      const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden', '9': 'relay' };
+      const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden', '9': 'relay', '0': 'cultivator' };
       if (map[k]) this.selectTool(map[k]);
       else if (k === 'h') this.harvest();
       else if (k === 'f') this.focusNextArea();
@@ -883,6 +888,8 @@ export class Game {
         const linked = 'id' in m ? this.sim.relays.linked(m as MachineData) : [];
         return [...g.tilesNear(m, TUNING.relay.zoneRadius), ...linked.map((o) => g.get(o.roofId, o.x, o.z)!)];
       }
+      case 'cultivator': // Look 6.8: its work radius (wider with Fog Seeker)
+        return g.tilesNear(m, 'id' in m ? this.sim.cultivators.radius(m as MachineData) : TUNING.cultivator.radius);
       case 'core':
         return this.sim.chains.isElder(m) ? g.tilesNear(m, this.sim.chains.canopyBurstRadius(m)) : [];
       default:
@@ -2187,6 +2194,7 @@ export class Game {
     this.transitions.sync(this.sim.time + Math.min(this.acc, TUNING.simStep));
     if (rect) this.chunks.update(dt, rect, this.camera.target, this.camera.zoom);
     this.machines.update(dt, rect);
+    this.tillers.update(this.paused || this.hiddenPause ? 0 : dt);
     this.drones.update(this.paused || this.hiddenPause ? 0 : dt); // drone personality freezes with the game
     this.cat.update(dt);
     // Phase 5 E16: fauna by unlock, capped per quality tier ("Fewer particles" = low).
