@@ -21,9 +21,18 @@ export interface ViewProfile {
   /** vertical field of view, degrees */
   farFov: number;
   nearFov: number;
+  /** Past the default (near) zoom, the camera keeps lowering toward this pitch and lens at `closeZoom`. */
+  closeZoom: number;
+  closePitch: number;
+  closeFov: number;
 }
 
-export const VIEW: ViewProfile = { farZoom: 0.5, nearZoom: 1.7, farPitch: 40, nearPitch: 25, farFov: 12, nearFov: 36 };
+/**
+ * Look 4.10 (#154): zoomed out (≤ farZoom) a high, narrow lens that reads like the old isometric grid; the
+ * default zoom (1) is a close three-quarter view with a wide lens, low enough that the skyline rises behind
+ * the area; zooming in further lowers it until the sky shows above the skyline.
+ */
+export const VIEW: ViewProfile = { farZoom: 0.45, nearZoom: 1.0, farPitch: 42, nearPitch: 24, farFov: 12, nearFov: 52, closeZoom: 1.9, closePitch: 19, closeFov: 56 };
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
@@ -322,8 +331,9 @@ export class CameraController {
 
   private apply() {
     const n = this.nearness();
-    this.pitch = VIEW.farPitch + (VIEW.nearPitch - VIEW.farPitch) * n;
-    this.fov = VIEW.farFov + (VIEW.nearFov - VIEW.farFov) * n;
+    const k = smooth(pc.math.clamp((this.zoom - VIEW.nearZoom) / (VIEW.closeZoom - VIEW.nearZoom), 0, 1));
+    this.pitch = VIEW.farPitch + (VIEW.nearPitch - VIEW.farPitch) * n + (VIEW.closePitch - VIEW.nearPitch) * k;
+    this.fov = VIEW.farFov + (VIEW.nearFov - VIEW.farFov) * n + (VIEW.closeFov - VIEW.nearFov) * k;
     this.viewHeight = this.fitHeight() / this.zoom;
     this.dist = this.viewHeight / Math.tan((this.fov * Math.PI) / 360);
     const c = this.cam;
