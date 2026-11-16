@@ -186,22 +186,24 @@ export function flowerDrifts(c: DressCtx, t: TileData, stage: number, x: number,
   let k = 0;
   for (const [dx, dz] of SIDES) {
     if (!flowerEdge(c, t, dx, dz)) continue;
-    const want = stage === 1 ? (hash01(t.x + dx, t.z + dz, 31) < 0.35 ? 1 : 0) : stage === 2 ? 1 + (hash01(t.x, t.z + dx, 37) < 0.4 ? 1 : 0) : 2;
+    // Phase 6: beds packed like the reference: 1–2 clumps a side when young, 3–4 once Blooming, 5 when Thriving
+    const want = stage === 1 ? 1 + (hash01(t.x + dx, t.z + dz, 31) < 0.4 ? 1 : 0) : stage === 2 ? 3 + (hash01(t.x, t.z + dx, 37) < 0.5 ? 1 : 0) : 5;
     const n = Math.max(want ? 1 : 0, Math.round(want * c.dens));
     for (let i = 0; i < n; i++) {
       const along = (i + 0.5) / n - 0.5 + (hash01(t.x * 5 + i, t.z + dz, 41) - 0.5) * 0.18;
-      const px = x + dx * 0.35 + (dz ? along * 0.85 : 0);
-      const pz = z + dz * 0.35 + (dx ? along * 0.85 : 0);
+      const inset = 0.36 - (i % 2) * 0.13; // two staggered rows, so a bed reads as a mass rather than a line
+      const px = x + dx * inset + (dz ? along * 0.9 : 0);
+      const pz = z + dz * inset + (dx ? along * 0.9 : 0);
       const open = stage >= 3 || (stage === 2 && hash01(t.x + i, t.z, 43) < 0.6);
       clump(c, t, speciesAt(px, pz, stage), open, px, pz, top, k++);
     }
   }
   // open lawn: sparse clumps where the drift field is strong
   const f = noise2(t.x / 2.6, t.z / 2.6, 47);
-  const inner = stage === 1 ? 0 : stage === 2 ? (f > 0.5 ? 1 : 0) : (f > 0.25 ? 1 : 0) + (f > 0.6 ? 1 : 0);
+  const inner = stage === 1 ? (f > 0.6 ? 1 : 0) : stage === 2 ? (f > 0.35 ? 2 : 0) + (f > 0.6 ? 2 : 0) : (f > 0.2 ? 3 : 0) + (f > 0.5 ? 3 : 0);
   for (let i = 0; i < Math.round(inner * Math.max(0.5, c.dens)); i++) {
-    const px = x + (hash01(t.x * 11 + i, t.z, 53) - 0.5) * 0.6;
-    const pz = z + (hash01(t.x, t.z * 11 + i, 59) - 0.5) * 0.6;
+    const px = x + (hash01(t.x * 11 + i, t.z, 53) - 0.5) * 0.8;
+    const pz = z + (hash01(t.x, t.z * 11 + i, 59) - 0.5) * 0.8;
     clump(c, t, speciesAt(px, pz, stage), stage >= 3 || hash01(t.x, t.z + i, 61) < 0.6, px, pz, top, k++);
   }
 }
@@ -222,10 +224,12 @@ export function thrivingExtras(c: DressCtx, t: TileData, x: number, z: number, t
   }
 }
 
-/** Radiant: a warm glow on the ground and luminous golden daisies and sunflowers above the shrubs. */
+/**
+ * Radiant: luminous golden daisies and sunflowers above the shrubs. (Phase 6: the flat gold disc that used to sit
+ * under them is gone: it was opaque and read as a tan hexagonal pad. The golden grass tone carries the stage.)
+ */
 export function radiantExtras(c: DressCtx, t: TileData, x: number, z: number, top: number) {
-  c.b.add('cylinder', PALETTE.radiantGlow, [x, top + 0.005, z], [0.86, 0.01, 0.86]);
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     const px = x + (hash01(t.x * 13 + i, t.z, 73) - 0.5) * 0.6;
     const pz = z + (hash01(t.x, t.z * 13 + i, 79) - 0.5) * 0.6;
     const sp: FlowerSpecies = i === 0 ? 'sunflower' : 'daisy';

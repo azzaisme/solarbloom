@@ -27,9 +27,10 @@ const restoreAll = `
   const s = g.sim;
   for (const t of s.areas.tiles('park')) {
     if (!s.restoration.isEligible(t)) continue;
-    s.restoration.complete(t, 'pulse');
+    // Set the restored state directly (no restore event), so no Look 6 restore animation starts: SwiftShader is too
+    // slow to play them out, and half-played ones leave soil patches in the shot.
+    t.ground = 'restored'; t.pollution = 0; t.tr = undefined;
     t.bloom = 1 + ((t.x * 3 + t.z * 5) % 4);
-    t.tr = undefined; // skip the Look 6 restore animation: SwiftShader is too slow to play it out
     s.grid.touch(t);
   }
   s.state.progression.coreActivated = true;
