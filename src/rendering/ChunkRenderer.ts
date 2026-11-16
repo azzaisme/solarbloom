@@ -953,6 +953,33 @@ export class ChunkRenderer {
           idx.push(i, i + N + 1, i + 1, i + 1, i + N + 1, i + N + 2);
         }
     }
+    // Look 4.5: soft vertical curtains where the fog's thickness steps (its edge against cleared ground), fading
+    // upward, so the fog-of-war has a side to it when seen from the low close-up camera instead of reading as a
+    // flat card. Each cell owns its west and north edges (the border cells cover the chunk seams).
+    const tint = this.lowFog ? [112, 121, 132] : [110, 119, 130];
+    const curtainH = this.lowFog ? 1.0 : 1.35;
+    const curtain = (ax: number, az: number, bx: number, bz: number, a: number, ox: number, oz: number) => {
+      const base = pos.length / 3;
+      const rows: [number, number][] = [[0.02, 0.55], [curtainH * 0.45, 0.38], [curtainH, 0]];
+      for (const [y, k] of rows) {
+        const al = Math.round(Math.min(1, a * k) * 255);
+        pos.push(ax + ox, h + y, az + oz, bx + ox, h + y, bz + oz);
+        col.push(tint[0], tint[1], tint[2], al, tint[0], tint[1], tint[2], al);
+      }
+      for (let r = 0; r < 2; r++) {
+        const i = base + r * 2;
+        idx.push(i, i + 2, i + 1, i + 1, i + 2, i + 3);
+      }
+    };
+    for (let z = 0; z < N; z++)
+      for (let x = 0; x < N; x++) {
+        const a = cell(x, z);
+        const w = cell(x - 1, z);
+        const n = cell(x, z - 1);
+        // Inset a little into the foggy side, so the curtain stands at the fog's edge.
+        if (Math.abs(a - w) > 0.15) curtain(x0 + x, z0 + z, x0 + x, z0 + z + 1, Math.max(a, w), a > w ? 0.15 : -0.15, 0);
+        if (Math.abs(a - n) > 0.15) curtain(x0 + x, z0 + z, x0 + x + 1, z0 + z, Math.max(a, n), 0, a > n ? 0.15 : -0.15);
+      }
     const m = new pc.Mesh(this.device);
     m.setPositions(pos);
     m.setColors32(col);
