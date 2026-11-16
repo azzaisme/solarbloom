@@ -21,6 +21,7 @@ import { Birds } from '../rendering/Birds';
 import { Clouds } from '../rendering/Clouds';
 import { Fauna } from '../rendering/Fauna';
 import { EcoBadge } from '../ui/EcoBadge';
+import { createModels } from '../rendering/Models';
 import { CameraController } from '../rendering/CameraController';
 import { setLeafTier, setTreeCursor } from '../rendering/Foliage';
 import { detailTextures } from '../rendering/DetailTex';
@@ -215,6 +216,14 @@ export class Game {
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
     this.rings = new ProgressRings(this.sim, this.scene.world);
+    // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
+    // its procedural look. Once they're in, what was already drawn is rebuilt with them.
+    createModels(this.app).onReady = () => {
+      this.chunks.markAll();
+      this.machines.rebuildAll();
+      this.tillers.rebuildAll();
+      this.cat.rebuildAll();
+    };
     this.birds = new Birds(this.scene.world);
     this.clouds = new Clouds(this.scene.world, this.app.graphicsDevice, this.scene.sun.up);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);

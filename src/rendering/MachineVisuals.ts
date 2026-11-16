@@ -12,6 +12,7 @@ import { treeGeo } from './TreeGen';
 import { machineRunning } from './FaunaPlan';
 import { arcPath, ball, bezier, dome, latheAuto, matOf, part, rbox, rcyl, ring, setMat, tube } from './MachineParts';
 import { cultivatorDock } from './CultivatorVisuals';
+import { MODELS } from './Models';
 
 interface MachineView {
   m: MachineData;
@@ -52,7 +53,31 @@ interface MachineView {
   vines?: pc.Entity;
   vineMat?: pc.StandardMaterial;
   blooms?: pc.Entity;
+  /** Look 3.19: the hand-built model standing in for the procedural body (when loaded) */
+  model?: pc.Entity;
 }
+
+/**
+ * Look 3.19: which hand-built model draws each machine or landmark, and its scale (the models are full size; a
+ * machine fits its footprint). Landmarks follow their area's landmark kind. No model: the procedural look stays
+ * (solar panels, the Elder Tree and the authored landmarks).
+ */
+const MACHINE_MODELS: Record<string, [string, number]> = {
+  condenser: ['water-condenser', 0.85],
+  pollinator: ['pollinator-garden', 0.55],
+  droneHub: ['drone-hub', 1.0],
+  reservoirGarden: ['reservoir-basin', 0.55],
+  relay: ['bloom-relay', 0.72],
+};
+const LANDMARK_MODELS: Record<string, [string, number]> = {
+  fountain: ['dry-fountain', 0.56],
+  lock: ['lock-gate', 0.62],
+  cistern: ['old-cistern', 0.66],
+  crystal: ['rooftop-core', 0.95],
+  mast: ['signal-mast', 0.6],
+  clock: ['clock-tower', 0.62],
+  hall: ['market-hall', 0.46],
+};
 
 const orbOn = () => mat(PALETTE.orbLit, { emissive: PALETTE.coreGlow, emissiveIntensity: 1.6 });
 const orbOff = () => mat(PALETTE.orbDark, { gloss: 0.6 });
@@ -150,7 +175,7 @@ export class MachineVisuals {
     v.batched = true;
     const skip = new Set<pc.Entity>([...(v.panel ?? []), ...(v.orbs ?? []), ...(v.light ? [v.light] : [])]);
     const walk = (e: pc.Entity) => {
-      if (skip.has(e)) return;
+      if (skip.has(e) || !e.enabled) return; // Look 3.19: procedural parts hidden under a model stay out
       if (e.render && e.render.batchGroupId !== id) e.render.batchGroupId = id;
       for (const c of e.children) walk(c as pc.Entity);
     };
@@ -168,6 +193,13 @@ export class MachineVisuals {
 
   buildAll() {
     for (const m of this.sim.state.machines) this.add(m, false);
+  }
+
+  /** Look 3.19: rebuild every machine (the hand-built models have loaded). */
+  rebuildAll() {
+    for (const v of this.views.values()) v.root.destroy();
+    this.views.clear();
+    this.buildAll();
   }
 
   add(m: MachineData, animate: boolean) {
@@ -216,6 +248,7 @@ export class MachineVisuals {
         cultivatorDock(v.body);
         break;
     }
+    this.applyModel(v);
     if ((m.tier ?? 1) >= 2) this.tier2(v);
     this.views.set(m.id, v);
     this.applyUpgrades(v);
@@ -764,6 +797,43 @@ export class MachineVisuals {
     blooms.enabled = false;
     v.vines = vines;
     v.blooms = blooms;
+  }
+
+  /**
+   * Look 3.19: swap the procedural body for the hand-built model. The procedural parts stay (disabled), so state
+   * code that drives them keeps working; what shows the machine's state stays visible: upgrade extras, water, and
+   * a Core's crystal, lifted to float above the model (it still glows when the area wakes).
+   */
+  private applyModel(v: MachineView) {
+    if (!MODELS) return;
+    const pick = v.m.type === 'core' ? LANDMARK_MODELS[this.landmarkKind(v.m)] : MACHINE_MODELS[v.m.type];
+    if (!pick) return;
+    const e = MODELS.instantiate(pick[0]);
+    if (!e) return;
+    const keep = new Set<pc.Entity>([v.extras]);
+    if (v.water) {
+      keep.add(v.water);
+      if (v.water.parent !== v.body) v.water.reparent(v.body);
+    }
+    const top = this.modelTop(e) * pick[1];
+    if (v.m.type === 'core')
+      for (const c of v.spin) {
+        keep.add(c);
+        if (c.parent !== v.body) c.reparent(v.body);
+        c.setLocalPosition(0, top + 0.45, 0);
+      }
+    for (const c of [...v.body.children] as pc.Entity[]) if (!keep.has(c)) c.enabled = false;
+    e.setLocalScale(pick[1], pick[1], pick[1]);
+    v.body.addChild(e);
+    v.model = e;
+  }
+
+  /** Height of a model entity's meshes (local space, unscaled). */
+  private modelTop(e: pc.Entity): number {
+    let top = 0;
+    e.syncHierarchy();
+    for (const r of e.findComponents('render') as pc.RenderComponent[]) for (const mi of r.meshInstances) top = Math.max(top, mi.aabb.getMax().y - e.getPosition().y);
+    return top;
   }
 
   private landmarkKind(m: MachineData): string {

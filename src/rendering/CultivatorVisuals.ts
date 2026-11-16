@@ -3,6 +3,7 @@ import type { CultivatorUnit, MachineData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { mat, PALETTE } from './Materials';
 import { group, shape } from './Shapes';
+import { MODELS } from './Models';
 import type { Vfx } from './Vfx';
 
 /**
@@ -47,6 +48,8 @@ interface UnitView {
   key: string;
   lastTrail: number;
   dust: number;
+  /** Look 3.19: built from the hand-built model: its tine drum's rest position (the drum dips while working) */
+  tinesRest?: pc.Vec3;
 }
 
 /** Look 6.9: the tillers, moved from the sim's unit positions each frame. */
@@ -66,6 +69,19 @@ export class CultivatorVisuals {
     const w = 1 + lv('cultWidth');
     const root = group(this.parent, `tiller-${m.id}-${i}`);
     const body = group(root, 'body');
+    const key = `${w}|${lv('cultSpeed') > 0}|${lv('cultSeed')}|${lv('cultRoute')}`;
+    // Look 3.19: the hand-built Cultivator (treads, tine drum, moss roller, sun canopy, glass hopper with its seed
+    // fill are its own parts, so they move as before). Wide Tines widen the drum; the glow stays procedural.
+    const model = MODELS?.instantiate('cultivator');
+    if (model) {
+      model.setLocalScale(0.46, 0.46, 0.46);
+      body.addChild(model);
+      const find = (n: string) => (model.findByName(n) as pc.Entity | null) ?? group(model, n);
+      const tines = find('tineDrum');
+      if (w > 1) tines.setLocalScale(w, 1, 1);
+      const glow = shape(body, 'sphere', mat(PALETTE.coreGlow, { emissive: PALETTE.coreGlow, emissiveIntensity: 1.4 }), { pos: [0, 0.1, 0.32], scale: [0.3 * w, 0.04, 0.08] });
+      return { root, body, canopy: find('canopy'), tines, roller: find('mossRoller'), seeds: find('seedFill'), glow, key, lastTrail: 0, dust: 0, tinesRest: tines.getLocalPosition().clone() };
+    }
     const s = 0.42; // overall scale: a bit under a tile
     body.setLocalScale(s, s, s);
     // treads
@@ -110,6 +126,12 @@ export class CultivatorVisuals {
     // working glow
     const glow = shape(body, 'sphere', mat(PALETTE.coreGlow, { emissive: PALETTE.coreGlow, emissiveIntensity: 1.4 }), { pos: [0, 0.32, 0.72], scale: [0.6 * w, 0.08, 0.16] });
     return { root, body, canopy, tines, roller, seeds, glow, key: `${w}|${lv('cultSpeed') > 0}|${lv('cultSeed')}|${lv('cultRoute')}`, lastTrail: 0, dust: 0 };
+  }
+
+  /** Look 3.19: rebuild every tiller (the hand-built model has loaded); they're remade next frame. */
+  rebuildAll() {
+    for (const v of this.units.values()) v.root.destroy();
+    this.units.clear();
   }
 
   update(dt: number) {
@@ -163,9 +185,10 @@ export class CultivatorVisuals {
     const spin = working ? 900 : u.work.length ? 200 : 0;
     const e = v.tines.getLocalEulerAngles();
     v.tines.setLocalEulerAngles(this.reducedMotion ? 0 : e.x + spin * dt, 0, 0);
-    v.tines.setLocalPosition(0, working ? 0.12 : 0.18, 0.72);
+    if (v.tinesRest) v.tines.setLocalPosition(v.tinesRest.x, v.tinesRest.y - (working ? 0.06 : 0), v.tinesRest.z);
+    else v.tines.setLocalPosition(0, working ? 0.12 : 0.18, 0.72);
     const re = v.roller.getLocalEulerAngles();
-    v.roller.setLocalEulerAngles(this.reducedMotion ? 0 : re.x + (u.work.length ? 120 : 0) * dt, 0, 90);
+    v.roller.setLocalEulerAngles(this.reducedMotion ? 0 : re.x + (u.work.length ? 120 : 0) * dt, 0, v.tinesRest ? 0 : 90);
     // the canopy tracks the sun (a slow sweep standing in for the sun's path), independent of driving direction
     v.canopy.setLocalEulerAngles(18 + Math.sin(t * 0.05) * 6, -(u.rot * 180) / Math.PI + 35, 0);
     // the hopper empties as it sows (refills at the dock)
