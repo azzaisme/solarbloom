@@ -555,8 +555,8 @@ export class Game {
     for (const d of this.sim.state.drones) {
       const p = this.drones.worldPos(d.id);
       if (!p) continue;
-      const sp = this.camera.toScreen(p);
-      pts.push({ id: d.id, x: sp.x, y: sp.y });
+      const sp = this.camera.onScreen(p);
+      if (sp) pts.push({ id: d.id, x: sp.x, y: sp.y });
     }
     if (!pts.length) return undefined;
     return pickDrone(pts, x, y, droneTapRadius(this.camera.worldPerPixel(), this.machineOrFootprintAt(x, y)));
@@ -579,7 +579,8 @@ export class Game {
     for (const id of this.cat.ids()) {
       const p = this.cat.targetWorld(id);
       if (!p) continue;
-      const s = this.camera.toScreen(p);
+      const s = this.camera.onScreen(p);
+      if (!s) continue;
       const d = Math.hypot(s.x - x, s.y - y);
       if (d <= bestD) {
         best = id;
@@ -616,10 +617,10 @@ export class Game {
 
   /** On screen and clear of the HUD, off screen (reachable by panning) or covered by a HUD panel. */
   private anchorView(p: pc.Vec3): 'visible' | 'offscreen' | 'covered' {
-    const s = this.camera.toScreen(p);
+    const s = this.camera.onScreen(p, 0);
     const w = window.innerWidth;
     const h = window.innerHeight;
-    if (s.x < 40 || s.y < 40 || s.x > w - 40 || s.y > h - 40) return 'offscreen';
+    if (!s || s.x < 40 || s.y < 40 || s.x > w - 40 || s.y > h - 40) return 'offscreen';
     return this.hud.blockedRects().some((r) => s.x > r.left - 16 && s.x < r.right + 16 && s.y > r.top - 16 && s.y < r.bottom + 16) ? 'covered' : 'visible';
   }
 
@@ -1133,8 +1134,9 @@ export class Game {
     const t = this.sim.grid.byTileId(tileId);
     if (!t) return undefined;
     const [x, y, z] = this.sim.grid.tileWorld(t);
-    const s = this.camera.toScreen(new pc.Vec3(x, y + 0.3, z));
-    return { x: s.x, y: s.y };
+    // Behind the camera or far off screen: the number flies from the default spot instead.
+    const s = this.camera.onScreen(new pc.Vec3(x, y + 0.3, z), 0);
+    return s && { x: s.x, y: s.y };
   }
 
   private tileVec(t: TileData, up = SLAB_TOP): pc.Vec3 {
@@ -1274,17 +1276,15 @@ export class Game {
       let from = tileId ? this.tileScreen(tileId) : undefined;
       if (!from && reason === 'cat') {
         const c = this.cat.targetWorld(this.claimingCat) ?? this.lastCatPos;
-        if (c) {
-          const sp = this.camera.toScreen(c);
-          from = { x: sp.x, y: sp.y };
-        }
+        const sp = c && this.camera.onScreen(c, 0);
+        if (sp) from = { x: sp.x, y: sp.y };
       }
       if (!from && reason === 'harvest') {
         const panel = s.state.machines.find((m) => m.type === 'solar');
         if (panel) {
           const w = this.machines.worldOf(panel);
-          const sp = this.camera.toScreen(new pc.Vec3(w[0], w[1] + 0.6, w[2]));
-          from = { x: sp.x, y: sp.y };
+          const sp = this.camera.onScreen(new pc.Vec3(w[0], w[1] + 0.6, w[2]), 0);
+          if (sp) from = { x: sp.x, y: sp.y };
         }
       }
       this.flyGain(kind, amount, from);
@@ -1916,7 +1916,6 @@ export class Game {
     const zoomedOut = this.camera.zoom < 0.6;
     const live = new Set<string>();
     if (show) {
-      const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
       // Overview icons: a chain blooming there now, and where you've found the Lucky Cat.
       const chaining = zoomedOut ? s.chains.activeAreas() : new Set<string>();
       const catAreas = new Set<string>();
@@ -1933,8 +1932,9 @@ export class Game {
         const fog = s.areas.fog(id);
         const ready = id !== PARK && s.areas.ready(id);
         if (!ready && !zoomedOut) continue;
-        const sp = this.camera.toScreen(new pc.Vec3(a.landmark[0] + 1, 2.4, a.landmark[1] + 1));
-        if (sp.x < -50 || sp.y < -50 || sp.x > c.clientWidth + 50 || sp.y > c.clientHeight + 50) continue;
+        // Look 4.6: never behind the camera or past the haze; sized by distance close up.
+        const sp = this.camera.onScreen(new pc.Vec3(a.landmark[0] + 1, 2.4, a.landmark[1] + 1), 50);
+        if (!sp) continue;
         const def = AREA_TYPES[a.type];
         const key = `areaLabel-${id}`;
         live.add(key);
@@ -1945,7 +1945,7 @@ export class Game {
         else if (fog === 'cleared') html = `<span data-area="${id}">${def.icon} ${esc(id === PARK ? 'The Park' : def.name)}${icons}<small>clear${a.authored ? ' · ' + esc(a.landmarkName) : ''}</small></span>`;
         else html = `<span data-area="${id}">${def.icon} ${esc(def.name)}${icons}<small>🌫️ ${Math.min(100, Math.round((s.areas.counts(id).restored / s.areas.need(id)) * 100))}%</small></span>`;
         // Zoomed out, every label is a button to its area's panel.
-        this.hud.worldLabel(key, html, sp.x, sp.y, ready || zoomedOut);
+        this.hud.worldLabel(key, html, sp.x, sp.y, ready || zoomedOut, zoomedOut ? 1 : sp.scale);
       }
     }
     for (const key of this.areaLabels) if (!live.has(key)) this.hud.worldLabel(key, null);

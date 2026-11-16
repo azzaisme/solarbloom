@@ -355,4 +355,20 @@ export class CameraController {
   toScreen(p: pc.Vec3): pc.Vec3 {
     return this.cam.worldToScreen(p);
   }
+
+  /**
+   * Look 4.6: a world point as screen-space UI sees it. Undefined when it is behind (or nearly at) the camera,
+   * past the haze, or further than `margin` CSS pixels off screen, so labels are never drawn mirrored from
+   * behind the camera. `scale` shrinks far labels and grows near ones a little (1 at the target's distance).
+   */
+  onScreen(p: pc.Vec3, margin = 60): { x: number; y: number; depth: number; scale: number } | undefined {
+    const e = this.entity.getPosition();
+    const f = this.entity.forward;
+    const depth = (p.x - e.x) * f.x + (p.y - e.y) * f.y + (p.z - e.z) * f.z;
+    if (depth < this.cam.nearClip + 0.2 || depth > this.dist + this.hazeEnd) return undefined;
+    const s = this.cam.worldToScreen(p);
+    const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    if (s.x < -margin || s.y < -margin || s.x > c.clientWidth + margin || s.y > c.clientHeight + margin) return undefined;
+    return { x: s.x, y: s.y, depth, scale: pc.math.clamp(this.dist / depth, 0.7, 1.25) };
+  }
 }
