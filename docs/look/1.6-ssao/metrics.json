@@ -1,0 +1,50 @@
+{
+  "tag": "1.6-ssao",
+  "query": "",
+  "renderer": "headless Chromium, SwiftShader (software GL)",
+  "when": "2026-11-16T01:48:59.957Z",
+  "shots": {
+    "machines-desktop": {
+      "scene": "Machine cluster (solar, condenser, core)",
+      "size": "1280x800",
+      "frameMs": 600.2,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 161,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "78edc2484269"
+    },
+    "full-desktop": {
+      "scene": "Fully restored park",
+      "size": "1280x800",
+      "frameMs": 554.5,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 150,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "bcbb7d508b63"
+    },
+    "far-desktop": {
+      "scene": "Far zoom (restored park, city beyond)",
+      "size": "1280x800",
+      "frameMs": 606.3,
+      "simTime": 4.6,
+      "restored": 242,
+      "drawCalls": 216,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "08ca091da67b"
+    }
+  }
+}

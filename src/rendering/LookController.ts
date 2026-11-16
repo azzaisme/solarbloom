@@ -41,11 +41,12 @@ export class LookController {
     this.app.scene.exposure = LOOK.exposure;
     this.rimColour = color(LOOK.rim.color);
     this.scene.sunDirection(this.toSun).mulScalar(-1);
-    this.post.apply({ post: true, bloom: true, samples: 4 }, this.app.scene.fog.color);
+    this.post.apply({ post: true, bloom: true, ssao: true, samples: 4 }, this.app.scene.fog.color);
   }
 
   update(_dt: number) {
     const R = LOOK.rim;
+    this.post.follow(this.camera.viewHeight);
     setLookRim(this.app.graphicsDevice, this.rimColour, R.intensity, R.power, this.toSun, this.camera.entity.getPosition());
   }
 }

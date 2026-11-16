@@ -48,4 +48,10 @@ export const LOOK = {
    * tone mapping): sunlit grass and paving peak around 1.0–1.3, so glows are authored at 2 and above (Look 1.9).
    */
   bloom: { intensity: 0.03, threshold: 1.6, blurLevel: 12 },
+  /**
+   * Look 1.6: screen-space ambient occlusion for contact shadows (High tier). The radius is in world units (a tile
+   * is 1): `radiusPerView` × the world height in view, clamped, so close-ups get tight contact shadows under
+   * bushes and machines and the overview still shows grounding around buildings and trees.
+   */
+  ssao: { intensity: 1, power: 2, minAngle: 10, samples: 12, radiusPerView: 0.12, minRadius: 0.6, maxRadius: 2 },
 };

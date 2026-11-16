@@ -58,3 +58,9 @@ offscreen target), then the effects run, then the compose pass applies exposure,
 - **Bloom:** intensity 0.03 with a scene-referred threshold of 1.6. Sunlit surfaces peak around 1.0–1.3, so only
   emissives authored at 2 or above glow (see the emissive budget). Checked: the dead park with bloom on and off
   differs by at most 1/255 on a few pixels.
+- **SSAO (High tier):** CameraFrame SSAO, combined into the final colour, 12 samples, blurred. Its radius is in world
+  units (a tile is 1), set every frame to 0.12 × the world height in view, clamped to 0.6–2: tight contact
+  shadows under bushes, benches and machines up close, soft grounding around buildings and trees at the overview.
+  It adds a depth prepass (about +50 draw calls in the park shots). Baked vertex occlusion for phones without SSAO
+  is not done yet: it means darkening the bases of tufts, stems and props where `ChunkRenderer` and the foliage
+  generators write vertex colours, which the parallel E16 vegetation work is rewriting; it should follow E16.

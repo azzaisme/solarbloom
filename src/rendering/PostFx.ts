@@ -6,13 +6,14 @@ export interface PostSpec {
   /** CameraFrame on: HDR scene target, effects, tone mapping in the compose pass. Off: the camera tone-maps. */
   post: boolean;
   bloom: boolean;
+  ssao: boolean;
   /** MSAA samples of the HDR scene target (the canvas's own antialiasing doesn't apply to it) */
   samples: number;
 }
 
 /**
  * Look 1.5: the CameraFrame post-processing stack on the main camera, the single home for post effects: the
- * scene renders to an HDR target, bloom (and later SSAO, depth of field, grading and vignette) run on it, and
+ * scene renders to an HDR target, SSAO, bloom (and later depth of field, grading and vignette) run on it, and
  * the compose pass applies exposure, tone mapping and sRGB output. With post off, the camera itself tone-maps,
  * so the image keeps the same curve.
  *
@@ -59,7 +60,22 @@ export class PostFx {
     f.bloom.intensity = spec.bloom ? B.intensity : 0;
     f.bloom.threshold = B.threshold;
     f.bloom.blurLevel = B.blurLevel;
+    const A = LOOK.ssao;
+    f.ssao.type = spec.ssao ? pc.SSAOTYPE_COMBINE : pc.SSAOTYPE_NONE;
+    f.ssao.intensity = A.intensity;
+    f.ssao.power = A.power;
+    f.ssao.minAngle = A.minAngle;
+    f.ssao.samples = A.samples;
+    f.ssao.blurEnabled = true;
     f.update();
+  }
+
+  /** Per frame: effect parameters that follow the camera (SSAO radius from the world height in view). */
+  follow(viewHeight: number) {
+    const f = this.frame;
+    if (!f || f.ssao.type === pc.SSAOTYPE_NONE) return;
+    const A = LOOK.ssao;
+    f.ssao.radius = Math.min(A.maxRadius, Math.max(A.minRadius, A.radiusPerView * viewHeight));
   }
 
   destroy() {
