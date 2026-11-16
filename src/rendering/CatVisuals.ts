@@ -5,6 +5,7 @@ import type { Sim } from '../gameplay/Sim';
 import { mat, PALETTE } from './Materials';
 import { group, shape } from './Shapes';
 import { ease, type Tweens } from './Tween';
+import { MODELS } from './Models';
 
 interface CatView {
   root: pc.Entity;
@@ -16,7 +17,10 @@ interface CatView {
   prints?: pc.Entity;
   anchorId: string;
   variant: CatVariant;
+  spot: CatSpot;
   phase: number;
+  /** Look 3.19: drawn with the hand-built model (its head doesn't tilt on its own) */
+  model?: boolean;
 }
 
 /**
@@ -66,6 +70,27 @@ export class CatVisuals {
     root.setEulerAngles(0, a.rotY, 0);
     const golden = variant === 'golden';
     const rainbow = variant === 'rainbow';
+    // Look 3.19: the hand-built maneki-neko for white cats (its paw is its own part, so it still waves). A Golden
+    // Cat stays procedural: gold all over with a crown and a bigger coin.
+    const model = golden ? undefined : MODELS?.instantiate('lucky-cat');
+    if (model) {
+      model.setLocalScale(0.8, 0.8, 0.8);
+      root.addChild(model);
+      const paw = (model.findByName('paw') as pc.Entity | null) ?? group(model, 'paw');
+      let halo: pc.Entity | undefined;
+      if (rainbow) {
+        halo = shape(root, 'torus', mat(PALETTE.pure.white, { emissive: PALETTE.glow.halo, emissiveIntensity: 0.9 }), { pos: [0, 0.42, 0], scale: [0.16, 0.03, 0.16] });
+        const star = group(root, 'star', [0, 0.12, 0.11]);
+        for (const r of [0, 45]) shape(star, 'box', mat(PALETTE.pure.white, { emissive: PALETTE.glow.star, emissiveIntensity: 0.8 }), { scale: [0.05, 0.05, 0.01], rot: [0, 0, r] });
+      }
+      const v: CatView = { root, paw, head: model, halo, anchorId: spot.anchorId, variant, spot, phase: this.views.size * 1.3, model: true };
+      this.views.set(spot.id, v);
+      if (animate) {
+        root.setLocalScale(0.01, 0.01, 0.01);
+        this.tweens.add(0.5, (k) => root.setLocalScale(k, k, k), { ease: ease.outBack });
+      }
+      return;
+    }
     const white = golden ? mat(PALETTE.gold, { metal: 0.7, gloss: 0.9, emissive: PALETTE.trim.goldLow, emissiveIntensity: 0.25 }) : mat(PALETTE.cat, { gloss: 0.9 });
     const body = group(root, 'b');
     body.setLocalScale(0.85, 0.85, 0.85);
@@ -98,7 +123,7 @@ export class CatVisuals {
       const star = group(body, 'star', [0, 0.11, 0.135]);
       for (const r of [0, 45]) shape(star, 'box', mat(PALETTE.pure.white, { emissive: PALETTE.glow.star, emissiveIntensity: 0.8 }), { scale: [0.05, 0.05, 0.01], rot: [0, 0, r] });
     }
-    const v: CatView = { root, paw, head, halo, anchorId: spot.anchorId, variant, phase: this.views.size * 1.3 };
+    const v: CatView = { root, paw, head, halo, anchorId: spot.anchorId, variant, spot, phase: this.views.size * 1.3 };
     this.views.set(spot.id, v);
     if (animate) {
       root.setLocalScale(0.01, 0.01, 0.01);
@@ -139,6 +164,11 @@ export class CatVisuals {
     }, { ease: ease.linear, done: () => root.destroy() });
   }
 
+  /** Look 3.19: redraw every cat on screen (the hand-built model has loaded). Paw-print hints come back on their own. */
+  rebuildAll() {
+    for (const v of [...this.views.values()]) this.show(v.spot, false);
+  }
+
   hideAll() {
     for (const id of this.ids()) this.hide(id, false);
   }
@@ -156,7 +186,7 @@ export class CatVisuals {
       const waving = phase < 1.2 && !this.reducedMotion;
       v.paw.setLocalEulerAngles(waving ? -20 + Math.sin(phase * 14) * 35 : -10, 0, 0);
       if (!this.reducedMotion) {
-        v.head.setLocalEulerAngles(0, 0, Math.sin(t * 1.3) * 6);
+        if (!v.model) v.head.setLocalEulerAngles(0, 0, Math.sin(t * 1.3) * 6);
         if (v.halo) v.halo.setLocalEulerAngles(0, t * 40, 0);
       }
     }
