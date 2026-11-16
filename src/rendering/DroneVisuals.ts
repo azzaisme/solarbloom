@@ -164,7 +164,7 @@ export class DroneVisuals {
     // can stay anchored to both the emitter and the tile while the drone bobs and leans.
     const beam = group(this.parent, `beam-${d.id}`);
     shape(beam, 'cone', mat(PALETTE.eyeCyan, { opacity: 0.2, emissive: PALETTE.eyeCyan, emissiveIntensity: 1.1, doubleSided: true }), { pos: [0, 0, 0] });
-    const beamCore = shape(beam, 'cone', mat('#d8fdff', { opacity: 0.32, emissive: PALETTE.eyeCyan, emissiveIntensity: 2.2, doubleSided: true }), { scale: [0.38, 1, 0.38] });
+    const beamCore = shape(beam, 'cone', mat(PALETTE.glow.beam, { opacity: 0.32, emissive: PALETTE.eyeCyan, emissiveIntensity: 2.2, doubleSided: true }), { scale: [0.38, 1, 0.38] });
     beam.enabled = false;
     const v: DroneView = {
       root,
@@ -249,7 +249,7 @@ export class DroneVisuals {
     }
     if (!old && dash >= 2) {
       // Drone Dash: a glowing ring along the belt, cyan at level 2, gold at level 3.
-      shape(body, 'cylinder', mat(dash >= 3 ? '#ffe27a' : '#a8ecff', { emissive: dash >= 3 ? '#ffd34d' : '#6fd3ff', emissiveIntensity: 0.6 }), {
+      shape(body, 'cylinder', mat(dash >= 3 ? PALETTE.glow.amber : PALETTE.glow.cyanSoft, { emissive: dash >= 3 ? PALETTE.glow.gold : PALETTE.glow.cyan, emissiveIntensity: 0.6 }), {
         pos: [0, -0.024, 0],
         scale: [0.41, 0.014, 0.41],
       });
@@ -261,17 +261,17 @@ export class DroneVisuals {
   private palMat(name: string, old: boolean, party: boolean): pc.Material | undefined {
     switch (name) {
       case 'pal_shell':
-        return mat(old ? '#d9cbb0' : PALETTE.shell, { gloss: old ? 0.3 : 0.7 });
+        return mat(old ? PALETTE.plastic.aged : PALETTE.shell, { gloss: old ? 0.3 : 0.7 });
       case 'pal_shellLow':
-        return mat(old ? '#9a8a70' : PALETTE.shellLow, { gloss: 0.65, metal: 0.15 });
+        return mat(old ? PALETTE.plastic.agedLow : PALETTE.shellLow, { gloss: 0.65, metal: 0.15 });
       case 'pal_gold':
-        return mat(old ? '#a88f5a' : PALETTE.gold, { gloss: old ? 0.45 : 0.72, metal: 0.55 });
+        return mat(old ? PALETTE.trim.bronzeAged : PALETTE.gold, { gloss: old ? 0.45 : 0.72, metal: 0.55 });
       case 'pal_darkFace':
         return mat(PALETTE.darkFace, { gloss: 0.82 });
       case 'pal_leafFin':
-        return mat(party ? PALETTE.pink : old ? '#b5a27e' : PALETTE.leafFin, { gloss: 0.5 });
+        return mat(party ? PALETTE.pink : old ? PALETTE.plastic.agedLeaf : PALETTE.leafFin, { gloss: 0.5 });
       case 'pal_leafVein':
-        return mat(old ? '#7d6e50' : PALETTE.leafVein, { gloss: 0.45 });
+        return mat(old ? PALETTE.plastic.agedVein : PALETTE.leafVein, { gloss: 0.45 });
       case 'pal_eyeCyan':
         return mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: old ? 0.8 : 1.6, gloss: 0.75 });
     }
@@ -304,19 +304,19 @@ export class DroneVisuals {
     // hub drones' trim shows Drone Dash: cyan at level 2, gold at level 3.
     const old = !!d.old;
     const dash = this.dash(d);
-    const eyeCol = old ? '#ffb347' : PALETTE.eyeCyan;
-    shape(body, 'sphere', mat(old ? '#d9cbb0' : PALETTE.white, { gloss: old ? 0.2 : 0.7 }), { scale: [0.36, 0.3, 0.36], shadow: true });
-    shape(body, 'cylinder', mat(old ? '#9a8a70' : dash >= 3 ? '#ffd34d' : dash >= 2 ? '#6fd3ff' : PALETTE.shell), { pos: [0, -0.1, 0], scale: [0.26, 0.06, 0.26] });
+    const eyeCol = old ? PALETTE.glow.orange : PALETTE.eyeCyan;
+    shape(body, 'sphere', mat(old ? PALETTE.plastic.aged : PALETTE.white, { gloss: old ? 0.2 : 0.7 }), { scale: [0.36, 0.3, 0.36], shadow: true });
+    shape(body, 'cylinder', mat(old ? PALETTE.plastic.agedLow : dash >= 3 ? PALETTE.glow.gold : dash >= 2 ? PALETTE.glow.cyan : PALETTE.shell), { pos: [0, -0.1, 0], scale: [0.26, 0.06, 0.26] });
     if (old) {
       shape(body, 'sphere', mat(PALETTE.rust), { pos: [0.12, 0.06, 0.1], scale: [0.1, 0.07, 0.06] });
-      shape(body, 'box', mat('#8a7a60'), { pos: [-0.1, 0.12, 0.06], scale: [0.08, 0.02, 0.06], rot: [0, 20, 0] });
+      shape(body, 'box', mat(PALETTE.plastic.agedDark), { pos: [-0.1, 0.12, 0.06], scale: [0.08, 0.02, 0.06], rot: [0, 20, 0] });
     }
-    if (!old && dash >= 2) shape(body, 'cylinder', mat(dash >= 3 ? '#ffe27a' : '#a8ecff', { emissive: dash >= 3 ? '#ffd34d' : '#6fd3ff', emissiveIntensity: 0.6 }), { pos: [0, 0.02, 0], scale: [0.37, 0.025, 0.37] });
+    if (!old && dash >= 2) shape(body, 'cylinder', mat(dash >= 3 ? PALETTE.glow.amber : PALETTE.glow.cyanSoft, { emissive: dash >= 3 ? PALETTE.glow.gold : PALETTE.glow.cyan, emissiveIntensity: 0.6 }), { pos: [0, 0.02, 0], scale: [0.37, 0.025, 0.37] });
     shape(body, 'box', mat(PALETTE.darkFace, { gloss: 0.8 }), { pos: [0, 0.02, 0.15], scale: [0.22, 0.14, 0.06] });
     const eyes = [-0.05, 0.05].map((ex) =>
       shape(body, 'sphere', mat(eyeCol, { emissive: eyeCol, emissiveIntensity: 2 }), { pos: [ex, 0.03, 0.185], scale: [0.04, 0.05, 0.02] }),
     );
-    const finCol = party ? PALETTE.pink : old ? '#b5a27e' : PALETTE.leafFin;
+    const finCol = party ? PALETTE.pink : old ? PALETTE.plastic.agedLeaf : PALETTE.leafFin;
     const finL = group(body, 'finL', [-0.17, 0.04, -0.02]);
     shape(finL, 'sphere', mat(finCol), { pos: [-0.1, 0, 0], scale: [0.22, 0.03, 0.12] });
     const finR = group(body, 'finR', [0.17, 0.04, -0.02]);
