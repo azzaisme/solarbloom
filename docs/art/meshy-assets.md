@@ -10,7 +10,7 @@ Reference: `docs/reference/target-look.png`. Current state: `docs/reference/comp
 **Procedural:** anything with hundreds of copies, anything that tiles, anything that follows an outline, and anything
 that morphs through a Look 6 transition. Trees are procedural already (`TreeGen.ts`).
 
-Roughly 40 models plus about 20 small upgrade parts. That's about 30% of what you see on screen. The other 70%
+Roughly 40 models plus about 25 small upgrade and role parts. That's about 30% of what you see on screen. The other 70%
 (ground, grass, flowers, moss, cracks, vines, railings, trees) stays in code.
 
 ## Camera note
@@ -50,7 +50,7 @@ and polish.
 ### Characters (3)
 | Asset | Pri | Parts to split | Variants | Notes |
 |---|---|---|---|---|
-| Drone | P0 | body, visor, eyes (emissive), leaf sprout ×2, nozzle | none | Replaces `DroneVisuals.ts` (Look 3.13) |
+| Drone | P0 | body, visor, eyes (emissive), leaf sprout ×2, nozzle | role parts (E18): Gardener watering-can nozzle + tank, Scout lens + long wings, Courier cargo pod, Spark glowing tail, Harvester basket | Replaces `DroneVisuals.ts` (Look 3.13). Role parts are separate meshes on the shared body, like machine upgrade parts; roles must read by shape, not colour (`docs/DRONE_ROLES_EPIC.md` 2.9) |
 | Cultivator | P1 | chassis, treads, tine drum (spins), solar canopy (tracks sun), seed hopper (glass, fill level), moss roller | tier 1–3 silhouettes | Look 6.9 |
 | Lucky cat | P2 | body, paw (waves) | none | `CatVisuals.ts`, sits in the wall-niche prop |
 
@@ -64,7 +64,7 @@ Keep that system and make the extras Meshy parts too.
 | Water Condenser | P1 | body, glass tank (water as separate emissive mesh), lid, valves | extra tank, mist ring | |
 | Rooftop Core | P1 | stepped dais, arch, leaf emblem (emissive) | none (dormant and awake use re-texture) | |
 | Pollinator Garden | P1 | basin, hive boxes | extra hive | |
-| Drone Hub | P1 | pad, mast, charging ring | extra pad | |
+| Drone Hub | P1 | pad, mast, charging ring | extra pad | The charging ring and status light take the hub's role accent (E18); a Fleet Hub shows two |
 | Mother Tree | P2 | planter base and collar only (tree is `TreeGen`) | brass collar tiers | |
 | Reservoir Garden | P2 | white basin (water level is procedural) | none | |
 | Bloom Relay | P2 | pylon, crystal (emissive) | antenna | |
