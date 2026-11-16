@@ -10,6 +10,7 @@
 import type { TileData } from '../core/types';
 import type { BuildingPlot } from '../core/Generation';
 import type { TreeGeo, Lod } from './TreeGen';
+import { PALETTE } from './Materials';
 import type { VPrim } from './Shapes';
 import { grassGeo, flowerGeo, leafyShrubGeo, vineGeo, bannerGeo, FLOWER_COLOURS, type FlowerSpecies } from './Flora';
 import { pavingGeo, pavingGaps, PAVING_LAYOUTS, planterGeo, railGeo, clutterGeo, CLUTTER_ALIVE, CLUTTER_DEAD, type RailKind, type ClutterKind } from './Props';
@@ -70,7 +71,7 @@ const EDGE_FRAME: Record<string, { ox: number; oz: number; rot: number; tx: numb
 // ───────────── turf and grass (3.3) ─────────────
 
 /** Phase 5 E16 grass by stage (index 1 Restored … 4 Radiant), three shades each. */
-export const STAGE_GRASS: string[][] = [[], ['#9fd46a', '#a6d871', '#97cd62'], ['#69bf4a', '#74c64f', '#5fb446'], ['#4fae45', '#58b74a', '#48a640'], ['#79c24d', '#82c853', '#74bd49']];
+export const STAGE_GRASS: string[][] = PALETTE.stageGrass;
 const isTurf = (t: TileData | undefined) => !!t && t.ground === 'restored' && !t.blocked && (t.feature ?? 'lawn') !== 'paving' && (t.feature ?? 'lawn') !== 'water' && (t.feature ?? 'lawn') !== 'road';
 const turfColour = (t: TileData) => lin(STAGE_GRASS[Math.max(1, Math.min(4, t.bloom || 1))][t.variant % 3]);
 
@@ -176,15 +177,15 @@ export function thrivingExtras(c: DressCtx, t: TileData, x: number, z: number, t
   } else {
     const rx = x + (hash01(t.x, t.z, 69) - 0.5) * 0.4;
     const rz = z + (hash01(t.x, t.z, 71) - 0.5) * 0.4;
-    c.b.add('sphere', '#a7a39a', [rx, top + 0.06, rz], [0.34, 0.2, 0.28]);
-    c.b.add('sphere', '#7fb35a', [rx, top + 0.13, rz], [0.24, 0.07, 0.2]);
+    c.b.add('sphere', PALETTE.rock, [rx, top + 0.06, rz], [0.34, 0.2, 0.28]);
+    c.b.add('sphere', PALETTE.rockMoss, [rx, top + 0.13, rz], [0.24, 0.07, 0.2]);
     c.fb.add(grassGeo(3, t.variant, 1), rx + 0.18, top, rz - 0.1, 0, 1.2);
   }
 }
 
 /** Radiant: a warm glow on the ground and luminous golden daisies and sunflowers above the shrubs. */
 export function radiantExtras(c: DressCtx, t: TileData, x: number, z: number, top: number) {
-  c.b.add('cylinder', '#fff1b8', [x, top + 0.005, z], [0.86, 0.01, 0.86]);
+  c.b.add('cylinder', PALETTE.radiantGlow, [x, top + 0.005, z], [0.86, 0.01, 0.86]);
   for (let i = 0; i < 3; i++) {
     const px = x + (hash01(t.x * 13 + i, t.z, 73) - 0.5) * 0.6;
     const pz = z + (hash01(t.x, t.z * 13 + i, 79) - 0.5) * 0.6;
@@ -195,8 +196,8 @@ export function radiantExtras(c: DressCtx, t: TileData, x: number, z: number, to
 
 // ───────────── paving (3.2) ─────────────
 
-const PAVE_ALIVE = ['#e9e4d8', '#e2dccd', '#efe9dd', '#d9d2c3'];
-const PAVE_DEAD = ['#9a9890', '#8f8d86', '#a3a097', '#8a877f'];
+const PAVE_ALIVE = PALETTE.paveAlive;
+const PAVE_DEAD = PALETTE.paveDead;
 
 /**
  * A paving tile as individual slabs over dark grout: layout and turn seeded per tile (nothing repeats over a
@@ -209,10 +210,10 @@ export function paving(c: DressCtx, t: TileData, alive: boolean, x: number, z: n
     c.b.add('box', alive ? PAVE_ALIVE[t.variant % 4] : PAVE_DEAD[t.variant % 4], [x, h, z], [0.96, 0.16, 0.96]);
     return;
   }
-  c.b.add('box', alive ? '#a59d8c' : '#5f5b52', [x, h - 0.01, z], [1, 0.16, 1]);
+  c.b.add('box', PALETTE.grout[alive ? 0 : 1], [x, h - 0.01, z], [1, 0.16, 1]);
   const layout = Math.floor(hash01(t.x, t.z, 3) * PAVING_LAYOUTS);
   const rot = Math.floor(hash01(t.x, t.z, 5) * 4) * (Math.PI / 2);
-  c.b.addGeo(pavingGeo(layout, t.variant + Math.floor(hash01(t.x, t.z, 7) * 4), alive || swept, alive ? PAVE_ALIVE : swept ? ['#b4b1a8', '#aaa79e', '#bdbab1'] : PAVE_DEAD, c.lod === 2 ? 1 : 0), x, top, z, rot, 1);
+  c.b.addGeo(pavingGeo(layout, t.variant + Math.floor(hash01(t.x, t.z, 7) * 4), alive || swept, alive ? PAVE_ALIVE : swept ? PALETTE.paveSwept : PAVE_DEAD, c.lod === 2 ? 1 : 0), x, top, z, rot, 1);
   const gaps = pavingGaps(layout);
   const n = Math.round((alive ? 2 : 3) * c.dens);
   const cr = Math.cos(rot), sr = Math.sin(rot);

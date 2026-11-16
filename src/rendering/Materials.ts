@@ -47,7 +47,82 @@ export const PALETTE = {
   skyline: ['#b9d6e6', '#acc9dc', '#c4dce8', '#a5c3d6'],
   skylineGreen: '#a8d3a0',
   bridge: '#eeeae2',
+
+  // Look 3 (#105) surfaces, foliage and props. Placeholder values (what Look 3 shipped with); Look 2 owns the retune.
+  /** E16 turf by stage (index 1 Restored … 4 Radiant), three shades each */
+  stageGrass: [[], ['#9fd46a', '#a6d871', '#97cd62'], ['#69bf4a', '#74c64f', '#5fb446'], ['#4fae45', '#58b74a', '#48a640'], ['#79c24d', '#82c853', '#74bd49']] as string[][],
+  /** grass blades by stage (0 dead weeds … 4 Radiant): base and tip */
+  bladeBase: ['#646a44', '#3d7023', '#2e7023', '#267023', '#387023'],
+  bladeTip: ['#b4ad74', '#bcdf77', '#88d345', '#79d345', '#9ad345'],
+  flowerDaisy: ['#ffffff', '#fff4c9', '#ffe066'],
+  flowerCosmos: ['#ff7eb6', '#e0479e', '#ffc1dc', '#ff9a5a'],
+  flowerLavender: ['#9a78e0', '#b48cff', '#7f8ce8'],
+  flowerSunflower: ['#ffd23f', '#ffb52e'],
+  flowerWild: ['#ffffff', '#ffd23f', '#8fb8ff', '#ff9fd0'],
+  flowerCentre: '#ffcf3a',
+  sunflowerDisc: '#6b3f1f',
+  bud: '#5aa045',
+  stemDark: '#2f6e2b',
+  stemLeaf: '#4f9a3a',
+  stemLeafLight: '#86c45a',
+  /** leafy shrubs: base, lit, shade */
+  shrubLeaf: ['#368028', '#82d039', '#183f1c'],
+  bougainvillea: ['#e0479e', '#ff7eb6', '#ff9fd0', '#f45d8a'],
+  twig: ['#6b4a32', '#7d5a3c'],
+  /** ivy: stem, leaf, leaf tip (dry: the same, dead) */
+  vine: ['#4e7a34', '#468f2d', '#82ce3b'],
+  vineDry: ['#6b5a45', '#8f7c4d', '#ac8053'],
+  vineFlower: ['#ff7eb6', '#ffffff', '#ff9fd0', '#ffd23f'],
+  banner: ['#f2b13a', '#f5c04a', '#eaa233'],
+  bannerFaded: '#a89a80',
+  bannerEmblem: '#fff3d0',
+  bannerEmblemFaded: '#c8bea8',
+  poleWood: ['#5d4a3a', '#6e5a48'],
+  goldDull: '#8f8160',
+  lampGlow: '#fff1b8',
+  brass: '#d9a441',
+  paveAlive: ['#e9e4d8', '#e2dccd', '#efe9dd', '#d9d2c3'],
+  paveDead: ['#9a9890', '#8f8d86', '#a3a097', '#8a877f'],
+  paveSwept: ['#b4b1a8', '#aaa79e', '#bdbab1'],
+  /** grout / dirt between slabs: restored, dead */
+  grout: ['#a59d8c', '#5f5b52'],
+  stoneCream: '#ece4d2',
+  stoneCreamTop: '#f7f1e4',
+  stoneDead: '#a49d90',
+  soilDry: '#9a8466',
+  railRust: '#8f5434',
+  railCopper: '#b97a4a',
+  /** parapet wall: restored, dead, dead coping */
+  parapetWall: ['#e6dcc8', '#8f8a80', '#a19c91'],
+  wood: '#a67a4e',
+  woodDead: '#7d6a55',
+  terracotta: '#c76b45',
+  terracottaDead: '#9a6a52',
+  acUnit: ['#e9e4d8', '#a7a49c'],
+  grille: '#3a3f45',
+  bricks: ['#a8573c', '#b5654a', '#93503a'],
+  /** rubble shades, then light and dark */
+  rubble: ['#8f8d86', '#7d7b74', '#9a9890', '#b4b1a8', '#5f5c55'],
+  ventMetal: ['#c9c4b8', '#7d7a73'],
+  stoneBlock: ['#d9d1c0', '#9a9890'],
+  mossLight: '#a5c86a',
+  mossDark: '#5a7f3f',
+  lanternMetal: '#3f4246',
+  catShade: '#d9d6cf',
+  catEar: '#ffc1dc',
+  mural: ['#a5d94d', '#7fb35a', '#e8ba40', '#cfe6a0'],
+  rock: '#a7a39a',
+  rockMoss: '#7fb35a',
+  radiantGlow: '#fff1b8',
+  bee: '#f2b630',
+  hoverfly: '#d98a2b',
+  insectDark: '#2b2620',
+  insectWing: '#eef6ff',
+  leafDrift: ['#a8743c', '#8f9a3a', '#c98f3c'],
+  petalFall: ['#ffd1e6', '#ffffff', '#ffb3d1'],
 };
+// Blooming turf is the base grass, so a retune of `grass` carries into it.
+PALETTE.stageGrass[2] = PALETTE.grass;
 
 const cache = new Map<string, pc.StandardMaterial>();
 

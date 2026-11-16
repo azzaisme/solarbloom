@@ -5,6 +5,7 @@ import { assignBatch, group, vshape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
 import { hash01, tilesIn, type Rect } from './FaunaPlan';
 import { treeSpot } from './TreePlacement';
+import { PALETTE } from './Materials';
 
 /**
  * Look 3.16 (#143): small ambient life — bees and hoverflies working the flower drifts on Thriving / Radiant
@@ -58,20 +59,20 @@ export class Pollinators {
     const root = group(this.parent, kind);
     let wings: pc.Entity[] | undefined;
     if (kind === 'bee' || kind === 'hoverfly') {
-      const body = kind === 'bee' ? '#f2b630' : '#d98a2b';
+      const body = kind === 'bee' ? PALETTE.bee : PALETTE.hoverfly;
       vshape(root, 'sphere', body, { scale: kind === 'bee' ? [0.026, 0.022, 0.04] : [0.018, 0.014, 0.036] });
-      vshape(root, 'box', '#2b2620', { pos: [0, 0, -0.004], scale: kind === 'bee' ? [0.027, 0.023, 0.008] : [0.019, 0.015, 0.006] });
-      vshape(root, 'sphere', '#2b2620', { pos: [0, 0.002, 0.02], scale: 0.014 });
+      vshape(root, 'box', PALETTE.insectDark, { pos: [0, 0, -0.004], scale: kind === 'bee' ? [0.027, 0.023, 0.008] : [0.019, 0.015, 0.006] });
+      vshape(root, 'sphere', PALETTE.insectDark, { pos: [0, 0.002, 0.02], scale: 0.014 });
       wings = [];
       for (const s of [-1, 1]) {
         const w = group(root, 'wing', [s * 0.01, 0.012, 0]);
-        vshape(w, 'box', '#eef6ff', { pos: [s * 0.016, 0, 0], scale: [0.03, 0.002, 0.016] });
+        vshape(w, 'box', PALETTE.insectWing, { pos: [s * 0.016, 0, 0], scale: [0.03, 0.002, 0.016] });
         wings.push(w);
       }
     } else if (kind === 'leaf') {
-      vshape(root, 'box', ['#a8743c', '#8f9a3a', '#c98f3c'][i % 3], { scale: [0.05, 0.004, 0.03] });
+      vshape(root, 'box', PALETTE.leafDrift[i % PALETTE.leafDrift.length], { scale: [0.05, 0.004, 0.03] });
     } else {
-      vshape(root, 'box', ['#ffd1e6', '#ffffff', '#ffb3d1'][i % 3], { scale: [0.028, 0.003, 0.022] });
+      vshape(root, 'box', PALETTE.petalFall[i % PALETTE.petalFall.length], { scale: [0.028, 0.003, 0.022] });
     }
     root.setLocalScale(0, 0, 0);
     if (this.batchId >= 0) assignBatch(root, this.batchId);

@@ -261,7 +261,7 @@ const DEAD: Record<string, string[]> = {
   building: ['#8d8a82', '#86837b', '#94918a'],
 };
 /** Phase 5 E16: grass by stage (index 1 Restored … 4 Radiant), three shades each. */
-const STAGE_GRASS: string[][] = [[], ['#9fd46a', '#a6d871', '#97cd62'], PALETTE.grass, ['#4fae45', '#58b74a', '#48a640'], ['#79c24d', '#82c853', '#74bd49']];
+const STAGE_GRASS: string[][] = PALETTE.stageGrass; // Phase 5 E16 turf by stage (Look 3 moved the values into PALETTE)
 const EDGE_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const hash01 = dhash;
 const ALIVE: Record<string, string> = { lawn: '', paving: '#e9e4d8', road: '', water: '#5cc6e6', clay: '', litter: '', obstacle: '#d9d4c8' };

@@ -11,9 +11,10 @@
  * second, double-sided material.
  */
 import {
-  Buf, puff, tube, plate, hsl, hex, mix, scaleC, add, mul, norm, cross, rng, card, leafShell, randDir, setShrubBuilder,
+  Buf, puff, tube, plate, hex, mix, scaleC, add, mul, norm, cross, rng, card, leafShell, randDir, setShrubBuilder,
   type TreeGeo, type Lod, type V, type C,
 } from './TreeGen';
+import { PALETTE } from './Materials';
 
 export { card, leafShell };
 
@@ -33,8 +34,6 @@ const UP: V = [0, 1, 0];
 
 // ───────────── grass (3.3) ─────────────
 
-/** Grass colours by tile stage (1 Restored pale … 4 Radiant warm). */
-const GRASS_HUE = [0, 92, 104, 110, 96];
 /** Dry weeds poking out of dead ground (stage 0). */
 export function buildGrass(stage: number, variant: number, lod: Lod): TreeGeo {
   const B = new Buf();
@@ -50,9 +49,8 @@ export function buildGrass(stage: number, variant: number, lod: Lod): TreeGeo {
     // blades lean outward from the clump's heart, a few spilling well over (edges overhang neighbours)
     const lean = 0.25 + R() * 0.5;
     const tipP: V = [p[0] + Math.cos(a) * h * lean, h, p[2] + Math.sin(a) * h * lean];
-    const hue = dead ? 52 + R() * 18 : GRASS_HUE[stage] + (R() - 0.5) * 16;
-    const base = dead ? hsl(hue, 22, 34) : hsl(hue + 8, 52, 26 + R() * 6);
-    const tip = dead ? hsl(hue - 8, 30, 58) : hsl(hue - 12, 62, (stage === 1 ? 62 : 50) + R() * 10);
+    const base = scaleC(hex(PALETTE.bladeBase[stage]), 0.88 + R() * 0.24);
+    const tip = mix(scaleC(hex(PALETTE.bladeTip[stage]), 0.88 + R() * 0.24), base, R() * 0.2);
     blade(B, p, tipP, 0.016 + R() * 0.01, norm([-Math.sin(a), 0, Math.cos(a)]), base, tip, 0.35 + h * 3);
   }
   return B.done();
@@ -64,16 +62,16 @@ export type FlowerSpecies = 'daisy' | 'cosmos' | 'lavender' | 'sunflower' | 'wil
 export const FLOWER_SPECIES: FlowerSpecies[] = ['daisy', 'cosmos', 'lavender', 'sunflower', 'wild'];
 /** Petal colours per species (one per clump, Look 2.4 will own the exact values). */
 export const FLOWER_COLOURS: Record<FlowerSpecies, string[]> = {
-  daisy: ['#ffffff', '#fff4c9', '#ffe066'],
-  cosmos: ['#ff7eb6', '#e0479e', '#ffc1dc', '#ff9a5a'],
-  lavender: ['#9a78e0', '#b48cff', '#7f8ce8'],
-  sunflower: ['#ffd23f', '#ffb52e'],
-  wild: ['#ffffff', '#ffd23f', '#8fb8ff', '#ff9fd0'],
+  daisy: PALETTE.flowerDaisy,
+  cosmos: PALETTE.flowerCosmos,
+  lavender: PALETTE.flowerLavender,
+  sunflower: PALETTE.flowerSunflower,
+  wild: PALETTE.flowerWild,
 };
-const STEM = hex('#3f8f36');
-const STEM_DARK = hex('#2f6e2b');
-const LEAF = hex('#4f9a3a');
-const LEAF_LIGHT = hex('#86c45a');
+const STEM = hex(PALETTE.stem);
+const STEM_DARK = hex(PALETTE.stemDark);
+const LEAF = hex(PALETTE.stemLeaf);
+const LEAF_LIGHT = hex(PALETTE.stemLeafLight);
 
 /**
  * A flower head: one star-shaped fan of petals round a centre disc, facing `face` (single-sided: the camera looks
@@ -154,7 +152,7 @@ export function buildFlowers(sp: FlowerSpecies, colour: number, open: boolean, v
     }
     if (!open) {
       // a closed bud, green with a hint of its colour
-      const bc = mix(hex('#5aa045'), pc, 0.45);
+      const bc = mix(hex(PALETTE.bud), pc, 0.45);
       if (sp === 'lavender') for (let k = 0; k < 3; k++) puff(B, { c: add(top, [0, -k * 0.018, 0]), r: [0.007, 0.012, 0.007], base: bc, light: mix(bc, pc, 0.4), dark: scaleC(bc, 0.7), flex: fx, seed: k, detail: 0, lump: 0 });
       else puff(B, { c: top, r: [0.012, 0.016, 0.012].map((v) => v * (sp === 'sunflower' ? 2 : 1)) as V, base: bc, light: mix(bc, pc, 0.5), dark: scaleC(bc, 0.7), flex: fx, seed: i, detail: 0, lump: 0 });
       continue;
@@ -162,18 +160,18 @@ export function buildFlowers(sp: FlowerSpecies, colour: number, open: boolean, v
     switch (sp) {
       case 'daisy': {
         const face = norm([(R() - 0.5) * 0.6, 1, (R() - 0.5) * 0.6]);
-        head(B, top, face, detail ? 10 : 6, 0.024, 0.009, pc, hex('#ffcf3a'), 0.009, fx, 0.12, R);
+        head(B, top, face, detail ? 10 : 6, 0.024, 0.009, pc, hex(PALETTE.flowerCentre), 0.009, fx, 0.12, R);
         break;
       }
       case 'cosmos': {
         const face = norm([(R() - 0.5) * 0.8, 1, (R() - 0.5) * 0.8]);
-        head(B, top, face, detail ? 7 : 5, 0.032, 0.022, pc, hex('#ffd23f'), 0.008, fx, 0.2, R);
+        head(B, top, face, detail ? 7 : 5, 0.032, 0.022, pc, hex(PALETTE.flowerSunflower[0]), 0.008, fx, 0.2, R);
         break;
       }
       case 'sunflower': {
         // a big head turned toward the sun / camera side
         const face = norm([0.45 + (R() - 0.5) * 0.3, 0.55, 0.7 + (R() - 0.5) * 0.3]);
-        head(B, top, face, detail ? 14 : 9, 0.036, 0.016, pc, hex('#6b3f1f'), 0.03, fx, 0.05, R, true);
+        head(B, top, face, detail ? 14 : 9, 0.036, 0.016, pc, hex(PALETTE.sunflowerDisc), 0.03, fx, 0.05, R, true);
         break;
       }
       case 'lavender': {
@@ -193,7 +191,7 @@ export function buildFlowers(sp: FlowerSpecies, colour: number, open: boolean, v
         // filler: tiny four-petal dots
         const face = norm([(R() - 0.5) * 0.5, 1, (R() - 0.5) * 0.5]);
         const col = hex(FLOWER_COLOURS.wild[(colour + i) % FLOWER_COLOURS.wild.length]);
-        head(B, top, face, 5, 0.011, 0.008, col, hex('#ffe28a'), 0.004, fx, 0.15, R);
+        head(B, top, face, 5, 0.011, 0.008, col, hex(PALETTE.flowerCore), 0.004, fx, 0.15, R);
       }
     }
   }
@@ -206,10 +204,10 @@ export function buildFlowers(sp: FlowerSpecies, colour: number, open: boolean, v
 export function buildLeafyShrub(variant: number, lod: Lod, flowering = false): TreeGeo {
   const B = new Buf();
   const R = rng(variant * 9973 + (flowering ? 501 : 7));
-  const h = 96 + R() * 30;
-  const base = hsl(h, 52, 33), light = hsl(h - 20, 62, 52), dark = hsl(h + 16, 45, 17);
+  const k = 0.88 + R() * 0.24;
+  const base = scaleC(hex(PALETTE.shrubLeaf[0]), k), light = scaleC(hex(PALETTE.shrubLeaf[1]), k), dark = hex(PALETTE.shrubLeaf[2]);
   const n = 2 + Math.floor(R() * 2);
-  const bloom = [hex('#e0479e'), hex('#ff7eb6'), hex('#ff9fd0'), hex('#f45d8a')][variant % 4];
+  const bloom = hex(PALETTE.bougainvillea[variant % PALETTE.bougainvillea.length]);
   for (let i = 0; i < n; i++) {
     const s = 0.11 + R() * 0.07;
     const a = R() * Math.PI * 2;
@@ -221,7 +219,7 @@ export function buildLeafyShrub(variant: number, lod: Lod, flowering = false): T
     if (lod > 0) {
       for (let k = 0; k < 2; k++) {
         const u = randDir(R, 0.2);
-        tube(B, [[c[0], 0, c[2]], add(c, mul(u, s * 1.02))], [0.006, 0.003], 3, [hex('#6b4a32'), hex('#7d5a3c')], [0, 0.3], false);
+        tube(B, [[c[0], 0, c[2]], add(c, mul(u, s * 1.02))], [0.006, 0.003], 3, [hex(PALETTE.twig[0]), hex(PALETTE.twig[1])], [0, 0.3], false);
       }
       if (flowering)
         for (let k = 0; k < 6; k++) {
@@ -252,7 +250,7 @@ export function buildVine(stage: number, hang: number, variant: number, lod: Lod
     const L = hang * grow * (0.5 + R() * 0.6);
     const drift = (R() - 0.5) * 0.12;
     const pts: V[] = [[x0, 0.02, 0.03], [x0 + drift * 0.5, -L * 0.5, 0.035], [x0 + drift, -L, 0.03]];
-    const vc = dead ? hex('#6b5a45') : hex('#4e7a34');
+    const vc = hex((dead ? PALETTE.vineDry : PALETTE.vine)[0]);
     tube(B, pts, [0.006, 0.005, 0.003], 3, [vc, vc, vc], [0, 0.35, 0.7], false);
     const leaves = Math.min(dead ? 5 : 14, Math.max(1, Math.round((L / 0.05) * (dead ? 0.4 : lod === 0 ? 0.35 : 1))));
     for (let k = 0; k < leaves; k++) {
@@ -261,14 +259,14 @@ export function buildVine(stage: number, hang: number, variant: number, lod: Lod
       const side = k % 2 ? 1 : -1;
       const dir = norm([side * (0.5 + R() * 0.5), -0.3 + R() * 0.5, 0.35 + R() * 0.3]);
       const s = (dead ? 0.045 : 0.065 + R() * 0.035) * (stage === 1 ? 0.75 : 1) * Math.max(1, L / (leaves * 0.05));
-      const hue = 92 + R() * 26;
-      const col = dead ? hsl(36 + R() * 14, 30, 38 + R() * 10) : hsl(hue, 52, 30 + R() * 14);
-      const tip = dead ? hsl(30, 35, 50) : hsl(hue - 14, 60, 52);
+      const pal = dead ? PALETTE.vineDry : PALETTE.vine;
+      const col = scaleC(hex(pal[1]), 0.8 + R() * 0.4);
+      const tip = hex(pal[2]);
       // broad, ivy-like leaves (wide near the base)
       card(B, p, dir, [0, 0, 1], s, s * 0.85, col, tip, 0.2 + t * 0.6, 0.3 + t * 0.7, 0.38, 0.12);
       if (stage >= 3 && !dead && lod > 0 && R() < 0.22) {
-        const fc = hex(['#ff7eb6', '#ffffff', '#ff9fd0', '#ffd23f'][Math.floor(R() * 4)]);
-        head(B, add(p, [0, 0, 0.02]), norm([0, 0.2, 1]), 5, 0.018, 0.014, fc, hex('#ffe28a'), 0.006, 0.3 + t * 0.7, 0.2, R);
+        const fc = hex(PALETTE.vineFlower[Math.floor(R() * PALETTE.vineFlower.length)]);
+        head(B, add(p, [0, 0, 0.02]), norm([0, 0.2, 1]), 5, 0.018, 0.014, fc, hex(PALETTE.flowerCore), 0.006, 0.3 + t * 0.7, 0.2, R);
       }
     }
   }
@@ -279,7 +277,7 @@ export function buildVine(stage: number, hang: number, variant: number, lod: Lod
       const x = (k + R()) / n;
       const dir = norm([R() - 0.5, 0.6, 0.6]);
       const s = dead ? 0.04 : 0.06;
-      card(B, [x, 0.01, 0.03], dir, [0, 0, 1], s, s * 0.85, dead ? hsl(40, 30, 40) : hsl(100 + R() * 20, 50, 34), dead ? hsl(34, 30, 52) : hsl(90, 60, 50), 0.1, 0.25, 0.38, 0.12);
+      card(B, [x, 0.01, 0.03], dir, [0, 0, 1], s, s * 0.85, scaleC(hex((dead ? PALETTE.vineDry : PALETTE.vine)[1]), 0.85 + R() * 0.3), hex((dead ? PALETTE.vineDry : PALETTE.vine)[2]), 0.1, 0.25, 0.38, 0.12);
     }
   }
   return B.done();
@@ -287,24 +285,24 @@ export function buildVine(stage: number, hang: number, variant: number, lod: Lod
 
 // ───────────── banners (3.10) ─────────────
 
-const GOLD = hex('#e8ba40');
+const GOLD = hex(PALETTE.gold);
 /**
  * A sun-emblem banner. `kind` 'pole': on a pole with a gold finial (base at the origin, cloth on +x);
  * 'rail': cloth hanging from a rail at y = 0. Dead banners are faded and torn. Cloth sways (flex grows to the hem).
  */
 export function buildBanner(kind: 'pole' | 'rail', alive: boolean, variant: number, lod: Lod): TreeGeo {
   const B = new Buf();
-  const cloth = alive ? hex(['#f2b13a', '#f5c04a', '#eaa233'][variant % 3]) : hex('#a89a80');
-  const emblem = alive ? hex('#fff3d0') : hex('#c8bea8');
+  const cloth = alive ? hex(PALETTE.banner[variant % PALETTE.banner.length]) : hex(PALETTE.bannerFaded);
+  const emblem = alive ? hex(PALETTE.bannerEmblem) : hex(PALETTE.bannerEmblemFaded);
   const W = kind === 'pole' ? 0.2 : 0.28;
   const Hc = (kind === 'pole' ? 0.36 : 0.32) * (alive ? 1 : 0.8);
   let topY = 0;
   let x0 = 0;
   if (kind === 'pole') {
     const H = 0.95;
-    tube(B, [[0, 0, 0], [0, H, 0]], [0.014, 0.011], 5, [hex('#5d4a3a'), hex('#6e5a48')], [0, 0.05], false);
-    puff(B, { c: [0, H + 0.025, 0], r: [0.024, 0.03, 0.024], base: alive ? GOLD : hex('#8f8160'), light: hex('#fff1b8'), dark: scaleC(GOLD, 0.7), flex: 0.05, seed: 1, detail: 1, lump: 0 });
-    tube(B, [[0, H - 0.03, 0], [W + 0.02, H - 0.03, 0]], [0.007, 0.007], 4, [hex('#5d4a3a'), hex('#5d4a3a')], [0.05, 0.08], false);
+    tube(B, [[0, 0, 0], [0, H, 0]], [0.014, 0.011], 5, [hex(PALETTE.poleWood[0]), hex(PALETTE.poleWood[1])], [0, 0.05], false);
+    puff(B, { c: [0, H + 0.025, 0], r: [0.024, 0.03, 0.024], base: alive ? GOLD : hex(PALETTE.goldDull), light: hex(PALETTE.lampGlow), dark: scaleC(GOLD, 0.7), flex: 0.05, seed: 1, detail: 1, lump: 0 });
+    tube(B, [[0, H - 0.03, 0], [W + 0.02, H - 0.03, 0]], [0.007, 0.007], 4, [hex(PALETTE.poleWood[0]), hex(PALETTE.poleWood[0])], [0.05, 0.08], false);
     topY = H - 0.04;
     x0 = 0.02;
   } else {

@@ -13,6 +13,7 @@
  */
 import { Buf, puff, tube, plate, hex, mix, scaleC, add, norm, rng, type TreeGeo, type Lod, type V, type C } from './TreeGen';
 import { card } from './TreeGen';
+import { PALETTE } from './Materials';
 
 // ───────────── bevelled box (3.15) ─────────────
 
@@ -193,11 +194,11 @@ export function buildPaving(layout: number, variant: number, alive: boolean, sha
 
 // ───────────── planters (3.9) ─────────────
 
-const CREAM: C = hex('#ece4d2');
-const CREAM_TOP: C = hex('#f7f1e4');
-const STONE_DEAD: C = hex('#a49d90');
-const SOIL: C = hex('#6f533a');
-const SOIL_DRY: C = hex('#9a8466');
+const CREAM: C = hex(PALETTE.stoneCream);
+const CREAM_TOP: C = hex(PALETTE.stoneCreamTop);
+const STONE_DEAD: C = hex(PALETTE.stoneDead);
+const SOIL: C = hex(PALETTE.soilDark);
+const SOIL_DRY: C = hex(PALETTE.soilDry);
 
 /** A raised stone bed `w` × `d` tiles, rim top at y ≈ 0.2; soil inside. Dead: cracked, chipped, dry soil. */
 export function buildPlanter(w: number, d: number, alive: boolean, variant: number, lod: Lod): TreeGeo {
@@ -230,8 +231,8 @@ export function buildPlanter(w: number, d: number, alive: boolean, variant: numb
 // ───────────── railings (3.10) ─────────────
 
 export type RailKind = 'pipe' | 'balustrade' | 'parapet';
-const RUST: C = hex('#8f5434');
-const COPPER: C = hex('#b97a4a');
+const RUST: C = hex(PALETTE.railRust);
+const COPPER: C = hex(PALETTE.railCopper);
 
 /** One tile of edge treatment along +x (0…1) at z = 0, standing on y = 0. `broken` drops a section (dead edges). */
 export function buildRail(kind: RailKind, alive: boolean, variant: number, broken: boolean, lod: Lod): TreeGeo {
@@ -243,7 +244,7 @@ export function buildRail(kind: RailKind, alive: boolean, variant: number, broke
     const H = 0.34;
     for (const x of [0.02, 0.98]) {
       tube(B, [[x, 0, 0], [x, H + 0.01, 0]], [0.016, 0.014], sides, [scaleC(col, 0.8), col], [0, 0], false);
-      if (lod > 0) puff(B, { c: [x, H + 0.02, 0], r: [0.02, 0.016, 0.02], base: alive ? hex('#e8ba40') : scaleC(RUST, 0.9), light: hex('#fff1b8'), dark: scaleC(col, 0.6), flex: 0, seed: 1, detail: 0, lump: 0 });
+      if (lod > 0) puff(B, { c: [x, H + 0.02, 0], r: [0.02, 0.016, 0.02], base: alive ? hex(PALETTE.gold) : scaleC(RUST, 0.9), light: hex(PALETTE.lampGlow), dark: scaleC(col, 0.6), flex: 0, seed: 1, detail: 0, lump: 0 });
     }
     const end = broken ? 0.45 + R() * 0.2 : 1;
     tube(B, [[0, H, 0], [end, H - (broken ? 0.02 : 0), 0]], [0.013, 0.013], sides, [col, col], [0, 0], false);
@@ -263,8 +264,8 @@ export function buildRail(kind: RailKind, alive: boolean, variant: number, broke
     if (!broken) bevelBox(B, [0.5, 0.31, 0], [0.5, 0.025, 0.055], lod > 0 ? 0.016 : 0.006, col, { top });
     else bevelBox(B, [0.3, 0.31, 0], [0.3, 0.025, 0.055], 0.016, col, { top, chip: 1, chipD: 0.04 });
   } else {
-    const col = alive ? hex('#e6dcc8') : hex('#8f8a80');
-    const top = alive ? CREAM_TOP : hex('#a19c91');
+    const col = hex(PALETTE.parapetWall[alive ? 0 : 1]);
+    const top = alive ? CREAM_TOP : hex(PALETTE.parapetWall[2]);
     bevelBox(B, [0.5, 0.12, 0], [0.5, 0.12, 0.06], 0.012, col, { top, noBottom: true, chip: broken ? 3 : undefined, chipD: 0.1 });
     bevelBox(B, [0.5, 0.25, 0], [0.51, 0.018, 0.08], 0.012, top, { chip: broken ? 1 : undefined, chipD: 0.03 });
   }
@@ -277,8 +278,8 @@ export type ClutterKind = 'ac' | 'pipes' | 'crate' | 'bricks' | 'rubble' | 'vent
 /** Dead ground gets debris; restored ground tidier, decorative props. */
 export const CLUTTER_DEAD: ClutterKind[] = ['rubble', 'bricks', 'crate', 'pot', 'ac', 'pipes', 'vent', 'block'];
 export const CLUTTER_ALIVE: ClutterKind[] = ['lantern', 'pot', 'crate', 'block', 'ac', 'pipes', 'vent', 'niche'];
-const WOOD: C = hex('#a67a4e');
-const TERRACOTTA: C = hex('#c76b45');
+const WOOD: C = hex(PALETTE.wood);
+const TERRACOTTA: C = hex(PALETTE.terracotta);
 
 /** One clutter prop, standing at the origin, facing +z (its "front", away from a wall at −z). */
 export function buildClutter(kind: ClutterKind, alive: boolean, variant: number, lod: Lod): TreeGeo {
@@ -287,9 +288,9 @@ export function buildClutter(kind: ClutterKind, alive: boolean, variant: number,
   const r = lod > 0 ? 0.012 : 0.004;
   switch (kind) {
     case 'ac': {
-      const col = alive ? hex('#e9e4d8') : hex('#a7a49c');
+      const col = hex(PALETTE.acUnit[alive ? 0 : 1]);
       bevelBox(B, [0, 0.1, 0], [0.13, 0.1, 0.08], r, col, { noBottom: true });
-      plate(B, [0.04, 0.1, 0.082], 0.065, [0, 0, 1], hex('#3a3f45'), 0, 10);
+      plate(B, [0.04, 0.1, 0.082], 0.065, [0, 0, 1], hex(PALETTE.grille), 0, 10);
       if (lod > 0) {
         for (let k = -2; k <= 2; k++) plainBox(B, [0.04, 0.1 + k * 0.024, 0.086], [0.066 - Math.abs(k) * 0.01, 0.003, 0.003], scaleC(col, 0.8));
         for (let k = 0; k < 4; k++) plainBox(B, [-0.09, 0.05 + k * 0.035, 0.082], [0.025, 0.004, 0.004], scaleC(col, 0.7));
@@ -308,7 +309,7 @@ export function buildClutter(kind: ClutterKind, alive: boolean, variant: number,
       for (let k = 0; k < n; k++) {
         const s = 0.08 + R() * 0.03;
         const c: V = [k * 0.05, s + k * 2 * s * 0.98, k * 0.02];
-        const col = alive ? scaleC(WOOD, 0.95 + R() * 0.1) : hex('#7d6a55');
+        const col = alive ? scaleC(WOOD, 0.95 + R() * 0.1) : hex(PALETTE.woodDead);
         bevelBox(B, c, [s, s, s], r, col, { rot: [0, (R() - 0.5) * 30, alive ? 0 : 8], noBottom: k === 0 });
         if (lod > 0) for (const dy of [-0.5, 0.5]) plainBox(B, add(c, [0, dy * s, s + 0.002]), [s * 0.98, 0.008, 0.004], scaleC(col, 0.7));
       }
@@ -317,32 +318,32 @@ export function buildClutter(kind: ClutterKind, alive: boolean, variant: number,
     case 'bricks': {
       for (let k = 0; k < (lod > 0 ? 7 : 3); k++) {
         const row = Math.floor(k / 3);
-        bevelBox(B, [((k % 3) - 1) * 0.07 + row * 0.03, 0.02 + row * 0.04, (R() - 0.5) * 0.04], [0.032, 0.018, 0.016], 0.005, hex(['#a8573c', '#b5654a', '#93503a'][k % 3]), { rot: [0, (R() - 0.5) * 30, 0] });
+        bevelBox(B, [((k % 3) - 1) * 0.07 + row * 0.03, 0.02 + row * 0.04, (R() - 0.5) * 0.04], [0.032, 0.018, 0.016], 0.005, hex(PALETTE.bricks[k % PALETTE.bricks.length]), { rot: [0, (R() - 0.5) * 30, 0] });
       }
       break;
     }
     case 'rubble': {
       for (let k = 0; k < (lod > 0 ? 6 : 3); k++) {
         const a = R() * Math.PI * 2, d = R() * 0.1;
-        puff(B, { c: [Math.cos(a) * d, 0.015, Math.sin(a) * d], r: [0.03 + R() * 0.03, 0.02 + R() * 0.02, 0.03 + R() * 0.03], base: hex(['#8f8d86', '#7d7b74', '#9a9890'][k % 3]), light: hex('#b4b1a8'), dark: hex('#5f5c55'), flex: 0, seed: k, detail: 0, lump: 0.4 });
+        puff(B, { c: [Math.cos(a) * d, 0.015, Math.sin(a) * d], r: [0.03 + R() * 0.03, 0.02 + R() * 0.02, 0.03 + R() * 0.03], base: hex(PALETTE.rubble[k % 3]), light: hex(PALETTE.rubble[3]), dark: hex(PALETTE.rubble[4]), flex: 0, seed: k, detail: 0, lump: 0.4 });
       }
       break;
     }
     case 'vent': {
-      const col = alive ? hex('#c9c4b8') : hex('#7d7a73');
+      const col = hex(PALETTE.ventMetal[alive ? 0 : 1]);
       bevelBox(B, [0, 0.07, 0], [0.09, 0.07, 0.09], r, col, { noBottom: true });
       bevelBox(B, [0, 0.15, 0], [0.11, 0.012, 0.11], r, scaleC(col, 0.9));
       if (lod > 0) for (let k = -1; k <= 1; k++) plainBox(B, [0, 0.07 + k * 0.03, 0.092], [0.07, 0.004, 0.004], scaleC(col, 0.6));
       break;
     }
     case 'block': {
-      const col = alive ? hex('#d9d1c0') : hex('#9a9890');
+      const col = hex(PALETTE.stoneBlock[alive ? 0 : 1]);
       bevelBox(B, [0, 0.07, 0], [0.12, 0.07, 0.09], r * 1.5, col, { noBottom: true, rot: [0, (R() - 0.5) * 40, 0], chip: alive ? undefined : 2 });
-      if (alive && lod > 0) puff(B, { c: [0.02, 0.14, 0], r: [0.1, 0.018, 0.07], base: hex('#7fa35a'), light: hex('#a5c86a'), dark: hex('#5a7f3f'), flex: 0, seed: 3, detail: 1, lump: 0.4 });
+      if (alive && lod > 0) puff(B, { c: [0.02, 0.14, 0], r: [0.1, 0.018, 0.07], base: hex(PALETTE.moss), light: hex(PALETTE.mossLight), dark: hex(PALETTE.mossDark), flex: 0, seed: 3, detail: 1, lump: 0.4 });
       break;
     }
     case 'pot': {
-      const col = alive ? TERRACOTTA : hex('#9a6a52');
+      const col = alive ? TERRACOTTA : hex(PALETTE.terracottaDead);
       if (alive) {
         tube(B, [[0, 0, 0], [0, 0.06, 0], [0, 0.11, 0]], [0.045, 0.055, 0.065], lod > 0 ? 8 : 5, [scaleC(col, 0.85), col, col], [0, 0, 0], false);
         plate(B, [0, 0.1, 0], 0.058, [0, 1, 0], SOIL, 0, 8);
@@ -354,11 +355,11 @@ export function buildClutter(kind: ClutterKind, alive: boolean, variant: number,
       break;
     }
     case 'lantern': {
-      const metal = hex('#3f4246');
+      const metal = hex(PALETTE.lanternMetal);
       tube(B, [[0, 0, 0], [0, 0.42, 0]], [0.012, 0.01], 5, [metal, metal], [0, 0], false);
-      bevelBox(B, [0, 0.47, 0], [0.035, 0.045, 0.035], 0.006, hex('#fff1b8'));
-      bevelBox(B, [0, 0.525, 0], [0.045, 0.01, 0.045], 0.005, hex('#d9a441'));
-      bevelBox(B, [0, 0.42, 0], [0.04, 0.006, 0.04], 0.004, hex('#d9a441'));
+      bevelBox(B, [0, 0.47, 0], [0.035, 0.045, 0.035], 0.006, hex(PALETTE.lampGlow));
+      bevelBox(B, [0, 0.525, 0], [0.045, 0.01, 0.045], 0.005, hex(PALETTE.brass));
+      bevelBox(B, [0, 0.42, 0], [0.04, 0.006, 0.04], 0.004, hex(PALETTE.brass));
       break;
     }
     case 'niche': {
@@ -367,16 +368,16 @@ export function buildClutter(kind: ClutterKind, alive: boolean, variant: number,
       bevelBox(B, [0, 0.16, -0.04], [0.12, 0.16, 0.04], r, col, { noBottom: true });
       plainBox(B, [0, 0.17, 0.005], [0.08, 0.1, 0.004], scaleC(col, 0.55));
       if (alive) {
-        puff(B, { c: [0, 0.12, 0.03], r: [0.035, 0.04, 0.03], base: hex('#fbfaf7'), light: [1, 1, 1], dark: hex('#d9d6cf'), flex: 0, seed: 1, detail: 1, lump: 0 });
-        puff(B, { c: [0, 0.18, 0.03], r: [0.032, 0.028, 0.028], base: hex('#fbfaf7'), light: [1, 1, 1], dark: hex('#d9d6cf'), flex: 0, seed: 2, detail: 1, lump: 0 });
-        plainBox(B, [0, 0.152, 0.045], [0.026, 0.005, 0.008], hex('#e2483c'));
-        for (const s of [-1, 1]) card(B, [s * 0.016, 0.2, 0.03], norm([s * 0.3, 1, 0]), [0, 0, 1], 0.02, 0.018, hex('#fbfaf7'), hex('#ffc1dc'), 0, 0, 0.3, 0);
+        puff(B, { c: [0, 0.12, 0.03], r: [0.035, 0.04, 0.03], base: hex(PALETTE.cat), light: [1, 1, 1], dark: hex(PALETTE.catShade), flex: 0, seed: 1, detail: 1, lump: 0 });
+        puff(B, { c: [0, 0.18, 0.03], r: [0.032, 0.028, 0.028], base: hex(PALETTE.cat), light: [1, 1, 1], dark: hex(PALETTE.catShade), flex: 0, seed: 2, detail: 1, lump: 0 });
+        plainBox(B, [0, 0.152, 0.045], [0.026, 0.005, 0.008], hex(PALETTE.catRed));
+        for (const s of [-1, 1]) card(B, [s * 0.016, 0.2, 0.03], norm([s * 0.3, 1, 0]), [0, 0, 1], 0.02, 0.018, hex(PALETTE.cat), hex(PALETTE.catEar), 0, 0, 0.3, 0);
       }
       break;
     }
     case 'mural': {
       // a painted leaf mural: flat leaves just off the wall (at −z), pale greens and gold
-      const cols = [hex('#a5d94d'), hex('#7fb35a'), hex('#e8ba40'), hex('#cfe6a0')];
+      const cols = PALETTE.mural.map((c) => hex(c));
       for (let k = 0; k < 5; k++) {
         const a = -0.6 + k * 0.3 + (R() - 0.5) * 0.2;
         card(B, [0, 0.15, -0.075], norm([Math.sin(a), Math.cos(a), 0]), [0, 0, 1], 0.12 + R() * 0.05, 0.07, cols[k % 4], mix(cols[k % 4], [1, 1, 1], 0.2), 0, 0, 0.45, 0);
