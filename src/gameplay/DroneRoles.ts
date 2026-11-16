@@ -1,4 +1,5 @@
 import { big, Decimal } from '../core/Big';
+import { PARK } from '../core/Areas';
 import { Economy } from '../core/Economy';
 import { GROUND } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
@@ -90,7 +91,9 @@ export class DroneRoles {
         if (!s.state.progression.coreActivated && s.progression.fullBloomCount(HOME) < R.gardener.unlockFullBloom) return `Grow ${R.gardener.unlockFullBloom} tiles to full bloom first`;
         return undefined;
       case 'scout':
-        return s.areas.revealed().some((id) => s.areas.info(id).distance === 1 && s.areas.fog(id) !== 'cleared') ? undefined : 'Wake the fountain to reveal the fog first';
+        // First when an area next to the park is in fog; after that, while any revealed area still has fog
+        // (once its neighbours clear, the frontier moves out: the role must not lock again).
+        return s.areas.revealed().some((id) => id !== PARK && s.areas.fog(id) !== 'cleared') || this.anyOwns('scout') ? undefined : 'Wake the fountain to reveal the fog first';
       case 'courier':
         return has('motherTree') || has('relay') ? undefined : 'Build a Mother Tree or a Bloom Relay first';
       case 'spark':
@@ -246,8 +249,13 @@ export class DroneRoles {
     if (role === 'gardener') {
       const t = job.tileId ? s.grid.byTileId(job.tileId) : undefined;
       if (t && this.growable(t)) {
-        for (const g of [t, ...this.gardenNeighbours(t, hub)]) {
-          s.restoration.grow(g);
+        // One watering, one chain: the target grows as any drone nurture does (it can set a chain off); its
+        // neighbours grow with it but don't each start a chain of their own (otherwise every visit was three
+        // automation chains, and automation started more big chains than the player: docs/E18_AUDIT.md).
+        s.restoration.grow(t);
+        tileIds.push(t.id);
+        for (const g of this.gardenNeighbours(t, hub)) {
+          s.restoration.grow(g, undefined, 'auto', true);
           tileIds.push(g.id);
         }
         done = true;

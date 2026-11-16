@@ -138,6 +138,8 @@ describe.skipIf(!run)('E18.0 drone baseline (scripted bots)', () => {
     it(`city: scripted player, ${CITY_MIN} min (seed ${seed})`, { timeout: 1_800_000 }, async () => {
       const { p, sample } = probe();
       const roleAt: Record<string, number> = {};
+      // E18_PLAN=restorer,gardener,… overrides the role rule (attribution runs).
+      const plan = (env.E18_PLAN?.split(',') as typeof BOT_ROLE_PLAN | undefined) ?? BOT_ROLE_PLAN;
       const r = await playCity(seed, 3, CITY_MIN, (sim) => {
         const tick = sim.tick.bind(sim);
         let n = 0;
@@ -148,7 +150,7 @@ describe.skipIf(!run)('E18.0 drone baseline (scripted bots)', () => {
           if (roles && n % 30 === 0) {
             const hubs = sim.state.machines.filter((m) => m.type === 'droneHub').sort((a, b) => (Number(a.id.slice(1)) || 0) - (Number(b.id.slice(1)) || 0));
             hubs.forEach((h, i) => {
-              const want = BOT_ROLE_PLAN[Math.min(i, BOT_ROLE_PLAN.length - 1)];
+              const want = plan[Math.min(i, plan.length - 1)];
               if (sim.roles.roleOf(h) !== want && sim.roles.check(h.id, want).ok && sim.state.resources.biomass.gte(1000) && sim.roles.choose(h.id, want)) roleAt[want] ??= Math.round(sim.time);
             });
           }
