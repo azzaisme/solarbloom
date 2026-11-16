@@ -1749,6 +1749,7 @@ export class Game {
     if (this.summaryAt <= 0) {
       this.summaryAt = 0.25;
       this.hud.chainAreas(tr && tr.total >= 12 && tr.perArea.size > 1 ? this.chainSummary.lines(tr) : []);
+      if (tr) this.hud.chainBreakdown(this.chainSummary.breakdown(tr.chainId)); // Look 5.5: the combo panel's lines
     }
     if (!tr || tr.total < 20 || this.frontAt > 0 || this.settings.reducedMotion) return;
     this.frontAt = 0.3;

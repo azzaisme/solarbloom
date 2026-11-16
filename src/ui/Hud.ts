@@ -1,7 +1,7 @@
 import type { AreaMode } from '../core/types';
 import { HOME } from '../gameplay/ProgressionSystem';
 import { Economy, formatCost, KINDS } from '../core/Economy';
-import { fmt, toNum, type Big } from '../core/Big';
+import { big, fmt, toNum, type Big } from '../core/Big';
 import type { Cost } from '../core/types';
 import type { BuildableType, MachineData, ResourceKind } from '../core/types';
 import { BUILDABLE, MACHINES, TIER2, TIER3 } from '../data/machines';
@@ -160,7 +160,7 @@ export class Hud {
         </div>
       </div>
       <div id="eventBanner" role="status" aria-live="polite" hidden><span class="ei"></span><span class="et"></span><span class="ec"></span><i class="ebar"></i></div>
-      <div id="combo"><div class="big" id="comboBig">BLOOM CHAIN ×0</div><div class="total" id="comboTotal"></div><div id="chainAreas"></div><div id="feed"></div></div>
+      <div id="combo"><div id="comboFx" aria-hidden="true"></div><div class="big" id="comboBig" role="status" aria-label="Bloom chain combo"><span class="cic">${ICONS.biomass}</span><span class="cl">Combo</span> <span class="cx">×0</span></div><div class="cbody panel"><ul id="comboParts"></ul><div class="total" id="comboTotal"></div><div id="chainAreas"></div></div><div id="feed"></div></div>
       <div id="hotbar" class="panel">${slots}</div>
       <button id="frenzyBtn" class="frenzy-btn" aria-label="Bloom Frenzy (Q)" hidden><span class="fill"></span><span class="fi">${ICONS.frenzy}</span><span class="ft">0%</span></button>
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
@@ -732,12 +732,18 @@ export class Hud {
     }, 2600);
   }
 
+  private comboTier = 0;
   combo(n: number, total?: string) {
     const el = $(this.root, '#comboBig');
-    el.textContent = `BLOOM CHAIN ×${n}`;
+    $(el, '.cx').textContent = `×${n}`;
     el.classList.add('on');
-    el.classList.toggle('tier2', n >= 5 && n < 10);
-    el.classList.toggle('tier3', n >= 10);
+    $(this.root, '#combo').classList.add('on');
+    const tier = n >= 10 ? 3 : n >= 5 ? 2 : 1;
+    el.classList.toggle('tier2', tier === 2);
+    el.classList.toggle('tier3', tier === 3);
+    // Look 5.5: sparkles burst around the panel when the chain reaches a new tier.
+    if (tier > this.comboTier && tier > 1) this.sparkle(tier);
+    this.comboTier = tier;
     el.classList.remove('pop');
     void el.offsetWidth;
     el.classList.add('pop');
@@ -745,6 +751,35 @@ export class Hud {
     tot.innerHTML = iconize(esc(total ?? ''));
     tot.classList.toggle('on', !!total);
     this.comboTimer = total ? 3.2 : 2.2;
+  }
+
+  /** Look 5.5: the combo panel's contribution lines, from the running chain (ChainSummary.breakdown). */
+  chainBreakdown(b?: { restored: number; adjacent: number; synergy: number; relay: number }) {
+    if (!b) return;
+    const lines: [string, number][] = [
+      ['Restored Tiles', b.restored],
+      ['Adjacent Blooms', b.adjacent],
+      ['Utility Synergy', b.synergy],
+      ['Relay Links', b.relay],
+    ];
+    this.set('comboParts', $(this.root, '#comboParts'), 'html', lines.filter(([, v]) => v > 0).map(([k, v]) => `<li><span>+ ${k}</span><b>+${fmt(big(v))}</b></li>`).join(''));
+  }
+
+  private sparkle(tier: number) {
+    if (document.body.classList.contains('reduced') || this.settings.lowVfx) return;
+    const box = $(this.root, '#comboFx');
+    const n = tier === 3 ? 12 : 7;
+    for (let i = 0; i < n; i++) {
+      const s = document.createElement('i');
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.5;
+      const d = 40 + Math.random() * 50;
+      s.style.setProperty('--dx', `${Math.round(Math.cos(a) * d)}px`);
+      s.style.setProperty('--dy', `${Math.round(Math.sin(a) * d * 0.6)}px`);
+      s.style.animationDelay = `${Math.round(Math.random() * 120)}ms`;
+      s.className = tier === 3 ? 'pink' : '';
+      box.appendChild(s);
+      setTimeout(() => s.remove(), 1000);
+    }
   }
 
   /** City 10.6: the running chain's per-area summary under the combo (empty hides it). */
@@ -1005,6 +1040,9 @@ export class Hud {
       this.comboTimer -= dt;
       if (this.comboTimer <= 0) {
         $(this.root, '#comboBig').classList.remove('on');
+        $(this.root, '#combo').classList.remove('on');
+        this.comboTier = 0;
+        this.set('comboParts', $(this.root, '#comboParts'), 'html', '');
         $(this.root, '#comboTotal').classList.remove('on');
       }
     }

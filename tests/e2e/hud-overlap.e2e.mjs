@@ -11,7 +11,7 @@ mkdirSync(dir, { recursive: true });
 const server = await preview({ preview: { port: 4197, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let fails = 0;
-const PANELS = ['#res', '#obj', '#hotbar', '#hint', '#inspect', '#toasts', '#catPanel'];
+const PANELS = ['#res', '#obj', '#hotbar', '#hint', '#inspect', '#toasts', '#catPanel', '#combo'];
 try {
   for (const [name, w, h] of [['phone', 390, 844], ['desktop', 1280, 800]]) {
     const page = await browser.newPage({ viewport: { width: w, height: h } });
@@ -37,7 +37,14 @@ try {
         g.camera.glide(8, 0, 8, zoom);
         for (let i = 0; i < 300; i++) g.camera.update(0.05);
       }, zoom);
-      await page.waitForTimeout(2500);
+      await page.waitForTimeout(2000);
+      // Look 5.5: a big chain's combo panel with its breakdown is on screen while we measure.
+      await page.evaluate(() => {
+        const h = window.solarbloom.hud;
+        h.combo(24, '+40🌿 earned');
+        h.chainBreakdown({ restored: 8, adjacent: 9, synergy: 5, relay: 2 });
+      });
+      await page.waitForTimeout(500);
       const rects = await page.evaluate((PANELS) => {
         const out = [];
         for (const sel of PANELS) {
