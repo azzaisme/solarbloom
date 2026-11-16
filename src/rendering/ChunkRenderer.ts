@@ -407,12 +407,18 @@ export class ChunkRenderer {
     this.treeTris.set(v.key, fb.tris);
   }
 
+  /** Look 2.3: the warm stone tone of one restored paving slab (stable per tile). */
+  private slabTone(t: TileData): string {
+    const s = PALETTE.paving.slabs;
+    return s[Math.floor(hash01(t.x, t.z, 41) * s.length) % s.length];
+  }
+
   /** Far level of detail: one coloured slab per tile, with a bump for full bloom. */
   private farTile(b: MeshBuilder, t: TileData, h: number) {
     const f = t.feature ?? 'lawn';
     const dead = DEAD[f] ?? DEAD.lawn;
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
-    const col = t.blocked ? dead[0] : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? ALIVE.paving : grassTone(stage, t.x, t.z)) : t.ground === 'polluted' ? dead[t.variant % dead.length] : PALETTE.soil;
+    const col = t.blocked ? dead[0] : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? this.slabTone(t) : grassTone(stage, t.x, t.z)) : t.ground === 'polluted' ? dead[t.variant % dead.length] : PALETTE.soil;
     b.add('box', col, [t.x + 0.5, h, t.z + 0.5], [1, 0.16, 1]);
     // Phase 5 E16: stages stay apart zoomed out too: a colour patch for Blooming, a gold disc for Radiant.
     if (t.ground === 'restored' && f !== 'water' && f !== 'paving') {
@@ -651,8 +657,10 @@ export class ChunkRenderer {
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
     const grass = grassTone(stage, t.x, t.z);
     if (f === 'paving') {
-      // Clean stone with a planted bed.
-      b.add('box', ALIVE.paving, [x, h, z], [0.98, 0.16, 0.98]);
+      // Clean stone with a planted bed. Look 2.3: each slab its own warm tone, set in darker grout, the odd hairline crack.
+      b.add('box', PALETTE.paving.grout, [x, h - 0.004, z], [1, 0.152, 1]);
+      b.add('box', this.slabTone(t), [x, h, z], [0.92, 0.16, 0.92]);
+      if (hash01(t.x, t.z, 43) < 0.3) b.add('box', PALETTE.paving.crack, [x + (hash01(t.x, t.z, 44) - 0.5) * 0.4, top + 0.002, z + (hash01(t.x, t.z, 45) - 0.5) * 0.4], [0.18 + hash01(t.x, t.z, 46) * 0.2, 0.006, 0.02]);
       if (treeSpot(t, this.areaType)?.planter) {
         // a cream planter with a brass rim for the street tree
         b.add('box', PALETTE.stone.cream, [x, top + 0.08, z], [0.62, 0.16, 0.62]);

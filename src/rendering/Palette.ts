@@ -7,47 +7,47 @@
  */
 
 const stone = {
-  /** limestone: planters, plinths, fountain basins, clean parapets */
-  light: '#e9e4d8',
-  cream: '#f2ece0',
-  white: '#f4f1ea',
-  bright: '#fdfbf6',
-  warm: '#d8d1c0',
-  sand: '#cfc8b8',
-  mid: '#b8b4aa',
-  grey: '#a7a39a',
-  dark: '#9d998f',
-  shadow: '#7f7b72',
-  pebble: '#b6b2a8',
+  /** Look 2.3: warm limestone (palette.md) for planters, plinths, basins, statues and clean parapets */
+  light: '#ddd2bf',
+  cream: '#e6dccb',
+  white: '#ece4d4',
+  bright: '#efe7d8',
+  warm: '#d3c6b0',
+  sand: '#c9bca5',
+  mid: '#b9ab95',
+  grey: '#a39886',
+  dark: '#978a76',
+  shadow: '#7d7264',
+  pebble: '#b3a896',
 };
 
 const paving = {
-  /** restored slab (one tone per slab is picked from `slabs`) */
-  alive: '#e9e4d8',
-  slabs: ['#e9e4d8', '#e9e4d8', '#e9e4d8', '#e9e4d8'] as string[],
+  /** restored slab; each slab takes one of `slabs` by hash, set in darker grout */
+  alive: '#cdbfa8',
+  slabs: ['#cdbfa8', '#c4b59d', '#d4c7b1', '#bcad95'] as string[],
   /** swept but not yet restored */
-  swept: '#b4b1a8',
-  grout: '#6d6a62',
-  crack: '#5f5c55',
+  swept: '#b3a999',
+  grout: '#7d705f',
+  crack: '#5e5347',
   /** raised border where restored paving meets lawn */
-  border: '#fdfbf6',
-  roadLine: '#c9c38f',
+  border: '#e6dccb',
+  roadLine: '#c9b98a',
 };
 
 /** Tile ground by feature: dead (polluted) tones, three per feature. */
 const ground = {
   dead: {
     lawn: ['#8a7b5f', '#837357', '#91825f'],
-    paving: ['#9a9890', '#8f8d86', '#a3a097'],
-    road: ['#55585c', '#4e5155', '#5b5e62'],
+    paving: ['#9d9486', '#958c7e', '#a59c8d'],
+    road: ['#58554f', '#514e49', '#5e5b55'],
     water: ['#4e5a52', '#475249', '#56625a'],
     clay: ['#bda78a', '#b29c7f', '#c6b195'],
     litter: ['#867c6a', '#7c7261', '#908571'],
-    obstacle: ['#7d7b74', '#76746d', '#85837b'],
-    building: ['#8d8a82', '#86837b', '#94918a'],
+    obstacle: ['#837b70', '#7b7368', '#8b8377'],
+    building: ['#90887c', '#898175', '#978f83'],
   } as Record<string, string[]>,
   /** restored ground that isn't lawn ('' = use the stage grass) */
-  alive: { lawn: '', paving: '#e9e4d8', road: '', water: '#5cc6e6', clay: '', litter: '', obstacle: '#d9d4c8' } as Record<string, string>,
+  alive: { lawn: '', paving: '#cdbfa8', road: '', water: '#5cc6e6', clay: '', litter: '', obstacle: '#d9d4c8' } as Record<string, string>,
   /** prepared / growing water tiles */
   wetSoil: '#4f7f86',
   /** dead water surface scum */
@@ -254,24 +254,24 @@ const glow = {
 };
 
 const building = {
-  wallsDead: ['#a19d93', '#9a8f80', '#8f969a', '#a8a093', '#97928a'],
-  wallsAlive: ['#f4f1e8', '#eef2ea', '#f6efe4', '#e9f1f0', '#f3f0f5'],
-  wallDead: '#9d978c',
-  wallAlive: '#f1ede3',
-  roofDead: '#7d7a73',
+  wallsDead: ['#a29a8c', '#9a8f80', '#958f86', '#a8a093', '#97908a'],
+  wallsAlive: ['#efe8da', '#ebe6d8', '#f1e8d8', '#e6e8dc', '#efe9e0'],
+  wallDead: '#9d958a',
+  wallAlive: '#ece4d4',
+  roofDead: '#7f786e',
   roofGarden: '#7cc576',
   gardenBed: '#6fbf5e',
   glassDead: '#4b4f54',
   glassAlive: '#9fd6e8',
-  parapetDead: '#7f7b72',
-  parapetAlive: '#e2ddd0',
+  parapetDead: '#80786c',
+  parapetAlive: '#ddd2bf',
   tank: '#6e655a',
-  facade: '#a3a6aa',
-  facadeDark: '#7d8085',
+  facade: '#aea596',
+  facadeDark: '#857d72',
   window: '#3b4652',
   windowLit: '#ffe6a6',
-  parapet: '#9a9ea2',
-  parapetClean: '#f2efe8',
+  parapet: '#a8a195',
+  parapetClean: '#ece4d4',
 };
 
 /** Park props: benches, gazebo, stalls, lamps. */
@@ -385,10 +385,10 @@ const families = { stone, paving, ground, roof, lawn, flowers, leaf, wood, soil,
 export const PALETTE = {
   ...families,
   // ───── legacy names (pre-Look 2), kept as aliases ─────
-  concrete: ['#8d9196', '#7f8489', '#979a9e', '#868a8f'],
-  concreteDark: '#5d6166',
-  crack: '#3f4347',
-  debris: '#6d7176',
+  concrete: ['#9a9286', '#8f877b', '#a39b8f', '#958d81'],
+  concreteDark: '#6b6358',
+  crack: '#4a433b',
+  debris: '#7a7166',
   weed: lawn.weed,
   soil: soil.base,
   soilDark: soil.dark,
@@ -400,7 +400,7 @@ export const PALETTE = {
   stem: flowers.stem,
   shrub: leaf.shrub,
   trunk: wood.trunk,
-  white: stone.white,
+  white: '#f4f1ea',
   whiteWarm: plastic.warm,
   shell: plastic.shell,
   shellLow: plastic.shellLow,
