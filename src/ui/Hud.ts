@@ -148,17 +148,23 @@ export class Hud {
         <button class="rbtn" id="setBtn" aria-label="Settings" title="Settings">${ICONS.settings}</button>
       </div>
       <div id="obj" class="panel">
-        <h3 id="objTitle">Wake the fountain</h3>
-        <div class="pct" id="objPct">0% restored</div>
+        <div class="ohead">
+          <span class="oic" aria-hidden="true">${ICONS.biomass}</span>
+          <div class="otx"><span class="olab">Objective</span><h3 id="objTitle">Wake the fountain</h3></div>
+          <span class="ock" id="objCheck" role="img" aria-label="Not done yet"></span>
+          <button class="otog" id="objToggle" aria-expanded="false" aria-controls="objMore" aria-label="Show objective details" title="Details"><i></i></button>
+        </div>
         <div class="next" id="objNext"></div>
-        <div class="pbar"><i id="objBar" style="width:0%"></i></div>
-        <ul id="objList"></ul>
+        <div id="objMore">
+          <div class="pct" id="objPct">0% restored</div>
+          <div class="pbar"><i id="objBar" style="width:0%"></i></div>
+          <ul id="objList"></ul>
+        </div>
         <div id="objAct"></div>
         <button id="coreBtn">✨ Awaken the Core</button>
         <div class="tools">
           <button class="chip" id="catBtn" aria-label="Lucky Cat discoveries" hidden>🐱 <span id="catCount">0</span></button>
           <button class="chip" id="pawBtn" aria-label="Paw prints: show where a cat is hiding" title="Paw prints: a cat is hiding nearby. Tap to look." hidden>🐾 <span id="pawCount">0</span></button>
-          <button class="chip" id="objToggle" aria-label="Toggle objective list">📋</button>
         </div>
       </div>
       <div id="eventBanner" role="status" aria-live="polite" hidden><span class="ei"></span><span class="et"></span><span class="ec"></span><i class="ebar"></i></div>
@@ -231,7 +237,12 @@ export class Hud {
     $(r, '#pawBtn').addEventListener('click', () => this.cb.findCat());
     $(r, '#buildToggle').addEventListener('click', () => this.toggleTray());
     $(r, '#pauseBtn').addEventListener('click', () => this.cb.togglePause());
-    $(r, '#objToggle').addEventListener('click', () => $(r, '#obj').classList.toggle('expanded'));
+    $(r, '#objToggle').addEventListener('click', () => {
+      const open = $(r, '#obj').classList.toggle('expanded');
+      const t = $(r, '#objToggle');
+      t.setAttribute('aria-expanded', String(open));
+      t.setAttribute('aria-label', open ? 'Hide objective details' : 'Show objective details');
+    });
     $(r, '#closeModal').addEventListener('click', () => this.openSettings(false));
     $(r, '#modal').addEventListener('click', (e) => {
       if (e.target === $(r, '#modal')) this.openSettings(false);
@@ -1019,6 +1030,12 @@ export class Hud {
       this.set('objList', $(this.root, '#objList'), 'html', html);
     }
     const ready = p.coreReady();
+    // Look 5.8: the card's checkbox ticks (with a flourish) once the current goal is ready to complete.
+    const goal = s.state.progression.coreActivated ? s.areas.nextGoal() : undefined;
+    const done = s.state.progression.coreActivated ? !!goal && s.areas.ready(goal) : ready;
+    this.set('objDone', $(this.root, '#obj'), 'cls', done ? '1' : '0', 'done');
+    this.set('objDoneLabel', $(this.root, '#objCheck'), 'title', done ? 'Ready: complete it now' : 'Not done yet');
+    $(this.root, '#objCheck').setAttribute('aria-label', done ? 'Ready to complete' : 'Not done yet');
     const coreBtn = $(this.root, '#coreBtn');
     this.set('coreBtn', coreBtn, 'cls', ready ? '1' : '0', 'show');
     this.set('coreBtnText', coreBtn, 'text', `✨ ${p.homeIsPark ? 'Wake the fountain' : 'Awaken the Core'} · ${formatCost(TUNING.core.cost)}`);
