@@ -22,7 +22,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
   page.on('pageerror', (e) => errors.push(`page: ${e}`));
   page.on('console', (m) => m.type() === 'error' && errors.push(`console: ${m.text()}`));
-  await page.goto(`http://localhost:${port}/?still`);
+  await page.goto(`http://localhost:${port}/?still&${process.env.LOOK_QUERY ?? "gfx=high"}`); // High tier: Auto picks Low under SwiftShader
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
@@ -53,6 +53,7 @@ try {
       t.bloom = d < 3 ? 3 : d < 5.5 ? 2 : 1;
       s.grid.touch(t);
     }
+    s.advance?.(30); // Look 6: let restore transitions and area waves finish before the shot
     g.chunks.markAll();
   });
   await shot('look3-stages-near', 5, 8, 1.8);
@@ -69,6 +70,7 @@ try {
     }
     s.state.progression.coreActivated = true;
     s.areas.clear('park', true);
+    s.advance?.(30); // Look 6: let restore transitions and area waves finish before the shot
     g.chunks.markAll();
   });
   await shot('look3-park-near', 6, 10, 2.4);
@@ -87,6 +89,7 @@ try {
       s.grid.touch(t);
     }
     s.areas.clear(id, true);
+    s.advance?.(30); // Look 6: let restore transitions and area waves finish before the shot
     g.chunks.markAll();
   });
   await shot('look3-street-near', 22, 8, 1.6);

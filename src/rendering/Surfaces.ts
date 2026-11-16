@@ -37,7 +37,13 @@ export interface DressCtx {
   level: number;
   peek(x: number, z: number): TileData | undefined;
   areaAt(x: number, z: number): string;
+  /**
+   * Look 6: a tile's ground slab. While a tile transitions, Look 6's living surface draws slabs (so the ground
+   * changes colour in place); other primitives are props that grow in or fall away. Defaults to `b.add('box')`.
+   */
+  slab?(hex: string, p: [number, number, number], s: [number, number, number]): void;
 }
+const slab = (c: DressCtx, hex: string, p: [number, number, number], s: [number, number, number]) => (c.slab ? c.slab(hex, p, s) : c.b.add('box', hex, p, s));
 
 export const hash01 = (x: number, z: number, salt: number) => {
   let h = Math.imul(x | 0, 73856093) ^ Math.imul(z | 0, 19349663) ^ Math.imul(salt, 83492791);
@@ -72,8 +78,10 @@ const EDGE_FRAME: Record<string, { ox: number; oz: number; rot: number; tx: numb
 
 /** Phase 5 E16 grass by stage (index 1 Restored … 4 Radiant), three shades each. */
 export const STAGE_GRASS: string[][] = PALETTE.stageGrass;
+/** One of a palette list by a (possibly negative) variant: lists differ in length now that Look 2 owns them. */
+const pick = (a: string[], v: number) => a[((v % a.length) + a.length) % a.length];
 const isTurf = (t: TileData | undefined) => !!t && t.ground === 'restored' && !t.blocked && (t.feature ?? 'lawn') !== 'paving' && (t.feature ?? 'lawn') !== 'water' && (t.feature ?? 'lawn') !== 'road';
-const turfColour = (t: TileData) => lin(STAGE_GRASS[Math.max(1, Math.min(4, t.bloom || 1))][t.variant % 3]);
+const turfColour = (t: TileData) => lin(pick(STAGE_GRASS[Math.max(1, Math.min(4, t.bloom || 1))], t.variant));
 
 /**
  * A restored lawn's top: one quad whose corner colours average the turf of the (up to) four tiles meeting there,
@@ -211,10 +219,10 @@ export function paving(c: DressCtx, t: TileData, alive: boolean, x: number, z: n
   const top = h + 0.08;
   if (c.dens === 0 && c.lod === 0) {
     // deep fog: one plain slab, as before Look 3 (nothing finer shows through)
-    c.b.add('box', alive ? PAVE_ALIVE[t.variant % 4] : PAVE_DEAD[t.variant % 4], [x, h, z], [0.96, 0.16, 0.96]);
+    slab(c, pick(alive ? PAVE_ALIVE : PAVE_DEAD, t.variant), [x, h, z], [0.96, 0.16, 0.96]);
     return;
   }
-  c.b.add('box', PALETTE.grout[alive ? 0 : 1], [x, h - 0.01, z], [1, 0.16, 1]);
+  slab(c, PALETTE.grout[alive ? 0 : 1], [x, h - 0.01, z], [1, 0.16, 1]);
   const layout = Math.floor(hash01(t.x, t.z, 3) * PAVING_LAYOUTS);
   const rot = Math.floor(hash01(t.x, t.z, 5) * 4) * (Math.PI / 2);
   c.b.addGeo(pavingGeo(layout, t.variant + Math.floor(hash01(t.x, t.z, 7) * 4), alive || swept, alive ? PAVE_ALIVE : swept ? PALETTE.paveSwept : PAVE_DEAD, c.lod === 2 ? 1 : 0), x, top, z, rot, 1);

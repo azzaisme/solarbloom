@@ -101,7 +101,7 @@ void getAlbedo() {
 	if (vLeaf < 0.5 || uLeafParams.x <= 0.0) return;
 	vec3 p = vLeafP * uLeafParams.z;
 	float px = length(fwidth(p));
-	float k = 1.0 - smoothstep(0.28, 0.7, px);
+	float k = 1.0 - smoothstep(0.35, 0.8, px);
 	if (k <= 0.001) return;
 	vec3 ip = floor(p);
 	vec3 fp = fract(p);
@@ -125,15 +125,17 @@ void getAlbedo() {
 	// from the leaf's centre to this point, flattened onto the clump's surface
 	vec3 q = -o1;
 	q -= n * dot(q, n);
-	float gap = smoothstep(0.03, 0.16, d2 - d1);          // dark seams between leaves
-	float body = 1.0 - smoothstep(0.42, 0.62, d1);          // rounded leaf tips
-	float leaf = gap * mix(0.55, 1.0, body);
-	float lit = clamp(0.5 + 1.1 * dot(q, normalize(vec3(0.45, 0.8, 0.3))), 0.0, 1.0);
-	float tone = mix(0.5, 1.0, leaf) * mix(0.84, 1.16, lit) * mix(0.9, 1.08, h1.x);
+	// Owner review: strong seams read as a turtle shell. Leaves now read by their own light, like the reference:
+	// each one bright on its sunny upper edge and shaded underneath (where the next leaf overlaps it), with only
+	// a thin soft seam between them.
+	float gap = smoothstep(0.0, 0.08, d2 - d1);
+	float leaf = mix(0.8, 1.0, gap);
+	float lit = clamp(0.5 + 1.3 * dot(q, normalize(vec3(0.45, 0.8, 0.3))), 0.0, 1.0);
+	float tone = leaf * mix(0.7, 1.2, lit * lit) * mix(0.92, 1.06, h1.x);
 	vec3 tint = vec3(1.0 + (h1.y - 0.5) * 0.16, 1.0 + (h1.z - 0.5) * 0.06, 1.0 - (h1.y - 0.5) * 0.12);
 	float s = uLeafParams.x * k;
 	dAlbedo *= mix(vec3(1.0), tint * tone, s);
-	sbLeafBend = q * 1.6 * leaf;
+	sbLeafBend = q * 1.1;
 	sbLeafK = s;
 }
 `;
@@ -179,8 +181,8 @@ const TREE_MAIN_END = /* glsl */ `
 `;
 
 let material: pc.StandardMaterial | undefined;
-/** Look 3.7: leaf pattern per quality tier: strength, normal tilt, leaves per tile (about 6 cm leaves) */
-const LEAF_TIER = { low: [0.85, 0, 16, 0], medium: [0.95, 0.35, 16, 0], high: [1, 0.5, 16, 0] } as const;
+/** Look 3.7: leaf pattern per quality tier: strength, normal tilt, leaves per tile (about 4 cm leaves) */
+const LEAF_TIER = { low: [0.85, 0, 26, 0], medium: [0.95, 0.35, 26, 0], high: [1, 0.5, 26, 0] } as const;
 let leafTier: keyof typeof LEAF_TIER = 'high';
 
 /** Look 3.7: the leaf pattern's quality tier (Low skips the per-leaf lighting). */

@@ -604,6 +604,7 @@ export class ChunkRenderer {
       level: this.level,
       peek: (x, z) => grid.peek(GROUND, x, z),
       areaAt: (x, z) => map.areaOfCell(x, z),
+      slab: (hex, p, sc) => self.slab(self.sink, hex, p, sc),
     };
     for (const t of c.tiles) {
       if (!t) continue;

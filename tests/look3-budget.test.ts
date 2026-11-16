@@ -90,6 +90,11 @@ describe('Look 3 detail budget', () => {
   it('paving tiles at negative city coordinates build (variants from world coordinates go negative)', () => {
     const { c, count } = dress(2, 1);
     paving(c, tile(-37, -5, 3, 'paving'), true, -36.5, -4.5, 0);
+    // dead paving too, every variant (palette lists differ in length since Look 2 took them over)
+    const seen: string[] = [];
+    const probe: DressCtx = { ...c, lod: 0, b: { ...c.b, add: (_t, hex) => void seen.push(hex) } };
+    for (let v = -7; v < 7; v++) paving(probe, { ...tile(-3, v, 0, 'paving'), ground: 'polluted', variant: v } as TileData, false, -2.5, v + 0.5, 0);
+    expect(seen.every((h) => typeof h === 'string')).toBe(true);
     expect(count()).toBeGreaterThan(0);
     expect(bannerGeo('pole', true, -41, 1).tris).toBeGreaterThan(0);
     expect(railGeo('pipe', false, -3, true, 1).tris).toBeGreaterThan(0);
