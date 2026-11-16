@@ -24,7 +24,7 @@ import { CameraController } from '../rendering/CameraController';
 import { setTreeCursor } from '../rendering/Foliage';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
-import { ChunkRenderer } from '../rendering/ChunkRenderer';
+import { ChunkRenderer, SINK } from '../rendering/ChunkRenderer';
 import { TransitionRenderer } from '../rendering/transitions/TransitionRenderer';
 import { CultivatorVisuals } from '../rendering/CultivatorVisuals';
 import { ProgressRings } from '../rendering/transitions/ProgressRings';
@@ -36,6 +36,9 @@ import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
+import { Sky } from '../rendering/Sky';
+import { Skyline } from '../rendering/Skyline';
+import { HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers } from '../core/Picking';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
@@ -80,6 +83,8 @@ export class Game {
   readonly tweens = new Tweens();
   readonly scene: SceneBuilder;
   readonly camera: CameraController;
+  private sky!: Sky;
+  private skyline!: Skyline;
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
   readonly chunks: ChunkRenderer;
@@ -162,6 +167,11 @@ export class Game {
     this.scene = new SceneBuilder(this.app, this.tweens);
     this.scene.build();
     this.camera = new CameraController(this.app, this.tweens);
+    // Look 4.7: the sky behind everything (its own layer, drawn first).
+    this.sky = new Sky(this.app, this.scene.sun);
+    this.camera.cam.layers = [this.sky.layer.id, this.sky.clearLayer.id, ...this.camera.cam.layers];
+    // Look 4.8: the distant terraced city behind the play area (in the sky's layer, drawn before the world).
+    this.skyline = new Skyline(this.app, this.sky.layer, this.scene.sun.up);
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
@@ -298,11 +308,11 @@ export class Game {
       hover: (x, y) => this.onHover(x, y),
       leave: () => this.onLeave(),
       click: (x, y, b) => this.onClick(x, y, b),
-      pan: (dx, dy) => {
+      pan: (dx, dy, x, y) => {
         this.lastPanAt = performance.now();
-        this.camera.pan(dx, dy);
+        this.camera.pan(dx, dy, x, y);
       },
-      zoom: (f) => this.camera.zoomBy(f),
+      zoom: (f, x, y) => this.camera.zoomBy(f, x, y),
       // A quick, strong pinch-out snaps to the city overview (one gesture from anywhere).
       pinchEnd: (f, ms) => {
         if (this.city && !this.cinematic && f < 0.6 && ms < 450) this.camera.glide(this.camera.target.x, 0, this.camera.target.z, this.camera.minZoom);
@@ -497,7 +507,25 @@ export class Game {
     const layers = this.sim.grid.allLayers.filter((l) => l.kind === 'raised' || l.unlocked);
     const hit = pickLayers(layers, o, d);
     if (!hit) return undefined;
+    // Look 4.9: unrevealed areas are drawn SINK lower. A ray that lands on one at the city level carries on
+    // down to the sunk ground; if it ends under the revealed terrace instead, it hit the facade (nothing).
+    if (hit.layerId === GROUND && this.city && this.sunkAt(hit.fx, hit.fz)) {
+      const y = this.sim.grid.layer(GROUND)!.height + SLAB_TOP - SINK;
+      const t = (y - o.y) / d.y;
+      const fx = o.x + d.x * t;
+      const fz = o.z + d.z * t;
+      if (!this.sunkAt(fx, fz)) return undefined;
+      return { roofId: GROUND, fx, fz, tile: this.sim.grid.get(GROUND, Math.floor(fx), Math.floor(fz)) };
+    }
     return { roofId: hit.layerId, fx: hit.fx, fz: hit.fz, tile: this.sim.grid.get(hit.layerId, Math.floor(hit.fx), Math.floor(hit.fz)) };
+  }
+
+  /** Look 4.9: how far unrevealed ground is drawn below the city (tests read it). */
+  readonly sinkDepth = SINK;
+
+  /** Look 4.9: a city cell drawn sunk (its area not revealed yet). */
+  sunkAt(x: number, z: number): boolean {
+    return this.sim.areas.fog(this.sim.areas.map.areaOfCell(Math.floor(x), Math.floor(z))) === 'hidden';
   }
 
   /** See-through trees: 0..1, eases in while the cursor rests on the world and out when it leaves or pans. */
@@ -518,13 +546,33 @@ export class Game {
     setTreeCursor((this.pointer.x / w) * 2 - 1, 1 - (this.pointer.y / h) * 2, depth, this.treeFade, w, h);
   }
 
-  /** Haze and shadow reach follow the zoom-dependent camera (its distance changes with the zoom). */
+  /**
+   * Haze and shadow reach follow the zoom-dependent camera (its distance changes with the zoom). Look 4.5/4.7:
+   * the haze reaches a little less far close up, its colour is the sky's horizon colour so the ground fades
+   * into the sky, and both grey while the city is fogged.
+   */
   private syncView() {
     const c = this.camera;
+    const n = c.nearness();
+    c.hazeStart = HAZE.start[0] + (HAZE.start[1] - HAZE.start[0]) * n;
+    c.hazeEnd = HAZE.end[0] + (HAZE.end[1] - HAZE.end[0]) * n;
     this.app.scene.fog.start = c.fogDepth(c.dist + c.hazeStart);
     this.app.scene.fog.end = c.fogDepth(c.dist + c.hazeEnd);
+    if (this.sky) {
+      const [r, g, b] = this.sky.hazeColour();
+      this.app.scene.fog.color.set(r, g, b, 1);
+      c.cam.clearColor = new pc.Color(r, g, b, 1);
+    }
     const sun = this.scene.sun.light;
     if (sun) sun.shadowDistance = c.shadowDistance();
+  }
+
+  /** Look 4.7: how clear the sky is (0 grey … 1 clear): the park's stage, then each woken area. */
+  private skyClarity(): number {
+    const p = this.sim.progression;
+    const park = this.city ? Math.max(0, p.parkStage()) / 4 : 0;
+    const k = park * 0.4 + Math.min(1, this.sim.areas.clearedCount() / 8) * 0.6;
+    return k * k * (3 - 2 * k) * 0.85 + 0.15;
   }
 
   /** The game is in the city (the park and beyond), not the legacy rooftop layout. */
@@ -549,31 +597,41 @@ export class Game {
     this.camera.bounds = { minX: x0 - 8, maxX: x1 + 8, minZ: z0 - 8, maxZ: z1 + 8 };
   }
 
-  /** Visible ground rectangle (world x/z) from the four screen corners. */
+  /**
+   * Look 4.11 (#155): the visible ground as the frustum's footprint (a trapezoid reaching toward the horizon)
+   * and its bounding rectangle. Each screen corner's ray meets the (sunk) ground, but never further than the
+   * haze reaches: past it everything is the haze colour, so nothing there needs streaming.
+   */
   private groundRect() {
     const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
     const w = c.clientWidth;
     const h = c.clientHeight;
+    const cam = this.camera;
+    const reach = cam.dist + cam.hazeEnd + 8; // from the camera, along the ground
+    const floor = -SINK;
     let x0 = Infinity;
     let x1 = -Infinity;
     let z0 = Infinity;
     let z1 = -Infinity;
-    for (const [sx, sy] of [[0, 0], [w, 0], [0, h], [w, h]]) {
-      const { o, d } = this.camera.ray(sx, sy);
-      // A ray at or above the horizon (the low close-up view) reaches as far as streaming goes.
-      const t = d.y < -1e-3 ? -o.y / d.y : 400;
+    const poly: [number, number][] = [];
+    for (const [sx, sy] of [[0, 0], [w, 0], [w, h], [0, h]]) {
+      const { o, d } = cam.ray(sx, sy);
+      const flat = Math.max(1e-6, Math.hypot(d.x, d.z));
+      const cap = reach / flat;
+      const t = d.y < -1e-3 ? Math.min(cap, (floor - o.y) / d.y) : cap;
       const x = o.x + d.x * t;
       const z = o.z + d.z * t;
+      poly.push([x, z]);
       x0 = Math.min(x0, x);
       x1 = Math.max(x1, x);
       z0 = Math.min(z0, z);
       z1 = Math.max(z1, z);
     }
     // Never stream an unbounded amount at extreme zoom-out.
-    const cx = this.camera.target.x;
-    const cz = this.camera.target.z;
+    const cx = cam.target.x;
+    const cz = cam.target.z;
     const R = 90;
-    return { x0: Math.max(x0, cx - R), x1: Math.min(x1, cx + R), z0: Math.max(z0, cz - R), z1: Math.min(z1, cz + R) };
+    return { x0: Math.max(x0, cx - R), x1: Math.min(x1, cx + R), z0: Math.max(z0, cz - R), z1: Math.min(z1, cz + R), poly };
   }
 
   /**
@@ -586,8 +644,8 @@ export class Game {
     for (const d of this.sim.state.drones) {
       const p = this.drones.worldPos(d.id);
       if (!p) continue;
-      const sp = this.camera.toScreen(p);
-      pts.push({ id: d.id, x: sp.x, y: sp.y });
+      const sp = this.camera.onScreen(p);
+      if (sp) pts.push({ id: d.id, x: sp.x, y: sp.y });
     }
     if (!pts.length) return undefined;
     return pickDrone(pts, x, y, droneTapRadius(this.camera.worldPerPixel(), this.machineOrFootprintAt(x, y)));
@@ -610,7 +668,8 @@ export class Game {
     for (const id of this.cat.ids()) {
       const p = this.cat.targetWorld(id);
       if (!p) continue;
-      const s = this.camera.toScreen(p);
+      const s = this.camera.onScreen(p);
+      if (!s) continue;
       const d = Math.hypot(s.x - x, s.y - y);
       if (d <= bestD) {
         best = id;
@@ -647,10 +706,10 @@ export class Game {
 
   /** On screen and clear of the HUD, off screen (reachable by panning) or covered by a HUD panel. */
   private anchorView(p: pc.Vec3): 'visible' | 'offscreen' | 'covered' {
-    const s = this.camera.toScreen(p);
+    const s = this.camera.onScreen(p, 0);
     const w = window.innerWidth;
     const h = window.innerHeight;
-    if (s.x < 40 || s.y < 40 || s.x > w - 40 || s.y > h - 40) return 'offscreen';
+    if (!s || s.x < 40 || s.y < 40 || s.x > w - 40 || s.y > h - 40) return 'offscreen';
     return this.hud.blockedRects().some((r) => s.x > r.left - 16 && s.x < r.right + 16 && s.y > r.top - 16 && s.y < r.bottom + 16) ? 'covered' : 'visible';
   }
 
@@ -1193,8 +1252,9 @@ export class Game {
     const t = this.sim.grid.byTileId(tileId);
     if (!t) return undefined;
     const [x, y, z] = this.sim.grid.tileWorld(t);
-    const s = this.camera.toScreen(new pc.Vec3(x, y + 0.3, z));
-    return { x: s.x, y: s.y };
+    // Behind the camera or far off screen: the number flies from the default spot instead.
+    const s = this.camera.onScreen(new pc.Vec3(x, y + 0.3, z), 0);
+    return s && { x: s.x, y: s.y };
   }
 
   private tileVec(t: TileData, up = SLAB_TOP): pc.Vec3 {
@@ -1369,17 +1429,15 @@ export class Game {
       let from = tileId ? this.tileScreen(tileId) : undefined;
       if (!from && reason === 'cat') {
         const c = this.cat.targetWorld(this.claimingCat) ?? this.lastCatPos;
-        if (c) {
-          const sp = this.camera.toScreen(c);
-          from = { x: sp.x, y: sp.y };
-        }
+        const sp = c && this.camera.onScreen(c, 0);
+        if (sp) from = { x: sp.x, y: sp.y };
       }
       if (!from && reason === 'harvest') {
         const panel = s.state.machines.find((m) => m.type === 'solar');
         if (panel) {
           const w = this.machines.worldOf(panel);
-          const sp = this.camera.toScreen(new pc.Vec3(w[0], w[1] + 0.6, w[2]));
-          from = { x: sp.x, y: sp.y };
+          const sp = this.camera.onScreen(new pc.Vec3(w[0], w[1] + 0.6, w[2]), 0);
+          if (sp) from = { x: sp.x, y: sp.y };
         }
       }
       this.flyGain(kind, amount, from);
@@ -2012,7 +2070,6 @@ export class Game {
     const zoomedOut = this.camera.zoom < 0.6;
     const live = new Set<string>();
     if (show) {
-      const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
       // Overview icons: a chain blooming there now, and where you've found the Lucky Cat.
       const chaining = zoomedOut ? s.chains.activeAreas() : new Set<string>();
       const catAreas = new Set<string>();
@@ -2029,8 +2086,9 @@ export class Game {
         const fog = s.areas.fog(id);
         const ready = id !== PARK && s.areas.ready(id);
         if (!ready && !zoomedOut) continue;
-        const sp = this.camera.toScreen(new pc.Vec3(a.landmark[0] + 1, 2.4, a.landmark[1] + 1));
-        if (sp.x < -50 || sp.y < -50 || sp.x > c.clientWidth + 50 || sp.y > c.clientHeight + 50) continue;
+        // Look 4.6: never behind the camera or past the haze; sized by distance close up.
+        const sp = this.camera.onScreen(new pc.Vec3(a.landmark[0] + 1, 2.4, a.landmark[1] + 1), 50);
+        if (!sp) continue;
         const def = AREA_TYPES[a.type];
         const key = `areaLabel-${id}`;
         live.add(key);
@@ -2041,7 +2099,7 @@ export class Game {
         else if (fog === 'cleared') html = `<span data-area="${id}">${def.icon} ${esc(id === PARK ? 'The Park' : def.name)}${icons}<small>clear${a.authored ? ' · ' + esc(a.landmarkName) : ''}</small></span>`;
         else html = `<span data-area="${id}">${def.icon} ${esc(def.name)}${icons}<small>🌫️ ${Math.min(100, Math.round((s.areas.counts(id).restored / s.areas.need(id)) * 100))}%</small></span>`;
         // Zoomed out, every label is a button to its area's panel.
-        this.hud.worldLabel(key, html, sp.x, sp.y, ready || zoomedOut);
+        this.hud.worldLabel(key, html, sp.x, sp.y, ready || zoomedOut, zoomedOut ? 1 : sp.scale);
       }
     }
     for (const key of this.areaLabels) if (!live.has(key)) this.hud.worldLabel(key, null);
@@ -2252,7 +2310,7 @@ export class Game {
     this.tweens.update(dt);
     this.scene.update(dt);
     this.grid.update(dt);
-    const rect = this.city ? this.groundRect() : undefined;
+    const rect = view;
     this.transitions.sync(this.sim.time + Math.min(this.acc, TUNING.simStep));
     if (rect) this.chunks.update(dt, rect, this.camera.target, this.camera.zoom);
     this.machines.update(dt, rect);
@@ -2290,6 +2348,12 @@ export class Game {
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
     this.camera.update(dt);
+    this.sky.clarity += (this.skyClarity() - this.sky.clarity) * Math.min(1, dt * 0.8);
+    this.sky.reducedMotion = this.settings.reducedMotion;
+    this.sky.update(dt, this.camera.entity.getPosition(), this.camera.cam.farClip);
+    this.skyline.clarity = this.sky.clarity;
+    this.skyline.reducedMotion = this.settings.reducedMotion;
+    this.skyline.update(dt, this.camera.target, this.camera.entity.getPosition(), this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
     this.syncView();
     this.updateTreeCursor(dt);
     this.hud.update(dt);

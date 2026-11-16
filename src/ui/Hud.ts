@@ -822,7 +822,7 @@ export class Hud {
   }
 
   /** A label pinned to a world point. Created on demand; `action` labels take clicks. */
-  worldLabel(id: string, html: string | null, x = 0, y = 0, action = false) {
+  worldLabel(id: string, html: string | null, x = 0, y = 0, action = false, scale = 1) {
     let el = this.root.querySelector<HTMLElement>(`#${id}`);
     if (!el) {
       if (!html) return;
@@ -840,6 +840,9 @@ export class Hud {
     el.style.display = 'block';
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
+    // Look 4.6: nearer labels a little larger, far ones smaller (the CSS scale property composes with its transform).
+    el.style.scale = scale === 1 ? '' : scale.toFixed(2);
+    el.style.transformOrigin = '50% 100%';
   }
 
   /** Rectangles the Lucky Cat must never hide under. */
