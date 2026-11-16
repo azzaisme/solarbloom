@@ -46,3 +46,16 @@ soft glow. Re-paint with `KLAD=<path to klad> node tools/icons/paint-icons.mjs <
 
 Small glyphs inside text (machine and event emoji) and the solid white pause, fast-forward and gear stay SVG.
 The favicon stays the SVG mark (a data URI). klad's drawings are ours to ship; klad itself is not distributed.
+
+## Secondary surfaces (5.10)
+
+Toasts, the discovery feed, tooltips and failure notes, hint bubbles, world labels (styling only; their
+positioning belongs to Look 4), the cat panel, the cinematic title, fly-text, the event banner, the
+biodiversity pill, the upgrades drawer, the inspect panel (area panel, merge preview, superstructure panel)
+and the intro and settings modals all use the glass tokens and the icon set. Settings uses glass toggle
+switches, gold sliders and a styled `select`: a new control (Look 1's Graphics quality) is one more
+`<label>Name <input|select></label>` row and picks the styles up.
+
+**Deferred (E18 drone roles, not on main yet):** the Drone Hub role picker, mixed-resource price buttons that
+mark the short resource, and the Courier reach preview. The pieces they need are in place: the six role icons
+(`ROLE_ICONS`), and a three-resource price renders as three icons side by side (`tests/icons.test.ts`).
