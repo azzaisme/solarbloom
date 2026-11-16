@@ -269,7 +269,9 @@ export class TransitionRenderer {
       fromPol: live && tr && tr.from !== undefined && tr.k !== 'bloom' ? tr.from : t.pollution,
       toPol: t.pollution,
       code: (live && tr ? KIND[tr.k] : 0) * 8 + surfaceState(t),
-      dir: tr?.dir ?? 0,
+      // Look 6.7: with no transition of its own, dead ground cracks from the side facing living ground, so hairline
+      // cracks creep outward from restored tiles and connect across borders (shared edge points). Visual only.
+      dir: live && tr ? (tr.dir ?? 0) : t.ground === 'polluted' || t.ground === 'prepared' ? this.sim.transitions.livingEdge(t) : 0,
       feature: FEATURE[t.feature ?? 'lawn'] ?? 0,
       lushAt: lush ? (t.lushAt ?? lush - TUNING.neighbourhood.reservoir.lushSeconds) : 0,
       lushUntil: lush,

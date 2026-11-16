@@ -266,6 +266,8 @@ void getAlbedo() {
 		col = c;
 		if (detail > 0.5 && top) {
 			float reveal = state > 0.5 ? 1.0 : 0.12 + 0.88 * (1.0 - g);
+			// Look 6.7: next to living ground, hairline cracks reach in from that side even on grimy concrete
+			if (dir > 0.5) reveal = max(reveal, 0.45);
 			float d = trCracks(cell, l, dir, reveal);
 			float w = 0.008 + 0.012 * (1.0 - g) + 0.012 * m;
 			float inCrack = 1.0 - smoothstep(w * 0.5, w, d);
