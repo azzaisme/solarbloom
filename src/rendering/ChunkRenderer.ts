@@ -7,6 +7,7 @@ import type { Sim } from '../gameplay/Sim';
 import { CITY_GEN, PARK_LAYOUT } from '../data/city';
 import { buildingPlots, type BuildingPlot } from '../core/Generation';
 import { PALETTE } from './Materials';
+import { grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { FoliageBuilder, foliageMaterial, treeMesh, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates } from './TreeGen';
@@ -84,23 +85,16 @@ class MeshBuilder {
   private idx = new Grow(new Uint32Array(1 << 14));
   /** 0 = full colour … 1 = fully grey (fog / desaturation) */
   grey = 0;
+  /** Look 2.2: when set, colours fade from the given colour at the bottom of a primitive to this one at its top. */
+  tip = '';
 
   add(type: VPrim, hex: string, p: [number, number, number], s: [number, number, number] | number) {
     const t = template(type);
     let sx: number, sy: number, sz: number;
     if (typeof s === 'number') sx = sy = sz = s;
     else [sx, sy, sz] = s;
-    let [r, g, b] = lin(hex);
-    if (this.grey > 0) {
-      const l = 0.3 * r + 0.59 * g + 0.11 * b;
-      const k = this.grey;
-      r = r + (l * 0.85 - r) * k;
-      g = g + (l * 0.88 - g) * k;
-      b = b + (l * 0.95 - b) * k;
-    }
-    const R = Math.round(r * 255);
-    const G = Math.round(g * 255);
-    const B = Math.round(b * 255);
+    const [R, G, B] = this.rgb(hex);
+    const [R2, G2, B2] = this.tip ? this.rgb(this.tip) : [R, G, B];
     const nv = t.pos.length;
     const base = this.pos.n / 3;
     this.pos.reserve(nv);
@@ -133,9 +127,16 @@ class MeshBuilder {
         N[o + 1] = ny / len;
         N[o + 2] = nz / len;
       }
-      C[c] = R;
-      C[c + 1] = G;
-      C[c + 2] = B;
+      if (this.tip) {
+        const k = Math.max(0, Math.min(1, t.pos[i + 1] + 0.5));
+        C[c] = R + (R2 - R) * k;
+        C[c + 1] = G + (G2 - G) * k;
+        C[c + 2] = B + (B2 - B) * k;
+      } else {
+        C[c] = R;
+        C[c + 1] = G;
+        C[c + 2] = B;
+      }
       C[c + 3] = 255;
     }
     this.pos.n = this.nrm.n = o;
@@ -143,6 +144,19 @@ class MeshBuilder {
     let k = this.idx.n;
     for (let i = 0; i < t.idx.length; i++) I[k++] = base + t.idx[i];
     this.idx.n = k;
+  }
+
+  /** A colour as 0–255 linear vertex channels, greyed for fog. */
+  private rgb(hex: string): [number, number, number] {
+    let [r, g, b] = lin(hex);
+    if (this.grey > 0) {
+      const l = 0.3 * r + 0.59 * g + 0.11 * b;
+      const k = this.grey;
+      r = r + (l * 0.85 - r) * k;
+      g = g + (l * 0.88 - g) * k;
+      b = b + (l * 0.95 - b) * k;
+    }
+    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
   }
 
   build(device: pc.GraphicsDevice): pc.Mesh | undefined {
@@ -159,9 +173,6 @@ class MeshBuilder {
 
 /** Ground colours per material, dead → alive (Look 2: PALETTE.ground / PALETTE.lawn). */
 const DEAD = PALETTE.ground.dead;
-/** Phase 5 E16: grass by stage (index 1 Restored … 4 Radiant), three shades each. */
-const STAGE_GRASS = PALETTE.lawn.stage;
-const STAGE1_TUFT = PALETTE.lawn.youngTuft;
 const EDGE_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const hash01 = (x: number, z: number, salt: number) => {
   let h = Math.imul(x | 0, 73856093) ^ Math.imul(z | 0, 19349663) ^ Math.imul(salt, 83492791);
@@ -401,7 +412,7 @@ export class ChunkRenderer {
     const f = t.feature ?? 'lawn';
     const dead = DEAD[f] ?? DEAD.lawn;
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
-    const col = t.blocked ? dead[0] : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? ALIVE.paving : STAGE_GRASS[stage][t.variant % 3]) : t.ground === 'polluted' ? dead[t.variant % dead.length] : PALETTE.soil;
+    const col = t.blocked ? dead[0] : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? ALIVE.paving : grassTone(stage, t.x, t.z)) : t.ground === 'polluted' ? dead[t.variant % dead.length] : PALETTE.soil;
     b.add('box', col, [t.x + 0.5, h, t.z + 0.5], [1, 0.16, 1]);
     // Phase 5 E16: stages stay apart zoomed out too: a colour patch for Blooming, a gold disc for Radiant.
     if (t.ground === 'restored' && f !== 'water' && f !== 'paving') {
@@ -573,7 +584,7 @@ export class ChunkRenderer {
       return;
     }
     if (t.occupantId) {
-      b.add('box', t.ground === 'restored' ? PALETTE.grass[t.variant % PALETTE.grass.length] : PALETTE.soil, [x, h, z], [1, 0.16, 1]);
+      b.add('box', t.ground === 'restored' ? grassTone(Math.max(1, t.bloom || 1), t.x, t.z) : PALETTE.soil, [x, h, z], [1, 0.16, 1]);
       return;
     }
     const top = h + 0.08;
@@ -605,7 +616,11 @@ export class ChunkRenderer {
         for (let i = 0; i < n; i++) {
           const sx = x + r.range(-0.3, 0.3);
           const sz = z + r.range(-0.3, 0.3);
-          if (t.ground === 'growing') b.add('cone', PALETTE.grassTuft[i % 3], [sx, top + 0.06, sz], [0.05, 0.12, 0.05]);
+          if (t.ground === 'growing') {
+            b.tip = PALETTE.lawn.youngTuftTip[i % 3];
+            b.add('cone', PALETTE.lawn.youngTuft[i % 3], [sx, top + 0.06, sz], [0.05, 0.12, 0.05]);
+            b.tip = '';
+          }
           else b.add('sphere', PALETTE.moss, [sx, top + 0.005, sz], [r.range(0.14, 0.26), 0.05, r.range(0.12, 0.24)]);
         }
         break;
@@ -634,7 +649,7 @@ export class ChunkRenderer {
    */
   private restoredTile(b: MeshBuilder, t: TileData, h: number, x: number, z: number, top: number, f: string, r: VRng) {
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
-    const grass = STAGE_GRASS[stage][t.variant % 3];
+    const grass = grassTone(stage, t.x, t.z);
     if (f === 'paving') {
       // Clean stone with a planted bed.
       b.add('box', ALIVE.paving, [x, h, z], [0.98, 0.16, 0.98]);
@@ -654,7 +669,9 @@ export class ChunkRenderer {
     for (let i = 0; i < tufts; i++) {
       const ht = r.range(tuftH[0], tuftH[1]);
       const span = f === 'paving' ? 0.25 : 0.42;
-      b.add('cone', (stage === 1 ? STAGE1_TUFT : PALETTE.grassTuft)[i % 3], [x + r.range(-span, span), top + ht / 2, z + r.range(-span, span)], [0.055, ht, 0.055]);
+      b.tip = (stage === 1 ? PALETTE.lawn.youngTuftTip : PALETTE.lawn.tuftTip)[i % 3];
+      b.add('cone', (stage === 1 ? PALETTE.lawn.youngTuft : PALETTE.lawn.tuft)[i % 3], [x + r.range(-span, span), top + ht / 2, z + r.range(-span, span)], [0.055, ht, 0.055]);
+      b.tip = '';
     }
     const span = f === 'paving' ? 0.2 : 0.3;
     if (stage >= 2) {

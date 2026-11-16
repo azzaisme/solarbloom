@@ -64,17 +64,33 @@ const roof = {
 };
 
 const lawn = {
-  /** fresh restored grass tones (per tile) */
-  tones: ['#69bf4a', '#74c64f', '#5fb446'],
-  /** grass by bloom stage: index 1 Restored … 4 Radiant */
-  stage: [[], ['#9fd46a', '#a6d871', '#97cd62'], ['#69bf4a', '#74c64f', '#5fb446'], ['#4fae45', '#58b74a', '#48a640'], ['#79c24d', '#82c853', '#74bd49']] as string[][],
-  tuft: ['#4fae3a', '#5fbf43', '#86d45a'],
-  youngTuft: ['#8cc95a', '#97d062', '#a9da74'],
+  /** Look 2.2: slightly golden, less saturated greens (palette.md). Fresh restored grass, picked per tile by noise. */
+  tones: ['#86ad3e', '#8fb443', '#7ba23a', '#96b84a', '#719a37'],
+  /** large sunlit / shaded patches pull the tile tone toward these */
+  sunlit: '#9cba48',
+  shadow: '#3f6a2e',
+  dryTip: '#c2bf5c',
+  /**
+   * Grass by bloom stage: index 1 Restored … 4 Radiant. Each stage keeps its own brightness so stages read apart:
+   * young grass is light and yellow-green, Blooming mid, Thriving deep, Radiant warm and golden.
+   */
+  stage: [
+    [],
+    ['#a9c463', '#b2c96a', '#a0bd5c', '#b8cd72', '#9db75a'],
+    ['#86ad3e', '#8fb443', '#7ba23a', '#96b84a', '#719a37'],
+    ['#5f8f34', '#68973a', '#58872f', '#6f9c3f', '#52802c'],
+    ['#8fae3a', '#99b440', '#86a636', '#a1b946', '#7d9e33'],
+  ] as string[][],
+  /** tufts: darker base, lighter tips (MeshBuilder.tip) */
+  tuft: ['#557f2c', '#5f8a31', '#6b9337'],
+  tuftTip: ['#a8c55a', '#b4c964', '#c2bf5c'],
+  youngTuft: ['#86ab4c', '#8fb254', '#99b85c'],
+  youngTuftTip: ['#c4d282', '#cbd58a', '#d2d38c'],
   /** trimmed darker edge where lawn meets paving */
-  edge: '#3f8f3a',
-  moss: '#7fa35a',
-  sprout: '#79a957',
-  clover: '#9be07a',
+  edge: '#4f7a2c',
+  moss: '#8a9a45',
+  sprout: '#7fa046',
+  clover: '#a3c25e',
   weed: '#7a8a5c',
   weedDry: '#86965f',
   weedDark: '#7d8a5c',
@@ -123,7 +139,9 @@ const leaf = {
   dusk: '#3f6b4a',
   lime: '#7fd36a',
   teal: '#4fb0ad',
-  shrub: ['#3e9e46', '#4fb04f', '#2f8a3e'],
+  shrub: ['#4f8a35', '#5f9a3c', '#3f7a2e'],
+  /** Look 2.2: leaf hue ranges (HSL degrees) per tree species, warmer and more varied than one lime green */
+  hue: { oak: [92, 112], birch: [78, 94], willow: [82, 98], pine: [130, 146], cherry: [330, 346], shrub: [80, 112] } as Record<string, [number, number]>,
   shrubTip: '#5fbf43',
   ivy: '#4f9a4a',
 };
@@ -412,3 +430,58 @@ export const PALETTE = {
   skylineGreen: sky.skylineGreen,
   bridge: sky.bridge,
 };
+
+// ───── colour helpers (pure) ─────
+
+const hexCache = new Map<string, string>();
+/** Mixes two #rrggbb colours in sRGB, k in 0–1 (quantised to 1/16 so vertex-colour caches stay small). */
+export function mixHex(a: string, b: string, k: number): string {
+  const q = Math.round(Math.max(0, Math.min(1, k)) * 16);
+  if (q === 0) return a;
+  if (q === 16) return b;
+  const key = a + b + q;
+  let out = hexCache.get(key);
+  if (!out) {
+    const A = parseInt(a.slice(1, 7), 16);
+    const B = parseInt(b.slice(1, 7), 16);
+    const ch = (sh: number) => Math.round(((A >> sh) & 255) + ((((B >> sh) & 255) - ((A >> sh) & 255)) * q) / 16);
+    out = '#' + ((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1);
+    hexCache.set(key, out);
+  }
+  return out;
+}
+
+const hash2 = (x: number, z: number, salt: number) => {
+  let h = Math.imul(x | 0, 73856093) ^ Math.imul(z | 0, 19349663) ^ Math.imul(salt, 83492791);
+  h = Math.imul(h ^ (h >>> 13), 0x5bd1e995);
+  h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
+};
+/** Smooth value noise in 0–1 (bilinear over a hashed lattice, smoothstepped). */
+export function valueNoise(x: number, z: number, salt = 0): number {
+  const xi = Math.floor(x);
+  const zi = Math.floor(z);
+  const fx = x - xi;
+  const fz = z - zi;
+  const u = fx * fx * (3 - 2 * fx);
+  const v = fz * fz * (3 - 2 * fz);
+  const a = hash2(xi, zi, salt);
+  const b = hash2(xi + 1, zi, salt);
+  const c = hash2(xi, zi + 1, salt);
+  const d = hash2(xi + 1, zi + 1, salt);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+
+/**
+ * Look 2.2: the grass colour of a tile at (x, z) for a bloom stage (1–4). Three levels of variation:
+ * a tone per tile chosen by hash (no `variant % n` pattern), soft large patches (sunlit / shaded lawns, about
+ * 7 tiles across), and a faint second octave so neighbouring tiles never match exactly. Shade goes cool and dark
+ * (toward `lawn.shadow`), never grey.
+ */
+export function grassTone(stage: number, x: number, z: number): string {
+  const tones = lawn.stage[Math.max(1, Math.min(4, stage | 0))];
+  const base = tones[Math.floor(hash2(x, z, 11) * tones.length) % tones.length];
+  const patch = valueNoise(x / 7, z / 7, 23) * 0.75 + valueNoise(x / 2.5, z / 2.5, 29) * 0.25;
+  // 0.5 is neutral; above leans sunlit, below leans into cool shade.
+  return patch >= 0.5 ? mixHex(base, lawn.sunlit, (patch - 0.5) * 0.6) : mixHex(base, lawn.shadow, (0.5 - patch) * 0.55);
+}

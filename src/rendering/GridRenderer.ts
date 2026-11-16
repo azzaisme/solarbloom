@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import type { LayerData, TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { PALETTE } from './Materials';
+import { grassTone } from './Palette';
 import { assignBatch, group, setVColor, vshape as shape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
 import { ease, type Tweens } from './Tween';
@@ -213,19 +214,19 @@ export class GridRenderer {
         setVColor(v.slab, 'box', PALETTE.soil);
         for (let i = 0; i < 5; i++) {
           const sp = add(group(deco, 'sprout', [r.range(-0.3, 0.3), 0, r.range(-0.3, 0.3)]));
-          shape(sp, 'cone', PALETTE.grassTuft[i % 3], { pos: [0, 0.06, 0], scale: [0.05, 0.12, 0.05] });
-          shape(sp, 'sphere', PALETTE.grassTuft[2], { pos: [0.03, 0.11, 0], scale: [0.06, 0.02, 0.04] });
+          shape(sp, 'cone', PALETTE.lawn.youngTuft[i % 3], { pos: [0, 0.06, 0], scale: [0.05, 0.12, 0.05] });
+          shape(sp, 'sphere', PALETTE.lawn.youngTuftTip[2], { pos: [0.03, 0.11, 0], scale: [0.06, 0.02, 0.04] });
         }
         break;
       }
       case 'restored': {
-        setVColor(v.slab, 'box', PALETTE.grass[t.variant % PALETTE.grass.length]);
+        setVColor(v.slab, 'box', grassTone(Math.max(1, t.bloom || 1), t.x, t.z));
         if (t.occupantId) break;
         if (!keepOld) {
           const tufts = 8 + (t.variant % 3);
           for (let i = 0; i < tufts; i++) {
             const h = r.range(0.09, 0.2);
-            add(shape(deco, 'cone', PALETTE.grassTuft[i % 3], { pos: [r.range(-0.44, 0.44), h / 2, r.range(-0.44, 0.44)], scale: [0.055, h, 0.055], rot: [r.range(-12, 12), 0, r.range(-12, 12)] }));
+            add(shape(deco, 'cone', PALETTE.lawn.tuft[i % 3], { pos: [r.range(-0.44, 0.44), h / 2, r.range(-0.44, 0.44)], scale: [0.055, h, 0.055], rot: [r.range(-12, 12), 0, r.range(-12, 12)] }));
           }
           if (t.variant % 4 === 0) add(shape(deco, 'sphere', PALETTE.lawn.clover, { pos: [r.range(-0.3, 0.3), 0.02, r.range(-0.3, 0.3)], scale: [0.2, 0.05, 0.2] }));
         }

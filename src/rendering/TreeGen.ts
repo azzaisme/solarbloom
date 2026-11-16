@@ -289,23 +289,23 @@ function leafPalette(sp: Species, R: () => number, stage: TreeStage): Palette {
   switch (sp) {
     case 'cherry': {
       // pink when it first blooms, the full pink crown later; Thriving leafs out a little green
-      const h = j(330, 346);
+      const h = j(...PALETTE.leaf.hue.cherry);
       return { base: hsl(h, 62, 76), light: hsl(h + 8, 70, 88), dark: hsl(h - 6, 45, 56) };
     }
     case 'birch': {
-      const h = j(90, 104);
+      const h = j(...PALETTE.leaf.hue.birch);
       return { base: hsl(h, 54, 34), light: hsl(h - 12, 62, 52), dark: hsl(h + 26, 46, 18) };
     }
     case 'pine': {
-      const h = j(146, 158);
+      const h = j(...PALETTE.leaf.hue.pine);
       return { base: hsl(h, 42, 32), light: hsl(h - 14, 48, 50), dark: hsl(h + 10, 40, 18) };
     }
     case 'willow': {
-      const h = j(94, 106);
+      const h = j(...PALETTE.leaf.hue.willow);
       return { base: hsl(h, 48, 38), light: hsl(h - 12, 58, 56), dark: hsl(h + 22, 42, 20) };
     }
     default: {
-      const h = j(108, 124) - (stage === 4 ? 6 : 0);
+      const h = j(...PALETTE.leaf.hue.oak) - (stage === 4 ? 6 : 0);
       return { base: hsl(h, 52, 30), light: hsl(h - 14, 60, 47), dark: hsl(h + 28, 50, 15) };
     }
   }
@@ -517,8 +517,9 @@ function radiant(B: Buf, R: () => number, sp: Species, S: number) {
 export function buildShrub(variant: number, lod: Lod = 1): TreeGeo {
   const B = new Buf();
   const R = rng(variant * 9973 + 7);
-  const h = 98 + R() * 30;
-  const pal = { base: hsl(h, 55, 40), light: hsl(h - 20, 66, 58), dark: hsl(h + 16, 45, 24) };
+  const [h0, h1] = PALETTE.leaf.hue.shrub;
+  const h = h0 + R() * (h1 - h0);
+  const pal = { base: hsl(h, 48, 38), light: hsl(h - 18, 58, 56), dark: hsl(h + 16, 42, 22) };
   const n = 2 + Math.floor(R() * 2);
   const det = lod === 0 ? 0 : 1;
   for (let i = 0; i < n; i++) {

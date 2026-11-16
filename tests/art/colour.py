@@ -37,7 +37,6 @@ def hexof(c):
 # Colour families used for the coverage measure. Order matters: first match wins.
 # (name, test(h, s, v) -> bool mask)
 FAMILIES = [
-    ('glow', lambda h, s, v: (v > 0.97) & (s > 0.35)),
     ('pink', lambda h, s, v: (s > 0.28) & (v > 0.4) & ((h >= 300) | (h < 8))),
     ('purple', lambda h, s, v: (s > 0.2) & (v > 0.3) & (h >= 250) & (h < 300)),
     ('red-orange', lambda h, s, v: (s > 0.45) & (v > 0.45) & (h >= 8) & (h < 38)),
