@@ -11,7 +11,7 @@ Shape (drone space: face +X, up +Z; body from drone_shape.py, 10% squat):
 - one small recessed side vent with cyan marks (right side)
 
 Objects (separate so the game can animate them; each object's origin is its pivot):
-drone_body, visor_eyes (the screen: eye sprite sheet as emission, UVs on frame 0, u 0..0.25),
+drone_body, visor_eyes (the screen: eye sprite sheet as emission, UVs on frame 0, u 0..1/8),
 antenna, leaf_L, leaf_R, thruster_C, thruster_L, thruster_R.
 Materials are pal_<key> with the spec's values (Materials.ts PALETTE gets the same values).
 All quads except a small triangle fan at the centre of the screen.
@@ -66,6 +66,7 @@ FACE_RINGS = [(1.065, 0.45 * BEZEL, "gold"), (1.04, 0.85 * BEZEL, "gold"), (1.01
 SCREEN = [0.88, 0.74, 0.58, 0.42, 0.26, 0.12]   # screen rings; the centre is a small fan
 SCREEN_LIFT = lambda f: -0.010 + 0.012 * (1 - f * f)
 EYE_SQUARE, EYE_UP = 0.64, 0.01                   # the eye sheet frame covers this square on the screen
+EYE_FRAMES = 8                                   # frames in the sheet (drone_eye_sheet.py); UVs show frame 0
 
 
 def srgb_to_linear(hexs):
@@ -261,7 +262,7 @@ for f in bm.faces:
     if f.material_index == MI["eyes"]:
         for l in f.loops:
             st = tangent(l.vert.co) or (0.0, 0.0)
-            l[uvl].uv = ((0.5 + st[0] / EYE_SQUARE) * 0.25, 0.5 + (st[1] - EYE_UP) / EYE_SQUARE)
+            l[uvl].uv = ((0.5 + st[0] / EYE_SQUARE) / EYE_FRAMES, 0.5 + (st[1] - EYE_UP) / EYE_SQUARE)
 bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
 if sum(f.normal.dot(f.calc_center_median() - S.C) * f.calc_area() for f in bm.faces) < 0:
     bmesh.ops.reverse_faces(bm, faces=bm.faces[:])

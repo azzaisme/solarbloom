@@ -2026,7 +2026,7 @@ export class Game {
     const rect = this.city ? this.groundRect() : undefined;
     if (rect) this.chunks.update(dt, rect, this.camera.target, this.camera.zoom);
     this.machines.update(dt, rect);
-    this.drones.update(dt);
+    this.drones.update(this.paused || this.hiddenPause ? 0 : dt); // drone personality freezes with the game
     this.cat.update(dt);
     this.butterflies.update(dt);
     this.birds.update(dt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2);

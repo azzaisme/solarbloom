@@ -3,6 +3,7 @@ import { createInitialState, GROUND } from '../core/GameState';
 import { PARK } from '../core/Areas';
 import { Sim } from '../gameplay/Sim';
 import type { Game } from './Game';
+import type { FaceName } from '../rendering/DroneVisuals';
 
 /**
  * Phase 4 E00.5: debug helpers for repeatable testing. Loaded only by the Vite dev server
@@ -13,6 +14,7 @@ import type { Game } from './Game';
  *   sbDev.simulate(120)        run 120 s of simulation now (accelerated)
  *   sbDev.log()                the local event log (sim time, event, small numbers)
  *   sbDev.overflow()           income lost to full storage so far
+ *   sbDev.face('excited')      show one drone expression on every drone (no argument: back to normal)
  */
 export type PresetName = 'fresh' | 'screenshot' | 'rich' | 'wealthy';
 
@@ -80,7 +82,12 @@ export function installDevTools(game: Game) {
     overflow() {
       return game.sim.log.overflow;
     },
+    /** Drone redesign D03: preview an expression on every drone. */
+    face(name?: FaceName) {
+      game.drones.previewFace = name;
+      return name ? `drones show "${name}"; sbDev.face() to go back` : 'drones show their normal faces';
+    },
   };
   (window as unknown as { sbDev: typeof api }).sbDev = api;
-  console.info('[solarbloom] dev tools: sbDev.reset(seed), sbDev.preset(name), sbDev.simulate(s), sbDev.log()');
+  console.info('[solarbloom] dev tools: sbDev.reset(seed), sbDev.preset(name), sbDev.simulate(s), sbDev.log(), sbDev.face(name)');
 }
