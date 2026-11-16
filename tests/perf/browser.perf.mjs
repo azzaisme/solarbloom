@@ -57,12 +57,17 @@ const LIMITS = {
   chainMinCombo: CHAIN,
   saveStepMs: 16, // each main-thread step of an autosave (serialize, base64, storage write) fits in a frame
   catchUpSimMs: 16, // City 06.5: catching up 5 minutes away never spends more than this on simulation in one frame
+  // Look 3.17: triangle budget for the heaviest loaded chunk (ground + props + foliage), High tier; Medium and
+  // Low thin grass, flowers and clutter further (see docs/art/surfaces.md).
+  chunkTris: 200000,
 };
 
-const server = await preview({ preview: { port: 4183, strictPort: true }, logLevel: 'silent' });
+const PORT = Number(process.env.PORT ?? 4183);
+// DIST: compare another build (e.g. the base branch's dist) on the same machine
+const server = await preview({ preview: { port: PORT, strictPort: true }, build: process.env.DIST ? { outDir: process.env.DIST } : undefined, logLevel: 'silent' });
 const MAIN_TIER = process.env.PERF_TIER ?? 'high';
 const TIERS = (process.env.PERF_TIERS ?? 'low,medium,high').split(',').filter((t) => ['low', 'medium', 'high'].includes(t));
-const url = `http://localhost:4183/?gfx=${MAIN_TIER}`;
+const url = `http://localhost:${PORT}/?gfx=${MAIN_TIER}`;
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
 const results = {};
@@ -231,6 +236,10 @@ try {
         drawCallsWorst: d.worst,
       };
       return results[name];
+    }).then(async (res) => {
+      // Look 3.17: triangles in loaded chunks after the phase (ground + props, foliage; the heaviest chunk)
+      results[name].detail = await page.evaluate(() => window.solarbloom.chunks.detailStats?.());
+      return res;
     });
 
   // 3. Pan across the whole city at mid zoom (a big loop through the cleared region).
@@ -263,7 +272,7 @@ try {
   // Look 1.11: the same city at each graphics tier (pan and zoom), then back to the main tier for the rest.
   results.tiers = {};
   for (const tier of TIERS) {
-    await page.goto(`http://localhost:4183/?gfx=${tier}`);
+    await page.goto(`http://localhost:${PORT}/?gfx=${tier}`);
     await page.waitForFunction(() => !!window.solarbloom && window.solarbloom.sim.state.machines.length > 50, null, { timeout: 60000 });
     await page.evaluate(() => new Promise((r) => setTimeout(r, 1500)));
     const got = await page.evaluate(() => window.solarbloom.gfxTier ?? 'n/a');
@@ -473,6 +482,7 @@ try {
       if (low && tier !== 'low' && t[k].median > low * L.vsLow) failures.push(`tier ${tier} ${k} frame ${t[k].median.toFixed(0)} ms > ${L.vsLow}× Low (${low.toFixed(0)} ms)`);
     }
   }
+  for (const k of ['pan', 'zoom', 'chain']) if ((r[k].detail?.worstChunk ?? 0) > LIMITS.chunkTris) failures.push(`${k} heaviest chunk ${r[k].detail.worstChunk} triangles > ${LIMITS.chunkTris}`);
   if (r.catchUp.simMsWorst > LIMITS.catchUpSimMs) failures.push(`catch-up spent ${r.catchUp.simMsWorst.toFixed(1)} ms of simulation in one frame > ${LIMITS.catchUpSimMs}`);
   if (r.catchUp.simulated < 299) failures.push(`catch-up simulated only ${r.catchUp.simulated.toFixed(0)} s of 300`);
   if (r.chainCombo < LIMITS.chainMinCombo) failures.push(`chain reached ×${r.chainCombo} < ×${LIMITS.chainMinCombo}`);
@@ -485,6 +495,7 @@ const f = (x) => x.toFixed(1);
 console.log(`city: ${results.city?.areas} areas, ${results.city?.machines} machines, save ${((results.city?.bytes ?? 0) / 1024).toFixed(0)} KB · reload ${results.loadMs} ms`);
 for (const k of ['pan', 'zoom', 'chain', 'transitions']) {
   const r = results[k];
+  if (r?.detail) console.log(`      triangles: ${(r.detail.ground / 1e3).toFixed(0)}K ground+props · ${(r.detail.foliage / 1e3).toFixed(0)}K foliage in ${r.detail.chunks} chunks · heaviest chunk ${(r.detail.worstChunk / 1e3).toFixed(0)}K (${r.detail.tier}, band ${r.detail.band})`);
   if (r) console.log(`${k.padEnd(5)} ${r.frames} frames · update median ${f(r.updateMedian)} p95 ${f(r.updateP95)} worst ${f(r.updateWorst)} ms · hitches ${r.hitches} · draw calls ${r.drawCalls} (worst ${r.drawCallsWorst}) · render ${f(r.renderMedian)} ms · frame ${f(r.median)} ms`);
 }
 if (results.catchUp) console.log(`catch-up: 300 s away → ${results.catchUp.simulated.toFixed(0)} s simulated over ${results.catchUp.frames} frames · worst frame ${f(results.catchUp.simMsWorst)} ms of simulation`);

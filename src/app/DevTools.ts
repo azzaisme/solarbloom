@@ -7,6 +7,8 @@ import type { FaceName } from '../rendering/DroneVisuals';
 import type { CatVariant, TransitionKind, WorldEventType } from '../core/types';
 import { TUNING } from '../data/tuning';
 import { WORLD_EVENTS } from '../gameplay/WorldEventSystem';
+import { roadPlanFor } from '../core/RoadPlan';
+import { drawRoadOverview } from './RoadDebug';
 
 /**
  * Phase 4 E00.5: debug helpers for repeatable testing. Loaded only by the Vite dev server
@@ -24,6 +26,7 @@ import { WORLD_EVENTS } from '../gameplay/WorldEventSystem';
  *   sbDev.tr.play(x, z, 'restore') start a transition on a ground tile (soften, moss, restore, bloom, unblock)
  *   sbDev.tr.speed(4)          every transition plays 4× slower (1 = normal), for tuning
  *   sbDev.tr.stats()           tiles mid-transition (sim) and drawn as transitions (renderer)
+ *   sbDev.roads(12)            toggle the City 16 road-network overview, 12 chunks round the camera
  */
 export type PresetName = 'fresh' | 'screenshot' | 'rich' | 'wealthy';
 
@@ -134,6 +137,25 @@ export function installDevTools(game: Game) {
         for (const n of game.transitions.liveByChunk.values()) drawn += n;
         return { sim: game.sim.transitions.liveCount, drawn, time: game.transitions.time };
       },
+    },
+    /**
+     * City 16.8: toggle a road-network overview over the game (road tiles by tier, arterials, the parent tree to the
+     * park, extra links, gates), centred on the camera's chunk. Ground generation 4+ only.
+     */
+    roads(radius = 12) {
+      const old = document.getElementById('sb-road-debug');
+      if (old) return void old.remove(), 'road overview hidden';
+      const gen = game.sim.grid.layer(GROUND)?.gen ?? 1;
+      if (gen < 4) return `this save is ground generation ${gen}: roads are the old row/column lattice`;
+      const canvas = document.createElement('canvas');
+      canvas.id = 'sb-road-debug';
+      canvas.style.cssText = 'position:fixed;inset:8px;z-index:9999;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);margin:auto;border:2px solid #222;background:#000;image-rendering:pixelated;cursor:pointer';
+      canvas.title = 'City 16 road overview: click to close';
+      canvas.onclick = () => canvas.remove();
+      const t = game.camera.target;
+      drawRoadOverview(canvas.getContext('2d')!, roadPlanFor(game.sim.state.seed, gen), Math.floor(t.x / 16), Math.floor(t.z / 16), radius);
+      document.body.appendChild(canvas);
+      return 'road overview shown (click it, or call sbDev.roads() again, to close)';
     },
     /** Drone redesign D03: preview an expression on every drone. */
     face(name?: FaceName) {
