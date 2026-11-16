@@ -64,15 +64,18 @@ export class Butterflies {
   private spawn() {
     const i = this.flies.length;
     const root = group(this.parent, 'butterfly');
+    // Look 3.16: a little smaller, to sit right beside the new small flowers
+    const body = group(root, 'body');
+    body.setLocalScale(0.72, 0.72, 0.72);
     const col = COLORS[i % COLORS.length];
     const wings: pc.Entity[] = [];
     for (const s of [-1, 1]) {
-      const w = group(root, 'wing');
+      const w = group(body, 'wing');
       vshape(w, 'box', col, { pos: [s * 0.045, 0, 0], scale: [0.08, 0.004, 0.065] });
       vshape(w, 'box', col, { pos: [s * 0.035, 0, -0.045], scale: [0.05, 0.004, 0.04] });
       wings.push(w);
     }
-    vshape(root, 'capsule', '#3b3b45', { scale: [0.014, 0.05, 0.014], rot: [90, 0, 0] });
+    vshape(body, 'capsule', '#3b3b45', { scale: [0.014, 0.05, 0.014], rot: [90, 0, 0] });
     root.setLocalScale(0, 0, 0);
     if (this.batchId >= 0) assignBatch(root, this.batchId); // moving every frame: dynamic batch
     this.flies.push({ root, wings, pos: new pc.Vec3(), target: new pc.Vec3(), rest: 0, phase: i * 1.7, speed: 0.6 + hash01(i, 7, 7) * 0.4, leg: i * 100, used: false });

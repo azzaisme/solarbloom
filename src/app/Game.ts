@@ -22,6 +22,8 @@ import { Fauna } from '../rendering/Fauna';
 import { EcoBadge } from '../ui/EcoBadge';
 import { CameraController } from '../rendering/CameraController';
 import { setTreeCursor } from '../rendering/Foliage';
+import { detailTextures } from '../rendering/DetailTex';
+import { Pollinators } from '../rendering/Pollinators';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
 import { ChunkRenderer } from '../rendering/ChunkRenderer';
@@ -84,6 +86,8 @@ export class Game {
   readonly drones: DroneVisuals;
   readonly cat: CatVisuals;
   readonly butterflies: Butterflies;
+  /** Look 3.16: bees, hoverflies, drifting leaves and falling blossom */
+  readonly pollinators: Pollinators;
   private birds: Birds;
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
   readonly fauna: Fauna;
@@ -179,6 +183,7 @@ export class Game {
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.birds = new Birds(this.scene.world);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
+    this.pollinators = new Pollinators(this.sim, this.scene.world, this.app.batcher!.addGroup('pollinators', true, 400).id);
     this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
     this.tileFx = new TileFx(this.sim, this.scene.world, this.app.graphicsDevice);
     this.machines.onWisp = (_m, at) => this.vfx.burst(at, 1, { up: 0.5, speed: 0.12, size: 0.035, life: 1.3, gravity: 0 }); // Phase 5 E16: running machines only
@@ -352,11 +357,16 @@ export class Game {
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
+    this.vfx.reducedMotion = rm;
     this.cat.softSparkle = rm || s.lowVfx;
     this.machines.wispsPerSecond = s.lowVfx ? 2 : 5;
     // Quality: lighter shadows with fewer effects.
     const sun = this.scene.sun.light;
     if (sun) sun.shadowResolution = s.lowVfx ? 1024 : 2048;
+    // Look 3: surface detail and foliage density follow the quality tier.
+    const detailTier = this.faunaTier ?? (s.lowVfx ? 'low' : 'high');
+    detailTextures.setTier(detailTier);
+    if (this.chunks) this.chunks.setDetail(detailTier);
     if (this.chunks && this.chunks.lowFog !== !!s.lowFog) {
       this.chunks.lowFog = !!s.lowFog;
       this.chunks.markAll();
@@ -1252,6 +1262,7 @@ export class Game {
       // Player actions get the full burst; automation (drones, machines, chains) is quieter.
       const manual = source === 'pulse' || source === 'broad';
       this.vfx.burst(p, manual ? 14 : source === 'drone' ? 9 : source === 'condenser' ? 6 : 9, { up: manual ? 2.6 : source === 'drone' ? 2.2 : 1.8, size: manual ? 0.07 : 0.055 });
+      this.vfx.restoreBloom(p, manual ? 1 : 0.6); // Look 3.14: sparkles, a shockwave and drifting petals
       // Drone redesign D05: a drone's restore ends in a small bloom burst (petals above, plus a cyan puff and a
       // leaf-green ring). Visual only: the reward was paid by the sim.
       if (source === 'drone') {
@@ -2167,6 +2178,9 @@ export class Game {
     this.grid.update(dt);
     const rect = this.city ? this.groundRect() : undefined;
     if (rect) this.chunks.update(dt, rect, this.camera.target, this.camera.zoom);
+    detailTextures.step(); // Look 3.1: builds the detail maps a slice per frame after first paint
+    const camP = this.camera.entity.getPosition();
+    detailTextures.setCamera(camP.x, camP.y, camP.z);
     this.machines.update(dt, rect);
     this.drones.update(this.paused || this.hiddenPause ? 0 : dt); // drone personality freezes with the game
     this.cat.update(dt);
@@ -2179,6 +2193,9 @@ export class Game {
     const ct = this.camera.target;
     const near = rect ? { x0: ct.x - 12, x1: ct.x + 12, z0: ct.z - 12, z1: ct.z + 12 } : undefined;
     this.butterflies.update(dt, near);
+    this.pollinators.enabled = !this.settings.reducedMotion && !ChunkRenderer.still;
+    this.pollinators.quality = quality;
+    this.pollinators.update(dt, near);
     this.birds.resident = eco.has('birds');
     this.birds.update(dt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
     this.fauna.update(dt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: !!this.settings.fireflies && !this.settings.highContrast });

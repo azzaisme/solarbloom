@@ -41,6 +41,9 @@ const LIMITS = {
   chainMinCombo: CHAIN,
   saveStepMs: 16, // each main-thread step of an autosave (serialize, base64, storage write) fits in a frame
   catchUpSimMs: 16, // City 06.5: catching up 5 minutes away never spends more than this on simulation in one frame
+  // Look 3.17: triangle budget for the heaviest loaded chunk (ground + props + foliage), High tier; Medium and
+  // Low thin grass, flowers and clutter further (see docs/art/surfaces.md).
+  chunkTris: 200000,
 };
 
 const server = await preview({ preview: { port: 4183, strictPort: true }, logLevel: 'silent' });
@@ -213,6 +216,10 @@ try {
         drawCallsWorst: d.worst,
       };
       return results[name];
+    }).then(async (res) => {
+      // Look 3.17: triangles in loaded chunks after the phase (ground + props, foliage; the heaviest chunk)
+      results[name].detail = await page.evaluate(() => window.solarbloom.chunks.detailStats?.());
+      return res;
     });
 
   // 3. Pan across the whole city at mid zoom (a big loop through the cleared region).
@@ -340,6 +347,7 @@ try {
     if (r[k].hitches > LIMITS.hitches[k]) failures.push(`${k} hitches ${r[k].hitches} (update > ${LIMITS.hitchMs} ms) > ${LIMITS.hitches[k]}`);
   }
   for (const k of ['pan', 'zoom', 'chain']) if (r[k].drawCalls > LIMITS.drawCalls[k]) failures.push(`${k} draw calls ${r[k].drawCalls} > ${LIMITS.drawCalls[k]}`);
+  for (const k of ['pan', 'zoom', 'chain']) if ((r[k].detail?.worstChunk ?? 0) > LIMITS.chunkTris) failures.push(`${k} heaviest chunk ${r[k].detail.worstChunk} triangles > ${LIMITS.chunkTris}`);
   if (r.catchUp.simMsWorst > LIMITS.catchUpSimMs) failures.push(`catch-up spent ${r.catchUp.simMsWorst.toFixed(1)} ms of simulation in one frame > ${LIMITS.catchUpSimMs}`);
   if (r.catchUp.simulated < 299) failures.push(`catch-up simulated only ${r.catchUp.simulated.toFixed(0)} s of 300`);
   if (r.chainCombo < LIMITS.chainMinCombo) failures.push(`chain reached ×${r.chainCombo} < ×${LIMITS.chainMinCombo}`);
@@ -352,6 +360,7 @@ const f = (x) => x.toFixed(1);
 console.log(`city: ${results.city?.areas} areas, ${results.city?.machines} machines, save ${((results.city?.bytes ?? 0) / 1024).toFixed(0)} KB · reload ${results.loadMs} ms`);
 for (const k of ['pan', 'zoom', 'chain']) {
   const r = results[k];
+  if (r?.detail) console.log(`      triangles: ${(r.detail.ground / 1e3).toFixed(0)}K ground+props · ${(r.detail.foliage / 1e3).toFixed(0)}K foliage in ${r.detail.chunks} chunks · heaviest chunk ${(r.detail.worstChunk / 1e3).toFixed(0)}K (${r.detail.tier}, band ${r.detail.band})`);
   if (r) console.log(`${k.padEnd(5)} ${r.frames} frames · update median ${f(r.updateMedian)} p95 ${f(r.updateP95)} worst ${f(r.updateWorst)} ms · hitches ${r.hitches} · draw calls ${r.drawCalls} (worst ${r.drawCallsWorst}) · render ${f(r.renderMedian)} ms · frame ${f(r.median)} ms`);
 }
 if (results.catchUp) console.log(`catch-up: 300 s away → ${results.catchUp.simulated.toFixed(0)} s simulated over ${results.catchUp.frames} frames · worst frame ${f(results.catchUp.simMsWorst)} ms of simulation`);
