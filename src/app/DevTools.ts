@@ -3,6 +3,7 @@ import { createInitialState, GROUND } from '../core/GameState';
 import { PARK } from '../core/Areas';
 import { Sim } from '../gameplay/Sim';
 import type { Game } from './Game';
+import type { FaceName } from '../rendering/DroneVisuals';
 import type { CatVariant, WorldEventType } from '../core/types';
 import { WORLD_EVENTS } from '../gameplay/WorldEventSystem';
 
@@ -17,6 +18,7 @@ import { WORLD_EVENTS } from '../gameplay/WorldEventSystem';
  *   sbDev.overflow()           income lost to full storage so far
  *   sbDev.event('supernova')   start a world event now: supernova, migration, rain, invasion (Phase 5 E15)
  *   sbDev.cat('golden')        hide a cat now (standard, golden or rainbow) somewhere in view
+ *   sbDev.face('excited')      show one drone expression on every drone (no argument: back to normal)
  */
 export type PresetName = 'fresh' | 'screenshot' | 'rich' | 'wealthy';
 
@@ -98,7 +100,12 @@ export function installDevTools(game: Game) {
     overflow() {
       return game.sim.log.overflow;
     },
+    /** Drone redesign D03: preview an expression on every drone. */
+    face(name?: FaceName) {
+      game.drones.previewFace = name;
+      return name ? `drones show "${name}"; sbDev.face() to go back` : 'drones show their normal faces';
+    },
   };
   (window as unknown as { sbDev: typeof api }).sbDev = api;
-  console.info('[solarbloom] dev tools: sbDev.reset(seed), sbDev.preset(name), sbDev.simulate(s), sbDev.log()');
+  console.info('[solarbloom] dev tools: sbDev.reset(seed), sbDev.preset(name), sbDev.simulate(s), sbDev.log(), sbDev.face(name)');
 }
