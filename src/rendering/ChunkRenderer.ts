@@ -68,7 +68,7 @@ class Grow<T extends Float32Array | Uint8Array | Uint32Array> {
 
 const linCache = new Map<string, [number, number, number]>();
 /** sRGB hex → linear 0–1 (matches the vertex-colour material). */
-function lin(hex: string): [number, number, number] {
+export function lin(hex: string): [number, number, number] {
   let c = linCache.get(hex);
   if (!c) {
     const col = new pc.Color();
@@ -90,13 +90,15 @@ class MeshBuilder {
   /** Look 2.2: when set, colours fade from the given colour at the bottom of a primitive to this one at its top. */
   tip = '';
 
-  add(type: VPrim, hex: string, p: [number, number, number], s: [number, number, number] | number) {
+  /** `glow` (0-1, Look 1.9) makes the primitive emissive: stored in the vertex alpha, read by the vertex-colour material. */
+  add(type: VPrim, hex: string, p: [number, number, number], s: [number, number, number] | number, glow = 0) {
     const t = template(type);
     let sx: number, sy: number, sz: number;
     if (typeof s === 'number') sx = sy = sz = s;
     else [sx, sy, sz] = s;
     const [R, G, B] = this.rgb(hex);
     const [R2, G2, B2] = this.tip ? this.rgb(this.tip) : [R, G, B];
+    const A = 255 - Math.round(Math.min(1, Math.max(0, glow)) * 255);
     const nv = t.pos.length;
     const base = this.pos.n / 3;
     this.pos.reserve(nv);
@@ -139,7 +141,7 @@ class MeshBuilder {
         C[c + 1] = G;
         C[c + 2] = B;
       }
-      C[c + 3] = 255;
+      C[c + 3] = A;
     }
     this.pos.n = this.nrm.n = o;
     this.col.n = c;
@@ -941,13 +943,13 @@ export class ChunkRenderer {
     if (stage >= 4) {
       // Phase 4 E05: Radiant: a pale golden glow on the ground and luminous gold flowers above the shrubs.
       // Look 2.5: paving keeps its stone; its Radiant cue is the gold flowers alone.
-      if (f !== 'paving') b.add('cylinder', PALETTE.flowers.radiantDisc, [x, top + 0.005, z], [0.86, 0.01, 0.86]);
+      if (f !== 'paving') b.add('cylinder', PALETTE.flowers.radiantDisc, [x, top + 0.005, z], [0.86, 0.01, 0.86], 0.08);
       for (let i = 0; i < 4; i++) {
         const fx = x + r.range(-0.34, 0.34);
         const fz = z + r.range(-0.34, 0.34);
         const ht = r.range(0.3, 0.46);
         b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.02, ht, 0.02]);
-        b.add('sphere', PALETTE.flowers.radiant[i % 2 ? 0 : 1], [fx, top + ht, fz], [0.13, 0.1, 0.13]);
+        b.add('sphere', PALETTE.flowers.radiant[i % 2 ? 0 : 1], [fx, top + ht, fz], [0.13, 0.1, 0.13], 0.45);
       }
     }
   }
@@ -1142,8 +1144,8 @@ export class ChunkRenderer {
           b.add('cylinder', PALETTE.metal.dark, [x, y + 0.04, z], [0.22, 0.08, 0.22]);
           b.add('cylinder', PALETTE.metal.mid, [x, y + 0.55, z], [0.06, 1.0, 0.06]);
           b.add('box', PALETTE.metal.mid, [x, y + 1.06, z], [0.22, 0.04, 0.22]);
-          b.add('sphere', PALETTE.flowers.radiantDisc, [x, y + 0.96, z], 0.16);
-          b.add('cylinder', PALETTE.glow.lamp, [x, y + 0.002, z], [0.9, 0.004, 0.9]); // its pool of light
+          b.add('sphere', PALETTE.flowers.radiantDisc, [x, y + 0.96, z], 0.16, 1);
+          b.add('cylinder', PALETTE.glow.lamp, [x, y + 0.002, z], [0.9, 0.004, 0.9], 0.12); // its pool of light
         } else {
           b.add('box', PALETTE.metal.mid, [x, y + 0.05, z], [0.9, 0.06, 0.08]); // toppled
           b.add('sphere', PALETTE.props.lampToppled, [x + 0.42, y + 0.07, z], 0.12);

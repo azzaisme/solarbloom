@@ -1,0 +1,70 @@
+{
+  "city": {
+    "areas": 150,
+    "machines": 801,
+    "bytes": 488466
+  },
+  "loadMs": 4668,
+  "autosave": {
+    "serialize": 25.19999998807907,
+    "encode": 14.600000023841858,
+    "write": 9.699999988079071
+  },
+  "extentTiles": 240,
+  "pan": {
+    "frames": 120,
+    "median": 389.69999998807907,
+    "p95": 743.6999999880791,
+    "worst": 1027,
+    "updateMedian": 195.70000004768372,
+    "updateP95": 492.89999997615814,
+    "updateWorst": 616.5,
+    "renderMedian": 21.69999998807907,
+    "hitches": 104,
+    "drawCalls": 212,
+    "drawCallsWorst": 263
+  },
+  "zoom": {
+    "frames": 90,
+    "median": 316.80000001192093,
+    "p95": 783.7000000476837,
+    "worst": 1054,
+    "updateMedian": 27.900000035762787,
+    "updateP95": 350,
+    "updateWorst": 636.5999999642372,
+    "renderMedian": 7.400000035762787,
+    "hitches": 37,
+    "drawCalls": 176,
+    "drawCallsWorst": 559
+  },
+  "tier": "n/a",
+  "tiers": {},
+  "catchUp": {
+    "frames": 6,
+    "simMsWorst": 10.399999976158142,
+    "simulated": 300.600000000005
+  },
+  "chainSetup": {
+    "row": {
+      "z": 33,
+      "from": -192,
+      "len": 383
+    },
+    "gardens": 811
+  },
+  "chain": {
+    "frames": 150,
+    "median": 702.3000000119209,
+    "p95": 1385.2000000476837,
+    "worst": 2045,
+    "updateMedian": 10.300000011920929,
+    "updateP95": 22,
+    "updateWorst": 383.5999999642372,
+    "renderMedian": 16.600000023841858,
+    "hitches": 4,
+    "drawCalls": 255,
+    "drawCallsWorst": 3487
+  },
+  "chainCombo": 664,
+  "errors": []
+}

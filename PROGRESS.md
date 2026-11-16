@@ -301,6 +301,44 @@ Pans out and back across a 120-area city in a new direction every lap for 10 min
 
 Dropped chunks release their meshes and buffers; nothing accumulates.
 
+### Graphics tiers (Look 1.11)
+
+`npm run test:perf:browser` now reloads the same 150-area city at each graphics tier (`?gfx=low|medium|high`) and
+pans and zooms it again (60 frames each), after the main run on High. Measured 2026-11-16 on a Windows dev machine
+with several other sessions building and testing at the same time, in headless Chromium with **SwiftShader software
+rendering**: these are relative numbers between builds and tiers, not frame rates on a real laptop or phone. The
+untouched pre-Look build (0164ddc) already failed the update-time and hitch limits on this busy machine (pan update
+median 196 ms against a 20 ms limit), so update time and wall time here mostly measure the machine's load.
+
+| Main run (same script, same city size) | Pan frame / draw calls / update | Zoom frame / draw calls / update | Chain frame / draw calls |
+|---|---|---|---|
+| Before Look 1 (0164ddc) | 390 ms / 212 / 196 ms | 317 ms / 176 / 28 ms | 702 ms / 255 |
+| After, High tier | 558 ms / 356 / 216 ms | 608 ms / 337 / 186 ms | 1290 ms / 493 |
+
+Per tier, after Look 1 (60-frame pan and zoom after a reload):
+
+| Run (pan phase) | Frame wall ms (median) | Draw calls (median) | Update ms | Render submit ms |
+|---|---|---|---|---|
+| Before Look 1 (0164ddc), main run | 390 | 212 | 195.7 | 21.7 |
+| After, Low tier | 548 | 239 | 13.3 | 9.7 |
+| After, Medium tier | 517 | 262 | 12.0 | 6.7 |
+| After, High tier | 610 | 362 | 10.8 | 7.5 |
+
+| Run (zoom phase) | Frame wall ms (median) | Draw calls (median, worst) | Update ms |
+|---|---|---|---|
+| Before Look 1, main run | 317 | 176 (559) | 27.9 |
+| After, Low tier | 374 | 210 (525) | 12.2 |
+| After, Medium tier | 410 | 227 (541) | 10.0 |
+| After, High tier | 544 | 340 (779) | 9.9 |
+
+What the tiers do: Low has no post-processing (camera tone mapping only), 1024² PCF3 shadows, no motes or shafts.
+Medium adds the CameraFrame stack with bloom, grading and vignette (2× MSAA), 2048² shadows, 50 motes and 3 shafts.
+High adds SSAO (a depth prepass: the scene is drawn twice, hence about +100 draw calls), depth of field, 4× MSAA,
+soft PCF5 shadows, 90 motes and 5 shafts. The harness gates draw calls per tier (Low 400, Medium 450, High 800) and
+each tier's frame time against Low in the same run (Medium ≤ 1.5×, High ≤ 2×). On a real device the post stack is
+GPU fill-rate work that SwiftShader inflates a lot; the targets (High about 60 fps on a mid-range laptop, Low 30 fps
+or better on a mid-range phone) still need checking on hardware (device log #99).
+
 # History: the rooftop campaign (before the city)
 
 Before the city, Solarbloom was a fixed campaign on rooftops. Its three rooftops live on as the templates of

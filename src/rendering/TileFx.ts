@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { LOOK } from '../data/look';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { SLAB_TOP } from './SceneBuilder';
@@ -26,6 +27,7 @@ function additive(color: string, opacity: number): pc.StandardMaterial {
   m.useLighting = false;
   m.diffuse = new pc.Color(0, 0, 0);
   m.emissive = hex(color);
+  m.emissiveIntensity = LOOK.emissive.tile; // Look 1.9: restore-tile glows reach the bloom range
   m.opacity = opacity;
   m.blendType = pc.BLEND_NORMAL; // normal blend: tints without blowing light tiles out to white
   m.depthWrite = false;

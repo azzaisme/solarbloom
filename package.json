@@ -21,6 +21,7 @@
     "test:hud": "vite build && STRICT=1 node tests/e2e/phase4-hud.e2e.mjs",
     "test:session": "vite build && node tests/e2e/phase4-session.e2e.mjs",
     "shots:phase4": "vite build && node tests/e2e/phase4-shots.mjs && node tests/e2e/phase4-machines.mjs",
+    "shots:look": "vite build && node tests/e2e/look-shots.mjs",
     "shots:phase5": "vite build && node tests/e2e/phase5-hud-shots.mjs",
     "test:merge": "vite build && node tests/e2e/merge.e2e.mjs",
     "test:events": "vite build && node tests/e2e/events.e2e.mjs",

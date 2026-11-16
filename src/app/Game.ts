@@ -43,6 +43,9 @@ import { droneTapRadius, pickDrone, pickLayers } from '../core/Picking';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
 import { initLowPoly } from '../rendering/Shapes';
+import { LookController } from '../rendering/LookController';
+import { detectTier, lowerTier, urlTier, type GfxSetting } from '../rendering/Quality';
+import type { GfxTier } from '../data/look';
 import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
@@ -82,6 +85,8 @@ export class Game {
   readonly sim: Sim;
   readonly tweens = new Tweens();
   readonly scene: SceneBuilder;
+  /** Look 1: lighting, post-processing and graphics quality. */
+  readonly look: LookController;
   readonly camera: CameraController;
   private sky!: Sky;
   private skyline!: Skyline;
@@ -172,6 +177,8 @@ export class Game {
     this.camera.cam.layers = [this.sky.layer.id, this.sky.clearLayer.id, ...this.camera.cam.layers];
     // Look 4.8: the distant terraced city behind the play area (in the sky's layer, drawn before the world).
     this.skyline = new Skyline(this.app, this.sky.layer, this.scene.sun.up);
+    this.look = new LookController(this.app, this.scene, this.camera);
+    this.look.atmosphere.isLit = (x, z) => this.sim.grid.get(GROUND, x, z)?.ground === 'restored';
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
@@ -231,6 +238,7 @@ export class Game {
         findCat: () => this.findCat(),
         goHome: (attention) => (attention ? this.focusNextArea() : this.focusArea(PARK)),
         setVolume: (k, v) => this.setVolume(k, v),
+        setGraphics: (v) => this.setGraphics(v),
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
         mergeAt: (id) => {
@@ -352,12 +360,31 @@ export class Game {
 
   // ───────────────────────── settings / persistence ─────────────────────────
 
+  /** Look 1.11: the graphics tier in effect (from the URL, the setting, or Auto). */
+  gfxTier: GfxTier = 'high';
+  /** Auto's current tier: detected once, then stepped down by adaptQuality when frames stay slow. */
+  private autoTier?: GfxTier;
+
+  private setGraphics(v: GfxSetting) {
+    if (v === 'auto') this.autoTier = undefined; // detect afresh
+    this.setSetting('gfx', v);
+  }
+
+  private resolveTier(): GfxTier {
+    const forced = urlTier();
+    if (forced) return forced;
+    const s = this.settings.gfx ?? 'auto';
+    if (s !== 'auto') return s;
+    this.autoTier ??= detectTier(this.app.graphicsDevice);
+    return this.autoTier;
+  }
+
   private setVolume(k: 'sfxVolume' | 'musicVolume', v: number) {
     this.settings[k] = Math.max(0, Math.min(100, v));
     this.setSetting('sound', this.settings.sound);
   }
 
-  private setSetting(k: keyof Settings, v: boolean) {
+  private setSetting(k: keyof Settings, v: boolean | string) {
     (this.settings as unknown as Record<string, unknown>)[k] = v;
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
@@ -373,9 +400,17 @@ export class Game {
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
     document.body.classList.toggle('contrast', !!s.highContrast);
+    this.look.highContrast = !!s.highContrast;
     // Look 5.11: HUD glass without live blur (cheaper on phones). Look 1's Low graphics tier can set it too.
     document.body.classList.toggle('solid-glass', !!s.lowVfx);
     const rm = s.reducedMotion;
+    this.look.lowVfx = !!s.lowVfx;
+    this.look.reducedMotion = rm;
+    this.gfxTier = this.resolveTier();
+    this.look.setTier(this.gfxTier);
+    this.hud.gfxTier = this.gfxTier;
+    // Phase 5 E16's fauna caps (TUNING.ecosystem.caps) follow the graphics tier.
+    this.faunaTier = this.gfxTier;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
     if (this.transitions) {
@@ -392,9 +427,6 @@ export class Game {
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
     this.cat.softSparkle = rm || s.lowVfx;
     this.machines.wispsPerSecond = s.lowVfx ? 2 : 5;
-    // Quality: lighter shadows with fewer effects.
-    const sun = this.scene.sun.light;
-    if (sun) sun.shadowResolution = s.lowVfx ? 1024 : 2048;
     if (this.chunks && this.chunks.lowFog !== !!s.lowFog) {
       this.chunks.lowFog = !!s.lowFog;
       this.chunks.markAll();
@@ -544,6 +576,31 @@ export class Game {
     const p = cam.getPosition();
     const depth = (o.x + d.x * t - p.x) * fwd.x + (o.y + d.y * t - p.y) * fwd.y + (o.z + d.z * t - p.z) * fwd.z;
     setTreeCursor((this.pointer.x / w) * 2 - 1, 1 - (this.pointer.y / h) * 2, depth, this.treeFade, w, h);
+  }
+
+  private moodT = 0;
+  private moodSet = false;
+
+  /**
+   * Look 1.7: the grade follows the restoration of the area under the camera (a cleared area is fully warm; a
+   * fogged one warms as its tiles come back toward the landmark's need), so progress reads as the light returning.
+   */
+  private updateMood(dt: number) {
+    this.moodT -= dt;
+    if (this.moodT > 0) return;
+    this.moodT = 0.5;
+    const s = this.sim;
+    const t = this.camera.target;
+    const id = s.areas.areaOf({ roofId: GROUND, x: Math.floor(t.x), z: Math.floor(t.z) });
+    let mood = 0;
+    if (id) {
+      const fog = s.areas.fog(id);
+      if (fog === 'cleared') mood = 1;
+      else if (fog !== 'hidden') mood = Math.min(1, s.areas.counts(id).restored / s.areas.need(id));
+    }
+    this.look.moodTarget = mood;
+    if (!this.moodSet) this.look.snapMood();
+    this.moodSet = true;
   }
 
   /**
@@ -2240,6 +2297,11 @@ export class Game {
       dev.maxPixelRatio = Math.max(1, dev.maxPixelRatio - 0.25);
       this.app.resizeCanvas();
       this.slowFor = 0;
+    } else if (this.slowFor > 3 && (this.settings.gfx ?? 'auto') === 'auto' && !urlTier() && this.gfxTier !== 'low') {
+      // Look 1.11: already at the lowest resolution and still slow: Auto steps down a graphics tier.
+      this.autoTier = lowerTier(this.gfxTier);
+      this.applySettings();
+      this.slowFor = 0;
     } else if (this.fastFor > 8 && dev.maxPixelRatio < this.maxDpr) {
       dev.maxPixelRatio = Math.min(this.maxDpr, dev.maxPixelRatio + 0.25);
       this.app.resizeCanvas();
@@ -2355,6 +2417,8 @@ export class Game {
     this.skyline.reducedMotion = this.settings.reducedMotion;
     this.skyline.update(dt, this.camera.target, this.camera.entity.getPosition(), this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
     this.syncView();
+    this.updateMood(dt);
+    this.look.update(dt);
     this.updateTreeCursor(dt);
     this.hud.update(dt);
     this.sfx.layers = Math.min(3, Math.floor(this.sim.progression.restoredCount(HOME) / 12));
