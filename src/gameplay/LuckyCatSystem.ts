@@ -1,6 +1,9 @@
 import { fmt } from '../core/Big';
 import { HOME } from './ProgressionSystem';
-import type { CatRewardType, MachineData, TileData } from '../core/types';
+import type { CatRewardType, CatSpot, CatVariant, MachineData, TileData } from '../core/types';
+import { hashString, tileRandom } from '../core/Hash';
+
+const CAT_SALT = hashString('lucky-cat');
 import { PARK } from '../core/Areas';
 import { GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
@@ -89,15 +92,89 @@ export class LuckyCatSystem {
 
   candidates(): CatAnchor[] {
     const s = this.sim;
+    // Phase 5 E15: never two cats in one spot (an invasion hides several at once).
+    const taken = new Set(this.spots().map((c) => c.anchorId));
     return [...CAT_ANCHORS, ...this.cityNooks()].filter((a) => {
+      if (taken.has(a.id)) return false;
       const roof = s.grid.roof(a.roofId);
       if (!roof || !roof.unlocked || roof.preview) return false;
       if (a.needsFreeTile) {
         const t = s.grid.get(a.roofId, a.needsFreeTile[0], a.needsFreeTile[1]);
         if (!t || t.occupantId) return false;
       }
+      if (this.concealed(a)) return false;
       return this.anchorView(a) !== 'covered';
     });
+  }
+
+  /**
+   * Phase 5 E15: a spot right behind something tall (a city building or a superstructure between it and the
+   * camera, which looks from +x +z) would hide the whole cat: never used.
+   */
+  concealed(a: CatAnchor): boolean {
+    const s = this.sim;
+    const x = a.needsFreeTile ? a.needsFreeTile[0] : Math.floor(a.pos[0]);
+    const z = a.needsFreeTile ? a.needsFreeTile[1] : Math.floor(a.pos[2]);
+    for (const [dx, dz] of [[1, 0], [0, 1], [1, 1]] as const) {
+      const t = s.grid.get(a.roofId, x + dx, z + dz);
+      if (!t) continue;
+      if (t.feature === 'building') return true;
+      const m = s.occupant(t);
+      if (m && (m.tier ?? 1) >= 3) return true;
+    }
+    return false;
+  }
+
+  /** Phase 5 E15: every cat hiding right now (the regular one first, then invasion cats). */
+  spots(): CatSpot[] {
+    const c = this.sim.state.cat;
+    return c.active ? [c.active, ...(c.invasion ?? [])] : [...(c.invasion ?? [])];
+  }
+
+  find(catId: string): CatSpot | undefined {
+    return this.spots().find((c) => c.id === catId);
+  }
+
+  /** Phase 5 E15: hiding long enough to leave paw prints (a gentle hint; nothing is lost by ignoring it). */
+  hinted(spot: CatSpot): boolean {
+    return this.sim.time - spot.spawnedAt >= TUNING.cat.hintAfter;
+  }
+
+  /** Phase 5 E15: a new cat's id and rarity. The very first cat is always a standard one (onboarding). */
+  private newSpot(anchorId: string): CatSpot {
+    const c = this.sim.state.cat;
+    c.seq = (c.seq ?? 0) + 1;
+    const id = `c${c.seq}`;
+    return { id, anchorId, spawnedAt: this.sim.time, variant: c.seq === 1 && c.found === 0 ? 'standard' : this.rollVariant(id) };
+  }
+
+  /** 80 / 18 / 2 (tuning), from a hash of the seed and cat id: deterministic, and the game's rng is untouched. */
+  rollVariant(id: string): CatVariant {
+    const V = TUNING.cat.variants;
+    const n = /^c\d+$/.test(id) ? Number(id.slice(1)) : hashString(id);
+    const r = tileRandom(this.sim.state.seed, CAT_SALT, n, 0, 15);
+    const x = r * (V.standard.weight + V.golden.weight + V.rainbow.weight);
+    if (x < V.rainbow.weight) return 'rainbow';
+    if (x < V.rainbow.weight + V.golden.weight) return 'golden';
+    return 'standard';
+  }
+
+  /**
+   * Phase 5 E15 Lucky Cat Invasion: up to `n` extra cats in different spots, each with its own reward. They stay
+   * until found (no timer). Returns how many hid.
+   */
+  invade(n: number): number {
+    const c = this.sim.state.cat;
+    let hid = 0;
+    for (let i = 0; i < n; i++) {
+      const a = this.pickAnchor(this.candidates());
+      if (!a) break;
+      const spot = this.newSpot(a.id);
+      c.invasion = [...(c.invasion ?? []), spot];
+      hid++;
+      this.sim.bus.emit('cat.spawned', { anchorId: a.id, catId: spot.id, variant: spot.variant, invasion: true });
+    }
+    return hid;
   }
 
   /** Picks a hiding spot: one in view most of the time, otherwise anywhere on a playable rooftop. */
@@ -111,15 +188,16 @@ export class LuckyCatSystem {
 
   /** A machine was built on the cat's nook: it hops to another spot instead of blocking the build. */
   relocateIfBlocked(): void {
-    const c = this.sim.state.cat;
-    const a = this.anchor(c.active?.anchorId);
-    if (!c.active || !a?.needsFreeTile) return;
-    const t = this.sim.grid.get(a.roofId, a.needsFreeTile[0], a.needsFreeTile[1]);
-    if (!t?.occupantId) return;
-    const next = this.pickAnchor(this.candidates().filter((x) => x.id !== a.id));
-    if (!next) return; // nowhere else: it stays put (still clickable)
-    c.active = { ...c.active, anchorId: next.id }; // same spawn time and reward roll: nothing lost or gained
-    this.sim.bus.emit('cat.moved', { from: a.id, anchorId: next.id });
+    for (const spot of this.spots()) {
+      const a = this.anchor(spot.anchorId);
+      if (!a?.needsFreeTile) continue;
+      const t = this.sim.grid.get(a.roofId, a.needsFreeTile[0], a.needsFreeTile[1]);
+      if (!t?.occupantId) continue;
+      const next = this.pickAnchor(this.candidates().filter((x) => x.id !== a.id));
+      if (!next) continue; // nowhere else: it stays put (still clickable)
+      spot.anchorId = next.id; // same id, spawn time and rarity: nothing lost or gained
+      this.sim.bus.emit('cat.moved', { from: a.id, anchorId: next.id, catId: spot.id });
+    }
   }
 
   restoredCount() {
@@ -155,10 +233,10 @@ export class LuckyCatSystem {
       c.nextSpawnAt = this.sim.time + 10;
       return false;
     }
-    c.active = { anchorId: a.id, spawnedAt: this.sim.time };
+    c.active = this.newSpot(a.id);
     c.firstSpawned = true;
     c.nextSpawnAt = this.sim.time + this.sim.rng.range(TUNING.cat.laterMin, TUNING.cat.laterMax);
-    this.sim.bus.emit('cat.spawned', { anchorId: a.id });
+    this.sim.bus.emit('cat.spawned', { anchorId: a.id, catId: c.active.id, variant: c.active.variant });
     return true;
   }
 
@@ -331,39 +409,52 @@ export class LuckyCatSystem {
     return 'luckyHarvest';
   }
 
-  /** Claims the active cat exactly once. Returns undefined if there is no cat. */
-  claim(): CatReward | undefined {
+  /**
+   * Claims a cat exactly once: the regular one by default, or any hiding cat by id (Phase 5 E15). Returns
+   * undefined if there is no such cat (already claimed, a stale id, a second tap): nothing is paid.
+   */
+  claim(catId?: string): CatReward | undefined {
     const s = this.sim;
     const c = s.state.cat;
-    const active = c.active;
-    if (!active) return undefined;
-    c.active = undefined; // clear first: a second click can never pay twice
+    const spot = catId === undefined ? c.active : this.find(catId);
+    if (!spot || c.claimed?.includes(spot.id)) return undefined;
+    // Removed and recorded first: a second click, a reload or a stale id can never pay twice.
+    const regular = spot === c.active;
+    if (regular) c.active = undefined;
+    else c.invasion = (c.invasion ?? []).filter((x) => x !== spot);
+    c.claimed = [...(c.claimed ?? []), spot.id].slice(-24);
     const first = c.found === 0;
     c.found++;
     s.state.stats.catsFound++;
-    const hidden = Math.min(1, (s.time - active.spawnedAt) / TUNING.cat.hiddenBonusCapSec);
-    const mult = 1 + TUNING.cat.hiddenBonusMax * hidden;
-    const type: CatRewardType = first ? 'luckyHarvest' : this.rollReward();
-    const parts = [this.apply(type, mult, hidden)];
-    // Saved-up rewards from while it was hiding: extra Lucky Harvests.
-    const extras = c.stash ?? 0;
+    const V = TUNING.cat.variants;
+    const variant: CatVariant = spot.variant ?? 'standard';
+    const vmult = V[variant].mult;
+    // The hidden-time bonus is capped (waiting never beats playing), and so is the whole multiplier.
+    const hidden = Math.min(1, (s.time - spot.spawnedAt) / TUNING.cat.hiddenBonusCapSec);
+    const mult = Math.min(TUNING.cat.maxRewardMult, (1 + TUNING.cat.hiddenBonusMax * hidden) * vmult);
+    // A Rainbow Cat always gives two different rewards (a jackpot); the first cat a Lucky Harvest.
+    const type: CatRewardType = first ? 'luckyHarvest' : variant === 'rainbow' ? 'jackpot' : this.rollReward();
+    const parts = [this.apply(type, mult, hidden, vmult)];
+    // Saved-up rewards from while the regular cat was hiding: extra Lucky Harvests.
+    const extras = regular ? (c.stash ?? 0) : 0;
     for (let i = 0; i < extras; i++) parts.push(this.apply('luckyHarvest', 1, 0));
-    c.stash = 0;
+    if (regular) c.stash = 0;
     const summary = parts.join(' · ');
     c.lastReward = type;
-    c.log = [...(c.log ?? []), { anchorId: active.anchorId, reward: type, at: s.time }];
-    c.nextSpawnAt = s.time + s.rng.range(TUNING.cat.laterMin, TUNING.cat.laterMax);
-    s.bus.emit('cat.found', { anchorId: active.anchorId, reward: type, summary, extras });
+    c.log = [...(c.log ?? []), { anchorId: spot.anchorId, reward: type, at: s.time, variant }];
+    if (regular) c.nextSpawnAt = s.time + s.rng.range(TUNING.cat.laterMin, TUNING.cat.laterMax);
+    s.bus.emit('cat.found', { anchorId: spot.anchorId, reward: type, summary, extras, catId: spot.id, variant });
     return { type, summary };
   }
 
-  private apply(type: CatRewardType, mult: number, hidden: number): string {
+  /** `mult`: everything scales by it (capped); `vmult`: the rarity's share, which also lengthens a harvest. */
+  private apply(type: CatRewardType, mult: number, hidden: number, vmult = 1): string {
     const s = this.sim;
     const parts: string[] = [];
     const harvest = () => {
       // Sustained rate: a cat found mid-Frenzy doesn't pay ×10 (Phase 4 E08.4).
       const rate = s.production.rates(true).biomass;
-      const secs = TUNING.cat.harvestSecondsMin + (TUNING.cat.harvestSecondsMax - TUNING.cat.harvestSecondsMin) * hidden;
+      const secs = (TUNING.cat.harvestSecondsMin + (TUNING.cat.harvestSecondsMax - TUNING.cat.harvestSecondsMin) * hidden) * vmult;
       // Phase 5 E12: biomass is uncapped, so the whole harvest always lands.
       const got = s.econ.add('biomass', rate.mul(secs).max(TUNING.cat.harvestMin));
       const w = s.econ.add('water', 10 * mult);
@@ -375,23 +466,26 @@ export class LuckyCatSystem {
     };
     const frenzy = () => {
       const secs = TUNING.cat.frenzySeconds * mult;
+      // Phase 5 E15: stacked surges never run past surgeMaxSeconds from now.
+      const cap = s.time + TUNING.cat.surgeMaxSeconds;
       const existing = s.state.buffs.find((b) => b.type === 'solarFrenzy');
-      if (existing) existing.until = Math.max(existing.until, s.time) + secs;
-      else s.state.buffs.push({ type: 'solarFrenzy', until: s.time + secs });
+      if (existing) existing.until = Math.min(cap, Math.max(existing.until, s.time) + secs);
+      else s.state.buffs.push({ type: 'solarFrenzy', until: Math.min(cap, s.time + secs) });
       s.bus.emit('buff.started', { type: 'solarFrenzy', seconds: secs });
       parts.push(`Solar ×${TUNING.cat.frenzyMult} for ${Math.round(secs)} s`);
     };
     const mega = () => {
-      const ok = s.chains.startMega(Math.round(TUNING.cat.megaBloomTiles * mult));
+      const ok = s.chains.startMega(Math.min(TUNING.cat.megaBloomMax, Math.round(TUNING.cat.megaBloomTiles * mult)));
       parts.push(ok ? 'A free Mega Bloom!' : 'Everything is already blooming!');
       if (!ok) harvest();
     };
     const party = () => {
       const hub = this.partyHub();
       if (!hub) return harvest();
-      s.drones.spawn(hub, TUNING.cat.dronePartySeconds * mult);
-      s.drones.spawn(hub, TUNING.cat.dronePartySeconds * mult);
-      parts.push(`2 party drones for ${Math.round(TUNING.cat.dronePartySeconds * mult)} s`);
+      const secs = Math.min(TUNING.cat.partyMaxSeconds, TUNING.cat.dronePartySeconds * mult);
+      s.drones.spawn(hub, secs);
+      s.drones.spawn(hub, secs);
+      parts.push(`2 party drones for ${Math.round(secs)} s`);
     };
     const golden = () => {
       if (!this.goldenRelayAvailable()) return harvest(); // degrade gracefully, never useless

@@ -106,6 +106,14 @@ Long stone trough, square raised bed, round pot. P1. Flowers and soil inside are
 Terraced tower ×3 variants, bridge span, glass dome, waterfall cliff block. P2. Waterfalls are scrolling-texture
 cards added in code.
 
+### Fauna and local landmarks (E16 placeholders)
+Phase 5 E16 added primitive placeholders, each built in one function so a reviewed model can replace it:
+`Fauna.ts` `makeKoi`, `makeRobot` (garden robot), `makeBird` (songbird), `makeCat` (sleeping cat: lying curled, no
+collar, coin or raised paw, about half a Lucky Cat's height, so it can never pass for the collectible), and
+`ChunkRenderer.landmark()` (flower arch, ivy statue, topiary, lantern post, spouting basin, mushroom ring). Fauna
+are characters (few on screen, pooled, at most 4–10 of each): Character budget, LOD1 only. Butterflies and fireflies
+stay procedural. Nothing here depends on the untracked `assets/` folder.
+
 ## Keep procedural (do not generate)
 Ground tiles and paving slabs (including breakup) · cracks, moss, soil, turf, wet mask · grass and flowers ·
 vines and roots · railings and balustrades (follow outlines) · banner cloth · trees and shrubs (`TreeGen`,
