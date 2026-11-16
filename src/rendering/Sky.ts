@@ -22,8 +22,8 @@ const smooth = (t: number) => {
   return x * x * (3 - 2 * x);
 };
 
-/** An unlit, vertex-coloured material that ignores the scene fog (the sky is the fog's backdrop). */
-export function skyMaterial(blend: boolean): pc.StandardMaterial {
+/** An unlit, vertex-coloured material that ignores the scene fog (the sky is the fog's backdrop; the skyline bakes its own haze). */
+export function skyMaterial(blend: boolean, depthWrite = false): pc.StandardMaterial {
   const m = new pc.StandardMaterial();
   m.useLighting = false;
   m.useFog = false;
@@ -31,7 +31,7 @@ export function skyMaterial(blend: boolean): pc.StandardMaterial {
   m.diffuse = new pc.Color(0, 0, 0);
   m.emissive = new pc.Color(1, 1, 1);
   m.emissiveVertexColor = true;
-  m.depthWrite = false;
+  m.depthWrite = depthWrite;
   m.cull = pc.CULLFACE_NONE;
   if (blend) {
     m.opacityVertexColor = true;

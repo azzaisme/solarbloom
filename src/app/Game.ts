@@ -34,6 +34,7 @@ import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
+import { Skyline } from '../rendering/Skyline';
 import { HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers } from '../core/Picking';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
@@ -80,6 +81,7 @@ export class Game {
   readonly scene: SceneBuilder;
   readonly camera: CameraController;
   private sky!: Sky;
+  private skyline!: Skyline;
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
   readonly chunks: ChunkRenderer;
@@ -158,6 +160,8 @@ export class Game {
     // Look 4.7: the sky behind everything (its own layer, drawn first).
     this.sky = new Sky(this.app, this.scene.sun);
     this.camera.cam.layers = [this.sky.layer.id, ...this.camera.cam.layers];
+    // Look 4.8: the distant terraced city behind the play area (in the sky's layer, drawn before the world).
+    this.skyline = new Skyline(this.app, this.sky.layer, this.scene.sun.up);
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
@@ -2215,6 +2219,9 @@ export class Game {
     this.sky.clarity += (this.skyClarity() - this.sky.clarity) * Math.min(1, dt * 0.8);
     this.sky.reducedMotion = this.settings.reducedMotion;
     this.sky.update(dt, this.camera.entity.getPosition(), this.camera.cam.farClip);
+    this.skyline.clarity = this.sky.clarity;
+    this.skyline.reducedMotion = this.settings.reducedMotion;
+    this.skyline.update(dt, this.camera.target, this.camera.dist, this.camera.nearness(), this.camera.yaw);
     this.syncView();
     this.updateTreeCursor(dt);
     this.hud.update(dt);

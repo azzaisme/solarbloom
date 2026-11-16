@@ -19,9 +19,9 @@ export const SKY = {
   cloudLit: ['#e7e9ea', '#ffffff'],
   cloudShade: ['#b4bac0', '#dfe8f2'],
   /** distant skyline silhouettes: stone, greenery, glass, water; each layer is hazed toward `haze` */
-  stone: ['#9c9f9e', '#efe9dc'],
+  stone: ['#9a9d9c', '#d8ccb6'],
   green: ['#8d978f', '#6dbb5a'],
-  glass: ['#a7b1b8', '#a9dcf0'],
+  glass: ['#a3adb4', '#86c8e2'],
   water: ['#b5bdc2', '#bfeaff'],
   glowWarm: ['#9a9a92', '#ffd36a'],
 } as const;
