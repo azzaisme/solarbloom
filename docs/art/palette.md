@@ -48,9 +48,9 @@ The colour spec for the art-direction epic (#102, Look 2 #104). Sampled from
 | Gold / amber | banners, trims | `#fbb73e` | `#f29f28` | `#f5b23c` banner, `#e8ba40` trim | `trim.banner`, `trim.gold` |
 | Solar navy | cells | `#6b74c2` | `#52599c` | `#233f7a`, grid `#5a74c0` | `solar.panel`, `solar.glint` |
 | Glass cyan | | `#ade9fc` | `#85d0f5` | `#9fe2f8` | `aqua.glass` |
-| Sky | zenith | `#a9d3fc` | `#a7d2fc` | `#7fb2e5` | `sky.zenith` |
-| | horizon | `#c4e0fc` | `#b0d3fc` | `#e8e2d2` | `sky.horizon` |
-| Haze | distant towers | `#c8c4d0` | `#9eaabf` | `#e8e2d2` (= horizon) | `sky.haze` |
+| Sky | zenith | `#a9d3fc` | `#a7d2fc` | `#78afe6` | `sky.zenith` |
+| | horizon | `#c4e0fc` | `#b0d3fc` | `#e6e2d4` | `sky.horizon` |
+| Haze | distant towers | `#c8c4d0` | `#9eaabf` | `#e6e2d4` (= horizon) | `sky.haze` |
 
 The drone keeps the redesign's colours (PR #211, `docs/art/SOLARBLOOM_DRONE_REDESIGN.md`): ceramic shell
 `#f5f3e8`, soft gold trim `#e8ba40` on every role, cyan glow `#71f5ff` for eyes, thrusters and vent only, navy
@@ -96,12 +96,20 @@ become stone planters and plinths, roads keep their surface with green at the ed
 
 ## Sky, haze and fog targets (#125)
 
-Look 4 owns the sky block and Look 1 the haze; these are the values to set there.
+Look 4 owns the sky block (`src/data/sky.ts` on its branch: `[fogged, clear]` pairs) and Look 1 the haze;
+these are the clear values to set there (`PALETTE.sky` holds the same values).
 
-| What | Value |
-|---|---|
-| sky zenith | `#7fb2e5` |
-| sky horizon | `#e8e2d2` |
-| haze / distance fog | `#e8e2d2` (fades into the horizon, no separate blue-grey) |
-| skyline towers | pale blue `#bcd6e4`, cream `#e9e1cf`, terrace green `#a9c98a` |
-| gameplay fog of war | `#6f7783` (cool gloomy grey, darker than the haze, so it never reads as sky) |
+| What | `SKY` key | Clear value |
+|---|---|---|
+| sky zenith | `zenith` | `#78afe6` |
+| about 25° up | `upper` | `#a4cdee` |
+| warm band above the horizon | `glow` | `#f6e2c0` |
+| horizon, haze, scene fog | `haze` | `#e6e2d4` (pale and warm; the ground fades into it, no blue-grey seam) |
+| cloud shade | `cloudShade` | `#dde3ee` |
+| skyline stone (cream) | `stone` | `#e9e1cf` |
+| skyline greenery (terraces) | `green` | `#a9c98a` (not lime) |
+| skyline glass (pale blue) | `glass` | `#bcd6e4` |
+| gameplay fog of war | `ChunkRenderer.buildFog` sheets | keep the cool grey (`#aab0b8` lower, `#bac0c6` upper, as rendered): darker than the haze (L\* ~71 vs ~90) and opposite in temperature, so it reads as gloomy fog, never as sky |
+
+Look 1's haze (`look.ts` `haze.color`, `#e9dcc4` on its branch) should converge on the same horizon colour, or
+be the golden-hour grade of it.

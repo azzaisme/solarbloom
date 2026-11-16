@@ -330,17 +330,27 @@ const core = {
 };
 
 const sky = {
-  /** linear distance fog (SceneBuilder; Look 4 owns the sky block) */
-  fog: '#bcd9e6',
-  zenith: '#7fb8e8',
-  horizon: '#e9eef0',
-  haze: '#bcd9e6',
-  skyline: ['#b9d6e6', '#acc9dc', '#c4dce8', '#a5c3d6'],
-  skylineGreen: '#a8d3a0',
+  /**
+   * Look 2.7 (palette.md): a clear zenith blue over a pale warm horizon. The haze is the horizon colour, so distant
+   * ground fades into the sky with no blue-grey seam. Look 4's sky block (src/data/sky.ts, [fogged, clear] pairs)
+   * carries the live values; these are the clear ones it should match.
+   */
+  zenith: '#78afe6',
+  upper: '#a4cdee',
+  horizon: '#e6e2d4',
+  haze: '#e6e2d4',
+  /** linear distance fog (SceneBuilder, until Look 4's sky sets the fog from its haze) */
+  fog: '#e6e2d4',
+  /** distant terraced towers: pale blue, cream and green */
+  skyline: ['#bcd6e4', '#e9e1cf', '#c4dce8', '#d8ccb6'],
+  skylineGreen: '#a9c98a',
   bridge: '#eeeae2',
-  /** gameplay fog of war: greys ground toward this */
-  fogOfWar: '#9a9a9a',
-};
+  /**
+   * gameplay fog of war (the fog sheets in ChunkRenderer.buildFog, Look 4's curtains): a cool gloomy grey, darker
+   * than the warm haze (L* ~71 vs ~90) and opposite in temperature, so it never reads as sky. Lower and upper sheet.
+   */
+  fogOfWar: ['#aab0b8', '#bac0c6'],
+};;
 
 const fauna = {
   catTabby: ['#9a948c', '#6f6a63'],
