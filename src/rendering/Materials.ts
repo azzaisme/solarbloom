@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { detailTextures, type DetailLayer } from './DetailTex';
 
 export const PALETTE = {
   concrete: ['#8d9196', '#7f8489', '#979a9e', '#868a8f'],
@@ -58,6 +59,8 @@ export interface MatOpts {
   metal?: number;
   unlit?: boolean;
   doubleSided?: boolean;
+  /** Look 3.1: a world-space detail layer (stone, metal, bark, plaster) over the flat colour. */
+  detail?: DetailLayer;
 }
 
 export function color(hex: string): pc.Color {
@@ -91,6 +94,7 @@ export function mat(hex: string, o: MatOpts = {}): pc.StandardMaterial {
     m.depthWrite = false;
   }
   if (o.doubleSided) m.cull = pc.CULLFACE_NONE;
+  if (o.detail && !o.unlit) detailTextures.apply(m, o.detail);
   m.update();
   cache.set(key, m);
   return m;
@@ -99,6 +103,7 @@ export function mat(hex: string, o: MatOpts = {}): pc.StandardMaterial {
 /** A private (uncached) material for things that animate their colour, like the Core. */
 export function uniqueMat(hex: string, o: MatOpts = {}): pc.StandardMaterial {
   const m = mat(hex, o).clone() as pc.StandardMaterial;
+  if (o.detail && !o.unlit) detailTextures.apply(m, o.detail);
   m.update();
   return m;
 }

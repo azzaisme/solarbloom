@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { detailTextures } from './DetailTex';
 
 export type Prim = 'box' | 'sphere' | 'cylinder' | 'cone' | 'capsule' | 'plane' | 'torus';
 /** Vertex-coloured primitives; 'sphereHi' is a smoother sphere for big canopies and domes. */
@@ -12,6 +13,9 @@ export function initLowPoly(device: pc.GraphicsDevice) {
   vcMaterial.useMetalness = true;
   vcMaterial.metalness = 0;
   vcMaterial.gloss = 0.3;
+  // Look 3.1: world-space detail textures over the vertex colours (stone, grass, grain), one draw call still.
+  detailTextures.init(device);
+  detailTextures.apply(vcMaterial);
   vcMaterial.update();
 }
 
