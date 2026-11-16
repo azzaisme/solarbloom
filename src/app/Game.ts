@@ -2249,7 +2249,7 @@ export class Game {
     this.sky.update(dt, this.camera.entity.getPosition(), this.camera.cam.farClip);
     this.skyline.clarity = this.sky.clarity;
     this.skyline.reducedMotion = this.settings.reducedMotion;
-    this.skyline.update(dt, this.camera.target, this.camera.dist, this.camera.nearness(), this.camera.yaw);
+    this.skyline.update(dt, this.camera.target, this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
     this.syncView();
     this.updateTreeCursor(dt);
     this.hud.update(dt);

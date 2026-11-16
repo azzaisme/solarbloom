@@ -302,8 +302,8 @@ export class ChunkRenderer {
       if (prev >= 0 && ps > prev) this.onParkStage?.(ps, prev);
     }
     // Zoomed out, all but the middle draw as plain slabs; close up, the low view reaches deep into the haze, so
-    // chunks well past the focus (where the haze is thick) do too.
-    this.farFrom = zoom < 0.55 ? 2 : 3.2;
+    // chunks well past the focus (where the haze is thick) do too. Mid zooms keep full detail (no LOD churn while panning).
+    this.farFrom = zoom < 0.55 ? 2 : zoom >= 0.9 ? 3.2 : Infinity;
     for (const v of this.views.values()) {
       const far = dist(v, focus) / CHUNK > this.farFrom;
       if (v.ground && !!v.far !== far) v.dirty = true;

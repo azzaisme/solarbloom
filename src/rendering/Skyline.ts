@@ -216,7 +216,7 @@ export class Skyline {
         else kit.blob(x, y + 1, z, tw * 0.45);
         towers.push({ x, z, w, tiers });
         // Waterfalls from a terrace on some towers, pouring toward the viewer, with mist at the foot.
-        if (rnd() < 0.28 && tiers.length > 1) {
+        if (rnd() < 0.35 && li === 0 && tiers.length > 1) { // nearest ring only: the falls share its scale
           const from = tiers[Math.min(tiers.length - 1, 1 + Math.floor(rnd() * (tiers.length - 1)))];
           const fw = w * (0.18 + rnd() * 0.14);
           const fx = x + Math.sin(face) * (w * 0.5 + 0.4);
@@ -362,7 +362,7 @@ export class Skyline {
    * Follow the view. `dist` is the camera distance (the rings stand past it), `nearness` 0 far … 1 near (the
    * skyline sinks out of view below ~0.3), `yaw` the camera yaw in degrees.
    */
-  update(dt: number, target: pc.Vec3, dist: number, nearness: number, yaw: number) {
+  update(dt: number, target: pc.Vec3, dist: number, nearness: number, yaw: number, hazeEnd: number, farClip: number) {
     this.time += dt;
     const t = Math.min(1, Math.max(0, (nearness - 0.3) / 0.4));
     const rise = t * t * (3 - 2 * t);
@@ -373,11 +373,19 @@ export class Skyline {
     // Sideways pans turn each ring a little (nearer rings more): parallax that never runs out.
     const yr = (yaw * Math.PI) / 180;
     const lateral = target.x * Math.cos(yr) - target.z * Math.sin(yr);
-    const s = 1 + dist / 60;
+    // Ring radii: the nearest just past where the haze is complete, the furthest inside the far clip plane
+    // (which stops just past the haze, so the city behind it is never drawn).
+    const r0 = hazeEnd + 12;
+    const r2 = Math.max(r0 + 20, farClip * 0.8 - dist); // inside the sky dome (0.97 × far clip) too
+    const first = LAYERS[0].r;
+    const last = LAYERS[LAYERS.length - 1].r;
+    const ringScale = (r: number) => (r0 + ((r - first) / (last - first)) * (r2 - r0)) / r;
     for (const L of this.layers) {
+      const s = ringScale(L.r);
       L.e.setLocalScale(s, 1, s);
       L.e.setLocalEulerAngles(0, ((lateral * L.par) / (L.r * s)) * (180 / Math.PI), 0);
     }
+    const s = ringScale(LAYERS[0].r);
     this.falls.setLocalScale(s, 1, s);
     this.mist.setLocalScale(s, 1, s);
     this.falls.setLocalEulerAngles(0, this.layers[0].e.getLocalEulerAngles().y, 0);

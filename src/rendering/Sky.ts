@@ -265,7 +265,7 @@ export class Sky {
       this.builtClarity = -1;
     }
     if (Math.abs(this.builtClarity - this.clarity) > 0.004) this.recolour();
-    const R = farClip * 0.92;
+    const R = farClip * 0.97;
     this.root.setPosition(cam.x, cam.y, cam.z);
     this.root.setLocalScale(R, R, R);
     // Clouds drift slowly around the horizon (a full turn takes about 40 minutes).
