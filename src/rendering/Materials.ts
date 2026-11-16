@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { LOOK } from '../data/look';
 
 /** Look 2: every colour lives in Palette.ts (docs/art/palette.md); re-exported here for existing imports. */
 import { PALETTE } from './Palette';
@@ -22,6 +23,14 @@ export function color(hex: string): pc.Color {
   return c;
 }
 
+/**
+ * Look 1.9: emissive intensity as rendered. Materials authored as glows (intensity >= 1) are scaled into the bloom
+ * range; weaker emissive tints stay below it.
+ */
+export function glow(intensity: number): number {
+  return intensity >= 1 ? intensity * LOOK.emissive.gain : intensity;
+}
+
 /** Shared, cached material. Never create materials per frame. */
 export function mat(hex: string, o: MatOpts = {}): pc.StandardMaterial {
   const key = hex + JSON.stringify(o);
@@ -34,11 +43,12 @@ export function mat(hex: string, o: MatOpts = {}): pc.StandardMaterial {
   m.gloss = o.gloss ?? 0.35;
   if (o.emissive) {
     m.emissive = color(o.emissive);
-    m.emissiveIntensity = o.emissiveIntensity ?? 1;
+    m.emissiveIntensity = glow(o.emissiveIntensity ?? 1);
   }
   if (o.unlit) {
     m.useLighting = false;
     m.emissive = color(hex);
+    m.emissiveIntensity = o.emissiveIntensity ?? 1;
     m.diffuse = new pc.Color(0, 0, 0);
   }
   if (o.opacity !== undefined && o.opacity < 1) {

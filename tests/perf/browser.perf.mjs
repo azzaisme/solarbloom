@@ -6,6 +6,11 @@
 //   npm run test:perf:browser          (builds first)
 //   PERF_AREAS=60 node tests/perf/browser.perf.mjs   (smaller city, quicker)
 //   PERF_JSON=out.json ...                            (also write the numbers to a file)
+//   PERF_TIERS=low,high ...                           (Look 1.11: graphics tiers to measure; default all three)
+//   PERF_TIER=medium ...                              (the tier for the main pan / zoom / chain run; default high)
+//
+// Look 1.11: after the main run (on the High tier), the same city is reloaded at each graphics tier (?gfx=…) and
+// panned and zoomed again, so every tier's frame time and draw calls are reported and checked.
 import { createRequire } from 'node:module';
 import { writeFileSync } from 'node:fs';
 import { preview } from 'vite';
@@ -38,13 +43,26 @@ const LIMITS = {
   // Per frame, phase median: under 400 at every zoom (machines merge into per-region batches, ground is one
   // mesh per chunk). The chain phase's worst frames are the instant 800 gardens appear, before they batch.
   drawCalls: { pan: 400, zoom: 400, chain: 400, transitions: 400 },
+  /**
+   * Look 1.11: per graphics tier, phase median draw calls (pan and zoom), and the frame's wall time relative to
+   * the Low tier in the same run. High adds the SSAO depth prepass (the scene drawn twice) and the post passes; Low
+   * has no post. Absolute wall time under SwiftShader depends on the runner and on whatever else it is doing
+   * (measured 370–610 ms per frame on a busy 2026 dev machine), so tiers are gated against each other instead.
+   */
+  tiers: {
+    low: { drawCalls: 400, vsLow: 1 },
+    medium: { drawCalls: 450, vsLow: 1.5 },
+    high: { drawCalls: 800, vsLow: 2 },
+  },
   chainMinCombo: CHAIN,
   saveStepMs: 16, // each main-thread step of an autosave (serialize, base64, storage write) fits in a frame
   catchUpSimMs: 16, // City 06.5: catching up 5 minutes away never spends more than this on simulation in one frame
 };
 
 const server = await preview({ preview: { port: 4183, strictPort: true }, logLevel: 'silent' });
-const url = 'http://localhost:4183/';
+const MAIN_TIER = process.env.PERF_TIER ?? 'high';
+const TIERS = (process.env.PERF_TIERS ?? 'low,medium,high').split(',').filter((t) => ['low', 'medium', 'high'].includes(t));
+const url = `http://localhost:4183/?gfx=${MAIN_TIER}`;
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
 const results = {};
@@ -241,6 +259,37 @@ try {
   );
 
   phase('zoomed');
+  results.tier = await page.evaluate(() => window.solarbloom.gfxTier ?? 'n/a');
+  // Look 1.11: the same city at each graphics tier (pan and zoom), then back to the main tier for the rest.
+  results.tiers = {};
+  for (const tier of TIERS) {
+    await page.goto(`http://localhost:4183/?gfx=${tier}`);
+    await page.waitForFunction(() => !!window.solarbloom && window.solarbloom.sim.state.machines.length > 50, null, { timeout: 60000 });
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 1500)));
+    const got = await page.evaluate(() => window.solarbloom.gfxTier ?? 'n/a');
+    const pan = await measure(
+      `pan-${tier}`,
+      60,
+      `const a = (i / n) * Math.PI * 2; const R = ${Math.round(extent * 0.5)};
+       g.camera.bounds = { minX: -1e4, maxX: 1e4, minZ: -1e4, maxZ: 1e4 };
+       g.camera.glide(Math.cos(a) * R * (i / n), 0, Math.sin(a) * R * (i / n), 0.7);`,
+    );
+    const zoom = await measure(
+      `zoom-${tier}`,
+      60,
+      `const t = i / n; const z = t < 0.5 ? 1.8 - (1.8 - 0.22) * t * 2 : 0.22 + (1.8 - 0.22) * (t - 0.5) * 2;
+       g.camera.glide(8, 0, 8, z);`,
+    );
+    results.tiers[tier] = { applied: got, pan, zoom };
+    delete results[`pan-${tier}`];
+    delete results[`zoom-${tier}`];
+    phase(`tier ${tier} (${got}): frame ${pan.median.toFixed(0)} / ${zoom.median.toFixed(0)} ms, draw calls ${pan.drawCalls} / ${zoom.drawCalls}`);
+  }
+  if (TIERS.length) {
+    await page.goto(url);
+    await page.waitForFunction(() => !!window.solarbloom && window.solarbloom.sim.state.machines.length > 50, null, { timeout: 60000 });
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 1000)));
+  }
   // 4b. Back after 5 minutes in another tab: the city catches up within the per-frame simulation budget.
   results.catchUp = await page.evaluate(
     () =>
@@ -412,7 +461,18 @@ try {
     if (r[k].updateMedian > LIMITS.updateMedianMs) failures.push(`${k} update median ${r[k].updateMedian.toFixed(1)} ms > ${LIMITS.updateMedianMs}`);
     if (r[k].hitches > LIMITS.hitches[k]) failures.push(`${k} hitches ${r[k].hitches} (update > ${LIMITS.hitchMs} ms) > ${LIMITS.hitches[k]}`);
   }
-  for (const k of ['pan', 'zoom', 'chain', 'transitions']) if (r[k] && r[k].drawCalls > LIMITS.drawCalls[k]) failures.push(`${k} draw calls ${r[k].drawCalls} > ${LIMITS.drawCalls[k]}`);
+  // The main run's draw-call limits are for Low-tier rendering (one scene pass); other tiers are checked below.
+  const passScale = LIMITS.tiers[MAIN_TIER].drawCalls / LIMITS.tiers.low.drawCalls;
+  for (const k of ['pan', 'zoom', 'chain', 'transitions']) if (r[k] && r[k].drawCalls > LIMITS.drawCalls[k] * passScale) failures.push(`${k} draw calls ${r[k].drawCalls} > ${Math.round(LIMITS.drawCalls[k] * passScale)}`);
+  for (const [tier, t] of Object.entries(r.tiers ?? {})) {
+    const L = LIMITS.tiers[tier];
+    if (t.applied !== tier) failures.push(`tier ${tier}: the game applied ${t.applied}`);
+    for (const k of ['pan', 'zoom']) {
+      if (t[k].drawCalls > L.drawCalls) failures.push(`tier ${tier} ${k} draw calls ${t[k].drawCalls} > ${L.drawCalls}`);
+      const low = r.tiers.low?.[k]?.median;
+      if (low && tier !== 'low' && t[k].median > low * L.vsLow) failures.push(`tier ${tier} ${k} frame ${t[k].median.toFixed(0)} ms > ${L.vsLow}× Low (${low.toFixed(0)} ms)`);
+    }
+  }
   if (r.catchUp.simMsWorst > LIMITS.catchUpSimMs) failures.push(`catch-up spent ${r.catchUp.simMsWorst.toFixed(1)} ms of simulation in one frame > ${LIMITS.catchUpSimMs}`);
   if (r.catchUp.simulated < 299) failures.push(`catch-up simulated only ${r.catchUp.simulated.toFixed(0)} s of 300`);
   if (r.chainCombo < LIMITS.chainMinCombo) failures.push(`chain reached ×${r.chainCombo} < ×${LIMITS.chainMinCombo}`);
@@ -431,6 +491,9 @@ if (results.catchUp) console.log(`catch-up: 300 s away → ${results.catchUp.sim
 if (results.autosave) console.log(`autosave (main thread, worst of 5): serialize ${f(results.autosave.serialize)} ms · base64 ${f(results.autosave.encode)} ms · write ${f(results.autosave.write)} ms`);
 console.log(`chain: ×${results.chainCombo} along a ${results.chainSetup?.row.len}-tile corridor of ${results.chainSetup?.gardens} gardens`);
 if (results.trSetup && !results.trSetup.skipped) console.log(`transitions (Look 6): a second ×500 chain + an area wave + ${results.trSetup.cultivators} Cultivators + ${results.trSetup.tiles} tiles set mid-transition (${results.trSetup.live} live in the sim at the start; ${results.trCounts?.sim} live, ${results.trCounts?.drawn} drawn as transitions after 150 frames)`);
+for (const [tier, t] of Object.entries(results.tiers ?? {}))
+  console.log(`tier ${tier.padEnd(6)} pan frame ${f(t.pan.median)} ms · draw calls ${t.pan.drawCalls} · update ${f(t.pan.updateMedian)} ms · render ${f(t.pan.renderMedian)} ms | zoom frame ${f(t.zoom.median)} ms · draw calls ${t.zoom.drawCalls} (worst ${t.zoom.drawCallsWorst})`);
+console.log('(headless Chromium with SwiftShader software rendering: compare tiers and builds, not devices)');
 if (process.env.PERF_JSON) writeFileSync(process.env.PERF_JSON, JSON.stringify(results, null, 2));
 if (failures.length) {
   for (const m of failures) console.error('  ✗', m);

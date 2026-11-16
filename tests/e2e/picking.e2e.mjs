@@ -58,8 +58,15 @@ try {
               for (let x = fx - 14; x < fx + 14; x++) {
                 const t = g.sim.grid.get('g', x, z);
                 for (const [ox, oz] of OFFSETS) {
-                  const s = g.camera.toScreen(new V(x + ox, 0.08, z + oz));
+                  // Look 4.9: unrevealed ground is drawn sunk; it's only seen where the city doesn't hide it.
+                  const sunk = g.sunkAt(x + ox, z + oz);
+                  const s = g.camera.toScreen(new V(x + ox, 0.08 - (sunk ? g.sinkDepth : 0), z + oz));
                   if (s.x < 0 || s.y < 0 || s.x > innerWidth || s.y > innerHeight) continue;
+                  if (sunk) {
+                    const { o, d } = g.camera.ray(s.x, s.y);
+                    const k = (0.08 - o.y) / d.y;
+                    if (!g.sunkAt(o.x + d.x * k, o.z + d.z * k)) continue; // behind the raised city's edge
+                  }
                   const p = g.pick(s.x, s.y);
                   out.push({ want: t.id, got: p?.tile?.id ?? null, sameRoof: true });
                 }

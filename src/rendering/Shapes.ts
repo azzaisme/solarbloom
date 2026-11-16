@@ -12,6 +12,8 @@ export function initLowPoly(device: pc.GraphicsDevice) {
   vcMaterial.useMetalness = true;
   vcMaterial.metalness = 0;
   vcMaterial.gloss = 0.3;
+  // Look 1.9: vertex alpha below 1 marks glowing geometry (lit lamps, Radiant flowers); see LookShaders.
+  vcMaterial.setDefine('LOOK_VC_GLOW', true);
   vcMaterial.update();
 }
 

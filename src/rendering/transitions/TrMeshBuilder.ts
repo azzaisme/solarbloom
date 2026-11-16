@@ -169,7 +169,8 @@ export class TrMeshBuilder {
   }
 
   /** One primitive at `p`, scaled by `s`. Its anchor is the ground point under it (pieces grow up from the ground). */
-  add(type: VPrim, hex: string, p: [number, number, number], s: [number, number, number] | number) {
+  /** `_glow` is accepted for the Sink interface but unused: the transition material has its own emission chunk. */
+  add(type: VPrim, hex: string, p: [number, number, number], s: [number, number, number] | number, _glow = 0) {
     const t = template(type);
     const [sx, sy, sz] = typeof s === 'number' ? [s, s, s] : s;
     const [R, G, B] = this.colour(hex);

@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import { CHUNK } from '../core/Hash';
 import { GROUND } from '../core/GameState';
 import { chunkKey } from '../core/Grid';
+import { polyDist } from '../core/Picking';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { CITY_GEN, PARK_LAYOUT } from '../data/city';
@@ -67,7 +68,7 @@ class Grow<T extends Float32Array | Uint8Array | Uint32Array> {
 
 const linCache = new Map<string, [number, number, number]>();
 /** sRGB hex → linear 0–1 (matches the vertex-colour material). */
-function lin(hex: string): [number, number, number] {
+export function lin(hex: string): [number, number, number] {
   let c = linCache.get(hex);
   if (!c) {
     const col = new pc.Color();
@@ -89,13 +90,15 @@ class MeshBuilder {
   /** Look 2.2: when set, colours fade from the given colour at the bottom of a primitive to this one at its top. */
   tip = '';
 
-  add(type: VPrim, hex: string, p: [number, number, number], s: [number, number, number] | number) {
+  /** `glow` (0-1, Look 1.9) makes the primitive emissive: stored in the vertex alpha, read by the vertex-colour material. */
+  add(type: VPrim, hex: string, p: [number, number, number], s: [number, number, number] | number, glow = 0) {
     const t = template(type);
     let sx: number, sy: number, sz: number;
     if (typeof s === 'number') sx = sy = sz = s;
     else [sx, sy, sz] = s;
     const [R, G, B] = this.rgb(hex);
     const [R2, G2, B2] = this.tip ? this.rgb(this.tip) : [R, G, B];
+    const A = 255 - Math.round(Math.min(1, Math.max(0, glow)) * 255);
     const nv = t.pos.length;
     const base = this.pos.n / 3;
     this.pos.reserve(nv);
@@ -138,7 +141,7 @@ class MeshBuilder {
         C[c + 1] = G;
         C[c + 2] = B;
       }
-      C[c + 3] = 255;
+      C[c + 3] = A;
     }
     this.pos.n = this.nrm.n = o;
     this.col.n = c;
@@ -197,6 +200,8 @@ interface ChunkView {
   fading?: boolean;
   /** built at far level of detail (slabs only) */
   far?: boolean;
+  /** Look 4.9: drawn sunk below the revealed city (an area not revealed yet) */
+  sunk?: boolean;
   /** Look 6.12: the living surface (every ground slab) and the props of tiles mid-transition */
   surface?: pc.Entity;
   trans?: pc.Entity;
@@ -225,6 +230,16 @@ void getOpacity() {
 	}
 }
 `;
+
+/**
+ * Look 4.9 (#153): how far unrevealed areas sit below the revealed city. The early city (the park, then the
+ * suburbs) is at street level, so this is a low step: the revealed ground reads as a place with a stone kerb
+ * at its edge, not a rooftop. Revealing an area raises it to the city level. Picking of sunk (hidden) ground
+ * uses the same depth (`Game.pick`). A drop of `TALL_DROP` or more draws a full building facade instead (for
+ * the skyscraper stage later in the game).
+ */
+export const SINK = 0.45;
+const TALL_DROP = 2;
 
 /**
  * Renders the endless city ground: one merged, vertex-coloured mesh per 16×16 chunk (slabs + decoration),
@@ -320,7 +335,7 @@ export class ChunkRenderer {
   /** Called when the park's stage rises (Game shows a line and a sparkle). */
   onParkStage?: (stage: number, prev: number) => void;
 
-  update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number }, focus: { x: number; z: number }, zoom = 1) {
+  update(dt: number, rect: { x0: number; x1: number; z0: number; z1: number; poly?: [number, number][] }, focus: { x: number; z: number }, zoom = 1) {
     this.time += dt;
     this.warmTrees();
     this.tickGrowing(dt);
@@ -333,7 +348,9 @@ export class ChunkRenderer {
       if (v) v.dirty = true;
       if (prev >= 0 && ps > prev) this.onParkStage?.(ps, prev);
     }
-    this.farFrom = zoom < 0.55 ? 2 : Infinity;
+    // Zoomed out, all but the middle draw as plain slabs; close up, the low view reaches deep into the haze, so
+    // chunks well past the focus (where the haze is thick) do too. Mid zooms keep full detail (no LOD churn while panning).
+    this.farFrom = zoom < 0.55 ? 2 : zoom >= 0.9 ? 3.2 : Infinity;
     for (const v of this.views.values()) {
       const far = dist(v, focus) / CHUNK > this.farFrom;
       if (v.ground && !!v.far !== far) v.dirty = true;
@@ -342,9 +359,13 @@ export class ChunkRenderer {
     const cx1 = Math.floor(rect.x1 / CHUNK) + 1;
     const cz0 = Math.floor(rect.z0 / CHUNK) - 1;
     const cz1 = Math.floor(rect.z1 / CHUNK) + 1;
+    // Look 4.11: only chunks near the view's ground trapezoid (not its whole bounding box), with hysteresis.
+    const poly = rect.poly;
+    const near = (cx: number, cz: number, margin: number) => !poly || polyDist(poly, cx * CHUNK + CHUNK / 2, cz * CHUNK + CHUNK / 2) <= CHUNK * 0.71 + margin;
     const want = new Set<string>();
     for (let cz = cz0; cz <= cz1; cz++)
       for (let cx = cx0; cx <= cx1; cx++) {
+        if (!near(cx, cz, 4)) continue;
         const key = chunkKey(GROUND, cx, cz);
         want.add(key);
         if (!this.views.has(key)) this.views.set(key, { key, cx, cz, dirty: true, fogDirty: true });
@@ -352,7 +373,7 @@ export class ChunkRenderer {
     // Drop chunks well outside the view (one extra ring of hysteresis).
     for (const [key, v] of this.views) {
       if (want.has(key)) continue;
-      if (v.cx < cx0 - 1 || v.cx > cx1 + 1 || v.cz < cz0 - 1 || v.cz > cz1 + 1) this.drop(v);
+      if (v.cx < cx0 - 1 || v.cx > cx1 + 1 || v.cz < cz0 - 1 || v.cz > cz1 + 1 || !near(v.cx, v.cz, 24)) this.drop(v);
     }
     // Fog fades (area cleared): opacity → 0, then rebuild.
     for (const v of this.views.values()) {
@@ -437,7 +458,9 @@ export class ChunkRenderer {
     const area = s.areas.map.areaOfChunk(v.cx, v.cz);
     this.areaType = s.areas.info(area).type;
     const fog = s.areas.fog(area);
-    const h = s.grid.layer(GROUND)!.height;
+    v.sunk = fog === 'hidden';
+    const city = s.grid.layer(GROUND)!.height;
+    const h = city - (v.sunk ? SINK : 0);
     v.far = dist(v, this.lastFocus) / CHUNK > this.farFrom;
     // Props in the park follow its stage; elsewhere they're broken until their area clears.
     this.level = area === 'park' ? Math.max(0, this.parkStage) : fog === 'cleared' ? 4 : 0;
@@ -476,6 +499,13 @@ export class ChunkRenderer {
         const whole = s.grid.peek(GROUND, p.x, p.z)?.feature === 'building' && s.grid.peek(GROUND, p.x + p.w - 1, p.z + p.d - 1)?.feature === 'building';
         if (whole) this.building(b, p, h, fog === 'cleared', v.far);
       }
+    }
+    // Look 4.9: retaining-wall facades where the revealed city drops to an unrevealed (sunk) neighbour.
+    if (!v.sunk) {
+      const alive = fog === 'cleared' || this.inPark;
+      b.grey = alive ? 0 : 0.4;
+      for (const [dx, dz] of EDGE_DIRS)
+        if (s.areas.fog(s.areas.map.areaOfChunk(v.cx + dx, v.cz + dz)) === 'hidden') this.facade(b, v, dx, dz, city, alive, !!v.far);
     }
     v.ground = this.setMesh(v.ground, `chunk-${v.key}`, b.build(this.device), vertexColourMaterial(), !v.far); // far chunks: no shadow pass (invisible at that distance, halves their draw calls)
     v.trees = this.setMesh(v.trees, `trees-${v.key}`, fb.build(this.device), foliageMaterial(), !v.far);
@@ -913,13 +943,13 @@ export class ChunkRenderer {
     if (stage >= 4) {
       // Phase 4 E05: Radiant: a pale golden glow on the ground and luminous gold flowers above the shrubs.
       // Look 2.5: paving keeps its stone; its Radiant cue is the gold flowers alone.
-      if (f !== 'paving') b.add('cylinder', PALETTE.flowers.radiantDisc, [x, top + 0.005, z], [0.86, 0.01, 0.86]);
+      if (f !== 'paving') b.add('cylinder', PALETTE.flowers.radiantDisc, [x, top + 0.005, z], [0.86, 0.01, 0.86], 0.08);
       for (let i = 0; i < 4; i++) {
         const fx = x + r.range(-0.34, 0.34);
         const fz = z + r.range(-0.34, 0.34);
         const ht = r.range(0.3, 0.46);
         b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.02, ht, 0.02]);
-        b.add('sphere', PALETTE.flowers.radiant[i % 2 ? 0 : 1], [fx, top + ht, fz], [0.13, 0.1, 0.13]);
+        b.add('sphere', PALETTE.flowers.radiant[i % 2 ? 0 : 1], [fx, top + ht, fz], [0.13, 0.1, 0.13], 0.45);
       }
     }
   }
@@ -981,6 +1011,75 @@ export class ChunkRenderer {
       if (p.style % 3 === 0) b.add('cylinder', PALETTE.building.tank, [p.x + 0.6, top + 0.3, p.z + 0.6], [0.4, 0.45, 0.4]);
       else b.add('box', PALETTE.paving.crack, [p.x + p.w - 0.5, top + 0.4, p.z + 0.5], [0.04, 0.7, 0.04]);
     }
+  }
+
+  /**
+   * Look 4.9: the face of the raised city where it drops to a sunk neighbour chunk (side dx, dz). For the low
+   * street-level step, a stone kerb. For a tall drop (TALL_DROP or more): a retaining wall with a plinth, two storeys of windows, pilasters, balconies with
+   * planters, vines, and a coping with a low rail along the top edge. Only the sides the camera sees (east and
+   * south) get the detail; the far sides are plain walls.
+   */
+  private facade(b: MeshBuilder, v: ChunkView, dx: number, dz: number, top: number, alive: boolean, far: boolean) {
+    const N = CHUNK;
+    const x0 = v.cx * N;
+    const z0 = v.cz * N;
+    const bottom = top - SINK - 0.4;
+    const H = top + 0.08 - bottom;
+    // Wall centre line, flush with the chunk edge; `along` runs the edge, `out` points down the drop.
+    const ex = dx > 0 ? x0 + N : dx < 0 ? x0 : x0 + N / 2;
+    const ez = dz > 0 ? z0 + N : dz < 0 ? z0 : z0 + N / 2;
+    const alongX = dz !== 0;
+    const at = (a: number, o: number, y: number): [number, number, number] => (alongX ? [x0 + a, y, ez + dz * o] : [ex + dx * o, y, z0 + a]);
+    /** (along the edge, out from the wall, height) */
+    const size = (a: number, o: number, y: number): [number, number, number] => (alongX ? [a, y, o] : [o, y, a]);
+    const F = PALETTE.retaining;
+    const pick = (c: readonly string[]) => (alive ? c[0] : c[1]);
+    const stone = pick(F.stone);
+    b.add('box', stone, at(N / 2, -0.2, bottom + H / 2), size(N, 0.4, H));
+    if (far) return;
+    const seen = dx > 0 || dz > 0;
+    if (SINK < TALL_DROP) {
+      // A street-level step: a stone kerb with a coping (Look 3 places railings, hedges and clutter along it).
+      b.add('box', pick(F.coping), at(N / 2, 0.02, top + 0.1), size(N, 0.14, 0.08));
+      if (seen) b.add('box', pick(F.plinth), at(N / 2, 0.02, bottom + 0.25), size(N, 0.04, 0.5));
+      return;
+    }
+    // Coping and a low rail along the top edge (all sides: it outlines the terrace).
+    b.add('box', pick(F.coping), at(N / 2, 0.02, top + 0.11), size(N, 0.12, 0.08));
+    for (let a = 0.5; a < N; a += 2) b.add('box', F.rail, at(a, 0.02, top + 0.3), size(0.05, 0.05, 0.36));
+    b.add('box', F.rail, at(N / 2, 0.02, top + 0.47), size(N, 0.04, 0.05));
+    if (!seen) return;
+    const glass = pick(F.glass);
+    const r = new VRng(v.cx * 7919 + v.cz * 104729 + dx * 13 + dz * 31);
+    // Plinth band and a darker foot.
+    b.add('box', pick(F.plinth), at(N / 2, 0.02, bottom + 0.35), size(N, 0.06, 0.7));
+    const storey = (SINK - 0.3) / 2;
+    for (let f = 0; f < 2; f++) {
+      const y = bottom + 0.7 + storey * (f + 0.5);
+      for (let a = 1; a < N; a += 2) {
+        if (r.next() < 0.12) continue; // a blank bay now and then
+        b.add('box', glass, at(a, 0.015, y), size(1.05, 0.03, storey * 0.5));
+        b.add('box', pick(F.sill), at(a, 0.03, y - storey * 0.3), size(1.25, 0.08, 0.06)); // sill
+      }
+      // Cornice between the storeys.
+      b.add('box', pick(F.cornice), at(N / 2, 0.04, bottom + 0.7 + storey * (f + 1) - 0.05), size(N, 0.1, 0.08));
+    }
+    // Pilasters.
+    for (let a = 0; a <= N; a += 4) b.add('box', pick(F.pilaster), at(a, 0.05, bottom + H / 2), size(0.3, 0.1, H));
+    // Balconies with planters on the upper storey, and vines down the wall once the area is alive.
+    const yb = bottom + 0.7 + storey;
+    for (let a = 2; a < N; a += 4) {
+      if (r.next() < 0.3) continue;
+      b.add('box', pick(F.balcony), at(a, 0.28, yb), size(1.6, 0.5, 0.08));
+      b.add('box', F.rail, at(a, 0.52, yb + 0.22), size(1.6, 0.04, 0.03));
+      if (alive) for (let k = 0; k < 3; k++) b.add('sphere', k % 2 ? PALETTE.flower[(a + k) % PALETTE.flower.length] : PALETTE.shrub[k % 3], at(a - 0.5 + k * 0.5, 0.3, yb + 0.12), [0.26, 0.2, 0.26]);
+    }
+    if (alive)
+      for (let i = 0; i < 4; i++) {
+        const a = r.range(0.6, N - 0.6);
+        const len = r.range(0.8, H * 0.8);
+        b.add('box', F.vine[i % 2 ? 0 : 1], at(a, 0.07, top - len / 2), size(0.22, 0.04, len));
+      }
   }
 
   /** A tree in a stone planter: bare twigs until it leafs out. */
@@ -1045,8 +1144,8 @@ export class ChunkRenderer {
           b.add('cylinder', PALETTE.metal.dark, [x, y + 0.04, z], [0.22, 0.08, 0.22]);
           b.add('cylinder', PALETTE.metal.mid, [x, y + 0.55, z], [0.06, 1.0, 0.06]);
           b.add('box', PALETTE.metal.mid, [x, y + 1.06, z], [0.22, 0.04, 0.22]);
-          b.add('sphere', PALETTE.flowers.radiantDisc, [x, y + 0.96, z], 0.16);
-          b.add('cylinder', PALETTE.glow.lamp, [x, y + 0.002, z], [0.9, 0.004, 0.9]); // its pool of light
+          b.add('sphere', PALETTE.flowers.radiantDisc, [x, y + 0.96, z], 0.16, 1);
+          b.add('cylinder', PALETTE.glow.lamp, [x, y + 0.002, z], [0.9, 0.004, 0.9], 0.12); // its pool of light
         } else {
           b.add('box', PALETTE.metal.mid, [x, y + 0.05, z], [0.9, 0.06, 0.08]); // toppled
           b.add('sphere', PALETTE.props.lampToppled, [x + 0.42, y + 0.07, z], 0.12);
@@ -1131,7 +1230,7 @@ export class ChunkRenderer {
     const pos: number[] = [];
     const col: number[] = [];
     const idx: number[] = [];
-    const h = this.sim.grid.layer(GROUND)!.height;
+    const h = this.sim.grid.layer(GROUND)!.height - (v.sunk ? SINK : 0);
     const sheets = this.lowFog
       ? [{ y: 0.5, alpha: 0.82, tint: [112, 121, 132] }]
       : [
@@ -1153,6 +1252,33 @@ export class ChunkRenderer {
           idx.push(i, i + N + 1, i + 1, i + 1, i + N + 1, i + N + 2);
         }
     }
+    // Look 4.5: soft vertical curtains where the fog's thickness steps (its edge against cleared ground), fading
+    // upward, so the fog-of-war has a side to it when seen from the low close-up camera instead of reading as a
+    // flat card. Each cell owns its west and north edges (the border cells cover the chunk seams).
+    const tint = this.lowFog ? [112, 121, 132] : [110, 119, 130];
+    const curtainH = this.lowFog ? 1.0 : 1.35;
+    const curtain = (ax: number, az: number, bx: number, bz: number, a: number, ox: number, oz: number) => {
+      const base = pos.length / 3;
+      const rows: [number, number][] = [[0.02, 0.55], [curtainH * 0.45, 0.38], [curtainH, 0]];
+      for (const [y, k] of rows) {
+        const al = Math.round(Math.min(1, a * k) * 255);
+        pos.push(ax + ox, h + y, az + oz, bx + ox, h + y, bz + oz);
+        col.push(tint[0], tint[1], tint[2], al, tint[0], tint[1], tint[2], al);
+      }
+      for (let r = 0; r < 2; r++) {
+        const i = base + r * 2;
+        idx.push(i, i + 2, i + 1, i + 1, i + 2, i + 3);
+      }
+    };
+    for (let z = 0; z < N; z++)
+      for (let x = 0; x < N; x++) {
+        const a = cell(x, z);
+        const w = cell(x - 1, z);
+        const n = cell(x, z - 1);
+        // Inset a little into the foggy side, so the curtain stands at the fog's edge.
+        if (Math.abs(a - w) > 0.15) curtain(x0 + x, z0 + z, x0 + x, z0 + z + 1, Math.max(a, w), a > w ? 0.15 : -0.15, 0);
+        if (Math.abs(a - n) > 0.15) curtain(x0 + x, z0 + z, x0 + x + 1, z0 + z, Math.max(a, n), 0, a > n ? 0.15 : -0.15);
+      }
     const m = new pc.Mesh(this.device);
     m.setPositions(pos);
     m.setColors32(col);

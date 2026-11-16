@@ -348,8 +348,8 @@ const sky = {
   cloud: '#ffffff',
   /** baked soft shading: warm sunlit tops, lavender-blue shade, a cooler belly, a bright silver rim */
   cloudSun: '#fff4e2',
-  cloudShade: '#a9b6e0',
-  cloudBelly: '#c4cdee',
+  cloudShade: '#c6d0f2',
+  cloudBelly: '#d6ddf6',
   cloudRim: '#ffffff',
   cloudFace: '#4a4f63',
   cloudSparkle: '#ffffff',
@@ -436,7 +436,21 @@ const pure = {
   clear: '#00000000',
 };
 
-const families = { stone, paving, ground, roof, lawn, flowers, leaf, wood, soil, metal, plastic, trim, solar, aqua, glow, building, props, core, sky, fauna, signal, light, surfaces, pure };
+/** Look 4.9: the kerb and retaining wall where the revealed city drops to a sunk (unrevealed) area. [alive, fogged] pairs. */
+const retaining = {
+  stone: ['#e7decb', '#a8a196'],
+  coping: ['#f3eee2', '#b3ada2'],
+  plinth: ['#cfc4ae', '#8f897f'],
+  rail: '#7c6f5e',
+  glass: ['#9fd6e8', '#596067'],
+  sill: ['#f6f1e6', '#a49e93'],
+  cornice: ['#efe7d6', '#a7a196'],
+  pilaster: ['#ddd3bf', '#9d978c'],
+  balcony: ['#efe7d6', '#a49e93'],
+  vine: ['#4f9a4a', '#5aa94f'],
+};
+
+const families = { retaining, stone, paving, ground, roof, lawn, flowers, leaf, wood, soil, metal, plastic, trim, solar, aqua, glow, building, props, core, sky, fauna, signal, light, surfaces, pure };
 
 export const PALETTE = {
   ...families,

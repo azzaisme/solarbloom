@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { LOOK } from '../data/look';
 import { PALETTE, uniqueMat } from './Materials';
 import { shape } from './Shapes';
 
@@ -88,7 +89,10 @@ export class Vfx {
     pm.useMetalness = true;
     pm.metalness = 0;
     pm.gloss = 0.4;
-    pm.emissive = new pc.Color(0.15, 0.15, 0.12);
+    // Look 1.9: sparkles (bursts, frenzy, mega-bloom, drone trails) glow in their own colour and bloom.
+    pm.emissive = new pc.Color(1, 1, 1);
+    pm.emissiveVertexColor = true;
+    pm.emissiveIntensity = LOOK.emissive.particles;
     pm.update();
     const pe = new pc.Entity('particles');
     pe.addComponent('render', { meshInstances: [new pc.MeshInstance(this.pMesh, pm)], castShadows: false, receiveShadows: false });

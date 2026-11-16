@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 import type { MachineData } from '../core/types';
 import { GROUND } from '../core/GameState';
 import type { Sim } from '../gameplay/Sim';
-import { color, mat, PALETTE, uniqueMat, surface } from './Materials';
+import { color, glow, mat, PALETTE, uniqueMat, surface } from './Materials';
 import { group, shape } from './Shapes';
 import { TUNING } from '../data/tuning';
 import { SLAB_TOP } from './SceneBuilder';
@@ -448,7 +448,7 @@ export class MachineVisuals {
     shape(b, 'cylinder', surface('shell'), { pos: [0, 0.32, 0], scale: [0.5, 0.36, 0.5], shadow: true });
     shape(b, 'torus', surface('trim'), { pos: [0, 0.5, 0], scale: [0.85, 0.3, 0.85] });
     shape(b, 'sphere', mat(PALETTE.glass, { opacity: 0.45, gloss: 0.95 }), { pos: [0, 0.74, 0], scale: 0.5 });
-    const water = shape(b, 'sphere', mat(PALETTE.water, { emissive: PALETTE.aqua.deep, emissiveIntensity: 0.4, gloss: 0.9 }), { pos: [0, 0.7, 0], scale: 0.3 });
+    const water = shape(b, 'sphere', mat(PALETTE.water, { emissive: PALETTE.aqua.deep, emissiveIntensity: 1, gloss: 0.9 }), { pos: [0, 0.7, 0], scale: 0.3 }); // Look 1.9: glowing tank
     v.bob.push(water);
     v.light = shape(b, 'sphere', mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1.5 }), { pos: [0, 0.17, 0.33], scale: 0.05 });
     for (let i = 0; i < 3; i++) {
@@ -919,7 +919,7 @@ export class MachineVisuals {
         v.coreBase!.update();
         v.coreMat!.diffuse = new pc.Color().lerp(color(PALETTE.core.steel), color(PALETTE.coreGlow), k);
         v.coreMat!.emissive = new pc.Color().lerp(new pc.Color(0, 0, 0), color(PALETTE.coreGlow), k);
-        v.coreMat!.emissiveIntensity = 1.2;
+        v.coreMat!.emissiveIntensity = glow(1.2); // Look 1.9: the awake core blooms
         v.coreMat!.update();
       });
       v.rings!.forEach((r) => (r.enabled = true));

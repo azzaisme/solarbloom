@@ -40,6 +40,8 @@ export interface HudCallbacks {
   newGame(): void;
   setSetting(key: keyof Settings, v: boolean): void;
   setVolume(key: 'sfxVolume' | 'musicVolume', v: number): void;
+  /** Look 1.11: the Graphics setting. */
+  setGraphics(v: 'auto' | 'low' | 'medium' | 'high'): void;
   skipCinematic(): void;
   closeInspect(): void;
   togglePause(): void;
@@ -79,6 +81,8 @@ export interface Settings {
   musicVolume?: number;
   /** Phase 4 E11.5: stronger outlines and text contrast. */
   highContrast?: boolean;
+  /** Look 1.11: graphics quality (Auto picks a tier from the device and steps down if frames stay slow). */
+  gfx?: 'auto' | 'low' | 'medium' | 'high';
   /** Phase 5 E16: fireflies over lush tiles (ambience only). */
   fireflies?: boolean;
 }
@@ -91,6 +95,8 @@ function esc(s: string) {
 
 /** DOM HUD. Reads sim state each frame (cheaply, with change detection); never mutates the sim directly. */
 export class Hud {
+  /** Look 1.11: the graphics tier in effect (shown next to Auto in Settings). */
+  gfxTier?: 'low' | 'medium' | 'high';
   readonly root: HTMLElement;
   private last = new Map<string, string>();
   private tool: Tool = 'pulse';
@@ -197,6 +203,7 @@ export class Hud {
         <label>Sound volume <input type="range" min="0" max="100" step="5" data-vol="sfxVolume" aria-label="Sound volume"></label>
         <label>Music <input type="checkbox" data-set="music"></label>
         <label>Music volume <input type="range" min="0" max="100" step="5" data-vol="musicVolume" aria-label="Music volume"></label>
+        <label>Graphics <select id="gfxSel" aria-label="Graphics quality"><option value="auto">Auto</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low (phones)</option></select></label>
         <label>High contrast <input type="checkbox" data-set="highContrast"></label>
         <label>Reduced motion &amp; effects <input type="checkbox" data-set="reducedMotion"></label>
         <label>Fewer particles &amp; softer sparkles <input type="checkbox" data-set="lowVfx"></label>
@@ -273,6 +280,9 @@ export class Hud {
       inp.value = String(this.settings[key] ?? 100);
       inp.addEventListener('input', () => this.cb.setVolume(key, Number(inp.value)));
     });
+    const gfx = $<HTMLSelectElement>(r, '#gfxSel');
+    gfx.value = this.settings.gfx ?? 'auto';
+    gfx.addEventListener('change', () => this.cb.setGraphics(gfx.value as 'auto' | 'low' | 'medium' | 'high'));
     r.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => {
       const key = inp.dataset.set as keyof Settings;
       inp.checked = !!this.settings[key];
@@ -600,6 +610,9 @@ export class Hud {
         `Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Avg: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b> 🐱 · Play time: <b>${Math.floor(this.sim.time / 60)}m</b>` +
         `<details style="margin-top:6px"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre><button class="copyT" data-copy-timings>📋 Copy</button></details>`);
       this.root.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => (inp.checked = !!this.settings[inp.dataset.set as keyof Settings]));
+      $<HTMLSelectElement>(this.root, '#gfxSel').value = this.settings.gfx ?? 'auto';
+      const auto = $<HTMLOptionElement>(this.root, '#gfxSel option[value=auto]');
+      auto.textContent = this.gfxTier ? `Auto (${this.gfxTier[0].toUpperCase()}${this.gfxTier.slice(1)})` : 'Auto';
     }
   }
 
@@ -822,7 +835,7 @@ export class Hud {
   }
 
   /** A label pinned to a world point. Created on demand; `action` labels take clicks. */
-  worldLabel(id: string, html: string | null, x = 0, y = 0, action = false) {
+  worldLabel(id: string, html: string | null, x = 0, y = 0, action = false, scale = 1) {
     let el = this.root.querySelector<HTMLElement>(`#${id}`);
     if (!el) {
       if (!html) return;
@@ -840,6 +853,9 @@ export class Hud {
     el.style.display = 'block';
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
+    // Look 4.6: nearer labels a little larger, far ones smaller (the CSS scale property composes with its transform).
+    el.style.scale = scale === 1 ? '' : scale.toFixed(2);
+    el.style.transformOrigin = '50% 100%';
   }
 
   /** Rectangles the Lucky Cat must never hide under. */

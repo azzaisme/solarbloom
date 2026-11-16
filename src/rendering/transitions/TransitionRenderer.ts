@@ -10,7 +10,8 @@ import { PALETTE } from '../Materials';
 
 /** Something primitives can be added to (the chunk renderer's static builder, or a transition builder). */
 export interface Sink {
-  add(type: 'box' | 'sphere' | 'cylinder' | 'cone' | 'capsule' | 'sphereHi', hex: string, p: [number, number, number], s: [number, number, number] | number): void;
+  /** `glow` (0–1, Look 1.9): emissive via vertex alpha in the static chunk mesh; transition meshes ignore it. */
+  add(type: 'box' | 'sphere' | 'cylinder' | 'cone' | 'capsule' | 'sphereHi', hex: string, p: [number, number, number], s: [number, number, number] | number, glow?: number): void;
   grey: number;
   /** a tip colour for the next primitives' upper vertices (grass tufts); '' = none */
   tip?: string;

@@ -1,0 +1,204 @@
+{
+  "tag": "baseline",
+  "query": "",
+  "renderer": "headless Chromium, SwiftShader (software GL)",
+  "when": "2026-11-16T01:22:30.293Z",
+  "shots": {
+    "dead-desktop": {
+      "scene": "Dead park",
+      "size": "1280x800",
+      "frameMs": 207.4,
+      "simTime": 2.6,
+      "restored": 1,
+      "drawCalls": 73,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "d1bae50e291e"
+    },
+    "dead-phone": {
+      "scene": "Dead park",
+      "size": "390x844",
+      "frameMs": 139,
+      "simTime": 2.6,
+      "restored": 1,
+      "drawCalls": 83,
+      "canvas": [
+        390,
+        844
+      ],
+      "tier": "n/a",
+      "sha1": "47997e36bf71"
+    },
+    "half-desktop": {
+      "scene": "Half-restored park, pulse in progress",
+      "size": "1280x800",
+      "frameMs": 197.6,
+      "simTime": 3,
+      "restored": 122,
+      "drawCalls": 70,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "ea127109349c"
+    },
+    "half-phone": {
+      "scene": "Half-restored park, pulse in progress",
+      "size": "390x844",
+      "frameMs": 125.6,
+      "simTime": 3,
+      "restored": 122,
+      "drawCalls": 59,
+      "canvas": [
+        390,
+        844
+      ],
+      "tier": "n/a",
+      "sha1": "23cc7a079746"
+    },
+    "full-desktop": {
+      "scene": "Fully restored park",
+      "size": "1280x800",
+      "frameMs": 396.9,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 87,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "6bb8174af703"
+    },
+    "full-phone": {
+      "scene": "Fully restored park",
+      "size": "390x844",
+      "frameMs": 206.6,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 97,
+      "canvas": [
+        390,
+        844
+      ],
+      "tier": "n/a",
+      "sha1": "47a43f653457"
+    },
+    "machines-desktop": {
+      "scene": "Machine cluster (solar, condenser, core)",
+      "size": "1280x800",
+      "frameMs": 360.8,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 92,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "e7ec9addd37e"
+    },
+    "machines-phone": {
+      "scene": "Machine cluster (solar, condenser, core)",
+      "size": "390x844",
+      "frameMs": 196.3,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 103,
+      "canvas": [
+        390,
+        844
+      ],
+      "tier": "n/a",
+      "sha1": "8584e5d75476"
+    },
+    "drone-desktop": {
+      "scene": "Drone mid-spray",
+      "size": "1280x800",
+      "frameMs": 238.5,
+      "simTime": 1.8,
+      "restored": 0,
+      "drawCalls": 67,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "f5d21b354afc"
+    },
+    "drone-phone": {
+      "scene": "Drone mid-spray",
+      "size": "390x844",
+      "frameMs": 126.9,
+      "simTime": 1.8,
+      "restored": 0,
+      "drawCalls": 84,
+      "canvas": [
+        390,
+        844
+      ],
+      "tier": "n/a",
+      "sha1": "6f76be4c9040"
+    },
+    "mid-desktop": {
+      "scene": "Mid zoom (restored park)",
+      "size": "1280x800",
+      "frameMs": 317.5,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 116,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "d62a3279b93e"
+    },
+    "mid-phone": {
+      "scene": "Mid zoom (restored park)",
+      "size": "390x844",
+      "frameMs": 203.7,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 124,
+      "canvas": [
+        390,
+        844
+      ],
+      "tier": "n/a",
+      "sha1": "c16bc0eb45a7"
+    },
+    "far-desktop": {
+      "scene": "Far zoom (restored park, city beyond)",
+      "size": "1280x800",
+      "frameMs": 336.5,
+      "simTime": 4.6,
+      "restored": 242,
+      "drawCalls": 127,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "4d6fb681e3fa"
+    },
+    "far-phone": {
+      "scene": "Far zoom (restored park, city beyond)",
+      "size": "390x844",
+      "frameMs": 207.3,
+      "simTime": 4.6,
+      "restored": 242,
+      "drawCalls": 137,
+      "canvas": [
+        390,
+        844
+      ],
+      "tier": "n/a",
+      "sha1": "80be351ebfd1"
+    }
+  }
+}
