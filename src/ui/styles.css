@@ -502,6 +502,10 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, summary:foc
   #obj { top: calc(52px + var(--safe-t)); right: auto; width: min(460px, 58vw); }
 }
 .chip .icon { width: 15px; height: 15px; }
+/* Painted icons (klad PNGs): their glow is baked in, with a margin for it, so they sit a little larger. */
+img.icon { object-fit: contain; -webkit-user-drag: none; }
+.icon.painted { transform: scale(1.22); filter: none !important; }
+.mark.painted { transform: scale(1.12); filter: none !important; }
 
 /* Phase 4 E11.5: high contrast: opaque panels, brighter secondary text, stronger outlines. */
 body.contrast { --text-soft: #f4ecd8; --text-dim: #e0d6c0; --edge: #ffd77a; --edge-soft: #ffd77a; --glass: var(--glass-solid); --glass-strong: rgb(8, 22, 24); }

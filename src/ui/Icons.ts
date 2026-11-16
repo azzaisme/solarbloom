@@ -197,7 +197,21 @@ type BodyName = keyof typeof BODIES;
 const body = (n: BodyName) => BODIES[n];
 
 /** Named icons (the HUD's own controls, resources and categories). */
-export const ICONS = Object.fromEntries((Object.keys(BODIES) as BodyName[]).map((n) => [n, svg(body(n))])) as Record<BodyName, string>;
+/**
+ * The painted icons: the HUD's prominent icons are painted in klad (tools/icons/paint-icons.mjs) and shipped as
+ * PNGs, 48 px for 1× screens and 96 px for 2×. They replace the line drawings of the same name; the rest (small
+ * glyphs inside text, the solid white pause / fast-forward / gear) stay SVG.
+ */
+const PNG = import.meta.glob('./icons/*.png', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+const PAINTED_AS: Partial<Record<BodyName, string>> = { sun: 'harvest' };
+function painted(name: string, cls = 'icon painted'): string | undefined {
+  const x2 = PNG[`./icons/${name}.png`];
+  const x1 = PNG[`./icons/${name}@1x.png`];
+  return x2 && x1 ? `<img class="${cls}" src="${x1}" srcset="${x2} 2x" alt="" aria-hidden="true" draggable="false">` : undefined;
+}
+export const ICONS = Object.fromEntries((Object.keys(BODIES) as BodyName[]).map((n) => [n, painted(PAINTED_AS[n] ?? n) ?? svg(body(n))])) as Record<BodyName, string>;
+/** Which icons are painted (for tests and the icon sheet). */
+export const PAINTED = (Object.keys(BODIES) as BodyName[]).filter((n) => !!painted(PAINTED_AS[n] ?? n));
 export type IconName = BodyName;
 
 /** The build tray's machine icons (machines' data still names them with an emoji). */
@@ -281,6 +295,6 @@ const MARK_BODY =
   `<path d="M11.2 18.6C8 18 5.4 15.8 4.4 12.2c-.7-2.2-.6-3.4-.4-4 2.7.8 4.9 2.5 6.1 5 .8 1.8 1.2 3.6 1.1 5.4z"/>` +
   `<path d="M12.8 18.6c3.2-.6 5.8-2.8 6.8-6.4.7-2.2.6-3.4.4-4-2.7.8-4.9 2.5-6.1 5-.8 1.8-1.2 3.6-1.1 5.4z"/>` +
   `<path d="M12 5.2c2.7 3 3.3 6.4 3.1 9-.2 2.5-1.4 4.4-3.1 5.6-1.7-1.2-2.9-3.1-3.1-5.6-.2-2.6.4-6 3.1-9z"/></g>`;
-export const LOGO_MARK = `<svg class="mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${MARK_BODY}</svg>`;
+export const LOGO_MARK = painted('mark', 'mark painted') ?? `<svg class="mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${MARK_BODY}</svg>`;
 /** The favicon: the mark on its own (standalone SVG with the xmlns a browser needs outside the page). */
 export const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${MARK_BODY}</svg>`;

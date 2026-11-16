@@ -35,3 +35,14 @@ speed (fast-forward; the multiplier shows on hover or focus, and stays shown whi
 **Deferred:** the reference's "☀ Day N" pill. The game has no day cycle or day length yet, and Look 5 doesn't
 invent gameplay. Once one exists (a day length in `tuning.ts`, optionally tied to Look 1's sun angle), it slots
 in as the row's first `.pill`.
+
+## Painted icons (5.2, second pass)
+
+The HUD's 22 main icons and the logo mark are painted in [klad](https://github.com/klad-app/klad) by
+`tools/icons/paint-icons.mjs` (the source of truth: it rebuilds every drawing each run) and shipped as PNGs in
+`src/ui/icons/` (96 px for 2×, 48 px for 1×, about 250 KB in all). Each icon is a set of parts, back to front,
+with flat colour, a clipped multiply shade and screen rim from `klad light`, tapered ink, white highlights and a
+soft glow. Re-paint with `KLAD=<path to klad> node tools/icons/paint-icons.mjs <workDir> [names]`.
+
+Small glyphs inside text (machine and event emoji) and the solid white pause, fast-forward and gear stay SVG.
+The favicon stays the SVG mark (a data URI). klad's drawings are ours to ship; klad itself is not distributed.
