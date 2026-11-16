@@ -97,36 +97,39 @@ const lawn = {
 };
 
 const flowers = {
-  /** the bed mix (legacy order: pink, yellow, lavender, white, orange) */
-  mix: ['#ff7eb6', '#ffd23f', '#b48cff', '#ffffff', '#ff9a5a'],
-  pink: '#ff7eb6',
-  blush: '#ff9fd0',
-  rose: '#ff9fb8',
-  pastelPink: '#ffb3d9',
-  red: '#ff6b6b',
-  orange: '#ff9a5a',
-  yellow: '#ffd23f',
-  sunflower: '#ffc93c',
-  pastelYellow: '#fff2a8',
-  lavender: '#b48cff',
-  lavenderDeep: '#9a7be0',
-  purple: '#8f6fd6',
-  blue: '#8fb8ff',
-  white: '#ffffff',
-  core: '#ffe28a',
-  daisyCore: '#ffc93c',
-  sunflowerCore: '#6b4423',
-  petalShade: '#e88aa8',
-  stem: '#3f9a3a',
-  stemSoft: '#6c9a5a',
+  /** the bed mix in legacy order (pink, yellow, lavender, white, orange); pick with flowerPick() for the weighted mix */
+  mix: ['#f2689f', '#f9d23a', '#a983d6', '#f8f6ee', '#ee8a2c'],
+  /** Look 2.4 (palette.md): hot pink and magenta lead, then white, lavender and purple, yellow, a little orange */
+  pink: '#f2689f',
+  magenta: '#d63d84',
+  blush: '#f58cb8',
+  rose: '#f59ab5',
+  pastelPink: '#f9b6d2',
+  red: '#e8574f',
+  orange: '#ee8a2c',
+  yellow: '#f9d23a',
+  sunflower: '#f6c22e',
+  pastelYellow: '#fbeaa0',
+  lavender: '#a983d6',
+  lavenderDeep: '#9270cc',
+  purple: '#7d58b5',
+  blue: '#8fa8e8',
+  white: '#f8f6ee',
+  /** centres: generic, daisy (yellow on white), sunflower (dark brown) */
+  core: '#f0c43a',
+  daisyCore: '#f0d22e',
+  sunflowerCore: '#6b4219',
+  petalShade: '#d9789c',
+  stem: '#4f8a32',
+  stemSoft: '#6c9a4f',
   /** Radiant: luminous gold flowers and their ground glow */
   radiant: ['#ffe066', '#fff6c2'],
   radiantDisc: '#fff1b8',
   /** far level of detail: the gold disc on a Radiant tile */
   radiantFar: '#ffe9a0',
-  /** tall spikes on Thriving tiles */
-  spikes: ['#b48cff', '#ff7eb6', '#8fb8ff', '#ffffff'],
-};
+  /** tall spikes on Thriving tiles (lupins, foxgloves) */
+  spikes: ['#a983d6', '#f2689f', '#7d58b5', '#f8f6ee'],
+};;
 
 const leaf = {
   light: '#7fb35a',
@@ -290,7 +293,7 @@ const props = {
   stallDead: '#9a8a70',
   stallAlive: '#c9a77a',
   awning: ['#b5655a', '#5a7fb5'],
-  produce: ['#ff9a5a', '#8be06b', '#ffd23f'],
+  produce: ['#ee8a2c', '#8fb443', '#f9d23a'],
   mushroom: '#e2483c',
   mushroomStem: '#f4efe6',
   bin: '#6b7378',
@@ -484,4 +487,44 @@ export function grassTone(stage: number, x: number, z: number): string {
   const patch = valueNoise(x / 7, z / 7, 23) * 0.75 + valueNoise(x / 2.5, z / 2.5, 29) * 0.25;
   // 0.5 is neutral; above leans sunlit, below leans into cool shade.
   return patch >= 0.5 ? mixHex(base, lawn.sunlit, (patch - 0.5) * 0.6) : mixHex(base, lawn.shadow, (0.5 - patch) * 0.55);
+}
+
+/** Look 2.4: the weighted flower mix: 40% pink (25 hot pink, 15 magenta), 20% white, 20% purple, 15% yellow, 5% orange. */
+const FLOWER_WEIGHTS: [string, number][] = [
+  [flowers.pink, 0.25],
+  [flowers.magenta, 0.15],
+  [flowers.white, 0.2],
+  [flowers.lavender, 0.12],
+  [flowers.purple, 0.08],
+  [flowers.yellow, 0.15],
+  [flowers.orange, 0.05],
+];
+/** A flower colour from the weighted mix for u in 0–1. */
+export function flowerPick(u: number): string {
+  let acc = 0;
+  for (const [c, w] of FLOWER_WEIGHTS) {
+    acc += w;
+    if (u < acc) return c;
+  }
+  return flowers.pink;
+}
+
+/**
+ * Look 2.4: the colour of flower clump `c` on the tile at (x, z). Beds read as drifts, not confetti: the main colour
+ * comes from low-frequency noise (neighbouring tiles share it, drifts are about five tiles across), and only about one
+ * clump in eight takes an accent colour instead.
+ */
+export function flowerAt(x: number, z: number, c = 0): string {
+  if (hash2(x * 3 + c, z * 7 - c, 71) < 0.12) return flowerPick(hash2(x, z, 73 + c));
+  // Rank-equalise the noise (value noise bunches around 0.5) so the drift mix keeps the weights.
+  const n = valueNoise(x / 5, z / 5, 79);
+  const u = n < 0.5 ? 2 * n * n : 1 - 2 * (1 - n) * (1 - n);
+  return flowerPick(u);
+}
+
+/** The centre colour for a petal colour: yellow on white daisies, dark brown on sunflowers, warm gold otherwise. */
+export function flowerCentre(petal: string): string {
+  if (petal === flowers.white) return flowers.daisyCore;
+  if (petal === flowers.yellow || petal === flowers.sunflower) return flowers.sunflowerCore;
+  return flowers.core;
 }

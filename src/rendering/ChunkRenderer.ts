@@ -7,7 +7,7 @@ import type { Sim } from '../gameplay/Sim';
 import { CITY_GEN, PARK_LAYOUT } from '../data/city';
 import { buildingPlots, type BuildingPlot } from '../core/Generation';
 import { PALETTE } from './Materials';
-import { grassTone } from './Palette';
+import { flowerAt, flowerCentre, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { FoliageBuilder, foliageMaterial, treeMesh, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates } from './TreeGen';
@@ -422,7 +422,7 @@ export class ChunkRenderer {
     b.add('box', col, [t.x + 0.5, h, t.z + 0.5], [1, 0.16, 1]);
     // Phase 5 E16: stages stay apart zoomed out too: a colour patch for Blooming, a gold disc for Radiant.
     if (t.ground === 'restored' && f !== 'water' && f !== 'paving') {
-      if (stage === 2) b.add('box', PALETTE.flower[t.variant % PALETTE.flower.length], [t.x + 0.4, h + 0.085, t.z + 0.55], [0.34, 0.02, 0.3]);
+      if (stage === 2) b.add('box', flowerAt(t.x, t.z), [t.x + 0.4, h + 0.085, t.z + 0.55], [0.34, 0.02, 0.3]);
       if (stage === 4) b.add('cylinder', PALETTE.flowers.radiantFar, [t.x + 0.5, h + 0.085, t.z + 0.5], [0.8, 0.02, 0.8]);
     }
     if (this.addTree(t, h, 0)) return;
@@ -688,7 +688,7 @@ export class ChunkRenderer {
       for (let c = 0; c < clusters; c++) {
         const cx = x + r.range(-span, span);
         const cz = z + r.range(-span, span);
-        const col = PALETTE.flower[(t.variant + c * 2) % PALETTE.flower.length];
+        const col = flowerAt(t.x, t.z, c);
         const n = 3 + ((t.variant + c) % 2);
         for (let i = 0; i < n; i++) {
           const a = (i / n) * Math.PI * 2 + r.next();
@@ -698,7 +698,7 @@ export class ChunkRenderer {
           b.add('cylinder', PALETTE.stem, [fx, top + ht / 2, fz], [0.02, ht, 0.02]);
           b.add('sphere', col, [fx, top + ht, fz], [0.13, 0.08, 0.13]);
         }
-        b.add('sphere', PALETTE.flowerCore, [cx, top + 0.2, cz], 0.06);
+        b.add('sphere', flowerCentre(col), [cx, top + 0.2, cz], 0.06);
       }
     }
     // Phase 5: a tree tile grows its tree from a sapling (Restored) to Radiant; other Thriving tiles get a seeded mix.

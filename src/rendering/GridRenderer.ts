@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 import type { LayerData, TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { PALETTE } from './Materials';
-import { grassTone } from './Palette';
+import { flowerAt, flowerCentre, flowerPick, grassTone } from './Palette';
 import { assignBatch, group, setVColor, vshape as shape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
 import { ease, type Tweens } from './Tween';
@@ -194,7 +194,7 @@ export class GridRenderer {
           // Life finds the cracks: weeds and the odd tiny flower.
           const n = st >= 2 ? 3 : 2;
           for (let i = 0; i < n; i++) add(shape(deco, 'cone', PALETTE.lawn.sprout, { pos: [r.range(-0.35, 0.35), 0.05, r.range(-0.35, 0.35)], scale: [0.05, 0.1, 0.05] }));
-          if (st >= 2 && t.variant % 2) add(shape(deco, 'sphere', r.pick(PALETTE.flower), { pos: [r.range(-0.3, 0.3), 0.08, r.range(-0.3, 0.3)], scale: 0.06 }));
+          if (st >= 2 && t.variant % 2) add(shape(deco, 'sphere', flowerPick(r.next()), { pos: [r.range(-0.3, 0.3), 0.08, r.range(-0.3, 0.3)], scale: 0.06 }));
         }
         break;
       }
@@ -238,10 +238,12 @@ export class GridRenderer {
             const f = add(group(deco, 'flower', [fr.range(-0.36, 0.36), 0, fr.range(-0.36, 0.36)]));
             shape(f, 'cylinder', PALETTE.stem, { pos: [0, h / 2, 0], scale: [0.02, h, 0.02] });
             switch ((t.variant + i) % 4) {
-              case 0: // cosmos
-                shape(f, 'sphere', fr.pick(PALETTE.flower), { pos: [0, h, 0], scale: [0.11, 0.07, 0.11] });
-                shape(f, 'sphere', PALETTE.flowerCore, { pos: [0, h + 0.03, 0], scale: 0.04 });
+              case 0: { // cosmos, in the bed's drift colour
+                const petal = fr.next() < 0.8 ? flowerAt(t.x, t.z, 0) : flowerPick(fr.next());
+                shape(f, 'sphere', petal, { pos: [0, h, 0], scale: [0.11, 0.07, 0.11] });
+                shape(f, 'sphere', flowerCentre(petal), { pos: [0, h + 0.03, 0], scale: 0.04 });
                 break;
+              }
               case 1: // daisy
                 shape(f, 'sphere', PALETTE.flowers.white, { pos: [0, h, 0], scale: [0.13, 0.025, 0.13] });
                 shape(f, 'sphere', PALETTE.flowers.sunflower, { pos: [0, h + 0.015, 0], scale: [0.05, 0.03, 0.05] });
@@ -290,7 +292,7 @@ export class GridRenderer {
               const s = fr.range(0.24, 0.34);
               shape(g, 'sphere', PALETTE.shrub[i], { pos: [fr.range(-0.12, 0.12), s / 2.2, fr.range(-0.12, 0.12)], scale: [s, s * 0.85, s], shadow: true });
             }
-            if (kind === 2) for (let i = 0; i < 4; i++) shape(g, 'sphere', fr.pick(PALETTE.flower), { pos: [fr.range(-0.15, 0.15), 0.26 + fr.range(0, 0.06), fr.range(-0.15, 0.15)], scale: 0.07 });
+            if (kind === 2) for (let i = 0; i < 4; i++) shape(g, 'sphere', flowerPick(fr.next()), { pos: [fr.range(-0.15, 0.15), 0.26 + fr.range(0, 0.06), fr.range(-0.15, 0.15)], scale: 0.07 });
           }
           v.sway.push(g);
         }
