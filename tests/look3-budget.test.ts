@@ -80,8 +80,9 @@ describe('Look 3 detail budget', () => {
     const near = run(2, 1);
     const mid = run(1, 0.6);
     console.log('lush lawn tile triangles', JSON.stringify({ near, mid }));
-    expect(near.worst, 'near worst').toBeLessThanOrEqual(2600);
-    expect(near.mean, 'near mean').toBeLessThanOrEqual(1500);
+    // near zoom shows only a few chunks; flower clumps on leafy mounds (owner review, Look 3.5) raised these
+    expect(near.worst, 'near worst').toBeLessThanOrEqual(3000);
+    expect(near.mean, 'near mean').toBeLessThanOrEqual(1950);
     expect(mid.worst, 'mid worst').toBeLessThanOrEqual(900);
     expect(mid.mean, 'mid mean').toBeLessThanOrEqual(650);
   });

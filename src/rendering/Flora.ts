@@ -127,15 +127,18 @@ export function buildFlowers(sp: FlowerSpecies, colour: number, open: boolean, v
   const R = rng(variant * 7717 + FLOWER_SPECIES.indexOf(sp) * 131 + colour * 17 + (open ? 3 : 0));
   const pc = hex(FLOWER_COLOURS[sp][colour % FLOWER_COLOURS[sp].length]);
   const detail = lod > 0;
-  const plants = sp === 'sunflower' ? 2 : sp === 'wild' ? 7 : sp === 'lavender' ? 6 : sp === 'daisy' ? 6 : 4;
+  const plants = sp === 'sunflower' ? 2 : sp === 'wild' ? 8 : sp === 'lavender' ? 5 : sp === 'daisy' ? 7 : 5;
   const spread = sp === 'sunflower' ? 0.07 : 0.09;
   const grow = open ? 1 : 0.7;
+  // Look 3.5: each clump sits on a low mound of leaves (the reference's flowers grow out of foliage, not bare soil)
+  const mr = spread + 0.035;
+  puff(B, { c: [0, 0.006, 0], r: [mr, sp === 'sunflower' ? 0.04 : 0.032, mr], base: LEAF, light: LEAF_LIGHT, dark: scaleC(LEAF, 0.55), leafy: true, flex: 0.2, seed: variant * 3 + 1, detail: detail ? 1 : 0, lump: 0.3 });
   for (let i = 0; i < plants; i++) {
     const a = R() * Math.PI * 2;
     const d = Math.sqrt(R()) * spread;
     const base: V = [Math.cos(a) * d, 0, Math.sin(a) * d];
     const lean: V = [(R() - 0.5) * 0.04, 0, (R() - 0.5) * 0.04];
-    const H = grow * (sp === 'sunflower' ? 0.28 + R() * 0.07 : sp === 'lavender' ? 0.17 + R() * 0.13 : sp === 'cosmos' ? 0.12 + R() * 0.08 : sp === 'daisy' ? 0.06 + R() * 0.05 : 0.03 + R() * 0.04);
+    const H = grow * (sp === 'sunflower' ? 0.28 + R() * 0.07 : sp === 'lavender' ? 0.17 + R() * 0.13 : sp === 'cosmos' ? 0.12 + R() * 0.08 : sp === 'daisy' ? 0.07 + R() * 0.05 : 0.055 + R() * 0.035);
     const top: V = add(add(base, [0, H, 0]), lean);
     const fx = 0.5 + H * 2.2;
     stem(B, base, top, sp === 'sunflower' ? 0.008 : 0.0035, fx);
@@ -160,12 +163,12 @@ export function buildFlowers(sp: FlowerSpecies, colour: number, open: boolean, v
     switch (sp) {
       case 'daisy': {
         const face = norm([(R() - 0.5) * 0.6, 1, (R() - 0.5) * 0.6]);
-        head(B, top, face, detail ? 10 : 6, 0.024, 0.009, pc, hex(PALETTE.flowerCentre), 0.009, fx, 0.12, R);
+        head(B, top, face, detail ? 10 : 6, 0.034, 0.012, pc, hex(PALETTE.flowerCentre), 0.009, fx, 0.12, R);
         break;
       }
       case 'cosmos': {
         const face = norm([(R() - 0.5) * 0.8, 1, (R() - 0.5) * 0.8]);
-        head(B, top, face, detail ? 7 : 5, 0.032, 0.022, pc, hex(PALETTE.flowerSunflower[0]), 0.008, fx, 0.2, R);
+        head(B, top, face, detail ? 7 : 5, 0.044, 0.03, pc, hex(PALETTE.flowerSunflower[0]), 0.008, fx, 0.2, R);
         break;
       }
       case 'sunflower': {
@@ -191,7 +194,7 @@ export function buildFlowers(sp: FlowerSpecies, colour: number, open: boolean, v
         // filler: tiny four-petal dots
         const face = norm([(R() - 0.5) * 0.5, 1, (R() - 0.5) * 0.5]);
         const col = hex(FLOWER_COLOURS.wild[(colour + i) % FLOWER_COLOURS.wild.length]);
-        head(B, top, face, 5, 0.011, 0.008, col, hex(PALETTE.flowerCore), 0.004, fx, 0.15, R);
+        head(B, top, face, 5, 0.017, 0.012, col, hex(PALETTE.flowerCore), 0.004, fx, 0.15, R);
       }
     }
   }
@@ -206,7 +209,9 @@ export function buildLeafyShrub(variant: number, lod: Lod, flowering = false): T
   const R = rng(variant * 9973 + (flowering ? 501 : 7));
   const k = 0.88 + R() * 0.24;
   const base = scaleC(hex(PALETTE.shrubLeaf[0]), k), light = scaleC(hex(PALETTE.shrubLeaf[1]), k), dark = hex(PALETTE.shrubLeaf[2]);
-  const n = 2; // two overlapping clusters (each a rounded cauliflower) keep a shrub under ~700 triangles
+  // two overlapping clusters: cauliflowers up close (under ~700 triangles), lumpy at mid zoom so the cheap version
+  // reads as a bush rather than a smooth bean (the foliage shader draws the leaves on both)
+  const n = 2;
   const bloom = hex(PALETTE.bougainvillea[variant % PALETTE.bougainvillea.length]);
   for (let i = 0; i < n; i++) {
     const s = 0.11 + R() * 0.07;
@@ -215,7 +220,7 @@ export function buildLeafyShrub(variant: number, lod: Lod, flowering = false): T
     const c: V = [Math.cos(a) * d, s * 0.8, Math.sin(a) * d];
     const r: V = [s, s * 0.82, s];
     // Look 3.6: rounded leaf clusters with dark crevices (no cards: nothing pointy), twigs, and blossom clusters
-    puff(B, { c, r, base, light, dark, flex: 0.25, seed: R() * 1e9, detail: lod === 0 ? 1 : 2, lump: lod === 0 ? 0 : 0.3, clusters: lod === 0 ? 0 : 6 });
+    puff(B, { c, r, base, light, dark, leafy: true, flex: 0.25, seed: R() * 1e9, detail: lod === 0 ? 1 : 2, lump: lod === 0 ? 0.22 : 0.3, clusters: lod === 0 ? 0 : 6 });
     if (lod > 0) {
       for (let k = 0; k < 2; k++) {
         const u = randDir(R, 0.2);
@@ -226,9 +231,9 @@ export function buildLeafyShrub(variant: number, lod: Lod, flowering = false): T
           const u = randDir(R, 0.15);
           const p = add(c, [u[0] * r[0] * 0.95, u[1] * r[1] * 0.95, u[2] * r[2] * 0.95]);
           const fr = 0.035 + R() * 0.015;
-          puff(B, { c: p, r: [fr, fr * 0.8, fr], base: scaleC(bloom, 0.95), light: mix(bloom, [1, 1, 1], 0.25), dark: scaleC(bloom, 0.7), flex: 0.35, seed: k, detail: 1, lump: 0 });
+          puff(B, { c: p, r: [fr, fr * 0.8, fr], base: scaleC(bloom, 0.95), light: mix(bloom, [1, 1, 1], 0.25), dark: scaleC(bloom, 0.7), leafy: true, flex: 0.35, seed: k, detail: 1, lump: 0 });
         }
-    } else if (flowering) puff(B, { c: add(c, [0, s * 0.4, 0]), r: [s * 0.7, s * 0.5, s * 0.7], base: bloom, light: mix(bloom, [1, 1, 1], 0.2), dark: scaleC(bloom, 0.7), flex: 0.3, seed: i, detail: 1, lump: 0 });
+    } else if (flowering) puff(B, { c: add(c, [0, s * 0.4, 0]), r: [s * 0.7, s * 0.5, s * 0.7], base: bloom, light: mix(bloom, [1, 1, 1], 0.2), dark: scaleC(bloom, 0.7), leafy: true, flex: 0.3, seed: i, detail: 1, lump: 0 });
   }
   return B.done();
 }

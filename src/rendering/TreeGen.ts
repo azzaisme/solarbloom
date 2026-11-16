@@ -12,6 +12,7 @@
  * The machine side of solarpunk: brass irrigation collars with a little status light round grown trunks,
  * glass sun-petals on the Sun-Catcher Birch, and moss-jar lanterns on Radiant trees.
  */
+import { PALETTE } from './Materials';
 
 export type Species = 'oak' | 'cherry' | 'birch' | 'pine' | 'willow';
 export const SPECIES: Species[] = ['oak', 'cherry', 'birch', 'pine', 'willow'];
@@ -167,7 +168,15 @@ interface PuffOpts {
    * to pull a single vertex into a point), with darker crevices between them.
    */
   clusters?: number;
+  /** Look 3.7: show the foliage shader's leaf pattern on this clump (default: any lumpy clump) */
+  leafy?: boolean;
 }
+
+/**
+ * Look 3.7: added to a vertex's flex to mark it as foliage, so the foliage shader draws leaves over it (rounded
+ * leaves with dark gaps, lit from above) at every zoom without any extra triangles. Flex itself stays below 2.
+ */
+export const LEAF_FLAG = 2;
 
 /** A soft, lumpy foliage clump: an ellipsoid with low-frequency bumps and baked sun / sky / ambient shading. */
 function puff(B: Buf, o: PuffOpts) {
@@ -182,6 +191,7 @@ function puff(B: Buf, o: PuffOpts) {
   // broad falloff for clusters (rounded bumps); the old narrow lobes made spikes on coarse spheres
   const sharp = nc ? 5 : 9;
   const base = B.n;
+  const leafy = o.leafy ?? o.lump !== 0 ? LEAF_FLAG : 0;
   for (const u of ico.v) {
     let bump = 0;
     let top = 0;
@@ -206,7 +216,7 @@ function puff(B: Buf, o: PuffOpts) {
     }
     // gentle per-vertex variation so clumps don't look plastic
     col = scaleC(col, nc ? 0.74 + 0.32 * Math.min(1, top * 1.4) : 0.94 + R() * 0.1);
-    B.v(p, n, col, o.flex * (0.75 + 0.25 * up));
+    B.v(p, n, col, o.flex * (0.75 + 0.25 * up) + leafy);
   }
   for (const [a, b, c] of ico.f) B.tri(base + a, base + b, base + c);
 }
@@ -350,46 +360,20 @@ interface Palette {
   dark: C;
 }
 function leafPalette(sp: Species, R: () => number, stage: TreeStage): Palette {
-  const j = (a: number, b: number) => lerp(a, b, R());
-  switch (sp) {
-    case 'cherry': {
-      // pink when it first blooms, the full pink crown later; Thriving leafs out a little green
-      const h = j(330, 346);
-      return { base: hsl(h, 62, 76), light: hsl(h + 8, 66, 84), dark: hsl(h - 6, 45, 56) };
-    }
-    case 'birch': {
-      const h = j(90, 104);
-      return { base: hsl(h, 54, 34), light: hsl(h - 12, 62, 52), dark: hsl(h + 26, 46, 18) };
-    }
-    case 'pine': {
-      const h = j(146, 158);
-      return { base: hsl(h, 42, 32), light: hsl(h - 14, 48, 50), dark: hsl(h + 10, 40, 18) };
-    }
-    case 'willow': {
-      const h = j(94, 106);
-      return { base: hsl(h, 48, 38), light: hsl(h - 12, 58, 56), dark: hsl(h + 22, 42, 20) };
-    }
-    default: {
-      const h = j(108, 124) - (stage === 4 ? 6 : 0);
-      return { base: hsl(h, 52, 30), light: hsl(h - 14, 60, 47), dark: hsl(h + 28, 50, 15) };
-    }
-  }
+  // Look 3.7: colours come from PALETTE.treeLeaf; each tree sits somewhere between the species' two ends
+  // (the same one R() draw as before, so variants keep their look). Radiant oaks lean to the warmer end.
+  const [a, b] = PALETTE.treeLeaf[sp];
+  const k = R() * (sp === 'oak' && stage === 4 ? 0.6 : 1);
+  return { base: mix(hex(a[0]), hex(b[0]), k), light: mix(hex(a[1]), hex(b[1]), k), dark: mix(hex(a[2]), hex(b[2]), k) };
 }
 
-const BARK: Record<Species, C> = {
-  oak: hsl(26, 32, 34),
-  cherry: hsl(12, 30, 32),
-  birch: hsl(40, 18, 92),
-  pine: hsl(22, 30, 28),
-  willow: hsl(30, 26, 36),
-};
+const BARK = Object.fromEntries(SPECIES.map((s) => [s, hex(PALETTE.treeBark[s])])) as Record<Species, C>;
 const BRASS = hex('#d9a441');
 const CREAM = hex('#f6efdc');
 const CYAN = hex('#6fe3e0');
 const GLOW = hex('#ffe9a3');
 const NAVY = hex('#24406e');
-const STAKE = hex('#d8c07a');
-const MULCH = hsl(25, 38, 24);
+const MULCH = hex(PALETTE.treeMulch);
 
 /** One crown "anchor": where a limb ends and a foliage clump sits. */
 interface Anchor {
@@ -471,15 +455,15 @@ function farTree(B: Buf, sp: Species, S: number, pal: Palette, bark: C) {
   const [th, cr, ch] = shape[sp];
   tube(B, [[0, 0, 0], [0, th * S + ch * S * 0.4, 0]], [0.07 * S, 0.05 * S], 4, [scaleC(bark, 0.75), bark], [0, 0.1], false);
   const c: V = [0, th * S + ch * S * 0.85, 0];
-  puff(B, { c, r: [cr * S, ch * S, cr * S], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.5, seed: 1, detail: 1, lump: 0 });
+  puff(B, { c, r: [cr * S, ch * S, cr * S], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.5, seed: 1, detail: 1, lump: 0, leafy: true });
   return B;
 }
 
 function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette, bark: C, barkDark: C, det: number, big: number, stage: TreeStage, lod: Lod = 1) {
   const birch = sp === 'birch';
   const cherry = sp === 'cherry';
-  const trunkH = (birch ? 0.78 : cherry ? 0.42 : 0.5) * S;
-  const trunkR = (birch ? 0.05 : 0.075) * S;
+  const trunkH = (birch ? 0.74 : cherry ? 0.4 : 0.46) * S;
+  const trunkR = (birch ? 0.058 : 0.092) * S;
   const lean: V = [(R() - 0.5) * 0.12, 1, (R() - 0.5) * 0.12];
   // trunk: a gently curving, flared tube
   const tp: V[] = [];
@@ -490,9 +474,9 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
   for (let i = 0; i <= segs; i++) {
     const k = i / segs;
     tp.push([lean[0] * k * trunkH + Math.sin(k * 3 + R()) * 0.012, k * trunkH, lean[2] * k * trunkH]);
-    tr.push(trunkR * (1 - 0.35 * k) * (1 + 0.6 * Math.exp(-k * 8)));
+    tr.push(trunkR * (1 - 0.38 * k) * (1 + 0.95 * Math.exp(-k * 7))); // Look 3.7: sturdy, with a root flare
     let c = mix(barkDark, bark, clamp(k * 1.6, 0, 1));
-    if (birch && i > 0 && i < segs && R() < 0.5) c = hsl(30, 12, 22); // birch eyes
+    if (birch && i > 0 && i < segs && R() < 0.5) c = hex(PALETTE.birchEye); // birch eyes
     tc.push(c);
     tf.push(k * 0.12);
   }
@@ -508,7 +492,7 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
     const a = (i / nLimb) * Math.PI * 2 + R() * 0.8;
     const rr = spread * (0.75 + R() * 0.4);
     const y = crownY + (birch ? (i - 1) * 0.16 * S : (R() - 0.35) * 0.14 * S);
-    anchors.push({ p: [heart[0] + Math.cos(a) * rr, y, heart[2] + Math.sin(a) * rr], r: (birch ? 0.17 : cherry ? 0.2 : 0.22) * S * (0.8 + R() * 0.35) });
+    anchors.push({ p: [heart[0] + Math.cos(a) * rr, y, heart[2] + Math.sin(a) * rr], r: (birch ? 0.18 : cherry ? 0.22 : 0.24) * S * (0.8 + R() * 0.35) });
   }
   // limbs from the trunk top to each clump (mostly hidden, they show between clumps)
   for (const an of anchors) {
@@ -525,7 +509,7 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
   const leaf = (p: V, r: V, d: number, seed: number, flex: number, n = 7) => {
     if (det < 2) return puff(B, { c: p, r, base: pal.base, light: pal.light, dark: pal.dark, flex, seed, detail: det > 0 ? Math.max(d, 2) : d, crown: heart, crownR, lump: 0.32, clusters: det > 0 ? n : 0 });
     const Rl = rng(seed);
-    puff(B, { c: p, r: mul(r, 0.66) as V, base: scaleC(pal.base, 0.7), light: pal.base, dark: pal.dark, flex: flex * 0.8, seed, detail: 0, crown: heart, crownR, lump: 0 }); // hidden core: coarse is fine
+    puff(B, { c: p, r: mul(r, 0.66) as V, base: scaleC(pal.base, 0.7), light: pal.base, dark: pal.dark, flex: flex * 0.8, seed, detail: 0, crown: heart, crownR, lump: 0, leafy: true }); // hidden core: coarse is fine
     const count = Math.round(clamp((r[0] * r[2]) / 0.01, 4, 10));
     const big = Math.max(r[0], r[1], r[2]);
     for (let i = 0; i < count; i++) {
@@ -534,7 +518,7 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
       const cp: V = [p[0] + u[0] * r[0] * depth, p[1] + u[1] * r[1] * depth, p[2] + u[2] * r[2] * depth];
       const cr = big * (0.3 + Rl() * 0.14);
       const cs: V = [cr, cr * 0.82, cr];
-      puff(B, { c: cp, r: cs, base: pal.base, light: pal.light, dark: pal.dark, flex: flex * (0.8 + 0.3 * depth), seed: Rl() * 1e9, detail: 1, crown: heart, crownR, lump: 0 });
+      puff(B, { c: cp, r: cs, base: pal.base, light: pal.light, dark: pal.dark, flex: flex * (0.8 + 0.3 * depth), seed: Rl() * 1e9, detail: 1, crown: heart, crownR, lump: 0, leafy: true });
       if (lod === 3) leafSkin(B, cp, cs, 8, pal, flex * (0.8 + 0.3 * depth), Rl);
       if (i % 3 === 0 && u[1] < 0.5) tube(B, [p, add(p, mul(sub(cp, p), 0.85))], [0.012 * S, 0.006 * S], 3, [bark, bark], [flex * 0.6, flex * 0.85], false);
     }
@@ -547,7 +531,7 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
     const an = anchors[(i * 2) % anchors.length];
     const c = add(an.p, [0, an.r * 0.5, 0]);
     const r: V = [an.r * 0.5, an.r * 0.42, an.r * 0.5];
-    puff(B, { c, r, base: hsl(340, 30, 93), light: hsl(0, 0, 97), dark: hsl(338, 40, 80), flex: 0.85, seed: R() * 1e9, detail: det > 0 ? 2 : 0, crown: heart, crownR, clusters: det > 0 ? 5 : 0 });
+    puff(B, { c, r, base: hex(PALETTE.treeBlossom[0]), light: hex(PALETTE.treeBlossom[1]), dark: hex(PALETTE.treeBlossom[2]), flex: 0.85, seed: R() * 1e9, detail: det > 0 ? 2 : 0, crown: heart, crownR, clusters: det > 0 ? 5 : 0 });
   }
   // machine side: glass sun-petals on the birch, turned to the light
   if (birch && det > 0) {
@@ -605,22 +589,26 @@ function willow(B: Buf, R: () => number, S: number, pal: Palette, bark: C, barkD
 function sapling(B: Buf, sp: Species, R: () => number, lod: Lod) {
   const pal = leafPalette(sp, R, 1);
   const bark = BARK[sp];
-  const h = 0.3 + R() * 0.06;
-  // mulch ring and a bamboo stake tied with twine
-  plate(B, [0, 0.004, 0], 0.17, [0, 1, 0], MULCH, 0, 9);
-  tube(B, [[0, 0, 0], [0.01, h * 0.6, 0], [0.005, h, 0.005]], [0.022, 0.016, 0.01], 5, [bark, bark, bark], [0, 0.25, 0.5]);
-  if (lod > 0) {
-    tube(B, [[0.06, 0, 0.02], [0.06, h * 0.85, 0.02]], [0.009, 0.007], 4, [STAKE, STAKE], [0, 0]);
-    tube(B, [[0.06, h * 0.5, 0.02], [0.006, h * 0.5, 0.0]], [0.004, 0.004], 3, [hex('#b48a5a'), hex('#b48a5a')], [0, 0.05], false);
-  }
+  // Look 3.7: a young tree, not a lollipop on a stick: a short sturdy trunk with a flared foot under a rounded
+  // crown of a few overlapping leafy clusters that comes down far enough to hide most of the stem.
+  const h = 0.2 + R() * 0.05;
+  plate(B, [0, 0.004, 0], 0.15, [0, 1, 0], MULCH, 0, 9);
+  tube(B, [[0, 0, 0], [0.006, h * 0.5, 0], [0.01, h, 0.004]], [0.034, 0.022, 0.016], 6, [scaleC(bark, 0.8), bark, bark], [0, 0.2, 0.4]);
   if (sp === 'pine') {
-    puff(B, { c: [0, h * 0.75, 0], r: [0.09, 0.07, 0.09], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.6, seed: R() * 1e9, detail: 1 });
-    puff(B, { c: [0, h * 1.02, 0], r: [0.05, 0.07, 0.05], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.8, seed: R() * 1e9, detail: 1 });
+    puff(B, { c: [0, h * 0.7, 0], r: [0.12, 0.08, 0.12], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.6, seed: R() * 1e9, detail: 1, leafy: true });
+    puff(B, { c: [0, h * 1.05, 0], r: [0.085, 0.08, 0.085], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.7, seed: R() * 1e9, detail: 1, leafy: true });
+    puff(B, { c: [0, h * 1.4, 0], r: [0.045, 0.07, 0.045], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.85, seed: R() * 1e9, detail: 1, leafy: true });
     return B;
   }
-  const c: V = [0.005, h + 0.04, 0.005];
-  puff(B, { c, r: [0.1, 0.085, 0.1], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.7, seed: R() * 1e9, detail: lod > 0 ? 2 : 1, lump: 0.2, clusters: lod > 0 ? 5 : 0 });
-  puff(B, { c: add(c, [0.06, -0.03, 0.03]), r: [0.06, 0.05, 0.06], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.75, seed: R() * 1e9, detail: 1 });
+  const c: V = [0.01, h + 0.06, 0.004];
+  const heart: V = [c[0], c[1] - 0.02, c[2]];
+  puff(B, { c, r: [0.14, 0.11, 0.14], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.7, seed: R() * 1e9, detail: 2, lump: 0.24, clusters: lod > 0 ? 6 : 0, crown: heart, crownR: 0.2 });
+  const n = lod > 0 ? 3 : 2;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + R() * 0.8;
+    const rr = 0.08 + R() * 0.03;
+    puff(B, { c: [c[0] + Math.cos(a) * 0.1, c[1] - 0.03 - R() * 0.03, c[2] + Math.sin(a) * 0.1], r: [rr, rr * 0.85, rr], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.75, seed: R() * 1e9, detail: 1, lump: 0.2, crown: heart, crownR: 0.2 });
+  }
   return B;
 }
 

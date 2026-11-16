@@ -15,6 +15,11 @@ vertex-colour material (`DetailTex.ts`, patching `diffusePS` and `normalMapPS`) 
   rotated), so nothing visibly repeats over a 10×10 area.
 - **Distance:** faded with camera distance (bands per quality tier), so the far view is plain colour.
 - **Foliage:** the foliage material is deliberately left out; the stone and grass normals made canopies crinkly.
+- **Leaves (Look 3.7, owner review against the reference):** the foliage material draws its own leaves instead:
+  a 3D cellular pattern in world space (`Foliage.ts`, `diffusePS` / `normalMapPS`) over every clump whose vertices
+  carry `LEAF_FLAG` (+2 on the flex in `position.w`). Each cell is a rounded leaf, lighter toward the sun, with dark
+  gaps and a bent normal. It costs no triangles or textures and fades out by screen size (`fwidth`) so far trees
+  don't shimmer. Strength per tier via `setLeafTier`.
 
 **Textures:** two 256² RGBA maps, generated procedurally at startup a slice per frame after first paint, with
 flat 1×1 placeholders until then.

@@ -120,6 +120,26 @@ export const PALETTE = {
   insectWing: '#eef6ff',
   leafDrift: ['#a8743c', '#8f9a3a', '#c98f3c'],
   petalFall: ['#ffd1e6', '#ffffff', '#ffb3d1'],
+  // Look 3.7 trees: each species' canopy as [base, light, dark] at the two ends of its range (a tree mixes
+  // between them by variant), bark, blossom and the bits at the foot of a sapling
+  treeLeaf: {
+    oak: [['#357425', '#6ec030', '#13391d'], ['#25742a', '#48c030', '#133928']],
+    cherry: [['#e89cc2', '#f1bbcf', '#c15c99'], ['#e89cae', '#f1bbc1', '#c15c7e']],
+    birch: [['#578628', '#a3d039', '#1c4319'], ['#418628', '#80d039', '#194320']],
+    pine: [['#2f744d', '#42bd5b', '#1c4032'], ['#2f745b', '#42bd73', '#1c4039']],
+    willow: [['#5b8f32', '#a0d04e', '#20481e'], ['#488f32', '#86d04e', '#1e4823']],
+  } as Record<string, string[][]>,
+  treeBark: { oak: '#72533b', cherry: '#6a4339', birch: '#eeece7', pine: '#5d4232', willow: '#745c44' } as Record<string, string>,
+  birchEye: '#3f3831',
+  /** cherry blossom clumps: base, light, dark */
+  treeBlossom: ['#f3e8eb', '#f7f7f7', '#e0b8c7'],
+  treeMulch: '#543926',
+  /** leaves that fall from each species' crown (Pollinators); pines drop nothing */
+  treeLeafFall: {
+    oak: ['#6ea83a', '#a8b83f', '#c98f3c'],
+    birch: ['#b8cf4a', '#e0c24a', '#9cc23f'],
+    willow: ['#8fbf4a', '#b5cf62', '#c7b85a'],
+  } as Record<string, string[]>,
   // Look 3.12 machines
   orbLit: '#b6ffe0',
   orbDark: '#3f6b4a',

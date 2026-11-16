@@ -21,7 +21,7 @@ import { Birds } from '../rendering/Birds';
 import { Fauna } from '../rendering/Fauna';
 import { EcoBadge } from '../ui/EcoBadge';
 import { CameraController } from '../rendering/CameraController';
-import { setTreeCursor } from '../rendering/Foliage';
+import { setLeafTier, setTreeCursor } from '../rendering/Foliage';
 import { detailTextures } from '../rendering/DetailTex';
 import { Pollinators } from '../rendering/Pollinators';
 import { CatVisuals } from '../rendering/CatVisuals';
@@ -366,6 +366,7 @@ export class Game {
     // Look 3: surface detail and foliage density follow the quality tier.
     const detailTier = this.faunaTier ?? (s.lowVfx ? 'low' : 'high');
     detailTextures.setTier(detailTier);
+    setLeafTier(detailTier);
     if (this.chunks) this.chunks.setDetail(detailTier);
     if (this.chunks && this.chunks.lowFog !== !!s.lowFog) {
       this.chunks.lowFog = !!s.lowFog;
