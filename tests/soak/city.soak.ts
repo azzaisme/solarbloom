@@ -177,6 +177,17 @@ describe('soak: the endless city (City 15.1)', () => {
     const json = saver.serialize(sim.state);
     const back = new Sim(saver.deserialize(await SaveService.decode(stored))!);
     expect(saver.serialize(back.state)).toBe(json);
+    // Look 6 (#180): mid-transition, too: every kind of transition on a few hundred tiles survives a save and load.
+    const kinds = ['soften', 'moss', 'restore', 'bloom', 'unblock'] as const;
+    let n = 0;
+    for (const c of sim.grid.loadedChunks())
+      for (const t of c.tiles) if (t && !t.blocked && n < 300) sim.transitions.begin(t, kinds[n % 5], 4 + (n++ % 7), { from: 50, dir: n % 5, g: n % 9 === 0 });
+    sim.advance(1);
+    const mid = saver.serialize(sim.state);
+    const again = new Sim(saver.deserialize(mid)!);
+    for (const c of again.grid.loadedChunks()) void c;
+    expect(saver.serialize(again.state)).toBe(mid);
+    log(`mid-transition save: ${sim.transitions.liveCount} tiles mid-transition round-trip exactly`);
   });
 
   it('is deterministic: the same seed plays out to the same save', { timeout: 10 * 60_000 }, async () => {

@@ -10,6 +10,7 @@ import { ease, type Tweens } from './Tween';
 import { foliageMaterial, treeMesh } from './Foliage';
 import { treeGeo } from './TreeGen';
 import { machineRunning } from './FaunaPlan';
+import { cultivatorDock } from './CultivatorVisuals';
 
 interface MachineView {
   m: MachineData;
@@ -164,6 +165,9 @@ export class MachineVisuals {
         break;
       case 'relay':
         this.relay(v);
+        break;
+      case 'cultivator': // Look 6.9: the dock (its tillers are drawn by CultivatorVisuals)
+        cultivatorDock(v.body);
         break;
     }
     if ((m.tier ?? 1) >= 2) this.tier2(v);

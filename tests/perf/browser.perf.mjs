@@ -34,10 +34,10 @@ const LIMITS = {
   // calls block on the software rasteriser, so they measure the runner, not the game.
   updateMedianMs: 20, // measured 12–15 ms on a 4-core cloud container
   hitchMs: 50, // a frame whose update crosses this is a hitch
-  hitches: { pan: 8, zoom: 6, chain: 8 },
+  hitches: { pan: 8, zoom: 6, chain: 8, transitions: 8 },
   // Per frame, phase median: under 400 at every zoom (machines merge into per-region batches, ground is one
   // mesh per chunk). The chain phase's worst frames are the instant 800 gardens appear, before they batch.
-  drawCalls: { pan: 400, zoom: 400, chain: 400 },
+  drawCalls: { pan: 400, zoom: 400, chain: 400, transitions: 400 },
   chainMinCombo: CHAIN,
   saveStepMs: 16, // each main-thread step of an autosave (serialize, base64, storage write) fits in a frame
   catchUpSimMs: 16, // City 06.5: catching up 5 minutes away never spends more than this on simulation in one frame
@@ -328,6 +328,78 @@ try {
     for (let i = 0; i < 600 && s.chains.activeRuns > 0; i++) s.advance(0.1);
     return window.__chain.combo;
   });
+  // 6. Look 6 (#180): the worst case for living transitions. The corridor dies again and a second ×500 chain runs
+  // through it while an area-clear wave rolls, three Cultivators work and hundreds of tiles around the view soften,
+  // turn to moss, bloom and soak at once — all through the transition framework (no tween or entity per tile).
+  if (!process.env.PERF_NO_TRANSITIONS) {
+    results.trSetup = await page.evaluate((row) => {
+      const g = window.solarbloom;
+      const s = g.sim;
+      if (!s.transitions) return { skipped: true };
+      const B = s.state.resources.energy.constructor;
+      s.state.resources.energy = new B(1e6);
+      s.state.caps.energy = new B(1e6);
+      for (let x = row.from; x <= row.from + row.len; x++)
+        for (let dz = -27; dz <= 27; dz++) {
+          const t = s.grid.get('g', x, row.z + dz);
+          if (!t || t.blocked || t.occupantId || s.isCoreTile(t)) continue;
+          t.ground = 'polluted';
+          t.bloom = 0;
+          t.pollution = 1;
+          s.grid.touch(t);
+        }
+      const cx = row.from + 20;
+      const cz = row.z;
+      // an area-clear wave near the view
+      const area = s.areas.areaOf(s.grid.get('g', cx, cz + 30)) ?? s.areas.areaOf(s.grid.get('g', cx, cz));
+      if (area) g.chunks.markArea(area, true);
+      // three Cultivators, Wide Tines 2, on restored ground beside the corridor
+      let cultivators = 0;
+      for (let dz = 28; dz < 60 && cultivators < 3; dz += 2)
+        for (let dx = 0; dx < 40 && cultivators < 3; dx += 7) {
+          const t = s.grid.get('g', cx + dx, cz + dz);
+          if (!t || t.blocked || t.occupantId) continue;
+          t.ground = 'restored';
+          t.bloom = Math.max(1, t.bloom);
+          const m = { id: s.newId('m'), type: 'cultivator', roofId: 'g', x: t.x, z: t.z, size: 1, boostUntil: 0, timer: 0, charge: 0, upg: { cultWidth: 2, cultSecond: 1 } };
+          s.state.machines.push(m);
+          s.grid.indexMachine(m);
+          t.occupantId = m.id;
+          s.bus.emit('machine.built', { machine: m });
+          cultivators++;
+        }
+      // everything else around the view mid-transition
+      let n = 0;
+      for (let z = cz - 40; z <= cz + 40; z++)
+        for (let x = cx - 40; x <= cx + 40; x++) {
+          const t = s.grid.get('g', x, z);
+          if (!t || t.blocked || t.occupantId || (z >= cz - 27 && z <= cz + 27 && x >= row.from && x <= row.from + row.len)) continue;
+          if (t.ground === 'restored') {
+            if ((x + z) % 3 === 0) s.transitions.lush(t, s.time + 25);
+            else s.transitions.begin(t, 'bloom', 5, { from: Math.max(1, t.bloom - 1) });
+          } else if (t.ground === 'prepared') s.transitions.begin(t, 'moss', 6, { from: 40, dir: 1 + ((x + z) & 3) });
+          else s.transitions.begin(t, 'soften', 3, { from: 100, dir: 1 + ((x + z) & 3) });
+          n++;
+        }
+      g.chunks.markAll();
+      const start = s.grid.get('g', row.from, row.z);
+      start.occupantId = undefined;
+      s.restoration.complete(start, 'pulse');
+      g.camera.glide(cx, 0, cz, 0.9);
+      return { tiles: n, cultivators, live: s.transitions.liveCount };
+    }, results.chainSetup.row);
+    phase('transitions set up');
+    if (!results.trSetup.skipped) {
+      await measure('transitions', 150, '');
+      results.trCounts = await page.evaluate(() => {
+        const g = window.solarbloom;
+        let drawn = 0;
+        for (const v of g.transitions.liveByChunk.values()) drawn += v;
+        return { sim: g.sim.transitions.liveCount, drawn, cultivating: g.sim.cultivators.working().length };
+      });
+      if (process.env.PERF_SHOT) await page.screenshot({ path: process.env.PERF_SHOT.replace(/\.png$/, '-transitions.png') });
+    }
+  }
   results.errors = errors;
 
   // Checks.
@@ -335,11 +407,12 @@ try {
   if (errors.length) failures.push(`page errors: ${errors.slice(0, 3).join(' | ')}`);
   if (r.loadMs > LIMITS.loadMs) failures.push(`load ${r.loadMs} ms > ${LIMITS.loadMs}`);
   for (const [k, v] of Object.entries(r.autosave)) if (v > LIMITS.saveStepMs) failures.push(`autosave ${k} ${v.toFixed(1)} ms > ${LIMITS.saveStepMs}`);
-  for (const k of ['pan', 'zoom', 'chain']) {
+  for (const k of ['pan', 'zoom', 'chain', 'transitions']) {
+    if (!r[k]) continue;
     if (r[k].updateMedian > LIMITS.updateMedianMs) failures.push(`${k} update median ${r[k].updateMedian.toFixed(1)} ms > ${LIMITS.updateMedianMs}`);
     if (r[k].hitches > LIMITS.hitches[k]) failures.push(`${k} hitches ${r[k].hitches} (update > ${LIMITS.hitchMs} ms) > ${LIMITS.hitches[k]}`);
   }
-  for (const k of ['pan', 'zoom', 'chain']) if (r[k].drawCalls > LIMITS.drawCalls[k]) failures.push(`${k} draw calls ${r[k].drawCalls} > ${LIMITS.drawCalls[k]}`);
+  for (const k of ['pan', 'zoom', 'chain', 'transitions']) if (r[k] && r[k].drawCalls > LIMITS.drawCalls[k]) failures.push(`${k} draw calls ${r[k].drawCalls} > ${LIMITS.drawCalls[k]}`);
   if (r.catchUp.simMsWorst > LIMITS.catchUpSimMs) failures.push(`catch-up spent ${r.catchUp.simMsWorst.toFixed(1)} ms of simulation in one frame > ${LIMITS.catchUpSimMs}`);
   if (r.catchUp.simulated < 299) failures.push(`catch-up simulated only ${r.catchUp.simulated.toFixed(0)} s of 300`);
   if (r.chainCombo < LIMITS.chainMinCombo) failures.push(`chain reached ×${r.chainCombo} < ×${LIMITS.chainMinCombo}`);
@@ -350,13 +423,14 @@ try {
 
 const f = (x) => x.toFixed(1);
 console.log(`city: ${results.city?.areas} areas, ${results.city?.machines} machines, save ${((results.city?.bytes ?? 0) / 1024).toFixed(0)} KB · reload ${results.loadMs} ms`);
-for (const k of ['pan', 'zoom', 'chain']) {
+for (const k of ['pan', 'zoom', 'chain', 'transitions']) {
   const r = results[k];
   if (r) console.log(`${k.padEnd(5)} ${r.frames} frames · update median ${f(r.updateMedian)} p95 ${f(r.updateP95)} worst ${f(r.updateWorst)} ms · hitches ${r.hitches} · draw calls ${r.drawCalls} (worst ${r.drawCallsWorst}) · render ${f(r.renderMedian)} ms · frame ${f(r.median)} ms`);
 }
 if (results.catchUp) console.log(`catch-up: 300 s away → ${results.catchUp.simulated.toFixed(0)} s simulated over ${results.catchUp.frames} frames · worst frame ${f(results.catchUp.simMsWorst)} ms of simulation`);
 if (results.autosave) console.log(`autosave (main thread, worst of 5): serialize ${f(results.autosave.serialize)} ms · base64 ${f(results.autosave.encode)} ms · write ${f(results.autosave.write)} ms`);
 console.log(`chain: ×${results.chainCombo} along a ${results.chainSetup?.row.len}-tile corridor of ${results.chainSetup?.gardens} gardens`);
+if (results.trSetup && !results.trSetup.skipped) console.log(`transitions (Look 6): a second ×500 chain + an area wave + ${results.trSetup.cultivators} Cultivators + ${results.trSetup.tiles} tiles set mid-transition (${results.trSetup.live} live in the sim at the start; ${results.trCounts?.sim} live, ${results.trCounts?.drawn} drawn as transitions after 150 frames)`);
 if (process.env.PERF_JSON) writeFileSync(process.env.PERF_JSON, JSON.stringify(results, null, 2));
 if (failures.length) {
   for (const m of failures) console.error('  ✗', m);

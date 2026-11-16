@@ -8,6 +8,12 @@ export interface GameEvents {
   'tile.prepared': { tile: TileData };
   'tile.softened': { tile: TileData };
   'tile.nurtured': { tile: TileData; level: number; auto?: boolean };
+  /** Look 6.16: a tile became (or stayed) lush; its wet mask soaks in. */
+  'tile.lush': { tile: TileData };
+  /** Look 6.10: a tap knocked a tile's transition along. */
+  'tile.knocked': { tile: TileData };
+  /** Look 6: a tile's transition changed without a state change (a delayed wave, a Cultivator phase). */
+  'tile.transition': { tile: TileData };
   'resource.gain': { kind: ResourceKind; amount: Big; tileId?: string; reason?: string };
   'resource.full': { kind: ResourceKind };
   'machine.built': { machine: MachineData };

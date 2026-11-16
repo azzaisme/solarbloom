@@ -66,6 +66,11 @@ export function areaPanelData(sim: Sim, id: string): AreaPanelData {
   };
 }
 
+/** Look 6.10: tiles a Cultivator is working in this area right now. */
+function cultivating(s: Sim, id: string): number {
+  return s.cultivators.working().filter((t) => t.roofId === 'g' && s.areas.areaOf(t) === id).length;
+}
+
 /** The area panel: opened from an area's landmark or its label in the overview. */
 export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string {
   const s = sim;
@@ -132,6 +137,7 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     `<ul style="margin:6px 0;padding-left:18px;font-size:12.5px;list-style:none">${checklist}</ul>` +
     (id === PARK ? '' : `<p class="stat">${cleared ? 'Bonus' : 'Bonus once clear'}: ${bonusText || '—'}</p>`) +
     `<p class="stat">Machines: ${machineText || 'none yet'}</p>` +
+    (cultivating(s, id) ? `<p class="stat" data-cultivating="${esc(id)}">🚜 ${cultivating(s, id)} tile${cultivating(s, id) === 1 ? '' : 's'} being cultivated</p>` : '') +
     district +
     switches +
     wake

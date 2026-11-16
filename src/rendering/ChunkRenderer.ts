@@ -12,6 +12,7 @@ import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { FoliageBuilder, foliageMaterial, treeMesh, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates } from './TreeGen';
 import { treeSpot, treeStage } from './TreePlacement';
+import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
 
 /** Small seeded RNG for decoration placement (looks only). */
 class VRng {
@@ -196,7 +197,34 @@ interface ChunkView {
   fading?: boolean;
   /** built at far level of detail (slabs only) */
   far?: boolean;
+  /** Look 6.12: the living surface (every ground slab) and the props of tiles mid-transition */
+  surface?: pc.Entity;
+  trans?: pc.Entity;
+  /** Look 6.12: when the last transition drawn in this chunk ends (visual clock); 0 = none */
+  trEnd?: number;
+  /** Look 6.18: last rebuild during an area wave */
+  waveAt?: number;
+  /** Look 6.18: the fog is rolling back as a front (kept until the wave ends, then rebuilt) */
+  fogHold?: boolean;
 }
+
+/** Look 6.18: fog opacity with a receding front (a circle growing from the landmark, with a wobbly edge). */
+const FOG_FRONT_PS = /* glsl */ `
+uniform float material_opacity;
+uniform float material_alphaDitherScale;
+uniform vec4 uFogFront;
+void getOpacity() {
+	dAlpha = material_opacity;
+	#ifdef STD_OPACITY_VERTEX
+	dAlpha *= clamp(vVertexColor.a, 0.0, 1.0);
+	#endif
+	if (uFogFront.w > 0.0) {
+		float d = distance(vPositionW.xz, uFogFront.xy);
+		float wob = sin(vPositionW.x * 1.3 + vPositionW.z * 0.7) * 0.9 + sin(vPositionW.z * 2.1 - vPositionW.x * 0.4) * 0.5;
+		dAlpha *= smoothstep(uFogFront.z - uFogFront.w, uFogFront.z + uFogFront.w * 0.5, d + wob);
+	}
+}
+`;
 
 /**
  * Renders the endless city ground: one merged, vertex-coloured mesh per 16×16 chunk (slabs + decoration),
@@ -247,13 +275,25 @@ export class ChunkRenderer {
 
   /** An area's fog state changed: refresh its chunks (and their neighbours, for soft edges). */
   markArea(id: string, fade = false) {
+    const tr = this.transitions;
+    if (fade && tr && !this.reducedMotion) {
+      // Look 6.18: the clear rolls out from the landmark: props wake, ground un-greys, fog recedes as a front.
+      const info = this.sim.areas.info(id);
+      const [lx, lz] = info.landmark;
+      let radius = 0;
+      for (const [cx, cz] of info.chunks) radius = Math.max(radius, Math.hypot(cx * CHUNK + CHUNK / 2 - lx, cz * CHUNK + CHUNK / 2 - lz) + CHUNK * 0.71);
+      tr.areaWave(id, lx + 0.5, lz + 0.5, radius);
+    }
     for (const [cx, cz] of this.sim.areas.info(id).chunks)
       for (let dz = -1; dz <= 1; dz++)
         for (let dx = -1; dx <= 1; dx++) {
           const v = this.views.get(chunkKey(GROUND, cx + dx, cz + dz));
           if (!v) continue;
           v.dirty = true;
-          if (fade && dx === 0 && dz === 0 && v.fogMat && !this.reducedMotion) v.fading = true;
+          if (fade && dx === 0 && dz === 0 && v.fogMat && !this.reducedMotion) {
+            if (tr) v.fogHold = true;
+            else v.fading = true;
+          }
           else v.fogDirty = true;
         }
   }
@@ -325,7 +365,26 @@ export class ChunkRenderer {
       }
     }
     this.lastFocus = focus;
-    const dirty = [...this.views.values()].filter((v) => v.dirty || (v.fogDirty && !v.fading));
+    // Look 6.12: a chunk whose last transition ended folds its tiles back into the static mesh (one rebuild); one
+    // inside a rolling area wave rebuilds a few times a second so the wave front advances.
+    const tr = this.transitions;
+    if (tr) {
+      this.fogFronts();
+      for (const v of this.views.values()) {
+        if (v.dirty || !v.ground) continue;
+        if (v.trEnd && tr.time >= v.trEnd) {
+          v.trEnd = 0;
+          v.dirty = true;
+        } else if (v.waveAt !== undefined) {
+          const a = this.sim.areas.map.areaOfChunk(v.cx, v.cz);
+          if (!tr.waving(a)) {
+            v.waveAt = undefined;
+            v.dirty = true;
+          } else if (tr.time - v.waveAt > 0.2) v.dirty = true;
+        }
+      }
+    }
+    const dirty = [...this.views.values()].filter((v) => v.dirty || (v.fogDirty && !v.fading && !v.fogHold));
     dirty.sort((a, b) => dist(a, focus) - dist(b, focus));
     // Rebuild nearest first, within a time budget (at least one per frame so streaming always progresses).
     const t0 = performance.now();
@@ -333,7 +392,7 @@ export class ChunkRenderer {
     for (const v of dirty) {
       if (n >= this.budget || (n > 0 && performance.now() - t0 > this.budgetMs)) break;
       if (v.dirty) this.buildGround(v);
-      if (v.fogDirty && !v.fading) this.buildFog(v);
+      if (v.fogDirty && !v.fading && !v.fogHold) this.buildFog(v);
       n++;
     }
     // Gentle drift of the fog sheets.
@@ -342,6 +401,9 @@ export class ChunkRenderer {
   }
 
   private drop(v: ChunkView) {
+    v.surface?.destroy();
+    v.trans?.destroy();
+    this.transitions?.liveByChunk.delete(v.key);
     v.ground?.destroy();
     v.trees?.destroy();
     v.fog?.destroy();
@@ -367,6 +429,11 @@ export class ChunkRenderer {
     const b = new MeshBuilder();
     const fb = new FoliageBuilder();
     this.fb = fb;
+    this.chunkFb = fb;
+    const tr = this.transitions;
+    const tB = tr ? chunkBuilders() : undefined;
+    let trEnd = 0;
+    let trLive = 0;
     const area = s.areas.map.areaOfChunk(v.cx, v.cz);
     this.areaType = s.areas.info(area).type;
     const fog = s.areas.fog(area);
@@ -388,9 +455,17 @@ export class ChunkRenderer {
     for (const t of c.tiles) {
       if (!t) continue;
       // Hidden ground is grey; fogged ground is greyed unless restored.
-      b.grey = fog === 'hidden' ? 0.75 : fog === 'cleared' || t.ground === 'restored' ? 0 : 0.35;
+      // Look 6.18: while an area-clear wave rolls, ground it hasn't reached yet keeps its fogged look.
+      const ahead = fog === 'cleared' && tr?.waveAhead(area, t.x, t.z);
+      b.grey = fog === 'hidden' ? 0.75 : (fog === 'cleared' && !ahead) || t.ground === 'restored' ? 0 : 0.35;
       fb.grey = b.grey;
-      if (v.far) this.farTile(b, t, h);
+      if (tr && tB) {
+        const end = tr.buildTile(this.host, t, h, !!v.far, { b, fb, sb: tB.sb, tb: tB.tb }, area);
+        if (end > 0) {
+          trEnd = Math.max(trEnd, end);
+          trLive++;
+        }
+      } else if (v.far) this.farTile(b, t, h);
       else this.tile(b, t, h);
     }
     // Buildings (generation 2): grey and shuttered in the fog, white with roof gardens once the area is clear.
@@ -405,6 +480,14 @@ export class ChunkRenderer {
     v.ground = this.setMesh(v.ground, `chunk-${v.key}`, b.build(this.device), vertexColourMaterial(), !v.far); // far chunks: no shadow pass (invisible at that distance, halves their draw calls)
     v.trees = this.setMesh(v.trees, `trees-${v.key}`, fb.build(this.device), foliageMaterial(), !v.far);
     this.treeTris.set(v.key, fb.tris);
+    if (tr && tB) {
+      // Look 6.12: the living surface casts no shadow (flat slabs), the moving props do.
+      v.surface = this.setMesh(v.surface, `surface-${v.key}`, tB.sb.build(this.device), tr.material, false);
+      v.trans = this.setMesh(v.trans, `trans-${v.key}`, tB.tb.build(this.device), tr.material, !v.far);
+      v.trEnd = trEnd;
+      tr.liveByChunk.set(v.key, trLive);
+      if (tr.waving(area)) v.waveAt = tr.time;
+    }
   }
 
   /**
@@ -412,7 +495,7 @@ export class ChunkRenderer {
    * corner; from Blooming on, tiny flowers in the bed's drift colour sit in the cracks. Stage still reads: young
    * slabs are just clean, blooming ones flower.
    */
-  private crackGreen(b: MeshBuilder, t: TileData, x: number, z: number, top: number, stage: number) {
+  private crackGreen(b: Sink, t: TileData, x: number, z: number, top: number, stage: number) {
     const sx = hash01(t.x, t.z, 51) < 0.5 ? -1 : 1;
     const sz = hash01(t.x, t.z, 52) < 0.5 ? -1 : 1;
     b.add('box', PALETTE.lawn.moss, [x + sx * 0.455, top - 0.006, z], [0.05, 0.012, 0.3 + hash01(t.x, t.z, 53) * 0.5]);
@@ -437,12 +520,12 @@ export class ChunkRenderer {
   }
 
   /** Far level of detail: one coloured slab per tile, with a bump for full bloom. */
-  private farTile(b: MeshBuilder, t: TileData, h: number) {
+  private farTile(b: Sink, t: TileData, h: number) {
     const f = t.feature ?? 'lawn';
     const dead = DEAD[f] ?? DEAD.lawn;
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
     const col = t.blocked ? (this.level >= 4 && f !== 'building' ? PALETTE.stone.light : dead[0]) : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? this.slabTone(t) : f === 'road' ? PALETTE.paving.roadAlive : grassTone(stage, t.x, t.z)) : t.ground === 'polluted' ? dead[t.variant % dead.length] : t.ground === 'growing' ? PALETTE.ground.growing : PALETTE.ground.prepared;
-    b.add('box', col, [t.x + 0.5, h, t.z + 0.5], [1, 0.16, 1]);
+    this.slab(b, col, [t.x + 0.5, h, t.z + 0.5], [1, 0.16, 1]);
     // Phase 5 E16: stages stay apart zoomed out too: a colour patch for Blooming, a gold disc for Radiant.
     if (t.ground === 'restored' && f !== 'water' && f !== 'paving' && f !== 'road') {
       if (stage === 2) b.add('box', flowerAt(t.x, t.z), [t.x + 0.4, h + 0.085, t.z + 0.55], [0.34, 0.02, 0.3]);
@@ -487,6 +570,7 @@ export class ChunkRenderer {
 
   /** A tile's bloom stage rose (or it was restored): grow its tree, if it has one. */
   growTree(t: TileData, prevStage: number) {
+    if (this.transitions) return; // Look 6.12: trees grow in through the transition mesh
     if (t.roofId !== GROUND || this.reducedMotion || this.growing.size >= ChunkRenderer.MAX_GROWING) return;
     const view = this.views.get(chunkKey(GROUND, Math.floor(t.x / CHUNK), Math.floor(t.z / CHUNK)));
     if (!view || view.far) return;
@@ -545,7 +629,7 @@ export class ChunkRenderer {
    * canals, a spouting basin at reservoirs, a mushroom ring in groves. Meshy hook: these are candidates for the
    * "edge clutter" / obstacle set in docs/art/meshy-assets.md.
    */
-  private landmark(b: MeshBuilder, x: number, y: number, z: number, variant: number) {
+  private landmark(b: Sink, x: number, y: number, z: number, variant: number) {
     const flower = PALETTE.flower[variant % PALETTE.flower.length];
     switch (this.areaType) {
       case 'plaza':
@@ -599,7 +683,59 @@ export class ChunkRenderer {
     }
   }
 
-  private tile(b: MeshBuilder, t: TileData, h: number) {
+  // ───────────── Look 6.12: transition hooks ─────────────
+
+  /** The transition framework (Game sets it). Without it, chunks build exactly as before Look 6. */
+  transitions?: TransitionRenderer;
+  private slabCap?: (hex: string, p: [number, number, number], s: [number, number, number]) => void;
+
+  /** Look 6.18: pushes each fogged chunk's receding front (if its area is clearing) to its fog material. */
+  private fogFronts() {
+    const tr = this.transitions!;
+    for (const v of this.views.values()) {
+      if (!v.fogMat) continue;
+      const a = this.sim.areas.map.areaOfChunk(v.cx, v.cz);
+      const f = v.fogHold ? tr.fogFront(a) : undefined;
+      v.fogMat.setParameter('uFogFront', f ?? [0, 0, 0, 0]);
+      if (v.fogHold && !tr.waving(a)) {
+        v.fogHold = false;
+        v.fogDirty = true;
+      }
+    }
+  }
+
+  /** A tile's ground slab: drawn by the living surface when transitions are on, else straight into the chunk. */
+  private slab(b: Sink, hex: string, p: [number, number, number], s: [number, number, number]) {
+    if (this.slabCap) this.slabCap(hex, p, s);
+    else b.add('box', hex, p, s);
+  }
+
+  private readonly host: ChunkHost = (() => {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    return {
+      tile: (sink: Sink, t: TileData, h: number) => self.tile(sink, t, h),
+      far: (sink: Sink, t: TileData, h: number) => self.farTile(sink, t, h),
+      setFoliage: (f: GeoSink | undefined) => {
+        self.fb = (f ?? self.chunkFb) as FoliageBuilder;
+      },
+      withLevel: (level: number, fn: () => void) => {
+        const old = self.level;
+        self.level = level;
+        fn();
+        self.level = old;
+      },
+      get slabCap() {
+        return self.slabCap;
+      },
+      set slabCap(v) {
+        self.slabCap = v;
+      },
+    };
+  })();
+  private chunkFb = new FoliageBuilder();
+
+  private tile(b: Sink, t: TileData, h: number) {
     const x = t.x + 0.5;
     const z = t.z + 0.5;
     const f = t.feature ?? 'lawn';
@@ -609,22 +745,22 @@ export class ChunkRenderer {
       // Look 2.5: once its area is alive, an obstacle stands on a clean stone plinth instead of dead ground.
       if (t.feature !== 'building' && this.level >= 4) {
         b.add('box', PALETTE.paving.grout, [x, h - 0.004, z], [1, 0.152, 1]);
-        b.add('box', PALETTE.stone.light, [x, h + 0.02, z], [0.9, 0.2, 0.9]);
-      } else b.add('box', dead[t.variant % dead.length], [x, h, z], [0.96, 0.16, 0.96]);
+        this.slab(b, PALETTE.stone.light, [x, h + 0.02, z], [0.9, 0.2, 0.9]);
+      } else this.slab(b, dead[t.variant % dead.length], [x, h, z], [0.96, 0.16, 0.96]);
       if (t.feature === 'building') return;
       if (t.id === this.localMark) this.landmark(b, x, h + 0.08, z, t.variant);
       else this.prop(b, t.prop ?? 'stump', x, h + 0.08, z, r);
       return;
     }
     if (t.occupantId) {
-      b.add('box', t.ground === 'restored' ? grassTone(Math.max(1, t.bloom || 1), t.x, t.z) : PALETTE.soil, [x, h, z], [1, 0.16, 1]);
+      this.slab(b, t.ground === 'restored' ? grassTone(Math.max(1, t.bloom || 1), t.x, t.z) : PALETTE.soil, [x, h, z], [1, 0.16, 1]);
       return;
     }
     const top = h + 0.08;
     switch (t.ground) {
       case 'polluted': {
         const shade = t.pollution > 80 ? dead[(t.variant + 1) % dead.length] : dead[t.variant % dead.length];
-        b.add('box', shade, [x, h, z], [0.96, 0.16, 0.96]);
+        this.slab(b, shade, [x, h, z], [0.96, 0.16, 0.96]);
         if (f === 'road') {
           if (t.variant % 3 === 0) b.add('box', PALETTE.paving.roadLine, [x, top + 0.004, z], [0.12, 0.01, 0.4]);
         } else if (f === 'water') {
@@ -648,7 +784,7 @@ export class ChunkRenderer {
       }
       case 'prepared':
       case 'growing': {
-        b.add('box', f === 'water' ? PALETTE.ground.wetSoil : t.ground === 'growing' ? PALETTE.ground.growing : PALETTE.ground.prepared, [x, h, z], [0.96, 0.16, 0.96]);
+        this.slab(b, f === 'water' ? PALETTE.ground.wetSoil : t.ground === 'growing' ? PALETTE.ground.growing : PALETTE.ground.prepared, [x, h, z], [0.96, 0.16, 0.96]);
         const n = t.ground === 'growing' ? 5 : 3 + (t.variant % 3);
         for (let i = 0; i < n; i++) {
           const sx = x + r.range(-0.3, 0.3);
@@ -664,7 +800,7 @@ export class ChunkRenderer {
       }
       case 'restored': {
         if (f === 'water') {
-          b.add('box', ALIVE.water, [x, h - 0.02, z], [1, 0.12, 1]);
+          this.slab(b, ALIVE.water, [x, h - 0.02, z], [1, 0.12, 1]);
           if (t.variant % 2) b.add('cylinder', PALETTE.leaf.mid, [x + r.range(-0.25, 0.25), top - 0.035, z + r.range(-0.25, 0.25)], [0.22, 0.01, 0.22]);
           if (t.bloom >= 2 && t.variant % 3 === 0) b.add('sphere', PALETTE.flowers.blush, [x + r.range(-0.2, 0.2), top - 0.02, z + r.range(-0.2, 0.2)], 0.07);
           break;
@@ -684,13 +820,13 @@ export class ChunkRenderer {
    * Lawns get a darker trimmed edge where they meet paving, and paving a raised white border where it meets
    * lawn. All of it is low and inside the tile, so the grid and the restored/dead contrast stay readable.
    */
-  private restoredTile(b: MeshBuilder, t: TileData, h: number, x: number, z: number, top: number, f: string, r: VRng) {
+  private restoredTile(b: Sink, t: TileData, h: number, x: number, z: number, top: number, f: string, r: VRng) {
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
     const grass = grassTone(stage, t.x, t.z);
     if (f === 'paving') {
       // Clean stone with a planted bed. Look 2.3: each slab its own warm tone, set in darker grout, the odd hairline crack.
       b.add('box', PALETTE.paving.grout, [x, h - 0.004, z], [1, 0.152, 1]);
-      b.add('box', this.slabTone(t), [x, h, z], [0.92, 0.16, 0.92]);
+      this.slab(b, this.slabTone(t), [x, h, z], [0.92, 0.16, 0.92]);
       if (hash01(t.x, t.z, 43) < 0.3) b.add('box', PALETTE.paving.crack, [x + (hash01(t.x, t.z, 44) - 0.5) * 0.4, top + 0.002, z + (hash01(t.x, t.z, 45) - 0.5) * 0.4], [0.18 + hash01(t.x, t.z, 46) * 0.2, 0.006, 0.02]);
       if (treeSpot(t, this.areaType)?.planter) {
         // a cream planter with a brass rim for the street tree
@@ -716,7 +852,7 @@ export class ChunkRenderer {
       }
       return;
     } else {
-      b.add('box', grass, [x, h, z], [1, 0.16, 1]);
+      this.slab(b, grass, [x, h, z], [1, 0.16, 1]);
       this.edges(b, t, x, z, top, false);
     }
     const tufts = f === 'paving' ? 0 : stage === 1 ? 4 : 5;
@@ -792,7 +928,7 @@ export class ChunkRenderer {
    * Phase 5 E16: where restored lawn meets restored paving, the lawn gets a trimmed darker edge and the paving a
    * raised white border (only on that side; neighbours in chunks not generated yet are skipped).
    */
-  private edges(b: MeshBuilder, t: TileData, x: number, z: number, top: number, paving: boolean) {
+  private edges(b: Sink, t: TileData, x: number, z: number, top: number, paving: boolean) {
     for (const [dx, dz] of EDGE_DIRS) {
       const n = this.sim.grid.peek(t.roofId, t.x + dx, t.z + dz);
       if (!n || n.ground !== 'restored' || n.blocked || n.occupantId) continue;
@@ -809,7 +945,7 @@ export class ChunkRenderer {
 
   /** Small props on obstacle tiles (benches, stalls, stumps…). */
   /** A procedural building from a small kit: body, window bands, parapet, and a roof that blooms when clear. */
-  private building(b: MeshBuilder, p: BuildingPlot, h: number, alive: boolean, far = false) {
+  private building(b: Sink, p: BuildingPlot, h: number, alive: boolean, far = false) {
     const H = p.storeys * CITY_GEN.buildings.storey;
     const cx = p.x + p.w / 2;
     const cz = p.z + p.d / 2;
@@ -848,7 +984,7 @@ export class ChunkRenderer {
   }
 
   /** A tree in a stone planter: bare twigs until it leafs out. */
-  private planterTree(b: MeshBuilder, x: number, y: number, z: number, leafy: boolean) {
+  private planterTree(b: Sink, x: number, y: number, z: number, leafy: boolean) {
     b.add('box', leafy ? PALETTE.stone.warm : PALETTE.props.planterDead, [x, y + 0.09, z], [0.26, 0.18, 0.26]);
     if (leafy) this.fb.add(treeGeo('cherry', 2, 1, 1), x, y + 0.18, z, 0.7, 0.55); // Phase 5: a real little tree
     else {
@@ -858,7 +994,7 @@ export class ChunkRenderer {
     }
   }
 
-  private prop(b: MeshBuilder, prop: string, x: number, y: number, z: number, r: VRng) {
+  private prop(b: Sink, prop: string, x: number, y: number, z: number, r: VRng) {
     switch (prop) {
       case 'bench': {
         const L = this.level;
@@ -1033,6 +1169,14 @@ export class ChunkRenderer {
       mat.blendType = pc.BLEND_NORMAL;
       mat.depthWrite = false;
       mat.cull = pc.CULLFACE_NONE;
+      if (this.transitions) {
+        try {
+          mat.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set('opacityPS', FOG_FRONT_PS);
+        } catch {
+          /* no per-material chunks: the fog fades as before */
+        }
+        mat.setParameter('uFogFront', [0, 0, 0, 0]);
+      }
       v.fogMat = mat;
     }
     v.fogMat.opacity = 1;
