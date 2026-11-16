@@ -148,6 +148,34 @@ try {
     return { t0: s.time, d: 25, fx: b.x - 2, fz: b.z };
   }, [0, 0.04, 0.1, 0.5, 0.7, 0.85, 0.95, 1.0]);
 
+  await strip('ground-types', 'Each ground type reclaims its own way (restore, 8 s): paving · road · water · clay · litter, left to right', (b) => {
+    const g = window.solarbloom, s = g.sim;
+    const feats = ['paving', 'road', 'water', 'clay', 'litter'];
+    let t0 = 0;
+    feats.forEach((f, i) => {
+      const t = s.grid.get('g', b.x - 2 + i, b.z + 2);
+      t.feature = f; // presentation only (features are generated, never saved)
+      t.ground = 'polluted'; t.pollution = 90; t.bloom = 0; s.grid.touch(t);
+      s.restoration.complete(t, 'drone');
+      s.transitions.begin(t, 'restore', 8, { from: 90, dir: 2 });
+      t0 = t.tr.t0;
+      g.chunks.markTile(t);
+    });
+    return { t0, d: 8, fx: b.x, fz: b.z + 2 };
+  }, [0, 0.1, 0.3, 0.5, 0.7, 0.85, 1.0], { zoom: 1.9, w: 560 });
+
+  await strip('area-wave', 'An area clears: the ground un-greys and props wake in a wave from the landmark while the fog rolls back as a front (about 3 s)', () => {
+    const g = window.solarbloom, s = g.sim;
+    const id = s.areas.info('park').neighbours[0];
+    const st = s.state.areas[id] ?? (s.state.areas[id] = { fog: 'frontier', revealedAt: s.time });
+    st.fog = 'cleared';
+    st.clearedAt = s.time;
+    g.chunks.markArea(id, true);
+    for (const nb of s.areas.info(id).neighbours) g.chunks.markArea(nb);
+    const [lx, lz] = s.areas.info(id).landmark;
+    return { t0: g.transitions.time, d: 4, fx: lx, fz: lz };
+  }, [0, 0.15, 0.3, 0.5, 0.75, 1.0], { zoom: 0.8, w: 640, h: 400 });
+
   if (errors.length) throw new Error(errors.join('\n'));
 } finally {
   await browser.close();

@@ -142,3 +142,29 @@ merge family.)
 Before/after pacing numbers (bots, not people) are recorded in the #170 and #180 issue comments once the
 implementation lands. Visual transitions can't move them by construction; the Cultivator is measured with a bot
 that builds one.
+
+## Implementation map (where each story landed)
+
+| Story | Where |
+|---|---|
+| 6.1 spike (#170) | this doc, `TUNING.transitions`, `TUNING.cultivator` |
+| 6.2 sim state (#171) | `TileData.tr`, `src/gameplay/Transitions.ts`, `TilePack` extras (save v7), `OfflineSystem` |
+| 6.12 framework (#181) | `src/rendering/transitions/` (material, builder, `TransitionRenderer`, `EndStates`), hooks in `ChunkRenderer`, `GridRenderer` |
+| 6.3 cracks (#172) | `trCracks()` in `TransitionMaterial.ts`: two warped main cracks whose edge points are shared with the neighbours, plus a late branch; revealed by pollution and by the transition's progress, seeded per tile cell (stable across reloads) |
+| 6.4 slab breakup (#173) | `TransitionRenderer.restorePieces()` (fragments, grit), shader restore branch (widening fracture → soil), shake/grit in `Game` |
+| 6.5 roots and sprouts (#174) | `restorePieces()` roots (mode 4) and seedlings; fracture glow as the "progress happened" cue |
+| 6.6 turf knit (#175) | shader knit mask from cracks and edges; paving ends as clean stone (#186) |
+| 6.7 crossing cracks, chains (#176) | shared edge points, living-edge `dir` for dead ground, fast restore variant for chains |
+| 6.8–6.10 Cultivator (#177–#179) | `CultivatorSystem.ts`, `CultivatorVisuals.ts`, `ProgressRings.ts`, `Sfx.stage()` |
+| 6.11 perf and tests (#180) | `tests/perf/browser.perf.mjs` (transitions phase), `leak.perf.mjs`, soak mid-transition save |
+| 6.13 softening (#182) | shader concrete branch: grime and rust fade with pollution, cracks appear, soften eases in from the source edge |
+| 6.14 moss creep (#183) | shader concrete/moss branch: moss runs along the cracks first, patches spread with a fuzzy front |
+| 6.15 bloom grow-in (#184) | bloom windows (incoming props grow staggered, old ones shrink late), grass colour deepens from patches |
+| 6.16 lush (#185) | `lushAt`/`lushUntil` per slab: wet mask soaks in, dries over the last 10 s, glints |
+| 6.17 ground types (#186) | shader feature branches (paving, water, road) and `restorePieces()` per feature |
+| 6.18 waves (#187) | district bloom delays in `DistrictSystem`, area-clear waves and the fog front in `TransitionRenderer`/`ChunkRenderer` |
+
+Known limits of this first pass (candidates for follow-ups): the soften visual for a seep is a 3 s surface blend with
+no prop change; moss and turf are colour masks (Look 3 textures and shells will replace them); trees on tiles
+mid-transition grow from zero rather than from their previous stage; roof tiles (GridRenderer) blend in steps on the
+CPU rather than through the shader; there is no camera-follow for big waves (City 14.5).
