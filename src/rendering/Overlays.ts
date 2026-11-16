@@ -1,17 +1,29 @@
 import * as pc from 'playcanvas';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
-import { mat } from './Materials';
+import { mat, PALETTE } from './Materials';
 import { group, shape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
+import { glowMaterial, glowTileMesh } from './TileFx';
 
 export type OverlayTone = 'hover' | 'ok' | 'bad' | 'info';
-const TONE: Record<OverlayTone, string> = { hover: '#ffffff', ok: '#7dff9a', bad: '#ff6b6b', info: '#fff0a0' };
+const TONE: Record<OverlayTone, string> = { hover: PALETTE.signal.hover, ok: PALETTE.signal.ok, bad: PALETTE.signal.bad, info: PALETTE.signal.info };
+const TONES = Object.keys(TONE) as OverlayTone[];
 
-/** Hover frame, placement ghost and radius tiles. */
+/**
+ * Hover frame, placement ghost and radius tiles. Look 3.14: the frame and the radius / pulse-preview tiles are
+ * glowing tile outlines with a soft inner fill (shared meshes, one shared material per tone and use).
+ */
 export class Overlays {
   private frame: pc.Entity;
-  private bars: pc.Entity[] = [];
+  private frameMi: pc.MeshInstance;
+  private frameTone?: OverlayTone;
+  private device: pc.GraphicsDevice;
+  /** One material per tone for the hover frame, and one per tone for the radius tiles (they breathe separately). */
+  private frameMats = {} as Record<OverlayTone, pc.StandardMaterial>;
+  private radiusMats = {} as Record<OverlayTone, pc.StandardMaterial>;
+  private radiusTone?: OverlayTone;
+  private radiusMis: pc.MeshInstance[] = [];
   private ghost: pc.Entity;
   private ghostBox: pc.Entity;
   private radius: pc.Entity[] = [];
@@ -28,15 +40,21 @@ export class Overlays {
     parent: pc.Entity,
   ) {
     const root = group(parent, 'overlays');
+    this.device = pc.AppBase.getApplication()!.graphicsDevice;
+    for (const t of TONES) {
+      this.frameMats[t] = glowMaterial(TONE[t]);
+      this.radiusMats[t] = glowMaterial(TONE[t]);
+    }
     this.frame = group(root, 'frame');
-    for (let i = 0; i < 4; i++) this.bars.push(shape(this.frame, 'box', mat('#ffffff', { unlit: true }), { scale: 0.05, receive: false }));
+    this.frameMi = new pc.MeshInstance(glowTileMesh(this.device, 1), this.frameMats.hover);
+    this.frame.addComponent('render', { meshInstances: [this.frameMi], castShadows: false, receiveShadows: false });
     this.frame.enabled = false;
     this.ghost = group(root, 'ghost');
     this.ghostBox = shape(this.ghost, 'box', mat(TONE.ok, { opacity: 0.5, unlit: true }), { receive: false });
     this.ghost.enabled = false;
     // Faint tile boundaries, shown only while building.
     this.gridLines = group(root, 'buildGrid');
-    const lineMat = mat('#1d3640', { opacity: 0.45, unlit: true });
+    const lineMat = mat(PALETTE.signal.gridLine, { opacity: 0.45, unlit: true });
     for (const r of sim.grid.rooftops) {
       if (!r.unlocked || r.preview) continue;
       const y = r.origin[1] + r.height + SLAB_TOP + 0.012;
@@ -47,32 +65,26 @@ export class Overlays {
     // First-tile beacon: a bobbing golden arrow + soft glow plate.
     this.beacon = group(root, 'beacon');
     this.beaconArrow = group(this.beacon, 'arrow');
-    shape(this.beaconArrow, 'cone', mat('#ffc428', { emissive: '#ffb000', emissiveIntensity: 0.6 }), { rot: [180, 0, 0], scale: [0.28, 0.34, 0.28] });
-    shape(this.beaconArrow, 'cylinder', mat('#ffc428', { emissive: '#ffb000', emissiveIntensity: 0.6 }), { pos: [0, 0.3, 0], scale: [0.11, 0.3, 0.11] });
-    shape(this.beacon, 'box', mat('#fff3a0', { opacity: 0.5, unlit: true }), { pos: [0, -0.5, 0], scale: [0.9, 0.02, 0.9], receive: false });
+    shape(this.beaconArrow, 'cone', mat(PALETTE.signal.beacon, { emissive: PALETTE.signal.beaconGlow, emissiveIntensity: 0.6 }), { rot: [180, 0, 0], scale: [0.28, 0.34, 0.28] });
+    shape(this.beaconArrow, 'cylinder', mat(PALETTE.signal.beacon, { emissive: PALETTE.signal.beaconGlow, emissiveIntensity: 0.6 }), { pos: [0, 0.3, 0], scale: [0.11, 0.3, 0.11] });
+    shape(this.beacon, 'box', mat(PALETTE.signal.beaconPool, { opacity: 0.5, unlit: true }), { pos: [0, -0.5, 0], scale: [0.9, 0.02, 0.9], receive: false });
     this.beacon.enabled = false;
     this.radiusRoot = group(root, 'radius');
+    const tileMesh = glowTileMesh(this.device, 1);
     for (let i = 0; i < 180; i++) { // Phase 4: room for the largest pulse footprint preview (161 tiles)
-      const e = shape(this.radiusRoot, 'box', mat(TONE.info, { opacity: 0.45, unlit: true }), { scale: [0.9, 0.02, 0.9], receive: false });
+      const e = group(this.radiusRoot, 'radiusTile');
+      const mi = new pc.MeshInstance(tileMesh, this.radiusMats.info);
+      e.addComponent('render', { meshInstances: [mi], castShadows: false, receiveShadows: false });
       e.enabled = false;
       this.radius.push(e);
+      this.radiusMis.push(mi);
     }
   }
 
   private layoutFrame(size: number) {
-    if (this.frameSize === size && this.bars[0].getLocalScale().x > 0.06) return;
+    if (this.frameSize === size) return;
     this.frameSize = size;
-    const h = size / 2 - 0.02;
-    const L = size;
-    const w = 0.05;
-    this.bars[0].setLocalPosition(0, 0, -h);
-    this.bars[0].setLocalScale(L, 0.03, w);
-    this.bars[1].setLocalPosition(0, 0, h);
-    this.bars[1].setLocalScale(L, 0.03, w);
-    this.bars[2].setLocalPosition(-h, 0, 0);
-    this.bars[2].setLocalScale(w, 0.03, L);
-    this.bars[3].setLocalPosition(h, 0, 0);
-    this.bars[3].setLocalScale(w, 0.03, L);
+    this.frameMi.mesh = glowTileMesh(this.device, size); // cached per size: the line keeps its width
   }
 
   private footprintCenter(roofId: string, x: number, z: number, size: number): pc.Vec3 {
@@ -83,8 +95,11 @@ export class Overlays {
   showFrame(roofId: string, x: number, z: number, size: number, tone: OverlayTone) {
     this.layoutFrame(size);
     const p = this.footprintCenter(roofId, x, z, size);
-    this.frame.setPosition(p.x, p.y, p.z);
-    for (const b of this.bars) b.render!.material = mat(TONE[tone], { unlit: true });
+    this.frame.setPosition(p.x, p.y + 0.012, p.z);
+    if (this.frameTone !== tone) {
+      this.frameTone = tone;
+      this.frameMi.material = this.frameMats[tone];
+    }
     this.frame.enabled = true;
   }
 
@@ -120,6 +135,9 @@ export class Overlays {
   }
 
   showRadius(tiles: TileData[], tone: OverlayTone = 'info') {
+    const m = this.radiusMats[tone];
+    const retone = this.radiusTone !== tone;
+    this.radiusTone = tone;
     this.radius.forEach((e, i) => {
       const t = tiles[i];
       if (!t) {
@@ -128,7 +146,7 @@ export class Overlays {
       }
       const [x, y, z] = this.sim.grid.tileWorld(t);
       e.setPosition(x, y + SLAB_TOP + 0.03, z);
-      e.render!.material = mat(TONE[tone], { opacity: 0.45, unlit: true });
+      if (retone || !e.enabled) this.radiusMis[i].material = m;
       e.enabled = true;
     });
   }
@@ -148,6 +166,15 @@ export class Overlays {
     if (this.frame.enabled) {
       const s = 1 + Math.sin(this.time * 6) * 0.015;
       this.frame.setLocalScale(s, 1, s);
+      const m = this.frameMats[this.frameTone ?? 'hover'];
+      m.opacity = 0.85 + 0.15 * Math.sin(this.time * 6);
+      m.update();
+    }
+    if (this.radiusTone && this.radius[0].enabled) {
+      // The preview tiles breathe softly together, a little out of step with the hover frame.
+      const m = this.radiusMats[this.radiusTone];
+      m.opacity = 0.62 + 0.18 * Math.sin(this.time * 3.2);
+      m.update();
     }
   }
 }

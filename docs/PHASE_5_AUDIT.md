@@ -146,7 +146,7 @@ because the scripted city now grows to ~80 areas an hour); its per-seed time lim
 | Animation | Partners hop into the anchor and shrink, the anchor squashes, rebuilds as its Tier 2 model and bounces up; gold arcs, rings, sparkles, a rising power-up then a fanfare. The simulation commits once, before any of it; visuals grant nothing |
 | Tier 2 look | Bigger body on a cream plinth with a gold ring and a floating gem in the family colour (gold, cyan, pink, mint). Solar Array gets two extra wing panels that track the sun with it; Condenser Array two side tanks; Bloom Garden a ring of petals; Fleet Hub a second mast |
 | Guidance | The advisor suggests a ready, affordable merge (its button flies there and opens the preview). The build tooltip says when a spot touches a matching machine ("one more alongside makes a Solar Array") or completes a merge |
-| Saves | `tier` on machines, `stats.built`, `stats.merges`; no version change (no players yet, as agreed) |
+| Saves | `tier` on machines, `stats.built`, `stats.merges`. Shipped without a version change at first; later bumped to **v6** (with E14's `cores` / `project` fields), so a v5 save is scrapped with the existing notice. No migration (no players yet, as agreed) |
 
 ## Measured (scripted bots, not people)
 
@@ -189,6 +189,11 @@ All on this branch, headless Linux, Chromium with SwiftShader software rendering
 | `phase4-session` (15 minutes in the real page) | pass after the Drone Squad fix |
 | `npm run test:perf:browser` (150 areas) | within limits: 0 pan / 0 zoom / 1 chain hitches, chain ×743 |
 | `npm run test:perf`, `npm run test:soak` | pass |
+
+Rerun after the save bump to v6 (Windows, on top of E14): `npm run typecheck` pass; `npm test` 41 files, 250 tests
+pass (new: a v5 save is scrapped, a v6 one loads); `STRICT=1 phase4-hud` no overlaps at any size;
+`merge.e2e` pass, no page or console errors; `phase4-session` (15 min, bot) no page errors, fountain at 13:13.
+Playwright was installed locally with `--no-save` for these runs (it isn't in `package.json`).
 
 ## Still open after E13
 

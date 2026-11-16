@@ -1,0 +1,36 @@
+{
+  "tag": "1.4-tonemap",
+  "query": "",
+  "renderer": "headless Chromium, SwiftShader (software GL)",
+  "when": "2026-11-16T01:41:50.319Z",
+  "shots": {
+    "machines-desktop": {
+      "scene": "Machine cluster (solar, condenser, core)",
+      "size": "1280x800",
+      "frameMs": 492.1,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 91,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "f8a92665d906"
+    },
+    "full-desktop": {
+      "scene": "Fully restored park",
+      "size": "1280x800",
+      "frameMs": 482.3,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 89,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "8cfc5fbeb56b"
+    }
+  }
+}

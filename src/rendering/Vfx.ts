@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
-import { PALETTE, uniqueMat } from './Materials';
+import { LOOK } from '../data/look';
+import { color, PALETTE, uniqueMat } from './Materials';
 import { shape } from './Shapes';
 
 interface Particle {
@@ -19,6 +20,12 @@ interface Particle {
   spin: number;
   gravity: number;
   active: boolean;
+  /** Look 3.14: how much the particle glows (0..1): sparkles and motes glow, leaf confetti barely. */
+  glow: number;
+  /** Look 3.14: drifts down slowly with a sway (petals). */
+  float: boolean;
+  /** Look 3.14: flickers in size (sparkles). */
+  twinkle: boolean;
 }
 
 interface Ring {
@@ -45,8 +52,20 @@ const OCT = [
 ];
 const OCT_IDX = [0, 2, 4, 2, 1, 4, 1, 3, 4, 3, 0, 4, 2, 0, 5, 1, 2, 5, 3, 1, 5, 0, 3, 5];
 const MAX_PARTICLES = 240;
+/** Confetti's own glow, as before Look 3.14 (an emissive of about 0.15). */
+const BASE_GLOW = 0.15;
 
-/** Pooled effects: expanding rings, leaf/confetti bursts (one draw call for all of them), chain arcs. */
+/** Look 3.14: the neon green of restore targets, pulse previews and restore shockwaves (Look 2's signal green). */
+export const NEON = PALETTE.signal.ok;
+
+/** Sparkle and petal colours of a restore. */
+const SPARKLE = [PALETTE.pure.white, PALETTE.flowerCore, NEON, PALETTE.glow.mintPale];
+const PETALS = [PALETTE.pink, PALETTE.flower[0], PALETTE.flower[3], PALETTE.flower[1], PALETTE.flower[2]];
+
+/**
+ * Pooled effects: expanding rings, restore shockwaves, leaf/confetti/sparkle/petal particles (one draw call for
+ * all of them), chain arcs.
+ */
 export class Vfx {
   private particles: Particle[] = [];
   private pMesh: pc.Mesh;
@@ -55,10 +74,13 @@ export class Vfx {
   private pCol: Uint8Array;
   private anyActive = false;
   private rings: Ring[] = [];
+  private waves: Ring[] = [];
   private arcs: Arc[] = [];
   private root: pc.Entity;
   private rgbCache = new Map<string, [number, number, number]>();
   density = 1;
+  /** Look 3.14: restore effects drop the travelling shockwave and the floating petals. */
+  reducedMotion = false;
 
   constructor(parent: pc.Entity, device: pc.GraphicsDevice) {
     this.root = new pc.Entity('vfx');
@@ -69,7 +91,10 @@ export class Vfx {
       return [c.r, c.g, c.b].map((v) => Math.round(Math.pow(v, 2.2) * 255)) as [number, number, number];
     });
     for (let i = 0; i < MAX_PARTICLES; i++)
-      this.particles.push({ x: 0, y: 0, z: 0, rot: 0, color: colors[i % colors.length], base: colors[i % colors.length], vx: 0, vy: 0, vz: 0, life: 0, max: 1, size: 0.05, spin: 0, gravity: 4, active: false });
+      this.particles.push({
+        x: 0, y: 0, z: 0, rot: 0, color: colors[i % colors.length], base: colors[i % colors.length], vx: 0, vy: 0, vz: 0,
+        life: 0, max: 1, size: 0.05, spin: 0, gravity: 4, active: false, glow: BASE_GLOW, float: false, twinkle: false,
+      });
     const n = MAX_PARTICLES * 6;
     this.pPos = new Float32Array(n * 3);
     this.pNrm = new Float32Array(n * 3);
@@ -88,7 +113,10 @@ export class Vfx {
     pm.useMetalness = true;
     pm.metalness = 0;
     pm.gloss = 0.4;
-    pm.emissive = new pc.Color(0.15, 0.15, 0.12);
+    // Look 1.9: sparkles (bursts, frenzy, mega-bloom, drone trails, Look 3.14 motes) glow in their own colour and bloom.
+    pm.emissive = new pc.Color(1, 1, 1);
+    pm.emissiveVertexColor = true;
+    pm.emissiveIntensity = LOOK.emissive.particles;
     pm.update();
     const pe = new pc.Entity('particles');
     pe.addComponent('render', { meshInstances: [new pc.MeshInstance(this.pMesh, pm)], castShadows: false, receiveShadows: false });
@@ -105,12 +133,68 @@ export class Vfx {
       e.enabled = false;
       this.rings.push({ e, m, life: 0, max: 1, r0: 0, r1: 1, active: false });
     }
+    // Look 3.14: restore shockwaves, a flat soft-edged annulus (vertex alpha) sweeping out across the tiles.
+    const waveMesh = this.annulus(device);
+    for (let i = 0; i < 12; i++) {
+      const m = new pc.StandardMaterial();
+      m.useLighting = false;
+      m.diffuse = new pc.Color(0, 0, 0);
+      m.emissive = color(NEON);
+      m.emissiveIntensity = 1.4;
+      m.opacityVertexColor = true;
+      m.opacityVertexColorChannel = 'a';
+      m.blendType = pc.BLEND_NORMAL;
+      m.depthWrite = false;
+      m.useFog = false;
+      m.cull = pc.CULLFACE_NONE;
+      m.update();
+      const e = new pc.Entity('wave');
+      e.addComponent('render', { meshInstances: [new pc.MeshInstance(waveMesh, m)], castShadows: false, receiveShadows: false });
+      this.root.addChild(e);
+      e.enabled = false;
+      this.waves.push({ e, m, life: 0, max: 1, r0: 0, r1: 1, active: false });
+    }
     for (let i = 0; i < 24; i++) {
       const m = uniqueMat(PALETTE.flowerCore, { opacity: 0.9, emissive: PALETTE.flowerCore, emissiveIntensity: 2 });
       const e = shape(this.root, 'box', m, { scale: 0.05 });
       e.enabled = false;
       this.arcs.push({ e, m, life: 0, max: 1, active: false });
     }
+  }
+
+  /** A flat ring of radius 1 at y=0: clear inside, a bright band at the rim, fading out just past it. */
+  private annulus(device: pc.GraphicsDevice): pc.Mesh {
+    const SEG = 40;
+    const radii: [number, number][] = [[0.5, 0], [0.84, 0.55], [0.93, 1], [1.05, 0]];
+    const pos: number[] = [];
+    const nrm: number[] = [];
+    const col: number[] = [];
+    const idx: number[] = [];
+    for (let i = 0; i < SEG; i++) {
+      const a = (i / SEG) * Math.PI * 2;
+      for (const [r, al] of radii) {
+        pos.push(Math.cos(a) * r, 0, Math.sin(a) * r);
+        nrm.push(0, 1, 0);
+        col.push(255, 255, 255, Math.round(al * 255));
+      }
+    }
+    const R = radii.length;
+    for (let i = 0; i < SEG; i++) {
+      const j = (i + 1) % SEG;
+      for (let k = 0; k < R - 1; k++) {
+        const a = i * R + k;
+        const b = j * R + k;
+        idx.push(a, a + 1, b + 1, a, b + 1, b);
+      }
+    }
+    const mesh = new pc.Mesh(device);
+    mesh.setPositions(pos);
+    mesh.setNormals(nrm);
+    mesh.setColors32(col);
+    mesh.setIndices(idx);
+    mesh.update();
+    mesh.incRefCount();
+    return mesh;
   }
 
   /** A palette colour as the particle mesh's vertex colour (linear 0-255). */
@@ -144,27 +228,104 @@ export class Vfx {
     r.e.setPosition(pos.x, pos.y + 0.12, pos.z);
   }
 
-  burst(pos: pc.Vec3, count: number, opts: { speed?: number; up?: number; size?: number; life?: number; gravity?: number; hex?: string } = {}) {
+  /**
+   * Look 3.14: a restore's feedback: a sparkle burst, a neon shockwave sweeping over the neighbouring tiles and a
+   * few petals drifting down. `strength` scales it (player restores 1, automation less). All pooled; the vfx
+   * density (Fewer particles, reduced motion) thins it, and reduced motion keeps only a calm sparkle.
+   */
+  restoreBloom(pos: pc.Vec3, strength = 1) {
+    const rm = this.reducedMotion;
+    this.sparkles(pos, Math.round(9 * strength), rm);
+    if (rm) return;
+    const w = this.waves.find((x) => !x.active) ?? this.waves[0];
+    w.active = true;
+    w.life = 0;
+    w.max = 0.6;
+    w.r0 = 0.3;
+    w.r1 = 0.9 + 0.4 * strength;
+    w.e.setPosition(pos.x, pos.y + 0.035, pos.z);
+    w.e.setLocalScale(w.r0, 1, w.r0);
+    w.m.opacity = 0;
+    w.m.update();
+    w.e.enabled = true;
+    const n = Math.round(4 * strength * this.density);
+    for (let i = 0; i < n; i++) {
+      const p = this.free();
+      if (!p) return;
+      const a = Math.random() * Math.PI * 2;
+      const sp = 0.35 + Math.random() * 0.45;
+      this.spawn(p, pos.x + Math.cos(a) * 0.2, pos.y + 0.25 + Math.random() * 0.2, pos.z + Math.sin(a) * 0.2);
+      p.vx = Math.cos(a) * sp;
+      p.vz = Math.sin(a) * sp;
+      p.vy = 1.4 + Math.random() * 0.6;
+      p.max = 1.5 + Math.random() * 0.6;
+      p.size = 0.08 + Math.random() * 0.03;
+      p.spin = (Math.random() - 0.5) * 260;
+      p.gravity = 2.2;
+      p.float = true;
+      p.glow = 0.3;
+      p.color = this.rgb(PETALS[Math.floor(Math.random() * PETALS.length)]);
+    }
+  }
+
+  /** Glowing, twinkling sparkles rising from a tile at `pos` (pooled; thinned by density). */
+  sparkles(pos: pc.Vec3, count: number, calm = false) {
     const n = Math.max(1, Math.round(count * this.density));
     for (let i = 0; i < n; i++) {
-      const p = this.particles.find((x) => !x.active);
+      const p = this.free();
+      if (!p) return;
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * 0.42;
+      this.spawn(p, pos.x + Math.cos(a) * r, pos.y + 0.05, pos.z + Math.sin(a) * r);
+      const sp = calm ? 0.1 : 0.3 + Math.random() * 0.5;
+      p.vx = Math.cos(a) * sp;
+      p.vz = Math.sin(a) * sp;
+      p.vy = calm ? 0.5 : 1.2 + Math.random() * 1.4;
+      p.max = 0.55 + Math.random() * 0.4;
+      p.size = 0.04 + Math.random() * 0.03;
+      p.spin = 360;
+      p.gravity = calm ? 0 : 1.6;
+      p.glow = 1;
+      p.twinkle = !calm;
+      p.color = this.rgb(SPARKLE[i % SPARKLE.length]);
+    }
+  }
+
+  private free(): Particle | undefined {
+    return this.particles.find((x) => !x.active);
+  }
+
+  /** Activates a pooled particle at a position with the confetti defaults. */
+  private spawn(p: Particle, x: number, y: number, z: number) {
+    p.active = true;
+    p.life = 0;
+    p.x = x;
+    p.y = y;
+    p.z = z;
+    p.rot = Math.random() * 6.28;
+    p.glow = BASE_GLOW;
+    p.float = false;
+    p.twinkle = false;
+  }
+
+  burst(pos: pc.Vec3, count: number, opts: { speed?: number; up?: number; size?: number; life?: number; gravity?: number; hex?: string; glow?: number } = {}) {
+    const n = Math.max(1, Math.round(count * this.density));
+    for (let i = 0; i < n; i++) {
+      const p = this.free();
       if (!p) return;
       const a = Math.random() * Math.PI * 2;
       const sp = (opts.speed ?? 1.2) * (0.4 + Math.random() * 0.8);
-      p.active = true;
+      this.spawn(p, pos.x + (Math.random() - 0.5) * 0.3, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 0.3);
       p.vx = Math.cos(a) * sp;
       p.vz = Math.sin(a) * sp;
       p.vy = (opts.up ?? 2.4) * (0.6 + Math.random() * 0.6);
-      p.life = 0;
       p.max = (opts.life ?? 0.9) * (0.7 + Math.random() * 0.5);
       p.size = (opts.size ?? 0.06) * (0.6 + Math.random() * 0.8);
       p.spin = (Math.random() - 0.5) * 720;
       p.gravity = opts.gravity ?? 5;
-      p.x = pos.x + (Math.random() - 0.5) * 0.3;
-      p.y = pos.y + 0.1;
-      p.z = pos.z + (Math.random() - 0.5) * 0.3;
-      p.rot = Math.random() * 6.28;
       p.color = opts.hex ? this.rgb(opts.hex) : p.base;
+      // A coloured burst is a sparkle (beam sparkles, drone puffs): it glows. Confetti keeps its soft look.
+      p.glow = opts.glow ?? (opts.hex ? 0.8 : BASE_GLOW);
     }
   }
 
@@ -174,41 +335,34 @@ export class Vfx {
    */
   mote(a: pc.Vec3, b: pc.Vec3, hex: string, life = 0.45, size = 0.035) {
     if (Math.random() > this.density) return;
-    const p = this.particles.find((x) => !x.active);
+    const p = this.free();
     if (!p) return;
-    p.active = true;
-    p.life = 0;
+    const j = 0.04;
+    this.spawn(p, a.x + (Math.random() - 0.5) * j, a.y, a.z + (Math.random() - 0.5) * j);
     p.max = life;
     p.size = size * (0.7 + Math.random() * 0.6);
     p.spin = 240;
     p.gravity = 0;
-    const j = 0.04;
-    p.x = a.x + (Math.random() - 0.5) * j;
-    p.y = a.y;
-    p.z = a.z + (Math.random() - 0.5) * j;
     p.vx = (b.x + (Math.random() - 0.5) * 0.35 - p.x) / life;
     p.vy = (b.y - p.y) / life;
     p.vz = (b.z + (Math.random() - 0.5) * 0.35 - p.z) / life;
     p.color = this.rgb(hex);
+    p.glow = 1;
   }
 
   /** One small, slow, fading particle (drone flight trails). */
   trail(pos: pc.Vec3) {
-    const p = this.particles.find((x) => !x.active);
+    const p = this.free();
     if (!p) return;
-    p.active = true;
+    this.spawn(p, pos.x, pos.y, pos.z);
     p.vx = (Math.random() - 0.5) * 0.2;
     p.vz = (Math.random() - 0.5) * 0.2;
     p.vy = -0.15;
-    p.life = 0;
     p.max = 0.5;
     p.size = 0.05;
     p.spin = 90;
     p.gravity = 0;
     p.color = p.base;
-    p.x = pos.x;
-    p.y = pos.y;
-    p.z = pos.z;
   }
 
   /** A short glowing streak between two tiles: explains a chain's cause → effect. */
@@ -242,16 +396,28 @@ export class Vfx {
         else {
           any = true;
           p.vy -= p.gravity * dt;
+          if (p.float) {
+            // Petals: air drag, a slow terminal fall and a gentle sway.
+            const drag = Math.exp(-dt * 2.2);
+            p.vx *= drag;
+            p.vz *= drag;
+            if (p.vy < -0.3) p.vy = -0.3;
+            const sway = Math.sin(p.life * 5 + i) * 0.35 * dt;
+            p.x += sway;
+            p.z += sway * 0.6;
+          }
           p.x += p.vx * dt;
           p.y += p.vy * dt;
           p.z += p.vz * dt;
           p.rot += (p.spin * Math.PI * dt) / 180;
           const k = 1 - p.life / p.max;
           s = p.size * Math.min(1, k * 3) * 0.6;
+          if (p.twinkle) s *= 0.65 + 0.35 * Math.sin(p.life * 38 + i);
         }
       }
       const c = Math.cos(p.rot);
       const sn = Math.sin(p.rot);
+      const ga = Math.round(p.glow * 255);
       for (let v = 0; v < 6; v++) {
         const [ox, oy, oz] = OCT[v];
         // spin around Y, flatten a little so they read as leaves/petals
@@ -268,7 +434,7 @@ export class Vfx {
         C[q] = p.color[0];
         C[q + 1] = p.color[1];
         C[q + 2] = p.color[2];
-        C[q + 3] = 255;
+        C[q + 3] = ga;
       }
     });
     if (any || this.anyActive) {
@@ -296,6 +462,21 @@ export class Vfx {
       r.e.setLocalScale(rad, 1, rad);
       r.m.opacity = 0.85 * (1 - k);
       r.m.update();
+    }
+    for (const w of this.waves) {
+      if (!w.active) continue;
+      w.life += dt;
+      const k = w.life / w.max;
+      if (k >= 1) {
+        w.active = false;
+        w.e.enabled = false;
+        continue;
+      }
+      const e = 1 - Math.pow(1 - k, 2.5);
+      const rad = w.r0 + (w.r1 - w.r0) * e;
+      w.e.setLocalScale(rad, 1, rad);
+      w.m.opacity = 0.9 * Math.min(1, k * 8) * (1 - k);
+      w.m.update();
     }
     for (const s of this.arcs) {
       if (!s.active) continue;

@@ -1,0 +1,50 @@
+{
+  "tag": "1.10-atmosphere",
+  "query": "",
+  "renderer": "headless Chromium, SwiftShader (software GL)",
+  "when": "2026-11-16T02:27:39.148Z",
+  "shots": {
+    "full-desktop": {
+      "scene": "Fully restored park",
+      "size": "1280x800",
+      "frameMs": 636.6,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 155,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "b3e853474902"
+    },
+    "mid-desktop": {
+      "scene": "Mid zoom (restored park)",
+      "size": "1280x800",
+      "frameMs": 610,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 191,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "6c8f83c9ced3"
+    },
+    "half-desktop": {
+      "scene": "Half-restored park, pulse in progress",
+      "size": "1280x800",
+      "frameMs": 481.2,
+      "simTime": 3,
+      "restored": 122,
+      "drawCalls": 126,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "f9085d536cbc"
+    }
+  }
+}

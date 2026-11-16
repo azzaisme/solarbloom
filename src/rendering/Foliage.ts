@@ -24,6 +24,9 @@ uniform float projectionFlipY;
 #endif
 uniform float uWindTime;
 uniform float uWindStrength;
+// Look 3.7: declared here so every pass that sways the foliage also declares what it writes
+varying float vLeaf;
+varying vec3 vLeafP;
 vec3 windOffset(vec3 posW, float flex) {
 	if (flex <= 0.0) return vec3(0.0);
 	float ph = dot(posW.xz, vec2(0.37, 0.21));
@@ -38,7 +41,11 @@ vec3 windOffset(vec3 posW, float flex) {
 vec4 evalWorldPosition(vec3 vertexPosition, mat4 modelMatrix) {
 	vec3 localPos = getLocalPosition(vertexPosition);
 	vec4 posW = modelMatrix * vec4(localPos, 1.0);
-	posW.xyz += windOffset(posW.xyz, vertex_position.w);
+	// flex carries LEAF_FLAG (2) on foliage clumps: leaves are drawn over those by the fragment shader
+	float w = vertex_position.w;
+	vLeaf = step(1.99, w);
+	vLeafP = posW.xyz; // before the wind, so the leaves don't swim over the clump
+	posW.xyz += windOffset(posW.xyz, w - vLeaf * 2.0);
 	return posW;
 }
 vec4 getPosition() {
@@ -60,6 +67,83 @@ vec4 getPosition() {
 }
 vec3 getWorldPosition() {
 	return dPositionW;
+}
+`;
+
+/**
+ * Look 3.7: leaves on every foliage clump, drawn in the fragment shader (no extra triangles). A 3D cellular pattern
+ * in world space, so neighbouring clumps and trees share one leaf size: each cell is a rounded leaf, lit on the side
+ * toward the sun and bent outward a little (the normal tilts with it), with dark gaps between leaves and a small
+ * per-leaf shift in tone. It fades out where a leaf would shrink below a few pixels, so distant trees stay smooth
+ * instead of shimmering. Everything else in the foliage mesh (grass, stems, petals, bark) is untouched.
+ */
+const LEAF_DECL_PS = /* glsl */ `
+varying float vLeaf;
+varying vec3 vLeafP;
+uniform vec4 uLeafParams; // strength, normal tilt, leaves per world unit, unused
+vec3 sbLeafBend;
+float sbLeafK;
+`;
+
+const LEAF_DIFFUSE_PS = /* glsl */ `
+uniform vec3 material_diffuse;
+vec3 sbLeafHash(vec3 p) {
+	p = vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)));
+	return fract(sin(p) * 43758.5453);
+}
+void getAlbedo() {
+	dAlbedo = material_diffuse.rgb;
+	#ifdef STD_DIFFUSE_VERTEX
+		dAlbedo *= saturate(vVertexColor.rgb);
+	#endif
+	sbLeafBend = vec3(0.0);
+	sbLeafK = 0.0;
+	if (vLeaf < 0.5 || uLeafParams.x <= 0.0) return;
+	vec3 p = vLeafP * uLeafParams.z;
+	float px = length(fwidth(p));
+	float k = 1.0 - smoothstep(0.35, 0.8, px);
+	if (k <= 0.001) return;
+	vec3 ip = floor(p);
+	vec3 fp = fract(p);
+	float d1 = 9.0;
+	float d2 = 9.0;
+	vec3 o1 = vec3(0.0);
+	vec3 h1 = vec3(0.0);
+	for (int z = -1; z <= 1; z++)
+	for (int y = -1; y <= 1; y++)
+	for (int x = -1; x <= 1; x++) {
+		vec3 g = vec3(float(x), float(y), float(z));
+		vec3 h = sbLeafHash(ip + g);
+		vec3 r = g + 0.1 + h * 0.8 - fp;
+		float d = dot(r, r);
+		if (d < d1) { d2 = d1; d1 = d; o1 = r; h1 = h; }
+		else if (d < d2) d2 = d;
+	}
+	d1 = sqrt(d1);
+	d2 = sqrt(d2);
+	vec3 n = normalize(vNormalW);
+	// from the leaf's centre to this point, flattened onto the clump's surface
+	vec3 q = -o1;
+	q -= n * dot(q, n);
+	// Owner review: strong seams read as a turtle shell. Leaves now read by their own light, like the reference:
+	// each one bright on its sunny upper edge and shaded underneath (where the next leaf overlaps it), with only
+	// a thin soft seam between them.
+	float gap = smoothstep(0.0, 0.08, d2 - d1);
+	float leaf = mix(0.8, 1.0, gap);
+	float lit = clamp(0.5 + 1.3 * dot(q, normalize(vec3(0.45, 0.8, 0.3))), 0.0, 1.0);
+	float tone = leaf * mix(0.7, 1.2, lit * lit) * mix(0.92, 1.06, h1.x);
+	vec3 tint = vec3(1.0 + (h1.y - 0.5) * 0.16, 1.0 + (h1.z - 0.5) * 0.06, 1.0 - (h1.y - 0.5) * 0.12);
+	float s = uLeafParams.x * k;
+	dAlbedo *= mix(vec3(1.0), tint * tone, s);
+	sbLeafBend = q * 1.1;
+	sbLeafK = s;
+}
+`;
+
+const LEAF_NORMAL_PS = /* glsl */ `
+void getNormal() {
+	dNormalW = dVertexNormalW;
+	if (sbLeafK > 0.001) dNormalW = normalize(dNormalW + sbLeafBend * uLeafParams.y * sbLeafK);
 }
 `;
 
@@ -97,6 +181,15 @@ const TREE_MAIN_END = /* glsl */ `
 `;
 
 let material: pc.StandardMaterial | undefined;
+/** Look 3.7: leaf pattern per quality tier: strength, normal tilt, leaves per tile (about 4 cm leaves) */
+const LEAF_TIER = { low: [0.85, 0, 26, 0], medium: [0.95, 0.35, 26, 0], high: [1, 0.5, 26, 0] } as const;
+let leafTier: keyof typeof LEAF_TIER = 'high';
+
+/** Look 3.7: the leaf pattern's quality tier (Low skips the per-leaf lighting). */
+export function setLeafTier(t: keyof typeof LEAF_TIER) {
+  leafTier = t;
+  material?.setParameter('uLeafParams', [...LEAF_TIER[t]]);
+}
 let windStrength = 1;
 
 /** The shared foliage material (merged chunk trees, growing trees, showcase). */
@@ -119,11 +212,15 @@ export function foliageMaterial(): pc.StandardMaterial {
     chunks.set('transformVS', WIND_TRANSFORM);
     chunks.set('litUserCodeVS', TREE_USER_CODE);
     chunks.set('litUserMainEndVS', TREE_MAIN_END);
+    chunks.set('litUserDeclarationPS', LEAF_DECL_PS);
+    chunks.set('diffusePS', LEAF_DIFFUSE_PS);
+    chunks.set('normalMapPS', LEAF_NORMAL_PS);
   } catch {
     /* an engine without per-material chunks: trees simply don't sway or fade */
   }
   m.setParameter('uTreeCursor', [0, 0, 0, 0]);
   m.setParameter('uTreeScreen', [1, 1]);
+  m.setParameter('uLeafParams', [...LEAF_TIER[leafTier]]);
   m.setParameter('uWindTime', 0);
   m.setParameter('uWindStrength', windStrength);
   m.update();

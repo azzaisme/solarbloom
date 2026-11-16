@@ -16,6 +16,10 @@ export interface OfflineReport {
   droneJobs: number;
   restored: number;
   grown: number;
+  /** Look 6.2: visual transitions finished while away (they play out in seconds; the sim clock doesn't move). */
+  settled: number;
+  /** Look 6.8: tiles the Cultivators broke up and restored while away. */
+  cultivated: number;
 }
 
 /**
@@ -48,8 +52,11 @@ export class OfflineSystem {
       credited[k] = credited[k].add(got);
       lost[k] = lost[k].add(amount.sub(got).max(0));
     }
-    const report: OfflineReport = { seconds, away: awaySeconds, credited, lost, droneJobs: 0, restored: 0, grown: 0 };
+    const report: OfflineReport = { seconds, away: awaySeconds, credited, lost, droneJobs: 0, restored: 0, grown: 0, settled: 0, cultivated: 0 };
     this.droneWork(eff, report);
+    report.cultivated = s.cultivators.offline(eff, O.maxDroneJobs);
+    // Everything visible finishes: pending transitions (including the ones drone work just started) settle.
+    report.settled = s.transitions.finishAll();
     s.frenzy.suspended = false;
     s.production.markDirty();
     return report;

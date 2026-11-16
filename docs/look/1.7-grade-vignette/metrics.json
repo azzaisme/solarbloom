@@ -1,0 +1,36 @@
+{
+  "tag": "1.7-grade-vignette",
+  "query": "",
+  "renderer": "headless Chromium, SwiftShader (software GL)",
+  "when": "2026-11-16T02:02:45.480Z",
+  "shots": {
+    "full-desktop": {
+      "scene": "Fully restored park",
+      "size": "1280x800",
+      "frameMs": 690.7,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 150,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "be9a3aed0b8e"
+    },
+    "machines-desktop": {
+      "scene": "Machine cluster (solar, condenser, core)",
+      "size": "1280x800",
+      "frameMs": 1143.1,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 161,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "f54cb838ef03"
+    }
+  }
+}

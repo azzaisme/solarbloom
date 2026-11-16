@@ -1,5 +1,5 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
-export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'core';
+export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
 /** Plain per-resource numbers (tuning tables, small per-second coefficients). */
@@ -27,7 +27,29 @@ export type RestoreSource =
   | 'cat'
   | 'neighbourhood'
   /** Phase 5 E14: a superstructure's ability (Water Nexus wave, Tree of Life evolution) */
-  | 'super';
+  | 'super'
+  /** Look 6.8: the Cultivator (a solar tiller) */
+  | 'cultivator';
+
+/**
+ * Look 6 (#169): what a tile is visibly turning into. `restore` covers moss/concrete → growing → restored (fracture,
+ * heave, crumble, sprout, knit); `bloom` one nurture step; `unblock` an obstacle crumbling away.
+ */
+export type TransitionKind = 'soften' | 'moss' | 'restore' | 'bloom' | 'unblock';
+
+/**
+ * Look 6.2: a tile's active transition, keyed to sim time (so a reload continues it). `from` is the look it starts
+ * from (pollution for soften/moss/restore, bloom level for bloom). `dir` is the edge facing where the change came
+ * from (0 centre, 1 +x, 2 −x, 3 +z, 4 −z). `g`: gameplay time (the Cultivator's work), not just visual catch-up.
+ */
+export interface TileTransition {
+  k: TransitionKind;
+  t0: number;
+  d: number;
+  dir?: number;
+  from?: number;
+  g?: 1;
+}
 
 export interface TileData {
   id: string;
@@ -44,6 +66,10 @@ export interface TileData {
   bloom: number; // 0 until restored, then 1..3 (grass → flowers → shrubs)
   /** Reservoir Overflow: biomass bonus on this tile until this sim time. */
   lushUntil?: number;
+  /** Look 6.16: when the current lush spell began (the wet mask soaks in from then). */
+  lushAt?: number;
+  /** Look 6.2: the transition playing on this tile, if any (saved). */
+  tr?: TileTransition;
   /** City ground: what the tile is made of (generated, not saved). */
   feature?: import('../data/city').TileFeature;
   /** City ground obstacles: which prop stands here (bench, stall, stump…), for the renderer. */
@@ -105,6 +131,24 @@ export interface MachineData {
   project?: { stage: number; costs: Partial<Record<ResourceKind, string>>[] };
   /** Phase 5 E14: a superstructure's ability: charge (events), uses, automation switch. */
   ability?: { charge: number; used: number; auto?: boolean };
+  /** Look 6.8: a Cultivator's tillers (mobile units working dead ground near the dock), and tiles finished. */
+  cult?: { units: CultivatorUnit[]; done: number };
+}
+
+/**
+ * Look 6.8: one Cultivator tiller. `px`/`pz` are its continuous position (tile centre = x + 0.5); `work` lists
+ * the tiles it is working side by side (Wide Tines), `knocks`/`knockAt` limit tap knocks per phase.
+ */
+export interface CultivatorUnit {
+  px: number;
+  pz: number;
+  work: string[];
+  /** facing (radians), for the model */
+  rot: number;
+  parked?: boolean;
+  knocks?: number;
+  knockAt?: number;
+  retryAt?: number;
 }
 
 export type DroneMode = 'idle' | 'flying' | 'working' | 'cooldown' | 'returning';

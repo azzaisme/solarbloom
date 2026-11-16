@@ -11,8 +11,11 @@ mkdirSync(dir, { recursive: true });
 const server = await preview({ preview: { port: 4197, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const errors = [];
+// Look 4: desktop and a portrait phone, at every zoom band (city overview, far, mid/default, near, closest).
+const SIZES = process.env.CAM_SIZES === 'desktop' ? [['desktop', 1280, 800]] : [['desktop', 1280, 800], ['phone', 390, 844]];
 try {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+ for (const [size, vw, vh] of SIZES) {
+  const page = await browser.newPage({ viewport: { width: vw, height: vh }, deviceScaleFactor: 1 });
   page.on('pageerror', (e) => errors.push(`page: ${e}`));
   page.on('console', (m) => m.type() === 'error' && errors.push(`console: ${m.text()}`));
   await page.goto('http://localhost:4197/');
@@ -33,15 +36,17 @@ try {
     }
     g.chunks.markAll();
   });
-  for (const zoom of [0.42, 0.7, 1, 1.4, 1.9]) {
+  for (const zoom of [0.22, 0.42, 0.7, 1, 1.4, 1.9]) {
     await page.evaluate((z) => {
       const g = window.solarbloom;
       g.camera.glide(8, 0, 8, z);
       for (let i = 0; i < 200; i++) g.camera.update(0.05);
     }, zoom);
     await page.waitForTimeout(2500);
-    await page.screenshot({ path: `${dir}/${prefix}-z${String(zoom).replace('.', '')}.png` });
+    await page.screenshot({ path: `${dir}/${prefix}-${size}-z${String(zoom).replace('.', '')}.png` });
   }
+  await page.close();
+ }
 } finally {
   await browser.close();
   await server.close();

@@ -1,7 +1,10 @@
 import * as pc from 'playcanvas';
+import { LOOK } from '../data/look';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { SLAB_TOP } from './SceneBuilder';
+import { NEON } from './Vfx';
+import { PALETTE } from './Palette';
 
 interface Flash {
   e: pc.Entity;
@@ -11,6 +14,8 @@ interface Flash {
   peak: number;
   active: boolean;
   hold: boolean; // stays until released (chain origin marker)
+  /** Look 3.14: a restore target. Glows, breathing gently, while its tile grows; may be stolen if the pool runs dry. */
+  target: boolean;
   key?: string;
 }
 
@@ -25,6 +30,7 @@ function additive(color: string, opacity: number): pc.StandardMaterial {
   m.useLighting = false;
   m.diffuse = new pc.Color(0, 0, 0);
   m.emissive = hex(color);
+  m.emissiveIntensity = LOOK.emissive.tile; // Look 1.9: restore-tile glows reach the bloom range
   m.opacity = opacity;
   m.blendType = pc.BLEND_NORMAL; // normal blend: tints without blowing light tiles out to white
   m.depthWrite = false;
@@ -33,10 +39,93 @@ function additive(color: string, opacity: number): pc.StandardMaterial {
   return m;
 }
 
+/** Glow strength of the tile outlines (kept below 2: the bloom pass multiplies glows of 1 and more). */
+export const GLOW_INTENSITY = 1.5;
+
+/**
+ * Look 3.14: the material for a glowing tile outline (see `glowTileMesh`). Unlit; the mesh's vertex colours
+ * shade it (rgb = brightness, alpha = opacity), and `opacity` fades the whole thing. Create once and reuse.
+ */
+export function glowMaterial(color: string, intensity = GLOW_INTENSITY): pc.StandardMaterial {
+  const m = new pc.StandardMaterial();
+  m.useLighting = false;
+  m.diffuse = new pc.Color(0, 0, 0);
+  m.emissive = hex(color);
+  m.emissiveIntensity = intensity;
+  m.emissiveVertexColor = true;
+  m.emissiveVertexColorChannel = 'rgb';
+  m.opacityVertexColor = true;
+  m.opacityVertexColorChannel = 'a';
+  m.blendType = pc.BLEND_NORMAL;
+  m.depthWrite = false;
+  m.useFog = false;
+  m.cull = pc.CULLFACE_NONE;
+  m.update();
+  return m;
+}
+
+const glowMeshes = new WeakMap<pc.GraphicsDevice, Map<number, pc.Mesh>>();
+
+/**
+ * Look 3.14: a glowing tile square (as in docs/reference/target-look.png), flat at y=0 and centred: a thin bright
+ * line set just inside the tile's edge, a soft halo either side of it and a faint inner fill. `size` is the
+ * footprint in tiles; the line keeps the same width at every size. Shared and cached per device and size.
+ */
+export function glowTileMesh(device: pc.GraphicsDevice, size = 1): pc.Mesh {
+  let bySize = glowMeshes.get(device);
+  if (!bySize) glowMeshes.set(device, (bySize = new Map()));
+  let mesh = bySize.get(size);
+  if (mesh) return mesh;
+  const h = size / 2;
+  // Concentric squares from the outside in: [half size, alpha, brightness].
+  const rings: [number, number, number][][] = [
+    [[h - 0.0, 0, 0.5], [h - 0.045, 0.6, 0.55]], // outer halo (deeper green, so the line reads on pale paving)
+    [[h - 0.045, 1, 1], [h - 0.083, 1, 1]], // the line
+    [[h - 0.083, 0.6, 0.55], [h - 0.24, 0.2, 0.5]], // inner glow
+  ];
+  const pos: number[] = [];
+  const nrm: number[] = [];
+  const col: number[] = [];
+  const idx: number[] = [];
+  const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+  const vert = (s: number, cx: number, cz: number, a: number, b: number) => {
+    pos.push(cx * s, 0, cz * s);
+    nrm.push(0, 1, 0);
+    const v = Math.round(b * 255);
+    col.push(v, v, v, Math.round(a * 255));
+  };
+  for (const [[so, ao, bo], [si, ai, bi]] of rings) {
+    const base = pos.length / 3;
+    for (const [cx, cz] of corners) vert(so, cx, cz, ao, bo);
+    for (const [cx, cz] of corners) vert(si, cx, cz, ai, bi);
+    for (let k = 0; k < 4; k++) {
+      const a = base + k;
+      const b = base + ((k + 1) % 4);
+      const c = base + 4 + ((k + 1) % 4);
+      const d = base + 4 + k;
+      idx.push(a, c, b, a, d, c);
+    }
+  }
+  // Inner fill.
+  const inner = rings[2][1];
+  const base = pos.length / 3;
+  for (const [cx, cz] of corners) vert(inner[0], cx, cz, inner[1], inner[2]);
+  idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+  mesh = new pc.Mesh(device);
+  mesh.setPositions(pos);
+  mesh.setNormals(nrm);
+  mesh.setColors32(col);
+  mesh.setIndices(idx);
+  mesh.update();
+  mesh.incRefCount(); // shared by pooled entities; never let the engine free it
+  bySize.set(size, mesh);
+  return mesh;
+}
+
 /**
  * Tile-level feedback layered just above the slabs:
  * - a restrained glow on boosted tiles (one merged mesh, rebuilt only when the set changes)
- * - pooled flashes for chain waves, neighbour highlights and the chain-origin marker
+ * - pooled glowing tile outlines for chain waves, neighbour highlights, restore targets and the chain-origin marker
  */
 export class TileFx {
   private root: pc.Entity;
@@ -45,7 +134,7 @@ export class TileFx {
   private glowKey = '';
   private flashes: Flash[] = [];
   private quad: pc.Mesh;
-  private frameMesh: pc.Mesh;
+  private tileMesh: pc.Mesh;
   private time = 0;
   private recheck = 0;
   reducedMotion = false;
@@ -58,20 +147,23 @@ export class TileFx {
     this.root = new pc.Entity('tileFx');
     parent.addChild(this.root);
     this.quad = this.quadMesh([[0, 0]], 0.94);
-    this.frameMesh = this.frameMeshBuild();
-    this.quad.incRefCount(); // shared by pooled flashes; never let the engine free it
-    this.frameMesh.incRefCount();
-    this.glowMat = additive('#ffe27a', 0.16);
+    this.quad.incRefCount();
+    this.tileMesh = glowTileMesh(device);
+    this.glowMat = additive(PALETTE.glow.amber, 0.16);
     this.glow = new pc.Entity('glow');
     this.root.addChild(this.glow);
-    for (let i = 0; i < 48; i++) {
-      const m = additive('#ffffff', 0);
+    for (let i = 0; i < 64; i++) {
+      const m = glowMaterial(PALETTE.pure.white);
+      m.opacity = 0;
       const e = new pc.Entity('flash');
-      e.addComponent('render', { meshInstances: [new pc.MeshInstance(this.quad, m)], castShadows: false, receiveShadows: false });
+      e.addComponent('render', { meshInstances: [new pc.MeshInstance(this.tileMesh, m)], castShadows: false, receiveShadows: false });
       e.enabled = false;
       this.root.addChild(e);
-      this.flashes.push({ e, m, life: 0, max: 1, peak: 0.5, active: false, hold: false });
+      this.flashes.push({ e, m, life: 0, max: 1, peak: 0.5, active: false, hold: false, target: false });
     }
+    // Look 3.14: restore targets glow green while they grow and pop brighter as they finish.
+    sim.bus.on('tile.restoring', ({ tile }) => this.target(tile));
+    sim.bus.on('tile.restored', ({ tile }) => this.landed(tile));
   }
 
   /** Flat quads (one per offset) at y=0, each `size` wide, centred on the offsets. */
@@ -82,33 +174,6 @@ export class TileFx {
     const h = size / 2;
     cells.forEach(([cx, cz], i) => {
       pos.push(cx - h, 0, cz - h, cx + h, 0, cz - h, cx + h, 0, cz + h, cx - h, 0, cz + h);
-      nrm.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0);
-      const b = i * 4;
-      idx.push(b, b + 2, b + 1, b, b + 3, b + 2);
-    });
-    const mesh = new pc.Mesh(this.device);
-    mesh.setPositions(pos);
-    mesh.setNormals(nrm);
-    mesh.setIndices(idx);
-    mesh.update();
-    return mesh;
-  }
-
-  /** A square outline (4 thin quads) for the chain-origin marker. */
-  private frameMeshBuild(): pc.Mesh {
-    const pos: number[] = [];
-    const nrm: number[] = [];
-    const idx: number[] = [];
-    const o = 0.5;
-    const t = 0.07;
-    const rects = [
-      [-o, -o, o, -o + t],
-      [-o, o - t, o, o],
-      [-o, -o, -o + t, o],
-      [o - t, -o, o, o],
-    ];
-    rects.forEach(([x0, z0, x1, z1], i) => {
-      pos.push(x0, 0, z0, x1, 0, z0, x1, 0, z1, x0, 0, z1);
       nrm.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0);
       const b = i * 4;
       idx.push(b, b + 2, b + 1, b, b + 3, b + 2);
@@ -160,42 +225,42 @@ export class TileFx {
   }
 
   private take(): Flash {
-    return this.flashes.find((f) => !f.active) ?? this.flashes.find((f) => !f.hold) ?? this.flashes[0];
+    return this.flashes.find((f) => !f.active) ?? this.flashes.find((f) => !f.hold && !f.target) ?? this.flashes.find((f) => !f.hold) ?? this.flashes[0];
   }
 
-  /** Brief highlight on a tile (chain wave, neighbour softening). */
+  private place(f: Flash, t: TileData, color: string, lift: number) {
+    f.m.emissive = hex(color);
+    f.m.opacity = 0;
+    f.m.update();
+    const p = this.tilePos(t);
+    f.e.setPosition(p.x, p.y + lift, p.z);
+    f.e.enabled = true;
+  }
+
+  /** Brief glowing outline on a tile (chain wave, neighbour softening). */
   flash(t: TileData, color: string, peak = 0.55, dur = 0.6, delay = 0) {
     const f = this.take();
     f.active = true;
     f.hold = false;
+    f.target = false;
     f.key = undefined;
     f.life = -delay;
     f.max = this.reducedMotion ? Math.min(dur, 0.35) : dur;
-    f.peak = peak;
-    f.m.emissive = hex(color);
-    f.m.opacity = 0;
-    f.m.update();
-    f.e.render!.meshInstances[0].mesh = this.quad;
-    const p = this.tilePos(t);
-    f.e.setPosition(p.x, p.y + 0.005, p.z);
-    f.e.enabled = true;
+    f.peak = Math.min(1, peak * 1.4); // outlines are mostly transparent, so they can run brighter than the old flat flash
+    this.place(f, t, color, 0.005);
   }
 
   /** Persistent gold outline on the tile that started a chain, until released. */
-  hold(key: string, t: TileData, color = '#ffcf4a') {
+  hold(key: string, t: TileData, color = PALETTE.trim.amber) {
     const f = this.take();
     f.active = true;
     f.hold = true;
+    f.target = false;
     f.key = key;
     f.life = 0;
     f.max = 1;
     f.peak = 0.9;
-    f.m.emissive = hex(color);
-    f.m.update();
-    f.e.render!.meshInstances[0].mesh = this.frameMesh;
-    const p = this.tilePos(t);
-    f.e.setPosition(p.x, p.y + 0.01, p.z);
-    f.e.enabled = true;
+    this.place(f, t, color, 0.01);
   }
 
   release(key: string) {
@@ -204,6 +269,37 @@ export class TileFx {
         f.hold = false;
         f.life = f.max * 0.5; // fade out from the peak
       }
+  }
+
+  /** Look 3.14: a restore target. Glows neon green while the tile grows (until `landed`, or a safety timeout). */
+  target(t: TileData) {
+    const key = `grow:${t.id}`;
+    const f = this.flashes.find((x) => x.target && x.key === key) ?? this.take();
+    f.active = true;
+    f.hold = false;
+    f.target = true;
+    f.key = key;
+    f.life = 0;
+    f.max = Math.max(0.6, (t.growthRemainingSec ?? 0) + 2); // timeout only; `landed` normally ends it
+    f.peak = 0.8;
+    this.place(f, t, NEON, 0.008);
+  }
+
+  /** The target's tile finished: one bright pop, then the outline fades. */
+  private landed(t: TileData) {
+    const key = `grow:${t.id}`;
+    let f = this.flashes.find((x) => x.target && x.key === key);
+    if (!f) {
+      f = this.take();
+      this.place(f, t, NEON, 0.008);
+    }
+    f.active = true;
+    f.target = false;
+    f.hold = false;
+    f.key = undefined;
+    f.max = this.reducedMotion ? 0.4 : 0.7;
+    f.life = f.max * 0.12; // start near the peak (the rise was the growing glow)
+    f.peak = 1;
   }
 
   update(dt: number) {
@@ -224,6 +320,19 @@ export class TileFx {
       }
       f.life += dt;
       if (f.life < 0) continue;
+      if (f.target) {
+        if (f.life >= f.max) {
+          f.active = f.target = false;
+          f.e.enabled = false;
+          continue;
+        }
+        // Fade in over 0.15 s, then breathe while the tile grows.
+        const rise = Math.min(1, f.life / 0.15);
+        const breathe = this.reducedMotion ? 0.85 : 0.75 + 0.25 * Math.sin(this.time * 5 + f.e.getPosition().x);
+        f.m.opacity = f.peak * rise * breathe;
+        f.m.update();
+        continue;
+      }
       const k = f.life / f.max;
       if (k >= 1) {
         f.active = false;

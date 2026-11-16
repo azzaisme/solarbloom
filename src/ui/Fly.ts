@@ -1,9 +1,10 @@
 import { fmt, type Big } from '../core/Big';
 import type { ResourceKind } from '../core/types';
+import { ICONS } from './Icons';
 
-const ICON: Record<ResourceKind, string> = { energy: '⚡', water: '💧', biomass: '🌿' };
+const ICON: Record<ResourceKind, string> = { energy: ICONS.energy, water: ICONS.water, biomass: ICONS.biomass };
 
-/** Pooled DOM "+2🌿" numbers that pop from a tile and fly into the HUD counter. */
+/** Pooled DOM "+2 leaf" numbers that pop from a tile and fly into the HUD counter. */
 export class FlyText {
   private pool: HTMLDivElement[] = [];
   private active = 0;
@@ -27,7 +28,7 @@ export class FlyText {
       return;
     }
     this.active++;
-    el.textContent = `+${fmt(amount, 1)}${ICON[kind]}`;
+    el.innerHTML = `+${fmt(amount, 1)}${ICON[kind]}`;
     el.className = `fly ${kind}`;
     el.style.display = 'block';
     const tx = to.left + to.width / 2 - 10;

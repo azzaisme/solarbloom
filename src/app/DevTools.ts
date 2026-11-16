@@ -4,7 +4,8 @@ import { PARK } from '../core/Areas';
 import { Sim } from '../gameplay/Sim';
 import type { Game } from './Game';
 import type { FaceName } from '../rendering/DroneVisuals';
-import type { CatVariant, WorldEventType } from '../core/types';
+import type { CatVariant, TransitionKind, WorldEventType } from '../core/types';
+import { TUNING } from '../data/tuning';
 import { WORLD_EVENTS } from '../gameplay/WorldEventSystem';
 
 /**
@@ -19,6 +20,10 @@ import { WORLD_EVENTS } from '../gameplay/WorldEventSystem';
  *   sbDev.event('supernova')   start a world event now: supernova, migration, rain, invasion (Phase 5 E15)
  *   sbDev.cat('golden')        hide a cat now (standard, golden or rainbow) somewhere in view
  *   sbDev.face('excited')      show one drone expression on every drone (no argument: back to normal)
+ *   sbDev.tr.scrub(x, z, 0.4)  freeze ground tile (x, z)'s transition at 40 % (sbDev.tr.scrub() releases it)
+ *   sbDev.tr.play(x, z, 'restore') start a transition on a ground tile (soften, moss, restore, bloom, unblock)
+ *   sbDev.tr.speed(4)          every transition plays 4× slower (1 = normal), for tuning
+ *   sbDev.tr.stats()           tiles mid-transition (sim) and drawn as transitions (renderer)
  */
 export type PresetName = 'fresh' | 'screenshot' | 'rich' | 'wealthy';
 
@@ -99,6 +104,36 @@ export function installDevTools(game: Game) {
     },
     overflow() {
       return game.sim.log.overflow;
+    },
+    /** Look 6.12: the transition scrubber and time-scale. */
+    tr: {
+      scrub(x?: number, z?: number, p = 0.5) {
+        const r = game.transitions;
+        r.scrub = x === undefined || z === undefined ? undefined : { x, z, p: Math.max(0, Math.min(1, p)) };
+        const t = x === undefined || z === undefined ? undefined : game.sim.grid.get(GROUND, x, z);
+        if (t) game.chunks.markTile(t);
+        return r.scrub ? `tile ${x},${z} frozen at ${Math.round(r.scrub.p * 100)}% (${t?.tr?.k ?? 'no transition: try sbDev.tr.play'})` : 'released';
+      },
+      play(x: number, z: number, kind: TransitionKind = 'restore') {
+        const sim = game.sim;
+        const t = sim.grid.get(GROUND, x, z);
+        if (!t) return 'no tile there';
+        const T = TUNING.transitions;
+        const d = kind === 'soften' ? T.soften : kind === 'moss' ? T.moss : kind === 'bloom' ? T.bloom[Math.max(2, t.bloom)] : kind === 'unblock' ? T.unblock : T.restore.pulse;
+        sim.transitions.begin(t, kind, d, { from: kind === 'bloom' ? Math.max(1, t.bloom - 1) : kind === 'restore' ? 100 : 100, dir: sim.transitions.livingEdge(t) });
+        game.chunks.markTile(t);
+        return `${kind} on ${x},${z} for ${d}s`;
+      },
+      speed(scale = 1) {
+        game.transitions.durScale = Math.max(0.05, scale);
+        game.chunks.markAll();
+        return `transitions play at 1/${scale} speed`;
+      },
+      stats() {
+        let drawn = 0;
+        for (const n of game.transitions.liveByChunk.values()) drawn += n;
+        return { sim: game.sim.transitions.liveCount, drawn, time: game.transitions.time };
+      },
     },
     /** Drone redesign D03: preview an expression on every drone. */
     face(name?: FaceName) {

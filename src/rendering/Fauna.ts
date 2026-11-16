@@ -4,7 +4,7 @@ import type { TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
 import { catSpots, fountainPond, hash01, idHash, supersIn, tilesIn, wanderStop, type Rect } from './FaunaPlan';
-import { mat } from './Materials';
+import { mat, PALETTE } from './Materials';
 import { assignBatch, group, shape, vshape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
 
@@ -56,9 +56,9 @@ const ROBOT_S = 1.4;
 const CAT_S = 1.4;
 
 const COATS = [
-  ['#9a948c', '#6f6a63'], // grey tabby
-  ['#e59a4f', '#c9773a'], // ginger
-  ['#2f2f35', '#f4f1ea'], // black and white
+  PALETTE.fauna.catTabby, // grey tabby
+  PALETTE.fauna.catGinger, // ginger
+  PALETTE.fauna.catTuxedo, // black and white
 ];
 
 export class Fauna {
@@ -95,9 +95,9 @@ export class Fauna {
   private makeKoi(i: number): Actor {
     const root = group(this.root, 'koi');
     const body = group(root, 'body');
-    const main = i % 3 === 2 ? '#ffffff' : '#ff8a3d';
+    const main = i % 3 === 2 ? PALETTE.pure.white : PALETTE.fauna.koi;
     vshape(body, 'sphere', main, { scale: [0.07, 0.04, 0.17] });
-    vshape(body, 'sphere', i % 2 ? '#ffffff' : '#e84a2a', { pos: [0, 0.012, 0.02], scale: [0.05, 0.03, 0.07] }); // a patch
+    vshape(body, 'sphere', i % 2 ? PALETTE.pure.white : PALETTE.fauna.koiPatch, { pos: [0, 0.012, 0.02], scale: [0.05, 0.03, 0.07] }); // a patch
     const tail = group(body, 'tail', [0, 0, -0.085]);
     vshape(tail, 'box', main, { pos: [0, 0, -0.035], scale: [0.07, 0.008, 0.06], rot: [0, 45, 0] });
     return this.actor(root, [tail], 'koi');
@@ -107,22 +107,22 @@ export class Fauna {
     const root = group(this.root, 'robot');
     const body = group(root, 'body');
     body.setLocalScale(ROBOT_S, ROBOT_S, ROBOT_S);
-    vshape(body, 'capsule', '#f2ece0', { pos: [0, 0.11, 0], scale: [0.13, 0.15, 0.11] });
-    vshape(body, 'box', '#d9a441', { pos: [0, 0.1, 0], scale: [0.135, 0.02, 0.115] }); // brass belt
+    vshape(body, 'capsule', PALETTE.plastic.cream, { pos: [0, 0.11, 0], scale: [0.13, 0.15, 0.11] });
+    vshape(body, 'box', PALETTE.trim.brass, { pos: [0, 0.1, 0], scale: [0.135, 0.02, 0.115] }); // brass belt
     const head = group(body, 'head', [0, 0.215, 0]);
-    vshape(head, 'sphere', '#fbf6ec', { scale: [0.11, 0.08, 0.1] });
-    vshape(head, 'box', '#1d2633', { pos: [0, 0.005, 0.045], scale: [0.07, 0.03, 0.02] }); // visor
-    vshape(head, 'sphere', '#6ff3ff', { pos: [-0.015, 0.006, 0.056], scale: 0.014 });
-    vshape(head, 'sphere', '#6ff3ff', { pos: [0.015, 0.006, 0.056], scale: 0.014 });
-    vshape(head, 'cylinder', '#d9a441', { pos: [0, 0.06, 0], scale: [0.006, 0.05, 0.006] });
-    vshape(head, 'sphere', i % 2 ? '#7fd36a' : '#ff8fbf', { pos: [0, 0.09, 0], scale: 0.022 }); // a leaf bud or a flower
+    vshape(head, 'sphere', PALETTE.plastic.warm, { scale: [0.11, 0.08, 0.1] });
+    vshape(head, 'box', PALETTE.plastic.visor, { pos: [0, 0.005, 0.045], scale: [0.07, 0.03, 0.02] }); // visor
+    vshape(head, 'sphere', PALETTE.glow.eyeSoft, { pos: [-0.015, 0.006, 0.056], scale: 0.014 });
+    vshape(head, 'sphere', PALETTE.glow.eyeSoft, { pos: [0.015, 0.006, 0.056], scale: 0.014 });
+    vshape(head, 'cylinder', PALETTE.trim.brass, { pos: [0, 0.06, 0], scale: [0.006, 0.05, 0.006] });
+    vshape(head, 'sphere', i % 2 ? PALETTE.leaf.lime : PALETTE.pink, { pos: [0, 0.09, 0], scale: 0.022 }); // a leaf bud or a flower
     // a little watering can in one hand
     const arm = group(body, 'arm', [0.075, 0.12, 0]);
-    vshape(arm, 'cylinder', '#4fa3c9', { pos: [0.02, -0.04, 0.02], scale: [0.04, 0.045, 0.04] });
-    vshape(arm, 'cylinder', '#4fa3c9', { pos: [0.02, -0.03, 0.06], scale: [0.008, 0.05, 0.008], rot: [60, 0, 0] });
+    vshape(arm, 'cylinder', PALETTE.fauna.helperArm, { pos: [0.02, -0.04, 0.02], scale: [0.04, 0.045, 0.04] });
+    vshape(arm, 'cylinder', PALETTE.fauna.helperArm, { pos: [0.02, -0.03, 0.06], scale: [0.008, 0.05, 0.008], rot: [60, 0, 0] });
     const wheels = [-1, 1].map((s) => {
       const w = group(body, 'wheel', [s * 0.06, 0.03, 0]);
-      vshape(w, 'cylinder', '#5d6166', { scale: [0.05, 0.02, 0.05], rot: [0, 0, 90] });
+      vshape(w, 'cylinder', PALETTE.fauna.wheel, { scale: [0.05, 0.02, 0.05], rot: [0, 0, 90] });
       return w;
     });
     return this.actor(root, [head, arm, ...wheels], 'robots');
@@ -132,12 +132,12 @@ export class Fauna {
     const root = group(this.root, 'songbird');
     const body = group(root, 'body');
     body.setLocalScale(BIRD_S, BIRD_S, BIRD_S);
-    const col = ['#6f8fd6', '#e58b4f', '#9a7b5a', '#f2d24a'][i % 4];
+    const col = PALETTE.fauna.birds[i % 4];
     vshape(body, 'sphere', col, { pos: [0, 0.05, 0], scale: [0.06, 0.055, 0.085] });
-    vshape(body, 'sphere', '#f4efe6', { pos: [0, 0.04, 0.015], scale: [0.045, 0.04, 0.05] }); // pale breast
+    vshape(body, 'sphere', PALETTE.fauna.gull, { pos: [0, 0.04, 0.015], scale: [0.045, 0.04, 0.05] }); // pale breast
     const head = group(body, 'head', [0, 0.085, 0.035]);
     vshape(head, 'sphere', col, { scale: 0.045 });
-    vshape(head, 'cone', '#f0a23a', { pos: [0, 0, 0.03], scale: [0.012, 0.025, 0.012], rot: [90, 0, 0] });
+    vshape(head, 'cone', PALETTE.fauna.beak, { pos: [0, 0, 0.03], scale: [0.012, 0.025, 0.012], rot: [90, 0, 0] });
     vshape(body, 'box', col, { pos: [0, 0.06, -0.06], scale: [0.03, 0.01, 0.05], rot: [-20, 0, 0] }); // tail
     return this.actor(root, [head], 'groundBirds');
   }
@@ -153,8 +153,8 @@ export class Fauna {
     const head = group(body, 'head', [0.06, 0.04, 0.035]);
     vshape(head, 'sphere', coat, { scale: [0.065, 0.05, 0.06] });
     for (const s of [-1, 1]) vshape(head, 'cone', coat, { pos: [0.005, 0.03, s * 0.018], scale: [0.018, 0.022, 0.016], rot: [s * 25, 0, -30] }); // ears folded back
-    vshape(head, 'box', '#2b2b33', { pos: [0.03, 0.006, 0.012], scale: [0.012, 0.003, 0.008] }); // closed eyes
-    vshape(head, 'box', '#2b2b33', { pos: [0.03, 0.006, -0.012], scale: [0.012, 0.003, 0.008] });
+    vshape(head, 'box', PALETTE.fauna.eye, { pos: [0.03, 0.006, 0.012], scale: [0.012, 0.003, 0.008] }); // closed eyes
+    vshape(head, 'box', PALETTE.fauna.eye, { pos: [0.03, 0.006, -0.012], scale: [0.012, 0.003, 0.008] });
     const tail = group(body, 'tail', [-0.06, 0.02, 0]);
     vshape(tail, 'capsule', coat, { pos: [0.03, 0, 0.05], scale: [0.022, 0.07, 0.022], rot: [90, 30, 0] }); // wrapped round the front
     return this.actor(root, [body, tail], 'cats');
@@ -173,10 +173,10 @@ export class Fauna {
     }
     if (!this.pond) {
       this.pond = group(this.root, 'koiPond');
-      shape(this.pond, 'cylinder', mat('#4cc3ea', { gloss: 0.9, opacity: 0.88 }), { scale: [1.62, 0.012, 1.62] });
+      shape(this.pond, 'cylinder', mat(PALETTE.fauna.pond, { gloss: 0.9, opacity: 0.88 }), { scale: [1.62, 0.012, 1.62] });
       for (const [px, pz, s] of [[0.45, 0.2, 0.22], [-0.3, 0.42, 0.18], [-0.4, -0.35, 0.2]]) {
-        shape(this.pond, 'cylinder', mat('#5fb24a'), { pos: [px, 0.008, pz], scale: [s, 0.006, s] });
-        shape(this.pond, 'sphere', mat('#ff9fd0'), { pos: [px + 0.03, 0.03, pz], scale: 0.05 });
+        shape(this.pond, 'cylinder', mat(PALETTE.leaf.mid), { pos: [px, 0.008, pz], scale: [s, 0.006, s] });
+        shape(this.pond, 'sphere', mat(PALETTE.flowers.blush), { pos: [px + 0.03, 0.03, pz], scale: 0.05 });
       }
     }
     this.pond.enabled = true;
@@ -185,7 +185,7 @@ export class Fauna {
 
   private fireflyMat?: pc.StandardMaterial;
   private makeFirefly(): Actor {
-    this.fireflyMat ??= mat('#fff3a0', { emissive: '#ffe066', emissiveIntensity: 2.2 });
+    this.fireflyMat ??= mat(PALETTE.glow.firefly, { emissive: PALETTE.glow.fireflyCore, emissiveIntensity: 2.2 });
     const root = group(this.root, 'firefly');
     shape(root, 'sphere', this.fireflyMat, { scale: 0.035 });
     return this.actor(root, [], 'fireflies');

@@ -18,13 +18,19 @@ import type { OfflineReport } from '../gameplay/OfflineSystem';
 import { Sim } from '../gameplay/Sim';
 import { Butterflies } from '../rendering/Butterflies';
 import { Birds } from '../rendering/Birds';
+import { Clouds } from '../rendering/Clouds';
 import { Fauna } from '../rendering/Fauna';
 import { EcoBadge } from '../ui/EcoBadge';
 import { CameraController } from '../rendering/CameraController';
-import { setTreeCursor } from '../rendering/Foliage';
+import { setLeafTier, setTreeCursor } from '../rendering/Foliage';
+import { detailTextures } from '../rendering/DetailTex';
+import { Pollinators } from '../rendering/Pollinators';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
-import { ChunkRenderer } from '../rendering/ChunkRenderer';
+import { ChunkRenderer, SINK } from '../rendering/ChunkRenderer';
+import { TransitionRenderer } from '../rendering/transitions/TransitionRenderer';
+import { CultivatorVisuals } from '../rendering/CultivatorVisuals';
+import { ProgressRings } from '../rendering/transitions/ProgressRings';
 import { areaPanelHtml } from '../ui/AreaPanel';
 import { upgradeHighlights } from '../gameplay/UpgradeEffects';
 import { GridRenderer } from '../rendering/GridRenderer';
@@ -33,10 +39,16 @@ import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
+import { Sky } from '../rendering/Sky';
+import { Skyline } from '../rendering/Skyline';
+import { HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers } from '../core/Picking';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
 import { initLowPoly } from '../rendering/Shapes';
+import { LookController } from '../rendering/LookController';
+import { detectTier, lowerTier, urlTier, type GfxSetting } from '../rendering/Quality';
+import type { GfxTier } from '../data/look';
 import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
@@ -76,15 +88,30 @@ export class Game {
   readonly sim: Sim;
   readonly tweens = new Tweens();
   readonly scene: SceneBuilder;
+  /** Look 1: lighting, post-processing and graphics quality. */
+  readonly look: LookController;
   readonly camera: CameraController;
+  private sky!: Sky;
+  private skyline!: Skyline;
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
   readonly chunks: ChunkRenderer;
+  /** Look 6.12: living transitions (every tile change plays as a process). */
+  readonly transitions: TransitionRenderer;
+  /** Look 6.9: Cultivator tillers. */
+  readonly tillers: CultivatorVisuals;
+  /** Look 6.10: progress rings on tiles mid-process (near zoom). */
+  readonly rings: ProgressRings;
+  private stageSoundAt = 0;
   readonly machines: MachineVisuals;
   readonly drones: DroneVisuals;
   readonly cat: CatVisuals;
   readonly butterflies: Butterflies;
+  /** Look 3.16: bees, hoverflies, drifting leaves and falling blossom */
+  readonly pollinators: Pollinators;
   private birds: Birds;
+  /** Puffy clouds between the camera and the city when zoomed out. */
+  private clouds: Clouds;
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
   readonly fauna: Fauna;
   private eco!: EcoBadge;
@@ -152,9 +179,18 @@ export class Game {
     this.scene = new SceneBuilder(this.app, this.tweens);
     this.scene.build();
     this.camera = new CameraController(this.app, this.tweens);
+    // Look 4.7: the sky behind everything (its own layer, drawn first).
+    this.sky = new Sky(this.app, this.scene.sun);
+    this.camera.cam.layers = [this.sky.layer.id, this.sky.clearLayer.id, ...this.camera.cam.layers];
+    // Look 4.8: the distant terraced city behind the play area (in the sky's layer, drawn before the world).
+    this.skyline = new Skyline(this.app, this.sky.layer, this.scene.sun.up);
+    this.look = new LookController(this.app, this.scene, this.camera);
+    this.look.atmosphere.isLit = (x, z) => this.sim.grid.get(GROUND, x, z)?.ground === 'restored';
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.transitions = new TransitionRenderer(this.sim);
+    this.chunks.transitions = this.transitions;
     this.chainSummary = new ChainSummary(this.sim);
     // City 05.2: the park cheers up in stages as you restore it.
     this.chunks.onParkStage = (stage) => {
@@ -177,8 +213,12 @@ export class Game {
     this.drones.sync();
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
+    this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
+    this.rings = new ProgressRings(this.sim, this.scene.world);
     this.birds = new Birds(this.scene.world);
+    this.clouds = new Clouds(this.scene.world, this.app.graphicsDevice, this.scene.sun.up);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
+    this.pollinators = new Pollinators(this.sim, this.scene.world, this.app.batcher!.addGroup('pollinators', true, 400).id);
     this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
     this.tileFx = new TileFx(this.sim, this.scene.world, this.app.graphicsDevice);
     this.machines.onWisp = (_m, at) => this.vfx.burst(at, 1, { up: 0.5, speed: 0.12, size: 0.035, life: 1.3, gravity: 0 }); // Phase 5 E16: running machines only
@@ -205,7 +245,9 @@ export class Game {
         setSetting: (k, v) => this.setSetting(k, v),
         activateFrenzy: () => this.sim.frenzy.activate(),
         findCat: () => this.findCat(),
+        goHome: (attention) => (attention ? this.focusNextArea() : this.focusArea(PARK)),
         setVolume: (k, v) => this.setVolume(k, v),
+        setGraphics: (v) => this.setGraphics(v),
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
         mergeAt: (id) => {
@@ -283,11 +325,11 @@ export class Game {
       hover: (x, y) => this.onHover(x, y),
       leave: () => this.onLeave(),
       click: (x, y, b) => this.onClick(x, y, b),
-      pan: (dx, dy) => {
+      pan: (dx, dy, x, y) => {
         this.lastPanAt = performance.now();
-        this.camera.pan(dx, dy);
+        this.camera.pan(dx, dy, x, y);
       },
-      zoom: (f) => this.camera.zoomBy(f),
+      zoom: (f, x, y) => this.camera.zoomBy(f, x, y),
       // A quick, strong pinch-out snaps to the city overview (one gesture from anywhere).
       pinchEnd: (f, ms) => {
         if (this.city && !this.cinematic && f < 0.6 && ms < 450) this.camera.glide(this.camera.target.x, 0, this.camera.target.z, this.camera.minZoom);
@@ -327,12 +369,31 @@ export class Game {
 
   // ───────────────────────── settings / persistence ─────────────────────────
 
+  /** Look 1.11: the graphics tier in effect (from the URL, the setting, or Auto). */
+  gfxTier: GfxTier = 'high';
+  /** Auto's current tier: detected once, then stepped down by adaptQuality when frames stay slow. */
+  private autoTier?: GfxTier;
+
+  private setGraphics(v: GfxSetting) {
+    if (v === 'auto') this.autoTier = undefined; // detect afresh
+    this.setSetting('gfx', v);
+  }
+
+  private resolveTier(): GfxTier {
+    const forced = urlTier();
+    if (forced) return forced;
+    const s = this.settings.gfx ?? 'auto';
+    if (s !== 'auto') return s;
+    this.autoTier ??= detectTier(this.app.graphicsDevice);
+    return this.autoTier;
+  }
+
   private setVolume(k: 'sfxVolume' | 'musicVolume', v: number) {
     this.settings[k] = Math.max(0, Math.min(100, v));
     this.setSetting('sound', this.settings.sound);
   }
 
-  private setSetting(k: keyof Settings, v: boolean) {
+  private setSetting(k: keyof Settings, v: boolean | string) {
     (this.settings as unknown as Record<string, unknown>)[k] = v;
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
@@ -348,15 +409,38 @@ export class Game {
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
     document.body.classList.toggle('contrast', !!s.highContrast);
+    this.look.highContrast = !!s.highContrast;
+    // Look 5.11: HUD glass without live blur (cheaper on phones). Look 1's Low graphics tier can set it too.
+    document.body.classList.toggle('solid-glass', !!s.lowVfx);
     const rm = s.reducedMotion;
-    this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
+    this.look.lowVfx = !!s.lowVfx;
+    this.look.reducedMotion = rm;
+    this.gfxTier = this.resolveTier();
+    this.look.setTier(this.gfxTier);
+    this.hud.gfxTier = this.gfxTier;
+    // Phase 5 E16's fauna caps (TUNING.ecosystem.caps) follow the graphics tier.
+    this.faunaTier = this.gfxTier;
+    this.tileFx.reducedMotion = this.birds.reducedMotion = this.clouds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
+    if (this.transitions) {
+      // Look 6: reduced motion keeps the timings with simpler visuals; detail follows the quality tier (Look 1's
+      // setting when it lands, the "fewer effects" switch until then).
+      this.transitions.reducedMotion = rm;
+      if (this.tillers) this.tillers.reducedMotion = rm;
+      const tier = (this as { gfxTier?: 'low' | 'medium' | 'high' }).gfxTier ?? (s.lowVfx ? 'low' : 'high');
+      if (this.transitions.tier !== tier) {
+        this.transitions.tier = tier;
+        this.chunks?.markAll();
+      }
+    }
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
+    this.vfx.reducedMotion = rm;
     this.cat.softSparkle = rm || s.lowVfx;
     this.machines.wispsPerSecond = s.lowVfx ? 2 : 5;
-    // Quality: lighter shadows with fewer effects.
-    const sun = this.scene.sun.light;
-    if (sun) sun.shadowResolution = s.lowVfx ? 1024 : 2048;
+    // Look 3: surface detail, the leaf pattern and foliage density follow Look 1's graphics tier.
+    detailTextures.setTier(this.gfxTier);
+    setLeafTier(this.gfxTier);
+    if (this.chunks) this.chunks.setDetail(this.gfxTier);
     if (this.chunks && this.chunks.lowFog !== !!s.lowFog) {
       this.chunks.lowFog = !!s.lowFog;
       this.chunks.markAll();
@@ -439,7 +523,7 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement) return;
       const k = e.key.toLowerCase();
-      const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden', '9': 'relay' };
+      const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden', '9': 'relay', '0': 'cultivator' };
       if (map[k]) this.selectTool(map[k]);
       else if (k === 'h') this.harvest();
       else if (k === 'f') this.focusNextArea();
@@ -469,7 +553,25 @@ export class Game {
     const layers = this.sim.grid.allLayers.filter((l) => l.kind === 'raised' || l.unlocked);
     const hit = pickLayers(layers, o, d);
     if (!hit) return undefined;
+    // Look 4.9: unrevealed areas are drawn SINK lower. A ray that lands on one at the city level carries on
+    // down to the sunk ground; if it ends under the revealed terrace instead, it hit the facade (nothing).
+    if (hit.layerId === GROUND && this.city && this.sunkAt(hit.fx, hit.fz)) {
+      const y = this.sim.grid.layer(GROUND)!.height + SLAB_TOP - SINK;
+      const t = (y - o.y) / d.y;
+      const fx = o.x + d.x * t;
+      const fz = o.z + d.z * t;
+      if (!this.sunkAt(fx, fz)) return undefined;
+      return { roofId: GROUND, fx, fz, tile: this.sim.grid.get(GROUND, Math.floor(fx), Math.floor(fz)) };
+    }
     return { roofId: hit.layerId, fx: hit.fx, fz: hit.fz, tile: this.sim.grid.get(hit.layerId, Math.floor(hit.fx), Math.floor(hit.fz)) };
+  }
+
+  /** Look 4.9: how far unrevealed ground is drawn below the city (tests read it). */
+  readonly sinkDepth = SINK;
+
+  /** Look 4.9: a city cell drawn sunk (its area not revealed yet). */
+  sunkAt(x: number, z: number): boolean {
+    return this.sim.areas.fog(this.sim.areas.map.areaOfCell(Math.floor(x), Math.floor(z))) === 'hidden';
   }
 
   /** See-through trees: 0..1, eases in while the cursor rests on the world and out when it leaves or pans. */
@@ -490,13 +592,58 @@ export class Game {
     setTreeCursor((this.pointer.x / w) * 2 - 1, 1 - (this.pointer.y / h) * 2, depth, this.treeFade, w, h);
   }
 
-  /** Haze and shadow reach follow the zoom-dependent camera (its distance changes with the zoom). */
+  private moodT = 0;
+  private moodSet = false;
+
+  /**
+   * Look 1.7: the grade follows the restoration of the area under the camera (a cleared area is fully warm; a
+   * fogged one warms as its tiles come back toward the landmark's need), so progress reads as the light returning.
+   */
+  private updateMood(dt: number) {
+    this.moodT -= dt;
+    if (this.moodT > 0) return;
+    this.moodT = 0.5;
+    const s = this.sim;
+    const t = this.camera.target;
+    const id = s.areas.areaOf({ roofId: GROUND, x: Math.floor(t.x), z: Math.floor(t.z) });
+    let mood = 0;
+    if (id) {
+      const fog = s.areas.fog(id);
+      if (fog === 'cleared') mood = 1;
+      else if (fog !== 'hidden') mood = Math.min(1, s.areas.counts(id).restored / s.areas.need(id));
+    }
+    this.look.moodTarget = mood;
+    if (!this.moodSet) this.look.snapMood();
+    this.moodSet = true;
+  }
+
+  /**
+   * Haze and shadow reach follow the zoom-dependent camera (its distance changes with the zoom). Look 4.5/4.7:
+   * the haze reaches a little less far close up, its colour is the sky's horizon colour so the ground fades
+   * into the sky, and both grey while the city is fogged.
+   */
   private syncView() {
     const c = this.camera;
+    const n = c.nearness();
+    c.hazeStart = HAZE.start[0] + (HAZE.start[1] - HAZE.start[0]) * n;
+    c.hazeEnd = HAZE.end[0] + (HAZE.end[1] - HAZE.end[0]) * n;
     this.app.scene.fog.start = c.fogDepth(c.dist + c.hazeStart);
     this.app.scene.fog.end = c.fogDepth(c.dist + c.hazeEnd);
+    if (this.sky) {
+      const [r, g, b] = this.sky.hazeColour();
+      this.app.scene.fog.color.set(r, g, b, 1);
+      c.cam.clearColor = new pc.Color(r, g, b, 1);
+    }
     const sun = this.scene.sun.light;
     if (sun) sun.shadowDistance = c.shadowDistance();
+  }
+
+  /** Look 4.7: how clear the sky is (0 grey … 1 clear): the park's stage, then each woken area. */
+  private skyClarity(): number {
+    const p = this.sim.progression;
+    const park = this.city ? Math.max(0, p.parkStage()) / 4 : 0;
+    const k = park * 0.4 + Math.min(1, this.sim.areas.clearedCount() / 8) * 0.6;
+    return k * k * (3 - 2 * k) * 0.85 + 0.15;
   }
 
   /** The game is in the city (the park and beyond), not the legacy rooftop layout. */
@@ -521,31 +668,41 @@ export class Game {
     this.camera.bounds = { minX: x0 - 8, maxX: x1 + 8, minZ: z0 - 8, maxZ: z1 + 8 };
   }
 
-  /** Visible ground rectangle (world x/z) from the four screen corners. */
+  /**
+   * Look 4.11 (#155): the visible ground as the frustum's footprint (a trapezoid reaching toward the horizon)
+   * and its bounding rectangle. Each screen corner's ray meets the (sunk) ground, but never further than the
+   * haze reaches: past it everything is the haze colour, so nothing there needs streaming.
+   */
   private groundRect() {
     const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
     const w = c.clientWidth;
     const h = c.clientHeight;
+    const cam = this.camera;
+    const reach = cam.dist + cam.hazeEnd + 8; // from the camera, along the ground
+    const floor = -SINK;
     let x0 = Infinity;
     let x1 = -Infinity;
     let z0 = Infinity;
     let z1 = -Infinity;
-    for (const [sx, sy] of [[0, 0], [w, 0], [0, h], [w, h]]) {
-      const { o, d } = this.camera.ray(sx, sy);
-      // A ray at or above the horizon (the low close-up view) reaches as far as streaming goes.
-      const t = d.y < -1e-3 ? -o.y / d.y : 400;
+    const poly: [number, number][] = [];
+    for (const [sx, sy] of [[0, 0], [w, 0], [w, h], [0, h]]) {
+      const { o, d } = cam.ray(sx, sy);
+      const flat = Math.max(1e-6, Math.hypot(d.x, d.z));
+      const cap = reach / flat;
+      const t = d.y < -1e-3 ? Math.min(cap, (floor - o.y) / d.y) : cap;
       const x = o.x + d.x * t;
       const z = o.z + d.z * t;
+      poly.push([x, z]);
       x0 = Math.min(x0, x);
       x1 = Math.max(x1, x);
       z0 = Math.min(z0, z);
       z1 = Math.max(z1, z);
     }
     // Never stream an unbounded amount at extreme zoom-out.
-    const cx = this.camera.target.x;
-    const cz = this.camera.target.z;
+    const cx = cam.target.x;
+    const cz = cam.target.z;
     const R = 90;
-    return { x0: Math.max(x0, cx - R), x1: Math.min(x1, cx + R), z0: Math.max(z0, cz - R), z1: Math.min(z1, cz + R) };
+    return { x0: Math.max(x0, cx - R), x1: Math.min(x1, cx + R), z0: Math.max(z0, cz - R), z1: Math.min(z1, cz + R), poly };
   }
 
   /**
@@ -558,8 +715,8 @@ export class Game {
     for (const d of this.sim.state.drones) {
       const p = this.drones.worldPos(d.id);
       if (!p) continue;
-      const sp = this.camera.toScreen(p);
-      pts.push({ id: d.id, x: sp.x, y: sp.y });
+      const sp = this.camera.onScreen(p);
+      if (sp) pts.push({ id: d.id, x: sp.x, y: sp.y });
     }
     if (!pts.length) return undefined;
     return pickDrone(pts, x, y, droneTapRadius(this.camera.worldPerPixel(), this.machineOrFootprintAt(x, y)));
@@ -582,7 +739,8 @@ export class Game {
     for (const id of this.cat.ids()) {
       const p = this.cat.targetWorld(id);
       if (!p) continue;
-      const s = this.camera.toScreen(p);
+      const s = this.camera.onScreen(p);
+      if (!s) continue;
       const d = Math.hypot(s.x - x, s.y - y);
       if (d <= bestD) {
         best = id;
@@ -619,10 +777,10 @@ export class Game {
 
   /** On screen and clear of the HUD, off screen (reachable by panning) or covered by a HUD panel. */
   private anchorView(p: pc.Vec3): 'visible' | 'offscreen' | 'covered' {
-    const s = this.camera.toScreen(p);
+    const s = this.camera.onScreen(p, 0);
     const w = window.innerWidth;
     const h = window.innerHeight;
-    if (s.x < 40 || s.y < 40 || s.x > w - 40 || s.y > h - 40) return 'offscreen';
+    if (!s || s.x < 40 || s.y < 40 || s.x > w - 40 || s.y > h - 40) return 'offscreen';
     return this.hud.blockedRects().some((r) => s.x > r.left - 16 && s.x < r.right + 16 && s.y > r.top - 16 && s.y < r.bottom + 16) ? 'covered' : 'visible';
   }
 
@@ -744,20 +902,47 @@ export class Game {
     this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${action ? '<br>' + action : ''}`);
   }
 
+  /** Look 6.10: the name of the stage a tile's transition is in (inspect panel). */
+  private stageName(t: TileData): string | undefined {
+    const tr = t.tr;
+    if (!tr) return undefined;
+    const p = this.transitions.progress(t);
+    if (p >= 1) return undefined;
+    const S = TUNING.transitions.restoreStages;
+    switch (tr.k) {
+      case 'restore':
+        return p < S.fracture[1] ? '💥 Slab fracturing' : p < S.heave[1] ? '🪨 Roots heaving the slab' : p < S.crumble[1] ? '🟫 Crumbling into soil' : p < S.knit[0] ? '🌱 Seedlings unfurling' : '🌿 Turf knitting';
+      case 'bloom':
+        return '🌸 Growing in';
+      case 'moss':
+        return '🍃 Moss creeping in';
+      case 'soften':
+        return '🧱 Softening';
+      case 'unblock':
+        return '🪨 Crumbling away';
+    }
+  }
+
   private tileDetail(t: TileData): string {
     if (t.blocked) return 'Nothing grows here.';
     const zone = this.sim.production.inPollinatorZone(t);
     switch (t.ground) {
-      case 'polluted':
+      case 'polluted': {
+        const left = this.sim.cultivators.remaining(t);
+        if (left !== undefined) return `🚜 The Cultivator is softening this slab — ${Math.ceil(left)} s to bloom. Tap to knock it along.`;
         return `Pollution ${Math.round(t.pollution)}% — restoring neighbours softens it into moss.`;
+      }
       case 'prepared':
         return zone ? '🌸 Inside a garden zone — may set off a Bloom Chain!' : 'Ready to bloom — cheaper to restore.';
       case 'growing':
-        return 'Almost there…';
+        return `${this.stageName(t) ?? 'Roots are breaking through'} — ${Math.max(1, Math.ceil(t.growthRemainingSec))} s`;
       case 'restored': {
         const rate = this.sim.production.tileBiomassRate(t);
         const lush = (t.lushUntil ?? 0) > this.sim.time ? ` · 💧 lush ${Math.ceil(t.lushUntil! - this.sim.time)} s` : '';
-        return `+${rate.toFixed(2)}🌿/s${zone ? ' (garden ×2)' : ''}${lush}${t.bloom >= TUNING.restore.maxBloom ? ' · radiant ✦' : t.bloom >= TUNING.restore.fullBloom ? ' · full bloom ✓' : ''}`;
+        const st = this.stageName(t);
+        const left = t.tr ? Math.ceil(t.tr.t0 + t.tr.d - this.sim.time) : 0;
+        const proc = st && left > 0 ? ` · ${st} (${left} s)` : '';
+        return `+${rate.toFixed(2)}🌿/s${zone ? ' (garden ×2)' : ''}${lush}${proc}${t.bloom >= TUNING.restore.maxBloom ? ' · radiant ✦' : t.bloom >= TUNING.restore.fullBloom ? ' · full bloom ✓' : ''}`;
       }
     }
   }
@@ -868,6 +1053,8 @@ export class Game {
         const linked = 'id' in m ? this.sim.relays.linked(m as MachineData) : [];
         return [...g.tilesNear(m, TUNING.relay.zoneRadius), ...linked.map((o) => g.get(o.roofId, o.x, o.z)!)];
       }
+      case 'cultivator': // Look 6.8: its work radius (wider with Fog Seeker)
+        return g.tilesNear(m, 'id' in m ? this.sim.cultivators.radius(m as MachineData) : TUNING.cultivator.radius);
       case 'core':
         return this.sim.chains.isElder(m) ? g.tilesNear(m, this.sim.chains.canopyBurstRadius(m)) : [];
       default:
@@ -1126,7 +1313,7 @@ export class Game {
       }
     }
     extra = this.superHtml(m) + extra + this.mergeHtml(m);
-    if ((m.overchargeUntil ?? 0) > s.time) extra = `<p class="stat" style="color:#1d8fb0">⚡ Boosted by your pulse — next trigger +1 (${Math.ceil(m.overchargeUntil! - s.time)} s)</p>` + extra;
+    if ((m.overchargeUntil ?? 0) > s.time) extra = `<p class="stat boost">⚡ Boosted by your pulse — next trigger +1 (${Math.ceil(m.overchargeUntil! - s.time)} s)</p>` + extra;
     this.hud.renderInspect(this.hud.machineHtml(m, extra));
   }
 
@@ -1136,8 +1323,9 @@ export class Game {
     const t = this.sim.grid.byTileId(tileId);
     if (!t) return undefined;
     const [x, y, z] = this.sim.grid.tileWorld(t);
-    const s = this.camera.toScreen(new pc.Vec3(x, y + 0.3, z));
-    return { x: s.x, y: s.y };
+    // Behind the camera or far off screen: the number flies from the default spot instead.
+    const s = this.camera.onScreen(new pc.Vec3(x, y + 0.3, z), 0);
+    return s && { x: s.x, y: s.y };
   }
 
   private tileVec(t: TileData, up = SLAB_TOP): pc.Vec3 {
@@ -1164,7 +1352,7 @@ export class Game {
   private wireEvents() {
     const b = this.bus;
     const s = this.sim;
-    for (const ev of ['tile.restoring', 'tile.restored', 'tile.prepared', 'tile.softened', 'tile.nurtured'] as const) b.on(ev, ({ tile }) => this.chunks.markTile(tile));
+    for (const ev of ['tile.restoring', 'tile.restored', 'tile.prepared', 'tile.softened', 'tile.nurtured', 'tile.lush', 'tile.knocked', 'tile.transition'] as const) b.on(ev, ({ tile }) => this.chunks.markTile(tile));
     // Phase 5: trees grow into their next stage with a bounce (restored → sapling, then with each bloom stage).
     b.on('tile.restored', ({ tile }) => this.chunks.growTree(tile, 0));
     b.on('tile.nurtured', ({ tile, level }) => this.chunks.growTree(tile, level - 1));
@@ -1212,6 +1400,9 @@ export class Game {
       if (source === 'pulse') {
         this.vfx.ring(p, PALETTE.eyeCyan, 1.1, 0.55);
         this.vfx.burst(p, 6, { up: 1.5, speed: 1.4, size: 0.05 });
+        // Look 6.4: the slab fractures under your tap: a short, punchy shake and a burst of grit.
+        this.vfx.burst(p, 8, { up: 1.1, speed: 1.6, size: 0.045, life: 0.6, hex: PALETTE.debris });
+        if (!this.settings.reducedMotion) this.camera.shake(0.035);
         this.sfx.pulse();
       } else if (source === 'broad') this.vfx.ring(p, PALETTE.eyeCyan, 0.8, 0.45);
       else if (source === 'condenser') this.vfx.ring(p, PALETTE.water, 0.8, 0.5);
@@ -1252,6 +1443,7 @@ export class Game {
       // Player actions get the full burst; automation (drones, machines, chains) is quieter.
       const manual = source === 'pulse' || source === 'broad';
       this.vfx.burst(p, manual ? 14 : source === 'drone' ? 9 : source === 'condenser' ? 6 : 9, { up: manual ? 2.6 : source === 'drone' ? 2.2 : 1.8, size: manual ? 0.07 : 0.055 });
+      this.vfx.restoreBloom(p, manual ? 1 : 0.6); // Look 3.14: sparkles, a shockwave and drifting petals
       // Drone redesign D05: a drone's restore ends in a small bloom burst (petals above, plus a cyan puff and a
       // leaf-green ring). Visual only: the reward was paid by the sim.
       if (source === 'drone') {
@@ -1266,6 +1458,32 @@ export class Game {
       if (this.selected) this.inspectTimer = 0;
     });
     b.on('tile.softened', ({ tile }) => this.tileFx.flash(tile, '#7fcf5a', 0.22, 0.5, 0.1));
+    // Look 6.10: a tap on a tile mid-process: a satisfying knock (crack burst, a tiny shake, a crack sound).
+    b.on('tile.knocked', ({ tile }) => {
+      const p = this.tileVec(tile);
+      this.vfx.burst(p, 7, { up: 1.2, speed: 1.2, size: 0.04, life: 0.5, hex: PALETTE.debris });
+      this.vfx.ring(p, '#c8ffa8', 0.6, 0.25);
+      if (!this.settings.reducedMotion) this.camera.shake(0.02);
+      this.sfx.stage('crack');
+    });
+    // Look 6.10: each restore stage has its own sound as it plays (rate-limited, so chains layer, never roar).
+    const stageSounds = (tile: TileData) => {
+      const tr = tile.tr;
+      if (!tr || tr.k !== 'restore' || Math.abs(tr.t0 - s.time) > 0.3) return;
+      const now = performance.now();
+      if (now - this.stageSoundAt < 150) return;
+      this.stageSoundAt = now;
+      const S = TUNING.transitions.restoreStages;
+      const at = (share: number, kind: Parameters<typeof this.sfx.stage>[0]) => this.tweens.add(0.01, () => {}, { delay: Math.max(0, tr.t0 + tr.d * share - s.time), done: () => this.sfx.stage(kind) });
+      at(0, 'crack');
+      at(S.heave[0] + 0.02, 'grind');
+      at(S.heave[0] + 0.1, 'creak');
+      at(S.crumble[0] + 0.05, 'thud');
+      at(S.sprout[0] + 0.02, 'sprout');
+      at(S.knit[0] + 0.05, 'rustle');
+    };
+    b.on('tile.restoring', ({ tile }) => stageSounds(tile));
+    b.on('tile.restored', ({ tile, source }) => source !== 'pulse' && source !== 'broad' && stageSounds(tile));
     b.on('tile.prepared', ({ tile }) => {
       this.grid.refresh(tile, true);
       this.tileFx.flash(tile, '#6cc24a', 0.35, 0.7, 0.1);
@@ -1283,17 +1501,15 @@ export class Game {
       let from = tileId ? this.tileScreen(tileId) : undefined;
       if (!from && reason === 'cat') {
         const c = this.cat.targetWorld(this.claimingCat) ?? this.lastCatPos;
-        if (c) {
-          const sp = this.camera.toScreen(c);
-          from = { x: sp.x, y: sp.y };
-        }
+        const sp = c && this.camera.onScreen(c, 0);
+        if (sp) from = { x: sp.x, y: sp.y };
       }
       if (!from && reason === 'harvest') {
         const panel = s.state.machines.find((m) => m.type === 'solar');
         if (panel) {
           const w = this.machines.worldOf(panel);
-          const sp = this.camera.toScreen(new pc.Vec3(w[0], w[1] + 0.6, w[2]));
-          from = { x: sp.x, y: sp.y };
+          const sp = this.camera.onScreen(new pc.Vec3(w[0], w[1] + 0.6, w[2]), 0);
+          if (sp) from = { x: sp.x, y: sp.y };
         }
       }
       this.flyGain(kind, amount, from);
@@ -1749,6 +1965,7 @@ export class Game {
     if (this.summaryAt <= 0) {
       this.summaryAt = 0.25;
       this.hud.chainAreas(tr && tr.total >= 12 && tr.perArea.size > 1 ? this.chainSummary.lines(tr) : []);
+      if (tr) this.hud.chainBreakdown(this.chainSummary.breakdown(tr.chainId)); // Look 5.5: the combo panel's lines
     }
     if (!tr || tr.total < 20 || this.frontAt > 0 || this.settings.reducedMotion) return;
     this.frontAt = 0.3;
@@ -1925,7 +2142,6 @@ export class Game {
     const zoomedOut = this.camera.zoom < 0.6;
     const live = new Set<string>();
     if (show) {
-      const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
       // Overview icons: a chain blooming there now, and where you've found the Lucky Cat.
       const chaining = zoomedOut ? s.chains.activeAreas() : new Set<string>();
       const catAreas = new Set<string>();
@@ -1942,8 +2158,9 @@ export class Game {
         const fog = s.areas.fog(id);
         const ready = id !== PARK && s.areas.ready(id);
         if (!ready && !zoomedOut) continue;
-        const sp = this.camera.toScreen(new pc.Vec3(a.landmark[0] + 1, 2.4, a.landmark[1] + 1));
-        if (sp.x < -50 || sp.y < -50 || sp.x > c.clientWidth + 50 || sp.y > c.clientHeight + 50) continue;
+        // Look 4.6: never behind the camera or past the haze; sized by distance close up.
+        const sp = this.camera.onScreen(new pc.Vec3(a.landmark[0] + 1, 2.4, a.landmark[1] + 1), 50);
+        if (!sp) continue;
         const def = AREA_TYPES[a.type];
         const key = `areaLabel-${id}`;
         live.add(key);
@@ -1954,7 +2171,7 @@ export class Game {
         else if (fog === 'cleared') html = `<span data-area="${id}">${def.icon} ${esc(id === PARK ? 'The Park' : def.name)}${icons}<small>clear${a.authored ? ' · ' + esc(a.landmarkName) : ''}</small></span>`;
         else html = `<span data-area="${id}">${def.icon} ${esc(def.name)}${icons}<small>🌫️ ${Math.min(100, Math.round((s.areas.counts(id).restored / s.areas.need(id)) * 100))}%</small></span>`;
         // Zoomed out, every label is a button to its area's panel.
-        this.hud.worldLabel(key, html, sp.x, sp.y, ready || zoomedOut);
+        this.hud.worldLabel(key, html, sp.x, sp.y, ready || zoomedOut, zoomedOut ? 1 : sp.scale);
       }
     }
     for (const key of this.areaLabels) if (!live.has(key)) this.hud.worldLabel(key, null);
@@ -2095,6 +2312,11 @@ export class Game {
       dev.maxPixelRatio = Math.max(1, dev.maxPixelRatio - 0.25);
       this.app.resizeCanvas();
       this.slowFor = 0;
+    } else if (this.slowFor > 3 && (this.settings.gfx ?? 'auto') === 'auto' && !urlTier() && this.gfxTier !== 'low') {
+      // Look 1.11: already at the lowest resolution and still slow: Auto steps down a graphics tier.
+      this.autoTier = lowerTier(this.gfxTier);
+      this.applySettings();
+      this.slowFor = 0;
     } else if (this.fastFor > 8 && dev.maxPixelRatio < this.maxDpr) {
       dev.maxPixelRatio = Math.min(this.maxDpr, dev.maxPixelRatio + 0.25);
       this.app.resizeCanvas();
@@ -2165,9 +2387,20 @@ export class Game {
     this.tweens.update(dt);
     this.scene.update(dt);
     this.grid.update(dt);
-    const rect = this.city ? this.groundRect() : undefined;
+    const rect = view;
+    this.transitions.sync(this.sim.time + Math.min(this.acc, TUNING.simStep));
     if (rect) this.chunks.update(dt, rect, this.camera.target, this.camera.zoom);
+    detailTextures.step(); // Look 3.1: builds the detail maps a slice per frame after first paint
+    const camP = this.camera.entity.getPosition();
+    detailTextures.setCamera(camP.x, camP.y, camP.z);
     this.machines.update(dt, rect);
+    this.tillers.update(this.paused || this.hiddenPause ? 0 : dt);
+    this.rings.update(this.camera.zoom, this.camera.target);
+    // Look 6.10: a working tiller near the view hums.
+    if (!this.paused && this.camera.zoom > 0.9) {
+      const f = this.camera.target;
+      if (this.sim.cultivators.working().some((t) => Math.abs(t.x - f.x) < 10 && Math.abs(t.z - f.z) < 8)) this.sfx.stage('hum');
+    }
     this.drones.update(this.paused || this.hiddenPause ? 0 : dt); // drone personality freezes with the game
     this.cat.update(dt);
     // Phase 5 E16: fauna by unlock, capped per quality tier ("Fewer particles" = low).
@@ -2179,7 +2412,11 @@ export class Game {
     const ct = this.camera.target;
     const near = rect ? { x0: ct.x - 12, x1: ct.x + 12, z0: ct.z - 12, z1: ct.z + 12 } : undefined;
     this.butterflies.update(dt, near);
+    this.pollinators.enabled = !this.settings.reducedMotion && !ChunkRenderer.still;
+    this.pollinators.quality = quality;
+    this.pollinators.update(dt, near);
     this.birds.resident = eco.has('birds');
+    this.clouds.happy = eco.has('birds'); // the sky wakes up with the songbirds: sleepy faces on a couple of clouds
     this.birds.update(dt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
     this.fauna.update(dt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: !!this.settings.fireflies && !this.settings.highContrast });
     this.eco?.update(dt);
@@ -2195,7 +2432,20 @@ export class Game {
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
     this.camera.update(dt);
+    this.sky.clarity += (this.skyClarity() - this.sky.clarity) * Math.min(1, dt * 0.8);
+    this.sky.reducedMotion = this.settings.reducedMotion;
+    this.sky.update(dt, this.camera.entity.getPosition(), this.camera.cam.farClip);
+    this.skyline.clarity = this.sky.clarity;
+    this.skyline.reducedMotion = this.settings.reducedMotion;
+    this.skyline.update(dt, this.camera.target, this.camera.entity.getPosition(), this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
     this.syncView();
+    {
+      const c = this.camera;
+      const cv = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+      this.clouds.update(dt, { zoom: c.zoom, yaw: c.yaw, dist: c.dist, viewHeight: c.viewHeight, aspect: cv.clientWidth / Math.max(1, cv.clientHeight), position: c.entity.getPosition(), forward: c.entity.forward });
+    }
+    this.updateMood(dt);
+    this.look.update(dt);
     this.updateTreeCursor(dt);
     this.hud.update(dt);
     this.sfx.layers = Math.min(3, Math.floor(this.sim.progression.restoredCount(HOME) / 12));
@@ -2258,7 +2508,7 @@ export function offlineToast(r: OfflineReport, title: string): string {
   const lost = (['energy', 'water', 'biomass'] as const).filter((k) => r.lost[k].gte(1)).map((k) => `${fmt(r.lost[k])}${icons[k]}`);
   const lines = [`🌙 ${title} (${away})`];
   const capped = r.away > r.seconds + 1 ? ` · counted up to ${Math.round(r.seconds / 3600)} h` : '';
-  lines.push(`<small>Your garden kept growing at half pace${capped}: ${got.join(' ') || 'nothing new'}${r.droneJobs ? ` · drones restored ${r.restored} and nurtured ${r.grown} tiles` : ''}${lost.length ? ` · ${lost.join(' ')} didn't fit in storage` : ''}</small>`);
+  lines.push(`<small>Your garden kept growing at half pace${capped}: ${got.join(' ') || 'nothing new'}${r.droneJobs ? ` · drones restored ${r.restored} and nurtured ${r.grown} tiles` : ''}${r.cultivated ? ` · your cultivators broke up ${r.cultivated} slab${r.cultivated === 1 ? '' : 's'}` : ''}${lost.length ? ` · ${lost.join(' ')} didn't fit in storage` : ''}</small>`);
   return lines.join('');
 }
 
