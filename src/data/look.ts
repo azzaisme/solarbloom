@@ -70,7 +70,7 @@ export const LOOK = {
    * restore. Read every frame: live edits apply at once.
    */
   grade: {
-    warm: { brightness: 1.0, contrast: 1.04, saturation: 1.22, tint: '#fff2de', shadows: 0.12, highlights: -0.1, vibrance: 0.3 },
+    warm: { brightness: 1.0, contrast: 1.04, saturation: 1.32, tint: '#fff2de', shadows: 0.1, highlights: -0.1, vibrance: 0.42 },
     dead: { brightness: 0.97, contrast: 1.03, saturation: 0.82, tint: '#e9eef6', shadows: 0.0, highlights: -0.1, vibrance: 0.0 },
     /** High contrast (settings): a flatter grade with no vignette so outlines and text stay readable. */
     contrast: { brightness: 1.02, contrast: 1.0, saturation: 1.0, tint: '#ffffff', shadows: 0.2, highlights: -0.1, vibrance: 0.0 },
