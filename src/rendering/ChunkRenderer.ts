@@ -200,11 +200,14 @@ interface ChunkView {
 }
 
 /**
- * Look 4.9 (#153): how far unrevealed areas sit below the revealed city. The revealed city reads as a raised
- * terrace with retaining-wall facades on its edges; revealing an area raises it to the city level. Picking
- * of sunk (hidden) ground uses the same depth (`Game.pick`).
+ * Look 4.9 (#153): how far unrevealed areas sit below the revealed city. The early city (the park, then the
+ * suburbs) is at street level, so this is a low step: the revealed ground reads as a place with a stone kerb
+ * at its edge, not a rooftop. Revealing an area raises it to the city level. Picking of sunk (hidden) ground
+ * uses the same depth (`Game.pick`). A drop of `TALL_DROP` or more draws a full building facade instead (for
+ * the skyscraper stage later in the game).
  */
-export const SINK = 3.2;
+export const SINK = 0.45;
+const TALL_DROP = 2;
 
 /**
  * Renders the endless city ground: one merged, vertex-coloured mesh per 16×16 chunk (slabs + decoration),
@@ -809,8 +812,8 @@ export class ChunkRenderer {
   }
 
   /**
-   * Look 4.9: the face of the raised city where it drops to a sunk neighbour chunk (side dx, dz): a stone
-   * retaining wall down to the lower level with a plinth, two storeys of windows, pilasters, balconies with
+   * Look 4.9: the face of the raised city where it drops to a sunk neighbour chunk (side dx, dz). For the low
+   * street-level step, a stone kerb. For a tall drop (TALL_DROP or more): a retaining wall with a plinth, two storeys of windows, pilasters, balconies with
    * planters, vines, and a coping with a low rail along the top edge. Only the sides the camera sees (east and
    * south) get the detail; the far sides are plain walls.
    */
@@ -831,6 +834,12 @@ export class ChunkRenderer {
     b.add('box', stone, at(N / 2, -0.2, bottom + H / 2), size(N, 0.4, H));
     if (far) return;
     const seen = dx > 0 || dz > 0;
+    if (SINK < TALL_DROP) {
+      // A street-level step: a stone kerb with a coping (Look 3 places railings, hedges and clutter along it).
+      b.add('box', alive ? '#f3eee2' : '#b3ada2', at(N / 2, 0.02, top + 0.1), size(N, 0.14, 0.08));
+      if (seen) b.add('box', alive ? '#cfc4ae' : '#8f897f', at(N / 2, 0.02, bottom + 0.25), size(N, 0.04, 0.5));
+      return;
+    }
     // Coping and a low rail along the top edge (all sides: it outlines the terrace).
     b.add('box', alive ? '#f3eee2' : '#b3ada2', at(N / 2, 0.02, top + 0.11), size(N, 0.12, 0.08));
     for (let a = 0.5; a < N; a += 2) b.add('box', '#7c6f5e', at(a, 0.02, top + 0.3), size(0.05, 0.05, 0.36));
