@@ -297,6 +297,24 @@ describe('E18.3 Scout', () => {
     expect(Economy.part(sim.roles.scoutCost(h, far), 'water').toNumber()).toBe(Economy.part(sim.restoration.pulseCost(far), 'water').toNumber());
   });
 
+  it('a Scout working near a hidden Lucky Cat shows its paw-print hint early (P1 add-on)', () => {
+    const sim = city();
+    sim.cat.anchorView = () => 'visible';
+    expect(sim.cat.spawn()).toBe(true);
+    const spot = sim.cat.spots()[0];
+    const a = sim.cat.anchor(spot.anchorId)!;
+    const [ax, az] = [Math.floor(a.pos[0]), Math.floor(a.pos[2])];
+    expect(sim.cat.hinted(spot)).toBe(false);
+    box(sim, ax - 14, az - 14, ax + 14, az + 14, green(1)); // nothing else to restore nearby…
+    box(sim, ax - 2, az - 2, ax + 2, az + 2, grey); // …but the cat's corner
+    const free = sim.grid.tilesNear({ roofId: GROUND, x: ax, z: az, size: 1 }, 6).find((t) => Math.hypot(t.x - ax, t.z - az) >= 4 && !t.occupantId && !t.blocked && sim.grid.footprint(GROUND, t.x, t.z, 2).every((c) => c && !c.occupantId && !c.blocked))!;
+    roleHub(sim, free.x, free.z, 'scout');
+    sim.advance(20);
+    expect(sim.time - spot.spawnedAt).toBeLessThan(TUNING.cat.hintAfter);
+    expect(spot.scouted).toBe(true);
+    expect(sim.cat.hinted(spot)).toBe(true);
+  });
+
   it('never nurtures', () => {
     const sim = city();
     roleHub(sim, 20, 20, 'scout');

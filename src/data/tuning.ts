@@ -256,7 +256,7 @@ export const TUNING = {
       /** Grows the target plus this many orthogonal neighbours (+1 per Drone Sweep level), paying the target's nurture water only. */
       gardener: { neighbours: 2, unlockFullBloom: 10 },
       /** Reach is the hub's radius + (reach − 1) × the base radius; flies `speed`× as fast; +1 ⚡ per `tilesPerEnergy` tiles past the base radius. */
-      scout: { reach: 1.5, speed: 1.5, tilesPerEnergy: 4 },
+      scout: { reach: 1.5, speed: 1.5, tilesPerEnergy: 4, catHintTiles: 3 },
       /** Deliveries, each machine at most once per `everySeconds`; priced in what the machine runs on. */
       courier: {
         everySeconds: 8,

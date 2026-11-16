@@ -207,6 +207,8 @@ export interface CatSpot {
   anchorId: string;
   spawnedAt: number;
   variant: CatVariant;
+  /** E18.3: a Scout flew close by, so the nook shows its paw-print hint early. */
+  scouted?: boolean;
 }
 
 export interface CatState {

@@ -257,6 +257,12 @@ export class DroneRoles {
       if (t && s.restoration.isEligible(t)) {
         s.restoration.beginGrowth(t, 'drone', TUNING.pulse.growSeconds);
         tileIds.push(t.id);
+        // E18.3 (P1): working within 3 tiles of a hidden Lucky Cat makes its nook show the paw-print hint early (once per cat).
+        for (const c of s.cat.spots()) {
+          if (c.scouted) continue;
+          const a = s.cat.anchor(c.anchorId);
+          if (a && a.roofId === t.roofId && Math.hypot(a.pos[0] - (t.x + 0.5), a.pos[2] - (t.z + 0.5)) <= TUNING.drone.roles.scout.catHintTiles) c.scouted = true;
+        }
         const sweep = s.upgrades.droneSweep(hub) + (d.swarm ? TUNING.super.megahub.sweep : 0);
         if (sweep > 0) {
           // Free restores around it, fog-edge tiles first.

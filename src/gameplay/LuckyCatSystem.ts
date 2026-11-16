@@ -137,7 +137,7 @@ export class LuckyCatSystem {
 
   /** Phase 5 E15: hiding long enough to leave paw prints (a gentle hint; nothing is lost by ignoring it). */
   hinted(spot: CatSpot): boolean {
-    return this.sim.time - spot.spawnedAt >= TUNING.cat.hintAfter;
+    return !!spot.scouted || this.sim.time - spot.spawnedAt >= TUNING.cat.hintAfter;
   }
 
   /** Phase 5 E15: a new cat's id and rarity. The very first cat is always a standard one (onboarding). */
