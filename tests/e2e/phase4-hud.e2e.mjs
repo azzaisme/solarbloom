@@ -11,7 +11,7 @@ const strict = !!process.env.STRICT;
 mkdirSync(dir, { recursive: true });
 const server = await preview({ preview: { port: 4198, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-const PANELS = ['#res', '#obj', '#hotbar', '#hint', '#chips', '#toasts', '#frenzyBtn'];
+const PANELS = ['#res', '#obj', '#hotbar', '#hint', '#chips', '#toasts', '#frenzyBtn', '#quick'];
 const SIZES = [
   ['320', 320, 640],
   ['360', 360, 740],
@@ -68,6 +68,13 @@ try {
     const covered = rects.reduce((a, r) => a + Math.max(0, Math.min(r.r, w) - Math.max(r.l, 0)) * Math.max(0, Math.min(r.b, h) - Math.max(r.t, 0)), 0);
     console.log(`${name} ${w}×${h}: HUD covers ~${Math.round((100 * covered) / (w * h))}% · ${issues.length ? issues.join('; ') : 'no overlaps'}`);
     console.log(`   ${rects.map((r) => `${r.sel} ${Math.round(r.r - r.l)}×${Math.round(r.b - r.t)}@${Math.round(r.l)},${Math.round(r.t)}`).join('  ')}`);
+    // Look 5.2: no emoji on screen (game strings carry them; the HUD draws icons instead).
+    const emoji = await page.evaluate(() => {
+      const t = document.getElementById('hud').innerText;
+      const titles = [...document.querySelectorAll('#hud [title], #hud [aria-label]')].map((e) => `${e.getAttribute('title') ?? ''} ${e.getAttribute('aria-label') ?? ''}`).join(' ');
+      return [...`${t} ${titles}`.matchAll(/\p{Extended_Pictographic}/gu)].map((m) => m[0]).join('');
+    });
+    if (emoji) issues.push(`emoji on screen: ${emoji}`);
     problems += issues.length;
     await page.screenshot({ path: `${dir}/phase4-hud-${name}.png` });
     // The Build tray opens above the hotbar and stays on screen.
@@ -82,6 +89,32 @@ try {
       problems++;
     }
     await page.screenshot({ path: `${dir}/phase4-hud-${name}-tray.png` });
+    // Look 5.6: on a keyboard-sized screen every key badge matches the binding it shows.
+    if (name === 'desktop') {
+      await page.keyboard.press('Escape');
+      const badge = (sel) => page.evaluate((sel) => document.querySelector(`${sel} .key`)?.textContent, sel);
+      const checks = [
+        ['1', '[data-tool="inspect"]', () => page.evaluate(() => document.querySelector('[data-tool="inspect"]').classList.contains('active'))],
+        ['2', '[data-tool="pulse"]', () => page.evaluate(() => document.querySelector('[data-tool="pulse"]').classList.contains('active'))],
+        ['B', '#buildToggle', () => page.evaluate(() => document.querySelector('#buildTray').classList.contains('open'))],
+        ['U', '#upgBtn', () => page.evaluate(() => window.solarbloom.hud.isUpgradesOpen)],
+      ];
+      for (const [key, sel, did] of checks) {
+        if ((await badge(sel)) !== key) {
+          console.log(`   key badge ${sel} shows "${await badge(sel)}", not ${key}`);
+          problems++;
+        }
+        await page.keyboard.press(key.toLowerCase());
+        await page.waitForTimeout(250);
+        if (!(await did())) {
+          console.log(`   key ${key} did not act on ${sel}`);
+          problems++;
+        }
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(150);
+      }
+      if ((await badge('#harvestBtn')) !== 'H') problems++;
+    }
     await page.close();
   }
 } finally {

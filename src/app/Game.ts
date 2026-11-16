@@ -219,6 +219,7 @@ export class Game {
         setSetting: (k, v) => this.setSetting(k, v),
         activateFrenzy: () => this.sim.frenzy.activate(),
         findCat: () => this.findCat(),
+        goHome: (attention) => (attention ? this.focusNextArea() : this.focusArea(PARK)),
         setVolume: (k, v) => this.setVolume(k, v),
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
@@ -362,6 +363,8 @@ export class Game {
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
     document.body.classList.toggle('contrast', !!s.highContrast);
+    // Look 5.11: HUD glass without live blur (cheaper on phones). Look 1's Low graphics tier can set it too.
+    document.body.classList.toggle('solid-glass', !!s.lowVfx);
     const rm = s.reducedMotion;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
@@ -1180,7 +1183,7 @@ export class Game {
       }
     }
     extra = this.superHtml(m) + extra + this.mergeHtml(m);
-    if ((m.overchargeUntil ?? 0) > s.time) extra = `<p class="stat" style="color:#1d8fb0">⚡ Boosted by your pulse — next trigger +1 (${Math.ceil(m.overchargeUntil! - s.time)} s)</p>` + extra;
+    if ((m.overchargeUntil ?? 0) > s.time) extra = `<p class="stat boost">⚡ Boosted by your pulse — next trigger +1 (${Math.ceil(m.overchargeUntil! - s.time)} s)</p>` + extra;
     this.hud.renderInspect(this.hud.machineHtml(m, extra));
   }
 
@@ -1832,6 +1835,7 @@ export class Game {
     if (this.summaryAt <= 0) {
       this.summaryAt = 0.25;
       this.hud.chainAreas(tr && tr.total >= 12 && tr.perArea.size > 1 ? this.chainSummary.lines(tr) : []);
+      if (tr) this.hud.chainBreakdown(this.chainSummary.breakdown(tr.chainId)); // Look 5.5: the combo panel's lines
     }
     if (!tr || tr.total < 20 || this.frontAt > 0 || this.settings.reducedMotion) return;
     this.frontAt = 0.3;
