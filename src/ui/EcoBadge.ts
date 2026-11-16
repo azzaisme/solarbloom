@@ -1,6 +1,7 @@
 import { fmt } from '../core/Big';
 import { FAUNA, FAUNA_INFO, faunaGoal, type FaunaId } from '../gameplay/Ecosystem';
 import type { Sim } from '../gameplay/Sim';
+import { ICONS } from './Icons';
 
 type Toast = (html: string, kind?: '' | 'gold' | 'cat', secs?: number) => void;
 
@@ -31,7 +32,7 @@ export class EcoBadge {
     b.className = 'chip';
     b.id = 'bioBtn';
     b.setAttribute('aria-label', 'Biodiversity');
-    b.innerHTML = '🌱 <span id="bioScore">0</span>';
+    b.innerHTML = `${ICONS.sprout} <span id="bioScore">0</span>`;
     b.addEventListener('click', () => this.explain());
     tools.insertBefore(b, tools.querySelector('#setBtn'));
     this.el = b;

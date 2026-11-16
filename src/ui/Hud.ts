@@ -9,7 +9,7 @@ import { AREA_TYPES } from '../data/city';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
 import { SEED_CORE_MACHINES } from '../gameplay/ProgressionSystem';
-import { ICONS } from './Icons';
+import { ICONS, GROUP_ICONS, MACHINE_ICONS, hasEmoji, iconize, installIconDefs, plain } from './Icons';
 import { WORLD_EVENT_INFO } from '../gameplay/WorldEventSystem';
 
 /** Phase 5 E14: `super:<type>` places a Superstructure Core of that family. */
@@ -19,10 +19,12 @@ export const SUPER_TOOLS: SuperTool[] = ['super:solar', 'super:condenser', 'supe
 export const superType = (t: Tool) => (t.startsWith('super:') ? (t.slice(6) as 'solar' | 'condenser' | 'pollinator' | 'droneHub') : undefined);
 
 const RES_META: Record<ResourceKind, { icon: string; name: string; color: string }> = {
-  energy: { icon: '⚡', name: 'Energy', color: 'var(--energy)' },
-  water: { icon: '💧', name: 'Water', color: 'var(--water)' },
-  biomass: { icon: '🌿', name: 'Biomass', color: 'var(--biomass)' },
+  energy: { icon: ICONS.energy, name: 'Energy', color: 'var(--energy-bar)' },
+  water: { icon: ICONS.water, name: 'Water', color: 'var(--water-bar)' },
+  biomass: { icon: ICONS.biomass, name: 'Biomass', color: 'var(--biomass-bar)' },
 };
+/** Resource emoji inside game strings (drawn as icons by `iconize`). */
+const RES_EMOJI: Record<ResourceKind, string> = { energy: '⚡', water: '💧', biomass: '🌿' };
 
 export interface HudCallbacks {
   selectTool(t: Tool): void;
@@ -102,7 +104,8 @@ export class Hud {
   ) {
     this.settings = settings;
     this.root = document.getElementById('hud')!;
-    this.root.innerHTML = this.template();
+    installIconDefs();
+    this.root.innerHTML = iconize(this.template());
     this.wire();
   }
 
@@ -123,7 +126,7 @@ export class Hud {
       `<div id="buildTray">`,
       ...BUILDABLE.map(
         (t) =>
-          `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name} (${MACHINES[t].hotkey})"><span class="key">${MACHINES[t].hotkey}</span><span class="si">${MACHINES[t].icon}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
+          `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name} (${MACHINES[t].hotkey})"><span class="key">${MACHINES[t].hotkey}</span><span class="si">${ICONS[MACHINE_ICONS[t]]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
       ),
       ...SUPER_TOOLS.map((t) => {
         const d = TIER3[superType(t)!]!;
@@ -367,9 +370,12 @@ export class Hud {
   private set(key: string, el: HTMLElement, prop: 'text' | 'html' | 'width' | 'cls' | 'style' | 'title', value: string, cls?: string) {
     if (this.last.get(key) === value) return;
     this.last.set(key, value);
-    if (prop === 'text') el.textContent = value;
-    else if (prop === 'title') el.title = value;
-    else if (prop === 'html') el.innerHTML = value;
+    // Look 5.2: emoji in game strings are drawn as icons; titles (tooltips) keep plain text.
+    if (prop === 'text') {
+      if (hasEmoji(value)) el.innerHTML = iconize(esc(value));
+      else el.textContent = value;
+    } else if (prop === 'title') el.title = plain(value);
+    else if (prop === 'html') el.innerHTML = iconize(value);
     else if (prop === 'width') el.style.width = value;
     else if (prop === 'cls' && cls) el.classList.toggle(cls, value === '1');
     else if (prop === 'style' && cls) el.style.setProperty(cls, value);
@@ -379,7 +385,7 @@ export class Hud {
   /** Lucky Cat reward summary: stays in the corner until dismissed (or fades after a while). */
   catReward(title: string, detail: string) {
     const p = $(this.root, '#catPanel');
-    $(this.root, '#catPanelBody').innerHTML = `<b>🐱 ${esc(title)}</b><span>${esc(detail)}</span>`;
+    $(this.root, '#catPanelBody').innerHTML = `<b>${ICONS.cat} ${iconize(esc(title))}</b><span>${iconize(esc(detail))}</span>`;
     p.hidden = false;
     window.clearTimeout(this.catPanelTimer);
     this.catPanelTimer = window.setTimeout(() => (p.hidden = true), 16000);
@@ -406,7 +412,7 @@ export class Hud {
     const s = this.sim;
     if (s.econ.canAfford(cost)) return formatCost(cost);
     return KINDS.filter((k) => Economy.part(cost, k).gt(s.econ.get(k)))
-      .map((k) => `${fmt(s.econ.get(k))}/${fmt(Economy.part(cost, k).ceil())}${RES_META[k].icon}`)
+      .map((k) => `${fmt(s.econ.get(k))}/${fmt(Economy.part(cost, k).ceil())}${RES_EMOJI[k]}`)
       .join(' ');
   }
 
@@ -533,7 +539,7 @@ export class Hud {
     tg.classList.toggle('active', building);
     const st = superType(t);
     const def = st ? TIER3[st]! : building ? MACHINES[t as BuildableType] : undefined;
-    $(tg, '.si').innerHTML = def ? def.icon : ICONS.build;
+    $(tg, '.si').innerHTML = st ? iconize(def!.icon) : building ? ICONS[MACHINE_ICONS[t]] : ICONS.build;
     $(tg, '.sl').textContent = def ? (st ? def.name.split(' ').pop()! : def.name.replace('Water ', '').replace('Pollinator ', '')) : 'Build';
     this.toggleTray(false);
   }
@@ -567,9 +573,9 @@ export class Hud {
       if (focusCats) $(this.root, '#disc').scrollIntoView({ block: 'nearest' });
       const s = this.sim.state.stats;
       const avg = s.chains ? (s.chainEffects / s.chains).toFixed(1) : '—';
-      $(this.root, '#statsBox').innerHTML =
+      $(this.root, '#statsBox').innerHTML = iconize(
         `Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Avg: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b> 🐱 · Play time: <b>${Math.floor(this.sim.time / 60)}m</b>` +
-        `<details style="margin-top:6px"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre><button class="copyT" data-copy-timings>📋 Copy</button></details>`;
+        `<details style="margin-top:6px"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre><button class="copyT" data-copy-timings>📋 Copy</button></details>`);
       this.root.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => (inp.checked = !!this.settings[inp.dataset.set as keyof Settings]));
     }
   }
@@ -589,7 +595,7 @@ export class Hud {
     const rewards = Object.entries(names)
       .map(([k, n]) => `<span class="rw ${d.rewards[k as keyof typeof d.rewards] ? 'got' : ''}">${n}${d.rewards[k as keyof typeof d.rewards] ? ` ×${d.rewards[k as keyof typeof d.rewards]}` : ''}</span>`)
       .join('');
-    $(this.root, '#disc').innerHTML = `<h3>🐱 Lucky Cat discoveries · ${d.found}</h3><ul class="spots">${spots}</ul><div class="rws">${rewards}</div>`;
+    $(this.root, '#disc').innerHTML = iconize(`<h3>🐱 Lucky Cat discoveries · ${d.found}</h3><ul class="spots">${spots}</ul><div class="rws">${rewards}</div>`);
   }
 
   get modalOpen() {
@@ -625,7 +631,7 @@ export class Hud {
     let lastGroup = '';
     const html = sorted
       .map((def) => {
-        const head = def.group !== lastGroup ? `<h3 class="ugroup">${def.group}</h3>` : '';
+        const head = def.group !== lastGroup ? `<h3 class="ugroup">${GROUP_ICONS[def.group] ? ICONS[GROUP_ICONS[def.group]] : ''} ${def.group}</h3>` : '';
         lastGroup = def.group;
         // Phase 5 E12: per-machine upgrades show the type's range of levels and an "Upgrade all" button that buys
         // cheapest-first; long-tail upgrades (no last level) show their level number instead of pips.
@@ -669,7 +675,7 @@ export class Hud {
   private failTimer = 0;
   showFail(msg: string, x?: number, y?: number) {
     const el = $(this.root, '#fail');
-    el.textContent = msg;
+    el.innerHTML = iconize(esc(msg));
     el.style.display = 'block';
     const px = x ?? window.innerWidth / 2 - 100;
     const py = y ?? window.innerHeight - 160;
@@ -689,7 +695,7 @@ export class Hud {
       if (c.dataset.head !== head || c.style.opacity === '0') continue;
       const n = Number(c.dataset.n ?? '1') + 1;
       c.dataset.n = String(n);
-      c.innerHTML = `${html.replace('<small>', ` <b class="tn">×${n}</b><small>`)}${html.includes('<small>') ? '' : ` <b class="tn">×${n}</b>`}`;
+      c.innerHTML = iconize(`${html.replace('<small>', ` <b class="tn">×${n}</b><small>`)}${html.includes('<small>') ? '' : ` <b class="tn">×${n}</b>`}`);
       clearTimeout(Number(c.dataset.timer));
       c.dataset.timer = String(this.fadeLater(c, secs));
       return;
@@ -698,7 +704,7 @@ export class Hud {
     const el = document.createElement('div');
     el.dataset.head = head;
     el.className = `toast panel ${kind}`;
-    el.innerHTML = html;
+    el.innerHTML = iconize(html);
     box.appendChild(el);
     el.dataset.timer = String(this.fadeLater(el, secs));
   }
@@ -715,7 +721,7 @@ export class Hud {
     const f = $(this.root, '#feed');
     while (f.children.length >= 4) f.firstElementChild!.remove();
     const el = document.createElement('div');
-    el.textContent = text;
+    el.innerHTML = iconize(esc(text));
     f.appendChild(el);
     setTimeout(() => {
       el.style.opacity = '0';
@@ -733,7 +739,7 @@ export class Hud {
     void el.offsetWidth;
     el.classList.add('pop');
     const tot = $(this.root, '#comboTotal');
-    tot.textContent = total ?? '';
+    tot.innerHTML = iconize(esc(total ?? ''));
     tot.classList.toggle('on', !!total);
     this.comboTimer = total ? 3.2 : 2.2;
   }

@@ -68,6 +68,13 @@ try {
     const covered = rects.reduce((a, r) => a + Math.max(0, Math.min(r.r, w) - Math.max(r.l, 0)) * Math.max(0, Math.min(r.b, h) - Math.max(r.t, 0)), 0);
     console.log(`${name} ${w}×${h}: HUD covers ~${Math.round((100 * covered) / (w * h))}% · ${issues.length ? issues.join('; ') : 'no overlaps'}`);
     console.log(`   ${rects.map((r) => `${r.sel} ${Math.round(r.r - r.l)}×${Math.round(r.b - r.t)}@${Math.round(r.l)},${Math.round(r.t)}`).join('  ')}`);
+    // Look 5.2: no emoji on screen (game strings carry them; the HUD draws icons instead).
+    const emoji = await page.evaluate(() => {
+      const t = document.getElementById('hud').innerText;
+      const titles = [...document.querySelectorAll('#hud [title], #hud [aria-label]')].map((e) => `${e.getAttribute('title') ?? ''} ${e.getAttribute('aria-label') ?? ''}`).join(' ');
+      return [...`${t} ${titles}`.matchAll(/\p{Extended_Pictographic}/gu)].map((m) => m[0]).join('');
+    });
+    if (emoji) issues.push(`emoji on screen: ${emoji}`);
     problems += issues.length;
     await page.screenshot({ path: `${dir}/phase4-hud-${name}.png` });
     // The Build tray opens above the hotbar and stays on screen.

@@ -84,6 +84,7 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
+  --mask-hourglass: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 10'%3E%3Cpath d='M0 0h8v1.2C8 3.4 5.6 4.2 5.6 5S8 6.6 8 8.8V10H0V8.8C0 6.6 2.4 5.8 2.4 5S0 3.4 0 1.2z'/%3E%3C/svg%3E");
   /* Page (behind the canvas while it boots) */
   --page-bg: linear-gradient(180deg, #7fc3e8 0%, #b9e0ee 32%, #dcefee 55%, #f8e6c6 82%, #f6d3a6 100%);
   --boot-ink: #2d6a3e;
@@ -424,7 +425,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, summary:foc
 #hotbar #buildTray .slot .sl { font-size: 10.5px; }
 .slot .badge { width: 12px; height: 12px; padding: 0; top: 3px; right: 3px; box-shadow: 0 0 0 2px var(--glass-solid); }
 .slot.cant .sc { color: var(--text-soft); }
-.slot.cant:not(.locked) .sc::before { content: '⏳ '; }
+.slot.cant:not(.locked) .sc::before { content: ''; display: inline-block; width: 8px; height: 9px; margin-right: 3px; vertical-align: -1px; background: var(--text-soft); -webkit-mask: var(--mask-hourglass) center / contain no-repeat; mask: var(--mask-hourglass) center / contain no-repeat; }
 
 /* Narrow screens and short landscape screens: a compact resource strip, a one-line objective under it. */
 @media (max-width: 760px), (max-height: 500px) {
