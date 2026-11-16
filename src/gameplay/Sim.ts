@@ -12,6 +12,7 @@ import { RelaySystem } from './RelaySystem';
 import { RooftopClusters } from './RooftopClusters';
 import { DistrictSystem } from './DistrictSystem';
 import { DroneSystem } from './DroneSystem';
+import { DroneRoles } from './DroneRoles';
 import { Advisor } from './Advisor';
 import { LuckyCatSystem } from './LuckyCatSystem';
 import { AreaSystem } from './AreaSystem';
@@ -48,6 +49,8 @@ export class Sim {
   readonly chains: BloomChainSystem;
   readonly build: BuildSystem;
   readonly drones: DroneSystem;
+  /** E18: drone roles (unlocks, refits, each role's jobs). */
+  readonly roles: DroneRoles;
   readonly cat: LuckyCatSystem;
   readonly advisor: Advisor;
   readonly progression: ProgressionSystem;
@@ -114,6 +117,7 @@ export class Sim {
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
     this.drones = new DroneSystem(this);
+    this.roles = new DroneRoles(this);
     this.cultivators = new CultivatorSystem(this);
     this.cat = new LuckyCatSystem(this);
     this.advisor = new Advisor(this);
@@ -222,6 +226,7 @@ export class Sim {
     this.transitions.tick();
     this.chains.tick();
     this.drones.tick(dt);
+    this.roles.tick(dt);
     this.cultivators.tick(dt);
     this.supers.tick(dt);
     this.cat.tick();
