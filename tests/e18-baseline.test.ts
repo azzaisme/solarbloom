@@ -151,7 +151,8 @@ describe('E18.0: golden saves (all hubs Restorer must not change a byte)', () =>
     const want = env.E18_GOLDEN === 'write' ? got : golden;
     // The runs must exercise drones, or the comparison proves nothing.
     expect(got.park.droneJobs).toBeGreaterThan(50);
-    expect(got.city.droneJobs).toBeGreaterThan(200);
+    // Not much higher: city drones sit below the water reserve from about minute 10 to 30 (docs/E18_AUDIT.md).
+    expect(got.city.droneJobs).toBeGreaterThan(50);
     expect(got).toEqual(want);
   });
 });
@@ -191,4 +192,26 @@ describe.runIf(env.E18_REPORT)('E18.0: drone baseline report', () => {
       expect(c.r.clears.length).toBeGreaterThan(0);
       expect(c.r.clears.every((t) => t > 0)).toBe(true);
     });
+});
+
+/**
+ * E18.7: when drone upgrades are bought (park bot, active and hands-off, 30 min). Run on two builds to compare:
+ * `E18_UPGRADES=1 npx vitest run --mode full tests/e18-baseline.test.ts -t timeline`.
+ */
+const DRONE_UPGRADES = ['droneSpeed', 'droneRadius', 'droneSweep', 'secondDrone', 'chainIntel', 'droneMesh'];
+describe.runIf(env.E18_UPGRADES)('E18.7: drone upgrade timeline', () => {
+  // One test per seed and mode: a long synchronous run starves the Vitest worker's RPC.
+  for (const seed of [7, 21, 99])
+    for (const mode of ['active', 'handsOff'] as const)
+      it(`timeline (seed ${seed}, ${mode}, 30 min)`, { timeout: 600_000 }, () => {
+        const x = parkRun(seed, 30, mode);
+        const first = DRONE_UPGRADES.map((id) => `${id} ${mmss(x.r.upgrades.find((u) => u.id === id)?.t)}`).join(' · ');
+        const by = (t: number) => x.r.upgrades.filter((u) => DRONE_UPGRADES.includes(u.id) && u.t <= t).length;
+        const all = (t: number) => x.r.upgrades.filter((u) => u.t <= t).length;
+        // eslint-disable-next-line no-console
+        console.log(
+          `E18.7 timeline seed ${seed} ${mode}: drone levels by 5/15/30 min ${by(300)}/${by(900)}/${by(1800)} (all upgrades ${all(300)}/${all(900)}/${all(1800)}) · tiles ${x.r.tilesRestored} · ` +
+            `jobs/min ${x.d.jobsPerMin.toFixed(1)} · waiting ${pct(x.d.waiting)} · fountain ${mmss(x.r.fountain)} · machines ${x.r.machines.length}\n    first: ${first}`,
+        );
+      });
 });

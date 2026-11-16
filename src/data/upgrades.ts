@@ -30,6 +30,12 @@ export interface UpgradeDef {
    * of the energy store, like machine prices since E12 ("price it by what it does").
    */
   costKind?: 'energy';
+  /**
+   * E18.7: an energy or water part on top of the main price, priced by what the upgrade does (faster motors and
+   * reach cost energy, a wider spray costs water). Per level: `base × mult^level`, never past
+   * TUNING.machineCostMaxShare of that store's cap; past that only the main (biomass) part keeps growing.
+   */
+  extra?: Partial<Record<'energy' | 'water', { base: number; mult: number }>>;
   describe: (nextLevel: number) => string;
   available?: (s: GameState) => boolean;
   lockedReason?: string;
@@ -116,7 +122,8 @@ export const UPGRADES: UpgradeDef[] = [
     machine: 'droneHub',
     name: 'Drone Dash',
     icon: '🛸',
-    baseCost: 35,
+    baseCost: 25, // E18.7: was 35; the rest of the price is in `extra`
+    extra: { energy: { base: 10, mult: 1.4 } },
     costMult: 1.65,
     maxLevel: DRONE_DASH.length - 1,
     describe: (n) => `This hub's drones work ×${DRONE_DASH[n]} as fast (flight and rest)`,
@@ -198,7 +205,8 @@ export const UPGRADES: UpgradeDef[] = [
     machine: 'droneHub',
     name: 'Drone Work Radius',
     icon: '📡',
-    baseCost: 40,
+    baseCost: 28, // E18.7: was 40; the rest of the price is in `extra`
+    extra: { energy: { base: 10, mult: 1.4 } },
     costMult: 1.65,
     maxLevel: 4,
     describe: (n) => `This hub's drones reach ${2 * n} tiles further`,
@@ -211,7 +219,8 @@ export const UPGRADES: UpgradeDef[] = [
     machine: 'droneHub',
     name: 'Chain Intelligence',
     icon: '🧠',
-    baseCost: 45,
+    baseCost: 30, // E18.7: was 45; the rest of the price is in `extra`
+    extra: { energy: { base: 15, mult: 1 } },
     costMult: 1,
     maxLevel: 1,
     describe: () => "This hub's drones pick tiles next to gardens, idle solar panels and charged Mother Trees first",
@@ -237,7 +246,9 @@ export const UPGRADES: UpgradeDef[] = [
     machine: 'droneHub',
     name: 'Drone Sweep',
     icon: '🧹',
-    baseCost: 120,
+    baseCost: 85, // E18.7: was 120; the rest of the price is in `extra`
+    // E18.7: energy, not the doc's water: drones are short of water, never energy (docs/E18_AUDIT.md).
+    extra: { energy: { base: 8, mult: 1.4 } },
     costMult: 2,
     maxLevel: 4,
     describe: (n) => `Each tile this hub's drones restore also restores up to ${2 * n} tiles around it for free`,
@@ -278,7 +289,8 @@ export const UPGRADES: UpgradeDef[] = [
     mode: 'city',
     name: 'Drone Mesh',
     icon: '🕸️',
-    baseCost: 200,
+    baseCost: 140, // E18.7: was 200; the rest of the price is in `extra`
+    extra: { energy: { base: 25, mult: 1.5 } },
     costMult: 2,
     maxLevel: 2,
     describe: (n) => `Drone Hubs up to ${12 + 4 * n} tiles apart share one network (from ${12 + 4 * (n - 1)}), so their drones roam all of it`,

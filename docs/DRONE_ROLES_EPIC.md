@@ -98,7 +98,7 @@ A role costs what it uses. A drone that waters plants pays in water, one that fl
 |---|---|---|---|
 | Drone Dash | 35 🌿 × 1.65^L | 25 🌿 × 1.65^L **+ 10 ⚡ × 1.4^L** | Faster motors |
 | Work Radius | 40 🌿 × 1.65^L | 28 🌿 × 1.65^L **+ 10 ⚡ × 1.4^L** | Longer flights, bigger batteries |
-| Drone Sweep | 120 🌿 × 2^L | 85 🌿 × 2^L **+ 8 💧 × 1.4^L** | A wider spray |
+| Drone Sweep | 120 🌿 × 2^L | 85 🌿 × 2^L **+ 8 ⚡ × 1.4^L** (was 💧 in the first draft) | A wider spray, paid in energy: E18.0 found drones short of water, never energy, and a water part cut park drone jobs by 35–60% (`docs/E18_AUDIT.md`) |
 | Drone Squad | 70 🌿 × 2.5^L | unchanged (🌿 only) | Building more drones is hardware |
 | Chain Intelligence | 45 🌿 (one level) | 30 🌿 **+ 15 ⚡** | A smarter onboard computer |
 | Drone Mesh | 200 🌿 × 2^L | 140 🌿 × 2^L **+ 25 ⚡ × 1.5^L** | Powering the network links |
@@ -214,7 +214,7 @@ Sound: delivery and work sounds reuse the drone sound set with a per-role pitch 
 - [ ] **E18.4 Courier.** Add machine targets and a machine reservation set. Implement the four deliveries, each priced in what its machine runs on, the 8 s per-machine limit and Sweep's extra machine. Mother Tree pulses go through their normal release path only. No offline effect.
 - [ ] **E18.5 Look, sound and panel.** Build the role parts, effects, hub accents and icons as listed in 2.9, in whichever form the Look issues have reached (procedural parts on today's drone, or Meshy parts after #197). Then: role picker in the hub's inspect panel with lock reasons, per-role reach preview, advisor hints ("Your Mother Tree is slow to charge: try a Courier hub nearby"), at most one hint per role. Check phone widths 320 / 390 and desktop, like the Phase 5 HUD shots.
 - [ ] **E18.6 Spark and Harvester.** As in 2.6, with their caps. No offline effect. Spark chains count as automation-started chains in the metrics, so the "player still starts most big chains" check stays honest.
-- [ ] **E18.7 Upgrade prices by job.** Give `UpgradeDef` an optional energy/water part (base and growth) next to `baseCost`. `UpgradeSystem.cost` returns a full `Cost`, `check` names the short resource, purchase spends all parts atomically through `econ.spend`, and the 60% cap applies. Update the drawer, inspect panel and advisor to show and save up for mixed prices. Apply the prices in 2.3 to the six drone upgrades. Re-run the E12 "always something to buy" bot and the hands-off bot, and record any change in when upgrades are bought.
+- [x] **E18.7 Upgrade prices by job.** Done: `docs/E18_AUDIT.md` (Drone Sweep's part is energy, not water; `UpgradeStatus.price` carries the full price and `cost` stays the biomass part). Give `UpgradeDef` an optional energy/water part (base and growth) next to `baseCost`. `UpgradeSystem.cost` returns a full `Cost`, `check` names the short resource, purchase spends all parts atomically through `econ.spend`, and the 60% cap applies. Update the drawer, inspect panel and advisor to show and save up for mixed prices. Apply the prices in 2.3 to the six drone upgrades. Re-run the E12 "always something to buy" bot and the hands-off bot, and record any change in when upgrades are bought.
 - [ ] **E18.8 Merge slots.** After E13: Fleet Hub two slots, merge preview text, role carried over by the rule in 2.8. After E14: per-drone roles on the Megahub.
 
 ### Acceptance criteria

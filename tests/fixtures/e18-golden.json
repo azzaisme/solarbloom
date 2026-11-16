@@ -3,14 +3,14 @@
     "seed": 7,
     "minutes": 20,
     "drones": 41,
-    "droneJobs": 590,
-    "hash": "5c70f774504fecef13c3f0f6ea709375ee92119aac8ca7e05aab3d67e8d9c933"
+    "droneJobs": 593,
+    "hash": "d825fe61ec66f38bc2edd090cbc12ba9ca5f7a54803d15765d492d5d57f57ac4"
   },
   "city": {
     "seed": 21,
     "minutes": 30,
-    "drones": 201,
-    "droneJobs": 557,
-    "hash": "f1658fae6901226b03acc2a66e44c3eba13b018cba4ae645089e12ac849ea2ec"
+    "drones": 200,
+    "droneJobs": 73,
+    "hash": "6a9f24f4f89e45213be9dda13d3f3e6cd5f1c60535de2fe8a97f038fe673beee"
   }
 }

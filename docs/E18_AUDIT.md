@@ -120,6 +120,77 @@ applies to every role; a reload mid-flight keeps role and target; no two drones 
 over 600 ticks; Drone Party drones copy the role; offline credits only offline roles; merges keep refits.
 The golden saves above still match with the framework in place.
 
+## E18.7: drone upgrades priced by what they do (#207)
+
+- `UpgradeDef.extra` holds an energy or water part (`base × mult^level`) next to the biomass `baseCost`.
+  `UpgradeSystem.price()` returns the whole price; `UpgradeStatus.price` carries it, and `UpgradeStatus.cost`
+  stays the biomass part, which "cheapest first", the bots and the tutorial hint compare (the issue asked for
+  `cost` to become a full `Cost`; keeping both avoided changing ~15 callers). A purchase spends every part at
+  once through `econ.spend`; `status` names the first short part ("Need 10 ⚡"). Each energy or water part
+  stops at 60% of its store's cap, so no level is ever impossible; past that only biomass grows.
+- The drawer, the inspect panel and the Upgrades button show the full price (`formatCost`). The advisor's next
+  purchase is the full price, so "save up" keeps its energy and water from drones. "Upgrade all" is unchanged:
+  cheapest level first, stops quietly at the first level it can't pay.
+- Prices (L = level): Drone Dash 25 🌿 × 1.65^L + 10 ⚡ × 1.4^L; Work Radius 28 🌿 × 1.65^L + 10 ⚡ × 1.4^L;
+  **Drone Sweep 85 🌿 × 2^L + 8 ⚡ × 1.4^L**; Drone Squad unchanged; Chain Intelligence 30 🌿 + 15 ⚡;
+  Drone Mesh 140 🌿 × 2^L + 25 ⚡ × 1.5^L. Saves store levels, so nothing migrates.
+- **Drone Sweep pays energy, not the design doc's water** (agreed after measuring). With the water part, park
+  drone jobs/min at 15 min fell from 30.7 / 26.3 / 23.9 to 19.3 / 10.4 / 14.5 (seeds 7 / 21 / 99), because
+  water is what drones are short of (E18.0). With an energy part they stay at baseline (table below).
+- The golden saves were re-recorded for these prices (an intended gameplay change).
+
+**Checks** (`tests/drone-upgrade-prices.test.ts`, in `npm test`): the 2.3 prices at level 0 and their growth;
+all parts or nothing, with the short part named; every drone upgrade bought at every level at every Seed
+Vault tier (0–4), each part within 60% of its store; only biomass grows past the cap; "Upgrade all" stops at
+the first unpayable level; the advisor saves up for the full price. The E12 bot ("keeps something to buy for
+30 minutes and never stalls") passes.
+
+### Against the E18.0 baseline (park bot, same seeds)
+
+| | Before (E18.0) | After (E18.7) |
+|---|---|---|
+| Hands-off share, 15 min (seeds 7 / 21 / 99) | 30% / 30% / 31% | 29% / 29% / 28% |
+| Hands-off share, 30 min | 15% / 24% / 15% | 14% / 14% / 13% |
+| Active drone jobs/min, 15 min | 30.7 / 26.3 / 23.9 | 29.9 / 25.6 / 24.4 |
+| Active drone jobs/min, 30 min | 32.3 / 88.4 / 66.5 | 31.2 / 100.9 / 60.8 |
+| Hands-off drone jobs/min, 30 min | 53.5 / 53.7 / 55.5 | 51.6 / 53.9 / 54.5 |
+| Hands-off fountain | 8:09 / 7:36 / 7:48 | 7:33 / 7:36 / 7:33 |
+| Drone upgrade levels by 30 min, active / hands-off | 230 / 192 / 268 · 97 / 97 / 116 | 192 / 268 / 211 · 78 / 97 / 97 |
+
+Seed 21's 30-minute share fell because the active bot restored more (3,810 → 6,435 tiles); its hands-off
+run is unchanged (931 → 932 tiles after the hub).
+
+First purchase of each drone upgrade (`E18_UPGRADES=1 … -t timeline`), seeds 7 / 21 / 99:
+
+| Upgrade | Active before | Active after | Hands-off before | Hands-off after |
+|---|---|---|---|---|
+| Drone Dash | 3:45 / 3:54 / 3:30 | 3:21 / 3:15 / 3:18 | 4:09 / 4:24 / 4:15 | 4:09 / 4:00 / 4:03 |
+| Work Radius | 4:06 / 4:03 / 4:24 | 4:27 / 4:21 / 4:21 | 5:12 / 4:45 / 4:51 | 4:57 / 5:24 / 5:09 |
+| Chain Intelligence | 4:30 / 4:57 / 5:06 | 4:51 / 4:57 / 4:45 | 5:27 / 5:12 / 6:57 | 5:09 / 5:57 / 6:30 |
+| Drone Squad | 5:12 / 5:03 / 5:09 | 5:03 / 5:21 / 5:03 | 6:03 / 6:12 / 7:00 | 6:54 / 6:06 / 6:57 |
+| Drone Sweep | 5:24 / 5:48 / 5:18 | 5:12 / 5:21 / 5:12 | 7:51 / 7:36 / 7:27 | 7:27 / 7:33 / 7:21 |
+| Drone Mesh | 6:30 / 6:21 / 6:00 | 5:27 / 5:54 / 5:33 | 8:45 / 8:45 / 7:45 | 8:21 / 8:24 / 8:09 |
+
+Smaller biomass parts make most drone upgrades come a little earlier (Dash and Mesh by up to a minute);
+Work Radius comes a little later in active play. Hands-off share barely moves: prices weren't what held
+hands-off play back.
+
+### City drones are frozen by the water reserve
+
+Looking into why the city golden run's drone jobs fell from 557 to 73 turned up a pre-E18.7 effect. On
+seed 21, **city drones do no work from about minute 10 to minute 29 on both builds** (jobs flat at 70–73):
+the player's pulses keep water under the 25% drone reserve while the cap grows with cleared areas. Before
+E18.7 water crossed the reserve in the last minute and drones did ~490 jobs in one burst; after it, that
+burst lands after minute 30. This is the strongest version of E18.0's finding: in the city the reserve, not
+energy, decides whether drones work at all. It matters for the Gardener decision and for E18's hands-off
+target.
+
+**City pace, open:** the 60-minute city bot (`tests/pacing-city.test.ts`, seeds 7 / 21) cleared 74 / 93 areas
+before E18.7, 81 / 86 with the water-priced Sweep and **59 / 77 with the shipped prices**. It still passes
+(≥ 8 areas, no stuck time, the player starts most big chains: 53 / 41 and 53 / 48). The three builds swing
+±20% in both directions, so two seeds can't separate the prices from the run-to-run spread; the shipped
+build being lower on both seeds is worth a check with more seeds before E18.2 changes the economy again.
+
 **Known failures not from E18:** on `d1716b1`, `tests/icons.test.ts` (emoji without an icon in `Game.ts`,
 `AreaPanel.ts` and `upgrades.ts`) and two `tests/upgrade-effects.test.ts` cases (City 09.4) already fail.
 E18 adds none.

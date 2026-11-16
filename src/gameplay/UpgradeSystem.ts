@@ -8,15 +8,18 @@ const tierOutput = (m: { tier?: number; project?: { stage: number } }, t2: numbe
   !isBuilt(m) ? 0 : tier3(m) ? TUNING.super.outputMult : tier2(m) ? t2 : 1;
 import { TUNING } from '../data/tuning';
 import { DRONE_DASH, powerMult, UPGRADE_BY_ID, UPGRADE_GROUPS, UPGRADES, type UpgradeDef, type UpgradeGroup } from '../data/upgrades';
-import { CAPPED } from '../core/Economy';
+import { CAPPED, RES_ICON } from '../core/Economy';
 import { big, Decimal, fmt, type Big } from '../core/Big';
-import type { MachineData } from '../core/types';
+import type { Cost, MachineData } from '../core/types';
 import type { Sim } from './Sim';
 
 export interface UpgradeStatus {
   ok: boolean;
   reason?: string;
+  /** The main part of the price (biomass, or energy for `costKind: 'energy'`): what "cheapest first" compares. */
   cost: Big;
+  /** E18.7: the whole price, every part (what a purchase spends and the advisor saves up for). */
+  price: Cost;
   /** Per-machine upgrade without a machine ("Upgrade all"): the machine the next purchase goes to. */
   machine?: MachineData;
 }
@@ -69,27 +72,47 @@ export class UpgradeSystem {
   }
 
   /**
+   * E18.7: the whole price of the next level: the main part plus any energy or water part (`UpgradeDef.extra`),
+   * each `base × mult^level` and never past machineCostMaxShare of its store, so no level is ever impossible.
+   */
+  price(def: UpgradeDef, m?: MachineData): Cost {
+    const out: Cost = { [def.costKind ?? 'biomass']: this.cost(def, m) };
+    if (!def.extra) return out;
+    const lvl = def.machine ? this.levelOf(m, def.id) : this.level(def.id);
+    for (const k of CAPPED) {
+      const e = def.extra[k];
+      if (!e) continue;
+      const v = big(e.base).mul(Decimal.pow(e.mult, lvl)).ceil();
+      const cap = this.sim.econ.cap(k);
+      out[k] = cap ? v.min(cap.mul(TUNING.machineCostMaxShare).floor().max(1)) : v;
+    }
+    return out;
+  }
+
+  /**
    * Can the next level be bought? For a per-machine upgrade without `m`, answers for "Upgrade all": the cheapest
    * machine that isn't maxed.
    */
   status(def: UpgradeDef, m?: MachineData): UpgradeStatus {
-    if (def.available && !def.available(this.sim.state)) return { ok: false, reason: def.lockedReason, cost: this.cost(def, m) };
+    if (def.available && !def.available(this.sim.state)) return { ok: false, reason: def.lockedReason, cost: this.cost(def, m), price: this.price(def, m) };
     if (def.machine && !m) {
       // Cost depends only on level, so the cheapest machine is the lowest-level one (first built on ties).
       const all = this.targets(def);
-      if (!all.length) return { ok: false, reason: def.lockedReason ?? 'Build one first', cost: this.cost(def) };
+      if (!all.length) return { ok: false, reason: def.lockedReason ?? 'Build one first', cost: this.cost(def), price: this.price(def) };
       let cheapest = all[0];
       for (const t of all) if (this.levelOf(t, def.id) < this.levelOf(cheapest, def.id)) cheapest = t;
-      if (this.levelOf(cheapest, def.id) >= def.maxLevel) return { ok: false, reason: 'Maxed', cost: this.cost(def, cheapest) };
+      if (this.levelOf(cheapest, def.id) >= def.maxLevel) return { ok: false, reason: 'Maxed', cost: this.cost(def, cheapest), price: this.price(def, cheapest) };
       return { ...this.status(def, cheapest), machine: cheapest };
     }
     const lvl = def.machine ? this.levelOf(m, def.id) : this.level(def.id);
     const cost = this.cost(def, m);
-    if (lvl >= def.maxLevel) return { ok: false, reason: 'Maxed', cost };
-    if (def.machine && m?.type !== def.machine) return { ok: false, reason: 'Not for this machine', cost };
-    const kind = def.costKind ?? 'biomass';
-    if (this.sim.econ.get(kind).lt(cost)) return { ok: false, reason: `Need ${fmt(cost)} ${kind === 'energy' ? '⚡' : '🌿'}`, cost };
-    return { ok: true, cost, machine: m };
+    const price = this.price(def, m);
+    if (lvl >= def.maxLevel) return { ok: false, reason: 'Maxed', cost, price };
+    if (def.machine && m?.type !== def.machine) return { ok: false, reason: 'Not for this machine', cost, price };
+    // E18.7: names the first part that's short (⚡, 💧, then 🌿).
+    const short = this.sim.econ.shortfall(price);
+    if (short) return { ok: false, reason: `Need ${fmt(big(price[short]!))} ${RES_ICON[short]}`, cost, price };
+    return { ok: true, cost, price, machine: m };
   }
 
   /**
@@ -106,7 +129,7 @@ export class UpgradeSystem {
       this.sim.bus.emit('action.failed', { reason: st.reason ?? 'Unavailable' });
       return false;
     }
-    if (!this.sim.econ.spend({ [def.costKind ?? 'biomass']: st.cost })) return false;
+    if (!this.sim.econ.spend(st.price)) return false; // E18.7: every part at once, or nothing
     let lvl: number;
     if (def.machine) {
       const target = st.machine!;

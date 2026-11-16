@@ -1113,7 +1113,7 @@ export class Game {
     const n = u.targets(def).length;
     const all = u.status(def);
     const allBtn = n > 1 ? `<button class="buy all" data-buy="${id}|*" ${all.ok ? '' : 'disabled'} title="Buys levels cheapest-first on every ${def.machine}">All ${n}</button>` : '';
-    return `<div class="card" style="margin-top:8px"><span class="ci">${def.icon}</span><span class="cn">${def.name} <em>Lv ${lvl}</em></span><button class="buy" data-buy="${id}|${m.id}" ${st.ok ? '' : 'disabled'}>${fmt(st.cost)} 🌿</button>${allBtn}<span class="cd2">${def.describe(lvl + 1)}</span></div>`;
+    return `<div class="card" style="margin-top:8px"><span class="ci">${def.icon}</span><span class="cn">${def.name} <em>Lv ${lvl}</em></span><button class="buy" data-buy="${id}|${m.id}" ${st.ok ? '' : 'disabled'}>${formatCost(st.price)}</button>${allBtn}<span class="cd2">${def.describe(lvl + 1)}</span></div>`;
   }
 
   private renderInspect() {
