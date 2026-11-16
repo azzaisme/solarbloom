@@ -33,6 +33,8 @@ import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
+import { Sky } from '../rendering/Sky';
+import { HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers } from '../core/Picking';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
@@ -77,6 +79,7 @@ export class Game {
   readonly tweens = new Tweens();
   readonly scene: SceneBuilder;
   readonly camera: CameraController;
+  private sky!: Sky;
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
   readonly chunks: ChunkRenderer;
@@ -152,6 +155,9 @@ export class Game {
     this.scene = new SceneBuilder(this.app, this.tweens);
     this.scene.build();
     this.camera = new CameraController(this.app, this.tweens);
+    // Look 4.7: the sky behind everything (its own layer, drawn first).
+    this.sky = new Sky(this.app, this.scene.sun);
+    this.camera.cam.layers = [this.sky.layer.id, ...this.camera.cam.layers];
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
@@ -487,13 +493,33 @@ export class Game {
     setTreeCursor((this.pointer.x / w) * 2 - 1, 1 - (this.pointer.y / h) * 2, depth, this.treeFade, w, h);
   }
 
-  /** Haze and shadow reach follow the zoom-dependent camera (its distance changes with the zoom). */
+  /**
+   * Haze and shadow reach follow the zoom-dependent camera (its distance changes with the zoom). Look 4.5/4.7:
+   * the haze reaches a little less far close up, its colour is the sky's horizon colour so the ground fades
+   * into the sky, and both grey while the city is fogged.
+   */
   private syncView() {
     const c = this.camera;
+    const n = c.nearness();
+    c.hazeStart = HAZE.start[0] + (HAZE.start[1] - HAZE.start[0]) * n;
+    c.hazeEnd = HAZE.end[0] + (HAZE.end[1] - HAZE.end[0]) * n;
     this.app.scene.fog.start = c.fogDepth(c.dist + c.hazeStart);
     this.app.scene.fog.end = c.fogDepth(c.dist + c.hazeEnd);
+    if (this.sky) {
+      const [r, g, b] = this.sky.hazeColour();
+      this.app.scene.fog.color.set(r, g, b, 1);
+      c.cam.clearColor = new pc.Color(r, g, b, 1);
+    }
     const sun = this.scene.sun.light;
     if (sun) sun.shadowDistance = c.shadowDistance();
+  }
+
+  /** Look 4.7: how clear the sky is (0 grey … 1 clear): the park's stage, then each woken area. */
+  private skyClarity(): number {
+    const p = this.sim.progression;
+    const park = this.city ? Math.max(0, p.parkStage()) / 4 : 0;
+    const k = park * 0.4 + Math.min(1, this.sim.areas.clearedCount() / 8) * 0.6;
+    return k * k * (3 - 2 * k) * 0.85 + 0.15;
   }
 
   /** The game is in the city (the park and beyond), not the legacy rooftop layout. */
@@ -2186,6 +2212,9 @@ export class Game {
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
     this.camera.update(dt);
+    this.sky.clarity += (this.skyClarity() - this.sky.clarity) * Math.min(1, dt * 0.8);
+    this.sky.reducedMotion = this.settings.reducedMotion;
+    this.sky.update(dt, this.camera.entity.getPosition(), this.camera.cam.farClip);
     this.syncView();
     this.updateTreeCursor(dt);
     this.hud.update(dt);
