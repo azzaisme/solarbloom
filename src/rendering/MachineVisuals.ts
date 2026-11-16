@@ -3,11 +3,12 @@ import type { MachineData } from '../core/types';
 import { GROUND } from '../core/GameState';
 import type { Sim } from '../gameplay/Sim';
 import { color, glow, mat, PALETTE, uniqueMat } from './Materials';
-import { group, shape } from './Shapes';
+import { group, shape, vshape, type ShapeOpts } from './Shapes';
 import { TUNING } from '../data/tuning';
 import { SLAB_TOP } from './SceneBuilder';
 import { ease, type Tweens } from './Tween';
-import { foliageMaterial, treeMesh } from './Foliage';
+import { foliageMaterial, FoliageBuilder, treeMesh } from './Foliage';
+import { flowerGeo, leafyShrubGeo, type FlowerSpecies } from './Flora';
 import { treeGeo } from './TreeGen';
 import { machineRunning } from './FaunaPlan';
 import { arcPath, ball, bezier, dome, latheAuto, matOf, part, rbox, rcyl, ring, setMat, tube } from './MachineParts';
@@ -34,6 +35,8 @@ interface MachineView {
   bare?: pc.Entity;
   /** Which Core model this is (decides how it wakes). */
   coreKind?: 'crystal' | 'cistern' | 'elder' | 'fountain';
+  /** The fountain's dry / flowing parts (see `fountain`). */
+  fountain?: FountainFx;
   level: number;
   /** the upgrade levels its extras were built for (Phase 4 E09.6) */
   vkey?: string;
@@ -130,6 +133,109 @@ function solarPanel(parent: pc.Entity, w: number, d: number, cols: number, rows:
   return cells;
 }
 
+/** The fountain's two looks: `dry` shows until it wakes, `wet` and `lush` after; `k` is how far it has woken (0–1). */
+interface FountainFx {
+  k: number;
+  trim: pc.StandardMaterial;
+  dry: pc.Entity;
+  wet: pc.Entity;
+  lush: pc.Entity;
+  falls: pc.Entity[];
+  ripples: pc.Entity[];
+  sparks: pc.Entity[];
+  drops: pc.Entity[];
+  halo: pc.Entity;
+  /** with the hand-built dry model standing in: the procedural parts hidden until it wakes */
+  hidden?: pc.Entity[];
+}
+
+// Fountain geometry (local units; the model sits on a 2×2 footprint, so radius 1 is the footprint's edge).
+const FOUNTAIN = {
+  /** basin water: its radius, and the surface height dry (hidden in the stone) and full. Fauna's koi pond matches. */
+  waterR: 0.79,
+  waterDry: 0.345,
+  waterFull: 0.4,
+  /** the two falls: from a bowl's rim (r0, y0) out and down to the water below (r1, y1) */
+  falls: [
+    { n: 10, r0: 0.5, y0: 0.87, r1: 0.6, y1: 0.4 },
+    { n: 7, r0: 0.3, y0: 1.21, r1: 0.38, y1: 0.88 },
+  ],
+  sproutY: 1.4,
+};
+
+// Shared meshes the primitives can't give (thin rims, flared bowls, ribbons of falling water). Made once; the cache
+// holds its own reference so the engine never frees one that a later fountain needs.
+const fxMeshes = new Map<string, pc.Mesh>();
+/** A fountain flower bed's planting: the park's own leafy shrubs and flowers, one mesh per corner variant. */
+const bedMeshes = new Map<number, pc.Mesh>();
+function bedMesh(device: pc.GraphicsDevice, c: number): pc.Mesh {
+  let m = bedMeshes.get(c);
+  if (!m) {
+    const fb = new FoliageBuilder();
+    fb.add(leafyShrubGeo(c, 1, true), 0.02, 0.04, -0.2, c * 1.9, 0.62);
+    fb.add(leafyShrubGeo(c + 2, 1, c % 2 === 0), 0.04, 0.04, 0.2, c * 2.7 + 1, 0.54);
+    const kinds: FlowerSpecies[] = ['cosmos', 'daisy', 'lavender', 'wild'];
+    const spots: [number, number][] = [[-0.14, -0.3], [-0.16, -0.06], [-0.13, 0.12], [-0.15, 0.32], [0.16, 0], [0.14, 0.36], [0.15, -0.38]];
+    spots.forEach(([x, z], i) => fb.add(flowerGeo(kinds[(i + c) % kinds.length], i + c, true, i, 1), x, 0.05, z, i * 1.7 + c, 0.95));
+    m = fb.build(device)!;
+    m.incRefCount();
+    bedMeshes.set(c, m);
+  }
+  return m;
+}
+
+function fxMesh(device: pc.GraphicsDevice, key: string, make: () => pc.Geometry): pc.Mesh {
+  let m = fxMeshes.get(key);
+  if (!m) {
+    m = pc.Mesh.fromGeometry(device, make());
+    m.incRefCount();
+    fxMeshes.set(key, m);
+  }
+  return m;
+}
+
+/** `n` ribbons of water arcing from a rim (radius r0, at y = 0) out to radius r1 and down by `drop`. */
+function fallsGeometry(n: number, r0: number, r1: number, drop: number): pc.Geometry {
+  const S = 5;
+  const half = (Math.PI / n) * 0.55;
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const indices: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const base = positions.length / 3;
+    for (let j = 0; j <= S; j++) {
+      const u = j / S;
+      const r = r0 + (r1 - r0) * Math.sqrt(u);
+      // the ribbon narrows a little as it falls
+      const w = half * (1 - 0.3 * u);
+      for (const side of [-1, 1]) {
+        positions.push(Math.cos(a + side * w) * r, -drop * u * u, Math.sin(a + side * w) * r);
+        normals.push(Math.cos(a) * 0.9, 0.44, Math.sin(a) * 0.9);
+      }
+      if (j < S) indices.push(base + j * 2, base + j * 2 + 1, base + j * 2 + 2, base + j * 2 + 1, base + j * 2 + 3, base + j * 2 + 2);
+    }
+  }
+  const g = new pc.Geometry();
+  g.positions = positions;
+  g.normals = normals;
+  g.indices = indices;
+  return g;
+}
+
+function meshShape(parent: pc.Entity, mesh: pc.Mesh, material: pc.Material, o: ShapeOpts = {}): pc.Entity {
+  const e = new pc.Entity(o.name ?? 'mesh');
+  e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, material)], castShadows: o.shadow ?? false, receiveShadows: o.receive ?? true });
+  if (o.pos) e.setLocalPosition(o.pos[0], o.pos[1], o.pos[2]);
+  if (o.scale !== undefined) {
+    if (typeof o.scale === 'number') e.setLocalScale(o.scale, o.scale, o.scale);
+    else e.setLocalScale(o.scale[0], o.scale[1], o.scale[2]);
+  }
+  if (o.rot) e.setLocalEulerAngles(o.rot[0], o.rot[1], o.rot[2]);
+  parent.addChild(e);
+  return e;
+}
+
 /** Procedural low-poly machine models. Visual upgrades (bigger arrays, antennas, flowers) follow upgrade levels. */
 export class MachineVisuals {
   private views = new Map<string, MachineView>();
@@ -202,9 +308,16 @@ export class MachineVisuals {
 
   /** Look 3.19: rebuild every machine (the hand-built models have loaded). */
   rebuildAll() {
-    for (const v of this.views.values()) v.root.destroy();
+    // landmarks keep their state (a fountain that already flows must not come back as its dry model)
+    const states = new Map<string, 'ready' | 'awake'>();
+    for (const [id, v] of this.views) {
+      if (v.root.tags.has('awake')) states.set(id, 'awake');
+      else if (v.root.tags.has('ready')) states.set(id, 'ready');
+      v.root.destroy();
+    }
     this.views.clear();
     this.buildAll();
+    for (const [id, state] of states) this.setLandmarkState(id, state, true);
   }
 
   add(m: MachineData, animate: boolean) {
@@ -239,7 +352,7 @@ export class MachineVisuals {
         v.coreKind = kind;
         if (kind === 'cistern') this.cistern(v);
         else if (kind === 'elder') this.elderTree(v);
-        else if (kind === 'fountain') this.fountain(v);
+        else if (kind === 'fountain') lk === 'lock' ? this.basin(v) : this.fountain(v);
         else this.core(v);
         break;
       }
@@ -818,6 +931,19 @@ export class MachineVisuals {
     if (!pick) return;
     const e = MODELS.instantiate(pick[0]);
     if (!e) return;
+    if (v.fountain) {
+      // The park fountain: the hand-built model is its dry look; the flowing three-tier fountain replaces it on waking.
+      // The withered sprout stays, on top of the model: it pulses gold when the fountain is ready.
+      const sprout = v.spin[0];
+      v.fountain.hidden = (v.body.children as pc.Entity[]).filter((c) => c !== v.extras && c !== sprout && c.enabled);
+      for (const c of v.fountain.hidden) c.enabled = false;
+      const p = sprout.getLocalPosition();
+      sprout.setLocalPosition(p.x, this.modelTop(e) * pick[1] - 0.03, p.z);
+      e.setLocalScale(pick[1], pick[1], pick[1]);
+      v.body.addChild(e);
+      v.model = e;
+      return;
+    }
     const keep = new Set<pc.Entity>([v.extras]);
     if (v.water) {
       keep.add(v.water);
@@ -872,8 +998,160 @@ export class MachineVisuals {
     return id ? this.sim.areas.info(id).landmarkKind : '';
   }
 
-  /** The park's dry fountain: a cracked stone basin that fills and sprays when it wakes. */
+  /**
+   * The park's fountain. Dry: grey cracked stone, a dusty empty basin, dead vines and a wilted sprout. Awake: cream
+   * stone with gold rims, three tiers of glowing water spilling into each other, the leaf emblem glowing on top and
+   * flower beds at the four corners of its footprint (steps face the paths between them).
+   */
   private fountain(v: MachineView) {
+    const b = v.body;
+    const F = FOUNTAIN;
+    const dev = this.device();
+    v.coreBase = uniqueMat(PALETTE.fountainStone, { gloss: 0.25 });
+    // the leaf sprout: withered until the fountain wakes (pulses gold when it is ready)
+    v.coreMat = uniqueMat(PALETTE.plastic.agedVein, { gloss: 0.5, emissive: PALETTE.emissiveOff, emissiveIntensity: 1 });
+    const trim = uniqueMat(PALETTE.stone.shadow, { gloss: 0.3 });
+    const stone = v.coreBase;
+    const rim = (ringRadius: number, tubeRadius: number) => fxMesh(dev, `ring:${ringRadius}:${tubeRadius}`, () => new pc.TorusGeometry({ ringRadius, tubeRadius, segments: 24, sides: 6 }));
+    const flare = (baseRadius: number, peakRadius: number, height: number) => fxMesh(dev, `flare:${baseRadius}:${peakRadius}:${height}`, () => new pc.ConeGeometry({ baseRadius, peakRadius, height, heightSegments: 1, capSegments: 18 }));
+
+    // Paved apron with a step towards each path, then the basin.
+    shape(b, 'cylinder', stone, { pos: [0, 0.035, 0], scale: [2.08, 0.07, 2.08], shadow: true });
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI) / 2;
+      shape(b, 'box', stone, { pos: [Math.cos(a) * 1.1, 0.02, Math.sin(a) * 1.1], scale: [0.24, 0.04, 0.62], rot: [0, (-a * 180) / Math.PI, 0] });
+    }
+    shape(b, 'cylinder', stone, { pos: [0, 0.1, 0], scale: [1.78, 0.06, 1.78], shadow: true });
+    meshShape(b, flare(0.82, 0.9, 0.24), stone, { pos: [0, 0.24, 0], shadow: true });
+    meshShape(b, rim(0.845, 0.05), trim, { pos: [0, 0.37, 0] });
+    // Stem and two bowls, each with its rim.
+    shape(b, 'cylinder', stone, { pos: [0, 0.42, 0], scale: [0.42, 0.12, 0.42] });
+    shape(b, 'cylinder', stone, { pos: [0, 0.6, 0], scale: [0.24, 0.36, 0.24], shadow: true });
+    meshShape(b, flare(0.13, 0.5, 0.15), stone, { pos: [0, 0.795, 0], shadow: true });
+    meshShape(b, rim(0.48, 0.03), trim, { pos: [0, 0.87, 0] });
+    shape(b, 'cylinder', stone, { pos: [0, 0.99, 0], scale: [0.16, 0.26, 0.16], shadow: true });
+    meshShape(b, flare(0.09, 0.3, 0.11), stone, { pos: [0, 1.155, 0], shadow: true });
+    meshShape(b, rim(0.285, 0.024), trim, { pos: [0, 1.21, 0] });
+    shape(b, 'cylinder', stone, { pos: [0, 1.26, 0], scale: [0.1, 0.12, 0.1] });
+    shape(b, 'sphere', trim, { pos: [0, 1.34, 0], scale: [0.17, 0.12, 0.17] });
+
+    // The leaf sprout (the game's emblem): three leaves on the finial.
+    const sprout = group(b, 'crystal', [0, F.sproutY, 0]);
+    shape(sprout, 'sphere', v.coreMat, { pos: [0, 0.2, 0], scale: [0.17, 0.4, 0.06], shadow: true });
+    for (const side of [-1, 1]) shape(sprout, 'sphere', v.coreMat, { pos: [side * 0.13, 0.1, 0], scale: [0.14, 0.3, 0.05], rot: [0, 0, side * -48], shadow: true });
+    v.spin.push(sprout);
+    v.rings = [];
+
+    // Dry look: a dusty basin floor, cracks, rubble, dead leaves, vines hanging dead from the bowl, bare twigs.
+    const dry = group(b, 'dry');
+    const dust = mat(PALETTE.basinDark);
+    const dead = mat(PALETTE.wood.dark);
+    shape(dry, 'cylinder', dust, { pos: [0, 0.362, 0], scale: [F.waterR * 2, 0.006, F.waterR * 2] });
+    shape(dry, 'box', mat(PALETTE.crack), { pos: [0.42, 0.367, 0.3], scale: [0.5, 0.004, 0.03], rot: [0, 35, 0] });
+    shape(dry, 'box', mat(PALETTE.crack), { pos: [0.52, 0.367, 0.12], scale: [0.26, 0.004, 0.025], rot: [0, -40, 0] });
+    shape(dry, 'box', mat(PALETTE.crack), { pos: [-0.35, 0.367, -0.45], scale: [0.4, 0.004, 0.03], rot: [0, 70, 0] });
+    shape(dry, 'box', mat(PALETTE.crack), { pos: [0.6, 0.24, 0.63], scale: [0.03, 0.24, 0.03], rot: [0, 45, 14] });
+    shape(dry, 'box', mat(PALETTE.crack), { pos: [-0.86, 0.22, 0.2], scale: [0.03, 0.2, 0.03], rot: [0, -13, -16] });
+    shape(dry, 'box', mat(PALETTE.debris), { pos: [-0.45, 0.39, 0.38], scale: [0.14, 0.07, 0.11], rot: [0, 25, 8], shadow: true });
+    shape(dry, 'box', mat(PALETTE.debris), { pos: [-0.3, 0.38, 0.5], scale: [0.08, 0.05, 0.07], rot: [10, 60, 0] });
+    shape(dry, 'box', mat(PALETTE.debris), { pos: [0.95, 0.1, -0.3], scale: [0.12, 0.08, 0.1], rot: [0, 30, 12], shadow: true });
+    for (const [x, z, s] of [[0.3, -0.5, 0.12], [-0.55, -0.1, 0.1], [0.1, 0.62, 0.11]]) shape(dry, 'sphere', dead, { pos: [x, 0.368, z], scale: [s, 0.012, s * 0.7], rot: [0, x * 200, 0] });
+    for (const [a, len] of [[0.6, 0.3], [2.5, 0.22], [4.1, 0.34], [5.3, 0.18]]) shape(dry, 'cylinder', dead, { pos: [Math.cos(a) * 0.5, 0.86 - len / 2, Math.sin(a) * 0.5], scale: [0.022, len, 0.022], rot: [Math.sin(a) * 5, 0, -Math.cos(a) * 5] });
+
+    // Flowing look: water in every tier, ribbons falling between them, ripples, foam, sparkles, a halo on the sprout.
+    const wet = group(b, 'wet');
+    const waterMat = mat(PALETTE.aqua.teal, { gloss: 0.9, emissive: PALETTE.aqua.deep, emissiveIntensity: 0.5, opacity: 0.92 });
+    const fallMat = mat(PALETTE.aqua.foam, { emissive: PALETTE.glow.eyeSoft, emissiveIntensity: 0.9, opacity: 0.72, doubleSided: true });
+    const foamMat = mat(PALETTE.glow.beam, { emissive: PALETTE.glow.cyanSoft, emissiveIntensity: 0.9 });
+    v.water = shape(wet, 'cylinder', waterMat, { pos: [0, F.waterDry, 0], scale: [F.waterR * 2, 0.01, F.waterR * 2] });
+    shape(wet, 'cylinder', waterMat, { pos: [0, 0.872, 0], scale: [0.92, 0.008, 0.92] });
+    shape(wet, 'cylinder', waterMat, { pos: [0, 1.212, 0], scale: [0.54, 0.008, 0.54] });
+    const fx: FountainFx = { k: 0, trim, dry, wet, lush: group(b, 'lush'), falls: [], ripples: [], sparks: [], drops: [], halo: wet };
+    F.falls.forEach((f, i) => {
+      const fall = meshShape(wet, fxMesh(dev, `falls:${i}`, () => fallsGeometry(f.n, f.r0, f.r1, f.y0 - f.y1)), fallMat, { pos: [0, f.y0, 0], receive: false });
+      fx.falls.push(fall);
+    });
+    meshShape(wet, rim(F.falls[0].r1, 0.022), foamMat, { pos: [0, F.waterFull + 0.004, 0], scale: [1, 0.3, 1] });
+    for (let i = 0; i < 3; i++) fx.ripples.push(meshShape(wet, rim(0.5, 0.008), foamMat, { scale: [1, 0.4, 1], receive: false }));
+    for (let i = 0; i < 5; i++) fx.sparks.push(shape(wet, 'sphere', foamMat, { scale: 0.03, receive: false }));
+    for (let i = 0; i < 4; i++) fx.drops.push(shape(wet, 'sphere', fallMat, { scale: [0.035, 0.06, 0.035], receive: false }));
+    fx.halo = shape(wet, 'sphere', mat(PALETTE.glow.sun, { emissive: PALETTE.glow.lamp, emissiveIntensity: 0.5, opacity: 0.12 }), { pos: [0, F.sproutY + 0.2, 0], scale: 0.62, receive: false });
+    wet.enabled = false;
+
+    // Flower beds at the footprint's corners: soil and bare twigs while dry, shrubs and blooms once it flows.
+    for (let c = 0; c < 4; c++) {
+      const a = Math.PI / 4 + (c * Math.PI) / 2;
+      const deg = (-a * 180) / Math.PI;
+      const at: [number, number, number] = [Math.cos(a) * 1.1, 0.05, Math.sin(a) * 1.1];
+      vshape(b, 'sphere', PALETTE.wood.post, { pos: at, scale: [0.32, 0.12, 0.66], rot: [0, deg, 0] });
+      const twigs = group(dry, 'twigs', at);
+      twigs.setLocalEulerAngles(0, deg, 0);
+      for (const [z, h, lean] of [[-0.2, 0.22, 16], [0.05, 0.3, -10], [0.24, 0.18, 22]]) shape(twigs, 'cylinder', dead, { pos: [0, 0.05 + h / 2, z], scale: [0.02, h, 0.02], rot: [lean, 0, lean * 0.6] });
+      const bed = group(fx.lush, 'bed', at);
+      bed.setLocalEulerAngles(0, deg, 0);
+      const plants = new pc.Entity('plants');
+      plants.addComponent('render', { meshInstances: [new pc.MeshInstance(bedMesh(dev, c), foliageMaterial())], castShadows: true, receiveShadows: true });
+      bed.addChild(plants);
+    }
+    fx.lush.setLocalScale(0.0001, 0.0001, 0.0001);
+    fx.lush.enabled = false;
+    v.fountain = fx;
+    this.fountainWake(v, 0);
+    this.fountainPose(fx, 0);
+  }
+
+  /** How far the fountain has woken (0 dry, 1 flowing): water level, the falls unrolling, beds growing, the sprout lifting. */
+  private fountainWake(v: MachineView, k: number) {
+    const f = v.fountain!;
+    f.k = k;
+    v.water!.setLocalPosition(0, FOUNTAIN.waterDry + (FOUNTAIN.waterFull - FOUNTAIN.waterDry) * k, 0);
+    const g = Math.max(0.0001, k);
+    f.lush.setLocalScale(g, g, g);
+    f.falls.forEach((e) => e.setLocalScale(1, g, 1));
+    f.halo.setLocalScale(0.62 * g, 0.62 * g, 0.62 * g);
+    // wilted: small and hanging to one side
+    const s = 0.7 + 0.3 * k;
+    v.spin[0].setLocalScale(s, s, s);
+    v.spin[0].setLocalEulerAngles(0, 30, 62 * (1 - k));
+    v.spin[0].setLocalPosition(0.05 * (1 - k), FOUNTAIN.sproutY - 0.04 * (1 - k), 0);
+  }
+
+  /** The flowing fountain's moving parts at time `t` (also their resting pose, with reduced motion). */
+  private fountainPose(f: FountainFx, t: number) {
+    const F = FOUNTAIN;
+    const g = Math.max(0.0001, f.k);
+    f.falls.forEach((e, i) => {
+      e.setLocalEulerAngles(0, Math.sin(t * 0.9 + i * 2) * 5, 0);
+      e.setLocalScale(1, g * (1 + Math.sin(t * 5 + i * 2) * 0.03), 1);
+    });
+    // Ripples widen from the foot of the falls to the rim, rising out of the water and sinking back into it.
+    f.ripples.forEach((e, i) => {
+      const u = (t * 0.28 + i / f.ripples.length) % 1;
+      const r = F.falls[0].r1 + 0.02 + (F.waterR - 0.03 - F.falls[0].r1) * u;
+      e.setLocalScale(r / 0.5, 0.4, r / 0.5);
+      e.setLocalPosition(0, F.waterFull + 0.004 + 0.008 * (Math.sin(u * Math.PI) - 1), 0);
+    });
+    f.sparks.forEach((e, i) => {
+      const a = i * 2.4 + t * 0.25;
+      const r = 0.45 + (i % 3) * 0.16;
+      e.setLocalPosition(Math.cos(a) * r, 0.6 + ((i * 0.29) % 1) * 0.75 + Math.sin(t * 1.3 + i) * 0.05, Math.sin(a) * r);
+      const s = 0.012 + 0.03 * Math.max(0, Math.sin(t * 3.1 + i * 1.9));
+      e.setLocalScale(s, s, s);
+    });
+    // Drops run down the lower falls (same curve as the ribbons).
+    const low = F.falls[0];
+    f.drops.forEach((e, i) => {
+      const u = (t * 0.8 + i * 0.37) % 1;
+      const a = ((i * 3 + 0.5) / low.n) * Math.PI * 2;
+      const r = low.r0 + (low.r1 - low.r0) * Math.sqrt(u) + 0.012;
+      e.setLocalPosition(Math.cos(a) * r, low.y0 - (low.y0 - low.y1) * u * u, Math.sin(a) * r);
+    });
+    const h = 0.62 * g * (1 + Math.sin(t * 2.2) * 0.08);
+    f.halo.setLocalScale(h, h, h);
+  }
+
+  /** The canal lock's basin (the plain fountain look: a cracked stone basin that fills when it wakes). */
+  private basin(v: MachineView) {
     const b = v.body;
     v.coreBase = uniqueMat(PALETTE.fountainStone, { gloss: 0.25 });
     v.coreMat = uniqueMat(PALETTE.gaugeDormant, { gloss: 0.8, emissive: PALETTE.emissiveOff, emissiveIntensity: 1 });
@@ -1199,6 +1477,36 @@ export class MachineVisuals {
     if (v.root.tags.has('awake') && state !== 'awake') return;
     v.root.tags.remove('ready', 'awake', 'dormant');
     v.root.tags.add(state);
+    if (state === 'awake' && v.fountain) {
+      // Stone washes clean to cream, the rims turn gold, water rises and spills, the sprout lifts and glows, beds bloom.
+      const f = v.fountain;
+      const k0 = f.k;
+      const stone = v.coreBase.diffuse.clone();
+      const trim = f.trim.diffuse.clone();
+      const leaf = v.coreMat.diffuse.clone();
+      const lit = v.coreMat.emissive.clone();
+      if (v.model?.enabled) {
+        v.model.enabled = false;
+        for (const c of f.hidden ?? []) c.enabled = true;
+        f.dry.enabled = false;
+      }
+      f.wet.enabled = true;
+      f.lush.enabled = true;
+      this.tweens.add(instant ? 0.01 : 1.8, (k) => {
+        v.coreBase!.diffuse = new pc.Color().lerp(stone, color(PALETTE.whiteWarm), k);
+        v.coreBase!.update();
+        f.trim.diffuse = new pc.Color().lerp(trim, color(PALETTE.gold), k);
+        f.trim.metalness = 0.6 * k;
+        f.trim.gloss = 0.3 + 0.45 * k;
+        f.trim.update();
+        v.coreMat!.diffuse = new pc.Color().lerp(leaf, color(PALETTE.leafFin), k);
+        v.coreMat!.emissive = new pc.Color().lerp(lit, color(PALETTE.leafFin), k);
+        v.coreMat!.emissiveIntensity = 0.85;
+        v.coreMat!.update();
+        this.fountainWake(v, k0 + (1 - k0) * k);
+      }, { done: () => (f.dry.enabled = false) });
+      return;
+    }
     if (state === 'awake' && (v.coreKind === 'cistern' || v.coreKind === 'fountain')) {
       const from = v.coreBase.diffuse.clone();
       this.tweens.add(instant ? 0.01 : 1.4, (k) => {
@@ -1426,6 +1734,13 @@ export class MachineVisuals {
         o.setLocalScale(sc, sc, sc);
       });
       if (!rm && v.canopy?.enabled && !this.tweens.has(v.canopy)) v.canopy.setLocalEulerAngles(Math.sin(t * 0.6) * 1.2, 0, Math.cos(t * 0.5) * 1.2);
+    } else if (v.fountain) {
+      // The flowing fountain moves (once it has finished waking); dry, it is still.
+      if (awake && !rm && v.fountain.k >= 1) {
+        this.fountainPose(v.fountain, t);
+        v.spin[0].setLocalEulerAngles(0, 30 + Math.sin(t * 0.7) * 22, Math.sin(t * 1.1) * 3);
+        v.spin[0].setLocalPosition(0, FOUNTAIN.sproutY + Math.sin(t * 2) * 0.025, 0);
+      }
     } else if (!rm) v.spin[0].setLocalEulerAngles(0, t * (awake ? 40 : 6), 0);
     if (ready && !awake) {
       v.coreMat!.emissive = color(PALETTE.gold);

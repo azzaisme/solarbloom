@@ -26,8 +26,11 @@ export const SKY = {
   glowWarm: ['#9a9a92', '#ffd36a'],
 } as const;
 
-/** Haze reach (world units past the camera target) as a function of how near the view is (0 far … 1 near). */
+/**
+ * Haze reach (world units past the camera target) as a function of how near the view is (0 far … 1 near). Close
+ * up it reaches far enough that the real city's buildings carry out to the foot of the distant skyline.
+ */
 export const HAZE = {
-  start: [8, 4],
-  end: [52, 40],
+  start: [8, 6],
+  end: [56, 76],
 };

@@ -7,6 +7,7 @@ import { FEATURE, fromTile, KIND, surfaceState } from './EndStates';
 import { transitionMaterial } from './TransitionMaterial';
 import { linHex, packHex, TrMeshBuilder, type Pen } from './TrMeshBuilder';
 import { PALETTE } from '../Materials';
+import { WATER } from '../Water';
 
 /** Something primitives can be added to (the chunk renderer's static builder, or a transition builder). */
 export interface Sink {
@@ -318,11 +319,11 @@ export class TransitionRenderer {
       // debris sinks, then lily pads and reeds grow
       for (let i = 0; i < 3; i++) {
         this.pen(tb, tr.t0, d, 1, [0, 0], [0.05, 0.4], top);
-        tb.add('box', PALETTE.soilDark, [x + (rnd() - 0.5) * 0.6, top - 0.02, z + (rnd() - 0.5) * 0.6], [0.12, 0.03, 0.08]);
+        tb.add('box', PALETTE.soilDark, [x + (rnd() - 0.5) * 0.6, top - WATER.drop + 0.015, z + (rnd() - 0.5) * 0.6], [0.12, 0.03, 0.08]);
       }
       for (let i = 0; i < 3; i++) {
         this.pen(tb, tr.t0, d, 1, [0.5, 0.85], [2, 3], top);
-        tb.add('cylinder', PALETTE.leafVein, [x + (rnd() - 0.5) * 0.6, top - 0.03, z + (rnd() - 0.5) * 0.6], [0.2, 0.01, 0.2]);
+        tb.add('cylinder', PALETTE.leafVein, [x + (rnd() - 0.5) * 0.6, top - WATER.drop + 0.006, z + (rnd() - 0.5) * 0.6], [0.2, 0.01, 0.2]);
       }
       return;
     }

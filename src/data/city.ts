@@ -55,6 +55,15 @@ export const PARK_LAYOUT = {
     { at: [4, 12], prop: 'lamp' },
     { at: [1, 1], prop: 'barrel' },
   ] as { at: [number, number]; prop: string }[],
+  /** The pond: restorable water tiles (a silted bed until restored), sunk below the lawn with rounded banks. */
+  pond: [
+    [1, 10], [2, 10], [3, 10],
+    [1, 11], [2, 11], [3, 11],
+    [1, 12], [2, 12], [3, 12],
+    [1, 13], [2, 13], [3, 13],
+  ] as [number, number][],
+  /** Flower canopies: pergolas over stretches of path (looks only; the tiles under them stay open). */
+  pergolas: [{ x: 2, z: 7, w: 4, d: 2 }] as { x: number; z: number; w: number; d: number }[],
   starterSolar: [5, 5] as [number, number],
   prepared: [
     [6, 5],
@@ -86,11 +95,12 @@ export const CITY_GEN = {
   authoredEvery: 10,
   /**
    * Buildings (generation 2): the chance each quarter of a chunk holds one, by area type, and storeys by district.
+   * One or two storeys draws as a house (pitched roof), six and up as a skyscraper (the towers district).
    * They stand on the quarter's outer corner, clear of roads, canals, footpaths and landmarks.
    */
   buildings: {
     chance: { park: 0.1, street: 0.6, plaza: 0.35, canal: 0.45, market: 0.5, reservoir: 0.12, grove: 0.08, rooftops: 0.4 } as Record<string, number>,
-    storeys: { oldtown: [2, 4], docks: [1, 3], towers: [3, 6], parkland: [1, 2] } as Record<string, [number, number]>,
+    storeys: { oldtown: [2, 4], docks: [1, 3], towers: [7, 14], parkland: [1, 2] } as Record<string, [number, number]>,
     /** height of one storey in world units */
     storey: 0.42,
   },

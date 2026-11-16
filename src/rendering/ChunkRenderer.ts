@@ -14,9 +14,10 @@ import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { FoliageBuilder, foliageMaterial, treeMesh, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
 import { treeSpot, treeStage } from './TreePlacement';
-import { warmFlora, grassGeo } from './Flora';
+import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, vineGeo } from './Flora';
 import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, radiantExtras, thrivingExtras, turfTop, type DressCtx, type SolidSink } from './Surfaces';
 import { MODELS, ModelBatch } from './Models';
+import { WATER, poolMaterial, updatePool } from './Water';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
 
 /** Small seeded RNG for decoration placement (looks only). */
@@ -82,6 +83,9 @@ export function lin(hex: string): [number, number, number] {
   }
   return c;
 }
+
+type V3 = [number, number, number];
+const UP: V3 = [0, 1, 0];
 
 /** Accumulates transformed primitives into one vertex-coloured mesh. */
 class MeshBuilder {
@@ -241,6 +245,67 @@ class MeshBuilder {
     this.tris += 2;
   }
 
+  /** One flat-shaded triangle (world positions), wound so it faces along `n`. */
+  tri(hex: string, a: V3, b: V3, c: V3, n: V3) {
+    const ux = b[0] - a[0];
+    const uy = b[1] - a[1];
+    const uz = b[2] - a[2];
+    const vx = c[0] - a[0];
+    const vy = c[1] - a[1];
+    const vz = c[2] - a[2];
+    const facing = (uy * vz - uz * vy) * n[0] + (uz * vx - ux * vz) * n[1] + (ux * vy - uy * vx) * n[2];
+    if (facing < 0) [b, c] = [c, b];
+    const [R, G, B] = this.rgb(hex);
+    const base = this.pos.n / 3;
+    this.pos.reserve(9);
+    this.nrm.reserve(9);
+    this.col.reserve(12);
+    this.idx.reserve(3);
+    let o = this.pos.n;
+    let k = this.col.n;
+    for (const p of [a, b, c]) {
+      this.pos.a[o] = p[0];
+      this.pos.a[o + 1] = p[1];
+      this.pos.a[o + 2] = p[2];
+      this.nrm.a[o] = n[0];
+      this.nrm.a[o + 1] = n[1];
+      this.nrm.a[o + 2] = n[2];
+      o += 3;
+      this.col.a[k] = R;
+      this.col.a[k + 1] = G;
+      this.col.a[k + 2] = B;
+      this.col.a[k + 3] = 255;
+      k += 4;
+    }
+    this.pos.n = this.nrm.n = o;
+    this.col.n = k;
+    for (let i = 0; i < 3; i++) this.idx.a[this.idx.n++] = base + i;
+    this.tris++;
+  }
+
+  /**
+   * A flat-topped piece from an outline: a top fan from `o` over the ring at `yTop`, and a wall down to `yBot` under
+   * each ring segment, facing away from `o`. Used for the rounded banks of pools.
+   */
+  prism(hex: string, o: [number, number], ring: [number, number][], closed: boolean, yTop: number, yBot: number) {
+    const n = closed ? ring.length : ring.length - 1;
+    for (let i = 0; i < n; i++) {
+      const p = ring[i];
+      const q = ring[(i + 1) % ring.length];
+      let nx = q[1] - p[1];
+      let nz = -(q[0] - p[0]);
+      const len = Math.hypot(nx, nz);
+      if (len < 1e-6) continue;
+      this.tri(hex, [o[0], yTop, o[1]], [p[0], yTop, p[1]], [q[0], yTop, q[1]], UP);
+      nx /= len;
+      nz /= len;
+      if (nx * ((p[0] + q[0]) / 2 - o[0]) + nz * ((p[1] + q[1]) / 2 - o[1]) < 0) [nx, nz] = [-nx, -nz];
+      const N: V3 = [nx, 0, nz];
+      this.tri(hex, [p[0], yTop, p[1]], [q[0], yTop, q[1]], [q[0], yBot, q[1]], N);
+      this.tri(hex, [p[0], yTop, p[1]], [q[0], yBot, q[1]], [p[0], yBot, p[1]], N);
+    }
+  }
+
   /** triangles added (perf readout) */
   tris = 0;
 
@@ -279,6 +344,12 @@ const hash01 = (x: number, z: number, salt: number) => {
   return (h >>> 0) / 4294967296;
 };
 const ALIVE = PALETTE.ground.alive;
+const CORNERS = [[1, 1], [-1, 1], [-1, -1], [1, -1]];
+interface PoolGeo {
+  pos: number[];
+  col: number[];
+  idx: number[];
+}
 
 interface ChunkView {
   key: string;
@@ -300,6 +371,8 @@ interface ChunkView {
   sunk?: boolean;
   /** Look 3.19: the chunk's hand-built models (props, clutter, planters), hardware-instanced */
   models?: pc.Entity;
+  /** clean pool water: its own animated surface */
+  water?: pc.Entity;
   modelVBs?: pc.VertexBuffer[];
   /** Look 6.12: the living surface (every ground slab) and the props of tiles mid-transition */
   surface?: pc.Entity;
@@ -452,6 +525,7 @@ export class ChunkRenderer {
     this.tickGrowing(dt);
     // Phase 5 / Look 3.16: foliage, grass, flowers, vines and banners sway; still with reduced motion or `?still`
     updateWind(ChunkRenderer.still ? 0 : this.time, this.reducedMotion || ChunkRenderer.still ? 0 : 1);
+    if (!this.reducedMotion && !ChunkRenderer.still) updatePool(this.time);
     const ps = this.sim.grid.isPlayable(GROUND) ? this.sim.progression.parkStage() : 0;
     if (ps !== this.parkStage) {
       const prev = this.parkStage;
@@ -544,6 +618,7 @@ export class ChunkRenderer {
     v.trans?.destroy();
     this.transitions?.liveByChunk.delete(v.key);
     v.ground?.destroy();
+    v.water?.destroy();
     v.trees?.destroy();
     v.fog?.destroy();
     this.treeTris.delete(v.key);
@@ -644,6 +719,7 @@ export class ChunkRenderer {
     // Props in the park follow its stage; elsewhere they're broken until their area clears.
     this.level = area === 'park' ? Math.max(0, this.parkStage) : fog === 'cleared' ? 4 : 0;
     this.inPark = area === 'park';
+    this.fog = fog;
     // Phase 5 E16: one obstacle per cleared chunk outside the park becomes a small local landmark (seeded).
     this.localMark = undefined;
     if (this.level >= 4 && !this.inPark) {
@@ -680,6 +756,7 @@ export class ChunkRenderer {
       slab: (hex, p, sc) => self.slab(self.sink, hex, p, sc),
       model: (name, x, y, z, rot, sx, sy, sz) => !!self.batch?.add(name, x, y, z, rot, sx, sy, sz),
     };
+    const pool: PoolGeo = { pos: [], col: [], idx: [] };
     for (const t of c.tiles) {
       if (!t) continue;
       // Hidden ground is grey; fogged ground is greyed unless restored.
@@ -697,6 +774,15 @@ export class ChunkRenderer {
       else this.tile(b, t, h);
       // Look 3.10: railings, vines, banners and clutter on area boundaries (near chunks; with transitions on too)
       if (!v.far) areaEdges(this.ctx, t, h + 0.08);
+      if (!v.far && this.isWater(t)) {
+        this.poolBanks(b, t, h);
+        if (t.ground === 'restored' && fog !== 'hidden') this.poolSurface(pool, t, h);
+      }
+    }
+    v.water = this.setMesh(v.water, `water-${v.key}`, this.poolMesh(pool), poolMaterial(), false);
+    if (this.inPark && !v.far) {
+      b.grey = fb.grey = 0;
+      for (const p of PARK_LAYOUT.pergolas) this.pergola(b, fb, p, h + 0.08);
     }
     // Buildings (generation 2): grey and shuttered in the fog, white with roof gardens once the area is clear.
     if ((s.grid.layer(GROUND)!.gen ?? 1) >= 2) {
@@ -742,7 +828,7 @@ export class ChunkRenderer {
     const dead = DEAD[f] ?? DEAD.lawn;
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
     const col = t.blocked ? (this.level >= 4 && f !== 'building' ? PALETTE.stone.light : dead[0]) : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? this.slabTone(t) : f === 'road' ? PALETTE.paving.roadAlive : grassTone(stage, t.x, t.z)) : t.ground === 'polluted' ? dead[t.variant % dead.length] : t.ground === 'growing' ? PALETTE.ground.growing : PALETTE.ground.prepared;
-    this.slab(b, col, [t.x + 0.5, h, t.z + 0.5], [1, 0.16, 1]);
+    this.slab(b, col, [t.x + 0.5, f === 'water' && !t.blocked ? h - WATER.drop : h, t.z + 0.5], [1, 0.16, 1]);
     // Phase 5 E16: stages stay apart zoomed out too: a colour patch for Blooming, a gold disc for Radiant.
     if (t.ground === 'restored' && f !== 'water' && f !== 'paving' && f !== 'road') {
       if (stage === 2) b.add('box', flowerAt(t.x, t.z), [t.x + 0.4, h + 0.085, t.z + 0.55], [0.34, 0.02, 0.3]);
@@ -1050,6 +1136,7 @@ export class ChunkRenderer {
       return;
     }
     const top = h + 0.08;
+    if (f === 'water') return this.waterTile(b, t, h, x, z, r);
     switch (t.ground) {
       case 'polluted': {
         const shade = t.pollution > 80 ? dead[(t.variant + 1) % dead.length] : dead[t.variant % dead.length];
@@ -1064,8 +1151,6 @@ export class ChunkRenderer {
           const piece = this.roads?.pieceAt(t.x, t.z);
           if (piece) this.roadMarks(b, piece, t, x, z, top, false);
           else if (t.variant % 3 === 0) b.add('box', PALETTE.paving.roadLine, [x, top + 0.004, z], [0.12, 0.01, 0.4]);
-        } else if (f === 'water') {
-          b.add('box', PALETTE.ground.scum, [x, top + 0.005, z], [0.8, 0.01, 0.8]);
         } else if (this.inPark && this.level >= 1) {
           // Swept: the litter is gone, a few weeds remain.
           if (t.variant % 3 === 0) b.add('box', PALETTE.paving.grout, [x + r.range(-0.2, 0.2), top + 0.004, z + r.range(-0.2, 0.2)], [r.range(0.2, 0.4), 0.01, 0.03]);
@@ -1084,7 +1169,7 @@ export class ChunkRenderer {
       }
       case 'prepared':
       case 'growing': {
-        this.slab(b, f === 'water' ? PALETTE.ground.wetSoil : t.ground === 'growing' ? PALETTE.ground.growing : PALETTE.ground.prepared, [x, h, z], [0.96, 0.16, 0.96]);
+        this.slab(b, t.ground === 'growing' ? PALETTE.ground.growing : PALETTE.ground.prepared, [x, h, z], [0.96, 0.16, 0.96]);
         const n = t.ground === 'growing' ? 5 : 3 + (t.variant % 3);
         for (let i = 0; i < n; i++) {
           const sx = x + r.range(-0.3, 0.3);
@@ -1095,15 +1180,305 @@ export class ChunkRenderer {
         break;
       }
       case 'restored': {
-        if (f === 'water') {
-          this.slab(b, ALIVE.water, [x, h - 0.02, z], [1, 0.12, 1]);
-          if (t.variant % 2) b.add('cylinder', PALETTE.leaf.mid, [x + r.range(-0.25, 0.25), top - 0.035, z + r.range(-0.25, 0.25)], [0.22, 0.01, 0.22]);
-          if (t.bloom >= 2 && t.variant % 3 === 0) b.add('sphere', PALETTE.flowers.blush, [x + r.range(-0.2, 0.2), top - 0.02, z + r.range(-0.2, 0.2)], 0.07);
-          break;
-        }
         this.restoredTile(b, t, h, x, z, top, f, r);
         break;
       }
+    }
+  }
+
+  // ───────────── pools ─────────────
+
+  /** Fog of the area being built (bank colours are greyed like the tile they copy). */
+  private fog = 'cleared';
+
+  private isWater(t: TileData | undefined): t is TileData {
+    return !!t && !t.blocked && !t.occupantId && t.feature === 'water';
+  }
+
+  /** The colour of a tile's top, as `tile` draws it (pool banks borrow it from the neighbouring tile). */
+  private topColour(t: TileData): string {
+    const f = t.feature ?? 'lawn';
+    const dead = DEAD[f] ?? DEAD.lawn;
+    if (t.blocked) return f !== 'building' && this.level >= 4 ? PALETTE.paving.grout : dead[t.variant % dead.length];
+    const stage = Math.max(1, Math.min(4, t.bloom || 1));
+    if (t.occupantId) return t.ground === 'restored' ? grassTone(stage, t.x, t.z) : PALETTE.soil;
+    if (t.ground === 'restored') return f === 'paving' ? this.slabTone(t) : f === 'road' ? PALETTE.paving.roadAlive : grassTone(stage, t.x, t.z);
+    if (t.ground === 'growing') return PALETTE.ground.growing;
+    if (t.ground === 'prepared') return PALETTE.ground.prepared;
+    if (f === 'paving' && this.inPark && this.level >= 1) return PALETTE.paving.swept;
+    return t.pollution > 80 ? dead[(t.variant + 1) % dead.length] : dead[t.variant % dead.length];
+  }
+
+  private greyOf(t: TileData): number {
+    return this.fog === 'hidden' ? 0.75 : this.fog === 'cleared' || t.ground === 'restored' ? 0 : 0.35;
+  }
+
+  /** Quarter arc inside a tile corner: from the x edge round to the z edge, bulging towards the corner. */
+  private arc(cx: number, cz: number, sx: number, sz: number, r: number): [number, number][] {
+    const out: [number, number][] = [];
+    for (let i = 0; i <= WATER.arc; i++) {
+      const a = (i / WATER.arc) * (Math.PI / 2);
+      out.push([cx - sx * r + sx * r * Math.cos(a), cz - sz * r + sz * r * Math.sin(a)]);
+    }
+    return out;
+  }
+
+  /**
+   * A pool tile's surface: water below ground level (a silted bed when polluted, clear with lily pads once
+   * restored). Its banks are `poolBanks`.
+   */
+  private waterTile(b: Sink, t: TileData, h: number, x: number, z: number, r: VRng) {
+    const surf = h + 0.08 - WATER.drop;
+    const hex = t.ground === 'restored' ? ALIVE.water : t.ground === 'polluted' ? DEAD.water[t.variant % DEAD.water.length] : PALETTE.ground.wetSoil;
+    this.slab(b, hex, [x, surf - 0.04, z], [1, 0.08, 1]);
+    if (t.ground === 'polluted') {
+      // a dried-out, silted bed: dark mud and the odd bit of rubbish
+      b.add('box', PALETTE.ground.scum, [x + r.range(-0.1, 0.1), surf + 0.004, z + r.range(-0.1, 0.1)], [0.5, 0.008, 0.36]);
+      if (t.variant % 3 === 0) b.add('box', PALETTE.paving.crack, [x + r.range(-0.2, 0.2), surf + 0.012, z + r.range(-0.2, 0.2)], [0.3, 0.02, 0.05]);
+      return;
+    }
+    if (t.ground !== 'restored') return;
+    // clear water (its surface is `poolSurface`): lily pads, and lotus flowers as it blooms
+    const pads = (t.variant % 3) + (t.bloom >= 3 ? 1 : 0);
+    for (let i = 0; i < pads; i++) {
+      const px = x + r.range(-0.28, 0.28);
+      const pz = z + r.range(-0.28, 0.28);
+      b.add('cylinder', i % 2 ? PALETTE.leaf.dark : PALETTE.leaf.mid, [px, surf + 0.012, pz], [0.2, 0.012, 0.2]);
+      if (t.bloom >= 2 && i === 0) {
+        b.add('sphere', PALETTE.flowers.blush, [px, surf + 0.05, pz], [0.13, 0.07, 0.13]);
+        b.add('sphere', PALETTE.flowers.core, [px, surf + 0.075, pz], 0.045);
+      }
+    }
+  }
+
+  /** The radius of the rounded bank in each corner of a pool tile (0: none), in CORNERS order. */
+  private poolCorners(t: TileData): number[] {
+    const g = this.sim.grid;
+    const water = (dx: number, dz: number) => {
+      const n = g.peek(t.roofId, t.x + dx, t.z + dz);
+      return !n || this.isWater(n);
+    };
+    return CORNERS.map(([sx, sz]) => (water(sx, 0) || water(0, sz) ? 0 : water(-sx, 0) && water(0, -sz) && water(-sx, -sz) ? WATER.wide : WATER.fillet));
+  }
+
+  /**
+   * Clean water's surface for one tile: a fine grid just above the bed, coloured from pale shallows at the bank to
+   * deep blue in the middle, with the distance to the bank in the vertex alpha (the pool shader draws the foam
+   * line, caustics and ripples from it).
+   */
+  private poolSurface(out: PoolGeo, t: TileData, h: number) {
+    const g = this.sim.grid;
+    const y = h + 0.08 - WATER.drop + 0.003;
+    const land: [number, number][] = [];
+    for (let dz = -2; dz <= 2; dz++)
+      for (let dx = -2; dx <= 2; dx++) {
+        const n = g.peek(t.roofId, t.x + dx, t.z + dz);
+        if (n && !this.isWater(n)) land.push([t.x + dx, t.z + dz]);
+      }
+    const radius = this.poolCorners(t);
+    const shallow = lin(PALETTE.aqua.foam);
+    const mid = lin(PALETTE.aqua.water);
+    const deep = lin(PALETTE.aqua.deep);
+    const N = WATER.grid;
+    const base = out.pos.length / 3;
+    for (let j = 0; j <= N; j++)
+      for (let i = 0; i <= N; i++) {
+        const px = t.x + i / N;
+        const pz = t.z + j / N;
+        let d = WATER.deepAt;
+        for (const [lx, lz] of land) d = Math.min(d, Math.hypot(Math.max(lx - px, 0, px - lx - 1), Math.max(lz - pz, 0, pz - lz - 1)));
+        for (let c = 0; c < 4; c++) {
+          const R = radius[c];
+          if (!R) continue;
+          const [sx, sz] = CORNERS[c];
+          const vx = (px - (t.x + 0.5 + sx * (0.5 - R))) * sx;
+          const vz = (pz - (t.z + 0.5 + sz * (0.5 - R))) * sz;
+          if (vx > 0 && vz > 0) d = Math.min(d, Math.max(0, R - Math.hypot(vx, vz)));
+        }
+        const k = Math.min(1, d / WATER.deepAt);
+        // pale at the bank, the water's own blue a third of the way in, deepening to the middle
+        const a = Math.min(1, k / 0.3);
+        const e = Math.max(0, (k - 0.3) / 0.7) * 0.75;
+        out.pos.push(px, y, pz);
+        for (let q = 0; q < 3; q++) out.col.push(Math.round((shallow[q] + (mid[q] - shallow[q]) * a + (deep[q] - mid[q]) * e) * 255));
+        out.col.push(Math.round(k * 255));
+      }
+    for (let j = 0; j < N; j++)
+      for (let i = 0; i < N; i++) {
+        const a = base + j * (N + 1) + i;
+        out.idx.push(a, a + N + 1, a + 1, a + 1, a + N + 1, a + N + 2);
+      }
+  }
+
+  private poolMesh(geo: PoolGeo): pc.Mesh | undefined {
+    if (!geo.idx.length) return undefined;
+    const m = new pc.Mesh(this.device);
+    const nrm: number[] = [];
+    for (let i = 0; i < geo.pos.length; i += 3) nrm.push(0, 1, 0);
+    m.setPositions(geo.pos);
+    m.setNormals(nrm);
+    m.setColors32(geo.col);
+    m.setIndices(geo.idx);
+    m.update(pc.PRIMITIVE_TRIANGLES);
+    return m;
+  }
+
+  /**
+   * A pool tile's banks (static mesh): a wall in the neighbouring tile's material on every land side, and a rounded
+   * bank of that material in each outer corner, wider where the pool carries on behind the tile, with the odd rock
+   * or clump of reeds on it.
+   */
+  private poolBanks(b: MeshBuilder, t: TileData, h: number) {
+    const g = this.sim.grid;
+    const x = t.x + 0.5;
+    const z = t.z + 0.5;
+    const top = h + 0.08;
+    const foot = top - WATER.drop - 0.02;
+    const keep = b.grey;
+    // a land neighbour (one not generated yet counts as water: canals run on across chunks)
+    const side = (dx: number, dz: number) => {
+      const n = g.peek(t.roofId, t.x + dx, t.z + dz);
+      return n && !this.isWater(n) ? n : undefined;
+    };
+    const radius = this.poolCorners(t);
+    for (let i = 0; i < 4; i++) {
+      const [sx, sz] = CORNERS[i];
+      const nx = side(sx, 0);
+      const nz = side(0, sz);
+      const R = radius[i];
+      if (!R || !nx || !nz) continue;
+      // the rounded bank takes the material of the tile across the corner (or of a side, if that one is water)
+      const land = side(sx, sz) ?? nx;
+      b.grey = this.greyOf(land);
+      const cx = x + sx * 0.5;
+      const cz = z + sz * 0.5;
+      b.prism(this.topColour(land), [cx, cz], this.arc(cx, cz, sx, sz, R), false, top, foot);
+      b.grey = keep;
+      const k = hash01(t.x * 2 + sx, t.z * 2 + sz, 91);
+      const px = cx - sx * R * 0.3;
+      const pz = cz - sz * R * 0.3;
+      const alive = t.ground === 'restored';
+      if (k < 0.4) {
+        b.add('sphere', PALETTE.stone.pebble, [px, top + 0.04, pz], [0.2, 0.14, 0.17]);
+        b.add('sphere', PALETTE.stone.grey, [px + sx * 0.12, top + 0.03, pz - sz * 0.1], [0.13, 0.1, 0.12]);
+        if (alive) b.add('sphere', PALETTE.leaf.light, [px, top + 0.09, pz], [0.14, 0.05, 0.12]);
+      } else if (alive && k < 0.9)
+        for (let j = 0; j < 3; j++) {
+          const ht = 0.22 + 0.1 * j;
+          const rx = px + (j - 1) * 0.06;
+          const rz = pz + (j === 1 ? 0.05 : -0.03);
+          b.add('cone', [PALETTE.leaf.dark, PALETTE.leaf.mid, PALETTE.leaf.deep][j], [rx, top + ht / 2, rz], [0.05, ht, 0.05]);
+          if (j === 2 && t.bloom >= 2) b.add('capsule', PALETTE.wood.bark, [rx, top + ht, rz], [0.045, 0.05, 0.045]); // a bulrush
+        }
+    }
+    // straight banks, stopping where a rounded corner takes over
+    for (const [dx, dz] of EDGE_DIRS) {
+      const n = side(dx, dz);
+      if (!n) continue;
+      // a boulder or a stand of reeds at the water's edge, here and there
+      const k = hash01(t.x * 2 + dx, t.z * 2 + dz, 93);
+      const along = (hash01(t.x + dx, t.z + dz, 94) - 0.5) * 0.5;
+      const ex0 = x + dx * 0.4 + (dz ? along : 0);
+      const ez0 = z + dz * 0.4 + (dx ? along : 0);
+      const surf = top - WATER.drop;
+      b.grey = keep;
+      if (k < 0.3) {
+        b.add('sphere', k < 0.15 ? PALETTE.stone.pebble : PALETTE.stone.grey, [ex0, surf + 0.05, ez0], [0.24, 0.2, 0.2]);
+        b.add('sphere', PALETTE.stone.warm, [ex0 + (dz ? 0.16 : 0), surf + 0.03, ez0 + (dx ? 0.16 : 0)], [0.14, 0.12, 0.13]);
+        if (t.ground === 'restored') b.add('sphere', PALETTE.leaf.light, [ex0, surf + 0.14, ez0], [0.15, 0.04, 0.12]);
+      } else if (k < 0.5 && t.ground === 'restored')
+        for (let j = 0; j < 4; j++) {
+          const ht = 0.26 + 0.07 * j;
+          const rx = ex0 + (dz ? (j - 1.5) * 0.07 : (j % 2) * 0.05);
+          const rz = ez0 + (dx ? (j - 1.5) * 0.07 : (j % 2) * 0.05);
+          b.add('cone', [PALETTE.leaf.dark, PALETTE.leaf.mid, PALETTE.leaf.deep, PALETTE.leaf.stalk][j], [rx, surf + ht / 2, rz], [0.045, ht, 0.045]);
+          if (j === 3) b.add('capsule', PALETTE.wood.bark, [rx, surf + ht, rz], [0.04, 0.05, 0.04]);
+        }
+      b.grey = this.greyOf(n);
+      const hex = this.topColour(n);
+      const reach = [-1, 1].map((e) => 0.5 - radius[CORNERS.findIndex((c) => c[0] === (dx || e) && c[1] === (dz || e))]);
+      const ex = x + dx * 0.497;
+      const ez = z + dz * 0.497;
+      const a: V3 = dx ? [ex, top, z - reach[0]] : [x - reach[0], top, ez];
+      const c: V3 = dx ? [ex, top, z + reach[1]] : [x + reach[1], top, ez];
+      const N: V3 = [-dx, 0, -dz];
+      b.tri(hex, a, c, [c[0], foot, c[2]], N);
+      b.tri(hex, a, [c[0], foot, c[2]], [a[0], foot, a[2]], N);
+    }
+    b.grey = keep;
+  }
+
+  // ───────────── flower canopies ─────────────
+
+  /**
+   * A pergola over a stretch of park path (posts on the path's edges, so every tile under it stays open). It
+   * follows the park's stage: a weathered frame with a fallen post, then repaired and white with climbers, then
+   * hanging wisteria, then full bloom with flowers along the top.
+   */
+  private pergola(b: MeshBuilder, fb: FoliageBuilder, p: { x: number; z: number; w: number; d: number }, y: number) {
+    const L = this.level;
+    const wood = L >= 2 ? PALETTE.stone.bright : PALETTE.stone.grey;
+    const H = 1.25;
+    const alongX = p.w >= p.d;
+    const len = alongX ? p.w : p.d;
+    const span = alongX ? p.d : p.w;
+    // local (u along the path, v across it) → world
+    const at = (u: number, v: number, yy: number): V3 => (alongX ? [p.x + u, yy, p.z + v] : [p.x + v, yy, p.z + u]);
+    const box = (hex: string, u: number, v: number, yy: number, su: number, sy: number, sv: number) => b.add('box', hex, at(u, v, yy), alongX ? [su, sy, sv] : [sv, sy, su]);
+    const r = new VRng(p.x * 131 + p.z * 17 + 5);
+    for (const v of [0.06, span - 0.06]) {
+      for (let u = 0; u <= len; u++) {
+        const uu = Math.min(len - 0.06, Math.max(0.06, u));
+        if (L < 2 && u === 1 && v > 1) {
+          box(wood, uu + 0.4, v + 0.25, y + 0.05, 0.9, 0.09, 0.09); // a post lying where it fell
+          continue;
+        }
+        b.add('box', L >= 2 ? PALETTE.stone.warm : PALETTE.stone.dark, at(uu, v, y + 0.06), [0.2, 0.12, 0.2]);
+        b.add('cylinder', wood, at(uu, v, y + H / 2), [0.09, H, 0.09]);
+      }
+      if (L >= 2 || v < 1) box(wood, len / 2, v, y + H + 0.04, len + 0.3, 0.08, 0.09);
+    }
+    // rafters across the path
+    const n = len * 2 + 1;
+    for (let i = 0; i < n; i++) {
+      if (L < 2 && i % 3 !== 0) continue;
+      box(wood, (i / (n - 1)) * len, span / 2, y + H + 0.11, 0.06, 0.06, span + 0.3);
+    }
+    // Planting, from the same leaves and flowers as the rest of the park. A vine hangs from the edge it is given,
+    // running along its local +x with its leaves facing +z: `turn` lays that along a side beam, facing outwards.
+    const stage = L >= 4 ? 4 : L >= 3 ? 3 : L >= 2 ? 2 : 0;
+    const vine = (u: number, outer: boolean, yy: number, hang: number, scale: number, variant: number) => {
+      const turn = alongX ? (outer ? 0 : Math.PI) : outer ? -Math.PI / 2 : Math.PI / 2;
+      const [wx, , wz] = at(alongX === outer ? u : u + scale, outer ? span + 0.02 : -0.02, 0);
+      fb.add(vineGeo(stage, hang, variant, 1), wx, yy, wz, turn, scale);
+    };
+    for (const outer of [false, true]) {
+      if (L < 2) {
+        // dead strands on the old frame
+        for (let u = 0; u < len; u += 2) vine(u, outer, y + H, 0.3, 1, p.x + u);
+        continue;
+      }
+      // a fringe along each beam, longer as the park wakes, and a climber down each post
+      for (let u = 0; u < len; u++) vine(u, outer, y + H + 0.02, 0.4 + 0.15 * (stage - 2) + r.range(0, 0.15), 1, p.x * 7 + u + (outer ? 11 : 0));
+      for (let u = 0; u <= len; u++) vine(Math.min(len - 0.17, Math.max(-0.17, u - 0.17)), outer, y + H, 3.2, 0.34, p.z * 5 + u + (outer ? 3 : 0));
+    }
+    if (L < 2) return;
+    // the roof: leafy shrubs along both beams (in flower from stage 3), then flowers standing among them
+    for (let i = 0; i < len * 3; i++) {
+      const u = (i + 0.5) / 3;
+      for (const v of [0.04, span - 0.04]) {
+        const [wx, wy, wz] = at(u + r.range(-0.08, 0.08), v, y + H + 0.08);
+        fb.add(leafyShrubGeo(i + (v > 1 ? 3 : 0), 1, L >= 3 && i % 2 === 0), wx, wy, wz, r.range(0, 6.28), r.range(0.68, 0.86));
+        if (L < 3) continue;
+        const [fx, fy, fz] = at(u + 0.25, v + (v > 1 ? -0.1 : 0.1), y + H + 0.1);
+        fb.add(flowerGeo('lavender', i % 2, true, i, 1), fx, fy, fz, i * 1.3, 0.95);
+      }
+    }
+    if (L < 4) return;
+    for (let i = 0; i < len * 2; i++) {
+      const [wx, wy, wz] = at(r.range(0.2, len - 0.2), r.range(0.4, span - 0.4), y + H + 0.14);
+      if (i % 3 === 0) fb.add(leafyShrubGeo(i + 1, 1, true), wx, wy, wz, i * 2.1, 0.6);
+      else fb.add(flowerGeo(i % 2 ? 'cosmos' : 'daisy', i, true, i, 1), wx, wy, wz, i * 1.7, 0.9);
     }
   }
 
@@ -1185,28 +1560,60 @@ export class ChunkRenderer {
   }
 
   /** Small props on obstacle tiles (benches, stalls, stumps…). */
-  /** A procedural building from a small kit: body, window bands, parapet, and a roof that blooms when clear. */
-  private building(b: Sink, p: BuildingPlot, h: number, alive: boolean, far = false) {
-    const H = p.storeys * CITY_GEN.buildings.storey;
+  /**
+   * A real city building, by its height: a house (one or two storeys: pitched tile roof, chimney, door), a town
+   * block (flat roof that blooms when clear), or a skyscraper (six storeys and up: a podium, a glass shaft and a
+   * set-back crown, with planted terraces on the ledges once the area is clear).
+   */
+  private building(b: MeshBuilder, p: BuildingPlot, h: number, alive: boolean, far = false) {
+    const S = CITY_GEN.buildings.storey;
+    const base = h + 0.08;
     const cx = p.x + p.w / 2;
     const cz = p.z + p.d / 2;
     const bw = p.w - 0.25;
     const bd = p.d - 0.25;
-    const top = h + 0.08 + H;
-    const wallsDead = PALETTE.building.wallsDead;
-    const wallsAlive = PALETTE.building.wallsAlive;
-    const wall = (alive ? wallsAlive : wallsDead)[p.style % 5];
-    b.add('box', wall, [cx, h + 0.08 + H / 2, cz], [bw, H, bd]);
+    const wall = (alive ? PALETTE.building.wallsAlive : PALETTE.building.wallsDead)[p.style % 5];
+    const glass = alive ? PALETTE.building.glassAlive : PALETTE.building.glassDead;
+    if (p.storeys >= 6) return this.skyscraper(b, p, base, wall, glass, alive, far);
+    const H = p.storeys * S;
+    const top = base + H;
+    b.add('box', wall, [cx, base + H / 2, cz], [bw, H, bd]);
+    const house = p.storeys <= 2;
+    if (house) this.gable(b, p, top, wall, alive);
     if (far) {
-      b.add('box', alive ? PALETTE.building.roofGarden : PALETTE.building.roofDead, [cx, top + 0.03, cz], [bw * 0.9, 0.06, bd * 0.9]);
+      if (!house) b.add('box', alive ? PALETTE.building.roofGarden : PALETTE.building.roofDead, [cx, top + 0.03, cz], [bw * 0.9, 0.06, bd * 0.9]);
+      return;
+    }
+    const south = p.z + p.d - 0.12 + 0.005;
+    const east = p.x + p.w - 0.12 + 0.005;
+    if (house) {
+      // A door and a window or two per storey on the two faces the camera sees.
+      const door = alive ? PALETTE.woodPlank : PALETTE.woodDead;
+      b.add('box', door, [cx - bw * 0.22, base + 0.15, south], [0.2, 0.3, 0.03]);
+      b.add('box', alive ? PALETTE.building.parapetAlive : PALETTE.building.parapetDead, [cx - bw * 0.22, base + 0.015, south + 0.07], [0.34, 0.03, 0.14]); // doorstep
+      const eastN = Math.max(1, Math.floor(bd));
+      for (let i = 0; i < p.storeys; i++) {
+        const y = base + S * (i + 0.58);
+        b.add('box', glass, [cx + bw * 0.2, y, south], [0.24, S * 0.42, 0.02]);
+        if (i > 0) b.add('box', glass, [cx - bw * 0.22, y, south], [0.24, S * 0.42, 0.02]);
+        for (let k = 0; k < eastN; k++) b.add('box', glass, [east, y, p.z + 0.125 + (k + 0.5) * (bd / eastN)], [0.02, S * 0.42, 0.24]);
+      }
+      if (alive) {
+        // a window box in flower, and a shrub by the door
+        const wy = base + S * 0.34;
+        b.add('box', PALETTE.terracotta, [cx + bw * 0.2, wy, south + 0.04], [0.3, 0.05, 0.08]);
+        this.fb.grey = b.grey;
+        this.fb.add(flowerGeo(p.style % 2 ? 'cosmos' : 'daisy', p.style, true, p.x + p.z, 1), cx + bw * 0.2, wy + 0.02, south + 0.04, p.style, 0.55);
+        this.fb.add(leafyShrubGeo(p.style, 1, p.style % 2 === 0), cx - bw * 0.22 - 0.3, base, south + 0.14, p.style * 1.3, 0.5);
+      }
+      buildingDressing(this.ctx, p, h, H, alive);
       return;
     }
     // Window bands on the two faces the camera sees (south and east), one per storey.
-    const glass = alive ? PALETTE.building.glassAlive : PALETTE.building.glassDead;
     for (let i = 0; i < p.storeys; i++) {
-      const y = h + 0.08 + CITY_GEN.buildings.storey * (i + 0.55);
-      b.add('box', glass, [cx, y, p.z + p.d - 0.12 + 0.005], [bw * 0.82, CITY_GEN.buildings.storey * 0.38, 0.02]);
-      b.add('box', glass, [p.x + p.w - 0.12 + 0.005, y, cz], [0.02, CITY_GEN.buildings.storey * 0.38, bd * 0.82]);
+      const y = base + S * (i + 0.55);
+      b.add('box', glass, [cx, y, south], [bw * 0.82, S * 0.38, 0.02]);
+      b.add('box', glass, [east, y, cz], [0.02, S * 0.38, bd * 0.82]);
     }
     // Parapet and roof.
     b.add('box', alive ? PALETTE.building.parapetAlive : PALETTE.stone.shadow, [cx, top + 0.04, cz], [bw + 0.06, 0.08, bd + 0.06]);
@@ -1215,13 +1622,111 @@ export class ChunkRenderer {
       b.add('box', PALETTE.building.gardenBed, [cx, top + 0.09, cz], [bw * 0.86, 0.05, bd * 0.86]);
       const r = new VRng(p.style * 131 + p.x * 7 + p.z * 13);
       for (let i = 0; i < 1 + (p.style % 2); i++) b.add('box', PALETTE.panel, [p.x + 0.6 + i * 0.7, top + 0.2, p.z + 0.6], [0.5, 0.04, 0.4]);
-      for (let i = 0; i < 3; i++) b.add('sphere', PALETTE.shrub[i % 3], [p.x + r.range(0.5, p.w - 0.5), top + 0.18, p.z + r.range(0.9, p.d - 0.4)], [0.32, 0.22, 0.32]);
+      this.fb.grey = b.grey;
+      for (let i = 0; i < 3; i++) this.fb.add(leafyShrubGeo(p.style + i, 1, i % 2 === 0), p.x + r.range(0.5, p.w - 0.5), top + 0.1, p.z + r.range(0.9, p.d - 0.4), r.range(0, 6.28), r.range(0.5, 0.7));
     } else {
       // A rusty water tank or a dead antenna on the roof.
       if (p.style % 3 === 0) b.add('cylinder', PALETTE.building.tank, [p.x + 0.6, top + 0.3, p.z + 0.6], [0.4, 0.45, 0.4]);
       else b.add('box', PALETTE.paving.crack, [p.x + p.w - 0.5, top + 0.4, p.z + 0.5], [0.04, 0.7, 0.04]);
     }
     buildingDressing(this.ctx, p, h, H, alive); // Look 3.8/3.11: ivy down the facades, wall clutter
+  }
+
+  /** A house's pitched roof: two tiled slopes off a ridge along the longer side, gable ends in the wall colour, a chimney. */
+  private gable(b: MeshBuilder, p: BuildingPlot, y0: number, wall: string, alive: boolean) {
+    const cx = p.x + p.w / 2;
+    const cz = p.z + p.d / 2;
+    const bw = p.w - 0.25;
+    const bd = p.d - 0.25;
+    const alongX = bw >= bd;
+    const half = (alongX ? bd : bw) / 2;
+    const len = (alongX ? bw : bd) / 2;
+    const eave = 0.1;
+    const rise = half * 0.8;
+    const y1 = y0 + rise;
+    const ye = y0 - (eave * rise) / half; // the eaves hang a little past the wall, a little lower
+    const tiles = p.style % 3 === 1 ? (alive ? PALETTE.metal.slate : PALETTE.building.roofDead) : alive ? PALETTE.terracotta : PALETTE.terracottaDead;
+    // along = the ridge axis, across = the slope axis
+    const P = (along: number, y: number, across: number): V3 => (alongX ? [cx + along, y, cz + across] : [cx + across, y, cz + along]);
+    const N = (along: number, y: number, across: number): V3 => (alongX ? [along, y, across] : [across, y, along]);
+    const nl = Math.hypot(rise, half);
+    for (const side of [-1, 1]) {
+      const n = N(0, half / nl, (side * rise) / nl);
+      const a = P(-len, ye, side * (half + eave));
+      const c = P(len, ye, side * (half + eave));
+      b.tri(tiles, a, c, P(len, y1, 0), n);
+      b.tri(tiles, a, P(len, y1, 0), P(-len, y1, 0), n);
+      b.tri(wall, P(side * len, y0, -half), P(side * len, y0, half), P(side * len, y1, 0), N(side, 0, 0));
+    }
+    b.add('box', alive ? PALETTE.bricks[p.style % 3] : PALETTE.building.tank, P(len * 0.45, y0 + rise * 0.75, half * 0.4), [0.16, rise * 0.9, 0.16]);
+  }
+
+  /**
+   * A skyscraper: a two-storey podium over the whole plot, a glass shaft set in from it, and a narrower crown, each
+   * with window bands on the faces the camera sees. Clear, its ledges and roof are planted terraces with solar
+   * panels and a mast; in the fog it is a dark shell with a dead antenna.
+   */
+  private skyscraper(b: MeshBuilder, p: BuildingPlot, base: number, wall: string, glass: string, alive: boolean, far: boolean) {
+    const S = CITY_GEN.buildings.storey;
+    const cx = p.x + p.w / 2;
+    const cz = p.z + p.d / 2;
+    const bw = p.w - 0.25;
+    const bd = p.d - 0.25;
+    const n = p.storeys;
+    const crownFrom = Math.max(4, Math.round(n * 0.72));
+    // tiers: [first storey, storeys, footprint scale]
+    const tiers: [number, number, number][] = [[0, 2, 1], [2, crownFrom - 2, 0.84], [crownFrom, n - crownFrom, 0.62]];
+    const trim = alive ? PALETTE.building.parapetAlive : PALETTE.stone.shadow;
+    const r = new VRng(p.style * 131 + p.x * 7 + p.z * 13);
+    if (!far) this.fb.grey = b.grey;
+    tiers.forEach(([from, count, k], ti) => {
+      if (count <= 0) return;
+      const w = bw * k;
+      const d = bd * k;
+      const y0 = base + from * S;
+      const H = count * S;
+      b.add('box', wall, [cx, y0 + H / 2, cz], [w, H, d]);
+      const last = ti === tiers.length - 1 || tiers[ti + 1][1] <= 0;
+      if (far) {
+        b.add('box', glass, [cx, y0 + H / 2, cz + d / 2 + 0.004], [w * 0.84, H * 0.86, 0.01]);
+        b.add('box', glass, [cx + w / 2 + 0.004, y0 + H / 2, cz], [0.01, H * 0.86, d * 0.84]);
+        if (last) b.add('box', alive ? PALETTE.building.roofGarden : PALETTE.building.roofDead, [cx, y0 + H + 0.03, cz], [w * 0.9, 0.06, d * 0.9]);
+        return;
+      }
+      for (let i = 0; i < count; i++) {
+        const y = y0 + S * (i + 0.55);
+        const tall = ti === 0 && i === 0 ? 0.62 : 0.5; // a glazed ground floor
+        b.add('box', glass, [cx, y, cz + d / 2 + 0.005], [w * 0.86, S * tall, 0.02]);
+        b.add('box', glass, [cx + w / 2 + 0.005, y, cz], [0.02, S * tall, d * 0.86]);
+      }
+      // corner piers up the faces the camera sees, and a ledge on top of the tier
+      for (const [px, pz] of [[w / 2, d / 2], [-w / 2, d / 2], [w / 2, -d / 2]]) b.add('box', trim, [cx + px, y0 + H / 2, cz + pz], [0.09, H, 0.09]);
+      b.add('box', trim, [cx, y0 + H + 0.035, cz], [w + 0.08, 0.07, d + 0.08]);
+      if (alive) {
+        // a planted terrace on the ledge (the roof, for the crown)
+        b.add('box', PALETTE.building.gardenBed, [cx, y0 + H + 0.08, cz], [w * 0.92, 0.04, d * 0.92]);
+        for (let i = 0; i < (last ? 3 : 4); i++) {
+          // on the crown anywhere on the roof; lower down along the south and east ledges
+          const u = r.range(-0.42, 0.42);
+          const sx = last ? u * w : i % 2 ? w * 0.46 : u * w;
+          const sz = last ? r.range(-0.4, 0.4) * d : i % 2 ? u * d : d * 0.46;
+          this.fb.add(leafyShrubGeo(p.style + i + ti * 3, 1, i % 2 === 0), cx + sx, y0 + H + 0.09, cz + sz, r.range(0, 6.28), r.range(0.45, 0.65));
+        }
+        if (!last) for (let i = 0; i < Math.floor(w); i++) if (r.next() < 0.7) this.fb.add(vineGeo(4, S * r.range(0.9, 1.8), p.x + i + ti, 1), cx - w / 2 + 0.3 + i, y0 + H + 0.06, cz + d / 2 + 0.05, 0, 1);
+      }
+      if (last) {
+        const top = y0 + H + 0.07;
+        if (alive) {
+          b.add('box', PALETTE.panel, [cx - w * 0.2, top + 0.14, cz - d * 0.2], [Math.min(0.6, w * 0.4), 0.04, Math.min(0.45, d * 0.35)]);
+          b.add('box', trim, [cx + w * 0.25, top + 0.45, cz - d * 0.25], [0.05, 0.9, 0.05]);
+          b.add('box', PALETTE.glow.lamp, [cx + w * 0.25, top + 0.92, cz - d * 0.25], 0.09, 0.8);
+        } else {
+          b.add('cylinder', PALETTE.building.tank, [cx - w * 0.2, top + 0.2, cz - d * 0.2], [0.34, 0.4, 0.34]);
+          b.add('box', PALETTE.paving.crack, [cx + w * 0.25, top + 0.4, cz - d * 0.25], [0.04, 0.8, 0.04]);
+        }
+      }
+    });
+    if (!far) buildingDressing(this.ctx, p, base - 0.08, 2 * S, alive); // ivy off the podium ledge, clutter at street level
   }
 
   /**
