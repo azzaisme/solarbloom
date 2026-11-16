@@ -35,6 +35,7 @@ compare builds with each other, not as device frame rates.
 
 - `baseline/`: before Look 1 (commit 0164ddc lighting).
 - `<story>/`: after each Look story (subsets of the scenes for intermediate stories).
+- `after/`: all 14 scenes after Look 1 (High tier).
 - `current/`: the default output of `npm run shots:look` (not committed).
 
 Usage:
