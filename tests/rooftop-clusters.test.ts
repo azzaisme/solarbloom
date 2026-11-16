@@ -2,7 +2,7 @@ import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { AreaMap, PARK } from '../src/core/Areas';
-import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
+import { createInitialState, GROUND_GEN, GROUND, isRestorable } from '../src/core/GameState';
 import { Grid } from '../src/core/Grid';
 import type { MachineData } from '../src/core/types';
 import { CITY_GEN } from '../src/data/city';
@@ -94,7 +94,7 @@ describe('rooftop cluster areas (City 12.1)', () => {
   it('the ground under a roof is the building holding it up (roads and canals run on underneath)', () => {
     const seed = 2;
     const g = new Grid(seed, createInitialState(seed).layers);
-    const map = new AreaMap(seed, 3);
+    const map = new AreaMap(seed, GROUND_GEN);
     const id = nearestCluster(map)!;
     const r = map.rooftop(id)!;
     for (let z = r.z; z < r.z + r.depth; z++)

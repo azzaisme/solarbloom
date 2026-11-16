@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { roadPlanFor, type RoadPiece, type RoadPlan } from '../core/RoadPlan';
 import { CHUNK } from '../core/Hash';
 import { GROUND } from '../core/GameState';
 import { chunkKey } from '../core/Grid';
@@ -264,6 +265,13 @@ class MeshBuilder {
 /** Ground colours per material, dead → alive (Look 2: PALETTE.ground / PALETTE.lawn). */
 const DEAD = PALETTE.ground.dead;
 const EDGE_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+/** City 16.6: the four sides of a road tile and their piece-mask bits (RoadPlan.pieceAt). */
+const ROAD_SIDES = [
+  [1, 0, 1],
+  [-1, 0, 2],
+  [0, 1, 4],
+  [0, -1, 8],
+] as const;
 const hash01 = (x: number, z: number, salt: number) => {
   let h = Math.imul(x | 0, 73856093) ^ Math.imul(z | 0, 19349663) ^ Math.imul(salt, 83492791);
   h = Math.imul(h ^ (h >>> 13), 0x5bd1e995);
@@ -626,6 +634,8 @@ export class ChunkRenderer {
     let trLive = 0;
     const area = s.areas.map.areaOfChunk(v.cx, v.cz);
     this.areaType = s.areas.info(area).type;
+    const gen = s.grid.layer(GROUND)?.gen ?? 1;
+    this.roads = gen >= 4 ? roadPlanFor(s.grid.seed, gen) : undefined;
     const fog = s.areas.fog(area);
     v.sunk = fog === 'hidden';
     const city = s.grid.layer(GROUND)!.height;
@@ -845,6 +855,47 @@ export class ChunkRenderer {
     return n;
   }
 
+  /** City 16: the planned road network of the chunk being built (ground generation 4+), for road pieces. */
+  private roads?: RoadPlan;
+
+  /**
+   * City 16.6: a road tile's kerbs, markings and bridge, from its piece (so they follow the real road shape and
+   * flow through junctions and across chunk borders). Kerbs on every side without road; a dashed centre line
+   * between a street's two lanes on straights; an arterial's double centre line and edge lines; nothing painted in
+   * junctions and corners. Lanes are paving, not road, so they never get here. Dead roads keep worn markings.
+   */
+  private roadMarks(b: Sink, p: RoadPiece, t: TileData, x: number, z: number, top: number, alive: boolean) {
+    const y = top + 0.004;
+    if (p.bridge) {
+      b.add('box', alive ? PALETTE.paving.bridgeDeck : PALETTE.paving.bridgeDeckDead, [x, top + 0.02, z], [1, 0.05, 1]);
+      for (const [dx, dz, bit] of ROAD_SIDES) {
+        if (p.mask & bit) continue;
+        b.add('box', PALETTE.paving.bridgeRail, [x + dx * 0.46, top + 0.16, z + dz * 0.46], [dx ? 0.05 : 1, 0.06, dz ? 0.05 : 1]);
+        for (const k of [-0.4, 0, 0.4]) b.add('box', PALETTE.paving.bridgeRail, [x + (dx ? dx * 0.46 : k), top + 0.09, z + (dz ? dz * 0.46 : k)], [0.05, 0.14, 0.05]);
+      }
+      return;
+    }
+    for (const [dx, dz, bit] of ROAD_SIDES) {
+      if (p.mask & bit) continue;
+      b.add('box', alive ? PALETTE.paving.kerb : PALETTE.paving.kerbDead, [x + dx * 0.47, top + 0.02, z + dz * 0.47], [dx ? 0.06 : 1, 0.05, dz ? 0.06 : 1]);
+    }
+    if (p.kind !== 'straight') return;
+    const worn = !alive && t.variant % 3 === 0; // dead roads lose a third of their paint
+    if (worn) return;
+    const alongX = (p.through & 3) === 3;
+    // the two across-sides: lo (−z / −x) and hi (+z / +x)
+    const lo = p.mask & (alongX ? 8 : 2);
+    const hi = p.mask & (alongX ? 4 : 1);
+    const at = (off: number, len: number, thick: number, col: string) =>
+      b.add('box', col, alongX ? [x, y, z + off] : [x + off, y, z], alongX ? [len, 0.01, thick] : [thick, 0.01, len]);
+    if (p.tier === 'arterial') {
+      if (lo && hi) {
+        at(-0.05, 1, 0.05, PALETTE.paving.roadLine);
+        at(0.05, 1, 0.05, PALETTE.paving.roadLine);
+      } else at(lo ? 0.36 : -0.36, 1, 0.05, PALETTE.paving.roadEdgeLine);
+    } else if (hi && !lo && (alongX ? t.x : t.z) % 2 === 0) at(0.5, 0.5, 0.07, PALETTE.paving.roadLine); // dash on the shared seam
+  }
+
   /** Look 3.17 budget readout: triangles in loaded chunks (ground + props, foliage) and the worst chunk. */
   detailStats() {
     let ground = 0, foliage = 0, worst = 0;
@@ -1011,7 +1062,9 @@ export class ChunkRenderer {
         }
         this.slab(b, shade, [x, h, z], [0.96, 0.16, 0.96]);
         if (f === 'road') {
-          if (t.variant % 3 === 0) b.add('box', PALETTE.paving.roadLine, [x, top + 0.004, z], [0.12, 0.01, 0.4]);
+          const piece = this.roads?.pieceAt(t.x, t.z);
+          if (piece) this.roadMarks(b, piece, t, x, z, top, false);
+          else if (t.variant % 3 === 0) b.add('box', PALETTE.paving.roadLine, [x, top + 0.004, z], [0.12, 0.01, 0.4]);
         } else if (f === 'water') {
           b.add('box', PALETTE.ground.scum, [x, top + 0.005, z], [0.8, 0.01, 0.8]);
         } else if (this.inPark && this.level >= 1) {
@@ -1076,8 +1129,10 @@ export class ChunkRenderer {
       this.edges(b, t, x, z, top, true);
     } else if (f === 'road') {
       // Look 2.5: a restored road keeps its surface (cleaner), with greenery creeping in from the edges.
-      b.add('box', PALETTE.paving.roadAlive, [x, h, z], [1, 0.16, 1]);
-      if (t.variant % 3 === 0) b.add('box', PALETTE.paving.roadLine, [x, top + 0.004, z], [0.12, 0.01, 0.4]);
+      const piece = this.roads?.pieceAt(t.x, t.z);
+      b.add('box', piece?.tier === 'arterial' ? PALETTE.paving.arterialAlive : PALETTE.paving.roadAlive, [x, h, z], [1, 0.16, 1]);
+      if (piece) this.roadMarks(b, piece, t, x, z, top, true);
+      else if (t.variant % 3 === 0) b.add('box', PALETTE.paving.roadLine, [x, top + 0.004, z], [0.12, 0.01, 0.4]);
       for (const [dx, dz] of EDGE_DIRS) {
         const n = this.sim.grid.peek(t.roofId, t.x + dx, t.z + dz);
         if (!n || (n.feature ?? 'lawn') === 'road') continue;

@@ -1,4 +1,5 @@
 import { AREA_TYPE_LIST, AREA_TYPES, CITY_GEN, THEMES, type AreaType, type Theme } from '../data/city';
+import { arterialsInChunk, runCovers } from './Arterials';
 import { CHUNK, hashString, tileRandom } from './Hash';
 import { ROOF_TEMPLATES } from '../data/templates';
 
@@ -45,10 +46,13 @@ export interface RooftopPlan {
   core: [number, number];
 }
 
+/** Generations that change the area layout: 2, 3 (rooftop clusters), 4 (roads: landmarks clear of arterials). */
+export const genKey = (gen: number) => (gen >= 4 ? 4 : gen >= 3 ? 3 : 2);
+
 /** Shared map per seed and ground generation (generation and the area system use the same cache). */
 const MAPS = new Map<string, AreaMap>();
 export function areaMapFor(seed: number, gen = 2): AreaMap {
-  const key = `${seed}|${gen >= 3 ? 3 : 2}`;
+  const key = `${seed}|${genKey(gen)}`;
   let m = MAPS.get(key);
   if (!m) {
     if (MAPS.size > 8) MAPS.clear();
@@ -90,11 +94,89 @@ export class AreaMap {
     readonly gen = 2,
   ) {}
 
-  /** Area id of a ground chunk. */
+  /**
+   * Area id of a ground chunk. Generation 4: an area is always one edge-connected piece. Snapping chunk centres to
+   * the Voronoi can leave a seed's chunks touching only at corners; the largest piece keeps the id and each
+   * detached piece joins the lowest-id neighbouring area it touches (still local and order-independent).
+   */
   areaOfChunk(cx: number, cz: number): string {
     if (cx === 0 && cz === 0) return PARK;
     const key = `${cx},${cz}`;
     const hit = this.byChunk.get(key);
+    if (hit) return hit;
+    const raw = this.rawArea(cx, cz);
+    const id = this.gen >= 4 ? (this.pieces(raw).adopt.get(key) ?? raw) : raw;
+    this.byChunk.set(key, id);
+    return id;
+  }
+
+  private rawCache = new Map<string, string>();
+  private pieceCache = new Map<string, { main: Set<string>; rest: string[][] }>();
+  private adoptCache = new Map<string, { main: Set<string>; adopt: Map<string, string> }>();
+
+  /** A seed's raw chunks split into its main piece and the detached pieces, each joining a neighbour's main piece. */
+  private pieces(id: string): { main: Set<string>; adopt: Map<string, string> } {
+    const hit = this.adoptCache.get(id);
+    if (hit) return hit;
+    const { main, rest } = this.split(id);
+    const adopt = new Map<string, string>();
+    for (const part of rest) {
+      const cands = new Set<string>();
+      for (const c of part) {
+        const [x, z] = c.split(',').map(Number);
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx;
+          const nz = z + dz;
+          const o = this.rawArea(nx, nz);
+          if (o === id) continue;
+          if (o === PARK || this.split(o).main.has(`${nx},${nz}`)) cands.add(o);
+        }
+      }
+      const to = [...cands].sort()[0];
+      if (to) for (const c of part) adopt.set(c, to);
+    }
+    const out = { main, adopt };
+    this.adoptCache.set(id, out);
+    return out;
+  }
+
+  /** A seed's raw chunks (the Voronoi), as edge-connected pieces: the largest is its main piece. */
+  private split(id: string): { main: Set<string>; rest: string[][] } {
+    const hit = this.pieceCache.get(id);
+    if (hit) return hit;
+    const [sx, sz] = this.firstChunk(id).map((c) => c / SUPER);
+    const raw = new Set<string>();
+    for (let cz = (sz - 1) * SUPER; cz < (sz + 2) * SUPER; cz++) for (let cx = (sx - 1) * SUPER; cx < (sx + 2) * SUPER; cx++) if (this.rawArea(cx, cz) === id) raw.add(`${cx},${cz}`);
+    const parts: string[][] = [];
+    const seen = new Set<string>();
+    for (const k of [...raw].sort()) {
+      if (seen.has(k)) continue;
+      const part: string[] = [];
+      const stack = [k];
+      seen.add(k);
+      while (stack.length) {
+        const c = stack.pop()!;
+        part.push(c);
+        const [x, z] = c.split(',').map(Number);
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const n = `${x + dx},${z + dz}`;
+          if (raw.has(n) && !seen.has(n)) seen.add(n), stack.push(n);
+        }
+      }
+      parts.push(part.sort());
+    }
+    // Largest piece first; ties by its first chunk key.
+    parts.sort((a, b) => b.length - a.length || (a[0] < b[0] ? -1 : 1));
+    const out = { main: new Set(parts[0] ?? []), rest: parts.slice(1) };
+    this.pieceCache.set(id, out);
+    return out;
+  }
+
+  /** The Voronoi owner of a chunk, before generation 4's one-piece rule. */
+  private rawArea(cx: number, cz: number): string {
+    if (cx === 0 && cz === 0) return PARK;
+    const key = `${cx},${cz}`;
+    const hit = this.rawCache.get(key);
     if (hit) return hit;
     const px = cx + 0.5;
     const pz = cz + 0.5;
@@ -111,7 +193,7 @@ export class AreaMap {
             best = s.id;
           }
         }
-    this.byChunk.set(key, best);
+    this.rawCache.set(key, best);
     return best;
   }
 
@@ -130,9 +212,10 @@ export class AreaMap {
       const sx = Number(sxs);
       const sz = Number(szs);
       chunks = [];
-      // A seed's chunks lie within its own super-cell's neighbourhood.
-      for (let cz = (sz - 1) * SUPER; cz < (sz + 2) * SUPER; cz++)
-        for (let cx = (sx - 1) * SUPER; cx < (sx + 2) * SUPER; cx++) if (this.areaOfChunk(cx, cz) === id) chunks.push([cx, cz]);
+      // A seed's chunks lie within its own super-cell's neighbourhood (plus one chunk for adopted pieces, gen 4).
+      const m = this.gen >= 4 ? 1 : 0;
+      for (let cz = (sz - 1) * SUPER - m; cz < (sz + 2) * SUPER + m; cz++)
+        for (let cx = (sx - 1) * SUPER - m; cx < (sx + 2) * SUPER + m; cx++) if (this.areaOfChunk(cx, cz) === id) chunks.push([cx, cz]);
     }
     const nb = new Set<string>();
     for (const [cx, cz] of chunks)
@@ -145,13 +228,15 @@ export class AreaMap {
     // Landmark: the chunk nearest the area's centre, slightly off its middle.
     const [lcx, lcz] = chunks.reduce((b, c) => ((c[0] + 0.5 - mx) ** 2 + (c[1] + 0.5 - mz) ** 2 < (b[0] + 0.5 - mx) ** 2 + (b[1] + 0.5 - mz) ** 2 ? c : b), chunks[0] ?? [0, 0]);
     const off = id === PARK ? [7, 7] : [5 + Math.floor(tileRandom(this.seed, salt, lcx, lcz, 31) * 5), 5 + Math.floor(tileRandom(this.seed, salt, lcx, lcz, 32) * 5)];
+    // Generation 4: keep the landmark and its clearance off any arterial crossing its chunk.
+    if (this.gen >= 4 && id !== PARK) this.clearOfArterials(lcx, lcz, off);
     const distance = Math.round(Math.hypot(mx - 0.5, mz - 0.5));
     const theme = this.theme(lcx, lcz);
     let type = this.typeOf(id, [...nb].sort(), theme);
     const authored = this.authoredLandmark(id, distance);
     // Generation 3: a few streets, plazas and markets carry a rooftop cluster instead.
     const RT = CITY_GEN.rooftops;
-    if (this.gen >= 3 && !authored && distance >= RT.minDistance && RT.from.includes(type) && tileRandom(this.seed, salt, hashString(id), 0, 71) < RT.chance) {
+    if (this.gen >= 3 && !authored && distance >= RT.minDistance && RT.from.includes(type) && tileRandom(this.seed, salt, hashString(id), 0, 71) < RT.chance && (this.gen < 4 || this.roofClear(id, lcx, lcz, off))) {
       type = 'rooftops';
       // The roof must fit inside the landmark's chunk: nudge the landmark so its Core can stand over it.
       const t = ROOF_TEMPLATES[this.templateOf(id)];
@@ -189,6 +274,39 @@ export class AreaMap {
     const t = ROOF_TEMPLATES[template];
     const core: [number, number] = [t.core[0], t.core[1]];
     return { template, x: a.landmark[0] - core[0], z: a.landmark[1] - core[1], width: t.width, depth: t.depth, height: RT.height, core };
+  }
+
+  /**
+   * City 16: nudge a landmark offset (chunk-local, in place) so its footprint plus clearance and a 1-tile verge stay
+   * off every arterial in its chunk: the nearest offset in 2–12 on each axis that is clear.
+   */
+  private clearOfArterials(lcx: number, lcz: number, off: number[]) {
+    const runs = arterialsInChunk(this.seed, lcx, lcz);
+    const pad = CITY_GEN.landmarkClearance + 1;
+    for (const [axis, i] of [['x', 1], ['z', 0]] as const) {
+      // runs along x constrain the z offset (index 1), runs along z the x offset (index 0)
+      const across = runs.filter((r) => r.axis === axis);
+      if (!across.length) continue;
+      const ok = (o: number) => across.every((r) => o + 1 + pad < r.lane || o - pad > r.lane + r.width - 1);
+      let best = off[i];
+      for (let d = 0; d <= 10; d++) {
+        if (off[i] - d >= 2 && ok(off[i] - d)) { best = off[i] - d; break; }
+        if (off[i] + d <= 12 && ok(off[i] + d)) { best = off[i] + d; break; }
+      }
+      off[i] = best;
+    }
+  }
+
+  /** City 16: a rooftop cluster may only stand where its roof covers no arterial. */
+  private roofClear(id: string, lcx: number, lcz: number, off: number[]): boolean {
+    const t = ROOF_TEMPLATES[this.templateOf(id)];
+    const ox = Math.min(Math.max(off[0], t.core[0]), CHUNK - t.width + t.core[0]);
+    const oz = Math.min(Math.max(off[1], t.core[1]), CHUNK - t.depth + t.core[1]);
+    const x0 = lcx * CHUNK + ox - t.core[0];
+    const z0 = lcz * CHUNK + oz - t.core[1];
+    const runs = arterialsInChunk(this.seed, lcx, lcz);
+    for (let z = z0; z < z0 + t.depth; z++) for (let x = x0; x < x0 + t.width; x++) if (runs.some((r) => runCovers(r, x, z))) return false;
+    return true;
   }
 
   private templateOf(id: string): string {

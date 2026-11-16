@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AreaMap, PARK } from '../src/core/Areas';
-import { createInitialState, GROUND } from '../src/core/GameState';
+import { createInitialState, GROUND, GROUND_GEN } from '../src/core/GameState';
+import { roadPlanFor } from '../src/core/RoadPlan';
 import { distToFootprint, Grid } from '../src/core/Grid';
 import { AREA_TYPE_LIST, AREA_TYPES, CITY_GEN } from '../src/data/city';
 import { roadCol, roadRow } from '../src/core/Generation';
@@ -12,8 +13,9 @@ const areasAround = (map: AreaMap, r: number) => {
 };
 
 describe('city generator: skeleton (City 04.1)', () => {
-  it('roads and canals are a pure function of the seed and run along whole chunk rows/columns', () => {
-    const g = new Grid(5, createInitialState(5).layers);
+  it('generations 2–3: roads and canals are a pure function of the seed and run along whole chunk rows/columns', () => {
+    // Generation 4 plans roads on the area graph instead (tests/roads.test.ts); older saves keep this lattice.
+    const g = new Grid(5, createInitialState(5).layers.map((l) => ({ ...l, gen: 3 })));
     for (let cz = -6; cz <= 6; cz++) {
       if (!roadRow(5, cz) || cz === 0) continue;
       for (let x = -40; x < 40; x += 3) {
@@ -36,7 +38,7 @@ describe('city generator: area types and layouts (City 04.3)', () => {
   it('each area type has its own ground, obstacles away from the landmark, and a sensible obstacle share', () => {
     const seen = new Set<string>();
     for (const seed of [1, 2, 3, 4]) {
-      const map = new AreaMap(seed);
+      const map = new AreaMap(seed, GROUND_GEN);
       const g = new Grid(seed, createInitialState(seed).layers);
       for (const id of areasAround(map, 10)) {
         const a = map.info(id);
@@ -57,11 +59,12 @@ describe('city generator: area types and layouts (City 04.3)', () => {
         expect(buildings.length / tiles.length, `${a.type} buildings`).toBeLessThan(0.3);
         for (const t of buildings) {
           expect(t.blocked).toBe(true);
-          expect(distToFootprint(t.x, t.z, a.landmark[0], a.landmark[1], 2)).toBeGreaterThan(CITY_GEN.landmarkClearance + 1);
+          // A rooftop cluster's building holds up the roof its Core stands on, so it sits right under the landmark.
+          if (!map.underRoof(id, t.x, t.z)) expect(distToFootprint(t.x, t.z, a.landmark[0], a.landmark[1], 2)).toBeGreaterThan(CITY_GEN.landmarkClearance + 1);
         }
       }
     }
-    expect([...seen].sort()).toEqual([...AREA_TYPE_LIST].sort());
+    expect([...seen].filter((t) => t !== 'rooftops').sort()).toEqual([...AREA_TYPE_LIST].sort()); // rooftop clusters are placed, not picked
   });
 });
 
@@ -147,7 +150,14 @@ describe('city generator: buildings (City 07.5)', () => {
 
   it('buildings never sit on roads, water, the park or near a landmark', () => {
     for (const seed of [1, 5, 9]) {
-      const g = new Grid(seed, createInitialState(seed).layers);
+      // Generation 4: never on a planned road or lane.
+      const g4 = new Grid(seed, createInitialState(seed).layers);
+      const plan = roadPlanFor(seed, 4);
+      for (let cz = -8; cz <= 8; cz++)
+        for (let cx = -8; cx <= 8; cx++)
+          for (const t of g4.chunkAt(GROUND, cx, cz)!.tiles) if (t!.feature === 'building') expect(plan.roadAt(t!.x, t!.z)).toBeUndefined();
+      // Generations 2–3: never on the row/column lattice.
+      const g = new Grid(seed, createInitialState(seed).layers.map((l) => ({ ...l, gen: 3 })));
       const map = new AreaMap(seed, 3);
       for (let cz = -8; cz <= 8; cz++)
         for (let cx = -8; cx <= 8; cx++) {
@@ -162,7 +172,7 @@ describe('city generator: buildings (City 07.5)', () => {
           }
         }
     }
-  });
+  }, 20000);
 });
 
 describe('park art stages (City 05.2)', () => {

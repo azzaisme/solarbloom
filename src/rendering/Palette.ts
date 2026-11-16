@@ -34,6 +34,16 @@ const paving = {
   roadLine: '#b9b19a',
   /** Look 2.5: a restored road keeps its (cleaner) surface */
   roadAlive: '#696662',
+  /** City 16.6: arterials are a shade darker and carry a double centre line and edge lines */
+  arterialAlive: '#5d5a56',
+  roadEdgeLine: '#d9d3c5',
+  /** kerbs on a road's open sides: dead, then restored */
+  kerbDead: '#6e6961',
+  kerb: '#cac4b9',
+  /** bridges over canals: deck (dead, restored) and rail */
+  bridgeDeckDead: '#6b5d50',
+  bridgeDeck: '#9c8268',
+  bridgeRail: '#4b4641',
 };
 
 /** Tile ground by feature: dead (polluted) tones, three per feature. */
