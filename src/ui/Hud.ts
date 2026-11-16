@@ -35,6 +35,8 @@ export interface HudCallbacks {
   activateFrenzy(): void;
   /** Phase 5 E15: the 🐾 chip: show where a hinted cat hides. */
   findCat(): void;
+  /** Look 5.9: the house button: the park, or (when something is ready) the next area that needs attention. */
+  goHome(attention: boolean): void;
   newGame(): void;
   setSetting(key: keyof Settings, v: boolean): void;
   setVolume(key: 'sfxVolume' | 'musicVolume', v: number): void;
@@ -162,10 +164,11 @@ export class Hud {
         </div>
         <div id="objAct"></div>
         <button id="coreBtn">✨ Awaken the Core</button>
-        <div class="tools">
-          <button class="chip" id="catBtn" aria-label="Lucky Cat discoveries" hidden>🐱 <span id="catCount">0</span></button>
-          <button class="chip" id="pawBtn" aria-label="Paw prints: show where a cat is hiding" title="Paw prints: a cat is hiding nearby. Tap to look." hidden>🐾 <span id="pawCount">0</span></button>
-        </div>
+      </div>
+      <div id="quick" role="toolbar" aria-label="Quick actions">
+        <button class="rbtn qbtn" id="homeBtn" aria-label="Home: fly to the park (Home)" title="Home (Home key)">${ICONS.home}<span class="qbadge" aria-hidden="true"></span></button>
+        <button class="rbtn qbtn" id="catBtn" aria-label="Lucky Cat garden" title="Lucky Cat garden" hidden>${ICONS.garden}<span class="qn" id="catCount">0</span></button>
+        <button class="rbtn qbtn" id="pawBtn" aria-label="Paw prints: show where a cat is hiding" title="Paw prints: a cat is hiding nearby. Tap to look." hidden>${ICONS.paw}<span class="qn" id="pawCount">0</span></button>
       </div>
       <div id="eventBanner" role="status" aria-live="polite" hidden><span class="ei"></span><span class="et"></span><span class="ec"></span><i class="ebar"></i></div>
       <div id="combo"><div id="comboFx" aria-hidden="true"></div><div class="big" id="comboBig" role="status" aria-label="Bloom chain combo"><span class="cic">${ICONS.biomass}</span><span class="cl">Combo</span> <span class="cx">×0</span></div><div class="cbody panel"><ul id="comboParts"></ul><div class="total" id="comboTotal"></div><div id="chainAreas"></div></div><div id="feed"></div></div>
@@ -235,6 +238,7 @@ export class Hud {
     });
     $(r, '#catBtn').addEventListener('click', () => this.openSettings(true, true));
     $(r, '#pawBtn').addEventListener('click', () => this.cb.findCat());
+    $(r, '#homeBtn').addEventListener('click', () => this.cb.goHome($(r, '#homeBtn').classList.contains('ready')));
     $(r, '#buildToggle').addEventListener('click', () => this.toggleTray());
     $(r, '#pauseBtn').addEventListener('click', () => this.cb.togglePause());
     $(r, '#objToggle').addEventListener('click', () => {
@@ -732,7 +736,7 @@ export class Hud {
   private fadeLater(el: HTMLElement, secs: number): number {
     return window.setTimeout(() => {
       el.style.opacity = '0';
-      el.style.transform = 'translateY(-10px)';
+      el.style.transform = 'scale(.96)'; // shrink in place: sliding up would overlap the toast above
       setTimeout(() => el.remove(), 600);
     }, secs * 1000);
   }
@@ -840,7 +844,7 @@ export class Hud {
 
   /** Rectangles the Lucky Cat must never hide under. */
   blockedRects(): DOMRect[] {
-    return ['#logo', '#res', '#obj', '#hotbar', '#hint', '#combo'].map((s) => $(this.root, s).getBoundingClientRect());
+    return ['#logo', '#res', '#obj', '#hotbar', '#hint', '#combo', '#quick', '#chips'].map((s) => $(this.root, s).getBoundingClientRect());
   }
 
   setPaused(p: boolean) {
@@ -1011,6 +1015,11 @@ export class Hud {
     const cats = s.state.cat.found;
     this.set('catCount', $(this.root, '#catCount'), 'text', String(cats));
     if (cats > 0) $(this.root, '#catBtn').hidden = false;
+    // Look 5.9: the house shows a badge while a landmark (or the fountain) is ready to wake; a tap then flies there.
+    const wakeReady = s.state.progression.coreActivated ? s.areas.revealed().some((id) => s.areas.fog(id) !== 'cleared' && s.areas.ready(id)) : s.progression.coreReady();
+    const homeB = $(this.root, '#homeBtn');
+    this.set('homeReady', homeB, 'cls', wakeReady ? '1' : '0', 'ready');
+    this.set('homeTitle', homeB, 'title', wakeReady ? 'A landmark is ready to wake: tap to fly there' : 'Home (Home key)');
 
     // Objective
     const p = s.progression;

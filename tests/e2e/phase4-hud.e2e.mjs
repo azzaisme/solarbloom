@@ -11,7 +11,7 @@ const strict = !!process.env.STRICT;
 mkdirSync(dir, { recursive: true });
 const server = await preview({ preview: { port: 4198, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-const PANELS = ['#res', '#obj', '#hotbar', '#hint', '#chips', '#toasts', '#frenzyBtn'];
+const PANELS = ['#res', '#obj', '#hotbar', '#hint', '#chips', '#toasts', '#frenzyBtn', '#quick'];
 const SIZES = [
   ['320', 320, 640],
   ['360', 360, 740],
