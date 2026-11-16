@@ -29,6 +29,8 @@ interface MachineView {
   rings?: pc.Entity[];
   orbs?: pc.Entity[];
   canopy?: pc.Entity;
+  /** Mother Tree: the tree itself (the park's own tree geometry, swaying and see-through like every other tree) */
+  tree?: pc.Entity;
   /** Reservoir: water surface inside the cistern / garden basin. */
   water?: pc.Entity;
   /** Elder Tree: the dormant bare branches (hidden once its canopy unfolds). */
@@ -167,6 +169,38 @@ const FOUNTAIN = {
 // holds its own reference so the engine never frees one that a later fountain needs.
 const fxMeshes = new Map<string, pc.Mesh>();
 /** A fountain flower bed's planting: the park's own leafy shrubs and flowers, one mesh per corner variant. */
+/**
+ * The Mother Tree: a Radiant oak from the same generator as the park's trees (close-up detail: leaf clusters), larger
+ * than any of them (two variants grown into one for a full crown), with flowers growing in its planter. `scale` is the oak's size, `crown` where its charge orbs
+ * hang (height and radius, in the machine's space before the collar lift), `resonance` how much wider each level of
+ * Mother Tree Resonance makes it.
+ */
+const MOTHER = { species: 'oak' as const, variant: 1, scale: 1.85, crown: [1.5, 1.05] as [number, number], resonance: 0.07 };
+
+let motherMeshCache: pc.Mesh | undefined;
+function motherMesh(device: pc.GraphicsDevice): pc.Mesh {
+  if (motherMeshCache) return motherMeshCache;
+  const fb = new FoliageBuilder();
+  // Two oaks grown into one, turned apart: a fuller, rounder crown than any single park tree (the trunks overlap).
+  fb.add(treeGeo(MOTHER.species, 4, MOTHER.variant, 2), 0, 0, 0, 0, 1);
+  fb.add(treeGeo(MOTHER.species, 4, MOTHER.variant + 2, 2), 0, 0, 0, Math.PI * 0.9, 0.92);
+  // A ring of flowers in the planter (scaled down with the tree: these sit at the soil, 0.2 up in tree space / scale).
+  const kinds: FlowerSpecies[] = ['cosmos', 'daisy', 'lavender', 'wild', 'cosmos', 'daisy', 'wild', 'lavender'];
+  const S = MOTHER.scale;
+  kinds.forEach((k, i) => {
+    const a = (i / kinds.length) * Math.PI * 2 + 0.2;
+    const r = (0.5 + (i % 2) * 0.12) / S;
+    fb.add(flowerGeo(k, i, true, i, 1), Math.cos(a) * r, 0.01 / S, Math.sin(a) * r, a * 2.3, 0.9 / S);
+  });
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 1.1;
+    fb.add(leafyShrubGeo(i + 2, 1, i !== 1), (Math.cos(a) * 0.56) / S, 0, (Math.sin(a) * 0.56) / S, a, 0.5 / S);
+  }
+  motherMeshCache = fb.build(device)!;
+  motherMeshCache.incRefCount(); // shared by every Mother Tree, kept for the session
+  return motherMeshCache;
+}
+
 const bedMeshes = new Map<number, pc.Mesh>();
 function bedMesh(device: pc.GraphicsDevice, c: number): pc.Mesh {
   let m = bedMeshes.get(c);
@@ -798,47 +832,46 @@ export class MachineVisuals {
     part(pl, rcyl(0.855, 0.08, 0.094, 0.005, 0.005, 28), creamSeam(), {});
     part(pl, rcyl(0.76, 0.19, 0.215, 0.01, 0, 24), mat(PALETTE.soil), {});
     v.planter = pl;
-    const trunk = latheAuto('motherTrunk', [[0.19, 0.18], [0.17, 0.45], [0.15, 0.8], [0.13, 1.15], [0.1, 1.45], [0.08, 1.6]], 10);
-    part(b, trunk, mat(PALETTE.trunk), { rot: [3, 0, 4], shadow: true });
-    for (let r = 0; r < 4; r++) {
-      const a = r * 1.7;
-      part(b, ball(4, 6), mat(PALETTE.trunk), { pos: [Math.cos(a) * 0.26, 0.24, Math.sin(a) * 0.26], scale: [0.1, 0.24, 0.1], rot: [Math.sin(a) * 70, 0, Math.cos(a) * 70] });
-    }
-    const canopy = group(b, 'canopy', [0, 1.55, 0]);
-    const leaves: [number, number, number, number, string][] = [
-      [0, 0.3, 0, 1.25, PALETTE.shrub[0]],
-      [0.45, 0.05, 0.2, 0.85, PALETTE.shrub[1]],
-      [-0.42, 0.1, -0.15, 0.9, PALETTE.shrub[2]],
-      [0.1, 0.05, -0.48, 0.8, PALETTE.shrub[1]],
-      [-0.2, 0.0, 0.45, 0.8, PALETTE.shrub[0]],
-      [0, 0.75, 0, 0.75, PALETTE.canopyTop],
-    ];
-    for (const [x, y, z, sz, c] of leaves) part(canopy, ball(7, 10), mat(c), { pos: [x, y, z], scale: [sz, sz * 0.78, sz], shadow: true });
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      part(canopy, ball(4, 6), mat(PALETTE.flower[i % 5]), { pos: [Math.cos(a) * 0.62, 0.15 + (i % 2) * 0.3, Math.sin(a) * 0.62], scale: 0.1 });
-    }
+    // The tree: the park's own oak (same generator, wind and see-through-over-the-cursor as every other tree), larger.
+    const tree = new pc.Entity('motherTree');
+    tree.addComponent('render', { meshInstances: [new pc.MeshInstance(motherMesh(this.device()), foliageMaterial())], castShadows: true, receiveShadows: true });
+    tree.setLocalPosition(0, 0.2, 0);
+    tree.setLocalScale(MOTHER.scale, MOTHER.scale, MOTHER.scale);
+    b.addChild(tree);
+    v.tree = tree;
+    // Charge orbs hang from the crown's edge, where they can be seen; they light up as the tree charges.
+    const [cy, cr] = MOTHER.crown;
+    const canopy = group(b, 'canopy', [0, cy, 0]);
     v.canopy = canopy;
-    // Charge orbs hang in the canopy; they light up as the tree charges.
     v.orbs = [];
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2 + 0.3;
-      const o = part(canopy, ball(5, 7), orbOff(), { pos: [Math.cos(a) * 0.55, -0.22 + (i % 2) * 0.12, Math.sin(a) * 0.55], scale: 0.12 });
+      const o = part(canopy, ball(5, 7), orbOff(), { pos: [Math.cos(a) * cr * (0.92 + (i % 2) * 0.08), -0.12 + (i % 3) * 0.08, Math.sin(a) * cr * (0.92 + (i % 2) * 0.08)], scale: 0.12 });
       v.orbs.push(o);
     }
     v.light = part(b, ball(5, 8), mat(PALETTE.coreGlow, { emissive: PALETTE.coreGlow, emissiveIntensity: 1.2 }), { pos: [0, 0.24, 0.72], scale: 0.07 });
   }
 
-  /** Bloom Pulse: canopy swells and the orbs flash. */
+  /** Bloom Pulse: the tree and its ring of orbs swell, then settle. */
   pulseTree(id: string) {
     const v = this.views.get(id);
     if (!v?.canopy) return;
     const c = v.canopy;
+    const tree = v.tree;
+    const base = tree?.getLocalScale().clone();
     this.tweens.cancel(c);
     this.tweens.add(0.9, (k) => {
       const s = 1 + Math.sin(k * Math.PI) * 0.25 * (1 - k * 0.5);
       c.setLocalScale(s, s, s);
-    }, { owner: c, ease: ease.linear, done: () => c.setLocalScale(1, 1, 1) });
+      if (tree && base) tree.setLocalScale(base.x * (1 + (s - 1) * 0.5), base.y * (1 + (s - 1) * 0.35), base.z * (1 + (s - 1) * 0.5));
+    }, {
+      owner: c,
+      ease: ease.linear,
+      done: () => {
+        c.setLocalScale(1, 1, 1);
+        if (tree && base) tree.setLocalScale(base.x, base.y, base.z);
+      },
+    });
   }
 
   private core(v: MachineView) {
@@ -1435,19 +1468,17 @@ export class MachineVisuals {
           part(ex, ball(4, 6), mat(PALETTE.mist, { opacity: 0.7 }), { pos: [Math.cos(a) * 0.42, 1.06, Math.sin(a) * 0.42], scale: 0.05 });
         }
     } else if (v.m.type === 'motherTree') {
-      // Resonance: a wider canopy and glowing gold lanterns (counts capped: each level still adds, and spreads wider).
+      // Resonance: the tree spreads wider and glowing gold lanterns hang under its crown (counts capped: each level still adds).
       const lvl = L('treeResonance');
+      const wide = 1 + Math.min(lvl, 5) * MOTHER.resonance;
+      if (v.tree && !this.tweens.has(v.canopy!)) v.tree.setLocalScale(MOTHER.scale * wide, MOTHER.scale * (1 + (wide - 1) * 0.5), MOTHER.scale * wide);
       if (lvl > 0 && v.canopy) {
-        const c = group(ex, 'canopyPlus', [0, 1.55 + (v.treeLift ?? 0), 0]);
-        const lumps = Math.min(4 * lvl, 4 + 2 * lvl);
-        for (let i = 0; i < lumps; i++) {
-          const a = (i / lumps) * Math.PI * 2;
-          part(c, ball(6, 8), mat(PALETTE.shrub[i % 3]), { pos: [Math.cos(a) * (0.75 + lvl * 0.1), 0.05 + (i % 2) * 0.2, Math.sin(a) * (0.75 + lvl * 0.1)], scale: [0.55, 0.42, 0.55], shadow: true });
-        }
+        const [cy, cr] = MOTHER.crown;
+        const c = group(ex, 'canopyPlus', [0, cy + (v.treeLift ?? 0), 0]);
         const lanterns = Math.min(3 * lvl, 2 + 2 * lvl);
         for (let i = 0; i < lanterns; i++) {
           const a = (i / lanterns) * Math.PI * 2 + 0.5;
-          part(c, ball(4, 6), mat(PALETTE.lanternGlow, { emissive: PALETTE.gemSolar, emissiveIntensity: 1.2 }), { pos: [Math.cos(a) * 0.95, -0.35, Math.sin(a) * 0.95], scale: 0.09 });
+          part(c, ball(4, 6), mat(PALETTE.lanternGlow, { emissive: PALETTE.gemSolar, emissiveIntensity: 1.2 }), { pos: [Math.cos(a) * cr * wide * 0.85, -0.3, Math.sin(a) * cr * wide * 0.85], scale: 0.09 });
         }
       }
     } else if (v.m.type === 'relay') {
