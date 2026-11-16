@@ -942,11 +942,26 @@ export class Game {
   private mergeHint(type: MachineData['type'], roofId: string, x: number, z: number, size: number): string {
     const n = this.sim.merge.groupIfPlaced(type, roofId, x, z, size);
     const t2 = TIER2[type];
-    if (!t2 || n < 2) return '';
+    if (!t2) return '';
     const name = MACHINES[type].name;
-    return n >= TUNING.merge.count
-      ? `<span class="ok">🔀 Completes a merge: ${TUNING.merge.count} ${name}s → ${t2.icon} ${t2.name}</span><br>`
-      : `🔀 Touches a ${name}: one more alongside makes a ${t2.icon} ${t2.name}<br>`;
+    const line =
+      n < 2
+        ? ''
+        : n >= TUNING.merge.count
+          ? `<span class="ok">🔀 Completes a merge: ${TUNING.merge.count} ${name}s → ${t2.icon} ${t2.name}</span><br>`
+          : `🔀 Touches a ${name}: one more alongside makes a ${t2.icon} ${t2.name}<br>`;
+    // Pacing pass: point the way to a superstructure. A tier 2 merged here (tap this one to merge) lands beside the
+    // tier 2s it touches; three touching tier 2s merge into a core.
+    const t3 = TIER3[type];
+    const beside = Math.min(this.sim.merge.tier2Beside(type, roofId, x, z, size), TUNING.merge.count - 1);
+    if (!t3 || !beside) return line;
+    const yours = beside > 1 ? `${beside} ${t2.name}s` : `${t2.name}`;
+    return (
+      line +
+      (beside + 1 >= TUNING.merge.count
+        ? `<span class="ok">✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (tap this one) and the new ${t2.name} completes a ${t3.icon} ${t3.name} core</span><br>`
+        : `✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (tap this one) and ${TUNING.merge.count} touching ${t2.name}s make a ${t3.icon} ${t3.name} core<br>`)
+    );
   }
 
   /** Phase 5 E14: a superstructure's card: construction stages, then its ability (charge, fire, automatic). */
@@ -969,7 +984,12 @@ export class Game {
     const max = sup.maxCharge(m);
     const why = sup.blocked(m);
     const stored = Math.floor(a.charge / th);
-    const charging = sup.kind(m) === 'megahub' ? 'Its own drones’ finished jobs charge it' : `Restorations within ${TUNING.super[sup.kind(m) as "megaflower" | "nexus" | "treeOfLife"].reach} tiles charge it`;
+    const sk = sup.kind(m);
+    const charging =
+      sk === 'megahub'
+        ? 'Its own drones’ finished jobs charge it'
+        : `Restorations within ${TUNING.super[sk as 'megaflower' | 'nexus' | 'treeOfLife'].reach} tiles and its own production charge it` +
+          (sk === 'nexus' || sk === 'treeOfLife' ? `; with everything nearby grown, it pays ${TUNING.super.bountySeconds} s of biomass income instead` : '');
     return (
       `<div class="super"><b>${d.icon} ${esc(d.ability)}</b>` +
       `<div class="bar"><i style="width:${Math.min(100, (a.charge / max) * 100).toFixed(0)}%"></i></div>` +
@@ -1337,14 +1357,14 @@ export class Game {
         this.tweens.add(0.01, () => {}, { delay: 1.1, done: () => this.sfx.fanfare() });
         this.camera.shake(0.12);
         this.hud.toast(
-          `${d.icon} ${esc(d.name)} is alive!<small>${esc(d.blurb)}: ${TUNING.super.outputMult}× a single machine, permanently (three tier 2s were 12×). ${esc(d.ability)}: it charges as you play; fire it from its panel.</small>`,
+          `${d.icon} ${esc(d.name)} is alive!<small>${esc(d.blurb)}: ${TUNING.super.outputMult}× a single machine, permanently (three tier 2s were ${3 * TUNING.merge.solarMult}×), and every superstructure enriches all biomass. ${esc(d.ability)}: it charges as you play; fire it from its panel.</small>`,
           'gold',
           first ? 7 : 4.5,
         );
       }
       if (this.selected === machine.id) this.renderInspect();
     });
-    b.on('super.ability', ({ machine, tiles }) => {
+    b.on('super.ability', ({ machine, tiles, bounty }) => {
       this.machines.superPulse(machine.id);
       const w = this.machines.worldOf(machine);
       const p = new pc.Vec3(w[0], w[1], w[2]);
@@ -1354,7 +1374,7 @@ export class Game {
       this.vfx.burst(new pc.Vec3(p.x, p.y + 1.2, p.z), 30, { up: 4, speed: 2.2, size: 0.08, life: 1.2 });
       this.sfx.powerUp();
       const d = TIER3[machine.type]!;
-      const what = k === 'megaflower' ? `every panel ×${TUNING.super.megaflower.mult} for ${TUNING.super.megaflower.seconds} s` : k === 'megahub' ? `${TUNING.super.megahub.drones} swarm drones for ${TUNING.super.megahub.seconds} s` : `${tiles.length} tiles bloom`;
+      const what = k === 'megaflower' ? `every panel ×${TUNING.super.megaflower.mult} for ${TUNING.super.megaflower.seconds} s` : k === 'megahub' ? `${TUNING.super.megahub.drones} swarm drones for ${TUNING.super.megahub.seconds} s` : bounty ? `everything nearby is grown: +${fmt(bounty)} 🌿` : `${tiles.length} tiles bloom`;
       this.hud.feed(`${d.icon} ${d.ability.split(':')[0]}! ${what}`);
       if (this.selected === machine.id) this.renderInspect();
     });

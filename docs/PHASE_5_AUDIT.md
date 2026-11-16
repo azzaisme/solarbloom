@@ -450,3 +450,96 @@ sessions' test runs sharing the machine.
 - On a 320 px phone the objective title has a little less room (the 🌱 chip is icon-only there).
 - Robots arrive late because superstructures do (E14).
 - Persisted field `fauna` is optional and needs no migration; list it in the save fixtures next time they are updated.
+
+# Pacing pass — the merge → superstructure loop
+
+Release gate (`docs/PHASE_5_EPICS.md` §4): before the city expansion that replaces E17, show a satisfying 15–30
+minute loop with economy, merge and one superstructure. The E14 audit measured four problems: the first
+superstructure came at 39:00 / 54:12 (seeds 7 / 21), superstructures didn't raise biomass, abilities rarely fired
+late on, and the first merge (3 → 4) was a modest gain. Every number below is a hypothesis, tuned in
+`src/data/tuning.ts` (only in the E13 `merge` and E14 `super` blocks).
+
+**Every timing and rate here comes from scripted bots (`tests/bots.ts`), not people.** The merging bot plans its
+merges and acts every 3 s. People will be slower and less systematic. No human playtests were done, so the
+"satisfying" part of the gate is still unverified.
+
+## Before and after (bots, 60 minutes)
+
+Measured with `PACING=1 npx vitest run tests/pacing-super.test.ts` (new). It is skipped without `PACING` because
+each seed takes 15–45 minutes of wall time. "Steady" biomass is the sustained rate, without Frenzy or other
+temporary boosts. The control bot builds the same machines and never merges.
+
+| Seed | Bot | First merge | First core | First superstructure | Built in 60 min | Abilities fired | Steady biomass/min at 15 / 30 / 45 / 60 min |
+|---|---|---|---|---|---:|---|---|
+| 7 | before (432ba3b) | 2:45 | 25:54 | 39:00 | 4 | 3 (Megaflower 3) | 1.02M / 14.5M / 82.4M / 113M |
+| 7 | **after** | 2:45 | 17:48 | **25:24** | 10 | 89 (Megaflower 25, Tree of Life 36, Nexus 28) | 1.05M / **73.4M / 484M / 1.21B** |
+| 7 | control, no merges | — | — | — | 0 | 0 | 760K / 9.99M / 39.6M / 39.7M |
+| 21 | before (432ba3b) | 2:48 | 31:12 | 54:12 | 6 | 2 (Megaflower 2) | 740K / 15.9M / 61.4M / 167M |
+| 21 | **after** | 2:48 | 13:42 | **19:39** | 14 | 138 (Megaflower 71, Tree of Life 39, Nexus 28) | 1.33M / **87.0M / 983M / 2.26B** |
+| 21 | control, no merges | — | — | — | 0 | 0 | 961K / 13.2M / 92.8M / 140M |
+
+The control rows came out identical before and after. The "before" rows reproduce the E14 audit's numbers.
+
+- **The first superstructure lands inside 15–30 min on both seeds** (25:24 and 19:39).
+- **Biomass clearly rises after it:** ×5 at 30 min and ×6–16 at 45–60 min against the same bot before, and
+  ×7–30 against the control.
+- **Abilities fire all game:** Nexus and Tree of Life went from 0 to 28–39 releases each.
+- **The opening is unchanged:** first merge at 2:45 / 2:48, and biomass at 15 min is within the bots' usual
+  spread. The E12 test "keeps something to buy for 30 minutes and never stalls" passes. Ability bounds hold: two
+  Water Nexuses on auto beside each other settle and their chains end.
+
+## How each step moved it (bots, 35–40 minute runs, merging bot only)
+
+| Step | First superstructure, seed 7 / 21 | Biomass/min at 30 min, 7 / 21 |
+|---|---|---|
+| Before | 39:00 / 54:12 | 14.5M / 15.9M |
+| Bot builds new tier-1 groups beside a tier 2, plus the biomass bonus, plus flow charge into a full store | 20:54 / never (core at 17:45, stuck) | 65M / 10.3M |
+| + drones and the bot leave a pending stage's energy and water alone | 13:39 / 25:30 | 114M / 77.2M |
+| + stages 45 / 120 / 240 s, activation water 30 % | 13:54 / 24:09 | 52.2M / 66.1M |
+| the same with the **biomass bonus off** (attribution) | 13:54 / 24:09 | 7.38M / 12.2M |
+| stages 60 / 180 / 360 s | 15:06 / 25:36 | 91.5M / 65.6M |
+| final: + tier 2 = 5, Bloom Garden ×2.25, Tree of Life ×3, tier 3 = 22, exponent 0.5 | 25:24 / 19:39 | 73.4M / 87.0M |
+
+Read these with care: the bots' layouts are chaotic, and a small change moves the first core by several minutes
+either way (seed 7: 9:51 with tier 2 = 4, 17:48 with tier 2 = 5).
+
+## What changed
+
+| Problem | Change | Kind |
+|---|---|---|
+| Slow first core | The merging bot only grew tier-1 groups, so its tier 2s rarely touched and cores came by accident. It now starts and grows groups beside a tier 2 of the same type and anchors the merge there, as a player aiming for a superstructure would. This alone moved seed 7's first core from 25:54 to 9:51 | measurement (bot) |
+| A stage stuck waiting for water | Activation needed 40 % of the water store, but drones spend everything above their 25 % reserve, so seed 21 waited 8+ minutes. Drones now leave the cheapest pending stage's energy and water alone (capped at 60 % of the store, like E12's "save up" rule). The bot also keeps them when it buys machines | mechanic (`DroneSystem.payJob`, `SuperSystem.pendingStage`) |
+| | `super.stageWaterShare` for activation 0.4 → 0.3 | tuning |
+| Too early once unblocked | `super.stageSeconds` 30 / 90 / 180 → 60 / 180 / 360 s of steady biomass income (still locked at placement, no timers) | tuning |
+| No biomass gain | Every built superstructure multiplies all biomass, soft-scaled: 1 + `biomassBonus` × n^`biomassExponent` = 1 + 1 × n^0.5 (×2 for the first, ×3 for 4, ×4.7 for 14). It is a fixed factor per structure, not something you can buy in a loop. The "is alive" toast says so | mechanic + tuning (`SuperSystem.biomassMult`, `ProductionSystem.rates`) |
+| Abilities idle late in the game | Megaflower and Nexus also charge while their store is full, at `super.fullFlowShare` = 0.5 (since E12 that overflow already charges Frenzy) | mechanic + tuning |
+| | With nothing in reach to grow, a Nexus or Tree of Life release pays `super.bountySeconds` = 12 s of steady biomass income instead of keeping its charge (the spec's "defined productive alternative"). Charge comes at a fixed pace, so this is a bounded share of income. The Megahub still keeps its charge. The panel and feed explain the bounty | mechanic + tuning |
+| Modest first merge | Tier 2 output index 4 → 5 (`merge.solarMult` / `waterMult`; the preview reads "Output 3 → 5 (+67%)"), Bloom Garden ×2 → ×2.25, Tree of Life ×2.5 → ×3, tier 3 18 → 22 (still about 1.5× three tier 2s). Machine blurbs now take their numbers from `TUNING` | tuning |
+
+Saves are unchanged: no new saved fields, and `SAVE_VERSION` is untouched.
+
+## Risks and still open
+
+- **The curve is steep after the first superstructure.** The bots reach 1.2–2.3B biomass/min at 60 min and build
+  10–14 superstructures an hour. That is above the spec's hypothesis (5M at 60 min, 1B at 120 min), which E12 had
+  already passed early on. Stage prices follow income, so this limits itself, but the city expansion needs
+  balancing against it. Knobs: `super.biomassBonus` and `biomassExponent`, or stage prices that grow with each
+  superstructure built (not tried).
+- **People don't get the bot's plan.** The bot builds its next tier-1 group beside a tier 2 on purpose. The
+  build tooltip now says so too: on a spot touching a tier 2 of the same type, it says "✨ Beside your Solar
+  Array: merge 3 Solar Panels here (tap this one) and 3 touching Solar Arrays make a 🌻 Solar Megaflower core".
+  It is highlighted once the new tier 2 would be the third (`MergeSystem.tier2Beside`). Whether people follow
+  it still needs a human playtest.
+- Gate status: the measurable half (bot timings, biomass, abilities) is met. Whether it is "satisfying" needs people.
+
+## Tests run (pacing pass)
+
+Windows 11, sharing the machine with other sessions' test runs, so wall-clock timings are inflated.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck`, `vite build` | pass |
+| `npm test` (42 files, 253 tests) | 249 pass, 2 skipped (the opt-in pacing table). `pacing-city` hit its 300 s per-test timeout under load. Its numbers printed (76 / 82 areas, the same as E12) and seed 7 passed when run alone. Seed 21 took 379.6 s on 432ba3b and 379.8 s on this branch with identical output, so the timeout is machine load, not a regression |
+| `tests/super.test.ts` (13: 2 new, for the biomass bonus and for flow charge into a full store; the Nexus test now checks the bounty) and `tests/merge.test.ts` | pass |
+| `tests/e2e/super.e2e.mjs`, `tests/e2e/merge.e2e.mjs` | pass, no page or console errors |
+| `phase4-session` (`npm run test:session`, 15 minutes in the real page) | pass, no page errors |

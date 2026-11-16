@@ -42,7 +42,7 @@ export interface MergePlan {
   free: boolean;
   fromName: string;
   toName: string;
-  /** output index: three tier-1 machines = 3, the tier 2 = 4 */
+  /** output index: three tier-1 machines = 3, the tier 2 = TUNING.merge.solarMult */
   before: number;
   after: number;
   lost: LostLevels[];
@@ -112,6 +112,19 @@ export class MergeSystem {
     for (const o of this.sim.grid.machinesNear(roofId, x, z, size + 1))
       if (this.canMerge(o) && o.type === type && tierOf(o) === 1 && edgeAdjacent(ghost, o) && !seen.has(o.id)) for (const c of this.cluster(o, 8)) seen.add(c.id);
     return 1 + seen.size;
+  }
+
+  /**
+   * Pacing pass: core guidance. How many tier-2 machines of this type a footprint here would touch, counting the
+   * whole connected group of tier 2s it joins (0 if none). Three touching tier 2s merge into a superstructure core.
+   */
+  tier2Beside(type: MachineData['type'], roofId: string, x: number, z: number, size: number): number {
+    if (!isMergeable(type) || MAX_MERGE_TIER < 2) return 0;
+    const ghost: MachineData = { id: '?', type, roofId, x, z, size, boostUntil: 0, timer: 0, charge: 0 };
+    const seen = new Set<string>();
+    for (const o of this.sim.grid.machinesNear(roofId, x, z, size + 1))
+      if (this.canMerge(o) && o.type === type && tierOf(o) === 2 && edgeAdjacent(ghost, o) && !seen.has(o.id)) for (const c of this.cluster(o, 8)) seen.add(c.id);
+    return seen.size;
   }
 
   /** True if the machine is in a cluster of at least three (for highlights and the advisor). */
