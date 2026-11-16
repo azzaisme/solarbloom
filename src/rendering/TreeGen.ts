@@ -276,6 +276,57 @@ function collar(B: Buf, y: number, rIn: number, rOut: number, h: number, col: C)
     }
 }
 
+// ───────────── cards ─────────────
+
+/** A leaf or petal card from `p` along `dir`, `w` wide (widest at `at`), folded along its midrib. */
+export function card(B: Buf, p: V, dir: V, up: V, L: number, w: number, col: C, tip: C, f0: number, f1: number, at = 0.42, fold = 0.25, soft?: V) {
+  const side = norm(cross(dir, up));
+  const n = norm(cross(side, dir));
+  const back = soft ? col : scaleC(col, 0.72);
+  const mid = add(p, mul(dir, L * at));
+  const sp = add(add(mid, mul(side, w / 2)), mul(n, -w * fold));
+  const sm = add(add(mid, mul(side, -w / 2)), mul(n, -w * fold));
+  const tp = add(p, mul(dir, L));
+  const fm = f0 + (f1 - f0) * at;
+  // front
+  // `soft`: shade both faces with the clump's own surface normal, so leaves blend into the canopy's soft light
+  const nf = soft ?? n;
+  const a = B.v(p, nf, col, f0), b = B.v(sp, nf, col, fm), c = B.v(tp, nf, tip, f1), d = B.v(sm, nf, col, fm);
+  B.tri(a, b, c);
+  B.tri(a, c, d);
+  // back
+  const nb = soft ?? mul(n, -1);
+  const a2 = B.v(p, nb, back, f0), b2 = B.v(sp, nb, back, fm), c2 = B.v(tp, nb, soft ? tip : scaleC(tip, 0.8), f1), d2 = B.v(sm, nb, back, fm);
+  B.tri(a2, c2, b2);
+  B.tri(a2, d2, c2);
+}
+
+const randDir = (R: () => number, upBias: number): V => norm([R() * 2 - 1, upBias + R() * (1 - upBias), R() * 2 - 1]);
+
+/**
+ * Scatters leaf cards over an ellipsoid as a soft, scaly shell: each leaf starts just inside the surface and lies
+ * mostly along it (drooping a little), poking out only at its tip, and is lit with the clump's own surface normal,
+ * so the canopy keeps its soft light and only its silhouette and texture turn leafy.
+ */
+export function leafShell(B: Buf, c: V, r: V, n: number, base: C, light: C, dark: C, flex: number, L: number, R: () => number, narrow = 0.55) {
+  for (let i = 0; i < n; i++) {
+    const u = randDir(R, -0.35);
+    const sn = norm([u[0] / r[0], u[1] / r[1], u[2] / r[2]]);
+    const p: V = [c[0] + u[0] * r[0] * 0.88, c[1] + u[1] * r[1] * 0.88, c[2] + u[2] * r[2] * 0.88];
+    // a tangent direction, biased downhill, tipped out a little from the surface
+    const a = R() * Math.PI * 2;
+    const t1 = norm(Math.abs(sn[1]) < 0.9 ? cross(sn, [0, 1, 0]) : cross(sn, [1, 0, 0]));
+    const t2 = cross(sn, t1);
+    let tan = add(mul(t1, Math.cos(a)), mul(t2, Math.sin(a)));
+    tan = norm(add(tan, [0, -0.35, 0]));
+    const dir = norm(add(tan, mul(sn, 0.45)));
+    const k = clamp(0.5 + 0.5 * sn[1], 0, 1);
+    const col = k > 0.5 ? mix(base, light, Math.pow((k - 0.5) * 2, 1.2) * 0.8) : mix(dark, base, k * 2);
+    const l = L * (0.8 + R() * 0.4);
+    card(B, p, dir, sn, l, l * narrow, scaleC(col, 0.95 + R() * 0.1), mix(col, light, 0.2), flex * 0.85, flex, 0.45, 0.15, sn);
+  }
+}
+
 // ───────────── species ─────────────
 
 interface Palette {
@@ -404,15 +455,22 @@ function broadleaf(B: Buf, sp: Species, R: () => number, S: number, pal: Palette
   const crownR = spread + 0.3 * S;
   // the clumps: a big heart clump, one per limb, and a crowning top
   const heartR: V = birch ? [0.22 * S, 0.34 * S, 0.22 * S] : cherry ? [0.4 * S, 0.27 * S, 0.4 * S] : [0.36 * S, 0.3 * S, 0.36 * S];
-  const leaf = (p: V, r: V, d: number, seed: number, flex: number) =>
-    puff(B, { c: p, r, base: pal.base, light: pal.light, dark: pal.dark, flex, seed, detail: d, crown: heart, crownR, lump: 0.32 });
+  // Look 3.7: each clump is a darker core puff wrapped in a shell of leaf cards, so the canopy reads as many small
+  // leaf clusters with light edges and a dark heart, not a smooth blob (cards only at normal / close detail).
+  const leaf = (p: V, r: V, d: number, seed: number, flex: number) => {
+    puff(B, { c: p, r: det > 0 ? (mul(r, 0.92) as V) : r, base: det > 0 ? scaleC(pal.base, 0.9) : pal.base, light: det > 0 ? mix(pal.base, pal.light, 0.6) : pal.light, dark: pal.dark, flex, seed, detail: d, crown: heart, crownR, lump: 0.32 });
+    if (det > 0) leafShell(B, p, r, Math.round(clamp((r[0] * r[2]) / 0.0018, 10, 64) * (det > 1 ? 1.4 : 1)), pal.base, pal.light, scaleC(pal.dark, 1.2), flex, (cherry ? 0.07 : 0.085) * S, rng(seed), cherry ? 0.8 : 0.72);
+  };
   leaf(heart, heartR, big, R() * 1e9, 0.55);
   for (const an of anchors) leaf(an.p, [an.r, an.r * 0.85, an.r], det, R() * 1e9, 0.8);
   if (!cherry || stage !== 2) leaf([heart[0] + (R() - 0.5) * 0.06, crownY + heartR[1] * 0.75, heart[2] + (R() - 0.5) * 0.06], mul([1, 0.8, 1], (birch ? 0.16 : 0.2) * S) as V, det, R() * 1e9, 0.9);
   // cherry blossom: a few white clumps and petal specks
   if (cherry) for (let i = 0; i < 2; i++) {
     const an = anchors[(i * 2) % anchors.length];
-    puff(B, { c: add(an.p, [0, an.r * 0.5, 0]), r: [an.r * 0.5, an.r * 0.42, an.r * 0.5], base: hsl(340, 30, 95), light: hsl(0, 0, 99), dark: hsl(338, 40, 80), flex: 0.85, seed: R() * 1e9, detail: det, crown: heart, crownR });
+    const c = add(an.p, [0, an.r * 0.5, 0]);
+    const r: V = [an.r * 0.5, an.r * 0.42, an.r * 0.5];
+    puff(B, { c, r, base: hsl(340, 30, 95), light: hsl(0, 0, 99), dark: hsl(338, 40, 80), flex: 0.85, seed: R() * 1e9, detail: det, crown: heart, crownR });
+    if (det > 0) leafShell(B, c, r, 14, hsl(340, 40, 92), hsl(0, 0, 100), hsl(338, 40, 80), 0.9, 0.045 * S, R, 0.8);
   }
   // machine side: glass sun-petals on the birch, turned to the light
   if (birch && det > 0) {
@@ -439,7 +497,9 @@ function pine(B: Buf, R: () => number, S: number, pal: Palette, bark: C, det: nu
     const r = (0.42 - 0.3 * k) * S;
     const heart: V = [0, y, 0];
     // a tier: a soft, drooping skirt of needles (squashed lumpy clump), darker underneath
-    puff(B, { c: heart, r: [r, (0.15 + 0.03 * (1 - k)) * S, r], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.35 + 0.5 * k, seed: R() * 1e9, detail: i === 0 ? big : det, lump: 0.28, crown: [0, y - 0.1, 0], crownR: r });
+    const tr: V = [r, (0.15 + 0.03 * (1 - k)) * S, r];
+    puff(B, { c: heart, r: tr, base: pal.base, light: pal.light, dark: pal.dark, flex: 0.35 + 0.5 * k, seed: R() * 1e9, detail: i === 0 ? big : det, lump: 0.28, crown: [0, y - 0.1, 0], crownR: r });
+    if (det > 0) leafShell(B, heart, tr, Math.round(14 + 26 * (1 - k)), pal.base, pal.light, pal.dark, 0.35 + 0.5 * k, 0.07 * S, R, 0.22); // needle sprays
   }
   puff(B, { c: [0, H * 0.98, 0], r: [0.07 * S, 0.14 * S, 0.07 * S], base: pal.base, light: pal.light, dark: pal.dark, flex: 1, seed: R() * 1e9, detail: det, lump: 0.1 });
 }
@@ -451,7 +511,8 @@ function willow(B: Buf, R: () => number, S: number, pal: Palette, bark: C, barkD
   tube(B, [[0, 0, 0], [lx * 0.5, trunkH * 0.5, 0], [lx, trunkH, 0.02]], [tr * 1.4, tr * 0.9, tr * 0.6], 7, [barkDark, bark, bark], [0, 0.08, 0.15], false);
   const heart: V = [lx, trunkH + 0.2 * S, 0.02];
   const domeR: V = [0.44 * S, 0.3 * S, 0.44 * S];
-  puff(B, { c: heart, r: domeR, base: pal.base, light: pal.light, dark: pal.dark, flex: 0.5, seed: R() * 1e9, detail: big, lump: 0.18, crown: heart, crownR: 0.5 * S });
+  puff(B, { c: heart, r: lod > 0 ? (mul(domeR, 0.88) as V) : domeR, base: lod > 0 ? scaleC(pal.base, 0.85) : pal.base, light: pal.light, dark: pal.dark, flex: 0.5, seed: R() * 1e9, detail: big, lump: 0.18, crown: heart, crownR: 0.5 * S });
+  if (lod > 0) leafShell(B, heart, domeR, 60, pal.base, pal.light, pal.dark, 0.6, 0.07 * S, R, 0.35);
   // weeping curtains: ribbons that hang from the dome's rim and swing most at the tips
   const n = lod === 0 ? 0 : 16;
   for (let i = 0; i < n; i++) {
@@ -484,6 +545,7 @@ function sapling(B: Buf, sp: Species, R: () => number, lod: Lod) {
   }
   const c: V = [0.005, h + 0.04, 0.005];
   puff(B, { c, r: [0.1, 0.085, 0.1], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.7, seed: R() * 1e9, detail: 1, lump: 0.2 });
+  if (lod > 0) leafShell(B, c, [0.1, 0.085, 0.1], 12, pal.base, pal.light, pal.dark, 0.75, 0.05, R, 0.6);
   puff(B, { c: add(c, [0.06, -0.03, 0.03]), r: [0.06, 0.05, 0.06], base: pal.base, light: pal.light, dark: pal.dark, flex: 0.75, seed: R() * 1e9, detail: 1 });
   return B;
 }
@@ -547,8 +609,13 @@ export function treeGeo(sp: Species, stage: TreeStage, variant: number, lod: Lod
 export function shrubGeo(variant: number, lod: Lod = 1): TreeGeo {
   const key = `shrub|${variant % 6}|${lod}`;
   let g = cache.get(key);
-  if (!g) cache.set(key, (g = buildShrub(variant % 6, lod)));
+  if (!g) cache.set(key, (g = shrubBuilder(variant % 6, lod)));
   return g;
+}
+/** Look 3.6: the leafy shrub builder (Flora.ts registers it; the smooth `buildShrub` stays as the fallback). */
+let shrubBuilder: (variant: number, lod: Lod) => TreeGeo = buildShrub;
+export function setShrubBuilder(f: (variant: number, lod: Lod) => TreeGeo) {
+  shrubBuilder = f;
 }
 
 /**
@@ -569,3 +636,7 @@ export function* warmTemplates(): Generator<void> {
     }
   }
 }
+
+/** Look 3: the geometry helpers, shared with the flower, shrub, vine and prop builders (Flora.ts, Props.ts). */
+export { Buf, puff, tube, plate, randDir, hsl, hex, mix, scaleC, add, sub, mul, norm, cross, dot, len, clamp, lerp, rotateAxis, SUN };
+export type { V, C, Palette };
