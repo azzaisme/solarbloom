@@ -1,0 +1,50 @@
+{
+  "tag": "1.2-key-light",
+  "query": "",
+  "renderer": "headless Chromium, SwiftShader (software GL)",
+  "when": "2026-11-16T01:30:58.776Z",
+  "shots": {
+    "machines-desktop": {
+      "scene": "Machine cluster (solar, condenser, core)",
+      "size": "1280x800",
+      "frameMs": 350.1,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 91,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "9f843bd146e8"
+    },
+    "half-desktop": {
+      "scene": "Half-restored park, pulse in progress",
+      "size": "1280x800",
+      "frameMs": 197.6,
+      "simTime": 3,
+      "restored": 122,
+      "drawCalls": 66,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "9ca32fcb865c"
+    },
+    "full-desktop": {
+      "scene": "Fully restored park",
+      "size": "1280x800",
+      "frameMs": 286.3,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 89,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "n/a",
+      "sha1": "6ce1a3f2277a"
+    }
+  }
+}
