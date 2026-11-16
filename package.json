@@ -18,6 +18,7 @@
     "shots:city": "vite build && node tests/e2e/city-shots.mjs",
     "shots:park": "vite build && node tests/e2e/park-shots.mjs",
     "shots:rooftops": "vite build && node tests/e2e/rooftop-shots.mjs",
+    "shots:look3": "vite build && node tests/e2e/look3-shots.mjs",
     "shots:roads": "vite build && node tests/e2e/road-shots.mjs",
     "test:hud": "vite build && STRICT=1 node tests/e2e/phase4-hud.e2e.mjs",
     "test:session": "vite build && node tests/e2e/phase4-session.e2e.mjs",
