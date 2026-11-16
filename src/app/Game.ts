@@ -30,7 +30,7 @@ import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
-import { pickLayers } from '../core/Picking';
+import { droneTapRadius, pickDrone, pickLayers } from '../core/Picking';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
 import { initLowPoly } from '../rendering/Shapes';
@@ -527,16 +527,29 @@ export class Game {
     return { x0: Math.max(x0, cx - R), x1: Math.min(x1, cx + R), z0: Math.max(z0, cz - R), z1: Math.min(z1, cz + R) };
   }
 
-  /** Screen-space hit test for drones (generous target, like the cat). Returns the drone id. */
+  /**
+   * Screen-space hit test for drones. Returns the nearest drone's id. Generous over open ground (like the cat),
+   * but only about the drone's body when a machine or a placement footprint is under the pointer, so a drone
+   * hovering beside a machine never takes the machine's tap (mouse and touch share this path).
+   */
   private droneHit(x: number, y: number): string | undefined {
-    const r = Math.max(26, 0.35 / this.camera.worldPerPixel());
+    const pts: { id: string; x: number; y: number }[] = [];
     for (const d of this.sim.state.drones) {
       const p = this.drones.worldPos(d.id);
       if (!p) continue;
       const sp = this.camera.toScreen(p);
-      if (Math.hypot(sp.x - x, sp.y - y) <= r) return d.id;
+      pts.push({ id: d.id, x: sp.x, y: sp.y });
     }
-    return undefined;
+    if (!pts.length) return undefined;
+    return pickDrone(pts, x, y, droneTapRadius(this.camera.worldPerPixel(), this.machineOrFootprintAt(x, y)));
+  }
+
+  /** A machine (or, with a build tool, a placement footprint) under the pointer: it gets the tap over nearby drones. */
+  private machineOrFootprintAt(x: number, y: number): boolean {
+    const tool = this.hud.currentTool;
+    if (tool !== 'inspect' && tool !== 'pulse') return true;
+    const t = this.pick(x, y)?.tile;
+    return !!t && !!this.sim.occupant(t);
   }
 
   private catHit(x: number, y: number): boolean {
