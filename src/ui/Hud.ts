@@ -1008,7 +1008,7 @@ export class Hud {
     const name = t3?.name ?? t2?.name ?? def.name;
     const icon = t3?.icon ?? t2?.icon ?? def.icon;
     const blurb = t3 ? `Superstructure (nine machines in one): ${t3.blurb}.` : t2 ? `Tier 2 (three merged): ${t2.blurb}. ${def.blurb}` : def.blurb;
-    return `<h4><span>${icon} ${esc(name)}${m.starter ? ' <small style="font-weight:700;color:var(--ink-soft)">(old)</small>' : ''}</span><button data-close aria-label="Close">×</button></h4><p>${esc(blurb)}</p>${extra}`;
+    return `<h4><span>${icon} ${esc(name)}${m.starter ? ' <small class="dim">(old)</small>' : ''}</span><button data-close aria-label="Close">×</button></h4><p>${esc(blurb)}</p>${extra}`;
   }
 
   get currentTool() {

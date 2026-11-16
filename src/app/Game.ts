@@ -1126,7 +1126,7 @@ export class Game {
       }
     }
     extra = this.superHtml(m) + extra + this.mergeHtml(m);
-    if ((m.overchargeUntil ?? 0) > s.time) extra = `<p class="stat" style="color:#1d8fb0">⚡ Boosted by your pulse — next trigger +1 (${Math.ceil(m.overchargeUntil! - s.time)} s)</p>` + extra;
+    if ((m.overchargeUntil ?? 0) > s.time) extra = `<p class="stat boost">⚡ Boosted by your pulse — next trigger +1 (${Math.ceil(m.overchargeUntil! - s.time)} s)</p>` + extra;
     this.hud.renderInspect(this.hud.machineHtml(m, extra));
   }
 
