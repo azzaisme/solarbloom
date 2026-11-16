@@ -30,6 +30,12 @@ const GLOW = [0.55, 1.3, 2.1] as const;
 const BODY_D = 0.39; // body diameter, world units
 const BOB = { amp: 0.045 * BODY_D, period: 2.0 }; // spec D04: 0.03–0.06 body diameters over 1.5–2.5 s
 const CELEBRATE_S = 1.6;
+/** D05: the restoration beam leaves from the front underside of the body (root space, world units). */
+const EMITTER = new pc.Vec3(0, -0.13, 0.12);
+const BEAM_RADIUS = 0.26; // at the ground
+const MOTE_EVERY = 0.07; // seconds between travelling motes
+const SPARKLE_EVERY = 0.22; // seconds between ground sparkles
+const UP = new pc.Vec3(0, 1, 0);
 const BOUNCE_S = 0.42;
 const WIGGLE_S = 0.7;
 
@@ -57,7 +63,11 @@ interface ModelParts {
 interface DroneView {
   root: pc.Entity;
   body: pc.Entity;
+  /** D05: the restoration beam, a soft outer cone and a bright inner stream (world space, apex at the emitter). */
   beam: pc.Entity;
+  beamCore: pc.Entity;
+  moteT: number;
+  sparkT: number;
   /** Classic drone only. */
   classic?: { finL: pc.Entity; finR: pc.Entity; eyes: pc.Entity[] };
   /** Model drone only. */
@@ -89,6 +99,9 @@ export class DroneVisuals {
   private time = 0;
   reducedMotion = false;
   onTrail?: (p: pc.Vec3) => void;
+  /** D05 effect hooks (wired to Vfx by the game): a mote travelling down a beam, a sparkle where it lands. */
+  onBeamMote?: (from: pc.Vec3, to: pc.Vec3, hex: string) => void;
+  onBeamSparkle?: (at: pc.Vec3, hex: string) => void;
   /** Dev preview (D03): show this expression on every drone, e.g. `solarbloom.drones.previewFace = 'excited'`. */
   previewFace?: FaceName;
   private trailT = 0;
@@ -147,12 +160,19 @@ export class DroneVisuals {
     const [x, z] = this.world(d);
     const root = group(this.parent, `drone-${d.id}`, [x, 0.9, z]);
     const body = group(root, 'body');
-    const beam = shape(root, 'cylinder', mat(PALETTE.eyeCyan, { opacity: 0.35, emissive: PALETTE.eyeCyan, emissiveIntensity: 1 }), { pos: [0, -0.4, 0], scale: [0.25, 0.7, 0.25] });
+    // A tapered beam: a translucent cone with a brighter, thinner stream inside. It lives in world space so it
+    // can stay anchored to both the emitter and the tile while the drone bobs and leans.
+    const beam = group(this.parent, `beam-${d.id}`);
+    shape(beam, 'cone', mat(PALETTE.eyeCyan, { opacity: 0.2, emissive: PALETTE.eyeCyan, emissiveIntensity: 1.1, doubleSided: true }), { pos: [0, 0, 0] });
+    const beamCore = shape(beam, 'cone', mat('#d8fdff', { opacity: 0.32, emissive: PALETTE.eyeCyan, emissiveIntensity: 2.2, doubleSided: true }), { scale: [0.38, 1, 0.38] });
     beam.enabled = false;
     const v: DroneView = {
       root,
       body,
       beam,
+      beamCore,
+      moteT: 0,
+      sparkT: 0,
       yaw: 0,
       x,
       z,
@@ -311,6 +331,7 @@ export class DroneVisuals {
   restyle() {
     for (const [id, v] of [...this.views]) {
       v.root.destroy();
+      v.beam.destroy();
       this.views.delete(id);
     }
     for (const d of this.sim.state.drones) this.add(d, false);
@@ -320,6 +341,7 @@ export class DroneVisuals {
     const v = this.views.get(id);
     if (!v) return;
     this.views.delete(id);
+    v.beam.destroy(); // a cancelled job's beam goes at once
     this.tweens.add(0.3, (k) => v.root.setLocalScale(1 - k, 1 - k, 1 - k), { done: () => v.root.destroy() });
   }
 
@@ -423,12 +445,49 @@ export class DroneVisuals {
         for (const e of v.classic.eyes) e.setLocalScale(0.04, blinking ? 0.008 : napping ? 0.02 : 0.05, 0.02);
       }
       if (emitTrail && d.mode === 'flying' && vel > 0.3) this.onTrail?.(new pc.Vec3(v.x, v.y + bob - 0.12, v.z));
-      v.beam.enabled = d.mode === 'working';
-      if (v.beam.enabled) {
-        const p = 0.22 + Math.sin(t * 20) * 0.04;
-        v.beam.setLocalScale(p, 0.55, p);
-        v.beam.setLocalPosition(0, -0.32, 0);
-      }
+      this.updateBeam(d, v, w, dt, t);
+    }
+  }
+
+  /**
+   * D05: the restoration beam. A short tapered cyan cone from the emitter to the tile, anchored to both,
+   * with motes streaming down it and soft sparkles where it lands; gold in a Frenzy or a celebration.
+   * Visual only: the job, its timing and its reward are the sim's.
+   */
+  private updateBeam(d: DroneData, v: DroneView, w: number[], dt: number, t: number) {
+    const on = d.mode === 'working';
+    v.beam.enabled = on;
+    if (!on) {
+      v.moteT = v.sparkT = 0;
+      return;
+    }
+    const from = new pc.Vec3();
+    v.root.getWorldTransform().transformPoint(EMITTER, from);
+    const to = new pc.Vec3(w[0], w[1] + 0.04, w[2]);
+    const dir = new pc.Vec3().sub2(from, to);
+    const len = dir.length();
+    if (len < 0.05) return;
+    dir.mulScalar(1 / len);
+    // Cone primitive: height 1 along +Y, apex at the top; point the apex at the emitter.
+    const q = new pc.Quat();
+    const axis = new pc.Vec3().cross(UP, dir);
+    const ang = Math.acos(Math.max(-1, Math.min(1, UP.dot(dir))));
+    if (axis.length() > 1e-6) q.setFromAxisAngle(axis.normalize(), (ang * 180) / Math.PI);
+    const shimmer = this.reducedMotion ? 1 : 1 + Math.sin(t * 18 + v.phase) * 0.06;
+    v.beam.setPosition((from.x + to.x) / 2, (from.y + to.y) / 2, (from.z + to.z) / 2);
+    v.beam.setRotation(q);
+    v.beam.setLocalScale(BEAM_RADIUS * 2 * shimmer, len, BEAM_RADIUS * 2 * shimmer);
+    v.beamCore.setLocalEulerAngles(0, (t * 120) % 360, 0);
+    const hex = this.frenzy || v.celebrate > 0 ? PALETTE.gold : PALETTE.eyeCyan;
+    v.moteT -= dt;
+    if (v.moteT <= 0) {
+      v.moteT = MOTE_EVERY;
+      this.onBeamMote?.(from, to, hex);
+    }
+    v.sparkT -= dt;
+    if (v.sparkT <= 0) {
+      v.sparkT = SPARKLE_EVERY * (this.frenzy ? 0.6 : 1);
+      this.onBeamSparkle?.(to, hex);
     }
   }
 
