@@ -20,6 +20,7 @@ import { OfflineSystem } from './OfflineSystem';
 import { FrenzySystem } from './FrenzySystem';
 import { EconomyLedger } from './EconomyLedger';
 import { Modifiers } from './Modifiers';
+import { WorldEventSystem } from './WorldEventSystem';
 import { Metrics } from './Metrics';
 import { MilestoneSystem } from './Milestones';
 import { MergeSystem } from './MergeSystem';
@@ -62,6 +63,8 @@ export class Sim {
   readonly milestones: MilestoneSystem;
   readonly merge: MergeSystem;
   readonly supers: SuperSystem;
+  /** Phase 5 E15: world events. */
+  readonly events: WorldEventSystem;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
   readonly ecosystem: EcosystemSystem;
 
@@ -117,6 +120,7 @@ export class Sim {
     this.offline = new OfflineSystem(this);
     this.frenzy = new FrenzySystem(this);
     this.ledger = new EconomyLedger(this);
+    this.events = new WorldEventSystem(this);
     this.mods = new Modifiers(this);
     this.econ.onOverflow = (k, a, frenzy) => {
       this.log.onOverflow(k, a);
@@ -209,6 +213,7 @@ export class Sim {
     this.drones.tick(dt);
     this.supers.tick(dt);
     this.cat.tick();
+    this.events.tick();
     this.progression.tick();
     this.milestones.tick();
     this.ecosystem.tick();

@@ -6,9 +6,10 @@ import type { GameState, LayerData, MachineData, TileData } from './types';
 
 /**
  * v1 Round 1 · v2 Round 2 · v3 Phase 3 · v4 the endless city (chunked world, tile deltas) · v5 Phase 5: big-number
- * resources, uncapped biomass, per-machine upgrades. Older saves are scrapped with a notice (no players yet).
+ * resources, uncapped biomass, per-machine upgrades · v6 Phase 5 E15: world events, cat ids and rarities. Older saves
+ * are scrapped with a notice (no players yet, so no migration, as agreed).
  */
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 /** Id of the endless ground layer (the city). */
 export const GROUND = 'g';
@@ -48,7 +49,8 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): Game
     // The park is home: its fog thins as you restore it, with no edge rule.
     areas: { park: { fog: 'thinning', revealedAt: 0 } },
     relayBonus: 0,
-    cat: { nextSpawnAt: -1, found: 0, stash: 0, firstSpawned: false, log: [] },
+    cat: { nextSpawnAt: -1, found: 0, stash: 0, firstSpawned: false, log: [], invasion: [], seq: 0, claimed: [] },
+    events: { nextAt: -1, rng: (seed ^ 0x5eed15) >>> 0, count: 0, byType: {} },
     progression: {
       coreActivated: false,
       coreActivatedAt: -1,

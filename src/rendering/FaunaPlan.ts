@@ -91,8 +91,11 @@ function luckyAnchorsNear(sim: Sim, x: number, z: number): [number, number][] {
         if (ob && ob.blocked && ob.prop) out.push([t.x + 0.5 + ox * 0.32, t.z + 0.5 + oz * 0.32]);
       }
     }
-  const act = sim.cat.anchor(sim.state.cat.active?.anchorId);
-  if (act && act.roofId === GROUND) out.push([act.pos[0], act.pos[2]]);
+  // every cat hiding right now: the regular one and any Lucky Cat Invasion cats (E15)
+  for (const spot of sim.cat.spots()) {
+    const act = sim.cat.anchor(spot.anchorId);
+    if (act && act.roofId === GROUND) out.push([act.pos[0], act.pos[2]]);
+  }
   return out;
 }
 

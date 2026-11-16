@@ -137,8 +137,25 @@ export interface Buff {
 
 export type CatRewardType = 'luckyHarvest' | 'solarFrenzy' | 'megaBloom' | 'droneParty' | 'jackpot' | 'goldenRelay' | 'catsGarden' | 'fogWhisker';
 
+/** Phase 5 E15: how rare a cat is (rolled when it appears, saved with it). */
+export type CatVariant = 'standard' | 'golden' | 'rainbow';
+
+/** Phase 5 E15: one hiding cat. `id` is stable (claims are recorded by it, so a cat pays exactly once). */
+export interface CatSpot {
+  id: string;
+  anchorId: string;
+  spawnedAt: number;
+  variant: CatVariant;
+}
+
 export interface CatState {
-  active?: { anchorId: string; spawnedAt: number };
+  active?: CatSpot;
+  /** Phase 5 E15: extra cats from a Lucky Cat Invasion (independent rewards; they stay until found). */
+  invasion?: CatSpot[];
+  /** Phase 5 E15: cats ever spawned (cat ids are `c<seq>`). */
+  seq?: number;
+  /** Phase 5 E15: ids of the most recent claimed cats (a stale or repeated claim pays nothing). */
+  claimed?: string[];
   nextSpawnAt: number; // -1 until the first (milestone-based) spawn
   found: number;
   /** Extra rewards a missed cat has saved up (it never blocks later rewards). */
@@ -146,7 +163,41 @@ export interface CatState {
   firstSpawned: boolean;
   lastReward?: CatRewardType;
   /** Discovery log: every cat found, where, and what it gave. */
-  log: { anchorId: string; reward: CatRewardType; at: number }[];
+  log: { anchorId: string; reward: CatRewardType; at: number; variant?: CatVariant }[];
+}
+
+/** Phase 5 E15: world events (optional, short, never punishing). */
+export type WorldEventType = 'supernova' | 'migration' | 'rain' | 'invasion';
+
+export interface WorldEventActive {
+  type: WorldEventType;
+  /** event number (1, 2, …): identifies it in logs and HUD */
+  n: number;
+  startedAt: number;
+  until: number;
+  /** Great Migration / Super Rain: tiles still to be visited, in order (saved, so reload resumes, never repeats) */
+  queue?: string[];
+  /** every tile queued so far in this event (bounded: a tile is never queued twice) */
+  seen?: string[];
+  /** sim time the next queued tile is visited */
+  nextStepAt?: number;
+  /** tiles actually grown or restored so far */
+  done?: number;
+  /** Super Rain: irrigation waves started so far (bounded) */
+  waves?: number;
+  /** a fallback reward was paid instead (nothing eligible) */
+  fallback?: string;
+}
+
+export interface WorldEventsState {
+  /** sim time of the next event opportunity (-1 until automation is unlocked) */
+  nextAt: number;
+  /** the event's own seeded random stream (never disturbs the game's rng) */
+  rng: number;
+  count: number;
+  last?: WorldEventType;
+  active?: WorldEventActive;
+  byType: Partial<Record<WorldEventType, number>>;
 }
 
 export interface Progression {
@@ -246,6 +297,8 @@ export interface GameState {
   cat: CatState;
   progression: Progression;
   stats: Stats;
+  /** Phase 5 E15: the world event scheduler and the running event. */
+  events?: WorldEventsState;
   /** Phase 4 E06: the Bloom Frenzy meter (0–100), the sim time a running Frenzy ends, and how many so far. */
   frenzy?: { charge: number; until?: number; count?: number };
   /** Phase 4 E01: wall-clock time (ms since 1970) this state was last saved, for offline progress. */

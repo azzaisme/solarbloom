@@ -162,6 +162,69 @@ try {
     const after = await page.evaluate(() => JSON.stringify(window.solarbloom.sim.state.resources));
     checks++;
     if (before !== after) fail(`${vp.name}: clicking the hotbar changed resources`);
+    // Regression (found by merge.e2e in E14): a drone hovering beside a machine took taps meant for the machine
+    // (drones have a generous tap radius). A tap on a machine's footprint selects the machine; a tap right on the
+    // drone still selects the drone's hub. Mouse and touch alike.
+    const dronePick = await page.evaluate(async () => {
+      const g = window.solarbloom;
+      const s = g.sim;
+      const V = g.camera.target.constructor;
+      const B = s.state.resources.energy.constructor;
+      s.state.resources.biomass = new B(1e9);
+      s.state.caps.energy = new B(1e6); s.state.caps.water = new B(1e6);
+      s.state.resources.energy = new B(1e6); s.state.resources.water = new B(1e6);
+      let m;
+      for (let z = 6; z < 14 && !m; z++) for (let x = 4; x < 14 && !m; x++) if (s.build.check('solar', 'g', x, z).ok) m = s.build.place('solar', 'g', x, z);
+      if (!m) return { error: 'no room for a panel' };
+      g.selectTool('pulse');
+      const [wx, wy, wz] = s.grid.tileWorld(s.grid.get('g', m.x, m.z));
+      g.camera.glide(wx, 0, wz, 1);
+      for (let i = 0; i < 200; i++) g.camera.update(0.05);
+      const c = g.app.graphicsDevice.canvas;
+      const r = c.getBoundingClientRect();
+      const tap = g.camera.toScreen(new V(wx, wy + 0.08, wz));
+      // One drone (not this panel's) hovers just beside the tap point on screen: inside the old generous radius,
+      // outside the drone's own body. The others are kept out of the way.
+      const drone = s.state.drones.find((d) => d.hubId !== m.id);
+      const off = Math.max(26, 0.35 / g.camera.worldPerPixel()) * 0.7;
+      const ray = g.camera.ray(tap.x + off * 0.6, tap.y - off * 0.8);
+      const t = (wy + 0.9 - ray.o.y) / ray.d.y;
+      const dp = new V(ray.o.x + ray.d.x * t, ray.o.y + ray.d.y * t, ray.o.z + ray.d.z * t);
+      g.drones.worldPos = (id) => (id === drone.id ? dp : undefined);
+      const ds = g.camera.toScreen(dp);
+      return { id: m.id, hub: drone.hubId, tap: { x: tap.x + r.left, y: tap.y + r.top }, drone: { x: ds.x + r.left, y: ds.y + r.top }, occupant: s.occupant(g.pick(tap.x, tap.y)?.tile)?.id };
+    });
+    if (dronePick.error) fail(`${vp.name}: ${dronePick.error}`);
+    else {
+      if (dronePick.occupant !== dronePick.id) fail(`${vp.name}: the tap point isn't on the panel's footprint (${dronePick.occupant})`);
+      const selectedAfter = async (fn) => {
+        await page.evaluate(() => window.solarbloom.select(undefined));
+        await fn();
+        await page.waitForTimeout(150);
+        return page.evaluate(() => window.solarbloom.selected);
+      };
+      const touchTap = (p) => page.evaluate(({ x, y }) => {
+        const c = window.solarbloom.app.graphicsDevice.canvas;
+        const ev = (type) => c.dispatchEvent(new PointerEvent(type, { pointerId: 7, pointerType: 'touch', clientX: x, clientY: y, bubbles: true, isPrimary: true, button: 0 }));
+        ev('pointerdown');
+        ev('pointerup');
+      }, p);
+      for (const [how, fn] of [
+        ['mouse', (p) => page.mouse.click(p.x, p.y)],
+        ['touch', touchTap],
+      ]) {
+        checks += 2;
+        const onPanel = await selectedAfter(() => fn(dronePick.tap));
+        if (onPanel !== dronePick.id) fail(`${vp.name}: ${how} tap on a panel with a drone beside it selected ${onPanel} instead of ${dronePick.id}`);
+        const onDrone = await selectedAfter(() => fn(dronePick.drone));
+        if (onDrone !== dronePick.hub) fail(`${vp.name}: ${how} tap right on a drone selected ${onDrone} instead of its hub ${dronePick.hub}`);
+      }
+      await page.evaluate(() => {
+        const g = window.solarbloom;
+        delete g.drones.worldPos; // back to the prototype method
+        g.select(undefined);
+      });
+    }
     // Regression: when the last tile using a colour (e.g. all moss) disappears, shared meshes must survive.
     await page.evaluate(() => {
       const s = window.solarbloom.sim;

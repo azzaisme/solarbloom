@@ -265,6 +265,51 @@ export const TUNING = {
     goldenCorridorMax: 12, // …+1 per 10 cleared areas, up to this
     preferVisible: 0.75, // chance a cat hides somewhere already on screen (when there is such a spot)
     catsGardenTiles: 6, // Cat's Garden: tiles restored (and decorated) on a random unlocked roof
+    /**
+     * Phase 5 E15: rarer cats (rolled when one appears, 80 / 18 / 2). `mult` scales the reward (harvest seconds,
+     * buff and party time, Mega Bloom size); a Rainbow Cat also gives two different rewards. The first cat is
+     * always a standard one with a Lucky Harvest (onboarding).
+     */
+    variants: {
+      standard: { weight: 80, mult: 1 },
+      golden: { weight: 18, mult: 2 },
+      rainbow: { weight: 2, mult: 3 },
+    },
+    /** Phase 5 E15: hard caps, whatever the variant and hidden-time bonus. */
+    maxRewardMult: 4.5,
+    surgeMaxSeconds: 180, // Solar Surge never stacks past this many seconds left
+    partyMaxSeconds: 135,
+    megaBloomMax: 30,
+    /** Phase 5 E15: after this long hiding (sim seconds), a cat leaves faint paw prints (HUD 🐾 chip, inspect). */
+    hintAfter: 90,
+  },
+
+  /**
+   * Phase 5 E15: central stacking policy for temporary boosts (Modifiers). Within one category the strongest
+   * boost wins; boosts from different categories multiply, capped at `maxProduct`. Applied once, to the
+   * baseline rate. Categories: Bloom Frenzy, short boosts (Solar Surge, Solar Burst), world events.
+   */
+  modifiers: { maxProduct: 20 },
+
+  /**
+   * Phase 5 E15: world events. Seeded, in simulation time (pause stops them; nothing happens offline). The first
+   * opportunity comes 3–6 active minutes after automation unlocks (the first Drone Hub), then every 3–6 minutes
+   * after the last one ended. Nothing is lost by missing one; no notifications.
+   */
+  events: {
+    firstMin: 180,
+    firstMax: 360,
+    laterMin: 180,
+    laterMax: 360,
+    /** weights (an event irrelevant right now gets 0; the same event never comes twice in a row) */
+    weights: { supernova: 30, migration: 30, rain: 25, invasion: 15 },
+    supernova: { seconds: 20, mult: 10 },
+    migration: { seconds: 15, tiles: 20, reach: 10 },
+    rain: { seconds: 25, mult: 3, waves: 3, waveTiles: 12, waveRadius: 6 },
+    invasion: { cats: 3 },
+    /** Nothing eligible to grow or water: seconds of steady biomass income instead (at least `fallbackMin`). */
+    fallbackSeconds: { migration: 20, rain: 8 },
+    fallbackMin: 30,
   },
 
   core: {

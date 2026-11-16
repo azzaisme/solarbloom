@@ -250,10 +250,97 @@ cleared area), saves up for stages and fires abilities, then leaves them on auto
 | Unit tests, file by file (41 files, including the new `super.test.ts` with 11) | pass |
 | `tests/e2e/super.e2e.mjs` (new): place a core from the Build tray by mouse, pay assembly and activation from its panel, fire the Solar Burst, then build the other three | pass, no page or console errors |
 | picking (74,299 checks), hud-overlap, area-panel, overview, `STRICT=1 phase4-hud`, `phase4-session` (15 min) | pass |
-| `tests/e2e/merge.e2e.mjs` | failed once: the old drone was hovering beside the panel and drones have a generous tap radius, so the tap selected the drone's home (the starter panel). The test now moves drones away first; 2 passes. Real-play note: a drone over a machine can take a tap meant for it (unchanged from Phase 4) |
+| `tests/e2e/merge.e2e.mjs` | failed once: the old drone was hovering beside the panel and drones have a generous tap radius, so the tap selected the drone's home (the starter panel). The test now moves drones away first; 2 passes. Real-play note: a drone over a machine can take a tap meant for it (unchanged from Phase 4). **Fixed after E14:** over a machine or a placement footprint a drone's tap target shrinks to its body, so the machine gets the tap (`droneTapRadius`/`pickDrone` in `src/core/Picking.ts`, `tests/picking.test.ts`, a mouse and touch check in `picking.e2e`); the merge test no longer moves drones away |
 | `npm run test:perf:browser` | within limits: 0 / 1 / 1 hitches, chain ×666 |
 | `npm run test:perf` | one timing failure in a busy run, then 4 / 4 on rerun |
 | `npm run test:soak` | pass |
+
+# E15 — World events and Hidden Lucky Cat
+
+## Decisions (from the agreed Phase 5 rules)
+
+- **No save migration:** the save version goes to **6**; v5 and older saves are scrapped with the existing notice.
+- **Automation unlock = the first Drone Hub.** The first event opportunity comes 3–6 active (simulation) minutes
+  after it, then 3–6 minutes after each event ends. Nothing runs offline, pausing stops the clock, nothing expires
+  in wall-clock time, there are no notifications and no penalties for missing anything.
+- **One event at a time.** A trigger while one runs does nothing. Invasion cats outlive their event (they stay until
+  found), and no new invasion comes while any still hide.
+- **Stacking categories:** Bloom Frenzy, short boosts (the Lucky Cat's Solar Surge, the Megaflower's Solar Burst)
+  and world events. Within a category the strongest boost wins (as before, so Surge + Burst stays ×3); across
+  categories they multiply, capped at **20×** (`TUNING.modifiers.maxProduct`). Supernova ×10 with a Solar Surge ×3
+  is ×20, not ×30.
+
+## What changed
+
+| Area | Change |
+|---|---|
+| Scheduler | `gameplay/WorldEventSystem.ts`: seeded in simulation time with its **own saved random stream** (`state.events.rng`), so it never shifts the game's rng. Weights prefer events that do something here (Migration with nothing to grow ×0.25, Rain without a condenser ×0.3, Invasion only after the first cat and with no invasion cats left); never the same event twice in a row |
+| Solar Supernova | solar ×10 for 20 s through `Modifiers` (category `event`). Overflow rules unchanged: a full energy store wastes it and Frenzy charge from that stays within its 0.15/s cap |
+| Great Migration | up to 20 restored tiles that can still grow, least grown and nearest the camera first (anywhere in the revealed city if none are near), each grown one stage, spread over 15 s from a **saved queue** (a reload resumes it; each tile leaves the queue once) |
+| Super Rain | water ×3 for 25 s, plus 3 irrigation waves (one every ~8 s) of up to 12 connected moss or growable tiles around a condenser (or the camera); a tile is queued at most once per rain |
+| Lucky Cat Invasion | up to 3 extra cats in different visible spots, each with its own id, rarity and reward; they stay until found and never touch the regular cat's timer or stash |
+| Nothing eligible | Migration and Rain waves pay seconds of steady biomass income (20 s and 8 s, at least 30 🌿) and the banner says so ("Everything near you is already radiant: … pollen worth +X🌿"); an invasion with nowhere to hide leaves a gift. No "0 tiles" celebration: the end-of-event line only appears for real progress |
+| Modifiers | `Modifiers.compose()` is the one stacking policy (tested directly); new `water` stat for Super Rain. `ProductionSystem` multiplies its sustained totals by the composed value once |
+| Cat ids and claims | every cat has a stable id (`c1`, `c2`, …); `claim(id)` removes the cat and records the id before paying, so a double tap, a stale id or a reload pays nothing. `claim()` with no id still claims the regular cat |
+| Rarer cats | Standard / Golden / Rainbow at 80 / 18 / 2, from a hash of the seed and cat id (deterministic, rng untouched); the first cat is always standard with a Lucky Harvest. Golden ×2 reward (a longer harvest, longer buffs), Rainbow ×3 and always two different rewards. Caps: total multiplier ≤ 4.5, Solar Surge never more than 180 s ahead, party drones ≤ 135 s, Mega Bloom ≤ 30 tiles; the hidden-time bonus stays capped at +50 % after 3 min (waiting never beats playing). Harvests still use steady production, never Frenzy ×10 |
+| Visible spots | a spot right behind a city building or a superstructure (on the camera's side) is never used; HUD-covered spots were already excluded |
+| Hints | after 90 s hiding a cat leaves paw prints on the ground beside it, a 🐾 chip appears (tap: the camera glides there and the feed names the spot, e.g. "beside a bench"), and the Inspect tooltip on tiles within 4 tiles says a cat is hiding very close. Ignoring it costs nothing |
+| Presentation | a small banner in the pointer-transparent combo column (icon, name, effect, seconds left, timer bar; `role=status`); feed lines when an event starts and ends; raindrop rings and butterfly sparkles on the tiles it touches (off with "fewer particles" / reduced motion). Golden Cat: gold glaze, a crown and a bigger coin; Rainbow Cat: a floating halo and a chest star; their toasts say "GOLDEN CAT" / "RAINBOW CAT" in words. Meow, paw wave, sparkles and the compact reward card as before; the halo and head sway stop with reduced motion |
+| Debug | dev build only: `sbDev.event('supernova' \| 'migration' \| 'rain' \| 'invasion')`, `sbDev.cat('golden')` |
+| Metrics | the playtest summary lists world events by type and golden / rainbow finds |
+| Save | v6: `events` (schedule, rng, active event with its queue and timer), `cat.invasion`, `cat.seq`, `cat.claimed`, cat `variant` |
+
+## Measured (scripted bots, not people)
+
+`tests/bots.ts`, 30 minutes, events on vs `noEvents`. The active bot pulses twice per action during a Supernova or
+Super Rain and finds every cat (invasion cats too) ~40 s after it appears. **These runs were made before the
+rarity-hash fix below**, so every cat in them was a standard one; the event schedule is unaffected by that fix.
+
+| Seed | Bot | Events (time, type) | Cats found | Steady 🌿/min at 15 / 30 min, events on | …events off | Longest quiet stretch on / off |
+|---|---|---|---|---|---|---|
+| 7 | active | 5:42 migration, 10:48 rain, 15:03 invasion, 19:08 rain, 25:16 migration | 9 (off: 6) | 502K / 3.82M | 490K / 4.02M | 81 s / 57 s |
+| 21 | active | 7:13 rain, 11:42 supernova, 17:02 rain, 21:46 migration, 27:45 supernova | 7 (off: 7) | 606K / 3.65M | 478K / 3.46M | 69 s / 81 s |
+| 7 | hands-off | same schedule as active | 0 | 97K / 517K | 77K / 479K | 60 s / 63 s |
+| 21 | hands-off | same schedule as active | 0 | 128K / 643K | 90K / 491K | 72 s / 69 s |
+
+- Five events in 30 minutes, the first 4–6 minutes after the Drone Hub (1:18), as specified.
+- Events are a small bonus, not a new economy: steady income at 30 minutes moved between −5 % and +31 %
+  (hands-off gains most: Super Rain and Migration work without the player). Seed 7's active run ended lower
+  because the runs diverge after the first event (different pulses, cats and Frenzies), not because of a penalty.
+- Nothing depends on events: the same bot reaches the fountain with events off (`world-events.test.ts`).
+- City player (`tests/pacing-city.test.ts`, 60 min, now also finding invasion cats): seed 7 **74 areas**, big chains
+  by you 67 / automation 47; seed 21 **93 areas**, 57 / 51. Both meet the test's pace and "player starts most big
+  chains" checks.
+
+## Bugs found while validating
+
+- **Rarer cats almost never appeared on some seeds** (my first version): the rarity came from an FNV string hash
+  of `seed|cat|id`, whose high bits barely change between `c1`, `c2`…; seeds 3 and 21 rolled 16 standard cats in
+  a row. Now a well-mixed integer hash of (seed, cat number); the test checks 80/18/2 across 1,000 seeds × 20 cats.
+- **The event banner covered the objective panel on phones** (found by the new events e2e): it first lived in the
+  combo column, which sits right under the objective panel at phone sizes, and its entry animation overrode the
+  centring. It now sits above the hotbar, pointer-transparent, with its own animation.
+
+## Tests run (E15)
+
+On Windows 11, Chromium (Playwright 1.65) with SwiftShader, while several other sessions shared the machine.
+
+| Check | Result |
+|---|---|
+| `npm run typecheck`, `vite build` | pass |
+| Quick unit set (grid, big, world, economy, placement, save-storage, save-v4, area-switches, area-panel, upgrades-city, feedback-phase4, playtest-metrics, canal-network, district-bloom, rooftop-clusters, relay-city, specialties-city: 17 files, 83 tests) | pass |
+| `world-events.test.ts` (new, 24 tests), `lucky-cat.test.ts`, `lucky-cat-city.test.ts`, `frenzy.test.ts`, `save.test.ts`, `super.test.ts`, `economy-phase5.test.ts` | pass |
+| Full suite in one process (before the hash fix) | 270 / 273 pass; the 3 failures were timeouts under machine load (two `lucky-cat` tests that pass alone in < 2 s, and the city pacing test) |
+| `pacing-city.test.ts` | assertions pass for both seeds (numbers above). Seed 7 finished in 272 s; seed 21 did not finish within its time limit on this loaded machine (480 s with another run beside it, 900 s alone while four other sessions ran). Per-seed limit raised 300 → 900 s. **Open:** confirm seed 21's run time on an idle machine or CI, and whether events slow the city simulation (a 20-minute bot run took 10–25 % longer with events on, which includes extra play: more cats, more pulses) |
+| `STRICT=1 phase4-hud` (`npm run test:hud`) | pass: no overlaps at 320–430 px, landscape, tablet, desktop |
+| `phase4-session` (`npm run test:session`, 15 minutes in the real page) | no page errors |
+| `tests/e2e/events.e2e.mjs` (new, `npm run test:events`): every event at 390×844 and 1280×800, banner effect + timer, banner clear of the HUD panels and pointer-transparent, Golden and Rainbow cats tapped on screen (each paid once, a second tap nothing), 🐾 chip after the hint delay | pass, no page or console errors; screenshots `docs/review/p5-events-*.png` |
+
+## Still open after E15
+
+- City pacing seed 21 run time (above).
+- No human playtests: whether the banner is noticed but not nagging, and whether paw prints are found, needs people.
+- Events only act on the ground city and the park; old rooftop layers get the boosts but no Migration/Rain tiles.
 
 # E16 — Living ecosystems and visual differentiation
 
@@ -261,7 +348,7 @@ cleared area), saves up for stages and fires abilities, then leaves them on auto
 
 - **Biodiversity is a readout, not a currency.** It is derived from the world every second and never stored,
   spent or fed into production. Only the fauna unlocks are saved (`state.fauna`, the sim time each kind arrived),
-  as an optional field, so **no save version change** (the save-version bump stays with the E13 follow-up).
+  as an optional field, so **no save version change** (E15 moved saves to version 6; an optional field needs no further bump).
 - **Build on the paused visual overhaul.** Trees stay `TreeGen`/`TreePlacement`/`Foliage`; E16 changes what
   grows around them and how each stage reads. Every new mesh is procedural; nothing uses the untracked `assets/`
   folder. The Meshy hooks are listed in `docs/art/meshy-assets.md`.
@@ -362,5 +449,4 @@ sessions' test runs sharing the machine.
   arrival toasts carry the unlocks at gameplay zoom. Real models (Meshy, pending review) should help.
 - On a 320 px phone the objective title has a little less room (the 🌱 chip is icon-only there).
 - Robots arrive late because superstructures do (E14).
-- Persisted field `fauna` is optional and needs no migration, but should be listed in the save fixtures when the
-  save version is bumped by the E13 follow-up.
+- Persisted field `fauna` is optional and needs no migration; list it in the save fixtures next time they are updated.
