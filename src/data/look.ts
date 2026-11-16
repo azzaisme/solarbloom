@@ -1,5 +1,7 @@
 import * as pc from 'playcanvas';
 
+export type GfxTier = 'low' | 'medium' | 'high';
+
 // Look 1 (lighting and post-processing): every rendering knob for the golden-hour look lives here, apart from
 // gameplay tuning (tuning.ts), so the art pass can retune it without touching balance. In a dev build the live
 // object is `window.solarbloom.look.cfg`: change a value, then call `window.solarbloom.look.apply()`.
@@ -102,4 +104,28 @@ export const LOOK = {
     shaftLength: 7,
   },
   vignette: { intensity: 0.32, inner: 0.55, outer: 1.35, curvature: 0.6, color: '#2a1d14' },
+  /**
+   * Look 1.11: what each graphics tier turns on. High is for laptops and desktops (60 fps), Low for mid-range phones
+   * (30 fps or better). Low has no post-processing: the camera tone-maps directly, so there is no grade, vignette,
+   * bloom, SSAO or depth of field. Fauna caps per tier live in tuning.ts (E16).
+   */
+  tiers: {
+    low: { post: false, samples: 1, shadowRes: 1024, softShadows: false, bloom: false, ssao: false, dof: false, rim: true },
+    medium: { post: true, samples: 2, shadowRes: 2048, softShadows: false, bloom: true, ssao: false, dof: false, rim: true },
+    high: { post: true, samples: 4, shadowRes: 2048, softShadows: true, bloom: true, ssao: true, dof: true, rim: true },
+  } satisfies Record<GfxTier, TierSpec>,
 };
+
+export interface TierSpec {
+  /** CameraFrame post-processing (off: the camera tone-maps directly) */
+  post: boolean;
+  /** MSAA samples of the HDR scene target */
+  samples: number;
+  shadowRes: number;
+  /** PCF5 (softer penumbra) instead of PCF3 */
+  softShadows: boolean;
+  bloom: boolean;
+  ssao: boolean;
+  dof: boolean;
+  rim: boolean;
+}

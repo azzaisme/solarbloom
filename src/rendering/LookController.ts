@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { LOOK } from '../data/look';
+import { type GfxTier, LOOK } from '../data/look';
 import type { CameraController } from './CameraController';
 import { Atmosphere } from './Atmosphere';
 import { installLookShaders, setLookRim } from './LookShaders';
@@ -19,6 +19,8 @@ export class LookController {
   private rimColour = new pc.Color();
   readonly post: PostFx;
   readonly atmosphere: Atmosphere;
+  /** Look 1.11: the graphics tier in effect. */
+  tier: GfxTier = 'high';
   /** Look 1.7: restoration of the area in view, 0 (dead, fogged) … 1 (restored); the grade follows it. */
   moodTarget = 0;
   mood = 0;
@@ -47,9 +49,20 @@ export class LookController {
   lowVfx = false;
   reducedMotion = false;
 
+  /** Look 1.11: switches shadow quality, the post stack and the atmosphere to a graphics tier. */
+  setTier(tier: GfxTier) {
+    this.tier = tier;
+    const T = LOOK.tiers[tier];
+    const sun = this.scene.sun.light!;
+    sun.shadowResolution = this.lowVfx ? Math.min(1024, T.shadowRes) : T.shadowRes;
+    sun.shadowType = T.softShadows ? pc.SHADOW_PCF5_32F : pc.SHADOW_PCF3_32F;
+    this.post.apply(T, this.app.scene.fog.color);
+    this.applyAtmosphere();
+  }
+
   applyAtmosphere() {
     const A = LOOK.atmosphere;
-    const tier = 'high';
+    const tier = this.tier;
     this.atmosphere.reducedMotion = this.reducedMotion;
     this.atmosphere.setCounts(this.lowVfx || this.reducedMotion ? 0 : A.motes[tier], this.lowVfx ? 0 : A.shafts[tier]);
   }
@@ -66,8 +79,7 @@ export class LookController {
     this.rimColour = color(LOOK.rim.color);
     this.scene.sunDirection(this.toSun).mulScalar(-1);
     this.app.scene.fog.color = color(LOOK.haze.color);
-    this.post.apply({ post: true, bloom: true, ssao: true, dof: true, samples: 4 }, this.app.scene.fog.color);
-    this.applyAtmosphere();
+    this.setTier(this.tier);
   }
 
   update(dt: number) {
@@ -83,6 +95,6 @@ export class LookController {
     else this.post.grade(G.dead, G.warm, this.mood, LOOK.vignette.intensity);
     this.atmosphere.update(dt, g, Math.max(6, cam.viewHeight * 1.2), this.toSun, fwd);
     const R = LOOK.rim;
-    setLookRim(this.app.graphicsDevice, this.rimColour, R.intensity, R.power, this.toSun, this.camera.entity.getPosition(), LOOK.emissive.vertexGlow);
+    setLookRim(this.app.graphicsDevice, this.rimColour, LOOK.tiers[this.tier].rim ? R.intensity : 0, R.power, this.toSun, this.camera.entity.getPosition(), LOOK.emissive.vertexGlow);
   }
 }

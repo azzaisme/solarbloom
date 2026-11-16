@@ -1,0 +1,158 @@
+{
+  "city": {
+    "areas": 150,
+    "machines": 796,
+    "bytes": 479248
+  },
+  "loadMs": 4404,
+  "autosave": {
+    "serialize": 113.80000001192093,
+    "encode": 11.199999988079071,
+    "write": 1.699999988079071
+  },
+  "extentTiles": 224,
+  "pan": {
+    "frames": 120,
+    "median": 557.5,
+    "p95": 996.8000000119209,
+    "worst": 1358.1000000238419,
+    "updateMedian": 215.5999999642372,
+    "updateP95": 536.5,
+    "updateWorst": 627.1000000238419,
+    "renderMedian": 18.69999998807907,
+    "hitches": 103,
+    "drawCalls": 356,
+    "drawCallsWorst": 505
+  },
+  "zoom": {
+    "frames": 90,
+    "median": 608.4000000357628,
+    "p95": 1181.199999988079,
+    "worst": 1469.5,
+    "updateMedian": 186.19999998807907,
+    "updateP95": 576.4000000357628,
+    "updateWorst": 718.6999999880791,
+    "renderMedian": 14.400000035762787,
+    "hitches": 73,
+    "drawCalls": 337,
+    "drawCallsWorst": 938
+  },
+  "tier": "high",
+  "tiers": {
+    "low": {
+      "applied": "low",
+      "pan": {
+        "frames": 60,
+        "median": 548,
+        "p95": 1014.1000000238419,
+        "worst": 1224,
+        "updateMedian": 13.300000011920929,
+        "updateP95": 226.80000001192093,
+        "updateWorst": 631,
+        "renderMedian": 9.700000047683716,
+        "hitches": 7,
+        "drawCalls": 239,
+        "drawCallsWorst": 289
+      },
+      "zoom": {
+        "frames": 60,
+        "median": 373.69999998807907,
+        "p95": 770.1999999880791,
+        "worst": 778.8000000119209,
+        "updateMedian": 12.199999988079071,
+        "updateP95": 293,
+        "updateWorst": 501.2000000476837,
+        "renderMedian": 6.599999964237213,
+        "hitches": 20,
+        "drawCalls": 210,
+        "drawCallsWorst": 525
+      }
+    },
+    "medium": {
+      "applied": "medium",
+      "pan": {
+        "frames": 60,
+        "median": 516.8999999761581,
+        "p95": 733.1000000238419,
+        "worst": 1976,
+        "updateMedian": 12,
+        "updateP95": 17,
+        "updateWorst": 22.19999998807907,
+        "renderMedian": 6.699999988079071,
+        "hitches": 0,
+        "drawCalls": 262,
+        "drawCallsWorst": 314
+      },
+      "zoom": {
+        "frames": 60,
+        "median": 409.5999999642372,
+        "p95": 786.1000000238419,
+        "worst": 847.3000000119209,
+        "updateMedian": 10,
+        "updateP95": 14.199999988079071,
+        "updateWorst": 16.400000035762787,
+        "renderMedian": 5.900000035762787,
+        "hitches": 0,
+        "drawCalls": 227,
+        "drawCallsWorst": 541
+      }
+    },
+    "high": {
+      "applied": "high",
+      "pan": {
+        "frames": 60,
+        "median": 609.6999999880791,
+        "p95": 727.8000000119209,
+        "worst": 762.3999999761581,
+        "updateMedian": 10.800000011920929,
+        "updateP95": 15.899999976158142,
+        "updateWorst": 21.599999964237213,
+        "renderMedian": 7.5,
+        "hitches": 0,
+        "drawCalls": 362,
+        "drawCallsWorst": 444
+      },
+      "zoom": {
+        "frames": 60,
+        "median": 544.3000000119209,
+        "p95": 1053.2999999523163,
+        "worst": 1188.5,
+        "updateMedian": 9.900000035762787,
+        "updateP95": 14.199999988079071,
+        "updateWorst": 16.80000001192093,
+        "renderMedian": 6.5,
+        "hitches": 0,
+        "drawCalls": 340,
+        "drawCallsWorst": 779
+      }
+    }
+  },
+  "catchUp": {
+    "frames": 7,
+    "simMsWorst": 27.200000047683716,
+    "simulated": 300.50000000001324
+  },
+  "chainSetup": {
+    "row": {
+      "z": -48,
+      "from": -176,
+      "len": 351
+    },
+    "gardens": 730
+  },
+  "chain": {
+    "frames": 150,
+    "median": 1289.7999999523163,
+    "p95": 2368.5,
+    "worst": 2837.5,
+    "updateMedian": 13.600000023841858,
+    "updateP95": 338.5999999642372,
+    "updateWorst": 1076.7000000476837,
+    "renderMedian": 36.30000001192093,
+    "hitches": 29,
+    "drawCalls": 493,
+    "drawCallsWorst": 5853
+  },
+  "chainCombo": 685,
+  "errors": []
+}

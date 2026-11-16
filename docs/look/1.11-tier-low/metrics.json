@@ -1,0 +1,64 @@
+{
+  "tag": "1.11-tier-low",
+  "query": "?gfx=low",
+  "renderer": "headless Chromium, SwiftShader (software GL)",
+  "when": "2026-11-16T02:46:37.666Z",
+  "shots": {
+    "full-desktop": {
+      "scene": "Fully restored park",
+      "size": "1280x800",
+      "frameMs": 399.5,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 89,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "low",
+      "sha1": "e5af661f7f87"
+    },
+    "full-phone": {
+      "scene": "Fully restored park",
+      "size": "390x844",
+      "frameMs": 211.9,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 96,
+      "canvas": [
+        390,
+        844
+      ],
+      "tier": "low",
+      "sha1": "aaf84d9e99a2"
+    },
+    "machines-desktop": {
+      "scene": "Machine cluster (solar, condenser, core)",
+      "size": "1280x800",
+      "frameMs": 428.1,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 91,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "low",
+      "sha1": "28ae76d593db"
+    },
+    "machines-phone": {
+      "scene": "Machine cluster (solar, condenser, core)",
+      "size": "390x844",
+      "frameMs": 237,
+      "simTime": 4.1,
+      "restored": 242,
+      "drawCalls": 105,
+      "canvas": [
+        390,
+        844
+      ],
+      "tier": "low",
+      "sha1": "c2c5f21596d7"
+    }
+  }
+}

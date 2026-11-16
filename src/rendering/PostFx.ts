@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { LOOK } from '../data/look';
+import { LOOK, type TierSpec } from '../data/look';
 
 export interface GradeValues {
   brightness: number;
@@ -11,16 +11,8 @@ export interface GradeValues {
   vibrance: number;
 }
 
-/** Which post effects run (Look 1.11 maps graphics tiers onto this). */
-export interface PostSpec {
-  /** CameraFrame on: HDR scene target, effects, tone mapping in the compose pass. Off: the camera tone-maps. */
-  post: boolean;
-  bloom: boolean;
-  ssao: boolean;
-  dof: boolean;
-  /** MSAA samples of the HDR scene target (the canvas's own antialiasing doesn't apply to it) */
-  samples: number;
-}
+/** Which post effects run: a graphics tier's spec (Look 1.11). */
+export type PostSpec = Pick<TierSpec, 'post' | 'bloom' | 'ssao' | 'dof' | 'samples'>;
 
 /**
  * Look 1.5: the CameraFrame post-processing stack on the main camera, the single home for post effects: the

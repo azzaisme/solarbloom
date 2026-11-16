@@ -115,3 +115,29 @@ UI (selection frames, ghost previews) stay at intensity 1 and don't bloom.
   *Fewer particles*; frozen with reduced motion.
 - CameraFrame's raymarched volumetric fog could give real shadowed shafts, but it marches the shadow map per
   pixel, which is too expensive for the phone budget; the cards cost almost nothing.
+
+## Graphics tiers (Look 1.11)
+
+Settings → **Graphics**: Auto (default), High, Medium, Low (phones), saved with the other settings. `?gfx=…` in
+the URL forces a tier for a session (tests, perf runs, support).
+
+| | Low | Medium | High |
+| --- | --- | --- | --- |
+| Post-processing (CameraFrame) | off: the camera tone-maps | on, 2× MSAA | on, 4× MSAA |
+| Bloom, grading, vignette | — | yes | yes |
+| SSAO, depth of field | — | — | yes |
+| Sun shadows | 1024², PCF3 | 2048², PCF3 | 2048², PCF5 (softer) |
+| Rim light | yes | yes | yes |
+| Motes / shafts | 0 / 0 | 50 / 3 | 90 / 5 |
+| Fauna caps (E16, `TUNING.ecosystem.caps`) | low | medium | high |
+
+*Fewer particles* also caps the sun's shadow map at 1024² and turns the motes and shafts off; reduced motion turns
+the motes off and freezes the shafts. Low keeps the same lights, shadows, rim and tone curve, so the look holds; it
+loses the grade (so the dead-to-restored mood shift too), the vignette and the glow halos.
+
+**Auto** starts from the device (`Quality.detectTier`): software renderers and phones start Low (big phones with 8+
+cores and 6+ GB start Medium), tablets Medium, computers High (Medium with 2 cores or 2 GB). At run time the
+existing adaptive pixel ratio drops resolution first when frames run slower than 40 fps; once it is at 1× and frames
+are still slow for 3 s, Auto steps down one tier. Choosing Auto again re-detects.
+
+Foliage density per tier (Look 3) is not wired yet: there is no density knob to switch until Look 3 adds one.

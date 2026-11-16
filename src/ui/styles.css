@@ -141,6 +141,7 @@ button:focus-visible { outline: 3px solid #2f7de1; outline-offset: 2px; }
 #modal h2 { margin: 0 0 10px; font-size: 18px; }
 #modal label { display: flex; justify-content: space-between; align-items: center; padding: 8px 2px; font-weight: 700; font-size: 14px; border-bottom: 1px solid rgba(0,0,0,.05); }
 #modal input[type=checkbox] { width: 22px; height: 22px; accent-color: #4fb543; }
+#modal select { font: inherit; font-weight: 600; padding: 4px 6px; border-radius: 8px; border: 1px solid rgba(0,0,0,.15); background: #fff; }
 #modal .row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 #modal .row button { flex: 1; padding: 10px; border-radius: 12px; font-weight: 800; background: rgba(0,0,0,.06); min-height: 42px; }
 #modal .row button.danger { background: #ffe1dc; color: #9b2c22; }

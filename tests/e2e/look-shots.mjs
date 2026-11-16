@@ -11,7 +11,7 @@
 //   npm run shots:look                    → docs/look/current/*.jpg + docs/look/current/metrics.json
 //   node tests/e2e/look-shots.mjs <tag>   → docs/look/<tag>/ (e.g. baseline, 1.2-key-light)
 //   LOOK_SCENES=dead,full LOOK_SIZES=desktop node tests/e2e/look-shots.mjs <tag>   (a subset, quicker)
-//   LOOK_QUERY='gfx=low' …                 (appended to the page URL, e.g. to force a graphics tier)
+//   LOOK_QUERY='gfx=low' …                 (the page URL's query; default gfx=high, the High graphics tier)
 //   LOOK_RAW=1 …                           (also keep the raw PNG of each shot, for diffing)
 //   LOOK_EVAL='g.look…' …                  (JavaScript run in the page after each scene's setup, `g` = the game)
 import { createRequire } from 'node:module';
@@ -26,7 +26,8 @@ const tag = process.argv[2] ?? 'current';
 const out = `docs/look/${tag}`;
 mkdirSync(out, { recursive: true });
 const PORT = 4211;
-const query = process.env.LOOK_QUERY ? `?${process.env.LOOK_QUERY}` : '';
+// High by default: Auto would pick Low under SwiftShader (a software renderer).
+const query = `?${process.env.LOOK_QUERY ?? 'gfx=high'}`;
 const FRAME = 1000 / 60;
 
 const SIZES = {
@@ -153,7 +154,7 @@ const SEED_SCRIPT = `(() => { let a = 0x5eed1e5; Math.random = () => { a |= 0; a
 const server = await preview({ preview: { port: PORT, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const errors = [];
-const metrics = { tag, query: process.env.LOOK_QUERY ?? '', renderer: 'headless Chromium, SwiftShader (software GL)', when: new Date().toISOString(), shots: {} };
+const metrics = { tag, query, renderer: 'headless Chromium, SwiftShader (software GL)', when: new Date().toISOString(), shots: {} };
 const target = `data:image/png;base64,${readFileSync('docs/reference/target-look.png').toString('base64')}`;
 
 /** Advances the fake clock in frame steps until `cond` holds (or `maxMs` of game time passes). */
@@ -237,7 +238,7 @@ async function shoot(sceneKey, sizeKey) {
       const H = 800;
       const wa = Math.round((a.width / a.height) * H);
       const wb = Math.round((b.width / b.height) * H);
-      const bar = 36;
+      const bar = 58;
       const cv = document.createElement('canvas');
       cv.width = wa + wb + 12;
       cv.height = H + bar;
@@ -248,8 +249,10 @@ async function shoot(sceneKey, sizeKey) {
       x.drawImage(b, wa + 12, bar, wb, H);
       x.fillStyle = '#fff';
       x.font = 'bold 20px sans-serif';
-      x.fillText(`${title} · ${label}`, 10, 25);
-      x.fillText('Target (reference)', wa + 22, 25);
+      x.fillText(`${title} · ${label}`, 10, 24);
+      x.font = '16px sans-serif';
+      x.fillText('Solarbloom', 10, 48);
+      x.fillText('Target (reference)', wa + 22, 48);
       return cv.toDataURL('image/jpeg', 0.86);
     },
     { shot: `data:image/png;base64,${png.toString('base64')}`, target, title: scene.title, label: tag },

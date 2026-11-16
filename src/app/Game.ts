@@ -35,6 +35,8 @@ import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
 import { initLowPoly } from '../rendering/Shapes';
 import { LookController } from '../rendering/LookController';
+import { detectTier, lowerTier, urlTier, type GfxSetting } from '../rendering/Quality';
+import type { GfxTier } from '../data/look';
 import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
@@ -194,6 +196,7 @@ export class Game {
         setSetting: (k, v) => this.setSetting(k, v),
         activateFrenzy: () => this.sim.frenzy.activate(),
         setVolume: (k, v) => this.setVolume(k, v),
+        setGraphics: (v) => this.setGraphics(v),
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
         mergeAt: (id) => {
@@ -312,12 +315,31 @@ export class Game {
 
   // ───────────────────────── settings / persistence ─────────────────────────
 
+  /** Look 1.11: the graphics tier in effect (from the URL, the setting, or Auto). */
+  gfxTier: GfxTier = 'high';
+  /** Auto's current tier: detected once, then stepped down by adaptQuality when frames stay slow. */
+  private autoTier?: GfxTier;
+
+  private setGraphics(v: GfxSetting) {
+    if (v === 'auto') this.autoTier = undefined; // detect afresh
+    this.setSetting('gfx', v);
+  }
+
+  private resolveTier(): GfxTier {
+    const forced = urlTier();
+    if (forced) return forced;
+    const s = this.settings.gfx ?? 'auto';
+    if (s !== 'auto') return s;
+    this.autoTier ??= detectTier(this.app.graphicsDevice);
+    return this.autoTier;
+  }
+
   private setVolume(k: 'sfxVolume' | 'musicVolume', v: number) {
     this.settings[k] = Math.max(0, Math.min(100, v));
     this.setSetting('sound', this.settings.sound);
   }
 
-  private setSetting(k: keyof Settings, v: boolean) {
+  private setSetting(k: keyof Settings, v: boolean | string) {
     (this.settings as unknown as Record<string, unknown>)[k] = v;
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
@@ -337,14 +359,15 @@ export class Game {
     const rm = s.reducedMotion;
     this.look.lowVfx = !!s.lowVfx;
     this.look.reducedMotion = rm;
-    this.look.applyAtmosphere();
+    this.gfxTier = this.resolveTier();
+    this.look.setTier(this.gfxTier);
+    this.hud.gfxTier = this.gfxTier;
+    // Phase 5 E16's fauna caps follow the tier (its hook on Game; set loosely so the branches merge cleanly).
+    (this as { faunaTier?: GfxTier }).faunaTier = this.gfxTier;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
     this.vfx.density = rm ? 0.35 : s.lowVfx ? 0.45 : 1;
     this.cat.softSparkle = rm || s.lowVfx;
-    // Quality: lighter shadows with fewer effects.
-    const sun = this.scene.sun.light;
-    if (sun) sun.shadowResolution = s.lowVfx ? 1024 : 2048;
     if (this.chunks && this.chunks.lowFog !== !!s.lowFog) {
       this.chunks.lowFog = !!s.lowFog;
       this.chunks.markAll();
@@ -1986,6 +2009,11 @@ export class Game {
     if (this.slowFor > 1.5 && dev.maxPixelRatio > 1) {
       dev.maxPixelRatio = Math.max(1, dev.maxPixelRatio - 0.25);
       this.app.resizeCanvas();
+      this.slowFor = 0;
+    } else if (this.slowFor > 3 && (this.settings.gfx ?? 'auto') === 'auto' && !urlTier() && this.gfxTier !== 'low') {
+      // Look 1.11: already at the lowest resolution and still slow: Auto steps down a graphics tier.
+      this.autoTier = lowerTier(this.gfxTier);
+      this.applySettings();
       this.slowFor = 0;
     } else if (this.fastFor > 8 && dev.maxPixelRatio < this.maxDpr) {
       dev.maxPixelRatio = Math.min(this.maxDpr, dev.maxPixelRatio + 0.25);
