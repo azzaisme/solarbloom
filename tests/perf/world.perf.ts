@@ -39,6 +39,28 @@ function syntheticCity(seed = 99) {
   return sim;
 }
 
+describe('performance: chunk generation with the road network (City 16.8)', () => {
+  it('a fresh generation-4 chunk generates within the streaming budget', () => {
+    // Fresh plan caches each seed: every area's roads are routed the first time one of its chunks generates.
+    const per: number[] = [];
+    for (const seed of [11, 12, 13]) {
+      const sim = new Sim(createInitialState(seed));
+      let n = 0;
+      const t0 = performance.now();
+      for (let cz = -12; cz <= 12; cz++)
+        for (let cx = -12; cx <= 12; cx++) {
+          sim.grid.chunkAt(GROUND, cx, cz);
+          n++;
+        }
+      per.push((performance.now() - t0) / n);
+    }
+    const avg = per.reduce((a, b) => a + b, 0) / per.length;
+    log(`chunk generation (gen 4, cold road plan): ${avg.toFixed(3)} ms per chunk (${per.map((p) => p.toFixed(3)).join(' / ')})`);
+    // City 07 streams chunks at a few per frame; keep a cold chunk (roads included) to a couple of ms.
+    expect(avg).toBeLessThan(3);
+  });
+});
+
 describe('performance: world model (City 01.3)', () => {
   it('lookups cost the same in a 100-tile world and a 100,000+-tile world', () => {
     const small = makeSim(1);

@@ -94,6 +94,27 @@ export const CITY_GEN = {
     /** height of one storey in world units */
     storey: 0.42,
   },
+  /**
+   * City 16 (generation 4): the road network, planned on the area graph. See docs/design/roads.md.
+   * - arterials: four avenues out of the park (chunk row/column 0), a square ring at `ring` chunks, and a jittered
+   *   lattice every `districtChunks`; a lattice row segment drops with `latticeDrop` (columns never do).
+   * - streets link neighbouring areas: always to the parent (one chunk step closer to the park, so every area
+   *   reaches the park), plus extra links with the theme's chance, up to `maxLinks` per area.
+   * - lanes: a link between two `laneTypes` areas is a 1-tile paved footpath.
+   * Gates sit on a shared chunk edge, tiles `gateRange` (chunk-local, inclusive).
+   */
+  roads: {
+    width: { arterial: 3, street: 2, lane: 1 },
+    avenueLane: 6,
+    ring: 3,
+    latticeDrop: 0.25,
+    extraChance: { oldtown: 0.45, docks: 0.3, towers: 0.55, parkland: 0.15 } as Record<Theme, number>,
+    maxLinks: 4,
+    laneTypes: ['park', 'grove'] as AreaType[],
+    gateRange: [5, 10] as [number, number],
+    /** routing style inside an area (City 16.4) */
+    style: { street: 'grid', market: 'grid', rooftops: 'grid', plaza: 'ring', park: 'curve', grove: 'curve', canal: 'waterside', reservoir: 'skirt' } as Record<AreaType, 'grid' | 'ring' | 'curve' | 'waterside' | 'skirt'>,
+  },
   /** Difficulty with distance (chunks): pulse cost multiplier and pollution floor, both capped. */
   difficulty: { perChunk: 0.04, max: 2, pollutionPerChunk: 1.5, pollutionFloorMax: 85 },
 };
