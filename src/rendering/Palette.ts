@@ -23,8 +23,8 @@ const stone = {
 
 const paving = {
   /** restored slab; each slab takes one of `slabs` by hash, set in darker grout */
-  alive: '#cdbfa8',
-  slabs: ['#cdbfa8', '#c4b59d', '#d4c7b1', '#bcad95'] as string[],
+  alive: '#c9bfa9',
+  slabs: ['#c9bfa9', '#c0b49e', '#d0c6b1', '#b9ad97'] as string[],
   /** swept but not yet restored */
   swept: '#b3a999',
   grout: '#7d705f',
@@ -32,6 +32,8 @@ const paving = {
   /** raised border where restored paving meets lawn */
   border: '#e6dccb',
   roadLine: '#c9b98a',
+  /** Look 2.5: a restored road keeps its (cleaner) surface */
+  roadAlive: '#6c675e',
 };
 
 /** Tile ground by feature: dead (polluted) tones, three per feature. */
@@ -47,7 +49,7 @@ const ground = {
     building: ['#90887c', '#898175', '#978f83'],
   } as Record<string, string[]>,
   /** restored ground that isn't lawn ('' = use the stage grass) */
-  alive: { lawn: '', paving: '#cdbfa8', road: '', water: '#5cc6e6', clay: '', litter: '', obstacle: '#d9d4c8' } as Record<string, string>,
+  alive: { lawn: '', paving: '#c9bfa9', road: '#6c675e', water: '#5cc6e6', clay: '', litter: '', obstacle: '#ddd2bf' } as Record<string, string>,
   /** prepared / growing water tiles */
   wetSoil: '#4f7f86',
   /** dead water surface scum */

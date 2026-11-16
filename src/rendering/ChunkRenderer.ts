@@ -407,6 +407,29 @@ export class ChunkRenderer {
     this.treeTris.set(v.key, fb.tris);
   }
 
+  /**
+   * Look 2.5: restored paving stays stone. Moss grows along two grout edges and in the crack, a tuft or two at a
+   * corner; from Blooming on, tiny flowers in the bed's drift colour sit in the cracks. Stage still reads: young
+   * slabs are just clean, blooming ones flower.
+   */
+  private crackGreen(b: MeshBuilder, t: TileData, x: number, z: number, top: number, stage: number) {
+    const sx = hash01(t.x, t.z, 51) < 0.5 ? -1 : 1;
+    const sz = hash01(t.x, t.z, 52) < 0.5 ? -1 : 1;
+    b.add('box', PALETTE.lawn.moss, [x + sx * 0.455, top - 0.006, z], [0.05, 0.012, 0.3 + hash01(t.x, t.z, 53) * 0.5]);
+    b.add('box', PALETTE.lawn.moss, [x, top - 0.006, z + sz * 0.455], [0.2 + hash01(t.x, t.z, 54) * 0.5, 0.012, 0.05]);
+    b.tip = PALETTE.lawn.tuftTip[t.variant % 3];
+    b.add('cone', PALETTE.lawn.tuft[t.variant % 3], [x + sx * 0.44, top + 0.04, z + sz * 0.44], [0.05, 0.08, 0.05]);
+    b.tip = '';
+    if (stage < 2) return;
+    const col = flowerAt(t.x, t.z);
+    const n = stage === 2 ? 2 : 3;
+    for (let i = 0; i < n; i++) {
+      const k = hash01(t.x, t.z, 55 + i) - 0.5;
+      b.add('sphere', col, [x + sx * 0.45, top + 0.03, z + k * 0.7], [0.07, 0.04, 0.07]);
+    }
+    b.add('sphere', flowerCentre(col), [x + sx * 0.45, top + 0.05, z], 0.03);
+  }
+
   /** Look 2.3: the warm stone tone of one restored paving slab (stable per tile). */
   private slabTone(t: TileData): string {
     const s = PALETTE.paving.slabs;
@@ -418,10 +441,10 @@ export class ChunkRenderer {
     const f = t.feature ?? 'lawn';
     const dead = DEAD[f] ?? DEAD.lawn;
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
-    const col = t.blocked ? dead[0] : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? this.slabTone(t) : grassTone(stage, t.x, t.z)) : t.ground === 'polluted' ? dead[t.variant % dead.length] : PALETTE.soil;
+    const col = t.blocked ? (this.level >= 4 && f !== 'building' ? PALETTE.stone.light : dead[0]) : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? this.slabTone(t) : f === 'road' ? PALETTE.paving.roadAlive : grassTone(stage, t.x, t.z)) : t.ground === 'polluted' ? dead[t.variant % dead.length] : PALETTE.soil;
     b.add('box', col, [t.x + 0.5, h, t.z + 0.5], [1, 0.16, 1]);
     // Phase 5 E16: stages stay apart zoomed out too: a colour patch for Blooming, a gold disc for Radiant.
-    if (t.ground === 'restored' && f !== 'water' && f !== 'paving') {
+    if (t.ground === 'restored' && f !== 'water' && f !== 'paving' && f !== 'road') {
       if (stage === 2) b.add('box', flowerAt(t.x, t.z), [t.x + 0.4, h + 0.085, t.z + 0.55], [0.34, 0.02, 0.3]);
       if (stage === 4) b.add('cylinder', PALETTE.flowers.radiantFar, [t.x + 0.5, h + 0.085, t.z + 0.5], [0.8, 0.02, 0.8]);
     }
@@ -583,7 +606,11 @@ export class ChunkRenderer {
     const r = new VRng(t.variant * 7919 + 13);
     const dead = DEAD[f] ?? DEAD.lawn;
     if (t.blocked) {
-      b.add('box', dead[t.variant % dead.length], [x, h, z], [0.96, 0.16, 0.96]);
+      // Look 2.5: once its area is alive, an obstacle stands on a clean stone plinth instead of dead ground.
+      if (t.feature !== 'building' && this.level >= 4) {
+        b.add('box', PALETTE.paving.grout, [x, h - 0.004, z], [1, 0.152, 1]);
+        b.add('box', PALETTE.stone.light, [x, h + 0.02, z], [0.9, 0.2, 0.9]);
+      } else b.add('box', dead[t.variant % dead.length], [x, h, z], [0.96, 0.16, 0.96]);
       if (t.feature === 'building') return;
       if (t.id === this.localMark) this.landmark(b, x, h + 0.08, z, t.variant);
       else this.prop(b, t.prop ?? 'stump', x, h + 0.08, z, r);
@@ -666,13 +693,29 @@ export class ChunkRenderer {
         b.add('box', PALETTE.stone.cream, [x, top + 0.08, z], [0.62, 0.16, 0.62]);
         b.add('box', PALETTE.trim.brass, [x, top + 0.162, z], [0.66, 0.02, 0.66]);
         b.add('box', PALETTE.soil, [x, top + 0.165, z], [0.54, 0.01, 0.54]);
-      } else b.add('box', grass, [x, top + 0.01, z], [0.6, 0.02, 0.6]);
+      } else this.crackGreen(b, t, x, z, top, stage);
       this.edges(b, t, x, z, top, true);
+    } else if (f === 'road') {
+      // Look 2.5: a restored road keeps its surface (cleaner), with greenery creeping in from the edges.
+      b.add('box', PALETTE.paving.roadAlive, [x, h, z], [1, 0.16, 1]);
+      if (t.variant % 3 === 0) b.add('box', PALETTE.paving.roadLine, [x, top + 0.004, z], [0.12, 0.01, 0.4]);
+      for (const [dx, dz] of EDGE_DIRS) {
+        const n = this.sim.grid.peek(t.roofId, t.x + dx, t.z + dz);
+        if (!n || (n.feature ?? 'lawn') === 'road') continue;
+        b.add('box', grass, [x + dx * 0.43, top + 0.004, z + dz * 0.43], [dx ? 0.14 : 1, 0.012, dz ? 0.14 : 1]);
+        for (let i = 0; i < 2; i++) {
+          const along = r.range(-0.42, 0.42);
+          b.tip = PALETTE.lawn.tuftTip[i];
+          b.add('cone', PALETTE.lawn.tuft[i], [x + (dx ? dx * 0.42 : along), top + 0.05, z + (dz ? dz * 0.42 : along)], [0.05, 0.1, 0.05]);
+          b.tip = '';
+        }
+      }
+      return;
     } else {
       b.add('box', grass, [x, h, z], [1, 0.16, 1]);
       this.edges(b, t, x, z, top, false);
     }
-    const tufts = f === 'paving' ? 3 : stage === 1 ? 4 : 5;
+    const tufts = f === 'paving' ? 0 : stage === 1 ? 4 : 5;
     const tuftH = stage === 1 ? [0.06, 0.12] : [0.09, 0.2];
     for (let i = 0; i < tufts; i++) {
       const ht = r.range(tuftH[0], tuftH[1]);
@@ -682,7 +725,7 @@ export class ChunkRenderer {
       b.tip = '';
     }
     const span = f === 'paving' ? 0.2 : 0.3;
-    if (stage >= 2) {
+    if (stage >= 2 && f !== 'paving') {
       // Flower clusters: tight groups of one colour (seeded), so blooming ground shows patches, not confetti.
       const clusters = stage === 2 ? 2 : 1;
       for (let c = 0; c < clusters; c++) {
@@ -729,7 +772,8 @@ export class ChunkRenderer {
     }
     if (stage >= 4) {
       // Phase 4 E05: Radiant: a pale golden glow on the ground and luminous gold flowers above the shrubs.
-      b.add('cylinder', PALETTE.flowers.radiantDisc, [x, top + 0.005, z], [0.86, 0.01, 0.86]);
+      // Look 2.5: paving keeps its stone; its Radiant cue is the gold flowers alone.
+      if (f !== 'paving') b.add('cylinder', PALETTE.flowers.radiantDisc, [x, top + 0.005, z], [0.86, 0.01, 0.86]);
       for (let i = 0; i < 4; i++) {
         const fx = x + r.range(-0.34, 0.34);
         const fz = z + r.range(-0.34, 0.34);
