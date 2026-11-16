@@ -344,6 +344,15 @@ const sky = {
    * carries the live values; these are the clear ones it should match.
    */
   zenith: '#78afe6',
+  /** Zoomed-out puffy clouds between the camera and the city: bright tops, a cool belly, sleepy faces */
+  cloud: '#ffffff',
+  /** baked soft shading: warm sunlit tops, lavender-blue shade, a cooler belly, a bright silver rim */
+  cloudSun: '#fff4e2',
+  cloudShade: '#a9b6e0',
+  cloudBelly: '#c4cdee',
+  cloudRim: '#ffffff',
+  cloudFace: '#4a4f63',
+  cloudBlush: '#ffb3c7',
   upper: '#a4cdee',
   horizon: '#e6e2d4',
   haze: '#e6e2d4',

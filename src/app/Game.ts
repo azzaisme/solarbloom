@@ -18,6 +18,7 @@ import type { OfflineReport } from '../gameplay/OfflineSystem';
 import { Sim } from '../gameplay/Sim';
 import { Butterflies } from '../rendering/Butterflies';
 import { Birds } from '../rendering/Birds';
+import { Clouds } from '../rendering/Clouds';
 import { Fauna } from '../rendering/Fauna';
 import { EcoBadge } from '../ui/EcoBadge';
 import { CameraController } from '../rendering/CameraController';
@@ -95,6 +96,8 @@ export class Game {
   readonly cat: CatVisuals;
   readonly butterflies: Butterflies;
   private birds: Birds;
+  /** Puffy clouds between the camera and the city when zoomed out. */
+  private clouds: Clouds;
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
   readonly fauna: Fauna;
   private eco!: EcoBadge;
@@ -192,6 +195,7 @@ export class Game {
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
     this.rings = new ProgressRings(this.sim, this.scene.world);
     this.birds = new Birds(this.scene.world);
+    this.clouds = new Clouds(this.scene.world, this.app.graphicsDevice, this.scene.sun.up);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
     this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
     this.tileFx = new TileFx(this.sim, this.scene.world, this.app.graphicsDevice);
@@ -366,7 +370,7 @@ export class Game {
     // Look 5.11: HUD glass without live blur (cheaper on phones). Look 1's Low graphics tier can set it too.
     document.body.classList.toggle('solid-glass', !!s.lowVfx);
     const rm = s.reducedMotion;
-    this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
+    this.tileFx.reducedMotion = this.birds.reducedMotion = this.clouds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
     if (this.transitions) {
       // Look 6: reduced motion keeps the timings with simpler visuals; detail follows the quality tier (Look 1's
@@ -2291,6 +2295,11 @@ export class Game {
     this.overlays.update(dt);
     this.camera.update(dt);
     this.syncView();
+    {
+      const c = this.camera;
+      const cv = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+      this.clouds.update(dt, { zoom: c.zoom, yaw: c.yaw, dist: c.dist, viewHeight: c.viewHeight, aspect: cv.clientWidth / Math.max(1, cv.clientHeight), position: c.entity.getPosition(), forward: c.entity.forward });
+    }
     this.updateTreeCursor(dt);
     this.hud.update(dt);
     this.sfx.layers = Math.min(3, Math.floor(this.sim.progression.restoredCount(HOME) / 12));
