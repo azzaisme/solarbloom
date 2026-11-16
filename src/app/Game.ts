@@ -2279,6 +2279,7 @@ export class Game {
     const near = rect ? { x0: ct.x - 12, x1: ct.x + 12, z0: ct.z - 12, z1: ct.z + 12 } : undefined;
     this.butterflies.update(dt, near);
     this.birds.resident = eco.has('birds');
+    this.clouds.happy = eco.has('birds'); // the sky wakes up with the songbirds: sleepy faces on a couple of clouds
     this.birds.update(dt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
     this.fauna.update(dt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: !!this.settings.fireflies && !this.settings.highContrast });
     this.eco?.update(dt);
