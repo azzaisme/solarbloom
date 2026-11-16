@@ -250,7 +250,7 @@ cleared area), saves up for stages and fires abilities, then leaves them on auto
 | Unit tests, file by file (41 files, including the new `super.test.ts` with 11) | pass |
 | `tests/e2e/super.e2e.mjs` (new): place a core from the Build tray by mouse, pay assembly and activation from its panel, fire the Solar Burst, then build the other three | pass, no page or console errors |
 | picking (74,299 checks), hud-overlap, area-panel, overview, `STRICT=1 phase4-hud`, `phase4-session` (15 min) | pass |
-| `tests/e2e/merge.e2e.mjs` | failed once: the old drone was hovering beside the panel and drones have a generous tap radius, so the tap selected the drone's home (the starter panel). The test now moves drones away first; 2 passes. Real-play note: a drone over a machine can take a tap meant for it (unchanged from Phase 4) |
+| `tests/e2e/merge.e2e.mjs` | failed once: the old drone was hovering beside the panel and drones have a generous tap radius, so the tap selected the drone's home (the starter panel). The test now moves drones away first; 2 passes. Real-play note: a drone over a machine can take a tap meant for it (unchanged from Phase 4). **Fixed after E14:** over a machine or a placement footprint a drone's tap target shrinks to its body, so the machine gets the tap (`droneTapRadius`/`pickDrone` in `src/core/Picking.ts`, `tests/picking.test.ts`, a mouse and touch check in `picking.e2e`); the merge test no longer moves drones away |
 | `npm run test:perf:browser` | within limits: 0 / 1 / 1 hitches, chain ×666 |
 | `npm run test:perf` | one timing failure in a busy run, then 4 / 4 on rerun |
 | `npm run test:soak` | pass |
