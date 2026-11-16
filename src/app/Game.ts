@@ -280,11 +280,11 @@ export class Game {
       hover: (x, y) => this.onHover(x, y),
       leave: () => this.onLeave(),
       click: (x, y, b) => this.onClick(x, y, b),
-      pan: (dx, dy) => {
+      pan: (dx, dy, x, y) => {
         this.lastPanAt = performance.now();
-        this.camera.pan(dx, dy);
+        this.camera.pan(dx, dy, x, y);
       },
-      zoom: (f) => this.camera.zoomBy(f),
+      zoom: (f, x, y) => this.camera.zoomBy(f, x, y),
       // A quick, strong pinch-out snaps to the city overview (one gesture from anywhere).
       pinchEnd: (f, ms) => {
         if (this.city && !this.cinematic && f < 0.6 && ms < 450) this.camera.glide(this.camera.target.x, 0, this.camera.target.z, this.camera.minZoom);
