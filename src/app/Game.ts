@@ -218,8 +218,10 @@ export class Game {
     this.rings = new ProgressRings(this.sim, this.scene.world);
     // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
     // its procedural look. Once they're in, what was already drawn is rebuilt with them.
-    createModels(this.app).onReady = () => {
+    const models = createModels(this.app);
+    models.onReady = () => {
       this.chunks.markAll();
+      this.skyline.useModels(models);
       this.machines.rebuildAll();
       this.tillers.rebuildAll();
       this.cat.rebuildAll();
