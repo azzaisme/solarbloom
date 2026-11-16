@@ -133,7 +133,7 @@ export function turfTop(c: DressCtx, t: TileData, top: number) {
     // a soft mottling across the lawn, a few tiles wide
     // Phase 6: with no blades shading it, the bare turf is a touch deeper, and the light / dark patches are stronger
     // so a big lawn reads as soft sunlit and shaded areas rather than one flat green
-    const m = 0.66 + 0.3 * noise2((t.x + cx) * 0.45, (t.z + cz) * 0.45, 7) + 0.14 * noise2((t.x + cx) * 1.3, (t.z + cz) * 1.3, 8);
+    const m = 0.5 + 0.28 * noise2((t.x + cx) * 0.45, (t.z + cz) * 0.45, 7) + 0.14 * noise2((t.x + cx) * 1.3, (t.z + cz) * 1.3, 8);
     cols.push(k[0] * m, k[1] * m, k[2] * m);
     pos.push(t.x + cx, top + 0.002, t.z + cz);
   }

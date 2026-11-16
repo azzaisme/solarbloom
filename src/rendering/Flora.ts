@@ -11,7 +11,7 @@
  * second, double-sided material.
  */
 import {
-  Buf, puff, tube, plate, hex, mix, scaleC, add, mul, norm, cross, rng, card, leafShell, randDir, setShrubBuilder,
+  Buf, puff, tube, plate, hex, mix, scaleC, add, mul, norm, cross, rng, card, leafShell, buildShrub, setShrubBuilder,
   type TreeGeo, type Lod, type V, type C,
 } from './TreeGen';
 import { PALETTE } from './Materials';
@@ -127,14 +127,23 @@ export function buildFlowers(sp: FlowerSpecies, colour: number, open: boolean, v
   const R = rng(variant * 7717 + FLOWER_SPECIES.indexOf(sp) * 131 + colour * 17 + (open ? 3 : 0));
   const pc = hex(FLOWER_COLOURS[sp][colour % FLOWER_COLOURS[sp].length]);
   const detail = lod > 0;
-  const plants = sp === 'sunflower' ? 2 : sp === 'wild' ? 8 : sp === 'lavender' ? 5 : sp === 'daisy' ? 7 : 5;
+  // Phase 6: fewer plants a clump (there are about 2.5x the clumps, each drawn about 1.5x the size)
+  const plants = sp === 'sunflower' ? 2 : sp === 'wild' ? 5 : sp === 'lavender' ? 3 : sp === 'daisy' ? 4 : 3;
   const spread = sp === 'sunflower' ? 0.07 : 0.09;
   const grow = open ? 1 : 0.7;
   // Look 3.5: each clump sits on a low mound of leaves (the reference's flowers grow out of foliage, not bare soil)
-  // Phase 6: a smaller, rounder tuft of leaves (the wide flat mound read as a lily pad lying on the lawn); the
-  // tiny lawn flowers ('wild') have none.
-  const mr = (spread + 0.035) * 0.62;
-  if (sp !== 'wild') puff(B, { c: [0, 0.02, 0], r: [mr, sp === 'sunflower' ? 0.06 : 0.05, mr], base: LEAF, light: LEAF_LIGHT, dark: scaleC(LEAF, 0.55), leafy: true, flex: 0.2, seed: variant * 3 + 1, detail: detail ? 1 : 0, lump: 0.3 });
+  // Phase 6: a low rosette of leaves at the foot of each clump (leaves, not a smooth green mound); the tiny lawn
+  // flowers ('wild') have none.
+  const mr = spread + 0.035;
+  if (sp !== 'wild') {
+    const nl = detail ? 7 : 4;
+    for (let i = 0; i < nl; i++) {
+      const a = (i / nl) * Math.PI * 2 + R() * 0.8;
+      const d: V = norm([Math.cos(a), 0.3 + R() * 0.35, Math.sin(a)]);
+      const Ll = mr * (0.9 + R() * 0.5);
+      card(B, [Math.cos(a) * 0.01, 0.004, Math.sin(a) * 0.01], d, UP, Ll, Ll * 0.5, scaleC(LEAF, 0.8 + R() * 0.3), LEAF_LIGHT, 0.1, 0.35);
+    }
+  }
   for (let i = 0; i < plants; i++) {
     const a = R() * Math.PI * 2;
     const d = Math.sqrt(R()) * spread;
@@ -205,39 +214,9 @@ export function buildFlowers(sp: FlowerSpecies, colour: number, open: boolean, v
 
 // ───────────── shrubs (3.6) ─────────────
 
-/** A leafy shrub of 2–3 overlapping clusters with twigs; `flowering` adds bougainvillea-style blossom masses. */
+/** A leafy shrub: stems and leaves (Phase 6, see TreeGen.buildShrub); `flowering` adds bougainvillea-coloured petals. */
 export function buildLeafyShrub(variant: number, lod: Lod, flowering = false): TreeGeo {
-  const B = new Buf();
-  const R = rng(variant * 9973 + (flowering ? 501 : 7));
-  const k = 0.88 + R() * 0.24;
-  const base = scaleC(hex(PALETTE.shrubLeaf[0]), k), light = scaleC(hex(PALETTE.shrubLeaf[1]), k), dark = hex(PALETTE.shrubLeaf[2]);
-  // two overlapping clusters: cauliflowers up close (under ~700 triangles), lumpy at mid zoom so the cheap version
-  // reads as a bush rather than a smooth bean (the foliage shader draws the leaves on both)
-  const n = 2;
-  const bloom = hex(PALETTE.bougainvillea[variant % PALETTE.bougainvillea.length]);
-  for (let i = 0; i < n; i++) {
-    const s = 0.11 + R() * 0.07;
-    const a = R() * Math.PI * 2;
-    const d = i === 0 ? 0 : 0.09 + R() * 0.08;
-    const c: V = [Math.cos(a) * d, s * 0.8, Math.sin(a) * d];
-    const r: V = [s, s * 0.82, s];
-    // Look 3.6: rounded leaf clusters with dark crevices (no cards: nothing pointy), twigs, and blossom clusters
-    puff(B, { c, r, base, light, dark, leafy: true, flex: 0.25, seed: R() * 1e9, detail: lod === 0 ? 1 : 2, lump: lod === 0 ? 0.22 : 0.3, clusters: lod === 0 ? 0 : 6 });
-    if (lod > 0) {
-      for (let k = 0; k < 2; k++) {
-        const u = randDir(R, 0.2);
-        tube(B, [[c[0], 0, c[2]], add(c, mul(u, s * 1.02))], [0.006, 0.003], 3, [hex(PALETTE.twig[0]), hex(PALETTE.twig[1])], [0, 0.3], false);
-      }
-      if (flowering)
-        for (let k = 0; k < 6; k++) {
-          const u = randDir(R, 0.15);
-          const p = add(c, [u[0] * r[0] * 0.95, u[1] * r[1] * 0.95, u[2] * r[2] * 0.95]);
-          const fr = 0.035 + R() * 0.015;
-          puff(B, { c: p, r: [fr, fr * 0.8, fr], base: scaleC(bloom, 0.95), light: mix(bloom, [1, 1, 1], 0.25), dark: scaleC(bloom, 0.7), leafy: true, flex: 0.35, seed: k, detail: 1, lump: 0 });
-        }
-    } else if (flowering) puff(B, { c: add(c, [0, s * 0.4, 0]), r: [s * 0.7, s * 0.5, s * 0.7], base: bloom, light: mix(bloom, [1, 1, 1], 0.2), dark: scaleC(bloom, 0.7), leafy: true, flex: 0.3, seed: i, detail: 1, lump: 0 });
-  }
-  return B.done();
+  return buildShrub(variant, lod, flowering, hex(PALETTE.bougainvillea[variant % PALETTE.bougainvillea.length]));
 }
 
 // ───────────── vines and ivy (3.8) ─────────────

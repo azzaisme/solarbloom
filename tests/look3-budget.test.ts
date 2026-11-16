@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { treeGeo, SPECIES, type TreeGeo } from '../src/rendering/TreeGen';
 import { bannerGeo, flowerGeo, FLOWER_SPECIES, grassGeo, turfGeo, vineGeo } from '../src/rendering/Flora';
+import { shrubGeo } from '../src/rendering/TreeGen';
 import { clutterGeo, pavingGeo, railGeo, PAVING_LAYOUTS } from '../src/rendering/Props';
 import { flowerDrifts, grassTufts, paving, thrivingExtras, type DressCtx } from '../src/rendering/Surfaces';
 import type { TileData } from '../src/core/types';
@@ -33,16 +34,19 @@ function dress(lod: 0 | 1 | 2, dens: number) {
 }
 
 describe('Look 3 detail budget', () => {
-  it('trees: one blob far, cheap clumps at normal zoom, clusters close up, leaves super close', () => {
+  it('trees: a few big leaves far, branches and leaves at normal zoom, more leaves close up', () => {
+    console.log('shrub triangles', [0, 1, 2].map((l) => shrubGeo(1, l as 0).tris).join(' '));
     for (const sp of SPECIES) {
       const far = treeGeo(sp, 3, 1, 0).tris;
       const normal = treeGeo(sp, 3, 1, 1).tris;
       const near = treeGeo(sp, 3, 1, 2).tris;
       const close = treeGeo(sp, 3, 1, 3).tris;
+      console.log(sp, 'triangles', far, normal, near, close);
       expect(far, `${sp} far`).toBeLessThanOrEqual(260);
-      expect(normal, `${sp} normal`).toBeLessThanOrEqual(3200);
-      expect(near, `${sp} near`).toBeLessThanOrEqual(5000);
-      expect(close, `${sp} super close`).toBeLessThanOrEqual(8000);
+      // Phase 6 (desktop target): real leaves on twigs cost more than lumpy clumps did (3200 / 5000 / 8000 before)
+      expect(normal, `${sp} normal`).toBeLessThanOrEqual(4500);
+      expect(near, `${sp} near`).toBeLessThanOrEqual(8500);
+      expect(close, `${sp} super close`).toBeLessThanOrEqual(11000);
     }
   });
 
@@ -81,10 +85,12 @@ describe('Look 3 detail budget', () => {
     const mid = run(1, 0.6);
     console.log('lush lawn tile triangles', JSON.stringify({ near, mid }));
     // near zoom shows only a few chunks; flower clumps on leafy mounds (owner review, Look 3.5) raised these
-    expect(near.worst, 'near worst').toBeLessThanOrEqual(3000);
-    expect(near.mean, 'near mean').toBeLessThanOrEqual(1950);
-    expect(mid.worst, 'mid worst').toBeLessThanOrEqual(900);
-    expect(mid.mean, 'mid mean').toBeLessThanOrEqual(650);
+    // Phase 6 (desktop target, phones no longer a gate): dense mixed flower beds and stem-and-leaf shrubs raised
+    // these from 3000 / 1950 / 900 / 650. Medium and Low thin them out through `dens`.
+    expect(near.worst, 'near worst').toBeLessThanOrEqual(4400);
+    expect(near.mean, 'near mean').toBeLessThanOrEqual(2800);
+    expect(mid.worst, 'mid worst').toBeLessThanOrEqual(1400);
+    expect(mid.mean, 'mid mean').toBeLessThanOrEqual(900);
   });
 
   it('paving tiles at negative city coordinates build (variants from world coordinates go negative)', () => {
