@@ -59,7 +59,14 @@ export class Metrics {
       `Areas cleared ${times.length} · ${hours > 0.05 ? (times.length / hours).toFixed(1) : '—'} per hour · fastest ${gaps.length ? mmss(Math.min(...gaps)) : '—'} · slowest ${gaps.length ? mmss(Math.max(...gaps)) : '—'}`,
       `Time to each area: ${times.length ? times.slice(0, 20).map((t, i) => `#${i + 1} ${mmss(t)}`).join(', ') + (times.length > 20 ? ` … #${times.length} ${mmss(times[times.length - 1])}` : '') : '—'}`,
       `Biggest chain ×${st.maxCombo} · chains ${st.chains} · big chains by you ${st.bigChains?.player ?? 0} / automation ${st.bigChains?.auto ?? 0}`,
-      `Lucky Cats found ${st.catsFound} · first ${mmss(f.cat)}`,
+      `Lucky Cats found ${st.catsFound} · first ${mmss(f.cat)}${(() => {
+        // Phase 5 E15: rarer cats and world events.
+        const log = s.state.cat.log ?? [];
+        const g = log.filter((e) => e.variant === 'golden').length;
+        const r = log.filter((e) => e.variant === 'rainbow').length;
+        return g || r ? ` · golden ${g} · rainbow ${r}` : '';
+      })()}`,
+      `World events ${s.state.events?.count ?? 0}${Object.entries(s.state.events?.byType ?? {}).map(([k, n]) => ` · ${k} ${n}`).join('')}`,
       `First upgrade ${mmss(f.upgrade)} · Drone Hub ${mmss(f.droneHub)} · Mother Tree ${mmss(f.motherTree)}`,
       `Time with nothing to do ${Math.round(st.stuckSeconds)} s`,
     ];

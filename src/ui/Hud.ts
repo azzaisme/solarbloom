@@ -10,6 +10,7 @@ import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
 import { SEED_CORE_MACHINES } from '../gameplay/ProgressionSystem';
 import { ICONS } from './Icons';
+import { WORLD_EVENT_INFO } from '../gameplay/WorldEventSystem';
 
 /** Phase 5 E14: `super:<type>` places a Superstructure Core of that family. */
 export type SuperTool = `super:${'solar' | 'condenser' | 'pollinator' | 'droneHub'}`;
@@ -30,6 +31,8 @@ export interface HudCallbacks {
   activateCore(): void;
   /** Phase 4 E06: fire Bloom Frenzy. */
   activateFrenzy(): void;
+  /** Phase 5 E15: the 🐾 chip: show where a hinted cat hides. */
+  findCat(): void;
   newGame(): void;
   setSetting(key: keyof Settings, v: boolean): void;
   setVolume(key: 'sfxVolume' | 'musicVolume', v: number): void;
@@ -144,10 +147,12 @@ export class Hud {
           <button class="chip" id="pauseBtn" aria-label="Pause">${ICONS.pause}<span class="lbl"> Pause</span></button>
           <button class="chip" id="speedBtn" aria-label="Game speed">1×</button>
           <button class="chip" id="catBtn" aria-label="Lucky Cat discoveries" hidden>🐱 <span id="catCount">0</span></button>
+          <button class="chip" id="pawBtn" aria-label="Paw prints: show where a cat is hiding" title="Paw prints: a cat is hiding nearby. Tap to look." hidden>🐾 <span id="pawCount">0</span></button>
           <button class="chip" id="setBtn" aria-label="Settings">⚙️<span class="lbl"> Settings</span></button>
           <button class="chip" id="objToggle" aria-label="Toggle objective list">📋</button>
         </div>
       </div>
+      <div id="eventBanner" role="status" aria-live="polite" hidden><span class="ei"></span><span class="et"></span><span class="ec"></span><i class="ebar"></i></div>
       <div id="combo"><div class="big" id="comboBig">BLOOM CHAIN ×0</div><div class="total" id="comboTotal"></div><div id="chainAreas"></div><div id="feed"></div></div>
       <div id="hotbar" class="panel">${slots}</div>
       <button id="frenzyBtn" class="frenzy-btn" aria-label="Bloom Frenzy (Q)" hidden><span class="fill"></span><span class="fi">${ICONS.frenzy}</span><span class="ft">0%</span></button>
@@ -209,6 +214,7 @@ export class Hud {
       $(r, '#speedBtn').textContent = `${sp}×`;
     });
     $(r, '#catBtn').addEventListener('click', () => this.openSettings(true, true));
+    $(r, '#pawBtn').addEventListener('click', () => this.cb.findCat());
     $(r, '#buildToggle').addEventListener('click', () => this.toggleTray());
     $(r, '#pauseBtn').addEventListener('click', () => this.cb.togglePause());
     $(r, '#objToggle').addEventListener('click', () => $(r, '#obj').classList.toggle('expanded'));
@@ -796,6 +802,36 @@ export class Hud {
     this.set('inspect', el, 'html', html);
   }
 
+  /**
+   * Phase 5 E15: the world event banner (small, above the hotbar, never blocks input: pointer-transparent) with
+   * its effect and a timer bar, and the 🐾 chip once a cat has been hiding a while.
+   */
+  private updateEvents() {
+    const s = this.sim;
+    const el = $(this.root, '#eventBanner');
+    const a = s.events.active;
+    if (!a) {
+      if (!el.hidden) el.hidden = true;
+      this.last.delete('evT');
+    } else {
+      if (el.hidden) el.hidden = false;
+      const info = WORLD_EVENT_INFO[a.type];
+      const left = Math.max(0, a.until - s.time);
+      const total = Math.max(0.1, a.until - a.startedAt);
+      const hiding = s.state.cat.invasion?.length ?? 0;
+      const effect = a.fallback ? a.fallback : a.type === 'invasion' ? `${hiding} cat${hiding === 1 ? '' : 's'} hiding · each with its own reward · no rush` : a.type === 'migration' ? `growing ${a.done ?? 0}/${(a.done ?? 0) + (a.queue?.length ?? 0)} tiles` : info.effect;
+      this.set('evI', $(el, '.ei'), 'text', info.icon);
+      this.set('evT', $(el, '.et'), 'html', `<b>${esc(info.name)}</b> ${esc(effect)}`);
+      this.set('evC', $(el, '.ec'), 'text', a.type === 'invasion' ? '' : `${Math.ceil(left)}s`);
+      this.set('evBar', $(el, '.ebar'), 'width', `${Math.round((left / total) * 100)}%`);
+      this.set('evKind', el, 'title', `${info.name}: ${info.effect}`);
+    }
+    const hinted = s.cat.spots().filter((c) => s.cat.hinted(c)).length;
+    const paw = $(this.root, '#pawBtn');
+    if (paw.hidden !== !hinted) paw.hidden = !hinted;
+    this.set('pawN', $(this.root, '#pawCount'), 'text', String(hinted));
+  }
+
   private toastLayoutAt = 0;
   /** On narrow screens the top panels sit side by side: toasts drop below them instead of covering them. */
   private layoutToasts() {
@@ -848,6 +884,7 @@ export class Hud {
     this.set('frActive', fb, 'cls', fActive ? '1' : '0', 'active');
     this.set('frBody', document.body, 'cls', fActive ? '1' : '0', 'frenzy'); // also right after loading mid-Frenzy
     this.set('frText', $(fb, '.ft'), 'text', fActive ? `${Math.ceil(s.frenzy.remaining())}s` : fReady ? 'FRENZY!' : `${Math.floor(s.frenzy.charge)}%`);
+    this.updateEvents();
     this.set('frTitle', fb, 'title', fActive ? 'Bloom Frenzy! Pulse reach +2 tiers, biomass ×10, drones ×3' : fReady ? 'Bloom Frenzy is ready: tap to fire it (Q)' : 'Bloom Frenzy charges as you restore, chain and overflow');
     // Hotbar costs
     for (const t of BUILDABLE) {
