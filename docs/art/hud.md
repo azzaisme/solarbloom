@@ -26,3 +26,12 @@ park, Esc back, 3–9 machines.
 Why: Q is already Bloom Frenzy, and remapping it (plus W/E/R) would change every player's muscle memory, the
 tutorial and the hints for a cosmetic match. The hotbar's five slots are the Phase 4 mobile-first set; machines
 live in the Build tray where their 3–9 keys are shown. `test:hud` checks every badge against its binding.
+
+## Top-right row (5.7)
+
+`#chips`: the biodiversity pill (where the reference has its Day pill), then round glass buttons for pause (P),
+speed (fast-forward; the multiplier shows on hover or focus, and stays shown while above 1×) and settings.
+
+**Deferred:** the reference's "☀ Day N" pill. The game has no day cycle or day length yet, and Look 5 doesn't
+invent gameplay. Once one exists (a day length in `tuning.ts`, optionally tied to Look 1's sun angle), it slots
+in as the row's first `.pill`.

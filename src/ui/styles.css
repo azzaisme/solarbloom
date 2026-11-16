@@ -150,7 +150,19 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, summary:foc
 .card-intro h2 { display: flex; align-items: center; gap: 8px; }
 
 /* Objective (top-right) */
-#obj { position: absolute; top: calc(12px + var(--safe-t)); right: calc(12px + var(--safe-r)); padding: 10px 14px 12px; width: 268px; }
+/* Look 5.7: the top-right row: the biodiversity pill, then round glass icon buttons for pause, speed and
+   settings (the reference's Day pill is deferred: there is no day cycle yet; see docs/art/hud.md). */
+#chips { position: absolute; top: calc(10px + var(--safe-t)); right: calc(12px + var(--safe-r)); display: flex; align-items: center; gap: 8px; }
+.rbtn { position: relative; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--glass); border: 1px solid var(--edge); box-shadow: var(--shadow-sm), var(--inner-glow); color: var(--text-strong); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); transition: transform .12s, background .12s, box-shadow .2s; }
+.rbtn:hover { background: var(--glass-strong); transform: translateY(-1px); box-shadow: var(--shadow-sm), var(--inner-glow), 0 0 12px var(--gold-glow-soft); }
+.rbtn .icon { width: 20px; height: 20px; }
+.rbtn.on { color: var(--gold-hi); border-color: var(--edge-strong); box-shadow: var(--glow-active); }
+#speedBtn .mult { position: absolute; right: -4px; bottom: -4px; min-width: 20px; padding: 1px 4px; border-radius: 8px; background: var(--btn-gold); color: var(--ink-dark); font: 700 10.5px/1.2 var(--font-display); opacity: 0; transform: scale(.8); transition: opacity .15s, transform .15s; pointer-events: none; }
+#speedBtn.fast .mult, #speedBtn:hover .mult, #speedBtn:focus-visible .mult { opacity: 1; transform: none; }
+#speedBtn.fast { color: var(--gold-hi); border-color: var(--edge-strong); }
+#chips .pill { height: 42px; padding: 0 14px 0 11px; display: inline-flex; align-items: center; gap: 6px; font: 600 15px var(--font-display); border-color: var(--edge); }
+#chips .pill .icon { width: 20px; height: 20px; }
+#obj { position: absolute; top: calc(62px + var(--safe-t)); right: calc(12px + var(--safe-r)); padding: 10px 14px 12px; width: 268px; }
 #obj h3 { margin: 0 0 2px; font-size: 15px; color: var(--gold); }
 #obj .pct { font-size: 12px; color: var(--text-soft); margin-bottom: 6px; }
 #obj .pbar { height: 6px; border-radius: 6px; background: var(--glass-sunk); overflow: hidden; margin-bottom: 6px; }
@@ -437,7 +449,11 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, summary:foc
   #res .res-row .val small { font-size: 11px; }
   #res .res-row .rate { grid-column: 2; min-width: 0; text-align: left; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; }
   #res .res-row .bar { left: 10px; right: 10px; bottom: 3px; height: 2px; }
-  #obj { top: calc(6px + var(--safe-t) + 46px); left: calc(6px + var(--safe-l)); right: calc(6px + var(--safe-r)); width: auto; padding: 5px 8px; display: grid; grid-template-columns: 1fr auto; column-gap: 8px; align-items: center; }
+  #chips { top: calc(52px + var(--safe-t)); right: calc(6px + var(--safe-r)); gap: 5px; }
+  #chips .rbtn { width: 36px; height: 36px; }
+  #chips .rbtn .icon { width: 17px; height: 17px; }
+  #chips .pill { height: 36px; padding: 0 10px 0 8px; font-size: 13.5px; }
+  #obj { top: calc(94px + var(--safe-t)); left: calc(6px + var(--safe-l)); right: calc(6px + var(--safe-r)); width: auto; padding: 5px 8px; display: grid; grid-template-columns: 1fr auto; column-gap: 8px; align-items: center; }
   #obj > * { grid-column: 1 / -1; }
   #obj h3, #obj .pct { display: none; }
   #obj.expanded .pct { display: block; grid-row: 3; margin: 4px 0 0; }
@@ -483,7 +499,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, summary:foc
   #hint { max-width: min(520px, calc(100vw - 20px)); }
 }
 @media (max-height: 500px) and (min-width: 600px) {
-  #obj { right: auto; width: min(460px, 58vw); }
+  #obj { top: calc(52px + var(--safe-t)); right: auto; width: min(460px, 58vw); }
 }
 .chip .icon { width: 15px; height: 15px; }
 

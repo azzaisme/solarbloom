@@ -142,6 +142,11 @@ export class Hud {
       <div id="logo" role="img" aria-label="Solarbloom">${LOGO_MARK}<span class="wm">Solarbloom</span></div>
       <div id="res" role="group" aria-label="Resources">${rows}</div>
       <div id="resInfo" class="panel" role="status" hidden></div>
+      <div id="chips" role="toolbar" aria-label="Game controls">
+        <button class="rbtn" id="pauseBtn" aria-label="Pause" title="Pause (P)">${ICONS.pause}</button>
+        <button class="rbtn" id="speedBtn" aria-label="Game speed: 1×" title="Game speed: 1×">${ICONS.fastForward}<span class="mult">1×</span></button>
+        <button class="rbtn" id="setBtn" aria-label="Settings" title="Settings">${ICONS.settings}</button>
+      </div>
       <div id="obj" class="panel">
         <h3 id="objTitle">Wake the fountain</h3>
         <div class="pct" id="objPct">0% restored</div>
@@ -151,11 +156,8 @@ export class Hud {
         <div id="objAct"></div>
         <button id="coreBtn">✨ Awaken the Core</button>
         <div class="tools">
-          <button class="chip" id="pauseBtn" aria-label="Pause">${ICONS.pause}<span class="lbl"> Pause</span></button>
-          <button class="chip" id="speedBtn" aria-label="Game speed">1×</button>
           <button class="chip" id="catBtn" aria-label="Lucky Cat discoveries" hidden>🐱 <span id="catCount">0</span></button>
           <button class="chip" id="pawBtn" aria-label="Paw prints: show where a cat is hiding" title="Paw prints: a cat is hiding nearby. Tap to look." hidden>🐾 <span id="pawCount">0</span></button>
-          <button class="chip" id="setBtn" aria-label="Settings">⚙️<span class="lbl"> Settings</span></button>
           <button class="chip" id="objToggle" aria-label="Toggle objective list">📋</button>
         </div>
       </div>
@@ -219,7 +221,11 @@ export class Hud {
     $(r, '#setBtn').addEventListener('click', () => this.openSettings(true));
     $(r, '#speedBtn').addEventListener('click', () => {
       const sp = this.cb.cycleSpeed();
-      $(r, '#speedBtn').textContent = `${sp}×`;
+      const b = $(r, '#speedBtn');
+      $(b, '.mult').textContent = `${sp}×`;
+      b.classList.toggle('fast', sp !== 1);
+      b.setAttribute('aria-label', `Game speed: ${sp}×`);
+      b.title = `Game speed: ${sp}×`;
     });
     $(r, '#catBtn').addEventListener('click', () => this.openSettings(true, true));
     $(r, '#pawBtn').addEventListener('click', () => this.cb.findCat());
@@ -827,7 +833,11 @@ export class Hud {
   }
 
   setPaused(p: boolean) {
-    this.set('pause', $(this.root, '#pauseBtn'), 'html', p ? `${ICONS.play}<span class="lbl"> Resume</span>` : `${ICONS.pause}<span class="lbl"> Pause</span>`);
+    const b = $(this.root, '#pauseBtn');
+    this.set('pause', b, 'html', p ? ICONS.play : ICONS.pause);
+    b.classList.toggle('on', p);
+    b.setAttribute('aria-label', p ? 'Resume' : 'Pause');
+    b.title = p ? 'Resume (P)' : 'Pause (P)';
   }
 
   setDebug(text: string | null) {
