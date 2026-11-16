@@ -27,6 +27,7 @@ import { DroneVisuals } from '../rendering/DroneVisuals';
 import { ChunkRenderer } from '../rendering/ChunkRenderer';
 import { TransitionRenderer } from '../rendering/transitions/TransitionRenderer';
 import { CultivatorVisuals } from '../rendering/CultivatorVisuals';
+import { ProgressRings } from '../rendering/transitions/ProgressRings';
 import { areaPanelHtml } from '../ui/AreaPanel';
 import { upgradeHighlights } from '../gameplay/UpgradeEffects';
 import { GridRenderer } from '../rendering/GridRenderer';
@@ -86,6 +87,9 @@ export class Game {
   readonly transitions: TransitionRenderer;
   /** Look 6.9: Cultivator tillers. */
   readonly tillers: CultivatorVisuals;
+  /** Look 6.10: progress rings on tiles mid-process (near zoom). */
+  readonly rings: ProgressRings;
+  private stageSoundAt = 0;
   readonly machines: MachineVisuals;
   readonly drones: DroneVisuals;
   readonly cat: CatVisuals;
@@ -186,6 +190,7 @@ export class Game {
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
+    this.rings = new ProgressRings(this.sim, this.scene.world);
     this.birds = new Birds(this.scene.world);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
     this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
@@ -764,20 +769,47 @@ export class Game {
     this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${action ? '<br>' + action : ''}`);
   }
 
+  /** Look 6.10: the name of the stage a tile's transition is in (inspect panel). */
+  private stageName(t: TileData): string | undefined {
+    const tr = t.tr;
+    if (!tr) return undefined;
+    const p = this.transitions.progress(t);
+    if (p >= 1) return undefined;
+    const S = TUNING.transitions.restoreStages;
+    switch (tr.k) {
+      case 'restore':
+        return p < S.fracture[1] ? '💥 Slab fracturing' : p < S.heave[1] ? '🪨 Roots heaving the slab' : p < S.crumble[1] ? '🟫 Crumbling into soil' : p < S.knit[0] ? '🌱 Seedlings unfurling' : '🌿 Turf knitting';
+      case 'bloom':
+        return '🌸 Growing in';
+      case 'moss':
+        return '🍃 Moss creeping in';
+      case 'soften':
+        return '🧱 Softening';
+      case 'unblock':
+        return '🪨 Crumbling away';
+    }
+  }
+
   private tileDetail(t: TileData): string {
     if (t.blocked) return 'Nothing grows here.';
     const zone = this.sim.production.inPollinatorZone(t);
     switch (t.ground) {
-      case 'polluted':
+      case 'polluted': {
+        const left = this.sim.cultivators.remaining(t);
+        if (left !== undefined) return `🚜 The Cultivator is softening this slab — ${Math.ceil(left)} s to bloom. Tap to knock it along.`;
         return `Pollution ${Math.round(t.pollution)}% — restoring neighbours softens it into moss.`;
+      }
       case 'prepared':
         return zone ? '🌸 Inside a garden zone — may set off a Bloom Chain!' : 'Ready to bloom — cheaper to restore.';
       case 'growing':
-        return 'Almost there…';
+        return `${this.stageName(t) ?? 'Roots are breaking through'} — ${Math.max(1, Math.ceil(t.growthRemainingSec))} s`;
       case 'restored': {
         const rate = this.sim.production.tileBiomassRate(t);
         const lush = (t.lushUntil ?? 0) > this.sim.time ? ` · 💧 lush ${Math.ceil(t.lushUntil! - this.sim.time)} s` : '';
-        return `+${rate.toFixed(2)}🌿/s${zone ? ' (garden ×2)' : ''}${lush}${t.bloom >= TUNING.restore.maxBloom ? ' · radiant ✦' : t.bloom >= TUNING.restore.fullBloom ? ' · full bloom ✓' : ''}`;
+        const st = this.stageName(t);
+        const left = t.tr ? Math.ceil(t.tr.t0 + t.tr.d - this.sim.time) : 0;
+        const proc = st && left > 0 ? ` · ${st} (${left} s)` : '';
+        return `+${rate.toFixed(2)}🌿/s${zone ? ' (garden ×2)' : ''}${lush}${proc}${t.bloom >= TUNING.restore.maxBloom ? ' · radiant ✦' : t.bloom >= TUNING.restore.fullBloom ? ' · full bloom ✓' : ''}`;
       }
     }
   }
@@ -1291,6 +1323,32 @@ export class Game {
       if (this.selected) this.inspectTimer = 0;
     });
     b.on('tile.softened', ({ tile }) => this.tileFx.flash(tile, '#7fcf5a', 0.22, 0.5, 0.1));
+    // Look 6.10: a tap on a tile mid-process: a satisfying knock (crack burst, a tiny shake, a crack sound).
+    b.on('tile.knocked', ({ tile }) => {
+      const p = this.tileVec(tile);
+      this.vfx.burst(p, 7, { up: 1.2, speed: 1.2, size: 0.04, life: 0.5, hex: '#b9ad97' });
+      this.vfx.ring(p, '#c8ffa8', 0.6, 0.25);
+      if (!this.settings.reducedMotion) this.camera.shake(0.02);
+      this.sfx.stage('crack');
+    });
+    // Look 6.10: each restore stage has its own sound as it plays (rate-limited, so chains layer, never roar).
+    const stageSounds = (tile: TileData) => {
+      const tr = tile.tr;
+      if (!tr || tr.k !== 'restore' || Math.abs(tr.t0 - s.time) > 0.3) return;
+      const now = performance.now();
+      if (now - this.stageSoundAt < 150) return;
+      this.stageSoundAt = now;
+      const S = TUNING.transitions.restoreStages;
+      const at = (share: number, kind: Parameters<typeof this.sfx.stage>[0]) => this.tweens.add(0.01, () => {}, { delay: Math.max(0, tr.t0 + tr.d * share - s.time), done: () => this.sfx.stage(kind) });
+      at(0, 'crack');
+      at(S.heave[0] + 0.02, 'grind');
+      at(S.heave[0] + 0.1, 'creak');
+      at(S.crumble[0] + 0.05, 'thud');
+      at(S.sprout[0] + 0.02, 'sprout');
+      at(S.knit[0] + 0.05, 'rustle');
+    };
+    b.on('tile.restoring', ({ tile }) => stageSounds(tile));
+    b.on('tile.restored', ({ tile, source }) => source !== 'pulse' && source !== 'broad' && stageSounds(tile));
     b.on('tile.prepared', ({ tile }) => {
       this.grid.refresh(tile, true);
       this.tileFx.flash(tile, '#6cc24a', 0.35, 0.7, 0.1);
@@ -2195,6 +2253,12 @@ export class Game {
     if (rect) this.chunks.update(dt, rect, this.camera.target, this.camera.zoom);
     this.machines.update(dt, rect);
     this.tillers.update(this.paused || this.hiddenPause ? 0 : dt);
+    this.rings.update(this.camera.zoom, this.camera.target);
+    // Look 6.10: a working tiller near the view hums.
+    if (!this.paused && this.camera.zoom > 0.9) {
+      const f = this.camera.target;
+      if (this.sim.cultivators.working().some((t) => Math.abs(t.x - f.x) < 10 && Math.abs(t.z - f.z) < 8)) this.sfx.stage('hum');
+    }
     this.drones.update(this.paused || this.hiddenPause ? 0 : dt); // drone personality freezes with the game
     this.cat.update(dt);
     // Phase 5 E16: fauna by unlock, capped per quality tier ("Fewer particles" = low).
@@ -2285,7 +2349,7 @@ export function offlineToast(r: OfflineReport, title: string): string {
   const lost = (['energy', 'water', 'biomass'] as const).filter((k) => r.lost[k].gte(1)).map((k) => `${fmt(r.lost[k])}${icons[k]}`);
   const lines = [`🌙 ${title} (${away})`];
   const capped = r.away > r.seconds + 1 ? ` · counted up to ${Math.round(r.seconds / 3600)} h` : '';
-  lines.push(`<small>Your garden kept growing at half pace${capped}: ${got.join(' ') || 'nothing new'}${r.droneJobs ? ` · drones restored ${r.restored} and nurtured ${r.grown} tiles` : ''}${lost.length ? ` · ${lost.join(' ')} didn't fit in storage` : ''}</small>`);
+  lines.push(`<small>Your garden kept growing at half pace${capped}: ${got.join(' ') || 'nothing new'}${r.droneJobs ? ` · drones restored ${r.restored} and nurtured ${r.grown} tiles` : ''}${r.cultivated ? ` · your cultivators broke up ${r.cultivated} slab${r.cultivated === 1 ? '' : 's'}` : ''}${lost.length ? ` · ${lost.join(' ')} didn't fit in storage` : ''}</small>`);
   return lines.join('');
 }
 

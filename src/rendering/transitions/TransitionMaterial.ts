@@ -265,7 +265,7 @@ void getAlbedo() {
 		col = mix(col, to, (1.0 - knit) * step(0.001, kn));
 		if (kn >= 1.0) col = to;
 		// the first fracture flashes green-gold (life underneath)
-		glow = (1.0 - smoothstep(0.0, 1.0, fr)) * step(0.0001, p) * inCrack * 1.6 + inCrack * (1.0 - cr) * 0.25;
+		glow = (1.0 - smoothstep(0.0, 1.0, fr)) * step(0.0001, p) * inCrack * 1.6 + inCrack * (1.0 - smoothstep(0.0, 0.3, cr)) * 0.06;
 	} else if (state < 0.5 || state > 0.5 && state < 1.5) {
 		// ── concrete (polluted) and moss (prepared): grime, cracks, moss ──
 		float g = pol / 100.0;
