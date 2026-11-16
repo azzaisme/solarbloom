@@ -48,10 +48,10 @@ interface MachineView {
   wispAt?: number;
 }
 
-const orbOn = () => mat('#b6ffe0', { emissive: '#7cf7c8', emissiveIntensity: 1.6 });
-const orbOff = () => mat('#3f6b4a', { gloss: 0.6 });
+const orbOn = () => mat(PALETTE.core.orbOn, { emissive: PALETTE.core.glow, emissiveIntensity: 1.6 });
+const orbOff = () => mat(PALETTE.core.orbOff, { gloss: 0.6 });
 const panelMat = () => mat(PALETTE.panel, { gloss: 0.85, metal: 0.2 });
-const panelBoost = () => mat(PALETTE.panelGlint, { gloss: 0.9, emissive: '#ffd56a', emissiveIntensity: 0.6 });
+const panelBoost = () => mat(PALETTE.panelGlint, { gloss: 0.9, emissive: PALETTE.glow.panel, emissiveIntensity: 0.6 });
 
 /** Procedural low-poly machine models. Visual upgrades (bigger arrays, antennas, flowers) follow upgrade levels. */
 export class MachineVisuals {
@@ -182,7 +182,7 @@ export class MachineVisuals {
   private tier2(v: MachineView) {
     const s = v.m.size;
     v.body.setLocalScale(1.16, 1.16, 1.16);
-    const gem = { solar: '#ffd34d', condenser: '#6fe3ff', pollinator: '#ff9ccf', droneHub: '#8ff0c2' }[v.m.type as string] ?? '#ffd34d';
+    const gem = PALETTE.glow.gem[v.m.type as string] ?? PALETTE.glow.gem.solar;
     shape(v.root, 'cylinder', mat(PALETTE.shell), { pos: [0, 0.03, 0], scale: [s * 0.98, 0.06, s * 0.98], shadow: true });
     shape(v.root, 'torus', mat(PALETTE.gold, { metal: 0.6, gloss: 0.75 }), { pos: [0, 0.06, 0], scale: [s * 1.0, 0.06, s * 1.0] });
     // Family touches that make the three-in-one readable.
@@ -200,12 +200,12 @@ export class MachineVisuals {
     } else if (v.m.type === 'condenser') {
       for (const side of [-1, 1]) {
         shape(v.body, 'cylinder', mat(PALETTE.white), { pos: [side * 0.36, 0.22, side * -0.18], scale: [0.2, 0.36, 0.2], shadow: true });
-        shape(v.body, 'sphere', mat(PALETTE.water, { emissive: '#2aa6d6', emissiveIntensity: 0.5, gloss: 0.9 }), { pos: [side * 0.36, 0.44, side * -0.18], scale: 0.16 });
+        shape(v.body, 'sphere', mat(PALETTE.water, { emissive: PALETTE.aqua.deep, emissiveIntensity: 0.5, gloss: 0.9 }), { pos: [side * 0.36, 0.44, side * -0.18], scale: 0.16 });
       }
     } else if (v.m.type === 'pollinator') {
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2;
-        shape(v.body, 'sphere', mat(i % 2 ? '#ffb3d9' : '#fff2a8'), { pos: [Math.cos(a) * 0.42, 0.16, Math.sin(a) * 0.42], scale: [0.16, 0.1, 0.16] });
+        shape(v.body, 'sphere', mat(i % 2 ? PALETTE.flowers.pastelPink : PALETTE.flowers.pastelYellow), { pos: [Math.cos(a) * 0.42, 0.16, Math.sin(a) * 0.42], scale: [0.16, 0.1, 0.16] });
       }
     } else if (v.m.type === 'droneHub') {
       shape(v.body, 'cylinder', mat(PALETTE.white), { pos: [0.6, 0.5, 0.6], scale: [0.26, 0.7, 0.26], shadow: true });
@@ -235,8 +235,8 @@ export class MachineVisuals {
     if (stage < 3) {
       const sc = group(v.root, 'scaffold');
       const h = stage === 1 ? 0.9 : 1.8;
-      for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) shape(sc, 'box', mat('#c9a77a'), { pos: [x * s * 0.42, h / 2, z * s * 0.42], scale: [0.06, h, 0.06], shadow: true });
-      for (const y of stage === 1 ? [0.5] : [0.6, 1.4]) for (const [x, z, rx] of [[0, -1, 0], [0, 1, 0], [-1, 0, 90], [1, 0, 90]]) shape(sc, 'box', mat('#d8b98d'), { pos: [x * s * 0.42, y, z * s * 0.42], scale: [s * 0.84, 0.05, 0.05], rot: [0, rx, 0] });
+      for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) shape(sc, 'box', mat(PALETTE.wood.light), { pos: [x * s * 0.42, h / 2, z * s * 0.42], scale: [0.06, h, 0.06], shadow: true });
+      for (const y of stage === 1 ? [0.5] : [0.6, 1.4]) for (const [x, z, rx] of [[0, -1, 0], [0, 1, 0], [-1, 0, 90], [1, 0, 90]]) shape(sc, 'box', mat(PALETTE.wood.pale), { pos: [x * s * 0.42, y, z * s * 0.42], scale: [s * 0.84, 0.05, 0.05], rot: [0, rx, 0] });
       sv.scaffold = sc;
       if (stage === 1) return; // just the foundation
       b.setLocalScale(0.62, 0.62, 0.62);
@@ -247,8 +247,8 @@ export class MachineVisuals {
       for (const side of [-1, 1]) shape(b, 'sphere', mat(PALETTE.leafFin), { pos: [side * 0.32, 0.7, 0], scale: [0.5, 0.08, 0.24], rot: [0, 0, side * -25], shadow: true });
       const head = group(b, 'head', [0, 1.65, 0]);
       head.setLocalEulerAngles(-35, 45, 0);
-      shape(head, 'cylinder', mat(PALETTE.gold, { metal: 0.5, gloss: 0.8, emissive: '#ffcf4a', emissiveIntensity: 0.25 }), { scale: [0.7, 0.14, 0.7], shadow: true });
-      shape(head, 'cylinder', mat('#8a5a1c'), { pos: [0, 0.08, 0], scale: [0.5, 0.04, 0.5] });
+      shape(head, 'cylinder', mat(PALETTE.gold, { metal: 0.5, gloss: 0.8, emissive: PALETTE.trim.amber, emissiveIntensity: 0.25 }), { scale: [0.7, 0.14, 0.7], shadow: true });
+      shape(head, 'cylinder', mat(PALETTE.metal.bronze), { pos: [0, 0.08, 0], scale: [0.5, 0.04, 0.5] });
       for (let i = 0; i < 10; i++) {
         const a = (i / 10) * 360;
         const pet = group(head, 'petal');
@@ -263,7 +263,7 @@ export class MachineVisuals {
       shape(b, 'cylinder', mat(PALETTE.white), { pos: [0, 0.55, 0], scale: [1.0, 0.9, 1.0], shadow: true });
       shape(b, 'torus', mat(PALETTE.gold, { metal: 0.6, gloss: 0.75 }), { pos: [0, 1.0, 0], scale: [1.08, 0.18, 1.08] });
       shape(b, 'sphere', mat(PALETTE.glass, { opacity: 0.4, gloss: 0.95 }), { pos: [0, 1.45, 0], scale: 1.0 });
-      const water = shape(b, 'sphere', mat(PALETTE.water, { emissive: '#2aa6d6', emissiveIntensity: 0.6, gloss: 0.9 }), { pos: [0, 1.4, 0], scale: 0.62 });
+      const water = shape(b, 'sphere', mat(PALETTE.water, { emissive: PALETTE.aqua.deep, emissiveIntensity: 0.6, gloss: 0.9 }), { pos: [0, 1.4, 0], scale: 0.62 });
       sv.bob.push(water);
       for (let i = 0; i < 3; i++) {
         const r = shape(b, 'torus', mat(PALETTE.water, { emissive: PALETTE.water, emissiveIntensity: 1.1 }), { pos: [0, 0.4 + i * 0.32, 0], scale: [1.35 + i * 0.1, 0.05, 1.35 + i * 0.1] });
@@ -280,12 +280,12 @@ export class MachineVisuals {
       b.addChild(tree);
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2;
-        const orb = shape(b, 'sphere', mat('#fff3b0', { emissive: '#ffe27a', emissiveIntensity: 1.4 }), { pos: [Math.cos(a) * 1.2, 1.6 + (i % 3) * 0.5, Math.sin(a) * 1.2], scale: 0.1 });
+        const orb = shape(b, 'sphere', mat(PALETTE.glow.sun, { emissive: PALETTE.glow.amber, emissiveIntensity: 1.4 }), { pos: [Math.cos(a) * 1.2, 1.6 + (i % 3) * 0.5, Math.sin(a) * 1.2], scale: 0.1 });
         sv.bob.push(orb);
       }
       for (let i = 0; i < 12; i++) {
         const a = (i / 12) * Math.PI * 2;
-        shape(b, 'sphere', mat(i % 2 ? '#ffb3d9' : '#fff2a8'), { pos: [Math.cos(a) * 1.25, 0.2, Math.sin(a) * 1.25], scale: [0.16, 0.1, 0.16] });
+        shape(b, 'sphere', mat(i % 2 ? PALETTE.flowers.pastelPink : PALETTE.flowers.pastelYellow), { pos: [Math.cos(a) * 1.25, 0.2, Math.sin(a) * 1.25], scale: [0.16, 0.1, 0.16] });
       }
     } else if (m.type === 'droneHub') {
       // Drone Megahub: a cream dome hangar with a cyan landing ring, a gold mast and drones parked on the rim.
@@ -444,7 +444,7 @@ export class MachineVisuals {
     shape(b, 'cylinder', mat(PALETTE.white), { pos: [0, 0.32, 0], scale: [0.5, 0.36, 0.5], shadow: true });
     shape(b, 'torus', mat(PALETTE.gold, { metal: 0.6, gloss: 0.7 }), { pos: [0, 0.5, 0], scale: [0.85, 0.3, 0.85] });
     shape(b, 'sphere', mat(PALETTE.glass, { opacity: 0.45, gloss: 0.95 }), { pos: [0, 0.74, 0], scale: 0.5 });
-    const water = shape(b, 'sphere', mat(PALETTE.water, { emissive: '#2aa6d6', emissiveIntensity: 0.4, gloss: 0.9 }), { pos: [0, 0.7, 0], scale: 0.3 });
+    const water = shape(b, 'sphere', mat(PALETTE.water, { emissive: PALETTE.aqua.deep, emissiveIntensity: 0.4, gloss: 0.9 }), { pos: [0, 0.7, 0], scale: 0.3 });
     v.bob.push(water);
     v.light = shape(b, 'sphere', mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1.5 }), { pos: [0, 0.17, 0.33], scale: 0.05 });
     for (let i = 0; i < 3; i++) {
@@ -521,7 +521,7 @@ export class MachineVisuals {
       [-0.42, 0.1, -0.15, 0.9, PALETTE.shrub[2]],
       [0.1, 0.05, -0.48, 0.8, PALETTE.shrub[1]],
       [-0.2, 0.0, 0.45, 0.8, PALETTE.shrub[0]],
-      [0, 0.75, 0, 0.75, '#5fc25a'],
+      [0, 0.75, 0, 0.75, PALETTE.leaf.bright],
     ];
     for (const [x, y, z, sz, c] of leaves) shape(canopy, 'sphere', mat(c), { pos: [x, y, z], scale: [sz, sz * 0.78, sz], shadow: true });
     for (let i = 0; i < 6; i++) {
@@ -533,10 +533,10 @@ export class MachineVisuals {
     v.orbs = [];
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2 + 0.3;
-      const o = shape(canopy, 'sphere', mat('#3f6b4a', { gloss: 0.6 }), { pos: [Math.cos(a) * 0.55, -0.22 + (i % 2) * 0.12, Math.sin(a) * 0.55], scale: 0.12 });
+      const o = shape(canopy, 'sphere', mat(PALETTE.core.orbOff, { gloss: 0.6 }), { pos: [Math.cos(a) * 0.55, -0.22 + (i % 2) * 0.12, Math.sin(a) * 0.55], scale: 0.12 });
       v.orbs.push(o);
     }
-    v.light = shape(b, 'sphere', mat('#7cf7c8', { emissive: '#7cf7c8', emissiveIntensity: 1.2 }), { pos: [0, 0.24, 0.72], scale: 0.07 });
+    v.light = shape(b, 'sphere', mat(PALETTE.core.glow, { emissive: PALETTE.core.glow, emissiveIntensity: 1.2 }), { pos: [0, 0.24, 0.72], scale: 0.07 });
   }
 
   /** Bloom Pulse: canopy swells and the orbs flash. */
@@ -554,7 +554,7 @@ export class MachineVisuals {
   private core(v: MachineView) {
     const b = v.body;
     v.coreBase = uniqueMat(PALETTE.coreDormant, { gloss: 0.3 });
-    v.coreMat = uniqueMat('#8a9097', { gloss: 0.8, emissive: '#000000', emissiveIntensity: 1 });
+    v.coreMat = uniqueMat(PALETTE.core.steel, { gloss: 0.8, emissive: PALETTE.pure.black, emissiveIntensity: 1 });
     shape(b, 'box', v.coreBase, { pos: [0, 0.1, 0], scale: [1.7, 0.2, 1.7], shadow: true });
     shape(b, 'box', v.coreBase, { pos: [0, 0.32, 0], scale: [1.25, 0.24, 1.25], shadow: true });
     const ob = shape(b, 'box', v.coreBase, { pos: [0, 0.95, 0], scale: [0.42, 1.1, 0.42], rot: [0, 45, 0], shadow: true });
@@ -581,11 +581,11 @@ export class MachineVisuals {
   /** The park's dry fountain: a cracked stone basin that fills and sprays when it wakes. */
   private fountain(v: MachineView) {
     const b = v.body;
-    v.coreBase = uniqueMat('#8f8b82', { gloss: 0.25 });
-    v.coreMat = uniqueMat('#6e7a80', { gloss: 0.8, emissive: '#000000', emissiveIntensity: 1 });
+    v.coreBase = uniqueMat(PALETTE.core.base, { gloss: 0.25 });
+    v.coreMat = uniqueMat(PALETTE.core.slate, { gloss: 0.8, emissive: PALETTE.pure.black, emissiveIntensity: 1 });
     shape(b, 'cylinder', v.coreBase, { pos: [0, 0.16, 0], scale: [1.8, 0.32, 1.8], shadow: true });
     shape(b, 'torus', v.coreBase, { pos: [0, 0.32, 0], scale: [1.8, 0.16, 1.8] });
-    shape(b, 'cylinder', mat('#4a463f'), { pos: [0, 0.31, 0], scale: [1.6, 0.02, 1.6] });
+    shape(b, 'cylinder', mat(PALETTE.core.deck), { pos: [0, 0.31, 0], scale: [1.6, 0.02, 1.6] });
     const water = shape(b, 'cylinder', mat(PALETTE.water, { gloss: 0.9, opacity: 0.85 }), { pos: [0, 0.2, 0], scale: [1.58, 0.02, 1.58] });
     water.enabled = false;
     v.water = water;
@@ -606,12 +606,12 @@ export class MachineVisuals {
   /** The Reservoir's Old Cistern: a big round tank, dry and rusty until it wakes. */
   private cistern(v: MachineView) {
     const b = v.body;
-    v.coreBase = uniqueMat('#8a8478', { gloss: 0.25 });
-    v.coreMat = uniqueMat('#6e7a80', { gloss: 0.8, emissive: '#000000', emissiveIntensity: 1 });
+    v.coreBase = uniqueMat(PALETTE.core.baseWarm, { gloss: 0.25 });
+    v.coreMat = uniqueMat(PALETTE.core.slate, { gloss: 0.8, emissive: PALETTE.pure.black, emissiveIntensity: 1 });
     shape(b, 'cylinder', v.coreBase, { pos: [0, 0.45, 0], scale: [1.7, 0.9, 1.7], shadow: true });
     shape(b, 'torus', v.coreBase, { pos: [0, 0.9, 0], scale: [1.72, 0.14, 1.72] });
-    for (let i = 0; i < 3; i++) shape(b, 'torus', mat('#7a6553'), { pos: [0, 0.2 + i * 0.25, 0], scale: [1.74, 0.05, 1.74] });
-    shape(b, 'cylinder', mat('#3d3a35'), { pos: [0, 0.88, 0], scale: [1.5, 0.02, 1.5] });
+    for (let i = 0; i < 3; i++) shape(b, 'torus', mat(PALETTE.core.ring), { pos: [0, 0.2 + i * 0.25, 0], scale: [1.74, 0.05, 1.74] });
+    shape(b, 'cylinder', mat(PALETTE.metal.drain), { pos: [0, 0.88, 0], scale: [1.5, 0.02, 1.5] });
     const water = shape(b, 'cylinder', mat(PALETTE.water, { gloss: 0.9, opacity: 0.85 }), { pos: [0, 0.3, 0], scale: [1.48, 0.02, 1.48] });
     water.enabled = false;
     v.water = water;
@@ -634,9 +634,9 @@ export class MachineVisuals {
   /** The Canopy's Elder Tree: bare and dormant, with a charge ring of seed-lights around its roots. */
   private elderTree(v: MachineView) {
     const b = v.body;
-    v.coreBase = uniqueMat('#7d6a58', { gloss: 0.2 });
-    v.coreMat = uniqueMat('#55604f', { gloss: 0.5, emissive: '#000000', emissiveIntensity: 1 });
-    shape(b, 'cylinder', mat('#6b6156'), { pos: [0, 0.08, 0], scale: [1.85, 0.16, 1.85], shadow: true });
+    v.coreBase = uniqueMat(PALETTE.core.baseEarth, { gloss: 0.2 });
+    v.coreMat = uniqueMat(PALETTE.core.moss, { gloss: 0.5, emissive: PALETTE.pure.black, emissiveIntensity: 1 });
+    shape(b, 'cylinder', mat(PALETTE.core.plinth), { pos: [0, 0.08, 0], scale: [1.85, 0.16, 1.85], shadow: true });
     for (let i = 0; i < 4; i++)
       shape(b, 'cylinder', v.coreBase, { pos: [Math.sin(i * 1.3) * 0.08, 0.45 + i * 0.5, Math.cos(i * 1.3) * 0.08], scale: [0.62 - i * 0.1, 0.56, 0.62 - i * 0.1], rot: [5 - i * 3, i * 25, 6 - i * 4], shadow: true });
     for (let r = 0; r < 5; r++) {
@@ -659,7 +659,7 @@ export class MachineVisuals {
       [-0.75, 0.1, -0.3, 1.6, PALETTE.shrub[2]],
       [0.2, 0.05, -0.85, 1.4, PALETTE.shrub[1]],
       [-0.35, 0.0, 0.8, 1.4, PALETTE.shrub[0]],
-      [0, 1.1, 0, 1.3, '#5fc25a'],
+      [0, 1.1, 0, 1.3, PALETTE.leaf.bright],
     ];
     for (const [x, y, z, sz, c] of leaves) shape(canopy, 'sphere', mat(c), { pos: [x, y, z], scale: [sz, sz * 0.75, sz], shadow: true });
     for (let i = 0; i < 10; i++) {
@@ -687,12 +687,12 @@ export class MachineVisuals {
     const b = v.body;
     shape(b, 'cylinder', mat(PALETTE.shell), { pos: [0, 0.14, 0], scale: [0.86, 0.28, 0.86], shadow: true });
     shape(b, 'torus', mat(PALETTE.white), { pos: [0, 0.28, 0], scale: [0.86, 0.1, 0.86] });
-    v.water = shape(b, 'cylinder', mat(PALETTE.water, { gloss: 0.9, emissive: '#1a6f8a', emissiveIntensity: 0.3 }), { pos: [0, 0.12, 0], scale: [0.74, 0.02, 0.74] });
+    v.water = shape(b, 'cylinder', mat(PALETTE.water, { gloss: 0.9, emissive: PALETTE.aqua.abyss, emissiveIntensity: 0.3 }), { pos: [0, 0.12, 0], scale: [0.74, 0.02, 0.74] });
     for (let i = 0; i < 3; i++) {
       const a = i * 2.1;
-      v.bob.push(shape(b, 'cylinder', mat('#5fb24a'), { pos: [Math.cos(a) * 0.2, 0.26, Math.sin(a) * 0.2], scale: [0.18, 0.015, 0.18] }));
+      v.bob.push(shape(b, 'cylinder', mat(PALETTE.leaf.mid), { pos: [Math.cos(a) * 0.2, 0.26, Math.sin(a) * 0.2], scale: [0.18, 0.015, 0.18] }));
     }
-    shape(b, 'sphere', mat('#ff9fd0'), { pos: [0.18, 0.3, 0.05], scale: 0.07 });
+    shape(b, 'sphere', mat(PALETTE.flowers.blush), { pos: [0.18, 0.3, 0.05], scale: 0.07 });
     // little fountain spout
     shape(b, 'cylinder', mat(PALETTE.white), { pos: [0, 0.38, 0], scale: [0.08, 0.3, 0.08] });
     v.light = shape(b, 'sphere', mat(PALETTE.water, { emissive: PALETTE.water, emissiveIntensity: 1.4 }), { pos: [0, 0.56, 0], scale: 0.07 });
@@ -703,9 +703,9 @@ export class MachineVisuals {
     const b = v.body;
     shape(b, 'cylinder', mat(PALETTE.shell), { pos: [0, 0.06, 0], scale: [0.6, 0.12, 0.6], shadow: true });
     shape(b, 'cylinder', mat(PALETTE.white), { pos: [0, 0.6, 0], scale: [0.09, 1.0, 0.09], shadow: true });
-    shape(b, 'torus', mat('#5fb24a'), { pos: [0, 0.95, 0], scale: [0.42, 0.08, 0.42] });
+    shape(b, 'torus', mat(PALETTE.leaf.mid), { pos: [0, 0.95, 0], scale: [0.42, 0.08, 0.42] });
     shape(b, 'cone', mat(PALETTE.white), { pos: [0, 1.12, 0], scale: [0.3, 0.16, 0.3] });
-    v.light = shape(b, 'sphere', mat('#9ff7ff', { emissive: '#9ff7ff', emissiveIntensity: 1.6 }), { pos: [0, 1.28, 0], scale: 0.1 });
+    v.light = shape(b, 'sphere', mat(PALETTE.glow.cyanPale, { emissive: PALETTE.glow.cyanPale, emissiveIntensity: 1.6 }), { pos: [0, 1.28, 0], scale: 0.1 });
     for (let i = 0; i < 3; i++) {
       const a = i * 2.1;
       v.bob.push(shape(b, 'sphere', mat(PALETTE.flower[i % PALETTE.flower.length]), { pos: [Math.cos(a) * 0.22, 0.16, Math.sin(a) * 0.22], scale: 0.07 }));
@@ -819,7 +819,7 @@ export class MachineVisuals {
         const a = i * 1.05 + 0.4;
         const h = 0.34 + (i % 3) * 0.06;
         shape(ex, 'cylinder', mat(PALETTE.stem), { pos: [Math.cos(a) * 0.3, 0.27 + h / 2, Math.sin(a) * 0.3], scale: [0.02, h, 0.02] });
-        shape(ex, 'sphere', mat(i % 2 ? '#fff6c2' : PALETTE.flower[(i + 2) % 5]), { pos: [Math.cos(a) * 0.3, 0.27 + h, Math.sin(a) * 0.3], scale: [0.13, 0.09, 0.13] });
+        shape(ex, 'sphere', mat(i % 2 ? PALETTE.flowers.radiant[1] : PALETTE.flower[(i + 2) % 5]), { pos: [Math.cos(a) * 0.3, 0.27 + h, Math.sin(a) * 0.3], scale: [0.13, 0.09, 0.13] });
       }
     } else if (v.m.type === 'condenser') {
       // Water Bloom: an extra tank per level and a ring of mist beads.
@@ -827,12 +827,12 @@ export class MachineVisuals {
       for (let i = 0; i < lvl; i++) {
         const a = i * Math.PI + 0.8;
         shape(ex, 'cylinder', mat(PALETTE.white), { pos: [Math.cos(a) * 0.36, 0.22, Math.sin(a) * 0.36], scale: [0.18, 0.3, 0.18], shadow: true });
-        shape(ex, 'sphere', mat(PALETTE.water, { emissive: '#2aa6d6', emissiveIntensity: 0.5, gloss: 0.9 }), { pos: [Math.cos(a) * 0.36, 0.42, Math.sin(a) * 0.36], scale: 0.14 });
+        shape(ex, 'sphere', mat(PALETTE.water, { emissive: PALETTE.aqua.deep, emissiveIntensity: 0.5, gloss: 0.9 }), { pos: [Math.cos(a) * 0.36, 0.42, Math.sin(a) * 0.36], scale: 0.14 });
       }
       if (lvl > 0)
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2;
-          shape(ex, 'sphere', mat('#d8f4ff', { opacity: 0.7 }), { pos: [Math.cos(a) * 0.42, 0.95, Math.sin(a) * 0.42], scale: 0.05 });
+          shape(ex, 'sphere', mat(PALETTE.aqua.mist, { opacity: 0.7 }), { pos: [Math.cos(a) * 0.42, 0.95, Math.sin(a) * 0.42], scale: 0.05 });
         }
     } else if (v.m.type === 'motherTree') {
       // Resonance: a wider canopy and glowing gold lanterns.
@@ -845,12 +845,12 @@ export class MachineVisuals {
         }
         for (let i = 0; i < 3 * lvl; i++) {
           const a = (i / (3 * lvl)) * Math.PI * 2 + 0.5;
-          shape(c, 'sphere', mat('#ffe27a', { emissive: '#ffd34d', emissiveIntensity: 1.2 }), { pos: [Math.cos(a) * 0.95, -0.35, Math.sin(a) * 0.95], scale: 0.09 });
+          shape(c, 'sphere', mat(PALETTE.glow.amber, { emissive: PALETTE.glow.gold, emissiveIntensity: 1.2 }), { pos: [Math.cos(a) * 0.95, -0.35, Math.sin(a) * 0.95], scale: 0.09 });
         }
       }
     } else if (v.m.type === 'relay') {
       const lvl = L('relayLens');
-      for (let i = 0; i < lvl; i++) shape(ex, 'torus', mat('#9ff7ff', { emissive: '#9ff7ff', emissiveIntensity: 0.8, opacity: 0.8 }), { pos: [0, 1.02 + i * 0.12, 0], scale: [0.5 + i * 0.1, 0.05, 0.5 + i * 0.1] });
+      for (let i = 0; i < lvl; i++) shape(ex, 'torus', mat(PALETTE.glow.cyanPale, { emissive: PALETTE.glow.cyanPale, emissiveIntensity: 0.8, opacity: 0.8 }), { pos: [0, 1.02 + i * 0.12, 0], scale: [0.5 + i * 0.1, 0.05, 0.5 + i * 0.1] });
     }
   }
 
@@ -913,7 +913,7 @@ export class MachineVisuals {
       this.tweens.add(instant ? 0.01 : 1.2, (k) => {
         v.coreBase!.diffuse = new pc.Color().lerp(from, to, k);
         v.coreBase!.update();
-        v.coreMat!.diffuse = new pc.Color().lerp(color('#8a9097'), color(PALETTE.coreGlow), k);
+        v.coreMat!.diffuse = new pc.Color().lerp(color(PALETTE.core.steel), color(PALETTE.coreGlow), k);
         v.coreMat!.emissive = new pc.Color().lerp(new pc.Color(0, 0, 0), color(PALETTE.coreGlow), k);
         v.coreMat!.emissiveIntensity = 1.2;
         v.coreMat!.update();
