@@ -4,7 +4,8 @@ import * as pc from 'playcanvas';
  * Look 1.3: a warm rim on silhouettes. A directional back light barely shows in this high camera view (the faces
  * it lights point away from the camera), so the rim is a view-dependent term added to every lit standard
  * material's emission: strongest where a surface turns edge-on to the camera, and on the side facing the sun.
- * It is tinted by the surface's own albedo, so it reads as light catching the edge, not as an outline.
+ * It is tinted partly by the surface's own albedo and partly by the rim's gold (Phase 6), so it reads as warm
+ * light catching the edge, not as an outline.
  *
  * Unlit materials (glows, overlays, fog) and the shadow and depth passes don't define LIT_NEEDS_NORMAL, so they
  * keep the stock chunk. WebGPU (WGSL) keeps the stock chunk too; the game runs on WebGL2.
@@ -21,9 +22,13 @@ void addLookRim() {
 #endif
 #if defined(LIT_NEEDS_NORMAL) && defined(FORWARD_PASS)
 	vec3 v = normalize(look_camPos - vPositionW);
-	float edge = pow(1.0 - clamp(dot(dNormalW, v), 0.0, 1.0), look_rim.a);
-	float side = 0.35 + 0.65 * clamp(dot(dNormalW, look_rimDir) * 0.5 + 0.5, 0.0, 1.0);
-	dEmission += look_rim.rgb * dAlbedo * edge * side;
+	// Phase 6: a golden edge light, like the reference. Only surfaces that really turn edge-on to the camera catch
+	// it (flat ground seen from above stays clear), it is strongest on the side facing the sun, and it carries its
+	// own gold as well as the surface's colour, so leaves, stone and machines all get a warm yellow edge.
+	float edge = pow(smoothstep(0.5, 1.0, 1.0 - clamp(dot(dNormalW, v), 0.0, 1.0)), look_rim.a);
+	float sun = clamp(dot(dNormalW, look_rimDir) * 0.5 + 0.5, 0.0, 1.0);
+	float side = 0.12 + 0.88 * sun * sun;
+	dEmission += look_rim.rgb * (dAlbedo * 0.55 + 0.16) * edge * side;
 #endif
 }
 `;

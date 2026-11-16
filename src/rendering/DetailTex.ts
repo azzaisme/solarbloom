@@ -106,13 +106,12 @@ export function* buildDetailMaps(): Generator<void, DetailMaps> {
       const crack = e < 0.06 && n2(x, y, 16) > 0.42 ? 1 - e / 0.06 : 0;
       const stone = 0.8 + 0.2 * blot + 0.12 * (grain - 0.5) - 0.16 * crack;
       stoneH[i] = blot * 0.6 + grain * 0.5 - crack * 0.5;
-      // grass: blade streaks (noise stretched along one axis, two crossing directions) and clumps
-      const s1 = n2((x * 4) % SIZE, y, 32);
-      const s2 = n3(x, (y * 4) % SIZE, 32);
-      const clump = n1(x, y, 8);
-      const blades = Math.max(s1, s2);
-      const grass = 0.62 + 0.45 * blades * (0.6 + 0.4 * clump) - 0.16 * (1 - clump);
-      grassH[i] = blades * 0.8 + clump * 0.2;
+      // grass (Phase 6): a soft lawn: gentle clumps and a fine speckle, no blade streaks (the crossing streaks and
+      // their bump read as combed playdough at play zoom). Almost flat, so the normal map barely tilts the light.
+      const clump = n1(x, y, 8) * 0.6 + n2(x, y, 16) * 0.4;
+      const speck = n3(x, y, 64) * 0.5 + n2(x, y, 128) * 0.5;
+      const grass = 0.8 + 0.2 * clump + 0.08 * (speck - 0.5);
+      grassH[i] = clump * 0.12 + speck * 0.06;
       // generic: fine grain for plaster, bark and metal
       const gen = 0.86 + 0.14 * (n3(x, y, 16) * 0.5 + n2(x, y, 64) * 0.5);
       detail[i * 4] = Math.round(Math.max(0, Math.min(1, stone)) * 255);

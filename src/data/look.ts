@@ -10,8 +10,8 @@ export type GfxTier = 'low' | 'medium' | 'high';
 export const LOOK = {
   /** Look 1.2: the golden-hour key light. Elevation above the horizon and compass direction it shines toward. */
   sun: {
-    color: '#ffd29a',
-    intensity: 3.1,
+    color: '#ffe6bf',
+    intensity: 3.4,
     elevation: 34,
     /**
      * Horizontal direction the light travels, as a world-space (x, z) vector. With the default camera yaw (45°)
@@ -23,33 +23,34 @@ export const LOOK = {
     normalOffsetBias: 0.05,
   },
   /** Look 1.3: a cool, low fill from the side opposite the sun (no shadows). */
-  fill: { color: '#8fb4ff', intensity: 0.42 },
+  fill: { color: '#e4e4dc', intensity: 0.6 },
   /**
    * Look 1.3: ambient light from the sky above and the ground below, baked into a tiny environment atlas.
    * Colours are linear-ish sRGB hex; `intensity` scales the whole environment (ambient and reflections).
    */
   env: {
-    zenith: '#5d8fd6',
-    horizon: '#cfd9e3',
-    ground: '#7a6a48',
-    intensity: 0.85,
+    zenith: '#9bb8d8',
+    horizon: '#f0eadc',
+    ground: '#a89263',
+    intensity: 1.15,
   },
   /**
    * Look 1.3: a warm rim on silhouettes (a view-dependent term added in the standard shader), stronger on the
    * sun side, so flowers, the drone and machines pick up a bright edge against darker ground.
    */
-  rim: { color: '#ffc98a', intensity: 0.8, power: 3.0 },
+  // Phase 6: stronger and more golden (was '#ffc98a', 0.8, power 3.0 on a plain 1 - N·V edge); see LookShaders
+  rim: { color: '#ffd35c', intensity: 2.6, power: 1.3 },
   /**
    * Look 1.4: tone mapping and exposure. Khronos PBR Neutral keeps the palette's hues and saturation (ACES
    * bleached the greens and pinks toward yellow-white), and rolls highlights off so nothing clips.
    */
   toneMapping: pc.TONEMAP_NEUTRAL as number,
-  exposure: 1.0,
+  exposure: 1.1,
   /**
    * Look 1.5: bloom on emissive and very bright pixels only. The threshold is scene-referred (before exposure and
    * tone mapping): sunlit grass and paving peak around 1.0–1.3, so glows are authored at 3 and above (Look 1.9).
    */
-  bloom: { intensity: 0.08, threshold: 1.5, blurLevel: 12 },
+  bloom: { intensity: 0.14, threshold: 1.15, blurLevel: 14 },
   /**
    * Look 1.9: emissive budget (scene-referred, before exposure; bloom starts at 1.5). See docs/art/rendering.md.
    * `gain` multiplies every standard material authored as a glow (emissiveIntensity >= 1); weaker emissive tints
@@ -70,7 +71,7 @@ export const LOOK = {
    * restore. Read every frame: live edits apply at once.
    */
   grade: {
-    warm: { brightness: 1.0, contrast: 1.08, saturation: 1.04, tint: '#fff0da', shadows: 0.05, highlights: -0.15, vibrance: 0.1 },
+    warm: { brightness: 1.0, contrast: 1.04, saturation: 1.32, tint: '#fff2de', shadows: 0.1, highlights: -0.1, vibrance: 0.42 },
     dead: { brightness: 0.97, contrast: 1.03, saturation: 0.82, tint: '#e9eef6', shadows: 0.0, highlights: -0.1, vibrance: 0.0 },
     /** High contrast (settings): a flatter grade with no vignette so outlines and text stay readable. */
     contrast: { brightness: 1.02, contrast: 1.0, saturation: 1.0, tint: '#ffffff', shadows: 0.2, highlights: -0.1, vibrance: 0.0 },
@@ -87,7 +88,7 @@ export const LOOK = {
    * Look 1.10: the warm golden haze toward the horizon (the linear fog; where it starts and ends follows the zoom,
    * see CameraController.hazeStart / hazeEnd). The camera clears to it when post-processing is on.
    */
-  haze: { color: '#e9dcc4' },
+  haze: { color: '#f4ecdc' },
   /**
    * Look 1.10: drifting light motes and soft light shafts over restored ground near the camera's focus. Counts per
    * graphics tier; `lowVfx` and reduced motion turn the motes off, reduced motion freezes the shafts.
@@ -103,7 +104,7 @@ export const LOOK = {
     shaftWidth: 1.6,
     shaftLength: 7,
   },
-  vignette: { intensity: 0.32, inner: 0.55, outer: 1.35, curvature: 0.6, color: '#2a1d14' },
+  vignette: { intensity: 0, inner: 0.55, outer: 1.35, curvature: 0.6, color: '#2a1d14' },
   /**
    * Look 1.11: what each graphics tier turns on. High is for laptops and desktops (60 fps), Low for mid-range phones
    * (30 fps or better). Low has no post-processing: the camera tone-maps directly, so there is no grade, vignette,
@@ -112,7 +113,7 @@ export const LOOK = {
   tiers: {
     low: { post: false, samples: 1, shadowRes: 1024, softShadows: false, bloom: false, ssao: false, dof: false, rim: true },
     medium: { post: true, samples: 2, shadowRes: 2048, softShadows: false, bloom: true, ssao: false, dof: false, rim: true },
-    high: { post: true, samples: 4, shadowRes: 2048, softShadows: true, bloom: true, ssao: true, dof: true, rim: true },
+    high: { post: true, samples: 4, shadowRes: 2048, softShadows: true, bloom: true, ssao: true, dof: false, rim: true },
   } satisfies Record<GfxTier, TierSpec>,
 };
 

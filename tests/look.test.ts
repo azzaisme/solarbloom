@@ -44,6 +44,7 @@ describe('graphics tiers (Look 1.11)', () => {
     // Phones (Low) get no post-processing and no motes; High gets the full stack.
     expect(LOOK.tiers.low.post).toBe(false);
     expect(LOOK.atmosphere.motes.low).toBe(0);
-    expect(LOOK.tiers.high).toMatchObject({ post: true, bloom: true, ssao: true, dof: true });
+    // Phase 6: no depth of field during normal play (kept for a photo mode)
+    expect(LOOK.tiers.high).toMatchObject({ post: true, bloom: true, ssao: true, dof: false });
   });
 });

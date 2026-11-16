@@ -12,7 +12,7 @@ import type { BuildingPlot } from '../core/Generation';
 import type { TreeGeo, Lod } from './TreeGen';
 import { PALETTE } from './Materials';
 import type { VPrim } from './Shapes';
-import { grassGeo, turfGeo, flowerGeo, leafyShrubGeo, vineGeo, bannerGeo, FLOWER_COLOURS, type FlowerSpecies } from './Flora';
+import { grassGeo, flowerGeo, leafyShrubGeo, vineGeo, bannerGeo, FLOWER_COLOURS, type FlowerSpecies } from './Flora';
 import { pavingGeo, pavingGaps, PAVING_LAYOUTS, planterGeo, railGeo, clutterGeo, CLUTTER_ALIVE, CLUTTER_DEAD, type RailKind, type ClutterKind } from './Props';
 
 export interface SolidSink {
@@ -131,7 +131,9 @@ export function turfTop(c: DressCtx, t: TileData, top: number) {
     }
     const k = n ? [r / n, g / n, b / n] : turfColour(t);
     // a soft mottling across the lawn, a few tiles wide
-    const m = 0.84 + 0.2 * noise2((t.x + cx) * 0.45, (t.z + cz) * 0.45, 7) + 0.1 * noise2((t.x + cx) * 1.3, (t.z + cz) * 1.3, 8);
+    // Phase 6: with no blades shading it, the bare turf is a touch deeper, and the light / dark patches are stronger
+    // so a big lawn reads as soft sunlit and shaded areas rather than one flat green
+    const m = 0.5 + 0.28 * noise2((t.x + cx) * 0.45, (t.z + cz) * 0.45, 7) + 0.14 * noise2((t.x + cx) * 1.3, (t.z + cz) * 1.3, 8);
     cols.push(k[0] * m, k[1] * m, k[2] * m);
     pos.push(t.x + cx, top + 0.002, t.z + cz);
   }
@@ -143,9 +145,19 @@ export function grassTufts(c: DressCtx, t: TileData, stage: number, x: number, z
   const lod: Lod = c.lod === 2 && c.dens > 0.99 ? 2 : 1;
   // Look 3.3: lawns get an even carpet of short blades (seeded turn, so it never lines up), then a few taller
   // tufts on top. The carpet goes at mid zoom too, except on Low, where it waits for near zoom.
-  if (base === undefined && stage >= 1 && (c.lod === 2 || c.dens >= 0.4))
-    c.fb.add(turfGeo(stage, t.variant + Math.floor(hash01(t.x, t.z, 15) * 4), lod), x, top, z, Math.floor(hash01(t.x, t.z, 16) * 4) * (Math.PI / 2), 1);
-  const n = Math.round((base ?? [2, 2, 3, 4, 4][stage]) * c.dens);
+  // Phase 6: no blade carpet. The lawn is the smooth blended turf quad (turfTop) with soft painted variation, like
+  // the reference; life comes from a sprinkle of small tufts and tiny lawn flowers (daisies, clover) on top.
+  if (base === undefined && stage >= 1) {
+    const sprinkle = Math.round((stage === 1 ? 2 : 3) * c.dens);
+    for (let i = 0; i < sprinkle; i++) {
+      const px = x + (hash01(t.x * 17 + i, t.z, 101) - 0.5) * 0.9;
+      const pz = z + (hash01(t.x, t.z * 17 + i, 103) - 0.5) * 0.9;
+      if (hash01(t.x + i, t.z * 3, 107) < 0.45) c.fb.add(flowerGeo('wild', t.variant + i, true, i, 1), px, top, pz, i * 1.9, 0.8);
+      else c.fb.add(grassGeo(stage, t.variant + i + 1, 1), px, top, pz, hash01(t.x, t.z + i, 109) * 6.28, 0.5);
+    }
+  }
+  // Phase 6: open lawn keeps one taller tuft at most (the carpet does the work); edges pass their own `base`
+  const n = Math.round((base ?? [2, 1, 1, 1, 1][stage]) * c.dens);
   for (let i = 0; i < n; i++) {
     const px = x + (hash01(t.x * 7 + i, t.z, 11) - 0.5) * 2 * span;
     const pz = z + (hash01(t.x, t.z * 7 + i, 13) - 0.5) * 2 * span;
@@ -155,7 +167,8 @@ export function grassTufts(c: DressCtx, t: TileData, stage: number, x: number, z
 
 // ───────────── flowers (3.4, 3.5) ─────────────
 
-const SPECIES_FIELD: FlowerSpecies[] = ['daisy', 'cosmos', 'lavender', 'wild', 'daisy', 'cosmos', 'lavender', 'wild', 'cosmos', 'sunflower'];
+// Phase 6: big open heads lead (cosmos, daisies), lavender is an accent rather than every other drift
+const SPECIES_FIELD: FlowerSpecies[] = ['cosmos', 'daisy', 'wild', 'cosmos', 'daisy', 'lavender', 'cosmos', 'wild', 'daisy', 'sunflower'];
 /** One main species and colour per drift: both come from a field a few tiles wide, so neighbouring clumps match. */
 function speciesAt(x: number, z: number, stage: number): FlowerSpecies {
   const sp = SPECIES_FIELD[Math.floor(noise2(x / 3.2, z / 3.2, 91) * SPECIES_FIELD.length * 0.999)];
@@ -163,9 +176,10 @@ function speciesAt(x: number, z: number, stage: number): FlowerSpecies {
 }
 const colourAt = (x: number, z: number) => Math.floor(noise2(x / 2.4, z / 2.4, 93) * 12);
 
-function clump(c: DressCtx, t: TileData, sp: FlowerSpecies, open: boolean, px: number, pz: number, top: number, k: number) {
-  const col = colourAt(px, pz) % FLOWER_COLOURS[sp].length;
-  c.fb.add(flowerGeo(sp, col, open, t.variant + k, c.lod === 2 ? 1 : 0), px, top, pz, hash01(t.x * 3 + k, t.z, 23) * 6.28, 0.85 + hash01(t.x, t.z * 3 + k, 29) * 0.35);
+function clump(c: DressCtx, t: TileData, sp: FlowerSpecies, open: boolean, px: number, pz: number, top: number, k: number, size = 1) {
+  // Phase 6: neighbouring clumps step through the colours (mixed beds, like the reference), at about 1.5x the size
+  const col = (colourAt(px, pz) + k) % FLOWER_COLOURS[sp].length;
+  c.fb.add(flowerGeo(sp, col, open, t.variant + k, c.lod === 2 ? 1 : 0), px, top, pz, hash01(t.x * 3 + k, t.z, 23) * 6.28, (1.25 + hash01(t.x, t.z * 3 + k, 29) * 0.4) * size);
 }
 
 /** Is this side of the tile an edge flowers hug (paving, a wall, a planter, another area, water)? */
@@ -186,22 +200,27 @@ export function flowerDrifts(c: DressCtx, t: TileData, stage: number, x: number,
   let k = 0;
   for (const [dx, dz] of SIDES) {
     if (!flowerEdge(c, t, dx, dz)) continue;
-    const want = stage === 1 ? (hash01(t.x + dx, t.z + dz, 31) < 0.35 ? 1 : 0) : stage === 2 ? 1 + (hash01(t.x, t.z + dx, 37) < 0.4 ? 1 : 0) : 2;
+    // Phase 6: beds packed like the reference: 1–2 clumps a side when young, 3–4 once Blooming, 5 when Thriving;
+    // along a path the bed is solid (two full rows of bigger flowers), so it reads as a border from the default view
+    const nb = c.peek(t.x + dx, t.z + dz);
+    const path = !!nb && (nb.feature ?? 'lawn') === 'paving' && !nb.blocked;
+    const want = stage === 1 ? 1 + (hash01(t.x + dx, t.z + dz, 31) < 0.4 ? 1 : 0) + (path ? 1 : 0) : stage === 2 ? (path ? 5 : 3 + (hash01(t.x, t.z + dx, 37) < 0.5 ? 1 : 0)) : path ? 7 : 5;
     const n = Math.max(want ? 1 : 0, Math.round(want * c.dens));
     for (let i = 0; i < n; i++) {
       const along = (i + 0.5) / n - 0.5 + (hash01(t.x * 5 + i, t.z + dz, 41) - 0.5) * 0.18;
-      const px = x + dx * 0.35 + (dz ? along * 0.85 : 0);
-      const pz = z + dz * 0.35 + (dx ? along * 0.85 : 0);
+      const inset = 0.36 - (i % 2) * 0.13; // two staggered rows, so a bed reads as a mass rather than a line
+      const px = x + dx * inset + (dz ? along * 0.9 : 0);
+      const pz = z + dz * inset + (dx ? along * 0.9 : 0);
       const open = stage >= 3 || (stage === 2 && hash01(t.x + i, t.z, 43) < 0.6);
-      clump(c, t, speciesAt(px, pz, stage), open, px, pz, top, k++);
+      clump(c, t, speciesAt(px, pz, stage), open || path, px, pz, top, k++, path ? 1.3 : 1);
     }
   }
   // open lawn: sparse clumps where the drift field is strong
   const f = noise2(t.x / 2.6, t.z / 2.6, 47);
-  const inner = stage === 1 ? 0 : stage === 2 ? (f > 0.5 ? 1 : 0) : (f > 0.25 ? 1 : 0) + (f > 0.6 ? 1 : 0);
+  const inner = stage === 1 ? (f > 0.6 ? 1 : 0) : stage === 2 ? (f > 0.35 ? 2 : 0) + (f > 0.6 ? 2 : 0) : (f > 0.2 ? 3 : 0) + (f > 0.5 ? 3 : 0);
   for (let i = 0; i < Math.round(inner * Math.max(0.5, c.dens)); i++) {
-    const px = x + (hash01(t.x * 11 + i, t.z, 53) - 0.5) * 0.6;
-    const pz = z + (hash01(t.x, t.z * 11 + i, 59) - 0.5) * 0.6;
+    const px = x + (hash01(t.x * 11 + i, t.z, 53) - 0.5) * 0.8;
+    const pz = z + (hash01(t.x, t.z * 11 + i, 59) - 0.5) * 0.8;
     clump(c, t, speciesAt(px, pz, stage), stage >= 3 || hash01(t.x, t.z + i, 61) < 0.6, px, pz, top, k++);
   }
 }
@@ -222,10 +241,12 @@ export function thrivingExtras(c: DressCtx, t: TileData, x: number, z: number, t
   }
 }
 
-/** Radiant: a warm glow on the ground and luminous golden daisies and sunflowers above the shrubs. */
+/**
+ * Radiant: luminous golden daisies and sunflowers above the shrubs. (Phase 6: the flat gold disc that used to sit
+ * under them is gone: it was opaque and read as a tan hexagonal pad. The golden grass tone carries the stage.)
+ */
 export function radiantExtras(c: DressCtx, t: TileData, x: number, z: number, top: number) {
-  c.b.add('cylinder', PALETTE.radiantGlow, [x, top + 0.005, z], [0.86, 0.01, 0.86]);
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     const px = x + (hash01(t.x * 13 + i, t.z, 73) - 0.5) * 0.6;
     const pz = z + (hash01(t.x, t.z * 13 + i, 79) - 0.5) * 0.6;
     const sp: FlowerSpecies = i === 0 ? 'sunflower' : 'daisy';

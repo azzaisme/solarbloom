@@ -1,0 +1,21 @@
+{
+  "query": "?gfx=high",
+  "renderer": "headless Chromium, SwiftShader (software GL)",
+  "when": "2026-11-16T10:55:05.132Z",
+  "shots": {
+    "close-1080p": {
+      "scene": "Fountain close-up",
+      "size": "1920x1080",
+      "drawCalls": 704,
+      "tier": "high",
+      "fps": 5
+    },
+    "full-1080p": {
+      "scene": "Restored park, fountain awake, default zoom",
+      "size": "1920x1080",
+      "drawCalls": 667,
+      "tier": "high",
+      "fps": 0
+    }
+  }
+}
