@@ -1560,28 +1560,60 @@ export class ChunkRenderer {
   }
 
   /** Small props on obstacle tiles (benches, stalls, stumps…). */
-  /** A procedural building from a small kit: body, window bands, parapet, and a roof that blooms when clear. */
-  private building(b: Sink, p: BuildingPlot, h: number, alive: boolean, far = false) {
-    const H = p.storeys * CITY_GEN.buildings.storey;
+  /**
+   * A real city building, by its height: a house (one or two storeys: pitched tile roof, chimney, door), a town
+   * block (flat roof that blooms when clear), or a skyscraper (six storeys and up: a podium, a glass shaft and a
+   * set-back crown, with planted terraces on the ledges once the area is clear).
+   */
+  private building(b: MeshBuilder, p: BuildingPlot, h: number, alive: boolean, far = false) {
+    const S = CITY_GEN.buildings.storey;
+    const base = h + 0.08;
     const cx = p.x + p.w / 2;
     const cz = p.z + p.d / 2;
     const bw = p.w - 0.25;
     const bd = p.d - 0.25;
-    const top = h + 0.08 + H;
-    const wallsDead = PALETTE.building.wallsDead;
-    const wallsAlive = PALETTE.building.wallsAlive;
-    const wall = (alive ? wallsAlive : wallsDead)[p.style % 5];
-    b.add('box', wall, [cx, h + 0.08 + H / 2, cz], [bw, H, bd]);
+    const wall = (alive ? PALETTE.building.wallsAlive : PALETTE.building.wallsDead)[p.style % 5];
+    const glass = alive ? PALETTE.building.glassAlive : PALETTE.building.glassDead;
+    if (p.storeys >= 6) return this.skyscraper(b, p, base, wall, glass, alive, far);
+    const H = p.storeys * S;
+    const top = base + H;
+    b.add('box', wall, [cx, base + H / 2, cz], [bw, H, bd]);
+    const house = p.storeys <= 2;
+    if (house) this.gable(b, p, top, wall, alive);
     if (far) {
-      b.add('box', alive ? PALETTE.building.roofGarden : PALETTE.building.roofDead, [cx, top + 0.03, cz], [bw * 0.9, 0.06, bd * 0.9]);
+      if (!house) b.add('box', alive ? PALETTE.building.roofGarden : PALETTE.building.roofDead, [cx, top + 0.03, cz], [bw * 0.9, 0.06, bd * 0.9]);
+      return;
+    }
+    const south = p.z + p.d - 0.12 + 0.005;
+    const east = p.x + p.w - 0.12 + 0.005;
+    if (house) {
+      // A door and a window or two per storey on the two faces the camera sees.
+      const door = alive ? PALETTE.woodPlank : PALETTE.woodDead;
+      b.add('box', door, [cx - bw * 0.22, base + 0.15, south], [0.2, 0.3, 0.03]);
+      b.add('box', alive ? PALETTE.building.parapetAlive : PALETTE.building.parapetDead, [cx - bw * 0.22, base + 0.015, south + 0.07], [0.34, 0.03, 0.14]); // doorstep
+      const eastN = Math.max(1, Math.floor(bd));
+      for (let i = 0; i < p.storeys; i++) {
+        const y = base + S * (i + 0.58);
+        b.add('box', glass, [cx + bw * 0.2, y, south], [0.24, S * 0.42, 0.02]);
+        if (i > 0) b.add('box', glass, [cx - bw * 0.22, y, south], [0.24, S * 0.42, 0.02]);
+        for (let k = 0; k < eastN; k++) b.add('box', glass, [east, y, p.z + 0.125 + (k + 0.5) * (bd / eastN)], [0.02, S * 0.42, 0.24]);
+      }
+      if (alive) {
+        // a window box in flower, and a shrub by the door
+        const wy = base + S * 0.34;
+        b.add('box', PALETTE.terracotta, [cx + bw * 0.2, wy, south + 0.04], [0.3, 0.05, 0.08]);
+        this.fb.grey = b.grey;
+        this.fb.add(flowerGeo(p.style % 2 ? 'cosmos' : 'daisy', p.style, true, p.x + p.z, 1), cx + bw * 0.2, wy + 0.02, south + 0.04, p.style, 0.55);
+        this.fb.add(leafyShrubGeo(p.style, 1, p.style % 2 === 0), cx - bw * 0.22 - 0.3, base, south + 0.14, p.style * 1.3, 0.5);
+      }
+      buildingDressing(this.ctx, p, h, H, alive);
       return;
     }
     // Window bands on the two faces the camera sees (south and east), one per storey.
-    const glass = alive ? PALETTE.building.glassAlive : PALETTE.building.glassDead;
     for (let i = 0; i < p.storeys; i++) {
-      const y = h + 0.08 + CITY_GEN.buildings.storey * (i + 0.55);
-      b.add('box', glass, [cx, y, p.z + p.d - 0.12 + 0.005], [bw * 0.82, CITY_GEN.buildings.storey * 0.38, 0.02]);
-      b.add('box', glass, [p.x + p.w - 0.12 + 0.005, y, cz], [0.02, CITY_GEN.buildings.storey * 0.38, bd * 0.82]);
+      const y = base + S * (i + 0.55);
+      b.add('box', glass, [cx, y, south], [bw * 0.82, S * 0.38, 0.02]);
+      b.add('box', glass, [east, y, cz], [0.02, S * 0.38, bd * 0.82]);
     }
     // Parapet and roof.
     b.add('box', alive ? PALETTE.building.parapetAlive : PALETTE.stone.shadow, [cx, top + 0.04, cz], [bw + 0.06, 0.08, bd + 0.06]);
@@ -1590,13 +1622,111 @@ export class ChunkRenderer {
       b.add('box', PALETTE.building.gardenBed, [cx, top + 0.09, cz], [bw * 0.86, 0.05, bd * 0.86]);
       const r = new VRng(p.style * 131 + p.x * 7 + p.z * 13);
       for (let i = 0; i < 1 + (p.style % 2); i++) b.add('box', PALETTE.panel, [p.x + 0.6 + i * 0.7, top + 0.2, p.z + 0.6], [0.5, 0.04, 0.4]);
-      for (let i = 0; i < 3; i++) b.add('sphere', PALETTE.shrub[i % 3], [p.x + r.range(0.5, p.w - 0.5), top + 0.18, p.z + r.range(0.9, p.d - 0.4)], [0.32, 0.22, 0.32]);
+      this.fb.grey = b.grey;
+      for (let i = 0; i < 3; i++) this.fb.add(leafyShrubGeo(p.style + i, 1, i % 2 === 0), p.x + r.range(0.5, p.w - 0.5), top + 0.1, p.z + r.range(0.9, p.d - 0.4), r.range(0, 6.28), r.range(0.5, 0.7));
     } else {
       // A rusty water tank or a dead antenna on the roof.
       if (p.style % 3 === 0) b.add('cylinder', PALETTE.building.tank, [p.x + 0.6, top + 0.3, p.z + 0.6], [0.4, 0.45, 0.4]);
       else b.add('box', PALETTE.paving.crack, [p.x + p.w - 0.5, top + 0.4, p.z + 0.5], [0.04, 0.7, 0.04]);
     }
     buildingDressing(this.ctx, p, h, H, alive); // Look 3.8/3.11: ivy down the facades, wall clutter
+  }
+
+  /** A house's pitched roof: two tiled slopes off a ridge along the longer side, gable ends in the wall colour, a chimney. */
+  private gable(b: MeshBuilder, p: BuildingPlot, y0: number, wall: string, alive: boolean) {
+    const cx = p.x + p.w / 2;
+    const cz = p.z + p.d / 2;
+    const bw = p.w - 0.25;
+    const bd = p.d - 0.25;
+    const alongX = bw >= bd;
+    const half = (alongX ? bd : bw) / 2;
+    const len = (alongX ? bw : bd) / 2;
+    const eave = 0.1;
+    const rise = half * 0.8;
+    const y1 = y0 + rise;
+    const ye = y0 - (eave * rise) / half; // the eaves hang a little past the wall, a little lower
+    const tiles = p.style % 3 === 1 ? (alive ? PALETTE.metal.slate : PALETTE.building.roofDead) : alive ? PALETTE.terracotta : PALETTE.terracottaDead;
+    // along = the ridge axis, across = the slope axis
+    const P = (along: number, y: number, across: number): V3 => (alongX ? [cx + along, y, cz + across] : [cx + across, y, cz + along]);
+    const N = (along: number, y: number, across: number): V3 => (alongX ? [along, y, across] : [across, y, along]);
+    const nl = Math.hypot(rise, half);
+    for (const side of [-1, 1]) {
+      const n = N(0, half / nl, (side * rise) / nl);
+      const a = P(-len, ye, side * (half + eave));
+      const c = P(len, ye, side * (half + eave));
+      b.tri(tiles, a, c, P(len, y1, 0), n);
+      b.tri(tiles, a, P(len, y1, 0), P(-len, y1, 0), n);
+      b.tri(wall, P(side * len, y0, -half), P(side * len, y0, half), P(side * len, y1, 0), N(side, 0, 0));
+    }
+    b.add('box', alive ? PALETTE.bricks[p.style % 3] : PALETTE.building.tank, P(len * 0.45, y0 + rise * 0.75, half * 0.4), [0.16, rise * 0.9, 0.16]);
+  }
+
+  /**
+   * A skyscraper: a two-storey podium over the whole plot, a glass shaft set in from it, and a narrower crown, each
+   * with window bands on the faces the camera sees. Clear, its ledges and roof are planted terraces with solar
+   * panels and a mast; in the fog it is a dark shell with a dead antenna.
+   */
+  private skyscraper(b: MeshBuilder, p: BuildingPlot, base: number, wall: string, glass: string, alive: boolean, far: boolean) {
+    const S = CITY_GEN.buildings.storey;
+    const cx = p.x + p.w / 2;
+    const cz = p.z + p.d / 2;
+    const bw = p.w - 0.25;
+    const bd = p.d - 0.25;
+    const n = p.storeys;
+    const crownFrom = Math.max(4, Math.round(n * 0.72));
+    // tiers: [first storey, storeys, footprint scale]
+    const tiers: [number, number, number][] = [[0, 2, 1], [2, crownFrom - 2, 0.84], [crownFrom, n - crownFrom, 0.62]];
+    const trim = alive ? PALETTE.building.parapetAlive : PALETTE.stone.shadow;
+    const r = new VRng(p.style * 131 + p.x * 7 + p.z * 13);
+    if (!far) this.fb.grey = b.grey;
+    tiers.forEach(([from, count, k], ti) => {
+      if (count <= 0) return;
+      const w = bw * k;
+      const d = bd * k;
+      const y0 = base + from * S;
+      const H = count * S;
+      b.add('box', wall, [cx, y0 + H / 2, cz], [w, H, d]);
+      const last = ti === tiers.length - 1 || tiers[ti + 1][1] <= 0;
+      if (far) {
+        b.add('box', glass, [cx, y0 + H / 2, cz + d / 2 + 0.004], [w * 0.84, H * 0.86, 0.01]);
+        b.add('box', glass, [cx + w / 2 + 0.004, y0 + H / 2, cz], [0.01, H * 0.86, d * 0.84]);
+        if (last) b.add('box', alive ? PALETTE.building.roofGarden : PALETTE.building.roofDead, [cx, y0 + H + 0.03, cz], [w * 0.9, 0.06, d * 0.9]);
+        return;
+      }
+      for (let i = 0; i < count; i++) {
+        const y = y0 + S * (i + 0.55);
+        const tall = ti === 0 && i === 0 ? 0.62 : 0.5; // a glazed ground floor
+        b.add('box', glass, [cx, y, cz + d / 2 + 0.005], [w * 0.86, S * tall, 0.02]);
+        b.add('box', glass, [cx + w / 2 + 0.005, y, cz], [0.02, S * tall, d * 0.86]);
+      }
+      // corner piers up the faces the camera sees, and a ledge on top of the tier
+      for (const [px, pz] of [[w / 2, d / 2], [-w / 2, d / 2], [w / 2, -d / 2]]) b.add('box', trim, [cx + px, y0 + H / 2, cz + pz], [0.09, H, 0.09]);
+      b.add('box', trim, [cx, y0 + H + 0.035, cz], [w + 0.08, 0.07, d + 0.08]);
+      if (alive) {
+        // a planted terrace on the ledge (the roof, for the crown)
+        b.add('box', PALETTE.building.gardenBed, [cx, y0 + H + 0.08, cz], [w * 0.92, 0.04, d * 0.92]);
+        for (let i = 0; i < (last ? 3 : 4); i++) {
+          // on the crown anywhere on the roof; lower down along the south and east ledges
+          const u = r.range(-0.42, 0.42);
+          const sx = last ? u * w : i % 2 ? w * 0.46 : u * w;
+          const sz = last ? r.range(-0.4, 0.4) * d : i % 2 ? u * d : d * 0.46;
+          this.fb.add(leafyShrubGeo(p.style + i + ti * 3, 1, i % 2 === 0), cx + sx, y0 + H + 0.09, cz + sz, r.range(0, 6.28), r.range(0.45, 0.65));
+        }
+        if (!last) for (let i = 0; i < Math.floor(w); i++) if (r.next() < 0.7) this.fb.add(vineGeo(4, S * r.range(0.9, 1.8), p.x + i + ti, 1), cx - w / 2 + 0.3 + i, y0 + H + 0.06, cz + d / 2 + 0.05, 0, 1);
+      }
+      if (last) {
+        const top = y0 + H + 0.07;
+        if (alive) {
+          b.add('box', PALETTE.panel, [cx - w * 0.2, top + 0.14, cz - d * 0.2], [Math.min(0.6, w * 0.4), 0.04, Math.min(0.45, d * 0.35)]);
+          b.add('box', trim, [cx + w * 0.25, top + 0.45, cz - d * 0.25], [0.05, 0.9, 0.05]);
+          b.add('box', PALETTE.glow.lamp, [cx + w * 0.25, top + 0.92, cz - d * 0.25], 0.09, 0.8);
+        } else {
+          b.add('cylinder', PALETTE.building.tank, [cx - w * 0.2, top + 0.2, cz - d * 0.2], [0.34, 0.4, 0.34]);
+          b.add('box', PALETTE.paving.crack, [cx + w * 0.25, top + 0.4, cz - d * 0.25], [0.04, 0.8, 0.04]);
+        }
+      }
+    });
+    if (!far) buildingDressing(this.ctx, p, base - 0.08, 2 * S, alive); // ivy off the podium ledge, clutter at street level
   }
 
   /**
