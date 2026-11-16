@@ -33,3 +33,32 @@ export function pickLayers(layers: readonly LayerData[], o: V3, d: V3): LayerHit
   }
   return best;
 }
+
+/**
+ * Drone tap targets in screen pixels: a minimum, or a world-space radius at the current zoom, whichever is larger.
+ * Generous over open ground (drones are small and moving); tight (about the drone's body) whenever a machine or a
+ * placement footprint is under the pointer, so a drone hovering beside a machine can't steal the machine's tap.
+ */
+export const DRONE_TAP = {
+  generous: { minPx: 26, world: 0.35 },
+  tight: { minPx: 10, world: 0.2 },
+} as const;
+
+export function droneTapRadius(worldPerPixel: number, tight: boolean): number {
+  const r = tight ? DRONE_TAP.tight : DRONE_TAP.generous;
+  return Math.max(r.minPx, r.world / worldPerPixel);
+}
+
+/** The drone nearest the tap within the radius (screen positions), or undefined. Pure, for tests. */
+export function pickDrone(drones: Iterable<{ id: string; x: number; y: number }>, x: number, y: number, radius: number): string | undefined {
+  let best: string | undefined;
+  let bestD = radius;
+  for (const d of drones) {
+    const dist = Math.hypot(d.x - x, d.y - y);
+    if (dist <= bestD) {
+      best = d.id;
+      bestD = dist;
+    }
+  }
+  return best;
+}

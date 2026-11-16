@@ -17,6 +17,10 @@ import { Sim } from '../src/gameplay/Sim';
  *   again (no pulses, no Harvest, no cat). It still makes the decisions an idle player checks in for: buying
  *   machines and upgrades, and waking landmarks. Compared with `active` over the same window it says how idle
  *   the game is.
+ *
+ * Phase 5 E15: world events run as in the game (seeded, sim time). The active bot reacts to them: during a
+ * Solar Supernova or Super Rain it pulses twice per action (spending the boosted income), and it finds every
+ * hiding cat, invasion cats included, ~40 s after it appears. `noEvents` switches the scheduler off.
  */
 export interface BotOptions {
   seed: number;
@@ -39,6 +43,8 @@ export interface BotOptions {
    * every ready group (off by default so earlier pacing measurements stay comparable).
    */
   merges?: boolean | 'buildOnly';
+  /** Phase 5 E15: no world events at all (checks nothing depends on them; comparison runs) */
+  noEvents?: boolean;
 }
 
 export interface BotReport {
@@ -73,6 +79,9 @@ export interface BotReport {
   frenzies: number;
   /** Phase 5 E13: merges made, and when */
   merges: { t: number; type: string }[];
+  /** Phase 5 E15: world events started (sim time, type) and cats found by rarity */
+  events: { t: number; type: string }[];
+  cats: Record<string, number>;
   /** per-minute snapshot */
   minutesLog: { m: number; parkRestored: number; tiles: number; res: Record<ResourceKind, number>; caps: Record<ResourceKind, number>; rates: Record<ResourceKind, number> }[];
 }
@@ -84,6 +93,7 @@ export function runBot(opts: BotOptions): BotReport {
   const actionEvery = opts.actionEvery ?? 3;
   const sim = new Sim(opts.state ?? createInitialState(opts.seed));
   sim.cat.anchorView = () => 'visible';
+  if (opts.noEvents) sim.events.tick = () => {};
   const s = sim.state;
   const earned: Record<ResourceKind, number> = { energy: 0, water: 0, biomass: 0 };
   const add = sim.econ.add.bind(sim.econ);
@@ -117,6 +127,13 @@ export function runBot(opts: BotOptions): BotReport {
   sim.bus.on('chain.ended', ({ combo }) => combo >= 5 && meaningful());
   let pulses = 0;
   sim.bus.on('pulse.fired', () => pulses++);
+  const events: BotReport['events'] = [];
+  const cats: Record<string, number> = {};
+  sim.bus.on('world.started', ({ type }) => {
+    events.push({ t: Math.round(sim.time), type });
+    meaningful();
+  });
+  sim.bus.on('cat.found', ({ variant }) => (cats[variant ?? 'standard'] = (cats[variant ?? 'standard'] ?? 0) + 1));
 
   const built: Record<string, number> = {};
   const merges: BotReport['merges'] = [];
@@ -203,6 +220,12 @@ export function runBot(opts: BotOptions): BotReport {
     if (taps) {
       if (target) sim.restoration.pulse(target.id);
       else if (s.resources.energy.lt(3)) sim.harvestSun();
+      // Phase 5 E15: a boosted store is worth spending: one more pulse while a Supernova or Super Rain runs.
+      const ev = sim.events.active?.type;
+      if ((ev === 'supernova' || ev === 'rain') && target) {
+        const again = target.ground === 'restored' ? target : park().find((t) => t.id !== target!.id && sim.restoration.checkPulse(t).ok);
+        if (again && sim.restoration.checkPulse(again).ok) sim.restoration.pulse(again.id);
+      }
     }
     // 3. upgrades when the next machine is far off
     // Phase 5 E12: biomass is uncapped, so keep back only the next machine's price. Per-machine upgrades go to
@@ -271,8 +294,8 @@ export function runBot(opts: BotOptions): BotReport {
       }
     }
     // 4. find the cat ~40 s after it appears
-    const c = s.cat.active;
-    if (taps && !opts.noCats && c && sim.time - c.spawnedAt > 40) sim.cat.claim();
+    // Phase 5 E15: every hiding cat (invasion cats too), each about 40 s after it appeared.
+    if (taps && !opts.noCats) for (const c of sim.cat.spots()) if (sim.time - c.spawnedAt > 40) sim.cat.claim(c.id);
     // 5. fire Bloom Frenzy as soon as it's ready (an idle player checking in would too)
     if (sim.frenzy.ready()) sim.frenzy.activate();
   };
@@ -326,6 +349,8 @@ export function runBot(opts: BotOptions): BotReport {
     pulses,
     frenzies: s.frenzy?.count ?? 0,
     merges,
+    events,
+    cats,
     minutesLog,
   };
 }
