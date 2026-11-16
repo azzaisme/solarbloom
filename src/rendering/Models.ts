@@ -6,7 +6,9 @@ import * as pc from 'playcanvas';
  * centre, front = +Z. Their materials keep the baked albedo and normal atlas (no palette swap).
  *
  * Two ways to draw them:
- * - `ModelBatch`: many copies in one chunk, hardware-instanced (one draw per model part and chunk);
+ * - `ModelBatch`: many copies in one chunk, hardware-instanced. A model's parts differ only in gloss and
+ *   metalness (one per palette material, all on the model's one atlas), so for batches they are merged into a
+ *   single mesh with gloss and metalness stored per vertex: one draw per model and chunk, not one per part;
  * - `ModelLibrary.instantiate`: one entity, for landmarks, machines and the cat (moving parts stay their own nodes).
  * Until a model has loaded (or with `?models=classic`), callers keep their procedural look.
  */
@@ -26,6 +28,109 @@ interface Loaded {
   near?: pc.ContainerResource;
   far?: pc.ContainerResource;
   parts: [ModelPart[], ModelPart[]];
+  /** the parts merged for batches (near, far), made on first use */
+  merged: [ModelPart[] | undefined, ModelPart[] | undefined];
+}
+
+/** A material is plain when only its gloss and metalness set it apart from the model's other parts. */
+function plain(m: pc.Material): m is pc.StandardMaterial {
+  if (!(m instanceof pc.StandardMaterial)) return false;
+  const white = m.diffuse.r > 0.999 && m.diffuse.g > 0.999 && m.diffuse.b > 0.999;
+  const dark = m.emissive.r + m.emissive.g + m.emissive.b < 0.001;
+  return white && dark && !m.emissiveMap && !m.glossMap && !m.metalnessMap && m.opacity >= 1 && m.useMetalness;
+}
+
+const IDENTITY = new pc.Mat4();
+/** Which image a map is (empty = none). A model's materials may each hold their own texture object of one image. */
+function texId(t: pc.Texture | null | undefined): string {
+  return t ? `${t.name}:${t.width}x${t.height}` : '';
+}
+
+/**
+ * Merges a model's plain parts that share their maps into one mesh (positions and normals moved into model space,
+ * gloss in the vertex colour's red, metalness in its green) with one material. Parts that glow, are tinted, or have
+ * an unexpected vertex layout stay as they are.
+ */
+function mergeParts(device: pc.GraphicsDevice, parts: ModelPart[]): ModelPart[] {
+  const out: ModelPart[] = [];
+  const groups = new Map<string, ModelPart[]>();
+  for (const part of parts) {
+    const m = part.material;
+    const vb = part.mesh.vertexBuffer;
+    const els = vb?.format.elements ?? [];
+    const float = (name: string, n: number) => els.some((e) => e.name === name && e.numComponents === n && e.dataType === pc.TYPE_FLOAT32);
+    const ok = plain(m) && !!vb?.storage && float(pc.SEMANTIC_POSITION, 3) && float(pc.SEMANTIC_NORMAL, 3) && float(pc.SEMANTIC_TEXCOORD0, 2) && part.mesh.primitive[0]?.type === pc.PRIMITIVE_TRIANGLES;
+    if (!ok) {
+      out.push(part);
+      continue;
+    }
+    const sm = m as pc.StandardMaterial;
+    const key = `${texId(sm.diffuseMap)}|${texId(sm.normalMap)}|${texId(sm.aoMap)}|${texId(sm.opacityMap)}|${sm.alphaTest}|${sm.cull}|${sm.blendType}|${sm.bumpiness}`;
+    let g = groups.get(key);
+    if (!g) groups.set(key, (g = []));
+    g.push(part);
+  }
+  const v = new pc.Vec3();
+  for (const g of groups.values()) {
+    if (g.length < 2) {
+      out.push(...g);
+      continue;
+    }
+    const pos: number[] = [];
+    const nrm: number[] = [];
+    const uv: number[] = [];
+    const col: number[] = [];
+    const idx: number[] = [];
+    for (const part of g) {
+      const vb = part.mesh.vertexBuffer;
+      const f32 = new Float32Array(vb.storage);
+      const at = (name: string) => {
+        const e = vb.format.elements.find((x) => x.name === name)!;
+        return { off: e.offset / 4, stride: e.stride / 4 };
+      };
+      const P = at(pc.SEMANTIC_POSITION);
+      const N = at(pc.SEMANTIC_NORMAL);
+      const T = at(pc.SEMANTIC_TEXCOORD0);
+      const m = part.material as pc.StandardMaterial;
+      const gloss = Math.round(pc.math.clamp(m.gloss, 0, 1) * 255);
+      const metal = Math.round(pc.math.clamp(m.metalness, 0, 1) * 255);
+      const base = pos.length / 3;
+      for (let i = 0; i < vb.numVertices; i++) {
+        v.set(f32[i * P.stride + P.off], f32[i * P.stride + P.off + 1], f32[i * P.stride + P.off + 2]);
+        part.local.transformPoint(v, v);
+        pos.push(v.x, v.y, v.z);
+        v.set(f32[i * N.stride + N.off], f32[i * N.stride + N.off + 1], f32[i * N.stride + N.off + 2]);
+        part.local.transformVector(v, v).normalize();
+        nrm.push(v.x, v.y, v.z);
+        uv.push(f32[i * T.stride + T.off], f32[i * T.stride + T.off + 1]);
+        col.push(gloss, metal, 0, 255);
+      }
+      const prim = part.mesh.primitive[0];
+      const ib = part.mesh.indexBuffer[0];
+      const src = ib && prim.indexed ? (ib.format === pc.INDEXFORMAT_UINT32 ? new Uint32Array(ib.storage) : ib.format === pc.INDEXFORMAT_UINT16 ? new Uint16Array(ib.storage) : new Uint8Array(ib.storage)) : undefined;
+      for (let i = prim.base; i < prim.base + prim.count; i++) idx.push(base + (src ? src[i] + (prim.baseVertex ?? 0) : i));
+    }
+    const mesh = new pc.Mesh(device);
+    mesh.setPositions(pos);
+    mesh.setNormals(nrm);
+    mesh.setUvs(0, uv);
+    mesh.setColors32(col);
+    mesh.setIndices(idx);
+    mesh.update(pc.PRIMITIVE_TRIANGLES);
+    mesh.incRefCount(); // owned by the library: chunks come and go, the merged mesh stays
+    const material = (g[0].material as pc.StandardMaterial).clone();
+    material.name = `${g[0].material.name}+merged`;
+    material.diffuseVertexColor = false; // the vertex colour now carries gloss and metalness, not a tint
+    material.gloss = 1;
+    material.metalness = 1;
+    material.glossVertexColor = true;
+    material.glossVertexColorChannel = 'r';
+    material.metalnessVertexColor = true;
+    material.metalnessVertexColorChannel = 'g';
+    material.update();
+    out.push({ mesh, material, local: IDENTITY, node: g[0].node });
+  }
+  return out;
 }
 
 function partsOf(container: pc.ContainerResource): ModelPart[] {
@@ -77,7 +182,7 @@ export class ModelLibrary {
       this.app.assets.loadFromUrl(url, 'container', (err, asset) => {
         if (err || !asset) console.warn(`Model ${file} failed to load; keeping the procedural look.`, err);
         else {
-          const m = this.models.get(name) ?? { parts: [[], []] };
+          const m: Loaded = this.models.get(name) ?? { parts: [[], []], merged: [undefined, undefined] };
           const res = asset.resource as pc.ContainerResource;
           if (far) {
             m.far = res;
@@ -103,6 +208,14 @@ export class ModelLibrary {
     const m = this.models.get(name);
     if (!m) return [];
     return far && m.parts[1].length ? m.parts[1] : m.parts[0];
+  }
+
+  /** The parts to draw many copies with: `parts`, with those that differ only in gloss and metalness merged into one. */
+  batchParts(name: string, far = false): ModelPart[] {
+    const m = this.models.get(name);
+    if (!m) return [];
+    const i = far && m.parts[1].length ? 1 : 0;
+    return (m.merged[i] ??= mergeParts(this.app.graphicsDevice, m.parts[i]));
   }
 
   /**
@@ -164,7 +277,7 @@ const scl = new pc.Vec3();
 
 /**
  * Copies of models in one chunk, drawn with hardware instancing. Add placements while the chunk is built, then
- * `build()` makes one entity holding one instanced mesh instance per model part.
+ * `build()` makes one entity holding one instanced mesh instance per model (its parts merged; see `batchParts`).
  */
 export class ModelBatch {
   private placed = new Map<string, number[]>();
@@ -196,7 +309,7 @@ export class ModelBatch {
     let tris = 0;
     for (const [name, list] of this.placed) {
       const n = list.length / 16;
-      for (const part of this.lib.parts(name, this.far)) {
+      for (const part of this.lib.batchParts(name, this.far)) {
         // each copy's matrix = placement × the part's own transform in the model
         const data = new Float32Array(list.length);
         for (let k = 0; k < n; k++) {
