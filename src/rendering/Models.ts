@@ -1,0 +1,190 @@
+import * as pc from 'playcanvas';
+
+/**
+ * Look 3.18/3.19: the hand-built models (assets/raw/models/final, built by assets/tools/build_props.py). Each model
+ * has a near version (`<name>.glb`) and a far one (`<name>.lod1.glb`), in metres (1 tile = 1 m), pivot at the base
+ * centre, front = +Z. Their materials keep the baked albedo and normal atlas (no palette swap).
+ *
+ * Two ways to draw them:
+ * - `ModelBatch`: many copies in one chunk, hardware-instanced (one draw per model part and chunk);
+ * - `ModelLibrary.instantiate`: one entity, for landmarks, machines and the cat (moving parts stay their own nodes).
+ * Until a model has loaded (or with `?models=classic`), callers keep their procedural look.
+ */
+const URLS = import.meta.glob('../../assets/raw/models/final/*.glb', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+
+export const useModels = () => typeof location === 'undefined' || new URLSearchParams(location.search).get('models') !== 'classic';
+
+/** One drawable piece of a model: a mesh with its material and its transform within the model. */
+export interface ModelPart {
+  mesh: pc.Mesh;
+  material: pc.Material;
+  local: pc.Mat4;
+  node: string;
+}
+
+interface Loaded {
+  near?: pc.ContainerResource;
+  far?: pc.ContainerResource;
+  parts: [ModelPart[], ModelPart[]];
+}
+
+function partsOf(container: pc.ContainerResource): ModelPart[] {
+  const root = container.instantiateRenderEntity();
+  root.syncHierarchy();
+  const out: ModelPart[] = [];
+  const walk = (e: pc.Entity) => {
+    if (e.render)
+      for (const mi of e.render.meshInstances) if (mi.mesh && mi.material) out.push({ mesh: mi.mesh, material: mi.material, local: e.getWorldTransform().clone(), node: e.name });
+    for (const c of e.children) walk(c as pc.Entity);
+  };
+  walk(root);
+  // The meshes and materials belong to the container; the throwaway entity can go.
+  root.destroy();
+  return out;
+}
+
+export class ModelLibrary {
+  private models = new Map<string, Loaded>();
+  /** every model that finished loading (near version at least) */
+  readonly loaded = new Set<string>();
+  /** called once, when every model has loaded or failed */
+  onReady?: () => void;
+  ready = false;
+
+  constructor(private app: pc.AppBase) {}
+
+  /** Names of all models on disk. */
+  static names(): string[] {
+    return Object.keys(URLS)
+      .map((k) => k.split('/').pop()!.replace(/\.glb$/, ''))
+      .filter((n) => !n.endsWith('.lod1'))
+      .sort();
+  }
+
+  load() {
+    if (!useModels()) return;
+    const files = Object.entries(URLS);
+    let pending = files.length;
+    const done = () => {
+      if (--pending > 0) return;
+      this.ready = true;
+      this.onReady?.();
+    };
+    for (const [path, url] of files) {
+      const file = path.split('/').pop()!.replace(/\.glb$/, '');
+      const far = file.endsWith('.lod1');
+      const name = far ? file.slice(0, -5) : file;
+      this.app.assets.loadFromUrl(url, 'container', (err, asset) => {
+        if (err || !asset) console.warn(`Model ${file} failed to load; keeping the procedural look.`, err);
+        else {
+          const m = this.models.get(name) ?? { parts: [[], []] };
+          const res = asset.resource as pc.ContainerResource;
+          if (far) {
+            m.far = res;
+            m.parts[1] = partsOf(res);
+          } else {
+            m.near = res;
+            m.parts[0] = partsOf(res);
+            this.loaded.add(name);
+          }
+          this.models.set(name, m);
+        }
+        done();
+      });
+    }
+  }
+
+  has(name: string): boolean {
+    return this.loaded.has(name);
+  }
+
+  /** The parts to draw (far = the LOD1 version, falling back to the near one). */
+  parts(name: string, far = false): ModelPart[] {
+    const m = this.models.get(name);
+    if (!m) return [];
+    return far && m.parts[1].length ? m.parts[1] : m.parts[0];
+  }
+
+  /** A fresh entity of the whole model (moving parts are child entities, found by name). */
+  instantiate(name: string, far = false, shadows = true): pc.Entity | undefined {
+    const m = this.models.get(name);
+    const res = far && m?.far ? m.far : m?.near;
+    if (!res) return undefined;
+    const e = res.instantiateRenderEntity({ castShadows: shadows, receiveShadows: true });
+    e.name = `model-${name}`;
+    return e;
+  }
+}
+
+/** Shared library (one per app); `null` until the game creates it. */
+export let MODELS: ModelLibrary | null = null;
+export function createModels(app: pc.AppBase): ModelLibrary {
+  MODELS = new ModelLibrary(app);
+  MODELS.load();
+  return MODELS;
+}
+
+const tmp = new pc.Mat4();
+const place = new pc.Mat4();
+const q = new pc.Quat();
+const pos = new pc.Vec3();
+const scl = new pc.Vec3();
+
+/**
+ * Copies of models in one chunk, drawn with hardware instancing. Add placements while the chunk is built, then
+ * `build()` makes one entity holding one instanced mesh instance per model part.
+ */
+export class ModelBatch {
+  private placed = new Map<string, number[]>();
+  count = 0;
+
+  constructor(
+    private lib: ModelLibrary,
+    private far: boolean,
+  ) {}
+
+  /** A copy at (x, y, z), turned rotY radians about +y, scaled (sx, sy, sz). */
+  add(name: string, x: number, y: number, z: number, rotY: number, sx: number, sy = sx, sz = sx): boolean {
+    if (!this.lib.has(name)) return false;
+    let list = this.placed.get(name);
+    if (!list) this.placed.set(name, (list = []));
+    q.setFromAxisAngle(pc.Vec3.UP, (rotY * 180) / Math.PI);
+    place.setTRS(pos.set(x, y, z), q, scl.set(sx, sy, sz));
+    for (let i = 0; i < 16; i++) list.push(place.data[i]);
+    this.count++;
+    return true;
+  }
+
+  /** The chunk's model entity (or undefined when nothing was placed). `bounds` culls the whole batch. */
+  build(device: pc.GraphicsDevice, bounds: pc.BoundingBox, shadows: boolean): { entity?: pc.Entity; buffers: pc.VertexBuffer[]; tris: number } {
+    const buffers: pc.VertexBuffer[] = [];
+    if (!this.count) return { buffers, tris: 0 };
+    const fmt = pc.VertexFormat.getDefaultInstancingFormat(device);
+    const mis: pc.MeshInstance[] = [];
+    let tris = 0;
+    for (const [name, list] of this.placed) {
+      const n = list.length / 16;
+      for (const part of this.lib.parts(name, this.far)) {
+        // each copy's matrix = placement × the part's own transform in the model
+        const data = new Float32Array(list.length);
+        for (let k = 0; k < n; k++) {
+          for (let i = 0; i < 16; i++) place.data[i] = list[k * 16 + i];
+          tmp.mul2(place, part.local);
+          data.set(tmp.data, k * 16);
+        }
+        const vb = new pc.VertexBuffer(device, fmt, n, { data });
+        buffers.push(vb);
+        const mi = new pc.MeshInstance(part.mesh, part.material);
+        mi.setInstancing(vb);
+        mi.instancingCount = n;
+        mi.setCustomAabb(bounds);
+        mis.push(mi);
+        const prim = part.mesh.primitive[0];
+        tris += (prim ? prim.count / 3 : 0) * n;
+      }
+    }
+    const entity = new pc.Entity('models');
+    entity.addComponent('render', { meshInstances: mis, castShadows: shadows, receiveShadows: true });
+    return { entity, buffers, tris };
+  }
+}
