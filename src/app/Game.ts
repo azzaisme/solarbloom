@@ -592,6 +592,15 @@ export class Game {
     const w = c.clientWidth, h = c.clientHeight;
     const on = this.pointer.inside && !this.cinematic && performance.now() - this.lastPanAt > 120;
     this.treeFade += ((on ? 1 : 0) - this.treeFade) * Math.min(1, dt * (on ? 10 : 6));
+    // See-through skyscrapers: one between the camera and the middle of the view (or the cursor) fades out.
+    const keep = [{ x: w / 2, y: h / 2, depth: this.camera.dist }];
+    if (on) {
+      const { o, d } = this.camera.ray(this.pointer.x, this.pointer.y);
+      const t = d.y < -1e-3 ? -o.y / d.y : 400;
+      const f = this.camera.entity.forward;
+      keep.push({ x: this.pointer.x, y: this.pointer.y, depth: d.x * t * f.x + d.y * t * f.y + d.z * t * f.z + (o.x - this.camera.entity.getPosition().x) * f.x + (o.y - this.camera.entity.getPosition().y) * f.y + (o.z - this.camera.entity.getPosition().z) * f.z });
+    }
+    if (w && h && !this.cinematic) this.chunks.fadeTowers(dt, this.camera.cam, keep);
     if (this.treeFade < 0.002 || !w || !h) return setTreeCursor(0, 0, 0, 0, w || 1, h || 1);
     const { o, d } = this.camera.ray(this.pointer.x, this.pointer.y);
     // The ground under the cursor (or far away if the ray misses it) as a view depth.

@@ -373,6 +373,8 @@ interface ChunkView {
   models?: pc.Entity;
   /** clean pool water: its own animated surface */
   water?: pc.Entity;
+  /** near skyscrapers, each its own meshes so it can fade when it blocks the view */
+  towers?: Tower[];
   modelVBs?: pc.VertexBuffer[];
   /** Look 6.12: the living surface (every ground slab) and the props of tiles mid-transition */
   surface?: pc.Entity;
@@ -383,6 +385,35 @@ interface ChunkView {
   waveAt?: number;
   /** Look 6.18: the fog is rolling back as a front (kept until the wave ends, then rebuilt) */
   fogHold?: boolean;
+}
+
+/** A skyscraper drawn on its own (near chunks): its axis, its meshes and how see-through it is right now. */
+interface Tower {
+  x: number;
+  z: number;
+  base: number;
+  top: number;
+  /** half its width */
+  r: number;
+  entities: pc.Entity[];
+  mis: pc.MeshInstance[];
+  /** opacity now and where it is heading (1 solid) */
+  a: number;
+  to: number;
+}
+
+/** How see-through a skyscraper gets when it stands between the camera and the cursor or the view's focus. */
+const TOWER_FADE = { opacity: 0.1, speed: 9 };
+
+let towerMat: pc.StandardMaterial | undefined;
+/** The chunk material with dithered opacity (no sorting, still writes depth): each tower sets its own opacity. */
+function towerMaterial(): pc.StandardMaterial {
+  if (towerMat) return towerMat;
+  const m = vertexColourMaterial().clone();
+  m.opacityDither = pc.DITHER_BAYER8;
+  m.opacityShadowDither = pc.DITHER_NONE;
+  m.update();
+  return (towerMat = m);
 }
 
 /** Look 6.18: fog opacity with a receding front (a circle growing from the landmark, with a wobbly edge). */
@@ -619,6 +650,7 @@ export class ChunkRenderer {
     this.transitions?.liveByChunk.delete(v.key);
     v.ground?.destroy();
     v.water?.destroy();
+    for (const t of v.towers ?? []) for (const e of t.entities) e.destroy();
     v.trees?.destroy();
     v.fog?.destroy();
     this.treeTris.delete(v.key);
@@ -701,6 +733,7 @@ export class ChunkRenderer {
     if (!c) return;
     const b = new MeshBuilder();
     const fb = new FoliageBuilder();
+    const towers: Tower[] = [];
     this.fb = fb;
     this.chunkFb = fb;
     const tr = this.transitions;
@@ -790,9 +823,15 @@ export class ChunkRenderer {
       for (const p of buildingPlots(s.grid.seed, v.cx, v.cz, s.grid.layer(GROUND)!.gen ?? 1)) {
         // An entry fix may have opened one of its tiles: then it's rubble, not a building.
         const whole = s.grid.peek(GROUND, p.x, p.z)?.feature === 'building' && s.grid.peek(GROUND, p.x + p.w - 1, p.z + p.d - 1)?.feature === 'building';
-        if (whole) this.building(b, p, h, fog === 'cleared', v.far);
+        if (!whole) continue;
+        if (p.storeys >= 6 && !v.far && fog !== 'hidden') towers.push(this.tower(p, h, fog === 'cleared', b.grey));
+        else this.building(b, p, h, fog === 'cleared', v.far);
       }
     }
+    this.fb = fb;
+    this.sink = b;
+    for (const t of v.towers ?? []) for (const e of t.entities) e.destroy();
+    v.towers = towers.length ? towers : undefined;
     // Look 4.9: retaining-wall facades where the revealed city drops to an unrevealed (sunk) neighbour.
     if (!v.sunk) {
       const alive = fog === 'cleared' || this.inPark;
@@ -1560,6 +1599,71 @@ export class ChunkRenderer {
   }
 
   /** Small props on obstacle tiles (benches, stalls, stumps…). */
+  /** A skyscraper built into meshes of its own (walls and planting), so it can fade without touching its chunk. */
+  private tower(p: BuildingPlot, h: number, alive: boolean, grey: number): Tower {
+    const b = new MeshBuilder();
+    const fb = new FoliageBuilder();
+    b.grey = fb.grey = grey;
+    const keep = { fb: this.fb, sink: this.sink };
+    this.fb = fb;
+    this.sink = b;
+    this.building(b, p, h, alive, false);
+    this.fb = keep.fb;
+    this.sink = keep.sink;
+    const t: Tower = { x: p.x + p.w / 2, z: p.z + p.d / 2, base: h + 0.08, top: h + 0.08 + p.storeys * CITY_GEN.buildings.storey, r: Math.max(p.w, p.d) / 2, entities: [], mis: [], a: 1, to: 1 };
+    const parts: [pc.Mesh | undefined, pc.Material][] = [[b.build(this.device), towerMaterial()], [fb.build(this.device), foliageMaterial()]];
+    for (const [mesh, material] of parts) {
+      if (!mesh) continue;
+      const mi = new pc.MeshInstance(mesh, material);
+      const e = new pc.Entity('tower');
+      e.addComponent('render', { meshInstances: [mi], castShadows: true, receiveShadows: true });
+      this.root.addChild(e);
+      t.entities.push(e);
+      t.mis.push(mi);
+    }
+    return t;
+  }
+
+  /**
+   * See-through skyscrapers. `points` are screen positions (pixels) to keep in view, each with the view depth of the
+   * ground there: the cursor and the middle of the view. A tower standing in front of one fades to a ghost; it
+   * comes back when it no longer covers any. Called once per frame.
+   */
+  fadeTowers(dt: number, cam: pc.CameraComponent, points: { x: number; y: number; depth: number }[]) {
+    const eye = cam.entity.getPosition();
+    const fwd = cam.entity.forward;
+    const a = new pc.Vec3();
+    const c = new pc.Vec3();
+    const k = Math.min(1, dt * TOWER_FADE.speed);
+    for (const v of this.views.values()) {
+      if (!v.towers) continue;
+      for (const t of v.towers) {
+        let cover = false;
+        const depth = (t.x - eye.x) * fwd.x + (t.base - eye.y) * fwd.y + (t.z - eye.z) * fwd.z;
+        if (points.length && depth > 0.2) {
+          cam.worldToScreen(new pc.Vec3(t.x, t.base, t.z), a);
+          cam.worldToScreen(new pc.Vec3(t.x, t.top, t.z), c);
+          const sx = c.x - a.x;
+          const sy = c.y - a.y;
+          const len = Math.max(1, Math.hypot(sx, sy));
+          // its half width on screen, from its height on screen (plus a little, so the edge doesn't flicker)
+          const half = (t.r / (t.top - t.base)) * len * 1.25;
+          for (const p of points) {
+            if (p.depth < depth + t.r + 0.5) continue; // the point is in front of the tower (or on it)
+            const u = Math.min(1, Math.max(0, ((p.x - a.x) * sx + (p.y - a.y) * sy) / (len * len)));
+            if (Math.hypot(p.x - (a.x + sx * u), p.y - (a.y + sy * u)) < half) cover = true;
+          }
+        }
+        t.to = cover ? TOWER_FADE.opacity : 1;
+        if (Math.abs(t.to - t.a) < 0.004) {
+          if (t.a === t.to) continue;
+          t.a = t.to;
+        } else t.a += (t.to - t.a) * k;
+        for (const mi of t.mis) mi.setParameter('material_opacity', t.a);
+      }
+    }
+  }
+
   /**
    * A real city building, by its height: a house (one or two storeys: pitched tile roof, chimney, door), a town
    * block (flat roof that blooms when clear), or a skyscraper (six storeys and up: a podium, a glass shaft and a
