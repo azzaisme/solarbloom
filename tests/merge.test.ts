@@ -24,7 +24,7 @@ const merge = (sim: Sim, anchor: MachineData, partners?: MachineData[]) => {
 };
 
 describe('Phase 5 E13: merging', () => {
-  it('three panels in a row merge into one Solar Array: ×4 output for 3 consumed, two tiles freed, tiles keep their state', () => {
+  it('three panels in a row merge into one Solar Array: tier-2 output for 3 consumed, two tiles freed, tiles keep their state', () => {
     const sim = setup();
     const a = place(sim, 'solar', 4, 5), b = place(sim, 'solar', 5, 5), c = place(sim, 'solar', 6, 5);
     const one = sim.production.solarOutput(a, true);
@@ -44,7 +44,7 @@ describe('Phase 5 E13: merging', () => {
     expect(t5.occupantId).toBeUndefined();
     expect(t5.ground).toBe('restored');
     expect(t5.bloom).toBe(3);
-    expect(sim.production.solarOutput(m, true)).toBeCloseTo(one * 4, 9);
+    expect(sim.production.solarOutput(m, true)).toBeCloseTo(one * TUNING.merge.solarMult, 9);
     // The freed tile can be built on again.
     expect(sim.build.check('solar', PAD, 5, 5).ok).toBe(true);
   });
@@ -179,7 +179,7 @@ describe('Phase 5 E13: merging', () => {
     for (let i = 0; i < 100; i++) sim.advance(0.1); // keeps running without errors
   });
 
-  it('Bloom Garden ×2 biomass and radius +1; Condenser Array ×4 water', () => {
+  it('Bloom Garden biomass bonus and radius +1; Condenser Array water', () => {
     const sim = setup();
     const g = place(sim, 'pollinator', 4, 5);
     place(sim, 'pollinator', 5, 5);
@@ -195,7 +195,7 @@ describe('Phase 5 E13: merging', () => {
     place(sim, 'condenser', 6, 1);
     const w3 = toNum(sim.production.rates(true).water);
     merge(sim, k);
-    expect(toNum(sim.production.rates(true).water) - w0).toBeCloseTo(((w3 - w0) / 3) * 4, 6);
+    expect(toNum(sim.production.rates(true).water) - w0).toBeCloseTo(((w3 - w0) / 3) * TUNING.merge.waterMult, 6);
   });
 
   it('after a merge, reload never brings the merged-away machines back; tier, upgrades and counts persist', () => {

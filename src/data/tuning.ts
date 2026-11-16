@@ -139,39 +139,47 @@ export const TUNING = {
   /** Pollinator Garden: a newly restored neighbour triggers a bonus restore/grow nearby. */
   pollinator: { reach: 1, biomassMult: 1.5, triggersPerChain: 4 },
   /**
-   * Phase 5 E13: merging. Three edge-connected tier-1 machines → one tier 2. Output index 1 → 4 (3 → 4 overall),
-   * and the merge frees two footprints. The first merge of each type is free; later ones cost `feeSeconds` of
+   * Phase 5 E13: merging. Three edge-connected tier-1 machines → one tier 2. Output index 1 → 5 (3 → 5 overall;
+   * the pacing pass raised it from the spec's suggested 4, whose first merge felt modest), and the merge frees two
+   * footprints. The first merge of each type is free; later ones cost `feeSeconds` of
    * steady biomass income (at least `minFee`).
    */
   merge: {
     count: 3,
     feeSeconds: 20,
     minFee: 20,
-    solarMult: 4,
-    waterMult: 4,
+    solarMult: 5,
+    waterMult: 5,
     condenserExtraTargets: 2,
-    gardenBiomassMult: 2,
+    gardenBiomassMult: 2.25, // pacing pass: was 2
     gardenReachBonus: 1,
     fleetDroneMult: 3,
     fleetDroneCap: 12,
     fleetRadiusBonus: 2,
   },
   /**
-   * Phase 5 E14: superstructures (tier 3). Output index 18 (three tier 2s = 12). Built in three paid stages
+   * Phase 5 E14: superstructures (tier 3). Output index 22 (three tier 2s = 15; pacing pass: was 18 against 12). Built in three paid stages
    * (foundation on placement, assembly, activation), priced from steady biomass income when the core is placed
    * and locked then. Abilities charge from restorations in reach (the Megahub from its own drones' jobs), are
    * fired by hand or automatically after the first use, and each release gives back less charge than it uses.
    */
   super: {
-    outputMult: 18,
-    stageSeconds: [30, 90, 180],
+    outputMult: 22,
+    /** Pacing pass: n built superstructures multiply all biomass by 1 + biomassBonus × n^biomassExponent. */
+    biomassBonus: 1,
+    biomassExponent: 0.5,
+    /** Pacing pass: share of the Megaflower's / Nexus's flow charge that still counts while its store is full (E14: 0). */
+    fullFlowShare: 0.5,
+    /** Pacing pass: with nothing in reach to grow, a Nexus / Tree of Life release pays this many seconds of steady biomass income. */
+    bountySeconds: 12,
+    stageSeconds: [60, 180, 360], // pacing pass: was 30 / 90 / 180 (the bot that plans its merges built one by minute 14)
     stageMin: [300, 600, 900],
     stageEnergyShare: [0, 0.4, 0.4],
-    stageWaterShare: [0, 0, 0.4],
+    stageWaterShare: [0, 0, 0.3], // pacing pass: was 0.4 (seed 21 waited 8 minutes for water)
     /** `flowSeconds`: also fills in this long from its own production while that is banked (not lost to a full store). */
     megaflower: { mult: 3, seconds: 15, charge: 25, reach: 4, flowSeconds: 90 },
     nexus: { tiles: 24, charge: 30, reach: 4, waveRadius: 8, flowSeconds: 90 },
-    treeOfLife: { tiles: 12, charge: 30, store: 3, reach: 4, gardenMult: 2.5, gardenReachBonus: 2, flowSeconds: 120 },
+    treeOfLife: { tiles: 12, charge: 30, store: 3, reach: 4, gardenMult: 3, gardenReachBonus: 2, flowSeconds: 120 },
     megahub: { drones: 6, seconds: 30, sweep: 3, charge: 20, radiusBonus: 4 },
   },
 

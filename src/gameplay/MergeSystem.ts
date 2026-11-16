@@ -42,7 +42,7 @@ export interface MergePlan {
   free: boolean;
   fromName: string;
   toName: string;
-  /** output index: three tier-1 machines = 3, the tier 2 = 4 */
+  /** output index: three tier-1 machines = 3, the tier 2 = TUNING.merge.solarMult */
   before: number;
   after: number;
   lost: LostLevels[];

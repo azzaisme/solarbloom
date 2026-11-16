@@ -174,7 +174,8 @@ export class ProductionSystem {
     // Phase 4 E06: temporary biomass boosts (Bloom Frenzy) apply to the total, never to the sustained rate.
     const bm = sustained ? 1 : this.sim.mods.biomassMult();
     // Phase 5 E12: per-tile and per-machine coefficients are plain numbers; the totals are big numbers.
-    return { energy: big(energy), water: big(water), biomass: big(this.biomassRate + bonus.biomass).mul(bm) };
+    // Pacing pass: built superstructures multiply all biomass (a permanent gain, so it is in the sustained rate).
+    return { energy: big(energy), water: big(water), biomass: big((this.biomassRate + bonus.biomass) * (this.sim.supers?.biomassMult() ?? 1)).mul(bm) };
   }
 
   /** Solar panels in a bloom boost (kept small: boosts last seconds). */

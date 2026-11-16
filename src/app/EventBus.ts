@@ -17,7 +17,7 @@ export interface GameEvents {
   /** Phase 5 E14: a superstructure was placed (stage 1) or a stage was paid (2, 3 = built). */
   'super.stage': { machine: MachineData; stage: number };
   /** Phase 5 E14: a superstructure's ability fired. `tiles` = tiles it acts on (wave, evolution), if any. */
-  'super.ability': { machine: MachineData; tiles: string[] };
+  'super.ability': { machine: MachineData; tiles: string[]; bounty?: Big };
   'machine.merged': { machine: MachineData; consumed: MachineData[]; fee: Cost; lost: { upgrade: string; name: string; kept: number; lost: number[] }[] };
   'chain.started': { chainId: number; originTileId: string };
   'chain.event': { event: ChainEvent; combo: number };
