@@ -1,11 +1,11 @@
-"""Fits each role part onto the base drone and renders every role drone.
+"""Puts each role's parts on the base drone and renders every role drone.
 
-Each part is scaled so its largest side is `size` and its bounding-box centre lands on `at` (Blender
-axes, drone origin: face +X, up +Z), with an optional Z turn. That placement is baked into the part,
-so the game parents the part to the drone at the origin with no offsets. Outputs:
+Parts are built in drone space (placed=True). A part made elsewhere can instead be fitted: scaled so its
+largest side is `size` with its bounding-box centre on `at` (Blender axes, drone origin: face +X, up +Z),
+with an optional Z turn. Either way the game parents the part to the drone at the origin. Outputs:
 - <parts>/<name>.fit.glb per part (game),
 - <drone>/roles/drone-<role>.blend per role: body, eyes and fitted parts as separate quad objects,
-  with that role's colour on pal_gold and pal_trim and its eye sheet on the visor,
+  with that role's eye sheet on the visor (frame 0 is the role's own idle face),
 - role-<role>.png renders next to <grid.png> (tile them with roles_grid.py).
 
 blender -b --python assets/tools/drone_roles.py -- assets/raw/drone/drone-base.blend assets/raw/drone/parts assets/raw/drone/preview/roles-grid.png
@@ -23,36 +23,22 @@ import model_io
 args = sys.argv[sys.argv.index("--") + 1:]
 base, parts_dir, grid_png = (os.path.abspath(a) for a in args[:3])
 
-# role -> parts. Positions follow docs/DRONE_ROLES_EPIC.md section 2.9, pushed up and out so each
-# role changes the silhouette seen from the game camera (which looks down at ~40 degrees).
+# role -> parts. Every part is built in drone space on the redesigned body (drone_role_kit.py,
+# drone_parts_procedural.py), so it is placed as it is. Each role changes the silhouette seen from the
+# game camera (which looks down at ~40 degrees), and roles read by shape, not colour.
 ROLES = {
     "Restorer": [],
-    "Gardener": [("gardener-kit", dict(at=(-0.35, 0.0, 0.0), size=0.42, turn=0)),
-                 ("gardener-pot", dict(at=(-0.06, -0.10, 0.44), size=0.36, turn=30))],
-    "Scout": [("scout-lens", dict(at=(0.36, -0.13, 0.11), size=0.15, turn=0)),
-              ("scout-wings", dict(placed=True)),      # built in drone space by drone_parts_procedural.py
-              ("scout-periscope", dict(placed=True))],  # built in drone space by drone_role_kit.py
-    "Courier": [("courier-parcel", dict(at=(-0.40, 0.0, 0.0), size=0.38, turn=0)),
-                ("courier-rotor", dict(placed=True))],
+    "Gardener": [("gardener-kit", dict(placed=True)), ("gardener-pot", dict(placed=True))],
+    "Scout": [("scout-lens", dict(placed=True)), ("scout-wings", dict(placed=True)), ("scout-periscope", dict(placed=True))],
+    "Courier": [("courier-parcel", dict(placed=True)), ("courier-rotor", dict(placed=True))],
     "Spark": [("spark-tail", dict(placed=True)), ("spark-bolt", dict(placed=True))],
-    "Harvester": [("harvester-basket", dict(at=(0.43, 0.0, -0.38), size=0.36, turn=0)),
-                  ("harvester-arms", dict(placed=True)), ("harvester-fruit", dict(placed=True))],
+    "Harvester": [("harvester-basket", dict(placed=True)), ("harvester-arms", dict(placed=True)),
+                  ("harvester-fruit", dict(placed=True))],
 }
-# Role accent: replaces pal_gold (metal on the parts) and pal_trim (the glowing grooves in the shell,
-# always emissive at TRIM_GLOW). The game does the same swap.
-# Spark's trim also glows (ACCENT_GLOW), which is what keeps its yellow apart from the Restorer's gold.
-ACCENT = {"Restorer": "#e7b54a", "Gardener": "#5fbf43", "Scout": "#4cc3ea", "Courier": "#ff9a5a",
-          "Spark": "#ffe14a", "Harvester": "#b48cff"}
-ACCENT_GLOW = {"Spark": 0.8}
-TRIM_GLOW = 0.9
+# Drone trim stays gold on every role (the redesign spec); a role's accent colour belongs to its hub and icon.
 ROLES_DIR = os.path.join(os.path.dirname(parts_dir), "roles")
 os.makedirs(ROLES_DIR, exist_ok=True)
 EYES_DIR = os.path.join(os.path.dirname(parts_dir), "eyes")   # drone-eyes-<role>.png
-
-
-def srgb_to_linear(hexs):
-    c = [int(hexs[i:i + 2], 16) / 255 for i in (1, 3, 5)]
-    return [x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4 for x in c] + [1]
 
 
 def append_objects(path):
@@ -114,7 +100,7 @@ sc.collection.objects.link(sun)
 cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam")); sc.collection.objects.link(cam)
 cam.data.type = "ORTHO"; cam.data.ortho_scale = 2.2; sc.camera = cam
 tgt = Vector((-0.05, 0.0, 0.05))
-cam.location = tgt + Vector((1.9, 1.9, 2.25))          # game-like: 45° yaw, ~40° pitch
+cam.location = tgt + Vector((2.45, 1.05, 2.25))        # game-like ~40° pitch, turned 23° so the face reads
 cam.rotation_euler = (tgt - cam.location).to_track_quat("-Z", "Y").to_euler()
 tiles = []
 for role, parts in ROLES.items():
@@ -122,23 +108,11 @@ for role, parts in ROLES.items():
     for o in sc.objects:
         if o.type == "MESH":
             o.hide_render = o not in show
-    for m in bpy.data.materials:
-        if m.name.startswith("pal_gold"):
-            b = m.node_tree.nodes["Principled BSDF"]
-            b.inputs["Base Color"].default_value = srgb_to_linear(ACCENT[role])
-            b.inputs["Emission Color"].default_value = srgb_to_linear(ACCENT[role])
-            b.inputs["Emission Strength"].default_value = ACCENT_GLOW.get(role, 0.0)
-        elif m.name.startswith("pal_trim"):
-            b = m.node_tree.nodes["Principled BSDF"]
-            b.inputs["Base Color"].default_value = srgb_to_linear(ACCENT[role])
-            b.inputs["Emission Color"].default_value = srgb_to_linear(ACCENT[role])
-            b.inputs["Emission Strength"].default_value = TRIM_GLOW
     eyes = os.path.join(EYES_DIR, f"drone-eyes-{role.lower()}.png")
     for n in bpy.data.materials["visor_eyes"].node_tree.nodes:
         if n.type == "TEX_IMAGE" and os.path.exists(eyes):
             n.image = bpy.data.images.load(eyes, check_existing=True)
-    # Assembled role file: only this role's objects, written in their own scene with the materials as
-    # they are set right now (the role's accent and eyes).
+    # Assembled role file: only this role's objects, written in their own scene with this role's eyes.
     rsc = bpy.data.scenes.new(f"drone-{role.lower()}")
     for o in show:
         rsc.collection.objects.link(o)

@@ -2,21 +2,25 @@
 
 Each coloured piece is its own smooth mesh, so material edges are exact (Tripo's parts had colours
 painted face by face, with ragged edges, and Tripo models thin tubes and blades badly). Drone space: face +X, up +Z,
-origin at the body centre; the shell top is at about z 0.235 and the antenna stands near (0, 0.05).
+origin near the body centre. Parts sit on the redesigned body (drone_shape.py, drone_build.py): the navy cap
+tops out at z 0.256 with the antenna in its middle, the leaf ears fill the shoulders (|y| 0.24-0.6, z above
+0.13) and the face spans |y| < 0.28 on the front, so top parts stand either side of the antenna or at the back.
 
-- scout-periscope: a tall gold periscope rising from the top, its lens looking forward.
+- scout-periscope: a tall gold periscope rising from the top beside the antenna, its lens looking forward.
+- scout-wings: two long leaf wings (the ears' leaf shape, stretched), swept back from the sides.
 - courier-rotor: a mast on top with a spinning hub of three leaf blades (the game spins `rotor`
   around Z; the blades are a separate object for that reason, see ROTOR_PIVOT).
-- spark-bolt: a glowing zig-zag lightning rod standing on the top.
+- spark-bolt: a glowing zig-zag lightning rod standing on the top beside the antenna.
 - harvester-arms: two gold arms reaching forward and down to hold the basket in front.
 - harvester-fruit: a pile of round fruit sitting in the basket's mouth.
 - gardener-kit: a water canister on the back with gold straps, a glass window and a sprinkler spout.
-- gardener-pot: a cream pot with a gold rim, soil and a three-leaf seedling, sitting on the head.
-- scout-lens: a gold spyglass by the visor.
+- gardener-pot: a cream pot with a gold rim, soil and a three-leaf seedling, on the back of the head.
+- scout-lens: a gold spyglass on the right side of the face.
 - courier-parcel: a kraft parcel on the back, tied with crossed gold straps and a buckle.
 - harvester-basket: a woven wooden basket (ridged) with a gold rim, held out in front.
 
-Gold parts use pal_gold, which the game recolours to the role's accent (see drone_roles.py).
+Gold parts use pal_gold, the same soft gold as the body on every role (a role's accent colour shows on its hub
+and icon, not the drone). Colours match the redesign spec and Materials.ts PALETTE.
 Writes <parts>/<name>.blend (quads) and <name>.glb.
 
 blender -b --python assets/tools/drone_role_kit.py -- <parts dir>
@@ -45,7 +49,8 @@ def srgb_to_linear(hexs):
 
 
 PAL = {  # key: (hex, roughness, metallic, glow) - same values as drone_build.py / Materials.ts
-    "gold": ("#e7b54a", 0.35, 0.6, 0), "shell": ("#e9e6df", 0.55, 0, 0), "leafFin": ("#7fd36a", 0.6, 0, 0),
+    "gold": ("#e8ba40", 0.28, 0.55, 0), "shell": ("#f5f3e8", 0.30, 0, 0), "leafFin": ("#a5d94d", 0.5, 0, 0),
+    "leafVein": ("#589d32", 0.55, 0, 0), "eyeCyan": ("#71f5ff", 0.25, 0, 2.0),
     "glass": ("#7fd6f0", 0.1, 0, 0.4), "flowerCore": ("#ffe28a", 0.3, 0, 2.0), "catRed": ("#e2483c", 0.45, 0, 0),
     "pink": ("#ff8fbf", 0.45, 0, 0), "trunk": ("#8b6243", 0.7, 0, 0), "soil": ("#6f533a", 0.9, 0, 0),
     "spark": ("#ffd23f", 0.3, 0, 1.2), "stem": ("#3f9a3a", 0.6, 0, 0),
@@ -115,7 +120,7 @@ def ring(centre, R, r, axis, key):
     return o
 
 
-def finish(name, objs=None):
+def finish(name, objs=None, xform=None):
     objs = objs or [o for o in bpy.context.scene.objects if o.type == "MESH"]
     bpy.ops.object.select_all(action="DESELECT")
     for o in objs:
@@ -127,6 +132,8 @@ def finish(name, objs=None):
     o = bpy.context.active_object
     o.name = o.data.name = name
     o.matrix_world = Matrix.Identity(4)
+    if xform is not None:
+        o.data.transform(xform)
     bpy.ops.object.shade_auto_smooth(angle=math.radians(40))
     model_io.save(os.path.join(parts_dir, name + ".glb"), [o])
     model_io.save(os.path.join(parts_dir, name + ".blend"), [o])
@@ -196,15 +203,58 @@ def leaf(root, direction, length, width, key="leafFin", thick=0.008):
     return obj_from(me, key)
 
 
+LEAF_FOLD, LEAF_CURL = 0.45, 0.55
+
+
+def ear_width(x):
+    x = min(max(x, 0.0), 1.0)
+    return math.sin(math.pi * x ** 0.85) ** 0.6
+
+
+def ear_shape(p, curl=LEAF_CURL):
+    x = p.x + 0.5
+    w = ear_width(x)
+    y = p.y * w * 1.1
+    z = p.z * (0.45 + 0.55 * w)
+    return Vector((x, y, z + LEAF_FOLD * abs(y) + curl * x * x))
+
+
+def ear_top(x, y, curl=LEAF_CURL):
+    w = max(ear_width(x), 1e-3)
+    return Vector((x, y, 0.5 * (0.45 + 0.55 * w) * math.sqrt(max(0.0, 1 - (y / (0.55 * w)) ** 2))
+                   + LEAF_FOLD * abs(y) + curl * x * x))
+
+
+def ear(root, rot, size, curl=LEAF_CURL):
+    """A chunky leaf like the drone's ears: the blade, a midrib and three pairs of side veins."""
+    bm = bmesh.new(); bmesh.ops.create_cube(bm, size=1.0)
+    bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=5, use_grid_fill=True)
+    for v in bm.verts:
+        v.co = ear_shape(v.co.normalized() * 0.5, curl)
+    me = bpy.data.meshes.new("ear"); bm.to_mesh(me); bm.free()
+    m = Matrix.Translation(Vector(root)) @ rot @ Matrix.Diagonal((2 * size[0], 2 * size[1], 2 * size[2], 1))
+    me.transform(m)
+    objs = [obj_from(me, "leafFin")]
+    lift = Vector((0, 0, 0.02))
+    objs.append(tube([m @ (ear_top(x, 0.0, curl) + lift) for x in (0.1, 0.3, 0.5, 0.7, 0.86)], 0.0045, "leafVein", taper=0.6))
+    for x0 in (0.3, 0.5, 0.68):
+        for sy in (1, -1):
+            w = ear_width(x0 + 0.1)
+            objs.append(tube([m @ (ear_top(x0, 0.0, curl) + lift), m @ (ear_top(x0 + 0.12, sy * 0.3 * w, curl) + lift)],
+                             0.003, "leafVein", taper=0.6))
+    return objs
+
+
 def fresh():
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
 
 # ---------------------------------------------------------------- scout periscope
 fresh()
-base = Vector((-0.06, -0.17, surf(-0.06, -0.17) - 0.035))
-top = Vector((-0.06, -0.17, 0.72))
-head = Vector((0.10, -0.17, 0.72))
+PX, PY = -0.10, -0.10                                                          # beside the antenna, clear of the ears
+base = Vector((PX, PY, surf(PX, PY) - 0.035))
+top = Vector((PX, PY, 0.72))
+head = Vector((0.08, PY, 0.72))
 tube([base, top - Vector((0, 0, 0.05)), top + Vector((0.05, 0, 0)), head], 0.03, "gold")
 knob(base + Vector((0, 0, 0.04)), (0.06, 0.06, 0.035), "gold")                 # collar on the shell
 knob(top + Vector((0.01, 0, -0.01)), (0.045, 0.045, 0.045), "gold")            # elbow
@@ -226,10 +276,11 @@ finish("courier-rotor")
 
 # ---------------------------------------------------------------- spark bolt
 fresh()
-zig = [(-0.10, -0.15, surf(-0.10, -0.15) - 0.02), (-0.10, -0.15, 0.46), (-0.04, -0.15, 0.56), (-0.13, -0.15, 0.62), (-0.06, -0.15, 0.78)]
+BY = 0.10                                                                       # beside the antenna, clear of the ears
+zig = [(-0.10, BY, surf(-0.10, BY) - 0.02), (-0.10, BY, 0.46), (-0.04, BY, 0.56), (-0.13, BY, 0.62), (-0.06, BY, 0.78)]
 tube([Vector(p) for p in zig], 0.042, "spark", taper=0.6)
-knob((-0.10, -0.15, surf(-0.10, -0.15) + 0.005), (0.06, 0.06, 0.035), "gold")                          # gold socket
-knob((-0.06, -0.15, 0.795), (0.026, 0.026, 0.034), "spark")                  # glowing tip
+knob((-0.10, BY, surf(-0.10, BY) + 0.005), (0.06, 0.06, 0.035), "gold")                          # gold socket
+knob((-0.06, BY, 0.795), (0.026, 0.026, 0.034), "spark")                  # glowing tip
 finish("spark-bolt")
 
 # ---------------------------------------------------------------- harvester arms
@@ -280,7 +331,7 @@ finish("gardener-kit")
 
 # ---------------------------------------------------------------- gardener pot (on the head)
 fresh()
-P = Vector((-0.04, -0.06, surf(-0.04, -0.06) - 0.012))                           # pot base centre
+P = Vector((0.0, 0.0, 0.0))                                                     # built round its base, then seated
 lathe([(0.02, 0.0), (0.07, 0.0), (0.088, 0.012), (0.1, 0.045), (0.108, 0.09), (0.108, 0.118),
        (0.094, 0.118), (0.09, 0.098)], P, "shell")                                # outer wall, lip, inner wall
 ring(P + Vector((0, 0, 0.12)), 0.104, 0.014, (0, 0, 1), "gold")                   # gold rim
@@ -294,16 +345,18 @@ for i in range(3):                                                              
 curl = [top + Vector((0.02 * math.cos(t) - 0.02, 0, 0.02 * math.sin(t))) for t in
         (math.radians(x) for x in range(0, 300, 30))]
 tube(curl, 0.008, "leafFin", taper=0.5)                                          # curled shoot
-finish("gardener-pot")
+seat = drone_shape.toward((-0.62, 0.0, 1.0), -0.02)                              # back of the head, behind the antenna
+lean = Vector((0, 0, 1)).rotation_difference(drone_shape.normal(seat)).to_matrix().to_4x4()
+finish("gardener-pot", xform=Matrix.Translation(seat) @ lean @ Matrix.Rotation(math.radians(30), 4, "Z"))
 
 # ---------------------------------------------------------------- scout spyglass (by the visor)
 fresh()
-L0, L1 = Vector((0.43, -0.2, 0.12)), Vector((0.29, -0.2, 0.12))                  # front, back
+L0, L1 = Vector((0.33, -0.315, 0.06)), Vector((0.17, -0.315, 0.06))              # front, back (beside the face)
 tube([L0, L1], 0.03, "gold", taper=0.35)
 ring(L0, 0.03, 0.009, (1, 0, 0), "gold")
 knob(L0 + Vector((0.004, 0, 0)), (0.008, 0.026, 0.026), "glass", cuts=2)        # lens
 knob(L1, (0.022, 0.022, 0.022), "gold", cuts=2)                                 # back cap
-rbox((0.315, -0.17, 0.11), (0.03, 0.035, 0.015), "gold", p=4)                    # clip to the body
+rbox((0.17, -0.29, 0.06), (0.035, 0.03, 0.018), "gold", p=4)                     # clip to the body
 finish("scout-lens")
 
 # ---------------------------------------------------------------- courier parcel (on the back)
@@ -327,3 +380,12 @@ outer += [(0.172, 0.165), (0.158, 0.165), (0.14, 0.09), (0.1, 0.03), (0.03, 0.03
 lathe(outer, B, "trunk")
 ring(B + Vector((0, 0, 0.165)), 0.168, 0.014, (0, 0, 1), "gold")
 finish("harvester-basket")
+
+# ---------------------------------------------------------------- scout wings (long leaves, swept back)
+fresh()
+objs = []
+for side in (1, -1):
+    root = Vector((-0.05, 0.27 * side, -0.02))
+    rot = Matrix.Rotation(math.radians(115 * side), 4, "Z") @ Matrix.Rotation(math.radians(6), 4, "Y")
+    objs += ear(root, rot, (0.24, 0.11, 0.022), curl=0.25)
+finish("scout-wings", objs)

@@ -57,14 +57,14 @@ TOP_LIFT = 0.006
 FACE_DIR = Vector((1.0, 0.0, -0.03))
 FACE_A, FACE_B, FACE_N = 0.275, 0.19, 3.6      # half width, half height, squareness
 HOLE = 1.09                                      # shell is cut back to this outline
-BEZEL = 0.032                                    # bezel crown height off the shell
+BEZEL = 0.024                                    # bezel crown height off the shell
 # (outline fraction, lift, material of the band outside this ring), from the hole edge inward:
 # a round bezel tube, then a wall down into the inset screen
 FACE_RINGS = [(1.065, 0.45 * BEZEL, "gold"), (1.04, 0.85 * BEZEL, "gold"), (1.01, BEZEL, "gold"),
               (0.98, 0.85 * BEZEL, "gold"), (0.958, 0.45 * BEZEL, "gold"), (0.95, 0.0, "gold"),
-              (0.95, -0.010, "darkFace")]
+              (0.95, -0.006, "darkFace")]
 SCREEN = [0.88, 0.74, 0.58, 0.42, 0.26, 0.12]   # screen rings; the centre is a small fan
-SCREEN_LIFT = lambda f: -0.010 + 0.012 * (1 - f * f)
+SCREEN_LIFT = lambda f: -0.006 + 0.012 * (1 - f * f)
 EYE_SQUARE, EYE_UP = 0.64, 0.01                   # the eye sheet frame covers this square on the screen
 EYE_FRAMES = 8                                   # frames in the sheet (drone_eye_sheet.py); UVs show frame 0
 
