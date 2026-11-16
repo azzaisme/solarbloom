@@ -1,10 +1,14 @@
 import type { TileData, TileTransition } from '../../core/types';
 
 /**
- * Look 6 end-state hooks. Every transition animates toward *today's* stage visuals (the chunk renderer's per-stage
- * builders, E16's stage-distinct ground). Look 3 (textures, paving, grass, flowers, shrubs) and Look 2.6 (dead-state
- * colours) replace end states here and in those builders; the transition framework doesn't care what the end
- * state looks like, only which state a tile is in and what it came from.
+ * Look 6 end-state hooks. Every transition animates toward *today's* stage visuals. The end state is whatever
+ * the chunk renderer's builders draw for a tile: its slab colour (through `ChunkRenderer.slab()`) and its props
+ * (through `ChunkRenderer.tile()`, which the framework calls via `ChunkHost.tile`). Look 3 (surfaces, foliage and
+ * detail) replaces those builders and materials; as long as they draw through the same host interface (slab via
+ * `slab()`, props via the sink passed in, trees/shrubs via the foliage sink), every transition animates toward the
+ * new look with no change here. Look 2 (palette, dead-state colours) changes PALETTE, which the slab colours and the
+ * transition shader's in-between colours (`TransitionRenderer.applyPalette`) both read.
+ * This file only says which surface state a tile is in and what it came from.
  */
 
 /** Surface state codes understood by the transition shader. */

@@ -5,7 +5,8 @@ import type { Sim } from '../../gameplay/Sim';
 import type { TreeGeo } from '../TreeGen';
 import { FEATURE, fromTile, KIND, surfaceState } from './EndStates';
 import { transitionMaterial } from './TransitionMaterial';
-import { packHex, TrMeshBuilder, type Pen } from './TrMeshBuilder';
+import { linHex, packHex, TrMeshBuilder, type Pen } from './TrMeshBuilder';
+import { PALETTE } from '../Materials';
 
 /** Something primitives can be added to (the chunk renderer's static builder, or a transition builder). */
 export interface Sink {
@@ -85,6 +86,20 @@ export class TransitionRenderer {
     const S = TUNING.transitions.restoreStages;
     this.material.setParameter('uTrStages', [S.fracture[1], S.heave[1], S.crumble[1], S.knit[0]]);
     this.material.setParameter('uTrLush', [TUNING.transitions.lushSoak, TUNING.transitions.lushDry, 0]);
+    this.applyPalette();
+  }
+
+  /**
+   * Look 2 hook: the in-between colours (soil, moss, crack interiors, rust streaks, the glow of life underneath)
+   * read PALETTE keys, so a palette pass carries through every transition. Call again if PALETTE changes at runtime.
+   */
+  applyPalette() {
+    const set = (u: string, hex: string) => this.material.setParameter(u, linHex(hex));
+    set('uTrSoil', PALETTE.soilDark);
+    set('uTrMoss', PALETTE.moss);
+    set('uTrCrack', PALETTE.crack);
+    set('uTrRust', PALETTE.rust);
+    set('uTrLife', PALETTE.coreGlow);
   }
 
   /** Once per frame: `simTime` is the sim clock plus the fraction of a step not yet simulated. */
@@ -300,11 +315,11 @@ export class TransitionRenderer {
       // debris sinks, then lily pads and reeds grow
       for (let i = 0; i < 3; i++) {
         this.pen(tb, tr.t0, d, 1, [0, 0], [0.05, 0.4], top);
-        tb.add('box', '#5d5442', [x + (rnd() - 0.5) * 0.6, top - 0.02, z + (rnd() - 0.5) * 0.6], [0.12, 0.03, 0.08]);
+        tb.add('box', PALETTE.soilDark, [x + (rnd() - 0.5) * 0.6, top - 0.02, z + (rnd() - 0.5) * 0.6], [0.12, 0.03, 0.08]);
       }
       for (let i = 0; i < 3; i++) {
         this.pen(tb, tr.t0, d, 1, [0.5, 0.85], [2, 3], top);
-        tb.add('cylinder', '#5fb24a', [x + (rnd() - 0.5) * 0.6, top - 0.03, z + (rnd() - 0.5) * 0.6], [0.2, 0.01, 0.2]);
+        tb.add('cylinder', PALETTE.leafVein, [x + (rnd() - 0.5) * 0.6, top - 0.03, z + (rnd() - 0.5) * 0.6], [0.2, 0.01, 0.2]);
       }
       return;
     }
@@ -325,14 +340,14 @@ export class TransitionRenderer {
       // dust and grit kicked up as they heave (tiny cubes that pop and settle)
       for (let i = 0; i < 4; i++) {
         this.pen(tb, tr.t0, d, 1, [S.fracture[0], S.fracture[1] + 0.05], [S.heave[0] + 0.06, S.heave[1]], top);
-        tb.add('box', '#b9ad97', [x + (rnd() - 0.5) * 0.7, top + 0.05 + rnd() * 0.06, z + (rnd() - 0.5) * 0.7], 0.035);
+        tb.add('box', PALETTE.debris, [x + (rnd() - 0.5) * 0.7, top + 0.05 + rnd() * 0.06, z + (rnd() - 0.5) * 0.7], 0.035);
       }
     }
     if (f === 'paving') {
       // tiny flowers come up in the joints
       for (let i = 0; i < 4; i++) {
         this.pen(tb, tr.t0, d, 1, [0.55, 0.85], [2, 3], top);
-        tb.add('sphere', ['#ffffff', '#ffd75e', '#ff9fd0', '#b48cff'][i], [x + (rnd() - 0.5) * 0.7, top + 0.025, z + (rnd() - 0.5) * 0.7], 0.05);
+        tb.add('sphere', PALETTE.flower[i % PALETTE.flower.length], [x + (rnd() - 0.5) * 0.7, top + 0.025, z + (rnd() - 0.5) * 0.7], 0.05);
       }
       return;
     }
@@ -342,17 +357,17 @@ export class TransitionRenderer {
       const az = z + (rnd() - 0.5) * 0.5;
       const ht = 0.12 + rnd() * 0.1;
       this.pen(tb, tr.t0, d, 4, [S.fracture[1] + 0.04, S.heave[1] + 0.08], [S.crumble[1], S.sprout[0] + 0.15], top);
-      tb.add('cylinder', i % 2 ? '#6b4a2f' : '#7d5a3a', [ax, top + ht / 2, az], [0.028, ht, 0.028]);
-      tb.add('sphere', '#5b3d26', [ax + 0.02, top + ht, az], [0.05, 0.03, 0.05]);
+      tb.add('cylinder', i % 2 ? PALETTE.trunk : PALETTE.soilDark, [ax, top + ht / 2, az], [0.028, ht, 0.028]);
+      tb.add('sphere', PALETTE.soilDark, [ax + 0.02, top + ht, az], [0.05, 0.03, 0.05]);
     }
     // seedlings: a stem and two cotyledon leaves each
     for (let i = 0; i < 5; i++) {
       const ax = x + (rnd() - 0.5) * 0.66;
       const az = z + (rnd() - 0.5) * 0.66;
       this.pen(tb, tr.t0, d, 1, [S.sprout[0], S.sprout[1]], [S.knit[0] + 0.12, 1], top);
-      tb.add('cylinder', '#6fae45', [ax, top + 0.04, az], [0.016, 0.08, 0.016]);
-      tb.add('sphere', '#8fd05a', [ax - 0.025, top + 0.085, az], [0.05, 0.016, 0.03]);
-      tb.add('sphere', '#8fd05a', [ax + 0.025, top + 0.085, az], [0.05, 0.016, 0.03]);
+      tb.add('cylinder', PALETTE.stem, [ax, top + 0.04, az], [0.016, 0.08, 0.016]);
+      tb.add('sphere', PALETTE.leafFin, [ax - 0.025, top + 0.085, az], [0.05, 0.016, 0.03]);
+      tb.add('sphere', PALETTE.leafFin, [ax + 0.025, top + 0.085, az], [0.05, 0.016, 0.03]);
     }
   }
 }

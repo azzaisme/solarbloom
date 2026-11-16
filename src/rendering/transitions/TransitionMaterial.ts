@@ -132,6 +132,12 @@ uniform float uTrDetail;
 uniform vec4 uTrScrub;
 uniform vec4 uTrStages;
 uniform vec3 uTrLush;
+// Look 2 hook: transition colours come from PALETTE (linear), set by TransitionRenderer
+uniform vec3 uTrSoil;
+uniform vec3 uTrMoss;
+uniform vec3 uTrCrack;
+uniform vec3 uTrRust;
+uniform vec3 uTrLife;
 vec3 trGlow = vec3(0.0);
 `;
 
@@ -216,16 +222,19 @@ void getAlbedo() {
 	float kind = floor(code / 8.0 + 0.01);
 	float state = code - kind * 8.0;
 	if (kind < 0.5) p = 1.0;
+	bool top = vNormalW.y > 0.5;
+	// Settled living or hard ground (most of a restored city), or any slab side: just its colour, unless it's lush.
+	bool wetNow = vTrC.w > uTrTime;
+	if (kind < 0.5 && (state > 1.5 || !top) && !(wetNow && top)) return;
 	vec3 from = kind < 0.5 ? to : trUnpack(vTrB.x);
 	float dir = vTrC.x;
-	bool top = vNormalW.y > 0.5;
 	float detail = uTrDetail;
-	float n = detail > 0.5 ? trNoise(l * 5.0 + cell * 1.7) : 0.5;
+	float n = detail > 0.5 && kind > 0.5 ? trNoise(l * 5.0 + cell * 1.7) : 0.5;
 	float creep = trCreep(l, dir, p, n);
 	vec3 col = to;
-	vec3 soil = vec3(0.085, 0.05, 0.03);
-	vec3 moss = vec3(0.16, 0.30, 0.06);
-	vec3 crackCol = vec3(0.03, 0.028, 0.025);
+	vec3 soil = uTrSoil * 0.55;
+	vec3 moss = uTrMoss * 0.8;
+	vec3 crackCol = uTrCrack * 0.55;
 	float glow = 0.0;
 	// pollution now (soften eases it in from the source edge)
 	float pol = kind > 0.5 && kind < 2.5 ? mix(vTrB.y, vTrB.z, creep) : vTrB.z;
@@ -276,7 +285,7 @@ void getAlbedo() {
 			float stain = smoothstep(0.45, 0.75, trNoise(l * 3.0 + cell * 0.9));
 			c *= 1.0 - 0.38 * g * stain;
 			float rust = smoothstep(0.86, 0.95, trNoise(vec2(l.x * 9.0, l.y * 1.5) + cell));
-			c = mix(c, vec3(0.2, 0.09, 0.04), rust * g * 0.5);
+			c = mix(c, uTrRust * 0.55, rust * g * 0.5);
 			// pale, clean limestone as the grime goes
 			c = mix(c, c * 1.18 + 0.02, (1.0 - g) * 0.6);
 		}
@@ -321,7 +330,7 @@ void getAlbedo() {
 		}
 	}
 	dAlbedo = col;
-	trGlow = vec3(0.35, 0.85, 0.45) * glow;
+	trGlow = uTrLife * glow;
 }
 `;
 
@@ -367,6 +376,7 @@ export function transitionMaterial(): pc.StandardMaterial {
   m.setParameter('uTrScrub', [0, 0, 0, 0]);
   m.setParameter('uTrStages', [0.08, 0.3, 0.5, 0.7]);
   m.setParameter('uTrLush', [2.5, 10, 0]);
+  for (const u of ['uTrSoil', 'uTrMoss', 'uTrCrack', 'uTrRust', 'uTrLife']) m.setParameter(u, [0.5, 0.5, 0.5]);
   m.update();
   return (material = m);
 }

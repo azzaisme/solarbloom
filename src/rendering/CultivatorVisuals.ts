@@ -176,8 +176,8 @@ export class CultivatorVisuals {
     if (working && this.vfx && !this.reducedMotion && t - v.lastTrail > 0.35) {
       v.lastTrail = t;
       const fwd = new pc.Vec3(Math.sin(u.rot), 0, Math.cos(u.rot));
-      this.vfx.burst(new pc.Vec3(nx + fwd.x * 0.32, y + 0.05, nz + fwd.z * 0.32), 3, { up: 0.8, speed: 0.6, size: 0.035, life: 0.5, hex: '#7a5a3a' });
-      if ((v.dust = (v.dust + 1) % 3) === 0) this.vfx.burst(new pc.Vec3(nx - fwd.x * 0.32, y + 0.04, nz - fwd.z * 0.32), 2, { up: 0.5, speed: 0.3, size: 0.03, life: 0.6, hex: '#8fd05a' });
+      this.vfx.burst(new pc.Vec3(nx + fwd.x * 0.32, y + 0.05, nz + fwd.z * 0.32), 3, { up: 0.8, speed: 0.6, size: 0.035, life: 0.5, hex: PALETTE.soil });
+      if ((v.dust = (v.dust + 1) % 3) === 0) this.vfx.burst(new pc.Vec3(nx - fwd.x * 0.32, y + 0.04, nz - fwd.z * 0.32), 2, { up: 0.5, speed: 0.3, size: 0.03, life: 0.6, hex: PALETTE.leafFin });
     }
   }
 

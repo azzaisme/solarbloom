@@ -1267,7 +1267,7 @@ export class Game {
         this.vfx.ring(p, PALETTE.eyeCyan, 1.1, 0.55);
         this.vfx.burst(p, 6, { up: 1.5, speed: 1.4, size: 0.05 });
         // Look 6.4: the slab fractures under your tap: a short, punchy shake and a burst of grit.
-        this.vfx.burst(p, 8, { up: 1.1, speed: 1.6, size: 0.045, life: 0.6, hex: '#b9ad97' });
+        this.vfx.burst(p, 8, { up: 1.1, speed: 1.6, size: 0.045, life: 0.6, hex: PALETTE.debris });
         if (!this.settings.reducedMotion) this.camera.shake(0.035);
         this.sfx.pulse();
       } else if (source === 'broad') this.vfx.ring(p, PALETTE.eyeCyan, 0.8, 0.45);
@@ -1326,7 +1326,7 @@ export class Game {
     // Look 6.10: a tap on a tile mid-process: a satisfying knock (crack burst, a tiny shake, a crack sound).
     b.on('tile.knocked', ({ tile }) => {
       const p = this.tileVec(tile);
-      this.vfx.burst(p, 7, { up: 1.2, speed: 1.2, size: 0.04, life: 0.5, hex: '#b9ad97' });
+      this.vfx.burst(p, 7, { up: 1.2, speed: 1.2, size: 0.04, life: 0.5, hex: PALETTE.debris });
       this.vfx.ring(p, '#c8ffa8', 0.6, 0.25);
       if (!this.settings.reducedMotion) this.camera.shake(0.02);
       this.sfx.stage('crack');
