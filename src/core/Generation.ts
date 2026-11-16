@@ -52,7 +52,7 @@ function generatePark(seed: number, lh: number, x: number, z: number): TileData 
     pollution: prepared ? 0 : Math.round(pollutionMin + (pollutionMax - pollutionMin) * tileRandom(seed, lh, x, z, 1)),
     variant: Math.floor(tileRandom(seed, lh, x, z, 2) * 10000),
     blocked: !!prop,
-    feature: prop ? 'obstacle' : path ? 'paving' : 'lawn',
+    feature: prop ? 'obstacle' : path ? 'paving' : inList(L.pond, x, z) ? 'water' : 'lawn',
     prop,
     growthRemainingSec: 0,
     bloom: 0,

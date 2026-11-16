@@ -3,6 +3,7 @@ import { GROUND } from '../core/GameState';
 import type { TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
+import { WATER } from './Water';
 import { catSpots, fountainPond, hash01, idHash, supersIn, tilesIn, wanderStop, type Rect } from './FaunaPlan';
 import { mat, PALETTE } from './Materials';
 import { assignBatch, group, shape, vshape } from './Shapes';
@@ -161,8 +162,8 @@ export class Fauna {
   }
 
   /**
-   * The koi pond: once koi arrive, the flowing park fountain's basin fills to the brim (the basin rim otherwise
-   * hides its water), with lily pads, so the koi have somewhere to be seen. One entity, made once.
+   * The koi pond: once koi arrive, lily pads float on the flowing park fountain's basin (POND_Y sits just above the
+   * fountain's water surface). One entity, made once.
    */
   static readonly POND_Y = 0.41;
   private pond?: pc.Entity;
@@ -173,8 +174,9 @@ export class Fauna {
     }
     if (!this.pond) {
       this.pond = group(this.root, 'koiPond');
-      shape(this.pond, 'cylinder', mat(PALETTE.fauna.pond, { gloss: 0.9, opacity: 0.88 }), { scale: [1.62, 0.012, 1.62] });
-      for (const [px, pz, s] of [[0.45, 0.2, 0.22], [-0.3, 0.42, 0.18], [-0.4, -0.35, 0.2]]) {
+      // The fountain shows its own water (MachineVisuals: surface at 0.4, radius 0.79, falls landing at 0.6): the pads
+      // float in the open ring between the falls and the rim.
+      for (const [px, pz, s] of [[0.62, 0.3, 0.17], [-0.38, 0.58, 0.15], [-0.5, -0.47, 0.16]]) {
         shape(this.pond, 'cylinder', mat(PALETTE.leaf.mid), { pos: [px, 0.008, pz], scale: [s, 0.006, s] });
         shape(this.pond, 'sphere', mat(PALETTE.flowers.blush), { pos: [px + 0.03, 0.03, pz], scale: 0.05 });
       }
@@ -269,7 +271,7 @@ export class Fauna {
       if (pond && pond.x > rect.x0 - 2 && pond.x < rect.x1 + 2 && pond.z > rect.z0 - 2 && pond.z < rect.z1 + 2)
         for (let i = 0; i < 4; i++) koi.push({ key: `pond:${i}`, home: pond, y: y + Fauna.POND_Y + 0.012 });
       const water = tilesIn(s, rect, (t) => t.ground === 'restored' && t.feature === 'water', 200).sort(near);
-      for (let i = 0; i < water.length; i += 3) koi.push({ key: `w:${water[i].x}:${water[i].z}`, home: { x: water[i].x + 0.5, z: water[i].z + 0.5 }, y: y - 0.035 });
+      for (let i = 0; i < water.length; i += 3) koi.push({ key: `w:${water[i].x}:${water[i].z}`, home: { x: water[i].x + 0.5, z: water[i].z + 0.5 }, y: y - WATER.drop + 0.012 });
     }
     this.assign('koi', koi, opts);
 
@@ -329,7 +331,7 @@ export class Fauna {
       if (a.key.startsWith('pond:')) {
         // circle the fountain basin at different radii and speeds
         const i = Number(a.key.slice(5));
-        const r = 0.3 + 0.1 * i; // inside the 0.8 basin, around the column (0.11)
+        const r = 0.64 + 0.03 * i; // the open water between the falls (0.6) and the basin rim (0.79)
         const ang = rm ? i * 1.6 : t * (0.35 + 0.08 * i) * (i % 2 ? -1 : 1) + i * 1.6;
         a.root.setPosition(a.home.x + Math.cos(ang) * r, a.y, a.home.z + Math.sin(ang) * r);
         a.root.setEulerAngles(0, (-ang * 180) / Math.PI + (i % 2 ? 180 : 0), 0);

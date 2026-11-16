@@ -55,6 +55,15 @@ export const PARK_LAYOUT = {
     { at: [4, 12], prop: 'lamp' },
     { at: [1, 1], prop: 'barrel' },
   ] as { at: [number, number]; prop: string }[],
+  /** The pond: restorable water tiles (a silted bed until restored), sunk below the lawn with rounded banks. */
+  pond: [
+    [1, 10], [2, 10], [3, 10],
+    [1, 11], [2, 11], [3, 11],
+    [1, 12], [2, 12], [3, 12],
+    [1, 13], [2, 13], [3, 13],
+  ] as [number, number][],
+  /** Flower canopies: pergolas over stretches of path (looks only; the tiles under them stay open). */
+  pergolas: [{ x: 2, z: 7, w: 4, d: 2 }] as { x: number; z: number; w: number; d: number }[],
   starterSolar: [5, 5] as [number, number],
   prepared: [
     [6, 5],
