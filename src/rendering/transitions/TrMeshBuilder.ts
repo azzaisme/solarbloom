@@ -33,7 +33,16 @@ export function linHex(hex: string): [number, number, number] {
 }
 
 /** sRGB hex → one float holding 8-bit r, g, b (exact in float32), for the surface's "from" colour. */
+const packCache = new Map<string, number>();
 export function packHex(hex: string, grey = 0): number {
+  const key = grey ? `${hex}|${grey}` : hex;
+  const hit = packCache.get(key);
+  if (hit !== undefined) return hit;
+  const v = packHexRaw(hex, grey);
+  packCache.set(key, v);
+  return v;
+}
+function packHexRaw(hex: string, grey: number): number {
   const col = new pc.Color();
   col.fromString(hex);
   let [r, g, b] = [col.r, col.g, col.b];
