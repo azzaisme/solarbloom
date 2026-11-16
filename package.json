@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:full": "vitest run --mode full",
     "test:perf": "PERF=1 vitest run",
     "test:soak": "SOAK=1 vitest run",
     "test:e2e": "vite build && node tests/e2e/picking.e2e.mjs && node tests/e2e/area-panel.e2e.mjs && node tests/e2e/overview.e2e.mjs && node tests/e2e/hud-overlap.e2e.mjs && node tests/e2e/district-bloom.e2e.mjs && node tests/e2e/camera.e2e.mjs",

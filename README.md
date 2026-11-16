@@ -27,7 +27,8 @@ Node 20+ is required. The build is a static site (`base: './'`), so `dist/` can 
 | `npm run build` | Type-check, then production build into `dist/` | ~10 s |
 | `npm run preview` | Serve `dist/` | — |
 | `npm run typecheck` | `tsc --noEmit` | ~5 s |
-| `npm test` | Unit and simulation tests (vitest, headless): world, saves, areas, generator, chains, drones, cat, pacing bots | ~1 min |
+| `npm test` | Quick check that the game works: a smoke test (new game, pulses, a drone hub, three minutes of play, save and reload) plus the fast unit tests. The list is `QUICK` in `vite.config.ts` | ~10 s |
+| `npm run test:full` | Every unit and simulation test (vitest, headless): world, saves, areas, generator, chains, drones, cat, economy curves, pacing bots | several min |
 | `npm run test:perf` | Node benchmarks: lookups, save size and speed, sim step for a ~1,000-area world (`tests/perf/*.perf.ts`) | ~10 s |
 | `npm run test:soak` | Headless soak: a 1,000-area city over 6 h of game time; fails on tick time, heap, save size, stalls, unreachable frontiers or non-determinism (`SOAK_AREAS`, `SOAK_HOURS`, `SOAK_PROFILE=1`) | ~1 min |
 | `npm run test:e2e` | Build, then check pointer → tile picking at 3 screen sizes × 3 zooms (55k checks), that the area panel opens from labels and landmarks, that every cleared area on the overview is one label tap away, that a district bloom pays once, leaves machines alone and replays for free, and that no HUD panels overlap on phone or desktop at any zoom (screenshots to `docs/review/hud-*.png`) | ~5 min |
@@ -69,7 +70,7 @@ Switching to another tab doesn't stop the city: when you come back, up to 10 min
 
 ### Dev tools (Phase 4)
 
-On the dev server only (`npm run dev`), the browser console has `sbDev`: `sbDev.reset(seed)`, `sbDev.preset('fresh' | 'screenshot' | 'rich')`, `sbDev.simulate(seconds)`, `sbDev.log()` (the local event log), `sbDev.counts()` and `sbDev.overflow()` (income lost to full storage). None of it ships in `npm run build`. The scripted first-15-minute baseline is `npx vitest run tests/baseline.test.ts` (`BASELINE=1` for per-minute detail), and the phone HUD check is `node tests/e2e/phase4-hud.e2e.mjs` after a build. Phase 4 plan and status: `docs/PHASE_4_EPICS.md`, `docs/PHASE_4_AUDIT.md`.
+On the dev server only (`npm run dev`), the browser console has `sbDev`: `sbDev.reset(seed)`, `sbDev.preset('fresh' | 'screenshot' | 'rich')`, `sbDev.simulate(seconds)`, `sbDev.log()` (the local event log), `sbDev.counts()`, `sbDev.overflow()` (income lost to full storage) and `sbDev.face(name)` (show one drone expression on every drone: `idle`, `focused`, `excited`, `workingA`, `workingB`, `restoring`, `sleeping`, `blink`; no argument to go back). None of it ships in `npm run build`. The scripted first-15-minute baseline is `npx vitest run tests/baseline.test.ts` (`BASELINE=1` for per-minute detail), and the phone HUD check is `node tests/e2e/phase4-hud.e2e.mjs` after a build. Phase 4 plan and status: `docs/PHASE_4_EPICS.md`, `docs/PHASE_4_AUDIT.md`.
 
 ## How it plays
 

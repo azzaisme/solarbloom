@@ -179,8 +179,11 @@ export class Game {
     this.grid.build();
     this.machines = new MachineVisuals(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.machines.buildAll();
-    this.drones = new DroneVisuals(this.sim, this.scene.world, this.tweens);
+    this.drones = new DroneVisuals(this.sim, this.scene.world, this.tweens, this.app);
     this.drones.onTrail = (p) => this.vfx.trail(p);
+    // Drone redesign D05: the restoration beam's travelling motes and ground sparkles (pooled particles).
+    this.drones.onBeamMote = (a, b, hex) => this.vfx.mote(a, b, hex);
+    this.drones.onBeamSparkle = (at, hex) => this.vfx.burst(at, 2, { up: 0.9, speed: 0.6, size: 0.035, life: 0.6, gravity: 2.5, hex });
     this.drones.sync();
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
@@ -1308,7 +1311,13 @@ export class Game {
       const p = this.tileVec(tile);
       // Player actions get the full burst; automation (drones, machines, chains) is quieter.
       const manual = source === 'pulse' || source === 'broad';
-      this.vfx.burst(p, manual ? 14 : source === 'drone' || source === 'condenser' ? 6 : 9, { up: manual ? 2.6 : 1.8, size: manual ? 0.07 : 0.055 });
+      this.vfx.burst(p, manual ? 14 : source === 'drone' ? 9 : source === 'condenser' ? 6 : 9, { up: manual ? 2.6 : source === 'drone' ? 2.2 : 1.8, size: manual ? 0.07 : 0.055 });
+      // Drone redesign D05: a drone's restore ends in a small bloom burst (petals above, plus a cyan puff and a
+      // leaf-green ring). Visual only: the reward was paid by the sim.
+      if (source === 'drone') {
+        this.vfx.burst(p, 4, { up: 1.3, speed: 0.8, size: 0.04, life: 0.7, hex: PALETTE.eyeCyan });
+        this.vfx.ring(p, PALETTE.leafFin, 1.0, 0.6);
+      }
       if (manual && this.clock - this.lastRestoreSound > 0.06) {
         this.lastRestoreSound = this.clock;
         this.sfx.restored(this.restoreSoundIdx++);
@@ -2217,7 +2226,7 @@ export class Game {
     const rect = view;
     if (rect) this.chunks.update(dt, rect, this.camera.target, this.camera.zoom);
     this.machines.update(dt, rect);
-    this.drones.update(dt);
+    this.drones.update(this.paused || this.hiddenPause ? 0 : dt); // drone personality freezes with the game
     this.cat.update(dt);
     // Phase 5 E16: fauna by unlock, capped per quality tier ("Fewer particles" = low).
     const eco = this.sim.ecosystem;
