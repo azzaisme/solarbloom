@@ -194,7 +194,16 @@ interface ChunkView {
   fading?: boolean;
   /** built at far level of detail (slabs only) */
   far?: boolean;
+  /** Look 4.9: drawn sunk below the revealed city (an area not revealed yet) */
+  sunk?: boolean;
 }
+
+/**
+ * Look 4.9 (#153): how far unrevealed areas sit below the revealed city. The revealed city reads as a raised
+ * terrace with retaining-wall facades on its edges; revealing an area raises it to the city level. Picking
+ * of sunk (hidden) ground uses the same depth (`Game.pick`).
+ */
+export const SINK = 3.2;
 
 /**
  * Renders the endless city ground: one merged, vertex-coloured mesh per 16×16 chunk (slabs + decoration),
@@ -303,6 +312,7 @@ export class ChunkRenderer {
     const want = new Set<string>();
     for (let cz = cz0; cz <= cz1; cz++)
       for (let cx = cx0; cx <= cx1; cx++) {
+        if (!near(cx, cz, 4)) continue;
         const key = chunkKey(GROUND, cx, cz);
         want.add(key);
         if (!this.views.has(key)) this.views.set(key, { key, cx, cz, dirty: true, fogDirty: true });
@@ -310,7 +320,7 @@ export class ChunkRenderer {
     // Drop chunks well outside the view (one extra ring of hysteresis).
     for (const [key, v] of this.views) {
       if (want.has(key)) continue;
-      if (v.cx < cx0 - 1 || v.cx > cx1 + 1 || v.cz < cz0 - 1 || v.cz > cz1 + 1) this.drop(v);
+      if (v.cx < cx0 - 1 || v.cx > cx1 + 1 || v.cz < cz0 - 1 || v.cz > cz1 + 1 || !near(v.cx, v.cz, 24)) this.drop(v);
     }
     // Fog fades (area cleared): opacity → 0, then rebuild.
     for (const v of this.views.values()) {
@@ -368,7 +378,9 @@ export class ChunkRenderer {
     const area = s.areas.map.areaOfChunk(v.cx, v.cz);
     this.areaType = s.areas.info(area).type;
     const fog = s.areas.fog(area);
-    const h = s.grid.layer(GROUND)!.height;
+    v.sunk = fog === 'hidden';
+    const city = s.grid.layer(GROUND)!.height;
+    const h = city - (v.sunk ? SINK : 0);
     v.far = dist(v, this.lastFocus) / CHUNK > this.farFrom;
     // Props in the park follow its stage; elsewhere they're broken until their area clears.
     this.level = area === 'park' ? Math.max(0, this.parkStage) : fog === 'cleared' ? 4 : 0;
@@ -399,6 +411,13 @@ export class ChunkRenderer {
         const whole = s.grid.peek(GROUND, p.x, p.z)?.feature === 'building' && s.grid.peek(GROUND, p.x + p.w - 1, p.z + p.d - 1)?.feature === 'building';
         if (whole) this.building(b, p, h, fog === 'cleared', v.far);
       }
+    }
+    // Look 4.9: retaining-wall facades where the revealed city drops to an unrevealed (sunk) neighbour.
+    if (!v.sunk) {
+      const alive = fog === 'cleared' || this.inPark;
+      b.grey = alive ? 0 : 0.4;
+      for (const [dx, dz] of EDGE_DIRS)
+        if (s.areas.fog(s.areas.map.areaOfChunk(v.cx + dx, v.cz + dz)) === 'hidden') this.facade(b, v, dx, dz, city, alive, !!v.far);
     }
     v.ground = this.setMesh(v.ground, `chunk-${v.key}`, b.build(this.device), vertexColourMaterial(), !v.far); // far chunks: no shadow pass (invisible at that distance, halves their draw calls)
     v.trees = this.setMesh(v.trees, `trees-${v.key}`, fb.build(this.device), foliageMaterial(), !v.far);
@@ -783,6 +802,67 @@ export class ChunkRenderer {
     }
   }
 
+  /**
+   * Look 4.9: the face of the raised city where it drops to a sunk neighbour chunk (side dx, dz): a stone
+   * retaining wall down to the lower level with a plinth, two storeys of windows, pilasters, balconies with
+   * planters, vines, and a coping with a low rail along the top edge. Only the sides the camera sees (east and
+   * south) get the detail; the far sides are plain walls.
+   */
+  private facade(b: MeshBuilder, v: ChunkView, dx: number, dz: number, top: number, alive: boolean, far: boolean) {
+    const N = CHUNK;
+    const x0 = v.cx * N;
+    const z0 = v.cz * N;
+    const bottom = top - SINK - 0.4;
+    const H = top + 0.08 - bottom;
+    // Wall centre line, flush with the chunk edge; `along` runs the edge, `out` points down the drop.
+    const ex = dx > 0 ? x0 + N : dx < 0 ? x0 : x0 + N / 2;
+    const ez = dz > 0 ? z0 + N : dz < 0 ? z0 : z0 + N / 2;
+    const alongX = dz !== 0;
+    const at = (a: number, o: number, y: number): [number, number, number] => (alongX ? [x0 + a, y, ez + dz * o] : [ex + dx * o, y, z0 + a]);
+    /** (along the edge, out from the wall, height) */
+    const size = (a: number, o: number, y: number): [number, number, number] => (alongX ? [a, y, o] : [o, y, a]);
+    const stone = alive ? '#e7decb' : '#a8a196';
+    b.add('box', stone, at(N / 2, -0.2, bottom + H / 2), size(N, 0.4, H));
+    if (far) return;
+    const seen = dx > 0 || dz > 0;
+    // Coping and a low rail along the top edge (all sides: it outlines the terrace).
+    b.add('box', alive ? '#f3eee2' : '#b3ada2', at(N / 2, 0.02, top + 0.11), size(N, 0.12, 0.08));
+    for (let a = 0.5; a < N; a += 2) b.add('box', '#7c6f5e', at(a, 0.02, top + 0.3), size(0.05, 0.05, 0.36));
+    b.add('box', '#7c6f5e', at(N / 2, 0.02, top + 0.47), size(N, 0.04, 0.05));
+    if (!seen) return;
+    const glass = alive ? '#9fd6e8' : '#596067';
+    const r = new VRng(v.cx * 7919 + v.cz * 104729 + dx * 13 + dz * 31);
+    // Plinth band and a darker foot.
+    b.add('box', alive ? '#cfc4ae' : '#8f897f', at(N / 2, 0.02, bottom + 0.35), size(N, 0.06, 0.7));
+    const storey = (SINK - 0.3) / 2;
+    for (let f = 0; f < 2; f++) {
+      const y = bottom + 0.7 + storey * (f + 0.5);
+      for (let a = 1; a < N; a += 2) {
+        if (r.next() < 0.12) continue; // a blank bay now and then
+        b.add('box', glass, at(a, 0.015, y), size(1.05, 0.03, storey * 0.5));
+        b.add('box', alive ? '#f6f1e6' : '#a49e93', at(a, 0.03, y - storey * 0.3), size(1.25, 0.08, 0.06)); // sill
+      }
+      // Cornice between the storeys.
+      b.add('box', alive ? '#efe7d6' : '#a7a196', at(N / 2, 0.04, bottom + 0.7 + storey * (f + 1) - 0.05), size(N, 0.1, 0.08));
+    }
+    // Pilasters.
+    for (let a = 0; a <= N; a += 4) b.add('box', alive ? '#ddd3bf' : '#9d978c', at(a, 0.05, bottom + H / 2), size(0.3, 0.1, H));
+    // Balconies with planters on the upper storey, and vines down the wall once the area is alive.
+    const yb = bottom + 0.7 + storey;
+    for (let a = 2; a < N; a += 4) {
+      if (r.next() < 0.3) continue;
+      b.add('box', alive ? '#efe7d6' : '#a49e93', at(a, 0.28, yb), size(1.6, 0.5, 0.08));
+      b.add('box', '#7c6f5e', at(a, 0.52, yb + 0.22), size(1.6, 0.04, 0.03));
+      if (alive) for (let k = 0; k < 3; k++) b.add('sphere', k % 2 ? PALETTE.flower[(a + k) % PALETTE.flower.length] : PALETTE.shrub[k % 3], at(a - 0.5 + k * 0.5, 0.3, yb + 0.12), [0.26, 0.2, 0.26]);
+    }
+    if (alive)
+      for (let i = 0; i < 4; i++) {
+        const a = r.range(0.6, N - 0.6);
+        const len = r.range(0.8, H * 0.8);
+        b.add('box', i % 2 ? '#4f9a4a' : '#5aa94f', at(a, 0.07, top - len / 2), size(0.22, 0.04, len));
+      }
+  }
+
   /** A tree in a stone planter: bare twigs until it leafs out. */
   private planterTree(b: MeshBuilder, x: number, y: number, z: number, leafy: boolean) {
     b.add('box', leafy ? '#d8d1c0' : '#9d978a', [x, y + 0.09, z], [0.26, 0.18, 0.26]);
@@ -931,7 +1011,7 @@ export class ChunkRenderer {
     const pos: number[] = [];
     const col: number[] = [];
     const idx: number[] = [];
-    const h = this.sim.grid.layer(GROUND)!.height;
+    const h = this.sim.grid.layer(GROUND)!.height - (v.sunk ? SINK : 0);
     const sheets = this.lowFog
       ? [{ y: 0.5, alpha: 0.82, tint: [112, 121, 132] }]
       : [

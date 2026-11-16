@@ -24,7 +24,7 @@ import { CameraController } from '../rendering/CameraController';
 import { setTreeCursor } from '../rendering/Foliage';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
-import { ChunkRenderer } from '../rendering/ChunkRenderer';
+import { ChunkRenderer, SINK } from '../rendering/ChunkRenderer';
 import { areaPanelHtml } from '../ui/AreaPanel';
 import { upgradeHighlights } from '../gameplay/UpgradeEffects';
 import { GridRenderer } from '../rendering/GridRenderer';
@@ -476,7 +476,25 @@ export class Game {
     const layers = this.sim.grid.allLayers.filter((l) => l.kind === 'raised' || l.unlocked);
     const hit = pickLayers(layers, o, d);
     if (!hit) return undefined;
+    // Look 4.9: unrevealed areas are drawn SINK lower. A ray that lands on one at the city level carries on
+    // down to the sunk ground; if it ends under the revealed terrace instead, it hit the facade (nothing).
+    if (hit.layerId === GROUND && this.city && this.sunkAt(hit.fx, hit.fz)) {
+      const y = this.sim.grid.layer(GROUND)!.height + SLAB_TOP - SINK;
+      const t = (y - o.y) / d.y;
+      const fx = o.x + d.x * t;
+      const fz = o.z + d.z * t;
+      if (!this.sunkAt(fx, fz)) return undefined;
+      return { roofId: GROUND, fx, fz, tile: this.sim.grid.get(GROUND, Math.floor(fx), Math.floor(fz)) };
+    }
     return { roofId: hit.layerId, fx: hit.fx, fz: hit.fz, tile: this.sim.grid.get(hit.layerId, Math.floor(hit.fx), Math.floor(hit.fz)) };
+  }
+
+  /** Look 4.9: how far unrevealed ground is drawn below the city (tests read it). */
+  readonly sinkDepth = SINK;
+
+  /** Look 4.9: a city cell drawn sunk (its area not revealed yet). */
+  sunkAt(x: number, z: number): boolean {
+    return this.sim.areas.fog(this.sim.areas.map.areaOfCell(Math.floor(x), Math.floor(z))) === 'hidden';
   }
 
   /** See-through trees: 0..1, eases in while the cursor rests on the world and out when it leaves or pans. */
