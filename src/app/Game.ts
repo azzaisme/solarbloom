@@ -349,6 +349,8 @@ export class Game {
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
     document.body.classList.toggle('contrast', !!s.highContrast);
+    // Look 5.11: HUD glass without live blur (cheaper on phones). Look 1's Low graphics tier can set it too.
+    document.body.classList.toggle('solid-glass', !!s.lowVfx);
     const rm = s.reducedMotion;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;

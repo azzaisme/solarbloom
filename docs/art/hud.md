@@ -59,3 +59,20 @@ switches, gold sliders and a styled `select`: a new control (Look 1's Graphics q
 **Deferred (E18 drone roles, not on main yet):** the Drone Hub role picker, mixed-resource price buttons that
 mark the short resource, and the Courier reach preview. The pieces they need are in place: the six role icons
 (`ROLE_ICONS`), and a three-resource price renders as three icons side by side (`tests/icons.test.ts`).
+
+## Phones, contrast and accessibility (5.11)
+
+- **Contrast, and how it's measured:** `tests/hud-contrast.test.ts` (quick suite) reads the tokens from
+  `styles.css`, composites each glass (`--glass`, `--glass-strong`, `--glass-solid`, and each with the lighter
+  card layer on top) over the brightest and darkest scene it can sit on (pure white and pure black), and checks
+  every text colour with the WCAG 2.1 relative-luminance formula: 4.5:1 for text, 3:1 for disabled labels. It
+  covers high contrast mode and button labels on their fills too. The audit led to a slightly darker glass
+  (alpha .84), quieter card layers, and a lighter warning red and disabled text.
+- **Phones (390×844):** compact pills side by side, the top-right buttons and the quick buttons on one row
+  under them, the collapsed objective card, a smaller dome that still fits at 320 px, safe-area insets on every
+  edge.
+- **Motion:** the in-game Reduced motion setting and the OS's `prefers-reduced-motion` both still halos,
+  glows, the frenzy pulse and the combo sparkles (sparkles are also skipped with Fewer particles).
+- **Blur:** touch screens and Fewer particles (`body.solid-glass`) use solid glass without live blur; Look 1's
+  Low tier can set the same class.
+- **Focus:** every button, select and summary shows a 3 px cyan outline on keyboard focus.
