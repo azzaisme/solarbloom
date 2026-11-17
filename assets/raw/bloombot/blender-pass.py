@@ -49,6 +49,19 @@ def damp(a, bones, keep, ref=None, compensate=()):
             write(cf, [(f, (new[f].inverted() @ old[f] @ cq[f]).normalized()) for f in frames(a)])
         write(fcs, [(f, new[f]) for f in frames(a)])
 
+# Backpack: the auto-rig spread its weights over spine, arms and hips, so it bent and smeared as bloombot
+# moved. Tie every pack vertex to the upper spine alone so it rides on the back as one rigid piece.
+# The pack is the geometry behind the torso (Blender: front is -Y), between the hips and the shoulders.
+PACK_BONE = 'Spine'
+pack_vg = mesh.vertex_groups[PACK_BONE]
+mw = mesh.matrix_world
+pack = [v.index for v in mesh.data.vertices if (lambda w: w.y > 0.05 and 0.15 < w.z < 0.5 and abs(w.x) < 0.24)(mw @ v.co)]
+for vg in mesh.vertex_groups:
+    if vg.name != PACK_BONE:
+        vg.remove(pack)
+pack_vg.add(pack, 1.0, 'REPLACE')
+print('PACK vertices', len(pack))
+
 acts = {a.name: a for a in bpy.data.actions}
 LEGS = ('LeftUpLeg', 'RightUpLeg')
 # Pulse and assemble: a human bow tips the oversized head to the floor. Keep a third of the lean.
@@ -82,7 +95,47 @@ new = np.stack([rr + m, gg + m, bb + m], 1)
 rgb[mask] = new[mask]
 px[:, :3] = rgb
 img.pixels[:] = px.ravel()
+# Budget (docs/art/meshy-assets.md): characters get a 1024² texture.
+if img.size[0] > 1024:
+    img.scale(1024, 1024)
 img.pack()
+
+# Visor: where the black visor sits on the model in the rest (T) pose, for the game's face panel. Rays from the
+# front hit the mesh; hits whose texture is near black are the visor. Printed in glTF space (Y up, +Z front).
+import bmesh
+from mathutils.bvhtree import BVHTree
+arm.data.pose_position = 'REST'
+bpy.context.view_layer.update()
+dg = bpy.context.evaluated_depsgraph_get()
+ev = mesh.evaluated_get(dg)
+me = ev.to_mesh()
+bm = bmesh.new(); bm.from_mesh(me); bm.transform(mesh.matrix_world); bmesh.ops.triangulate(bm, faces=bm.faces)
+bvh = BVHTree.FromBMesh(bm)
+bm.faces.ensure_lookup_table()
+uvl = bm.loops.layers.uv.active
+tw, th = img.size
+tp = np.array(img.pixels[:], dtype=np.float32).reshape(th, tw, 4)
+hits = []
+for ix in range(-30, 31):
+    for iz in range(30, 95):
+        x, z = ix * 0.01, iz * 0.01
+        loc, nrm, fi, dist = bvh.ray_cast(mathutils.Vector((x, -2, z)), mathutils.Vector((0, 1, 0)))
+        if loc is None: continue
+        f = bm.faces[fi]
+        # barycentric UV
+        a_, b_, c_ = [l.vert.co for l in f.loops]
+        w = mathutils.geometry.barycentric_transform(loc, a_, b_, c_, mathutils.Vector((1, 0, 0)), mathutils.Vector((0, 1, 0)), mathutils.Vector((0, 0, 1)))
+        uv = sum((f.loops[k][uvl].uv * w[k] for k in range(3)), mathutils.Vector((0, 0)))
+        px = tp[min(th - 1, max(0, int(uv.y * th))), min(tw - 1, max(0, int(uv.x * tw)))]
+        if px[0] + px[1] + px[2] < 0.25 and nrm.y < -0.5:
+            hits.append((x, z, loc.y))
+bm.free()
+arm.data.pose_position = 'POSE'
+if hits:
+    xs = [h[0] for h in hits]; zs = [h[1] for h in hits]; ys = [h[2] for h in hits]
+    cx, cz = (min(xs) + max(xs)) / 2, (min(zs) + max(zs)) / 2
+    front = min(ys)
+    print(f'VISOR gltf centre=({cx:.3f}, {cz:.3f}, {-front:.3f}) size=({max(xs) - min(xs):.3f}, {max(zs) - min(zs):.3f}) hits={len(hits)}')
 
 # export: one NLA track per clip
 ad = arm.animation_data

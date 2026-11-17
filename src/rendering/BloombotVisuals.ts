@@ -11,6 +11,12 @@ import { color, PALETTE } from './Materials';
  * Presentation only: nothing here touches the simulation.
  */
 const MODEL_URL = new URL('../../assets/raw/bloombot/bloombot.glb', import.meta.url).href;
+/** Visor faces (assets/tools/bloombot_faces.py): one row of frames, in FACES order. */
+const FACES_URL = new URL('../../assets/raw/bloombot/bloombot-faces.png', import.meta.url).href;
+export const FACES = ['happy', 'surprised', 'wink', 'blink'] as const;
+export type BotFace = (typeof FACES)[number];
+/** The visor in model space (metres, +Z front), from the T-pose: centre and size of the face panel. */
+const VISOR = { x: 0, y: 0.6, z: 0.192, w: 0.24, h: 0.165 };
 /** Model metres -> world units (1 tile = 1 m). A touch under a tile tall, like the mock beside a bench. */
 const SCALE = 0.95;
 /** Clip speeds at which the feet match the ground: world units per second at anim speed 1. */
@@ -32,6 +38,10 @@ export class BloombotVisuals {
   private action?: { name: BotAction; until: number };
   private clock = 0;
   private destroyed = false;
+  private faceMat?: pc.StandardMaterial;
+  private face: BotFace = 'happy';
+  private faceUntil = 0;
+  private blinkAt = 3;
   reducedMotion = false;
   /** true once the real model is drawn */
   loaded = false;
@@ -75,6 +85,8 @@ export class BloombotVisuals {
     holder.setLocalScale(SCALE, SCALE, SCALE);
     const e = res.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
     holder.addChild(e);
+    this.root.addChild(holder);
+    this.addFace(holder, e);
     e.addComponent('anim', { activate: true });
     const anim = e.anim!;
     for (const a of res.animations) {
@@ -83,12 +95,65 @@ export class BloombotVisuals {
       anim.assignAnimation(track.name, track, undefined, 1, looped);
       this.clips.set(track.name, track.duration);
     }
-    this.root.addChild(holder);
     this.model = e;
     this.standIn?.destroy();
     this.standIn = undefined;
     this.loaded = true;
     anim.baseLayer?.transition('idle', 0);
+  }
+
+  /**
+   * The visor face: a thin glowing panel just in front of the baked visor, tied to the head bone so it nods and
+   * turns with the head. Placed in the rest (T) pose, before any clip plays.
+   */
+  private addFace(holder: pc.Entity, rig: pc.Entity) {
+    const head = rig.findByName('Head') as pc.Entity | null;
+    if (!head) return;
+    const m = new pc.StandardMaterial();
+    m.diffuse.set(0, 0, 0);
+    m.emissive.set(1, 1, 1);
+    m.emissiveIntensity = 1.6;
+    m.useLighting = true;
+    m.gloss = 0.85;
+    m.emissiveMapTiling.set(1 / FACES.length, 1);
+    this.faceMat = m;
+    const panel = new pc.Entity('bloombot-face');
+    panel.addComponent('render', { type: 'plane', material: m, castShadows: false });
+    holder.addChild(panel);
+    panel.setLocalPosition(VISOR.x, VISOR.y, VISOR.z);
+    panel.setLocalEulerAngles(90, 0, 0); // the plane faces +Y; turn it to face +Z
+    panel.setLocalScale(VISOR.w, 1, VISOR.h);
+    holder.syncHierarchy();
+    const pos = panel.getPosition().clone();
+    const rot = panel.getRotation().clone();
+    const ws = new pc.Vec3();
+    panel.getWorldTransform().getScale(ws);
+    const hs = new pc.Vec3();
+    head.getWorldTransform().getScale(hs);
+    panel.reparent(head);
+    panel.setPosition(pos);
+    panel.setRotation(rot);
+    panel.setLocalScale(ws.x / hs.x, ws.y / hs.y, ws.z / hs.z);
+    const tex = this.app.assets;
+    tex.loadFromUrl(FACES_URL, 'texture', (err, asset) => {
+      if (err || !asset || this.destroyed) return;
+      const t = asset.resource as pc.Texture;
+      t.addressU = pc.ADDRESS_CLAMP_TO_EDGE;
+      m.emissiveMap = t;
+      this.setFace(this.face);
+      m.update();
+    });
+    m.update();
+  }
+
+  /** Shows a visor face, for `seconds` (then back to happy), or until changed. */
+  setFace(face: BotFace, seconds = 0) {
+    this.face = face;
+    this.faceUntil = seconds ? this.clock + seconds : 0;
+    const m = this.faceMat;
+    if (!m) return;
+    m.emissiveMapOffset.set(FACES.indexOf(face) / FACES.length, 0);
+    m.update();
   }
 
   /** Places bloombot (feet) and turns it to face `facing` (radians, 0 = +z). */
@@ -118,6 +183,8 @@ export class BloombotVisuals {
     anim.speed = name === 'pulse' ? 1.6 : name === 'assemble' ? 1.2 : 1;
     anim.baseLayer?.transition(name, 0.1);
     const dur = len / anim.speed;
+    if (name === 'cheer') this.setFace('wink', dur);
+    else if (name === 'interact') this.setFace('surprised', Math.min(dur, 0.9));
     this.action = { name, until: this.clock + dur * 0.92 };
     return dur;
   }
@@ -128,6 +195,12 @@ export class BloombotVisuals {
 
   update(dt: number) {
     this.clock += dt;
+    // Faces: an expression times out back to happy; now and then a blink.
+    if (this.faceUntil && this.clock >= this.faceUntil) this.setFace('happy');
+    if (this.clock >= this.blinkAt) {
+      if (this.face === 'happy' && !this.reducedMotion) this.setFace('blink', 0.13);
+      this.blinkAt = this.clock + 2.5 + ((this.clock * 7.31) % 3);
+    }
     if (this.action && this.clock >= this.action.until) {
       this.action = undefined;
       const anim = this.model?.anim;

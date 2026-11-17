@@ -25,3 +25,15 @@ Forward, interact 290 Wave One Hand, cheer 298 Cheer with Both Hands Up; walk an
 - **Cheer** brings the arms halfway back to the T-pose (a V that clears the head) and straightens the elbows.
 - **Gold:** saturated yellows in the texture are pulled toward a deeper, warmer gold (hue toward 43°,
   saturation ×1.15).
+- **Backpack:** the auto-rig spread its weights over the spine, arms and hips, so it bent and smeared in
+  motion. Every pack vertex (behind the torso, between hips and shoulders) is now tied to the `Spine` bone
+  alone, so it rides on the back as one rigid piece.
+- **Texture:** halved to 1024² (the character budget in docs/art/meshy-assets.md); the GLB went from 3.5 to
+  1.7 MB.
+- **Visor:** the pass prints where the black visor sits (`VISOR …`); the game's face panel uses it.
+
+## Faces
+
+`assets/tools/bloombot_faces.py` draws `bloombot-faces.png`: happy, surprised, wink and blink in one row. The
+game lays it on a thin glowing panel over the visor, tied to the `Head` bone, and swaps frames
+(`BloombotVisuals.setFace`): it blinks now and then, winks while cheering, looks surprised when interacting.
