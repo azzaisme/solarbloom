@@ -168,3 +168,67 @@ export function fountainPond(sim: Sim): { x: number; z: number } | undefined {
   const m = sim.state.machines.find((x) => x.type === 'core' && x.roofId === GROUND && sim.areas.areaOf(x) === 'park');
   return m ? { x: m.x + m.size / 2, z: m.z + m.size / 2 } : undefined;
 }
+
+/** E19.3.1 (#257): the animals that move into cleared areas. */
+export type LocalSpecies = 'rabbits' | 'pigeons' | 'ducks' | 'frogs' | 'squirrels';
+export const LOCAL_SPECIES: readonly LocalSpecies[] = ['rabbits', 'pigeons', 'ducks', 'frogs', 'squirrels'];
+
+export interface LocalSlot {
+  species: LocalSpecies;
+  key: string;
+  home: { x: number; z: number };
+  /** on a water tile (ducks swim at the water's surface) */
+  water: boolean;
+}
+
+/** Where each species likes to be: a restored tile of the right kind, free of machines and obstacles. */
+export function localHabitat(species: LocalSpecies, t: TileData, nearWater: () => boolean): boolean {
+  if (t.ground !== 'restored' || t.blocked || t.occupantId) return false;
+  const f = t.feature ?? 'lawn';
+  switch (species) {
+    case 'ducks':
+      return f === 'water';
+    case 'frogs':
+      return f !== 'water' && nearWater();
+    case 'pigeons':
+      return f === 'paving' || f === 'road' || f === 'lawn';
+    case 'rabbits':
+    case 'squirrels':
+      return f === 'lawn' || f === 'litter' || f === 'clay';
+  }
+}
+
+/**
+ * E19.3.1 (#257): animal slots in view. Only areas whose fog is cleared get their area type's cast
+ * (`TUNING.ecosystem.locals`); one animal per `localsEvery` matching tiles, nearest the view centre first. Pure
+ * and seeded by tile: the same world and view give the same slots. Reads the simulation, never writes it.
+ */
+export function localSlots(sim: Sim, rect: Rect): LocalSlot[] {
+  const E = TUNING.ecosystem;
+  const cx = (rect.x0 + rect.x1) / 2;
+  const cz = (rect.z0 + rect.z1) / 2;
+  const castOf = new Map<string, readonly LocalSpecies[]>();
+  const cast = (t: TileData): readonly LocalSpecies[] => {
+    const id = sim.areas.areaOf(t);
+    if (!id) return [];
+    let c = castOf.get(id);
+    if (!c) {
+      c = sim.areas.fog(id) === 'cleared' ? (E.locals[sim.areas.info(id).type] ?? []) : [];
+      castOf.set(id, c);
+    }
+    return c;
+  };
+  const tiles = tilesIn(sim, rect, (t) => t.ground === 'restored' && cast(t).length > 0, 600, 18);
+  tiles.sort((a, b) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz));
+  const seen: Record<LocalSpecies, number> = { rabbits: 0, pigeons: 0, ducks: 0, frogs: 0, squirrels: 0 };
+  const out: LocalSlot[] = [];
+  for (const t of tiles) {
+    const nearWater = () => sim.grid.neighbors(t).some((n) => n.feature === 'water');
+    for (const sp of cast(t)) {
+      if (!localHabitat(sp, t, nearWater)) continue;
+      if (seen[sp]++ % E.localsEvery !== 0) continue;
+      out.push({ species: sp, key: `${sp}:${t.x}:${t.z}`, home: { x: t.x + 0.5, z: t.z + 0.5 }, water: t.feature === 'water' });
+    }
+  }
+  return out;
+}

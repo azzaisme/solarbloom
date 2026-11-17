@@ -402,6 +402,13 @@ const fauna = {
   cat: '#fbfaf7',
   catRed: '#e2483c',
   catBlanket: '#6b5a4a',
+  /** E19.3.1 (#257): animals that move into cleared areas */
+  rabbit: ['#b8a48c', '#f4efe6'],
+  pigeon: ['#8e95a3', '#5f8f86'],
+  duck: ['#7a5a3a', '#2f7a4a'],
+  duckBill: '#f2b33d',
+  frog: ['#6aa84f', '#c7d98a'],
+  squirrel: ['#b5652e', '#e8c9a0'],
 };
 
 /** Overlays: hover frames, placement tones, the beacon. */
