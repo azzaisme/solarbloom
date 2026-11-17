@@ -2,7 +2,7 @@ import { decoration, decorKey, decorKeyOf, decorOccupant, decorValue, type Decor
 import { GROUND } from '../core/GameState';
 import { plotAt, plotById, plotSpots, type PlotSpot } from '../core/Plots';
 import type { CozyState } from '../core/types';
-import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type PlotOption } from '../data/cozy';
+import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, KEEPSAKE_HINTS, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type Keepsake, type PlotOption } from '../data/cozy';
 import type { Sim } from './Sim';
 
 export interface DecorChoice {
@@ -116,8 +116,22 @@ export class Cozy {
   private met(u: CozyUnlock): boolean {
     if ('start' in u) return true;
     if ('parkStage' in u) return this.sim.progression.parkStage() >= u.parkStage;
-    if ('keepsake' in u) return u.keepsake === 'firstFind' && this.sim.state.stats.catsFound >= 1; // #288 adds more finds
+    if ('keepsake' in u) return this.keepsakeMet(u.keepsake);
     return this.sim.areas.clearedCount() >= u.areas;
+  }
+
+  /** E20.5 (#288): Lucky Cat finds that unlock keepsakes. Read from the cat's own record; nothing else unlocks them. */
+  private keepsakeMet(k: Keepsake): boolean {
+    const cat = this.sim.state.cat;
+    switch (k) {
+      case 'firstFind':
+        return this.sim.state.stats.catsFound >= 1;
+      case 'finds5':
+        return this.sim.state.stats.catsFound >= 5;
+      case 'golden':
+      case 'rainbow':
+        return (cat.log ?? []).some((e) => e.variant === k);
+    }
   }
 
   isUnlocked(o: PlotOption): boolean {
@@ -127,7 +141,7 @@ export class Cozy {
   /** Words for what a locked option waits for. */
   hint(u: CozyUnlock): string {
     if ('start' in u) return '';
-    if ('keepsake' in u) return 'you find your first Lucky Cat';
+    if ('keepsake' in u) return KEEPSAKE_HINTS[u.keepsake];
     if ('parkStage' in u) return ['', 'the park’s paths are swept', 'the park’s benches are mended', 'the park’s lamps are lit', 'the fountain wakes'][u.parkStage] ?? 'the park grows';
     return `${u.areas} area${u.areas === 1 ? '' : 's'} cleared`;
   }

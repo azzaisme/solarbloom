@@ -14,7 +14,14 @@ export type CozyUnlock = { start: true } | { parkStage: number } | { areas: numb
  * E19.2 × #288: the cat finds that unlock keepsake decorations. Only the first find exists so far; #288 adds the
  * first golden and rainbow cats and a find in each area type.
  */
-export type Keepsake = 'firstFind';
+export type Keepsake = 'firstFind' | 'finds5' | 'golden' | 'rainbow';
+/** E20.5 (#288): what each keepsake waits for, for the tray and backpack. */
+export const KEEPSAKE_HINTS: Record<Keepsake, string> = {
+  firstFind: 'you find your first Lucky Cat',
+  finds5: 'you have found five Lucky Cats',
+  golden: 'you find a Golden Cat',
+  rainbow: 'you find a Rainbow Cat',
+};
 
 export interface PlotOption {
   id: string;
@@ -107,6 +114,9 @@ export const DECOR_OPTIONS: DecorOption[] = [
   { id: 'topiary', name: 'Topiary', icon: '🌳', blurb: 'A clipped round shrub in a square tub.', solid: true, unlock: { areas: 4 } },
   // Keepsakes (#288): only Lucky Cat finds unlock these.
   { id: 'catstatue', name: 'Lucky Cat statue', icon: '🐱', blurb: 'A keepsake from your first Lucky Cat.', solid: true, unlock: { keepsake: 'firstFind' } },
+  { id: 'pawstones', name: 'Paw-print stones', icon: '🐾', blurb: 'Stepping stones in the shape of a paw. Walk right over them.', solid: false, unlock: { keepsake: 'finds5' } },
+  { id: 'goldlantern', name: 'Golden lantern', icon: '🏮', blurb: 'A keepsake from a Golden Cat: it glows all night.', solid: false, unlock: { keepsake: 'golden' } },
+  { id: 'rainbowbunting', name: 'Rainbow bunting', icon: '🌈', blurb: 'A keepsake from a Rainbow Cat: a pole of bright flags.', solid: true, unlock: { keepsake: 'rainbow' } },
 ];
 
 export const DECOR_OPTION: Record<string, DecorOption> = Object.fromEntries(DECOR_OPTIONS.map((o) => [o.id, o]));
