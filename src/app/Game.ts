@@ -42,7 +42,7 @@ import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
 import { Skyline } from '../rendering/Skyline';
-import { HAZE } from '../data/sky';
+import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers } from '../core/Picking';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
@@ -1061,6 +1061,12 @@ export class Game {
     const n = c.nearness();
     c.hazeStart = HAZE.start[0] + (HAZE.start[1] - HAZE.start[0]) * n;
     c.hazeEnd = HAZE.end[0] + (HAZE.end[1] - HAZE.end[0]) * n;
+    if (this.bot) {
+      // G.18: past the old default zoom, lower tiers pull the haze (and so the far clip) in.
+      const close = Math.min(1, Math.max(0, c.zoom - 1) / 0.9);
+      const reach = CLOSE_VIEW_REACH[this.gfxTier as keyof typeof CLOSE_VIEW_REACH] ?? 1;
+      c.hazeEnd *= 1 - (1 - reach) * close;
+    }
     this.app.scene.fog.start = c.fogDepth(c.dist + c.hazeStart);
     this.app.scene.fog.end = c.fogDepth(c.dist + c.hazeEnd);
     if (this.sky) {
