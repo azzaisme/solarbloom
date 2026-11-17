@@ -446,6 +446,9 @@ export class Game {
     );
     this.fly = new FlyText(this.hud.root);
     this.createMenu();
+    // E22.10: old-city rules strip the walking view to the place: plain words, two gauges, one objective.
+    this.hud.oldCity = isOldCity(state);
+    document.body.classList.toggle('oldcity', this.hud.oldCity);
     this.eco = new EcoBadge(this.sim, (h, k, t) => this.hud.toast(h, k, t));
     this.hud.setTool('pulse');
     this.applySettings();
@@ -788,6 +791,7 @@ export class Game {
     // E19.4.2 / E20.7: the calm HUD is the default; E19.4.3: the potter-about pace. Both presentation only.
     document.body.classList.toggle('calm', calmHud(s));
     document.body.classList.toggle('potter', potterPace(s));
+    document.body.classList.toggle('details', !!s.showNumbers); // E22.10: "Show details" adds figures to the gauges
     this.hud.settings = s;
     if (!s.debug) this.hud.setDebug(null);
   }
@@ -1533,7 +1537,7 @@ export class Game {
       const short = this.sim.econ.shortfall(cost);
       out.push({
         kind: 'gate', id: `gate:${sealed}`, verb: 'Unlock', name: `the ${AREA_TYPES[s.info(sealed).type].name.toLowerCase()}`, distance: fd, at: front,
-        refused: short ? `Needs ${fmt(cost.biomass)} 🌿 and ${fmt(cost.energy)} ⚡` : undefined,
+        refused: short ? `Needs ${fmt(cost.biomass)} ${this.hud.oldCity ? 'Greens' : 'biomass'} and ${fmt(cost.energy)} energy` : undefined,
         run: () => {
           if (this.sim.areas.unlock(sealed)) b.visuals.play('cheer');
         },

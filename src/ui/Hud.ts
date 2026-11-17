@@ -16,6 +16,8 @@ import { ICONS, GROUP_ICONS, LOGO_MARK, MACHINE_ICONS, hasEmoji, iconize, instal
 import { WORLD_EVENT_INFO } from '../gameplay/WorldEventSystem';
 import { advisorStep, calmToast } from './Pace';
 import { Prompt } from './Prompt';
+import { plainWords, RESOURCE_NAME } from './words';
+import { oldCityObjective } from './ObjectiveCard';
 
 /** Phase 5 E14: `super:<type>` places a Superstructure Core of that family. */
 export type SuperTool = `super:${'solar' | 'condenser' | 'pollinator' | 'droneHub'}`;
@@ -162,6 +164,10 @@ export class Hud {
   settings: Settings;
   /** E22.2: the one prompt at the bottom centre */
   readonly prompt: Prompt;
+  /** E22.10: old-city rules: plain words, two gauges, one objective sentence (Game sets it from the rules) */
+  oldCity = false;
+  /** E22.10: when each gauge last changed, and its last value (gauges fade out when full and unchanged) */
+  private gaugeAt: Record<string, { v: number; at: number }> = {};
 
   constructor(
     private sim: Sim,
@@ -845,7 +851,13 @@ export class Hud {
     this.set('upgList', $(this.root, '#upgList'), 'html', html);
   }
 
+  /** E22.10: game text in the words of the rules in play (old-city rules: plain words, no rates). */
+  words(text: string): string {
+    return this.oldCity ? plainWords(text) : text;
+  }
+
   showTip(x: number, y: number, html: string) {
+    html = this.words(html);
     const tip = $(this.root, '#tip');
     this.set('tip', tip, 'html', html);
     tip.style.display = 'block';
@@ -864,6 +876,7 @@ export class Hud {
 
   private failTimer = 0;
   showFail(msg: string, x?: number, y?: number) {
+    msg = this.words(msg);
     const el = $(this.root, '#fail');
     el.innerHTML = iconize(esc(msg));
     el.style.display = 'block';
@@ -881,8 +894,9 @@ export class Hud {
   toast(html: string, kind: '' | 'gold' | 'cat' = '', secs = 3.2) {
     const box = $(this.root, '#toasts');
     // E19.4.2: the calm HUD keeps one toast at a time, drops number-heavy detail lines and the repeat count.
-    const calm = !this.settings.showNumbers;
+    const calm = !this.settings.showNumbers || this.oldCity;
     if (calm) html = calmToast(html);
+    html = this.words(html);
     const head = html.split('<small>')[0].replace(/[×x]\d+|\d+/g, '#');
     for (const c of Array.from(box.children) as HTMLElement[]) {
       if (c.dataset.head !== head || c.style.opacity === '0') continue;
@@ -1234,6 +1248,8 @@ export class Hud {
     this.set('coreBtn', coreBtn, 'cls', ready ? '1' : '0', 'show');
     this.set('coreBtnText', coreBtn, 'text', `✨ ${p.homeIsPark ? 'Wake the fountain' : 'Awaken the Core'} · ${formatCost(TUNING.core.cost)}`);
 
+    if (this.oldCity) this.updateOldCity();
+
     // Hint
     const step = s.state.progression.tutorialStep;
     const hint = $(this.root, '#hint');
@@ -1270,6 +1286,29 @@ export class Hud {
     if (this.failTimer > 0) {
       this.failTimer -= dt;
       if (this.failTimer <= 0) $(this.root, '#fail').style.display = 'none';
+    }
+  }
+
+  /**
+   * E22.10: the walking view under old-city rules. The objective is one sentence (with a count only for things
+   * done by hand); energy and water are two small gauges that fade out when full and unchanged for 5 s and come
+   * back when they change or drop under a quarter. Biomass is not on the walking view.
+   */
+  private updateOldCity() {
+    const o = oldCityObjective(this.sim);
+    this.set('objTitle', $(this.root, '#objTitle'), 'html', `${esc(o.text)}${o.count ? ` <span class="ocount">${esc(o.count)}</span>` : ''}`);
+    const now = performance.now();
+    for (const k of ['energy', 'water'] as const) {
+      const row = $(this.root, `[data-res="${k}"]`);
+      const v = toNum(this.sim.econ.get(k));
+      const c = this.sim.econ.cap(k);
+      const frac = c ? v / Math.max(1e-9, toNum(c)) : 1;
+      const g = (this.gaugeAt[k] ??= { v, at: now });
+      if (Math.abs(v - g.v) > 0.05) Object.assign(g, { v, at: now });
+      const faded = this.sim.econ.isFull(k) && now - g.at > 5000 && frac >= 0.25;
+      this.set(`fade-${k}`, row, 'cls', faded ? '1' : '0', 'faded');
+      this.set(`low-${k}`, row, 'cls', frac < 0.25 ? '1' : '0', 'low');
+      this.set(`nm-${k}`, $(row, '.nm'), 'text', RESOURCE_NAME[k]);
     }
   }
 
