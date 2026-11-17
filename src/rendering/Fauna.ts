@@ -4,7 +4,7 @@ import type { TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
 import { WATER } from './Water';
-import { catSpots, fountainPond, hash01, idHash, LOCAL_SPECIES, localSlots, supersIn, tilesIn, wanderStop, type LocalSpecies, type Rect } from './FaunaPlan';
+import { catSpots, fountainPond, hash01, idHash, LOCAL_SPECIES, localSlots, supersIn, tilesIn, visitorSlots, wanderStop, type LocalSpecies, type Rect, type VisitorKind } from './FaunaPlan';
 import { mat, PALETTE } from './Materials';
 import { assignBatch, group, shape, vshape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
@@ -335,6 +335,9 @@ export class Fauna {
     const cx = (rect.x0 + rect.x1) / 2;
     const cz = (rect.z0 + rect.z1) / 2;
     const near = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz);
+    // E19.3.2 (#258): visitors to the player's chosen plots go first in their kind's list (within its cap).
+    const visitors = visitorSlots(s, rect);
+    const vis = (k: VisitorKind) => visitors.filter((v) => v.kind === k).map((v) => ({ key: v.key, home: v.home, y: v.water ? y - WATER.drop + 0.01 : y }));
 
     // Koi: a few circle the flowing fountain; the rest swim the restored water tiles in view.
     const koi: { key: string; home: { x: number; z: number }; y: number }[] = [];
@@ -361,13 +364,13 @@ export class Fauna {
       const lawn = tilesIn(s, rect, (t) => t.ground === 'restored' && t.bloom >= 2 && !t.occupantId && !t.blocked && (t.feature ?? 'lawn') === 'lawn', 120).sort(near);
       for (let i = 0; i < lawn.length; i += 5) birds.push({ key: `b:${lawn[i].x}:${lawn[i].z}`, home: { x: lawn[i].x + 0.5, z: lawn[i].z + 0.5 }, y });
     }
-    this.assign('groundBirds', birds, opts);
+    this.assign('groundBirds', [...vis('groundBirds'), ...birds], opts);
 
     // Sleeping cats: curled up inside some machines' footprints (never where a Lucky Cat could be).
     const cap = TUNING.ecosystem.caps[opts.quality].cats;
     this.assign(
       'cats',
-      catSpots(s, rect, cap).map((c) => ({ key: `c:${c.machineId}`, home: { x: c.x, z: c.z }, y, rot: c.rot })),
+      [...vis('cats'), ...catSpots(s, rect, cap).map((c) => ({ key: `c:${c.machineId}`, home: { x: c.x, z: c.z }, y, rot: c.rot }))],
       opts,
     );
     // The coat follows the slot, not the pool index: re-tint by rebuilding is costly, so cats keep their pooled coat.
@@ -386,7 +389,7 @@ export class Fauna {
     for (const sp of LOCAL_SPECIES)
       this.assign(
         sp,
-        locals.filter((l) => l.species === sp).map((l) => ({ key: l.key, home: l.home, y: l.water ? y - WATER.drop + 0.01 : y })),
+        [...vis(sp), ...locals.filter((l) => l.species === sp).map((l) => ({ key: l.key, home: l.home, y: l.water ? y - WATER.drop + 0.01 : y }))],
         opts,
       );
   }
