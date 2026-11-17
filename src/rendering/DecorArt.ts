@@ -11,7 +11,6 @@
 import type { PlotHost } from './PlotArt';
 import { PALETTE } from './Palette';
 import type { VPrim } from './Shapes';
-import { shrubGeo } from './TreeGen';
 
 type V3 = [number, number, number];
 const C = PALETTE.cozy;
@@ -49,9 +48,9 @@ function put(a: At, type: VPrim, hex: string, dx: number, dy: number, dz: number
 }
 
 /** A model copy at a local offset, turned with the decoration. False when the model isn't there. */
-function model(a: At, name: string, dx: number, dz: number, scale: number, extraRot = 0): boolean {
+function model(a: At, name: string, dx: number, dz: number, scale: number, extraRot = 0, dy = 0): boolean {
   const [ox, oz] = turn(a.rot, dx, dz);
-  return a.h.model(name, a.x + ox, a.y, a.z + oz, -a.rot * (Math.PI / 2) + extraRot, scale);
+  return a.h.model(name, a.x + ox, a.y + dy, a.z + oz, -a.rot * (Math.PI / 2) + extraRot, scale);
 }
 
 function flowersRing(a: At, r: number, n: number, dy = 0.12, size = 0.12) {
@@ -131,13 +130,15 @@ const ART: Record<string, (a: At) => void> = {
     put(a, 'box', C.basket, 0.18, 0.22, 0.12, [0.03, 0.12, 0.18]);
   },
   topiary: (a) => {
-    put(a, 'box', P.wood.mid, 0, 0.13, 0, [0.42, 0.26, 0.42]);
-    if (a.far) return put(a, 'sphere', P.leaf.shrub[0], 0, 0.55, 0, 0.5);
-    a.h.foliage(shrubGeo(3, a.h.lod), a.x, a.y + 0.26, a.z, a.rot, 0.9);
+    put(a, 'box', P.stone.light, 0, 0.12, 0, [0.36, 0.24, 0.36]);
+    put(a, 'box', C.bedSoil, 0, 0.245, 0, [0.3, 0.01, 0.3]);
+    if (a.far) return put(a, 'sphere', P.leaf.shrub[0], 0, 0.46, 0, 0.36);
+    put(a, 'sphere', P.leaf.shrub[1], 0, 0.44, 0, 0.36);
+    put(a, 'sphere', P.leaf.shrub[0], 0, 0.66, 0, 0.2);
   },
   catstatue: (a) => {
     put(a, 'box', P.stone.light, 0, 0.08, 0, [0.42, 0.16, 0.42]);
-    if (model(a, 'lucky-cat', 0, 0, 0.5, 0)) return;
+    if (model(a, 'lucky-cat', 0, 0, 0.55, 0, 0.16)) return;
     put(a, 'sphere', P.glow.gold, 0, 0.36, 0, [0.3, 0.38, 0.26]);
     put(a, 'sphere', P.glow.gold, 0, 0.6, 0.02, 0.22);
   },

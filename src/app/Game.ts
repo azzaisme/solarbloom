@@ -58,6 +58,7 @@ import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
 import { FlyText } from '../ui/Fly';
 import { decorType, Hud, machineTool, superType, type Settings, type Tool } from '../ui/Hud';
+import { BOT } from '../gameplay/Walker';
 import { SuperSystem } from '../gameplay/SuperSystem';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
 import type { MergePlan } from '../gameplay/MergeSystem';
@@ -851,9 +852,11 @@ export class Game {
     const tools: Tool[] = ['pulse', 'inspect'];
     for (const t of BUILDABLE) if (this.sim.build.isUnlocked(t)) tools.push(t);
     for (const btn of this.hud.root.querySelectorAll<HTMLElement>('#buildTray .super[data-tool]')) if (!btn.hidden) tools.push(btn.dataset.tool as Tool);
-    // E19.2: the decoration last held (any other is a choice in the Build tray), then the remove tool
+    // E19.2: the decoration last held, then the remove tool. With a decoration in hand the keys step through every
+    // decoration earned (so the keyboard alone can choose one); on the pad the bumpers turn it and the tray chooses.
     const cur = this.hud.currentTool;
-    tools.push(decorType(cur) ? cur : this.lastDecor, 'remove');
+    const decor = [...this.hud.root.querySelectorAll<HTMLElement>('#buildTray .decor[data-tool^="decor:"]')].filter((b) => !b.hidden).map((b) => b.dataset.tool as Tool);
+    tools.push(...(decorType(cur) ? decor : [this.lastDecor]), 'remove');
     const i = Math.max(0, tools.indexOf(cur));
     this.selectTool(tools[(i + step + tools.length) % tools.length]);
   }
@@ -1680,8 +1683,7 @@ export class Game {
   private previewDecor(p: Pick, x: number, y: number, kind: string) {
     const t = p.tile!;
     const o = DECOR_OPTION[kind];
-    let why = this.cozy.canDecorate(kind, p.roofId, t.x, t.z);
-    if (!why && !this.inReach(p.roofId, t.x, t.z, 1)) why = TOO_FAR;
+    const why = this.decorProblem(kind, p.roofId, t.x, t.z);
     this.overlays.hideRadius();
     this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
     const how = `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
@@ -1706,14 +1708,20 @@ export class Game {
     this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? d.kind}</b>${how}`);
   }
 
+  /** Why a decoration in hand can't go here (the tile's rules, reach, and not on top of bloombot if it's solid). */
+  private decorProblem(kind: string, roofId: string, x: number, z: number): string | undefined {
+    const why = this.cozy.canDecorate(kind, roofId, x, z);
+    if (why) return why;
+    if (!this.inReach(roofId, x, z, 1)) return TOO_FAR;
+    const b = this.bot;
+    if (b && DECOR_OPTION[kind]?.solid && b.pose.roofId === roofId && Math.abs(b.pose.x - (x + 0.5)) < 0.5 + BOT.radius && Math.abs(b.pose.z - (z + 0.5)) < 0.5 + BOT.radius) return 'Bloombot is standing there';
+    return undefined;
+  }
+
   /** Places the decoration in hand on a tile (free); it stays in hand for the next one. */
   private placeDecorAt(p: Pick, x: number, y: number, kind: string): ActResult {
     const t = p.tile!;
-    if (!this.inReach(p.roofId, t.x, t.z, 1)) {
-      this.hud.showFail(TOO_FAR, x, y);
-      return 'none';
-    }
-    const why = this.cozy.placeDecor(kind, this.buildRot, p.roofId, t.x, t.z);
+    const why = this.decorProblem(kind, p.roofId, t.x, t.z) ?? this.cozy.placeDecor(kind, this.buildRot, p.roofId, t.x, t.z);
     if (why) {
       this.hud.showFail(why, x, y);
       return 'none';
@@ -1721,7 +1729,6 @@ export class Game {
     this.chunks.markTile(t);
     this.sfx.build();
     this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.2), 8, { up: 1.6, size: 0.04, life: 0.8 });
-    if (this.bot && DECOR_OPTION[kind]?.solid) this.bot.walker.settle(this.bot.pose); // never left standing inside it
     this.buildKey = '';
     return 'select';
   }
