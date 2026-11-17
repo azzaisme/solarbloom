@@ -34,3 +34,10 @@ export const HAZE = {
   start: [8, 6],
   end: [56, 76],
 };
+
+/**
+ * Bloombot (G.18): in the close follow view (zoom past the old default) the horizon is always on screen, so each
+ * graphics tier draws a shorter way out: the haze ends this share of HAZE.end sooner, and the far clip with it,
+ * so the cut-off sits inside thick haze. Same camera on every tier.
+ */
+export const CLOSE_VIEW_REACH: Record<'high' | 'medium' | 'low', number> = { high: 1, medium: 0.78, low: 0.6 };

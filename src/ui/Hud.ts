@@ -89,7 +89,12 @@ export interface Settings {
   gfx?: 'auto' | 'low' | 'medium' | 'high';
   /** Phase 5 E16: fireflies over lush tiles (ambience only). */
   fireflies?: boolean;
+  /** Bloombot (G.16): rebound keys and gamepad buttons (only what differs from the default map). */
+  keys?: SavedBindings['keys'];
+  pad?: SavedBindings['pad'];
 }
+
+import { ACTIONS, type Action, type Bindings, keyLabel, padLabel, type SavedBindings } from '../app/Bindings';
 
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
 
@@ -119,6 +124,7 @@ export class Hud {
     installIconDefs();
     this.root.innerHTML = iconize(this.template());
     this.wire();
+    $(this.root, '#backpack h2 button').addEventListener('click', () => this.toggleBackpack(false));
   }
 
   private template() {
@@ -199,6 +205,7 @@ export class Hud {
       </div></div>
       <div id="tip" class="panel"></div>
       <div id="fail"></div>
+      <div id="backpack" class="drawer panel" aria-label="Backpack"><h2>Backpack <button aria-label="Close backpack">×</button></h2><div id="bpList"></div></div>
       <div id="upgrades" class="drawer panel"><h2>Upgrades <button aria-label="Close upgrades">×</button></h2><p id="upgNext" class="upg-next"></p><div id="upgList"></div></div>
       <div id="inspect" class="panel"></div>
       <div id="modal"><div class="panel">
@@ -216,6 +223,7 @@ export class Hud {
         <label>Camera follows big chains <input type="checkbox" data-set="followChains"></label>
         <label>Tutorial hints <input type="checkbox" data-set="hints"></label>
         <label>Debug / FPS (F3) <input type="checkbox" data-set="debug"></label>
+        <div id="controlsBox" class="controls"></div>
         <div class="stats" id="statsBox"></div>
         <div id="disc"></div>
         <div class="row"><button id="closeModal">Back to the garden</button><button class="danger" id="newGame">New game</button></div>
@@ -603,6 +611,90 @@ export class Hud {
     if (open) this.renderUpgrades(true);
   }
 
+  /**
+   * Bloombot (G.16, G.7): the hotbar's key badges from the bindings, or gamepad buttons when the pad was used
+   * last. Without bindings, the cursor map.
+   */
+  setKeyMap(mode: 'keys' | 'pad' | undefined, b?: Bindings) {
+    const slots: [string, Action, string][] = [
+      ['[data-tool="inspect"]', 'interact', '1'],
+      ['[data-tool="pulse"]', 'pulse', '2'],
+      ['#buildToggle', 'tray', 'B'],
+      ['#harvestBtn', 'harvest', 'H'],
+      ['#upgBtn', 'upgrades', 'U'],
+    ];
+    for (const [sel, action, cursor] of slots) {
+      const el = this.root.querySelector<HTMLElement>(`#hotbar ${sel} .key`);
+      if (!el) continue;
+      el.textContent = !b || !mode ? cursor : mode === 'pad' ? padShort(b.pad[action]) : b.label(action);
+    }
+    this.root.classList.toggle('pad-keys', mode === 'pad');
+  }
+
+  /**
+   * Bloombot (G.16): the Controls section of Settings: every action with its key and gamepad button. Clicking
+   * one waits for the next key (or button) and binds it; a key another action had moves over to it (a swap).
+   */
+  renderControls(b: Bindings, listen: (kind: 'key' | 'pad', done: (code: string | number | undefined) => void) => void, changed: () => void) {
+    const box = this.root.querySelector<HTMLElement>('#controlsBox');
+    if (!box) return;
+    const row = (a: (typeof ACTIONS)[number]) =>
+      `<div class="ctl-row"><span>${a.label}</span><button class="ctl-key" data-act="${a.id}" data-kind="key">${[...new Set(b.keys[a.id].map(keyLabel))].join(' / ')}</button>` +
+      `<button class="ctl-key" data-act="${a.id}" data-kind="pad" ${a.pad ? '' : 'disabled'}>${a.pad ? padLabel(b.pad[a.id]) : 'stick'}</button></div>`;
+    box.innerHTML = `<h3>Controls</h3><p class="ctl-help">Click a key or button, then press the new one. Esc cancels.</p>${ACTIONS.map(row).join('')}<button id="ctlReset" class="ctl-reset">Reset to defaults</button>`;
+    box.querySelectorAll<HTMLButtonElement>('.ctl-key').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        const act = btn.dataset.act as Action;
+        const kind = btn.dataset.kind as 'key' | 'pad';
+        btn.textContent = 'Press…';
+        btn.classList.add('listening');
+        listen(kind, (code) => {
+          if (code !== undefined) {
+            if (kind === 'key') b.setKey(act, code as string);
+            else b.setButton(act, code as number);
+            changed();
+          }
+          this.renderControls(b, listen, changed);
+        });
+      }),
+    );
+    box.querySelector('#ctlReset')!.addEventListener('click', () => {
+      b.reset();
+      changed();
+    });
+  }
+
+  private backpackIsOpen = false;
+  /** Bloombot (G.15): the backpack (Tab / d-pad up): what you've found, and later your plot options and decorations. */
+  toggleBackpack(open = !this.backpackIsOpen) {
+    this.backpackIsOpen = open;
+    $(this.root, '#backpack').classList.toggle('open', open);
+    if (open) this.renderBackpack();
+  }
+
+  get backpackOpen() {
+    return this.backpackIsOpen;
+  }
+
+  private renderBackpack() {
+    const st = this.sim.state;
+    const woken = this.sim.areas
+      .revealed()
+      .filter((id) => this.sim.areas.fog(id) === 'cleared')
+      .map((id) => this.sim.areas.info(id));
+    const card = (icon: string, name: string, detail: string) => `<div class="card"><span class="ci">${icon}</span><span class="cn">${name}</span><span class="cd2">${detail}</span></div>`;
+    const fauna = Object.keys(st.fauna ?? {});
+    const parts = [
+      '<h3 class="bp-h">Discoveries</h3>',
+      card('🐱', `Lucky Cats found: ${st.stats.catsFound}`, st.stats.catsFound ? 'Keep wandering: more hide as the city wakes.' : 'Wander the city. Paw prints mean a cat is close.'),
+      card('⛲', `Landmarks woken: ${woken.length}`, woken.length ? woken.map((a) => a.landmarkName).join(', ') : 'Restore the park to wake the fountain.'),
+      card('🦋', `Wildlife: ${fauna.length}`, fauna.length ? fauna.join(', ') : 'Wildlife arrives as gardens grow.'),
+      '<h3 class="bp-h">Plots and decorations</h3>',
+      '<p class="bp-empty">Plot choices and decorations you unlock will be kept here.</p>',
+    ];
+    $(this.root, '#bpList').innerHTML = iconize(parts.join(''));
+  }
+
   get isUpgradesOpen() {
     return this.upgradesOpen;
   }
@@ -868,7 +960,8 @@ export class Hud {
 
   /** Rectangles the Lucky Cat must never hide under. */
   blockedRects(): DOMRect[] {
-    return ['#logo', '#res', '#obj', '#hotbar', '#hint', '#combo', '#quick', '#chips'].map((s) => $(this.root, s).getBoundingClientRect());
+    const extra = [...this.root.querySelectorAll<HTMLElement>('#minimap:not([hidden])')].map((e) => e.getBoundingClientRect());
+    return ['#logo', '#res', '#obj', '#hotbar', '#hint', '#combo', '#quick', '#chips'].map((s) => $(this.root, s).getBoundingClientRect()).concat(extra);
   }
 
   setPaused(p: boolean) {
@@ -1134,4 +1227,10 @@ export function etaText(sec: number): string {
   if (sec < 60) return `${Math.max(1, Math.ceil(sec))} s`;
   if (sec < 3600) return `${Math.ceil(sec / 60)} min`;
   return `${Math.round(sec / 360) / 10} h`;
+}
+
+/** A short gamepad label for the small hotbar badges. */
+function padShort(button: number | undefined): string {
+  const short: Record<number, string> = { 0: 'A', 1: 'B', 2: 'X', 3: 'Y', 4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT', 12: '↑', 13: '↓', 14: '←', 15: '→' };
+  return button === undefined ? '' : (short[button] ?? padLabel(button));
 }

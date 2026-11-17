@@ -7,8 +7,8 @@ import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
-import type { BuildableType, DroneRole, MachineData, ResourceKind, TileData } from '../core/types';
-import { MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
+import type { BuildableType, DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
+import { BUILDABLE, MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
@@ -42,7 +42,7 @@ import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
 import { Skyline } from '../rendering/Skyline';
-import { HAZE } from '../data/sky';
+import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers } from '../core/Picking';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
@@ -59,11 +59,25 @@ import { SuperSystem } from '../gameplay/SuperSystem';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
 import type { MergePlan } from '../gameplay/MergeSystem';
 import { EventBus } from './EventBus';
+import { BotController } from './BotController';
+import { type Action, Bindings, BUILD_DIGITS, keyLabel, padLabel } from './Bindings';
+import { BloombotVisuals } from '../rendering/BloombotVisuals';
+import { Minimap } from '../ui/Minimap';
+import { PadFocus } from '../ui/PadFocus';
 import { type LoadResult, SaveService } from './SaveService';
 
 const SETTINGS_KEY = 'solarbloom.settings';
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Thriving (full bloom)', 'Radiant'];
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+/** Bloombot: the camera zoom of the close default view (G.3), and how near counts as "within reach". */
+const BOT_ZOOM = 3.2;
+/** Bloombot: how far in the camera may come (the cursor view stops at 1.9). */
+const BOT_MAX_ZOOM = 4.2;
+const BOT_REACH = 1.6;
+/** Bloombot is the game; `?cursor=1` keeps the old click-to-act play for tests that drive tiles directly. */
+const botMode = () => typeof location === 'undefined' || new URLSearchParams(location.search).get('cursor') !== '1';
+type ActResult = 'pulse' | 'build' | 'select' | 'wake' | 'none';
 
 interface Pick {
   roofId: string;
@@ -144,6 +158,19 @@ export class Game {
   private saveTimer = 0;
   private resetting = false;
   private pointer = { x: -1, y: -1, inside: false };
+  /** when the pointer last moved over the world (bloombot's front-tile preview yields to the mouse for a moment) */
+  private pointerAt = -1e9;
+  /** Bloombot (#234): the player character. Off with `?cursor=1` (e2e tests that click tiles directly). */
+  readonly bot?: BotController;
+  /** true while the front-tile preview (not the pointer) is drawing the hover tooltip */
+  private previewFromBot = false;
+  private botPreviewAt = 0;
+  private botPreviewKey = '';
+  private keyMapShown: 'keys' | 'pad' = 'keys';
+  /** Bloombot (G.16): the controls map, rebindable in Settings */
+  readonly bindings = new Bindings();
+  /** Bloombot (G.14): the round map at the bottom left */
+  private minimap?: Minimap;
   private selected?: string;
   private inspectTimer = 0;
   private cinematic = false;
@@ -269,7 +296,12 @@ export class Game {
           if (target === '*') this.sim.upgrades.purchaseAll(id);
           else this.sim.upgrades.purchase(id, target || undefined);
         },
-        activateCore: () => this.sim.progression.activateCore(),
+        activateCore: () => {
+          // Bloombot (G.17): bloombot walks to the fountain and wakes it there.
+          const f = this.bot && this.sim.state.machines.find((m) => m.type === 'core' && this.sim.areas.areaOf(m) === PARK);
+          if (f) this.botWake(f);
+          else this.sim.progression.activateCore();
+        },
         newGame: () => this.newGame(),
         setSetting: (k, v) => this.setSetting(k, v),
         activateFrenzy: () => this.sim.frenzy.activate(),
@@ -325,7 +357,9 @@ export class Game {
         },
         wake: (id) => {
           const m = this.sim.machine(id);
-          if (m && this.landmarkReady(m)) this.wakeLandmark(m);
+          if (!m || !this.landmarkReady(m)) return;
+          if (this.bot) this.botWake(m);
+          else this.wakeLandmark(m);
         },
         cycleSpeed: () => {
           this.speed = this.speed === 1 ? 2 : this.speed === 2 ? 3 : 1;
@@ -358,6 +392,32 @@ export class Game {
     else if (this.sim.progression.coreReady()) this.machines.setCoreState('ready');
 
     this.wireEvents();
+    if (botMode()) {
+      const visuals = new BloombotVisuals(this.app, this.scene.world);
+      visuals.reducedMotion = !!this.settings.reducedMotion;
+      Object.assign(this, { bindings: new Bindings({ keys: this.settings.keys, pad: this.settings.pad }) });
+      const bot = new BotController(this.sim, this.camera, visuals, this.bindings);
+      this.bot = bot;
+      bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble';
+      bot.onPad = (a) => this.doAction(a);
+      bot.onButton = (i) => this.padListener?.(i);
+      const focus = new PadFocus(this.hud.root);
+      bot.padCapture = (i) => !this.padListener && focus.button(i);
+      bot.onZoom = (f) => this.camera.zoomBy(f);
+      this.hud.setKeyMap('keys', this.bindings);
+      // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad).
+      const touchOnly = typeof matchMedia !== 'undefined' && !matchMedia('(any-pointer: fine)').matches && navigator.maxTouchPoints > 0;
+      if (touchOnly) setTimeout(() => this.hud.toast('Solarbloom needs a keyboard or a gamepad for now<small>Phones and tablets will be supported again later. Connect a controller to play.</small>', 'gold', 12), 900);
+      this.hud.renderControls(this.bindings, (kind, done) => this.listenForBinding(kind, done), () => this.saveBindings());
+      this.minimap = new Minimap(this.sim, this.hud.root, (id) => {
+        const m = this.sim.state.machines.find((q) => q.id === id);
+        return !!m && this.landmarkReady(m);
+      });
+      const [bx, , bz] = bot.world();
+      this.camera.maxZoom = BOT_MAX_ZOOM;
+      this.camera.target.set(bx, 0, bz);
+      this.camera.glide(bx, 0, bz, BOT_ZOOM);
+    }
     new InputController(canvas, {
       hover: (x, y) => this.onHover(x, y),
       leave: () => this.onLeave(),
@@ -366,7 +426,8 @@ export class Game {
         this.lastPanAt = performance.now();
         this.camera.pan(dx, dy, x, y);
       },
-      zoom: (f, x, y) => this.camera.zoomBy(f, x, y),
+      // Bloombot: while the camera follows it, zoom about the middle of the view (bloombot), not the cursor.
+      zoom: (f, x, y) => (this.bot?.following ? this.camera.zoomBy(f) : this.camera.zoomBy(f, x, y)),
       // A quick, strong pinch-out snaps to the city overview (one gesture from anywhere).
       pinchEnd: (f, ms) => {
         if (this.city && !this.cinematic && f < 0.6 && ms < 450) this.camera.glide(this.camera.target.x, 0, this.camera.target.z, this.camera.minZoom);
@@ -396,7 +457,8 @@ export class Game {
     // Phase 4 E10.1: no blocking welcome card. The first pulse works at once; a short note says what this is.
     if (!state.progression.introSeen && state.stats.tilesRestored === 0) {
       state.progression.introSeen = true;
-      setTimeout(() => this.hud.toast('🌱 Welcome to Solarbloom<small>This park is dead and grey. Tap a grey tile to bring it back to life.</small>', 'gold', 5), 600);
+      const how = this.bot ? 'Walk with WASD and press E to pulse the grey tile in front of you.' : 'Tap a grey tile to bring it back to life.';
+      setTimeout(() => this.hud.toast(`🌱 Welcome to Solarbloom<small>This park is dead and grey. ${how}</small>`, 'gold', 6), 600);
     }
     else if (offline) {
       this.saveNow();
@@ -491,6 +553,7 @@ export class Game {
   /** Autosave: compressed, off the frame (the next idle moment). Unload uses the plain synchronous save. */
   save() {
     if (this.resetting || this.saving) return;
+    this.bot?.save();
     this.saving = true;
     const seq = ++this.saveSeq;
     const run = () =>
@@ -516,6 +579,7 @@ export class Game {
   /** Immediate, uncompressed save for page unload (no time to compress). */
   saveNow() {
     if (this.resetting) return;
+    this.bot?.save();
     this.saveSeq++;
     this.saver.save(this.sim.state);
   }
@@ -558,7 +622,24 @@ export class Game {
 
   private wireKeys() {
     window.addEventListener('keydown', (e) => {
-      if (e.target instanceof HTMLInputElement) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      if (this.keyListener) {
+        e.preventDefault();
+        this.keyListener(e.code);
+        return;
+      }
+      if (this.bot) {
+        // Bloombot's map (docs/BLOOMBOT_EPIC.md §7), rebindable; build tools stay on the number row.
+        const slot = BUILD_DIGITS.indexOf(e.code as (typeof BUILD_DIGITS)[number]);
+        const tools: Tool[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
+        if (slot >= 0) return this.selectTool(tools[slot]);
+        const a = this.bindings.actionForCode(e.code);
+        if (!a) return;
+        if (a === 'backpack' || a === 'debug') e.preventDefault();
+        if (e.repeat && a !== 'zoomIn' && a !== 'zoomOut') return;
+        this.doAction(a);
+        return;
+      }
       const k = e.key.toLowerCase();
       const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden', '9': 'relay', '0': 'cultivator' };
       if (map[k]) this.selectTool(map[k]);
@@ -572,16 +653,342 @@ export class Game {
       else if (k === 'f3' || k === '`') {
         e.preventDefault();
         this.setSetting('debug', !this.settings.debug);
-      } else if (k === 'escape') {
-        if (this.mergeSel) this.cancelMerge();
-        else if (this.hud.modalOpen) this.hud.openSettings(false);
-        else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
-        else if (this.hud.trayOpen) this.hud.toggleTray(false);
-        else if (this.selected) this.select(undefined);
-        else this.selectTool('pulse');
-      } else if (k === '+' || k === '=') this.camera.zoomBy(1.15);
+      } else if (k === 'escape') this.escape();
+      else if (k === '+' || k === '=') this.camera.zoomBy(1.15);
       else if (k === '-') this.camera.zoomBy(1 / 1.15);
     });
+  }
+
+  /** Bloombot: one action from a key or a gamepad button. Movement and sprint are read by BotController. */
+  private doAction(a: Action) {
+    if (a === 'pulse') this.botAct();
+    else if (a === 'interact') this.botInteract();
+    else if (a === 'tray') this.hud.toggleTray();
+    else if (a === 'cancel') this.escape();
+    else if (a === 'harvest') this.harvest();
+    else if (a === 'upgrades') this.hud.toggleUpgrades();
+    else if (a === 'backpack') this.hud.toggleBackpack();
+    else if (a === 'prevTool') this.cycleTool(-1);
+    else if (a === 'nextTool') this.cycleTool(1);
+    else if (a === 'zoomIn') this.camera.zoomBy(1.15);
+    else if (a === 'zoomOut') this.camera.zoomBy(1 / 1.15);
+    else if (a === 'overview') this.toggleOverview();
+    else if (a === 'pause') this.setPaused(!this.paused);
+    else if (a === 'frenzy') this.sim.frenzy.activate();
+    else if (a === 'nextArea') this.focusNextArea();
+    else if (a === 'home') this.focusArea(PARK);
+    else if (a === 'debug') this.setSetting('debug', !this.settings.debug);
+  }
+
+  /** G.16: the rebinding screen waits for one key or button. */
+  private keyListener?: (code: string) => void;
+  private padListener?: (button: number) => void;
+  private listenForBinding(kind: 'key' | 'pad', done: (code: string | number | undefined) => void) {
+    const finish = (v: string | number | undefined) => {
+      this.keyListener = undefined;
+      this.padListener = undefined;
+      done(v);
+    };
+    this.keyListener = (code) => finish(code === 'Escape' ? undefined : kind === 'key' ? code : undefined);
+    if (kind === 'pad') this.padListener = (i) => finish(i);
+  }
+
+  private saveBindings() {
+    const saved = this.bindings.save();
+    this.settings.keys = saved.keys;
+    this.settings.pad = saved.pad;
+    this.setSetting('keys', saved.keys as unknown as string);
+    this.hud.setKeyMap(this.bot?.lastInput ?? 'keys', this.bindings);
+    this.hud.renderControls(this.bindings, (kind, done) => this.listenForBinding(kind, done), () => this.saveBindings());
+    this.botPreviewKey = '';
+  }
+
+  private escape() {
+    if (this.mergeSel) this.cancelMerge();
+    else if (this.hud.modalOpen) this.hud.openSettings(false);
+    else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
+    else if (this.hud.trayOpen) this.hud.toggleTray(false);
+    else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
+    else if (this.selected) this.select(undefined);
+    else if (this.bot?.walking) this.bot.cancelWalk();
+    else this.selectTool('pulse');
+  }
+
+  /**
+   * Bloombot: 1 / 2 and the bumpers step through the tools: Pulse, Inspect, then every machine that's unlocked
+   * (and any Superstructure Core waiting to be placed), so a gamepad can build without opening the tray.
+   */
+  private cycleTool(step: number) {
+    const tools: Tool[] = ['pulse', 'inspect'];
+    for (const t of BUILDABLE) if (this.sim.build.isUnlocked(t)) tools.push(t);
+    for (const btn of this.hud.root.querySelectorAll<HTMLElement>('#buildTray .super[data-tool]')) if (!btn.hidden) tools.push(btn.dataset.tool as Tool);
+    const cur = this.hud.currentTool;
+    const i = Math.max(0, tools.indexOf(cur));
+    this.selectTool(tools[(i + step + tools.length) % tools.length]);
+  }
+
+  /** Bloombot (G.3): M or the View button: out to the city overview, and back to the close view. */
+  private toggleOverview() {
+    const c = this.camera;
+    const out = c.zoom > c.minZoom + 0.15;
+    const t = this.bot ? this.bot.world() : [c.target.x, 0, c.target.z];
+    c.glide(t[0], 0, t[2], out ? c.minZoom : BOT_ZOOM);
+    if (!out && this.bot) this.bot.following = true;
+  }
+
+  /** A key or button name for hints: the pointer's "Click", or bloombot's key / pad button. */
+  private press(key: 'E' | 'Q', bot = this.previewFromBot): string {
+    if (!bot) return 'Click';
+    const a: Action = key === 'E' ? 'pulse' : 'interact';
+    if (this.bot?.lastInput === 'pad') return `<kbd>${padLabel(this.bindings.pad[a])}</kbd>`;
+    return `<kbd>${keyLabel(this.bindings.keys[a][0] ?? '')}</kbd>`;
+  }
+
+  /** The tile in front of bloombot as a pick. */
+  private frontPick(): Pick | undefined {
+    const b = this.bot;
+    if (!b) return undefined;
+    const f = b.front();
+    const tile = this.sim.grid.get(b.pose.roofId, f.x, f.z);
+    if (!tile) return undefined;
+    return { roofId: b.pose.roofId, fx: f.x + 0.5, fz: f.z + 0.5, tile };
+  }
+
+  /** Where a tile is on screen (CSS pixels), for tooltips and fails anchored to it. */
+  private botTileScreen(t: TileData): { x: number; y: number } {
+    const v = this.camera.toScreen(this.tileVec(t, SLAB_TOP + 0.6));
+    return { x: v.x, y: v.y };
+  }
+
+  private botAnim(r: ActResult) {
+    const v = this.bot?.visuals;
+    if (!v) return;
+    if (r === 'pulse') {
+      v.play('pulse');
+      this.drones.companionReact('pulse');
+    }
+    else if (r === 'build') v.play('assemble');
+    else if (r === 'select' || r === 'wake') v.play('interact');
+  }
+
+  /** Bloombot (G.4): E / A: the current tool on the tile in front (Inspect pulses; build tools build). */
+  private botAct() {
+    if (!this.bot || this.cinematic || this.paused || this.hud.modalOpen || this.bot.visuals.busy === 'assemble') return;
+    const p = this.frontPick();
+    if (!p || !p.tile) return;
+    this.bot.following = true;
+    const tool = this.hud.currentTool === 'inspect' ? 'pulse' : this.hud.currentTool;
+    const sc = this.botTileScreen(p.tile);
+    this.botAnim(this.actAt(p, sc.x, sc.y, tool, false));
+    this.botPreviewKey = '';
+  }
+
+  /** Bloombot (G.5): Q / X: say hello to a cat within reach, wake or inspect what's in front, or read the tile. */
+  private botInteract() {
+    const b = this.bot;
+    if (!b || this.cinematic || this.paused || this.hud.modalOpen) return;
+    const [wx, , wz] = b.world();
+    for (const id of this.cat.ids()) {
+      const v = this.cat.targetWorld(id);
+      if (v && Math.hypot(v.x - wx, v.z - wz) < BOT_REACH + 0.6) {
+        b.pose.facing = Math.atan2(v.x - wx, v.z - wz);
+        this.claimingCat = id;
+        this.sim.cat.claim(id);
+        this.claimingCat = undefined;
+        b.visuals.play('cheer');
+        return;
+      }
+    }
+    const lift = this.liftAhead();
+    if (lift) {
+      this.rideLift(lift);
+      return;
+    }
+    const p = this.frontPick();
+    if (!p || !p.tile) return;
+    const occ = this.sim.occupant(p.tile);
+    const sc = this.botTileScreen(p.tile);
+    if (occ) {
+      this.botAnim(this.actAt(p, sc.x, sc.y, 'inspect', false));
+      return;
+    }
+    this.select(undefined);
+    this.hud.showTip(sc.x, sc.y, `<b>${this.tileTitle(p.tile)}</b>${this.tileDetail(p.tile)}${this.pawHint(p.tile)}`);
+  }
+
+  /** G.13: the rooftop whose building stands on this ground cell. */
+  private roofOver(x: number, z: number): LayerData | undefined {
+    return this.sim.grid.clusterRoofs.find((l) => x >= l.origin[0] && x < l.origin[0] + l.width && z >= l.origin[2] && z < l.origin[2] + l.depth);
+  }
+
+  /**
+   * G.13: a lift in front of bloombot: the wall of a building that carries a rooftop (going up), or the edge of
+   * the rooftop it stands on (going down).
+   */
+  private liftAhead(): { up?: LayerData; down?: { x: number; z: number } } | undefined {
+    const b = this.bot;
+    if (!b) return undefined;
+    const f = b.front();
+    if (b.pose.roofId === GROUND) {
+      const g = this.sim.grid.layer(GROUND)!;
+      const roof = this.roofOver(f.x + g.origin[0], f.z + g.origin[2]);
+      return roof ? { up: roof } : undefined;
+    }
+    const r = this.sim.grid.layer(b.pose.roofId)!;
+    if (r.cluster && !this.sim.grid.inBounds(r.id, f.x, f.z)) {
+      const g = this.sim.grid.layer(GROUND)!;
+      return { down: { x: r.origin[0] + f.x - g.origin[0] + 0.5, z: r.origin[2] + f.z - g.origin[2] + 0.5 } };
+    }
+    return undefined;
+  }
+
+  private rideLift(lift: { up?: LayerData; down?: { x: number; z: number } }) {
+    const b = this.bot!;
+    if (lift.up) {
+      const r = lift.up;
+      if (r.preview || !this.sim.grid.isPlayable(r.id)) {
+        const f = b.front();
+        const t = this.sim.grid.get(GROUND, f.x, f.z);
+        const sc = t ? this.botTileScreen(t) : { x: innerWidth / 2, y: innerHeight / 2 };
+        this.hud.showFail(this.lockedReason(r.id), sc.x, sc.y);
+        return;
+      }
+      const [wx, , wz] = b.world();
+      const x = Math.min(r.width - 0.5, Math.max(0.5, wx - r.origin[0]));
+      const z = Math.min(r.depth - 0.5, Math.max(0.5, wz - r.origin[2]));
+      b.ride(r.id, x, z);
+    } else if (lift.down) b.ride(GROUND, lift.down.x, lift.down.z);
+    this.sfx.click();
+  }
+
+  /** G.17: a wake button sends bloombot to the landmark; it wakes it on arrival (as Q would). */
+  private botWake(m: MachineData) {
+    const b = this.bot!;
+    const go = b.goTo(m.roofId, m.x, m.z, m.size, () => {
+      if (!this.landmarkReady(m)) return;
+      b.visuals.play('interact');
+      this.wakeLandmark(m);
+    });
+    if (go) {
+      this.hud.toast(`Bloombot is on its way to wake it`, '', 2.2);
+      const [x, y, z] = b.world();
+      this.camera.glide(x, y - SLAB_TOP, z, Math.max(this.camera.zoom, BOT_ZOOM * 0.8));
+    } else this.hud.toast(m.roofId !== b.pose.roofId ? 'Ride the rooftop lift first: bloombot has to be there to wake it' : "Bloombot can't find a way there yet", '', 3);
+  }
+
+  /** G.12: is this landmark awake (its area cleared), so bloombot can travel to it from the overview? */
+  private landmarkWoken(m: MachineData): boolean {
+    const id = this.sim.areas.areaOf(m);
+    return !!id && this.sim.areas.fog(id) === 'cleared';
+  }
+
+  /** Bloombot (G.11): a click walks to the clicked thing, then does what the click would have done. */
+  private botClick(x: number, y: number) {
+    const b = this.bot!;
+    const catId = this.catHit(x, y);
+    if (catId) {
+      const v = this.cat.targetWorld(catId) ?? new pc.Vec3(b.world()[0], 0, b.world()[2]);
+      const l = this.sim.grid.layer(b.pose.roofId)!;
+      const claim = () => {
+        this.claimingCat = catId;
+        this.sim.cat.claim(catId);
+        this.claimingCat = undefined;
+        b.visuals.play('cheer');
+      };
+      if (!b.goTo(b.pose.roofId, Math.floor(v.x - l.origin[0]), Math.floor(v.z - l.origin[2]), 1, claim)) this.hud.showFail("Bloombot can't reach that cat from here", x, y);
+      return;
+    }
+    const droneId = this.droneHit(x, y);
+    if (droneId) {
+      const d = this.sim.state.drones.find((q) => q.id === droneId);
+      if (d) this.select(d.hubId);
+      this.sfx.drone();
+      return;
+    }
+    const p = this.pick(x, y);
+    if (!p || !p.tile) {
+      this.select(undefined);
+      return;
+    }
+    const tool = this.hud.currentTool;
+    // Another layer: reading a tile is fine from anywhere, but acting needs bloombot there (the lift, G.13).
+    if (p.roofId !== b.pose.roofId || this.sim.grid.roof(p.roofId)?.preview) {
+      if (this.hud.currentTool === 'inspect') this.actAt(p, x, y);
+      else this.hud.showFail(this.sim.grid.roof(p.roofId)?.preview ? this.lockedReason(p.roofId) : b.pose.roofId === GROUND ? 'Ride a rooftop lift up there first' : 'Ride the lift down to the street first', x, y);
+      return;
+    }
+    const occ = this.sim.occupant(p.tile);
+    // G.12: from the overview, a woken landmark is a travel stop: bloombot hops there and the view comes back.
+    if (this.camera.zoom < 0.75 && occ?.type === 'core' && this.landmarkWoken(occ)) {
+      b.teleport(occ.roofId, occ.x + occ.size / 2, occ.z + occ.size + 0.6);
+      const [tx, ty, tz] = b.world();
+      this.camera.glide(tx, ty - SLAB_TOP, tz, BOT_ZOOM);
+      b.visuals.play('cheer');
+      return;
+    }
+    if (tool === 'inspect' && !occ) {
+      this.actAt(p, x, y); // reading a tile needs no walk
+      return;
+    }
+    // What the action covers: a machine's footprint, a build ghost's footprint, or the one tile.
+    let rect = { x: p.tile.x, z: p.tile.z, size: 1 };
+    if (occ && !this.mergeSel) rect = { x: occ.x, z: occ.z, size: occ.size };
+    else if (tool !== 'inspect' && tool !== 'pulse') {
+      const st = superType(tool);
+      const a = st ? this.sim.supers.anchorFor(st, p.fx, p.fz) : this.sim.build.anchorFor(tool as BuildableType, p.fx, p.fz);
+      rect = { x: a.x, z: a.z, size: st ? TIER3[st]!.size : MACHINES[tool as BuildableType].size };
+    }
+    const tile = p.tile;
+    const go = b.goTo(p.roofId, rect.x, rect.z, rect.size, () => {
+      const sc = this.botTileScreen(tile);
+      this.botAnim(this.actAt(p, sc.x, sc.y, tool, false));
+    });
+    if (!go) this.hud.showFail("Bloombot can't find a way there", x, y);
+  }
+
+  private pointerRecent(): boolean {
+    return this.pointer.inside && performance.now() - this.pointerAt < 1500;
+  }
+
+  /** Bloombot (G.4): highlight the tile in front and preview what E would do there (yields to an active mouse). */
+  private updateBotPreview() {
+    if (!this.bot) return;
+    if (this.bot.lastInput !== this.keyMapShown) {
+      this.keyMapShown = this.bot.lastInput;
+      this.hud.setKeyMap(this.bot.lastInput, this.bindings);
+    }
+    if (this.cinematic || this.pointerRecent()) return;
+    const p = this.frontPick();
+    const now = performance.now();
+    const key = `${this.bot.pose.roofId}:${this.bot.front().x},${this.bot.front().z}|${p?.roofId}:${p?.tile?.x},${p?.tile?.z}|${this.hud.currentTool}|${p?.tile?.ground}|${p?.tile?.bloom}|${this.bot.lastInput}`;
+    if (key === this.botPreviewKey && now - this.botPreviewAt < 400) return;
+    this.botPreviewKey = key;
+    this.botPreviewAt = now;
+    const lift = this.liftAhead();
+    if (lift) {
+      const [bx, by, bz] = this.bot.world();
+      const v = this.camera.toScreen(new pc.Vec3(bx, by + 1.1, bz));
+      const sc = p?.tile ? this.botTileScreen(p.tile) : { x: v.x, y: v.y };
+      this.overlays.hideGhost();
+      if (p?.tile) this.overlays.showFrame(p.roofId, p.tile.x, p.tile.z, 1, 'info');
+      else this.overlays.hideFrame();
+      const up = lift.up;
+      const k = this.press('Q', true);
+      const what = up ? (up.preview ? `<span class="bad">${this.lockedReason(up.id)}</span>` : `<span class="ok">${k} Ride up to the rooftop</span>`) : `<span class="ok">${k} Ride down to the street</span>`;
+      this.hud.showTip(sc.x, sc.y, `<b>Rooftop lift</b>${what}`);
+      return;
+    }
+    if (!p?.tile) {
+      this.previewAt(undefined, 0, 0);
+      return;
+    }
+    const sc = this.botTileScreen(p.tile);
+    this.previewFromBot = true;
+    try {
+      this.previewAt(p, sc.x, sc.y);
+    } finally {
+      this.previewFromBot = false;
+    }
   }
 
   pick(x: number, y: number): Pick | undefined {
@@ -616,26 +1023,33 @@ export class Game {
   private updateTreeCursor(dt: number) {
     const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
     const w = c.clientWidth, h = c.clientHeight;
-    const on = this.pointer.inside && !this.cinematic && performance.now() - this.lastPanAt > 120;
+    // Bloombot (G.3): when the mouse is idle, see through to bloombot instead of the cursor.
+    let ptr: { x: number; y: number; inside: boolean } = this.pointer;
+    if (this.bot && !this.pointerRecent()) {
+      const [bx, by, bz] = this.bot.world();
+      const v = this.camera.toScreen(new pc.Vec3(bx, by + 0.45, bz));
+      ptr = { x: v.x, y: v.y, inside: true };
+    }
+    const on = ptr.inside && !this.cinematic && performance.now() - this.lastPanAt > 120;
     this.treeFade += ((on ? 1 : 0) - this.treeFade) * Math.min(1, dt * (on ? 10 : 6));
     // See-through skyscrapers: one between the camera and the middle of the view (or the cursor) fades out.
     const keep = [{ x: w / 2, y: h / 2, depth: this.camera.dist }];
     if (on) {
-      const { o, d } = this.camera.ray(this.pointer.x, this.pointer.y);
+      const { o, d } = this.camera.ray(ptr.x, ptr.y);
       const t = d.y < -1e-3 ? -o.y / d.y : 400;
       const f = this.camera.entity.forward;
-      keep.push({ x: this.pointer.x, y: this.pointer.y, depth: d.x * t * f.x + d.y * t * f.y + d.z * t * f.z + (o.x - this.camera.entity.getPosition().x) * f.x + (o.y - this.camera.entity.getPosition().y) * f.y + (o.z - this.camera.entity.getPosition().z) * f.z });
+      keep.push({ x: ptr.x, y: ptr.y, depth: d.x * t * f.x + d.y * t * f.y + d.z * t * f.z + (o.x - this.camera.entity.getPosition().x) * f.x + (o.y - this.camera.entity.getPosition().y) * f.y + (o.z - this.camera.entity.getPosition().z) * f.z });
     }
     if (w && h && !this.cinematic) this.chunks.fadeTowers(dt, this.camera.cam, keep);
     if (this.treeFade < 0.002 || !w || !h) return setTreeCursor(0, 0, 0, 0, w || 1, h || 1);
-    const { o, d } = this.camera.ray(this.pointer.x, this.pointer.y);
+    const { o, d } = this.camera.ray(ptr.x, ptr.y);
     // The ground under the cursor (or far away if the ray misses it) as a view depth.
     const t = d.y < -1e-3 ? -o.y / d.y : 400;
     const cam = this.camera.entity;
     const fwd = cam.forward;
     const p = cam.getPosition();
     const depth = (o.x + d.x * t - p.x) * fwd.x + (o.y + d.y * t - p.y) * fwd.y + (o.z + d.z * t - p.z) * fwd.z;
-    setTreeCursor((this.pointer.x / w) * 2 - 1, 1 - (this.pointer.y / h) * 2, depth, this.treeFade, w, h);
+    setTreeCursor((ptr.x / w) * 2 - 1, 1 - (ptr.y / h) * 2, depth, this.treeFade, w, h);
   }
 
   private moodT = 0;
@@ -673,6 +1087,12 @@ export class Game {
     const n = c.nearness();
     c.hazeStart = HAZE.start[0] + (HAZE.start[1] - HAZE.start[0]) * n;
     c.hazeEnd = HAZE.end[0] + (HAZE.end[1] - HAZE.end[0]) * n;
+    if (this.bot) {
+      // G.18: past the old default zoom, lower tiers pull the haze (and so the far clip) in.
+      const close = Math.min(1, Math.max(0, c.zoom - 1) / 0.9);
+      const reach = CLOSE_VIEW_REACH[this.gfxTier as keyof typeof CLOSE_VIEW_REACH] ?? 1;
+      c.hazeEnd *= 1 - (1 - reach) * close;
+    }
     this.app.scene.fog.start = c.fogDepth(c.dist + c.hazeStart);
     this.app.scene.fog.end = c.fogDepth(c.dist + c.hazeEnd);
     if (this.sky) {
@@ -854,6 +1274,7 @@ export class Game {
 
   private onHover(x: number, y: number) {
     this.pointer = { x, y, inside: true };
+    this.pointerAt = performance.now();
     if (this.cinematic) return;
     if (this.catHit(x, y)) {
       this.overlays.hideFrame();
@@ -870,7 +1291,11 @@ export class Game {
       return;
     }
     document.body.style.cursor = '';
-    const p = this.pick(x, y);
+    this.previewAt(this.pick(x, y), x, y);
+  }
+
+  /** The hover preview for a tile (ghost, pulse footprint, frame and tooltip), from the pointer or bloombot. */
+  private previewAt(p: Pick | undefined, x: number, y: number) {
     const tool = this.hud.currentTool;
     if (!p || !p.tile) {
       this.overlays.hideFrame();
@@ -899,7 +1324,7 @@ export class Game {
       this.hud.showTip(
         x,
         y,
-        `<b>${d.icon} ${d.name}</b>${d.blurb}. ${d.ability}.<br><small>${stages}<br>Total ${formatCost(this.sim.supers.totalCost(chk.costs))} · prices fixed once placed</small><br>${chk.ok ? '<span class="ok">Click to lay the foundation</span>' : `<span class="bad">${chk.reason}</span>`}`,
+        `<b>${d.icon} ${d.name}</b>${d.blurb}. ${d.ability}.<br><small>${stages}<br>Total ${formatCost(this.sim.supers.totalCost(chk.costs))} · prices fixed once placed</small><br>${chk.ok ? `<span class="ok">${this.press('E')} to lay the foundation</span>` : `<span class="bad">${chk.reason}</span>`}`,
       );
       return;
     }
@@ -913,7 +1338,7 @@ export class Game {
       this.hud.showTip(
         x,
         y,
-        `<b>${def.icon} ${def.name}</b>${def.blurb}<br>${this.mergeHint(bt, p.roofId, a.x, a.z, def.size)}${chk.ok ? `<span class="ok">Click to build · ${formatCost(chk.cost)}</span>` : `<span class="bad">${chk.reason}</span>`}`,
+        `<b>${def.icon} ${def.name}</b>${def.blurb}<br>${this.mergeHint(bt, p.roofId, a.x, a.z, def.size)}${chk.ok ? `<span class="ok">${this.press('E')} to build · ${formatCost(chk.cost)}</span>` : `<span class="bad">${chk.reason}</span>`}`,
       );
       return;
     }
@@ -925,7 +1350,7 @@ export class Game {
       const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
       const ct = area ? { icon: AREA_TYPES[this.sim.areas.info(area).type].icon, name: this.sim.areas.info(area).landmarkName } : undefined;
       const boost = (occ.overchargeUntil ?? 0) > this.sim.time ? '<br><span class="ok">⚡ Boosted: next trigger +1</span>' : '';
-      this.hud.showTip(x, y, `<b>${ct?.icon ?? machineIcon(occ)} ${ct?.name ?? machineName(occ)}</b>${ready ? '<span class="ok">Ready! Click to awaken.</span>' : 'Click to inspect'}${boost}`);
+      this.hud.showTip(x, y, `<b>${ct?.icon ?? machineIcon(occ)} ${ct?.name ?? machineName(occ)}</b>${ready ? `<span class="ok">Ready! ${this.press('Q')} to awaken.</span>` : `${this.press('Q')} to inspect`}${boost}`);
       return;
     }
     if (tool === 'inspect') {
@@ -999,6 +1424,10 @@ export class Game {
       this.hud.toggleUpgrades(false);
       return;
     }
+    if (this.bot) {
+      this.botClick(x, y);
+      return;
+    }
     const catId = this.catHit(x, y);
     if (catId) {
       this.claimingCat = catId;
@@ -1018,12 +1447,20 @@ export class Game {
       this.select(undefined);
       return;
     }
+    this.actAt(p, x, y);
+  }
+
+  /**
+   * What a click on a tile does with a tool (the cursor path), and what bloombot does when it acts on a tile.
+   * `x, y` is where on screen to show a failure. Returns what happened, for bloombot's animation.
+   */
+  private actAt(p: Pick, x: number, y: number, tool: Tool = this.hud.currentTool, hover = true): ActResult {
+    if (!p.tile) return 'none';
     const roof = this.sim.grid.roof(p.roofId)!;
     if (roof.preview) {
       this.hud.showFail(this.lockedReason(roof.id), x, y);
-      return;
+      return 'none';
     }
-    const tool = this.hud.currentTool;
     const t = p.tile;
     const st = superType(tool);
     if (st) {
@@ -1033,7 +1470,7 @@ export class Game {
         this.selectTool('pulse');
         this.select(m.id);
       }
-      return;
+      return m ? 'build' : 'none';
     }
     if (tool !== 'inspect' && tool !== 'pulse') {
       const bt = tool as BuildableType;
@@ -1043,36 +1480,37 @@ export class Game {
         this.selectTool('pulse');
         this.select(m.id);
       }
-      return;
+      return m ? 'build' : 'none';
     }
     const occ = this.sim.occupant(t);
     if (occ && this.mergeSel) {
       const plan = this.sim.merge.plan(this.mergeSel.anchor, this.mergeSel.partners);
-      if (occ.id === this.mergeSel.anchor || (plan && plan.partners.some((p) => p.id === occ.id))) return;
+      if (occ.id === this.mergeSel.anchor || (plan && plan.partners.some((p) => p.id === occ.id))) return 'none';
       const ids = plan && this.sim.merge.swap(plan, occ.id);
       if (ids) {
         this.mergeSel = { anchor: this.mergeSel.anchor, partners: ids };
         this.sfx.click();
         this.showMergeHighlights();
         this.renderInspect();
-        return;
+        return 'select';
       }
     }
     if (occ) {
       if (occ.type === 'core' && this.landmarkReady(occ)) {
         this.wakeLandmark(occ);
-        return;
+        return 'wake';
       }
       this.select(occ.id);
-      return;
+      return 'select';
     }
     if (tool === 'inspect') {
       this.select(undefined);
-      return;
+      return 'none';
     }
     this.select(undefined);
-    this.sim.restoration.pulse(t.id);
-    this.onHover(x, y);
+    const ok = this.sim.restoration.pulse(t.id);
+    if (hover) this.onHover(x, y);
+    return ok ? 'pulse' : 'none';
   }
 
   private radiusTiles(m: { type: MachineData['type']; roofId: string; x: number; z: number; size: number }): TileData[] {
@@ -2308,6 +2746,7 @@ export class Game {
     this.chunks.markArea(id, true);
     for (const nb of s.areas.info(id).neighbours) this.chunks.markArea(nb);
     this.updateCityBounds();
+    this.bot?.visuals.play('cheer');
     if (id === PARK) return; // the fountain has its own finale
     const lm = s.areas.landmark(id);
     if (lm) {
@@ -2556,6 +2995,13 @@ export class Game {
       if (t) this.overlays.showBeacon(t.roofId, t.x, t.z);
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
+    if (this.bot) {
+      this.bot.update(this.hiddenPause ? 0 : dt);
+      this.updateBotPreview();
+      this.minimap?.update(dt, this.bot.pose);
+      const [cx, cy, cz] = this.bot.world();
+      this.drones.companion = { x: cx, y: cy, z: cz, facing: this.bot.pose.facing };
+    }
     this.camera.update(dt);
     this.sky.clarity += (this.skyClarity() - this.sky.clarity) * Math.min(1, dt * 0.8);
     this.sky.reducedMotion = this.settings.reducedMotion;

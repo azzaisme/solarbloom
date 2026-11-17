@@ -329,9 +329,19 @@ try {
       `const t = i / n; const z = t < 0.5 ? 1.8 - (1.8 - 0.22) * t * 2 : 0.22 + (1.8 - 0.22) * (t - 0.5) * 2;
        g.camera.glide(8, 0, 8, z);`,
     );
-    results.tiers[tier] = { applied: got, pan, zoom };
+    // Bloombot (G.18): the close default view, following bloombot as it is carried round the city.
+    const close = await measure(
+      `close-${tier}`,
+      60,
+      `const a = (i / n) * Math.PI * 2; const R = ${Math.round(extent * 0.5)};
+       const x = Math.cos(a) * R * (i / n), z = Math.sin(a) * R * (i / n);
+       if (g.bot) { g.bot.teleport('g', x, z); const w = g.bot.world(); g.camera.glide(w[0], 0, w[2], 3.2); }
+       else g.camera.glide(x, 0, z, 1.8);`,
+    );
+    results.tiers[tier] = { applied: got, pan, zoom, close };
     delete results[`pan-${tier}`];
     delete results[`zoom-${tier}`];
+    delete results[`close-${tier}`];
     phase(`tier ${tier} (${got}): frame ${pan.median.toFixed(0)} / ${zoom.median.toFixed(0)} ms, draw calls ${pan.drawCalls} / ${zoom.drawCalls}`);
   }
   if (TIERS.length) {
@@ -516,7 +526,8 @@ try {
   for (const [tier, t] of Object.entries(r.tiers ?? {})) {
     const L = LIMITS.tiers[tier];
     if (t.applied !== tier) failures.push(`tier ${tier}: the game applied ${t.applied}`);
-    for (const k of ['pan', 'zoom']) {
+    for (const k of ['pan', 'zoom', 'close']) {
+      if (!t[k]) continue;
       if (t[k].drawCalls > L.drawCalls) failures.push(`tier ${tier} ${k} draw calls ${t[k].drawCalls} > ${L.drawCalls}`);
       const low = r.tiers.low?.[k]?.median;
       if (low && tier !== 'low' && t[k].median > low * L.vsLow) failures.push(`tier ${tier} ${k} frame ${t[k].median.toFixed(0)} ms > ${L.vsLow}× Low (${low.toFixed(0)} ms)`);
@@ -544,7 +555,7 @@ if (results.autosave) console.log(`autosave (main thread, worst of 5): serialize
 console.log(`chain: ×${results.chainCombo} along a ${results.chainSetup?.row.len}-tile corridor of ${results.chainSetup?.gardens} gardens`);
 if (results.trSetup && !results.trSetup.skipped) console.log(`transitions (Look 6): a second ×500 chain + an area wave + ${results.trSetup.cultivators} Cultivators + ${results.trSetup.tiles} tiles set mid-transition (${results.trSetup.live} live in the sim at the start; ${results.trCounts?.sim} live, ${results.trCounts?.drawn} drawn as transitions after 150 frames)`);
 for (const [tier, t] of Object.entries(results.tiers ?? {}))
-  console.log(`tier ${tier.padEnd(6)} pan frame ${f(t.pan.median)} ms · draw calls ${t.pan.drawCalls} · update ${f(t.pan.updateMedian)} ms · render ${f(t.pan.renderMedian)} ms | zoom frame ${f(t.zoom.median)} ms · draw calls ${t.zoom.drawCalls} (worst ${t.zoom.drawCallsWorst})`);
+  console.log(`tier ${tier.padEnd(6)} pan frame ${f(t.pan.median)} ms · draw calls ${t.pan.drawCalls} · update ${f(t.pan.updateMedian)} ms · render ${f(t.pan.renderMedian)} ms | zoom frame ${f(t.zoom.median)} ms · draw calls ${t.zoom.drawCalls} (worst ${t.zoom.drawCallsWorst})${t.close ? ` | close view (bloombot) frame ${f(t.close.median)} ms · draw calls ${t.close.drawCalls} (worst ${t.close.drawCallsWorst})` : ''}`);
 if (GPU) for (const [tier, t] of Object.entries(results.tiers ?? {})) console.log(`tier ${tier.padEnd(6)} fps: pan ${(1000 / t.pan.median).toFixed(0)} (p95 ${(1000 / t.pan.p95).toFixed(0)}, worst frame ${f(t.pan.worst)} ms) · zoom ${(1000 / t.zoom.median).toFixed(0)} (p95 ${(1000 / t.zoom.p95).toFixed(0)}, worst frame ${f(t.zoom.worst)} ms)`);
 console.log(GPU ? `(visible Chromium on ${results.device?.renderer}: a device measurement for PROGRESS.md)` : '(headless Chromium with SwiftShader software rendering: compare tiers and builds, not devices)');
 if (process.env.PERF_JSON) writeFileSync(process.env.PERF_JSON, JSON.stringify(results, null, 2));
