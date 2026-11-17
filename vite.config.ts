@@ -11,7 +11,7 @@ const env = (globalThis as { process?: { env: Record<string, string | undefined>
 const QUICK = [
   'smoke', 'grid', 'big', 'world', 'economy', 'placement', 'save-storage', 'save-v4', 'area-switches',
   'area-panel', 'upgrades-city', 'feedback-phase4', 'playtest-metrics', 'canal-network', 'district-bloom',
-  'rooftop-clusters', 'relay-city', 'specialties-city', 'look', 'palette-lint', 'icons', 'hud-contrast', 'look3-budget', 'roads',
+  'rooftop-clusters', 'relay-city', 'specialties-city', 'look', 'palette-lint', 'icons', 'hud-contrast', 'look3-budget', 'roads', 'bloombot-walk',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

@@ -351,4 +351,10 @@ export interface GameState {
   districts?: Record<string, number>;
   /** Phase 5 E16: fauna that has arrived, by kind (sim time). Cosmetic; optional, so no save version change. */
   fauna?: Partial<Record<'butterflies' | 'birds' | 'koi' | 'robots', number>>;
+  /**
+   * Bloombot (#234, G.2): where the player character stands, in its layer's cell units, and which way it faces
+   * (radians, 0 = +z). Written by the game only, never by the sim, so the bots' saves don't change. Optional,
+   * so no save version change: a save without it starts bloombot beside the park fountain.
+   */
+  bot?: { roofId: string; x: number; z: number; facing: number };
 }

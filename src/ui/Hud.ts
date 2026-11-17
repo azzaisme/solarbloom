@@ -115,6 +115,7 @@ export class Hud {
     installIconDefs();
     this.root.innerHTML = iconize(this.template());
     this.wire();
+    $(this.root, '#backpack h2 button').addEventListener('click', () => this.toggleBackpack(false));
   }
 
   private template() {
@@ -195,6 +196,7 @@ export class Hud {
       </div></div>
       <div id="tip" class="panel"></div>
       <div id="fail"></div>
+      <div id="backpack" class="drawer panel" aria-label="Backpack"><h2>Backpack <button aria-label="Close backpack">×</button></h2><div id="bpList"></div></div>
       <div id="upgrades" class="drawer panel"><h2>Upgrades <button aria-label="Close upgrades">×</button></h2><p id="upgNext" class="upg-next"></p><div id="upgList"></div></div>
       <div id="inspect" class="panel"></div>
       <div id="modal"><div class="panel">
@@ -593,6 +595,57 @@ export class Hud {
     this.upgradesOpen = open;
     $(this.root, '#upgrades').classList.toggle('open', open);
     if (open) this.renderUpgrades(true);
+  }
+
+  /**
+   * Bloombot (G.16, G.7): the hotbar's key badges for bloombot's map, or gamepad buttons when the pad was used
+   * last. `undefined` restores the cursor map.
+   */
+  setKeyMap(mode: 'keys' | 'pad' | undefined) {
+    const keys: Record<string, [string, string, string]> = {
+      // slot selector: [cursor, keyboard, gamepad]
+      '[data-tool="inspect"]': ['1', 'Q', 'X'],
+      '[data-tool="pulse"]': ['2', 'E', 'A'],
+      '#buildToggle': ['B', 'B', 'Y'],
+      '#harvestBtn': ['H', 'F', '←'],
+      '#upgBtn': ['U', 'U', '→'],
+    };
+    for (const [sel, k] of Object.entries(keys)) {
+      const el = this.root.querySelector<HTMLElement>(`#hotbar ${sel} .key`);
+      if (el) el.textContent = mode === 'pad' ? k[2] : mode === 'keys' ? k[1] : k[0];
+    }
+    this.root.classList.toggle('pad-keys', mode === 'pad');
+  }
+
+  private backpackIsOpen = false;
+  /** Bloombot (G.15): the backpack (Tab / d-pad up): what you've found, and later your plot options and decorations. */
+  toggleBackpack(open = !this.backpackIsOpen) {
+    this.backpackIsOpen = open;
+    $(this.root, '#backpack').classList.toggle('open', open);
+    if (open) this.renderBackpack();
+  }
+
+  get backpackOpen() {
+    return this.backpackIsOpen;
+  }
+
+  private renderBackpack() {
+    const st = this.sim.state;
+    const woken = this.sim.areas
+      .revealed()
+      .filter((id) => this.sim.areas.fog(id) === 'cleared')
+      .map((id) => this.sim.areas.info(id));
+    const card = (icon: string, name: string, detail: string) => `<div class="card"><span class="ci">${icon}</span><span class="cn">${name}</span><span class="cd2">${detail}</span></div>`;
+    const fauna = Object.keys(st.fauna ?? {});
+    const parts = [
+      '<h3 class="bp-h">Discoveries</h3>',
+      card('🐱', `Lucky Cats found: ${st.stats.catsFound}`, st.stats.catsFound ? 'Keep wandering: more hide as the city wakes.' : 'Wander the city. Paw prints mean a cat is close.'),
+      card('⛲', `Landmarks woken: ${woken.length}`, woken.length ? woken.map((a) => a.landmarkName).join(', ') : 'Restore the park to wake the fountain.'),
+      card('🦋', `Wildlife: ${fauna.length}`, fauna.length ? fauna.join(', ') : 'Wildlife arrives as gardens grow.'),
+      '<h3 class="bp-h">Plots and decorations</h3>',
+      '<p class="bp-empty">Plot choices and decorations you unlock will be kept here.</p>',
+    ];
+    $(this.root, '#bpList').innerHTML = iconize(parts.join(''));
   }
 
   get isUpgradesOpen() {

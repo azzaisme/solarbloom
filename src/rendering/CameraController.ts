@@ -142,6 +142,18 @@ export class CameraController {
     this.follow = this.reducedMotion ? 30 : 3.2;
   }
 
+  /**
+   * Bloombot (G.3): follow a moving point each frame. Unlike `glide` it keeps any zoom in progress and follows
+   * briskly, so the character stays near the middle of the view while it walks.
+   */
+  track(x: number, y: number, z: number) {
+    if (this.cinematic) return;
+    this.anchor = undefined;
+    this.goal.set(x, y, z);
+    this.clamp();
+    this.follow = this.reducedMotion ? 30 : 7;
+  }
+
   get goalPoint() {
     return this.goal;
   }
