@@ -12,6 +12,7 @@ import type { Sim } from '../gameplay/Sim';
 import { SEED_CORE_MACHINES } from '../gameplay/ProgressionSystem';
 import { ICONS, GROUP_ICONS, LOGO_MARK, MACHINE_ICONS, hasEmoji, iconize, installIconDefs, plain } from './Icons';
 import { WORLD_EVENT_INFO } from '../gameplay/WorldEventSystem';
+import { advisorStep, calmToast } from './Pace';
 
 /** Phase 5 E14: `super:<type>` places a Superstructure Core of that family. */
 export type SuperTool = `super:${'solar' | 'condenser' | 'pollinator' | 'droneHub'}`;
@@ -43,6 +44,8 @@ export interface HudCallbacks {
   /** Look 5.9: the house button: the park, or (when something is ready) the next area that needs attention. */
   goHome(attention: boolean): void;
   newGame(): void;
+  /** E19.4.1 (#260): open photo mode (from Settings). */
+  photoMode(): void;
   setSetting(key: keyof Settings, v: boolean | number): void;
   setVolume(key: 'sfxVolume' | 'musicVolume', v: number): void;
   /** Look 1.11: the Graphics setting. */
@@ -94,6 +97,13 @@ export interface Settings {
   uiScale?: number;
   /** Phase 5 E16: fireflies over lush tiles (ambience only). */
   fireflies?: boolean;
+  /**
+   * E19.4.2 / E20.7 (#261, #290): "Show numbers": rates, net income, time-to-afford and other secondary numbers.
+   * Off (or never chosen) is the calm HUD, the default.
+   */
+  showNumbers?: boolean;
+  /** E19.4.3 (#262): the potter-about pace: no objective nudges or advisor tips, softer chains. Presentation only. */
+  potter?: boolean;
   /** Bloombot (G.16): rebound keys and gamepad buttons (only what differs from the default map). */
   keys?: SavedBindings['keys'];
   pad?: SavedBindings['pad'];
@@ -245,12 +255,14 @@ export class Hud {
         <label>Simple fog (faster on phones) <input type="checkbox" data-set="lowFog"></label>
         <label>Fireflies <input type="checkbox" data-set="fireflies"></label>
         <label>Camera follows big chains <input type="checkbox" data-set="followChains"></label>
+        <label>Show numbers (rates, income, time to afford) <input type="checkbox" data-set="showNumbers"></label>
+        <label>Potter about (no nudges or tips, gentler chains) <input type="checkbox" data-set="potter"></label>
         <label>Tutorial hints <input type="checkbox" data-set="hints"></label>
         <label>Debug / FPS (F3) <input type="checkbox" data-set="debug"></label>
         <div id="controlsBox" class="controls"></div>
         <div class="stats" id="statsBox"></div>
         <div id="disc"></div>
-        <div class="row"><button id="closeModal">Back to the garden</button><button class="danger" id="newGame">New game</button></div>
+        <div class="row"><button id="closeModal">Back to the garden</button><button id="photoBtn">Photo mode</button><button class="danger" id="newGame">New game</button></div>
       </div></div>
       <div id="cine"><div class="bar t"></div><div class="bar b"></div><div class="title" id="cineTitle"></div><button id="skipBtn">Skip ⏭</button></div>
       <div id="wlabels"></div>
@@ -291,6 +303,10 @@ export class Hud {
       t.setAttribute('aria-label', open ? 'Hide objective details' : 'Show objective details');
     });
     $(r, '#closeModal').addEventListener('click', () => this.openSettings(false));
+    $(r, '#photoBtn').addEventListener('click', () => {
+      this.openSettings(false);
+      this.cb.photoMode();
+    });
     $(r, '#modal').addEventListener('click', (e) => {
       if (e.target === $(r, '#modal')) this.openSettings(false);
     });
@@ -479,6 +495,7 @@ export class Hud {
   private nudgeSel = '';
   /** Briefly highlight a control (e.g. Harvest when energy runs out). */
   nudge(sel: string, secs = 4) {
+    if (this.settings.potter) return; // E19.4.3: the potter-about pace never nudges
     this.nudgeSel = sel;
     this.nudgeUntil = performance.now() + secs * 1000;
   }
@@ -546,7 +563,9 @@ export class Hud {
     const now = performance.now();
     if (now - this.suggestionAt < 500) return this.suggestionBtn;
     this.suggestionAt = now;
-    const g = this.sim.advisor.suggest();
+    // E19.4.3: the advisor is asked either way (its "saving up" note steers drone spending); potter just hides it.
+    const g = advisorStep(this.sim, !!this.settings.potter);
+    if (!g) return (this.suggestionBtn = '');
     const a = g.action;
     const attr =
       a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'merge' ? `data-merge-at="${a.machineId}"` : a.kind === 'role' ? `data-inspect-at="${a.machineId}"` : a.kind === 'placeCore' ? `data-core-tool="super:${a.type}"` : a.kind === 'super' ? `data-super="${a.action}|${a.machineId}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
@@ -576,7 +595,7 @@ export class Hud {
     const ready = s.areas.ready(id);
     const sp = s.milestones.specialty(id); // City 09.1: the landmark's specialty action
     const fr = s.advisor.nearestFrontier();
-    const frontier = fr && fr.areaId !== id ? `<li><span class="ck">·</span>Nearest frontier: the ${esc(fr.name.toLowerCase())}, ${fr.distance} block${fr.distance === 1 ? '' : 's'} out (${Math.round(fr.share * 100)}% restored)</li>` : '';
+    const frontier = fr && fr.areaId !== id && !this.settings.potter ? `<li><span class="ck">·</span>Nearest frontier: the ${esc(fr.name.toLowerCase())}, ${fr.distance} block${fr.distance === 1 ? '' : 's'} out (${Math.round(fr.share * 100)}% restored)</li>` : '';
     this.set(
       'objList',
       objList,
@@ -924,17 +943,20 @@ export class Hud {
    */
   toast(html: string, kind: '' | 'gold' | 'cat' = '', secs = 3.2) {
     const box = $(this.root, '#toasts');
+    // E19.4.2: the calm HUD keeps one toast at a time, drops number-heavy detail lines and the repeat count.
+    const calm = !this.settings.showNumbers;
+    if (calm) html = calmToast(html);
     const head = html.split('<small>')[0].replace(/[×x]\d+|\d+/g, '#');
     for (const c of Array.from(box.children) as HTMLElement[]) {
       if (c.dataset.head !== head || c.style.opacity === '0') continue;
       const n = Number(c.dataset.n ?? '1') + 1;
       c.dataset.n = String(n);
-      c.innerHTML = iconize(`${html.replace('<small>', ` <b class="tn">×${n}</b><small>`)}${html.includes('<small>') ? '' : ` <b class="tn">×${n}</b>`}`);
+      if (!calm) c.innerHTML = iconize(`${html.replace('<small>', ` <b class="tn">×${n}</b><small>`)}${html.includes('<small>') ? '' : ` <b class="tn">×${n}</b>`}`);
       clearTimeout(Number(c.dataset.timer));
       c.dataset.timer = String(this.fadeLater(c, secs));
       return;
     }
-    while (box.children.length >= 2) box.firstElementChild!.remove();
+    while (box.children.length >= (calm ? 1 : 2)) box.firstElementChild!.remove();
     const el = document.createElement('div');
     el.dataset.head = head;
     el.className = `toast panel ${kind}`;
@@ -969,7 +991,8 @@ export class Hud {
     $(el, '.cx').textContent = `×${n}`;
     el.classList.add('on');
     $(this.root, '#combo').classList.add('on');
-    const tier = n >= 10 ? 3 : n >= 5 ? 2 : 1;
+    // E19.4.3: the potter-about pace keeps chains gentle: one quiet tier, no sparkle burst or pop.
+    const tier = this.settings.potter ? 1 : n >= 10 ? 3 : n >= 5 ? 2 : 1;
     el.classList.toggle('tier2', tier === 2);
     el.classList.toggle('tier3', tier === 3);
     // Look 5.5: sparkles burst around the panel when the chain reaches a new tier.
@@ -977,7 +1000,7 @@ export class Hud {
     this.comboTier = tier;
     el.classList.remove('pop');
     void el.offsetWidth;
-    el.classList.add('pop');
+    if (!this.settings.potter) el.classList.add('pop');
     const tot = $(this.root, '#comboTotal');
     tot.innerHTML = iconize(esc(total ?? ''));
     tot.classList.toggle('on', !!total);
@@ -1159,7 +1182,7 @@ export class Hud {
       const sign = net.lt(0) ? '−' : '+';
       const rateTxt = `${sign}${fmt(net.abs(), 1)}/min`; // "· full" comes from the .full class
       this.set(`r-${k}`, $(row, '.rate'), 'html', `${rateTxt}${boost}`);
-      this.set(`t-${k}`, row, 'title', this.resourceBreakdown(k, true));
+      this.set(`t-${k}`, row, 'title', this.settings.showNumbers ? this.resourceBreakdown(k, true) : RES_META[k].name);
       this.set(`b-${k}`, $(row, '.bar i'), 'width', c ? `${Math.round(Math.min(1, toNum(v) / Math.max(1e-9, toNum(c))) * 100)}%` : '100%');
       this.set(`f-${k}`, row, 'cls', full ? '1' : '0', 'full');
     }
@@ -1222,8 +1245,10 @@ export class Hud {
     this.set('badgeOn', badge, 'cls', useful ? '1' : '0', 'on');
     // Phase 5 E12: otherwise, how long until the next thing (seconds of current net income).
     const next = useful ? undefined : s.advisor.nextPurchase();
-    this.set('upgSc', $(this.root, '#upgBtn .sc'), 'text', useful ? formatCost(s.upgrades.status(useful).price).replace(/ /g, '') : next ? `~${etaText(next.eta)}` : '\u00a0');
-    this.set('upgNext', $(this.root, '#upgNext'), 'html', next ? `Next: ${next.icon} ${esc(next.name)} · ${formatCost(next.cost)} · ${next.eta < 0.5 ? 'affordable now' : `~${etaText(next.eta)}`}` : useful ? '' : '');
+    // E19.4.2 / E20.7: time-to-afford is a number the calm HUD leaves out.
+    const eta = this.settings.showNumbers && next ? (next.eta < 0.5 ? ' · affordable now' : ` · ~${etaText(next.eta)}`) : '';
+    this.set('upgSc', $(this.root, '#upgBtn .sc'), 'text', useful ? formatCost(s.upgrades.status(useful).price).replace(/ /g, '') : next && eta ? `~${etaText(next.eta)}` : '\u00a0');
+    this.set('upgNext', $(this.root, '#upgNext'), 'html', next ? `Next: ${next.icon} ${esc(next.name)} · ${formatCost(next.cost)}${eta}` : useful ? '' : '');
     this.renderUpgrades();
 
     const cats = s.state.cat.found;
@@ -1267,11 +1292,11 @@ export class Hud {
     const step = s.state.progression.tutorialStep;
     const hint = $(this.root, '#hint');
     const h = this.hintFor(step);
-    const showHint = this.settings.hints && step !== this.hintDismissedStep && !this.introOpen;
+    const showHint = this.settings.hints && !this.settings.potter && step !== this.hintDismissedStep && !this.introOpen;
     this.set('hintText', $(this.root, '#hintText'), 'text', h.text);
     this.set('hintShow', hint, 'cls', showHint ? '0' : '1', 'hide');
     // Glow the control the hint talks about (or a temporary nudge). On phones, machine cards live in the Build tray.
-    let target = performance.now() < this.nudgeUntil ? this.nudgeSel : this.settings.hints ? (h.target ?? '') : '';
+    let target = this.settings.potter ? '' : performance.now() < this.nudgeUntil ? this.nudgeSel : this.settings.hints ? (h.target ?? '') : '';
     const tray = $(this.root, '#buildTray');
     if (target.startsWith('#buildTray') && !tray.classList.contains('open')) target = '#buildToggle';
     if (this.last.get('nudgeTarget') !== target) {
