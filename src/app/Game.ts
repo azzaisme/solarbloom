@@ -1025,6 +1025,12 @@ export class Game {
     if (r === 'pulse') {
       v.play('pulse');
       this.drones.companionReact('pulse');
+      // The echo pulse: cyan rings leave the palms and travel to the tile in front (as in the reference image).
+      const f = this.frontPick();
+      if (f?.tile) {
+        const to = this.tileVec(f.tile, SLAB_TOP + 0.25);
+        setTimeout(() => this.vfx.palmWave(v.palmWorld(new pc.Vec3()), to), 140); // when the palms push out
+      }
     }
     else if (r === 'build') v.play('assemble');
     else if (r === 'select' || r === 'wake') v.play('interact');
