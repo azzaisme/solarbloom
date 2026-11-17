@@ -67,6 +67,8 @@ import { EventBus } from './EventBus';
 import { BotController } from './BotController';
 import { type Action, Bindings, type Context, FIXED_KEY, keyLabel, migrateBindings, padLabel, SLOTS } from './Bindings';
 import { isOldCity, rulesViewFromUrl } from './Rules';
+import { type Candidate, holdFor, pickTarget, promptText } from './Interact';
+import type { PromptModel } from '../ui/Prompt';
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
@@ -107,6 +109,13 @@ const BOT_REACH = 1.6;
 /** Bloombot is the game; `?cursor=1` keeps the old click-to-act play for tests that drive tiles directly. */
 const botMode = () => typeof location === 'undefined' || new URLSearchParams(location.search).get('cursor') !== '1';
 type ActResult = 'pulse' | 'build' | 'select' | 'wake' | 'none';
+
+/** E22.2: an Interact target with what it does, where it is, and the outline to draw round it. */
+interface InteractTarget extends Candidate {
+  run: () => void;
+  at?: TileData;
+  frame?: { roofId: string; x: number; z: number; size: number };
+}
 
 interface Pick {
   roofId: string;
@@ -835,7 +844,10 @@ export class Game {
   }
 
   private wireKeys() {
+    window.addEventListener('keyup', (e) => this.heldKeys.delete(e.code));
+    window.addEventListener('blur', () => this.heldKeys.clear());
     window.addEventListener('keydown', (e) => {
+      this.heldKeys.add(e.code);
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
       if (this.keyListener) {
         e.preventDefault();
@@ -1165,55 +1177,180 @@ export class Game {
     this.buildKey = '';
   }
 
-  /** Bloombot (G.5): Q / X: say hello to a cat within reach, wake or inspect what's in front, or read the tile. */
+  /**
+   * E22.2 (#339): Interact acts on the one target the prompt names (Interact.ts chooses it by the epic's priority,
+   * nearest first). A refused action says why; a hold starts the ring instead (unless holds are single presses).
+   */
   private botInteract() {
     const b = this.bot;
     if (!b || this.cinematic || this.paused || this.hud.modalOpen) return;
+    const t = this.interactTarget();
+    if (!t) return;
+    if (t.refused) {
+      const sc = t.at ? this.botTileScreen(t.at) : undefined;
+      this.hud.showFail(t.refused, sc?.x, sc?.y);
+      return;
+    }
+    const hold = holdFor(t, this.settings.holdToAct !== false);
+    if (hold) {
+      this.holding = { id: t.id, t: 0, need: hold };
+      return;
+    }
+    t.run();
+  }
+
+  /** E22.2: a hold under way (Interact kept down on the same target until `need` seconds pass). */
+  private holding?: { id: string; t: number; need: number };
+  /** keys held down right now (for holds) */
+  private heldKeys = new Set<string>();
+
+  /** Is Interact still held (a key, or the pad button)? */
+  private interactHeld(): boolean {
+    if (this.bindings.keys.interact.some((k) => this.heldKeys.has(k))) return true;
+    const btn = this.bindings.pad.interact;
+    if (btn === undefined) return false;
+    const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [];
+    return [...pads].some((p) => p?.connected && p.buttons[btn]?.pressed);
+  }
+
+  private updateHold(dt: number, target: InteractTarget | undefined) {
+    const h = this.holding;
+    if (!h) return;
+    if (!target || target.id !== h.id || !this.interactHeld() || this.paused) {
+      this.holding = undefined;
+      return;
+    }
+    h.t += dt;
+    if (h.t >= h.need) {
+      this.holding = undefined;
+      target.run();
+    }
+  }
+
+  /**
+   * E22.2: everything Interact could act on now: a Lucky Cat within reach, the fog gate or rooftop lift ahead,
+   * and what stands on the tile in front (or aimed at, in build mode): a landmark, a machine, a decoration, a plot.
+   * E21 adds its kinds (Keepers, salvage, caches, doors, storage) here.
+   */
+  private interactCandidates(): InteractTarget[] {
+    const b = this.bot;
+    if (!b) return [];
+    const out: InteractTarget[] = [];
     const [wx, , wz] = b.world();
     for (const id of this.cat.ids()) {
       const v = this.cat.targetWorld(id);
-      if (v && Math.hypot(v.x - wx, v.z - wz) < BOT_REACH + 0.6) {
-        b.pose.facing = Math.atan2(v.x - wx, v.z - wz);
-        this.claimingCat = id;
-        this.sim.cat.claim(id);
-        this.claimingCat = undefined;
-        b.visuals.play('cheer');
-        return;
-      }
+      if (!v) continue;
+      const d = Math.hypot(v.x - wx, v.z - wz);
+      if (d >= BOT_REACH + 0.6) continue;
+      out.push({
+        kind: 'cat', id: `cat:${id}`, verb: 'Say hello', name: '', distance: d,
+        run: () => {
+          b.pose.facing = Math.atan2(v.x - wx, v.z - wz);
+          this.claimingCat = id;
+          this.sim.cat.claim(id);
+          this.claimingCat = undefined;
+          b.visuals.play('cheer');
+        },
+      });
     }
-    // Region unlocks: facing a sealed area's fog, interact buys it (or says what it costs).
+    const f = b.front();
+    const front = this.sim.grid.get(b.pose.roofId, f.x, f.z);
+    const fd = Math.hypot(f.x + 0.5 - b.pose.x, f.z + 0.5 - b.pose.z);
+    // Region unlocks: facing a sealed area's fog, Interact opens it (or says what it still needs).
     const sealed = this.sealedAhead();
     if (sealed) {
-      if (this.sim.areas.unlock(sealed)) b.visuals.play('cheer');
-      return;
+      const s = this.sim.areas;
+      const cost = s.unlockCost(sealed)!;
+      const short = this.sim.econ.shortfall(cost);
+      out.push({
+        kind: 'gate', id: `gate:${sealed}`, verb: 'Unlock', name: `the ${AREA_TYPES[s.info(sealed).type].name.toLowerCase()}`, distance: fd, at: front,
+        refused: short ? `Needs ${fmt(cost.biomass)} 🌿 and ${fmt(cost.energy)} ⚡` : undefined,
+        run: () => {
+          if (this.sim.areas.unlock(sealed)) b.visuals.play('cheer');
+        },
+      });
     }
     const lift = this.liftAhead();
     if (lift) {
-      this.rideLift(lift);
-      return;
+      const up = lift.up;
+      out.push({
+        kind: 'gate', id: `lift:${up?.id ?? 'down'}`, verb: up ? 'Ride up' : 'Ride down', name: up ? 'to the rooftop' : 'to the street', distance: fd, at: front,
+        refused: up && (up.preview || !this.sim.grid.isPlayable(up.id)) ? this.lockedReason(up.id) : undefined,
+        run: () => this.rideLift(lift),
+      });
     }
     const aim = this.building() ? this.buildAim() : undefined;
     const p = aim ? aim.p : this.frontPick();
-    if (!p || !p.tile) return;
-    const occ = this.sim.occupant(p.tile);
-    const sc = aim ?? this.botTileScreen(p.tile);
-    // E19.2: a decoration in front (or aimed at) is picked up into bloombot's hands, to place again (a move)
-    if (this.cozy.decorOf(p.tile.occupantId)) {
-      this.botAnim(this.removeDecorAt(p, sc.x, sc.y, true));
-      return;
+    if (!p?.tile) return out;
+    const tile = p.tile;
+    const sc = () => aim ?? this.botTileScreen(tile);
+    const dist = Math.hypot(tile.x + 0.5 - b.pose.x, tile.z + 0.5 - b.pose.z);
+    const occ = this.sim.occupant(tile);
+    const dec = this.cozy.decorOf(tile.occupantId);
+    if (dec) {
+      out.push({
+        kind: 'decoration', id: `decor:${tile.occupantId}`, verb: 'Pick up', name: DECOR_OPTION[dec.kind]?.name ?? 'the decoration', distance: dist, at: tile,
+        run: () => this.botAnim(this.removeDecorAt(p, sc().x, sc().y, true)),
+      });
+    } else if (occ) {
+      const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
+      const lmName = area === PARK ? 'the fountain' : area ? this.sim.areas.info(area).landmarkName : undefined;
+      const ready = occ.type === 'core' && this.landmarkReady(occ);
+      out.push({
+        kind: lmName ? 'landmark' : 'machine', id: `m:${occ.id}`, verb: ready ? 'Wake' : 'Look at', name: lmName ?? machineName(occ), distance: dist, at: tile,
+        frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size },
+        run: () => this.botAnim(this.actAt(p, sc().x, sc().y, 'inspect', false)),
+      });
+    } else {
+      const plot = this.openablePlot(p.roofId, tile.x, tile.z);
+      if (plot)
+        out.push({
+          kind: 'plot', id: `plot:${p.roofId}:${plot.x},${plot.z}`, verb: 'Choose what grows on', name: 'this plot', distance: dist, at: tile,
+          frame: { roofId: p.roofId, x: plot.x, z: plot.z, size: plot.size },
+          run: () => {
+            this.select(undefined);
+            b.visuals.play('interact');
+            this.openPlotPicker(plot);
+          },
+        });
     }
-    if (occ) {
-      this.botAnim(this.actAt(p, sc.x, sc.y, 'inspect', false));
-      return;
+    return out;
+  }
+
+  private interactTarget(): InteractTarget | undefined {
+    return pickTarget(this.interactCandidates());
+  }
+
+  /** E22.2: an action's button as the prompt draws it (E22.3: a glyph for the device in use). */
+  private glyph(a: Action): string {
+    return `<kbd>${esc(this.hudKey(a))}</kbd>`;
+  }
+
+  /** E22.2: the prompt for this frame: the Interact target (or why not), and Pulse when it also applies. */
+  private promptModel(target: InteractTarget | undefined): PromptModel | undefined {
+    const b = this.bot!;
+    if (this.building()) {
+      const tool = this.hud.currentTool;
+      const dk = decorType(tool);
+      const st = superType(tool);
+      const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : st ? `Lay the foundation of the ${TIER3[st]!.name}` : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
+      return what ? { glyph: this.glyph(b.lastInput === 'pad' ? 'place' : 'pulse'), text: what } : undefined;
     }
-    this.select(undefined);
-    const plot = this.openablePlot(p.roofId, p.tile.x, p.tile.z);
-    if (plot) {
-      b.visuals.play('interact');
-      this.openPlotPicker(plot);
-      return;
-    }
-    this.hud.showTip(sc.x, sc.y, `<b>${this.tileTitle(p.tile)}</b>${this.tileDetail(p.tile)}${this.pawHint(p.tile)}${this.plotLine(p.roofId, p.tile)}`);
+    const f = b.front();
+    const t = this.sim.grid.get(b.pose.roofId, f.x, f.z);
+    const chk = t && !t.occupantId ? this.sim.restoration.checkPulse(t) : undefined;
+    const pulse = chk?.ok ? { glyph: this.glyph('pulse'), text: t!.ground === 'restored' ? 'Nurture' : 'Pulse' } : undefined;
+    if (!target) return pulse ? { glyph: pulse.glyph, text: pulse.text } : undefined;
+    const hold = holdFor(target, this.settings.holdToAct !== false);
+    const h = this.holding;
+    return {
+      glyph: this.glyph('interact'),
+      text: promptText(target),
+      hold: hold > 0,
+      progress: h && h.id === target.id ? h.t / h.need : 0,
+      refused: target.refused,
+      pulse,
+    };
   }
 
   /** G.13: the rooftop whose building stands on this ground cell. */
@@ -1379,55 +1516,44 @@ export class Game {
       if (this.photo.active) this.photoBar.render(this.photo.state); // its key names follow the device too
       this.hud.setKeyMap(this.bot.lastInput, this.bindings);
     }
-    if (this.cinematic || this.photo.active) return;
+    if (this.cinematic || this.photo.active || this.panelOpen()) {
+      this.holding = undefined;
+      this.hud.prompt.show(undefined);
+      return;
+    }
+    // E22.2: one prompt, every frame (the hold ring fills smoothly); the target gets a soft outline.
+    const target = this.interactTarget();
+    this.updateHold(this.frameDt, target);
+    this.hud.prompt.show(this.promptModel(target));
     if (this.updateBuildPreview()) return; // E19.2: build mode aims the hologram itself
     if (this.pointerRecent()) return;
     const p = this.frontPick();
     const now = performance.now();
-    const key = `${this.bot.pose.roofId}:${this.bot.front().x},${this.bot.front().z}|${p?.roofId}:${p?.tile?.x},${p?.tile?.z}|${this.hud.currentTool}|${p?.tile?.ground}|${p?.tile?.bloom}|${this.bot.lastInput}`;
+    const key = `${this.bot.pose.roofId}:${this.bot.front().x},${this.bot.front().z}|${p?.roofId}:${p?.tile?.x},${p?.tile?.z}|${this.hud.currentTool}|${p?.tile?.ground}|${p?.tile?.bloom}|${this.bot.lastInput}|${target?.id}`;
     if (key === this.botPreviewKey && now - this.botPreviewAt < 400) return;
     this.botPreviewKey = key;
     this.botPreviewAt = now;
-    const lift = this.liftAhead();
-    if (lift) {
-      const [bx, by, bz] = this.bot.world();
-      const v = this.camera.toScreen(new pc.Vec3(bx, by + 1.1, bz));
-      const sc = p?.tile ? this.botTileScreen(p.tile) : { x: v.x, y: v.y };
+    if (target?.frame || (target && (target.kind === 'gate' || target.kind === 'cat'))) {
+      // The target's soft outline; the prompt says the rest (no tooltip over the world).
       this.overlays.hideGhost();
-      if (p?.tile) this.overlays.showFrame(p.roofId, p.tile.x, p.tile.z, 1, 'info');
+      this.overlays.hideRadius();
+      const fr = target.frame ?? (target.at && { roofId: target.at.roofId, x: target.at.x, z: target.at.z, size: 1 });
+      if (fr && target.kind !== 'cat') this.overlays.showFrame(fr.roofId, fr.x, fr.z, fr.size, 'info');
       else this.overlays.hideFrame();
-      const up = lift.up;
-      const k = this.press('Q', true);
-      const what = up ? (up.preview ? `<span class="bad">${this.lockedReason(up.id)}</span>` : `<span class="ok">${k} Ride up to the rooftop</span>`) : `<span class="ok">${k} Ride down to the street</span>`;
-      this.hud.showTip(sc.x, sc.y, `<b>Rooftop lift</b>${what}`);
-      return;
-    }
-    // Region unlocks: facing sealed fog, the prompt names the area and its price.
-    const sealed = this.sealedAhead();
-    if (sealed) {
-      const [bx, by, bz] = this.bot.world();
-      const v = this.camera.toScreen(new pc.Vec3(bx, by + 1.1, bz));
-      this.overlays.hideGhost();
-      this.overlays.hideFrame();
-      const s = this.sim.areas;
-      const cost = s.unlockCost(sealed)!;
-      const price = `${fmt(cost.biomass)} 🌿 and ${fmt(cost.energy)} ⚡`;
-      const ok = !this.sim.econ.shortfall(cost);
-      const line = ok ? `<span class="ok">${this.press('Q', true)} Unlock for ${price}</span>` : `<span class="bad">Unlock for ${price}</span>`;
-      this.hud.showTip(v.x, v.y, `<b>🔒 ${AREA_TYPES[s.info(sealed).type].name} in thick fog</b>${line}`);
+      this.hud.hideTip();
       return;
     }
     if (!p?.tile) {
       this.previewAt(undefined, 0, 0);
       return;
     }
-    const sc = this.botTileScreen(p.tile);
     this.previewFromBot = true;
     try {
-      this.previewAt(p, sc.x, sc.y);
+      this.previewAt(p, 0, 0);
     } finally {
       this.previewFromBot = false;
     }
+    this.hud.hideTip(); // E22.2: walking, the prompt speaks; the frame and footprint stay
   }
 
   pick(x: number, y: number): Pick | undefined {
@@ -3764,8 +3890,11 @@ export class Game {
     this.simMsWorst = Math.max(this.simMsWorst, this.simMs);
   }
 
+  /** this frame's dt (holds read it) */
+  private frameDt = 0;
   private update(rawDt: number) {
     const dt = Math.min(rawDt, TUNING.maxFrameDt);
+    this.frameDt = dt;
     this.clock += dt;
     this.adaptQuality(rawDt);
     // City 11.4: drones well outside the view fly by the clock (no per-tick moves); near ones fly for real.
