@@ -52,8 +52,10 @@ export class BotController {
   onZoom?: (factor: number) => void;
   /** gamepad right stick turn, in degrees for this frame */
   onTurn?: (degrees: number) => void;
-  /** a gamepad button was pressed (bound to an action) */
-  onPad?: (a: Action) => void;
+  /** a gamepad button was pressed (the game resolves it to an action for the context in effect) */
+  onPad?: (button: number) => void;
+  /** E22.1: sprint switched on by the toggle (left stick click); it ends when bloombot stops */
+  sprintLatched = false;
   /** a menu that wants pad buttons first (G.7 focus navigation); true when it used the press */
   padCapture?: (button: number) => boolean;
   /** any gamepad button press, by index (the rebinding screen listens here) */
@@ -74,7 +76,7 @@ export class BotController {
     this.save();
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement) return;
-      const a = this.bindings.actionForCode(e.code);
+      const a = this.bindings.actionForCode(e.code, ['world']);
       if (a === 'up' || a === 'down' || a === 'left' || a === 'right' || a === 'sprint') {
         this.held.add(e.code);
         this.lastInput = 'keys';
@@ -173,8 +175,7 @@ export class BotController {
       if (down && !this.padPrev[i]) {
         this.lastInput = 'pad';
         this.onButton?.(i);
-        const a = this.bindings.actionForButton(i);
-        if (!this.padCapture?.(i) && a && a !== 'sprint') this.onPad?.(a);
+        if (!this.padCapture?.(i)) this.onPad?.(i);
       }
       this.padPrev[i] = down;
     });
@@ -215,7 +216,8 @@ export class BotController {
       }
     }
     const frozen = this.frozen();
-    this.sprinting = !frozen && (this.bindings.isDown('sprint', this.held) || !!pad?.sprint);
+    if (mag < 0.01 && !this.walk) this.sprintLatched = false; // a toggled sprint ends when bloombot stops
+    this.sprinting = !frozen && (this.bindings.isDown('sprint', this.held) || !!pad?.sprint || this.sprintLatched);
     const p = this.pose;
     const w = this.walker;
     const wade = w.wading(p) ? BOT.wade : 1;

@@ -9,7 +9,7 @@ import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
 import type { BuildableType, DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
-import { BUILDABLE, MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
+import { MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
@@ -65,7 +65,8 @@ import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
 import type { MergePlan } from '../gameplay/MergeSystem';
 import { EventBus } from './EventBus';
 import { BotController } from './BotController';
-import { type Action, Bindings, BUILD_DIGITS, keyLabel, padLabel } from './Bindings';
+import { type Action, Bindings, type Context, FIXED_KEY, keyLabel, migrateBindings, padLabel, SLOTS } from './Bindings';
+import { isOldCity, rulesViewFromUrl } from './Rules';
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
@@ -85,6 +86,12 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 /** Bloombot: the camera zoom of the close default view (G.3), and how near counts as "within reach". */
 const BOT_ZOOM = 3.2;
+/** E22.1: the camera's zoom steps while walking (the wheel and d-pad down step through them; closest first). */
+const BOT_ZOOMS = [BOT_ZOOM, 2.6, 2.0];
+/** E22.1: the build hotbar's default contents (slots 1–9): the machines in the old number-row order. */
+export const HOTBAR_DEFAULT: readonly string[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator', ''];
+/** E22.1: while a panel is open, these walking actions still reach the game (they close the panel they opened). */
+const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'upgrades', 'menu']);
 /**
  * E19.2 (#245, "Building and placing"): build mode is Satisfactory-style. With something to build in hand (a
  * machine, a core, a decoration) the camera stays in the close view; a hologram sits where you aim, snapped to the
@@ -224,6 +231,7 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement, lr: LoadResult = new SaveService().loadResult()) {
     this.settings = loadSettings();
+    rulesViewFromUrl();
     const loaded = lr.state;
     const state = loaded ?? createInitialState();
     this.sim = new Sim(state, this.bus);
@@ -438,7 +446,14 @@ export class Game {
     if (botMode()) {
       const visuals = new BloombotVisuals(this.app, this.scene.world);
       visuals.reducedMotion = !!this.settings.reducedMotion;
-      Object.assign(this, { bindings: new Bindings({ keys: this.settings.keys, pad: this.settings.pad }) });
+      // E22.1: bindings saved before the new map are reset once, with a notice.
+      const st = this.settings;
+      const mig = migrateBindings(st.keys || st.pad ? { v: st.bindingsV, keys: st.keys, pad: st.pad } : undefined);
+      Object.assign(this, { bindings: new Bindings(mig.saved, { oldCity: isOldCity(state) }) });
+      if (mig.reset) {
+        this.saveBindings(false);
+        setTimeout(() => this.hud.toast('Controls were updated. Your custom keys were reset.', '', 6), 900);
+      }
       const bot = new BotController(this.sim, this.camera, visuals, this.bindings);
       this.bot = bot;
       this.overlays.holo.eye = (out) => visuals.eyeWorld(out);
@@ -446,7 +461,10 @@ export class Game {
       bot.walker.solid = (r, x, z) => this.cozy.solidAt(r, x, z); // E19: solid plot options block like machines (a decoration blocks through its tile)
       bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble' || !!this.photo?.active;
       bot.onZoom = (f) => this.photo?.active && this.photo.zoom(f); // the right stick zooms only in photo mode
-      bot.onPad = (a) => this.doAction(a);
+      bot.onPad = (i) => {
+        const a = this.resolveButton(i);
+        if (a && a !== 'sprint') this.doAction(a);
+      };
       bot.onButton = (i) => this.padListener?.(i);
       const focus = new PadFocus(this.hud.root);
       bot.padCapture = (i) => !this.padListener && focus.button(i);
@@ -477,13 +495,14 @@ export class Game {
       },
       // Bloombot: while the camera follows it, zoom about the middle of the view (bloombot), not the cursor.
       // Bloombot: a right-button drag turns the view around bloombot (a third of a degree per pixel).
-      orbit: (dx) => {
-        if (!this.bot || this.cinematic) return false;
+      orbit: (dx, button) => {
+        if (!this.bot || this.cinematic || !this.bindings.keys.look.includes(`Mouse${button}`)) return false;
         this.camera.orbit(-dx * 0.35);
         return true;
       },
       // Bloombot: the camera's distance is fixed; the wheel turns what you're building (E19.2).
-      zoom: (f, x, y) => (this.photo?.active ? this.photo.zoom(f) : this.bot ? this.wheelTurn(f) : this.camera.zoomBy(f, x, y)),
+      // E22.1: in build mode the wheel turns the piece (and the camera's zoom waits); otherwise it zooms.
+      zoom: (f, x, y) => (this.photo?.active ? this.photo.zoom(f) : this.bot ? this.wheel(f) : this.camera.zoomBy(f, x, y)),
       // A quick, strong pinch-out snaps to the city overview (one gesture from anywhere).
       pinchEnd: (f, ms) => {
         if (this.city && !this.cinematic && f < 0.6 && ms < 450) this.camera.glide(this.camera.target.x, 0, this.camera.target.z, this.camera.minZoom);
@@ -513,7 +532,7 @@ export class Game {
     // Phase 4 E10.1: no blocking welcome card. The first pulse works at once; a short note says what this is.
     if (!state.progression.introSeen && state.stats.tilesRestored === 0) {
       state.progression.introSeen = true;
-      const how = `Walk with ${this.hudKey('up')}${this.hudKey('left')}${this.hudKey('down')}${this.hudKey('right')} and press ${this.hudKey('pulse')} to pulse the grey tile in front of you.`;
+      const how = `Walk with ${this.hudKey('up')} ${this.hudKey('left')} ${this.hudKey('down')} ${this.hudKey('right')}. Press ${this.hudKeys('pulse')} to pulse the grey tile in front of you, and ${this.hudKey('interact')} to interact.`;
       setTimeout(() => this.hud.toast(`🌱 Welcome to Solarbloom<small>This park is dead and grey. ${how}</small>`, 'gold', 6), 600);
     }
     else if (offline) {
@@ -739,7 +758,6 @@ export class Game {
 
   private selectTool(t: Tool) {
     if (this.cinematic) return;
-    if (decorType(t)) this.lastDecor = t as `decor:${string}`;
     this.buildKey = '';
     this.sfx.click();
     this.hud.setTool(t);
@@ -827,22 +845,24 @@ export class Game {
       if (this.bot && this.photo.active) {
         // E19.4.1: photo mode reads the same map with its own meanings (PhotoMode); held keys pan.
         this.photo.key(e.code, true);
-        const a = this.bindings.actionForCode(e.code);
-        if (a === 'backpack' || a === 'debug' || e.code.startsWith('Arrow')) e.preventDefault();
-        if (!a || (e.repeat && a !== 'zoomIn' && a !== 'zoomOut' && a !== 'prevTool' && a !== 'nextTool')) return;
+        const a = e.code === FIXED_KEY ? 'cancel' : this.bindings.actionForCode(e.code, ['build', 'world', 'any']);
+        if (a === 'backpack' || a === 'debug' || e.code.startsWith('Arrow') || e.code === 'Space' || e.code === 'Tab') e.preventDefault();
+        if (!a || (e.repeat && a !== 'zoomCamera' && a !== 'rotate' && a !== 'rotateBack')) return;
         if (a === 'debug') this.doAction(a);
         else this.photo.action(a);
         return;
       }
       if (this.bot) {
-        // Bloombot's map (docs/BLOOMBOT_EPIC.md §7), rebindable; build tools stay on the number row.
-        const slot = BUILD_DIGITS.indexOf(e.code as (typeof BUILD_DIGITS)[number]);
-        const tools: Tool[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
-        if (slot >= 0) return this.selectTool(tools[slot]);
-        const a = this.bindings.actionForCode(e.code);
+        // E22.1: the epic's map (docs/E22_CONTROLS_UI.md), every action rebindable. Esc is back, or the menu.
+        if (e.code === FIXED_KEY) {
+          e.preventDefault();
+          if (!e.repeat) this.escape();
+          return;
+        }
+        const a = this.resolveKey(e.code);
         if (!a) return;
-        if (a === 'backpack' || a === 'debug') e.preventDefault();
-        if (e.repeat && a !== 'zoomIn' && a !== 'zoomOut') return;
+        if (a === 'backpack' || a === 'debug' || e.code === 'Space' || e.code === 'Tab') e.preventDefault();
+        if (e.repeat && a !== 'rotate' && a !== 'rotateBack') return;
         this.doAction(a);
         return;
       }
@@ -865,30 +885,135 @@ export class Game {
     });
   }
 
-  /** Bloombot: one action from a key or a gamepad button. Movement and sprint are read by BotController. */
+  /** Bloombot: one action from a key, mouse input or pad button. Movement and sprint are read by BotController. */
   private doAction(a: Action) {
     if ((this.photo.active && a !== 'debug') || a === 'photo') {
       if (!this.cinematic || this.photo.active) this.photo.action(a);
-    } else if (a === 'pulse') this.botAct();
-    else if (a === 'interact') this.botInteract();
-    else if (a === 'tray') this.hud.toggleTray();
-    else if (a === 'cancel') this.escape();
-    else if (a === 'harvest') this.harvest();
-    else if (a === 'upgrades') this.hud.toggleUpgrades();
-    else if (a === 'backpack') this.hud.toggleBackpack();
-    // E19.2: on the pad the bumpers turn a decoration in hand (they cycle tools otherwise)
-    else if ((a === 'prevTool' || a === 'nextTool') && this.bot?.lastInput === 'pad' && this.turnable()) this.turnBuild(a === 'nextTool' ? 1 : -1);
-    else if (a === 'prevTool') this.cycleTool(-1);
-    else if (a === 'nextTool') this.cycleTool(1);
-    else if (a === 'zoomIn') (this.photo?.active ? this.photo.zoom(1.15) : this.turnBuild(1));
-    else if (a === 'zoomOut') (this.photo?.active ? this.photo.zoom(1 / 1.15) : this.turnBuild(-1));
-    else if (a === 'overview') this.toggleOverview();
-    else if (a === 'pause') this.setPaused(!this.paused);
-    else if (a === 'frenzy') this.sim.frenzy.activate();
-    else if (a === 'nextArea') this.focusNextArea();
-    else if (a === 'home') this.focusArea(PARK);
-    else if (a === 'recentre') this.camera.recentre();
-    else if (a === 'debug') this.setSetting('debug', !this.settings.debug);
+      return;
+    }
+    const slot = SLOTS.indexOf(a as (typeof SLOTS)[number]);
+    if (slot >= 0) return this.useSlot(slot);
+    switch (a) {
+      case 'pulse':
+      case 'place':
+        return this.botAct();
+      case 'interact':
+        return this.botInteract();
+      case 'buildMenu':
+        return this.hud.toggleTray();
+      case 'cancel':
+        return this.escape(true);
+      case 'menu':
+        return this.toggleMenu();
+      case 'harvest':
+        return this.harvest();
+      case 'upgrades':
+        return this.hud.toggleUpgrades();
+      case 'backpack':
+        return this.hud.toggleBackpack();
+      case 'rotate':
+      case 'rotateBack':
+        return this.turnBuild(a === 'rotate' ? 1 : -1);
+      case 'removeMode':
+        return this.selectTool(this.hud.currentTool === 'remove' ? 'pulse' : 'remove');
+      case 'map':
+        return this.toggleOverview();
+      case 'zoomCamera':
+        return this.stepZoom(1, true);
+      case 'sprintToggle':
+        if (this.bot) this.bot.sprintLatched = !this.bot.sprintLatched;
+        return;
+      case 'pinNext':
+        return this.pinNext();
+      case 'frenzy':
+        return void this.sim.frenzy.activate();
+      case 'nextArea':
+        return this.focusNextArea();
+      case 'home':
+        return this.focusArea(PARK);
+      case 'recentre':
+        return this.camera.recentre();
+      case 'debug':
+        return this.setSetting('debug', !this.settings.debug);
+    }
+  }
+
+  /** E22.1: the input contexts in effect now (Bindings: an open panel, build mode, or walking). */
+  private contexts(): Context[] {
+    if (this.panelOpen()) return ['panel', 'any'];
+    return this.building() ? ['build', 'world', 'any'] : ['world', 'any'];
+  }
+
+  /** A panel or menu that takes the input is open. */
+  private panelOpen(): boolean {
+    const h = this.hud;
+    return h.modalOpen || h.backpackOpen || h.plotPickerOpen || h.isUpgradesOpen || h.trayOpen;
+  }
+
+  /** The action a key (or mouse input) means now. With a panel open, the key that opened it closes it again. */
+  private resolveKey(code: string): Action | undefined {
+    const ctx = this.contexts();
+    const a = this.bindings.actionForCode(code, ctx);
+    if (a || ctx[0] !== 'panel') return a;
+    const w = this.bindings.actionForCode(code, ['world']);
+    return w && PANEL_TOGGLES.has(w) ? w : undefined;
+  }
+
+  private resolveButton(i: number): Action | undefined {
+    const ctx = this.contexts();
+    const a = this.bindings.actionForButton(i, ctx);
+    if (a || ctx[0] !== 'panel') return a;
+    const w = this.bindings.actionForButton(i, ['world']);
+    return w && PANEL_TOGGLES.has(w) ? w : undefined;
+  }
+
+  /** E22.1: hotbar slots 1–9 take a pinned build card into bloombot's hands (again: put it away). */
+  private useSlot(i: number) {
+    const t = (this.settings.hotbar ?? HOTBAR_DEFAULT)[i] as Tool | '' | undefined;
+    if (!t) {
+      this.hud.toast(`Hotbar slot ${i + 1} is empty. Pin something to it from the build menu.`, '', 2.6);
+      return;
+    }
+    if (machineTool(t) && !this.sim.build.isUnlocked(t)) {
+      this.hud.showFail(this.sim.build.lockLabel(t));
+      return;
+    }
+    this.selectTool(this.hud.currentTool === t ? 'pulse' : t);
+  }
+
+  /** E22.1: Pin the next request (E21's requests; until they exist there is nothing to pin). */
+  private pinNext() {
+    this.hud.toast('No requests to pin yet', '', 2);
+  }
+
+  /** E22.1: Esc / Menu: the menu (E22.11 makes it the real pause and menu). */
+  private toggleMenu() {
+    this.setPaused(!this.paused);
+  }
+
+  /** E22.1: the walking camera's zoom step (0 closest). `wrap` cycles (the pad); the wheel stops at the ends. */
+  private zoomStep = 0;
+  private stepZoom(dir: number, wrap = false) {
+    if (!this.bot || this.cinematic) return;
+    const n = BOT_ZOOMS.length;
+    this.zoomStep = wrap ? (this.zoomStep + dir + n) % n : Math.max(0, Math.min(n - 1, this.zoomStep + dir));
+    this.overviewOn = false;
+    this.bot.following = true;
+  }
+
+  /** The mouse wheel: turns the piece in build mode, otherwise zooms the camera (as bound). */
+  private wheel(factor: number) {
+    if (factor === 1) return;
+    const now = performance.now();
+    if (now - this.wheelAt < WHEEL_TURN_MS) return;
+    const a = this.resolveKey('Wheel');
+    if (a === 'rotate' || a === 'rotateBack') {
+      this.wheelAt = now;
+      this.turnBuild(factor > 1 ? 1 : -1);
+    } else if (a === 'zoomCamera') {
+      this.wheelAt = now;
+      this.stepZoom(factor > 1 ? -1 : 1);
+    }
   }
 
   /** G.16: the rebinding screen waits for one key or button. */
@@ -904,17 +1029,20 @@ export class Game {
     if (kind === 'pad') this.padListener = (i) => finish(i);
   }
 
-  private saveBindings() {
+  private saveBindings(render = true) {
     const saved = this.bindings.save();
     this.settings.keys = saved.keys;
     this.settings.pad = saved.pad;
+    this.settings.bindingsV = saved.v;
     this.setSetting('keys', saved.keys as unknown as string);
+    if (!render) return;
     this.hud.setKeyMap(this.bot?.lastInput ?? 'keys', this.bindings);
     this.hud.renderControls(this.bindings, (kind, done) => this.listenForBinding(kind, done), () => this.saveBindings());
     this.botPreviewKey = '';
   }
 
-  private escape() {
+  /** Esc / B: closes or puts away the nearest thing; with nothing to close, Esc (not B) opens the menu. */
+  private escape(fromCancel = false) {
     if (this.mergeSel) this.cancelMerge();
     else if (this.hud.modalOpen) this.hud.openSettings(false);
     else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
@@ -923,24 +1051,8 @@ export class Game {
     else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
     else if (this.selected) this.select(undefined);
     else if (this.bot?.walking) this.bot.cancelWalk();
-    else this.selectTool('pulse');
-  }
-
-  /**
-   * Bloombot: 1 / 2 and the bumpers step through the tools: Pulse, Inspect, then every machine that's unlocked
-   * (and any Superstructure Core waiting to be placed), so a gamepad can build without opening the tray.
-   */
-  private cycleTool(step: number) {
-    const tools: Tool[] = ['pulse', 'inspect'];
-    for (const t of BUILDABLE) if (this.sim.build.isUnlocked(t)) tools.push(t);
-    for (const btn of this.hud.root.querySelectorAll<HTMLElement>('#buildTray .super[data-tool]')) if (!btn.hidden) tools.push(btn.dataset.tool as Tool);
-    // E19.2: the decoration last held, then the remove tool. With a decoration in hand the keys step through every
-    // decoration earned (so the keyboard alone can choose one); on the pad the bumpers turn it and the tray chooses.
-    const cur = this.hud.currentTool;
-    const decor = [...this.hud.root.querySelectorAll<HTMLElement>('#buildTray .decor[data-tool^="decor:"]')].filter((b) => !b.hidden).map((b) => b.dataset.tool as Tool);
-    tools.push(...(decorType(cur) ? decor : [this.lastDecor]), 'remove');
-    const i = Math.max(0, tools.indexOf(cur));
-    this.selectTool(tools[(i + step + tools.length) % tools.length]);
+    else if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
+    else if (!fromCancel || this.paused) this.toggleMenu();
   }
 
   /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
@@ -949,8 +1061,6 @@ export class Game {
   }
   /** the overview (M) is showing; walking, or M again, leaves it */
   private overviewOn = false;
-  /** E19.2: the decoration the tool cycle offers (the last one held) */
-  private lastDecor: `decor:${string}` = 'decor:bench';
   /** E19.2: how a decoration in hand is turned, in quarter turns (kept between placements, as in Satisfactory) */
   private buildRot = 0;
   private wheelAt = 0;
@@ -968,20 +1078,13 @@ export class Game {
     this.sfx.click();
   }
 
-  private wheelTurn(factor: number) {
-    const now = performance.now();
-    if (factor === 1 || now - this.wheelAt < WHEEL_TURN_MS) return;
-    this.wheelAt = now;
-    this.turnBuild(factor > 1 ? 1 : -1);
-  }
-
   /** Bloombot: hold the camera at the close view's distance (E19.2: building no longer pulls it back). */
   private updateBotZoom() {
     const b = this.bot;
     if (!b || this.cinematic) return;
     if (this.overviewOn && b.speed > 0.05) this.overviewOn = false; // walking leaves the overview
     if (this.overviewOn || !b.following) return; // the overview, or a camera-only fly-to, keeps its own zoom
-    const want = BOT_ZOOM;
+    const want = BOT_ZOOMS[this.zoomStep] ?? BOT_ZOOM;
     if (Math.abs(this.camera.zoomTarget - want) > 1e-3) this.camera.zoomTo(want);
   }
 
@@ -991,7 +1094,7 @@ export class Game {
     const out = !this.overviewOn;
     this.overviewOn = out;
     const t = this.bot ? this.bot.world() : [c.target.x, 0, c.target.z];
-    c.glide(t[0], 0, t[2], out ? c.minZoom : BOT_ZOOM);
+    c.glide(t[0], 0, t[2], out ? c.minZoom : (BOT_ZOOMS[this.zoomStep] ?? BOT_ZOOM));
     if (!out && this.bot) this.bot.following = true;
   }
 
@@ -1000,10 +1103,17 @@ export class Game {
     return this.bot?.lastInput === 'pad' ? padLabel(this.bindings.pad[a]) : keyLabel(this.bindings.keys[a][0] ?? '');
   }
 
+  /** Every key for an action ("Left mouse or Space"), or its pad button. */
+  private hudKeys(a: Action): string {
+    if (this.bot?.lastInput === 'pad') return padLabel(this.bindings.pad[a]);
+    const ks = this.bindings.keys[a].map(keyLabel);
+    return ks.length ? ks.slice(0, 2).join(' or ') : '—';
+  }
+
   /** A key or button name for hints: the pointer's "Click", or bloombot's key / pad button. */
   private press(key: 'E' | 'Q', bot = this.previewFromBot): string {
     if (!bot) return 'Select'; // the internal cursor path (bots, dev tools)
-    const a: Action = key === 'E' ? 'pulse' : 'interact';
+    const a: Action = key === 'E' ? (this.building() && this.bot?.lastInput === 'pad' ? 'place' : 'pulse') : 'interact';
     if (this.bot?.lastInput === 'pad') return `<kbd>${padLabel(this.bindings.pad[a])}</kbd>`;
     return `<kbd>${keyLabel(this.bindings.keys[a][0] ?? '')}</kbd>`;
   }
@@ -1767,8 +1877,8 @@ export class Game {
   /** Words for turning what's in hand, for the input used last. */
   private turnHint(): string {
     if (!this.bot) return '';
-    if (this.bot.lastInput === 'pad') return `${padLabel(this.bindings.pad.prevTool)} / ${padLabel(this.bindings.pad.nextTool)} to turn`;
-    return `wheel or ${keyLabel(this.bindings.keys.zoomOut[0] ?? '')} / ${keyLabel(this.bindings.keys.zoomIn[0] ?? '')} to turn`;
+    if (this.bot.lastInput === 'pad') return `${padLabel(this.bindings.pad.rotateBack)} / ${padLabel(this.bindings.pad.rotate)} to turn`;
+    return `${this.bindings.keys.rotate.map(keyLabel).join(' or ')} to turn`;
   }
 
   /** Build mode's preview, every frame: the hologram where you aim (true while building). */
@@ -2028,7 +2138,7 @@ export class Game {
     if (this.clock < this.cozyCheckAt) return;
     this.cozyCheckAt = this.clock + 1;
     for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Look for empty plots in restored ground.</small>`, 'gold', 4.5);
-    for (const o of this.cozy.checkDecorUnlocks()) this.hud.toast(`${o.icon} New decoration: ${o.name}<small>${o.blurb} It’s in the Build tray (${this.hudKey('tray')}), free to place.</small>`, 'gold', 4.5);
+    for (const o of this.cozy.checkDecorUnlocks()) this.hud.toast(`${o.icon} New decoration: ${o.name}<small>${o.blurb} It’s in the build menu (${this.hudKey('buildMenu')}), free to place.</small>`, 'gold', 4.5);
     // The picker closes if bloombot wanders off.
     const pp = this.pickerPlot;
     if (pp && this.bot) {
@@ -2083,13 +2193,18 @@ export class Game {
   }
 
   private onClick(x: number, y: number, button: number) {
-    if (button !== 0 || this.cinematic || this.photo.active) return;
-    if (this.hud.isUpgradesOpen && window.innerWidth < 760) {
-      this.hud.toggleUpgrades(false);
+    if (this.cinematic || this.photo.active) return;
+    if (this.bot) {
+      // E22.1: mouse buttons are bindable: the pulse button uses the tool on the aimed tile (walking there first if
+      // it's out of reach); any other bound button does its action.
+      const a = this.resolveKey(`Mouse${button}`);
+      if (a === 'pulse' || a === 'place') this.botClick(x, y);
+      else if (a && a !== 'look') this.doAction(a);
       return;
     }
-    if (this.bot) {
-      this.botClick(x, y);
+    if (button !== 0) return;
+    if (this.hud.isUpgradesOpen && window.innerWidth < 760) {
+      this.hud.toggleUpgrades(false);
       return;
     }
     const catId = this.catHit(x, y);

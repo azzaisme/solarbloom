@@ -8,8 +8,8 @@ export interface InputHandlers {
   zoom(factor: number, x?: number, y?: number): void;
   /** A two-finger pinch finished: its overall zoom factor (spread end / start) and how long it took. */
   pinchEnd?(factor: number, ms: number): void;
-  /** A right-button drag moved sideways by dx pixels. Return true if it was used (else it pans). */
-  orbit?(dx: number): boolean;
+  /** A drag with `button` held moved sideways by dx pixels. Return true if it was used (else it pans). */
+  orbit?(dx: number, button: number): boolean;
 }
 
 /**
@@ -19,8 +19,8 @@ export interface InputHandlers {
 export class InputController {
   private pointers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
   private dragging = false;
-  /** the current drag began with the right mouse button */
-  private rightDrag = false;
+  /** the mouse button the current press began with */
+  private downButton = 0;
   private pinchDist = 0;
   /** spread and time when the current pinch began */
   private pinchStart?: { d: number; at: number };
@@ -57,7 +57,7 @@ export class InputController {
     this.pointers.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y });
     if (this.pointers.size === 1) {
       this.dragging = e.button === 1 || e.button === 2;
-      this.rightDrag = e.button === 2;
+      this.downButton = e.button;
       this.suppressClick = this.dragging;
     } else {
       this.suppressClick = true;
@@ -98,7 +98,7 @@ export class InputController {
       this.suppressClick = true;
     }
     if (this.dragging) {
-      if (!(this.rightDrag && this.h.orbit?.(dx))) this.h.pan(dx, dy, p.x, p.y);
+      if (!(e.pointerType === 'mouse' && this.h.orbit?.(dx, this.downButton))) this.h.pan(dx, dy, p.x, p.y);
     } else if (e.pointerType === 'mouse') this.h.hover(p.x, p.y);
   };
 
