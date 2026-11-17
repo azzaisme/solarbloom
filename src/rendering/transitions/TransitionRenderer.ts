@@ -33,6 +33,8 @@ export interface ChunkHost {
   setFoliage(f: GeoSink | undefined): void;
   /** draws with the chunk's prop level overridden (area-clear waves) */
   withLevel(level: number, fn: () => void): void;
+  /** Look 3.8 (#135): draws one tile's area-edge dressing (rail, ivy, banners, clutter) into `sink` */
+  edges(sink: Sink, t: TileData, h: number): void;
   slabCap?: (hex: string, p: [number, number, number], s: [number, number, number]) => void;
 }
 
@@ -40,13 +42,16 @@ const NULL_SINK: Sink & GeoSink = { add() {}, grey: 0 };
 
 type Win = [number, number];
 /** In/out windows (progress) for incoming props, outgoing props, per transition kind. */
-const WINDOWS: Record<TileTransition['k'] | 'wake', { in: Win; out: Win }> = {
+const WINDOWS: Record<TileTransition['k'] | 'wake' | 'edge', { in: Win; out: Win }> = {
   soften: { in: [0, 0], out: [2, 3] },
   moss: { in: [0.3, 1], out: [0.1, 0.6] },
   restore: { in: [0.7, 1], out: [0, 0.12] },
   bloom: { in: [0, 0.75], out: [0.55, 0.95] },
   unblock: { in: [0.45, 1], out: [0, 0.6] },
   wake: { in: [0.3, 1], out: [0, 0.5] },
+  // Look 3.8 (#135): area edges (rails, ivy, banners). The window closes at 0.6 so the per-piece stagger (up to
+  // 60% of the window) still finishes before the end, and the vines are full-grown when the chunk folds back.
+  edge: { in: [0.25, 0.6], out: [0, 0.3] },
 };
 
 export type Tier = 'low' | 'medium' | 'high';
@@ -83,7 +88,7 @@ export class TransitionRenderer {
   readonly material: pc.StandardMaterial;
   /** tiles drawn mid-transition in the last chunk builds (perf readout) */
   readonly liveByChunk = new Map<string, number>();
-  private waves = new Map<string, { t0: number; ox: number; oz: number; end: number }>();
+  private waves = new Map<string, { t0: number; ox: number; oz: number; end: number; from: number; edgesOnly: boolean }>();
 
   constructor(readonly sim: Sim) {
     this.material = transitionMaterial();
@@ -154,10 +159,35 @@ export class TransitionRenderer {
   // ───────────── area waves (renderer only) ─────────────
 
   /** An area cleared: its props wake and its ground un-greys in a wave from (ox, oz), the fog rolls back. */
-  areaWave(areaId: string, ox: number, oz: number, radius: number) {
+  areaWave(areaId: string, ox: number, oz: number, radius: number, opts: { from?: number; edgesOnly?: boolean } = {}) {
     const A = TUNING.transitions.areaWave;
     if (this.reducedMotion) return; // reduced motion: no rolling, one gentle change (the chunk rebuild)
-    this.waves.set(areaId, { t0: this.time, ox, oz, end: this.time + Math.min(A.max, radius * A.perTile) + A.prop });
+    this.waves.set(areaId, { t0: this.time, ox, oz, end: this.time + Math.min(A.max, radius * A.perTile) + A.prop, from: opts.from ?? 0, edgesOnly: !!opts.edgesOnly });
+  }
+
+  /**
+   * Look 3.8 (#135): one tile's area edge while a wave rolls over it. The old dressing shrinks away and the new
+   * one (fuller ivy, banners, tidy clutter) grows in as the front passes, so vines visibly grow instead of
+   * popping. Returns when it ends on screen, or 0 when no wave is running there (the caller draws it statically).
+   */
+  edgeTile(host: ChunkHost, area: string, t: TileData, h: number, tb: TrMeshBuilder, fb: GeoSink, grey: number): number {
+    const w = this.waves.get(area);
+    if (!w || this.tier === 'low') return 0;
+    const d = TUNING.transitions.areaWave.prop;
+    const t0 = w.t0 + (this.waveDelay(area, t.x, t.z) ?? 0);
+    if (this.time >= t0 + d) return 0;
+    const top = h + 0.08;
+    tb.grey = grey;
+    const win = WINDOWS.edge;
+    const before = tb.verts;
+    host.setFoliage({ add: (g, x, y, z, r, s) => tb.addGeo(g, x, y, z, r, s), grey });
+    this.pen(tb, t0, d, 1, win.in, [2, 3], top);
+    host.edges(tb, t, h);
+    this.pen(tb, t0, d, 1, [0, 0], win.out, top);
+    host.withLevel(w.from, () => host.edges(tb, t, h));
+    host.setFoliage(fb);
+    // most tiles have no edge: they aren't drawn as transitions (keeps the live-tile readout honest)
+    return tb.verts > before ? t0 + d : 0;
   }
 
   /** Delay (s) before the wave reaches (x, z) in this area, or undefined when no wave is running there. */
@@ -171,7 +201,7 @@ export class TransitionRenderer {
   /** True while the wave hasn't reached (x, z) yet (the tile keeps its fogged look). */
   waveAhead(areaId: string, x: number, z: number): boolean {
     const w = this.waves.get(areaId);
-    if (!w) return false;
+    if (!w || w.edgesOnly) return false;
     return this.time < w.t0 + (this.waveDelay(areaId, x, z) ?? 0);
   }
 
@@ -216,7 +246,7 @@ export class TransitionRenderer {
     if (tr !== t.tr) t = { ...t, tr };
     const live = this.live(t, tr);
     // Waves (area clear): a blocked prop wakes when the wave reaches it.
-    const wd = area !== undefined && t.blocked && t.feature !== 'building' ? this.waveDelay(area, t.x, t.z) : undefined;
+    const wd = area !== undefined && t.blocked && t.feature !== 'building' && !this.waves.get(area)?.edgesOnly ? this.waveDelay(area, t.x, t.z) : undefined;
     const waking = wd !== undefined && this.time < (this.waves.get(area!)!.t0 + wd + TUNING.transitions.areaWave.prop);
     const detailed = !far && this.tier !== 'low';
     let rec: { hex: string; p: [number, number, number]; s: [number, number, number] } | undefined;

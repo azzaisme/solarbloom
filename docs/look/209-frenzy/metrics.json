@@ -1,0 +1,36 @@
+{
+  "tag": "209-frenzy",
+  "query": "?gfx=high",
+  "renderer": "headless Chromium, SwiftShader (software GL)",
+  "when": "2026-11-16T23:30:40.111Z",
+  "shots": {
+    "drone-desktop": {
+      "scene": "Drone mid-spray",
+      "size": "1280x800",
+      "frameMs": 2366.1,
+      "simTime": 1.8,
+      "restored": 0,
+      "drawCalls": 394,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "high",
+      "sha1": "dad9098d2446"
+    },
+    "frenzy-desktop": {
+      "scene": "Drone mid-spray during Bloom Frenzy",
+      "size": "1280x800",
+      "frameMs": 2432.6,
+      "simTime": 2.1,
+      "restored": 0,
+      "drawCalls": 394,
+      "canvas": [
+        1280,
+        800
+      ],
+      "tier": "high",
+      "sha1": "5509b29dc049"
+    }
+  }
+}

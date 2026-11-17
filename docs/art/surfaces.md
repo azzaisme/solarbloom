@@ -58,7 +58,9 @@ reload.
   - tier: low 0.4×, medium 0.7×, high 1×.
   - fog: hidden chunks keep only cheap shapes.
 
-  `chunks.detailStats()` reports triangles, and `test:perf:browser` gates the heaviest chunk.
+  `chunks.detailStats()` reports triangles, and `test:perf:browser` gates the heaviest chunk at 450k triangles
+  (High tier). That was 200k until the leafy trees and dense flower beds (d2e3efc) set a desktop target; phones
+  aren't a gate any more. Frame time on a real GPU, not the triangle count, is the measure that matters.
 - **Planters (#136):** decorative only, no gameplay effect.
 - **Area edges (#137):** each shared boundary is drawn once (by the park, otherwise by the area whose id sorts
   first), with gaps where roads, water or paths cross. Railings are props placed on the boundary, so Look 4's
