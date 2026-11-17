@@ -188,6 +188,17 @@ const BODIES = {
   wrench: P('M14.5 3.5a5 5 0 0 0-4.6 6.9L3.8 16.5a1.9 1.9 0 0 0 2.7 2.7l6.1-6.1a5 5 0 0 0 6.9-4.6l-3 3-2.6-.5-.5-2.6z', 'steel'),
   crane: L('M7 21V3.5h12.5M7 7l4.5-3.5M17 3.5V9', '#d9a03a', 2) + R(15, 9, 4, 3.4, .8, 'wood') + P('M4 20.5h7v1.5H4z', 'stone'),
   crate: R(4, 6, 16, 14, 1.8, 'wood') + L('M4 11h16M12 6v14', '#3a2a1a', 1.2) + P('M4 6l2.4-2.5h11.2L20 6z', 'wood'),
+  // E19: plot options
+  carrot: P('M14.5 9.5 5 20.5l11.2-8.8a2.6 2.6 0 0 0-1.7-2.2z', 'orange') + L('M9 15.6l1.6 1.2M11.6 12.8l1.4 1.2', '#b5560f', 1.1) + P('M15.4 8.6c-.4-2.6.6-4.6 2.8-5.4.6 2.4-.6 4.6-2.8 5.4z', 'leaf') + P('M16 9.4c2.2-1.2 4.4-.8 5.6 1-2 1.2-4.2.8-5.6-1z', 'leaf'),
+  apple: P('M12 7.5c-2.4-1.6-7-1-7 4.6 0 4.6 3 8.4 5.2 8.4.8 0 1.2-.4 1.8-.4s1 .4 1.8.4c2.2 0 5.2-3.8 5.2-8.4 0-5.6-4.6-6.2-7-4.6z', 'red') + L('M12 7.5c0-1.6.4-3 1.4-4', '#3a2a1a', 1.4) + P('M13 5.4c.6-1.8 2.4-2.6 4.4-2-.6 1.8-2.4 2.6-4.4 2z', 'leaf') + HI('M7.6 11a3 3 0 0 1 1.8-2.2'),
+  cup: P('M4.5 9h12v5.5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z', 'cream') + L('M16.5 10.6h1.6a2.2 2.2 0 0 1 0 4.4h-1.8', '#3a2a1a', 1.6) + L('M8.5 3.5c-.8 1 .8 2 0 3M12 3.5c-.8 1 .8 2 0 3', '#a39d90', 1.2) + P('M3.5 20.5h15v1h-15z', 'stone'),
+  slide: L('M5 21V6M9 21V6M5 9.5h4M5 13h4M5 16.5h4', '#3a2a1a', 1.6) + P('M9 6c4 0 5 10 11.5 14l-1 1.2C12.6 17 12 8.4 9 8.4z', 'red') + P('M4 5h6v1.6H4z', 'gold'),
+  pot: P('M6.5 13h11l-1.6 7.5H8.1z', 'orange') + R(5.5, 11.5, 13, 2.4, 1, 'orange') + P('M12 11.5C12 7 9 4.6 5 5.2c0 4 3 6.6 7 6.3z', 'leaf') + P('M12 11c0-3.6 2.6-6 6.6-5.6 0 3.4-2.8 5.8-6.6 5.6z', 'leaf'),
+  bike: C(6, 15.5, 4, 'dark') + C(18, 15.5, 4, 'dark') + C(6, 15.5, 2.4, 'cream') + C(18, 15.5, 2.4, 'cream') + L('M6 15.5l4-6.5h6l2 6.5M10 9l2.4 6.5h5.6M9 7h3M16 9l-.8-3h2', '#e0533f', 1.8),
+  note: L('M9 17V5.5l10-2V15', '#3a2a1a', 1.8) + E(6.8, 17.4, 3, 2.4, 'violet') + E(16.8, 15.4, 3, 2.4, 'violet') + L('M9 9l10-2', '#3a2a1a', 1.8),
+  frog: E(12, 15, 8.5, 5.5, 'leaf') + C(8, 9.4, 3, 'leaf') + C(16, 9.4, 3, 'leaf') + C(8, 9.2, 1.4, 'cream') + C(16, 9.2, 1.4, 'cream') + C(8, 9.2, .7, 'dark') + C(16, 9.2, .7, 'dark') + L('M8.5 15.5q3.5 2.2 7 0', '#3a2a1a', 1.2),
+  hut: P('M12 3 21 13h-2.5v7.5h-13V13H3z', 'wood') + P('M12 3 21 13H3z', 'gold') + R(10, 14.5, 4, 6, 1.6, 'dark') + P('M8.5 7.4c1.6-.6 3-.6 4.6 0', 'leaf'),
+  glasshouse: P('M3.5 11 12 4l8.5 7v9.5h-17z', 'water') + L('M3.5 11 12 4l8.5 7M12 4v16.5M3.5 15.5h17M7.8 7.5v13M16.2 7.5v13', '#f4f1ea', 1.2) + P('M3 20.5h18v1H3z', 'stone'),
   // Drone roles (E18; used by the role picker and over drones)
   roleRestorer: P('M12 8l8.5 4.6L12 17.2 3.5 12.6z', 'leaf') + P('M3.5 12.6v2.2l8.5 4.6 8.5-4.6v-2.2L12 17.2z', 'wood') + P(sparkle(12, 5, 4.2), 'gold'),
   roleGardener: P('M4.5 10h10v8.5a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2z', 'water') + L('M14.5 12l5-4.5', '#3a2a1a', 2.2) + L('M7 10a3 3 0 0 1 5 0', '#3a2a1a', 1.6) + L('M20.5 9.5v1.6M19 11.4v1.6M21.6 12v1.4', '#7ad8f8', 1.2),
@@ -254,6 +265,9 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '📋': 'clipboard', '🧹': 'broom', '🪑': 'bench', '💡': 'bulb', '💰': 'coins', '🧩': 'puzzle', '👑': 'crown', '🧠': 'brain', '🕸': 'web', '✋': 'hand',
   '⚙': 'settings', '🔧': 'wrench', '▶': 'play', '⏸': 'pause', '⏩': 'fastForward', '⏭': 'fastForward',
   // Cultivator / slab-breakdown strings.
+  // E19 plot options.
+  '🥕': 'carrot', '🍎': 'apple', '☕': 'cup', '🛝': 'slide', '🌹': 'flower', '🌼': 'sunflower', '🪴': 'pot', '🚲': 'bike', '💦': 'water', '🎻': 'note',
+  '🚣': 'boat', '🐸': 'frog', '🛖': 'hut', '🪟': 'glasshouse',
   '🪨': 'restore', '🧱': 'restore', '🟫': 'garden', '🍃': 'biomass', '🚜': 'build', '🔱': 'build', '🧭': 'telescope',
 };
 

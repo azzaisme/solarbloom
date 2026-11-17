@@ -34,7 +34,8 @@
     "test:gamepad": "vite build && node tests/e2e/gamepad.e2e.mjs",
     "shots:look2": "vite build && node tests/e2e/look2-shots.mjs",
     "desktop": "vite build && electron . --windowed",
-    "package:deck": "vite build && electron-builder --linux AppImage --x64 --publish never"
+    "package:deck": "vite build && electron-builder --linux AppImage --x64 --publish never",
+    "shots:plots": "vite build && node tests/e2e/plot-shots.mjs"
   },
   "dependencies": {
     "break_infinity.js": "2.2.0",
