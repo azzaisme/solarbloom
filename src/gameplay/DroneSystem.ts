@@ -2,7 +2,7 @@ import { Economy } from '../core/Economy';
 import { GROUND, machinesStamp } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
 import { KINDS } from '../core/Economy';
-import type { Cost, DroneData, MachineData, TileData } from '../core/types';
+import type { Cost, DroneData, DroneRole, MachineData, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
@@ -38,6 +38,11 @@ export class DroneSystem {
    * every role, so a drone and a tiller never take the same tile.
    */
   readonly external = new Set<string>();
+
+  /** E18: claims a tile for a role drone's job (same reservation set as every drone). */
+  claimTile(d: DroneData, tileId: string) {
+    this.setTarget(d, tileId);
+  }
 
   private setTarget(d: DroneData, tileId: string | undefined) {
     this.isReserved(''); // make sure the set matches the drone list first
@@ -161,6 +166,11 @@ export class DroneSystem {
   /** Cached tile lists (hub reach and network reach); dropped whenever hubs or reach upgrades change. */
   private tileCache = new Map<string, TileData[]>();
   private tileCacheStamp = '';
+  /** E18: a role's own cached tile list (dropped with the others when hubs or reach upgrades change). */
+  cachedTiles(key: string, make: () => TileData[]): TileData[] {
+    return this.cached(key, make);
+  }
+
   private cached(key: string, make: () => TileData[]): TileData[] {
     const stamp = `${machinesStamp(this.sim.state.machines)}|${this.sim.upgrades.version}`;
     if (stamp !== this.tileCacheStamp) {
@@ -203,7 +213,7 @@ export class DroneSystem {
   }
 
   /** Chain Intelligence: how likely a tile is to set off a synergy if restored now. */
-  private synergyScore(t: TileData): number {
+  synergyScore(t: TileData): number {
     const u = this.sim.upgrades;
     const s = this.sim;
     let score = 0;
@@ -306,7 +316,8 @@ export class DroneSystem {
 
   /** Tiles per second (the old drone is slow and ignores upgrades). */
   speedOf(d: DroneData): number {
-    return d.old ? TUNING.drone.old.flySpeed : TUNING.drone.flySpeed * this.sim.upgrades.droneSpeed(this.sim.machine(d.hubId)) * this.sim.mods.droneSpeedMult();
+    const v = d.old ? TUNING.drone.old.flySpeed : TUNING.drone.flySpeed * this.sim.upgrades.droneSpeed(this.sim.machine(d.hubId)) * this.sim.mods.droneSpeedMult();
+    return d.role === 'scout' ? v * TUNING.drone.roles.scout.speed : v; // E18.3: Scouts fly 1.5x as fast
   }
 
   /** The old solar lamp the old drone lives by (the park's starter panel), if this game has one. */
@@ -329,6 +340,74 @@ export class DroneSystem {
     d.px += (dx / dist) * step;
     d.pz += (dz / dist) * step;
     return false;
+  }
+
+  /** E18: an idle drone of a non-Restorer role looks for its role's job (see DroneRoles). */
+  private roleIdle(d: DroneData, hub: MachineData, role: DroneRole) {
+    const s = this.sim;
+    const home = () => {
+      const hx = hub.x + hub.size / 2;
+      const hz = hub.z + hub.size / 2;
+      if (Math.hypot(d.px - hx, d.pz - hz) > 0.05) d.mode = 'returning';
+    };
+    if (role === 'harvester') {
+      // Harvesters stay by their hub; while a store is full they're at work (DroneRoles.tick converts the loss).
+      this.status.set(d.id, s.roles.harvesting() ? 'working' : 'napping');
+      home();
+      d.timer = TUNING.drone.retrySeconds;
+      return;
+    }
+    const r = s.roles.start(d, hub, role);
+    if (r !== 'started') {
+      this.status.set(d.id, r === 'broke' ? 'waitingEnergy' : 'napping');
+      if (r === 'none') home();
+      d.timer = TUNING.drone.retrySeconds;
+      return;
+    }
+    d.mode = 'flying';
+    const p = s.roles.targetPoint(d)!;
+    if (this.roofOf(d) === hub.roofId && this.isFar(hub)) {
+      d.far = { fx: d.px, fz: d.pz, t0: s.time, t1: s.time + Math.hypot(p[0] - d.px, p[1] - d.pz) / this.speedOf(d) };
+    }
+    this.status.set(d.id, 'travelling');
+    const m = d.targetMachineId ? s.machine(d.targetMachineId) : undefined;
+    const tileId = d.targetTileId ?? (m ? s.grid.get(m.roofId, m.x, m.z)?.id : undefined);
+    if (tileId) s.bus.emit('drone.jobStarted', { droneId: d.id, tileId });
+  }
+
+  /** E18: a role drone's flight to its tile or machine (timed when far from the camera, like any drone). */
+  private roleFly(d: DroneData, hub: MachineData, dt: number) {
+    const s = this.sim;
+    const p = s.roles.targetPoint(d);
+    if (!p) {
+      // Its target is gone (machine merged away): drop the job. It was paid; nothing refunds, nothing repeats.
+      this.setTarget(d, undefined);
+      d.targetMachineId = undefined;
+      d.role = undefined;
+      d.far = undefined;
+      d.mode = 'idle';
+      return;
+    }
+    const arrive = () => {
+      d.px = p[0];
+      d.pz = p[1];
+      d.far = undefined;
+      d.mode = 'working';
+      d.timer = TUNING.drone.workSeconds;
+      this.status.set(d.id, 'working');
+    };
+    if (d.far) {
+      if (s.time >= d.far.t1 - 1e-9) arrive();
+      else if (!this.isFar(hub)) {
+        const f = d.far;
+        const k = f.t1 > f.t0 ? Math.min(1, Math.max(0, (s.time - f.t0) / (f.t1 - f.t0))) : 1;
+        d.px = f.fx + (p[0] - f.fx) * k;
+        d.pz = f.fz + (p[1] - f.fz) * k;
+        d.far = undefined;
+      }
+      return;
+    }
+    if (this.moveToward(d, p[0], p[1], dt)) arrive();
   }
 
   tick(dt: number) {
@@ -356,6 +435,12 @@ export class DroneSystem {
         case 'idle': {
           d.timer -= dt;
           if (d.timer > 0) break;
+          // E18: a hub with another role sends its drones on that role's job (Restorers carry on below, unchanged).
+          const role = s.roles.roleFor(d, hub);
+          if (role !== 'restorer') {
+            this.roleIdle(d, hub, role);
+            break;
+          }
           const job = this.findJob(d);
           if (!job) {
             this.status.set(d.id, 'napping');
@@ -383,6 +468,10 @@ export class DroneSystem {
           break;
         }
         case 'flying': {
+          if (d.role) {
+            this.roleFly(d, hub, dt);
+            break;
+          }
           const t = d.targetTileId ? s.grid.byTileId(d.targetTileId) : undefined;
           if (!t) {
             d.mode = 'idle';
@@ -414,6 +503,18 @@ export class DroneSystem {
         case 'working': {
           d.timer -= dt;
           if (d.timer > 0) break;
+          if (d.role) {
+            // E18: the job this drone paid for, in the role it paid for it under (even if its hub switched since).
+            // Its own claim is released first, as a Restorer's is (a reserved tile isn't eligible to restore).
+            const job = { role: d.role, tileId: d.targetTileId, machineId: d.targetMachineId };
+            this.setTarget(d, undefined);
+            d.targetMachineId = undefined;
+            d.role = undefined;
+            s.roles.complete(d, job);
+            d.mode = 'cooldown';
+            d.timer = TUNING.drone.cycleSeconds / s.upgrades.droneSpeed(hub) / s.mods.droneSpeedMult();
+            break;
+          }
           const t = d.targetTileId ? s.grid.byTileId(d.targetTileId) : undefined;
           this.setTarget(d, undefined);
           if (t && t.ground !== 'restored' && t.ground !== 'growing') {
@@ -453,7 +554,7 @@ export class DroneSystem {
           if (this.travel(d, hub.roofId, hub.x + hub.size / 2, hub.z + hub.size / 2, dt)) {
             d.mode = 'idle';
             d.timer = TUNING.drone.retrySeconds;
-          } else if (this.roofOf(d) === hub.roofId && this.findJob(d)) {
+          } else if (this.roofOf(d) === hub.roofId && s.roles.roleFor(d, hub) === 'restorer' && this.findJob(d)) {
             d.mode = 'idle';
             d.timer = 0;
           }

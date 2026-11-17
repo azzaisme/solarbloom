@@ -165,8 +165,28 @@ export class Sfx {
     [0, 2, 4, 5, 7, 9].forEach((s, i) => this.tone(this.note(s, 392), 0.7, { vol: 0.13, delay: i * 0.12, type: 'triangle' }));
     this.tone(this.note(10, 392), 1.5, { vol: 0.12, delay: 0.8 });
   }
-  drone() {
-    this.tone(660, 0.12, { vol: 0.04, glide: 1.5, type: 'triangle' });
+  /**
+   * A drone sets off on a job. E18.5: each role has its own pitch and timbre (Restorer as before), and a role's
+   * chirp plays at most every 80 ms, so a busy swarm never becomes a constant overlapping beep.
+   */
+  private droneAt: Record<string, number> = {};
+  drone(role: 'restorer' | 'gardener' | 'scout' | 'courier' | 'spark' | 'harvester' = 'restorer') {
+    const now = performance.now() / 1000;
+    if (now - (this.droneAt[role] ?? -9) < 0.08) return;
+    this.droneAt[role] = now;
+    switch (role) {
+      case 'gardener': // a soft watery blip
+        return this.tone(520, 0.14, { vol: 0.035, glide: 0.8, type: 'sine' });
+      case 'scout': // a higher, quicker ping
+        return this.tone(990, 0.08, { vol: 0.03, glide: 1.8, type: 'triangle' });
+      case 'courier': // a low two-step hum
+        this.tone(392, 0.09, { vol: 0.035, type: 'square' });
+        return this.tone(523, 0.09, { vol: 0.03, type: 'square', delay: 0.07 });
+      case 'spark': // a bright zap
+        return this.tone(1320, 0.07, { vol: 0.03, glide: 0.5, type: 'sawtooth' });
+      default:
+        return this.tone(660, 0.12, { vol: 0.04, glide: 1.5, type: 'triangle' });
+    }
   }
 
   /**
