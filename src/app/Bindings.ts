@@ -26,6 +26,7 @@ export type Action =
   | 'nextArea'
   | 'home'
   | 'recentre'
+  | 'photo'
   | 'debug';
 
 /** Labels for the rebinding screen, in the order shown. */
@@ -52,6 +53,7 @@ export const ACTIONS: readonly { id: Action; label: string; pad: boolean }[] = [
   { id: 'nextArea', label: 'Go to the area that needs you', pad: true },
   { id: 'home', label: 'Back to the park', pad: true },
   { id: 'recentre', label: 'Recentre the camera', pad: true },
+  { id: 'photo', label: 'Photo mode', pad: true },
   { id: 'debug', label: 'Debug overlay', pad: false },
 ];
 
@@ -78,6 +80,7 @@ export const DEFAULT_KEYS: Record<Action, string[]> = {
   nextArea: ['KeyN'],
   home: ['Home'],
   recentre: ['KeyC'],
+  photo: ['KeyO'],
   debug: ['F3', 'Backquote'],
 };
 
@@ -102,6 +105,7 @@ export const DEFAULT_PAD: Partial<Record<Action, number>> = {
   // 13 (d-pad down) is left for menu focus (G.7)
   harvest: 14,
   upgrades: 15,
+  // photo (E19.4.1): no free button is left on a standard pad; it opens from Settings and can be bound here.
 };
 
 /** Build tool shortcuts stay on the number row (3–9, 0) and can't be rebound. */

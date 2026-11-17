@@ -71,8 +71,11 @@ import { Cozy } from '../gameplay/Cozy';
 import { PLOT_OPTIONS } from '../data/cozy';
 import type { PlotSpot } from '../core/Plots';
 import { type LoadResult, SaveService } from './SaveService';
+import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
+import { padStick, PhotoMode } from './PhotoMode';
+import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
+import { LOOK } from '../data/look';
 
-const SETTINGS_KEY = 'solarbloom.settings';
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Thriving (full bloom)', 'Radiant'];
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -98,13 +101,11 @@ interface Pick {
 }
 
 function loadSettings(): Settings {
-  const def: Settings = { sound: true, music: true, reducedMotion: false, hints: true, debug: false, lowVfx: false, lowFog: false, followChains: false };
+  const rm = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   try {
-    if (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) def.reducedMotion = true;
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    return raw ? { ...def, ...JSON.parse(raw) } : def;
+    return parseSettings(localStorage.getItem(SETTINGS_KEY), rm);
   } catch {
-    return def;
+    return parseSettings(null, rm);
   }
 }
 
@@ -185,6 +186,9 @@ export class Game {
   readonly bindings = new Bindings();
   /** Bloombot (G.14): the round map at the bottom left */
   private minimap?: Minimap;
+  /** E19.4.1 (#260): photo mode and its controls bar */
+  private photo!: PhotoMode;
+  private photoBar!: PhotoBar;
   /** E19 (#245): plot choices and unlocks (cosmetic; never read by the sim) */
   private cozy!: Cozy;
   /** E19.1.2: the plot the picker is open for, and the option it's previewing there */
@@ -325,6 +329,7 @@ export class Game {
           else this.sim.progression.activateCore();
         },
         newGame: () => this.newGame(),
+        photoMode: () => this.photo.enter(),
         setSetting: (k, v) => this.setSetting(k, v),
         activateFrenzy: () => this.sim.frenzy.activate(),
         findCat: () => this.findCat(),
@@ -424,7 +429,7 @@ export class Game {
       this.overlays.holo.eye = (out) => visuals.eyeWorld(out);
       this.overlays.holo.sink = () => new MeshBuilder();
       bot.walker.solid = (r, x, z) => this.cozy.solidAt(r, x, z); // E19: solid plot options block like machines
-      bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble';
+      bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble' || !!this.photo?.active;
       bot.onPad = (a) => this.doAction(a);
       bot.onButton = (i) => this.padListener?.(i);
       const focus = new PadFocus(this.hud.root);
@@ -445,6 +450,7 @@ export class Game {
       this.camera.target.set(bx, 0, bz);
       this.camera.glide(bx, 0, bz, BOT_ZOOM);
     }
+    this.createPhotoMode();
     new InputController(canvas, {
       hover: (x, y) => this.onHover(x, y),
       leave: () => this.onLeave(),
@@ -659,6 +665,9 @@ export class Game {
       this.chunks.markAll();
     }
     document.body.classList.toggle('reduced', rm);
+    // E19.4.2 / E20.7: the calm HUD is the default; E19.4.3: the potter-about pace. Both presentation only.
+    document.body.classList.toggle('calm', calmHud(s));
+    document.body.classList.toggle('potter', potterPace(s));
     this.hud.settings = s;
     if (!s.debug) this.hud.setDebug(null);
   }
@@ -724,6 +733,61 @@ export class Game {
     if (this.pointer.inside) this.onHover(this.pointer.x, this.pointer.y);
   }
 
+  /** E19.4.1 (#260): photo mode, wired to the camera, bloombot, the HUD and the look. */
+  private createPhotoMode() {
+    const b = this.bot;
+    this.photoBar = new PhotoBar((a) => this.photo.action(a), (a) => this.hudKey(a));
+    this.photo = new PhotoMode(
+      {
+        camera: this.camera,
+        bot: b && {
+          get following() {
+            return b.following;
+          },
+          set following(v: boolean) {
+            b.following = v;
+          },
+          setVisible: (v) => (b.visuals.root.enabled = v),
+          pose: () => void b.visuals.play('cheer'),
+        },
+        setHudHidden: (hidden) => {
+          document.body.classList.toggle('photo', hidden);
+          if (hidden) {
+            // Nothing of the game's own pointers in the picture: the hover frame, ghost, reach ring, grid, beacon.
+            this.overlays.hideFrame();
+            this.overlays.hideGhost();
+            this.overlays.hideRadius();
+            this.overlays.showGrid(false);
+            this.overlays.hideBeacon();
+            this.hud.hideTip();
+          } else {
+            const t = this.hud.currentTool;
+            this.overlays.showGrid(t !== 'inspect' && t !== 'pulse');
+            this.botPreviewKey = ''; // the front-tile preview draws again
+          }
+        },
+        setDof: (on) => this.look.setPhotoDof(on),
+        capture: () => this.savePicture(),
+        render: (st) => this.photoBar.render(st),
+        stick: () => padStick(),
+      },
+      this.bindings,
+    );
+    window.addEventListener('keyup', (e) => this.photo.key(e.code, false));
+    window.addEventListener('blur', () => this.photo.clearKeys());
+  }
+
+  /**
+   * E19.4.1: saves the canvas as a PNG, right after the next frame is drawn (the drawing buffer is only readable
+   * then). The HUD is DOM over the canvas, so it is never in the picture. Where the canvas is see-through (no
+   * post-processing), the haze colour fills in behind it.
+   */
+  private savePicture() {
+    this.app.once('frameend', () => saveCanvasPng(this.app.graphicsDevice.canvas as HTMLCanvasElement, LOOK.haze.color));
+    this.photoBar.flashNow();
+    this.sfx.click();
+  }
+
   private harvest() {
     if (this.sim.harvestSun()) {
       const starter = this.sim.state.machines.find((m) => m.type === 'solar');
@@ -741,6 +805,16 @@ export class Game {
       if (this.keyListener) {
         e.preventDefault();
         this.keyListener(e.code);
+        return;
+      }
+      if (this.bot && this.photo.active) {
+        // E19.4.1: photo mode reads the same map with its own meanings (PhotoMode); held keys pan.
+        this.photo.key(e.code, true);
+        const a = this.bindings.actionForCode(e.code);
+        if (a === 'backpack' || a === 'debug' || e.code.startsWith('Arrow')) e.preventDefault();
+        if (!a || (e.repeat && a !== 'zoomIn' && a !== 'zoomOut' && a !== 'prevTool' && a !== 'nextTool')) return;
+        if (a === 'debug') this.doAction(a);
+        else this.photo.action(a);
         return;
       }
       if (this.bot) {
@@ -776,7 +850,9 @@ export class Game {
 
   /** Bloombot: one action from a key or a gamepad button. Movement and sprint are read by BotController. */
   private doAction(a: Action) {
-    if (a === 'pulse') this.botAct();
+    if ((this.photo.active && a !== 'debug') || a === 'photo') {
+      if (!this.cinematic || this.photo.active) this.photo.action(a);
+    } else if (a === 'pulse') this.botAct();
     else if (a === 'interact') this.botInteract();
     else if (a === 'tray') this.hud.toggleTray();
     else if (a === 'cancel') this.escape();
@@ -855,6 +931,7 @@ export class Game {
 
   /** Bloombot: a zoom input. Ignored in normal play (fixed distance); in placement mode it moves the pulled-back view. */
   private zoomInput(factor: number) {
+    if (this.photo?.active) return this.photo.zoom(factor);
     if (!this.placing() || this.overviewOn) return;
     this.placeZoom = Math.min(PLACE_ZOOM.max, Math.max(PLACE_ZOOM.min, this.placeZoom * factor));
   }
@@ -1121,9 +1198,10 @@ export class Game {
     if (!this.bot) return;
     if (this.bot.lastInput !== this.keyMapShown) {
       this.keyMapShown = this.bot.lastInput;
+      if (this.photo.active) this.photoBar.render(this.photo.state); // its key names follow the device too
       this.hud.setKeyMap(this.bot.lastInput, this.bindings);
     }
-    if (this.cinematic || this.pointerRecent()) return;
+    if (this.cinematic || this.photo.active || this.pointerRecent()) return;
     const p = this.frontPick();
     const now = performance.now();
     const key = `${this.bot.pose.roofId}:${this.bot.front().x},${this.bot.front().z}|${p?.roofId}:${p?.tile?.x},${p?.tile?.z}|${this.hud.currentTool}|${p?.tile?.ground}|${p?.tile?.bloom}|${this.bot.lastInput}`;
@@ -1449,7 +1527,7 @@ export class Game {
   private onHover(x: number, y: number) {
     this.pointer = { x, y, inside: true };
     this.pointerAt = performance.now();
-    if (this.cinematic) return;
+    if (this.cinematic || this.photo.active) return;
     if (this.catHit(x, y)) {
       this.overlays.hideFrame();
       this.overlays.hideGhost();
@@ -1741,7 +1819,7 @@ export class Game {
   }
 
   private onClick(x: number, y: number, button: number) {
-    if (button !== 0 || this.cinematic) return;
+    if (button !== 0 || this.cinematic || this.photo.active) return;
     if (this.hud.isUpgradesOpen && window.innerWidth < 760) {
       this.hud.toggleUpgrades(false);
       return;
@@ -2545,7 +2623,7 @@ export class Game {
     });
     b.on('chain.ended', ({ chainId, combo, bonus, total, milestonePct, energy, crossings, areas }) => {
       if (areas >= 3) this.hud.feed(`🌸 Bloom chain ×${combo} swept ${areas} areas`);
-      if (areas >= 6) this.hud.toast(`🌸 A city-wide bloom! ×${combo}<small>It swept across ${areas} areas.</small>`, 'gold', 3);
+      if (areas >= 6 && !potterPace(this.settings)) this.hud.toast(`🌸 A city-wide bloom! ×${combo}<small>It swept across ${areas} areas.</small>`, 'gold', 3);
       this.tileFx.release(`chain${chainId}`);
       if (crossings > 0) this.hud.feed(`📡 Chain crossed ${crossings} Bloom Relay link${crossings > 1 ? 's' : ''}`);
       if (combo < 2) return;
@@ -2553,7 +2631,7 @@ export class Game {
       this.hud.combo(combo, `+${fmt(total)}🌿${energy.gte(1) ? ` +${fmt(energy)}⚡` : ''} earned${ms}`);
       this.hud.feed(`🌸 Bloom chain ×${combo}${bonus.gte(1) ? ` · +${fmt(bonus)}🌿 bonus` : ''}`);
       this.sfx.chainEnd(combo);
-      if (combo >= 5) {
+      if (combo >= 5 && !potterPace(this.settings)) {
         this.hud.toast(`🌸 BLOOM CHAIN ×${combo}!${bonus ? `<small>Chain bonus +${bonus} 🌿${ms}</small>` : ''}`, 'gold', 2.6);
         this.camera.shake(0.04);
       }
@@ -2865,7 +2943,7 @@ export class Game {
   private presentChainEvent(ev: ChainEvent, combo: number) {
     const s = this.sim;
     // Camera follows big chains (setting): glide toward the wave front now and then, never against the player.
-    if (this.settings.followChains && combo >= 20 && !this.cinematic) {
+    if (this.settings.followChains && !potterPace(this.settings) && combo >= 20 && !this.cinematic) {
       const now = performance.now();
       const tr = this.chainSummary.tracks.get(ev.chainId);
       if (tr && this.city && now - this.followAt > 1500 && now - this.lastPanAt > 4000) {
@@ -3271,7 +3349,7 @@ export class Game {
     // City 11.4: drones well outside the view fly by the clock (no per-tick moves); near ones fly for real.
     const view = this.city ? this.groundRect() : undefined;
     this.sim.drones.focus = view ? { x: (view.x0 + view.x1) / 2, z: (view.z0 + view.z1) / 2, radius: Math.hypot(view.x1 - view.x0, view.z1 - view.z0) / 2 + 24 } : undefined;
-    if (!this.paused && !this.hiddenPause && !this.hud.modalOpen) {
+    if (!this.paused && !this.hiddenPause && !this.hud.modalOpen && !this.photo.frozen) {
       if (rawDt > TUNING.maxFrameDt && !this.hiddenAt) this.awayFor(Math.min(rawDt, 30) - TUNING.maxFrameDt); // a hitch
       this.runSim(dt);
     }
@@ -3286,7 +3364,7 @@ export class Game {
     const camP = this.camera.entity.getPosition();
     detailTextures.setCamera(camP.x, camP.y, camP.z);
     this.machines.update(dt, rect);
-    this.tillers.update(this.paused || this.hiddenPause ? 0 : dt);
+    this.tillers.update(this.paused || this.hiddenPause || this.photo.frozen ? 0 : dt);
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.
     if (!this.paused && this.camera.zoom > 0.9) {
@@ -3303,7 +3381,7 @@ export class Game {
       this.placeBrook();
       this.placeBirds();
     }
-    this.drones.update(this.paused || this.hiddenPause ? 0 : dt); // drone personality freezes with the game
+    this.drones.update(this.paused || this.hiddenPause || this.photo.frozen ? 0 : dt); // drone personality freezes with the game
     this.cat.update(dt);
     // Phase 5 E16: fauna by unlock, capped per quality tier ("Fewer particles" = low).
     const eco = this.sim.ecosystem;
@@ -3328,7 +3406,7 @@ export class Game {
     if (!this.cinematic) this.checkCozyUnlocks();
     this.vfx.update(dt);
     // First-tile beacon until the player restores something.
-    if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic) {
+    if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic && !this.photo.active) {
       const tiles = this.sim.progression.tilesFor(HOME);
       const t = tiles.find((x) => x.ground === 'prepared' && !x.occupantId) ?? tiles.find((x) => x.ground === 'polluted' && !x.blocked && !x.occupantId);
       if (t) this.overlays.showBeacon(t.roofId, t.x, t.z);
@@ -3336,6 +3414,7 @@ export class Game {
     this.overlays.update(dt);
     if (this.bot) {
       this.bot.update(this.hiddenPause ? 0 : dt);
+      this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();
       this.minimap?.update(dt, this.bot.pose);

@@ -682,3 +682,27 @@ body.has-minimap #inspect { bottom: calc(var(--above-bar) + 96px + var(--safe-b)
 .controls .ctl-key.listening { border-color: var(--gold); color: var(--gold); }
 .controls .ctl-reset { margin-top: 8px; padding: 6px 12px; border-radius: 10px; background: var(--glass-hi); color: var(--text); font: 600 13px var(--font-display); }
 #backpack .bp-opts { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 4px 8px; font-size: 18px; }
+
+/* E19.4.2 / E20.7 (#261, #290): the calm HUD, the default. Rates, net income, time-to-afford, storage caps, the chain
+   breakdown and the flying "+N" numbers step back ("Show numbers" in Settings brings them back). A full store still
+   says "full". Toasts are quieter in Hud.toast (one at a time, no number-only detail lines). */
+body.calm .res-row .rate { font-size: 0; min-width: 0; }
+body.calm .res-row .rate > * { display: none; }
+body.calm .res-row.full .rate::after { content: 'full'; font-size: 12px; }
+body.calm .res-row .capw, body.calm #resInfo, body.calm #comboParts, body.calm #comboTotal, body.calm #feed, body.calm .fly { display: none !important; }
+body.calm .res-row { cursor: default; }
+
+/* E19.4.1 (#260): photo mode. The HUD steps aside (its own state is left as it was, so leaving restores it exactly);
+   a small bar lists the controls and is never part of the saved picture (the picture is the canvas alone). */
+body.photo #hud { display: none; }
+#photoBar { position: fixed; left: 50%; bottom: calc(14px + var(--safe-b)); transform: translateX(-50%); z-index: 40; display: none; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 10px; padding: 8px 14px; max-width: calc(100vw - 24px); font: 600 13px var(--font-ui); color: var(--text); }
+#photoBar.on { display: flex; }
+#photoBar.on.clean { display: none; }
+#photoBar .pb-title { font: 700 14px var(--font-display); color: var(--gold-hi); }
+#photoBar button { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 4px 10px; border-radius: 999px; background: var(--glass-hi); border: 1px solid var(--edge-soft); color: var(--text-strong); font: 600 13px var(--font-ui); }
+#photoBar button:hover, #photoBar button:focus-visible { background: var(--glass-hi-2); border-color: var(--edge-strong); }
+#photoBar button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold-hi); }
+#photoBar .pb-help { color: var(--text-soft); font-size: 12px; }
+#photoFlash { position: fixed; inset: 0; z-index: 39; pointer-events: none; background: var(--text-strong); opacity: 0; transition: opacity .35s; }
+#photoFlash.on { opacity: .55; transition: none; }
+body.reduced #photoFlash { display: none; }
