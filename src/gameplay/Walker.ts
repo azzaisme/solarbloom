@@ -1,4 +1,6 @@
+import { decorKeyOf, parseDecorValue } from '../core/Decor';
 import { GROUND } from '../core/GameState';
+import { DECOR_OPTION } from '../data/cozy';
 import type { Sim } from './Sim';
 
 /**
@@ -55,10 +57,18 @@ export class Walker {
       if (this.sim.areas.fog(this.sim.areas.map.areaOfCell(cx, cz)) === 'hidden') return false;
     } else if (!g.isPlayable(roofId) || !g.inBounds(roofId, cx, cz)) return false;
     const t = g.get(roofId, cx, cz);
-    if (!t || t.blocked || t.occupantId) return false;
+    if (!t || t.blocked) return false;
+    // E19.2: a flat decoration (a flower patch, stepping stones) occupies its tile but can be walked over.
+    if (t.occupantId && !this.flatDecor(t.occupantId)) return false;
     if (this.solid?.(roofId, cx, cz)) return false;
     // An obstacle cleared to open a way in keeps its 'obstacle' feature but is no longer blocked.
     return t.feature !== 'building';
+  }
+
+  private flatDecor(occupantId: string): boolean {
+    const key = decorKeyOf(occupantId);
+    const v = key && this.sim.state.cozy?.decor?.[key];
+    return !!v && DECOR_OPTION[parseDecorValue(v).kind]?.solid === false;
   }
 
   /** Does a bloombot-sized circle at (x, z) touch only walkable cells? */

@@ -26,6 +26,7 @@ export type Action =
   | 'nextArea'
   | 'home'
   | 'recentre'
+  | 'photo'
   | 'debug';
 
 /** Labels for the rebinding screen, in the order shown. */
@@ -42,16 +43,19 @@ export const ACTIONS: readonly { id: Action; label: string; pad: boolean }[] = [
   { id: 'harvest', label: 'Harvest', pad: true },
   { id: 'upgrades', label: 'Upgrades', pad: true },
   { id: 'backpack', label: 'Backpack', pad: true },
-  { id: 'prevTool', label: 'Previous tool', pad: true },
-  { id: 'nextTool', label: 'Next tool', pad: true },
-  { id: 'zoomIn', label: 'Zoom in (while placing)', pad: false },
-  { id: 'zoomOut', label: 'Zoom out (while placing)', pad: false },
+  { id: 'prevTool', label: 'Previous tool (turns a decoration on the pad)', pad: true },
+  { id: 'nextTool', label: 'Next tool (turns a decoration on the pad)', pad: true },
+  // E19.2: building no longer zooms; these keys (and the mouse wheel) turn a decoration in hand. The ids stay so
+  // saved bindings keep working.
+  { id: 'zoomIn', label: 'Turn a decoration clockwise', pad: false },
+  { id: 'zoomOut', label: 'Turn a decoration anticlockwise', pad: false },
   { id: 'overview', label: 'Overview', pad: true },
   { id: 'pause', label: 'Settings / pause', pad: true },
   { id: 'frenzy', label: 'Bloom Frenzy', pad: true },
   { id: 'nextArea', label: 'Go to the area that needs you', pad: true },
   { id: 'home', label: 'Back to the park', pad: true },
   { id: 'recentre', label: 'Recentre the camera', pad: true },
+  { id: 'photo', label: 'Photo mode', pad: true },
   { id: 'debug', label: 'Debug overlay', pad: false },
 ];
 
@@ -78,6 +82,7 @@ export const DEFAULT_KEYS: Record<Action, string[]> = {
   nextArea: ['KeyN'],
   home: ['Home'],
   recentre: ['KeyC'],
+  photo: ['KeyO'],
   debug: ['F3', 'Backquote'],
 };
 
@@ -102,6 +107,7 @@ export const DEFAULT_PAD: Partial<Record<Action, number>> = {
   // 13 (d-pad down) is left for menu focus (G.7)
   harvest: 14,
   upgrades: 15,
+  // photo (E19.4.1): no free button is left on a standard pad; it opens from Settings and can be bound here.
 };
 
 /** Build tool shortcuts stay on the number row (3–9, 0) and can't be rebound. */

@@ -57,7 +57,8 @@ import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
 import { FlyText } from '../ui/Fly';
-import { Hud, superType, type Settings, type Tool } from '../ui/Hud';
+import { decorType, Hud, machineTool, superType, type Settings, type Tool } from '../ui/Hud';
+import { BOT } from '../gameplay/Walker';
 import { SuperSystem } from '../gameplay/SuperSystem';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
 import type { MergePlan } from '../gameplay/MergeSystem';
@@ -68,21 +69,30 @@ import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
 import { Cozy } from '../gameplay/Cozy';
-import { PLOT_OPTIONS } from '../data/cozy';
+import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
+import { chunkKey } from '../core/Grid';
+import type { Decoration } from '../core/Decor';
 import type { PlotSpot } from '../core/Plots';
 import { type LoadResult, SaveService } from './SaveService';
+import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
+import { padStick, PhotoMode } from './PhotoMode';
+import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
+import { LOOK } from '../data/look';
 
-const SETTINGS_KEY = 'solarbloom.settings';
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Thriving (full bloom)', 'Radiant'];
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 /** Bloombot: the camera zoom of the close default view (G.3), and how near counts as "within reach". */
 const BOT_ZOOM = 3.2;
 /**
- * Bloombot: placement mode (a build tool in hand) pulls the camera back so the ground around bloombot can be
- * planned, as in other cozy games' furniture modes. It is the only time the player can zoom, within this range.
+ * E19.2 (#245, "Building and placing"): build mode is Satisfactory-style. With something to build in hand (a
+ * machine, a core, a decoration) the camera stays in the close view; a hologram sits where you aim, snapped to the
+ * grid, within DECOR_GEN.reach tiles of bloombot, red where it can't go. The mouse aims while it is over the world
+ * and was moved in the last MOUSE_AIM_MS; otherwise (pad, keys) the aim is the tile in front of bloombot.
  */
-const PLACE_ZOOM = { start: 1.5, min: 0.9, max: BOT_ZOOM };
+const MOUSE_AIM_MS = 8000;
+/** the shortest time between two quarter turns from the mouse wheel (a trackpad sends many small wheel events) */
+const WHEEL_TURN_MS = 140;
 /** Bloombot: how far in the camera may come (the cursor view stops at 1.9). */
 const BOT_MAX_ZOOM = 4.2;
 const BOT_REACH = 1.6;
@@ -98,19 +108,19 @@ interface Pick {
 }
 
 function loadSettings(): Settings {
-  const def: Settings = { sound: true, music: true, reducedMotion: false, hints: true, debug: false, lowVfx: false, lowFog: false, followChains: false };
+  const rm = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   try {
-    if (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) def.reducedMotion = true;
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    return raw ? { ...def, ...JSON.parse(raw) } : def;
+    return parseSettings(localStorage.getItem(SETTINGS_KEY), rm);
   } catch {
-    return def;
+    return parseSettings(null, rm);
   }
 }
 
 /** Glue between the headless Sim, PlayCanvas rendering, DOM HUD, input, audio and persistence. */
 /** E19.1: the message when a build would cover a chosen plot. */
 const PLOT_IN_WAY = 'A plot is here: clear it first (it’s free)';
+/** E19.2: a build aimed beyond bloombot's reach */
+const TOO_FAR = 'Too far: walk closer';
 
 export class Game {
   readonly app: pc.Application;
@@ -185,6 +195,9 @@ export class Game {
   readonly bindings = new Bindings();
   /** Bloombot (G.14): the round map at the bottom left */
   private minimap?: Minimap;
+  /** E19.4.1 (#260): photo mode and its controls bar */
+  private photo!: PhotoMode;
+  private photoBar!: PhotoBar;
   /** E19 (#245): plot choices and unlocks (cosmetic; never read by the sim) */
   private cozy!: Cozy;
   /** E19.1.2: the plot the picker is open for, and the option it's previewing there */
@@ -243,6 +256,7 @@ export class Game {
     this.chunks.transitions = this.transitions;
     this.cozy = new Cozy(this.sim);
     this.chunks.plots = { look: (p) => this.plotLook(p) };
+    this.chunks.decor = { inChunk: (cx, cz) => this.decorInChunk(cx, cz) }; // E19.2
     this.chainSummary = new ChainSummary(this.sim);
     // City 05.2: the park cheers up in stages as you restore it.
     this.chunks.onParkStage = (stage) => {
@@ -325,6 +339,7 @@ export class Game {
           else this.sim.progression.activateCore();
         },
         newGame: () => this.newGame(),
+        photoMode: () => this.photo.enter(),
         setSetting: (k, v) => this.setSetting(k, v),
         activateFrenzy: () => this.sim.frenzy.activate(),
         findCat: () => this.findCat(),
@@ -423,13 +438,14 @@ export class Game {
       this.bot = bot;
       this.overlays.holo.eye = (out) => visuals.eyeWorld(out);
       this.overlays.holo.sink = () => new MeshBuilder();
-      bot.walker.solid = (r, x, z) => this.cozy.solidAt(r, x, z); // E19: solid plot options block like machines
-      bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble';
+      bot.walker.solid = (r, x, z) => this.cozy.solidAt(r, x, z); // E19: solid plot options block like machines (a decoration blocks through its tile)
+      bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble' || !!this.photo?.active;
+      bot.onZoom = (f) => this.photo?.active && this.photo.zoom(f); // the right stick zooms only in photo mode
       bot.onPad = (a) => this.doAction(a);
       bot.onButton = (i) => this.padListener?.(i);
       const focus = new PadFocus(this.hud.root);
       bot.padCapture = (i) => !this.padListener && focus.button(i);
-      bot.onZoom = (f) => this.zoomInput(f);
+      // E19.2: no zoom in play or while building (the right stick's up and down do nothing for now)
       bot.onTurn = (deg) => this.camera.orbit(deg);
       this.hud.setKeyMap('keys', this.bindings);
       // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad).
@@ -445,6 +461,7 @@ export class Game {
       this.camera.target.set(bx, 0, bz);
       this.camera.glide(bx, 0, bz, BOT_ZOOM);
     }
+    this.createPhotoMode();
     new InputController(canvas, {
       hover: (x, y) => this.onHover(x, y),
       leave: () => this.onLeave(),
@@ -460,8 +477,8 @@ export class Game {
         this.camera.orbit(-dx * 0.35);
         return true;
       },
-      // Bloombot: the camera's distance is fixed in play; zoom only works in placement mode (zoomInput).
-      zoom: (f, x, y) => (this.bot ? this.zoomInput(f) : this.camera.zoomBy(f, x, y)),
+      // Bloombot: the camera's distance is fixed; the wheel turns what you're building (E19.2).
+      zoom: (f, x, y) => (this.photo?.active ? this.photo.zoom(f) : this.bot ? this.wheelTurn(f) : this.camera.zoomBy(f, x, y)),
       // A quick, strong pinch-out snaps to the city overview (one gesture from anywhere).
       pinchEnd: (f, ms) => {
         if (this.city && !this.cinematic && f < 0.6 && ms < 450) this.camera.glide(this.camera.target.x, 0, this.camera.target.z, this.camera.minZoom);
@@ -659,6 +676,9 @@ export class Game {
       this.chunks.markAll();
     }
     document.body.classList.toggle('reduced', rm);
+    // E19.4.2 / E20.7: the calm HUD is the default; E19.4.3: the potter-about pace. Both presentation only.
+    document.body.classList.toggle('calm', calmHud(s));
+    document.body.classList.toggle('potter', potterPace(s));
     this.hud.settings = s;
     if (!s.debug) this.hud.setDebug(null);
   }
@@ -714,7 +734,8 @@ export class Game {
 
   private selectTool(t: Tool) {
     if (this.cinematic) return;
-    if (this.bot && t !== 'inspect' && t !== 'pulse' && !this.placing()) this.placeZoom = PLACE_ZOOM.start; // entering placement mode
+    if (decorType(t)) this.lastDecor = t as `decor:${string}`;
+    this.buildKey = '';
     this.sfx.click();
     this.hud.setTool(t);
     this.overlays.hideGhost();
@@ -722,6 +743,61 @@ export class Game {
     this.overlays.showGrid(t !== 'inspect' && t !== 'pulse');
     if (t !== 'inspect') this.select(undefined);
     if (this.pointer.inside) this.onHover(this.pointer.x, this.pointer.y);
+  }
+
+  /** E19.4.1 (#260): photo mode, wired to the camera, bloombot, the HUD and the look. */
+  private createPhotoMode() {
+    const b = this.bot;
+    this.photoBar = new PhotoBar((a) => this.photo.action(a), (a) => this.hudKey(a));
+    this.photo = new PhotoMode(
+      {
+        camera: this.camera,
+        bot: b && {
+          get following() {
+            return b.following;
+          },
+          set following(v: boolean) {
+            b.following = v;
+          },
+          setVisible: (v) => (b.visuals.root.enabled = v),
+          pose: () => void b.visuals.play('cheer'),
+        },
+        setHudHidden: (hidden) => {
+          document.body.classList.toggle('photo', hidden);
+          if (hidden) {
+            // Nothing of the game's own pointers in the picture: the hover frame, ghost, reach ring, grid, beacon.
+            this.overlays.hideFrame();
+            this.overlays.hideGhost();
+            this.overlays.hideRadius();
+            this.overlays.showGrid(false);
+            this.overlays.hideBeacon();
+            this.hud.hideTip();
+          } else {
+            const t = this.hud.currentTool;
+            this.overlays.showGrid(t !== 'inspect' && t !== 'pulse');
+            this.botPreviewKey = ''; // the front-tile preview draws again
+          }
+        },
+        setDof: (on) => this.look.setPhotoDof(on),
+        capture: () => this.savePicture(),
+        render: (st) => this.photoBar.render(st),
+        stick: () => padStick(),
+      },
+      this.bindings,
+    );
+    window.addEventListener('keyup', (e) => this.photo.key(e.code, false));
+    window.addEventListener('blur', () => this.photo.clearKeys());
+  }
+
+  /**
+   * E19.4.1: saves the canvas as a PNG, right after the next frame is drawn (the drawing buffer is only readable
+   * then). The HUD is DOM over the canvas, so it is never in the picture. Where the canvas is see-through (no
+   * post-processing), the haze colour fills in behind it.
+   */
+  private savePicture() {
+    this.app.once('frameend', () => saveCanvasPng(this.app.graphicsDevice.canvas as HTMLCanvasElement, LOOK.haze.color));
+    this.photoBar.flashNow();
+    this.sfx.click();
   }
 
   private harvest() {
@@ -741,6 +817,16 @@ export class Game {
       if (this.keyListener) {
         e.preventDefault();
         this.keyListener(e.code);
+        return;
+      }
+      if (this.bot && this.photo.active) {
+        // E19.4.1: photo mode reads the same map with its own meanings (PhotoMode); held keys pan.
+        this.photo.key(e.code, true);
+        const a = this.bindings.actionForCode(e.code);
+        if (a === 'backpack' || a === 'debug' || e.code.startsWith('Arrow')) e.preventDefault();
+        if (!a || (e.repeat && a !== 'zoomIn' && a !== 'zoomOut' && a !== 'prevTool' && a !== 'nextTool')) return;
+        if (a === 'debug') this.doAction(a);
+        else this.photo.action(a);
         return;
       }
       if (this.bot) {
@@ -776,17 +862,21 @@ export class Game {
 
   /** Bloombot: one action from a key or a gamepad button. Movement and sprint are read by BotController. */
   private doAction(a: Action) {
-    if (a === 'pulse') this.botAct();
+    if ((this.photo.active && a !== 'debug') || a === 'photo') {
+      if (!this.cinematic || this.photo.active) this.photo.action(a);
+    } else if (a === 'pulse') this.botAct();
     else if (a === 'interact') this.botInteract();
     else if (a === 'tray') this.hud.toggleTray();
     else if (a === 'cancel') this.escape();
     else if (a === 'harvest') this.harvest();
     else if (a === 'upgrades') this.hud.toggleUpgrades();
     else if (a === 'backpack') this.hud.toggleBackpack();
+    // E19.2: on the pad the bumpers turn a decoration in hand (they cycle tools otherwise)
+    else if ((a === 'prevTool' || a === 'nextTool') && this.bot?.lastInput === 'pad' && this.turnable()) this.turnBuild(a === 'nextTool' ? 1 : -1);
     else if (a === 'prevTool') this.cycleTool(-1);
     else if (a === 'nextTool') this.cycleTool(1);
-    else if (a === 'zoomIn') this.zoomInput(1.15);
-    else if (a === 'zoomOut') this.zoomInput(1 / 1.15);
+    else if (a === 'zoomIn') (this.photo?.active ? this.photo.zoom(1.15) : this.turnBuild(1));
+    else if (a === 'zoomOut') (this.photo?.active ? this.photo.zoom(1 / 1.15) : this.turnBuild(-1));
     else if (a === 'overview') this.toggleOverview();
     else if (a === 'pause') this.setPaused(!this.paused);
     else if (a === 'frenzy') this.sim.frenzy.activate();
@@ -839,33 +929,54 @@ export class Game {
     const tools: Tool[] = ['pulse', 'inspect'];
     for (const t of BUILDABLE) if (this.sim.build.isUnlocked(t)) tools.push(t);
     for (const btn of this.hud.root.querySelectorAll<HTMLElement>('#buildTray .super[data-tool]')) if (!btn.hidden) tools.push(btn.dataset.tool as Tool);
+    // E19.2: the decoration last held, then the remove tool. With a decoration in hand the keys step through every
+    // decoration earned (so the keyboard alone can choose one); on the pad the bumpers turn it and the tray chooses.
     const cur = this.hud.currentTool;
+    const decor = [...this.hud.root.querySelectorAll<HTMLElement>('#buildTray .decor[data-tool^="decor:"]')].filter((b) => !b.hidden).map((b) => b.dataset.tool as Tool);
+    tools.push(...(decorType(cur) ? decor : [this.lastDecor]), 'remove');
     const i = Math.max(0, tools.indexOf(cur));
     this.selectTool(tools[(i + step + tools.length) % tools.length]);
   }
 
-  /** Bloombot: placement mode is having something to place in hand (a machine or a superstructure core). */
-  private placing(): boolean {
-    const t = this.hud.currentTool;
+  /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
+  private building(t: Tool = this.hud.currentTool): boolean {
     return !!this.bot && t !== 'inspect' && t !== 'pulse';
   }
-  private placeZoom = PLACE_ZOOM.start;
   /** the overview (M) is showing; walking, or M again, leaves it */
   private overviewOn = false;
+  /** E19.2: the decoration the tool cycle offers (the last one held) */
+  private lastDecor: `decor:${string}` = 'decor:bench';
+  /** E19.2: how a decoration in hand is turned, in quarter turns (kept between placements, as in Satisfactory) */
+  private buildRot = 0;
+  private wheelAt = 0;
 
-  /** Bloombot: a zoom input. Ignored in normal play (fixed distance); in placement mode it moves the pulled-back view. */
-  private zoomInput(factor: number) {
-    if (!this.placing() || this.overviewOn) return;
-    this.placeZoom = Math.min(PLACE_ZOOM.max, Math.max(PLACE_ZOOM.min, this.placeZoom * factor));
+  /** Is what's in hand something that turns (a decoration)? */
+  private turnable(): boolean {
+    return !!this.bot && !!decorType(this.hud.currentTool);
   }
 
-  /** Bloombot: hold the camera at the distance its mode asks for (close in play, pulled back while placing). */
+  /** E19.2: a quarter turn of the decoration in hand (wheel, + / -, or the pad's bumpers). */
+  private turnBuild(step: number) {
+    if (!this.turnable() || this.cinematic || this.hud.modalOpen) return;
+    this.buildRot = (this.buildRot + (step > 0 ? 1 : 3)) % 4;
+    this.buildKey = '';
+    this.sfx.click();
+  }
+
+  private wheelTurn(factor: number) {
+    const now = performance.now();
+    if (factor === 1 || now - this.wheelAt < WHEEL_TURN_MS) return;
+    this.wheelAt = now;
+    this.turnBuild(factor > 1 ? 1 : -1);
+  }
+
+  /** Bloombot: hold the camera at the close view's distance (E19.2: building no longer pulls it back). */
   private updateBotZoom() {
     const b = this.bot;
     if (!b || this.cinematic) return;
     if (this.overviewOn && b.speed > 0.05) this.overviewOn = false; // walking leaves the overview
     if (this.overviewOn || !b.following) return; // the overview, or a camera-only fly-to, keeps its own zoom
-    const want = this.placing() ? this.placeZoom : BOT_ZOOM;
+    const want = BOT_ZOOM;
     if (Math.abs(this.camera.zoomTarget - want) > 1e-3) this.camera.zoomTo(want);
   }
 
@@ -922,13 +1033,15 @@ export class Game {
   /** Bloombot (G.4): E / A: the current tool on the tile in front (Inspect pulses; build tools build). */
   private botAct() {
     if (!this.bot || this.cinematic || this.paused || this.hud.modalOpen || this.bot.visuals.busy === 'assemble') return;
-    const p = this.frontPick();
+    const aim = this.building() ? this.buildAim() : undefined; // E19.2: build mode acts where the hologram is
+    const p = aim ? aim.p : this.frontPick();
     if (!p || !p.tile) return;
     this.bot.following = true;
     const tool = this.hud.currentTool === 'inspect' ? 'pulse' : this.hud.currentTool;
-    const sc = this.botTileScreen(p.tile);
+    const sc = aim ?? this.botTileScreen(p.tile);
     this.botAnim(this.actAt(p, sc.x, sc.y, tool, false));
     this.botPreviewKey = '';
+    this.buildKey = '';
   }
 
   /** Bloombot (G.5): Q / X: say hello to a cat within reach, wake or inspect what's in front, or read the tile. */
@@ -952,10 +1065,16 @@ export class Game {
       this.rideLift(lift);
       return;
     }
-    const p = this.frontPick();
+    const aim = this.building() ? this.buildAim() : undefined;
+    const p = aim ? aim.p : this.frontPick();
     if (!p || !p.tile) return;
     const occ = this.sim.occupant(p.tile);
-    const sc = this.botTileScreen(p.tile);
+    const sc = aim ?? this.botTileScreen(p.tile);
+    // E19.2: a decoration in front (or aimed at) is picked up into bloombot's hands, to place again (a move)
+    if (this.cozy.decorOf(p.tile.occupantId)) {
+      this.botAnim(this.removeDecorAt(p, sc.x, sc.y, true));
+      return;
+    }
     if (occ) {
       this.botAnim(this.actAt(p, sc.x, sc.y, 'inspect', false));
       return;
@@ -1052,6 +1171,15 @@ export class Game {
       if (!b.goTo(b.pose.roofId, Math.floor(v.x - l.origin[0]), Math.floor(v.z - l.origin[2]), 1, claim)) this.hud.showFail("Bloombot can't reach that cat from here", x, y);
       return;
     }
+    // E19.2: build mode builds where you aim, within reach; bloombot doesn't walk there
+    if (this.building()) {
+      const p = this.pick(x, y);
+      if (!p?.tile) return;
+      if (p.roofId !== b.pose.roofId) this.hud.showFail(TOO_FAR, x, y);
+      else this.botAnim(this.actAt(p, x, y, this.hud.currentTool, false));
+      this.buildKey = '';
+      return;
+    }
     const droneId = this.droneHit(x, y);
     if (droneId) {
       const d = this.sim.state.drones.find((q) => q.id === droneId);
@@ -1099,7 +1227,7 @@ export class Game {
     // What the action covers: a machine's footprint, a build ghost's footprint, or the one tile.
     let rect = { x: p.tile.x, z: p.tile.z, size: 1 };
     if (occ && !this.mergeSel) rect = { x: occ.x, z: occ.z, size: occ.size };
-    else if (tool !== 'inspect' && tool !== 'pulse') {
+    else if (superType(tool) || machineTool(tool)) {
       const st = superType(tool);
       const a = st ? this.sim.supers.anchorFor(st, p.fx, p.fz) : this.sim.build.anchorFor(tool as BuildableType, p.fx, p.fz);
       rect = { x: a.x, z: a.z, size: st ? TIER3[st]!.size : MACHINES[tool as BuildableType].size };
@@ -1121,9 +1249,12 @@ export class Game {
     if (!this.bot) return;
     if (this.bot.lastInput !== this.keyMapShown) {
       this.keyMapShown = this.bot.lastInput;
+      if (this.photo.active) this.photoBar.render(this.photo.state); // its key names follow the device too
       this.hud.setKeyMap(this.bot.lastInput, this.bindings);
     }
-    if (this.cinematic || this.pointerRecent()) return;
+    if (this.cinematic || this.photo.active) return;
+    if (this.updateBuildPreview()) return; // E19.2: build mode aims the hologram itself
+    if (this.pointerRecent()) return;
     const p = this.frontPick();
     const now = performance.now();
     const key = `${this.bot.pose.roofId}:${this.bot.front().x},${this.bot.front().z}|${p?.roofId}:${p?.tile?.x},${p?.tile?.z}|${this.hud.currentTool}|${p?.tile?.ground}|${p?.tile?.bloom}|${this.bot.lastInput}`;
@@ -1449,7 +1580,11 @@ export class Game {
   private onHover(x: number, y: number) {
     this.pointer = { x, y, inside: true };
     this.pointerAt = performance.now();
-    if (this.cinematic) return;
+    if (this.cinematic || this.photo.active) return;
+    if (this.building()) {
+      document.body.style.cursor = '';
+      return; // E19.2: build mode previews from the frame loop (updateBuildPreview), wherever the pointer is
+    }
     if (this.catHit(x, y)) {
       this.overlays.hideFrame();
       this.overlays.hideGhost();
@@ -1493,12 +1628,16 @@ export class Game {
       return;
     }
     const t = p.tile;
+    const dk = decorType(tool);
+    if (dk) return this.previewDecor(p, x, y, dk);
+    if (tool === 'remove') return this.previewRemove(p, x, y);
     const st = superType(tool);
     if (st) {
       // Phase 5 E14: placing a Superstructure Core: footprint ghost, reach, and the whole build's price first.
       const a = this.sim.supers.anchorFor(st, p.fx, p.fz);
-      const chk = this.sim.supers.check(st, p.roofId, a.x, a.z);
       const d = TIER3[st]!;
+      const chk = { ...this.sim.supers.check(st, p.roofId, a.x, a.z) };
+      if (chk.ok && !this.inReach(p.roofId, a.x, a.z, d.size)) Object.assign(chk, { ok: false, reason: TOO_FAR });
       this.overlays.showGhost(p.roofId, a.x, a.z, d.size, chk.ok, 0.3, this.bot ? this.holoShape(st, d.size) : undefined);
       this.overlays.showRadius(this.sim.grid.tilesNear({ roofId: p.roofId, x: a.x, z: a.z, size: d.size }, 2), chk.ok ? 'ok' : 'info');
       const stages = chk.costs.map((c, i) => `${SuperSystem.stageName(i)} ${formatCost(c)}`).join('<br>');
@@ -1509,12 +1648,13 @@ export class Game {
       );
       return;
     }
-    if (tool !== 'inspect' && tool !== 'pulse') {
-      const bt = tool as BuildableType;
+    if (machineTool(tool)) {
+      const bt = tool;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
       const chk = { ...this.sim.build.check(bt, p.roofId, a.x, a.z) };
       const def = MACHINES[bt];
       if (chk.ok && this.cozy.plotUnder(p.roofId, a.x, a.z, def.size)) Object.assign(chk, { ok: false, spotOk: false, reason: PLOT_IN_WAY });
+      if ((chk.ok || chk.spotOk) && !this.inReach(p.roofId, a.x, a.z, def.size)) Object.assign(chk, { ok: false, spotOk: false, reason: TOO_FAR });
       this.overlays.showGhost(p.roofId, a.x, a.z, def.size, chk.ok || chk.spotOk, def.size === 2 ? 0.35 : 0.5, this.bot ? this.holoShape(bt, def.size) : undefined);
       this.overlays.showRadius(this.radiusTiles({ type: bt, roofId: p.roofId, x: a.x, z: a.z, size: def.size }), chk.ok ? 'ok' : 'info');
       this.hud.showTip(
@@ -1526,6 +1666,15 @@ export class Game {
     }
     this.overlays.hideGhost();
     const occ = this.sim.occupant(t);
+    const dec = this.cozy.decorOf(t.occupantId);
+    if (dec) {
+      // E19.2: a decoration: Q picks it up to move it (the remove tool removes it)
+      const o = DECOR_OPTION[dec.kind];
+      this.overlays.showFrame(t.roofId, t.x, t.z, 1, 'info');
+      this.overlays.hideRadius();
+      this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? 'Decoration'}</b>${this.previewFromBot ? `<span class="ok">${this.press('Q')} to pick it up and move it</span>` : 'A decoration'}`);
+      return;
+    }
     if (occ) {
       this.overlays.showFrame(occ.roofId, occ.x, occ.z, occ.size, 'info');
       const ready = occ.type === 'core' && this.landmarkReady(occ);
@@ -1555,6 +1704,166 @@ export class Game {
       action = `<span class="ok">${verb}: ${formatCost(chk.cost)}${fp.length ? ` · restores ${fp.length + 1} tiles` : ''}</span>`;
     } else if (chk.reason && !maxed) action = `<span class="bad">${chk.reason}</span>`;
     this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${action ? '<br>' + action : ''}${this.plotLine(t.roofId, t)}`);
+  }
+
+  // ───────────── E19.2: build mode and decorations ─────────────
+
+  private buildKey = '';
+  private buildAt = 0;
+
+  /** Does the mouse aim builds (over the world, moved lately, and the pad isn't what was used last)? */
+  private mouseAims(): boolean {
+    return this.pointer.inside && this.bot?.lastInput !== 'pad' && performance.now() - this.pointerAt < MOUSE_AIM_MS;
+  }
+
+  /** Where a build is aimed, and where on screen to say so: the pointer's tile, or the tile in front of bloombot. */
+  private buildAim(): { p?: Pick; x: number; y: number } {
+    if (this.mouseAims()) return { p: this.pick(this.pointer.x, this.pointer.y), x: this.pointer.x, y: this.pointer.y };
+    const p = this.frontPick();
+    const sc = p?.tile ? this.botTileScreen(p.tile) : { x: innerWidth / 2, y: innerHeight / 2 };
+    return { p, x: sc.x, y: sc.y };
+  }
+
+  /** Is a footprint within bloombot's reach, on its layer? (Always, without bloombot.) */
+  private inReach(roofId: string, x: number, z: number, size: number): boolean {
+    const b = this.bot;
+    if (!b) return true;
+    if (b.pose.roofId !== roofId) return false;
+    return Math.hypot(b.pose.x - (x + size / 2), b.pose.z - (z + size / 2)) <= DECOR_GEN.reach + (size - 1) / 2;
+  }
+
+  /** Words for turning what's in hand, for the input used last. */
+  private turnHint(): string {
+    if (!this.bot) return '';
+    if (this.bot.lastInput === 'pad') return `${padLabel(this.bindings.pad.prevTool)} / ${padLabel(this.bindings.pad.nextTool)} to turn`;
+    return `wheel or ${keyLabel(this.bindings.keys.zoomOut[0] ?? '')} / ${keyLabel(this.bindings.keys.zoomIn[0] ?? '')} to turn`;
+  }
+
+  /** Build mode's preview, every frame: the hologram where you aim (true while building). */
+  private updateBuildPreview(): boolean {
+    if (!this.building() || this.cinematic || this.hud.modalOpen || this.hud.plotPickerOpen) return false;
+    const b = this.bot!;
+    const { p, x, y } = this.buildAim();
+    const t = p?.tile;
+    const key = `${this.hud.currentTool}|${this.buildRot}|${p?.roofId}:${t?.x},${t?.z}|${t?.ground}|${t?.occupantId}|${Math.round(b.pose.x * 4)},${Math.round(b.pose.z * 4)}|${b.lastInput}|${Math.round(x)},${Math.round(y)}`;
+    const now = performance.now();
+    if (key === this.buildKey && now - this.buildAt < 400) return true;
+    this.buildKey = key;
+    this.buildAt = now;
+    this.previewFromBot = true;
+    try {
+      this.previewAt(p, x, y);
+    } finally {
+      this.previewFromBot = false;
+    }
+    return true;
+  }
+
+  private previewDecor(p: Pick, x: number, y: number, kind: string) {
+    const t = p.tile!;
+    const o = DECOR_OPTION[kind];
+    const why = this.decorProblem(kind, p.roofId, t.x, t.z);
+    this.overlays.hideRadius();
+    this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
+    const how = `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
+    this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${o?.solid ? 'Solid' : 'Walk over it'} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
+  }
+
+  private previewRemove(p: Pick, x: number, y: number) {
+    const t = p.tile!;
+    const d = this.cozy.decorOf(t.occupantId);
+    this.overlays.hideRadius();
+    if (!d) {
+      this.overlays.hideGhost();
+      this.overlays.showFrame(p.roofId, t.x, t.z, 1, 'hover');
+      this.hud.showTip(x, y, '<b>🧹 Remove</b>Aim at a decoration to remove it or pick it up');
+      return;
+    }
+    const o = DECOR_OPTION[d.kind];
+    const far = !this.inReach(p.roofId, t.x, t.z, 1);
+    // the decoration aimed at lights up red: removing it is free and instant
+    this.overlays.showGhost(p.roofId, t.x, t.z, 1, false, 0.4, this.bot ? { kind: 'decor', decor: d.kind, rot: d.rot } : undefined);
+    const how = far ? `<span class="bad">${TOO_FAR}</span>` : `<span class="ok">${this.press('E')} to remove${this.bot ? ` · ${this.press('Q')} to pick it up and move it` : ''}</span>`;
+    this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? d.kind}</b>${how}`);
+  }
+
+  /** Why a decoration in hand can't go here (the tile's rules, reach, and not on top of bloombot if it's solid). */
+  private decorProblem(kind: string, roofId: string, x: number, z: number): string | undefined {
+    const why = this.cozy.canDecorate(kind, roofId, x, z);
+    if (why) return why;
+    if (!this.inReach(roofId, x, z, 1)) return TOO_FAR;
+    const b = this.bot;
+    if (b && DECOR_OPTION[kind]?.solid && b.pose.roofId === roofId && Math.abs(b.pose.x - (x + 0.5)) < 0.5 + BOT.radius && Math.abs(b.pose.z - (z + 0.5)) < 0.5 + BOT.radius) return 'Bloombot is standing there';
+    return undefined;
+  }
+
+  /** Places the decoration in hand on a tile (free); it stays in hand for the next one. */
+  private placeDecorAt(p: Pick, x: number, y: number, kind: string): ActResult {
+    const t = p.tile!;
+    const why = this.decorProblem(kind, p.roofId, t.x, t.z) ?? this.cozy.placeDecor(kind, this.buildRot, p.roofId, t.x, t.z);
+    if (why) {
+      this.hud.showFail(why, x, y);
+      return 'none';
+    }
+    this.chunks.markTile(t);
+    this.sfx.build();
+    this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.2), 8, { up: 1.6, size: 0.04, life: 0.8 });
+    this.buildKey = '';
+    return 'select';
+  }
+
+  /** Removes the decoration on a tile (free, instant); with `pickUp` it goes into bloombot's hands, turned as it was. */
+  private removeDecorAt(p: Pick, x: number, y: number, pickUp: boolean): ActResult {
+    const t = p.tile!;
+    const d = this.cozy.decorOf(t.occupantId);
+    if (!d) {
+      this.hud.showFail('Aim at a decoration', x, y);
+      return 'none';
+    }
+    if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+      this.hud.showFail(TOO_FAR, x, y);
+      return 'none';
+    }
+    this.cozy.removeDecor(d.roofId, d.x, d.z);
+    this.chunks.markTile(t);
+    this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.2), 6, { up: 1.2, size: 0.035, life: 0.6 });
+    const o = DECOR_OPTION[d.kind];
+    if (pickUp && o) {
+      this.buildRot = d.rot;
+      this.selectTool(`decor:${d.kind}`);
+      this.hud.toast(`${o.icon} ${o.name} in hand<small>Aim where it goes and press ${this.hudKey('pulse')}. ${this.hudKey('cancel')} puts it away.</small>`, '', 2.6);
+    } else this.sfx.click();
+    this.buildKey = '';
+    return 'select';
+  }
+
+  /** The decorations of one ground chunk, for the chunk renderer. */
+  private decorInChunk(cx: number, cz: number): Decoration[] {
+    const keys = this.sim.grid.decorInChunk(chunkKey(GROUND, cx, cz));
+    if (!keys.length) return [];
+    return keys.flatMap((k) => this.cozy.decorByKey(k) ?? []);
+  }
+
+  /**
+   * E19.2 dev and perf helper: decorates restored, free ground in the revealed city, every `every`-th tile, cycling
+   * through every decoration and turn (all unlocked); `null` clears them all. Returns how many stand afterwards.
+   */
+  fillDecor(every: number | null = 5): number {
+    const cz = (this.sim.state.cozy ??= {});
+    if (every === null) for (const d of this.cozy.decorations()) this.cozy.removeDecor(d.roofId, d.x, d.z);
+    else {
+      cz.decorUnlocked = DECOR_OPTIONS.filter((o) => !('start' in o.unlock)).map((o) => o.id);
+      let i = 0;
+      let n = 0;
+      for (const id of this.sim.areas.revealed())
+        for (const t of this.sim.areas.tiles(id)) {
+          if (t.ground !== 'restored' || t.occupantId || i++ % Math.max(1, every) !== 0) continue;
+          const o = DECOR_OPTIONS[n % DECOR_OPTIONS.length];
+          if (!this.cozy.placeDecor(o.id, Math.floor(n / DECOR_OPTIONS.length) % 4, GROUND, t.x, t.z)) n++;
+        }
+    }
+    this.chunks.markAll();
+    return this.cozy.decorCount();
   }
 
   // ───────────── E19.1: plots ─────────────
@@ -1687,6 +1996,7 @@ export class Game {
     if (this.clock < this.cozyCheckAt) return;
     this.cozyCheckAt = this.clock + 1;
     for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Look for empty plots in restored ground.</small>`, 'gold', 4.5);
+    for (const o of this.cozy.checkDecorUnlocks()) this.hud.toast(`${o.icon} New decoration: ${o.name}<small>${o.blurb} It’s in the Build tray (${this.hudKey('tray')}), free to place.</small>`, 'gold', 4.5);
     // The picker closes if bloombot wanders off.
     const pp = this.pickerPlot;
     if (pp && this.bot) {
@@ -1741,7 +2051,7 @@ export class Game {
   }
 
   private onClick(x: number, y: number, button: number) {
-    if (button !== 0 || this.cinematic) return;
+    if (button !== 0 || this.cinematic || this.photo.active) return;
     if (this.hud.isUpgradesOpen && window.innerWidth < 760) {
       this.hud.toggleUpgrades(false);
       return;
@@ -1784,9 +2094,16 @@ export class Game {
       return 'none';
     }
     const t = p.tile;
+    const dk = decorType(tool);
+    if (dk) return this.placeDecorAt(p, x, y, dk);
+    if (tool === 'remove') return this.removeDecorAt(p, x, y, false);
     const st = superType(tool);
     if (st) {
       const a = this.sim.supers.anchorFor(st, p.fx, p.fz);
+      if (!this.inReach(p.roofId, a.x, a.z, TIER3[st]!.size)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
       if (this.cozy.plotUnder(p.roofId, a.x, a.z, TIER3[st]!.size)) {
         this.hud.showFail(PLOT_IN_WAY, x, y);
         return 'none';
@@ -1798,9 +2115,13 @@ export class Game {
       }
       return m ? 'build' : 'none';
     }
-    if (tool !== 'inspect' && tool !== 'pulse') {
-      const bt = tool as BuildableType;
+    if (machineTool(tool)) {
+      const bt = tool;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
+      if (!this.inReach(p.roofId, a.x, a.z, MACHINES[bt].size)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
       if (this.cozy.plotUnder(p.roofId, a.x, a.z, MACHINES[bt].size)) {
         this.hud.showFail(PLOT_IN_WAY, x, y);
         return 'none';
@@ -1838,6 +2159,11 @@ export class Game {
       return 'none';
     }
     this.select(undefined);
+    if (this.cozy.decorOf(t.occupantId)) {
+      // E19.2: like a machine's tile, a decoration's isn't pulsed (Q picks it up)
+      this.hud.showFail(this.bot ? `A decoration stands here: ${this.hudKey('interact')} picks it up` : 'A decoration stands here', x, y);
+      return 'none';
+    }
     const ok = this.sim.restoration.pulse(t.id);
     if (hover) this.onHover(x, y);
     return ok ? 'pulse' : 'none';
@@ -2545,7 +2871,7 @@ export class Game {
     });
     b.on('chain.ended', ({ chainId, combo, bonus, total, milestonePct, energy, crossings, areas }) => {
       if (areas >= 3) this.hud.feed(`🌸 Bloom chain ×${combo} swept ${areas} areas`);
-      if (areas >= 6) this.hud.toast(`🌸 A city-wide bloom! ×${combo}<small>It swept across ${areas} areas.</small>`, 'gold', 3);
+      if (areas >= 6 && !potterPace(this.settings)) this.hud.toast(`🌸 A city-wide bloom! ×${combo}<small>It swept across ${areas} areas.</small>`, 'gold', 3);
       this.tileFx.release(`chain${chainId}`);
       if (crossings > 0) this.hud.feed(`📡 Chain crossed ${crossings} Bloom Relay link${crossings > 1 ? 's' : ''}`);
       if (combo < 2) return;
@@ -2553,7 +2879,7 @@ export class Game {
       this.hud.combo(combo, `+${fmt(total)}🌿${energy.gte(1) ? ` +${fmt(energy)}⚡` : ''} earned${ms}`);
       this.hud.feed(`🌸 Bloom chain ×${combo}${bonus.gte(1) ? ` · +${fmt(bonus)}🌿 bonus` : ''}`);
       this.sfx.chainEnd(combo);
-      if (combo >= 5) {
+      if (combo >= 5 && !potterPace(this.settings)) {
         this.hud.toast(`🌸 BLOOM CHAIN ×${combo}!${bonus ? `<small>Chain bonus +${bonus} 🌿${ms}</small>` : ''}`, 'gold', 2.6);
         this.camera.shake(0.04);
       }
@@ -2865,7 +3191,7 @@ export class Game {
   private presentChainEvent(ev: ChainEvent, combo: number) {
     const s = this.sim;
     // Camera follows big chains (setting): glide toward the wave front now and then, never against the player.
-    if (this.settings.followChains && combo >= 20 && !this.cinematic) {
+    if (this.settings.followChains && !potterPace(this.settings) && combo >= 20 && !this.cinematic) {
       const now = performance.now();
       const tr = this.chainSummary.tracks.get(ev.chainId);
       if (tr && this.city && now - this.followAt > 1500 && now - this.lastPanAt > 4000) {
@@ -3271,7 +3597,7 @@ export class Game {
     // City 11.4: drones well outside the view fly by the clock (no per-tick moves); near ones fly for real.
     const view = this.city ? this.groundRect() : undefined;
     this.sim.drones.focus = view ? { x: (view.x0 + view.x1) / 2, z: (view.z0 + view.z1) / 2, radius: Math.hypot(view.x1 - view.x0, view.z1 - view.z0) / 2 + 24 } : undefined;
-    if (!this.paused && !this.hiddenPause && !this.hud.modalOpen) {
+    if (!this.paused && !this.hiddenPause && !this.hud.modalOpen && !this.photo.frozen) {
       if (rawDt > TUNING.maxFrameDt && !this.hiddenAt) this.awayFor(Math.min(rawDt, 30) - TUNING.maxFrameDt); // a hitch
       this.runSim(dt);
     }
@@ -3286,7 +3612,7 @@ export class Game {
     const camP = this.camera.entity.getPosition();
     detailTextures.setCamera(camP.x, camP.y, camP.z);
     this.machines.update(dt, rect);
-    this.tillers.update(this.paused || this.hiddenPause ? 0 : dt);
+    this.tillers.update(this.paused || this.hiddenPause || this.photo.frozen ? 0 : dt);
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.
     if (!this.paused && this.camera.zoom > 0.9) {
@@ -3303,7 +3629,7 @@ export class Game {
       this.placeBrook();
       this.placeBirds();
     }
-    this.drones.update(this.paused || this.hiddenPause ? 0 : dt); // drone personality freezes with the game
+    this.drones.update(this.paused || this.hiddenPause || this.photo.frozen ? 0 : dt); // drone personality freezes with the game
     this.cat.update(dt);
     // Phase 5 E16: fauna by unlock, capped per quality tier ("Fewer particles" = low).
     const eco = this.sim.ecosystem;
@@ -3328,7 +3654,7 @@ export class Game {
     if (!this.cinematic) this.checkCozyUnlocks();
     this.vfx.update(dt);
     // First-tile beacon until the player restores something.
-    if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic) {
+    if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic && !this.photo.active) {
       const tiles = this.sim.progression.tilesFor(HOME);
       const t = tiles.find((x) => x.ground === 'prepared' && !x.occupantId) ?? tiles.find((x) => x.ground === 'polluted' && !x.blocked && !x.occupantId);
       if (t) this.overlays.showBeacon(t.roofId, t.x, t.z);
@@ -3336,6 +3662,7 @@ export class Game {
     this.overlays.update(dt);
     if (this.bot) {
       this.bot.update(this.hiddenPause ? 0 : dt);
+      this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();
       this.minimap?.update(dt, this.bot.pose);

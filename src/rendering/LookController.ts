@@ -62,8 +62,17 @@ export class LookController {
     sun.numCascades = this.lowVfx ? 1 : T.shadowCascades;
     sun.cascadeDistribution = LOOK.cascadeDistribution;
     sun.shadowType = T.softShadows ? pc.SHADOW_PCF5_32F : pc.SHADOW_PCF3_32F;
-    this.post.apply(T, this.app.scene.fog.color);
+    // E19.4.1 (#260): photo mode brings depth of field back (Phase 6 set it aside for play) where post runs.
+    this.post.apply(this.photoDof ? { ...T, dof: true } : T, this.app.scene.fog.color);
     this.applyAtmosphere();
+  }
+
+  /** E19.4.1: depth of field for photo mode (tiers with post-processing only; Low has no post stack). */
+  photoDof = false;
+  setPhotoDof(on: boolean) {
+    if (this.photoDof === on) return;
+    this.photoDof = on;
+    this.setTier(this.tier);
   }
 
   applyAtmosphere() {

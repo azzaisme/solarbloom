@@ -27,6 +27,7 @@ import { drawRoadOverview } from './RoadDebug';
  *   sbDev.tr.speed(4)          every transition plays 4× slower (1 = normal), for tuning
  *   sbDev.tr.stats()           tiles mid-transition (sim) and drawn as transitions (renderer)
  *   sbDev.plots()              E19.1: fill every revealed plot (sbDev.plots('cafe') one option, sbDev.plots(null) clears)
+ *   sbDev.decor(5)             E19.2: decorate every 5th restored free tile in the revealed city (sbDev.decor(null) clears)
  *   sbDev.roads(12)            toggle the City 16 road-network overview, 12 chunks round the camera
  *   sbDev.water(14)            restore the water tiles within 14 tiles of the view (to hear the 3D brook)
  */
@@ -177,6 +178,10 @@ export function installDevTools(game: Game) {
     /** E19.1: restore and fill every plot in the revealed city (round-robin, or one option id); null clears them. */
     plots(only?: string | null) {
       return `${game.fillPlots(only)} plots set`;
+    },
+    /** E19.2: decorate every n-th restored free tile of the revealed city with every decoration in turn; null clears. */
+    decor(every?: number | null) {
+      return `${game.fillDecor(every === undefined ? 5 : every)} decorations stand`;
     },
     /** Drone redesign D03: preview an expression on every drone. */
     face(name?: FaceName) {

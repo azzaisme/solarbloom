@@ -204,12 +204,27 @@ export const TUNING = {
     },
     /** most actors of each kind at once, per quality tier */
     caps: {
-      high: { butterflies: 10, groundBirds: 4, koi: 8, robots: 4, cats: 6, fireflies: 24 },
-      medium: { butterflies: 8, groundBirds: 3, koi: 6, robots: 3, cats: 4, fireflies: 16 },
-      low: { butterflies: 5, groundBirds: 2, koi: 4, robots: 2, cats: 3, fireflies: 10 },
-    } as Record<'low' | 'medium' | 'high', Record<'butterflies' | 'groundBirds' | 'koi' | 'robots' | 'cats' | 'fireflies', number>>,
+      high: { butterflies: 10, groundBirds: 4, koi: 8, robots: 4, cats: 6, fireflies: 24, rabbits: 5, pigeons: 8, ducks: 6, frogs: 5, squirrels: 5 },
+      medium: { butterflies: 8, groundBirds: 3, koi: 6, robots: 3, cats: 4, fireflies: 16, rabbits: 3, pigeons: 5, ducks: 4, frogs: 3, squirrels: 3 },
+      low: { butterflies: 5, groundBirds: 2, koi: 4, robots: 2, cats: 3, fireflies: 10, rabbits: 2, pigeons: 3, ducks: 2, frogs: 2, squirrels: 2 },
+    } as Record<'low' | 'medium' | 'high', Record<'butterflies' | 'groundBirds' | 'koi' | 'robots' | 'cats' | 'fireflies' | 'rabbits' | 'pigeons' | 'ducks' | 'frogs' | 'squirrels', number>>,
     /** sleeping cats: this share of finished machines (seeded by machine id) on restored ground has one */
     cats: { share: 0.3 },
+    /**
+     * E19.3.1 (#257): who moves into a cleared area, by area type (cosmetic only; never a resource). One animal per
+     * `every` matching tiles in view, nearest the view first, up to the tier cap of its species.
+     */
+    locals: {
+      park: ['rabbits'],
+      street: ['pigeons'],
+      plaza: ['pigeons'],
+      canal: ['ducks'],
+      market: ['pigeons'],
+      reservoir: ['frogs', 'ducks'],
+      rooftops: ['pigeons'],
+      grove: ['squirrels', 'rabbits'],
+    } as Record<string, ('rabbits' | 'pigeons' | 'ducks' | 'frogs' | 'squirrels')[]>,
+    localsEvery: 6,
   },
 
   /** Mother Tree: charges from restorations nearby; at full charge releases an area Bloom Pulse. */

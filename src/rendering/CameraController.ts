@@ -36,6 +36,21 @@ export const VIEW: ViewProfile = { farZoom: 0.45, nearZoom: 1.0, farPitch: 42, n
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
+/** E19.4.1: everything photo mode may change about the view, so leaving it puts the view back exactly. */
+export interface CameraSnapshot {
+  target: [number, number, number];
+  goal: [number, number, number];
+  yaw: number;
+  yawGoal: number;
+  zoom: number;
+  zoomGoal: number;
+  minZoom: number;
+  maxZoom: number;
+  pitchOffset: number;
+  follow: number;
+  held: boolean;
+}
+
 export class CameraController {
   readonly entity: pc.Entity;
   readonly target = new pc.Vec3(4, 0, 4);
@@ -61,6 +76,13 @@ export class CameraController {
   private shakeAmp = 0;
   reducedMotion = false;
   private cinematic = false;
+  /**
+   * E19.4.1 (#260): photo mode's own pitch, in degrees on top of the zoom's (positive looks down more). Zero in
+   * play: the play camera's pitch always follows the zoom.
+   */
+  pitchOffset = 0;
+  /** E19.4.1: photo mode holds the view: glides, follows and eased zooms from the game leave it alone. */
+  held = false;
 
   constructor(
     private app: pc.AppBase,
@@ -137,7 +159,7 @@ export class CameraController {
 
   /** Smoothly pans/zooms toward a point; any player pan or zoom takes over immediately. */
   glide(x: number, y: number, z: number, zoom?: number) {
-    if (this.cinematic) return;
+    if (this.cinematic || this.held) return;
     this.anchor = undefined;
     this.goal.set(x, y, z);
     this.clamp();
@@ -150,7 +172,7 @@ export class CameraController {
    * briskly, so the character stays near the middle of the view while it walks.
    */
   track(x: number, y: number, z: number) {
-    if (this.cinematic) return;
+    if (this.cinematic || this.held) return;
     this.anchor = undefined;
     this.goal.set(x, y, z);
     this.clamp();
@@ -159,7 +181,7 @@ export class CameraController {
 
   /** Bloombot: ease to a zoom without moving the view or changing how it follows. */
   zoomTo(zoom: number) {
-    if (this.cinematic) return;
+    if (this.cinematic || this.held) return;
     this.anchor = undefined;
     this.zoomGoal = pc.math.clamp(zoom, this.minZoom, this.maxZoom);
   }
@@ -319,6 +341,21 @@ export class CameraController {
     }, { ease: ease.inOutCubic, done: () => (this.cinematic = false) });
   }
 
+  /** E19.4.1: the view as it is now (photo mode keeps it to put back on the way out). */
+  snapshot(): CameraSnapshot {
+    const v = (p: pc.Vec3): [number, number, number] => [p.x, p.y, p.z];
+    return { target: v(this.target), goal: v(this.goal), yaw: this.yaw, yawGoal: this.yawGoal, zoom: this.zoom, zoomGoal: this.zoomGoal, minZoom: this.minZoom, maxZoom: this.maxZoom, pitchOffset: this.pitchOffset, follow: this.follow, held: this.held };
+  }
+
+  /** E19.4.1: puts a snapshot back, at once (no glide). */
+  restore(s: CameraSnapshot) {
+    this.target.set(...s.target);
+    this.goal.set(...s.goal);
+    Object.assign(this, { yaw: s.yaw, yawGoal: s.yawGoal, zoom: s.zoom, zoomGoal: s.zoomGoal, minZoom: s.minZoom, maxZoom: s.maxZoom, pitchOffset: s.pitchOffset, follow: s.follow, held: s.held });
+    this.anchor = undefined;
+    this.apply();
+  }
+
   reset() {
     this.follow = 12;
     this.anchor = undefined;
@@ -381,6 +418,7 @@ export class CameraController {
     const n = this.nearness();
     const k = smooth(pc.math.clamp((this.zoom - VIEW.nearZoom) / (VIEW.closeZoom - VIEW.nearZoom), 0, 1));
     this.pitch = VIEW.farPitch + (VIEW.nearPitch - VIEW.farPitch) * n + (VIEW.closePitch - VIEW.nearPitch) * k;
+    if (this.pitchOffset) this.pitch = pc.math.clamp(this.pitch + this.pitchOffset, 6, 80);
     this.fov = VIEW.farFov + (VIEW.nearFov - VIEW.farFov) * n + (VIEW.closeFov - VIEW.nearFov) * k;
     this.viewHeight = this.fitHeight() / this.zoom;
     this.dist = this.viewHeight / Math.tan((this.fov * Math.PI) / 360);

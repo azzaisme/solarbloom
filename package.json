@@ -35,7 +35,8 @@
     "shots:look2": "vite build && node tests/e2e/look2-shots.mjs",
     "desktop": "vite build && electron . --windowed",
     "package:deck": "vite build && electron-builder --linux AppImage --x64 --publish never",
-    "shots:plots": "vite build && node tests/e2e/plot-shots.mjs"
+    "shots:plots": "vite build && node tests/e2e/plot-shots.mjs",
+    "shots:decor": "vite build && node tests/e2e/decor-shots.mjs"
   },
   "dependencies": {
     "break_infinity.js": "2.2.0",

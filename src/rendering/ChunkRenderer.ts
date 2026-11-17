@@ -13,6 +13,8 @@ import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { plotsInChunk, type PlotSpot } from '../core/Plots';
 import { drawPlot } from './PlotArt';
+import { drawDecor } from './DecorArt';
+import type { Decoration } from '../core/Decor';
 import { FoliageBuilder, foliageMaterial, treeMesh, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
 import { treeSpot, treeStage } from './TreePlacement';
@@ -723,6 +725,12 @@ export class ChunkRenderer {
   private plotCells = new Set<string>();
   private chunkPlots: { p: PlotSpot; look: string | null }[] = [];
 
+  /**
+   * E19.2 (#255): the decorations standing in a ground chunk, from the game. Drawn into the chunk's own meshes and
+   * model batch like plots, so they cost no extra draw calls and stream with the chunk.
+   */
+  decor?: { inChunk(cx: number, cz: number): readonly Decoration[] };
+
   /** E19.1.5: redraw the chunk holding a plot (its choice or preview changed). */
   markPlot(p: PlotSpot) {
     const t = this.sim.grid.peek(GROUND, p.x, p.z);
@@ -751,11 +759,11 @@ export class ChunkRenderer {
       // one structure over its 2×2 footprint, from its first tile only (the others draw nothing)
       const first = PARK_LAYOUT.props.find((p) => p.prop === 'bandstand')!.at;
       if (Math.floor(x) !== first[0] || Math.floor(z) !== first[1]) return !!MODELS?.has('bandstand');
-      return this.batch.add('bandstand', x + 0.5, y, z + 0.5, 0, 0.58);
+      return this.batch.add('bandstand', x + 0.5, y, z + 0.5, 0, 0.58, 0.58, 0.58, this.neglected);
     }
     const [name, scale, turn] = ChunkRenderer.PROP_MODELS[prop] ?? ChunkRenderer.PROP_MODELS.stump;
     const rot = turn ? Math.floor(dhash(Math.floor(x), Math.floor(z), 211) * 4) * (Math.PI / 2) : 0;
-    return this.batch.add(name, x, y, z, rot, scale);
+    return this.batch.add(name, x, y, z, rot, scale, scale, scale, this.neglected);
   }
 
   private setMesh(holder: pc.Entity | undefined, name: string, mesh: pc.Mesh | undefined, material: pc.Material, shadows: boolean): pc.Entity | undefined {
@@ -927,6 +935,18 @@ export class ChunkRenderer {
         lod: (v.far ? 0 : this.band >= 2 ? 2 : 1) as Lod,
       };
       for (const { p, look } of this.chunkPlots) drawPlot(host, p, look ?? undefined, h + 0.08, !!v.far);
+    }
+    // E19.2: decorations, the same way
+    const decor = this.decor && fog !== 'hidden' ? this.decor.inChunk(v.cx, v.cz) : [];
+    if (decor.length) {
+      b.grey = fb.grey = 0;
+      const host = {
+        add: (type: VPrim, hex: string, p: [number, number, number], sc: [number, number, number] | number, glow?: number) => b.add(type, hex, p, sc, glow),
+        foliage: (g: TreeGeo, x: number, y: number, z: number, rot: number, scale: number) => fb.add(g, x, y, z, rot, scale),
+        model: (name: string, x: number, y: number, z: number, rot: number, sc: number) => !!this.batch?.add(name, x, y, z, rot, sc),
+        lod: (v.far ? 0 : this.band >= 2 ? 2 : 1) as Lod,
+      };
+      for (const d of decor) drawDecor(host, d.kind, d.x + 0.5, h + 0.08, d.z + 0.5, d.rot, !!v.far);
     }
     this.fb = fb;
     this.sink = b;
@@ -1137,6 +1157,10 @@ export class ChunkRenderer {
 
   /** Look of the chunk being built: prop level 0–4, and whether it's the park. */
   private level = 0;
+  /** E20.6 (#289): props look neglected until their area wakes (the park from its second stage). */
+  private get neglected(): boolean {
+    return this.level < 2;
+  }
   private inPark = false;
   /** Phase 5 E16: the obstacle tile shown as this chunk's local landmark (cleared areas only). */
   private localMark?: string;
