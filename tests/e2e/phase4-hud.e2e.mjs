@@ -26,7 +26,11 @@ try {
   for (const [name, w, h] of SIZES) {
     const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
     await page.goto('http://localhost:4198/');
-    await page.evaluate(() => localStorage.clear());
+    // E20.7 (#290): calm is the default; NUMBERS=1 runs the same checks with "Show numbers" on.
+    await page.evaluate((numbers) => {
+      localStorage.clear();
+      if (numbers) localStorage.setItem('solarbloom.settings', JSON.stringify({ showNumbers: true }));
+    }, !!process.env.NUMBERS);
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom);
     await page.waitForTimeout(1200);

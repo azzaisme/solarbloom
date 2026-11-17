@@ -16,7 +16,11 @@ try {
   for (const [name, w, h] of [['phone', 390, 844], ['desktop', 1280, 800]]) {
     const page = await browser.newPage({ viewport: { width: w, height: h } });
     await page.goto('http://localhost:4197/');
-    await page.evaluate(() => localStorage.clear());
+    // E20.7 (#290): calm is the default; NUMBERS=1 runs the same checks with "Show numbers" on.
+    await page.evaluate((numbers) => {
+      localStorage.clear();
+      if (numbers) localStorage.setItem('solarbloom.settings', JSON.stringify({ showNumbers: true }));
+    }, !!process.env.NUMBERS);
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom);
     if (await page.locator('#introGo').isVisible()) await page.click('#introGo');

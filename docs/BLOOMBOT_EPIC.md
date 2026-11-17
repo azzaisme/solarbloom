@@ -87,7 +87,7 @@ is the walkable or buildable tile one step ahead along bloombot's facing.
 
 - **New, from the mock:** a minimap (bottom left, north up, bloombot's arrow), a backpack (unlocked plot options,
   decorations and discoveries) and objectives worded by district, with a progress bar.
-- **Style:** the default stays Look 5 dark glass (#107). The mock's light panels become the calm HUD option (#261).
+- **Style:** Look 5 dark glass (#107). The calm HUD (#261) is the default since E20.7 (#290): same glass, fewer numbers ("Show numbers" in Settings brings them back). The mock's light panels were not used.
 - Every panel shows controller prompts when a gamepad was the last input (#242).
 
 ## 7. Controls
@@ -107,6 +107,7 @@ is the walkable or buildable tile one step ahead along bloombot's facing.
 | Zoom (placement mode only) | Mouse wheel, + / - | Right stick up / down | wheel, + / - |
 | Turn the view | Right-button drag | Right stick left / right | (none) |
 | Recentre the view | C | Right stick click | (none) |
+| Photo mode (#260) | O | (none: no free button; Settings › Photo mode, or bind one) | (none) |
 | Overview | M | View | (none) |
 | Settings / pause | P | Menu | P |
 | Bloom Frenzy | R | (to agree) | Q |
