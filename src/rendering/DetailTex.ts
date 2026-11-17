@@ -7,7 +7,8 @@ import * as pc from 'playcanvas';
  * not per-mesh UVs. The chunk ground, props and foliage stay merged vertex-coloured meshes (one draw call per
  * chunk), and a shader chunk on the shared material multiplies in fine detail picked by the surface itself:
  *
- *  - which layer: from the vertex colour (green → grass, low saturation → stone, anything else → generic grain),
+ *  - which layer: from the vertex colour (green → grass, low saturation → stone, anything else → generic grain;
+ *    very dark greys and cool cyans, i.e. glass, windows and water, get none),
  *    or forced per material (`mat(hex, { detail: 'metal' })`);
  *  - where: projected on the dominant world axis of the normal (one fetch per layer, no UVs needed), at two
  *    scales mixed so nothing visibly repeats over a 10×10 area;
@@ -165,7 +166,10 @@ void sbDetailSetup(vec3 col, vec3 n) {
 	float sat = (mx - mn) / max(mx, 0.001);
 	float green = smoothstep(0.02, 0.12, col.g - max(col.r, col.b) * 0.9) * step(0.12, sat);
 	float stone = (1.0 - green) * (1.0 - smoothstep(0.12, 0.3, sat));
-	sbW = mix(vec3(stone, green, max(0.0, 1.0 - stone - green)), uDetailForce.xyz, uDetailForce.w);
+	// glass and windows stay smooth: very dark greys (window bands, dead glass) and cool cyans (clear glass, water)
+	float glass = max(1.0 - smoothstep(0.09, 0.2, mx), smoothstep(0.12, 0.3, col.b - col.r) * step(col.r, col.g));
+	vec3 sbAuto = vec3(stone, green, max(0.0, 1.0 - stone - green)) * (1.0 - glass);
+	sbW = mix(sbAuto, uDetailForce.xyz, uDetailForce.w);
 	float d = distance(uDetailCam, p);
 	sbK = 1.0 - smoothstep(uDetailParams.z, uDetailParams.w, d);
 }
@@ -224,8 +228,8 @@ const FORCE: Record<DetailLayer, [number, number, number, number]> = {
 /** Quality-tier settings: strength of albedo and normal detail, and the distance band it fades over. */
 const TIER = {
   low: [0.55, 0, 9, 20],
-  medium: [0.8, 0.5, 14, 32],
-  high: [0.9, 0.7, 18, 45],
+  medium: [0.8, 0.3, 14, 32],
+  high: [0.9, 0.4, 18, 45],
 } as const;
 export type DetailTier = keyof typeof TIER;
 

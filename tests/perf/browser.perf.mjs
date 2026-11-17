@@ -63,8 +63,10 @@ const LIMITS = {
   saveStepMs: 16, // each main-thread step of an autosave (serialize, base64, storage write) fits in a frame
   catchUpSimMs: 16, // City 06.5: catching up 5 minutes away never spends more than this on simulation in one frame
   // Look 3.17: triangle budget for the heaviest loaded chunk (ground + props + foliage), High tier; Medium and
-  // Low thin grass, flowers and clutter further (see docs/art/surfaces.md).
-  chunkTris: 200000,
+  // Low thin grass, flowers and clutter further (see docs/art/surfaces.md). Raised from 200k to 450k (#144, Nov
+  // 2026) for the desktop target: leafy trees and dense beds (d2e3efc) put the heaviest chunk at 319k (real GPU,
+  // 150 areas) to ~420k (a fully lush park, SwiftShader).
+  chunkTris: 450000,
 };
 
 const PORT = Number(process.env.PORT ?? 4183);
