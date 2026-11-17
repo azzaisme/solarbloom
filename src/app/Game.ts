@@ -98,6 +98,8 @@ const WHEEL_TURN_MS = 140;
 const BOT_MAX_ZOOM = 4.2;
 const BOT_REACH = 1.6;
 /** Bloombot is the game; `?cursor=1` keeps the old click-to-act play for tests that drive tiles directly. */
+/** E21: the rule set a new game starts with (the Old City, unless `?rules=classic`). */
+const newGameRules = () => (typeof location !== 'undefined' && new URLSearchParams(location.search).get('rules') === 'classic' ? 'classic' : 'oldcity');
 const botMode = () => typeof location === 'undefined' || new URLSearchParams(location.search).get('cursor') !== '1';
 type ActResult = 'pulse' | 'build' | 'select' | 'wake' | 'none';
 
@@ -225,7 +227,8 @@ export class Game {
   constructor(canvas: HTMLCanvasElement, lr: LoadResult = new SaveService().loadResult()) {
     this.settings = loadSettings();
     const loaded = lr.state;
-    const state = loaded ?? createInitialState();
+    // E21: a new game plays the Old City; `?rules=classic` (dev) starts a classic one. A loaded save keeps its own rules.
+    const state = loaded ?? createInitialState(undefined, newGameRules());
     this.sim = new Sim(state, this.bus);
     // Phase 4 E01: time away since the last save earns bounded offline progress (before anything renders).
     // A clock that went backwards earns nothing; the result is saved right away so a reload can't count it twice.

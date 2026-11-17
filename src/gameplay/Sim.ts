@@ -1,11 +1,11 @@
-import { machinesStamp } from '../core/GameState';
+import { machinesStamp, rulesOf } from '../core/GameState';
 import { decorOccupant, parseDecorKey } from '../core/Decor';
 import { EventBus } from '../app/EventBus';
 import { Economy } from '../core/Economy';
 import { Grid } from '../core/Grid';
 import { hasGrowth, unpackChunk } from '../core/TilePack';
 import { Rng } from '../core/Rng';
-import type { GameState, MachineData, TileData } from '../core/types';
+import type { GameState, MachineData, Rules, TileData } from '../core/types';
 import { BloomChainSystem } from './BloomChainSystem';
 import { BuildSystem } from './BuildSystem';
 import { CanalNetwork } from './CanalNetwork';
@@ -154,6 +154,16 @@ export class Sim {
 
   get time() {
     return this.state.time;
+  }
+
+  /** E21: the rule set, from the state (never from the URL). */
+  get rules(): Rules {
+    return rulesOf(this.state);
+  }
+
+  /** E21: playing under old-city rules? */
+  get oldCity(): boolean {
+    return this.state.rules === 'oldcity';
   }
 
   newId(prefix: string) {
