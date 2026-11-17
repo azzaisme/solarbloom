@@ -111,10 +111,15 @@ export const LOOK = {
    * bloom, SSAO or depth of field. Fauna caps per tier live in tuning.ts (E16).
    */
   tiers: {
-    low: { post: false, samples: 1, shadowRes: 1024, softShadows: false, bloom: false, ssao: false, dof: false, rim: true },
-    medium: { post: true, samples: 2, shadowRes: 2048, softShadows: false, bloom: true, ssao: false, dof: false, rim: true },
-    high: { post: true, samples: 4, shadowRes: 2048, softShadows: true, bloom: true, ssao: true, dof: false, rim: true },
+    low: { post: false, samples: 1, shadowRes: 1024, shadowCascades: 1, softShadows: false, bloom: false, ssao: false, dof: false, rim: true },
+    medium: { post: true, samples: 2, shadowRes: 2048, shadowCascades: 2, softShadows: false, bloom: true, ssao: false, dof: false, rim: true },
+    high: { post: true, samples: 4, shadowRes: 4096, shadowCascades: 3, softShadows: true, bloom: true, ssao: true, dof: false, rim: true },
   } satisfies Record<GfxTier, TierSpec>,
+  /**
+   * #156: how the sun's shadow cascades split the shadow distance, 0 (even) … 1 (logarithmic: most detail near the
+   * camera). The skyline and sky are unlit and cast no shadows, so the cascades only cover the playable terrace.
+   */
+  cascadeDistribution: 0.6,
 };
 
 export interface TierSpec {
@@ -122,7 +127,13 @@ export interface TierSpec {
   post: boolean;
   /** MSAA samples of the HDR scene target */
   samples: number;
+  /**
+   * Size of the sun's whole shadow map. With 2+ cascades PlayCanvas packs them into a 2×2 atlas, so each cascade
+   * gets half this per side (High: 3 × 2048²).
+   */
   shadowRes: number;
+  /** #156: sun shadow cascades, so mid-distance objects keep shadows without softening the near ones */
+  shadowCascades: number;
   /** PCF5 (softer penumbra) instead of PCF3 */
   softShadows: boolean;
   bloom: boolean;

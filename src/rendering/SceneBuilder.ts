@@ -44,6 +44,7 @@ export class SceneBuilder {
       castShadows: true,
       shadowResolution: 2048,
       shadowDistance: 45,
+      // Cascades and resolution follow the graphics tier (LookController.setTier).
       numCascades: 1,
       shadowType: pc.SHADOW_PCF3_32F,
     });
