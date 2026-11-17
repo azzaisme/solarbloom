@@ -4,7 +4,7 @@ import type { TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
 import { WATER } from './Water';
-import { catSpots, fountainPond, hash01, idHash, supersIn, tilesIn, wanderStop, type Rect } from './FaunaPlan';
+import { catSpots, fountainPond, hash01, idHash, LOCAL_SPECIES, localSlots, supersIn, tilesIn, visitorSlots, wanderStop, type LocalSpecies, type Rect, type VisitorKind } from './FaunaPlan';
 import { mat, PALETTE } from './Materials';
 import { assignBatch, group, shape, vshape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
@@ -24,7 +24,9 @@ import { SLAB_TOP } from './SceneBuilder';
  * `make*` with the loaded model and keep the returned parts (root, plus the named moving pieces).
  */
 
-type Kind = 'koi' | 'robots' | 'groundBirds' | 'cats' | 'fireflies';
+type Kind = 'koi' | 'robots' | 'groundBirds' | 'cats' | 'fireflies' | LocalSpecies;
+const KINDS: readonly Kind[] = ['koi', 'robots', 'groundBirds', 'cats', 'fireflies', ...LOCAL_SPECIES];
+const perKind = <T,>(v: () => T) => Object.fromEntries(KINDS.map((k) => [k, v()])) as Record<Kind, T>;
 
 interface Actor {
   root: pc.Entity;
@@ -64,13 +66,13 @@ const COATS = [
 
 export class Fauna {
   private root: pc.Entity;
-  private pools: Record<Kind, Actor[]> = { koi: [], robots: [], groundBirds: [], cats: [], fireflies: [] };
-  private batch: Record<Kind, number> = { koi: -1, robots: -1, groundBirds: -1, cats: -1, fireflies: -1 };
+  private pools: Record<Kind, Actor[]> = perKind<Actor[]>(() => []);
+  private batch: Record<Kind, number> = perKind(() => -1);
   private time = 0;
   private replanIn = 0;
   private seed: number;
   /** actors in use, per kind (perf readout) */
-  readonly active: Record<Kind, number> = { koi: 0, robots: 0, groundBirds: 0, cats: 0, fireflies: 0 };
+  readonly active: Record<Kind, number> = perKind(() => 0);
 
   constructor(
     private sim: Sim,
@@ -143,6 +145,77 @@ export class Fauna {
     return this.actor(root, [head], 'groundBirds');
   }
 
+  /**
+   * E19.3.1 (#257): an animal that moves into a cleared area. Primitive placeholders at gameplay scale, in the same
+   * style as the songbird; parts[0] is the piece that animates (the head, or the body for a frog).
+   */
+  private makeLocal(kind: LocalSpecies, i: number): Actor {
+    const root = group(this.root, kind);
+    const body = group(root, 'body');
+    const F = PALETTE.fauna;
+    const eye = (p: pc.Entity, x: number, y: number, z: number, s = 0.008) => {
+      for (const side of [-1, 1]) vshape(p, 'sphere', F.eye, { pos: [side * x, y, z], scale: s });
+    };
+    switch (kind) {
+      case 'rabbits': {
+        const [fur, tail] = F.rabbit;
+        body.setLocalScale(1.5, 1.5, 1.5);
+        vshape(body, 'sphere', fur, { pos: [0, 0.05, 0], scale: [0.07, 0.065, 0.1] });
+        const head = group(body, 'head', [0, 0.09, 0.06]);
+        vshape(head, 'sphere', fur, { scale: [0.05, 0.05, 0.055] });
+        for (const s of [-1, 1]) vshape(head, 'capsule', fur, { pos: [s * 0.015, 0.05, -0.01], scale: [0.012, 0.05, 0.008], rot: [-15, 0, s * 8] });
+        eye(head, 0.02, 0.01, 0.022);
+        vshape(body, 'sphere', tail, { pos: [0, 0.06, -0.055], scale: 0.025 });
+        return this.actor(root, [body, head], kind);
+      }
+      case 'pigeons': {
+        const [grey, neck] = F.pigeon;
+        body.setLocalScale(1.6, 1.6, 1.6);
+        vshape(body, 'sphere', grey, { pos: [0, 0.045, 0], scale: [0.055, 0.05, 0.08] });
+        const head = group(body, 'head', [0, 0.08, 0.04]);
+        vshape(head, 'sphere', neck, { pos: [0, -0.015, -0.005], scale: [0.035, 0.03, 0.035] });
+        vshape(head, 'sphere', grey, { scale: 0.032 });
+        vshape(head, 'cone', F.beak, { pos: [0, 0, 0.025], scale: [0.008, 0.016, 0.008], rot: [90, 0, 0] });
+        vshape(body, 'box', grey, { pos: [0, 0.05, -0.065], scale: [0.03, 0.008, 0.045], rot: [-15, 0, 0] });
+        return this.actor(root, [head], kind);
+      }
+      case 'ducks': {
+        const [brown, green] = F.duck;
+        body.setLocalScale(1.6, 1.6, 1.6);
+        const col = i % 2 ? brown : green;
+        vshape(body, 'sphere', brown, { pos: [0, 0.025, 0], scale: [0.065, 0.04, 0.1] });
+        const head = group(body, 'head', [0, 0.075, 0.06]);
+        vshape(head, 'sphere', col, { scale: 0.035 });
+        vshape(head, 'box', F.duckBill, { pos: [0, -0.005, 0.03], scale: [0.02, 0.008, 0.03] });
+        eye(head, 0.018, 0.008, 0.012, 0.006);
+        return this.actor(root, [head], kind);
+      }
+      case 'frogs': {
+        const [skin, belly] = F.frog;
+        body.setLocalScale(1.3, 1.3, 1.3);
+        vshape(body, 'sphere', skin, { pos: [0, 0.025, 0], scale: [0.05, 0.03, 0.055] });
+        vshape(body, 'sphere', belly, { pos: [0, 0.018, 0.012], scale: [0.04, 0.02, 0.04] });
+        for (const s of [-1, 1]) vshape(body, 'sphere', skin, { pos: [s * 0.02, 0.05, 0.025], scale: 0.015 });
+        eye(body, 0.02, 0.058, 0.032, 0.007);
+        for (const s of [-1, 1]) vshape(body, 'sphere', skin, { pos: [s * 0.045, 0.012, -0.02], scale: [0.02, 0.012, 0.035] });
+        return this.actor(root, [body], kind);
+      }
+      case 'squirrels': {
+        const [fur, belly] = F.squirrel;
+        body.setLocalScale(1.5, 1.5, 1.5);
+        vshape(body, 'sphere', fur, { pos: [0, 0.045, 0], scale: [0.045, 0.05, 0.07] });
+        vshape(body, 'sphere', belly, { pos: [0, 0.04, 0.02], scale: [0.03, 0.035, 0.04] });
+        const head = group(body, 'head', [0, 0.085, 0.045]);
+        vshape(head, 'sphere', fur, { scale: 0.035 });
+        for (const s of [-1, 1]) vshape(head, 'cone', fur, { pos: [s * 0.015, 0.03, -0.005], scale: [0.01, 0.018, 0.01] });
+        eye(head, 0.015, 0.008, 0.022, 0.006);
+        const tail = group(body, 'tail', [0, 0.05, -0.05]);
+        vshape(tail, 'capsule', fur, { pos: [0, 0.05, -0.02], scale: [0.03, 0.09, 0.03], rot: [-25, 0, 0] });
+        return this.actor(root, [head, tail], kind);
+      }
+    }
+  }
+
   /** A sleeping cat: curled flat on its side, about half a Lucky Cat's height, no collar, coin or raised paw. */
   private makeCat(i: number): Actor {
     const root = group(this.root, 'sleepingCat');
@@ -204,7 +277,7 @@ export class Fauna {
     const p = this.pools[kind];
     while (p.length < n) {
       const i = p.length;
-      const a = kind === 'koi' ? this.makeKoi(i) : kind === 'robots' ? this.makeRobot(i) : kind === 'groundBirds' ? this.makeBird(i) : kind === 'cats' ? this.makeCat(i) : this.makeFirefly();
+      const a = kind === 'koi' ? this.makeKoi(i) : kind === 'robots' ? this.makeRobot(i) : kind === 'groundBirds' ? this.makeBird(i) : kind === 'cats' ? this.makeCat(i) : kind === 'fireflies' ? this.makeFirefly() : this.makeLocal(kind, i);
       a.phase = i * 1.37;
       p.push(a);
     }
@@ -262,6 +335,9 @@ export class Fauna {
     const cx = (rect.x0 + rect.x1) / 2;
     const cz = (rect.z0 + rect.z1) / 2;
     const near = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz);
+    // E19.3.2 (#258): visitors to the player's chosen plots go first in their kind's list (within its cap).
+    const visitors = visitorSlots(s, rect);
+    const vis = (k: VisitorKind) => visitors.filter((v) => v.kind === k).map((v) => ({ key: v.key, home: v.home, y: v.water ? y - WATER.drop + 0.01 : y }));
 
     // Koi: a few circle the flowing fountain; the rest swim the restored water tiles in view.
     const koi: { key: string; home: { x: number; z: number }; y: number }[] = [];
@@ -288,13 +364,13 @@ export class Fauna {
       const lawn = tilesIn(s, rect, (t) => t.ground === 'restored' && t.bloom >= 2 && !t.occupantId && !t.blocked && (t.feature ?? 'lawn') === 'lawn', 120).sort(near);
       for (let i = 0; i < lawn.length; i += 5) birds.push({ key: `b:${lawn[i].x}:${lawn[i].z}`, home: { x: lawn[i].x + 0.5, z: lawn[i].z + 0.5 }, y });
     }
-    this.assign('groundBirds', birds, opts);
+    this.assign('groundBirds', [...vis('groundBirds'), ...birds], opts);
 
     // Sleeping cats: curled up inside some machines' footprints (never where a Lucky Cat could be).
     const cap = TUNING.ecosystem.caps[opts.quality].cats;
     this.assign(
       'cats',
-      catSpots(s, rect, cap).map((c) => ({ key: `c:${c.machineId}`, home: { x: c.x, z: c.z }, y, rot: c.rot })),
+      [...vis('cats'), ...catSpots(s, rect, cap).map((c) => ({ key: `c:${c.machineId}`, home: { x: c.x, z: c.z }, y, rot: c.rot }))],
       opts,
     );
     // The coat follows the slot, not the pool index: re-tint by rebuilding is costly, so cats keep their pooled coat.
@@ -307,6 +383,15 @@ export class Fauna {
       for (let i = 0; i < lush.length; i += 4) flies.push({ key: `f:${lush[i].x}:${lush[i].z}`, home: { x: lush[i].x + 0.5, z: lush[i].z + 0.5 }, y: y + 0.35 });
     }
     this.assign('fireflies', flies, opts);
+
+    // E19.3.1 (#257): animals that moved into cleared areas (by area type), nearest the view first.
+    const locals = localSlots(s, rect);
+    for (const sp of LOCAL_SPECIES)
+      this.assign(
+        sp,
+        [...vis(sp), ...locals.filter((l) => l.species === sp).map((l) => ({ key: l.key, home: l.home, y: l.water ? y - WATER.drop + 0.01 : y }))],
+        opts,
+      );
   }
 
   // ─────────────── per frame ───────────────
@@ -361,6 +446,7 @@ export class Fauna {
       a.parts[0].setLocalScale(CAT_S, CAT_S * b, CAT_S);
       a.parts[1].setLocalEulerAngles(0, Math.sin(t * 0.7 + a.phase) * 6, 0);
     }
+    if (!rm) this.updateLocals(dt, t, okWalk, okWater);
     for (const a of this.pools.fireflies) {
       if (!a.used) continue;
       const k = a.leg;
@@ -371,6 +457,31 @@ export class Fauna {
       const glow = 0.6 + 0.4 * Math.max(0, Math.sin(t * 2.2 + k * 1.7));
       a.root.setLocalScale(glow, glow, glow);
     }
+  }
+
+  /** E19.3.1: each species moves its own way: ducks swim and dabble, rabbits and frogs hop, pigeons peck, squirrels dart. */
+  private updateLocals(dt: number, t: number, okWalk: (x: number, z: number) => boolean, okWater: (x: number, z: number) => boolean) {
+    for (const sp of LOCAL_SPECIES)
+      for (const a of this.pools[sp]) {
+        if (!a.used) continue;
+        if (sp === 'ducks') {
+          const moving = this.walk(a, dt, 0.3, 2, okWater, 3);
+          const p = a.root.getPosition();
+          a.root.setPosition(p.x, a.y + Math.sin(t * 2 + a.phase) * 0.006, p.z);
+          a.parts[0].setLocalEulerAngles(moving ? 0 : Math.max(0, Math.sin(t * 1.5 + a.phase)) * 70, 0, 0);
+          continue;
+        }
+        const speed = sp === 'squirrels' ? 1.6 : sp === 'rabbits' ? 1.1 : sp === 'frogs' ? 0.8 : 0.5;
+        const rest = sp === 'frogs' ? 5 : sp === 'squirrels' ? 1.2 : 2.2;
+        const moving = this.walk(a, dt, speed, sp === 'frogs' ? 1 : 2.5, okWalk, rest);
+        const hops = sp === 'rabbits' ? 3 : sp === 'frogs' ? 2 : sp === 'squirrels' ? 6 : 0;
+        const hop = moving && hops ? Math.abs(Math.sin(a.t * Math.PI * hops)) * (sp === 'squirrels' ? 0.03 : 0.07) : 0;
+        const p = a.root.getPosition();
+        a.root.setPosition(p.x, a.y + hop, p.z);
+        if (sp === 'pigeons') a.parts[0].setLocalEulerAngles(moving ? Math.sin(t * 12 + a.phase) * 20 : Math.max(0, Math.sin(t * 4 + a.phase)) * 50, 0, 0);
+        else if (sp === 'squirrels') a.parts[1].setLocalEulerAngles(Math.sin(t * 3 + a.phase) * 12, 0, 0);
+        else if (sp === 'rabbits' && !moving) a.parts[1].setLocalEulerAngles(0, Math.sin(t * 0.8 + a.phase) * 25, 0);
+      }
   }
 
   private tile(x: number, z: number): TileData | undefined {
