@@ -133,6 +133,38 @@ function mergeParts(device: pc.GraphicsDevice, parts: ModelPart[]): ModelPart[] 
   return out;
 }
 
+const MAP_SLOTS = ['diffuseMap', 'normalMap', 'aoMap', 'emissiveMap', 'glossMap', 'metalnessMap', 'opacityMap', 'specularMap'] as const;
+
+/**
+ * City 15.4: a model's materials all sample one atlas, but the loader gives each material its own copy of it on the
+ * GPU (the pollinator garden held 14 copies of two 1024² images). Points every material at the first copy of each
+ * image and frees the rest: across the model set that was about 700 MB of video memory.
+ */
+function shareTextures(container: pc.ContainerResource) {
+  const kept = new Map<string, pc.Texture>();
+  const spare = new Set<pc.Texture>();
+  for (const asset of container.materials ?? []) {
+    const m = asset.resource as pc.StandardMaterial | undefined;
+    if (!m) continue;
+    let changed = false;
+    for (const slot of MAP_SLOTS) {
+      const t = m[slot];
+      if (!t) continue;
+      const key = `${texId(t)}|${t.format}|${t.addressU}|${t.addressV}|${t.minFilter}|${t.magFilter}|${t.mipmaps}`;
+      const first = kept.get(key);
+      if (!first) kept.set(key, t);
+      else if (first !== t) {
+        m[slot] = first;
+        spare.add(t);
+        changed = true;
+      }
+    }
+    if (changed) m.update();
+  }
+  for (const t of kept.values()) spare.delete(t);
+  for (const t of spare) t.destroy();
+}
+
 function partsOf(container: pc.ContainerResource): ModelPart[] {
   const root = container.instantiateRenderEntity();
   root.syncHierarchy();
@@ -184,6 +216,7 @@ export class ModelLibrary {
         else {
           const m: Loaded = this.models.get(name) ?? { parts: [[], []], merged: [undefined, undefined] };
           const res = asset.resource as pc.ContainerResource;
+          shareTextures(res);
           if (far) {
             m.far = res;
             m.parts[1] = partsOf(res);
@@ -257,6 +290,29 @@ export class ModelLibrary {
     if (!res) return undefined;
     const e = res.instantiateRenderEntity({ castShadows: shadows, receiveShadows: true });
     e.name = `model-${name}`;
+    return e;
+  }
+
+  /**
+   * City 15.4: a fresh entity of the model with its plain parts merged (see `batchParts`): one or two draw calls
+   * instead of one per palette material (up to 14). For models that are placed whole (machines, landmarks); models
+   * with moving parts found by name use `instantiate`.
+   */
+  instantiateMerged(name: string, shadows = true): pc.Entity | undefined {
+    const parts = this.batchParts(name);
+    if (!parts.length) return undefined;
+    const e = new pc.Entity(`model-${name}`);
+    const q = new pc.Quat();
+    for (const part of parts) {
+      const c = new pc.Entity(part.node);
+      c.addComponent('render', { meshInstances: [new pc.MeshInstance(part.mesh, part.material)], castShadows: shadows, receiveShadows: true });
+      if (part.local !== IDENTITY) {
+        c.setLocalPosition(part.local.getTranslation());
+        c.setLocalRotation(q.setFromMat4(part.local));
+        c.setLocalScale(part.local.getScale());
+      }
+      e.addChild(c);
+    }
     return e;
   }
 }

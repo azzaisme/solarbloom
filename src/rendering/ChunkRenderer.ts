@@ -631,13 +631,20 @@ export class ChunkRenderer {
     dirty.sort((a, b) => dist(a, focus) - dist(b, focus));
     // Rebuild nearest first, within a time budget (at least one per frame so streaming always progresses).
     const t0 = performance.now();
+    const over = () => performance.now() - t0 > this.budgetMs;
+    // City 15.4: the camera left the chunk being built (it was dropped above): abandon the job.
+    if (this.job && this.views.get(this.job.v.key) !== this.job.v) this.job = undefined;
     let n = 0;
-    for (const v of dirty) {
-      if (n >= this.budget || (n > 0 && performance.now() - t0 > this.budgetMs)) break;
-      if (v.dirty) this.buildGround(v);
-      if (v.fogDirty && !v.fading && !v.fogHold) this.buildFog(v);
-      n++;
-    }
+    if (!this.job || this.runJob(over))
+      for (const v of dirty) {
+        if (n >= this.budget || (n > 0 && over())) break;
+        if (v.dirty) {
+          this.job = { v, steps: this.buildGround(v) };
+          if (!this.runJob(over)) break; // carries on next frame
+        }
+        if (v.fogDirty && !v.fading && !v.fogHold) this.buildFog(v);
+        n++;
+      }
     // Gentle drift of the fog sheets.
     if (!this.reducedMotion)
       for (const v of this.views.values()) if (v.fog) v.fog.setLocalPosition(0, Math.sin(this.time * 0.4 + v.cx * 0.7 + v.cz) * 0.04, 0);
@@ -726,7 +733,27 @@ export class ChunkRenderer {
 
   // ───────────── ground mesh ─────────────
 
-  private buildGround(v: ChunkView) {
+  /**
+   * City 15.4: a chunk's ground is built as a resumable job, a tile at a time. `update` runs it for a few
+   * milliseconds a frame (one chunk at near zoom can take far longer than a frame when its trees and props are
+   * new), and abandons it if the camera has left and the chunk was dropped. Nothing is shown until the last step,
+   * which swaps all of the chunk's meshes in at once. One job at a time: the build's working state lives on `this`.
+   */
+  private job?: { v: ChunkView; steps: Generator<void> };
+
+  /** Runs the job until it finishes (true) or the frame's budget is spent (false). Always makes some progress. */
+  private runJob(over: () => boolean): boolean {
+    const job = this.job!;
+    for (;;) {
+      if (job.steps.next().done) {
+        this.job = undefined;
+        return true;
+      }
+      if (over()) return false;
+    }
+  }
+
+  private *buildGround(v: ChunkView): Generator<void> {
     v.dirty = false;
     const s = this.sim;
     const c = s.grid.chunkAt(GROUND, v.cx, v.cz);
@@ -811,7 +838,9 @@ export class ChunkRenderer {
         this.poolBanks(b, t, h);
         if (t.ground === 'restored' && fog !== 'hidden') this.poolSurface(pool, t, h);
       }
+      yield; // a tile done: `update` decides whether this frame has time for the next
     }
+    // From here to the end is one step: buildings, then every mesh of the chunk swaps in together.
     v.water = this.setMesh(v.water, `water-${v.key}`, this.poolMesh(pool), poolMaterial(), false);
     if (this.inPark && !v.far) {
       b.grey = fb.grey = 0;

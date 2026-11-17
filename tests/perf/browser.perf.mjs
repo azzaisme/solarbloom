@@ -8,6 +8,9 @@
 //   PERF_JSON=out.json ...                            (also write the numbers to a file)
 //   PERF_TIERS=low,high ...                           (Look 1.11: graphics tiers to measure; default all three)
 //   PERF_TIER=medium ...                              (the tier for the main pan / zoom / chain run; default high)
+//   PERF_GPU=1 PERF_AREAS=1000 ...                    (City 15.4: a visible window on this machine's real GPU at
+//                                                      1920×1080, for the device log; reports fps per phase.
+//                                                      Uses installed Edge; PERF_CHANNEL=chrome for Chrome)
 //
 // Look 1.11: after the main run (on the High tier), the same city is reloaded at each graphics tier (?gfx=…) and
 // panned and zoomed again, so every tier's frame time and draw calls are reported and checked.
@@ -26,6 +29,8 @@ try {
 
 const AREAS = Number(process.env.PERF_AREAS ?? 150);
 const CHAIN = 500;
+// A big save takes a while to load; the game being ready (not the page's load event) is what counts.
+const READY_MS = Math.max(60000, AREAS * 150);
 
 /**
  * Thresholds for software rendering on a CI runner (a GPU is many times faster). They catch regressions such
@@ -68,7 +73,15 @@ const server = await preview({ preview: { port: PORT, strictPort: true }, build:
 const MAIN_TIER = process.env.PERF_TIER ?? 'high';
 const TIERS = (process.env.PERF_TIERS ?? 'low,medium,high').split(',').filter((t) => ['low', 'medium', 'high'].includes(t));
 const url = `http://localhost:${PORT}/?gfx=${MAIN_TIER}`;
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+// City 15.4: PERF_GPU runs a visible window on the real GPU (a headless or hidden window is throttled and may fall
+// back to software), so frame times are a device measurement rather than a regression check.
+const GPU = !!process.env.PERF_GPU;
+const VIEWPORT = GPU ? { width: Number(process.env.PERF_W ?? 1920), height: Number(process.env.PERF_H ?? 1080) } : { width: 640, height: 400 };
+const browser = await chromium.launch(
+  GPU
+    ? { headless: false, channel: process.env.PERF_CHANNEL ?? 'msedge', args: ['--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] }
+    : { args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] },
+);
 const failures = [];
 const results = {};
 
@@ -82,15 +95,24 @@ const stats = (xs) => {
 
 try {
   // A small viewport: SwiftShader's cost is per pixel, and the CPU-side numbers don't depend on size.
-  const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
+  const page = await browser.newPage({ viewport: VIEWPORT });
   const errors = [];
+  if (GPU) {
+    results.device = await page.evaluate(() => {
+      const gl = document.createElement('canvas').getContext('webgl2');
+      const ext = gl?.getExtension('WEBGL_debug_renderer_info');
+      return { renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl?.getParameter(gl.RENDERER), dpr: devicePixelRatio, cores: navigator.hardwareConcurrency };
+    });
+    console.log(`  GPU run: ${results.device.renderer} · ${VIEWPORT.width}×${VIEWPORT.height} @${results.device.dpr}x · ${results.device.cores} threads`);
+    if (/swiftshader|software/i.test(results.device.renderer ?? '')) failures.push(`PERF_GPU fell back to software rendering (${results.device.renderer})`);
+  }
   page.on('pageerror', (e) => errors.push(e.message));
   if (process.env.PERF_VERBOSE) await page.addInitScript(() => (window.__verbose = true));
   if (process.env.PERF_VERBOSE) page.on('console', (m) => console.log('   page:', m.text()));
-  await page.goto(url);
+  await page.goto(url, { waitUntil: 'commit' });
   await page.evaluate(() => localStorage.clear());
-  await page.reload();
-  await page.waitForFunction(() => !!window.solarbloom);
+  await page.reload({ waitUntil: 'commit' });
+  await page.waitForFunction(() => !!window.solarbloom, null, { timeout: READY_MS });
   if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
 
   phase('page ready');
@@ -133,8 +155,8 @@ try {
   phase('city built');
   // 2. Reload it like a player coming back.
   const t0 = Date.now();
-  await page.reload();
-  await page.waitForFunction(() => !!window.solarbloom && window.solarbloom.sim.state.machines.length > 50, null, { timeout: 60000 });
+  await page.reload({ waitUntil: 'commit' });
+  await page.waitForFunction(() => !!window.solarbloom && window.solarbloom.sim.state.machines.length > 50, null, { timeout: READY_MS });
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   results.loadMs = Date.now() - t0;
   // Autosave with the big save loaded: the steps on the main thread, five saves, worst of each.
@@ -190,10 +212,21 @@ try {
     });
 
   /** Runs `drive(i)` every frame for `frames` frames and records frame times and draw calls. */
-  const measure = (name, frames, drive) =>
-    page.evaluate(
+  const measure = async (name, frames, drive) => {
+    // A visible window stops animation frames when it is minimized or covered: bring it forward, and fail loudly
+    // rather than wait forever if frames still stop.
+    if (GPU) await page.bringToFront();
+    return page.evaluate(
       ({ frames, drive }) =>
-        new Promise((resolve) => {
+        new Promise((resolve, reject) => {
+          let lastFrameAt = performance.now();
+          const watchdog = setInterval(() => {
+            if (performance.now() - lastFrameAt > 10000) {
+              clearInterval(watchdog);
+              const hidden = document.visibilityState !== 'visible';
+              reject(new Error(hidden ? 'no animation frame for 10 s: the page is hidden, keep the browser window visible' : `one frame blocked the main thread for over 10 s (frame ${i} of ${frames})`));
+            }
+          }, 1000);
           const g = window.solarbloom;
           const step = new Function('g', 'i', 'n', drive);
           const times = [];
@@ -204,6 +237,7 @@ try {
           let i = 0;
           const tick = () => {
             const now = performance.now();
+            lastFrameAt = now;
             if (i % 20 === 0 && window.__verbose) console.log(`frame ${i} ${(now - last).toFixed(0)} ms`);
             if (i > 0) {
               if (g.app.stats.frame.updateTime > 50 && window.__verbose) console.log(`slow frame ${i}: update ${g.app.stats.frame.updateTime.toFixed(0)} render ${g.app.stats.frame.renderTime.toFixed(0)} views ${g.chunks.views.size}`);
@@ -213,7 +247,10 @@ try {
               render.push(g.app.stats.frame.renderTime);
             }
             last = now;
-            if (i >= frames) return resolve({ times, draws, cpu, render });
+            if (i >= frames) {
+              clearInterval(watchdog);
+              return resolve({ times, draws, cpu, render });
+            }
             step(g, i, frames);
             i++;
             requestAnimationFrame(tick);
@@ -241,6 +278,7 @@ try {
       results[name].detail = await page.evaluate(() => window.solarbloom.chunks.detailStats?.());
       return res;
     });
+  };
 
   // 3. Pan across the whole city at mid zoom (a big loop through the cleared region).
   const extent = await page.evaluate(() => {
@@ -272,8 +310,8 @@ try {
   // Look 1.11: the same city at each graphics tier (pan and zoom), then back to the main tier for the rest.
   results.tiers = {};
   for (const tier of TIERS) {
-    await page.goto(`http://localhost:${PORT}/?gfx=${tier}`);
-    await page.waitForFunction(() => !!window.solarbloom && window.solarbloom.sim.state.machines.length > 50, null, { timeout: 60000 });
+    await page.goto(`http://localhost:${PORT}/?gfx=${tier}`, { waitUntil: 'commit' });
+    await page.waitForFunction(() => !!window.solarbloom && window.solarbloom.sim.state.machines.length > 50, null, { timeout: READY_MS });
     await page.evaluate(() => new Promise((r) => setTimeout(r, 1500)));
     const got = await page.evaluate(() => window.solarbloom.gfxTier ?? 'n/a');
     const pan = await measure(
@@ -295,8 +333,8 @@ try {
     phase(`tier ${tier} (${got}): frame ${pan.median.toFixed(0)} / ${zoom.median.toFixed(0)} ms, draw calls ${pan.drawCalls} / ${zoom.drawCalls}`);
   }
   if (TIERS.length) {
-    await page.goto(url);
-    await page.waitForFunction(() => !!window.solarbloom && window.solarbloom.sim.state.machines.length > 50, null, { timeout: 60000 });
+    await page.goto(url, { waitUntil: 'commit' });
+    await page.waitForFunction(() => !!window.solarbloom && window.solarbloom.sim.state.machines.length > 50, null, { timeout: READY_MS });
     await page.evaluate(() => new Promise((r) => setTimeout(r, 1000)));
   }
   // 4b. Back after 5 minutes in another tab: the city catches up within the per-frame simulation budget.
@@ -497,6 +535,7 @@ for (const k of ['pan', 'zoom', 'chain', 'transitions']) {
   const r = results[k];
   if (r?.detail) console.log(`      triangles: ${(r.detail.ground / 1e3).toFixed(0)}K ground+props · ${(r.detail.foliage / 1e3).toFixed(0)}K foliage in ${r.detail.chunks} chunks · heaviest chunk ${(r.detail.worstChunk / 1e3).toFixed(0)}K (${r.detail.tier}, band ${r.detail.band})`);
   if (r) console.log(`${k.padEnd(5)} ${r.frames} frames · update median ${f(r.updateMedian)} p95 ${f(r.updateP95)} worst ${f(r.updateWorst)} ms · hitches ${r.hitches} · draw calls ${r.drawCalls} (worst ${r.drawCallsWorst}) · render ${f(r.renderMedian)} ms · frame ${f(r.median)} ms`);
+  if (r && GPU) console.log(`      fps: median ${(1000 / r.median).toFixed(0)} · p95 frame ${f(r.p95)} ms (${(1000 / r.p95).toFixed(0)} fps) · worst frame ${f(r.worst)} ms`);
 }
 if (results.catchUp) console.log(`catch-up: 300 s away → ${results.catchUp.simulated.toFixed(0)} s simulated over ${results.catchUp.frames} frames · worst frame ${f(results.catchUp.simMsWorst)} ms of simulation`);
 if (results.autosave) console.log(`autosave (main thread, worst of 5): serialize ${f(results.autosave.serialize)} ms · base64 ${f(results.autosave.encode)} ms · write ${f(results.autosave.write)} ms`);
@@ -504,7 +543,8 @@ console.log(`chain: ×${results.chainCombo} along a ${results.chainSetup?.row.le
 if (results.trSetup && !results.trSetup.skipped) console.log(`transitions (Look 6): a second ×500 chain + an area wave + ${results.trSetup.cultivators} Cultivators + ${results.trSetup.tiles} tiles set mid-transition (${results.trSetup.live} live in the sim at the start; ${results.trCounts?.sim} live, ${results.trCounts?.drawn} drawn as transitions after 150 frames)`);
 for (const [tier, t] of Object.entries(results.tiers ?? {}))
   console.log(`tier ${tier.padEnd(6)} pan frame ${f(t.pan.median)} ms · draw calls ${t.pan.drawCalls} · update ${f(t.pan.updateMedian)} ms · render ${f(t.pan.renderMedian)} ms | zoom frame ${f(t.zoom.median)} ms · draw calls ${t.zoom.drawCalls} (worst ${t.zoom.drawCallsWorst})`);
-console.log('(headless Chromium with SwiftShader software rendering: compare tiers and builds, not devices)');
+if (GPU) for (const [tier, t] of Object.entries(results.tiers ?? {})) console.log(`tier ${tier.padEnd(6)} fps: pan ${(1000 / t.pan.median).toFixed(0)} (p95 ${(1000 / t.pan.p95).toFixed(0)}, worst frame ${f(t.pan.worst)} ms) · zoom ${(1000 / t.zoom.median).toFixed(0)} (p95 ${(1000 / t.zoom.p95).toFixed(0)}, worst frame ${f(t.zoom.worst)} ms)`);
+console.log(GPU ? `(visible Chromium on ${results.device?.renderer}: a device measurement for PROGRESS.md)` : '(headless Chromium with SwiftShader software rendering: compare tiers and builds, not devices)');
 if (process.env.PERF_JSON) writeFileSync(process.env.PERF_JSON, JSON.stringify(results, null, 2));
 if (failures.length) {
   for (const m of failures) console.error('  ✗', m);

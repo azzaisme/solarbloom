@@ -1,6 +1,8 @@
 import * as pc from 'playcanvas';
 import type { MachineData } from '../core/types';
 import { GROUND } from '../core/GameState';
+import { CHUNK } from '../core/Hash';
+import { chunkKey } from '../core/Grid';
 import type { Sim } from '../gameplay/Sim';
 import { color, glow, mat, PALETTE, uniqueMat } from './Materials';
 import { group, shape, vshape, type ShapeOpts } from './Shapes';
@@ -299,7 +301,7 @@ export class MachineVisuals {
   private batchGroups = new Map<string, number>();
 
   private batchGroupFor(m: MachineData): number | undefined {
-    if (!this.batcher || m.roofId !== GROUND || m.type === 'core') return undefined;
+    if (!this.batcher || m.roofId !== GROUND) return undefined;
     const R = MachineVisuals.BATCH_REGION;
     const key = `${Math.floor(m.x / R)}:${Math.floor(m.z / R)}`;
     let id = this.batchGroups.get(key);
@@ -337,20 +339,96 @@ export class MachineVisuals {
   }
 
   buildAll() {
+    if (this.streaming) return; // models are built when the view reaches them (see `stream`)
     for (const m of this.sim.state.machines) this.add(m, false);
+  }
+
+  /**
+   * City 07 (#8): in the city, machines only have models near the view. A machine's model is about 50
+   * entities, so a 1,000-area city (5,000 machines) held 250,000 entities, 2 GB of heap and every landmark's draw
+   * calls for ground the player wasn't looking at. Models are built a chunk at a time as the view approaches
+   * (nearest first, a few milliseconds per frame) and dropped once it has moved well away.
+   */
+  streaming = false;
+  /** The look a landmark should have when its model streams in (the area's state lives in the simulation). */
+  landmarkState?: (m: MachineData) => 'dormant' | 'ready' | 'awake';
+  /** Tiles beyond the view where models are built, and the wider band where existing ones are kept. */
+  static readonly STREAM_MARGIN = 20;
+  static readonly STREAM_KEEP = 44;
+  static readonly STREAM_MS = 3;
+  private streamKey = '';
+  private streamQueue: string[] = [];
+  private streamed = false;
+
+  get loadedCount() {
+    return this.views.size;
+  }
+
+  private stream(view: { x0: number; x1: number; z0: number; z1: number }) {
+    const A = MachineVisuals.STREAM_MARGIN;
+    const cx0 = Math.floor((view.x0 - A) / CHUNK);
+    const cx1 = Math.floor((view.x1 + A) / CHUNK);
+    const cz0 = Math.floor((view.z0 - A) / CHUNK);
+    const cz1 = Math.floor((view.z1 + A) / CHUNK);
+    const key = `${cx0}|${cx1}|${cz0}|${cz1}`;
+    if (key !== this.streamKey) {
+      this.streamKey = key;
+      const K = MachineVisuals.STREAM_KEEP;
+      for (const [id, v] of this.views) {
+        const [x, , z] = this.worldOf(v.m);
+        if (x < view.x0 - K || x > view.x1 + K || z < view.z0 - K || z > view.z1 + K) {
+          v.root.destroy();
+          this.views.delete(id);
+        }
+      }
+      // machines on rooftop clusters (few, and not in the ground's chunk index by world position)
+      for (const m of this.sim.state.machines) {
+        if (m.roofId === GROUND || this.views.has(m.id)) continue;
+        const [x, , z] = this.worldOf(m);
+        if (x >= view.x0 - A && x <= view.x1 + A && z >= view.z0 - A && z <= view.z1 + A) this.streamIn(m);
+      }
+      const mx = (view.x0 + view.x1) / 2 / CHUNK - 0.5;
+      const mz = (view.z0 + view.z1) / 2 / CHUNK - 0.5;
+      const todo: { key: string; d: number }[] = [];
+      for (let cz = cz0; cz <= cz1; cz++)
+        for (let cx = cx0; cx <= cx1; cx++) {
+          const k = chunkKey(GROUND, cx, cz);
+          if (this.sim.grid.machinesInChunk(k).some((m) => !this.views.has(m.id))) todo.push({ key: k, d: Math.hypot(cx - mx, cz - mz) });
+        }
+      todo.sort((a, b) => a.d - b.d);
+      this.streamQueue = todo.map((t) => t.key);
+    }
+    // The first pass (a load) builds everything in view at once; after that, within a small budget per frame.
+    const t0 = performance.now();
+    while (this.streamQueue.length) {
+      const k = this.streamQueue.shift()!;
+      for (const m of this.sim.grid.machinesInChunk(k)) if (!this.views.has(m.id)) this.streamIn(m);
+      if (this.streamed && performance.now() - t0 > MachineVisuals.STREAM_MS) break;
+    }
+    this.streamed = true;
+  }
+
+  private streamIn(m: MachineData) {
+    this.add(m, false);
+    const v = this.views.get(m.id);
+    if (!v || m.type !== 'core') return;
+    const state = this.landmarkState?.(m) ?? 'dormant';
+    if (state !== 'dormant') this.applyCoreState(v, state, true);
   }
 
   /** Look 3.19: rebuild every machine (the hand-built models have loaded). */
   rebuildAll() {
     // landmarks keep their state (a fountain that already flows must not come back as its dry model)
     const states = new Map<string, 'ready' | 'awake'>();
+    const loaded: MachineData[] = [];
     for (const [id, v] of this.views) {
       if (v.root.tags.has('awake')) states.set(id, 'awake');
       else if (v.root.tags.has('ready')) states.set(id, 'ready');
+      loaded.push(v.m);
       v.root.destroy();
     }
     this.views.clear();
-    this.buildAll();
+    for (const m of loaded) this.add(m, false); // only the models that exist (in the city, those near the view)
     for (const [id, state] of states) this.setLandmarkState(id, state, true);
   }
 
@@ -962,7 +1040,7 @@ export class MachineVisuals {
     if (v.m.type === 'motherTree') return this.motherCollar(v);
     const pick = v.m.type === 'core' ? LANDMARK_MODELS[this.landmarkKind(v.m)] : MACHINE_MODELS[v.m.type];
     if (!pick) return;
-    const e = MODELS.instantiate(pick[0]);
+    const e = MODELS.instantiateMerged(pick[0]);
     if (!e) return;
     if (v.fountain) {
       // The park fountain: the hand-built model is its dry look; the flowing three-tier fountain replaces it on waking.
@@ -1001,7 +1079,7 @@ export class MachineVisuals {
    * resonance canopy are raised to grow out of the collar, and the charge light moves to the planter's front.
    */
   private motherCollar(v: MachineView) {
-    const e = v.planter && MODELS!.instantiate('mother-tree-collar');
+    const e = v.planter && MODELS!.instantiateMerged('mother-tree-collar');
     if (!e || !v.planter) return;
     const S = MotherCollar.scale;
     v.planter.enabled = false;
@@ -1504,6 +1582,11 @@ export class MachineVisuals {
   }
 
   private applyCoreState(v: MachineView, state: 'dormant' | 'ready' | 'awake', instant: boolean) {
+    this.coreLook(v, state, instant);
+    if (v.batched) this.batch(v); // parts the new state switched on join the region's batch
+  }
+
+  private coreLook(v: MachineView, state: 'dormant' | 'ready' | 'awake', instant: boolean) {
     if (!v.coreMat || !v.coreBase) return;
     if (v.root.tags.has('awake') && state !== 'awake') return;
     v.root.tags.remove('ready', 'awake', 'dormant');
@@ -1605,7 +1688,13 @@ export class MachineVisuals {
   /** World point above a Core (by roof, or a specific landmark machine id). */
   coreWorld(roofId = GROUND, machineId?: string): [number, number, number] | undefined {
     const v = machineId ? this.views.get(machineId) : this.coreView(roofId);
-    if (!v) return undefined;
+    if (!v) {
+      // no model here right now (streamed out): the same point, from the machine itself
+      const m = machineId ? this.sim.machine(machineId) : this.sim.state.machines.find((x) => x.type === 'core' && x.roofId === roofId);
+      if (!m) return undefined;
+      const w = this.worldOf(m);
+      return [w[0], w[1] + 1.8, w[2]];
+    }
     const p = v.root.getPosition();
     return [p.x, p.y + 1.8, p.z];
   }
@@ -1616,6 +1705,7 @@ export class MachineVisuals {
    */
   update(dt: number, view?: { x0: number; x1: number; z0: number; z1: number }) {
     this.time += dt;
+    if (this.streaming && view) this.stream(view);
     const t = this.time;
     const now = this.sim.time;
     const rm = this.reducedMotion;
