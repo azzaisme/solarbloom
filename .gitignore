@@ -3,3 +3,5 @@ dist/
 *.log
 __pycache__/
 *.blend1
+
+assets/raw/bloombot/meshy-parts/
