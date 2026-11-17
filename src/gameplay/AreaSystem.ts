@@ -1,4 +1,4 @@
-import { areaMapFor, AreaMap, PARK, type AreaInfo } from '../core/Areas';
+import { areaMapFor, AreaMap, OldCityMap, PARK, SEA, type AreaInfo } from '../core/Areas';
 import { GROUND, isRestorable } from '../core/GameState';
 import type { AreaMode, FogState, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
@@ -52,8 +52,9 @@ export class AreaSystem {
     return plan ? plan.core : this.info(id).landmark;
   }
 
-  /** Every revealed area has its landmark (a 2×2 Core). Idempotent. */
+  /** Every revealed area has its landmark (a 2×2 Core). Idempotent. E21.4: Old City backstreets have none. */
   private placeLandmark(id: string) {
+    if (this.info(id).noLandmark) return;
     if (this.landmark(id)) return;
     const s = this.sim;
     if (this.map.rooftop(id)) s.clusters.ensure(id, this.map);
@@ -77,6 +78,7 @@ export class AreaSystem {
 
   /** A sealed area (region unlocks) is still hidden fog to everything in the game until it is bought. */
   fog(id: string): FogState {
+    if (id === SEA && this.map instanceof OldCityMap) return 'cleared'; // E21.4: the sea is always in view
     const st = this.sim.state.areas[id];
     return !st || st.sealed ? 'hidden' : st.fog;
   }
@@ -295,6 +297,7 @@ export class AreaSystem {
   reveal(id: string) {
     const s = this.sim;
     if (s.state.areas[id]) return;
+    if (this.map instanceof OldCityMap && (id === SEA || id.startsWith('out_'))) return; // E21.4: the sea and the cloud beyond
     s.state.areas[id] = { fog: 'frontier', revealedAt: s.time };
     if (TUNING.city.unlock.enabled && id !== PARK) Object.assign(s.state.areas[id], { sealed: true, price: this.priceNow() });
     this.placeLandmark(id);

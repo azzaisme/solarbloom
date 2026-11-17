@@ -92,6 +92,10 @@ const LANDMARK_MODELS: Record<string, [string, number]> = {
   mast: ['signal-mast', 0.6],
   clock: ['clock-tower', 0.62],
   hall: ['market-hall', 0.46],
+  // E21.4: the Old City's own landmarks, from existing models
+  sealock: ['lock-gate', 0.62],
+  greenhouse: ['skyline-dome', 0.5],
+  observatory: ['satellite-dish', 0.7],
 };
 
 const orbOn = () => mat(PALETTE.orbLit, { emissive: PALETTE.coreGlow, emissiveIntensity: 1.6 });

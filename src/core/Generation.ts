@@ -1,11 +1,12 @@
 import { AREA_TYPES, CITY_GEN, PARK_LAYOUT, parkPath, type TileFeature } from '../data/city';
 import { ROOF_TEMPLATES } from '../data/templates';
 import { TUNING } from '../data/tuning';
-import { areaMapFor, genKey, PARK, type AreaInfo } from './Areas';
+import { areaMapFor, genKey, PARK, SEA, type AreaInfo } from './Areas';
 import { canalRow, roadCol, roadRow } from './Arterials';
 import { distToFootprintRaw } from './Footprint';
 import { roadPlanFor } from './RoadPlan';
-import { setPieceAt } from './OldCityLayout';
+import { inRect, isSeaChunk, regionById, setPieceAt } from './OldCityLayout';
+import { OLD_CITY } from '../data/oldcity';
 import { CHUNK, hashString, tileId, tileRandom } from './Hash';
 import type { GroundState, LayerData, TileData } from './types';
 
@@ -110,7 +111,8 @@ export function buildingPlots(seed: number, cx: number, cz: number, gen = 2): Bu
   const out: BuildingPlot[] = [];
   const map = areaMapFor(seed, gen);
   const area = map.info(map.areaOfChunk(cx, cz));
-  if (area.id !== PARK && gen >= 4) out.push(...roadPlots(seed, cx, cz, area));
+  if (genKey(gen) === 5) out.push(...oldCityPlots(seed, cx, cz, area));
+  else if (area.id !== PARK && gen >= 4) out.push(...roadPlots(seed, cx, cz, area));
   else if (area.id !== PARK) {
     const B = CITY_GEN.buildings;
     const lh = hashString('buildings');
@@ -225,6 +227,7 @@ function generateGround(seed: number, layer: LayerData, x: number, z: number): T
   const lz = z - cz * CHUNK;
   const area = map.info(map.areaOfChunk(cx, cz));
   if (area.id === PARK) return generatePark(seed, lh, x, z, layer.gen ?? 1);
+  if (genKey(layer.gen ?? 1) === 5) return generateOldCity(seed, layer, lh, x, z, area);
   const def = AREA_TYPES[area.type];
   let feature: TileFeature = def.ground;
   const park = area.id === PARK;
@@ -268,4 +271,98 @@ function generateGround(seed: number, layer: LayerData, x: number, z: number): T
     growthRemainingSec: 0,
     bloom: 0,
   };
+}
+
+// ───────────── E21.4: the Old City (generation 5) ─────────────
+
+/**
+ * The Old City is one fixed city: its buildings and obstacles come from this constant, never from the game's seed,
+ * so every game has the same streets (only pollution and small looks vary).
+ */
+const OC_SEED = 0x01dc17;
+
+/** Is a cell on one of the Old City's roads: a region's main streets, or a backstreet's crossing avenues? */
+export function oldCityRoad(x: number, z: number, area: AreaInfo): boolean {
+  const r = area.region ? regionById(area.region) : undefined;
+  if (r) return r.roads.some((q) => inRect(q, x, z));
+  if (!area.noLandmark || area.id === SEA || area.id.startsWith('out_')) return false;
+  const lx = x - Math.floor(x / CHUNK) * CHUNK;
+  const lz = z - Math.floor(z / CHUNK) * CHUNK;
+  return lx === 7 || lx === 8 || lz === 7 || lz === 8; // a backstreet: two avenues crossing at its middle
+}
+
+/** Cells kept clear of buildings and generated obstacles: set pieces and their neighbours, the patch, the seam, the landmark, terraces. */
+function oldCityKeepClear(x: number, z: number, area: AreaInfo): boolean {
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (setPieceAt(x + dx, z + dz)) return true;
+  const r = area.region ? regionById(area.region) : undefined;
+  if (!r) return false;
+  if (distToFootprintRaw(x, z, r.landmark.x, r.landmark.z, 2) <= CITY_GEN.landmarkClearance + 1) return true;
+  if (distToFootprintRaw(x, z, r.seam.x, r.seam.z, 2) <= 1) return true;
+  const grow = (q: { x: number; z: number; w: number; d: number }, m: number) => ({ x: q.x - m, z: q.z - m, w: q.w + 2 * m, d: q.d + 2 * m });
+  if (inRect(grow(r.patch, 1), x, z)) return true;
+  if (r.stamps.some((q) => inRect(grow(q, 1), x, z)) || r.ramps.some((q) => inRect(grow(q, 1), x, z))) return true;
+  return r.roads.some((q) => inRect(grow(q, 1), x, z));
+}
+
+/** Old City buildings: at most one per chunk quarter, on its outer corner, never on roads, set pieces or terraces. */
+function oldCityPlots(_seed: number, cx: number, cz: number, area: AreaInfo): BuildingPlot[] {
+  const out: BuildingPlot[] = [];
+  if (area.id === PARK || area.id === SEA || area.type === 'beach' || area.id.startsWith('out_')) return out;
+  const B = CITY_GEN.buildings;
+  const lh = hashString('buildings');
+  const [lo, hi] = B.storeys.oldtown;
+  for (const [qx, qz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+    const r = (salt: number) => tileRandom(OC_SEED, lh, cx * 2 + qx, cz * 2 + qz, salt);
+    if (r(1) >= (B.chance[area.type] ?? 0)) continue;
+    const w = 2 + Math.floor(r(2) * 3);
+    const d = 2 + Math.floor(r(3) * 3);
+    const x = cx * CHUNK + (qx === 0 ? 0 : CHUNK - w);
+    const z = cz * CHUNK + (qz === 0 ? 0 : CHUNK - d);
+    let ok = true;
+    for (let j = 0; j < d && ok; j++) for (let i = 0; i < w && ok; i++) if (oldCityRoad(x + i, z + j, area) || oldCityKeepClear(x + i, z + j, area)) ok = false;
+    if (!ok) continue;
+    out.push({ x, z, w, d, storeys: lo + Math.floor(r(4) * (hi - lo + 1)), style: Math.floor(r(5) * 10) });
+  }
+  return out;
+}
+
+/**
+ * E21.4: one Old City ground tile. The sea is open water nothing crosses; the beach is sand with a band of
+ * shallow surf before it; regions take their type's ground with their main streets; backstreets are paved with
+ * two avenues; then buildings, a few obstacles and the set pieces. Beyond the Old City: dead street under cloud.
+ */
+function generateOldCity(seed: number, layer: LayerData, lh: number, x: number, z: number, area: AreaInfo): TileData {
+  const { pollutionMin, pollutionMax } = TUNING.restore;
+  const base: TileData = {
+    id: tileId(layer.id, x, z),
+    roofId: layer.id,
+    x,
+    z,
+    ground: 'polluted',
+    pollution: 0,
+    variant: Math.floor(tileRandom(seed, lh, x, z, 2) * 10000),
+    blocked: false,
+    growthRemainingSec: 0,
+    bloom: 0,
+  };
+  if (area.id === SEA) return Object.assign(base, { feature: 'water' as TileFeature, blocked: true });
+  const def = AREA_TYPES[area.type];
+  let feature: TileFeature = area.noLandmark ? 'paving' : def.ground;
+  const road = oldCityRoad(x, z, area);
+  if (road) feature = 'road';
+  // the beach: shallow surf (wadable) in the rows before the sea
+  if (area.type === 'beach' && isSeaChunk(Math.floor(x / CHUNK), Math.floor((z + OLD_CITY.surfRows) / CHUNK))) feature = 'water';
+  const clear = oldCityKeepClear(x, z, area);
+  const building = !road && !clear && !!buildingAt(seed, x, z, layer.gen ?? 5);
+  const blocked = building || (!road && !clear && feature !== 'water' && tileRandom(OC_SEED, lh, x, z, 5) < def.obstacles);
+  if (building) feature = 'building';
+  else if (blocked) feature = 'obstacle';
+  const lo = Math.max(pollutionMin, area.pollutionFloor);
+  Object.assign(base, {
+    pollution: Math.min(100, Math.round(lo + (Math.max(lo, pollutionMax) - lo) * tileRandom(seed, lh, x, z, 1))),
+    blocked,
+    feature,
+    prop: building ? 'building' : blocked ? def.prop : undefined,
+  });
+  return stampOldCity(base);
 }

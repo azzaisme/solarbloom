@@ -1341,6 +1341,13 @@ export class ChunkRenderer {
     const f = t.feature ?? 'lawn';
     const r = new VRng(t.variant * 7919 + 13);
     const dead = DEAD[f] ?? DEAD.lawn;
+    // E21.4: the Old City's open sea: deep water, never restored
+    if (t.blocked && f === 'water') {
+      const sea = PALETTE.ground.sea;
+      this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
+      if (t.variant % 5 === 0) b.add('box', PALETTE.ground.seaFoam, [x + r.range(-0.3, 0.3), h + 0.085 - WATER.drop, z + r.range(-0.3, 0.3)], [r.range(0.2, 0.5), 0.006, 0.05]);
+      return;
+    }
     if (t.blocked) {
       // Look 2.5: once its area is alive, an obstacle stands on a clean stone plinth instead of dead ground.
       if (t.feature !== 'building' && this.level >= 4) {
