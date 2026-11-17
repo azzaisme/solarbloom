@@ -23,7 +23,8 @@ const ZOOMS = [0.6, 1, 1.8];
 const OFFSETS = [[0.5, 0.5], [0.15, 0.15], [0.85, 0.2], [0.2, 0.85], [0.85, 0.85]];
 
 const server = await preview({ preview: { port: 4179, strictPort: true }, logLevel: 'silent' });
-const url = 'http://localhost:4179/';
+// Bloombot (G.17): this checks pointer picking itself, so it runs the internal cursor path.
+const url = 'http://localhost:4179/?cursor=1';
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let failures = 0;
 let checks = 0;

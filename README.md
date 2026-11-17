@@ -45,24 +45,32 @@ The browser scripts need Playwright with Chromium (`npm i -D playwright && npx p
 
 ## Controls
 
-| Action | Mouse / keyboard | Touch |
+You play as **bloombot**, a little robot who restores the park and city with its own hands
+(docs/BLOOMBOT_EPIC.md). Everything acts on the tile in front of bloombot, which is highlighted. Keys can be
+rebound in Settings → Controls.
+
+| Action | Keyboard and mouse | Gamepad |
 |---|---|---|
-| Restore a tile (or nurture a green one) | Left-click with **Pulse** (2) | Tap |
-| Build a machine | Pick it in the hotbar (3–9), then click | Pick it, then tap |
-| Wake a landmark | Click it when it glows, or the objective panel's button | Tap |
-| Go to the area that needs you | `F` cycles areas that need attention; `Home` returns to the park | Area labels when zoomed out |
-| Inspect a machine | Click it, or use **Inspect** (1) | Tap it |
-| Pan | Drag the world (or middle/right drag) | Drag |
-| Zoom (down to a city overview) | Mouse wheel, `+` / `-` | Pinch (a quick pinch-out snaps to the overview) |
-| Harvest sunlight (emergency energy) | `H` | 🌞 button |
-| Upgrades | `U` | ⬆️ button |
-| Pause | `P` | ⏸ chip |
-| Game speed 1× / 2× / 3× | `1×` chip | `1×` chip |
-| Lucky Cat discoveries | 🐱 chip (after your first cat) | 🐱 chip |
-| Cancel, close or deselect | `Esc` | Tap empty space |
-| Build tray | `B` (machines `3`–`9`) | Build button |
-| Bloom Frenzy (when full) | `Q` | ✨ meter above the hotbar |
-| Debug / FPS overlay | `F3` or `` ` `` | Settings |
+| Move | `W` `A` `S` `D` or the arrows; click a tile to walk there and use the tool | Left stick |
+| Sprint | `Shift` | Right trigger |
+| Pulse the tile in front (or build there with a build tool) | `E` | A |
+| Interact: inspect, wake a landmark, greet a Lucky Cat, ride a rooftop lift | `Q` | X |
+| Build tray | `B` (machines on `3`–`9` and `0`) | Y |
+| Cancel, close or deselect | `Esc` | B |
+| Harvest sunlight (emergency energy) | `F` | D-pad left |
+| Upgrades | `U` | D-pad right |
+| Backpack (discoveries) | `Tab` | D-pad up |
+| Previous / next tool | `1` / `2` | Bumpers |
+| Zoom (out to the city overview) | Mouse wheel, `+` / `-` | Right stick |
+| Overview (and back) | `M`; in the overview, click a woken landmark to travel there | View |
+| Settings / pause | `P` | Menu |
+| Bloom Frenzy (when full) | `R` | Left trigger |
+| Go to the area that needs you (camera only) | `N` | Left stick click |
+| Back to the park (camera only) | `Home` | Right stick click |
+| Debug / FPS overlay | `F3` or `` ` `` | |
+
+Phones and tablets aren't supported for now. `?cursor=1` brings back the old click-to-act play (used by
+some end-to-end tests).
 
 Switching to another tab doesn't stop the city: when you come back, up to 10 minutes are caught up over a few frames (Pause still pauses).
 

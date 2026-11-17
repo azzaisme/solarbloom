@@ -28,7 +28,7 @@ try {
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
     page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-    await page.goto('http://localhost:4203/');
+    await page.goto('http://localhost:4203/?cursor=1');
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom);
