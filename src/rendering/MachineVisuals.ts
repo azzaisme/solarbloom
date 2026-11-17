@@ -95,7 +95,8 @@ const orbOn = () => mat(PALETTE.orbLit, { emissive: PALETTE.coreGlow, emissiveIn
 const orbOff = () => mat(PALETTE.orbDark, { gloss: 0.6 });
 // matte enough to read navy while tilted toward the sun (glossy, it mirrored the sky and read white)
 const panelMat = () => mat(PALETTE.panel, { gloss: 0.45, metal: 0 });
-const panelBoost = () => mat(PALETTE.panelGlint, { gloss: 0.5, emissive: PALETTE.panelBoostGlow, emissiveIntensity: 0.6 });
+// boosted: the cells keep their blue with a warm glow (at 0.6 the gold washed them out to near white inside the cream frame)
+const panelBoost = () => mat(PALETTE.panelGlint, { gloss: 0.5, emissive: PALETTE.panelBoostGlow, emissiveIntensity: 0.28 });
 
 /**
  * Look 3.12 machine materials: warm cream ceramic bodies, brushed metal frames, gold trim, dark seams and vents,
@@ -123,17 +124,22 @@ function bolts(parent: pc.Entity, pts: [number, number, number][], size = 0.03, 
 }
 
 /**
- * A solar panel: a bevelled metal frame, the blue cell sheet (returned: it swaps material when boosted), a silver
- * cell grid, a gold edge strip and corner bolts.
+ * A solar panel in the reference's style: a chunky, rounded cream frame around a few large blue cells (the sheet is
+ * returned: it swaps material when boosted), a silver cell grid, and small gold caps on the corners.
  */
-function solarPanel(parent: pc.Entity, w: number, d: number, cols: number, rows: number, withBolts = true): pc.Entity {
-  part(parent, rbox(w, 0.045, d, 0.016), metal(), { shadow: true });
-  const iw = w - 0.06, id = d - 0.06;
-  const cells = shape(parent, 'box', panelMat(), { pos: [0, 0.016, 0], scale: [iw, 0.02, id] });
-  for (let i = 1; i < cols; i++) shape(parent, 'box', gridLine(), { pos: [-iw / 2 + (iw * i) / cols, 0.027, 0], scale: [0.007, 0.003, id] });
-  for (let i = 1; i < rows; i++) shape(parent, 'box', gridLine(), { pos: [0, 0.027, -id / 2 + (id * i) / rows], scale: [iw, 0.003, 0.007] });
-  shape(parent, 'box', gold(), { pos: [0, 0.022, d / 2 - 0.006], scale: [w - 0.02, 0.012, 0.014] });
-  if (withBolts) bolts(parent, [[-w / 2 + 0.03, 0.024, -d / 2 + 0.03], [w / 2 - 0.03, 0.024, -d / 2 + 0.03], [-w / 2 + 0.03, 0.024, d / 2 - 0.03], [w / 2 - 0.03, 0.024, d / 2 - 0.03]], 0.022, metal());
+function solarPanel(parent: pc.Entity, w: number, d: number, cols: number, rows: number, withCaps = true): pc.Entity {
+  // the rim scales with the panel, so small upgrade panels keep the same chunky look
+  const rim = Math.min(0.075, Math.min(w, d) * 0.11);
+  part(parent, rbox(w, 0.06, d, rim * 0.6), cream(), { shadow: true });
+  const iw = w - rim * 2, id = d - rim * 2;
+  const cells = shape(parent, 'box', panelMat(), { pos: [0, 0.024, 0], scale: [iw, 0.02, id] });
+  for (let i = 1; i < cols; i++) shape(parent, 'box', gridLine(), { pos: [-iw / 2 + (iw * i) / cols, 0.035, 0], scale: [0.012, 0.004, id] });
+  for (let i = 1; i < rows; i++) shape(parent, 'box', gridLine(), { pos: [0, 0.035, -id / 2 + (id * i) / rows], scale: [iw, 0.004, 0.012] });
+  if (withCaps) {
+    const c = rim * 0.9;
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]])
+      part(parent, rbox(c, 0.022, c, c * 0.3), gold(), { pos: [sx * (w / 2 - c / 2 - 0.004), 0.034, sz * (d / 2 - c / 2 - 0.004)] });
+  }
   return cells;
 }
 
@@ -816,28 +822,30 @@ export class MachineVisuals {
   }
 
   /**
-   * Look 3.12 Solar Panel: a bevelled cream base with a pedestal and a cable to a junction box, a metal hinge and an
-   * angled panel (metal frame, blue cells, silver cell grid, gold edge). The panel faces the sun (which shines from
-   * the camera side) and slowly tracks it.
-   * Meshy hook: assets/raw/solar/solar-panel.glb, loaded like the drone (DroneVisuals MODEL_URL + loadFromUrl).
+   * Solar Panel, in the reference's style (target-look.png): a chunky cream base box with a seam and a gold band, a
+   * short thick cream pedestal with a collar, a cream hinge block, and an angled panel with a thick rounded cream
+   * frame around 4×2 large cells. The pedestal is a middle height, so the tilted panel's low edge (~0.4) still
+   * clears the edge balustrades and railings (~0.35). The panel faces the sun (from the camera side) and tracks it.
    */
   private solar(v: MachineView) {
     const b = v.body;
-    part(b, rbox(0.64, 0.08, 0.64, 0.03), cream(), { pos: [0, 0.04, 0], shadow: true });
-    part(b, rbox(0.645, 0.012, 0.645, 0.005), creamSeam(), { pos: [0, 0.03, 0] });
-    bolts(b, [[-0.26, 0.082, -0.26], [0.26, 0.082, -0.26], [-0.26, 0.082, 0.26]]);
-    // a tall pedestal: the tilted panel's low edge clears the edge balustrades and railings (~0.35)
-    part(b, rbox(0.17, 0.47, 0.17, 0.035), cream(), { pos: [0, 0.3, 0], shadow: true });
-    part(b, rbox(0.21, 0.04, 0.21, 0.015), creamSeam(), { pos: [0, 0.1, 0] });
-    part(b, rcyl(0.07, 0.53, 0.58, 0.012, 0.005, 12), metal(), {});
-    // cable from the pedestal to a little junction box (which carries the status light)
-    part(b, tube('solarCable', bezier([0.07, 0.17, 0.05], [0.24, 0.16, 0.06], [0.22, 0.09, 0.2], 7), 0.014, { sides: 6 }), cable(), {});
-    part(b, rbox(0.1, 0.05, 0.08, 0.015), creamSeam(), { pos: [0.22, 0.105, 0.22] });
-    const tilt = group(b, 'tilt', [0, 0.62, 0]);
+    // base box: a solid cream block (the reference's cabinet), a darker seam low down and a thin gold trim near the top
+    part(b, rbox(0.56, 0.2, 0.56, 0.05), cream(), { pos: [0, 0.1, 0], shadow: true });
+    part(b, rbox(0.565, 0.014, 0.565, 0.006), creamSeam(), { pos: [0, 0.05, 0] });
+    part(b, rbox(0.566, 0.012, 0.566, 0.04), gold(), { pos: [0, 0.172, 0] });
+    // short, thick pedestal with a collar at its foot and a cap under the hinge
+    part(b, rbox(0.24, 0.07, 0.24, 0.03), cream(), { pos: [0, 0.245, 0], shadow: true });
+    part(b, rbox(0.18, 0.24, 0.18, 0.04), cream(), { pos: [0, 0.38, 0], shadow: true });
+    part(b, rbox(0.22, 0.04, 0.22, 0.015), creamSeam(), { pos: [0, 0.5, 0] });
+    // cable from the base box to a little junction box (which carries the status light)
+    part(b, tube('solarCable', bezier([0.1, 0.22, 0.08], [0.26, 0.2, 0.1], [0.25, 0.12, 0.24], 7), 0.014, { sides: 6 }), cable(), {});
+    part(b, rbox(0.1, 0.05, 0.08, 0.015), creamSeam(), { pos: [0.25, 0.12, 0.25] });
+    const tilt = group(b, 'tilt', [0, 0.6, 0]);
     tilt.setLocalEulerAngles(28, 45, 0);
-    part(tilt, rcyl(0.032, -0.13, 0.13, 0.01, 0.01, 10), metal(), { pos: [0, -0.045, 0], rot: [0, 0, 90] });
-    part(tilt, rbox(0.34, 0.025, 0.07, 0.01), darkMetal(), { pos: [0, -0.025, 0] });
-    const cells = solarPanel(tilt, 0.92, 0.7, 6, 4);
+    // hinge: a cream block on a short metal axle
+    part(tilt, rcyl(0.03, -0.12, 0.12, 0.01, 0.01, 10), metal(), { pos: [0, -0.06, 0], rot: [0, 0, 90] });
+    part(tilt, rbox(0.2, 0.05, 0.12, 0.02), cream(), { pos: [0, -0.04, 0] });
+    const cells = solarPanel(tilt, 0.92, 0.66, 4, 2);
     v.panel = [cells];
     v.spin.push(tilt); // Phase 4 E09.3: the panel slowly tracks the sun
     v.light = part(b, ball(5, 8), mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1 }), { pos: [0.22, 0.14, 0.22], scale: 0.05 });
