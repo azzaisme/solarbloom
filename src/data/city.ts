@@ -39,15 +39,30 @@ export const THEMES: Theme[] = ['oldtown', 'docks', 'towers', 'parkland'];
 
 /**
  * The starting park, hand-made (chunk 0,0; cells are park-local = ground cells). The fountain is its landmark
- * (from Areas: cell 7,7, 2×2). Paths cross at the fountain; props are obstacles with names for the renderer.
+ * (from Areas: cell 7,7, 2×2). A round plaza circles the fountain and winding paths lead from it to the four
+ * gates (`parkPath`); props are obstacles with names for the renderer.
  */
 export const PARK_LAYOUT = {
+  /** The park's gates: its paths meet the edge at these columns (north, south) and rows (west, east); avenues carry on from them. */
   paths: { cols: [7, 8], rows: [7, 8] },
+  /** The round plaza about the fountain: paved out to this many tiles from the park's centre. */
+  plaza: { centre: [8, 8] as [number, number], radius: 2.7 },
+  /**
+   * The winding paths from the plaza to the gates: each a curve from `from` to `to` bending towards `via`
+   * (a quadratic Bézier, in tile units), paved `width` tiles wide. The west path runs straight under the pergola.
+   */
+  walks: [
+    { from: [8, 5.6], via: [12, 2.6], to: [8, 0] },
+    { from: [10.4, 8], via: [13.4, 12], to: [16, 8] },
+    { from: [8, 10.4], via: [4, 13.4], to: [8, 16] },
+    { from: [5.6, 8], via: [2.8, 8], to: [0, 8] },
+  ] as { from: [number, number]; via: [number, number]; to: [number, number] }[],
+  walkWidth: 1.9,
   props: [
     { at: [3, 6], prop: 'bench' },
-    { at: [12, 6], prop: 'bench' },
-    { at: [3, 9], prop: 'bench' },
-    { at: [12, 9], prop: 'bench' },
+    { at: [10, 6], prop: 'bench' },
+    { at: [5, 9], prop: 'bench' },
+    { at: [9, 10], prop: 'bench' },
     { at: [11, 2], prop: 'bandstand' },
     { at: [12, 2], prop: 'bandstand' },
     { at: [11, 3], prop: 'bandstand' },
@@ -68,9 +83,36 @@ export const PARK_LAYOUT = {
   prepared: [
     [6, 5],
     [5, 6],
-    [6, 6],
+    [4, 5],
   ] as [number, number][],
 };
+
+const walkTiles = new Set<number>();
+/** Is this park cell paved: the round plaza, or within half a path's width of one of the winding walks? */
+export function parkPath(x: number, z: number): boolean {
+  if (x < 0 || z < 0 || x > 15 || z > 15) return false;
+  if (!walkTiles.size) {
+    const L = PARK_LAYOUT;
+    const half = L.walkWidth / 2;
+    for (let cz = 0; cz < 16; cz++)
+      for (let cx = 0; cx < 16; cx++) {
+        const px = cx + 0.5;
+        const pz = cz + 0.5;
+        let on = Math.hypot(px - L.plaza.centre[0], pz - L.plaza.centre[1]) < L.plaza.radius;
+        for (const w of L.walks) {
+          if (on) break;
+          for (let i = 0; i <= 48 && !on; i++) {
+            const t = i / 48;
+            const bx = (1 - t) * (1 - t) * w.from[0] + 2 * t * (1 - t) * w.via[0] + t * t * w.to[0];
+            const bz = (1 - t) * (1 - t) * w.from[1] + 2 * t * (1 - t) * w.via[1] + t * t * w.to[1];
+            if (Math.hypot(px - bx, pz - bz) < half) on = true;
+          }
+        }
+        if (on) walkTiles.add(cz * 16 + cx);
+      }
+  }
+  return walkTiles.has(z * 16 + x);
+}
 
 export const CITY_GEN = {
   /** district themes are chosen per region of this many chunks */

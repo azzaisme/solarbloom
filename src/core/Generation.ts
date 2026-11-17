@@ -1,4 +1,4 @@
-import { AREA_TYPES, CITY_GEN, PARK_LAYOUT, type TileFeature } from '../data/city';
+import { AREA_TYPES, CITY_GEN, PARK_LAYOUT, parkPath, type TileFeature } from '../data/city';
 import { ROOF_TEMPLATES } from '../data/templates';
 import { TUNING } from '../data/tuning';
 import { areaMapFor, genKey, PARK, type AreaInfo } from './Areas';
@@ -36,11 +36,11 @@ export function generateTile(seed: number, layer: LayerData, x: number, z: numbe
   };
 }
 
-/** The hand-made starting park: lawns, a path cross through the fountain, benches, a bandstand, a lamp. */
+/** The hand-made starting park: lawns, a round plaza about the fountain, winding paths, benches, a bandstand, a lamp. */
 function generatePark(seed: number, lh: number, x: number, z: number): TileData {
   const L = PARK_LAYOUT;
   const prop = L.props.find((p) => p.at[0] === x && p.at[1] === z)?.prop;
-  const path = L.paths.cols.includes(x) || L.paths.rows.includes(z);
+  const path = parkPath(x, z);
   const prepared = L.prepared.some(([a, b]) => a === x && b === z) || (L.starterSolar[0] === x && L.starterSolar[1] === z);
   const { pollutionMin, pollutionMax } = TUNING.restore;
   return {
