@@ -391,4 +391,11 @@ export interface CozyState {
   unlocked?: string[];
   /** E19.1.4: unlocked options the picker hasn't shown yet (its "new" marker) */
   fresh?: string[];
+  /**
+   * E19.2: decorations placed by hand, `<layer>|<x>|<z>` → `<decoration id>[@<quarter turns>]` (core/Decor.ts).
+   * Sorted keys; each occupies its tile as a machine does.
+   */
+  decor?: Record<string, string>;
+  /** E19.2.2: decorations earned so far, in the order they unlocked (ones open from the start aren't listed) */
+  decorUnlocked?: string[];
 }

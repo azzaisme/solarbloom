@@ -1,4 +1,5 @@
 import { machinesStamp } from '../core/GameState';
+import { decorOccupant, parseDecorKey } from '../core/Decor';
 import { EventBus } from '../app/EventBus';
 import { Economy } from '../core/Economy';
 import { Grid } from '../core/Grid';
@@ -87,6 +88,8 @@ export class Sim {
     this.grid.pending = { ...(state.tiles ?? {}) };
     delete state.tiles;
     for (const m of state.machines) this.grid.indexMachine(m);
+    // E19.2: decorations occupy their tile as machines do (the game writes them; the sim only stamps occupancy).
+    for (const k of Object.keys(state.cozy?.decor ?? {})) this.grid.indexDecor(k);
     this.grid.onChunkCreated = (c) => {
       const p = this.grid.pending[c.key];
       delete this.grid.pending[c.key];
@@ -94,6 +97,11 @@ export class Sim {
       c.packed = p ?? '';
       if (p && this.transitions) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
       for (const m of this.grid.machinesInChunk(c.key)) for (const t of this.grid.footprint(m.roofId, m.x, m.z, m.size)) if (t) t.occupantId = m.id;
+      for (const k of this.grid.decorInChunk(c.key)) {
+        const at = parseDecorKey(k)!;
+        const t = this.grid.peek(at.roofId, at.x, at.z);
+        if (t && !t.occupantId) t.occupantId = decorOccupant(k);
+      }
       this.production?.chunkLoaded(c.key);
     };
     // The world travels with the state (for saving) but is never part of its JSON.

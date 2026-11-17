@@ -7,6 +7,9 @@ import { GROUND } from '../core/GameState';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
+/** E19.2: what building over a decoration says (a decoration is free and instant to remove). */
+export const DECOR_IN_WAY = 'A decoration is here: remove it first';
+
 export interface PlacementCheck {
   ok: boolean;
   reason?: string;
@@ -98,7 +101,10 @@ export class BuildSystem {
       if (!c) continue;
       if (!s.areas.isClear(c) && !s.areas.canTouch(c)) return 'Lost in the fog — clear the ground here first';
       if (c.blocked) return 'A rusty vent is in the way';
-      if (c.occupantId) return `${machineName(s.occupant(c)!)} is already here`;
+      if (c.occupantId) {
+        const m = s.occupant(c);
+        return m ? `${machineName(m)} is already here` : DECOR_IN_WAY; // E19.2: a decoration (free and instant to remove)
+      }
       if (s.drones.isReserved(c.id)) return 'Your drone is about to work here';
       if (c.ground === 'growing') return 'Let it finish growing first';
       if (!allowed.includes(c.ground)) return 'Needs restored or mossy ground — pulse it first';
