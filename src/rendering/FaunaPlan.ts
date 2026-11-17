@@ -2,6 +2,7 @@ import { GROUND } from '../core/GameState';
 import type { MachineData, TileData } from '../core/types';
 import { CAT_ANCHORS } from '../data/templates';
 import { plotById } from '../core/Plots';
+import { decoration } from '../core/Decor';
 import { isBuilt } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
@@ -258,6 +259,22 @@ export const PLOT_VISITORS: Record<string, VisitorKind[]> = {
   hut: ['squirrels'],
 };
 
+/** E19.3.2 (#258) with E19.2: who visits a decoration (one each). No cat at the Lucky Cat statue: never mistakable. */
+export const DECOR_VISITORS: Record<string, VisitorKind> = {
+  bench: 'cats',
+  rug: 'cats',
+  birdbath: 'groundBirds',
+  flowerbed: 'groundBirds',
+  trough: 'groundBirds',
+  pot: 'groundBirds',
+  topiary: 'groundBirds',
+  barrel: 'groundBirds',
+  bunting: 'pigeons',
+  lamppost: 'pigeons',
+  cratestack: 'squirrels',
+  stones: 'frogs',
+};
+
 export interface VisitorSlot {
   kind: VisitorKind;
   key: string;
@@ -272,8 +289,7 @@ export interface VisitorSlot {
  * spot. Reads the simulation, never writes it.
  */
 export function visitorSlots(sim: Sim, rect: Rect, gen = sim.grid.layer(GROUND)?.gen ?? 1): VisitorSlot[] {
-  const chosen = sim.state.cozy?.plots;
-  if (!chosen) return [];
+  const chosen = sim.state.cozy?.plots ?? {};
   const cx = (rect.x0 + rect.x1) / 2;
   const cz = (rect.z0 + rect.z1) / 2;
   const out: (VisitorSlot & { d: number })[] = [];
@@ -296,6 +312,20 @@ export function visitorSlots(sim: Sim, rect: Rect, gen = sim.grid.layer(GROUND)?
       if (kind === 'cats' && luckyAnchorsNear(sim, home.x, home.z).some(([ax, az]) => Math.hypot(ax - home.x, az - home.z) < CAT_ANCHOR_CLEARANCE)) return;
       out.push({ kind, key: `v:${id}:${i}`, home, water, d });
     });
+  }
+  for (const [key, value] of Object.entries(sim.state.cozy?.decor ?? {})) {
+    const dec = decoration(key, value);
+    const kind = dec && dec.roofId === GROUND ? DECOR_VISITORS[dec.kind] : undefined;
+    if (!dec || !kind || dec.x < rect.x0 - 1 || dec.x > rect.x1 || dec.z < rect.z0 - 1 || dec.z > rect.z1) continue;
+    const h = idHash(key);
+    // beside it (the tile itself is taken), on a free restored neighbour picked by hash
+    const t0 = sim.grid.peek(GROUND, dec.x, dec.z);
+    if (!t0) continue;
+    const free = sim.grid.neighbors(t0).filter((n) => n.ground === 'restored' && !n.blocked && !n.occupantId && (kind === 'frogs' || n.feature !== 'water'));
+    const at = kind === 'cats' ? { x: dec.x + 0.5, z: dec.z + 0.5 } : free.length ? { x: free[h % free.length].x + 0.5, z: free[h % free.length].z + 0.5 } : undefined;
+    if (!at) continue;
+    if (kind === 'cats' && luckyAnchorsNear(sim, at.x, at.z).some(([ax, az]) => Math.hypot(ax - at.x, az - at.z) < CAT_ANCHOR_CLEARANCE)) continue;
+    out.push({ kind, key: `vd:${key}`, home: at, water: false, d: Math.hypot(at.x - cx, at.z - cz) });
   }
   out.sort((a, b) => a.d - b.d);
   return out.map(({ d: _d, ...v }) => v);

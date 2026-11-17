@@ -1,8 +1,16 @@
+import { decoration, decorKey, decorKeyOf, decorOccupant, decorValue, type Decoration } from '../core/Decor';
 import { GROUND } from '../core/GameState';
 import { plotAt, plotById, plotSpots, type PlotSpot } from '../core/Plots';
 import type { CozyState } from '../core/types';
-import { PLOT_OPTION, plotOptionsFor, type CozyUnlock, type PlotOption } from '../data/cozy';
+import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, KEEPSAKE_HINTS, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type Keepsake, type PlotOption } from '../data/cozy';
 import type { Sim } from './Sim';
+
+export interface DecorChoice {
+  option: DecorOption;
+  unlocked: boolean;
+  /** what it waits for, when locked */
+  hint?: string;
+}
 
 export interface PlotChoice {
   option: PlotOption;
@@ -21,6 +29,9 @@ export interface PlotChoice {
  */
 export class Cozy {
   constructor(private sim: Sim) {}
+
+  /** E19.2: decorations go on the city's ground only (rooftops draw no decoration art yet); tests on a pad lift it. */
+  groundOnly = true;
 
   private get gen(): number {
     return this.sim.grid.layer(GROUND)?.gen ?? 1;
@@ -101,11 +112,26 @@ export class Cozy {
 
   // ───────────── unlocks (E19.1.4) ─────────────
 
-  /** Has this unlock rule been met (the park's look stage, or areas cleared)? */
+  /** Has this unlock rule been met (the park's look stage, areas cleared, or a Lucky Cat keepsake)? */
   private met(u: CozyUnlock): boolean {
     if ('start' in u) return true;
     if ('parkStage' in u) return this.sim.progression.parkStage() >= u.parkStage;
+    if ('keepsake' in u) return this.keepsakeMet(u.keepsake);
     return this.sim.areas.clearedCount() >= u.areas;
+  }
+
+  /** E20.5 (#288): Lucky Cat finds that unlock keepsakes. Read from the cat's own record; nothing else unlocks them. */
+  private keepsakeMet(k: Keepsake): boolean {
+    const cat = this.sim.state.cat;
+    switch (k) {
+      case 'firstFind':
+        return this.sim.state.stats.catsFound >= 1;
+      case 'finds5':
+        return this.sim.state.stats.catsFound >= 5;
+      case 'golden':
+      case 'rainbow':
+        return (cat.log ?? []).some((e) => e.variant === k);
+    }
   }
 
   isUnlocked(o: PlotOption): boolean {
@@ -115,6 +141,7 @@ export class Cozy {
   /** Words for what a locked option waits for. */
   hint(u: CozyUnlock): string {
     if ('start' in u) return '';
+    if ('keepsake' in u) return KEEPSAKE_HINTS[u.keepsake];
     if ('parkStage' in u) return ['', 'the park’s paths are swept', 'the park’s benches are mended', 'the park’s lamps are lit', 'the fountain wakes'][u.parkStage] ?? 'the park grows';
     return `${u.areas} area${u.areas === 1 ? '' : 's'} cleared`;
   }
@@ -184,5 +211,117 @@ export class Cozy {
   /** How many plots carry a choice. */
   count(): number {
     return Object.keys(this.st?.plots ?? {}).length;
+  }
+
+  // ───────────── decorations (E19.2) ─────────────
+
+  /** The decoration on a tile, if any. */
+  decorAt(roofId: string, x: number, z: number): Decoration | undefined {
+    const d = this.st?.decor;
+    if (!d) return undefined;
+    const key = decorKey(roofId, x, z);
+    const v = d[key];
+    return v ? decoration(key, v) : undefined;
+  }
+
+  /** A decoration by its key (`<layer>|<x>|<z>`). */
+  decorByKey(key: string): Decoration | undefined {
+    const v = this.st?.decor?.[key];
+    return v ? decoration(key, v) : undefined;
+  }
+
+  /** The decoration behind a tile's occupant id (undefined for machines and free tiles). */
+  decorOf(occupantId: string | undefined): Decoration | undefined {
+    const key = decorKeyOf(occupantId);
+    const v = key && this.st?.decor?.[key];
+    return v ? decoration(key!, v) : undefined;
+  }
+
+  /** Every decoration placed, in key order. */
+  decorations(): Decoration[] {
+    return Object.entries(this.st?.decor ?? {}).flatMap(([k, v]) => decoration(k, v) ?? []);
+  }
+
+  decorCount(): number {
+    return Object.keys(this.st?.decor ?? {}).length;
+  }
+
+  isDecorUnlocked(o: DecorOption): boolean {
+    return 'start' in o.unlock || !!this.st?.decorUnlocked?.includes(o.id);
+  }
+
+  /** The tray's list: every decoration, unlocked or with what it waits for (keepsakes only once earned). */
+  decorChoices(): DecorChoice[] {
+    return DECOR_OPTIONS.map((o) => ({ option: o, unlocked: this.isDecorUnlocked(o), hint: this.isDecorUnlocked(o) ? undefined : this.hint(o.unlock) }));
+  }
+
+  /** Unlocks every decoration whose milestone has been met, once each (saved). Returns the new ones. */
+  checkDecorUnlocks(): DecorOption[] {
+    const out: DecorOption[] = [];
+    for (const o of DECOR_OPTIONS) {
+      if (this.isDecorUnlocked(o) || !this.met(o.unlock)) continue;
+      (this.write().decorUnlocked ??= []).push(o.id);
+      out.push(o);
+    }
+    return out;
+  }
+
+  /**
+   * Why a decoration can't go on this tile, or undefined when it can. The tile rules are a machine's (restored,
+   * clear of fog, nothing standing there, no drone about to work it, not growing), plus: the city's ground only
+   * (rooftops come later), not in water, and not on a plot whose look has been chosen.
+   */
+  canDecorate(kind: string, roofId: string, x: number, z: number): string | undefined {
+    const o = DECOR_OPTION[kind];
+    if (!o) return 'There is no such decoration';
+    if (!this.isDecorUnlocked(o)) return `Unlocks when ${this.hint(o.unlock)}`;
+    if (this.groundOnly && roofId !== GROUND) return 'Decorations go on the city’s ground for now';
+    if (this.decorCount() >= DECOR_GEN.max) return `The city holds ${DECOR_GEN.max} decorations at most: remove one first`;
+    const t = this.sim.grid.peek(roofId, x, z); // never loads a chunk (the sim decides that)
+    if (!t) return 'Nothing to stand it on here';
+    if (t.feature === 'water' && !t.blocked) return 'Not in the water';
+    const why = this.sim.build.footprintProblem(roofId, x, z, 1, ['restored']);
+    if (why) return why === 'Needs restored or mossy ground — pulse it first' ? 'Restore the ground here first' : why;
+    if (this.plotUnder(roofId, x, z, 1)) return 'A plot is chosen here: clear it first';
+    return undefined;
+  }
+
+  /**
+   * Places a decoration (free). It occupies its tile as a machine does. Returns why it was refused, or undefined.
+   * The only sim-side effects are a machine's: the tile's occupant, production's dirty marks, and a Lucky Cat
+   * hiding on the tile hopping to another nook.
+   */
+  placeDecor(kind: string, rot: number, roofId: string, x: number, z: number): string | undefined {
+    const why = this.canDecorate(kind, roofId, x, z);
+    if (why) return why;
+    const s = this.write();
+    const key = decorKey(roofId, x, z);
+    const decor = { ...(s.decor ?? {}), [key]: decorValue(kind, rot) };
+    s.decor = Object.fromEntries(Object.keys(decor).sort().map((k) => [k, decor[k]])); // sorted: byte-identical saves
+    this.sim.grid.indexDecor(key);
+    this.sim.grid.peek(roofId, x, z)!.occupantId = decorOccupant(key);
+    this.sim.production.markNear(roofId, x, z, 1);
+    this.sim.cat.relocateIfBlocked();
+    return undefined;
+  }
+
+  /** Removes the decoration on a tile (free and instant; the tile stays restored). Returns what was removed. */
+  removeDecor(roofId: string, x: number, z: number): Decoration | undefined {
+    const d = this.decorAt(roofId, x, z);
+    const s = this.st;
+    if (!d || !s?.decor) return undefined;
+    delete s.decor[d.key];
+    if (!Object.keys(s.decor).length) delete s.decor;
+    this.sim.grid.unindexDecor(d.key);
+    const t = this.sim.grid.peek(roofId, x, z);
+    if (t && t.occupantId === decorOccupant(d.key)) t.occupantId = undefined;
+    this.sim.production.markNear(roofId, x, z, 1);
+    return d;
+  }
+
+  /** Bloombot (#235): is a solid decoration on this cell? (The Walker reads occupancy itself; this is for tests.) */
+  decorSolid(roofId: string, x: number, z: number): boolean {
+    const d = this.decorAt(roofId, x, z);
+    return !!d && DECOR_OPTION[d.kind]?.solid !== false;
   }
 }

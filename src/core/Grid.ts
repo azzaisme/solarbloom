@@ -1,7 +1,9 @@
+import { decorChunkKey } from './Decor';
 import { CHUNK, generateTile, tileId } from './Generation';
 import type { LayerData, MachineData, TileData } from './types';
 
 export { tileId };
+
 export const chunkKey = (layerId: string, cx: number, cz: number) => `${layerId}|${cx}|${cz}`;
 export const chunkOf = (v: number) => Math.floor(v / CHUNK);
 
@@ -277,6 +279,33 @@ export class Grid {
       const list = this.machineIndex.get(k);
       if (list) this.machineIndex.set(k, list.filter((x) => x !== m));
     }
+  }
+
+  // ───────────── E19.2: decoration index ─────────────
+
+  /** Decoration keys (core/Decor) by chunk: a loading chunk stamps their occupancy as it does machines'. */
+  private decorIndex = new Map<string, string[]>();
+
+  indexDecor(key: string) {
+    const ck = decorChunkKey(key);
+    if (!ck) return;
+    const list = this.decorIndex.get(ck);
+    if (!list) this.decorIndex.set(ck, [key]);
+    else if (!list.includes(key)) list.push(key);
+  }
+
+  unindexDecor(key: string) {
+    const ck = decorChunkKey(key);
+    const list = ck ? this.decorIndex.get(ck) : undefined;
+    if (!list) return;
+    const next = list.filter((k) => k !== key);
+    if (next.length) this.decorIndex.set(ck!, next);
+    else this.decorIndex.delete(ck!);
+  }
+
+  /** Keys of the decorations in a chunk. */
+  decorInChunk(key: string): readonly string[] {
+    return this.decorIndex.get(key) ?? [];
   }
 
   /**

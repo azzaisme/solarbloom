@@ -4,7 +4,8 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import { plotSpots } from '../src/core/Plots';
 import { PLOT_OPTIONS } from '../src/data/cozy';
 import { Sim } from '../src/gameplay/Sim';
-import { PLOT_VISITORS, visitorSlots, type Rect } from '../src/rendering/FaunaPlan';
+import { DECOR_VISITORS, PLOT_VISITORS, visitorSlots, type Rect } from '../src/rendering/FaunaPlan';
+import { DECOR_OPTIONS } from '../src/data/cozy';
 
 /** E19.3.2 (#258): animals visit what the player chose. Cosmetic: reading choices never changes the game. */
 
@@ -58,5 +59,17 @@ describe('E19.3.2: animals visit what you chose', () => {
       expect(t.ground).toBe('restored');
     }
     expect(JSON.stringify(sim.state)).toBe(before);
+  });
+
+  it('decorations draw visitors too, and never a cat at the Lucky Cat statue', () => {
+    expect(DECOR_VISITORS.catstatue).toBeUndefined();
+    for (const id of Object.keys(DECOR_VISITORS)) expect(DECOR_OPTIONS.some((o) => o.id === id), id).toBe(true);
+    const sim = world(5);
+    for (const t of sim.areas.tiles(PARK)) if (!t.blocked && !t.occupantId) { t.ground = 'restored'; sim.grid.touch(t); }
+    const t = sim.areas.tiles(PARK).find((x) => x.ground === 'restored' && !x.occupantId && x.feature !== 'water' && x.x > 2 && x.z > 2)!;
+    sim.state.cozy = { decor: { [`${GROUND}|${t.x}|${t.z}`]: 'birdbath' } };
+    const v = visitorSlots(sim, around(t.x, t.z));
+    expect(v.map((x) => x.kind)).toEqual(['groundBirds']);
+    expect(Math.hypot(v[0].home.x - (t.x + 0.5), v[0].home.z - (t.z + 0.5))).toBeLessThan(1.6);
   });
 });

@@ -1,4 +1,5 @@
 import { CHUNK } from '../core/Hash';
+import { decorKey } from '../core/Decor';
 import { GROUND } from '../core/GameState';
 import { generateTile } from '../core/Generation';
 import { bloomCounts } from '../core/TilePack';
@@ -283,7 +284,9 @@ export class EcosystemSystem {
       const z = cz * CHUNK + Math.floor(i / CHUNK);
       const g = generateTile(this.sim.grid.seed, layer, x, z);
       if (!g) continue;
-      const occupied = this.sim.grid.machinesInChunk(key).some((m) => x >= m.x && x < m.x + m.size && z >= m.z && z < m.z + m.size);
+      const occupied =
+        this.sim.grid.machinesInChunk(key).some((m) => x >= m.x && x < m.x + m.size && z >= m.z && z < m.z + m.size) ||
+        this.sim.grid.decorInChunk(key).includes(decorKey(layerId, x, z)); // E19.2: decorations occupy like machines
       this.tallyTile(out, { ground: 'restored', bloom: Number(packed[N + i]) || 1, feature: g.feature, x, z, blocked: g.blocked, occupantId: occupied ? 'm' : undefined }, type);
     }
     return out;
