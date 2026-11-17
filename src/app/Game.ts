@@ -20,6 +20,7 @@ import { Sim } from '../gameplay/Sim';
 import { Butterflies } from '../rendering/Butterflies';
 import { Birds } from '../rendering/Birds';
 import { Clouds } from '../rendering/Clouds';
+import { CloudWall } from '../rendering/CloudWall';
 import { Fauna } from '../rendering/Fauna';
 import { EcoBadge } from '../ui/EcoBadge';
 import { createModels } from '../rendering/Models';
@@ -153,6 +154,8 @@ export class Game {
   private birds: Birds;
   /** Puffy clouds between the camera and the city when zoomed out. */
   private clouds: Clouds;
+  /** region unlocks: the wall of clouds around sealed areas */
+  private cloudWall: CloudWall;
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
   readonly fauna: Fauna;
   private eco!: EcoBadge;
@@ -303,6 +306,7 @@ export class Game {
     };
     this.birds = new Birds(this.scene.world);
     this.clouds = new Clouds(this.scene.world, this.app.graphicsDevice, this.scene.sun.up);
+    this.cloudWall = new CloudWall(this.sim, this.scene.world, this.app.graphicsDevice, this.scene.sun.up, this.app.batcher ?? undefined);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
     this.pollinators = new Pollinators(this.sim, this.scene.world, this.app.batcher!.addGroup('pollinators', true, 400).id);
     this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
@@ -430,6 +434,7 @@ export class Game {
     else if (this.sim.progression.coreReady()) this.machines.setCoreState('ready');
 
     this.wireEvents();
+    this.cloudWall.sync();
     if (botMode()) {
       const visuals = new BloombotVisuals(this.app, this.scene.world);
       visuals.reducedMotion = !!this.settings.reducedMotion;
@@ -2608,6 +2613,8 @@ export class Game {
     });
     b.on('area.fogChanged', ({ areaId }) => this.chunks.markArea(areaId));
     b.on('area.unlocked', ({ areaId }) => {
+      this.cloudWall.reducedMotion = !!this.settings.reducedMotion;
+      this.cloudWall.sync(); // its wall rises and melts away
       this.chunks.markArea(areaId);
       for (const nb of s.areas.info(areaId).neighbours) this.chunks.markArea(nb); // soft fog edges
       const info = s.areas.info(areaId);
@@ -2635,7 +2642,10 @@ export class Game {
       if (lm) this.machines.setLandmarkState(lm.id, 'ready');
       if (areaId !== PARK) this.hud.toast(`✨ ${s.areas.info(areaId).landmarkName} is ready to wake!<small>Walk up and press ${this.hudKey('interact')} to clear this ${AREA_TYPES[s.areas.info(areaId).type].name.toLowerCase()}'s fog.</small>`, 'gold', 4);
     });
-    b.on('area.cleared', ({ areaId }) => this.onAreaCleared(areaId));
+    b.on('area.cleared', ({ areaId }) => {
+      this.onAreaCleared(areaId);
+      this.cloudWall.sync(); // the newly sealed neighbours get their walls
+    });
     b.on('fauna.unlocked', ({ id }) => this.eco?.arrived(id)); // Phase 5 E16 (cosmetic; pays nothing)
     // City 09.1: the landmark's specialty action is done (the wake itself has its own toast once ready).
     b.on('area.specialty', ({ areaId, met }) => {
@@ -3729,6 +3739,7 @@ export class Game {
     {
       const c = this.camera;
       const cv = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+      this.cloudWall.update(dt);
       this.clouds.update(dt, { zoom: c.zoom, yaw: c.yaw, dist: c.dist, viewHeight: c.viewHeight, aspect: cv.clientWidth / Math.max(1, cv.clientHeight), position: c.entity.getPosition(), forward: c.entity.forward });
     }
     this.updateMood(dt);
