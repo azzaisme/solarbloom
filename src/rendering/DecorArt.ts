@@ -142,6 +142,23 @@ const ART: Record<string, (a: At) => void> = {
     put(a, 'sphere', P.glow.gold, 0, 0.36, 0, [0.3, 0.38, 0.26]);
     put(a, 'sphere', P.glow.gold, 0, 0.6, 0.02, 0.22);
   },
+  // E20.5 (#288): keepsakes from Lucky Cat finds
+  pawstones: (a) => {
+    put(a, 'cylinder', P.stone.light, 0, 0.02, 0.08, [0.36, 0.04, 0.3]);
+    if (a.far) return;
+    for (const [x, z] of [[-0.2, -0.14], [-0.07, -0.24], [0.07, -0.24], [0.2, -0.14]]) put(a, 'cylinder', P.stone.light, x, 0.02, z, [0.12, 0.04, 0.12]);
+  },
+  goldlantern: (a) => {
+    put(a, 'box', P.stone.light, 0, 0.04, 0, [0.26, 0.08, 0.26]);
+    put(a, 'box', P.glow.gold, 0, 0.22, 0, [0.17, 0.24, 0.17], 1);
+    put(a, 'cone', P.glow.gold, 0, 0.4, 0, [0.26, 0.12, 0.26]);
+  },
+  rainbowbunting: (a) => {
+    put(a, 'cylinder', P.wood.post, 0, 0.7, 0, [0.06, 1.4, 0.06]);
+    if (a.far) return put(a, 'box', P.flowers.pink, 0.18, 1.15, 0, [0.32, 0.36, 0.02]);
+    const flags = [P.flowers.pink, P.flowers.yellow, P.leaf.shrub[0], P.glow.lamp];
+    flags.forEach((c, i) => put(a, 'box', c, 0.16, 1.32 - i * 0.14, 0, [0.28, 0.12, 0.02]));
+  },
 };
 
 /** Ids with art (tests check every decoration has some). */

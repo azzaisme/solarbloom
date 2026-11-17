@@ -232,4 +232,19 @@ describe('E19.2 stays cosmetic for the pacing bots', () => {
     expect(strip(saver.serialize(checked!.state))).toBe(strip(saver.serialize(plain!.state)));
     expect(JSON.stringify(checked!.ecosystem.score())).toBe(JSON.stringify(plain!.ecosystem.score()));
   });
+
+  it('E20.5: keepsakes come only from Lucky Cat finds: five finds, a Golden Cat, a Rainbow Cat', () => {
+    const sim = new Sim(createInitialState(6));
+    const cozy = new Cozy(sim);
+    sim.state.stats.catsFound = 1;
+    expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['catstatue']);
+    sim.state.cat.log = [{ anchorId: 'park-bench', reward: 'luckyHarvest', at: 10, variant: 'golden' }];
+    expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['goldlantern']);
+    sim.state.stats.catsFound = 5;
+    sim.state.cat.log.push({ anchorId: 'hedge-gap', reward: 'jackpot', at: 20, variant: 'rainbow' });
+    expect(cozy.checkDecorUnlocks().map((o) => o.id).sort()).toEqual(['pawstones', 'rainbowbunting']);
+    expect(cozy.checkDecorUnlocks()).toEqual([]);
+    const fresh = new Cozy(new Sim(createInitialState(6)));
+    expect(fresh.decorChoices().find((c) => c.option.id === 'rainbowbunting')?.hint ?? '').toMatch(/Rainbow Cat/);
+  });
 });
