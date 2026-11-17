@@ -80,13 +80,62 @@ export class GridRenderer {
 
   build() {
     for (const roof of this.sim.grid.rooftops) this.addRoof(roof);
-    for (const roof of this.sim.grid.clusterRoofs) this.addRoof(roof);
+    if (!this.streaming) for (const roof of this.sim.grid.clusterRoofs) this.addRoof(roof);
+  }
+
+  /**
+   * City 07 (#8): in the city, a rooftop cluster only has its tile views and building near the view. Every tile is
+   * a small entity tree, so a 1,000-area city kept about 30,000 entities for rooftops nobody was looking at.
+   */
+  streaming = false;
+  static readonly STREAM_MARGIN = 20;
+  static readonly STREAM_KEEP = 44;
+  private roofs = new Map<string, { tiles: pc.Entity; building?: pc.Entity }>();
+  private streamKey = '';
+  private streamQueue: LayerData[] = [];
+  private streamed = false;
+
+  get loadedRoofs() {
+    return this.roofs.size;
+  }
+
+  /** Adds the clusters the view has reached (one per frame after the first pass) and drops those well behind it. */
+  stream(view: { x0: number; x1: number; z0: number; z1: number }) {
+    if (!this.streaming) return;
+    const key = `${Math.floor(view.x0 / 8)}|${Math.floor(view.x1 / 8)}|${Math.floor(view.z0 / 8)}|${Math.floor(view.z1 / 8)}`;
+    if (key !== this.streamKey) {
+      this.streamKey = key;
+      this.streamQueue = [];
+      for (const roof of this.sim.grid.clusterRoofs) {
+        const x0 = roof.origin[0];
+        const z0 = roof.origin[2];
+        const out = (m: number) => x0 + roof.width < view.x0 - m || x0 > view.x1 + m || z0 + roof.depth < view.z0 - m || z0 > view.z1 + m;
+        if (this.roofs.has(roof.id)) {
+          if (out(GridRenderer.STREAM_KEEP)) this.removeRoof(roof);
+        } else if (!out(GridRenderer.STREAM_MARGIN)) this.streamQueue.push(roof);
+      }
+    }
+    while (this.streamQueue.length) {
+      this.addRoof(this.streamQueue.shift()!);
+      if (this.streamed) break;
+    }
+    this.streamed = true;
+  }
+
+  private removeRoof(roof: LayerData) {
+    const r = this.roofs.get(roof.id);
+    if (!r) return;
+    r.tiles.destroy();
+    r.building?.destroy();
+    this.roofs.delete(roof.id);
+    for (const t of this.sim.grid.tilesOf(roof.id)) this.views.delete(t.id);
   }
 
   /** Tile views for one raised layer (a campaign rooftop, or a city rooftop cluster as it's revealed). */
   addRoof(roof: LayerData) {
-    if (this.parent.findByName(`tiles-${roof.id}`)) return;
+    if (this.roofs.has(roof.id)) return;
     const g = group(this.parent, `tiles-${roof.id}`);
+    this.roofs.set(roof.id, { tiles: g });
     if (roof.cluster) this.clusterBuilding(roof);
     for (const t of this.sim.grid.tilesOf(roof.id)) {
       if (t.blocked) continue;
@@ -105,9 +154,12 @@ export class GridRenderer {
    * and a stair hut. Grey and shuttered while out of reach, white once a relay reaches it.
    */
   clusterBuilding(roof: LayerData) {
-    this.parent.findByName(`building-${roof.id}`)?.destroy();
+    const loaded = this.roofs.get(roof.id);
+    if (!loaded) return; // streamed out: built with its current look when the view comes back
+    loaded.building?.destroy();
     const alive = roof.unlocked && !roof.preview;
     const b = group(this.parent, `building-${roof.id}`, [roof.origin[0] + roof.width / 2, 0, roof.origin[2] + roof.depth / 2]);
+    loaded.building = b;
     const H = roof.height - 0.02;
     const wall = alive ? PALETTE.building.wallAlive : PALETTE.building.wallDead;
     shape(b, 'box', wall, { pos: [0, H / 2, 0], scale: [roof.width + 0.3, H, roof.depth + 0.3], shadow: true });

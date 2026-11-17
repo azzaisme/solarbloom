@@ -205,8 +205,18 @@ export class Game {
       if (lines[stage]) this.hud.toast(lines[stage], 'gold', 4);
       this.vfx.ring(new pc.Vec3(8, 0.3, 8), PALETTE.gold, 6, 1.0);
     };
+    this.grid.streaming = this.city; // City 07 (#8): rooftop clusters stream with the view
     this.grid.build();
     this.machines = new MachineVisuals(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
+    // City 07 (#8): in the city, machine models stream with the view; a landmark streaming in takes its area's state.
+    this.machines.streaming = this.city;
+    this.machines.landmarkState = (m) => {
+      const s = this.sim;
+      const id = s.areas.areaOf({ roofId: m.roofId, x: m.x, z: m.z });
+      if (!id || id === PARK) return s.state.progression.coreActivated ? 'awake' : s.progression.coreReady() ? 'ready' : 'dormant';
+      if (s.areas.fog(id) === 'cleared') return 'awake';
+      return s.areas.ready(id) ? 'ready' : 'dormant';
+    };
     this.machines.buildAll();
     this.drones = new DroneVisuals(this.sim, this.scene.world, this.tweens, this.app);
     this.drones.onTrail = (p) => this.vfx.trail(p);
@@ -2502,6 +2512,7 @@ export class Game {
     this.scene.update(dt);
     this.grid.update(dt);
     const rect = view;
+    if (rect) this.grid.stream(rect);
     this.transitions.sync(this.sim.time + Math.min(this.acc, TUNING.simStep));
     if (rect) this.chunks.update(dt, rect, this.camera.target, this.camera.zoom);
     detailTextures.step(); // Look 3.1: builds the detail maps a slice per frame after first paint

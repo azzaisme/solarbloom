@@ -1,6 +1,8 @@
 import * as pc from 'playcanvas';
 import type { MachineData } from '../core/types';
 import { GROUND } from '../core/GameState';
+import { CHUNK } from '../core/Hash';
+import { chunkKey } from '../core/Grid';
 import type { Sim } from '../gameplay/Sim';
 import { color, glow, mat, PALETTE, uniqueMat } from './Materials';
 import { group, shape, vshape, type ShapeOpts } from './Shapes';
@@ -299,7 +301,7 @@ export class MachineVisuals {
   private batchGroups = new Map<string, number>();
 
   private batchGroupFor(m: MachineData): number | undefined {
-    if (!this.batcher || m.roofId !== GROUND || m.type === 'core') return undefined;
+    if (!this.batcher || m.roofId !== GROUND) return undefined;
     const R = MachineVisuals.BATCH_REGION;
     const key = `${Math.floor(m.x / R)}:${Math.floor(m.z / R)}`;
     let id = this.batchGroups.get(key);
@@ -337,20 +339,154 @@ export class MachineVisuals {
   }
 
   buildAll() {
+    if (this.streaming) return; // models are built when the view reaches them (see `stream`)
     for (const m of this.sim.state.machines) this.add(m, false);
+  }
+
+  /**
+   * City 07 (#8): in the city, machines only have models near the view. A machine's model is about 50
+   * entities, so a 1,000-area city (5,000 machines) held 250,000 entities, 2 GB of heap and every landmark's draw
+   * calls for ground the player wasn't looking at. Models are built a chunk at a time as the view approaches
+   * (nearest first, a few milliseconds per frame) and dropped once it has moved well away.
+   */
+  streaming = false;
+  /** The look a landmark should have when its model streams in (the area's state lives in the simulation). */
+  landmarkState?: (m: MachineData) => 'dormant' | 'ready' | 'awake';
+  /** Tiles beyond the view where models are built, and the wider band where existing ones are kept. */
+  static readonly STREAM_MARGIN = 20;
+  static readonly STREAM_KEEP = 44;
+  static readonly STREAM_MS = 3;
+  private streamKey = '';
+  private streamQueue: string[] = [];
+  private streamed = false;
+
+  get loadedCount() {
+    return this.views.size;
+  }
+
+  /** Regions whose machines all have models and have joined their batch. */
+  private regionsLoaded = new Set<string>();
+  /** The region being built: its machines still to do, and the models built so far (not yet batched). */
+  private regionJob?: { key: string; todo: MachineData[]; built: MachineView[] };
+  private deferBatch = false;
+
+  /**
+   * Machines stream a whole batch region (64×64 tiles) at a time, and a region's models join its batch together,
+   * once, when the last one is built. Adding them a chunk at a time made the engine regenerate the region's batches
+   * (vertex data, a material clone and a shader per batch) on almost every frame of a pan: 28 ms a frame.
+   */
+  private stream(view: { x0: number; x1: number; z0: number; z1: number }) {
+    const R = MachineVisuals.BATCH_REGION;
+    const A = MachineVisuals.STREAM_MARGIN;
+    const K = MachineVisuals.STREAM_KEEP;
+    const span = (m: number) => [Math.floor((view.x0 - m) / R), Math.floor((view.x1 + m) / R), Math.floor((view.z0 - m) / R), Math.floor((view.z1 + m) / R)];
+    const [ax0, ax1, az0, az1] = span(A);
+    const [kx0, kx1, kz0, kz1] = span(K);
+    const key = `${ax0}|${ax1}|${az0}|${az1}|${kx0}|${kx1}|${kz0}|${kz1}`;
+    if (key !== this.streamKey) {
+      this.streamKey = key;
+      const kept = (rx: number, rz: number) => rx >= kx0 && rx <= kx1 && rz >= kz0 && rz <= kz1;
+      // Drop whole regions the view has left well behind (their batch empties in one go).
+      for (const [id, v] of this.views) {
+        const m = v.m;
+        let out: boolean;
+        if (m.roofId === GROUND) out = !kept(Math.floor(m.x / R), Math.floor(m.z / R));
+        else {
+          const [x, , z] = this.worldOf(m);
+          out = x < view.x0 - K || x > view.x1 + K || z < view.z0 - K || z > view.z1 + K;
+        }
+        if (out) {
+          v.root.destroy();
+          this.views.delete(id);
+        }
+      }
+      for (const k of this.regionsLoaded) {
+        const [rx, rz] = k.split(':').map(Number);
+        if (!kept(rx, rz)) this.regionsLoaded.delete(k);
+      }
+      if (this.regionJob) {
+        const [rx, rz] = this.regionJob.key.split(':').map(Number);
+        if (!kept(rx, rz)) this.regionJob = undefined; // the camera left before it finished
+      }
+      // machines on rooftop clusters (few, never batched, and not in the ground's chunk index by world position)
+      for (const m of this.sim.state.machines) {
+        if (m.roofId === GROUND || this.views.has(m.id)) continue;
+        const [x, , z] = this.worldOf(m);
+        if (x >= view.x0 - A && x <= view.x1 + A && z >= view.z0 - A && z <= view.z1 + A) this.streamIn(m);
+      }
+      const mx = (view.x0 + view.x1) / 2 / R - 0.5;
+      const mz = (view.z0 + view.z1) / 2 / R - 0.5;
+      const todo: { key: string; d: number }[] = [];
+      for (let rz = az0; rz <= az1; rz++)
+        for (let rx = ax0; rx <= ax1; rx++) {
+          const k = `${rx}:${rz}`;
+          if (!this.regionsLoaded.has(k) && this.regionJob?.key !== k) todo.push({ key: k, d: Math.hypot(rx - mx, rz - mz) });
+        }
+      todo.sort((a, b) => a.d - b.d);
+      this.streamQueue = todo.map((t) => t.key);
+    }
+    // The first pass (a load) builds everything in view at once; after that, within a small budget per frame.
+    const t0 = performance.now();
+    for (;;) {
+      if (!this.regionJob) {
+        const k = this.streamQueue.shift();
+        if (k === undefined) break;
+        this.regionJob = { key: k, todo: this.regionMachines(k), built: [] };
+      }
+      const job = this.regionJob;
+      while (job.todo.length) {
+        const m = job.todo.pop()!;
+        if (this.views.has(m.id)) continue;
+        this.deferBatch = true;
+        this.streamIn(m);
+        this.deferBatch = false;
+        const v = this.views.get(m.id);
+        if (v) job.built.push(v);
+        if (this.streamed && performance.now() - t0 > MachineVisuals.STREAM_MS) break;
+      }
+      if (job.todo.length) break; // out of time: carries on next frame
+      for (const v of job.built) if (this.views.get(v.m.id) === v) this.batch(v); // the region batches once
+      this.regionsLoaded.add(job.key);
+      this.regionJob = undefined;
+      if (this.streamed && performance.now() - t0 > MachineVisuals.STREAM_MS) break;
+    }
+    this.streamed = true;
+  }
+
+  /** Ground machines standing in a batch region (by their origin tile, as `batchGroupFor` groups them). */
+  private regionMachines(key: string): MachineData[] {
+    const R = MachineVisuals.BATCH_REGION;
+    const [rx, rz] = key.split(':').map(Number);
+    const out: MachineData[] = [];
+    const per = R / CHUNK;
+    for (let cz = rz * per; cz < (rz + 1) * per; cz++)
+      for (let cx = rx * per; cx < (rx + 1) * per; cx++)
+        for (const m of this.sim.grid.machinesInChunk(chunkKey(GROUND, cx, cz)))
+          if (Math.floor(m.x / R) === rx && Math.floor(m.z / R) === rz && !out.includes(m)) out.push(m);
+    return out;
+  }
+
+  private streamIn(m: MachineData) {
+    this.add(m, false);
+    const v = this.views.get(m.id);
+    if (!v || m.type !== 'core') return;
+    const state = this.landmarkState?.(m) ?? 'dormant';
+    if (state !== 'dormant') this.applyCoreState(v, state, true);
   }
 
   /** Look 3.19: rebuild every machine (the hand-built models have loaded). */
   rebuildAll() {
     // landmarks keep their state (a fountain that already flows must not come back as its dry model)
     const states = new Map<string, 'ready' | 'awake'>();
+    const loaded: MachineData[] = [];
     for (const [id, v] of this.views) {
       if (v.root.tags.has('awake')) states.set(id, 'awake');
       else if (v.root.tags.has('ready')) states.set(id, 'ready');
+      loaded.push(v.m);
       v.root.destroy();
     }
     this.views.clear();
-    this.buildAll();
+    for (const m of loaded) this.add(m, false); // only the models that exist (in the city, those near the view)
     for (const [id, state] of states) this.setLandmarkState(id, state, true);
   }
 
@@ -407,7 +543,7 @@ export class MachineVisuals {
     if (animate) {
       this.playBuild(v);
       this.tweens.add(1.4, () => {}, { done: () => this.views.get(m.id) === v && this.batch(v) });
-    } else this.batch(v);
+    } else if (!this.deferBatch) this.batch(v);
   }
 
   /**
@@ -962,7 +1098,7 @@ export class MachineVisuals {
     if (v.m.type === 'motherTree') return this.motherCollar(v);
     const pick = v.m.type === 'core' ? LANDMARK_MODELS[this.landmarkKind(v.m)] : MACHINE_MODELS[v.m.type];
     if (!pick) return;
-    const e = MODELS.instantiate(pick[0]);
+    const e = MODELS.instantiateMerged(pick[0]);
     if (!e) return;
     if (v.fountain) {
       // The park fountain: the hand-built model is its dry look; the flowing three-tier fountain replaces it on waking.
@@ -1001,7 +1137,7 @@ export class MachineVisuals {
    * resonance canopy are raised to grow out of the collar, and the charge light moves to the planter's front.
    */
   private motherCollar(v: MachineView) {
-    const e = v.planter && MODELS!.instantiate('mother-tree-collar');
+    const e = v.planter && MODELS!.instantiateMerged('mother-tree-collar');
     if (!e || !v.planter) return;
     const S = MotherCollar.scale;
     v.planter.enabled = false;
@@ -1504,6 +1640,11 @@ export class MachineVisuals {
   }
 
   private applyCoreState(v: MachineView, state: 'dormant' | 'ready' | 'awake', instant: boolean) {
+    this.coreLook(v, state, instant);
+    if (v.batched) this.batch(v); // parts the new state switched on join the region's batch
+  }
+
+  private coreLook(v: MachineView, state: 'dormant' | 'ready' | 'awake', instant: boolean) {
     if (!v.coreMat || !v.coreBase) return;
     if (v.root.tags.has('awake') && state !== 'awake') return;
     v.root.tags.remove('ready', 'awake', 'dormant');
@@ -1605,7 +1746,13 @@ export class MachineVisuals {
   /** World point above a Core (by roof, or a specific landmark machine id). */
   coreWorld(roofId = GROUND, machineId?: string): [number, number, number] | undefined {
     const v = machineId ? this.views.get(machineId) : this.coreView(roofId);
-    if (!v) return undefined;
+    if (!v) {
+      // no model here right now (streamed out): the same point, from the machine itself
+      const m = machineId ? this.sim.machine(machineId) : this.sim.state.machines.find((x) => x.type === 'core' && x.roofId === roofId);
+      if (!m) return undefined;
+      const w = this.worldOf(m);
+      return [w[0], w[1] + 1.8, w[2]];
+    }
     const p = v.root.getPosition();
     return [p.x, p.y + 1.8, p.z];
   }
@@ -1616,6 +1763,7 @@ export class MachineVisuals {
    */
   update(dt: number, view?: { x0: number; x1: number; z0: number; z1: number }) {
     this.time += dt;
+    if (this.streaming && view) this.stream(view);
     const t = this.time;
     const now = this.sim.time;
     const rm = this.reducedMotion;
