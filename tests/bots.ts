@@ -90,7 +90,7 @@ export interface BotReport {
 
 const ORDER: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'pollinator', 'motherTree', 'solar', 'pollinator', 'droneHub', 'condenser'];
 
-export function runBot(opts: BotOptions): BotReport {
+function* botRun(opts: BotOptions): Generator<void, BotReport> {
   const mode = opts.mode ?? 'active';
   const actionEvery = opts.actionEvery ?? 3;
   const sim = new Sim(opts.state ?? createInitialState(opts.seed));
@@ -318,6 +318,7 @@ export function runBot(opts: BotOptions): BotReport {
     if (handsOffAt === undefined && mode === 'handsOff' && s.machines.some((m) => m.type === 'droneHub')) handsOffAt = Math.round(sim.time);
     if (i % stepsPerAction === 0) act(handsOffAt === undefined);
     sim.tick();
+    if (i % 3000 === 2999) yield; // lets runBotAsync hand the thread back now and then
     if (i % 10 === 0) {
       const hub = sim.build.cost('droneHub');
       if (hubFitsCap < 0 && !sim.econ.exceedsStorage(hub)) hubFitsCap = Math.round(sim.time);
@@ -365,6 +366,24 @@ export function runBot(opts: BotOptions): BotReport {
     cats,
     minutesLog,
   };
+}
+
+export function runBot(opts: BotOptions): BotReport {
+  const it = botRun(opts);
+  for (;;) {
+    const r = it.next();
+    if (r.done) return r.value;
+  }
+}
+
+/** The same run, yielding every 300 simulated seconds: long runs otherwise starve the Vitest worker's RPC. */
+export async function runBotAsync(opts: BotOptions): Promise<BotReport> {
+  const it = botRun(opts);
+  for (;;) {
+    const r = it.next();
+    if (r.done) return r.value;
+    await new Promise((res) => setTimeout(res, 0));
+  }
 }
 
 export const mmss = (t?: number) => (t === undefined || t < 0 ? '—' : `${Math.floor(t / 60)}:${String(Math.round(t) % 60).padStart(2, '0')}`);
