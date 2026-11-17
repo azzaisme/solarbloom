@@ -23,7 +23,7 @@ import { Clouds } from '../rendering/Clouds';
 import { Fauna } from '../rendering/Fauna';
 import { EcoBadge } from '../ui/EcoBadge';
 import { createModels } from '../rendering/Models';
-import { CameraController } from '../rendering/CameraController';
+import { CameraController, ORBIT, PLAY_TILT } from '../rendering/CameraController';
 import { setLeafTier, setTreeCursor } from '../rendering/Foliage';
 import { detailTextures } from '../rendering/DetailTex';
 import { Pollinators } from '../rendering/Pollinators';
@@ -75,7 +75,7 @@ import type { Decoration } from '../core/Decor';
 import type { PlotSpot } from '../core/Plots';
 import { type LoadResult, SaveService } from './SaveService';
 import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
-import { padStick, PhotoMode } from './PhotoMode';
+import { padStick, PHOTO_TILT, PhotoMode } from './PhotoMode';
 import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
 import { LOOK } from '../data/look';
 
@@ -445,8 +445,10 @@ export class Game {
       bot.onButton = (i) => this.padListener?.(i);
       const focus = new PadFocus(this.hud.root);
       bot.padCapture = (i) => !this.padListener && focus.button(i);
-      // E19.2: no zoom in play or while building (the right stick's up and down do nothing for now)
+      // The right stick turns the view (sideways) and tilts it (up and down): a 3D orbit around bloombot. Zoom
+      // belongs to photo mode (above), where up and down zoom instead.
       bot.onTurn = (deg) => this.camera.orbit(deg);
+      bot.onTilt = (deg) => !this.photo?.active && this.camera.tilt(deg);
       this.hud.setKeyMap('keys', this.bindings);
       // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad).
       const touchOnly = typeof matchMedia !== 'undefined' && !matchMedia('(any-pointer: fine)').matches && navigator.maxTouchPoints > 0;
@@ -467,21 +469,31 @@ export class Game {
       leave: () => this.onLeave(),
       click: (x, y, b) => this.onClick(x, y, b),
       pan: (dx, dy, x, y) => {
+        if (this.bot && !this.photo?.active) {
+          // Bloombot in play: the camera follows bloombot and never pans. Any drag turns and tilts the view
+          // around it instead (grab the world: drag right turns the view left, drag down raises the camera).
+          if (!this.cinematic) {
+            this.camera.orbit(-dx * ORBIT.yawPerPx);
+            this.camera.tilt(dy * ORBIT.tiltPerPx);
+          }
+          return;
+        }
         this.lastPanAt = performance.now();
         this.camera.pan(dx, dy, x, y);
       },
-      // Bloombot: while the camera follows it, zoom about the middle of the view (bloombot), not the cursor.
-      // Bloombot: a right-button drag turns the view around bloombot (a third of a degree per pixel).
-      orbit: (dx) => {
+      // Bloombot: a right-button drag turns and tilts the view around bloombot (photo mode's drag pans, and its
+      // right-button drag does this within photo mode's own tilt range).
+      orbit: (dx, dy) => {
         if (!this.bot || this.cinematic) return false;
-        this.camera.orbit(-dx * 0.35);
+        this.camera.orbit(-dx * ORBIT.yawPerPx);
+        this.camera.tilt(dy * ORBIT.tiltPerPx, this.photo?.active ? PHOTO_TILT : PLAY_TILT);
         return true;
       },
       // Bloombot: the camera's distance is fixed; the wheel turns what you're building (E19.2).
       zoom: (f, x, y) => (this.photo?.active ? this.photo.zoom(f) : this.bot ? this.wheelTurn(f) : this.camera.zoomBy(f, x, y)),
       // A quick, strong pinch-out snaps to the city overview (one gesture from anywhere).
       pinchEnd: (f, ms) => {
-        if (this.city && !this.cinematic && f < 0.6 && ms < 450) this.camera.glide(this.camera.target.x, 0, this.camera.target.z, this.camera.minZoom);
+        if (!this.bot && this.city && !this.cinematic && f < 0.6 && ms < 450) this.camera.glide(this.camera.target.x, 0, this.camera.target.z, this.camera.minZoom);
       },
     });
     this.wireKeys();

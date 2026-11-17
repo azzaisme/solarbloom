@@ -1,4 +1,4 @@
-import type { CameraController } from '../rendering/CameraController';
+import { ORBIT, type CameraController } from '../rendering/CameraController';
 import type { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { SLAB_TOP } from '../core/Picking';
 import type { Sim } from '../gameplay/Sim';
@@ -15,8 +15,9 @@ import type { Action, Bindings } from './Bindings';
  * it picks bloombot up again as soon as bloombot moves.
  */
 const DEAD = 0.18;
-/** Right stick fully over turns the view this many degrees a second. */
-const TURN_SPEED = 150;
+/** Right stick fully over turns the view this many degrees a second (sideways) or tilts it (up and down). */
+const TURN_SPEED = ORBIT.stickYaw;
+const TILT_SPEED = ORBIT.stickTilt;
 const MOVES: readonly [Action, number, number][] = [
   ['up', 0, 1],
   ['down', 0, -1],
@@ -52,6 +53,8 @@ export class BotController {
   onZoom?: (factor: number) => void;
   /** gamepad right stick turn, in degrees for this frame */
   onTurn?: (degrees: number) => void;
+  /** gamepad right stick tilt, in degrees for this frame (positive raises the camera) */
+  onTilt?: (degrees: number) => void;
   /** a gamepad button was pressed (bound to an action) */
   onPad?: (a: Action) => void;
   /** a menu that wants pad buttons first (G.7 focus navigation); true when it used the press */
@@ -162,8 +165,8 @@ export class BotController {
     const dz = (v: number) => (Math.abs(v) < DEAD ? 0 : (v - Math.sign(v) * DEAD) / (1 - DEAD));
     const x = dz(gp.axes[0] ?? 0);
     const y = -dz(gp.axes[1] ?? 0);
-    // Right stick: sideways turns the view, up and down zooms. Only the stronger axis counts, so a turn
-    // doesn't also creep the zoom.
+    // Right stick: sideways turns the view, up and down tilts it (and zooms in photo mode). Only the stronger
+    // axis counts, so a turn doesn't also creep the tilt.
     const rx = dz(gp.axes[2] ?? 0);
     const ry = -dz(gp.axes[3] ?? 0);
     const zoom = Math.abs(ry) >= Math.abs(rx) ? ry : 0;
@@ -185,7 +188,10 @@ export class BotController {
 
   update(dt: number) {
     const pad = this.readPad();
-    if (pad?.zoom) this.onZoom?.(Math.pow(1.8, pad.zoom * dt));
+    if (pad?.zoom) {
+      this.onZoom?.(Math.pow(1.8, pad.zoom * dt));
+      this.onTilt?.(-pad.zoom * TILT_SPEED * dt); // stick up lowers the camera, as looking up does
+    }
     if (pad?.turn) this.onTurn?.(-pad.turn * TURN_SPEED * dt);
     let ix = 0;
     let iy = 0;

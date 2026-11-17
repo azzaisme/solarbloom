@@ -108,8 +108,8 @@ is the walkable or buildable tile one step ahead along bloombot's facing.
 | Cycle tools | 1 / 2 | Bumpers | 1 = inspect, 2 = pulse |
 | Turn a decoration (build mode) | Mouse wheel, + / - | Bumpers (while one is in hand) | (none) |
 | Remove / move a decoration | Remove tool + E; Q picks it up | Remove tool + A; X picks it up | (none) |
-| Turn the view | Right-button drag | Right stick left / right | (none) |
-| Recentre the view | C | Right stick click | (none) |
+| Turn and tilt the view (Phase 6: a 3D orbit; no pan or zoom outside photo mode) | Drag with any mouse button | Right stick: left / right turns, up / down tilts | (none) |
+| Recentre the view (turn and tilt) | C | Right stick click | (none) |
 | Photo mode (#260) | O | (none: no free button; Settings › Photo mode, or bind one) | (none) |
 | Overview | M | View | (none) |
 | Settings / pause | P | Menu | P |

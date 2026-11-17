@@ -31,6 +31,9 @@ export const PHOTO = {
   zoomStep: 1.12,
 };
 
+/** Photo mode's own range for the view's tilt (the play camera's is PLAY_TILT). */
+export const PHOTO_TILT = { min: PHOTO.tiltMin, max: PHOTO.tiltMax };
+
 export interface PhotoCamera {
   snapshot(): CameraSnapshot;
   restore(s: CameraSnapshot): void;

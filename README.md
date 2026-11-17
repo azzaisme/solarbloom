@@ -61,9 +61,10 @@ rebound in Settings → Controls.
 | Upgrades | `U` | D-pad right |
 | Backpack (discoveries) | `Tab` | D-pad up |
 | Previous / next tool | `1` / `2` | Bumpers |
-| Zoom, only while placing something (the camera pulls back by itself; in play its distance is fixed) | Mouse wheel, `+` / `-` | Right stick up / down |
-| Turn the view around bloombot | Drag with the right mouse button | Right stick left / right |
-| Recentre the view | `C` | Right stick click |
+| Turn a decoration in hand (build mode) | Mouse wheel, `+` / `-` | Bumpers (while one is in hand) |
+| Turn and tilt the view around bloombot (any angle, from nearly level to nearly overhead) | Drag with any mouse button | Right stick: sideways turns, up / down tilts |
+| Recentre the view (turn and tilt) | `C` | Right stick click |
+| Photo mode: free pan, zoom and tilt, no HUD (the only place the camera pans or zooms) | `O` | Settings › Photo mode |
 | Overview (and back) | `M`; in the overview, click a woken landmark to travel there | View |
 | Settings / pause | `P` | Menu |
 | Bloom Frenzy (when full) | `R` | Left trigger |

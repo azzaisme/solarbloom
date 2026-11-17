@@ -36,6 +36,22 @@ export const VIEW: ViewProfile = { farZoom: 0.45, nearZoom: 1.0, farPitch: 42, n
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
+/**
+ * The play camera is a third-person orbit: the view turns (yaw, any angle) and tilts (pitch) around the point it
+ * follows. Pitch is the zoom's own pitch plus `pitchOffset`; in play the offset may take the view from nearly
+ * level (the close view's 19° less 9) to nearly overhead (19° plus 58 = 77°). Photo mode has its own range
+ * (PHOTO.tiltMin / tiltMax in app/PhotoMode.ts). CameraController.apply keeps the final pitch within 6–80°.
+ */
+export const PLAY_TILT = { min: -9, max: 58 };
+
+/** Degrees of turn and tilt per pixel of a mouse drag, and per second at full right stick. */
+export const ORBIT = { yawPerPx: 0.35, tiltPerPx: 0.25, stickYaw: 150, stickTilt: 70 };
+
+/** A pitch offset moved by `delta` degrees, kept within `range`. */
+export function tiltedOffset(offset: number, delta: number, range: { min: number; max: number } = PLAY_TILT): number {
+  return Math.min(range.max, Math.max(range.min, offset + delta));
+}
+
 /** E19.4.1: everything photo mode may change about the view, so leaving it puts the view back exactly. */
 export interface CameraSnapshot {
   target: [number, number, number];
@@ -77,8 +93,8 @@ export class CameraController {
   reducedMotion = false;
   private cinematic = false;
   /**
-   * E19.4.1 (#260): photo mode's own pitch, in degrees on top of the zoom's (positive looks down more). Zero in
-   * play: the play camera's pitch always follows the zoom.
+   * The view's tilt, in degrees on top of the zoom's pitch (positive looks down more). Zero by default; the
+   * player turns it with a drag or the right stick (Phase 6) and photo mode with its tilt keys (E19.4.1, #260).
    */
   pitchOffset = 0;
   /** E19.4.1: photo mode holds the view: glides, follows and eased zooms from the game leave it alone. */
@@ -197,15 +213,31 @@ export class CameraController {
     this.yawGoal += degrees;
   }
 
-  /** Bloombot: turn back to the default angle, the short way round. */
+  /**
+   * Phase 6: tilt the view around its target by some degrees (positive raises the camera, looking further down).
+   * Kept within `range`: the play range by default, photo mode's own when it is open.
+   */
+  tilt(degrees: number, range: { min: number; max: number } = PLAY_TILT) {
+    if (this.cinematic) return;
+    this.anchor = undefined;
+    this.pitchGoal = undefined;
+    this.pitchOffset = tiltedOffset(this.pitchOffset, degrees, range);
+  }
+
+  /** Where a recentre is easing the tilt to (undefined when it isn't). */
+  private pitchGoal?: number;
+
+  /** Bloombot: turn and tilt back to the default view, the short way round. */
   recentre() {
     const turns = Math.round((this.yawGoal - CameraController.HOME_YAW) / 360);
     this.yawGoal = CameraController.HOME_YAW + turns * 360;
+    this.pitchGoal = 0;
   }
 
-  /** Is the view at (or heading back to) the default angle? */
+  /** Is the view at (or heading back to) the default angle and tilt? */
   get centred(): boolean {
-    return Math.abs((((this.yawGoal - CameraController.HOME_YAW) % 360) + 360) % 360) < 0.01;
+    const tilt = this.pitchGoal ?? this.pitchOffset;
+    return Math.abs((((this.yawGoal - CameraController.HOME_YAW) % 360) + 360) % 360) < 0.01 && Math.abs(tilt) < 0.01;
   }
 
   get goalPoint() {
@@ -353,11 +385,13 @@ export class CameraController {
     this.goal.set(...s.goal);
     Object.assign(this, { yaw: s.yaw, yawGoal: s.yawGoal, zoom: s.zoom, zoomGoal: s.zoomGoal, minZoom: s.minZoom, maxZoom: s.maxZoom, pitchOffset: s.pitchOffset, follow: s.follow, held: s.held });
     this.anchor = undefined;
+    this.pitchGoal = undefined;
     this.apply();
   }
 
   reset() {
     this.follow = 12;
+    this.pitchGoal = 0;
     this.anchor = undefined;
     this.goal.set(4, 0, 4);
     this.zoomGoal = 1;
@@ -377,6 +411,13 @@ export class CameraController {
       const turn = this.reducedMotion ? 1 : 1 - Math.exp(-dt * 14);
       this.yaw += (this.yawGoal - this.yaw) * turn;
       if (Math.abs(this.yawGoal - this.yaw) < 0.01) this.yaw = this.yawGoal;
+      if (this.pitchGoal !== undefined) {
+        this.pitchOffset += (this.pitchGoal - this.pitchOffset) * turn;
+        if (Math.abs(this.pitchGoal - this.pitchOffset) < 0.01) {
+          this.pitchOffset = this.pitchGoal;
+          this.pitchGoal = undefined;
+        }
+      }
       this.target.lerp(this.target, this.goal, k);
       if (this.anchor) {
         // Zoom toward the cursor: move the view so the anchored ground point stays under it.

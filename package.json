@@ -16,7 +16,7 @@
     "bot:walk": "vitest run --mode full tests/walk-bot.test.ts",
     "test:perf": "PERF=1 vitest run",
     "test:soak": "SOAK=1 vitest run",
-    "test:e2e": "vite build && node tests/e2e/picking.e2e.mjs && node tests/e2e/area-panel.e2e.mjs && node tests/e2e/overview.e2e.mjs && node tests/e2e/hud-overlap.e2e.mjs && node tests/e2e/district-bloom.e2e.mjs && node tests/e2e/camera.e2e.mjs",
+    "test:e2e": "vite build && node tests/e2e/picking.e2e.mjs && node tests/e2e/area-panel.e2e.mjs && node tests/e2e/overview.e2e.mjs && node tests/e2e/hud-overlap.e2e.mjs && node tests/e2e/district-bloom.e2e.mjs && node tests/e2e/camera.e2e.mjs && node tests/e2e/camera-orbit.e2e.mjs",
     "test:perf:browser": "vite build && node tests/perf/browser.perf.mjs",
     "test:leak": "vite build && node tests/perf/leak.perf.mjs",
     "shots:city": "vite build && node tests/e2e/city-shots.mjs",

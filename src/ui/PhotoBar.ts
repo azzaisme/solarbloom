@@ -52,7 +52,7 @@ export class PhotoBar {
       tog('frenzy', 'Depth of field', s.dof) +
       `<button data-photo="backpack">Hide this bar${k('backpack')}</button>` +
       `<button data-photo="cancel">Leave${k('cancel')}</button>` +
-      `<span class="pb-help">Move ${move} · zoom ${zoom} · tilt ${this.keyFor('prevTool')} ${this.keyFor('nextTool')} · turn with a right-button drag or the right stick</span>`;
+      `<span class="pb-help">Move ${move} · zoom ${zoom} · tilt ${this.keyFor('prevTool')} ${this.keyFor('nextTool')} · right-button drag turns and tilts · right stick turns</span>`;
     if (html !== this.shown) {
       this.el.innerHTML = html;
       this.shown = html;
