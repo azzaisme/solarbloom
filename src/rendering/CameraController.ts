@@ -157,6 +157,17 @@ export class CameraController {
     this.follow = this.reducedMotion ? 30 : 7;
   }
 
+  /** Bloombot: ease to a zoom without moving the view or changing how it follows. */
+  zoomTo(zoom: number) {
+    if (this.cinematic) return;
+    this.anchor = undefined;
+    this.zoomGoal = pc.math.clamp(zoom, this.minZoom, this.maxZoom);
+  }
+
+  get zoomTarget(): number {
+    return this.zoomGoal;
+  }
+
   /** Bloombot: turn the view around its target by some degrees (positive moves the camera to its right). */
   orbit(degrees: number) {
     if (this.cinematic) return;

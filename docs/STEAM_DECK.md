@@ -42,8 +42,8 @@ To update, download the new AppImage and run the script again.
 
 The game reads the Deck as a standard gamepad, so Steam Input's built-in **Gamepad** template works as it is:
 left stick to walk, A to pulse, X to interact, Y for the build tray, B to cancel, right trigger to sprint,
-bumpers to change tool, right stick to turn the view (sideways) and zoom (up and down), a right stick click to
-recentre it, View for the overview, Menu to pause, and the d-pad for the
+bumpers to change tool, right stick to turn the view (sideways; up and down zooms only while placing something), a right stick click
+to recentre it, View for the overview, Menu to pause, and the d-pad for the
 backpack, harvest and upgrades. Buttons can be rebound in Settings → Controls. A custom Steam Input template is
 not shipped yet.
 

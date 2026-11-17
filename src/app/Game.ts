@@ -72,6 +72,11 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 /** Bloombot: the camera zoom of the close default view (G.3), and how near counts as "within reach". */
 const BOT_ZOOM = 3.2;
+/**
+ * Bloombot: placement mode (a build tool in hand) pulls the camera back so the ground around bloombot can be
+ * planned, as in other cozy games' furniture modes. It is the only time the player can zoom, within this range.
+ */
+const PLACE_ZOOM = { start: 1.5, min: 0.9, max: BOT_ZOOM };
 /** Bloombot: how far in the camera may come (the cursor view stops at 1.9). */
 const BOT_MAX_ZOOM = 4.2;
 const BOT_REACH = 1.6;
@@ -403,7 +408,7 @@ export class Game {
       bot.onButton = (i) => this.padListener?.(i);
       const focus = new PadFocus(this.hud.root);
       bot.padCapture = (i) => !this.padListener && focus.button(i);
-      bot.onZoom = (f) => this.camera.zoomBy(f);
+      bot.onZoom = (f) => this.zoomInput(f);
       bot.onTurn = (deg) => this.camera.orbit(deg);
       this.hud.setKeyMap('keys', this.bindings);
       // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad).
@@ -434,7 +439,8 @@ export class Game {
         this.camera.orbit(-dx * 0.35);
         return true;
       },
-      zoom: (f, x, y) => (this.bot?.following ? this.camera.zoomBy(f) : this.camera.zoomBy(f, x, y)),
+      // Bloombot: the camera's distance is fixed in play; zoom only works in placement mode (zoomInput).
+      zoom: (f, x, y) => (this.bot ? this.zoomInput(f) : this.camera.zoomBy(f, x, y)),
       // A quick, strong pinch-out snaps to the city overview (one gesture from anywhere).
       pinchEnd: (f, ms) => {
         if (this.city && !this.cinematic && f < 0.6 && ms < 450) this.camera.glide(this.camera.target.x, 0, this.camera.target.z, this.camera.minZoom);
@@ -629,6 +635,7 @@ export class Game {
 
   private selectTool(t: Tool) {
     if (this.cinematic) return;
+    if (this.bot && t !== 'inspect' && t !== 'pulse' && !this.placing()) this.placeZoom = PLACE_ZOOM.start; // entering placement mode
     this.sfx.click();
     this.hud.setTool(t);
     this.overlays.hideGhost();
@@ -699,8 +706,8 @@ export class Game {
     else if (a === 'backpack') this.hud.toggleBackpack();
     else if (a === 'prevTool') this.cycleTool(-1);
     else if (a === 'nextTool') this.cycleTool(1);
-    else if (a === 'zoomIn') this.camera.zoomBy(1.15);
-    else if (a === 'zoomOut') this.camera.zoomBy(1 / 1.15);
+    else if (a === 'zoomIn') this.zoomInput(1.15);
+    else if (a === 'zoomOut') this.zoomInput(1 / 1.15);
     else if (a === 'overview') this.toggleOverview();
     else if (a === 'pause') this.setPaused(!this.paused);
     else if (a === 'frenzy') this.sim.frenzy.activate();
@@ -757,10 +764,36 @@ export class Game {
     this.selectTool(tools[(i + step + tools.length) % tools.length]);
   }
 
+  /** Bloombot: placement mode is having something to place in hand (a machine or a superstructure core). */
+  private placing(): boolean {
+    const t = this.hud.currentTool;
+    return !!this.bot && t !== 'inspect' && t !== 'pulse';
+  }
+  private placeZoom = PLACE_ZOOM.start;
+  /** the overview (M) is showing; walking, or M again, leaves it */
+  private overviewOn = false;
+
+  /** Bloombot: a zoom input. Ignored in normal play (fixed distance); in placement mode it moves the pulled-back view. */
+  private zoomInput(factor: number) {
+    if (!this.placing() || this.overviewOn) return;
+    this.placeZoom = Math.min(PLACE_ZOOM.max, Math.max(PLACE_ZOOM.min, this.placeZoom * factor));
+  }
+
+  /** Bloombot: hold the camera at the distance its mode asks for (close in play, pulled back while placing). */
+  private updateBotZoom() {
+    const b = this.bot;
+    if (!b || this.cinematic) return;
+    if (this.overviewOn && b.speed > 0.05) this.overviewOn = false; // walking leaves the overview
+    if (this.overviewOn || !b.following) return; // the overview, or a camera-only fly-to, keeps its own zoom
+    const want = this.placing() ? this.placeZoom : BOT_ZOOM;
+    if (Math.abs(this.camera.zoomTarget - want) > 1e-3) this.camera.zoomTo(want);
+  }
+
   /** Bloombot (G.3): M or the View button: out to the city overview, and back to the close view. */
   private toggleOverview() {
     const c = this.camera;
-    const out = c.zoom > c.minZoom + 0.15;
+    const out = !this.overviewOn;
+    this.overviewOn = out;
     const t = this.bot ? this.bot.world() : [c.target.x, 0, c.target.z];
     c.glide(t[0], 0, t[2], out ? c.minZoom : BOT_ZOOM);
     if (!out && this.bot) this.bot.following = true;
@@ -949,9 +982,10 @@ export class Game {
     }
     const occ = this.sim.occupant(p.tile);
     // G.12: from the overview, a woken landmark is a travel stop: bloombot hops there and the view comes back.
-    if (this.camera.zoom < 0.75 && occ?.type === 'core' && this.landmarkWoken(occ)) {
+    if (this.overviewOn && occ?.type === 'core' && this.landmarkWoken(occ)) {
       b.teleport(occ.roofId, occ.x + occ.size / 2, occ.z + occ.size + 0.6);
       const [tx, ty, tz] = b.world();
+      this.overviewOn = false;
       this.camera.glide(tx, ty - SLAB_TOP, tz, BOT_ZOOM);
       b.visuals.play('cheer');
       return;
@@ -3027,6 +3061,7 @@ export class Game {
     this.overlays.update(dt);
     if (this.bot) {
       this.bot.update(this.hiddenPause ? 0 : dt);
+      this.updateBotZoom();
       this.updateBotPreview();
       this.minimap?.update(dt, this.bot.pose);
       const [cx, cy, cz] = this.bot.world();

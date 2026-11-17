@@ -61,7 +61,7 @@ rebound in Settings → Controls.
 | Upgrades | `U` | D-pad right |
 | Backpack (discoveries) | `Tab` | D-pad up |
 | Previous / next tool | `1` / `2` | Bumpers |
-| Zoom (out to the city overview) | Mouse wheel, `+` / `-` | Right stick up / down |
+| Zoom, only while placing something (the camera pulls back by itself; in play its distance is fixed) | Mouse wheel, `+` / `-` | Right stick up / down |
 | Turn the view around bloombot | Drag with the right mouse button | Right stick left / right |
 | Recentre the view | `C` | Right stick click |
 | Overview (and back) | `M`; in the overview, click a woken landmark to travel there | View |

@@ -71,9 +71,14 @@ is the walkable or buildable tile one step ahead along bloombot's facing.
 
 - **Default view:** the close, low view from the mock, following bloombot.
 - **The view turns around bloombot** (changed 17 Nov 2026; it was a fixed angle): the right stick sideways, or a
-  right-button drag, turns it a full circle; C or a right stick click recentres it. Tilt still follows the zoom
-  only. Mouse wheel, + / - and the right stick up and down zoom; zooming out passes through today's angled view
-  and reaches the overview. The light was composed for the default angle, so other angles look flatter.
+  right-button drag, turns it a full circle; C or a right stick click recentres it. The light was composed for
+  the default angle, so other angles look flatter.
+- **Fixed distance, no zoom in play** (owner, 17 Nov 2026). The camera stays at the close view's distance.
+- **Placement mode pulls back.** With something to place in hand (a machine or a superstructure core today;
+  decorations and plots in #245) the camera eases back so the ground around bloombot can be planned, as in other
+  cozy games' furniture modes. Only here do the mouse wheel, + / - and the right stick up and down zoom, between
+  the pulled-back view and the close one. Putting the tool away returns to the close view.
+- **The overview** stays on its own key (M / View) and is left by pressing it again or by walking.
 - **Lower quality tiers** keep the same camera with a shorter view distance and thicker haze (#272).
 - **Overview, fly-to and Home move the camera only.** Bloombot stays where it is, and the camera returns to it.
 - **Covering distance:** sprint (#266), and travel from the overview to any landmark already woken.
@@ -99,7 +104,7 @@ is the walkable or buildable tile one step ahead along bloombot's facing.
 | Upgrades | U | D-pad right | U |
 | Backpack | Tab | D-pad up | (new) |
 | Cycle tools | 1 / 2 | Bumpers | 1 = inspect, 2 = pulse |
-| Zoom | Mouse wheel, + / - | Right stick up / down | wheel, + / - |
+| Zoom (placement mode only) | Mouse wheel, + / - | Right stick up / down | wheel, + / - |
 | Turn the view | Right-button drag | Right stick left / right | (none) |
 | Recentre the view | C | Right stick click | (none) |
 | Overview | M | View | (none) |
