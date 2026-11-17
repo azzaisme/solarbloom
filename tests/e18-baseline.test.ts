@@ -21,7 +21,8 @@ const run = !!env.E18;
 const roles = !!env.E18_ROLES;
 const PARK_SEEDS = [7, 21, 99];
 const PARK_MIN = 30;
-const CITY_SEEDS = [7, 21];
+// E18_CITY_SEEDS=3,42 overrides the city seeds (extra seeds for noisy results).
+const CITY_SEEDS = env.E18_CITY_SEEDS ? env.E18_CITY_SEEDS.split(',').map(Number) : [7, 21];
 const CITY_MIN = 60;
 
 /** Read-only drone probe: sampled once per simulated second, never changes the sim. */
