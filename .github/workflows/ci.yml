@@ -2,7 +2,7 @@ name: Build
 # Builds only (typecheck + production bundle). Tests run locally, not on GitHub Actions.
 on:
   push:
-    branches: [main]
+    branches: [main, testing]
   pull_request:
 jobs:
   build:

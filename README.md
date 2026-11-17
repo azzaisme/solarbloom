@@ -72,6 +72,18 @@ Switching to another tab doesn't stop the city: when you come back, up to 10 min
 
 On the dev server only (`npm run dev`), the browser console has `sbDev`: `sbDev.reset(seed)`, `sbDev.preset('fresh' | 'screenshot' | 'rich')`, `sbDev.simulate(seconds)`, `sbDev.log()` (the local event log), `sbDev.counts()`, `sbDev.overflow()` (income lost to full storage) and `sbDev.face(name)` (show one drone expression on every drone: `idle`, `focused`, `excited`, `workingA`, `workingB`, `restoring`, `sleeping`, `blink`; no argument to go back). None of it ships in `npm run build`. The scripted first-15-minute baseline is `npx vitest run tests/baseline.test.ts` (`BASELINE=1` for per-minute detail), and the phone HUD check is `node tests/e2e/phase4-hud.e2e.mjs` after a build. Phase 4 plan and status: `docs/PHASE_4_EPICS.md`, `docs/PHASE_4_AUDIT.md`.
 
+## Branches and releases
+
+- **`testing`** is where work lands: branch from it and open pull requests into it.
+- **`main`** is what has been released. Merge `testing` into `main` to release.
+- Every push to `main` runs the **Steam Deck release** workflow (`.github/workflows/release-steamdeck.yml`): it
+  builds the game, wraps it with Electron as a Linux AppImage and publishes a GitHub release named
+  `v<version>-build.<run>`. It can also be run by hand from the Actions tab.
+- On a Steam Deck: download the AppImage in Desktop Mode, mark it executable, then add it to Steam with
+  Games → Add a Non-Steam Game.
+- Locally: `npm run desktop` opens the built game in an Electron window, and `npm run package:deck` builds the
+  AppImage into `release/` (Linux only).
+
 ## How it plays
 
 ### The park
