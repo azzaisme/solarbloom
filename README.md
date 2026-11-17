@@ -87,8 +87,8 @@ On the dev server only (`npm run dev`), the browser console has `sbDev`: `sbDev.
 - Every push to `main` runs the **Steam Deck release** workflow (`.github/workflows/release-steamdeck.yml`): it
   builds the game, wraps it with Electron as a Linux AppImage and publishes a GitHub release named
   `v<version>-build.<run>`. It can also be run by hand from the Actions tab.
-- On a Steam Deck: download the AppImage in Desktop Mode, mark it executable, then add it to Steam with
-  Games → Add a Non-Steam Game.
+- On a Steam Deck: see `docs/STEAM_DECK.md` (install script, the Deck graphics preset, file saves and the
+  test checklist).
 - Locally: `npm run desktop` opens the built game in an Electron window, and `npm run package:deck` builds the
   AppImage into `release/` (Linux only).
 

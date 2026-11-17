@@ -48,7 +48,7 @@ import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
 import { initLowPoly } from '../rendering/Shapes';
 import { LookController } from '../rendering/LookController';
-import { detectTier, lowerTier, urlTier, type GfxSetting } from '../rendering/Quality';
+import { DECK, detectTier, lowerTier, onSteamDeck, urlDeck, urlTier, type GfxSetting } from '../rendering/Quality';
 import type { GfxTier } from '../data/look';
 import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
@@ -478,10 +478,21 @@ export class Game {
     this.setSetting('gfx', v);
   }
 
+  /** Steam Deck (#243): is the Deck preset in effect (chosen, forced by the URL, or Auto on a Deck)? */
+  deck = false;
+  private resolveDeck(): boolean {
+    if (urlTier()) return false;
+    if (urlDeck()) return true;
+    const s = this.settings.gfx ?? 'auto';
+    return s === 'deck' || (s === 'auto' && onSteamDeck(this.app.graphicsDevice));
+  }
+
   private resolveTier(): GfxTier {
     const forced = urlTier();
     if (forced) return forced;
+    if (this.deck) return DECK.tier;
     const s = this.settings.gfx ?? 'auto';
+    if (s === 'deck') return DECK.tier;
     if (s !== 'auto') return s;
     this.autoTier ??= detectTier(this.app.graphicsDevice);
     return this.autoTier;
@@ -492,7 +503,7 @@ export class Game {
     this.setSetting('sound', this.settings.sound);
   }
 
-  private setSetting(k: keyof Settings, v: boolean | string) {
+  private setSetting(k: keyof Settings, v: boolean | string | number) {
     (this.settings as unknown as Record<string, unknown>)[k] = v;
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
@@ -514,9 +525,20 @@ export class Game {
     const rm = s.reducedMotion;
     this.look.lowVfx = !!s.lowVfx;
     this.look.reducedMotion = rm;
+    this.deck = this.resolveDeck();
     this.gfxTier = this.resolveTier();
+    // Steam Deck preset: three-quarter resolution and 1024 shadows on top of its tier.
+    this.look.shadowCap = this.deck ? DECK.shadowRes : undefined;
+    const dpr = this.deck ? DECK.renderScale : Math.min(window.devicePixelRatio || 1, 2);
+    if (dpr !== this.maxDpr) {
+      this.maxDpr = dpr;
+      this.app.graphicsDevice.maxPixelRatio = dpr;
+      this.app.resizeCanvas();
+    }
     this.look.setTier(this.gfxTier);
     this.hud.gfxTier = this.gfxTier;
+    this.hud.gfxDeck = this.deck;
+    this.hud.setUiScale(s.uiScale ?? 100);
     // Phase 5 E16's fauna caps (TUNING.ecosystem.caps) follow the graphics tier.
     this.faunaTier = this.gfxTier;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.clouds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
@@ -539,7 +561,7 @@ export class Game {
     // Look 3: surface detail, the leaf pattern and foliage density follow Look 1's graphics tier.
     detailTextures.setTier(this.gfxTier);
     setLeafTier(this.gfxTier);
-    if (this.chunks) this.chunks.setDetail(this.gfxTier);
+    if (this.chunks) this.chunks.setDetail(this.deck ? DECK.detail : this.gfxTier);
     if (this.chunks && this.chunks.lowFog !== !!s.lowFog) {
       this.chunks.lowFog = !!s.lowFog;
       this.chunks.markAll();
@@ -1090,7 +1112,7 @@ export class Game {
     if (this.bot) {
       // G.18: past the old default zoom, lower tiers pull the haze (and so the far clip) in.
       const close = Math.min(1, Math.max(0, c.zoom - 1) / 0.9);
-      const reach = CLOSE_VIEW_REACH[this.gfxTier as keyof typeof CLOSE_VIEW_REACH] ?? 1;
+      const reach = this.deck ? DECK.closeReach : (CLOSE_VIEW_REACH[this.gfxTier as keyof typeof CLOSE_VIEW_REACH] ?? 1);
       c.hazeEnd *= 1 - (1 - reach) * close;
     }
     this.app.scene.fog.start = c.fogDepth(c.dist + c.hazeStart);
@@ -2875,7 +2897,7 @@ export class Game {
       dev.maxPixelRatio = Math.max(1, dev.maxPixelRatio - 0.25);
       this.app.resizeCanvas();
       this.slowFor = 0;
-    } else if (this.slowFor > 3 && (this.settings.gfx ?? 'auto') === 'auto' && !urlTier() && this.gfxTier !== 'low') {
+    } else if (this.slowFor > 3 && (this.settings.gfx ?? 'auto') === 'auto' && !urlTier() && !this.deck && this.gfxTier !== 'low') {
       // Look 1.11: already at the lowest resolution and still slow: Auto steps down a graphics tier.
       this.autoTier = lowerTier(this.gfxTier);
       this.applySettings();

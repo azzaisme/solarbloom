@@ -40,10 +40,10 @@ export interface HudCallbacks {
   /** Look 5.9: the house button: the park, or (when something is ready) the next area that needs attention. */
   goHome(attention: boolean): void;
   newGame(): void;
-  setSetting(key: keyof Settings, v: boolean): void;
+  setSetting(key: keyof Settings, v: boolean | number): void;
   setVolume(key: 'sfxVolume' | 'musicVolume', v: number): void;
   /** Look 1.11: the Graphics setting. */
-  setGraphics(v: 'auto' | 'low' | 'medium' | 'high'): void;
+  setGraphics(v: 'auto' | 'deck' | 'low' | 'medium' | 'high'): void;
   skipCinematic(): void;
   closeInspect(): void;
   togglePause(): void;
@@ -86,7 +86,9 @@ export interface Settings {
   /** Phase 4 E11.5: stronger outlines and text contrast. */
   highContrast?: boolean;
   /** Look 1.11: graphics quality (Auto picks a tier from the device and steps down if frames stay slow). */
-  gfx?: 'auto' | 'low' | 'medium' | 'high';
+  gfx?: 'auto' | 'deck' | 'low' | 'medium' | 'high';
+  /** Steam Deck (#243): HUD size in percent (100, 125 or 150). */
+  uiScale?: number;
   /** Phase 5 E16: fireflies over lush tiles (ambience only). */
   fireflies?: boolean;
   /** Bloombot (G.16): rebound keys and gamepad buttons (only what differs from the default map). */
@@ -94,6 +96,7 @@ export interface Settings {
   pad?: SavedBindings['pad'];
 }
 
+import { hudHeight, hudWidth, toHud, ui } from './UiScale';
 import { ACTIONS, type Action, type Bindings, keyLabel, padLabel, type SavedBindings } from '../app/Bindings';
 
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
@@ -106,6 +109,8 @@ function esc(s: string) {
 export class Hud {
   /** Look 1.11: the graphics tier in effect (shown next to Auto in Settings). */
   gfxTier?: 'low' | 'medium' | 'high';
+  /** the Steam Deck preset is in effect (it sits on the Medium tier) */
+  gfxDeck?: boolean;
   readonly root: HTMLElement;
   private last = new Map<string, string>();
   private tool: Tool = 'pulse';
@@ -214,7 +219,8 @@ export class Hud {
         <label>Sound volume <input type="range" min="0" max="100" step="5" data-vol="sfxVolume" aria-label="Sound volume"></label>
         <label>Music <input type="checkbox" data-set="music"></label>
         <label>Music volume <input type="range" min="0" max="100" step="5" data-vol="musicVolume" aria-label="Music volume"></label>
-        <label>Graphics <select id="gfxSel" aria-label="Graphics quality"><option value="auto">Auto</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low (phones)</option></select></label>
+        <label>Graphics <select id="gfxSel" aria-label="Graphics quality"><option value="auto">Auto</option><option value="high">High</option><option value="deck">Steam Deck</option><option value="medium">Medium</option><option value="low">Low (phones)</option></select></label>
+        <label>Interface size <select id="uiScaleSel" aria-label="Interface size"><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option></select></label>
         <label>High contrast <input type="checkbox" data-set="highContrast"></label>
         <label>Reduced motion &amp; effects <input type="checkbox" data-set="reducedMotion"></label>
         <label>Fewer particles &amp; softer sparkles <input type="checkbox" data-set="lowVfx"></label>
@@ -294,7 +300,10 @@ export class Hud {
     });
     const gfx = $<HTMLSelectElement>(r, '#gfxSel');
     gfx.value = this.settings.gfx ?? 'auto';
-    gfx.addEventListener('change', () => this.cb.setGraphics(gfx.value as 'auto' | 'low' | 'medium' | 'high'));
+    gfx.addEventListener('change', () => this.cb.setGraphics(gfx.value as 'auto' | 'deck' | 'low' | 'medium' | 'high'));
+    const uis = $<HTMLSelectElement>(r, '#uiScaleSel');
+    uis.value = String(this.settings.uiScale ?? 100);
+    uis.addEventListener('change', () => this.cb.setSetting('uiScale', Number(uis.value)));
     r.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => {
       const key = inp.dataset.set as keyof Settings;
       inp.checked = !!this.settings[key];
@@ -318,8 +327,8 @@ export class Hud {
       if (this.resInfo) {
         this.last.delete('resInfo');
         const rect = row!.getBoundingClientRect();
-        box.style.top = `${Math.round(rect.bottom + 6)}px`;
-        box.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - 248, rect.left)))}px`;
+        box.style.top = `${Math.round(toHud(rect.bottom) + 6)}px`;
+        box.style.left = `${Math.round(Math.max(8, Math.min(hudWidth() - 248, toHud(rect.left))))}px`;
         box.innerHTML = this.resourceBreakdown(this.resInfo);
       }
     });
@@ -664,6 +673,15 @@ export class Hud {
     });
   }
 
+  /** Steam Deck (#243): HUD size, 100 / 125 / 150%. Zooms the whole HUD; see UiScale. */
+  setUiScale(percent: number) {
+    const pct = percent === 125 || percent === 150 ? percent : 100;
+    ui.scale = pct / 100;
+    this.root.style.zoom = pct === 100 ? '' : String(ui.scale);
+    const sel = this.root.querySelector<HTMLSelectElement>('#uiScaleSel');
+    if (sel) sel.value = String(pct);
+  }
+
   private backpackIsOpen = false;
   /** Bloombot (G.15): the backpack (Tab / d-pad up): what you've found, and later your plot options and decorations. */
   toggleBackpack(open = !this.backpackIsOpen) {
@@ -712,7 +730,7 @@ export class Hud {
       this.root.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => (inp.checked = !!this.settings[inp.dataset.set as keyof Settings]));
       $<HTMLSelectElement>(this.root, '#gfxSel').value = this.settings.gfx ?? 'auto';
       const auto = $<HTMLOptionElement>(this.root, '#gfxSel option[value=auto]');
-      auto.textContent = this.gfxTier ? `Auto (${this.gfxTier[0].toUpperCase()}${this.gfxTier.slice(1)})` : 'Auto';
+      auto.textContent = this.gfxDeck ? 'Auto (Steam Deck)' : this.gfxTier ? `Auto (${this.gfxTier[0].toUpperCase()}${this.gfxTier.slice(1)})` : 'Auto';
     }
   }
 
@@ -798,8 +816,8 @@ export class Hud {
     tip.style.display = 'block';
     const w = tip.offsetWidth;
     const h = tip.offsetHeight;
-    const px = Math.min(window.innerWidth - w - 8, x + 18);
-    const py = Math.max(8, Math.min(window.innerHeight - h - 90, y + 18));
+    const px = Math.min(hudWidth() - w - 8, toHud(x) + 18);
+    const py = Math.max(8, Math.min(hudHeight() - h - 90, toHud(y) + 18));
     tip.style.transform = `translate(${px}px, ${py}px)`;
     tip.style.left = '0';
     tip.style.top = '0';
@@ -814,9 +832,9 @@ export class Hud {
     const el = $(this.root, '#fail');
     el.innerHTML = iconize(esc(msg));
     el.style.display = 'block';
-    const px = x ?? window.innerWidth / 2 - 100;
-    const py = y ?? window.innerHeight - 160;
-    el.style.left = `${Math.max(8, Math.min(window.innerWidth - 290, px - 20))}px`;
+    const px = x !== undefined ? toHud(x) : hudWidth() / 2 - 100;
+    const py = y !== undefined ? toHud(y) : hudHeight() - 160;
+    el.style.left = `${Math.max(8, Math.min(hudWidth() - 290, px - 20))}px`;
     el.style.top = `${Math.max(8, py - 48)}px`;
     this.failTimer = 2.2;
   }
@@ -951,8 +969,8 @@ export class Hud {
     }
     this.set(`wl-${id}`, el, 'html', html);
     el.style.display = 'block';
-    el.style.left = `${x}px`;
-    el.style.top = `${y}px`;
+    el.style.left = `${toHud(x)}px`;
+    el.style.top = `${toHud(y)}px`;
     // Look 4.6: nearer labels a little larger, far ones smaller (the CSS scale property composes with its transform).
     el.style.scale = scale === 1 ? '' : scale.toFixed(2);
     el.style.transformOrigin = '50% 100%';
@@ -1033,7 +1051,7 @@ export class Hud {
       return;
     }
     const below = Math.max($(this.root, '#res').getBoundingClientRect().bottom, $(this.root, '#obj').getBoundingClientRect().bottom);
-    t.style.top = `${Math.round(below + 8)}px`;
+    t.style.top = `${Math.round(toHud(below) + 8)}px`;
   }
 
   update(dt: number) {
