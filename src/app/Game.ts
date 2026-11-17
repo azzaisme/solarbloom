@@ -59,6 +59,7 @@ import { SuperSystem } from '../gameplay/SuperSystem';
 import { EventBus } from './EventBus';
 import { BotController, type PadAction } from './BotController';
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
+import { Minimap } from '../ui/Minimap';
 import { type LoadResult, SaveService } from './SaveService';
 
 const SETTINGS_KEY = 'solarbloom.settings';
@@ -162,6 +163,8 @@ export class Game {
   private botPreviewAt = 0;
   private botPreviewKey = '';
   private keyMapShown: 'keys' | 'pad' = 'keys';
+  /** Bloombot (G.14): the round map at the bottom left */
+  private minimap?: Minimap;
   private selected?: string;
   private inspectTimer = 0;
   private cinematic = false;
@@ -361,6 +364,10 @@ export class Game {
       bot.onPad = (a) => this.padAction(a);
       bot.onZoom = (f) => this.camera.zoomBy(f);
       this.hud.setKeyMap('keys');
+      this.minimap = new Minimap(this.sim, this.hud.root, (id) => {
+        const m = this.sim.state.machines.find((q) => q.id === id);
+        return !!m && this.landmarkReady(m);
+      });
       const [bx, , bz] = bot.world();
       this.camera.maxZoom = BOT_MAX_ZOOM;
       this.camera.target.set(bx, 0, bz);
@@ -671,7 +678,10 @@ export class Game {
   private botAnim(r: ActResult) {
     const v = this.bot?.visuals;
     if (!v) return;
-    if (r === 'pulse') v.play('pulse');
+    if (r === 'pulse') {
+      v.play('pulse');
+      this.drones.companionReact('pulse');
+    }
     else if (r === 'build') v.play('assemble');
     else if (r === 'select' || r === 'wake') v.play('interact');
   }
@@ -2802,6 +2812,9 @@ export class Game {
     if (this.bot) {
       this.bot.update(this.hiddenPause ? 0 : dt);
       this.updateBotPreview();
+      this.minimap?.update(dt, this.bot.pose);
+      const [cx, cy, cz] = this.bot.world();
+      this.drones.companion = { x: cx, y: cy, z: cz, facing: this.bot.pose.facing };
     }
     this.camera.update(dt);
     this.sky.clarity += (this.skyClarity() - this.sky.clarity) * Math.min(1, dt * 0.8);

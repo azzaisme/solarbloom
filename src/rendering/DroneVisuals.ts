@@ -163,6 +163,28 @@ export class DroneVisuals {
     bus.on('cat.found', () => this.cheerAll(true));
   }
 
+  /**
+   * Bloombot (G.6): the companion. When set, the first drone floats at bloombot's shoulder whenever it has no
+   * job (idle or flying home), and looks where bloombot looks. Looks only: the sim drone, its jobs and its
+   * timing are untouched; only where it is drawn changes.
+   */
+  companion?: { x: number; y: number; z: number; facing: number };
+
+  /** The drone that keeps bloombot company: the park's old drone if there is one, else the first. */
+  companionId(): string | undefined {
+    const ds = this.sim.state.drones;
+    return (ds.find((d) => d.old) ?? ds.find((d) => !d.swarm && d.expiresAt === undefined))?.id;
+  }
+
+  /** Bloombot (G.6): the companion hops for a pulse, and cheers for bigger moments. */
+  companionReact(kind: 'pulse' | 'cheer') {
+    const id = this.companionId();
+    const v = id && this.views.get(id);
+    if (!v) return;
+    if (kind === 'pulse') v.bounce = BOUNCE_S;
+    else v.celebrate = CELEBRATE_S;
+  }
+
   /** Every drone shows excited eyes for a moment (and wiggles, for a Lucky Cat). */
   private cheerAll(wiggle = false) {
     for (const v of this.views.values()) {
@@ -478,6 +500,7 @@ export class DroneVisuals {
     const emitTrail = this.trailT <= 0 && !this.reducedMotion;
     if (emitTrail) this.trailT = 0.07 - 0.035 * fz; // a Frenzy trail streams twice as fast
     const motion = this.reducedMotion ? 0 : 1;
+    const buddy = this.companion ? this.companionId() : undefined;
     for (const d of this.sim.state.drones) {
       const v = this.views.get(d.id);
       if (!v) continue;
@@ -489,7 +512,14 @@ export class DroneVisuals {
       v.lastMode = d.mode;
       const idle = d.mode === 'idle' || d.mode === 'returning';
       const napping = d.mode === 'idle' && this.sim.drones.statusOf(d) === 'napping';
-      if (idle && motion) {
+      const c = d.id === buddy && idle ? this.companion : undefined;
+      if (c) {
+        // At bloombot's right shoulder and a little behind, so it never stands between the camera and bloombot.
+        const f = c.facing;
+        tx = c.x + Math.cos(f) * 0.62 - Math.sin(f) * 0.25;
+        tz = c.z - Math.sin(f) * 0.62 - Math.cos(f) * 0.25;
+        if (motion) tx += Math.sin(t * 0.9 + v.phase) * 0.06;
+      } else if (idle && motion) {
         // Lazy figure-eight while napping
         tx += Math.sin(t * 0.6 + v.phase) * 0.35;
         tz += Math.sin(t * 1.2 + v.phase) * 0.18;
@@ -499,7 +529,7 @@ export class DroneVisuals {
       const dz = tz - v.z;
       v.x += dx * k;
       v.z += dz * k;
-      const baseY = w[1] + (d.mode === 'working' ? 0.55 : idle ? 1.05 : 0.9);
+      const baseY = c ? c.y + 1.15 : w[1] + (d.mode === 'working' ? 0.55 : idle ? 1.05 : 0.9);
       v.y += (baseY - v.y) * (1 - Math.exp(-dt * 5));
       // Hover bob: softer and slower asleep, livelier in a Frenzy; a short hop on a finished restore.
       const bobAmp = BOB.amp * (napping ? 0.45 : 1) * motion;
@@ -511,7 +541,13 @@ export class DroneVisuals {
       const vel = dt > 0 ? moved / dt : 0;
       const accel = dt > 0 ? (vel - v.vel) / dt : 0;
       v.vel = vel;
-      if (Math.hypot(dx, dz) > 0.01) {
+      if (c && Math.hypot(dx, dz) < 0.15) {
+        // Beside bloombot: look where it looks.
+        let diff = (c.facing * 180) / Math.PI - v.yaw;
+        while (diff > 180) diff -= 360;
+        while (diff < -180) diff += 360;
+        v.yaw += diff * Math.min(1, dt * 5);
+      } else if (Math.hypot(dx, dz) > 0.01) {
         const target = (Math.atan2(dx, dz) * 180) / Math.PI;
         let diff = target - v.yaw;
         while (diff > 180) diff -= 360;
