@@ -759,11 +759,11 @@ export class ChunkRenderer {
       // one structure over its 2×2 footprint, from its first tile only (the others draw nothing)
       const first = PARK_LAYOUT.props.find((p) => p.prop === 'bandstand')!.at;
       if (Math.floor(x) !== first[0] || Math.floor(z) !== first[1]) return !!MODELS?.has('bandstand');
-      return this.batch.add('bandstand', x + 0.5, y, z + 0.5, 0, 0.58);
+      return this.batch.add('bandstand', x + 0.5, y, z + 0.5, 0, 0.58, 0.58, 0.58, this.neglected);
     }
     const [name, scale, turn] = ChunkRenderer.PROP_MODELS[prop] ?? ChunkRenderer.PROP_MODELS.stump;
     const rot = turn ? Math.floor(dhash(Math.floor(x), Math.floor(z), 211) * 4) * (Math.PI / 2) : 0;
-    return this.batch.add(name, x, y, z, rot, scale);
+    return this.batch.add(name, x, y, z, rot, scale, scale, scale, this.neglected);
   }
 
   private setMesh(holder: pc.Entity | undefined, name: string, mesh: pc.Mesh | undefined, material: pc.Material, shadows: boolean): pc.Entity | undefined {
@@ -1157,6 +1157,10 @@ export class ChunkRenderer {
 
   /** Look of the chunk being built: prop level 0–4, and whether it's the park. */
   private level = 0;
+  /** E20.6 (#289): props look neglected until their area wakes (the park from its second stage). */
+  private get neglected(): boolean {
+    return this.level < 2;
+  }
   private inPark = false;
   /** Phase 5 E16: the obstacle tile shown as this chunk's local landmark (cleared areas only). */
   private localMark?: string;
