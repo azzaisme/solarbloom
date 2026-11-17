@@ -6,6 +6,7 @@ import { CHUNK } from '../src/core/Hash';
 import { Rng } from '../src/core/Rng';
 import { Sim } from '../src/gameplay/Sim';
 import { BOT, spawnPose, Walker } from '../src/gameplay/Walker';
+import { runBot } from './bots';
 
 /** A city with the park and at least 40 areas around it revealed, most of them cleared. */
 function bigCity(seed = 7) {
@@ -124,6 +125,13 @@ describe('bloombot walking (G.2)', () => {
     expect(saver.deserialize(saver.serialize(fresh.state))!.bot).toBeUndefined();
     fresh.state.bot = { roofId: GROUND, x: 9.25, z: 11.75, facing: 1.5 };
     expect(saver.deserialize(saver.serialize(fresh.state))!.bot).toEqual({ roofId: GROUND, x: 9.25, z: 11.75, facing: 1.5 });
+  });
+
+  it('leaves the cursor path alone: a pacing bot run never writes bloombot into its save', () => {
+    let sim: Sim | undefined;
+    runBot({ seed: 5, minutes: 3, onSecond: (x) => (sim = x) });
+    expect(sim!.state.bot).toBeUndefined();
+    expect(new SaveService().serialize(sim!.state)).not.toContain('"bot"');
   });
 
   it('walks one chunk in a straight line without leaving legal ground', () => {

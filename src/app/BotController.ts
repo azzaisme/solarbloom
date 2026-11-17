@@ -251,6 +251,7 @@ export class BotController {
       let diff = goal - p.facing;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       p.facing += diff * Math.min(1, dt * BOT.turn);
+      p.facing = Math.atan2(Math.sin(p.facing), Math.cos(p.facing)); // keep it in (-π, π] for the save
       if (this.walk) {
         this.walk.stuckFor = moved < want * dt * 0.1 ? this.walk.stuckFor + dt : 0;
         if (this.walk.stuckFor > 0.6) this.walk = undefined; // something moved into the way

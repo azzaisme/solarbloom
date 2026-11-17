@@ -278,7 +278,12 @@ export class Game {
           if (target === '*') this.sim.upgrades.purchaseAll(id);
           else this.sim.upgrades.purchase(id, target || undefined);
         },
-        activateCore: () => this.sim.progression.activateCore(),
+        activateCore: () => {
+          // Bloombot (G.17): bloombot walks to the fountain and wakes it there.
+          const f = this.bot && this.sim.state.machines.find((m) => m.type === 'core' && this.sim.areas.areaOf(m) === PARK);
+          if (f) this.botWake(f);
+          else this.sim.progression.activateCore();
+        },
         newGame: () => this.newGame(),
         setSetting: (k, v) => this.setSetting(k, v),
         activateFrenzy: () => this.sim.frenzy.activate(),
@@ -326,7 +331,9 @@ export class Game {
         },
         wake: (id) => {
           const m = this.sim.machine(id);
-          if (m && this.landmarkReady(m)) this.wakeLandmark(m);
+          if (!m || !this.landmarkReady(m)) return;
+          if (this.bot) this.botWake(m);
+          else this.wakeLandmark(m);
         },
         cycleSpeed: () => {
           this.speed = this.speed === 1 ? 2 : this.speed === 2 ? 3 : 1;
@@ -372,6 +379,9 @@ export class Game {
       bot.padCapture = (i) => !this.padListener && focus.button(i);
       bot.onZoom = (f) => this.camera.zoomBy(f);
       this.hud.setKeyMap('keys', this.bindings);
+      // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad).
+      const touchOnly = typeof matchMedia !== 'undefined' && !matchMedia('(any-pointer: fine)').matches && navigator.maxTouchPoints > 0;
+      if (touchOnly) setTimeout(() => this.hud.toast('Solarbloom needs a keyboard or a gamepad for now<small>Phones and tablets will be supported again later. Connect a controller to play.</small>', 'gold', 12), 900);
       this.hud.renderControls(this.bindings, (kind, done) => this.listenForBinding(kind, done), () => this.saveBindings());
       this.minimap = new Minimap(this.sim, this.hud.root, (id) => {
         const m = this.sim.state.machines.find((q) => q.id === id);
@@ -825,6 +835,21 @@ export class Game {
     this.sfx.click();
   }
 
+  /** G.17: a wake button sends bloombot to the landmark; it wakes it on arrival (as Q would). */
+  private botWake(m: MachineData) {
+    const b = this.bot!;
+    const go = b.goTo(m.roofId, m.x, m.z, m.size, () => {
+      if (!this.landmarkReady(m)) return;
+      b.visuals.play('interact');
+      this.wakeLandmark(m);
+    });
+    if (go) {
+      this.hud.toast(`Bloombot is on its way to wake it`, '', 2.2);
+      const [x, y, z] = b.world();
+      this.camera.glide(x, y - SLAB_TOP, z, Math.max(this.camera.zoom, BOT_ZOOM * 0.8));
+    } else this.hud.toast(m.roofId !== b.pose.roofId ? 'Ride the rooftop lift first: bloombot has to be there to wake it' : "Bloombot can't find a way there yet", '', 3);
+  }
+
   /** G.12: is this landmark awake (its area cleared), so bloombot can travel to it from the overview? */
   private landmarkWoken(m: MachineData): boolean {
     const id = this.sim.areas.areaOf(m);
@@ -844,7 +869,7 @@ export class Game {
         this.claimingCat = undefined;
         b.visuals.play('cheer');
       };
-      if (!b.goTo(b.pose.roofId, Math.floor(v.x - l.origin[0]), Math.floor(v.z - l.origin[2]), 1, claim)) claim();
+      if (!b.goTo(b.pose.roofId, Math.floor(v.x - l.origin[0]), Math.floor(v.z - l.origin[2]), 1, claim)) this.hud.showFail("Bloombot can't reach that cat from here", x, y);
       return;
     }
     const droneId = this.droneHit(x, y);
@@ -860,9 +885,10 @@ export class Game {
       return;
     }
     const tool = this.hud.currentTool;
-    // Somewhere bloombot can't walk yet (another rooftop, before the lift): act from here, as before.
+    // Another layer: reading a tile is fine from anywhere, but acting needs bloombot there (the lift, G.13).
     if (p.roofId !== b.pose.roofId || this.sim.grid.roof(p.roofId)?.preview) {
-      this.actAt(p, x, y);
+      if (this.hud.currentTool === 'inspect') this.actAt(p, x, y);
+      else this.hud.showFail(this.sim.grid.roof(p.roofId)?.preview ? this.lockedReason(p.roofId) : b.pose.roofId === GROUND ? 'Ride a rooftop lift up there first' : 'Ride the lift down to the street first', x, y);
       return;
     }
     const occ = this.sim.occupant(p.tile);
