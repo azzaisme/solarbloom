@@ -1,6 +1,36 @@
 import { bloomVoice } from '../ui/ChainSummary';
-/** Synthesised sound effects (no audio files). Voice-capped; silent until the first user gesture. */
+/**
+ * Synthesised sound effects plus streamed ambient music beds. Voice-capped; silent until the first user gesture.
+ * Music tracks are CC0 (see assets/raw/audio/music/CREDITS.md).
+ */
 const PENTA = [0, 2, 4, 7, 9];
+
+const MUSIC_DIR = '../../assets/raw/audio/music/';
+/** Only the files named here are bundled; the other raw tracks wait for later layers. */
+const TRACK_URLS = import.meta.glob(
+  [
+    '../../assets/raw/audio/music/birds-wind-synth-v2.ogg',
+    '../../assets/raw/audio/music/birds-wind-ambient.ogg',
+    '../../assets/raw/audio/music/kalimba-think-id-stay-clean.ogg',
+  ],
+  {
+  query: '?url',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
+/**
+ * Looping music beds, each mixed by how alive the world is (`life`, 0..1). New wildlife layers go here as the
+ * world gains them: a file and a level curve.
+ */
+export const MUSIC_BEDS: { file: string; level: (life: number) => number }[] = [
+  // The synth-and-birds score: the atmospheric bed under the melody.
+  { file: 'birds-wind-synth-v2.ogg', level: (life) => 0.6 + 0.2 * life },
+  // The kalimba melody (the tune): present from the start, warmer and fuller as the garden grows.
+  { file: 'kalimba-think-id-stay-clean.ogg', level: (life) => 0.55 + 0.45 * life },
+  // Birdsong and wind: silent in the grey city, rising as wildlife comes back.
+  { file: 'birds-wind-ambient.ogg', level: (life) => 1.1 * Math.min(1, Math.max(0, (life - 0.05) / 0.75)) },
+];
 
 export class Sfx {
   private ctx?: AudioContext;
@@ -20,6 +50,38 @@ export class Sfx {
   layers = 0; // 0..3, grows with restoration
   /** Phase 4 E06: while Bloom Frenzy runs, the pad plays faster and fuller. */
   frenzy = false;
+  /** 0..1, how restored and alive the world is; mixes the wildlife beds in. */
+  life = 0;
+  private beds: { el: HTMLAudioElement; gain: GainNode; level: (life: number) => number; at: number }[] = [];
+
+  /** Starts every music bed silent; update() fades each to its level. */
+  private startBeds() {
+    const ctx = this.ctx;
+    if (!ctx || !this.musicGain || typeof Audio === 'undefined') return;
+    for (const b of MUSIC_BEDS) {
+      const url = TRACK_URLS[MUSIC_DIR + b.file];
+      if (!url) continue;
+      try {
+        const el = new Audio(url);
+        el.loop = true;
+        el.preload = 'auto';
+        const gain = ctx.createGain();
+        gain.gain.value = 0;
+        ctx.createMediaElementSource(el).connect(gain).connect(this.musicGain);
+        this.beds.push({ el, gain, level: b.level, at: -1 });
+      } catch {
+        /* a bed that cannot play is skipped; the synth pad covers for it */
+      }
+    }
+    this.playBeds(this.music);
+  }
+
+  private playBeds(on: boolean) {
+    for (const b of this.beds) {
+      if (on) void b.el.play().catch(() => {});
+      else b.el.pause();
+    }
+  }
 
   unlock() {
     if (this.ctx) {
@@ -41,6 +103,7 @@ export class Sfx {
     } catch {
       this.ctx = undefined;
     }
+    this.startBeds();
   }
 
   setMuted(m: boolean) {
@@ -59,6 +122,7 @@ export class Sfx {
   setMusic(on: boolean) {
     this.music = on;
     if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(on ? 0.22 * this.musicVolume : 0, this.ctx.currentTime, 0.2);
+    this.playBeds(on);
   }
 
   private tone(freq: number, dur: number, opts: { type?: OscillatorType; vol?: number; attack?: number; glide?: number; delay?: number; dest?: AudioNode } = {}) {
@@ -226,9 +290,19 @@ export class Sfx {
     }
   }
 
-  /** Gentle generative pad; layers grow with the garden. */
+  /**
+   * Music beds fade toward their level for the current `life`. The generative pad now plays only during Bloom
+   * Frenzy (its faster, fuller pulse marks the event), or always if no bed could load.
+   */
   update(dt: number) {
     if (!this.ctx || !this.musicGain || !this.music) return;
+    for (const b of this.beds) {
+      const v = b.level(this.life);
+      if (Math.abs(v - b.at) < 0.01) continue;
+      b.at = v;
+      b.gain.gain.setTargetAtTime(v, this.ctx.currentTime, 2.5);
+    }
+    if (this.beds.length && !this.frenzy) return;
     this.musicTimer -= dt;
     if (this.musicTimer > 0) return;
     this.musicTimer = this.frenzy ? 1.2 : 2.4; // Phase 4 E06: Bloom Frenzy doubles the music's pace

@@ -2573,7 +2573,9 @@ export class Game {
     this.look.update(dt);
     this.updateTreeCursor(dt);
     this.hud.update(dt);
-    this.sfx.layers = Math.min(3, Math.floor(this.sim.progression.restoredCount(HOME) / 12));
+    const restored = this.sim.progression.restoredCount(HOME);
+    this.sfx.layers = Math.min(3, Math.floor(restored / 12));
+    this.sfx.life = Math.min(1, restored / 48);
     this.sfx.update(dt);
 
     if (this.selected) {
