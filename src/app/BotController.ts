@@ -50,6 +50,8 @@ export class BotController {
   onZoom?: (factor: number) => void;
   /** a gamepad button was pressed (bound to an action) */
   onPad?: (a: Action) => void;
+  /** a menu that wants pad buttons first (G.7 focus navigation); true when it used the press */
+  padCapture?: (button: number) => boolean;
   /** any gamepad button press, by index (the rebinding screen listens here) */
   onButton?: (button: number) => void;
   /** true while input must not move bloombot (cinematics, open modal, paused) */
@@ -163,7 +165,7 @@ export class BotController {
         this.lastInput = 'pad';
         this.onButton?.(i);
         const a = this.bindings.actionForButton(i);
-        if (a && a !== 'sprint') this.onPad?.(a);
+        if (!this.padCapture?.(i) && a && a !== 'sprint') this.onPad?.(a);
       }
       this.padPrev[i] = down;
     });

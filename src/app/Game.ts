@@ -8,7 +8,7 @@ import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
 import type { BuildableType, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
-import { MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
+import { BUILDABLE, MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
@@ -61,6 +61,7 @@ import { BotController } from './BotController';
 import { type Action, Bindings, BUILD_DIGITS, keyLabel, padLabel } from './Bindings';
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
+import { PadFocus } from '../ui/PadFocus';
 import { type LoadResult, SaveService } from './SaveService';
 
 const SETTINGS_KEY = 'solarbloom.settings';
@@ -367,6 +368,8 @@ export class Game {
       bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble';
       bot.onPad = (a) => this.doAction(a);
       bot.onButton = (i) => this.padListener?.(i);
+      const focus = new PadFocus(this.hud.root);
+      bot.padCapture = (i) => !this.padListener && focus.button(i);
       bot.onZoom = (f) => this.camera.zoomBy(f);
       this.hud.setKeyMap('keys', this.bindings);
       this.hud.renderControls(this.bindings, (kind, done) => this.listenForBinding(kind, done), () => this.saveBindings());
@@ -675,12 +678,16 @@ export class Game {
     else this.selectTool('pulse');
   }
 
-  /** Bloombot: 1 / 2 and the bumpers step through the tools (pulse, inspect, then the build tray's machine). */
+  /**
+   * Bloombot: 1 / 2 and the bumpers step through the tools: Pulse, Inspect, then every machine that's unlocked
+   * (and any Superstructure Core waiting to be placed), so a gamepad can build without opening the tray.
+   */
   private cycleTool(step: number) {
     const tools: Tool[] = ['pulse', 'inspect'];
+    for (const t of BUILDABLE) if (this.sim.build.isUnlocked(t)) tools.push(t);
+    for (const btn of this.hud.root.querySelectorAll<HTMLElement>('#buildTray .super[data-tool]')) if (!btn.hidden) tools.push(btn.dataset.tool as Tool);
     const cur = this.hud.currentTool;
-    if (!tools.includes(cur)) tools.push(cur);
-    const i = tools.indexOf(cur);
+    const i = Math.max(0, tools.indexOf(cur));
     this.selectTool(tools[(i + step + tools.length) % tools.length]);
   }
 
