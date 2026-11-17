@@ -9,7 +9,7 @@ import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
 import type { BuildableType, DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
-import { BUILDABLE, MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
+import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
@@ -940,7 +940,7 @@ export class Game {
    */
   private cycleTool(step: number) {
     const tools: Tool[] = ['pulse', 'inspect'];
-    for (const t of BUILDABLE) if (this.sim.build.isUnlocked(t)) tools.push(t);
+    for (const t of this.sim.oldCity ? OLD_CITY_BUILDABLE : BUILDABLE) if (this.sim.build.isUnlocked(t)) tools.push(t);
     for (const btn of this.hud.root.querySelectorAll<HTMLElement>('#buildTray .super[data-tool]')) if (!btn.hidden) tools.push(btn.dataset.tool as Tool);
     // E19.2: the decoration last held, then the remove tool. With a decoration in hand the keys step through every
     // decoration earned (so the keyboard alone can choose one); on the pad the bumpers turn it and the tray chooses.
@@ -1890,6 +1890,20 @@ export class Game {
   private removeDecorAt(p: Pick, x: number, y: number, pickUp: boolean): ActResult {
     const t = p.tile!;
     const d = this.cozy.decorOf(t.occupantId);
+    // E21.3: under old-city rules the remove tool also takes down a machine, giving its whole recipe back
+    const occ = !d && !pickUp && this.sim.oldCity ? this.sim.occupant(t) : undefined;
+    if (occ && occ.type !== 'core' && !occ.starter) {
+      if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
+      if (this.sim.build.remove(occ.id)) {
+        this.machines.remove(occ.id);
+        for (const c of this.sim.grid.footprint(occ.roofId, occ.x, occ.z, occ.size)) if (c) this.chunks.markTile(c);
+        this.hud.toast(`${machineName(occ)} taken down<small>Everything it was built from is back in your backpack.</small>`, '', 2.4);
+        return 'build';
+      }
+    }
     if (!d) {
       this.hud.showFail('Aim at a decoration', x, y);
       return 'none';

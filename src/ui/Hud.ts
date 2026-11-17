@@ -5,7 +5,7 @@ import { Economy, formatCost, formatPriceHtml, KINDS } from '../core/Economy';
 import { big, fmt, toNum, type Big } from '../core/Big';
 import type { Cost } from '../core/types';
 import type { BuildableType, MachineData, ResourceKind } from '../core/types';
-import { BUILDABLE, MACHINES, TIER2, TIER3 } from '../data/machines';
+import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE, TIER2, TIER3 } from '../data/machines';
 import { AREA_TYPES } from '../data/city';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
@@ -181,9 +181,10 @@ export class Hud {
       `<span class="sep"></span>`,
       `<button class="slot" id="buildToggle" aria-label="Build menu (B)" aria-expanded="false"><span class="key">B</span><span class="si">${ICONS.build}</span><span class="sl">Build</span><span class="sc"></span></button>`,
       `<div id="buildTray">`,
-      ...BUILDABLE.map(
+      // E21.3: the Old City adds the Storage Chest and the Reclaimer (no number keys: the tray and the bumpers reach them)
+      ...(this.sim.oldCity ? OLD_CITY_BUILDABLE : BUILDABLE).map(
         (t) =>
-          `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name} (${MACHINES[t].hotkey})"><span class="key">${MACHINES[t].hotkey}</span><span class="si">${ICONS[MACHINE_ICONS[t]]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
+          `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name}${MACHINES[t].hotkey ? ` (${MACHINES[t].hotkey})` : ''}"><span class="key">${MACHINES[t].hotkey ?? ''}</span><span class="si">${ICONS[MACHINE_ICONS[t]]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
       ),
       ...SUPER_TOOLS.map((t) => {
         const d = TIER3[superType(t)!]!;
@@ -1225,11 +1226,11 @@ export class Hud {
     this.updateEvents();
     this.set('frTitle', fb, 'title', fActive ? 'Bloom Frenzy! Pulse reach +2 tiers, biomass ×10, drones ×3' : fReady ? `Bloom Frenzy is ready: press ${this.cb.keyFor('frenzy')} to fire it` : 'Bloom Frenzy charges as you restore, chain and overflow');
     // Hotbar costs
-    for (const t of BUILDABLE) {
+    for (const t of s.oldCity ? OLD_CITY_BUILDABLE : BUILDABLE) {
       const btn = $(this.root, `#hotbar [data-tool="${t}"]`);
-      const cost = s.build.cost(t);
-      this.set(`hc-${t}`, $(btn, '.sc'), 'text', formatCost(cost));
-      this.set(`hk-${t}`, btn, 'cls', s.econ.canAfford(cost) ? '0' : '1', 'cant');
+      // E21.3: under old-city rules the price is the recipe (material icons, have / need)
+      this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.costLabel(t));
+      this.set(`hk-${t}`, btn, 'cls', s.build.affordable(t) ? '0' : '1', 'cant');
       const locked = !s.build.isUnlocked(t);
       this.set(`hl-${t}`, btn, 'cls', locked ? '1' : '0', 'locked');
       // A rooftop's specialty piece only appears once that rooftop is reachable.

@@ -10,6 +10,8 @@ export interface GameEvents {
   'pack.full': { material: import('../core/types').MaterialId; left: number };
   /** E21.2: bloombot salvaged a pile (`got` units; `left` in the pile; 0 = it is gone). */
   'pile.salvaged': { pileId: string; material: import('../core/types').MaterialId; got: number; left: number; x: number; z: number };
+  /** E21.3: a machine was taken down (its recipe refunded). */
+  'machine.removed': { machine: MachineData };
   /** E21.2: a Reclaimer sent units to the store. */
   'reclaimer.delivered': { machineId: string; material: import('../core/types').MaterialId; n: number };
   /** E21.5: a gate opened for good (a barricade pried, a bridge repaired, the lock bridge risen). */
