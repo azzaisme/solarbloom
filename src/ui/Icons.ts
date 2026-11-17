@@ -253,6 +253,8 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '🔒': 'lock', '✅': 'check', '⬜': 'box', '⏳': 'hourglass', '🔗': 'link', '🔀': 'merge', '🔁': 'repeat', '⬆': 'up', '⚠': 'warning', '❔': 'question',
   '📋': 'clipboard', '🧹': 'broom', '🪑': 'bench', '💡': 'bulb', '💰': 'coins', '🧩': 'puzzle', '👑': 'crown', '🧠': 'brain', '🕸': 'web', '✋': 'hand',
   '⚙': 'settings', '🔧': 'wrench', '▶': 'play', '⏸': 'pause', '⏩': 'fastForward', '⏭': 'fastForward',
+  // Cultivator / slab-breakdown strings.
+  '🪨': 'restore', '🧱': 'restore', '🟫': 'garden', '🍃': 'biomass', '🚜': 'build', '🔱': 'build', '🧭': 'telescope',
 };
 
 /** Emoji (with optional variation selector / ZWJ sequences). */
