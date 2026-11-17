@@ -36,6 +36,7 @@ import { TUNING } from '../data/tuning';
 import { Transitions } from './Transitions';
 import { CultivatorSystem } from './CultivatorSystem';
 import { Inventory, type BotAt } from './Inventory';
+import { SalvageSystem } from './SalvageSystem';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -80,6 +81,8 @@ export class Sim {
   readonly cultivators: CultivatorSystem;
   /** E21.1: the backpack and the store (old-city rules). */
   readonly inventory: Inventory;
+  /** E21.2: salvage piles, seams and Reclaimers (old-city rules). */
+  readonly salvage: SalvageSystem;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -124,6 +127,7 @@ export class Sim {
     }
     this.econ = new Economy(state.resources, state.caps);
     this.inventory = new Inventory(this);
+    this.salvage = new SalvageSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
@@ -255,6 +259,7 @@ export class Sim {
     this.drones.tick(dt);
     this.roles.tick(dt);
     this.cultivators.tick(dt);
+    this.salvage.tick(dt);
     this.supers.tick(dt);
     this.cat.tick();
     this.events.tick();

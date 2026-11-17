@@ -1132,11 +1132,17 @@ export class Game {
         const t = this.sim.grid.get(this.bot!.pose.roofId, x, z);
         return t ? this.botTileScreen(t) : { x: innerWidth / 2, y: innerHeight / 2 };
       },
-      sound: (name: string) => {
+      sound: (name: string, material?: string) => {
         if (name === 'tier' || name === 'wake') this.sfx.fanfare();
         else if (name === 'deliver') this.sfx.coin();
-        else if (name === 'salvage' || name === 'pry') this.sfx.build();
+        else if (name === 'pry') this.sfx.stage('crack');
+        // a sound per material
+        else if (name === 'salvage') this.sfx.stage(({ scrap: 'thud', seeds: 'rustle', copper: 'hum', timber: 'creak', glass: 'crack', clay: 'thud', gears: 'grind', sunstone: 'hum' } as const)[material as 'scrap'] ?? 'thud');
         else this.sfx.click();
+      },
+      markTile: (x: number, z: number) => {
+        const t = this.sim.grid.get(GROUND, x, z);
+        if (t) this.chunks.markTile(t);
       },
     };
   }
@@ -1244,6 +1250,7 @@ export class Game {
       this.select(undefined);
       return;
     }
+    if (this.oc?.click(p.tile)) return; // E21.2: a pile: walk there and salvage it
     const tool = this.hud.currentTool;
     // Another layer: reading a tile is fine from anywhere, but acting needs bloombot there (the lift, G.13).
     if (p.roofId !== b.pose.roofId || this.sim.grid.roof(p.roofId)?.preview) {

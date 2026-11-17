@@ -20,6 +20,8 @@ export interface OfflineReport {
   settled: number;
   /** Look 6.8: tiles the Cultivators broke up and restored while away. */
   cultivated: number;
+  /** E21.2: what Reclaimers sent to the store while away (old-city rules). */
+  reclaimed?: Partial<Record<import('../core/types').MaterialId, number>>;
 }
 
 /**
@@ -55,6 +57,7 @@ export class OfflineSystem {
     const report: OfflineReport = { seconds, away: awaySeconds, credited, lost, droneJobs: 0, restored: 0, grown: 0, settled: 0, cultivated: 0 };
     this.droneWork(eff, report);
     report.cultivated = s.cultivators.offline(eff, O.maxDroneJobs);
+    if (s.salvage.on) report.reclaimed = s.salvage.offline(awaySeconds);
     // Everything visible finishes: pending transitions (including the ones drone work just started) settle.
     report.settled = s.transitions.finishAll();
     s.frenzy.suspended = false;

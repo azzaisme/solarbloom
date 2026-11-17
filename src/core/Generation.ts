@@ -5,6 +5,7 @@ import { areaMapFor, genKey, PARK, type AreaInfo } from './Areas';
 import { canalRow, roadCol, roadRow } from './Arterials';
 import { distToFootprintRaw } from './Footprint';
 import { roadPlanFor } from './RoadPlan';
+import { setPieceAt } from './OldCityLayout';
 import { CHUNK, hashString, tileId, tileRandom } from './Hash';
 import type { GroundState, LayerData, TileData } from './types';
 
@@ -36,14 +37,33 @@ export function generateTile(seed: number, layer: LayerData, x: number, z: numbe
   };
 }
 
+/**
+ * E21 (generation 5): the Old City's set pieces stamped over generated ground: salvage piles, Keepers, gates and
+ * the ruined shed stand on their tile (blocked, with a prop the renderer draws). Pure: the layout never changes.
+ */
+export function stampOldCity(t: TileData): TileData {
+  const p = setPieceAt(t.x, t.z);
+  if (!p) return t;
+  if (p.kind === 'pile') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `pile:${p.pile.id}` });
+  if (p.kind === 'keeper') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `keeper:${p.keeper.id}` });
+  if (p.kind === 'shed') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: 'shed' });
+  if (p.kind === 'gate') {
+    const g = p.gate;
+    if (g.kind === 'barricade') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `gate:${g.id}` });
+    if (g.kind === 'water' || g.kind === 'lockBridge') return Object.assign(t, { blocked: false, feature: 'water', prop: `gate:${g.id}` });
+    if (g.kind === 'bridge') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `gate:${g.id}` });
+  }
+  return t;
+}
+
 /** The hand-made starting park: lawns, a round plaza about the fountain, winding paths, benches, a bandstand, a lamp. */
-function generatePark(seed: number, lh: number, x: number, z: number): TileData {
+function generatePark(seed: number, lh: number, x: number, z: number, gen = GROUND_GEN_CLASSIC): TileData {
   const L = PARK_LAYOUT;
   const prop = L.props.find((p) => p.at[0] === x && p.at[1] === z)?.prop;
   const path = parkPath(x, z);
   const prepared = L.prepared.some(([a, b]) => a === x && b === z) || (L.starterSolar[0] === x && L.starterSolar[1] === z);
   const { pollutionMin, pollutionMax } = TUNING.restore;
-  return {
+  const t: TileData = {
     id: tileId(GROUND_ID, x, z),
     roofId: GROUND_ID,
     x,
@@ -57,7 +77,12 @@ function generatePark(seed: number, lh: number, x: number, z: number): TileData 
     growthRemainingSec: 0,
     bloom: 0,
   };
+  return gen >= OLD_CITY_GEN_ID ? stampOldCity(t) : t;
 }
+
+/** Ground generations: classic games are 4 at most; 5 is the Old City (core/GameState OLD_CITY_GEN). */
+const GROUND_GEN_CLASSIC = 4;
+const OLD_CITY_GEN_ID = 5;
 
 const GROUND_ID = 'g';
 
@@ -199,7 +224,7 @@ function generateGround(seed: number, layer: LayerData, x: number, z: number): T
   const lx = x - cx * CHUNK;
   const lz = z - cz * CHUNK;
   const area = map.info(map.areaOfChunk(cx, cz));
-  if (area.id === PARK) return generatePark(seed, lh, x, z);
+  if (area.id === PARK) return generatePark(seed, lh, x, z, layer.gen ?? 1);
   const def = AREA_TYPES[area.type];
   let feature: TileFeature = def.ground;
   const park = area.id === PARK;

@@ -402,6 +402,8 @@ export interface SalvageState {
   weather?: { kind: WeatherKind; until: number };
   /** E21.9: Reclaimers' undelivered fractions, by machine id (so 6 a minute pays exactly) */
   reclaim?: Record<string, number>;
+  /** E21.9: lasting region rewards in effect (data/oldcity RewardId), in the order they were won */
+  rewards?: string[];
   /** E21.12: lookouts and vistas already seen, beacons spotted (presentation, but saved so they play once) */
   seen?: string[];
 }

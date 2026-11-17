@@ -12,6 +12,9 @@ import { PALETTE } from './Materials';
 import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { plotsInChunk, type PlotSpot } from '../core/Plots';
+import { pileById } from '../core/OldCityLayout';
+import { PARK_SET } from '../data/oldcity';
+import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
 import { drawDecor } from './DecorArt';
 import type { Decoration } from '../core/Decor';
@@ -766,6 +769,56 @@ export class ChunkRenderer {
     return this.batch.add(name, x, y, z, rot, scale, scale, scale, this.neglected);
   }
 
+  /**
+   * E21.2: the Old City's set pieces on their tile. A salvage pile is its material's model in three sizes,
+   * shrinking as it empties; a barricade is a heap of rubble across the avenue; the ruined shed is drawn once
+   * from its corner tile; a Keeper stands on bare ground (KeeperVisuals draws it). True when handled.
+   */
+  private oldCityProp(b: Sink, t: TileData, x: number, y: number, z: number): boolean {
+    const prop = t.prop!;
+    if (prop.startsWith('pile:')) {
+      const pile = pileById(prop.slice(5));
+      if (!pile) return false;
+      const size = SALVAGE.units[pile.size];
+      const k = Math.max(0, this.sim.salvage.left(pile.id)) / size;
+      const base = pile.size === 'large' ? 0.95 : pile.size === 'medium' ? 0.72 : 0.52;
+      const sc = base * (0.45 + 0.55 * k);
+      const rot = dhash(t.x, t.z, 213) * Math.PI * 2;
+      if (pile.model && this.batch?.add(pile.model, x, y, z, rot, sc, sc, sc, this.neglected)) return true;
+      // no model (or not loaded yet): a heap in the material's colour
+      const hex = MATERIALS[pile.material].colour;
+      b.add('sphere', hex, [x, y + 0.12 * sc, z], [0.8 * sc, 0.35 * sc, 0.7 * sc]);
+      b.add('box', PALETTE.stone.light, [x + 0.15 * sc, y + 0.2 * sc, z - 0.1 * sc], [0.3 * sc, 0.2 * sc, 0.25 * sc]);
+      return true;
+    }
+    if (prop.startsWith('gate:')) {
+      // a rubble barricade (or a broken bridge deck): heaped stone and rubble
+      const r = new VRng(t.variant * 31 + 7);
+      if (!this.batch?.add('rubble-pile', x, y, z, r.range(0, 6.28), 0.9, 0.9, 0.9, true)) b.add('sphere', PALETTE.stone.dark, [x, y + 0.15, z], [0.95, 0.45, 0.9]);
+      this.batch?.add('stone-block', x + r.range(-0.25, 0.25), y, z + r.range(-0.25, 0.25), r.range(0, 6.28), 0.5, 0.5, 0.5, true);
+      return true;
+    }
+    if (prop.startsWith('keeper:')) return true;
+    if (prop === 'shed') {
+      const sh = PARK_SET.shed;
+      if (t.x !== sh.x || t.z !== sh.z) return true;
+      const cx = sh.x + sh.size / 2;
+      const cz = sh.z + sh.size / 2;
+      const house = this.sim.state.salvage?.house ?? 0;
+      const W = sh.size - 0.3;
+      const wall = house >= 1 ? PALETTE.wood.mid : PALETTE.wood.deep;
+      // four walls (the front one broken until the shed is patched), a sagging roof
+      b.add('box', wall, [cx, y + 0.5, cz - W / 2], [W, 1, 0.12]);
+      b.add('box', wall, [cx - W / 2, y + 0.5, cz], [0.12, 1, W]);
+      b.add('box', wall, [cx + W / 2, y + (house >= 1 ? 0.5 : 0.3), cz], [0.12, house >= 1 ? 1 : 0.6, W]);
+      b.add('box', wall, [cx - 0.5, y + 0.5, cz + W / 2], [W - 1.1, 1, 0.12]);
+      b.add('box', house >= 1 ? PALETTE.wood.dark : PALETTE.metal.iron, [cx, y + 1.08, cz], [W + 0.2, 0.08, W + 0.2]);
+      if (house < 1) b.add('box', PALETTE.wood.dark, [cx + 0.6, y + 0.12, cz + 0.4], [0.9, 0.06, 0.2]);
+      return true;
+    }
+    return false;
+  }
+
   private setMesh(holder: pc.Entity | undefined, name: string, mesh: pc.Mesh | undefined, material: pc.Material, shadows: boolean): pc.Entity | undefined {
     holder?.destroy();
     if (!mesh) return undefined;
@@ -1295,6 +1348,7 @@ export class ChunkRenderer {
         this.slab(b, PALETTE.stone.light, [x, h + 0.02, z], [0.9, 0.2, 0.9]);
       } else this.slab(b, dead[t.variant % dead.length], [x, h, z], [0.96, 0.16, 0.96]);
       if (t.feature === 'building') return;
+      if (t.prop && this.oldCityProp(b, t, x, h + 0.08, z)) return; // E21: piles, barricades, the shed, Keepers
       if (t.id === this.localMark) this.landmark(b, x, h + 0.08, z, t.variant);
       else if ((t.prop ?? 'stump') === 'stump' && dhash(t.x, t.z, 211) < 0.45) planterBed(this.ctx, t, this.level >= 3, x, z, h + 0.08, 0.82, 0.82); // Look 3.9
       else this.prop(b, t.prop ?? 'stump', x, h + 0.08, z, r);

@@ -72,6 +72,17 @@ export class OldCityPanel {
   }
 }
 
+/** E21.2: a short "+3 Copper" that rises from a spot on screen and fades. */
+export function flyUp(root: HTMLElement, text: string, x: number, y: number) {
+  const el = document.createElement('div');
+  el.className = 'oc-fly';
+  el.innerHTML = iconize(escHtml(text));
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+  root.appendChild(el);
+  setTimeout(() => el.remove(), 1400);
+}
+
 // ───────────── the storage panel (E21.1) ─────────────
 
 /** HTML of the storage panel: one row per material with backpack and store counts, move 1 / 10 / a stack. */

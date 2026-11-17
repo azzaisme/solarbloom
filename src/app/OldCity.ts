@@ -2,8 +2,10 @@ import type { Action, Bindings } from './Bindings';
 import type { BotController } from './BotController';
 import type { Sim } from '../gameplay/Sim';
 import type { Hud } from '../ui/Hud';
-import type { MachineData } from '../core/types';
-import { OldCityPanel, storageAct, storageHtml } from '../ui/OldCityPanel';
+import type { MachineData, MaterialId } from '../core/types';
+import { GROUND } from '../core/GameState';
+import { MATERIALS, SALVAGE } from '../data/salvage';
+import { flyUp, OldCityPanel, storageAct, storageHtml } from '../ui/OldCityPanel';
 
 /** What the game lends the Old City controller (kept small, so Game.ts changes little). */
 export interface OldCityHost {
@@ -14,7 +16,9 @@ export interface OldCityHost {
   /** where a tile is on screen, for prompts anchored to it */
   screenOf(x: number, z: number): { x: number; y: number };
   /** plays a sound by name, if the game has it */
-  sound(name: 'click' | 'salvage' | 'pry' | 'deliver' | 'tier' | 'wake'): void;
+  sound(name: 'click' | 'salvage' | 'pry' | 'deliver' | 'tier' | 'wake', material?: MaterialId): void;
+  /** redraws the ground tile at a cell */
+  markTile(x: number, z: number): void;
 }
 
 /**
@@ -33,6 +37,14 @@ export class OldCityController {
     window.addEventListener('keydown', (e) => this.keysDown.add(e.code));
     window.addEventListener('keyup', (e) => this.keysDown.delete(e.code));
     window.addEventListener('blur', () => this.keysDown.clear());
+    host.sim.bus.on('pile.salvaged', (e) => {
+      host.markTile(e.x, e.z);
+      const sc = host.screenOf(e.x, e.z);
+      flyUp(host.hud.root, `+${e.got} ${MATERIALS[e.material].icon} ${MATERIALS[e.material].name}`, sc.x, sc.y);
+      host.sound('salvage', e.material);
+      this.panel.refresh();
+    });
+    host.sim.bus.on('pack.full', (e) => host.hud.toast(`Your ${MATERIALS[e.material].name} stack is full<small>Put some in storage at the fountain or a chest.</small>`, '', 2.6));
   }
 
   get sim(): Sim {
@@ -101,12 +113,45 @@ export class OldCityController {
    */
   interact(front: { x: number; z: number }, occupant?: MachineData): boolean {
     if (!this.sim.oldCity) return false;
+    const onGround = this.host.bot.pose.roofId === GROUND;
+    const pile = onGround ? this.sim.salvage.pileAt(front.x, front.z) : undefined;
+    if (pile) {
+      this.salvageHold(pile.id, front, false);
+      return true;
+    }
     if (occupant && (occupant.type === 'chest' || this.isStoreLandmark(occupant))) {
       this.openStorage();
       return true;
     }
     void front;
     return false;
+  }
+
+  /** Salvage a pile: hold Interact 0.6 s (a click-to-walk arrival needs no hold). */
+  private salvageHold(id: string, at: { x: number; z: number }, viaClick: boolean) {
+    const why = this.sim.salvage.problem(id);
+    if (why) {
+      const sc = this.host.screenOf(at.x, at.z);
+      this.host.hud.showFail(why, sc.x, sc.y);
+      return;
+    }
+    this.startHold('salvage', SALVAGE.holdSeconds, () => this.sim.salvage.salvage(id), viaClick);
+  }
+
+  /**
+   * A click on a tile under old-city rules: a pile walks bloombot there and salvages it. True when handled.
+   */
+  click(tile: { roofId: string; x: number; z: number }): boolean {
+    if (!this.sim.oldCity || tile.roofId !== GROUND) return false;
+    const pile = this.sim.salvage.pileAt(tile.x, tile.z);
+    if (!pile) return false;
+    const b = this.host.bot;
+    const go = b.goTo(GROUND, pile.x, pile.z, 1, () => this.salvageHold(pile.id, pile, true));
+    if (!go) {
+      const sc = this.host.screenOf(pile.x, pile.z);
+      this.host.hud.showFail("Bloombot can't find a way there", sc.x, sc.y);
+    }
+    return true;
   }
 
   /** A woken landmark (or the fountain) is a way into the store. */

@@ -14,7 +14,7 @@ const QUICK = [
   'rooftop-clusters', 'relay-city', 'specialties-city', 'look', 'palette-lint', 'icons', 'hud-contrast', 'look3-budget', 'roads', 'upgrade-prices', 'drone-roles',
   'bloombot-walk', 'bindings', 'deck', 'framing',
   // E21: the Old City
-  'oldcity-data', 'oldcity-inventory',
+  'oldcity-data', 'oldcity-inventory', 'oldcity-salvage',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

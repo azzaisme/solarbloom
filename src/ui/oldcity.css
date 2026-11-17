@@ -29,3 +29,7 @@
 #ocPanel .oc-map .cloud { opacity: .55; }
 #ocPanel .oc-map .open { background: var(--glass-hi-2); }
 #ocPanel .oc-map .awake { border-color: var(--gold); }
+
+/* E21.2: salvage fly-ups */
+.oc-fly { position: absolute; transform: translate(-50%, -100%); pointer-events: none; font: 700 16px var(--font-display); color: var(--gold-hi); text-shadow: var(--shadow-sm); animation: oc-fly 1.4s ease-out forwards; z-index: 8; white-space: nowrap; }
+@keyframes oc-fly { from { opacity: 0; margin-top: 0; } 15% { opacity: 1; } to { opacity: 0; margin-top: -48px; } }
