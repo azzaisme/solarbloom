@@ -364,48 +364,106 @@ export class MachineVisuals {
     return this.views.size;
   }
 
+  /** Regions whose machines all have models and have joined their batch. */
+  private regionsLoaded = new Set<string>();
+  /** The region being built: its machines still to do, and the models built so far (not yet batched). */
+  private regionJob?: { key: string; todo: MachineData[]; built: MachineView[] };
+  private deferBatch = false;
+
+  /**
+   * Machines stream a whole batch region (64×64 tiles) at a time, and a region's models join its batch together,
+   * once, when the last one is built. Adding them a chunk at a time made the engine regenerate the region's batches
+   * (vertex data, a material clone and a shader per batch) on almost every frame of a pan: 28 ms a frame.
+   */
   private stream(view: { x0: number; x1: number; z0: number; z1: number }) {
+    const R = MachineVisuals.BATCH_REGION;
     const A = MachineVisuals.STREAM_MARGIN;
-    const cx0 = Math.floor((view.x0 - A) / CHUNK);
-    const cx1 = Math.floor((view.x1 + A) / CHUNK);
-    const cz0 = Math.floor((view.z0 - A) / CHUNK);
-    const cz1 = Math.floor((view.z1 + A) / CHUNK);
-    const key = `${cx0}|${cx1}|${cz0}|${cz1}`;
+    const K = MachineVisuals.STREAM_KEEP;
+    const span = (m: number) => [Math.floor((view.x0 - m) / R), Math.floor((view.x1 + m) / R), Math.floor((view.z0 - m) / R), Math.floor((view.z1 + m) / R)];
+    const [ax0, ax1, az0, az1] = span(A);
+    const [kx0, kx1, kz0, kz1] = span(K);
+    const key = `${ax0}|${ax1}|${az0}|${az1}|${kx0}|${kx1}|${kz0}|${kz1}`;
     if (key !== this.streamKey) {
       this.streamKey = key;
-      const K = MachineVisuals.STREAM_KEEP;
+      const kept = (rx: number, rz: number) => rx >= kx0 && rx <= kx1 && rz >= kz0 && rz <= kz1;
+      // Drop whole regions the view has left well behind (their batch empties in one go).
       for (const [id, v] of this.views) {
-        const [x, , z] = this.worldOf(v.m);
-        if (x < view.x0 - K || x > view.x1 + K || z < view.z0 - K || z > view.z1 + K) {
+        const m = v.m;
+        let out: boolean;
+        if (m.roofId === GROUND) out = !kept(Math.floor(m.x / R), Math.floor(m.z / R));
+        else {
+          const [x, , z] = this.worldOf(m);
+          out = x < view.x0 - K || x > view.x1 + K || z < view.z0 - K || z > view.z1 + K;
+        }
+        if (out) {
           v.root.destroy();
           this.views.delete(id);
         }
       }
-      // machines on rooftop clusters (few, and not in the ground's chunk index by world position)
+      for (const k of this.regionsLoaded) {
+        const [rx, rz] = k.split(':').map(Number);
+        if (!kept(rx, rz)) this.regionsLoaded.delete(k);
+      }
+      if (this.regionJob) {
+        const [rx, rz] = this.regionJob.key.split(':').map(Number);
+        if (!kept(rx, rz)) this.regionJob = undefined; // the camera left before it finished
+      }
+      // machines on rooftop clusters (few, never batched, and not in the ground's chunk index by world position)
       for (const m of this.sim.state.machines) {
         if (m.roofId === GROUND || this.views.has(m.id)) continue;
         const [x, , z] = this.worldOf(m);
         if (x >= view.x0 - A && x <= view.x1 + A && z >= view.z0 - A && z <= view.z1 + A) this.streamIn(m);
       }
-      const mx = (view.x0 + view.x1) / 2 / CHUNK - 0.5;
-      const mz = (view.z0 + view.z1) / 2 / CHUNK - 0.5;
+      const mx = (view.x0 + view.x1) / 2 / R - 0.5;
+      const mz = (view.z0 + view.z1) / 2 / R - 0.5;
       const todo: { key: string; d: number }[] = [];
-      for (let cz = cz0; cz <= cz1; cz++)
-        for (let cx = cx0; cx <= cx1; cx++) {
-          const k = chunkKey(GROUND, cx, cz);
-          if (this.sim.grid.machinesInChunk(k).some((m) => !this.views.has(m.id))) todo.push({ key: k, d: Math.hypot(cx - mx, cz - mz) });
+      for (let rz = az0; rz <= az1; rz++)
+        for (let rx = ax0; rx <= ax1; rx++) {
+          const k = `${rx}:${rz}`;
+          if (!this.regionsLoaded.has(k) && this.regionJob?.key !== k) todo.push({ key: k, d: Math.hypot(rx - mx, rz - mz) });
         }
       todo.sort((a, b) => a.d - b.d);
       this.streamQueue = todo.map((t) => t.key);
     }
     // The first pass (a load) builds everything in view at once; after that, within a small budget per frame.
     const t0 = performance.now();
-    while (this.streamQueue.length) {
-      const k = this.streamQueue.shift()!;
-      for (const m of this.sim.grid.machinesInChunk(k)) if (!this.views.has(m.id)) this.streamIn(m);
+    for (;;) {
+      if (!this.regionJob) {
+        const k = this.streamQueue.shift();
+        if (k === undefined) break;
+        this.regionJob = { key: k, todo: this.regionMachines(k), built: [] };
+      }
+      const job = this.regionJob;
+      while (job.todo.length) {
+        const m = job.todo.pop()!;
+        if (this.views.has(m.id)) continue;
+        this.deferBatch = true;
+        this.streamIn(m);
+        this.deferBatch = false;
+        const v = this.views.get(m.id);
+        if (v) job.built.push(v);
+        if (this.streamed && performance.now() - t0 > MachineVisuals.STREAM_MS) break;
+      }
+      if (job.todo.length) break; // out of time: carries on next frame
+      for (const v of job.built) if (this.views.get(v.m.id) === v) this.batch(v); // the region batches once
+      this.regionsLoaded.add(job.key);
+      this.regionJob = undefined;
       if (this.streamed && performance.now() - t0 > MachineVisuals.STREAM_MS) break;
     }
     this.streamed = true;
+  }
+
+  /** Ground machines standing in a batch region (by their origin tile, as `batchGroupFor` groups them). */
+  private regionMachines(key: string): MachineData[] {
+    const R = MachineVisuals.BATCH_REGION;
+    const [rx, rz] = key.split(':').map(Number);
+    const out: MachineData[] = [];
+    const per = R / CHUNK;
+    for (let cz = rz * per; cz < (rz + 1) * per; cz++)
+      for (let cx = rx * per; cx < (rx + 1) * per; cx++)
+        for (const m of this.sim.grid.machinesInChunk(chunkKey(GROUND, cx, cz)))
+          if (Math.floor(m.x / R) === rx && Math.floor(m.z / R) === rz && !out.includes(m)) out.push(m);
+    return out;
   }
 
   private streamIn(m: MachineData) {
@@ -485,7 +543,7 @@ export class MachineVisuals {
     if (animate) {
       this.playBuild(v);
       this.tweens.add(1.4, () => {}, { done: () => this.views.get(m.id) === v && this.batch(v) });
-    } else this.batch(v);
+    } else if (!this.deferBatch) this.batch(v);
   }
 
   /**
