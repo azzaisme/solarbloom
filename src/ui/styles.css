@@ -802,3 +802,33 @@ body.oldcity #inspect { bottom: calc(176px + var(--safe-b)); }
 body.oldcity #res { width: 220px; }
 #minimap .mm-rim { position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%); font: 700 13px/1 var(--font-display); color: var(--text-strong); text-shadow: 0 1px 2px var(--glass-solid); white-space: nowrap; }
 #minimap .mm-rim[hidden] { display: none; }
+
+/* ───────── E22.3: button glyphs (src/ui/Glyphs.ts) ───────── */
+:root {
+  --pad-a: #2f8a3c; --pad-b: #c23a33; --pad-x: #2a6fc0; --pad-y: #b98a12;
+  --ps-cross: #8fb4f0; --ps-circle: #f08a92; --ps-square: #e59ad2; --ps-triangle: #62d0b3;
+  --deck-btn: #2c3136; --glyph-ink-dark: #10181a;
+}
+svg.glyph { display: block; overflow: visible; flex: none; }
+svg.glyph text { font-family: var(--font-ui); font-weight: 800; dominant-baseline: auto; }
+svg.glyph .g-cap { fill: var(--glass-hi-2); stroke: var(--edge-strong); stroke-width: 1.6; }
+svg.glyph .g-cap-edge { fill: var(--edge-soft); }
+svg.glyph .g-ink { fill: var(--text-strong); }
+svg.glyph .g-ink-fill { fill: var(--text-strong); }
+svg.glyph .g-lit { fill: var(--gold); stroke: var(--edge-strong); stroke-width: 1.2; }
+svg.glyph .g-stroke { fill: none; stroke: var(--text-strong); stroke-width: 2; stroke-linecap: round; }
+svg.glyph .g-face-ink { fill: var(--text-strong); stroke: var(--glyph-ink-dark); stroke-width: 2.4; paint-order: stroke; }
+svg.glyph .g-pad-a { fill: var(--pad-a); stroke: var(--text-strong); stroke-width: 1.4; }
+svg.glyph .g-pad-b { fill: var(--pad-b); stroke: var(--text-strong); stroke-width: 1.4; }
+svg.glyph .g-pad-x { fill: var(--pad-x); stroke: var(--text-strong); stroke-width: 1.4; }
+svg.glyph .g-pad-y { fill: var(--pad-y); stroke: var(--text-strong); stroke-width: 1.4; }
+svg.glyph .g-deck { fill: var(--deck-btn); stroke: var(--text-strong); stroke-width: 1.4; }
+svg.glyph .g-ps-disc { fill: var(--deck-btn); stroke: var(--text-strong); stroke-width: 1.4; }
+svg.glyph .g-shape { fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; stroke: var(--text-strong); }
+svg.glyph.g-ps-cross .g-shape { stroke: var(--ps-cross); }
+svg.glyph.g-ps-circle .g-shape { stroke: var(--ps-circle); }
+svg.glyph.g-ps-square .g-shape { stroke: var(--ps-square); }
+svg.glyph.g-ps-triangle .g-shape { stroke: var(--ps-triangle); }
+#prompt .pr-glyph { min-width: 40px; height: 30px; }
+#prompt .pr-sub .pr-glyph { min-width: 40px; height: 30px; transform: scale(.85); }
+body.contrast svg.glyph .g-cap { fill: var(--glass-solid); stroke: var(--text-strong); }

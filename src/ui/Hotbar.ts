@@ -2,7 +2,8 @@ import { formatCost } from '../core/Economy';
 import { DECOR_OPTION, DECOR_OPTIONS } from '../data/cozy';
 import { BUILDABLE, MACHINES, TIER3 } from '../data/machines';
 import { TUNING } from '../data/tuning';
-import { type Action, type Bindings, keyLabel, padLabel } from '../app/Bindings';
+import { type Action, type Bindings, keyLabel } from '../app/Bindings';
+import { type GlyphStyle, type PadStyle, padName } from './Glyphs';
 import { ICONS, iconize, MACHINE_ICONS, plain } from './Icons';
 import { $, esc, HudPart } from './HudPart';
 import { decorType, etaText, machineTool, SUPER_TOOLS, superType, type Tool } from './Hud';
@@ -88,7 +89,9 @@ export class Hotbar extends HudPart {
    * Bloombot (G.16, G.7): the hotbar's key badges from the bindings, or gamepad buttons when the pad was used
    * last. Without bindings, the cursor map.
    */
-  setKeyMap(mode: 'keys' | 'pad' | undefined, b?: Bindings) {
+  /** E22.3: the badges follow the glyph set in use (a key, or the pad button's name in that pad's family). */
+  setKeyMap(style: GlyphStyle | undefined, b?: Bindings) {
+    const mode = style === undefined ? undefined : style === 'keys' ? 'keys' : 'pad';
     const slots: [string, Action, string][] = [
       ['[data-tool="inspect"]', 'interact', '1'],
       ['[data-tool="pulse"]', 'pulse', '2'],
@@ -101,7 +104,7 @@ export class Hotbar extends HudPart {
       if (!el) continue;
       // E22.1: a badge shows a keyboard key (the mouse buttons are too long for it)
       const key = b?.keys[action].find((c) => !c.startsWith('Mouse') && c !== 'Wheel');
-      el.textContent = !b || !mode ? cursor : mode === 'pad' ? padShort(b.pad[action]) : key ? keyLabel(key) : '';
+      el.textContent = !b || !mode ? cursor : mode === 'pad' ? padShort(style as PadStyle, b.pad[action]) : key ? keyLabel(key) : '';
     }
     this.root.classList.toggle('pad-keys', mode === 'pad');
   }
@@ -181,9 +184,9 @@ export class Hotbar extends HudPart {
 }
 
 /** A short gamepad label for the small hotbar badges. */
-function padShort(button: number | undefined): string {
-  const short: Record<number, string> = { 0: 'A', 1: 'B', 2: 'X', 3: 'Y', 4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT', 12: '↑', 13: '↓', 14: '←', 15: '→' };
-  return button === undefined ? '' : (short[button] ?? padLabel(button));
+function padShort(style: PadStyle, button: number | undefined): string {
+  const arrows: Record<number, string> = { 12: '↑', 13: '↓', 14: '←', 15: '→' };
+  return button === undefined ? '' : (arrows[button] ?? padName(style, button));
 }
 
 /** E22.1 / E22.7: the build hotbar's default contents (slots 1–9): the machines in the old number-row order. */
@@ -217,10 +220,10 @@ export class BuildBar extends HudPart {
     return Array.from({ length: 9 }, (_, i) => h[i] ?? '');
   }
 
-  setKeys(mode: 'keys' | 'pad' | undefined, b?: Bindings) {
+  setKeys(style: GlyphStyle | undefined, b?: Bindings) {
     if (!b) return;
     this.keys = (['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6', 'slot7', 'slot8', 'slot9'] as Action[]).map((a) => (b.keys[a][0] ? keyLabel(b.keys[a][0]) : ''));
-    void mode;
+    void style;
     this.last.delete('buildbar');
   }
 

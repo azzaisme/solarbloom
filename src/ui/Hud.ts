@@ -13,6 +13,7 @@ import { BuildBar, Hotbar } from './Hotbar';
 import { Toasts } from './Toasts';
 import { Panels } from './Panels';
 import type { SetProp } from './HudPart';
+import type { GlyphSetting, GlyphStyle } from './Glyphs';
 
 /** Phase 5 E14: `super:<type>` places a Superstructure Core of that family. */
 export type SuperTool = `super:${'solar' | 'condenser' | 'pollinator' | 'droneHub'}`;
@@ -111,6 +112,8 @@ export interface Settings {
   holdToAct?: boolean;
   /** E22.11: pause when the window loses focus or the page is hidden. Default on. */
   pauseOnBlur?: boolean;
+  /** E22.3: which button pictures to show (auto follows the device in use) */
+  glyphs?: GlyphSetting;
   /** E22.11: the developer's game speed (shown with the debug overlay; never saved) */
   speed?: number;
 }
@@ -309,9 +312,9 @@ export class Hud {
   get trayOpen() {
     return this.hotbar.trayOpen;
   }
-  setKeyMap(mode: 'keys' | 'pad' | undefined, b?: Bindings) {
-    this.hotbar.setKeyMap(mode, b);
-    this.buildBar.setKeys(mode, b);
+  setKeyMap(style: GlyphStyle | undefined, b?: Bindings) {
+    this.hotbar.setKeyMap(style, b);
+    this.buildBar.setKeys(style, b);
   }
   toggleUpgrades(open?: boolean) {
     this.panels.toggleUpgrades(open);
