@@ -191,6 +191,22 @@ export class CameraController {
   }
 
   /** Bloombot: turn the view around its target by some degrees (positive moves the camera to its right). */
+  /** E21.24: where the view is turning to (degrees). */
+  get heading(): number {
+    return this.yawGoal;
+  }
+
+  /** E21.24: turns the view to a heading (degrees); `instant` jumps there (a still frame for reduced motion). */
+  turnTo(degrees: number, instant = false) {
+    this.yawGoal = degrees;
+    if (instant) this.yaw = degrees;
+  }
+
+  /** E21.24: sets the zoom at once (reduced motion cuts instead of easing). */
+  jumpZoom(zoom: number) {
+    this.zoom = this.zoomGoal = Math.min(this.maxZoom, Math.max(this.minZoom, zoom));
+  }
+
   orbit(degrees: number) {
     if (this.cinematic) return;
     this.anchor = undefined;

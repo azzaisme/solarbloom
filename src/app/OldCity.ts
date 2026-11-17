@@ -7,6 +7,7 @@ import { GROUND } from '../core/GameState';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { flyUp, fountainHtml, OldCityPanel, storageAct, storageHtml } from '../ui/OldCityPanel';
 import { PARK } from '../core/Areas';
+import { setPieceAt } from '../core/OldCityLayout';
 
 /** What the game lends the Old City controller (kept small, so Game.ts changes little). */
 export interface OldCityHost {
@@ -20,6 +21,11 @@ export interface OldCityHost {
   sound(name: 'click' | 'salvage' | 'pry' | 'deliver' | 'tier' | 'wake', material?: MaterialId): void;
   /** redraws the ground tile at a cell */
   markTile(x: number, z: number): void;
+  /**
+   * E21.24 / E21.22: the camera rises over a spot for `secs` and comes back (skippable; a still frame with reduced
+   * motion); `done` gets the regions whose landmark was on screen.
+   */
+  vista(x: number, z: number, secs: number, done: (seen: string[]) => void): void;
 }
 
 /**
@@ -119,6 +125,16 @@ export class OldCityController {
     const pile = onGround ? this.sim.salvage.pileAt(front.x, front.z) : undefined;
     if (pile) {
       this.salvageHold(pile.id, front, false);
+      return true;
+    }
+    // E21.24: a lookout: a short vista over the city; every landmark beacon in view counts as seen
+    const sp = onGround ? setPieceAt(front.x, front.z) : undefined;
+    if (sp?.kind === 'lookout') {
+      this.host.sound('click');
+      this.sim.salvage.see(`lookout:${sp.id}`);
+      this.host.vista(front.x + 0.5, front.z + 0.5, 3, (seen) => {
+        for (const r of seen) this.sim.salvage.see(`beacon:${r}`);
+      });
       return true;
     }
     // E21.5: a gate: Pry a barricade (hold 2 s), repair a bridge, or hear what it needs

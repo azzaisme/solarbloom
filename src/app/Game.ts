@@ -10,6 +10,7 @@ import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
 import type { BuildableType, DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
 import { TIERS } from '../data/salvage';
+import { OLD_CITY, REGIONS } from '../data/oldcity';
 import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
@@ -49,6 +50,7 @@ import { Sky } from '../rendering/Sky';
 import { Skyline } from '../rendering/Skyline';
 import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers, pickTerraced } from '../core/Picking';
+import { heightAt, levelY } from '../core/Height';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
 import { initLowPoly } from '../rendering/Shapes';
@@ -1142,6 +1144,7 @@ export class Game {
         else if (name === 'salvage') this.sfx.stage(({ scrap: 'thud', seeds: 'rustle', copper: 'hum', timber: 'creak', glass: 'crack', clay: 'thud', gears: 'grind', sunstone: 'hum' } as const)[material as 'scrap'] ?? 'thud');
         else this.sfx.click();
       },
+      vista: (x: number, z: number, secs: number, done: (seen: string[]) => void) => this.vista(x, z, secs, done),
       markTile: (x: number, z: number) => {
         const t = this.sim.grid.get(GROUND, x, z);
         if (t) this.chunks.markTile(t);
@@ -1375,6 +1378,12 @@ export class Game {
     const layers = this.sim.grid.allLayers.filter((l) => l.kind === 'raised' || l.unlocked);
     const hit = pickLayers(layers, o, d);
     if (!hit) return undefined;
+    // E21.24: the Old City's terraces: the first ground the ray meets as drawn (terraces, slopes, sunk fog)
+    if (hit.layerId === GROUND && this.sim.grid.terraced(GROUND)) {
+      const l = this.sim.grid.layer(GROUND)!;
+      const tp = pickTerraced(o, d, l.origin[1] + l.height + SLAB_TOP, (x, z) => heightAt(x, z) - (this.sunkAt(x, z) ? SINK / OLD_CITY.levelHeight : 0));
+      return tp ? { roofId: GROUND, fx: tp.fx, fz: tp.fz, tile: this.sim.grid.get(GROUND, Math.floor(tp.fx), Math.floor(tp.fz)) } : undefined;
+    }
     // Look 4.9: unrevealed areas are drawn SINK lower. A ray that lands on one at the city level carries on
     // down to the sunk ground; if it ends under the revealed terrace instead, it hit the facade (nothing).
     if (hit.layerId === GROUND && this.city && this.sunkAt(hit.fx, hit.fz)) {
@@ -1385,13 +1394,13 @@ export class Game {
       if (!this.sunkAt(fx, fz)) return undefined;
       return { roofId: GROUND, fx, fz, tile: this.sim.grid.get(GROUND, Math.floor(fx), Math.floor(fz)) };
     }
-    // E21.24: the Old City's terraces: the first level plane the ray meets on a tile of that level
-    if (hit.layerId === GROUND && this.sim.grid.terraced(GROUND)) {
-      const l = this.sim.grid.layer(GROUND)!;
-      const tp = pickTerraced(o, d, l.origin[1] + l.height + SLAB_TOP, (x, z) => this.sim.grid.peek(GROUND, x, z)?.level);
-      if (tp) return { roofId: GROUND, fx: tp.fx, fz: tp.fz, tile: this.sim.grid.get(GROUND, Math.floor(tp.fx), Math.floor(tp.fz)) };
-    }
     return { roofId: hit.layerId, fx: hit.fx, fz: hit.fz, tile: this.sim.grid.get(hit.layerId, Math.floor(hit.fx), Math.floor(hit.fz)) };
+  }
+
+  /** E21.24: world y of the ground's top under a point as drawn (terraces, slopes, fog sunk; the picking e2e reads it). */
+  groundY(px: number, pz: number): number {
+    const l = this.sim.grid.layer(GROUND)!;
+    return l.origin[1] + l.height + SLAB_TOP + (this.sim.grid.terraced(GROUND) ? levelY(heightAt(px, pz)) : 0) - (this.city && this.sunkAt(px, pz) ? SINK : 0);
   }
 
   /** Look 4.9: how far unrevealed ground is drawn below the city (tests read it). */
@@ -1651,6 +1660,8 @@ export class Game {
   }
 
   private tileTitle(t: TileData): string {
+    const piece = this.sim.salvage.describe(t); // E21: Old City set pieces
+    if (piece) return piece.title;
     if (t.blocked) return 'Rusty vent';
     switch (t.ground) {
       case 'polluted':
@@ -2128,6 +2139,8 @@ export class Game {
   }
 
   private tileDetail(t: TileData): string {
+    const piece = this.sim.salvage.describe(t); // E21: Old City set pieces
+    if (piece) return piece.detail;
     if (t.blocked) return 'Nothing grows here.';
     const zone = this.sim.production.inPollinatorZone(t);
     switch (t.ground) {
@@ -3392,6 +3405,50 @@ export class Game {
 
   // ───────────────────────── core sequence ─────────────────────────
 
+  /**
+   * E21.24: a vista from a lookout: the camera pulls up and out over the city for `secs`, then returns to bloombot.
+   * Any Cancel skips it; with reduced motion it cuts to the view and back (a still frame). `done` gets the Old City
+   * regions whose landmark was on screen at the top of the view.
+   */
+  private vista(x: number, z: number, secs: number, done: (seen: string[]) => void) {
+    if (this.cinematic) return;
+    const cam = this.camera;
+    const before = { zoom: cam.zoom, yaw: cam.heading };
+    const rm = !!this.settings.reducedMotion;
+    this.cinematic = true;
+    if (this.bot) this.bot.following = false;
+    // look away from the park when far from it, toward the city centre when near it
+    const toward = Math.atan2(x - 8, -(z - 8)) * (180 / Math.PI);
+    cam.turnTo(Math.hypot(x - 8, z - 8) > 12 ? toward + 180 : before.yaw, rm);
+    if (rm) cam.jumpZoom(0.35);
+    cam.glide(x, 0, z, Math.max(cam.minZoom, 0.35));
+    const seen = () => {
+      const out: string[] = [];
+      for (const r of REGIONS) {
+        const t = this.sim.grid.get(GROUND, r.landmark.x, r.landmark.z);
+        const y = t ? this.sim.grid.tileWorld(t)[1] + 3 : 3;
+        if (cam.onScreen(new pc.Vec3(r.landmark.x + 1, y, r.landmark.z + 1), 0)) out.push(r.id);
+      }
+      return out;
+    };
+    let finished = false;
+    const end = () => {
+      if (finished) return;
+      finished = true;
+      done(seen());
+      this.cinematic = false;
+      cam.turnTo(before.yaw, rm);
+      if (this.bot) {
+        this.bot.following = true;
+        const [bx, , bz] = this.bot.world();
+        cam.glide(bx, 0, bz, before.zoom);
+      }
+      this.cinematicEnd = undefined;
+    };
+    this.cinematicEnd = end;
+    this.tweens.add(0.01, () => {}, { delay: secs, done: end });
+  }
+
   /** E21.6: the Old City fountain shows its tier (dry, trickle, flowing, lit, in bloom). */
   private applyFountainLook(instant: boolean) {
     const tier = this.sim.state.salvage?.tier ?? 0;
@@ -3523,13 +3580,15 @@ export class Game {
         }
       for (const id of s.areas.revealed()) {
         const a = s.areas.info(id);
+        if (a.noLandmark) continue; // E21: Old City backstreets carry no label
         const fog = s.areas.fog(id);
         const ready = id !== PARK && s.areas.ready(id);
         if (!ready && !zoomedOut) continue;
         // Look 4.6: never behind the camera or past the haze; sized by distance close up.
         const sp = this.camera.onScreen(new pc.Vec3(a.landmark[0] + 1, 2.4, a.landmark[1] + 1), 50);
         if (!sp) continue;
-        const def = AREA_TYPES[a.type];
+        // E21: an Old City region is labelled with its own name
+        const def = a.region ? { ...AREA_TYPES[a.type], name: s.gates.regionById(a.region)!.name } : AREA_TYPES[a.type];
         const key = `areaLabel-${id}`;
         live.add(key);
         const lm = s.areas.landmark(id);

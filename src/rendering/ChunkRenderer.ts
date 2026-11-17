@@ -14,7 +14,7 @@ import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { plotsInChunk, type PlotSpot } from '../core/Plots';
 import { onJetty, pileById, setPieceAt } from '../core/OldCityLayout';
 import { oldCityModel } from './Models';
-import { edgeHeight, levelY, rampAt } from '../core/Height';
+import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
 import { GATE_MODELS, LANDING, PARK_SET } from '../data/oldcity';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
@@ -814,6 +814,13 @@ export class ChunkRenderer {
       const wz = z + dz * 0.5;
       const sx = dx ? 0.12 : 1;
       const sz = dz ? 0.12 : 1;
+      // a weir: where a canal drops a level, its water falls over the edge
+      const below = this.sim.grid.peek(GROUND, t.x + dx, t.z + dz);
+      if (t.feature === 'water' && below?.feature === 'water') {
+        b.add('box', PALETTE.aqua.foam, [wx + dx * 0.04, bottom + H / 2, wz + dz * 0.04], [dx ? 0.1 : 1, H, dz ? 0.1 : 1], 0.3);
+        b.add('box', PALETTE.ground.seaFoam, [wx + dx * 0.25, bottom + 0.06, wz + dz * 0.25], [dx ? 0.4 : 1, 0.05, dz ? 0.4 : 1]);
+        continue;
+      }
       // stone wall with brick courses, a coping stone on top
       b.add('box', R.stone[alive], [wx, bottom + H / 2, wz], [sx, H, sz]);
       const bricks = PALETTE.bricks;
@@ -865,6 +872,15 @@ export class ChunkRenderer {
       return true;
     }
     if (prop.startsWith('keeper:')) return true;
+    if (prop.startsWith('lookout:')) {
+      // E21.24: a lookout: its model once it lands, else a bench and a brass telescope on a tripod (stand-in)
+      const model = oldCityModel('lookout-telescope');
+      if (model) return !!this.batch?.add(model, x, y, z, 0, 0.8, 0.8, 0.8);
+      if (!this.batch?.add('bench', x, y, z + 0.2, 0, 0.58, 0.58, 0.58)) b.add('box', PALETTE.wood.mid, [x, y + 0.18, z + 0.2], [0.8, 0.05, 0.3]);
+      for (const a of [0, 2.1, 4.2]) b.add('cylinder', PALETTE.metal.iron, [x + Math.cos(a) * 0.12, y + 0.25, z - 0.2 + Math.sin(a) * 0.12], [0.03, 0.5, 0.03]);
+      b.add('cylinder', PALETTE.trim.gold ?? PALETTE.metal.iron, [x, y + 0.55, z - 0.2], [0.09, 0.42, 0.09]);
+      return true;
+    }
     if (prop === 'shed') {
       const sh = PARK_SET.shed;
       if (t.x !== sh.x || t.z !== sh.z) return true;
@@ -1113,6 +1129,8 @@ export class ChunkRenderer {
     const f = t.feature ?? 'lawn';
     const dead = DEAD[f] ?? DEAD.lawn;
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
+    // E21.4: the open sea stays sea zoomed out
+    if (t.blocked && f === 'water' && t.level !== undefined) return this.slab(b, PALETTE.ground.sea[t.variant % PALETTE.ground.sea.length], [t.x + 0.5, h + 0.04 - WATER.drop, t.z + 0.5], [1, 0.08, 1]);
     const col = t.blocked ? (this.level >= 4 && f !== 'building' ? PALETTE.stone.light : dead[0]) : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? this.slabTone(t) : f === 'road' ? PALETTE.paving.roadAlive : grassTone(stage, t.x, t.z)) : t.ground === 'polluted' ? dead[t.variant % dead.length] : t.ground === 'growing' ? PALETTE.ground.growing : PALETTE.ground.prepared;
     this.slab(b, col, [t.x + 0.5, f === 'water' && !t.blocked ? h - WATER.drop : h, t.z + 0.5], [1, 0.16, 1]);
     // Phase 5 E16: stages stay apart zoomed out too: a colour patch for Blooming, a gold disc for Radiant.
@@ -2405,6 +2423,7 @@ export class ChunkRenderer {
     const col: number[] = [];
     const idx: number[] = [];
     const h = this.sim.grid.layer(GROUND)!.height - (v.sunk ? SINK : 0);
+    const terraced = this.sim.grid.terraced(GROUND);
     // Denser fog (owner, 18 Nov 2026): three thicker sheets (one on Simple fog), stacked higher.
     const sheets = this.lowFog
       ? [{ y: 0.5, alpha: 0.95, tint: [112, 121, 132] }]
@@ -2419,7 +2438,9 @@ export class ChunkRenderer {
         for (let x = 0; x <= N; x++) {
           const a = (cell(x - 1, z - 1) + cell(x, z - 1) + cell(x - 1, z) + cell(x, z)) / 4;
           const wob = 0.9 + 0.2 * Math.sin((x0 + x) * 0.9 + (z0 + z) * 1.3);
-          pos.push(x0 + x, h + sh.y + a * 0.25, z0 + z);
+          // E21.24: on the terraces the fog follows the highest ground at each vertex
+          const lift = terraced ? Math.max(levelY(levelAt(x0 + x - 1, z0 + z - 1)), levelY(levelAt(x0 + x, z0 + z - 1)), levelY(levelAt(x0 + x - 1, z0 + z)), levelY(levelAt(x0 + x, z0 + z))) : 0;
+          pos.push(x0 + x, h + sh.y + a * 0.25 + lift, z0 + z);
           col.push(sh.tint[0], sh.tint[1], sh.tint[2], Math.round(Math.min(1, a * sh.alpha * wob) * 255));
         }
       for (let z = 0; z < N; z++)

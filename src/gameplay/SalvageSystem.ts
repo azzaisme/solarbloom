@@ -160,12 +160,40 @@ export class SalvageSystem {
     return out;
   }
 
+  /** E21.24: records something seen once (a lookout's view, a beacon spotted). Returns true the first time. */
+  see(key: string): boolean {
+    const sv = this.sim.state.salvage;
+    if (!sv || sv.seen?.includes(key)) return false;
+    (sv.seen ??= []).push(key);
+    return true;
+  }
+
   /** The material a tile's region gives (Lucky Cat rewards, prompts). */
   regionMaterial(t: Pick<TileData, 'x' | 'z'>): MaterialId {
     return regionOfCell(t.x, t.z)?.material ?? 'scrap';
   }
 
   regionById = regionById;
+
+  /**
+   * E21: what an Old City set piece on a tile is, for tooltips and refused pulses (undefined: not a set piece).
+   * Names actions, never keys (E22 owns prompts).
+   */
+  describe(t: TileData): { title: string; detail: string } | undefined {
+    if (!this.on || t.roofId !== GROUND) return undefined;
+    const sp = setPieceAt(t.x, t.z);
+    if (t.blocked && t.feature === 'water' && !sp) return { title: 'The sea', detail: 'Open water: nothing crosses it.' };
+    if (!sp) return undefined;
+    if (sp.kind === 'pile' && this.left(sp.pile.id) > 0) {
+      const m = MATERIALS[sp.pile.material];
+      return { title: `${m.icon} ${m.name} pile`, detail: `${this.left(sp.pile.id)} ${m.name} left. Hold Interact to salvage it, 3 at a time.` };
+    }
+    if (sp.kind === 'gate' && !this.sim.gates.isOpen(sp.gate.id)) return { title: 'In the way', detail: sp.gate.blocked };
+    if (sp.kind === 'keeper') return { title: `🤖 ${sp.keeper.name}`, detail: 'A sleeping robot. Pulse it, then hand it 5 of anything.' };
+    if (sp.kind === 'shed') return { title: 'A ruined shed', detail: 'Bloombot\'s house, one day.' };
+    if (sp.kind === 'lookout') return { title: 'A lookout', detail: 'A bench and an old telescope. Interact to look out over the city.' };
+    return undefined;
+  }
 }
 
 function allPilesOf(where?: string): PileDef[] {

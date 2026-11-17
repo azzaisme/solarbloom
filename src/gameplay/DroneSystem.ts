@@ -122,7 +122,8 @@ export class DroneSystem {
     const r = g.roof(this.roofOf(d))!;
     const t = d.far && d.targetTileId ? g.byTileId(d.targetTileId) : undefined;
     const [px, pz] = t ? this.farPos(d, t) : [d.px, d.pz];
-    return [r.origin[0] + px, r.origin[1] + r.height, r.origin[2] + pz];
+    // E21.24: drones fly above the terrace under them
+    return [r.origin[0] + px, r.origin[1] + r.height + g.groundOffset(this.roofOf(d), Math.floor(px), Math.floor(pz)), r.origin[2] + pz];
   }
 
 

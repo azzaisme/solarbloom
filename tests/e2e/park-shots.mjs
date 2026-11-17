@@ -7,7 +7,7 @@ const out = process.argv[2] ?? 'docs/review';
 const server = await preview({ preview: { port: 4193, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 760 } });
-await page.goto('http://localhost:4193/');
+await page.goto('http://localhost:4193/?rules=classic'); // the classic park (E21: new games are Old Cities)
 await page.evaluate(() => localStorage.clear());
 await page.reload();
 await page.waitForFunction(() => !!window.solarbloom);

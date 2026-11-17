@@ -103,12 +103,18 @@ export class Minimap {
         // peek, not get: the map must never generate chunks.
         const t = hidden ? undefined : g.peek(v.roofId, cx, cz);
         const c = frontier && t && t.ground !== 'restored' && !t.occupantId ? C.frontier : this.colour(t, hidden);
+        // E21.24: terraces shade by level (higher is lighter), with a dark line along each cliff's foot
+        const lv = t?.level;
+        const shade = lv === undefined ? 1 : 0.82 + 0.09 * lv;
+        const cliffW = t && lv !== undefined && !t.ramp && ((g.peek(v.roofId, cx - 1, cz)?.level ?? lv) > lv + 0.5);
+        const cliffN = t && lv !== undefined && !t.ramp && ((g.peek(v.roofId, cx, cz - 1)?.level ?? lv) > lv + 0.5);
         for (let py = 0; py < PX; py++)
           for (let px = 0; px < PX; px++) {
             const k = ((j * PX + py) * W + i * PX + px) * 4;
-            d[k] = c[0];
-            d[k + 1] = c[1];
-            d[k + 2] = c[2];
+            const line = (cliffW && px === 0) || (cliffN && py === 0) ? 0.45 : 1;
+            d[k] = Math.min(255, c[0] * shade * line);
+            d[k + 1] = Math.min(255, c[1] * shade * line);
+            d[k + 2] = Math.min(255, c[2] * shade * line);
             d[k + 3] = 255;
           }
       }

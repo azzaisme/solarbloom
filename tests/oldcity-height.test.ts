@@ -125,15 +125,56 @@ describe('E21.24: terraces', () => {
     expect(sim.build.footprintProblem(GROUND, 14, 3, 1, ['restored', 'polluted'])).toBeUndefined();
   });
 
-  it('picking finds the highest terrace the ray meets first', () => {
-    // straight down onto the embankment (level 2) and beside it (level 1)
-    const lv = (x: number, z: number) => levelAt(x, z);
+  it('picking finds the first terrace the ray meets, on slopes too', () => {
+    const h = (x: number, z: number) => heightAt(x, z);
     const down = { x: 0, y: -1, z: 0 };
-    expect(pickTerraced({ x: 26.5, y: 20, z: -27.5 }, down, 0.08, lv)).toEqual({ fx: 26.5, fz: -27.5 });
-    const hit = pickTerraced({ x: 23.5, y: 20, z: -27.5 }, down, 0.08, lv)!;
-    expect(Math.floor(hit.fx)).toBe(23);
-    // a slanted ray that passes over the low street first lands on the embankment's top
-    const slant = pickTerraced({ x: 20.5, y: 10, z: -27.5 }, { x: 0.5, y: -0.6, z: 0 }, 0.08, lv)!;
+    // straight down onto the embankment (level 2) and beside it (level 1)
+    const top = pickTerraced({ x: 26.5, y: 20, z: -27.5 }, down, 0.08, h)!;
+    expect([top.fx, top.fz].map((v) => Math.round(v * 100) / 100)).toEqual([26.5, -27.5]);
+    expect(Math.floor(pickTerraced({ x: 23.5, y: 20, z: -27.5 }, down, 0.08, h)!.fx)).toBe(23);
+    // a slanted ray that would reach the low street behind the embankment hits the embankment's wall top first
+    const slant = pickTerraced({ x: 20.5, y: 10, z: -27.5 }, { x: 0.5, y: -0.6, z: 0 }, 0.08, h)!;
     expect(levelAt(Math.floor(slant.fx), -28)).toBe(2);
+    // on the ramp: straight down at a quarter of the way up lands on that ramp cell
+    const ramp = pickTerraced({ x: 26.5, y: 20, z: -20.3 }, down, 0.08, h)!;
+    expect(Math.floor(ramp.fz)).toBe(-21);
+    // a slanted ray down the park's stairs lands on a stair cell, not on the beach beyond
+    const stairs = pickTerraced({ x: 7.5, y: 6, z: 9 }, { x: 0, y: -0.75, z: 0.66 }, 0.08, h)!;
+    expect(rampAt(Math.floor(stairs.fx), Math.floor(stairs.fz)) || levelAt(Math.floor(stairs.fx), Math.floor(stairs.fz)) === 1).toBeTruthy();
+  });
+
+
+  it('the Elder Tree on its hill, the Old Cistern on its island and the observatory on its summit are reached on foot', () => {
+    const sim = oldSim();
+    for (const id of ['elderGrove', 'cistern', 'observatory']) sim.state.areas[id] = { fog: 'thinning', revealedAt: 0 };
+    const w = new Walker(sim);
+    expect(levelAt(-20, -4)).toBe(2);
+    expect(levelAt(56, 48)).toBe(1);
+    expect(levelAt(40, 40)).toBe(0);
+    expect(levelAt(60, -66)).toBe(4);
+    for (const id of ['elderGrove', 'cistern', 'observatory']) {
+      const r = REGIONS.find((q) => q.id === id)!;
+      const k = KEEPERS.find((q) => q.region === id)!;
+      const from = { x: k.x + 0.5, z: k.z + 1.5 };
+      expect(w.walkable(GROUND, Math.floor(from.x), Math.floor(from.z)), id).toBe(true);
+      const path = w.path(GROUND, from.x, from.z, (x, z) => Math.abs(x - r.landmark.x - 0.5) <= 1.5 && Math.abs(z - r.landmark.z - 0.5) <= 1.5 && !(x >= r.landmark.x && x <= r.landmark.x + 1 && z >= r.landmark.z && z <= r.landmark.z + 1), { x: r.landmark.x, z: r.landmark.z });
+      expect(path, id).toBeDefined();
+      // and its lookout stands on a terrace's edge
+      const lo = r.lookout;
+      const edge = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => levelAt(lo.x + dx, lo.z + dz) < levelAt(lo.x, lo.z));
+      expect(edge, `${id} lookout`).toBe(true);
+    }
+  });
+
+  it('a lookout is a set piece: a bench and a telescope that blocks its tile', () => {
+    const sim = oldSim();
+    sim.state.areas.mastRow = { fog: 'thinning', revealedAt: 0 };
+    const lo = MAST.lookout;
+    const t = sim.grid.get(GROUND, lo.x, lo.z)!;
+    expect(t.blocked).toBe(true);
+    expect(t.prop).toBe(`lookout:${lo.id}`);
+    expect(sim.salvage.describe(t)?.title).toBe('A lookout');
+    expect(sim.salvage.see(`lookout:${lo.id}`)).toBe(true);
+    expect(sim.salvage.see(`lookout:${lo.id}`)).toBe(false);
   });
 });

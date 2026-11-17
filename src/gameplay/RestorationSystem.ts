@@ -49,6 +49,8 @@ export class RestorationSystem {
     const fog = this.sim.areas.fogReason(t);
     if (fog) return { ok: false, reason: fog, cost };
     if (t.blocked && t.feature === 'water') return { ok: false, reason: 'The open sea — nothing grows out there', cost };
+    const piece = t.blocked ? this.sim.salvage?.describe(t) : undefined; // E21: a pile, a gate, a Keeper
+    if (piece) return { ok: false, reason: piece.detail, cost };
     if (t.blocked) return { ok: false, reason: t.feature === 'building' ? 'An old building: its roof garden wakes when this area clears' : 'A rusty vent — nothing grows here', cost };
     if (this.sim.isCoreTile(t)) return { ok: false, reason: 'The Rooftop Core — awaken it when it is ready', cost };
     if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in full bloom', cost };
