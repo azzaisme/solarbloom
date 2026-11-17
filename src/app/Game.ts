@@ -1,14 +1,15 @@
 import { big, fmt, type Big } from '../core/Big';
 import { HOME } from '../gameplay/ProgressionSystem';
 import * as pc from 'playcanvas';
-import { Sfx } from '../audio/Sfx';
+import { BIRD_VOICES, Sfx } from '../audio/Sfx';
+import { treeSpot, treeStage } from '../rendering/TreePlacement';
 import { formatCost, formatPriceHtml, RES_ICON } from '../core/Economy';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
-import type { BuildableType, DroneRole, MachineData, ResourceKind, TileData } from '../core/types';
-import { MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
+import type { BuildableType, DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
+import { BUILDABLE, MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
@@ -28,7 +29,9 @@ import { detailTextures } from '../rendering/DetailTex';
 import { Pollinators } from '../rendering/Pollinators';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
-import { ChunkRenderer, SINK } from '../rendering/ChunkRenderer';
+import { ChunkRenderer, MeshBuilder, SINK } from '../rendering/ChunkRenderer';
+import { MACHINE_MODELS } from '../rendering/MachineVisuals';
+import type { HoloShape } from '../rendering/Hologram';
 import { TransitionRenderer } from '../rendering/transitions/TransitionRenderer';
 import { CultivatorVisuals } from '../rendering/CultivatorVisuals';
 import { ProgressRings } from '../rendering/transitions/ProgressRings';
@@ -42,13 +45,13 @@ import { Overlays } from '../rendering/Overlays';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
 import { Skyline } from '../rendering/Skyline';
-import { HAZE } from '../data/sky';
+import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers } from '../core/Picking';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
 import { initLowPoly } from '../rendering/Shapes';
 import { LookController } from '../rendering/LookController';
-import { detectTier, lowerTier, urlTier, type GfxSetting } from '../rendering/Quality';
+import { DECK, detectTier, lowerTier, onSteamDeck, urlDeck, urlTier, type GfxSetting } from '../rendering/Quality';
 import type { GfxTier } from '../data/look';
 import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
@@ -59,11 +62,33 @@ import { SuperSystem } from '../gameplay/SuperSystem';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
 import type { MergePlan } from '../gameplay/MergeSystem';
 import { EventBus } from './EventBus';
+import { BotController } from './BotController';
+import { type Action, Bindings, BUILD_DIGITS, keyLabel, padLabel } from './Bindings';
+import { BloombotVisuals } from '../rendering/BloombotVisuals';
+import { Minimap } from '../ui/Minimap';
+import { PadFocus } from '../ui/PadFocus';
+import { Cozy } from '../gameplay/Cozy';
+import { PLOT_OPTIONS } from '../data/cozy';
+import type { PlotSpot } from '../core/Plots';
 import { type LoadResult, SaveService } from './SaveService';
 
 const SETTINGS_KEY = 'solarbloom.settings';
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Thriving (full bloom)', 'Radiant'];
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+/** Bloombot: the camera zoom of the close default view (G.3), and how near counts as "within reach". */
+const BOT_ZOOM = 3.2;
+/**
+ * Bloombot: placement mode (a build tool in hand) pulls the camera back so the ground around bloombot can be
+ * planned, as in other cozy games' furniture modes. It is the only time the player can zoom, within this range.
+ */
+const PLACE_ZOOM = { start: 1.5, min: 0.9, max: BOT_ZOOM };
+/** Bloombot: how far in the camera may come (the cursor view stops at 1.9). */
+const BOT_MAX_ZOOM = 4.2;
+const BOT_REACH = 1.6;
+/** Bloombot is the game; `?cursor=1` keeps the old click-to-act play for tests that drive tiles directly. */
+const botMode = () => typeof location === 'undefined' || new URLSearchParams(location.search).get('cursor') !== '1';
+type ActResult = 'pulse' | 'build' | 'select' | 'wake' | 'none';
 
 interface Pick {
   roofId: string;
@@ -84,6 +109,9 @@ function loadSettings(): Settings {
 }
 
 /** Glue between the headless Sim, PlayCanvas rendering, DOM HUD, input, audio and persistence. */
+/** E19.1: the message when a build would cover a chosen plot. */
+const PLOT_IN_WAY = 'A plot is here: clear it first (it’s free)';
+
 export class Game {
   readonly app: pc.Application;
   readonly bus = new EventBus();
@@ -144,6 +172,25 @@ export class Game {
   private saveTimer = 0;
   private resetting = false;
   private pointer = { x: -1, y: -1, inside: false };
+  /** when the pointer last moved over the world (bloombot's front-tile preview yields to the mouse for a moment) */
+  private pointerAt = -1e9;
+  /** Bloombot (#234): the player character. Off with `?cursor=1` (e2e tests that click tiles directly). */
+  readonly bot?: BotController;
+  /** true while the front-tile preview (not the pointer) is drawing the hover tooltip */
+  private previewFromBot = false;
+  private botPreviewAt = 0;
+  private botPreviewKey = '';
+  private keyMapShown: 'keys' | 'pad' = 'keys';
+  /** Bloombot (G.16): the controls map, rebindable in Settings */
+  readonly bindings = new Bindings();
+  /** Bloombot (G.14): the round map at the bottom left */
+  private minimap?: Minimap;
+  /** E19 (#245): plot choices and unlocks (cosmetic; never read by the sim) */
+  private cozy!: Cozy;
+  /** E19.1.2: the plot the picker is open for, and the option it's previewing there */
+  private pickerPlot?: PlotSpot;
+  private plotPreview?: { id: string; option: string };
+  private cozyCheckAt = 0;
   private selected?: string;
   private inspectTimer = 0;
   private cinematic = false;
@@ -194,6 +241,8 @@ export class Game {
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
     this.transitions = new TransitionRenderer(this.sim);
     this.chunks.transitions = this.transitions;
+    this.cozy = new Cozy(this.sim);
+    this.chunks.plots = { look: (p) => this.plotLook(p) };
     this.chainSummary = new ChainSummary(this.sim);
     // City 05.2: the park cheers up in stages as you restore it.
     this.chunks.onParkStage = (stage) => {
@@ -269,11 +318,17 @@ export class Game {
           if (target === '*') this.sim.upgrades.purchaseAll(id);
           else this.sim.upgrades.purchase(id, target || undefined);
         },
-        activateCore: () => this.sim.progression.activateCore(),
+        activateCore: () => {
+          // Bloombot (G.17): bloombot walks to the fountain and wakes it there.
+          const f = this.bot && this.sim.state.machines.find((m) => m.type === 'core' && this.sim.areas.areaOf(m) === PARK);
+          if (f) this.botWake(f);
+          else this.sim.progression.activateCore();
+        },
         newGame: () => this.newGame(),
         setSetting: (k, v) => this.setSetting(k, v),
         activateFrenzy: () => this.sim.frenzy.activate(),
         findCat: () => this.findCat(),
+        keyFor: (a) => this.hudKey(a),
         goHome: (attention) => (attention ? this.focusNextArea() : this.focusArea(PARK)),
         setVolume: (k, v) => this.setVolume(k, v),
         setGraphics: (v) => this.setGraphics(v),
@@ -325,7 +380,9 @@ export class Game {
         },
         wake: (id) => {
           const m = this.sim.machine(id);
-          if (m && this.landmarkReady(m)) this.wakeLandmark(m);
+          if (!m || !this.landmarkReady(m)) return;
+          if (this.bot) this.botWake(m);
+          else this.wakeLandmark(m);
         },
         cycleSpeed: () => {
           this.speed = this.speed === 1 ? 2 : this.speed === 2 ? 3 : 1;
@@ -358,6 +415,36 @@ export class Game {
     else if (this.sim.progression.coreReady()) this.machines.setCoreState('ready');
 
     this.wireEvents();
+    if (botMode()) {
+      const visuals = new BloombotVisuals(this.app, this.scene.world);
+      visuals.reducedMotion = !!this.settings.reducedMotion;
+      Object.assign(this, { bindings: new Bindings({ keys: this.settings.keys, pad: this.settings.pad }) });
+      const bot = new BotController(this.sim, this.camera, visuals, this.bindings);
+      this.bot = bot;
+      this.overlays.holo.eye = (out) => visuals.eyeWorld(out);
+      this.overlays.holo.sink = () => new MeshBuilder();
+      bot.walker.solid = (r, x, z) => this.cozy.solidAt(r, x, z); // E19: solid plot options block like machines
+      bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble';
+      bot.onPad = (a) => this.doAction(a);
+      bot.onButton = (i) => this.padListener?.(i);
+      const focus = new PadFocus(this.hud.root);
+      bot.padCapture = (i) => !this.padListener && focus.button(i);
+      bot.onZoom = (f) => this.zoomInput(f);
+      bot.onTurn = (deg) => this.camera.orbit(deg);
+      this.hud.setKeyMap('keys', this.bindings);
+      // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad).
+      const touchOnly = typeof matchMedia !== 'undefined' && !matchMedia('(any-pointer: fine)').matches && navigator.maxTouchPoints > 0;
+      if (touchOnly) setTimeout(() => this.hud.toast('Solarbloom needs a keyboard or a gamepad for now<small>Phones and tablets will be supported again later. Connect a controller to play.</small>', 'gold', 12), 900);
+      this.hud.renderControls(this.bindings, (kind, done) => this.listenForBinding(kind, done), () => this.saveBindings());
+      this.minimap = new Minimap(this.sim, this.hud.root, (id) => {
+        const m = this.sim.state.machines.find((q) => q.id === id);
+        return !!m && this.landmarkReady(m);
+      });
+      const [bx, , bz] = bot.world();
+      this.camera.maxZoom = BOT_MAX_ZOOM;
+      this.camera.target.set(bx, 0, bz);
+      this.camera.glide(bx, 0, bz, BOT_ZOOM);
+    }
     new InputController(canvas, {
       hover: (x, y) => this.onHover(x, y),
       leave: () => this.onLeave(),
@@ -366,7 +453,15 @@ export class Game {
         this.lastPanAt = performance.now();
         this.camera.pan(dx, dy, x, y);
       },
-      zoom: (f, x, y) => this.camera.zoomBy(f, x, y),
+      // Bloombot: while the camera follows it, zoom about the middle of the view (bloombot), not the cursor.
+      // Bloombot: a right-button drag turns the view around bloombot (a third of a degree per pixel).
+      orbit: (dx) => {
+        if (!this.bot || this.cinematic) return false;
+        this.camera.orbit(-dx * 0.35);
+        return true;
+      },
+      // Bloombot: the camera's distance is fixed in play; zoom only works in placement mode (zoomInput).
+      zoom: (f, x, y) => (this.bot ? this.zoomInput(f) : this.camera.zoomBy(f, x, y)),
       // A quick, strong pinch-out snaps to the city overview (one gesture from anywhere).
       pinchEnd: (f, ms) => {
         if (this.city && !this.cinematic && f < 0.6 && ms < 450) this.camera.glide(this.camera.target.x, 0, this.camera.target.z, this.camera.minZoom);
@@ -396,7 +491,8 @@ export class Game {
     // Phase 4 E10.1: no blocking welcome card. The first pulse works at once; a short note says what this is.
     if (!state.progression.introSeen && state.stats.tilesRestored === 0) {
       state.progression.introSeen = true;
-      setTimeout(() => this.hud.toast('🌱 Welcome to Solarbloom<small>This park is dead and grey. Tap a grey tile to bring it back to life.</small>', 'gold', 5), 600);
+      const how = `Walk with ${this.hudKey('up')}${this.hudKey('left')}${this.hudKey('down')}${this.hudKey('right')} and press ${this.hudKey('pulse')} to pulse the grey tile in front of you.`;
+      setTimeout(() => this.hud.toast(`🌱 Welcome to Solarbloom<small>This park is dead and grey. ${how}</small>`, 'gold', 6), 600);
     }
     else if (offline) {
       this.saveNow();
@@ -416,13 +512,81 @@ export class Game {
     this.setSetting('gfx', v);
   }
 
+  /** Steam Deck (#243): is the Deck preset in effect (chosen, forced by the URL, or Auto on a Deck)? */
+  deck = false;
+  private resolveDeck(): boolean {
+    if (urlTier()) return false;
+    if (urlDeck()) return true;
+    const s = this.settings.gfx ?? 'auto';
+    return s === 'deck' || (s === 'auto' && onSteamDeck(this.app.graphicsDevice));
+  }
+
   private resolveTier(): GfxTier {
     const forced = urlTier();
     if (forced) return forced;
+    if (this.deck) return DECK.tier;
     const s = this.settings.gfx ?? 'auto';
+    if (s === 'deck') return DECK.tier;
     if (s !== 'auto') return s;
     this.autoTier ??= detectTier(this.app.graphicsDevice);
     return this.autoTier;
+  }
+
+  private brookScan = 0;
+  /**
+   * Puts the brook's 3D emitter at the clean (restored) water around the view, weighted toward the closest
+   * tiles; how much water there is sets its level. No clean water nearby: the brook fades out.
+   */
+  private placeBrook() {
+    const f = this.camera.target;
+    const R = 14;
+    let w = 0, x = 0, z = 0;
+    for (let tz = Math.floor(f.z - R); tz <= f.z + R; tz++) {
+      for (let tx = Math.floor(f.x - R); tx <= f.x + R; tx++) {
+        const t = this.sim.grid.get(GROUND, tx, tz);
+        if (!t || t.blocked || t.occupantId || t.feature !== 'water' || t.ground !== 'restored') continue;
+        const d = Math.hypot(tx + 0.5 - f.x, tz + 0.5 - f.z);
+        if (d >= R) continue;
+        const k = (1 - d / R) ** 2;
+        w += k;
+        x += k * (tx + 0.5);
+        z += k * (tz + 0.5);
+      }
+    }
+    if (w > 0) this.sfx.setBrook(Math.min(1, w / 3), x / w, 0, z / w);
+    else this.sfx.setBrook(0, 0, 0, 0);
+  }
+
+  /**
+   * 3D birds: up to BIRD_VOICES grown trees (stage 2+) nearest the view, at least 4 tiles apart so the voices
+   * spread round the listener, each placed in its crown and louder the bigger the tree.
+   */
+  private placeBirds() {
+    const f = this.camera.target;
+    const R = 16;
+    const found: { x: number; y: number; z: number; d: number; amount: number }[] = [];
+    const h = this.sim.grid.layer(GROUND)?.height ?? 0;
+    for (let tz = Math.floor(f.z - R); tz <= f.z + R; tz++) {
+      for (let tx = Math.floor(f.x - R); tx <= f.x + R; tx++) {
+        const t = this.sim.grid.get(GROUND, tx, tz);
+        if (!t || t.feature === 'water') continue;
+        const stage = treeStage(t);
+        if (!stage || stage < 2) continue;
+        const area = this.sim.areas.areaOf(t);
+        const spot = area ? treeSpot(t, this.sim.areas.info(area).type) : undefined;
+        if (!spot) continue;
+        const d = Math.hypot(tx + 0.5 - f.x, tz + 0.5 - f.z);
+        if (d >= R) continue;
+        found.push({ x: tx + 0.5, y: h + 1.4 * spot.scale * (stage / 4), z: tz + 0.5, d, amount: (stage - 1) / 3 });
+      }
+    }
+    found.sort((a, b) => a.d - b.d);
+    const picked: typeof found = [];
+    for (const c of found) {
+      if (picked.length >= BIRD_VOICES) break;
+      if (picked.every((q) => Math.hypot(q.x - c.x, q.z - c.z) >= 4)) picked.push(c);
+    }
+    this.sfx.setBirds(picked);
   }
 
   private setVolume(k: 'sfxVolume' | 'musicVolume', v: number) {
@@ -430,7 +594,7 @@ export class Game {
     this.setSetting('sound', this.settings.sound);
   }
 
-  private setSetting(k: keyof Settings, v: boolean | string) {
+  private setSetting(k: keyof Settings, v: boolean | string | number) {
     (this.settings as unknown as Record<string, unknown>)[k] = v;
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
@@ -452,13 +616,25 @@ export class Game {
     const rm = s.reducedMotion;
     this.look.lowVfx = !!s.lowVfx;
     this.look.reducedMotion = rm;
+    this.deck = this.resolveDeck();
     this.gfxTier = this.resolveTier();
+    // Steam Deck preset: three-quarter resolution and 1024 shadows on top of its tier.
+    this.look.shadowCap = this.deck ? DECK.shadowRes : undefined;
+    const dpr = this.deck ? DECK.renderScale : Math.min(window.devicePixelRatio || 1, 2);
+    if (dpr !== this.maxDpr) {
+      this.maxDpr = dpr;
+      this.app.graphicsDevice.maxPixelRatio = dpr;
+      this.app.resizeCanvas();
+    }
     this.look.setTier(this.gfxTier);
     this.hud.gfxTier = this.gfxTier;
+    this.hud.gfxDeck = this.deck;
+    this.hud.setUiScale(s.uiScale ?? 100);
     // Phase 5 E16's fauna caps (TUNING.ecosystem.caps) follow the graphics tier.
     this.faunaTier = this.gfxTier;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.clouds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
+    if (this.overlays) this.overlays.holo.reducedMotion = rm;
     if (this.transitions) {
       // Look 6: reduced motion keeps the timings with simpler visuals; detail follows the quality tier (Look 1's
       // setting when it lands, the "fewer effects" switch until then).
@@ -477,7 +653,7 @@ export class Game {
     // Look 3: surface detail, the leaf pattern and foliage density follow Look 1's graphics tier.
     detailTextures.setTier(this.gfxTier);
     setLeafTier(this.gfxTier);
-    if (this.chunks) this.chunks.setDetail(this.gfxTier);
+    if (this.chunks) this.chunks.setDetail(this.deck ? DECK.detail : this.gfxTier);
     if (this.chunks && this.chunks.lowFog !== !!s.lowFog) {
       this.chunks.lowFog = !!s.lowFog;
       this.chunks.markAll();
@@ -491,6 +667,7 @@ export class Game {
   /** Autosave: compressed, off the frame (the next idle moment). Unload uses the plain synchronous save. */
   save() {
     if (this.resetting || this.saving) return;
+    this.bot?.save();
     this.saving = true;
     const seq = ++this.saveSeq;
     const run = () =>
@@ -516,6 +693,7 @@ export class Game {
   /** Immediate, uncompressed save for page unload (no time to compress). */
   saveNow() {
     if (this.resetting) return;
+    this.bot?.save();
     this.saveSeq++;
     this.saver.save(this.sim.state);
   }
@@ -536,6 +714,7 @@ export class Game {
 
   private selectTool(t: Tool) {
     if (this.cinematic) return;
+    if (this.bot && t !== 'inspect' && t !== 'pulse' && !this.placing()) this.placeZoom = PLACE_ZOOM.start; // entering placement mode
     this.sfx.click();
     this.hud.setTool(t);
     this.overlays.hideGhost();
@@ -558,7 +737,24 @@ export class Game {
 
   private wireKeys() {
     window.addEventListener('keydown', (e) => {
-      if (e.target instanceof HTMLInputElement) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      if (this.keyListener) {
+        e.preventDefault();
+        this.keyListener(e.code);
+        return;
+      }
+      if (this.bot) {
+        // Bloombot's map (docs/BLOOMBOT_EPIC.md §7), rebindable; build tools stay on the number row.
+        const slot = BUILD_DIGITS.indexOf(e.code as (typeof BUILD_DIGITS)[number]);
+        const tools: Tool[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
+        if (slot >= 0) return this.selectTool(tools[slot]);
+        const a = this.bindings.actionForCode(e.code);
+        if (!a) return;
+        if (a === 'backpack' || a === 'debug') e.preventDefault();
+        if (e.repeat && a !== 'zoomIn' && a !== 'zoomOut') return;
+        this.doAction(a);
+        return;
+      }
       const k = e.key.toLowerCase();
       const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden', '9': 'relay', '0': 'cultivator' };
       if (map[k]) this.selectTool(map[k]);
@@ -572,16 +768,393 @@ export class Game {
       else if (k === 'f3' || k === '`') {
         e.preventDefault();
         this.setSetting('debug', !this.settings.debug);
-      } else if (k === 'escape') {
-        if (this.mergeSel) this.cancelMerge();
-        else if (this.hud.modalOpen) this.hud.openSettings(false);
-        else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
-        else if (this.hud.trayOpen) this.hud.toggleTray(false);
-        else if (this.selected) this.select(undefined);
-        else this.selectTool('pulse');
-      } else if (k === '+' || k === '=') this.camera.zoomBy(1.15);
+      } else if (k === 'escape') this.escape();
+      else if (k === '+' || k === '=') this.camera.zoomBy(1.15);
       else if (k === '-') this.camera.zoomBy(1 / 1.15);
     });
+  }
+
+  /** Bloombot: one action from a key or a gamepad button. Movement and sprint are read by BotController. */
+  private doAction(a: Action) {
+    if (a === 'pulse') this.botAct();
+    else if (a === 'interact') this.botInteract();
+    else if (a === 'tray') this.hud.toggleTray();
+    else if (a === 'cancel') this.escape();
+    else if (a === 'harvest') this.harvest();
+    else if (a === 'upgrades') this.hud.toggleUpgrades();
+    else if (a === 'backpack') this.hud.toggleBackpack();
+    else if (a === 'prevTool') this.cycleTool(-1);
+    else if (a === 'nextTool') this.cycleTool(1);
+    else if (a === 'zoomIn') this.zoomInput(1.15);
+    else if (a === 'zoomOut') this.zoomInput(1 / 1.15);
+    else if (a === 'overview') this.toggleOverview();
+    else if (a === 'pause') this.setPaused(!this.paused);
+    else if (a === 'frenzy') this.sim.frenzy.activate();
+    else if (a === 'nextArea') this.focusNextArea();
+    else if (a === 'home') this.focusArea(PARK);
+    else if (a === 'recentre') this.camera.recentre();
+    else if (a === 'debug') this.setSetting('debug', !this.settings.debug);
+  }
+
+  /** G.16: the rebinding screen waits for one key or button. */
+  private keyListener?: (code: string) => void;
+  private padListener?: (button: number) => void;
+  private listenForBinding(kind: 'key' | 'pad', done: (code: string | number | undefined) => void) {
+    const finish = (v: string | number | undefined) => {
+      this.keyListener = undefined;
+      this.padListener = undefined;
+      done(v);
+    };
+    this.keyListener = (code) => finish(code === 'Escape' ? undefined : kind === 'key' ? code : undefined);
+    if (kind === 'pad') this.padListener = (i) => finish(i);
+  }
+
+  private saveBindings() {
+    const saved = this.bindings.save();
+    this.settings.keys = saved.keys;
+    this.settings.pad = saved.pad;
+    this.setSetting('keys', saved.keys as unknown as string);
+    this.hud.setKeyMap(this.bot?.lastInput ?? 'keys', this.bindings);
+    this.hud.renderControls(this.bindings, (kind, done) => this.listenForBinding(kind, done), () => this.saveBindings());
+    this.botPreviewKey = '';
+  }
+
+  private escape() {
+    if (this.mergeSel) this.cancelMerge();
+    else if (this.hud.modalOpen) this.hud.openSettings(false);
+    else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
+    else if (this.hud.trayOpen) this.hud.toggleTray(false);
+    else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
+    else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
+    else if (this.selected) this.select(undefined);
+    else if (this.bot?.walking) this.bot.cancelWalk();
+    else this.selectTool('pulse');
+  }
+
+  /**
+   * Bloombot: 1 / 2 and the bumpers step through the tools: Pulse, Inspect, then every machine that's unlocked
+   * (and any Superstructure Core waiting to be placed), so a gamepad can build without opening the tray.
+   */
+  private cycleTool(step: number) {
+    const tools: Tool[] = ['pulse', 'inspect'];
+    for (const t of BUILDABLE) if (this.sim.build.isUnlocked(t)) tools.push(t);
+    for (const btn of this.hud.root.querySelectorAll<HTMLElement>('#buildTray .super[data-tool]')) if (!btn.hidden) tools.push(btn.dataset.tool as Tool);
+    const cur = this.hud.currentTool;
+    const i = Math.max(0, tools.indexOf(cur));
+    this.selectTool(tools[(i + step + tools.length) % tools.length]);
+  }
+
+  /** Bloombot: placement mode is having something to place in hand (a machine or a superstructure core). */
+  private placing(): boolean {
+    const t = this.hud.currentTool;
+    return !!this.bot && t !== 'inspect' && t !== 'pulse';
+  }
+  private placeZoom = PLACE_ZOOM.start;
+  /** the overview (M) is showing; walking, or M again, leaves it */
+  private overviewOn = false;
+
+  /** Bloombot: a zoom input. Ignored in normal play (fixed distance); in placement mode it moves the pulled-back view. */
+  private zoomInput(factor: number) {
+    if (!this.placing() || this.overviewOn) return;
+    this.placeZoom = Math.min(PLACE_ZOOM.max, Math.max(PLACE_ZOOM.min, this.placeZoom * factor));
+  }
+
+  /** Bloombot: hold the camera at the distance its mode asks for (close in play, pulled back while placing). */
+  private updateBotZoom() {
+    const b = this.bot;
+    if (!b || this.cinematic) return;
+    if (this.overviewOn && b.speed > 0.05) this.overviewOn = false; // walking leaves the overview
+    if (this.overviewOn || !b.following) return; // the overview, or a camera-only fly-to, keeps its own zoom
+    const want = this.placing() ? this.placeZoom : BOT_ZOOM;
+    if (Math.abs(this.camera.zoomTarget - want) > 1e-3) this.camera.zoomTo(want);
+  }
+
+  /** Bloombot (G.3): M or the View button: out to the city overview, and back to the close view. */
+  private toggleOverview() {
+    const c = this.camera;
+    const out = !this.overviewOn;
+    this.overviewOn = out;
+    const t = this.bot ? this.bot.world() : [c.target.x, 0, c.target.z];
+    c.glide(t[0], 0, t[2], out ? c.minZoom : BOT_ZOOM);
+    if (!out && this.bot) this.bot.following = true;
+  }
+
+  /** E20.2 (#285): an action's key or pad button as plain text, as the player last used them. */
+  private hudKey(a: Action): string {
+    return this.bot?.lastInput === 'pad' ? padLabel(this.bindings.pad[a]) : keyLabel(this.bindings.keys[a][0] ?? '');
+  }
+
+  /** A key or button name for hints: the pointer's "Click", or bloombot's key / pad button. */
+  private press(key: 'E' | 'Q', bot = this.previewFromBot): string {
+    if (!bot) return 'Select'; // the internal cursor path (bots, dev tools)
+    const a: Action = key === 'E' ? 'pulse' : 'interact';
+    if (this.bot?.lastInput === 'pad') return `<kbd>${padLabel(this.bindings.pad[a])}</kbd>`;
+    return `<kbd>${keyLabel(this.bindings.keys[a][0] ?? '')}</kbd>`;
+  }
+
+  /** The tile in front of bloombot as a pick. */
+  private frontPick(): Pick | undefined {
+    const b = this.bot;
+    if (!b) return undefined;
+    const f = b.front();
+    const tile = this.sim.grid.get(b.pose.roofId, f.x, f.z);
+    if (!tile) return undefined;
+    return { roofId: b.pose.roofId, fx: f.x + 0.5, fz: f.z + 0.5, tile };
+  }
+
+  /** Where a tile is on screen (CSS pixels), for tooltips and fails anchored to it. */
+  private botTileScreen(t: TileData): { x: number; y: number } {
+    const v = this.camera.toScreen(this.tileVec(t, SLAB_TOP + 0.6));
+    return { x: v.x, y: v.y };
+  }
+
+  private botAnim(r: ActResult) {
+    const v = this.bot?.visuals;
+    if (!v) return;
+    if (r === 'pulse') {
+      v.play('pulse');
+      this.drones.companionReact('pulse');
+    }
+    else if (r === 'build') v.play('assemble');
+    else if (r === 'select' || r === 'wake') v.play('interact');
+  }
+
+  /** Bloombot (G.4): E / A: the current tool on the tile in front (Inspect pulses; build tools build). */
+  private botAct() {
+    if (!this.bot || this.cinematic || this.paused || this.hud.modalOpen || this.bot.visuals.busy === 'assemble') return;
+    const p = this.frontPick();
+    if (!p || !p.tile) return;
+    this.bot.following = true;
+    const tool = this.hud.currentTool === 'inspect' ? 'pulse' : this.hud.currentTool;
+    const sc = this.botTileScreen(p.tile);
+    this.botAnim(this.actAt(p, sc.x, sc.y, tool, false));
+    this.botPreviewKey = '';
+  }
+
+  /** Bloombot (G.5): Q / X: say hello to a cat within reach, wake or inspect what's in front, or read the tile. */
+  private botInteract() {
+    const b = this.bot;
+    if (!b || this.cinematic || this.paused || this.hud.modalOpen) return;
+    const [wx, , wz] = b.world();
+    for (const id of this.cat.ids()) {
+      const v = this.cat.targetWorld(id);
+      if (v && Math.hypot(v.x - wx, v.z - wz) < BOT_REACH + 0.6) {
+        b.pose.facing = Math.atan2(v.x - wx, v.z - wz);
+        this.claimingCat = id;
+        this.sim.cat.claim(id);
+        this.claimingCat = undefined;
+        b.visuals.play('cheer');
+        return;
+      }
+    }
+    const lift = this.liftAhead();
+    if (lift) {
+      this.rideLift(lift);
+      return;
+    }
+    const p = this.frontPick();
+    if (!p || !p.tile) return;
+    const occ = this.sim.occupant(p.tile);
+    const sc = this.botTileScreen(p.tile);
+    if (occ) {
+      this.botAnim(this.actAt(p, sc.x, sc.y, 'inspect', false));
+      return;
+    }
+    this.select(undefined);
+    const plot = this.openablePlot(p.roofId, p.tile.x, p.tile.z);
+    if (plot) {
+      b.visuals.play('interact');
+      this.openPlotPicker(plot);
+      return;
+    }
+    this.hud.showTip(sc.x, sc.y, `<b>${this.tileTitle(p.tile)}</b>${this.tileDetail(p.tile)}${this.pawHint(p.tile)}${this.plotLine(p.roofId, p.tile)}`);
+  }
+
+  /** G.13: the rooftop whose building stands on this ground cell. */
+  private roofOver(x: number, z: number): LayerData | undefined {
+    return this.sim.grid.clusterRoofs.find((l) => x >= l.origin[0] && x < l.origin[0] + l.width && z >= l.origin[2] && z < l.origin[2] + l.depth);
+  }
+
+  /**
+   * G.13: a lift in front of bloombot: the wall of a building that carries a rooftop (going up), or the edge of
+   * the rooftop it stands on (going down).
+   */
+  private liftAhead(): { up?: LayerData; down?: { x: number; z: number } } | undefined {
+    const b = this.bot;
+    if (!b) return undefined;
+    const f = b.front();
+    if (b.pose.roofId === GROUND) {
+      const g = this.sim.grid.layer(GROUND)!;
+      const roof = this.roofOver(f.x + g.origin[0], f.z + g.origin[2]);
+      return roof ? { up: roof } : undefined;
+    }
+    const r = this.sim.grid.layer(b.pose.roofId)!;
+    if (r.cluster && !this.sim.grid.inBounds(r.id, f.x, f.z)) {
+      const g = this.sim.grid.layer(GROUND)!;
+      return { down: { x: r.origin[0] + f.x - g.origin[0] + 0.5, z: r.origin[2] + f.z - g.origin[2] + 0.5 } };
+    }
+    return undefined;
+  }
+
+  private rideLift(lift: { up?: LayerData; down?: { x: number; z: number } }) {
+    const b = this.bot!;
+    if (lift.up) {
+      const r = lift.up;
+      if (r.preview || !this.sim.grid.isPlayable(r.id)) {
+        const f = b.front();
+        const t = this.sim.grid.get(GROUND, f.x, f.z);
+        const sc = t ? this.botTileScreen(t) : { x: innerWidth / 2, y: innerHeight / 2 };
+        this.hud.showFail(this.lockedReason(r.id), sc.x, sc.y);
+        return;
+      }
+      const [wx, , wz] = b.world();
+      const x = Math.min(r.width - 0.5, Math.max(0.5, wx - r.origin[0]));
+      const z = Math.min(r.depth - 0.5, Math.max(0.5, wz - r.origin[2]));
+      b.ride(r.id, x, z);
+    } else if (lift.down) b.ride(GROUND, lift.down.x, lift.down.z);
+    this.sfx.click();
+  }
+
+  /** G.17: a wake button sends bloombot to the landmark; it wakes it on arrival (as Q would). */
+  private botWake(m: MachineData) {
+    const b = this.bot!;
+    const go = b.goTo(m.roofId, m.x, m.z, m.size, () => {
+      if (!this.landmarkReady(m)) return;
+      b.visuals.play('interact');
+      this.wakeLandmark(m);
+    });
+    if (go) {
+      this.hud.toast(`Bloombot is on its way to wake it`, '', 2.2);
+      const [x, y, z] = b.world();
+      this.camera.glide(x, y - SLAB_TOP, z, Math.max(this.camera.zoom, BOT_ZOOM * 0.8));
+    } else this.hud.toast(m.roofId !== b.pose.roofId ? 'Ride the rooftop lift first: bloombot has to be there to wake it' : "Bloombot can't find a way there yet", '', 3);
+  }
+
+  /** G.12: is this landmark awake (its area cleared), so bloombot can travel to it from the overview? */
+  private landmarkWoken(m: MachineData): boolean {
+    const id = this.sim.areas.areaOf(m);
+    return !!id && this.sim.areas.fog(id) === 'cleared';
+  }
+
+  /** Bloombot (G.11): a click walks to the clicked thing, then does what the click would have done. */
+  private botClick(x: number, y: number) {
+    const b = this.bot!;
+    const catId = this.catHit(x, y);
+    if (catId) {
+      const v = this.cat.targetWorld(catId) ?? new pc.Vec3(b.world()[0], 0, b.world()[2]);
+      const l = this.sim.grid.layer(b.pose.roofId)!;
+      const claim = () => {
+        this.claimingCat = catId;
+        this.sim.cat.claim(catId);
+        this.claimingCat = undefined;
+        b.visuals.play('cheer');
+      };
+      if (!b.goTo(b.pose.roofId, Math.floor(v.x - l.origin[0]), Math.floor(v.z - l.origin[2]), 1, claim)) this.hud.showFail("Bloombot can't reach that cat from here", x, y);
+      return;
+    }
+    const droneId = this.droneHit(x, y);
+    if (droneId) {
+      const d = this.sim.state.drones.find((q) => q.id === droneId);
+      if (d) this.select(d.hubId);
+      this.sfx.drone();
+      return;
+    }
+    const p = this.pick(x, y);
+    if (!p || !p.tile) {
+      this.select(undefined);
+      return;
+    }
+    const tool = this.hud.currentTool;
+    // Another layer: reading a tile is fine from anywhere, but acting needs bloombot there (the lift, G.13).
+    if (p.roofId !== b.pose.roofId || this.sim.grid.roof(p.roofId)?.preview) {
+      if (this.hud.currentTool === 'inspect') this.actAt(p, x, y);
+      else this.hud.showFail(this.sim.grid.roof(p.roofId)?.preview ? this.lockedReason(p.roofId) : b.pose.roofId === GROUND ? 'Ride a rooftop lift up there first' : 'Ride the lift down to the street first', x, y);
+      return;
+    }
+    const occ = this.sim.occupant(p.tile);
+    // G.12: from the overview, a woken landmark is a travel stop: bloombot hops there and the view comes back.
+    if (this.overviewOn && occ?.type === 'core' && this.landmarkWoken(occ)) {
+      b.teleport(occ.roofId, occ.x + occ.size / 2, occ.z + occ.size + 0.6);
+      const [tx, ty, tz] = b.world();
+      this.overviewOn = false;
+      this.camera.glide(tx, ty - SLAB_TOP, tz, BOT_ZOOM);
+      b.visuals.play('cheer');
+      return;
+    }
+    // E19.1.2: inspecting a plot (or clicking a chosen one) walks to it and opens its picker
+    const spot = !occ ? this.cozy.spotAt(p.roofId, p.tile.x, p.tile.z) : undefined;
+    const plot = spot && (tool === 'inspect' || this.cozy.shown(spot)) ? this.openablePlot(p.roofId, p.tile.x, p.tile.z) : undefined;
+    if (plot) {
+      const go = b.goTo(p.roofId, plot.x, plot.z, plot.size, () => {
+        b.visuals.play('interact');
+        this.openPlotPicker(plot);
+      });
+      if (!go) this.hud.showFail("Bloombot can't find a way there", x, y);
+      return;
+    }
+    if (tool === 'inspect' && !occ) {
+      this.actAt(p, x, y); // reading a tile needs no walk
+      return;
+    }
+    // What the action covers: a machine's footprint, a build ghost's footprint, or the one tile.
+    let rect = { x: p.tile.x, z: p.tile.z, size: 1 };
+    if (occ && !this.mergeSel) rect = { x: occ.x, z: occ.z, size: occ.size };
+    else if (tool !== 'inspect' && tool !== 'pulse') {
+      const st = superType(tool);
+      const a = st ? this.sim.supers.anchorFor(st, p.fx, p.fz) : this.sim.build.anchorFor(tool as BuildableType, p.fx, p.fz);
+      rect = { x: a.x, z: a.z, size: st ? TIER3[st]!.size : MACHINES[tool as BuildableType].size };
+    }
+    const tile = p.tile;
+    const go = b.goTo(p.roofId, rect.x, rect.z, rect.size, () => {
+      const sc = this.botTileScreen(tile);
+      this.botAnim(this.actAt(p, sc.x, sc.y, tool, false));
+    });
+    if (!go) this.hud.showFail("Bloombot can't find a way there", x, y);
+  }
+
+  private pointerRecent(): boolean {
+    return this.pointer.inside && performance.now() - this.pointerAt < 1500;
+  }
+
+  /** Bloombot (G.4): highlight the tile in front and preview what E would do there (yields to an active mouse). */
+  private updateBotPreview() {
+    if (!this.bot) return;
+    if (this.bot.lastInput !== this.keyMapShown) {
+      this.keyMapShown = this.bot.lastInput;
+      this.hud.setKeyMap(this.bot.lastInput, this.bindings);
+    }
+    if (this.cinematic || this.pointerRecent()) return;
+    const p = this.frontPick();
+    const now = performance.now();
+    const key = `${this.bot.pose.roofId}:${this.bot.front().x},${this.bot.front().z}|${p?.roofId}:${p?.tile?.x},${p?.tile?.z}|${this.hud.currentTool}|${p?.tile?.ground}|${p?.tile?.bloom}|${this.bot.lastInput}`;
+    if (key === this.botPreviewKey && now - this.botPreviewAt < 400) return;
+    this.botPreviewKey = key;
+    this.botPreviewAt = now;
+    const lift = this.liftAhead();
+    if (lift) {
+      const [bx, by, bz] = this.bot.world();
+      const v = this.camera.toScreen(new pc.Vec3(bx, by + 1.1, bz));
+      const sc = p?.tile ? this.botTileScreen(p.tile) : { x: v.x, y: v.y };
+      this.overlays.hideGhost();
+      if (p?.tile) this.overlays.showFrame(p.roofId, p.tile.x, p.tile.z, 1, 'info');
+      else this.overlays.hideFrame();
+      const up = lift.up;
+      const k = this.press('Q', true);
+      const what = up ? (up.preview ? `<span class="bad">${this.lockedReason(up.id)}</span>` : `<span class="ok">${k} Ride up to the rooftop</span>`) : `<span class="ok">${k} Ride down to the street</span>`;
+      this.hud.showTip(sc.x, sc.y, `<b>Rooftop lift</b>${what}`);
+      return;
+    }
+    if (!p?.tile) {
+      this.previewAt(undefined, 0, 0);
+      return;
+    }
+    const sc = this.botTileScreen(p.tile);
+    this.previewFromBot = true;
+    try {
+      this.previewAt(p, sc.x, sc.y);
+    } finally {
+      this.previewFromBot = false;
+    }
   }
 
   pick(x: number, y: number): Pick | undefined {
@@ -616,26 +1189,33 @@ export class Game {
   private updateTreeCursor(dt: number) {
     const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
     const w = c.clientWidth, h = c.clientHeight;
-    const on = this.pointer.inside && !this.cinematic && performance.now() - this.lastPanAt > 120;
+    // Bloombot (G.3): when the mouse is idle, see through to bloombot instead of the cursor.
+    let ptr: { x: number; y: number; inside: boolean } = this.pointer;
+    if (this.bot && !this.pointerRecent()) {
+      const [bx, by, bz] = this.bot.world();
+      const v = this.camera.toScreen(new pc.Vec3(bx, by + 0.45, bz));
+      ptr = { x: v.x, y: v.y, inside: true };
+    }
+    const on = ptr.inside && !this.cinematic && performance.now() - this.lastPanAt > 120;
     this.treeFade += ((on ? 1 : 0) - this.treeFade) * Math.min(1, dt * (on ? 10 : 6));
     // See-through skyscrapers: one between the camera and the middle of the view (or the cursor) fades out.
     const keep = [{ x: w / 2, y: h / 2, depth: this.camera.dist }];
     if (on) {
-      const { o, d } = this.camera.ray(this.pointer.x, this.pointer.y);
+      const { o, d } = this.camera.ray(ptr.x, ptr.y);
       const t = d.y < -1e-3 ? -o.y / d.y : 400;
       const f = this.camera.entity.forward;
-      keep.push({ x: this.pointer.x, y: this.pointer.y, depth: d.x * t * f.x + d.y * t * f.y + d.z * t * f.z + (o.x - this.camera.entity.getPosition().x) * f.x + (o.y - this.camera.entity.getPosition().y) * f.y + (o.z - this.camera.entity.getPosition().z) * f.z });
+      keep.push({ x: ptr.x, y: ptr.y, depth: d.x * t * f.x + d.y * t * f.y + d.z * t * f.z + (o.x - this.camera.entity.getPosition().x) * f.x + (o.y - this.camera.entity.getPosition().y) * f.y + (o.z - this.camera.entity.getPosition().z) * f.z });
     }
     if (w && h && !this.cinematic) this.chunks.fadeTowers(dt, this.camera.cam, keep);
     if (this.treeFade < 0.002 || !w || !h) return setTreeCursor(0, 0, 0, 0, w || 1, h || 1);
-    const { o, d } = this.camera.ray(this.pointer.x, this.pointer.y);
+    const { o, d } = this.camera.ray(ptr.x, ptr.y);
     // The ground under the cursor (or far away if the ray misses it) as a view depth.
     const t = d.y < -1e-3 ? -o.y / d.y : 400;
     const cam = this.camera.entity;
     const fwd = cam.forward;
     const p = cam.getPosition();
     const depth = (o.x + d.x * t - p.x) * fwd.x + (o.y + d.y * t - p.y) * fwd.y + (o.z + d.z * t - p.z) * fwd.z;
-    setTreeCursor((this.pointer.x / w) * 2 - 1, 1 - (this.pointer.y / h) * 2, depth, this.treeFade, w, h);
+    setTreeCursor((ptr.x / w) * 2 - 1, 1 - (ptr.y / h) * 2, depth, this.treeFade, w, h);
   }
 
   private moodT = 0;
@@ -673,6 +1253,12 @@ export class Game {
     const n = c.nearness();
     c.hazeStart = HAZE.start[0] + (HAZE.start[1] - HAZE.start[0]) * n;
     c.hazeEnd = HAZE.end[0] + (HAZE.end[1] - HAZE.end[0]) * n;
+    if (this.bot) {
+      // G.18: past the old default zoom, lower tiers pull the haze (and so the far clip) in.
+      const close = Math.min(1, Math.max(0, c.zoom - 1) / 0.9);
+      const reach = this.deck ? DECK.closeReach : (CLOSE_VIEW_REACH[this.gfxTier as keyof typeof CLOSE_VIEW_REACH] ?? 1);
+      c.hazeEnd *= 1 - (1 - reach) * close;
+    }
     this.app.scene.fog.start = c.fogDepth(c.dist + c.hazeStart);
     this.app.scene.fog.end = c.fogDepth(c.dist + c.hazeEnd);
     if (this.sky) {
@@ -796,7 +1382,10 @@ export class Game {
     return best;
   }
 
-  /** Phase 5 E15: the 🐾 chip: glide to the longest-hiding hinted cat and say where it is (a hint, not a beacon). */
+  /**
+   * The 🐾 chip. E20.1 (#284): the cat has to be found, so the chip never moves the camera: it says which way the
+   * paw prints lead from bloombot (or the view), and what the cat hides beside. The meow already comes from there.
+   */
   private findCat() {
     const s = this.sim;
     const spot = s.cat
@@ -806,8 +1395,8 @@ export class Game {
     const a = spot && s.cat.anchor(spot.anchorId);
     if (!spot || !a) return;
     const p = this.cat.anchorWorld(a);
-    this.camera.focus(p.x, 0, p.z, Math.max(this.camera.zoom, 0.9), this.settings.reducedMotion ? 0.01 : 1.2);
-    this.hud.feed(`🐾 Paw prints lead ${a.hint}…`);
+    const [fx, , fz] = this.bot ? this.bot.world() : [this.camera.target.x, 0, this.camera.target.z];
+    this.hud.feed(`🐾 Paw prints lead ${compass(p.x - fx, p.z - fz)}, ${a.hint}…`);
   }
 
   /** Phase 5 E15 (inspect): a cat hiding within a few tiles leaves a note on the tile tooltip. */
@@ -827,6 +1416,11 @@ export class Game {
     const w = window.innerWidth;
     const h = window.innerHeight;
     if (!s || s.x < 40 || s.y < 40 || s.x > w - 40 || s.y > h - 40) return 'offscreen';
+    // E20.1 (#284): in the close view, a spot far from bloombot is small and hazy: it counts as out of sight.
+    if (this.bot) {
+      const [bx, , bz] = this.bot.world();
+      if (Math.hypot(p.x - bx, p.z - bz) > TUNING.cat.inViewTiles) return 'offscreen';
+    }
     return this.hud.blockedRects().some((r) => s.x > r.left - 16 && s.x < r.right + 16 && s.y > r.top - 16 && s.y < r.bottom + 16) ? 'covered' : 'visible';
   }
 
@@ -854,23 +1448,35 @@ export class Game {
 
   private onHover(x: number, y: number) {
     this.pointer = { x, y, inside: true };
+    this.pointerAt = performance.now();
     if (this.cinematic) return;
     if (this.catHit(x, y)) {
       this.overlays.hideFrame();
       this.overlays.hideGhost();
-      this.hud.showTip(x, y, `<b>🐱 …is that a cat?</b>Click it!`);
+      this.hud.showTip(x, y, `<b>🐱 …is that a cat?</b>Go and say hello!`);
       document.body.style.cursor = 'pointer';
       return;
     }
     if (this.droneHit(x, y)) {
       this.overlays.hideFrame();
       this.overlays.hideGhost();
-      this.hud.showTip(x, y, `<b>🛸 Drone</b>Click to see its work area and current job`);
+      this.hud.showTip(x, y, `<b>🛸 Drone</b>Press ${this.hudKey('interact')} beside it to see its work area and current job`);
       document.body.style.cursor = 'pointer';
       return;
     }
     document.body.style.cursor = '';
-    const p = this.pick(x, y);
+    this.previewAt(this.pick(x, y), x, y);
+  }
+
+  /** The hover preview for a tile (ghost, pulse footprint, frame and tooltip), from the pointer or bloombot. */
+  /** E19: the build hologram's shape for a machine type: its model, or a footprint block. */
+  private holoShape(type: MachineData['type'], size: number): HoloShape {
+    const m = MACHINE_MODELS[type];
+    return m ? { kind: 'model', name: m[0], scale: m[1] * (size > 1 ? 1.3 : 1) } : { kind: 'block', height: type === 'motherTree' ? 1.1 : size > 2 ? 1.2 : 0.45 };
+  }
+
+  private previewAt(p: Pick | undefined, x: number, y: number) {
+    if (this.hud.plotPickerOpen) return; // the picker's hologram owns the preview while it's open
     const tool = this.hud.currentTool;
     if (!p || !p.tile) {
       this.overlays.hideFrame();
@@ -893,27 +1499,28 @@ export class Game {
       const a = this.sim.supers.anchorFor(st, p.fx, p.fz);
       const chk = this.sim.supers.check(st, p.roofId, a.x, a.z);
       const d = TIER3[st]!;
-      this.overlays.showGhost(p.roofId, a.x, a.z, d.size, chk.ok, 0.3);
+      this.overlays.showGhost(p.roofId, a.x, a.z, d.size, chk.ok, 0.3, this.bot ? this.holoShape(st, d.size) : undefined);
       this.overlays.showRadius(this.sim.grid.tilesNear({ roofId: p.roofId, x: a.x, z: a.z, size: d.size }, 2), chk.ok ? 'ok' : 'info');
       const stages = chk.costs.map((c, i) => `${SuperSystem.stageName(i)} ${formatCost(c)}`).join('<br>');
       this.hud.showTip(
         x,
         y,
-        `<b>${d.icon} ${d.name}</b>${d.blurb}. ${d.ability}.<br><small>${stages}<br>Total ${formatCost(this.sim.supers.totalCost(chk.costs))} · prices fixed once placed</small><br>${chk.ok ? '<span class="ok">Click to lay the foundation</span>' : `<span class="bad">${chk.reason}</span>`}`,
+        `<b>${d.icon} ${d.name}</b>${d.blurb}. ${d.ability}.<br><small>${stages}<br>Total ${formatCost(this.sim.supers.totalCost(chk.costs))} · prices fixed once placed</small><br>${chk.ok ? `<span class="ok">${this.press('E')} to lay the foundation</span>` : `<span class="bad">${chk.reason}</span>`}`,
       );
       return;
     }
     if (tool !== 'inspect' && tool !== 'pulse') {
       const bt = tool as BuildableType;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
-      const chk = this.sim.build.check(bt, p.roofId, a.x, a.z);
+      const chk = { ...this.sim.build.check(bt, p.roofId, a.x, a.z) };
       const def = MACHINES[bt];
-      this.overlays.showGhost(p.roofId, a.x, a.z, def.size, chk.ok || chk.spotOk, def.size === 2 ? 0.35 : 0.5);
+      if (chk.ok && this.cozy.plotUnder(p.roofId, a.x, a.z, def.size)) Object.assign(chk, { ok: false, spotOk: false, reason: PLOT_IN_WAY });
+      this.overlays.showGhost(p.roofId, a.x, a.z, def.size, chk.ok || chk.spotOk, def.size === 2 ? 0.35 : 0.5, this.bot ? this.holoShape(bt, def.size) : undefined);
       this.overlays.showRadius(this.radiusTiles({ type: bt, roofId: p.roofId, x: a.x, z: a.z, size: def.size }), chk.ok ? 'ok' : 'info');
       this.hud.showTip(
         x,
         y,
-        `<b>${def.icon} ${def.name}</b>${def.blurb}<br>${this.mergeHint(bt, p.roofId, a.x, a.z, def.size)}${chk.ok ? `<span class="ok">Click to build · ${formatCost(chk.cost)}</span>` : `<span class="bad">${chk.reason}</span>`}`,
+        `<b>${def.icon} ${def.name}</b>${def.blurb}<br>${this.mergeHint(bt, p.roofId, a.x, a.z, def.size)}${chk.ok ? `<span class="ok">${this.press('E')} to build · ${formatCost(chk.cost)}</span>` : `<span class="bad">${chk.reason}</span>`}`,
       );
       return;
     }
@@ -925,12 +1532,14 @@ export class Game {
       const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
       const ct = area ? { icon: AREA_TYPES[this.sim.areas.info(area).type].icon, name: this.sim.areas.info(area).landmarkName } : undefined;
       const boost = (occ.overchargeUntil ?? 0) > this.sim.time ? '<br><span class="ok">⚡ Boosted: next trigger +1</span>' : '';
-      this.hud.showTip(x, y, `<b>${ct?.icon ?? machineIcon(occ)} ${ct?.name ?? machineName(occ)}</b>${ready ? '<span class="ok">Ready! Click to awaken.</span>' : 'Click to inspect'}${boost}`);
+      this.hud.showTip(x, y, `<b>${ct?.icon ?? machineIcon(occ)} ${ct?.name ?? machineName(occ)}</b>${ready ? `<span class="ok">Ready! ${this.press('Q')} to awaken.</span>` : `${this.press('Q')} to inspect`}${boost}`);
       return;
     }
     if (tool === 'inspect') {
-      this.overlays.showFrame(t.roofId, t.x, t.z, 1, 'hover');
-      this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${this.pawHint(t)}`);
+      const plot = this.cozy.spotAt(t.roofId, t.x, t.z);
+      if (plot && (this.cozy.ready(plot) || this.cozy.shown(plot))) this.overlays.showFrame(t.roofId, plot.x, plot.z, plot.size, 'hover');
+      else this.overlays.showFrame(t.roofId, t.x, t.z, 1, 'hover');
+      this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${this.pawHint(t)}${this.plotLine(t.roofId, t)}`);
       return;
     }
     const chk = this.sim.restoration.checkPulse(t);
@@ -945,7 +1554,145 @@ export class Game {
       const verb = t.ground === 'restored' ? `Nurture → ${BLOOM_NAMES[t.bloom + 1]}` : this.sim.restoration.nextIsOvercharged() ? '🌟 Overcharged pulse' : 'Pulse';
       action = `<span class="ok">${verb}: ${formatCost(chk.cost)}${fp.length ? ` · restores ${fp.length + 1} tiles` : ''}</span>`;
     } else if (chk.reason && !maxed) action = `<span class="bad">${chk.reason}</span>`;
-    this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${action ? '<br>' + action : ''}`);
+    this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${action ? '<br>' + action : ''}${this.plotLine(t.roofId, t)}`);
+  }
+
+  // ───────────── E19.1: plots ─────────────
+
+  /** What the renderer draws on a plot: the option being previewed or chosen, the waiting look, or nothing. */
+  private plotLook(p: PlotSpot): string | null | undefined {
+    if (this.pickerPlot?.id === p.id) return null; // the picker's hologram shows the choice; the plot waits under it
+    const shown = this.cozy.shown(p);
+    if (shown) return shown.id;
+    if (this.cozy.choice(p.id)) return undefined; // a machine stands on it
+    return this.cozy.ready(p) ? null : undefined;
+  }
+
+  /** A plot at this cell that can be opened now (ready, or already chosen). */
+  private openablePlot(roofId: string, x: number, z: number): PlotSpot | undefined {
+    const p = this.cozy.spotAt(roofId, x, z);
+    return p && (this.cozy.ready(p) || this.cozy.shown(p)) ? p : undefined;
+  }
+
+  /** A line for a tile's tooltip when it's part of a plot: what Q does there, or what the plot waits for. */
+  private plotLine(roofId: string, t: TileData): string {
+    const p = this.cozy.spotAt(roofId, t.x, t.z);
+    if (!p || this.sim.areas.fog(p.areaId) === 'hidden') return '';
+    const chosen = this.cozy.shown(p);
+    const k = this.press('Q', true);
+    if (chosen) return `<br><span class="ok">${chosen.icon} ${chosen.name} · ${k} to change it</span>`;
+    if (this.cozy.ready(p)) return `<br><span class="ok">🌱 An empty plot · ${k} to choose what it becomes</span>`;
+    if (this.cozy.choice(p.id)) return '';
+    return '<br><small>🌱 A plot: restore all four tiles to choose what it becomes</small>';
+  }
+
+  /** E19.1.2: opens the picker for a plot (bloombot is beside it). */
+  private openPlotPicker(p: PlotSpot) {
+    this.hud.hideTip();
+    const info = this.sim.areas.info(p.areaId);
+    const choices = this.cozy.choices(p);
+    const current = this.cozy.choice(p.id)?.id;
+    this.pickerPlot = p;
+    this.chunks.markPlot(p);
+    this.hud.openPlotPicker(
+      {
+        title: current ? `🌱 A plot by the ${info.landmarkName}` : '🌱 An empty plot',
+        sub: `${AREA_TYPES[info.type].name} · free to choose and change any time`,
+        current,
+        choices: choices.map((c) => ({ id: c.option.id, name: c.option.name, icon: c.option.icon, blurb: c.option.blurb, solid: c.option.solid, unlocked: c.unlocked, fresh: c.fresh, hint: c.hint })),
+      },
+      {
+        onPreview: (id) => this.previewPlot(p, id ?? current), // off an option: back to what's chosen
+        onChoose: (id) => this.choosePlot(p, id),
+        onClose: () => {
+          this.previewPlot(p, undefined);
+          this.pickerPlot = undefined;
+          this.chunks.markPlot(p);
+        },
+      },
+    );
+    this.cozy.seen(choices.filter((c) => c.fresh).map((c) => c.option.id)); // the "new" marker shows this once
+    if (current) this.previewPlot(p, current);
+    this.sfx.click();
+  }
+
+  private previewPlot(p: PlotSpot, option: string | undefined) {
+    const next = option ? { id: p.id, option } : undefined;
+    if (this.plotPreview?.id === next?.id && this.plotPreview?.option === next?.option) return;
+    this.plotPreview = next;
+    // E19: the option bloombot is considering is projected over the plot as a hologram
+    if (next && this.bot) {
+      this.hud.hideTip();
+      this.overlays.showGhost(GROUND, p.x, p.z, p.size, true, 0.5, { kind: 'plot', plot: p, option: next.option });
+    } else this.overlays.hideGhost();
+  }
+
+  private choosePlot(p: PlotSpot, option: string | undefined) {
+    const why = this.cozy.choose(p.id, option);
+    if (why) {
+      this.hud.showFail(why);
+      return;
+    }
+    this.plotPreview = undefined;
+    this.hud.closePlotPicker();
+    this.chunks.markPlot(p);
+    this.sfx.click();
+    const o = option ? this.cozy.choice(p.id) : undefined;
+    this.hud.toast(o ? `${o.icon} ${o.name} it is<small>Change it any time: it's free.</small>` : '🌱 The plot is empty again', '', 2.4);
+    if (this.bot) {
+      this.bot.visuals.play(o ? 'cheer' : 'interact');
+      if (o?.solid) this.bot.walker.settle(this.bot.pose); // never left standing inside it
+    }
+  }
+
+  /**
+   * E19.1.5: dev and perf helper. Restores every plot in the revealed city and gives each an option (all options
+   * unlocked, round-robin, or `only` for every plot); `null` clears them all. Returns how many plots it set.
+   */
+  fillPlots(only?: string | null): number {
+    const st = this.sim.state;
+    const cz = (st.cozy ??= {});
+    cz.unlocked = PLOT_OPTIONS.filter((o) => !('start' in o.unlock)).map((o) => o.id);
+    let n = 0;
+    for (const id of this.sim.areas.revealed())
+      for (const p of this.cozy.spots(id)) {
+        for (let j = 0; j < p.size; j++)
+          for (let i = 0; i < p.size; i++) {
+            const t = this.sim.grid.get(GROUND, p.x + i, p.z + j);
+            if (!t || t.occupantId || t.blocked || t.ground === 'restored') continue;
+            t.ground = 'restored';
+            t.pollution = 0;
+            t.bloom = Math.max(1, t.bloom);
+            this.sim.grid.touch(t);
+          }
+        if (only === null) {
+          this.cozy.choose(p.id, undefined);
+          continue;
+        }
+        const opts = this.cozy.choices(p).filter((c) => c.unlocked);
+        const pick = only ? opts.find((c) => c.option.id === only) : opts[n % Math.max(1, opts.length)];
+        if (pick && !this.cozy.choose(p.id, pick.option.id)) n++;
+      }
+    this.chunks.markAll();
+    return n;
+  }
+
+  /** E19.1.3: every plot option id (review shots). */
+  plotOptionIds(): string[] {
+    return PLOT_OPTIONS.map((o) => o.id);
+  }
+
+  /** E19.1.4: new plot options earned (checked about once a second): one toast each. */
+  private checkCozyUnlocks() {
+    if (this.clock < this.cozyCheckAt) return;
+    this.cozyCheckAt = this.clock + 1;
+    for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Look for empty plots in restored ground.</small>`, 'gold', 4.5);
+    // The picker closes if bloombot wanders off.
+    const pp = this.pickerPlot;
+    if (pp && this.bot) {
+      const [bx, , bz] = this.bot.world();
+      if (Math.hypot(bx - (pp.x + pp.size / 2), bz - (pp.z + pp.size / 2)) > 4.5 || this.bot.pose.roofId !== GROUND) this.hud.closePlotPicker();
+    }
   }
 
   /** Look 6.10: the name of the stage a tile's transition is in (inspect panel). */
@@ -975,7 +1722,7 @@ export class Game {
     switch (t.ground) {
       case 'polluted': {
         const left = this.sim.cultivators.remaining(t);
-        if (left !== undefined) return `🚜 The Cultivator is softening this slab — ${Math.ceil(left)} s to bloom. Tap to knock it along.`;
+        if (left !== undefined) return `🚜 The Cultivator is softening this slab — ${Math.ceil(left)} s to bloom. Pulse it to knock it along.`;
         return `Pollution ${Math.round(t.pollution)}% — restoring neighbours softens it into moss.`;
       }
       case 'prepared':
@@ -999,6 +1746,10 @@ export class Game {
       this.hud.toggleUpgrades(false);
       return;
     }
+    if (this.bot) {
+      this.botClick(x, y);
+      return;
+    }
     const catId = this.catHit(x, y);
     if (catId) {
       this.claimingCat = catId;
@@ -1018,61 +1769,78 @@ export class Game {
       this.select(undefined);
       return;
     }
+    this.actAt(p, x, y);
+  }
+
+  /**
+   * What a click on a tile does with a tool (the cursor path), and what bloombot does when it acts on a tile.
+   * `x, y` is where on screen to show a failure. Returns what happened, for bloombot's animation.
+   */
+  private actAt(p: Pick, x: number, y: number, tool: Tool = this.hud.currentTool, hover = true): ActResult {
+    if (!p.tile) return 'none';
     const roof = this.sim.grid.roof(p.roofId)!;
     if (roof.preview) {
       this.hud.showFail(this.lockedReason(roof.id), x, y);
-      return;
+      return 'none';
     }
-    const tool = this.hud.currentTool;
     const t = p.tile;
     const st = superType(tool);
     if (st) {
       const a = this.sim.supers.anchorFor(st, p.fx, p.fz);
+      if (this.cozy.plotUnder(p.roofId, a.x, a.z, TIER3[st]!.size)) {
+        this.hud.showFail(PLOT_IN_WAY, x, y);
+        return 'none';
+      }
       const m = this.sim.supers.place(st, p.roofId, a.x, a.z);
       if (m) {
         this.selectTool('pulse');
         this.select(m.id);
       }
-      return;
+      return m ? 'build' : 'none';
     }
     if (tool !== 'inspect' && tool !== 'pulse') {
       const bt = tool as BuildableType;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
+      if (this.cozy.plotUnder(p.roofId, a.x, a.z, MACHINES[bt].size)) {
+        this.hud.showFail(PLOT_IN_WAY, x, y);
+        return 'none';
+      }
       const m = this.sim.build.place(bt, p.roofId, a.x, a.z);
       if (m) {
         this.selectTool('pulse');
         this.select(m.id);
       }
-      return;
+      return m ? 'build' : 'none';
     }
     const occ = this.sim.occupant(t);
     if (occ && this.mergeSel) {
       const plan = this.sim.merge.plan(this.mergeSel.anchor, this.mergeSel.partners);
-      if (occ.id === this.mergeSel.anchor || (plan && plan.partners.some((p) => p.id === occ.id))) return;
+      if (occ.id === this.mergeSel.anchor || (plan && plan.partners.some((p) => p.id === occ.id))) return 'none';
       const ids = plan && this.sim.merge.swap(plan, occ.id);
       if (ids) {
         this.mergeSel = { anchor: this.mergeSel.anchor, partners: ids };
         this.sfx.click();
         this.showMergeHighlights();
         this.renderInspect();
-        return;
+        return 'select';
       }
     }
     if (occ) {
       if (occ.type === 'core' && this.landmarkReady(occ)) {
         this.wakeLandmark(occ);
-        return;
+        return 'wake';
       }
       this.select(occ.id);
-      return;
+      return 'select';
     }
     if (tool === 'inspect') {
       this.select(undefined);
-      return;
+      return 'none';
     }
     this.select(undefined);
-    this.sim.restoration.pulse(t.id);
-    this.onHover(x, y);
+    const ok = this.sim.restoration.pulse(t.id);
+    if (hover) this.onHover(x, y);
+    return ok ? 'pulse' : 'none';
   }
 
   private radiusTiles(m: { type: MachineData['type']; roofId: string; x: number; z: number; size: number }): TileData[] {
@@ -1195,8 +1963,8 @@ export class Game {
     return (
       line +
       (beside + 1 >= TUNING.merge.count
-        ? `<span class="ok">✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (tap this one) and the new ${t2.name} completes a ${t3.icon} ${t3.name} core</span><br>`
-        : `✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (tap this one) and ${TUNING.merge.count} touching ${t2.name}s make a ${t3.icon} ${t3.name} core<br>`)
+        ? `<span class="ok">✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (this one too) and the new ${t2.name} completes a ${t3.icon} ${t3.name} core</span><br>`
+        : `✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (this one too) and ${TUNING.merge.count} touching ${t2.name}s make a ${t3.icon} ${t3.name} core<br>`)
     );
   }
 
@@ -1251,7 +2019,7 @@ export class Game {
     }
     const freed = plan.freed.length;
     const lost = plan.lost.map((l) => `<p class="loss">⚠️ ${esc(l.name)}: keeps Lv ${l.kept}, loses Lv ${l.lost.join(' and ')}</p>`).join('');
-    const swap = plan.options.length > 2 ? `<p>Tap another highlighted ${esc(plan.fromName)} to swap it in.</p>` : '';
+    const swap = plan.options.length > 2 ? `<p>Pick another highlighted ${esc(plan.fromName)} to swap it in.</p>` : '';
     return (
       `<div class="merge"><b>🔀 ${TUNING.merge.count} × ${esc(plan.fromName)} → ${t2.icon} ${esc(plan.toName)}</b>` +
       `<p class="gain">Output ${plan.before} → ${plan.after} (+${Math.round((plan.after / plan.before - 1) * 100)}%) · ${esc(t2.blurb)}</p>` +
@@ -1504,7 +2272,7 @@ export class Game {
     b.on('area.ready', ({ areaId }) => {
       const lm = s.areas.landmark(areaId);
       if (lm) this.machines.setLandmarkState(lm.id, 'ready');
-      if (areaId !== PARK) this.hud.toast(`✨ ${s.areas.info(areaId).landmarkName} is ready to wake!<small>Click it to clear this ${AREA_TYPES[s.areas.info(areaId).type].name.toLowerCase()}'s fog.</small>`, 'gold', 4);
+      if (areaId !== PARK) this.hud.toast(`✨ ${s.areas.info(areaId).landmarkName} is ready to wake!<small>Walk up and press ${this.hudKey('interact')} to clear this ${AREA_TYPES[s.areas.info(areaId).type].name.toLowerCase()}'s fog.</small>`, 'gold', 4);
     });
     b.on('area.cleared', ({ areaId }) => this.onAreaCleared(areaId));
     b.on('fauna.unlocked', ({ id }) => this.eco?.arrived(id)); // Phase 5 E16 (cosmetic; pays nothing)
@@ -1523,7 +2291,7 @@ export class Game {
         // Look 6.4: the slab fractures under your tap: a short, punchy shake and a burst of grit.
         this.vfx.burst(p, 8, { up: 1.1, speed: 1.6, size: 0.045, life: 0.6, hex: PALETTE.debris });
         if (!this.settings.reducedMotion) this.camera.shake(0.035);
-        this.sfx.pulse();
+        this.sfx.at(p, (q) => q.pulse());
       } else if (source === 'broad') this.vfx.ring(p, PALETTE.eyeCyan, 0.8, 0.45);
       else if (source === 'condenser') this.vfx.ring(p, PALETTE.water, 0.8, 0.5);
       else if (source === 'overflow') this.vfx.ring(p, '#a8ecff', 0.9, 0.5);
@@ -1572,7 +2340,7 @@ export class Game {
       }
       if (manual && this.clock - this.lastRestoreSound > 0.06) {
         this.lastRestoreSound = this.clock;
-        this.sfx.restored(this.restoreSoundIdx++);
+        this.sfx.at(p, (q) => q.restored(this.restoreSoundIdx++));
       }
       for (const n of s.grid.neighbors(tile)) this.grid.refresh(n, true); // neighbours may have softened
       if (this.selected) this.inspectTimer = 0;
@@ -1584,7 +2352,7 @@ export class Game {
       this.vfx.burst(p, 7, { up: 1.2, speed: 1.2, size: 0.04, life: 0.5, hex: PALETTE.debris });
       this.vfx.ring(p, '#c8ffa8', 0.6, 0.25);
       if (!this.settings.reducedMotion) this.camera.shake(0.02);
-      this.sfx.stage('crack');
+      this.sfx.at(p, (q) => q.stage('crack'));
     });
     // Look 6.10: each restore stage has its own sound as it plays (rate-limited, so chains layer, never roar).
     const stageSounds = (tile: TileData) => {
@@ -1594,7 +2362,7 @@ export class Game {
       if (now - this.stageSoundAt < 150) return;
       this.stageSoundAt = now;
       const S = TUNING.transitions.restoreStages;
-      const at = (share: number, kind: Parameters<typeof this.sfx.stage>[0]) => this.tweens.add(0.01, () => {}, { delay: Math.max(0, tr.t0 + tr.d * share - s.time), done: () => this.sfx.stage(kind) });
+      const at = (share: number, kind: Parameters<typeof this.sfx.stage>[0]) => this.tweens.add(0.01, () => {}, { delay: Math.max(0, tr.t0 + tr.d * share - s.time), done: () => this.sfx.at(this.tileVec(tile), (q) => q.stage(kind)) });
       at(0, 'crack');
       at(S.heave[0] + 0.02, 'grind');
       at(S.heave[0] + 0.1, 'creak');
@@ -1614,7 +2382,7 @@ export class Game {
       const p = this.tileVec(tile, 0.3);
       this.vfx.burst(p, 12 + level * 4, { up: 2.4, size: 0.07 });
       this.vfx.ring(this.tileVec(tile), PALETTE.pink, 0.9, 0.5);
-      this.sfx.nurture(level);
+      this.sfx.at(p, (q) => q.nurture(level));
     });
     b.on('resource.gain', ({ kind, amount, tileId, reason }) => {
       if (amount.lt(0.05)) return;
@@ -1642,7 +2410,7 @@ export class Game {
       this.vfx.ring(p, PALETTE.white, machine.size * 1.1, 0.6);
       this.vfx.burst(p, 16, { up: 3, size: 0.06 });
       this.camera.shake(0.05);
-      this.sfx.build();
+      this.sfx.at(p, (q) => q.build());
       if ((machine.tier ?? 1) >= 3) return; // a superstructure's foundation: its own messages (super.stage)
       const first = s.state.machines.filter((m) => m.type === machine.type && !m.starter).length === 1;
       const msg: Partial<Record<MachineData['type'], string>> = {
@@ -1688,7 +2456,7 @@ export class Game {
       const p = new pc.Vec3(w[0], w[1], w[2]);
       if (stage < 3) {
         this.vfx.ring(p, PALETTE.white, machine.size * 1.2, 0.6);
-        this.sfx.build();
+        this.sfx.at(p, (q) => q.build());
         this.hud.toast(`🏗️ ${esc(d.name)}: ${stage === 1 ? 'foundation laid' : 'assembled'}<small>Next: ${SuperSystem.stageName(stage)} · ${formatCost(s.supers.nextCost(machine)!)} (fixed price, no timer)</small>`, undefined, 3.5);
       } else {
         // Built: unfolding machinery, light spreading out in rings, a crescendo. The first one is an event.
@@ -1860,7 +2628,11 @@ export class Game {
       if (d) this.drones.add(d, true);
     });
     b.on('drone.despawned', ({ droneId }) => this.drones.remove(droneId));
-    b.on('drone.jobStarted', ({ droneId }) => this.sfx.drone(s.state.drones.find((x) => x.id === droneId)?.role));
+    b.on('drone.jobStarted', ({ droneId }) => {
+      const d = s.state.drones.find((x) => x.id === droneId);
+      const w = d && this.sim.drones.worldOf(d);
+      this.sfx.at(w && { x: w[0], y: w[1], z: w[2] }, (q) => q.drone(d?.role));
+    });
     b.on('drone.roleChanged', () => {
       this.drones.sync(); // drones between jobs take their new look now; the rest as they finish
       this.renderInspect();
@@ -1884,7 +2656,7 @@ export class Game {
       }
       if (id) this.cat.hide(id, true);
       this.hud.hideTip();
-      this.sfx.meow();
+      this.sfx.at(p, (q) => q.meow());
       setTimeout(() => this.sfx.fanfare(), 250);
       // Rarer cats are named in words (and shaped differently), never told apart by colour alone.
       const label = variant === 'rainbow' ? '🌈 RAINBOW CAT FOUND!' : variant === 'golden' ? '👑 GOLDEN CAT FOUND!' : '🐱 LUCKY CAT FOUND!';
@@ -1936,17 +2708,11 @@ export class Game {
         `🐱✨ Golden Relay: your next green corridor hop blooms ${this.sim.state.relayBonus} extra tiles`,
       );
     });
-    b.on('cat.stash', () => {
-      // A soft hint that something lucky is still waiting, never a pointer.
-      this.sfx.meow(true);
-      const p = this.cat.targetWorld(this.sim.state.cat.active?.id);
-      if (p) this.vfx.burst(p, 6, { up: 1.5, size: 0.04, speed: 0.4 });
-    });
     b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Surge ×${TUNING.cat.frenzyMult} for ${Math.round(seconds)}s`));
     b.on('harvest', () => this.sfx.coin());
     b.on('rooftop.coreReady', () => {
       this.machines.setCoreState('ready');
-      this.hud.toast('✨ The Rooftop Core is humming!<small>Click it (or the button) to awaken the building.</small>', 'gold', 5);
+      this.hud.toast(`✨ The Rooftop Core is humming!<small>Walk up and press ${this.hudKey('interact')} (or use the button) to awaken the building.</small>`, 'gold', 5);
       this.sfx.chainEnd(10);
     });
     b.on('rooftop.coreRestored', () => this.playCoreSequence());
@@ -2007,7 +2773,7 @@ export class Game {
         for (let i = 0; i < 3; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.15, done: () => this.vfx.ring(p, i % 2 ? '#a8ecff' : PALETTE.water, 1.4 + i * 0.9, 0.7) });
         this.vfx.burst(new pc.Vec3(p.x, p.y + 0.3, p.z), 24, { up: 3.2, speed: 1.6, size: 0.07 });
       }
-      this.sfx.pulse();
+      this.sfx.at(p, (q) => q.pulse());
       this.camera.shake(0.04);
       if ((s.state.progression.overflows ?? 0) <= 1) this.hud.toast(`⛲ Reservoir Overflow!<small>Water spills into the dry planters: they bloom lush (×${TUNING.neighbourhood.reservoir.lushMult} 🌿 for a while).</small>`, 'gold', 3.5);
       else this.hud.feed('⛲ Overflow! Dry tiles burst into lush bloom');
@@ -2112,7 +2878,7 @@ export class Game {
       const t = s.grid.byTileId(ev.target);
       if (t && (ev.type === 'RESTORE' || ev.type === 'GROW' || ev.type === 'LUSH')) {
         this.tileFx.flash(t, combo >= 100 ? '#ff5fb8' : '#ffb81f', 0.45, 0.9);
-        this.sfx.bloom(combo);
+        this.sfx.at(this.tileVec(t), (q) => q.bloom(combo));
       }
       if (combo >= 2) this.hud.combo(combo);
       return;
@@ -2131,7 +2897,7 @@ export class Game {
         if (from && to && ev.cause !== 'motherTree' && ev.cause !== 'canopy')
           this.vfx.arc(from, to, ev.cause === 'overflow' ? PALETTE.water : ev.cause === 'relay' ? PALETTE.coreGlow : combo >= 5 ? PALETTE.pink : PALETTE.flowerCore, 0.5);
         if (combo >= 2) this.hud.combo(combo);
-        this.sfx.bloom(combo);
+        this.sfx.at(t && this.tileVec(t), (q) => q.bloom(combo));
         break;
       }
       case 'CORRIDOR':
@@ -2153,7 +2919,7 @@ export class Game {
         break;
       case 'PRODUCE_WATER':
         if (to) this.vfx.ring(to, PALETTE.water, 1.4, 0.6);
-        this.sfx.pulse();
+        this.sfx.at(to, (q) => q.pulse());
         break;
       case 'CHARGE':
         if (from && to && !this.settings.reducedMotion) this.vfx.arc(from, to, '#7cf7c8', 0.35);
@@ -2308,6 +3074,7 @@ export class Game {
     this.chunks.markArea(id, true);
     for (const nb of s.areas.info(id).neighbours) this.chunks.markArea(nb);
     this.updateCityBounds();
+    this.bot?.visuals.play('cheer');
     if (id === PARK) return; // the fountain has its own finale
     const lm = s.areas.landmark(id);
     if (lm) {
@@ -2436,7 +3203,7 @@ export class Game {
       dev.maxPixelRatio = Math.max(1, dev.maxPixelRatio - 0.25);
       this.app.resizeCanvas();
       this.slowFor = 0;
-    } else if (this.slowFor > 3 && (this.settings.gfx ?? 'auto') === 'auto' && !urlTier() && this.gfxTier !== 'low') {
+    } else if (this.slowFor > 3 && (this.settings.gfx ?? 'auto') === 'auto' && !urlTier() && !this.deck && this.gfxTier !== 'low') {
       // Look 1.11: already at the lowest resolution and still slow: Auto steps down a graphics tier.
       this.autoTier = lowerTier(this.gfxTier);
       this.applySettings();
@@ -2524,7 +3291,17 @@ export class Game {
     // Look 6.10: a working tiller near the view hums.
     if (!this.paused && this.camera.zoom > 0.9) {
       const f = this.camera.target;
-      if (this.sim.cultivators.working().some((t) => Math.abs(t.x - f.x) < 10 && Math.abs(t.z - f.z) < 8)) this.sfx.stage('hum');
+      const tiller = this.sim.cultivators.working().find((t) => Math.abs(t.x - f.x) < 10 && Math.abs(t.z - f.z) < 8);
+      if (tiller) this.sfx.at(this.tileVec(tiller), (q) => q.stage('hum'));
+    }
+    // 3D audio: the listener rides the camera; the brook sits at the clean water near the view.
+    const camE = this.camera.entity;
+    this.sfx.setListener(camE.getPosition(), camE.forward, camE.up);
+    this.brookScan -= dt;
+    if (this.brookScan <= 0) {
+      this.brookScan = 0.25;
+      this.placeBrook();
+      this.placeBirds();
     }
     this.drones.update(this.paused || this.hiddenPause ? 0 : dt); // drone personality freezes with the game
     this.cat.update(dt);
@@ -2548,6 +3325,7 @@ export class Game {
     this.tileFx.update(dt);
     this.frameNo++;
     this.updateChainPresentation(dt);
+    if (!this.cinematic) this.checkCozyUnlocks();
     this.vfx.update(dt);
     // First-tile beacon until the player restores something.
     if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic) {
@@ -2556,6 +3334,14 @@ export class Game {
       if (t) this.overlays.showBeacon(t.roofId, t.x, t.z);
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
+    if (this.bot) {
+      this.bot.update(this.hiddenPause ? 0 : dt);
+      this.updateBotZoom();
+      this.updateBotPreview();
+      this.minimap?.update(dt, this.bot.pose);
+      const [cx, cy, cz] = this.bot.world();
+      this.drones.companion = { x: cx, y: cy, z: cz, facing: this.bot.pose.facing };
+    }
     this.camera.update(dt);
     this.sky.clarity += (this.skyClarity() - this.sky.clarity) * Math.min(1, dt * 0.8);
     this.sky.reducedMotion = this.settings.reducedMotion;
@@ -2573,7 +3359,9 @@ export class Game {
     this.look.update(dt);
     this.updateTreeCursor(dt);
     this.hud.update(dt);
-    this.sfx.layers = Math.min(3, Math.floor(this.sim.progression.restoredCount(HOME) / 12));
+    const restored = this.sim.progression.restoredCount(HOME);
+    this.sfx.layers = Math.min(3, Math.floor(restored / 12));
+    this.sfx.life = Math.min(1, restored / 48);
     this.sfx.update(dt);
 
     if (this.selected) {
@@ -2590,7 +3378,9 @@ export class Game {
       this.meowTimer -= dt;
       if (this.meowTimer <= 0) {
         this.meowTimer = 30 + Math.random() * 20;
-        this.sfx.meow(true);
+        const spots = this.sim.cat.spots();
+        // The hint meow comes from where a cat actually hides, so a listener can turn toward it.
+        this.sfx.at(this.cat.targetWorld(spots[Math.floor(Math.random() * spots.length)].id), (q) => q.meow(true));
       }
     }
     this.updateAreaLabels();
@@ -2642,4 +3432,12 @@ function fromCostStrings(c: Partial<Record<ResourceKind, string>>): import('../c
   const o: import('../core/types').Cost = {};
   for (const k of ['energy', 'water', 'biomass'] as const) if (c[k] !== undefined) o[k] = big(c[k]);
   return o;
+}
+
+/** E20.1: a rough direction in words, north up as on the minimap (north is -z, east is +x). */
+export function compass(dx: number, dz: number): string {
+  if (Math.hypot(dx, dz) < 2) return 'right here';
+  const names = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+  const deg = (Math.atan2(dx, -dz) * 180) / Math.PI;
+  return names[((Math.round(deg / 45) % 8) + 8) % 8];
 }

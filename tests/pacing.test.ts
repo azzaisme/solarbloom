@@ -14,7 +14,7 @@ import { Sim } from '../src/gameplay/Sim';
 export function playSession(seed: number, actionEvery = 3, minutes = 20) {
   const sim = new Sim(createInitialState(seed));
   const layer = GROUND;
-  sim.cat.anchorView = () => 'visible';
+  sim.cat.anchorView = () => 'offscreen';
   const order: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'pollinator', 'motherTree', 'solar', 'pollinator'];
   const built: Record<string, number> = {};
   let next = 0;

@@ -104,18 +104,55 @@ describe('lucky cat', () => {
     expect(d.rewards.luckyHarvest).toBe(1);
   });
 
-  it('a missed cat never blocks rewards: it stashes extras (capped) and pays them on discovery', () => {
+  it('E20.1: a cat waits to be found: no stash grows, and the next timer starts from the find', () => {
     const sim = makeSim();
     sim.cat.spawn('park-bench');
     sim.state.cat.found = 1;
-    sim.advance(TUNING.cat.laterMax * (TUNING.cat.stashMax + 2));
-    expect(sim.state.cat.active?.anchorId).toBe('park-bench'); // still discoverable, only one cat
-    expect(sim.state.cat.stash).toBe(TUNING.cat.stashMax);
+    sim.advance(TUNING.cat.laterMax * 4);
+    expect(sim.state.cat.active?.anchorId).toBe('park-bench'); // still there, only one cat
+    expect(sim.state.cat.stash ?? 0).toBe(0);
     let extras = -1;
     sim.bus.on('cat.found', (e) => (extras = e.extras));
     sim.cat.claim();
-    expect(extras).toBe(TUNING.cat.stashMax);
+    expect(extras).toBe(0);
+    expect(sim.state.cat.nextSpawnAt).toBeGreaterThanOrEqual(sim.time + TUNING.cat.laterMin);
+  });
+
+  it('E20.1: a stash from an older save is paid once with the next find', () => {
+    const sim = makeSim();
+    sim.cat.spawn('park-bench');
+    sim.state.cat.found = 1;
+    sim.state.cat.stash = 2;
+    let extras = -1;
+    sim.bus.on('cat.found', (e) => (extras = e.extras));
+    sim.cat.claim();
+    expect(extras).toBe(2);
     expect(sim.state.cat.stash).toBe(0);
+  });
+
+  it('E20.1: a cat never hides in view or right beside bloombot, and prefers a short walk away', () => {
+    for (let seed = 1; seed < 12; seed++) {
+      const sim = makeSim(seed);
+      const all = sim.cat.candidates();
+      if (all.length < 3) continue;
+      const seen = new Set([all[0].id]);
+      sim.cat.anchorView = (a) => (seen.has(a.id) ? 'visible' : 'offscreen');
+      const near = all[1];
+      sim.state.bot = { roofId: near.roofId, x: near.pos[0], z: near.pos[2], facing: 0 };
+      expect(sim.cat.spawn()).toBe(true);
+      const id = sim.state.cat.active!.anchorId;
+      expect(seen.has(id)).toBe(false);
+      const a = sim.cat.anchor(id)!;
+      if (a.roofId === near.roofId) expect(Math.hypot(a.pos[0] - near.pos[0], a.pos[2] - near.pos[2])).toBeGreaterThan(TUNING.cat.minFromBot);
+    }
+  });
+
+  it('E20.1: with every spot in view, no cat appears (it tries again later)', () => {
+    const sim = makeSim();
+    sim.cat.anchorView = () => 'visible';
+    expect(sim.cat.spawn()).toBe(false);
+    expect(sim.state.cat.active).toBeUndefined();
+    expect(sim.state.cat.nextSpawnAt).toBeGreaterThan(sim.time);
   });
 
   it('jackpot grants two different rewards', () => {

@@ -23,12 +23,47 @@ export interface LoadResult {
   scrapped?: boolean;
 }
 
+/**
+ * Steam Deck (#243): saves as files. `files` reads and writes the user data folder (the desktop wrapper's
+ * preload provides it); `local` is browser storage. The first read of a key the files don't have yet takes it
+ * from browser storage and writes it to a file (a one-time import), so an earlier browser-storage save carries
+ * over. Everything after that goes to files only.
+ */
+export function fileBackedStorage(files: StorageLike, local?: StorageLike): StorageLike {
+  return {
+    getItem(k) {
+      const v = files.getItem(k);
+      if (v !== null) return v;
+      let old: string | null = null;
+      try {
+        old = local?.getItem(k) ?? null;
+      } catch {
+        /* browser storage blocked */
+      }
+      if (old !== null) files.setItem(k, old);
+      return old;
+    },
+    setItem: (k, v) => files.setItem(k, v),
+    removeItem(k) {
+      files.removeItem(k);
+      try {
+        local?.removeItem(k); // or the import would bring a cleared save back
+      } catch {
+        /* browser storage blocked */
+      }
+    },
+  };
+}
+
 function safeStorage(): StorageLike | undefined {
+  let local: StorageLike | undefined;
   try {
-    return typeof localStorage !== 'undefined' ? localStorage : undefined;
+    local = typeof localStorage !== 'undefined' ? localStorage : undefined;
   } catch {
-    return undefined;
+    local = undefined;
   }
+  const files = (globalThis as { solarbloomDesktop?: { saves?: StorageLike } }).solarbloomDesktop?.saves;
+  return files ? fileBackedStorage(files, local) : local;
 }
 
 /** The world the Sim attached to its state (non-enumerable, so plain JSON never includes it). */

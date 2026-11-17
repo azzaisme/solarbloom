@@ -13,7 +13,7 @@ import { Sim } from '../src/gameplay/Sim';
 export async function playCity(seed: number, actionEvery = 3, minutes = 60, setup?: (sim: Sim) => void) {
   const sim = new Sim(createInitialState(seed));
   setup?.(sim);
-  sim.cat.anchorView = () => 'visible';
+  sim.cat.anchorView = () => 'offscreen';
   const parkOrder: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'pollinator', 'motherTree', 'solar', 'pollinator'];
   const areaOrder: BuildableType[] = ['pollinator', 'droneHub', 'solar', 'pollinator'];
   const clears: number[] = [];

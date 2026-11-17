@@ -1,3 +1,4 @@
+import { toHud } from './UiScale';
 import { fmt, type Big } from '../core/Big';
 import type { ResourceKind } from '../core/types';
 import { ICONS } from './Icons';
@@ -31,8 +32,10 @@ export class FlyText {
     el.innerHTML = `+${fmt(amount, 1)}${ICON[kind]}`;
     el.className = `fly ${kind}`;
     el.style.display = 'block';
-    const tx = to.left + to.width / 2 - 10;
-    const ty = to.top + to.height / 2 - 10;
+    // Screen coordinates into the (possibly zoomed) HUD.
+    from = { x: toHud(from.x), y: toHud(from.y) };
+    const tx = toHud(to.left + to.width / 2) - 10;
+    const ty = toHud(to.top + to.height / 2) - 10;
     const finish = () => {
       el.style.display = 'none';
       this.pool.push(el);

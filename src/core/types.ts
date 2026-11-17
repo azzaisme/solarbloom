@@ -207,7 +207,7 @@ export interface CatSpot {
   anchorId: string;
   spawnedAt: number;
   variant: CatVariant;
-  /** E18.3: a Scout flew close by, so the nook shows its paw-print hint early. */
+  /** E18.3: a Scout flew close by. Unused since E20.1 (#284); kept so older saves load. */
   scouted?: boolean;
 }
 
@@ -370,4 +370,25 @@ export interface GameState {
   districts?: Record<string, number>;
   /** Phase 5 E16: fauna that has arrived, by kind (sim time). Cosmetic; optional, so no save version change. */
   fauna?: Partial<Record<'butterflies' | 'birds' | 'koi' | 'robots', number>>;
+  /**
+   * Bloombot (#234, G.2): where the player character stands, in its layer's cell units, and which way it faces
+   * (radians, 0 = +z). Written by the game only, never by the sim, so the bots' saves don't change. Optional,
+   * so no save version change: a save without it starts bloombot beside the park fountain.
+   */
+  bot?: { roofId: string; x: number; z: number; facing: number };
+  /**
+   * E19 (#245): the cozy city. Written by the game only, never by the sim (cosmetic: nothing reads it to decide
+   * production, chains, milestones or pacing). Optional and sparse, so no save version change.
+   */
+  cozy?: CozyState;
+}
+
+/** E19: what the player chose for the look of their city. */
+export interface CozyState {
+  /** E19.1: plot id → plot option id (only plots with a choice) */
+  plots?: Record<string, string>;
+  /** E19.1.4: options earned so far, in the order they unlocked (options open from the start aren't listed) */
+  unlocked?: string[];
+  /** E19.1.4: unlocked options the picker hasn't shown yet (its "new" marker) */
+  fresh?: string[];
 }

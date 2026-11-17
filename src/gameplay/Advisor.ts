@@ -151,7 +151,7 @@ export class Advisor {
           .tiles(PARK)
           .filter((x) => x.ground === 'restored' && !x.occupantId && x.bloom < TUNING.restore.fullBloom && s.restoration.checkPulse(x).ok)
           .sort((a, b) => b.bloom - a.bloom || a.z - b.z || a.x - b.x)[0];
-        if (t) return { text: 'The fountain wants full-bloom gardens: tap green tiles to grow them.', label: '🌸 Show me where', action: { kind: 'focus', x: t.x, z: t.z } };
+        if (t) return { text: 'The fountain wants full-bloom gardens: pulse green tiles to grow them.', label: '🌸 Show me where', action: { kind: 'focus', x: t.x, z: t.z } };
       }
     }
     // 4. Push the fog back: an affordable tile at the edge of the current goal (or anywhere in the park).

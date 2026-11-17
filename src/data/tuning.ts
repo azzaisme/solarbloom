@@ -256,7 +256,7 @@ export const TUNING = {
       /** Grows the target plus this many orthogonal neighbours (+1 per Drone Sweep level), paying the target's nurture water only. */
       gardener: { neighbours: 2, unlockFullBloom: 10 },
       /** Reach is the hub's radius + (reach − 1) × the base radius; flies `speed`× as fast; +1 ⚡ per `tilesPerEnergy` tiles past the base radius. */
-      scout: { reach: 1.5, speed: 1.5, tilesPerEnergy: 4, catHintTiles: 3 },
+      scout: { reach: 1.5, speed: 1.5, tilesPerEnergy: 4 },
       /** Deliveries, each machine at most once per `everySeconds`; priced in what the machine runs on. */
       courier: {
         everySeconds: 8,
@@ -299,13 +299,17 @@ export const TUNING = {
     frenzyMult: 3,
     megaBloomTiles: 8,
     dronePartySeconds: 45,
-    stashMax: 2, // a missed cat saves up to this many extra rewards instead of blocking new ones
     weights: { luckyHarvest: 40, solarFrenzy: 25, megaBloom: 20, droneParty: 12, jackpot: 3, goldenRelay: 14, catsGarden: 14, fogWhisker: 18 },
     fogWhiskerTiles: 10, // Fog Whisker: tiles of the next fogged area restored from its edge, capped
     goldenRelayExtra: 1, // Golden Relay: extra remote blooms on the next crossing
     goldenCorridorTiles: 5, // Golden Relay in the city: extra blooms on the next green corridor hop…
     goldenCorridorMax: 12, // …+1 per 10 cleared areas, up to this
-    preferVisible: 0.75, // chance a cat hides somewhere already on screen (when there is such a spot)
+    /** E20.1 (#284): the cat hides: never in view, never this close to bloombot (tiles)… */
+    minFromBot: 6,
+    /** …and preferably within a short walk of it (tiles), so finding it is a stroll, not a trek. */
+    preferWithin: 40,
+    /** On screen but further than this from bloombot (tiles) counts as out of sight: small, hazy, behind things. */
+    inViewTiles: 12,
     catsGardenTiles: 6, // Cat's Garden: tiles restored (and decorated) on a random unlocked roof
     /**
      * Phase 5 E15: rarer cats (rolled when one appears, 80 / 18 / 2). `mult` scales the reward (harvest seconds,

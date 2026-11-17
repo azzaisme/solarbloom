@@ -317,6 +317,23 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 /* Drawers & panels */
 .drawer { position: absolute; right: calc(12px + var(--safe-r)); top: calc(12px + var(--safe-t)); bottom: calc(var(--above-bar) + var(--safe-b)); width: 300px; padding: 12px; overflow-y: auto; transform: translateX(calc(100% + 30px)); transition: transform .28s cubic-bezier(.3, 1.2, .5, 1); z-index: 4; background: var(--glass-strong); }
 .drawer.open { transform: none; }
+/* Bloombot (G.15): the backpack drawer opens from the left. */
+#backpack { right: auto; left: calc(12px + var(--safe-l)); transform: translateX(calc(-100% - 30px)); }
+#backpack.open { transform: none; }
+#backpack .bp-h { margin: 12px 4px 6px; font: 600 13px var(--font-display); color: var(--text-soft); text-transform: uppercase; letter-spacing: .06em; }
+/* E19.1.2: the plot picker (left, like the backpack) */
+#plotPicker { right: auto; left: calc(12px + var(--safe-l)); transform: translateX(calc(-100% - 30px)); }
+#plotPicker.open { transform: none; }
+#plotPicker .pp-sub { margin: -4px 4px 10px; font-size: 12px; color: var(--text-soft); }
+.pp-opt { width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+button.pp-opt:hover, button.pp-opt:focus-visible { border-color: var(--gold); }
+.pp-opt.on { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+.pp-opt.locked { opacity: .62; cursor: default; }
+.pp-opt .cd2 i { font-style: normal; color: var(--text-strong); opacity: .8; margin-left: 2px; }
+.pp-opt .pp-new { color: var(--gold) !important; }
+.pp-clear { width: 100%; margin-top: 4px; padding: 9px; border-radius: 12px; background: var(--glass-hi); color: var(--text); font: 600 13px var(--font-ui); }
+#backpack .bp-empty { margin: 0 4px; font-size: 12px; color: var(--text-soft); }
+kbd { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 5px; font: 700 11px/17px var(--font-ui); text-align: center; color: var(--text-strong); background: var(--glass-hi); border: 1px solid var(--edge-soft); }
 .drawer h2 { margin: 2px 4px 10px; font-size: 19px; color: var(--gold); display: flex; justify-content: space-between; align-items: center; }
 .drawer h2 button { width: 30px; height: 30px; border-radius: 50%; background: var(--glass-hi); color: var(--text); font-weight: 900; }
 .card { display: grid; grid-template-columns: 34px 1fr auto; gap: 2px 8px; align-items: center; background: var(--glass-hi); border: 1px solid var(--edge-soft); border-radius: 12px; padding: 9px; margin-bottom: 8px; }
@@ -648,3 +665,20 @@ body.solid-glass .panel, body.solid-glass .chip, body.solid-glass .rbtn { backdr
 @media (hover: none) {
   .rbtn { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--glass-strong); }
 }
+
+/* Bloombot (G.14): the round minimap at the bottom left, above the quick buttons. North up. */
+#minimap { position: absolute; left: calc(14px + var(--safe-l)); bottom: calc(76px + var(--safe-b)); width: 148px; height: 148px; padding: 0; border-radius: 50%; overflow: hidden; z-index: 2; border: 2px solid var(--edge-strong); background: var(--glass-strong); pointer-events: none; }
+#minimap canvas { width: 100%; height: 100%; display: block; border-radius: 50%; image-rendering: pixelated; opacity: .92; }
+#minimap .mm-n { position: absolute; top: 3px; left: 50%; transform: translateX(-50%); font: 700 11px/1 var(--font-display); color: var(--text-strong); text-shadow: 0 1px 2px var(--glass-solid); }
+#minimap .mm-arrow { position: absolute; left: 50%; top: 50%; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 16px solid var(--gold); filter: drop-shadow(0 1px 2px var(--glass-solid)); transform-origin: 50% 60%; }
+body.has-minimap #inspect { bottom: calc(var(--above-bar) + 96px + var(--safe-b)); }
+
+/* Bloombot (G.16): Controls in Settings: each action with its key and gamepad button. */
+.controls h3 { margin: 14px 0 4px; font: 600 15px var(--font-display); color: var(--gold); }
+.controls .ctl-help { margin: 0 0 8px; font-size: 12px; color: var(--text-soft); }
+.controls .ctl-row { display: grid; grid-template-columns: 1fr 88px 72px; gap: 6px; align-items: center; padding: 3px 0; font-size: 13px; }
+.controls .ctl-key { min-height: 30px; padding: 2px 6px; border-radius: 8px; background: var(--glass-hi); border: 1px solid var(--edge-soft); color: var(--text-strong); font: 700 12px var(--font-ui); }
+.controls .ctl-key:disabled { color: var(--text-dim); background: transparent; }
+.controls .ctl-key.listening { border-color: var(--gold); color: var(--gold); }
+.controls .ctl-reset { margin-top: 8px; padding: 6px 12px; border-radius: 10px; background: var(--glass-hi); color: var(--text); font: 600 13px var(--font-display); }
+#backpack .bp-opts { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 4px 8px; font-size: 18px; }

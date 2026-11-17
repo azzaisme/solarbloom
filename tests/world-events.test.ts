@@ -28,7 +28,7 @@ function rich(sim: Sim) {
 /** A park with `n` restored tiles (stage 1) and, optionally, a Drone Hub and a condenser (automation unlocked). */
 function parkSim(seed = 7, n = 60, machines: BuildableType[] = ['droneHub', 'condenser']) {
   const sim = new Sim(createInitialState(seed));
-  sim.cat.anchorView = () => 'visible';
+  sim.cat.anchorView = () => 'offscreen';
   rich(sim);
   let k = 0;
   for (const t of sim.areas.tiles(PARK)) {
@@ -47,7 +47,7 @@ function parkSim(seed = 7, n = 60, machines: BuildableType[] = ['droneHub', 'con
 
 function reload(sim: Sim): Sim {
   const next = new Sim(saver.deserialize(saver.serialize(sim.state))!);
-  next.cat.anchorView = () => 'visible';
+  next.cat.anchorView = () => 'offscreen';
   return next;
 }
 

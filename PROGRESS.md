@@ -2,6 +2,35 @@
 
 Moved out of the `azzaisme/mouthwash-brigade` repo (where it started in a `solarbloom/` folder) with its full history.
 
+# E20: One game — bloombot first (#283)
+
+Direction audit, 17 Nov 2026: Solarbloom is a cozy restoration game where bloombot does the work; the idle engine stays underneath as bloombot's helpers.
+
+| Story | Status |
+|---|---|
+| E20.1 The Lucky Cat hides (#284) | ✅ never placed in view (on screen within 12 tiles of bloombot) or within 6 tiles of it; a spot within a 40-tile walk is preferred; no stash (an old save's stash is paid once); the 🐾 chip names a direction and a landmark instead of flying the camera; Scouts no longer hint cats |
+| E20.2 Speak bloombot (#285) | ✅ hints, toasts, tooltips, the intro and tutorial say walk up and press the bound key (pad or keyboard, from `Bindings`); `tests/bloombot-words.test.ts` fails on tap or click wording |
+| E20.3 Walking pacing bot (#286) | ✅ `npm run bot:walk`: the active bot's decisions, but every ground action walks there first (`Walker.path`, sprint over 8 cells). Numbers below |
+
+E20.3, 30 minutes, the same decisions with and without walking (`npm run bot:walk`). "By bloombot" counts the player's own pulses (chains, drones, machines and events are helpers):
+
+| Seed | Play | Hub | Fountain | First area | Tiles | By bloombot | By helpers | Walking |
+|---|---|---|---|---|---|---|---|---|
+| 7 | cursor | 1:18 | 5:09 | 6:30 | 6,691 | 78% | 22% | — |
+| 7 | walking | 1:33 | 6:42 | 7:36 | 4,442 | 82% | 18% | 18:30 (395 trips) |
+| 21 | cursor | 1:18 | 5:27 | 6:45 | 6,123 | 80% | 20% | — |
+| 21 | walking | 1:30 | 5:21 | 6:48 | 4,598 | 76% | 24% | 18:41 (441 trips) |
+
+Reading: walking barely moves the early milestones (hub +12–15 s, fountain −6 s to +1:33) but costs about a third of the tiles by 30 minutes, because bloombot spends ~60% of its time walking. The player already does most of the restoring, so E20.4 (helpers around bloombot) is not urgent; the owner decides.
+
+# E19: Cozy city (#245)
+
+Plan: the epic and its stories on GitHub (#245). Building and placing work like Satisfactory (owner, 17 Nov 2026): you stay in the close view and bloombot projects a hologram of what you're about to build.
+
+| Story | Status |
+|---|---|
+| E19.1 Plot choices (#246) | 🟡 2–4 seeded 2×2 plots per area (`core/Plots.ts`, a pure function of the seed; never on roads, water, buildings, obstacles, landmarks, rooftops or the park's paths and starting tiles; valid across 1,000 areas, tested). 19 options (`data/cozy.ts`): a shared four plus one to three per area type, each flat or solid for walking; extra options unlock with park stages and areas cleared (one toast each, saved, never bought). Choices live in `GameState.cozy`, written by the game only (`gameplay/Cozy.ts`), sparse and sorted: save → load → save is byte-identical and old saves load with empty plots. Picker: face a restored plot and press interact (or click it: bloombot walks there); hovering or focusing an option projects it over the plot as a hologram from bloombot's visor; choosing is free and can be changed or cleared. Building over a chosen plot is refused. Art (`rendering/PlotArt.ts`) drawn into each chunk's own meshes and model batch (no extra draw calls), far LOD a pad and one blob, an empty plot a kerb-and-string "waiting" look; under 6k triangles per option (tested). Cosmetic-only proof: a bot making and changing choices for 25 minutes ends with an identical save (minus `cozy`) and biodiversity score. Hologram (`rendering/Hologram.ts`) also replaces the machine build ghost with a see-through copy of the machine. Open: plot art is procedural plus existing models (no new Meshy models yet); perf numbers below are from a slow machine |
+
 # Phase 5: Ecological Overdrive
 
 Plan: `docs/PHASE_5_EPICS.md`. Decisions, audit and results: `docs/PHASE_5_AUDIT.md`. Timings are from scripted bots, not people.

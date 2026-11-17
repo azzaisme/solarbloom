@@ -1,5 +1,6 @@
 import type { AreaMode } from '../core/types';
 import { HOME } from '../gameplay/ProgressionSystem';
+import { PLOT_OPTION, PLOT_OPTIONS } from '../data/cozy';
 import { Economy, formatCost, formatPriceHtml, KINDS } from '../core/Economy';
 import { big, fmt, toNum, type Big } from '../core/Big';
 import type { Cost } from '../core/types';
@@ -37,13 +38,15 @@ export interface HudCallbacks {
   activateFrenzy(): void;
   /** Phase 5 E15: the 🐾 chip: show where a hinted cat hides. */
   findCat(): void;
+  /** E20.2 (#285): the key or pad button bound to an action, as the player last used them (for hint text). */
+  keyFor(a: Action): string;
   /** Look 5.9: the house button: the park, or (when something is ready) the next area that needs attention. */
   goHome(attention: boolean): void;
   newGame(): void;
-  setSetting(key: keyof Settings, v: boolean): void;
+  setSetting(key: keyof Settings, v: boolean | number): void;
   setVolume(key: 'sfxVolume' | 'musicVolume', v: number): void;
   /** Look 1.11: the Graphics setting. */
-  setGraphics(v: 'auto' | 'low' | 'medium' | 'high'): void;
+  setGraphics(v: 'auto' | 'deck' | 'low' | 'medium' | 'high'): void;
   skipCinematic(): void;
   closeInspect(): void;
   togglePause(): void;
@@ -86,12 +89,33 @@ export interface Settings {
   /** Phase 4 E11.5: stronger outlines and text contrast. */
   highContrast?: boolean;
   /** Look 1.11: graphics quality (Auto picks a tier from the device and steps down if frames stay slow). */
-  gfx?: 'auto' | 'low' | 'medium' | 'high';
+  gfx?: 'auto' | 'deck' | 'low' | 'medium' | 'high';
+  /** Steam Deck (#243): HUD size in percent (100, 125 or 150). */
+  uiScale?: number;
   /** Phase 5 E16: fireflies over lush tiles (ambience only). */
   fireflies?: boolean;
+  /** Bloombot (G.16): rebound keys and gamepad buttons (only what differs from the default map). */
+  keys?: SavedBindings['keys'];
+  pad?: SavedBindings['pad'];
 }
 
+import { hudHeight, hudWidth, toHud, ui } from './UiScale';
+import { ACTIONS, type Action, type Bindings, keyLabel, padLabel, type SavedBindings } from '../app/Bindings';
+
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
+
+/** E19.1.2: what the plot picker shows. */
+export interface PlotPickerModel {
+  title: string;
+  sub: string;
+  current?: string;
+  choices: { id: string; name: string; icon: string; blurb: string; solid: boolean; unlocked: boolean; fresh: boolean; hint?: string }[];
+}
+export interface PlotPickerHandlers {
+  onPreview(id: string | undefined): void;
+  onChoose(id: string | undefined): void;
+  onClose(): void;
+}
 
 function esc(s: string) {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -101,6 +125,8 @@ function esc(s: string) {
 export class Hud {
   /** Look 1.11: the graphics tier in effect (shown next to Auto in Settings). */
   gfxTier?: 'low' | 'medium' | 'high';
+  /** the Steam Deck preset is in effect (it sits on the Medium tier) */
+  gfxDeck?: boolean;
   readonly root: HTMLElement;
   private last = new Map<string, string>();
   private tool: Tool = 'pulse';
@@ -119,6 +145,8 @@ export class Hud {
     installIconDefs();
     this.root.innerHTML = iconize(this.template());
     this.wire();
+    $(this.root, '#backpack h2 button').addEventListener('click', () => this.toggleBackpack(false));
+    $(this.root, '#plotPicker h2 button').addEventListener('click', () => this.closePlotPicker());
   }
 
   private template() {
@@ -178,7 +206,7 @@ export class Hud {
       <div id="quick" role="toolbar" aria-label="Quick actions">
         <button class="rbtn qbtn" id="homeBtn" aria-label="Home: fly to the park (Home)" title="Home (Home key)">${ICONS.home}<span class="qbadge" aria-hidden="true"></span></button>
         <button class="rbtn qbtn" id="catBtn" aria-label="Lucky Cat garden" title="Lucky Cat garden" hidden>${ICONS.garden}<span class="qn" id="catCount">0</span></button>
-        <button class="rbtn qbtn" id="pawBtn" aria-label="Paw prints: show where a cat is hiding" title="Paw prints: a cat is hiding nearby. Tap to look." hidden>${ICONS.paw}<span class="qn" id="pawCount">0</span></button>
+        <button class="rbtn qbtn" id="pawBtn" aria-label="Paw prints: which way a hiding cat went" title="Paw prints: a Lucky Cat is hiding. Which way do they lead?" hidden>${ICONS.paw}<span class="qn" id="pawCount">0</span></button>
       </div>
       <div id="eventBanner" role="status" aria-live="polite" hidden><span class="ei"></span><span class="et"></span><span class="ec"></span><i class="ebar"></i></div>
       <div id="combo"><div id="comboFx" aria-hidden="true"></div><div class="big" id="comboBig" role="status" aria-label="Bloom chain combo"><span class="cic">${ICONS.biomass}</span><span class="cl">Combo</span> <span class="cx">×0</span></div><div class="cbody panel"><ul id="comboParts"></ul><div class="total" id="comboTotal"></div><div id="chainAreas"></div></div><div id="feed"></div></div>
@@ -191,14 +219,16 @@ export class Hud {
         <h2>${LOGO_MARK}<span>Welcome to Solarbloom</span></h2>
         <p>This old park is dead and grey, and the city around it is lost in a gloomy fog. Bring it back to life.</p>
         <ol>
-          <li><b>Tap a grey tile</b> to restore it. Each tap uses a little ⚡ energy and 💧 water, which refill on their own.</li>
-          <li><b>Green tiles grow 🌿 biomass.</b> Spend it on machines and upgrades. Tap a green tile again to grow flowers.</li>
+          <li><b>Walk up to a grey tile and pulse it</b> to restore it. Each pulse uses a little ⚡ energy and 💧 water, which refill on their own.</li>
+          <li><b>Green tiles grow 🌿 biomass.</b> Spend it on machines and upgrades. Pulse a green tile again to grow flowers.</li>
           <li><b>Goal:</b> wake the dry fountain. Then the fog starts to lift. The checklist is in the top-right corner.</li>
         </ol>
         <button id="introGo">Start restoring ✨</button>
       </div></div>
       <div id="tip" class="panel"></div>
       <div id="fail"></div>
+      <div id="plotPicker" class="drawer panel" aria-label="Plot picker"><h2><span id="ppTitle">Plot</span> <button aria-label="Close plot picker">×</button></h2><p id="ppSub" class="pp-sub"></p><div id="ppList"></div></div>
+      <div id="backpack" class="drawer panel" aria-label="Backpack"><h2>Backpack <button aria-label="Close backpack">×</button></h2><div id="bpList"></div></div>
       <div id="upgrades" class="drawer panel"><h2>Upgrades <button aria-label="Close upgrades">×</button></h2><p id="upgNext" class="upg-next"></p><div id="upgList"></div></div>
       <div id="inspect" class="panel"></div>
       <div id="modal"><div class="panel">
@@ -207,7 +237,8 @@ export class Hud {
         <label>Sound volume <input type="range" min="0" max="100" step="5" data-vol="sfxVolume" aria-label="Sound volume"></label>
         <label>Music <input type="checkbox" data-set="music"></label>
         <label>Music volume <input type="range" min="0" max="100" step="5" data-vol="musicVolume" aria-label="Music volume"></label>
-        <label>Graphics <select id="gfxSel" aria-label="Graphics quality"><option value="auto">Auto</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low (phones)</option></select></label>
+        <label>Graphics <select id="gfxSel" aria-label="Graphics quality"><option value="auto">Auto</option><option value="high">High</option><option value="deck">Steam Deck</option><option value="medium">Medium</option><option value="low">Low (phones)</option></select></label>
+        <label>Interface size <select id="uiScaleSel" aria-label="Interface size"><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option></select></label>
         <label>High contrast <input type="checkbox" data-set="highContrast"></label>
         <label>Reduced motion &amp; effects <input type="checkbox" data-set="reducedMotion"></label>
         <label>Fewer particles &amp; softer sparkles <input type="checkbox" data-set="lowVfx"></label>
@@ -216,6 +247,7 @@ export class Hud {
         <label>Camera follows big chains <input type="checkbox" data-set="followChains"></label>
         <label>Tutorial hints <input type="checkbox" data-set="hints"></label>
         <label>Debug / FPS (F3) <input type="checkbox" data-set="debug"></label>
+        <div id="controlsBox" class="controls"></div>
         <div class="stats" id="statsBox"></div>
         <div id="disc"></div>
         <div class="row"><button id="closeModal">Back to the garden</button><button class="danger" id="newGame">New game</button></div>
@@ -268,7 +300,7 @@ export class Hud {
     ng.addEventListener('click', () => {
       if (Date.now() - armed < 4000) return this.cb.newGame();
       armed = Date.now();
-      ng.textContent = 'Tap again to clear your garden';
+      ng.textContent = 'Press again to clear your garden';
       setTimeout(() => {
         if (Date.now() - armed >= 4000) ng.textContent = 'New game';
       }, 4100);
@@ -286,7 +318,10 @@ export class Hud {
     });
     const gfx = $<HTMLSelectElement>(r, '#gfxSel');
     gfx.value = this.settings.gfx ?? 'auto';
-    gfx.addEventListener('change', () => this.cb.setGraphics(gfx.value as 'auto' | 'low' | 'medium' | 'high'));
+    gfx.addEventListener('change', () => this.cb.setGraphics(gfx.value as 'auto' | 'deck' | 'low' | 'medium' | 'high'));
+    const uis = $<HTMLSelectElement>(r, '#uiScaleSel');
+    uis.value = String(this.settings.uiScale ?? 100);
+    uis.addEventListener('change', () => this.cb.setSetting('uiScale', Number(uis.value)));
     r.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => {
       const key = inp.dataset.set as keyof Settings;
       inp.checked = !!this.settings[key];
@@ -310,8 +345,8 @@ export class Hud {
       if (this.resInfo) {
         this.last.delete('resInfo');
         const rect = row!.getBoundingClientRect();
-        box.style.top = `${Math.round(rect.bottom + 6)}px`;
-        box.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - 248, rect.left)))}px`;
+        box.style.top = `${Math.round(toHud(rect.bottom) + 6)}px`;
+        box.style.left = `${Math.round(Math.max(8, Math.min(hudWidth() - 248, toHud(rect.left))))}px`;
         box.innerHTML = this.resourceBreakdown(this.resInfo);
       }
     });
@@ -469,7 +504,7 @@ export class Hud {
     });
     switch (step) {
       case 0:
-        return { text: 'Tap a grey tile to bring it back to life ✨' };
+        return { text: `Walk up to a grey tile and press ${this.cb.keyFor('pulse')} to bring it back to life ✨` };
       case 1:
       case 2: {
         if (step === 1) return { text: `Green tiles grow 🌿. Restore a few more · ${n}/4` };
@@ -494,10 +529,10 @@ export class Hud {
         const g = TUNING.park;
         return n < g.restoredTiles
           ? { text: `Restore the park · ${n}/${g.restoredTiles}`, target: '#obj' }
-          : { text: `Tap green tiles until they're in full bloom · ${full}/${g.fullBloomTiles}`, target: '#obj' };
+          : { text: `Pulse green tiles until they're in full bloom · ${full}/${g.fullBloomTiles}`, target: '#obj' };
       }
       case 8:
-        return { text: 'The fountain is ready: tap ✨ Wake the fountain', target: '#coreBtn' };
+        return { text: `The fountain is ready: walk up and press ${this.cb.keyFor('interact')}, or use ✨ Wake the fountain`, target: '#coreBtn' };
       default:
         return this.hoodHint();
     }
@@ -603,6 +638,160 @@ export class Hud {
     if (open) this.renderUpgrades(true);
   }
 
+  /**
+   * Bloombot (G.16, G.7): the hotbar's key badges from the bindings, or gamepad buttons when the pad was used
+   * last. Without bindings, the cursor map.
+   */
+  setKeyMap(mode: 'keys' | 'pad' | undefined, b?: Bindings) {
+    const slots: [string, Action, string][] = [
+      ['[data-tool="inspect"]', 'interact', '1'],
+      ['[data-tool="pulse"]', 'pulse', '2'],
+      ['#buildToggle', 'tray', 'B'],
+      ['#harvestBtn', 'harvest', 'H'],
+      ['#upgBtn', 'upgrades', 'U'],
+    ];
+    for (const [sel, action, cursor] of slots) {
+      const el = this.root.querySelector<HTMLElement>(`#hotbar ${sel} .key`);
+      if (!el) continue;
+      el.textContent = !b || !mode ? cursor : mode === 'pad' ? padShort(b.pad[action]) : b.label(action);
+    }
+    this.root.classList.toggle('pad-keys', mode === 'pad');
+  }
+
+  /**
+   * Bloombot (G.16): the Controls section of Settings: every action with its key and gamepad button. Clicking
+   * one waits for the next key (or button) and binds it; a key another action had moves over to it (a swap).
+   */
+  renderControls(b: Bindings, listen: (kind: 'key' | 'pad', done: (code: string | number | undefined) => void) => void, changed: () => void) {
+    const box = this.root.querySelector<HTMLElement>('#controlsBox');
+    if (!box) return;
+    const row = (a: (typeof ACTIONS)[number]) =>
+      `<div class="ctl-row"><span>${a.label}</span><button class="ctl-key" data-act="${a.id}" data-kind="key">${[...new Set(b.keys[a.id].map(keyLabel))].join(' / ')}</button>` +
+      `<button class="ctl-key" data-act="${a.id}" data-kind="pad" ${a.pad ? '' : 'disabled'}>${a.pad ? padLabel(b.pad[a.id]) : 'stick'}</button></div>`;
+    box.innerHTML = `<h3>Controls</h3><p class="ctl-help">Choose an action, then press the new key or button. Esc cancels.</p>${ACTIONS.map(row).join('')}<button id="ctlReset" class="ctl-reset">Reset to defaults</button>`;
+    box.querySelectorAll<HTMLButtonElement>('.ctl-key').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        const act = btn.dataset.act as Action;
+        const kind = btn.dataset.kind as 'key' | 'pad';
+        btn.textContent = 'Press…';
+        btn.classList.add('listening');
+        listen(kind, (code) => {
+          if (code !== undefined) {
+            if (kind === 'key') b.setKey(act, code as string);
+            else b.setButton(act, code as number);
+            changed();
+          }
+          this.renderControls(b, listen, changed);
+        });
+      }),
+    );
+    box.querySelector('#ctlReset')!.addEventListener('click', () => {
+      b.reset();
+      changed();
+    });
+  }
+
+  /** Steam Deck (#243): HUD size, 100 / 125 / 150%. Zooms the whole HUD; see UiScale. */
+  setUiScale(percent: number) {
+    const pct = percent === 125 || percent === 150 ? percent : 100;
+    ui.scale = pct / 100;
+    this.root.style.zoom = pct === 100 ? '' : String(ui.scale);
+    const sel = this.root.querySelector<HTMLSelectElement>('#uiScaleSel');
+    if (sel) sel.value = String(pct);
+  }
+
+  private backpackIsOpen = false;
+  /** Bloombot (G.15): the backpack (Tab / d-pad up): what you've found, and later your plot options and decorations. */
+  toggleBackpack(open = !this.backpackIsOpen) {
+    this.backpackIsOpen = open;
+    $(this.root, '#backpack').classList.toggle('open', open);
+    if (open) this.renderBackpack();
+  }
+
+  get backpackOpen() {
+    return this.backpackIsOpen;
+  }
+
+  private picker?: PlotPickerHandlers;
+  /**
+   * E19.1.2 (#248): the plot picker. Unlocked options are buttons (mouse, keys and the pad's focus ring); focusing
+   * or hovering one previews it on the plot, choosing it keeps it, and closing without choosing puts the plot back.
+   * Locked options show what they wait for. Choosing and changing are free.
+   */
+  openPlotPicker(m: PlotPickerModel, h: PlotPickerHandlers) {
+    this.toggleBackpack(false);
+    this.picker = h;
+    $(this.root, '#ppTitle').innerHTML = iconize(esc(m.title));
+    $(this.root, '#ppSub').textContent = m.sub;
+    const rows = m.choices.map((c) => {
+      const tag = c.solid ? 'Solid' : 'Walk over it';
+      if (!c.unlocked) return `<div class="card pp-opt locked"><span class="ci">${c.icon}</span><span class="cn">${esc(c.name)}</span><span class="cd2">Unlocks when ${esc(c.hint ?? '')}</span></div>`;
+      const on = c.id === m.current;
+      return `<button class="card pp-opt${on ? ' on' : ''}" data-opt="${c.id}" aria-pressed="${on}"><span class="ci">${c.icon}</span><span class="cn">${esc(c.name)}${c.fresh ? '<em class="pp-new">New</em>' : ''}${on ? '<em>Chosen</em>' : ''}</span><span class="cd2">${esc(c.blurb)} <i>${tag}</i></span></button>`;
+    });
+    if (m.current) rows.push('<button class="pp-clear" data-opt="">Clear the plot</button>');
+    const list = $(this.root, '#ppList');
+    list.innerHTML = iconize(rows.join(''));
+    list.querySelectorAll<HTMLButtonElement>('button[data-opt]').forEach((b) => {
+      const id = b.dataset.opt || undefined;
+      b.addEventListener('click', () => this.picker?.onChoose(id));
+      if (id) {
+        b.addEventListener('mouseenter', () => this.picker?.onPreview(id));
+        b.addEventListener('focus', () => this.picker?.onPreview(id));
+        b.addEventListener('mouseleave', () => this.picker?.onPreview(undefined));
+        b.addEventListener('blur', () => this.picker?.onPreview(undefined));
+      }
+    });
+    $(this.root, '#plotPicker').classList.add('open');
+  }
+
+  closePlotPicker() {
+    const h = this.picker;
+    if (!h) return;
+    this.picker = undefined;
+    $(this.root, '#plotPicker').classList.remove('open');
+    h.onClose();
+  }
+
+  get plotPickerOpen() {
+    return !!this.picker;
+  }
+
+  private renderBackpack() {
+    const st = this.sim.state;
+    const woken = this.sim.areas
+      .revealed()
+      .filter((id) => this.sim.areas.fog(id) === 'cleared')
+      .map((id) => this.sim.areas.info(id));
+    const card = (icon: string, name: string, detail: string) => `<div class="card"><span class="ci">${icon}</span><span class="cn">${name}</span><span class="cd2">${detail}</span></div>`;
+    const fauna = Object.keys(st.fauna ?? {});
+    const parts = [
+      '<h3 class="bp-h">Discoveries</h3>',
+      card('🐱', `Lucky Cats found: ${st.stats.catsFound}`, st.stats.catsFound ? 'Keep wandering: more hide as the city wakes.' : 'Wander the city. Paw prints mean a cat is close.'),
+      card('⛲', `Landmarks woken: ${woken.length}`, woken.length ? woken.map((a) => a.landmarkName).join(', ') : 'Restore the park to wake the fountain.'),
+      card('🦋', `Wildlife: ${fauna.length}`, fauna.length ? fauna.join(', ') : 'Wildlife arrives as gardens grow.'),
+      '<h3 class="bp-h">Plots and decorations</h3>',
+      ...this.backpackPlots(),
+    ];
+    $(this.root, '#bpList').innerHTML = iconize(parts.join(''));
+  }
+
+  /** E19.1: plots chosen so far, and the plot options you've earned (by area type). */
+  private backpackPlots(): string[] {
+    const cz = this.sim.state.cozy;
+    const chosen = Object.values(cz?.plots ?? {});
+    const card = (icon: string, name: string, detail: string) => `<div class="card"><span class="ci">${icon}</span><span class="cn">${name}</span><span class="cd2">${detail}</span></div>`;
+    const got = PLOT_OPTIONS.filter((o) => 'start' in o.unlock || cz?.unlocked?.includes(o.id));
+    const byKind = new Map<string, number>();
+    for (const id of chosen) byKind.set(id, (byKind.get(id) ?? 0) + 1);
+    const out = [
+      card('🌱', `Plots chosen: ${chosen.length}`, chosen.length ? [...byKind].map(([id, n]) => `${esc(PLOT_OPTION[id]?.name ?? id)}${n > 1 ? ` ×${n}` : ''}`).join(', ') : 'Every area has a few plots. Restore one, face it and press the interact button.'),
+      card('✨', `Plot options: ${got.length} of ${PLOT_OPTIONS.length}`, 'More unlock as the park grows and areas clear. Free, always.'),
+    ];
+    out.push(`<div class="bp-opts">${got.map((o) => `<span title="${esc(o.name)}">${o.icon}</span>`).join('')}</div>`);
+    return out;
+  }
+
   get isUpgradesOpen() {
     return this.upgradesOpen;
   }
@@ -620,7 +809,7 @@ export class Hud {
       this.root.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => (inp.checked = !!this.settings[inp.dataset.set as keyof Settings]));
       $<HTMLSelectElement>(this.root, '#gfxSel').value = this.settings.gfx ?? 'auto';
       const auto = $<HTMLOptionElement>(this.root, '#gfxSel option[value=auto]');
-      auto.textContent = this.gfxTier ? `Auto (${this.gfxTier[0].toUpperCase()}${this.gfxTier.slice(1)})` : 'Auto';
+      auto.textContent = this.gfxDeck ? 'Auto (Steam Deck)' : this.gfxTier ? `Auto (${this.gfxTier[0].toUpperCase()}${this.gfxTier.slice(1)})` : 'Auto';
     }
   }
 
@@ -693,7 +882,7 @@ export class Hud {
           : `<button class="buy" data-buy="${def.id}" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : formatPriceHtml(st.price, u.short(st))}</button>`;
         return `${head}<div class="card"><span class="ci">${def.icon}</span><span class="cn">${esc(def.name)} ${lvTxt}</span>
           ${btn}
-          <span class="cd2">${esc(def.describe(lvl + 1))}${per && n ? ' · tap a machine to upgrade just that one' : ''}</span>${pips}
+          <span class="cd2">${esc(def.describe(lvl + 1))}${per && n ? ' · inspect a machine to upgrade just that one' : ''}</span>${pips}
           ${!st.ok && !maxed && st.reason && !st.reason.startsWith('Need ') ? `<span class="why">${esc(st.reason)}</span>` : ''}</div>`;
       })
       .join('');
@@ -706,8 +895,8 @@ export class Hud {
     tip.style.display = 'block';
     const w = tip.offsetWidth;
     const h = tip.offsetHeight;
-    const px = Math.min(window.innerWidth - w - 8, x + 18);
-    const py = Math.max(8, Math.min(window.innerHeight - h - 90, y + 18));
+    const px = Math.min(hudWidth() - w - 8, toHud(x) + 18);
+    const py = Math.max(8, Math.min(hudHeight() - h - 90, toHud(y) + 18));
     tip.style.transform = `translate(${px}px, ${py}px)`;
     tip.style.left = '0';
     tip.style.top = '0';
@@ -722,9 +911,9 @@ export class Hud {
     const el = $(this.root, '#fail');
     el.innerHTML = iconize(esc(msg));
     el.style.display = 'block';
-    const px = x ?? window.innerWidth / 2 - 100;
-    const py = y ?? window.innerHeight - 160;
-    el.style.left = `${Math.max(8, Math.min(window.innerWidth - 290, px - 20))}px`;
+    const px = x !== undefined ? toHud(x) : hudWidth() / 2 - 100;
+    const py = y !== undefined ? toHud(y) : hudHeight() - 160;
+    el.style.left = `${Math.max(8, Math.min(hudWidth() - 290, px - 20))}px`;
     el.style.top = `${Math.max(8, py - 48)}px`;
     this.failTimer = 2.2;
   }
@@ -859,8 +1048,8 @@ export class Hud {
     }
     this.set(`wl-${id}`, el, 'html', html);
     el.style.display = 'block';
-    el.style.left = `${x}px`;
-    el.style.top = `${y}px`;
+    el.style.left = `${toHud(x)}px`;
+    el.style.top = `${toHud(y)}px`;
     // Look 4.6: nearer labels a little larger, far ones smaller (the CSS scale property composes with its transform).
     el.style.scale = scale === 1 ? '' : scale.toFixed(2);
     el.style.transformOrigin = '50% 100%';
@@ -868,7 +1057,8 @@ export class Hud {
 
   /** Rectangles the Lucky Cat must never hide under. */
   blockedRects(): DOMRect[] {
-    return ['#logo', '#res', '#obj', '#hotbar', '#hint', '#combo', '#quick', '#chips'].map((s) => $(this.root, s).getBoundingClientRect());
+    const extra = [...this.root.querySelectorAll<HTMLElement>('#minimap:not([hidden])')].map((e) => e.getBoundingClientRect());
+    return ['#logo', '#res', '#obj', '#hotbar', '#hint', '#combo', '#quick', '#chips'].map((s) => $(this.root, s).getBoundingClientRect()).concat(extra);
   }
 
   setPaused(p: boolean) {
@@ -940,7 +1130,7 @@ export class Hud {
       return;
     }
     const below = Math.max($(this.root, '#res').getBoundingClientRect().bottom, $(this.root, '#obj').getBoundingClientRect().bottom);
-    t.style.top = `${Math.round(below + 8)}px`;
+    t.style.top = `${Math.round(toHud(below) + 8)}px`;
   }
 
   update(dt: number) {
@@ -986,7 +1176,7 @@ export class Hud {
     this.set('frBody', document.body, 'cls', fActive ? '1' : '0', 'frenzy'); // also right after loading mid-Frenzy
     this.set('frText', $(fb, '.ft'), 'text', fActive ? `${Math.ceil(s.frenzy.remaining())}s` : fReady ? 'FRENZY!' : `${Math.floor(s.frenzy.charge)}%`);
     this.updateEvents();
-    this.set('frTitle', fb, 'title', fActive ? 'Bloom Frenzy! Pulse reach +2 tiers, biomass ×10, drones ×3' : fReady ? 'Bloom Frenzy is ready: tap to fire it (Q)' : 'Bloom Frenzy charges as you restore, chain and overflow');
+    this.set('frTitle', fb, 'title', fActive ? 'Bloom Frenzy! Pulse reach +2 tiers, biomass ×10, drones ×3' : fReady ? `Bloom Frenzy is ready: press ${this.cb.keyFor('frenzy')} to fire it` : 'Bloom Frenzy charges as you restore, chain and overflow');
     // Hotbar costs
     for (const t of BUILDABLE) {
       const btn = $(this.root, `#hotbar [data-tool="${t}"]`);
@@ -1043,7 +1233,7 @@ export class Hud {
     const wakeReady = s.state.progression.coreActivated ? s.areas.revealed().some((id) => s.areas.fog(id) !== 'cleared' && s.areas.ready(id)) : s.progression.coreReady();
     const homeB = $(this.root, '#homeBtn');
     this.set('homeReady', homeB, 'cls', wakeReady ? '1' : '0', 'ready');
-    this.set('homeTitle', homeB, 'title', wakeReady ? 'A landmark is ready to wake: tap to fly there' : 'Home (Home key)');
+    this.set('homeTitle', homeB, 'title', wakeReady ? 'A landmark is ready to wake: look at it from above' : 'Home (Home key)');
 
     // Objective
     const p = s.progression;
@@ -1134,4 +1324,10 @@ export function etaText(sec: number): string {
   if (sec < 60) return `${Math.max(1, Math.ceil(sec))} s`;
   if (sec < 3600) return `${Math.ceil(sec / 60)} min`;
   return `${Math.round(sec / 360) / 10} h`;
+}
+
+/** A short gamepad label for the small hotbar badges. */
+function padShort(button: number | undefined): string {
+  const short: Record<number, string> = { 0: 'A', 1: 'B', 2: 'X', 3: 'Y', 4: 'LB', 5: 'RB', 6: 'LT', 7: 'RT', 12: '↑', 13: '↓', 14: '←', 15: '→' };
+  return button === undefined ? '' : (short[button] ?? padLabel(button));
 }

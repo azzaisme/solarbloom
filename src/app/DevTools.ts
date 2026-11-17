@@ -26,7 +26,9 @@ import { drawRoadOverview } from './RoadDebug';
  *   sbDev.tr.play(x, z, 'restore') start a transition on a ground tile (soften, moss, restore, bloom, unblock)
  *   sbDev.tr.speed(4)          every transition plays 4× slower (1 = normal), for tuning
  *   sbDev.tr.stats()           tiles mid-transition (sim) and drawn as transitions (renderer)
+ *   sbDev.plots()              E19.1: fill every revealed plot (sbDev.plots('cafe') one option, sbDev.plots(null) clears)
  *   sbDev.roads(12)            toggle the City 16 road-network overview, 12 chunks round the camera
+ *   sbDev.water(14)            restore the water tiles within 14 tiles of the view (to hear the 3D brook)
  */
 export type PresetName = 'fresh' | 'screenshot' | 'rich' | 'wealthy';
 
@@ -105,6 +107,21 @@ export function installDevTools(game: Game) {
     counts() {
       return game.sim.log.counts;
     },
+    /** 3D audio: restore the water tiles around the view, so the brook has clean water to sit at. */
+    water(r = 14) {
+      const f = game.camera.target;
+      let n = 0;
+      for (let z = Math.floor(f.z - r); z <= f.z + r; z++) {
+        for (let x = Math.floor(f.x - r); x <= f.x + r; x++) {
+          const t = game.sim.grid.get(GROUND, x, z);
+          if (!t || t.blocked || t.feature !== 'water' || t.ground === 'restored') continue;
+          t.ground = 'restored';
+          game.chunks.markTile(t);
+          n++;
+        }
+      }
+      return `${n} water tiles restored around ${f.x.toFixed(1)}, ${f.z.toFixed(1)}`;
+    },
     overflow() {
       return game.sim.log.overflow;
     },
@@ -156,6 +173,10 @@ export function installDevTools(game: Game) {
       drawRoadOverview(canvas.getContext('2d')!, roadPlanFor(game.sim.state.seed, gen), Math.floor(t.x / 16), Math.floor(t.z / 16), radius);
       document.body.appendChild(canvas);
       return 'road overview shown (click it, or call sbDev.roads() again, to close)';
+    },
+    /** E19.1: restore and fill every plot in the revealed city (round-robin, or one option id); null clears them. */
+    plots(only?: string | null) {
+      return `${game.fillPlots(only)} plots set`;
     },
     /** Drone redesign D03: preview an expression on every drone. */
     face(name?: FaceName) {

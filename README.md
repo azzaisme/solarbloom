@@ -45,24 +45,34 @@ The browser scripts need Playwright with Chromium (`npm i -D playwright && npx p
 
 ## Controls
 
-| Action | Mouse / keyboard | Touch |
+You play as **bloombot**, a little robot who restores the park and city with its own hands
+(docs/BLOOMBOT_EPIC.md). Everything acts on the tile in front of bloombot, which is highlighted. Keys can be
+rebound in Settings → Controls.
+
+| Action | Keyboard and mouse | Gamepad |
 |---|---|---|
-| Restore a tile (or nurture a green one) | Left-click with **Pulse** (2) | Tap |
-| Build a machine | Pick it in the hotbar (3–9), then click | Pick it, then tap |
-| Wake a landmark | Click it when it glows, or the objective panel's button | Tap |
-| Go to the area that needs you | `F` cycles areas that need attention; `Home` returns to the park | Area labels when zoomed out |
-| Inspect a machine | Click it, or use **Inspect** (1) | Tap it |
-| Pan | Drag the world (or middle/right drag) | Drag |
-| Zoom (down to a city overview) | Mouse wheel, `+` / `-` | Pinch (a quick pinch-out snaps to the overview) |
-| Harvest sunlight (emergency energy) | `H` | 🌞 button |
-| Upgrades | `U` | ⬆️ button |
-| Pause | `P` | ⏸ chip |
-| Game speed 1× / 2× / 3× | `1×` chip | `1×` chip |
-| Lucky Cat discoveries | 🐱 chip (after your first cat) | 🐱 chip |
-| Cancel, close or deselect | `Esc` | Tap empty space |
-| Build tray | `B` (machines `3`–`9`) | Build button |
-| Bloom Frenzy (when full) | `Q` | ✨ meter above the hotbar |
-| Debug / FPS overlay | `F3` or `` ` `` | Settings |
+| Move | `W` `A` `S` `D` or the arrows; click a tile to walk there and use the tool | Left stick |
+| Sprint | `Shift` | Right trigger |
+| Pulse the tile in front (or build there with a build tool) | `E` | A |
+| Interact: inspect, wake a landmark, greet a Lucky Cat, ride a rooftop lift | `Q` | X |
+| Build tray | `B` (machines on `3`–`9` and `0`) | Y |
+| Cancel, close or deselect | `Esc` | B |
+| Harvest sunlight (emergency energy) | `F` | D-pad left |
+| Upgrades | `U` | D-pad right |
+| Backpack (discoveries) | `Tab` | D-pad up |
+| Previous / next tool | `1` / `2` | Bumpers |
+| Zoom, only while placing something (the camera pulls back by itself; in play its distance is fixed) | Mouse wheel, `+` / `-` | Right stick up / down |
+| Turn the view around bloombot | Drag with the right mouse button | Right stick left / right |
+| Recentre the view | `C` | Right stick click |
+| Overview (and back) | `M`; in the overview, click a woken landmark to travel there | View |
+| Settings / pause | `P` | Menu |
+| Bloom Frenzy (when full) | `R` | Left trigger |
+| Go to the area that needs you (camera only) | `N` | Left stick click |
+| Back to the park (camera only) | `Home` | |
+| Debug / FPS overlay | `F3` or `` ` `` | |
+
+Phones and tablets aren't supported for now. `?cursor=1` brings back the old click-to-act play (used by
+some end-to-end tests).
 
 Switching to another tab doesn't stop the city: when you come back, up to 10 minutes are caught up over a few frames (Pause still pauses).
 
@@ -71,6 +81,18 @@ Switching to another tab doesn't stop the city: when you come back, up to 10 min
 ### Dev tools (Phase 4)
 
 On the dev server only (`npm run dev`), the browser console has `sbDev`: `sbDev.reset(seed)`, `sbDev.preset('fresh' | 'screenshot' | 'rich')`, `sbDev.simulate(seconds)`, `sbDev.log()` (the local event log), `sbDev.counts()`, `sbDev.overflow()` (income lost to full storage) and `sbDev.face(name)` (show one drone expression on every drone: `idle`, `focused`, `excited`, `workingA`, `workingB`, `restoring`, `sleeping`, `blink`; no argument to go back). None of it ships in `npm run build`. The scripted first-15-minute baseline is `npx vitest run tests/baseline.test.ts` (`BASELINE=1` for per-minute detail), and the phone HUD check is `node tests/e2e/phase4-hud.e2e.mjs` after a build. Phase 4 plan and status: `docs/PHASE_4_EPICS.md`, `docs/PHASE_4_AUDIT.md`.
+
+## Branches and releases
+
+- **`testing`** is where work lands: branch from it and open pull requests into it.
+- **`main`** is what has been released. Merge `testing` into `main` to release.
+- Every push to `main` runs the **Steam Deck release** workflow (`.github/workflows/release-steamdeck.yml`): it
+  builds the game, wraps it with Electron as a Linux AppImage and publishes a GitHub release named
+  `v<version>-build.<run>`. It can also be run by hand from the Actions tab.
+- On a Steam Deck: see `docs/STEAM_DECK.md` (install script, the Deck graphics preset, file saves and the
+  test checklist).
+- Locally: `npm run desktop` opens the built game in an Electron window, and `npm run package:deck` builds the
+  AppImage into `release/` (Linux only).
 
 ## How it plays
 
