@@ -121,6 +121,10 @@ export interface Settings {
   /** Bloombot (G.16): rebound keys and gamepad buttons (only what differs from the default map). */
   keys?: SavedBindings['keys'];
   pad?: SavedBindings['pad'];
+  /** E22.1: the bindings' version (older saved bindings are reset once) */
+  bindingsV?: number;
+  /** E22.1: what hotbar slots 1–9 hold (tool ids; '' is empty) */
+  hotbar?: string[];
 }
 
 import { hudHeight, hudWidth, toHud, ui } from './UiScale';
@@ -702,14 +706,16 @@ export class Hud {
     const slots: [string, Action, string][] = [
       ['[data-tool="inspect"]', 'interact', '1'],
       ['[data-tool="pulse"]', 'pulse', '2'],
-      ['#buildToggle', 'tray', 'B'],
+      ['#buildToggle', 'buildMenu', 'B'],
       ['#harvestBtn', 'harvest', 'H'],
       ['#upgBtn', 'upgrades', 'U'],
     ];
     for (const [sel, action, cursor] of slots) {
       const el = this.root.querySelector<HTMLElement>(`#hotbar ${sel} .key`);
       if (!el) continue;
-      el.textContent = !b || !mode ? cursor : mode === 'pad' ? padShort(b.pad[action]) : b.label(action);
+      // E22.1: a badge shows a keyboard key (the mouse buttons are too long for it)
+      const key = b?.keys[action].find((c) => !c.startsWith('Mouse') && c !== 'Wheel');
+      el.textContent = !b || !mode ? cursor : mode === 'pad' ? padShort(b.pad[action]) : key ? keyLabel(key) : '';
     }
     this.root.classList.toggle('pad-keys', mode === 'pad');
   }
@@ -722,9 +728,9 @@ export class Hud {
     const box = this.root.querySelector<HTMLElement>('#controlsBox');
     if (!box) return;
     const row = (a: (typeof ACTIONS)[number]) =>
-      `<div class="ctl-row"><span>${a.label}</span><button class="ctl-key" data-act="${a.id}" data-kind="key">${[...new Set(b.keys[a.id].map(keyLabel))].join(' / ')}</button>` +
-      `<button class="ctl-key" data-act="${a.id}" data-kind="pad" ${a.pad ? '' : 'disabled'}>${a.pad ? padLabel(b.pad[a.id]) : 'stick'}</button></div>`;
-    box.innerHTML = `<h3>Controls</h3><p class="ctl-help">Choose an action, then press the new key or button. Esc cancels.</p>${ACTIONS.map(row).join('')}<button id="ctlReset" class="ctl-reset">Reset to defaults</button>`;
+      `<div class="ctl-row"><span>${a.label}</span><button class="ctl-key" data-act="${a.id}" data-kind="key" ${a.keys && !b.locked(a.id, 'key') ? '' : 'disabled'}>${[...new Set(b.keys[a.id].map(keyLabel))].join(' / ') || '—'}</button>` +
+      `<button class="ctl-key" data-act="${a.id}" data-kind="pad" ${a.pad && !b.locked(a.id, 'pad') ? '' : 'disabled'}>${a.pad ? padLabel(b.pad[a.id]) : 'stick'}</button></div>`;
+    box.innerHTML = `<h3>Controls</h3><p class="ctl-help">Choose an action, then press the new key or button. Esc cancels.</p>${ACTIONS.filter((a) => !a.classic || !b.oldCity).map(row).join('')}<button id="ctlReset" class="ctl-reset">Reset to defaults</button>`;
     box.querySelectorAll<HTMLButtonElement>('.ctl-key').forEach((btn) =>
       btn.addEventListener('click', () => {
         const act = btn.dataset.act as Action;

@@ -139,9 +139,9 @@ describe('E19.4.1: photo mode', () => {
     for (let i = 0; i < 30; i++) photo.update(1 / 30);
     photo.key('KeyW', false);
     photo.key('KeyD', false);
-    for (let i = 0; i < 20; i++) photo.action('zoomIn');
-    photo.action('nextTool');
-    photo.action('nextTool');
+    for (let i = 0; i < 20; i++) photo.action('zoomCamera');
+    photo.action('rotate');
+    photo.action('rotate');
     cam.orbit(70);
     expect(cam.goalPoint.distance(new pc.Vec3(10, 0, 12))).toBeGreaterThan(2);
     expect(cam.zoomTarget).toBeGreaterThan(4.2);
@@ -162,7 +162,7 @@ describe('E19.4.1: photo mode', () => {
     const { hud, photo } = setup();
     photo.enter();
     expect(photo.frozen).toBe(false);
-    photo.action('tray');
+    photo.action('buildMenu');
     expect(photo.frozen).toBe(true);
     expect(hud.bar?.freeze).toBe(true);
     photo.action('pulse');
