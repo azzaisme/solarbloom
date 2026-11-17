@@ -336,7 +336,7 @@ export class Advisor {
     for (const def of s.upgrades.all()) {
       const st = s.upgrades.status(def);
       if (!st.ok && st.reason && !st.reason.startsWith('Need ')) continue;
-      consider(def.name, def.icon, { [def.costKind ?? 'biomass']: st.cost }, 'upgrade');
+      consider(def.name, def.icon, st.price, 'upgrade'); // E18.7: every part, so drones leave its energy and water alone
     }
     for (const type of BUILDABLE) {
       if (!s.build.isUnlocked(type) || MACHINES[type].areaTypes) continue;

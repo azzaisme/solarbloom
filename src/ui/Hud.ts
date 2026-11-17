@@ -1,6 +1,6 @@
 import type { AreaMode } from '../core/types';
 import { HOME } from '../gameplay/ProgressionSystem';
-import { Economy, formatCost, KINDS } from '../core/Economy';
+import { Economy, formatCost, formatPriceHtml, KINDS } from '../core/Economy';
 import { big, fmt, toNum, type Big } from '../core/Big';
 import type { Cost } from '../core/types';
 import type { BuildableType, MachineData, ResourceKind } from '../core/types';
@@ -681,8 +681,8 @@ export class Hud {
         const pips = finite && !per ? `<span class="pips">${Array.from({ length: def.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</span>` : '';
         const lvTxt = maxed ? '<em>MAX</em>' : per ? `<em>${n} built · next Lv ${lvl + 1}</em>` : `<em>Lv ${lvl}</em>`;
         const btn = per
-          ? `<button class="buy" data-buy="${def.id}|*" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : `All · ${fmt(st.cost)}🌿`}</button>`
-          : `<button class="buy" data-buy="${def.id}" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : `${fmt(st.cost)} 🌿`}</button>`;
+          ? `<button class="buy" data-buy="${def.id}|*" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : `All · ${formatPriceHtml(st.price, u.short(st))}`}</button>`
+          : `<button class="buy" data-buy="${def.id}" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : formatPriceHtml(st.price, u.short(st))}</button>`;
         return `${head}<div class="card"><span class="ci">${def.icon}</span><span class="cn">${esc(def.name)} ${lvTxt}</span>
           ${btn}
           <span class="cd2">${esc(def.describe(lvl + 1))}${per && n ? ' · tap a machine to upgrade just that one' : ''}</span>${pips}
@@ -1024,7 +1024,7 @@ export class Hud {
     this.set('badgeOn', badge, 'cls', useful ? '1' : '0', 'on');
     // Phase 5 E12: otherwise, how long until the next thing (seconds of current net income).
     const next = useful ? undefined : s.advisor.nextPurchase();
-    this.set('upgSc', $(this.root, '#upgBtn .sc'), 'text', useful ? `${fmt(s.upgrades.status(useful).cost)}🌿` : next ? `~${etaText(next.eta)}` : '\u00a0');
+    this.set('upgSc', $(this.root, '#upgBtn .sc'), 'text', useful ? formatCost(s.upgrades.status(useful).price).replace(/ /g, '') : next ? `~${etaText(next.eta)}` : '\u00a0');
     this.set('upgNext', $(this.root, '#upgNext'), 'html', next ? `Next: ${next.icon} ${esc(next.name)} · ${formatCost(next.cost)} · ${next.eta < 0.5 ? 'affordable now' : `~${etaText(next.eta)}`}` : useful ? '' : '');
     this.renderUpgrades();
 

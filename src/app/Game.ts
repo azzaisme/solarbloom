@@ -2,7 +2,7 @@ import { big, fmt, type Big } from '../core/Big';
 import { HOME } from '../gameplay/ProgressionSystem';
 import * as pc from 'playcanvas';
 import { Sfx } from '../audio/Sfx';
-import { formatCost, RES_ICON } from '../core/Economy';
+import { formatCost, formatPriceHtml, RES_ICON } from '../core/Economy';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
@@ -1263,7 +1263,7 @@ export class Game {
     const n = u.targets(def).length;
     const all = u.status(def);
     const allBtn = n > 1 ? `<button class="buy all" data-buy="${id}|*" ${all.ok ? '' : 'disabled'} title="Buys levels cheapest-first on every ${def.machine}">All ${n}</button>` : '';
-    return `<div class="card" style="margin-top:8px"><span class="ci">${def.icon}</span><span class="cn">${def.name} <em>Lv ${lvl}</em></span><button class="buy" data-buy="${id}|${m.id}" ${st.ok ? '' : 'disabled'}>${fmt(st.cost)} 🌿</button>${allBtn}<span class="cd2">${def.describe(lvl + 1)}</span></div>`;
+    return `<div class="card" style="margin-top:8px"><span class="ci">${def.icon}</span><span class="cn">${def.name} <em>Lv ${lvl}</em></span><button class="buy" data-buy="${id}|${m.id}" ${st.ok ? '' : 'disabled'}>${formatPriceHtml(st.price, u.short(st))}</button>${allBtn}<span class="cd2">${def.describe(lvl + 1)}</span></div>`;
   }
 
   private renderInspect() {
