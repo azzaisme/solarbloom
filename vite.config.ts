@@ -24,6 +24,8 @@ export default defineConfig(({ mode }) => ({
   test: {
     include: env.SOAK ? ['tests/soak/**/*.soak.ts'] : env.PERF ? ['tests/perf/**/*.perf.ts'] : mode === 'full' ? ['tests/**/*.test.ts'] : QUICK,
     environment: 'node',
+    // Region unlocks are off for tests written before them (tests/setup.ts); new tests switch them on.
+    setupFiles: ['tests/setup.ts'],
     // Look 5: tests read styles.css as text (tokens, contrast, no emoji); Vitest stubs CSS to '' otherwise.
     css: { include: [/styles\.css/] },
   },

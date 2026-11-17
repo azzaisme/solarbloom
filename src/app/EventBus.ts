@@ -85,6 +85,8 @@ export interface GameEvents {
   'area.step': { areaId: string; step: number; share: number; credited: Partial<Record<ResourceKind, Big>> };
   'milestone.reached': { at: number; credited: Partial<Record<ResourceKind, Big>>; next?: number };
   'area.revealed': { areaId: string };
+  /** region unlocks: the player paid to lift a sealed area's fog */
+  'area.unlocked': { areaId: string };
   'area.fogChanged': { areaId: string; fog: string };
   'area.ready': { areaId: string };
   'area.cleared': { areaId: string };

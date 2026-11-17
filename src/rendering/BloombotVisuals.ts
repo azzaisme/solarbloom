@@ -22,6 +22,8 @@ const STRIDE = { walk: 1.15, run: 3.1 } as const;
 const BLEND = 0.18;
 /** The visor's middle, from the feet (front is +z), in world units. */
 const EYE = new pc.Vec3(0, 0.66, 0.2);
+/** Where the echo palms are while pulsing (model space, before SCALE): chest height, pushed forward. */
+const PALM = new pc.Vec3(0.06, 0.46, 0.34);
 
 export type BotLoop = 'idle' | 'walk' | 'run';
 export type BotAction = 'pulse' | 'assemble' | 'interact' | 'cheer';
@@ -142,6 +144,11 @@ export class BloombotVisuals {
   /** E19: where bloombot's eyes are (world): the build hologram is projected from here. */
   eyeWorld(out: pc.Vec3): pc.Vec3 {
     return this.root.getWorldTransform().transformPoint(EYE, out);
+  }
+
+  /** Where bloombot's palms are mid-pulse (world): the pulse rings leave from here. */
+  palmWorld(out: pc.Vec3): pc.Vec3 {
+    return this.root.getWorldTransform().transformPoint(PALM, out);
   }
 
   /** Places bloombot (feet) and turns it to face `facing` (radians, 0 = +z). */

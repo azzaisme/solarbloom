@@ -20,6 +20,7 @@ import { Sim } from '../gameplay/Sim';
 import { Butterflies } from '../rendering/Butterflies';
 import { Birds } from '../rendering/Birds';
 import { Clouds } from '../rendering/Clouds';
+import { CloudWall } from '../rendering/CloudWall';
 import { Fauna } from '../rendering/Fauna';
 import { EcoBadge } from '../ui/EcoBadge';
 import { createModels } from '../rendering/Models';
@@ -153,6 +154,8 @@ export class Game {
   private birds: Birds;
   /** Puffy clouds between the camera and the city when zoomed out. */
   private clouds: Clouds;
+  /** region unlocks: the wall of clouds around sealed areas */
+  private cloudWall: CloudWall;
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
   readonly fauna: Fauna;
   private eco!: EcoBadge;
@@ -303,6 +306,7 @@ export class Game {
     };
     this.birds = new Birds(this.scene.world);
     this.clouds = new Clouds(this.scene.world, this.app.graphicsDevice, this.scene.sun.up);
+    this.cloudWall = new CloudWall(this.sim, this.scene.world, this.app.graphicsDevice, this.scene.sun.up, this.app.batcher ?? undefined);
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
     this.pollinators = new Pollinators(this.sim, this.scene.world, this.app.batcher!.addGroup('pollinators', true, 400).id);
     this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
@@ -430,6 +434,7 @@ export class Game {
     else if (this.sim.progression.coreReady()) this.machines.setCoreState('ready');
 
     this.wireEvents();
+    this.cloudWall.sync();
     if (botMode()) {
       const visuals = new BloombotVisuals(this.app, this.scene.world);
       visuals.reducedMotion = !!this.settings.reducedMotion;
@@ -1025,6 +1030,12 @@ export class Game {
     if (r === 'pulse') {
       v.play('pulse');
       this.drones.companionReact('pulse');
+      // The echo pulse: cyan rings leave the palms and travel to the tile in front (as in the reference image).
+      const f = this.frontPick();
+      if (f?.tile) {
+        const to = this.tileVec(f.tile, SLAB_TOP + 0.25);
+        setTimeout(() => this.vfx.palmWave(v.palmWorld(new pc.Vec3()), to), 140); // when the palms push out
+      }
     }
     else if (r === 'build') v.play('assemble');
     else if (r === 'select' || r === 'wake') v.play('interact');
@@ -1059,6 +1070,12 @@ export class Game {
         b.visuals.play('cheer');
         return;
       }
+    }
+    // Region unlocks: facing a sealed area's fog, interact buys it (or says what it costs).
+    const sealed = this.sealedAhead();
+    if (sealed) {
+      if (this.sim.areas.unlock(sealed)) b.visuals.play('cheer');
+      return;
     }
     const lift = this.liftAhead();
     if (lift) {
@@ -1273,6 +1290,21 @@ export class Game {
       const k = this.press('Q', true);
       const what = up ? (up.preview ? `<span class="bad">${this.lockedReason(up.id)}</span>` : `<span class="ok">${k} Ride up to the rooftop</span>`) : `<span class="ok">${k} Ride down to the street</span>`;
       this.hud.showTip(sc.x, sc.y, `<b>Rooftop lift</b>${what}`);
+      return;
+    }
+    // Region unlocks: facing sealed fog, the prompt names the area and its price.
+    const sealed = this.sealedAhead();
+    if (sealed) {
+      const [bx, by, bz] = this.bot.world();
+      const v = this.camera.toScreen(new pc.Vec3(bx, by + 1.1, bz));
+      this.overlays.hideGhost();
+      this.overlays.hideFrame();
+      const s = this.sim.areas;
+      const cost = s.unlockCost(sealed)!;
+      const price = `${fmt(cost.biomass)} 🌿 and ${fmt(cost.energy)} ⚡`;
+      const ok = !this.sim.econ.shortfall(cost);
+      const line = ok ? `<span class="ok">${this.press('Q', true)} Unlock for ${price}</span>` : `<span class="bad">Unlock for ${price}</span>`;
+      this.hud.showTip(v.x, v.y, `<b>🔒 ${AREA_TYPES[s.info(sealed).type].name} in thick fog</b>${line}`);
       return;
     }
     if (!p?.tile) {
@@ -2580,6 +2612,16 @@ export class Game {
       this.updateCityBounds();
     });
     b.on('area.fogChanged', ({ areaId }) => this.chunks.markArea(areaId));
+    b.on('area.unlocked', ({ areaId }) => {
+      this.cloudWall.reducedMotion = !!this.settings.reducedMotion;
+      this.cloudWall.sync(); // its wall rises and melts away
+      this.chunks.markArea(areaId);
+      for (const nb of s.areas.info(areaId).neighbours) this.chunks.markArea(nb); // soft fog edges
+      const info = s.areas.info(areaId);
+      this.hud.toast(`🔓 ${AREA_TYPES[info.type].name} unlocked!<small>The fog lifts. Restore it to wake the ${info.landmarkName}.</small>`, 'gold', 4);
+      this.sfx.fanfare();
+      this.save();
+    });
     // City 12.1: rooftop clusters appear with their area and come alive when a Bloom Relay reaches them.
     b.on('layer.added', ({ layerId }) => {
       const l = s.grid.layer(layerId);
@@ -2600,7 +2642,10 @@ export class Game {
       if (lm) this.machines.setLandmarkState(lm.id, 'ready');
       if (areaId !== PARK) this.hud.toast(`✨ ${s.areas.info(areaId).landmarkName} is ready to wake!<small>Walk up and press ${this.hudKey('interact')} to clear this ${AREA_TYPES[s.areas.info(areaId).type].name.toLowerCase()}'s fog.</small>`, 'gold', 4);
     });
-    b.on('area.cleared', ({ areaId }) => this.onAreaCleared(areaId));
+    b.on('area.cleared', ({ areaId }) => {
+      this.onAreaCleared(areaId);
+      this.cloudWall.sync(); // the newly sealed neighbours get their walls
+    });
     b.on('fauna.unlocked', ({ id }) => this.eco?.arrived(id)); // Phase 5 E16 (cosmetic; pays nothing)
     // City 09.1: the landmark's specialty action is done (the wake itself has its own toast once ready).
     b.on('area.specialty', ({ areaId, met }) => {
@@ -3395,6 +3440,20 @@ export class Game {
   }
   private areaLabels = new Set<string>();
 
+  /** Region unlocks: the sealed area just ahead of bloombot (the tile in front, or one more step), if any. */
+  private sealedAhead(): string | undefined {
+    const b = this.bot;
+    if (!b || b.pose.roofId !== GROUND) return undefined;
+    const f = b.front();
+    const dx = Math.sign(Math.round(Math.sin(b.pose.facing)));
+    const dz = Math.sign(Math.round(Math.cos(b.pose.facing)));
+    for (const [x, z] of [[f.x, f.z], [f.x + dx, f.z + dz]]) {
+      const id = this.sim.areas.map.areaOfCell(x, z);
+      if (this.sim.areas.sealed(id)) return id;
+    }
+    return undefined;
+  }
+
   private onAreaCleared(id: string) {
     const s = this.sim;
     this.chunks.markArea(id, true);
@@ -3680,6 +3739,7 @@ export class Game {
     {
       const c = this.camera;
       const cv = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+      this.cloudWall.update(dt);
       this.clouds.update(dt, { zoom: c.zoom, yaw: c.yaw, dist: c.dist, viewHeight: c.viewHeight, aspect: cv.clientWidth / Math.max(1, cv.clientHeight), position: c.entity.getPosition(), forward: c.entity.forward });
     }
     this.updateMood(dt);
@@ -3750,7 +3810,7 @@ export function offlineToast(r: OfflineReport, title: string): string {
   const lost = (['energy', 'water', 'biomass'] as const).filter((k) => r.lost[k].gte(1)).map((k) => `${fmt(r.lost[k])}${icons[k]}`);
   const lines = [`🌙 ${title} (${away})`];
   const capped = r.away > r.seconds + 1 ? ` · counted up to ${Math.round(r.seconds / 3600)} h` : '';
-  lines.push(`<small>Your garden kept growing at half pace${capped}: ${got.join(' ') || 'nothing new'}${r.droneJobs ? ` · drones restored ${r.restored} and nurtured ${r.grown} tiles` : ''}${r.cultivated ? ` · your cultivators broke up ${r.cultivated} slab${r.cultivated === 1 ? '' : 's'}` : ''}${lost.length ? ` · ${lost.join(' ')} didn't fit in storage` : ''}</small>`);
+  lines.push(`<small>Your helpers kept the garden growing at half pace${capped}: ${got.join(' ') || 'nothing new'}${r.droneJobs ? ` · your drones restored ${r.restored} and nurtured ${r.grown} tiles` : ''}${r.cultivated ? ` · your cultivators broke up ${r.cultivated} slab${r.cultivated === 1 ? '' : 's'}` : ''}${lost.length ? ` · ${lost.join(' ')} didn't fit in storage` : ''}</small>`);
   return lines.join('');
 }
 

@@ -70,8 +70,9 @@ export const TUNING = {
       perFootprintTile: 0.05, // …plus a little per extra tile its reach restores
       footprintMax: 1.5,
       nurtureTap: 0.3,
-      autoRestore: 0.05, // a tile restored by drones, machines or chains
-      autoNurture: 0.03, // Phase 5 E12: a tile grown a stage by automation (keeps charging once an area is restored)
+      // #287: Frenzy is bloombot's: automation (drones, machines) no longer charges it; chains still do.
+      autoRestore: 0, // was 0.05: a tile restored by drones, machines or chains
+      autoNurture: 0, // was 0.03: a tile grown a stage by automation
       perChainStep: 0.4, // per activation beyond the first, when a chain ends…
       chainMax: 8, // …capped per chain
     },
@@ -240,6 +241,12 @@ export const TUNING = {
     networkRange: 12,
     /** City: preference for restoring at the fog's edge (score bonus, in tiles²). */
     frontierBonus: 12,
+    /**
+     * #287 (helpers work around bloombot): a job within `nearBotRadius` tiles of bloombot scores up to
+     * `nearBotBonus` better (squared-tile units, fading with distance), so drones help where the player is.
+     */
+    nearBotBonus: 60,
+    nearBotRadius: 9,
     focusMult: 6, // "Focus the frontier": the fog edge counts this many times more
     bloomBonus: 60, // "Keep this area blooming": its green tiles beat restoring up to ~8 tiles further away
     /**
@@ -428,6 +435,13 @@ export const TUNING = {
     clearShare: 0.6,
     /** …but never more than this many tiles (× the area's distance difficulty), so big areas stay a session's goal */
     clearCap: 160,
+    /**
+     * Region unlocks (owner, 18 Nov 2026): a newly revealed area stays sealed in thick fog until bought. The price
+     * is set when the area appears: `biomass` × `growth`^n (n = areas already unlocked), but at least
+     * `incomeSeconds` of sustained biomass income, so it stays a real choice as the economy grows; and `energy` ×
+     * `energyGrowth`^n, never more than `capShare` of the energy cap (always affordable by waiting).
+     */
+    unlock: { enabled: true, biomass: 1000, growth: 1.6, incomeSeconds: 120, energy: 60, energyGrowth: 1.25, capShare: 0.6 },
     /** fog density at 0% restored and just before clearing (it thins linearly in between) */
     fogFull: 1,
     fogThin: 0.25,

@@ -323,6 +323,15 @@ export interface AreaState {
   spec?: number;
   /** Phase 5 E12: rewarded progress steps already paid here (count of TUNING.areaSteps.at reached). */
   steps?: number;
+  /**
+   * Region unlocks (18 Nov 2026): revealed but still sealed in thick fog until the player pays `price`. While sealed
+   * the area behaves exactly as hidden fog (nothing can be walked, restored or built). Absent on older saves.
+   */
+  sealed?: boolean;
+  /** the unlock price, set when the area was revealed (biomass as a big-number string) */
+  price?: { biomass: string; energy: number };
+  /** sim time the player unlocked it */
+  unlockedAt?: number;
 }
 
 export interface LinkState {
