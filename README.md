@@ -62,7 +62,7 @@ rebound in Settings → Controls.
 | Backpack (discoveries) | `Tab` | D-pad up |
 | Previous / next tool | `1` / `2` | Bumpers |
 | Turn a decoration in hand (build mode) | Mouse wheel, `+` / `-` | Bumpers (while one is in hand) |
-| Turn and tilt the view around bloombot (any angle, from nearly level to nearly overhead) | Drag with any mouse button | Right stick: sideways turns, up / down tilts |
+| Turn and tilt the view around bloombot (any angle, from nearly level to nearly overhead) | Drag with any mouse button | Right stick: sideways turns, up / down tilts, a diagonal does both |
 | Recentre the view (turn and tilt) | `C` | Right stick click |
 | Photo mode: free pan, zoom and tilt, no HUD (the only place the camera pans or zooms) | `O` | Settings › Photo mode |
 | Overview (and back) | `M`; in the overview, click a woken landmark to travel there | View |

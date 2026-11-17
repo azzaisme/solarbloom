@@ -165,12 +165,14 @@ export class BotController {
     const dz = (v: number) => (Math.abs(v) < DEAD ? 0 : (v - Math.sign(v) * DEAD) / (1 - DEAD));
     const x = dz(gp.axes[0] ?? 0);
     const y = -dz(gp.axes[1] ?? 0);
-    // Right stick: sideways turns the view, up and down tilts it (and zooms in photo mode). Only the stronger
-    // axis counts, so a turn doesn't also creep the tilt.
+    // Right stick: sideways turns the view, up and down tilts it (and zooms in photo mode). A push close to one
+    // axis stays on that axis (no creep); a clear diagonal turns and tilts together, so the stick can orbit in
+    // any direction (it is the Steam Deck's main camera control).
     const rx = dz(gp.axes[2] ?? 0);
     const ry = -dz(gp.axes[3] ?? 0);
-    const zoom = Math.abs(ry) >= Math.abs(rx) ? ry : 0;
-    const turn = Math.abs(rx) > Math.abs(ry) ? rx : 0;
+    const lock = 0.4 * Math.max(Math.abs(rx), Math.abs(ry));
+    const zoom = Math.abs(ry) >= lock ? ry : 0;
+    const turn = Math.abs(rx) >= lock ? rx : 0;
     gp.buttons.forEach((b, i) => {
       const down = b.pressed;
       if (down && !this.padPrev[i]) {

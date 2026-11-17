@@ -450,8 +450,9 @@ export class Game {
       bot.onTurn = (deg) => this.camera.orbit(deg);
       bot.onTilt = (deg) => !this.photo?.active && this.camera.tilt(deg);
       this.hud.setKeyMap('keys', this.bindings);
-      // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad).
-      const touchOnly = typeof matchMedia !== 'undefined' && !matchMedia('(any-pointer: fine)').matches && navigator.maxTouchPoints > 0;
+      // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad). A Steam Deck has its
+      // gamepad built in, and Gaming Mode often shows no mouse at all, so it never gets this note.
+      const touchOnly = !this.deck && typeof matchMedia !== 'undefined' && !matchMedia('(any-pointer: fine)').matches && navigator.maxTouchPoints > 0;
       if (touchOnly) setTimeout(() => this.hud.toast('Solarbloom needs a keyboard or a gamepad for now<small>Phones and tablets will be supported again later. Connect a controller to play.</small>', 'gold', 12), 900);
       this.hud.renderControls(this.bindings, (kind, done) => this.listenForBinding(kind, done), () => this.saveBindings());
       this.minimap = new Minimap(this.sim, this.hud.root, (id) => {

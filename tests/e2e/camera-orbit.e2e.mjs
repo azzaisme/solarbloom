@@ -1,6 +1,7 @@
 // Phase 6: the play camera is a 3D orbit around bloombot. In play there is no pan and no zoom: any mouse drag
 // (or the right stick) turns and tilts the view; the wheel turns a decoration, not the zoom. Photo mode is the
-// only place the camera pans and zooms. Drives the real game with a mouse, keys and a fake gamepad.
+// only place the camera pans and zooms. Drives the real game with a mouse, keys and a fake gamepad, then again as a
+// Steam Deck would run it: 1280×800, the Deck preset, a built-in gamepad and a touchscreen, no mouse.
 // Run after `vite build`:  node tests/e2e/camera-orbit.e2e.mjs
 import { createRequire } from 'node:module';
 import { preview } from 'vite';
@@ -163,6 +164,76 @@ try {
 
   check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
   await page.close();
+
+  // ── Steam Deck: 1280×800, the Deck graphics preset, a built-in gamepad and a touchscreen, and (in Gaming Mode)
+  // often no mouse at all. The camera has to work from the right stick and from a finger.
+  console.log('steam deck (1280×800, Deck preset, gamepad + touchscreen, no mouse):');
+  const touchOnly = () => {
+    window.matchMedia = ((mm) => (q) =>
+      /any-pointer:\s*fine/.test(q)
+        ? { matches: false, media: q, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false }
+        : mm(q))(window.matchMedia.bind(window));
+    Object.defineProperty(navigator, 'maxTouchPoints', { get: () => 5 });
+  };
+  const padInit = () => {
+    const buttons = Array.from({ length: 17 }, () => ({ pressed: false, value: 0 }));
+    window.__pad = { id: 'Steam Deck Controller', index: 0, connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons, timestamp: 0 };
+    navigator.getGamepads = () => [window.__pad];
+  };
+  const open = async (query) => {
+    const p = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    p.on('pageerror', (e) => errors.push(e.message));
+    await p.addInitScript(touchOnly);
+    await p.addInitScript(padInit);
+    await p.goto(`http://localhost:${PORT}/${query}`);
+    await p.evaluate(() => localStorage.clear());
+    await p.reload();
+    await p.waitForFunction(() => !!window.solarbloom && !!window.solarbloom.bot, null, { timeout: 90000 });
+    if (await p.locator('#introGo').isVisible().catch(() => false)) await p.click('#introGo');
+    await p.waitForFunction(() => { const c = window.solarbloom.camera; return Math.abs(c.zoom - c.zoomTarget) < 1e-3; }, null, { timeout: 60000 });
+    return p;
+  };
+  const NOTE = 'needs a keyboard or a gamepad';
+
+  // Control: the same touch-only browser without the Deck preset does get the "needs a keyboard or a gamepad" note,
+  // so the Deck's missing note below means something.
+  const phone = await open('');
+  await phone.waitForTimeout(4000);
+  check(await phone.evaluate((n) => document.body.innerText.includes(n), NOTE), 'control: a touch-only browser (not a Deck) shows the keyboard-or-gamepad note');
+  await phone.close();
+
+  const deck = await open('?gfx=deck');
+  await deck.waitForTimeout(4000);
+  check(await deck.evaluate(() => window.solarbloom.deck === true), 'the Deck preset is on');
+  check(!(await deck.evaluate((n) => document.body.innerText.includes(n), NOTE)), 'a Deck never gets the keyboard-or-gamepad note');
+  const dview = () => deck.evaluate(() => { const c = window.solarbloom.camera; return { tx: c.target.x, tz: c.target.z, zoom: c.zoom, yawGoal: c.yawGoal, off: c.pitchOffset }; });
+
+  // The right stick orbits in any direction: a diagonal push turns and tilts at the same time.
+  const d0 = await dview();
+  await deck.evaluate(() => { window.__pad.axes[2] = 0.9; window.__pad.axes[3] = 0.9; }); // right and down
+  await deck.waitForTimeout(3000);
+  await deck.evaluate(() => { window.__pad.axes[2] = 0; window.__pad.axes[3] = 0; });
+  const d1 = await dview();
+  check(d1.yawGoal < d0.yawGoal - 5 && d1.off > d0.off + 5, `a diagonal stick push turns (${(d1.yawGoal - d0.yawGoal).toFixed(1)}°) and tilts (${(d1.off - d0.off).toFixed(1)}°) together`);
+  await deck.evaluate(() => { window.__pad.axes[2] = 0.3; window.__pad.axes[3] = 1; }); // nearly straight down
+  await deck.waitForTimeout(2500);
+  await deck.evaluate(() => { window.__pad.axes[2] = 0; window.__pad.axes[3] = 0; });
+  const d2 = await dview();
+  check(near(d2.yawGoal, d1.yawGoal, 0.01), 'a push close to one axis stays on that axis (no sideways creep)');
+
+  // A finger drag on the touchscreen turns the view; it never pans or zooms.
+  const cdp = await deck.context().newCDPSession(deck);
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+  const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+  await touch('touchStart', 640, 400);
+  for (let i = 1; i <= 12; i++) await touch('touchMove', 640 + (200 * i) / 12, 400);
+  await touch('touchEnd');
+  await deck.waitForTimeout(1500);
+  const d3 = await dview();
+  check(near(d3.yawGoal - d2.yawGoal, -70, 1), `a 200 px finger drag turned the view by ${(d3.yawGoal - d2.yawGoal).toFixed(1)}° (expected -70°)`);
+  check(near(d3.tx, d2.tx, 0.05) && near(d3.tz, d2.tz, 0.05) && near(d3.zoom, d2.zoom, 1e-3), 'a finger drag does not pan or zoom');
+  check(errors.length === 0, `no page errors on the Deck run${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
+  await deck.close();
 } finally {
   await browser.close();
   server.httpServer.close();

@@ -42,10 +42,21 @@ To update, download the new AppImage and run the script again.
 
 The game reads the Deck as a standard gamepad, so Steam Input's built-in **Gamepad** template works as it is:
 left stick to walk, A to pulse, X to interact, Y for the build tray, B to cancel, right trigger to sprint,
-bumpers to change tool, right stick to turn the view (sideways) and tilt it (up and down), a right stick click
+bumpers to change tool, right stick to orbit the view, a right stick click
 to recentre it, View for the overview, Menu to pause, and the d-pad for the
 backpack, harvest and upgrades. Buttons can be rebound in Settings → Controls. A custom Steam Input template is
 not shipped yet.
+
+**The camera** is an orbit around bloombot. The right stick turns the view sideways and tilts it up and down, and
+a diagonal push does both at once (a push close to one axis stays on that axis, so a sideways turn doesn't
+creep). It goes from nearly level to nearly overhead and all the way round. There is no pan and no zoom in play;
+photo mode (Settings › Photo mode, or bind a button) is the only place the camera pans and zooms. If Steam Input
+is set to map a trackpad to the mouse, a trackpad drag (pressed) orbits the same way, and so does a finger drag on
+the touchscreen. The Deck never shows the "needs a keyboard or a gamepad" note.
+
+The nearly level view draws about what the default one does (the haze limits the reach), so the Deck preset needs
+no separate limit for it. That was measured in a software renderer (draw calls and chunks), not on a Deck, so
+the checklist below still has the real frame-rate test.
 
 ## Test checklist (on a real Deck)
 
@@ -60,6 +71,9 @@ Record the result of each on the issue (#243, #244).
 - [ ] Text is readable at 100%; try 125% and 150% and check nothing overlaps or leaves the screen.
 - [ ] Restored park, close default view, a ×300 chain running and drones working: 30 fps or better (turn on the
       debug overlay with Settings → Debug, or Steam's performance overlay; attach a frame-time log).
+- [ ] Orbit with the right stick through every angle (nearly level, default, nearly overhead, all the way round,
+      diagonals): the frame rate stays at 30 or better, bloombot stays in the middle, a stick click recentres.
+- [ ] No "needs a keyboard or a gamepad" note at start. A finger drag on the touchscreen orbits the view.
 - [ ] Suspend (power button) for a minute and resume: the game continues and nothing is lost.
 - [ ] Quit from the Steam menu, start again: the save loads with bloombot where it was.
 - [ ] `~/.config/Solarbloom/saves/` holds the save file.
