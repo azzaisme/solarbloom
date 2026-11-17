@@ -470,6 +470,7 @@ export const mmss = (t?: number) => (t === undefined || t < 0 ? '—' : `${Math.
 function walking(sim: Sim) {
   const walker = new Walker(sim);
   const pose: BotPose = spawnPose(sim, walker);
+  sim.state.bot = { ...pose }; // #287: drones see where bloombot is, as in the game
   let busyUntil = 0;
   let pending: (() => unknown) | undefined;
   let pendingBuild: string | undefined;
@@ -498,6 +499,7 @@ function walking(sim: Sim) {
       secs = len / (path.length > 8 ? BOT.sprint : BOT.walk);
       pose.x = px;
       pose.z = pz;
+      sim.state.bot = { ...pose };
     }
     if (secs < 0.05) return !!run();
     r.seconds += secs;

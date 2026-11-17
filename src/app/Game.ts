@@ -3810,7 +3810,7 @@ export function offlineToast(r: OfflineReport, title: string): string {
   const lost = (['energy', 'water', 'biomass'] as const).filter((k) => r.lost[k].gte(1)).map((k) => `${fmt(r.lost[k])}${icons[k]}`);
   const lines = [`🌙 ${title} (${away})`];
   const capped = r.away > r.seconds + 1 ? ` · counted up to ${Math.round(r.seconds / 3600)} h` : '';
-  lines.push(`<small>Your garden kept growing at half pace${capped}: ${got.join(' ') || 'nothing new'}${r.droneJobs ? ` · drones restored ${r.restored} and nurtured ${r.grown} tiles` : ''}${r.cultivated ? ` · your cultivators broke up ${r.cultivated} slab${r.cultivated === 1 ? '' : 's'}` : ''}${lost.length ? ` · ${lost.join(' ')} didn't fit in storage` : ''}</small>`);
+  lines.push(`<small>Your helpers kept the garden growing at half pace${capped}: ${got.join(' ') || 'nothing new'}${r.droneJobs ? ` · your drones restored ${r.restored} and nurtured ${r.grown} tiles` : ''}${r.cultivated ? ` · your cultivators broke up ${r.cultivated} slab${r.cultivated === 1 ? '' : 's'}` : ''}${lost.length ? ` · ${lost.join(' ')} didn't fit in storage` : ''}</small>`);
   return lines.join('');
 }
 

@@ -255,6 +255,14 @@ export class DroneSystem {
     let best: TileData | undefined;
     let bestD = Infinity;
     const intel = s.upgrades.chainIntel(hub);
+    // #287: helpers work around bloombot: jobs near it score better, fading out over nearBotRadius.
+    const bot = s.state.bot;
+    const R = TUNING.drone.nearBotRadius;
+    const nearBot = (t: TileData) => {
+      if (!bot || bot.roofId !== t.roofId) return 0;
+      const d = Math.hypot(t.x + 0.5 - bot.x, t.z + 0.5 - bot.z);
+      return d >= R ? 0 : TUNING.drone.nearBotBonus * (1 - d / R);
+    };
     for (const t of inRange) {
       const mode = modeOf(t);
       if (mode === 'off') continue; // "Leave this area alone"
@@ -263,7 +271,7 @@ export class DroneSystem {
       let score: number;
       if (s.restoration.isEligible(t)) {
         // Prefer mossy tiles (cheaper), then nearest; Chain Intelligence strongly prefers synergy tiles.
-        score = dx * dx + dz * dz + (t.ground === 'prepared' ? 0 : 1.5) - edge(t);
+        score = dx * dx + dz * dz + (t.ground === 'prepared' ? 0 : 1.5) - edge(t) - nearBot(t);
       } else if (mode === 'bloom' && !focus && nurturable(t)) {
         // "Keep this area blooming": its green tiles compete with (and usually beat) restoration elsewhere.
         score = dx * dx + dz * dz + t.bloom * 2 - TUNING.drone.bloomBonus;
