@@ -20,12 +20,12 @@ export interface MaterialDef {
 export const MATERIALS: Record<MaterialId, MaterialDef> = {
   scrap: { id: 'scrap', name: 'Scrap', icon: '🧱', models: ['rubble-pile', 'crate', 'stone-block'], home: ['park', 'backstreet', 'mastRow', 'oldMarket', 'saltwind', 'elderGrove', 'cistern', 'clockPlaza', 'terraces', 'glasshouse', 'observatory'], colour: '#9a8f84' },
   seeds: { id: 'seeds', name: 'Seeds', icon: '🌱', models: ['broken-pot', 'stump'], home: ['park', 'elderGrove'], colour: '#8fbf5a' },
-  copper: { id: 'copper', name: 'Copper', icon: '🔧', models: ['copper-pipe', 'ac-unit'], home: ['mastRow'], colour: '#c87a4a' },
-  timber: { id: 'timber', name: 'Timber', icon: '🛢️', models: ['barrel', 'mooring-post'], home: ['saltwind'], colour: '#a8764a' },
-  glass: { id: 'glass', name: 'Glass', icon: '🪟', models: ['lantern', 'market-stall'], home: ['oldMarket'], colour: '#8fd0d8' },
-  clay: { id: 'clay', name: 'Clay', icon: '🏺', models: ['dry-drain', 'planter-pot'], home: ['cistern'], colour: '#b97a5a' },
-  gears: { id: 'gears', name: 'Gears', icon: '⚙️', models: ['vent', 'bollard'], home: ['clockPlaza'], colour: '#b8a26a' },
-  sunstone: { id: 'sunstone', name: 'Sunstone', icon: '✨', models: [], home: ['terraces'], colour: '#f2c84a' },
+  copper: { id: 'copper', name: 'Copper', icon: '🔧', models: ['salvage-copper'], home: ['mastRow'], colour: '#c87a4a' },
+  timber: { id: 'timber', name: 'Timber', icon: '🛢️', models: ['salvage-driftwood'], home: ['saltwind'], colour: '#a8764a' },
+  glass: { id: 'glass', name: 'Glass', icon: '🪟', models: ['salvage-glass'], home: ['oldMarket'], colour: '#8fd0d8' },
+  clay: { id: 'clay', name: 'Clay', icon: '🏺', models: ['salvage-clay'], home: ['cistern'], colour: '#b97a5a' },
+  gears: { id: 'gears', name: 'Gears', icon: '⚙️', models: ['salvage-gears'], home: ['clockPlaza'], colour: '#b8a26a' },
+  sunstone: { id: 'sunstone', name: 'Sunstone', icon: '✨', models: ['salvage-sunstone'], home: ['terraces'], colour: '#f2c84a' },
 };
 
 export const MATERIAL_IDS = Object.keys(MATERIALS) as MaterialId[];

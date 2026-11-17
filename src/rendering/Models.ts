@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { MODEL_NAMES } from '../data/oldcity';
 
 /**
  * Look 3.18/3.19: the hand-built models (assets/raw/models/final, built by assets/tools/build_props.py). Each model
@@ -345,6 +346,16 @@ function neglectedMaterial(src: pc.Material): pc.Material {
 }
 
 export let MODELS: ModelLibrary | null = null;
+
+/**
+ * E21: the model to draw for an Old City name (data/oldcity MODEL_NAMES): the file itself once it has landed in
+ * assets/raw/models/final, else its marked stand-in. undefined: draw the procedural stand-in.
+ */
+export function oldCityModel(name: string): string | undefined {
+  if (MODELS?.has(name)) return name;
+  const s = MODEL_NAMES[name]?.standIn;
+  return s && s !== 'procedural' && MODELS?.has(s) ? s : undefined;
+}
 export function createModels(app: pc.AppBase): ModelLibrary {
   MODELS = new ModelLibrary(app);
   MODELS.load();

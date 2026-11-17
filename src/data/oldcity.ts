@@ -151,16 +151,16 @@ export const REGIONS: RegionDef[] = [
     ladders: [{ x: 8, z: -32, to: [8, -33] }],
     perches: [],
     piles: [
-      P('mr-c1', 4, -22, 'copper', 'large', 'copper-pipe'),
-      P('mr-c2', 21, -14, 'copper', 'large', 'copper-pipe'),
-      P('mr-c3', 12, -8, 'copper', 'medium', 'ac-unit'),
-      P('mr-c4', 16, -30, 'copper', 'medium', 'copper-pipe'),
-      P('mr-c5', 22, -20, 'copper', 'medium', 'ac-unit'),
-      P('mr-c6', 2, -6, 'copper', 'medium', 'copper-pipe'),
-      P('mr-c7', 15, -3, 'copper', 'small', 'ac-unit'),
-      P('mr-c8', 29, -6, 'copper', 'small', 'copper-pipe'),
-      P('mr-c9', 11, -24, 'copper', 'small', 'ac-unit'),
-      P('mr-c10', 26, -28, 'copper', 'small', 'copper-pipe'),
+      P('mr-c1', 4, -22, 'copper', 'large', 'salvage-copper'),
+      P('mr-c2', 21, -14, 'copper', 'large', 'salvage-copper'),
+      P('mr-c3', 12, -8, 'copper', 'medium', 'salvage-copper'),
+      P('mr-c4', 16, -30, 'copper', 'medium', 'salvage-copper'),
+      P('mr-c5', 22, -20, 'copper', 'medium', 'salvage-copper'),
+      P('mr-c6', 2, -6, 'copper', 'medium', 'salvage-copper'),
+      P('mr-c7', 15, -3, 'copper', 'small', 'salvage-copper'),
+      P('mr-c8', 29, -6, 'copper', 'small', 'salvage-copper'),
+      P('mr-c9', 11, -24, 'copper', 'small', 'salvage-copper'),
+      P('mr-c10', 26, -28, 'copper', 'small', 'salvage-copper'),
       P('mr-s1', 20, -4, 'scrap', 'large', 'rubble-pile'),
       P('mr-s2', 4, -14, 'scrap', 'medium', 'crate'),
       P('mr-s3', 13, -27, 'scrap', 'medium', 'stone-block'),
@@ -684,16 +684,16 @@ export const BLUEPRINTS: { id: string; name: string; region: RegionId }[] = [
 
 /** One keepsake decoration per region (existing models). */
 export const KEEPSAKES: { id: string; name: string; model: string; region: RegionId }[] = [
-  { id: 'ks-mast', name: 'Signal lamp', model: 'lantern', region: 'mastRow' },
-  { id: 'ks-market', name: 'Market banner', model: 'banner-pole', region: 'oldMarket' },
-  { id: 'ks-beach', name: 'Mooring post', model: 'mooring-post', region: 'saltwind' },
-  { id: 'ks-grove', name: 'Planter pot', model: 'planter-pot', region: 'elderGrove' },
-  { id: 'ks-cistern', name: 'Drain cover', model: 'dry-drain', region: 'cistern' },
-  { id: 'ks-clock', name: 'Clock pillar', model: 'cracked-pillar', region: 'clockPlaza' },
-  { id: 'ks-roofs', name: 'Roof planter', model: 'planter-trough', region: 'terraces' },
-  { id: 'ks-glass', name: 'Seed bed', model: 'planter-bed', region: 'glasshouse' },
-  { id: 'ks-observatory', name: 'Wall niche', model: 'wall-niche', region: 'observatory' },
-  { id: 'ks-spire', name: 'Street lamp', model: 'lamp-post', region: 'spireHeights' },
+  { id: 'ks-mast', name: 'Tram sign', model: 'keepsake-tram-sign', region: 'mastRow' },
+  { id: 'ks-market', name: 'Market scales', model: 'keepsake-scales', region: 'oldMarket' },
+  { id: 'ks-beach', name: 'Ship\'s bell', model: 'keepsake-ship-bell', region: 'saltwind' },
+  { id: 'ks-grove', name: 'Acorn lamp', model: 'keepsake-acorn-lamp', region: 'elderGrove' },
+  { id: 'ks-cistern', name: 'Water jug', model: 'keepsake-water-jug', region: 'cistern' },
+  { id: 'ks-clock', name: 'Cuckoo clock', model: 'keepsake-cuckoo-clock', region: 'clockPlaza' },
+  { id: 'ks-roofs', name: 'Weathercock', model: 'keepsake-weathercock', region: 'terraces' },
+  { id: 'ks-glass', name: 'Terrarium', model: 'keepsake-terrarium', region: 'glasshouse' },
+  { id: 'ks-observatory', name: 'Orrery', model: 'keepsake-orrery', region: 'observatory' },
+  { id: 'ks-spire', name: 'Lift dial', model: 'keepsake-lift-dial', region: 'spireHeights' },
 ];
 
 /** The journal: 22 pages, two per region and two in the park, by page id. */
@@ -747,3 +747,87 @@ export const ITEMS: Record<string, { name: string; from: RegionId }> = {
   heartSeed: { name: 'Heart Seed', from: 'glasshouse' },
   starLens: { name: 'Star Lens', from: 'observatory' },
 };
+
+// ───────────── the Old City's models ─────────────
+
+/**
+ * Every model the Old City expects, by file name (`assets/raw/models/final/<name>.glb` plus `<name>.lod1.glb`), as
+ * listed in docs/art/old-city-models.md. They are loaded by name through src/rendering/Models.ts. Until a file has
+ * landed the game draws its STAND-IN (an existing model, or 'procedural' for code-drawn shapes): stand-ins are
+ * placeholders, not the finished art. Keepers are rigged (clips idle, wave, sleep) and play through the bloombot
+ * pipeline once they land. Dead and restored looks come from the neglected-look shader (E20.6), not extra files.
+ */
+export const MODEL_NAMES: Record<string, { standIn: string; what: string }> = {
+  // Keepers (rigged)
+  'keeper-pylon': { standIn: 'procedural', what: 'Pylon, Keeper of Mast Row' },
+  'keeper-tally': { standIn: 'procedural', what: 'Tally, Keeper of the Old Market' },
+  'keeper-tide': { standIn: 'procedural', what: 'Tide, Keeper of Saltwind Beach' },
+  'keeper-moss': { standIn: 'procedural', what: 'Moss, Keeper of Elder Grove' },
+  'keeper-sluice': { standIn: 'procedural', what: 'Sluice, Keeper of Cistern Basin' },
+  'keeper-tock': { standIn: 'procedural', what: 'Tock, Keeper of Clock Plaza' },
+  'keeper-gable': { standIn: 'procedural', what: 'Gable, Keeper of The Terraces' },
+  'keeper-fern': { standIn: 'procedural', what: 'Fern, Keeper of the Glasshouse Gardens' },
+  'keeper-vega': { standIn: 'procedural', what: 'Vega, Keeper of Observatory Hill' },
+  'keeper-atlas': { standIn: 'procedural', what: 'Atlas, Keeper of Spire Heights' },
+  // landmarks and towers
+  'solar-spire': { standIn: 'skyline-tower', what: 'The Solar Spire (Spire Heights landmark)' },
+  'glass-tower': { standIn: 'skyline-tower', what: 'Glass Tower' },
+  'twin-tower': { standIn: 'skyline-tower', what: 'The Twins (placed twice)' },
+  'old-exchange': { standIn: 'skyline-tower', what: 'Old Exchange' },
+  'great-greenhouse': { standIn: 'skyline-dome', what: 'The Great Greenhouse (Glasshouse Gardens landmark)' },
+  'sky-observatory': { standIn: 'satellite-dish', what: 'The Sky Observatory (Observatory Hill landmark)' },
+  'sea-lock-light': { standIn: 'lamp-post', what: 'The Sea Lock\'s beacon, beside the existing lock-gate' },
+  // the house
+  'house-shed': { standIn: 'procedural', what: 'House level 1: the patched shed' },
+  'house-cottage': { standIn: 'procedural', what: 'House level 2: the cottage' },
+  'house-two-storey': { standIn: 'procedural', what: 'House level 3: two storeys' },
+  'house-home': { standIn: 'procedural', what: 'House level 4: home' },
+  bed: { standIn: 'procedural', what: 'The bed' },
+  workbench: { standIn: 'procedural', what: 'The Workbench' },
+  'keepsake-shelf': { standIn: 'procedural', what: 'The keepsake shelf' },
+  'journal-desk': { standIn: 'procedural', what: 'The journal desk' },
+  // the island
+  boat: { standIn: 'procedural', what: 'The boat that brings bloombot' },
+  jetty: { standIn: 'procedural', what: 'The Landing\'s jetty' },
+  'causeway-span': { standIn: 'procedural', what: 'A span of the Long Causeway' },
+  'causeway-broken': { standIn: 'procedural', what: 'The Long Causeway\'s broken middle' },
+  'sea-cliff': { standIn: 'skyline-cliff', what: 'Close-range sea cliffs in the north' },
+  // machines
+  reclaimer: { standIn: 'ac-unit', what: 'The Reclaimer (on a seam)' },
+  'storage-chest': { standIn: 'crate', what: 'The Storage Chest' },
+  // salvage piles (Scrap stays rubble-pile, crate, stone-block; Seeds stays broken-pot, stump)
+  'salvage-copper': { standIn: 'copper-pipe', what: 'A Copper pile' },
+  'salvage-driftwood': { standIn: 'barrel', what: 'A Timber (driftwood) pile' },
+  'salvage-glass': { standIn: 'lantern', what: 'A Glass pile' },
+  'salvage-clay': { standIn: 'planter-pot', what: 'A Clay pile' },
+  'salvage-gears': { standIn: 'vent', what: 'A Gears pile' },
+  'salvage-sunstone': { standIn: 'procedural', what: 'A Sunstone pile' },
+  // gates and getting about
+  barricade: { standIn: 'rubble-pile', what: 'A rubble barricade (Pry)' },
+  'skybridge-collapsed': { standIn: 'procedural', what: 'The collapsed skybridge into Spire Heights (Climb)' },
+  'bridge-broken': { standIn: 'procedural', what: 'The broken bridge to the Glasshouse Gardens' },
+  'bridge-repaired': { standIn: 'procedural', what: 'The same bridge, repaired' },
+  'lift-bridge': { standIn: 'procedural', what: 'The lock bridge to Clock Plaza' },
+  'glide-perch': { standIn: 'procedural', what: 'A glide perch' },
+  'tower-lift': { standIn: 'procedural', what: 'A tower lift' },
+  'lookout-telescope': { standIn: 'procedural', what: 'A lookout\'s telescope' },
+  // finds
+  'cache-box': { standIn: 'crate', what: 'A cache' },
+  'journal-page-post': { standIn: 'procedural', what: 'A journal page on its post' },
+  // keepsakes
+  'keepsake-tram-sign': { standIn: 'procedural', what: 'Keepsake: tram sign (Mast Row)' },
+  'keepsake-scales': { standIn: 'procedural', what: 'Keepsake: scales (Old Market)' },
+  'keepsake-ship-bell': { standIn: 'procedural', what: 'Keepsake: ship\'s bell (Saltwind Beach)' },
+  'keepsake-acorn-lamp': { standIn: 'procedural', what: 'Keepsake: acorn lamp (Elder Grove)' },
+  'keepsake-water-jug': { standIn: 'procedural', what: 'Keepsake: water jug (Cistern Basin)' },
+  'keepsake-cuckoo-clock': { standIn: 'procedural', what: 'Keepsake: cuckoo clock (Clock Plaza)' },
+  'keepsake-weathercock': { standIn: 'procedural', what: 'Keepsake: weathercock (The Terraces)' },
+  'keepsake-terrarium': { standIn: 'procedural', what: 'Keepsake: terrarium (Glasshouse Gardens)' },
+  'keepsake-orrery': { standIn: 'procedural', what: 'Keepsake: orrery (Observatory Hill)' },
+  'keepsake-lift-dial': { standIn: 'procedural', what: 'Keepsake: lift dial (Spire Heights)' },
+};
+
+/** The model each gate kind is drawn with (names from MODEL_NAMES). */
+export const GATE_MODELS: Record<GateKind, string> = { barricade: 'barricade', water: 'lift-bridge', lockBridge: 'lift-bridge', bridge: 'bridge-broken', climb: 'skybridge-collapsed', cliff: 'glide-perch' };
+/** The model each new landmark kind is drawn with. */
+export const OLD_LANDMARK_MODELS: Record<string, string> = { greenhouse: 'great-greenhouse', observatory: 'sky-observatory', spire: 'solar-spire' };

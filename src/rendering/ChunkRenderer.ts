@@ -12,9 +12,10 @@ import { PALETTE } from './Materials';
 import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { plotsInChunk, type PlotSpot } from '../core/Plots';
-import { pileById } from '../core/OldCityLayout';
+import { onJetty, pileById, setPieceAt } from '../core/OldCityLayout';
+import { oldCityModel } from './Models';
 import { edgeHeight, levelY, rampAt } from '../core/Height';
-import { PARK_SET } from '../data/oldcity';
+import { GATE_MODELS, LANDING, PARK_SET } from '../data/oldcity';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
 import { drawDecor } from './DecorArt';
@@ -845,7 +846,8 @@ export class ChunkRenderer {
       const base = pile.size === 'large' ? 1.45 : pile.size === 'medium' ? 1.15 : 0.9;
       const sc = base * (0.45 + 0.55 * k);
       const rot = dhash(t.x, t.z, 213) * Math.PI * 2;
-      if (pile.model && this.batch?.add(pile.model, x, y, z, rot, sc, sc, sc, this.neglected)) return true;
+      const model = oldCityModel(pile.model); // the file once it lands, else its stand-in
+      if (model && this.batch?.add(model, x, y, z, rot, sc, sc, sc, this.neglected)) return true;
       // no model (or not loaded yet): a heap in the material's colour
       const hex = MATERIALS[pile.material].colour;
       b.add('sphere', hex, [x, y + 0.12 * sc, z], [0.8 * sc, 0.35 * sc, 0.7 * sc]);
@@ -855,8 +857,11 @@ export class ChunkRenderer {
     if (prop.startsWith('gate:')) {
       // a rubble barricade (or a broken bridge deck): heaped stone and rubble
       const r = new VRng(t.variant * 31 + 7);
-      if (!this.batch?.add('rubble-pile', x, y, z, r.range(0, 6.28), 0.9, 0.9, 0.9, true)) b.add('sphere', PALETTE.stone.dark, [x, y + 0.15, z], [0.95, 0.45, 0.9]);
-      this.batch?.add('stone-block', x + r.range(-0.25, 0.25), y, z + r.range(-0.25, 0.25), r.range(0, 6.28), 0.5, 0.5, 0.5, true);
+      const sp = setPieceAt(t.x, t.z);
+      const name = sp?.kind === 'gate' ? GATE_MODELS[sp.gate.kind] : 'barricade';
+      const model = oldCityModel(name); // the file once it lands, else its stand-in
+      if (!model || !this.batch?.add(model, x, y, z, r.range(0, 6.28), 0.9, 0.9, 0.9, true)) b.add('sphere', PALETTE.stone.dark, [x, y + 0.15, z], [0.95, 0.45, 0.9]);
+      if (name === 'barricade' && model !== 'barricade') this.batch?.add('stone-block', x + r.range(-0.25, 0.25), y, z + r.range(-0.25, 0.25), r.range(0, 6.28), 0.5, 0.5, 0.5, true);
       return true;
     }
     if (prop.startsWith('keeper:')) return true;
@@ -1410,6 +1415,20 @@ export class ChunkRenderer {
     const f = t.feature ?? 'lawn';
     const r = new VRng(t.variant * 7919 + 13);
     const dead = DEAD[f] ?? DEAD.lawn;
+    // E21.26: the Landing's jetty: its model (once it lands) from the first plank, else procedural planks on posts
+    if (t.level !== undefined && onJetty(t.x, t.z)) {
+      const J = LANDING.jetty;
+      const model = oldCityModel('jetty');
+      if (model === 'jetty') {
+        if (t.x === J.x && t.z === J.z) this.batch?.add('jetty', J.x + J.w / 2, h - 0.1, J.z + J.d / 2, 0, 1, 1, 1);
+        return;
+      }
+      const sea = PALETTE.ground.sea;
+      this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
+      for (let i = 0; i < 4; i++) b.add('box', i % 2 ? PALETTE.wood.mid : PALETTE.wood.dark, [x, h + 0.06, z - 0.375 + i * 0.25], [0.98, 0.05, 0.22]);
+      if (t.x === J.x || t.x === J.x + J.w - 1) b.add('cylinder', PALETTE.wood.deep, [t.x === J.x ? x - 0.42 : x + 0.42, h - 0.25, z], [0.09, 0.7, 0.09]);
+      return;
+    }
     // E21.4: the Old City's open sea: deep water, never restored
     if (t.blocked && f === 'water') {
       const sea = PALETTE.ground.sea;

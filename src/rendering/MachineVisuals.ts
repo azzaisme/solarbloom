@@ -15,7 +15,7 @@ import { treeGeo } from './TreeGen';
 import { machineRunning } from './FaunaPlan';
 import { arcPath, ball, bezier, dome, latheAuto, matOf, part, rbox, rcyl, ring, setMat, tube } from './MachineParts';
 import { cultivatorDock } from './CultivatorVisuals';
-import { MODELS } from './Models';
+import { oldCityModel, MODELS } from './Models';
 
 interface MachineView {
   /** E21.6: how full the Old City fountain may get (a trickle at tier 1) */
@@ -80,9 +80,9 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   droneHub: ['drone-hub', 1.0],
   reservoirGarden: ['reservoir-basin', 0.55],
   relay: ['bloom-relay', 0.72],
-  // E21: the Storage Chest and the Reclaimer reuse existing models
-  chest: ['crate', 0.66],
-  reclaimer: ['ac-unit', 1.1],
+  // E21: the Storage Chest and the Reclaimer (data/oldcity MODEL_NAMES; a stand-in until the files land)
+  chest: ['storage-chest', 0.66],
+  reclaimer: ['reclaimer', 1.1],
 };
 /** The Mother Tree's collar model: its scale (the planter fits the procedural ring, radius 0.85) and planter top (model metres). */
 const MotherCollar = { scale: 1.12, top: 0.84 };
@@ -94,11 +94,11 @@ const LANDMARK_MODELS: Record<string, [string, number]> = {
   mast: ['signal-mast', 0.6],
   clock: ['clock-tower', 0.62],
   hall: ['market-hall', 0.46],
-  // E21.4: the Old City's own landmarks, from existing models
+  // E21.4: the Old City's own landmarks (data/oldcity MODEL_NAMES; a stand-in until the files land)
   sealock: ['lock-gate', 0.62],
-  greenhouse: ['skyline-dome', 0.5],
-  observatory: ['satellite-dish', 0.7],
-  spire: ['skyline-tower', 0.9],
+  greenhouse: ['great-greenhouse', 0.5],
+  observatory: ['sky-observatory', 0.7],
+  spire: ['solar-spire', 0.9],
 };
 
 const orbOn = () => mat(PALETTE.orbLit, { emissive: PALETTE.coreGlow, emissiveIntensity: 1.6 });
@@ -1120,7 +1120,7 @@ export class MachineVisuals {
     if (v.m.type === 'motherTree') return this.motherCollar(v);
     const pick = v.m.type === 'core' ? LANDMARK_MODELS[this.landmarkKind(v.m)] : MACHINE_MODELS[v.m.type];
     if (!pick) return;
-    const e = MODELS.instantiateMerged(pick[0]);
+    const e = MODELS.instantiateMerged(oldCityModel(pick[0]) ?? pick[0]); // E21: a new model, or its stand-in
     if (!e) return;
     if (v.fountain) {
       // The park fountain: the hand-built model is its dry look; the flowing three-tier fountain replaces it on waking.
