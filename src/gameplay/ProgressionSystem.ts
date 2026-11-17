@@ -93,12 +93,18 @@ export class ProgressionSystem {
    */
   parkStage(): number {
     if (!this.homeIsPark) return 0;
+    // E21.6: in the Old City the park cheers up toward tier 1's 60 tiles, and is awake from tier 1
+    if (this.sim.oldCity) {
+      if ((this.sim.state.salvage?.tier ?? 0) >= 1) return 4;
+      return Math.min(3, Math.floor((this.sim.areas.counts(PARK).restored / 60) * 4 + 1e-9));
+    }
     if (this.sim.state.progression.coreActivated) return 4;
     const k = this.sim.areas.counts(PARK).restored / TUNING.park.restoredTiles;
     return Math.min(3, Math.floor(k * 4 + 1e-9));
   }
 
   coreReady(): boolean {
+    if (this.sim.oldCity) return false; // E21.6: the Old City's fountain is woken by its tier-1 delivery
     return !this.sim.state.progression.coreActivated && this.requirements().every((r) => r.done);
   }
 

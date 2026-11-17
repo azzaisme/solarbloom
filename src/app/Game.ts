@@ -9,6 +9,7 @@ import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
 import type { BuildableType, DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
+import { TIERS } from '../data/salvage';
 import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
@@ -438,6 +439,7 @@ export class Game {
     }
     if (state.progression.coreActivated) this.machines.setCoreState('awake', true);
     else if (this.sim.progression.coreReady()) this.machines.setCoreState('ready');
+    this.applyFountainLook(true); // E21.6
 
     this.wireEvents();
     this.cloudWall.sync();
@@ -3156,6 +3158,16 @@ export class Game {
       this.sfx.chainEnd(10);
     });
     b.on('rooftop.coreRestored', () => this.playCoreSequence());
+    // E21.6: the Old City's fountain tiers: tier 1 is the water returning (the old fountain sequence); later tiers a toast
+    b.on('fountain.tier', ({ tier }) => {
+      this.applyFountainLook(false);
+      this.celebrateTier(tier);
+      if (tier === 1) return this.playCoreSequence();
+      const t = TIERS[tier - 1];
+      this.hud.toast(`⛲ ${t.name}!<small>${t.gives.join(' · ')}</small>`, 'gold', 6);
+      this.sfx.fanfare();
+      this.save();
+    });
     // City 10.4: a pulse arcs from one Bloom Relay to the next, landing as a ring.
     b.on('relay.city', ({ from, to, travel }) => {
       const a = this.posOf(from);
@@ -3380,6 +3392,31 @@ export class Game {
 
   // ───────────────────────── core sequence ─────────────────────────
 
+  /** E21.6: the Old City fountain shows its tier (dry, trickle, flowing, lit, in bloom). */
+  private applyFountainLook(instant: boolean) {
+    const tier = this.sim.state.salvage?.tier ?? 0;
+    const park = this.sim.areas.landmark(PARK);
+    if (!park || tier < 1) return;
+    this.machines.setFountainLook(park.id, TIERS[tier - 1].look, instant);
+  }
+
+  /** E21.6: a short celebration per tier: rings and sparks from the fountain, a fanfare. */
+  private celebrateTier(tier: number) {
+    const park = this.sim.areas.landmark(PARK);
+    if (!park) return;
+    const [x, y, z] = this.sim.grid.tileWorld(this.sim.grid.get(GROUND, park.x + 1, park.z + 1)!);
+    const at = new pc.Vec3(x - 0.5, y + 0.3, z - 0.5);
+    for (let i = 0; i < 2 + tier; i++)
+      this.tweens.add(0.01, () => {}, {
+        delay: i * 0.3,
+        done: () => {
+          this.vfx.ring(at, i % 2 ? PALETTE.gold : PALETTE.coreGlow, 2 + i * 1.6, 1.1);
+          this.vfx.burst(new pc.Vec3(at.x, at.y + 1, at.z), 16, { up: 4, speed: 2, size: 0.07, life: 1.4 });
+        },
+      });
+    this.sfx.fanfare();
+  }
+
   private playCoreSequence() {
     this.cinematic = true;
     this.select(undefined);
@@ -3408,7 +3445,8 @@ export class Game {
       if (!this.cinematic) return;
       this.cinematic = false;
       this.hud.cinematic(false);
-      this.hud.toast('🌫️ The fog rolls back!<small>The park now grows +25% biomass, and the fountain filled your ✨ Bloom Frenzy: fire it at the fog’s edge. Restore the areas around it and wake their landmarks.</small>', 'gold', 7);
+      if (this.sim.oldCity) this.hud.toast('⛲ Water returns!<small>Bloombot can Pry now, and build. Rubble blocks the avenues north, east and west: pry one open.</small>', 'gold', 7);
+      else this.hud.toast('🌫️ The fog rolls back!<small>The park now grows +25% biomass, and the fountain filled your ✨ Bloom Frenzy: fire it at the fog’s edge. Restore the areas around it and wake their landmarks.</small>', 'gold', 7);
       this.save();
     };
     this.tweens.add(0.01, () => {}, { delay: TUNING.core.sequenceSeconds, done: () => this.cinematicEnd?.() });

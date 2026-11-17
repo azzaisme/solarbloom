@@ -5,7 +5,8 @@ import type { Hud } from '../ui/Hud';
 import type { MachineData, MaterialId } from '../core/types';
 import { GROUND } from '../core/GameState';
 import { MATERIALS, SALVAGE } from '../data/salvage';
-import { flyUp, OldCityPanel, storageAct, storageHtml } from '../ui/OldCityPanel';
+import { flyUp, fountainHtml, OldCityPanel, storageAct, storageHtml } from '../ui/OldCityPanel';
+import { PARK } from '../core/Areas';
 
 /** What the game lends the Old City controller (kept small, so Game.ts changes little). */
 export interface OldCityHost {
@@ -44,6 +45,7 @@ export class OldCityController {
       host.sound('salvage', e.material);
       this.panel.refresh();
     });
+    host.sim.bus.on('fountain.tier', () => this.panel.close());
     host.sim.bus.on('pack.full', (e) => host.hud.toast(`Your ${MATERIALS[e.material].name} stack is full<small>Put some in storage at the fountain or a chest.</small>`, '', 2.6));
   }
 
@@ -138,6 +140,11 @@ export class OldCityController {
       }
       return true;
     }
+    // E21.6: the fountain opens its delivery panel (with a way to the store)
+    if (occupant?.type === 'core' && this.sim.areas.areaOf(occupant) === PARK) {
+      this.openFountain();
+      return true;
+    }
     if (occupant && (occupant.type === 'chest' || this.isStoreLandmark(occupant))) {
       this.openStorage();
       return true;
@@ -177,6 +184,17 @@ export class OldCityController {
   private isStoreLandmark(m: MachineData): boolean {
     if (m.type !== 'core') return false;
     return this.sim.inventory.accessPoints().some((p) => p.x === m.x && p.z === m.z && p.roofId === m.roofId);
+  }
+
+  openFountain() {
+    this.host.sound('click');
+    this.panel.open(
+      () => fountainHtml(this.sim),
+      (act) => {
+        if (act === 'storage') return this.openStorage('Storage — at the fountain');
+        if (act === 'giveAll' && this.sim.fountain.giveAll() > 0) this.host.sound('deliver');
+      },
+    );
   }
 
   openStorage(title = 'Storage') {

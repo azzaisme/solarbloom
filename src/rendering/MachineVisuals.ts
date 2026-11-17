@@ -18,6 +18,8 @@ import { cultivatorDock } from './CultivatorVisuals';
 import { MODELS } from './Models';
 
 interface MachineView {
+  /** E21.6: how full the Old City fountain may get (a trickle at tier 1) */
+  fountainCap?: number;
   m: MachineData;
   root: pc.Entity;
   body: pc.Entity;
@@ -152,6 +154,9 @@ function solarPanel(parent: pc.Entity, w: number, d: number, cols: number, rows:
 }
 
 /** The fountain's two looks: `dry` shows until it wakes, `wet` and `lush` after; `k` is how far it has woken (0–1). */
+/** E21.6: the fountain's tier looks: how full a trickle is, and how much the lit and blooming looks glow and grow. */
+const FOUNTAIN_LOOK = { trickle: 0.35, litHalo: 1.45, bloomHalo: 1.8, bloomBeds: 1.35, litGlow: 1.7, trimGlow: 0.35 };
+
 interface FountainFx {
   k: number;
   trim: pc.StandardMaterial;
@@ -1645,6 +1650,41 @@ export class MachineVisuals {
   }
 
   /** Core look: dormant / ready (pulsing gold) / awakened. */
+  /**
+   * E21.6: the Old City fountain's five looks, one per tier: dry (0), a trickle (1), flowing (2), lit (3, 4: the
+   * sprout and rims glow), in bloom (5: the beds overflow). Each later look eases in from the one before.
+   */
+  setFountainLook(machineId: string, look: 'dry' | 'trickle' | 'flowing' | 'lit' | 'bloom', instant = false) {
+    const v = this.views.get(machineId);
+    if (!v?.fountain || look === 'dry') return;
+    const cap = look === 'trickle' ? FOUNTAIN_LOOK.trickle : 1;
+    v.fountainCap = cap;
+    if (!v.root.tags.has('awake')) {
+      this.applyCoreState(v, 'awake', instant);
+    } else {
+      const f = v.fountain;
+      const k0 = f.k;
+      this.tweens.add(instant ? 0.01 : 1.6, (k) => this.fountainWake(v, k0 + (cap - k0) * k));
+    }
+    const lit = look === 'lit' || look === 'bloom';
+    const halo = look === 'bloom' ? FOUNTAIN_LOOK.bloomHalo : lit ? FOUNTAIN_LOOK.litHalo : 1;
+    const lush = look === 'bloom' ? FOUNTAIN_LOOK.bloomBeds : 1;
+    this.tweens.add(instant ? 0.01 : 1.8, (k) => {
+      const f = v.fountain!;
+      const h = 0.62 * Math.max(0.0001, f.k) * (1 + (halo - 1) * k);
+      f.halo.setLocalScale(h, h, h);
+      const b = Math.max(0.0001, f.k) * (1 + (lush - 1) * k);
+      f.lush.setLocalScale(b, b, b);
+      if (lit && v.coreMat) {
+        v.coreMat.emissiveIntensity = 0.85 + (FOUNTAIN_LOOK.litGlow - 0.85) * k;
+        v.coreMat.update();
+        f.trim.emissive = new pc.Color().lerp(new pc.Color(0, 0, 0), color(PALETTE.gold), FOUNTAIN_LOOK.trimGlow * k);
+        f.trim.update();
+      }
+    });
+    if (v.batched) this.batch(v);
+  }
+
   setCoreState(state: 'dormant' | 'ready' | 'awake', instant = false, roofId = GROUND) {
     const v = this.coreView(roofId);
     if (v) this.applyCoreState(v, state, instant);
@@ -1692,7 +1732,7 @@ export class MachineVisuals {
         v.coreMat!.emissive = new pc.Color().lerp(lit, color(PALETTE.leafFin), k);
         v.coreMat!.emissiveIntensity = 0.85;
         v.coreMat!.update();
-        this.fountainWake(v, k0 + (1 - k0) * k);
+        this.fountainWake(v, (k0 + (1 - k0) * k) * (v.fountainCap ?? 1));
       }, { done: () => (f.dry.enabled = false) });
       return;
     }

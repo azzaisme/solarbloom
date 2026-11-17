@@ -121,3 +121,29 @@ export function storageAct(sim: Sim, act: string, arg: string) {
 function seen(sim: Sim, m: MaterialId): boolean {
   return m === 'scrap' || m === 'seeds' || !!sim.state.salvage?.seen?.includes(`mat:${m}`);
 }
+
+// ───────────── the fountain's delivery panel (E21.6) ─────────────
+
+/** HTML of the fountain panel: the next tier's name, each material given / needed, what it unlocks. */
+export function fountainHtml(sim: Sim): string {
+  const f = sim.fountain;
+  const t = f.next();
+  if (!t) return `<h2>⛲ The fountain</h2><p>The fountain is in full bloom.</p><div class="oc-row"><button data-act="storage">Storage</button></div>`;
+  const rows = (Object.entries(t.delivery) as [MaterialId | 'biomass', number][])
+    .filter(([k]) => k !== 'biomass')
+    .map(([k, need]) => {
+      const m = k as MaterialId;
+      const got = f.given(m);
+      const have = sim.inventory.available(m);
+      const left = f.remaining(m);
+      return `<div class="oc-need ${left ? '' : 'done'}"><span>${MATERIALS[m].icon} ${MATERIALS[m].name}</span><span>${got}/${need}${left ? ` · you have ${have}` : ' ✅'}</span></div>`;
+    })
+    .join('');
+  const c = f.condition(t);
+  const canGive = (Object.keys(t.delivery) as MaterialId[]).some((m) => f.remaining(m) > 0 && sim.inventory.available(m) > 0);
+  return `<h2>⛲ Tier ${t.tier}: ${escHtml(t.name)}</h2>
+    <h3>Bring</h3>${rows}
+    <div class="oc-need ${c.done ? 'done' : ''}"><span>${escHtml(c.label)}</span><span>${Math.min(c.have, c.need)}/${c.need}${c.done ? ' ✅' : ''}</span></div>
+    <h3>It brings</h3><p class="oc-soft">${t.gives.map(escHtml).join(' · ')}</p>
+    <div class="oc-row"><button data-act="giveAll" ${canGive ? '' : 'disabled'}>Give all I have</button><button data-act="storage">Storage</button></div>`;
+}

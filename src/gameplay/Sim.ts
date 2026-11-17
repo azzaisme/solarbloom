@@ -38,6 +38,7 @@ import { CultivatorSystem } from './CultivatorSystem';
 import { Inventory, type BotAt } from './Inventory';
 import { SalvageSystem } from './SalvageSystem';
 import { GateSystem } from './GateSystem';
+import { FountainSystem } from './FountainSystem';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -86,6 +87,8 @@ export class Sim {
   readonly salvage: SalvageSystem;
   /** E21.5: gates (old-city rules). */
   readonly gates: GateSystem;
+  /** E21.6: the fountain's tiers and deliveries (old-city rules). */
+  readonly fountain: FountainSystem;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -132,6 +135,7 @@ export class Sim {
     this.inventory = new Inventory(this);
     this.salvage = new SalvageSystem(this);
     this.gates = new GateSystem(this);
+    this.fountain = new FountainSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
@@ -268,6 +272,7 @@ export class Sim {
     this.cat.tick();
     this.events.tick();
     this.progression.tick();
+    this.fountain.tick();
     this.milestones.tick();
     this.ecosystem.tick();
     this.metrics.tick(dt);
