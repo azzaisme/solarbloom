@@ -35,7 +35,7 @@ export const ACTIONS: readonly { id: Action; label: string; pad: boolean }[] = [
   { id: 'down', label: 'Move down', pad: false },
   { id: 'left', label: 'Move left', pad: false },
   { id: 'right', label: 'Move right', pad: false },
-  { id: 'sprint', label: 'Sprint', pad: true },
+  { id: 'sprint', label: 'Hover (sprint)', pad: true },
   { id: 'pulse', label: 'Pulse / confirm', pad: true },
   { id: 'interact', label: 'Interact / inspect', pad: true },
   { id: 'tray', label: 'Build tray', pad: true },

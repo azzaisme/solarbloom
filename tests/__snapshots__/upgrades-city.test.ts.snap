@@ -5,6 +5,7 @@ exports[`upgrades drawer grouped by system (City 14.4) > the city drawer: Pulse,
   {
     "cards": [
       "⚡ Efficient Pulse: Pulse energy cost −25%",
+      "🚀 Hover: Hold Shift (or the right trigger) to hover a little off the ground and move faster",
       "💠 Pulse Reach: Sprout: each pulse restores up to 9 tiles around it for free",
       "🌟 Overcharge: Every 6th pulse is Overcharged: it restores everything within 2 tiles",
       "🌾 Harvest Burst: Harvest Sunlight also gathers 4 s of your steady biomass income",
