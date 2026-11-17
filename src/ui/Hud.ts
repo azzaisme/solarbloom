@@ -15,6 +15,7 @@ import { SEED_CORE_MACHINES } from '../gameplay/ProgressionSystem';
 import { ICONS, GROUP_ICONS, LOGO_MARK, MACHINE_ICONS, hasEmoji, iconize, installIconDefs, plain } from './Icons';
 import { WORLD_EVENT_INFO } from '../gameplay/WorldEventSystem';
 import { advisorStep, calmToast } from './Pace';
+import { Prompt } from './Prompt';
 
 /** Phase 5 E14: `super:<type>` places a Superstructure Core of that family. */
 export type SuperTool = `super:${'solar' | 'condenser' | 'pollinator' | 'droneHub'}`;
@@ -125,6 +126,8 @@ export interface Settings {
   bindingsV?: number;
   /** E22.1: what hotbar slots 1–9 hold (tool ids; '' is empty) */
   hotbar?: string[];
+  /** E22.2: holds (salvage, pry) need Interact held; false turns them into a single press. Default on. */
+  holdToAct?: boolean;
 }
 
 import { hudHeight, hudWidth, toHud, ui } from './UiScale';
@@ -162,6 +165,8 @@ export class Hud {
   private comboTimer = 0;
   private upgradesOpen = false;
   settings: Settings;
+  /** E22.2: the one prompt at the bottom centre */
+  readonly prompt: Prompt;
 
   constructor(
     private sim: Sim,
@@ -173,6 +178,7 @@ export class Hud {
     installIconDefs();
     this.root.innerHTML = iconize(this.template());
     this.wire();
+    this.prompt = new Prompt(this.root);
     $(this.root, '#backpack h2 button').addEventListener('click', () => this.toggleBackpack(false));
     $(this.root, '#plotPicker h2 button').addEventListener('click', () => this.closePlotPicker());
   }
