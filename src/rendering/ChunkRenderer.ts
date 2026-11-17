@@ -2222,13 +2222,13 @@ export class ChunkRenderer {
     const id = s.areas.map.areaOfCell(x, z);
     const fog = s.areas.fog(id);
     if (fog === 'cleared') return 0;
-    if (fog === 'hidden') return 0.95;
+    if (fog === 'hidden') return 1; // hidden and sealed areas: a solid wall of fog (owner, 18 Nov 2026)
     const t = s.grid.peek(GROUND, x, z);
     if (!t) return s.areas.density(id);
     if (t.ground === 'restored' || t.ground === 'growing') return 0;
     if (id === 'park') return 0;
-    if (s.areas.canTouch(t)) return 0.3;
-    return 0.35 + 0.6 * s.areas.density(id);
+    if (s.areas.canTouch(t)) return 0.4;
+    return 0.5 + 0.5 * s.areas.density(id);
   }
 
   private buildFog(v: ChunkView) {
@@ -2256,11 +2256,13 @@ export class ChunkRenderer {
     const col: number[] = [];
     const idx: number[] = [];
     const h = this.sim.grid.layer(GROUND)!.height - (v.sunk ? SINK : 0);
+    // Denser fog (owner, 18 Nov 2026): three thicker sheets (one on Simple fog), stacked higher.
     const sheets = this.lowFog
-      ? [{ y: 0.5, alpha: 0.82, tint: [112, 121, 132] }]
+      ? [{ y: 0.5, alpha: 0.95, tint: [112, 121, 132] }]
       : [
-          { y: 0.32, alpha: 0.62, tint: [104, 113, 124] },
-          { y: 0.85, alpha: 0.5, tint: [128, 136, 146] },
+          { y: 0.3, alpha: 0.85, tint: [104, 113, 124] },
+          { y: 0.95, alpha: 0.72, tint: [124, 132, 142] },
+          { y: 1.7, alpha: 0.5, tint: [138, 145, 154] },
         ];
     for (const sh of sheets) {
       const base = pos.length / 3;
@@ -2281,10 +2283,10 @@ export class ChunkRenderer {
     // upward, so the fog-of-war has a side to it when seen from the low close-up camera instead of reading as a
     // flat card. Each cell owns its west and north edges (the border cells cover the chunk seams).
     const tint = this.lowFog ? [112, 121, 132] : [110, 119, 130];
-    const curtainH = this.lowFog ? 1.0 : 1.35;
+    const curtainH = this.lowFog ? 1.4 : 2.2;
     const curtain = (ax: number, az: number, bx: number, bz: number, a: number, ox: number, oz: number) => {
       const base = pos.length / 3;
-      const rows: [number, number][] = [[0.02, 0.55], [curtainH * 0.45, 0.38], [curtainH, 0]];
+      const rows: [number, number][] = [[0.02, 0.85], [curtainH * 0.45, 0.62], [curtainH, 0]];
       for (const [y, k] of rows) {
         const al = Math.round(Math.min(1, a * k) * 255);
         pos.push(ax + ox, h + y, az + oz, bx + ox, h + y, bz + oz);
