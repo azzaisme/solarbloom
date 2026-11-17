@@ -1,6 +1,64 @@
 import { bloomVoice } from '../ui/ChainSummary';
-/** Synthesised sound effects (no audio files). Voice-capped; silent until the first user gesture. */
+/**
+ * Synthesised sound effects plus streamed music and atmos beds. Voice-capped; silent until the first user gesture.
+ * Tracks are CC0 (see CREDITS.md in assets/raw/audio/music and assets/raw/audio/atmos).
+ */
 const PENTA = [0, 2, 4, 7, 9];
+
+const AUDIO_DIR = '../../assets/raw/audio/';
+/** Only the files named here are bundled; the other raw tracks wait for later layers. */
+const TRACK_URLS = import.meta.glob(
+  [
+    '../../assets/raw/audio/music/birds-wind-synth-v2.ogg',
+    '../../assets/raw/audio/music/birds-wind-ambient.ogg',
+    '../../assets/raw/audio/music/kalimba-think-id-stay-clean.ogg',
+    '../../assets/raw/audio/atmos/city-wind.ogg',
+    '../../assets/raw/audio/atmos/city-hum.ogg',
+    '../../assets/raw/audio/atmos/water-flowing.ogg',
+    '../../assets/raw/audio/atmos/crickets.mp3',
+    '../../assets/raw/audio/atmos/brook.wav',
+    '../../assets/raw/audio/atmos/birds-trees.wav',
+  ],
+  { query: '?url', import: 'default', eager: true },
+) as Record<string, string>;
+
+export type V3 = { x: number; y: number; z: number };
+
+/** Every 3D source uses this distance model: full level within `refDistance` of the camera, softer beyond. */
+const SPATIAL: PannerOptions = { panningModel: 'HRTF', distanceModel: 'inverse', rolloffFactor: 1, maxDistance: 300 };
+/** Effects keep their level at normal viewing distance; ambient objects (brook, birds) swell as you zoom in. */
+const FX_REF = 30;
+const AMBIENT_REF = 14;
+/** Bird emitters in the trees nearest the view. */
+export const BIRD_VOICES = 3;
+
+/** 0 below `a`, 1 above `b`, smooth in between. */
+const ramp = (x: number, a: number, b: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * Looping beds, each mixed by how alive the world is (`life`, 0..1). `bus` 'music' follows the Music setting;
+ * 'atmos' is the world's own sound and follows the Sound setting. New layers go here: a file, a bus, a level
+ * curve. Atmos levels also even out the raw files' loudness (wind is loud, crickets very quiet).
+ */
+export const AUDIO_BEDS: { file: string; bus: 'music' | 'atmos'; level: (life: number) => number; spatial?: 'brook' }[] = [
+  // 3D: a babbling brook placed at the clean water nearest the view (level and position from setBrook).
+  { file: 'atmos/brook.wav', bus: 'atmos', level: () => 0, spatial: 'brook' },
+  // The synth-and-birds score: the atmospheric bed under the melody.
+  { file: 'music/birds-wind-synth-v2.ogg', bus: 'music', level: (life) => 0.6 + 0.2 * life },
+  // The kalimba melody (the tune): present from the start, warmer and fuller as the garden grows.
+  { file: 'music/kalimba-think-id-stay-clean.ogg', bus: 'music', level: (life) => 0.55 + 0.45 * life },
+  // Birdsong and wind: silent in the grey city, rising as wildlife comes back.
+  { file: 'music/birds-wind-ambient.ogg', bus: 'music', level: (life) => 1.1 * ramp(life, 0.05, 0.8) },
+  // Dead city: hollow wind and a low hum, receding as the park comes alive (a breath of wind always stays).
+  { file: 'atmos/city-wind.ogg', bus: 'atmos', level: (life) => 0.056 * (1 - 0.8 * ramp(life, 0, 0.6)) },
+  { file: 'atmos/city-hum.ogg', bus: 'atmos', level: (life) => 0.4 * (1 - ramp(life, 0, 0.5)) },
+  // Living park: running water, then insects once the garden is well along.
+  { file: 'atmos/water-flowing.ogg', bus: 'atmos', level: (life) => 0.9 * ramp(life, 0.15, 0.7) },
+  { file: 'atmos/crickets.mp3', bus: 'atmos', level: (life) => 5.2 * ramp(life, 0.35, 1) },
+];
 
 export class Sfx {
   private ctx?: AudioContext;
@@ -20,6 +78,164 @@ export class Sfx {
   layers = 0; // 0..3, grows with restoration
   /** Phase 4 E06: while Bloom Frenzy runs, the pad plays faster and fuller. */
   frenzy = false;
+  /** 0..1, how restored and alive the world is; mixes the wildlife beds in. */
+  life = 0;
+  private beds: { el: HTMLAudioElement; gain: GainNode; bus: 'music' | 'atmos'; level: (life: number) => number; at: number }[] = [];
+  /** The brook's 3D emitter (HRTF), and how much clean water is near the view (0..1). */
+  private brookPanner?: PannerNode;
+  private brookLevel = 0;
+
+  /**
+   * 3D object audio (the web's take on what Atmos does over headphones): the listener sits at the camera, looking
+   * where it looks; spatial sounds are rendered binaurally with HRTF. Call every frame with world coordinates.
+   */
+  setListener(p: { x: number; y: number; z: number }, fwd: { x: number; y: number; z: number }, up: { x: number; y: number; z: number }) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const l = ctx.listener;
+    if (l.positionX) {
+      l.positionX.value = p.x;
+      l.positionY.value = p.y;
+      l.positionZ.value = p.z;
+      l.forwardX.value = fwd.x;
+      l.forwardY.value = fwd.y;
+      l.forwardZ.value = fwd.z;
+      l.upX.value = up.x;
+      l.upY.value = up.y;
+      l.upZ.value = up.z;
+    } else {
+      l.setPosition(p.x, p.y, p.z);
+      l.setOrientation(fwd.x, fwd.y, fwd.z, up.x, up.y, up.z);
+    }
+  }
+
+  /** Where the effect being played happens (set by at()); undefined: an interface sound, centred in the head. */
+  private pos?: V3;
+
+  /**
+   * Plays `play` with every voice it makes placed at `p` in the world, rendered in 3D (HRTF). World sounds (tile
+   * restores, cracks, blooms, builds, drones, the cat) go through here; interface sounds (clicks, errors, coin and
+   * fanfare stingers) are called directly and stay centred. A missing `p` plays centred too.
+   */
+  at(p: V3 | null | undefined, play: (s: this) => void) {
+    const prev = this.pos;
+    this.pos = p ?? undefined;
+    try {
+      play(this);
+    } finally {
+      this.pos = prev;
+    }
+  }
+
+  /** A voice's output: its own HRTF panner at `pos` for a world sound, else straight to the effects bus. */
+  private voiceOut(): AudioNode {
+    const bus = this.sfxGain ?? this.master!;
+    if (!this.pos || !this.ctx) return bus;
+    const p = new PannerNode(this.ctx, { ...SPATIAL, refDistance: FX_REF, positionX: this.pos.x, positionY: this.pos.y, positionZ: this.pos.z });
+    p.connect(bus);
+    return p;
+  }
+
+  /** Birds in the trees: looping voices of one recording, each with its own panner, gain and start offset. */
+  private birds: { gain: GainNode; panner: PannerNode; at: number }[] = [];
+
+  /** Decodes the birds loop once and starts BIRD_VOICES silent emitters (setBirds moves and fades them). */
+  private async startBirds() {
+    const ctx = this.ctx;
+    const url = TRACK_URLS[AUDIO_DIR + 'atmos/birds-trees.wav'];
+    if (!ctx || !this.sfxGain || !url) return;
+    try {
+      const buf = await ctx.decodeAudioData(await (await fetch(url)).arrayBuffer());
+      for (let i = 0; i < BIRD_VOICES; i++) {
+        const src = new AudioBufferSourceNode(ctx, { buffer: buf, loop: true });
+        const gain = new GainNode(ctx, { gain: 0 });
+        const panner = new PannerNode(ctx, { ...SPATIAL, refDistance: AMBIENT_REF });
+        src.connect(gain).connect(panner).connect(this.sfxGain);
+        // Offset each voice through the loop, so three trees never sing the same phrase together.
+        src.start(0, (buf.duration * i) / BIRD_VOICES);
+        this.birds.push({ gain, panner, at: 0 });
+      }
+    } catch {
+      /* no birds: the rest of the soundscape carries on */
+    }
+  }
+
+  /**
+   * Puts the bird voices in these trees (nearest first, up to BIRD_VOICES), `amount` 0..1 each by how grown the
+   * tree is. Voices without a tree fade out where they are.
+   */
+  setBirds(trees: (V3 & { amount: number })[]) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    this.birds.forEach((v, i) => {
+      const tree = trees[i];
+      const level = tree ? 0.35 * Math.max(0, Math.min(1, tree.amount)) : 0;
+      if (tree) {
+        // A silent voice jumps straight to its new tree; a singing one glides there.
+        const glide = v.at < 0.01 ? 0.01 : 0.6;
+        v.panner.positionX.setTargetAtTime(tree.x, t, glide);
+        v.panner.positionY.setTargetAtTime(tree.y, t, glide);
+        v.panner.positionZ.setTargetAtTime(tree.z, t, glide);
+      }
+      if (Math.abs(level - v.at) > 0.005) v.gain.gain.setTargetAtTime(level, t, 1.2);
+      v.at = level;
+    });
+  }
+
+  /** Places the brook at (x, y, z) with `amount` 0..1 of nearby clean water (0 fades it out). */
+  setBrook(amount: number, x: number, y: number, z: number) {
+    this.brookLevel = 0.3 * Math.max(0, Math.min(1, amount));
+    const p = this.brookPanner;
+    if (!p || !this.ctx || amount <= 0) return;
+    const t = this.ctx.currentTime;
+    p.positionX.setTargetAtTime(x, t, 0.3);
+    p.positionY.setTargetAtTime(y, t, 0.3);
+    p.positionZ.setTargetAtTime(z, t, 0.3);
+  }
+
+  /** Starts every bed fading in to its level; update() follows `life` from there. */
+  private startBeds() {
+    const ctx = this.ctx;
+    if (!ctx || !this.musicGain || !this.sfxGain || typeof Audio === 'undefined') return;
+    for (const b of AUDIO_BEDS) {
+      const url = TRACK_URLS[AUDIO_DIR + b.file];
+      if (!url) continue;
+      try {
+        const el = new Audio(url);
+        el.loop = true;
+        el.preload = 'auto';
+        const gain = ctx.createGain();
+        // Fade in to the current level now, so music never waits on the frame loop to become audible.
+        const level = b.spatial === 'brook' ? () => this.brookLevel : b.level;
+        const at = level(this.life);
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.setTargetAtTime(at, ctx.currentTime, 1.5);
+        const out = b.bus === 'music' ? this.musicGain : this.sfxGain;
+        const src = ctx.createMediaElementSource(el).connect(gain);
+        if (b.spatial) {
+          // Inverse distance from the camera: zooming in on the water brings the brook up close.
+          const p = new PannerNode(ctx, { ...SPATIAL, refDistance: AMBIENT_REF });
+          src.connect(p).connect(out);
+          this.brookPanner = p;
+        } else src.connect(out);
+        this.beds.push({ el, gain, bus: b.bus, level, at });
+      } catch {
+        /* a bed that cannot play is skipped; the synth pad covers for missing music */
+      }
+    }
+    this.playBeds('music', this.music);
+    this.playBeds('atmos', !this.muted);
+  }
+
+  /** Beds whose bus is switched off are paused, not just silenced. */
+  private playBeds(bus: 'music' | 'atmos', on: boolean) {
+    for (const b of this.beds) {
+      if (b.bus !== bus) continue;
+      if (on) void b.el.play().catch(() => {});
+      else b.el.pause();
+    }
+  }
 
   unlock() {
     if (this.ctx) {
@@ -41,11 +257,14 @@ export class Sfx {
     } catch {
       this.ctx = undefined;
     }
+    this.startBeds();
+    void this.startBirds();
   }
 
   setMuted(m: boolean) {
     this.muted = m;
     if (this.sfxGain && this.ctx) this.sfxGain.gain.setTargetAtTime(m ? 0 : this.sfxVolume, this.ctx.currentTime, 0.05);
+    this.playBeds('atmos', !m);
   }
 
   /** Volumes 0..1 for effects and music (Settings sliders). */
@@ -59,6 +278,7 @@ export class Sfx {
   setMusic(on: boolean) {
     this.music = on;
     if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(on ? 0.22 * this.musicVolume : 0, this.ctx.currentTime, 0.2);
+    this.playBeds('music', on);
   }
 
   private tone(freq: number, dur: number, opts: { type?: OscillatorType; vol?: number; attack?: number; glide?: number; delay?: number; dest?: AudioNode } = {}) {
@@ -77,10 +297,14 @@ export class Sfx {
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(v, t0 + (opts.attack ?? 0.01));
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    o.connect(g).connect(opts.dest ?? this.sfxGain ?? this.master);
+    const out = opts.dest ?? this.voiceOut();
+    o.connect(g).connect(out);
     o.start(t0);
     o.stop(t0 + dur + 0.05);
-    o.onended = () => this.voices--;
+    o.onended = () => {
+      this.voices--;
+      if (out instanceof PannerNode) out.disconnect();
+    };
   }
 
   private noise(dur: number, vol: number, freq: number) {
@@ -98,9 +322,13 @@ export class Sfx {
     f.frequency.exponentialRampToValueAtTime(freq * 3, ctx.currentTime + dur);
     const g = ctx.createGain();
     g.gain.value = vol;
-    src.connect(f).connect(g).connect(this.sfxGain ?? this.master);
+    const out = this.voiceOut();
+    src.connect(f).connect(g).connect(out);
     src.start();
-    src.onended = () => this.voices--;
+    src.onended = () => {
+      this.voices--;
+      if (out instanceof PannerNode) out.disconnect();
+    };
   }
 
   note(step: number, base = 523.25) {
@@ -226,9 +454,21 @@ export class Sfx {
     }
   }
 
-  /** Gentle generative pad; layers grow with the garden. */
+  /**
+   * Music and atmos beds fade toward their level for the current `life`. The generative pad now plays only during
+   * Bloom Frenzy (its faster, fuller pulse marks the event), or always if no music bed could load.
+   */
   update(dt: number) {
-    if (!this.ctx || !this.musicGain || !this.music) return;
+    if (!this.ctx || !this.musicGain) return;
+    for (const b of this.beds) {
+      const v = b.level(this.life);
+      // Relative step, so very quiet beds (the wind) still follow small changes.
+      if (Math.abs(v - b.at) <= 0.02 * Math.max(v, b.at)) continue;
+      b.at = v;
+      b.gain.gain.setTargetAtTime(v, this.ctx.currentTime, 2.5);
+    }
+    if (!this.music) return;
+    if (this.beds.some((b) => b.bus === 'music') && !this.frenzy) return;
     this.musicTimer -= dt;
     if (this.musicTimer > 0) return;
     this.musicTimer = this.frenzy ? 1.2 : 2.4; // Phase 4 E06: Bloom Frenzy doubles the music's pace

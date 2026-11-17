@@ -1,7 +1,8 @@
 import { big, fmt, type Big } from '../core/Big';
 import { HOME } from '../gameplay/ProgressionSystem';
 import * as pc from 'playcanvas';
-import { Sfx } from '../audio/Sfx';
+import { BIRD_VOICES, Sfx } from '../audio/Sfx';
+import { treeSpot, treeStage } from '../rendering/TreePlacement';
 import { formatCost, formatPriceHtml, RES_ICON } from '../core/Economy';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
@@ -509,6 +510,63 @@ export class Game {
     if (s !== 'auto') return s;
     this.autoTier ??= detectTier(this.app.graphicsDevice);
     return this.autoTier;
+  }
+
+  private brookScan = 0;
+  /**
+   * Puts the brook's 3D emitter at the clean (restored) water around the view, weighted toward the closest
+   * tiles; how much water there is sets its level. No clean water nearby: the brook fades out.
+   */
+  private placeBrook() {
+    const f = this.camera.target;
+    const R = 14;
+    let w = 0, x = 0, z = 0;
+    for (let tz = Math.floor(f.z - R); tz <= f.z + R; tz++) {
+      for (let tx = Math.floor(f.x - R); tx <= f.x + R; tx++) {
+        const t = this.sim.grid.get(GROUND, tx, tz);
+        if (!t || t.blocked || t.occupantId || t.feature !== 'water' || t.ground !== 'restored') continue;
+        const d = Math.hypot(tx + 0.5 - f.x, tz + 0.5 - f.z);
+        if (d >= R) continue;
+        const k = (1 - d / R) ** 2;
+        w += k;
+        x += k * (tx + 0.5);
+        z += k * (tz + 0.5);
+      }
+    }
+    if (w > 0) this.sfx.setBrook(Math.min(1, w / 3), x / w, 0, z / w);
+    else this.sfx.setBrook(0, 0, 0, 0);
+  }
+
+  /**
+   * 3D birds: up to BIRD_VOICES grown trees (stage 2+) nearest the view, at least 4 tiles apart so the voices
+   * spread round the listener, each placed in its crown and louder the bigger the tree.
+   */
+  private placeBirds() {
+    const f = this.camera.target;
+    const R = 16;
+    const found: { x: number; y: number; z: number; d: number; amount: number }[] = [];
+    const h = this.sim.grid.layer(GROUND)?.height ?? 0;
+    for (let tz = Math.floor(f.z - R); tz <= f.z + R; tz++) {
+      for (let tx = Math.floor(f.x - R); tx <= f.x + R; tx++) {
+        const t = this.sim.grid.get(GROUND, tx, tz);
+        if (!t || t.feature === 'water') continue;
+        const stage = treeStage(t);
+        if (!stage || stage < 2) continue;
+        const area = this.sim.areas.areaOf(t);
+        const spot = area ? treeSpot(t, this.sim.areas.info(area).type) : undefined;
+        if (!spot) continue;
+        const d = Math.hypot(tx + 0.5 - f.x, tz + 0.5 - f.z);
+        if (d >= R) continue;
+        found.push({ x: tx + 0.5, y: h + 1.4 * spot.scale * (stage / 4), z: tz + 0.5, d, amount: (stage - 1) / 3 });
+      }
+    }
+    found.sort((a, b) => a.d - b.d);
+    const picked: typeof found = [];
+    for (const c of found) {
+      if (picked.length >= BIRD_VOICES) break;
+      if (picked.every((q) => Math.hypot(q.x - c.x, q.z - c.z) >= 4)) picked.push(c);
+    }
+    this.sfx.setBirds(picked);
   }
 
   private setVolume(k: 'sfxVolume' | 'musicVolume', v: number) {
@@ -2025,7 +2083,7 @@ export class Game {
         // Look 6.4: the slab fractures under your tap: a short, punchy shake and a burst of grit.
         this.vfx.burst(p, 8, { up: 1.1, speed: 1.6, size: 0.045, life: 0.6, hex: PALETTE.debris });
         if (!this.settings.reducedMotion) this.camera.shake(0.035);
-        this.sfx.pulse();
+        this.sfx.at(p, (q) => q.pulse());
       } else if (source === 'broad') this.vfx.ring(p, PALETTE.eyeCyan, 0.8, 0.45);
       else if (source === 'condenser') this.vfx.ring(p, PALETTE.water, 0.8, 0.5);
       else if (source === 'overflow') this.vfx.ring(p, '#a8ecff', 0.9, 0.5);
@@ -2074,7 +2132,7 @@ export class Game {
       }
       if (manual && this.clock - this.lastRestoreSound > 0.06) {
         this.lastRestoreSound = this.clock;
-        this.sfx.restored(this.restoreSoundIdx++);
+        this.sfx.at(p, (q) => q.restored(this.restoreSoundIdx++));
       }
       for (const n of s.grid.neighbors(tile)) this.grid.refresh(n, true); // neighbours may have softened
       if (this.selected) this.inspectTimer = 0;
@@ -2086,7 +2144,7 @@ export class Game {
       this.vfx.burst(p, 7, { up: 1.2, speed: 1.2, size: 0.04, life: 0.5, hex: PALETTE.debris });
       this.vfx.ring(p, '#c8ffa8', 0.6, 0.25);
       if (!this.settings.reducedMotion) this.camera.shake(0.02);
-      this.sfx.stage('crack');
+      this.sfx.at(p, (q) => q.stage('crack'));
     });
     // Look 6.10: each restore stage has its own sound as it plays (rate-limited, so chains layer, never roar).
     const stageSounds = (tile: TileData) => {
@@ -2096,7 +2154,7 @@ export class Game {
       if (now - this.stageSoundAt < 150) return;
       this.stageSoundAt = now;
       const S = TUNING.transitions.restoreStages;
-      const at = (share: number, kind: Parameters<typeof this.sfx.stage>[0]) => this.tweens.add(0.01, () => {}, { delay: Math.max(0, tr.t0 + tr.d * share - s.time), done: () => this.sfx.stage(kind) });
+      const at = (share: number, kind: Parameters<typeof this.sfx.stage>[0]) => this.tweens.add(0.01, () => {}, { delay: Math.max(0, tr.t0 + tr.d * share - s.time), done: () => this.sfx.at(this.tileVec(tile), (q) => q.stage(kind)) });
       at(0, 'crack');
       at(S.heave[0] + 0.02, 'grind');
       at(S.heave[0] + 0.1, 'creak');
@@ -2116,7 +2174,7 @@ export class Game {
       const p = this.tileVec(tile, 0.3);
       this.vfx.burst(p, 12 + level * 4, { up: 2.4, size: 0.07 });
       this.vfx.ring(this.tileVec(tile), PALETTE.pink, 0.9, 0.5);
-      this.sfx.nurture(level);
+      this.sfx.at(p, (q) => q.nurture(level));
     });
     b.on('resource.gain', ({ kind, amount, tileId, reason }) => {
       if (amount.lt(0.05)) return;
@@ -2144,7 +2202,7 @@ export class Game {
       this.vfx.ring(p, PALETTE.white, machine.size * 1.1, 0.6);
       this.vfx.burst(p, 16, { up: 3, size: 0.06 });
       this.camera.shake(0.05);
-      this.sfx.build();
+      this.sfx.at(p, (q) => q.build());
       if ((machine.tier ?? 1) >= 3) return; // a superstructure's foundation: its own messages (super.stage)
       const first = s.state.machines.filter((m) => m.type === machine.type && !m.starter).length === 1;
       const msg: Partial<Record<MachineData['type'], string>> = {
@@ -2190,7 +2248,7 @@ export class Game {
       const p = new pc.Vec3(w[0], w[1], w[2]);
       if (stage < 3) {
         this.vfx.ring(p, PALETTE.white, machine.size * 1.2, 0.6);
-        this.sfx.build();
+        this.sfx.at(p, (q) => q.build());
         this.hud.toast(`🏗️ ${esc(d.name)}: ${stage === 1 ? 'foundation laid' : 'assembled'}<small>Next: ${SuperSystem.stageName(stage)} · ${formatCost(s.supers.nextCost(machine)!)} (fixed price, no timer)</small>`, undefined, 3.5);
       } else {
         // Built: unfolding machinery, light spreading out in rings, a crescendo. The first one is an event.
@@ -2362,7 +2420,11 @@ export class Game {
       if (d) this.drones.add(d, true);
     });
     b.on('drone.despawned', ({ droneId }) => this.drones.remove(droneId));
-    b.on('drone.jobStarted', ({ droneId }) => this.sfx.drone(s.state.drones.find((x) => x.id === droneId)?.role));
+    b.on('drone.jobStarted', ({ droneId }) => {
+      const d = s.state.drones.find((x) => x.id === droneId);
+      const w = d && this.sim.drones.worldOf(d);
+      this.sfx.at(w && { x: w[0], y: w[1], z: w[2] }, (q) => q.drone(d?.role));
+    });
     b.on('drone.roleChanged', () => {
       this.drones.sync(); // drones between jobs take their new look now; the rest as they finish
       this.renderInspect();
@@ -2386,7 +2448,7 @@ export class Game {
       }
       if (id) this.cat.hide(id, true);
       this.hud.hideTip();
-      this.sfx.meow();
+      this.sfx.at(p, (q) => q.meow());
       setTimeout(() => this.sfx.fanfare(), 250);
       // Rarer cats are named in words (and shaped differently), never told apart by colour alone.
       const label = variant === 'rainbow' ? '🌈 RAINBOW CAT FOUND!' : variant === 'golden' ? '👑 GOLDEN CAT FOUND!' : '🐱 LUCKY CAT FOUND!';
@@ -2440,8 +2502,8 @@ export class Game {
     });
     b.on('cat.stash', () => {
       // A soft hint that something lucky is still waiting, never a pointer.
-      this.sfx.meow(true);
       const p = this.cat.targetWorld(this.sim.state.cat.active?.id);
+      this.sfx.at(p, (q) => q.meow(true));
       if (p) this.vfx.burst(p, 6, { up: 1.5, size: 0.04, speed: 0.4 });
     });
     b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Surge ×${TUNING.cat.frenzyMult} for ${Math.round(seconds)}s`));
@@ -2509,7 +2571,7 @@ export class Game {
         for (let i = 0; i < 3; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.15, done: () => this.vfx.ring(p, i % 2 ? '#a8ecff' : PALETTE.water, 1.4 + i * 0.9, 0.7) });
         this.vfx.burst(new pc.Vec3(p.x, p.y + 0.3, p.z), 24, { up: 3.2, speed: 1.6, size: 0.07 });
       }
-      this.sfx.pulse();
+      this.sfx.at(p, (q) => q.pulse());
       this.camera.shake(0.04);
       if ((s.state.progression.overflows ?? 0) <= 1) this.hud.toast(`⛲ Reservoir Overflow!<small>Water spills into the dry planters: they bloom lush (×${TUNING.neighbourhood.reservoir.lushMult} 🌿 for a while).</small>`, 'gold', 3.5);
       else this.hud.feed('⛲ Overflow! Dry tiles burst into lush bloom');
@@ -2614,7 +2676,7 @@ export class Game {
       const t = s.grid.byTileId(ev.target);
       if (t && (ev.type === 'RESTORE' || ev.type === 'GROW' || ev.type === 'LUSH')) {
         this.tileFx.flash(t, combo >= 100 ? '#ff5fb8' : '#ffb81f', 0.45, 0.9);
-        this.sfx.bloom(combo);
+        this.sfx.at(this.tileVec(t), (q) => q.bloom(combo));
       }
       if (combo >= 2) this.hud.combo(combo);
       return;
@@ -2633,7 +2695,7 @@ export class Game {
         if (from && to && ev.cause !== 'motherTree' && ev.cause !== 'canopy')
           this.vfx.arc(from, to, ev.cause === 'overflow' ? PALETTE.water : ev.cause === 'relay' ? PALETTE.coreGlow : combo >= 5 ? PALETTE.pink : PALETTE.flowerCore, 0.5);
         if (combo >= 2) this.hud.combo(combo);
-        this.sfx.bloom(combo);
+        this.sfx.at(t && this.tileVec(t), (q) => q.bloom(combo));
         break;
       }
       case 'CORRIDOR':
@@ -2655,7 +2717,7 @@ export class Game {
         break;
       case 'PRODUCE_WATER':
         if (to) this.vfx.ring(to, PALETTE.water, 1.4, 0.6);
-        this.sfx.pulse();
+        this.sfx.at(to, (q) => q.pulse());
         break;
       case 'CHARGE':
         if (from && to && !this.settings.reducedMotion) this.vfx.arc(from, to, '#7cf7c8', 0.35);
@@ -3027,7 +3089,17 @@ export class Game {
     // Look 6.10: a working tiller near the view hums.
     if (!this.paused && this.camera.zoom > 0.9) {
       const f = this.camera.target;
-      if (this.sim.cultivators.working().some((t) => Math.abs(t.x - f.x) < 10 && Math.abs(t.z - f.z) < 8)) this.sfx.stage('hum');
+      const tiller = this.sim.cultivators.working().find((t) => Math.abs(t.x - f.x) < 10 && Math.abs(t.z - f.z) < 8);
+      if (tiller) this.sfx.at(this.tileVec(tiller), (q) => q.stage('hum'));
+    }
+    // 3D audio: the listener rides the camera; the brook sits at the clean water near the view.
+    const camE = this.camera.entity;
+    this.sfx.setListener(camE.getPosition(), camE.forward, camE.up);
+    this.brookScan -= dt;
+    if (this.brookScan <= 0) {
+      this.brookScan = 0.25;
+      this.placeBrook();
+      this.placeBirds();
     }
     this.drones.update(this.paused || this.hiddenPause ? 0 : dt); // drone personality freezes with the game
     this.cat.update(dt);
@@ -3084,7 +3156,9 @@ export class Game {
     this.look.update(dt);
     this.updateTreeCursor(dt);
     this.hud.update(dt);
-    this.sfx.layers = Math.min(3, Math.floor(this.sim.progression.restoredCount(HOME) / 12));
+    const restored = this.sim.progression.restoredCount(HOME);
+    this.sfx.layers = Math.min(3, Math.floor(restored / 12));
+    this.sfx.life = Math.min(1, restored / 48);
     this.sfx.update(dt);
 
     if (this.selected) {
@@ -3101,7 +3175,9 @@ export class Game {
       this.meowTimer -= dt;
       if (this.meowTimer <= 0) {
         this.meowTimer = 30 + Math.random() * 20;
-        this.sfx.meow(true);
+        const spots = this.sim.cat.spots();
+        // The hint meow comes from where a cat actually hides, so a listener can turn toward it.
+        this.sfx.at(this.cat.targetWorld(spots[Math.floor(Math.random() * spots.length)].id), (q) => q.meow(true));
       }
     }
     this.updateAreaLabels();
