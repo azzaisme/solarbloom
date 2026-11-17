@@ -237,6 +237,7 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   motherTree: 'tree',
   reservoirGarden: 'fountain',
   relay: 'relay',
+  cultivator: 'carrot', // the tiller: its tray slot showed 'undefined' without one
   core: 'sparkle',
 };
 
