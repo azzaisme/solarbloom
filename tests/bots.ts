@@ -105,7 +105,7 @@ function* botRun(opts: BotOptions): Generator<void, BotReport> {
   const mode = opts.mode ?? 'active';
   const actionEvery = opts.actionEvery ?? 3;
   const sim = new Sim(opts.state ?? createInitialState(opts.seed));
-  sim.cat.anchorView = () => 'visible';
+  sim.cat.anchorView = () => 'offscreen';
   if (opts.noEvents) sim.events.tick = () => {};
   const s = sim.state;
   const earned: Record<ResourceKind, number> = { energy: 0, water: 0, biomass: 0 };

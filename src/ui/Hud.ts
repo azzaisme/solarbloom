@@ -189,7 +189,7 @@ export class Hud {
       <div id="quick" role="toolbar" aria-label="Quick actions">
         <button class="rbtn qbtn" id="homeBtn" aria-label="Home: fly to the park (Home)" title="Home (Home key)">${ICONS.home}<span class="qbadge" aria-hidden="true"></span></button>
         <button class="rbtn qbtn" id="catBtn" aria-label="Lucky Cat garden" title="Lucky Cat garden" hidden>${ICONS.garden}<span class="qn" id="catCount">0</span></button>
-        <button class="rbtn qbtn" id="pawBtn" aria-label="Paw prints: show where a cat is hiding" title="Paw prints: a cat is hiding nearby. Tap to look." hidden>${ICONS.paw}<span class="qn" id="pawCount">0</span></button>
+        <button class="rbtn qbtn" id="pawBtn" aria-label="Paw prints: which way a hiding cat went" title="Paw prints: a Lucky Cat is hiding. Which way do they lead?" hidden>${ICONS.paw}<span class="qn" id="pawCount">0</span></button>
       </div>
       <div id="eventBanner" role="status" aria-live="polite" hidden><span class="ei"></span><span class="et"></span><span class="ec"></span><i class="ebar"></i></div>
       <div id="combo"><div id="comboFx" aria-hidden="true"></div><div class="big" id="comboBig" role="status" aria-label="Bloom chain combo"><span class="cic">${ICONS.biomass}</span><span class="cl">Combo</span> <span class="cx">×0</span></div><div class="cbody panel"><ul id="comboParts"></ul><div class="total" id="comboTotal"></div><div id="chainAreas"></div></div><div id="feed"></div></div>

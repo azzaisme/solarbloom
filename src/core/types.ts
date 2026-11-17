@@ -207,7 +207,7 @@ export interface CatSpot {
   anchorId: string;
   spawnedAt: number;
   variant: CatVariant;
-  /** E18.3: a Scout flew close by, so the nook shows its paw-print hint early. */
+  /** E18.3: a Scout flew close by. Unused since E20.1 (#284); kept so older saves load. */
   scouted?: boolean;
 }
 

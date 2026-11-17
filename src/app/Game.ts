@@ -1338,7 +1338,10 @@ export class Game {
     return best;
   }
 
-  /** Phase 5 E15: the 🐾 chip: glide to the longest-hiding hinted cat and say where it is (a hint, not a beacon). */
+  /**
+   * The 🐾 chip. E20.1 (#284): the cat has to be found, so the chip never moves the camera: it says which way the
+   * paw prints lead from bloombot (or the view), and what the cat hides beside. The meow already comes from there.
+   */
   private findCat() {
     const s = this.sim;
     const spot = s.cat
@@ -1348,8 +1351,8 @@ export class Game {
     const a = spot && s.cat.anchor(spot.anchorId);
     if (!spot || !a) return;
     const p = this.cat.anchorWorld(a);
-    this.camera.focus(p.x, 0, p.z, Math.max(this.camera.zoom, 0.9), this.settings.reducedMotion ? 0.01 : 1.2);
-    this.hud.feed(`🐾 Paw prints lead ${a.hint}…`);
+    const [fx, , fz] = this.bot ? this.bot.world() : [this.camera.target.x, 0, this.camera.target.z];
+    this.hud.feed(`🐾 Paw prints lead ${compass(p.x - fx, p.z - fz)}, ${a.hint}…`);
   }
 
   /** Phase 5 E15 (inspect): a cat hiding within a few tiles leaves a note on the tile tooltip. */
@@ -1369,6 +1372,11 @@ export class Game {
     const w = window.innerWidth;
     const h = window.innerHeight;
     if (!s || s.x < 40 || s.y < 40 || s.x > w - 40 || s.y > h - 40) return 'offscreen';
+    // E20.1 (#284): in the close view, a spot far from bloombot is small and hazy: it counts as out of sight.
+    if (this.bot) {
+      const [bx, , bz] = this.bot.world();
+      if (Math.hypot(p.x - bx, p.z - bz) > TUNING.cat.inViewTiles) return 'offscreen';
+    }
     return this.hud.blockedRects().some((r) => s.x > r.left - 16 && s.x < r.right + 16 && s.y > r.top - 16 && s.y < r.bottom + 16) ? 'covered' : 'visible';
   }
 
@@ -2500,12 +2508,6 @@ export class Game {
         `🐱✨ Golden Relay: your next green corridor hop blooms ${this.sim.state.relayBonus} extra tiles`,
       );
     });
-    b.on('cat.stash', () => {
-      // A soft hint that something lucky is still waiting, never a pointer.
-      const p = this.cat.targetWorld(this.sim.state.cat.active?.id);
-      this.sfx.at(p, (q) => q.meow(true));
-      if (p) this.vfx.burst(p, 6, { up: 1.5, size: 0.04, speed: 0.4 });
-    });
     b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Surge ×${TUNING.cat.frenzyMult} for ${Math.round(seconds)}s`));
     b.on('harvest', () => this.sfx.coin());
     b.on('rooftop.coreReady', () => {
@@ -3229,4 +3231,12 @@ function fromCostStrings(c: Partial<Record<ResourceKind, string>>): import('../c
   const o: import('../core/types').Cost = {};
   for (const k of ['energy', 'water', 'biomass'] as const) if (c[k] !== undefined) o[k] = big(c[k]);
   return o;
+}
+
+/** E20.1: a rough direction in words, north up as on the minimap (north is -z, east is +x). */
+export function compass(dx: number, dz: number): string {
+  if (Math.hypot(dx, dz) < 2) return 'right here';
+  const names = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+  const deg = (Math.atan2(dx, -dz) * 180) / Math.PI;
+  return names[((Math.round(deg / 45) % 8) + 8) % 8];
 }
