@@ -70,6 +70,11 @@ import { type Action, Bindings, type Context, FIXED_KEY, keyLabel, migrateBindin
 import { isOldCity, rulesViewFromUrl } from './Rules';
 import { type Candidate, holdFor, pickTarget, promptText } from './Interact';
 import type { PromptModel } from '../ui/Prompt';
+import { Pause, runSimFrame } from './Pause';
+import { Menu, type MenuHeader, type MenuItem } from '../ui/Menu';
+import { type SettingKey, SettingsScreen } from '../ui/SettingsScreen';
+import { settingsRows } from '../ui/SettingsRows';
+import { ACTION, ACTIONS, GROUPS } from './Bindings';
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
@@ -193,9 +198,21 @@ export class Game {
   readonly sfx = new Sfx();
   settings: Settings;
 
-  private acc = 0;
-  paused = false;
-  private hiddenPause = false;
+  /** simulated seconds not yet ticked (runSimFrame) */
+  acc = 0;
+  /** E22.11: one pause with reasons (menu, panel, blur, sleep, padLost); nothing in the world moves while set */
+  readonly pause = new Pause();
+  get paused(): boolean {
+    return this.pause.paused;
+  }
+  /** Tools and tests freeze the game this way (no menu). */
+  set paused(v: boolean) {
+    this.pause.set('menu', v);
+  }
+  /** E22.11: the in-game menu and the shared Settings screen */
+  menu!: Menu;
+  settingsUi!: SettingsScreen;
+  private padFocus?: PadFocus;
   /** City 06.5: simulated seconds still owed after a hitch or a hidden tab, run within the frame budget. */
   catchUpDebt = 0;
   private hiddenAt = 0;
@@ -369,15 +386,10 @@ export class Game {
           if (f) this.botWake(f);
           else this.sim.progression.activateCore();
         },
-        newGame: () => this.newGame(),
-        photoMode: () => this.photo.enter(),
-        setSetting: (k, v) => this.setSetting(k, v),
         activateFrenzy: () => this.sim.frenzy.activate(),
         findCat: () => this.findCat(),
         keyFor: (a) => this.hudKey(a),
         goHome: (attention) => (attention ? this.focusNextArea() : this.focusArea(PARK)),
-        setVolume: (k, v) => this.setVolume(k, v),
-        setGraphics: (v) => this.setGraphics(v),
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
         inspectAt: (id) => {
@@ -408,7 +420,6 @@ export class Game {
           this.renderInspect();
         },
         merge: (action) => (action === 'start' ? this.startMerge() : action === 'confirm' ? this.confirmMerge() : this.cancelMerge()),
-        togglePause: () => this.setPaused(!this.paused),
         districtBloom: (id, replay) => this.playDistrictBloom(id, replay),
         openArea: (id) => this.openArea(id),
         setAreaMode: (id, mode) => {
@@ -430,15 +441,11 @@ export class Game {
           if (this.bot) this.botWake(m);
           else this.wakeLandmark(m);
         },
-        cycleSpeed: () => {
-          this.speed = this.speed === 1 ? 2 : this.speed === 2 ? 3 : 1;
-          this.hud.toast(this.speed === 1 ? '▶ Normal speed' : `⏩ ${this.speed}× speed`, '', 1.4);
-          return this.speed;
-        },
       },
       this.settings,
     );
     this.fly = new FlyText(this.hud.root);
+    this.createMenu();
     this.eco = new EcoBadge(this.sim, (h, k, t) => this.hud.toast(h, k, t));
     this.hud.setTool('pulse');
     this.applySettings();
@@ -493,6 +500,7 @@ export class Game {
         this.oc = new OldCityController(this.oldCityHost());
       }
       const focus = new PadFocus(this.hud.root);
+      this.padFocus = focus;
       bot.padCapture = (i) => !this.padListener && focus.button(i);
       // E19.2: no zoom in play or while building (the right stick's up and down do nothing for now)
       bot.onTurn = (deg) => this.camTurn(deg, 0);
@@ -504,7 +512,6 @@ export class Game {
       // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad).
       const touchOnly = typeof matchMedia !== 'undefined' && !matchMedia('(any-pointer: fine)').matches && navigator.maxTouchPoints > 0;
       if (touchOnly) setTimeout(() => this.hud.toast('Solarbloom needs a keyboard or a gamepad for now<small>Phones and tablets will be supported again later. Connect a controller to play.</small>', 'gold', 12), 900);
-      this.hud.renderControls(this.bindings, (kind, done) => this.listenForBinding(kind, done), () => this.saveBindings());
       this.minimap = new Minimap(this.sim, this.hud.root, (id) => {
         const m = this.sim.state.machines.find((q) => q.id === id);
         return !!m && this.landmarkReady(m);
@@ -542,16 +549,36 @@ export class Game {
     const unlock = () => this.sfx.unlock();
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
+    // E22.11: a hidden page or a window without focus pauses the game (setting, on by default): the time away
+    // is not counted. With the setting off, a hidden tab catches up on return as before (City 06.5).
+    const pauseOnBlur = () => this.settings.pauseOnBlur !== false;
     document.addEventListener('visibilitychange', () => {
-      this.hiddenPause = document.hidden;
       if (document.hidden) {
-        this.hiddenAt = performance.now();
         this.saveNow();
-      } else if (this.hiddenAt) {
-        this.awayFor((performance.now() - this.hiddenAt) / 1000);
-        this.hiddenAt = 0;
+        if (pauseOnBlur()) this.pause.set('blur');
+        else this.hiddenAt = performance.now();
+      } else {
+        if (document.hasFocus()) this.pause.clear('blur');
+        if (this.hiddenAt) {
+          this.awayFor((performance.now() - this.hiddenAt) / 1000);
+          this.hiddenAt = 0;
+        }
       }
     });
+    window.addEventListener('blur', () => pauseOnBlur() && this.pause.set('blur'));
+    window.addEventListener('focus', () => this.pause.clear('blur'));
+    // The pad in use disconnected: open the menu (resuming clears it). The Deck going to sleep pauses too.
+    window.addEventListener('gamepaddisconnected', () => {
+      if (this.bot?.lastInput !== 'pad' || this.menu.isOpen) return;
+      this.openMenu();
+      this.pause.set('padLost');
+      this.menu.note('The controller was disconnected');
+    });
+    desktopApi()?.onPower?.((s) => this.pause.set('sleep', s === 'suspend'));
+    this.pause.onChange = (p) => {
+      document.body.classList.toggle('paused', p);
+      this.applyVolumes();
+    };
     window.addEventListener('beforeunload', () => this.saveNow());
 
     this.app.on('update', (dt: number) => this.update(dt));
@@ -694,7 +721,7 @@ export class Game {
   private setSetting(k: keyof Settings, v: boolean | string | number) {
     (this.settings as unknown as Record<string, unknown>)[k] = v;
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...this.settings, speed: undefined }));
     } catch {
       /* private mode */
     }
@@ -703,7 +730,7 @@ export class Game {
 
   private applySettings() {
     const s = this.settings;
-    this.sfx.setVolumes((s.sfxVolume ?? 100) / 100, (s.musicVolume ?? 100) / 100);
+    this.applyVolumes();
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
     document.body.classList.toggle('contrast', !!s.highContrast);
@@ -724,6 +751,8 @@ export class Game {
       this.app.resizeCanvas();
     }
     this.look.setTier(this.gfxTier);
+    // E22.11: the paused world dims; it blurs too except on the Low and Deck presets (dim only).
+    document.body.classList.toggle('no-blur', this.deck || this.gfxTier === 'low');
     this.hud.gfxTier = this.gfxTier;
     this.hud.gfxDeck = this.deck;
     this.hud.setUiScale(s.uiScale ?? 100);
@@ -804,10 +833,183 @@ export class Game {
     location.reload();
   }
 
-  private setPaused(p: boolean) {
-    this.paused = p;
-    this.hud.setPaused(p);
-    this.hud.toast(p ? '⏸ Paused — the garden waits for you' : '▶ Back to blooming', '', 1.6);
+  /** Freezes or unfreezes the game without the menu (tools, screenshots). */
+  setPaused(p: boolean) {
+    this.pause.set('menu', p);
+  }
+
+  /** E22.11: volumes, with world sound off and the music down to a quiet bed while paused. */
+  private applyVolumes() {
+    const s = this.settings;
+    const quiet = this.pause.paused;
+    this.sfx.setVolumes(quiet ? 0 : (s.sfxVolume ?? 100) / 100, ((s.musicVolume ?? 100) / 100) * (quiet ? 0.3 : 1));
+  }
+
+  // ───────────────────────── E22.11: the menu and Settings ─────────────────────────
+
+  private createMenu() {
+    this.settingsUi = new SettingsScreen(this.hud.root, {
+      settings: this.settings,
+      set: (k, v) => this.changeSetting(k, v),
+      rows: (tab) => [
+        ...settingsRows(tab, { inGame: true, debug: !!this.settings.debug, autoLabel: this.autoLabel(), stats: this.hud.statsHtml() }),
+        // Until the title screen's save slots (E22.12), a new game starts from here, with a second press to confirm.
+        ...(tab === 'game' ? [{ kind: 'button' as const, id: 'newGame', label: this.newGameArmed > performance.now() ? 'Press again to clear your garden' : 'New game', danger: true }] : []),
+      ],
+      button: (id) => {
+        if (id !== 'newGame') return;
+        if (this.newGameArmed > performance.now()) return this.newGame();
+        this.newGameArmed = performance.now() + 4000;
+        this.settingsUi.refresh();
+      },
+      controls: (body) => this.renderControls(body),
+      onClose: () => {
+        this.cancelListen();
+        if (this.menu.isOpen) this.menu.focus('settings');
+      },
+    });
+    this.menu = new Menu(this.hud.root, { desktop: !!desktopApi()?.quit, header: () => this.menuHeader(), choose: (i) => this.menuChoose(i) });
+    this.hud.modalCheck = () => this.menu.isOpen || this.settingsUi.isOpen;
+  }
+
+  private newGameArmed = 0;
+
+  /** "Auto (High)", "Auto (Steam Deck)": what Auto picked, beside it in Settings › Display. */
+  private autoLabel(): string {
+    return this.deck ? 'Auto (Steam Deck)' : `Auto (${this.gfxTier[0].toUpperCase()}${this.gfxTier.slice(1)})`;
+  }
+
+  /** One change from the Settings screen. */
+  private changeSetting(k: SettingKey, v: boolean | number | string) {
+    if (k === 'speed') {
+      this.speed = Number(v) || 1;
+      this.settings.speed = this.speed;
+      return;
+    }
+    if (k === 'sfxVolume' || k === 'musicVolume') return this.setVolume(k, Number(v));
+    if (k === 'gfx') {
+      this.setGraphics(v as GfxSetting);
+      this.settingsUi.refresh();
+      return;
+    }
+    this.setSetting(k, v);
+    if (k === 'debug') {
+      if (!v) this.speed = 1; // fast-forward is a developer tool only
+      this.settingsUi.refresh();
+    }
+  }
+
+  private openMenu() {
+    if (this.photo.active) this.photo.exit();
+    this.hud.toggleTray(false);
+    this.hud.hideTip();
+    this.menu.open();
+    this.pause.set('menu');
+  }
+
+  private closeMenu() {
+    this.settingsUi.close();
+    this.menu.close();
+    this.pause.clear('menu', 'padLost');
+  }
+
+  /** Esc with nothing open, or Menu on the pad. */
+  private toggleMenu() {
+    if (this.menu.isOpen || this.settingsUi.isOpen) this.closeMenu();
+    else this.openMenu();
+  }
+
+  private menuHeader(): MenuHeader {
+    const st = this.sim.state as unknown as { clock?: { day?: number }; day?: number };
+    return { name: this.saveName, region: this.regionName(), day: st.clock?.day ?? st.day, played: this.sim.time };
+  }
+
+  /** E22.12 names saves; until a slot has a name, this. */
+  saveName = 'My garden';
+
+  /** The region bloombot is in, by name. */
+  private regionName(): string {
+    const b = this.bot;
+    const at = b ? b.world() : [this.camera.target.x, 0, this.camera.target.z];
+    if (b && b.pose.roofId !== GROUND) return 'On a rooftop';
+    const id = this.sim.areas.areaOf({ roofId: GROUND, x: Math.floor(at[0]), z: Math.floor(at[2]) });
+    if (!id) return 'The city';
+    return id === PARK ? 'The park' : AREA_TYPES[this.sim.areas.info(id).type].name;
+  }
+
+  private menuChoose(i: MenuItem) {
+    switch (i) {
+      case 'resume':
+        return this.closeMenu();
+      case 'backpack':
+        this.closeMenu();
+        return this.hud.toggleBackpack(true);
+      case 'map':
+        this.closeMenu();
+        if (!this.overviewOn) this.toggleOverview();
+        return;
+      case 'photo':
+        this.closeMenu();
+        return this.photo.enter();
+      case 'settings':
+        return this.settingsUi.open();
+      case 'save':
+        this.saveNow();
+        this.menu.note('Saved');
+        return;
+      case 'title':
+        return this.quitToTitle();
+      case 'desktop':
+        this.saveNow();
+        return desktopApi()?.quit?.();
+    }
+  }
+
+  /** "Quit to title" saves first (nothing in the menu loses progress), then goes to the title screen. */
+  quitToTitle() {
+    this.saveNow();
+    this.resetting = true; // nothing writes after this save
+    location.href = `${location.pathname}?title=1`;
+  }
+
+  /**
+   * Settings › Controls: every action with its key and pad button; choose one and press the new input (E22.4
+   * gives this its two columns, groups and clash questions).
+   */
+  private renderControls(body: HTMLElement) {
+    const b = this.bindings;
+    const row = (a: (typeof ACTIONS)[number]) =>
+      `<div class="ctl-row"><span>${a.label}</span><button class="ctl-key" data-act="${a.id}" data-kind="key" ${a.keys && !b.locked(a.id, 'key') ? '' : 'disabled'}>${[...new Set(b.keys[a.id].map(keyLabel))].join(' / ') || '—'}</button>` +
+      `<button class="ctl-key" data-act="${a.id}" data-kind="pad" ${a.pad && !b.locked(a.id, 'pad') ? '' : 'disabled'}>${a.pad ? padLabel(b.pad[a.id]) : 'stick'}</button></div>`;
+    const list = ACTIONS.filter((a) => !a.classic || !b.oldCity);
+    body.innerHTML = `<p class="ctl-help">Choose an action, then press the new key or button. Esc cancels.</p>${GROUPS.map((g) => `<h3 class="set-h">${g.label}</h3>${list.filter((a) => a.group === g.id).map(row).join('')}`).join('')}<button id="ctlReset" class="ctl-reset">Reset to defaults</button>`;
+    body.querySelectorAll<HTMLButtonElement>('.ctl-key').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        const act = btn.dataset.act as Action;
+        const kind = btn.dataset.kind as 'key' | 'pad';
+        btn.textContent = 'Press a key or button';
+        btn.classList.add('listening');
+        this.listenForBinding(kind, (code) => {
+          if (code !== undefined) {
+            if (kind === 'key') b.bindKey(act, code as string, true);
+            else b.bindButton(act, code as number, true);
+            this.saveBindings();
+          }
+          this.settingsUi.refresh();
+        });
+      }),
+    );
+    body.querySelector('#ctlReset')!.addEventListener('click', () => {
+      b.reset();
+      this.saveBindings();
+      this.settingsUi.refresh();
+    });
+    void ACTION;
+  }
+
+  private cancelListen() {
+    this.keyListener = undefined;
+    this.padListener = undefined;
   }
 
   // ───────────────────────── tools & input ─────────────────────────
@@ -895,7 +1097,8 @@ export class Game {
     window.addEventListener('blur', () => this.heldKeys.clear());
     window.addEventListener('keydown', (e) => {
       this.heldKeys.add(e.code);
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      const field = (e.target instanceof HTMLInputElement && e.target.type !== 'checkbox') || e.target instanceof HTMLSelectElement;
+      if (field && e.code !== FIXED_KEY) return;
       if (this.keyListener) {
         e.preventDefault();
         this.keyListener(e.code);
@@ -916,6 +1119,13 @@ export class Game {
         if (e.code === FIXED_KEY) {
           e.preventDefault();
           if (!e.repeat) this.escape();
+          return;
+        }
+        // E22.11: in a panel the arrow keys move the focus ring, as the d-pad does.
+        const dpad: Record<string, number> = { ArrowUp: 12, ArrowDown: 13, ArrowLeft: 14, ArrowRight: 15 };
+        if (this.panelOpen() && dpad[e.code] !== undefined && this.padFocus && !(e.target as HTMLElement)?.closest?.('[role=tablist]')) {
+          e.preventDefault();
+          this.padFocus.button(dpad[e.code]);
           return;
         }
         const a = this.resolveKey(e.code);
@@ -993,8 +1203,16 @@ export class Game {
       case 'recentre':
         return this.camera.recentre();
       case 'debug':
-        return this.setSetting('debug', !this.settings.debug);
+        return this.changeSetting('debug', !this.settings.debug);
+      case 'prevTab':
+      case 'nextTab':
+        return this.panelTab(a === 'nextTab' ? 1 : -1);
     }
+  }
+
+  /** LB / RB, Q / E: the tabs of the panel on top. */
+  private panelTab(dir: number) {
+    if (this.settingsUi.isOpen) this.settingsUi.tab(dir, true);
   }
 
   /** E22.1: the input contexts in effect now (Bindings: an open panel, build mode, or walking). */
@@ -1015,7 +1233,15 @@ export class Game {
     const a = this.bindings.actionForCode(code, ctx);
     if (a || ctx[0] !== 'panel') return a;
     const w = this.bindings.actionForCode(code, ['world']);
-    return w && PANEL_TOGGLES.has(w) ? w : undefined;
+    return w && this.togglesOpenPanel(w) ? w : undefined;
+  }
+
+  /** The key or button that opened the panel on top closes it again (Tab still moves the focus elsewhere). */
+  private togglesOpenPanel(a: Action): boolean {
+    if (!PANEL_TOGGLES.has(a)) return false;
+    const h = this.hud;
+    const open: Action | undefined = this.settingsUi.isOpen || this.menu.isOpen ? 'menu' : h.backpackOpen ? 'backpack' : h.trayOpen ? 'buildMenu' : h.isUpgradesOpen ? 'upgrades' : undefined;
+    return a === open;
   }
 
   private resolveButton(i: number): Action | undefined {
@@ -1023,7 +1249,7 @@ export class Game {
     const a = this.bindings.actionForButton(i, ctx);
     if (a || ctx[0] !== 'panel') return a;
     const w = this.bindings.actionForButton(i, ['world']);
-    return w && PANEL_TOGGLES.has(w) ? w : undefined;
+    return w && this.togglesOpenPanel(w) ? w : undefined;
   }
 
   /** E22.1: hotbar slots 1–9 take a pinned build card into bloombot's hands (again: put it away). */
@@ -1043,11 +1269,6 @@ export class Game {
   /** E22.1: Pin the next request (E21's requests; until they exist there is nothing to pin). */
   private pinNext() {
     this.hud.toast('No requests to pin yet', '', 2);
-  }
-
-  /** E22.1: Esc / Menu: the menu (E22.11 makes it the real pause and menu). */
-  private toggleMenu() {
-    this.setPaused(!this.paused);
   }
 
   /** E22.1: the walking camera's zoom step (0 closest). `wrap` cycles (the pad); the wheel stops at the ends. */
@@ -1096,14 +1317,14 @@ export class Game {
     this.setSetting('keys', saved.keys as unknown as string);
     if (!render) return;
     this.hud.setKeyMap(this.bot?.lastInput ?? 'keys', this.bindings);
-    this.hud.renderControls(this.bindings, (kind, done) => this.listenForBinding(kind, done), () => this.saveBindings());
     this.botPreviewKey = '';
   }
 
   /** Esc / B: closes or puts away the nearest thing; with nothing to close, Esc (not B) opens the menu. */
   private escape(fromCancel = false) {
-    if (this.mergeSel) this.cancelMerge();
-    else if (this.hud.modalOpen) this.hud.openSettings(false);
+    if (this.settingsUi.isOpen) this.settingsUi.close();
+    else if (this.menu.isOpen) this.closeMenu();
+    else if (this.mergeSel) this.cancelMerge();
     else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
     else if (this.hud.trayOpen) this.hud.toggleTray(false);
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
@@ -1111,7 +1332,7 @@ export class Game {
     else if (this.selected) this.select(undefined);
     else if (this.bot?.walking) this.bot.cancelWalk();
     else if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
-    else if (!fromCancel || this.paused) this.toggleMenu();
+    else if (!fromCancel) this.openMenu();
   }
 
   /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
@@ -4087,25 +4308,8 @@ export class Game {
 
   /** Runs simulation ticks within the frame budget: the frame's own time first, then any catch-up owed. */
   private runSim(dt: number) {
-    const budget = TUNING.catchUp.frameBudgetMs;
     const t0 = performance.now();
-    this.acc += dt * this.speed;
-    let n = 0;
-    while (this.acc >= TUNING.simStep && (n === 0 || performance.now() - t0 < budget)) {
-      this.sim.tick(TUNING.simStep);
-      this.acc -= TUNING.simStep;
-      n++;
-    }
-    // More owed than the budget allows (a slow device at high speed): carry it as catch-up, not a backlog.
-    if (this.acc > 1) {
-      this.catchUpDebt = Math.min(TUNING.catchUp.maxSeconds, this.catchUpDebt + this.acc - TUNING.simStep);
-      this.acc = TUNING.simStep;
-    }
-    while (this.catchUpDebt >= TUNING.simStep && performance.now() - t0 < budget) {
-      this.sim.tick(TUNING.simStep);
-      this.catchUpDebt -= TUNING.simStep;
-    }
-    if (this.catchUpDebt < TUNING.simStep) this.catchUpDebt = 0;
+    runSimFrame(this.sim, this, dt, { pause: this.pause, speed: this.speed, step: TUNING.simStep, budgetMs: TUNING.catchUp.frameBudgetMs, maxCatchUp: TUNING.catchUp.maxSeconds });
     this.simMs = performance.now() - t0;
     this.simMsWorst = Math.max(this.simMsWorst, this.simMs);
   }
@@ -4120,13 +4324,18 @@ export class Game {
     // City 11.4: drones well outside the view fly by the clock (no per-tick moves); near ones fly for real.
     const view = this.city ? this.groundRect() : undefined;
     this.sim.drones.focus = view ? { x: (view.x0 + view.x1) / 2, z: (view.z0 + view.z1) / 2, radius: Math.hypot(view.x1 - view.x0, view.z1 - view.z0) / 2 + 24 } : undefined;
-    if (!this.paused && !this.hiddenPause && !this.hud.modalOpen && !this.photo.frozen) {
+    // E22.11: a full-screen panel (the backpack, Settings) pauses the game while it is open.
+    this.pause.set('panel', this.hud.backpackOpen || this.settingsUi.isOpen);
+    const paused = this.pause.paused;
+    if (!paused && !this.photo.frozen) {
       if (rawDt > TUNING.maxFrameDt && !this.hiddenAt) this.awayFor(Math.min(rawDt, 30) - TUNING.maxFrameDt); // a hitch
       this.runSim(dt);
     }
-    this.tweens.update(dt);
-    this.scene.update(dt);
-    this.grid.update(dt);
+    /** the world's own time: nothing moves while paused (the camera, streaming and the HUD still run) */
+    const wdt = paused ? 0 : dt;
+    this.tweens.update(wdt);
+    this.scene.update(wdt);
+    this.grid.update(wdt);
     const rect = view;
     if (rect) this.grid.stream(rect);
     this.transitions.sync(this.sim.time + Math.min(this.acc, TUNING.simStep));
@@ -4134,8 +4343,8 @@ export class Game {
     detailTextures.step(); // Look 3.1: builds the detail maps a slice per frame after first paint
     const camP = this.camera.entity.getPosition();
     detailTextures.setCamera(camP.x, camP.y, camP.z);
-    this.machines.update(dt, rect);
-    this.tillers.update(this.paused || this.hiddenPause || this.photo.frozen ? 0 : dt);
+    this.machines.update(wdt, rect);
+    this.tillers.update(paused || this.photo.frozen ? 0 : dt);
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.
     if (!this.paused && this.camera.zoom > 0.9) {
@@ -4152,8 +4361,8 @@ export class Game {
       this.placeBrook();
       this.placeBirds();
     }
-    this.drones.update(this.paused || this.hiddenPause || this.photo.frozen ? 0 : dt); // drone personality freezes with the game
-    this.cat.update(dt);
+    this.drones.update(paused || this.photo.frozen ? 0 : dt); // drone personality freezes with the game
+    this.cat.update(wdt);
     // Phase 5 E16: fauna by unlock, capped per quality tier ("Fewer particles" = low).
     const eco = this.sim.ecosystem;
     const quality = this.faunaTier ?? (this.settings.lowVfx ? 'low' : 'high');
@@ -4162,20 +4371,20 @@ export class Game {
     // Fauna live around where the camera looks (the ground rect of a low perspective view reaches far beyond it).
     const ct = this.camera.target;
     const near = rect ? { x0: ct.x - 12, x1: ct.x + 12, z0: ct.z - 12, z1: ct.z + 12 } : undefined;
-    this.butterflies.update(dt, near);
+    this.butterflies.update(wdt, near);
     this.pollinators.enabled = !this.settings.reducedMotion && !ChunkRenderer.still;
     this.pollinators.quality = quality;
-    this.pollinators.update(dt, near);
+    this.pollinators.update(wdt, near);
     this.birds.resident = eco.has('birds');
     this.clouds.happy = eco.has('birds'); // the sky wakes up with the songbirds: sleepy faces on a couple of clouds
-    this.birds.update(dt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
-    this.fauna.update(dt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: !!this.settings.fireflies && !this.settings.highContrast });
-    this.eco?.update(dt);
-    this.tileFx.update(dt);
+    this.birds.update(wdt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
+    this.fauna.update(wdt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: !!this.settings.fireflies && !this.settings.highContrast });
+    this.eco?.update(wdt);
+    this.tileFx.update(wdt);
     this.frameNo++;
-    this.updateChainPresentation(dt);
+    this.updateChainPresentation(wdt);
     if (!this.cinematic) this.checkCozyUnlocks();
-    this.vfx.update(dt);
+    this.vfx.update(wdt);
     // First-tile beacon until the player restores something.
     if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic && !this.photo.active) {
       const tiles = this.sim.progression.tilesFor(HOME);
@@ -4184,10 +4393,7 @@ export class Game {
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
     if (this.bot) {
-      this.bot.update(this.hiddenPause ? 0 : dt);
-      this.updateExploreCamera(this.hiddenPause ? 0 : dt);
-      this.oc?.update(this.hiddenPause ? 0 : dt);
-      this.keepers?.update(this.hiddenPause ? 0 : dt);
+      this.bot.update(wdt); // still reads the pad (the menu's focus ring), but nothing moves
       this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();
@@ -4198,16 +4404,16 @@ export class Game {
     this.camera.update(dt);
     this.sky.clarity += (this.skyClarity() - this.sky.clarity) * Math.min(1, dt * 0.8);
     this.sky.reducedMotion = this.settings.reducedMotion;
-    this.sky.update(dt, this.camera.entity.getPosition(), this.camera.cam.farClip);
+    this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
     this.skyline.clarity = this.sky.clarity;
     this.skyline.reducedMotion = this.settings.reducedMotion;
-    this.skyline.update(dt, this.camera.target, this.camera.entity.getPosition(), this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
+    this.skyline.update(wdt, this.camera.target, this.camera.entity.getPosition(), this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
     this.syncView();
     {
       const c = this.camera;
       const cv = this.app.graphicsDevice.canvas as HTMLCanvasElement;
-      this.cloudWall.update(dt);
-      this.clouds.update(dt, { zoom: c.zoom, yaw: c.yaw, dist: c.dist, viewHeight: c.viewHeight, aspect: cv.clientWidth / Math.max(1, cv.clientHeight), position: c.entity.getPosition(), forward: c.entity.forward });
+      this.cloudWall.update(wdt);
+      this.clouds.update(wdt, { zoom: c.zoom, yaw: c.yaw, dist: c.dist, viewHeight: c.viewHeight, aspect: cv.clientWidth / Math.max(1, cv.clientHeight), position: c.entity.getPosition(), forward: c.entity.forward });
     }
     this.updateMood(dt);
     this.look.update(dt);
@@ -4216,7 +4422,7 @@ export class Game {
     const restored = this.sim.progression.restoredCount(HOME);
     this.sfx.layers = Math.min(3, Math.floor(restored / 12));
     this.sfx.life = Math.min(1, restored / 48);
-    this.sfx.update(dt);
+    this.sfx.update(wdt);
 
     if (this.selected) {
       this.inspectTimer -= dt;
@@ -4240,7 +4446,7 @@ export class Game {
     this.updateAreaLabels();
     this.updateBoostRings(dt);
 
-    this.saveTimer += dt;
+    if (!paused) this.saveTimer += dt; // E22.11: a pause writes nothing (savedAt doesn't move)
     if (this.saveTimer >= TUNING.autosaveSeconds) {
       this.saveTimer = 0;
       this.save();
@@ -4286,6 +4492,11 @@ function fromCostStrings(c: Partial<Record<ResourceKind, string>>): import('../c
   const o: import('../core/types').Cost = {};
   for (const k of ['energy', 'water', 'biomass'] as const) if (c[k] !== undefined) o[k] = big(c[k]);
   return o;
+}
+
+/** E22.11: what the desktop (Steam Deck) build's preload offers the page, if anything. */
+export function desktopApi(): { quit?: () => void; onPower?: (cb: (state: 'suspend' | 'resume') => void) => void; deck?: boolean } | undefined {
+  return (globalThis as { solarbloomDesktop?: { quit?: () => void; onPower?: (cb: (state: 'suspend' | 'resume') => void) => void; deck?: boolean } }).solarbloomDesktop;
 }
 
 /** E20.1: a rough direction in words, north up as on the minimap (north is -z, east is +x). */

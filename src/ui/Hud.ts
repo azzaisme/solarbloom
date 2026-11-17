@@ -52,17 +52,8 @@ export interface HudCallbacks {
   keyFor(a: Action): string;
   /** Look 5.9: the house button: the park, or (when something is ready) the next area that needs attention. */
   goHome(attention: boolean): void;
-  newGame(): void;
-  /** E19.4.1 (#260): open photo mode (from Settings). */
-  photoMode(): void;
-  setSetting(key: keyof Settings, v: boolean | number): void;
-  setVolume(key: 'sfxVolume' | 'musicVolume', v: number): void;
-  /** Look 1.11: the Graphics setting. */
-  setGraphics(v: 'auto' | 'deck' | 'low' | 'medium' | 'high'): void;
   skipCinematic(): void;
   closeInspect(): void;
-  togglePause(): void;
-  cycleSpeed(): number;
   /** City 10.7: set off (or replay) a district bloom. */
   districtBloom(id: string, replay: boolean): void;
   /** Wake a city landmark (by machine id). */
@@ -128,10 +119,14 @@ export interface Settings {
   hotbar?: string[];
   /** E22.2: holds (salvage, pry) need Interact held; false turns them into a single press. Default on. */
   holdToAct?: boolean;
+  /** E22.11: pause when the window loses focus or the page is hidden. Default on. */
+  pauseOnBlur?: boolean;
+  /** E22.11: the developer's game speed (shown with the debug overlay; never saved) */
+  speed?: number;
 }
 
 import { hudHeight, hudWidth, toHud, ui } from './UiScale';
-import { ACTIONS, type Action, type Bindings, keyLabel, padLabel, type SavedBindings } from '../app/Bindings';
+import { type Action, type Bindings, keyLabel, padLabel, type SavedBindings } from '../app/Bindings';
 
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
 
@@ -223,11 +218,6 @@ export class Hud {
       <div id="logo" role="img" aria-label="Solarbloom">${LOGO_MARK}<span class="wm">Solarbloom</span></div>
       <div id="res" role="group" aria-label="Resources">${rows}</div>
       <div id="resInfo" class="panel" role="status" hidden></div>
-      <div id="chips" role="toolbar" aria-label="Game controls">
-        <button class="rbtn" id="pauseBtn" aria-label="Pause" title="Pause (P)">${ICONS.pause}</button>
-        <button class="rbtn" id="speedBtn" aria-label="Game speed: 1×" title="Game speed: 1×">${ICONS.fastForward}<span class="mult">1×</span></button>
-        <button class="rbtn" id="setBtn" aria-label="Settings" title="Settings">${ICONS.settings}</button>
-      </div>
       <div id="obj" class="panel">
         <div class="ohead">
           <span class="oic" aria-hidden="true">${ICONS.biomass}</span>
@@ -278,34 +268,6 @@ export class Hud {
       <div id="backpack" class="drawer panel" aria-label="Backpack"><h2>Backpack <button aria-label="Close backpack">×</button></h2><div id="bpList"></div></div>
       <div id="upgrades" class="drawer panel"><h2>Upgrades <button aria-label="Close upgrades">×</button></h2><p id="upgNext" class="upg-next"></p><div id="upgList"></div></div>
       <div id="inspect" class="panel"></div>
-      <div id="modal"><div class="panel">
-        <h2>Settings</h2>
-        <label>Sound effects <input type="checkbox" data-set="sound"></label>
-        <label>Sound volume <input type="range" min="0" max="100" step="5" data-vol="sfxVolume" aria-label="Sound volume"></label>
-        <label>Music <input type="checkbox" data-set="music"></label>
-        <label>Music volume <input type="range" min="0" max="100" step="5" data-vol="musicVolume" aria-label="Music volume"></label>
-        <label>Graphics <select id="gfxSel" aria-label="Graphics quality"><option value="auto">Auto</option><option value="high">High</option><option value="deck">Steam Deck</option><option value="medium">Medium</option><option value="low">Low (phones)</option></select></label>
-        <label>Interface size <select id="uiScaleSel" aria-label="Interface size"><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option></select></label>
-        <label>High contrast <input type="checkbox" data-set="highContrast"></label>
-        <label>Reduced motion &amp; effects <input type="checkbox" data-set="reducedMotion"></label>
-        <label>Fewer particles &amp; softer sparkles <input type="checkbox" data-set="lowVfx"></label>
-        <label>Simple fog (faster on phones) <input type="checkbox" data-set="lowFog"></label>
-        <label>Fireflies <input type="checkbox" data-set="fireflies"></label>
-        <label>Camera follows big chains <input type="checkbox" data-set="followChains"></label>
-        <label>Show numbers (rates, income, time to afford) <input type="checkbox" data-set="showNumbers"></label>
-        <label>Potter about (no nudges or tips, gentler chains) <input type="checkbox" data-set="potter"></label>
-        <label>Tutorial hints <input type="checkbox" data-set="hints"></label>
-        <label>Camera speed <select id="camSensSel" aria-label="Camera speed"><option value="50">Slow</option><option value="75">Gentle</option><option value="100">Normal</option><option value="150">Quick</option><option value="200">Fast</option></select></label>
-        <label>Invert camera left and right <input type="checkbox" data-set="invertX"></label>
-        <label>Invert camera up and down <input type="checkbox" data-set="invertY"></label>
-        <label>Keep the view where I turn it <input type="checkbox" data-set="noRecentre"></label>
-        <label>Skip region vistas <input type="checkbox" data-set="noVistas"></label>
-        <label>Debug / FPS (F3) <input type="checkbox" data-set="debug"></label>
-        <div id="controlsBox" class="controls"></div>
-        <div class="stats" id="statsBox"></div>
-        <div id="disc"></div>
-        <div class="row"><button id="closeModal">Back to the garden</button><button id="photoBtn">Photo mode</button><button class="danger" id="newGame">New game</button></div>
-      </div></div>
       <div id="cine"><div class="bar t"></div><div class="bar b"></div><div class="title" id="cineTitle"></div><button id="skipBtn">Skip ⏭</button></div>
       <div id="wlabels"></div>
       <div id="fps"></div>
@@ -324,77 +286,21 @@ export class Hud {
       this.hintDismissedStep = this.sim.state.progression.tutorialStep;
       $(r, '#hint').classList.add('hide');
     });
-    $(r, '#setBtn').addEventListener('click', () => this.openSettings(true));
-    $(r, '#speedBtn').addEventListener('click', () => {
-      const sp = this.cb.cycleSpeed();
-      const b = $(r, '#speedBtn');
-      $(b, '.mult').textContent = `${sp}×`;
-      b.classList.toggle('fast', sp !== 1);
-      b.setAttribute('aria-label', `Game speed: ${sp}×`);
-      b.title = `Game speed: ${sp}×`;
-    });
-    $(r, '#catBtn').addEventListener('click', () => this.openSettings(true, true));
+    $(r, '#catBtn').addEventListener('click', () => this.toggleBackpack(true));
     $(r, '#pawBtn').addEventListener('click', () => this.cb.findCat());
     $(r, '#homeBtn').addEventListener('click', () => this.cb.goHome($(r, '#homeBtn').classList.contains('ready')));
     $(r, '#buildToggle').addEventListener('click', () => this.toggleTray());
-    $(r, '#pauseBtn').addEventListener('click', () => this.cb.togglePause());
     $(r, '#objToggle').addEventListener('click', () => {
       const open = $(r, '#obj').classList.toggle('expanded');
       const t = $(r, '#objToggle');
       t.setAttribute('aria-expanded', String(open));
       t.setAttribute('aria-label', open ? 'Hide objective details' : 'Show objective details');
     });
-    $(r, '#closeModal').addEventListener('click', () => this.openSettings(false));
-    $(r, '#photoBtn').addEventListener('click', () => {
-      this.openSettings(false);
-      this.cb.photoMode();
-    });
-    $(r, '#modal').addEventListener('click', (e) => {
-      if (e.target === $(r, '#modal')) this.openSettings(false);
-    });
-    // In-page two-tap confirmation (native confirm() dialogs are blocked in some embeds).
-    let armed = 0;
-    const ng = $<HTMLButtonElement>(r, '#newGame');
-    ng.addEventListener('click', () => {
-      if (Date.now() - armed < 4000) return this.cb.newGame();
-      armed = Date.now();
-      ng.textContent = 'Press again to clear your garden';
-      setTimeout(() => {
-        if (Date.now() - armed >= 4000) ng.textContent = 'New game';
-      }, 4100);
-    });
     $(r, '#skipBtn').addEventListener('click', () => this.cb.skipCinematic());
     $(r, '#catPanel button').addEventListener('click', () => ($(r, '#catPanel').hidden = true));
     $(r, '#introGo').addEventListener('click', () => {
       $(r, '#intro').hidden = true;
       this.sim.state.progression.introSeen = true;
-    });
-    r.querySelectorAll<HTMLInputElement>('[data-vol]').forEach((inp) => {
-      const key = inp.dataset.vol as 'sfxVolume' | 'musicVolume';
-      inp.value = String(this.settings[key] ?? 100);
-      inp.addEventListener('input', () => this.cb.setVolume(key, Number(inp.value)));
-    });
-    const gfx = $<HTMLSelectElement>(r, '#gfxSel');
-    gfx.value = this.settings.gfx ?? 'auto';
-    gfx.addEventListener('change', () => this.cb.setGraphics(gfx.value as 'auto' | 'deck' | 'low' | 'medium' | 'high'));
-    const uis = $<HTMLSelectElement>(r, '#uiScaleSel');
-    uis.value = String(this.settings.uiScale ?? 100);
-    uis.addEventListener('change', () => this.cb.setSetting('uiScale', Number(uis.value)));
-    const cs = $<HTMLSelectElement>(r, '#camSensSel'); // E21.22
-    cs.value = String(this.settings.camSensitivity ?? 100);
-    cs.addEventListener('change', () => this.cb.setSetting('camSensitivity', Number(cs.value)));
-    r.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => {
-      const key = inp.dataset.set as keyof Settings;
-      inp.checked = !!this.settings[key];
-      inp.addEventListener('change', () => this.cb.setSetting(key, inp.checked));
-    });
-    $(r, '#statsBox').addEventListener('click', (e) => {
-      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-copy-timings]');
-      if (!b) return;
-      const text = this.sim.metrics.summary();
-      const done = () => (b.textContent = '✓ Copied');
-      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, () => (b.textContent = 'Copy failed: select the text above'));
-      else b.textContent = 'Select the text above to copy';
     });
     // Phase 5 E12: tap a resource for where its numbers come from (tap again, or elsewhere, to close).
     $(r, '#res').addEventListener('click', (e) => {
@@ -726,46 +632,11 @@ export class Hud {
     this.root.classList.toggle('pad-keys', mode === 'pad');
   }
 
-  /**
-   * Bloombot (G.16): the Controls section of Settings: every action with its key and gamepad button. Clicking
-   * one waits for the next key (or button) and binds it; a key another action had moves over to it (a swap).
-   */
-  renderControls(b: Bindings, listen: (kind: 'key' | 'pad', done: (code: string | number | undefined) => void) => void, changed: () => void) {
-    const box = this.root.querySelector<HTMLElement>('#controlsBox');
-    if (!box) return;
-    const row = (a: (typeof ACTIONS)[number]) =>
-      `<div class="ctl-row"><span>${a.label}</span><button class="ctl-key" data-act="${a.id}" data-kind="key" ${a.keys && !b.locked(a.id, 'key') ? '' : 'disabled'}>${[...new Set(b.keys[a.id].map(keyLabel))].join(' / ') || '—'}</button>` +
-      `<button class="ctl-key" data-act="${a.id}" data-kind="pad" ${a.pad && !b.locked(a.id, 'pad') ? '' : 'disabled'}>${a.pad ? padLabel(b.pad[a.id]) : 'stick'}</button></div>`;
-    box.innerHTML = `<h3>Controls</h3><p class="ctl-help">Choose an action, then press the new key or button. Esc cancels.</p>${ACTIONS.filter((a) => !a.classic || !b.oldCity).map(row).join('')}<button id="ctlReset" class="ctl-reset">Reset to defaults</button>`;
-    box.querySelectorAll<HTMLButtonElement>('.ctl-key').forEach((btn) =>
-      btn.addEventListener('click', () => {
-        const act = btn.dataset.act as Action;
-        const kind = btn.dataset.kind as 'key' | 'pad';
-        btn.textContent = 'Press…';
-        btn.classList.add('listening');
-        listen(kind, (code) => {
-          if (code !== undefined) {
-            if (kind === 'key') b.setKey(act, code as string);
-            else b.setButton(act, code as number);
-            changed();
-          }
-          this.renderControls(b, listen, changed);
-        });
-      }),
-    );
-    box.querySelector('#ctlReset')!.addEventListener('click', () => {
-      b.reset();
-      changed();
-    });
-  }
-
   /** Steam Deck (#243): HUD size, 100 / 125 / 150%. Zooms the whole HUD; see UiScale. */
   setUiScale(percent: number) {
     const pct = percent === 125 || percent === 150 ? percent : 100;
     ui.scale = pct / 100;
     this.root.style.zoom = pct === 100 ? '' : String(ui.scale);
-    const sel = this.root.querySelector<HTMLSelectElement>('#uiScaleSel');
-    if (sel) sel.value = String(pct);
   }
 
   private backpackIsOpen = false;
@@ -850,6 +721,7 @@ export class Hud {
       card('🦋', `Wildlife: ${fauna.length}`, fauna.length ? fauna.join(', ') : 'Wildlife arrives as gardens grow.'),
       '<h3 class="bp-h">Plots and decorations</h3>',
       ...this.backpackPlots(),
+      this.discoveriesHtml(),
     ];
     $(this.root, '#bpList').innerHTML = iconize(parts.join(''));
   }
@@ -884,24 +756,18 @@ export class Hud {
     return this.upgradesOpen;
   }
 
-  openSettings(open: boolean, focusCats = false) {
-    $(this.root, '#modal').classList.toggle('open', open);
-    if (open) {
-      this.renderDiscoveries();
-      if (focusCats) $(this.root, '#disc').scrollIntoView({ block: 'nearest' });
-      const s = this.sim.state.stats;
-      const avg = s.chains ? (s.chainEffects / s.chains).toFixed(1) : '—';
-      $(this.root, '#statsBox').innerHTML = iconize(
-        `Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Avg: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b> 🐱 · Play time: <b>${Math.floor(this.sim.time / 60)}m</b>` +
-        `<details style="margin-top:6px"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre><button class="copyT" data-copy-timings>📋 Copy</button></details>`);
-      this.root.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => (inp.checked = !!this.settings[inp.dataset.set as keyof Settings]));
-      $<HTMLSelectElement>(this.root, '#gfxSel').value = this.settings.gfx ?? 'auto';
-      const auto = $<HTMLOptionElement>(this.root, '#gfxSel option[value=auto]');
-      auto.textContent = this.gfxDeck ? 'Auto (Steam Deck)' : this.gfxTier ? `Auto (${this.gfxTier[0].toUpperCase()}${this.gfxTier.slice(1)})` : 'Auto';
-    }
+  /** E22.11: the game's stats for Settings › Game (numbers live in panels, never over the world). */
+  statsHtml(): string {
+    const s = this.sim.state.stats;
+    const avg = s.chains ? (s.chainEffects / s.chains).toFixed(1) : '—';
+    return iconize(
+      `<p class="set-stats">Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Average: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b></p>` +
+        `<details class="set-timings"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre></details>`,
+    );
   }
 
-  private renderDiscoveries() {
+  /** Phase 5 E15: the Lucky Cat discoveries (in the backpack since E22.11 moved Settings into the menu). */
+  discoveriesHtml(): string {
     const d = this.sim.cat.discoveries();
     const names: Record<string, string> = { luckyHarvest: 'Lucky Harvest', solarFrenzy: 'Solar Surge', megaBloom: 'Mega Bloom', droneParty: 'Drone Party', jackpot: 'Jackpot', goldenRelay: 'Golden Relay', catsGarden: "Cat's Garden", fogWhisker: 'Fog Whisker' };
     // In the city, finds are grouped by area type (the city is endless; the list never grows).
@@ -916,11 +782,13 @@ export class Hud {
     const rewards = Object.entries(names)
       .map(([k, n]) => `<span class="rw ${d.rewards[k as keyof typeof d.rewards] ? 'got' : ''}">${n}${d.rewards[k as keyof typeof d.rewards] ? ` ×${d.rewards[k as keyof typeof d.rewards]}` : ''}</span>`)
       .join('');
-    $(this.root, '#disc').innerHTML = iconize(`<h3>🐱 Lucky Cat discoveries · ${d.found}</h3><ul class="spots">${spots}</ul><div class="rws">${rewards}</div>`);
+    return `<h3 class="bp-h">🐱 Lucky Cat discoveries · ${d.found}</h3><div id="disc"><ul class="spots">${spots}</ul><div class="rws">${rewards}</div></div>`;
   }
 
+  /** E22.11: the menu or Settings is open (the game sets how it knows). */
+  modalCheck: () => boolean = () => false;
   get modalOpen() {
-    return $(this.root, '#modal').classList.contains('open');
+    return this.modalCheck();
   }
 
   resourceRect(kind: ResourceKind): DOMRect {
@@ -1150,15 +1018,7 @@ export class Hud {
   /** Rectangles the Lucky Cat must never hide under. */
   blockedRects(): DOMRect[] {
     const extra = [...this.root.querySelectorAll<HTMLElement>('#minimap:not([hidden])')].map((e) => e.getBoundingClientRect());
-    return ['#logo', '#res', '#obj', '#hotbar', '#hint', '#combo', '#quick', '#chips'].map((s) => $(this.root, s).getBoundingClientRect()).concat(extra);
-  }
-
-  setPaused(p: boolean) {
-    const b = $(this.root, '#pauseBtn');
-    this.set('pause', b, 'html', p ? ICONS.play : ICONS.pause);
-    b.classList.toggle('on', p);
-    b.setAttribute('aria-label', p ? 'Resume' : 'Pause');
-    b.title = p ? 'Resume (P)' : 'Pause (P)';
+    return ['#logo', '#res', '#obj', '#hotbar', '#hint', '#combo', '#quick', '#prompt'].map((s) => $(this.root, s).getBoundingClientRect()).concat(extra);
   }
 
   setDebug(text: string | null) {
