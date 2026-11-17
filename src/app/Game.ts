@@ -65,7 +65,7 @@ import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
 import type { MergePlan } from '../gameplay/MergeSystem';
 import { EventBus } from './EventBus';
 import { BotController } from './BotController';
-import { type Action, Bindings, type Context, FIXED_KEY, keyLabel, migrateBindings, padLabel, SLOTS } from './Bindings';
+import { type Action, Bindings, type Context, FIXED_KEY, keyLabel, migrateBindings, SLOTS } from './Bindings';
 import { isOldCity, rulesViewFromUrl } from './Rules';
 import { type Candidate, holdFor, pickTarget, promptText } from './Interact';
 import type { PromptModel } from '../ui/Prompt';
@@ -73,7 +73,6 @@ import { Pause, runSimFrame } from './Pause';
 import { Menu, type MenuHeader, type MenuItem } from '../ui/Menu';
 import { type SettingKey, SettingsScreen } from '../ui/SettingsScreen';
 import { settingsRows } from '../ui/SettingsRows';
-import { ACTION, ACTIONS, GROUPS } from './Bindings';
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
@@ -87,7 +86,8 @@ import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
 import { padStick, PhotoMode } from './PhotoMode';
 import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
 import { HOTBAR_DEFAULT } from '../ui/Hotbar';
-import { actionGlyph, GLYPH_SETTINGS, GlyphTracker, padName } from '../ui/Glyphs';
+import { actionGlyph, GlyphTracker, padName, type PadStyle } from '../ui/Glyphs';
+import { ControlsTable } from '../ui/ControlsTable';
 import { LOOK } from '../data/look';
 
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Thriving (full bloom)', 'Radiant'];
@@ -486,10 +486,21 @@ export class Game {
         const a = this.resolveButton(i);
         if (a && a !== 'sprint') this.doAction(a);
       };
-      bot.onButton = (i) => this.padListener?.(i);
+      // E22.4: the rebinding screen takes the next press; that press then does nothing else.
+      bot.onButton = (i) => {
+        if (!this.padListener) return;
+        this.padListener(i);
+        this.swallowPad = i;
+      };
       const focus = new PadFocus(this.hud.root);
       this.padFocus = focus;
-      bot.padCapture = (i) => !this.padListener && focus.button(i);
+      bot.padCapture = (i) => {
+        if (this.swallowPad === i) {
+          this.swallowPad = undefined;
+          return true;
+        }
+        return !this.padListener && focus.button(i);
+      };
       // E19.2: no zoom in play or while building (the right stick's up and down do nothing for now)
       bot.onTurn = (deg) => this.camera.orbit(deg);
       this.glyphs.deckBuild = !!desktopApi()?.deck;
@@ -943,45 +954,30 @@ export class Game {
     location.href = `${location.pathname}?title=1`;
   }
 
-  /**
-   * Settings › Controls: every action with its key and pad button; choose one and press the new input (E22.4
-   * gives this its two columns, groups and clash questions).
-   */
+  /** E22.4: Settings › Controls (src/ui/ControlsTable.ts). */
   private renderControls(body: HTMLElement) {
-    const b = this.bindings;
-    const row = (a: (typeof ACTIONS)[number]) =>
-      `<div class="ctl-row"><span>${a.label}</span><button class="ctl-key" data-act="${a.id}" data-kind="key" ${a.keys && !b.locked(a.id, 'key') ? '' : 'disabled'}>${[...new Set(b.keys[a.id].map(keyLabel))].join(' / ') || '—'}</button>` +
-      `<button class="ctl-key" data-act="${a.id}" data-kind="pad" ${a.pad && !b.locked(a.id, 'pad') ? '' : 'disabled'}>${a.pad ? padLabel(b.pad[a.id]) : 'stick'}</button></div>`;
-    const list = ACTIONS.filter((a) => !a.classic || !b.oldCity);
-    const gs = this.settings.glyphs ?? 'auto';
-    body.innerHTML = `<label class="set-row" for="set-glyphs"><span>Button pictures</span><select id="set-glyphs" data-key="glyphs">${GLYPH_SETTINGS.map(([v, l]) => `<option value="${v}" ${v === gs ? 'selected' : ''}>${l}</option>`).join('')}</select></label><p class="ctl-help">Choose an action, then press the new key or button. Esc cancels.</p>${GROUPS.map((g) => `<h3 class="set-h">${g.label}</h3>${list.filter((a) => a.group === g.id).map(row).join('')}`).join('')}<button id="ctlReset" class="ctl-reset">Reset to defaults</button>`;
-    body.querySelectorAll<HTMLButtonElement>('.ctl-key').forEach((btn) =>
-      btn.addEventListener('click', () => {
-        const act = btn.dataset.act as Action;
-        const kind = btn.dataset.kind as 'key' | 'pad';
-        btn.textContent = 'Press a key or button';
-        btn.classList.add('listening');
-        this.listenForBinding(kind, (code) => {
-          if (code !== undefined) {
-            if (kind === 'key') b.bindKey(act, code as string, true);
-            else b.bindButton(act, code as number, true);
-            this.saveBindings();
-          }
-          this.settingsUi.refresh();
-        });
-      }),
-    );
-    body.querySelector('#ctlReset')!.addEventListener('click', () => {
-      b.reset();
-      this.saveBindings();
-      this.settingsUi.refresh();
-    });
-    void ACTION;
+    new ControlsTable(body, {
+      bindings: this.bindings,
+      padStyle: () => {
+        const st = this.glyphs.style;
+        const set = this.settings.glyphs;
+        return st !== 'keys' ? st : set === 'xbox' || set === 'ps' || set === 'deck' ? set : (this.glyphs.padType as PadStyle);
+      },
+      glyphSetting: () => this.settings.glyphs ?? 'auto',
+      listen: (kind, done) => this.listenForBinding(kind, done),
+      changed: () => this.saveBindings(),
+    }).render();
   }
+
+  /** the pad button the rebinding screen just took (it does nothing else) */
+  private swallowPad?: number;
+  private listenCleanup?: () => void;
 
   private cancelListen() {
     this.keyListener = undefined;
     this.padListener = undefined;
+    this.listenCleanup?.();
+    this.listenCleanup = undefined;
   }
 
   // ───────────────────────── tools & input ─────────────────────────
@@ -1271,14 +1267,46 @@ export class Game {
   /** G.16: the rebinding screen waits for one key or button. */
   private keyListener?: (code: string) => void;
   private padListener?: (button: number) => void;
-  private listenForBinding(kind: 'key' | 'pad', done: (code: string | number | undefined) => void) {
-    const finish = (v: string | number | undefined) => {
-      this.keyListener = undefined;
-      this.padListener = undefined;
+  /**
+   * E22.4: waits for one input for the rebinding screen. Keyboard column: a key, a mouse button or the wheel
+   * (Esc cancels, Backspace clears). Gamepad column: a pad button (Menu or Esc cancels).
+   */
+  private listenForBinding(kind: 'key' | 'pad', done: (input: string | number | 'clear' | undefined) => void) {
+    this.cancelListen();
+    const finish = (v: string | number | 'clear' | undefined) => {
+      this.cancelListen();
       done(v);
     };
-    this.keyListener = (code) => finish(code === 'Escape' ? undefined : kind === 'key' ? code : undefined);
-    if (kind === 'pad') this.padListener = (i) => finish(i);
+    if (kind === 'key') {
+      this.keyListener = (code) => finish(code === 'Escape' ? undefined : code === 'Backspace' ? 'clear' : code);
+      // Mouse buttons and the wheel, from the next press (the click that chose the cell is already over).
+      setTimeout(() => {
+        if (!this.keyListener) return;
+        const swallow = (e: Event) => {
+          e.preventDefault();
+          e.stopPropagation();
+        };
+        const md = (e: MouseEvent) => {
+          swallow(e);
+          window.addEventListener('click', swallow, { capture: true, once: true });
+          window.addEventListener('contextmenu', swallow, { capture: true, once: true });
+          finish(`Mouse${e.button}`);
+        };
+        const wh = (e: WheelEvent) => {
+          swallow(e);
+          finish('Wheel');
+        };
+        window.addEventListener('mousedown', md, { capture: true });
+        window.addEventListener('wheel', wh, { capture: true, passive: false });
+        this.listenCleanup = () => {
+          window.removeEventListener('mousedown', md, { capture: true });
+          window.removeEventListener('wheel', wh, { capture: true });
+        };
+      }, 0);
+    } else {
+      this.keyListener = (code) => code === 'Escape' && finish(undefined);
+      this.padListener = (i) => finish(i === 9 ? undefined : i);
+    }
   }
 
   private saveBindings(render = true) {
