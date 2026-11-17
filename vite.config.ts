@@ -12,7 +12,7 @@ const QUICK = [
   'smoke', 'grid', 'big', 'world', 'economy', 'placement', 'save-storage', 'save-v4', 'area-switches',
   'area-panel', 'upgrades-city', 'feedback-phase4', 'playtest-metrics', 'canal-network', 'district-bloom',
   'rooftop-clusters', 'relay-city', 'specialties-city', 'look', 'palette-lint', 'icons', 'hud-contrast', 'look3-budget', 'roads', 'upgrade-prices', 'drone-roles',
-  'bloombot-walk', 'bindings', 'deck', 'framing', 'interact', 'pause', 'bloombot-words',
+  'bloombot-walk', 'bindings', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glyphs',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

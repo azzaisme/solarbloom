@@ -87,6 +87,7 @@ import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
 import { padStick, PhotoMode } from './PhotoMode';
 import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
 import { HOTBAR_DEFAULT } from '../ui/Hotbar';
+import { actionGlyph, GLYPH_SETTINGS, GlyphTracker, padName } from '../ui/Glyphs';
 import { LOOK } from '../data/look';
 
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Thriving (full bloom)', 'Radiant'];
@@ -225,7 +226,9 @@ export class Game {
   private previewFromBot = false;
   private botPreviewAt = 0;
   private botPreviewKey = '';
-  private keyMapShown: 'keys' | 'pad' = 'keys';
+  private keyMapShown = '';
+  /** E22.3: which glyph set is on screen (the setting, the last device used, the pad's family) */
+  readonly glyphs = new GlyphTracker();
   /** Bloombot (G.16): the controls map, rebindable in Settings */
   readonly bindings = new Bindings();
   /** Bloombot (G.14): the round map at the bottom left */
@@ -489,6 +492,7 @@ export class Game {
       bot.padCapture = (i) => !this.padListener && focus.button(i);
       // E19.2: no zoom in play or while building (the right stick's up and down do nothing for now)
       bot.onTurn = (deg) => this.camera.orbit(deg);
+      this.glyphs.deckBuild = !!desktopApi()?.deck;
       this.hud.setKeyMap('keys', this.bindings);
       // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad).
       const touchOnly = typeof matchMedia !== 'undefined' && !matchMedia('(any-pointer: fine)').matches && navigator.maxTouchPoints > 0;
@@ -744,6 +748,7 @@ export class Game {
     document.body.classList.toggle('calm', calmHud(s));
     document.body.classList.toggle('potter', potterPace(s));
     document.body.classList.toggle('details', !!s.showNumbers); // E22.10: "Show details" adds figures to the gauges
+    this.glyphs.setting = s.glyphs ?? 'auto'; // E22.3
     this.hud.settings = s;
     if (!s.debug) this.hud.setDebug(null);
   }
@@ -948,7 +953,8 @@ export class Game {
       `<div class="ctl-row"><span>${a.label}</span><button class="ctl-key" data-act="${a.id}" data-kind="key" ${a.keys && !b.locked(a.id, 'key') ? '' : 'disabled'}>${[...new Set(b.keys[a.id].map(keyLabel))].join(' / ') || '—'}</button>` +
       `<button class="ctl-key" data-act="${a.id}" data-kind="pad" ${a.pad && !b.locked(a.id, 'pad') ? '' : 'disabled'}>${a.pad ? padLabel(b.pad[a.id]) : 'stick'}</button></div>`;
     const list = ACTIONS.filter((a) => !a.classic || !b.oldCity);
-    body.innerHTML = `<p class="ctl-help">Choose an action, then press the new key or button. Esc cancels.</p>${GROUPS.map((g) => `<h3 class="set-h">${g.label}</h3>${list.filter((a) => a.group === g.id).map(row).join('')}`).join('')}<button id="ctlReset" class="ctl-reset">Reset to defaults</button>`;
+    const gs = this.settings.glyphs ?? 'auto';
+    body.innerHTML = `<label class="set-row" for="set-glyphs"><span>Button pictures</span><select id="set-glyphs" data-key="glyphs">${GLYPH_SETTINGS.map(([v, l]) => `<option value="${v}" ${v === gs ? 'selected' : ''}>${l}</option>`).join('')}</select></label><p class="ctl-help">Choose an action, then press the new key or button. Esc cancels.</p>${GROUPS.map((g) => `<h3 class="set-h">${g.label}</h3>${list.filter((a) => a.group === g.id).map(row).join('')}`).join('')}<button id="ctlReset" class="ctl-reset">Reset to defaults</button>`;
     body.querySelectorAll<HTMLButtonElement>('.ctl-key').forEach((btn) =>
       btn.addEventListener('click', () => {
         const act = btn.dataset.act as Action;
@@ -1282,7 +1288,7 @@ export class Game {
     this.settings.bindingsV = saved.v;
     this.setSetting('keys', saved.keys as unknown as string);
     if (!render) return;
-    this.hud.setKeyMap(this.bot?.lastInput ?? 'keys', this.bindings);
+    this.hud.setKeyMap(this.glyphs.style, this.bindings);
     this.botPreviewKey = '';
   }
 
@@ -1346,12 +1352,14 @@ export class Game {
 
   /** E20.2 (#285): an action's key or pad button as plain text, as the player last used them. */
   private hudKey(a: Action): string {
-    return this.bot?.lastInput === 'pad' ? padLabel(this.bindings.pad[a]) : keyLabel(this.bindings.keys[a][0] ?? '');
+    const st = this.glyphs.style;
+    return st !== 'keys' ? padName(st, this.bindings.pad[a]) || '—' : keyLabel(this.bindings.keys[a][0] ?? '');
   }
 
   /** Every key for an action ("Left mouse or Space"), or its pad button. */
   private hudKeys(a: Action): string {
-    if (this.bot?.lastInput === 'pad') return padLabel(this.bindings.pad[a]);
+    const st = this.glyphs.style;
+    if (st !== 'keys') return padName(st, this.bindings.pad[a]) || '—';
     const ks = this.bindings.keys[a].map(keyLabel);
     return ks.length ? ks.slice(0, 2).join(' or ') : '—';
   }
@@ -1360,7 +1368,7 @@ export class Game {
   private press(key: 'E' | 'Q', bot = this.previewFromBot): string {
     if (!bot) return 'Select'; // the internal cursor path (bots, dev tools)
     const a: Action = key === 'E' ? (this.building() && this.bot?.lastInput === 'pad' ? 'place' : 'pulse') : 'interact';
-    if (this.bot?.lastInput === 'pad') return `<kbd>${padLabel(this.bindings.pad[a])}</kbd>`;
+    if (this.glyphs.style !== 'keys') return `<kbd>${esc(this.hudKey(a))}</kbd>`;
     return `<kbd>${keyLabel(this.bindings.keys[a][0] ?? '')}</kbd>`;
   }
 
@@ -1555,9 +1563,9 @@ export class Game {
     return pickTarget(this.interactCandidates());
   }
 
-  /** E22.2: an action's button as the prompt draws it (E22.3: a glyph for the device in use). */
+  /** E22.3: an action's button as a glyph from the set in use (a rebound action shows its new input). */
   private glyph(a: Action): string {
-    return `<kbd>${esc(this.hudKey(a))}</kbd>`;
+    return actionGlyph(this.bindings, a, this.glyphs.style);
   }
 
   /** E22.2: the prompt for this frame: the Interact target (or why not), and Pulse when it also applies. */
@@ -1568,7 +1576,7 @@ export class Game {
       const dk = decorType(tool);
       const st = superType(tool);
       const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : st ? `Lay the foundation of the ${TIER3[st]!.name}` : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
-      return what ? { glyph: this.glyph(b.lastInput === 'pad' ? 'place' : 'pulse'), text: what } : undefined;
+      return what ? { glyph: this.glyph(this.glyphs.style !== 'keys' ? 'place' : 'pulse'), text: what } : undefined;
     }
     const f = b.front();
     const t = this.sim.grid.get(b.pose.roofId, f.x, f.z);
@@ -1745,10 +1753,15 @@ export class Game {
   /** Bloombot (G.4): highlight the tile in front and preview what E would do there (yields to an active mouse). */
   private updateBotPreview() {
     if (!this.bot) return;
-    if (this.bot.lastInput !== this.keyMapShown) {
-      this.keyMapShown = this.bot.lastInput;
+    // E22.3: the glyph set follows the last device used; every glyph on screen swaps in the same frame.
+    if (this.bot.lastInput !== this.glyphs.device) {
+      this.glyphs.device = this.bot.lastInput;
+      if (this.glyphs.device === 'pad') this.glyphs.sensePad(typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : undefined);
+    }
+    if (this.glyphs.style !== this.keyMapShown) {
+      this.keyMapShown = this.glyphs.style;
       if (this.photo.active) this.photoBar.render(this.photo.state); // its key names follow the device too
-      this.hud.setKeyMap(this.bot.lastInput, this.bindings);
+      this.hud.setKeyMap(this.glyphs.style, this.bindings);
     }
     if (this.cinematic || this.photo.active || this.panelOpen()) {
       this.holding = undefined;
@@ -2237,7 +2250,7 @@ export class Game {
   /** Words for turning what's in hand, for the input used last. */
   private turnHint(): string {
     if (!this.bot) return '';
-    if (this.bot.lastInput === 'pad') return `${padLabel(this.bindings.pad.rotateBack)} / ${padLabel(this.bindings.pad.rotate)} to turn`;
+    if (this.glyphs.style !== 'keys') return `${this.hudKey('rotateBack')} / ${this.hudKey('rotate')} to turn`;
     return `${this.bindings.keys.rotate.map(keyLabel).join(' or ')} to turn`;
   }
 
