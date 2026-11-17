@@ -404,6 +404,7 @@ export class Game {
       const focus = new PadFocus(this.hud.root);
       bot.padCapture = (i) => !this.padListener && focus.button(i);
       bot.onZoom = (f) => this.camera.zoomBy(f);
+      bot.onTurn = (deg) => this.camera.orbit(deg);
       this.hud.setKeyMap('keys', this.bindings);
       // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad).
       const touchOnly = typeof matchMedia !== 'undefined' && !matchMedia('(any-pointer: fine)').matches && navigator.maxTouchPoints > 0;
@@ -427,6 +428,12 @@ export class Game {
         this.camera.pan(dx, dy, x, y);
       },
       // Bloombot: while the camera follows it, zoom about the middle of the view (bloombot), not the cursor.
+      // Bloombot: a right-button drag turns the view around bloombot (a third of a degree per pixel).
+      orbit: (dx) => {
+        if (!this.bot || this.cinematic) return false;
+        this.camera.orbit(-dx * 0.35);
+        return true;
+      },
       zoom: (f, x, y) => (this.bot?.following ? this.camera.zoomBy(f) : this.camera.zoomBy(f, x, y)),
       // A quick, strong pinch-out snaps to the city overview (one gesture from anywhere).
       pinchEnd: (f, ms) => {
@@ -699,6 +706,7 @@ export class Game {
     else if (a === 'frenzy') this.sim.frenzy.activate();
     else if (a === 'nextArea') this.focusNextArea();
     else if (a === 'home') this.focusArea(PARK);
+    else if (a === 'recentre') this.camera.recentre();
     else if (a === 'debug') this.setSetting('debug', !this.settings.debug);
   }
 

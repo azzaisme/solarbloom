@@ -12,6 +12,8 @@ describe('bloombot controls map (G.16)', () => {
     expect([b.label('frenzy'), b.label('nextArea'), b.label('overview'), b.label('sprint')]).toEqual(['R', 'N', 'M', 'Shift']);
     expect([DEFAULT_PAD.pulse, DEFAULT_PAD.interact, DEFAULT_PAD.tray, DEFAULT_PAD.cancel, DEFAULT_PAD.sprint]).toEqual([0, 2, 3, 1, 7]);
     expect([DEFAULT_PAD.backpack, DEFAULT_PAD.harvest, DEFAULT_PAD.upgrades]).toEqual([12, 14, 15]);
+    // Turning the view: C or a right stick click recentres it.
+    expect([b.label('recentre'), DEFAULT_PAD.recentre]).toEqual(['C', 11]);
   });
 
   it('lists every action on the rebinding screen', () => {

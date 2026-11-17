@@ -70,8 +70,10 @@ is the walkable or buildable tile one step ahead along bloombot's facing.
 ## 5. Camera and travel
 
 - **Default view:** the close, low view from the mock, following bloombot.
-- **Fixed angle.** Mouse wheel, + / - and the right stick zoom only. Zooming out passes through today's angled
-  view and reaches the overview.
+- **The view turns around bloombot** (changed 17 Nov 2026; it was a fixed angle): the right stick sideways, or a
+  right-button drag, turns it a full circle; C or a right stick click recentres it. Tilt still follows the zoom
+  only. Mouse wheel, + / - and the right stick up and down zoom; zooming out passes through today's angled view
+  and reaches the overview. The light was composed for the default angle, so other angles look flatter.
 - **Lower quality tiers** keep the same camera with a shorter view distance and thicker haze (#272).
 - **Overview, fly-to and Home move the camera only.** Bloombot stays where it is, and the camera returns to it.
 - **Covering distance:** sprint (#266), and travel from the overview to any landmark already woken.
@@ -98,11 +100,13 @@ is the walkable or buildable tile one step ahead along bloombot's facing.
 | Backpack | Tab | D-pad up | (new) |
 | Cycle tools | 1 / 2 | Bumpers | 1 = inspect, 2 = pulse |
 | Zoom | Mouse wheel, + / - | Right stick up / down | wheel, + / - |
+| Turn the view | Right-button drag | Right stick left / right | (none) |
+| Recentre the view | C | Right stick click | (none) |
 | Overview | M | View | (none) |
 | Settings / pause | P | Menu | P |
 | Bloom Frenzy | R | (to agree) | Q |
 | Go to the area that needs you | N | (to agree) | F |
-| Back to the park | Home | (to agree) | Home |
+| Back to the park | Home | (none) | Home |
 | Debug overlay | F3 or ` | (none) | F3 or ` |
 
 Confirmed by the owner on 17 Nov 2026 (#235). Frenzy, "go to the area" and Harvest move because the mock
