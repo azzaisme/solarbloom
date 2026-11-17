@@ -1,5 +1,6 @@
 import type { AreaMode } from '../core/types';
 import { HOME } from '../gameplay/ProgressionSystem';
+import { PLOT_OPTION, PLOT_OPTIONS } from '../data/cozy';
 import { Economy, formatCost, formatPriceHtml, KINDS } from '../core/Economy';
 import { big, fmt, toNum, type Big } from '../core/Big';
 import type { Cost } from '../core/types';
@@ -101,6 +102,19 @@ import { ACTIONS, type Action, type Bindings, keyLabel, padLabel, type SavedBind
 
 const $ = <T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
 
+/** E19.1.2: what the plot picker shows. */
+export interface PlotPickerModel {
+  title: string;
+  sub: string;
+  current?: string;
+  choices: { id: string; name: string; icon: string; blurb: string; solid: boolean; unlocked: boolean; fresh: boolean; hint?: string }[];
+}
+export interface PlotPickerHandlers {
+  onPreview(id: string | undefined): void;
+  onChoose(id: string | undefined): void;
+  onClose(): void;
+}
+
 function esc(s: string) {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 }
@@ -130,6 +144,7 @@ export class Hud {
     this.root.innerHTML = iconize(this.template());
     this.wire();
     $(this.root, '#backpack h2 button').addEventListener('click', () => this.toggleBackpack(false));
+    $(this.root, '#plotPicker h2 button').addEventListener('click', () => this.closePlotPicker());
   }
 
   private template() {
@@ -210,6 +225,7 @@ export class Hud {
       </div></div>
       <div id="tip" class="panel"></div>
       <div id="fail"></div>
+      <div id="plotPicker" class="drawer panel" aria-label="Plot picker"><h2><span id="ppTitle">Plot</span> <button aria-label="Close plot picker">×</button></h2><p id="ppSub" class="pp-sub"></p><div id="ppList"></div></div>
       <div id="backpack" class="drawer panel" aria-label="Backpack"><h2>Backpack <button aria-label="Close backpack">×</button></h2><div id="bpList"></div></div>
       <div id="upgrades" class="drawer panel"><h2>Upgrades <button aria-label="Close upgrades">×</button></h2><p id="upgNext" class="upg-next"></p><div id="upgList"></div></div>
       <div id="inspect" class="panel"></div>
@@ -694,6 +710,51 @@ export class Hud {
     return this.backpackIsOpen;
   }
 
+  private picker?: PlotPickerHandlers;
+  /**
+   * E19.1.2 (#248): the plot picker. Unlocked options are buttons (mouse, keys and the pad's focus ring); focusing
+   * or hovering one previews it on the plot, choosing it keeps it, and closing without choosing puts the plot back.
+   * Locked options show what they wait for. Choosing and changing are free.
+   */
+  openPlotPicker(m: PlotPickerModel, h: PlotPickerHandlers) {
+    this.toggleBackpack(false);
+    this.picker = h;
+    $(this.root, '#ppTitle').innerHTML = iconize(esc(m.title));
+    $(this.root, '#ppSub').textContent = m.sub;
+    const rows = m.choices.map((c) => {
+      const tag = c.solid ? 'Solid' : 'Walk over it';
+      if (!c.unlocked) return `<div class="card pp-opt locked"><span class="ci">${c.icon}</span><span class="cn">${esc(c.name)}</span><span class="cd2">Unlocks when ${esc(c.hint ?? '')}</span></div>`;
+      const on = c.id === m.current;
+      return `<button class="card pp-opt${on ? ' on' : ''}" data-opt="${c.id}" aria-pressed="${on}"><span class="ci">${c.icon}</span><span class="cn">${esc(c.name)}${c.fresh ? '<em class="pp-new">New</em>' : ''}${on ? '<em>Chosen</em>' : ''}</span><span class="cd2">${esc(c.blurb)} <i>${tag}</i></span></button>`;
+    });
+    if (m.current) rows.push('<button class="pp-clear" data-opt="">Clear the plot</button>');
+    const list = $(this.root, '#ppList');
+    list.innerHTML = iconize(rows.join(''));
+    list.querySelectorAll<HTMLButtonElement>('button[data-opt]').forEach((b) => {
+      const id = b.dataset.opt || undefined;
+      b.addEventListener('click', () => this.picker?.onChoose(id));
+      if (id) {
+        b.addEventListener('mouseenter', () => this.picker?.onPreview(id));
+        b.addEventListener('focus', () => this.picker?.onPreview(id));
+        b.addEventListener('mouseleave', () => this.picker?.onPreview(undefined));
+        b.addEventListener('blur', () => this.picker?.onPreview(undefined));
+      }
+    });
+    $(this.root, '#plotPicker').classList.add('open');
+  }
+
+  closePlotPicker() {
+    const h = this.picker;
+    if (!h) return;
+    this.picker = undefined;
+    $(this.root, '#plotPicker').classList.remove('open');
+    h.onClose();
+  }
+
+  get plotPickerOpen() {
+    return !!this.picker;
+  }
+
   private renderBackpack() {
     const st = this.sim.state;
     const woken = this.sim.areas
@@ -708,9 +769,25 @@ export class Hud {
       card('⛲', `Landmarks woken: ${woken.length}`, woken.length ? woken.map((a) => a.landmarkName).join(', ') : 'Restore the park to wake the fountain.'),
       card('🦋', `Wildlife: ${fauna.length}`, fauna.length ? fauna.join(', ') : 'Wildlife arrives as gardens grow.'),
       '<h3 class="bp-h">Plots and decorations</h3>',
-      '<p class="bp-empty">Plot choices and decorations you unlock will be kept here.</p>',
+      ...this.backpackPlots(),
     ];
     $(this.root, '#bpList').innerHTML = iconize(parts.join(''));
+  }
+
+  /** E19.1: plots chosen so far, and the plot options you've earned (by area type). */
+  private backpackPlots(): string[] {
+    const cz = this.sim.state.cozy;
+    const chosen = Object.values(cz?.plots ?? {});
+    const card = (icon: string, name: string, detail: string) => `<div class="card"><span class="ci">${icon}</span><span class="cn">${name}</span><span class="cd2">${detail}</span></div>`;
+    const got = PLOT_OPTIONS.filter((o) => 'start' in o.unlock || cz?.unlocked?.includes(o.id));
+    const byKind = new Map<string, number>();
+    for (const id of chosen) byKind.set(id, (byKind.get(id) ?? 0) + 1);
+    const out = [
+      card('🌱', `Plots chosen: ${chosen.length}`, chosen.length ? [...byKind].map(([id, n]) => `${esc(PLOT_OPTION[id]?.name ?? id)}${n > 1 ? ` ×${n}` : ''}`).join(', ') : 'Every area has a few plots. Restore one, face it and press the interact button.'),
+      card('✨', `Plot options: ${got.length} of ${PLOT_OPTIONS.length}`, 'More unlock as the park grows and areas clear. Free, always.'),
+    ];
+    out.push(`<div class="bp-opts">${got.map((o) => `<span title="${esc(o.name)}">${o.icon}</span>`).join('')}</div>`);
+    return out;
   }
 
   get isUpgradesOpen() {

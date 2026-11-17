@@ -26,6 +26,7 @@ import { drawRoadOverview } from './RoadDebug';
  *   sbDev.tr.play(x, z, 'restore') start a transition on a ground tile (soften, moss, restore, bloom, unblock)
  *   sbDev.tr.speed(4)          every transition plays 4× slower (1 = normal), for tuning
  *   sbDev.tr.stats()           tiles mid-transition (sim) and drawn as transitions (renderer)
+ *   sbDev.plots()              E19.1: fill every revealed plot (sbDev.plots('cafe') one option, sbDev.plots(null) clears)
  *   sbDev.roads(12)            toggle the City 16 road-network overview, 12 chunks round the camera
  */
 export type PresetName = 'fresh' | 'screenshot' | 'rich' | 'wealthy';
@@ -156,6 +157,10 @@ export function installDevTools(game: Game) {
       drawRoadOverview(canvas.getContext('2d')!, roadPlanFor(game.sim.state.seed, gen), Math.floor(t.x / 16), Math.floor(t.z / 16), radius);
       document.body.appendChild(canvas);
       return 'road overview shown (click it, or call sbDev.roads() again, to close)';
+    },
+    /** E19.1: restore and fill every plot in the revealed city (round-robin, or one option id); null clears them. */
+    plots(only?: string | null) {
+      return `${game.fillPlots(only)} plots set`;
     },
     /** Drone redesign D03: preview an expression on every drone. */
     face(name?: FaceName) {

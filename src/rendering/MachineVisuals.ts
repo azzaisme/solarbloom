@@ -72,7 +72,7 @@ interface MachineView {
  * machine fits its footprint). Landmarks follow their area's landmark kind. No model: the procedural look stays
  * (solar panels, the Elder Tree and the authored landmarks).
  */
-const MACHINE_MODELS: Record<string, [string, number]> = {
+export const MACHINE_MODELS: Record<string, [string, number]> = {
   condenser: ['water-condenser', 0.85],
   pollinator: ['pollinator-garden', 0.55],
   droneHub: ['drone-hub', 1.0],

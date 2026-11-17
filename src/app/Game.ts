@@ -28,7 +28,9 @@ import { detailTextures } from '../rendering/DetailTex';
 import { Pollinators } from '../rendering/Pollinators';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
-import { ChunkRenderer, SINK } from '../rendering/ChunkRenderer';
+import { ChunkRenderer, MeshBuilder, SINK } from '../rendering/ChunkRenderer';
+import { MACHINE_MODELS } from '../rendering/MachineVisuals';
+import type { HoloShape } from '../rendering/Hologram';
 import { TransitionRenderer } from '../rendering/transitions/TransitionRenderer';
 import { CultivatorVisuals } from '../rendering/CultivatorVisuals';
 import { ProgressRings } from '../rendering/transitions/ProgressRings';
@@ -64,6 +66,9 @@ import { type Action, Bindings, BUILD_DIGITS, keyLabel, padLabel } from './Bindi
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
+import { Cozy } from '../gameplay/Cozy';
+import { PLOT_OPTIONS } from '../data/cozy';
+import type { PlotSpot } from '../core/Plots';
 import { type LoadResult, SaveService } from './SaveService';
 
 const SETTINGS_KEY = 'solarbloom.settings';
@@ -103,6 +108,9 @@ function loadSettings(): Settings {
 }
 
 /** Glue between the headless Sim, PlayCanvas rendering, DOM HUD, input, audio and persistence. */
+/** E19.1: the message when a build would cover a chosen plot. */
+const PLOT_IN_WAY = 'A plot is here: clear it first (it’s free)';
+
 export class Game {
   readonly app: pc.Application;
   readonly bus = new EventBus();
@@ -176,6 +184,12 @@ export class Game {
   readonly bindings = new Bindings();
   /** Bloombot (G.14): the round map at the bottom left */
   private minimap?: Minimap;
+  /** E19 (#245): plot choices and unlocks (cosmetic; never read by the sim) */
+  private cozy!: Cozy;
+  /** E19.1.2: the plot the picker is open for, and the option it's previewing there */
+  private pickerPlot?: PlotSpot;
+  private plotPreview?: { id: string; option: string };
+  private cozyCheckAt = 0;
   private selected?: string;
   private inspectTimer = 0;
   private cinematic = false;
@@ -226,6 +240,8 @@ export class Game {
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
     this.transitions = new TransitionRenderer(this.sim);
     this.chunks.transitions = this.transitions;
+    this.cozy = new Cozy(this.sim);
+    this.chunks.plots = { look: (p) => this.plotLook(p) };
     this.chainSummary = new ChainSummary(this.sim);
     // City 05.2: the park cheers up in stages as you restore it.
     this.chunks.onParkStage = (stage) => {
@@ -403,6 +419,9 @@ export class Game {
       Object.assign(this, { bindings: new Bindings({ keys: this.settings.keys, pad: this.settings.pad }) });
       const bot = new BotController(this.sim, this.camera, visuals, this.bindings);
       this.bot = bot;
+      this.overlays.holo.eye = (out) => visuals.eyeWorld(out);
+      this.overlays.holo.sink = () => new MeshBuilder();
+      bot.walker.solid = (r, x, z) => this.cozy.solidAt(r, x, z); // E19: solid plot options block like machines
       bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble';
       bot.onPad = (a) => this.doAction(a);
       bot.onButton = (i) => this.padListener?.(i);
@@ -556,6 +575,7 @@ export class Game {
     this.faunaTier = this.gfxTier;
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.clouds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
+    if (this.overlays) this.overlays.holo.reducedMotion = rm;
     if (this.transitions) {
       // Look 6: reduced motion keeps the timings with simpler visuals; detail follows the quality tier (Look 1's
       // setting when it lands, the "fewer effects" switch until then).
@@ -745,6 +765,7 @@ export class Game {
     else if (this.hud.modalOpen) this.hud.openSettings(false);
     else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
     else if (this.hud.trayOpen) this.hud.toggleTray(false);
+    else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
     else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
     else if (this.selected) this.select(undefined);
     else if (this.bot?.walking) this.bot.cancelWalk();
@@ -876,7 +897,13 @@ export class Game {
       return;
     }
     this.select(undefined);
-    this.hud.showTip(sc.x, sc.y, `<b>${this.tileTitle(p.tile)}</b>${this.tileDetail(p.tile)}${this.pawHint(p.tile)}`);
+    const plot = this.openablePlot(p.roofId, p.tile.x, p.tile.z);
+    if (plot) {
+      b.visuals.play('interact');
+      this.openPlotPicker(plot);
+      return;
+    }
+    this.hud.showTip(sc.x, sc.y, `<b>${this.tileTitle(p.tile)}</b>${this.tileDetail(p.tile)}${this.pawHint(p.tile)}${this.plotLine(p.roofId, p.tile)}`);
   }
 
   /** G.13: the rooftop whose building stands on this ground cell. */
@@ -988,6 +1015,17 @@ export class Game {
       this.overviewOn = false;
       this.camera.glide(tx, ty - SLAB_TOP, tz, BOT_ZOOM);
       b.visuals.play('cheer');
+      return;
+    }
+    // E19.1.2: inspecting a plot (or clicking a chosen one) walks to it and opens its picker
+    const spot = !occ ? this.cozy.spotAt(p.roofId, p.tile.x, p.tile.z) : undefined;
+    const plot = spot && (tool === 'inspect' || this.cozy.shown(spot)) ? this.openablePlot(p.roofId, p.tile.x, p.tile.z) : undefined;
+    if (plot) {
+      const go = b.goTo(p.roofId, plot.x, plot.z, plot.size, () => {
+        b.visuals.play('interact');
+        this.openPlotPicker(plot);
+      });
+      if (!go) this.hud.showFail("Bloombot can't find a way there", x, y);
       return;
     }
     if (tool === 'inspect' && !occ) {
@@ -1359,7 +1397,14 @@ export class Game {
   }
 
   /** The hover preview for a tile (ghost, pulse footprint, frame and tooltip), from the pointer or bloombot. */
+  /** E19: the build hologram's shape for a machine type: its model, or a footprint block. */
+  private holoShape(type: MachineData['type'], size: number): HoloShape {
+    const m = MACHINE_MODELS[type];
+    return m ? { kind: 'model', name: m[0], scale: m[1] * (size > 1 ? 1.3 : 1) } : { kind: 'block', height: type === 'motherTree' ? 1.1 : size > 2 ? 1.2 : 0.45 };
+  }
+
   private previewAt(p: Pick | undefined, x: number, y: number) {
+    if (this.hud.plotPickerOpen) return; // the picker's hologram owns the preview while it's open
     const tool = this.hud.currentTool;
     if (!p || !p.tile) {
       this.overlays.hideFrame();
@@ -1382,7 +1427,7 @@ export class Game {
       const a = this.sim.supers.anchorFor(st, p.fx, p.fz);
       const chk = this.sim.supers.check(st, p.roofId, a.x, a.z);
       const d = TIER3[st]!;
-      this.overlays.showGhost(p.roofId, a.x, a.z, d.size, chk.ok, 0.3);
+      this.overlays.showGhost(p.roofId, a.x, a.z, d.size, chk.ok, 0.3, this.bot ? this.holoShape(st, d.size) : undefined);
       this.overlays.showRadius(this.sim.grid.tilesNear({ roofId: p.roofId, x: a.x, z: a.z, size: d.size }, 2), chk.ok ? 'ok' : 'info');
       const stages = chk.costs.map((c, i) => `${SuperSystem.stageName(i)} ${formatCost(c)}`).join('<br>');
       this.hud.showTip(
@@ -1395,9 +1440,10 @@ export class Game {
     if (tool !== 'inspect' && tool !== 'pulse') {
       const bt = tool as BuildableType;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
-      const chk = this.sim.build.check(bt, p.roofId, a.x, a.z);
+      const chk = { ...this.sim.build.check(bt, p.roofId, a.x, a.z) };
       const def = MACHINES[bt];
-      this.overlays.showGhost(p.roofId, a.x, a.z, def.size, chk.ok || chk.spotOk, def.size === 2 ? 0.35 : 0.5);
+      if (chk.ok && this.cozy.plotUnder(p.roofId, a.x, a.z, def.size)) Object.assign(chk, { ok: false, spotOk: false, reason: PLOT_IN_WAY });
+      this.overlays.showGhost(p.roofId, a.x, a.z, def.size, chk.ok || chk.spotOk, def.size === 2 ? 0.35 : 0.5, this.bot ? this.holoShape(bt, def.size) : undefined);
       this.overlays.showRadius(this.radiusTiles({ type: bt, roofId: p.roofId, x: a.x, z: a.z, size: def.size }), chk.ok ? 'ok' : 'info');
       this.hud.showTip(
         x,
@@ -1418,8 +1464,10 @@ export class Game {
       return;
     }
     if (tool === 'inspect') {
-      this.overlays.showFrame(t.roofId, t.x, t.z, 1, 'hover');
-      this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${this.pawHint(t)}`);
+      const plot = this.cozy.spotAt(t.roofId, t.x, t.z);
+      if (plot && (this.cozy.ready(plot) || this.cozy.shown(plot))) this.overlays.showFrame(t.roofId, plot.x, plot.z, plot.size, 'hover');
+      else this.overlays.showFrame(t.roofId, t.x, t.z, 1, 'hover');
+      this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${this.pawHint(t)}${this.plotLine(t.roofId, t)}`);
       return;
     }
     const chk = this.sim.restoration.checkPulse(t);
@@ -1434,7 +1482,145 @@ export class Game {
       const verb = t.ground === 'restored' ? `Nurture → ${BLOOM_NAMES[t.bloom + 1]}` : this.sim.restoration.nextIsOvercharged() ? '🌟 Overcharged pulse' : 'Pulse';
       action = `<span class="ok">${verb}: ${formatCost(chk.cost)}${fp.length ? ` · restores ${fp.length + 1} tiles` : ''}</span>`;
     } else if (chk.reason && !maxed) action = `<span class="bad">${chk.reason}</span>`;
-    this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${action ? '<br>' + action : ''}`);
+    this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${action ? '<br>' + action : ''}${this.plotLine(t.roofId, t)}`);
+  }
+
+  // ───────────── E19.1: plots ─────────────
+
+  /** What the renderer draws on a plot: the option being previewed or chosen, the waiting look, or nothing. */
+  private plotLook(p: PlotSpot): string | null | undefined {
+    if (this.pickerPlot?.id === p.id) return null; // the picker's hologram shows the choice; the plot waits under it
+    const shown = this.cozy.shown(p);
+    if (shown) return shown.id;
+    if (this.cozy.choice(p.id)) return undefined; // a machine stands on it
+    return this.cozy.ready(p) ? null : undefined;
+  }
+
+  /** A plot at this cell that can be opened now (ready, or already chosen). */
+  private openablePlot(roofId: string, x: number, z: number): PlotSpot | undefined {
+    const p = this.cozy.spotAt(roofId, x, z);
+    return p && (this.cozy.ready(p) || this.cozy.shown(p)) ? p : undefined;
+  }
+
+  /** A line for a tile's tooltip when it's part of a plot: what Q does there, or what the plot waits for. */
+  private plotLine(roofId: string, t: TileData): string {
+    const p = this.cozy.spotAt(roofId, t.x, t.z);
+    if (!p || this.sim.areas.fog(p.areaId) === 'hidden') return '';
+    const chosen = this.cozy.shown(p);
+    const k = this.press('Q', true);
+    if (chosen) return `<br><span class="ok">${chosen.icon} ${chosen.name} · ${k} to change it</span>`;
+    if (this.cozy.ready(p)) return `<br><span class="ok">🌱 An empty plot · ${k} to choose what it becomes</span>`;
+    if (this.cozy.choice(p.id)) return '';
+    return '<br><small>🌱 A plot: restore all four tiles to choose what it becomes</small>';
+  }
+
+  /** E19.1.2: opens the picker for a plot (bloombot is beside it). */
+  private openPlotPicker(p: PlotSpot) {
+    this.hud.hideTip();
+    const info = this.sim.areas.info(p.areaId);
+    const choices = this.cozy.choices(p);
+    const current = this.cozy.choice(p.id)?.id;
+    this.pickerPlot = p;
+    this.chunks.markPlot(p);
+    this.hud.openPlotPicker(
+      {
+        title: current ? `🌱 A plot by the ${info.landmarkName}` : '🌱 An empty plot',
+        sub: `${AREA_TYPES[info.type].name} · free to choose and change any time`,
+        current,
+        choices: choices.map((c) => ({ id: c.option.id, name: c.option.name, icon: c.option.icon, blurb: c.option.blurb, solid: c.option.solid, unlocked: c.unlocked, fresh: c.fresh, hint: c.hint })),
+      },
+      {
+        onPreview: (id) => this.previewPlot(p, id ?? current), // off an option: back to what's chosen
+        onChoose: (id) => this.choosePlot(p, id),
+        onClose: () => {
+          this.previewPlot(p, undefined);
+          this.pickerPlot = undefined;
+          this.chunks.markPlot(p);
+        },
+      },
+    );
+    this.cozy.seen(choices.filter((c) => c.fresh).map((c) => c.option.id)); // the "new" marker shows this once
+    if (current) this.previewPlot(p, current);
+    this.sfx.click();
+  }
+
+  private previewPlot(p: PlotSpot, option: string | undefined) {
+    const next = option ? { id: p.id, option } : undefined;
+    if (this.plotPreview?.id === next?.id && this.plotPreview?.option === next?.option) return;
+    this.plotPreview = next;
+    // E19: the option bloombot is considering is projected over the plot as a hologram
+    if (next && this.bot) {
+      this.hud.hideTip();
+      this.overlays.showGhost(GROUND, p.x, p.z, p.size, true, 0.5, { kind: 'plot', plot: p, option: next.option });
+    } else this.overlays.hideGhost();
+  }
+
+  private choosePlot(p: PlotSpot, option: string | undefined) {
+    const why = this.cozy.choose(p.id, option);
+    if (why) {
+      this.hud.showFail(why);
+      return;
+    }
+    this.plotPreview = undefined;
+    this.hud.closePlotPicker();
+    this.chunks.markPlot(p);
+    this.sfx.click();
+    const o = option ? this.cozy.choice(p.id) : undefined;
+    this.hud.toast(o ? `${o.icon} ${o.name} it is<small>Change it any time: it's free.</small>` : '🌱 The plot is empty again', '', 2.4);
+    if (this.bot) {
+      this.bot.visuals.play(o ? 'cheer' : 'interact');
+      if (o?.solid) this.bot.walker.settle(this.bot.pose); // never left standing inside it
+    }
+  }
+
+  /**
+   * E19.1.5: dev and perf helper. Restores every plot in the revealed city and gives each an option (all options
+   * unlocked, round-robin, or `only` for every plot); `null` clears them all. Returns how many plots it set.
+   */
+  fillPlots(only?: string | null): number {
+    const st = this.sim.state;
+    const cz = (st.cozy ??= {});
+    cz.unlocked = PLOT_OPTIONS.filter((o) => !('start' in o.unlock)).map((o) => o.id);
+    let n = 0;
+    for (const id of this.sim.areas.revealed())
+      for (const p of this.cozy.spots(id)) {
+        for (let j = 0; j < p.size; j++)
+          for (let i = 0; i < p.size; i++) {
+            const t = this.sim.grid.get(GROUND, p.x + i, p.z + j);
+            if (!t || t.occupantId || t.blocked || t.ground === 'restored') continue;
+            t.ground = 'restored';
+            t.pollution = 0;
+            t.bloom = Math.max(1, t.bloom);
+            this.sim.grid.touch(t);
+          }
+        if (only === null) {
+          this.cozy.choose(p.id, undefined);
+          continue;
+        }
+        const opts = this.cozy.choices(p).filter((c) => c.unlocked);
+        const pick = only ? opts.find((c) => c.option.id === only) : opts[n % Math.max(1, opts.length)];
+        if (pick && !this.cozy.choose(p.id, pick.option.id)) n++;
+      }
+    this.chunks.markAll();
+    return n;
+  }
+
+  /** E19.1.3: every plot option id (review shots). */
+  plotOptionIds(): string[] {
+    return PLOT_OPTIONS.map((o) => o.id);
+  }
+
+  /** E19.1.4: new plot options earned (checked about once a second): one toast each. */
+  private checkCozyUnlocks() {
+    if (this.clock < this.cozyCheckAt) return;
+    this.cozyCheckAt = this.clock + 1;
+    for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Look for empty plots in restored ground.</small>`, 'gold', 4.5);
+    // The picker closes if bloombot wanders off.
+    const pp = this.pickerPlot;
+    if (pp && this.bot) {
+      const [bx, , bz] = this.bot.world();
+      if (Math.hypot(bx - (pp.x + pp.size / 2), bz - (pp.z + pp.size / 2)) > 4.5 || this.bot.pose.roofId !== GROUND) this.hud.closePlotPicker();
+    }
   }
 
   /** Look 6.10: the name of the stage a tile's transition is in (inspect panel). */
@@ -1529,6 +1715,10 @@ export class Game {
     const st = superType(tool);
     if (st) {
       const a = this.sim.supers.anchorFor(st, p.fx, p.fz);
+      if (this.cozy.plotUnder(p.roofId, a.x, a.z, TIER3[st]!.size)) {
+        this.hud.showFail(PLOT_IN_WAY, x, y);
+        return 'none';
+      }
       const m = this.sim.supers.place(st, p.roofId, a.x, a.z);
       if (m) {
         this.selectTool('pulse');
@@ -1539,6 +1729,10 @@ export class Game {
     if (tool !== 'inspect' && tool !== 'pulse') {
       const bt = tool as BuildableType;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
+      if (this.cozy.plotUnder(p.roofId, a.x, a.z, MACHINES[bt].size)) {
+        this.hud.showFail(PLOT_IN_WAY, x, y);
+        return 'none';
+      }
       const m = this.sim.build.place(bt, p.roofId, a.x, a.z);
       if (m) {
         this.selectTool('pulse');
@@ -3051,6 +3245,7 @@ export class Game {
     this.tileFx.update(dt);
     this.frameNo++;
     this.updateChainPresentation(dt);
+    if (!this.cinematic) this.checkCozyUnlocks();
     this.vfx.update(dt);
     // First-tile beacon until the player restores something.
     if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic) {

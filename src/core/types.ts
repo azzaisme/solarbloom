@@ -376,4 +376,19 @@ export interface GameState {
    * so no save version change: a save without it starts bloombot beside the park fountain.
    */
   bot?: { roofId: string; x: number; z: number; facing: number };
+  /**
+   * E19 (#245): the cozy city. Written by the game only, never by the sim (cosmetic: nothing reads it to decide
+   * production, chains, milestones or pacing). Optional and sparse, so no save version change.
+   */
+  cozy?: CozyState;
+}
+
+/** E19: what the player chose for the look of their city. */
+export interface CozyState {
+  /** E19.1: plot id → plot option id (only plots with a choice) */
+  plots?: Record<string, string>;
+  /** E19.1.4: options earned so far, in the order they unlocked (options open from the start aren't listed) */
+  unlocked?: string[];
+  /** E19.1.4: unlocked options the picker hasn't shown yet (its "new" marker) */
+  fresh?: string[];
 }
