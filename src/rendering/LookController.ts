@@ -57,7 +57,10 @@ export class LookController {
     this.tier = tier;
     const T = LOOK.tiers[tier];
     const sun = this.scene.sun.light!;
+    // "Fewer effects" keeps one small shadow map: split into cascades it would blur every one of them.
     sun.shadowResolution = Math.min(this.shadowCap ?? Infinity, this.lowVfx ? Math.min(1024, T.shadowRes) : T.shadowRes);
+    sun.numCascades = this.lowVfx ? 1 : T.shadowCascades;
+    sun.cascadeDistribution = LOOK.cascadeDistribution;
     sun.shadowType = T.softShadows ? pc.SHADOW_PCF5_32F : pc.SHADOW_PCF3_32F;
     this.post.apply(T, this.app.scene.fog.color);
     this.applyAtmosphere();
