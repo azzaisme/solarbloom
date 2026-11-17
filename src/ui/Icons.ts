@@ -262,7 +262,7 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '🦋': 'butterfly', '🐦': 'bird', '🐟': 'fish', '🐱': 'cat', '🐾': 'paw', '🤖': 'robot',
   '⛲': 'fountain', '📡': 'relay', '🛰': 'satellite', '🛸': 'drone', '🚀': 'rocket', '💠': 'crystal', '🏺': 'vase', '🏢': 'building', '🏙': 'building', '🗼': 'building',
   '🛣': 'road', '🛤': 'road', '🛶': 'boat', '🧺': 'basket', '🔭': 'telescope', '📦': 'parcel', '🏮': 'lantern', '🏗': 'crane',
-  '🔒': 'lock', '✅': 'check', '⬜': 'box', '⏳': 'hourglass', '🔗': 'link', '🔀': 'merge', '🔁': 'repeat', '⬆': 'up', '⚠': 'warning', '❔': 'question',
+  '🔒': 'lock', '🔓': 'lock', '✅': 'check', '⬜': 'box', '⏳': 'hourglass', '🔗': 'link', '🔀': 'merge', '🔁': 'repeat', '⬆': 'up', '⚠': 'warning', '❔': 'question',
   '📋': 'clipboard', '🧹': 'broom', '🪑': 'bench', '💡': 'bulb', '💰': 'coins', '🧩': 'puzzle', '👑': 'crown', '🧠': 'brain', '🕸': 'web', '✋': 'hand',
   '⚙': 'settings', '🔧': 'wrench', '▶': 'play', '⏸': 'pause', '⏩': 'fastForward', '⏭': 'fastForward',
   // Cultivator / slab-breakdown strings.

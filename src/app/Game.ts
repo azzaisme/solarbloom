@@ -1060,6 +1060,12 @@ export class Game {
         return;
       }
     }
+    // Region unlocks: facing a sealed area's fog, interact buys it (or says what it costs).
+    const sealed = this.sealedAhead();
+    if (sealed) {
+      if (this.sim.areas.unlock(sealed)) b.visuals.play('cheer');
+      return;
+    }
     const lift = this.liftAhead();
     if (lift) {
       this.rideLift(lift);
@@ -1273,6 +1279,21 @@ export class Game {
       const k = this.press('Q', true);
       const what = up ? (up.preview ? `<span class="bad">${this.lockedReason(up.id)}</span>` : `<span class="ok">${k} Ride up to the rooftop</span>`) : `<span class="ok">${k} Ride down to the street</span>`;
       this.hud.showTip(sc.x, sc.y, `<b>Rooftop lift</b>${what}`);
+      return;
+    }
+    // Region unlocks: facing sealed fog, the prompt names the area and its price.
+    const sealed = this.sealedAhead();
+    if (sealed) {
+      const [bx, by, bz] = this.bot.world();
+      const v = this.camera.toScreen(new pc.Vec3(bx, by + 1.1, bz));
+      this.overlays.hideGhost();
+      this.overlays.hideFrame();
+      const s = this.sim.areas;
+      const cost = s.unlockCost(sealed)!;
+      const price = `${fmt(cost.biomass)} 🌿 and ${fmt(cost.energy)} ⚡`;
+      const ok = !this.sim.econ.shortfall(cost);
+      const line = ok ? `<span class="ok">${this.press('Q', true)} Unlock for ${price}</span>` : `<span class="bad">Unlock for ${price}</span>`;
+      this.hud.showTip(v.x, v.y, `<b>🔒 ${AREA_TYPES[s.info(sealed).type].name} in thick fog</b>${line}`);
       return;
     }
     if (!p?.tile) {
@@ -2580,6 +2601,14 @@ export class Game {
       this.updateCityBounds();
     });
     b.on('area.fogChanged', ({ areaId }) => this.chunks.markArea(areaId));
+    b.on('area.unlocked', ({ areaId }) => {
+      this.chunks.markArea(areaId);
+      for (const nb of s.areas.info(areaId).neighbours) this.chunks.markArea(nb); // soft fog edges
+      const info = s.areas.info(areaId);
+      this.hud.toast(`🔓 ${AREA_TYPES[info.type].name} unlocked!<small>The fog lifts. Restore it to wake the ${info.landmarkName}.</small>`, 'gold', 4);
+      this.sfx.fanfare();
+      this.save();
+    });
     // City 12.1: rooftop clusters appear with their area and come alive when a Bloom Relay reaches them.
     b.on('layer.added', ({ layerId }) => {
       const l = s.grid.layer(layerId);
@@ -3394,6 +3423,20 @@ export class Game {
     this.areaLabels = live;
   }
   private areaLabels = new Set<string>();
+
+  /** Region unlocks: the sealed area just ahead of bloombot (the tile in front, or one more step), if any. */
+  private sealedAhead(): string | undefined {
+    const b = this.bot;
+    if (!b || b.pose.roofId !== GROUND) return undefined;
+    const f = b.front();
+    const dx = Math.sign(Math.round(Math.sin(b.pose.facing)));
+    const dz = Math.sign(Math.round(Math.cos(b.pose.facing)));
+    for (const [x, z] of [[f.x, f.z], [f.x + dx, f.z + dz]]) {
+      const id = this.sim.areas.map.areaOfCell(x, z);
+      if (this.sim.areas.sealed(id)) return id;
+    }
+    return undefined;
+  }
 
   private onAreaCleared(id: string) {
     const s = this.sim;

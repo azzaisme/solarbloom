@@ -1,3 +1,4 @@
+import { fmt } from '../core/Big';
 import { ROLE_INFO } from './DroneRoles';
 import { Economy, formatCost, KINDS } from '../core/Economy';
 import { PARK } from '../core/Areas';
@@ -156,6 +157,17 @@ export class Advisor {
     }
     // 4. Push the fog back: an affordable tile at the edge of the current goal (or anywhere in the park).
     const goal = city && s.state.progression.coreActivated ? s.areas.nextGoal() : undefined;
+    // 3b. Region unlocks: nothing open to work on, but sealed regions wait: point at the cheapest one.
+    if (city && s.state.progression.coreActivated && !goal) {
+      const id = s.areas
+        .sealedAreas()
+        .sort((a, b) => s.areas.unlockCost(a)!.biomass.cmp(s.areas.unlockCost(b)!.biomass) || s.areas.info(a).distance - s.areas.info(b).distance)[0];
+      if (id) {
+        const c = s.areas.unlockCost(id)!;
+        const [x, z] = s.areas.info(id).landmark;
+        return { text: `Unlock the ${AREA_TYPES[s.areas.info(id).type].name.toLowerCase()}: walk up to its fog and pay ${fmt(c.biomass)}🌿 ${fmt(c.energy)}⚡`, label: '🔓 Show me where', action: { kind: 'focus', x, z } };
+      }
+    }
     const edge = this.edgeTile(goal) ?? (city ? this.parkTile() : undefined);
     if (edge) {
       const where = goal && s.areas.areaOf(edge) === goal ? `the ${AREA_TYPES[s.areas.info(goal).type].name.toLowerCase()}'s fog edge` : 'the park';

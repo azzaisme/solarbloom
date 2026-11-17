@@ -428,6 +428,13 @@ export const TUNING = {
     clearShare: 0.6,
     /** …but never more than this many tiles (× the area's distance difficulty), so big areas stay a session's goal */
     clearCap: 160,
+    /**
+     * Region unlocks (owner, 18 Nov 2026): a newly revealed area stays sealed in thick fog until bought. The price
+     * is set when the area appears: `biomass` × `growth`^n (n = areas already unlocked), but at least
+     * `incomeSeconds` of sustained biomass income, so it stays a real choice as the economy grows; and `energy` ×
+     * `energyGrowth`^n, never more than `capShare` of the energy cap (always affordable by waiting).
+     */
+    unlock: { enabled: true, biomass: 1000, growth: 1.6, incomeSeconds: 120, energy: 60, energyGrowth: 1.25, capShare: 0.6 },
     /** fog density at 0% restored and just before clearing (it thins linearly in between) */
     fogFull: 1,
     fogThin: 0.25,

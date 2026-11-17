@@ -6,6 +6,7 @@ import type { BuildableType, DroneRole, GameState, ResourceKind, TileData } from
 import { HOME } from '../src/gameplay/ProgressionSystem';
 import { MACHINES } from '../src/data/machines';
 import { Sim } from '../src/gameplay/Sim';
+import { TUNING } from '../src/data/tuning';
 import { BOT, type BotPose, spawnPose, Walker } from '../src/gameplay/Walker';
 
 /**
@@ -62,6 +63,11 @@ export interface BotOptions {
    * Menu actions (upgrades, roles, Frenzy, Harvest) stay instant. Merging and superstructures are not walked.
    */
   walk?: boolean;
+  /**
+   * Region unlocks (18 Nov 2026): play with sealed regions on (the game's default; tests default it off). After
+   * the fountain the bot buys the nearest sealed area whenever it can, keeping the next machine's price.
+   */
+  unlocks?: boolean;
 }
 
 /** E18: the bots' fixed role rule, by hub order (see BotOptions.roles). */
@@ -106,6 +112,8 @@ export interface BotReport {
   roleAt: Partial<Record<DroneRole, number>>;
   /** E20.3: with `walk`, seconds spent walking, trips made and actions dropped because no path reached them */
   walk?: { seconds: number; trips: number; unreachable: number; failedOnArrival: number };
+  /** Region unlocks: when each area was bought (sim seconds) */
+  unlocked: number[];
   /** E20.3: tiles restored by the player's own pulses vs everything else (drones, chains, machines, events) */
   restoredBy: { player: number; helpers: number };
   /** per-minute snapshot */
@@ -115,6 +123,17 @@ export interface BotReport {
 const ORDER: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'pollinator', 'motherTree', 'solar', 'pollinator', 'droneHub', 'condenser'];
 
 function* botRun(opts: BotOptions): Generator<void, BotReport> {
+  const U = TUNING.city.unlock as { enabled: boolean };
+  const was = U.enabled;
+  U.enabled = !!opts.unlocks;
+  try {
+    return yield* botRunInner(opts);
+  } finally {
+    U.enabled = was;
+  }
+}
+
+function* botRunInner(opts: BotOptions): Generator<void, BotReport> {
   const mode = opts.mode ?? 'active';
   const actionEvery = opts.actionEvery ?? 3;
   const sim = new Sim(opts.state ?? createInitialState(opts.seed));
@@ -161,6 +180,7 @@ function* botRun(opts: BotOptions): Generator<void, BotReport> {
   });
   sim.bus.on('cat.found', ({ variant }) => (cats[variant ?? 'standard'] = (cats[variant ?? 'standard'] ?? 0) + 1));
   const restoredBy = { player: 0, helpers: 0 };
+  const unlocked: number[] = [];
   sim.bus.on('tile.restored', ({ source }) => (source === 'pulse' || source === 'broad' ? restoredBy.player++ : restoredBy.helpers++));
   const walk = opts.walk ? walking(sim) : undefined;
 
@@ -224,6 +244,13 @@ function* botRun(opts: BotOptions): Generator<void, BotReport> {
     }
     // 1b. after the fountain: wake any landmark that's ready, and put a Drone Hub at the edge of the next goal
     if (s.progression.coreActivated) {
+      // Region unlocks: buy the nearest sealed area when affordable, keeping the next machine's biomass.
+      const sealed = sim.areas.sealedAreas()[0];
+      const price = sealed ? sim.areas.unlockCost(sealed) : undefined;
+      if (sealed && price && sim.econ.canAfford(price)) {
+        const keep = ORDER[next] ? big(sim.build.cost(ORDER[next]).biomass ?? 0) : big(0);
+        if (s.resources.biomass.sub(price.biomass).gte(keep) && sim.areas.unlock(sealed)) unlocked.push(Math.round(sim.time));
+      }
       for (const id of sim.areas.revealed()) if (sim.areas.fog(id) !== 'cleared' && sim.areas.ready(id)) sim.areas.clear(id);
       const goal = sim.areas.nextGoal();
       if (goal && !ORDER[next] && !hubFor.has(goal) && sim.econ.canAfford(sim.build.cost('droneHub'))) {
@@ -408,6 +435,7 @@ function* botRun(opts: BotOptions): Generator<void, BotReport> {
     cats,
     roleAt,
     walk: walk?.report(),
+    unlocked,
     restoredBy,
     minutesLog,
   };
