@@ -764,3 +764,41 @@ body.oldcity .res-row { transition: opacity .6s, box-shadow .3s, border-color .3
 body.oldcity .res-row.faded { opacity: 0; pointer-events: none; }
 body.oldcity .res-row.low { border-color: var(--bad); }
 body.oldcity #obj .ohead { display: block; }
+
+/* ───────── E22.5: a HUD about the place (the epic's table) ─────────
+   Top left the objective card; top right energy and water; bottom left the minimap; bottom centre the prompt with
+   the build hotbar above it while building; bottom right the toasts. Classic rules keep their hotbar along the
+   bottom (the prompt and toasts sit above it) and their chips under the bars. Everything fits 1280 × 800 at
+   100, 125 and 150% interface size (tests/e2e/phase4-hud.e2e.mjs). */
+#logo { display: none; }
+#obj { top: calc(12px + var(--safe-t)); left: calc(12px + var(--safe-l)); right: auto; width: 300px; }
+#res { top: calc(12px + var(--safe-t)); right: calc(12px + var(--safe-r)); left: auto; width: 260px; }
+#minimap { left: calc(14px + var(--safe-l)); bottom: calc(14px + var(--safe-b)); }
+#quick { left: auto; bottom: auto; right: calc(12px + var(--safe-r)); top: calc(158px + var(--safe-t)); }
+#toasts { top: auto; left: auto; transform: none; right: calc(12px + var(--safe-r)); bottom: calc(118px + var(--safe-b)); align-items: flex-end; max-width: 280px; }
+#toasts .toast { max-width: 280px; }
+#toasts .toast.pickup { font: 700 16px var(--font-display); padding: 6px 14px; }
+.frenzy-btn { right: calc(14px + var(--safe-r)); bottom: calc(14px + var(--safe-b)); }
+#combo { left: calc(14px + var(--safe-l)); top: calc(50% - 90px); }
+#hint { top: calc(12px + var(--safe-t)); bottom: auto; max-width: max(220px, calc(100% - 640px)); }
+#eventBanner { top: auto; bottom: calc(176px + var(--safe-b)); }
+#inspect { bottom: calc(176px + var(--safe-b)); }
+#catPanel { top: calc(214px + var(--safe-t)); }
+#buildbar { position: absolute; left: 50%; bottom: calc(176px + var(--safe-b)); transform: translateX(-50%); z-index: 3; display: flex; gap: 5px; padding: 5px 7px; border-radius: 16px; max-width: calc(100% - 352px); overflow: hidden; }
+#buildbar[hidden] { display: none; }
+#buildbar .bslot { position: relative; width: 50px; height: 54px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--glass-hi); border: 1px solid var(--edge-soft); color: var(--text-strong); }
+#buildbar .bslot.on { border-color: var(--edge-strong); box-shadow: var(--glow-active); }
+#buildbar .bslot.empty { opacity: .55; }
+#buildbar .bslot.locked .si { opacity: .45; }
+#buildbar .bslot .key { position: absolute; top: 2px; left: 5px; font: 700 13px var(--font-ui); color: var(--gold-hi); }
+#buildbar .bslot .si .icon { width: 26px; height: 26px; }
+#buildbar .bslot .sl { font: 600 11px/1.1 var(--font-display); max-width: 46px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Old-city rules: no hotbar on the walking view, so the prompt, the toasts and the build hotbar sit lower. */
+body.oldcity #hotbar { display: none !important; }
+body.oldcity #prompt { bottom: calc(16px + var(--safe-b)); }
+body.oldcity #toasts { bottom: calc(14px + var(--safe-b)); }
+body.oldcity #buildbar { bottom: calc(74px + var(--safe-b)); }
+body.oldcity #inspect { bottom: calc(176px + var(--safe-b)); }
+body.oldcity #res { width: 220px; }
+#minimap .mm-rim { position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%); font: 700 13px/1 var(--font-display); color: var(--text-strong); text-shadow: 0 1px 2px var(--glass-solid); white-space: nowrap; }
+#minimap .mm-rim[hidden] { display: none; }

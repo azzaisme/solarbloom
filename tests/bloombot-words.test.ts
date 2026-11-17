@@ -71,10 +71,10 @@ describe('E22.10: plain words', () => {
     expect(bad).toEqual([]);
   });
 
-  it('the new UI pieces (prompt, menu, settings, objective) use none of them either', async () => {
+  it("the new UI pieces (prompt, menu, settings) use none of them either (the objective card's old-city words are in words.ts)", async () => {
     const { bannedIn } = await import('../src/ui/words');
     const bad: string[] = [];
-    for (const f of ['src/ui/Menu.ts', 'src/ui/SettingsRows.ts', 'src/ui/SettingsScreen.ts', 'src/ui/Prompt.ts', 'src/ui/ObjectiveCard.ts', 'src/app/Interact.ts'])
+    for (const f of ['src/ui/Menu.ts', 'src/ui/SettingsRows.ts', 'src/ui/SettingsScreen.ts', 'src/ui/Prompt.ts', 'src/app/Interact.ts'])
       for (const s of literals(stripComments(readFileSync(f, 'utf8')))) {
         // code identifiers ('menu', '#prompt', CSS classes) aren't on screen; sentences with a capital or a space are
         if (!/[A-Z ]/.test(s) || /^[#.[]/.test(s)) continue;

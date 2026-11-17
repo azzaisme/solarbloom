@@ -11,7 +11,7 @@
 export const BANNED: readonly { word: string; re: RegExp; instead?: string }[] = [
   { word: 'rate', re: /\brates?\b/i },
   { word: '/min', re: /\/\s*min\b/i },
-  { word: '/s', re: /\d\s*\/\s*s\b/i },
+  { word: '/s', re: /\/\s*s\b/i },
   { word: 'per second', re: /\bper second\b/i },
   { word: 'cap', re: /\bcaps?\b/i },
   { word: 'overflow', re: /\boverflow(s|ed|ing)?\b/i },
@@ -41,7 +41,7 @@ export function bannedIn(text: string): string[] {
 }
 
 /** A rate written as "/" ("+71/min", "3/s"). */
-export const RATE_SLASH = /[+−-]?\d[\d.,]*\s*[kKmMbB]?\s*\/\s*(min|s|sec|second|minute|h|hour)\b/;
+export const RATE_SLASH = /[+−-]?\d[\d.,]*\s*[kKmMbB]?\s*(?:[a-zA-Z]+\s*)?\/\s*(min|s|sec|second|minute|h|hour)\b/;
 
 /**
  * Rewrites game text for old-city rules where a plain word exists (biomass → Greens, full bloom → in flower) and
