@@ -19,7 +19,7 @@ Reference images: [the character sheet](reference/bloombot-sheet.png) and
 - **Moves by walking** on its legs.
 - **Build path:** generated, rigged and animated in Meshy, then rebuilt in Blender to fit that rig (#264, #236).
   The game gains skinned animation for the first time.
-- **Animations:** idle, walk, sprint, pulse, assemble, wade, interact, cheer and the lift ride.
+- **Animations:** idle, walk, hover (the sprint), pulse, assemble, wade, interact, cheer and the lift ride.
 - **Detail levels:** a near and a far version inside an agreed triangle budget, plus a flat marker for the
   overview and the minimap.
 
@@ -74,7 +74,7 @@ is the walkable or buildable tile one step ahead along bloombot's facing.
   view and reaches the overview.
 - **Lower quality tiers** keep the same camera with a shorter view distance and thicker haze (#272).
 - **Overview, fly-to and Home move the camera only.** Bloombot stays where it is, and the camera returns to it.
-- **Covering distance:** sprint (#266), and travel from the overview to any landmark already woken.
+- **Covering distance:** sprint (#266; since 18 Nov 2026 the Hover upgrade, 40 biomass, one level: until it is bought the sprint key does nothing, then holding it hovers bloombot a little off the ground at sprint speed), and travel from the overview to any landmark already woken.
 
 ## 6. HUD
 
@@ -88,7 +88,7 @@ is the walkable or buildable tile one step ahead along bloombot's facing.
 | Action | Keyboard and mouse | Gamepad | Today |
 |---|---|---|---|
 | Move | WASD, or click a tile | Left stick | (none) |
-| Sprint | Shift | Right trigger | (none) |
+| Hover (sprint, once the Hover upgrade is bought) | Shift | Right trigger | (none) |
 | Pulse / confirm | E | A | click with tool 2 |
 | Interact / inspect | Q | X | click with tool 1 |
 | Build tray | B (machines on 3–0) | Y | B, 3–0 |

@@ -69,6 +69,18 @@ export const UPGRADES: UpgradeDef[] = [
     describe: () => 'Pulse energy cost −25%',
   },
   {
+    // Bloombot's sprint, bought once: hold the sprint key to hover a little off the ground and move faster
+    // (BOT.sprint instead of BOT.walk). Read by BotController. Price set by the owner, 18 Nov 2026.
+    id: 'hover',
+    group: 'Pulse',
+    name: 'Hover',
+    icon: '🚀',
+    baseCost: 40,
+    costMult: 1,
+    maxLevel: 1,
+    describe: () => 'Hold Shift (or the right trigger) to hover a little off the ground and move faster',
+  },
+  {
     id: 'solarArray', // saved id kept; shown as Solar Wings (Phase 5: "Array" becomes the merged T2 panel's name)
     group: 'Machines',
     machine: 'solar',

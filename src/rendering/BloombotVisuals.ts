@@ -4,8 +4,8 @@ import { color, PALETTE } from './Materials';
 /**
  * Bloombot (#234, G.10 + G.1): the player character, and the game's first skinned model. The GLB comes from
  * Meshy (generated, rigged, animated) and a Blender pass (assets/raw/bloombot/blender-pass.py); it holds one
- * skinned mesh, a 24-bone rig and seven clips: idle, walk, run (loops), pulse, assemble, interact, cheer
- * (one-shots). Front is +Z, pivot at the feet, about 0.9 m tall.
+ * skinned model in rigid robot pieces, a 24-bone rig and seven clips: idle, walk, hover (loops), pulse,
+ * assemble, interact, cheer (one-shots). Front is +Z, pivot at the feet, about 0.9 m tall.
  *
  * Until the model loads (or if it fails) a small stand-in capsule is drawn, so walking works from frame one.
  * Presentation only: nothing here touches the simulation.
@@ -17,13 +17,17 @@ export const FACES = ['happy', 'surprised', 'wink', 'blink'] as const;
 export type BotFace = (typeof FACES)[number];
 /** Model metres -> world units (1 tile = 1 m). A touch under a tile tall, like the mock beside a bench. */
 const SCALE = 0.95;
-/** Clip speeds at which the feet match the ground: world units per second at anim speed 1. */
-const STRIDE = { walk: 1.15, run: 3.1 } as const;
+/**
+ * Walk clip speed at which the feet match the ground: world units per second at anim speed 1. The toddler
+ * waddle from the Blender pass (0.479 m/s, which it prints, times SCALE). Hover has no feet on the ground, so it
+ * always plays at speed 1.
+ */
+const WALK_STRIDE = 0.455;
 const BLEND = 0.18;
 
-export type BotLoop = 'idle' | 'walk' | 'run';
+export type BotLoop = 'idle' | 'walk' | 'hover';
 export type BotAction = 'pulse' | 'assemble' | 'interact' | 'cheer';
-const LOOPS: readonly string[] = ['idle', 'walk', 'run'];
+const LOOPS: readonly string[] = ['idle', 'walk', 'hover'];
 
 export class BloombotVisuals {
   /** placed at bloombot's feet, turned to its facing */
@@ -143,14 +147,14 @@ export class BloombotVisuals {
     this.root.setEulerAngles(0, (facing * 180) / Math.PI, 0);
   }
 
-  /** The looping clip, from how fast bloombot moves (world units per second). */
-  setMotion(speed: number, sprinting: boolean) {
-    const want: BotLoop = speed < 0.05 ? 'idle' : sprinting ? 'run' : 'walk';
+  /** The looping clip, from how fast bloombot moves (world units per second) and whether it hovers (sprint). */
+  setMotion(speed: number, hovering: boolean) {
+    const want: BotLoop = speed < 0.05 ? 'idle' : hovering ? 'hover' : 'walk';
     const anim = this.model?.anim;
     if (!anim) return;
     if (!this.action) {
       if (want !== this.loop) anim.baseLayer?.transition(want, BLEND);
-      anim.speed = want === 'idle' ? 1 : pc.math.clamp(speed / STRIDE[want], 0.5, 1.8);
+      anim.speed = want === 'walk' ? pc.math.clamp(speed / WALK_STRIDE, 0.5, 1.8) : 1;
     }
     this.loop = want;
   }

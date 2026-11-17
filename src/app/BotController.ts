@@ -9,8 +9,8 @@ import type { Action, Bindings } from './Bindings';
  * Bloombot (#234): input, movement and the camera follow (G.2, G.3, G.11, G.12). The game owns what an action
  * does; this owns where bloombot is and when it gets there. Docs: docs/BLOOMBOT_EPIC.md.
  *
- * Moving: WASD / arrows or the left stick, relative to the camera's fixed angle; Shift or the right trigger
- * sprints. A click sets a walk target: bloombot paths there and then runs the click's action (`arrive`).
+ * Moving: WASD / arrows or the left stick, relative to the camera's fixed angle; once the Hover upgrade is
+ * bought, Shift or the right trigger hovers (bloombot's sprint: faster, a little off the ground). A click sets a walk target: bloombot paths there and then runs the click's action (`arrive`).
  * The camera follows bloombot unless something else moved it (a drag, a fly-to, Home, the overview's travel);
  * it picks bloombot up again as soon as bloombot moves.
  */
@@ -205,7 +205,9 @@ export class BotController {
       }
     }
     const frozen = this.frozen();
-    this.sprinting = !frozen && (this.bindings.isDown('sprint', this.held) || !!pad?.sprint);
+    // Sprinting is the Hover upgrade: until it is bought the sprint key does nothing.
+    const canHover = (this.sim.state.upgrades.hover ?? 0) > 0;
+    this.sprinting = !frozen && canHover && (this.bindings.isDown('sprint', this.held) || !!pad?.sprint);
     const p = this.pose;
     const w = this.walker;
     const wade = w.wading(p) ? BOT.wade : 1;
