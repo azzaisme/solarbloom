@@ -57,7 +57,8 @@ import { FlyText } from '../ui/Fly';
 import { Hud, superType, type Settings, type Tool } from '../ui/Hud';
 import { SuperSystem } from '../gameplay/SuperSystem';
 import { EventBus } from './EventBus';
-import { BotController, type PadAction } from './BotController';
+import { BotController } from './BotController';
+import { type Action, Bindings, BUILD_DIGITS, keyLabel, padLabel } from './Bindings';
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
 import { type LoadResult, SaveService } from './SaveService';
@@ -163,6 +164,8 @@ export class Game {
   private botPreviewAt = 0;
   private botPreviewKey = '';
   private keyMapShown: 'keys' | 'pad' = 'keys';
+  /** Bloombot (G.16): the controls map, rebindable in Settings */
+  readonly bindings = new Bindings();
   /** Bloombot (G.14): the round map at the bottom left */
   private minimap?: Minimap;
   private selected?: string;
@@ -358,12 +361,15 @@ export class Game {
     if (botMode()) {
       const visuals = new BloombotVisuals(this.app, this.scene.world);
       visuals.reducedMotion = !!this.settings.reducedMotion;
-      const bot = new BotController(this.sim, this.camera, visuals);
+      Object.assign(this, { bindings: new Bindings({ keys: this.settings.keys, pad: this.settings.pad }) });
+      const bot = new BotController(this.sim, this.camera, visuals, this.bindings);
       this.bot = bot;
       bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble';
-      bot.onPad = (a) => this.padAction(a);
+      bot.onPad = (a) => this.doAction(a);
+      bot.onButton = (i) => this.padListener?.(i);
       bot.onZoom = (f) => this.camera.zoomBy(f);
-      this.hud.setKeyMap('keys');
+      this.hud.setKeyMap('keys', this.bindings);
+      this.hud.renderControls(this.bindings, (kind, done) => this.listenForBinding(kind, done), () => this.saveBindings());
       this.minimap = new Minimap(this.sim, this.hud.root, (id) => {
         const m = this.sim.state.machines.find((q) => q.id === id);
         return !!m && this.landmarkReady(m);
@@ -577,28 +583,33 @@ export class Game {
 
   private wireKeys() {
     window.addEventListener('keydown', (e) => {
-      if (e.target instanceof HTMLInputElement) return;
-      const k = e.key.toLowerCase();
-      const map: Record<string, Tool> = { '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden', '9': 'relay', '0': 'cultivator' };
-      if (!this.bot) Object.assign(map, { '1': 'inspect', '2': 'pulse' });
-      if (map[k]) this.selectTool(map[k]);
-      else if (this.bot && (k === '1' || k === '2')) this.cycleTool(k === '1' ? -1 : 1);
-      // Bloombot's map (docs/BLOOMBOT_EPIC.md §7); the cursor map keeps Q Frenzy, F next area, H harvest.
-      else if (this.bot && e.code === 'KeyE') this.botAct();
-      else if (this.bot && e.code === 'KeyQ') this.botInteract();
-      else if (this.bot && e.code === 'KeyR') this.sim.frenzy.activate();
-      else if (this.bot && e.code === 'KeyN') this.focusNextArea();
-      else if (this.bot && e.code === 'KeyF') this.harvest();
-      else if (this.bot && e.code === 'KeyM') this.toggleOverview();
-      else if (this.bot && e.code === 'Tab') {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      if (this.keyListener) {
         e.preventDefault();
-        this.hud.toggleBackpack();
-      } else if (!this.bot && k === 'h') this.harvest();
-      else if (!this.bot && k === 'f') this.focusNextArea();
-      else if (!this.bot && k === 'q') this.sim.frenzy.activate();
+        this.keyListener(e.code);
+        return;
+      }
+      if (this.bot) {
+        // Bloombot's map (docs/BLOOMBOT_EPIC.md §7), rebindable; build tools stay on the number row.
+        const slot = BUILD_DIGITS.indexOf(e.code as (typeof BUILD_DIGITS)[number]);
+        const tools: Tool[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
+        if (slot >= 0) return this.selectTool(tools[slot]);
+        const a = this.bindings.actionForCode(e.code);
+        if (!a) return;
+        if (a === 'backpack' || a === 'debug') e.preventDefault();
+        if (e.repeat && a !== 'zoomIn' && a !== 'zoomOut') return;
+        this.doAction(a);
+        return;
+      }
+      const k = e.key.toLowerCase();
+      const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden', '9': 'relay', '0': 'cultivator' };
+      if (map[k]) this.selectTool(map[k]);
+      else if (k === 'h') this.harvest();
+      else if (k === 'f') this.focusNextArea();
       else if (k === 'home') this.focusArea(PARK);
       else if (k === 'u') this.hud.toggleUpgrades();
       else if (k === 'b') this.hud.toggleTray();
+      else if (k === 'q') this.sim.frenzy.activate();
       else if (k === 'p') this.setPaused(!this.paused);
       else if (k === 'f3' || k === '`') {
         e.preventDefault();
@@ -607,6 +618,50 @@ export class Game {
       else if (k === '+' || k === '=') this.camera.zoomBy(1.15);
       else if (k === '-') this.camera.zoomBy(1 / 1.15);
     });
+  }
+
+  /** Bloombot: one action from a key or a gamepad button. Movement and sprint are read by BotController. */
+  private doAction(a: Action) {
+    if (a === 'pulse') this.botAct();
+    else if (a === 'interact') this.botInteract();
+    else if (a === 'tray') this.hud.toggleTray();
+    else if (a === 'cancel') this.escape();
+    else if (a === 'harvest') this.harvest();
+    else if (a === 'upgrades') this.hud.toggleUpgrades();
+    else if (a === 'backpack') this.hud.toggleBackpack();
+    else if (a === 'prevTool') this.cycleTool(-1);
+    else if (a === 'nextTool') this.cycleTool(1);
+    else if (a === 'zoomIn') this.camera.zoomBy(1.15);
+    else if (a === 'zoomOut') this.camera.zoomBy(1 / 1.15);
+    else if (a === 'overview') this.toggleOverview();
+    else if (a === 'pause') this.setPaused(!this.paused);
+    else if (a === 'frenzy') this.sim.frenzy.activate();
+    else if (a === 'nextArea') this.focusNextArea();
+    else if (a === 'home') this.focusArea(PARK);
+    else if (a === 'debug') this.setSetting('debug', !this.settings.debug);
+  }
+
+  /** G.16: the rebinding screen waits for one key or button. */
+  private keyListener?: (code: string) => void;
+  private padListener?: (button: number) => void;
+  private listenForBinding(kind: 'key' | 'pad', done: (code: string | number | undefined) => void) {
+    const finish = (v: string | number | undefined) => {
+      this.keyListener = undefined;
+      this.padListener = undefined;
+      done(v);
+    };
+    this.keyListener = (code) => finish(code === 'Escape' ? undefined : kind === 'key' ? code : undefined);
+    if (kind === 'pad') this.padListener = (i) => finish(i);
+  }
+
+  private saveBindings() {
+    const saved = this.bindings.save();
+    this.settings.keys = saved.keys;
+    this.settings.pad = saved.pad;
+    this.setSetting('keys', saved.keys as unknown as string);
+    this.hud.setKeyMap(this.bot?.lastInput ?? 'keys', this.bindings);
+    this.hud.renderControls(this.bindings, (kind, done) => this.listenForBinding(kind, done), () => this.saveBindings());
+    this.botPreviewKey = '';
   }
 
   private escape() {
@@ -638,25 +693,12 @@ export class Game {
     if (!out && this.bot) this.bot.following = true;
   }
 
-  private padAction(a: PadAction) {
-    if (a === 'pulse') this.botAct();
-    else if (a === 'interact') this.botInteract();
-    else if (a === 'tray') this.hud.toggleTray();
-    else if (a === 'cancel') this.escape();
-    else if (a === 'harvest') this.harvest();
-    else if (a === 'upgrades') this.hud.toggleUpgrades();
-    else if (a === 'backpack') this.hud.toggleBackpack();
-    else if (a === 'prevTool') this.cycleTool(-1);
-    else if (a === 'nextTool') this.cycleTool(1);
-    else if (a === 'overview') this.toggleOverview();
-    else if (a === 'pause') this.setPaused(!this.paused);
-  }
-
   /** A key or button name for hints: the pointer's "Click", or bloombot's key / pad button. */
-  private press(key: 'E' | 'Q'): string {
-    if (!this.previewFromBot) return 'Click';
-    if (this.bot?.lastInput === 'pad') return key === 'E' ? 'Ⓐ' : 'Ⓧ';
-    return `<kbd>${key}</kbd>`;
+  private press(key: 'E' | 'Q', bot = this.previewFromBot): string {
+    if (!bot) return 'Click';
+    const a: Action = key === 'E' ? 'pulse' : 'interact';
+    if (this.bot?.lastInput === 'pad') return `<kbd>${padLabel(this.bindings.pad[a])}</kbd>`;
+    return `<kbd>${keyLabel(this.bindings.keys[a][0] ?? '')}</kbd>`;
   }
 
   /** The tile in front of bloombot as a pick. */
@@ -854,7 +896,7 @@ export class Game {
     if (!this.bot) return;
     if (this.bot.lastInput !== this.keyMapShown) {
       this.keyMapShown = this.bot.lastInput;
-      this.hud.setKeyMap(this.bot.lastInput);
+      this.hud.setKeyMap(this.bot.lastInput, this.bindings);
     }
     if (this.cinematic || this.pointerRecent()) return;
     const p = this.frontPick();
@@ -872,7 +914,7 @@ export class Game {
       if (p?.tile) this.overlays.showFrame(p.roofId, p.tile.x, p.tile.z, 1, 'info');
       else this.overlays.hideFrame();
       const up = lift.up;
-      const k = this.bot.lastInput === 'pad' ? 'Ⓧ' : '<kbd>Q</kbd>';
+      const k = this.press('Q', true);
       const what = up ? (up.preview ? `<span class="bad">${this.lockedReason(up.id)}</span>` : `<span class="ok">${k} Ride up to the rooftop</span>`) : `<span class="ok">${k} Ride down to the street</span>`;
       this.hud.showTip(sc.x, sc.y, `<b>Rooftop lift</b>${what}`);
       return;

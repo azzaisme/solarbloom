@@ -3,6 +3,7 @@ import type { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { SLAB_TOP } from '../core/Picking';
 import type { Sim } from '../gameplay/Sim';
 import { BOT, type BotPose, spawnPose, Walker } from '../gameplay/Walker';
+import type { Action, Bindings } from './Bindings';
 
 /**
  * Bloombot (#234): input, movement and the camera follow (G.2, G.3, G.11, G.12). The game owns what an action
@@ -13,33 +14,13 @@ import { BOT, type BotPose, spawnPose, Walker } from '../gameplay/Walker';
  * The camera follows bloombot unless something else moved it (a drag, a fly-to, Home, the overview's travel);
  * it picks bloombot up again as soon as bloombot moves.
  */
-export type PadAction = 'pulse' | 'interact' | 'tray' | 'cancel' | 'harvest' | 'upgrades' | 'backpack' | 'prevTool' | 'nextTool' | 'overview' | 'pause';
-
-/** Standard-mapping gamepad buttons (https://w3c.github.io/gamepad/#remapping). */
-const PAD_BUTTONS: Partial<Record<number, PadAction>> = {
-  0: 'pulse', // A
-  1: 'cancel', // B
-  2: 'interact', // X
-  3: 'tray', // Y
-  4: 'prevTool', // LB
-  5: 'nextTool', // RB
-  8: 'overview', // View
-  9: 'pause', // Menu
-  12: 'backpack', // d-pad up
-  14: 'harvest', // d-pad left
-  15: 'upgrades', // d-pad right
-};
 const DEAD = 0.18;
-const MOVE_KEYS: Record<string, [number, number]> = {
-  KeyW: [0, 1],
-  ArrowUp: [0, 1],
-  KeyS: [0, -1],
-  ArrowDown: [0, -1],
-  KeyA: [-1, 0],
-  ArrowLeft: [-1, 0],
-  KeyD: [1, 0],
-  ArrowRight: [1, 0],
-};
+const MOVES: readonly [Action, number, number][] = [
+  ['up', 0, 1],
+  ['down', 0, -1],
+  ['left', -1, 0],
+  ['right', 1, 0],
+];
 
 interface Walk {
   path: { x: number; z: number }[];
@@ -67,7 +48,10 @@ export class BotController {
   lastInput: 'keys' | 'pad' = 'keys';
   /** gamepad right stick zoom, per second */
   onZoom?: (factor: number) => void;
-  onPad?: (a: PadAction) => void;
+  /** a gamepad button was pressed (bound to an action) */
+  onPad?: (a: Action) => void;
+  /** any gamepad button press, by index (the rebinding screen listens here) */
+  onButton?: (button: number) => void;
   /** true while input must not move bloombot (cinematics, open modal, paused) */
   frozen = () => false;
 
@@ -75,6 +59,7 @@ export class BotController {
     private sim: Sim,
     private camera: CameraController,
     readonly visuals: BloombotVisuals,
+    private bindings: Bindings,
   ) {
     this.walker = new Walker(sim);
     const saved = sim.state.bot;
@@ -83,10 +68,11 @@ export class BotController {
     this.save();
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement) return;
-      if (MOVE_KEYS[e.code] || e.code.startsWith('Shift')) {
+      const a = this.bindings.actionForCode(e.code);
+      if (a === 'up' || a === 'down' || a === 'left' || a === 'right' || a === 'sprint') {
         this.held.add(e.code);
         this.lastInput = 'keys';
-        if (e.code.startsWith('Arrow')) e.preventDefault();
+        if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
       }
     });
     window.addEventListener('keyup', (e) => this.held.delete(e.code));
@@ -175,13 +161,15 @@ export class BotController {
       const down = b.pressed;
       if (down && !this.padPrev[i]) {
         this.lastInput = 'pad';
-        const a = PAD_BUTTONS[i];
-        if (a) this.onPad?.(a);
+        this.onButton?.(i);
+        const a = this.bindings.actionForButton(i);
+        if (a && a !== 'sprint') this.onPad?.(a);
       }
       this.padPrev[i] = down;
     });
     if (x || y) this.lastInput = 'pad';
-    return { x, y, sprint: (gp.buttons[7]?.value ?? 0) > 0.4, zoom };
+    const sb = this.bindings.pad.sprint;
+    return { x, y, sprint: sb !== undefined && (gp.buttons[sb]?.value ?? 0) > 0.4, zoom };
   }
 
   update(dt: number) {
@@ -189,13 +177,11 @@ export class BotController {
     if (pad?.zoom) this.onZoom?.(Math.pow(1.8, pad.zoom * dt));
     let ix = 0;
     let iy = 0;
-    for (const k of this.held) {
-      const m = MOVE_KEYS[k];
-      if (m) {
-        ix += m[0];
-        iy += m[1];
+    for (const [a, mx, my] of MOVES)
+      if (this.bindings.isDown(a, this.held)) {
+        ix += mx;
+        iy += my;
       }
-    }
     if (pad) {
       ix += pad.x;
       iy += pad.y;
@@ -217,7 +203,7 @@ export class BotController {
       }
     }
     const frozen = this.frozen();
-    this.sprinting = !frozen && (this.held.has('ShiftLeft') || this.held.has('ShiftRight') || !!pad?.sprint);
+    this.sprinting = !frozen && (this.bindings.isDown('sprint', this.held) || !!pad?.sprint);
     const p = this.pose;
     const w = this.walker;
     const wade = w.wading(p) ? BOT.wade : 1;
