@@ -1,4 +1,5 @@
 import { areaMapFor, AreaMap, OldCityMap, PARK, SEA, type AreaInfo } from '../core/Areas';
+import { regionById } from '../core/OldCityLayout';
 import { GROUND, isRestorable } from '../core/GameState';
 import type { AreaMode, FogState, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
@@ -116,9 +117,29 @@ export class AreaSystem {
     return { biomass: roundNice(biomass).toString(), energy: Math.max(1, Math.round(energy)) };
   }
 
+  /** E21.5: the Old City opens by clearing the way, never by buying it. */
+  private get oldCity(): boolean {
+    return this.map instanceof OldCityMap;
+  }
+
+  /** E21.5: what an Old City area's seal says: its region's gate, or (a backstreet) the region beside it. */
+  sealText(id: string): string {
+    const r = regionById(id);
+    if (r) return `${r.name} is behind the clouds. ${r.gate.blocked}`;
+    return 'Behind the clouds — open a region beside it first';
+  }
+
+  /** E21.5: after GateSystem lifts an Old City seal. */
+  afterUnseal(id: string) {
+    this.placeLandmark(id);
+    this.countCache.delete(id);
+    this.sim.bus.emit('area.revealed', { areaId: id });
+  }
+
   /** Why an area can't be unlocked now, or undefined if it can. */
   unlockProblem(id: string): string | undefined {
     if (!this.sealed(id)) return 'Already open';
+    if (this.oldCity) return this.sealText(id);
     const cost = this.unlockCost(id)!;
     const short = this.sim.econ.shortfall(cost);
     if (short) return `Needs ${fmt(cost.biomass)} 🌿 and ${fmt(cost.energy)} ⚡`;
@@ -168,6 +189,7 @@ export class AreaSystem {
     const fog = this.fog(id);
     if (fog === 'hidden') return false;
     if (fog === 'cleared' || id === PARK || t.ground === 'restored') return true;
+    if (this.oldCity) return true; // E21.5: an opened Old City region can be restored anywhere (no receding frontier)
     return this.sim.grid.neighbors(t).some((n) => this.isClear(n));
   }
 
@@ -175,6 +197,7 @@ export class AreaSystem {
   fogReason(t: TileData): string | undefined {
     if (t.roofId !== GROUND || this.canTouch(t)) return undefined;
     const id = this.map.areaOfCell(t.x, t.z);
+    if (this.sealed(id) && this.oldCity) return this.sealText(id);
     if (this.sealed(id)) return `Sealed in thick fog — unlock it for ${fmt(this.unlockCost(id)!.biomass)} 🌿 and ${fmt(this.unlockCost(id)!.energy)} ⚡`;
     return this.fog(id) === 'hidden' ? 'Lost in the fog — clear a neighbouring area first' : 'Thick fog — restore a tile next to clear ground first';
   }
@@ -299,7 +322,9 @@ export class AreaSystem {
     if (s.state.areas[id]) return;
     if (this.map instanceof OldCityMap && (id === SEA || id.startsWith('out_'))) return; // E21.4: the sea and the cloud beyond
     s.state.areas[id] = { fog: 'frontier', revealedAt: s.time };
-    if (TUNING.city.unlock.enabled && id !== PARK) Object.assign(s.state.areas[id], { sealed: true, price: this.priceNow() });
+    // E21.5: in the Old City a revealed area stays sealed (no price) until its gate is opened
+    if (this.oldCity && id !== PARK) s.state.areas[id].sealed = true;
+    else if (TUNING.city.unlock.enabled && id !== PARK) Object.assign(s.state.areas[id], { sealed: true, price: this.priceNow() });
     this.placeLandmark(id);
     if (!this.sealed(id)) this.ensureEntry(id);
     s.bus.emit('area.revealed', { areaId: id });

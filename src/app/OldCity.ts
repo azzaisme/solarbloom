@@ -119,6 +119,25 @@ export class OldCityController {
       this.salvageHold(pile.id, front, false);
       return true;
     }
+    // E21.5: a gate: Pry a barricade (hold 2 s), repair a bridge, or hear what it needs
+    const gate = onGround ? this.sim.gates.gateAt(front.x, front.z) : undefined;
+    if (gate) {
+      const why = this.sim.gates.problem(gate);
+      const sc = this.host.screenOf(front.x, front.z);
+      if (why) this.host.hud.showFail(why, sc.x, sc.y);
+      else if (gate.kind === 'barricade')
+        this.startHold('pry', SALVAGE.pryHoldSeconds, () => {
+          if (this.sim.gates.open(gate.id)) {
+            this.host.sound('pry');
+            for (const [x, z] of gate.cells) this.host.markTile(x, z);
+          }
+        });
+      else if (this.sim.gates.open(gate.id)) {
+        this.host.sound('deliver');
+        for (const [x, z] of gate.cells) this.host.markTile(x, z);
+      }
+      return true;
+    }
     if (occupant && (occupant.type === 'chest' || this.isStoreLandmark(occupant))) {
       this.openStorage();
       return true;

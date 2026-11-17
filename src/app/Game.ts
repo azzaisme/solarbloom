@@ -1342,6 +1342,11 @@ export class Game {
       this.overlays.hideGhost();
       this.overlays.hideFrame();
       const s = this.sim.areas;
+      // E21.5: no price in the Old City: the tip says what is in the way
+      if (this.sim.oldCity) {
+        this.hud.showTip(v.x, v.y, `<b>🌫️ Behind the clouds</b>${s.sealText(sealed)}`);
+        return;
+      }
       const cost = s.unlockCost(sealed)!;
       const price = `${fmt(cost.biomass)} 🌿 and ${fmt(cost.energy)} ⚡`;
       const ok = !this.sim.econ.shortfall(cost);
@@ -2680,8 +2685,10 @@ export class Game {
       this.chunks.markArea(areaId);
       for (const nb of s.areas.info(areaId).neighbours) this.chunks.markArea(nb); // soft fog edges
       const info = s.areas.info(areaId);
-      this.hud.toast(`🔓 ${AREA_TYPES[info.type].name} unlocked!<small>The fog lifts. Restore it to wake the ${info.landmarkName}.</small>`, 'gold', 4);
-      this.sfx.fanfare();
+      // E21.5: an Old City region names itself; its backstreets open quietly
+      if (info.region) this.hud.toast(`🔓 ${s.gates.regionById(info.region)!.name} is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>`, 'gold', 4);
+      else if (!info.noLandmark) this.hud.toast(`🔓 ${AREA_TYPES[info.type].name} unlocked!<small>The fog lifts. Restore it to wake the ${info.landmarkName}.</small>`, 'gold', 4);
+      if (!info.noLandmark) this.sfx.fanfare();
       this.save();
     });
     // City 12.1: rooftop clusters appear with their area and come alive when a Bloom Relay reaches them.

@@ -60,6 +60,8 @@ export class Walker {
     } else if (!g.isPlayable(roofId) || !g.inBounds(roofId, cx, cz)) return false;
     const t = g.get(roofId, cx, cz);
     if (!t || t.blocked) return false;
+    // E21.5: a deep-water gate (a canal, the basin's moat) is only crossed with Hover
+    if (t.feature === 'water' && t.prop?.startsWith('gate:') && !this.sim.state.salvage?.abilities.includes('hover') && !this.sim.gates.isOpen(t.prop.slice(5))) return false;
     // E19.2: a flat decoration (a flower patch, stepping stones) occupies its tile but can be walked over.
     if (t.occupantId && !this.flatDecor(t.occupantId)) return false;
     if (this.solid?.(roofId, cx, cz)) return false;
