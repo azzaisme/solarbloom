@@ -5,9 +5,16 @@ import type { AreaType } from './city';
 
 /**
  * What unlocks an option (never bought): from the start, once the park reaches a look stage (1–4, see
- * ProgressionSystem.parkStage), or once this many city areas are cleared.
+ * ProgressionSystem.parkStage), once this many city areas are cleared, or (E19.2, for #288) a Lucky Cat
+ * keepsake: a decoration that only a cat find unlocks.
  */
-export type CozyUnlock = { start: true } | { parkStage: number } | { areas: number };
+export type CozyUnlock = { start: true } | { parkStage: number } | { areas: number } | { keepsake: Keepsake };
+
+/**
+ * E19.2 × #288: the cat finds that unlock keepsake decorations. Only the first find exists so far; #288 adds the
+ * first golden and rainbow cats and a find in each area type.
+ */
+export type Keepsake = 'firstFind';
 
 export interface PlotOption {
   id: string;
@@ -64,4 +71,49 @@ export const PLOT_GEN = {
   max: 4,
   /** placement attempts per area */
   tries: 64,
+};
+
+// ───────────── E19.2: decorations ─────────────
+
+/**
+ * E19.2.2 (#254): a decoration the player places by hand on one restored tile. It occupies the tile as a machine
+ * does (#252); `solid` ones also block bloombot, flat ones can be walked over. Cosmetic only and never bought:
+ * each unlocks once (milestones, or a Lucky Cat keepsake) and can then be placed as often as you like.
+ */
+export interface DecorOption {
+  id: string;
+  name: string;
+  icon: string;
+  /** one line for the tray and the backpack */
+  blurb: string;
+  solid: boolean;
+  unlock: CozyUnlock;
+}
+
+/** Tray order. Art: rendering/DecorArt.ts (existing prop models where one fits, primitives otherwise). */
+export const DECOR_OPTIONS: DecorOption[] = [
+  { id: 'bench', name: 'Bench', icon: '🪑', blurb: 'A slatted park bench.', solid: true, unlock: { start: true } },
+  { id: 'lantern', name: 'Lantern', icon: '🏮', blurb: 'A little lantern on the ground, lit at dusk.', solid: false, unlock: { start: true } },
+  { id: 'pot', name: 'Flower pot', icon: '🪴', blurb: 'A terracotta pot of flowers.', solid: true, unlock: { start: true } },
+  { id: 'flowerbed', name: 'Flower patch', icon: '🌷', blurb: 'A low ring of tulips. Walk right over it.', solid: false, unlock: { start: true } },
+  { id: 'stones', name: 'Stepping stones', icon: '🪨', blurb: 'Three flat stones for a garden path.', solid: false, unlock: { parkStage: 1 } },
+  { id: 'trough', name: 'Planter trough', icon: '🌿', blurb: 'A long stone trough of herbs.', solid: true, unlock: { parkStage: 1 } },
+  { id: 'birdbath', name: 'Bird bath', icon: '🐦', blurb: 'A stone bowl of water on a pedestal.', solid: true, unlock: { parkStage: 2 } },
+  { id: 'lamppost', name: 'Lamp post', icon: '💡', blurb: 'An old iron street lamp.', solid: true, unlock: { parkStage: 3 } },
+  { id: 'bunting', name: 'Bunting pole', icon: '🎏', blurb: 'A pole with a bright banner.', solid: true, unlock: { areas: 1 } },
+  { id: 'cratestack', name: 'Crate stack', icon: '📦', blurb: 'Two old crates, one on the other.', solid: true, unlock: { areas: 2 } },
+  { id: 'barrel', name: 'Barrel planter', icon: '🛢️', blurb: 'A barrel cut down and filled with flowers.', solid: true, unlock: { areas: 2 } },
+  { id: 'rug', name: 'Picnic rug', icon: '🧺', blurb: 'A checked rug and a basket.', solid: false, unlock: { areas: 3 } },
+  { id: 'topiary', name: 'Topiary', icon: '🌳', blurb: 'A clipped round shrub in a square tub.', solid: true, unlock: { areas: 4 } },
+  // Keepsakes (#288): only Lucky Cat finds unlock these.
+  { id: 'catstatue', name: 'Lucky Cat statue', icon: '🐱', blurb: 'A keepsake from your first Lucky Cat.', solid: true, unlock: { keepsake: 'firstFind' } },
+];
+
+export const DECOR_OPTION: Record<string, DecorOption> = Object.fromEntries(DECOR_OPTIONS.map((o) => [o.id, o]));
+
+export const DECOR_GEN = {
+  /** how far from bloombot (tiles, centre to centre) a build may be aimed: Satisfactory-style reach */
+  reach: 3.6,
+  /** most decorations a city can hold (keeps the save inside its limit, #3) */
+  max: 4000,
 };

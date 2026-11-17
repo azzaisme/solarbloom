@@ -43,10 +43,12 @@ export const ACTIONS: readonly { id: Action; label: string; pad: boolean }[] = [
   { id: 'harvest', label: 'Harvest', pad: true },
   { id: 'upgrades', label: 'Upgrades', pad: true },
   { id: 'backpack', label: 'Backpack', pad: true },
-  { id: 'prevTool', label: 'Previous tool', pad: true },
-  { id: 'nextTool', label: 'Next tool', pad: true },
-  { id: 'zoomIn', label: 'Zoom in (while placing)', pad: false },
-  { id: 'zoomOut', label: 'Zoom out (while placing)', pad: false },
+  { id: 'prevTool', label: 'Previous tool (turns a decoration on the pad)', pad: true },
+  { id: 'nextTool', label: 'Next tool (turns a decoration on the pad)', pad: true },
+  // E19.2: building no longer zooms; these keys (and the mouse wheel) turn a decoration in hand. The ids stay so
+  // saved bindings keep working.
+  { id: 'zoomIn', label: 'Turn a decoration clockwise', pad: false },
+  { id: 'zoomOut', label: 'Turn a decoration anticlockwise', pad: false },
   { id: 'overview', label: 'Overview', pad: true },
   { id: 'pause', label: 'Settings / pause', pad: true },
   { id: 'frenzy', label: 'Bloom Frenzy', pad: true },
