@@ -7,7 +7,7 @@ import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
-import type { BuildableType, MachineData, ResourceKind, TileData } from '../core/types';
+import type { BuildableType, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
 import { MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
@@ -704,6 +704,11 @@ export class Game {
         return;
       }
     }
+    const lift = this.liftAhead();
+    if (lift) {
+      this.rideLift(lift);
+      return;
+    }
     const p = this.frontPick();
     if (!p || !p.tile) return;
     const occ = this.sim.occupant(p.tile);
@@ -714,6 +719,57 @@ export class Game {
     }
     this.select(undefined);
     this.hud.showTip(sc.x, sc.y, `<b>${this.tileTitle(p.tile)}</b>${this.tileDetail(p.tile)}${this.pawHint(p.tile)}`);
+  }
+
+  /** G.13: the rooftop whose building stands on this ground cell. */
+  private roofOver(x: number, z: number): LayerData | undefined {
+    return this.sim.grid.clusterRoofs.find((l) => x >= l.origin[0] && x < l.origin[0] + l.width && z >= l.origin[2] && z < l.origin[2] + l.depth);
+  }
+
+  /**
+   * G.13: a lift in front of bloombot: the wall of a building that carries a rooftop (going up), or the edge of
+   * the rooftop it stands on (going down).
+   */
+  private liftAhead(): { up?: LayerData; down?: { x: number; z: number } } | undefined {
+    const b = this.bot;
+    if (!b) return undefined;
+    const f = b.front();
+    if (b.pose.roofId === GROUND) {
+      const g = this.sim.grid.layer(GROUND)!;
+      const roof = this.roofOver(f.x + g.origin[0], f.z + g.origin[2]);
+      return roof ? { up: roof } : undefined;
+    }
+    const r = this.sim.grid.layer(b.pose.roofId)!;
+    if (r.cluster && !this.sim.grid.inBounds(r.id, f.x, f.z)) {
+      const g = this.sim.grid.layer(GROUND)!;
+      return { down: { x: r.origin[0] + f.x - g.origin[0] + 0.5, z: r.origin[2] + f.z - g.origin[2] + 0.5 } };
+    }
+    return undefined;
+  }
+
+  private rideLift(lift: { up?: LayerData; down?: { x: number; z: number } }) {
+    const b = this.bot!;
+    if (lift.up) {
+      const r = lift.up;
+      if (r.preview || !this.sim.grid.isPlayable(r.id)) {
+        const f = b.front();
+        const t = this.sim.grid.get(GROUND, f.x, f.z);
+        const sc = t ? this.botTileScreen(t) : { x: innerWidth / 2, y: innerHeight / 2 };
+        this.hud.showFail(this.lockedReason(r.id), sc.x, sc.y);
+        return;
+      }
+      const [wx, , wz] = b.world();
+      const x = Math.min(r.width - 0.5, Math.max(0.5, wx - r.origin[0]));
+      const z = Math.min(r.depth - 0.5, Math.max(0.5, wz - r.origin[2]));
+      b.ride(r.id, x, z);
+    } else if (lift.down) b.ride(GROUND, lift.down.x, lift.down.z);
+    this.sfx.click();
+  }
+
+  /** G.12: is this landmark awake (its area cleared), so bloombot can travel to it from the overview? */
+  private landmarkWoken(m: MachineData): boolean {
+    const id = this.sim.areas.areaOf(m);
+    return !!id && this.sim.areas.fog(id) === 'cleared';
   }
 
   /** Bloombot (G.11): a click walks to the clicked thing, then does what the click would have done. */
@@ -751,6 +807,14 @@ export class Game {
       return;
     }
     const occ = this.sim.occupant(p.tile);
+    // G.12: from the overview, a woken landmark is a travel stop: bloombot hops there and the view comes back.
+    if (this.camera.zoom < 0.75 && occ?.type === 'core' && this.landmarkWoken(occ)) {
+      b.teleport(occ.roofId, occ.x + occ.size / 2, occ.z + occ.size + 0.6);
+      const [tx, ty, tz] = b.world();
+      this.camera.glide(tx, ty - SLAB_TOP, tz, BOT_ZOOM);
+      b.visuals.play('cheer');
+      return;
+    }
     if (tool === 'inspect' && !occ) {
       this.actAt(p, x, y); // reading a tile needs no walk
       return;
@@ -785,10 +849,24 @@ export class Game {
     if (this.cinematic || this.pointerRecent()) return;
     const p = this.frontPick();
     const now = performance.now();
-    const key = `${p?.roofId}:${p?.tile?.x},${p?.tile?.z}|${this.hud.currentTool}|${p?.tile?.ground}|${p?.tile?.bloom}|${this.bot.lastInput}`;
+    const key = `${this.bot.pose.roofId}:${this.bot.front().x},${this.bot.front().z}|${p?.roofId}:${p?.tile?.x},${p?.tile?.z}|${this.hud.currentTool}|${p?.tile?.ground}|${p?.tile?.bloom}|${this.bot.lastInput}`;
     if (key === this.botPreviewKey && now - this.botPreviewAt < 400) return;
     this.botPreviewKey = key;
     this.botPreviewAt = now;
+    const lift = this.liftAhead();
+    if (lift) {
+      const [bx, by, bz] = this.bot.world();
+      const v = this.camera.toScreen(new pc.Vec3(bx, by + 1.1, bz));
+      const sc = p?.tile ? this.botTileScreen(p.tile) : { x: v.x, y: v.y };
+      this.overlays.hideGhost();
+      if (p?.tile) this.overlays.showFrame(p.roofId, p.tile.x, p.tile.z, 1, 'info');
+      else this.overlays.hideFrame();
+      const up = lift.up;
+      const k = this.bot.lastInput === 'pad' ? 'Ⓧ' : '<kbd>Q</kbd>';
+      const what = up ? (up.preview ? `<span class="bad">${this.lockedReason(up.id)}</span>` : `<span class="ok">${k} Ride up to the rooftop</span>`) : `<span class="ok">${k} Ride down to the street</span>`;
+      this.hud.showTip(sc.x, sc.y, `<b>Rooftop lift</b>${what}`);
+      return;
+    }
     if (!p?.tile) {
       this.previewAt(undefined, 0, 0);
       return;

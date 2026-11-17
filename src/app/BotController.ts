@@ -55,6 +55,8 @@ export class BotController {
   private held = new Set<string>();
   private padPrev: boolean[] = [];
   private walk?: Walk;
+  /** G.13: riding a rooftop lift: rising (or sinking) in place, then stepping off on the other layer */
+  private lift?: { roofId: string; x: number; z: number; fromY: number; toY: number; t: number; dur: number };
   /** world speed this frame */
   speed = 0;
   sprinting = false;
@@ -95,7 +97,35 @@ export class BotController {
   world(): [number, number, number] {
     const l = this.sim.grid.layer(this.pose.roofId)!;
     const sink = this.walker.wading(this.pose) ? 0.07 : 0;
-    return [l.origin[0] + this.pose.x, l.origin[1] + l.height + SLAB_TOP - sink, l.origin[2] + this.pose.z];
+    let y = l.origin[1] + l.height + SLAB_TOP - sink;
+    if (this.lift) {
+      const k = Math.min(1, this.lift.t / this.lift.dur);
+      y = this.lift.fromY + (this.lift.toY - this.lift.fromY) * (k * k * (3 - 2 * k));
+    }
+    return [l.origin[0] + this.pose.x, y, l.origin[2] + this.pose.z];
+  }
+
+  /** The standing height of a layer (world y of its surface). */
+  private surface(roofId: string): number {
+    const l = this.sim.grid.layer(roofId)!;
+    return l.origin[1] + l.height + SLAB_TOP;
+  }
+
+  /**
+   * G.13: ride a lift to another layer: rise or sink in place for about a second, then step off at (x, z), in
+   * that layer's cells (moved to the nearest free cell if it's taken).
+   */
+  ride(roofId: string, x: number, z: number) {
+    if (this.lift || !this.sim.grid.layer(roofId)) return;
+    this.walk = undefined;
+    const fromY = this.world()[1];
+    const toY = this.surface(roofId);
+    this.lift = { roofId, x, z, fromY, toY, t: 0, dur: this.visuals.reducedMotion ? 0.4 : Math.min(2.2, 0.8 + Math.abs(toY - fromY) * 0.18) };
+    this.following = true;
+  }
+
+  get riding(): boolean {
+    return !!this.lift;
   }
 
   /** The cell in front, which every tool acts on. */
@@ -171,6 +201,21 @@ export class BotController {
       iy += pad.y;
     }
     const mag = Math.min(1, Math.hypot(ix, iy));
+    if (this.lift) {
+      this.lift.t += dt;
+      if (this.lift.t >= this.lift.dur) {
+        const l = this.lift;
+        this.lift = undefined;
+        this.teleport(l.roofId, l.x, l.z);
+      } else {
+        const [x, y, z] = this.world();
+        this.visuals.place(x, y, z, this.pose.facing);
+        this.visuals.setMotion(0, false);
+        this.visuals.update(dt);
+        this.follow(x, y, z);
+        return;
+      }
+    }
     const frozen = this.frozen();
     this.sprinting = !frozen && (this.held.has('ShiftLeft') || this.held.has('ShiftRight') || !!pad?.sprint);
     const p = this.pose;
@@ -234,11 +279,11 @@ export class BotController {
     this.follow(x, y, z);
   }
 
-  private follow(x: number, _y: number, z: number) {
+  private follow(x: number, y: number, z: number) {
     const g = this.camera.goalPoint;
     if (this.tracked && (Math.abs(g.x - this.tracked.x) > 0.02 || Math.abs(g.z - this.tracked.z) > 0.02)) this.following = false;
     if (this.following) {
-      this.camera.track(x, 0, z);
+      this.camera.track(x, y - SLAB_TOP, z);
       this.tracked = { x: this.camera.goalPoint.x, z: this.camera.goalPoint.z };
     } else this.tracked = undefined;
   }
