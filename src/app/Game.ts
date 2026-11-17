@@ -312,6 +312,7 @@ export class Game {
         setSetting: (k, v) => this.setSetting(k, v),
         activateFrenzy: () => this.sim.frenzy.activate(),
         findCat: () => this.findCat(),
+        keyFor: (a) => this.hudKey(a),
         goHome: (attention) => (attention ? this.focusNextArea() : this.focusArea(PARK)),
         setVolume: (k, v) => this.setVolume(k, v),
         setGraphics: (v) => this.setGraphics(v),
@@ -471,7 +472,7 @@ export class Game {
     // Phase 4 E10.1: no blocking welcome card. The first pulse works at once; a short note says what this is.
     if (!state.progression.introSeen && state.stats.tilesRestored === 0) {
       state.progression.introSeen = true;
-      const how = this.bot ? 'Walk with WASD and press E to pulse the grey tile in front of you.' : 'Tap a grey tile to bring it back to life.';
+      const how = `Walk with ${this.hudKey('up')}${this.hudKey('left')}${this.hudKey('down')}${this.hudKey('right')} and press ${this.hudKey('pulse')} to pulse the grey tile in front of you.`;
       setTimeout(() => this.hud.toast(`🌱 Welcome to Solarbloom<small>This park is dead and grey. ${how}</small>`, 'gold', 6), 600);
     }
     else if (offline) {
@@ -857,9 +858,14 @@ export class Game {
     if (!out && this.bot) this.bot.following = true;
   }
 
+  /** E20.2 (#285): an action's key or pad button as plain text, as the player last used them. */
+  private hudKey(a: Action): string {
+    return this.bot?.lastInput === 'pad' ? padLabel(this.bindings.pad[a]) : keyLabel(this.bindings.keys[a][0] ?? '');
+  }
+
   /** A key or button name for hints: the pointer's "Click", or bloombot's key / pad button. */
   private press(key: 'E' | 'Q', bot = this.previewFromBot): string {
-    if (!bot) return 'Click';
+    if (!bot) return 'Select'; // the internal cursor path (bots, dev tools)
     const a: Action = key === 'E' ? 'pulse' : 'interact';
     if (this.bot?.lastInput === 'pad') return `<kbd>${padLabel(this.bindings.pad[a])}</kbd>`;
     return `<kbd>${keyLabel(this.bindings.keys[a][0] ?? '')}</kbd>`;
@@ -1409,14 +1415,14 @@ export class Game {
     if (this.catHit(x, y)) {
       this.overlays.hideFrame();
       this.overlays.hideGhost();
-      this.hud.showTip(x, y, `<b>🐱 …is that a cat?</b>Click it!`);
+      this.hud.showTip(x, y, `<b>🐱 …is that a cat?</b>Go and say hello!`);
       document.body.style.cursor = 'pointer';
       return;
     }
     if (this.droneHit(x, y)) {
       this.overlays.hideFrame();
       this.overlays.hideGhost();
-      this.hud.showTip(x, y, `<b>🛸 Drone</b>Click to see its work area and current job`);
+      this.hud.showTip(x, y, `<b>🛸 Drone</b>Press ${this.hudKey('interact')} beside it to see its work area and current job`);
       document.body.style.cursor = 'pointer';
       return;
     }
@@ -1530,7 +1536,7 @@ export class Game {
     switch (t.ground) {
       case 'polluted': {
         const left = this.sim.cultivators.remaining(t);
-        if (left !== undefined) return `🚜 The Cultivator is softening this slab — ${Math.ceil(left)} s to bloom. Tap to knock it along.`;
+        if (left !== undefined) return `🚜 The Cultivator is softening this slab — ${Math.ceil(left)} s to bloom. Pulse it to knock it along.`;
         return `Pollution ${Math.round(t.pollution)}% — restoring neighbours softens it into moss.`;
       }
       case 'prepared':
@@ -1763,8 +1769,8 @@ export class Game {
     return (
       line +
       (beside + 1 >= TUNING.merge.count
-        ? `<span class="ok">✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (tap this one) and the new ${t2.name} completes a ${t3.icon} ${t3.name} core</span><br>`
-        : `✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (tap this one) and ${TUNING.merge.count} touching ${t2.name}s make a ${t3.icon} ${t3.name} core<br>`)
+        ? `<span class="ok">✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (this one too) and the new ${t2.name} completes a ${t3.icon} ${t3.name} core</span><br>`
+        : `✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (this one too) and ${TUNING.merge.count} touching ${t2.name}s make a ${t3.icon} ${t3.name} core<br>`)
     );
   }
 
@@ -1819,7 +1825,7 @@ export class Game {
     }
     const freed = plan.freed.length;
     const lost = plan.lost.map((l) => `<p class="loss">⚠️ ${esc(l.name)}: keeps Lv ${l.kept}, loses Lv ${l.lost.join(' and ')}</p>`).join('');
-    const swap = plan.options.length > 2 ? `<p>Tap another highlighted ${esc(plan.fromName)} to swap it in.</p>` : '';
+    const swap = plan.options.length > 2 ? `<p>Pick another highlighted ${esc(plan.fromName)} to swap it in.</p>` : '';
     return (
       `<div class="merge"><b>🔀 ${TUNING.merge.count} × ${esc(plan.fromName)} → ${t2.icon} ${esc(plan.toName)}</b>` +
       `<p class="gain">Output ${plan.before} → ${plan.after} (+${Math.round((plan.after / plan.before - 1) * 100)}%) · ${esc(t2.blurb)}</p>` +
@@ -2072,7 +2078,7 @@ export class Game {
     b.on('area.ready', ({ areaId }) => {
       const lm = s.areas.landmark(areaId);
       if (lm) this.machines.setLandmarkState(lm.id, 'ready');
-      if (areaId !== PARK) this.hud.toast(`✨ ${s.areas.info(areaId).landmarkName} is ready to wake!<small>Click it to clear this ${AREA_TYPES[s.areas.info(areaId).type].name.toLowerCase()}'s fog.</small>`, 'gold', 4);
+      if (areaId !== PARK) this.hud.toast(`✨ ${s.areas.info(areaId).landmarkName} is ready to wake!<small>Walk up and press ${this.hudKey('interact')} to clear this ${AREA_TYPES[s.areas.info(areaId).type].name.toLowerCase()}'s fog.</small>`, 'gold', 4);
     });
     b.on('area.cleared', ({ areaId }) => this.onAreaCleared(areaId));
     b.on('fauna.unlocked', ({ id }) => this.eco?.arrived(id)); // Phase 5 E16 (cosmetic; pays nothing)
@@ -2512,7 +2518,7 @@ export class Game {
     b.on('harvest', () => this.sfx.coin());
     b.on('rooftop.coreReady', () => {
       this.machines.setCoreState('ready');
-      this.hud.toast('✨ The Rooftop Core is humming!<small>Click it (or the button) to awaken the building.</small>', 'gold', 5);
+      this.hud.toast(`✨ The Rooftop Core is humming!<small>Walk up and press ${this.hudKey('interact')} (or use the button) to awaken the building.</small>`, 'gold', 5);
       this.sfx.chainEnd(10);
     });
     b.on('rooftop.coreRestored', () => this.playCoreSequence());

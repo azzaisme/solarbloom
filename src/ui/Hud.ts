@@ -37,6 +37,8 @@ export interface HudCallbacks {
   activateFrenzy(): void;
   /** Phase 5 E15: the 🐾 chip: show where a hinted cat hides. */
   findCat(): void;
+  /** E20.2 (#285): the key or pad button bound to an action, as the player last used them (for hint text). */
+  keyFor(a: Action): string;
   /** Look 5.9: the house button: the park, or (when something is ready) the next area that needs attention. */
   goHome(attention: boolean): void;
   newGame(): void;
@@ -202,8 +204,8 @@ export class Hud {
         <h2>${LOGO_MARK}<span>Welcome to Solarbloom</span></h2>
         <p>This old park is dead and grey, and the city around it is lost in a gloomy fog. Bring it back to life.</p>
         <ol>
-          <li><b>Tap a grey tile</b> to restore it. Each tap uses a little ⚡ energy and 💧 water, which refill on their own.</li>
-          <li><b>Green tiles grow 🌿 biomass.</b> Spend it on machines and upgrades. Tap a green tile again to grow flowers.</li>
+          <li><b>Walk up to a grey tile and pulse it</b> to restore it. Each pulse uses a little ⚡ energy and 💧 water, which refill on their own.</li>
+          <li><b>Green tiles grow 🌿 biomass.</b> Spend it on machines and upgrades. Pulse a green tile again to grow flowers.</li>
           <li><b>Goal:</b> wake the dry fountain. Then the fog starts to lift. The checklist is in the top-right corner.</li>
         </ol>
         <button id="introGo">Start restoring ✨</button>
@@ -282,7 +284,7 @@ export class Hud {
     ng.addEventListener('click', () => {
       if (Date.now() - armed < 4000) return this.cb.newGame();
       armed = Date.now();
-      ng.textContent = 'Tap again to clear your garden';
+      ng.textContent = 'Press again to clear your garden';
       setTimeout(() => {
         if (Date.now() - armed >= 4000) ng.textContent = 'New game';
       }, 4100);
@@ -486,7 +488,7 @@ export class Hud {
     });
     switch (step) {
       case 0:
-        return { text: 'Tap a grey tile to bring it back to life ✨' };
+        return { text: `Walk up to a grey tile and press ${this.cb.keyFor('pulse')} to bring it back to life ✨` };
       case 1:
       case 2: {
         if (step === 1) return { text: `Green tiles grow 🌿. Restore a few more · ${n}/4` };
@@ -511,10 +513,10 @@ export class Hud {
         const g = TUNING.park;
         return n < g.restoredTiles
           ? { text: `Restore the park · ${n}/${g.restoredTiles}`, target: '#obj' }
-          : { text: `Tap green tiles until they're in full bloom · ${full}/${g.fullBloomTiles}`, target: '#obj' };
+          : { text: `Pulse green tiles until they're in full bloom · ${full}/${g.fullBloomTiles}`, target: '#obj' };
       }
       case 8:
-        return { text: 'The fountain is ready: tap ✨ Wake the fountain', target: '#coreBtn' };
+        return { text: `The fountain is ready: walk up and press ${this.cb.keyFor('interact')}, or use ✨ Wake the fountain`, target: '#coreBtn' };
       default:
         return this.hoodHint();
     }
@@ -650,7 +652,7 @@ export class Hud {
     const row = (a: (typeof ACTIONS)[number]) =>
       `<div class="ctl-row"><span>${a.label}</span><button class="ctl-key" data-act="${a.id}" data-kind="key">${[...new Set(b.keys[a.id].map(keyLabel))].join(' / ')}</button>` +
       `<button class="ctl-key" data-act="${a.id}" data-kind="pad" ${a.pad ? '' : 'disabled'}>${a.pad ? padLabel(b.pad[a.id]) : 'stick'}</button></div>`;
-    box.innerHTML = `<h3>Controls</h3><p class="ctl-help">Click a key or button, then press the new one. Esc cancels.</p>${ACTIONS.map(row).join('')}<button id="ctlReset" class="ctl-reset">Reset to defaults</button>`;
+    box.innerHTML = `<h3>Controls</h3><p class="ctl-help">Choose an action, then press the new key or button. Esc cancels.</p>${ACTIONS.map(row).join('')}<button id="ctlReset" class="ctl-reset">Reset to defaults</button>`;
     box.querySelectorAll<HTMLButtonElement>('.ctl-key').forEach((btn) =>
       btn.addEventListener('click', () => {
         const act = btn.dataset.act as Action;
@@ -803,7 +805,7 @@ export class Hud {
           : `<button class="buy" data-buy="${def.id}" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : formatPriceHtml(st.price, u.short(st))}</button>`;
         return `${head}<div class="card"><span class="ci">${def.icon}</span><span class="cn">${esc(def.name)} ${lvTxt}</span>
           ${btn}
-          <span class="cd2">${esc(def.describe(lvl + 1))}${per && n ? ' · tap a machine to upgrade just that one' : ''}</span>${pips}
+          <span class="cd2">${esc(def.describe(lvl + 1))}${per && n ? ' · inspect a machine to upgrade just that one' : ''}</span>${pips}
           ${!st.ok && !maxed && st.reason && !st.reason.startsWith('Need ') ? `<span class="why">${esc(st.reason)}</span>` : ''}</div>`;
       })
       .join('');
@@ -1097,7 +1099,7 @@ export class Hud {
     this.set('frBody', document.body, 'cls', fActive ? '1' : '0', 'frenzy'); // also right after loading mid-Frenzy
     this.set('frText', $(fb, '.ft'), 'text', fActive ? `${Math.ceil(s.frenzy.remaining())}s` : fReady ? 'FRENZY!' : `${Math.floor(s.frenzy.charge)}%`);
     this.updateEvents();
-    this.set('frTitle', fb, 'title', fActive ? 'Bloom Frenzy! Pulse reach +2 tiers, biomass ×10, drones ×3' : fReady ? 'Bloom Frenzy is ready: tap to fire it (Q)' : 'Bloom Frenzy charges as you restore, chain and overflow');
+    this.set('frTitle', fb, 'title', fActive ? 'Bloom Frenzy! Pulse reach +2 tiers, biomass ×10, drones ×3' : fReady ? `Bloom Frenzy is ready: press ${this.cb.keyFor('frenzy')} to fire it` : 'Bloom Frenzy charges as you restore, chain and overflow');
     // Hotbar costs
     for (const t of BUILDABLE) {
       const btn = $(this.root, `#hotbar [data-tool="${t}"]`);
@@ -1154,7 +1156,7 @@ export class Hud {
     const wakeReady = s.state.progression.coreActivated ? s.areas.revealed().some((id) => s.areas.fog(id) !== 'cleared' && s.areas.ready(id)) : s.progression.coreReady();
     const homeB = $(this.root, '#homeBtn');
     this.set('homeReady', homeB, 'cls', wakeReady ? '1' : '0', 'ready');
-    this.set('homeTitle', homeB, 'title', wakeReady ? 'A landmark is ready to wake: tap to fly there' : 'Home (Home key)');
+    this.set('homeTitle', homeB, 'title', wakeReady ? 'A landmark is ready to wake: look at it from above' : 'Home (Home key)');
 
     // Objective
     const p = s.progression;
