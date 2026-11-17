@@ -425,6 +425,31 @@ export class Game {
     return this.autoTier;
   }
 
+  private brookScan = 0;
+  /**
+   * Puts the brook's 3D emitter at the clean (restored) water around the view, weighted toward the closest
+   * tiles; how much water there is sets its level. No clean water nearby: the brook fades out.
+   */
+  private placeBrook() {
+    const f = this.camera.target;
+    const R = 14;
+    let w = 0, x = 0, z = 0;
+    for (let tz = Math.floor(f.z - R); tz <= f.z + R; tz++) {
+      for (let tx = Math.floor(f.x - R); tx <= f.x + R; tx++) {
+        const t = this.sim.grid.get(GROUND, tx, tz);
+        if (!t || t.blocked || t.occupantId || t.feature !== 'water' || t.ground !== 'restored') continue;
+        const d = Math.hypot(tx + 0.5 - f.x, tz + 0.5 - f.z);
+        if (d >= R) continue;
+        const k = (1 - d / R) ** 2;
+        w += k;
+        x += k * (tx + 0.5);
+        z += k * (tz + 0.5);
+      }
+    }
+    if (w > 0) this.sfx.setBrook(Math.min(1, w / 3), x / w, 0, z / w);
+    else this.sfx.setBrook(0, 0, 0, 0);
+  }
+
   private setVolume(k: 'sfxVolume' | 'musicVolume', v: number) {
     this.settings[k] = Math.max(0, Math.min(100, v));
     this.setSetting('sound', this.settings.sound);
@@ -2525,6 +2550,14 @@ export class Game {
     if (!this.paused && this.camera.zoom > 0.9) {
       const f = this.camera.target;
       if (this.sim.cultivators.working().some((t) => Math.abs(t.x - f.x) < 10 && Math.abs(t.z - f.z) < 8)) this.sfx.stage('hum');
+    }
+    // 3D audio: the listener rides the camera; the brook sits at the clean water near the view.
+    const camE = this.camera.entity;
+    this.sfx.setListener(camE.getPosition(), camE.forward, camE.up);
+    this.brookScan -= dt;
+    if (this.brookScan <= 0) {
+      this.brookScan = 0.25;
+      this.placeBrook();
     }
     this.drones.update(this.paused || this.hiddenPause ? 0 : dt); // drone personality freezes with the game
     this.cat.update(dt);
