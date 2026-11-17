@@ -1,6 +1,7 @@
 import { GROUND } from '../core/GameState';
 import type { MachineData, TileData } from '../core/types';
 import { CAT_ANCHORS } from '../data/templates';
+import { plotById } from '../core/Plots';
 import { isBuilt } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
@@ -231,4 +232,83 @@ export function localSlots(sim: Sim, rect: Rect): LocalSlot[] {
     }
   }
   return out;
+}
+
+/** E19.3.2 (#258): who visits a chosen plot option (and, from E19.2, a decoration). */
+export type VisitorKind = 'groundBirds' | 'cats' | LocalSpecies;
+export const PLOT_VISITORS: Record<string, VisitorKind[]> = {
+  garden: ['groundBirds', 'groundBirds'],
+  orchard: ['groundBirds', 'squirrels'],
+  meadow: ['rabbits', 'groundBirds'],
+  arbour: ['groundBirds'],
+  greenhouse: ['groundBirds'],
+  crates: ['groundBirds'],
+  cafe: ['cats', 'pigeons'],
+  parklet: ['cats'],
+  picnic: ['cats', 'groundBirds'],
+  playground: ['pigeons'],
+  bandstand: ['pigeons', 'pigeons'],
+  bikes: ['pigeons'],
+  stalls: ['pigeons', 'pigeons'],
+  splash: ['pigeons'],
+  mooring: ['ducks', 'ducks'],
+  boathouse: ['ducks'],
+  reeds: ['ducks', 'frogs'],
+  dipping: ['frogs', 'frogs'],
+  hut: ['squirrels'],
+};
+
+export interface VisitorSlot {
+  kind: VisitorKind;
+  key: string;
+  home: { x: number; z: number };
+  water: boolean;
+}
+
+/**
+ * E19.3.2 (#258): animals drawn to what the player chose: birds in kitchen gardens, a cat asleep at the café,
+ * ducks by a mooring, frogs at a dipping pond. Read from `state.cozy` (the game's own choices), seeded by plot id,
+ * nearest the view first. Ducks need a restored water cell beside the plot; a cat never sits near a Lucky Cat
+ * spot. Reads the simulation, never writes it.
+ */
+export function visitorSlots(sim: Sim, rect: Rect, gen = sim.grid.layer(GROUND)?.gen ?? 1): VisitorSlot[] {
+  const chosen = sim.state.cozy?.plots;
+  if (!chosen) return [];
+  const cx = (rect.x0 + rect.x1) / 2;
+  const cz = (rect.z0 + rect.z1) / 2;
+  const out: (VisitorSlot & { d: number })[] = [];
+  for (const [id, option] of Object.entries(chosen)) {
+    const kinds = PLOT_VISITORS[option];
+    const spot = kinds && plotById(sim.grid.seed, id, gen);
+    if (!spot || spot.x + spot.size < rect.x0 || spot.x > rect.x1 || spot.z + spot.size < rect.z0 || spot.z > rect.z1) continue;
+    const h = idHash(id);
+    const mid = { x: spot.x + spot.size / 2, z: spot.z + spot.size / 2 };
+    const d = Math.hypot(mid.x - cx, mid.z - cz);
+    kinds.forEach((kind, i) => {
+      let home = { x: spot.x + 0.3 + hash01(h, i, 1) * (spot.size - 0.6), z: spot.z + 0.3 + hash01(h, i, 2) * (spot.size - 0.6) };
+      let water = false;
+      if (kind === 'ducks') {
+        const w = waterBeside(sim, spot.x, spot.z, spot.size, h + i);
+        if (!w) return;
+        home = w;
+        water = true;
+      }
+      if (kind === 'cats' && luckyAnchorsNear(sim, home.x, home.z).some(([ax, az]) => Math.hypot(ax - home.x, az - home.z) < CAT_ANCHOR_CLEARANCE)) return;
+      out.push({ kind, key: `v:${id}:${i}`, home, water, d });
+    });
+  }
+  out.sort((a, b) => a.d - b.d);
+  return out.map(({ d: _d, ...v }) => v);
+}
+
+/** A restored water cell touching the square [x, x+size) × [z, z+size), picked by `pick` among them. */
+function waterBeside(sim: Sim, x: number, z: number, size: number, pick: number): { x: number; z: number } | undefined {
+  const cells: { x: number; z: number }[] = [];
+  for (let i = -1; i <= size; i++)
+    for (let j = -1; j <= size; j++) {
+      if (i >= 0 && i < size && j >= 0 && j < size) continue;
+      const t = sim.grid.peek(GROUND, x + i, z + j);
+      if (t && t.feature === 'water' && t.ground === 'restored') cells.push({ x: t.x + 0.5, z: t.z + 0.5 });
+    }
+  return cells.length ? cells[pick % cells.length] : undefined;
 }
