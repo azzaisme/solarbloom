@@ -49,12 +49,15 @@ export class LookController {
   lowVfx = false;
   reducedMotion = false;
 
+  /** Steam Deck (#243): an upper limit on the shadow map size, whatever the tier asks for. */
+  shadowCap?: number;
+
   /** Look 1.11: switches shadow quality, the post stack and the atmosphere to a graphics tier. */
   setTier(tier: GfxTier) {
     this.tier = tier;
     const T = LOOK.tiers[tier];
     const sun = this.scene.sun.light!;
-    sun.shadowResolution = this.lowVfx ? Math.min(1024, T.shadowRes) : T.shadowRes;
+    sun.shadowResolution = Math.min(this.shadowCap ?? Infinity, this.lowVfx ? Math.min(1024, T.shadowRes) : T.shadowRes);
     sun.shadowType = T.softShadows ? pc.SHADOW_PCF5_32F : pc.SHADOW_PCF3_32F;
     this.post.apply(T, this.app.scene.fog.color);
     this.applyAtmosphere();
