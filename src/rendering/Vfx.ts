@@ -148,7 +148,7 @@ export class Vfx {
       this.rings.push({ e, m, life: 0, max: 1, r0: 0, r1: 1, active: false });
     }
     // A bolder ring for bloombot's pulse: it reads as a glowing band, like the reference's echo waves.
-    const palmMesh = pc.Mesh.fromGeometry(device, new pc.TorusGeometry({ tubeRadius: 0.09, ringRadius: 1, segments: 40, sides: 8 }));
+    const palmMesh = pc.Mesh.fromGeometry(device, new pc.TorusGeometry({ tubeRadius: 0.04, ringRadius: 1, segments: 48, sides: 8 }));
     palmMesh.incRefCount();
     for (let i = 0; i < 15; i++) {
       const m = uniqueMat(PALETTE.eyeCyan, { opacity: 0.9, emissive: PALETTE.eyeCyan, emissiveIntensity: 2.6 });
@@ -248,13 +248,13 @@ export class Vfx {
    */
   palmWave(from: pc.Vec3, to: pc.Vec3, hex: string = PALETTE.eyeCyan) {
     if (this.reducedMotion) return this.ring(to, hex, 0.7, 0.4);
-    const n = this.density < 0.6 ? 3 : 5;
+    const n = this.density < 0.6 ? 2 : 4;
     for (let i = 0; i < n; i++) {
       const r = this.palms.find((x) => !x.active) ?? this.palms[0];
       r.active = true;
       r.life = 0;
-      r.max = 0.5;
-      r.delay = i * 0.06;
+      r.max = 1.1;
+      r.delay = i * 0.16;
       r.from.copy(from);
       r.to.copy(to);
       this.setMatColor(r.m, hex);
@@ -263,10 +263,10 @@ export class Vfx {
     for (let i = 0; i < Math.round(6 * this.density); i++) {
       const k = (i + 1) / 7;
       const a = new pc.Vec3().lerp(from, to, k * 0.6);
-      this.mote(a, new pc.Vec3().lerp(from, to, Math.min(1, k + 0.35)).add(new pc.Vec3((Math.random() - 0.5) * 0.3, 0.12 + Math.random() * 0.2, (Math.random() - 0.5) * 0.3)), i % 2 ? PALETTE.pure.white : hex, 0.5, 0.03);
+      this.mote(a, new pc.Vec3().lerp(from, to, Math.min(1, k + 0.35)).add(new pc.Vec3((Math.random() - 0.5) * 0.3, 0.12 + Math.random() * 0.2, (Math.random() - 0.5) * 0.3)), i % 2 ? PALETTE.pure.white : hex, 1.1, 0.03);
     }
     const land = new pc.Vec3(to.x, to.y - 0.25, to.z);
-    setTimeout(() => this.ring(land, hex, 0.95, 0.45), 380);
+    setTimeout(() => this.ring(land, hex, 0.95, 0.6), 1000);
   }
 
   ring(pos: pc.Vec3, hex: string, r1 = 1.2, dur = 0.6) {
