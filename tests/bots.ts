@@ -4,7 +4,9 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import { KINDS } from '../src/core/Economy';
 import type { BuildableType, DroneRole, GameState, ResourceKind, TileData } from '../src/core/types';
 import { HOME } from '../src/gameplay/ProgressionSystem';
+import { MACHINES } from '../src/data/machines';
 import { Sim } from '../src/gameplay/Sim';
+import { BOT, type BotPose, spawnPose, Walker } from '../src/gameplay/Walker';
 
 /**
  * Phase 4 E00.3: scripted baseline players. These are deterministic bots, not people: they measure pacing
@@ -53,6 +55,13 @@ export interface BotOptions {
    * every later one (built at the fog's edge after the fountain) a Scout.
    */
   roles?: boolean;
+  /**
+   * E20.3 (#286): play through bloombot. The decisions are the same, but every ground action (pulse, build, wake,
+   * the cat, the fountain) first walks bloombot next to its target along the real path (`Walker.path`, sprinting
+   * on trips over 8 cells); the action happens on arrival, and nothing else on the ground happens meanwhile.
+   * Menu actions (upgrades, roles, Frenzy, Harvest) stay instant. Merging and superstructures are not walked.
+   */
+  walk?: boolean;
 }
 
 /** E18: the bots' fixed role rule, by hub order (see BotOptions.roles). */
@@ -95,6 +104,10 @@ export interface BotReport {
   cats: Record<string, number>;
   /** E18: when each role was first chosen (sim seconds), with `roles` on */
   roleAt: Partial<Record<DroneRole, number>>;
+  /** E20.3: with `walk`, seconds spent walking, trips made and actions dropped because no path reached them */
+  walk?: { seconds: number; trips: number; unreachable: number; failedOnArrival: number };
+  /** E20.3: tiles restored by the player's own pulses vs everything else (drones, chains, machines, events) */
+  restoredBy: { player: number; helpers: number };
   /** per-minute snapshot */
   minutesLog: { m: number; parkRestored: number; tiles: number; res: Record<ResourceKind, number>; caps: Record<ResourceKind, number>; rates: Record<ResourceKind, number> }[];
 }
@@ -147,6 +160,9 @@ function* botRun(opts: BotOptions): Generator<void, BotReport> {
     meaningful();
   });
   sim.bus.on('cat.found', ({ variant }) => (cats[variant ?? 'standard'] = (cats[variant ?? 'standard'] ?? 0) + 1));
+  const restoredBy = { player: 0, helpers: 0 };
+  sim.bus.on('tile.restored', ({ source }) => (source === 'pulse' || source === 'broad' ? restoredBy.player++ : restoredBy.helpers++));
+  const walk = opts.walk ? walking(sim) : undefined;
 
   const built: Record<string, number> = {};
   const roleAt: BotReport['roleAt'] = {};
@@ -215,7 +231,7 @@ function* botRun(opts: BotOptions): Generator<void, BotReport> {
         const near = new Map<string, TileData>();
         for (const e of entry) for (const t of sim.grid.tilesNear({ ...e, size: 1 }, 3)) near.set(t.id, t);
         const spot = [...near.values()].filter((t) => t.ground === 'restored' && sim.build.check('droneHub', GROUND, t.x, t.z).ok).sort((a, b) => a.z - b.z || a.x - b.x)[0];
-        if (spot && sim.build.place('droneHub', GROUND, spot.x, spot.z)) hubFor.add(goal);
+        if (spot && (sim.build.place('droneHub', GROUND, spot.x, spot.z) || walk?.queued('droneHub'))) hubFor.add(goal);
       }
     }
     // 2. pulse the most promising tile (the park first; after the fountain, where the advisor points)
@@ -339,7 +355,10 @@ function* botRun(opts: BotOptions): Generator<void, BotReport> {
   const steps = Math.round((opts.minutes * 60) / 0.1);
   for (let i = 0; i < steps; i++) {
     if (handsOffAt === undefined && mode === 'handsOff' && s.machines.some((m) => m.type === 'droneHub')) handsOffAt = Math.round(sim.time);
-    if (i % stepsPerAction === 0) act(handsOffAt === undefined);
+    if (i % stepsPerAction === 0) {
+      walk?.arrive();
+      act(handsOffAt === undefined);
+    }
     sim.tick();
     if (i % 3000 === 2999) yield; // lets runBotAsync hand the thread back now and then
     if (i % 10 === 0) {
@@ -388,6 +407,8 @@ function* botRun(opts: BotOptions): Generator<void, BotReport> {
     events,
     cats,
     roleAt,
+    walk: walk?.report(),
+    restoredBy,
     minutesLog,
   };
 }
@@ -411,3 +432,97 @@ export async function runBotAsync(opts: BotOptions): Promise<BotReport> {
 }
 
 export const mmss = (t?: number) => (t === undefined || t < 0 ? '—' : `${Math.floor(t / 60)}:${String(Math.round(t) % 60).padStart(2, '0')}`);
+
+/**
+ * E20.3 (#286): makes a bot walk. Wraps the Sim's ground actions so each one is queued until bloombot has walked
+ * next to its target; while it walks, other ground actions are refused (return falsy), as a player can only be in
+ * one place. A queued action reports success at once so the bot's bookkeeping moves on, and runs on arrival
+ * (`failedOnArrival` counts the ones that no longer could).
+ */
+function walking(sim: Sim) {
+  const walker = new Walker(sim);
+  const pose: BotPose = spawnPose(sim, walker);
+  let busyUntil = 0;
+  let pending: (() => unknown) | undefined;
+  let pendingBuild: string | undefined;
+  const r = { seconds: 0, trips: 0, unreachable: 0, failedOnArrival: 0 };
+  /** Walk next to the cells [x0, x0+w) × [z0, z0+d) on `roofId`. False when busy or unreachable. */
+  const go = (roofId: string, x0: number, z0: number, w: number, d: number, run: () => unknown): boolean => {
+    if (sim.time < busyUntil || pending) return false;
+    const near = (x: number, z: number) => x >= x0 - 1 && x <= x0 + w && z >= z0 - 1 && z <= z0 + d && !(x >= x0 && x < x0 + w && z >= z0 && z < z0 + d);
+    let secs: number;
+    if (roofId !== pose.roofId) {
+      secs = 40; // a lift or a trip across: a flat cost, bloombot stays where it was
+    } else {
+      const path = walker.path(roofId, pose.x, pose.z, near, { x: x0 + w / 2, z: z0 + d / 2 });
+      if (!path) {
+        r.unreachable++;
+        return false;
+      }
+      let len = 0;
+      let px = pose.x;
+      let pz = pose.z;
+      for (const c of path) {
+        len += Math.hypot(c.x - px, c.z - pz);
+        px = c.x;
+        pz = c.z;
+      }
+      secs = len / (path.length > 8 ? BOT.sprint : BOT.walk);
+      pose.x = px;
+      pose.z = pz;
+    }
+    if (secs < 0.05) return !!run();
+    r.seconds += secs;
+    r.trips++;
+    busyUntil = sim.time + secs;
+    pending = run;
+    return true;
+  };
+  const tile = (id: string) => sim.grid.byTileId(id);
+  const build = sim.build.place.bind(sim.build);
+  sim.build.place = ((type, roofId, x, z) => {
+    const size = MACHINES[type].size;
+    // A build counts only once it stands (falsy now): the bot's own bookkeeping sees it on a later action.
+    let made: ReturnType<typeof build>;
+    if (go(roofId, x, z, size, size, () => (made = build(type, roofId, x, z))) && !made) pendingBuild = type;
+    return made;
+  }) as typeof sim.build.place;
+  const pulse = sim.restoration.pulse.bind(sim.restoration);
+  sim.restoration.pulse = (id) => {
+    const t = tile(id);
+    return !!t && go(t.roofId, t.x, t.z, 1, 1, () => pulse(id));
+  };
+  const claim = sim.cat.claim.bind(sim.cat);
+  sim.cat.claim = ((catId?: string) => {
+    const spot = catId ? sim.cat.find(catId) : sim.state.cat.active;
+    const a = spot && sim.cat.anchor(spot.anchorId);
+    if (!a) return undefined;
+    return (go(a.roofId, Math.floor(a.pos[0]), Math.floor(a.pos[2]), 1, 1, () => claim(catId)) || undefined) as never;
+  }) as typeof sim.cat.claim;
+  const clear = sim.areas.clear.bind(sim.areas);
+  sim.areas.clear = (id, force) => {
+    const m = sim.areas.landmark(id);
+    if (!m) return clear(id, force);
+    return go(m.roofId, m.x, m.z, m.size, m.size, () => clear(id, force));
+  };
+  const wake = sim.progression.activateCore.bind(sim.progression);
+  sim.progression.activateCore = () => {
+    const f = sim.state.machines.find((m) => m.type === 'core' && m.roofId === GROUND);
+    if (!f) return wake();
+    return go(f.roofId, f.x, f.z, f.size, f.size, wake);
+  };
+  return {
+    pose,
+    /** Called before each action: an arrived trip does its action now. */
+    arrive() {
+      if (!pending || sim.time < busyUntil) return;
+      const run = pending;
+      pending = undefined;
+      pendingBuild = undefined;
+      if (!run()) r.failedOnArrival++;
+    },
+    /** A trip to build this type is under way (so the bot doesn't send a second one). */
+    queued: (type: string) => pendingBuild === type,
+    report: () => ({ ...r, seconds: Math.round(r.seconds) }),
+  };
+}
