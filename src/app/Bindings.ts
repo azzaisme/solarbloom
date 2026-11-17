@@ -25,6 +25,7 @@ export type Action =
   | 'frenzy'
   | 'nextArea'
   | 'home'
+  | 'recentre'
   | 'debug';
 
 /** Labels for the rebinding screen, in the order shown. */
@@ -43,13 +44,14 @@ export const ACTIONS: readonly { id: Action; label: string; pad: boolean }[] = [
   { id: 'backpack', label: 'Backpack', pad: true },
   { id: 'prevTool', label: 'Previous tool', pad: true },
   { id: 'nextTool', label: 'Next tool', pad: true },
-  { id: 'zoomIn', label: 'Zoom in', pad: false },
-  { id: 'zoomOut', label: 'Zoom out', pad: false },
+  { id: 'zoomIn', label: 'Zoom in (while placing)', pad: false },
+  { id: 'zoomOut', label: 'Zoom out (while placing)', pad: false },
   { id: 'overview', label: 'Overview', pad: true },
   { id: 'pause', label: 'Settings / pause', pad: true },
   { id: 'frenzy', label: 'Bloom Frenzy', pad: true },
   { id: 'nextArea', label: 'Go to the area that needs you', pad: true },
   { id: 'home', label: 'Back to the park', pad: true },
+  { id: 'recentre', label: 'Recentre the camera', pad: true },
   { id: 'debug', label: 'Debug overlay', pad: false },
 ];
 
@@ -75,6 +77,7 @@ export const DEFAULT_KEYS: Record<Action, string[]> = {
   frenzy: ['KeyR'],
   nextArea: ['KeyN'],
   home: ['Home'],
+  recentre: ['KeyC'],
   debug: ['F3', 'Backquote'],
 };
 
@@ -94,7 +97,7 @@ export const DEFAULT_PAD: Partial<Record<Action, number>> = {
   overview: 8,
   pause: 9,
   nextArea: 10,
-  home: 11,
+  recentre: 11, // right stick click, beside the stick that turns the view
   backpack: 12,
   // 13 (d-pad down) is left for menu focus (G.7)
   harvest: 14,

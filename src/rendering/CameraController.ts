@@ -41,6 +41,9 @@ export class CameraController {
   readonly target = new pc.Vec3(4, 0, 4);
   private goal = new pc.Vec3(4, 0, 4);
   yaw = 45;
+  /** Bloombot: where the view is turning to (degrees; may run past 360, the view eases along the short way) */
+  private yawGoal = 45;
+  static readonly HOME_YAW = 45;
   /** current pitch (degrees); follows the zoom */
   pitch = 35;
   /** current vertical field of view (degrees); follows the zoom */
@@ -152,6 +155,35 @@ export class CameraController {
     this.goal.set(x, y, z);
     this.clamp();
     this.follow = this.reducedMotion ? 30 : 7;
+  }
+
+  /** Bloombot: ease to a zoom without moving the view or changing how it follows. */
+  zoomTo(zoom: number) {
+    if (this.cinematic) return;
+    this.anchor = undefined;
+    this.zoomGoal = pc.math.clamp(zoom, this.minZoom, this.maxZoom);
+  }
+
+  get zoomTarget(): number {
+    return this.zoomGoal;
+  }
+
+  /** Bloombot: turn the view around its target by some degrees (positive moves the camera to its right). */
+  orbit(degrees: number) {
+    if (this.cinematic) return;
+    this.anchor = undefined;
+    this.yawGoal += degrees;
+  }
+
+  /** Bloombot: turn back to the default angle, the short way round. */
+  recentre() {
+    const turns = Math.round((this.yawGoal - CameraController.HOME_YAW) / 360);
+    this.yawGoal = CameraController.HOME_YAW + turns * 360;
+  }
+
+  /** Is the view at (or heading back to) the default angle? */
+  get centred(): boolean {
+    return Math.abs((((this.yawGoal - CameraController.HOME_YAW) % 360) + 360) % 360) < 0.01;
   }
 
   get goalPoint() {
@@ -304,6 +336,10 @@ export class CameraController {
     if (!this.cinematic) {
       const k = 1 - Math.exp(-dt * this.follow);
       this.zoom += (this.zoomGoal - this.zoom) * k;
+      // Turning eases briskly whatever the follow speed (a glide's slow follow would make it feel stuck).
+      const turn = this.reducedMotion ? 1 : 1 - Math.exp(-dt * 14);
+      this.yaw += (this.yawGoal - this.yaw) * turn;
+      if (Math.abs(this.yawGoal - this.yaw) < 0.01) this.yaw = this.yawGoal;
       this.target.lerp(this.target, this.goal, k);
       if (this.anchor) {
         // Zoom toward the cursor: move the view so the anchored ground point stays under it.

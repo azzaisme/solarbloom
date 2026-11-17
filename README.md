@@ -61,12 +61,14 @@ rebound in Settings → Controls.
 | Upgrades | `U` | D-pad right |
 | Backpack (discoveries) | `Tab` | D-pad up |
 | Previous / next tool | `1` / `2` | Bumpers |
-| Zoom (out to the city overview) | Mouse wheel, `+` / `-` | Right stick |
+| Zoom, only while placing something (the camera pulls back by itself; in play its distance is fixed) | Mouse wheel, `+` / `-` | Right stick up / down |
+| Turn the view around bloombot | Drag with the right mouse button | Right stick left / right |
+| Recentre the view | `C` | Right stick click |
 | Overview (and back) | `M`; in the overview, click a woken landmark to travel there | View |
 | Settings / pause | `P` | Menu |
 | Bloom Frenzy (when full) | `R` | Left trigger |
 | Go to the area that needs you (camera only) | `N` | Left stick click |
-| Back to the park (camera only) | `Home` | Right stick click |
+| Back to the park (camera only) | `Home` | |
 | Debug / FPS overlay | `F3` or `` ` `` | |
 
 Phones and tablets aren't supported for now. `?cursor=1` brings back the old click-to-act play (used by
