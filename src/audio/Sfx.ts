@@ -17,9 +17,20 @@ const TRACK_URLS = import.meta.glob(
     '../../assets/raw/audio/atmos/water-flowing.ogg',
     '../../assets/raw/audio/atmos/crickets.mp3',
     '../../assets/raw/audio/atmos/brook.wav',
+    '../../assets/raw/audio/atmos/birds-trees.wav',
   ],
   { query: '?url', import: 'default', eager: true },
 ) as Record<string, string>;
+
+export type V3 = { x: number; y: number; z: number };
+
+/** Every 3D source uses this distance model: full level within `refDistance` of the camera, softer beyond. */
+const SPATIAL: PannerOptions = { panningModel: 'HRTF', distanceModel: 'inverse', rolloffFactor: 1, maxDistance: 300 };
+/** Effects keep their level at normal viewing distance; ambient objects (brook, birds) swell as you zoom in. */
+const FX_REF = 30;
+const AMBIENT_REF = 14;
+/** Bird emitters in the trees nearest the view. */
+export const BIRD_VOICES = 3;
 
 /** 0 below `a`, 1 above `b`, smooth in between. */
 const ramp = (x: number, a: number, b: number) => {
@@ -98,6 +109,80 @@ export class Sfx {
     }
   }
 
+  /** Where the effect being played happens (set by at()); undefined: an interface sound, centred in the head. */
+  private pos?: V3;
+
+  /**
+   * Plays `play` with every voice it makes placed at `p` in the world, rendered in 3D (HRTF). World sounds (tile
+   * restores, cracks, blooms, builds, drones, the cat) go through here; interface sounds (clicks, errors, coin and
+   * fanfare stingers) are called directly and stay centred. A missing `p` plays centred too.
+   */
+  at(p: V3 | null | undefined, play: (s: this) => void) {
+    const prev = this.pos;
+    this.pos = p ?? undefined;
+    try {
+      play(this);
+    } finally {
+      this.pos = prev;
+    }
+  }
+
+  /** A voice's output: its own HRTF panner at `pos` for a world sound, else straight to the effects bus. */
+  private voiceOut(): AudioNode {
+    const bus = this.sfxGain ?? this.master!;
+    if (!this.pos || !this.ctx) return bus;
+    const p = new PannerNode(this.ctx, { ...SPATIAL, refDistance: FX_REF, positionX: this.pos.x, positionY: this.pos.y, positionZ: this.pos.z });
+    p.connect(bus);
+    return p;
+  }
+
+  /** Birds in the trees: looping voices of one recording, each with its own panner, gain and start offset. */
+  private birds: { gain: GainNode; panner: PannerNode; at: number }[] = [];
+
+  /** Decodes the birds loop once and starts BIRD_VOICES silent emitters (setBirds moves and fades them). */
+  private async startBirds() {
+    const ctx = this.ctx;
+    const url = TRACK_URLS[AUDIO_DIR + 'atmos/birds-trees.wav'];
+    if (!ctx || !this.sfxGain || !url) return;
+    try {
+      const buf = await ctx.decodeAudioData(await (await fetch(url)).arrayBuffer());
+      for (let i = 0; i < BIRD_VOICES; i++) {
+        const src = new AudioBufferSourceNode(ctx, { buffer: buf, loop: true });
+        const gain = new GainNode(ctx, { gain: 0 });
+        const panner = new PannerNode(ctx, { ...SPATIAL, refDistance: AMBIENT_REF });
+        src.connect(gain).connect(panner).connect(this.sfxGain);
+        // Offset each voice through the loop, so three trees never sing the same phrase together.
+        src.start(0, (buf.duration * i) / BIRD_VOICES);
+        this.birds.push({ gain, panner, at: 0 });
+      }
+    } catch {
+      /* no birds: the rest of the soundscape carries on */
+    }
+  }
+
+  /**
+   * Puts the bird voices in these trees (nearest first, up to BIRD_VOICES), `amount` 0..1 each by how grown the
+   * tree is. Voices without a tree fade out where they are.
+   */
+  setBirds(trees: (V3 & { amount: number })[]) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    this.birds.forEach((v, i) => {
+      const tree = trees[i];
+      const level = tree ? 0.35 * Math.max(0, Math.min(1, tree.amount)) : 0;
+      if (tree) {
+        // A silent voice jumps straight to its new tree; a singing one glides there.
+        const glide = v.at < 0.01 ? 0.01 : 0.6;
+        v.panner.positionX.setTargetAtTime(tree.x, t, glide);
+        v.panner.positionY.setTargetAtTime(tree.y, t, glide);
+        v.panner.positionZ.setTargetAtTime(tree.z, t, glide);
+      }
+      if (Math.abs(level - v.at) > 0.005) v.gain.gain.setTargetAtTime(level, t, 1.2);
+      v.at = level;
+    });
+  }
+
   /** Places the brook at (x, y, z) with `amount` 0..1 of nearby clean water (0 fades it out). */
   setBrook(amount: number, x: number, y: number, z: number) {
     this.brookLevel = 0.3 * Math.max(0, Math.min(1, amount));
@@ -130,7 +215,7 @@ export class Sfx {
         const src = ctx.createMediaElementSource(el).connect(gain);
         if (b.spatial) {
           // Inverse distance from the camera: zooming in on the water brings the brook up close.
-          const p = new PannerNode(ctx, { panningModel: 'HRTF', distanceModel: 'inverse', refDistance: 14, rolloffFactor: 1, maxDistance: 300 });
+          const p = new PannerNode(ctx, { ...SPATIAL, refDistance: AMBIENT_REF });
           src.connect(p).connect(out);
           this.brookPanner = p;
         } else src.connect(out);
@@ -173,6 +258,7 @@ export class Sfx {
       this.ctx = undefined;
     }
     this.startBeds();
+    void this.startBirds();
   }
 
   setMuted(m: boolean) {
@@ -211,10 +297,14 @@ export class Sfx {
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(v, t0 + (opts.attack ?? 0.01));
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    o.connect(g).connect(opts.dest ?? this.sfxGain ?? this.master);
+    const out = opts.dest ?? this.voiceOut();
+    o.connect(g).connect(out);
     o.start(t0);
     o.stop(t0 + dur + 0.05);
-    o.onended = () => this.voices--;
+    o.onended = () => {
+      this.voices--;
+      if (out instanceof PannerNode) out.disconnect();
+    };
   }
 
   private noise(dur: number, vol: number, freq: number) {
@@ -232,9 +322,13 @@ export class Sfx {
     f.frequency.exponentialRampToValueAtTime(freq * 3, ctx.currentTime + dur);
     const g = ctx.createGain();
     g.gain.value = vol;
-    src.connect(f).connect(g).connect(this.sfxGain ?? this.master);
+    const out = this.voiceOut();
+    src.connect(f).connect(g).connect(out);
     src.start();
-    src.onended = () => this.voices--;
+    src.onended = () => {
+      this.voices--;
+      if (out instanceof PannerNode) out.disconnect();
+    };
   }
 
   note(step: number, base = 523.25) {

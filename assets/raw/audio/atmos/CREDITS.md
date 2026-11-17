@@ -9,6 +9,7 @@ All files are CC0 (public domain): no attribution required, credited here anyway
 | water-flowing.ogg | 30 CC0 SFX loops (water_flowing.ogg) | rubberduck | CC0 | Running water, rises with restoration |
 | crickets.mp3 | Crickets Ambient Noise - loopable | Wolfgang_ | CC0 | Insects, late in restoration |
 | brook.wav | Park ambiences (park_ambience_river.wav): a 30 s mono 24 kHz loop cut from it | Thimras | CC0 | 3D brook at clean water near the view |
+| birds-trees.wav | Park ambiences (park_ambience_birds.wav): a 36 s mono 24 kHz loop cut from its busiest stretch | Thimras | CC0 | 3D birds in the grown trees near the view |
 
 Sources:
 - https://opengameart.org/content/windy-ambient-noise
