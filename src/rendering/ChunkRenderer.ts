@@ -11,6 +11,8 @@ import { buildingPlots, type BuildingPlot } from '../core/Generation';
 import { PALETTE } from './Materials';
 import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
+import { plotsInChunk, type PlotSpot } from '../core/Plots';
+import { drawPlot } from './PlotArt';
 import { FoliageBuilder, foliageMaterial, treeMesh, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
 import { treeSpot, treeStage } from './TreePlacement';
@@ -89,7 +91,7 @@ type V3 = [number, number, number];
 const UP: V3 = [0, 1, 0];
 
 /** Accumulates transformed primitives into one vertex-coloured mesh. */
-class MeshBuilder {
+export class MeshBuilder {
   private pos = new Grow(new Float32Array(1 << 15));
   private nrm = new Grow(new Float32Array(1 << 15));
   private col = new Grow(new Uint8Array(1 << 15));
@@ -713,6 +715,21 @@ export class ChunkRenderer {
   private batch?: ModelBatch;
 
   /**
+   * E19.1.5 (#251): what each plot looks like, from the game (the renderer never reads choices itself): an option
+   * id, null for the empty "waiting" look, undefined to draw nothing (not restored yet, or a machine on it).
+   */
+  plots?: { look(p: PlotSpot): string | null | undefined };
+  /** Cells of the chunk being built that a chosen plot covers (their own grass and flowers stay flat under it). */
+  private plotCells = new Set<string>();
+  private chunkPlots: { p: PlotSpot; look: string | null }[] = [];
+
+  /** E19.1.5: redraw the chunk holding a plot (its choice or preview changed). */
+  markPlot(p: PlotSpot) {
+    const t = this.sim.grid.peek(GROUND, p.x, p.z);
+    if (t) this.markTile(t);
+  }
+
+  /**
    * Look 3.19: an obstacle prop as its hand-built model: model, scale (to the procedural prop's size) and whether
    * its turn is seeded (props that face the street keep theirs).
    */
@@ -838,6 +855,16 @@ export class ChunkRenderer {
       slab: (hex, p, sc) => self.slab(self.sink, hex, p, sc),
       model: (name, x, y, z, rot, sx, sy, sz) => !!self.batch?.add(name, x, y, z, rot, sx, sy, sz),
     };
+    // E19.1.5: this chunk's plots and their looks (decided before the tiles, which stay flat under a chosen plot)
+    this.plotCells.clear();
+    this.chunkPlots = [];
+    if (this.plots && fog !== 'hidden')
+      for (const p of plotsInChunk(s.grid.seed, v.cx, v.cz, gen)) {
+        const look = this.plots.look(p);
+        if (look === undefined) continue;
+        this.chunkPlots.push({ p, look });
+        if (look) for (let j = 0; j < p.size; j++) for (let i = 0; i < p.size; i++) this.plotCells.add(`${p.x + i},${p.z + j}`);
+      }
     const pool: PoolGeo = { pos: [], col: [], idx: [] };
     for (const t of c.tiles) {
       if (!t) continue;
@@ -890,6 +917,17 @@ export class ChunkRenderer {
         else this.building(b, p, h, fog === 'cleared', v.far);
       }
     }
+    // E19.1.5: plots, in the chunk's own meshes and model batch (no extra draw calls)
+    if (this.chunkPlots.length) {
+      b.grey = fb.grey = 0;
+      const host = {
+        add: (type: VPrim, hex: string, p: [number, number, number], sc: [number, number, number] | number, glow?: number) => b.add(type, hex, p, sc, glow),
+        foliage: (g: TreeGeo, x: number, y: number, z: number, rot: number, scale: number) => fb.add(g, x, y, z, rot, scale),
+        model: (name: string, x: number, y: number, z: number, rot: number, sc: number) => !!this.batch?.add(name, x, y, z, rot, sc),
+        lod: (v.far ? 0 : this.band >= 2 ? 2 : 1) as Lod,
+      };
+      for (const { p, look } of this.chunkPlots) drawPlot(host, p, look ?? undefined, h + 0.08, !!v.far);
+    }
     this.fb = fb;
     this.sink = b;
     for (const t of v.towers ?? []) for (const e of t.entities) e.destroy();
@@ -935,6 +973,7 @@ export class ChunkRenderer {
       if (stage === 2) b.add('box', flowerAt(t.x, t.z), [t.x + 0.4, h + 0.085, t.z + 0.55], [0.34, 0.02, 0.3]);
       if (stage === 4) b.add('cylinder', PALETTE.flowers.radiantFar, [t.x + 0.5, h + 0.085, t.z + 0.5], [0.8, 0.02, 0.8]);
     }
+    if (this.plotCells.has(`${t.x},${t.z}`)) return; // E19.1.5: the plot's own far look stands here
     if (this.addTree(t, h, 0)) return;
     if (t.ground === 'restored' && t.bloom >= 3 && f !== 'water') this.fb.add(shrubGeo(t.variant, 0), t.x + 0.5, h + 0.08, t.z + 0.5, t.variant, 1);
   }
@@ -1238,8 +1277,8 @@ export class ChunkRenderer {
       obstacleClutter(this.ctx, t, x, z, h + 0.08); // Look 3.11
       return;
     }
-    if (t.occupantId) {
-      this.slab(b, t.ground === 'restored' ? grassTone(Math.max(1, t.bloom || 1), t.x, t.z) : PALETTE.soil, [x, h, z], [1, 0.16, 1]);
+    if (t.occupantId || this.plotCells.has(`${t.x},${t.z}`)) {
+      this.slab(b, t.ground === 'restored' ? (t.feature === 'paving' ? this.slabTone(t) : grassTone(Math.max(1, t.bloom || 1), t.x, t.z)) : PALETTE.soil, [x, h, z], [1, 0.16, 1]);
       return;
     }
     const top = h + 0.08;

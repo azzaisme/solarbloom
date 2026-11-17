@@ -414,6 +414,8 @@ const signal = {
   beacon: '#ffc428',
   beaconGlow: '#ffb000',
   beaconPool: '#fff3a0',
+  /** E19: the build hologram bloombot projects */
+  holo: '#5fe8ff',
 };
 
 /** Scene lights (Look 1 owns lighting; on its branch these move to src/data/look.ts). */
@@ -460,7 +462,37 @@ const retaining = {
   vine: ['#4f9a4a', '#5aa94f'],
 };
 
-const families = { retaining, stone, paving, ground, roof, lawn, flowers, leaf, wood, soil, metal, plastic, trim, solar, aqua, glow, building, props, core, sky, fauna, signal, light, surfaces, pure };
+/** E19 (#245): the cozy city's plots (and later decorations): warm wood, striped canvas, play colours. */
+const cozy = {
+  kerb: '#e3dccb',
+  stake: '#c9a77a',
+  string: '#f1ede4',
+  bedSoil: '#5f4733',
+  deck: '#c69c6d',
+  deckDark: '#8f6a48',
+  canvas: ['#f2689f', '#f9d23a', '#7fc8e8', '#9fd27a'] as string[],
+  canvasWhite: '#fbf6ec',
+  table: '#f1ede4',
+  play: ['#e8574f', '#f9d23a', '#5aa3c9', '#7cc26a'] as string[],
+  sand: '#ecd9a6',
+  boat: ['#e8574f', '#5aa3c9', '#f6c22e'] as string[],
+  reed: '#8db85c',
+  reedHead: '#7d5a3a',
+  iris: '#7d58b5',
+  blanket: ['#e8574f', '#f8f6ee'] as string[],
+  basket: '#b48a5a',
+  thatch: '#a5855a',
+  moss: '#6f9a45',
+  glass: '#bfe9f5',
+  frame: '#f4f1ea',
+  fruit: ['#e8574f', '#f6c22e', '#ee8a2c'] as string[],
+  veg: ['#ee8a2c', '#4f8a32', '#a983d6'] as string[],
+  rose: ['#f59ab5', '#e8574f', '#f8f6ee'] as string[],
+  metal: '#5b6670',
+  waterShallow: '#7fd0f0',
+};
+
+const families = { cozy, retaining, stone, paving, ground, roof, lawn, flowers, leaf, wood, soil, metal, plastic, trim, solar, aqua, glow, building, props, core, sky, fauna, signal, light, surfaces, pure };
 
 export const PALETTE = {
   ...families,

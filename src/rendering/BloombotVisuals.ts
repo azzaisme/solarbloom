@@ -20,6 +20,8 @@ const SCALE = 0.95;
 /** Clip speeds at which the feet match the ground: world units per second at anim speed 1. */
 const STRIDE = { walk: 1.15, run: 3.1 } as const;
 const BLEND = 0.18;
+/** The visor's middle, from the feet (front is +z), in world units. */
+const EYE = new pc.Vec3(0, 0.66, 0.2);
 
 export type BotLoop = 'idle' | 'walk' | 'run';
 export type BotAction = 'pulse' | 'assemble' | 'interact' | 'cheer';
@@ -135,6 +137,11 @@ export class BloombotVisuals {
     if (!m) return;
     m.emissiveMapOffset.set(FACES.indexOf(face) / FACES.length, 0);
     m.update();
+  }
+
+  /** E19: where bloombot's eyes are (world): the build hologram is projected from here. */
+  eyeWorld(out: pc.Vec3): pc.Vec3 {
+    return this.root.getWorldTransform().transformPoint(EYE, out);
   }
 
   /** Places bloombot (feet) and turns it to face `facing` (radians, 0 = +z). */
