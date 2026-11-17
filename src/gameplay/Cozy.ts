@@ -210,6 +210,12 @@ export class Cozy {
     return v ? decoration(key, v) : undefined;
   }
 
+  /** A decoration by its key (`<layer>|<x>|<z>`). */
+  decorByKey(key: string): Decoration | undefined {
+    const v = this.st?.decor?.[key];
+    return v ? decoration(key, v) : undefined;
+  }
+
   /** The decoration behind a tile's occupant id (undefined for machines and free tiles). */
   decorOf(occupantId: string | undefined): Decoration | undefined {
     const key = decorKeyOf(occupantId);

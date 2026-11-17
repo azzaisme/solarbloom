@@ -268,6 +268,8 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   // E19 plot options.
   '🥕': 'carrot', '🍎': 'apple', '☕': 'cup', '🛝': 'slide', '🌹': 'flower', '🌼': 'sunflower', '🪴': 'pot', '🚲': 'bike', '💦': 'water', '🎻': 'note',
   '🚣': 'boat', '🐸': 'frog', '🛖': 'hut', '🪟': 'glasshouse',
+  // E19.2 decorations.
+  '🌷': 'flower', '🎏': 'rainbow', '🛢': 'vase',
   '🪨': 'restore', '🧱': 'restore', '🟫': 'garden', '🍃': 'biomass', '🚜': 'build', '🔱': 'build', '🧭': 'telescope',
 };
 

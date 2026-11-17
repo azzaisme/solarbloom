@@ -1,6 +1,6 @@
 import type { AreaMode } from '../core/types';
 import { HOME } from '../gameplay/ProgressionSystem';
-import { PLOT_OPTION, PLOT_OPTIONS } from '../data/cozy';
+import { DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTION, PLOT_OPTIONS } from '../data/cozy';
 import { Economy, formatCost, formatPriceHtml, KINDS } from '../core/Economy';
 import { big, fmt, toNum, type Big } from '../core/Big';
 import type { Cost } from '../core/types';
@@ -15,9 +15,15 @@ import { WORLD_EVENT_INFO } from '../gameplay/WorldEventSystem';
 
 /** Phase 5 E14: `super:<type>` places a Superstructure Core of that family. */
 export type SuperTool = `super:${'solar' | 'condenser' | 'pollinator' | 'droneHub'}`;
-export type Tool = 'inspect' | 'pulse' | BuildableType | SuperTool;
+/** E19.2: `decor:<id>` holds a decoration to place; `remove` aims at decorations to remove or pick up. */
+export type DecorTool = `decor:${string}`;
+export type Tool = 'inspect' | 'pulse' | BuildableType | SuperTool | DecorTool | 'remove';
 export const SUPER_TOOLS: SuperTool[] = ['super:solar', 'super:condenser', 'super:pollinator', 'super:droneHub'];
 export const superType = (t: Tool) => (t.startsWith('super:') ? (t.slice(6) as 'solar' | 'condenser' | 'pollinator' | 'droneHub') : undefined);
+/** E19.2: the decoration a tool holds, if it holds one. */
+export const decorType = (t: Tool) => (t.startsWith('decor:') ? t.slice(6) : undefined);
+/** A machine build tool (a machine type), not pulse, inspect, a core, a decoration or remove. */
+export const machineTool = (t: Tool): t is BuildableType => t in MACHINES;
 
 const RES_META: Record<ResourceKind, { icon: string; name: string; color: string }> = {
   energy: { icon: ICONS.energy, name: 'Energy', color: 'var(--energy-bar)' },
@@ -173,6 +179,12 @@ export class Hud {
         const d = TIER3[superType(t)!]!;
         return `<button class="slot super" data-tool="${t}" hidden aria-label="Place ${d.name} core"><span class="si">${d.icon}</span><span class="sl">${d.name.split(' ').pop()}</span><span class="sc"></span></button>`;
       }),
+      // E19.2: decorations, free once earned, and the remove tool
+      `<span class="tray-break" aria-hidden="true"></span>`,
+      ...DECOR_OPTIONS.map(
+        (o) => `<button class="slot decor" data-tool="decor:${o.id}" hidden aria-label="Place a ${esc(plain(o.name))}" title="${esc(plain(o.blurb))}"><span class="si">${o.icon}</span><span class="sl">${esc(o.name)}</span><span class="sc">${o.solid ? '' : 'walk over'}</span></button>`,
+      ),
+      `<button class="slot decor" data-tool="remove" aria-label="Remove or move a decoration"><span class="si">🧹</span><span class="sl">Remove</span><span class="sc">or move</span></button>`,
       `</div>`,
       `<span class="sep"></span>`,
       `<button class="slot" id="harvestBtn" aria-label="Harvest sunlight (H)"><span class="key">H</span><span class="si">${ICONS.harvest}</span><span class="sl">Harvest</span><span class="sc">+${TUNING.harvest.energy}⚡</span><span class="cd"></span></button>`,
@@ -614,9 +626,11 @@ export class Hud {
     const tg = $(this.root, '#buildToggle');
     tg.classList.toggle('active', building);
     const st = superType(t);
-    const def = st ? TIER3[st]! : building ? MACHINES[t as BuildableType] : undefined;
-    $(tg, '.si').innerHTML = st ? iconize(def!.icon) : building ? ICONS[MACHINE_ICONS[t]] : ICONS.build;
-    $(tg, '.sl').textContent = def ? (st ? def.name.split(' ').pop()! : def.name.replace('Water ', '').replace('Pollinator ', '')) : 'Build';
+    const dk = decorType(t);
+    const dec = dk ? DECOR_OPTION[dk] : undefined;
+    const def = st ? TIER3[st]! : machineTool(t) ? MACHINES[t] : undefined;
+    $(tg, '.si').innerHTML = st ? iconize(def!.icon) : machineTool(t) ? ICONS[MACHINE_ICONS[t]] : dec ? iconize(dec.icon) : t === 'remove' ? iconize('🧹') : ICONS.build;
+    $(tg, '.sl').textContent = def ? (st ? def.name.split(' ').pop()! : def.name.replace('Water ', '').replace('Pollinator ', '')) : dec ? dec.name : t === 'remove' ? 'Remove' : 'Build';
     this.toggleTray(false);
   }
 
@@ -789,6 +803,16 @@ export class Hud {
       card('✨', `Plot options: ${got.length} of ${PLOT_OPTIONS.length}`, 'More unlock as the park grows and areas clear. Free, always.'),
     ];
     out.push(`<div class="bp-opts">${got.map((o) => `<span title="${esc(o.name)}">${o.icon}</span>`).join('')}</div>`);
+    // E19.2: decorations placed, and the ones earned (keepsakes from Lucky Cats among them)
+    const placed = Object.values(cz?.decor ?? {}).map((v) => v.split('@')[0]);
+    const dGot = DECOR_OPTIONS.filter((o) => 'start' in o.unlock || cz?.decorUnlocked?.includes(o.id));
+    const dKinds = new Map<string, number>();
+    for (const id of placed) dKinds.set(id, (dKinds.get(id) ?? 0) + 1);
+    out.push(
+      card('🪑', `Decorations placed: ${placed.length}`, placed.length ? [...dKinds].map(([id, n]) => `${esc(DECOR_OPTION[id]?.name ?? id)}${n > 1 ? ` ×${n}` : ''}`).join(', ') : 'Open the Build tray and choose a decoration. Place it on restored ground near bloombot.'),
+      card('✨', `Decorations: ${dGot.length} of ${DECOR_OPTIONS.length}`, 'Earned as the park grows and areas clear; keepsakes come from Lucky Cats. Place as many as you like.'),
+      `<div class="bp-opts">${dGot.map((o) => `<span title="${esc(o.name)}">${o.icon}</span>`).join('')}</div>`,
+    );
     return out;
   }
 
@@ -1200,6 +1224,14 @@ export class Hud {
       this.set(`hcs-${t}`, $(btn, '.sc'), 'text', n ? `core ×${n}` : '');
     }
     this.set('coresBadge', $(this.root, '#buildToggle .sc'), 'text', cores ? `✨ ${cores} core${cores > 1 ? 's' : ''}` : '');
+    // E19.2: a decoration's slot appears once it's earned
+    const earned = s.state.cozy?.decorUnlocked;
+    for (const o of DECOR_OPTIONS) {
+      const on = 'start' in o.unlock || !!earned?.includes(o.id);
+      if (this.last.get(`dc-${o.id}`) === String(on)) continue;
+      this.last.set(`dc-${o.id}`, String(on));
+      $(this.root, `#hotbar [data-tool="decor:${o.id}"]`).hidden = !on;
+    }
     // Overcharge countdown on the Pulse button
     const every = s.upgrades.overchargeEvery;
     const pc0 = s.state.progression.pulseCharge ?? 0;

@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import type { PlotSpot } from '../core/Plots';
 import { color, PALETTE } from './Materials';
 import { MODELS } from './Models';
+import { drawDecor } from './DecorArt';
 import { drawPlot } from './PlotArt';
 import { group } from './Shapes';
 import type { TreeGeo } from './TreeGen';
@@ -20,6 +21,8 @@ export type HoloTone = 'ok' | 'bad';
 export type HoloShape =
   | { kind: 'model'; name: string; scale: number }
   | { kind: 'plot'; plot: PlotSpot; option: string }
+  /** E19.2: a decoration (its models and primitives, turned `rot` quarter turns) */
+  | { kind: 'decor'; decor: string; rot: number }
   | { kind: 'block'; height: number };
 
 /** Lays geometry out as the chunk's MeshBuilder does: what PlotArt needs to draw into a standalone mesh. */
@@ -113,7 +116,11 @@ export class Hologram {
    * tiles. Cheap to call every frame with the same arguments.
    */
   show(shape: HoloShape, x: number, y: number, z: number, size: number, tone: HoloTone) {
-    const key = shape.kind === 'model' ? `m|${shape.name}|${shape.scale}|${!!MODELS?.has(shape.name)}` : shape.kind === 'plot' ? `p|${shape.plot.id}|${shape.option}` : `b|${size}|${shape.height}`;
+    const key =
+      shape.kind === 'model' ? `m|${shape.name}|${shape.scale}|${!!MODELS?.has(shape.name)}`
+      : shape.kind === 'plot' ? `p|${shape.plot.id}|${shape.option}`
+      : shape.kind === 'decor' ? `d|${shape.decor}|${shape.rot}|${!!MODELS}`
+      : `b|${size}|${shape.height}`;
     this.at.set(x, y, z);
     if (key !== this.contentKey) {
       this.content?.destroy();
@@ -128,7 +135,7 @@ export class Hologram {
     // plots are drawn in world coordinates (their art is laid out on the plot's own cells)
     if (shape.kind === 'plot') this.body.setPosition(0, 0, 0);
     else this.body.setPosition(x, y, z);
-    this.height = shape.kind === 'block' ? shape.height : shape.kind === 'plot' ? 1.1 : 0.4 + size * 0.45;
+    this.height = shape.kind === 'block' ? shape.height : shape.kind === 'plot' ? 1.1 : shape.kind === 'decor' ? 0.8 : 0.4 + size * 0.45;
     this.root.enabled = true;
   }
 
@@ -166,6 +173,29 @@ export class Hologram {
         e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, this.mats[this.tone].body)], castShadows: false, receiveShadows: false });
         return e;
       }
+    }
+    if (shape.kind === 'decor' && this.sink) {
+      // Its primitives into one mesh, its models as their own copies: laid out about the tile centre (the body's origin).
+      const root = new pc.Entity('holo-decor');
+      const b = this.sink();
+      const host = {
+        add: b.add.bind(b),
+        foliage: (g: TreeGeo, x: number, y: number, z: number, rot: number, sc: number) => b.addGeo(g, x, y, z, rot, sc),
+        model: (name: string, x: number, y: number, z: number, rot: number, sc: number) => {
+          const e = MODELS?.has(name) ? MODELS.instantiate(name, false, false) : undefined;
+          if (!e) return false;
+          e.setLocalPosition(x, y, z);
+          e.setLocalEulerAngles(0, (rot * 180) / Math.PI, 0);
+          e.setLocalScale(sc, sc, sc);
+          root.addChild(e);
+          return true;
+        },
+        lod: 1 as const,
+      };
+      drawDecor(host, shape.decor, 0, 0, 0, shape.rot, false);
+      const mesh = b.build(this.device);
+      if (mesh) root.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, this.mats[this.tone].body)], castShadows: false, receiveShadows: false });
+      return root;
     }
     // A footprint block: what a machine without a model (or a plot without art) looks like as a hologram.
     const h = shape.kind === 'block' ? shape.height : 0.5;
