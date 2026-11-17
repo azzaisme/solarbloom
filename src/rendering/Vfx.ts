@@ -28,6 +28,18 @@ interface Particle {
   twinkle: boolean;
 }
 
+/** Bloombot's travelling palm ring (palmWave). */
+interface PalmRing {
+  e: pc.Entity;
+  m: pc.StandardMaterial;
+  from: pc.Vec3;
+  to: pc.Vec3;
+  life: number;
+  max: number;
+  delay: number;
+  active: boolean;
+}
+
 interface Ring {
   e: pc.Entity;
   m: pc.StandardMaterial;
@@ -75,6 +87,8 @@ export class Vfx {
   private anyActive = false;
   private rings: Ring[] = [];
   private waves: Ring[] = [];
+  /** Bloombot's pulse: upright rings that travel from its palm to the tile (like the reference's echo pulse). */
+  private palms: PalmRing[] = [];
   private arcs: Arc[] = [];
   private root: pc.Entity;
   private rgbCache = new Map<string, [number, number, number]>();
@@ -132,6 +146,17 @@ export class Vfx {
       this.root.addChild(e);
       e.enabled = false;
       this.rings.push({ e, m, life: 0, max: 1, r0: 0, r1: 1, active: false });
+    }
+    // A bolder ring for bloombot's pulse: it reads as a glowing band, like the reference's echo waves.
+    const palmMesh = pc.Mesh.fromGeometry(device, new pc.TorusGeometry({ tubeRadius: 0.09, ringRadius: 1, segments: 40, sides: 8 }));
+    palmMesh.incRefCount();
+    for (let i = 0; i < 15; i++) {
+      const m = uniqueMat(PALETTE.eyeCyan, { opacity: 0.9, emissive: PALETTE.eyeCyan, emissiveIntensity: 2.6 });
+      const e = new pc.Entity('palmRing');
+      e.addComponent('render', { meshInstances: [new pc.MeshInstance(palmMesh, m)], castShadows: false });
+      this.root.addChild(e);
+      e.enabled = false;
+      this.palms.push({ e, m, from: new pc.Vec3(), to: new pc.Vec3(), life: 0, max: 1, delay: 0, active: false });
     }
     // Look 3.14: restore shockwaves, a flat soft-edged annulus (vertex alpha) sweeping out across the tiles.
     const waveMesh = this.annulus(device);
@@ -214,6 +239,34 @@ export class Vfx {
     c.fromString(hex);
     m.diffuse = c;
     m.emissive = c;
+  }
+
+  /**
+   * Bloombot's pulse: four cyan rings leave the palm (`from`) one after another, growing as they travel to the
+   * target tile (`to`), with sparkles along the way, then a cyan ring on the ground where they land. Reduced
+   * motion: one ring that fades in place at the tile.
+   */
+  palmWave(from: pc.Vec3, to: pc.Vec3, hex: string = PALETTE.eyeCyan) {
+    if (this.reducedMotion) return this.ring(to, hex, 0.7, 0.4);
+    const n = this.density < 0.6 ? 3 : 5;
+    for (let i = 0; i < n; i++) {
+      const r = this.palms.find((x) => !x.active) ?? this.palms[0];
+      r.active = true;
+      r.life = 0;
+      r.max = 0.5;
+      r.delay = i * 0.06;
+      r.from.copy(from);
+      r.to.copy(to);
+      this.setMatColor(r.m, hex);
+      r.e.enabled = false; // shown once its delay has passed
+    }
+    for (let i = 0; i < Math.round(6 * this.density); i++) {
+      const k = (i + 1) / 7;
+      const a = new pc.Vec3().lerp(from, to, k * 0.6);
+      this.mote(a, new pc.Vec3().lerp(from, to, Math.min(1, k + 0.35)).add(new pc.Vec3((Math.random() - 0.5) * 0.3, 0.12 + Math.random() * 0.2, (Math.random() - 0.5) * 0.3)), i % 2 ? PALETTE.pure.white : hex, 0.5, 0.03);
+    }
+    const land = new pc.Vec3(to.x, to.y - 0.25, to.z);
+    setTimeout(() => this.ring(land, hex, 0.95, 0.45), 380);
   }
 
   ring(pos: pc.Vec3, hex: string, r1 = 1.2, dur = 0.6) {
@@ -448,6 +501,29 @@ export class Vfx {
 
   update(dt: number) {
     this.updateParticles(dt);
+    for (const r of this.palms) {
+      if (!r.active) continue;
+      if (r.delay > 0) {
+        r.delay -= dt;
+        continue;
+      }
+      r.life += dt;
+      const k = r.life / r.max;
+      if (k >= 1) {
+        r.active = false;
+        r.e.enabled = false;
+        continue;
+      }
+      const e = 1 - Math.pow(1 - k, 2);
+      r.e.enabled = true;
+      r.e.setPosition(r.from.x + (r.to.x - r.from.x) * e, r.from.y + (r.to.y - r.from.y) * e, r.from.z + (r.to.z - r.from.z) * e);
+      r.e.lookAt(r.e.getPosition().clone().add(new pc.Vec3().sub2(r.to, r.from)));
+      r.e.rotateLocal(90, 0, 0); // the torus's axis (local +y) along the direction of travel
+      const s = 0.12 + 0.46 * e;
+      r.e.setLocalScale(s, 1, s);
+      r.m.opacity = 0.95 * (1 - k * k);
+      r.m.update();
+    }
     for (const r of this.rings) {
       if (!r.active) continue;
       r.life += dt;
