@@ -86,6 +86,7 @@ import { type LoadResult, SaveService } from './SaveService';
 import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
 import { padStick, PhotoMode } from './PhotoMode';
 import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
+import { HOTBAR_DEFAULT } from '../ui/Hotbar';
 import { LOOK } from '../data/look';
 
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Thriving (full bloom)', 'Radiant'];
@@ -95,8 +96,6 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const BOT_ZOOM = 3.2;
 /** E22.1: the camera's zoom steps while walking (the wheel and d-pad down step through them; closest first). */
 const BOT_ZOOMS = [BOT_ZOOM, 2.6, 2.0];
-/** E22.1: the build hotbar's default contents (slots 1–9): the machines in the old number-row order. */
-export const HOTBAR_DEFAULT: readonly string[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator', ''];
 /** E22.1: while a panel is open, these walking actions still reach the game (they close the panel they opened). */
 const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'upgrades', 'menu']);
 /**
@@ -854,6 +853,16 @@ export class Game {
       if (!v) this.speed = 1; // fast-forward is a developer tool only
       this.settingsUi.refresh();
     }
+  }
+
+  /** Closes every panel and menu and puts the tool away (tests, scripted runs). */
+  closeAll() {
+    this.closeMenu();
+    this.hud.toggleTray(false);
+    this.hud.toggleBackpack(false);
+    this.hud.toggleUpgrades(false);
+    this.hud.closePlotPicker();
+    if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
   }
 
   private openMenu() {
