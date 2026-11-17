@@ -2,12 +2,12 @@ import { big, fmt, type Big } from '../core/Big';
 import { HOME } from '../gameplay/ProgressionSystem';
 import * as pc from 'playcanvas';
 import { Sfx } from '../audio/Sfx';
-import { formatCost, RES_ICON } from '../core/Economy';
+import { formatCost, formatPriceHtml, RES_ICON } from '../core/Economy';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
-import type { BuildableType, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
+import type { BuildableType, DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
 import { BUILDABLE, MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
@@ -56,6 +56,8 @@ import { Vfx } from '../rendering/Vfx';
 import { FlyText } from '../ui/Fly';
 import { Hud, superType, type Settings, type Tool } from '../ui/Hud';
 import { SuperSystem } from '../gameplay/SuperSystem';
+import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
+import type { MergePlan } from '../gameplay/MergeSystem';
 import { EventBus } from './EventBus';
 import { BotController } from './BotController';
 import { type Action, Bindings, BUILD_DIGITS, keyLabel, padLabel } from './Bindings';
@@ -230,8 +232,18 @@ export class Game {
       if (lines[stage]) this.hud.toast(lines[stage], 'gold', 4);
       this.vfx.ring(new pc.Vec3(8, 0.3, 8), PALETTE.gold, 6, 1.0);
     };
+    this.grid.streaming = this.city; // City 07 (#8): rooftop clusters stream with the view
     this.grid.build();
     this.machines = new MachineVisuals(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
+    // City 07 (#8): in the city, machine models stream with the view; a landmark streaming in takes its area's state.
+    this.machines.streaming = this.city;
+    this.machines.landmarkState = (m) => {
+      const s = this.sim;
+      const id = s.areas.areaOf({ roofId: m.roofId, x: m.x, z: m.z });
+      if (!id || id === PARK) return s.state.progression.coreActivated ? 'awake' : s.progression.coreReady() ? 'ready' : 'dormant';
+      if (s.areas.fog(id) === 'cleared') return 'awake';
+      return s.areas.ready(id) ? 'ready' : 'dormant';
+    };
     this.machines.buildAll();
     this.drones = new DroneVisuals(this.sim, this.scene.world, this.tweens, this.app);
     this.drones.onTrail = (p) => this.vfx.trail(p);
@@ -273,6 +285,12 @@ export class Game {
         selectTool: (t) => this.selectTool(t),
         harvest: () => this.harvest(),
         // Phase 5 E12: "id" (global or cheapest machine), "id|machineId" (that machine) or "id|*" (Upgrade all).
+        chooseRole: (key) => {
+          const [hubId, role, slot, index] = key.split('|');
+          if (slot === 'drone') this.sim.roles.chooseForDrone(hubId, Number(index), role === '-' ? undefined : (role as DroneRole));
+          else this.sim.roles.choose(hubId, role as DroneRole, Number(slot) || 1);
+          this.renderInspect();
+        },
         buyUpgrade: (key) => {
           const [id, target] = key.split('|');
           if (target === '*') this.sim.upgrades.purchaseAll(id);
@@ -293,6 +311,14 @@ export class Game {
         setGraphics: (v) => this.setGraphics(v),
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
+        inspectAt: (id) => {
+          const m = this.sim.machine(id);
+          if (!m) return;
+          const w = this.machines.worldOf(m);
+          this.camera.glide(w[0], 0, w[2], Math.max(this.camera.zoom, 1));
+          this.selectTool('inspect');
+          this.select(id);
+        },
         mergeAt: (id) => {
           const m = this.sim.machine(id);
           if (!m) return;
@@ -1670,6 +1696,7 @@ export class Game {
       `<p>💰 ${plan.free ? 'Free: your first ' + esc(plan.fromName) + ' merge' : 'Fee ' + formatCost(plan.fee)} · 🧩 Frees ${freed} tile${freed === 1 ? '' : 's'}</p>` +
       (plan.core ? `<p>✨ All three leave the grid as a Superstructure Core: place it anywhere (${TIER3[m.type]!.size}×${TIER3[m.type]!.size}), then build it in three stages.</p>` : '') +
       lost +
+      this.mergeRolesText(plan) +
       swap +
       (plan.ok ? '' : `<p class="why">${esc(plan.reason ?? '')}</p>`) +
       `<div class="row"><button data-merge="confirm" ${plan.ok ? '' : 'disabled'}>Merge</button><button data-merge="cancel">Cancel</button></div></div>`
@@ -1690,6 +1717,77 @@ export class Game {
     this.renderInspect();
   }
 
+  /** E18: what a drone of this role is doing, in words. */
+  private droneLabel(role: DroneRole, status: 'working' | 'travelling' | 'napping' | 'waitingEnergy'): string {
+    const work: Record<DroneRole, string> = {
+      restorer: 'restoring a tile',
+      gardener: 'watering tiles',
+      scout: 'pushing back the fog',
+      courier: 'delivering charge',
+      spark: 'sparking a chain',
+      harvester: 'harvesting lost income',
+    };
+    const idle: Record<DroneRole, string> = {
+      restorer: 'napping — nothing to do in range',
+      gardener: 'napping — nothing in reach can grow',
+      scout: 'napping — nothing left to restore in reach',
+      courier: 'napping — no machine needs charge yet',
+      spark: 'resting — one chain per 30 s, or no garden cluster in reach',
+      harvester: 'resting — no store is full',
+    };
+    const wait = role === 'gardener' || role === 'courier' ? 'waiting for water 💧 or energy ⚡' : 'waiting for energy ⚡';
+    return status === 'working' ? work[role] : status === 'travelling' ? 'flying to a job' : status === 'napping' ? idle[role] : wait;
+  }
+
+  /**
+   * E18: the hub's role picker: every role with its icon, one-line job and refit price, "Owned" or why it's locked.
+   * A Fleet Hub has a second slot (half its drones); a Megahub can set each drone's role.
+   */
+  private rolePicker(m: MachineData): string {
+    const s = this.sim;
+    const r = s.roles;
+    const row = (slot: number, current: DroneRole) =>
+      ROLES.map((role) => {
+        const st = r.check(m.id, role, slot);
+        const owned = r.owns(m, role);
+        const on = role === current;
+        const note = on ? 'In use' : owned ? 'Owned' : st.reason && !st.reason.startsWith('Need ') ? esc(st.reason) : formatPriceHtml(st.price, s.econ.shortfall(st.price));
+        return `<button class="role-btn${on ? ' on' : ''}" data-role="${m.id}|${role}|${slot}" ${on || (!owned && !st.ok) ? 'disabled' : ''} aria-pressed="${on}" title="${esc(ROLE_INFO[role].job)}"><span class="ri">${ROLE_INFO[role].icon}</span><span class="rn">${ROLE_INFO[role].name}</span><span class="rp">${note}</span></button>`;
+      }).join('');
+    const tier = m.tier ?? 1;
+    const current = r.roleOf(m);
+    let html = `<div class="roles"><p class="rh">Role${tier >= 2 ? ' · slot 1' : ''}: <b>${ROLE_INFO[current].icon} ${ROLE_INFO[current].name}</b> — ${esc(ROLE_INFO[current].job)}</p><div class="role-row">${row(1, current)}</div>`;
+    if (tier === 2) {
+      const second = m.role2 ?? current;
+      html += `<p class="rh">Slot 2 (half the drones): <b>${ROLE_INFO[second].icon} ${ROLE_INFO[second].name}</b></p><div class="role-row">${row(2, second)}</div>`;
+    }
+    if (tier >= 3) {
+      const ds = s.state.drones.filter((d) => d.hubId === m.id).slice(0, TUNING.super.megahub.drones);
+      html += ds
+        .map((_d, i) => {
+          const mine = m.droneRoles?.[i] ?? undefined;
+          const opts = ROLES.filter((x) => r.owns(m, x) || r.check(m.id, x).ok)
+            .map((x) => `<button class="role-btn mini${mine === x ? ' on' : ''}" data-role="${m.id}|${x}|drone|${i}" ${mine === x ? 'disabled' : ''} title="${ROLE_INFO[x].name}">${ROLE_INFO[x].icon}</button>`)
+            .join('');
+          return `<p class="rh">Drone ${i + 1}: ${mine ? ROLE_INFO[mine].name : 'hub role'} ${mine ? `<button class="role-btn mini" data-role="${m.id}|-|drone|${i}">↺</button>` : ''}</p><div class="role-row">${opts}</div>`;
+        })
+        .join('');
+    }
+    const reach = current === 'scout' ? r.scoutReach(m) : s.upgrades.droneRadius(m);
+    html += `<p>Works within ${reach} tiles (highlighted). ${esc(ROLE_INFO[current].upgrades)}. A new role is a one-time refit; switching back to a role this hub owns is free.</p></div>`;
+    return html;
+  }
+
+  /** E18.8: what a hub merge does to roles, said before confirming. */
+  private mergeRolesText(plan: MergePlan): string {
+    const r = plan.roles;
+    if (!r) return '';
+    const name = (x: DroneRole) => `${ROLE_INFO[x].icon} ${ROLE_INFO[x].name}`;
+    const owned = r.owned.length ? ` · keeps refits: ${r.owned.map((x) => ROLE_INFO[x].name).join(', ')}` : '';
+    if (plan.core) return `<p>🛸 The Megahub keeps ${name(r.slot1)}${owned}; set each of its drones' roles once it's built.</p>`;
+    return `<p>🛸 Roles: slot 1 ${name(r.slot1)}${r.slot2 ? `, slot 2 ${name(r.slot2)} (half the drones each)` : ' (all drones)'}${owned}</p>`;
+  }
+
   /** Phase 5 E12: this machine's own upgrade (per-machine levels), plus "all of this type" when there are several. */
   private upgradeButton(id: string, m: MachineData) {
     const def = UPGRADE_BY_ID[id];
@@ -1701,7 +1799,7 @@ export class Game {
     const n = u.targets(def).length;
     const all = u.status(def);
     const allBtn = n > 1 ? `<button class="buy all" data-buy="${id}|*" ${all.ok ? '' : 'disabled'} title="Buys levels cheapest-first on every ${def.machine}">All ${n}</button>` : '';
-    return `<div class="card" style="margin-top:8px"><span class="ci">${def.icon}</span><span class="cn">${def.name} <em>Lv ${lvl}</em></span><button class="buy" data-buy="${id}|${m.id}" ${st.ok ? '' : 'disabled'}>${fmt(st.cost)} 🌿</button>${allBtn}<span class="cd2">${def.describe(lvl + 1)}</span></div>`;
+    return `<div class="card" style="margin-top:8px"><span class="ci">${def.icon}</span><span class="cn">${def.name} <em>Lv ${lvl}</em></span><button class="buy" data-buy="${id}|${m.id}" ${st.ok ? '' : 'disabled'}>${formatPriceHtml(st.price, u.short(st))}</button>${allBtn}<span class="cd2">${def.describe(lvl + 1)}</span></div>`;
   }
 
   private renderInspect() {
@@ -1732,11 +1830,13 @@ export class Game {
       }
       case 'droneHub': {
         const ds = s.state.drones.filter((d) => d.hubId === m.id);
-        const label = { working: 'restoring a tile', travelling: 'flying to a job', napping: 'napping — nothing to do in range', waitingEnergy: 'waiting for energy ⚡' } as const;
         extra = ds
-          .map((d, i) => `<p class="stat">🛸 Drone ${i + 1}${d.expiresAt ? ' (party!)' : ''}: ${label[s.drones.statusOf(d)]} · ${d.jobs} jobs</p>`)
+          .map((d, i) => {
+            const role = s.roles.roleFor(d, m);
+            return `<p class="stat">${ROLE_INFO[role].icon} Drone ${i + 1}${d.expiresAt ? ' (party!)' : ''}: ${this.droneLabel(role, s.drones.statusOf(d))} · ${d.jobs} jobs</p>`;
+          })
           .join('') +
-          `<p>Works within ${s.upgrades.droneRadius(m)} tiles (highlighted), paying the normal pulse cost. Blue outlines show current jobs.</p>` +
+          this.rolePicker(m) +
           ['droneSpeed', 'droneRadius', 'secondDrone', 'droneSweep', 'chainIntel'].map((u) => this.upgradeButton(u, m)).join('');
         break;
       }
@@ -2198,7 +2298,11 @@ export class Game {
       if (d) this.drones.add(d, true);
     });
     b.on('drone.despawned', ({ droneId }) => this.drones.remove(droneId));
-    b.on('drone.jobStarted', () => this.sfx.drone());
+    b.on('drone.jobStarted', ({ droneId }) => this.sfx.drone(s.state.drones.find((x) => x.id === droneId)?.role));
+    b.on('drone.roleChanged', () => {
+      this.drones.sync(); // drones between jobs take their new look now; the rest as they finish
+      this.renderInspect();
+    });
     b.on('cat.spawned', ({ catId }) => {
       const spot = catId ? this.sim.cat.find(catId) : this.sim.state.cat.active;
       if (spot) this.cat.show(spot, true);
@@ -2847,6 +2951,7 @@ export class Game {
     this.scene.update(dt);
     this.grid.update(dt);
     const rect = view;
+    if (rect) this.grid.stream(rect);
     this.transitions.sync(this.sim.time + Math.min(this.acc, TUNING.simStep));
     if (rect) this.chunks.update(dt, rect, this.camera.target, this.camera.zoom);
     detailTextures.step(); // Look 3.1: builds the detail maps a slice per frame after first paint

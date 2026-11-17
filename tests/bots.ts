@@ -2,7 +2,7 @@ import { big, toNum } from '../src/core/Big';
 import { distToFootprint } from '../src/core/Grid';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { KINDS } from '../src/core/Economy';
-import type { BuildableType, GameState, ResourceKind, TileData } from '../src/core/types';
+import type { BuildableType, DroneRole, GameState, ResourceKind, TileData } from '../src/core/types';
 import { HOME } from '../src/gameplay/ProgressionSystem';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -47,7 +47,16 @@ export interface BotOptions {
   noEvents?: boolean;
   /** Look 6.8: build Cultivators (one as soon as it unlocks and is affordable, another after the fountain) */
   cultivator?: boolean;
+  /**
+   * E18: give hubs roles by a fixed rule, as soon as each unlocks and the refit is affordable (keeping the next
+   * machine's biomass): the first hub stays a Restorer, the second becomes a Gardener, the third a Courier, and
+   * every later one (built at the fog's edge after the fountain) a Scout.
+   */
+  roles?: boolean;
 }
+
+/** E18: the bots' fixed role rule, by hub order (see BotOptions.roles). */
+export const BOT_ROLE_PLAN: DroneRole[] = ['restorer', 'gardener', 'courier', 'scout'];
 
 export interface BotReport {
   seed: number;
@@ -84,13 +93,15 @@ export interface BotReport {
   /** Phase 5 E15: world events started (sim time, type) and cats found by rarity */
   events: { t: number; type: string }[];
   cats: Record<string, number>;
+  /** E18: when each role was first chosen (sim seconds), with `roles` on */
+  roleAt: Partial<Record<DroneRole, number>>;
   /** per-minute snapshot */
   minutesLog: { m: number; parkRestored: number; tiles: number; res: Record<ResourceKind, number>; caps: Record<ResourceKind, number>; rates: Record<ResourceKind, number> }[];
 }
 
 const ORDER: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'pollinator', 'motherTree', 'solar', 'pollinator', 'droneHub', 'condenser'];
 
-export function runBot(opts: BotOptions): BotReport {
+function* botRun(opts: BotOptions): Generator<void, BotReport> {
   const mode = opts.mode ?? 'active';
   const actionEvery = opts.actionEvery ?? 3;
   const sim = new Sim(opts.state ?? createInitialState(opts.seed));
@@ -138,6 +149,7 @@ export function runBot(opts: BotOptions): BotReport {
   sim.bus.on('cat.found', ({ variant }) => (cats[variant ?? 'standard'] = (cats[variant ?? 'standard'] ?? 0) + 1));
 
   const built: Record<string, number> = {};
+  const roleAt: BotReport['roleAt'] = {};
   const merges: BotReport['merges'] = [];
   sim.bus.on('machine.merged', meaningful);
   const hubFor = new Set<string>();
@@ -254,6 +266,17 @@ export function runBot(opts: BotOptions): BotReport {
       }
     }
     if (sim.progression.coreReady()) sim.progression.activateCore();
+    // 3a. E18: roles by the fixed rule (a refit is a purchase, like an upgrade: idle players make it too).
+    if (opts.roles) {
+      const hubs = s.machines.filter((m) => m.type === 'droneHub').sort((a, b) => (Number(a.id.slice(1)) || 0) - (Number(b.id.slice(1)) || 0));
+      hubs.forEach((h, i) => {
+        const want = BOT_ROLE_PLAN[Math.min(i, BOT_ROLE_PLAN.length - 1)];
+        if (sim.roles.roleOf(h) === want) return;
+        const st = sim.roles.check(h.id, want);
+        if (!st.ok || s.resources.biomass.sub(big(st.price.biomass ?? 0)).lt(nextCost)) return;
+        if (sim.roles.choose(h.id, want)) roleAt[want] ??= Math.round(sim.time);
+      });
+    }
     // 3b. Phase 5 E13: grow groups of matching machines and merge them.
     if (opts.merges && !ORDER[next]) {
       for (const type of ['solar', 'pollinator', 'condenser'] as const) {
@@ -318,6 +341,7 @@ export function runBot(opts: BotOptions): BotReport {
     if (handsOffAt === undefined && mode === 'handsOff' && s.machines.some((m) => m.type === 'droneHub')) handsOffAt = Math.round(sim.time);
     if (i % stepsPerAction === 0) act(handsOffAt === undefined);
     sim.tick();
+    if (i % 3000 === 2999) yield; // lets runBotAsync hand the thread back now and then
     if (i % 10 === 0) {
       const hub = sim.build.cost('droneHub');
       if (hubFitsCap < 0 && !sim.econ.exceedsStorage(hub)) hubFitsCap = Math.round(sim.time);
@@ -363,8 +387,27 @@ export function runBot(opts: BotOptions): BotReport {
     merges,
     events,
     cats,
+    roleAt,
     minutesLog,
   };
+}
+
+export function runBot(opts: BotOptions): BotReport {
+  const it = botRun(opts);
+  for (;;) {
+    const r = it.next();
+    if (r.done) return r.value;
+  }
+}
+
+/** The same run, yielding every 300 simulated seconds: long runs otherwise starve the Vitest worker's RPC. */
+export async function runBotAsync(opts: BotOptions): Promise<BotReport> {
+  const it = botRun(opts);
+  for (;;) {
+    const r = it.next();
+    if (r.done) return r.value;
+    await new Promise((res) => setTimeout(res, 0));
+  }
 }
 
 export const mmss = (t?: number) => (t === undefined || t < 0 ? '—' : `${Math.floor(t / 60)}:${String(Math.round(t) % 60).padStart(2, '0')}`);

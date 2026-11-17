@@ -239,6 +239,40 @@ export const TUNING = {
      */
     reserve: 0.25,
     old: { enabled: true, radius: 6, cycleSeconds: 7, flySpeed: 1.5, workSeconds: 0.8 },
+    /**
+     * E18: drone roles. Every number is a starting guess from the design (the E18 epic, section 4), to tune
+     * against the bots in docs/E18_AUDIT.md.
+     */
+    roles: {
+      /** One-time refit per hub. The biomass part grows ×refitGrowth for each other hub already refitted to it. */
+      refit: {
+        gardener: { biomass: 60, water: 20 },
+        scout: { biomass: 60, energy: 30 },
+        courier: { biomass: 80, energy: 15, water: 15 },
+        spark: { biomass: 120, energy: 30 },
+        harvester: { biomass: 50, energy: 35, water: 20 },
+      } as Record<string, { biomass: number; energy?: number; water?: number }>,
+      refitGrowth: 1.5,
+      /** Grows the target plus this many orthogonal neighbours (+1 per Drone Sweep level), paying the target's nurture water only. */
+      gardener: { neighbours: 2, unlockFullBloom: 10 },
+      /** Reach is the hub's radius + (reach − 1) × the base radius; flies `speed`× as fast; +1 ⚡ per `tilesPerEnergy` tiles past the base radius. */
+      scout: { reach: 1.5, speed: 1.5, tilesPerEnergy: 4, catHintTiles: 3 },
+      /** Deliveries, each machine at most once per `everySeconds`; priced in what the machine runs on. */
+      courier: {
+        everySeconds: 8,
+        cost: { motherTree: { water: 4 }, condenser: { energy: 4 }, reservoirGarden: { energy: 4 }, solar: { water: 3 }, relay: { energy: 6 } } as Record<string, { energy?: number; water?: number }>,
+        treeCharge: 2,
+        storeCharge: 1, // condenser or Reservoir Garden
+        relayCut: 0.25, // of a link's remaining recharge
+      },
+      /** One chain per hub per `everySeconds`, from a garden with `cluster`+ other gardens in chain reach. */
+      spark: { everySeconds: 30, energy: 10, unlockGardens: 3, cluster: 2 },
+      /**
+       * Turns income lost to full stores into biomass: each drone collects up to `perDronePerSec` lost ⚡/💧 a
+       * second, keeps `keep` of it as its running cost and pays out the rest as biomass, `rate` 🌿 per unit.
+       */
+      harvester: { unlockLostSeconds: 60, perDronePerSec: 2, keep: 0.7, rate: 1 },
+    },
   },
 
   /** Phase 5 E12: long-tail upgrade strength (see UpgradeSystem.soilMult). */
@@ -338,7 +372,7 @@ export const TUNING = {
   areaSteps: { at: [0.25, 0.5, 0.75], incomeSeconds: [10, 15, 20], min: 20, energy: 20, water: 10 },
 
   /** Phase 5 E12: after any upgrade purchase, the advisor points at progress for this long before upgrades again. */
-  advisor: { upgradeHintCooldown: 15, savingFreshSeconds: 10 },
+  advisor: { upgradeHintCooldown: 15, savingFreshSeconds: 10, roleHintSeconds: 30 },
 
   autosaveSeconds: 10,
 

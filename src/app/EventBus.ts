@@ -56,6 +56,10 @@ export interface GameEvents {
   'drone.spawned': { droneId: string };
   'drone.despawned': { droneId: string };
   'drone.jobStarted': { droneId: string; tileId: string };
+  /** E18: a hub took a role (`refit` = it paid for it just now; otherwise a free switch). */
+  'drone.roleChanged': { hubId: string; role: import('../core/types').DroneRole; refit: boolean; slot?: number };
+  /** E18: a non-Restorer drone finished a job (effects and sound): what it touched. */
+  'drone.roleWork': { droneId: string; role: import('../core/types').DroneRole; tileIds: string[]; machineIds: string[] };
   /** Phase 5 E15: `catId` is stable; `invasion` cats come from a Lucky Cat Invasion. */
   'cat.spawned': { anchorId: string; catId?: string; variant?: CatVariant; invasion?: boolean };
   'cat.found': { anchorId: string; reward: CatRewardType; summary: string; extras: number; catId?: string; variant?: CatVariant; rewards?: CatRewardType[] };

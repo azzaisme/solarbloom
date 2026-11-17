@@ -1,6 +1,6 @@
 import type { AreaMode } from '../core/types';
 import { HOME } from '../gameplay/ProgressionSystem';
-import { Economy, formatCost, KINDS } from '../core/Economy';
+import { Economy, formatCost, formatPriceHtml, KINDS } from '../core/Economy';
 import { big, fmt, toNum, type Big } from '../core/Big';
 import type { Cost } from '../core/types';
 import type { BuildableType, MachineData, ResourceKind } from '../core/types';
@@ -30,6 +30,8 @@ export interface HudCallbacks {
   selectTool(t: Tool): void;
   harvest(): void;
   buyUpgrade(id: string): void;
+  /** E18: `hubId|role|slot` (slot 2 on a Fleet Hub), or `hubId|role|drone|index` for a Megahub drone. */
+  chooseRole(key: string): void;
   activateCore(): void;
   /** Phase 4 E06: fire Bloom Frenzy. */
   activateFrenzy(): void;
@@ -60,6 +62,8 @@ export interface HudCallbacks {
   merge(action: 'start' | 'confirm' | 'cancel'): void;
   /** Phase 5 E13: the advisor's merge button (select the machine and open its merge preview). */
   mergeAt(machineId: string): void;
+  /** E18.5: open a machine's panel (the advisor's role hint). */
+  inspectAt(machineId: string): void;
   /** Phase 5 E14: superstructure panel buttons: pay the next stage, fire the ability, toggle automatic firing. */
   superAction(action: 'stage' | 'activate' | 'auto', machineId: string): void;
 }
@@ -351,6 +355,8 @@ export class Hud {
       if (t.closest('[data-harvest]')) this.cb.harvest();
       const mg = t.closest<HTMLButtonElement>('[data-merge-at]');
       if (mg) this.cb.mergeAt(mg.dataset.mergeAt!);
+      const ia = t.closest<HTMLButtonElement>('[data-inspect-at]');
+      if (ia) this.cb.inspectAt(ia.dataset.inspectAt!);
       const ct = t.closest<HTMLButtonElement>('[data-core-tool]');
       if (ct) this.cb.selectTool(ct.dataset.coreTool as Tool);
       const su = t.closest<HTMLButtonElement>('[data-super]');
@@ -371,6 +377,8 @@ export class Hud {
       if (db && !db.disabled) this.cb.districtBloom(db.dataset.district!, db.dataset.replay === '1');
       const b = t.closest<HTMLButtonElement>('[data-buy]');
       if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
+      const rl = t.closest<HTMLButtonElement>('[data-role]');
+      if (rl && !rl.disabled) this.cb.chooseRole(rl.dataset.role!);
       const sp = t.closest<HTMLButtonElement>('[data-super]');
       if (sp && !sp.disabled) {
         const [action, id] = sp.dataset.super!.split('|');
@@ -514,7 +522,7 @@ export class Hud {
     const g = this.sim.advisor.suggest();
     const a = g.action;
     const attr =
-      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'merge' ? `data-merge-at="${a.machineId}"` : a.kind === 'placeCore' ? `data-core-tool="super:${a.type}"` : a.kind === 'super' ? `data-super="${a.action}|${a.machineId}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
+      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'merge' ? `data-merge-at="${a.machineId}"` : a.kind === 'role' ? `data-inspect-at="${a.machineId}"` : a.kind === 'placeCore' ? `data-core-tool="super:${a.type}"` : a.kind === 'super' ? `data-super="${a.action}|${a.machineId}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
     this.suggestionBtn = `<p class="sugg">${esc(g.text)}</p><button class="act" ${attr}>${esc(g.label)}</button>`;
     return this.suggestionBtn;
   }
@@ -773,8 +781,8 @@ export class Hud {
         const pips = finite && !per ? `<span class="pips">${Array.from({ length: def.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</span>` : '';
         const lvTxt = maxed ? '<em>MAX</em>' : per ? `<em>${n} built · next Lv ${lvl + 1}</em>` : `<em>Lv ${lvl}</em>`;
         const btn = per
-          ? `<button class="buy" data-buy="${def.id}|*" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : `All · ${fmt(st.cost)}🌿`}</button>`
-          : `<button class="buy" data-buy="${def.id}" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : `${fmt(st.cost)} 🌿`}</button>`;
+          ? `<button class="buy" data-buy="${def.id}|*" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : `All · ${formatPriceHtml(st.price, u.short(st))}`}</button>`
+          : `<button class="buy" data-buy="${def.id}" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : formatPriceHtml(st.price, u.short(st))}</button>`;
         return `${head}<div class="card"><span class="ci">${def.icon}</span><span class="cn">${esc(def.name)} ${lvTxt}</span>
           ${btn}
           <span class="cd2">${esc(def.describe(lvl + 1))}${per && n ? ' · tap a machine to upgrade just that one' : ''}</span>${pips}
@@ -1117,7 +1125,7 @@ export class Hud {
     this.set('badgeOn', badge, 'cls', useful ? '1' : '0', 'on');
     // Phase 5 E12: otherwise, how long until the next thing (seconds of current net income).
     const next = useful ? undefined : s.advisor.nextPurchase();
-    this.set('upgSc', $(this.root, '#upgBtn .sc'), 'text', useful ? `${fmt(s.upgrades.status(useful).cost)}🌿` : next ? `~${etaText(next.eta)}` : '\u00a0');
+    this.set('upgSc', $(this.root, '#upgBtn .sc'), 'text', useful ? formatCost(s.upgrades.status(useful).price).replace(/ /g, '') : next ? `~${etaText(next.eta)}` : '\u00a0');
     this.set('upgNext', $(this.root, '#upgNext'), 'html', next ? `Next: ${next.icon} ${esc(next.name)} · ${formatCost(next.cost)} · ${next.eta < 0.5 ? 'affordable now' : `~${etaText(next.eta)}`}` : useful ? '' : '');
     this.renderUpgrades();
 

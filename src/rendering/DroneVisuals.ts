@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import type { DroneData } from '../core/types';
+import type { DroneData, DroneRole } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
 import { color, glow as glowGain, mat, type MatOpts, PALETTE, uniqueMat } from './Materials';
@@ -16,6 +16,32 @@ import { ease, type Tweens } from './Tween';
  * gameplay state, targets or timing.
  */
 const MODEL_URL = new URL('../../assets/raw/drone/drone-base.glb', import.meta.url).href;
+/**
+ * E18.5: each role's parts, built in drone space on the redesigned body (assets/tools/drone_roles.py writes
+ * `<part>.fit.glb`), so they sit on the model as they are. Roles read by shape, not colour.
+ */
+const PART_URLS = import.meta.glob('../../assets/raw/drone/parts/*.fit.glb', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+const partUrl = (name: string) => Object.entries(PART_URLS).find(([k]) => k.endsWith(`/${name}.fit.glb`))?.[1];
+const ROLE_PARTS: Record<DroneRole, string[]> = {
+  restorer: [],
+  gardener: ['gardener-kit', 'gardener-pot'],
+  scout: ['scout-lens', 'scout-wings', 'scout-periscope'],
+  courier: ['courier-parcel', 'courier-rotor'],
+  spark: ['spark-tail', 'spark-bolt'],
+  harvester: ['harvester-basket', 'harvester-arms', 'harvester-fruit'],
+};
+/** E18.5: each role's own 8-frame eye sheet (frame 0 is its idle face). The Restorer keeps the model's own. */
+const EYE_URLS = import.meta.glob('../../assets/raw/drone/eyes/*.png', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+const eyeUrl = (role: DroneRole) => Object.entries(EYE_URLS).find(([k]) => k.endsWith(`/drone-eyes-${role}.png`))?.[1];
+/** E18.5: per-role work effect colours (beam, motes, sparkles): the Restorer's cyan mist, the Gardener's water, the Scout's brighter beam, the Courier's gold charge, the Spark's sun. */
+const ROLE_BEAM: Record<DroneRole, { hex: string; width: number }> = {
+  restorer: { hex: PALETTE.eyeCyan, width: 1 },
+  gardener: { hex: PALETTE.glow.cyanSoft, width: 1.25 },
+  scout: { hex: PALETTE.glow.beam, width: 0.6 },
+  courier: { hex: PALETTE.gold, width: 0.8 },
+  spark: { hex: PALETTE.glow.sun, width: 0.7 },
+  harvester: { hex: PALETTE.gold, width: 1 },
+};
 /** Model units -> world units. The body is about 0.39 wide, a touch bigger than the classic drone. */
 const MODEL_SCALE = 0.58;
 /** The model's origin sits 0.05 model units above the body's centre; lift it back so the body is centred. */
@@ -76,10 +102,12 @@ interface ModelParts {
   leafR: pc.Entity;
   antenna?: pc.Entity;
   thrusters: pc.Entity[];
-  face?: { mi: pc.MeshInstance; frame: number; glow: number; wide: number; old: boolean };
+  face?: { mi: pc.MeshInstance; frame: number; glow: number; wide: number; old: boolean; role: DroneRole };
 }
 
 interface DroneView {
+  /** E18.5: the role this drone's look was built for (rebuilt when it changes). */
+  role: DroneRole;
   root: pc.Entity;
   body: pc.Entity;
   /** D05: the restoration beam, a soft outer cone and a bright inner stream (world space, apex at the emitter). */
@@ -133,6 +161,10 @@ export class DroneVisuals {
   private fz = 0;
   private fzApplied = 0;
   private accents = new Map<string, Accent>();
+  /** E18.5: loaded role parts and role eye sheets (loaded the first time a drone of that role shows). */
+  private parts = new Map<string, pc.ContainerResource | null>();
+  private eyes = new Map<DroneRole, pc.Texture | null>();
+  private app?: pc.AppBase;
 
   constructor(
     private sim: Sim,
@@ -140,6 +172,7 @@ export class DroneVisuals {
     private tweens: Tweens,
     app?: pc.AppBase,
   ) {
+    this.app = app;
     // The classic drone shows until the model has loaded (and stays if it fails to load).
     if (app && useModel()) {
       app.assets.loadFromUrl(MODEL_URL, 'container', (err, asset) => {
@@ -198,19 +231,72 @@ export class DroneVisuals {
     return [w[0], w[2]];
   }
 
+  /** E18.5: the role a drone's look shows: the job it's on, else its hub's role for it. */
+  private roleOf(d: DroneData): DroneRole {
+    return d.role ?? this.sim.roles.roleFor(d, this.sim.machine(d.hubId));
+  }
+
+  /** E18.5: loads a role's parts and eye sheet once, then rebuilds the drones that need them. */
+  private loadRole(role: DroneRole) {
+    const app = this.app;
+    if (!app || !this.model) return;
+    for (const name of ROLE_PARTS[role]) {
+      if (this.parts.has(name)) continue;
+      const url = partUrl(name);
+      this.parts.set(name, null);
+      if (!url) continue;
+      app.assets.loadFromUrl(url, 'container', (err, asset) => {
+        if (err || !asset) return console.warn(`Drone role part ${name} failed to load.`, err);
+        this.parts.set(name, asset.resource as pc.ContainerResource);
+        this.restyleRole(role);
+      });
+    }
+    if (role !== 'restorer' && !this.eyes.has(role)) {
+      this.eyes.set(role, null);
+      const url = eyeUrl(role);
+      if (url)
+        app.assets.loadFromUrl(url, 'texture', (err, asset) => {
+          if (err || !asset) return console.warn(`Drone eyes for ${role} failed to load.`, err);
+          const tex = asset.resource as pc.Texture;
+          const base = this.faceBase?.emissiveMap;
+          tex.addressU = base?.addressU ?? pc.ADDRESS_CLAMP_TO_EDGE;
+          tex.addressV = base?.addressV ?? pc.ADDRESS_CLAMP_TO_EDGE;
+          this.eyes.set(role, tex);
+          for (const k of [...this.faceMats.keys()]) if (k.startsWith(`${role}:`)) this.faceMats.delete(k);
+          this.restyleRole(role);
+        });
+    }
+  }
+
+  private restyleRole(role: DroneRole) {
+    for (const [id, v] of [...this.views]) {
+      if (v.role !== role) continue;
+      const d = this.sim.state.drones.find((x) => x.id === id);
+      v.root.destroy();
+      v.beam.destroy();
+      this.views.delete(id);
+      if (d) this.add(d, false);
+    }
+  }
+
   add(d: DroneData, animate: boolean) {
     const [x, z] = this.world(d);
+    const role = this.roleOf(d);
+    if (role !== 'restorer') this.loadRole(role);
+    const rb = ROLE_BEAM[role];
     const root = group(this.parent, `drone-${d.id}`, [x, 0.9, z]);
     const body = group(root, 'body');
     // A tapered beam: a translucent cone with a brighter, thinner stream inside. It lives in world space so it
     // can stay anchored to both the emitter and the tile while the drone bobs and leans.
     const beam = group(this.parent, `beam-${d.id}`);
-    shape(beam, 'cone', this.accent('beam', PALETTE.eyeCyan, { opacity: 0.2, emissive: PALETTE.eyeCyan, emissiveIntensity: 1.1, doubleSided: true }, [DASH_GOLD.diffuse, DASH_GOLD.glow, 1.1]), { pos: [0, 0, 0] });
-    const beamCore = shape(beam, 'cone', this.accent('beamCore', PALETTE.glow.beam, { opacity: 0.32, emissive: PALETTE.eyeCyan, emissiveIntensity: 2.2, doubleSided: true }, [PALETTE.glow.sun, DASH_GOLD.glow, 2]), {
+    const bk = role === 'restorer' ? '' : `:${role}`; // the Restorer keeps its original shared beam materials
+    shape(beam, 'cone', this.accent(`beam${bk}`, rb.hex, { opacity: 0.2, emissive: rb.hex, emissiveIntensity: 1.1, doubleSided: true }, [DASH_GOLD.diffuse, DASH_GOLD.glow, 1.1]), { pos: [0, 0, 0] });
+    const beamCore = shape(beam, 'cone', this.accent(`beamCore${bk}`, role === 'restorer' ? PALETTE.glow.beam : rb.hex, { opacity: 0.32, emissive: rb.hex, emissiveIntensity: 2.2, doubleSided: true }, [PALETTE.glow.sun, DASH_GOLD.glow, 2]), {
       scale: [0.38, 1, 0.38],
     });
     beam.enabled = false;
     const v: DroneView = {
+      role,
       root,
       body,
       beam,
@@ -271,8 +357,8 @@ export class DroneVisuals {
           if (name === 'visor_eyes') {
             this.faceBase ??= mi.material as pc.StandardMaterial;
             const glow = old ? 0 : 1;
-            mi.material = this.faceMat(FACE.idle, glow);
-            face = { mi, frame: FACE.idle, glow, wide: 0, old };
+            mi.material = this.faceMat(FACE.idle, glow, 0, this.roleOf(d));
+            face = { mi, frame: FACE.idle, glow, wide: 0, old, role: this.roleOf(d) };
           } else {
             const m = this.palMat(name, old, party);
             if (m) mi.material = m;
@@ -282,6 +368,26 @@ export class DroneVisuals {
       for (const c of e.children) walk(c as pc.Entity);
     };
     walk(model);
+    // E18.5: the role's parts, in drone space on the same wrap (pal_* slots take the shared palette materials).
+    if (!old)
+      for (const name of ROLE_PARTS[this.roleOf(d)]) {
+        const res = this.parts.get(name);
+        if (!res) continue;
+        const part = res.instantiateRenderEntity();
+        wrap.addChild(part);
+        const paint = (e: pc.Entity) => {
+          if (e.render) {
+            e.render.castShadows = false;
+            e.render.receiveShadows = true;
+            for (const mi of e.render.meshInstances) {
+              const m = this.palMat(mi.material?.name ?? '', false, party);
+              if (m) mi.material = m;
+            }
+          }
+          for (const c of e.children) paint(c as pc.Entity);
+        };
+        paint(part);
+      }
     const find = (n: string) => (model.findByName(n) as pc.Entity | null) ?? undefined;
     const leafL = find('leaf_L') ?? group(wrap, 'leaf_L');
     const leafR = find('leaf_R') ?? group(wrap, 'leaf_R');
@@ -376,11 +482,13 @@ export class DroneVisuals {
    * The screen material showing one eye-sheet frame at one glow level. Shared by every drone showing it.
    * Look 3.20: `wide` (0-3) zooms the eyes a little, mostly taller, for a Frenzy's wide-eyed look.
    */
-  private faceMat(frame: number, glow: number, wide = 0): pc.StandardMaterial {
-    const key = `${frame}:${glow}:${wide}`;
+  private faceMat(frame: number, glow: number, wide = 0, role: DroneRole = 'restorer'): pc.StandardMaterial {
+    const sheet = role === 'restorer' ? undefined : this.eyes.get(role) ?? undefined;
+    const key = `${sheet ? role : 'restorer'}:${frame}:${glow}:${wide}`;
     let m = this.faceMats.get(key);
     if (m) return m;
     m = this.faceBase!.clone() as pc.StandardMaterial;
+    if (sheet) m.emissiveMap = sheet; // E18.5: the role's own eye sheet
     m.diffuse = color(PALETTE.darkFace);
     m.useMetalness = true;
     m.metalness = 0;
@@ -452,7 +560,17 @@ export class DroneVisuals {
   }
 
   sync() {
-    for (const d of this.sim.state.drones) if (!this.views.has(d.id)) this.add(d, false);
+    for (const d of this.sim.state.drones) {
+      const v = this.views.get(d.id);
+      if (!v) this.add(d, false);
+      else if (v.role !== this.roleOf(d)) {
+        // E18.5: a new role: the drone takes its new parts, eyes and beam (between jobs, as the sim switches it).
+        v.root.destroy();
+        v.beam.destroy();
+        this.views.delete(d.id);
+        this.add(d, false);
+      }
+    }
   }
 
   /**
@@ -502,10 +620,18 @@ export class DroneVisuals {
     const motion = this.reducedMotion ? 0 : 1;
     const buddy = this.companion ? this.companionId() : undefined;
     for (const d of this.sim.state.drones) {
-      const v = this.views.get(d.id);
+      let v = this.views.get(d.id);
       if (!v) continue;
       const hub = this.sim.machine(d.hubId);
       if (!hub) continue;
+      if (v.role !== this.roleOf(d)) {
+        // E18.5: it finished its last job under the old role: rebuild with the new parts, eyes and beam.
+        v.root.destroy();
+        v.beam.destroy();
+        this.views.delete(d.id);
+        this.add(d, false);
+        v = this.views.get(d.id)!;
+      }
       const w = this.sim.drones.worldOf(d);
       let [tx, tz] = [w[0], w[2]];
       if (v.lastMode === 'working' && d.mode === 'cooldown') v.bounce = BOUNCE_S; // a job done: a joyful hop
@@ -598,7 +724,7 @@ export class DroneVisuals {
    * Visual only: the job, its timing and its reward are the sim's.
    */
   private updateBeam(d: DroneData, v: DroneView, w: number[], dt: number, fz: number) {
-    const on = d.mode === 'working';
+    const on = d.mode === 'working' && v.role !== 'harvester';
     v.beam.enabled = on;
     if (!on) {
       v.moteT = v.sparkT = 0;
@@ -620,9 +746,10 @@ export class DroneVisuals {
     const shimmer = this.reducedMotion ? 1 : 1 + Math.sin(this.flapT * (18 + 10 * fz) + v.phase) * (0.06 + 0.06 * fz);
     v.beam.setPosition((from.x + to.x) / 2, (from.y + to.y) / 2, (from.z + to.z) / 2);
     v.beam.setRotation(q);
-    v.beam.setLocalScale(BEAM_RADIUS * 2 * shimmer, len, BEAM_RADIUS * 2 * shimmer);
+    const width = ROLE_BEAM[v.role].width; // E18.5: the Scout's beam is narrower, the Gardener's spray wider
+    v.beam.setLocalScale(BEAM_RADIUS * 2 * shimmer * width, len, BEAM_RADIUS * 2 * shimmer * width);
     v.beamCore.setLocalEulerAngles(0, (this.flapT * 150) % 360, 0);
-    const hex = fz > 0.5 ? DASH_GOLD.glow : v.celebrate > 0 ? PALETTE.gold : PALETTE.eyeCyan;
+    const hex = fz > 0.5 ? DASH_GOLD.glow : v.celebrate > 0 ? PALETTE.gold : ROLE_BEAM[v.role].hex;
     const busy = this.reducedMotion ? 1 : 1 - 0.4 * fz;
     v.moteT -= dt;
     if (v.moteT <= 0) {
@@ -646,7 +773,7 @@ export class DroneVisuals {
         m.face.frame = frame;
         m.face.glow = glow;
         m.face.wide = wide;
-        m.face.mi.material = this.faceMat(frame, glow, wide);
+        m.face.mi.material = this.faceMat(frame, glow, wide, m.face.role);
       }
     }
     // Leaf ears: swept back by speed (they trail behind on springs), an occasional twitch, a flutter in a

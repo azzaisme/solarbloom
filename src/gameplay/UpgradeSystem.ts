@@ -8,15 +8,18 @@ const tierOutput = (m: { tier?: number; project?: { stage: number } }, t2: numbe
   !isBuilt(m) ? 0 : tier3(m) ? TUNING.super.outputMult : tier2(m) ? t2 : 1;
 import { TUNING } from '../data/tuning';
 import { DRONE_DASH, powerMult, UPGRADE_BY_ID, UPGRADE_GROUPS, UPGRADES, type UpgradeDef, type UpgradeGroup } from '../data/upgrades';
-import { CAPPED } from '../core/Economy';
+import { CAPPED, Economy, RES_ICON } from '../core/Economy';
 import { big, Decimal, fmt, type Big } from '../core/Big';
-import type { MachineData } from '../core/types';
+import type { Cost, MachineData, ResourceKind } from '../core/types';
 import type { Sim } from './Sim';
 
 export interface UpgradeStatus {
   ok: boolean;
   reason?: string;
+  /** The main part of the price (biomass unless `costKind` says otherwise): what "Upgrade all" sorts by. */
   cost: Big;
+  /** E18.7: the whole price, every part ("Need …" names the first part that's short). */
+  price: Cost;
   /** Per-machine upgrade without a machine ("Upgrade all"): the machine the next purchase goes to. */
   machine?: MachineData;
 }
@@ -56,7 +59,10 @@ export class UpgradeSystem {
     return def.machine ? this.sim.machinesOfType(def.machine) : [];
   }
 
-  /** Next level's price: baseCost × costMult^level (per machine for per-machine upgrades). */
+  /**
+   * Next level's main price: baseCost × costMult^level (per machine for per-machine upgrades). Paid in biomass
+   * unless `costKind` says otherwise. `price` adds the E18.7 energy and water parts.
+   */
   cost(def: UpgradeDef, m?: MachineData): Big {
     const lvl = def.machine ? this.levelOf(m, def.id) : this.level(def.id);
     const c = big(def.baseCost).mul(Decimal.pow(def.costMult, lvl)).ceil();
@@ -69,27 +75,76 @@ export class UpgradeSystem {
   }
 
   /**
+   * E18.7: the whole price of the next level: the main part plus any energy or water part (base × mult^level),
+   * each capped at TUNING.machineCostMaxShare of its store so no level is ever out of reach.
+   */
+  price(def: UpgradeDef, m?: MachineData): Cost {
+    const out: Cost = { [def.costKind ?? 'biomass']: this.cost(def, m) };
+    if (!def.parts) return out;
+    const lvl = def.machine ? this.levelOf(m, def.id) : this.level(def.id);
+    for (const k of ['energy', 'water'] as const) {
+      const p = def.parts[k];
+      if (!p) continue;
+      let c = big(p.base).mul(Decimal.pow(p.mult, lvl)).ceil();
+      const cap = this.sim.econ.cap(k);
+      if (cap) c = c.min(cap.mul(TUNING.machineCostMaxShare).floor().max(1));
+      out[k] = Economy.part(out, k).add(c);
+    }
+    return out;
+  }
+
+  /**
    * Can the next level be bought? For a per-machine upgrade without `m`, answers for "Upgrade all": the cheapest
    * machine that isn't maxed.
    */
   status(def: UpgradeDef, m?: MachineData): UpgradeStatus {
-    if (def.available && !def.available(this.sim.state)) return { ok: false, reason: def.lockedReason, cost: this.cost(def, m) };
+    const priced = (mm?: MachineData) => ({ cost: this.cost(def, mm), price: this.price(def, mm) });
+    if (def.available && !def.available(this.sim.state)) return { ok: false, reason: def.lockedReason, ...priced(m) };
     if (def.machine && !m) {
       // Cost depends only on level, so the cheapest machine is the lowest-level one (first built on ties).
       const all = this.targets(def);
-      if (!all.length) return { ok: false, reason: def.lockedReason ?? 'Build one first', cost: this.cost(def) };
+      if (!all.length) return { ok: false, reason: def.lockedReason ?? 'Build one first', ...priced() };
       let cheapest = all[0];
       for (const t of all) if (this.levelOf(t, def.id) < this.levelOf(cheapest, def.id)) cheapest = t;
-      if (this.levelOf(cheapest, def.id) >= def.maxLevel) return { ok: false, reason: 'Maxed', cost: this.cost(def, cheapest) };
+      if (this.levelOf(cheapest, def.id) >= def.maxLevel) return { ok: false, reason: 'Maxed', ...priced(cheapest) };
       return { ...this.status(def, cheapest), machine: cheapest };
     }
     const lvl = def.machine ? this.levelOf(m, def.id) : this.level(def.id);
-    const cost = this.cost(def, m);
-    if (lvl >= def.maxLevel) return { ok: false, reason: 'Maxed', cost };
-    if (def.machine && m?.type !== def.machine) return { ok: false, reason: 'Not for this machine', cost };
-    const kind = def.costKind ?? 'biomass';
-    if (this.sim.econ.get(kind).lt(cost)) return { ok: false, reason: `Need ${fmt(cost)} ${kind === 'energy' ? '⚡' : '🌿'}`, cost };
-    return { ok: true, cost, machine: m };
+    const { cost, price } = priced(m);
+    if (lvl >= def.maxLevel) return { ok: false, reason: 'Maxed', cost, price };
+    if (def.machine && m?.type !== def.machine) return { ok: false, reason: 'Not for this machine', cost, price };
+    // The main part first, so a biomass-only upgrade reads exactly as before.
+    const main = def.costKind ?? 'biomass';
+    const short: ResourceKind | undefined = this.sim.econ.get(main).lt(cost) ? main : this.sim.econ.shortfall(price);
+    if (short) return { ok: false, reason: `Need ${fmt(Economy.part(price, short).ceil())} ${RES_ICON[short]}`, cost, price };
+    return { ok: true, cost, price, machine: m };
+  }
+
+  /**
+   * E18.7: the energy and water parts of the cheapest mixed-price upgrade whose main part is already paid for
+   * (bought or not yet). Drones leave these alone (DroneSystem.payJob), as they do a pending superstructure
+   * stage: otherwise they spend everything above their 25% reserve and a part above that could never fill.
+   * Each part is at most TUNING.machineCostMaxShare of its store. Worked out once per tick.
+   */
+  pendingParts(): Cost | undefined {
+    const t = this.sim.time;
+    if (this.pendingCache?.t === t) return this.pendingCache.cost;
+    let best: { main: Big; cost: Cost } | undefined;
+    for (const def of this.all()) {
+      if (!def.parts) continue;
+      const st = this.status(def);
+      if (!st.ok && !st.reason?.startsWith('Need ')) continue; // locked or maxed
+      if (this.sim.econ.get(def.costKind ?? 'biomass').lt(st.cost)) continue; // still saving for the main part
+      if (!best || st.cost.lt(best.main)) best = { main: st.cost, cost: { energy: st.price.energy, water: st.price.water } };
+    }
+    this.pendingCache = { t, cost: best?.cost };
+    return best?.cost;
+  }
+  private pendingCache?: { t: number; cost: Cost | undefined };
+
+  /** E18.7: which part of a status's price the player is short of (for marking it on the button), if any. */
+  short(st: UpgradeStatus): ResourceKind | undefined {
+    return st.ok || !st.reason?.startsWith('Need ') ? undefined : this.sim.econ.shortfall(st.price);
   }
 
   /**
@@ -106,7 +161,7 @@ export class UpgradeSystem {
       this.sim.bus.emit('action.failed', { reason: st.reason ?? 'Unavailable' });
       return false;
     }
-    if (!this.sim.econ.spend({ [def.costKind ?? 'biomass']: st.cost })) return false;
+    if (!this.sim.econ.spend(st.price)) return false; // every part at once, or nothing
     let lvl: number;
     if (def.machine) {
       const target = st.machine!;

@@ -133,6 +133,14 @@ export interface MachineData {
   ability?: { charge: number; used: number; auto?: boolean };
   /** Look 6.8: a Cultivator's tillers (mobile units working dead ground near the dock), and tiles finished. */
   cult?: { units: CultivatorUnit[]; done: number };
+  /** E18: a Drone Hub's role (unset = restorer; slot 1 on a Fleet Hub). */
+  role?: DroneRole;
+  /** E18: roles this hub has been refitted for (Restorer is always owned, so never listed). */
+  roles?: DroneRole[];
+  /** E18.8: a Fleet Hub's second role slot (half its drones). */
+  role2?: DroneRole;
+  /** E18.8: a Drone Megahub's per-drone roles, by drone order (unset entries follow `role`). */
+  droneRoles?: (DroneRole | null)[];
 }
 
 /**
@@ -152,6 +160,8 @@ export interface CultivatorUnit {
 }
 
 export type DroneMode = 'idle' | 'flying' | 'working' | 'cooldown' | 'returning';
+/** E18: what a Drone Hub's drones do (docs/E18_AUDIT.md; design in the E18 epic, #199). Unset = restorer. */
+export type DroneRole = 'restorer' | 'gardener' | 'scout' | 'courier' | 'spark' | 'harvester';
 
 export interface DroneData {
   id: string;
@@ -171,6 +181,13 @@ export interface DroneData {
   roofId?: string;
   /** City 11.4: a flight far from the camera, resolved by time instead of per-tick moves (from, departure, arrival). */
   far?: { fx: number; fz: number; t0: number; t1: number };
+  /**
+   * E18: the role of the job in flight (unset = restorer). Set when a job is paid, so a hub switching roles lets
+   * each drone finish what it already paid for.
+   */
+  role?: DroneRole;
+  /** E18.4: a Courier's machine target (instead of a tile). */
+  targetMachineId?: string;
 }
 
 export type BuffType = 'solarFrenzy' | 'megaflower';
@@ -190,6 +207,8 @@ export interface CatSpot {
   anchorId: string;
   spawnedAt: number;
   variant: CatVariant;
+  /** E18.3: a Scout flew close by, so the nook shows its paw-print hint early. */
+  scouted?: boolean;
 }
 
 export interface CatState {
@@ -327,7 +346,7 @@ export interface GameState {
   tiles?: Record<string, string>;
   machines: MachineData[];
   /** Phase 5 E14: Superstructure Cores waiting to be placed (from merging three tier-2 machines). */
-  cores?: { type: MachineType; upg?: Record<string, number> }[];
+  cores?: { type: MachineType; upg?: Record<string, number>; role?: DroneRole; roles?: DroneRole[] }[];
   drones: DroneData[];
   upgrades: Record<string, number>;
   buffs: Buff[];

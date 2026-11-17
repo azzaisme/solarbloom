@@ -36,7 +36,7 @@ describe('simulation at city scale (City 06)', () => {
 
 describe('active-region ticking (City 06.1)', () => {
   it('indexed, active-only ticking plays out exactly like scanning every machine every tick', { timeout: 120000 }, async () => {
-    const { playCity } = await import('./pacing-city.test');
+    const { playCity } = await import('./city-bot');
     const { SaveService } = await import('../src/app/SaveService');
     const saver = new SaveService(undefined);
     saver.now = () => 0; // saves stamp the wall clock (Phase 4 offline progress)

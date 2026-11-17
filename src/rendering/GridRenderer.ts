@@ -3,8 +3,10 @@ import type { LayerData, TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { PALETTE } from './Materials';
 import { flowerAt, flowerCentre, flowerPick, grassTone } from './Palette';
-import { assignBatch, group, setVColor, vshape as shape } from './Shapes';
+import { assignBatch, group, setVColor, vertexColourMaterial, vshape as shape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
+import { railGeo } from './Props';
+import type { TreeGeo } from './TreeGen';
 import { ease, type Tweens } from './Tween';
 
 class VRng {
@@ -19,6 +21,64 @@ class VRng {
   pick<T>(a: readonly T[]) {
     return a[Math.floor(this.next() * a.length)];
   }
+}
+
+/**
+ * Look 3.10 (#137): a rooftop cluster's rim as one entity: a parapet rail piece along every edge tile, merged into
+ * one vertex-coloured mesh (local to the building group, which sits at the roof's centre on y = 0).
+ */
+function roofRail(roof: LayerData, alive: boolean): pc.Entity {
+  const W = roof.width, D = roof.depth;
+  const y = roof.height + SLAB_TOP;
+  const inset = 0.05;
+  // [x, z, rotY] of each piece's start; pieces run along +x (rot 0) or +z (rot π/2) for one tile
+  const pieces: [number, number, number][] = [];
+  for (let i = 0; i < W; i++) {
+    pieces.push([-W / 2 + i, -D / 2 - inset, 0]);
+    pieces.push([-W / 2 + i, D / 2 + inset, 0]);
+  }
+  for (let i = 0; i < D; i++) {
+    pieces.push([-W / 2 - inset, -D / 2 + i, Math.PI / 2]);
+    pieces.push([W / 2 + inset, -D / 2 + i, Math.PI / 2]);
+  }
+  const geos: [TreeGeo, number, number, number][] = pieces.map(([x, z, r], k) => {
+    const broken = !alive && ((k * 7 + roof.origin[0] * 3 + roof.origin[2]) % 10) < 3;
+    return [railGeo('parapet', alive, k, broken, 1), x, z, r];
+  });
+  let nv = 0, ni = 0;
+  for (const [g] of geos) {
+    nv += g.pos.length / 4;
+    ni += g.idx.length;
+  }
+  const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), C = new Uint8Array(nv * 4), I = new Uint32Array(ni);
+  let v = 0, j = 0;
+  for (const [g, x, z, r] of geos) {
+    const c = Math.cos(r), s = Math.sin(r);
+    const n = g.pos.length / 4;
+    for (let i = 0; i < n; i++) {
+      const px = g.pos[i * 4], pz = g.pos[i * 4 + 2];
+      P[(v + i) * 3] = x + px * c - pz * s;
+      P[(v + i) * 3 + 1] = y + g.pos[i * 4 + 1];
+      P[(v + i) * 3 + 2] = z + px * s + pz * c;
+      const nx = g.nrm[i * 3], nz = g.nrm[i * 3 + 2];
+      N[(v + i) * 3] = nx * c - nz * s;
+      N[(v + i) * 3 + 1] = g.nrm[i * 3 + 1];
+      N[(v + i) * 3 + 2] = nx * s + nz * c;
+    }
+    C.set(g.col.subarray(0, n * 4), v * 4);
+    for (let i = 0; i < g.idx.length; i++) I[j + i] = g.idx[i] + v;
+    v += n;
+    j += g.idx.length;
+  }
+  const mesh = new pc.Mesh(pc.Application.getApplication()!.graphicsDevice);
+  mesh.setPositions(P);
+  mesh.setNormals(N);
+  mesh.setColors32(C);
+  mesh.setIndices(I);
+  mesh.update(pc.PRIMITIVE_TRIANGLES);
+  const e = new pc.Entity('roof-rail');
+  e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, vertexColourMaterial())], castShadows: true, receiveShadows: true });
+  return e;
 }
 
 function paintSlab(e: pc.Entity, hex: string) {
@@ -80,13 +140,62 @@ export class GridRenderer {
 
   build() {
     for (const roof of this.sim.grid.rooftops) this.addRoof(roof);
-    for (const roof of this.sim.grid.clusterRoofs) this.addRoof(roof);
+    if (!this.streaming) for (const roof of this.sim.grid.clusterRoofs) this.addRoof(roof);
+  }
+
+  /**
+   * City 07 (#8): in the city, a rooftop cluster only has its tile views and building near the view. Every tile is
+   * a small entity tree, so a 1,000-area city kept about 30,000 entities for rooftops nobody was looking at.
+   */
+  streaming = false;
+  static readonly STREAM_MARGIN = 20;
+  static readonly STREAM_KEEP = 44;
+  private roofs = new Map<string, { tiles: pc.Entity; building?: pc.Entity }>();
+  private streamKey = '';
+  private streamQueue: LayerData[] = [];
+  private streamed = false;
+
+  get loadedRoofs() {
+    return this.roofs.size;
+  }
+
+  /** Adds the clusters the view has reached (one per frame after the first pass) and drops those well behind it. */
+  stream(view: { x0: number; x1: number; z0: number; z1: number }) {
+    if (!this.streaming) return;
+    const key = `${Math.floor(view.x0 / 8)}|${Math.floor(view.x1 / 8)}|${Math.floor(view.z0 / 8)}|${Math.floor(view.z1 / 8)}`;
+    if (key !== this.streamKey) {
+      this.streamKey = key;
+      this.streamQueue = [];
+      for (const roof of this.sim.grid.clusterRoofs) {
+        const x0 = roof.origin[0];
+        const z0 = roof.origin[2];
+        const out = (m: number) => x0 + roof.width < view.x0 - m || x0 > view.x1 + m || z0 + roof.depth < view.z0 - m || z0 > view.z1 + m;
+        if (this.roofs.has(roof.id)) {
+          if (out(GridRenderer.STREAM_KEEP)) this.removeRoof(roof);
+        } else if (!out(GridRenderer.STREAM_MARGIN)) this.streamQueue.push(roof);
+      }
+    }
+    while (this.streamQueue.length) {
+      this.addRoof(this.streamQueue.shift()!);
+      if (this.streamed) break;
+    }
+    this.streamed = true;
+  }
+
+  private removeRoof(roof: LayerData) {
+    const r = this.roofs.get(roof.id);
+    if (!r) return;
+    r.tiles.destroy();
+    r.building?.destroy();
+    this.roofs.delete(roof.id);
+    for (const t of this.sim.grid.tilesOf(roof.id)) this.views.delete(t.id);
   }
 
   /** Tile views for one raised layer (a campaign rooftop, or a city rooftop cluster as it's revealed). */
   addRoof(roof: LayerData) {
-    if (this.parent.findByName(`tiles-${roof.id}`)) return;
+    if (this.roofs.has(roof.id)) return;
     const g = group(this.parent, `tiles-${roof.id}`);
+    this.roofs.set(roof.id, { tiles: g });
     if (roof.cluster) this.clusterBuilding(roof);
     for (const t of this.sim.grid.tilesOf(roof.id)) {
       if (t.blocked) continue;
@@ -105,9 +214,12 @@ export class GridRenderer {
    * and a stair hut. Grey and shuttered while out of reach, white once a relay reaches it.
    */
   clusterBuilding(roof: LayerData) {
-    this.parent.findByName(`building-${roof.id}`)?.destroy();
+    const loaded = this.roofs.get(roof.id);
+    if (!loaded) return; // streamed out: built with its current look when the view comes back
+    loaded.building?.destroy();
     const alive = roof.unlocked && !roof.preview;
     const b = group(this.parent, `building-${roof.id}`, [roof.origin[0] + roof.width / 2, 0, roof.origin[2] + roof.depth / 2]);
+    loaded.building = b;
     const H = roof.height - 0.02;
     const wall = alive ? PALETTE.building.wallAlive : PALETTE.building.wallDead;
     shape(b, 'box', wall, { pos: [0, H / 2, 0], scale: [roof.width + 0.3, H, roof.depth + 0.3], shadow: true });
@@ -117,13 +229,9 @@ export class GridRenderer {
       shape(b, 'box', glass, { pos: [0, y, roof.depth / 2 + 0.16], scale: [roof.width * 0.84, H * 0.11, 0.02] });
       shape(b, 'box', glass, { pos: [roof.width / 2 + 0.16, y, 0], scale: [0.02, H * 0.11, roof.depth * 0.84] });
     }
-    // Parapet around the roof edge.
-    const top = roof.height + 0.12;
-    const pc = alive ? PALETTE.building.parapetAlive : PALETTE.stone.shadow;
-    shape(b, 'box', pc, { pos: [0, top, -roof.depth / 2 - 0.1], scale: [roof.width + 0.3, 0.24, 0.1] });
-    shape(b, 'box', pc, { pos: [0, top, roof.depth / 2 + 0.1], scale: [roof.width + 0.3, 0.24, 0.1] });
-    shape(b, 'box', pc, { pos: [-roof.width / 2 - 0.1, top, 0], scale: [0.1, 0.24, roof.depth + 0.3] });
-    shape(b, 'box', pc, { pos: [roof.width / 2 + 0.1, top, 0], scale: [0.1, 0.24, roof.depth + 0.3] });
+    // Look 3.10 (#137): a continuous bevelled parapet around the roof edge, one rail piece per tile, the same
+    // treatment area edges get (chipped, with broken sections, while out of reach). One merged mesh per building.
+    b.addChild(roofRail(roof, alive));
     if (alive) for (let i = 0; i < 2; i++) shape(b, 'box', PALETTE.leaf.ivy, { pos: [-roof.width / 2 + 0.6 + i * (roof.width - 1.2), H * 0.5, roof.depth / 2 + 0.17], scale: [0.14, H * 0.9, 0.03] });
   }
 

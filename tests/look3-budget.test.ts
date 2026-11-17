@@ -10,7 +10,7 @@ import type { TileData } from '../src/core/types';
 /**
  * Look 3.17 (#144): triangle budgets for the new detail, checked without a browser. Each template is pure
  * geometry, so its cost is exact; a tile's cost is what the surface builders stamp for it. The chunk budget in
- * test:perf:browser (heaviest chunk ≤ 200k) is roughly 256 tiles × these per-tile numbers plus trees.
+ * test:perf:browser (heaviest chunk ≤ 450k, the desktop target) is roughly 256 tiles × these per-tile numbers plus trees.
  */
 const tile = (x: number, z: number, bloom: number, feature = 'lawn'): TileData =>
   ({ id: `0:${x}:${z}`, roofId: '0', x, z, ground: 'restored', bloom, variant: x * 31 + z * 17, blocked: false, pollution: 0, feature }) as unknown as TileData;

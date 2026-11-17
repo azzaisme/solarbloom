@@ -106,7 +106,9 @@ describe('performance: saves (City 02.5)', () => {
 });
 
 describe('performance: simulation at city scale (City 06.6)', () => {
-  it('a 0.1 s step with 10k restored tiles, 300 machines and 30 drones stays under 2 ms', () => {
+  // E18: the same city with the hubs' roles mixed (every role in turn) must stay inside the same budget.
+  for (const mixed of [false, true])
+  it(`a 0.1 s step with 10k restored tiles, 300 machines and 30 drones stays under 2 ms${mixed ? ' (mixed drone roles)' : ''}`, () => {
     const sim = new Sim(createInitialState(5));
     const st = sim.state;
     st.caps.energy = big(1e9); st.caps.water = big(1e9);
@@ -137,7 +139,16 @@ describe('performance: simulation at city scale (City 06.6)', () => {
       sim.state.machines.push(m);
       sim.grid.indexMachine(m);
       for (const c of cells) c!.occupantId = m.id;
-      if (type === 'droneHub') sim.drones.spawn(m);
+      if (type === 'droneHub') {
+        if (mixed) {
+          const role = (['restorer', 'gardener', 'scout', 'courier', 'spark', 'harvester'] as const)[hubs % 6];
+          if (role !== 'restorer') {
+            m.roles = [role];
+            m.role = role;
+          }
+        }
+        sim.drones.spawn(m);
+      }
       return true;
     };
     let hubs = 0;
@@ -155,7 +166,7 @@ describe('performance: simulation at city scale (City 06.6)', () => {
     const t0 = performance.now();
     for (let i = 0; i < steps; i++) sim.tick();
     const per = (performance.now() - t0) / steps;
-    log(`sim step: ${per.toFixed(3)} ms with ${restored} restored tiles, ${sim.state.machines.length} machines, ${sim.state.drones.length} drones`);
+    log(`sim step${mixed ? ' (mixed roles)' : ''}: ${per.toFixed(3)} ms with ${restored} restored tiles, ${sim.state.machines.length} machines, ${sim.state.drones.length} drones`);
     expect(sim.state.machines.length).toBeGreaterThanOrEqual(300);
     expect(sim.state.drones.length).toBeGreaterThanOrEqual(30);
     expect(per).toBeLessThan(2);

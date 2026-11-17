@@ -1,8 +1,9 @@
+import { ROLE_INFO } from './DroneRoles';
 import { Economy, formatCost, KINDS } from '../core/Economy';
 import { PARK } from '../core/Areas';
 import { GROUND } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
-import type { BuildableType, Cost, TileData } from '../core/types';
+import type { BuildableType, Cost, MachineData, TileData } from '../core/types';
 import { BUILDABLE, MACHINES } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { AREA_TYPES } from '../data/city';
@@ -22,6 +23,8 @@ export type SuggestionAction =
   | { kind: 'super'; action: 'stage' | 'activate'; machineId: string }
   /** Phase 5 E13: open the merge preview for this machine (the anchor) */
   | { kind: 'merge'; machineId: string; layer?: string }
+  /** E18.5: open this Drone Hub's panel to pick a role */
+  | { kind: 'role'; machineId: string }
   | { kind: 'wait'; seconds: number };
 
 export interface Suggestion {
@@ -128,6 +131,9 @@ export class Advisor {
       const lvl = up.machine ? s.upgrades.levelOf(st.machine, up.id) : s.upgrades.level(up.id);
       return { text: `${up.icon} ${up.name} is affordable: ${up.describe(lvl + 1)}.`, label: '⬆️ Upgrades', action: { kind: 'upgrades' } };
     }
+    // 2c. E18.5: a drone role that would help right now (each role's hint at most once, briefly).
+    const role = this.roleStep();
+    if (role) return role;
     // 3. Before the fountain: a machine it still needs, if one can be built now.
     const build = city && !s.state.progression.coreActivated ? this.neededBuild() : undefined;
     if (build) return build;
@@ -186,6 +192,55 @@ export class Advisor {
   }
 
   /** Phase 5 E13: the first affordable merge, as a suggestion. */
+  /** E18.5: when each role's hint was first shown (it shows for TUNING.advisor.roleHintSeconds, once). */
+  private roleHintAt = new Map<string, number>();
+
+  /**
+   * E18.5: at most one hint per role, when the game shows a need it answers and no hub has that role yet:
+   * drones stuck on energy (Gardener), a slow Mother Tree near a hub (Courier), fog to push (Scout), a garden
+   * cluster (Spark), full stores losing income (Harvester).
+   */
+  roleStep(): Suggestion | undefined {
+    const s = this.sim;
+    const hubs = s.machinesOfType('droneHub');
+    if (!hubs.length) return undefined;
+    const fresh = (role: string) => {
+      const at = this.roleHintAt.get(role);
+      return at === undefined || s.time - at <= TUNING.advisor.roleHintSeconds;
+    };
+    const offer = (role: 'gardener' | 'scout' | 'courier' | 'spark' | 'harvester', hub: MachineData, text: string): Suggestion | undefined => {
+      if (!fresh(role) || s.roles.lockedReason(role) || hubs.some((h) => s.roles.owns(h, role))) return undefined;
+      if (!s.roles.check(hub.id, role).ok) return undefined;
+      if (!this.roleHintAt.has(role)) this.roleHintAt.set(role, s.time);
+      return { text, label: `${ROLE_INFO[role].icon} Pick a role`, action: { kind: 'role', machineId: hub.id } };
+    };
+    const drones = s.state.drones.filter((d) => !d.old);
+    const waiting = drones.filter((d) => s.drones.statusOf(d) === 'waitingEnergy').length;
+    if (drones.length >= 2 && waiting * 2 >= drones.length && !s.econ.shortfall({ water: 10 })) {
+      const h = offer('gardener', hubs[0], 'Your drones keep waiting for energy. A 🌱 Gardener hub grows tiles with water only.');
+      if (h) return h;
+    }
+    for (const tree of s.machinesOfType('motherTree')) {
+      if (tree.charge >= TUNING.motherTree.threshold / 2) continue;
+      const near = hubs.find((h) => distToFootprint(tree.x, tree.z, h.x, h.z, h.size) <= s.upgrades.droneRadius(h));
+      const h = near && offer('courier', near, 'Your Mother Tree is slow to charge: try a 📦 Courier hub nearby.');
+      if (h) return h;
+    }
+    if (s.state.progression.coreActivated) {
+      const h = offer('scout', hubs[hubs.length - 1], 'A 🔭 Scout hub pushes the fog back from farther away.');
+      if (h) return h;
+    }
+    if (s.machinesOfType('pollinator').length >= TUNING.drone.roles.spark.unlockGardens) {
+      const h = offer('spark', hubs[0], 'Your gardens are lined up: a ✨ Spark hub starts a chain among them every 30 s.');
+      if (h) return h;
+    }
+    if (s.roles.harvesting()) {
+      const h = offer('harvester', hubs[0], 'Your stores are full and losing income: a 🧺 Harvester hub turns it into biomass.');
+      if (h) return h;
+    }
+    return undefined;
+  }
+
   mergeStep(): Suggestion | undefined {
     const s = this.sim;
     for (const c of s.merge.ready(4)) {
@@ -336,7 +391,7 @@ export class Advisor {
     for (const def of s.upgrades.all()) {
       const st = s.upgrades.status(def);
       if (!st.ok && st.reason && !st.reason.startsWith('Need ')) continue;
-      consider(def.name, def.icon, { [def.costKind ?? 'biomass']: st.cost }, 'upgrade');
+      consider(def.name, def.icon, st.price, 'upgrade'); // E18.7: every part, so drones leave its energy and water alone
     }
     for (const type of BUILDABLE) {
       if (!s.build.isUnlocked(type) || MACHINES[type].areaTypes) continue;

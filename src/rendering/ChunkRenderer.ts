@@ -18,6 +18,7 @@ import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, vineGeo } from './Flora'
 import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, radiantExtras, thrivingExtras, turfTop, type DressCtx, type SolidSink } from './Surfaces';
 import { MODELS, ModelBatch } from './Models';
 import { WATER, poolMaterial, updatePool } from './Water';
+import { TrMeshBuilder } from './transitions/TrMeshBuilder';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
 
 /** Small seeded RNG for decoration placement (looks only). */
@@ -501,15 +502,21 @@ export class ChunkRenderer {
       }
   }
 
+  /** Where an area's wave starts (its landmark) and how far it has to roll. */
+  private waveFrom(id: string): [number, number, number] {
+    const info = this.sim.areas.info(id);
+    const [lx, lz] = info.landmark;
+    let radius = 0;
+    for (const [cx, cz] of info.chunks) radius = Math.max(radius, Math.hypot(cx * CHUNK + CHUNK / 2 - lx, cz * CHUNK + CHUNK / 2 - lz) + CHUNK * 0.71);
+    return [lx, lz, radius];
+  }
+
   /** An area's fog state changed: refresh its chunks (and their neighbours, for soft edges). */
   markArea(id: string, fade = false) {
     const tr = this.transitions;
     if (fade && tr && !this.reducedMotion) {
       // Look 6.18: the clear rolls out from the landmark: props wake, ground un-greys, fog recedes as a front.
-      const info = this.sim.areas.info(id);
-      const [lx, lz] = info.landmark;
-      let radius = 0;
-      for (const [cx, cz] of info.chunks) radius = Math.max(radius, Math.hypot(cx * CHUNK + CHUNK / 2 - lx, cz * CHUNK + CHUNK / 2 - lz) + CHUNK * 0.71);
+      const [lx, lz, radius] = this.waveFrom(id);
       tr.areaWave(id, lx + 0.5, lz + 0.5, radius);
     }
     for (const [cx, cz] of this.sim.areas.info(id).chunks)
@@ -570,6 +577,12 @@ export class ChunkRenderer {
       const v = this.views.get(chunkKey(GROUND, 0, 0));
       if (v) v.dirty = true;
       if (prev >= 0 && ps > prev) this.onParkStage?.(ps, prev);
+      // Look 3.8 (#135): from stage 3 the park's edges come alive (ivy, banners); they grow in as a wave from the
+      // fountain instead of popping. Edges only: the ground and obstacles keep their own transitions.
+      if (prev >= 0 && ps > prev && ps >= 3 && this.transitions && !this.reducedMotion) {
+        const [lx, lz, radius] = this.waveFrom('park');
+        this.transitions.areaWave('park', lx + 0.5, lz + 0.5, radius, { from: prev, edgesOnly: true });
+      }
     }
     // Zoomed out, all but the middle draw as plain slabs; close up, the low view reaches deep into the haze, so
     // chunks well past the focus (where the haze is thick) do too. Mid zooms keep full detail (no LOD churn while panning).
@@ -637,13 +650,20 @@ export class ChunkRenderer {
     dirty.sort((a, b) => dist(a, focus) - dist(b, focus));
     // Rebuild nearest first, within a time budget (at least one per frame so streaming always progresses).
     const t0 = performance.now();
+    const over = () => performance.now() - t0 > this.budgetMs;
+    // City 15.4: the camera left the chunk being built (it was dropped above): abandon the job.
+    if (this.job && this.views.get(this.job.v.key) !== this.job.v) this.job = undefined;
     let n = 0;
-    for (const v of dirty) {
-      if (n >= this.budget || (n > 0 && performance.now() - t0 > this.budgetMs)) break;
-      if (v.dirty) this.buildGround(v);
-      if (v.fogDirty && !v.fading && !v.fogHold) this.buildFog(v);
-      n++;
-    }
+    if (!this.job || this.runJob(over))
+      for (const v of dirty) {
+        if (n >= this.budget || (n > 0 && over())) break;
+        if (v.dirty) {
+          this.job = { v, steps: this.buildGround(v) };
+          if (!this.runJob(over)) break; // carries on next frame
+        }
+        if (v.fogDirty && !v.fading && !v.fogHold) this.buildFog(v);
+        n++;
+      }
     // Gentle drift of the fog sheets.
     if (!this.reducedMotion)
       for (const v of this.views.values()) if (v.fog) v.fog.setLocalPosition(0, Math.sin(this.time * 0.4 + v.cx * 0.7 + v.cz) * 0.04, 0);
@@ -732,7 +752,27 @@ export class ChunkRenderer {
 
   // ───────────── ground mesh ─────────────
 
-  private buildGround(v: ChunkView) {
+  /**
+   * City 15.4: a chunk's ground is built as a resumable job, a tile at a time. `update` runs it for a few
+   * milliseconds a frame (one chunk at near zoom can take far longer than a frame when its trees and props are
+   * new), and abandons it if the camera has left and the chunk was dropped. Nothing is shown until the last step,
+   * which swaps all of the chunk's meshes in at once. One job at a time: the build's working state lives on `this`.
+   */
+  private job?: { v: ChunkView; steps: Generator<void> };
+
+  /** Runs the job until it finishes (true) or the frame's budget is spent (false). Always makes some progress. */
+  private runJob(over: () => boolean): boolean {
+    const job = this.job!;
+    for (;;) {
+      if (job.steps.next().done) {
+        this.job = undefined;
+        return true;
+      }
+      if (over()) return false;
+    }
+  }
+
+  private *buildGround(v: ChunkView): Generator<void> {
     v.dirty = false;
     const s = this.sim;
     const c = s.grid.chunkAt(GROUND, v.cx, v.cz);
@@ -789,7 +829,10 @@ export class ChunkRenderer {
       lod: v.far || fog === 'hidden' ? 0 : this.band >= 2 ? 2 : 1,
       area,
       areaType: this.areaType,
-      level: this.level,
+      // a getter: area-wave edges redraw the old dressing with the level overridden (host.withLevel)
+      get level() {
+        return self.level;
+      },
       peek: (x, z) => grid.peek(GROUND, x, z),
       areaAt: (x, z) => map.areaOfCell(x, z),
       slab: (hex, p, sc) => self.slab(self.sink, hex, p, sc),
@@ -811,14 +854,26 @@ export class ChunkRenderer {
         }
       } else if (v.far) this.farTile(b, t, h);
       else this.tile(b, t, h);
-      // Look 3.10: railings, vines, banners and clutter on area boundaries (near chunks; with transitions on too)
-      if (!v.far) areaEdges(this.ctx, t, h + 0.08);
+      // Look 3.10: railings, vines, banners and clutter on area boundaries (near chunks; with transitions on too).
+      // Look 3.8 (#135): while an area wave rolls over the edge, the new dressing grows in through the transition.
+      if (!v.far) {
+        const end = tr && tB ? tr.edgeTile(this.host, area, t, h, tB.tb, fb, b.grey) : 0;
+        if (end > 0) {
+          trEnd = Math.max(trEnd, end);
+          trLive++;
+        } else {
+          this.sink = b;
+          areaEdges(this.ctx, t, h + 0.08);
+        }
+      }
       if (!v.far && fog !== 'hidden') this.pathCorners(b, t, h);
       if (!v.far && this.isWater(t)) {
         this.poolBanks(b, t, h);
         if (t.ground === 'restored' && fog !== 'hidden') this.poolSurface(pool, t, h);
       }
+      yield; // a tile done: `update` decides whether this frame has time for the next
     }
+    // From here to the end is one step: buildings, then every mesh of the chunk swaps in together.
     v.water = this.setMesh(v.water, `water-${v.key}`, this.poolMesh(pool), poolMaterial(), false);
     if (this.inPark && !v.far) {
       b.grey = fb.grey = 0;
@@ -904,6 +959,8 @@ export class ChunkRenderer {
   private solidSink(): SolidSink {
     const b = this.sink;
     if (b instanceof MeshBuilder) return b;
+    // area-wave edges (#135): rails and clutter go through the transition builder so they grow in with the ivy
+    if (b instanceof TrMeshBuilder) return { get grey() { return b.grey; }, add: (type, hex, p, sc, glow) => b.add(type, hex, p, sc, glow), addGeo: (g, x, y, z, r, s) => b.addGeo(g, x, y, z, r, s), quad() {} };
     return { get grey() { return b.grey; }, add: (type, hex, p, sc, glow) => b.add(type as 'box', hex, p, sc, glow), addGeo() {}, quad() {} };
   }
 
@@ -1140,6 +1197,10 @@ export class ChunkRenderer {
       far: (sink: Sink, t: TileData, h: number) => self.farTile(sink, t, h),
       setFoliage: (f: GeoSink | undefined) => {
         self.fb = (f ?? self.chunkFb) as FoliageBuilder;
+      },
+      edges: (sink: Sink, t: TileData, h: number) => {
+        self.sink = sink;
+        areaEdges(self.ctx, t, h + 0.08);
       },
       withLevel: (level: number, fn: () => void) => {
         const old = self.level;

@@ -158,6 +158,9 @@ const BODIES = {
   building: R(5, 3.5, 14, 17.5, 1.6, 'steel') + `<g fill="#ffe7a3">${[6.5, 10.5, 14.5].flatMap((y) => [8, 11.2, 14.4].map((x) => `<rect x="${x}" y="${y}" width="1.8" height="2.2" rx=".4"/>`)).join('')}</g>` + R(10.6, 17.5, 2.8, 3.5, .6, 'wood'),
   road: P('M8.5 3h7L21 21H3z', 'stone') + L('M12 5v2.6M12 10.4v3M12 16.4v3', '#ffe7a3', 1.6),
   boat: P('M2.5 12.5h19l-3.4 5.6H5.9z', 'wood') + L('M14.5 3.5 9 17', '#3a2a1a', 1.6) + P('M8.2 19.4l1.6-3.8 2 .8-1.6 3.8z', 'wood'),
+  // E18: drone roles (Scout, Courier)
+  telescope: L('M9 14l-3.5 7M12 14v7M15 14l3.5 7', '#3a2a1a', 1.6) + P('M3.5 11.2l13.8-6.4 1.6 3.4-13.8 6.4z', 'cream') + P('M16.6 4.2l3.2-1.5 2 4.3-3.2 1.5z', 'gold') + C(5, 13.4, 1.6, 'dark'),
+  parcel: R(3.5, 7, 17, 13.5, 2.2, 'wood') + P('M3.5 9.2l3-4.2h11l3 4.2z', 'cream') + R(10.6, 5, 2.8, 15.5, .6, 'gold') + L('M7 15.5h3.2', '#fbe0b4', 1.2),
   basket: P('M3.5 10.5h17l-2 9.5H5.5z', 'wood') + L('M7 10.5a5 5 0 0 1 10 0', '#3a2a1a', 1.8) + L('M8 13.5l1 5M12 13.5v5M16 13.5l-1 5', '#fbe0b4', 1) + P('M14 8c0-2.4 1.6-4 4-4 0 2.4-1.6 4-4 4z', 'leaf'),
   lantern: L('M12 2v2', '#3a2a1a', 1.6) + R(9.5, 3.5, 5, 2, .6, 'gold') + E(12, 12, 6.5, 6.5, 'red') + R(9.5, 18.2, 5, 2, .6, 'gold') + L('M12 5.6v12.8M8 7.6c-1.2 2.6-1.2 6.2 0 8.8M16 7.6c1.2 2.6 1.2 6.2 0 8.8', '#ffd9cf', 1),
   // Status and actions
@@ -246,7 +249,7 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '☀': 'sun', '🌞': 'sun', '🔆': 'sun', '🌙': 'moon', '🌈': 'rainbow', '🌊': 'wave', '🌫': 'fog', '🌧': 'rain', '🌟': 'star', '💥': 'burst',
   '🦋': 'butterfly', '🐦': 'bird', '🐟': 'fish', '🐱': 'cat', '🐾': 'paw', '🤖': 'robot',
   '⛲': 'fountain', '📡': 'relay', '🛰': 'satellite', '🛸': 'drone', '🚀': 'rocket', '💠': 'crystal', '🏺': 'vase', '🏢': 'building', '🏙': 'building', '🗼': 'building',
-  '🛣': 'road', '🛤': 'road', '🛶': 'boat', '🧺': 'basket', '🏮': 'lantern', '🏗': 'crane',
+  '🛣': 'road', '🛤': 'road', '🛶': 'boat', '🧺': 'basket', '🔭': 'telescope', '📦': 'parcel', '🏮': 'lantern', '🏗': 'crane',
   '🔒': 'lock', '✅': 'check', '⬜': 'box', '⏳': 'hourglass', '🔗': 'link', '🔀': 'merge', '🔁': 'repeat', '⬆': 'up', '⚠': 'warning', '❔': 'question',
   '📋': 'clipboard', '🧹': 'broom', '🪑': 'bench', '💡': 'bulb', '💰': 'coins', '🧩': 'puzzle', '👑': 'crown', '🧠': 'brain', '🕸': 'web', '✋': 'hand',
   '⚙': 'settings', '🔧': 'wrench', '▶': 'play', '⏸': 'pause', '⏩': 'fastForward', '⏭': 'fastForward',

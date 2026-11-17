@@ -36,6 +36,8 @@ export interface MergePlan {
   anchor: MachineData;
   /** the two machines that merge into the anchor */
   partners: MachineData[];
+  /** E18.8: Drone Hubs: the merged hub's role slots (a core keeps slot 1 for the Megahub) */
+  roles?: { slot1: import('../core/types').DroneRole; slot2?: import('../core/types').DroneRole; owned: import('../core/types').DroneRole[] };
   /** every machine the anchor could merge with (connected, same type and tier): tap one to swap it in */
   options: MachineData[];
   fee: Cost;
@@ -245,6 +247,7 @@ export class MergeSystem {
       after: core ? TUNING.super.outputMult : TUNING.merge.solarMult,
       lost,
       freed,
+      ...(anchor.type === 'droneHub' ? { roles: s.roles.mergeRoles(anchor, partners) } : {}),
       key: `${anchor.id}>${tierOf(anchor)}|${partners.map((p) => `${p.id}>${tierOf(p)}`).sort().join(',')}`,
     };
     if (!s.econ.canAfford(fee)) return { ...plan, ok: false, reason: `Need ${formatCost(fee)}` };
@@ -300,7 +303,10 @@ export class MergeSystem {
     const ck = MergeSystem.countKey(anchor.type, tierOf(anchor));
     stats.merges = { ...(stats.merges ?? {}), [ck]: (stats.merges?.[ck] ?? 0) + 1 };
     if (plan.core) {
-      s.state.cores = [...(s.state.cores ?? []), { type: anchor.type, ...(Object.keys(upg).length ? { upg } : {}) }];
+      // E18.8: a hub core keeps slot 1's role and every refit for the Megahub.
+      const r = plan.roles;
+      const roles = r && (r.slot1 !== 'restorer' || r.owned.length) ? { ...(r.slot1 !== 'restorer' ? { role: r.slot1 } : {}), ...(r.owned.length ? { roles: r.owned } : {}) } : {};
+      s.state.cores = [...(s.state.cores ?? []), { type: anchor.type, ...(Object.keys(upg).length ? { upg } : {}), ...roles }];
       s.upgrades.version++;
       for (const m of leaving) s.production.markNear(m.roofId, m.x, m.z, m.size);
       s.production.markDirty();
@@ -310,6 +316,11 @@ export class MergeSystem {
     }
     anchor.tier = tierOf(anchor) + 1;
     if (Object.keys(upg).length) anchor.upg = upg;
+    if (plan.roles) {
+      // E18.8: a Fleet Hub has two role slots; refits owned by any of the three carry over.
+      if (plan.roles.owned.length) anchor.roles = plan.roles.owned;
+      if (plan.roles.slot2) anchor.role2 = plan.roles.slot2;
+    }
     anchor.charge = Math.max(anchor.charge, ...partners.map((p) => p.charge));
     anchor.boostUntil = Math.max(anchor.boostUntil, ...partners.map((p) => p.boostUntil));
     s.upgrades.version++; // per-machine caches (drone reach, production sums)

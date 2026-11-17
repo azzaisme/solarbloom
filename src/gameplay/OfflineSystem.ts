@@ -81,6 +81,25 @@ export class OfflineSystem {
     while (left > 0 && active.length) {
       for (const d of active) {
         if (left <= 0) break;
+        // E18: Gardeners and Scouts work offline through this same path; Couriers, Sparks and Harvesters don't
+        // (their payoffs set off machine pulses, chains or conversions, which offline play never does).
+        const hub = s.machine(d.hubId);
+        const role = s.roles.roleFor(d, hub);
+        if (role !== 'restorer') {
+          const r = hub ? s.roles.offlineJob(d, hub, role) : 'none';
+          if (r === 'none' || r === 'broke') {
+            budget.set(d.id, 0);
+            continue;
+          }
+          report.restored += r.restored;
+          report.grown += r.grown;
+          d.jobs++;
+          s.state.stats.droneJobs++;
+          report.droneJobs++;
+          left--;
+          budget.set(d.id, (budget.get(d.id) ?? 0) - 1);
+          continue;
+        }
         const job = s.drones.findJob(d);
         if (!job) {
           budget.set(d.id, 0);
