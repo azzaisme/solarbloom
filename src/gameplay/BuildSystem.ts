@@ -114,6 +114,8 @@ export class BuildSystem {
     const s = this.sim;
     const cells = s.grid.footprint(roofId, x, z, size);
     if (cells.some((c) => !c)) return 'Too close to the edge';
+    // E21.24: every tile of a footprint on one terrace, none on a ramp or stair
+    if (cells.some((c) => c!.ramp || c!.level !== cells[0]!.level)) return 'Needs level ground';
     for (const c of cells) {
       if (!c) continue;
       if (!s.areas.isClear(c) && !s.areas.canTouch(c)) return 'Lost in the fog — clear the ground here first';

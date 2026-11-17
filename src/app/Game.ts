@@ -47,7 +47,7 @@ import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
 import { Skyline } from '../rendering/Skyline';
 import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
-import { droneTapRadius, pickDrone, pickLayers } from '../core/Picking';
+import { droneTapRadius, pickDrone, pickLayers, pickTerraced } from '../core/Picking';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
 import { initLowPoly } from '../rendering/Shapes';
@@ -1377,6 +1377,12 @@ export class Game {
       const fz = o.z + d.z * t;
       if (!this.sunkAt(fx, fz)) return undefined;
       return { roofId: GROUND, fx, fz, tile: this.sim.grid.get(GROUND, Math.floor(fx), Math.floor(fz)) };
+    }
+    // E21.24: the Old City's terraces: the first level plane the ray meets on a tile of that level
+    if (hit.layerId === GROUND && this.sim.grid.terraced(GROUND)) {
+      const l = this.sim.grid.layer(GROUND)!;
+      const tp = pickTerraced(o, d, l.origin[1] + l.height + SLAB_TOP, (x, z) => this.sim.grid.peek(GROUND, x, z)?.level);
+      if (tp) return { roofId: GROUND, fx: tp.fx, fz: tp.fz, tile: this.sim.grid.get(GROUND, Math.floor(tp.fx), Math.floor(tp.fz)) };
     }
     return { roofId: hit.layerId, fx: hit.fx, fz: hit.fz, tile: this.sim.grid.get(hit.layerId, Math.floor(hit.fx), Math.floor(hit.fz)) };
   }

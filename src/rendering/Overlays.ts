@@ -93,7 +93,8 @@ export class Overlays {
 
   private footprintCenter(roofId: string, x: number, z: number, size: number): pc.Vec3 {
     const r = this.sim.grid.roof(roofId)!;
-    return new pc.Vec3(r.origin[0] + x + size / 2, r.origin[1] + r.height + SLAB_TOP + 0.02, r.origin[2] + z + size / 2);
+    // E21.24: on its terrace
+    return new pc.Vec3(r.origin[0] + x + size / 2, r.origin[1] + r.height + SLAB_TOP + 0.02 + this.sim.grid.groundOffset(roofId, x, z), r.origin[2] + z + size / 2);
   }
 
   showFrame(roofId: string, x: number, z: number, size: number, tone: OverlayTone) {

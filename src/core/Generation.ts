@@ -6,6 +6,7 @@ import { canalRow, roadCol, roadRow } from './Arterials';
 import { distToFootprintRaw } from './Footprint';
 import { roadPlanFor } from './RoadPlan';
 import { inRect, isSeaChunk, regionById, setPieceAt } from './OldCityLayout';
+import { rampAt, tileLevel } from './Height';
 import { OLD_CITY } from '../data/oldcity';
 import { CHUNK, hashString, tileId, tileRandom } from './Hash';
 import type { GroundState, LayerData, TileData } from './types';
@@ -43,6 +44,9 @@ export function generateTile(seed: number, layer: LayerData, x: number, z: numbe
  * the ruined shed stand on their tile (blocked, with a prop the renderer draws). Pure: the layout never changes.
  */
 export function stampOldCity(t: TileData): TileData {
+  // E21.24: the terrace height (every Old City tile has one)
+  t.level = tileLevel(t.x, t.z);
+  if (rampAt(t.x, t.z)) t.ramp = true;
   const p = setPieceAt(t.x, t.z);
   if (!p) return t;
   if (p.kind === 'pile') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `pile:${p.pile.id}` });
@@ -345,7 +349,7 @@ function generateOldCity(seed: number, layer: LayerData, lh: number, x: number, 
     growthRemainingSec: 0,
     bloom: 0,
   };
-  if (area.id === SEA) return Object.assign(base, { feature: 'water' as TileFeature, blocked: true });
+  if (area.id === SEA) return Object.assign(base, { feature: 'water' as TileFeature, blocked: true, level: tileLevel(x, z) });
   const def = AREA_TYPES[area.type];
   let feature: TileFeature = area.noLandmark ? 'paving' : def.ground;
   const road = oldCityRoad(x, z, area);

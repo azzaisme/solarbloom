@@ -13,6 +13,7 @@ import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { plotsInChunk, type PlotSpot } from '../core/Plots';
 import { pileById } from '../core/OldCityLayout';
+import { edgeHeight, levelY, rampAt } from '../core/Height';
 import { PARK_SET } from '../data/oldcity';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
@@ -770,6 +771,66 @@ export class ChunkRenderer {
   }
 
   /**
+   * E21.24: the Old City's terraces. Where a neighbour's edge is lower, an old retaining wall (brick and stone,
+   * coping on top) drops to it, with ivy once the ground above is restored. A ramp or stair tile is drawn as
+   * steps from its low end to its high end. `h` is the chunk's base height, `th` this tile's.
+   */
+  private terrace(b: Sink, t: TileData, h: number, th: number) {
+    const R = PALETTE.retaining;
+    const x = t.x + 0.5;
+    const z = t.z + 0.5;
+    const alive = t.ground === 'restored' ? 0 : 1;
+    if (t.ramp) {
+      const hit = rampAt(t.x, t.z);
+      if (!hit) return;
+      const steps = hit.ramp.kind === 'stair' ? 2 : 3;
+      const [fx, fz] = ({ n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] } as const)[hit.ramp.dir];
+      const col = t.ground === 'restored' ? PALETTE.paving.slabs[0] : R.stone[1];
+      for (let k = 0; k < steps; k++) {
+        const lv = hit.ramp.from + ((hit.ramp.to - hit.ramp.from) * (hit.i + (k + 0.5) / steps)) / hit.n;
+        const top = h + levelY(lv);
+        const low = Math.min(top, h + levelY(Math.min(hit.ramp.from, hit.ramp.to))) - 0.4;
+        const off = (k + 0.5) / steps - 0.5;
+        const cx = x + fx * off;
+        const cz = z + fz * off;
+        const len = 1 / steps;
+        b.add('box', col, [cx, (top + low) / 2 + 0.08, cz], [fx ? len : 1, top - low, fz ? len : 1]);
+        b.add('box', R.coping[alive], [cx, top + 0.085, cz], [fx ? len : 1.02, 0.03, fz ? len : 1.02]);
+      }
+      return;
+    }
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const mine = edgeHeight(t.x, t.z, dx, dz);
+      const theirs = edgeHeight(t.x + dx, t.z + dz, -dx, -dz);
+      if (typeof mine !== 'number') continue;
+      // a ramp's side: drop to the ramp's lowest point
+      const lowLv = typeof theirs === 'number' ? theirs : (rampAt(t.x + dx, t.z + dz)?.ramp ? Math.min(rampAt(t.x + dx, t.z + dz)!.ramp.from, rampAt(t.x + dx, t.z + dz)!.ramp.to) : mine);
+      if (lowLv >= mine - 1e-6) continue;
+      const top = th + 0.08;
+      const bottom = h + levelY(lowLv) - 0.1;
+      const H = top - bottom;
+      const wx = x + dx * 0.5;
+      const wz = z + dz * 0.5;
+      const sx = dx ? 0.12 : 1;
+      const sz = dz ? 0.12 : 1;
+      // stone wall with brick courses, a coping stone on top
+      b.add('box', R.stone[alive], [wx, bottom + H / 2, wz], [sx, H, sz]);
+      const bricks = PALETTE.bricks;
+      for (let c = 0; c < Math.floor(H / 0.45); c++) b.add('box', bricks[(((t.x * 7 + t.z * 3 + c) % bricks.length) + bricks.length) % bricks.length], [wx + dx * 0.01, bottom + 0.25 + c * 0.45, wz + dz * 0.01], [dx ? 0.12 : 0.9, 0.06, dz ? 0.12 : 0.9]);
+      b.add('box', R.coping[alive], [wx, top + 0.02, wz], [dx ? 0.18 : 1.04, 0.06, dz ? 0.18 : 1.04]);
+      // ivy and hanging plants once the ground above is restored
+      if (t.ground === 'restored') {
+        const n = 2 + (t.variant % 3);
+        for (let i = 0; i < n; i++) {
+          const along = ((t.variant >> (i * 2)) % 10) / 10 - 0.45;
+          const len = 0.3 + ((t.variant >> i) % 5) * 0.12;
+          b.add('box', R.vine[i % 2], [wx + dx * 0.07 + (dz ? along : 0), top - len / 2, wz + dz * 0.07 + (dx ? along : 0)], [dx ? 0.04 : 0.14, len, dz ? 0.04 : 0.14]);
+        }
+      }
+    }
+  }
+
+  /**
    * E21.2: the Old City's set pieces on their tile. A salvage pile is its material's model in three sizes,
    * shrinking as it empties; a barricade is a heap of rubble across the avenue; the ruined shed is drawn once
    * from its corner tile; a Keeper stands on bare ground (KeeperVisuals draws it). True when handled.
@@ -781,7 +842,7 @@ export class ChunkRenderer {
       if (!pile) return false;
       const size = SALVAGE.units[pile.size];
       const k = Math.max(0, this.sim.salvage.left(pile.id)) / size;
-      const base = pile.size === 'large' ? 0.95 : pile.size === 'medium' ? 0.72 : 0.52;
+      const base = pile.size === 'large' ? 1.45 : pile.size === 'medium' ? 1.15 : 0.9;
       const sc = base * (0.45 + 0.55 * k);
       const rot = dhash(t.x, t.z, 213) * Math.PI * 2;
       if (pile.model && this.batch?.add(pile.model, x, y, z, rot, sc, sc, sc, this.neglected)) return true;
@@ -934,30 +995,37 @@ export class ChunkRenderer {
       const ahead = fog === 'cleared' && tr?.waveAhead(area, t.x, t.z);
       b.grey = fog === 'hidden' ? 0.75 : (fog === 'cleared' && !ahead) || t.ground === 'restored' ? 0 : 0.35;
       fb.grey = b.grey;
+      // E21.24: an Old City tile stands at its terrace's height; cliff faces drop to lower neighbours
+      const th = t.level !== undefined ? h + levelY(t.level) : h;
+      if (t.level !== undefined) this.terrace(b, t, h, th);
+      if (t.ramp) {
+        yield;
+        continue;
+      }
       if (tr && tB) {
-        const end = tr.buildTile(this.host, t, h, !!v.far, { b, fb, sb: tB.sb, tb: tB.tb }, area);
+        const end = tr.buildTile(this.host, t, th, !!v.far, { b, fb, sb: tB.sb, tb: tB.tb }, area);
         if (end > 0) {
           trEnd = Math.max(trEnd, end);
           trLive++;
         }
-      } else if (v.far) this.farTile(b, t, h);
-      else this.tile(b, t, h);
+      } else if (v.far) this.farTile(b, t, th);
+      else this.tile(b, t, th);
       // Look 3.10: railings, vines, banners and clutter on area boundaries (near chunks; with transitions on too).
       // Look 3.8 (#135): while an area wave rolls over the edge, the new dressing grows in through the transition.
       if (!v.far) {
-        const end = tr && tB ? tr.edgeTile(this.host, area, t, h, tB.tb, fb, b.grey) : 0;
+        const end = tr && tB ? tr.edgeTile(this.host, area, t, th, tB.tb, fb, b.grey) : 0;
         if (end > 0) {
           trEnd = Math.max(trEnd, end);
           trLive++;
         } else {
           this.sink = b;
-          areaEdges(this.ctx, t, h + 0.08);
+          areaEdges(this.ctx, t, th + 0.08);
         }
       }
-      if (!v.far && fog !== 'hidden') this.pathCorners(b, t, h);
+      if (!v.far && fog !== 'hidden') this.pathCorners(b, t, th);
       if (!v.far && this.isWater(t)) {
-        this.poolBanks(b, t, h);
-        if (t.ground === 'restored' && fog !== 'hidden') this.poolSurface(pool, t, h);
+        this.poolBanks(b, t, th);
+        if (t.ground === 'restored' && fog !== 'hidden') this.poolSurface(pool, t, th);
       }
       yield; // a tile done: `update` decides whether this frame has time for the next
     }
@@ -974,8 +1042,9 @@ export class ChunkRenderer {
         // An entry fix may have opened one of its tiles: then it's rubble, not a building.
         const whole = s.grid.peek(GROUND, p.x, p.z)?.feature === 'building' && s.grid.peek(GROUND, p.x + p.w - 1, p.z + p.d - 1)?.feature === 'building';
         if (!whole) continue;
-        if (p.storeys >= 6 && !v.far && fog !== 'hidden') towers.push(this.tower(p, h, fog === 'cleared', b.grey));
-        else this.building(b, p, h, fog === 'cleared', v.far);
+        const bh = h + s.grid.groundOffset(GROUND, p.x, p.z); // E21.24: on its terrace
+        if (p.storeys >= 6 && !v.far && fog !== 'hidden') towers.push(this.tower(p, bh, fog === 'cleared', b.grey));
+        else this.building(b, p, bh, fog === 'cleared', v.far);
       }
     }
     // E19.1.5: plots, in the chunk's own meshes and model batch (no extra draw calls)
@@ -987,7 +1056,7 @@ export class ChunkRenderer {
         model: (name: string, x: number, y: number, z: number, rot: number, sc: number) => !!this.batch?.add(name, x, y, z, rot, sc),
         lod: (v.far ? 0 : this.band >= 2 ? 2 : 1) as Lod,
       };
-      for (const { p, look } of this.chunkPlots) drawPlot(host, p, look ?? undefined, h + 0.08, !!v.far);
+      for (const { p, look } of this.chunkPlots) drawPlot(host, p, look ?? undefined, h + 0.08 + s.grid.groundOffset(GROUND, p.x, p.z), !!v.far);
     }
     // E19.2: decorations, the same way
     const decor = this.decor && fog !== 'hidden' ? this.decor.inChunk(v.cx, v.cz) : [];
@@ -999,7 +1068,7 @@ export class ChunkRenderer {
         model: (name: string, x: number, y: number, z: number, rot: number, sc: number) => !!this.batch?.add(name, x, y, z, rot, sc),
         lod: (v.far ? 0 : this.band >= 2 ? 2 : 1) as Lod,
       };
-      for (const d of decor) drawDecor(host, d.kind, d.x + 0.5, h + 0.08, d.z + 0.5, d.rot, !!v.far);
+      for (const d of decor) drawDecor(host, d.kind, d.x + 0.5, h + 0.08 + s.grid.groundOffset(GROUND, d.x, d.z), d.z + 0.5, d.rot, !!v.far);
     }
     this.fb = fb;
     this.sink = b;

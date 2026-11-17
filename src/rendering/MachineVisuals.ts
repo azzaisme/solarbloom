@@ -344,7 +344,8 @@ export class MachineVisuals {
 
   worldOf(m: MachineData): [number, number, number] {
     const r = this.sim.grid.roof(m.roofId)!;
-    return [r.origin[0] + m.x + m.size / 2, r.origin[1] + r.height + SLAB_TOP, r.origin[2] + m.z + m.size / 2];
+    // E21.24: a machine stands on its terrace
+    return [r.origin[0] + m.x + m.size / 2, r.origin[1] + r.height + SLAB_TOP + this.sim.grid.groundOffset(m.roofId, m.x, m.z), r.origin[2] + m.z + m.size / 2];
   }
 
   view(id: string) {

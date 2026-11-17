@@ -85,3 +85,22 @@ export function polyDist(poly: [number, number][], x: number, z: number): number
   }
   return inside ? 0 : best;
 }
+
+/**
+ * E21.24: picking on terraced ground. The ray tests the level planes from the highest down; the aimed cell is
+ * the first whose own level is that plane's (a ramp counts as its nearest level). `baseY` is the world y of
+ * level 1's walkable top; `levelOf` reads a cell's level (undefined: flat, level 1). Pure, for tests.
+ */
+export function pickTerraced(o: V3, d: V3, baseY: number, levelOf: (x: number, z: number) => number | undefined, levels = [4, 3, 2, 1, 0], levelHeight = 1.2): { fx: number; fz: number } | undefined {
+  if (Math.abs(d.y) < 1e-6) return undefined;
+  for (const L of levels) {
+    const y = baseY + (L - 1) * levelHeight;
+    const t = (y - o.y) / d.y;
+    if (t < 0) continue;
+    const fx = o.x + d.x * t;
+    const fz = o.z + d.z * t;
+    const lv = levelOf(Math.floor(fx), Math.floor(fz)) ?? 1;
+    if (Math.abs(lv - L) < 0.5) return { fx, fz };
+  }
+  return undefined;
+}

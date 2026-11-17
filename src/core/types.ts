@@ -77,6 +77,10 @@ export interface TileData {
   prop?: string;
   /** A generated obstacle was cleared so a fogged area stays reachable (saved). */
   unblocked?: boolean;
+  /** E21.24: the Old City's terrace height at the tile's middle, in levels (generated, not saved; unset = flat) */
+  level?: number;
+  /** E21.24: the tile is part of a ramp or stair (generated) */
+  ramp?: boolean;
 }
 
 /**
