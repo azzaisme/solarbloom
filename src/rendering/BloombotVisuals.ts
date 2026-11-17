@@ -15,8 +15,6 @@ const MODEL_URL = new URL('../../assets/raw/bloombot/bloombot.glb', import.meta.
 const FACES_URL = new URL('../../assets/raw/bloombot/bloombot-faces.png', import.meta.url).href;
 export const FACES = ['happy', 'surprised', 'wink', 'blink'] as const;
 export type BotFace = (typeof FACES)[number];
-/** The visor in model space (metres, +Z front), from the T-pose: centre and size of the face panel. */
-const VISOR = { x: 0, y: 0.6, z: 0.192, w: 0.24, h: 0.165 };
 /** Model metres -> world units (1 tile = 1 m). A touch under a tile tall, like the mock beside a bench. */
 const SCALE = 0.95;
 /** Clip speeds at which the feet match the ground: world units per second at anim speed 1. */
@@ -103,47 +101,30 @@ export class BloombotVisuals {
   }
 
   /**
-   * The visor face: a thin glowing panel just in front of the baked visor, tied to the head bone so it nods and
-   * turns with the head. Placed in the rest (T) pose, before any clip plays.
+   * The visor face: the Blender pass cuts the visor out as its own part (material `bloombot_visor`, skinned to
+   * the head) with flat front-on UVs, so the face sheet's frames lie on the real curved visor.
    */
-  private addFace(holder: pc.Entity, rig: pc.Entity) {
-    const head = rig.findByName('Head') as pc.Entity | null;
-    if (!head) return;
+  private addFace(_holder: pc.Entity, rig: pc.Entity) {
+    const mi = rig.findComponents('render').flatMap((r) => (r as pc.RenderComponent).meshInstances).find((m) => m.material?.name === 'bloombot_visor');
+    if (!mi) return;
     const m = new pc.StandardMaterial();
+    m.name = 'bloombot_visor_face';
     m.diffuse.set(0, 0, 0);
     m.emissive.set(1, 1, 1);
     m.emissiveIntensity = 1.6;
-    m.useLighting = true;
     m.gloss = 0.85;
     m.emissiveMapTiling.set(1 / FACES.length, 1);
+    m.update();
+    mi.material = m;
     this.faceMat = m;
-    const panel = new pc.Entity('bloombot-face');
-    panel.addComponent('render', { type: 'plane', material: m, castShadows: false });
-    holder.addChild(panel);
-    panel.setLocalPosition(VISOR.x, VISOR.y, VISOR.z);
-    panel.setLocalEulerAngles(90, 0, 0); // the plane faces +Y; turn it to face +Z
-    panel.setLocalScale(VISOR.w, 1, VISOR.h);
-    holder.syncHierarchy();
-    const pos = panel.getPosition().clone();
-    const rot = panel.getRotation().clone();
-    const ws = new pc.Vec3();
-    panel.getWorldTransform().getScale(ws);
-    const hs = new pc.Vec3();
-    head.getWorldTransform().getScale(hs);
-    panel.reparent(head);
-    panel.setPosition(pos);
-    panel.setRotation(rot);
-    panel.setLocalScale(ws.x / hs.x, ws.y / hs.y, ws.z / hs.z);
-    const tex = this.app.assets;
-    tex.loadFromUrl(FACES_URL, 'texture', (err, asset) => {
+    this.app.assets.loadFromUrl(FACES_URL, 'texture', (err, asset) => {
       if (err || !asset || this.destroyed) return;
       const t = asset.resource as pc.Texture;
       t.addressU = pc.ADDRESS_CLAMP_TO_EDGE;
+      t.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
       m.emissiveMap = t;
       this.setFace(this.face);
-      m.update();
     });
-    m.update();
   }
 
   /** Shows a visor face, for `seconds` (then back to happy), or until changed. */

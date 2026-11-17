@@ -31,7 +31,8 @@ blender -b -P blender-pass.py -- bloombot-meshy.glb bloombot.glb preview-fixed.p
   put). Idle keeps 12% of its hip twist. Cheer's arms open into a V that clears the head.
 - **Makes the backpack rigid.** Its vertices are tied to the `Spine` bone alone.
 - **Warms the gold** in the texture and **halves the texture** to 1024².
-- **Measures the visor** for the face panel.
+- **Cuts out the visor** as its own part (`bloombot_visor`, skinned to the head) with flat front-on UVs, so face
+  frames lie on the real curved surface. A flat panel in front of the visor floated off the head; don't.
 - Renders a check sheet of the changed clips.
 
 Blender 5 notes: actions need their slot set (`strip.action_slot`, `animation_data.action_slot`) or they bind
@@ -44,8 +45,8 @@ to nothing; export with `export_animation_mode='NLA_TRACKS'` to get one glTF ani
 - `anim` component on the rig root; each glTF animation is assigned by name (`assignAnimation(name, track,
   undefined, speed, loop)`). Loops (idle, walk, run) blend with `baseLayer.transition(name, 0.18)`; one-shots
   play and blend back on a timer. Walk and run speed follow how fast bloombot really moves, so feet don't slide.
-- Faces: `assets/tools/bloombot_faces.py` → `bloombot-faces.png`, on a plane reparented to the `Head` bone in
-  the rest pose, frames picked with `emissiveMapOffset`.
+- Faces: `assets/tools/bloombot_faces.py` → `bloombot-faces.png`, as the emissive map of the visor part's
+  material, frames picked with `emissiveMapOffset`.
 - Until the GLB loads (or if it fails) a capsule stands in.
 
 ## Still to do

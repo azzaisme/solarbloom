@@ -30,10 +30,12 @@ Forward, interact 290 Wave One Hand, cheer 298 Cheer with Both Hands Up; walk an
   alone, so it rides on the back as one rigid piece.
 - **Texture:** halved to 1024² (the character budget in docs/art/meshy-assets.md); the GLB went from 3.5 to
   1.7 MB.
-- **Visor:** the pass prints where the black visor sits (`VISOR …`); the game's face panel uses it.
+- **Visor:** the visor's triangles (an oval on the front of the head) are cut out as their own part with
+  material `bloombot_visor`, still skinned to the head, with flat front-on UVs across the visor.
 
 ## Faces
 
 `assets/tools/bloombot_faces.py` draws `bloombot-faces.png`: happy, surprised, wink and blink in one row. The
-game lays it on a thin glowing panel over the visor, tied to the `Head` bone, and swaps frames
+game puts it on the visor part (its own UVs span the visor, so the eyes sit on the real curved surface) and
+swaps frames
 (`BloombotVisuals.setFace`): it blinks now and then, winks while cheering, looks surprised when interacting.

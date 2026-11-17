@@ -62,6 +62,46 @@ for vg in mesh.vertex_groups:
 pack_vg.add(pack, 1.0, 'REPLACE')
 print('PACK vertices', len(pack))
 
+# Visor: cut the visor's triangles out as their own part (still skinned to the head) with flat, front-on UVs,
+# so the game can swap face frames on the real curved surface. Front is -Y; the visor is the oval at
+# x ±0.125, z 0.52–0.68 on the front of the head.
+VX, VZ0, VZ1 = 0.125, 0.517, 0.679
+vzc, vrx, vrz = (VZ0 + VZ1) / 2, VX * 0.99, (VZ1 - VZ0) / 2 * 0.99
+bpy.ops.object.select_all(action='DESELECT')
+bpy.context.view_layer.objects.active = mesh
+mesh.select_set(True)
+n3 = mesh.matrix_world.to_3x3()
+bpy.ops.object.mode_set(mode='EDIT')
+import bmesh as _bm
+ebm = _bm.from_edit_mesh(mesh.data)
+for el in (*ebm.verts, *ebm.edges, *ebm.faces):
+    el.select = False
+picked = 0
+for f in ebm.faces:
+    c = mesh.matrix_world @ f.calc_center_median()
+    nn = (n3 @ f.normal).normalized()
+    if nn.y < -0.3 and c.y < -0.12 and (c.x / vrx) ** 2 + ((c.z - vzc) / vrz) ** 2 < 1:
+        f.select = True
+        picked += 1
+ebm.select_flush(True)
+_bm.update_edit_mesh(mesh.data)
+bpy.ops.mesh.separate(type='SELECTED')
+bpy.ops.object.mode_set(mode='OBJECT')
+visor = next(o for o in bpy.context.selected_objects if o is not mesh)
+visor.name = 'bloombot_visor'
+vm = visor.matrix_world
+uvd = visor.data.uv_layers.active.data
+for poly in visor.data.polygons:
+    for li in poly.loop_indices:
+        co = vm @ visor.data.vertices[visor.data.loops[li].vertex_index].co
+        uvd[li].uv = ((co.x + VX) / (2 * VX), (co.z - VZ0) / (VZ1 - VZ0))
+vmat = bpy.data.materials.new('bloombot_visor')
+vmat.use_nodes = True
+vmat.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.02, 0.025, 0.035, 1)
+visor.data.materials.clear()
+visor.data.materials.append(vmat)
+print('VISOR faces', picked)
+
 acts = {a.name: a for a in bpy.data.actions}
 LEGS = ('LeftUpLeg', 'RightUpLeg')
 # Pulse and assemble: a human bow tips the oversized head to the floor. Keep a third of the lean.
