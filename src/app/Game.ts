@@ -69,6 +69,7 @@ import { type Action, Bindings, BUILD_DIGITS, keyLabel, padLabel } from './Bindi
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
+import { OldCityController } from './OldCity';
 import { Cozy } from '../gameplay/Cozy';
 import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
 import { chunkKey } from '../core/Grid';
@@ -210,6 +211,8 @@ export class Game {
   private plotPreview?: { id: string; option: string };
   private cozyCheckAt = 0;
   private selected?: string;
+  /** E21: the Old City's panels and held actions (old-city rules with bloombot only) */
+  private oc?: OldCityController;
   private inspectTimer = 0;
   private cinematic = false;
   private specialtyToasted = new Set<string>();
@@ -447,10 +450,11 @@ export class Game {
       this.overlays.holo.eye = (out) => visuals.eyeWorld(out);
       this.overlays.holo.sink = () => new MeshBuilder();
       bot.walker.solid = (r, x, z) => this.cozy.solidAt(r, x, z); // E19: solid plot options block like machines (a decoration blocks through its tile)
-      bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble' || !!this.photo?.active;
+      bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble' || !!this.photo?.active || !!this.oc?.busy;
       bot.onZoom = (f) => this.photo?.active && this.photo.zoom(f); // the right stick zooms only in photo mode
       bot.onPad = (a) => this.doAction(a);
       bot.onButton = (i) => this.padListener?.(i);
+      if (this.sim.oldCity) this.oc = new OldCityController(this.oldCityHost());
       const focus = new PadFocus(this.hud.root);
       bot.padCapture = (i) => !this.padListener && focus.button(i);
       // E19.2: no zoom in play or while building (the right stick's up and down do nothing for now)
@@ -918,6 +922,7 @@ export class Game {
   }
 
   private escape() {
+    if (this.oc?.escape()) return;
     if (this.mergeSel) this.cancelMerge();
     else if (this.hud.modalOpen) this.hud.openSettings(false);
     else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
@@ -1074,6 +1079,12 @@ export class Game {
         return;
       }
     }
+    // E21: piles, barricades, Keepers, the fountain and the store come first under old-city rules.
+    if (this.oc) {
+      const f = b.front();
+      const ft = this.sim.grid.get(b.pose.roofId, f.x, f.z);
+      if (this.oc.interact(f, ft ? this.sim.occupant(ft) : undefined)) return;
+    }
     // Region unlocks: facing a sealed area's fog, interact buys it (or says what it costs).
     const sealed = this.sealedAhead();
     if (sealed) {
@@ -1107,6 +1118,27 @@ export class Game {
       return;
     }
     this.hud.showTip(sc.x, sc.y, `<b>${this.tileTitle(p.tile)}</b>${this.tileDetail(p.tile)}${this.pawHint(p.tile)}${this.plotLine(p.roofId, p.tile)}`);
+  }
+
+  /** E21: what the Old City controller borrows from the game. */
+  private oldCityHost() {
+    return {
+      sim: this.sim,
+      hud: this.hud,
+      bot: this.bot!,
+      bindings: this.bindings,
+      game: this,
+      screenOf: (x: number, z: number) => {
+        const t = this.sim.grid.get(this.bot!.pose.roofId, x, z);
+        return t ? this.botTileScreen(t) : { x: innerWidth / 2, y: innerHeight / 2 };
+      },
+      sound: (name: string) => {
+        if (name === 'tier' || name === 'wake') this.sfx.fanfare();
+        else if (name === 'deliver') this.sfx.coin();
+        else if (name === 'salvage' || name === 'pry') this.sfx.build();
+        else this.sfx.click();
+      },
+    };
   }
 
   /** G.13: the rooftop whose building stands on this ground cell. */
@@ -3724,6 +3756,7 @@ export class Game {
     this.overlays.update(dt);
     if (this.bot) {
       this.bot.update(this.hiddenPause ? 0 : dt);
+      this.oc?.update(this.hiddenPause ? 0 : dt);
       this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();

@@ -35,6 +35,7 @@ import { UpgradeSystem } from './UpgradeSystem';
 import { TUNING } from '../data/tuning';
 import { Transitions } from './Transitions';
 import { CultivatorSystem } from './CultivatorSystem';
+import { Inventory, type BotAt } from './Inventory';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -77,6 +78,13 @@ export class Sim {
   readonly transitions: Transitions;
   /** Look 6.8: Cultivators (solar tillers). */
   readonly cultivators: CultivatorSystem;
+  /** E21.1: the backpack and the store (old-city rules). */
+  readonly inventory: Inventory;
+  /**
+   * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
+   * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
+   */
+  bot?: BotAt;
 
   constructor(
     readonly state: GameState,
@@ -115,6 +123,7 @@ export class Sim {
       this.grid.chunkAt(layer, Number(cx), Number(cz));
     }
     this.econ = new Economy(state.resources, state.caps);
+    this.inventory = new Inventory(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);

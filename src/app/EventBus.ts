@@ -3,6 +3,25 @@ import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import type { BuffType, CatRewardType, CatVariant, Cost, MachineData, ResourceKind, RestoreSource, TileData, WorldEventType } from '../core/types';
 
 export interface GameEvents {
+  /** E21.1: the backpack or the store changed (`material` unset = several at once). */
+  'pack.changed': { material?: import('../core/types').MaterialId; delta?: number };
+  'store.changed': { material?: import('../core/types').MaterialId; delta?: number };
+  /** E21.1: a stack is full; `left` units stayed where they were. */
+  'pack.full': { material: import('../core/types').MaterialId; left: number };
+  /** E21.2: bloombot salvaged a pile (`got` units; `left` in the pile; 0 = it is gone). */
+  'pile.salvaged': { pileId: string; material: import('../core/types').MaterialId; got: number; left: number; x: number; z: number };
+  /** E21.2: a Reclaimer sent units to the store. */
+  'reclaimer.delivered': { machineId: string; material: import('../core/types').MaterialId; n: number };
+  /** E21.5: a gate opened for good (a barricade pried, a bridge repaired, the lock bridge risen). */
+  'gate.opened': { gateId: string; region: string };
+  /** E21.6: something was handed in at the fountain; the fountain reached a tier. */
+  'fountain.delivered': { material: import('../core/types').MaterialId; n: number };
+  'fountain.tier': { tier: number };
+  /** E21.8: a Keeper speaks (one to three lines) or moves to a new step. */
+  'keeper.said': { keeperId: string; lines: string[] };
+  'keeper.step': { keeperId: string; step: import('../core/types').KeeperStep };
+  /** E21.9: a region's landmark woke (by bloombot's own delivery). */
+  'landmark.woken': { region: string };
   'tile.restoring': { tile: TileData; source: RestoreSource };
   'tile.restored': { tile: TileData; source: RestoreSource; chainId: number; biomass: Big };
   'tile.prepared': { tile: TileData };
