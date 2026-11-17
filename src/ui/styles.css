@@ -832,3 +832,19 @@ svg.glyph.g-ps-triangle .g-shape { stroke: var(--ps-triangle); }
 #prompt .pr-glyph { min-width: 40px; height: 30px; }
 #prompt .pr-sub .pr-glyph { min-width: 40px; height: 30px; transform: scale(.85); }
 body.contrast svg.glyph .g-cap { fill: var(--glass-solid); stroke: var(--text-strong); }
+
+/* ───────── E22.4: Settings › Controls ───────── */
+.ctl-table { display: flex; flex-direction: column; }
+.ctl-table .ctl-row { display: grid; grid-template-columns: minmax(150px, 1.3fr) 1fr 1fr; align-items: center; gap: 10px; padding: 5px 2px; border-bottom: 1px solid var(--edge-soft); font-size: 16px; font-weight: 700; }
+.ctl-table .ctl-headrow { font: 600 15px var(--font-display); color: var(--text-soft); border-bottom: 2px solid var(--edge); }
+.ctl-key { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; min-width: 56px; padding: 2px 8px; border-radius: 10px; background: var(--glass-hi); border: 1px solid var(--edge-soft); color: var(--text-strong); font: 700 15px var(--font-ui); }
+.ctl-key:hover, .ctl-key:focus-visible { background: var(--glass-hi-2); border-color: var(--edge-strong); }
+.ctl-key[data-locked] { opacity: .7; }
+.ctl-key.listening { border-color: var(--gold); box-shadow: var(--glow-active); }
+.ctl-key svg.glyph { width: 34px; height: 26px; }
+.ctl-none, .ctl-unset { color: var(--text-soft); font-weight: 700; font-size: 15px; }
+.ctl-wait { color: var(--gold-hi); font-size: 15px; }
+.ctl-note { min-height: 22px; margin: 4px 0; font-size: 16px; color: var(--good); }
+.ctl-ask { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 8px; border-radius: 12px; background: var(--glass-hi-2); border: 1px solid var(--gold); font: 600 17px var(--font-display); }
+.ctl-ask button, .ctl-resets button { min-height: 40px; padding: 0 16px; border-radius: 12px; font: 600 16px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge-soft); color: var(--text-strong); }
+.ctl-resets { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }

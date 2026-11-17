@@ -356,11 +356,11 @@ export class Bindings {
     if (other && this.locked(other, 'key')) return { ok: false, reason: 'locked', other };
     if (other && !swap) return { ok: false, reason: 'clash', other };
     const old = this.keys[action][0];
+    this.keys[action] = [code, ...this.keys[action].filter((c) => c !== code && c !== old)];
     if (other) {
       this.keys[other] = this.keys[other].filter((c) => c !== code);
       if (old && !this.keys[other].includes(old) && !this.clashForKey(other, old)) this.keys[other].unshift(old);
     }
-    this.keys[action] = [code, ...this.keys[action].filter((c) => c !== code && c !== old)];
     return { ok: true, swapped: other };
   }
 
@@ -372,11 +372,11 @@ export class Bindings {
     if (other && this.locked(other, 'pad')) return { ok: false, reason: 'locked', other };
     if (other && !swap) return { ok: false, reason: 'clash', other };
     const old = this.pad[action];
-    if (other) {
-      if (old === undefined || this.clashForButton(other, old)) delete this.pad[other];
-      else this.pad[other] = old;
-    }
     this.pad[action] = button;
+    if (other) {
+      delete this.pad[other];
+      if (old !== undefined && !this.clashForButton(other, old)) this.pad[other] = old;
+    }
     return { ok: true, swapped: other };
   }
 
