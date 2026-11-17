@@ -6,6 +6,7 @@
 //   npm run test:perf:browser          (builds first)
 //   PERF_AREAS=60 node tests/perf/browser.perf.mjs   (smaller city, quicker)
 //   PERF_JSON=out.json ...                            (also write the numbers to a file)
+//   PERF_PLOTS=0 ...                                  (E19.1.5: leave the city's plots empty; default fills every one)
 //   PERF_TIERS=low,high ...                           (Look 1.11: graphics tiers to measure; default all three)
 //   PERF_TIER=medium ...                              (the tier for the main pan / zoom / chain run; default high)
 //   PERF_GPU=1 PERF_AREAS=1000 ...                    (City 15.4: a visible window on this machine's real GPU at
@@ -110,6 +111,7 @@ try {
   }
   page.on('pageerror', (e) => errors.push(e.message));
   if (process.env.PERF_VERBOSE) await page.addInitScript(() => (window.__verbose = true));
+  if (process.env.PERF_PLOTS === '0') await page.addInitScript(() => (window.__plots = false));
   if (process.env.PERF_VERBOSE) page.on('console', (m) => console.log('   page:', m.text()));
   await page.goto(url, { waitUntil: 'commit' });
   await page.evaluate(() => localStorage.clear());
@@ -149,8 +151,10 @@ try {
       const spots = s.areas.tiles(id).filter((t) => !t.blocked && !t.occupantId && t.ground === 'restored');
       for (let i = 0; i < 4; i++) insert(['pollinator', 'solar', 'pollinator', 'solar'][i], spots[(i * 37) % Math.max(1, spots.length)]);
     }
+    // E19.1.5: every plot in the city restored and filled (PERF_PLOTS=0 leaves them empty, for comparison)
+    const plots = window.__plots === false ? 0 : g.fillPlots();
     g.saver.save(st);
-    return { areas: n, machines: st.machines.length, bytes: localStorage.getItem('solarbloom.save')?.length ?? 0 };
+    return { areas: n, machines: st.machines.length, plots, bytes: localStorage.getItem('solarbloom.save')?.length ?? 0 };
   }, AREAS);
   results.city = built;
 
@@ -543,7 +547,7 @@ try {
 }
 
 const f = (x) => x.toFixed(1);
-console.log(`city: ${results.city?.areas} areas, ${results.city?.machines} machines, save ${((results.city?.bytes ?? 0) / 1024).toFixed(0)} KB · reload ${results.loadMs} ms`);
+console.log(`city: ${results.city?.areas} areas, ${results.city?.machines} machines, ${results.city?.plots ?? 0} plots filled, save ${((results.city?.bytes ?? 0) / 1024).toFixed(0)} KB · reload ${results.loadMs} ms`);
 for (const k of ['pan', 'zoom', 'chain', 'transitions']) {
   const r = results[k];
   if (r?.detail) console.log(`      triangles: ${(r.detail.ground / 1e3).toFixed(0)}K ground+props · ${(r.detail.foliage / 1e3).toFixed(0)}K foliage in ${r.detail.chunks} chunks · heaviest chunk ${(r.detail.worstChunk / 1e3).toFixed(0)}K (${r.detail.tier}, band ${r.detail.band})`);

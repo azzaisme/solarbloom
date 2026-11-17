@@ -32,11 +32,11 @@ export type AnchorView = 'visible' | 'offscreen' | 'covered';
 
 /**
  * Hidden Lucky Cat: spawning, claiming and rewards. Visual hiding/VFX live in the renderer.
- * `anchorView` is injected by the renderer: anchors under the HUD are never used; on-screen ones are preferred,
+ * `anchorView` is injected by the renderer: anchors under the HUD or in view are never used (E20.1, #284),
  * but a cat can hide on any playable rooftop (the player can pan there; it never expires).
  */
 export class LuckyCatSystem {
-  anchorView: (a: CatAnchor) => AnchorView = () => 'visible';
+  anchorView: (a: CatAnchor) => AnchorView = () => 'offscreen'; // headless (bots, tests): nothing is in view
 
   constructor(private sim: Sim) {}
 
@@ -137,7 +137,7 @@ export class LuckyCatSystem {
 
   /** Phase 5 E15: hiding long enough to leave paw prints (a gentle hint; nothing is lost by ignoring it). */
   hinted(spot: CatSpot): boolean {
-    return !!spot.scouted || this.sim.time - spot.spawnedAt >= TUNING.cat.hintAfter;
+    return this.sim.time - spot.spawnedAt >= TUNING.cat.hintAfter; // E20.1: drones never hint a cat
   }
 
   /** Phase 5 E15: a new cat's id and rarity. The very first cat is always a standard one (onboarding). */
@@ -177,13 +177,23 @@ export class LuckyCatSystem {
     return hid;
   }
 
-  /** Picks a hiding spot: one in view most of the time, otherwise anywhere on a playable rooftop. */
+  /**
+   * E20.1 (#284): picks a hiding spot the player has to go and find. Never one in view (`anchorView` 'visible') and
+   * never within `TUNING.cat.minFromBot` tiles of bloombot; a spot within `preferWithin` tiles (a short walk) is
+   * preferred when there is one. Undefined when every candidate is in view: the spawn retries a little later.
+   */
   private pickAnchor(cands: CatAnchor[]): CatAnchor | undefined {
-    if (!cands.length) return undefined;
-    const rng = this.sim.rng;
-    const visible = cands.filter((a) => this.anchorView(a) === 'visible');
-    const pool = visible.length && (rng.next() < TUNING.cat.preferVisible || visible.length === cands.length) ? visible : cands;
-    return rng.pick(pool);
+    const hidden = cands.filter((a) => this.anchorView(a) !== 'visible' && !this.nearBot(a, TUNING.cat.minFromBot));
+    if (!hidden.length) return undefined;
+    const near = hidden.filter((a) => this.nearBot(a, TUNING.cat.preferWithin));
+    return this.sim.rng.pick(near.length ? near : hidden);
+  }
+
+  /** Within `tiles` of bloombot on the same layer (false when there is no bloombot, as in the bots). */
+  private nearBot(a: CatAnchor, tiles: number): boolean {
+    const b = this.sim.state.bot;
+    if (!b || b.roofId !== a.roofId) return false;
+    return Math.hypot(a.pos[0] - b.x, a.pos[2] - b.z) <= tiles;
   }
 
   /** A machine was built on the cat's nook: it hops to another spot instead of blocking the build. */
@@ -207,15 +217,8 @@ export class LuckyCatSystem {
   tick() {
     const c = this.sim.state.cat;
     const t = this.sim.time;
-    if (c.active) {
-      // A missed cat never blocks rewards: when the next one would have appeared, it saves up an extra.
-      if (c.nextSpawnAt >= 0 && t >= c.nextSpawnAt) {
-        c.stash = Math.min(TUNING.cat.stashMax, (c.stash ?? 0) + 1);
-        c.nextSpawnAt = t + this.sim.rng.range(TUNING.cat.laterMin, TUNING.cat.laterMax);
-        this.sim.bus.emit('cat.stash', { stash: c.stash });
-      }
-      return;
-    }
+    // E20.1 (#284): a cat waits until bloombot finds it (no stash); the next one's timer starts from the find.
+    if (c.active) return;
     if (!c.firstSpawned) {
       const ready = (t >= TUNING.cat.firstMinTime && this.restoredCount() >= TUNING.cat.firstMinRestored) || t >= TUNING.cat.firstForceTime;
       if (ready) this.spawn();
@@ -435,7 +438,7 @@ export class LuckyCatSystem {
     // A Rainbow Cat always gives two different rewards (a jackpot); the first cat a Lucky Harvest.
     const type: CatRewardType = first ? 'luckyHarvest' : variant === 'rainbow' ? 'jackpot' : this.rollReward();
     const parts = [this.apply(type, mult, hidden, vmult)];
-    // Saved-up rewards from while the regular cat was hiding: extra Lucky Harvests.
+    // Saved-up rewards from saves made before E20.1 (#284), when a missed cat stashed extras: paid once, then gone.
     const extras = regular ? (c.stash ?? 0) : 0;
     for (let i = 0; i < extras; i++) parts.push(this.apply('luckyHarvest', 1, 0));
     if (regular) c.stash = 0;

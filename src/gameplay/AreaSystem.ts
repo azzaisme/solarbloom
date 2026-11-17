@@ -2,7 +2,17 @@ import { areaMapFor, AreaMap, PARK, type AreaInfo } from '../core/Areas';
 import { GROUND, isRestorable } from '../core/GameState';
 import type { AreaMode, FogState, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
+import { big, fmt, type Decimal } from '../core/Big';
 import type { Sim } from './Sim';
+
+type Big = Decimal;
+
+/** Two significant figures (1,234 → 1,200; 87,654 → 88,000), so prices read cleanly. */
+function roundNice(x: Decimal): Decimal {
+  if (x.lte(100)) return x.ceil();
+  const p = big(10).pow(Math.floor(x.log10()) - 1);
+  return x.div(p).ceil().mul(p);
+}
 
 /**
  * The fog over the endless city. Every area starts hidden. When a neighbour clears, an area becomes
@@ -65,8 +75,72 @@ export class AreaSystem {
     return t.roofId === GROUND ? this.map.areaOfCell(t.x, t.z) : this.sim.grid.layer(t.roofId)?.cluster;
   }
 
+  /** A sealed area (region unlocks) is still hidden fog to everything in the game until it is bought. */
   fog(id: string): FogState {
-    return this.sim.state.areas[id]?.fog ?? 'hidden';
+    const st = this.sim.state.areas[id];
+    return !st || st.sealed ? 'hidden' : st.fog;
+  }
+
+  // ───────────── region unlocks (18 Nov 2026) ─────────────
+
+  /** Revealed next to clear ground, but sealed until the player pays its price. */
+  sealed(id: string): boolean {
+    return !!this.sim.state.areas[id]?.sealed;
+  }
+
+  /** Every sealed area, nearest the park first. */
+  sealedAreas(): string[] {
+    return Object.keys(this.sim.state.areas)
+      .filter((id) => this.sealed(id))
+      .sort((a, b) => this.info(a).distance - this.info(b).distance || (a < b ? -1 : 1));
+  }
+
+  /** The price to unlock a sealed area (as set when it appeared). */
+  unlockCost(id: string): { biomass: Big; energy: Big } | undefined {
+    const p = this.sim.state.areas[id]?.price;
+    return p ? { biomass: big(p.biomass), energy: big(p.energy) } : undefined;
+  }
+
+  /** The price a newly revealed area gets: grows with areas already unlocked, and with income (see TUNING). */
+  private priceNow(): { biomass: string; energy: number } {
+    const U = TUNING.city.unlock;
+    const s = this.sim;
+    const n = Object.values(s.state.areas).filter((a) => a.unlockedAt !== undefined).length;
+    const income = s.production.rates(true).biomass.mul(U.incomeSeconds);
+    const biomass = big(U.biomass * Math.pow(U.growth, n)).max(income);
+    const cap = s.econ.cap('energy');
+    let energy = U.energy * Math.pow(U.energyGrowth, n);
+    if (cap) energy = Math.min(energy, Math.floor(cap.toNumber() * U.capShare));
+    return { biomass: roundNice(biomass).toString(), energy: Math.max(1, Math.round(energy)) };
+  }
+
+  /** Why an area can't be unlocked now, or undefined if it can. */
+  unlockProblem(id: string): string | undefined {
+    if (!this.sealed(id)) return 'Already open';
+    const cost = this.unlockCost(id)!;
+    const short = this.sim.econ.shortfall(cost);
+    if (short) return `Needs ${fmt(cost.biomass)} 🌿 and ${fmt(cost.energy)} ⚡`;
+    return undefined;
+  }
+
+  /** Pays the price and lifts the seal: the area becomes ordinary frontier fog with a guaranteed way in. */
+  unlock(id: string): boolean {
+    const s = this.sim;
+    const why = this.unlockProblem(id);
+    if (why) {
+      s.bus.emit('action.failed', { reason: why });
+      return false;
+    }
+    if (!s.econ.spend(this.unlockCost(id)!)) return false;
+    const st = s.state.areas[id];
+    st.sealed = undefined;
+    st.price = undefined;
+    st.unlockedAt = s.time;
+    st.revealedAt = s.time;
+    this.countCache.delete(id);
+    this.ensureEntry(id);
+    s.bus.emit('area.unlocked', { areaId: id });
+    return true;
   }
 
   /** Tiles of an area (generating its chunks if needed). */
@@ -98,7 +172,9 @@ export class AreaSystem {
   /** Why a tile can't be touched (tooltips, failed actions). */
   fogReason(t: TileData): string | undefined {
     if (t.roofId !== GROUND || this.canTouch(t)) return undefined;
-    return this.fog(this.map.areaOfCell(t.x, t.z)) === 'hidden' ? 'Lost in the fog — clear a neighbouring area first' : 'Thick fog — restore a tile next to clear ground first';
+    const id = this.map.areaOfCell(t.x, t.z);
+    if (this.sealed(id)) return `Sealed in thick fog — unlock it for ${fmt(this.unlockCost(id)!.biomass)} 🌿 and ${fmt(this.unlockCost(id)!.energy)} ⚡`;
+    return this.fog(id) === 'hidden' ? 'Lost in the fog — clear a neighbouring area first' : 'Thick fog — restore a tile next to clear ground first';
   }
 
   // ───────────── progress ─────────────
@@ -220,8 +296,9 @@ export class AreaSystem {
     const s = this.sim;
     if (s.state.areas[id]) return;
     s.state.areas[id] = { fog: 'frontier', revealedAt: s.time };
+    if (TUNING.city.unlock.enabled && id !== PARK) Object.assign(s.state.areas[id], { sealed: true, price: this.priceNow() });
     this.placeLandmark(id);
-    this.ensureEntry(id);
+    if (!this.sealed(id)) this.ensureEntry(id);
     s.bus.emit('area.revealed', { areaId: id });
   }
 
@@ -315,8 +392,9 @@ export class AreaSystem {
     return true;
   }
 
-  /** Revealed areas (frontier, thinning or cleared). */
+  /** Revealed areas (frontier, thinning or cleared). Sealed areas are left out: they are still fog (sealedAreas()). */
   revealed(): string[] {
-    return Object.keys(this.sim.state.areas);
+    const a = this.sim.state.areas;
+    return Object.keys(a).filter((id) => !a[id].sealed);
   }
 }

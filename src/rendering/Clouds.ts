@@ -82,8 +82,8 @@ const mix = (a: number[], b: number[], t: number) => a.map((v, i) => v + (b[i] -
  * silver rim where the surface turns away from the camera. The camera's yaw never changes and its pitch only
  * moves 25–40°, so view-dependent terms bake fine.
  */
-function puffMesh(device: pc.GraphicsDevice, p: Puff, sunWorld: pc.Vec3): pc.Mesh {
-  const g = new pc.SphereGeometry({ radius: 1, latitudeBands: 18, longitudeBands: 26 });
+function puffMesh(device: pc.GraphicsDevice, p: Puff, sunWorld: pc.Vec3, bands: [number, number] = [18, 26]): pc.Mesh {
+  const g = new pc.SphereGeometry({ radius: 1, latitudeBands: bands[0], longitudeBands: bands[1] });
   const pos = g.positions!;
   const n = pos.length / 3;
   // Into the cloud's frame (rotated by the camera yaw, 45°): to-sun and to-camera directions.
@@ -125,6 +125,14 @@ function puffMesh(device: pc.GraphicsDevice, p: Puff, sunWorld: pc.Vec3): pc.Mes
   const m = pc.Mesh.fromGeometry(device, g);
   m.incRefCount();
   return m;
+}
+
+/**
+ * Region unlocks' cloud wall: the same soft puffs at a lower resolution (the wall has many clouds), the first
+ * `count` of them (base, face puff, crown and the biggest sides), with the shared unlit material.
+ */
+export function wallCloudParts(device: pc.GraphicsDevice, sunWorld: pc.Vec3, count = 8): { meshes: { mesh: pc.Mesh; pos: [number, number, number] }[]; material: pc.Material } {
+  return { meshes: PUFFS.slice(0, count).map((p) => ({ mesh: puffMesh(device, p, sunWorld, [9, 14]), pos: p.pos })), material: softMaterial() };
 }
 
 /** Unlit: the shading is all in the vertex colours, so the clouds stay soft and bright whatever the scene light. */

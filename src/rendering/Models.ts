@@ -30,6 +30,8 @@ interface Loaded {
   parts: [ModelPart[], ModelPart[]];
   /** the parts merged for batches (near, far), made on first use */
   merged: [ModelPart[] | undefined, ModelPart[] | undefined];
+  /** E20.6: the same, with neglected materials (near, far) */
+  neglected?: [ModelPart[] | undefined, ModelPart[] | undefined];
 }
 
 /** A material is plain when only its gloss and metalness set it apart from the model's other parts. */
@@ -244,11 +246,14 @@ export class ModelLibrary {
   }
 
   /** The parts to draw many copies with: `parts`, with those that differ only in gloss and metalness merged into one. */
-  batchParts(name: string, far = false): ModelPart[] {
+  batchParts(name: string, far = false, neglected = false): ModelPart[] {
     const m = this.models.get(name);
     if (!m) return [];
     const i = far && m.parts[1].length ? 1 : 0;
-    return (m.merged[i] ??= mergeParts(this.app.graphicsDevice, m.parts[i]));
+    const merged = (m.merged[i] ??= mergeParts(this.app.graphicsDevice, m.parts[i]));
+    if (!neglected) return merged;
+    m.neglected ??= [undefined, undefined];
+    return (m.neglected[i] ??= merged.map((p) => ({ ...p, material: neglectedMaterial(p.material) })));
   }
 
   /**
@@ -318,6 +323,27 @@ export class ModelLibrary {
 }
 
 /** Shared library (one per app); `null` until the game creates it. */
+/**
+ * E20.6 (#289): the neglected look of a prop model before its area is woken: the same mesh and atlas, darkened
+ * toward a dusty warm grey, matte, and with no glow (lamps unlit). Cached per material, shared by every chunk.
+ */
+export const NEGLECT = { tint: [0.62, 0.58, 0.53] as const, gloss: 0.55 };
+const neglectCache = new Map<pc.Material, pc.Material>();
+function neglectedMaterial(src: pc.Material): pc.Material {
+  let m = neglectCache.get(src);
+  if (m) return m;
+  const s = (src as pc.StandardMaterial).clone();
+  s.name = `${src.name}+neglected`;
+  s.diffuse = new pc.Color(s.diffuse.r * NEGLECT.tint[0], s.diffuse.g * NEGLECT.tint[1], s.diffuse.b * NEGLECT.tint[2]);
+  if (!s.glossVertexColor) s.gloss *= NEGLECT.gloss;
+  s.emissive = new pc.Color(0, 0, 0);
+  s.emissiveMap = null;
+  s.emissiveIntensity = 0;
+  s.update();
+  neglectCache.set(src, (m = s));
+  return m;
+}
+
 export let MODELS: ModelLibrary | null = null;
 export function createModels(app: pc.AppBase): ModelLibrary {
   MODELS = new ModelLibrary(app);
@@ -344,11 +370,12 @@ export class ModelBatch {
     private far: boolean,
   ) {}
 
-  /** A copy at (x, y, z), turned rotY radians about +y, scaled (sx, sy, sz). */
-  add(name: string, x: number, y: number, z: number, rotY: number, sx: number, sy = sx, sz = sx): boolean {
+  /** A copy at (x, y, z), turned rotY radians about +y, scaled (sx, sy, sz). E20.6: `neglected` draws its dusty look. */
+  add(name: string, x: number, y: number, z: number, rotY: number, sx: number, sy = sx, sz = sx, neglected = false): boolean {
     if (!this.lib.has(name)) return false;
-    let list = this.placed.get(name);
-    if (!list) this.placed.set(name, (list = []));
+    const key = neglected ? `${name}|neglected` : name;
+    let list = this.placed.get(key);
+    if (!list) this.placed.set(key, (list = []));
     q.setFromAxisAngle(pc.Vec3.UP, (rotY * 180) / Math.PI);
     place.setTRS(pos.set(x, y, z), q, scl.set(sx, sy, sz));
     for (let i = 0; i < 16; i++) list.push(place.data[i]);
@@ -363,9 +390,10 @@ export class ModelBatch {
     const fmt = pc.VertexFormat.getDefaultInstancingFormat(device);
     const mis: pc.MeshInstance[] = [];
     let tris = 0;
-    for (const [name, list] of this.placed) {
+    for (const [key, list] of this.placed) {
       const n = list.length / 16;
-      for (const part of this.lib.batchParts(name, this.far)) {
+      const [name, neglected] = key.split('|');
+      for (const part of this.lib.batchParts(name, this.far, !!neglected)) {
         // each copy's matrix = placement × the part's own transform in the model
         const data = new Float32Array(list.length);
         for (let k = 0; k < n; k++) {

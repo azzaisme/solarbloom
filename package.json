@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:full": "vitest run --mode full",
+    "bot:walk": "vitest run --mode full tests/walk-bot.test.ts",
     "test:perf": "PERF=1 vitest run",
     "test:soak": "SOAK=1 vitest run",
     "test:e2e": "vite build && node tests/e2e/picking.e2e.mjs && node tests/e2e/area-panel.e2e.mjs && node tests/e2e/overview.e2e.mjs && node tests/e2e/hud-overlap.e2e.mjs && node tests/e2e/district-bloom.e2e.mjs && node tests/e2e/camera.e2e.mjs",
@@ -33,7 +34,9 @@
     "test:gamepad": "vite build && node tests/e2e/gamepad.e2e.mjs",
     "shots:look2": "vite build && node tests/e2e/look2-shots.mjs",
     "desktop": "vite build && electron . --windowed",
-    "package:deck": "vite build && electron-builder --linux AppImage --x64 --publish never"
+    "package:deck": "vite build && electron-builder --linux AppImage --x64 --publish never",
+    "shots:plots": "vite build && node tests/e2e/plot-shots.mjs",
+    "shots:decor": "vite build && node tests/e2e/decor-shots.mjs"
   },
   "dependencies": {
     "break_infinity.js": "2.2.0",

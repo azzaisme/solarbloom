@@ -15,6 +15,9 @@ import { createInitialState, GROUND, isRestorable } from '../../src/core/GameSta
 import type { MachineData, MachineType } from '../../src/core/types';
 import { TUNING } from '../../src/data/tuning';
 import { Sim } from '../../src/gameplay/Sim';
+import { decorKey, decorValue } from '../../src/core/Decor';
+import { plotSpots } from '../../src/core/Plots';
+import { DECOR_GEN, DECOR_OPTIONS, plotOptionsFor } from '../../src/data/cozy';
 
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
 const AREAS = Number(env.SOAK_AREAS ?? 1000);
@@ -106,13 +109,23 @@ async function play(seed: number, areas: number, hours: number, check: boolean) 
     const t0 = performance.now();
     if (env.SOAK_PROFILE && check) {
       const parts: [string, () => void][] = [
+        // Every system Sim.tick runs, in its order (keep in step with Sim.tick).
+        ['frenzy', () => sim.frenzy.tick()],
         ['prod', () => sim.production.tick(step)],
         ['rest', () => sim.restoration.tick(step)],
+        ['transitions', () => sim.transitions.tick()],
         ['chains', () => sim.chains.tick()],
         ['drones', () => sim.drones.tick(step)],
+        ['roles', () => sim.roles.tick(step)],
+        ['cultivators', () => sim.cultivators.tick(step)],
+        ['supers', () => sim.supers.tick(step)],
         ['cat', () => sim.cat.tick()],
+        ['events', () => sim.events.tick()],
         ['prog', () => sim.progression.tick()],
+        ['milestones', () => sim.milestones.tick()],
+        ['ecosystem', () => sim.ecosystem.tick()],
         ['metrics', () => sim.metrics.tick(step)],
+        ['ledger', () => sim.ledger.tick()],
       ];
       st.time += step;
       st.buffs = st.buffs.filter((b) => b.until > st.time);
@@ -169,6 +182,24 @@ describe('soak: the endless city (City 15.1)', () => {
     sim.production.markDirty();
     expect(toNum(sim.production.rates().biomass)).toBeCloseTo(live, 3);
     expect(saveMB).toBeLessThan(LIMITS.saveMB);
+    // E19.1.5 / E19.2.3 (#251, #255): the same city with every plot chosen and the decoration cap placed still saves
+    // inside the limit (cozy state is written by the game, so it is added here directly).
+    const gen = sim.grid.layer(GROUND)?.gen ?? 1;
+    const plots: Record<string, string> = {};
+    for (const id of sim.areas.revealed()) for (const p of plotSpots(sim.grid.seed, id, gen)) plots[p.id] = plotOptionsFor(sim.areas.info(id).type)[0].id;
+    const decor: Record<string, string> = {};
+    let k = 0;
+    for (const c of sim.grid.loadedChunks(GROUND)) {
+      for (const t of c.tiles) if (t && t.ground === 'restored' && !t.occupantId && !t.blocked && k < DECOR_GEN.max) decor[decorKey(GROUND, t.x, t.z)] = decorValue(DECOR_OPTIONS[k++ % DECOR_OPTIONS.length].id, k % 4);
+      if (k >= DECOR_GEN.max) break;
+    }
+    const cozy0 = sim.state.cozy;
+    sim.state.cozy = { plots: Object.fromEntries(Object.keys(plots).sort().map((p) => [p, plots[p]])), decor: Object.fromEntries(Object.keys(decor).sort().map((d) => [d, decor[d]])) };
+    const cozyMB = (await saver.serializeCompressed(sim.state)).length / 1048576;
+    sim.state.cozy = cozy0; // the checks below use the city as played
+    log(`save with ${Object.keys(plots).length} plots chosen and ${k} decorations: ${cozyMB.toFixed(2)} MB`);
+    expect(k).toBe(DECOR_GEN.max);
+    expect(cozyMB).toBeLessThan(LIMITS.saveMB);
     expect(saveMs).toBeLessThan(LIMITS.saveMs);
     expect(heap).toBeLessThan(LIMITS.heapMB);
     // Every revealed area still has a way in at the end.

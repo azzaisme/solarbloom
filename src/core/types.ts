@@ -207,7 +207,7 @@ export interface CatSpot {
   anchorId: string;
   spawnedAt: number;
   variant: CatVariant;
-  /** E18.3: a Scout flew close by, so the nook shows its paw-print hint early. */
+  /** E18.3: a Scout flew close by. Unused since E20.1 (#284); kept so older saves load. */
   scouted?: boolean;
 }
 
@@ -323,6 +323,15 @@ export interface AreaState {
   spec?: number;
   /** Phase 5 E12: rewarded progress steps already paid here (count of TUNING.areaSteps.at reached). */
   steps?: number;
+  /**
+   * Region unlocks (18 Nov 2026): revealed but still sealed in thick fog until the player pays `price`. While sealed
+   * the area behaves exactly as hidden fog (nothing can be walked, restored or built). Absent on older saves.
+   */
+  sealed?: boolean;
+  /** the unlock price, set when the area was revealed (biomass as a big-number string) */
+  price?: { biomass: string; energy: number };
+  /** sim time the player unlocked it */
+  unlockedAt?: number;
 }
 
 export interface LinkState {
@@ -376,4 +385,26 @@ export interface GameState {
    * so no save version change: a save without it starts bloombot beside the park fountain.
    */
   bot?: { roofId: string; x: number; z: number; facing: number };
+  /**
+   * E19 (#245): the cozy city. Written by the game only, never by the sim (cosmetic: nothing reads it to decide
+   * production, chains, milestones or pacing). Optional and sparse, so no save version change.
+   */
+  cozy?: CozyState;
+}
+
+/** E19: what the player chose for the look of their city. */
+export interface CozyState {
+  /** E19.1: plot id → plot option id (only plots with a choice) */
+  plots?: Record<string, string>;
+  /** E19.1.4: options earned so far, in the order they unlocked (options open from the start aren't listed) */
+  unlocked?: string[];
+  /** E19.1.4: unlocked options the picker hasn't shown yet (its "new" marker) */
+  fresh?: string[];
+  /**
+   * E19.2: decorations placed by hand, `<layer>|<x>|<z>` → `<decoration id>[@<quarter turns>]` (core/Decor.ts).
+   * Sorted keys; each occupies its tile as a machine does.
+   */
+  decor?: Record<string, string>;
+  /** E19.2.2: decorations earned so far, in the order they unlocked (ones open from the start aren't listed) */
+  decorUnlocked?: string[];
 }

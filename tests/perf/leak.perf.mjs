@@ -64,6 +64,7 @@ try {
       }
       s.areas.clear(id, true);
     }
+    g.fillPlots(); // E19.1.5: every plot filled, so streaming plots in and out is part of the leak check
     g.camera.bounds = { minX: -1e4, maxX: 1e4, minZ: -1e4, maxZ: 1e4 };
     let r = 0;
     for (const id of s.areas.revealed()) for (const [cx, cz] of s.areas.info(id).chunks) r = Math.max(r, Math.abs(cx * 16), Math.abs(cz * 16));

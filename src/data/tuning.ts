@@ -70,8 +70,9 @@ export const TUNING = {
       perFootprintTile: 0.05, // …plus a little per extra tile its reach restores
       footprintMax: 1.5,
       nurtureTap: 0.3,
-      autoRestore: 0.05, // a tile restored by drones, machines or chains
-      autoNurture: 0.03, // Phase 5 E12: a tile grown a stage by automation (keeps charging once an area is restored)
+      // #287: Frenzy is bloombot's: automation (drones, machines) no longer charges it; chains still do.
+      autoRestore: 0, // was 0.05: a tile restored by drones, machines or chains
+      autoNurture: 0, // was 0.03: a tile grown a stage by automation
       perChainStep: 0.4, // per activation beyond the first, when a chain ends…
       chainMax: 8, // …capped per chain
     },
@@ -204,12 +205,27 @@ export const TUNING = {
     },
     /** most actors of each kind at once, per quality tier */
     caps: {
-      high: { butterflies: 10, groundBirds: 4, koi: 8, robots: 4, cats: 6, fireflies: 24 },
-      medium: { butterflies: 8, groundBirds: 3, koi: 6, robots: 3, cats: 4, fireflies: 16 },
-      low: { butterflies: 5, groundBirds: 2, koi: 4, robots: 2, cats: 3, fireflies: 10 },
-    } as Record<'low' | 'medium' | 'high', Record<'butterflies' | 'groundBirds' | 'koi' | 'robots' | 'cats' | 'fireflies', number>>,
+      high: { butterflies: 10, groundBirds: 4, koi: 8, robots: 4, cats: 6, fireflies: 24, rabbits: 5, pigeons: 8, ducks: 6, frogs: 5, squirrels: 5 },
+      medium: { butterflies: 8, groundBirds: 3, koi: 6, robots: 3, cats: 4, fireflies: 16, rabbits: 3, pigeons: 5, ducks: 4, frogs: 3, squirrels: 3 },
+      low: { butterflies: 5, groundBirds: 2, koi: 4, robots: 2, cats: 3, fireflies: 10, rabbits: 2, pigeons: 3, ducks: 2, frogs: 2, squirrels: 2 },
+    } as Record<'low' | 'medium' | 'high', Record<'butterflies' | 'groundBirds' | 'koi' | 'robots' | 'cats' | 'fireflies' | 'rabbits' | 'pigeons' | 'ducks' | 'frogs' | 'squirrels', number>>,
     /** sleeping cats: this share of finished machines (seeded by machine id) on restored ground has one */
     cats: { share: 0.3 },
+    /**
+     * E19.3.1 (#257): who moves into a cleared area, by area type (cosmetic only; never a resource). One animal per
+     * `every` matching tiles in view, nearest the view first, up to the tier cap of its species.
+     */
+    locals: {
+      park: ['rabbits'],
+      street: ['pigeons'],
+      plaza: ['pigeons'],
+      canal: ['ducks'],
+      market: ['pigeons'],
+      reservoir: ['frogs', 'ducks'],
+      rooftops: ['pigeons'],
+      grove: ['squirrels', 'rabbits'],
+    } as Record<string, ('rabbits' | 'pigeons' | 'ducks' | 'frogs' | 'squirrels')[]>,
+    localsEvery: 6,
   },
 
   /** Mother Tree: charges from restorations nearby; at full charge releases an area Bloom Pulse. */
@@ -225,6 +241,12 @@ export const TUNING = {
     networkRange: 12,
     /** City: preference for restoring at the fog's edge (score bonus, in tiles²). */
     frontierBonus: 12,
+    /**
+     * #287 (helpers work around bloombot): a job within `nearBotRadius` tiles of bloombot scores up to
+     * `nearBotBonus` better (squared-tile units, fading with distance), so drones help where the player is.
+     */
+    nearBotBonus: 60,
+    nearBotRadius: 9,
     focusMult: 6, // "Focus the frontier": the fog edge counts this many times more
     bloomBonus: 60, // "Keep this area blooming": its green tiles beat restoring up to ~8 tiles further away
     /**
@@ -256,7 +278,7 @@ export const TUNING = {
       /** Grows the target plus this many orthogonal neighbours (+1 per Drone Sweep level), paying the target's nurture water only. */
       gardener: { neighbours: 2, unlockFullBloom: 10 },
       /** Reach is the hub's radius + (reach − 1) × the base radius; flies `speed`× as fast; +1 ⚡ per `tilesPerEnergy` tiles past the base radius. */
-      scout: { reach: 1.5, speed: 1.5, tilesPerEnergy: 4, catHintTiles: 3 },
+      scout: { reach: 1.5, speed: 1.5, tilesPerEnergy: 4 },
       /** Deliveries, each machine at most once per `everySeconds`; priced in what the machine runs on. */
       courier: {
         everySeconds: 8,
@@ -299,13 +321,17 @@ export const TUNING = {
     frenzyMult: 3,
     megaBloomTiles: 8,
     dronePartySeconds: 45,
-    stashMax: 2, // a missed cat saves up to this many extra rewards instead of blocking new ones
     weights: { luckyHarvest: 40, solarFrenzy: 25, megaBloom: 20, droneParty: 12, jackpot: 3, goldenRelay: 14, catsGarden: 14, fogWhisker: 18 },
     fogWhiskerTiles: 10, // Fog Whisker: tiles of the next fogged area restored from its edge, capped
     goldenRelayExtra: 1, // Golden Relay: extra remote blooms on the next crossing
     goldenCorridorTiles: 5, // Golden Relay in the city: extra blooms on the next green corridor hop…
     goldenCorridorMax: 12, // …+1 per 10 cleared areas, up to this
-    preferVisible: 0.75, // chance a cat hides somewhere already on screen (when there is such a spot)
+    /** E20.1 (#284): the cat hides: never in view, never this close to bloombot (tiles)… */
+    minFromBot: 6,
+    /** …and preferably within a short walk of it (tiles), so finding it is a stroll, not a trek. */
+    preferWithin: 40,
+    /** On screen but further than this from bloombot (tiles) counts as out of sight: small, hazy, behind things. */
+    inViewTiles: 12,
     catsGardenTiles: 6, // Cat's Garden: tiles restored (and decorated) on a random unlocked roof
     /**
      * Phase 5 E15: rarer cats (rolled when one appears, 80 / 18 / 2). `mult` scales the reward (harvest seconds,
@@ -346,7 +372,7 @@ export const TUNING = {
     /** weights (an event irrelevant right now gets 0; the same event never comes twice in a row) */
     weights: { supernova: 30, migration: 30, rain: 25, invasion: 15 },
     supernova: { seconds: 20, mult: 10 },
-    migration: { seconds: 15, tiles: 20, reach: 10 },
+    migration: { seconds: 15, tiles: 20, reach: 10, fallbackAreas: 12 }, // fallbackAreas: nearest revealed areas searched when nothing near can grow
     rain: { seconds: 25, mult: 3, waves: 3, waveTiles: 12, waveRadius: 6 },
     invasion: { cats: 3 },
     /** Nothing eligible to grow or water: seconds of steady biomass income instead (at least `fallbackMin`). */
@@ -409,6 +435,13 @@ export const TUNING = {
     clearShare: 0.6,
     /** …but never more than this many tiles (× the area's distance difficulty), so big areas stay a session's goal */
     clearCap: 160,
+    /**
+     * Region unlocks (owner, 18 Nov 2026): a newly revealed area stays sealed in thick fog until bought. The price
+     * is set when the area appears: `biomass` × `growth`^n (n = areas already unlocked), but at least
+     * `incomeSeconds` of sustained biomass income, so it stays a real choice as the economy grows; and `energy` ×
+     * `energyGrowth`^n, never more than `capShare` of the energy cap (always affordable by waiting).
+     */
+    unlock: { enabled: true, biomass: 1000, growth: 1.6, incomeSeconds: 120, energy: 60, energyGrowth: 1.25, capShare: 0.6 },
     /** fog density at 0% restored and just before clearing (it thins linearly in between) */
     fogFull: 1,
     fogThin: 0.25,

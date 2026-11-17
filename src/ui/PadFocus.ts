@@ -4,7 +4,7 @@
  * direction), A presses the focused one, and B is left to Cancel (which closes the panel). With no panel open
  * the d-pad keeps its game actions. On the hotbar, d-pad down from the game focuses the tools.
  */
-const PANELS = ['#modal.open', '#intro:not([hidden])', '#catPanel:not([hidden])', '#upgrades.open', '#backpack.open', '#buildTray.open', '#inspect.open'] as const;
+const PANELS = ['#modal.open', '#intro:not([hidden])', '#catPanel:not([hidden])', '#upgrades.open', '#plotPicker.open', '#backpack.open', '#buildTray.open', '#inspect.open'] as const;
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]';
 const DIRS: Partial<Record<number, [number, number]>> = { 12: [0, -1], 13: [0, 1], 14: [-1, 0], 15: [1, 0] };
 

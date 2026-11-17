@@ -5,6 +5,7 @@ import { mat, PALETTE } from './Materials';
 import { group, shape } from './Shapes';
 import { SLAB_TOP } from './SceneBuilder';
 import { glowMaterial, glowTileMesh } from './TileFx';
+import { Hologram, type HoloShape } from './Hologram';
 
 export type OverlayTone = 'hover' | 'ok' | 'bad' | 'info';
 const TONE: Record<OverlayTone, string> = { hover: PALETTE.signal.hover, ok: PALETTE.signal.ok, bad: PALETTE.signal.bad, info: PALETTE.signal.info };
@@ -34,6 +35,8 @@ export class Overlays {
   private beacon: pc.Entity;
   private beaconArrow: pc.Entity;
   private beaconBase = new pc.Vec3();
+  /** E19: the build hologram (replaces the plain ghost box when given a shape). */
+  readonly holo: Hologram;
 
   constructor(
     private sim: Sim,
@@ -52,6 +55,7 @@ export class Overlays {
     this.ghost = group(root, 'ghost');
     this.ghostBox = shape(this.ghost, 'box', mat(TONE.ok, { opacity: 0.5, unlit: true }), { receive: false });
     this.ghost.enabled = false;
+    this.holo = new Hologram(this.device, root);
     // Faint tile boundaries, shown only while building.
     this.gridLines = group(root, 'buildGrid');
     const lineMat = mat(PALETTE.signal.gridLine, { opacity: 0.45, unlit: true });
@@ -121,8 +125,16 @@ export class Overlays {
     this.frame.enabled = false;
   }
 
-  showGhost(roofId: string, x: number, z: number, size: number, ok: boolean, height = 0.5) {
+  showGhost(roofId: string, x: number, z: number, size: number, ok: boolean, height = 0.5, shape?: HoloShape) {
     const p = this.footprintCenter(roofId, x, z, size);
+    if (shape) {
+      // E19: a hologram of the real thing, projected from bloombot's eyes
+      this.ghost.enabled = false;
+      this.holo.show(shape, p.x, p.y, p.z, size, ok ? 'ok' : 'bad');
+      this.showFrame(roofId, x, z, size, ok ? 'ok' : 'bad');
+      return;
+    }
+    this.holo.hide();
     this.ghost.setPosition(p.x, p.y + height / 2, p.z);
     this.ghostBox.setLocalScale(size * 0.92, height, size * 0.92);
     this.ghostBox.render!.material = mat(ok ? TONE.ok : TONE.bad, { opacity: 0.5, unlit: true });
@@ -132,6 +144,7 @@ export class Overlays {
 
   hideGhost() {
     this.ghost.enabled = false;
+    this.holo.hide();
   }
 
   showRadius(tiles: TileData[], tone: OverlayTone = 'info') {
@@ -157,6 +170,7 @@ export class Overlays {
 
   update(dt: number) {
     this.time += dt;
+    this.holo.update(dt);
     if (this.beacon.enabled) {
       const b = this.beaconBase;
       this.beacon.setPosition(b.x, b.y, b.z);

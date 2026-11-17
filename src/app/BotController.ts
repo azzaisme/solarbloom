@@ -9,12 +9,15 @@ import type { Action, Bindings } from './Bindings';
  * Bloombot (#234): input, movement and the camera follow (G.2, G.3, G.11, G.12). The game owns what an action
  * does; this owns where bloombot is and when it gets there. Docs: docs/BLOOMBOT_EPIC.md.
  *
- * Moving: WASD / arrows or the left stick, relative to the camera's fixed angle; once the Hover upgrade is
- * bought, Shift or the right trigger hovers (bloombot's sprint: faster, a little off the ground). A click sets a walk target: bloombot paths there and then runs the click's action (`arrive`).
+ * Moving: WASD / arrows or the left stick, relative to where the camera is looking; once the Hover upgrade is
+ * bought, Shift or the right trigger hovers (bloombot's sprint: faster, a little off the ground). A click sets
+ * a walk target: bloombot paths there and then runs the click's action (`arrive`).
  * The camera follows bloombot unless something else moved it (a drag, a fly-to, Home, the overview's travel);
  * it picks bloombot up again as soon as bloombot moves.
  */
 const DEAD = 0.18;
+/** Right stick fully over turns the view this many degrees a second. */
+const TURN_SPEED = 150;
 const MOVES: readonly [Action, number, number][] = [
   ['up', 0, 1],
   ['down', 0, -1],
@@ -48,6 +51,8 @@ export class BotController {
   lastInput: 'keys' | 'pad' = 'keys';
   /** gamepad right stick zoom, per second */
   onZoom?: (factor: number) => void;
+  /** gamepad right stick turn, in degrees for this frame */
+  onTurn?: (degrees: number) => void;
   /** a gamepad button was pressed (bound to an action) */
   onPad?: (a: Action) => void;
   /** a menu that wants pad buttons first (G.7 focus navigation); true when it used the press */
@@ -151,14 +156,19 @@ export class BotController {
     this.walk = undefined;
   }
 
-  private readPad(): { x: number; y: number; sprint: boolean; zoom: number } | undefined {
+  private readPad(): { x: number; y: number; sprint: boolean; zoom: number; turn: number } | undefined {
     const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [];
     const gp = [...pads].find((p) => p && p.connected);
     if (!gp) return undefined;
     const dz = (v: number) => (Math.abs(v) < DEAD ? 0 : (v - Math.sign(v) * DEAD) / (1 - DEAD));
     const x = dz(gp.axes[0] ?? 0);
     const y = -dz(gp.axes[1] ?? 0);
-    const zoom = -dz(gp.axes[3] ?? 0);
+    // Right stick: sideways turns the view, up and down zooms. Only the stronger axis counts, so a turn
+    // doesn't also creep the zoom.
+    const rx = dz(gp.axes[2] ?? 0);
+    const ry = -dz(gp.axes[3] ?? 0);
+    const zoom = Math.abs(ry) >= Math.abs(rx) ? ry : 0;
+    const turn = Math.abs(rx) > Math.abs(ry) ? rx : 0;
     gp.buttons.forEach((b, i) => {
       const down = b.pressed;
       if (down && !this.padPrev[i]) {
@@ -171,12 +181,13 @@ export class BotController {
     });
     if (x || y) this.lastInput = 'pad';
     const sb = this.bindings.pad.sprint;
-    return { x, y, sprint: sb !== undefined && (gp.buttons[sb]?.value ?? 0) > 0.4, zoom };
+    return { x, y, sprint: sb !== undefined && (gp.buttons[sb]?.value ?? 0) > 0.4, zoom, turn };
   }
 
   update(dt: number) {
     const pad = this.readPad();
     if (pad?.zoom) this.onZoom?.(Math.pow(1.8, pad.zoom * dt));
+    if (pad?.turn) this.onTurn?.(-pad.turn * TURN_SPEED * dt);
     let ix = 0;
     let iy = 0;
     for (const [a, mx, my] of MOVES)

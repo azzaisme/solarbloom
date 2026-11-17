@@ -63,7 +63,6 @@ export interface GameEvents {
   /** Phase 5 E15: `catId` is stable; `invasion` cats come from a Lucky Cat Invasion. */
   'cat.spawned': { anchorId: string; catId?: string; variant?: CatVariant; invasion?: boolean };
   'cat.found': { anchorId: string; reward: CatRewardType; summary: string; extras: number; catId?: string; variant?: CatVariant; rewards?: CatRewardType[] };
-  'cat.stash': { stash: number };
   'cat.moved': { from: string; anchorId: string; catId?: string };
   'cat.goldenRelay': Record<string, never>;
   'buff.started': { type: BuffType; seconds: number };
@@ -86,6 +85,8 @@ export interface GameEvents {
   'area.step': { areaId: string; step: number; share: number; credited: Partial<Record<ResourceKind, Big>> };
   'milestone.reached': { at: number; credited: Partial<Record<ResourceKind, Big>>; next?: number };
   'area.revealed': { areaId: string };
+  /** region unlocks: the player paid to lift a sealed area's fog */
+  'area.unlocked': { areaId: string };
   'area.fogChanged': { areaId: string; fog: string };
   'area.ready': { areaId: string };
   'area.cleared': { areaId: string };

@@ -42,7 +42,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v${{ steps.version.outputs.version }}" release/*.AppImage \
+          gh release create "v${{ steps.version.outputs.version }}" release/*.AppImage tools/steamdeck/add-to-steam.sh \
             --target "${{ github.sha }}" \
             --title "Solarbloom ${{ steps.version.outputs.version }} (Steam Deck)" \
-            --notes "Steam Deck build of commit ${{ github.sha }}. To install: download the AppImage on the Deck in Desktop Mode, mark it executable (Properties > Permissions), then add it to Steam with Games > Add a Non-Steam Game."
+            --notes "Steam Deck build of commit ${{ github.sha }}. To install: on the Deck in Desktop Mode, download both files and run: bash ~/Downloads/add-to-steam.sh ~/Downloads/Solarbloom-*-steamdeck.AppImage (details in docs/STEAM_DECK.md)."

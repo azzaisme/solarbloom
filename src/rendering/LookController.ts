@@ -49,15 +49,30 @@ export class LookController {
   lowVfx = false;
   reducedMotion = false;
 
+  /** Steam Deck (#243): an upper limit on the shadow map size, whatever the tier asks for. */
+  shadowCap?: number;
+
   /** Look 1.11: switches shadow quality, the post stack and the atmosphere to a graphics tier. */
   setTier(tier: GfxTier) {
     this.tier = tier;
     const T = LOOK.tiers[tier];
     const sun = this.scene.sun.light!;
-    sun.shadowResolution = this.lowVfx ? Math.min(1024, T.shadowRes) : T.shadowRes;
+    // "Fewer effects" keeps one small shadow map: split into cascades it would blur every one of them.
+    sun.shadowResolution = Math.min(this.shadowCap ?? Infinity, this.lowVfx ? Math.min(1024, T.shadowRes) : T.shadowRes);
+    sun.numCascades = this.lowVfx ? 1 : T.shadowCascades;
+    sun.cascadeDistribution = LOOK.cascadeDistribution;
     sun.shadowType = T.softShadows ? pc.SHADOW_PCF5_32F : pc.SHADOW_PCF3_32F;
-    this.post.apply(T, this.app.scene.fog.color);
+    // E19.4.1 (#260): photo mode brings depth of field back (Phase 6 set it aside for play) where post runs.
+    this.post.apply(this.photoDof ? { ...T, dof: true } : T, this.app.scene.fog.color);
     this.applyAtmosphere();
+  }
+
+  /** E19.4.1: depth of field for photo mode (tiers with post-processing only; Low has no post stack). */
+  photoDof = false;
+  setPhotoDof(on: boolean) {
+    if (this.photoDof === on) return;
+    this.photoDof = on;
+    this.setTier(this.tier);
   }
 
   applyAtmosphere() {

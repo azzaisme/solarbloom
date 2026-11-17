@@ -70,8 +70,17 @@ is the walkable or buildable tile one step ahead along bloombot's facing.
 ## 5. Camera and travel
 
 - **Default view:** the close, low view from the mock, following bloombot.
-- **Fixed angle.** Mouse wheel, + / - and the right stick zoom only. Zooming out passes through today's angled
-  view and reaches the overview.
+- **The view turns around bloombot** (changed 17 Nov 2026; it was a fixed angle): the right stick sideways, or a
+  right-button drag, turns it a full circle; C or a right stick click recentres it. The light was composed for
+  the default angle, so other angles look flatter.
+- **Fixed distance, no zoom in play** (owner, 17 Nov 2026). The camera stays at the close view's distance.
+- **Build mode stays close** (E19.2, replacing #280's pull-back and zoom). With something to build in hand (a
+  machine, a superstructure core, a decoration, or the remove tool) the camera keeps the close view. A hologram
+  sits where you aim, snapped to the grid, within 3.6 tiles of bloombot, red with a reason where it can't go. The
+  mouse aims with a free pointer (while it's over the world and was moved in the last 8 s); the pad and the keys
+  aim at the tile in front of bloombot. The mouse wheel, + / - and (on the pad) the bumpers turn a decoration a
+  quarter turn; E / A places it, and it stays in hand for the next one.
+- **The overview** stays on its own key (M / View) and is left by pressing it again or by walking.
 - **Lower quality tiers** keep the same camera with a shorter view distance and thicker haze (#272).
 - **Overview, fly-to and Home move the camera only.** Bloombot stays where it is, and the camera returns to it.
 - **Covering distance:** sprint (#266; since 18 Nov 2026 the Hover upgrade, 40 biomass, one level: until it is bought the sprint key does nothing, then holding it hovers bloombot a little off the ground at sprint speed), and travel from the overview to any landmark already woken.
@@ -80,7 +89,7 @@ is the walkable or buildable tile one step ahead along bloombot's facing.
 
 - **New, from the mock:** a minimap (bottom left, north up, bloombot's arrow), a backpack (unlocked plot options,
   decorations and discoveries) and objectives worded by district, with a progress bar.
-- **Style:** the default stays Look 5 dark glass (#107). The mock's light panels become the calm HUD option (#261).
+- **Style:** Look 5 dark glass (#107). The calm HUD (#261) is the default since E20.7 (#290): same glass, fewer numbers ("Show numbers" in Settings brings them back). The mock's light panels were not used.
 - Every panel shows controller prompts when a gamepad was the last input (#242).
 
 ## 7. Controls
@@ -97,12 +106,16 @@ is the walkable or buildable tile one step ahead along bloombot's facing.
 | Upgrades | U | D-pad right | U |
 | Backpack | Tab | D-pad up | (new) |
 | Cycle tools | 1 / 2 | Bumpers | 1 = inspect, 2 = pulse |
-| Zoom | Mouse wheel, + / - | Right stick up / down | wheel, + / - |
+| Turn a decoration (build mode) | Mouse wheel, + / - | Bumpers (while one is in hand) | (none) |
+| Remove / move a decoration | Remove tool + E; Q picks it up | Remove tool + A; X picks it up | (none) |
+| Turn the view | Right-button drag | Right stick left / right | (none) |
+| Recentre the view | C | Right stick click | (none) |
+| Photo mode (#260) | O | (none: no free button; Settings › Photo mode, or bind one) | (none) |
 | Overview | M | View | (none) |
 | Settings / pause | P | Menu | P |
 | Bloom Frenzy | R | (to agree) | Q |
 | Go to the area that needs you | N | (to agree) | F |
-| Back to the park | Home | (to agree) | Home |
+| Back to the park | Home | (none) | Home |
 | Debug overlay | F3 or ` | (none) | F3 or ` |
 
 Confirmed by the owner on 17 Nov 2026 (#235). Frenzy, "go to the area" and Harvest move because the mock
