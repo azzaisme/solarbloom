@@ -159,3 +159,27 @@ Notes for implementers:
   distance and budget work (#272). The overview is already over 400 draw calls.
 - **The cozy city epic (#245)** comes after this one, so plots, decorations and the backpack are designed for
   bloombot once.
+
+## 12. Status (17 Nov 2026, branch `bloombot-g1`)
+
+| Issue | State |
+|---|---|
+| #235 G.0 design | This doc, the images, keys confirmed |
+| #264 G.10 skinned animation | Done: `BloombotVisuals`, pipeline in `docs/art/bloombot-pipeline.md`. Leak test not run (needs Playwright) |
+| #236 G.1 model | Generated, rigged, animated, Blender pass, faces. Waiting on the owner's look sign-off. No LOD1 yet |
+| #237 G.2 walking | Done, tests in `tests/bloombot-walk.test.ts` |
+| #238 G.3 follow camera | Done: close low view (zoom 3.2) by default, see-through to bloombot |
+| #272 G.18 view distance | Close-view reach per tier and a perf-harness phase; real-laptop and 1,000-area runs still to do |
+| #239 G.4 pulse in front | Done |
+| #240 G.5 build, inspect, wake, cat | Done; assembly is a 1.5 s animation, the machine exists from the press |
+| #265 G.11 click to walk | Done (A*, capped search) |
+| #266 G.12 sprint, landmark travel | Done |
+| #267 G.13 rooftop lift | Done: face a rooftop's building, Q rides up; face out over a roof edge, Q rides down |
+| #268 G.14 minimap | Done; HUD e2e not run here |
+| #269 G.15 backpack | Discoveries now; plots and decorations arrive with #245 |
+| #270 G.16 key map, rebinding | Done, tests in `tests/bindings.test.ts` |
+| #241 G.6 drone companion | Done (looks only) |
+| #242 G.7 controller | Pad play, focus navigation, `tests/e2e/gamepad.e2e.mjs`; text button labels, not glyph SVGs yet |
+| #271 G.17 bloombot for everyone | Done in code; GitHub notes on #56, #74, #99 not posted |
+| #243 G.8 Steam Deck build | Not started |
+| #244 G.9 owner playtest | Owner |
