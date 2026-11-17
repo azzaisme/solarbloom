@@ -1,9 +1,9 @@
 # E21: The Old City — a sandbox of exploring, salvaging and restoring
 
 ## Goal
-Solarbloom becomes a sandbox, exploration and restoration game, in the way Dreamlight Valley and Satisfactory are. I walk bloombot out of the park into a foggy city split into nine named regions, with a beach close to home. Each region has a material found nowhere else, a landmark I can see from far away, something in my way, and a sleeping robot who wakes up and asks for help. I salvage by hand, store what I find, carry it to the fountain, and each delivery gives bloombot a new way to move and new things to build. I have a house that grows with me. Days turn to nights and the weather changes. Helpers only take over what I have already restored myself.
+Solarbloom becomes a sandbox, exploration and restoration game, in the way Dreamlight Valley and Satisfactory are. I walk bloombot out of the park into a foggy city split into ten named regions, with a beach close to home. Each region has a material found nowhere else, a landmark I can see from far away, something in my way, and a sleeping robot who wakes up and asks for help. I salvage by hand, store what I find, carry it to the fountain, and each delivery gives bloombot a new way to move and new things to build. I have a house that grows with me. Days turn to nights and the weather changes. Helpers only take over what I have already restored myself.
 
-The endless idle city is not deleted. It becomes the endgame (the Outskirts) once the Old City is restored.
+**The setting: an island.** The Old City is a fog-bound island city that was abandoned when the fog came. Bloombot is sent there by boat from the mainland to bring it back to life. The sea surrounds it on every side, and the journal pages tell what happened. The endless idle city is not deleted: it becomes the mainland (the Outskirts), reached across the Long Causeway once the island is restored.
 
 Controls, prompts, menus and the backpack screen are their own epic: **E22: Controls and UI**. This document names actions (Interact, Pulse), never keys.
 
@@ -11,7 +11,7 @@ Controls, prompts, menus and the backpack screen are their own epic: **E22: Cont
 
 | | Today (`testing`, 18 Nov 2026) | After E21 |
 |---|---|---|
-| World | Endless seeded areas that all play alike | A fixed Old City: the park plus 9 regions under cloud; the endless city opens after the finale |
+| World | Endless seeded areas that all play alike | A fixed Old City: the park plus 10 regions, one of them a downtown of skyscrapers under cloud; the endless city opens after the finale |
 | What I spend | Biomass, energy and water earned by machines and tiles | Eight materials I find, carry and store; biomass is one ingredient; energy and water power pulses |
 | Opening a region | Buy sealed fog for biomass and energy | Clear what is in the way with an ability or a repair |
 | Progress | Upgrade drawer, exponential costs | Fountain tiers: deliver materials, get an ability and recipes |
@@ -27,7 +27,7 @@ Controls, prompts, menus and the backpack screen are their own epic: **E22: Cont
 1. **Two rule sets.** `GameState.rules` is `'oldcity'` or `'classic'`. New games are `'oldcity'`. A save with no `rules` field loads as `'classic'` and plays exactly as it does today, so no save is scrapped and `SAVE_VERSION` stays 7. `createInitialState(seed, rules = 'classic')` keeps every existing test on classic rules, unchanged and byte-identical.
 2. **All numbers live in data.** `src/data/oldcity.ts` (map, regions, gates, Keepers, caches, house) and `src/data/salvage.ts` (materials, yields, recipes, tiers). The numbers here are the starting values. Tickets tune yields, not gates or recipes, unless the pacing bot (§19) fails.
 3. **No intermediate items.** Materials go straight into recipes. No crafting stations, conveyors or part chains.
-4. **"Region"** means one of the nine authored places. In code they are `OldRegion` in `oldcity.ts`; `DistrictSystem` and "sealed areas" keep their current meanings.
+4. **"Region"** means one of the ten authored places. In code they are `OldRegion` in `oldcity.ts`; `DistrictSystem` and "sealed areas" keep their current meanings.
 5. **Keepers are robots.** E19's "animals only, no residents" stays true for people.
 6. **The Lucky Cat stays hidden** (E20). Nothing here adds a hint for it.
 7. **No new paid models are needed.** Everything uses GLBs already in `assets/raw/tripo/models` and `assets/raw/models`, plus procedural shapes. Keepers reuse the bloombot model with a tint and one prop. The owner can swap in new models later.
@@ -94,7 +94,7 @@ Interact at the fountain opens the delivery panel. Materials can be handed in a 
 | 2 "The pump turns" | 2 landmarks awake | 30 Copper, 30 Timber, 20 Glass | **Hover**; Pollinator, Drone Hub, Reclaimer; stack 60 |
 | 3 "The garden climbs" | 4 landmarks awake | 40 Clay, 30 Gears, 40 Seeds | **Climb**; Reservoir Garden, Mother Tree; stack 80 |
 | 4 "Light on the roofs" | 6 landmarks awake | 40 Sunstone, 60 Copper, 40 Gears | **Glide**; Relay, Cultivator; stack 120 |
-| 5 "The Great Bloom" | all 9 landmarks awake | 80 Sunstone, 80 Glass, 80 Seeds, Heart Seed, Star Lens | Finale (§17) |
+| 5 "The Great Bloom" | all 10 landmarks awake | 80 Sunstone, 80 Glass, 80 Seeds, Heart Seed, Star Lens | Finale (§17) |
 
 The fountain's look changes at each tier (dry, trickle, flowing, lit, in bloom). The old fountain rules (130 tiles, one of each machine, 100 biomass) apply only under classic rules.
 
@@ -112,23 +112,24 @@ Sprint and travel to woken landmarks stay as they are.
 ## 7. The map: regions under cloud
 The structure follows Merge Mayor: one map, split into named regions, each under cloud until I open it, each shown on a region map with what it needs. The beach is one of the four regions touching the park, so the sea is a two-minute walk from the first pulse.
 
-The Old City is chunks −6 to 6 in both directions (13 × 13 chunks, 208 × 208 tiles). The park is chunk (0,0). **The sea** fills every chunk with z ≥ 3 and x ≤ 1, so the south-west edge of the map is coast. Beyond the other edges is a cloud wall until the finale.
+The Old City is an island inside chunks −6 to 6 in both directions (13 × 13 chunks, 208 × 208 tiles). The park is chunk (0,0). **The sea** surrounds it: every chunk outside that square is open sea, and the island's outer chunks end in coastline inside them (sea cliffs under Spire Heights and Observatory Hill in the north, rocky shore in the east and west, beaches in the south). A bay fills every chunk with z ≥ 3 and x ≤ 1, so Saltwind Beach, directly below the park's south steps, faces the bay. Bloombot lands there, so the beach is open from the start. Sea mist hangs a few chunks out to sea; nothing beyond it can be reached until the finale. The Long Causeway leaves the east shore of Clock Plaza toward the mainland, broken in the middle until the Great Bloom.
 
 | # | Region | Area type | Chunks (x, z) | Landmark | Material | In the way | Keeper |
 |---|---|---|---|---|---|---|---|
 | 1 | Mast Row | street | 0…1, −2…−1 | Signal Mast | Copper | Barricade (Pry) | Pylon |
 | 2 | Old Market | market | 1…2, 0…1 | Market Hall | Glass | Barricade (Pry) | Tally |
-| 3 | Saltwind Beach | beach (new) | −1…0, 1…2 | The Sea Lock (lock-gate model, where the canal meets the sea) | Timber | Barricade (Pry) | Tide |
+| 3 | Saltwind Beach | beach (new) | −1…0, 1…2 | The Sea Lock (lock-gate model, where the canal meets the sea) | Timber | Nothing at first: the boat lands here. A barricade (Pry) blocks the boardwalk to the Sea Lock | Tide |
 | 4 | Elder Grove | grove | −2…−1, −1…0 | Elder Tree | Seeds | Barricade (Pry) | Moss |
 | 5 | Cistern Basin | reservoir | 2…4, 2…3 | Old Cistern | Clay | Deep water (Hover) | Sluice |
 | 6 | Clock Plaza | plaza | 3…4, −1…1 | Clock Tower | Gears | Canal; the lock bridge rises when the Sea Lock wakes (Hover also works) | Tock |
 | 7 | The Terraces | rooftops | −1…1, −4…−3 | Rooftop Core | Sunstone | Roofs only (Climb) | Gable |
 | 8 | Glasshouse Gardens | grove | −4…−3, −2…0 | Great Greenhouse (skyline-dome model) | rich Seeds and Glass; Heart Seed | Broken bridge: repair for 30 Timber, 20 Copper, 10 Gears | Fern |
 | 9 | Observatory Hill | rooftops | 2…4, −5…−3 | Sky Observatory (satellite-dish model) | rich Copper and Sunstone; Star Lens | Cliff (Glide from The Terraces) | Vega |
+| 10 | Spire Heights | downtown (new) | −5…−2, −6…−3 | The Solar Spire (skyline-tower model, scaled) | rich Glass and Gears | A collapsed skybridge across the only avenue (Climb over it) | Atlas |
 
-- Regions 1–4 form a pinwheel round the park. Any of the four can be first.
+- Regions 1–4 form a pinwheel round the park. The beach is open from the start; Mast Row, Old Market and Elder Grove each sit behind a barricade, and any of them can be opened first.
 - **The `beach` area type:** sand ground, a band of shallow surf that can be waded, then open sea that nothing crosses. Props: driftwood, barrels, mooring posts, crates. It can be restored into dune grass and sea flowers.
-- Pulse cost multiplier: ring 1 (regions 1–4) ×1.0, ring 2 (5–7) ×1.2, ring 3 (8–9) ×1.4.
+- Pulse cost multiplier: ring 1 (regions 1–4) ×1.0, ring 2 (5–7) ×1.2, ring 3 (8–10) ×1.4.
 - Every other land chunk inside the Old City is a **backstreet**: generated street ground with no landmark, loose Scrap and cat nooks. Its fog lifts when a neighbouring region's gate is opened. Restoring it is optional.
 - Region ground is still generated by area type. What is authored per region is a list of set pieces at fixed cells: the landmark, the Keeper, the seam, salvage piles, the gate, two caches, two journal pages, ladders and perches, and the patch for the Keeper's second request.
 - This is generation 5 (`GROUND_GEN`), used only under old-city rules. Roads keep a clear avenue from the park to each ring-1 barricade.
@@ -157,7 +158,35 @@ Today all ground is flat at one height; only rooftops are raised. The Old City g
 | The Terraces | 2, with roofs above | Roofs stepped up a slope |
 | Glasshouse Gardens | 2 | Across a ravine (level 0) spanned by the broken bridge |
 | Observatory Hill | 3 → 4 | The highest ground in the city, behind a cliff; reached by gliding from The Terraces |
+| Spire Heights | 2 at street level; towers rise to 12 | A downtown of five towers on a raised plateau; the Solar Spire is the tallest thing in the city |
 | Backstreets | Blend between neighbours | Ramps on avenues, stairs in alleys |
+
+### Spire Heights: skyscrapers to climb and decorate
+The north-west of the Old City is a downtown of five glass towers, dead and dark at the start. It is the climbing and decorating showcase, and the Solar Spire is visible from everywhere.
+
+**Getting there:** a collapsed skybridge blocks the only avenue in from Elder Grove's side. Bloombot climbs over it with Climb (tier 3). Spire Heights is in ring 3, so the earliest it opens is tier 3.
+
+**The towers** (heights in levels of 1.2 tiles; each tower is a stack of raised layers like today's rooftops)
+
+| Tower | Footprint | Floors with a terrace | Top | Climbing |
+|---|---|---|---|---|
+| The Solar Spire (landmark) | 6 × 6 | 4, 6, 8, 10, 12 | Crown platform with the landmark core | Ladders up to 8, then an outside stair spiralling to 12 |
+| Glass Tower | 5 × 5 | 4, 6, 8 | Roof garden | Ladders and scaffold |
+| The Twins (two towers) | 4 × 4 each | 4, 6 | Joined by a skybridge at 6 | Ladders; the skybridge needs repairing (20 Copper, 10 Gears) |
+| Old Exchange | 6 × 4 | 4 | A wide roof plaza | Outside stair |
+
+- **Terraces** are open floors running round the outside of a tower, three tiles deep. Each is its own layer with restorable ground (dead planters and cracked paving), salvage piles (Glass, Gears, Scrap), and sometimes a cache or journal page.
+- **Climbing a tower:**
+  - Ladders between terraces need Climb. Outside stairs can be walked.
+  - Each tower's **lift** is dead until the Keeper's landmark delivery. After that, Interact at the lift rides to any terrace already visited.
+- **Gliding:** every tower top and its highest terrace has a perch. From the Spire's crown, glides reach the park, Observatory Hill and The Terraces. With the Long Glide blueprint, glides from any tower top reach twice as far.
+- **Decorating:**
+  - Every terrace and roof is open to decorations once half of its ground is restored. The limit is 60 per tower, or 120 on the Spire.
+  - The roofs of Glass Tower and the Old Exchange each hold one 4 × 4 garden where any plot option can be planted.
+  - Restored terraces light up at night, and the towers' windows light up floor by floor as each terrace is restored. This shows on the skyline from the park.
+- **Restoring:** the region is ready to wake when half of all its restorable tiles (street, terraces and roofs together) are restored and the second request is done. Bloombot's share counts tiles on terraces too.
+- **Never falling:** terrace edges have railings. Bloombot can only leave a terrace by stair, ladder, lift or glide.
+- **Models:** each tower is built from the `skyline-tower` GLB scaled up, with procedural terrace floors and railings, plus the existing building kit. The towers are drawn as close meshes inside Spire Heights and as skyline impostors everywhere else.
 
 ## 8. Keepers
 Each region has one dormant robot near its entrance.
@@ -178,6 +207,7 @@ Each region has one dormant robot near its entrance.
 | The Terraces | 15 Clay | The roof garden | 30 Sunstone, 15 Gears | Energy storage doubled |
 | Glasshouse Gardens | 15 Sunstone | The nursery beds | 40 Glass, 40 Seeds, 20 Clay | The Heart Seed |
 | Observatory Hill | 20 Glass | The hilltop | 40 Sunstone, 30 Copper, 20 Gears | The Star Lens; caches show on the map |
+| Spire Heights | 20 Clay | Spire Square, at the foot of the towers | 40 Glass, 30 Gears, 20 Sunstone | Every tower lift runs; the Spire's top becomes a travel point |
 
 - Keepers speak in short speech bubbles of one to three lines. No voice, no choices.
 - One request is pinned in the objective card at a time; the backpack's Requests tab lists the rest.
@@ -190,11 +220,11 @@ Each region has one dormant robot near its entrance.
 - Landmarks are always woken by bloombot, by hand.
 
 ## 10. Caches, blueprints and the journal
-- Two caches per region (18), in out-of-the-way spots. Interact opens one.
+- Two caches per region (20), in out-of-the-way spots. Interact opens one.
 - One cache in each region holds a **blueprint**; the other holds a **keepsake decoration** (one per region, from existing models, listed in `oldcity.ts`).
 - The Upgrades drawer becomes the **Workbench**. It stands at the fountain until the house reaches level 1, then inside the house. Each upgrade has at most 3 levels. Level L costs 10 × L Scrap and 8 × L of the group's material: Pulse → Copper, Machines → Gears, Drones → Glass, Storage → Timber, Networks → Sunstone, Fog → Clay.
-- Blueprints, one per region in map order: Networks group; Fog group; level 3 of Pulse; level 3 of Machines; level 3 of Drones; level 3 of Storage; Reclaimer Mk 2 (12 a minute); Pack Frame (+40 to every stack); Sprint Servos (sprint 4.6 → 5.6).
-- **Journal:** 20 pages (two per region, two in the park) telling what happened to the city. Each is two or three sentences.
+- Blueprints, one per region in map order: Networks group; Fog group; level 3 of Pulse; level 3 of Machines; level 3 of Drones; level 3 of Storage; Reclaimer Mk 2 (12 a minute); Pack Frame (+40 to every stack); Sprint Servos (sprint 4.6 → 5.6); Long Glide (glides from a tower top reach twice as far).
+- **Journal:** 22 pages (two per region, two in the park) telling what happened to the city. Each is two or three sentences.
 - **Lucky Cat rewards** under old-city rules: 10, 25 or 60 of the local material for a standard, Golden or Rainbow cat. Keepsakes are unchanged.
 
 ## 11. Bloombot's house
@@ -242,25 +272,25 @@ A third-person orbit camera made for walking and looking.
 ## 15. Finding your way
 - Every Old City landmark has a dim amber beacon and a silhouette that show above the fog from anywhere in the Old City, drawn as far impostors by `Skyline.ts`. It brightens when the landmark wakes.
 - The minimap has fog of war. A beacon bloombot has seen shows as "?" until visited.
-- **The region map** replaces the city overview under old-city rules. It shows the whole Old City as nine labelled regions and the sea. A region is under cloud until its gate is open. Selecting one shows a card: its name, what is in the way, its material (once seen), its Keeper (once met), how much is restored, and its pinned request. Woken landmarks and the house are travel points.
+- **The region map** replaces the city overview under old-city rules. It shows the whole Old City as ten labelled regions and the sea. A region is under cloud until its gate is open. Selecting one shows a card: its name, what is in the way, its material (once seen), its Keeper (once met), how much is restored, and its pinned request. Woken landmarks and the house are travel points.
 - The advisor suggests, in order: the pinned request, a fountain tier that can be delivered, a landmark that can be woken, an unvisited beacon, then nothing. Potter pace still hides it.
 
 ## 16. The first 15 minutes
-1. Bloombot wakes beside the dry fountain.
+1. A small boat brings bloombot to the Landing, a jetty on Saltwind Beach a short walk below the park's south steps. Bloombot steps ashore, walks up the steps, and wakes the dry fountain's first spark. The arrival takes about 20 s and can be skipped. The beach is open to explore from the start.
 2. Salvage a rubble pile. The tile under it is now bare.
 3. Pulse four tiles.
 4. Find Seeds in the broken pots.
 5. Restore 60 tiles (starter lamp, Harvest Sunlight).
 6. Deliver 20 Scrap and 6 Seeds: water returns, bloombot gets Pry.
 7. Build a Solar Panel.
-8. Four beacons show through the fog, and the sound of the sea comes from the south. Pry open any avenue.
+8. Three beacons show through the fog to the north, east and west, and the Sea Lock stands at the far end of the beach. Pry open any of the four barricades.
 9. Wake the Keeper there.
 
 No step mentions clicks, taps, rates or upgrades. The intro card and `hintFor()` are rewritten to match; the stale `TUTORIAL` array is deleted.
 
 ## 17. The finale and the Outskirts
-- The tier-5 delivery plays the Great Bloom: the fog lifts off the whole Old City, every landmark lights, and the outer cloud wall opens.
-- Beyond it the city goes on for ever under today's rules: sealed areas bought with biomass and energy, specialties, merging, superstructures, Frenzy, all world events, district blooms. Old-city recipes keep applying to machines.
+- The tier-5 delivery plays the Great Bloom: the fog lifts off the whole island, every landmark lights, the sea mist clears, and the Long Causeway rises out of the water to the mainland.
+- Across the causeway is the mainland: every chunk with x ≥ 9 (the chunks between are sea, except the causeway along z = 0). It goes on for ever under today's rules: sealed areas bought with biomass and energy, specialties, merging, superstructures, Frenzy, all world events, district blooms. Old-city recipes keep applying to machines.
 
 ## 18. The idle layer before the finale (old-city rules)
 
@@ -286,14 +316,16 @@ No step mentions clicks, taps, rates or upgrades. The intro card and `hintFor()`
 ## 20. Order
 **Milestone A, the slice (park, house level 1 and Mast Row):** E21.0 → E21.1 → E21.2 → E21.3 → E21.4 (park and Mast Row only) → E21.24 (height) → E21.5 (barricade) → E21.6 (tier 1) → E21.8 (Pylon) → E21.9 → E21.12 → E21.22 (camera). Run the full suite; the owner plays it.
 
-**Milestone B, the whole city:** E21.7, E21.10, E21.11, E21.13, E21.18, E21.19, E21.20, E21.21 in any order; E21.14 → E21.15 → E21.16 (the rings); E21.17; E21.23 last.
+**Milestone B, the whole city:** E21.7, E21.10, E21.11, E21.13, E21.18, E21.19, E21.20, E21.21 in any order; E21.26 (the island) early; E21.14 → E21.15 → E21.16 (the rings); E21.25 (Spire Heights) after E21.7; E21.17; E21.23 last.
 
 E22 (controls and UI) can run alongside from the start; E22.1 should land before Milestone A is played.
 
 ## Done when
 - A new game can be played from waking up to the Great Bloom with bloombot, once on a gamepad and once on keyboard and mouse, without buying fog, opening an upgrade drawer or seeing Frenzy.
-- All nine regions differ in material, landmark, obstacle and Keeper, and each can be recognised from the park by its silhouette. The beach can be reached within two minutes of tier 1.
-- The city has real height: the sea is seen from the park, and Observatory Hill stands above everything else.
+- All ten regions differ in material, landmark, obstacle and Keeper, and each can be recognised from the park by its silhouette. The beach can be reached within two minutes of tier 1.
+- The city has real height: the sea is seen from the park, Observatory Hill is the highest ground, and the Solar Spire is the tallest thing on the island.
+- It feels like an island: sea on every side, a boat arrival, and a causeway to the mainland at the end.
+- Each of the five towers in Spire Heights can be climbed to the top and decorated on its terraces.
 - The house can be taken from shed to home and decorated inside.
 - A full day, a night and every kind of weather can be seen in one hour of play.
 - The walking bot meets §19's targets on both seeds.

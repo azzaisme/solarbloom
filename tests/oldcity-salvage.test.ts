@@ -11,7 +11,7 @@ const oldSim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
 const pile = (id: string) => PARK_SET.piles.find((p) => p.id === id)!;
 
 describe('E21.2: salvage piles', () => {
-  it('the park holds 60 Scrap and 18 Seeds, the first pile right in front of bloombot', () => {
+  it('the park holds 60 Scrap and 18 Seeds', () => {
     const sim = oldSim();
     expect(sim.salvage.looseLeft('scrap', 'park')).toBe(60);
     expect(sim.salvage.looseLeft('seeds', 'park')).toBe(18);

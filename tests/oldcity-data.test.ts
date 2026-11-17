@@ -65,7 +65,7 @@ describe('E21.0: the data', () => {
   });
 
   it('every region has a landmark, a Keeper, a seam, a gate, two caches and two pages', () => {
-    expect(REGIONS).toHaveLength(9);
+    expect(REGIONS).toHaveLength(10);
     for (const r of REGIONS) {
       expect(r.landmark.name, r.id).toBeTruthy();
       const k = KEEPERS.find((q) => q.id === r.keeper);
@@ -77,7 +77,7 @@ describe('E21.0: the data', () => {
       for (const p of r.pages) expect(PAGES[p.id], p.id).toBeDefined();
       expect(r.patch.w * r.patch.d).toBeGreaterThan(0);
     }
-    expect(Object.keys(PAGES)).toHaveLength(20);
+    expect(Object.keys(PAGES)).toHaveLength(22);
     for (const p of PARK_SET.pages) expect(PAGES[p.id]).toBeDefined();
     expect(BLUEPRINTS.map((b) => b.region)).toEqual(REGIONS.map((r) => r.id));
     expect(KEEPSAKES.map((b) => b.region)).toEqual(REGIONS.map((r) => r.id));

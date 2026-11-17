@@ -1,6 +1,6 @@
 // The endless city: area types, district themes, landmarks and distance scaling. All data, no rules.
 
-export type AreaType = 'park' | 'street' | 'plaza' | 'canal' | 'market' | 'reservoir' | 'grove' | 'rooftops' | 'beach';
+export type AreaType = 'park' | 'street' | 'plaza' | 'canal' | 'market' | 'reservoir' | 'grove' | 'rooftops' | 'beach' | 'downtown';
 export type Theme = 'oldtown' | 'docks' | 'towers' | 'parkland';
 /** What a ground tile is made of (look + specialty hooks). Obstacles are blocked. */
 export type TileFeature = 'lawn' | 'paving' | 'road' | 'water' | 'clay' | 'litter' | 'obstacle' | 'building' | 'sand';
@@ -32,11 +32,13 @@ export const AREA_TYPES: Record<AreaType, AreaTypeDef> = {
   rooftops: { type: 'rooftops', prop: 'bollard', name: 'Rooftops', icon: '🏢', ground: 'paving', obstacles: 0.03, obstacleName: 'rusty bollard', landmark: { kind: 'crystal', name: 'Rooftop Core' }, weights: { oldtown: 0, docks: 0, towers: 0, parkland: 0 } },
   grove: { type: 'grove', prop: 'stump', name: 'Grove', icon: '🍂', ground: 'litter', obstacles: 0.06, obstacleName: 'dead stump', landmark: { kind: 'elder', name: 'Elder Tree' }, weights: { oldtown: 1, docks: 1, towers: 1, parkland: 4 } },
   // E21.4: the Old City's beach (Saltwind Beach). Never picked by weight: only the Old City lays it out.
+  // E21.25: the Old City's downtown (Spire Heights). Never picked by weight.
+  downtown: { type: 'downtown', prop: 'pillar', name: 'Downtown', icon: '🏙️', ground: 'paving', obstacles: 0.03, obstacleName: 'fallen girder', landmark: { kind: 'spire', name: 'Solar Spire' }, weights: { oldtown: 0, docks: 0, towers: 0, parkland: 0 } },
   beach: { type: 'beach', prop: 'post', name: 'Beach', icon: '🌊', ground: 'sand', obstacles: 0.03, obstacleName: 'driftwood', landmark: { kind: 'sealock', name: 'The Sea Lock' }, weights: { oldtown: 0, docks: 0, towers: 0, parkland: 0 } },
 };
 
 /** Types picked by weight (rooftop clusters are placed separately). */
-export const AREA_TYPE_LIST: AreaType[] = (Object.keys(AREA_TYPES) as AreaType[]).filter((t) => t !== 'rooftops' && t !== 'beach');
+export const AREA_TYPE_LIST: AreaType[] = (Object.keys(AREA_TYPES) as AreaType[]).filter((t) => t !== 'rooftops' && t !== 'beach' && t !== 'downtown');
 export const THEMES: Theme[] = ['oldtown', 'docks', 'towers', 'parkland'];
 
 /**
@@ -143,7 +145,7 @@ export const CITY_GEN = {
    * They stand on the quarter's outer corner, clear of roads, canals, footpaths and landmarks.
    */
   buildings: {
-    chance: { park: 0.1, street: 0.6, plaza: 0.35, canal: 0.45, market: 0.5, reservoir: 0.12, grove: 0.08, rooftops: 0.4, beach: 0.05 } as Record<string, number>,
+    chance: { park: 0.1, street: 0.6, plaza: 0.35, canal: 0.45, market: 0.5, reservoir: 0.12, grove: 0.08, rooftops: 0.4, beach: 0.05, downtown: 0.7 } as Record<string, number>,
     storeys: { oldtown: [2, 4], docks: [1, 3], towers: [7, 14], parkland: [1, 2] } as Record<string, [number, number]>,
     /** height of one storey in world units */
     storey: 0.42,
@@ -167,7 +169,7 @@ export const CITY_GEN = {
     laneTypes: ['park', 'grove'] as AreaType[],
     gateRange: [5, 10] as [number, number],
     /** routing style inside an area (City 16.4) */
-    style: { street: 'grid', market: 'grid', rooftops: 'grid', plaza: 'ring', park: 'curve', grove: 'curve', canal: 'waterside', reservoir: 'skirt', beach: 'curve' } as Record<AreaType, 'grid' | 'ring' | 'curve' | 'waterside' | 'skirt'>,
+    style: { street: 'grid', market: 'grid', rooftops: 'grid', plaza: 'ring', park: 'curve', grove: 'curve', canal: 'waterside', reservoir: 'skirt', beach: 'curve', downtown: 'grid' } as Record<AreaType, 'grid' | 'ring' | 'curve' | 'waterside' | 'skirt'>,
   },
   /** Difficulty with distance (chunks): pulse cost multiplier and pollution floor, both capped. */
   difficulty: { perChunk: 0.04, max: 2, pollutionPerChunk: 1.5, pollutionFloorMax: 85 },

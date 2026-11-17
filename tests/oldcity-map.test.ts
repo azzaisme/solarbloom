@@ -12,7 +12,7 @@ describe('E21.4: the Old City map', () => {
     expect(oldSim().grid.layer(GROUND)!.gen).toBe(OLD_CITY_GEN);
   });
 
-  it('the nine regions sit on the chunks in the epic\'s table, each one connected piece', () => {
+  it('the ten regions sit on the chunks in the epic\'s table, each one connected piece', () => {
     const map = areaMapFor(7, OLD_CITY_GEN);
     for (const r of REGIONS) {
       const info = map.info(r.id);

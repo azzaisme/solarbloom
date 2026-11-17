@@ -78,7 +78,7 @@ export class AreaSystem {
 
   /** A sealed area (region unlocks) is still hidden fog to everything in the game until it is bought. */
   fog(id: string): FogState {
-    if (id === SEA && this.map instanceof OldCityMap) return 'cleared'; // E21.4: the sea is always in view
+    if ((id === SEA || id.startsWith('out_')) && this.map instanceof OldCityMap) return 'cleared'; // E21.4 / E21.26: the sea all round is always in view
     const st = this.sim.state.areas[id];
     return !st || st.sealed ? 'hidden' : st.fog;
   }

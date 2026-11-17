@@ -1,6 +1,7 @@
 import { decorKeyOf, parseDecorValue } from '../core/Decor';
 import { GROUND } from '../core/GameState';
 import { DECOR_OPTION } from '../data/cozy';
+import { LANDING } from '../data/oldcity';
 import { canStep, connected } from '../core/Height';
 import type { Sim } from './Sim';
 
@@ -267,6 +268,12 @@ class MinHeap<T> {
 
 /** Where a new game (or a save from before bloombot) puts it: beside the park fountain, facing it. */
 export function spawnPose(sim: Sim, walker: Walker): BotPose {
+  // E21.26: a new Old City game starts at the Landing, the jetty on Saltwind Beach below the park's south steps
+  if (sim.oldCity) {
+    const q: BotPose = { roofId: GROUND, x: LANDING.spawn[0], z: LANDING.spawn[1], facing: LANDING.facing };
+    walker.settle(q);
+    return q;
+  }
   const p: BotPose = { roofId: GROUND, x: 8, z: 10.5, facing: Math.PI };
   const fountain = sim.state.machines.find((m) => m.type === 'core' && m.roofId === GROUND && sim.areas.areaOf(m) === 'park');
   if (fountain) {

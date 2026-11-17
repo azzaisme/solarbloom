@@ -6,7 +6,10 @@ import type { AbilityId, MaterialId } from '../core/types';
 import type { AreaType } from './city';
 import type { MaterialCost, PileSize } from './salvage';
 
-/** The Old City's chunks: −6…6 on both axes (13 × 13 chunks, 208 × 208 tiles). */
+/**
+ * The Old City is an island inside chunks −6…6 on both axes (13 × 13 chunks, 208 × 208 tiles). Every chunk outside
+ * that square is open sea (E21.26), and so is the bay: chunks with z ≥ 3 and x ≤ 1.
+ */
 export const OLD_CITY = {
   min: -6,
   max: 6,
@@ -27,7 +30,7 @@ export const OLD_CITY = {
   surfRows: 3,
 };
 
-export type RegionId = 'mastRow' | 'oldMarket' | 'saltwind' | 'elderGrove' | 'cistern' | 'clockPlaza' | 'terraces' | 'glasshouse' | 'observatory';
+export type RegionId = 'mastRow' | 'oldMarket' | 'saltwind' | 'elderGrove' | 'cistern' | 'clockPlaza' | 'terraces' | 'glasshouse' | 'observatory' | 'spireHeights';
 
 export type GateKind = 'barricade' | 'water' | 'lockBridge' | 'bridge' | 'climb' | 'cliff';
 
@@ -40,6 +43,11 @@ export interface GateDef {
   needs: { ability?: AbilityId; landmark?: RegionId; repair?: MaterialCost };
   /** what the prompt says while it is shut */
   blocked: string;
+  /**
+   * Opening it opens its region (the default). False when the region is open from the start and the gate only
+   * shuts off part of it (Saltwind Beach: the boat lands there; the barricade blocks the boardwalk to the Sea Lock).
+   */
+  opensRegion?: boolean;
 }
 
 /** A rectangle of cells (x, z, width, depth). */
@@ -107,6 +115,8 @@ export interface RegionDef {
   piles: PileDef[];
   /** the region's main street: a road from its gate (cells, two wide, for generation) */
   roads: CellRect[];
+  /** deep water inside the region (a canal: never walked, until Hover; level 0) */
+  water?: CellRect[];
 }
 
 const P = (id: string, x: number, z: number, material: MaterialId, size: PileSize, model: string): PileDef => ({ id, x, z, material, size, model });
@@ -205,7 +215,9 @@ export const REGIONS: RegionDef[] = [
     landmark: { kind: 'sealock', name: 'The Sea Lock', x: -6, z: 40 },
     keeper: 'tide',
     seam: { name: 'the Driftline', x: -12, z: 28 },
-    gate: { id: 'g-saltwind', kind: 'barricade', cells: [[7, 16], [8, 16]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way — needs Pry (fountain tier 1)' },
+    // The boat lands here, so the beach is open from the start. The Sea Lock stands across the canal that runs down
+    // to the bay; the barricade blocks the boardwalk bridge over it.
+    gate: { id: 'g-saltwind', kind: 'barricade', cells: [[-3, 36], [-2, 36], [-3, 37], [-2, 37]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the boardwalk to the Sea Lock — needs Pry (fountain tier 1)', opensRegion: false },
     patch: { name: 'The boardwalk', x: 0, z: 36, w: 10, d: 2 },
     caches: [
       { id: 'c-saltwind-1', x: -15, z: 18 },
@@ -221,8 +233,10 @@ export const REGIONS: RegionDef[] = [
     ramps: [],
     ladders: [],
     perches: [],
-    piles: [],
+    // the first pile: right in front of bloombot as it steps off the jetty
+    piles: [P('sw-s1', 8, 44, 'scrap', 'small', 'crate')],
     roads: [],
+    water: [{ x: -3, z: 16, w: 2, d: 32 }],
   },
   {
     id: 'elderGrove',
@@ -404,7 +418,65 @@ export const REGIONS: RegionDef[] = [
     piles: [],
     roads: [],
   },
+  {
+    // E21.25: a downtown of five glass towers on a raised plateau (the towers themselves land with #352)
+    id: 'spireHeights',
+    n: 10,
+    name: 'Spire Heights',
+    type: 'downtown',
+    chunks: { x0: -5, x1: -2, z0: -6, z1: -3 },
+    ring: 3,
+    material: 'gears',
+    landmark: { kind: 'spire', name: 'Solar Spire', x: -50, z: -66 },
+    keeper: 'atlas',
+    seam: { name: 'the Foundry Vaults', x: -70, z: -50 },
+    gate: { id: 'g-spireHeights', kind: 'climb', cells: [[-24, -33], [-23, -33]], needs: { ability: 'climb' }, blocked: 'A collapsed skybridge blocks the avenue — needs Climb (fountain tier 3)' },
+    patch: { name: 'Spire Square', x: -54, z: -58, w: 8, d: 4 },
+    caches: [
+      { id: 'c-spireHeights-1', x: -79, z: -90 },
+      { id: 'c-spireHeights-2', x: -20, z: -92 },
+    ],
+    pages: [
+      { id: 'p-spireHeights-1', x: -40, z: -40 },
+      { id: 'p-spireHeights-2', x: -70, z: -80 },
+    ],
+    lookout: { id: 'l-spireHeights', x: -30, z: -60 },
+    level: 2,
+    stamps: [],
+    ramps: [],
+    ladders: [],
+    perches: [],
+    piles: [],
+    roads: [{ x: -24, z: -96, w: 2, d: 64 }],
+  },
 ];
+
+// ───────────── E21.26: the island ─────────────
+
+export type CoastKind = 'cliff' | 'rocky' | 'beach';
+
+/**
+ * The island's coastline, per edge: what kind of shore and how many tiles of each outer chunk are sea. Sea cliffs
+ * in the north (under Spire Heights and Observatory Hill), rocky shore east and west, beaches in the south. The bay
+ * (z ≥ 3, x ≤ 1) has its own shore: Saltwind Beach.
+ */
+export const COAST: Record<'north' | 'south' | 'east' | 'west', { kind: CoastKind; band: number }> = {
+  north: { kind: 'cliff', band: 3 },
+  east: { kind: 'rocky', band: 3 },
+  west: { kind: 'rocky', band: 3 },
+  south: { kind: 'beach', band: 4 },
+};
+
+/**
+ * E21.26: the Landing. A new old-city game starts on this jetty on Saltwind Beach, at the foot of the beach below the
+ * park's south steps, facing north toward the park (the boat arrival cinematic comes with #353).
+ */
+export const LANDING = {
+  jetty: { x: 7, z: 45, w: 2, d: 6 } as CellRect,
+  spawn: [8.5, 45.5] as [number, number],
+  /** radians, 0 = +z (south): π faces north, up the beach to the park */
+  facing: Math.PI,
+};
 
 /** The park's set pieces (chunk 0, 0). The first pile stands right in front of bloombot when it wakes. */
 export const PARK_SET = {
@@ -432,7 +504,7 @@ export const PARK_SET = {
 
 // ───────────── §8 Keepers ─────────────
 
-export type RewardId = 'beacons' | 'trade' | 'lockBridge' | 'seedsDouble' | 'waterCap' | 'helpersFast' | 'energyCap' | 'heartSeed' | 'starLens';
+export type RewardId = 'beacons' | 'trade' | 'lockBridge' | 'seedsDouble' | 'waterCap' | 'helpersFast' | 'energyCap' | 'heartSeed' | 'starLens' | 'lifts';
 
 export interface KeeperDef {
   id: string;
@@ -579,6 +651,19 @@ export const KEEPERS: KeeperDef[] = [
       settled: ['I can see everything! Take the Star Lens, and look for the caches on your map.'],
     },
   },
+  {
+    id: 'atlas', name: 'Atlas', region: 'spireHeights', x: -24, z: -36, tint: '#9aa6b8', prop: 'lamp-post',
+    request1: { clay: 20 }, landmark: { glass: 40, gears: 30, sunstone: 20 }, reward: 'lifts', rewardText: 'Every tower lift runs; the Spire\'s top becomes a travel point',
+    say: {
+      asleep: ['A tall robot under a fallen skybridge, holding up nothing.'],
+      stirred: ['Floors… so many floors. Five of anything, please.'],
+      woke: ['Atlas, keeper of Spire Heights. I ran the lifts.'],
+      request1: ['The planters on the terraces are bare. 20 Clay from the basin.'],
+      request2: ['Restore Spire Square, at the foot of the towers.'],
+      landmark: ['Wake the Solar Spire with 40 Glass, 30 Gears and 20 Sunstone.'],
+      settled: ['The Spire is lit! Every lift runs again, right to the top.'],
+    },
+  },
 ];
 
 // ───────────── §10 caches, blueprints, keepsakes, pages ─────────────
@@ -594,6 +679,7 @@ export const BLUEPRINTS: { id: string; name: string; region: RegionId }[] = [
   { id: 'reclaimerMk2', name: 'Reclaimer Mk 2 (12 a minute)', region: 'terraces' },
   { id: 'packFrame', name: 'Pack Frame (+40 to every stack)', region: 'glasshouse' },
   { id: 'sprintServos', name: 'Sprint Servos (faster sprint)', region: 'observatory' },
+  { id: 'longGlide', name: 'Long Glide (glides from a tower top reach twice as far)', region: 'spireHeights' },
 ];
 
 /** One keepsake decoration per region (existing models). */
@@ -607,11 +693,12 @@ export const KEEPSAKES: { id: string; name: string; model: string; region: Regio
   { id: 'ks-roofs', name: 'Roof planter', model: 'planter-trough', region: 'terraces' },
   { id: 'ks-glass', name: 'Seed bed', model: 'planter-bed', region: 'glasshouse' },
   { id: 'ks-observatory', name: 'Wall niche', model: 'wall-niche', region: 'observatory' },
+  { id: 'ks-spire', name: 'Street lamp', model: 'lamp-post', region: 'spireHeights' },
 ];
 
-/** The journal: 20 pages, two per region and two in the park, by page id. */
+/** The journal: 22 pages, two per region and two in the park, by page id. */
 export const PAGES: Record<string, { title: string; text: string }> = {
-  'p-park-1': { title: 'The park keeper\'s note', text: 'The fountain stopped the summer the pumps were switched off. We said we would come back for the benches.' },
+  'p-park-1': { title: 'Orders from the mainland', text: 'The fog came and the island emptied in a week. We are sending one small robot by boat to bring it back to life.' },
   'p-park-2': { title: 'A child\'s drawing', text: 'Crayon flowers round a fountain, and a little robot watering them. Someone wrote "bloombot" underneath.' },
   'p-mastRow-1': { title: 'Tram timetable', text: 'Mast Row, every ten minutes, last tram at midnight. The last tram ran at four in the afternoon.' },
   'p-mastRow-2': { title: 'Engineer\'s log', text: 'The mast carried the city\'s signals. When it went dark, the keepers lost each other one by one.' },
@@ -631,6 +718,8 @@ export const PAGES: Record<string, { title: string; text: string }> = {
   'p-glasshouse-2': { title: 'Bridge notice', text: 'Bridge closed. Use the ferry. The ferry is also closed.' },
   'p-observatory-1': { title: 'Star chart', text: 'From the hill the whole city shows, and the sea beyond it.' },
   'p-observatory-2': { title: 'Vega\'s note', text: 'The Star Lens focuses sunlight. With it the fountain could make the whole city bloom.' },
+  'p-spireHeights-1': { title: 'Lift inspection', text: 'All five towers passed. The Spire\'s crown lift sticks at ten; Atlas knows the trick.' },
+  'p-spireHeights-2': { title: 'A view from the top', text: 'From the Spire you can see the causeway, the bay and on a clear day the mainland.' },
 };
 
 // ───────────── §11 the house ─────────────

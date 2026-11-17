@@ -66,8 +66,9 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0, rules
     buffs: [],
     harvestReadyAt: 0,
     links: {},
-    // The park is home: its fog thins as you restore it, with no edge rule.
-    areas: { park: { fog: 'thinning', revealedAt: 0 } },
+    // The park is home: its fog thins as you restore it, with no edge rule. E21.26: in the Old City the boat lands on
+    // Saltwind Beach, so the beach is open from the start too.
+    areas: old ? { park: { fog: 'thinning', revealedAt: 0 }, saltwind: { fog: 'thinning', revealedAt: 0 } } : { park: { fog: 'thinning', revealedAt: 0 } },
     relayBonus: 0,
     cat: { nextSpawnAt: -1, found: 0, stash: 0, firstSpawned: false, log: [], invasion: [], seq: 0, claimed: [] },
     events: { nextAt: -1, rng: (seed ^ 0x5eed15) >>> 0, count: 0, byType: {} },

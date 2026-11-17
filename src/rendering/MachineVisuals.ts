@@ -96,6 +96,7 @@ const LANDMARK_MODELS: Record<string, [string, number]> = {
   sealock: ['lock-gate', 0.62],
   greenhouse: ['skyline-dome', 0.5],
   observatory: ['satellite-dish', 0.7],
+  spire: ['skyline-tower', 0.9],
 };
 
 const orbOn = () => mat(PALETTE.orbLit, { emissive: PALETTE.coreGlow, emissiveIntensity: 1.6 });

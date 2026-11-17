@@ -1,5 +1,5 @@
 import { OLD_CITY, PARK_SET, REGIONS, type RampDef } from '../data/oldcity';
-import { inOldCity, inRect, isSeaChunk, regionOfChunk } from './OldCityLayout';
+import { inOldCity, inRect, isSeaChunk, onJetty, regionOfChunk, regionWater, seaCell } from './OldCityLayout';
 
 /**
  * E21.24 (§7 "Height"): the Old City's terraces. Every ground tile has a level 0–4 (one level is 1.2 tiles high),
@@ -54,8 +54,8 @@ export function rampAt(x: number, z: number): RampHit | undefined {
 export function levelAt(x: number, z: number): number {
   const cx = Math.floor(x / CHUNK);
   const cz = Math.floor(z / CHUNK);
-  if (!inOldCity(cx, cz)) return OLD_CITY.backstreetLevel;
-  if (isSeaChunk(cx, cz)) return OLD_CITY.seaLevel;
+  // the sea all round (E21.26), the bay, the coast, the jetty and canals are all at sea level
+  if (!inOldCity(cx, cz) || isSeaChunk(cx, cz) || seaCell(x, z) || onJetty(x, z) || regionWater(x, z)) return OLD_CITY.seaLevel;
   if (cx === 0 && cz === 0) return PARK_SET.level;
   const r = regionOfChunk(cx, cz);
   if (!r) return OLD_CITY.backstreetLevel;
