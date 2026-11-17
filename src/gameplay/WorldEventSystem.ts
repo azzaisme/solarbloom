@@ -100,7 +100,9 @@ export class WorldEventSystem {
 
   /**
    * Great Migration targets: up to N restored tiles that can still grow, least grown first, nearest the player.
-   * If there are none near the player, anywhere in the revealed city.
+   * If there are none near the player, the nearest revealed areas that have some (by landmark distance, at most
+   * `fallbackAreas` of them, stopping once there are plenty). Scanning every area made an event start take half a
+   * second in a 1,000-area city (soak, 18 Nov 2026).
    */
   migrationTargets(): TileData[] {
     const s = this.sim;
@@ -109,7 +111,17 @@ export class WorldEventSystem {
     if (!f) return [];
     const order = (a: TileData, b: TileData) => a.bloom - b.bloom || Math.hypot(a.x - f.x, a.z - f.z) - Math.hypot(b.x - f.x, b.z - f.z) || (a.id < b.id ? -1 : 1);
     let pool = s.grid.tilesNear({ roofId: f.roofId, x: f.x, z: f.z, size: 1 }, M.reach).filter((t) => this.growable(t));
-    if (!pool.length && s.grid.isPlayable(GROUND)) pool = s.areas.revealed().flatMap((id) => s.areas.tiles(id)).filter((t) => this.growable(t));
+    if (!pool.length && s.grid.isPlayable(GROUND)) {
+      const dist = (id: string) => {
+        const [x, z] = s.areas.info(id).landmark;
+        return Math.hypot(x - f.x, z - f.z);
+      };
+      const ids = s.areas.revealed().map((id) => ({ id, d: dist(id) })).sort((a, b) => a.d - b.d || (a.id < b.id ? -1 : 1));
+      for (const { id } of ids.slice(0, M.fallbackAreas)) {
+        for (const t of s.areas.tiles(id)) if (this.growable(t)) pool.push(t);
+        if (pool.length >= M.tiles * 3) break;
+      }
+    }
     return pool.sort(order).slice(0, M.tiles);
   }
 
@@ -218,7 +230,8 @@ export class WorldEventSystem {
       if (!n) a.fallback = `The cats found nowhere to hide and left a gift: +${fmt(this.fallbackPay(E.fallbackSeconds.migration))}🌿`;
     }
     st.active = a;
-    if (kind === 'supernova' || kind === 'rain') s.production.markDirty();
+    // No production re-sum: Supernova and Super Rain are multipliers rates() reads from Modifiers on every call
+    // (re-summing a 1,000-area city here cost ~120 ms, soak 18 Nov 2026).
     s.bus.emit('world.started', { type: kind, seconds: a.until - t, tiles: a.queue?.length ?? a.done ?? 0, fallback: a.fallback });
     if (kind === 'rain') this.rainWave(a);
     return true;
@@ -262,7 +275,6 @@ export class WorldEventSystem {
     const st = this.state;
     st.active = undefined;
     st.nextAt = s.time + this.range(TUNING.events.laterMin, TUNING.events.laterMax);
-    if (a.type === 'supernova' || a.type === 'rain') s.production.markDirty();
     s.bus.emit('world.ended', { type: a.type, done: a.done ?? 0, fallback: a.fallback });
   }
 
