@@ -63,7 +63,6 @@ export interface GameEvents {
   /** Phase 5 E15: `catId` is stable; `invasion` cats come from a Lucky Cat Invasion. */
   'cat.spawned': { anchorId: string; catId?: string; variant?: CatVariant; invasion?: boolean };
   'cat.found': { anchorId: string; reward: CatRewardType; summary: string; extras: number; catId?: string; variant?: CatVariant; rewards?: CatRewardType[] };
-  'cat.stash': { stash: number };
   'cat.moved': { from: string; anchorId: string; catId?: string };
   'cat.goldenRelay': Record<string, never>;
   'buff.started': { type: BuffType; seconds: number };

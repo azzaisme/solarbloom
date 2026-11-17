@@ -328,6 +328,7 @@ export class Game {
         setSetting: (k, v) => this.setSetting(k, v),
         activateFrenzy: () => this.sim.frenzy.activate(),
         findCat: () => this.findCat(),
+        keyFor: (a) => this.hudKey(a),
         goHome: (attention) => (attention ? this.focusNextArea() : this.focusArea(PARK)),
         setVolume: (k, v) => this.setVolume(k, v),
         setGraphics: (v) => this.setGraphics(v),
@@ -490,7 +491,7 @@ export class Game {
     // Phase 4 E10.1: no blocking welcome card. The first pulse works at once; a short note says what this is.
     if (!state.progression.introSeen && state.stats.tilesRestored === 0) {
       state.progression.introSeen = true;
-      const how = this.bot ? 'Walk with WASD and press E to pulse the grey tile in front of you.' : 'Tap a grey tile to bring it back to life.';
+      const how = `Walk with ${this.hudKey('up')}${this.hudKey('left')}${this.hudKey('down')}${this.hudKey('right')} and press ${this.hudKey('pulse')} to pulse the grey tile in front of you.`;
       setTimeout(() => this.hud.toast(`🌱 Welcome to Solarbloom<small>This park is dead and grey. ${how}</small>`, 'gold', 6), 600);
     }
     else if (offline) {
@@ -878,9 +879,14 @@ export class Game {
     if (!out && this.bot) this.bot.following = true;
   }
 
+  /** E20.2 (#285): an action's key or pad button as plain text, as the player last used them. */
+  private hudKey(a: Action): string {
+    return this.bot?.lastInput === 'pad' ? padLabel(this.bindings.pad[a]) : keyLabel(this.bindings.keys[a][0] ?? '');
+  }
+
   /** A key or button name for hints: the pointer's "Click", or bloombot's key / pad button. */
   private press(key: 'E' | 'Q', bot = this.previewFromBot): string {
-    if (!bot) return 'Click';
+    if (!bot) return 'Select'; // the internal cursor path (bots, dev tools)
     const a: Action = key === 'E' ? 'pulse' : 'interact';
     if (this.bot?.lastInput === 'pad') return `<kbd>${padLabel(this.bindings.pad[a])}</kbd>`;
     return `<kbd>${keyLabel(this.bindings.keys[a][0] ?? '')}</kbd>`;
@@ -1376,7 +1382,10 @@ export class Game {
     return best;
   }
 
-  /** Phase 5 E15: the 🐾 chip: glide to the longest-hiding hinted cat and say where it is (a hint, not a beacon). */
+  /**
+   * The 🐾 chip. E20.1 (#284): the cat has to be found, so the chip never moves the camera: it says which way the
+   * paw prints lead from bloombot (or the view), and what the cat hides beside. The meow already comes from there.
+   */
   private findCat() {
     const s = this.sim;
     const spot = s.cat
@@ -1386,8 +1395,8 @@ export class Game {
     const a = spot && s.cat.anchor(spot.anchorId);
     if (!spot || !a) return;
     const p = this.cat.anchorWorld(a);
-    this.camera.focus(p.x, 0, p.z, Math.max(this.camera.zoom, 0.9), this.settings.reducedMotion ? 0.01 : 1.2);
-    this.hud.feed(`🐾 Paw prints lead ${a.hint}…`);
+    const [fx, , fz] = this.bot ? this.bot.world() : [this.camera.target.x, 0, this.camera.target.z];
+    this.hud.feed(`🐾 Paw prints lead ${compass(p.x - fx, p.z - fz)}, ${a.hint}…`);
   }
 
   /** Phase 5 E15 (inspect): a cat hiding within a few tiles leaves a note on the tile tooltip. */
@@ -1407,6 +1416,11 @@ export class Game {
     const w = window.innerWidth;
     const h = window.innerHeight;
     if (!s || s.x < 40 || s.y < 40 || s.x > w - 40 || s.y > h - 40) return 'offscreen';
+    // E20.1 (#284): in the close view, a spot far from bloombot is small and hazy: it counts as out of sight.
+    if (this.bot) {
+      const [bx, , bz] = this.bot.world();
+      if (Math.hypot(p.x - bx, p.z - bz) > TUNING.cat.inViewTiles) return 'offscreen';
+    }
     return this.hud.blockedRects().some((r) => s.x > r.left - 16 && s.x < r.right + 16 && s.y > r.top - 16 && s.y < r.bottom + 16) ? 'covered' : 'visible';
   }
 
@@ -1439,14 +1453,14 @@ export class Game {
     if (this.catHit(x, y)) {
       this.overlays.hideFrame();
       this.overlays.hideGhost();
-      this.hud.showTip(x, y, `<b>🐱 …is that a cat?</b>Click it!`);
+      this.hud.showTip(x, y, `<b>🐱 …is that a cat?</b>Go and say hello!`);
       document.body.style.cursor = 'pointer';
       return;
     }
     if (this.droneHit(x, y)) {
       this.overlays.hideFrame();
       this.overlays.hideGhost();
-      this.hud.showTip(x, y, `<b>🛸 Drone</b>Click to see its work area and current job`);
+      this.hud.showTip(x, y, `<b>🛸 Drone</b>Press ${this.hudKey('interact')} beside it to see its work area and current job`);
       document.body.style.cursor = 'pointer';
       return;
     }
@@ -1708,7 +1722,7 @@ export class Game {
     switch (t.ground) {
       case 'polluted': {
         const left = this.sim.cultivators.remaining(t);
-        if (left !== undefined) return `🚜 The Cultivator is softening this slab — ${Math.ceil(left)} s to bloom. Tap to knock it along.`;
+        if (left !== undefined) return `🚜 The Cultivator is softening this slab — ${Math.ceil(left)} s to bloom. Pulse it to knock it along.`;
         return `Pollution ${Math.round(t.pollution)}% — restoring neighbours softens it into moss.`;
       }
       case 'prepared':
@@ -1949,8 +1963,8 @@ export class Game {
     return (
       line +
       (beside + 1 >= TUNING.merge.count
-        ? `<span class="ok">✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (tap this one) and the new ${t2.name} completes a ${t3.icon} ${t3.name} core</span><br>`
-        : `✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (tap this one) and ${TUNING.merge.count} touching ${t2.name}s make a ${t3.icon} ${t3.name} core<br>`)
+        ? `<span class="ok">✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (this one too) and the new ${t2.name} completes a ${t3.icon} ${t3.name} core</span><br>`
+        : `✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (this one too) and ${TUNING.merge.count} touching ${t2.name}s make a ${t3.icon} ${t3.name} core<br>`)
     );
   }
 
@@ -2005,7 +2019,7 @@ export class Game {
     }
     const freed = plan.freed.length;
     const lost = plan.lost.map((l) => `<p class="loss">⚠️ ${esc(l.name)}: keeps Lv ${l.kept}, loses Lv ${l.lost.join(' and ')}</p>`).join('');
-    const swap = plan.options.length > 2 ? `<p>Tap another highlighted ${esc(plan.fromName)} to swap it in.</p>` : '';
+    const swap = plan.options.length > 2 ? `<p>Pick another highlighted ${esc(plan.fromName)} to swap it in.</p>` : '';
     return (
       `<div class="merge"><b>🔀 ${TUNING.merge.count} × ${esc(plan.fromName)} → ${t2.icon} ${esc(plan.toName)}</b>` +
       `<p class="gain">Output ${plan.before} → ${plan.after} (+${Math.round((plan.after / plan.before - 1) * 100)}%) · ${esc(t2.blurb)}</p>` +
@@ -2258,7 +2272,7 @@ export class Game {
     b.on('area.ready', ({ areaId }) => {
       const lm = s.areas.landmark(areaId);
       if (lm) this.machines.setLandmarkState(lm.id, 'ready');
-      if (areaId !== PARK) this.hud.toast(`✨ ${s.areas.info(areaId).landmarkName} is ready to wake!<small>Click it to clear this ${AREA_TYPES[s.areas.info(areaId).type].name.toLowerCase()}'s fog.</small>`, 'gold', 4);
+      if (areaId !== PARK) this.hud.toast(`✨ ${s.areas.info(areaId).landmarkName} is ready to wake!<small>Walk up and press ${this.hudKey('interact')} to clear this ${AREA_TYPES[s.areas.info(areaId).type].name.toLowerCase()}'s fog.</small>`, 'gold', 4);
     });
     b.on('area.cleared', ({ areaId }) => this.onAreaCleared(areaId));
     b.on('fauna.unlocked', ({ id }) => this.eco?.arrived(id)); // Phase 5 E16 (cosmetic; pays nothing)
@@ -2694,17 +2708,11 @@ export class Game {
         `🐱✨ Golden Relay: your next green corridor hop blooms ${this.sim.state.relayBonus} extra tiles`,
       );
     });
-    b.on('cat.stash', () => {
-      // A soft hint that something lucky is still waiting, never a pointer.
-      const p = this.cat.targetWorld(this.sim.state.cat.active?.id);
-      this.sfx.at(p, (q) => q.meow(true));
-      if (p) this.vfx.burst(p, 6, { up: 1.5, size: 0.04, speed: 0.4 });
-    });
     b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Surge ×${TUNING.cat.frenzyMult} for ${Math.round(seconds)}s`));
     b.on('harvest', () => this.sfx.coin());
     b.on('rooftop.coreReady', () => {
       this.machines.setCoreState('ready');
-      this.hud.toast('✨ The Rooftop Core is humming!<small>Click it (or the button) to awaken the building.</small>', 'gold', 5);
+      this.hud.toast(`✨ The Rooftop Core is humming!<small>Walk up and press ${this.hudKey('interact')} (or use the button) to awaken the building.</small>`, 'gold', 5);
       this.sfx.chainEnd(10);
     });
     b.on('rooftop.coreRestored', () => this.playCoreSequence());
@@ -3424,4 +3432,12 @@ function fromCostStrings(c: Partial<Record<ResourceKind, string>>): import('../c
   const o: import('../core/types').Cost = {};
   for (const k of ['energy', 'water', 'biomass'] as const) if (c[k] !== undefined) o[k] = big(c[k]);
   return o;
+}
+
+/** E20.1: a rough direction in words, north up as on the minimap (north is -z, east is +x). */
+export function compass(dx: number, dz: number): string {
+  if (Math.hypot(dx, dz) < 2) return 'right here';
+  const names = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+  const deg = (Math.atan2(dx, -dz) * 180) / Math.PI;
+  return names[((Math.round(deg / 45) % 8) + 8) % 8];
 }

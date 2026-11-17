@@ -16,7 +16,7 @@ export interface Requirement {
 }
 
 export const TUTORIAL: string[] = [
-  'Tap a grey tile to bring it back to life.',
+  'Walk up to a grey tile and pulse it to bring it back to life.',
   'Restored tiles grow Biomass 🌿. Pulse a green tile again to nurture it into flowers.',
   'Spend Biomass on an upgrade — open Upgrades (U).',
   'Build a Water Condenser (4) on living ground for steady water.',
@@ -24,7 +24,7 @@ export const TUTORIAL: string[] = [
   'Pulse mossy tiles inside the garden’s zone to set off a Bloom Chain.',
   'Build a Drone Hub (6). Your drone can handle the small jobs now.',
   'Restore 42 tiles, grow 24 to full bloom, build every machine and plant a Mother Tree to wake the Rooftop Core.',
-  'The Core is ready! Click it to awaken the building.',
+  'The Core is ready! Walk up to it to awaken the building.',
   'The building lives again. Rooftop 2 awaits across the bridge…',
 ];
 
