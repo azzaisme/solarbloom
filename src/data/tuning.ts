@@ -365,7 +365,7 @@ export const TUNING = {
     /** weights (an event irrelevant right now gets 0; the same event never comes twice in a row) */
     weights: { supernova: 30, migration: 30, rain: 25, invasion: 15 },
     supernova: { seconds: 20, mult: 10 },
-    migration: { seconds: 15, tiles: 20, reach: 10 },
+    migration: { seconds: 15, tiles: 20, reach: 10, fallbackAreas: 12 }, // fallbackAreas: nearest revealed areas searched when nothing near can grow
     rain: { seconds: 25, mult: 3, waves: 3, waveTiles: 12, waveRadius: 6 },
     invasion: { cats: 3 },
     /** Nothing eligible to grow or water: seconds of steady biomass income instead (at least `fallbackMin`). */
