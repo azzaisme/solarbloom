@@ -103,10 +103,11 @@ try {
     // ── "Press any button", then New game on slot 1 ──
     if (dev === 'pad') await pressPad(page, 0);
     else await page.keyboard.press('Space');
-    await page.waitForSelector('#tNew');
-    check(await page.evaluate(() => !document.querySelector('#tContinue') && !document.querySelector('#tLoad')), T('a first start offers New game and Settings (no Continue or Load yet)'));
+    await page.waitForSelector('#tPlay');
+    check(await page.evaluate(() => [...document.querySelectorAll('.t-side button')].map((b) => b.id).join() === (document.querySelector('#tQuit') ? 'tPlay,tSettings,tQuit' : 'tPlay,tSettings')), T('the menu is Play and Settings'));
+    check(await page.evaluate(() => { const r = document.querySelector('.t-side').getBoundingClientRect(); return Math.abs(r.width - innerWidth / 3) < 2 && r.left === 0; }), T('the panel covers the left third'));
     await page.screenshot({ path: `${dir}/ui-title-menu-${dev}.png` });
-    check(await moveTo(page, '#tNew', dev), T('reach New game'));
+    check(await moveTo(page, '#tPlay', dev), T('reach Play'));
     await go(page, dev);
     await page.waitForSelector('#tStart1');
     check(await moveTo(page, '#tStart1', dev), T('reach slot 1'));
@@ -176,13 +177,13 @@ try {
     check(await page.evaluate(() => !document.querySelector('#splash') && !window.solarbloom), T('quitting lands on the title (no splash a second time)'));
     if (dev === 'pad') await pressPad(page, 0);
     else await page.keyboard.press('Space');
-    await page.waitForSelector('#tContinue');
+    await page.waitForSelector('#tPlay');
     const head = await page.evaluate(() => JSON.parse(localStorage.getItem('solarbloom.save.1.head')));
     check(head && head.name === 'Garden 1' && head.rules === 'oldcity' && head.played >= 0 && !!head.region && !!head.step, T(`slot 1 has its header (${JSON.stringify(head)})`));
 
     // ── Load game: the slot's card; rename and delete ask first (keyboard run) ──
     if (dev === 'keys') {
-      await moveTo(page, '#tLoad', dev);
+      await moveTo(page, '#tPlay', dev);
       await go(page, dev);
       await page.waitForSelector('#tLoad1');
       await page.screenshot({ path: `${dir}/ui-title-load.png` });
@@ -200,23 +201,26 @@ try {
       await page.waitForFunction(() => JSON.parse(localStorage.getItem('solarbloom.save.1.head')).name === 'Saltwind');
       check(true, T('the slot is renamed'));
       await page.keyboard.press('Escape'); // back to the menu
-      await page.waitForSelector('#tContinue');
+      await page.waitForSelector('#tPlay');
     }
 
-    // ── Continue: the same game, where it was left ──
-    check(await moveTo(page, '#tContinue', dev), T('reach Continue'));
+    // ── Play, then Load: the same game, where it was left ──
+    check(await moveTo(page, '#tPlay', dev), T('reach Play'));
+    await go(page, dev);
+    await page.waitForSelector('#tLoad1');
+    check(await moveTo(page, '#tLoad1', dev), T('reach Load on slot 1'));
     await go(page, dev);
     await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
     const after = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time, rules: window.solarbloom.sim.state.rules }));
-    check(after.seed === before.seed && after.time >= before.time && after.rules === before.rules, T(`Continue loads the same game (time ${before.time.toFixed(1)} → ${after.time.toFixed(1)})`));
+    check(after.seed === before.seed && after.time >= before.time && after.rules === before.rules, T(`Load brings back the same game (time ${before.time.toFixed(1)} → ${after.time.toFixed(1)})`));
 
     // ── delete asks first, then the slot is empty (keyboard run, from a fresh title) ──
     if (dev === 'keys') {
       await page.goto(`${URL_}?title=1`);
       await page.waitForSelector('#tPress');
       await page.keyboard.press('Space');
-      await page.waitForSelector('#tLoad');
-      await moveTo(page, '#tLoad', dev);
+      await page.waitForSelector('#tPlay');
+      await moveTo(page, '#tPlay', dev);
       await go(page, dev);
       await page.waitForSelector('#tDelete1');
       await moveTo(page, '#tDelete1', dev);
@@ -226,7 +230,8 @@ try {
       await moveTo(page, '#tYes', dev);
       await go(page, dev);
       await page.waitForFunction(() => !localStorage.getItem('solarbloom.save.1') && !localStorage.getItem('solarbloom.save.1.head'));
-      check(await page.evaluate(() => !document.querySelector('#tContinue')), T('the slot is deleted and Continue is gone'));
+      await page.waitForSelector('#tStart1');
+      check(await page.evaluate(() => !document.querySelector('#tLoad1')), T('the slot is deleted and is empty again'));
     }
     check(!errors.length, T(`no page errors ${errors.join(' | ')}`));
     await page.close();
