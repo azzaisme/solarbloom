@@ -6,8 +6,8 @@ import type { PowerSky } from '../src/gameplay/PowerEnv';
 import { sunAt } from '../src/gameplay/PowerEnv';
 import { Sim } from '../src/gameplay/Sim';
 
-const DAY: PowerSky = { sun: 1, cloudy: false, wind: 0, dark: 0 };
-const NIGHT: PowerSky = { sun: 0, cloudy: false, wind: 0, dark: 1 };
+const DAY: PowerSky = { sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 };
+const NIGHT: PowerSky = { sun: 0, solar: 0, cloudy: false, wind: 0, dark: 1 };
 
 /** A sim with test machine types: a 10 W generator, a 1000 W·s battery and one consumer per shed class. */
 function world() {
@@ -173,15 +173,43 @@ describe('E23.3.1 power grid', () => {
     expect(run()).toEqual(run());
   });
 
-  it('solar follows the sun and loses 20% in cloud', () => {
+  it('solar follows the sun and loses 20% in cloud; E23.7 handles are read when present', () => {
     const { sim, put, setSky } = world();
     const s = put('solar', 0, 0);
     expect(sim.power.output(s, DAY)).toBe(POWER.solar.output);
-    expect(sim.power.output(s, { ...DAY, cloudy: true })).toBeCloseTo(POWER.solar.output * 0.8);
     setSky(NIGHT);
     expect(sim.power.output(s)).toBe(0);
-    expect(sunAt(0)).toBe(0);
+    // Through the adapter: no clock or weather means a clear day.
+    sim.power.skyOverride = undefined;
+    expect(sim.power.output(s)).toBe(POWER.solar.output);
+    const weather = { kind: 'cloudy' };
+    const any = sim as unknown as { weather: unknown; clock: unknown };
+    any.weather = { kind: () => weather.kind };
+    expect(sim.power.output(s)).toBeCloseTo(POWER.solar.output * 0.8);
+    // E23.7's day fraction: 0 dawn, 2/3 dusk; its solar factor wins when present.
+    const clock = { f: 0.3 };
+    any.clock = { dayFraction: () => clock.f };
+    weather.kind = 'sunny';
+    expect(sim.power.output(s)).toBe(POWER.solar.output);
+    clock.f = 0.8;
+    expect(sim.power.output(s)).toBe(0);
+    expect(sim.power.sky().dark).toBe(1);
+    any.clock = { solarFactor: () => 0.25, daylight: () => 0.5 };
+    expect(sim.power.output(s)).toBe(POWER.solar.output * 0.25);
     expect(sunAt(0.5)).toBe(1);
+    expect(sunAt(0.9)).toBe(0);
+  });
+
+  it('re-links when a pole range changes without a build (Relay Lens)', () => {
+    const { sim, put } = world();
+    const range = sim.relays.range();
+    const a = put('relay', 0, 0);
+    const b = put('relay', Math.ceil(range) + 3, 0);
+    sim.power.tick(1);
+    expect(sim.power.networkOf(a)).not.toBe(sim.power.networkOf(b));
+    a.upg = { relayLens: 1 };
+    sim.power.tick(1);
+    expect(sim.power.networkOf(a)).toBe(sim.power.networkOf(b));
   });
 
   it('ticks with the sim', () => {
@@ -224,8 +252,8 @@ describe('E23.3.2 sources and storage', () => {
     const { sim, put } = world();
     sim.power.skyOverride = undefined;
     const t = put('windTurbine', 0, 0);
-    const weather = { kind: 'clear' };
-    (sim as unknown as { weather: { current: () => string } }).weather = { current: () => weather.kind };
+    const weather = { kind: 'sunny' };
+    (sim as unknown as { weather: { kind: () => string } }).weather = { kind: () => weather.kind };
     expect(sim.power.output(t)).toBe(0);
     weather.kind = 'windy';
     const windy = sim.power.output(t);

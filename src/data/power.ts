@@ -35,7 +35,7 @@ export const POWER = {
    * owns the table (its `sim.regions?.strength?.(m, kind)` wins when present).
    */
   regionBoost: 1.5,
-  /** Wind (0..1) while there is no weather system yet (before E23.7 lands). */
+  /** Wind (0..1) while there is no weather system yet (before E23.7 lands): a steady breeze. */
   fallbackWind: 0.4,
   regionStrengths: { wind: ['saltwind', 'terraces', 'spireHeights'], solar: ['glasshouse', 'observatory'] } as Record<'wind' | 'solar', string[]>,
   /** Battery (E23.3.2.1): stores surplus and covers deficits, up to `rate` either way. */

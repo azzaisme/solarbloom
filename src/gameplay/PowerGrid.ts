@@ -80,15 +80,15 @@ export class PowerGrid {
   /** Eased level per consumer id. */
   private eased = new Map<string, number>();
   private solved = false;
+  private rangeSig = 0;
   /** Test hook: replaces the sky reading (time of day and weather). */
   skyOverride?: () => PowerSky;
 
   constructor(private sim: Sim) {
     this.register('relay', { pole: { range: (m, s) => s.relays.range(m) } });
-    this.register('solar', { source: (m, s, sky) => POWER.solar.output * sky.sun * (sky.cloudy ? POWER.solar.cloudFactor : 1) * regionBoost(s, m, 'solar') });
+    this.register('solar', { source: (m, s, sky) => POWER.solar.output * sky.solar * regionBoost(s, m, 'solar') });
     this.register('battery', { battery: { capacity: POWER.battery.capacity, rate: POWER.battery.rate } });
     this.register('windTurbine', { source: (m, s, sky) => windOutput(s, m, sky) });
-    sim.bus.on('upgrade.purchased', () => this.invalidate());
   }
 
   /** Adds (or merges into) a machine type's role. Types need not exist yet (other sub-epics add them). */
@@ -158,6 +158,13 @@ export class PowerGrid {
   }
 
   tick(dt: number): void {
+    // Pole ranges change with upgrades (Relay Lens) without a build: re-link when they do.
+    let sig = 0;
+    for (const n of this.nets) for (const p of n.poles) sig = sig * 31 + this.roles.get(p.type)!.pole!.range(p, this.sim) * 7 + 1;
+    if (sig !== this.rangeSig) {
+      this.rangeSig = sig;
+      this.dirty = true;
+    }
     this.fresh(false);
     const sky = this.sky();
     for (const n of this.nets) this.solve(n, dt, sky);
