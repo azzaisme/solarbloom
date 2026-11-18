@@ -120,10 +120,7 @@ describe('E21.9: bloombot first', () => {
       for (const t of sim.areas.tiles(region)) if (!t.blocked && !t.occupantId) { t.ground = 'restored'; t.bloom = 1; t.pollution = 0; sim.grid.touch(t); }
       sim.state.salvage!.keepers[r.keeper] = { step: 'landmark' };
       sim.bot = { roofId: GROUND, x: r.landmark.x + 0.5, z: r.landmark.z - 0.5 };
-      for (const [k, v] of Object.entries(KEEPERS.find((q) => q.id === r.keeper)!.landmark)) {
-        if (k === 'biomass') sim.state.resources.biomass = big(v!);
-        else sim.inventory.addToStore(k as 'scrap', v!), sim.inventory.withdraw(k as 'scrap', v!);
-      }
+      for (const [k, v] of Object.entries(KEEPERS.find((q) => q.id === r.keeper)!.landmark)) sim.inventory.addToStore(k as 'scrap', v!), sim.inventory.withdraw(k as 'scrap', v!);
       expect(sim.landmarks.interact(region), region).toBe('woke');
     };
     const waterBefore = sim.state.caps.water.toNumber();

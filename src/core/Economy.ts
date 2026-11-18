@@ -19,6 +19,8 @@ export class Economy {
   readonly lost: Amounts = { energy: new Decimal(0), water: new Decimal(0), biomass: new Decimal(0) };
   /** Told about income lost to a full store. */
   onOverflow?: (kind: CappedKind, amount: Decimal) => void;
+  /** E23.5.1: counters that earn nothing (old-city biomass is a gathered backpack item, not a counter). */
+  noIncome?: ReadonlySet<ResourceKind>;
 
   constructor(
     private res: Amounts,
@@ -82,7 +84,7 @@ export class Economy {
   /** Adds income; energy and water stop at their cap. Returns the amount actually banked. */
   add(kind: ResourceKind, amount: BigLike): Decimal {
     const a = big(amount);
-    if (a.lte(0)) return ZERO;
+    if (a.lte(0) || this.noIncome?.has(kind)) return ZERO;
     const before = this.res[kind];
     const cap = this.cap(kind);
     if (!cap) {

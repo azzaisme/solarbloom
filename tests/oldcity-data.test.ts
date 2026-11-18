@@ -9,9 +9,9 @@ import { Sim } from '../src/gameplay/Sim';
 SaveService.clock = () => 0;
 const saver = new SaveService(undefined);
 
-/** Every material a cost names is a real material (biomass is a resource, allowed in recipes). */
+/** Every material a cost names is a real material (E23.5.1: biomass is one too). */
 function realMaterials(cost: MaterialCost) {
-  for (const k of Object.keys(cost)) if (k !== 'biomass') expect(MATERIALS[k as MaterialId], `material ${k}`).toBeDefined();
+  for (const k of Object.keys(cost)) expect(MATERIALS[k as MaterialId], `material ${k}`).toBeDefined();
   for (const v of Object.values(cost)) expect(v).toBeGreaterThan(0);
 }
 

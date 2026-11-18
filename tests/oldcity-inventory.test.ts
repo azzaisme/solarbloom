@@ -65,15 +65,17 @@ describe('E21.1: paying', () => {
     expect(inv.nearStore({ roofId: GROUND, x: 8.5, z: 21.5 })).toBe(false);
   });
 
-  it('recipes may ask for biomass, read through the same check', () => {
+  it('E23.5.1: a recipe’s biomass is a carried item, paid like any material (the counter is never read)', () => {
     const sim = oldSim();
     const inv = sim.inventory;
-    sim.state.resources.biomass = big(5);
+    sim.state.resources.biomass = big(1000);
+    inv.add('biomass', 5);
     inv.add('seeds', 10);
     expect(inv.shortfall({ seeds: 10, biomass: 20 }, FAR)).toBe('biomass');
-    sim.state.resources.biomass = big(25);
+    inv.add('biomass', 20);
     expect(inv.pay({ seeds: 10, biomass: 20 }, FAR)).toBe(true);
-    expect(sim.econ.get('biomass').toNumber()).toBe(5);
+    expect(inv.count('biomass')).toBe(5);
+    expect(sim.econ.get('biomass').toNumber()).toBe(1000);
   });
 
   it('a refund goes to the pack, anything over a stack to the store', () => {
