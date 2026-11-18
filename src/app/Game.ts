@@ -68,6 +68,7 @@ import { EventBus } from './EventBus';
 import { BotController } from './BotController';
 import { type Action, Bindings, type Context, FIXED_KEY, keyLabel, migrateBindings, SLOTS } from './Bindings';
 import { isOldCity, rulesViewFromUrl } from './Rules';
+import { playGreatBloom } from './Ending';
 import { type Candidate, holdFor, pickTarget, promptText } from './Interact';
 import type { PromptModel } from '../ui/Prompt';
 import { Pause, runSimFrame } from './Pause';
@@ -3576,6 +3577,36 @@ export class Game {
       this.applyFountainLook(false);
       this.celebrateTier(tier);
       if (tier === 1) return this.playCoreSequence();
+      // E23.9.3: the last delivery plays the Great Bloom ending
+      let bloomZoom = this.camera.zoomTarget;
+      if (tier === TIERS.length && this.sim.oldCity)
+        return playGreatBloom({
+          cinematic: (on, title) => this.hud.cinematic(on, title),
+          bloomAt: (x, z, i) => {
+            const t = this.sim.grid.get(GROUND, x, z);
+            const at = new pc.Vec3(x + 0.5, t ? this.sim.grid.tileWorld(t)[1] : 0, z + 0.5);
+            this.vfx.ring(at, i % 2 ? PALETTE.gold : PALETTE.coreGlow, 4, 1.2);
+            this.vfx.burst(new pc.Vec3(at.x, at.y + 1, at.z), 24, { up: 4.5, speed: 2.4, size: 0.08, life: 1.5 });
+          },
+          fanfare: () => this.sfx.fanfare(),
+          overview: (on) => {
+            if (!this.bot) return;
+            this.bot.following = !on;
+            if (on) {
+              bloomZoom = this.camera.zoomTarget;
+              this.camera.glide(8, 0, -8, this.camera.minZoom);
+            } else {
+              const [bx, , bz] = this.bot.world();
+              this.camera.glide(bx, 0, bz, bloomZoom);
+            }
+          },
+          bounds: () => this.updateCityBounds(),
+          vista: (x, z, secs, done) => this.vista(x, z, secs, () => done()),
+          markTile: (x, z) => this.oldCityHost().markTile(x, z),
+          openPage: (id) => this.oldCityHost().openPage(id),
+          after: (secs, fn) => this.tweens.add(0.01, () => {}, { delay: secs, done: fn }),
+          save: () => this.save(),
+        });
       const t = TIERS[tier - 1];
       this.hud.toast(`⛲ ${t.name}!<small>${t.gives.join(' · ')}</small>`, 'gold', 6);
       this.sfx.fanfare();
