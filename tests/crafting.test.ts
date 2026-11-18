@@ -222,9 +222,8 @@ describe('E23.6.1: the crafting table', () => {
     expect(cozy.canDecorate('cratestack', GROUND, 12, 12)).toBeUndefined();
   });
 
-  it('every machine is built from a crafting-table recipe (the Reclaimer, going with E23.7.4, keeps its own)', () => {
+  it('every machine is built from a crafting-table recipe', () => {
     for (const t of OLD_CITY_BUILDABLE) {
-      if (t === 'reclaimer') continue;
       expect(MACHINE_RECIPES.find((r) => r.builds === t), t).toBeDefined();
     }
   });

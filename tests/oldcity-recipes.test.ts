@@ -3,8 +3,8 @@ import { big } from '../src/core/Big';
 import { formatCost } from '../src/core/Economy';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { BuildableType, GroundState } from '../src/core/types';
-import { BUILDABLE, MACHINES } from '../src/data/machines';
-import { RECIPES } from '../src/data/salvage';
+import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE } from '../src/data/machines';
+import { RECIPES, TIERS } from '../src/data/salvage';
 import { KEEPERS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -40,7 +40,6 @@ function stock(sim: Sim, type: BuildableType) {
 describe('E21.3: recipes', () => {
   it('each recipe is paid exactly, with no price growth, and the tray never shows a classic price', () => {
     for (const type of Object.keys(RECIPES) as BuildableType[]) {
-      if (type === 'reclaimer') continue; // seams only (below)
       const sim = oldSim();
       wakeKeepers(sim);
       sim.state.resources.biomass = big(0);
@@ -81,12 +80,14 @@ describe('E21.3: recipes', () => {
     const sim = oldSim(4);
     ground(sim, 12, 12);
     // E23.6.1: a component is named with where it is made; a material with its region once seen
-    expect(sim.build.check('relay', GROUND, 12, 12).reason).toBe('Needs Wire ➰ — make it at the crafting table');
-    sim.inventory.add('wire', 10);
-    sim.inventory.add('sunCell', 2);
-    expect(sim.build.check('relay', GROUND, 12, 12).reason).toBe('Needs Gears ⚙️');
+    sim.inventory.add('scrap', 20);
+    expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Motor 🌀 — make it at the crafting table');
+    sim.inventory.add('motor', 2);
+    expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Gears ⚙️');
     sim.state.areas.clockPlaza = { fog: 'frontier', revealedAt: 0, sealed: true };
-    expect(sim.build.check('relay', GROUND, 12, 12).reason).toBe('Needs Gears ⚙️ — Clock Plaza');
+    expect(sim.build.check('cultivator', GROUND, 12, 12).reason).toBe('Needs Gears ⚙️ — Clock Plaza');
+    // E23.3: the power pole is a Bloom Relay, from Pylon in Mast Row
+    expect(sim.build.lockLabel('relay')).toBe('🔒 Pylon, Mast Row');
   });
 
   it('the store only counts within reach of it', () => {
@@ -118,19 +119,10 @@ describe('E21.3: recipes', () => {
     expect(sim.build.remove(sim.state.machines.find((q) => q.starter)!.id)).toBe(false);
   });
 
-  it('a Reclaimer stands only on the seam of a woken region', () => {
-    const sim = oldSim(2);
-    stock(sim, 'reclaimer');
-    sim.bot = { roofId: GROUND, x: 20.5, z: -6.5 };
-    sim.inventory.withdraw('scrap');
-    sim.inventory.withdraw('copper');
-    sim.inventory.withdraw('timber');
-    sim.state.areas.mastRow = { fog: 'thinning', revealedAt: 0 };
-    ground(sim, 23, -8);
-    expect(sim.build.check('reclaimer', GROUND, 22, -8).reason).toMatch(/seam/);
-    expect(sim.build.check('reclaimer', GROUND, 23, -8).reason).toMatch(/Wake Signal Mast/);
-    sim.state.areas.mastRow.fog = 'cleared';
-    expect(sim.build.check('reclaimer', GROUND, 23, -8).ok).toBe(true);
+  it('E23.7.4: the Reclaimer is gone: not in the build list, no recipe, no tier gives it', () => {
+    expect(OLD_CITY_BUILDABLE as string[]).not.toContain('reclaimer');
+    expect(Object.keys(RECIPES)).not.toContain('reclaimer');
+    expect(TIERS.flatMap((t) => t.gives).join(' ')).not.toMatch(/Reclaimer/);
   });
 
   it('classic costs are untouched', () => {

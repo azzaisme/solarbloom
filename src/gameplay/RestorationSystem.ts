@@ -236,6 +236,9 @@ export class RestorationSystem {
 
   tick(dt: number) {
     if (!this.growing.size) return;
+    // E23.7.2: rain (and a storm's downpour) makes restoring ground bloom faster; nothing makes it slower
+    const speed = Math.max(1, this.sim.weather?.bloomSpeed() ?? 1);
+    dt *= speed;
     for (const t of [...this.growing.values()]) {
       if (t.ground !== 'growing') {
         this.growing.delete(t.id);
