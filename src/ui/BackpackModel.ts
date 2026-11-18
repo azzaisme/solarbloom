@@ -1,6 +1,7 @@
 import type { BuildableType, MaterialId } from '../core/types';
 import { PARK } from '../core/Areas';
-import { BLUEPRINTS, ITEMS, KEEPSAKES, PAGES, REGIONS } from '../data/oldcity';
+import { KEEPER_STORIES } from '../data/keepers';
+import { BLUEPRINTS, ITEMS, KEEPERS, KEEPSAKES, PAGES, REGIONS } from '../data/oldcity';
 import { DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
 import { MACHINES } from '../data/machines';
 import { MATERIAL_IDS, MATERIALS, RECIPES } from '../data/salvage';
@@ -184,15 +185,28 @@ export function collection(sim: Sim): CollectionGroup[] {
   // keepsakes: the ones Lucky Cats leave, and one per region
   const unlocked = new Set([...(cz?.decorUnlocked ?? []), ...(st.salvage?.items ?? []), ...(st.salvage?.caches ?? [])]);
   const catKeeps = DECOR_OPTIONS.filter((o) => 'keepsake' in o.unlock).map((o) => ({ name: unlocked.has(o.id) ? o.name : 'Not found yet', detail: unlocked.has(o.id) ? o.blurb : 'A Lucky Cat keeps it for you', found: unlocked.has(o.id) }));
-  const regionKeeps = sim.oldCity ? KEEPSAKES.map((k) => ({ name: unlocked.has(k.id) ? k.name : 'Not found yet', detail: unlocked.has(k.id) ? `From ${regionName(k.region)}` : 'Hidden in a cache somewhere', found: unlocked.has(k.id) })) : [];
+  const regionKeeps = sim.oldCity ? KEEPSAKES.map((k) => ({ name: unlocked.has(k.id) ? k.name : 'Not found yet', detail: unlocked.has(k.id) ? `From ${regionName(k.region)}` : 'Kept by someone in the city', found: unlocked.has(k.id) })) : [];
   const keeps = [...catKeeps, ...regionKeeps];
   const fauna = Object.keys(st.fauna ?? {});
   const woken = sim.areas.revealed().filter((id) => sim.areas.fog(id) === 'cleared').map((id) => sim.areas.info(id));
   const plots = PLOT_OPTIONS.filter((o) => 'start' in o.unlock || cz?.unlocked?.includes(o.id));
   const decor = DECOR_OPTIONS.filter((o) => 'start' in o.unlock || cz?.decorUnlocked?.includes(o.id));
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  // E23.9.2: the Keepers bloombot has woken, with what each is like and how close a friend it is
+  const awake = sim.oldCity ? KEEPERS.filter((k) => sim.keepers.step(k.id) !== 'asleep') : [];
+  const friends: CollectionGroup = {
+    title: 'Friends',
+    count: `${awake.filter((k) => sim.keepers.isFriend(k.id)).length} of ${KEEPERS.length}`,
+    rows: awake.map((k) => ({
+      name: sim.keepers.isFriend(k.id) ? `${k.name}, a friend` : k.name,
+      detail: KEEPER_STORIES[k.id]?.personality ?? regionName(k.region),
+      found: true,
+    })),
+    empty: 'The other robots are asleep. Pulse one to wake it.',
+  };
   return [
     cats,
+    ...(sim.oldCity ? [friends] : []),
     { title: 'Keepsakes', count: `${keeps.filter((k) => k.found).length} of ${keeps.length}`, rows: keeps, empty: '' },
     { title: 'Wildlife', count: `${fauna.length} kinds`, rows: fauna.map((f) => ({ name: cap(f), detail: 'Lives in your gardens', found: true })), empty: 'Wildlife arrives as gardens grow.' },
     { title: 'Landmarks', count: `${woken.length} awake`, rows: woken.map((a) => ({ name: a.region ? (REGIONS.find((r) => r.id === a.region)?.landmark.name ?? a.landmarkName) : a.landmarkName, detail: a.region ? `In ${regionName(a.region)}` : 'Awake', found: true })), empty: 'Bring a place back to life to wake its landmark.' },

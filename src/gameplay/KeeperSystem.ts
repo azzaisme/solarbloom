@@ -1,7 +1,8 @@
 import { GROUND } from '../core/GameState';
 import { inRect, keeperById, regionById } from '../core/OldCityLayout';
 import type { KeeperState, KeeperStep, MaterialId } from '../core/types';
-import { KEEPERS, type KeeperDef, type RegionDef } from '../data/oldcity';
+import { FRIENDSHIP, KEEPER_STORIES, type ArcBeat, type KeeperStory } from '../data/keepers';
+import { KEEPERS, KEEPSAKES, type KeeperDef, type RegionDef, type RegionId } from '../data/oldcity';
 import { MATERIAL_IDS, MATERIALS, type MaterialCost } from '../data/salvage';
 import type { Sim } from './Sim';
 
@@ -13,6 +14,11 @@ export const WAKE_GIFT = 5;
  * asleep → (a pulse makes it stir, 5 of anything wakes it) → request1 (bring something from another region) →
  * request2 (restore a named patch, every tile) → landmark (wake the landmark with a delivery, E21.9) → settled.
  * Each step speaks one to three lines from data/oldcity (`keeper.said`). Saved in `salvage.keepers`.
+ *
+ * E23.9.2: each Keeper is a friend with an arc from taker to tender (data/keepers). It remembers the old way when it
+ * wakes, notices the new way when its patch comes back, takes up its job the new way when its landmark wakes, and
+ * once settled takes gifts it likes (one a game day). After three it is bloombot's friend and gives its region's
+ * keepsake. Friends can sit with bloombot on a bench (`benchFriend`, for E23.2.3).
  */
 export class KeeperSystem {
   constructor(private sim: Sim) {}
@@ -53,7 +59,17 @@ export class KeeperSystem {
   }
 
   private say(id: string, lines: string[]) {
-    this.sim.bus.emit('keeper.said', { keeperId: id, lines: lines.slice(0, 3) });
+    this.sim.bus.emit('keeper.said', { keeperId: id, lines: lines.slice(0, 4) });
+  }
+
+  /** E23.9.2: a Keeper's story (personality, arc, likes, gifts). */
+  story(id: string): KeeperStory | undefined {
+    return KEEPER_STORIES[id];
+  }
+
+  /** E23.9.2: one beat of its arc (empty when it has none). */
+  beat(id: string, b: ArcBeat): string[] {
+    return this.story(id)?.arc[b] ?? [];
   }
 
   private go(id: string, step: KeeperStep) {
@@ -113,7 +129,7 @@ export class KeeperSystem {
         return 'stirs';
       }
       this.go(id, 'request1');
-      this.say(id, [...d.say.woke, ...d.say.request1].slice(0, 3));
+      this.say(id, [...d.say.woke, ...this.beat(id, 'taker'), ...d.say.request1]);
       return 'woke';
     }
     if (st.step === 'request1') {
@@ -136,8 +152,8 @@ export class KeeperSystem {
       }
       return 'gave';
     }
-    const lines = st.step === 'request2' ? d.say.request2 : st.step === 'landmark' ? d.say.landmark : d.say.settled;
-    this.say(id, lines);
+    if (st.step === 'settled') return this.befriend(id);
+    this.say(id, st.step === 'request2' ? d.say.request2 : d.say.landmark);
     return 'talked';
   }
 
@@ -162,7 +178,7 @@ export class KeeperSystem {
     const p = this.patch(id);
     if (p.total > 0 && p.restored >= p.total) {
       this.go(id, 'landmark');
-      this.say(id, this.def(id).say.landmark);
+      this.say(id, [...this.beat(id, 'turning'), ...this.def(id).say.landmark]);
     }
   }
 
@@ -176,7 +192,81 @@ export class KeeperSystem {
   settle(id: string) {
     if (this.step(id) === 'settled') return;
     this.go(id, 'settled');
-    this.say(id, this.def(id).say.settled);
+    this.say(id, [...this.beat(id, 'tender'), ...this.def(id).say.settled]);
+  }
+
+  // ───────────── E23.9.2: friendship ─────────────
+
+  /** Gifts it has liked so far (0 until it settles). */
+  hearts(id: string): number {
+    return this.state(id).hearts ?? 0;
+  }
+
+  isFriend(id: string): boolean {
+    return this.hearts(id) >= FRIENDSHIP.giftsToFriend;
+  }
+
+  /** Every Keeper that calls bloombot a friend, in map order. */
+  friends(): string[] {
+    return KEEPERS.filter((k) => this.isFriend(k.id)).map((k) => k.id);
+  }
+
+  /**
+   * E23.2.3's hook: the friend who comes to sit beside bloombot on a bench in a region (undefined: none). A Keeper sits
+   * only in its own region, and only once it is a friend.
+   */
+  benchFriend(region: RegionId | string | undefined): string | undefined {
+    return KEEPERS.find((k) => k.region === region && this.isFriend(k.id))?.id;
+  }
+
+  /** Everything it loves, best first (its own likes, then what every Keeper loves). */
+  likes(id: string): string[] {
+    const own = this.story(id)?.likes ?? [];
+    return [...own, ...(own.includes(FRIENDSHIP.everyoneLikes) ? [] : [FRIENDSHIP.everyoneLikes])];
+  }
+
+  /** The gift bloombot would hand over now: the best thing it loves that bloombot carries (undefined: none, or not today). */
+  giftFor(id: string): MaterialId | undefined {
+    const st = this.state(id);
+    if (!this.on || st.step !== 'settled' || this.isFriend(id) || !this.story(id)) return undefined;
+    if (st.giftedAt !== undefined && this.sim.time - st.giftedAt < FRIENDSHIP.giftEverySeconds) return undefined;
+    return this.likes(id).find((m) => this.sim.inventory.count(m as MaterialId) > 0) as MaterialId | undefined;
+  }
+
+  /** Talking to a settled Keeper: hand it a gift it loves (once a game day), or just chat. */
+  private befriend(id: string): 'gave' | 'talked' {
+    const st = this.state(id);
+    const story = this.story(id);
+    const gift = this.giftFor(id);
+    if (!story || !gift || !this.sim.inventory.take(gift, 1)) {
+      if (!story || !this.isFriend(id)) {
+        this.say(id, this.def(id).say.settled);
+        return 'talked';
+      }
+      const n = st.chats ?? 0;
+      this.set(id, { ...st, chats: n + 1 });
+      this.say(id, [story.chatter[n % story.chatter.length]]);
+      return 'talked';
+    }
+    const hearts = (st.hearts ?? 0) + 1;
+    this.set(id, { ...st, hearts, giftedAt: this.sim.time });
+    this.sim.bus.emit('keeper.gift', { keeperId: id, item: gift, hearts });
+    if (hearts === 1)
+      for (const [m, n] of Object.entries(story.giftBack) as [MaterialId, number][]) {
+        const left = this.sim.inventory.add(m, n);
+        if (left > 0) this.sim.inventory.addToStore(m, left);
+      }
+    if (hearts < FRIENDSHIP.giftsToFriend) {
+      this.say(id, [story.thanks]);
+      return 'gave';
+    }
+    // the friend beat, and its region's keepsake
+    const ks = KEEPSAKES.find((k) => k.region === this.def(id).region);
+    const sv = this.sim.state.salvage!;
+    if (ks && !sv.items?.includes(ks.id)) (sv.items ??= []).push(ks.id);
+    this.sim.bus.emit('keeper.friend', { keeperId: id });
+    this.say(id, this.beat(id, 'friend'));
+    return 'gave';
   }
 
   /** What a Keeper is waiting for, in one line (tooltips, the objective card). */
@@ -194,8 +284,12 @@ export class KeeperSystem {
       }
       case 'landmark':
         return `${d.name}: wake the ${this.region(id).landmark.name} with ${costText(this.wants(id) ?? {})}.`;
-      default:
-        return `${d.name} looks after ${this.region(id).name}.`;
+      default: {
+        // E23.9.2: until it is a friend, what it loves (the backpack's names; things not found yet stay unnamed)
+        if (this.isFriend(id) || !this.story(id)) return `${d.name} looks after ${this.region(id).name}.`;
+        const named = this.likes(id).filter((m) => m in MATERIALS).map((m) => MATERIALS[m as MaterialId].name);
+        return `${d.name} looks after ${this.region(id).name}.${named.length ? ` It loves ${named.join(' and ')}.` : ''}`;
+      }
     }
   }
 

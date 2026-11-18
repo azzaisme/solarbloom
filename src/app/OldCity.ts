@@ -151,7 +151,8 @@ export class OldCityController {
     // E21.8: a Keeper: wake it, hand over what it asks for, or hear it
     const keeper = onGround ? this.sim.keepers.at(front.x, front.z) : undefined;
     // E21.9: once the Market Hall is awake, Tally trades any 3 of one material for 1 of another
-    if (keeper && keeper.id === 'tally' && this.sim.landmarks.canTrade()) {
+    // E23.9.2: unless bloombot has a gift for it today
+    if (keeper && keeper.id === 'tally' && this.sim.landmarks.canTrade() && !this.sim.keepers.giftFor(keeper.id)) {
       this.openTrade();
       return true;
     }

@@ -337,6 +337,12 @@ export interface KeeperState {
   pulsed?: boolean;
   /** what has been handed over toward the current delivery (request 1 or the landmark) */
   given?: Partial<Record<MaterialId, number>>;
+  /** E23.9.2: settled only: gifts it liked so far (FRIENDSHIP.giftsToFriend makes a friend) */
+  hearts?: number;
+  /** E23.9.2: sim time of the last gift it took (one a game day) */
+  giftedAt?: number;
+  /** E23.9.2: how many times a friend has chatted (which line comes next) */
+  chats?: number;
 }
 
 /**
