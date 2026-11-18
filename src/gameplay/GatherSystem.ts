@@ -1,6 +1,7 @@
 import { GROUND } from '../core/GameState';
 import type { TileData } from '../core/types';
-import { DAY_SECONDS, GATHER } from '../data/farm';
+import { GATHER } from '../data/farm';
+import { gameDays } from '../data/time';
 import type { Sim } from './Sim';
 
 /**
@@ -57,7 +58,7 @@ export class GatherSystem {
     const clipped = (sv.clipped ??= {});
     // forget tiles that have regrown, so the save stays small
     for (const [id, at] of Object.entries(clipped)) if (at <= s.time) delete clipped[id];
-    clipped[t.id] = s.time + GATHER.regrowDays * DAY_SECONDS;
+    clipped[t.id] = s.time + gameDays(GATHER.regrowDays);
     s.bus.emit('biomass.gathered', { tileId: t.id, x: t.x, z: t.z, got });
     return got;
   }

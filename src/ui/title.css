@@ -48,6 +48,10 @@ body.reduced .t-press { animation: none; }
 .t-rename input { min-height: 40px; padding: 0 10px; border-radius: 10px; font: 600 17px var(--font-ui); color: var(--text-strong); background: var(--glass-sunk); border: 1px solid var(--edge); }
 .t-confirm { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5; width: min(460px, 92vw); padding: 18px; background: var(--glass-solid); }
 .t-confirm p { margin: 0 0 14px; font: 600 19px/1.35 var(--font-display); color: var(--text-strong); }
+/* E23.7.1.2: the new garden's clock question (two equal choices, neither one a warning) */
+.t-confirm p.t-detail { font: 500 15px/1.4 var(--font-body, inherit); color: var(--text); }
+.t-confirm.t-choice #tYes { background: var(--glass-hi); border-color: var(--edge-soft); }
+.t-confirm.t-choice .t-row { flex-wrap: wrap; }
 #title:has(.t-confirm) .t-side, #title:has(.t-confirm) .t-main { filter: brightness(.6); pointer-events: none; }
 @media (max-width: 900px) { .t-slot-list { grid-template-columns: 1fr; } }
 
