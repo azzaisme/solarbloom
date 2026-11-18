@@ -105,7 +105,7 @@ describe('E23.8.3.2: mainland machines', () => {
     expect(calls).toEqual([
       ['gridBattery', { battery: { capacity: MAINLAND_MACHINES.gridBattery.capacity, rate: MAINLAND_MACHINES.gridBattery.rate } }],
       ['longPump', { consumer: { shed: 'pump', draw: MAINLAND_MACHINES.longPump.draw } }],
-      ['water:longPump', { reach: MAINLAND_MACHINES.longPump.reach, flow: MAINLAND_MACHINES.longPump.flow }],
+      ['water:longPump', { reach: Infinity, flow: MAINLAND_MACHINES.longPump.flow, power: MAINLAND_MACHINES.longPump.draw, sea: true }],
     ]);
     // without a water network (E23.4 not landed yet), nothing breaks and the pump is not wired to it
     expect(new Sim(createInitialState(7, 'oldcity')).mainland.wired.water).toBe(false);

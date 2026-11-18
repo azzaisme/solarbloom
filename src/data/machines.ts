@@ -140,7 +140,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     size: 2,
     cost: {},
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Pushes water down a long pipe run, far further than a pump. Mainland only.',
+    blurb: 'Draws from a canal, a pond or the sea (it filters the salt) and sends twice a pump’s water down the pipes. Mainland only.',
     oldCity: true,
     mainlandOnly: true,
   },

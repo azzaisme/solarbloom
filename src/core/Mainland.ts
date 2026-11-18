@@ -2,7 +2,7 @@
 // the game's seed), so every game's mainland is the same, and any cell can be asked about in any order.
 
 import type { AreaType } from '../data/city';
-import { MAINLAND, MAINLAND_TYPES, SALVAGE_FIELDS } from '../data/mainland';
+import { MAINLAND, MAINLAND_TYPES, MAINLAND_WATER, SALVAGE_FIELDS } from '../data/mainland';
 import type { PileDef, RampDef } from '../data/oldcity';
 import { OLD_CITY } from '../data/oldcity';
 import { MATERIALS, type PileSize } from '../data/salvage';
@@ -101,6 +101,34 @@ export function brokenCells(): [number, number][] {
   return out;
 }
 
+// ───────────── fresh water ─────────────
+
+const mod = (a: number, n: number) => ((a % n) + n) % n;
+
+/**
+ * Is a mainland cell fresh water (a canal or a pond)? Canals run through every other row of districts and ponds sit in
+ * reservoirs, plazas and some parks and groves (`MAINLAND_WATER`). Never on an avenue (they bridge the water), the
+ * shore or the causeway.
+ */
+export function mainlandWater(x: number, z: number): boolean {
+  if (!isMainlandCell(x) || mainlandShore(x, z) || onCauseway(x, z)) return false;
+  const lx = mod(x, CHUNK);
+  const lz = mod(z, CHUNK);
+  if (lx === 7 || lx === 8 || lz === 7 || lz === 8) return false;
+  const D = MAINLAND.district * CHUNK;
+  const dx = Math.floor(x / D);
+  const dz = Math.floor(z / D);
+  const ox = x - dx * D;
+  const oz = z - dz * D;
+  const W = MAINLAND_WATER;
+  if (mod(dz, W.canalEvery) === 0 && W.canalRows.includes(oz)) return true;
+  const pond = W.ponds[mainlandType(`${ML_PREFIX}${dx}_${dz}`)];
+  if (!pond || tileRandom(ML_SEED, LH, dx, dz, 30) >= pond.chance) return false;
+  if (pond.rect) return ox >= pond.rect[0] && oz >= pond.rect[1] && ox <= pond.rect[2] && oz <= pond.rect[3];
+  const [px, pz] = pond.centre!;
+  return Math.hypot(ox - px, oz - pz) <= pond.radius!;
+}
+
 // ───────────── salvage fields ─────────────
 
 const fieldCache = new Map<string, Map<string, PileDef>>();
@@ -132,7 +160,7 @@ export function chunkPiles(cx: number, cz: number): Map<string, PileDef> {
     if (lx < 0 || lz < 0 || lx >= CHUNK || lz >= CHUNK || lx === 7 || lx === 8 || lz === 7 || lz === 8) continue;
     const x = cx * CHUNK + lx;
     const z = cz * CHUNK + lz;
-    if (mainlandShore(x, z) || onCauseway(x, z)) continue;
+    if (mainlandShore(x, z) || onCauseway(x, z) || mainlandWater(x, z)) continue;
     const id = `ml:${x}:${z}`;
     if (out.has(id)) continue;
     const size = pick(r(22 + i * 4), sizeList);

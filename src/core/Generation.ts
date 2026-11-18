@@ -7,7 +7,7 @@ import { distToFootprintRaw } from './Footprint';
 import { roadPlanFor } from './RoadPlan';
 import { coastSand, inRect, isSeaChunk, onJetty, regionById, regionWater, seaCell, setPieceAt } from './OldCityLayout';
 import { rampAt, tileLevel } from './Height';
-import { causewayBroken, onCauseway } from './Mainland';
+import { causewayBroken, mainlandWater, onCauseway } from './Mainland';
 import { OLD_CITY } from '../data/oldcity';
 import { CHUNK, hashString, tileId, tileRandom } from './Hash';
 import type { GroundState, LayerData, TileData } from './types';
@@ -362,7 +362,7 @@ function generateOldCity(seed: number, layer: LayerData, lh: number, x: number, 
     return stampOldCity(Object.assign(base, { feature: 'road' as TileFeature, blocked: broken, prop: broken ? 'causeway-broken' : undefined, pollution: pollutionMax }));
   }
   // the sea all round the island, the bay and the coast band: open water nothing crosses; canals: deep water
-  if (area.id === SEA || area.id.startsWith('out_') || seaCell(x, z) || regionWater(x, z)) return stampOldCity(Object.assign(base, { feature: 'water' as TileFeature, blocked: true }));
+  if (area.id === SEA || area.id.startsWith('out_') || seaCell(x, z) || regionWater(x, z) || mainlandWater(x, z)) return stampOldCity(Object.assign(base, { feature: 'water' as TileFeature, blocked: true }));
   const def = AREA_TYPES[area.type];
   let feature: TileFeature = area.noLandmark ? 'paving' : def.ground;
   const road = oldCityRoad(x, z, area);
