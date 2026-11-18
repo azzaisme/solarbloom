@@ -32,6 +32,7 @@ import { detailTextures } from '../rendering/DetailTex';
 import { Pollinators } from '../rendering/Pollinators';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
+import { WaterLevels } from '../rendering/WaterLevels';
 import { ChunkRenderer, MeshBuilder, SINK } from '../rendering/ChunkRenderer';
 import { MACHINE_MODELS } from '../rendering/MachineVisuals';
 import type { HoloShape } from '../rendering/Hologram';
@@ -171,6 +172,8 @@ export class Game {
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
   readonly chunks: ChunkRenderer;
+  /** E23.4.1: water levels drawn on the water (the drained bed) */
+  readonly waterLevels: WaterLevels;
   /** Look 6.12: living transitions (every tile change plays as a process). */
   readonly transitions: TransitionRenderer;
   /** Look 6.9: Cultivator tillers. */
@@ -307,6 +310,7 @@ export class Game {
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice);
     this.transitions = new TransitionRenderer(this.sim);
     this.chunks.transitions = this.transitions;
     this.cozy = new Cozy(this.sim);
@@ -4211,6 +4215,7 @@ export class Game {
       if (t) this.overlays.showBeacon(t.roofId, t.x, t.z);
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
+    this.waterLevels.update();
     if (this.bot) {
       this.bot.update(wdt); // still reads the pad (the menu's focus ring), but nothing moves
       this.updateExploreCamera(wdt);

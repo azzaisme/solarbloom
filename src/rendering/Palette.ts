@@ -255,6 +255,9 @@ const aqua = {
   mist: '#d8f4ff',
   pipe: '#5aa3c9',
   surface: '#7fd0f0',
+  /** E23.4.1: a drained bed (damp silt), and its darker wet rim at the waterline */
+  bed: '#5e4b39',
+  bedWet: '#3f3328',
   foam: '#a8ecff',
   teal: '#6fe3e0',
 };

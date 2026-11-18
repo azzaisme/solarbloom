@@ -305,6 +305,8 @@ export const REGIONS: RegionDef[] = [
     perches: [],
     piles: [],
     roads: [],
+    // E23.4.1: the spring-fed pond east of the island (dry until the Old Cistern wakes and its springs run)
+    water: [{ x: 64, z: 41, w: 8, d: 12 }],
   },
   {
     id: 'clockPlaza',
