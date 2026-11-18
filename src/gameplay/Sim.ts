@@ -41,6 +41,7 @@ import { LandmarkSystem } from './LandmarkSystem';
 import { Crafting } from './Crafting';
 import { Research } from './Research';
 import { ChargeSystem } from './Charge';
+import { Automation } from './Automation';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
@@ -107,6 +108,8 @@ export class Sim {
   readonly research: Research;
   /** E23.2.1: bloombot's charge, the only meter (old-city rules). */
   readonly charge: ChargeSystem;
+  /** E23.6.4 / E23.6.5: supply crates, courier routes and jobs done by hand, the Assembler. */
+  readonly automation: Automation;
   /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
   readonly clock: Clock;
   /** E23.7.1.3: finds that are out only at night. */
@@ -182,6 +185,7 @@ export class Sim {
     this.keepers = new KeeperSystem(this);
     this.crafting = new Crafting(this);
     this.research = new Research(this);
+    this.automation = new Automation(this);
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
     this.gather = new GatherSystem(this);
@@ -313,6 +317,7 @@ export class Sim {
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
     this.crafting.tick(dt);
+    this.automation.tick(dt);
     this.research.tick(dt);
     this.charge.tick(dt);
     this.clock.tick();

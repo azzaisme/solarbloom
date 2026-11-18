@@ -516,6 +516,19 @@ export class DroneSystem {
         case 'working': {
           d.timer -= dt;
           if (d.timer > 0) break;
+          // E23.6.4: a courier on a route: at the source it takes the basket and flies on to the target crate
+          if (d.role === 'courier' && d.route) {
+            if (s.automation.arrive(d)) {
+              d.mode = 'flying';
+              this.status.set(d.id, 'travelling');
+              break;
+            }
+            d.targetMachineId = undefined;
+            d.role = undefined;
+            d.mode = 'cooldown';
+            d.timer = TUNING.drone.cycleSeconds / s.upgrades.droneSpeed(hub);
+            break;
+          }
           if (d.role) {
             // E18: the job this drone paid for, in the role it paid for it under (even if its hub switched since).
             // Its own claim is released first, as a Restorer's is (a reserved tile isn't eligible to restore).

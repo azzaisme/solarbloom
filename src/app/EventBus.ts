@@ -54,6 +54,15 @@ export interface GameEvents {
   'seeds.found': { crop: string; region: string };
   /** E23.6.2: a crossbreed found at a harvest (data/crops crossKey and its two parents) */
   'cross.found': { key: string; a: string; b: string };
+  /** E23.6.4: automation: things carried to or from the store by hand; a job's automation opened; a crate's contents
+   *  changed; a route set, changed or removed, or a basket delivered; an Assembler's recipe changed or a craft made */
+  'store.moved': { material: import('../core/types').ItemId; n: number };
+  'automation.opened': { job: import('../data/automation').HandJob };
+  'crate.changed': { id: string };
+  'route.changed': { id: string };
+  'route.delivered': { id: string; items: number };
+  'assembler.changed': { id: string };
+  'assembler.made': { id: string; item: string; made: number };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
   /** E23.7.4: a pile gained units back (slowly over game days, or all at once in a storm); `left` units now. */

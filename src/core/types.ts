@@ -1,8 +1,11 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
 /** `chest` exists only under old-city rules (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
+/** E23.6.4: `crate` (a supply crate, its own contents) and `assembler` (E23.6.5) are automation's machines. */
 export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger'
   // E23.5.2: the farm
-  | 'planter';
+  | 'planter'
+  // E23.6.4 / E23.6.5: automation
+  | 'crate' | 'assembler';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
 /** Plain per-resource numbers (tuning tables, small per-second coefficients). */
@@ -197,6 +200,9 @@ export interface DroneData {
   role?: DroneRole;
   /** E18.4: a Courier's machine target (instead of a tile). */
   targetMachineId?: string;
+  /** E23.6.4: a Courier on a route: the route, and what it carries to the route's target crate (none: going to fetch) */
+  route?: string;
+  cargo?: { item: import('./types').ItemId; n: number }[];
 }
 
 export type BuffType = 'solarFrenzy' | 'megaflower';
@@ -388,6 +394,14 @@ export interface SalvageState {
   decorMade?: string[];
   /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
   clipped?: Record<string, number>;
+  /** E23.6.4: what each supply crate holds, by machine id */
+  crates?: Record<string, Partial<Record<ItemId, number>>>;
+  /** E23.6.4: courier routes the player set (from one crate to another, an item or everything) */
+  routes?: { id: string; from: string; to: string; item: import('../data/automation').RouteItem }[];
+  /** E23.6.4: how many times each job has been done by hand (it opens its automation) */
+  hand?: Partial<Record<import('../data/automation').HandJob, number>>;
+  /** E23.6.5: each Assembler's recipe (a component id) and seconds left on the craft in hand */
+  assemblers?: Record<string, { recipe?: string; left?: number }>;
   /** E23.6.2: the research station (finds analysed, projects done and running, upgrade levels bought) */
   research?: ResearchState;
   /** E23.5.2: each planter's bed, by machine id (absent = empty, no extras) */

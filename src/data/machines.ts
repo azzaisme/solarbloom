@@ -162,6 +162,28 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     blurb: 'A pad on the grid. Sit on it and bloombot fills up fast.',
     oldCity: true,
   },
+  // E23.6.4: a box with its own contents, for machines and couriers (old-city rules only)
+  crate: {
+    type: 'crate',
+    name: 'Supply Crate',
+    icon: '🧺',
+    size: 1,
+    cost: {},
+    allowedGround: ['restored', 'prepared', 'polluted'],
+    blurb: 'A box of its own: couriers carry between crates, and machines take from and put into the crates beside them.',
+    oldCity: true,
+  },
+  // E23.6.5: crafts a component by itself, from the crate beside it into another (old-city rules only)
+  assembler: {
+    type: 'assembler',
+    name: 'Assembler',
+    icon: '🛠️',
+    size: 2,
+    cost: {},
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Makes the component you choose by itself, from the supply crate beside it into the next one, on grid power.',
+    oldCity: true,
+  },
   core: {
     type: 'core',
     name: 'Rooftop Core',
@@ -175,7 +197,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
 
 export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
 /** E21.3: the old-city build list (the classic list plus the Storage Chest and the Planter; E23.7.4 dropped the Reclaimer; E23.3 adds the grid). */
-export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoirGarden', 'motherTree', 'relay', 'cultivator', 'crate', 'assembler'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the
