@@ -2,8 +2,9 @@ import { GROUND } from '../core/GameState';
 import { keeperById } from '../core/OldCityLayout';
 import type { ExtraState, MachineData, MachineType } from '../core/types';
 import { CROPS, type CropId } from '../data/crops';
-import { DAY_SECONDS } from '../data/farm';
+import { DAY_SECONDS } from '../data/time';
 import { BEEHIVE, DIVERSITY, FISH_POND, GARDEN_REQUESTS, HOME, HOMES, KEEPER_GARDEN, MUSHROOM_LOG, ORCHARD, WORM_BIN, type GardenRequest, type Habitat, type HomeKind } from '../data/farmExtras';
+import { machineStrengthAt } from '../core/RegionStrengths';
 import type { Sim } from './Sim';
 
 /** The E23.5.4 machine types. */
@@ -15,7 +16,6 @@ export const isHome = (t: string): t is HomeKind => t in HOMES;
 /** What the extras borrow from other sub-epics (optional until they land). */
 interface Hooks {
   water?: { isWatered?(t: { roofId: string; x: number; z: number }): boolean; drawNear?(t: { roofId: string; x: number; z: number }, n: number): number; pipeFeeds?(from: MachineData, to: MachineData): boolean };
-  clock?: { isNight?(): boolean };
   keepers?: { tend?(id: string): void };
 }
 
@@ -91,8 +91,9 @@ export class FarmExtras {
     return ground + beds * 2;
   }
 
+  /** Night on the GAME clock (E23.7.1), never the sky: the same play time in both clock modes. */
   private isNight(): boolean {
-    return this.hooks.clock?.isNight?.() ?? this.sim.farm.isNight();
+    return this.sim.farm.isNight();
   }
 
   private foggy(): boolean {
@@ -175,7 +176,7 @@ export class FarmExtras {
     st.age = (st.age ?? 0) + days;
     st.sincePrune = (st.sincePrune ?? 0) + days;
     if (!this.fruitReady(m) && st.age >= ORCHARD.firstFruitDays) {
-      st.growing = (st.growing ?? 0) + days;
+      st.growing = (st.growing ?? 0) + days * machineStrengthAt('orchard', m.x, m.z); // E23.8.1: fertile soil
       // the first crop comes at firstFruitDays, then one every fruitDays
       const need = (st.crops ?? 0) === 0 ? 0 : ORCHARD.fruitDays;
       if (st.growing >= need) {
@@ -204,7 +205,9 @@ export class FarmExtras {
   /** Is the log growing right now (fed, shaded, and night or fog)? */
   logGrowing(m: MachineData): boolean {
     const st = this.st(m);
-    return (st.flushes ?? 0) > 0 && (st.ready ?? 0) < 1 && this.logShaded(m) && (this.isNight() || this.foggy());
+    // E23.8.1: under shelter (Glasshouse Gardens) it is always dim and damp enough
+    const sheltered = machineStrengthAt('mushroomLog', m.x, m.z) > 1;
+    return (st.flushes ?? 0) > 0 && (st.ready ?? 0) < 1 && this.logShaded(m) && (sheltered || this.isNight() || this.foggy());
   }
 
   /** Feeds a spent log compost (it then gives `flushes` crops). */
@@ -437,7 +440,7 @@ export class FarmExtras {
     if (!this.hiveSettled(m)) return;
     const st = { ...this.st(m) };
     if ((st.ready ?? 0) >= BEEHIVE.honeyCapacity) return;
-    st.growing = (st.growing ?? 0) + days;
+    st.growing = (st.growing ?? 0) + days * machineStrengthAt('beehive', m.x, m.z); // E23.8.1: fertile soil
     if (st.growing >= BEEHIVE.honeyDays) {
       st.growing -= BEEHIVE.honeyDays;
       st.ready = (st.ready ?? 0) + 1;

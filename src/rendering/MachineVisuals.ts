@@ -86,6 +86,16 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   reclaimer: ['reclaimer', 1.0],
   // E23.5.2: the planter box (its crop is drawn by CropVisuals)
   planter: ['planter-bed', 0.9],
+  // E23.5.3: E23.10's hand-built bin (1 m cube, scaled to its tile) and digester; the procedural bodies stand in
+  // until their files are in assets/raw/models/final (MODELS loads whatever is there)
+  compostBin: ['compost-bin', 0.82],
+  bioDigester: ['bio-digester', 0.8],
+  // E23.5.4: E23.10's models, used once their files land (the procedural bodies stand in until then)
+  beehive: ['beehive', 0.8],
+  mushroomLog: ['mushroom-log', 0.8],
+  birdBox: ['bird-box', 0.9],
+  batBox: ['bat-box', 0.9],
+  hedgehogHouse: ['hedgehog-house', 0.8],
 };
 /** The Mother Tree's collar model: its scale (the planter fits the procedural ring, radius 0.85) and planter top (model metres). */
 const MotherCollar = { scale: 1.12, top: 0.84 };

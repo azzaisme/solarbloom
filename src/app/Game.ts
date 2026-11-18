@@ -15,7 +15,7 @@ import { GATHER } from '../data/farm';
 import { CROPS } from '../data/crops';
 import { isExtra } from '../gameplay/FarmExtras';
 import { EXPLORE } from '../rendering/CameraController';
-import { OLD_CITY, REGIONS } from '../data/oldcity';
+import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
@@ -93,6 +93,9 @@ import { Loading, type LoadSteps } from '../ui/Loading';
 import { ModelLibrary, useModels } from '../rendering/Models';
 import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
 import { padStick, PhotoMode } from './PhotoMode';
+import { DayNight, type LightMoment } from '../rendering/DayNight';
+import { NightFindVisuals } from '../rendering/NightFindVisuals';
+import { NIGHT_FIND_GIVES } from '../data/time';
 import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
 import { HOTBAR_DEFAULT } from '../ui/Hotbar';
 import { actionGlyph, GlyphTracker, padName, type PadStyle } from '../ui/Glyphs';
@@ -171,6 +174,12 @@ export class Game {
   readonly look: LookController;
   readonly camera: CameraController;
   private sky!: Sky;
+  /** E23.7.1: day and night on screen (the light clock, or photo mode's own time) */
+  private dayNight!: DayNight;
+  /** E23.7.1.2: the title's "follow my clock" preference (new gardens), kept apart from the save's mode */
+  private titleRealClock?: boolean;
+  /** E23.7.1.3: glowing plants and night salvage */
+  private nightFindVisuals!: NightFindVisuals;
   private skyline!: Skyline;
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
@@ -279,16 +288,20 @@ export class Game {
   private fastFor = 0;
   private maxDpr = 2;
 
-  constructor(canvas: HTMLCanvasElement, lr: LoadResult = new SaveService().loadResult(), opts: { slot?: Slot; device?: 'keys' | 'pad' } = {}) {
+  constructor(canvas: HTMLCanvasElement, lr: LoadResult = new SaveService().loadResult(), opts: { slot?: Slot; device?: 'keys' | 'pad'; realClock?: boolean } = {}) {
     this.saver = new SaveService(undefined, opts.slot ?? 1);
     this.saver.headerExtra = () => ({ region: this.regionName() });
     this.startDevice = opts.device ?? 'keys';
     this.settings = loadSettings();
+    this.titleRealClock = this.settings.realClock;
     rulesViewFromUrl();
     const loaded = lr.state;
     // E21: a new game plays the Old City; `?rules=classic` (dev) starts a classic one. A loaded save keeps its own rules.
     const state = loaded ?? createInitialState(undefined, newGameRules());
     this.sim = new Sim(state, this.bus);
+    // E23.7.1.2: a new game's choice of day (the game's own, or the real clock's); Settings shows the save's
+    if (!loaded && opts.realClock) this.sim.clock.real = true;
+    this.settings.realClock = this.sim.clock.real;
 
     this.app = new pc.Application(canvas, {
       graphicsDeviceOptions: { antialias: true, alpha: true, powerPreference: 'high-performance' },
@@ -309,6 +322,7 @@ export class Game {
     // Look 4.8: the distant terraced city behind the play area (in the sky's layer, drawn before the world).
     this.skyline = new Skyline(this.app, this.sky.layer, this.scene.sun.up);
     this.look = new LookController(this.app, this.scene, this.camera);
+    this.dayNight = new DayNight(this.app, this.scene, this.sky);
     this.look.atmosphere.isLit = (x, z) => this.sim.grid.get(GROUND, x, z)?.ground === 'restored';
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
@@ -370,6 +384,7 @@ export class Game {
     this.butterflies = new Butterflies(this.sim, this.scene.world, this.app.batcher!.addGroup('butterflies', true, 400).id);
     this.pollinators = new Pollinators(this.sim, this.scene.world, this.app.batcher!.addGroup('pollinators', true, 400).id);
     this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
+    this.nightFindVisuals = new NightFindVisuals(this.sim, this.scene.world, (x, z) => this.groundY(x, z));
     this.tileFx = new TileFx(this.sim, this.scene.world, this.app.graphicsDevice);
     this.machines.onWisp = (_m, at) => this.vfx.burst(at, 1, { up: 0.5, speed: 0.12, size: 0.035, life: 1.3, gravity: 0 }); // Phase 5 E16: running machines only
     this.machines.onActivated = (_m, at) => {
@@ -733,7 +748,7 @@ export class Game {
   private setSetting(k: keyof Settings, v: boolean | string | number) {
     (this.settings as unknown as Record<string, unknown>)[k] = v;
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...this.settings, speed: undefined }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...this.settings, speed: undefined, realClock: this.titleRealClock }));
     } catch {
       /* private mode */
     }
@@ -916,6 +931,12 @@ export class Game {
 
   /** One change from the Settings screen. */
   private changeSetting(k: SettingKey, v: boolean | number | string) {
+    if (k === 'realClock') {
+      // E23.7.1.2: the clock mode belongs to the save, not the settings file
+      this.sim.clock.real = !!v;
+      this.settings.realClock = !!v;
+      return;
+    }
     if (k === 'speed') {
       this.speed = Number(v) || 1;
       this.settings.speed = this.speed;
@@ -971,9 +992,44 @@ export class Game {
     else this.openMenu();
   }
 
+  /** E23.7.1.3: is a ground cell the house (its footprint or the cell at its door)? */
+  private atHouse(f: { x: number; z: number }): boolean {
+    const h = PARK_SET.shed;
+    return (f.x >= h.x && f.x < h.x + h.size && f.z >= h.z && f.z < h.z + h.size) || (f.x === h.door[0] && f.z === h.door[1]);
+  }
+
+  /** E23.7.1.3: sleep in the house until morning: the screen dims, the clock skips the night, charge is full. */
+  private sleeping = false;
+  private sleep() {
+    if (this.sleeping || !this.sim.clock.canSleep()) return;
+    this.sleeping = true;
+    let veil = document.getElementById('sleepVeil');
+    if (!veil) {
+      veil = document.createElement('div');
+      veil.id = 'sleepVeil';
+      document.body.appendChild(veil);
+    }
+    const v = veil;
+    const fade = this.settings.reducedMotion ? 150 : 900;
+    v.style.transitionDuration = `${fade}ms`;
+    requestAnimationFrame(() => v.classList.add('on'));
+    setTimeout(() => {
+      this.sim.clock.sleep();
+      this.save();
+      setTimeout(() => {
+        v.classList.remove('on');
+        this.sleeping = false;
+      }, fade + 300);
+    }, fade);
+  }
+
+  /** E23.7.1: the moment the sky and light show: the light clock (photo mode may set its own, E23.7.3). */
+  private lightMoment(): LightMoment {
+    return { f: this.sim.clock.dayFraction() };
+  }
+
   private menuHeader(): MenuHeader {
-    const st = this.sim.state as unknown as { clock?: { day?: number }; day?: number };
-    return { name: this.saveName, region: this.regionName(), day: st.clock?.day ?? st.day, played: this.sim.time };
+    return { name: this.saveName, region: this.regionName(), day: this.sim.clock.gameDay(), played: this.sim.time };
   }
 
   /** E22.12 names saves; until a slot has a name, this. */
@@ -1705,10 +1761,14 @@ export class Game {
       const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
       const lmName = area === PARK ? 'the fountain' : area ? this.sim.areas.info(area).landmarkName : undefined;
       const ready = occ.type === 'core' && this.landmarkReady(occ);
+      const tripped = this.sim.power.isTripped(occ); // E23.3: lightning tripped this pole; one press resets it
       out.push({
-        kind: lmName ? 'landmark' : 'machine', id: `m:${occ.id}`, verb: ready ? 'Wake' : 'Look at', name: lmName ?? machineName(occ), distance: dist, at: tile,
+        kind: lmName ? 'landmark' : 'machine', id: `m:${occ.id}`, verb: ready ? 'Wake' : tripped ? 'Reset' : 'Look at', name: lmName ?? machineName(occ), distance: dist, at: tile,
         frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size },
-        run: () => this.botAnim(this.actAt(p, sc().x, sc().y, 'inspect', false)),
+        run: () => {
+          if (this.sim.power.reset(occ)) return b.visuals.play('interact');
+          this.botAnim(this.actAt(p, sc().x, sc().y, 'inspect', false));
+        },
       });
     } else {
       const plot = this.openablePlot(p.roofId, tile.x, tile.z);
@@ -1738,10 +1798,19 @@ export class Game {
     const occ = front ? s.occupant(front) : undefined;
     const run = () => void oc.interact(f, occ);
     const out: InteractTarget[] = [];
+    // E23.7.1.3: a night find in front (glowing seeds, something glinting), and the house's bed from dusk
+    const nf = s.nightFinds.at(f.x, f.z);
+    if (nf) {
+      const g = NIGHT_FIND_GIVES[nf.kind];
+      out.push({ kind: 'salvage', id: `night:${nf.id}`, verb: g.verb, name: g.name, distance: fd, at: front, refused: s.nightFinds.problem(nf.id), run: () => void s.nightFinds.take(nf.id) });
+    }
+    if (this.atHouse(f) && s.clock.canSleep()) out.push({ kind: 'door', id: 'house:sleep', verb: 'Sleep', name: 'until morning', distance: fd, at: front, run: () => this.sleep() });
     const pile = s.salvage.pileAt(f.x, f.z);
     if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: SALVAGE.holdSeconds, refused: s.salvage.problem(pile.id), run });
     const keeper = s.keepers.at(f.x, f.z);
     if (keeper && s.keepers.visible(keeper.id)) out.push({ kind: 'keeper', id: `keeper:${keeper.id}`, verb: keeper.id === 'tally' && s.landmarks.canTrade() ? 'Trade with' : 'Talk to', name: keeper.name, distance: fd, at: front, run });
+    const page = s.journal.pageAt(f.x, f.z);
+    if (page) out.push({ kind: 'cache', id: `page:${page}`, verb: 'Read', name: s.journal.found(page) ? 'the page again' : 'the page', distance: fd, at: front, run });
     const sp = setPieceAt(f.x, f.z);
     if (sp?.kind === 'lookout') out.push({ kind: 'gate', id: `lookout:${sp.id}`, verb: 'Look out', name: '', distance: fd, at: front, run });
     const gate = s.gates.gateAt(f.x, f.z);
@@ -1816,6 +1885,12 @@ export class Game {
       bot: this.bot!,
       bindings: this.bindings,
       game: this,
+      // E23.9.1: a page read from its post opens the journal at it
+      openPage: (id: string) => {
+        this.oc?.panel.close();
+        this.hud.backpack.openPage(id);
+        this.syncPanelPause();
+      },
       // E22.6: the store opens as the backpack's Items grid with the store beside it
       openStorage: (title: string) => {
         this.oc?.panel.close();
@@ -4220,7 +4295,9 @@ export class Game {
     this.birds.resident = eco.has('birds');
     this.clouds.happy = eco.has('birds'); // the sky wakes up with the songbirds: sleepy faces on a couple of clouds
     this.birds.update(wdt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
-    this.fauna.update(wdt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: !!this.settings.fireflies && !this.settings.highContrast });
+    this.fauna.update(wdt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: this.settings.fireflies !== false && !this.settings.highContrast && this.dayNight.light < 0.5 });
+    this.nightFindVisuals.reducedMotion = this.settings.reducedMotion;
+    this.nightFindVisuals.update(wdt);
     this.eco?.update(wdt);
     this.tileFx.update(wdt);
     this.frameNo++;
@@ -4253,6 +4330,10 @@ export class Game {
     this.camera.update(dt);
     this.sky.clarity += (this.skyClarity() - this.sky.clarity) * Math.min(1, dt * 0.8);
     this.sky.reducedMotion = this.settings.reducedMotion;
+    this.dayNight.apply(this.lightMoment());
+    this.look.rimShare = this.dayNight.rim;
+    this.chunks.fogTint.copy(this.dayNight.cloudTint);
+    this.chunks.tintFog();
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
     this.skyline.clarity = this.sky.clarity;
     this.skyline.reducedMotion = this.settings.reducedMotion;

@@ -1,6 +1,7 @@
 import type { BinState, MachineData } from '../core/types';
 import { COMPOST, DIGESTER } from '../data/compost';
-import { DAY_SECONDS } from '../data/farm';
+import { DAY_SECONDS } from '../data/time';
+import { machineStrengthAt } from '../core/RegionStrengths';
 import type { Sim } from './Sim';
 
 /**
@@ -166,9 +167,12 @@ export class CompostSystem {
     return this.wanted(m) ? 'running' : 'idle';
   }
 
-  /** What it supplies to the grid this moment (E23.3 watts): its output while fed, nothing when empty. */
+  /**
+   * What it supplies to the grid this moment (E23.3 watts): its output while fed, nothing when empty. E23.8.1: a
+   * digester in a machinery region (Clock Plaza) runs at that region's strength (1.5×).
+   */
   output(m: MachineData): number {
-    return this.fuel(m) > 1e-9 ? DIGESTER.output : 0;
+    return this.fuel(m) > 1e-9 ? DIGESTER.output * machineStrengthAt('bioDigester', m.x, m.z) : 0;
   }
 
   private tickDigester(m: MachineData, days: number) {

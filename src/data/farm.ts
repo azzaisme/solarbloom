@@ -3,16 +3,8 @@
 
 import type { MaterialId } from '../core/types';
 
-/** E23 rule 5: a game day is 48 minutes of play. Every farm timer counts in game days. */
-export const DAY_SECONDS = 48 * 60;
-
-/**
- * Game days since the start, as a fraction. E23.7 (e23-time) owns the clock: once the sim carries one with a
- * `days` reading it wins; until then a game day is simply 48 minutes of sim time.
- */
-export function gameDays(sim: { time: number; clock?: { days?: number } }): number {
-  return sim.clock?.days ?? sim.time / DAY_SECONDS;
-}
+// E23 rule 5: every farm timer counts in game days. The day itself (48 minutes of play) and the helpers that turn
+// game days into sim seconds live in data/time (E23.7): use gameDays(n) from there.
 
 /** The four farm items, in backpack order. */
 export const FARM_ITEMS = ['biomass', 'food', 'compost', 'fertiliser', 'honey'] as const satisfies readonly MaterialId[];

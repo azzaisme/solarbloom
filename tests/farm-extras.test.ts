@@ -5,9 +5,9 @@ import { keeperById } from '../src/core/OldCityLayout';
 import type { MachineData, MachineType } from '../src/core/types';
 import { COMPOST } from '../src/data/compost';
 import { CROPS } from '../src/data/crops';
-import { DAY_SECONDS } from '../src/data/farm';
+import { DAY_SECONDS } from '../src/data/time';
 import { BEEHIVE, GARDEN_REQUESTS, HOMES, MUSHROOM_LOG, ORCHARD, WORM_BIN, type HomeKind } from '../src/data/farmExtras';
-import { KEEPERS } from '../src/data/oldcity';
+import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { RECIPES } from '../src/data/salvage';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -63,7 +63,8 @@ describe('E23.5.4.1: beehives', () => {
     const hive = build(sim, 'beehive', 12, 16);
     const p = build(sim, 'planter', 14, 16);
     sim.inventory.add('seeds', 1);
-    sim.farm.plant(p, 'radish');
+    sim.state.salvage!.crops = ['pumpkin']; // five days: still growing when the bees arrive
+    sim.farm.plant(p, 'pumpkin');
     expect(sim.farmExtras.hiveSettled(hive)).toBe(false);
     const before = sim.farm.look(p).rate;
     run(sim, DAY_SECONDS);
@@ -123,7 +124,7 @@ describe('E23.5.4.4: mushroom logs and worm bins', () => {
     sim.inventory.add('compost', 1);
     expect(sim.farmExtras.inoculate(log)).toBe(true);
     let night = true;
-    (sim as unknown as { clock: unknown }).clock = { isNight: () => night };
+    sim.clock.gameIsNight = () => night; // the game clock's night, held still for the test
     run(sim, DAY_SECONDS);
     expect(sim.farmExtras.st(log).ready ?? 0).toBe(0); // no shade
     const shade = sim.grid.get(GROUND, 13, 16)!;
@@ -138,6 +139,22 @@ describe('E23.5.4.4: mushroom logs and worm bins', () => {
     night = true;
     run(sim, MUSHROOM_LOG.flushDays * DAY_SECONDS + 60);
     expect(sim.farmExtras.pickMushrooms(log)).toBe(MUSHROOM_LOG.food);
+  });
+
+  it('E23.8.1: in Glasshouse Gardens (shelter) a shaded log grows mushrooms by day too', () => {
+    const sim = farm();
+    const r = REGIONS.find((q) => q.id === 'glasshouse')!;
+    const x = r.landmark.x + 4;
+    const z = r.landmark.z + 4;
+    ground(sim, x, z, 2, 1);
+    const log = build(sim, 'mushroomLog', x, z);
+    const shade = sim.grid.get(GROUND, x + 1, z)!;
+    shade.blocked = true;
+    sim.inventory.add('compost', 1);
+    sim.farmExtras.inoculate(log);
+    sim.clock.gameIsNight = () => false;
+    sim.state.salvage!.weather = { kind: 'clear', until: 1e9 };
+    expect(sim.farmExtras.logGrowing(log)).toBe(true);
   });
 
   it('a fed worm bin makes the compost bin beside it work twice as fast', () => {
@@ -208,7 +225,7 @@ describe('E23.5.4.5: wildlife homes', () => {
   it('bats live in their box by day and fly at night', () => {
     const { sim, m } = home('batBox', true);
     let night = false;
-    (sim as unknown as { clock: unknown }).clock = { isNight: () => night };
+    sim.clock.gameIsNight = () => night; // the game clock's night, held still for the test
     expect(sim.farmExtras.occupied(m)).toBe(true);
     expect(sim.farmExtras.creatureOut(m)).toBe(false);
     night = true;

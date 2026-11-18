@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { TileData } from '../src/core/types';
-import { DAY_SECONDS, FARM_ITEMS, GATHER, gameDays } from '../src/data/farm';
+import { FARM_ITEMS, GATHER } from '../src/data/farm';
+import { DAY_SECONDS, gameDays } from '../src/data/time';
 import { MATERIALS } from '../src/data/salvage';
 import { Sim } from '../src/gameplay/Sim';
 import { MATERIAL_ICON_IDS } from '../src/ui/MaterialIcons';
@@ -50,8 +51,8 @@ describe('E23.5.1: farm items', () => {
 
   it('a game day is 48 minutes of play', () => {
     expect(DAY_SECONDS).toBe(2880);
-    expect(gameDays({ time: 2880 * 1.5 })).toBeCloseTo(1.5);
-    expect(gameDays({ time: 0, clock: { days: 3 } })).toBe(3);
+    // the farm's timers are written with E23.7's game-day helper
+    expect(gameDays(GATHER.regrowDays)).toBe(GATHER.regrowDays * 2880);
   });
 });
 
