@@ -3,8 +3,10 @@ import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { MACHINES } from '../src/data/machines';
 import { PARK_SET } from '../src/data/oldcity';
-import { SALVAGE } from '../src/data/salvage';
+import { LEGACY_RECLAIMER, SALVAGE } from '../src/data/salvage';
 import { gameDays } from '../src/data/time';
+import { SALVAGE_FIELDS } from '../src/data/mainland';
+import { chunkPiles } from '../src/core/Mainland';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
@@ -138,6 +140,15 @@ describe('E23.7.4: salvage respawns', () => {
     expect(t.ground).toBe('restored');
   });
 
+  it('mainland piles refill on their own, quicker clock (SALVAGE_FIELDS.respawnDays)', () => {
+    const sim = oldSim(37);
+    let ml: ReturnType<typeof chunkPiles> extends Map<string, infer P> ? P : never = undefined as never;
+    for (let cx = 9; cx < 30 && !ml; cx++) for (let cz = -10; cz < 10 && !ml; cz++) for (const p of chunkPiles(cx, cz).values()) ml ??= p;
+    expect(ml).toBeDefined();
+    expect(sim.salvage.perUnit(ml)).toBeCloseTo(gameDays(SALVAGE_FIELDS.respawnDays) / SALVAGE.units[ml.size], 6);
+    expect(sim.salvage.perUnit(pile('pk-s1'))).toBeCloseTo(gameDays(SALVAGE.refillDays) / SALVAGE.units.small, 6);
+  });
+
   it("the Terraces' Salvage Lore blueprint makes piles refill twice as fast", () => {
     const sim = oldSim(35);
     const per = sim.salvage.perUnit(pile('pk-s1'));
@@ -155,6 +166,25 @@ describe('E23.7.4: salvage respawns', () => {
     expect(saver.serialize(back.state)).toBe(json);
     back.advance(gameDays(fullDays / 12) + 6);
     expect(back.salvage.left('pk-s3')).toBe(11);
+  });
+
+  it('an old save loads without its Reclaimers: each is taken down and refunded to the store, and Mk 2 becomes Salvage Lore', () => {
+    const sim = oldSim(38);
+    // a save from before E23.7.4: a placed Reclaimer, its undelivered fraction, and the Terraces' old blueprint
+    const json = JSON.parse(saver.serialize(sim.state));
+    json.machines.push({ id: 'm900', type: 'reclaimer', roofId: GROUND, x: 23, z: -8, size: 2, boostUntil: 0, timer: 0, charge: 0 });
+    json.salvage.reclaim = { m900: 0.5 };
+    json.salvage.blueprints = ['networks', 'reclaimerMk2'];
+    json.salvage.store = { copper: 4 };
+    const back = new Sim(saver.deserialize(JSON.stringify(json))!);
+    expect(back.state.machines.some((m) => (m.type as string) === 'reclaimer')).toBe(false);
+    expect(back.state.salvage!.store).toEqual({ copper: 4 + LEGACY_RECLAIMER.refund.copper!, scrap: LEGACY_RECLAIMER.refund.scrap, timber: LEGACY_RECLAIMER.refund.timber });
+    expect((back.state.salvage as unknown as { reclaim?: unknown }).reclaim).toBeUndefined();
+    expect(back.state.salvage!.blueprints).toEqual(['networks', 'salvageLore']);
+    expect(back.salvage.perUnit(pile('pk-s1'))).toBeCloseTo(gameDays(SALVAGE.refillDays) / SALVAGE.loreRefill / SALVAGE.units.small, 6);
+    // and a save written now loads byte for byte (nothing left to migrate)
+    const again = saver.serialize(back.state);
+    expect(saver.serialize(new Sim(saver.deserialize(again)!).state)).toBe(again);
   });
 
   it('there is no offline income: the Reclaimer is gone', () => {

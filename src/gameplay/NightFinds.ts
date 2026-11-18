@@ -2,8 +2,10 @@ import { NIGHT_FIND_GIVES, NIGHT_FINDS, type NightFindDef } from '../data/time';
 import type { Sim } from './Sim';
 
 /**
- * E23.7.1.3 (#447): night-only finds: glowing plants and glinting salvage. Each is out from dusk to dawn (the light
- * clock, so in "follow my clock" mode they come out with the real night). One taken tonight is back the next night.
+ * E23.7.1.3 (#447): night-only finds: glowing plants and glinting salvage. Each is out whenever the sky is dark (the
+ * light clock, so in "follow my clock" mode they come out with the real night), and one that's taken is back the next
+ * game day. In "follow my clock" mode that is the best for the player: fresh finds every 48 minutes of play, shown
+ * whenever it's dark, so nobody waits a whole real day for them.
  * Fireflies, the third night find, are ambience (rendering/Fauna) and fly only at night.
  */
 export class NightFinds {
@@ -62,23 +64,11 @@ export class NightFinds {
     return n;
   }
 
-  /** Which night (or, for fog finds, which game day) a find was taken in. */
-  private stamp(f: NightFindDef): number {
-    return f.when === 'fog' ? this.sim.clock.gameDay() : this.night();
-  }
-
   /**
-   * Which night it is: the game day of the evening the night began. On the light clock: in "follow my clock" mode,
-   * the real date's evening. Past midnight still counts as the evening before.
+   * The game day a find was taken on: it is back the next game day, in both clock modes. (A game night belongs to
+   * the day whose evening it began on: the game day only turns at dawn.)
    */
-  private night(): number {
-    const c = this.sim.clock;
-    if (c.real) {
-      const d = c.now();
-      // before dawn belongs to the evening before
-      const back = d.getHours() < 6 ? 1 : 0;
-      return Math.floor((d.getTime() - d.getTimezoneOffset() * 60000) / 86400000) - back;
-    }
-    return c.gameDay();
+  private stamp(_f: NightFindDef): number {
+    return this.sim.clock.gameDay();
   }
 }

@@ -161,6 +161,19 @@ describe('E23.7.1.3: night finds and sleeping', () => {
     expect(sim.nightFinds.visible(f.id)).toBe(true);
   });
 
+  it('in "follow my clock" mode a taken find is back after one game day of play, whenever the sky is dark', { timeout: 120_000 }, () => {
+    const sim = oldSim();
+    sim.clock.now = at(23); // the real night, all the way through
+    sim.clock.real = true;
+    const f = NIGHT_FINDS[0];
+    expect(sim.nightFinds.take(f.id)).toBeGreaterThan(0);
+    expect(sim.nightFinds.visible(f.id)).toBe(false);
+    sim.advance(gameDays(1)); // 48 minutes of play: the real clock hasn't moved, but a game day has
+    expect(sim.nightFinds.visible(f.id)).toBe(true);
+    sim.clock.now = at(12); // the real day: out of sight until it's dark again
+    expect(sim.nightFinds.visible(f.id)).toBe(false);
+  });
+
   it('every night find sits on open, unblocked ground', () => {
     const sim = oldSim();
     for (const f of ALL_FINDS) {
