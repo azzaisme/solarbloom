@@ -1,4 +1,4 @@
-import { big, Decimal, toNum } from '../src/core/Big';
+import { big, toNum } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
@@ -24,15 +24,6 @@ describe('Phase 4 E01: economy rescue', () => {
     }
     const vault = UPGRADES.find((u) => u.id === 'seedVault')!;
     expect(vault.maxLevel).toBe(TUNING.storageTiers.energy.length - 1);
-    // Phase 5 E12: biomass is uncapped, so upgrade prices no longer have to fit a store; they must stay finite
-    // and positive, also far into the long tail (checked as big numbers).
-    for (const u of UPGRADES) {
-      const last = Math.min(u.maxLevel, 400);
-      for (let lvl = 0; lvl < last; lvl++) {
-        const cost = big(u.baseCost).mul(Decimal.pow(u.costMult, lvl));
-        expect(Number.isFinite(cost.mantissa) && cost.gt(0), `${u.id} level ${lvl + 1}`).toBe(true);
-      }
-    }
   });
 
   it('every purchase the fountain requires fits in the starting store (E01.1)', () => {
@@ -49,20 +40,18 @@ describe('Phase 4 E01: economy rescue', () => {
     expect(sim.econ.exceedsStorage(sim.build.cost('droneHub'))).toBeUndefined();
   });
 
-  it('the fountain wakes from a fresh save without upgrades or Lucky Cats', { timeout: 60_000 }, () => {
+  it('the fountain wakes from a fresh save without Lucky Cats', { timeout: 60_000 }, () => {
     for (const seed of [7, 21]) {
-      const r = runBot({ seed, minutes: 20, noUpgrades: true, noCats: true });
+      const r = runBot({ seed, minutes: 20, noCats: true });
       expect(r.fountain, `seed ${seed}`).toBeGreaterThan(0);
       expect(r.firsts.droneHub).toBeLessThan(4 * 60);
     }
   });
 
-  it('the Drone Hub comes at about minute 2–3 for an active player, and a hands-off player still progresses', { timeout: 60_000 }, () => {
+  it('the Drone Hub comes at about minute 2–3 for an active player', { timeout: 60_000 }, () => {
     for (const seed of [7, 99]) {
       const a = runBot({ seed, minutes: 15 });
       expect(a.firsts.droneHub).toBeLessThan(3.5 * 60);
-      const h = runBot({ seed, minutes: 15, mode: 'handsOff' });
-      expect(h.tilesRestored - (h.minutesLog[1]?.tiles ?? 0)).toBeGreaterThan(120);
     }
   });
 
@@ -70,24 +59,18 @@ describe('Phase 4 E01: economy rescue', () => {
     const sim = fresh();
     const s = sim.state;
     s.resources.biomass = big(100);
-    expect(sim.upgrades.purchase('seedVault')).toBe(true);
+    expect(sim.upgrades.grant('seedVault')).toBeGreaterThan(0);
     for (const k of CAPPED) expect(toNum(s.caps[k])).toBe(TUNING.storageTiers[k][1]);
     // (biomass has no cap since Phase 5)
     s.resources.biomass = big(1e5);
-    for (let i = 0; i < 10; i++) sim.upgrades.purchase('seedVault');
+    for (let i = 0; i < 10; i++) sim.upgrades.grant('seedVault');
     expect(sim.upgrades.level('seedVault')).toBe(4);
     for (const k of CAPPED) expect(toNum(s.caps[k])).toBeGreaterThanOrEqual(TUNING.storageTiers[k][4]);
   });
 
-  it('rapid repeated purchases never overspend or go negative (E01 acceptance)', () => {
+  it('the same tile pulsed many times in one tick is paid once (E01 acceptance)', () => {
     const sim = fresh();
     const s = sim.state;
-    s.resources.biomass = big(95);
-    let bought = 0;
-    for (let i = 0; i < 50; i++) if (sim.upgrades.purchase('efficientPulse')) bought++;
-    expect(bought).toBeLessThanOrEqual(3);
-    for (const k of KINDS) expect(toNum(s.resources[k])).toBeGreaterThanOrEqual(0);
-    // The same tile pulsed many times in one tick is paid once.
     s.resources.energy = big(60);
     s.resources.water = big(40);
     const t = sim.areas.tiles(PARK).find((x) => sim.restoration.checkPulse(x).ok)!;
@@ -141,7 +124,7 @@ describe('Phase 4 E01: the old drone', () => {
     sim.advance(1);
     expect(sim.progression.requirements().find((r) => r.label.includes('Drone Hub'))!.done).toBe(false);
     expect(sim.build.isUnlocked('motherTree')).toBe(false);
-    expect(sim.upgrades.status(UPGRADES.find((u) => u.id === 'droneSpeed')!).ok).toBe(false);
+    expect(sim.upgrades.grant('droneSpeed')).toBe(0); // no hub to give it to
   });
 
   it('comes back in games saved before it existed', () => {

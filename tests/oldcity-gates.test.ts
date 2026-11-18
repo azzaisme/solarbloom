@@ -19,12 +19,10 @@ function tier1(seed = 7) {
 }
 
 describe('E21.5: gates', () => {
-  it('revealed regions are sealed with no price anywhere; buying is refused', () => {
+  it('revealed regions are sealed, and their seal says what is in the way (nothing is bought)', () => {
     const sim = tier1();
     expect(sim.areas.sealed('mastRow')).toBe(true);
-    expect(sim.state.areas.mastRow.price).toBeUndefined();
-    expect(sim.areas.unlockProblem('mastRow')).toMatch(/Pry/);
-    expect(sim.areas.unlock('mastRow')).toBe(false);
+    expect(sim.areas.sealText('mastRow')).toMatch(/Pry/);
     expect(sim.areas.sealed('saltwind')).toBe(false); // the beach is open from the start
   });
 

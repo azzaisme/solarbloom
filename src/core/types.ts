@@ -290,19 +290,15 @@ export interface AreaState {
   clearedAt?: number;
   /** what drones do here: keep it blooming, push from it into the fog, or leave it alone */
   mode?: AreaMode;
-  /** City 09.1: progress on the landmark's specialty action (a count, or the best chain for 'chain') */
-  spec?: number;
   /** Phase 5 E12: rewarded progress steps already paid here (count of TUNING.areaSteps.at reached). */
   steps?: number;
   /**
-   * Region unlocks (18 Nov 2026): revealed but still sealed in thick fog until the player pays `price`. While sealed
+   * Revealed but still sealed in thick fog until its gate opens (E21.5; E23.1.5: never bought). While sealed
    * the area behaves exactly as hidden fog (nothing can be walked, restored or built). Absent on older saves.
    */
   sealed?: boolean;
   /** E21.9: tiles in this area bloombot restored itself (old-city rules: helpers wait until it has done its share) */
   byBot?: number;
-  /** the unlock price, set when the area was revealed (biomass as a big-number string) */
-  price?: { biomass: string; energy: number };
   /** sim time the player unlocked it */
   unlockedAt?: number;
 }

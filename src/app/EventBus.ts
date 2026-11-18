@@ -63,9 +63,8 @@ export interface GameEvents {
   'solar.boost': { machineId: string };
   'pulse.fired': { tileId: string; extra: string[]; overcharged: boolean };
   'action.failed': { reason: string; tileId?: string };
-  'upgrade.purchased': { id: string; level: number; machineId?: string; bulk?: boolean };
-  /** Phase 5 E12: "Upgrade all" finished: `count` levels bought across machines of one type. */
-  'upgrade.bulk': { id: string; count: number };
+  /** E23.1.5: an upgrade level was granted (research; nothing is bought). */
+  'upgrade.granted': { id: string; level: number; machineId?: string };
   'drone.spawned': { droneId: string };
   'drone.despawned': { droneId: string };
   'drone.jobStarted': { droneId: string; tileId: string };
