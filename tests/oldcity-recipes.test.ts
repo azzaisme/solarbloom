@@ -5,6 +5,7 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { BuildableType, GroundState } from '../src/core/types';
 import { BUILDABLE, MACHINES } from '../src/data/machines';
 import { RECIPES } from '../src/data/salvage';
+import { KEEPER_RECIPES } from '../src/data/farmExtras';
 import { Sim } from '../src/gameplay/Sim';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
@@ -35,6 +36,7 @@ describe('E21.3: recipes', () => {
       if (type === 'reclaimer') continue; // seams only (below)
       const sim = oldSim();
       sim.state.resources.biomass = big(0);
+      sim.state.salvage!.recipes = [...KEEPER_RECIPES]; // E23.5.4.6: these recipes come from Keeper gardens (tested there)
       const x = 12;
       const z = 12;
       ground(sim, x, z);

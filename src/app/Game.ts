@@ -13,6 +13,7 @@ import { MACHINES, machineIcon, machineName } from '../data/machines';
 import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
 import { GATHER } from '../data/farm';
 import { CROPS } from '../data/crops';
+import { isExtra } from '../gameplay/FarmExtras';
 import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
@@ -1760,6 +1761,12 @@ export class Game {
     // E23.5.3: the compost bin and the Bio Digester open their panels
     if (occ?.type === 'compostBin') out.push({ kind: 'machine', id: `bin:${occ.id}`, verb: 'Open', name: 'the compost bin', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.compostBin(occ) });
     if (occ?.type === 'bioDigester') out.push({ kind: 'machine', id: `dig:${occ.id}`, verb: s.compost.fuel(occ) > 0 ? 'Look at' : 'Feed', name: 'the Bio Digester', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.digester(occ) });
+    // E23.5.4: hives, ponds, fruit trees, logs, worm bins and wildlife homes open their panels
+    if (occ && isExtra(occ.type)) {
+      const x = s.farmExtras;
+      const verb = (occ.type === 'beehive' && (x.st(occ).ready ?? 0) >= 1) || (occ.type === 'orchard' && x.fruitReady(occ)) || (occ.type === 'mushroomLog' && (x.st(occ).ready ?? 0) >= 1) ? 'Harvest' : 'Look at';
+      out.push({ kind: 'machine', id: `extra:${occ.id}`, verb, name: `the ${MACHINES[occ.type].name}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.extra(occ) });
+    }
     // E23.5.1: flowered, restored ground in front can be clipped for biomass
     if (!pile && s.gather.canGather(front))
       out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });

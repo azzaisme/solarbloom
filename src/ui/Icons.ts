@@ -246,7 +246,7 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   beehive: 'flower', // E23.5.4
   fishPond: 'fish',
   orchard: 'apple',
-  mushroomLog: 'stump',
+  mushroomLog: 'tree',
   wormBin: 'garden',
   birdBox: 'bird',
   batBox: 'moon',
@@ -288,6 +288,8 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '🪨': 'restore', '🧱': 'restore', '🟫': 'garden', '🍃': 'biomass', '🚜': 'build', '🔱': 'build', '🧭': 'telescope',
   // E23.5.1 farm items (food is the carrot, compost the garden bed above).
   '🧪': 'sparkle', '🍯': 'vase',
+  // E23.5.4 beyond planters
+  '🐝': 'flower', '🍄': 'sprout', '🪱': 'sprout', '🦇': 'moon', '🦔': 'paw', '🪵': 'restore',
 };
 
 /** Emoji (with optional variation selector / ZWJ sequences). */

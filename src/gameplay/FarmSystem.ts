@@ -165,9 +165,10 @@ export class FarmSystem {
     return false;
   }
 
-  /** Fed with fertiliser, or beans growing next door. */
+  /** Fed with fertiliser, beans growing next door, or water from a fish pond (E23.5.4.2). */
   fertilised(m: MachineData): boolean {
     if (this.bed(m).fed) return true;
+    if (this.sim.farmExtras?.pondFeeds(m)) return true;
     return this.near(m, PLANTER.beansReach, (o) => o.type === 'planter' && this.bed(o).crop === 'beans');
   }
 
@@ -222,6 +223,7 @@ export class FarmSystem {
       rate = PLANTER.unmetLike ** unmet.length;
       if (crop !== 'pumpkin' && this.fertilised(m)) rate *= PLANTER.fertilisedBoost;
       if (this.pollinated(m)) rate *= PLANTER.pollinatorBoost;
+      rate *= this.sim.farmExtras?.cropBoost(m) ?? 1; // E23.5.4.1: settled beehives in reach
     }
     return { crop, progress, stage, ripe, wilting, resting, rate, met, unmet };
   }

@@ -37,6 +37,7 @@ import { LandmarkSystem } from './LandmarkSystem';
 import { GatherSystem } from './GatherSystem';
 import { FarmSystem } from './FarmSystem';
 import { CompostSystem } from './CompostSystem';
+import { FarmExtras } from './FarmExtras';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -89,6 +90,8 @@ export class Sim {
   readonly farm: FarmSystem;
   /** E23.5.3: compost bins and Bio Digesters (old-city rules). */
   readonly compost: CompostSystem;
+  /** E23.5.4: hives, ponds, orchards, logs, worm bins, wildlife homes and Keeper gardens (old-city rules). */
+  readonly farmExtras: FarmExtras;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -143,6 +146,7 @@ export class Sim {
     this.gather = new GatherSystem(this);
     this.farm = new FarmSystem(this);
     this.compost = new CompostSystem(this);
+    this.farmExtras = new FarmExtras(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
@@ -266,6 +270,7 @@ export class Sim {
     this.salvage.tick(dt);
     this.farm.tick(dt);
     this.compost.tick(dt);
+    this.farmExtras.tick(dt);
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();

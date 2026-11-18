@@ -78,7 +78,7 @@ export interface HomeDef {
 
 export const HOMES: Record<HomeKind, HomeDef> = {
   birdBox: { kind: 'birdBox', name: 'Bird Box', creature: 'Songbirds', needs: ['trees'], wants: 'trees or tall shrubs nearby' },
-  batBox: { kind: 'batBox', name: 'Bat Box', creature: 'Bats', needs: ['night', 'water'], wants: 'water nearby, and the night to fly in' },
+  batBox: { kind: 'batBox', name: 'Bat Box', creature: 'Bats', needs: ['water'], wants: 'water nearby (they fly at night)' },
   hedgehogHouse: { kind: 'hedgehogHouse', name: 'Hedgehog House', creature: 'Hedgehogs', needs: ['shrubs', 'quiet'], wants: 'shrubs nearby and no machines right beside it' },
   butterflyGarden: { kind: 'butterflyGarden', name: 'Butterfly Garden', creature: 'Butterflies', needs: ['flowers'], wants: 'flowers or herbs nearby' },
 };
@@ -98,6 +98,8 @@ export const DIVERSITY = {
   perKind: 1,
   /** each kind of creature living in an area's homes counts this much */
   perCreature: 2,
+  /** what each point is worth in the city-wide biodiversity score (Ecosystem; a landmark is 25) */
+  cityWeight: 10,
 };
 
 /** E23.5.4.6 (#434): Keeper gardens. A planter within `reach` of a woken Keeper is that Keeper's garden. */
@@ -112,6 +114,9 @@ export interface GardenRequest {
   ask: string;
   reward: GardenReward;
 }
+
+/** Machines whose recipe only a Keeper garden hands over (the rewards of kind 'recipe' below). */
+export const KEEPER_RECIPES: string[] = ['wormBin', 'fishPond', 'butterflyGarden', 'batBox'];
 
 /** At least one garden request per Keeper, asked in order (the next once the last is grown). */
 export const GARDEN_REQUESTS: Record<string, GardenRequest[]> = {

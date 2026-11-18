@@ -15,7 +15,7 @@ import { treeGeo } from './TreeGen';
 import { machineRunning } from './FaunaPlan';
 import { arcPath, ball, bezier, dome, latheAuto, matOf, part, rbox, rcyl, ring, setMat, tube } from './MachineParts';
 import { cultivatorDock } from './CultivatorVisuals';
-import { compostBinBody, digesterBody } from './FarmBodies';
+import { batBoxBody, beehiveBody, birdBoxBody, butterflyGardenBody, compostBinBody, digesterBody, fishPondBody, hedgehogHouseBody, mushroomLogBody, orchardBody, wormBinBody } from './FarmBodies';
 import { oldCityModel, MODELS } from './Models';
 
 interface MachineView {
@@ -564,6 +564,34 @@ export class MachineVisuals {
         break;
       case 'bioDigester': // E23.5.3 (its glow is drawn by CropVisuals)
         digesterBody(v.body);
+        break;
+      // E23.5.4 (what is ready, and the creatures, are drawn by CropVisuals)
+      case 'beehive':
+        beehiveBody(v.body);
+        break;
+      case 'fishPond':
+        fishPondBody(v.body);
+        break;
+      case 'orchard':
+        orchardBody(v.body);
+        break;
+      case 'mushroomLog':
+        mushroomLogBody(v.body);
+        break;
+      case 'wormBin':
+        wormBinBody(v.body);
+        break;
+      case 'birdBox':
+        birdBoxBody(v.body);
+        break;
+      case 'batBox':
+        batBoxBody(v.body);
+        break;
+      case 'hedgehogHouse':
+        hedgehogHouseBody(v.body);
+        break;
+      case 'butterflyGarden':
+        butterflyGardenBody(v.body);
         break;
     }
     this.applyModel(v);

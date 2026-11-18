@@ -3,6 +3,7 @@ import type { MachineData, MachineType } from '../core/types';
 import { COMPOST } from '../data/compost';
 import { CROPS, PLANTER, type CropId } from '../data/crops';
 import type { PlanterLook } from '../gameplay/FarmSystem';
+import { EXTRA_TYPES, isExtra } from '../gameplay/FarmExtras';
 import type { Sim } from '../gameplay/Sim';
 import { mat, PALETTE } from './Materials';
 import { SLAB_TOP } from './SceneBuilder';
@@ -23,7 +24,7 @@ const SPOTS: [number, number][] = [
 ];
 
 /** The farm machines whose live state is drawn here. */
-const FARM_TYPES: MachineType[] = ['planter', 'compostBin', 'bioDigester'];
+const FARM_TYPES: MachineType[] = ['planter', 'compostBin', 'bioDigester', ...EXTRA_TYPES];
 
 interface CropView {
   root: pc.Entity;
@@ -60,6 +61,7 @@ export class CropVisuals {
   }
 
   private drop(id: string) {
+    this.anims.delete(id);
     this.views.get(id)?.root.destroy();
     this.views.delete(id);
   }
@@ -76,13 +78,132 @@ export class CropVisuals {
     const root = group(this.parent, `crop-${id}`, this.worldOf(m));
     if (lk) this.build(root, m, lk);
     else if (m.type === 'compostBin') this.buildBin(root, m);
-    else this.buildDigester(root, m);
+    else if (m.type === 'bioDigester') this.buildDigester(root, m);
+    else this.buildExtra(root, m);
     this.views.set(id, { root, key });
+  }
+
+  /** E23.5.4: an extra's look changes with what is ready, and with its creature moving in or out (or flying). */
+  private extraKey(m: MachineData): string {
+    const x = this.sim.farmExtras;
+    const st = x.st(m);
+    if (m.type === 'beehive') return `${x.hiveSettled(m) ? 1 : 0}|${Math.min(1, Math.floor(st.ready ?? 0))}`;
+    if (m.type === 'fishPond') return `${x.pondFilled(m) ? 1 : 0}`;
+    if (m.type === 'orchard') return `${x.fruitReady(m) ? 1 : 0}|${x.overgrown(m) ? 1 : 0}|${(st.age ?? 0) >= 0.01 ? 1 : 0}`;
+    if (m.type === 'mushroomLog') return `${(st.ready ?? 0) >= 1 ? 2 : x.logGrowing(m) ? 1 : 0}`;
+    if (m.type === 'wormBin') return `${(st.fed ?? 0) > 0 ? 1 : 0}`;
+    return `${x.creatureOut(m) ? 1 : 0}`;
+  }
+
+  /** Things that move every frame (bees, fish, bats, butterflies, a hedgehog shuffling), by machine id. */
+  private anims = new Map<string, { e: pc.Entity; at: (t: number) => [number, number, number, number?] }[]>();
+  private time = 0;
+
+  private buildExtra(root: pc.Entity, m: MachineData) {
+    const x = this.sim.farmExtras;
+    const st = x.st(m);
+    const seed = (m.x * 7 + m.z * 13) % 10;
+    const list: { e: pc.Entity; at: (t: number) => [number, number, number, number?] }[] = [];
+    this.anims.set(m.id, list);
+    const anim = (e: pc.Entity, at: (t: number) => [number, number, number, number?]) => list.push({ e, at });
+    switch (m.type) {
+      case 'beehive': {
+        if ((st.ready ?? 0) >= 1) shape(root, 'sphere', mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 0.2 }), { pos: [0, 0.16, 0.24], scale: [0.14, 0.08, 0.06] });
+        if (x.hiveSettled(m))
+          for (let i = 0; i < 4; i++) {
+            const bee = shape(root, 'sphere', mat(PALETTE.gold), { scale: [0.055, 0.045, 0.07] });
+            anim(bee, (t) => {
+              const a = t * (1.2 + i * 0.3) + i * 1.7 + seed;
+              return [Math.cos(a) * (0.35 + i * 0.08), 0.5 + Math.sin(a * 2.3) * 0.12, Math.sin(a) * (0.35 + i * 0.08)];
+            });
+          }
+        return;
+      }
+      case 'fishPond': {
+        if (!x.pondFilled(m)) return;
+        shape(root, 'cylinder', mat(PALETTE.water, { gloss: 0.9, opacity: 0.8 }), { pos: [0, 0.07, 0], scale: [0.74, 0.01, 0.74] });
+        for (let i = 0; i < 2; i++) {
+          const fish = shape(root, 'sphere', mat(PALETTE.terracotta, { gloss: 0.6 }), { scale: [0.1, 0.03, 0.04] });
+          anim(fish, (t) => {
+            const a = t * 0.6 + i * Math.PI + seed;
+            return [Math.cos(a) * 0.22, 0.06, Math.sin(a) * 0.22, (-a * 180) / Math.PI];
+          });
+        }
+        return;
+      }
+      case 'orchard': {
+        if (x.overgrown(m)) for (const [px, py, pz] of [[0.28, 0.98, 0.16], [-0.26, 1.02, 0.18], [0.05, 1.22, -0.2]] as const) shape(root, 'sphere', mat(PALETTE.shrubLeaf[0]), { pos: [px, py, pz], scale: 0.3 });
+        if (x.fruitReady(m)) for (const [px, py, pz] of [[0.2, 0.8, 0.26], [-0.22, 0.9, 0.22], [0.1, 1.1, 0.28], [-0.05, 0.75, -0.3], [0.28, 1.0, -0.12]] as const) shape(root, 'sphere', mat(PALETTE.flowerCosmos[3]), { pos: [px, py, pz], scale: 0.07 });
+        return;
+      }
+      case 'mushroomLog': {
+        const up = (st.ready ?? 0) >= 1 ? 1 : x.logGrowing(m) ? 0.45 : 0;
+        if (!up) return;
+        for (const [px, pz] of [[-0.2, 0.08], [0.05, 0.12], [0.22, 0.06], [-0.05, -0.12]] as const) {
+          shape(root, 'cylinder', mat(PALETTE.stoneCreamTop), { pos: [px, 0.29 + 0.04 * up, pz], scale: [0.025, 0.08 * up, 0.025] });
+          shape(root, 'sphere', mat(PALETTE.terracotta), { pos: [px, 0.29 + 0.08 * up, pz], scale: [0.09 * up, 0.04 * up, 0.09 * up] });
+        }
+        return;
+      }
+      case 'wormBin': {
+        if ((st.fed ?? 0) > 0) shape(root, 'box', mat(PALETTE.soilDark), { pos: [0, 0.445, 0.05], rot: [-12, 0, 0], scale: [0.5, 0.02, 0.3] });
+        return;
+      }
+      case 'birdBox': {
+        if (!x.creatureOut(m)) return;
+        const bird = group(root, 'bird');
+        bird.setLocalScale(1.4, 1.4, 1.4);
+        shape(bird, 'sphere', mat(PALETTE.terracotta), { scale: [0.07, 0.06, 0.09] });
+        shape(bird, 'sphere', mat(PALETTE.stoneCreamTop), { pos: [0, 0.04, 0.05], scale: 0.05 });
+        shape(bird, 'cone', mat(PALETTE.gold), { pos: [0, 0.04, 0.09], rot: [90, 0, 0], scale: [0.02, 0.04, 0.02] });
+        anim(bird, (t) => [0, 0.92 + Math.abs(Math.sin(t * 3 + seed)) * 0.02, 0.18, Math.sin(t * 0.7 + seed) * 40]);
+        return;
+      }
+      case 'batBox': {
+        if (!x.creatureOut(m)) return;
+        for (let i = 0; i < 2; i++) {
+          const bat = group(root, 'bat');
+          shape(bat, 'sphere', mat(PALETTE.darkFace), { scale: [0.05, 0.04, 0.06] });
+          for (const s of [-1, 1]) shape(bat, 'box', mat(PALETTE.darkFace), { pos: [s * 0.08, 0, 0], rot: [0, 0, s * 15], scale: [0.12, 0.01, 0.07] });
+          anim(bat, (t) => {
+            const a = t * (1.6 + i * 0.4) + i * 2 + seed;
+            return [Math.cos(a) * 1.4, 1.6 + Math.sin(a * 1.7) * 0.25, Math.sin(a) * 1.4, (-a * 180) / Math.PI];
+          });
+        }
+        return;
+      }
+      case 'hedgehogHouse': {
+        if (!x.creatureOut(m)) return;
+        const hog = group(root, 'hedgehog');
+        hog.setLocalScale(1.3, 1.3, 1.3);
+        shape(hog, 'sphere', mat(PALETTE.woodDead), { pos: [0, 0.06, 0], scale: [0.14, 0.1, 0.18] });
+        shape(hog, 'cone', mat(PALETTE.stoneCreamTop), { pos: [0, 0.05, 0.11], rot: [90, 0, 0], scale: [0.05, 0.07, 0.05] });
+        anim(hog, (t) => {
+          const a = Math.sin(t * 0.25 + seed) * 0.9;
+          return [0.42 * Math.cos(a), 0, 0.42 * Math.sin(a) + 0.1, 90 - (a * 180) / Math.PI];
+        });
+        return;
+      }
+      case 'butterflyGarden': {
+        if (!x.creatureOut(m)) return;
+        const colours = [PALETTE.flowerCosmos[0], PALETTE.flowerSunflower[0], PALETTE.flowerLavender[0]];
+        for (let i = 0; i < 3; i++) {
+          const fly = group(root, 'butterfly');
+          for (const s of [-1, 1]) shape(fly, 'box', mat(colours[i], { emissive: colours[i], emissiveIntensity: 0.25 }), { pos: [s * 0.05, 0, 0], rot: [0, 0, s * 25], scale: [0.09, 0.006, 0.08] });
+          anim(fly, (t) => {
+            const a = t * (0.8 + i * 0.25) + i * 2.1 + seed;
+            return [Math.cos(a) * 0.35, 0.35 + Math.abs(Math.sin(t * 6 + i)) * 0.08 + Math.sin(a * 2) * 0.06, Math.sin(a * 1.3) * 0.35, (-a * 180) / Math.PI];
+          });
+        }
+        return;
+      }
+    }
   }
 
   /** E23.5.3: a bin's look changes with how full its heap is and whether fertiliser is ready; a digester's with its mood. */
   private machineKey(m: MachineData): string {
     if (m.type === 'bioDigester') return this.sim.compost.mood(m);
+    if (isExtra(m.type)) return this.extraKey(m);
     const st = this.sim.compost.bin(m);
     const heap = Math.min(4, Math.ceil(((st.feed ?? 0) + (st.compost ?? 0) * COMPOST.perCompost) / 8));
     return `${heap}|${(st.fertiliser ?? 0) >= 1 ? 1 : 0}`;
@@ -151,6 +272,14 @@ export class CropVisuals {
 
   /** Per frame: picks up planters built or loaded since, and a bed's wilting turning on or off (checked twice a second). */
   update(dt: number) {
+    // creatures and bees move every frame (still with reduced motion: they just hold their place)
+    this.time += this.reducedMotion ? 0 : dt;
+    for (const list of this.anims.values())
+      for (const a of list) {
+        const [x, y, z, yaw] = a.at(this.time);
+        a.e.setLocalPosition(x, y, z);
+        if (yaw !== undefined) a.e.setLocalEulerAngles(0, yaw, 0);
+      }
     this.since += dt;
     if (this.since < 0.5) return;
     this.since = 0;

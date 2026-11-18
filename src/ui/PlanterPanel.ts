@@ -2,6 +2,7 @@ import type { MachineData } from '../core/types';
 import { CROPS, PLANTER, type CropId, type Like } from '../data/crops';
 import type { Sim } from '../gameplay/Sim';
 import { escHtml } from './OldCityPanel';
+import { keeperById } from '../core/OldCityLayout';
 
 /** Short words for what a crop likes (the planter panel; no numbers). */
 const LIKE_WORDS: Record<Like, string> = {
@@ -24,6 +25,10 @@ const LIKE_WORDS: Record<Like, string> = {
  */
 export function planterHtml(sim: Sim, m: MachineData): string {
   const f = sim.farm;
+  // E23.5.4.6: a planter by a woken Keeper is its garden: say what it would like grown here
+  const keeper = sim.farmExtras.gardenOf(m);
+  const req = keeper ? sim.farmExtras.request(keeper) : undefined;
+  const garden = keeper && req ? `<p class="oc-say">${escHtml(keeperById(keeper)?.name ?? '')}'s garden: “${escHtml(req.ask)}”</p>` : '';
   const st = f.bed(m);
   const lk = f.look(m);
   const inv = sim.inventory;
@@ -37,7 +42,7 @@ export function planterHtml(sim: Sim, m: MachineData): string {
       const d = CROPS[c];
       return `<button data-act="plant" data-arg="${c}" ${seeds < PLANTER.seedCost ? 'disabled' : ''}><b>${d.icon} ${escHtml(d.name)}</b><br><small>${escHtml(d.use)}</small></button>`;
     });
-    return `<h2>🟫 An empty planter</h2>
+    return `<h2>🟫 An empty planter</h2>${garden}
       <p class="oc-soft">${seeds >= PLANTER.seedCost ? 'Choose what to grow. Each planting takes a Seed.' : 'Bring Seeds to plant something.'}</p>
       <div class="oc-row oc-crops">${crops.join('')}</div>${extras}`;
   }
@@ -51,7 +56,7 @@ export function planterHtml(sim: Sim, m: MachineData): string {
         : lk.unmet.length
           ? `Growing slowly: it would love ${lk.unmet.map((n) => LIKE_WORDS[n]).join(' and ')}.`
           : 'Growing happily.';
-  return `<h2>${d.icon} ${escHtml(d.name)}</h2>
+  return `<h2>${d.icon} ${escHtml(d.name)}</h2>${garden}
     <p>${escHtml(mood)}</p>
     <div class="oc-row">
       ${lk.ripe ? '<button data-act="harvest">Harvest</button>' : ''}

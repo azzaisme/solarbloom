@@ -6,6 +6,7 @@ import { bloomCounts } from '../core/TilePack';
 import type { Chunk } from '../core/Grid';
 import type { TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
+import { DIVERSITY } from '../data/farmExtras';
 import { isBuilt } from '../data/machines';
 // Pure, deterministic placement (type-only imports from TreeGen): the same tree tiles the renderer draws.
 import { treeSpot } from '../rendering/TreePlacement';
@@ -53,11 +54,11 @@ export interface Biodiversity {
   rank: string;
   /** next rank's name and the score it needs (undefined at the top) */
   next?: { rank: string; at: number };
-  parts: { stages: number; species: number; features: number; landmarks: number; supers: number; fauna: number };
+  parts: { stages: number; species: number; features: number; landmarks: number; supers: number; fauna: number; farm: number };
 }
 
 /** The score from counts (pure). Blooming tiles count three times a freshly restored one, Radiant ten times. */
-export function biodiversity(c: BioCounts, faunaCount: number): Biodiversity {
+export function biodiversity(c: BioCounts, faunaCount: number, farm = 0): Biodiversity {
   const W = TUNING.ecosystem.score;
   const stages = c.stages.reduce((a, n, i) => a + n * (W.stage[i] ?? 0), 0);
   const parts = {
@@ -67,8 +68,10 @@ export function biodiversity(c: BioCounts, faunaCount: number): Biodiversity {
     landmarks: c.landmarks * W.landmark,
     supers: c.supers * W.superstructure,
     fauna: faunaCount * W.fauna,
+    // E23.5.4: hives, ponds, orchards, logs, worm bins and the creatures in wildlife homes
+    farm: farm * DIVERSITY.cityWeight,
   };
-  const score = parts.stages + parts.species + parts.features + parts.landmarks + parts.supers + parts.fauna;
+  const score = parts.stages + parts.species + parts.features + parts.landmarks + parts.supers + parts.fauna + parts.farm;
   const ranks = TUNING.ecosystem.ranks;
   let i = 0;
   while (i + 1 < ranks.length && score >= ranks[i + 1][0]) i++;
@@ -159,7 +162,7 @@ export class EcosystemSystem {
   }
 
   score(): Biodiversity {
-    return biodiversity(this.counts, this.unlocked().length);
+    return biodiversity(this.counts, this.unlocked().length, this.sim.farmExtras?.diversityIn() ?? 0);
   }
 
   tick() {
