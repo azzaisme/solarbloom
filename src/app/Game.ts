@@ -2983,7 +2983,7 @@ export class Game {
   }
 
   /** E18: what a drone of this role is doing, in words. */
-  private droneLabel(role: DroneRole, status: 'working' | 'travelling' | 'napping' | 'waitingEnergy'): string {
+  private droneLabel(role: DroneRole, status: 'working' | 'travelling' | 'napping' | 'waitingEnergy' | 'docked', short?: string): string {
     const work: Record<DroneRole, string> = {
       restorer: 'restoring a tile',
       gardener: 'watering tiles',
@@ -3001,6 +3001,8 @@ export class Game {
       harvester: 'resting — no store is full',
     };
     const wait = role === 'gardener' || role === 'courier' ? 'waiting for water 💧 or energy ⚡' : 'waiting for energy ⚡';
+    // E23.6.3: docked until its hub has what the role runs on again
+    if (status === 'docked') return `docked — waiting for ${short === 'water' ? 'water' : short === 'biomass' ? 'Greens in a chest beside the hub' : 'power'}`;
     return status === 'working' ? work[role] : status === 'travelling' ? 'flying to a job' : status === 'napping' ? idle[role] : wait;
   }
 
@@ -3088,7 +3090,7 @@ export class Game {
         extra = ds
           .map((d, i) => {
             const role = s.roles.roleFor(d, m);
-            return `<p class="stat">${ROLE_INFO[role].icon} Drone ${i + 1}${d.expiresAt ? ' (party!)' : ''}: ${this.droneLabel(role, s.drones.statusOf(d))} · ${d.jobs} jobs</p>`;
+            return `<p class="stat">${ROLE_INFO[role].icon} Drone ${i + 1}${d.expiresAt ? ' (party!)' : ''}: ${this.droneLabel(role, s.drones.statusOf(d), s.droneFuel.short(m, role))} · ${d.jobs} jobs</p>`;
           })
           .join('') +
           this.rolePicker(m) +

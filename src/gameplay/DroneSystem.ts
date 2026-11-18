@@ -6,7 +6,8 @@ import type { Cost, DroneData, DroneRole, MachineData, TileData } from '../core/
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
-export type DroneStatus = 'working' | 'napping' | 'waitingEnergy' | 'travelling';
+/** E23.6.3: 'docked' = its hub is short of power, water or biomass; it waits at home and starts again by itself. */
+export type DroneStatus = 'working' | 'napping' | 'waitingEnergy' | 'travelling' | 'docked';
 
 /**
  * Drone AI runs purely on grid targets. Positions are roof-local continuous coordinates;
@@ -371,6 +372,7 @@ export class DroneSystem {
       d.timer = TUNING.drone.retrySeconds;
       return;
     }
+    s.droneFuel.take(hub, role); // E23.6.3: the job's water or biomass (checked before it started)
     d.mode = 'flying';
     const p = s.roles.targetPoint(d)!;
     if (this.roofOf(d) === hub.roofId && this.isFar(hub)) {
@@ -444,6 +446,15 @@ export class DroneSystem {
           if (d.timer > 0) break;
           // E18: a hub with another role sends its drones on that role's job (Restorers carry on below, unchanged).
           const role = s.roles.roleFor(d, hub);
+          // E23.6.3: a hub short of what this role runs on: the drone docks and waits (the old drone runs on sunlight)
+          if (!d.old && s.droneFuel.short(hub, role)) {
+            this.status.set(d.id, 'docked');
+            const hx = hub.x + hub.size / 2;
+            const hz = hub.z + hub.size / 2;
+            if (Math.hypot(d.px - hx, d.pz - hz) > 0.05) d.mode = 'returning';
+            d.timer = TUNING.drone.retrySeconds;
+            break;
+          }
           if (role !== 'restorer') {
             this.roleIdle(d, hub, role);
             break;
@@ -460,6 +471,11 @@ export class DroneSystem {
           const cost = d.old ? {} : s.restoration.pulseCost(job); // the old drone runs on sunlight
           if (!this.payJob(cost)) {
             this.status.set(d.id, 'waitingEnergy');
+            d.timer = TUNING.drone.retrySeconds;
+            break;
+          }
+          if (!d.old && !s.droneFuel.take(hub, 'restorer')) {
+            this.status.set(d.id, 'docked');
             d.timer = TUNING.drone.retrySeconds;
             break;
           }

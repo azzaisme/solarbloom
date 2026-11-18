@@ -136,6 +136,13 @@ export class CultivatorSystem {
         }
         if (!u.work.length) {
           if ((u.retryAt ?? 0) > s.time) continue;
+          // E23.6.3: short of power or water, a tiller finishes what it was doing, then parks on its dock and waits
+          if (s.droneFuel.short(m, 'cultivator')) {
+            u.retryAt = s.time + 1;
+            u.parked = true;
+            this.drive(u, m.x + 0.5, m.z + 0.5, sp, dt);
+            continue;
+          }
           const job = this.findJob(m, u);
           if (!job.length) {
             u.retryAt = s.time + 1;
@@ -143,6 +150,7 @@ export class CultivatorSystem {
             this.drive(u, m.x + 0.5, m.z + 0.5, sp, dt);
             continue;
           }
+          s.droneFuel.take(m, 'cultivator'); // the job's water
           this.claim(u, job);
         }
         const lead = s.grid.byTileId(u.work[0])!;
