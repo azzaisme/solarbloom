@@ -187,7 +187,7 @@ export function tradeHtml(sim: Sim, give: MaterialId | undefined): string {
   // E23.9.2: when bloombot carries something Tally loves, it can be given as a gift (a choice, never a surprise)
   const gift = sim.keepers.giftFor('tally');
   const giftRow = gift
-    ? `<h3>A gift</h3><div class="oc-row"><button data-act="gift" data-arg="${gift}">${MATERIALS[gift as MaterialId]?.icon ?? '🎁'} Give Tally 1 ${MATERIALS[gift as MaterialId]?.name ?? gift}</button></div>`
+    ? `<h3>A gift</h3><div class="oc-row"><button data-act="gift" data-arg="${gift}">${MATERIALS[gift as MaterialId]?.icon ?? ''} Give Tally 1 ${MATERIALS[gift as MaterialId]?.name ?? gift}</button></div>`
     : '';
   return `<h2>🤖 Tally's trade</h2><p class="oc-soft">Any 3 of one material for 1 of another.</p>
     ${giftRow}<h3>Give 3</h3><div class="oc-row">${gives}</div>
