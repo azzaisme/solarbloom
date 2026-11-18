@@ -32,8 +32,8 @@ try {
     g.pause.clear('blur');
     const s = g.sim;
     s.state.salvage.tier = 2;
-    window.grid = { on: true, isPowered: () => window.grid.on };
-    s.power = window.grid;
+    window.grid = { on: true };
+    s.power.isPowered = () => window.grid.on; // the real grid stays; whether it powers the hub is stood in
     for (let x = 10; x < 16; x++)
       for (let z = 14; z < 18; z++) {
         const t = s.grid.get('g', x, z);
