@@ -43,17 +43,14 @@ export function placeFixed(state: Pick<GameState, 'machines' | 'nextId'>, roofId
   return m;
 }
 
-/**
- * A new game. `rules` defaults to classic so every older caller (tests, tools) keeps today's game unchanged and
- * byte-identical; the player's "New game" asks for 'oldcity' (E21). A classic state has no `rules` key at all.
- */
-export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0, rules: Rules = 'classic'): GameState {
+/** A new game: the Old City (E23.1.1: the one rule set). */
+export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): GameState {
   const holder = { machines: [] as MachineData[], nextId: 1 };
   placeFixed(holder, GROUND, 'solar', PARK_LAYOUT.starterSolar[0], PARK_LAYOUT.starterSolar[1], 1, true);
-  const old = rules === 'oldcity';
+  const old = true;
   return {
     version: SAVE_VERSION,
-    ...(old ? { rules, salvage: newSalvage() } : {}),
+    ...(old ? { rules: 'oldcity' as const, salvage: newSalvage() } : {}),
     seed,
     rngState: new Rng(seed).state,
     time: 0,

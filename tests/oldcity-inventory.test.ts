@@ -6,7 +6,7 @@ import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
 const saver = new SaveService(undefined);
-const oldSim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
+const oldSim = (seed = 7) => new Sim(createInitialState(seed));
 /** Beside the fountain (a way into the store), and far from any. */
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const FAR = { roofId: GROUND, x: 8.5, z: -40.5 };

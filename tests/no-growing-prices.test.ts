@@ -54,7 +54,7 @@ describe('E23.1.5: no price grows with purchases', () => {
   });
 
   it('fog is never bought: sealed regions open by their gates and have no price', () => {
-    const sim = new Sim(createInitialState(3, 'oldcity'));
+    const sim = new Sim(createInitialState(3));
     const areas = sim.areas as unknown as Record<string, unknown>;
     for (const k of ['unlock', 'unlockCost', 'unlockProblem']) expect(areas[k], k).toBeUndefined();
     for (const r of REGIONS) {

@@ -11,7 +11,7 @@ const saver = new SaveService(undefined);
 const MAST = REGIONS[0];
 
 function mastRow(seed = 7) {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   sim.state.salvage!.tier = 2;
   sim.state.salvage!.abilities.push('pry', 'hover');
   sim.areas.clear('park', true);

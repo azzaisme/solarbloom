@@ -17,14 +17,14 @@ function realMaterials(cost: MaterialCost) {
 
 describe('E21.0: two rule sets', () => {
   it('a new Old City game is oldcity; createInitialState defaults to classic with no rules field at all', () => {
-    const old = createInitialState(7, 'oldcity');
+    const old = createInitialState(7);
     expect(old.rules).toBe('oldcity');
     expect(old.salvage).toBeDefined();
     const classic = createInitialState(7);
     expect('rules' in classic).toBe(false);
     expect('salvage' in classic).toBe(false);
     expect(rulesOf(classic)).toBe('classic');
-    expect(new Sim(createInitialState(7, 'oldcity')).oldCity).toBe(true);
+    expect(new Sim(createInitialState(7)).oldCity).toBe(true);
   });
 
   it('a save made before E21 (no rules) loads as classic and re-saves byte-identically', () => {
@@ -41,7 +41,7 @@ describe('E21.0: two rule sets', () => {
   });
 
   it('an Old City save keeps its rules and salvage state through a round trip', () => {
-    const sim = new Sim(createInitialState(21, 'oldcity'));
+    const sim = new Sim(createInitialState(21));
     sim.state.salvage!.pack.scrap = 7;
     const json = saver.serialize(sim.state);
     const loaded = saver.deserialize(json)!;

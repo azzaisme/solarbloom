@@ -70,7 +70,7 @@ describe('objective advisor (City 14.1)', () => {
   });
 
   it('under old-city rules, points at the next Keeper', () => {
-    const sim = new Sim(createInitialState(3, 'oldcity'));
+    const sim = new Sim(createInitialState(3));
     sim.state.progression.coreActivated = true;
     const g = check(sim, 'old city');
     expect(['keeper', 'restore']).toContain(g.topic);

@@ -11,7 +11,7 @@ SaveService.clock = () => 0;
 const saver = new SaveService(undefined);
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const oldSim = (seed = 7) => {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   sim.bot = NEAR;
   return sim;
 };

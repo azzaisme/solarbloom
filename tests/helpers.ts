@@ -2,6 +2,7 @@ import { big } from '../src/core/Big';
 import { createInitialState, GROUND, placeFixed } from '../src/core/GameState';
 import type { GroundState, LayerData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
+import { MATERIAL_IDS, TIERS } from '../src/data/salvage';
 
 /**
  * Mechanics tests run on a small bounded test layer (`PAD`, 8×8, laid out like the Seed rooftop template:
@@ -23,6 +24,19 @@ export function rich(sim: Sim) {
   const s = sim.state;
   s.caps.energy = big(10000); s.caps.water = big(10000);
   s.resources.energy = big(5000); s.resources.water = big(5000); s.resources.biomass = big(5000);
+  unlockAll(sim);
+}
+
+/**
+ * E23.1.1: every game plays by the Old City's rules, where a machine unlocks at its fountain tier and is paid with
+ * its recipe. Mechanics tests open every buildable tier (4: tier 5 is the Great Bloom) and fill the backpack, so a
+ * placement only fails for the reason a test is about.
+ */
+export function unlockAll(sim: Sim, plenty = 9999) {
+  const sv = sim.state.salvage!;
+  sv.tier = Math.max(sv.tier, 4);
+  for (const t of TIERS.slice(0, 4)) if (t.ability && !sv.abilities.includes(t.ability)) sv.abilities.push(t.ability);
+  for (const m of MATERIAL_IDS) sv.pack[m] = plenty;
 }
 
 export function setGround(sim: Sim, x: number, z: number, g: GroundState, roof = PAD) {

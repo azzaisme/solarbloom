@@ -28,7 +28,7 @@ function stripComments(src: string): string {
 
 describe('E20.2: bloombot wording', () => {
   it('the Old City\'s first-fifteen-minutes hints never say tap, click, rates or upgrades', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     for (let step = 0; step <= FIRST_STEPS; step++) {
       const line = oldCityHint(sim, step, (a) => (a === 'pulse' ? 'E' : 'Q')).text;
       expect(line, line).not.toMatch(OLD_CITY_WORD);

@@ -9,7 +9,7 @@ import { Sim } from '../src/gameplay/Sim';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const oldSim = (tier = 4) => {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = tier;
   sim.bot = NEAR;
   return sim;

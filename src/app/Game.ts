@@ -279,7 +279,7 @@ export class Game {
     rulesViewFromUrl();
     const loaded = lr.state;
     // E23.1.1: one rule set. Every new game is the Old City.
-    const state = loaded ?? createInitialState(undefined, 'oldcity');
+    const state = loaded ?? createInitialState(undefined);
     this.sim = new Sim(state, this.bus);
 
     this.app = new pc.Application(canvas, {

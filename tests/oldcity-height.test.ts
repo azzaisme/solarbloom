@@ -6,7 +6,7 @@ import { KEEPERS, PARK_SET, REGIONS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 import { spawnPose, Walker } from '../src/gameplay/Walker';
 
-const oldSim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
+const oldSim = (seed = 7) => new Sim(createInitialState(seed));
 const MAST = REGIONS[0];
 
 /** An Old City with Mast Row open (its gate pried), so bloombot can walk there. */

@@ -18,7 +18,7 @@ const service = (store: ReturnType<typeof memory>, slot: Slot) => {
 describe('E22.12: save slots', () => {
   it('moves the old single save into slot 1, once, with a header', async () => {
     const store = memory();
-    const sim = new Sim(createInitialState(31, 'oldcity'));
+    const sim = new Sim(createInitialState(31));
     sim.state.time = 3725;
     store.setItem(SAVE_KEY, new SaveService(undefined).serialize(sim.state));
     const heads = await service(store, 1).slots();
@@ -44,7 +44,7 @@ describe('E22.12: save slots', () => {
   it('saves and loads three slots independently, each with a header that matches its save', () => {
     const store = memory();
     for (const slot of [1, 2, 3] as Slot[]) {
-      const sim = new Sim(createInitialState(100 + slot, 'oldcity'));
+      const sim = new Sim(createInitialState(100 + slot));
       sim.state.time = slot * 600;
       if (slot === 3) sim.state.salvage!.tier = 1;
       expect(service(store, slot).save(sim.state)).toBe(true);
@@ -62,12 +62,12 @@ describe('E22.12: save slots', () => {
 
   it('renames and deletes a slot, leaving the others alone', async () => {
     const store = memory();
-    for (const slot of [1, 2] as Slot[]) service(store, slot).save(new Sim(createInitialState(slot, 'oldcity')).state);
+    for (const slot of [1, 2] as Slot[]) service(store, slot).save(new Sim(createInitialState(slot)).state);
     const s2 = service(store, 2);
     expect(s2.rename('  Rooftop garden  ')).toBe(true);
     expect(s2.readHeader()?.name).toBe('Rooftop garden');
     // a later save keeps the name
-    s2.save(new Sim(createInitialState(2, 'oldcity')).state);
+    s2.save(new Sim(createInitialState(2)).state);
     expect(s2.readHeader()?.name).toBe('Rooftop garden');
     service(store, 1).deleteSlot();
     expect(store.data.has(slotKey(1))).toBe(false);
@@ -78,7 +78,7 @@ describe('E22.12: save slots', () => {
 
   it('keeps backups per slot', () => {
     const store = memory();
-    store.setItem(slotKey(2), JSON.stringify({ ...new Sim(createInitialState(9, 'oldcity')).state, version: 99 }));
+    store.setItem(slotKey(2), JSON.stringify({ ...new Sim(createInitialState(9)).state, version: 99 }));
     const r = service(store, 2).loadResult();
     expect(r.backedUpAs?.startsWith(`${slotKey(2)}.backup.`)).toBe(true);
   });
@@ -87,18 +87,18 @@ describe('E22.12: save slots', () => {
     const store = memory();
     const s = service(store, 1);
     s.headerExtra = () => ({ region: 'The market' });
-    s.save(new Sim(createInitialState(4, 'oldcity')).state);
+    s.save(new Sim(createInitialState(4)).state);
     expect(s.readHeader()?.region).toBe('The market');
   });
 
   it('E23.1.1: a garden from an earlier version is marked old, then starts fresh without errors', async () => {
     const store = memory();
-    const sim = new Sim(createInitialState(12, 'oldcity'));
+    const sim = new Sim(createInitialState(12));
     const old = { ...JSON.parse(new SaveService(undefined).serialize(sim.state)), version: SAVE_VERSION - 1, rules: 'classic' };
     store.setItem(slotKey(2), JSON.stringify(old));
     // a header from before E23.1.1: no version, a rules field
     store.setItem(headerKey(2), JSON.stringify({ name: 'Garden 2', played: 540, step: 'The fountain is awake', region: 'The park', rules: 'classic', savedAt: 1 }));
-    service(store, 1).save(new Sim(createInitialState(13, 'oldcity')).state);
+    service(store, 1).save(new Sim(createInitialState(13)).state);
     const heads = await service(store, 1).slots();
     expect(heads[0]?.old).toBe(false);
     expect(heads[1]?.old).toBe(true);

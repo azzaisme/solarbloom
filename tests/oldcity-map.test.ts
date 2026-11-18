@@ -5,7 +5,7 @@ import { CHUNK } from '../src/core/Generation';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
-const oldSim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
+const oldSim = (seed = 7) => new Sim(createInitialState(seed));
 
 describe('E21.4: the Old City map', () => {
   it('a new Old City game uses generation 5', () => {

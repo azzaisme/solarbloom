@@ -31,7 +31,7 @@ export interface OldCityBotReport {
 const ACT = { salvage: SALVAGE.holdSeconds + 0.5, pulse: 0.7, interact: 0.6, build: 1.2, pry: SALVAGE.pryHoldSeconds + 0.4, think: 0.4 };
 
 export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'keeper' = 'keeper'): OldCityBotReport {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   const w = new Walker(sim);
   const pose: BotPose = spawnPose(sim, w);
   const firsts: Record<string, number> = {};
