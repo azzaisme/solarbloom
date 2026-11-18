@@ -136,6 +136,8 @@ export interface MachineData {
   project?: { stage: number; costs: Partial<Record<ResourceKind, string>>[] };
   /** Phase 5 E14: a superstructure's ability: charge (events), uses, automation switch. */
   ability?: { charge: number; used: number; auto?: boolean };
+  /** E23.3: a power pole tripped by lightning (it carries nothing until bloombot resets it with one press). */
+  tripped?: boolean;
   /** Look 6.8: a Cultivator's tillers (mobile units working dead ground near the dock), and tiles finished. */
   cult?: { units: CultivatorUnit[]; done: number };
   /** E18: a Drone Hub's role (unset = restorer; slot 1 on a Fleet Hub). */
@@ -386,6 +388,8 @@ export interface SalvageState {
   seen?: string[];
   /** E23.6.1: the crafting table's queue (recipe id, crafts left, seconds left on the one in hand) */
   craft?: { id: string; n: number; left: number }[];
+  /** E23.6.1: decorations made at the crafting table (each once; placing copies after that is free) */
+  decorMade?: string[];
   /** E23.6.2: the research station (finds analysed, projects done and running, upgrade levels bought) */
   research?: ResearchState;
   /** E23.6.6: overgrowth by host key (a machine, a decoration, a ruin, a pipe tile, a power line), and since when */

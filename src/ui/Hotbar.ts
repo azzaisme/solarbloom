@@ -7,7 +7,7 @@ import { type GlyphStyle, type PadStyle, padName } from './Glyphs';
 import { ICONS, iconize, MACHINE_ICONS, plain } from './Icons';
 import { $, esc, HudPart } from './HudPart';
 import { decorType, etaText, growType, machineTool, type Tool } from './Hud';
-import { decorCostLabel, decorOpen } from '../gameplay/Cozy';
+import { decorOpen } from '../gameplay/Cozy';
 import { OVERGROWTH, OVERGROWTH_BY_ID, type OvergrowthKind } from '../data/overgrowth';
 
 /**
@@ -131,9 +131,6 @@ export class Hotbar extends HudPart {
     }
     // E19.2: a decoration's slot appears once it's earned
     for (const o of DECOR_OPTIONS) {
-      // E23.6.1: under old-city rules a decoration costs its recipe: the slot shows it
-      const cost = decorCostLabel(s, o.id);
-      if (cost) this.set(`dcc-${o.id}`, $(this.root, `#hotbar [data-tool="decor:${o.id}"] .sc`), 'text', cost);
       const on = decorOpen(s, o);
       if (this.last.get(`dc-${o.id}`) === String(on)) continue;
       this.last.set(`dc-${o.id}`, String(on));

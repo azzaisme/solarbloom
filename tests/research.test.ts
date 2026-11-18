@@ -47,6 +47,8 @@ describe('E23.6.2: research in data', () => {
       if ('material' in f) expect(MATERIALS[f.material], p.id).toBeDefined();
       else if ('keeper' in f) expect(KEEPERS.some((k) => k.region === f.keeper), p.id).toBe(true);
       else if ('tech' in f) expect(CACHES.has(f.tech), p.id).toBe(true);
+      else if ('creature' in f) expect(['butterflies', 'birds', 'koi'], p.id).toContain(f.creature);
+      else if ('crop' in f) expect(f.crop, p.id).toBe('radish'); // E23.5.2's first crop (data/crops once it lands)
       else expect(PROJECTS.some((q) => q.id === f.project), p.id).toBe(true);
       // follow the chain back to a find
       let q = p;
@@ -158,21 +160,61 @@ describe('E23.6.2: the research station', { timeout: 60000 }, () => {
     expect(sim.research.upgrade('sprint')).toBe(0);
   });
 
-  it('upgrades that drive an existing effect grant its levels, also to machines built later', () => {
+  it('every upgrade bought does something: the systems read their levels', () => {
     const sim = station();
-    sim.state.salvage!.research = { analysed: [], done: ['rb-pulse', 'dr-speed'], running: [], levels: {} };
-    for (const m of ['seeds', 'copper', 'motor', 'gears'] as const) sim.inventory.addToStore(m, 40);
-    expect(sim.upgrades.level('broadPulse')).toBe(0);
+    sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
+    for (const m of ['seeds', 'copper', 'motor', 'gears', 'glassPane', 'wire', 'sunCell', 'glass', 'sunstone'] as const) sim.inventory.addToStore(m, 60);
+    // Wider pulse: a tile further
+    const broad = sim.upgrades.broadExtra;
     expect(sim.research.upgrade('pulseRadius')).toBe(1);
-    expect(sim.upgrades.level('broadPulse')).toBe(1);
+    expect(sim.upgrades.broadExtra).toBe(broad + 1);
+    // Quicker and Further wings: drones fly faster and work further
     const hub = { id: 'h1', type: 'droneHub', roofId: GROUND, x: 20, z: 20, size: 2 } as never;
-    sim.state.machines.push(hub);
+    const speed = sim.upgrades.droneSpeed(hub);
+    const radius = sim.upgrades.droneRadius(hub);
     expect(sim.research.upgrade('droneSpeed')).toBe(1);
-    expect(sim.upgrades.levelOf(hub, 'droneSpeed')).toBe(1);
-    const later = { id: 'h2', type: 'droneHub', roofId: GROUND, x: 30, z: 20, size: 2 } as never;
-    sim.state.machines.push(later);
-    sim.bus.emit('machine.built', { machine: later });
-    expect(sim.upgrades.levelOf(later, 'droneSpeed')).toBe(1);
+    expect(sim.research.upgrade('droneRange')).toBe(1);
+    expect(sim.upgrades.droneSpeed(hub)).toBeCloseTo(speed * 1.15, 6);
+    expect(sim.upgrades.droneRadius(hub)).toBe(radius + 2);
+    // and none of it writes the idle upgrade state (E23.1 removes it)
+    expect(sim.state.upgrades.broadPulse ?? 0).toBe(0);
+    expect((hub as { upg?: unknown }).upg).toBeUndefined();
+    // Longer lines and Clearer panels: the grid's pole range and solar output
+    const relay = { id: 'r1', type: 'relay', roofId: GROUND, x: 10, z: 10, size: 1 } as never;
+    const solar = { id: 's1', type: 'solar', roofId: GROUND, x: 12, z: 10, size: 1 } as never;
+    const role = (m: unknown) => (sim.power as unknown as { roleOf(m: unknown): { pole?: { range(m: unknown, s: unknown): number }; source?(m: unknown, s: unknown, sky: unknown): number } }).roleOf(m)!;
+    const range = role(relay).pole!.range(relay, sim);
+    const out = role(solar).source!(solar, sim, { solar: 1, wind: 0, night: false });
+    expect(sim.research.upgrade('poleReach')).toBe(1);
+    expect(sim.research.upgrade('solarYield')).toBe(1);
+    expect(role(relay).pole!.range(relay, sim)).toBeCloseTo(range * 1.15, 6);
+    expect(role(solar).source!(solar, sim, { solar: 1, wind: 0, night: false })).toBeCloseTo(out * 1.1, 6);
+  });
+
+  it('an upgrade whose system has not landed yet is never offered', () => {
+    const sim = station();
+    sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
+    const offered = sim.research.upgrades().map((u) => u.id);
+    // E23.4 water, E23.5 farm, E23.2.1 charge and E23.6.4 couriers are not in this game yet; no battery machine either
+    for (const id of ['pumpRate', 'reservoirSize', 'evaporation', 'compostSpeed', 'cropGrowth', 'crossbreed', 'chargeCells', 'chargeEfficiency', 'sprint', 'droneCarry', 'batteryStore'])
+      expect(offered, id).not.toContain(id);
+    expect(sim.research.upgradeProblem('cropGrowth')).toBe('Not open yet');
+    for (const id of ['backpack', 'pulseRadius', 'poleReach', 'solarYield', 'droneRange', 'droneSpeed', 'droneThrift']) expect(offered, id).toContain(id);
+  });
+
+  it('crops and creatures found open projects', () => {
+    const sim = station();
+    const keys = () => sim.research.finds().map((f) => JSON.stringify(f));
+    expect(keys()).not.toContain(JSON.stringify({ creature: 'birds' }));
+    sim.state.fauna = { ...(sim.state.fauna ?? {}), birds: 0 } as never;
+    expect(keys()).toContain(JSON.stringify({ creature: 'birds' }));
+    sim.research.analyse({ creature: 'birds' });
+    expect(sim.research.open().map((p) => p.id)).toContain('dc-birdbath');
+    (sim.state.salvage as unknown as { crops: string[] }).crops = ['radish'];
+    expect(keys()).toContain(JSON.stringify({ crop: 'radish' }));
+    expect(sim.research.findName({ crop: 'radish' })).toBe('Radish seeds');
+    sim.research.analyse({ crop: 'radish' });
+    expect(sim.research.open().map((p) => p.id)).toContain('fm-crossbreed');
   });
 
   it('a research recipe appears at the crafting table once its project is done', () => {

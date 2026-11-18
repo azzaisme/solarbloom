@@ -1,5 +1,6 @@
 import type { ComponentId, ItemId } from '../core/types';
 import { MACHINES } from '../data/machines';
+import { DECOR_OPTION } from '../data/cozy';
 import { itemDef } from '../data/items';
 import type { ItemCost } from '../data/crafting';
 import { BRANCHES, RESEARCH, type Find } from '../data/research';
@@ -82,6 +83,18 @@ export function upgradeRows(sim: Sim) {
     const next = u.levels[level];
     return { id: u.id, name: u.name, each: u.each, level, max: u.levels.length, parts: next ? costParts(sim, next.cost) : [], problem: sim.research.upgradeProblem(u.id) };
   });
+}
+
+/** E23.6.1: the decorations the table knows, made or not (each is made once, then placed free). */
+export function decorRows(sim: Sim): { id: string; name: string; icon: string; parts: CostPart[]; made: boolean; problem?: string }[] {
+  return sim.crafting.decorations().map((r) => ({
+    id: r.id,
+    name: DECOR_OPTION[r.id]?.name ?? r.id,
+    icon: DECOR_OPTION[r.id]?.icon ?? '',
+    parts: costParts(sim, r.cost),
+    made: sim.crafting.decorMade(r.id),
+    problem: sim.crafting.decorProblem(r.id),
+  }));
 }
 
 /** The machines the table knows that can be built now (a recipe waiting for its machine stays off the list). */
@@ -247,7 +260,18 @@ export class CraftTable {
           .map((m) => `<li tabindex="0" class="${m.ready ? '' : 'cr-short'}" aria-label="${esc(`${m.name}: ${costText(m.parts)}`)}"><b>${esc(m.name)}</b> ${this.partsHtml(m.parts)}</li>`)
           .join('')}</ul>`
       : '';
-    return `<div class="bp-split"><div><h3 class="set-h">Components</h3><div class="bp-grid" role="listbox" aria-label="Components" aria-orientation="horizontal">${grid}</div>${mlist}</div><div class="bp-detail" id="crDetail">${this.detail()}</div></div>`;
+    const decor = decorRows(sim);
+    const dlist = decor.length
+      ? `<h3 class="set-h">Decorations</h3><ul class="cr-machines cr-decor">${decor
+          .map(
+            (d) =>
+              `<li class="${d.made ? 'cr-made' : d.problem ? 'cr-short' : ''}"><b>${esc(d.name)}</b> ${d.made ? '<span class="cr-note">Made</span>' : this.partsHtml(d.parts)}` +
+              (d.made ? '' : `<button id="cr-decor-${d.id}" data-decor="${d.id}" aria-label="${esc(`Make the ${d.name}, once: ${costText(d.parts)}. Placing it is free after that.`)}" ${d.problem ? 'aria-disabled="true"' : ''}>Make</button>`) +
+              `</li>`,
+          )
+          .join('')}</ul>`
+      : '';
+    return `<div class="bp-split"><div><h3 class="set-h">Components</h3><div class="bp-grid" role="listbox" aria-label="Components" aria-orientation="horizontal">${grid}</div>${mlist}${dlist}</div><div class="bp-detail" id="crDetail">${this.detail()}</div></div>`;
   }
 
   private partsHtml(parts: CostPart[]): string {
@@ -363,6 +387,14 @@ export class CraftTable {
       if (mk.getAttribute('aria-disabled')) return this.say(sim.crafting.problem(this.sel) ?? '');
       const n = sim.crafting.craft(this.sel, Number(mk.dataset.make));
       this.say(n ? `Making ${name}` : (sim.crafting.problem(this.sel) ?? ''));
+      this.host.changed?.();
+      return this.refresh();
+    }
+    const dm = t.closest<HTMLElement>('[data-decor]');
+    if (dm) {
+      const id = dm.dataset.decor!;
+      if (dm.getAttribute('aria-disabled')) return this.say(sim.crafting.decorProblem(id) ?? '');
+      if (sim.crafting.makeDecor(id)) this.say(`Made the ${DECOR_OPTION[id]?.name ?? id}: it is in the build menu`);
       this.host.changed?.();
       return this.refresh();
     }
