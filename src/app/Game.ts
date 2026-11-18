@@ -338,7 +338,7 @@ export class Game {
     this.chunks.onParkStage = (stage) => {
       const lines: Record<number, string> = {
         1: '🧹 The park paths are swept clean.<small>A quarter of the way to waking the fountain.</small>',
-        2: '🪑 The benches are mended.<small>Halfway there: people will want to sit here again.</small>',
+        2: '🪑 The benches are mended.<small>Halfway there: the birds will want to sit here again.</small>',
         3: '💡 The lamps are lit again!<small>The planter trees leaf out and bunting goes up on the bandstand.</small>',
       };
       if (lines[stage]) this.hud.toast(lines[stage], 'gold', 4);
