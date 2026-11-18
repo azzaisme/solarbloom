@@ -183,7 +183,7 @@ export class BotController {
       }
       this.padPrev[i] = down;
     });
-    if (x || y) this.lastInput = 'pad';
+    if (x || y || rx || ry) this.lastInput = 'pad'; // either stick means the pad is in hand
     const sb = this.bindings.pad.sprint;
     return { x, y, sprint: sb !== undefined && (gp.buttons[sb]?.value ?? 0) > 0.4, zoom, turn };
   }
