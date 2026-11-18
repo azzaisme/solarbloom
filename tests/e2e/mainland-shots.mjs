@@ -52,12 +52,22 @@ try {
     const land = s.areas.map.areaOfChunk(9, 0);
     s.areas.clear(land, true);
     for (const nb of s.areas.info(land).neighbours) if (nb.startsWith('ml_')) s.areas.clear(nb, true);
+    // for comparison: an island backstreet by the causeway, cleared the same way
+    s.state.areas['bs_5_0'] ??= { fog: 'frontier', revealedAt: 0 };
+    s.areas.clear('bs_5_0', true);
     g.chunks.markAll();
     const seen = Object.keys(s.state.areas).filter((id) => id.startsWith('ml_'));
     return { seen, types: seen.map((id) => `${id}:${s.areas.info(id).type}`) };
   });
   console.log('  mainland areas out of the cloud:', info.types.join(', '));
-  await shot('mainland-causeway-raised', 125, 8, 0.6, 90);
+  await shot('mainland-causeway-raised', 125, 8, 0.6, 90, 25000);
+  await shot('mainland-compare-island-backstreet', 88, 8, 0.5, 90, 15000);
+  const fog = await page.evaluate(() => { const a = window.solarbloom.sim.areas; return { landing: a.fog('ml_4_0'), next: a.fog('ml_5_0'), beyond: a.fog('ml_6_0'), sealed: a.sealed('ml_6_0') }; });
+  console.log('  fog:', JSON.stringify(fog));
+  if (fog.landing !== 'cleared' || fog.next !== 'cleared' || fog.beyond !== 'frontier' || fog.sealed) {
+    failed = true;
+    console.log('  ✗ the restored mainland should be clear, and the next district out open (frontier, never sealed)');
+  }
   await shot('mainland-landing', 160, 16, 0.5, 90);
   await shot('mainland-overview', 175, 10, 0.25, 60);
   const field = await page.evaluate(() => {

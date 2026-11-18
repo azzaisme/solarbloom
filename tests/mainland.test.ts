@@ -1,11 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { areaMapFor } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import { levelAt } from '../src/core/Height';
+import { canStep, levelAt } from '../src/core/Height';
 import { brokenCells, chunkPiles, isMainlandArea, landingArea, mainlandType } from '../src/core/Mainland';
 import { pileById, seaCell, setPieceAt } from '../src/core/OldCityLayout';
 import { MAINLAND } from '../src/data/mainland';
+import { TUNING } from '../src/data/tuning';
 import { OLD_CITY } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -44,8 +45,14 @@ describe('E23.8.3.1: mainland layout', () => {
     expect(seaCell(130, C.z0 - 1)).toBe(true);
     for (let x = C.x0; x <= C.x1; x++) {
       expect(seaCell(x, C.z0), `x ${x}`).toBe(false);
-      expect(levelAt(x, C.z1)).toBe(OLD_CITY.baseLevel);
+      const broken = x >= MAINLAND.broken.x0 && x <= MAINLAND.broken.x1;
+      const ramp = (x >= MAINLAND.broken.x0 - MAINLAND.rampLength && x < MAINLAND.broken.x0) || (x > MAINLAND.broken.x1 && x <= MAINLAND.broken.x1 + MAINLAND.rampLength);
+      if (broken) expect(levelAt(x, C.z1)).toBe(OLD_CITY.seaLevel);
+      else if (!ramp) expect(levelAt(x, C.z1)).toBe(OLD_CITY.baseLevel);
     }
+    // by height, bloombot can walk the whole causeway: island avenue, ramp down, the low middle, ramp up, the mainland
+    for (let x = C.x0 - 3; x < C.x1 + 3; x++) for (const z of [C.z0, C.z1]) expect(canStep(x, z, x + 1, z), `step ${x} → ${x + 1} on row ${z}`).toBe(true);
+    expect(canStep(130, C.z0, 130, C.z0 - 1)).toBe(false); // and never off its side into the sea
     expect(seaCell(MAINLAND.minChunkX * 16, 40)).toBe(true); // the rocky shore
     expect(seaCell(MAINLAND.minChunkX * 16 + 5, 40)).toBe(false);
     expect(levelAt(400, -300)).toBe(OLD_CITY.baseLevel);
@@ -73,6 +80,12 @@ describe('E23.8.3.1: mainland layout', () => {
 });
 
 describe('E23.8.3.1: mainland generation and the Great Bloom', () => {
+  // the real game runs with region unlocks on (tests default it off): the mainland must still never be sealed or priced
+  const U = TUNING.city.unlock as { enabled: boolean };
+  const was = U.enabled;
+  beforeEach(() => (U.enabled = true));
+  afterEach(() => (U.enabled = was));
+
   it('the same tiles whatever order the chunks stream in', () => {
     const cells: [number, number][] = [];
     for (let i = 0; i < 400; i++) cells.push([140 + ((i * 37) % 300), -150 + ((i * 53) % 300)]);

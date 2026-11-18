@@ -3,8 +3,9 @@
 
 import type { AreaType } from '../data/city';
 import { MAINLAND, MAINLAND_TYPES, SALVAGE_FIELDS } from '../data/mainland';
-import type { PileDef } from '../data/oldcity';
-import type { PileSize } from '../data/salvage';
+import type { PileDef, RampDef } from '../data/oldcity';
+import { OLD_CITY } from '../data/oldcity';
+import { MATERIALS, type PileSize } from '../data/salvage';
 import type { MaterialId } from './types';
 import { CHUNK, hashString, tileRandom } from './Hash';
 
@@ -79,6 +80,20 @@ export function causewayBroken(x: number, z: number): boolean {
   return onCauseway(x, z) && x >= MAINLAND.broken.x0 && x <= MAINLAND.broken.x1;
 }
 
+/** The ramps down to the causeway's low middle (sea level) from its two high ends (the island's base level). */
+export function causewayRamps(): RampDef[] {
+  const C = MAINLAND.causeway;
+  const B = MAINLAND.broken;
+  const n = MAINLAND.rampLength;
+  const d = C.z1 - C.z0 + 1;
+  const hi = OLD_CITY.baseLevel;
+  const lo = OLD_CITY.seaLevel;
+  return [
+    { x: B.x0 - n, z: C.z0, w: n, d, dir: 'e', from: hi, to: lo, kind: 'ramp' },
+    { x: B.x1 + 1, z: C.z0, w: n, d, dir: 'e', from: lo, to: hi, kind: 'ramp' },
+  ];
+}
+
 /** Every broken causeway cell (what the Great Bloom raises). */
 export function brokenCells(): [number, number][] {
   const out: [number, number][] = [];
@@ -121,7 +136,11 @@ export function chunkPiles(cx: number, cz: number): Map<string, PileDef> {
     const id = `ml:${x}:${z}`;
     if (out.has(id)) continue;
     const size = pick(r(22 + i * 4), sizeList);
-    out.set(id, { id, x, z, material: pick(r(23 + i * 4), matList), size, model: F.models[size] });
+    const material = pick(r(23 + i * 4), matList);
+    // the material's own pile model (as on the island), the usual one most of the time
+    const models = MATERIALS[material].models;
+    const model = models[Math.floor(r(24 + i * 4) * 4) % models.length] ?? F.models[size];
+    out.set(id, { id, x, z, material, size, model });
   }
   return out;
 }

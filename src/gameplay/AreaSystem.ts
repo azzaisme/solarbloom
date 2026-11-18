@@ -361,8 +361,10 @@ export class AreaSystem {
     if (this.map instanceof OldCityMap && (id === SEA || id.startsWith('out_'))) return; // E21.4: the sea and the cloud beyond
     s.state.areas[id] = { fog: 'frontier', revealedAt: s.time };
     // E21.5: in the Old City a revealed area stays sealed (no price) until its gate is opened
-    // E23.8.3.1: the mainland has no gates: past the causeway, restoring a district reveals the next, open
-    if (this.oldCity && id !== PARK && !isMainlandArea(id)) s.state.areas[id].sealed = true;
+    // E23.8.3.1: the mainland has no gates and no prices: past the causeway, restoring a district reveals the next, open
+    if (this.oldCity && isMainlandArea(id)) {
+      /* open */
+    } else if (this.oldCity && id !== PARK) s.state.areas[id].sealed = true;
     else if (TUNING.city.unlock.enabled && id !== PARK) Object.assign(s.state.areas[id], { sealed: true, price: this.priceNow() });
     this.placeLandmark(id);
     if (!this.sealed(id)) this.ensureEntry(id);

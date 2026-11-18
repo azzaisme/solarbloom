@@ -15,8 +15,10 @@ export const MAINLAND = {
   shoreBand: 3,
   /** the Long Causeway: two cells wide (z), from the backstreet avenue east of Clock Plaza to the mainland's shore */
   causeway: { z0: 7, z1: 8, x0: 104, x1: 146 },
-  /** its broken middle: open water until the Great Bloom raises it */
+  /** its broken middle: a low deck awash at sea level, flooded (impassable) until the Great Bloom raises it */
   broken: { x0: 120, x1: 129 },
+  /** ramps down to the low middle from each side, this many cells long */
+  rampLength: 3,
   /** the fountain tier that raises the causeway (the Great Bloom) */
   opensAtTier: 5,
   /** the district the causeway lands in, revealed by the Great Bloom; the rest is found by restoring outward */
@@ -59,5 +61,6 @@ export const SALVAGE_FIELDS = {
     reservoir: { clay: 3, scrap: 1 },
   } as Partial<Record<AreaType, Partial<Record<MaterialId, number>>>>,
   sizes: { small: 1, medium: 2, large: 2 } as Record<PileSize, number>,
+  /** a pile's model when its material has none */
   models: { small: 'rubble-pile', medium: 'crate', large: 'stone-block' } as Record<PileSize, string>,
 };

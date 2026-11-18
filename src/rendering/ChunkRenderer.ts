@@ -887,13 +887,6 @@ export class ChunkRenderer {
       b.add('box', PALETTE.stone.light, [x + 0.15 * sc, y + 0.2 * sc, z - 0.1 * sc], [0.3 * sc, 0.2 * sc, 0.25 * sc]);
       return true;
     }
-    if (prop === 'causeway-broken') {
-      // E23.8.3.1: the Long Causeway's broken middle: tumbled deck stones across the gap until the Great Bloom
-      const j = dhash(t.x, t.z, 217) * 0.2 - 0.1;
-      b.add('box', PALETTE.stone.light, [x - 0.18 + j, y + 0.06, z + 0.1], [0.5, 0.18 + 0.2 * dhash(t.x, t.z, 218), 0.42]);
-      b.add('box', PALETTE.paving.grout, [x + 0.22, y + 0.04, z - 0.2 - j], [0.36, 0.12, 0.3]);
-      return true;
-    }
     if (prop.startsWith('gate:')) {
       // E21.5: a gate is one model over all its cells (drawn from its first cell), fitted to the gate's length
       // and turned along its long side: the barricade (4 m), the bridges (14 m, along +X) and the skybridge (12 m)
@@ -1526,6 +1519,15 @@ export class ChunkRenderer {
       this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
       for (let i = 0; i < 4; i++) b.add('box', i % 2 ? PALETTE.wood.mid : PALETTE.wood.dark, [x, h + 0.06, z - 0.375 + i * 0.25], [0.98, 0.05, 0.22]);
       if (t.x === J.x || t.x === J.x + J.w - 1) b.add('cylinder', PALETTE.wood.deep, [t.x === J.x ? x - 0.42 : x + 0.42, h - 0.25, z], [0.09, 0.7, 0.09]);
+      return;
+    }
+    // E23.8.3.1: the Long Causeway's broken middle: its low deck under the sea, a few deck stones breaking the surface,
+    // until the Great Bloom raises it (then it draws as the road it is)
+    if (t.blocked && t.prop === 'causeway-broken') {
+      const sea = PALETTE.ground.sea;
+      this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
+      if (t.variant % 3 === 0) b.add('box', PALETTE.stone.light, [x + r.range(-0.25, 0.25), h + 0.02 - WATER.drop, z + r.range(-0.25, 0.25)], [r.range(0.3, 0.55), 0.16, r.range(0.25, 0.45)]);
+      if (t.variant % 4 === 1) b.add('box', PALETTE.paving.grout, [x + r.range(-0.3, 0.3), h - WATER.drop, z + r.range(-0.3, 0.3)], [0.3, 0.1, 0.24]);
       return;
     }
     // E21.4: the Old City's open sea: deep water, never restored
