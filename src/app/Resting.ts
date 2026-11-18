@@ -81,7 +81,7 @@ export class Resting {
     const friend = h.sim.rest.friends(b.x, b.z).find((id) => h.sim.keepers.visible(id));
     const side = friend ? 0.2 : 0;
     h.bot.seat = { x: cx + fx * 0.04 - sx * side, y: by, z: cz + fz * 0.04 - sz * side, facing };
-    h.bot.visuals.setPose('sit');
+    h.bot.visuals.setPose('sit', REST.benchSeat);
     // a Keeper who is a friend sits beside (only one already out and about: never in fog)
     if (friend && h.keepers) h.keepers.beside = { id: friend, x: cx + fx * 0.04 + sx * 0.24, y: by, z: cz + fz * 0.04 + sz * 0.24, facing };
     this.calm();

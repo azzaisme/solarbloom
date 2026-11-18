@@ -149,6 +149,18 @@ function softMaterial(): pc.StandardMaterial {
   return m;
 }
 
+/**
+ * E23.7.1: tints every soft cloud (the sky's clouds and the cloud walls) by the time of day: warm at dusk, a dim
+ * blue at night. The clouds are unlit, so the light alone can't do it. Cheap: one shared material.
+ */
+export function tintClouds(r: number, g: number, b: number) {
+  const m = softMaterial();
+  const e = m.emissive;
+  if (Math.abs(e.r - r) + Math.abs(e.g - g) + Math.abs(e.b - b) < 0.004) return;
+  m.emissive = new pc.Color(r, g, b);
+  m.update();
+}
+
 /** A soft top-down footprint of the puffs (blurred), used as the cloud's shadow. */
 function shadowTexture(device: pc.GraphicsDevice): pc.Texture {
   const N = 128;
@@ -193,6 +205,8 @@ export class Clouds {
   private root: pc.Entity;
   private clouds: Cloud[] = [];
   private wind = 0;
+  /** E23.7.2: the weather's wind, 0 … 1 (the clouds drift faster) */
+  gust = 0;
   private t = 0;
   private right = new pc.Vec3();
   private back = new pc.Vec3();
@@ -292,7 +306,7 @@ export class Clouds {
     this.root.enabled = true;
     const still = this.reducedMotion;
     if (!still) {
-      this.wind += dt * 0.012;
+      this.wind += dt * 0.012 * (1 + this.gust * 4);
       this.t += dt;
     }
     const vh = cam.viewHeight;

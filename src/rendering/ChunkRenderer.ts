@@ -7,7 +7,7 @@ import { polyDist } from '../core/Picking';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { CITY_GEN, PARK_LAYOUT } from '../data/city';
-import { RARE_PLANTS } from '../data/pulse';
+import { RARE_PLANT_DEFAULT, RARE_PLANTS } from '../data/pulse';
 import { buildingPlots, type BuildingPlot } from '../core/Generation';
 import { PALETTE } from './Materials';
 import { flowerAt, grassTone } from './Palette';
@@ -25,7 +25,7 @@ import type { Decoration } from '../core/Decor';
 import { FoliageBuilder, foliageMaterial, treeMesh, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
 import { treeSpot, treeStage } from './TreePlacement';
-import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, vineGeo } from './Flora';
+import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, tintGeo, vineGeo } from './Flora';
 import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, radiantExtras, thrivingExtras, turfTop, type DressCtx, type SolidSink } from './Surfaces';
 import { MODELS, ModelBatch } from './Models';
 import { WATER, poolMaterial, updatePool } from './Water';
@@ -929,6 +929,15 @@ export class ChunkRenderer {
       b.add('cylinder', PALETTE.trim.gold ?? PALETTE.metal.iron, [x, y + 0.55, z - 0.2], [0.09, 0.42, 0.09]);
       return true;
     }
+    if (prop.startsWith('page:')) {
+      // E23.9.1: a page of the maker's journal on its post (the post stays once the page is read)
+      const rot = dhash(t.x, t.z, 217) * Math.PI * 2;
+      const model = oldCityModel('journal-page-post');
+      if (model && this.batch?.add(model, x, y, z, rot, 0.7, 0.7, 0.7)) return true;
+      b.add('cylinder', PALETTE.wood.mid, [x, y + 0.35, z], [0.06, 0.7, 0.06]);
+      b.add('box', PALETTE.stone.light, [x, y + 0.62, z + 0.05], [0.26, 0.32, 0.02]);
+      return true;
+    }
     if (prop === 'shed') {
       const sh = PARK_SET.shed;
       if (t.x !== sh.x || t.z !== sh.z) return true;
@@ -1450,6 +1459,23 @@ export class ChunkRenderer {
   transitions?: TransitionRenderer;
   private slabCap?: (hex: string, p: [number, number, number], s: [number, number, number]) => void;
 
+  /** E23.7.1: the fog sheets' tint by the time of day (unlit, so the light can't dim them): DayNight sets it */
+  fogTint = new pc.Color(1, 1, 1);
+  private fogTintBuilt = new pc.Color(1, 1, 1);
+
+  /** E23.7.1: applies `fogTint` to every fog sheet when it changes (and to new sheets as they're built). */
+  tintFog(force = false) {
+    const t = this.fogTint;
+    const b = this.fogTintBuilt;
+    if (!force && Math.abs(t.r - b.r) + Math.abs(t.g - b.g) + Math.abs(t.b - b.b) < 0.004) return;
+    b.copy(t);
+    for (const v of this.views.values()) {
+      if (!v.fogMat) continue;
+      v.fogMat.emissive = new pc.Color(t.r, t.g, t.b);
+      v.fogMat.update();
+    }
+  }
+
   /** Look 6.18: pushes each fogged chunk's receding front (if its area is clearing) to its fog material. */
   private fogFronts() {
     const tr = this.transitions!;
@@ -1504,6 +1530,18 @@ export class ChunkRenderer {
     this.sink = b;
     const x = t.x + 0.5;
     const z = t.z + 0.5;
+    // E23.7.4: a salvage pile blown back onto ground bloombot restored sits on that ground (never on a dead slab)
+    if (t.blocked && t.ground === 'restored' && t.prop?.startsWith('pile:')) {
+      t.blocked = false;
+      try {
+        this.tile(b, t, h);
+      } finally {
+        t.blocked = true;
+      }
+      this.sink = b;
+      this.oldCityProp(b, t, x, h + 0.08, z);
+      return;
+    }
     const f = t.feature ?? 'lawn';
     const r = new VRng(t.variant * 7919 + 13);
     const dead = paintedDead(t) ?? DEAD[f] ?? DEAD.lawn;
@@ -1526,6 +1564,15 @@ export class ChunkRenderer {
       this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
       for (let i = 0; i < 4; i++) b.add('box', i % 2 ? PALETTE.wood.mid : PALETTE.wood.dark, [x, h + 0.06, z - 0.375 + i * 0.25], [0.98, 0.05, 0.22]);
       if (t.x === J.x || t.x === J.x + J.w - 1) b.add('cylinder', PALETTE.wood.deep, [t.x === J.x ? x - 0.42 : x + 0.42, h - 0.25, z], [0.09, 0.7, 0.09]);
+      return;
+    }
+    // E23.8.3.1: the Long Causeway's broken middle: its low deck under the sea, a few deck stones breaking the surface,
+    // until the Great Bloom raises it (then it draws as the road it is)
+    if (t.blocked && t.prop === 'causeway-broken') {
+      const sea = PALETTE.ground.sea;
+      this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
+      if (t.variant % 3 === 0) b.add('box', PALETTE.stone.light, [x + r.range(-0.25, 0.25), h + 0.02 - WATER.drop, z + r.range(-0.25, 0.25)], [r.range(0.3, 0.55), 0.16, r.range(0.25, 0.45)]);
+      if (t.variant % 4 === 1) b.add('box', PALETTE.paving.grout, [x + r.range(-0.3, 0.3), h - WATER.drop, z + r.range(-0.3, 0.3)], [0.3, 0.1, 0.24]);
       return;
     }
     // E21.4: the Old City's open sea: deep water, never restored
@@ -1610,6 +1657,12 @@ export class ChunkRenderer {
         this.restoredTile(b, t, h, x, z, top, f, r);
         break;
       }
+    }
+    // E23.2.2.3: a buried find the ripple revealed: a little mound of turned earth with a sprout, until dug up
+    if (t.roofId === GROUND && this.sim.buried?.known(t.x, t.z)) {
+      b.add('sphere', PALETTE.turnedEarth, [x + 0.08, top + 0.02, z - 0.06], [0.36, 0.11, 0.3]);
+      b.add('sphere', PALETTE.turnedEarthDark, [x + 0.02, top + 0.06, z - 0.02], [0.18, 0.07, 0.15]);
+      this.fb.add(grassGeo(2, t.variant, 1), x + 0.04, top + 0.06, z - 0.04, t.variant, 0.5);
     }
   }
 
@@ -2058,11 +2111,10 @@ export class ChunkRenderer {
         fb.add(flowerGeo(mix[(t.variant + i) % mix.length], i, true, t.variant + i, 1), px, top, pz, i * 1.9, 0.85 + dhash(t.x, t.z, 950 + i) * 0.3);
       }
     } else if (t.plant === 'rare') {
-      const area = this.sim.areas.areaOf(t);
-      const sp = (RARE_PLANTS[area ?? ''] ?? RARE_PLANTS.default).flower;
+      const rp = RARE_PLANTS[this.sim.areas.areaOf(t) ?? ''] ?? RARE_PLANT_DEFAULT;
       for (let i = 0; i < 9; i++) {
         const [px, pz] = at(i, 911);
-        fb.add(flowerGeo(sp, i, true, t.variant + i * 3, 1), px, top, pz, i * 2.3, 1.05 + dhash(t.x, t.z, 960 + i) * 0.35);
+        fb.add(tintGeo(flowerGeo(rp.flower, i, true, t.variant + i * 3, 1), rp.tint), px, top, pz, i * 2.3, rp.height * (0.95 + dhash(t.x, t.z, 960 + i) * 0.3));
       }
       fb.add(leafyShrubGeo(t.variant, 1, true), x, top, z, t.variant, 0.55);
     } else if (t.plant === 'grove') {
@@ -2623,7 +2675,7 @@ export class ChunkRenderer {
       const mat = new pc.StandardMaterial();
       mat.useLighting = false;
       mat.diffuse = new pc.Color(0, 0, 0);
-      mat.emissive = new pc.Color(1, 1, 1);
+      mat.emissive = new pc.Color(this.fogTintBuilt.r, this.fogTintBuilt.g, this.fogTintBuilt.b);
       mat.emissiveVertexColor = true;
       mat.opacityVertexColor = true;
       mat.opacityVertexColorChannel = 'a';

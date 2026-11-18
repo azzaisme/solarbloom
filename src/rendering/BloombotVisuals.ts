@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import { color, PALETTE } from './Materials';
+import { BOT_CLIPS, seatLift } from '../data/rest';
 
 /**
  * Bloombot (#234, G.10 + G.1): the player character, and the game's first skinned model. The GLB comes from
@@ -31,7 +32,7 @@ const PALM = new pc.Vec3(0.06, 0.46, 0.34);
 
 export type BotLoop = 'idle' | 'walk' | 'hover' | 'sit' | 'meditate';
 export type BotAction = 'pulse' | 'assemble' | 'interact' | 'cheer';
-const LOOPS: readonly string[] = ['idle', 'walk', 'hover', 'sit', 'meditate'];
+const LOOPS: readonly string[] = ['idle', 'walk', 'hover', 'sit', 'meditate', 'doze'];
 
 export class BloombotVisuals {
   /** placed at bloombot's feet, turned to its facing */
@@ -59,6 +60,8 @@ export class BloombotVisuals {
    * The stand-in (before the model loads) just sits lower.
    */
   private pose?: 'sit' | 'meditate';
+  /** E23.2.1: out of charge: bloombot droops a little and its walk slows (the low-power walk) */
+  private tired = false;
 
   constructor(
     private app: pc.AppBase,
@@ -170,30 +173,64 @@ export class BloombotVisuals {
     this.root.setEulerAngles(0, (facing * 180) / Math.PI, 0);
   }
 
-  /** E23.2.3: sit on a bench, meditate at a charger, or stand (undefined). */
-  setPose(pose: 'sit' | 'meditate' | undefined) {
+  /** the bench seat's height while sitting on one (world units) */
+  private seat = 0;
+
+  /**
+   * E23.2.3: sit on a bench (`seat`: its height), meditate at a charger, or stand (undefined). Plays the clip into
+   * the pose (sit down, stand up) where the model has it.
+   */
+  setPose(pose: 'sit' | 'meditate' | undefined, seat = 0) {
+    const was = this.pose;
     this.pose = pose;
+    this.seat = seat;
     if (pose === 'meditate') this.setFace('blink', 1e9);
     else if (this.face === 'blink') this.setFace('happy');
+    if (pose === 'sit' && this.clips.has(BOT_CLIPS.sitDown)) this.oneShot(BOT_CLIPS.sitDown);
+    if (!pose && was === 'sit' && this.clips.has(BOT_CLIPS.standUp)) this.oneShot(BOT_CLIPS.standUp);
     if (!pose) {
       this.holder?.setLocalPosition(0, 0, 0);
-      this.holder?.setLocalEulerAngles(0, 0, 0);
+      this.holder?.setLocalEulerAngles(this.tired ? 9 : 0, 0, 0);
       this.standIn?.setLocalPosition(0, 0.4, 0);
     }
   }
 
+  /** A one-shot clip by name (the sitting transitions), back to the loop afterwards. */
+  private oneShot(name: string) {
+    const anim = this.model?.anim;
+    const len = this.clips.get(name);
+    if (!anim || !len) return;
+    anim.speed = 1;
+    anim.baseLayer?.transition(name, 0.12);
+    this.action = { name: name as BotAction, until: this.clock + len * 0.95 };
+  }
+
   private posed() {
     const h = this.holder;
+    const clip = (n: string) => this.clips.has(n);
     if (this.pose === 'sit') {
-      // the clip keeps the hips at standing height, which is a bench seat's: just back onto the seat
-      h?.setLocalPosition(0, 0.02, -0.14);
-      this.standIn?.setLocalPosition(0, 0.5, -0.1);
+      // with the sit clip the hips come down to the seat's height; without it (until #482's clips land) never stand
+      // up on the seat: settle low at the bench's foot, leaning back against it
+      if (clip(BOT_CLIPS.sit)) h?.setLocalPosition(0, seatLift(this.seat, SCALE), -0.12);
+      else h?.setLocalPosition(0, -0.14, 0.32);
+      h?.setLocalEulerAngles(clip(BOT_CLIPS.sit) ? 0 : -8, 0, 0);
+      this.standIn?.setLocalPosition(0, 0.4 + this.seat, -0.1);
     } else if (this.pose === 'meditate') {
-      h?.setLocalPosition(0, 0, 0);
+      // the clip sits cross-legged on the ground; without it, settled low, breathing slowly
+      const breathe = this.reducedMotion ? 0 : Math.sin(this.clock * 1.6) * 0.012;
+      h?.setLocalPosition(0, clip(BOT_CLIPS.meditate) ? 0 : -0.14 + breathe, 0);
       this.standIn?.setLocalPosition(0, 0.26, 0);
     }
     const anim = this.model?.anim;
     if (anim && !this.action) anim.speed = this.pose === 'meditate' ? 0.6 : 0.8; // slow, calm breathing
+  }
+
+  /** E23.2.1: out of charge (or not): a tired droop, head and shoulders forward. */
+  setTired(on: boolean) {
+    if (on === this.tired) return;
+    this.tired = on;
+    this.holder?.setLocalEulerAngles(on ? 9 : 0, 0, 0);
+    this.standIn?.setLocalEulerAngles(on ? 9 : 0, 0, 0);
   }
 
   /** The looping clip, from how fast bloombot moves (world units per second) and whether it hovers (sprint). */
@@ -214,6 +251,7 @@ export class BloombotVisuals {
     const len = this.clips.get(name);
     if (!anim || !len) return 0;
     if (this.reducedMotion && name === 'cheer') return 0;
+    if (this.pose) return 0; // sitting or meditating: no standing gestures (a cheer would pop it up off the seat)
     anim.speed = name === 'pulse' ? 1.6 : name === 'assemble' ? 1.2 : 1;
     anim.baseLayer?.transition(name, 0.1);
     const dur = len / anim.speed;

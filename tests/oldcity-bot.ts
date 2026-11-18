@@ -3,11 +3,12 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { TileData } from '../src/core/types';
 import { PARK_SET, REGIONS } from '../src/data/oldcity';
 import { SALVAGE } from '../src/data/salvage';
-import { CHARGE } from '../src/data/charge';
+import { CHARGE as CHARGE_DATA } from '../src/data/charge';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
 import { BOT, spawnPose, Walker, type BotPose } from '../src/gameplay/Walker';
 import { oldCityHint } from '../src/ui/OldCityGuide';
+import { canWalk, CHARGE, handle } from './e23-gentle';
 
 /**
  * E21.12 / E21.23: the Old City's walking bot. It plays a new old-city game the way a player would, on foot:
@@ -25,8 +26,20 @@ export interface OldCityBotReport {
   steps: number[];
   /** the longest wait with nothing to do (seconds) */
   longestIdle: number;
+  /** E23.2.1: times bloombot ran out of charge with nothing to eat and walked home to rest */
+  restedAtHome: number;
   walked: number;
   time: number;
+  /**
+   * E23.3 (#480): the grid, once on the sim: the Solar Panel bloombot built is on a network, and that network's
+   * supply in daylight (watts). Undefined without a grid or before the panel is built.
+   */
+  grid?: { onNetwork: boolean; supply: number };
+  /**
+   * E23.10.1 (#405): bloombot's charge, once E23.2.1 lands (undefined until then): the lowest it fell, seconds
+   * spent at zero, and seconds stranded (at zero and unable to walk: must stay 0).
+   */
+  charge?: { min: number; atZero: number; stranded: number };
 }
 
 const ACT = { salvage: SALVAGE.holdSeconds + 0.5, pulse: 0.7, interact: 0.6, build: 1.2, pry: SALVAGE.pryHoldSeconds + 0.4, think: 0.4 };
@@ -41,17 +54,32 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
   let walked = 0;
   let idle = 0;
   let longestIdle = 0;
+  /** E23.2.1: times bloombot ran out of charge and walked home to rest */
+  let restedAtHome = 0;
   const first = (k: string) => (firsts[k] ??= sim.time);
   sim.bus.on('pile.salvaged', (e) => (first('salvage'), e.material === 'seeds' && first('seeds')));
   sim.bus.on('pulse.fired', () => first('pulse'));
   sim.bus.on('fountain.tier', (e) => e.tier === 1 && first('tier1'));
   sim.bus.on('gate.opened', () => first('gate'));
   sim.bus.on('keeper.step', (e) => e.step === 'request1' && first('keeper'));
+  // E23.2.1's charge, once it is on the sim: read through its real `value()` (fails loudly if it lacks it)
+  const chargeSys = CHARGE.present(sim) ? handle(sim, 'charge')! : undefined;
+  if (chargeSys && typeof chargeSys.value !== 'function') throw new Error('sim.charge is here but lacks value(): update tests/oldcity-bot.ts');
+  const charge = chargeSys ? { min: Infinity, atZero: 0, stranded: 0 } : undefined;
+  const chargeNow = () => (chargeSys!.value as () => number).call(chargeSys);
   const pass = (secs: number) => {
     const n = Math.round(secs / TUNING.simStep);
     for (let i = 0; i < n; i++) {
       sim.tick();
       record();
+      if (charge) {
+        const c = chargeNow() ?? 0;
+        charge.min = Math.min(charge.min, c);
+        if (c <= 0) {
+          charge.atZero += TUNING.simStep;
+          if (!canWalk(sim)) charge.stranded += TUNING.simStep;
+        }
+      }
     }
   };
   const record = () => {
@@ -77,7 +105,7 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
     }
     // E23.2.1: a long walk is sprinted while there is charge for it; at zero, the low-power walk
     const sprint = len > 8 && sim.charge.use('sprint', len / BOT.sprint);
-    const secs = len / (sprint ? BOT.sprint : BOT.walk * (sim.charge.empty ? CHARGE.lowPowerWalk : 1));
+    const secs = len / (sprint ? BOT.sprint : BOT.walk * (sim.charge.empty ? CHARGE_DATA.lowPowerWalk : 1));
     walked += secs;
     pass(secs);
     pose.x = px;
@@ -95,7 +123,8 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
     if (firsts.keeper !== undefined) break;
     let did = false;
     const tier = sim.fountain.tier;
-    // 0. E23.2.1: running low: eat something carried; out of charge with nothing to eat: home to sleep
+    // 0. E23.2.1: running low: eat something carried; out of charge with nothing to eat: walk home and rest there
+    //    (stand still by the fountain until the charge has come back far enough to be worth going out again)
     if (sim.charge.low) {
       const meal = sim.charge.eat();
       if (typeof meal === 'object') {
@@ -104,8 +133,8 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
       }
       if (sim.charge.empty) {
         walkTo(fountain.x, fountain.z, 2);
-        pass(ACT.think);
-        sim.charge.sleep();
+        restedAtHome++;
+        while (sim.charge.share < 0.6) pass(1);
         continue;
       }
     }
@@ -126,7 +155,7 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
         const spot = sim.areas.tiles(PARK).filter((t) => t.ground === 'restored' && !t.occupantId && !t.blocked && sim.build.check('solar', GROUND, t.x, t.z).ok).sort((a, b) => dist(a.x, a.z) - dist(b.x, b.z))[0];
         if (spot && walkTo(spot.x, spot.z)) {
           pass(ACT.build);
-          if (sim.build.place('solar', GROUND, spot.x, spot.z)) did = true;
+          if (sim.build.place('solar', GROUND, spot.x, spot.z)) (first('solar'), (did = true));
         }
       } else if (firsts.gate === undefined) {
         const gates = REGIONS.filter((r) => r.ring === 1 && r.gate.kind === 'barricade' && r.gate.opensRegion !== false).sort((a, b) => dist(a.gate.cells[0][0], a.gate.cells[0][1]) - dist(b.gate.cells[0][0], b.gate.cells[0][1]));
@@ -196,7 +225,9 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
     pass(ACT.think);
   }
   record();
-  return { seed, firsts, hints, steps, longestIdle, walked, time: sim.time };
+  const solar = sim.state.machines.find((m) => m.type === 'solar' && !m.starter);
+  const grid = sim.power ? { onNetwork: !!solar && !!sim.power.networkOf(solar), supply: (solar && sim.power.networkOf(solar)?.supply) || 0 } : undefined;
+  return { seed, firsts, hints, steps, longestIdle, walked, time: sim.time, charge, grid, restedAtHome };
 
   function affordableNear(): boolean {
     return !!nearestPulse();

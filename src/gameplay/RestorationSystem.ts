@@ -97,7 +97,9 @@ export class RestorationSystem {
     this.sim.charge.use('pulse');
     // E23.2.2: the pulse uses one unit of its load (or fires empty) and sends out its reveal ripple
     const load = this.sim.pulseLoad.take();
-    this.sim.bus.emit('pulse.ripple', { tileId, targets: this.sim.pulseLoad.ripple(t) });
+    const ripple = this.sim.pulseLoad.ripple(t);
+    this.sim.buried.reveal(ripple.filter((g) => g.kind === 'buried')); // found: a mound marks each until it is dug up
+    this.sim.bus.emit('pulse.ripple', { tileId, targets: ripple });
     if (this.megaReady()) return this.releaseMega(t);
     this.chargeMega();
     if (t.ground === 'restored') {
@@ -234,11 +236,23 @@ export class RestorationSystem {
     return t.plant ? PULSE_LOAD[PLANT_LOAD[t.plant]] : PULSE_LOAD.none;
   }
 
-  /** Chains a loaded pulse set off grow what it carried (newest chains remembered; old ones fall away). */
+  /**
+   * Chains a loaded pulse set off grow what it carried, for as long as each chain runs: every chain is remembered
+   * until it ends (no cap), then let go. Chains themselves are never saved (a reload ends them), and what they
+   * grew is saved on each tile (`TileData.plant`), so a reload keeps every plant that grew and loses nothing.
+   */
   private chainPlants = new Map<number, PlantKind>();
+  private chainWatch = false;
   private rememberChainPlant(id: number, kind: PlantKind) {
+    if (!this.chainWatch) {
+      this.chainWatch = true;
+      this.sim.bus.on('chain.ended', ({ chainId }) => this.chainPlants.delete(chainId));
+    }
     this.chainPlants.set(id, kind);
-    if (this.chainPlants.size > 64) this.chainPlants.delete(this.chainPlants.keys().next().value!);
+  }
+  /** Chains still running with a load's plant (tests). */
+  get plantedChains(): number {
+    return this.chainPlants.size;
   }
   private chainPlantOn(t: TileData, chainId?: number) {
     if (t.plant || chainId === undefined || chainId < 0) return;
@@ -273,6 +287,9 @@ export class RestorationSystem {
 
   tick(dt: number) {
     if (!this.growing.size) return;
+    // E23.7.2: rain (and a storm's downpour) makes restoring ground bloom faster; nothing makes it slower
+    const speed = Math.max(1, this.sim.weather?.bloomSpeed() ?? 1);
+    dt *= speed;
     for (const t of [...this.growing.values()]) {
       if (t.ground !== 'growing') {
         this.growing.delete(t.id);

@@ -1,6 +1,11 @@
 import { GROUND } from '../core/GameState';
 import { allPiles, pileById, regionById, regionOfCell, setPieceAt } from '../core/OldCityLayout';
-import type { MachineData, MaterialId, TileData } from '../core/types';
+import type { MaterialId, TileData } from '../core/types';
+import { gameDays } from '../data/time';
+import { SALVAGE_FIELDS } from '../data/mainland';
+
+/** A mainland salvage-field pile (`ml:<x>:<z>`, E23.8.3). */
+const isMainlandPile = (p: PileDef) => p.id.startsWith('ml:');
 import { PARK_SET, type PileDef, type RegionDef } from '../data/oldcity';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import type { Sim } from './Sim';
@@ -8,11 +13,15 @@ import type { Sim } from './Sim';
 /**
  * E21.2 (§3): salvage piles and seams. A pile is a real thing in the simulation, placed from data/oldcity: it
  * blocks its tile (generation stamps it) and only what is `left` is saved. Salvaging takes up to 3 units into the
- * backpack; an empty pile is gone for good and its tile is ordinary dead ground, ready to restore. Piles never
- * come back. Reclaimers on a woken region's seam send its material to the store, 6 a minute.
+ * backpack; an empty pile's tile is open ground, ready to restore.
+ *
+ * E23.7.4 (#398): piles come back. A pile refills slowly over a few game days of play, and a storm blows every pile
+ * full at once, so finished regions stay worth visiting. (E21's Reclaimers and their offline income are gone.)
  */
 export class SalvageSystem {
-  constructor(private sim: Sim) {}
+  constructor(private sim: Sim) {
+    sim.bus.on('weather.storm', () => this.blowIn());
+  }
 
   get on(): boolean {
     return !!this.sim.state.salvage;
@@ -79,12 +88,15 @@ export class SalvageSystem {
     s.inventory.add(p.material, fit);
     const now = left - used;
     s.state.salvage!.piles[id] = now;
+    // E23.7.4: the refill clock starts (or keeps running) from the first take
+    const sv = s.state.salvage!;
+    if (!sv.since?.[id]) (sv.since ??= {})[id] = s.state.time;
     if (now <= 0) this.clearTile(p);
     s.bus.emit('pile.salvaged', { pileId: id, material: p.material, got: fit, left: now, x: p.x, z: p.z });
     return fit;
   }
 
-  /** An emptied pile's tile: open, dead ground (saved as an entry fix, so it never comes back). */
+  /** An emptied pile's tile: open ground (it takes the pile back when it refills, E23.7.4). */
   private clearTile(p: PileDef) {
     const t = this.sim.grid.get(GROUND, p.x, p.z);
     if (!t) return;
@@ -102,62 +114,103 @@ export class SalvageSystem {
     return n;
   }
 
-  // ───────────── seams and Reclaimers ─────────────
-
-  /** The region whose seam this 2×2 footprint is exactly on, if any. */
-  seamAt(x: number, z: number): RegionDef | undefined {
-    const r = regionOfCell(x, z);
-    return r && r.seam.x === x && r.seam.z === z ? r : undefined;
-  }
-
   /** Is a region's landmark awake (its area cleared)? */
   woken(r: RegionDef): boolean {
     return this.sim.areas.fog(r.id) === 'cleared';
   }
 
-  /** Units a minute one Reclaimer sends (Mk 2 with its blueprint). */
-  perMinute(): number {
-    return this.sim.state.salvage?.blueprints.includes('reclaimerMk2') ? SALVAGE.reclaimerMk2PerMinute : SALVAGE.reclaimerPerMinute;
+  // ───────────── E23.7.4: piles refill ─────────────
+
+  /**
+   * Sim seconds for one unit to come back to a pile. A whole island pile refills over `SALVAGE.refillDays` game days;
+   * a mainland pile (E23.8.3, the endless sandbox) over `SALVAGE_FIELDS.respawnDays`.
+   */
+  perUnit(p: PileDef): number {
+    const lore = this.sim.state.salvage?.blueprints.includes('salvageLore') ? SALVAGE.loreRefill : 1; // Terraces' blueprint
+    const days = isMainlandPile(p) ? SALVAGE_FIELDS.respawnDays : SALVAGE.refillDays;
+    return gameDays(days) / lore / this.size(p);
   }
 
-  private material(m: MachineData): MaterialId | undefined {
-    return regionOfCell(m.x, m.z)?.material;
+  /**
+   * Can a pile stand on its tile again? Not under a machine or a decoration, and not on top of bloombot. (Restored
+   * ground is fine: the pile sits on it and the ground stays restored.)
+   */
+  private canStand(p: PileDef): boolean {
+    const t = this.sim.grid.get(GROUND, p.x, p.z);
+    if (!t || t.occupantId) return false;
+    const b = this.sim.bot;
+    return !(b && b.roofId === GROUND && Math.floor(b.x) === p.x && Math.floor(b.z) === p.z);
   }
 
-  /** Per sim step: every Reclaimer fills its fraction and sends whole units to the store. */
-  tick(dt: number) {
+  /** An emptied pile's tile takes the pile back (it blocks its tile again, as a pile always has). */
+  private standTile(p: PileDef) {
+    const t = this.sim.grid.get(GROUND, p.x, p.z);
+    if (!t || t.blocked) return;
+    t.blocked = true;
+    delete t.unblocked;
+    delete t.tr;
+    this.sim.grid.touch(t);
+    this.sim.production.markNear(GROUND, t.x, t.z, 1);
+  }
+
+  /**
+   * Per sim step (checked every few seconds): piles bloombot has taken from refill a unit at a time, a whole pile
+   * over `SALVAGE.refillDays` game days of play. An emptied pile comes back once its tile is free.
+   */
+  tick(_dt: number) {
     if (!this.on) return;
-    const list = this.sim.machinesOfType('reclaimer');
-    if (!list.length) return;
-    const sv = this.sim.state.salvage!;
-    const rate = this.perMinute() / 60;
-    for (const m of list) {
-      const mat = this.material(m);
-      if (!mat) continue;
-      const acc = (sv.reclaim?.[m.id] ?? 0) + rate * dt;
-      const whole = Math.floor(acc + 1e-9);
-      (sv.reclaim ??= {})[m.id] = Math.round((acc - whole) * 1e6) / 1e6;
-      if (whole > 0) {
-        this.sim.inventory.addToStore(mat, whole);
-        this.sim.bus.emit('reclaimer.delivered', { machineId: m.id, material: mat, n: whole });
-      }
+    const s = this.sim;
+    if (s.state.time < this.checkAt) return;
+    this.checkAt = s.state.time + SALVAGE.refillCheckSeconds;
+    const sv = s.state.salvage!;
+    for (const id of Object.keys(sv.piles)) {
+      const p = pileById(id);
+      if (!p) continue;
+      const since = (sv.since ??= {})[id] ?? (sv.since[id] = s.state.time);
+      const per = this.perUnit(p);
+      const gained = Math.floor((s.state.time - since) / per + 1e-9);
+      if (gained <= 0) continue;
+      const left = sv.piles[id];
+      if (left <= 0 && !this.canStand(p)) continue; // waits for its tile (keeps its time: it comes back at once)
+      const now = Math.min(this.size(p), left + gained);
+      if (left <= 0) this.standTile(p);
+      this.setLeft(p, now, since + gained * per);
+      s.bus.emit('pile.refilled', { pileId: id, left: now, x: p.x, z: p.z, storm: false });
     }
   }
 
-  /** Away: Reclaimers earn half their rate for up to 4 hours. Returns units per material. */
-  offline(awaySeconds: number): Partial<Record<MaterialId, number>> {
-    const out: Partial<Record<MaterialId, number>> = {};
-    if (!this.on) return out;
-    const secs = Math.min(awaySeconds, SALVAGE.offlineHours * 3600);
-    const per = Math.floor((this.perMinute() / 60) * secs * SALVAGE.offlineShare);
-    if (per <= 0) return out;
-    for (const m of this.sim.machinesOfType('reclaimer')) {
-      const mat = this.material(m);
-      if (!mat) continue;
-      this.sim.inventory.addToStore(mat, per);
-      out[mat] = (out[mat] ?? 0) + per;
+  private checkAt = 0;
+
+  /** Records a pile's units (a full pile drops out of the save: untouched piles are full). */
+  private setLeft(p: PileDef, left: number, since: number) {
+    const sv = this.sim.state.salvage!;
+    if (left >= this.size(p)) {
+      delete sv.piles[p.id];
+      if (sv.since) delete sv.since[p.id];
+      if (sv.since && !Object.keys(sv.since).length) delete sv.since;
+    } else {
+      sv.piles[p.id] = left;
+      (sv.since ??= {})[p.id] = since;
     }
-    return out;
+  }
+
+  /** E23.7.2.3 / E23.7.4: a storm blows fresh salvage in: every pile that can stand is full at once. */
+  blowIn(): number {
+    if (!this.on) return 0;
+    const s = this.sim;
+    let n = 0;
+    for (const id of Object.keys(s.state.salvage!.piles)) {
+      const p = pileById(id);
+      if (!p) continue;
+      if (s.state.salvage!.piles[id] <= 0) {
+        if (!this.canStand(p)) continue;
+        this.standTile(p);
+      }
+      this.setLeft(p, this.size(p), s.state.time);
+      s.bus.emit('pile.refilled', { pileId: id, left: this.size(p), x: p.x, z: p.z, storm: true });
+      n++;
+    }
+    return n;
   }
 
   /** E21.24: records something seen once (a lookout's view, a beacon spotted). Returns true the first time. */
@@ -190,6 +243,7 @@ export class SalvageSystem {
     }
     if (sp.kind === 'gate' && !this.sim.gates.isOpen(sp.gate.id)) return { title: 'In the way', detail: sp.gate.blocked };
     if (sp.kind === 'keeper') return { title: `🤖 ${sp.keeper.name}`, detail: this.sim.keepers.hint(sp.keeper.id) };
+    if (sp.kind === 'page') return { title: 'A page on a post', detail: this.sim.journal.found(sp.id) ? "A page of the maker's journal. You have read this one." : "A page in the maker's handwriting." };
     if (sp.kind === 'shed') return { title: 'A ruined shed', detail: 'Bloombot\'s house, one day.' };
     if (sp.kind === 'lookout') return { title: 'A lookout', detail: 'A bench and an old telescope. Interact to look out over the city.' };
     return undefined;

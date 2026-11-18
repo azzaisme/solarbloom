@@ -7,7 +7,7 @@ import type { Sim } from './Sim';
 
 /** Something the reveal ripple lights up for a few seconds. */
 export interface RippleTarget {
-  kind: 'salvage' | 'cache' | 'page';
+  kind: 'salvage' | 'cache' | 'page' | 'buried';
   id: string;
   x: number;
   z: number;
@@ -18,7 +18,7 @@ export interface RippleTarget {
  * fertiliser); each pulse uses one unit of it, and when it runs out the pulse fires empty, so you're never stuck.
  * Old-city rules only: under classic rules every pulse is empty and nothing is used.
  *
- * The reveal ripple (E23.2.2.3) lists nearby salvage, unopened caches and unfound journal pages. It reads only
+ * The reveal ripple (E23.2.2.3) lists nearby salvage, unopened caches, unfound journal pages and buried seeds and salvage. It reads only
  * the salvage data (piles, caches, pages) and never the Lucky Cat system: no cat is ever a target, and nothing
  * about the ripple changes where cats are (tests/pulse-load.test.ts proves both).
  */
@@ -89,6 +89,7 @@ export class PulseLoad {
     for (const p of [...PARK_SET.piles, ...REGIONS.flatMap((r) => r.piles)]) if (near(p.x, p.z) && this.sim.salvage.left(p.id) > 0) out.push({ kind: 'salvage', id: p.id, x: p.x, z: p.z });
     for (const c of REGIONS.flatMap((r) => r.caches)) if (near(c.x, c.z) && !sv.caches.includes(c.id)) out.push({ kind: 'cache', id: c.id, x: c.x, z: c.z });
     for (const p of [...PARK_SET.pages, ...REGIONS.flatMap((r) => r.pages)]) if (near(p.x, p.z) && !sv.pages.includes(p.id)) out.push({ kind: 'page', id: p.id, x: p.x, z: p.z });
+    for (const b of this.sim.buried.near(t.x, t.z, RIPPLE.radius)) out.push({ kind: 'buried', id: b.id, x: b.x, z: b.z });
     return out.sort((a, b) => (a.x - t.x) ** 2 + (a.z - t.z) ** 2 - ((b.x - t.x) ** 2 + (b.z - t.z) ** 2) || a.id.localeCompare(b.id));
   }
 }

@@ -23,6 +23,8 @@ export const CHARGE = {
   pulse: 1,
   /** charge a second of sprinting (hovering) uses, while moving */
   sprintPerSecond: 1 / 6,
+  /** E23.6.7: sprinting on a laid path uses this share (until e23-craft's PATHS.sprintChargeShare is on sim.paths) */
+  pathSprintShare: 0.6,
   /** charge each use of an ability costs */
   ability: { pry: 3, hover: 0, climb: 2, glide: 2 } as Record<string, number>,
   /** at zero: walking speed is this share of a normal walk (never stranded) */
@@ -36,6 +38,11 @@ export const CHARGE = {
   ] as EdibleDef[],
   /** E23.3.3: sitting and meditating at a charger, per second (fast, free, on the grid) */
   meditatePerSecond: 6,
+  /**
+   * Home: standing still for a moment by the fountain or the house trickles charge back, so bloombot is never stuck
+   * with an empty charge and an empty backpack. Benches (E23.2.3) trickle too, and sleeping (E23.7) fills it.
+   */
+  home: { radius: 3, perSecond: 0.5, stillSeconds: 1.5 },
   /** E23.2.3: sitting on a bench, per second (a trickle) */
   benchPerSecond: 0.4,
   /** the active-play profile a full charge is sized for: a pulse every few seconds, sprinting part of the time */

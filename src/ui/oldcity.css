@@ -48,7 +48,7 @@
 #chargeRow .ic { color: var(--gold-hi); }
 #chargeRow .pct { justify-self: end; font: 700 15px var(--font-display); font-variant-numeric: tabular-nums; color: var(--text-strong); }
 #chargeRow .bar i { background: linear-gradient(90deg, #6fd3c4, #c9f7a8); }
-#chargeRow.low { border-color: var(--gold); }
+#chargeRow.low { border-color: var(--gold); box-shadow: var(--shadow), 0 0 0 1px var(--gold), 0 0 14px rgba(247, 181, 42, .55); }
 #chargeRow.low .bar i { background: var(--energy-bar); }
 #chargeRow.low .ic { animation: charge-low 1.6s ease-in-out infinite; }
 #chargeRow.empty { border-color: var(--edge-soft); }

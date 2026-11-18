@@ -29,7 +29,6 @@ export const machineTool = (t: Tool): t is BuildableType => t in MACHINES;
 export interface HudCallbacks {
   selectTool(t: Tool): void;
   harvest(): void;
-  buyUpgrade(id: string): void;
   /** E18: `hubId|role|slot` (slot 2 on a Fleet Hub), or `hubId|role|drone|index` for a Megahub drone. */
   chooseRole(key: string): void;
   activateCore(): void;
@@ -85,6 +84,8 @@ export interface Settings {
   showNumbers?: boolean;
   /** E19.4.3 (#262): the potter-about pace: no objective nudges or advisor tips, softer chains. Presentation only. */
   potter?: boolean;
+  /** E23.7.1.2: "follow my clock" for the game in play (kept in its save; the menu shows it here) */
+  realClock?: boolean;
   /** E21.22: the camera: how fast it turns (percent), inverted axes, no drift back behind bloombot, no vistas */
   camSensitivity?: number;
   invertX?: boolean;
@@ -238,7 +239,7 @@ export class Hud {
         </ol>
         <ol data-rules="classic">
           <li><b>Walk up to a grey tile and pulse it</b> to restore it. Each pulse uses a little ⚡ energy and 💧 water, which refill on their own.</li>
-          <li><b>Green tiles grow 🌿 biomass.</b> Spend it on machines and upgrades. Pulse a green tile again to grow flowers.</li>
+          <li><b>Green tiles grow 🌿 biomass.</b> Spend it on machines. Pulse a green tile again to grow flowers.</li>
           <li><b>Goal:</b> wake the dry fountain. Then the fog starts to lift. The objective is in the top-left corner.</li>
         </ol>
         <button id="introGo">Start restoring ✨</button>
@@ -246,7 +247,6 @@ export class Hud {
       <div id="tip" class="panel"></div>
       <div id="fail"></div>
       <div id="plotPicker" class="drawer panel" aria-label="Plot picker"><h2><span id="ppTitle">Plot</span> <button aria-label="Close plot picker">×</button></h2><p id="ppSub" class="pp-sub"></p><div id="ppList"></div></div>
-      <div id="upgrades" class="drawer panel"><h2>Upgrades <button aria-label="Close upgrades">×</button></h2><p id="upgNext" class="upg-next"></p><div id="upgList"></div></div>
       <div id="inspect" class="panel"></div>
       <div id="cine"><div class="bar t"></div><div class="bar b"></div><div class="title" id="cineTitle"></div><button id="skipBtn">Skip ⏭</button></div>
       <div id="wlabels"></div>
@@ -315,15 +315,6 @@ export class Hud {
     this.hotbar.setKeyMap(style, b);
     this.buildBar.setKeys(style, b);
   }
-  toggleUpgrades(open?: boolean) {
-    this.panels.toggleUpgrades(open);
-  }
-  get isUpgradesOpen() {
-    return this.panels.isUpgradesOpen;
-  }
-  renderUpgrades(force = false) {
-    this.panels.renderUpgrades(force);
-  }
   /** E22.6: the backpack screen (Tab / I, d-pad up). */
   toggleBackpack(open = !this.backpack.isOpen) {
     if (open) this.backpack.open();
@@ -363,7 +354,6 @@ export class Hud {
     this.loadWheel.update(dt);
     this.hotbar.update();
     this.updateCatChip();
-    this.panels.renderUpgrades();
     this.panels.update(dt);
     this.objective.update();
     if (this.comboTimer > 0) {

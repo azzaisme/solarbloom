@@ -82,18 +82,27 @@ export class RestSystem {
     this.sim.bus.emit('rest.stood', {});
   }
 
-  /** Is a charger giving charge now (E23.3's grid; until it lands, any charger counts as powered)? */
+  /**
+   * Is a charger giving charge now? E23.3's grid decides for any machine it has a role for (a charger on a network
+   * with power). E23.3.3 registers the charger's role; until it does, a charger counts as powered.
+   */
   powered(m: MachineData): boolean {
-    const power = (this.sim as unknown as { power?: { isPowered?(m: MachineData): boolean } }).power;
-    return power?.isPowered?.(m) ?? true;
+    const p = this.sim.power;
+    return p.roleOf(m) ? p.isPowered(m) : true;
   }
 
-  /** Keepers who are friends (far enough along their story), nearest first: one may sit beside bloombot. */
+  /**
+   * Keepers who are friends, nearest first: one may sit beside bloombot. Friendship is E23.9.2's
+   * (`sim.keepers.isFriend`); until that lands, a Keeper whose story has settled counts. Only a Keeper the world
+   * shows (its region out of the fog) can come and sit.
+   */
   friends(x: number, z: number): string[] {
     const sv = this.sim.state.salvage;
     if (!sv) return [];
     const from = STEPS.indexOf(REST.friendFrom);
-    return KEEPERS.filter((k) => STEPS.indexOf(sv.keepers[k.id]?.step ?? 'asleep') >= from)
+    const keepers = this.sim.keepers as unknown as { isFriend?(id: string): boolean };
+    return KEEPERS.filter((k) => this.sim.keepers.visible(k.id))
+      .filter((k) => keepers.isFriend?.(k.id) ?? STEPS.indexOf(sv.keepers[k.id]?.step ?? 'asleep') >= from)
       .sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z))
       .map((k) => k.id);
   }

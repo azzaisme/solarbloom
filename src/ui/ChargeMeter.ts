@@ -47,7 +47,7 @@ export class ChargeMeter extends HudPart {
     this.set('ch-empty', el, 'cls', c.empty ? '1' : '0', 'empty');
     this.set('ch-eat', el, 'cls', c.eating ? '1' : '0', 'eating');
     // calm when full: fades out after 5 s unchanged, back the moment it changes
-    const v = c.value;
+    const v = c.value();
     this.still = Math.abs(v - this.lastV) < 1e-6 ? this.still + dt : 0;
     this.lastV = v;
     this.set('ch-faded', el, 'cls', pct >= 100 && this.still > 5 ? '1' : '0', 'calm');
