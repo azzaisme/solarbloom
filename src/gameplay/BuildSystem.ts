@@ -6,6 +6,7 @@ import { AREA_TYPES, type AreaType } from '../data/city';
 import { GROUND, machinesRemoved } from '../core/GameState';
 import { RECIPES, MATERIALS, STORE, type MaterialCost } from '../data/salvage';
 import { regionById } from '../core/OldCityLayout';
+import { isMainlandCell } from '../core/Mainland';
 import type { MaterialId } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
@@ -217,6 +218,8 @@ export class BuildSystem {
       if (!r) return fail('A Reclaimer stands only on a seam (the marked 2×2 spot in each region)');
       if (!s.salvage.woken(r)) return fail(`Wake ${r.landmark.name} first: then its seam takes a Reclaimer`);
     }
+    // E23.8.3.2: the mainland's big machines stand only past the causeway
+    if (def.mainlandOnly && (roofId !== GROUND || !isMainlandCell(x) || !isMainlandCell(x + def.size - 1))) return fail(`${def.name}: only on the mainland`);
     if (type === 'chest' && s.machinesOfType('chest').length >= STORE.maxChests) return fail(`At most ${STORE.maxChests} Storage Chests`);
     if (roofId === GROUND && def.areaTypes) {
       const t = AREA_TYPES[s.areas.info(s.areas.map.areaOfCell(x, z)).type];

@@ -83,6 +83,48 @@ try {
   });
   if (field) await shot('mainland-salvage-field', field[0] + 0.5, field[1] + 0.5, 1.4, 0);
   else console.log('  ✗ no salvage field near the landing');
+  // E23.8.3.2: a steel field in the industrial ruins, and the mainland's two machines built from steel
+  const steel = await page.evaluate(() => {
+    const g = window.solarbloom;
+    const s = g.sim;
+    let at;
+    for (let cx = 9; cx < 40 && !at; cx++)
+      for (let cz = -12; cz < 12 && !at; cz++) {
+        const id = s.areas.map.areaOfChunk(cx, cz);
+        if (s.areas.info(id).type !== 'downtown') continue;
+        for (let z = cz * 16; z < cz * 16 + 16 && !at; z++)
+          for (let x = cx * 16; x < cx * 16 + 16 && !at; x++) {
+            s.grid.get('g', x, z); // generate the chunk
+            if (s.salvage.pileAt(x, z)?.material === 'steel') at = [x, z, id];
+          }
+      }
+    if (at) { s.state.areas[at[2]] ??= { fog: 'frontier', revealedAt: 0 }; s.areas.clear(at[2], true); }
+    // the two machines, on restored ground in the landing district
+    for (const m of ['steel', 'copper', 'gears', 'clay']) s.inventory.add(m, 60);
+    const built = [];
+    for (const type of ['gridBattery', 'longPump']) {
+      let done = false;
+      for (let z = 2; z < 30 && !done; z++)
+        for (let x = 150; x < 175 && !done; x++) {
+          const cells = s.grid.footprint('g', x, z, 2);
+          if (cells.some((c) => !c || c.blocked || c.occupantId || c.ramp)) continue;
+          for (const c of cells) { c.ground = 'restored'; c.pollution = 0; s.grid.touch(c); }
+          const m = s.build.place(type, 'g', x, z);
+          if (m) { built.push([type, x, z]); done = true; }
+        }
+    }
+    const island = s.build.check('gridBattery', 'g', 6, 6).reason;
+    g.chunks.markAll();
+    return { at, built, island, steelInPack: s.inventory.count('steel') };
+  });
+  console.log('  steel:', JSON.stringify(steel));
+  if (steel.built.length !== 2 || !/only on the mainland/.test(steel.island ?? '')) {
+    failed = true;
+    console.log('  ✗ both mainland machines should build past the causeway and refuse the island');
+  }
+  if (steel.built[0]) await shot('mainland-machines', steel.built[0][1] + 3, steel.built[0][2] + 1, 1.0, 0, 15000);
+  if (steel.at) await shot('mainland-steel-field', steel.at[0] + 0.5, steel.at[1] + 0.5, 1.3, 0, 15000);
+  else { failed = true; console.log('  ✗ no steel field in the industrial ruins nearby'); }
   if (errors.length) {
     failed = true;
     console.log('  ✗ page errors:\n   ', errors.join('\n    '));

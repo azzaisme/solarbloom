@@ -42,6 +42,7 @@ describe('E21.3: recipes', () => {
       const z = 12;
       ground(sim, x, z);
       if (MACHINES[type].areaTypes) continue; // needs its area type (the Reservoir Garden)
+      if (MACHINES[type].mainlandOnly) continue; // only past the causeway: paid exactly in tests/mainland-steel
       stock(sim, type);
       stock(sim, type);
       const first = sim.build.place(type, GROUND, x, z);

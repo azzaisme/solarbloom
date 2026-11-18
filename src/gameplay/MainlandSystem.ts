@@ -1,7 +1,19 @@
 import { GROUND } from '../core/GameState';
 import { brokenCells, isMainlandCell, landingArea, onCauseway } from '../core/Mainland';
-import { MAINLAND } from '../data/mainland';
+import { MAINLAND, MAINLAND_MACHINES } from '../data/mainland';
 import type { Sim } from './Sim';
+
+/**
+ * E23.8.3.2: the grid (E23.3, `sim.power`, PR #480) and water network (E23.4, `sim.water`) as far as the mainland's
+ * machines need them. Both are optional until those land: a machine they don't know simply stands there (cozy).
+ */
+export interface PowerHook {
+  register(type: string, spec: { battery?: { capacity: number; rate: number }; consumer?: { shed: string; draw: number } }): void;
+}
+export interface WaterHook {
+  /** E23.4: a pump of this machine type, pushing `flow` along up to `reach` pipe cells (API to settle with e23-water) */
+  registerPump?(type: string, spec: { reach: number; flow: number }): void;
+}
 
 /**
  * E23.8.3.1 (#451): the mainland. The Long Causeway's broken middle rises with the Great Bloom (fountain tier 5) and
@@ -14,6 +26,29 @@ export class MainlandSystem {
     sim.bus.on('fountain.tier', ({ tier }) => {
       if (tier >= MAINLAND.opensAtTier) this.open();
     });
+  }
+
+  /** The grid and water hooks the mainland's machines joined (for tests and the PR's checklist). */
+  wired = { power: false, water: false };
+
+  /**
+   * E23.8.3.2: joins the mainland's machines to the grid and the water network, once the Sim has built them
+   * (called at the end of the Sim's constructor). The Grid Battery is storage; the Long-range Pump is a consumer that
+   * sheds with the pumps, and a pump with a long reach.
+   */
+  wire(): void {
+    const sim = this.sim as unknown as { power?: PowerHook; water?: WaterHook };
+    const B = MAINLAND_MACHINES.gridBattery;
+    const P = MAINLAND_MACHINES.longPump;
+    if (sim.power?.register) {
+      sim.power.register('gridBattery', { battery: { capacity: B.capacity, rate: B.rate } });
+      sim.power.register('longPump', { consumer: { shed: 'pump', draw: P.draw } });
+      this.wired.power = true;
+    }
+    if (sim.water?.registerPump) {
+      sim.water.registerPump('longPump', { reach: P.reach, flow: P.flow });
+      this.wired.water = true;
+    }
   }
 
   /** Has the Great Bloom raised the causeway? */

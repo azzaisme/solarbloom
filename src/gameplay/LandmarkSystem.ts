@@ -127,6 +127,8 @@ export class LandmarkSystem {
   trade(give: MaterialId, get: MaterialId): boolean {
     const s = this.sim;
     if (!this.canTrade() || give === get) return false;
+    // E23.8.3.2: mainland-only materials (steel) are found, never traded for
+    if (MATERIALS[get].mainlandOnly) return false;
     if (!s.inventory.canPay({ [give]: TRADE.give })) {
       s.bus.emit('action.failed', { reason: `Tally wants ${TRADE.give} ${MATERIALS[give].name}` });
       return false;
@@ -138,6 +140,11 @@ export class LandmarkSystem {
     s.inventory.pay({ [give]: TRADE.give });
     s.inventory.add(get, TRADE.get);
     return true;
+  }
+
+  /** Materials Tally can give (not the mainland's own: steel is only found there). */
+  tradeTargets(): MaterialId[] {
+    return MATERIAL_IDS.filter((m) => !MATERIALS[m].mainlandOnly);
   }
 
   /** Materials bloombot could trade away (at least 3 within reach). */
