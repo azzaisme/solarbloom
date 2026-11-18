@@ -1,4 +1,6 @@
+import { PARK } from '../core/Areas';
 import type { MaterialId } from '../core/types';
+import { REGIONS } from '../data/oldcity';
 import { MATERIALS } from '../data/salvage';
 import type { Sim } from '../gameplay/Sim';
 
@@ -65,4 +67,58 @@ export function oldCityObjective(sim: Sim): Objective {
 /** The Keepers' requests that are not pinned (the backpack's Requests list). */
 export function otherRequests(sim: Sim): string[] {
   return sim.keepers.requests().slice(1).map((r) => r.text);
+}
+
+/**
+ * E21.12 (§16): the first fifteen minutes, as the hint line shows them (one step at a time, never skipped:
+ * ProgressionSystem advances the step by one at most per tick). Actions are named through `keyFor` (bloombot's key
+ * or pad button); no step speaks of clicks, taps, rates or upgrades.
+ */
+export const FIRST_STEPS = 9;
+
+export function oldCityHint(sim: Sim, step: number, keyFor: (a: 'pulse' | 'interact') => string): { text: string; target?: string } {
+  const park = sim.areas.counts(PARK).restored;
+  const restored = sim.state.stats.tilesRestored;
+  switch (step) {
+    case 0:
+      return { text: `You've landed! Salvage the pile in front of you: hold ${keyFor('interact')} 🧱` };
+    case 1:
+      return { text: `Walk up the steps to the park and pulse dead ground with ${keyFor('pulse')} · ${Math.min(4, restored)}/4` };
+    case 2:
+      return { text: 'The fountain wants 🌱 Seeds: look for the broken pots in the park' };
+    case 3:
+      return { text: `Restore the park around the fountain · ${Math.min(60, park)}/60`, target: '#obj' };
+    case 4: {
+      const s = sim.fountain.remaining('scrap');
+      const e = sim.fountain.remaining('seeds');
+      return { text: `Bring the fountain what it asks for (${keyFor('interact')} at the fountain) · still ${s} Scrap, ${e} Seeds`, target: '#obj' };
+    }
+    case 5:
+      return { text: 'Water returns! Build a ☀️ Solar Panel from 10 Scrap', target: '#buildToggle' };
+    case 6:
+      return { text: `Three beacons glow through the fog, and the Sea Lock waits down the beach. Pry open a barricade: hold ${keyFor('interact')}` };
+    case 7: {
+      const r = REGIONS.find((q) => q.ring === 1 && sim.gates.isOpen(q.gate.id) && q.gate.opensRegion !== false);
+      const k = r ? sim.keepers.def(r.keeper) : undefined;
+      return { text: k ? `A robot sleeps in ${r!.name}: pulse ${k.name}, then hand it 5 of anything` : 'A robot sleeps behind each barricade: wake one' };
+    }
+    default: {
+      const p = sim.keepers.pinned();
+      return { text: p ? p.text : 'Explore, salvage and restore: the city is yours to bring back.' };
+    }
+  }
+}
+
+/** Which first-fifteen-minutes step the game is on: the first not yet done (ProgressionSystem moves one at a time). */
+export function oldCityStep(sim: Sim): number {
+  const sv = sim.state.salvage;
+  if (!sv) return 0;
+  const salvaged = Object.keys(sv.piles).length > 0;
+  const seeds = (sv.pack.seeds ?? 0) + (sv.store.seeds ?? 0) + (sv.delivered.seeds ?? 0) > 0 || sv.tier >= 1;
+  const solar = sim.state.machines.some((m) => m.type === 'solar' && !m.starter);
+  const pried = REGIONS.some((r) => r.ring === 1 && r.gate.opensRegion !== false && sv.opened.includes(r.gate.id));
+  const keeper = REGIONS.some((r) => sv.opened.includes(r.gate.id) && (sv.keepers[r.keeper]?.step ?? 'asleep') !== 'asleep');
+  const done = [salvaged, sim.state.stats.tilesRestored >= 4, seeds, sim.areas.counts(PARK).restored >= 60 || sv.tier >= 1, sv.tier >= 1, solar, pried, keeper];
+  const i = done.indexOf(false);
+  return i < 0 ? done.length : i;
 }

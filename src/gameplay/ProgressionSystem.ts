@@ -6,6 +6,7 @@ import { formatCost } from '../core/Economy';
 import { MACHINES } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
+import { oldCityStep } from '../ui/OldCityGuide';
 
 /** The player's starting area (the park in the city). */
 export const HOME = 'home';
@@ -14,19 +15,6 @@ export interface Requirement {
   label: string;
   done: boolean;
 }
-
-export const TUTORIAL: string[] = [
-  'Walk up to a grey tile and pulse it to bring it back to life.',
-  'Restored tiles grow Biomass 🌿. Pulse a green tile again to nurture it into flowers.',
-  'Spend Biomass on an upgrade — open Upgrades (U).',
-  'Build a Water Condenser (4) on living ground for steady water.',
-  'Plants and machines make each other stronger. Build a Pollinator Garden (5).',
-  'Pulse mossy tiles inside the garden’s zone to set off a Bloom Chain.',
-  'Build a Drone Hub (6). Your drone can handle the small jobs now.',
-  'Restore 42 tiles, grow 24 to full bloom, build every machine and plant a Mother Tree to wake the Rooftop Core.',
-  'The Core is ready! Walk up to it to awaken the building.',
-  'The building lives again. Rooftop 2 awaits across the bridge…',
-];
 
 /** Machines the Seed's Core asks for (Round 2 rules; later specialty pieces are not required). */
 export const SEED_CORE_MACHINES: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree'];
@@ -134,6 +122,8 @@ export class ProgressionSystem {
 
   private computeStep(): number {
     const s = this.sim.state;
+    // E21.12: the Old City's first fifteen minutes, one step at a time (a step already done shows for a moment)
+    if (this.sim.oldCity) return Math.min(s.progression.tutorialStep + 1, oldCityStep(this.sim));
     if (s.progression.coreActivated) return 9; // before any scan: after the fountain this runs every tick for nothing
     const has = (t: BuildableType) => this.built(t);
     const n = this.restoredCount(HOME);

@@ -7,7 +7,7 @@ import type { Cost } from '../core/types';
 import type { BuildableType, MachineData, ResourceKind } from '../core/types';
 import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE, TIER2, TIER3 } from '../data/machines';
 import { MATERIAL_IDS, MATERIALS } from '../data/salvage';
-import { oldCityObjective } from './OldCityGuide';
+import { oldCityHint, oldCityObjective } from './OldCityGuide';
 import { AREA_TYPES } from '../data/city';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
@@ -242,8 +242,14 @@ export class Hud {
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
       <div id="intro" hidden><div class="panel card-intro">
         <h2>${LOGO_MARK}<span>Welcome to Solarbloom</span></h2>
-        <p>This old park is dead and grey, and the city around it is lost in a gloomy fog. Bring it back to life.</p>
-        <ol>
+        <p data-rules="classic">This old park is dead and grey, and the city around it is lost in a gloomy fog. Bring it back to life.</p>
+        <p data-rules="oldcity">The fog came and the island city emptied. A small boat has brought you, bloombot, from the mainland to bring it back to life.</p>
+        <ol data-rules="oldcity">
+          <li><b>Salvage what lies around</b>: Scrap, Seeds and more, by hand. Tidied ground can be restored.</li>
+          <li><b>Pulse dead ground back to life</b>, and bring the fountain what it asks for. Each delivery gives you a new way to move.</li>
+          <li><b>Clear the way</b> into the city's regions and wake the robot who sleeps in each.</li>
+        </ol>
+        <ol data-rules="classic">
           <li><b>Walk up to a grey tile and pulse it</b> to restore it. Each pulse uses a little ⚡ energy and 💧 water, which refill on their own.</li>
           <li><b>Green tiles grow 🌿 biomass.</b> Spend it on machines and upgrades. Pulse a green tile again to grow flowers.</li>
           <li><b>Goal:</b> wake the dry fountain. Then the fog starts to lift. The checklist is in the top-right corner.</li>
@@ -1345,7 +1351,7 @@ export class Hud {
     // Hint
     const step = s.state.progression.tutorialStep;
     const hint = $(this.root, '#hint');
-    const h = this.hintFor(step);
+    const h = s.oldCity ? oldCityHint(s, step, (a) => this.cb.keyFor(a)) : this.hintFor(step); // E21.12
     const showHint = this.settings.hints && !this.settings.potter && step !== this.hintDismissedStep && !this.introOpen;
     this.set('hintText', $(this.root, '#hintText'), 'text', h.text);
     this.set('hintShow', hint, 'cls', showHint ? '0' : '1', 'hide');

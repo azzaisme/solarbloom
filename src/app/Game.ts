@@ -462,6 +462,7 @@ export class Game {
       bot.onPad = (a) => this.doAction(a);
       bot.onButton = (i) => this.padListener?.(i);
       if (this.sim.oldCity) {
+        this.hud.root.dataset.rules = 'oldcity'; // E21.12: the intro card's Old City words
         this.keepers = new KeeperVisuals(this.sim, this.scene.world, this.app);
         this.keepers.reducedMotion = !!this.settings.reducedMotion;
         this.oc = new OldCityController(this.oldCityHost());
