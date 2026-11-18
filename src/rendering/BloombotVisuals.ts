@@ -4,7 +4,7 @@ import { color, PALETTE } from './Materials';
 /**
  * Bloombot (#234, G.10 + G.1): the player character, and the game's first skinned model. The GLB comes from
  * Meshy (generated, rigged, animated) and a Blender pass (assets/raw/bloombot/blender-pass.py); it holds one
- * skinned model in rigid robot pieces, a 24-bone rig and seven clips: idle, walk, hover (loops), pulse,
+ * skinned model in rigid robot pieces, a 24-bone rig and nine clips: idle, walk, hover, sit, meditate (loops), pulse,
  * assemble, interact, cheer (one-shots). Front is +Z, pivot at the feet, about 0.9 m tall.
  *
  * Until the model loads (or if it fails) a small stand-in capsule is drawn, so walking works from frame one.
@@ -29,9 +29,9 @@ const EYE = new pc.Vec3(0, 0.66, 0.2);
 /** Where the echo palms are while pulsing (model space, before SCALE): chest height, pushed forward. */
 const PALM = new pc.Vec3(0.06, 0.46, 0.34);
 
-export type BotLoop = 'idle' | 'walk' | 'hover';
+export type BotLoop = 'idle' | 'walk' | 'hover' | 'sit' | 'meditate';
 export type BotAction = 'pulse' | 'assemble' | 'interact' | 'cheer';
-const LOOPS: readonly string[] = ['idle', 'walk', 'hover'];
+const LOOPS: readonly string[] = ['idle', 'walk', 'hover', 'sit', 'meditate'];
 
 export class BloombotVisuals {
   /** placed at bloombot's feet, turned to its facing */
@@ -54,8 +54,9 @@ export class BloombotVisuals {
   /** the model's holder (the seated poses move it) */
   private holder?: pc.Entity;
   /**
-   * E23.2.3: a seated pose. 'sit': up on a bench seat, leaning back a little; 'meditate': settled low on the
-   * ground, eyes closed, breathing slowly. Procedural until the cross-legged clip lands (an art pass).
+   * E23.2.3: a seated pose, played as its looping clip (assets/raw/bloombot/add-rest-clips.py): 'sit' on a bench
+   * seat, thighs forward and shins down; 'meditate' cross-legged on the ground, hands by the knees, eyes closed.
+   * The stand-in (before the model loads) just sits lower.
    */
   private pose?: 'sit' | 'meditate';
 
@@ -183,23 +184,21 @@ export class BloombotVisuals {
 
   private posed() {
     const h = this.holder;
-    const breathe = this.reducedMotion ? 0 : Math.sin(this.clock * 1.6);
     if (this.pose === 'sit') {
-      h?.setLocalPosition(0, 0.2, -0.1);
-      h?.setLocalEulerAngles(-8, 0, 0);
-      this.standIn?.setLocalPosition(0, 0.6, -0.1);
+      // the clip keeps the hips at standing height, which is a bench seat's: just back onto the seat
+      h?.setLocalPosition(0, 0.02, -0.14);
+      this.standIn?.setLocalPosition(0, 0.5, -0.1);
     } else if (this.pose === 'meditate') {
-      h?.setLocalPosition(0, -0.14 + breathe * 0.012, 0);
-      h?.setLocalEulerAngles(4, 0, 0);
+      h?.setLocalPosition(0, 0, 0);
       this.standIn?.setLocalPosition(0, 0.26, 0);
     }
     const anim = this.model?.anim;
-    if (anim && !this.action) anim.speed = this.pose === 'meditate' ? 0.35 : 0.6;
+    if (anim && !this.action) anim.speed = this.pose === 'meditate' ? 0.6 : 0.8; // slow, calm breathing
   }
 
   /** The looping clip, from how fast bloombot moves (world units per second) and whether it hovers (sprint). */
   setMotion(speed: number, hovering: boolean) {
-    const want: BotLoop = speed < 0.05 ? 'idle' : hovering ? 'hover' : 'walk';
+    const want: BotLoop = this.pose && this.clips.has(this.pose) ? this.pose : speed < 0.05 ? 'idle' : hovering ? 'hover' : 'walk';
     const anim = this.model?.anim;
     if (!anim) return;
     if (!this.action) {

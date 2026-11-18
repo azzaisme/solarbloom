@@ -65,6 +65,8 @@ export class BotController {
   onButton?: (button: number) => void;
   /** E23.2.3: sitting (a bench, a charger): drawn here instead of at its pose, and input doesn't move it */
   seat?: { x: number; y: number; z: number; facing: number };
+  /** E23.2.3: moving while seated stands bloombot up */
+  onSeatMove?: () => void;
   /** true while input must not move bloombot (cinematics, open modal, paused) */
   frozen = () => false;
 
@@ -222,6 +224,7 @@ export class BotController {
         return;
       }
     }
+    if (this.seat && mag > 0.3 && !this.frozen()) this.onSeatMove?.();
     if (this.seat) {
       const st = this.seat;
       this.walk = undefined;

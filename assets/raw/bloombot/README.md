@@ -8,7 +8,8 @@ Generated in Meshy on 17 Nov 2026 from `docs/reference/bloombot-sheet.png`. 41 c
 | `bloombot-mesh.glb` + `_base_color.png` | Static mesh, meshy-t2.5 smart topology, 8,347 tris, meshy-n1 texture | `01a1e779-1a80-735f-beb6-5f5fd8c85671` |
 | `bloombot-meshy.glb` | Meshy's rig (24 bones) and clips, merged, untouched | rig `01a1e779-c5f4-7703-9e9d-27fb8eecfa24`, clips `01a1e77a-b1dd-75a7-9683-1af54d31c958` |
 | `meshy-parts/` | Meshy's separate downloads, not committed (rebuild `bloombot.glb` from them) | |
-| `bloombot.glb` | **The one to use.** `bloombot-meshy.glb` after `blender-pass.py` | |
+| `bloombot.glb` | **The one to use.** `bloombot-meshy.glb` after `blender-pass.py`, then `add-rest-clips.py` | |
+| `add-rest-clips.py` | E23.2.3: adds the `sit` (bench) and `meditate` (cross-legged) loops, posed from `idle`. Run it on `bloombot.blend` **after** every `blender-pass.py`, or the two clips are lost: `blender -b bloombot.blend -P add-rest-clips.py -- bloombot.glb sheet.png` (time-limit it) | |
 | `preview-mesh.png`, `preview-clips.png` | Meshy output: front, 3/4, side, back; middle frame of each clip | |
 | `bloombot.blend` | The same model as a Blender file, saved by the pass | |
 | `preview-fixed.png` | After the Blender pass: a turnaround (top), then pulse, assemble, cheer, idle, three frames each | |

@@ -12,6 +12,8 @@ export interface Bench {
   x: number;
   z: number;
   kind: 'old' | 'placed';
+  /** which way its seat faces (radians, 0 = +z, as bloombot's facing): the bench model's back is on its -z side */
+  facing: number;
 }
 
 const STEPS: KeeperStep[] = ['asleep', 'request1', 'request2', 'landmark', 'settled'];
@@ -38,9 +40,9 @@ export class RestSystem {
   benchAt(x: number, z: number): Bench | undefined {
     const t = this.sim.grid.peek(GROUND, x, z);
     if (!t) return undefined;
-    if (t.prop === 'bench') return { id: `bench:${x}:${z}`, x, z, kind: 'old' };
+    if (t.prop === 'bench') return { id: `bench:${x}:${z}`, x, z, kind: 'old', facing: 0 }; // old benches are drawn unturned
     const d = this.sim.state.cozy?.decor?.[decorKey(GROUND, x, z)];
-    if (d && d.split('@')[0] === 'bench') return { id: `bench:${x}:${z}`, x, z, kind: 'placed' };
+    if (d && d.split('@')[0] === 'bench') return { id: `bench:${x}:${z}`, x, z, kind: 'placed', facing: (-Number(d.split('@')[1] ?? 0) * Math.PI) / 2 }; // as DecorArt turns it
     return undefined;
   }
 

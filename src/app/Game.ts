@@ -16,6 +16,8 @@ import { OLD_CITY, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
 import { RIPPLE } from '../data/pulse';
+import { REST } from '../data/rest';
+import { Resting } from './Resting';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
@@ -260,6 +262,8 @@ export class Game {
   private oc?: OldCityController;
   /** E21.8: the Keepers (old-city rules) */
   private keepers?: KeeperVisuals;
+  /** E23.2.3: sitting on benches and meditating at chargers */
+  private resting?: Resting;
   private inspectTimer = 0;
   private cinematic = false;
   private specialtyToasted = new Set<string>();
@@ -494,6 +498,14 @@ export class Game {
         this.keepers = new KeeperVisuals(this.sim, this.scene.world, this.app);
         this.keepers.reducedMotion = !!this.settings.reducedMotion;
         this.oc = new OldCityController(this.oldCityHost());
+        this.resting = new Resting({
+          sim: this.sim, bot, camera: this.camera, hud: this.hud, sfx: this.sfx, keepers: this.keepers,
+          glyph: (a) => this.glyph(a),
+          showFail: (msg, at) => {
+            const sc = at ? this.botTileScreen(at) : undefined;
+            this.hud.showFail(msg, sc?.x, sc?.y);
+          },
+        });
         this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
         // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
         this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
@@ -1210,6 +1222,7 @@ export class Game {
       if (!this.cinematic || this.photo.active) this.photo.action(a);
       return;
     }
+    if (this.resting?.action(a)) return; // E23.2.3: sitting: Interact or Back stands, Pulse runs time faster
     const slot = SLOTS.indexOf(a as (typeof SLOTS)[number]);
     if (slot >= 0) return this.useSlot(slot);
     switch (a) {
@@ -1504,7 +1517,7 @@ export class Game {
   /** Bloombot: hold the camera at the close view's distance (E19.2: building no longer pulls it back). */
   private updateBotZoom() {
     const b = this.bot;
-    if (!b || this.cinematic) return;
+    if (!b || this.cinematic || this.resting?.active) return; // E23.2.3: sitting keeps its calm, wider view
     if (this.overviewOn && b.speed > 0.05) this.overviewOn = false; // walking leaves the overview
     if (this.overviewOn || !b.following) return; // the overview, or a camera-only fly-to, keeps its own zoom
     // E21.22: the chosen step; on a rooftop the view eases out to the far step
@@ -1707,6 +1720,7 @@ export class Game {
     const dist = Math.hypot(tile.x + 0.5 - b.pose.x, tile.z + 0.5 - b.pose.z);
     const occ = this.sim.occupant(tile);
     const dec = this.cozy.decorOf(tile.occupantId);
+    if (this.resting && !aim) out.push(...this.resting.candidates(tile, dist)); // E23.2.3: benches and chargers
     if (dec) {
       out.push({
         kind: 'decoration', id: `decor:${tile.occupantId}`, verb: 'Pick up', name: DECOR_OPTION[dec.kind]?.name ?? 'the decoration', distance: dist, at: tile,
@@ -1778,6 +1792,7 @@ export class Game {
 
   /** E22.2: the prompt for this frame: the Interact target (or why not), and Pulse when it also applies. */
   private promptModel(target: InteractTarget | undefined): PromptModel | undefined {
+    if (this.resting?.active) return this.resting.prompt();
     const b = this.bot!;
     if (this.building()) {
       const tool = this.hud.currentTool;
@@ -4166,7 +4181,7 @@ export class Game {
   /** Runs simulation ticks within the frame budget: the frame's own time first, then any catch-up owed. */
   private runSim(dt: number) {
     const t0 = performance.now();
-    runSimFrame(this.sim, this, dt, { pause: this.pause, speed: this.speed, step: TUNING.simStep, budgetMs: TUNING.catchUp.frameBudgetMs, maxCatchUp: TUNING.catchUp.maxSeconds });
+    runSimFrame(this.sim, this, dt, { pause: this.pause, speed: this.speed * (this.sim.rest.fast ? REST.fastTime : 1), step: TUNING.simStep, budgetMs: TUNING.catchUp.frameBudgetMs, maxCatchUp: TUNING.catchUp.maxSeconds });
     this.simMs = performance.now() - t0;
     this.simMsWorst = Math.max(this.simMsWorst, this.simMs);
   }
@@ -4258,6 +4273,7 @@ export class Game {
       this.updateExploreCamera(wdt);
       this.oc?.update(wdt);
       this.keepers?.update(wdt);
+      this.resting?.update(wdt);
       this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();

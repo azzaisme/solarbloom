@@ -793,6 +793,12 @@ export class ChunkRenderer {
     }
     const [name, scale, turn] = ChunkRenderer.PROP_MODELS[prop] ?? ChunkRenderer.PROP_MODELS.stump;
     const rot = turn ? Math.floor(dhash(Math.floor(x), Math.floor(z), 211) * 4) * (Math.PI / 2) : 0;
+    if (prop === 'bench' && this.sim.oldCity) {
+      // E23.2.3: an old park bench is broken until mended: weathered, sagging and sunk a little into the ground
+      const bx = Math.floor(x);
+      const bz = Math.floor(z);
+      if (!this.sim.rest.usable({ id: `bench:${bx}:${bz}`, x: bx, z: bz, kind: 'old', facing: 0 })) return this.batch.add(name, x, y - 0.05, z, rot + 0.12, scale, scale * 0.82, scale, true);
+    }
     return this.batch.add(name, x, y, z, rot, scale, scale, scale, this.neglected);
   }
 

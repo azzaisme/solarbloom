@@ -225,8 +225,13 @@ export class KeeperVisuals {
       }
       const b = this.beside?.id === def.id ? this.beside : undefined;
       if (b) {
-        // sitting beside bloombot: up on the bench, idling (it walks back to where it was afterwards)
-        if (step !== 'asleep') this.play(v, 'idle');
+        // sitting beside bloombot: down on the bench seat (the sit-down clip the Keepers doze with, which is seat
+        // height), then back to where it was afterwards. The stand-in has no sitting clip: it just stands there.
+        if (!v.standIn) {
+          v.body.setLocalEulerAngles(0, 0, 0);
+          v.body.setLocalPosition(0, SEAT.height * 0.35, -0.08);
+          this.play(v, 'sleep');
+        } else this.play(v, 'idle');
         v.root.setPosition(b.x, b.y, b.z);
         v.root.setEulerAngles(0, (b.facing * 180) / Math.PI, 0);
         continue;
