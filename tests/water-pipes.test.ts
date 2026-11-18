@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import type { MachineData, MachineType, WeatherKind } from '../src/core/types';
+import type { BuildableType, MachineData, MachineType, WeatherKind } from '../src/core/types';
 import { WATER_NET } from '../src/data/water';
 import { Sim } from '../src/gameplay/Sim';
 import { tankId } from '../src/gameplay/WaterPipes';
@@ -201,9 +201,9 @@ describe('E23.4.2.2: pumps and pipe placement', () => {
     const { sim } = park();
     sim.water.registerPump('longPump', { reach: 3, flow: 2 * WATER_NET.pump.perDay, power: 8, size: 2 });
     // never in the water, and on a bank
-    expect(sim.water.placeProblem('longPump' as MachineType, GROUND, 2, 10)).toMatch(/water/);
-    expect(sim.water.placeProblem('longPump' as MachineType, GROUND, 9, 4)).toMatch(/bank/);
-    expect(sim.water.placeProblem('longPump' as MachineType, GROUND, 4, 10)).toBeUndefined();
+    expect(sim.water.placeProblem('longPump' as BuildableType, GROUND, 2, 10)).toMatch(/water/);
+    expect(sim.water.placeProblem('longPump' as BuildableType, GROUND, 9, 4)).toMatch(/bank/);
+    expect(sim.water.placeProblem('longPump' as BuildableType, GROUND, 4, 10)).toBeUndefined();
     const lp = put(sim, 'longPump' as MachineType, 4, 10, 2);
     put(sim, 'solar', 6, 9);
     put(sim, 'solar', 6, 12);
