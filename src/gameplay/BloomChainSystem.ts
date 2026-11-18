@@ -793,7 +793,7 @@ export class BloomChainSystem {
         s.bus.emit('tree.discharged', { machineId: m.id });
         const tiles = s.grid
           .tilesNear(m, s.upgrades.treeRadius(m) + Math.min(2, this.consumeOvercharge(m)))
-          .filter((t) => !run.visited.has(t.id))
+          .filter((t) => !run.visited.has(t.id) && s.restoration.helperMay(t)) // E21.9: bloombot's share first
           .filter((t) => s.restoration.isEligible(t) || (t.ground === 'restored' && !t.occupantId && t.bloom < TUNING.restore.maxBloom))
           .map((t) => ({ t, d: distToFootprint(t.x, t.z, m.x, m.z, m.size) }))
           .sort((a, b) => a.d - b.d || a.t.z - b.t.z || a.t.x - b.t.x);

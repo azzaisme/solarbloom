@@ -73,6 +73,7 @@ import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
 import { OldCityController } from './OldCity';
+import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Cozy } from '../gameplay/Cozy';
 import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
 import { chunkKey } from '../core/Grid';
@@ -216,6 +217,8 @@ export class Game {
   private selected?: string;
   /** E21: the Old City's panels and held actions (old-city rules with bloombot only) */
   private oc?: OldCityController;
+  /** E21.8: the Keepers (old-city rules) */
+  private keepers?: KeeperVisuals;
   private inspectTimer = 0;
   private cinematic = false;
   private specialtyToasted = new Set<string>();
@@ -458,7 +461,11 @@ export class Game {
       bot.onZoom = (f) => this.photo?.active && this.photo.zoom(f); // the right stick zooms only in photo mode
       bot.onPad = (a) => this.doAction(a);
       bot.onButton = (i) => this.padListener?.(i);
-      if (this.sim.oldCity) this.oc = new OldCityController(this.oldCityHost());
+      if (this.sim.oldCity) {
+        this.keepers = new KeeperVisuals(this.sim, this.scene.world, this.app);
+        this.keepers.reducedMotion = !!this.settings.reducedMotion;
+        this.oc = new OldCityController(this.oldCityHost());
+      }
       const focus = new PadFocus(this.hud.root);
       bot.padCapture = (i) => !this.padListener && focus.button(i);
       // E19.2: no zoom in play or while building (the right stick's up and down do nothing for now)
@@ -1056,6 +1063,7 @@ export class Game {
   /** Bloombot (G.4): E / A: the current tool on the tile in front (Inspect pulses; build tools build). */
   private botAct() {
     if (!this.bot || this.cinematic || this.paused || this.hud.modalOpen || this.bot.visuals.busy === 'assemble') return;
+    if (this.oc && !this.building() && this.oc.pulse(this.bot.front())) return; // E21.8: a pulse stirs a sleeping Keeper
     const aim = this.building() ? this.buildAim() : undefined; // E19.2: build mode acts where the hologram is
     const p = aim ? aim.p : this.frontPick();
     if (!p || !p.tile) return;
@@ -1145,6 +1153,11 @@ export class Game {
         else this.sfx.click();
       },
       vista: (x: number, z: number, secs: number, done: (seen: string[]) => void) => this.vista(x, z, secs, done),
+      keeperScreen: (id: string) => {
+        const p = this.keepers?.headWorld(id);
+        const s = p && this.camera.onScreen(p, 20);
+        return s ? { x: s.x, y: s.y } : undefined;
+      },
       markTile: (x: number, z: number) => {
         const t = this.sim.grid.get(GROUND, x, z);
         if (t) this.chunks.markTile(t);
@@ -3527,6 +3540,12 @@ export class Game {
   private wakeLandmark(m: MachineData) {
     if (this.cinematic) return;
     const id = this.sim.areas.areaOf(m)!;
+    if (this.sim.oldCity) {
+      // E21.9: an Old City landmark is woken by bloombot's own delivery, by hand (the fountain by its tiers)
+      if (id === PARK) this.oc?.openFountain();
+      else if (this.sim.landmarks.interact(id) === 'woke') this.sfx.fanfare();
+      return;
+    }
     if (id === PARK) this.sim.progression.activateCore();
     else this.sim.areas.clear(id);
   }
@@ -3888,6 +3907,7 @@ export class Game {
     if (this.bot) {
       this.bot.update(this.hiddenPause ? 0 : dt);
       this.oc?.update(this.hiddenPause ? 0 : dt);
+      this.keepers?.update(this.hiddenPause ? 0 : dt);
       this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();

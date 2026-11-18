@@ -30,6 +30,11 @@ export class RestorationSystem {
     return { energy: Math.round(base.energy * this.sim.upgrades.pulseEnergyMult * roofMult * 100) / 100, water: Math.ceil(base.water * roofMult) };
   }
 
+  /** E21.9: may a helper (drone, Cultivator, Mother Tree) work this tile? (Old City: bloombot's share first.) */
+  helperMay(t: TileData): boolean {
+    return t.roofId !== GROUND || this.sim.areas.helpersMayWork(this.sim.areas.areaOf(t));
+  }
+
   /** Can this tile be turned into a restoration target at all (ignoring cost)? */
   isEligible(t: TileData, allowPolluted = true): boolean {
     const roof = this.sim.grid.roof(t.roofId);
@@ -277,6 +282,8 @@ export class RestorationSystem {
         this.sim.bus.emit('tile.softened', { tile: nb });
       }
     }
+    // E21.9: bloombot's own pulses count toward its share of an Old City region
+    if (source === 'pulse' || source === 'broad' || source === 'mega') this.sim.areas.countBot(t);
     this.sim.areas.onRestored(t);
     if (quiet) {
       this.sim.bus.emit('tile.restored', { tile: t, source, chainId: -1, biomass });

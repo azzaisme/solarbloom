@@ -33,3 +33,8 @@
 /* E21.2: salvage fly-ups */
 .oc-fly { position: absolute; transform: translate(-50%, -100%); pointer-events: none; font: 700 16px var(--font-display); color: var(--gold-hi); text-shadow: var(--shadow-sm); animation: oc-fly 1.4s ease-out forwards; z-index: 8; white-space: nowrap; }
 @keyframes oc-fly { from { opacity: 0; margin-top: 0; } 15% { opacity: 1; } to { opacity: 0; margin-top: -48px; } }
+
+/* E21.8: Keeper speech bubbles */
+.oc-bubble { position: absolute; transform: translate(-50%, -100%); max-width: 280px; padding: 8px 12px; border-radius: var(--radius); background: var(--glass-strong); border: 1px solid var(--edge-soft); box-shadow: var(--shadow-sm); color: var(--text); font-size: 13.5px; line-height: 1.4; pointer-events: none; z-index: 7; }
+.oc-bubble b { display: block; font: 600 13px var(--font-display); color: var(--gold); margin-bottom: 2px; }
+.oc-bubble p { margin: 0; }

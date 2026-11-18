@@ -5,7 +5,7 @@ import type { Hud } from '../ui/Hud';
 import type { MachineData, MaterialId } from '../core/types';
 import { GROUND } from '../core/GameState';
 import { MATERIALS, SALVAGE } from '../data/salvage';
-import { flyUp, fountainHtml, OldCityPanel, storageAct, storageHtml } from '../ui/OldCityPanel';
+import { flyUp, fountainHtml, OldCityPanel, SpeechBubble, storageAct, storageHtml, tradeHtml } from '../ui/OldCityPanel';
 import { PARK } from '../core/Areas';
 import { setPieceAt } from '../core/OldCityLayout';
 
@@ -21,6 +21,8 @@ export interface OldCityHost {
   sound(name: 'click' | 'salvage' | 'pry' | 'deliver' | 'tier' | 'wake', material?: MaterialId): void;
   /** redraws the ground tile at a cell */
   markTile(x: number, z: number): void;
+  /** E21.8: where a Keeper's head is on screen (undefined: not drawn) */
+  keeperScreen(id: string): { x: number; y: number } | undefined;
   /**
    * E21.24 / E21.22: the camera rises over a spot for `secs` and comes back (skippable; a still frame with reduced
    * motion); `done` gets the regions whose landmark was on screen.
@@ -35,12 +37,25 @@ export interface OldCityHost {
  */
 export class OldCityController {
   readonly panel: OldCityPanel;
+  /** E21.8: what the last Keeper to speak said */
+  readonly bubble: SpeechBubble;
+  private speaker?: string;
   /** a held Interact in progress (salvage, pry): what, how long so far, how long it needs */
   private hold?: { kind: string; t: number; need: number; done: () => void; padHeld: boolean };
   private keysDown = new Set<string>();
 
   constructor(private host: OldCityHost) {
     this.panel = new OldCityPanel(host.hud.root);
+    this.bubble = new SpeechBubble(host.hud.root);
+    host.sim.bus.on('keeper.said', ({ keeperId, lines }) => {
+      this.speaker = keeperId;
+      this.bubble.say(host.sim.keepers.def(keeperId).name, lines);
+    });
+    host.sim.bus.on('keeper.step', ({ keeperId, step }) => {
+      if (step === 'request1') host.sound('wake');
+      const k = host.sim.keepers.def(keeperId);
+      host.markTile(k.x, k.z);
+    });
     window.addEventListener('keydown', (e) => this.keysDown.add(e.code));
     window.addEventListener('keyup', (e) => this.keysDown.delete(e.code));
     window.addEventListener('blur', () => this.keysDown.clear());
@@ -86,6 +101,7 @@ export class OldCityController {
   update(dt: number) {
     const p = this.host.bot.pose;
     this.sim.bot = { roofId: p.roofId, x: p.x, z: p.z };
+    this.bubble.place(this.speaker ? this.host.keeperScreen(this.speaker) : undefined);
     const h = this.hold;
     if (!h) return;
     if (h.padHeld && !this.interactHeld() && h.t > 0.12) {
@@ -127,6 +143,19 @@ export class OldCityController {
       this.salvageHold(pile.id, front, false);
       return true;
     }
+    // E21.8: a Keeper: wake it, hand over what it asks for, or hear it
+    const keeper = onGround ? this.sim.keepers.at(front.x, front.z) : undefined;
+    // E21.9: once the Market Hall is awake, Tally trades any 3 of one material for 1 of another
+    if (keeper && keeper.id === 'tally' && this.sim.landmarks.canTrade()) {
+      this.openTrade();
+      return true;
+    }
+    if (keeper && this.sim.keepers.visible(keeper.id)) {
+      const r = this.sim.keepers.interact(keeper.id);
+      if (r === 'gave' || r === 'done' || r === 'woke') this.host.sound('deliver');
+      this.host.bot.visuals.play('interact');
+      return true;
+    }
     // E21.24: a lookout: a short vista over the city; every landmark beacon in view counts as seen
     const sp = onGround ? setPieceAt(front.x, front.z) : undefined;
     if (sp?.kind === 'lookout') {
@@ -161,12 +190,35 @@ export class OldCityController {
       this.openFountain();
       return true;
     }
+    // E21.9: a landmark still asleep: hand over its delivery (only when the region is ready)
+    if (occupant?.type === 'core') {
+      const r = this.sim.landmarks.regionAt(occupant.x, occupant.z);
+      if (r && this.sim.areas.fog(r.id) !== 'cleared') {
+        const res = this.sim.landmarks.interact(r.id);
+        if (res) this.host.sound(res === 'woke' ? 'wake' : 'deliver');
+        this.host.bot.visuals.play('interact');
+        return true;
+      }
+    }
     if (occupant && (occupant.type === 'chest' || this.isStoreLandmark(occupant))) {
       this.openStorage();
       return true;
     }
     void front;
     return false;
+  }
+
+  /**
+   * E21.8: Pulse on the tile in front: a sleeping Keeper stirs. True when the Old City handled it (the game then
+   * does nothing else).
+   */
+  pulse(front: { x: number; z: number }): boolean {
+    if (!this.sim.oldCity || this.host.bot.pose.roofId !== GROUND) return false;
+    const keeper = this.sim.keepers.at(front.x, front.z);
+    if (!keeper || !this.sim.keepers.visible(keeper.id)) return false;
+    if (!this.sim.keepers.pulse(keeper.id)) this.sim.keepers.interact(keeper.id);
+    this.host.bot.visuals.play('pulse');
+    return true;
   }
 
   /** Salvage a pile: hold Interact 0.6 s (a click-to-walk arrival needs no hold). */
@@ -200,6 +252,19 @@ export class OldCityController {
   private isStoreLandmark(m: MachineData): boolean {
     if (m.type !== 'core') return false;
     return this.sim.inventory.accessPoints().some((p) => p.x === m.x && p.z === m.z && p.roofId === m.roofId);
+  }
+
+  /** E21.9: Tally's trade panel: pick what to give (3) and what to get (1). */
+  openTrade() {
+    let give: MaterialId | undefined;
+    this.host.sound('click');
+    this.panel.open(
+      () => tradeHtml(this.sim, give),
+      (act, arg) => {
+        if (act === 'give') give = arg as MaterialId;
+        else if (act === 'get' && give && this.sim.landmarks.trade(give, arg as MaterialId)) this.host.sound('deliver');
+      },
+    );
   }
 
   openFountain() {

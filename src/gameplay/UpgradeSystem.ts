@@ -198,7 +198,9 @@ export class UpgradeSystem {
     for (const k of CAPPED) {
       const tiers = TUNING.storageTiers[k];
       const tier = tiers[Math.min(tiers.length - 1, this.level('seedVault'))];
-      this.sim.state.caps[k] = big(this.sim.state.caps[k]).max(tier * mult); // big(): tolerate a plain number from tooling
+      // E21.9: Cistern Basin doubles water storage, The Terraces energy storage
+      const lm = this.sim.landmarks?.capMult(k) ?? 1;
+      this.sim.state.caps[k] = big(this.sim.state.caps[k]).max(tier * mult * lm); // big(): tolerate a plain number from tooling
     }
   }
 
@@ -289,7 +291,7 @@ export class UpgradeSystem {
   }
   /** Drone Dash: ×1.5, ×2, ×3 … ×6 as fast overall (flight and rest), per hub. */
   droneSpeed(hub: MachineData | undefined) {
-    return DRONE_DASH[Math.min(DRONE_DASH.length - 1, this.levelOf(hub, 'droneSpeed'))];
+    return DRONE_DASH[Math.min(DRONE_DASH.length - 1, this.levelOf(hub, 'droneSpeed'))] * (this.sim.landmarks?.helperSpeed() ?? 1); // E21.9: Clock Plaza
   }
   droneRadius(hub: MachineData | undefined) {
     return TUNING.drone.hubRadius + 2 * this.levelOf(hub, 'droneRadius') + (hub && tier3(hub) ? TUNING.super.megahub.radiusBonus : hub && tier2(hub) ? TUNING.merge.fleetRadiusBonus : 0);

@@ -83,7 +83,7 @@ try {
       g.cloudWall?.sync?.();
       return byType;
     });
-    await shot('oldcity-overview', 8, -8, 0.13, 0, 14000);
+    await shot('oldcity-overview', 8, -8, 0.13, 0, 30000);
     for (const [type, [x, z, id]] of Object.entries(types)) await shot(`oldcity-region-${type}-${id}`, x, z, 0.9, 0, 8000);
   } else if (section === 'height') {
     await page.evaluate(() => {
@@ -100,6 +100,22 @@ try {
     await shot('oldcity-height-cistern-basin', 56, 46, 0.55, 20);
     // the view from Observatory Hill, the highest ground, back over the city
     await shot('oldcity-height-from-observatory-hill', 64, -66, 0.35, 225);
+  }
+  if (section === 'keepers') {
+    // E21.8: a sleeping Keeper (Tide, on the open beach), the same Keeper awake and speaking, and the Pylon settled
+    await shot('oldcity-keeper-asleep', 10.5, 21, 1.7, 0);
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      const s = g.sim;
+      g.bot.teleport('g', 10.5, 20.5);
+      s.bot = { roofId: 'g', x: 10.5, z: 20.5 };
+      s.keepers.pulse('tide');
+      s.inventory.add('scrap', 6);
+      s.keepers.interact('tide');
+    });
+    await shot('oldcity-keeper-awake', 10.5, 21, 1.7, 0, 2500);
+    const step = await page.evaluate(() => window.solarbloom.sim.keepers.step('tide'));
+    if (step !== 'request1') throw new Error(`Tide should be awake, is ${step}`);
   }
   if (errors.length) {
     failed = true;

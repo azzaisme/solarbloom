@@ -147,3 +147,44 @@ export function fountainHtml(sim: Sim): string {
     <h3>It brings</h3><p class="oc-soft">${t.gives.map(escHtml).join(' · ')}</p>
     <div class="oc-row"><button data-act="giveAll" ${canGive ? '' : 'disabled'}>Give all I have</button><button data-act="storage">Storage</button></div>`;
 }
+
+// ───────────── Keeper speech bubbles (E21.8) ─────────────
+
+/** A speech bubble that follows a point in the world for a few seconds (one to three lines, no voice, no choices). */
+export class SpeechBubble {
+  readonly el: HTMLElement;
+  private until = 0;
+  constructor(root: HTMLElement) {
+    this.el = document.createElement('div');
+    this.el.className = 'oc-bubble';
+    this.el.hidden = true;
+    root.appendChild(this.el);
+  }
+  say(name: string, lines: string[], secs = 3 + lines.length * 1.6) {
+    this.el.innerHTML = iconize(`<b>${escHtml(name)}</b>${lines.map((l) => `<p>${escHtml(l)}</p>`).join('')}`);
+    this.el.hidden = false;
+    this.until = performance.now() + secs * 1000;
+  }
+  /** Per frame: follow the speaker on screen (undefined: off screen or gone). */
+  place(at: { x: number; y: number } | undefined) {
+    if (this.el.hidden) return;
+    if (!at || performance.now() > this.until) {
+      this.el.hidden = true;
+      return;
+    }
+    this.el.style.left = `${at.x}px`;
+    this.el.style.top = `${at.y}px`;
+  }
+}
+
+// ───────────── Tally's trade (E21.9) ─────────────
+
+/** HTML of Tally's trade panel: 3 of one material for 1 of another. */
+export function tradeHtml(sim: Sim, give: MaterialId | undefined): string {
+  const can = sim.landmarks.tradable();
+  const gives = MATERIAL_IDS.map((m) => `<button data-act="give" data-arg="${m}" ${can.includes(m) ? '' : 'disabled'} class="${give === m ? 'on' : ''}">${MATERIALS[m].icon} ${MATERIALS[m].name}${give === m ? ' ✓' : ''}</button>`).join('');
+  const gets = MATERIAL_IDS.filter((m) => m !== give).map((m) => `<button data-act="get" data-arg="${m}" ${give ? '' : 'disabled'}>${MATERIALS[m].icon} ${MATERIALS[m].name}</button>`).join('');
+  return `<h2>🤖 Tally's trade</h2><p class="oc-soft">Any 3 of one material for 1 of another.</p>
+    <h3>Give 3</h3><div class="oc-row">${gives}</div>
+    <h3>Get 1</h3><div class="oc-row">${gets}</div>`;
+}

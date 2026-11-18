@@ -137,9 +137,18 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     `<ul style="margin:6px 0;padding-left:18px;font-size:12.5px;list-style:none">${checklist}</ul>` +
     (id === PARK ? '' : `<p class="stat">${cleared ? 'Bonus' : 'Bonus once clear'}: ${bonusText || '—'}</p>`) +
     `<p class="stat">Machines: ${machineText || 'none yet'}</p>` +
+    oldCityShare(s, id) +
     (cultivating(s, id) ? `<p class="stat" data-cultivating="${esc(id)}">🚜 ${cultivating(s, id)} tile${cultivating(s, id) === 1 ? '' : 's'} being cultivated</p>` : '') +
     district +
     switches +
     wake
   );
+}
+
+/** E21.9: under old-city rules a region shows bloombot's share until helpers may join in. */
+function oldCityShare(s: Sim, id: string): string {
+  if (!s.oldCity || id === PARK || s.areas.info(id).noLandmark || s.areas.fog(id) === 'cleared') return '';
+  const have = s.state.areas[id]?.byBot ?? 0;
+  const need = s.areas.shareTarget(id);
+  return s.areas.shareMet(id) ? `<p class="stat" data-share="${esc(id)}">🛸 Helpers can work here</p>` : `<p class="stat" data-share="${esc(id)}">🤖 Your share: ${Math.min(have, need)} / ${need}</p>`;
 }

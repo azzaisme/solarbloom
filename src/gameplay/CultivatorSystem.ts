@@ -27,7 +27,7 @@ export class CultivatorSystem {
     return m.upg?.[id] ?? 0;
   }
   speed(m: MachineData) {
-    return 1 + C().speedPerLevel * this.level(m, 'cultSpeed');
+    return (1 + C().speedPerLevel * this.level(m, 'cultSpeed')) * (this.sim.landmarks?.helperSpeed() ?? 1); // E21.9: Clock Plaza
   }
   width(m: MachineData) {
     return 1 + this.level(m, 'cultWidth');
@@ -66,7 +66,7 @@ export class CultivatorSystem {
   private takeable(t: TileData): boolean {
     if (t.ground !== 'polluted' && t.ground !== 'prepared') return false;
     if (t.occupantId) return false;
-    return this.sim.restoration.isEligible(t);
+    return this.sim.restoration.isEligible(t) && this.sim.restoration.helperMay(t); // E21.9: bloombot's share first
   }
 
   /**

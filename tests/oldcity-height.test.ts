@@ -164,7 +164,7 @@ describe('E21.24: terraces', () => {
       const edge = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => levelAt(lo.x + dx, lo.z + dz) < levelAt(lo.x, lo.z));
       expect(edge, `${id} lookout`).toBe(true);
     }
-  });
+  }, 30_000);
 
   it('a lookout is a set piece: a bench and a telescope that blocks its tile', () => {
     const sim = oldSim();

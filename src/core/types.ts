@@ -333,6 +333,8 @@ export interface AreaState {
    * the area behaves exactly as hidden fog (nothing can be walked, restored or built). Absent on older saves.
    */
   sealed?: boolean;
+  /** E21.9: tiles in this area bloombot restored itself (old-city rules: helpers wait until it has done its share) */
+  byBot?: number;
   /** the unlock price, set when the area was revealed (biomass as a big-number string) */
   price?: { biomass: string; energy: number };
   /** sim time the player unlocked it */

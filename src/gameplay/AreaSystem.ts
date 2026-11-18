@@ -227,8 +227,39 @@ export class AreaSystem {
     return c;
   }
 
+  // ───────────── E21.9: bloombot first ─────────────
+
+  /** Counts a tile bloombot restored itself (its own pulse), in the Old City only. */
+  countBot(t: TileData) {
+    if (!this.oldCity || t.roofId !== GROUND) return;
+    const id = this.areaOf(t);
+    const st = id ? this.sim.state.areas[id] : undefined;
+    if (!st || id === PARK) return;
+    st.byBot = (st.byBot ?? 0) + 1;
+  }
+
+  /** Bloombot's share of an Old City area: a quarter of the tiles that wake its landmark. */
+  shareTarget(id: string): number {
+    return Math.max(1, Math.ceil(this.need(id) / 4));
+  }
+
+  /** Has bloombot done its share here? */
+  shareMet(id: string): boolean {
+    return (this.sim.state.areas[id]?.byBot ?? 0) >= this.shareTarget(id);
+  }
+
+  /**
+   * May helpers (drones, Cultivators, Mother Tree pulses) work here? Always under classic rules; in the Old City
+   * only in the park, in woken regions, and where bloombot has done its share.
+   */
+  helpersMayWork(id: string | undefined): boolean {
+    if (!this.oldCity || !id || id === PARK) return true;
+    return this.fog(id) === 'cleared' || this.shareMet(id);
+  }
+
   /** Tiles to restore before the landmark can be woken: a share of the area, capped (scaled by difficulty). */
   need(id: string): number {
+    if (this.oldCity) return Math.max(1, Math.ceil(this.counts(id).restorable / 2)); // E21.9: half the region
     const c = this.counts(id);
     const cap = Math.round(TUNING.city.clearCap * this.info(id).difficulty);
     const mult = this.sim.upgrades.wakeNeedMult; // Fog Lanterns
@@ -253,6 +284,11 @@ export class AreaSystem {
   /** The landmark can be woken: enough restored, its specialty action done (City 09.1), not yet cleared. */
   ready(id: string): boolean {
     const f = this.fog(id);
+    // E21.9: an Old City region is ready when half of it is restored and its Keeper's second request is done
+    if (this.oldCity) {
+      const r = regionById(id);
+      return !!r && (f === 'frontier' || f === 'thinning') && this.counts(id).restored >= this.need(id) && this.sim.keepers.step(r.keeper) === 'landmark';
+    }
     return (f === 'frontier' || f === 'thinning') && this.counts(id).restored >= this.need(id) && this.sim.milestones.met(id);
   }
 
@@ -266,6 +302,7 @@ export class AreaSystem {
 
   /** A ground tile was restored: its area's fog starts thinning. */
   onRestored(t: TileData) {
+    if (t.roofId === GROUND) this.sim.keepers?.onRestored(t.x, t.z); // E21.8: a Keeper's patch
     const id = this.areaOf(t);
     if (!id) return;
     const st = this.sim.state.areas[id];

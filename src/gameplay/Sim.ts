@@ -39,6 +39,8 @@ import { Inventory, type BotAt } from './Inventory';
 import { SalvageSystem } from './SalvageSystem';
 import { GateSystem } from './GateSystem';
 import { FountainSystem } from './FountainSystem';
+import { KeeperSystem } from './KeeperSystem';
+import { LandmarkSystem } from './LandmarkSystem';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -89,6 +91,10 @@ export class Sim {
   readonly gates: GateSystem;
   /** E21.6: the fountain's tiers and deliveries (old-city rules). */
   readonly fountain: FountainSystem;
+  /** E21.8: the Keepers and their requests (old-city rules). */
+  readonly keepers: KeeperSystem;
+  /** E21.9: waking landmarks and their lasting rewards (old-city rules). */
+  readonly landmarks: LandmarkSystem;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -133,9 +139,11 @@ export class Sim {
     }
     this.econ = new Economy(state.resources, state.caps);
     this.inventory = new Inventory(this);
+    this.landmarks = new LandmarkSystem(this);
     this.salvage = new SalvageSystem(this);
     this.gates = new GateSystem(this);
     this.fountain = new FountainSystem(this);
+    this.keepers = new KeeperSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);

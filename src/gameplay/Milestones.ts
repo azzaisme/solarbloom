@@ -78,6 +78,7 @@ export class MilestoneSystem {
   private pending = new Set<string>();
 
   tick() {
+    if (this.sim.oldCity) return; // E21.8: the Old City's regions ask through their Keepers, not specialties
     if (!this.pending.size) return;
     for (const id of this.pending) this.progressed(id);
     this.pending.clear();
@@ -302,6 +303,7 @@ export class MilestoneSystem {
 
   /** The landmark's specialty is done (always true for the park and cleared areas). */
   met(id: string): boolean {
+    if (this.sim.oldCity) return true; // E21.8: no specialties in the Old City
     if (id === PARK || !this.sim.grid.isPlayable(GROUND)) return true;
     return this.specialty(id).met;
   }
