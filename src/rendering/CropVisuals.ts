@@ -229,7 +229,8 @@ export class CropVisuals {
   private buildBin(root: pc.Entity, m: MachineData) {
     const st = this.sim.compost.bin(m);
     const amount = (st.feed ?? 0) + (st.compost ?? 0) * COMPOST.perCompost;
-    const h = Math.min(0.42, 0.06 + (amount / COMPOST.feedCapacity) * 0.4);
+    // the heap shows above the slats from the play camera even when only a little is in (show, don't tell)
+    const h = Math.min(0.62, 0.3 + (amount / COMPOST.feedCapacity) * 0.32);
     if (amount > 0) {
       shape(root, 'sphere', mat(PALETTE.soilDark), { pos: [0, 0.1 + h / 2, 0], scale: [0.62, h, 0.62] });
       // fresh clippings on top
