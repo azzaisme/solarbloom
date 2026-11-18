@@ -5,6 +5,8 @@ import { MACHINES } from '../src/data/machines';
 import { PARK_SET } from '../src/data/oldcity';
 import { SALVAGE } from '../src/data/salvage';
 import { gameDays } from '../src/data/time';
+import { SALVAGE_FIELDS } from '../src/data/mainland';
+import { chunkPiles } from '../src/core/Mainland';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
@@ -136,6 +138,15 @@ describe('E23.7.4: salvage respawns', () => {
     sim.salvage.blowIn();
     expect(t.blocked).toBe(true);
     expect(t.ground).toBe('restored');
+  });
+
+  it('mainland piles refill on their own, quicker clock (SALVAGE_FIELDS.respawnDays)', () => {
+    const sim = oldSim(37);
+    let ml: ReturnType<typeof chunkPiles> extends Map<string, infer P> ? P : never = undefined as never;
+    for (let cx = 9; cx < 30 && !ml; cx++) for (let cz = -10; cz < 10 && !ml; cz++) for (const p of chunkPiles(cx, cz).values()) ml ??= p;
+    expect(ml).toBeDefined();
+    expect(sim.salvage.perUnit(ml)).toBeCloseTo(gameDays(SALVAGE_FIELDS.respawnDays) / SALVAGE.units[ml.size], 6);
+    expect(sim.salvage.perUnit(pile('pk-s1'))).toBeCloseTo(gameDays(SALVAGE.refillDays) / SALVAGE.units.small, 6);
   });
 
   it("the Terraces' Salvage Lore blueprint makes piles refill twice as fast", () => {

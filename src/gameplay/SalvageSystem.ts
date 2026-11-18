@@ -2,6 +2,10 @@ import { GROUND } from '../core/GameState';
 import { allPiles, pileById, regionById, regionOfCell, setPieceAt } from '../core/OldCityLayout';
 import type { MaterialId, TileData } from '../core/types';
 import { gameDays } from '../data/time';
+import { SALVAGE_FIELDS } from '../data/mainland';
+
+/** A mainland salvage-field pile (`ml:<x>:<z>`, E23.8.3). */
+const isMainlandPile = (p: PileDef) => p.id.startsWith('ml:');
 import { PARK_SET, type PileDef, type RegionDef } from '../data/oldcity';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import type { Sim } from './Sim';
@@ -117,10 +121,14 @@ export class SalvageSystem {
 
   // ───────────── E23.7.4: piles refill ─────────────
 
-  /** Sim seconds for one unit to come back to a pile (a whole pile refills over `SALVAGE.refillDays` game days). */
+  /**
+   * Sim seconds for one unit to come back to a pile. A whole island pile refills over `SALVAGE.refillDays` game days;
+   * a mainland pile (E23.8.3, the endless sandbox) over `SALVAGE_FIELDS.respawnDays`.
+   */
   perUnit(p: PileDef): number {
     const lore = this.sim.state.salvage?.blueprints.includes('salvageLore') ? SALVAGE.loreRefill : 1; // Terraces' blueprint
-    return gameDays(SALVAGE.refillDays) / lore / this.size(p);
+    const days = isMainlandPile(p) ? SALVAGE_FIELDS.respawnDays : SALVAGE.refillDays;
+    return gameDays(days) / lore / this.size(p);
   }
 
   /**
