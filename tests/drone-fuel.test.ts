@@ -14,7 +14,9 @@ function hubSim() {
   sim.state.salvage!.tier = 2;
   const grid = { on: true, isPowered: () => grid.on };
   const water = { on: true, drawn: 0, isWatered: () => water.on, drawNear: (_t: TileData, n: number) => (water.on ? ((water.drawn += n), n) : 0) };
-  Object.assign(sim, { power: grid, water });
+  // the real grid (E23.3) stays; only whether the hub is powered is stood in (E23.4's water is a stand-in)
+  Object.assign(sim.power, { isPowered: () => grid.on });
+  Object.assign(sim, { water });
   const hub: MachineData = { id: 'hub1', type: 'droneHub', roofId: GROUND, x: 20, z: 20, size: 2 } as MachineData;
   const chest: MachineData = { id: 'chest1', type: 'chest', roofId: GROUND, x: 23, z: 20, size: 1 } as MachineData;
   sim.state.machines.push(hub, chest);
