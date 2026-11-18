@@ -17,8 +17,6 @@ export class Metrics {
     });
     for (const e of ['area.cleared', 'rooftop.coreRestored', 'district.bloom'] as const) b.on(e, () => this.invalidate());
     b.on('cat.found', () => this.first('cat'));
-    b.on('frenzy.ready', () => this.first('frenzyReady'));
-    b.on('frenzy.started', () => this.first('frenzy'));
     b.on('milestone.reached', ({ at }) => this.first(`park${at}`));
     b.on('tree.discharged', () => this.first('treePulse'));
     b.on('rooftop.coreRestored', () => this.first('core'));
@@ -60,13 +58,12 @@ export class Metrics {
       `Time to each area: ${times.length ? times.slice(0, 20).map((t, i) => `#${i + 1} ${mmss(t)}`).join(', ') + (times.length > 20 ? ` … #${times.length} ${mmss(times[times.length - 1])}` : '') : '—'}`,
       `Biggest chain ×${st.maxCombo} · chains ${st.chains} · big chains by you ${st.bigChains?.player ?? 0} / automation ${st.bigChains?.auto ?? 0}`,
       `Lucky Cats found ${st.catsFound} · first ${mmss(f.cat)}${(() => {
-        // Phase 5 E15: rarer cats and world events.
+        // Phase 5 E15: rarer cats.
         const log = s.state.cat.log ?? [];
         const g = log.filter((e) => e.variant === 'golden').length;
         const r = log.filter((e) => e.variant === 'rainbow').length;
         return g || r ? ` · golden ${g} · rainbow ${r}` : '';
       })()}`,
-      `World events ${s.state.events?.count ?? 0}${Object.entries(s.state.events?.byType ?? {}).map(([k, n]) => ` · ${k} ${n}`).join('')}`,
       `First upgrade ${mmss(f.upgrade)} · Drone Hub ${mmss(f.droneHub)} · Mother Tree ${mmss(f.motherTree)}`,
       `Time with nothing to do ${Math.round(st.stuckSeconds)} s`,
     ];

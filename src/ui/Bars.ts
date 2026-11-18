@@ -67,16 +67,9 @@ export class Bars extends HudPart {
   /** Where a resource's numbers come from right now (popover and tooltip). */
   private resourceBreakdown(k: ResourceKind, plain = false): string {
     const s = this.sim;
-    const L = s.ledger;
     const pm = (x: Big) => `${fmt(x.mul(60), 1)}/min`;
     const c = s.econ.cap(k);
-    const lines: [string, string][] = [
-      ['Producing', pm(L.warm ? L.gross(k) : s.production.rates()[k])],
-      ['Spending', pm(L.spent(k))],
-    ];
-    if (c) lines.push(['Lost to full storage', `${pm(L.wasted(k))}${L.wasted(k).gt(0) ? ' (charges Bloom Frenzy)' : ''}`]);
-    const net = L.net(k);
-    lines.push(['Net', `${net.lt(0) ? '−' : '+'}${pm(net.abs())}`]);
+    const lines: [string, string][] = [['Producing', pm(s.production.rates()[k])]];
     lines.push(['Stored', c ? `${fmt(s.econ.get(k))} / ${fmt(c)}` : `${fmt(s.econ.get(k))} (no limit)`]);
     if (plain) return `${RES_META[k].name}: ${lines.map(([a, b]) => `${a} ${b}`).join(' · ')}`;
     return `<b>${RES_META[k].icon} ${RES_META[k].name}</b>${lines.map(([a, b]) => `<div><span>${a}</span><span>${b}</span></div>`).join('')}`;
@@ -105,9 +98,6 @@ export class Bars extends HudPart {
   update() {
     const s = this.sim;
     const rates = s.production.rates();
-    // Phase 5 E12: the rate shown is NET (banked − spent over the last ~20 s), so production lost to a full store
-    // is never shown as income. Tap a resource for the breakdown (gross, spending, overflow).
-    const L = s.ledger;
     const surge = s.production.surgeActive();
     for (const k of KINDS) {
       const row = $(this.root, `[data-res="${k}"]`);
@@ -122,7 +112,7 @@ export class Bars extends HudPart {
       this.set(`c-${k}`, $(row, '.c'), 'text', c ? fmt(c) : '');
       this.set(`cw-${k}`, $(row, '.capw'), 'cls', c ? '0' : '1', 'nocap');
       const full = s.econ.isFull(k);
-      const net = (L.warm ? L.net(k) : rates[k]).mul(60);
+      const net = rates[k].mul(60);
       const boost = k === 'energy' && surge ? ` ☀️×${TUNING.cat.frenzyMult}` : '';
       const sign = net.lt(0) ? '−' : '+';
       const rateTxt = `${sign}${fmt(net.abs(), 1)}/min`; // "· full" comes from the .full class

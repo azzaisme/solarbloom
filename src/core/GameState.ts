@@ -71,7 +71,6 @@ export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0, rules
     areas: old ? { park: { fog: 'thinning', revealedAt: 0 }, saltwind: { fog: 'thinning', revealedAt: 0 } } : { park: { fog: 'thinning', revealedAt: 0 } },
     relayBonus: 0,
     cat: { nextSpawnAt: -1, found: 0, stash: 0, firstSpawned: false, log: [], invasion: [], seq: 0, claimed: [] },
-    events: { nextAt: -1, rng: (seed ^ 0x5eed15) >>> 0, count: 0, byType: {} },
     progression: {
       coreActivated: false,
       coreActivatedAt: -1,

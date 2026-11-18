@@ -1,6 +1,6 @@
 import type { Big } from '../core/Big';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
-import type { BuffType, CatRewardType, CatVariant, Cost, MachineData, ResourceKind, RestoreSource, TileData, WorldEventType } from '../core/types';
+import type { BuffType, CatRewardType, CatVariant, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
   /** E21.1: the backpack or the store changed (`material` unset = several at once). */
@@ -38,14 +38,6 @@ export interface GameEvents {
   'resource.gain': { kind: ResourceKind; amount: Big; tileId?: string; reason?: string };
   'resource.full': { kind: ResourceKind };
   'machine.built': { machine: MachineData };
-  /** Phase 5 E13: `consumed` are gone (snapshots); `machine` is the anchor, now one tier higher. */
-  /** Phase 5 E14: three tier-2 machines became a stored Superstructure Core (all three are gone). */
-  'core.created': { type: MachineData['type']; consumed: MachineData[]; fee: Cost; lost: { upgrade: string; name: string; kept: number; lost: number[] }[] };
-  /** Phase 5 E14: a superstructure was placed (stage 1) or a stage was paid (2, 3 = built). */
-  'super.stage': { machine: MachineData; stage: number };
-  /** Phase 5 E14: a superstructure's ability fired. `tiles` = tiles it acts on (wave, evolution), if any. */
-  'super.ability': { machine: MachineData; tiles: string[]; bounty?: Big };
-  'machine.merged': { machine: MachineData; consumed: MachineData[]; fee: Cost; lost: { upgrade: string; name: string; kept: number; lost: number[] }[] };
   'chain.started': { chainId: number; originTileId: string };
   'chain.event': { event: ChainEvent; combo: number };
   'chain.fastForward': { chainId: number };
@@ -91,16 +83,6 @@ export interface GameEvents {
   'rooftop.coreReady': Record<string, never>;
   'rooftop.coreRestored': Record<string, never>;
   'tutorial.step': { step: number };
-  'frenzy.ready': Record<string, never>;
-  /** Phase 5 E15: a world event began (`tiles`: tiles it will visit, or cats hidden; `fallback`: what it paid instead). */
-  'world.started': { type: WorldEventType; seconds: number; tiles: number; fallback?: string };
-  /** Phase 5 E15: a Super Rain irrigation wave (tile ids it will water), or its fallback. */
-  'world.wave': { type: WorldEventType; tiles: string[]; fallback?: string };
-  /** Phase 5 E15: an event visited one of its tiles (presentation: a butterfly or a raindrop there). */
-  'world.tile': { type: WorldEventType; tileId: string };
-  'world.ended': { type: WorldEventType; done: number; fallback?: string };
-  'frenzy.started': { seconds: number };
-  'frenzy.ended': Record<string, never>;
   /** Phase 4 E04.3: a park milestone was reached and paid (once). */
   /** Phase 5 E12: a rewarded step on the way to an area's landmark (25 / 50 / 75% of the tiles it needs). */
   'area.step': { areaId: string; step: number; share: number; credited: Partial<Record<ResourceKind, Big>> };

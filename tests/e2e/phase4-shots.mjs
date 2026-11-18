@@ -50,12 +50,6 @@ try {
       s.areas.clear('park', true);
       s.production.markDirty();
     });
-    if (name === 'desktop')
-      await shot('3-frenzy', () => {
-        const s = window.solarbloom.sim;
-        s.state.frenzy = { charge: 100 };
-        s.frenzy.activate();
-      });
     await page.close();
   }
 } finally {

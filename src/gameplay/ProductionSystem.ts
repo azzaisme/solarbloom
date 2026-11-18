@@ -84,16 +84,21 @@ export class ProductionSystem {
     return b;
   }
 
-  /** The Lucky Cat's Solar Surge buff (saved as 'solarFrenzy'; renamed so "Frenzy" means only Bloom Frenzy). */
+  /** The Lucky Cat's Solar Surge buff (saved as 'solarFrenzy'). */
   surgeActive() {
     return this.sim.state.buffs.some((b) => b.type === 'solarFrenzy');
   }
 
+  /** Solar output multiplier from Solar Surge (1 when it isn't running). */
+  surgeMult(): number {
+    return this.surgeActive() ? TUNING.cat.frenzyMult : 1;
+  }
+
   /**
-   * `sustained`: without temporary boosts (bloom boosts, Solar Surge, Supernova), for offline progress and cat
-   * rewards. Phase 5 E15: `boost` is the composed modifier (Modifiers' stacking policy), applied once here.
+   * `sustained`: without temporary boosts (bloom boosts, the Lucky Cat's Solar Surge), for cat rewards.
+   * `boost` is Solar Surge's multiplier, applied once here.
    */
-  solarOutput(m: MachineData, sustained = false, boost = sustained ? 1 : this.sim.mods.solarMult()): number {
+  solarOutput(m: MachineData, sustained = false, boost = sustained ? 1 : this.surgeMult()): number {
     const t = this.sim.time;
     let v = (m.starter ? TUNING.starterSolarRate : TUNING.solarRate) * this.sim.upgrades.solarMult(m);
     if (sustained) return v;
@@ -161,7 +166,7 @@ export class ProductionSystem {
       this.dirtyChunks.clear();
     }
     const bonus = this.sim.areas.bonusIncome();
-    const solarBoost = sustained ? 1 : this.sim.mods.solarMult();
+    const solarBoost = sustained ? 1 : this.surgeMult();
     const sums = this.machineSums();
     // Phase 4 E11: solar and condenser totals are cached (they only change with machines and upgrades); only the
     // few panels in a bloom boost right now are visited each tick.
@@ -173,13 +178,9 @@ export class ProductionSystem {
         else this.boostedSolar.delete(m);
       }
     }
-    // Phase 5 E15: Super Rain multiplies the whole water rate once (composed in Modifiers).
-    const water = (TUNING.rainBarrelRate + bonus.water + sums.condensers) * (sustained ? 1 : this.sim.mods.waterMult());
-    // Phase 4 E06: temporary biomass boosts (Bloom Frenzy) apply to the total, never to the sustained rate.
-    const bm = sustained ? 1 : this.sim.mods.biomassMult();
+    const water = TUNING.rainBarrelRate + bonus.water + sums.condensers;
     // Phase 5 E12: per-tile and per-machine coefficients are plain numbers; the totals are big numbers.
-    // Pacing pass: built superstructures multiply all biomass (a permanent gain, so it is in the sustained rate).
-    return { energy: big(energy), water: big(water), biomass: big((this.biomassRate + bonus.biomass) * (this.sim.supers?.biomassMult() ?? 1)).mul(bm) };
+    return { energy: big(energy), water: big(water), biomass: big(this.biomassRate + bonus.biomass) };
   }
 
   /** Solar panels in a bloom boost (kept small: boosts last seconds). */
@@ -213,7 +214,6 @@ export class ProductionSystem {
     const r = this.rates();
     for (const k of KINDS) {
       const amt = r[k].mul(dt);
-      if (k !== 'biomass') this.sim.frenzy.onProduced(k, amt);
       this.sim.econ.add(k, amt);
       const full = this.sim.econ.isFull(k);
       if (full && !this.wasFull[k]) this.sim.bus.emit('resource.full', { kind: k });

@@ -1,15 +1,15 @@
 import { formatCost } from '../core/Economy';
 import { DECOR_OPTION, DECOR_OPTIONS } from '../data/cozy';
-import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE, TIER3 } from '../data/machines';
+import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { type Action, type Bindings, keyLabel } from '../app/Bindings';
 import { type GlyphStyle, type PadStyle, padName } from './Glyphs';
 import { ICONS, iconize, MACHINE_ICONS, plain } from './Icons';
 import { $, esc, HudPart } from './HudPart';
-import { decorType, etaText, machineTool, SUPER_TOOLS, superType, type Tool } from './Hud';
+import { decorType, etaText, machineTool, type Tool } from './Hud';
 
 /**
- * E22.5 (#342): the classic hotbar (Inspect, Pulse, the build tray, Harvest, Upgrades) with the Frenzy meter.
+ * E22.5 (#342): the classic hotbar (Inspect, Pulse, the build tray, Harvest, Upgrades).
  * Under old-city rules it is not on the walking view: the build hotbar (slots 1–9, BuildBar) shows above the
  * prompt only while build mode is open.
  */
@@ -28,10 +28,6 @@ export class Hotbar extends HudPart {
         (t) =>
           `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name}${MACHINES[t].hotkey ? ` (${MACHINES[t].hotkey})` : ''}"><span class="key">${MACHINES[t].hotkey ?? ''}</span><span class="si">${ICONS[MACHINE_ICONS[t]]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
       ),
-      ...SUPER_TOOLS.map((t) => {
-        const d = TIER3[superType(t)!]!;
-        return `<button class="slot super" data-tool="${t}" hidden aria-label="Place ${d.name} core"><span class="si">${d.icon}</span><span class="sl">${d.name.split(' ').pop()}</span><span class="sc"></span></button>`;
-      }),
       // E19.2: decorations, free once earned, and the remove tool
       `<span class="tray-break" aria-hidden="true"></span>`,
       ...DECOR_OPTIONS.map(
@@ -49,7 +45,6 @@ export class Hotbar extends HudPart {
     const r = this.root;
     r.querySelectorAll<HTMLButtonElement>('#hotbar [data-tool]').forEach((b) => b.addEventListener('click', () => this.cb.selectTool(b.dataset.tool as Tool)));
     $(r, '#harvestBtn').addEventListener('click', () => this.cb.harvest());
-    $(r, '#frenzyBtn').addEventListener('click', () => this.cb.activateFrenzy());
     $(r, '#upgBtn').addEventListener('click', () => this.hud.toggleUpgrades());
     $(r, '#buildToggle').addEventListener('click', () => this.toggleTray());
   }
@@ -64,12 +59,11 @@ export class Hotbar extends HudPart {
     const building = t !== 'pulse' && t !== 'inspect';
     const tg = $(this.root, '#buildToggle');
     tg.classList.toggle('active', building);
-    const st = superType(t);
     const dk = decorType(t);
     const dec = dk ? DECOR_OPTION[dk] : undefined;
-    const def = st ? TIER3[st]! : machineTool(t) ? MACHINES[t] : undefined;
-    $(tg, '.si').innerHTML = st ? iconize(def!.icon) : machineTool(t) ? ICONS[MACHINE_ICONS[t]] : dec ? iconize(dec.icon) : t === 'remove' ? iconize('🧹') : ICONS.build;
-    $(tg, '.sl').textContent = def ? (st ? def.name.split(' ').pop()! : def.name.replace('Water ', '').replace('Pollinator ', '')) : dec ? dec.name : t === 'remove' ? 'Remove' : 'Build';
+    const def = machineTool(t) ? MACHINES[t] : undefined;
+    $(tg, '.si').innerHTML = machineTool(t) ? ICONS[MACHINE_ICONS[t]] : dec ? iconize(dec.icon) : t === 'remove' ? iconize('🧹') : ICONS.build;
+    $(tg, '.sl').textContent = def ? def.name.replace('Water ', '').replace('Pollinator ', '') : dec ? dec.name : t === 'remove' ? 'Remove' : 'Build';
     this.toggleTray(false);
     this.hud.buildBar.render(t);
   }
@@ -115,18 +109,6 @@ export class Hotbar extends HudPart {
 
   update() {
     const s = this.sim;
-    // Phase 4 E06: the Bloom Frenzy meter (appears with the first restored tile).
-    const fb = $(this.root, '#frenzyBtn');
-    if (fb.hidden && s.state.stats.tilesRestored > 0) fb.hidden = false;
-    const fActive = s.frenzy.active();
-    const fReady = s.frenzy.ready();
-    const fill = fActive ? s.frenzy.remaining() / TUNING.frenzy.seconds : s.frenzy.charge / 100;
-    this.set('frFill', fb, 'style', fill.toFixed(3), '--fill');
-    this.set('frReady', fb, 'cls', fReady ? '1' : '0', 'ready');
-    this.set('frActive', fb, 'cls', fActive ? '1' : '0', 'active');
-    this.set('frBody', document.body, 'cls', fActive ? '1' : '0', 'frenzy'); // also right after loading mid-Frenzy
-    this.set('frText', $(fb, '.ft'), 'text', fActive ? `${Math.ceil(s.frenzy.remaining())}s` : fReady ? 'FRENZY!' : `${Math.floor(s.frenzy.charge)}%`);
-    this.set('frTitle', fb, 'title', fActive ? 'Bloom Frenzy! Pulse reach +2 tiers, biomass ×10, drones ×3' : fReady ? `Bloom Frenzy is ready: press ${this.cb.keyFor('frenzy')} to fire it` : 'Bloom Frenzy charges as you restore, chain and overflow');
     // Hotbar costs
     for (const t of s.oldCity ? OLD_CITY_BUILDABLE : BUILDABLE) {
       const btn = $(this.root, `#hotbar [data-tool="${t}"]`);
@@ -140,16 +122,6 @@ export class Hotbar extends HudPart {
       btn.hidden = !!roofOnly && !s.build.isUnlocked(t);
       if (locked) this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.lockLabel(t));
     }
-    // Phase 5 E14: core slots appear while a core waits to be placed; the Build button shows a badge.
-    let cores = 0;
-    for (const t of SUPER_TOOLS) {
-      const n = s.supers.coreCount(superType(t)!);
-      cores += n;
-      const btn = $(this.root, `#hotbar [data-tool="${t}"]`);
-      btn.hidden = !n;
-      this.set(`hcs-${t}`, $(btn, '.sc'), 'text', n ? `core ×${n}` : '');
-    }
-    this.set('coresBadge', $(this.root, '#buildToggle .sc'), 'text', cores ? `✨ ${cores} core${cores > 1 ? 's' : ''}` : '');
     // E19.2: a decoration's slot appears once it's earned
     const earned = s.state.cozy?.decorUnlocked;
     for (const o of DECOR_OPTIONS) {
@@ -202,8 +174,6 @@ export function toolFace(t: string): { icon: string; name: string } | undefined 
   if (t === 'remove') return { icon: '🧹', name: 'Remove' };
   const d = decorType(t as Tool);
   if (d) return DECOR_OPTION[d] ? { icon: DECOR_OPTION[d].icon, name: DECOR_OPTION[d].name } : undefined;
-  const st = superType(t as Tool);
-  if (st) return { icon: TIER3[st]!.icon, name: TIER3[st]!.name };
   if (machineTool(t as Tool)) return { icon: ICONS[MACHINE_ICONS[t as keyof typeof MACHINE_ICONS]] ?? MACHINES[t as keyof typeof MACHINES].icon, name: MACHINES[t as keyof typeof MACHINES].name };
   return undefined;
 }

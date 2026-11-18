@@ -1091,7 +1091,8 @@ export class ChunkRenderer {
         if (t.ground === 'restored' && fog !== 'hidden') this.poolSurface(pool, t, th);
       }
       // painted ground over each dead Old City tile's slab (sand on the beach, dry earth elsewhere)
-      const gt = !v.far && t.level !== undefined && !t.occupantId && t.ground === 'polluted' ? this.paintedGround(t) : undefined;
+      // (not the jetty: its tiles are paving underneath, but its wooden deck is the model's)
+      const gt = !v.far && t.level !== undefined && !t.occupantId && t.ground === 'polluted' && !onJetty(t.x, t.z) ? this.paintedGround(t) : undefined;
       if (gt) {
         const k = Math.round(255 * (1 - 0.3 * b.grey));
         addGroundQuad(gtex[GROUND_TEXTURES.indexOf(gt)], gt, t.x, t.z, th + 0.086, [k, k, k]);

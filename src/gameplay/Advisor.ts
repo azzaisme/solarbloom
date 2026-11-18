@@ -18,12 +18,6 @@ export type SuggestionAction =
   | { kind: 'upgrades' }
   | { kind: 'harvest' }
   | { kind: 'build'; type: BuildableType; x: number; z: number }
-  /** Phase 5 E14: pick up a Superstructure Core to place */
-  | { kind: 'placeCore'; type: 'solar' | 'condenser' | 'pollinator' | 'droneHub' }
-  /** Phase 5 E14: pay a superstructure's next stage, or fire its ability */
-  | { kind: 'super'; action: 'stage' | 'activate'; machineId: string }
-  /** Phase 5 E13: open the merge preview for this machine (the anchor) */
-  | { kind: 'merge'; machineId: string; layer?: string }
   /** E18.5: open this Drone Hub's panel to pick a role */
   | { kind: 'role'; machineId: string }
   | { kind: 'wait'; seconds: number };
@@ -117,12 +111,6 @@ export class Advisor {
       const d = s.districts.ready()[0];
       if (d) return { text: `${s.districts.title(d)} has ${s.districts.awakeGroup(d)} neighbouring landmarks awake: its district bloom is ready.`, label: '🌸 Set off the district bloom', action: { kind: 'district', districtId: d } };
     }
-    // 2a. Phase 5 E14: a superstructure to finish, fire or place.
-    const sup = this.superStep();
-    if (sup) return sup;
-    // 2b. Phase 5 E13: three touching machines ready to merge (and the fee affordable).
-    const merge = this.mergeStep();
-    if (merge) return merge;
     // 2. An upgrade you can buy now. Phase 5 E12: not again right after a purchase, so with per-machine
     // upgrades on hundreds of machines the hint never loops on "buy one more level" instead of progress.
     const recent = s.time - this.lastPurchaseAt < TUNING.advisor.upgradeHintCooldown;
@@ -181,29 +169,6 @@ export class Advisor {
     return { text: `Solar panels are recharging. Sunlight can be harvested again in ${secs} s.`, label: `🌞 Harvest in ${secs} s`, action: { kind: 'wait', seconds: secs } };
   }
 
-  /** Phase 5 E14: a stage you can pay, an ability ready to fire by hand, or a core waiting to be placed. */
-  superStep(): Suggestion | undefined {
-    const s = this.sim;
-    for (const m of s.state.machines) {
-      if ((m.tier ?? 1) < 3) continue;
-      const name = s.supers.name(m);
-      const next = s.supers.nextCost(m);
-      if (next && s.econ.canAfford(next)) {
-        const last = m.project!.stage === 2;
-        return { text: `🏗️ The ${name} is ready for its ${last ? 'activation' : 'assembly'}: ${formatCost(next)}.`, label: last ? '✨ Activate it' : '🔧 Assemble it', action: { kind: 'super', action: 'stage', machineId: m.id } };
-      }
-      if (!m.ability?.auto && s.supers.ready(m) && !s.supers.blocked(m))
-        return { text: `⚡ The ${name} is charged: fire its ability.`, label: '✨ Fire', action: { kind: 'super', action: 'activate', machineId: m.id } };
-    }
-    const core = s.supers.cores()[0];
-    if (core && s.econ.canAfford(s.supers.stageCosts()[0])) {
-      const name = s.supers.name({ type: core.type, tier: 3 } as never);
-      return { text: `✨ Your ${name} Core is waiting: place it on clear ground (the foundation costs ${formatCost(s.supers.stageCosts()[0])}).`, label: '✨ Place the core', action: { kind: 'placeCore', type: core.type as 'solar' } };
-    }
-    return undefined;
-  }
-
-  /** Phase 5 E13: the first affordable merge, as a suggestion. */
   /** E18.5: when each role's hint was first shown (it shows for TUNING.advisor.roleHintSeconds, once). */
   private roleHintAt = new Map<string, number>();
 
@@ -249,20 +214,6 @@ export class Advisor {
     if (s.roles.harvesting()) {
       const h = offer('harvester', hubs[0], 'Your stores are full and losing income: a 🧺 Harvester hub turns it into biomass.');
       if (h) return h;
-    }
-    return undefined;
-  }
-
-  mergeStep(): Suggestion | undefined {
-    const s = this.sim;
-    for (const c of s.merge.ready(4)) {
-      const plan = s.merge.plan(c[0].id);
-      if (!plan?.ok) continue;
-      return {
-        text: `🔀 ${TUNING.merge.count} ${plan.fromName}s touch: merge them into a ${plan.toName} (output ${plan.before} → ${plan.after}, frees ${plan.freed.length} tile${plan.freed.length === 1 ? '' : 's'}).`,
-        label: '🔀 Merge',
-        action: { kind: 'merge', machineId: plan.anchor.id, layer: plan.anchor.roofId === GROUND ? undefined : plan.anchor.roofId },
-      };
     }
     return undefined;
   }
@@ -393,7 +344,12 @@ export class Advisor {
   nextPurchase(): { name: string; icon: string; cost: Cost; eta: number; kind: 'upgrade' | 'machine' } | undefined {
     const s = this.sim;
     let best: { name: string; icon: string; cost: Cost; eta: number; kind: 'upgrade' | 'machine' } | undefined;
-    const etaOf = (cost: Cost) => Math.max(0, ...KINDS.map((k) => s.ledger.eta(k, Economy.part(cost, k).sub(s.econ.get(k)))));
+    const rates = s.production.rates(true);
+    const etaOf = (cost: Cost) => Math.max(0, ...KINDS.map((k) => {
+      const short = Economy.part(cost, k).sub(s.econ.get(k));
+      if (short.lte(0)) return 0;
+      return rates[k].gt(0) ? short.div(rates[k]).toNumber() : Infinity;
+    }));
     const consider = (name: string, icon: string, cost: Cost, kind: 'upgrade' | 'machine') => {
       if (s.econ.exceedsStorage(cost)) return;
       const eta = etaOf(cost);

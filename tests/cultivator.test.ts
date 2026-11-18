@@ -144,7 +144,7 @@ describe('Look 6.8: the Cultivator (#177)', () => {
     expect(n).toBeLessThanOrEqual(TUNING.cultivator.knock.max * 2); // per phase: softening, then growing
   });
 
-  it('saves mid-work and keeps going after a reload; offline progress works its pace', () => {
+  it('saves mid-work and keeps going after a reload', () => {
     const { sim, m } = setup(8);
     sim.advance(4);
     const json = saver.serialize(sim.state);
@@ -153,9 +153,5 @@ describe('Look 6.8: the Cultivator (#177)', () => {
     const cm = copy.state.machines.find((x) => x.id === m.id)!;
     copy.advance(40);
     expect(doneOf(cm)).toBeGreaterThan(doneOf(m));
-    const before = doneOf(cm);
-    const r = copy.offline.apply(600)!;
-    expect(r.cultivated).toBeGreaterThan(0);
-    expect(doneOf(cm)).toBe(before + r.cultivated);
   });
 });

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { CAPPED, KINDS } from '../src/core/Economy';
-import { createInitialState, GROUND } from '../src/core/GameState';
+import { createInitialState } from '../src/core/GameState';
 import { MACHINES } from '../src/data/machines';
 import { TUNING } from '../src/data/tuning';
 import { UPGRADES } from '../src/data/upgrades';
@@ -154,76 +154,3 @@ describe('Phase 4 E01: the old drone', () => {
   });
 });
 
-describe('Phase 4 E01: offline progress', () => {
-  const grown = () => {
-    const sim = fresh(21);
-    const s = sim.state;
-    s.caps.energy = big(1000); s.caps.water = big(1000);
-    s.resources.energy = big(200); s.resources.water = big(200);
-    for (const t of sim.areas.tiles(PARK).filter((x) => sim.restoration.isEligible(x)).slice(0, 30)) sim.restoration.complete(t, 'pulse');
-    sim.advance(1);
-    return sim;
-  };
-
-  it('short, negative or nonsense absences earn nothing', () => {
-    const sim = grown();
-    expect(sim.offline.apply(30)).toBeUndefined();
-    expect(sim.offline.apply(-3600)).toBeUndefined();
-    expect(sim.offline.apply(NaN)).toBeUndefined();
-    expect(sim.offline.apply(Infinity)).toBeUndefined();
-  });
-
-  it('credits half the sustained rate, capped at 4 hours and at storage, and reports what did not fit', () => {
-    const a = grown();
-    const rate = a.production.rates(true);
-    const r = a.offline.apply(600)!;
-    expect(r.seconds).toBe(600);
-    expect(toNum(r.credited.water.add(r.lost.water))).toBeCloseTo(toNum(rate.water) * 600 * TUNING.offline.rate, 3);
-    const b = grown();
-    const c = grown();
-    const four = b.offline.apply(TUNING.offline.maxSeconds)!;
-    const ten = c.offline.apply(10 * 3600)!;
-    expect(ten.seconds).toBe(TUNING.offline.maxSeconds);
-    for (const k of KINDS) {
-      expect(toNum(ten.credited[k].add(ten.lost[k]))).toBeCloseTo(toNum(four.credited[k].add(four.lost[k])), 3);
-      const cap = c.econ.cap(k);
-      if (cap) expect(toNum(c.state.resources[k])).toBeLessThanOrEqual(toNum(cap) + 1e-9);
-      expect(toNum(c.state.resources[k])).toBeGreaterThanOrEqual(0);
-    }
-    expect(toNum(ten.lost.energy.add(ten.lost.water))).toBeGreaterThan(0);
-  });
-
-  it('never advances the clock, cats, landmarks or chains; drone jobs are bounded and never repeat a restore', () => {
-    const sim = grown();
-    const s = sim.state;
-    const time = s.time;
-    const cat = JSON.stringify(s.cat);
-    const fog = JSON.stringify(s.areas);
-    const restoredIds: string[] = [];
-    let chains = 0;
-    sim.bus.on('tile.restored', ({ tile }) => restoredIds.push(tile.id));
-    sim.bus.on('chain.started', () => chains++);
-    const r = sim.offline.apply(3 * 3600)!;
-    expect(s.time).toBe(time);
-    expect(JSON.stringify(s.cat)).toBe(cat);
-    expect(JSON.stringify(s.areas)).toBe(fog);
-    expect(s.progression.coreActivated).toBe(false);
-    expect(chains).toBe(0);
-    expect(r.droneJobs).toBeLessThanOrEqual(TUNING.offline.maxDroneJobs);
-    expect(r.restored).toBeGreaterThan(0); // the old drone worked
-    expect(new Set(restoredIds).size).toBe(restoredIds.length);
-    sim.advance(5); // and the game carries on normally
-  });
-
-  it('saves remember when they were written, so a reload right away earns nothing more', () => {
-    const sim = grown();
-    const saver = new SaveService(undefined);
-    let now = 1_000_000;
-    saver.now = () => now;
-    const st = saver.deserialize(saver.serialize(sim.state))!;
-    expect(st.savedAt).toBe(1_000_000);
-    now += 5_000;
-    expect(new Sim(st).offline.apply((now - st.savedAt!) / 1000)).toBeUndefined();
-    void GROUND;
-  });
-});

@@ -308,8 +308,6 @@ export class DroneSystem {
   payJob(cost: Cost): boolean {
     const s = this.sim;
     const saving = s.advisor.savingFor(); // Phase 5 E12: leave what the player is saving up for
-    // Pacing pass: and a superstructure stage waiting to be paid (otherwise its water share never filled).
-    const stage = s.supers.pendingStage();
     const upgrade = s.upgrades.pendingParts(); // E18.7: and a drone upgrade's energy or water part
     for (const k of KINDS) {
       const p = Economy.part(cost, k);
@@ -317,7 +315,6 @@ export class DroneSystem {
       if (!cap || p.lte(0)) continue; // biomass is uncapped: no reserve to keep
       let floor = cap.mul(TUNING.drone.reserve);
       if (saving) floor = floor.max(Economy.part(saving, k).min(cap.mul(TUNING.machineCostMaxShare)));
-      if (stage) floor = floor.max(Economy.part(stage, k).min(cap.mul(TUNING.machineCostMaxShare)));
       if (upgrade) floor = floor.max(Economy.part(upgrade, k).min(cap.mul(TUNING.machineCostMaxShare)));
       if (s.econ.get(k).sub(p).lt(floor.sub(1e-9))) return false;
     }
@@ -326,7 +323,7 @@ export class DroneSystem {
 
   /** Tiles per second (the old drone is slow and ignores upgrades). */
   speedOf(d: DroneData): number {
-    const v = d.old ? TUNING.drone.old.flySpeed : TUNING.drone.flySpeed * this.sim.upgrades.droneSpeed(this.sim.machine(d.hubId)) * this.sim.mods.droneSpeedMult();
+    const v = d.old ? TUNING.drone.old.flySpeed : TUNING.drone.flySpeed * this.sim.upgrades.droneSpeed(this.sim.machine(d.hubId));
     return d.role === 'scout' ? v * TUNING.drone.roles.scout.speed : v; // E18.3: Scouts fly 1.5x as fast
   }
 
@@ -522,7 +519,7 @@ export class DroneSystem {
             d.role = undefined;
             s.roles.complete(d, job);
             d.mode = 'cooldown';
-            d.timer = TUNING.drone.cycleSeconds / s.upgrades.droneSpeed(hub) / s.mods.droneSpeedMult();
+            d.timer = TUNING.drone.cycleSeconds / s.upgrades.droneSpeed(hub);
             break;
           }
           const t = d.targetTileId ? s.grid.byTileId(d.targetTileId) : undefined;
@@ -541,15 +538,13 @@ export class DroneSystem {
             }
             d.jobs++;
             s.state.stats.droneJobs++;
-            if (!d.swarm) s.supers.onDroneJob(s.machine(d.hubId));
           } else if (t && t.ground === 'restored' && t.bloom < TUNING.restore.maxBloom) {
             s.restoration.grow(t);
             d.jobs++;
             s.state.stats.droneJobs++;
-            if (!d.swarm) s.supers.onDroneJob(s.machine(d.hubId));
           }
           d.mode = 'cooldown';
-          d.timer = d.old ? TUNING.drone.old.cycleSeconds : TUNING.drone.cycleSeconds / s.upgrades.droneSpeed(s.machine(d.hubId)) / s.mods.droneSpeedMult();
+          d.timer = d.old ? TUNING.drone.old.cycleSeconds : TUNING.drone.cycleSeconds / s.upgrades.droneSpeed(s.machine(d.hubId));
           break;
         }
         case 'cooldown': {

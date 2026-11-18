@@ -27,8 +27,6 @@ export function trActive(t: TileData, now: number): boolean {
  * work) carry `g` and are driven by their owner; everything here is bookkeeping, never a rule.
  */
 export class Transitions {
-  /** Saved transitions that started before this sim time count as finished (set by offline progress). */
-  finishedBefore = -Infinity;
 
   constructor(private sim: Sim) {}
 
@@ -44,7 +42,7 @@ export class Transitions {
   /** How long the restore sequence plays for a restore by `source` (the sim restored it already, or will soon). */
   restoreSeconds(t: TileData, source: RestoreSource, quiet = false): number {
     const R = TUNING.transitions.restore;
-    const fast = quiet || FAST.has(source) || this.sim.frenzy?.active();
+    const fast = quiet || FAST.has(source);
     const base = fast ? R.fast : source === 'pulse' ? R.pulse : source === 'broad' ? R.broad : R.auto;
     return base * this.featureMult(t);
   }
@@ -157,11 +155,11 @@ export class Transitions {
     return this.live.size;
   }
 
-  /** A chunk was loaded: picks up its saved transitions, dropping stale ones (finished by offline progress). */
+  /** A chunk was loaded: picks up its saved transitions, dropping finished ones. */
   adopt(t: TileData) {
     const tr = t.tr;
     if (!tr) return;
-    if ((tr.t0 < this.finishedBefore && !tr.g) || this.now >= tr.t0 + tr.d) t.tr = undefined;
+    if (this.now >= tr.t0 + tr.d) t.tr = undefined;
     else this.live.set(t.id, t);
   }
 
@@ -177,20 +175,5 @@ export class Transitions {
         this.sim.grid.touch(t);
       }
     }
-  }
-
-  /** Offline progress: every visual transition is finished (the sim clock doesn't move while away). */
-  finishAll(): number {
-    this.finishedBefore = this.now;
-    let n = 0;
-    for (const c of this.sim.grid.loadedChunks())
-      for (const t of c.tiles)
-        if (t?.tr && !t.tr.g) {
-          t.tr = undefined;
-          this.live.delete(t.id);
-          this.sim.grid.touch(t);
-          n++;
-        }
-    return n;
   }
 }

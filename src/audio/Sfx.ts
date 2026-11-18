@@ -79,8 +79,6 @@ export class Sfx {
   private musicTimer = 0;
   private bar = 0;
   layers = 0; // 0..3, grows with restoration
-  /** Phase 4 E06: while Bloom Frenzy runs, the pad plays faster and fuller. */
-  frenzy = false;
   /** 0..1, how restored and alive the world is; mixes the wildlife beds in. */
   life = 0;
   private beds: { el: HTMLAudioElement; gain: GainNode; bus: 'music' | 'atmos'; level: (life: number) => number; at: number }[] = [];
@@ -486,10 +484,10 @@ export class Sfx {
       b.gain.gain.setTargetAtTime(v, this.ctx.currentTime, 2.5);
     }
     if (!this.music) return;
-    if (this.beds.some((b) => b.bus === 'music') && !this.frenzy) return;
+    if (this.beds.some((b) => b.bus === 'music')) return;
     this.musicTimer -= dt;
     if (this.musicTimer > 0) return;
-    this.musicTimer = this.frenzy ? 1.2 : 2.4; // Phase 4 E06: Bloom Frenzy doubles the music's pace
+    this.musicTimer = 2.4;
     const roots = [0, 3, 1, 4];
     const r = roots[this.bar++ % roots.length];
     const base = 196;

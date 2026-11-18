@@ -91,54 +91,6 @@ describe('Phase 5 E12: per-machine upgrades', () => {
   });
 });
 
-describe('Phase 5 E12: useful overflow (spec rule)', () => {
-  it('charge follows the share of production wasted, capped per second', () => {
-    const sim = new Sim(createInitialState(6));
-    const s = sim.state;
-    const O = TUNING.frenzy.overflow;
-    const perSecond = () => sim.frenzy.overflowCharge(1); // from the tick just run
-    // Only energy full: all of its steady income is wasted → perResource per second.
-    s.resources.energy = big(s.caps.energy);
-    s.resources.water = big(0);
-    sim.tick();
-    expect(perSecond()).toBeCloseTo(O.perResource, 6);
-    // Both full: 0.1 + 0.1, capped.
-    s.resources.energy = big(s.caps.energy);
-    s.resources.water = big(s.caps.water);
-    sim.tick();
-    expect(perSecond()).toBeCloseTo(Math.min(O.maxPerSecond, 2 * O.perResource), 6);
-    // Nothing full: nothing wasted, no charge.
-    s.resources.energy = big(0);
-    s.resources.water = big(0);
-    sim.tick();
-    expect(perSecond()).toBe(0);
-  });
-
-  it('Harvest on a full energy store gives no Frenzy charge (no tapping a maxed store)', () => {
-    const sim = new Sim(createInitialState(6));
-    const s = sim.state;
-    s.resources.energy = big(s.caps.energy);
-    const f = sim.frenzy as unknown as { lost: Record<string, number> };
-    expect(sim.harvestSun()).toBe(true);
-    expect(f.lost.energy).toBe(0);
-    expect(toNum(sim.econ.lost.energy)).toBeGreaterThan(0); // still reported as lost, honestly
-  });
-
-  it('Frenzy keeps charging in a finished area through automation, and never while it runs', () => {
-    const sim = new Sim(createInitialState(11));
-    // Restore the whole park so no tile is left to restore: only growth remains.
-    for (const t of sim.areas.tiles(PARK)) if (sim.restoration.isEligible(t)) sim.restoration.complete(t, 'pulse');
-    const s = sim.state;
-    s.frenzy = { charge: 0 };
-    sim.advance(120); // the old drone nurtures tiles
-    expect(s.frenzy.charge).toBeGreaterThan(0);
-    s.frenzy.charge = 100;
-    sim.frenzy.activate();
-    sim.advance(5);
-    expect(s.frenzy.charge).toBe(0);
-  });
-});
-
 describe('Phase 5 E12: smaller goals and no specialty stall', () => {
   it('city areas pay rewarded steps at 25 / 50 / 75% of what their landmark needs, once each', () => {
     const sim = new Sim(createInitialState(7));

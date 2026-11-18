@@ -4,9 +4,8 @@ import { PARK } from '../core/Areas';
 import { Sim } from '../gameplay/Sim';
 import type { Game } from './Game';
 import type { FaceName } from '../rendering/DroneVisuals';
-import type { CatVariant, TransitionKind, WorldEventType } from '../core/types';
+import type { CatVariant, TransitionKind } from '../core/types';
 import { TUNING } from '../data/tuning';
-import { WORLD_EVENTS } from '../gameplay/WorldEventSystem';
 import { roadPlanFor } from '../core/RoadPlan';
 import { drawRoadOverview } from './RoadDebug';
 
@@ -19,7 +18,6 @@ import { drawRoadOverview } from './RoadDebug';
  *   sbDev.simulate(120)        run 120 s of simulation now (accelerated)
  *   sbDev.log()                the local event log (sim time, event, small numbers)
  *   sbDev.overflow()           income lost to full storage so far
- *   sbDev.event('supernova')   start a world event now: supernova, migration, rain, invasion (Phase 5 E15)
  *   sbDev.cat('golden')        hide a cat now (standard, golden or rainbow) somewhere in view
  *   sbDev.face('excited')      show one drone expression on every drone (no argument: back to normal)
  *   sbDev.tr.scrub(x, z, 0.4)  freeze ground tile (x, z)'s transition at 40 % (sbDev.tr.scrub() releases it)
@@ -97,11 +95,6 @@ export function installDevTools(game: Game) {
     },
     log() {
       return game.sim.log.entries;
-    },
-    /** Phase 5 E15: start a world event now (false while another runs). */
-    event(type: WorldEventType) {
-      if (!WORLD_EVENTS.includes(type)) throw new Error(`Unknown event. Try: ${WORLD_EVENTS.join(', ')}`);
-      return game.sim.events.trigger(type);
     },
     /** Phase 5 E15: hide an extra cat of this rarity now (it behaves like an invasion cat). */
     cat(variant: CatVariant = 'standard') {

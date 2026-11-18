@@ -42,7 +42,6 @@ try {
         else if (sug.action.kind === 'harvest') s.harvestSun();
         const up = s.upgrades.all().find((u) => s.upgrades.status(u).ok);
         if (up) s.upgrades.purchase(up.id);
-        if (s.frenzy.ready()) s.frenzy.activate();
         if (s.state.cat.active) s.cat.claim();
       }
       s.tick();
@@ -58,7 +57,6 @@ try {
     return {
       fountain: s.state.progression.coreActivated ? Math.round(s.state.progression.coreActivatedAt) : -1,
       areas: s.areas.clearedCount?.() ?? 0,
-      frenzies: s.state.frenzy?.count ?? 0,
       cats: s.state.cat.found,
       tiles: s.state.stats.tilesRestored,
       medianFrameMs: Math.round(frames[Math.floor(frames.length / 2)]),

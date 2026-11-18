@@ -16,7 +16,7 @@ mkdirSync(dir, { recursive: true });
 const server = await preview({ preview: { port: 4198, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 /** Everything that can be on the walking view. */
-const PARTS = ['#res', '#obj', '#hotbar', '#hint', '#toasts', '#frenzyBtn', '#quick', '#prompt', '#minimap', '#buildbar', '#eventBanner', '#combo'];
+const PARTS = ['#res', '#obj', '#hotbar', '#hint', '#toasts', '#quick', '#prompt', '#minimap', '#buildbar', '#combo'];
 /** Old-city rules: plain walking shows these and nothing else (the epic's table). */
 const FIVE = new Set(['#obj', '#res', '#minimap', '#prompt', '#toasts']);
 const SIZES = [
