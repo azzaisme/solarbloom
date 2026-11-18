@@ -1,6 +1,6 @@
 import type { BinState, MachineData } from '../core/types';
 import { COMPOST, DIGESTER } from '../data/compost';
-import { DAY_SECONDS } from '../data/farm';
+import { DAY_SECONDS } from '../data/time';
 import type { Sim } from './Sim';
 
 /**

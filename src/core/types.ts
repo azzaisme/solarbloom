@@ -141,6 +141,8 @@ export interface MachineData {
   project?: { stage: number; costs: Partial<Record<ResourceKind, string>>[] };
   /** Phase 5 E14: a superstructure's ability: charge (events), uses, automation switch. */
   ability?: { charge: number; used: number; auto?: boolean };
+  /** E23.3: a power pole tripped by lightning (it carries nothing until bloombot resets it with one press). */
+  tripped?: boolean;
   /** Look 6.8: a Cultivator's tillers (mobile units working dead ground near the dock), and tiles finished. */
   cult?: { units: CultivatorUnit[]; done: number };
   /** E18: a Drone Hub's role (unset = restorer; slot 1 on a Fleet Hub). */
@@ -472,6 +474,19 @@ export interface GameState {
    * production, chains, milestones or pacing). Optional and sparse, so no save version change.
    */
   cozy?: CozyState;
+  /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
+  clock?: ClockState;
+}
+
+/**
+ * E23.7.1 (#395): the clock. Game time is sim time plus `offset` (only sleeping moves it). `real`: "follow my
+ * clock", where the sky, the light and solar follow the real clock (timers still count in game days).
+ * `nights`: night finds taken, by find id → the game day they were taken on (back the next night).
+ */
+export interface ClockState {
+  offset: number;
+  real?: boolean;
+  nights?: Record<string, number>;
 }
 
 /** E19: what the player chose for the look of their city. */

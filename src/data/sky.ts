@@ -41,3 +41,41 @@ export const HAZE = {
  * so the cut-off sits inside thick haze. Same camera on every tier.
  */
 export const CLOSE_VIEW_REACH: Record<'high' | 'medium' | 'low', number> = { high: 1, medium: 0.78, low: 0.6 };
+
+/**
+ * E23.7.1: the sky at dusk (a warm band low down) and at night (a deep, calm blue: night is cosy, never black).
+ * DayNight blends the day sky toward these by the light clock; `sun` tints the sun's glow, `cloud` the clouds.
+ */
+export const NIGHT_SKY = {
+  dusk: { haze: '#e8b994', glow: '#f2a477', upper: '#c9a3b8', zenith: '#5d6f9c', sun: '#ff9a5c', cloud: '#f0b8a0' },
+  night: { haze: '#2b3858', glow: '#31406a', upper: '#1f2c4e', zenith: '#121c38', sun: '#3a4a78', cloud: '#3a4668' },
+} as const;
+
+/**
+ * E23.7.1: the light through the day. The key light follows the sun's arc by day (from low in the east to low in
+ * the west, never overhead, so the golden-hour look holds most of the day) and becomes a cool moon by night.
+ * Shares are of LOOK's values (1 = the golden-hour look as tuned).
+ */
+export const DAY_LIGHT = {
+  /** sun elevation in degrees at the horizon and at noon */
+  sunLow: 8,
+  sunHigh: 50,
+  /** how far the sun swings either side of LOOK's heading over the day, degrees */
+  swing: 70,
+  /** the moon: elevation, colour and the share of the sun's intensity it gives */
+  moonElevation: 42,
+  moonColour: '#a8bce8',
+  moonShare: 0.12,
+  /** the sun's colour when low (dawn and dusk) */
+  lowSunColour: '#ffb27a',
+  /** night shares of the fill light and the ambient environment */
+  fillNight: 0.3,
+  envNight: 0.16,
+  /** exposure at night, as a share of LOOK's (the eye adjusts a little, but night stays night) */
+  exposureNight: 0.72,
+  fillNightColour: '#8fa4d8',
+  /** the unlit clouds' tint at night (linear 0–1 multipliers) */
+  cloudNight: [0.3, 0.34, 0.48] as [number, number, number],
+  /** the warm rim on silhouettes at night */
+  rimNight: 0.25,
+};

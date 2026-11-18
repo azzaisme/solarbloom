@@ -3,7 +3,7 @@ import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { COMPOST, DIGESTER } from '../src/data/compost';
-import { DAY_SECONDS } from '../src/data/farm';
+import { DAY_SECONDS } from '../src/data/time';
 import { RECIPES } from '../src/data/salvage';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -144,6 +144,36 @@ describe('E23.5.3: the Bio Digester', () => {
     expect(short).toBe(0);
     expect(sim.compost.mood(m)).toBe('running');
     expect(sim.compost.fuel(m)).toBeCloseTo(DIGESTER.capacity - DIGESTER.burnPerDay / 3, 3);
+  });
+
+  it('done when, on the real E23.3 grid: a fed digester alone carries a game night for a charger-sized load', () => {
+    const sim = farm();
+    sim.state.salvage!.tier = 4;
+    // a stand-in for E23.3.3's charger (not on e23-integration yet): a chest drawing a charger's 6 W
+    sim.power.register('chest', { consumer: { shed: 'charger', draw: 6 } });
+    const pole = build(sim, 'relay' as 'bioDigester', 12, 16);
+    const dig = build(sim, 'bioDigester', 13, 16);
+    const load = build(sim, 'chest' as 'bioDigester', 12, 17);
+    sim.inventory.add('biomass', DIGESTER.capacity);
+    sim.compost.feed(dig);
+    // to dusk on the game clock: no sun, so nothing but the digester can power it
+    sim.state.time = 0;
+    const f0 = sim.clock.gameDayFraction();
+    sim.state.time = ((((2 / 3 - f0) % 1) + 1) % 1) * DAY_SECONDS + 1;
+    expect(sim.clock.gameIsNight()).toBe(true);
+    let dark = 0;
+    let steps = 0;
+    while (sim.clock.gameIsNight()) {
+      sim.state.time += 10;
+      sim.power.tick(10);
+      sim.compost.tick(10);
+      const net = sim.power.networkOf(load)!;
+      if (steps++ > 2 && (!net || net.served < net.demand - 1e-6 || !sim.power.isPowered(load))) dark++;
+    }
+    expect(steps * 10).toBeGreaterThan(DAY_SECONDS / 3 - 20); // a whole night went by
+    expect(sim.power.networkOf(pole)?.sources.some((s) => s.id === dig.id)).toBe(true);
+    expect(dark).toBe(0);
+    expect(sim.compost.fuel(dig)).toBeGreaterThan(0);
   });
 
   it('day or night alike; an empty digester just stops, and runs again when fed', () => {
