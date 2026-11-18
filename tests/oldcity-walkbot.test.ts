@@ -23,5 +23,10 @@ describe('E21.12: the walking bot\'s first fifteen minutes', () => {
       // every step, in order, none skipped, through to a Keeper awake
       expect(r.steps).toEqual(Array.from({ length: FIRST_STEPS }, (_, i) => i));
       expect(r.firsts.keeper).toBeDefined();
+      // E23.10.1 (#405): never stranded at zero charge (checked once E23.2.1's charge is on the sim)
+      if (r.charge) {
+        console.log(`  charge: lowest ${r.charge.min.toFixed(2)} · ${r.charge.atZero.toFixed(0)} s at zero · ${r.charge.stranded.toFixed(0)} s stranded`);
+        expect(r.charge.stranded).toBe(0);
+      }
     });
 });

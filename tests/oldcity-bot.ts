@@ -7,6 +7,7 @@ import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
 import { BOT, spawnPose, Walker, type BotPose } from '../src/gameplay/Walker';
 import { oldCityHint } from '../src/ui/OldCityGuide';
+import { canWalk, CHARGE } from './e23-gentle';
 
 /**
  * E21.12 / E21.23: the Old City's walking bot. It plays a new old-city game the way a player would, on foot:
@@ -26,6 +27,11 @@ export interface OldCityBotReport {
   longestIdle: number;
   walked: number;
   time: number;
+  /**
+   * E23.10.1 (#405): bloombot's charge, once E23.2.1 lands (undefined until then): the lowest it fell, seconds
+   * spent at zero, and seconds stranded (at zero and unable to walk: must stay 0).
+   */
+  charge?: { min: number; atZero: number; stranded: number };
 }
 
 const ACT = { salvage: SALVAGE.holdSeconds + 0.5, pulse: 0.7, interact: 0.6, build: 1.2, pry: SALVAGE.pryHoldSeconds + 0.4, think: 0.4 };
@@ -46,11 +52,22 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
   sim.bus.on('fountain.tier', (e) => e.tier === 1 && first('tier1'));
   sim.bus.on('gate.opened', () => first('gate'));
   sim.bus.on('keeper.step', (e) => e.step === 'request1' && first('keeper'));
+  const chargeSys = CHARGE.find(sim);
+  const charge = chargeSys ? { min: Infinity, atZero: 0, stranded: 0 } : undefined;
+  const chargeNow = () => ['value', 'current', 'charge'].map((f) => chargeSys?.[f]).find((v) => typeof v === 'number') as number | undefined;
   const pass = (secs: number) => {
     const n = Math.round(secs / TUNING.simStep);
     for (let i = 0; i < n; i++) {
       sim.tick();
       record();
+      if (charge) {
+        const c = chargeNow() ?? 0;
+        charge.min = Math.min(charge.min, c);
+        if (c <= 0) {
+          charge.atZero += TUNING.simStep;
+          if (!canWalk(sim)) charge.stranded += TUNING.simStep;
+        }
+      }
     }
   };
   const record = () => {
@@ -179,7 +196,7 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
     pass(ACT.think);
   }
   record();
-  return { seed, firsts, hints, steps, longestIdle, walked, time: sim.time };
+  return { seed, firsts, hints, steps, longestIdle, walked, time: sim.time, charge };
 
   function affordableNear(): boolean {
     return !!nearestPulse();
