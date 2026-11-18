@@ -1,4 +1,5 @@
-import type { BuildableType, MaterialId } from '../core/types';
+import type { BuildableType, ItemId, MaterialId } from '../core/types';
+import { COMPONENT_IDS, COMPONENTS } from '../data/crafting';
 import { PARK } from '../core/Areas';
 import { BLUEPRINTS, ITEMS, KEEPSAKES, PAGES, REGIONS } from '../data/oldcity';
 import { DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
@@ -25,7 +26,7 @@ const regionName = (id: string) => (id === 'park' ? 'the park' : id === 'backstr
 const list = (parts: string[]) => (parts.length <= 1 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`);
 
 export interface ItemCell {
-  id: MaterialId;
+  id: ItemId;
   name: string;
   /** found yet? (an unseen material keeps its name and where it comes from to itself) */
   seen: boolean;
@@ -62,7 +63,7 @@ export function itemCells(sim: Sim): ItemCell[] {
   if (!sim.oldCity) return [];
   const inv = sim.inventory;
   const limit = inv.stackLimit();
-  return MATERIAL_IDS.map((id) => {
+  return MATERIAL_IDS.map((id): ItemCell => {
     const seen = materialSeen(sim, id);
     const count = inv.count(id);
     const stored = inv.stored(id);
@@ -77,6 +78,28 @@ export function itemCells(sim: Sim): ItemCell[] {
       label: seen ? `${name}, ${count} of ${limit} in backpack, ${stored} in store` : 'A material not found yet',
       from: seen ? `Found in ${list(MATERIALS[id].home.slice(0, 3).map(regionName))}${MATERIALS[id].home.length > 3 ? ' and across the city' : ''}` : 'Somewhere in the city',
       next: seen ? neededNext(sim, id) : '',
+    };
+  }).concat(componentCells(sim, limit));
+}
+
+/** E23.6.1: components carried or stored, after the materials (made at the crafting table). */
+function componentCells(sim: Sim, limit: number): ItemCell[] {
+  const inv = sim.inventory;
+  return COMPONENT_IDS.filter((id) => inv.count(id) > 0 || inv.stored(id) > 0).map((id) => {
+    const name = COMPONENTS[id].name;
+    const count = inv.count(id);
+    const stored = inv.stored(id);
+    const uses = sim.crafting.machines().find((r) => r.builds && r.cost[id]);
+    return {
+      id,
+      name,
+      seen: true,
+      count,
+      limit,
+      stored,
+      label: `${name}, ${count} of ${limit} in backpack, ${stored} in store`,
+      from: 'Made at the crafting table',
+      next: uses ? `A ${uses.name} takes ${uses.cost[id]}` : 'Nothing needs it yet',
     };
   });
 }

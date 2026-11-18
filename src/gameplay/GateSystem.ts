@@ -2,7 +2,7 @@ import { GROUND } from '../core/GameState';
 import { regionById, setPieceAt } from '../core/OldCityLayout';
 import type { GateDef, RegionDef } from '../data/oldcity';
 import { REGIONS } from '../data/oldcity';
-import { MATERIALS } from '../data/salvage';
+import { itemDef } from '../data/items';
 import type { Sim } from './Sim';
 
 /**
@@ -59,7 +59,7 @@ export class GateSystem {
 
   private missing(cost: Record<string, number | undefined>): string {
     const m = this.sim.inventory.shortfall(cost);
-    return m && m !== 'biomass' ? ` (short of ${MATERIALS[m].name})` : '';
+    return m && m !== 'biomass' ? ` (short of ${itemDef(m).name})` : '';
   }
 
   /** Opens a gate for good. `free`: a reward (the lock bridge) — no check. */

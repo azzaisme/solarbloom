@@ -12,7 +12,7 @@ import type { DroneRole, LayerData, MachineData, ResourceKind, TileData } from '
 import { MACHINES, machineIcon, machineName } from '../data/machines';
 import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
 import { EXPLORE } from '../rendering/CameraController';
-import { OLD_CITY, REGIONS } from '../data/oldcity';
+import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
@@ -930,6 +930,7 @@ export class Game {
     this.closeMenu();
     this.hud.toggleTray(false);
     this.hud.toggleBackpack(false);
+    this.hud.craft.close();
     this.hud.toggleUpgrades(false);
     this.hud.closePlotPicker();
     if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
@@ -938,7 +939,7 @@ export class Game {
   /** E22.11: a full-screen panel pauses the game while it is open (also called the moment one closes, so the next
    *  key press already reaches the game, however slow the frame). */
   private syncPanelPause() {
-    this.pause.set('panel', this.hud.backpackOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
+    this.pause.set('panel', this.hud.backpackOpen || this.hud.craft.isOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
   }
 
   private openMenu() {
@@ -1250,6 +1251,7 @@ export class Game {
   private panelTab(dir: number) {
     if (this.settingsUi.isOpen) this.settingsUi.tab(dir, true);
     else if (this.hud.backpack.isOpen) this.hud.backpack.tab(dir, true);
+    else if (this.hud.craft.isOpen) this.hud.craft.tab(dir, true);
   }
 
   /** E22.1: the input contexts in effect now (Bindings: an open panel, build mode, or walking). */
@@ -1261,7 +1263,7 @@ export class Game {
   /** A panel or menu that takes the input is open. */
   private panelOpen(): boolean {
     const h = this.hud;
-    return h.modalOpen || h.backpackOpen || h.plotPickerOpen || h.isUpgradesOpen || h.trayOpen || !!this.oc?.panel.isOpen;
+    return h.modalOpen || h.backpackOpen || h.craft.isOpen || h.plotPickerOpen || h.isUpgradesOpen || h.trayOpen || !!this.oc?.panel.isOpen;
   }
 
   /** The action a key (or mouse input) means now. With a panel open, the key that opened it closes it again. */
@@ -1451,6 +1453,7 @@ export class Game {
     else if (this.hud.trayOpen) this.hud.toggleTray(false);
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
     else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
+    else if (this.hud.craft.isOpen) this.hud.craft.close();
     else if (this.selected) this.select(undefined);
     else if (this.bot?.walking) this.bot.cancelWalk();
     else if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
@@ -1744,6 +1747,17 @@ export class Game {
       if (r && s.areas.fog(r.id) !== 'cleared') out.push({ kind: 'landmark', id: `lm:${occ.id}`, verb: 'Wake', name: `the ${r.landmark.name}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
       else if (s.inventory.accessPoints().some((p) => p.x === occ.x && p.z === occ.z && p.roofId === occ.roofId)) out.push({ kind: 'storage', id: `store:${occ.id}`, verb: 'Open', name: 'the store', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
     } else if (occ?.type === 'chest') out.push({ kind: 'storage', id: `chest:${occ.id}`, verb: 'Open', name: 'the chest', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+    // E23.6.1: the crafting table is in the house (the shed by the fountain) from the start
+    const sh = PARK_SET.shed;
+    if (f.x >= sh.x && f.x < sh.x + sh.size && f.z >= sh.z && f.z < sh.z + sh.size)
+      out.push({
+        kind: 'door', id: 'craft:table', verb: 'Use', name: 'the crafting table', distance: fd, at: front, frame: { roofId: GROUND, x: sh.x, z: sh.z, size: sh.size },
+        run: () => {
+          this.oc?.panel.close();
+          this.hud.craft.open();
+          this.syncPanelPause();
+        },
+      });
     return out;
   }
 
@@ -4131,7 +4145,16 @@ export class Game {
 
   /** this frame's dt (holds read it) */
   private frameDt = 0;
+  private lastReal = 0;
+  /** Seconds of wall time since the last frame (the engine's dt is 0 while paused), at most a frame's worth. */
+  private realDt(): number {
+    const now = performance.now();
+    const d = this.lastReal ? (now - this.lastReal) / 1000 : 0;
+    this.lastReal = now;
+    return Math.min(d, TUNING.maxFrameDt);
+  }
   private update(rawDt: number) {
+    if (!this.pause.paused) this.lastReal = performance.now();
     const dt = Math.min(rawDt, TUNING.maxFrameDt);
     this.frameDt = dt;
     this.clock += dt;
@@ -4142,6 +4165,8 @@ export class Game {
     // E22.11: a full-screen panel (the backpack, Settings) pauses the game while it is open.
     this.syncPanelPause();
     const paused = this.pause.paused;
+    // E23.6.1: the table keeps working while its panel holds the game paused (the engine's clock is stopped then)
+    this.hud.craft.update(paused ? this.realDt() : dt, paused);
     if (!paused && !this.photo.frozen) {
       if (rawDt > TUNING.maxFrameDt && !this.hiddenAt) this.awayFor(Math.min(rawDt, 30) - TUNING.maxFrameDt); // a hitch
       this.runSim(dt);

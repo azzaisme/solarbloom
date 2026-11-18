@@ -5,6 +5,7 @@ import type { Hud } from '../ui/Hud';
 import type { MachineData, MaterialId } from '../core/types';
 import { GROUND } from '../core/GameState';
 import { MATERIALS, SALVAGE } from '../data/salvage';
+import { itemDef } from '../data/items';
 import { flyUp, fountainHtml, OldCityPanel, SpeechBubble, storageAct, storageHtml, tradeHtml } from '../ui/OldCityPanel';
 import { PARK } from '../core/Areas';
 import { setPieceAt } from '../core/OldCityLayout';
@@ -69,7 +70,7 @@ export class OldCityController {
       this.panel.refresh();
     });
     host.sim.bus.on('fountain.tier', () => this.panel.close());
-    host.sim.bus.on('pack.full', (e) => host.hud.toast(`Your ${MATERIALS[e.material].name} stack is full<small>Put some in storage at the fountain or a chest.</small>`, '', 2.6));
+    host.sim.bus.on('pack.full', (e) => host.hud.toast(`Your ${itemDef(e.material).name} stack is full<small>Put some in storage at the fountain or a chest.</small>`, '', 2.6));
   }
 
   get sim(): Sim {
