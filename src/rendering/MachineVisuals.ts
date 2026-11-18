@@ -15,7 +15,7 @@ import { treeGeo } from './TreeGen';
 import { machineRunning } from './FaunaPlan';
 import { arcPath, ball, bezier, dome, latheAuto, matOf, part, rbox, rcyl, ring, setMat, tube } from './MachineParts';
 import { cultivatorDock } from './CultivatorVisuals';
-import { tankId } from '../gameplay/WaterPipes';
+import { plantId, tankId } from '../gameplay/WaterPipes';
 import { oldCityModel, MODELS } from './Models';
 
 interface MachineView {
@@ -569,6 +569,9 @@ export class MachineVisuals {
         break;
       case 'pump': // E23.4.2.2
         this.pump(v);
+        break;
+      case 'desalination': // E23.4.3
+        this.desalination(v);
         break;
     }
     this.applyModel(v);
@@ -1562,6 +1565,47 @@ export class MachineVisuals {
     bolts(b, [[-0.33, 0.1, 0.33], [0.33, 0.1, 0.33], [-0.33, 0.1, -0.33], [0.33, 0.1, -0.33]], 0.025, gold());
   }
 
+  /**
+   * E23.4.3 Desalination Plant: a cream plant house with a pitched roof on a stone footing filling its 2×2 plot. Two
+   * tall glass columns beside it hold its fresh water (blue, as high as its tank is full); a slatted fan on the roof
+   * turns while it runs on grid power; a pale-blue intake pipe drops toward the sea at the back; gold trim and a lamp
+   * (aqua while running, dark without power).
+   */
+  private desalination(v: MachineView) {
+    const b = v.body;
+    part(b, rbox(1.8, 0.1, 1.8, 0.04), creamSeam(), { pos: [0, 0.05, 0], shadow: true });
+    // the house (toward the back), its roof and trim
+    const house = group(b, 'house', [-0.25, 0, -0.25]);
+    house.setLocalEulerAngles(0, 45, 0);
+    part(house, rbox(0.9, 0.62, 0.7, 0.07), cream(), { pos: [0, 0.41, 0], shadow: true });
+    part(house, rbox(0.92, 0.03, 0.72, 0.012), gold(), { pos: [0, 0.73, 0] });
+    for (const sx of [-1, 1]) part(house, rbox(0.98, 0.04, 0.42, 0.015), cream(), { pos: [0, 0.86, sx * 0.17], rot: [sx * 32, 0, 0], shadow: true });
+    part(house, rbox(0.26, 0.36, 0.02, 0.03), darkMetal(), { pos: [0, 0.3, 0.36] }); // the door
+    // the roof fan (turns while running)
+    const fan = group(house, 'fan', [0, 1.02, 0]);
+    part(house, rcyl(0.07, 0.9, 1.0, 0.01, 0.01, 10), metal(), {});
+    for (let i = 0; i < 4; i++) part(fan, rbox(0.34, 0.012, 0.07, 0.006), metal(), { rot: [0, i * 45, 0] });
+    part(fan, ball(6, 8), gold(), { scale: [0.06, 0.04, 0.06] });
+    v.spin.push(fan);
+    v.turn = 0;
+    // two glass columns of fresh water (toward the front, where the camera looks from)
+    v.rings = [];
+    for (const [x, z] of [
+      [0.55, 0.1],
+      [0.1, 0.55],
+    ] as const) {
+      part(b, rcyl(0.17, 0.1, 0.16, 0.02, 0.01, 14), cream(), { pos: [x, 0, z] });
+      v.rings.push(part(b, rcyl(0.13, 0, 0.78, 0.01, 0.01, 14), waterGlow(), { pos: [x, 0.16, z] }));
+      part(b, rcyl(0.15, 0.16, 0.96, 0.02, 0.02, 14), glassMat(), { pos: [x, 0, z] });
+      part(b, rcyl(0.17, 0.96, 1.02, 0.02, 0.01, 14), gold(), { pos: [x, 0, z] });
+    }
+    // the intake pipe at the back, dropping to the ground toward the sea
+    part(b, rcyl(0.07, 0.05, 0.7, 0.01, 0.01, 10), mat(PALETTE.aqua.pipe, { gloss: 0.6, metal: 0.2 }), { pos: [-0.72, 0, -0.72] });
+    part(b, rcyl(0.09, 0.66, 0.74, 0.01, 0.01, 10), cream(), { pos: [-0.72, 0, -0.72] });
+    v.light = part(b, ball(5, 8), pumpOff(), { pos: [0.32, 0.62, 0.32], scale: 0.06 });
+    bolts(b, [[-0.82, 0.1, 0.82], [0.82, 0.1, 0.82], [0.82, 0.1, -0.82], [-0.82, 0.1, -0.82]], 0.03, gold());
+  }
+
   /** Reservoir Overflow: the basin spills over with a splash. */
   splash(id: string) {
     const v = this.views.get(id);
@@ -2004,6 +2048,22 @@ export class MachineVisuals {
           g.setLocalScale(1, Math.max(0.001, lv), 1);
           g.setLocalPosition(0, TANK.gauge0 + (TANK.gauge1 - TANK.gauge0) * lv * 0.5, 0);
           if (!rm && lv > 0.01) v.water!.setLocalEulerAngles(0, t * 4, 0);
+          break;
+        }
+        case 'desalination': {
+          // E23.4.3: the columns show its fresh-water tank; the roof fan turns while it runs on power
+          const lv = this.sim.water.levelOf(plantId(v.m));
+          for (const c of v.rings ?? []) {
+            c.enabled = lv > 0.01;
+            c.setLocalScale(1, Math.max(0.001, lv), 1);
+          }
+          const on = this.sim.water.desalinating.has(v.m.id) && this.sim.water.pipes.powered(v.m);
+          if (on && !rm) {
+            v.turn = ((v.turn ?? 0) + dt * 300) % 360;
+            v.spin[0]?.setLocalEulerAngles(0, v.turn, 0);
+          }
+          const want = on ? pumpOn() : pumpOff();
+          if (matOf(v.light!) !== want) setMat(v.light!, want);
           break;
         }
         case 'pump': {

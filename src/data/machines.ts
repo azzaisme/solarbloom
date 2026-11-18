@@ -141,6 +141,16 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     blurb: 'Stores water. Rain fills it, and so does a canal or pond on its bank, a spring, or a pipe from a pump. Up high, it feeds the pipes below on its own.',
     oldCity: true,
   },
+  desalination: {
+    type: 'desalination',
+    name: 'Desalination Plant',
+    icon: '🌊',
+    size: 2,
+    cost: {},
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Built on the shore. Turns the sea into fresh water on grid power, in any weather, into a pond or canal beside it or the pipes it touches. A heavy load on the grid.',
+    oldCity: true,
+  },
   pump: {
     type: 'pump',
     name: 'Pump',
@@ -164,7 +174,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
 
 export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
 /** E21.3: the old-city build list (the classic list plus the Storage Chest and the Reclaimer). */
-export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'pollinator', 'droneHub', 'reclaimer', 'reservoir', 'pump', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'pollinator', 'droneHub', 'reclaimer', 'reservoir', 'pump', 'desalination', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

@@ -106,6 +106,9 @@ export const RECIPES: Partial<Record<BuildableType | 'reclaimer' | 'chest', Reci
   // only the classic fallback.
   reservoir: { cost: { clay: 10, scrap: 4 }, tier: 2 },
   pump: { cost: { scrap: 6, copper: 2, clay: 2 }, tier: 2 },
+  // E23.4.3 (design: 10 Scrap, 4 Pipe, 4 Glass pane, 2 Wire). Until E23.6's components land, the same in materials:
+  // 4 Pipe = 1 Copper + 2 Clay, 4 Glass pane = 8 Glass, 2 Wire = 2 Copper (E23.6.1's component recipes).
+  desalination: { cost: { scrap: 10, copper: 3, clay: 2, glass: 8 }, tier: 2 },
   reservoirGarden: { cost: { clay: 15, seeds: 10, biomass: 30 }, tier: 3 },
   motherTree: { cost: { seeds: 30, clay: 20, biomass: 100 }, tier: 3 },
   relay: { cost: { copper: 20, gears: 10, sunstone: 10 }, tier: 4 },

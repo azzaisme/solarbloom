@@ -148,7 +148,7 @@ export class WaterPipes {
     for (const [dx, dz] of SIDES) {
       const t = this.sim.grid.peek(GROUND, x + dx, z + dz);
       const m = t && this.sim.occupant(t);
-      if (m && (m.type === 'pump' || m.type === 'reservoir')) out.push({ m, dx, dz });
+      if (m && (m.type === 'pump' || m.type === 'reservoir' || m.type === 'desalination')) out.push({ m, dx, dz });
     }
     return out;
   }
@@ -181,7 +181,7 @@ export class WaterPipes {
         for (const { m } of this.machineLinks(x, z)) {
           if (seen.has(m.id)) continue;
           seen.add(m.id);
-          (m.type === 'pump' ? net.pumps : net.tanks).push(m);
+          (m.type === 'reservoir' ? net.tanks : net.pumps).push(m); // a desalination plant pushes like a pump
         }
       }
       net.tiles.sort();
@@ -199,8 +199,14 @@ export class WaterPipes {
     return this.byTile.get(pipeKey(x, z));
   }
 
-  /** The pond or canal a pump stands on the bank of. */
+  /** The networks a machine's footprint touches. */
+  netsOf(m: MachineData): PipeNet[] {
+    return this.networks().filter((n) => n.pumps.includes(m) || n.tanks.includes(m));
+  }
+
+  /** The water a pump pushes: the pond or canal it stands on the bank of (a desalination plant: its own tank). */
   pumpSource(m: MachineData): WaterBody | undefined {
+    if (m.type === 'desalination') return this.water.plantTank(m.id);
     for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size)) {
       const b = t && this.water.bodyNear(t, 1);
       if (b) return b;
@@ -275,14 +281,14 @@ export class WaterPipes {
    * into lower ones, then which pipe tiles carry water (and from where) is worked out for consumers.
    */
   tick(days: number) {
-    this.register();
+    this.registerPower();
     this.pumping.clear();
     const w = this.water;
     for (const net of this.networks()) {
       // pumps fill the reservoirs on their line (uphill or not)
       for (const p of net.pumps) {
         const src = this.pumpSource(p);
-        if (src && w.amountOf(src.id) > 0) this.pumping.add(p.id);
+        if (src && w.amountOf(src.id) > 0 && p.type === 'pump') this.pumping.add(p.id); // (a plant asks through sim.water)
         if (!this.pumpLive(p)) continue;
         let budget = WATER_NET.pump.perDay * days;
         const tanks = net.tanks.filter((t) => w.levelOf(tankId(t)) < 1);
@@ -377,15 +383,19 @@ export class WaterPipes {
     return got;
   }
 
-  /** E23.3: pumps are grid consumers (shed after lamps); they draw only while they move water. */
-  private register() {
+  /** E23.3: pumps and desalination plants are grid consumers (shed after lamps); they draw only while they want to run. */
+  registerPower() {
     if (this.registered) return;
     const power = (this.sim as { power?: { register?: (type: string, def: unknown) => void } }).power;
     if (!power?.register) return;
     this.registered = true;
     power.register('pump', { consumer: { shed: 'pump', draw: (m: MachineData) => (this.pumping.has(m.id) ? WATER_NET.pump.power : 0) } });
+    // E23.4.3: the desalination plant, a heavy load, shed with the pumps
+    power.register('desalination', { consumer: { shed: 'pump', draw: (m: MachineData) => (this.water.desalinating.has(m.id) ? WATER_NET.desal.power : 0) } });
   }
 }
 
 /** A reservoir's water body id. */
 export const tankId = (m: MachineData) => `r:${m.id}`;
+/** A desalination plant's tank id. */
+export const plantId = (m: MachineData) => `d:${m.id}`;

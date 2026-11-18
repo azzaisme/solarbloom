@@ -5,7 +5,7 @@ import type { BuildableType, MachineData, TileData, WeatherKind } from '../core/
 import { KEEPERS, REGIONS, type RegionId } from '../data/oldcity';
 import { WATER_NET } from '../data/water';
 import type { Sim } from './Sim';
-import { tankId, WaterPipes } from './WaterPipes';
+import { plantId, tankId, WaterPipes } from './WaterPipes';
 
 /**
  * A body of fresh water: one connected stretch of water tiles (a pond, a canal, a basin). Its id is its anchor
@@ -113,6 +113,7 @@ export class WaterSystem {
   /** The body with this id (its anchor `x,z`, or a reservoir's `r:<machine id>`). */
   body(id: string): WaterBody | undefined {
     if (id.startsWith('r:')) return this.tank(id.slice(2));
+    if (id.startsWith('d:')) return this.plantTank(id.slice(2));
     const hit = this.bodies.get(id);
     if (hit) return hit;
     const [x, z] = id.split(',').map(Number);
@@ -144,9 +145,38 @@ export class WaterSystem {
     return this.sim.machinesOfType('reservoir').flatMap((m) => this.tank(m.id) ?? []);
   }
 
+  /** E23.4.3: does this land tile touch the sea (the open sea, the bay or the surf; 8 neighbours)? */
+  onShore(t: TileData): boolean {
+    if (t.roofId !== GROUND || !this.sim.oldCity) return false;
+    for (let dz = -1; dz <= 1; dz++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const n = this.sim.grid.get(GROUND, t.x + dx, t.z + dz);
+        if (n?.feature === 'water' && (seaCell(n.x, n.z) || surfCell(n.x, n.z))) return true;
+      }
+    return false;
+  }
+
+  /** E23.4.3: a desalination plant's fresh-water tank (its id is `d:<machine id>`). */
+  plantTank(machineId: string): WaterBody | undefined {
+    const m = this.sim.machine(machineId);
+    if (!m || m.type !== 'desalination') return undefined;
+    let b = this.tanks.get(machineId);
+    if (b?.reservoir !== m) {
+      const tiles = new Set(this.sim.grid.footprint(m.roofId, m.x, m.z, m.size).flatMap((t) => (t ? [t.id] : [])));
+      b = { id: plantId(m), tiles, capacity: WATER_NET.desal.tank, reservoir: m };
+      this.tanks.set(machineId, b);
+    }
+    return b;
+  }
+
+  /** Every desalination plant's tank. */
+  plants(): WaterBody[] {
+    return this.sim.machinesOfType('desalination').flatMap((m) => this.plantTank(m.id) ?? []);
+  }
+
   /** E23.4.2: the region unlock (E23.8.2, Cistern Basin) a water machine needs, if it is one. */
   unlockFor(type: BuildableType): WaterUnlock | undefined {
-    return type === 'reservoir' ? 'reservoir' : type === 'pump' ? 'pump' : undefined;
+    return type === 'reservoir' ? 'reservoir' : type === 'pump' ? 'pump' : type === 'desalination' ? 'desalinationPlant' : undefined;
   }
 
   /** Has bloombot been handed this part of the water network? (Classic rules: always.) */
@@ -166,11 +196,12 @@ export class WaterSystem {
 
   /** E23.4.2: why a water machine can't stand here (undefined: it can). Called by the build check. */
   placeProblem(type: BuildableType, roofId: string, x: number, z: number): string | undefined {
-    if (type !== 'pump' && type !== 'reservoir') return undefined;
-    const size = type === 'reservoir' ? 2 : 1;
+    if (type !== 'pump' && type !== 'reservoir' && type !== 'desalination') return undefined;
+    const size = type === 'pump' ? 1 : 2;
     const foot = this.sim.grid.footprint(roofId, x, z, size);
     if (foot.some((t) => t?.feature === 'water')) return 'Not in the water: on its bank';
     if (type === 'reservoir') return undefined;
+    if (type === 'desalination') return foot.some((t) => t && this.onShore(t)) ? undefined : 'A desalination plant stands on the shore, beside the sea';
     if (roofId !== GROUND) return 'A pump stands on the ground, on the bank of a pond or canal';
     for (const t of foot) if (t && this.bodyNear(t, 1)) return undefined;
     return 'A pump stands on the bank of a pond or canal';
@@ -264,7 +295,7 @@ export class WaterSystem {
   levelOf(id: string): number {
     const saved = this.save.levels[id];
     if (saved !== undefined) return saved;
-    if (id.startsWith('r:')) return WATER_NET.reservoir.startLevel;
+    if (id.startsWith('r:') || id.startsWith('d:')) return WATER_NET.reservoir.startLevel;
     const b = this.bodies.get(id) ?? this.body(id);
     return (b?.region && WATER_NET.startLevel[b.region]) ?? 1;
   }
@@ -346,7 +377,7 @@ export class WaterSystem {
     for (const id of Object.keys(this.save.levels).sort()) {
       const b = this.body(id);
       if (b) out.push(b);
-      else if (id.startsWith('r:') && !this.sim.machine(id.slice(2))) delete this.save.levels[id]; // taken down
+      else if ((id.startsWith('r:') || id.startsWith('d:')) && !this.sim.machine(id.slice(2))) delete this.save.levels[id]; // taken down
     }
     return out;
   }
@@ -528,6 +559,7 @@ export class WaterSystem {
     const fill = WATER_NET.weatherFill[w] ?? 0;
     const evap = w === 'clear' ? WATER_NET.evaporationPerDay : 0;
     for (const b of this.live()) {
+      if (b.reservoir?.type === 'desalination') continue; // a closed tank: no rain, no sun
       let lv = this.levelOf(b.id);
       const before = lv;
       lv += (fill + this.springOf(b)) * days;
@@ -542,7 +574,31 @@ export class WaterSystem {
       if (!src) continue;
       this.fill(r.id, this.draw(src.id, Math.min(room, WATER_NET.reservoir.bankFillPerDay * r.capacity * days)));
     }
+    this.pipes.registerPower();
+    this.desalinate(days);
     this.pipes.tick(days);
+  }
+
+  /** Plants asking the grid for power this step (they run whenever their tank has room or somewhere to empty). */
+  readonly desalinating = new Set<string>();
+
+  /**
+   * E23.4.3: each plant on power fills its tank from the sea, in any weather, then empties it into a pond or canal
+   * on its bank. The pipes it touches take from the tank like a pump's line (WaterPipes).
+   */
+  private desalinate(days: number) {
+    this.desalinating.clear();
+    for (const t of this.plants()) {
+      const m = t.reservoir!;
+      const bank = this.bankOf(m);
+      const room = (1 - this.levelOf(t.id)) * t.capacity;
+      const outlet = bank ? (1 - this.levelOf(bank.id)) * bank.capacity : 0;
+      if (room <= 1e-9 && outlet <= 1e-9 && !this.pipes.netsOf(m).length) continue;
+      this.desalinating.add(m.id);
+      if (!this.pipes.powered(m)) continue;
+      this.fill(t.id, WATER_NET.desal.perDay * days);
+      if (bank) this.fill(bank.id, this.draw(t.id, outlet));
+    }
   }
 
   /** The pond or canal on a reservoir's bank (touching its footprint), if any. */
