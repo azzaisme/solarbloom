@@ -440,6 +440,19 @@ export interface GameState {
     /** E23.4.2.2: pipe tiles already paid for (a Pipe lays 4) */
     pipeStock?: number;
   };
+  /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
+  clock?: ClockState;
+}
+
+/**
+ * E23.7.1 (#395): the clock. Game time is sim time plus `offset` (only sleeping moves it). `real`: "follow my
+ * clock", where the sky, the light and solar follow the real clock (timers still count in game days).
+ * `nights`: night finds taken, by find id → the game day they were taken on (back the next night).
+ */
+export interface ClockState {
+  offset: number;
+  real?: boolean;
+  nights?: Record<string, number>;
 }
 
 /** E19: what the player chose for the look of their city. */

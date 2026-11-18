@@ -180,11 +180,13 @@ describe('E23.3.1 power grid', () => {
     expect(sim.power.output(s, DAY)).toBe(POWER.solar.output);
     setSky(NIGHT);
     expect(sim.power.output(s)).toBe(0);
-    // Through the adapter: no clock or weather means a clear day.
+    // Through the adapter: no clock or weather means a clear day. (E23.7's real handles are taken away first.)
     sim.power.skyOverride = undefined;
+    const any = sim as unknown as { weather: unknown; clock: unknown };
+    any.clock = undefined;
+    any.weather = undefined;
     expect(sim.power.output(s)).toBe(POWER.solar.output);
     const weather = { kind: 'cloudy' };
-    const any = sim as unknown as { weather: unknown; clock: unknown };
     any.weather = { kind: () => weather.kind };
     expect(sim.power.output(s)).toBeCloseTo(POWER.solar.output * 0.8);
     // E23.7's day fraction: 0 dawn, 2/3 dusk; its solar factor wins when present.
@@ -259,6 +261,7 @@ describe('E23.3 lightning (for E23.7.2)', () => {
     sim.power.register('turb', { source: (_m, _s, sky) => 10 * sky.wind });
     const t = put('turb', 0, 0);
     const s = put('solar', 2, 0);
+    (sim as unknown as { clock: unknown }).clock = undefined; // the weather alone (E23.7's real clock would set the hour)
     (sim as unknown as { weather: unknown }).weather = { current: () => ({ kind: 'storm', wind: 1, solar: 0, rain: 1 }) };
     expect(sim.power.output(t)).toBe(10);
     expect(sim.power.sky().cloudy).toBe(true);

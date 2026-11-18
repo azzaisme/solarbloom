@@ -80,14 +80,49 @@ describe('E23.4.4: land fades around low water', () => {
     for (const t of land) expect(sim.water.bloomShown(t)).toBe(t.bloom);
   });
 
-  it('a nearby full body keeps the land green even when another runs dry', () => {
+  it('a nearby full body keeps the land green even when another runs dry (two bodies)', () => {
+    const { sim, land, body } = park();
+    // Saltwind's canal: a second body, south-west of the park's pond
+    const canal = sim.water.bodyAt(sim.grid.get(GROUND, -3, 20))!;
+    expect(canal).toBeDefined();
+    expect(canal.id).not.toBe(body.id);
+    const R = WATER_NET.fadeReach;
+    const dist = (t: TileData, b: typeof canal) => Math.min(...[...b.tiles].map((id) => sim.grid.byTileId(id)!).map((w) => Math.max(Math.abs(w.x - t.x), Math.abs(w.z - t.z))));
+    const both = land.filter((t) => dist(t, body) <= R && dist(t, canal) <= R);
+    const pondOnly = land.filter((t) => dist(t, body) <= R && dist(t, canal) > R);
+    expect(both.length).toBeGreaterThan(0);
+    expect(pondOnly.length).toBeGreaterThan(0);
+    // the pond runs dry, the canal stays full
+    sim.water.draw(body.id, body.capacity);
+    expect(sim.water.levelOf(canal.id)).toBe(1);
+    for (const t of pondOnly) expect(sim.water.fadeAt(t)).toBe(WATER_NET.fadeSteps);
+    for (const t of both) expect(sim.water.fadeAt(t)).toBe(0); // the full canal keeps its side green
+    // the canal runs dry too: now that side fades as well
+    sim.water.draw(canal.id, canal.capacity);
+    for (const t of both) expect(sim.water.fadeAt(t)).toBe(WATER_NET.fadeSteps);
+    // the canal comes back: its side greens up, the pond's own side stays faded
+    sim.water.fill(canal.id, canal.capacity);
+    for (const t of both) expect(sim.water.fadeAt(t)).toBe(0);
+    for (const t of pondOnly) expect(sim.water.fadeAt(t)).toBe(WATER_NET.fadeSteps);
+  });
+
+  it('a chunk rebuild reads the fade with one lookup per tile: no rebuild of the map between level changes', () => {
     const { sim, land, body } = park();
     sim.water.draw(body.id, body.capacity);
-    const banks = near(sim, land, body.id);
-    const t = banks[0];
-    expect(sim.water.fadeAt(t)).toBeGreaterThan(0);
-    sim.water.fill(body.id, body.capacity);
-    expect(sim.water.fadeAt(t)).toBe(0);
+    sim.water.fadeAt(land[0]);
+    const w = sim.water as unknown as { refreshFade: () => void };
+    let builds = 0;
+    const orig = w.refreshFade.bind(w);
+    w.refreshFade = () => {
+      builds++;
+      orig();
+    };
+    for (let i = 0; i < 20; i++) for (const t of land) sim.water.bloomShown(t);
+    for (let i = 0; i < 600; i++) sim.water.takeFadeChanges();
+    expect(builds).toBe(0);
+    sim.water.fill(body.id, 1); // a level changes: the next read refreshes once
+    for (const t of land) sim.water.bloomShown(t);
+    expect(builds).toBe(1);
   });
 
   it('reports the areas to repaint only when a body crosses a fade step', () => {
@@ -117,5 +152,10 @@ describe('E23.4.4: land fades around low water', () => {
     expect(sim.water.weather()).toBe('clear');
     (sim as unknown as { weather: { kind: () => string } }).weather = { kind: () => 'storm' };
     expect(sim.water.weather()).toBe('rain');
+    // with E23.7.2's full weather: its rain units and its evaporation share
+    (sim as unknown as { weather: unknown }).weather = { kind: () => 'storm', rain: () => 2, effects: () => ({ evaporation: 0 }) };
+    expect(sim.water.sky()).toEqual({ fill: 2 * WATER_NET.rainShare, evap: 0 });
+    (sim as unknown as { weather: unknown }).weather = { kind: () => 'sunny', rain: () => 0, effects: () => ({ evaporation: 0.05 }) };
+    expect(sim.water.sky()).toEqual({ fill: 0, evap: 0.05 });
   });
 });
