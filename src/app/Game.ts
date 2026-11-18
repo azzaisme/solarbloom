@@ -11,6 +11,7 @@ import { distToFootprint } from '../core/Grid';
 import type { DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
 import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
+import { GATHER } from '../data/farm';
 import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
@@ -511,6 +512,7 @@ export class Game {
         this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
         // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
         this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
+        this.sim.bus.on('biomass.gathered', (e) => this.hud.pickup(MATERIALS.biomass.name, e.got));
       }
       const focus = new PadFocus(this.hud.root);
       this.padFocus = focus;
@@ -1822,6 +1824,9 @@ export class Game {
       if (r && s.areas.fog(r.id) !== 'cleared') out.push({ kind: 'landmark', id: `lm:${occ.id}`, verb: 'Wake', name: `the ${r.landmark.name}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
       else if (s.inventory.accessPoints().some((p) => p.x === occ.x && p.z === occ.z && p.roofId === occ.roofId)) out.push({ kind: 'storage', id: `store:${occ.id}`, verb: 'Open', name: 'the store', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
     } else if (occ?.type === 'chest') out.push({ kind: 'storage', id: `chest:${occ.id}`, verb: 'Open', name: 'the chest', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+    // E23.5.1: flowered, restored ground in front can be clipped for biomass
+    if (!pile && s.gather.canGather(front))
+      out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });
     return out;
   }
 
@@ -1889,7 +1894,7 @@ export class Game {
         else if (name === 'deliver') this.sfx.coin();
         else if (name === 'pry') this.sfx.stage('crack');
         // a sound per material
-        else if (name === 'salvage') this.sfx.stage(({ scrap: 'thud', seeds: 'rustle', copper: 'hum', timber: 'creak', glass: 'crack', clay: 'thud', gears: 'grind', sunstone: 'hum' } as const)[material as 'scrap'] ?? 'thud');
+        else if (name === 'salvage') this.sfx.stage(({ biomass: 'rustle', scrap: 'thud', seeds: 'rustle', copper: 'hum', timber: 'creak', glass: 'crack', clay: 'thud', gears: 'grind', sunstone: 'hum' } as const)[material as 'scrap'] ?? 'thud');
         else this.sfx.click();
       },
       vista: (x: number, z: number, secs: number, done: (seen: string[]) => void) => this.vista(x, z, secs, done),
