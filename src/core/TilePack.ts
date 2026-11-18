@@ -74,6 +74,20 @@ export function packChunk(c: Chunk, seed: number, layer: LayerData): string {
   return [g.join(''), b.join(''), p.join(''), '|', extras.join(';')].join('');
 }
 
+/** E23.2.2: what a loaded pulse grew, by tile index, in a packed chunk (without generating it). */
+export function plantsOf(packed: string): Map<number, PlantKind> {
+  const out = new Map<number, PlantKind>();
+  const bar = packed.indexOf('|', N * 4);
+  if (bar < 0) return out;
+  for (const e of packed.slice(bar + 1).split(';')) {
+    if (!e) continue;
+    const f = e.split(',');
+    const p = f[7] ? C2P[f[7]] : undefined;
+    if (p) out.set(Number(f[0]), p);
+  }
+  return out;
+}
+
 /** Restored tiles per bloom level (index 1..4) in a packed chunk, without generating it. */
 export function bloomCounts(packed: string): number[] {
   const out = [0, 0, 0, 0, 0];

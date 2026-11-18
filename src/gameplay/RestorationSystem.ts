@@ -97,7 +97,9 @@ export class RestorationSystem {
     this.sim.charge.use('pulse');
     // E23.2.2: the pulse uses one unit of its load (or fires empty) and sends out its reveal ripple
     const load = this.sim.pulseLoad.take();
-    this.sim.bus.emit('pulse.ripple', { tileId, targets: this.sim.pulseLoad.ripple(t) });
+    const ripple = this.sim.pulseLoad.ripple(t);
+    this.sim.buried.reveal(ripple.filter((g) => g.kind === 'buried')); // found: a mound marks each until it is dug up
+    this.sim.bus.emit('pulse.ripple', { tileId, targets: ripple });
     if (this.megaReady()) return this.releaseMega(t);
     this.chargeMega();
     if (t.ground === 'restored') {
@@ -234,15 +236,19 @@ export class RestorationSystem {
     return t.plant ? PULSE_LOAD[PLANT_LOAD[t.plant]] : PULSE_LOAD.none;
   }
 
-  /** Chains a loaded pulse set off grow what it carried (newest chains remembered; old ones fall away). */
-  private chainPlants = new Map<number, PlantKind>();
+  /**
+   * Chains a loaded pulse set off grow what it carried. Saved with the game (`state.chainPlants`), so a chain still
+   * running when the game is saved keeps growing the same plant after a reload. The newest 64 are kept.
+   */
   private rememberChainPlant(id: number, kind: PlantKind) {
-    this.chainPlants.set(id, kind);
-    if (this.chainPlants.size > 64) this.chainPlants.delete(this.chainPlants.keys().next().value!);
+    const m = (this.sim.state.chainPlants ??= {});
+    m[id] = kind;
+    const ids = Object.keys(m).map(Number).sort((a, b) => a - b);
+    for (const old of ids.slice(0, Math.max(0, ids.length - 64))) delete m[old];
   }
   private chainPlantOn(t: TileData, chainId?: number) {
     if (t.plant || chainId === undefined || chainId < 0) return;
-    const k = this.chainPlants.get(chainId);
+    const k = this.sim.state.chainPlants?.[chainId];
     if (k) this.plant(t, k);
   }
 

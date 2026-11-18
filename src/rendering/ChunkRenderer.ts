@@ -7,7 +7,7 @@ import { polyDist } from '../core/Picking';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { CITY_GEN, PARK_LAYOUT } from '../data/city';
-import { RARE_PLANTS } from '../data/pulse';
+import { RARE_PLANT_DEFAULT, RARE_PLANTS } from '../data/pulse';
 import { buildingPlots, type BuildingPlot } from '../core/Generation';
 import { PALETTE } from './Materials';
 import { flowerAt, grassTone } from './Palette';
@@ -25,7 +25,7 @@ import type { Decoration } from '../core/Decor';
 import { FoliageBuilder, foliageMaterial, treeMesh, updateWind } from './Foliage';
 import { shrubGeo, treeGeo, warmTemplates, type TreeGeo, type Lod } from './TreeGen';
 import { treeSpot, treeStage } from './TreePlacement';
-import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, vineGeo } from './Flora';
+import { warmFlora, grassGeo, flowerGeo, leafyShrubGeo, tintGeo, vineGeo } from './Flora';
 import { areaEdges, buildingDressing, flowerDrifts, grassTufts, hash01 as dhash, obstacleClutter, paving, planterBed, radiantExtras, thrivingExtras, turfTop, type DressCtx, type SolidSink } from './Surfaces';
 import { MODELS, ModelBatch } from './Models';
 import { WATER, poolMaterial, updatePool } from './Water';
@@ -1605,6 +1605,12 @@ export class ChunkRenderer {
         break;
       }
     }
+    // E23.2.2.3: a buried find the ripple revealed: a little mound of turned earth with a sprout, until dug up
+    if (t.roofId === GROUND && this.sim.buried?.known(t.x, t.z)) {
+      b.add('sphere', '#7b5134', [x + 0.08, top + 0.02, z - 0.06], [0.36, 0.11, 0.3]); // freshly turned earth
+      b.add('sphere', '#5d3b25', [x + 0.02, top + 0.06, z - 0.02], [0.18, 0.07, 0.15]);
+      this.fb.add(grassGeo(2, t.variant, 1), x + 0.04, top + 0.06, z - 0.04, t.variant, 0.5);
+    }
   }
 
   // ───────────── curved paths ─────────────
@@ -2052,11 +2058,10 @@ export class ChunkRenderer {
         fb.add(flowerGeo(mix[(t.variant + i) % mix.length], i, true, t.variant + i, 1), px, top, pz, i * 1.9, 0.85 + dhash(t.x, t.z, 950 + i) * 0.3);
       }
     } else if (t.plant === 'rare') {
-      const area = this.sim.areas.areaOf(t);
-      const sp = (RARE_PLANTS[area ?? ''] ?? RARE_PLANTS.default).flower;
+      const rp = RARE_PLANTS[this.sim.areas.areaOf(t) ?? ''] ?? RARE_PLANT_DEFAULT;
       for (let i = 0; i < 9; i++) {
         const [px, pz] = at(i, 911);
-        fb.add(flowerGeo(sp, i, true, t.variant + i * 3, 1), px, top, pz, i * 2.3, 1.05 + dhash(t.x, t.z, 960 + i) * 0.35);
+        fb.add(tintGeo(flowerGeo(rp.flower, i, true, t.variant + i * 3, 1), rp.tint), px, top, pz, i * 2.3, rp.height * (0.95 + dhash(t.x, t.z, 960 + i) * 0.3));
       }
       fb.add(leafyShrubGeo(t.variant, 1, true), x, top, z, t.variant, 0.55);
     } else if (t.plant === 'grove') {

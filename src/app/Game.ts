@@ -497,6 +497,7 @@ export class Game {
         this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
         // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
         this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
+        this.sim.bus.on('buried.dug', (e) => this.hud.pickup(MATERIALS[e.material].name, e.n)); // E23.2.2.3
       }
       const focus = new PadFocus(this.hud.root);
       this.padFocus = focus;
@@ -1707,6 +1708,18 @@ export class Game {
     const dist = Math.hypot(tile.x + 0.5 - b.pose.x, tile.z + 0.5 - b.pose.z);
     const occ = this.sim.occupant(tile);
     const dec = this.cozy.decorOf(tile.occupantId);
+    // E23.2.2.3: a buried find the ripple revealed: dig it up
+    const buried = !aim && tile.roofId === GROUND ? this.sim.buried.known(tile.x, tile.z) : undefined;
+    if (buried) {
+      const room = this.sim.inventory.room(buried.material) > 0;
+      out.push({
+        kind: 'cache', id: buried.id, verb: 'Dig up', name: `buried ${MATERIALS[buried.material].name}`, distance: dist, at: tile,
+        refused: room ? undefined : 'Backpack full',
+        run: () => {
+          if (this.sim.buried.dig(tile.x, tile.z) > 0) this.bot?.visuals.play('interact');
+        },
+      });
+    }
     if (dec) {
       out.push({
         kind: 'decoration', id: `decor:${tile.occupantId}`, verb: 'Pick up', name: DECOR_OPTION[dec.kind]?.name ?? 'the decoration', distance: dist, at: tile,

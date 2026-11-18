@@ -4,7 +4,8 @@ import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { TileData } from '../src/core/types';
 import { PARK_SET, REGIONS } from '../src/data/oldcity';
-import { PULSE_LOAD, RIPPLE } from '../src/data/pulse';
+import { PULSE_LOAD, RARE_PLANTS, RIPPLE } from '../src/data/pulse';
+import { faunaGoal } from '../src/gameplay/Ecosystem';
 import { CAT_ANCHORS } from '../src/data/templates';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
@@ -172,10 +173,116 @@ describe('E23.2.2.3: the reveal ripple', () => {
       const targets = sim.pulseLoad.ripple({ roofId: GROUND, ...c });
       expect(JSON.stringify(targets)).toBe(before[i]); // the same with or without cats
       for (const g of targets) {
-        expect(['salvage', 'cache', 'page']).toContain(g.kind);
+        expect(['salvage', 'cache', 'page', 'buried']).toContain(g.kind);
         expect(catIds.has(g.id)).toBe(false);
         expect(catCells.has(`${g.x},${g.z}`)).toBe(false);
       }
     });
+  });
+});
+
+describe('E23.2.2.3: buried seeds and salvage', () => {
+  /** Buried finds within 40 tiles of the park's middle. */
+  const finds = (sim: Sim) => sim.buried.near(8, 8, 40);
+
+  it('lie in open ground only, about one tile in BURIED.oneIn, the same every time for a seed', () => {
+    const a = finds(oldSim(7));
+    const b = finds(oldSim(7));
+    expect(a.length).toBeGreaterThan(5);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    const sim = oldSim(7);
+    for (const f of a) {
+      const t = sim.grid.get(GROUND, f.x, f.z)!;
+      expect(t.blocked).toBe(false);
+      expect(sim.grid.neighbors(t).some((n) => n.blocked && n.prop)).toBe(false); // never beside a cat's nook
+    }
+    expect(new Set(a.map((f) => f.material))).toEqual(new Set(['seeds', 'scrap']));
+  });
+
+  it('a pulse reveals the ones in reach; a mound shows; Interact digs them up into the backpack (saved)', () => {
+    const sim = oldSim(7);
+    const f = finds(sim).find((q) => deadTiles(sim, 400).some((t) => Math.hypot(t.x - q.x, t.z - q.z) <= RIPPLE.radius))!;
+    expect(f).toBeTruthy();
+    expect(sim.buried.known(f.x, f.z)).toBeUndefined();
+    expect(sim.buried.dig(f.x, f.z)).toBe(0); // unknown: nothing to dig
+    const t = deadTiles(sim, 400).find((q) => Math.hypot(q.x - f.x, q.z - f.z) <= RIPPLE.radius)!;
+    let targets: string[] = [];
+    sim.bus.on('pulse.ripple', (e) => (targets = e.targets.map((g) => g.id)));
+    sim.restoration.pulse(t.id);
+    expect(targets).toContain(f.id);
+    expect(sim.buried.known(f.x, f.z)?.id).toBe(f.id);
+    const before = sim.inventory.count(f.material);
+    expect(sim.buried.dig(f.x, f.z)).toBe(f.n);
+    expect(sim.inventory.count(f.material)).toBe(before + f.n);
+    expect(sim.buried.at(f.x, f.z)).toBeUndefined(); // dug: gone for good
+    const saver = new SaveService(undefined);
+    const back = new Sim(saver.deserialize(saver.serialize(sim.state))!);
+    expect(back.buried.at(f.x, f.z)).toBeUndefined();
+  });
+
+  it('none under classic rules', () => {
+    expect(new Sim(createInitialState(7)).buried.near(8, 8, 40)).toEqual([]);
+  });
+});
+
+describe('E23.2.2.2: each load has its own pollinator effect', () => {
+  /** Pollinators an ecosystem recount finds after one pulse with this load, from a fresh game. */
+  const after = (load: 'none' | 'seeds' | 'rare' | 'fertiliser') => {
+    const sim = oldSim();
+    sim.inventory.add('seeds', 1);
+    pack(sim).rareSeed = 1;
+    pack(sim).fertiliser = 1;
+    sim.pulseLoad.choose(load);
+    sim.restoration.pulse(deadTiles(sim, 1)[0].id);
+    grown(sim);
+    sim.ecosystem.refresh(true);
+    return { pollinators: sim.ecosystem.bio.pollinators, rare: sim.ecosystem.bio.rarePollinators };
+  };
+
+  it('nothing draws none; seeds draw some; a rare seed draws rare ones too; fertiliser draws the most', () => {
+    const none = after('none');
+    const seeds = after('seeds');
+    const rare = after('rare');
+    const grove = after('fertiliser');
+    expect(none).toEqual({ pollinators: 0, rare: 0 });
+    expect(seeds.pollinators).toBeGreaterThan(0);
+    expect(seeds.rare).toBe(0);
+    expect(rare.rare).toBeGreaterThan(0); // hawk-moths come to rare plants only
+    expect(grove.pollinators).toBeGreaterThan(seeds.pollinators);
+    expect(grove.rare).toBe(0);
+  });
+
+  it('pollinators count toward the butterflies arriving', () => {
+    const sim = oldSim();
+    sim.ecosystem.refresh(true);
+    const goal0 = faunaGoal('butterflies', sim.ecosystem.bio).have;
+    sim.inventory.add('seeds', 1);
+    sim.pulseLoad.choose('seeds');
+    const [t] = deadTiles(sim, 1);
+    const fp = sim.restoration.footprint(t).length;
+    sim.restoration.pulse(t.id);
+    grown(sim);
+    sim.ecosystem.refresh(true);
+    // every meadow tile blooms (stage 2) and draws PULSE_LOAD.seeds.pollinators more
+    expect(faunaGoal('butterflies', sim.ecosystem.bio).have).toBe(goal0 + (fp + 1) * (1 + PULSE_LOAD.seeds.pollinators));
+  });
+});
+
+describe('E23.2.2.2: rare plants and chains', () => {
+  it('every region (and the park and backstreets) has its own rare plant, all different', () => {
+    const ids = ['park', 'backstreet', ...REGIONS.map((r) => r.id)];
+    for (const id of ids) expect(RARE_PLANTS[id], id).toBeTruthy();
+    const names = ids.map((id) => RARE_PLANTS[id].name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('what a chain grows survives a reload', () => {
+    const sim = oldSim();
+    (sim.restoration as unknown as { rememberChainPlant(id: number, k: string): void }).rememberChainPlant(7, 'rare');
+    const saver = new SaveService(undefined);
+    const back = new Sim(saver.deserialize(saver.serialize(sim.state))!);
+    const [dead] = deadTiles(back, 1);
+    back.restoration.complete(dead, 'chain', 7);
+    expect(dead.plant).toBe('rare');
   });
 });
