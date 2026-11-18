@@ -4,7 +4,7 @@ import type { GroundState } from '../src/core/types';
 import { COMPONENT_IDS, COMPONENT_RECIPES, DECOR_RECIPES, MACHINE_RECIPES, type Unlock } from '../src/data/crafting';
 import { DECOR_OPTION } from '../src/data/cozy';
 import { ITEM_DEFS } from '../src/data/items';
-import { MACHINES } from '../src/data/machines';
+import { MACHINES, OLD_CITY_BUILDABLE } from '../src/data/machines';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { PROJECTS } from '../src/data/research';
 import { Sim } from '../src/gameplay/Sim';
@@ -27,6 +27,7 @@ function reachable(u: Unlock): boolean {
   if ('home' in u) return true;
   if ('keeper' in u) return KEEPERS.some((k) => k.region === u.keeper);
   if ('find' in u) return CACHES.has(u.find);
+  if ('tier' in u) return u.tier >= 1 && u.tier <= 5;
   return PROJECTS.some((p) => p.id === u.research); // E23.6.2: a real project
 }
 
@@ -174,9 +175,11 @@ describe('E23.6.1: the crafting table', () => {
     expect(wire.problem).toBeUndefined();
     expect(wire.label).toBe('Wire, makes 2 from 2 Copper, 0 at hand');
     expect(rows.find((r) => r.id === 'motor')!.problem).toBeDefined();
-    expect(machineRows(sim)).toEqual([]);
+    // at fountain tier 1 the table knows the Water Condenser; each Keeper adds its machines
+    expect(machineRows(sim).map((m) => m.id)).toEqual(['condenser']);
     for (const k of KEEPERS) sim.state.salvage!.keepers[k.id] = { step: 'settled' };
-    expect(machineRows(sim).map((m) => m.id)).toEqual(MACHINE_RECIPES.filter((r) => r.builds).map((r) => r.id));
+    expect(machineRows(sim).map((m) => m.id)).toEqual(MACHINE_RECIPES.filter((r) => r.builds && sim.crafting.unlocked(r.unlock)).map((r) => r.id));
+    expect(machineRows(sim).map((m) => m.id)).toContain('solar');
   });
 
   it('components carried show in the backpack after the materials', () => {
@@ -188,26 +191,42 @@ describe('E23.6.1: the crafting table', () => {
     expect(wire.from).toBe('Made at the crafting table');
   });
 
-  it('a decoration costs its recipe, comes back whole when removed, and a found one waits for its cache', () => {
+  it('a decoration is made once at the table, then placed free; a found one waits for its cache', () => {
     const sim = oldSim();
     const cozy = new Cozy(sim);
     const t = sim.grid.get(GROUND, 12, 12)!;
     t.ground = 'restored';
     t.pollution = 0;
     sim.grid.touch(t);
-    expect(cozy.canDecorate('bench', GROUND, 12, 12)).toBe('Needs Planks');
+    expect(cozy.canDecorate('bench', GROUND, 12, 12)).toBe('Not made yet: it is made at the crafting table');
+    expect(sim.crafting.decorProblem('bench')).toBe('Needs Planks');
     sim.inventory.add('planks', 3);
+    expect(sim.crafting.makeDecor('bench')).toBe(true);
+    expect(sim.inventory.count('planks')).toBe(1);
+    expect(sim.crafting.decorProblem('bench')).toMatch(/Already made/);
+    // placing copies is free, and so is taking them away
     expect(cozy.placeDecor('bench', 0, GROUND, 12, 12)).toBeUndefined();
     expect(sim.inventory.count('planks')).toBe(1);
     cozy.removeDecor(GROUND, 12, 12);
-    expect(sim.inventory.count('planks')).toBe(3);
+    expect(sim.inventory.count('planks')).toBe(1);
+    expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['bench']);
     // the crate stack is found in a Saltwind Beach cache
-    expect(cozy.canDecorate('cratestack', GROUND, 12, 12)).toBe('Not known yet: Not found yet');
+    expect(sim.crafting.decorProblem('cratestack')).toBe('🔒 Not found yet');
     expect(cozy.decorChoices().find((c) => c.option.id === 'cratestack')!.unlocked).toBe(false);
     sim.state.salvage!.caches.push('c-saltwind-1');
+    expect(cozy.canDecorate('cratestack', GROUND, 12, 12)).toBe('Not made yet: it is made at the crafting table');
+    sim.inventory.add('planks', 3);
+    expect(sim.crafting.makeDecor('cratestack')).toBe(true);
     expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['cratestack']);
     expect(cozy.checkDecorUnlocks()).toEqual([]);
     expect(cozy.canDecorate('cratestack', GROUND, 12, 12)).toBeUndefined();
+  });
+
+  it('every machine is built from a crafting-table recipe (the Reclaimer, going with E23.7.4, keeps its own)', () => {
+    for (const t of OLD_CITY_BUILDABLE) {
+      if (t === 'reclaimer') continue;
+      expect(MACHINE_RECIPES.find((r) => r.builds === t), t).toBeDefined();
+    }
   });
 
   it('the queue survives a save (it lives in the salvage state)', () => {
