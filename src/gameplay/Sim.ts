@@ -34,6 +34,7 @@ import { SalvageSystem } from './SalvageSystem';
 import { GateSystem } from './GateSystem';
 import { FountainSystem } from './FountainSystem';
 import { KeeperSystem } from './KeeperSystem';
+import { MainlandSystem } from './MainlandSystem';
 import { LandmarkSystem } from './LandmarkSystem';
 
 /**
@@ -81,6 +82,8 @@ export class Sim {
   readonly fountain: FountainSystem;
   /** E21.8: the Keepers and their requests (old-city rules). */
   readonly keepers: KeeperSystem;
+  /** E23.8.3: the causeway and the endless mainland. */
+  readonly mainland: MainlandSystem;
   /** E21.9: waking landmarks and their lasting rewards (old-city rules). */
   readonly landmarks: LandmarkSystem;
   /**
@@ -132,6 +135,7 @@ export class Sim {
     this.gates = new GateSystem(this);
     this.fountain = new FountainSystem(this);
     this.keepers = new KeeperSystem(this);
+    this.mainland = new MainlandSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);

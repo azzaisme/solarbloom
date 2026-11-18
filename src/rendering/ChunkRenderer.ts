@@ -1521,6 +1521,15 @@ export class ChunkRenderer {
       if (t.x === J.x || t.x === J.x + J.w - 1) b.add('cylinder', PALETTE.wood.deep, [t.x === J.x ? x - 0.42 : x + 0.42, h - 0.25, z], [0.09, 0.7, 0.09]);
       return;
     }
+    // E23.8.3.1: the Long Causeway's broken middle: its low deck under the sea, a few deck stones breaking the surface,
+    // until the Great Bloom raises it (then it draws as the road it is)
+    if (t.blocked && t.prop === 'causeway-broken') {
+      const sea = PALETTE.ground.sea;
+      this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
+      if (t.variant % 3 === 0) b.add('box', PALETTE.stone.light, [x + r.range(-0.25, 0.25), h + 0.02 - WATER.drop, z + r.range(-0.25, 0.25)], [r.range(0.3, 0.55), 0.16, r.range(0.25, 0.45)]);
+      if (t.variant % 4 === 1) b.add('box', PALETTE.paving.grout, [x + r.range(-0.3, 0.3), h - WATER.drop, z + r.range(-0.3, 0.3)], [0.3, 0.1, 0.24]);
+      return;
+    }
     // E21.4: the Old City's open sea: deep water, never restored
     if (t.blocked && f === 'water') {
       const sea = PALETTE.ground.sea;
