@@ -86,7 +86,7 @@ export class Inventory {
     return this.count(m) >= n;
   }
 
-  /** Puts units straight into the store (Reclaimers, overflow from refunds). */
+  /** Puts units straight into the store (overflow from refunds). */
   addToStore(m: ItemId, n: number) {
     if (!this.on || n <= 0) return;
     this.set('store', m, this.stored(m) + Math.floor(n));

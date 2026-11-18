@@ -38,6 +38,9 @@ import { KeeperSystem } from './KeeperSystem';
 import { MainlandSystem } from './MainlandSystem';
 import { LandmarkSystem } from './LandmarkSystem';
 import { Crafting } from './Crafting';
+import { Clock } from './Clock';
+import { NightFinds } from './NightFinds';
+import { Weather } from './Weather';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -76,7 +79,7 @@ export class Sim {
   readonly cultivators: CultivatorSystem;
   /** E21.1: the backpack and the store (old-city rules). */
   readonly inventory: Inventory;
-  /** E21.2: salvage piles, seams and Reclaimers (old-city rules). */
+  /** E21.2 / E23.7.4: salvage piles, refilling over game days and in storms (old-city rules). */
   readonly salvage: SalvageSystem;
   /** E21.5: gates (old-city rules). */
   readonly gates: GateSystem;
@@ -92,6 +95,12 @@ export class Sim {
   readonly landmarks: LandmarkSystem;
   /** E23.6.1: the crafting table (components; machine and decoration recipes). */
   readonly crafting: Crafting;
+  /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
+  readonly clock: Clock;
+  /** E23.7.1.3: finds that are out only at night. */
+  readonly nightFinds: NightFinds;
+  /** E23.7.2: the weather: one kind a game day, each with its effects (data/weather). See gameplay/Weather. */
+  readonly weather: Weather;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -137,6 +146,9 @@ export class Sim {
     this.econ = new Economy(state.resources, state.caps);
     this.inventory = new Inventory(this);
     this.landmarks = new LandmarkSystem(this);
+    this.clock = new Clock(this);
+    this.nightFinds = new NightFinds(this);
+    this.weather = new Weather(this);
     this.salvage = new SalvageSystem(this);
     this.gates = new GateSystem(this);
     this.fountain = new FountainSystem(this);
@@ -268,6 +280,8 @@ export class Sim {
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
     this.crafting.tick(dt);
+    this.clock.tick();
+    this.weather.tick();
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();
