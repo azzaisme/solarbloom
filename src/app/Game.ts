@@ -15,6 +15,7 @@ import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
+import { RIPPLE } from '../data/pulse';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
@@ -1227,6 +1228,11 @@ export class Game {
         return this.harvest();
       case 'eat':
         return this.eat();
+      case 'loadNext':
+      case 'loadPrev':
+        // E23.2.2: turn the pulse load wheel
+        this.sim.pulseLoad.step(a === 'loadNext' ? 1 : -1);
+        return this.hud.loadWheel.show();
       case 'upgrades':
         return this.hud.toggleUpgrades();
       case 'backpack':
@@ -3245,6 +3251,21 @@ export class Game {
       if (t) for (let i = 0; i < 4; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.18, done: () => this.vfx.ring(this.tileVec(t), i % 2 ? PALETTE.gold : PALETTE.coreGlow, 3 + i * 3, 1.1) });
       this.camera.shake?.(0.25);
       this.hud.feed(`💥 Mega Pulse: up to ${budget} tiles bloom outward`);
+    });
+    // E23.2.2.3: the reveal ripple: a wide soft ring, then what it found glows for a few seconds (never a cat:
+    // its targets come from the salvage data alone)
+    b.on('pulse.ripple', ({ tileId, targets }) => {
+      const t = s.grid.byTileId(tileId);
+      if (!t || !s.oldCity) return;
+      this.vfx.ring(this.tileVec(t), '#bff3ff', RIPPLE.radius, 0.9);
+      for (const g of targets) {
+        const at = s.grid.get(GROUND, g.x, g.z);
+        if (!at) continue;
+        const d = Math.hypot(g.x - t.x, g.z - t.z);
+        const hex = g.kind === 'page' ? '#fff3c4' : g.kind === 'cache' ? PALETTE.gold : '#bff3ff';
+        for (let i = 0; i < 3; i++)
+          this.tweens.add(0.01, () => {}, { delay: 0.06 * d + i * (RIPPLE.seconds / 3), done: () => (this.vfx.ring(this.tileVec(at), hex, 0.7, 0.9), this.vfx.sparkles(this.tileVec(at), 5, true)) });
+      }
     });
     b.on('pulse.fired', ({ tileId, extra, overcharged }) => {
       const t = s.grid.byTileId(tileId);

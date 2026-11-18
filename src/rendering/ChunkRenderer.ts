@@ -7,6 +7,7 @@ import { polyDist } from '../core/Picking';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { CITY_GEN, PARK_LAYOUT } from '../data/city';
+import { RARE_PLANTS } from '../data/pulse';
 import { buildingPlots, type BuildingPlot } from '../core/Generation';
 import { PALETTE } from './Materials';
 import { flowerAt, grassTone } from './Palette';
@@ -2026,6 +2027,7 @@ export class ChunkRenderer {
     }
     grassTufts(c, t, stage, x, z, top, f === 'paving' ? 0.2 : 0.46, f === 'paving' ? 1 : undefined);
     if (f !== 'paving') flowerDrifts(c, t, stage, x, z, top); // Look 3.4/3.5: species drifts hugging edges
+    if (t.plant && f !== 'paving') this.plantExtras(t, x, z, top); // E23.2.2: what a loaded pulse grew
     // Phase 5: a tree tile grows its tree from a sapling (Restored) to Radiant; other Thriving tiles get a seeded mix.
     if (!this.addTree(t, h, 1) && stage >= 3 && f !== 'paving') thrivingExtras(c, t, x, z, top);
     else if (stage <= 2 && f !== 'paving' && !treeSpot(t, this.areaType) && dhash(t.x, t.z, 67) < 0.07) {
@@ -2033,6 +2035,40 @@ export class ChunkRenderer {
       b.add('sphere', PALETTE.stone.pebble, [x + (dhash(t.x, t.z, 68) - 0.5) * 0.6, top + 0.03, z + (dhash(t.x, t.z, 69) - 0.5) * 0.6], [0.16, 0.08, 0.13]);
     }
     if (stage >= 4) radiantExtras(c, t, x, z, top); // Phase 4 E05: Radiant gold, now golden daisies and sunflowers
+  }
+
+  /**
+   * E23.2.2.2: what a loaded pulse grew. A wildflower meadow (seeds) is a scatter of mixed wildflowers; a rare seed
+   * grows its region's own flower, taller and denser; fertiliser grows a young tree (unless the tile already has
+   * one) in a ring of flowering shrubs. Seeded per tile, so a chunk rebuild draws the same plants.
+   */
+  private plantExtras(t: TileData, x: number, z: number, top: number) {
+    const fb = this.fb;
+    const at = (i: number, salt: number) => [x + (dhash(t.x, t.z, salt + i * 7) - 0.5) * 0.78, z + (dhash(t.x, t.z, salt + i * 7 + 3) - 0.5) * 0.78] as const;
+    if (t.plant === 'meadow') {
+      const mix = ['daisy', 'cosmos', 'wild', 'lavender'] as const;
+      for (let i = 0; i < 7; i++) {
+        const [px, pz] = at(i, 901);
+        fb.add(flowerGeo(mix[(t.variant + i) % mix.length], i, true, t.variant + i, 1), px, top, pz, i * 1.9, 0.85 + dhash(t.x, t.z, 950 + i) * 0.3);
+      }
+    } else if (t.plant === 'rare') {
+      const area = this.sim.areas.areaOf(t);
+      const sp = (RARE_PLANTS[area ?? ''] ?? RARE_PLANTS.default).flower;
+      for (let i = 0; i < 9; i++) {
+        const [px, pz] = at(i, 911);
+        fb.add(flowerGeo(sp, i, true, t.variant + i * 3, 1), px, top, pz, i * 2.3, 1.05 + dhash(t.x, t.z, 960 + i) * 0.35);
+      }
+      fb.add(leafyShrubGeo(t.variant, 1, true), x, top, z, t.variant, 0.55);
+    } else if (t.plant === 'grove') {
+      if (!treeSpot(t, this.areaType)) {
+        const kinds = ['oak', 'cherry', 'birch'] as const;
+        fb.add(treeGeo(kinds[t.variant % kinds.length], 3, t.variant, 1), x + (dhash(t.x, t.z, 921) - 0.5) * 0.2, top, z + (dhash(t.x, t.z, 922) - 0.5) * 0.2, t.variant * 0.7, 0.55);
+      }
+      for (let i = 0; i < 3; i++) {
+        const [px, pz] = at(i, 931);
+        fb.add(leafyShrubGeo(t.variant + i, 1, true), px, top, pz, i * 2.1, 0.5);
+      }
+    }
   }
 
   /**

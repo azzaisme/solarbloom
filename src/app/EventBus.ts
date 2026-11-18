@@ -7,6 +7,11 @@ export interface GameEvents {
   'charge.empty': Record<string, never>;
   'charge.full': { source: import('../gameplay/Charge').ChargeSource };
   'charge.eat': { item: 'biomass' | 'food' };
+  /** E23.2.2: the wheel picked a load; a load just ran out (the next pulse fires empty); a pulse's reveal ripple. */
+  'pulse.load': { load: import('../data/pulse').PulseLoadId };
+  'pulse.loadEmpty': { load: import('../data/pulse').PulseLoadId };
+  'tile.planted': { tile: TileData; plant: import('../core/types').PlantKind };
+  'pulse.ripple': { tileId: string; targets: import('../gameplay/PulseLoad').RippleTarget[] };
   /** E21.1: the backpack or the store changed (`material` unset = several at once). */
   'pack.changed': { material?: import('../core/types').MaterialId; delta?: number };
   'store.changed': { material?: import('../core/types').MaterialId; delta?: number };

@@ -81,7 +81,12 @@ export interface TileData {
   level?: number;
   /** E21.24: the tile is part of a ramp or stair (generated) */
   ramp?: boolean;
+  /** E23.2.2: what a loaded pulse grew here (unset: plain grass and moss). Saved. */
+  plant?: PlantKind;
 }
+
+/** E23.2.2: what grows from a pulse's load: a wildflower meadow (seeds), a region's rare plants, a grove (fertiliser). */
+export type PlantKind = 'meadow' | 'rare' | 'grove';
 
 /**
  * A layer is one continuous grid surface. The ground is unbounded (an endless city, generated on demand);
@@ -430,6 +435,8 @@ export interface GameState {
    * production, chains, milestones or pacing). Optional and sparse, so no save version change.
    */
   cozy?: CozyState;
+  /** E23.2.2: what the pulse is loaded with (absent = nothing). Optional, so no save version change. */
+  pulseLoad?: 'none' | 'seeds' | 'rare' | 'fertiliser';
   /** E23.2.1: bloombot's charge (old-city rules; absent = full). Optional, so no save version change. */
   charge?: ChargeState;
 }
