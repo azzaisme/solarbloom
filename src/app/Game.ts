@@ -97,6 +97,7 @@ import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
 import { HOTBAR_DEFAULT } from '../ui/Hotbar';
 import { actionGlyph, GlyphTracker, padName, type PadStyle } from '../ui/Glyphs';
 import { ControlsTable } from '../ui/ControlsTable';
+import { pinNext } from '../ui/BackpackModel';
 import { LOOK } from '../data/look';
 
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Thriving (full bloom)', 'Radiant'];
@@ -1024,7 +1025,8 @@ export class Game {
         return this.closeMenu();
       case 'backpack':
         this.closeMenu();
-        return this.hud.toggleBackpack(true);
+        this.hud.toggleBackpack(true);
+        return this.syncPanelPause();
       case 'map':
         this.closeMenu();
         if (!this.overviewOn) this.toggleOverview();
@@ -1192,7 +1194,9 @@ export class Game {
         }
         // E22.11: in a panel the arrow keys move the focus ring, as the d-pad does.
         const dpad: Record<string, number> = { ArrowUp: 12, ArrowDown: 13, ArrowLeft: 14, ArrowRight: 15 };
-        if (this.panelOpen() && dpad[e.code] !== undefined && this.padFocus && !(e.target as HTMLElement)?.closest?.('[role=tablist]')) {
+        // (on a tab, left and right change tab; up and down still leave the tab row)
+        const onTab = !!(e.target as HTMLElement)?.closest?.('[role=tablist]') && (e.code === 'ArrowLeft' || e.code === 'ArrowRight');
+        if (this.panelOpen() && dpad[e.code] !== undefined && this.padFocus && !onTab) {
           e.preventDefault();
           this.padFocus.button(dpad[e.code]);
           return;
@@ -1248,7 +1252,8 @@ export class Game {
       case 'upgrades':
         return this.hud.toggleUpgrades();
       case 'backpack':
-        return this.hud.toggleBackpack();
+        this.hud.toggleBackpack();
+        return this.syncPanelPause(); // paused from this very moment
       case 'rotate':
       case 'rotateBack':
         return this.turnBuild(a === 'rotate' ? 1 : -1);
@@ -1282,6 +1287,7 @@ export class Game {
   /** LB / RB, Q / E: the tabs of the panel on top. */
   private panelTab(dir: number) {
     if (this.settingsUi.isOpen) this.settingsUi.tab(dir, true);
+    else if (this.hud.backpack.isOpen) this.hud.backpack.tab(dir, true);
   }
 
   /** E22.1: the input contexts in effect now (Bindings: an open panel, build mode, or walking). */
@@ -1337,7 +1343,8 @@ export class Game {
 
   /** E22.1: Pin the next request (E21's requests; until they exist there is nothing to pin). */
   private pinNext() {
-    this.hud.toast('No requests to pin yet', '', 2);
+    const r = pinNext(this.sim);
+    this.hud.toast(r ? `Pinned: ${r.keeper}'s request<small>${esc(r.text)}</small>` : 'No requests to pin yet', '', 2.6);
   }
 
   /** The mouse wheel: turns the piece in build mode, otherwise zooms the camera (as bound). */
@@ -1823,6 +1830,12 @@ export class Game {
       bot: this.bot!,
       bindings: this.bindings,
       game: this,
+      // E22.6: the store opens as the backpack's Items grid with the store beside it
+      openStorage: (title: string) => {
+        this.oc?.panel.close();
+        this.hud.backpack.open('items', title);
+        this.syncPanelPause();
+      },
       screenOf: (x: number, z: number) => {
         const t = this.sim.grid.get(this.bot!.pose.roofId, x, z);
         return t ? this.botTileScreen(t) : { x: innerWidth / 2, y: innerHeight / 2 };

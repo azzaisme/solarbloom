@@ -12,6 +12,7 @@ import type { Sim } from '../gameplay/Sim';
 import { HOME } from '../gameplay/ProgressionSystem';
 import { TUNING } from '../data/tuning';
 import { WORDS } from './words';
+import { pinnedRequest as pinnedKeeper } from './BackpackModel';
 import { MATERIALS } from '../data/salvage';
 import type { MaterialId } from '../core/types';
 import { oldCityHint, oldCityObjective as oldCityCard } from './OldCityGuide';
@@ -39,7 +40,7 @@ export function objectiveSentence(sim: Sim): Objective {
   const W = WORDS.objective;
   if (sim.oldCity) {
     // E21.8: the pinned Keeper request (with a count only while its patch is restored by hand)
-    const pinned = sim.keepers.pinned();
+    const pinned = pinnedKeeper(sim); // E22.6: the request the player pinned, else the first open one
     if (pinned) {
       const step = sim.keepers.step(pinned.id);
       const p = step === 'request2' ? sim.keepers.patch(pinned.id) : undefined;

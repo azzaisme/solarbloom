@@ -1,6 +1,4 @@
 import type { AreaMode, MachineData } from '../core/types';
-import { DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTION, PLOT_OPTIONS } from '../data/cozy';
-import { MATERIAL_IDS, MATERIALS } from '../data/salvage';
 import { formatPriceHtml } from '../core/Economy';
 import { MACHINES, TIER2, TIER3 } from '../data/machines';
 import { GROUP_ICONS, ICONS, iconize } from './Icons';
@@ -9,8 +7,7 @@ import { hudHeight, hudWidth, toHud } from './UiScale';
 import type { PlotPickerHandlers, PlotPickerModel } from './Hud';
 
 /**
- * E22.5 (#342): the panels the HUD opens over the world: upgrades (classic), the plot picker, the backpack
- * (until E22.6's full-screen one), a machine's inspect panel, the Lucky Cat's reward card, the welcome card,
+ * E22.5 (#342): the panels the HUD opens over the world: upgrades (classic), the plot picker, a machine's inspect panel, the Lucky Cat's reward card, the welcome card,
  * the hover tooltip and the "can't do that" note, and the classic quick chips (home, cats, paw prints).
  */
 export class Panels extends HudPart {
@@ -20,7 +17,7 @@ export class Panels extends HudPart {
   wire() {
     const r = this.root;
     $(r, '#upgrades h2 button').addEventListener('click', () => this.toggleUpgrades(false));
-    $(r, '#catBtn').addEventListener('click', () => this.toggleBackpack(true));
+    $(r, '#catBtn').addEventListener('click', () => this.hud.backpack.open('collection'));
     $(r, '#pawBtn').addEventListener('click', () => this.cb.findCat());
     $(r, '#homeBtn').addEventListener('click', () => this.cb.goHome($(r, '#homeBtn').classList.contains('ready')));
     $(r, '#catPanel button').addEventListener('click', () => ($(r, '#catPanel').hidden = true));
@@ -56,7 +53,6 @@ export class Panels extends HudPart {
         this.cb.setAreaMode(id, (mode || undefined) as AreaMode | undefined);
       }
     });
-    $(r, '#backpack h2 button').addEventListener('click', () => this.toggleBackpack(false));
     $(r, '#plotPicker h2 button').addEventListener('click', () => this.closePlotPicker());
   }
 
@@ -84,18 +80,6 @@ export class Panels extends HudPart {
     if (open) this.renderUpgrades(true);
   }
 
-  private backpackIsOpen = false;
-  /** Bloombot (G.15): the backpack (Tab / d-pad up): what you've found, and later your plot options and decorations. */
-  toggleBackpack(open = !this.backpackIsOpen) {
-    this.backpackIsOpen = open;
-    $(this.root, '#backpack').classList.toggle('open', open);
-    if (open) this.renderBackpack();
-  }
-
-  get backpackOpen() {
-    return this.backpackIsOpen;
-  }
-
   private picker?: PlotPickerHandlers;
   /**
    * E19.1.2 (#248): the plot picker. Unlocked options are buttons (mouse, keys and the pad's focus ring); focusing
@@ -103,7 +87,7 @@ export class Panels extends HudPart {
    * Locked options show what they wait for. Choosing and changing are free.
    */
   openPlotPicker(m: PlotPickerModel, h: PlotPickerHandlers) {
-    this.toggleBackpack(false);
+    this.hud.toggleBackpack(false);
     this.picker = h;
     $(this.root, '#ppTitle').innerHTML = iconize(esc(m.title));
     $(this.root, '#ppSub').textContent = m.sub;
@@ -141,62 +125,6 @@ export class Panels extends HudPart {
     return !!this.picker;
   }
 
-  private renderBackpack() {
-    const st = this.sim.state;
-    const woken = this.sim.areas
-      .revealed()
-      .filter((id) => this.sim.areas.fog(id) === 'cleared')
-      .map((id) => this.sim.areas.info(id));
-    const card = (icon: string, name: string, detail: string) => `<div class="card"><span class="ci">${icon}</span><span class="cn">${name}</span><span class="cd2">${detail}</span></div>`;
-    const fauna = Object.keys(st.fauna ?? {});
-    // E21.1 / E21.8: in the Old City the backpack lists what bloombot carries and the Keepers' other requests
-    const oldCity = this.sim.oldCity
-      ? [
-          '<h3 class="bp-h">Carrying</h3>',
-          ...MATERIAL_IDS.filter((m) => this.sim.inventory.count(m)).map((m) => card(MATERIALS[m].icon, `${MATERIALS[m].name}: ${this.sim.inventory.count(m)}/${this.sim.inventory.stackLimit()}`, `${this.sim.inventory.stored(m)} in storage`)),
-          '<h3 class="bp-h">Requests</h3>',
-          ...(this.sim.keepers.requests().length ? this.sim.keepers.requests().map((r, i) => card('🤖', i === 0 ? 'Pinned' : 'Waiting', esc(r.text))) : [card('🤖', 'No requests yet', 'Wake a Keeper and it will ask for help.')]),
-        ]
-      : [];
-    const parts = [
-      ...oldCity,
-      '<h3 class="bp-h">Discoveries</h3>',
-      card('🐱', `Lucky Cats found: ${st.stats.catsFound}`, st.stats.catsFound ? 'Keep wandering: more hide as the city wakes.' : 'Wander the city. Paw prints mean a cat is close.'),
-      card('⛲', `Landmarks woken: ${woken.length}`, woken.length ? woken.map((a) => a.landmarkName).join(', ') : 'Restore the park to wake the fountain.'),
-      card('🦋', `Wildlife: ${fauna.length}`, fauna.length ? fauna.join(', ') : 'Wildlife arrives as gardens grow.'),
-      '<h3 class="bp-h">Plots and decorations</h3>',
-      ...this.backpackPlots(),
-      this.discoveriesHtml(),
-    ];
-    $(this.root, '#bpList').innerHTML = iconize(parts.join(''));
-  }
-
-  /** E19.1: plots chosen so far, and the plot options you've earned (by area type). */
-  private backpackPlots(): string[] {
-    const cz = this.sim.state.cozy;
-    const chosen = Object.values(cz?.plots ?? {});
-    const card = (icon: string, name: string, detail: string) => `<div class="card"><span class="ci">${icon}</span><span class="cn">${name}</span><span class="cd2">${detail}</span></div>`;
-    const got = PLOT_OPTIONS.filter((o) => 'start' in o.unlock || cz?.unlocked?.includes(o.id));
-    const byKind = new Map<string, number>();
-    for (const id of chosen) byKind.set(id, (byKind.get(id) ?? 0) + 1);
-    const out = [
-      card('🌱', `Plots chosen: ${chosen.length}`, chosen.length ? [...byKind].map(([id, n]) => `${esc(PLOT_OPTION[id]?.name ?? id)}${n > 1 ? ` ×${n}` : ''}`).join(', ') : 'Every area has a few plots. Restore one, face it and press the interact button.'),
-      card('✨', `Plot options: ${got.length} of ${PLOT_OPTIONS.length}`, 'More unlock as the park grows and areas clear. Free, always.'),
-    ];
-    out.push(`<div class="bp-opts">${got.map((o) => `<span title="${esc(o.name)}">${o.icon}</span>`).join('')}</div>`);
-    // E19.2: decorations placed, and the ones earned (keepsakes from Lucky Cats among them)
-    const placed = Object.values(cz?.decor ?? {}).map((v) => v.split('@')[0]);
-    const dGot = DECOR_OPTIONS.filter((o) => 'start' in o.unlock || cz?.decorUnlocked?.includes(o.id));
-    const dKinds = new Map<string, number>();
-    for (const id of placed) dKinds.set(id, (dKinds.get(id) ?? 0) + 1);
-    out.push(
-      card('🪑', `Decorations placed: ${placed.length}`, placed.length ? [...dKinds].map(([id, n]) => `${esc(DECOR_OPTION[id]?.name ?? id)}${n > 1 ? ` ×${n}` : ''}`).join(', ') : 'Open the Build tray and choose a decoration. Place it on restored ground near bloombot.'),
-      card('✨', `Decorations: ${dGot.length} of ${DECOR_OPTIONS.length}`, 'Earned as the park grows and areas clear; keepsakes come from Lucky Cats. Place as many as you like.'),
-      `<div class="bp-opts">${dGot.map((o) => `<span title="${esc(o.name)}">${o.icon}</span>`).join('')}</div>`,
-    );
-    return out;
-  }
-
   get isUpgradesOpen() {
     return this.upgradesOpen;
   }
@@ -209,25 +137,6 @@ export class Panels extends HudPart {
       `<p class="set-stats">Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Average: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b></p>` +
         `<details class="set-timings"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre></details>`,
     );
-  }
-
-  /** Phase 5 E15: the Lucky Cat discoveries (in the backpack since E22.11 moved Settings into the menu). */
-  discoveriesHtml(): string {
-    const d = this.sim.cat.discoveries();
-    const names: Record<string, string> = { luckyHarvest: 'Lucky Harvest', solarFrenzy: 'Solar Surge', megaBloom: 'Mega Bloom', droneParty: 'Drone Party', jackpot: 'Jackpot', goldenRelay: 'Golden Relay', catsGarden: "Cat's Garden", fogWhisker: 'Fog Whisker' };
-    // In the city, finds are grouped by area type (the city is endless; the list never grows).
-    const spots = d.byType.length
-      ? d.byType
-          .map(
-            (t) =>
-              `<li class="${t.cats ? 'found' : ''}"><span>${t.cats ? t.icon : '❔'}</span>${esc(t.name)} nooks: ${t.cats ? `${t.cats} cat${t.cats === 1 ? '' : 's'} in ${t.nooks} nook${t.nooks === 1 ? '' : 's'} · ${t.kinds}/${t.totalKinds} kinds of reward` : 'none found yet'}</li>`,
-          )
-          .join('')
-      : d.anchors.map((a) => `<li class="${a.found ? 'found' : ''}"><span>${a.found ? '🐱' : '❔'}</span>${a.found ? esc(a.hint) : 'Undiscovered nook'}</li>`).join('');
-    const rewards = Object.entries(names)
-      .map(([k, n]) => `<span class="rw ${d.rewards[k as keyof typeof d.rewards] ? 'got' : ''}">${n}${d.rewards[k as keyof typeof d.rewards] ? ` ×${d.rewards[k as keyof typeof d.rewards]}` : ''}</span>`)
-      .join('');
-    return `<h3 class="bp-h">🐱 Lucky Cat discoveries · ${d.found}</h3><div id="disc"><ul class="spots">${spots}</ul><div class="rws">${rewards}</div></div>`;
   }
 
   renderUpgrades(force = false) {

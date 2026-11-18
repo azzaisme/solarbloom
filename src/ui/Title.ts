@@ -265,7 +265,8 @@ export class Title {
     }
     if (field) return;
     const dpad: Record<string, number> = { ArrowUp: 12, ArrowDown: 13, ArrowLeft: 14, ArrowRight: 15 };
-    if (dpad[e.code] !== undefined && !(e.target as HTMLElement)?.closest?.('[role=tablist], select, input[type=range]')) {
+    const onTab = !!(e.target as HTMLElement)?.closest?.('[role=tablist]') && (e.code === 'ArrowLeft' || e.code === 'ArrowRight');
+    if (dpad[e.code] !== undefined && !onTab && !(e.target as HTMLElement)?.closest?.('select, input[type=range]')) {
       e.preventDefault();
       this.focus.button(dpad[e.code]);
     } else if (this.host.settingsOpen() && (e.code === 'KeyQ' || e.code === 'KeyE')) this.host.settingsTab?.(e.code === 'KeyE' ? 1 : -1);
