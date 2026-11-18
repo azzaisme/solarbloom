@@ -149,6 +149,7 @@ try {
     await page.waitForTimeout(200);
     const closed = await page.evaluate(() => ({ open: window.solarbloom.hud.craft.isOpen, paused: window.solarbloom.paused }));
     check(!closed.open && !closed.paused, T('Esc / B closes it and the game runs again'));
+    {
     // a decoration is made once at the table (Make, on the Craft tab), then placed free from the build menu
     await page.evaluate(() => {
       const g = window.solarbloom;
@@ -183,6 +184,7 @@ try {
       return { why, why2, before, placed, hidden };
     });
     check(!dec.why && dec.placed === dec.before && dec.hidden === false, T(`then the bench is placed free from the build menu (${JSON.stringify(dec)})`));
+    }
     check(errors.length === 0, T(`no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`));
     await page.context().close();
   }
