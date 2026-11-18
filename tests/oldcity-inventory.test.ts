@@ -75,7 +75,8 @@ describe('E21.1: paying', () => {
     inv.add('biomass', 20);
     expect(inv.pay({ seeds: 10, biomass: 20 }, FAR)).toBe(true);
     expect(inv.count('biomass')).toBe(5);
-    expect(sim.econ.get('biomass').toNumber()).toBe(1000);
+    expect(sim.state.resources.biomass.toNumber()).toBe(1000); // the old counter is never touched
+    expect(sim.econ.get('biomass').toNumber()).toBe(5); // econ's biomass is what bloombot carries
   });
 
   it('a refund goes to the pack, anything over a stack to the store', () => {

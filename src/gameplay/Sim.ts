@@ -143,7 +143,15 @@ export class Sim {
     }
     this.econ = new Economy(state.resources, state.caps);
     // E23.5.1: under old-city rules biomass is gathered into the backpack (GatherSystem), never earned as a counter
-    if (this.oldCity) this.econ.noIncome = new Set(['biomass']);
+    // and every biomass price (drone refits and jobs, the core, ...) is paid from the backpack and the store within reach
+    if (this.oldCity) {
+      this.econ.noIncome = new Set(['biomass']);
+      this.econ.items = {
+        kinds: new Set(['biomass']),
+        have: () => this.inventory.available('biomass'),
+        take: (_k, units) => this.inventory.pay({ biomass: units }),
+      };
+    }
     this.inventory = new Inventory(this);
     this.landmarks = new LandmarkSystem(this);
     this.clock = new Clock(this);
