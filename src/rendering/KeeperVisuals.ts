@@ -1,8 +1,8 @@
 import * as pc from 'playcanvas';
 import { GROUND } from '../core/GameState';
 import { canStep } from '../core/Height';
-import { inRect } from '../core/OldCityLayout';
 import { KEEPER_HELP } from '../data/keepers';
+import { keeperCanStand, keeperPath } from '../gameplay/KeeperSystem';
 import { KEEPERS, MODEL_NAMES, type KeeperDef } from '../data/oldcity';
 import type { Sim } from '../gameplay/Sim';
 import { MODELS, oldCityModel } from './Models';
@@ -30,10 +30,8 @@ interface KeeperView {
   z: number;
   to?: { x: number; z: number };
   wait: number;
-  /** E23.9.2: the cells it has walked through since leaving home, so it can retrace them (never off a cliff) */
-  trail: { x: number; z: number }[];
-  /** E23.9.2: a bench it was asked to sit on with bloombot (E23.2.3) */
-  bench?: { x: number; z: number; facing: number };
+  /** E23.9.2: the cells still to walk through (cell centres), after `to` */
+  path: { x: number; z: number }[];
   facing: number;
   waveUntil: number;
   clip?: string;
@@ -65,29 +63,6 @@ export class KeeperVisuals {
     });
   }
 
-  /**
-   * E23.9.2 → E23.2.3: bloombot sat on a bench in `region`: its friend Keeper (sim.keepers.benchFriend) walks over
-   * and sits at `seat` beside it. Returns the Keeper's id (undefined: no friend there). `leaveBench` lets it go.
-   */
-  joinBench(region: string, seat: { x: number; z: number; facing: number }): string | undefined {
-    const id = this.sim.keepers.benchFriend(region);
-    const v = id ? this.views.get(id) : undefined;
-    if (!v) return undefined;
-    v.bench = seat;
-    v.to = undefined;
-    v.trail = [];
-    return id;
-  }
-
-  leaveBench() {
-    for (const v of this.views.values())
-      if (v.bench) {
-        // back home along a straight line it just walked
-        v.trail = [{ x: v.def.x + 0.5, z: v.def.z + 0.5 }];
-        v.bench = undefined;
-      }
-  }
-
   /** World position of a Keeper's head (for its speech bubble). */
   headWorld(id: string): pc.Vec3 | undefined {
     const v = this.views.get(id);
@@ -106,7 +81,7 @@ export class KeeperVisuals {
     const body = new pc.Entity('body');
     root.addChild(body);
     this.root.addChild(root);
-    const v: KeeperView = { def, root, body, standIn: true, x: def.x + 0.5, z: def.z + 0.5, wait: 2, trail: [], facing: Math.PI, waveUntil: 0 };
+    const v: KeeperView = { def, root, body, standIn: true, x: def.x + 0.5, z: def.z + 0.5, wait: 2, path: [], facing: Math.PI, waveUntil: 0 };
     const own = KEEPER_URLS[`../../assets/raw/models/final/keeper-${def.id}.glb`];
     v.standIn = !own;
     this.app.assets.loadFromUrl(own ?? STAND_IN_URL, 'container', (err, asset) => {
@@ -172,25 +147,27 @@ export class KeeperVisuals {
     anim.baseLayer?.transition(want, 0.25);
   }
 
-  /** A settled Keeper's next step on restored ground of its own region (a slow random walk, never off a cliff). */
+  /** A woken Keeper's next wandering step: a cell it can stand on beside it (a slow random walk, never off a cliff). */
   private nextStep(v: KeeperView): { x: number; z: number } | undefined {
-    const g = this.sim.grid;
     const cx = Math.floor(v.x);
     const cz = Math.floor(v.z);
-    const region = this.sim.keepers.region(v.def.id);
     const opts: { x: number; z: number }[] = [];
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const x = cx + dx;
       const z = cz + dz;
-      const t = g.peek(GROUND, x, z);
-      if (!t || t.blocked || t.occupantId || t.ground !== 'restored' || t.feature === 'water') continue;
-      if (Math.abs(x - v.def.x) + Math.abs(z - v.def.z) > KEEPER_HELP.radius) continue;
-      if (!inRect({ x: region.chunks.x0 * 16, z: region.chunks.z0 * 16, w: (region.chunks.x1 - region.chunks.x0 + 1) * 16, d: (region.chunks.z1 - region.chunks.z0 + 1) * 16 }, x, z)) continue;
-      if (!canStep(cx, cz, x, z)) continue;
+      if (!keeperCanStand(this.sim, v.def.id, x, z) || !canStep(cx, cz, x, z)) continue;
       opts.push({ x: x + 0.5, z: z + 0.5 });
     }
     if (!opts.length) return undefined;
     return opts[Math.floor((Math.sin(this.clock * 12.9898 + v.def.x * 78.233) * 0.5 + 0.5) * opts.length) % opts.length];
+  }
+
+  /** E23.9.2: sets a Keeper walking to a cell along ground it can stand on (straight there if there is no such way). */
+  private route(v: KeeperView, to: { x: number; z: number }) {
+    const from = { x: Math.floor(v.x), z: Math.floor(v.z) };
+    const cells = keeperPath(this.sim, v.def.id, from, to) ?? [from, to];
+    v.path = cells.slice(1).map((c) => ({ x: c.x + 0.5, z: c.z + 0.5 }));
+    v.to = v.path.shift();
   }
 
   /** Per frame. `night`: settled Keepers doze (E21.20's day and night tells the game when). */
@@ -219,60 +196,47 @@ export class KeeperVisuals {
         v.body.setLocalEulerAngles(0, 0, 0);
         v.body.setLocalPosition(0, dozing && !v.standIn ? SEAT.height : 0, 0);
         const waving = this.clock < v.waveUntil && !this.reducedMotion;
-        // E23.9.2: a friend asked to a bench walks straight over and sits beside bloombot
-        if (v.bench && step === 'settled') {
-          const dx = v.bench.x - v.x;
-          const dz = v.bench.z - v.z;
-          const d = Math.hypot(dx, dz);
-          if (d > 0.05) {
-            const sp = Math.min(d, 1.1 * dt);
-            v.x += (dx / d) * sp;
-            v.z += (dz / d) * sp;
-            v.facing = Math.atan2(dx, dz);
-            this.play(v, 'walk');
-          } else {
-            v.facing = v.bench.facing;
-            v.body.setLocalPosition(0, v.standIn ? 0 : SEAT.height, 0);
-            this.play(v, 'sleep', 'idle');
-          }
-        } else if (!waving && !(step === 'settled' && night)) {
-          {
-            // E23.9.2: every woken Keeper hangs around its region by day; with bloombot near, it walks home
-            const bot = this.sim.bot;
-            const near = !!bot && Math.hypot(bot.x - (def.x + 0.5), bot.z - (def.z + 0.5)) < KEEPER_HELP.comeHomeTiles;
-            if (near && !v.to && v.trail.length) v.to = v.trail.pop();
-            if (!v.to) {
-              v.wait -= dt;
-              if (v.wait <= 0 && !near) {
-                const next = this.nextStep(v);
-                if (next) {
-                  // the way home stays a simple path: walking back over a cell drops the loop since it
-                  const here = { x: Math.floor(v.x) + 0.5, z: Math.floor(v.z) + 0.5 };
-                  const seen = v.trail.findIndex((c) => c.x === here.x && c.z === here.z);
-                  if (seen >= 0) v.trail.length = seen;
-                  v.trail.push(here);
-                  v.to = next;
-                }
-                v.wait = 1.5 + (Math.sin(this.clock + def.z) * 0.5 + 0.5) * 3;
-              }
-              if (near && !v.trail.length) v.facing = Math.atan2(bot!.x - v.x, bot!.z - v.z);
-              this.play(v, 'idle');
+        if (!waving && !(step === 'settled' && night)) {
+          // E23.9.2: a woken Keeper hangs around its region by day. Off to tend a tile, it walks there and tends it
+          // (the tile blooms when it is done, KeeperSystem); otherwise, with bloombot near, it walks home to be
+          // talked to; otherwise it wanders.
+          const bot = this.sim.bot;
+          const near = !!bot && Math.hypot(bot.x - (def.x + 0.5), bot.z - (def.z + 0.5)) < KEEPER_HELP.comeHomeTiles;
+          const cx = Math.floor(v.x);
+          const cz = Math.floor(v.z);
+          const tend = k.tendingAt(def.id);
+          const goal = tend ?? (near ? { x: def.x, z: def.z } : undefined);
+          if (!v.to && goal && (cx !== goal.x || cz !== goal.z)) this.route(v, goal);
+          if (v.to) {
+            const dx = v.to.x - v.x;
+            const dz = v.to.z - v.z;
+            const d = Math.hypot(dx, dz);
+            const sp = KEEPER_HELP.walkSpeed * dt;
+            if (d <= Math.max(sp, KEEPER_HELP.arriveTiles)) {
+              v.x = v.to.x;
+              v.z = v.to.z;
+              v.to = v.path.shift();
             } else {
-              const dx = v.to.x - v.x;
-              const dz = v.to.z - v.z;
-              const d = Math.hypot(dx, dz);
-              const sp = 0.7 * dt;
-              if (d <= sp) {
-                v.x = v.to.x;
-                v.z = v.to.z;
-                v.to = undefined;
-              } else {
-                v.x += (dx / d) * sp;
-                v.z += (dz / d) * sp;
-                v.facing = Math.atan2(dx, dz);
-              }
-              this.play(v, 'walk');
+              v.x += (dx / d) * sp;
+              v.z += (dz / d) * sp;
+              v.facing = Math.atan2(dx, dz);
             }
+            this.play(v, 'walk');
+          } else if (tend) {
+            // tending: leaning over its tile, working the soil (a bob on top of whatever clip it has)
+            this.play(v, 'interact', 'idle');
+            if (!this.reducedMotion) v.body.setLocalEulerAngles(KEEPER_HELP.tendLean + Math.sin(this.clock * 6) * KEEPER_HELP.tendBob, 0, 0);
+          } else if (near) {
+            v.facing = Math.atan2(bot!.x - v.x, bot!.z - v.z);
+            this.play(v, 'idle');
+          } else {
+            v.wait -= dt;
+            if (v.wait <= 0) {
+              v.to = this.nextStep(v);
+              v.path = [];
+              v.wait = 1.5 + (Math.sin(this.clock + def.z) * 0.5 + 0.5) * 3;
+            }
+            this.play(v, 'idle');
           }
         } else if (step === 'settled' && night && !waving) this.play(v, 'sleep');
         else this.play(v, waving ? 'wave' : 'idle', waving ? 'interact' : 'idle');

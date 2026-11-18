@@ -1,4 +1,5 @@
 import { GROUND } from '../core/GameState';
+import { canStep } from '../core/Height';
 import { TUNING } from '../data/tuning';
 import { inRect, keeperById, regionById } from '../core/OldCityLayout';
 import type { KeeperState, KeeperStep, MaterialId } from '../core/types';
@@ -206,34 +207,58 @@ export class KeeperSystem {
   tick(dt: number) {
     if (!this.on) return;
     const now = this.sim.time;
+    // a Keeper dozes at night (E23.7's clock), and so does its tending
+    const night = !!(this.sim as { clock?: { isNight?(): boolean } }).clock?.isNight?.();
     for (const k of KEEPERS) {
       if (this.step(k.id) !== 'settled') continue;
+      const st = this.state(k.id);
+      // on its way: the tile blooms once it has walked there and tended it
+      if (st.tending) {
+        if (now >= st.tending.at) this.finishTending(k.id);
+        continue;
+      }
+      if (night) continue;
       const every = KEEPER_HELP.tendEverySeconds / (this.isFriend(k.id) ? KEEPER_HELP.friendMult : 1);
       if (Math.floor(now / every) === Math.floor((now - dt) / every)) continue;
-      this.tend(k.id);
+      this.startTending(k.id);
     }
   }
 
-  /** One tending: the tile it helped, if any. */
-  tend(id: string): { x: number; z: number } | undefined {
-    const d = this.def(id);
-    const r = this.region(id);
-    const R = KEEPER_HELP.radius;
-    let best: { x: number; z: number; bloom: number } | undefined;
-    for (let z = d.z - R; z <= d.z + R; z++)
-      for (let x = d.x - R; x <= d.x + R; x++) {
-        if (Math.abs(x - d.x) + Math.abs(z - d.z) > R) continue;
-        const cx = Math.floor(x / 16);
-        const cz = Math.floor(z / 16);
-        if (cx < r.chunks.x0 || cx > r.chunks.x1 || cz < r.chunks.z0 || cz > r.chunks.z1) continue;
-        const t = this.sim.grid.peek(GROUND, x, z);
-        if (!t || t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom || t.occupantId) continue;
-        if (!best || t.bloom < best.bloom) best = { x, z, bloom: t.bloom };
-      }
+  /**
+   * Picks the tile a Keeper will tend next: the least bloomed restored tile it can walk to (nearest first on a tie),
+   * and when it will have walked there and tended it. Saved, so a reload carries on where it was.
+   */
+  startTending(id: string): { x: number; z: number } | undefined {
+    let best: { x: number; z: number; steps: number; bloom: number } | undefined;
+    for (const c of keeperReach(this.sim, id)) {
+      const t = this.sim.grid.peek(GROUND, c.x, c.z)!;
+      if (t.bloom >= TUNING.restore.maxBloom) continue;
+      if (!best || t.bloom < best.bloom) best = { ...c, bloom: t.bloom };
+    }
     if (!best) return undefined;
-    this.sim.restoration.grow(this.sim.grid.peek(GROUND, best.x, best.z)!, undefined, 'auto', true);
-    this.sim.bus.emit('keeper.tended', { keeperId: id, x: best.x, z: best.z });
+    const at = this.sim.time + best.steps / KEEPER_HELP.walkSpeed + KEEPER_HELP.tendSeconds;
+    this.set(id, { ...this.state(id), tending: { x: best.x, z: best.z, at } });
+    this.sim.bus.emit('keeper.tending', { keeperId: id, x: best.x, z: best.z });
     return { x: best.x, z: best.z };
+  }
+
+  /** The Keeper has walked to its tile and tended it: one bloom step. */
+  finishTending(id: string): { x: number; z: number } | undefined {
+    const st = this.state(id);
+    const c = st.tending;
+    if (!c) return undefined;
+    this.set(id, { ...st, tending: undefined });
+    const t = this.sim.grid.peek(GROUND, c.x, c.z);
+    if (!t || t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom || t.occupantId || t.blocked) return undefined;
+    this.sim.restoration.grow(t, undefined, 'auto', true);
+    this.sim.bus.emit('keeper.tended', { keeperId: id, x: c.x, z: c.z });
+    return { x: c.x, z: c.z };
+  }
+
+  /** Where a Keeper is off to tend (undefined: nowhere). */
+  tendingAt(id: string): { x: number; z: number } | undefined {
+    const t = this.state(id).tending;
+    return t && { x: t.x, z: t.z };
   }
 
   /** Gifts it has liked so far (0 until it settles). */
@@ -341,6 +366,74 @@ export class KeeperSystem {
   pinned(): { id: string; text: string } | undefined {
     return this.requests()[0];
   }
+}
+
+/**
+ * E23.9.2: can a Keeper stand on this cell? Restored, open ground of its own region within KEEPER_HELP.radius of
+ * where it sleeps (its own sleeping cell counts). Pure: the sim's tending and the visuals' walking agree on it.
+ */
+export function keeperCanStand(sim: Sim, id: string, x: number, z: number): boolean {
+  const d = keeperById(id)!;
+  if (x === d.x && z === d.z) return true;
+  if (Math.abs(x - d.x) + Math.abs(z - d.z) > KEEPER_HELP.radius) return false;
+  const r = regionById(d.region)!;
+  const cx = Math.floor(x / 16);
+  const cz = Math.floor(z / 16);
+  if (cx < r.chunks.x0 || cx > r.chunks.x1 || cz < r.chunks.z0 || cz > r.chunks.z1) return false;
+  const t = sim.grid.peek(GROUND, x, z);
+  return !!t && !t.blocked && !t.occupantId && t.ground === 'restored' && t.feature !== 'water';
+}
+
+const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
+
+/** Every cell a Keeper can walk to from where it sleeps, nearest first, with how many steps away. */
+export function keeperReach(sim: Sim, id: string): { x: number; z: number; steps: number }[] {
+  const d = keeperById(id)!;
+  const seen = new Set([`${d.x},${d.z}`]);
+  const out: { x: number; z: number; steps: number }[] = [];
+  let edge = [{ x: d.x, z: d.z, steps: 0 }];
+  while (edge.length) {
+    const next: typeof edge = [];
+    for (const c of edge)
+      for (const [dx, dz] of N4) {
+        const x = c.x + dx;
+        const z = c.z + dz;
+        const k = `${x},${z}`;
+        if (seen.has(k) || !keeperCanStand(sim, id, x, z) || !canStep(c.x, c.z, x, z)) continue;
+        seen.add(k);
+        const n = { x, z, steps: c.steps + 1 };
+        out.push(n);
+        next.push(n);
+      }
+    edge = next;
+  }
+  return out;
+}
+
+/** A Keeper's walk between two cells it can stand on (both included), or undefined when there is none. */
+export function keeperPath(sim: Sim, id: string, from: { x: number; z: number }, to: { x: number; z: number }): { x: number; z: number }[] | undefined {
+  const key = (x: number, z: number) => `${x},${z}`;
+  const prev = new Map<string, string | null>([[key(from.x, from.z), null]]);
+  let edge = [from];
+  while (edge.length && !prev.has(key(to.x, to.z))) {
+    const next: { x: number; z: number }[] = [];
+    for (const c of edge)
+      for (const [dx, dz] of N4) {
+        const x = c.x + dx;
+        const z = c.z + dz;
+        if (prev.has(key(x, z)) || !keeperCanStand(sim, id, x, z) || !canStep(c.x, c.z, x, z)) continue;
+        prev.set(key(x, z), key(c.x, c.z));
+        next.push({ x, z });
+      }
+    edge = next;
+  }
+  if (!prev.has(key(to.x, to.z))) return undefined;
+  const path: { x: number; z: number }[] = [];
+  for (let k: string | null = key(to.x, to.z); k; k = prev.get(k) ?? null) {
+    const [x, z] = k.split(',').map(Number);
+    path.unshift({ x, z });
+  }
+  return path;
 }
 
 /** "8 Seeds and 20 Biomass" */

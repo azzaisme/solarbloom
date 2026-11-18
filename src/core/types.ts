@@ -345,6 +345,8 @@ export interface KeeperState {
   giftedAt?: number;
   /** E23.9.2: how many times a friend has chatted (which line comes next) */
   chats?: number;
+  /** E23.9.2: settled only: the tile it is walking to tend, and the sim time it will have tended it */
+  tending?: { x: number; z: number; at: number };
 }
 
 /**

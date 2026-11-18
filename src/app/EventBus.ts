@@ -22,6 +22,8 @@ export interface GameEvents {
   /** E21.8: a Keeper speaks (one to three lines) or moves to a new step. */
   /** E23.9.2: a settled Keeper took a gift it loves */
   'keeper.gift': { keeperId: string; item: string; hearts: number };
+  /** E23.9.2: a settled Keeper sets off to tend a tile of its region */
+  'keeper.tending': { keeperId: string; x: number; z: number };
   /** E23.9.2: a settled Keeper tended a tile of its region (one bloom step) */
   'keeper.tended': { keeperId: string; x: number; z: number };
   /** E23.9.2: a Keeper calls bloombot a friend */

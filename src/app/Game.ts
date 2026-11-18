@@ -3509,6 +3509,13 @@ export class Game {
       if (!s.salvage.see(`vista:${region}`)) return;
       setTimeout(() => this.vista(r.landmark.x + 1, r.landmark.z + 1, 2, () => {}), 300);
     });
+    // E23.9.2: a Keeper finished tending a tile: a little burst of green where it worked
+    b.on('keeper.tended', ({ x, z }) => {
+      const t = this.sim.grid.get(GROUND, x, z);
+      if (!t) return;
+      const [wx, wy, wz] = this.sim.grid.tileWorld(t);
+      this.vfx.burst(new pc.Vec3(wx, wy + 0.3, wz), 10, { up: 1.6, speed: 0.9, size: 0.05, life: 1.1 });
+    });
     b.on('fountain.tier', ({ tier }) => {
       this.applyFountainLook(false);
       this.celebrateTier(tier);

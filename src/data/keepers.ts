@@ -54,6 +54,15 @@ export const KEEPER_HELP = {
   radius: 8,
   /** a wandering Keeper heads home when bloombot comes this close to it, so it can be talked to */
   comeHomeTiles: 6,
+  /** how fast a Keeper walks, in tiles a second (bloombot strolls at about 2) */
+  walkSpeed: 0.7,
+  /** seconds a Keeper spends tending a tile once it gets there */
+  tendSeconds: 2.5,
+  /** how close to a cell's centre counts as there, in tiles */
+  arriveTiles: 0.05,
+  /** while tending, a Keeper leans over its tile this many degrees, bobbing this much */
+  tendLean: 24,
+  tendBob: 7,
 };
 
 export const KEEPER_STORIES: Record<string, KeeperStory> = {
@@ -172,7 +181,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
     likes: ['moonflower', 'glass'],
     thanks: 'For me? How lovely. Thank you.',
     giftBack: { copper: 5 },
-    chatter: ['A comet tonight, maybe. Or a moth. Both are nice.', 'The owls are back on the hill.', 'Still no lights on the mainland. One day.'],
+    chatter: ['A comet tonight, maybe. Or a moth. Both are nice.', 'The owls are back on the hill.', 'I used to look for lights out there. Now I count the stars, and the fireflies.'],
   },
   atlas: {
     personality: 'Big, proud and tired. Learning to set things down and rest.',

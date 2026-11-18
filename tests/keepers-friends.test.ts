@@ -143,9 +143,9 @@ describe('E23.9.2: Keepers as friends', () => {
     // Pylon sleeps at (10, -4); restore a tile beside it
     const near = sim.grid.get(GROUND, 10, -6)!;
     sim.restoration.complete(near, 'pulse');
-    for (let z = -8; z <= -6; z++) for (let x = 8; x <= 12; x++) { const t = sim.grid.get(GROUND, x, z)!; if (!t.blocked && t.ground !== 'restored') sim.restoration.complete(t, 'pulse'); }
+    for (let z = -8; z <= -5; z++) for (let x = 8; x <= 12; x++) { const t = sim.grid.get(GROUND, x, z)!; if (!t.blocked && t.ground !== 'restored') sim.restoration.complete(t, 'pulse'); }
     const area: ReturnType<typeof sim.grid.get>[] = [];
-    for (let z = -8; z <= -6; z++) for (let x = 8; x <= 12; x++) area.push(sim.grid.get(GROUND, x, z));
+    for (let z = -8; z <= -5; z++) for (let x = 8; x <= 12; x++) area.push(sim.grid.get(GROUND, x, z));
     const bloomSum = () => area.reduce((a, t) => a + (t?.bloom ?? 0), 0);
     const before = bloomSum();
     // awake but not settled: no help yet
@@ -157,13 +157,16 @@ describe('E23.9.2: Keepers as friends', () => {
     sim.keepers.settle('pylon');
     const t0 = sim.time;
     // tick at fixed times: exactly one tending per period
-    let n = 0;
-    for (let s = 1; s <= KEEPER_HELP.tendEverySeconds * 2; s++) {
+    // it sets off at each period, walks to its tile and tends it; the tile blooms when it is done, not before
+    const started: unknown[] = [];
+    sim.bus.on('keeper.tending', (e) => started.push(e));
+    for (let s = 1; s <= KEEPER_HELP.tendEverySeconds * 2 + 30; s++) {
       sim.state.time = t0 + s;
       sim.keepers.tick(1);
-      n = tended.length;
+      if (started.length === 1 && !tended.length) expect(sim.keepers.tendingAt('pylon')).toBeDefined();
     }
-    expect(n).toBe(2);
+    expect(started.length).toBe(2);
+    expect(tended.length).toBe(2);
     // each tending is one bloom step on a tile beside it
     expect(bloomSum()).toBe(before + 2);
     // a friend tends twice as often
@@ -173,7 +176,8 @@ describe('E23.9.2: Keepers as friends', () => {
       sim.state.time += 1;
       sim.keepers.tick(1);
     }
-    expect(tended.length).toBe(2 * KEEPER_HELP.friendMult);
+    expect(tended.length).toBeGreaterThanOrEqual(2 * KEEPER_HELP.friendMult - 1);
+    expect(tended.length).toBeLessThanOrEqual(2 * KEEPER_HELP.friendMult);
     void tiles;
   });
 });

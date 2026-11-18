@@ -22,7 +22,7 @@ const QUICK = [
   // E23.8.3: the mainland
   'mainland',
   // E23.9: the story
-  'journal', 'keepers-friends',
+  'journal', 'keepers-friends', 'keepers-arcs',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
