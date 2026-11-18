@@ -58,6 +58,7 @@ async function open(dev) {
     sv.caches.push('c-elderGrove-2', 'c-saltwind-1');
     sv.research = { analysed: [], done: ['dc-clematis', 'dc-morningGlory', 'dc-wisteria'], running: [], levels: {} };
     s.inventory.addToStore('seeds', 400);
+    s.inventory.add('seeds', 30); // carried: some hosts are beyond the store's reach
     s.inventory.addToStore('planks', 60);
     for (let x = 6; x < 22; x++)
       for (let z = 8; z < 24; z++) {
