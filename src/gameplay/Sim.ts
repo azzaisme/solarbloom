@@ -39,6 +39,7 @@ import { MainlandSystem } from './MainlandSystem';
 import { LandmarkSystem } from './LandmarkSystem';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
+import { Weather } from './Weather';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -95,8 +96,8 @@ export class Sim {
   readonly clock: Clock;
   /** E23.7.1.3: finds that are out only at night. */
   readonly nightFinds: NightFinds;
-  /** E23.7.2: the weather (solar share and the rest). Optional until it lands; read `sim.weather?.solar() ?? 1`. */
-  weather?: { solar(): number };
+  /** E23.7.2: the weather: one kind a game day, each with its effects (data/weather). See gameplay/Weather. */
+  readonly weather: Weather;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -144,6 +145,7 @@ export class Sim {
     this.landmarks = new LandmarkSystem(this);
     this.clock = new Clock(this);
     this.nightFinds = new NightFinds(this);
+    this.weather = new Weather(this);
     this.salvage = new SalvageSystem(this);
     this.gates = new GateSystem(this);
     this.fountain = new FountainSystem(this);
@@ -274,6 +276,7 @@ export class Sim {
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
     this.clock.tick();
+    this.weather.tick();
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();

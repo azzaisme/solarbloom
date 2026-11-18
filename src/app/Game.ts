@@ -92,6 +92,9 @@ import { padStick, PhotoMode } from './PhotoMode';
 import { DayNight, type LightMoment } from '../rendering/DayNight';
 import { NightFindVisuals } from '../rendering/NightFindVisuals';
 import { NIGHT_FIND_GIVES } from '../data/time';
+import { WEATHER, WEATHER_WORDS } from '../data/weather';
+import { WeatherVisuals, type WeatherLook } from '../rendering/WeatherVisuals';
+import { buildRadio } from '../rendering/HouseRadio';
 import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
 import { HOTBAR_DEFAULT } from '../ui/Hotbar';
 import { actionGlyph, GlyphTracker, padName, type PadStyle } from '../ui/Glyphs';
@@ -176,6 +179,8 @@ export class Game {
   private titleRealClock?: boolean;
   /** E23.7.1.3: glowing plants and night salvage */
   private nightFindVisuals!: NightFindVisuals;
+  /** E23.7.2: rain, storms, fog and wind on screen */
+  private weatherVisuals!: WeatherVisuals;
   private skyline!: Skyline;
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
@@ -378,6 +383,8 @@ export class Game {
     this.pollinators = new Pollinators(this.sim, this.scene.world, this.app.batcher!.addGroup('pollinators', true, 400).id);
     this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
     this.nightFindVisuals = new NightFindVisuals(this.sim, this.scene.world, (x, z) => this.groundY(x, z));
+    this.weatherVisuals = new WeatherVisuals(this.app, this.scene.world);
+    buildRadio(this.scene.world, (x, z) => this.groundY(x, z));
     this.tileFx = new TileFx(this.sim, this.scene.world, this.app.graphicsDevice);
     this.machines.onWisp = (_m, at) => this.vfx.burst(at, 1, { up: 0.5, speed: 0.12, size: 0.035, life: 1.3, gravity: 0 }); // Phase 5 E16: running machines only
     this.machines.onActivated = (_m, at) => {
@@ -1016,7 +1023,24 @@ export class Game {
 
   /** E23.7.1: the moment the sky and light show: the light clock (photo mode may set its own, E23.7.3). */
   private lightMoment(): LightMoment {
-    return { f: this.sim.clock.dayFraction() };
+    const wv = this.weatherVisuals;
+    return { f: this.sim.clock.dayFraction(), overcast: wv?.overcast ?? 0, flash: wv?.lightning ?? 0 };
+  }
+
+  /** E23.7.2: the weather the screen shows (photo mode may pick its own, E23.7.3). */
+  private weatherLook(): WeatherLook {
+    return { kind: this.sim.weather.kind() };
+  }
+
+  /**
+   * E23.7.2.2 (#449): the forecast. An old radio on a crate by the house's door; by day, Interact listens to it and
+   * it says tomorrow's weather (always the right one: the weather is fixed per game day).
+   */
+  /** E23.7.2.2: tomorrow's weather, from the radio. */
+  private listenToRadio() {
+    const k = this.sim.weather.forecast();
+    this.hud.toast(WEATHER_WORDS[k].forecast, '', 5);
+    this.sim.bus.emit('weather.forecast', { kind: k });
   }
 
   private menuHeader(): MenuHeader {
@@ -1795,6 +1819,8 @@ export class Game {
       const g = NIGHT_FIND_GIVES[nf.kind];
       out.push({ kind: 'salvage', id: `night:${nf.id}`, verb: g.verb, name: g.name, distance: fd, at: front, refused: s.nightFinds.problem(nf.id), run: () => void s.nightFinds.take(nf.id) });
     }
+    // the house: its radio's forecast by day, its bed from dusk
+    if (this.atHouse(f) && s.weather.on && !s.clock.canSleep()) out.push({ kind: 'door', id: 'house:radio', verb: 'Listen to', name: 'the radio', distance: fd, at: front, run: () => this.listenToRadio() });
     if (this.atHouse(f) && s.clock.canSleep()) out.push({ kind: 'door', id: 'house:sleep', verb: 'Sleep', name: 'until morning', distance: fd, at: front, run: () => this.sleep() });
     const pile = s.salvage.pileAt(f.x, f.z);
     if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: SALVAGE.holdSeconds, refused: s.salvage.problem(pile.id), run });
@@ -2222,6 +2248,10 @@ export class Game {
       const reach = this.deck ? DECK.closeReach : (CLOSE_VIEW_REACH[this.gfxTier as keyof typeof CLOSE_VIEW_REACH] ?? 1);
       c.hazeEnd *= 1 - (1 - reach) * close;
     }
+    // E23.7.2: fog (and rain) shorten the view
+    const view = this.weatherVisuals?.view ?? 1;
+    c.hazeStart *= view * view * view;
+    c.hazeEnd *= view * view;
     this.app.scene.fog.start = c.fogDepth(c.dist + c.hazeStart);
     this.app.scene.fog.end = c.fogDepth(c.dist + c.hazeEnd);
     if (this.sky) {
@@ -4268,7 +4298,7 @@ export class Game {
     this.birds.resident = eco.has('birds');
     this.clouds.happy = eco.has('birds'); // the sky wakes up with the songbirds: sleepy faces on a couple of clouds
     this.birds.update(wdt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
-    this.fauna.update(wdt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: this.settings.fireflies !== false && !this.settings.highContrast && this.dayNight.light < 0.5 });
+    this.fauna.update(wdt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: this.settings.fireflies !== false && !this.settings.highContrast && this.dayNight.light < 0.5, fog: WEATHER[this.weatherLook().kind].fogFinds });
     this.nightFindVisuals.reducedMotion = this.settings.reducedMotion;
     this.nightFindVisuals.update(wdt);
     this.eco?.update(wdt);
@@ -4303,6 +4333,14 @@ export class Game {
     this.camera.update(dt);
     this.sky.clarity += (this.skyClarity() - this.sky.clarity) * Math.min(1, dt * 0.8);
     this.sky.reducedMotion = this.settings.reducedMotion;
+    {
+      const wv = this.weatherVisuals;
+      wv.reducedMotion = this.settings.reducedMotion;
+      wv.lowVfx = !!this.settings.lowVfx;
+      wv.update(wdt, this.weatherLook(), this.camera.target);
+      this.sky.wind = wv.wind;
+      this.clouds.gust = wv.wind;
+    }
     this.dayNight.apply(this.lightMoment());
     this.look.rimShare = this.dayNight.rim;
     this.chunks.fogTint.copy(this.dayNight.cloudTint);

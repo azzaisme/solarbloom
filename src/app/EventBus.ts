@@ -10,6 +10,14 @@ export interface GameEvents {
   'clock.slept': { from: number; day: number; real: boolean };
   /** E23.7.1: "follow my clock" switched on or off. */
   'clock.mode': { real: boolean };
+  /** E23.7.2: a new day's weather (or a held one, in tests and photo mode never). */
+  'weather.changed': { kind: import('../data/weather').WeatherKind; day: number };
+  /** E23.7.2.3: a storm blew in at dawn: fresh salvage (E23.7.4 refills the piles). */
+  'weather.storm': { day: number };
+  /** E23.7.2.3: lightning struck; `poleId`: the power pole it tripped (reset with one press), if the grid has one. */
+  'weather.lightning': { day: number; poleId?: string };
+  /** E23.7.2.2: bloombot listened to the forecast on the radio. */
+  'weather.forecast': { kind: import('../data/weather').WeatherKind };
   /** E23.7.1.3: a night find was taken. */
   'night.found': { id: string; material: import('../core/types').MaterialId; n: number; x: number; z: number };
   /** E21.1: the backpack or the store changed (`material` unset = several at once). */

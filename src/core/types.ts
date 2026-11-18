@@ -331,7 +331,6 @@ export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'cl
 export type AbilityId = 'pry' | 'hover' | 'climb' | 'glide';
 /** E21 §8: where a Keeper is in its story. Woken (pulsed and handed 5 of anything) goes straight to request1. */
 export type KeeperStep = 'asleep' | 'request1' | 'request2' | 'landmark' | 'settled';
-export type WeatherKind = 'clear' | 'cloudy' | 'rain' | 'mist' | 'windy';
 
 export interface KeeperState {
   step: KeeperStep;
@@ -370,10 +369,8 @@ export interface SalvageState {
   blueprints: string[];
   /** E21.11: the house's level (0 = the ruined shed) */
   house: number;
-  /** E21.13: seconds added to sim time to get the time of day (only the bed changes it) */
+  /** E21.13 (unused since E23.7.1: the clock lives in `GameState.clock`; kept until E23.1 bumps the save) */
   clockOffset: number;
-  /** E21.13: the weather now, and when it next changes (sim time) */
-  weather?: { kind: WeatherKind; until: number };
   /** E21.9: Reclaimers' undelivered fractions, by machine id (so 6 a minute pays exactly) */
   reclaim?: Record<string, number>;
   /** E21.6 / E21.17: one-off items carried for the Great Bloom (the Heart Seed, the Star Lens) */
