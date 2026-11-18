@@ -9,6 +9,7 @@ import type { Tool } from './Hud';
 import { AREA_TYPES } from '../data/city';
 import { MACHINES } from '../data/machines';
 import type { Sim } from '../gameplay/Sim';
+import type { Suggestion } from '../gameplay/Advisor';
 import { HOME } from '../gameplay/ProgressionSystem';
 import { TUNING } from '../data/tuning';
 import { WORDS } from './words';
@@ -36,9 +37,18 @@ export function pinnedRequest(state: object): { text: string; have?: number; nee
   return undefined;
 }
 
-export function objectiveSentence(sim: Sim): Objective {
+/** E23.1.5: the advisor's topics that come before any request: a shortage in the loop the player should see now. */
+const URGENT = new Set<Suggestion['topic']>(['charge', 'grid', 'water', 'farm']);
+
+/**
+ * The sentence. E23.1.5: under the calm HUD the hint strip is hidden, so the advisor speaks through this line: a
+ * shortage in the loop first, then the pinned request, then the fountain, and its next step once the fountain is
+ * done. `advice` is the advisor's current suggestion (the card asks for it twice a second; tests may leave it out).
+ */
+export function objectiveSentence(sim: Sim, advice: Suggestion | undefined = sim.oldCity ? sim.advisor.suggest() : undefined): Objective {
   const W = WORDS.objective;
   if (sim.oldCity) {
+    if (advice && URGENT.has(advice.topic)) return { text: advice.text };
     // E21.8: the pinned Keeper request (with a count only while its patch is restored by hand)
     const pinned = pinnedKeeper(sim); // E22.6: the request the player pinned, else the first open one
     if (pinned) {
@@ -49,7 +59,7 @@ export function objectiveSentence(sim: Sim): Objective {
     // E21.6: the fountain's next step, by its name: what it still wants, then its own condition
     const f = sim.fountain;
     const t = f.next();
-    if (!t) return { text: W.explore };
+    if (!t) return { text: advice?.text ?? W.explore };
     const want = (Object.keys(t.delivery) as (MaterialId | 'biomass')[])
       .map((k) => [k, k === 'biomass' ? t.delivery[k]! : f.remaining(k as MaterialId)] as const)
       .filter(([, n]) => n > 0)
@@ -317,8 +327,16 @@ export class ObjectiveCard extends HudPart {
   }
 
   /** E22.10: the old-city sentence. */
+  private advice?: Suggestion;
+  private adviceAt = -Infinity;
   private updateOldCity() {
-    const o = objectiveSentence(this.sim);
+    // E23.1.5: the advisor is asked at most twice a second (it scans tiles)
+    const now = performance.now();
+    if (now - this.adviceAt > 500) {
+      this.adviceAt = now;
+      this.advice = this.sim.advisor.suggest();
+    }
+    const o = objectiveSentence(this.sim, this.advice);
     this.set('objTitle', $(this.root, '#objTitle'), 'html', `${esc(o.text)}${o.count ? ` <span class="ocount">${esc(o.count)}</span>` : ''}`);
   }
 }

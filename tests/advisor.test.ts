@@ -5,6 +5,7 @@ import { createInitialState, GROUND, isRestorable } from '../src/core/GameState'
 import type { MachineData } from '../src/core/types';
 import { Rng } from '../src/core/Rng';
 import { Sim } from '../src/gameplay/Sim';
+import { objectiveSentence } from '../src/ui/ObjectiveCard';
 
 const TOPICS = ['charge', 'grid', 'water', 'farm', 'keeper', 'restore'];
 
@@ -164,5 +165,16 @@ describe('objective advisor (City 14.1)', () => {
     expect([...seen].every((t) => ['keeper', 'restore'].includes(t))).toBe(true); // no charge, grid or water yet
     // eslint-disable-next-line no-console
     console.log(`advisor alone: fountain tier 1 at ${(sim.time / 60).toFixed(1)} min, ${followed} steps followed`);
+  });
+
+  it('speaks through the objective sentence: a shortage in the loop first, the next step once the fountain is done', () => {
+    const sim = new Sim(createInitialState(4, 'oldcity'));
+    expect(objectiveSentence(sim).text).toMatch(/fountain/); // a new game: the fountain wants Scrap and Seeds
+    (sim as unknown as Record<string, unknown>).charge = { low: true, share: 0.1 };
+    expect(objectiveSentence(sim).text).toMatch(/running low/);
+    (sim as unknown as Record<string, unknown>).charge = { low: false, share: 0.9 };
+    sim.state.salvage!.tier = 5; // every tier done
+    const g = sim.advisor.suggest();
+    expect(objectiveSentence(sim).text).toBe(g.text);
   });
 });
