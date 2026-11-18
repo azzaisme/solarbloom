@@ -132,6 +132,9 @@ const PLOT_IN_WAY = 'A plot is here: clear it first (it’s free)';
 /** E19.2: a build aimed beyond bloombot's reach */
 const TOO_FAR = 'Too far: walk closer';
 
+/** E21: what dead ground is called in the Old City, by its feature */
+const OLD_DEAD_NAME: Record<string, string> = { sand: 'Dead sand', paving: 'Cracked paving', road: 'Cracked road', lawn: 'Dead grass', litter: 'Dead leaf litter', clay: 'Cracked clay', water: 'Murky water' };
+
 export class Game {
   readonly app: pc.Application;
   readonly bus = new EventBus();
@@ -537,7 +540,7 @@ export class Game {
     if (lr.backedUpAs) setTimeout(() => this.hud.toast(`Your old save couldn't be read by this version, so it was kept safely as a backup and a new rooftop started.<small>${lr.backedUpAs}</small>`, '', 8), 400);
     this.sfx.frenzy = this.sim.frenzy.active(); // loaded mid-Frenzy
     // Phase 4 E10.1: no blocking welcome card. The first pulse works at once; a short note says what this is.
-    if (!state.progression.introSeen && state.stats.tilesRestored === 0) {
+    if (!state.progression.introSeen && state.stats.tilesRestored === 0 && !this.sim.oldCity) {
       state.progression.introSeen = true;
       const how = `Walk with ${this.hudKey('up')}${this.hudKey('left')}${this.hudKey('down')}${this.hudKey('right')} and press ${this.hudKey('pulse')} to pulse the grey tile in front of you.`;
       setTimeout(() => this.hud.toast(`🌱 Welcome to Solarbloom<small>This park is dead and grey. ${how}</small>`, 'gold', 6), 600);
@@ -1538,7 +1541,9 @@ export class Game {
     }
     // E21.22: and whatever stands between the camera and bloombot
     const through = this.bot && this.sim.oldCity ? (([x, y, z]) => new pc.Vec3(x, y + 0.45, z))(this.bot.world()) : undefined;
-    if (w && h && !this.cinematic) this.chunks.fadeTowers(dt, this.camera.cam, keep, through);
+    // In the Old City every building can fade, so only the sight line to bloombot fades one: the view's middle and
+    // the cursor would ghost whole blocks the player is just looking at.
+    if (w && h && !this.cinematic) this.chunks.fadeTowers(dt, this.camera.cam, through ? [] : keep, through);
     if (this.treeFade < 0.002 || !w || !h) return setTreeCursor(0, 0, 0, 0, w || 1, h || 1);
     const { o, d } = this.camera.ray(ptr.x, ptr.y);
     // The ground under the cursor (or far away if the ray misses it) as a view depth.
@@ -1770,6 +1775,7 @@ export class Game {
     if (t.blocked) return 'Rusty vent';
     switch (t.ground) {
       case 'polluted':
+        if (this.sim.oldCity) return OLD_DEAD_NAME[t.feature ?? 'lawn'] ?? 'Dead ground';
         return 'Cracked concrete';
       case 'prepared':
         return 'Mossy soil';
@@ -1902,7 +1908,9 @@ export class Game {
     const fp = chk.ok && t.ground !== 'restored' ? this.sim.restoration.footprint(t) : [];
     if (fp.length) this.overlays.showRadius([t, ...fp.map((f) => f.tile)], 'ok');
     else if (!this.selected) this.overlays.hideRadius();
-    if (chk.ok) {
+    if (this.sim.salvage.describe(t)) action = '';
+    else if (chk.ok && this.sim.oldCity) action = `<span class="ok">${t.ground === 'restored' ? 'Pulse to help it flower' : 'Pulse to bring it back'}</span>`;
+    else if (chk.ok) {
       const verb = t.ground === 'restored' ? `Nurture → ${BLOOM_NAMES[t.bloom + 1]}` : this.sim.restoration.nextIsOvercharged() ? '🌟 Overcharged pulse' : 'Pulse';
       action = `<span class="ok">${verb}: ${formatCost(chk.cost)}${fp.length ? ` · restores ${fp.length + 1} tiles` : ''}</span>`;
     } else if (chk.reason && !maxed) action = `<span class="bad">${chk.reason}</span>`;
@@ -2252,6 +2260,7 @@ export class Game {
       case 'polluted': {
         const left = this.sim.cultivators.remaining(t);
         if (left !== undefined) return `🚜 The Cultivator is softening this slab — ${Math.ceil(left)} s to bloom. Pulse it to knock it along.`;
+        if (this.sim.oldCity) return 'Dead and grey. A pulse brings it back.';
         return `Pollution ${Math.round(t.pollution)}% — restoring neighbours softens it into moss.`;
       }
       case 'prepared':
@@ -2259,6 +2268,7 @@ export class Game {
       case 'growing':
         return `${this.stageName(t) ?? 'Roots are breaking through'} — ${Math.max(1, Math.ceil(t.growthRemainingSec))} s`;
       case 'restored': {
+        if (this.sim.oldCity) return t.bloom >= TUNING.restore.fullBloom ? 'In flower.' : 'Alive again. Pulse it again to help it flower.';
         const rate = this.sim.production.tileBiomassRate(t);
         const lush = (t.lushUntil ?? 0) > this.sim.time ? ` · 💧 lush ${Math.ceil(t.lushUntil! - this.sim.time)} s` : '';
         const st = this.stageName(t);
