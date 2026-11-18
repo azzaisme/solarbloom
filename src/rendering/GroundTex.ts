@@ -301,8 +301,9 @@ function painted(name: GroundTexName): { colour: HTMLCanvasElement; normal?: HTM
   const normal = canvasOf((px) => {
     for (let y = 0; y < SIZE; y++)
       for (let x = 0; x < SIZE; x++) {
-        const dx = (at(x - 1, y) - at(x + 1, y)) * NORMAL_STRENGTH;
-        const dy = (at(x, y - 1) - at(x, y + 1)) * NORMAL_STRENGTH;
+        // signs as the engine reads them (checked in the game: the other way round the pavers looked sunk below the grout)
+        const dx = (at(x + 1, y) - at(x - 1, y)) * NORMAL_STRENGTH;
+        const dy = (at(x, y + 1) - at(x, y - 1)) * NORMAL_STRENGTH;
         const l = 1 / Math.hypot(dx, dy, 1);
         const i = (y * SIZE + x) * 4;
         px[i] = (dx * l * 0.5 + 0.5) * 255;
