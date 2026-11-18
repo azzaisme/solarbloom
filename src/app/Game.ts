@@ -373,7 +373,7 @@ export class Game {
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
     this.powerLines = new PowerLines(this.sim, this.scene.world, (m) => this.machines.worldOf(m));
-    this.powerOverlay = new PowerOverlay(this.sim, this.scene.world, (m) => this.machines.worldOf(m));
+    this.powerOverlay = new PowerOverlay(this.sim, this.scene.world, (m) => this.machines.worldOf(m), this.app.batcher ?? undefined);
     this.rings = new ProgressRings(this.sim, this.scene.world);
     // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
     // its procedural look. Once they're in, what was already drawn is rebuilt with them.
@@ -1548,6 +1548,9 @@ export class Game {
   }
 
   /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
+  private building(t: Tool = this.hud.currentTool): boolean {
+    return !!this.bot && t !== 'inspect' && t !== 'pulse';
+  }
   /** E23.3.4: the Power view is on (shown while building; it stays on for the next time you build). */
   private powerView = false;
   private togglePowerView() {
@@ -1562,10 +1565,6 @@ export class Game {
     }
   }
   private powerViewSeen = false;
-
-  private building(t: Tool = this.hud.currentTool): boolean {
-    return !!this.bot && t !== 'inspect' && t !== 'pulse';
-  }
   /** the overview (M) is showing; walking, or M again, leaves it */
   private overviewOn = false;
   /** E19.2: how a decoration in hand is turned, in quarter turns (kept between placements, as in Satisfactory) */
