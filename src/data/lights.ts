@@ -68,9 +68,10 @@ export const LIGHTING = {
   /** seconds a light takes to fade in at dusk (or out at dawn), on top of the sky's own twilight */
   fadeSeconds: 4,
   /** a solar light: its panel at full sun (W), its battery (W·s) and its lamp's draw (W) */
-  // A sunny day (~1830 s of sun) charges it about 365 W·s; a night (~870 s of dark, twilight included) at 0.38 W
-  // uses about 330. After a cloudy day (−20%: ~290) it runs out a little before dawn and dims.
-  solar: { panel: 0.2, capacity: 370, rate: 1, draw: 0.38 },
+  // On E23.7's clock a sunny day gives ~1,608 full-sun seconds and a night ~1,075 dark ones. A sunny day charges
+  // ~400 W·s; the night uses ~365 at 0.34 W, so it lasts till dawn. After a cloudy day (−20%: ~320) it runs out about
+  // two minutes before dawn and dims.
+  solar: { panel: 0.25, capacity: 410, rate: 1, draw: 0.34 },
   /** how close to a pole a line light can be placed, measured from the aimed tile to the pole (tiles) */
   poleReach: 1.6,
   /** fireflies and moths: how many lights near the view gather them, and how many each */

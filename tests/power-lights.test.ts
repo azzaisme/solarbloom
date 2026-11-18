@@ -8,16 +8,33 @@ import { LIGHT, LIGHTING, LIGHTS } from '../src/data/lights';
 import { POWER } from '../src/data/power';
 import { Cozy } from '../src/gameplay/Cozy';
 import { Sim } from '../src/gameplay/Sim';
+import type { WeatherKind } from '../src/data/weather';
 
 SaveService.clock = () => 0;
 
-/** A sim with a controllable clock (E23.7's `dayFraction`: 0 dawn, 2/3 dusk) and weather (`current()`). */
+/**
+ * A sim on E23.7's real clock and weather. `sky.f` sets the time of day (0 dawn, 2/3 dusk) through the clock's offset;
+ * `sky.kind` holds a weather (`forceForTest`).
+ */
 function world() {
   const sim = new Sim(createInitialState(7, 'oldcity'));
-  const sky = { f: 0.3, kind: 'sunny' };
-  const any = sim as unknown as { clock: unknown; weather: unknown };
-  any.clock = { dayFraction: () => sky.f };
-  any.weather = { current: () => ({ kind: sky.kind }) };
+  const st = sim.state;
+  const sky = {
+    get f(): number {
+      return sim.clock.dayFraction();
+    },
+    set f(v: number) {
+      (st.clock ??= { offset: 0 }).offset = v * POWER.daySeconds - st.time;
+    },
+    get kind(): WeatherKind {
+      return sim.weather.kind();
+    },
+    set kind(k: WeatherKind) {
+      sim.weather.forceForTest(k, 1e9);
+    },
+  };
+  sky.f = 0.3;
+  sky.kind = 'sunny';
   const put = (type: string, x: number, z: number, size = 1): MachineData => {
     const m = { id: sim.newId('m'), type, roofId: GROUND, x, z, size, boostUntil: 0, timer: 0, charge: 0 } as unknown as MachineData;
     sim.state.machines.push(m);
@@ -31,7 +48,10 @@ function world() {
   /** Runs the lights and the grid for `seconds` (1 s steps), with the clock moving if `day` is set. */
   const run = (seconds: number, day = false) => {
     for (let i = 0; i < seconds; i++) {
-      if (day) sky.f = (sky.f + 1 / POWER.daySeconds) % 1;
+      // play time passes (only the lights and the grid are ticked here); without `day` the hour is held
+      const f = sky.f;
+      st.time += 1;
+      if (!day) sky.f = f;
       sim.lights.tick(1);
       sim.power.tick(1);
     }
@@ -83,8 +103,8 @@ describe('E23.3.5 night lighting', () => {
     expect(steps).toBeGreaterThan(3); // several in-between brightnesses: a fade
     run(20);
     expect(glow(lamp)).toBeCloseTo(LIGHT.lamppost.brightness, 2);
-    // at dawn it fades out again
-    sky.f = 0.05;
+    // after dawn's twilight it has faded out again
+    sky.f = 0.12;
     run(30);
     expect(glow(lamp)).toBeLessThan(0.05);
   });
@@ -243,18 +263,26 @@ describe('E23.3.5 night lighting', () => {
     expect(sim.lights.all().some((l) => l.key === key)).toBe(false);
   });
 
-  it('lights follow the sky whatever drives the clock (E23.7 game clock or follow-my-clock: both reach PowerEnv)', () => {
-    const { sim, put, light, run, glow } = world();
+  it('lights come on at dusk in both clock modes: the game’s own day, and following the real clock', () => {
+    const { sim, sky, put, light, run, glow } = world();
     sim.power.register('gen', { source: () => 5 });
     put('gen', 0, 0);
     put('relay', 1, 0);
     const lamp = light('pathlight', 2, 0);
-    // E23.7's clock reports daylight directly in either mode; lights read only that.
-    let daylight = 1;
-    (sim as unknown as { clock: unknown }).clock = { daylight: () => daylight, solarFactor: () => daylight };
+    // the game clock: midday, then after dusk
+    sky.f = 0.35;
     run(20);
     expect(glow(lamp)).toBe(0);
-    daylight = 0;
+    sky.f = 0.8;
+    run(20);
+    expect(glow(lamp)).toBeGreaterThan(0.75);
+    // "follow my clock": the game clock still says night, but the real clock says 10:30 in the morning: off
+    sim.clock.now = () => new Date(2026, 10, 19, 10, 30);
+    sim.clock.real = true;
+    run(20);
+    expect(glow(lamp)).toBeLessThan(0.02);
+    // and the real evening, 23:00: on again
+    sim.clock.now = () => new Date(2026, 10, 19, 23, 0);
     run(20);
     expect(glow(lamp)).toBeGreaterThan(0.75);
     expect(LIGHTING.fadeSeconds).toBeGreaterThan(0);

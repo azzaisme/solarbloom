@@ -5,10 +5,28 @@ import { mat, PALETTE } from './Materials';
 import { bezier, part, tube } from './MachineParts';
 import { group } from './Shapes';
 
-/** How high a cable meets a machine, by type (world units above its base); poles carry theirs at the top. */
-const CABLE_Y: Record<string, number> = { relay: 1.0, windTurbine: 0.5, battery: 0.85, solar: 0.3, charger: 0.6 };
-/** Where a cable meets this machine, above its base. */
-export const cableY = (m: PowerNode): number => CABLE_Y[m.type] ?? 0.5;
+/** How high a cable meets a machine, by type (world units above its base). Poles carry theirs on the crossarm. */
+const CABLE_Y: Record<string, number> = { windTurbine: 0.5, battery: 0.85, solar: 0.3, charger: 0.6 };
+
+type V3 = [number, number, number];
+
+/**
+ * E23.3.2.3: a Bloom Relay is a power pole: a crossarm under its crystal with an insulator at each end (along world x).
+ * Its height above the base, half its length, and the insulator's height. MachineVisuals draws it; lines meet it.
+ */
+export const POLE_ARM = { y: 0.8, half: 0.34, insulator: 0.11 };
+
+/** Where a cable meets a machine standing at `base`: a pole's insulator on the side facing `toward`. */
+export function anchorOf(m: { type: string }, base: V3, toward?: V3): V3 {
+  if (m.type === 'relay') {
+    const side = toward && toward[0] < base[0] - 0.05 ? -1 : 1;
+    return [base[0] + side * POLE_ARM.half, base[1] + POLE_ARM.y + POLE_ARM.insulator, base[2]];
+  }
+  return [base[0], base[1] + (CABLE_Y[m.type] ?? 0.5), base[2]];
+}
+
+/** Height above its base where a cable meets this machine (a pole: its insulators). */
+export const cableY = (m: { type: string }): number => anchorOf(m, [0, 0, 0])[1];
 
 /**
  * E23.3.2.3: the grid's cables, drawn in the world. Linked poles are strung together with a sagging cable, and every
@@ -42,8 +60,8 @@ export class PowerLines {
   private cable(a: PowerNode, b: PowerNode, m: pc.Material, r: number, sagPerTile: number) {
     const pa = this.worldOf(a);
     const pb = this.worldOf(b);
-    const A: [number, number, number] = [pa[0], pa[1] + cableY(a), pa[2]];
-    const B: [number, number, number] = [pb[0], pb[1] + cableY(b), pb[2]];
+    const A = anchorOf(a, pa, pb);
+    const B = anchorOf(b, pb, pa);
     const len = Math.hypot(B[0] - A[0], B[2] - A[2]);
     const sag = Math.min(1.2, len * sagPerTile);
     const mid: [number, number, number] = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2 - sag * 2, (A[2] + B[2]) / 2];

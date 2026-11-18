@@ -59,7 +59,7 @@ export interface PowerNetwork {
 export function windOutput(sim: Sim, m: PowerNode, sky: PowerSky): number {
   const w = POWER.wind;
   const height = Math.min(1, w.groundShare + w.perLevel * Math.max(0, groundLevel(sim, m)));
-  return w.output * sky.wind * height * regionBoost(sim, m, 'wind');
+  return w.output * sky.wind * height * regionBoost(sim, m);
 }
 
 const idNum = (m: PowerNode) => Number(m.id.replace(/^\D+/, '')) || 0;
@@ -96,7 +96,7 @@ export class PowerGrid {
 
   constructor(private sim: Sim) {
     this.register('relay', { pole: { range: (m, s) => s.relays.range(m as MachineData) } });
-    this.register('solar', { source: (m, s, sky) => POWER.solar.output * sky.solar * regionBoost(s, m, 'solar') });
+    this.register('solar', { source: (m, s, sky) => POWER.solar.output * sky.solar * regionBoost(s, m) });
     this.register('battery', { battery: { capacity: POWER.battery.capacity, rate: POWER.battery.rate } });
     this.register('windTurbine', { source: (m, s, sky) => windOutput(s, m, sky) });
     // E23.3.3: helpers run on the grid (old-city rules only; the classic game keeps its energy economy).

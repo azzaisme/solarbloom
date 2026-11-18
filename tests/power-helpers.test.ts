@@ -23,6 +23,9 @@ function oldCity() {
   const sim = new Sim(createInitialState(7, 'oldcity'));
   sim.state.salvage!.tier = 2;
   sim.state.resources.energy = big(1e6);
+  // Clear noon: these tests are about chargers and helpers, not E23.7's sky (a new game starts at 07:30, when
+  // panels are still waking up).
+  sim.power.skyOverride = () => ({ sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 });
   return sim;
 }
 
@@ -152,7 +155,9 @@ describe('E23.3.3 powered helpers', () => {
     const dock = put(sim, 'cultivator', 30, 30);
     sim.advance(10);
     expect(sim.power.isPowered(dock)).toBe(false);
-    for (const u of dock.cult?.units ?? []) {
+    const units = dock.cult?.units ?? [];
+    expect(units.length).toBeGreaterThan(0); // the loop below must check real tillers
+    for (const u of units) {
       expect(u.parked).toBe(true);
       expect(Math.hypot(u.px - 30.5, u.pz - 30.5)).toBeLessThan(0.1);
     }

@@ -116,7 +116,7 @@ describe('E21.9: bloombot first', () => {
     expect(back.landmarks.interact('mastRow')).toBe('woke');
     expect(back.areas.fog('mastRow')).toBe('cleared');
     expect(back.keepers.step('pylon')).toBe('settled');
-    // a woken landmark is a way into the store, and its seam takes a Reclaimer
+    // a woken landmark is a way into the store (E23.7.4 dropped the Reclaimer its seam used to take)
     expect(back.inventory.nearStore(back.bot)).toBe(true);
     expect(back.salvage.woken(MAST)).toBe(true);
     expect(back.areas.helpersMayWork('mastRow')).toBe(true);

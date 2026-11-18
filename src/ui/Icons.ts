@@ -245,7 +245,6 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   battery: 'battery', // E23.3.2
   windTurbine: 'windTurbine', // E23.3.2
   charger: 'charger', // E23.3.3
-  reclaimer: 'wrench', // E21.2
   core: 'sparkle',
 };
 

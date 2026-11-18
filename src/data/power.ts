@@ -1,3 +1,4 @@
+import { DAY_SECONDS } from './time';
 /**
  * E23.3: the power grid's starting values (tuning lives here, not in code).
  *
@@ -10,8 +11,8 @@ export const SHED_ORDER = ['lamp', 'pump', 'helper', 'charger'] as const;
 export type ShedClass = (typeof SHED_ORDER)[number];
 
 export const POWER = {
-  /** A game day in seconds of play (E23 rule 5). The fallback clock uses it until E23.7's clock lands. */
-  daySeconds: 48 * 60,
+  /** A game day in seconds of play (E23 rule 5): data/time's, the one game-day length. */
+  daySeconds: DAY_SECONDS,
   /** How long a consumer's light/level takes to fade between on and off (seconds of play). */
   fadeSeconds: 2.5,
   /**
@@ -30,14 +31,8 @@ export const POWER = {
    * each terrace level adds `perLevel` (rooftops count as `roofLevel`), up to the full output.
    */
   wind: { output: 10, groundShare: 0.5, perLevel: 0.25, roofLevel: 2 },
-  /**
-   * Region strengths (#377, E23.8.1): a matching machine in its region makes about 1.5×. Provisional until E23.8
-   * owns the table (its `sim.regions?.strength?.(m, kind)` wins when present).
-   */
-  regionBoost: 1.5,
-  /** Wind (0..1) while there is no weather system yet (before E23.7 lands): a steady breeze. */
-  fallbackWind: 0.4,
-  regionStrengths: { wind: ['saltwind', 'terraces', 'spireHeights'], solar: ['glasshouse', 'observatory'] } as Record<'wind' | 'solar', string[]>,
+  /** Wind (0..1) while there is no weather system (before E23.7 lands): calm, so turbines stand still. */
+  fallbackWind: 0,
   /** Battery (E23.3.2.1): stores surplus and covers deficits, up to `rate` either way. */
   battery: { capacity: 6000, rate: 20 }, // a night (~0.4 day, 1150 s) of a pump and a lamp is ~4600 W·s
   /** Charger (E23.3.3): bloombot's charge per second while it sits on a powered pad (CHARGE.meditatePerSecond is 6). */

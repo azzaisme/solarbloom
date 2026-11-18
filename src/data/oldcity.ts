@@ -96,7 +96,7 @@ export interface RegionDef {
   material: MaterialId;
   landmark: { kind: string; name: string; x: number; z: number };
   keeper: string;
-  /** the 2×2 seam (a Reclaimer stands on it once the landmark wakes) */
+  /** the 2×2 seam: kept clear of generated clutter (E21's Reclaimers stood here; E23.7.4 dropped them) */
   seam: { name: string; x: number; z: number };
   gate: GateDef;
   /** the Keeper's second request: restore every tile of this patch */
@@ -460,6 +460,47 @@ export const REGIONS: RegionDef[] = [
   },
 ];
 
+// ───────────── E23.8.1 (#399): region strengths ─────────────
+
+/**
+ * A region's natural strength, as well as its E21 material: the reason to link regions together. A machine that
+ * matches a strength gives that much more output when it stands in the region (see `strengthAt` in
+ * core/RegionStrengths). `shelter` and `water` read as yes/no: greenhouses ignore weather, springs refill for free.
+ */
+export type StrengthKind = 'wind' | 'tide' | 'sun' | 'soil' | 'water' | 'machinery' | 'salvage' | 'shelter' | 'trade';
+
+/** Starting value: about 1.5× output for a matching machine in its strength region. */
+export const STRENGTH_BONUS = 1.5;
+
+export const REGION_STRENGTHS: Record<RegionId, { strengths: Partial<Record<StrengthKind, number>>; text: string }> = {
+  mastRow: { strengths: { wind: STRENGTH_BONUS }, text: 'Wind' },
+  oldMarket: { strengths: { trade: STRENGTH_BONUS }, text: 'Trade: swap materials, buy seeds' },
+  saltwind: { strengths: { wind: 1.75, tide: STRENGTH_BONUS }, text: 'Wind and tide: the strongest wind' },
+  elderGrove: { strengths: { soil: STRENGTH_BONUS }, text: 'Fertile soil: faster crops, more biomass' },
+  cistern: { strengths: { water: STRENGTH_BONUS }, text: 'Water: springs refill for free' },
+  clockPlaza: { strengths: { machinery: STRENGTH_BONUS }, text: 'Machinery' },
+  terraces: { strengths: { sun: STRENGTH_BONUS }, text: 'Sun: more solar on the roofs' },
+  glasshouse: { strengths: { shelter: STRENGTH_BONUS }, text: 'Shelter: greenhouses ignore weather' },
+  observatory: { strengths: { sun: STRENGTH_BONUS, wind: STRENGTH_BONUS }, text: 'Sun and wind' },
+  spireHeights: { strengths: { salvage: STRENGTH_BONUS }, text: 'Scrap and metals: the richest salvage' },
+};
+
+/**
+ * Which machines a strength boosts. Machine ids are the E23 build ids; several belong to sessions still landing
+ * (power, water, farm, crafting), so this is a plain lookup they can extend. A machine not listed has no strength.
+ */
+export const STRENGTH_MACHINES: Record<StrengthKind, string[]> = {
+  wind: ['windTurbine', 'turbineField'],
+  tide: ['tidalPump', 'desalinationPlant'],
+  sun: ['solar', 'largeSolar'],
+  soil: ['planter', 'orchard', 'floodedBed', 'roofGarden', 'beehive'],
+  water: ['pump', 'reservoir', 'largeReservoir', 'gravityFeed', 'spring'],
+  machinery: ['craftingTable', 'assembler', 'motor', 'bioDigester', 'mulcher'],
+  salvage: ['salvage'],
+  shelter: ['greenhouse', 'mushroomLog'],
+  trade: ['trade'],
+};
+
 // ───────────── E21.26: the island ─────────────
 
 export type CoastKind = 'cliff' | 'rocky' | 'beach';
@@ -507,7 +548,8 @@ export const PARK_SET = {
   /** broad steps down to the beach through the south gate */
   ramps: [{ x: 6, z: 14, w: 4, d: 2, dir: 's', from: 1, to: 0, kind: 'stair' }] as RampDef[],
   pages: [
-    { id: 'p-park-1', x: 1, z: 4 },
+    // E23.9.1: his first note waits at the top of the beach steps, where bloombot first comes into the park
+    { id: 'p-park-1', x: 7, z: 12 },
     { id: 'p-park-2', x: 14, z: 9 },
   ] as SpotDef[],
 };
@@ -686,7 +728,7 @@ export const BLUEPRINTS: { id: string; name: string; region: RegionId }[] = [
   { id: 'machines3', name: 'Machines, level 3', region: 'elderGrove' },
   { id: 'drones3', name: 'Drones, level 3', region: 'cistern' },
   { id: 'storage3', name: 'Storage, level 3', region: 'clockPlaza' },
-  { id: 'reclaimerMk2', name: 'Reclaimer Mk 2 (12 a minute)', region: 'terraces' },
+  { id: 'salvageLore', name: 'Salvage Lore (piles refill twice as fast)', region: 'terraces' },
   { id: 'packFrame', name: 'Pack Frame (+40 to every stack)', region: 'glasshouse' },
   { id: 'sprintServos', name: 'Sprint Servos (faster sprint)', region: 'observatory' },
   { id: 'longGlide', name: 'Long Glide (glides from a tower top reach twice as far)', region: 'spireHeights' },
@@ -706,31 +748,8 @@ export const KEEPSAKES: { id: string; name: string; model: string; region: Regio
   { id: 'ks-spire', name: 'Lift dial', model: 'keepsake-lift-dial', region: 'spireHeights' },
 ];
 
-/** The journal: 22 pages, two per region and two in the park, by page id. */
-export const PAGES: Record<string, { title: string; text: string }> = {
-  'p-park-1': { title: 'Orders from the mainland', text: 'The fog came and the island emptied in a week. We are sending one small robot by boat to bring it back to life.' },
-  'p-park-2': { title: 'A child\'s drawing', text: 'Crayon flowers round a fountain, and a little robot watering them. Someone wrote "bloombot" underneath.' },
-  'p-mastRow-1': { title: 'Tram timetable', text: 'Mast Row, every ten minutes, last tram at midnight. The last tram ran at four in the afternoon.' },
-  'p-mastRow-2': { title: 'Engineer\'s log', text: 'The mast carried the city\'s signals. When it went dark, the keepers lost each other one by one.' },
-  'p-oldMarket-1': { title: 'Price board', text: 'Lamps, two coins. Glass jars, one coin. Bring your own bag.' },
-  'p-oldMarket-2': { title: 'A stallholder\'s letter', text: 'We are closing the hall. Tally says it will keep count until we come back.' },
-  'p-saltwind-1': { title: 'Tide table', text: 'High water at the Sea Lock twice a day. The lock kept the canals full.' },
-  'p-saltwind-2': { title: 'A note in a bottle', text: 'If you find this, the sea is still here. It always will be.' },
-  'p-elderGrove-1': { title: 'Planting record', text: 'The Elder Tree was planted when the city was founded. Every seed in the grove came from it.' },
-  'p-elderGrove-2': { title: 'Moss\'s list', text: 'Water the stumps. Talk to the tree. Wait.' },
-  'p-cistern-1': { title: 'Water board notice', text: 'The cistern will be drained for repairs. Repairs were never booked.' },
-  'p-cistern-2': { title: 'Clay works ledger', text: 'Bricks for the whole city came from the basin\'s clay.' },
-  'p-clockPlaza-1': { title: 'Clockmaker\'s card', text: 'The tower clock wants winding every Sunday. Tock does it.' },
-  'p-clockPlaza-2': { title: 'A torn poster', text: 'Concert in the plaza tonight. Bring a lantern.' },
-  'p-terraces-1': { title: 'Roof garden plan', text: 'Beans on the south roofs, herbs on the north. Sunstone in the gutters keeps them warm.' },
-  'p-terraces-2': { title: 'Gable\'s sketch', text: 'The roofs step down the hill like stairs. You can see the sea from every one.' },
-  'p-glasshouse-1': { title: 'Greenhouse label', text: 'The Heart Seed: the first of every plant the city ever grew.' },
-  'p-glasshouse-2': { title: 'Bridge notice', text: 'Bridge closed. Use the ferry. The ferry is also closed.' },
-  'p-observatory-1': { title: 'Star chart', text: 'From the hill the whole city shows, and the sea beyond it.' },
-  'p-observatory-2': { title: 'Vega\'s note', text: 'The Star Lens focuses sunlight. With it the fountain could make the whole city bloom.' },
-  'p-spireHeights-1': { title: 'Lift inspection', text: 'All five towers passed. The Spire\'s crown lift sticks at ten; Atlas knows the trick.' },
-  'p-spireHeights-2': { title: 'A view from the top', text: 'From the Spire you can see the causeway, the bay and on a clear day the mainland.' },
-};
+/** E23.9.1: the journal's pages live in data/journal (book order, by stage); the posts are placed above. */
+export { PAGES } from './journal';
 
 // ───────────── §11 the house ─────────────
 
@@ -803,7 +822,6 @@ export const MODEL_NAMES: Record<string, { standIn: string; what: string }> = {
   'causeway-broken': { standIn: 'procedural', what: 'The Long Causeway\'s broken middle' },
   'sea-cliff': { standIn: 'skyline-cliff', what: 'Close-range sea cliffs in the north' },
   // machines
-  reclaimer: { standIn: 'ac-unit', what: 'The Reclaimer (on a seam)' },
   'storage-chest': { standIn: 'crate', what: 'The Storage Chest' },
   // salvage piles (Scrap stays rubble-pile, crate, stone-block; Seeds stays broken-pot, stump)
   'salvage-copper': { standIn: 'copper-pipe', what: 'A Copper pile' },
