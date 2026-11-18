@@ -1,4 +1,5 @@
 import { OLD_CITY, PARK_SET, REGIONS, type RampDef } from '../data/oldcity';
+import { isMainlandCell, mainlandShore, onCauseway } from './Mainland';
 import { inOldCity, inRect, isSeaChunk, onJetty, regionOfChunk, regionWater, seaCell } from './OldCityLayout';
 
 /**
@@ -54,6 +55,8 @@ export function rampAt(x: number, z: number): RampHit | undefined {
 export function levelAt(x: number, z: number): number {
   const cx = Math.floor(x / CHUNK);
   const cz = Math.floor(z / CHUNK);
+  // E23.8.3.1: the Long Causeway and the mainland stand at the island's base level
+  if (onCauseway(x, z) || (isMainlandCell(x) && !mainlandShore(x, z))) return OLD_CITY.baseLevel;
   // the sea all round (E21.26), the bay, the coast, the jetty and canals are all at sea level
   if (!inOldCity(cx, cz) || isSeaChunk(cx, cz) || seaCell(x, z) || onJetty(x, z) || regionWater(x, z)) return OLD_CITY.seaLevel;
   if (cx === 0 && cz === 0) return PARK_SET.level;

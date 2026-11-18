@@ -887,6 +887,13 @@ export class ChunkRenderer {
       b.add('box', PALETTE.stone.light, [x + 0.15 * sc, y + 0.2 * sc, z - 0.1 * sc], [0.3 * sc, 0.2 * sc, 0.25 * sc]);
       return true;
     }
+    if (prop === 'causeway-broken') {
+      // E23.8.3.1: the Long Causeway's broken middle: tumbled deck stones across the gap until the Great Bloom
+      const j = dhash(t.x, t.z, 217) * 0.2 - 0.1;
+      b.add('box', PALETTE.stone.light, [x - 0.18 + j, y + 0.06, z + 0.1], [0.5, 0.18 + 0.2 * dhash(t.x, t.z, 218), 0.42]);
+      b.add('box', PALETTE.paving.grout, [x + 0.22, y + 0.04, z - 0.2 - j], [0.36, 0.12, 0.3]);
+      return true;
+    }
     if (prop.startsWith('gate:')) {
       // E21.5: a gate is one model over all its cells (drawn from its first cell), fitted to the gate's length
       // and turned along its long side: the barricade (4 m), the bridges (14 m, along +X) and the skybridge (12 m)

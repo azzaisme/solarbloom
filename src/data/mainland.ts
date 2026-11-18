@@ -1,0 +1,63 @@
+// E23.8.3 (#401): the endless mainland, past the Long Causeway. Opened by the Great Bloom; built big after it.
+// All numbers here are starting values for tuning. The mainland replaces E21.17's idle Outskirts: it runs on the same
+// rules as the island (restore, gather, build), with no idle mechanics.
+
+import type { MaterialId } from '../core/types';
+import type { AreaType } from './city';
+import type { PileSize } from './salvage';
+
+export const MAINLAND = {
+  /** every chunk with x ≥ this is mainland (the chunks between it and the island are sea), for ever east, north and south */
+  minChunkX: 9,
+  /** a mainland district (one area: one fog, one restoration) is this many chunks square */
+  district: 2,
+  /** the rocky shore: the mainland's westmost cells that are still sea */
+  shoreBand: 3,
+  /** the Long Causeway: two cells wide (z), from the backstreet avenue east of Clock Plaza to the mainland's shore */
+  causeway: { z0: 7, z1: 8, x0: 104, x1: 146 },
+  /** its broken middle: open water until the Great Bloom raises it */
+  broken: { x0: 120, x1: 129 },
+  /** the fountain tier that raises the causeway (the Great Bloom) */
+  opensAtTier: 5,
+  /** the district the causeway lands in, revealed by the Great Bloom; the rest is found by restoring outward */
+  landing: [9, 0] as [number, number],
+};
+
+/** What a mainland district is, by weight. `downtown` is the industrial ruins (fallen girders, steel, E23.8.3.2). */
+export const MAINLAND_TYPES: { type: AreaType; weight: number }[] = [
+  { type: 'street', weight: 4 },
+  { type: 'downtown', weight: 3 },
+  { type: 'grove', weight: 2 },
+  { type: 'park', weight: 2 },
+  { type: 'market', weight: 1 },
+  { type: 'plaza', weight: 1 },
+  { type: 'reservoir', weight: 1 },
+];
+
+/**
+ * Salvage fields: the mainland's best salvage. In a district of a type below, each chunk holds a field (a cluster of
+ * piles) with this chance. Fields are bigger and richer than the island's piles, and respawn quickly (E23.7.4 owns
+ * respawning; `respawnDays` is the mainland's value for it).
+ */
+export const SALVAGE_FIELDS = {
+  /** chance a chunk has a field */
+  chance: 0.6,
+  /** piles in a field */
+  piles: [5, 9] as [number, number],
+  /** how far piles scatter from the field's centre, in cells */
+  spread: 3,
+  /** game days for a mainland pile to refill (island piles are slower) */
+  respawnDays: 0.5,
+  /** what each district type's fields hold, by weight */
+  materials: {
+    street: { scrap: 3, copper: 2, glass: 1 },
+    downtown: { scrap: 3, gears: 2, copper: 2 },
+    grove: { seeds: 3, timber: 2 },
+    park: { seeds: 2, timber: 2, clay: 1 },
+    market: { glass: 2, scrap: 2, timber: 1 },
+    plaza: { scrap: 2, sunstone: 1, glass: 1 },
+    reservoir: { clay: 3, scrap: 1 },
+  } as Partial<Record<AreaType, Partial<Record<MaterialId, number>>>>,
+  sizes: { small: 1, medium: 2, large: 2 } as Record<PileSize, number>,
+  models: { small: 'rubble-pile', medium: 'crate', large: 'stone-block' } as Record<PileSize, string>,
+};
