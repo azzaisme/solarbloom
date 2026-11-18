@@ -128,25 +128,29 @@ export class WaterLevels {
         continue;
       }
       // a strip in from each side that faces the bank (or a tile nearer it), with a wet line at the water's edge
+      // (clipped where a strip from the next side already covers the corner)
       const r = Math.min(RIM, e);
-      SIDES.forEach(([dx, dz], s) => {
+      const bank = SIDES.map(([dx, dz]) => {
         const n = g.peek(GROUND, t.x + dx, t.z + dz);
-        const nd = n && b.tiles.has(n.id) ? d.get(n.id)! : 0;
-        if (nd >= k) return;
-        if (s === 0) {
-          quad(bed, t.x + 1 - e, t.z, t.x + 1, t.z + 1, y);
-          quad(rim, t.x + 1 - e, t.z, t.x + 1 - e + r, t.z + 1, y + 0.003);
-        } else if (s === 1) {
-          quad(bed, t.x, t.z, t.x + e, t.z + 1, y);
-          quad(rim, t.x + e - r, t.z, t.x + e, t.z + 1, y + 0.003);
-        } else if (s === 2) {
-          quad(bed, t.x, t.z + 1 - e, t.x + 1, t.z + 1, y);
-          quad(rim, t.x, t.z + 1 - e, t.x + 1, t.z + 1 - e + r, y + 0.003);
-        } else {
-          quad(bed, t.x, t.z, t.x + 1, t.z + e, y);
-          quad(rim, t.x, t.z + e - r, t.x + 1, t.z + e, y + 0.003);
-        }
+        return (n && b.tiles.has(n.id) ? d.get(n.id)! : 0) < k;
       });
+      const [px, nx, pz, nz] = bank.map((on) => (on ? e : 0));
+      if (bank[0]) {
+        quad(bed, t.x + 1 - e, t.z, t.x + 1, t.z + 1, y);
+        quad(rim, t.x + 1 - e, t.z + nz, t.x + 1 - e + r, t.z + 1 - pz, y + 0.003);
+      }
+      if (bank[1]) {
+        quad(bed, t.x, t.z, t.x + e, t.z + 1, y);
+        quad(rim, t.x + e - r, t.z + nz, t.x + e, t.z + 1 - pz, y + 0.003);
+      }
+      if (bank[2]) {
+        quad(bed, t.x, t.z + 1 - e, t.x + 1, t.z + 1, y);
+        quad(rim, t.x + nx, t.z + 1 - e, t.x + 1 - px, t.z + 1 - e + r, y + 0.003);
+      }
+      if (bank[3]) {
+        quad(bed, t.x, t.z, t.x + 1, t.z + e, y);
+        quad(rim, t.x + nx, t.z + e - r, t.x + 1 - px, t.z + e, y + 0.003);
+      }
     }
     if (!bed.length) return;
     const e = new pc.Entity(`water-bed-${b.id}`);
