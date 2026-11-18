@@ -272,7 +272,6 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 #hotbar #buildToggle { order: 2; }
 #hotbar [data-tool="pulse"] { order: 3; }
 #hotbar #harvestBtn { order: 9; }
-#hotbar #upgBtn { order: 10; }
 /* The domed Restoration Pulse */
 #hotbar .slot[data-tool="pulse"] { --mega: 0; width: 132px; height: 92px; margin: -30px 4px 0; border-radius: 66px 66px 22px 22px; padding-top: 10px; justify-content: flex-start; color: var(--ink-green); border: 1.5px solid var(--edge-strong); background: radial-gradient(ellipse at 50% 22%, var(--pulse-hover), var(--pulse-hi) 30%, var(--leaf) 72%, var(--btn-green-edge) 100%); box-shadow: 0 0 0 4px var(--glass), 0 0 26px var(--leaf-glow), inset 0 2px 0 var(--white-ring), inset 0 -10px 18px var(--leaf-glow); }
 #hotbar .slot[data-tool="pulse"] .si .icon { width: 44px; height: 44px; filter: drop-shadow(0 0 8px var(--white-ring)); }
@@ -428,7 +427,6 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 5px
 .nudge { position: relative; animation: nudge 1.3s ease-in-out infinite; }
 @keyframes nudge { 0%, 100% { box-shadow: 0 0 0 0 var(--gold-ring-0), inset 0 0 0 3px var(--gold); } 50% { box-shadow: 0 0 0 8px var(--gold-glow-soft), inset 0 0 0 3px var(--gold); } }
 
-.ugroup { margin: 10px 4px 6px; font: 600 12px var(--font-display); text-transform: uppercase; letter-spacing: .08em; color: var(--gold); }
 #catPanel { position: absolute; right: calc(12px + var(--safe-r)); top: calc(12px + var(--safe-t) + 250px); width: 268px; padding: 10px 34px 10px 14px; border-color: var(--pink); animation: toastIn .35s cubic-bezier(.2, 1.6, .4, 1); z-index: 4; }
 #catPanel[hidden] { display: none; }
 #catPanel b { display: block; font: 600 15px var(--font-display); margin-bottom: 2px; color: var(--text-strong); }
@@ -555,7 +553,6 @@ body.contrast .res-row .rate, body.contrast .slot .sc { color: var(--text-strong
 #resInfo div { display: flex; justify-content: space-between; gap: 8px; }
 #resInfo div span:first-child { color: var(--text-soft); }
 #resInfo div span:last-child { font-variant-numeric: tabular-nums; text-align: right; }
-.upg-next { margin: 0 0 6px; font-size: 12px; color: var(--text-soft); min-height: 1em; }
 .card .buy.all { margin-left: 4px; }
 /* E18: the Drone Hub's role picker (wraps to rows at phone widths) */
 #inspect .roles { margin-top: 8px; }
@@ -578,9 +575,8 @@ body.contrast .res-row .rate, body.contrast .slot .sc { color: var(--text-strong
 #feed .icon, #chainAreas .icon, #comboParts .icon { width: 1.15em; height: 1.15em; vertical-align: -.24em; }
 .fly .icon { width: 1.2em; height: 1.2em; vertical-align: -.25em; }
 #tip b .icon, .wlabel .icon, #inspect h4 .icon { width: 1.25em; height: 1.25em; vertical-align: -.26em; }
-#inspect .stat .icon, #inspect p .icon, .card .icon, #upgNext .icon, #resInfo .icon, #hintText .icon, #fail .icon, #objAct .icon, .slot .sc .icon { width: 1.1em; height: 1.1em; vertical-align: -.22em; }
+#inspect .stat .icon, #inspect p .icon, .card .icon, #resInfo .icon, #hintText .icon, #fail .icon, #objAct .icon, .slot .sc .icon { width: 1.1em; height: 1.1em; vertical-align: -.22em; }
 .card .ci .icon { width: 30px; height: 30px; vertical-align: middle; }
-.ugroup .icon { width: 16px; height: 16px; vertical-align: -3px; margin-right: 4px; }
 #catPanel b .icon { width: 24px; height: 24px; vertical-align: -6px; margin-right: 2px; }
 #disc h3 .icon, #disc .spots .icon { width: 1.2em; height: 1.2em; vertical-align: -.25em; }
 #hint { border-color: var(--edge-strong); }
@@ -699,7 +695,7 @@ body.paused.no-blur canvas#app, body.reduced.paused canvas#app { filter: brightn
 #settings { z-index: 12; }
 
 /* ───────── E22.10: plain words, few numbers (old-city rules) ───────── */
-body.oldcity #logo, body.oldcity #quick, body.oldcity #upgBtn, body.oldcity #combo, body.oldcity #hint,
+body.oldcity #logo, body.oldcity #quick, body.oldcity #combo, body.oldcity #hint,
 body.oldcity #obj .olab, body.oldcity #obj .ock, body.oldcity #obj .otog, body.oldcity #objNext, body.oldcity #objMore, body.oldcity #objAct, body.oldcity #coreBtn,
 body.oldcity #obj .oic, body.oldcity .res-row[data-res=biomass], body.oldcity .res-row .rate, body.oldcity #resInfo { display: none !important; }
 body.oldcity:not(.details) .res-row .val { display: none; }

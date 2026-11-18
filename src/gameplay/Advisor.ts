@@ -1,26 +1,19 @@
-import { fmt } from '../core/Big';
-import { ROLE_INFO } from './DroneRoles';
-import { Economy, formatCost, KINDS } from '../core/Economy';
 import { PARK } from '../core/Areas';
-import { GROUND } from '../core/GameState';
-import { distToFootprint } from '../core/Grid';
-import type { BuildableType, Cost, MachineData, TileData } from '../core/types';
-import { BUILDABLE, MACHINES } from '../data/machines';
-import { TUNING } from '../data/tuning';
+import type { MachineData, MaterialId, TileData } from '../core/types';
+import { REGIONS, type PileDef } from '../data/oldcity';
+import { allPiles } from '../core/OldCityLayout';
+import { MATERIALS } from '../data/salvage';
 import { AREA_TYPES } from '../data/city';
 import type { Sim } from './Sim';
 
 /** What the suggestion's button does. */
 export type SuggestionAction =
   | { kind: 'wake'; machineId: string }
-  | { kind: 'district'; districtId: string }
   | { kind: 'focus'; x: number; z: number; /** a raised layer (a city rooftop); the ground when absent */ layer?: string }
-  | { kind: 'upgrades' }
-  | { kind: 'harvest' }
-  | { kind: 'build'; type: BuildableType; x: number; z: number }
-  /** E18.5: open this Drone Hub's panel to pick a role */
-  | { kind: 'role'; machineId: string }
   | { kind: 'wait'; seconds: number };
+
+/** Which part of the loop a hint is about (E23.1.5: every hint belongs to one). */
+export type HintTopic = 'charge' | 'grid' | 'water' | 'farm' | 'keeper' | 'restore';
 
 export interface Suggestion {
   /** One line: what to do next and why. */
@@ -28,6 +21,7 @@ export interface Suggestion {
   /** Button label. */
   label: string;
   action: SuggestionAction;
+  topic: HintTopic;
 }
 
 export interface Frontier {
@@ -39,30 +33,33 @@ export interface Frontier {
 }
 
 /**
- * The objective panel's advisor for the endless city: the nearest frontier and one achievable next step,
- * in every game state (headless, so tests can check it never comes up empty).
+ * The handles other E23 sub-epics add to Sim (E23.2 charge, E23.3 power, E23.4 water). Read structurally and
+ * optionally, so the advisor runs before they land and picks each one up once it does.
+ */
+interface LoopHandles {
+  /** E23.2.1 (ChargeSystem): `low` is true below CHARGE.lowShare; `share` is 0 (empty) … 1 (full). */
+  charge?: { readonly low: boolean; readonly share?: number };
+  /** E23.3.1: is this machine getting power right now? */
+  power?: { isPowered(m: MachineData): boolean };
+  /** E23.4.1: is this area short of water (its land fading)? */
+  water?: { isLow(areaId: string): boolean };
+}
+
+/** Machines that rest bloombot (E23.2.3 / E23.3.3): the charge hint points at the nearest. */
+const RESTING = new Set<string>(['charger', 'bench']);
+/** Farm machines (E23.5) whose neighbours the farm hint looks at. */
+const FARM = new Set<string>(['planter', 'compostBin', 'bioDigester']);
+
+/**
+ * E23.1.5: the advisor. One achievable next step, always about the new loop: bloombot's charge, the grid, water,
+ * the farm, and the next Keeper (or restoring towards it). Nothing is ever bought or saved up for. Headless, so
+ * tests can check it never comes up empty and every hint names its part of the loop.
  */
 export class Advisor {
-  /** Sim time of the last upgrade purchase (the upgrade hint's cooldown). */
-  private lastPurchaseAt = -Infinity;
+  constructor(private sim: Sim) {}
 
-  /**
-   * Phase 5 E12: what the advisor is telling the player to save up for, and when it last said so. Drones leave
-   * its energy and water alone while the hint is fresh (DroneSystem.payJob); otherwise they spend everything
-   * above their 25% reserve and a price above that could never fill.
-   */
-  private saving?: { cost: Cost; at: number };
-  private saveFor(cost: Cost) {
-    this.saving = { cost, at: this.sim.time };
-  }
-  /** The price being saved for, while the hint is fresh. */
-  savingFor(): Cost | undefined {
-    const sv = this.saving;
-    return sv && this.sim.time - sv.at <= TUNING.advisor.savingFreshSeconds ? sv.cost : undefined;
-  }
-
-  constructor(private sim: Sim) {
-    sim.bus.on('upgrade.purchased', () => (this.lastPurchaseAt = sim.time));
+  private get loop(): LoopHandles {
+    return this.sim as unknown as LoopHandles;
   }
 
   /** The open (revealed, not cleared) area closest to the park. */
@@ -75,337 +72,165 @@ export class Advisor {
     return { areaId: id, name: AREA_TYPES[a.type].name, distance: a.distance, share: s.areas.share(id) };
   }
 
-  /** A tile at the fog edge of the goal area that a pulse can restore right now (affordable), if any. */
-  private edgeTile(goal: string | undefined): TileData | undefined {
-    const s = this.sim;
-    if (!goal) return undefined;
-    let best: TileData | undefined;
-    for (const t of s.areas.entryTiles(goal)) {
-      if (!s.restoration.checkPulse(t).ok) continue;
-      best = t;
-      break;
-    }
-    return best;
-  }
-
   suggest(): Suggestion {
-    const s = this.sim;
-    const city = s.grid.isPlayable(GROUND);
-    // 1. A landmark that can be woken.
-    if (city) {
-      if (!s.state.progression.coreActivated && s.progression.coreReady() && !s.econ.shortfall(TUNING.core.cost)) {
-        const lm = s.areas.landmark(PARK);
-        if (lm) return { text: 'The fountain is ready. Wake it to roll back the fog.', label: '✨ Wake the fountain', action: { kind: 'wake', machineId: lm.id } };
-      }
-      // Phase 4 E01: ready but short (drones keep spending): say what it's waiting for instead of something else.
-      if (!s.state.progression.coreActivated && s.progression.coreReady() && s.econ.shortfall(TUNING.core.cost)) {
-        return { text: `The fountain is ready. It needs ${formatCost(TUNING.core.cost)} to wake: let your stores fill up.`, label: '⛲ Filling up…', action: { kind: 'wait', seconds: 5 } };
-      }
-      for (const id of s.areas.revealed()) {
-        if (id === PARK || s.areas.fog(id) === 'cleared' || !s.areas.ready(id)) continue;
-        const lm = s.areas.landmark(id);
-        const a = s.areas.info(id);
-        if (lm) return { text: `The ${a.landmarkName} is ready to wake.`, label: `✨ Wake the ${a.landmarkName}`, action: { kind: 'wake', machineId: lm.id } };
-      }
-      // 1b. A district bloom waiting to be set off (free: a reward and lusher ground).
-      const d = s.districts.ready()[0];
-      if (d) return { text: `${s.districts.title(d)} has ${s.districts.awakeGroup(d)} neighbouring landmarks awake: its district bloom is ready.`, label: '🌸 Set off the district bloom', action: { kind: 'district', districtId: d } };
-    }
-    // 2. An upgrade you can buy now. Phase 5 E12: not again right after a purchase, so with per-machine
-    // upgrades on hundreds of machines the hint never loops on "buy one more level" instead of progress.
-    const recent = s.time - this.lastPurchaseAt < TUNING.advisor.upgradeHintCooldown;
-    const up = recent ? undefined : s.upgrades.all().find((d) => s.upgrades.status(d).ok);
-    if (up) {
-      const st = s.upgrades.status(up);
-      const lvl = up.machine ? s.upgrades.levelOf(st.machine, up.id) : s.upgrades.level(up.id);
-      return { text: `${up.icon} ${up.name} is affordable: ${up.describe(lvl + 1)}.`, label: '⬆️ Upgrades', action: { kind: 'upgrades' } };
-    }
-    // 2c. E18.5: a drone role that would help right now (each role's hint at most once, briefly).
-    const role = this.roleStep();
-    if (role) return role;
-    // 3. Before the fountain: a machine it still needs, if one can be built now.
-    const build = city && !s.state.progression.coreActivated ? this.neededBuild() : undefined;
-    if (build) return build;
-    // 3b. The goal's landmark wants its specialty action (City 09.1): the next step towards it, if one is possible now.
-    const specGoal = city && s.state.progression.coreActivated ? s.areas.nextGoal() : undefined;
-    const spec = specGoal ? this.specialtyStep(specGoal) : undefined;
-    // Saving up only once the restore share is met (until then, restoring is progress too).
-    if (spec && (spec.action.kind !== 'wait' || s.areas.counts(specGoal!).restored >= s.areas.need(specGoal!))) return spec;
-    // 3c. Before the fountain, once enough tiles are restored: grow green tiles to full bloom (Phase 4 E05).
-    if (city && !s.state.progression.coreActivated) {
-      const g = TUNING.park;
-      const restored = s.progression.restoredCount('home');
-      if (restored >= g.restoredTiles && s.progression.fullBloomCount('home') < g.fullBloomTiles) {
-        const t = s.areas
-          .tiles(PARK)
-          .filter((x) => x.ground === 'restored' && !x.occupantId && x.bloom < TUNING.restore.fullBloom && s.restoration.checkPulse(x).ok)
-          .sort((a, b) => b.bloom - a.bloom || a.z - b.z || a.x - b.x)[0];
-        if (t) return { text: 'The fountain wants full-bloom gardens: pulse green tiles to grow them.', label: '🌸 Show me where', action: { kind: 'focus', x: t.x, z: t.z } };
-      }
-    }
-    // 4. Push the fog back: an affordable tile at the edge of the current goal (or anywhere in the park).
-    const goal = city && s.state.progression.coreActivated ? s.areas.nextGoal() : undefined;
-    // 3b. Region unlocks: nothing open to work on, but sealed regions wait: point at the cheapest one.
-    if (city && s.state.progression.coreActivated && !goal && !s.oldCity) {
-      const id = s.areas
-        .sealedAreas()
-        .sort((a, b) => s.areas.unlockCost(a)!.biomass.cmp(s.areas.unlockCost(b)!.biomass) || s.areas.info(a).distance - s.areas.info(b).distance)[0];
-      if (id) {
-        const c = s.areas.unlockCost(id)!;
-        const [x, z] = s.areas.info(id).landmark;
-        return { text: `Unlock the ${AREA_TYPES[s.areas.info(id).type].name.toLowerCase()}: walk up to its fog and pay ${fmt(c.biomass)}🌿 ${fmt(c.energy)}⚡`, label: '🔓 Show me where', action: { kind: 'focus', x, z } };
-      }
-    }
-    const edge = this.edgeTile(goal) ?? (city ? this.parkTile() : undefined);
-    if (edge) {
-      const where = goal && s.areas.areaOf(edge) === goal ? `the ${AREA_TYPES[s.areas.info(goal).type].name.toLowerCase()}'s fog edge` : 'the park';
-      return { text: `Restore tiles at ${where}: each one pushes the fog back.`, label: '🌱 Show me where', action: { kind: 'focus', x: edge.x, z: edge.z } };
-    }
-    // 5. Short of energy: Harvest Sunlight is always there (on a cooldown).
-    const cd = Math.max(0, s.state.harvestReadyAt - s.time);
-    if (cd <= 0) return { text: 'Low on energy? Harvest a burst of sunlight.', label: '🌞 Harvest sunlight', action: { kind: 'harvest' } };
-    // 6. Nothing to do this instant: solar and the rain barrel always refill, and so does the harvest.
-    const secs = Math.ceil(cd);
-    return { text: `Solar panels are recharging. Sunlight can be harvested again in ${secs} s.`, label: `🌞 Harvest in ${secs} s`, action: { kind: 'wait', seconds: secs } };
+    return this.chargeStep() ?? this.wakeStep() ?? this.gridStep() ?? this.waterStep() ?? this.farmStep() ?? this.keeperStep() ?? this.restoreStep() ?? this.explore();
   }
 
-  /** E18.5: when each role's hint was first shown (it shows for TUNING.advisor.roleHintSeconds, once). */
-  private roleHintAt = new Map<string, number>();
+  /** E23.2: low on charge → the nearest powered place to rest, else eat something from the backpack. */
+  chargeStep(): Suggestion | undefined {
+    if (!this.loop.charge?.low) return undefined;
+    const rest = this.nearest(this.sim.state.machines.filter((m) => RESTING.has(m.type) && this.powered(m)));
+    if (rest) return { topic: 'charge', text: 'Bloombot is running low. Rest a while to charge up.', label: '⚡ Show me where', action: { kind: 'focus', x: rest.x, z: rest.z } };
+    return { topic: 'charge', text: 'Bloombot is running low. Eat something from the backpack, or walk home to rest.', label: '⚡ Charge up', action: { kind: 'wait', seconds: 5 } };
+  }
 
-  /**
-   * E18.5: at most one hint per role, when the game shows a need it answers and no hub has that role yet:
-   * drones stuck on energy (Gardener), a slow Mother Tree near a hub (Courier), fog to push (Scout), a garden
-   * cluster (Spark), full stores losing income (Harvester).
-   */
-  roleStep(): Suggestion | undefined {
+  /** A region's landmark ready to wake. */
+  wakeStep(): Suggestion | undefined {
     const s = this.sim;
-    const hubs = s.machinesOfType('droneHub');
-    if (!hubs.length) return undefined;
-    const fresh = (role: string) => {
-      const at = this.roleHintAt.get(role);
-      return at === undefined || s.time - at <= TUNING.advisor.roleHintSeconds;
-    };
-    const offer = (role: 'gardener' | 'scout' | 'courier' | 'spark' | 'harvester', hub: MachineData, text: string): Suggestion | undefined => {
-      if (!fresh(role) || s.roles.lockedReason(role) || hubs.some((h) => s.roles.owns(h, role))) return undefined;
-      if (!s.roles.check(hub.id, role).ok) return undefined;
-      if (!this.roleHintAt.has(role)) this.roleHintAt.set(role, s.time);
-      return { text, label: `${ROLE_INFO[role].icon} Pick a role`, action: { kind: 'role', machineId: hub.id } };
-    };
-    const drones = s.state.drones.filter((d) => !d.old);
-    const waiting = drones.filter((d) => s.drones.statusOf(d) === 'waitingEnergy').length;
-    if (drones.length >= 2 && waiting * 2 >= drones.length && !s.econ.shortfall({ water: 10 })) {
-      const h = offer('gardener', hubs[0], 'Your drones keep waiting for energy. A 🌱 Gardener hub grows tiles with water only.');
-      if (h) return h;
+    for (const id of s.areas.revealed()) {
+      if (id === PARK || s.areas.fog(id) === 'cleared' || !s.areas.ready(id)) continue;
+      const lm = s.areas.landmark(id);
+      const name = s.areas.info(id).landmarkName;
+      if (lm) return { topic: 'keeper', text: `The ${name} is ready to wake.`, label: `✨ Wake the ${name}`, action: { kind: 'wake', machineId: lm.id } };
     }
-    for (const tree of s.machinesOfType('motherTree')) {
-      if (tree.charge >= TUNING.motherTree.threshold / 2) continue;
-      const near = hubs.find((h) => distToFootprint(tree.x, tree.z, h.x, h.z, h.size) <= s.upgrades.droneRadius(h));
-      const h = near && offer('courier', near, 'Your Mother Tree is slow to charge: try a 📦 Courier hub nearby.');
-      if (h) return h;
-    }
-    if (s.state.progression.coreActivated) {
-      const h = offer('scout', hubs[hubs.length - 1], 'A 🔭 Scout hub pushes the fog back from farther away.');
-      if (h) return h;
-    }
-    if (s.machinesOfType('pollinator').length >= TUNING.drone.roles.spark.unlockGardens) {
-      const h = offer('spark', hubs[0], 'Your gardens are lined up: a ✨ Spark hub starts a chain among them every 30 s.');
-      if (h) return h;
-    }
-    if (s.roles.harvesting()) {
-      const h = offer('harvester', hubs[0], 'Your stores are full and losing income: a 🧺 Harvester hub turns it into biomass.');
-      if (h) return h;
+    return undefined;
+  }
+
+  /** E23.3: a machine that has gone dark (off the grid, or the grid is short). */
+  gridStep(): Suggestion | undefined {
+    const p = this.loop.power;
+    if (!p) return undefined;
+    const dark = this.nearest(this.sim.state.machines.filter((m) => !m.starter && m.type !== 'core' && !p.isPowered(m)));
+    if (!dark) return undefined;
+    return { topic: 'grid', text: 'A machine has gone dark. Run a power pole to it, or add a panel or a turbine.', label: '⚡ Show me where', action: { kind: 'focus', x: dark.x, z: dark.z } };
+  }
+
+  /** E23.4: an open area whose water is low (its land fading). */
+  waterStep(): Suggestion | undefined {
+    const w = this.loop.water;
+    if (!w) return undefined;
+    const s = this.sim;
+    const id = s.areas.revealed().find((a) => !s.areas.sealed(a) && w.isLow(a));
+    if (!id) return undefined;
+    const [x, z] = s.areas.info(id).landmark;
+    return { topic: 'water', text: 'The land is fading here. Bring water: a pump, a pipe or a reservoir.', label: '💧 Show me where', action: { kind: 'focus', x, z } };
+  }
+
+  /** E23.5: a farm machine with dead ground beside it. */
+  farmStep(): Suggestion | undefined {
+    const s = this.sim;
+    for (const m of s.state.machines) {
+      if (!FARM.has(m.type)) continue;
+      const t = s.grid.tilesNear(m, 1).find((n) => n.ground !== 'restored' && s.restoration.checkPulse(n).ok);
+      if (t) return { topic: 'farm', text: 'Your farm wants living ground around it. Pulse the soil beside it.', label: '🌱 Show me where', action: { kind: 'focus', x: t.x, z: t.z } };
     }
     return undefined;
   }
 
   /**
-   * City 09.1: one achievable step towards an area's specialty action (a build or a pulse), or undefined when
-   * nothing can be done towards it right now (waiting for a basin or a meter, short of resources, still in fog).
+   * The next Keeper: the pinned request; else a shut region bloombot can open now; else the fountain's next tier
+   * (which gives the abilities gates need); else the nearest shut region and what it still waits for.
    */
-  specialtyStep(id: string): Suggestion | undefined {
+  keeperStep(): Suggestion | undefined {
     const s = this.sim;
-    if (id === PARK || s.areas.fog(id) === 'cleared' || s.milestones.met(id)) return undefined;
-    const sp = s.milestones.specialty(id);
-    const a = s.areas.info(id);
-    const tiles = s.areas.tiles(id);
-    const max = TUNING.restore.maxBloom;
-    const why = `The ${a.landmarkName} also wants: ${sp.label.replace(/ \(.*\)$/, '')}.`;
-    const ok = (t: TileData) => s.restoration.checkPulse(t).ok;
-    const growable = (t: TileData) => t.ground === 'restored' && !t.occupantId && t.bloom < max;
-    const focus = (t: TileData | undefined, what: string): Suggestion | undefined =>
-      t ? { text: `${why} ${what}`, label: '🌱 Show me where', action: t.roofId === GROUND ? { kind: 'focus', x: t.x, z: t.z } : { kind: 'focus', x: t.x, z: t.z, layer: t.roofId } } : undefined;
-    const build = (type: BuildableType, cands: TileData[], what: string): Suggestion | undefined => {
-      const def = MACHINES[type];
-      const cost = s.build.cost(type);
-      const spot = cands.find((c) => s.build.check(type, GROUND, c.x, c.z).spotOk);
-      if (!spot) return undefined;
-      // A spot is ready but the purchase isn't: save up (resources always refill), unless storage can't hold it.
-      if (s.econ.shortfall(cost)) {
-        // Phase 4 E01: more than storage can hold → say so and point at the Seed Vault, if it can still grow.
-        if (s.econ.exceedsStorage(cost)) return this.storageStep(def.name);
-        this.saveFor(cost);
-        return { text: `${why} Save up for a ${def.name} (${formatCost(cost)}).`, label: `${def.icon} Saving up…`, action: { kind: 'wait', seconds: 5 } };
-      }
-      return { text: `${why} ${what}`, label: `${def.icon} Build a ${def.name}`, action: { kind: 'build', type, x: spot.x, z: spot.z } };
-    };
-    // Room to bloom beside a spot: tiles next to it that can still be restored or grown (machines need it to fire).
-    const room = (t: { x: number; z: number }) => s.grid.tilesNear({ roofId: GROUND, x: t.x, z: t.z, size: 1 }, 1).filter((n) => s.restoration.isEligible(n) || growable(n)).length;
-    const roomy = (cands: TileData[]) => cands.filter((t) => room(t) >= 2).sort((x, y) => room(y) - room(x) || x.z - y.z || x.x - y.x);
-    const mine = (type: BuildableType) => s.state.machines.filter((m) => m.type === type && s.areas.areaOf(m) === id);
-    const beside = (m: { x: number; z: number; size: number }, r = 1) => s.grid.tilesNear({ roofId: GROUND, x: m.x, z: m.z, size: m.size }, r);
-    switch (sp.kind) {
-      case 'fullBloom':
-        return focus(tiles.filter((t) => growable(t) && t.bloom < TUNING.restore.fullBloom && ok(t)).sort((x, y) => y.bloom - x.bloom)[0], 'Pulse a green tile to grow it.');
-      case 'roofBloom': {
-        const roof = s.clusters.roof(id);
-        if (!roof) return undefined;
-        if (!s.grid.isPlayable(roof.id)) {
-          // Reach it with a Bloom Relay on the street (within range of the roof).
-          if (!s.build.isUnlocked('relay')) return build('droneHub', tiles, 'Relays need a Drone Hub first.');
-          const spots = s.clusters.relaySpots(id);
-          const b = build('relay', spots, 'A Bloom Relay here reaches the rooftop.');
-          if (b) return b;
-          // No ground in reach is ready to build on yet: restore a spot first.
-          return focus(spots.find((t) => t.ground !== 'restored' && !t.occupantId && ok(t)), 'Restore a spot within reach of the rooftop for a Bloom Relay.');
-        }
-        const roofTiles = s.grid.tilesOf(roof.id);
-        return focus(roofTiles.find((t) => t.ground !== 'restored' && ok(t)), 'Restore the rooftop.');
-      }
-      case 'canopy': {
-        const lm = s.areas.landmark(id);
-        if (!lm) return undefined;
-        const near = beside(lm, TUNING.neighbourhood.canopy.chargeRadius);
-        return focus(near.find((t) => t.ground !== 'restored' && ok(t)) ?? near.find((t) => growable(t) && ok(t)), 'Bloom tiles around the Elder Tree to charge it.');
-      }
-      case 'solarBoost': {
-        const panel = mine('solar')[0];
-        if (!panel || room(panel) === 0) return build('solar', roomy(tiles), 'Build a Solar Panel beside ground that can still bloom.');
-        return focus(beside(panel).find((t) => (s.restoration.isEligible(t) || growable(t)) && ok(t)), 'Bloom a tile right next to the Solar Panel.');
-      }
-      case 'chain': {
-        const gardens = mine('pollinator');
-        if (gardens.filter((g) => room(g) > 0).length < 2) return build('pollinator', roomy(tiles), 'Pollinator Gardens with room around them set each other off.');
-        for (const g of gardens) {
-          const t = beside(g).find((n) => (s.restoration.isEligible(n) || growable(n)) && ok(n));
-          if (t) return focus(t, 'Pulse beside a Pollinator Garden to start a big chain.');
-        }
-        return undefined;
-      }
-      case 'corridor': {
-        // Two street gardens within corridor range of each other.
-        const paved = (t: TileData) => t.feature === 'road' || t.feature === 'paving';
-        const gardens = mine('pollinator').filter((m) => s.chains.isCorridor(m));
-        const R = s.upgrades.corridorRange;
-        const gap = 1;
-        const md = (p: { x: number; z: number }, q: { x: number; z: number }) => Math.abs(p.x - q.x) + Math.abs(p.z - q.z);
-        const pairs = gardens.filter((g) => gardens.some((o) => o !== g && md(g, o) >= gap && md(g, o) <= R));
-        if (!pairs.some((g) => room(g) > 0)) {
-          // A (new) garden with room around it, within range of another street garden if there is one.
-          const g0 = gardens[0];
-          return build('pollinator', roomy(tiles.filter((t) => paved(t) && (!g0 || (md(t, g0) >= 2 && md(t, g0) <= R)))), 'Two gardens on the paving form a green corridor: put this one where the ground can still bloom.');
-        }
-        for (const g of pairs) {
-          const t = beside(g).find((n) => (s.restoration.isEligible(n) || growable(n)) && ok(n));
-          if (t) return focus(t, 'Pulse beside a street garden: the chain runs along the corridor.');
-        }
-        return undefined;
-      }
-      case 'overflow': {
-        const R = TUNING.neighbourhood.reservoir.condenserRange;
-        const garden = mine('reservoirGarden')[0];
-        if (!garden) return build('reservoirGarden', tiles.filter((t) => beside({ ...t, size: 1 }, R).some((c) => !c.blocked && !c.occupantId && s.areas.areaOf(c) === id)), 'A Reservoir Garden overflows when its basin fills.');
-        const conds = s.state.machines.filter((m) => m.type === 'condenser' && distToFootprint(m.x, m.z, garden.x, garden.z, garden.size) <= R);
-        if (!conds.length) return build('condenser', beside(garden, R), 'A Water Condenser within 2 tiles fills its basin.');
-        return undefined;
-      }
-      case 'canalFlow': {
-        const plan = s.milestones.canalPlan(id);
-        if (!plan) return undefined;
-        const path = plan.path.map(([x, z]) => s.grid.get(GROUND, x, z)!);
-        const dirty = path.find((t) => t.ground !== 'restored' && t.ground !== 'growing');
-        if (dirty) return focus(path.find((t) => t.ground !== 'restored' && ok(t)), 'Restore the canal water so it can flow.');
-        for (const [type, [x, z]] of [['reservoirGarden', plan.garden], ['condenser', plan.condenser]] as [BuildableType, [number, number]][]) {
-          const t = s.grid.get(GROUND, x, z)!;
-          if (s.occupant(t)?.type === type) continue;
-          if (t.occupantId) return undefined; // something else stands there: the player can still do it by hand
-          if (t.ground === 'polluted') return focus(ok(t) ? t : undefined, `Clear the bank for a ${MACHINES[type].name}.`);
-          return build(type, [t], type === 'reservoirGarden' ? 'A garden on one bank…' : '…and a condenser further along sends it water down the canal.');
-        }
-        return undefined;
-      }
+    if (!s.oldCity) return undefined;
+    const pinned = s.keepers.pinned();
+    if (pinned) {
+      const k = s.keepers.def(pinned.id);
+      return { topic: 'keeper', text: pinned.text, label: `🤖 Find ${k.name}`, action: { kind: 'focus', x: k.x, z: k.z } };
     }
+    const shut = REGIONS.filter((q) => q.gate.opensRegion !== false && !s.gates.isOpen(q.gate.id));
+    const gate = (r: (typeof REGIONS)[number], text: string): Suggestion => {
+      const [x, z] = r.gate.cells[0];
+      return { topic: 'keeper', text, label: '🤖 Show me the way', action: { kind: 'focus', x, z } };
+    };
+    const open = shut.find((q) => !s.gates.problem(q.gate));
+    if (open) return gate(open, `A Keeper sleeps in ${open.name}. The way in is clear: open it.`);
+    const f = this.fountainStep();
+    if (f) return f;
+    if (shut[0]) return gate(shut[0], `A Keeper sleeps in ${shut[0].name}. ${shut[0].gate.blocked}`);
+    return undefined;
   }
 
   /**
-   * Phase 5 E12: the next purchase worth saving for, and how long until it's affordable at the current net
-   * income (sim seconds). Affordable things come first (eta 0), then the soonest. Upgrades and machines both
-   * count; a price bigger than a capped store is skipped (the Seed Vault hint covers that).
+   * The fountain's next tier, one step at a time: bring what bloombot carries for it; else salvage the nearest pile
+   * of what it still wants; else what its own condition asks (park ground to restore; landmarks wake through the
+   * Keepers above). Its tiers give the abilities the gates need.
    */
-  nextPurchase(): { name: string; icon: string; cost: Cost; eta: number; kind: 'upgrade' | 'machine' } | undefined {
+  fountainStep(): Suggestion | undefined {
     const s = this.sim;
-    let best: { name: string; icon: string; cost: Cost; eta: number; kind: 'upgrade' | 'machine' } | undefined;
-    const rates = s.production.rates(true);
-    const etaOf = (cost: Cost) => Math.max(0, ...KINDS.map((k) => {
-      const short = Economy.part(cost, k).sub(s.econ.get(k));
-      if (short.lte(0)) return 0;
-      return rates[k].gt(0) ? short.div(rates[k]).toNumber() : Infinity;
-    }));
-    const consider = (name: string, icon: string, cost: Cost, kind: 'upgrade' | 'machine') => {
-      if (s.econ.exceedsStorage(cost)) return;
-      const eta = etaOf(cost);
-      if (!Number.isFinite(eta)) return;
-      if (!best || eta < best.eta - 1e-9) best = { name, icon, cost, eta, kind };
-    };
-    for (const def of s.upgrades.all()) {
-      const st = s.upgrades.status(def);
-      if (!st.ok && st.reason && !st.reason.startsWith('Need ')) continue;
-      consider(def.name, def.icon, st.price, 'upgrade'); // E18.7: every part, so drones leave its energy and water alone
+    const t = s.fountain.next();
+    if (!t) return undefined;
+    const [fx, fz] = s.areas.info(PARK).landmark;
+    const wanted = (Object.keys(t.delivery) as string[]).filter((k) => k !== 'biomass' && s.fountain.remaining(k as MaterialId) > 0) as MaterialId[];
+    const carried = wanted.filter((m) => s.inventory.available(m) > 0);
+    // carrying all of it, or as much as the piles in reach give: hand it in
+    const missing = wanted.filter((m) => s.inventory.available(m) < s.fountain.remaining(m));
+    const pile = this.nearestPile(missing);
+    if (carried.length && (!pile || !missing.length)) {
+      return { topic: 'keeper', text: `Bring the ${carried.map((m) => MATERIALS[m].name).join(' and ')} to the fountain.`, label: '⛲ Show me', action: { kind: 'focus', x: fx, z: fz } };
     }
-    for (const type of BUILDABLE) {
-      if (!s.build.isUnlocked(type) || MACHINES[type].areaTypes) continue;
-      consider(MACHINES[type].name, MACHINES[type].icon, s.build.cost(type), 'machine');
+    if (pile) return { topic: 'keeper', text: `The fountain wants ${MATERIALS[pile.material].name}: salvage it here.`, label: `${MATERIALS[pile.material].icon} Show me where`, action: { kind: 'focus', x: pile.x, z: pile.z } };
+    if (carried.length) return { topic: 'keeper', text: `Bring the ${carried.map((m) => MATERIALS[m].name).join(' and ')} to the fountain.`, label: '⛲ Show me', action: { kind: 'focus', x: fx, z: fz } };
+    const c = s.fountain.condition(t);
+    if (!c.done && t.needs.parkTiles !== undefined) {
+      const tile = this.parkTile();
+      if (tile) return { topic: 'restore', text: `The fountain wants the park alive around it: restore it (${Math.min(c.have, c.need)} of ${c.need}).`, label: '🌱 Show me where', action: { kind: 'focus', x: tile.x, z: tile.z } };
+    }
+    return undefined;
+  }
+
+  /** The nearest pile with something left of one of these materials that bloombot can salvage now. */
+  private nearestPile(materials: MaterialId[]): PileDef | undefined {
+    if (!materials.length) return undefined;
+    const s = this.sim;
+    const [fx, fz] = s.areas.info(PARK).landmark;
+    const bx = s.bot?.x ?? s.state.bot?.x ?? fx;
+    const bz = s.bot?.z ?? s.state.bot?.z ?? fz;
+    let best: PileDef | undefined;
+    let bd = Infinity;
+    for (const p of allPiles()) {
+      if (!materials.includes(p.material) || s.salvage.left(p.id) <= 0 || s.salvage.problem(p.id)) continue;
+      const d = Math.abs(p.x - bx) + Math.abs(p.z - bz);
+      if (d < bd) [best, bd] = [p, d];
     }
     return best;
   }
 
-  /** A purchase is bigger than storage: the Seed Vault's next tier, if there is one (Phase 4 E01). */
-  storageStep(what: string): Suggestion | undefined {
-    const vault = this.sim.upgrades.all().find((u) => u.id === 'seedVault');
-    if (!vault || this.sim.upgrades.level(vault.id) >= vault.maxLevel) return undefined;
-    return { text: `A ${what} needs more storage than you have. Upgrade the Seed Vault to hold more.`, label: '🏺 Upgrades', action: { kind: 'upgrades' } };
-  }
-
-  /** The first machine the fountain still needs that is affordable, at a valid spot nearest the fountain. */
-  private neededBuild(): Suggestion | undefined {
+  /** Restoring towards the current goal: a tile at its edge, or in the park. */
+  restoreStep(): Suggestion | undefined {
     const s = this.sim;
-    const order: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree'];
-    const [fx, fz] = s.areas.info(PARK).landmark;
-    const tiles = s.areas.tiles(PARK).sort((a, b) => Math.abs(a.x - fx) + Math.abs(a.z - fz) - (Math.abs(b.x - fx) + Math.abs(b.z - fz)) || a.z - b.z || a.x - b.x);
-    const rates = s.production.rates();
-    for (const type of order) {
-      if (s.state.machines.some((m) => m.type === type && !m.starter)) continue;
-      const cost = s.build.cost(type);
-      if (s.econ.shortfall(cost)) {
-        // Phase 4: short only of things that refill on their own (and fit in storage): save up instead of
-        // tapping it all away. Otherwise keep restoring (biomass only comes from restored tiles).
-        const short = KINDS.filter((k) => Economy.part(cost, k).gt(s.econ.get(k)));
-        if (s.build.isUnlocked(type) && !s.econ.exceedsStorage(cost) && short.every((k) => rates[k].gt(0))) {
-          const def = MACHINES[type];
-          this.saveFor(cost);
-          return { text: `The fountain needs a ${def.name}: let your stores fill up (${formatCost(cost)}).`, label: `${def.icon} Saving up…`, action: { kind: 'wait', seconds: 5 } };
-        }
-        continue;
-      }
-      for (const t of tiles) {
-        if (!s.build.check(type, GROUND, t.x, t.z).ok) continue;
-        const def = MACHINES[type];
-        return { text: `The fountain needs a ${def.name}, and you can afford one.`, label: `${def.icon} Build a ${def.name}`, action: { kind: 'build', type, x: t.x, z: t.z } };
-      }
-    }
-    return undefined;
+    const goal = s.state.progression.coreActivated ? s.areas.nextGoal() : undefined;
+    const edge = (goal ? s.areas.entryTiles(goal).find((t) => s.restoration.checkPulse(t).ok) : undefined) ?? this.parkTile();
+    if (!edge) return undefined;
+    const where = goal && s.areas.areaOf(edge) === goal ? `the ${AREA_TYPES[s.areas.info(goal).type].name.toLowerCase()}` : 'the park';
+    return { topic: 'restore', text: `Restore ${where}: each tile pushes the fog back.`, label: '🌱 Show me where', action: { kind: 'focus', x: edge.x, z: edge.z } };
   }
 
-  /** Before the fountain: an affordable dead tile in the park, nearest the fountain. */
+  private explore(): Suggestion {
+    return { topic: 'restore', text: 'Explore, salvage and restore: the island is yours to bring back.', label: '🌿 Explore', action: { kind: 'wait', seconds: 5 } };
+  }
+
+  private powered(m: MachineData): boolean {
+    return this.loop.power?.isPowered(m) ?? true;
+  }
+
+  /** The machine nearest bloombot (or the park's fountain, with no bot). */
+  private nearest(list: MachineData[]): MachineData | undefined {
+    const s = this.sim;
+    const [fx, fz] = s.areas.info(PARK).landmark;
+    const bx = s.state.bot?.x ?? fx;
+    const bz = s.state.bot?.z ?? fz;
+    let best: MachineData | undefined;
+    let bd = Infinity;
+    for (const m of list) {
+      const d = Math.abs(m.x - bx) + Math.abs(m.z - bz);
+      if (d < bd) [best, bd] = [m, d];
+    }
+    return best;
+  }
+
+  /** Before the fountain: a dead tile in the park that a pulse can restore, nearest the fountain. */
   private parkTile(): TileData | undefined {
     const s = this.sim;
     if (s.state.progression.coreActivated) return undefined;

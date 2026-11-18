@@ -222,7 +222,7 @@ export class BotController {
     const frozen = this.frozen();
     if (mag < 0.01 && !this.walk) this.sprintLatched = false; // a toggled sprint ends when bloombot stops
     // Sprinting is the Hover upgrade: until it is bought the sprint inputs do nothing.
-    const canHover = (this.sim.state.upgrades.hover ?? 0) > 0;
+    const canHover = (this.sim.state.upgrades.hover ?? 0) > 0 || !!this.sim.state.salvage?.abilities.includes('hover'); // E23.1.5: the fountain's tier-2 ability
     this.sprinting = !frozen && canHover && (this.bindings.isDown('sprint', this.held) || !!pad?.sprint || this.sprintLatched);
     const p = this.pose;
     const w = this.walker;
