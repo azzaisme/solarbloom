@@ -15,6 +15,9 @@ function city() {
   sim.areas.clear(PARK, true);
   sim.state.salvage!.keepers.sluice = { step: 'request1' }; // Cistern Basin's unlocks held (E23.8.2)
   weather(sim, 'clear');
+  // midday, all day (E23.7.1's clock turns the sun off at night; the dry-spell test keeps the panels in sun: "enough power")
+  const noon = { ...sim.power.sky(), sun: 1, solar: 1 };
+  sim.power.skyOverride = () => noon;
   return sim;
 }
 
@@ -171,5 +174,38 @@ describe('E23.4.3: the desalination plant', () => {
     }
     expect(s.farm.some((t) => sim.water.isWatered(t))).toBe(false);
     for (const t of s.farm) expect(t.ground).toBe('restored');
+  });
+
+  it('through days and nights on the real clock: a reservoir on the line, filled by day, carries the farm through the night', () => {
+    const sim = city();
+    sim.power.skyOverride = undefined; // E23.7.1's real day and night
+    const s = shore(sim);
+    const m = put(sim, 'desalination', s.x, s.z);
+    // a reservoir on the west side of the line, touching it (open land, restored)
+    const [rx, rz] = [s.run[3][0] - 2, s.run[3][1]];
+    for (const t of sim.grid.footprint(GROUND, rx, rz, 2)) {
+      expect(open(sim, t), `reservoir spot ${rx},${rz}`).toBe(true);
+      Object.assign(t!, { ground: 'restored', pollution: 0 });
+    }
+    const tank = put(sim, 'reservoir', rx, rz);
+    panels(sim, m, 5, [...s.run, ...s.farm.map((t) => [t.x, t.z] as [number, number]), [rx, rz], [rx + 1, rz], [rx, rz + 1], [rx + 1, rz + 1]]);
+    sim.state.salvage!.pack = { copper: 10, clay: 20 };
+    for (const [x, z] of s.run) expect(sim.water.pipes.lay(GROUND, x, z)).toBe(true);
+    const perPlotHour = 6;
+    let short = 0;
+    let darkHours = 0;
+    // three dry game days, hour by hour, the clock running
+    for (let h = 0; h < 24 * 3; h++) {
+      for (let q = 0; q < 4; q++) {
+        sim.state.time += HOUR / 4;
+        sim.power.tick(1);
+        sim.water.tick(HOUR / 4);
+      }
+      if (!sim.power.isPowered(m) || sim.power.sky().solar === 0) darkHours++;
+      for (const t of s.farm) if (sim.water.drawNear(t, perPlotHour) < perPlotHour) short++;
+    }
+    expect(darkHours).toBeGreaterThan(12); // there were nights, and the plant stood dark in them
+    expect(short).toBe(0); // the reservoir carried the farm through them
+    expect(sim.water.levelOf(`r:${tank.id}`)).toBeGreaterThan(0);
   });
 });

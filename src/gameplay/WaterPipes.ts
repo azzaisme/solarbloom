@@ -222,7 +222,9 @@ export class WaterPipes {
   /** Would this pump push water now (powered, on a bank with water in it)? */
   pumpLive(m: MachineData): boolean {
     const b = this.pumpSource(m);
-    return !!b && this.powered(m) && this.water.amountOf(b.id) > 0;
+    if (!b || this.water.amountOf(b.id) <= 0) return false;
+    // a desalination plant needs power to make fresh water, not to let out what it has made (its tank drains by itself)
+    return m.type === 'desalination' || this.powered(m);
   }
 
   /** A reservoir's water height in terrace levels (its highest footprint tile; flat ground everywhere else is 1). */

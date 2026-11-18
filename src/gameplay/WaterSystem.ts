@@ -657,8 +657,8 @@ export class WaterSystem {
       const outlet = bank ? (1 - this.levelOf(bank.id)) * bank.capacity : 0;
       if (room <= 1e-9 && outlet <= 1e-9 && !this.pipes.netsOf(m).length) continue;
       this.desalinating.add(m.id);
-      if (!this.pipes.powered(m)) continue;
-      this.fill(t.id, WATER_NET.desal.perDay * days);
+      if (this.pipes.powered(m)) this.fill(t.id, WATER_NET.desal.perDay * days);
+      // what it has made runs out into its bank's pond or canal with or without power
       if (bank) this.fill(bank.id, this.draw(t.id, outlet));
     }
   }
