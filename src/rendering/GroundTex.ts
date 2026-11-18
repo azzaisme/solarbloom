@@ -5,7 +5,8 @@ import * as pc from 'playcanvas';
  * the ground runs on without seams from tile to tile and chunk to chunk, instead of flat slabs with drawn-on cracks.
  *
  *  - `sand`: the beach's dead sand (warm gold, wind ripples, pale pebbles)
- *  - `dead-earth`: dead grass, leaf litter and clay (dry red-brown earth, cracked in patches, small stones)
+ *  - `dead-earth`: dead grass, leaf litter and clay (dry brown earth, cracked in patches, small stones)
+ *  - `dead-paving`: dead paving (worn cream stone pavers, orange dust in the joints and drifted across)
  *
  * Each is painted procedurally at startup (512², seamless, no download), in the hand-painted look of the owner's
  * reference images. A file in `assets/raw/textures/` named `<name>.png`, `.webp` or `.jpg` replaces the painted
@@ -14,11 +15,11 @@ import * as pc from 'playcanvas';
 
 const FILES = import.meta.glob('../../assets/raw/textures/*.{png,webp,jpg}', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
 
-export type GroundTexName = 'sand' | 'dead-earth';
-export const GROUND_TEXTURES: GroundTexName[] = ['sand', 'dead-earth'];
+export type GroundTexName = 'sand' | 'dead-earth' | 'dead-paving';
+export const GROUND_TEXTURES: GroundTexName[] = ['sand', 'dead-earth', 'dead-paving'];
 
 /** World metres one copy of each texture covers. */
-const TILE_M: Record<GroundTexName, number> = { sand: 5, 'dead-earth': 5 };
+const TILE_M: Record<GroundTexName, number> = { sand: 5, 'dead-earth': 5, 'dead-paving': 4 };
 const SIZE = 512;
 
 function urlOf(name: GroundTexName): string | undefined {
@@ -105,9 +106,9 @@ function paintDeadEarth(px: Uint8ClampedArray) {
   const seeds: [number, number, number][] = [];
   for (let i = 0; i < G * G; i++) seeds.push([((i % G) + R()) / G, (Math.floor(i / G) + R()) / G, R()]);
   const peb = stones(rng(9), 60, 0.005, 0.018);
-  // a soft terracotta brown that sits with the game's cream stone and gold (not a raw red)
-  const base: RGB = [132, 102, 84], lightDust: RGB = [172, 142, 114], darkEarth: RGB = [102, 78, 66], crack: RGB = [70, 52, 44];
-  const stoneBody: RGB = [158, 128, 112], stoneLight: RGB = [214, 188, 164], stoneDark: RGB = [84, 58, 50];
+  // the dusty orange-red of the owner's pre-restored reference
+  const base: RGB = [178, 112, 76], lightDust: RGB = [212, 148, 100], darkEarth: RGB = [138, 84, 60], crack: RGB = [88, 52, 40];
+  const stoneBody: RGB = [156, 112, 100], stoneLight: RGB = [212, 170, 148], stoneDark: RGB = [88, 54, 46];
   for (let y = 0; y < SIZE; y++)
     for (let x = 0; x < SIZE; x++) {
       const u = x / SIZE, v = y / SIZE;
@@ -174,14 +175,143 @@ function paintSand(px: Uint8ClampedArray) {
     }
 }
 
-function painted(name: GroundTexName): HTMLCanvasElement {
+/**
+ * Fine cracks as real concrete cracks run: a wandering line that forks now and then, each fork thinner and shorter,
+ * most of them starting at a joint or a corner. Stamped into a wrapped buffer (1 = the crack's dark core).
+ */
+function crackField(seed: number): Float32Array {
+  const F = new Float32Array(SIZE * SIZE);
+  const R = rng(seed);
+  const stamp = (x: number, y: number, w: number) => {
+    const r = Math.ceil(w + 1.5);
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        const d = Math.hypot(dx, dy);
+        const k = clamp01(1 - (d - w * 0.5) / 1.2);
+        if (k <= 0) continue;
+        const i = (((Math.round(y) + dy) % SIZE) + SIZE) % SIZE * SIZE + ((((Math.round(x) + dx) % SIZE) + SIZE) % SIZE);
+        if (k > F[i]) F[i] = k;
+      }
+  };
+  const walk = (x: number, y: number, ang: number, len: number, w: number, depth: number) => {
+    let drift = (R() - 0.5) * 0.02;
+    for (let i = 0; i < len; i++) {
+      stamp(x, y, w * (1 - (i / len) * 0.6)); // it thins toward its tip
+      ang += drift + (R() - 0.5) * 0.35; // small jitters on a slow drift: jagged close up, one line from afar
+      if (R() < 0.04) ang += (R() - 0.5) * 1.2; // the odd kink where it met a stone
+      if (R() < 0.02) drift = (R() - 0.5) * 0.03;
+      x += Math.cos(ang);
+      y += Math.sin(ang);
+      if (depth < 1 && R() < 0.02) walk(x, y, ang + (R() < 0.5 ? 1 : -1) * (0.5 + R() * 0.6), len * (0.25 + R() * 0.3), w * 0.6, depth + 1);
+    }
+  };
+  // a handful of cracks across the whole texture (16 m²): most slabs stay whole
+  for (let i = 0; i < 9; i++) {
+    const onJoint = R() < 0.7;
+    const jx = Math.round(R() * 2) * (SIZE / 2), jy = Math.round(R() * 2) * (SIZE / 2);
+    walk(onJoint ? jx : R() * SIZE, onJoint ? R() * SIZE : jy + R() * 40, R() * 6.283, 30 + R() * 60, 0.9 + R() * 0.6, 0);
+  }
+  return F;
+}
+
+/**
+ * Old stone paving, as in the owner's pre-restored reference: cream pavers laid in running bond, edges worn round,
+ * each its own tone, orange dust packed in the joints and drifted across in places, a few cracked or missing.
+ */
+function paintDeadPaving(px: Uint8ClampedArray, H: Float32Array) {
+  const n1 = makeNoise(71), n2 = makeNoise(83), n3 = makeNoise(97);
+  const cracks = crackField(21);
+  const R = rng(31);
+  const ROWS = 16, COLS = 8; // pavers of 0.5 × 0.25 m on a 4 m texture
+  const tone = new Float32Array(ROWS * COLS), gone = new Uint8Array(ROWS * COLS);
+  for (let i = 0; i < tone.length; i++) {
+    tone[i] = R();
+    gone[i] = R() < 0.035 ? 1 : 0;
+  }
+  const stone: RGB = [212, 196, 176], pale: RGB = [232, 220, 202], worn: RGB = [184, 164, 146], shadow: RGB = [150, 126, 110];
+  const dust: RGB = [196, 132, 92], dustDark: RGB = [150, 94, 66], crackC: RGB = [96, 70, 58];
+  for (let y = 0; y < SIZE; y++)
+    for (let x = 0; x < SIZE; x++) {
+      const u = x / SIZE, v = y / SIZE;
+      const row = Math.floor(v * ROWS);
+      const cu = u * COLS + (row % 2) * 0.5; // running bond: every other row shifted half a paver
+      const col = ((Math.floor(cu) % COLS) + COLS) % COLS;
+      const id = row * COLS + col;
+      const fx = cu - Math.floor(cu), fy = v * ROWS - row;
+      // distance to the paver's edge in metres-ish units (x is twice as long as y), with a wobble so edges are worn
+      const wob = (n3(u, v, 40) - 0.5) * 0.05 + (n2(u, v, 90) - 0.5) * 0.03; // chipped, uneven edges
+      const edge = Math.min(Math.min(fx, 1 - fx) * 2, Math.min(fy, 1 - fy)) + wob;
+      // the stone: its own tone, a paler worn middle, weather stains
+      let c = mix(mix(worn, stone, 0.3 + tone[id] * 0.7), pale, smooth(0.5, 0.9, n1(u, v, 14)) * 0.5);
+      c = mix(c, worn, smooth(0.55, 0.85, n2(u, v, 9)) * 0.45);
+      c = mix(c, pale, smooth(0.16, 0.3, edge) * 0.12); // a slightly domed top
+      // fine cracks across a few pavers, and pitting
+      const k = cracks[y * SIZE + x];
+      c = mix(c, crackC, smooth(0.55, 0.95, k) * 0.75);
+      if (n3(u, v, 200) > 0.88) c = mix(c, worn, 0.5);
+      // joints: a soft shadowed lip, then dust packed between the stones
+      c = mix(c, shadow, smooth(0.11, 0.05, edge) * 0.55);
+      const inJoint = smooth(0.055, 0.03, edge);
+      const dustC = mix(dustDark, dust, n2(u, v, 30));
+      // the grout: gritty and uneven, darker where it has washed out, dustier where it has silted up
+      const grit = n3(u, v, 110) * 0.6 + n1(u, v, 45) * 0.4;
+      c = mix(c, mix(mix(shadow, dustC, 0.55), mix(dustDark, shadow, 0.5), smooth(0.4, 0.75, grit)), inJoint);
+      // a missing paver: bare dusty earth, darker at its rim
+      if (gone[id]) c = mix(mix(dustDark, dust, n1(u, v, 24) * 0.7), shadow, smooth(0.2, 0.03, edge) * 0.5);
+      // dust drifted over the paving on the wind: thick in places, a thin wash elsewhere
+      const drift = n1(u + v * 0.6, v - u * 0.3, 3) * 0.65 + n2(u, v, 7) * 0.35;
+      c = mix(c, dustC, smooth(0.62, 0.8, drift) * 0.7 + 0.02);
+      // height: a rounded top standing above the joint, each paver sunk or tilted a little, pitted and cracked;
+      // drifted dust levels it out
+      const driftK = smooth(0.62, 0.8, drift);
+      let hgt = smooth(0.02, 0.14, edge) * (0.8 + tone[id] * 0.2) + (fx - 0.5) * (tone[(id * 7) % tone.length] - 0.5) * 0.25;
+      hgt += (n3(u, v, 60) - 0.5) * 0.1 + (n1(u, v, 24) - 0.5) * 0.08; // worn, uneven stone
+      hgt -= smooth(0.5, 0.95, k) * 0.5 + (n3(u, v, 200) > 0.88 ? 0.12 : 0);
+      hgt += inJoint * (grit - 0.5) * 0.3;
+      if (gone[id]) hgt = 0.1 + n1(u, v, 24) * 0.15;
+      H[y * SIZE + x] = hgt * (1 - driftK * 0.7) + driftK * 0.55;
+      const g = (n3(u, v, 150) - 0.5) * 9 + (n1(u, v, 60) - 0.5) * 6;
+      const i = (y * SIZE + x) * 4;
+      px[i] = c[0] + g;
+      px[i + 1] = c[1] + g * 0.9;
+      px[i + 2] = c[2] + g * 0.8;
+      px[i + 3] = 255;
+    }
+}
+
+/** How strongly each height field tilts its normals (kept gentle: weathering, not relief). */
+const NORMAL_STRENGTH = 2.2;
+
+function canvasOf(fill: (px: Uint8ClampedArray) => void): HTMLCanvasElement {
   const cv = document.createElement('canvas');
   cv.width = cv.height = SIZE;
   const ctx = cv.getContext('2d')!;
   const img = ctx.createImageData(SIZE, SIZE);
-  (name === 'sand' ? paintSand : paintDeadEarth)(img.data);
+  fill(img.data);
   ctx.putImageData(img, 0, 0);
   return cv;
+}
+
+function painted(name: GroundTexName): { colour: HTMLCanvasElement; normal?: HTMLCanvasElement } {
+  if (name !== 'dead-paving') return { colour: canvasOf(name === 'sand' ? paintSand : paintDeadEarth) };
+  const H = new Float32Array(SIZE * SIZE);
+  const colour = canvasOf((px) => paintDeadPaving(px, H));
+  // a tangent-space normal map from the heights (wrapped, so it tiles like the colour)
+  const at = (x: number, y: number) => H[((y + SIZE) % SIZE) * SIZE + ((x + SIZE) % SIZE)];
+  const normal = canvasOf((px) => {
+    for (let y = 0; y < SIZE; y++)
+      for (let x = 0; x < SIZE; x++) {
+        const dx = (at(x - 1, y) - at(x + 1, y)) * NORMAL_STRENGTH;
+        const dy = (at(x, y - 1) - at(x, y + 1)) * NORMAL_STRENGTH;
+        const l = 1 / Math.hypot(dx, dy, 1);
+        const i = (y * SIZE + x) * 4;
+        px[i] = (dx * l * 0.5 + 0.5) * 255;
+        px[i + 1] = (dy * l * 0.5 + 0.5) * 255;
+        px[i + 2] = (l * 0.5 + 0.5) * 255;
+        px[i + 3] = 255;
+      }
+  });
+  return { colour, normal };
 }
 
 // ───────────── material and mesh ─────────────
@@ -199,9 +329,9 @@ export function groundTexMaterial(device: pc.GraphicsDevice, name: GroundTexName
   m.gloss = 0.1;
   m.cull = pc.CULLFACE_NONE;
   materials.set(name, m);
-  const use = (src: HTMLCanvasElement | HTMLImageElement) => {
+  const texOf = (src: HTMLCanvasElement | HTMLImageElement, kind: string) => {
     const tex = new pc.Texture(device, {
-      name: `ground-${name}`,
+      name: `ground-${name}-${kind}`,
       mipmaps: true,
       anisotropy: 8,
       addressU: pc.ADDRESS_REPEAT,
@@ -210,17 +340,28 @@ export function groundTexMaterial(device: pc.GraphicsDevice, name: GroundTexName
       magFilter: pc.FILTER_LINEAR,
     });
     tex.setSource(src);
-    m.diffuseMap = tex;
+    return tex;
+  };
+  const usePainted = () => {
+    const t = painted(name);
+    m.diffuseMap = texOf(t.colour, 'colour');
+    if (t.normal) {
+      m.normalMap = texOf(t.normal, 'normal');
+      m.bumpiness = 0.6;
+    }
     m.update();
   };
   const url = urlOf(name);
   if (url) {
     m.update();
     const img = new Image();
-    img.onload = () => use(img);
-    img.onerror = () => use(painted(name));
+    img.onload = () => {
+      m.diffuseMap = texOf(img, 'colour');
+      m.update();
+    };
+    img.onerror = usePainted;
     img.src = url;
-  } else use(painted(name));
+  } else usePainted();
   return m;
 }
 
@@ -257,8 +398,8 @@ export function groundTexMesh(device: pc.GraphicsDevice, g: GroundTexGeo): pc.Me
   return m;
 }
 
-/** Which painted texture a dead Old City tile wears (none: paving, roads and water keep their own look). */
+/** Which painted texture a dead Old City tile wears (none: roads and water keep their own look). */
 export function groundTexFor(feature: string | undefined): GroundTexName | undefined {
   const f = feature ?? 'lawn';
-  return f === 'sand' ? 'sand' : f === 'lawn' || f === 'litter' || f === 'clay' ? 'dead-earth' : undefined;
+  return f === 'sand' ? 'sand' : f === 'paving' ? 'dead-paving' : f === 'lawn' || f === 'litter' || f === 'clay' ? 'dead-earth' : undefined;
 }

@@ -1543,7 +1543,7 @@ export class ChunkRenderer {
     switch (t.ground) {
       case 'polluted': {
         const shade = t.pollution > 80 ? dead[(t.variant + 1) % dead.length] : dead[t.variant % dead.length];
-        if (f === 'paving') {
+        if (f === 'paving' && !paintedDead(t)) {
           // Look 3.2: cracked slabs with weeds in the gaps (scrubbed lighter once the park is swept)
           paving(this.ctx, t, false, x, z, h, this.inPark && this.level >= 1);
           if (!(this.inPark && this.level >= 1) && this.inPark) for (let i = 0; i < 2; i++) b.add('sphere', [PALETTE.soilDark, PALETTE.soil][i], [x + r.range(-0.35, 0.35), top + 0.04, z + r.range(-0.35, 0.35)], [0.14, 0.025, 0.09]);
@@ -1554,7 +1554,7 @@ export class ChunkRenderer {
           // drawn cracks or dirt patches (the painting has them); a few dry tufts and leaves stand on it.
           this.slab(b, shade, [x, h, z], [1, 0.16, 1]);
           if (f === 'litter') for (let i = 0; i < 2; i++) b.add('sphere', PALETTE.ground.leafLitter[i % 3], [x + r.range(-0.35, 0.35), top + 0.016, z + r.range(-0.35, 0.35)], [0.16, 0.03, 0.1]);
-          if (f !== 'sand' && r.next() < 0.35) this.fb.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant * 2, 1);
+          if (f !== 'sand' && r.next() < (f === 'paving' ? 0.15 : 0.35)) this.fb.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant * 2, 1);
           if (t.variant % 7 === 0) this.fb.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant, 0.8);
           break;
         }

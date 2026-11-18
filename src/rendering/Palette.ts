@@ -65,7 +65,7 @@ const ground = {
   shallows: ['#4f8592', '#4a7f8b', '#568b98'],
   surf: '#9fdcef',
   /** the slab under painted dead ground (GroundTex): each painting's average colour, for its sides and the far view */
-  painted: { sand: ['#e2bf7e'], 'dead-earth': ['#846654'] } as Record<string, string[]>,
+  painted: { sand: ['#e2bf7e'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
   seaFoam: '#eaf8fb',
   /** restored ground that isn't lawn ('' = use the stage grass) */
   alive: { lawn: '', paving: '#b4afa5', road: '#6c675e', water: '#5cc6e6', clay: '', litter: '', obstacle: '#d6d0c6', sand: '#e6d3a0' } as Record<string, string>,
