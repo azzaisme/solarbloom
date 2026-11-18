@@ -84,6 +84,9 @@ export class KeeperVisuals {
     const v: KeeperView = { def, root, body, standIn: true, x: def.x + 0.5, z: def.z + 0.5, wait: 2, path: [], facing: Math.PI, waveUntil: 0 };
     const own = KEEPER_URLS[`../../assets/raw/models/final/keeper-${def.id}.glb`];
     v.standIn = !own;
+    // registered before loading: a model the library already holds comes back synchronously, inside this call, and
+    // a Keeper not yet in `views` would throw its rig away (Pylon, in Mast Row, never got its body)
+    this.views.set(def.id, v);
     this.app.assets.loadFromUrl(own ?? STAND_IN_URL, 'container', (err, asset) => {
       if (err || !asset || !this.views.has(def.id)) return;
       const res = asset.resource as pc.ContainerResource;
