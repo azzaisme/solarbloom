@@ -23,6 +23,12 @@ describe('E21.12: the walking bot\'s first fifteen minutes', () => {
       // every step, in order, none skipped, through to a Keeper awake
       expect(r.steps).toEqual(Array.from({ length: FIRST_STEPS }, (_, i) => i));
       expect(r.firsts.keeper).toBeDefined();
+      // E23.3 (#480): the Solar Panel bloombot built joins the grid and supplies power
+      if (r.grid) {
+        console.log(`  grid: solar panel on a network ${r.grid.onNetwork}, supply ${r.grid.supply.toFixed(1)} W`);
+        expect(r.grid.onNetwork).toBe(true);
+        expect(r.grid.supply).toBeGreaterThan(0);
+      }
       // E23.10.1 (#405): never stranded at zero charge (checked once E23.2.1's charge is on the sim)
       if (r.charge) {
         console.log(`  charge: lowest ${r.charge.min.toFixed(2)} · ${r.charge.atZero.toFixed(0)} s at zero · ${r.charge.stranded.toFixed(0)} s stranded`);
