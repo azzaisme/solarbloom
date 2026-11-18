@@ -1,6 +1,7 @@
 import { PARK } from '../core/Areas';
 import { regionOfCell } from '../core/OldCityLayout';
-import type { MachineData, PlanterState, WeatherKind } from '../core/types';
+import type { MachineData, PlanterState } from '../core/types';
+import type { WeatherKind } from '../data/weather';
 import { CROP_HOMES, CROP_IDS, CROPS, PLANTER, SEED_FINDS, STARTING_CROPS, type CropId, type Like } from '../data/crops';
 import { DAY_SECONDS } from '../data/time';
 import { machineStrengthAt } from '../core/RegionStrengths';
@@ -8,18 +9,13 @@ import type { Sim } from './Sim';
 
 /**
  * What the farm borrows from other sub-epics, each optional until it lands: watering from E23.4 (`sim.water`) and
- * the weather from E23.7.2. Without them every planter is watered and the weather is whatever E21's state holds
- * (clear when unset). Day and night come from E23.7.1's game clock (`sim.clock`).
+ * the weather from E23.7.2 (`sim.weather`; classic games have calm sunny days).
+ * Without water every planter is watered. Day and night come from E23.7.1's game clock (`sim.clock`).
  */
 type At = { roofId: string; x: number; z: number };
 interface FarmHooks {
   water?: { isWatered?(t: At): boolean; isRunning?(t: At): boolean; drawNear?(t: At, units: number): number };
-  /** E23.7.2's weather: its own kinds (sunny, wind, storm, fog), and how fast planters dry (0 when the sky waters them) */
-  weather?: { kind?(): string; effects?(): { planterDrying?: number } };
 }
-
-/** E23.7.2's weather kinds in E21's words (storms count as rain; they also blow). */
-const SKY: Record<string, WeatherKind> = { sunny: 'clear', clear: 'clear', cloudy: 'cloudy', rain: 'rain', storm: 'rain', wind: 'windy', windy: 'windy', fog: 'mist', mist: 'mist' };
 
 /** Why a planter is (or isn't) growing right now, for tests, tooltips and the crop visuals. */
 export interface PlanterLook {
@@ -97,7 +93,7 @@ export class FarmSystem {
   // ───────────── the world around a planter ─────────────
 
   isWatered(m: MachineData): boolean {
-    if (this.weather() === 'rain') return true;
+    if (this.sky().rain > 0) return true; // rain and storms water every planter
     return this.hooks.water?.isWatered?.(m) ?? true;
   }
 
@@ -109,15 +105,14 @@ export class FarmSystem {
     return this.sim.clock.gameIsNight();
   }
 
+  /** E23.7.2's weather today (sunny, cloudy, rain, wind, storm, fog). */
   weather(): WeatherKind {
-    const k = this.hooks.weather?.kind?.();
-    if (k !== undefined) return SKY[k] ?? 'cloudy';
-    return this.sim.state.salvage?.weather?.kind ?? 'clear';
+    return this.sim.weather.kind();
   }
 
-  /** E23.7.2: a storm blows as well as rains (wind-loving crops count it as windy). */
-  private stormy(): boolean {
-    return this.hooks.weather?.kind?.() === 'storm';
+  /** E23.7.2's effects today (rain, planterDrying, ...). */
+  private sky() {
+    return this.sim.weather.effects();
   }
 
   /** Water drunk but not yet drawn from the network, per planter (fractions of a unit; not saved). */
@@ -127,7 +122,7 @@ export class FarmSystem {
   private drink(m: MachineData, days: number) {
     const w = this.hooks.water;
     if (!w?.drawNear) return;
-    const drying = this.hooks.weather?.effects?.().planterDrying ?? (this.weather() === 'rain' ? 0 : 1);
+    const drying = this.sky().planterDrying;
     const want = (this.thirst.get(m.id) ?? 0) + PLANTER.waterPerDay * drying * days;
     const whole = Math.floor(want);
     if (whole > 0) w.drawNear(m, whole);
@@ -183,11 +178,11 @@ export class FarmSystem {
     const w = this.weather();
     switch (like) {
       case 'sun':
-        return !this.isNight() && (w === 'clear' || w === 'windy');
+        return !this.isNight() && (w === 'sunny' || w === 'wind');
       case 'rain':
-        return w === 'rain';
+        return w === 'rain' || w === 'storm'; // a storm rains as well as blows
       case 'wind':
-        return w === 'windy' || this.stormy();
+        return w === 'wind' || w === 'storm';
       case 'shade':
         return this.shaded(m);
       case 'trellis':

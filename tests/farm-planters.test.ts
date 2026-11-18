@@ -123,16 +123,23 @@ describe('E23.5.2.1: planter growth', () => {
     expect(drawn).toBe(0);
   });
 
-  it('reads E23.7’s weather kinds: storms rain and blow, fog is mist', () => {
+  it('reads E23.7’s weather: storms rain and blow, fog is neither sunny nor wet', () => {
     const sim = farm();
     const m = planter(sim, 12, 16);
-    let kind = 'storm';
-    (sim as unknown as { weather: unknown }).weather = { kind: () => kind };
-    expect(sim.farm.weather()).toBe('rain');
+    sow(sim, m, 'radish');
+    (sim as unknown as { water: { isWatered(): boolean } }).water = { isWatered: () => false };
+    at(sim, 0.2); // morning
+    sim.weather.forceForTest('storm', 1e9);
+    expect(sim.farm.weather()).toBe('storm');
+    expect(sim.farm.likeMet(m, 'rain')).toBe(true);
     expect(sim.farm.likeMet(m, 'wind')).toBe(true);
-    kind = 'fog';
-    expect(sim.farm.weather()).toBe('mist');
-    kind = 'sunny';
+    expect(sim.farm.look(m).wilting).toBe(false);
+    sim.weather.forceForTest('fog', 1e9);
+    expect(sim.farm.likeMet(m, 'sun')).toBe(false);
+    expect(sim.farm.likeMet(m, 'rain')).toBe(false);
+    expect(sim.farm.look(m).wilting).toBe(true);
+    sim.weather.forceForTest('sunny', 1e9);
+    expect(sim.farm.likeMet(m, 'sun')).toBe(true);
     expect(sim.farm.likeMet(m, 'rain')).toBe(false);
   });
 
@@ -142,7 +149,7 @@ describe('E23.5.2.1: planter growth', () => {
     sow(sim, m, 'radish');
     (sim as unknown as { water: { isWatered(): boolean } }).water = { isWatered: () => false };
     expect(sim.farm.look(m).wilting).toBe(true);
-    sim.state.salvage!.weather = { kind: 'rain', until: 1e9 };
+    sim.weather.forceForTest('rain', 1e12);
     expect(sim.farm.look(m).wilting).toBe(false);
   });
 
@@ -169,11 +176,11 @@ describe('E23.5.2.2: every crop’s likes change its growth', () => {
   /** Puts a planter in each condition for a like (true = met). */
   const set: Record<Like, (sim: Sim, m: MachineData, on: boolean) => void> = {
     sun: (sim, _m, on) => {
-      sim.state.salvage!.weather = { kind: on ? 'clear' : 'cloudy', until: 1e9 };
+      sim.weather.forceForTest(on ? 'sunny' : 'cloudy', 1e9);
       at(sim, 0.2); // morning
     },
-    rain: (sim, _m, on) => void (sim.state.salvage!.weather = { kind: on ? 'rain' : 'clear', until: 1e9 }),
-    wind: (sim, _m, on) => void (sim.state.salvage!.weather = { kind: on ? 'windy' : 'cloudy', until: 1e9 }),
+    rain: (sim, _m, on) => void (sim.weather.forceForTest(on ? 'rain' : 'sunny', 1e9)),
+    wind: (sim, _m, on) => void (sim.weather.forceForTest(on ? 'wind' : 'cloudy', 1e9)),
     shade: (sim, m, on) => {
       const t = sim.grid.get(GROUND, m.x + 1, m.z)!;
       t.blocked = on;
@@ -297,7 +304,7 @@ describe('E23.5.2.2 × E23.7.1: growth follows the game clock', () => {
       const sim = farm();
       sim.clock.now = () => new Date(2026, 10, 18, hour, 0, 0);
       sim.clock.real = real;
-      sim.state.salvage!.weather = { kind: 'clear', until: 1e9 };
+      sim.weather.forceForTest('sunny', 1e12);
       const m = planter(sim, 12, 16);
       sow(sim, m, crop);
       const t0 = sim.time;

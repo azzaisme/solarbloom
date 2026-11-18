@@ -113,7 +113,7 @@ describe('E23.7.1.1: every timer counts in game days', () => {
       sim.clock.now = () => new Date(); // the faked real clock
       sim.clock.real = real;
       sim.state.salvage!.tier = 1;
-      sim.state.salvage!.weather = { kind: 'clear', until: 1e12 };
+      sim.weather.forceForTest('sunny', 1e12);
       const t = sim.grid.get(GROUND, 12, 16)!;
       t.blocked = false;
       t.feature = undefined;
