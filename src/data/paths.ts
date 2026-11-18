@@ -50,7 +50,7 @@ export const PATHS = {
   /** the decal's edge: this share of the width blends into the grass */
   edgeBlend: 0.25,
   /** the decal sits this far above the ground (no z-fighting) */
-  lift: 0.015,
+  lift: 0.025,
   /** moss and flowers creep onto a path's edges: a clump every this many tiles along each edge once fully crept,
    *  creeping in over this many game days (a game day is 2880 s of play) */
   creepEvery: 0.9,

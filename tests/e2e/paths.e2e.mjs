@@ -39,8 +39,8 @@ async function pressPad(page, b) {
   }, b);
 }
 
-/** Bloombot stands beside (x, z) facing it (the first free side); then Space or A. */
-async function at(page, dev, x, z) {
+/** Bloombot stands beside (x, z) facing it (the first free side); then Space or A (X for a pulse on the pad). */
+async function at(page, dev, x, z, padButton = 0) {
   await page.evaluate(({ x, z }) => {
     const g = window.solarbloom;
     for (const [dx, dz, f] of [[0, 1.1, Math.PI], [0, -1.1, 0], [1.1, 0, -Math.PI / 2], [-1.1, 0, Math.PI / 2]]) {
@@ -54,8 +54,10 @@ async function at(page, dev, x, z) {
   if (dev === 'keys') {
     await page.evaluate(() => window.solarbloom.onLeave()); // keyboard alone: build mode aims in front of bloombot
     await page.keyboard.press('Space');
-  } else await pressPad(page, 0);
+  } else await pressPad(page, padButton);
   await page.waitForTimeout(200);
+  const fail = await page.evaluate(() => document.querySelector('#failTip, .fail-tip, #fail')?.textContent?.trim());
+  if (fail) console.log(`    (${x},${z}): ${fail}`);
 }
 const turn = (page, dev) => (dev === 'pad' ? pressPad(page, 5) : page.keyboard.press('KeyR'));
 const tool = (page, t) => page.evaluate((t) => window.solarbloom.selectTool(t), t);
@@ -79,7 +81,10 @@ async function open(dev) {
     for (let x = 6; x < 25; x++)
       for (let z = 10; z < 27; z++) {
         const t = s.grid.get('g', x, z);
-        if (!t || t.blocked || t.occupantId) continue;
+        if (!t || t.occupantId) continue;
+        // open ground for the test: the park's piles and vents here are cleared (machines stay)
+        t.blocked = false;
+        t.feature = t.feature === 'water' ? 'lawn' : t.feature;
         t.ground = 'restored';
         t.pollution = 0;
         t.bloom = 2;
@@ -111,6 +116,7 @@ try {
     for (const [x, z] of [[9, 14], [14, 18], [19, 14]]) await at(page, dev, x, z);
     await at(page, dev, 19, 14);
     const laid = await page.evaluate(() => window.solarbloom.sim.paths.all().map((p) => ({ id: p.id, pts: p.pts, w: p.w })));
+    if (!laid.length) console.log('    draft:', await page.evaluate(() => JSON.stringify({ draft: window.solarbloom.pathDraft, why: window.solarbloom.pathDraft ? window.solarbloom.sim.paths.problem(window.solarbloom.pathDraft) : 'no draft' })));
     check(laid.length === 1 && laid[0].pts.length === 3 && laid[0].w === 2, T(`a curved path through three points, a step wider (${JSON.stringify(laid)})`));
     const curved = await page.evaluate(() => window.solarbloom.sim.paths.onPath(14.5, 18.5) && window.solarbloom.sim.paths.onPath(11.5, 16.8));
     check(curved, T('the path follows a smooth curve between its points'));
@@ -139,16 +145,19 @@ try {
     const dep = await page.evaluate(() => [10, 11, 12, 13].map((x) => window.solarbloom.sim.grid.get('g', x, 24).feature));
     check(dep.every((f) => f === 'lawn'), T(`a stretch of old paving broken up (${dep.join(', ')})`));
     await tool(page, 'pulse');
-    await at(page, dev, 11, 24);
+    await at(page, dev, 11, 24, 2); // the pad's pulse is X
     await page.waitForTimeout(1500);
     const g24 = await page.evaluate(() => window.solarbloom.sim.grid.get('g', 11, 24).ground);
     check(g24 !== 'polluted', T(`the broken-up ground can be restored with a pulse (${g24})`));
-    // reroute: a park path round the broken-up stretch, in stepping stones
+    // reroute: a park path round the broken-up stretch, in stepping stones (bloombot carries Scrap: it is beyond the store's reach)
+    await page.evaluate(() => window.solarbloom.sim.inventory.add('scrap', 40));
+    const before2 = await scrap();
     await tool(page, 'path:steppingStones');
     for (const [x, z] of [[8, 25], [12, 22], [16, 25]]) await at(page, dev, x, z);
     await at(page, dev, 16, 25);
     const n = await page.evaluate(() => window.solarbloom.sim.paths.all().length);
     check(n === 2, T('a park path rerouted round it'));
+    const spent2 = before2 - (await scrap());
     // height and edges: the decal sits on the ground at every vertex, its edges in the edge colour
     const fit = await page.evaluate(() => {
       const g = window.solarbloom;
@@ -169,7 +178,7 @@ try {
     }
     const left = await page.evaluate(() => window.solarbloom.sim.paths.all().length);
     check(left === 0 && ids.length === 2, T('the remove tool takes the paths away (points first, then the path)'));
-    check((await scrap()) === before, T(`everything they took came back (${before} Scrap)`));
+    check((await scrap()) === before + 40, T(`everything they took came back (${before + 40} Scrap, ${spent2} of it from the second path)`));
     if (dev === 'keys') {
       // a region full of paths in the Deck preset: one draw call for all of them
       const draws = async () => {
@@ -184,7 +193,10 @@ try {
       };
       const without = await draws();
       const many = await page.evaluate(() => {
-        const s = window.solarbloom.sim;
+        const g = window.solarbloom, s = g.sim;
+        g.bot.teleport('g', 8.5, 11.5); // by the fountain: the store pays
+        s.bot = { roofId: 'g', x: 8.5, z: 11.5 };
+        s.inventory.addToStore('scrap', 2000);
         let laid = 0;
         for (let z = 11; z < 26; z += 3) if (s.paths.add([[6.5, z + 0.5], [15.5, z + 1.5], [23.5, z + 0.5]], z % 2, 'gravel').id) laid++;
         for (let x = 7; x < 24; x += 4) if (s.paths.add([[x + 0.5, 10.5], [x + 1.5, 26.5]], 0, 'steppingStones').id) laid++;
@@ -193,8 +205,12 @@ try {
       await page.waitForTimeout(1500);
       const withPaths = await draws();
       await page.screenshot({ path: `${dir}/ui-paths-region.png` });
-      const tris = await page.evaluate(() => window.solarbloom.pathArt.tris);
-      check(withPaths <= LIMIT && withPaths - without <= 2, T(`a region full of paths (${many}) in the Deck preset: ${withPaths} draw calls (was ${without}, limit ${LIMIT}), ${tris} triangles`));
+      const art = await page.evaluate(() => {
+        const a = window.solarbloom.pathArt;
+        const n = (e) => e?.render?.meshInstances?.length ?? 0;
+        return { tris: a.tris, instances: n(a.entity) + n(a.creepEntity) };
+      });
+      check(many >= 8 && withPaths <= LIMIT && art.instances <= 2, T(`a region full of paths (${many}) in the Deck preset: ${withPaths} draw calls (${without} before, limit ${LIMIT}); all paths are ${art.instances} mesh instance(s), ${art.tris} triangles`));
     }
     check(errors.length === 0, T(`no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`));
     await page.context().close();

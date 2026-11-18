@@ -1566,6 +1566,11 @@ export class ChunkRenderer {
     }
     const top = h + 0.08;
     if (f === 'water') return this.waterTile(b, t, h, x, z, r);
+    // E23.6.7: under a path the ground is plain (no grass or flowers poking through its decal)
+    if (t.roofId === GROUND && this.sim.paths?.pathAt(t.x, t.z)) {
+      this.slab(b, t.ground === 'restored' ? PALETTE.soil : dead[t.variant % dead.length], [x, h, z], [1, 0.16, 1]);
+      return;
+    }
     switch (t.ground) {
       case 'polluted': {
         const shade = t.pollution > 80 ? dead[(t.variant + 1) % dead.length] : dead[t.variant % dead.length];

@@ -359,6 +359,18 @@ export class Game {
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
     this.overgrowthArt = new OvergrowthVisuals(this.sim, this.scene.world, () => this.app.graphicsDevice);
     this.pathArt = new PathVisuals(this.sim, this.scene.world, () => this.app.graphicsDevice);
+    // E23.6.7: a path laid, reshaped or removed: the ground under its old and new tiles is redrawn
+    let pathTiles = new Set<string>();
+    this.sim.bus.on('paths.changed', () => {
+      const now = new Set<string>();
+      for (const p of this.sim.paths.all()) for (const k of this.sim.paths.tiles(p).keys()) now.add(k);
+      for (const k of new Set([...pathTiles, ...now])) {
+        const [x, z] = k.split(',').map(Number);
+        const t = this.sim.grid.get(GROUND, x, z);
+        if (t) this.chunks.markTile(t);
+      }
+      pathTiles = now;
+    });
     this.sim.bus.on('paths.depaved', ({ x, z }) => {
       const t = this.sim.grid.get(GROUND, x, z);
       if (t) this.chunks.markTile(t);

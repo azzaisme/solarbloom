@@ -50,6 +50,7 @@ export class PathVisuals {
     m.useMetalness = true;
     m.metalness = 0;
     m.gloss = 0.15;
+    m.cull = pc.CULLFACE_NONE; // a flat decal: drawn whichever way its triangles wind
     m.update();
     return (this.material = m);
   }
