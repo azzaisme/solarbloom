@@ -112,6 +112,12 @@ export interface Settings {
   showNumbers?: boolean;
   /** E19.4.3 (#262): the potter-about pace: no objective nudges or advisor tips, softer chains. Presentation only. */
   potter?: boolean;
+  /** E21.22: the camera: how fast it turns (percent), inverted axes, no drift back behind bloombot, no vistas */
+  camSensitivity?: number;
+  invertX?: boolean;
+  invertY?: boolean;
+  noRecentre?: boolean;
+  noVistas?: boolean;
   /** Bloombot (G.16): rebound keys and gamepad buttons (only what differs from the default map). */
   keys?: SavedBindings['keys'];
   pad?: SavedBindings['pad'];
@@ -279,6 +285,11 @@ export class Hud {
         <label>Show numbers (rates, income, time to afford) <input type="checkbox" data-set="showNumbers"></label>
         <label>Potter about (no nudges or tips, gentler chains) <input type="checkbox" data-set="potter"></label>
         <label>Tutorial hints <input type="checkbox" data-set="hints"></label>
+        <label>Camera speed <select id="camSensSel" aria-label="Camera speed"><option value="50">Slow</option><option value="75">Gentle</option><option value="100">Normal</option><option value="150">Quick</option><option value="200">Fast</option></select></label>
+        <label>Invert camera left and right <input type="checkbox" data-set="invertX"></label>
+        <label>Invert camera up and down <input type="checkbox" data-set="invertY"></label>
+        <label>Keep the view where I turn it <input type="checkbox" data-set="noRecentre"></label>
+        <label>Skip region vistas <input type="checkbox" data-set="noVistas"></label>
         <label>Debug / FPS (F3) <input type="checkbox" data-set="debug"></label>
         <div id="controlsBox" class="controls"></div>
         <div class="stats" id="statsBox"></div>
@@ -359,6 +370,9 @@ export class Hud {
     const uis = $<HTMLSelectElement>(r, '#uiScaleSel');
     uis.value = String(this.settings.uiScale ?? 100);
     uis.addEventListener('change', () => this.cb.setSetting('uiScale', Number(uis.value)));
+    const cs = $<HTMLSelectElement>(r, '#camSensSel'); // E21.22
+    cs.value = String(this.settings.camSensitivity ?? 100);
+    cs.addEventListener('change', () => this.cb.setSetting('camSensitivity', Number(cs.value)));
     r.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => {
       const key = inp.dataset.set as keyof Settings;
       inp.checked = !!this.settings[key];

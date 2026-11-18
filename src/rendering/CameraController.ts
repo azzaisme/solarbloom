@@ -51,6 +51,27 @@ export interface CameraSnapshot {
   held: boolean;
 }
 
+/**
+ * E21.22 (§14): the exploration camera. The epic's zoom steps (close 2.4, normal 3.2 = today's, far 5.0) are
+ * distances relative to today's view; this camera's zoom is the inverse (bigger is closer), so each step's zoom
+ * is 3.2 × 3.2 / distance. Pitch 20°–60° (default 35°), 0.15 s follow smoothing, 1.5 tiles of look-ahead,
+ * a drift back behind bloombot after 3 s of walking with no camera input.
+ */
+export const EXPLORE = {
+  pitchMin: 20,
+  pitchMax: 60,
+  pitch: 35,
+  distances: [2.4, 3.2, 5.0],
+  zoomSteps: [(3.2 * 3.2) / 2.4, 3.2, (3.2 * 3.2) / 5.0],
+  smoothing: 0.15,
+  lead: 1.5,
+  recentreAfter: 3,
+  /** degrees a second the view drifts back behind bloombot */
+  recentreSpeed: 60,
+  /** the camera stays at least this far above the ground under it */
+  clearance: 0.6,
+};
+
 export class CameraController {
   readonly entity: pc.Entity;
   readonly target = new pc.Vec3(4, 0, 4);
@@ -83,6 +104,16 @@ export class CameraController {
   pitchOffset = 0;
   /** E19.4.1: photo mode holds the view: glides, follows and eased zooms from the game leave it alone. */
   held = false;
+  /** E21.22: the exploration camera is on (bloombot play): pitch is the player's, not the zoom's */
+  explore = false;
+  /** E21.22: the pitch the view eases to (degrees, EXPLORE.pitchMin–pitchMax) */
+  pitchGoal = EXPLORE.pitch;
+  private explorePitch = EXPLORE.pitch;
+  /** E21.22: the look-ahead (world units), eased */
+  private lead = new pc.Vec3();
+  private leadGoal = new pc.Vec3();
+  /** E21.22: the ground's height under a point (world y), so the camera never ends below it */
+  ground?: (x: number, z: number) => number;
 
   constructor(
     private app: pc.AppBase,
@@ -176,7 +207,7 @@ export class CameraController {
     this.anchor = undefined;
     this.goal.set(x, y, z);
     this.clamp();
-    this.follow = this.reducedMotion ? 30 : 7;
+    this.follow = this.reducedMotion ? 30 : this.explore ? 1 / EXPLORE.smoothing : 7; // E21.22: 0.15 s smoothing
   }
 
   /** Bloombot: ease to a zoom without moving the view or changing how it follows. */
@@ -191,6 +222,21 @@ export class CameraController {
   }
 
   /** Bloombot: turn the view around its target by some degrees (positive moves the camera to its right). */
+  /** E21.22: tilts the view (degrees; positive looks down more), within 20°–60°. */
+  pitchBy(degrees: number) {
+    this.pitchGoal = pc.math.clamp(this.pitchGoal + degrees, EXPLORE.pitchMin, EXPLORE.pitchMax);
+  }
+
+  /** E21.22: the look-ahead: where bloombot is walking (world units from it). */
+  setLead(x: number, z: number) {
+    this.leadGoal.set(x, 0, z);
+  }
+
+  /** E21.22: the pitch the view has now (exploration camera). */
+  get explorePitchNow(): number {
+    return this.explorePitch;
+  }
+
   /** E21.24: where the view is turning to (degrees). */
   get heading(): number {
     return this.yawGoal;
@@ -386,6 +432,11 @@ export class CameraController {
   }
 
   update(dt: number) {
+    if (this.explore) {
+      const e = this.reducedMotion ? 1 : 1 - Math.exp(-dt / EXPLORE.smoothing);
+      this.explorePitch += (this.pitchGoal - this.explorePitch) * e;
+      this.lead.lerp(this.lead, this.leadGoal, e);
+    }
     if (!this.cinematic) {
       const k = 1 - Math.exp(-dt * this.follow);
       this.zoom += (this.zoomGoal - this.zoom) * k;
@@ -434,6 +485,7 @@ export class CameraController {
     const n = this.nearness();
     const k = smooth(pc.math.clamp((this.zoom - VIEW.nearZoom) / (VIEW.closeZoom - VIEW.nearZoom), 0, 1));
     this.pitch = VIEW.farPitch + (VIEW.nearPitch - VIEW.farPitch) * n + (VIEW.closePitch - VIEW.nearPitch) * k;
+    if (this.explore && !this.pitchOffset) this.pitch = this.explorePitch; // E21.22: the player's pitch
     if (this.pitchOffset) this.pitch = pc.math.clamp(this.pitch + this.pitchOffset, 6, 80);
     this.fov = VIEW.farFov + (VIEW.nearFov - VIEW.farFov) * n + (VIEW.closeFov - VIEW.nearFov) * k;
     this.viewHeight = this.fitHeight() / this.zoom;
@@ -447,13 +499,21 @@ export class CameraController {
     // the city behind it. The sky dome and the skyline are a backdrop that fits itself inside (Look 4.7, 4.8).
     c.farClip = this.dist + this.hazeEnd + 10;
     const yr = (this.yaw * Math.PI) / 180;
-    const pr = (this.pitch * Math.PI) / 180;
-    const t = this.target;
-    this.entity.setPosition(
-      t.x + this.dist * Math.cos(pr) * Math.sin(yr),
-      t.y + this.dist * Math.sin(pr),
-      t.z + this.dist * Math.cos(pr) * Math.cos(yr),
-    );
+    const t = this.explore ? new pc.Vec3(this.target.x + this.lead.x, this.target.y, this.target.z + this.lead.z) : this.target;
+    // E21.22: the camera never ends below the ground (it tilts up over a rise instead of pushing in)
+    let pitch = this.pitch;
+    for (let i = 0; i < 40; i++) {
+      const pr = (pitch * Math.PI) / 180;
+      const x = t.x + this.dist * Math.cos(pr) * Math.sin(yr);
+      const z = t.z + this.dist * Math.cos(pr) * Math.cos(yr);
+      const y = t.y + this.dist * Math.sin(pr);
+      if (!this.explore || !this.ground || y >= this.ground(x, z) + EXPLORE.clearance || pitch >= 85) {
+        this.entity.setPosition(x, y, z);
+        break;
+      }
+      pitch += 2;
+    }
+    this.pitch = pitch;
     this.entity.lookAt(t);
     this.markDirty();
   }

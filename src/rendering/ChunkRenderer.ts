@@ -469,6 +469,8 @@ const TALL_DROP = 2;
  */
 export class ChunkRenderer {
   private views = new Map<string, ChunkView>();
+  /** E21.22: how far a building in front of the view fades (the Old City's exploration camera: to 30%) */
+  fadeTo = TOWER_FADE.opacity;
   private root: pc.Entity;
   reducedMotion = false;
   /** Max chunk meshes rebuilt per frame (keeps frames smooth while panning or during big chains). */
@@ -1083,7 +1085,8 @@ export class ChunkRenderer {
         const whole = s.grid.peek(GROUND, p.x, p.z)?.feature === 'building' && s.grid.peek(GROUND, p.x + p.w - 1, p.z + p.d - 1)?.feature === 'building';
         if (!whole) continue;
         const bh = h + s.grid.groundOffset(GROUND, p.x, p.z); // E21.24: on its terrace
-        if (p.storeys >= 6 && !v.far && fog !== 'hidden') towers.push(this.tower(p, bh, fog === 'cleared', b.grey));
+        // E21.22: in the Old City every near building can fade (one standing between the camera and bloombot)
+        if ((p.storeys >= 6 || s.grid.terraced(GROUND)) && !v.far && fog !== 'hidden') towers.push(this.tower(p, bh, fog === 'cleared', b.grey));
         else this.building(b, p, bh, fog === 'cleared', v.far);
       }
     }
@@ -2017,7 +2020,7 @@ export class ChunkRenderer {
    * ground there: the cursor and the middle of the view. A tower standing in front of one fades to a ghost; it
    * comes back when it no longer covers any. Called once per frame.
    */
-  fadeTowers(dt: number, cam: pc.CameraComponent, points: { x: number; y: number; depth: number }[]) {
+  fadeTowers(dt: number, cam: pc.CameraComponent, points: { x: number; y: number; depth: number }[], through?: pc.Vec3) {
     const eye = cam.entity.getPosition();
     const fwd = cam.entity.forward;
     const a = new pc.Vec3();
@@ -2042,7 +2045,9 @@ export class ChunkRenderer {
             if (Math.hypot(p.x - (a.x + sx * u), p.y - (a.y + sy * u)) < half) cover = true;
           }
         }
-        t.to = cover ? TOWER_FADE.opacity : 1;
+        // E21.22: anything standing between the camera and bloombot fades (a world-space test of the sight line)
+        if (!cover && through && blocksSight(eye, through, t)) cover = true;
+        t.to = cover ? this.fadeTo : 1;
         if (Math.abs(t.to - t.a) < 0.004) {
           if (t.a === t.to) continue;
           t.a = t.to;
@@ -2531,4 +2536,16 @@ export class ChunkRenderer {
 
 function dist(v: ChunkView, f: { x: number; z: number }) {
   return Math.hypot(v.cx * CHUNK + 8 - f.x, v.cz * CHUNK + 8 - f.z);
+}
+
+/** E21.22: does the sight line from the eye to a point pass through a building's box (its footprint, base to top)? */
+export function blocksSight(eye: { x: number; y: number; z: number }, to: { x: number; y: number; z: number }, t: { x: number; z: number; r: number; base: number; top: number }): boolean {
+  for (let i = 1; i < 40; i++) {
+    const k = i / 40;
+    const x = eye.x + (to.x - eye.x) * k;
+    const y = eye.y + (to.y - eye.y) * k;
+    const z = eye.z + (to.z - eye.z) * k;
+    if (Math.abs(x - t.x) <= t.r && Math.abs(z - t.z) <= t.r && y >= t.base && y <= t.top) return true;
+  }
+  return false;
 }
