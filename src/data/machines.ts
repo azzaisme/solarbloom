@@ -151,6 +151,17 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     blurb: 'Turns on windy days and in storms. It catches more wind on high ground.',
     oldCity: true,
   },
+  // E23.3.3: bloombot sits on it to recharge from the grid.
+  charger: {
+    type: 'charger',
+    name: 'Charger',
+    icon: '🔌',
+    size: 1,
+    cost: {},
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'A pad on the grid. Sit on it and bloombot fills up fast.',
+    oldCity: true,
+  },
   core: {
     type: 'core',
     name: 'Rooftop Core',
@@ -164,7 +175,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
 
 export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
 /** E21.3: the old-city build list (the classic list plus the Storage Chest and the Reclaimer). */
-export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'battery', 'pollinator', 'droneHub', 'reclaimer', 'windTurbine', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'battery', 'charger', 'pollinator', 'droneHub', 'reclaimer', 'windTurbine', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

@@ -89,6 +89,11 @@ export class PowerGrid {
     this.register('solar', { source: (m, s, sky) => POWER.solar.output * sky.solar * regionBoost(s, m, 'solar') });
     this.register('battery', { battery: { capacity: POWER.battery.capacity, rate: POWER.battery.rate } });
     this.register('windTurbine', { source: (m, s, sky) => windOutput(s, m, sky) });
+    // E23.3.3: helpers run on the grid (old-city rules only; the classic game keeps its energy economy).
+    if (sim.oldCity) {
+      this.register('droneHub', { consumer: { shed: 'helper', draw: POWER.helper.droneHub } });
+      this.register('cultivator', { consumer: { shed: 'helper', draw: POWER.helper.cultivator } });
+    }
   }
 
   /** Adds (or merges into) a machine type's role. Types need not exist yet (other sub-epics add them). */

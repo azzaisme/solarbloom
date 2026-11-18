@@ -61,6 +61,8 @@ interface MachineView {
   wispAt?: number;
   /** E23.3.2: a wind turbine's rotor angle (degrees), turned by its output */
   turn?: number;
+  /** E23.3.3: the status light's own material (it goes dark while the machine has no power) */
+  lightOn?: pc.Material;
   /** Look 3.12 Core gazebo: the vines on its arch (dry while dormant), their leaf material, and the flowers */
   vines?: pc.Entity;
   vineMat?: pc.StandardMaterial;
@@ -567,6 +569,9 @@ export class MachineVisuals {
         break;
       case 'windTurbine':
         this.windTurbine(v);
+        break;
+      case 'charger':
+        this.charger(v);
         break;
     }
     this.applyModel(v);
@@ -1560,6 +1565,26 @@ export class MachineVisuals {
     }
   }
 
+  /**
+   * E23.3.3 Charger: a low round cream pad bloombot sits on, with a gold rim and an inlaid glow ring that lights
+   * when the pad has power and breathes while it charges. A short mast at the back carries a leaf and a status light.
+   */
+  private charger(v: MachineView) {
+    const b = v.body;
+    part(b, rcyl(0.44, 0, 0.08, 0.03, 0.01, 24), cream(), { shadow: true });
+    part(b, rcyl(0.445, 0.03, 0.04, 0.004, 0.004, 24), creamSeam(), {});
+    part(b, ring(28, 6), gold(), { pos: [0, 0.08, 0], scale: [0.86, 0.06, 0.86] });
+    part(b, rcyl(0.3, 0.08, 0.1, 0.01, 0.005, 20), creamSeam(), {});
+    v.orbs = [part(b, ring(28, 5, 0.12), cellOff(), { pos: [0, 0.1, 0], scale: [0.5, 0.04, 0.5] })];
+    // the mast at the back (away from the camera), with a curled leaf and the status light
+    const mast = group(b, 'mast', [-0.3, 0, -0.3]);
+    part(mast, latheAuto('chargerMast', [[0.05, 0.06], [0.05, 0.12], [0.035, 0.18], [0.03, 0.62], [0.03, 0.62], [0, 0.62]], 10), cream(), { shadow: true });
+    part(mast, rcyl(0.045, 0.34, 0.37, 0.01, 0.01, 10), metal(), {});
+    part(mast, ball(3, 6), leafMat(0), { pos: [0.07, 0.58, 0.02], scale: [0.16, 0.035, 0.07], rot: [0, -40, 20] });
+    v.light = part(mast, ball(5, 8), mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1.2 }), { pos: [0, 0.68, 0], scale: 0.07 });
+    part(b, tube('chargerCable', bezier([-0.3, 0.1, -0.3], [-0.15, 0.04, -0.2], [-0.05, 0.08, -0.1], 6), 0.014, { sides: 6 }), cable(), {});
+  }
+
   /** Reservoir Overflow: the basin spills over with a splash. */
   splash(id: string) {
     const v = this.views.get(id);
@@ -2005,6 +2030,17 @@ export class MachineVisuals {
           v.light!.setLocalScale(s, s, s);
           break;
         }
+        case 'charger': {
+          // The ring lights when the pad has power, and breathes while bloombot charges on it.
+          const on = this.sim.power.isPowered(v.m);
+          const ring = v.orbs![0];
+          const want = on ? cellOn() : cellOff();
+          if (matOf(ring) !== want) setMat(ring, want);
+          const charging = on && this.sim.chargers.charging(v.m);
+          const s = 0.07 + (charging && !rm ? 0.025 * (1 + Math.sin(t * 4)) : 0);
+          v.light!.setLocalScale(s, s, s);
+          break;
+        }
         case 'windTurbine': {
           // Blades turn with the output: still in calm air, brisk in a storm.
           const out = this.sim.power.output(v.m) / POWER.wind.output;
@@ -2047,6 +2083,24 @@ export class MachineVisuals {
           break;
         }
       }
+      this.powerLook(v);
+    }
+  }
+
+  /**
+   * E23.3.3: a machine on the grid that has no power shows it: its status light goes dark (fading with the grid's
+   * eased level), so a dark machine reads at a glance.
+   */
+  private powerLook(v: MachineView) {
+    if (!v.light || v.m.type === 'charger' || !this.sim.power.roleOf(v.m)?.consumer) return;
+    const lv = this.sim.power.level(v.m);
+    if (!v.lightOn) v.lightOn = matOf(v.light);
+    const want = lv < 0.5 ? orbOff() : v.lightOn;
+    if (want && matOf(v.light) !== want) setMat(v.light, want);
+    if (lv < 0.999) {
+      const k = 0.4 + 0.6 * lv;
+      const sc = v.light.getLocalScale();
+      v.light.setLocalScale(sc.x * k, sc.y * k, sc.z * k);
     }
   }
 

@@ -35,6 +35,16 @@ function hub(sim: Sim, x = 12, z = -12): MachineData {
   for (const t of sim.grid.footprint(GROUND, x, z, 2)) if (t) t.occupantId = m.id;
   sim.grid.indexMachine(m);
   sim.drones.spawn(m);
+  // E23.3.3: helpers run on the grid. Two solar panels touching the hub power it (a clear day without E23.7).
+  for (const sx of [x + 2, x + 3]) {
+    const t = sim.grid.get(GROUND, sx, z)!;
+    t.ground = 'restored';
+    t.blocked = false;
+    const p: MachineData = { id: sim.newId('m'), type: 'solar', roofId: GROUND, x: sx, z, size: 1, boostUntil: 0, timer: 0, charge: 0 };
+    sim.state.machines.push(p);
+    t.occupantId = p.id;
+    sim.grid.indexMachine(p);
+  }
   return m;
 }
 /** The cap the store would have without a reward (the reward is put back after). */

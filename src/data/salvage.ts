@@ -99,6 +99,7 @@ export const RECIPES: Partial<Record<BuildableType | 'reclaimer' | 'chest', Reci
   condenser: { cost: { scrap: 12, copper: 6 }, tier: 1 },
   chest: { cost: { timber: 8, scrap: 4 }, tier: 1 },
   battery: { cost: { scrap: 10, copper: 8 }, tier: 1 }, // E23.3.2
+  charger: { cost: { scrap: 6, copper: 4 }, tier: 1 }, // E23.3.3
   windTurbine: { cost: { scrap: 15, timber: 10, copper: 6 }, tier: 2 }, // E23.3.2
   pollinator: { cost: { seeds: 10, timber: 6, biomass: 20 }, tier: 2 },
   droneHub: { cost: { scrap: 20, copper: 15, glass: 10 }, tier: 2 },
@@ -127,7 +128,7 @@ export interface TierDef {
 }
 
 export const TIERS: TierDef[] = [
-  { tier: 1, name: 'Water returns', needs: { parkTiles: 60 }, delivery: { scrap: 20, seeds: 6 }, ability: 'pry', gives: ['Pry', 'Build mode', 'Solar Panel', 'Battery', 'Bloom Relay', 'Water Condenser', 'Storage Chest', 'The house plot'], look: 'trickle' },
+  { tier: 1, name: 'Water returns', needs: { parkTiles: 60 }, delivery: { scrap: 20, seeds: 6 }, ability: 'pry', gives: ['Pry', 'Build mode', 'Solar Panel', 'Battery', 'Bloom Relay', 'Charger', 'Water Condenser', 'Storage Chest', 'The house plot'], look: 'trickle' },
   { tier: 2, name: 'The pump turns', needs: { landmarks: 2 }, delivery: { copper: 30, timber: 30, glass: 20 }, ability: 'hover', gives: ['Hover', 'Pollinator Garden', 'Drone Hub', 'Wind Turbine', 'Reclaimer', 'Stacks of 60'], look: 'flowing' },
   { tier: 3, name: 'The garden climbs', needs: { landmarks: 4 }, delivery: { clay: 40, gears: 30, seeds: 40 }, ability: 'climb', gives: ['Climb', 'Reservoir Garden', 'Mother Tree', 'Stacks of 80'], look: 'lit' },
   { tier: 4, name: 'Light on the roofs', needs: { landmarks: 6 }, delivery: { sunstone: 40, copper: 60, gears: 40 }, ability: 'glide', gives: ['Glide', 'Cultivator', 'Stacks of 120'], look: 'lit' },
