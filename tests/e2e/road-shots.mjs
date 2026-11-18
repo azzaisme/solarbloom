@@ -24,7 +24,7 @@ try {
 
   /** A fresh game on `seed`, with its ground at generation `gen`. */
   const fresh = async (gen) => {
-    await page.goto('http://localhost:4196/');
+    await page.goto('http://localhost:4196/?slot=1');
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom);

@@ -101,7 +101,7 @@ for (const key of pick(process.env.LOOK_SCENES, SCENES)) {
   await page.addInitScript(() => { try { localStorage.clear(); } catch {} });
   await page.clock.install({ time: new Date('2026-06-21T16:30:00') });
   await page.clock.pauseAt(new Date('2026-06-21T16:31:00')); // headroom: the clock runs from install until paused
-  await page.goto(`http://localhost:${PORT}/${query}`, { timeout: 180000 });
+  await page.goto(`http://localhost:${PORT}/${query ? query + '&' : '?'}slot=1`, { timeout: 180000 });
   let booted = false;
   for (let i = 0; i < 300 && !booted; i++) {
     booted = await page.evaluate(() => !!window.solarbloom);

@@ -18,7 +18,7 @@ try {
   const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   page.on('pageerror', (e) => errors.push(`page: ${e}`));
   page.on('console', (m) => m.type() === 'error' && errors.push(`console: ${m.text()}`));
-  await page.goto('http://localhost:4198/?gfx=high');
+  await page.goto('http://localhost:4198/?slot=1&gfx=high');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);

@@ -88,7 +88,9 @@ import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS } from '../data/co
 import { chunkKey } from '../core/Grid';
 import type { Decoration } from '../core/Decor';
 import type { PlotSpot } from '../core/Plots';
-import { type LoadResult, SaveService } from './SaveService';
+import { type LoadResult, SaveService, type Slot } from './SaveService';
+import { Loading, type LoadSteps } from '../ui/Loading';
+import { ModelLibrary, useModels } from '../rendering/Models';
 import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
 import { padStick, PhotoMode } from './PhotoMode';
 import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
@@ -159,7 +161,8 @@ const OLD_DEAD_NAME: Record<string, string> = { sand: 'Dead sand', paving: 'Crac
 export class Game {
   readonly app: pc.Application;
   readonly bus = new EventBus();
-  readonly saver = new SaveService();
+  /** E22.12: this game's save slot */
+  readonly saver: SaveService;
   readonly sim: Sim;
   readonly tweens = new Tweens();
   readonly scene: SceneBuilder;
@@ -273,7 +276,10 @@ export class Game {
   private fastFor = 0;
   private maxDpr = 2;
 
-  constructor(canvas: HTMLCanvasElement, lr: LoadResult = new SaveService().loadResult()) {
+  constructor(canvas: HTMLCanvasElement, lr: LoadResult = new SaveService().loadResult(), opts: { slot?: Slot; device?: 'keys' | 'pad' } = {}) {
+    this.saver = new SaveService(undefined, opts.slot ?? 1);
+    this.saver.headerExtra = () => ({ region: this.regionName() });
+    this.startDevice = opts.device ?? 'keys';
     this.settings = loadSettings();
     rulesViewFromUrl();
     const loaded = lr.state;
@@ -350,6 +356,7 @@ export class Game {
     // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
     // its procedural look. Once they're in, what was already drawn is rebuilt with them.
     const models = createModels(this.app);
+    this.models = models;
     models.onReady = () => {
       this.chunks.markAll();
       this.skyline.useModels(models);
@@ -535,6 +542,7 @@ export class Game {
       if (this.sim.oldCity) this.chunks.fadeTo = 0.3; // E21.22: buildings between the camera and bloombot fade to 30%
       this.camera.ground = (x, z) => this.groundY(x, z);
       this.glyphs.deckBuild = !!desktopApi()?.deck;
+      bot.lastInput = this.startDevice; // E22.12: the title's first input picked the glyph set
       this.hud.setKeyMap('keys', this.bindings);
       // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad).
       const touchOnly = typeof matchMedia !== 'undefined' && !matchMedia('(any-pointer: fine)').matches && navigator.maxTouchPoints > 0;
@@ -604,6 +612,8 @@ export class Game {
     desktopApi()?.onPower?.((s) => this.pause.set('sleep', s === 'suspend'));
     this.pause.onChange = (p) => {
       document.body.classList.toggle('paused', p);
+      // model animations (bloombot, the Keepers) run on the engine's own clock: it stops too
+      this.app.timeScale = p ? 0 : 1;
       this.applyVolumes();
     };
     window.addEventListener('beforeunload', () => this.saveNow());
@@ -836,6 +846,10 @@ export class Game {
           // A newer synchronous save (unload) or a New Game wins over this one.
           if (this.resetting || seq !== this.saveSeq) return;
           const ok = this.saver.write(data);
+          if (ok) {
+            this.saver.writeHeader(this.sim.state);
+            this.showSaved();
+          }
           if (!ok && !this.warnedStorage) {
             this.warnedStorage = true;
             this.hud.toast("Couldn't save your garden: this browser's storage is full or blocked.", '', 6);
@@ -854,13 +868,41 @@ export class Game {
     if (this.resetting) return;
     this.bot?.save();
     this.saveSeq++;
-    this.saver.save(this.sim.state);
+    if (this.saver.save(this.sim.state)) this.showSaved();
   }
 
-  private newGame() {
-    this.resetting = true;
-    this.saver.clear();
-    location.reload();
+  /** E22.12: a leaf in the corner for a second whenever the game saves. */
+  private showSaved() {
+    const leaf = this.hud.root.querySelector<HTMLElement>('#saveLeaf');
+    if (!leaf) return;
+    leaf.classList.add('on');
+    window.clearTimeout(this.leafTimer);
+    this.leafTimer = window.setTimeout(() => leaf.classList.remove('on'), 1000);
+  }
+  private leafTimer = 0;
+  private models?: ModelLibrary;
+  /** the device the title screen was driven with (it picks the first glyph set) */
+  private startDevice: 'keys' | 'pad' = 'keys';
+  private readyFrames = 0;
+  private builtAt = performance.now();
+
+  /**
+   * E22.12: how far the game is from a complete first view, as the loading screen's real steps: the models, the
+   * world (done once this exists), the chunks round bloombot built with those models, and a few frames drawn
+   * with everything in place (shaders compiled).
+   */
+  loadSteps(): LoadSteps {
+    const m = this.models;
+    const total = Math.max(1, ModelLibrary.names().length);
+    // no models to wait for (?models=classic), or they never arrive: don't hold the game for ever
+    const modelsDone = !m || m.ready || !useModels() || performance.now() - this.builtAt > 30000;
+    const loaded = this.chunks.loadedCount;
+    const pending = this.chunks.pending;
+    const view = loaded ? (loaded - pending) / loaded : 0;
+    // the camera has settled on bloombot (its opening zoom is over), so the view that fades in is the view that stays
+    const settled = Math.abs(this.camera.zoom - this.camera.zoomTarget) < 0.02;
+    const viewDone = modelsDone && loaded > 0 && pending === 0 && settled;
+    return { models: modelsDone ? 1 : Math.min(0.99, (m?.loaded.size ?? 0) / total), world: 1, view: viewDone ? 1 : Math.min(0.99, view * (modelsDone ? 1 : 0.5)), shaders: Math.min(1, this.readyFrames / 4) };
   }
 
   /** Freezes or unfreezes the game without the menu (tools, screenshots). */
@@ -881,17 +923,7 @@ export class Game {
     this.settingsUi = new SettingsScreen(this.hud.root, {
       settings: this.settings,
       set: (k, v) => this.changeSetting(k, v),
-      rows: (tab) => [
-        ...settingsRows(tab, { inGame: true, debug: !!this.settings.debug, autoLabel: this.autoLabel(), stats: this.hud.statsHtml() }),
-        // Until the title screen's save slots (E22.12), a new game starts from here, with a second press to confirm.
-        ...(tab === 'game' ? [{ kind: 'button' as const, id: 'newGame', label: this.newGameArmed > performance.now() ? 'Press again to clear your garden' : 'New game', danger: true }] : []),
-      ],
-      button: (id) => {
-        if (id !== 'newGame') return;
-        if (this.newGameArmed > performance.now()) return this.newGame();
-        this.newGameArmed = performance.now() + 4000;
-        this.settingsUi.refresh();
-      },
+      rows: (tab) => settingsRows(tab, { inGame: true, debug: !!this.settings.debug, autoLabel: this.autoLabel(), stats: this.hud.statsHtml() }),
       controls: (body) => this.renderControls(body),
       onClose: () => {
         this.cancelListen();
@@ -901,8 +933,6 @@ export class Game {
     this.menu = new Menu(this.hud.root, { desktop: !!desktopApi()?.quit, header: () => this.menuHeader(), choose: (i) => this.menuChoose(i) });
     this.hud.modalCheck = () => this.menu.isOpen || this.settingsUi.isOpen;
   }
-
-  private newGameArmed = 0;
 
   /** "Auto (High)", "Auto (Steam Deck)": what Auto picked, beside it in Settings › Display. */
   private autoLabel(): string {
@@ -972,7 +1002,9 @@ export class Game {
   }
 
   /** E22.12 names saves; until a slot has a name, this. */
-  saveName = 'My garden';
+  get saveName(): string {
+    return this.saver.readHeader()?.name ?? `Garden ${this.saver.slot}`;
+  }
 
   /** The region bloombot is in, by name. */
   private regionName(): string {
@@ -981,7 +1013,9 @@ export class Game {
     if (b && b.pose.roofId !== GROUND) return 'On a rooftop';
     const id = this.sim.areas.areaOf({ roofId: GROUND, x: Math.floor(at[0]), z: Math.floor(at[2]) });
     if (!id) return 'The city';
-    return id === PARK ? 'The park' : AREA_TYPES[this.sim.areas.info(id).type].name;
+    const info = this.sim.areas.info(id);
+    if (info.region) return this.sim.gates.regionById(info.region)?.name ?? 'The city'; // E21: a region by its own name
+    return id === PARK ? 'The park' : AREA_TYPES[info.type].name;
   }
 
   private menuChoose(i: MenuItem) {
@@ -1014,9 +1048,11 @@ export class Game {
 
   /** "Quit to title" saves first (nothing in the menu loses progress), then goes to the title screen. */
   quitToTitle() {
+    // E22.12: the loading screen covers the way out, as it covered the way in.
+    new Loading(!!this.settings.reducedMotion).show();
     this.saveNow();
     this.resetting = true; // nothing writes after this save
-    location.href = `${location.pathname}?title=1`;
+    setTimeout(() => (location.href = `${location.pathname}?title=1`), 60);
   }
 
   /** E22.4: Settings › Controls (src/ui/ControlsTable.ts). */
@@ -4508,7 +4544,7 @@ export class Game {
     const rect = view;
     if (rect) this.grid.stream(rect);
     this.transitions.sync(this.sim.time + Math.min(this.acc, TUNING.simStep));
-    if (rect) this.chunks.update(dt, rect, this.camera.target, this.camera.zoom);
+    if (rect) this.chunks.update(wdt, rect, this.camera.target, this.camera.zoom); // streams while paused; the wind and growth wait
     detailTextures.step(); // Look 3.1: builds the detail maps a slice per frame after first paint
     const camP = this.camera.entity.getPosition();
     detailTextures.setCamera(camP.x, camP.y, camP.z);
@@ -4551,6 +4587,10 @@ export class Game {
     this.eco?.update(wdt);
     this.tileFx.update(wdt);
     this.frameNo++;
+    if (this.readyFrames < 4) {
+      const s = this.loadSteps();
+      this.readyFrames = s.models === 1 && s.view === 1 ? this.readyFrames + 1 : 0;
+    }
     this.updateChainPresentation(wdt);
     if (!this.cinematic) this.checkCozyUnlocks();
     this.vfx.update(wdt);

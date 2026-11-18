@@ -509,6 +509,13 @@ export class ChunkRenderer {
     return this.views.size;
   }
 
+  /** E22.12: chunks in view still waiting to be built or rebuilt (the loading screen waits for none). */
+  get pending(): number {
+    let n = 0;
+    for (const v of this.views.values()) if (v.dirty || v.fogDirty) n++;
+    return n;
+  }
+
   /** A tile changed: rebuild its chunk (and fog) soon. */
   markTile(t: TileData) {
     if (t.roofId !== GROUND) return;

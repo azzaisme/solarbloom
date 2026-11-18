@@ -12,7 +12,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   page.on('pageerror', (e) => errors.push(`${e.message}\n${e.stack}`));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-  await page.goto('http://localhost:4200/');
+  await page.goto('http://localhost:4200/?slot=1');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);

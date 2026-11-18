@@ -216,7 +216,7 @@ async function shoot(sceneKey, sizeKey) {
   // The fake clock flows in real time after install unless paused: pause it so time moves only by runFor.
   await page.clock.install({ time: new Date('2026-06-21T16:30:00') });
   await page.clock.pauseAt(new Date('2026-06-21T16:30:01'));
-  await page.goto(`http://localhost:${PORT}/${query}`);
+  await page.goto(`http://localhost:${PORT}/${query ? query + '&' : '?'}slot=1`);
   // Boot with the fake clock frozen (the save loads through promises, not timers), so the game always starts
   // at the same fake time; only then do frames begin.
   let booted = false;

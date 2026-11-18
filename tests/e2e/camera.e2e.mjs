@@ -26,7 +26,7 @@ try {
     const page = await browser.newPage({ viewport: { width, height } });
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
-    await page.goto('http://localhost:4198/');
+    await page.goto('http://localhost:4198/?slot=1');
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom);

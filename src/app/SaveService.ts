@@ -4,8 +4,32 @@ import { createInitialState, SAVE_VERSION } from '../core/GameState';
 import type { Grid } from '../core/Grid';
 import { packChunk } from '../core/TilePack';
 import type { GameState } from '../core/types';
+import { TIERS } from '../data/salvage';
 
+/** The single save from before E22.12; it moves to slot 1 the first time the game starts. */
 export const SAVE_KEY = 'solarbloom.save';
+/** E22.12: three save slots. */
+export const SLOT_COUNT = 3;
+export type Slot = 1 | 2 | 3;
+/** A slot's save (`solarbloom.save.1`…`.3`; three files on the Deck). */
+export const slotKey = (slot: Slot) => `${SAVE_KEY}.${slot}`;
+/** The small header stored beside a slot's save, so the title screen never parses whole saves. */
+export const headerKey = (slot: Slot) => `${SAVE_KEY}.${slot}.head`;
+
+/** E22.12: what the title screen shows for a slot. */
+export interface SlotHeader {
+  name: string;
+  /** E21's day number, when its clock exists */
+  day?: number;
+  /** seconds played */
+  played: number;
+  /** the fountain's step, in words */
+  step: string;
+  /** the region bloombot was last in */
+  region: string;
+  rules: 'classic' | 'oldcity';
+  savedAt: number;
+}
 /** Prefix of a gzip-compressed, base64 save. Anything else is plain JSON. */
 const Z = 'SB4z:';
 
@@ -95,7 +119,139 @@ async function pipe(data: Uint8Array, stream: CompressionStream | DecompressionS
  * saves are backed up, never overwritten. Chain queues are transient and intentionally not saved.
  */
 export class SaveService {
-  constructor(private storage: StorageLike | undefined = safeStorage()) {}
+  /** where this service reads and writes: a slot's key */
+  readonly key: string;
+
+  constructor(
+    private storage: StorageLike | undefined = safeStorage(),
+    readonly slot: Slot = 1,
+  ) {
+    this.key = slotKey(slot);
+  }
+
+  /** E22.12: the game fills in what a header needs that the state doesn't say (the region, from bloombot). */
+  headerExtra?: () => Partial<SlotHeader>;
+
+  /**
+   * E22.12: the save from before slots (`solarbloom.save`) becomes slot 1, once. It is copied first and removed
+   * only after the copy is written, so a full or blocked storage keeps it where it was.
+   */
+  migrateLegacy(): boolean {
+    try {
+      const st = this.storage;
+      if (!st) return false;
+      const old = st.getItem(SAVE_KEY);
+      if (old === null || st.getItem(slotKey(1)) !== null) return false;
+      st.setItem(slotKey(1), old);
+      st.removeItem(SAVE_KEY);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** E22.12: a slot's header as the title screen shows it, without reading the save. */
+  readHeader(slot: Slot = this.slot): SlotHeader | undefined {
+    try {
+      const raw = this.storage?.getItem(headerKey(slot));
+      return raw ? (JSON.parse(raw) as SlotHeader) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Is there a save in a slot? */
+  hasSave(slot: Slot = this.slot): boolean {
+    try {
+      return !!this.storage?.getItem(slotKey(slot));
+    } catch {
+      return false;
+    }
+  }
+
+  /** The header for a state (its name kept from the slot's header when there is one). */
+  headerFor(state: GameState): SlotHeader {
+    const prev = this.readHeader();
+    const st = state as unknown as { clock?: { day?: number }; day?: number };
+    const cleared = Object.values(state.areas ?? {}).filter((a) => a.fog === 'cleared').length;
+    // E21.6: an Old City save shows the fountain's step by its name; a classic one whether the fountain is awake
+    const tier = state.salvage?.tier ?? 0;
+    const step =
+      state.rules === 'oldcity'
+        ? tier > 0
+          ? `Fountain: ${TIERS[tier - 1].name}`
+          : 'The fountain is dry'
+        : state.progression.coreActivated
+          ? cleared > 1
+            ? `The fountain is awake, ${cleared - 1} more places woken`
+            : 'The fountain is awake'
+          : 'The fountain is asleep';
+    return {
+      name: prev?.name ?? `Garden ${this.slot}`,
+      day: st.clock?.day ?? st.day,
+      played: Math.round(state.time ?? 0),
+      step,
+      region: prev?.region ?? 'The park',
+      rules: state.rules === 'oldcity' ? 'oldcity' : 'classic',
+      ...this.headerExtra?.(),
+      savedAt: this.now(),
+    };
+  }
+
+  writeHeader(state: GameState) {
+    try {
+      this.storage?.setItem(headerKey(this.slot), JSON.stringify(this.headerFor(state)));
+    } catch {
+      /* storage full: the save itself matters more */
+    }
+  }
+
+  /** E22.12: renames a slot (its header only). */
+  rename(name: string, slot: Slot = this.slot) {
+    const h = this.readHeader(slot);
+    if (!h) return false;
+    try {
+      this.storage?.setItem(headerKey(slot), JSON.stringify({ ...h, name: name.trim().slice(0, 40) || h.name }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** E22.12: deletes a slot's save and header (its backups stay). */
+  deleteSlot(slot: Slot = this.slot) {
+    try {
+      this.storage?.removeItem(slotKey(slot));
+      this.storage?.removeItem(headerKey(slot));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** E22.12: every slot's header (undefined for an empty slot). A save without a header gets one (one parse). */
+  async slots(): Promise<(SlotHeader | undefined)[]> {
+    this.migrateLegacy();
+    const out: (SlotHeader | undefined)[] = [];
+    for (let i = 1; i <= SLOT_COUNT; i++) {
+      const slot = i as Slot;
+      if (!this.hasSave(slot)) {
+        out.push(undefined);
+        continue;
+      }
+      let h = this.readHeader(slot);
+      if (!h) {
+        const svc = new SaveService(this.storage, slot);
+        svc.now = this.now;
+        const r = await svc.loadResultAsync();
+        if (r.state) {
+          svc.writeHeader(r.state);
+          h = svc.readHeader(slot);
+        }
+      }
+      out.push(h);
+    }
+    return out;
+  }
 
   /** Wall clock for `savedAt`, shared by every SaveService (tests fix it to compare saves byte for byte). */
   static clock: () => number = () => Date.now();
@@ -191,7 +347,8 @@ export class SaveService {
   /** Synchronous, uncompressed save: for page unload, when there is no time to compress. */
   save(state: GameState): boolean {
     try {
-      this.storage?.setItem(SAVE_KEY, this.serialize(state));
+      this.storage?.setItem(this.key, this.serialize(state));
+      this.writeHeader(state);
       return !!this.storage;
     } catch {
       return false;
@@ -202,7 +359,7 @@ export class SaveService {
   write(data: string): boolean {
     const t = performance.now();
     try {
-      this.storage?.setItem(SAVE_KEY, data);
+      this.storage?.setItem(this.key, data);
       this.timings.write = performance.now() - t;
       return !!this.storage;
     } catch {
@@ -214,7 +371,8 @@ export class SaveService {
   async saveCompressed(state: GameState): Promise<boolean> {
     try {
       const data = await this.serializeCompressed(state);
-      this.storage?.setItem(SAVE_KEY, data);
+      this.storage?.setItem(this.key, data);
+      this.writeHeader(state);
       return !!this.storage;
     } catch {
       return false;
@@ -228,7 +386,7 @@ export class SaveService {
       return { scrapped: true };
     }
     if (parsed) return { state: parsed };
-    const key = `${SAVE_KEY}.backup.${Date.now()}`;
+    const key = `${this.key}.backup.${Date.now()}`;
     try {
       this.storage?.setItem(key, raw);
     } catch {
@@ -239,8 +397,9 @@ export class SaveService {
 
   /** Loads a plain-JSON save synchronously (a compressed save needs loadResultAsync). */
   loadResult(): LoadResult {
+    if (this.slot === 1) this.migrateLegacy();
     try {
-      const raw = this.storage?.getItem(SAVE_KEY);
+      const raw = this.storage?.getItem(this.key);
       if (!raw) return {};
       return this.handle(raw, raw.startsWith(Z) ? undefined : raw);
     } catch {
@@ -249,9 +408,10 @@ export class SaveService {
   }
 
   async loadResultAsync(): Promise<LoadResult> {
+    if (this.slot === 1) this.migrateLegacy();
     let raw: string | null | undefined;
     try {
-      raw = this.storage?.getItem(SAVE_KEY);
+      raw = this.storage?.getItem(this.key);
     } catch {
       return {};
     }
@@ -271,7 +431,8 @@ export class SaveService {
 
   clear() {
     try {
-      this.storage?.removeItem(SAVE_KEY);
+      this.storage?.removeItem(this.key);
+      this.storage?.removeItem(headerKey(this.slot));
     } catch {
       /* ignore */
     }

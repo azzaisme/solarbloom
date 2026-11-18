@@ -9,11 +9,14 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([di
 const DIRS: Partial<Record<number, [number, number]>> = { 12: [0, -1], 13: [0, 1], 14: [-1, 0], 15: [1, 0] };
 
 export class PadFocus {
-  constructor(private root: HTMLElement) {}
+  constructor(
+    private root: HTMLElement,
+    private panels: readonly string[] = PANELS,
+  ) {}
 
   /** The topmost open panel, if any. */
   panel(): HTMLElement | undefined {
-    for (const sel of PANELS) {
+    for (const sel of this.panels) {
       const el = this.root.querySelector<HTMLElement>(sel);
       if (el && el.offsetParent !== null) return el;
     }

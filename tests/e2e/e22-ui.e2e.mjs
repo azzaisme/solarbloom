@@ -2,7 +2,7 @@
 // - E22.3: switching from the mouse to the pad changes the prompt's glyph within one frame, with no layout shift.
 // - E22.4: Interact rebound on the keyboard and on the pad (from Settings › Controls, by the device alone), then used.
 // - E22.11: the menu with the keyboard alone and with the pad alone: open it, change a setting, save, quit to the
-//   title and come back (until E22.12's title screen, quitting reloads straight into the saved game).
+//   title and Continue from it.
 // - E22.10: under old-city rules (?ui=oldcity), a scripted stretch of play scans every HUD string for the banned
 //   words and "/" as a rate, and screenshots plain walking (docs/review/ui-walking-oldcity.png).
 // Run after `vite build` (npm run test:ui). Requires Playwright.
@@ -34,7 +34,7 @@ async function open(query = '', pad = false) {
   await page.goto(`http://localhost:4231/${query}`);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-  await page.waitForFunction(() => window.solarbloom?.bot, null, { timeout: 180000 });
+  await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 180000 });
   await page.evaluate(() => window.solarbloom.pause.clear('blur'));
   await wait(page, 800);
   return { page, errors };
@@ -217,7 +217,12 @@ try {
     const before = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time, bot: window.solarbloom.sim.state.bot }));
     await keyTo(page, '#menu-title');
     await Promise.all([page.waitForNavigation(), page.keyboard.press('Enter')]);
-    await page.waitForFunction(() => window.solarbloom?.bot, null, { timeout: 60000 });
+    // E22.12: the title; any key, then Continue (it has the focus)
+    await page.waitForSelector('#tPress');
+    await page.keyboard.press('Space');
+    await page.waitForSelector('#tContinue');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
     const after = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time, bot: window.solarbloom.sim.state.bot }));
     check(after.seed === before.seed && after.time >= before.time && Math.hypot(after.bot.x - before.bot.x, after.bot.z - before.bot.z) < 0.5, `E22.11 keyboard: quit to title saved first, and the game continues (time ${before.time.toFixed(1)} → ${after.time.toFixed(1)})`);
     check(!errors.length, `E22.11 keyboard: no page errors ${errors.join(' | ')}`);
@@ -242,7 +247,11 @@ try {
     check(/Saved/.test(await page.evaluate(() => document.querySelector('.menu-saved').textContent)), 'E22.11 pad: Save now says Saved');
     await padTo(page, '#menu-title');
     await Promise.all([page.waitForNavigation(), press(page, 0).catch(() => {})]); // the page leaves mid-press
-    await page.waitForFunction(() => window.solarbloom?.bot, null, { timeout: 60000 });
+    await page.waitForSelector('#tPress');
+    await press(page, 0); // any button
+    await page.waitForSelector('#tContinue');
+    await press(page, 0); // Continue has the focus
+    await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
     check(true, 'E22.11 pad: quit to title and the game continues');
     await page.evaluate(() => window.solarbloom.pause.clear('blur'));
     await press(page, 9);

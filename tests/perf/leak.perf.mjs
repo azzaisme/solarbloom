@@ -38,7 +38,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('http://localhost:4189/');
+  await page.goto('http://localhost:4189/?slot=1');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);

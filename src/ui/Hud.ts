@@ -226,6 +226,7 @@ export class Hud {
       <button id="frenzyBtn" class="frenzy-btn" aria-label="Bloom Frenzy (Q)" hidden><span class="fill"></span><span class="fi">${ICONS.frenzy}</span><span class="ft">0%</span></button>
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
       <div id="toasts" role="status" aria-live="polite"></div>
+      <div id="saveLeaf" role="img" aria-label="Saved">${ICONS.biomass}</div>
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
       <div id="intro" hidden><div class="panel card-intro">
         <h2>${LOGO_MARK}<span>Welcome to Solarbloom</span></h2>

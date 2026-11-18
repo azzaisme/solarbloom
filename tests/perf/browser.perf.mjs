@@ -75,7 +75,7 @@ const PORT = Number(process.env.PORT ?? 4183);
 const server = await preview({ preview: { port: PORT, strictPort: true }, build: process.env.DIST ? { outDir: process.env.DIST } : undefined, logLevel: 'silent' });
 const MAIN_TIER = process.env.PERF_TIER ?? 'high';
 const TIERS = (process.env.PERF_TIERS ?? 'low,medium,high').split(',').filter((t) => ['low', 'medium', 'high'].includes(t));
-const url = `http://localhost:${PORT}/?gfx=${MAIN_TIER}`;
+const url = `http://localhost:${PORT}/?slot=1&gfx=${MAIN_TIER}`;
 // City 15.4: PERF_GPU runs a visible window on the real GPU (a headless or hidden window is throttled and may fall
 // back to software), so frame times are a device measurement rather than a regression check.
 const GPU = !!process.env.PERF_GPU;
@@ -316,7 +316,7 @@ try {
   // Look 1.11: the same city at each graphics tier (pan and zoom), then back to the main tier for the rest.
   results.tiers = {};
   for (const tier of TIERS) {
-    await page.goto(`http://localhost:${PORT}/?gfx=${tier}`, { waitUntil: 'commit' });
+    await page.goto(`http://localhost:${PORT}/?slot=1&gfx=${tier}`, { waitUntil: 'commit' });
     await page.waitForFunction(() => !!window.solarbloom && window.solarbloom.sim.state.machines.length > 50, null, { timeout: READY_MS });
     await page.evaluate(() => new Promise((r) => setTimeout(r, 1500)));
     const got = await page.evaluate(() => window.solarbloom.gfxTier ?? 'n/a');

@@ -16,7 +16,7 @@ const errs = [];
 async function open(w, h) {
   const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
   page.on('pageerror', (e) => errs.push(String(e)));
-  await page.goto('http://localhost:4211/?gfx=high');
+  await page.goto('http://localhost:4211/?slot=1&gfx=high');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
