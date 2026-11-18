@@ -12,7 +12,8 @@ import { PALETTE } from './Materials';
 import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { plotsInChunk, type PlotSpot } from '../core/Plots';
-import { onJetty, pileById, setPieceAt } from '../core/OldCityLayout';
+import { onJetty, pileById, seaCell, setPieceAt, surfCell } from '../core/OldCityLayout';
+import { addGroundQuad, emptyGroundTexGeo, GROUND_TEXTURES, groundTexFor, groundTexMaterial, groundTexMesh, type GroundTexName } from './GroundTex';
 import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
 import { GATE_MODELS, LANDING, PARK_SET } from '../data/oldcity';
@@ -362,6 +363,13 @@ const hash01 = (x: number, z: number, salt: number) => {
   return (h >>> 0) / 4294967296;
 };
 const ALIVE = PALETTE.ground.alive;
+/** The slab colours under a painted dead tile (the painting's average), or undefined where none is painted. */
+const PAINTED_DEAD: Record<string, string[]> = PALETTE.ground.painted;
+function paintedDead(t: TileData): string[] | undefined {
+  if (t.level === undefined) return undefined;
+  const g = groundTexFor(t.feature);
+  return g ? PAINTED_DEAD[g] : undefined;
+}
 const CORNERS = [[1, 1], [-1, 1], [-1, -1], [1, -1]];
 interface PoolGeo {
   pos: number[];
@@ -391,6 +399,8 @@ interface ChunkView {
   models?: pc.Entity;
   /** clean pool water: its own animated surface */
   water?: pc.Entity;
+  /** painted ground (GroundTex): one mesh per texture over the chunk's dead sand and dead earth */
+  gtex?: (pc.Entity | undefined)[];
   /** near skyscrapers, each its own meshes so it can fade when it blocks the view */
   towers?: Tower[];
   modelVBs?: pc.VertexBuffer[];
@@ -422,6 +432,8 @@ interface Tower {
 
 /** How see-through a skyscraper gets when it stands between the camera and the cursor or the view's focus. */
 const TOWER_FADE = { opacity: 0.1, speed: 9 };
+/** Height of the jetty model's deck above its base, in model metres (measured from its upward faces) */
+const JETTY_DECK = 1.7;
 
 let towerMat: pc.StandardMaterial | undefined;
 /** The chunk material with dithered opacity (no sorting, still writes depth): each tower sets its own opacity. */
@@ -689,6 +701,7 @@ export class ChunkRenderer {
     this.transitions?.liveByChunk.delete(v.key);
     v.ground?.destroy();
     v.water?.destroy();
+    v.gtex?.forEach((e) => e?.destroy());
     for (const t of v.towers ?? []) for (const e of t.entities) e.destroy();
     v.trees?.destroy();
     v.fog?.destroy();
@@ -1030,6 +1043,7 @@ export class ChunkRenderer {
         if (look) for (let j = 0; j < p.size; j++) for (let i = 0; i < p.size; i++) this.plotCells.add(`${p.x + i},${p.z + j}`);
       }
     const pool: PoolGeo = { pos: [], col: [], idx: [] };
+    const gtex = GROUND_TEXTURES.map(emptyGroundTexGeo);
     for (const t of c.tiles) {
       if (!t) continue;
       // Hidden ground is grey; fogged ground is greyed unless restored.
@@ -1069,10 +1083,17 @@ export class ChunkRenderer {
         this.poolBanks(b, t, th);
         if (t.ground === 'restored' && fog !== 'hidden') this.poolSurface(pool, t, th);
       }
+      // painted ground over each dead Old City tile's slab (sand on the beach, dry earth elsewhere)
+      const gt = !v.far && t.level !== undefined && !t.occupantId && t.ground === 'polluted' ? this.paintedGround(t) : undefined;
+      if (gt) {
+        const k = Math.round(255 * (1 - 0.3 * b.grey));
+        addGroundQuad(gtex[GROUND_TEXTURES.indexOf(gt)], gt, t.x, t.z, th + 0.086, [k, k, k]);
+      }
       yield; // a tile done: `update` decides whether this frame has time for the next
     }
     // From here to the end is one step: buildings, then every mesh of the chunk swaps in together.
     v.water = this.setMesh(v.water, `water-${v.key}`, this.poolMesh(pool), poolMaterial(), false);
+    v.gtex = GROUND_TEXTURES.map((name, i) => this.setMesh(v.gtex?.[i], `ground-${name}-${v.key}`, groundTexMesh(this.device, gtex[i]), groundTexMaterial(this.device, name), false));
     if (this.inPark && !v.far) {
       b.grey = fb.grey = 0;
       for (const p of PARK_LAYOUT.pergolas) this.pergola(b, fb, p, h + 0.08);
@@ -1145,14 +1166,30 @@ export class ChunkRenderer {
     return s[Math.floor(hash01(t.x, t.z, 41) * s.length) % s.length];
   }
 
+  /**
+   * The painted texture a dead Old City tile wears. An obstacle or a salvage pile takes its neighbours' ground, so
+   * it stands on the beach or the earth, not on a square of its own.
+   */
+  private paintedGround(t: TileData): GroundTexName | undefined {
+    if (!t.blocked) return groundTexFor(t.feature);
+    if (t.feature !== 'obstacle') return undefined;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const n = this.sim.grid.peek(t.roofId, t.x + dx, t.z + dz);
+      const g = n && !n.blocked && n.level === t.level ? groundTexFor(n.feature) : undefined;
+      if (g) return g;
+    }
+    return undefined;
+  }
+
   /** Far level of detail: one coloured slab per tile, with a bump for full bloom. */
   private farTile(b: Sink, t: TileData, h: number) {
     this.sink = b;
     const f = t.feature ?? 'lawn';
-    const dead = DEAD[f] ?? DEAD.lawn;
+    const dead = paintedDead(t) ?? DEAD[f] ?? DEAD.lawn;
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
     // E21.4: the open sea stays sea zoomed out
     if (t.blocked && f === 'water' && t.level !== undefined) return this.slab(b, PALETTE.ground.sea[t.variant % PALETTE.ground.sea.length], [t.x + 0.5, h + 0.04 - WATER.drop, t.z + 0.5], [1, 0.08, 1]);
+    if (f === 'water' && t.level !== undefined && t.ground !== 'restored' && surfCell(t.x, t.z)) return this.slab(b, PALETTE.ground.shallows[t.variant % PALETTE.ground.shallows.length], [t.x + 0.5, h + 0.04 - WATER.drop, t.z + 0.5], [1, 0.08, 1]);
     const col = t.blocked ? (this.level >= 4 && f !== 'building' ? PALETTE.stone.light : dead[0]) : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? this.slabTone(t) : f === 'road' ? PALETTE.paving.roadAlive : grassTone(stage, t.x, t.z)) : t.ground === 'polluted' ? dead[t.variant % dead.length] : t.ground === 'growing' ? PALETTE.ground.growing : PALETTE.ground.prepared;
     this.slab(b, col, [t.x + 0.5, f === 'water' && !t.blocked ? h - WATER.drop : h, t.z + 0.5], [1, 0.16, 1]);
     // Phase 5 E16: stages stay apart zoomed out too: a colour patch for Blooming, a gold disc for Radiant.
@@ -1454,15 +1491,20 @@ export class ChunkRenderer {
     const z = t.z + 0.5;
     const f = t.feature ?? 'lawn';
     const r = new VRng(t.variant * 7919 + 13);
-    const dead = DEAD[f] ?? DEAD.lawn;
+    const dead = paintedDead(t) ?? DEAD[f] ?? DEAD.lawn;
     // E21.26: the Landing's jetty: its model (once it lands) from the first plank, else procedural planks on posts
     if (t.level !== undefined && onJetty(t.x, t.z)) {
       const J = LANDING.jetty;
       const model = oldCityModel('jetty');
       if (model === 'jetty') {
-        // the model (8 m long along +X, 4.2 m from its posts' feet to the deck) turned along the jetty, deck at the beach
+        // the model (8 m long along +X, 5.2 m wide, 4.2 m from its posts' feet to the deck) at half size, turned along
+        // the jetty, deck at the beach
         const sc = J.d / 8;
-        if (t.x === J.x && t.z === J.z) this.batch?.add('jetty', J.x + J.w / 2, h + 0.08 - 4.18 * sc, J.z + J.d / 2, Math.PI / 2, sc, sc, sc);
+        // water under the planks: the shallow surf where the jetty starts, open sea further out
+        const under = surfCell(t.x, t.z) || !seaCell(t.x, t.z + 1) ? PALETTE.ground.shallows : PALETTE.ground.sea;
+        this.slab(b, under[t.variant % under.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
+        // its deck is 1.7 m up the model (the rope posts rise above it), so that height goes at the beach, not the top
+        if (t.x === J.x && t.z === J.z) this.batch?.add('jetty', J.x + J.w / 2, h + 0.08 - JETTY_DECK * sc, J.z + J.d / 2, Math.PI / 2, sc, sc, sc);
         return;
       }
       const sea = PALETTE.ground.sea;
@@ -1483,7 +1525,7 @@ export class ChunkRenderer {
       if (t.feature !== 'building' && this.level >= 4) {
         b.add('box', PALETTE.paving.grout, [x, h - 0.004, z], [1, 0.152, 1]);
         this.slab(b, PALETTE.stone.light, [x, h + 0.02, z], [0.9, 0.2, 0.9]);
-      } else this.slab(b, dead[t.variant % dead.length], [x, h, z], [0.96, 0.16, 0.96]);
+      } else this.slab(b, dead[t.variant % dead.length], [x, h, z], [1, 0.16, 1]);
       if (t.feature === 'building') return;
       if (t.prop && this.oldCityProp(b, t, x, h + 0.08, z)) return; // E21: piles, barricades, the shed, Keepers
       if (t.id === this.localMark) this.landmark(b, x, h + 0.08, z, t.variant);
@@ -1507,7 +1549,16 @@ export class ChunkRenderer {
           if (!(this.inPark && this.level >= 1) && this.inPark) for (let i = 0; i < 2; i++) b.add('sphere', [PALETTE.soilDark, PALETTE.soil][i], [x + r.range(-0.35, 0.35), top + 0.04, z + r.range(-0.35, 0.35)], [0.14, 0.025, 0.09]);
           break;
         }
-        this.slab(b, shade, [x, h, z], [0.96, 0.16, 0.96]);
+        if (paintedDead(t)) {
+          // Painted ground (GroundTex) lies on top: this slab only gives it sides where it meets lower ground. No
+          // drawn cracks or dirt patches (the painting has them); a few dry tufts and leaves stand on it.
+          this.slab(b, shade, [x, h, z], [1, 0.16, 1]);
+          if (f === 'litter') for (let i = 0; i < 2; i++) b.add('sphere', PALETTE.ground.leafLitter[i % 3], [x + r.range(-0.35, 0.35), top + 0.016, z + r.range(-0.35, 0.35)], [0.16, 0.03, 0.1]);
+          if (f !== 'sand' && r.next() < 0.35) this.fb.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant * 2, 1);
+          if (t.variant % 7 === 0) this.fb.add(grassGeo(0, t.variant + 1, 1), x + r.range(-0.3, 0.3), top, z + r.range(-0.3, 0.3), t.variant, 0.8);
+          break;
+        }
+        this.slab(b, shade, [x, h, z], [1, 0.16, 1]);
         if (f === 'road') {
           const piece = this.roads?.pieceAt(t.x, t.z);
           if (piece) this.roadMarks(b, piece, t, x, z, top, false);
@@ -1530,7 +1581,7 @@ export class ChunkRenderer {
       }
       case 'prepared':
       case 'growing': {
-        this.slab(b, t.ground === 'growing' ? PALETTE.ground.growing : PALETTE.ground.prepared, [x, h, z], [0.96, 0.16, 0.96]);
+        this.slab(b, t.ground === 'growing' ? PALETTE.ground.growing : PALETTE.ground.prepared, [x, h, z], [1, 0.16, 1]);
         const n = t.ground === 'growing' ? 5 : 3 + (t.variant % 3);
         for (let i = 0; i < n; i++) {
           const sx = x + r.range(-0.3, 0.3);
@@ -1659,8 +1710,14 @@ export class ChunkRenderer {
    */
   private waterTile(b: Sink, t: TileData, h: number, x: number, z: number, r: VRng) {
     const surf = h + 0.08 - WATER.drop;
-    const hex = t.ground === 'restored' ? ALIVE.water : t.ground === 'polluted' ? DEAD.water[t.variant % DEAD.water.length] : PALETTE.ground.wetSoil;
+    // the beach's surf is shallow sea, murky while dead: never the dried-out canal bed
+    const shallows = t.level !== undefined && t.ground !== 'restored' && surfCell(t.x, t.z);
+    const hex = shallows ? PALETTE.ground.shallows[t.variant % PALETTE.ground.shallows.length] : t.ground === 'restored' ? ALIVE.water : t.ground === 'polluted' ? DEAD.water[t.variant % DEAD.water.length] : PALETTE.ground.wetSoil;
     this.slab(b, hex, [x, surf - 0.04, z], [1, 0.08, 1]);
+    if (shallows) {
+      if (t.variant % 4 === 0) b.add('box', PALETTE.ground.seaFoam, [x + r.range(-0.3, 0.3), surf + 0.004, z + r.range(-0.3, 0.3)], [r.range(0.2, 0.45), 0.006, 0.05]);
+      return;
+    }
     if (t.ground === 'polluted') {
       // a dried-out, silted bed: dark mud and the odd bit of rubbish
       b.add('box', PALETTE.ground.scum, [x + r.range(-0.1, 0.1), surf + 0.004, z + r.range(-0.1, 0.1)], [0.5, 0.008, 0.36]);
@@ -2416,6 +2473,9 @@ export class ChunkRenderer {
     const fog = s.areas.fog(id);
     if (fog === 'cleared') return 0;
     if (fog === 'hidden') return 1; // hidden and sealed areas: a solid wall of fog (owner, 18 Nov 2026)
+    // An open Old City region has no fog left: it is restored anywhere (E21.5), so a sheet over every dead tile
+    // only washed the whole region out to a white haze. Its dead ground reads by colour instead.
+    if (s.oldCity) return 0;
     const t = s.grid.peek(GROUND, x, z);
     if (!t) return s.areas.density(id);
     if (t.ground === 'restored' || t.ground === 'growing') return 0;
@@ -2504,6 +2564,8 @@ export class ChunkRenderer {
       }
     const m = new pc.Mesh(this.device);
     m.setPositions(pos);
+    // the shader asks for normals even unlit (a console error every frame without them): straight up
+    m.setNormals(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)));
     m.setColors32(col);
     m.setIndices(idx);
     m.update(pc.PRIMITIVE_TRIANGLES);

@@ -270,7 +270,7 @@ export function paving(c: DressCtx, t: TileData, alive: boolean, x: number, z: n
   const top = h + 0.08;
   if (c.dens === 0 && c.lod === 0) {
     // deep fog: one plain slab, as before Look 3 (nothing finer shows through)
-    slab(c, pick(alive ? PAVE_ALIVE : PAVE_DEAD, t.variant), [x, h, z], [0.96, 0.16, 0.96]);
+    slab(c, pick(alive ? PAVE_ALIVE : PAVE_DEAD, t.variant), [x, h, z], [1, 0.16, 1]);
     return;
   }
   slab(c, PALETTE.grout[alive ? 0 : 1], [x, h - 0.01, z], [1, 0.16, 1]);
