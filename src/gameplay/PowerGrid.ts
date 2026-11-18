@@ -165,6 +165,35 @@ export class PowerGrid {
     }
   }
 
+  // ---- lightning (E23.7.2) ----
+
+  /**
+   * A storm's lightning trips one working pole (chosen with the sim's rng, so it is deterministic). A tripped pole
+   * carries nothing, so what it linked goes dark, until bloombot resets it with one press. Returns its id, or
+   * undefined when there is no pole to trip. Weather never destroys anything: a reset brings it all back.
+   */
+  trip(rng: { int(min: number, maxInclusive: number): number }): string | undefined {
+    const poles = this.sim.state.machines.filter((m) => !m.tripped && this.roles.get(m.type)?.pole && this.sim.grid.isPlayable(m.roofId)).sort(byId);
+    if (!poles.length) return undefined;
+    const p = poles[rng.int(0, poles.length - 1)];
+    p.tripped = true;
+    this.invalidate();
+    return p.id;
+  }
+
+  /** Is this a pole lightning has tripped? */
+  isTripped(m: MachineData | undefined): boolean {
+    return !!m?.tripped && !!this.roleOf(m)?.pole;
+  }
+
+  /** Resets a tripped pole (one press). True if it was tripped. */
+  reset(m: MachineData | undefined): boolean {
+    if (!m || !this.isTripped(m)) return false;
+    delete m.tripped;
+    this.invalidate();
+    return true;
+  }
+
   // ---- networks ----
 
   private capacityOf(m: MachineData, b: NonNullable<PowerRole['battery']>): number {
@@ -194,7 +223,8 @@ export class PowerGrid {
 
   private rebuild(): void {
     const sim = this.sim;
-    const members = sim.state.machines.filter((m) => this.roles.has(m.type) && sim.grid.isPlayable(m.roofId)).sort(byId);
+    // A tripped pole carries nothing until it is reset: it is on no network.
+    const members = sim.state.machines.filter((m) => this.roles.has(m.type) && sim.grid.isPlayable(m.roofId) && !(m.tripped && this.roles.get(m.type)!.pole)).sort(byId);
     const index = new Map<string, number>();
     members.forEach((m, i) => index.set(m.id, i));
     const parent = members.map((_, i) => i);

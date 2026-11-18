@@ -1696,10 +1696,14 @@ export class Game {
       const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
       const lmName = area === PARK ? 'the fountain' : area ? this.sim.areas.info(area).landmarkName : undefined;
       const ready = occ.type === 'core' && this.landmarkReady(occ);
+      const tripped = this.sim.power.isTripped(occ); // E23.3: lightning tripped this pole; one press resets it
       out.push({
-        kind: lmName ? 'landmark' : 'machine', id: `m:${occ.id}`, verb: ready ? 'Wake' : 'Look at', name: lmName ?? machineName(occ), distance: dist, at: tile,
+        kind: lmName ? 'landmark' : 'machine', id: `m:${occ.id}`, verb: ready ? 'Wake' : tripped ? 'Reset' : 'Look at', name: lmName ?? machineName(occ), distance: dist, at: tile,
         frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size },
-        run: () => this.botAnim(this.actAt(p, sc().x, sc().y, 'inspect', false)),
+        run: () => {
+          if (this.sim.power.reset(occ)) return b.visuals.play('interact');
+          this.botAnim(this.actAt(p, sc().x, sc().y, 'inspect', false));
+        },
       });
     } else {
       const plot = this.openablePlot(p.roofId, tile.x, tile.z);

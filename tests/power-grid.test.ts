@@ -5,6 +5,7 @@ import { POWER } from '../src/data/power';
 import type { PowerSky } from '../src/gameplay/PowerEnv';
 import { sunAt } from '../src/gameplay/PowerEnv';
 import { Sim } from '../src/gameplay/Sim';
+import { Rng } from '../src/core/Rng';
 
 const DAY: PowerSky = { sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 };
 const NIGHT: PowerSky = { sun: 0, solar: 0, cloudy: false, wind: 0, dark: 1 };
@@ -224,3 +225,44 @@ describe('E23.3.1 power grid', () => {
 function tick(sim: Sim) {
   sim.power.tick(1);
 }
+
+describe('E23.3 lightning (for E23.7.2)', () => {
+  it('trip(rng) trips one pole deterministically; what it carried goes dark until one reset brings it back', () => {
+    const run = () => {
+      const { sim, put } = world();
+      put('gen', 0, 0);
+      const a = put('relay', 1, 0);
+      const b = put('relay', 12, 0);
+      const pump = put('pump', 13, 1);
+      sim.power.tick(1);
+      expect(sim.power.isPowered(pump)).toBe(true);
+      const rng = new Rng(42);
+      const id = sim.power.trip(rng)!;
+      expect([a.id, b.id]).toContain(id);
+      const pole = sim.machine(id)!;
+      expect(sim.power.isTripped(pole)).toBe(true);
+      expect(sim.power.networkOf(pole)).toBeUndefined();
+      sim.power.tick(1);
+      expect(sim.power.isPowered(pump)).toBe(false);
+      expect(sim.power.reset(pole)).toBe(true);
+      expect(sim.power.reset(pole)).toBe(false);
+      sim.power.tick(1);
+      expect(sim.power.isPowered(pump)).toBe(true);
+      return id;
+    };
+    expect(run()).toBe(run());
+  });
+
+  it('reads E23.7 weather.current() as an object (kind and wind)', () => {
+    const { sim, put } = world();
+    sim.power.skyOverride = undefined;
+    sim.power.register('turb', { source: (_m, _s, sky) => 10 * sky.wind });
+    const t = put('turb', 0, 0);
+    const s = put('solar', 2, 0);
+    (sim as unknown as { weather: unknown }).weather = { current: () => ({ kind: 'storm', wind: 1, solar: 0, rain: 1 }) };
+    expect(sim.power.output(t)).toBe(10);
+    expect(sim.power.sky().cloudy).toBe(true);
+    expect(sim.power.sky().dark).toBe(1); // lights come on in storms
+    expect(sim.power.output(s)).toBeCloseTo(POWER.solar.output * 0.8);
+  });
+});
