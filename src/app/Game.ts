@@ -69,6 +69,7 @@ import { BotController } from './BotController';
 import { type Action, Bindings, type Context, FIXED_KEY, keyLabel, migrateBindings, SLOTS } from './Bindings';
 import { isOldCity, rulesViewFromUrl } from './Rules';
 import { playGreatBloom } from './Ending';
+import { CAUSEWAY } from '../data/ending';
 import { type Candidate, holdFor, pickTarget, promptText } from './Interact';
 import type { PromptModel } from '../ui/Prompt';
 import { Pause, runSimFrame } from './Pause';
@@ -2194,6 +2195,12 @@ export class Game {
         z0 = Math.min(z0, cz * 16);
         z1 = Math.max(z1, cz * 16 + 16);
       }
+    // E23.9.3: after the Great Bloom the view reaches along the Long Causeway to the mainland's edge
+    if (this.sim.ending?.bloomed) {
+      x1 = Math.max(x1, CAUSEWAY.mainlandX + 8);
+      z0 = Math.min(z0, CAUSEWAY.z0 - 8);
+      z1 = Math.max(z1, CAUSEWAY.z1 + 8);
+    }
     this.camera.bounds = { minX: x0 - 8, maxX: x1 + 8, minZ: z0 - 8, maxZ: z1 + 8 };
   }
 
@@ -3511,6 +3518,7 @@ export class Game {
       this.celebrateTier(tier);
       if (tier === 1) return this.playCoreSequence();
       // E23.9.3: the last delivery plays the Great Bloom ending
+      let bloomZoom = this.camera.zoomTarget;
       if (tier === TIERS.length && this.sim.oldCity)
         return playGreatBloom({
           cinematic: (on, title) => this.hud.cinematic(on, title),
@@ -3521,6 +3529,18 @@ export class Game {
             this.vfx.burst(new pc.Vec3(at.x, at.y + 1, at.z), 24, { up: 4.5, speed: 2.4, size: 0.08, life: 1.5 });
           },
           fanfare: () => this.sfx.fanfare(),
+          overview: (on) => {
+            if (!this.bot) return;
+            this.bot.following = !on;
+            if (on) {
+              bloomZoom = this.camera.zoomTarget;
+              this.camera.glide(8, 0, -8, this.camera.minZoom);
+            } else {
+              const [bx, , bz] = this.bot.world();
+              this.camera.glide(bx, 0, bz, bloomZoom);
+            }
+          },
+          bounds: () => this.updateCityBounds(),
           vista: (x, z, secs, done) => this.vista(x, z, secs, () => done()),
           markTile: (x, z) => this.oldCityHost().markTile(x, z),
           openPage: (id) => this.oldCityHost().openPage(id),
