@@ -1,7 +1,8 @@
 import { GROUND } from '../core/GameState';
-import { regionOfCell, seaCell, surfCell } from '../core/OldCityLayout';
+import { regionById, regionOfCell, seaCell, surfCell } from '../core/OldCityLayout';
+import { isUsable } from './Unlocks';
 import type { BuildableType, MachineData, TileData, WeatherKind } from '../core/types';
-import { REGIONS, type RegionId } from '../data/oldcity';
+import { KEEPERS, REGIONS, type RegionId } from '../data/oldcity';
 import { WATER_NET } from '../data/water';
 import type { Sim } from './Sim';
 import { tankId, WaterPipes } from './WaterPipes';
@@ -21,6 +22,9 @@ export interface WaterBody {
   /** E23.4.2.1: a reservoir (a built tank, id `r:<machine id>`; `tiles` is its footprint, not water) */
   reservoir?: MachineData;
 }
+
+/** E23.8.2's unlock ids for the water network (all handed over in Cistern Basin). */
+export type WaterUnlock = 'reservoir' | 'pump' | 'pipe' | 'gravityFeed' | 'desalinationPlant';
 
 /** E23.4.1: what a save keeps. Levels are shares of capacity (0…1), only for bodies that have changed. */
 export interface WaterSave {
@@ -138,6 +142,26 @@ export class WaterSystem {
   /** Every reservoir's water. */
   reservoirs(): WaterBody[] {
     return this.sim.machinesOfType('reservoir').flatMap((m) => this.tank(m.id) ?? []);
+  }
+
+  /** E23.4.2: the region unlock (E23.8.2, Cistern Basin) a water machine needs, if it is one. */
+  unlockFor(type: BuildableType): WaterUnlock | undefined {
+    return type === 'reservoir' ? 'reservoir' : type === 'pump' ? 'pump' : undefined;
+  }
+
+  /** Has bloombot been handed this part of the water network? (Classic rules: always.) */
+  unlocked(id: WaterUnlock): boolean {
+    return !this.sim.oldCity || isUsable(this.sim.state, id);
+  }
+
+  /** The water network's lock, in words (the build menu and a refused build). */
+  lockLabel(): string {
+    return `🔒 ${regionById('cistern')?.name ?? 'Cistern Basin'}`;
+  }
+
+  lockReason(): string {
+    const k = KEEPERS.find((q) => q.region === 'cistern');
+    return `Wake ${k?.name ?? 'the Keeper'} in ${regionById('cistern')?.name ?? 'Cistern Basin'} first`;
   }
 
   /** E23.4.2: why a water machine can't stand here (undefined: it can). Called by the build check. */

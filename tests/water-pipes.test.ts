@@ -19,6 +19,7 @@ function park() {
   const sim = new Sim(createInitialState(7, 'oldcity'));
   sim.areas.clear(PARK, true);
   sim.state.salvage!.tier = 2;
+  sim.state.salvage!.keepers.sluice = { step: 'request1' }; // E23.8.2: Cistern Basin's Keeper is awake (its unlocks held)
   for (let z = 0; z < 16; z++)
     for (let x = 0; x < 16; x++) {
       const t = sim.grid.get(GROUND, x, z)!;
@@ -40,6 +41,18 @@ function put(sim: Sim, type: MachineType, x: number, z: number, size = type === 
   sim.grid.indexMachine(m);
   return m;
 }
+
+/** A solar panel touching the pump (diagonally): machines that touch share a grid network (E23.3), so it powers it. */
+const powerUp = (sim: Sim) => put(sim, 'solar', 5, 10);
+/** The grid's own answer (E23.3's sim.power, not a stand-in). */
+const powered = (sim: Sim, m: MachineData) => sim.power.isPowered(m);
+/** The grid switched off: a calm night (no sun, no wind), so nothing on the island makes power. */
+const gridOff = (sim: Sim) => {
+  const night = { ...sim.power.sky(), sun: 0, solar: 0, wind: 0 };
+  sim.power.skyOverride = () => night;
+  sim.power.tick(1);
+  expect(sim.state.machines.some((m) => sim.power.output(m) > 0)).toBe(false);
+};
 
 const lay = (sim: Sim, cells: [number, number][]) => {
   for (const [x, z] of cells) expect(sim.water.pipes.lay(GROUND, x, z)).toBe(true);
@@ -155,8 +168,20 @@ describe('E23.4.2.2: pumps and pipe placement', () => {
     const { sim, pond } = park();
     const far = tile(sim, 11, 12);
     expect(sim.water.isWatered(far)).toBe(false);
-    put(sim, 'pump', 4, 11); // on the pond's bank (3,11)
+    const pump = put(sim, 'pump', 4, 11); // on the pond's bank (3,11)
     lay(sim, run(5, 11, 11));
+    // no power yet: the pump asks the grid, gets nothing, and the line stays dry
+    days(sim, 0.05);
+    sim.power.tick(1);
+    expect(sim.water.pipes.pumping.has(pump.id)).toBe(true);
+    expect(powered(sim, pump)).toBe(false);
+    days(sim, 0.05);
+    expect(sim.water.pipes.carries(11, 11)).toBe(false);
+    expect(sim.water.isWatered(far)).toBe(false);
+    // a solar panel beside it: the grid powers it, and the far tile is fed
+    powerUp(sim);
+    sim.power.tick(1);
+    expect(powered(sim, pump)).toBe(true);
     days(sim, 0.05);
     expect(sim.water.pipes.carries(11, 11)).toBe(true);
     expect(sim.water.isWatered(far)).toBe(true);
@@ -172,31 +197,53 @@ describe('E23.4.2.2: pumps and pipe placement', () => {
   it('a pump pushes water uphill into a higher reservoir, and stops without power', () => {
     const { sim, pond } = park();
     const pump = put(sim, 'pump', 4, 11);
+    const panel = powerUp(sim);
+    sim.power.tick(1);
     const r = put(sim, 'reservoir', 9, 12);
     for (const t of sim.grid.footprint(GROUND, 9, 12, 2)) t!.level = 3; // a tank on a terrace two levels up
     lay(sim, run(5, 9, 11)); // (9,11) touches the tank's top edge
+    sim.power.tick(1);
     days(sim, 0.02);
     expect(sim.water.pipes.pumping.has(pump.id)).toBe(true); // asks the grid for power while it has water to push
+    expect(powered(sim, pump)).toBe(true);
     days(sim, 0.23);
     const lv = sim.water.levelOf(tankId(r));
     expect(lv).toBeGreaterThan(0.5);
     expect(sim.water.levelOf(pond.id)).toBeLessThan(1);
     sim.water.fill(pond.id, pond.capacity); // keep the pond topped up
     sim.water.draw(tankId(r), 100);
+    sim.water.tick(WATER_NET.step); // the pump asks for power again (it has water to push)
     const lv2 = sim.water.levelOf(tankId(r));
     // the grid goes dark: the pump stops, nothing breaks
-    (sim as unknown as { power: { isPowered: (m: MachineData) => boolean } }).power = { isPowered: (m) => m.type !== 'pump' };
+    sim.bot = { roofId: GROUND, x: 6, z: 10 };
+    expect(sim.build.remove(panel.id)).toBe(true);
+    sim.power.tick(1);
+    expect(powered(sim, pump)).toBe(false);
+    const tank = sim.water.levelOf(tankId(r));
+    const pondNow = sim.water.levelOf(pond.id);
     days(sim, 0.25);
     expect(lv).toBeGreaterThan(lv2);
-    expect(sim.water.levelOf(tankId(r))).toBe(lv2);
-    expect(sim.water.levelOf(pond.id)).toBe(1);
+    expect(sim.water.levelOf(tankId(r))).toBe(tank); // nothing moves without power…
+    expect(sim.water.levelOf(pond.id)).toBe(pondNow); // …and nothing is lost
   });
 });
 
 describe('E23.4.2.3: gravity feeds', () => {
+  it('gravity feeds come with the reservoirs in Cistern Basin: before Sluice wakes, nothing is handed over', () => {
+    const { sim } = park();
+    sim.state.salvage!.keepers = {};
+    expect(sim.water.unlocked('gravityFeed')).toBe(false);
+    expect(sim.build.isUnlocked('reservoir')).toBe(false);
+    expect(sim.build.isUnlocked('pump')).toBe(false);
+    expect(sim.water.pipes.layProblem(GROUND, 6, 4)).toMatch(/Sluice/);
+    sim.state.salvage!.keepers.sluice = { step: 'request1' };
+    expect(sim.build.isUnlocked('reservoir')).toBe(true);
+    expect(sim.water.pipes.layProblem(GROUND, 6, 4)).toBeUndefined();
+  });
+
   it('a reservoir on higher ground feeds the pipe below it with the grid switched off; not uphill', () => {
     const { sim } = park();
-    (sim as unknown as { power: { isPowered: () => boolean } }).power = { isPowered: () => false }; // grid off
+    gridOff(sim);
     const r = put(sim, 'reservoir', 14, 4);
     for (const t of sim.grid.footprint(GROUND, 14, 4, 2)) t!.level = 2;
     sim.water.fill(tankId(r), 300);
@@ -221,7 +268,7 @@ describe('E23.4.2.3: gravity feeds', () => {
 
   it('a higher reservoir fills a lower one down a pipe, with no pump and no power', () => {
     const { sim } = park();
-    (sim as unknown as { power: { isPowered: () => boolean } }).power = { isPowered: () => false };
+    gridOff(sim);
     const hi = put(sim, 'reservoir', 14, 4);
     for (const t of sim.grid.footprint(GROUND, 14, 4, 2)) t!.level = 2;
     const lo = put(sim, 'reservoir', 6, 5);

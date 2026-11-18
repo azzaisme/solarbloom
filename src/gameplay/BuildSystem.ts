@@ -36,6 +36,9 @@ export class BuildSystem {
 
   isUnlocked(type: BuildableType) {
     const def = MACHINES[type];
+    // E23.4.2: the water network's machines come with Cistern Basin (E23.8.2's region unlocks)
+    const water = this.sim.water.unlockFor(type);
+    if (water && this.sim.oldCity) return !!RECIPES[type] && this.sim.water.unlocked(water);
     // E21.3: under old-city rules a machine is locked until its fountain tier, and nothing else.
     if (this.sim.oldCity) return !!RECIPES[type] && (this.sim.state.salvage?.tier ?? 0) >= this.recipeTier(type);
     if (def.oldCity) return false;
@@ -54,6 +57,7 @@ export class BuildSystem {
   /** Short reason a machine is still locked (hotbar label). */
   lockLabel(type: BuildableType): string {
     const def = MACHINES[type];
+    if (this.sim.oldCity && this.sim.water.unlockFor(type)) return this.sim.water.lockLabel();
     if (this.sim.oldCity) return `🔒 Fountain tier ${this.recipeTier(type)}`;
     if (def.unlock && !this.sim.state.machines.some((m) => m.type === def.unlock!.needs)) return `🔒 ${MACHINES[def.unlock.needs].name}`;
     if (def.roofs && this.sim.grid.isPlayable(GROUND) && def.areaTypes) return `🔒 ${def.areaTypes.map((t) => AREA_TYPES[t as AreaType].name).join(' / ')}`;
@@ -209,7 +213,7 @@ export class BuildSystem {
     const fail = (reason: string, spotOk = false): PlacementCheck => ({ ok: false, reason, cost, spotOk });
     const recipe = this.recipe(type);
     if (!recipe) return fail(`${def.name} is not built in the Old City`);
-    if (!this.isUnlocked(type)) return fail(`Unlocks at fountain tier ${this.recipeTier(type)}`);
+    if (!this.isUnlocked(type)) return fail(s.water.unlockFor(type) ? s.water.lockReason() : `Unlocks at fountain tier ${this.recipeTier(type)}`);
     const roof = s.grid.roof(roofId);
     if (!roof || !roof.unlocked || roof.preview) return fail('This rooftop is not reachable yet');
     if (type === 'reclaimer') {

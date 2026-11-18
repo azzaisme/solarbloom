@@ -102,7 +102,8 @@ export const RECIPES: Partial<Record<BuildableType | 'reclaimer' | 'chest', Reci
   droneHub: { cost: { scrap: 20, copper: 15, glass: 10 }, tier: 2 },
   reclaimer: { cost: { scrap: 20, copper: 10, timber: 10 }, tier: 2 },
   // E23.4.2 (design §6: Reservoir 10 Clay, 4 Scrap; Pump 6 Scrap, 2 Wire, 2 Clay). Wire is E23.6's component: until it
-  // lands the pump takes 2 Copper in its place. Both unlock with Cistern Basin (E23.8.2); until then, fountain tier 2.
+  // lands the pump takes 2 Copper in its place. Both unlock with Cistern Basin (E23.8.2, sim.water.unlocked); the tier is
+  // only the classic fallback.
   reservoir: { cost: { clay: 10, scrap: 4 }, tier: 2 },
   pump: { cost: { scrap: 6, copper: 2, clay: 2 }, tier: 2 },
   reservoirGarden: { cost: { clay: 15, seeds: 10, biomass: 30 }, tier: 3 },

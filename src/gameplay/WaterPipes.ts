@@ -88,6 +88,7 @@ export class WaterPipes {
 
   /** Why a pipe can't go here (undefined: it can). */
   layProblem(roofId: string, x: number, z: number): string | undefined {
+    if (!this.water.unlocked('pipe')) return this.water.lockReason();
     if (roofId !== GROUND) return 'Pipes are laid on the ground';
     const t = this.sim.grid.get(GROUND, x, z);
     if (!t) return 'Nothing here';
@@ -232,6 +233,7 @@ export class WaterPipes {
 
   /** Pipe tiles a reservoir feeds by gravity: from the tiles touching it, through tiles no higher than it. */
   gravityTiles(m: MachineData, net: PipeNet): string[] {
+    if (!this.water.unlocked('gravityFeed')) return []; // E23.8.2: handed over with the reservoirs in Cistern Basin
     const h = this.height(m);
     const inNet = new Set(net.tiles);
     const start: string[] = [];

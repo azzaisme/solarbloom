@@ -129,8 +129,8 @@ export class Hotbar extends HudPart {
     const pipeBtn = s.oldCity ? this.root.querySelector<HTMLElement>('#hotbar [data-tool="pipe"]') : null;
     if (pipeBtn) {
       const p = s.water.pipes;
-      const locked = !s.build.isUnlocked('pump');
-      this.set('hc-pipe', $(pipeBtn, '.sc'), 'text', locked ? s.build.lockLabel('pump') : p.stock > 0 ? `${p.stock} left` : p.costText());
+      const locked = !s.water.unlocked('pipe');
+      this.set('hc-pipe', $(pipeBtn, '.sc'), 'text', locked ? s.water.lockLabel() : p.stock > 0 ? `${p.stock} left` : p.costText());
       this.set('hk-pipe', pipeBtn, 'cls', p.stock > 0 || s.inventory.canPay(WATER_NET.pipe.cost) ? '0' : '1', 'cant');
       this.set('hl-pipe', pipeBtn, 'cls', locked ? '1' : '0', 'locked');
     }
