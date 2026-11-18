@@ -1699,10 +1699,14 @@ export class Game {
       const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
       const lmName = area === PARK ? 'the fountain' : area ? this.sim.areas.info(area).landmarkName : undefined;
       const ready = occ.type === 'core' && this.landmarkReady(occ);
+      const tripped = this.sim.power.isTripped(occ); // E23.3: lightning tripped this pole; one press resets it
       out.push({
-        kind: lmName ? 'landmark' : 'machine', id: `m:${occ.id}`, verb: ready ? 'Wake' : 'Look at', name: lmName ?? machineName(occ), distance: dist, at: tile,
+        kind: lmName ? 'landmark' : 'machine', id: `m:${occ.id}`, verb: ready ? 'Wake' : tripped ? 'Reset' : 'Look at', name: lmName ?? machineName(occ), distance: dist, at: tile,
         frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size },
-        run: () => this.botAnim(this.actAt(p, sc().x, sc().y, 'inspect', false)),
+        run: () => {
+          if (this.sim.power.reset(occ)) return b.visuals.play('interact');
+          this.botAnim(this.actAt(p, sc().x, sc().y, 'inspect', false));
+        },
       });
     } else {
       const plot = this.openablePlot(p.roofId, tile.x, tile.z);
@@ -1736,6 +1740,8 @@ export class Game {
     if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: SALVAGE.holdSeconds, refused: s.salvage.problem(pile.id), run });
     const keeper = s.keepers.at(f.x, f.z);
     if (keeper && s.keepers.visible(keeper.id)) out.push({ kind: 'keeper', id: `keeper:${keeper.id}`, verb: keeper.id === 'tally' && s.landmarks.canTrade() ? 'Trade with' : 'Talk to', name: keeper.name, distance: fd, at: front, run });
+    const page = s.journal.pageAt(f.x, f.z);
+    if (page) out.push({ kind: 'cache', id: `page:${page}`, verb: 'Read', name: s.journal.found(page) ? 'the page again' : 'the page', distance: fd, at: front, run });
     const sp = setPieceAt(f.x, f.z);
     if (sp?.kind === 'lookout') out.push({ kind: 'gate', id: `lookout:${sp.id}`, verb: 'Look out', name: '', distance: fd, at: front, run });
     const gate = s.gates.gateAt(f.x, f.z);
@@ -1804,6 +1810,12 @@ export class Game {
       bot: this.bot!,
       bindings: this.bindings,
       game: this,
+      // E23.9.1: a page read from its post opens the journal at it
+      openPage: (id: string) => {
+        this.oc?.panel.close();
+        this.hud.backpack.openPage(id);
+        this.syncPanelPause();
+      },
       // E22.6: the store opens as the backpack's Items grid with the store beside it
       openStorage: (title: string) => {
         this.oc?.panel.close();
@@ -2769,7 +2781,7 @@ export class Game {
     if (this.clock < this.cozyCheckAt) return;
     this.cozyCheckAt = this.clock + 1;
     for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Look for empty plots in restored ground.</small>`, 'gold', 4.5);
-    for (const o of this.cozy.checkDecorUnlocks()) this.hud.toast(`${o.icon} New decoration: ${o.name}<small>${o.blurb} It’s in the build menu (${this.hudKey('buildMenu')})${this.sim.oldCity ? '' : ', free to place'}.</small>`, 'gold', 4.5);
+    for (const o of this.cozy.checkDecorUnlocks()) this.hud.toast(`${o.icon} New decoration: ${o.name}<small>${o.blurb} It’s in the build menu (${this.hudKey('buildMenu')}), free to place.</small>`, 'gold', 4.5);
     // The picker closes if bloombot wanders off.
     const pp = this.pickerPlot;
     if (pp && this.bot) {

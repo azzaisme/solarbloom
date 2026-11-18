@@ -149,7 +149,22 @@ try {
     await page.waitForTimeout(200);
     const closed = await page.evaluate(() => ({ open: window.solarbloom.hud.craft.isOpen, paused: window.solarbloom.paused }));
     check(!closed.open && !closed.paused, T('Esc / B closes it and the game runs again'));
-    // a decoration costs its recipe in build mode, and comes back whole when removed
+    // a decoration is made once at the table (Make, on the Craft tab), then placed free from the build menu
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      g.bot.teleport('g', 3.5, 5.5);
+      g.bot.pose.facing = Math.PI;
+    });
+    await interact(page, dev);
+    await page.waitForSelector('#craftScreen.open');
+    const planksBefore = await page.evaluate(() => window.solarbloom.sim.inventory.count('planks') + window.solarbloom.sim.inventory.stored('planks'));
+    check(await moveTo(page, '#cr-decor-bench', dev), T('reach the bench under Decorations'));
+    await go(page, dev);
+    const made = await page.evaluate(() => ({ made: window.solarbloom.sim.crafting.decorMade('bench'), planks: window.solarbloom.sim.inventory.count('planks') + window.solarbloom.sim.inventory.stored('planks'), live: document.querySelector('#craftScreen .bp-live').textContent }));
+    check(made.made && made.planks === planksBefore - 2, T(`make the bench once: 2 Planks (${JSON.stringify(made)})`));
+    await page.screenshot({ path: `${dir}/ui-workshop-decor-${dev}.png` });
+    await back(page, dev);
+    await page.waitForTimeout(200);
     const dec = await page.evaluate(() => {
       const g = window.solarbloom, s = g.sim;
       const t = s.grid.get('g', 6, 7);
@@ -159,15 +174,15 @@ try {
       const have = () => s.inventory.count('planks') + s.inventory.stored('planks');
       const before = have();
       g.selectTool('decor:bench');
-      const label = document.querySelector('#hotbar [data-tool="decor:bench"] .sc')?.textContent;
+      const hidden = document.querySelector('#hotbar [data-tool="decor:bench"]')?.hidden;
       const why = g.cozy.canDecorate('bench', 'g', 6, 7) ?? g.cozy.placeDecor('bench', 0, 'g', 6, 7);
+      const why2 = g.cozy.canDecorate('bench', 'g', 6, 8);
       const placed = have();
       g.cozy.removeDecor('g', 6, 7);
-      const back = have();
       g.selectTool('pulse');
-      return { why, before, placed, back, label };
+      return { why, why2, before, placed, hidden };
     });
-    check(!dec.why && dec.placed === dec.before - 2 && dec.back === dec.before && /\/2/.test(dec.label ?? ''), T(`a bench costs 2 Planks in build mode and comes back (${JSON.stringify(dec)})`));
+    check(!dec.why && dec.placed === dec.before && dec.hidden === false, T(`then the bench is placed free from the build menu (${JSON.stringify(dec)})`));
     check(errors.length === 0, T(`no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`));
     await page.context().close();
   }
