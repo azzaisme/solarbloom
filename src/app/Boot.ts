@@ -56,7 +56,7 @@ export async function boot(canvas: HTMLCanvasElement) {
   installIconDefs();
   let title: Title | undefined;
 
-  const start = async (slot: Slot, fresh: boolean, device: 'keys' | 'pad') => {
+  const start = async (slot: Slot, fresh: boolean, device: 'keys' | 'pad', realClock = false) => {
     const loading = new Loading(!!settings.reducedMotion);
     loading.show();
     title?.destroy();
@@ -67,7 +67,7 @@ export async function boot(canvas: HTMLCanvasElement) {
     loading.progress({ models: 0, world: 0, view: 0, shaders: 0 });
     await frame(); // the loading screen is on screen before the world is built
     await frame();
-    const game = new Game(canvas, lr, { slot, device });
+    const game = new Game(canvas, lr, { slot, device, realClock: fresh && realClock });
     (window as unknown as { solarbloom: Game }).solarbloom = game;
     // Debug tools (Phase 4 E00.5) exist only on the dev server; production builds drop this branch.
     if (import.meta.env.DEV) void import('./DevTools').then((m) => m.installDevTools(game));
@@ -83,7 +83,7 @@ export async function boot(canvas: HTMLCanvasElement) {
   };
 
   const slotQ = Number(q.get('slot'));
-  if (slotQ >= 1 && slotQ <= SLOT_COUNT) return start(slotQ as Slot, q.has('new'), 'keys');
+  if (slotQ >= 1 && slotQ <= SLOT_COUNT) return start(slotQ as Slot, q.has('new'), 'keys', q.get('clock') === 'real');
 
   // ───── the title, with the same Settings screen as the game ─────
   const store = new SaveService();
@@ -98,11 +98,12 @@ export async function boot(canvas: HTMLCanvasElement) {
   const padStyle = (): PadStyle => (settings.glyphs === 'ps' || settings.glyphs === 'deck' || settings.glyphs === 'xbox' ? settings.glyphs : desktopApi()?.deck ? 'deck' : 'xbox');
   title = new Title({
     slots: () => store.slots(),
-    start: (slot, fresh, device) => void start(slot, fresh, device),
+    start: (slot, fresh, device, realClock) => void start(slot, fresh, device, realClock),
     rename: (slot, name) => void new SaveService(undefined, slot).rename(name),
     remove: (slot) => new SaveService(undefined, slot).deleteSlot(),
     quit: desktopApi()?.quit,
     reducedMotion: !!settings.reducedMotion,
+    preferRealClock: () => !!settings.realClock,
     settingsOpen: () => !!screen?.isOpen,
     closeSettings: () => screen?.close(),
     settingsTab: (dir) => screen?.tab(dir, true),

@@ -23,6 +23,9 @@ function oldCity() {
   const sim = new Sim(createInitialState(7, 'oldcity'));
   sim.state.salvage!.tier = 2;
   sim.state.resources.energy = big(1e6);
+  // Clear noon: these tests are about chargers and helpers, not E23.7's sky (a new game starts at 07:30, when
+  // panels are still waking up).
+  sim.power.skyOverride = () => ({ sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 });
   return sim;
 }
 

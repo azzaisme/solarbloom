@@ -1,3 +1,4 @@
+import { DAY_SECONDS } from './time';
 /**
  * E23.3: the power grid's starting values (tuning lives here, not in code).
  *
@@ -10,8 +11,8 @@ export const SHED_ORDER = ['lamp', 'pump', 'helper', 'charger'] as const;
 export type ShedClass = (typeof SHED_ORDER)[number];
 
 export const POWER = {
-  /** A game day in seconds of play (E23 rule 5). The fallback clock uses it until E23.7's clock lands. */
-  daySeconds: 48 * 60,
+  /** A game day in seconds of play (E23 rule 5): data/time's, the one game-day length. */
+  daySeconds: DAY_SECONDS,
   /** How long a consumer's light/level takes to fade between on and off (seconds of play). */
   fadeSeconds: 2.5,
   /**

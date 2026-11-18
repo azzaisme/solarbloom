@@ -5,6 +5,8 @@ import type { Grid } from '../core/Grid';
 import { packChunk } from '../core/TilePack';
 import type { GameState } from '../core/types';
 import { TIERS } from '../data/salvage';
+import { gameDayOf } from '../gameplay/Clock';
+import { migrateSave } from '../core/SaveMigrations';
 
 /** The single save from before E22.12; it moves to slot 1 the first time the game starts. */
 export const SAVE_KEY = 'solarbloom.save';
@@ -172,7 +174,6 @@ export class SaveService {
   /** The header for a state (its name kept from the slot's header when there is one). */
   headerFor(state: GameState): SlotHeader {
     const prev = this.readHeader();
-    const st = state as unknown as { clock?: { day?: number }; day?: number };
     const cleared = Object.values(state.areas ?? {}).filter((a) => a.fog === 'cleared').length;
     // E21.6: an Old City save shows the fountain's step by its name; a classic one whether the fountain is awake
     const tier = state.salvage?.tier ?? 0;
@@ -188,7 +189,7 @@ export class SaveService {
           : 'The fountain is asleep';
     return {
       name: prev?.name ?? `Garden ${this.slot}`,
-      day: st.clock?.day ?? st.day,
+      day: gameDayOf(state),
       played: Math.round(state.time ?? 0),
       step,
       region: prev?.region ?? 'The park',
@@ -322,7 +323,7 @@ export class SaveService {
       const base = createInitialState(s.seed, s.rules ?? 'classic');
       // Phase 5 E12: resource quantities are saved as Decimal strings.
       const raw = s as unknown as { resources?: Record<string, BigLike>; caps?: Record<string, BigLike> };
-      return {
+      return migrateSave({
         ...base,
         ...s,
         resources: amounts(raw.resources ?? {}),
@@ -331,7 +332,7 @@ export class SaveService {
         progression: { ...base.progression, ...s.progression },
         stats: { ...base.stats, ...s.stats, firsts: { ...(s.stats?.firsts ?? {}) } },
         salvage: base.salvage ? { ...base.salvage, ...s.salvage } : undefined,
-      };
+      });
     } catch {
       return undefined;
     }
