@@ -1757,6 +1757,9 @@ export class Game {
       const lk = s.farm.look(occ);
       out.push({ kind: 'machine', id: `planter:${occ.id}`, verb: lk.ripe ? 'Harvest' : lk.crop ? 'Tend' : 'Plant in', name: lk.ripe ? CROPS[lk.crop!].name : 'the planter', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.planter(occ) });
     }
+    // E23.5.3: the compost bin and the Bio Digester open their panels
+    if (occ?.type === 'compostBin') out.push({ kind: 'machine', id: `bin:${occ.id}`, verb: 'Open', name: 'the compost bin', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.compostBin(occ) });
+    if (occ?.type === 'bioDigester') out.push({ kind: 'machine', id: `dig:${occ.id}`, verb: s.compost.fuel(occ) > 0 ? 'Look at' : 'Feed', name: 'the Bio Digester', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.digester(occ) });
     // E23.5.1: flowered, restored ground in front can be clipped for biomass
     if (!pile && s.gather.canGather(front))
       out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });

@@ -8,6 +8,7 @@ import { MATERIALS, SALVAGE } from '../data/salvage';
 import { GATHER } from '../data/farm';
 import { CROPS, type CropId } from '../data/crops';
 import { planterHtml } from '../ui/PlanterPanel';
+import { compostHtml, digesterHtml } from '../ui/CompostPanel';
 import type { TileData } from '../core/types';
 import { flyUp, fountainHtml, OldCityPanel, SpeechBubble, storageAct, storageHtml, tradeHtml } from '../ui/OldCityPanel';
 import { PARK } from '../core/Areas';
@@ -278,6 +279,30 @@ export class OldCityController {
           this.panel.close();
         } else if (act === 'feed' && f.feed(m)) this.host.sound('deliver');
         else if (act === 'extra' && f.addExtra(m, arg as 'trellis' | 'flooded')) this.host.sound('deliver');
+      },
+    );
+  }
+
+  /** E23.5.3: a compost bin's panel. */
+  compostBin(m: MachineData) {
+    const c = this.sim.compost;
+    this.host.sound('click');
+    this.panel.open(
+      () => compostHtml(this.sim, m),
+      (act, arg) => {
+        const n = act === 'fill' ? c.fill(m, arg as 'biomass' | 'food') : act === 'take' ? c.take(m, arg as 'compost' | 'fertiliser') : act === 'return' ? c.returnCompost(m) : 0;
+        if (n > 0) this.host.sound(act === 'take' ? 'salvage' : 'deliver', act === 'take' ? 'seeds' : undefined);
+      },
+    );
+  }
+
+  /** E23.5.3: a Bio Digester's panel. */
+  digester(m: MachineData) {
+    this.host.sound('click');
+    this.panel.open(
+      () => digesterHtml(this.sim, m),
+      (act) => {
+        if (act === 'feed' && this.sim.compost.feed(m) > 0) this.host.sound('deliver');
       },
     );
   }

@@ -241,6 +241,8 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   chest: 'parcel', // E21.1
   reclaimer: 'wrench', // E21.2
   planter: 'garden', // E23.5.2
+  compostBin: 'basket', // E23.5.3
+  bioDigester: 'energy', // E23.5.3
   core: 'sparkle',
 };
 

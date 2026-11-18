@@ -107,11 +107,15 @@ export const RECIPES: Partial<Record<BuildableType | 'reclaimer' | 'chest', Reci
   chest: { cost: { timber: 8, scrap: 4 }, tier: 1 },
   // E23.5.2: planters come with the first water (no Timber yet in the park)
   planter: { cost: { scrap: 6, biomass: 4 }, tier: 1 },
+  // E23.5.3: the compost bin is home kit (Timber washes up on the beach); the digester needs Clock Plaza's Gears
+  compostBin: { cost: { timber: 4, scrap: 2 }, tier: 1 },
+  bioDigester: { cost: { scrap: 10, gears: 4, clay: 4 }, tier: 2 },
   pollinator: { cost: { seeds: 10, timber: 6, biomass: 20 }, tier: 2 },
   droneHub: { cost: { scrap: 20, copper: 15, glass: 10 }, tier: 2 },
   reclaimer: { cost: { scrap: 20, copper: 10, timber: 10 }, tier: 2 },
   reservoirGarden: { cost: { clay: 15, seeds: 10, biomass: 30 }, tier: 3 },
-  motherTree: { cost: { seeds: 30, clay: 20, biomass: 100 }, tier: 3 },
+  // E23.5.3: a landmark tree wants fertiliser
+  motherTree: { cost: { seeds: 30, clay: 20, biomass: 100, fertiliser: 4 }, tier: 3 },
   relay: { cost: { copper: 20, gears: 10, sunstone: 10 }, tier: 4 },
   cultivator: { cost: { scrap: 30, gears: 20, copper: 10 }, tier: 4 },
 };

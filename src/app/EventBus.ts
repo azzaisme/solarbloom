@@ -16,6 +16,8 @@ export interface GameEvents {
   'planter.changed': { machineId: string };
   'planter.ripe': { machineId: string; crop: string };
   'planter.harvested': { machineId: string; crop: string; food: number; biomass: number; seeds: number };
+  /** E23.5.3: a compost bin or Bio Digester changed (filled, made something, emptied). */
+  'farm.machine': { machineId: string };
   /** E23.5.2.3: a crop's seed packet found while exploring. */
   'seeds.found': { crop: string; region: string };
   /** E21.3: a machine was taken down (its recipe refunded). */

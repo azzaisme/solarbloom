@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
-import type { MachineData } from '../core/types';
+import type { MachineData, MachineType } from '../core/types';
+import { COMPOST } from '../data/compost';
 import { CROPS, PLANTER, type CropId } from '../data/crops';
 import type { PlanterLook } from '../gameplay/FarmSystem';
 import type { Sim } from '../gameplay/Sim';
@@ -21,6 +22,9 @@ const SPOTS: [number, number][] = [
   [0.26, 0.15],
 ];
 
+/** The farm machines whose live state is drawn here. */
+const FARM_TYPES: MachineType[] = ['planter', 'compostBin', 'bioDigester'];
+
 interface CropView {
   root: pc.Entity;
   key: string;
@@ -41,6 +45,7 @@ export class CropVisuals {
     private parent: pc.Entity,
   ) {
     sim.bus.on('planter.changed', ({ machineId }) => this.refresh(machineId));
+    sim.bus.on('farm.machine', ({ machineId }) => this.refresh(machineId));
     sim.bus.on('machine.removed', ({ machine }) => this.drop(machine.id));
   }
 
@@ -59,23 +64,57 @@ export class CropVisuals {
     this.views.delete(id);
   }
 
-  /** Rebuilds one planter's crop if its look changed. */
+  /** Rebuilds one farm machine's live look (a planter's crop, a bin's heap, a digester's glow) if it changed. */
   refresh(id: string) {
     const m = this.sim.machine(id);
-    if (!m || m.type !== 'planter') return this.drop(id);
-    const lk = this.sim.farm.look(m);
-    const key = this.keyOf(lk, m);
+    if (!m || !FARM_TYPES.includes(m.type)) return this.drop(id);
+    const lk = m.type === 'planter' ? this.sim.farm.look(m) : undefined;
+    const key = lk ? this.keyOf(lk, m) : this.machineKey(m);
     const v = this.views.get(id);
     if (v && v.key === key) return;
     this.drop(id);
     const root = group(this.parent, `crop-${id}`, this.worldOf(m));
-    this.build(root, m, lk);
+    if (lk) this.build(root, m, lk);
+    else if (m.type === 'compostBin') this.buildBin(root, m);
+    else this.buildDigester(root, m);
     this.views.set(id, { root, key });
+  }
+
+  /** E23.5.3: a bin's look changes with how full its heap is and whether fertiliser is ready; a digester's with its mood. */
+  private machineKey(m: MachineData): string {
+    if (m.type === 'bioDigester') return this.sim.compost.mood(m);
+    const st = this.sim.compost.bin(m);
+    const heap = Math.min(4, Math.ceil(((st.feed ?? 0) + (st.compost ?? 0) * COMPOST.perCompost) / 8));
+    return `${heap}|${(st.fertiliser ?? 0) >= 1 ? 1 : 0}`;
+  }
+
+  /** The heap inside a compost bin (taller the fuller), and a little sack on top once fertiliser is ready. */
+  private buildBin(root: pc.Entity, m: MachineData) {
+    const st = this.sim.compost.bin(m);
+    const amount = (st.feed ?? 0) + (st.compost ?? 0) * COMPOST.perCompost;
+    const h = Math.min(0.42, 0.06 + (amount / COMPOST.feedCapacity) * 0.4);
+    if (amount > 0) {
+      shape(root, 'sphere', mat(PALETTE.soilDark), { pos: [0, 0.1 + h / 2, 0], scale: [0.62, h, 0.62] });
+      // fresh clippings on top
+      if ((st.feed ?? 0) > 0) for (const [x, z] of [[-0.12, 0.05], [0.1, -0.08], [0.02, 0.14]] as const) shape(root, 'cone', mat(PALETTE.leafFin), { pos: [x, 0.1 + h, z], rot: [70, x * 300, 0], scale: [0.08, 0.12, 0.04] });
+    }
+    if ((st.fertiliser ?? 0) >= 1) {
+      // a tied sack of fertiliser leaning on the front, with a gold tie
+      shape(root, 'sphere', mat(PALETTE.terracotta), { pos: [0.18, 0.72, 0.18], scale: [0.2, 0.24, 0.18], shadow: true });
+      shape(root, 'cylinder', mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 0.25 }), { pos: [0.18, 0.84, 0.18], scale: [0.08, 0.03, 0.08] });
+    }
+  }
+
+  /** The digester's window: dark when empty, a soft green glow while it runs, dim while fed and waiting. */
+  private buildDigester(root: pc.Entity, m: MachineData) {
+    const mood = this.sim.compost.mood(m);
+    const glow = mood === 'running' ? mat(PALETTE.leafFin, { emissive: PALETTE.leafFin, emissiveIntensity: 1.4 }) : mood === 'idle' ? mat(PALETTE.leafFin, { emissive: PALETTE.leafFin, emissiveIntensity: 0.3 }) : mat(PALETTE.darkFace, { gloss: 0.7 });
+    shape(root, 'cylinder', glow, { pos: [0, 0.34, 0.33], rot: [90, 0, 0], scale: [0.18, 0.02, 0.18] });
   }
 
   rebuildAll() {
     for (const id of [...this.views.keys()]) this.drop(id);
-    for (const m of this.sim.machinesOfType('planter')) this.refresh(m.id);
+    for (const type of FARM_TYPES) for (const m of this.sim.machinesOfType(type)) this.refresh(m.id);
   }
 
   private build(root: pc.Entity, m: MachineData, lk: PlanterLook) {
@@ -116,10 +155,11 @@ export class CropVisuals {
     if (this.since < 0.5) return;
     this.since = 0;
     const seen = new Set<string>();
-    for (const m of this.sim.machinesOfType('planter')) {
-      seen.add(m.id);
-      this.refresh(m.id);
-    }
+    for (const type of FARM_TYPES)
+      for (const m of this.sim.machinesOfType(type)) {
+        seen.add(m.id);
+        this.refresh(m.id);
+      }
     for (const id of [...this.views.keys()]) if (!seen.has(id)) this.drop(id);
   }
 }

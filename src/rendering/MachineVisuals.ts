@@ -15,6 +15,7 @@ import { treeGeo } from './TreeGen';
 import { machineRunning } from './FaunaPlan';
 import { arcPath, ball, bezier, dome, latheAuto, matOf, part, rbox, rcyl, ring, setMat, tube } from './MachineParts';
 import { cultivatorDock } from './CultivatorVisuals';
+import { compostBinBody, digesterBody } from './FarmBodies';
 import { oldCityModel, MODELS } from './Models';
 
 interface MachineView {
@@ -557,6 +558,12 @@ export class MachineVisuals {
         break;
       case 'cultivator': // Look 6.9: the dock (its tillers are drawn by CultivatorVisuals)
         cultivatorDock(v.body);
+        break;
+      case 'compostBin': // E23.5.3 (its heap is drawn by CropVisuals)
+        compostBinBody(v.body);
+        break;
+      case 'bioDigester': // E23.5.3 (its glow is drawn by CropVisuals)
+        digesterBody(v.body);
         break;
     }
     this.applyModel(v);
