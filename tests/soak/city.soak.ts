@@ -4,7 +4,6 @@ import { big, toNum } from '../../src/core/Big';
  * any violation: memory, save size, tick time, determinism, unreachable frontiers or stalls.
  * Run with `npm run test:soak`. Set SOAK_AREAS / SOAK_HOURS to shorten it locally.
  */
-import { meetSpecialty } from '../city-helpers';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../../src/app/SaveService';
 
@@ -81,7 +80,6 @@ async function play(seed: number, areas: number, hours: number, check: boolean) 
           t.pollution = 0;
           sim.grid.touch(t);
         }
-        meetSpecialty(sim, id);
         if (sim.areas.clear(id)) {
           cleared++;
           // A little building in the new area: a garden or two, a solar panel, sometimes a drone hub.
@@ -119,7 +117,6 @@ async function play(seed: number, areas: number, hours: number, check: boolean) 
         ['cultivators', () => sim.cultivators.tick(step)],
         ['cat', () => sim.cat.tick()],
         ['prog', () => sim.progression.tick()],
-        ['milestones', () => sim.milestones.tick()],
         ['ecosystem', () => sim.ecosystem.tick()],
         ['metrics', () => sim.metrics.tick(step)],
       ];

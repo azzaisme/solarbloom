@@ -137,24 +137,13 @@ describe('rooftop cluster areas (City 12.1)', () => {
 
   it('is playable end to end: reach the roof, restore it, restore the share, wake the Rooftop Core', () => {
     const { sim, id } = revealedCluster(3);
-    const hub = sim.clusters.relaySpots(id).find((t) => sim.grid.footprint(GROUND, t.x, t.z, 2).every((c) => c && !c.blocked && !c.occupantId))!;
-    machine(sim, 'droneHub', GROUND, hub.x, hub.z, 2);
-    for (let i = 0; i < 900 && !sim.milestones.specialty(id).met; i++) {
-      const st = sim.state.resources;
-      st.energy = big(1e6);
-      st.water = big(1e6);
-      st.biomass = big(1e6);
-      const step = sim.advisor.specialtyStep(id);
-      if (step?.action.kind === 'build') sim.build.place(step.action.type, GROUND, step.action.x, step.action.z);
-      else if (step?.action.kind === 'focus') sim.restoration.pulse(sim.grid.get(step.action.layer ?? GROUND, step.action.x, step.action.z)!.id);
-      else {
-        const e = sim.areas.entryTiles(id).find((t) => sim.restoration.checkPulse(t).ok);
-        if (e) sim.restoration.pulse(e.id);
-      }
-      sim.advance(1);
-    }
-    expect(sim.milestones.specialty(id).met).toBe(true);
-    expect(sim.clusters.counts(id).restored).toBeGreaterThanOrEqual(sim.milestones.specialty(id).need);
+    // Reach the roof with a Bloom Relay, then restore its tiles.
+    const roof = sim.clusters.roof(id)!;
+    const near = sim.clusters.relaySpots(id)[0];
+    machine(sim, 'relay', GROUND, near.x, near.z);
+    expect(sim.grid.isPlayable(roof.id)).toBe(true);
+    for (const t of sim.grid.tilesOf(roof.id)) if (!t.blocked && !t.occupantId && sim.restoration.isEligible(t)) sim.restoration.complete(t, 'pulse');
+    expect(sim.clusters.counts(id).restored).toBeGreaterThan(0);
     // The share on the ground, then the wake.
     for (const t of sim.areas.tiles(id)) {
       if (!isRestorable(t, sim.state.machines) || t.ground === 'restored' || sim.areas.counts(id).restored >= sim.areas.need(id)) continue;

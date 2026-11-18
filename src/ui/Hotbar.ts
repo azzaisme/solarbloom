@@ -1,4 +1,3 @@
-import { formatCost } from '../core/Economy';
 import { DECOR_OPTION, DECOR_OPTIONS } from '../data/cozy';
 import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE } from '../data/machines';
 import { TUNING } from '../data/tuning';
@@ -6,7 +5,7 @@ import { type Action, type Bindings, keyLabel } from '../app/Bindings';
 import { type GlyphStyle, type PadStyle, padName } from './Glyphs';
 import { ICONS, iconize, MACHINE_ICONS, plain } from './Icons';
 import { $, esc, HudPart } from './HudPart';
-import { decorType, etaText, machineTool, type Tool } from './Hud';
+import { decorType, machineTool, type Tool } from './Hud';
 
 /**
  * E22.5 (#342): the classic hotbar (Inspect, Pulse, the build tray, Harvest, Upgrades).
@@ -37,7 +36,6 @@ export class Hotbar extends HudPart {
       `</div>`,
       `<span class="sep"></span>`,
       `<button class="slot" id="harvestBtn" aria-label="Harvest sunlight (H)"><span class="key">H</span><span class="si">${ICONS.harvest}</span><span class="sl">Harvest</span><span class="sc">+${TUNING.harvest.energy}⚡</span><span class="cd"></span></button>`,
-      `<button class="slot" id="upgBtn" aria-label="Upgrades (U)"><span class="key">U</span><span class="si">${ICONS.upgrades}</span><span class="sl">Upgrades</span><span class="sc">&nbsp;</span><span class="badge" aria-label="Something useful to buy"></span></button>`,
     ].join('');
   }
 
@@ -45,7 +43,6 @@ export class Hotbar extends HudPart {
     const r = this.root;
     r.querySelectorAll<HTMLButtonElement>('#hotbar [data-tool]').forEach((b) => b.addEventListener('click', () => this.cb.selectTool(b.dataset.tool as Tool)));
     $(r, '#harvestBtn').addEventListener('click', () => this.cb.harvest());
-    $(r, '#upgBtn').addEventListener('click', () => this.hud.toggleUpgrades());
     $(r, '#buildToggle').addEventListener('click', () => this.toggleTray());
   }
 
@@ -95,7 +92,6 @@ export class Hotbar extends HudPart {
       ['[data-tool="pulse"]', 'pulse', '2'],
       ['#buildToggle', 'buildMenu', 'B'],
       ['#harvestBtn', 'harvest', 'H'],
-      ['#upgBtn', 'upgrades', 'U'],
     ];
     for (const [sel, action, cursor] of slots) {
       const el = this.root.querySelector<HTMLElement>(`#hotbar ${sel} .key`);
@@ -146,16 +142,6 @@ export class Hotbar extends HudPart {
     this.set('hcd', $(hb, '.cd'), 'html', '');
     ($(hb, '.cd') as HTMLElement).style.transform = `scaleY(${cd / TUNING.harvest.cooldown})`;
     this.set('hsc', $(hb, '.sc'), 'text', cd > 0 ? `${Math.ceil(cd)}s` : `+${TUNING.harvest.energy}⚡`);
-    // Phase 4 E02.5: a dot when there is something worth buying now, not a count of notifications.
-    const useful = s.upgrades.all().find((u) => s.upgrades.status(u).ok);
-    const badge = $(this.root, '#upgBtn .badge');
-    this.set('badgeOn', badge, 'cls', useful ? '1' : '0', 'on');
-    // Phase 5 E12: otherwise, how long until the next thing (seconds of current net income).
-    const next = useful ? undefined : s.advisor.nextPurchase();
-    // E19.4.2 / E20.7: time-to-afford is a number the calm HUD leaves out.
-    const eta = this.settings.showNumbers && next ? (next.eta < 0.5 ? ' · affordable now' : ` · ~${etaText(next.eta)}`) : '';
-    this.set('upgSc', $(this.root, '#upgBtn .sc'), 'text', useful ? formatCost(s.upgrades.status(useful).price).replace(/ /g, '') : next && eta ? `~${etaText(next.eta)}` : '\u00a0');
-    this.set('upgNext', $(this.root, '#upgNext'), 'html', next ? `Next: ${next.icon} ${esc(next.name)} · ${formatCost(next.cost)}${eta}` : useful ? '' : '');
   }
 }
 
