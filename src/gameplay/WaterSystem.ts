@@ -27,6 +27,13 @@ export interface WaterSave {
 /** Each region's water rectangles (its canals and ponds), by region. */
 const REGION_WATER = new Map(REGIONS.filter((r) => r.water?.length).map((r) => [r.id, r.water!]));
 
+/** What the water reads from E23.7.2's `sim.weather` (all optional until it lands). */
+interface WeatherLike {
+  kind?(): string;
+  rain?(): number;
+  effects?(): { evaporation?: number };
+}
+
 /** E23.7's weather names, as the water reads them. */
 const WEATHER_ALIASES: Record<string, WeatherKind> = {
   sunny: 'clear',
@@ -68,6 +75,8 @@ export class WaterSystem {
   private acc = 0;
   /** bumped whenever any level changes (renderers redraw on change) */
   version = 0;
+  /** bumped whenever bodies change shape (a water tile changed): the fade cache keys on both */
+  private shapeRev = 0;
 
   constructor(private sim: Sim) {
     sim.grid.touchListeners.push((t) => {
@@ -82,6 +91,7 @@ export class WaterSystem {
   private forget() {
     this.byTile.clear();
     this.bodies.clear();
+    this.shapeRev++;
   }
 
   /**
@@ -282,6 +292,15 @@ export class WaterSystem {
 
   private fadeMap = new Map<string, number>();
   private fadeKey = '';
+  /**
+   * What the fade map was built from (`version`, `shapeRev`). Levels and shapes only change in a water step or when a
+   * water tile or a level is touched, so between those the land's look is one map lookup per tile: a chunk rebuild
+   * never walks the bodies, and the renderer's per-frame check is two number compares.
+   */
+  private fadeAtVersion = -1;
+  private fadeAtShape = -1;
+  private changesVersion = -1;
+  private changesShape = -1;
 
   /** Bloom stages a level takes off the land around it (0 at or above `fadeBelow`). */
   static fadeSteps(level: number): number {
@@ -295,7 +314,7 @@ export class WaterSystem {
    * water within `fadeReach` never fades: it never depended on it. The fullest body in reach decides.
    */
   fadeAt(t: TileData): number {
-    this.refreshFade();
+    if (this.fadeAtVersion !== this.version || this.fadeAtShape !== this.shapeRev) this.refreshFade();
     return this.fadeMap.size ? (this.fadeMap.get(t.id) ?? 0) : 0;
   }
 
@@ -323,21 +342,51 @@ export class WaterSystem {
   }
 
   private refreshFade() {
+    this.fadeAtVersion = this.version;
+    this.fadeAtShape = this.shapeRev;
     const { key, low } = this.fadeState();
     if (key === this.fadeKey) return;
     this.fadeKey = key;
     this.fadeMap.clear();
+    if (!low.length) return;
     const R = WATER_NET.fadeReach;
     const g = this.sim.grid;
+    const cell = (x: number, z: number) => x * 65536 + z;
+    // every body within reach of the faded areas (the low ones and any fuller neighbour), found once
+    const near = new Set<WaterBody>();
+    for (const b of low) {
+      near.add(b);
+      const [x0, z0, x1, z1] = this.fadeBounds(b);
+      for (let z = z0 - R; z <= z1 + R; z++)
+        for (let x = x0 - R; x <= x1 + R; x++) {
+          const t = g.get(GROUND, x, z);
+          if (this.isFresh(t)) near.add(this.bodyAt(t)!);
+        }
+    }
+    // each body marks the land within its reach with its level; the fullest mark wins (no water in reach: no mark)
+    const best = new Map<number, number>();
+    for (const b of near) {
+      const lv = this.levelOf(b.id);
+      for (const id of b.tiles) {
+        const t = g.byTileId(id);
+        if (!t) continue;
+        for (let dz = -R; dz <= R; dz++)
+          for (let dx = -R; dx <= R; dx++) {
+            const k = cell(t.x + dx, t.z + dz);
+            const have = best.get(k);
+            if (have === undefined || lv > have) best.set(k, lv);
+          }
+      }
+    }
     for (const b of low) {
       const [x0, z0, x1, z1] = this.fadeBounds(b);
       for (let z = z0; z <= z1; z++)
         for (let x = x0; x <= x1; x++) {
+          const lv = best.get(cell(x, z));
+          const steps = lv === undefined ? 0 : WaterSystem.fadeSteps(lv);
+          if (!steps) continue;
           const t = g.get(GROUND, x, z);
-          if (!t || t.feature === 'water' || this.fadeMap.has(t.id)) continue;
-          const w = this.fullest(t, R);
-          const s = w === undefined ? 0 : WaterSystem.fadeSteps(w); // no water in reach: nothing to fade
-          if (s) this.fadeMap.set(t.id, s);
+          if (t && t.feature !== 'water') this.fadeMap.set(t.id, steps);
         }
     }
   }
@@ -349,6 +398,9 @@ export class WaterSystem {
    * their chunks are rebuilt.
    */
   takeFadeChanges(): [number, number, number, number][] {
+    if (this.changesVersion === this.version && this.changesShape === this.shapeRev) return [];
+    this.changesVersion = this.version;
+    this.changesShape = this.shapeRev;
     const out: [number, number, number, number][] = [];
     const now = new Map<string, number>();
     for (const b of this.live()) {
@@ -388,9 +440,20 @@ export class WaterSystem {
    * (no rain, no sun).
    */
   weather(): WeatherKind {
-    const live = (this.sim as { weather?: { kind?: () => string } }).weather?.kind?.();
+    const live = (this.sim as unknown as { weather?: WeatherLike }).weather?.kind?.();
     if (live) return WEATHER_ALIASES[live] ?? (live as WeatherKind);
     return this.sim.state.salvage?.weather?.kind ?? 'cloudy';
+  }
+
+  /**
+   * What the weather does to the water now (shares of capacity per game day): E23.7.2's rain and evaporation when
+   * its weather is there, else this file's own table by kind.
+   */
+  sky(): { fill: number; evap: number } {
+    const wx = (this.sim as unknown as { weather?: WeatherLike }).weather;
+    if (wx?.rain && wx.effects) return { fill: WATER_NET.rainShare * wx.rain(), evap: wx.effects().evaporation ?? 0 };
+    const w = this.weather();
+    return { fill: WATER_NET.weatherFill[w] ?? 0, evap: w === 'clear' ? WATER_NET.evaporationPerDay : 0 };
   }
 
   // ───────────── hooks for the gentle-failure suite (E23.10) ─────────────
@@ -448,9 +511,7 @@ export class WaterSystem {
     const span = this.acc;
     this.acc = 0;
     const days = span / WATER_NET.daySeconds;
-    const w = this.weather();
-    const fill = WATER_NET.weatherFill[w] ?? 0;
-    const evap = w === 'clear' ? WATER_NET.evaporationPerDay : 0;
+    const { fill, evap } = this.sky();
     for (const b of this.live()) {
       let lv = this.levelOf(b.id);
       const before = lv;
