@@ -55,6 +55,23 @@ export class Clock {
     return this.sim.state.time / DAY_SECONDS;
   }
 
+  /**
+   * Where the GAME day is (0 dawn … 2/3 dusk … 1), ignoring "follow my clock". Growth and other timers that care
+   * about day and night (night-only crops, E23.5) read this, so they take the same play time in both modes.
+   */
+  gameDayFraction(): number {
+    return gameFraction(this.sim.state);
+  }
+
+  /** Is it night on the game clock (whatever the sky shows in "follow my clock" mode)? */
+  gameIsNight(): boolean {
+    return this.gameDayFraction() >= DAY.dayShare;
+  }
+
+  gameIsDay(): boolean {
+    return !this.gameIsNight();
+  }
+
   /** Game days of play since `since` (sim time), for timers: `clock.elapsedDays(t0) >= 2`. */
   elapsedDays(since: number): number {
     return (this.sim.state.time - since) / DAY_SECONDS;
