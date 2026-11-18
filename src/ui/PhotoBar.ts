@@ -1,5 +1,6 @@
 import type { Action } from '../app/Bindings';
-import { PHOTO_FILTERS, PHOTO_WEATHER_NAMES, type PhotoState } from '../app/PhotoMode';
+import type { PhotoState } from '../app/PhotoMode';
+import { PHOTO_FILTERS, PHOTO_WEATHER_NAMES } from '../data/photo';
 
 /**
  * E19.4.1 (#260): photo mode's controls bar, outside the HUD (which photo mode hides). The saved picture is the

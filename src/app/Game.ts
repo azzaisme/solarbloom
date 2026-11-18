@@ -88,7 +88,9 @@ import { type LoadResult, SaveService, type Slot } from './SaveService';
 import { Loading, type LoadSteps } from '../ui/Loading';
 import { ModelLibrary, useModels } from '../rendering/Models';
 import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
-import { padStick, PHOTO_FILTERS, PhotoMode } from './PhotoMode';
+import { padStick, PhotoMode } from './PhotoMode';
+import { PHOTO_FILTERS } from '../data/photo';
+import { sceneNow } from './PhotoScene';
 import { DayNight, type LightMoment } from '../rendering/DayNight';
 import { NightFindVisuals } from '../rendering/NightFindVisuals';
 import { NIGHT_FIND_GIVES } from '../data/time';
@@ -1025,12 +1027,12 @@ export class Game {
   private lightMoment(): LightMoment {
     const wv = this.weatherVisuals;
     // E23.7.3: photo mode may show its own time of day (the game's clock doesn't move)
-    return { f: this.photo?.lightOverride() ?? this.sim.clock.dayFraction(), overcast: wv?.overcast ?? 0, flash: wv?.lightning ?? 0 };
+    return { f: sceneNow(this.sim, this.photo).f, overcast: wv?.overcast ?? 0, flash: wv?.lightning ?? 0 };
   }
 
   /** E23.7.2: the weather the screen shows (photo mode may pick its own, E23.7.3). */
   private weatherLook(): WeatherLook {
-    return { kind: this.photo?.weatherOverride() ?? this.sim.weather.kind() };
+    return { kind: sceneNow(this.sim, this.photo).weather };
   }
 
   /**

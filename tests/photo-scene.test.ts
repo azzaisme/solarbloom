@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Bindings } from '../src/app/Bindings';
-import { GOLDEN_HOUR, PHOTO_FILTERS, PHOTO_WEATHERS, PhotoMode, type PhotoState } from '../src/app/PhotoMode';
+import { PhotoMode, type PhotoState } from '../src/app/PhotoMode';
+import { sceneNow } from '../src/app/PhotoScene';
+import { GOLDEN_HOUR, PHOTO_FILTERS, PHOTO_WEATHERS } from '../src/data/photo';
 import { createInitialState } from '../src/core/GameState';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -79,17 +81,43 @@ describe('E23.7.3: photo mode sets the time and the weather', () => {
     expect(photo.lightOverride()).toBeUndefined(); // the next visit starts from the real sky
   });
 
-  it('nothing set in photo mode changes the game: the sim never sees it', () => {
+  it('nothing set in photo mode changes the game: bound to a running Sim, the screen changes and the game does not', { timeout: 120_000 }, () => {
+    // two identical games: one with photo mode open and busy, one without
     const sim = new Sim(createInitialState(9, 'oldcity'));
-    sim.advance(5);
-    const before = JSON.stringify(sim.state);
-    const day = [sim.clock.dayFraction(), sim.weather.kind(), sim.clock.solarFactor()];
-    const { photo } = setup();
+    const control = new Sim(createInitialState(9, 'oldcity'));
+    const out = { filter: '' };
+    const photo = new PhotoMode(
+      {
+        camera: camera(),
+        setHudHidden: () => {},
+        setDof: () => {},
+        capture: () => {},
+        render: () => {},
+        // the real wiring: the slider starts from this game's clock (as Game binds it)
+        clockHour: () => sim.clock.hour() + sim.clock.minute() / 60,
+        setFilter: (css) => (out.filter = css),
+      },
+      new Bindings(undefined, { oldCity: true }),
+    );
+    const real = sceneNow(sim, photo);
     photo.enter();
+    photo.action('pinNext'); // an hour on
     photo.setHour(23);
     photo.setWeather('storm');
     photo.setFilter('vivid');
-    expect(JSON.stringify(sim.state)).toBe(before);
-    expect([sim.clock.dayFraction(), sim.weather.kind(), sim.clock.solarFactor()]).toEqual(day);
+    // what the screen draws follows photo mode...
+    expect(sceneNow(sim, photo)).toEqual({ f: (23 - 6) / 24, weather: 'storm' });
+    expect(sceneNow(sim, photo)).not.toEqual(real);
+    // ...while the game plays on exactly as one without photo mode
+    for (let i = 0; i < 300; i++) {
+      sim.tick();
+      control.tick();
+      sceneNow(sim, photo); // the game reads the scene every frame
+    }
+    expect(JSON.stringify(sim.state)).toBe(JSON.stringify(control.state));
+    expect([sim.clock.dayFraction(), sim.weather.kind(), sim.clock.solarFactor()]).toEqual([control.clock.dayFraction(), control.weather.kind(), control.clock.solarFactor()]);
+    // and leaving puts the screen back on the game's own sky
+    photo.exit();
+    expect(sceneNow(sim, photo)).toEqual({ f: sim.clock.dayFraction(), weather: sim.weather.kind() });
   });
 });
