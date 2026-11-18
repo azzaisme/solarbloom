@@ -77,7 +77,10 @@ export class PadFocus {
       const along = vx * dx + vy * dy;
       if (along <= 2) continue;
       const across = Math.abs(vx * dy - vy * dx);
-      const score = along + across * 2.5;
+      // E22.4: in a table, left and right stay on the row (and up and down in the column) when anything does:
+      // something in the same band beats anything off it, however near.
+      const band = dx ? b.top < a.bottom - 2 && b.bottom > a.top + 2 : b.left < a.right - 2 && b.right > a.left + 2;
+      const score = band ? along : along + across * 2.5 + 10000;
       if (score < bestScore) {
         bestScore = score;
         best = e;
