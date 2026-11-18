@@ -460,6 +460,47 @@ export const REGIONS: RegionDef[] = [
   },
 ];
 
+// ───────────── E23.8.1 (#399): region strengths ─────────────
+
+/**
+ * A region's natural strength, as well as its E21 material: the reason to link regions together. A machine that
+ * matches a strength gives that much more output when it stands in the region (see `strengthAt` in
+ * core/RegionStrengths). `shelter` and `water` read as yes/no: greenhouses ignore weather, springs refill for free.
+ */
+export type StrengthKind = 'wind' | 'tide' | 'sun' | 'soil' | 'water' | 'machinery' | 'salvage' | 'shelter' | 'trade';
+
+/** Starting value: about 1.5× output for a matching machine in its strength region. */
+export const STRENGTH_BONUS = 1.5;
+
+export const REGION_STRENGTHS: Record<RegionId, { strengths: Partial<Record<StrengthKind, number>>; text: string }> = {
+  mastRow: { strengths: { wind: STRENGTH_BONUS }, text: 'Wind' },
+  oldMarket: { strengths: { trade: STRENGTH_BONUS }, text: 'Trade: swap materials, buy seeds' },
+  saltwind: { strengths: { wind: 1.75, tide: STRENGTH_BONUS }, text: 'Wind and tide: the strongest wind' },
+  elderGrove: { strengths: { soil: STRENGTH_BONUS }, text: 'Fertile soil: faster crops, more biomass' },
+  cistern: { strengths: { water: STRENGTH_BONUS }, text: 'Water: springs refill for free' },
+  clockPlaza: { strengths: { machinery: STRENGTH_BONUS }, text: 'Machinery' },
+  terraces: { strengths: { sun: STRENGTH_BONUS }, text: 'Sun: more solar on the roofs' },
+  glasshouse: { strengths: { shelter: STRENGTH_BONUS }, text: 'Shelter: greenhouses ignore weather' },
+  observatory: { strengths: { sun: STRENGTH_BONUS, wind: STRENGTH_BONUS }, text: 'Sun and wind' },
+  spireHeights: { strengths: { salvage: STRENGTH_BONUS }, text: 'Scrap and metals: the richest salvage' },
+};
+
+/**
+ * Which machines a strength boosts. Machine ids are the E23 build ids; several belong to sessions still landing
+ * (power, water, farm, crafting), so this is a plain lookup they can extend. A machine not listed has no strength.
+ */
+export const STRENGTH_MACHINES: Record<StrengthKind, string[]> = {
+  wind: ['windTurbine', 'turbineField'],
+  tide: ['tidalPump', 'desalinationPlant'],
+  sun: ['solar', 'largeSolar'],
+  soil: ['planter', 'orchard', 'floodedBed', 'roofGarden', 'beehive'],
+  water: ['pump', 'reservoir', 'largeReservoir', 'gravityFeed', 'spring'],
+  machinery: ['craftingTable', 'assembler', 'motor', 'bioDigester', 'mulcher'],
+  salvage: ['salvage'],
+  shelter: ['greenhouse', 'mushroomLog'],
+  trade: ['trade'],
+};
+
 // ───────────── E21.26: the island ─────────────
 
 export type CoastKind = 'cliff' | 'rocky' | 'beach';
