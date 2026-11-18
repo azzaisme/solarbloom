@@ -89,9 +89,9 @@ export const MACHINE_RECIPES: MachineRecipe[] = [
   { id: 'pump', name: 'Pump', cost: { scrap: 6, wire: 2, clay: 2 }, unlock: { keeper: 'cistern' }, owner: 'E23.4' },
   { id: 'desalination', name: 'Desalination plant', cost: { scrap: 10, pipe: 4, glassPane: 4, wire: 2 }, unlock: { keeper: 'cistern' }, owner: 'E23.4' },
   { id: 'battery', name: 'Battery', cost: { batteryCell: 4 }, unlock: { keeper: 'clockPlaza' }, owner: 'E23.3' },
-  { id: 'bioDigester', name: 'Bio Digester', cost: { scrap: 10, motor: 2, clay: 4 }, unlock: { keeper: 'clockPlaza' }, owner: 'E23.3' },
+  { id: 'bioDigester', name: 'Bio Digester', cost: { scrap: 10, motor: 2, clay: 4 }, unlock: { keeper: 'clockPlaza' }, owner: 'E23.5' },
   { id: 'drone', name: 'Drone', cost: { motor: 1, wire: 2, glassPane: 1 }, unlock: { keeper: 'clockPlaza' }, owner: 'E23.6.3' },
-  { id: 'largeSolar', name: 'Large solar array', cost: { sunCell: 4, scrap: 6, wire: 2 }, unlock: { keeper: 'observatory' }, owner: 'E23.3' },
+  { id: 'largeSolar', name: 'Large solar array', cost: { sunCell: 4, scrap: 6, wire: 2 }, unlock: { keeper: 'observatory' }, owner: 'unassigned: no sub-epic builds it yet (raised with the coordinator)' },
   { id: 'assembler', name: 'Assembler', cost: { motor: 4, gears: 10, glassPane: 6 }, unlock: { keeper: 'spireHeights' }, owner: 'E23.6.5' },
   // The Old City's own machines (E21.3), on the table too: one way to build everything. They keep the fountain step
   // that opened them, and their recipes move onto components where one fits.
