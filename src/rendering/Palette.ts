@@ -513,7 +513,9 @@ const families = { cozy, retaining, stone, paving, ground, roof, lawn, flowers, 
 export const PALETTE = {
   ...families,
   /** E23.7.1.3: night finds: a glowing plant's stems and buds, night salvage's scraps and its glint */
-  nightFind: { stem: '#4f7d5a', bud: '#c8ffe6', budGlow: '#7dffd0', scrap: '#8a8f96', glint: '#fff2c8', glintGlow: '#ffd98a' },
+  /** E23.7.2.2: the house's radio (the forecast) */
+  radio: { crate: '#9a7652', body: '#c9a074', grille: '#4b4741', dial: '#f3e2b8', dialGlow: '#ffcf7a' },
+  nightFind: { stem: '#4f7d5a', bud: '#c8ffe6', budGlow: '#7dffd0', scrap: '#8a8f96', glint: '#fff2c8', glintGlow: '#ffd98a', dewStem: '#d9d2c2', dewCap: '#9fb7c9', dewDrop: '#e8f6ff', glass: '#bfe3ef', moth: '#e9e4d8' },
   // ───── legacy names (pre-Look 2), kept as aliases ─────
   concrete: ['#9a9286', '#8f877b', '#a39b8f', '#958d81'],
   concreteDark: '#6b6358',

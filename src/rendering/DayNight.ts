@@ -14,6 +14,8 @@ export interface LightMoment {
   f: number;
   /** 0 clear … 1 heavy cloud (storm) */
   overcast?: number;
+  /** a lightning flash, 0 … 1 (E23.7.2) */
+  flash?: number;
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -99,7 +101,7 @@ export class DayNight {
     this.tmp.lerp(this.base.moon, this.tmp, day);
     sunLight.color = this.tmp.clone();
     const sunI = LOOK.sun.intensity * lerp(L.moonShare, 1, day) * (1 - oc * 0.6);
-    sunLight.intensity = sunI;
+    sunLight.intensity = sunI + (m.flash ?? 0) * LOOK.sun.intensity * 0.8;
     // the fill keeps its own side, opposite the key light
     const fill = this.scene.fill.light!;
     this.fd.set(-this.dir.x, -0.75, -this.dir.z).normalize();
@@ -108,7 +110,7 @@ export class DayNight {
     fill.intensity = LOOK.fill.intensity * lerp(L.fillNight, 1, day) * (1 + oc * 0.25);
     this.app.scene.skyboxIntensity = LOOK.env.intensity * lerp(L.envNight, 1, day) * (1 - oc * 0.15);
     this.rim = lerp(L.rimNight, 1, day) * (1 - oc * 0.5);
-    this.app.scene.exposure = LOOK.exposure * lerp(L.exposureNight, 1, day);
+    this.app.scene.exposure = LOOK.exposure * lerp(L.exposureNight, 1, day) * (1 + (m.flash ?? 0) * 0.5);
     // the sky: night, the warm band at dawn and dusk, and the weather's cloud
     this.sky.night = 1 - day;
     const edge = Math.min(Math.abs(f - DAY.dayShare), f, 1 - f); // distance to the nearer horizon

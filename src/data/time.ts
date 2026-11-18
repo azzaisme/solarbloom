@@ -39,14 +39,18 @@ export function gameHours(n: number): number {
  * `glowplant`: a glowing plant to gather (Seeds); `salvage`: something glinting that only shows by night (Scrap).
  * Positions are open ground cells in the park and on its edges.
  */
-export type NightFindKind = 'glowplant' | 'salvage';
+export type NightFindKind = 'glowplant' | 'salvage' | 'dewcap' | 'driftglass';
 export interface NightFindDef {
   id: string;
   kind: NightFindKind;
+  /** when it's out: at night (default), or in fog (E23.7.2: fog-only finds, day or night) */
+  when?: 'night' | 'fog';
   x: number;
   z: number;
 }
-export const NIGHT_FIND_GIVES: Record<NightFindKind, { material: 'seeds' | 'scrap'; n: number; verb: string; name: string }> = {
+export const NIGHT_FIND_GIVES: Record<NightFindKind, { material: 'seeds' | 'scrap' | 'glass'; n: number; verb: string; name: string }> = {
+  dewcap: { material: 'seeds', n: 4, verb: 'Gather', name: 'dewcap spores' },
+  driftglass: { material: 'glass', n: 3, verb: 'Pick up', name: 'misted glass' },
   glowplant: { material: 'seeds', n: 3, verb: 'Gather', name: 'glowing seeds' },
   salvage: { material: 'scrap', n: 4, verb: 'Pick up', name: 'something glinting' },
 };
@@ -55,4 +59,8 @@ export const NIGHT_FINDS: NightFindDef[] = [
   { id: 'n-glow-2', kind: 'glowplant', x: 15, z: 7 },
   { id: 'n-salv-1', kind: 'salvage', x: 10, z: 3 },
   { id: 'n-salv-2', kind: 'salvage', x: 6, z: 12 },
+  // E23.7.2: fog-only finds (out whenever it's foggy)
+  { id: 'f-dew-1', kind: 'dewcap', when: 'fog', x: 12, z: 8 },
+  { id: 'f-dew-2', kind: 'dewcap', when: 'fog', x: 1, z: 13 },
+  { id: 'f-glass-1', kind: 'driftglass', when: 'fog', x: 9, z: 15 },
 ];

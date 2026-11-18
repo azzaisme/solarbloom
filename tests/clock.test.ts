@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import { DAY, DAY_SECONDS, gameDays, gameHours, NIGHT_FINDS } from '../src/data/time';
+import { DAY, DAY_SECONDS, gameDays, gameHours, NIGHT_FINDS as ALL_FINDS } from '../src/data/time';
+
+/** the night finds proper (E23.7.2 adds fog finds to the same list) */
+const NIGHT_FINDS = ALL_FINDS.filter((f) => f.when !== 'fog');
 import { daylightAt, gameDayOf, realFraction, solarAt } from '../src/gameplay/Clock';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -160,7 +163,7 @@ describe('E23.7.1.3: night finds and sleeping', () => {
 
   it('every night find sits on open, unblocked ground', () => {
     const sim = oldSim();
-    for (const f of NIGHT_FINDS) {
+    for (const f of ALL_FINDS) {
       const t = sim.grid.get(GROUND, f.x, f.z);
       expect(t, f.id).toBeDefined();
       expect(t!.blocked, f.id).toBeFalsy();

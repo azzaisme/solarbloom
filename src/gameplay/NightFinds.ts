@@ -13,16 +13,21 @@ export class NightFinds {
     return NIGHT_FINDS;
   }
 
-  /** Out now: night, and not taken tonight. */
+  /** Is its time now: night for night finds, fog (E23.7.2) for fog finds? */
+  private due(f: NightFindDef): boolean {
+    return f.when === 'fog' ? !!this.sim.weather?.effects().fogFinds : this.sim.clock.isNight();
+  }
+
+  /** Out now: its time (night, or fog), and not taken this night (or this foggy day). */
   visible(id: string): boolean {
-    const c = this.sim.clock;
-    if (!c.isNight() || !NIGHT_FINDS.some((f) => f.id === id)) return false;
-    return this.sim.state.clock?.nights?.[id] !== this.night();
+    const f = NIGHT_FINDS.find((n) => n.id === id);
+    if (!f || !this.due(f)) return false;
+    return this.sim.state.clock?.nights?.[id] !== this.stamp(f);
   }
 
   /** The finds out now. */
   out(): NightFindDef[] {
-    return this.sim.clock.isNight() ? NIGHT_FINDS.filter((f) => this.visible(f.id)) : [];
+    return NIGHT_FINDS.filter((f) => this.visible(f.id));
   }
 
   /** The find on a ground cell, if one is out there. */
@@ -52,9 +57,14 @@ export class NightFinds {
     const n = s.state.salvage ? Math.min(g.n, s.inventory.room(g.material)) : 0;
     if (n > 0) s.inventory.add(g.material, n);
     const st = (s.state.clock ??= { offset: s.clock.gameSeconds() - s.state.time });
-    (st.nights ??= {})[id] = this.night();
+    (st.nights ??= {})[id] = this.stamp(f);
     s.bus.emit('night.found', { id, material: g.material, n, x: f.x, z: f.z });
     return n;
+  }
+
+  /** Which night (or, for fog finds, which game day) a find was taken in. */
+  private stamp(f: NightFindDef): number {
+    return f.when === 'fog' ? this.sim.clock.gameDay() : this.night();
   }
 
   /**
