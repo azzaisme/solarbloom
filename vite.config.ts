@@ -9,7 +9,7 @@ const env = (globalThis as { process?: { env: Record<string, string | undefined>
  * A new test file joins the full suite automatically; add it here too if it is fast and core.
  */
 const QUICK = [
-  'smoke', 'grid', 'big', 'world', 'economy', 'placement', 'save-storage', 'save-v4', 'area-switches',
+  'smoke', 'advisor', 'grid', 'big', 'world', 'economy', 'placement', 'save-storage', 'save-v4', 'area-switches',
   'area-panel', 'upgrades-city', 'feedback-phase4', 'playtest-metrics', 'canal-network', 'district-bloom',
   'rooftop-clusters', 'relay-city', 'no-growing-prices', 'look', 'palette-lint', 'icons', 'hud-contrast', 'look3-budget', 'roads', 'drone-roles',
   'bloombot-walk', 'bindings', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glyphs', 'rebind', 'save-slots', 'backpack',

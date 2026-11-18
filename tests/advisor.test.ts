@@ -55,9 +55,10 @@ describe('objective advisor (City 14.1)', () => {
   it('reads the other sub-epics handles when they exist: charge, then power, then water (E23.1.5)', () => {
     const sim = new Sim(createInitialState(3));
     const loop = sim as unknown as Record<string, unknown>;
-    loop.charge = { fraction: () => 0.1 };
+    // the same shape as E23.2's ChargeSystem: `low` below CHARGE.lowShare, `share` 0…1
+    loop.charge = { low: true, share: 0.1 };
     expect(check(sim, 'low charge').topic).toBe('charge');
-    loop.charge = { fraction: () => 1 };
+    loop.charge = { low: false, share: 1 };
     const m: MachineData = { id: sim.newId('m'), type: 'solar', roofId: GROUND, x: 1, z: 1, size: 1, boostUntil: 0, timer: 0, charge: 0 };
     sim.state.machines.push(m);
     loop.power = { isPowered: (x: MachineData) => x.id !== m.id };
@@ -126,5 +127,42 @@ describe('objective advisor (City 14.1)', () => {
     const f = sim.advisor.nearestFrontier()!;
     expect(sim.areas.fog(f.areaId)).not.toBe('cleared');
     for (const id of sim.areas.revealed()) if (id !== PARK && sim.areas.fog(id) !== 'cleared') expect(sim.areas.info(id).distance).toBeGreaterThanOrEqual(f.distance);
+  });
+
+  // E23.1.5: the cozy guarantee no-stall gave the classic advisor, rewritten for the Old City. A player who does
+  // nothing but what the advisor says (walk there, then the one obvious action) wakes the fountain, starting from
+  // a new game with nothing at all in the bank.
+  it('a fresh game with nothing in the bank reaches fountain tier 1 by following the advisor alone', { timeout: 120_000 }, () => {
+    const sim = new Sim(createInitialState(9, 'oldcity'));
+    const st = sim.state;
+    st.resources.energy = big(0);
+    st.resources.water = big(0);
+    st.resources.biomass = big(0);
+    const [fx, fz] = sim.areas.info(PARK).landmark;
+    const fountain = sim.areas.landmark(PARK)!;
+    const seen = new Set<string>();
+    let followed = 0;
+    while (sim.state.salvage!.tier < 1 && sim.time < 40 * 60) {
+      const g = check(sim, `t=${sim.time.toFixed(0)}`);
+      seen.add(g.topic);
+      const a = g.action;
+      if (a.kind === 'focus') {
+        sim.bot = { roofId: a.layer ?? GROUND, x: a.x, z: a.z }; // walking there (the walk itself is E23.10.1's proof)
+        const pile = sim.salvage.pileAt(a.x, a.z);
+        const t = sim.grid.get(a.layer ?? GROUND, a.x, a.z);
+        if (pile) while (sim.salvage.left(pile.id) > 0 && !sim.salvage.problem(pile.id) && sim.salvage.salvage(pile.id) > 0) sim.advance(1);
+        else if (a.x === fx && a.z === fz) {
+          sim.bot = { roofId: GROUND, x: fountain.x - 1, z: fountain.z };
+          sim.fountain.giveAll();
+        } else if (t && sim.restoration.checkPulse(t).ok) sim.restoration.pulse(t.id);
+        followed++;
+      }
+      sim.advance(a.kind === 'wait' ? a.seconds : 1.5);
+    }
+    expect(sim.state.salvage!.tier, `stuck at t=${sim.time.toFixed(0)}: "${sim.advisor.suggest().text}"`).toBe(1);
+    expect(followed).toBeGreaterThan(20);
+    expect([...seen].every((t) => ['keeper', 'restore'].includes(t))).toBe(true); // no charge, grid or water yet
+    // eslint-disable-next-line no-console
+    console.log(`advisor alone: fountain tier 1 at ${(sim.time / 60).toFixed(1)} min, ${followed} steps followed`);
   });
 });

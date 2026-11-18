@@ -336,8 +336,6 @@ export const TUNING = {
    */
   areaSteps: { at: [0.25, 0.5, 0.75], incomeSeconds: [10, 15, 20], min: 20, energy: 20, water: 10 },
 
-  /** E23.1.5: the advisor speaks of charging up below this share of bloombot's charge (E23.2.1). */
-  advisor: { lowCharge: 0.25 },
 
   autosaveSeconds: 10,
 
