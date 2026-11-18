@@ -29,6 +29,13 @@ export const WATER_NET = {
   maxTiles: 6000,
   /** what the helpers draw (units per tile they work); planters and pumps bring their own (E23.5, E23.4.2) */
   draw: { cultivatorPerTile: 2 },
+  /**
+   * E23.4.4: land around low water fades. Restored ground within `fadeReach` of a body below `fadeBelow` shows up to
+   * `fadeSteps` bloom stages less (lush → flowers → plain restored), more the emptier it is. Never below restored.
+   */
+  fadeReach: 5,
+  fadeBelow: 0.35,
+  fadeSteps: 2,
   /** the drained bed shows in this many steps (the renderer rebuilds a body's look only when its step changes) */
   lookSteps: 10,
 };

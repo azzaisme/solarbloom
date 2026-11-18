@@ -534,6 +534,15 @@ export class ChunkRenderer {
       }
   }
 
+  /** E23.4.4: rebuild every chunk touching these tile bounds (inclusive). */
+  markRect(x0: number, z0: number, x1: number, z1: number) {
+    for (let cz = Math.floor(z0 / CHUNK); cz <= Math.floor(z1 / CHUNK); cz++)
+      for (let cx = Math.floor(x0 / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
+        const v = this.views.get(chunkKey(GROUND, cx, cz));
+        if (v) v.dirty = true;
+      }
+  }
+
   /** Where an area's wave starts (its landmark) and how far it has to roll. */
   private waveFrom(id: string): [number, number, number] {
     const info = this.sim.areas.info(id);
@@ -1194,7 +1203,7 @@ export class ChunkRenderer {
     this.sink = b;
     const f = t.feature ?? 'lawn';
     const dead = paintedDead(t) ?? DEAD[f] ?? DEAD.lawn;
-    const stage = Math.max(1, Math.min(4, t.bloom || 1));
+    const stage = Math.max(1, Math.min(4, this.sim.water.bloomShown(t) || 1)); // E23.4.4: fades by low water
     // E21.4: the open sea stays sea zoomed out
     if (t.blocked && f === 'water' && t.level !== undefined) return this.slab(b, PALETTE.ground.sea[t.variant % PALETTE.ground.sea.length], [t.x + 0.5, h + 0.04 - WATER.drop, t.z + 0.5], [1, 0.08, 1]);
     if (f === 'water' && t.level !== undefined && t.ground !== 'restored' && surfCell(t.x, t.z)) return this.slab(b, PALETTE.ground.shallows[t.variant % PALETTE.ground.shallows.length], [t.x + 0.5, h + 0.04 - WATER.drop, t.z + 0.5], [1, 0.08, 1]);
@@ -1207,7 +1216,7 @@ export class ChunkRenderer {
     }
     if (this.plotCells.has(`${t.x},${t.z}`)) return; // E19.1.5: the plot's own far look stands here
     if (this.addTree(t, h, 0)) return;
-    if (t.ground === 'restored' && t.bloom >= 3 && f !== 'water') this.fb.add(shrubGeo(t.variant, 0), t.x + 0.5, h + 0.08, t.z + 0.5, t.variant, 1);
+    if (t.ground === 'restored' && this.sim.water.bloomShown(t) >= 3 && f !== 'water') this.fb.add(shrubGeo(t.variant, 0), t.x + 0.5, h + 0.08, t.z + 0.5, t.variant, 1);
   }
 
   // ───────────── trees (Phase 5) ─────────────
@@ -1543,7 +1552,7 @@ export class ChunkRenderer {
       return;
     }
     if (t.occupantId || this.plotCells.has(`${t.x},${t.z}`)) {
-      this.slab(b, t.ground === 'restored' ? (t.feature === 'paving' ? this.slabTone(t) : grassTone(Math.max(1, t.bloom || 1), t.x, t.z)) : PALETTE.soil, [x, h, z], [1, 0.16, 1]);
+      this.slab(b, t.ground === 'restored' ? (t.feature === 'paving' ? this.slabTone(t) : grassTone(Math.max(1, this.sim.water.bloomShown(t) || 1), t.x, t.z)) : PALETTE.soil, [x, h, z], [1, 0.16, 1]);
       return;
     }
     const top = h + 0.08;
@@ -1689,7 +1698,7 @@ export class ChunkRenderer {
     const f = t.feature ?? 'lawn';
     const dead = DEAD[f] ?? DEAD.lawn;
     if (t.blocked) return f !== 'building' && this.level >= 4 ? PALETTE.paving.grout : dead[t.variant % dead.length];
-    const stage = Math.max(1, Math.min(4, t.bloom || 1));
+    const stage = Math.max(1, Math.min(4, this.sim.water.bloomShown(t) || 1)); // E23.4.4: fades by low water
     if (t.occupantId) return t.ground === 'restored' ? grassTone(stage, t.x, t.z) : PALETTE.soil;
     if (t.ground === 'restored') return f === 'paving' ? this.slabTone(t) : f === 'road' ? PALETTE.paving.roadAlive : grassTone(stage, t.x, t.z);
     if (t.ground === 'growing') return PALETTE.ground.growing;
@@ -1988,7 +1997,7 @@ export class ChunkRenderer {
    */
   private restoredTile(b: Sink, t: TileData, h: number, x: number, z: number, top: number, f: string, r: VRng) {
     void r;
-    const stage = Math.max(1, Math.min(4, t.bloom || 1));
+    const stage = Math.max(1, Math.min(4, this.sim.water.bloomShown(t) || 1)); // E23.4.4: fades by low water
     const grass = grassTone(stage, t.x, t.z);
     const c = this.ctx;
     if (f === 'paving') {

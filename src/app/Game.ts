@@ -4216,6 +4216,7 @@ export class Game {
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
     this.waterLevels.update();
+    for (const r of this.sim.water.takeFadeChanges()) this.chunks.markRect(...r); // E23.4.4: land around low water
     if (this.bot) {
       this.bot.update(wdt); // still reads the pad (the menu's focus ring), but nothing moves
       this.updateExploreCamera(wdt);

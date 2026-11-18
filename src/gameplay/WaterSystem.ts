@@ -1,9 +1,9 @@
-import { GROUND } from '../core/GameState';
-import { regionOfCell, seaCell, surfCell } from '../core/OldCityLayout';
-import type { TileData, WeatherKind } from '../core/types';
-import { REGIONS, type RegionId } from '../data/oldcity';
-import { WATER_NET } from '../data/water';
-import type { Sim } from './Sim';
+import { GROUND } from "../core/GameState";
+import { regionOfCell, seaCell, surfCell } from "../core/OldCityLayout";
+import type { TileData, WeatherKind } from "../core/types";
+import { REGIONS, type RegionId } from "../data/oldcity";
+import { WATER_NET } from "../data/water";
+import type { Sim } from "./Sim";
 
 /**
  * A body of fresh water: one connected stretch of water tiles (a pond, a canal, a basin). Its id is its anchor
@@ -25,7 +25,9 @@ export interface WaterSave {
 }
 
 /** Each region's water rectangles (its canals and ponds), by region. */
-const REGION_WATER = new Map(REGIONS.filter((r) => r.water?.length).map((r) => [r.id, r.water!]));
+const REGION_WATER = new Map(
+  REGIONS.filter((r) => r.water?.length).map((r) => [r.id, r.water!]),
+);
 
 const SIDES = [
   [1, 0],
@@ -63,7 +65,7 @@ export class WaterSystem {
 
   constructor(private sim: Sim) {
     sim.grid.touchListeners.push((t) => {
-      if (t.feature === 'water' && this.byTile.size) this.forget();
+      if (t.feature === "water" && this.byTile.size) this.forget();
     });
   }
 
@@ -81,9 +83,10 @@ export class WaterSystem {
    * once restored (until then it is a silted bed). The open sea, the bay and the surf never are.
    */
   isFresh(t: TileData | undefined): t is TileData {
-    if (!t || t.roofId !== GROUND || t.feature !== 'water') return false;
-    if (this.sim.oldCity && (seaCell(t.x, t.z) || surfCell(t.x, t.z))) return false;
-    return (this.sim.oldCity && t.blocked) || t.ground === 'restored';
+    if (!t || t.roofId !== GROUND || t.feature !== "water") return false;
+    if (this.sim.oldCity && (seaCell(t.x, t.z) || surfCell(t.x, t.z)))
+      return false;
+    return (this.sim.oldCity && t.blocked) || t.ground === "restored";
   }
 
   /** The body a water tile belongs to. */
@@ -96,7 +99,7 @@ export class WaterSystem {
   body(id: string): WaterBody | undefined {
     const hit = this.bodies.get(id);
     if (hit) return hit;
-    const [x, z] = id.split(',').map(Number);
+    const [x, z] = id.split(",").map(Number);
     const b = this.bodyAt(this.sim.grid.get(GROUND, x, z));
     return b?.id === id ? b : undefined;
   }
@@ -138,8 +141,15 @@ export class WaterSystem {
       }
     }
     const id = `${anchor.x},${anchor.z}`;
-    const region = this.sim.oldCity ? (regionOfCell(anchor.x, anchor.z)?.id as RegionId | undefined) : undefined;
-    const body: WaterBody = { id, tiles, capacity: tiles.size * WATER_NET.perTile, region };
+    const region = this.sim.oldCity
+      ? (regionOfCell(anchor.x, anchor.z)?.id as RegionId | undefined)
+      : undefined;
+    const body: WaterBody = {
+      id,
+      tiles,
+      capacity: tiles.size * WATER_NET.perTile,
+      region,
+    };
     for (const tid of tiles) this.byTile.set(tid, body);
     this.bodies.set(id, body);
     this.carryOver(body);
@@ -157,15 +167,19 @@ export class WaterSystem {
    */
   private carryOver(b: WaterBody) {
     const levels = this.save.levels;
-    if (levels[b.id] !== undefined && this.sizes.get(b.id) === b.tiles.size) return;
+    if (levels[b.id] !== undefined && this.sizes.get(b.id) === b.tiles.size)
+      return;
     let held = 0;
     let counted = 0;
     let found = false;
     for (const key of Object.keys(levels)) {
-      const [x, z] = key.split(',').map(Number);
+      const [x, z] = key.split(",").map(Number);
       const t = this.sim.grid.peek(GROUND, x, z);
       if (!t || !b.tiles.has(t.id)) continue;
-      const n = Math.min(this.sizes.get(key) ?? b.tiles.size, b.tiles.size - counted);
+      const n = Math.min(
+        this.sizes.get(key) ?? b.tiles.size,
+        b.tiles.size - counted,
+      );
       held += levels[key] * n;
       counted += n;
       found = true;
@@ -173,7 +187,10 @@ export class WaterSystem {
     }
     if (!found) return;
     const start = (b.region && WATER_NET.startLevel[b.region]) ?? 1;
-    const v = Math.max(0, Math.min(1, (held + (b.tiles.size - counted) * start) / b.tiles.size));
+    const v = Math.max(
+      0,
+      Math.min(1, (held + (b.tiles.size - counted) * start) / b.tiles.size),
+    );
     if (levels[b.id] !== v) {
       levels[b.id] = v;
       this.version++;
@@ -234,8 +251,13 @@ export class WaterSystem {
 
   /** 0…1: the fullest body within reach (0 if there is none). */
   wetness(t: TileData, reach = WATER_NET.reach): number {
-    if (t.roofId !== GROUND) return 0;
-    let best = 0;
+    return this.fullest(t, reach) ?? 0;
+  }
+
+  /** The level of the fullest body within reach, or undefined if there is no water in reach. */
+  private fullest(t: TileData, reach: number): number | undefined {
+    if (t.roofId !== GROUND) return undefined;
+    let best: number | undefined;
     const seen = new Set<WaterBody>();
     const g = this.sim.grid;
     for (let dz = -reach; dz <= reach; dz++)
@@ -245,7 +267,7 @@ export class WaterSystem {
         const b = this.bodyAt(n)!;
         if (seen.has(b)) continue;
         seen.add(b);
-        best = Math.max(best, this.levelOf(b.id));
+        best = Math.max(best ?? 0, this.levelOf(b.id));
       }
     return best;
   }
@@ -260,9 +282,117 @@ export class WaterSystem {
     return out;
   }
 
+  // ───────────── E23.4.4: land fades around low water ─────────────
+
+  private fadeMap = new Map<string, number>();
+  private fadeKey = "";
+
+  /** Bloom stages a level takes off the land around it (0 at or above `fadeBelow`). */
+  static fadeSteps(level: number): number {
+    const { fadeBelow, fadeSteps } = WATER_NET;
+    if (level >= fadeBelow) return 0;
+    return Math.min(
+      fadeSteps,
+      Math.ceil(((fadeBelow - level) / fadeBelow) * fadeSteps),
+    );
+  }
+
+  /**
+   * How many bloom stages a tile shows less because the water near it is low (0 almost everywhere). Land with no
+   * water within `fadeReach` never fades: it never depended on it. The fullest body in reach decides.
+   */
+  fadeAt(t: TileData): number {
+    this.refreshFade();
+    return this.fadeMap.size ? (this.fadeMap.get(t.id) ?? 0) : 0;
+  }
+
+  /**
+   * The bloom stage a tile shows: its own bloom less the fade, never below 1 on restored ground. The tile itself
+   * never changes (nothing is lost): refilling the water brings it all straight back.
+   */
+  bloomShown(t: TileData): number {
+    if (t.ground !== "restored" || t.bloom <= 1) return t.bloom;
+    const f = this.fadeAt(t);
+    return f ? Math.max(1, t.bloom - f) : t.bloom;
+  }
+
+  /** Bodies whose fade step is above 0, with the step, as a key (the map is rebuilt only when this changes). */
+  private fadeState(): { key: string; low: WaterBody[] } {
+    const low: WaterBody[] = [];
+    let key = "";
+    for (const b of this.live()) {
+      const s = WaterSystem.fadeSteps(this.levelOf(b.id));
+      if (!s) continue;
+      low.push(b);
+      key += `${b.id}:${s}:${b.tiles.size};`;
+    }
+    return { key, low };
+  }
+
+  private refreshFade() {
+    const { key, low } = this.fadeState();
+    if (key === this.fadeKey) return;
+    this.fadeKey = key;
+    this.fadeMap.clear();
+    const R = WATER_NET.fadeReach;
+    const g = this.sim.grid;
+    for (const b of low) {
+      const [x0, z0, x1, z1] = this.fadeBounds(b);
+      for (let z = z0; z <= z1; z++)
+        for (let x = x0; x <= x1; x++) {
+          const t = g.get(GROUND, x, z);
+          if (!t || t.feature === "water" || this.fadeMap.has(t.id)) continue;
+          const w = this.fullest(t, R);
+          const s = w === undefined ? 0 : WaterSystem.fadeSteps(w); // no water in reach: nothing to fade
+          if (s) this.fadeMap.set(t.id, s);
+        }
+    }
+  }
+
+  private shownSteps = new Map<string, number>();
+
+  /**
+   * For the renderer: the areas whose look changed since the last call (a body crossed a fade step), so only
+   * their chunks are rebuilt.
+   */
+  takeFadeChanges(): [number, number, number, number][] {
+    const out: [number, number, number, number][] = [];
+    const now = new Map<string, number>();
+    for (const b of this.live()) {
+      const s = WaterSystem.fadeSteps(this.levelOf(b.id));
+      now.set(b.id, s);
+      if ((this.shownSteps.get(b.id) ?? 0) !== s) out.push(this.fadeBounds(b));
+    }
+    for (const [id, s] of this.shownSteps) {
+      if (now.has(id) || !s) continue;
+      const b = this.body(id);
+      if (b) out.push(this.fadeBounds(b));
+    }
+    this.shownSteps = now;
+    return out;
+  }
+
+  /** The area (inclusive tile bounds, grown by the fade reach) whose look a body's level touches. */
+  fadeBounds(b: WaterBody): [number, number, number, number] {
+    let x0 = Infinity,
+      z0 = Infinity,
+      x1 = -Infinity,
+      z1 = -Infinity;
+    for (const id of b.tiles) {
+      const t = this.sim.grid.byTileId(id);
+      if (!t) continue;
+      x0 = Math.min(x0, t.x);
+      z0 = Math.min(z0, t.z);
+      x1 = Math.max(x1, t.x);
+      z1 = Math.max(z1, t.z);
+    }
+    const R = WATER_NET.fadeReach;
+    return [x0 - R, z0 - R, x1 + R, z1 + R];
+  }
+
   /** The weather now: E21.13's field (E23.7 writes it); unset is plain cloud (no rain, no sun). */
   weather(): WeatherKind {
-    return this.sim.state.salvage?.weather?.kind ?? 'cloudy';
+    return this.sim.state.salvage?.weather?.kind ?? "cloudy";
   }
 
   /** Spring flow for a body (share of capacity per game day). */
@@ -270,7 +400,8 @@ export class WaterSystem {
     const r = b.region;
     const rate = r ? (WATER_NET.springs[r] ?? 0) : 0;
     if (!rate) return 0;
-    if (WATER_NET.springsNeedLandmark && this.sim.areas.fog(r!) !== 'cleared') return 0;
+    if (WATER_NET.springsNeedLandmark && this.sim.areas.fog(r!) !== "cleared")
+      return 0;
     return rate;
   }
 
@@ -281,8 +412,12 @@ export class WaterSystem {
   live(): WaterBody[] {
     const out = this.tracked();
     if (!this.sim.oldCity) return out;
-    const regions = new Set([...Object.keys(WATER_NET.springs), ...Object.keys(WATER_NET.startLevel)] as RegionId[]);
-    for (const r of regions) for (const b of this.springBodies(r)) if (!out.includes(b)) out.push(b);
+    const regions = new Set([
+      ...Object.keys(WATER_NET.springs),
+      ...Object.keys(WATER_NET.startLevel),
+    ] as RegionId[]);
+    for (const r of regions)
+      for (const b of this.springBodies(r)) if (!out.includes(b)) out.push(b);
     return out;
   }
 
@@ -305,12 +440,13 @@ export class WaterSystem {
     const days = span / WATER_NET.daySeconds;
     const w = this.weather();
     const fill = WATER_NET.weatherFill[w] ?? 0;
-    const evap = w === 'clear' ? WATER_NET.evaporationPerDay : 0;
+    const evap = w === "clear" ? WATER_NET.evaporationPerDay : 0;
     for (const b of this.live()) {
       let lv = this.levelOf(b.id);
       const before = lv;
       lv += (fill + this.springOf(b)) * days;
-      if (evap && lv > WATER_NET.evaporationFloor) lv = Math.max(WATER_NET.evaporationFloor, lv - evap * days);
+      if (evap && lv > WATER_NET.evaporationFloor)
+        lv = Math.max(WATER_NET.evaporationFloor, lv - evap * days);
       if (lv !== before) this.set(b.id, lv);
     }
   }
