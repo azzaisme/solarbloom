@@ -103,6 +103,45 @@ describe('E23.7.1.1: every timer counts in game days', () => {
     expect(regrow(true)).toBe(game);
   });
 
+  it('E23.5.2 (#446): a sun crop and a night-only crop ripen in the same play time in both clock modes, the real clock jumping', { timeout: 600_000 }, () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    /** Seconds of play from planting until ripe (whole-sim ticks of 1 s), with the real clock at `hour` then jumping. */
+    const ripen = (crop: 'tomato' | 'moonflower', real: boolean, hour: number): number => {
+      vi.setSystemTime(new Date(2026, 10, 18, hour, 0, 0));
+      const sim = oldSim();
+      sim.clock.now = () => new Date(); // the faked real clock
+      sim.clock.real = real;
+      sim.state.salvage!.tier = 1;
+      sim.state.salvage!.weather = { kind: 'clear', until: 1e12 };
+      const t = sim.grid.get(GROUND, 12, 16)!;
+      t.blocked = false;
+      t.feature = undefined;
+      t.ground = 'restored';
+      t.pollution = 0;
+      sim.grid.touch(t);
+      sim.inventory.addToStore('scrap', 6);
+      sim.inventory.addToStore('biomass', 4);
+      sim.bot = { roofId: GROUND, x: 8.5, z: 11.5 };
+      const m = sim.build.place('planter', GROUND, 12, 16)!;
+      (sim.state.salvage!.crops ??= []).push(crop);
+      sim.inventory.add('seeds', 1);
+      expect(sim.farm.plant(m, crop)).toBe(true);
+      let n = 0;
+      while (!sim.farm.look(m).ripe && n < 20_000) {
+        sim.tick(1);
+        if (n === 500) vi.setSystemTime(new Date(2026, 10, 19, (hour + 12) % 24, 0, 0)); // the real clock jumps half a day
+        n++;
+      }
+      return n;
+    };
+    for (const crop of ['tomato', 'moonflower'] as const) {
+      const game = ripen(crop, false, 2);
+      expect(game, `${crop} ripens`).toBeLessThan(20_000);
+      expect(ripen(crop, true, 2), `${crop}: follow my clock from 02:00`).toBe(game);
+      expect(ripen(crop, true, 14), `${crop}: follow my clock from 14:00`).toBe(game);
+    }
+  });
+
   it('night finds come back after one game night, in game time', { timeout: 120_000 }, () => {
     const sim = oldSim();
     const f = NIGHT_FINDS[0];
