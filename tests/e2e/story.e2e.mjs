@@ -14,7 +14,7 @@ const { chromium } = require('playwright');
 const dir = process.env.SHOTS_DIR ?? 'docs/review/story';
 mkdirSync(dir, { recursive: true });
 const scenes = process.argv.slice(2).length ? process.argv.slice(2) : ['journal', 'keepers', 'ending'];
-const port = 4251;
+const port = Number(process.env.STORY_PORT ?? 4251);
 const server = await preview({ preview: { port, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
@@ -166,10 +166,12 @@ try {
         s.inventory.add('glass', 5);
       });
       await stand(page, 19.5, 11.4, Math.PI);
+      // a newly opened region builds slowly headless: wait for its Keeper to be what Interact faces
+      await page.waitForFunction(() => /Trade with Tally/.test(document.querySelector('#prompt, .prompt, [class*=prompt]')?.textContent ?? '')).catch(() => {});
       const p2 = await prompt(page);
       check(/Trade with Tally/.test(p2), `keepers: facing Tally, the prompt says Trade (${p2})`);
       await page.keyboard.press('KeyE');
-      await page.waitForTimeout(800);
+      await page.waitForSelector('[data-act="gift"]', { timeout: 60000 }).catch(() => {});
       const panel = await page.evaluate(() => document.querySelector('[data-act="gift"]')?.textContent ?? '');
       check(/Give Tally 1 Glass/.test(panel), `keepers: Tally's panel offers the gift as a choice (${panel})`);
       const before = await page.evaluate(() => ({ glass: window.solarbloom.sim.inventory.count('glass'), hearts: window.solarbloom.sim.keepers.hearts('tally') }));

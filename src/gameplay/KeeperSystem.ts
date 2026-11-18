@@ -7,6 +7,7 @@ import { FRIENDSHIP, KEEPER_HELP, KEEPER_STORIES, type ArcBeat, type KeeperStory
 import { KEEPERS, KEEPSAKES, type KeeperDef, type RegionDef, type RegionId } from '../data/oldcity';
 import { MATERIAL_IDS, MATERIALS, type MaterialCost } from '../data/salvage';
 import type { Sim } from './Sim';
+import { Walker } from './Walker';
 
 /** Units of anything a stirring Keeper takes to wake. */
 export const WAKE_GIFT = 5;
@@ -253,6 +254,18 @@ export class KeeperSystem {
     this.sim.restoration.grow(t, undefined, 'auto', true);
     this.sim.bus.emit('keeper.tended', { keeperId: id, x: c.x, z: c.z });
     return { x: c.x, z: c.z };
+  }
+
+  /**
+   * E23.9.2 → E23.2.3: a Keeper's walk from a cell to beside another (a bench seat), over ground bloombot could walk,
+   * so a friend walks over to sit rather than appearing. Cell centres, the start left out; [] when already beside it;
+   * undefined when there is no way within bloombot's search budget.
+   */
+  pathTo(id: string, from: { x: number; z: number }, to: { x: number; z: number }): { x: number; z: number }[] | undefined {
+    if (!keeperById(id)) return undefined;
+    const tx = Math.floor(to.x);
+    const tz = Math.floor(to.z);
+    return new Walker(this.sim).path(GROUND, from.x, from.z, (x, z) => Math.abs(x - tx) + Math.abs(z - tz) <= 1 && !(x === tx && z === tz), { x: tx, z: tz });
   }
 
   /** Where a Keeper is off to tend (undefined: nowhere). */

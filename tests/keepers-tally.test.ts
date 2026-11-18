@@ -50,3 +50,19 @@ describe('E23.9.2: Tally trades, and takes a gift only when asked', () => {
     expect(said.length).toBe(1);
   });
 });
+
+describe('E23.9.2 → E23.2.3: a friend walks over to a bench', () => {
+  it('pathTo gives a Keeper a walk to beside a seat, over ground bloombot could walk', () => {
+    const sim = new Sim(createInitialState(7, 'oldcity'));
+    sim.state.salvage!.tier = 1;
+    sim.state.salvage!.abilities.push('pry');
+    sim.areas.clear('park', true);
+    sim.gates.open('g-mastRow');
+    const seat = { x: 12, z: -10 };
+    const path = sim.keepers.pathTo('pylon', { x: 10.5, z: -2.5 }, seat)!;
+    expect(path.length).toBeGreaterThan(0);
+    const end = path[path.length - 1];
+    expect(Math.abs(Math.floor(end.x) - seat.x) + Math.abs(Math.floor(end.z) - seat.z)).toBe(1);
+    expect(sim.keepers.pathTo('nobody', { x: 0, z: 0 }, seat)).toBeUndefined();
+  });
+});
