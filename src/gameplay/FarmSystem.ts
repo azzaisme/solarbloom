@@ -210,8 +210,8 @@ export class FarmSystem {
     const crop = st.crop as CropId | undefined;
     if (!crop || !CROPS[crop]) return { progress: 0, stage: 0, ripe: false, wilting: false, resting: false, rate: 0, met: [], unmet: [] };
     const def = CROPS[crop];
-    // growth is saved to six decimals: within that of ripe counts as ripe
-    const progress = (st.grown ?? 0) >= def.days - 1e-5 ? 1 : (st.grown ?? 0) / def.days;
+    // growth is saved to nine decimals: within a millionth of a day of ripe counts as ripe
+    const progress = (st.grown ?? 0) >= def.days - 1e-6 ? 1 : (st.grown ?? 0) / def.days;
     const ripe = progress >= 1;
     const stage = ripe ? PLANTER.stages : 1 + Math.min(PLANTER.stages - 2, Math.floor(progress * (PLANTER.stages - 1)));
     const wilting = !ripe && !this.isWatered(m);
@@ -244,7 +244,7 @@ export class FarmSystem {
       const def = CROPS[st.crop as CropId];
       const was = lk.stage;
       const grown = Math.min(def.days, (st.grown ?? 0) + lk.rate * days);
-      this.write(m, { ...st, grown: Math.round(grown * 1e6) / 1e6 });
+      this.write(m, { ...st, grown: Math.round(grown * 1e9) / 1e9 });
       const now = this.look(m);
       if (now.stage !== was) this.sim.bus.emit('planter.changed', { machineId: m.id });
       if (now.ripe && !lk.ripe) this.sim.bus.emit('planter.ripe', { machineId: m.id, crop: st.crop });

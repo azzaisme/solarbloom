@@ -274,8 +274,11 @@ describe('E23.5.2.2 × E23.7.1: growth follows the game clock', () => {
     }
     expect(sim.farm.look(m).ripe).toBe(true);
     expect(nights).toBe(2);
-    // ripe right at the end of the second night: it grew only in the dark
-    expect(sim.clock.gameDayFraction()).toBeLessThan(0.02);
+    // ripe at the end of the second night, give or take one of this test's minute steps (night is read at the end of
+    // each step, so the step that ends at dusk counts): it grew only in the dark
+    const f = sim.clock.gameDayFraction();
+    const step = 60 / DAY_SECONDS;
+    expect(f > 1 - step - 1e-9 || f < step + 1e-9, `ripe at ${f}`).toBe(true);
   });
 
   it('a night crop and a sun crop take the same play time in both clock modes, whatever the real clock says', () => {
