@@ -62,11 +62,11 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
   sim.bus.on('fountain.tier', (e) => e.tier === 1 && first('tier1'));
   sim.bus.on('gate.opened', () => first('gate'));
   sim.bus.on('keeper.step', (e) => e.step === 'request1' && first('keeper'));
-  // E23.2.1's charge, read through its real API: `sim.charge.value` is a number (fails loudly if it isn't)
+  // E23.2.1's charge, once it is on the sim: read through its real `value()` (fails loudly if it lacks it)
   const chargeSys = CHARGE.present(sim) ? handle(sim, 'charge')! : undefined;
-  if (chargeSys && typeof chargeSys.value !== 'number') throw new Error('sim.charge.value is not a number: update tests/oldcity-bot.ts');
+  if (chargeSys && typeof chargeSys.value !== 'function') throw new Error('sim.charge is here but lacks value(): update tests/oldcity-bot.ts');
   const charge = chargeSys ? { min: Infinity, atZero: 0, stranded: 0 } : undefined;
-  const chargeNow = () => chargeSys!.value as number;
+  const chargeNow = () => (chargeSys!.value as () => number).call(chargeSys);
   const pass = (secs: number) => {
     const n = Math.round(secs / TUNING.simStep);
     for (let i = 0; i < n; i++) {

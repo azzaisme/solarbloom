@@ -54,10 +54,10 @@ describe('E23.2.2.1: the load wheel and its cost', () => {
     sim.pulseLoad.choose('seeds');
     const empties: string[] = [];
     sim.bus.on('pulse.loadEmpty', (e) => empties.push(e.load));
-    const charge = sim.charge.value;
+    const charge = sim.charge.value();
     expect(sim.restoration.pulse(a.id)).toBe(true);
     expect(sim.inventory.count('seeds')).toBe(0);
-    expect(sim.charge.value).toBeCloseTo(charge - 1);
+    expect(sim.charge.value()).toBeCloseTo(charge - 1);
     expect(empties).toEqual(['seeds']);
     expect(a.plant).toBe('meadow');
     // out of seeds: still a pulse, plain grass, nothing used

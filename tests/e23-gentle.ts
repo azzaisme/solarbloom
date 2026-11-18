@@ -158,20 +158,11 @@ export const WATER = strict('water', 'water', ['isDry'], (o, sim) => {
   return { dark: () => dry().slice(0, 5).map((t) => `tile ${t.x},${t.z} dry`), unrecovered: () => dry().slice(0, 5).map((t) => `tile ${t.x},${t.z} still dry`) };
 });
 
-/**
- * E23.2.1 (#371): bloombot's charge, bound to its real API (#487): `value` is a number (a getter), `canWalk()`,
- * `drainForTest()` and `refillForTest()`. At zero: a low-power walk, never stranded, nothing lost.
- */
-export const CHARGE = strict('charge', 'charge', ['canWalk'], (o) => {
-  const value = () => {
-    if (typeof o.value !== 'number') throw new Error('sim.charge.value is not a number: rebind the charge probe in tests/e23-gentle.ts');
-    return o.value;
-  };
-  return {
-    dark: () => (value() <= 0 ? ['charge at zero'] : []),
-    unrecovered: () => (value() <= 0 ? ['charge still at zero after a refill'] : []),
-  };
-});
+/** E23.2.1 (#371): bloombot's charge. At zero: a low-power walk, never stranded, nothing lost. */
+export const CHARGE = strict('charge', 'charge', ['value', 'canWalk'], (o) => ({
+  dark: () => ((call(o, 'value') as number) <= 0 ? ['charge at zero'] : []),
+  unrecovered: () => ((call(o, 'value') as number) <= 0 ? ['charge still at zero after a refill'] : []),
+}));
 
 /** E23.5.3 (#388): the Bio Digester. An empty one just stops; the grid sheds load gently. */
 export const DIGESTER = strict('digester', 'farm.digester', ['isFed'], (o, sim) => {
