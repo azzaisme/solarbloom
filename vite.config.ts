@@ -18,7 +18,7 @@ const QUICK = [
   // E23.3: the power grid
   'power-grid',
   // E23.8: regions and the mainland
-  'region-strengths',
+  'region-strengths', 'region-unlocks-e23',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
