@@ -432,6 +432,8 @@ export interface GameState {
    * production, chains, milestones or pacing). Optional and sparse, so no save version change.
    */
   cozy?: CozyState;
+  /** E23.3.5: stored energy of grid nodes that are not machines (solar garden lights), by node id. Optional. */
+  power?: { cells?: Record<string, number> };
 }
 
 /** E19: what the player chose for the look of their city. */
@@ -449,4 +451,6 @@ export interface CozyState {
   decor?: Record<string, string>;
   /** E19.2.2: decorations earned so far, in the order they unlocked (ones open from the start aren't listed) */
   decorUnlocked?: string[];
+  /** E23.3.5: line lights hung on power poles, pole machine id → light id (data/lights) */
+  poleLights?: Record<string, string>;
 }

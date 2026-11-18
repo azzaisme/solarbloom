@@ -117,6 +117,9 @@ export class Cozy {
     if ('start' in u) return true;
     if ('parkStage' in u) return this.sim.progression.parkStage() >= u.parkStage;
     if ('keepsake' in u) return this.keepsakeMet(u.keepsake);
+    if ('find' in u) return !!this.sim.state.salvage?.caches.includes(u.find);
+    // E23.6.2's research (`sim.research`); until it lands, research-only styles stay locked
+    if ('research' in u) return !!(this.sim as unknown as { research?: { done?: (id: string) => boolean } }).research?.done?.(u.research);
     return this.sim.areas.clearedCount() >= u.areas;
   }
 
@@ -143,6 +146,8 @@ export class Cozy {
     if ('start' in u) return '';
     if ('keepsake' in u) return KEEPSAKE_HINTS[u.keepsake];
     if ('parkStage' in u) return ['', 'the park’s paths are swept', 'the park’s benches are mended', 'the park’s lamps are lit', 'the fountain wakes'][u.parkStage] ?? 'the park grows';
+    if ('find' in u) return 'you find it in an old cache';
+    if ('research' in u) return 'Decor research';
     return `${u.areas} area${u.areas === 1 ? '' : 's'} cleared`;
   }
 

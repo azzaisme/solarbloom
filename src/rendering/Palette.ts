@@ -447,6 +447,11 @@ const light = {
   ambient: '#8a90a3',
   sun: '#ffe6bd',
   fill: '#b9d7ff',
+  /** E23.3.5: night lights, warm and low (data/lights.ts `tone`), and the insects that gather round them */
+  lamps: { warm: '#ffc46b', amber: '#ffa94d', rose: '#ff9fa8', cream: '#fff0c8', green: '#9dffb0' },
+  firefly: '#e9ff8a',
+  moth: '#f3eadb',
+  bulbOff: '#8a7e6c',
 };
 
 /**

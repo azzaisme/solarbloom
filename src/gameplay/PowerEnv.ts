@@ -1,6 +1,9 @@
 import { GROUND } from '../core/GameState';
 import { regionOfCell } from '../core/OldCityLayout';
 import type { MachineData } from '../core/types';
+
+/** Where something on the grid stands. */
+type Placed = Pick<MachineData, 'id' | 'roofId' | 'x' | 'z'>;
 import { POWER } from '../data/power';
 import type { Sim } from './Sim';
 
@@ -45,8 +48,8 @@ interface WeatherLike {
 }
 
 /** A source's region strength multiplier (E23.8 owns this; a provisional table until then). */
-export function regionBoost(sim: Sim, m: MachineData, kind: 'wind' | 'solar'): number {
-  const r = (sim as unknown as { regions?: { strength?: (m: MachineData, kind: string) => number | undefined } }).regions;
+export function regionBoost(sim: Sim, m: Placed, kind: 'wind' | 'solar'): number {
+  const r = (sim as unknown as { regions?: { strength?: (m: Placed, kind: string) => number | undefined } }).regions;
   const v = r?.strength?.(m, kind);
   if (typeof v === 'number') return v;
   if (m.roofId !== GROUND || !sim.oldCity) return 1;
@@ -55,7 +58,7 @@ export function regionBoost(sim: Sim, m: MachineData, kind: 'wind' | 'solar'): n
 }
 
 /** How high a machine stands, in terrace levels (rooftops count as high ground). */
-export function groundLevel(sim: Sim, m: MachineData): number {
+export function groundLevel(sim: Sim, m: Placed): number {
   if (m.roofId !== GROUND) return POWER.wind.roofLevel;
   return sim.grid.get(GROUND, m.x, m.z)?.level ?? 0;
 }

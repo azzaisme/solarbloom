@@ -1,6 +1,5 @@
 import * as pc from 'playcanvas';
-import type { MachineData } from '../core/types';
-import type { PowerNetwork } from '../gameplay/PowerGrid';
+import type { PowerNetwork, PowerNode } from '../gameplay/PowerGrid';
 import type { Sim } from '../gameplay/Sim';
 import { mat, PALETTE } from './Materials';
 import { bezier, part, tube } from './MachineParts';
@@ -9,7 +8,7 @@ import { group } from './Shapes';
 /** How high a cable meets a machine, by type (world units above its base); poles carry theirs at the top. */
 const CABLE_Y: Record<string, number> = { relay: 1.0, windTurbine: 0.5, battery: 0.85, solar: 0.3, charger: 0.6 };
 /** Where a cable meets this machine, above its base. */
-export const cableY = (m: MachineData): number => CABLE_Y[m.type] ?? 0.5;
+export const cableY = (m: PowerNode): number => CABLE_Y[m.type] ?? 0.5;
 
 /**
  * E23.3.2.3: the grid's cables, drawn in the world. Linked poles are strung together with a sagging cable, and every
@@ -23,7 +22,7 @@ export class PowerLines {
   constructor(
     private sim: Sim,
     parent: pc.Entity,
-    private worldOf: (m: MachineData) => [number, number, number],
+    private worldOf: (m: PowerNode) => [number, number, number],
   ) {
     this.root = group(parent, 'powerLines');
   }
@@ -40,7 +39,7 @@ export class PowerLines {
     }
   }
 
-  private cable(a: MachineData, b: MachineData, m: pc.Material, r: number, sagPerTile: number) {
+  private cable(a: PowerNode, b: PowerNode, m: pc.Material, r: number, sagPerTile: number) {
     const pa = this.worldOf(a);
     const pb = this.worldOf(b);
     const A: [number, number, number] = [pa[0], pa[1] + cableY(a), pa[2]];

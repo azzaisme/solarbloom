@@ -1,6 +1,5 @@
 import * as pc from 'playcanvas';
-import type { MachineData } from '../core/types';
-import type { PowerNetwork } from '../gameplay/PowerGrid';
+import type { PowerNetwork, PowerNode } from '../gameplay/PowerGrid';
 import type { Sim } from '../gameplay/Sim';
 import { mat, PALETTE } from './Materials';
 import { bezier, part, ring, tube } from './MachineParts';
@@ -11,12 +10,12 @@ import { glowMaterial, glowTileMesh } from './TileFx';
 const P = PALETTE.signal.power;
 
 interface MemberView {
-  m: MachineData;
+  m: PowerNode;
   frame: pc.MeshInstance;
   net: number;
 }
 interface BarView {
-  m: MachineData;
+  m: PowerNode;
   fill: pc.Entity;
 }
 
@@ -41,7 +40,7 @@ export class PowerOverlay {
   constructor(
     private sim: Sim,
     parent: pc.Entity,
-    private worldOf: (m: MachineData) => [number, number, number],
+    private worldOf: (m: PowerNode) => [number, number, number],
   ) {
     this.root = group(parent, 'powerOverlay');
     this.root.enabled = false;
@@ -131,7 +130,7 @@ export class PowerOverlay {
   }
 
   /** A battery's level bar, standing above it and facing the camera (which looks from +x +z). */
-  private bar(m: MachineData, x: number, y: number, z: number) {
+  private bar(m: PowerNode, x: number, y: number, z: number) {
     const g = group(this.root, 'pbar', [x, y + 1.45, z]);
     g.setLocalEulerAngles(0, 45, 0);
     shape(g, 'box', mat(P.cellBack, { unlit: true }), { pos: [0, 0, -0.01], scale: [0.24, 0.8, 0.02] });
@@ -139,7 +138,7 @@ export class PowerOverlay {
     this.bars.push({ m, fill });
   }
 
-  private glowCable(a: MachineData, b: MachineData, m: pc.Material, r: number) {
+  private glowCable(a: PowerNode, b: PowerNode, m: pc.Material, r: number) {
     const pa = this.worldOf(a);
     const pb = this.worldOf(b);
     const A: [number, number, number] = [pa[0], pa[1] + cableY(a), pa[2]];
