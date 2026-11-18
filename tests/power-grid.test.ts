@@ -148,13 +148,20 @@ describe('E23.3.1 power grid', () => {
     expect(sim.power.level(lamp)).toBeCloseTo(0.5, 3);
   });
 
-  it('an idle consumer (draw 0) is on and costs nothing', () => {
+  it('an idle consumer (draw 0) costs nothing, and is on only where its network has power to give', () => {
     const { sim, put } = world();
     let docked = false;
     sim.power.register('charger', { consumer: { shed: 'charger', draw: () => (docked ? 5 : 0) } });
     const c = put('charger', 0, 0);
-    expect(sim.power.isPowered(c)).toBe(true);
+    expect(sim.power.isPowered(c)).toBe(false); // a pad on its own: nothing to give, so it reads dark
+    const g = put('gen', 1, 0);
+    sim.power.tick(1);
+    expect(sim.power.isPowered(c)).toBe(true); // idle on a live network: on, drawing nothing
+    expect(sim.power.networkOf(c)!.served).toBe(0);
     docked = true;
+    sim.power.tick(1);
+    expect(sim.power.isPowered(c)).toBe(true); // 5 W of the generator's 10
+    sim.state.machines = sim.state.machines.filter((m) => m !== g);
     sim.power.tick(1);
     expect(sim.power.isPowered(c)).toBe(false);
   });
@@ -377,7 +384,8 @@ describe('E23.3.2.3 relays are poles and still carry Bloom Chains', () => {
     st.resources.water = big(1e6);
     st.resources.biomass = big(1e6);
     st.progression.coreActivated = true;
-    for (let cz = -3; cz <= 3; cz++) for (let cx = -3; cx <= 3; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
+    // the chunks the two poles and their blooms use (x −20…20, z −4…4)
+    for (let cz = -1; cz <= 0; cz++) for (let cx = -2; cx <= 1; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
     for (let z = -4; z <= 4; z++)
       for (let x = -20; x <= 20; x++) {
         const t = sim.grid.get(GROUND, x, z)!;
