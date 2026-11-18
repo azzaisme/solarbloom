@@ -1,4 +1,4 @@
-import { CAUSEWAY } from '../data/ending';
+import { isMainlandCell, mainlandPileAt, mainlandPileById, mainlandShore, onCauseway } from './Mainland';
 import { COAST, KEEPERS, LANDING, OLD_CITY, PARK_SET, REGIONS, type GateDef, type KeeperDef, type PileDef, type RegionDef, type RegionId } from '../data/oldcity';
 
 /**
@@ -48,13 +48,19 @@ function build() {
 /** What set piece stands on a ground cell, if any. */
 export function setPieceAt(x: number, z: number): SetPiece | undefined {
   if (!pieces) build();
-  return pieces!.get(key(x, z));
+  return pieces!.get(key(x, z)) ?? mainlandPiece(x, z);
 }
 
 /** A pile by id. */
 export function pileById(id: string): PileDef | undefined {
   if (!piles) build();
-  return piles!.get(id);
+  return piles!.get(id) ?? mainlandPileById(id);
+}
+
+/** E23.8.3.1: the mainland's set pieces are its salvage fields, generated per chunk (core/Mainland). */
+function mainlandPiece(x: number, z: number): SetPiece | undefined {
+  const pile = mainlandPileAt(x, z);
+  return pile ? { kind: 'pile', pile } : undefined;
 }
 
 /** Every pile in the Old City (park first, then the regions in map order). */
@@ -93,11 +99,6 @@ export function coastSand(_x: number, z: number): boolean {
   return COAST.south.kind === 'beach' && z > HI - COAST.south.band - 3 && z <= HI - COAST.south.band;
 }
 
-/** E23.9.3: a cell of the Long Causeway (walkable only after the Great Bloom; EndingSystem). */
-export function onCauseway(x: number, z: number): boolean {
-  return x >= CAUSEWAY.x0 && x <= CAUSEWAY.x1 && z >= CAUSEWAY.z0 && z <= CAUSEWAY.z1;
-}
-
 /** E21.26: the Landing's jetty (walkable planks over the surf and the bay). */
 export function onJetty(x: number, z: number): boolean {
   return inRect(LANDING.jetty, x, z);
@@ -106,6 +107,9 @@ export function onJetty(x: number, z: number): boolean {
 /** E21.26 / E21.4: is this cell sea (open sea, the bay, the coast band), not counting the jetty? */
 export function seaCell(x: number, z: number): boolean {
   if (onJetty(x, z)) return false;
+  // E23.8.3.1: the Long Causeway is never sea; the mainland is land past its rocky shore
+  if (onCauseway(x, z)) return false;
+  if (isMainlandCell(x)) return mainlandShore(x, z);
   const cx = Math.floor(x / 16);
   const cz = Math.floor(z / 16);
   return !inOldCity(cx, cz) || isSeaChunk(cx, cz) || coastSea(x, z);

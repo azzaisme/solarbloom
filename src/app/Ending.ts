@@ -1,4 +1,6 @@
-import { CAUSEWAY, ENDING } from '../data/ending';
+import { brokenCells } from '../core/Mainland';
+import { ENDING } from '../data/ending';
+import { MAINLAND } from '../data/mainland';
 import { LAST_PAGE } from '../data/journal';
 import { REGIONS } from '../data/oldcity';
 
@@ -43,9 +45,10 @@ export function playGreatBloom(host: EndingHost) {
   host.after(ENDING.bloomSeconds, () => {
     host.cinematic(false);
     host.overview(false);
-    // the causeway rises: its spans redraw standing (the sim made them walkable at the delivery)
-    for (let x = CAUSEWAY.x0; x <= CAUSEWAY.x1; x++) host.markTile(x, CAUSEWAY.z0);
-    host.vista((CAUSEWAY.x0 + CAUSEWAY.x1) / 2, 0.5, ENDING.causewaySeconds, () => {});
+    // the causeway rises: its broken middle redraws raised (MainlandSystem made it walkable at the delivery)
+    for (const [x, z] of brokenCells()) host.markTile(x, z);
+    const c = MAINLAND.causeway;
+    host.vista((c.x0 + c.x1) / 2, (c.z0 + c.z1 + 1) / 2, ENDING.causewaySeconds, () => {});
   });
   // his last page, whatever the camera did (a skipped or refused vista still ends here)
   host.after(ENDING.bloomSeconds + ENDING.causewaySeconds + 1, () => {

@@ -69,7 +69,6 @@ import { BotController } from './BotController';
 import { type Action, Bindings, type Context, FIXED_KEY, keyLabel, migrateBindings, SLOTS } from './Bindings';
 import { isOldCity, rulesViewFromUrl } from './Rules';
 import { playGreatBloom } from './Ending';
-import { CAUSEWAY } from '../data/ending';
 import { type Candidate, holdFor, pickTarget, promptText } from './Interact';
 import type { PromptModel } from '../ui/Prompt';
 import { Pause, runSimFrame } from './Pause';
@@ -1698,10 +1697,14 @@ export class Game {
       const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
       const lmName = area === PARK ? 'the fountain' : area ? this.sim.areas.info(area).landmarkName : undefined;
       const ready = occ.type === 'core' && this.landmarkReady(occ);
+      const tripped = this.sim.power.isTripped(occ); // E23.3: lightning tripped this pole; one press resets it
       out.push({
-        kind: lmName ? 'landmark' : 'machine', id: `m:${occ.id}`, verb: ready ? 'Wake' : 'Look at', name: lmName ?? machineName(occ), distance: dist, at: tile,
+        kind: lmName ? 'landmark' : 'machine', id: `m:${occ.id}`, verb: ready ? 'Wake' : tripped ? 'Reset' : 'Look at', name: lmName ?? machineName(occ), distance: dist, at: tile,
         frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size },
-        run: () => this.botAnim(this.actAt(p, sc().x, sc().y, 'inspect', false)),
+        run: () => {
+          if (this.sim.power.reset(occ)) return b.visuals.play('interact');
+          this.botAnim(this.actAt(p, sc().x, sc().y, 'inspect', false));
+        },
       });
     } else {
       const plot = this.openablePlot(p.roofId, tile.x, tile.z);
@@ -2195,12 +2198,6 @@ export class Game {
         z0 = Math.min(z0, cz * 16);
         z1 = Math.max(z1, cz * 16 + 16);
       }
-    // E23.9.3: after the Great Bloom the view reaches along the Long Causeway to the mainland's edge
-    if (this.sim.ending?.bloomed) {
-      x1 = Math.max(x1, CAUSEWAY.mainlandX + 8);
-      z0 = Math.min(z0, CAUSEWAY.z0 - 8);
-      z1 = Math.max(z1, CAUSEWAY.z1 + 8);
-    }
     this.camera.bounds = { minX: x0 - 8, maxX: x1 + 8, minZ: z0 - 8, maxZ: z1 + 8 };
   }
 

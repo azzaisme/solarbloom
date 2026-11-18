@@ -10,6 +10,7 @@ import { BloomChainSystem } from './BloomChainSystem';
 import { BuildSystem } from './BuildSystem';
 import { CanalNetwork } from './CanalNetwork';
 import { RelaySystem } from './RelaySystem';
+import { PowerGrid } from './PowerGrid';
 import { RooftopClusters } from './RooftopClusters';
 import { DistrictSystem } from './DistrictSystem';
 import { DroneSystem } from './DroneSystem';
@@ -35,6 +36,7 @@ import { FountainSystem } from './FountainSystem';
 import { EndingSystem } from './EndingSystem';
 import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
+import { MainlandSystem } from './MainlandSystem';
 import { LandmarkSystem } from './LandmarkSystem';
 
 /**
@@ -62,6 +64,8 @@ export class Sim {
   readonly districts: DistrictSystem;
   readonly canals: CanalNetwork;
   readonly relays: RelaySystem;
+  /** E23.3: the power grid (networks of poles, sources, batteries and consumers). */
+  readonly power: PowerGrid;
   readonly clusters: RooftopClusters;
   readonly milestones: MilestoneSystem;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
@@ -80,6 +84,8 @@ export class Sim {
   readonly fountain: FountainSystem;
   /** E21.8: the Keepers and their requests (old-city rules). */
   readonly keepers: KeeperSystem;
+  /** E23.8.3: the causeway and the endless mainland. */
+  readonly mainland: MainlandSystem;
   /** E23.9.1: the maker's journal (pages on posts, his last page at the Great Bloom). */
   readonly journal: JournalSystem;
   /** E23.9.3: the Great Bloom ending (wildlife, the causeway rising). */
@@ -135,6 +141,7 @@ export class Sim {
     this.gates = new GateSystem(this);
     this.fountain = new FountainSystem(this);
     this.keepers = new KeeperSystem(this);
+    this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
     this.ending = new EndingSystem(this);
     this.rng = new Rng(state.rngState);
@@ -143,6 +150,7 @@ export class Sim {
     this.restoration = new RestorationSystem(this);
     this.canals = new CanalNetwork(this);
     this.relays = new RelaySystem(this);
+    this.power = new PowerGrid(this);
     this.clusters = new RooftopClusters(this);
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
@@ -250,6 +258,7 @@ export class Sim {
     const s = this.state;
     s.time += dt;
     s.buffs = s.buffs.filter((b) => b.until > s.time);
+    this.power.tick(dt);
     this.production.tick(dt);
     this.restoration.tick(dt);
     this.transitions.tick();

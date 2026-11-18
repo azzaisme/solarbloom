@@ -5,8 +5,9 @@ import { areaMapFor, genKey, PARK, SEA, type AreaInfo } from './Areas';
 import { canalRow, roadCol, roadRow } from './Arterials';
 import { distToFootprintRaw } from './Footprint';
 import { roadPlanFor } from './RoadPlan';
-import { coastSand, inRect, isSeaChunk, onCauseway, onJetty, regionById, regionWater, seaCell, setPieceAt } from './OldCityLayout';
+import { coastSand, inRect, isSeaChunk, onJetty, regionById, regionWater, seaCell, setPieceAt } from './OldCityLayout';
 import { rampAt, tileLevel } from './Height';
+import { causewayBroken, onCauseway } from './Mainland';
 import { OLD_CITY } from '../data/oldcity';
 import { CHUNK, hashString, tileId, tileRandom } from './Hash';
 import type { GroundState, LayerData, TileData } from './types';
@@ -47,8 +48,6 @@ export function stampOldCity(t: TileData): TileData {
   // E21.24: the terrace height (every Old City tile has one)
   t.level = tileLevel(t.x, t.z);
   if (rampAt(t.x, t.z)) t.ramp = true;
-  // E23.9.3: the Long Causeway over the sea (Walker lets bloombot on only after the Great Bloom)
-  if (onCauseway(t.x, t.z)) return Object.assign(t, { blocked: false, feature: 'water', prop: 'causeway' });
   const p = setPieceAt(t.x, t.z);
   if (!p) return t;
   if (p.kind === 'pile') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `pile:${p.pile.id}` });
@@ -357,6 +356,11 @@ function generateOldCity(seed: number, layer: LayerData, lh: number, x: number, 
   };
   // E21.26: the Landing's jetty: walkable planks out over the surf and the bay
   if (onJetty(x, z)) return Object.assign(base, { feature: 'paving' as TileFeature, prop: undefined, level: tileLevel(x, z) });
+  // E23.8.3.1: the Long Causeway to the mainland; its broken middle is rubble across the gap until the Great Bloom
+  if (onCauseway(x, z)) {
+    const broken = causewayBroken(x, z);
+    return stampOldCity(Object.assign(base, { feature: 'road' as TileFeature, blocked: broken, prop: broken ? 'causeway-broken' : undefined, pollution: pollutionMax }));
+  }
   // the sea all round the island, the bay and the coast band: open water nothing crosses; canals: deep water
   if (area.id === SEA || area.id.startsWith('out_') || seaCell(x, z) || regionWater(x, z)) return stampOldCity(Object.assign(base, { feature: 'water' as TileFeature, blocked: true }));
   const def = AREA_TYPES[area.type];

@@ -178,11 +178,11 @@ try {
         }
         g.updateCityBounds();
       });
-      await stand(page, 100.5, 0.5, Math.PI / 2);
-      // before: the causeway lies broken under the sea
+      await stand(page, 100.5, 8.5, Math.PI / 2);
+      // before: the causeway's middle lies broken under the sea
       await page.evaluate(() => {
         const g = window.solarbloom;
-        g.vista(118, 0.5, 30, () => {});
+        g.vista(124.5, 8, 30, () => {});
       });
       await page.waitForTimeout(5000);
       await shot(page, 'ending-1-causeway-broken');
@@ -213,17 +213,14 @@ try {
       await shot(page, 'ending-6-last-page');
       const state = await page.evaluate(() => {
         const s = window.solarbloom.sim;
-        return { bloomed: s.ending.bloomed, open: s.ending.causewayOpen(130, 0), fauna: Object.keys(s.state.fauna ?? {}).length };
+        return { bloomed: s.ending.bloomed, open: s.mainland.opened && !s.grid.get('g', 124, 7).blocked, fauna: Object.keys(s.state.fauna ?? {}).length };
       });
       check(state.bloomed && state.open, 'ending: the causeway can be walked');
       check(state.fauna >= 4, `ending: every kind of wildlife is back (${state.fauna})`);
       // walk out along it
-      await page.keyboard.press('Escape');
-      await stand(page, 126.5, 0.5, Math.PI / 2);
-      const walked = await page.evaluate(async () => {
-        const g = window.solarbloom;
-        return g.bot.walker.walkable('g', 127, 0);
-      });
+      await page.evaluate(() => window.solarbloom.hud.backpack.close());
+      await stand(page, 124.5, 8.5, Math.PI / 2);
+      const walked = await page.evaluate(() => window.solarbloom.bot.walker.walkable('g', 125, 8));
       check(!!walked, 'ending: bloombot stands on the causeway');
       await shot(page, 'ending-7-on-causeway');
     }

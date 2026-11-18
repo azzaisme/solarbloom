@@ -1,4 +1,3 @@
-import { CAUSEWAY } from '../data/ending';
 import * as pc from 'playcanvas';
 import { roadPlanFor, type RoadPiece, type RoadPlan } from '../core/RoadPlan';
 import { CHUNK } from '../core/Hash';
@@ -17,7 +16,7 @@ import { onJetty, pileById, seaCell, setPieceAt, surfCell } from '../core/OldCit
 import { addGroundQuad, emptyGroundTexGeo, GROUND_TEXTURES, groundTexFor, groundTexMaterial, groundTexMesh, type GroundTexName } from './GroundTex';
 import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
-import { GATE_MODELS, LANDING, OLD_CITY, PARK_SET } from '../data/oldcity';
+import { GATE_MODELS, LANDING, PARK_SET } from '../data/oldcity';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
 import { drawDecor } from './DecorArt';
@@ -923,28 +922,6 @@ export class ChunkRenderer {
       b.add('cylinder', PALETTE.trim.gold ?? PALETTE.metal.iron, [x, y + 0.55, z - 0.2], [0.09, 0.42, 0.09]);
       return true;
     }
-    if (prop === 'causeway') {
-      // E23.9.3: the Long Causeway, drawn a span at a time from each span's first cell. Its models are 8 m long and
-      // stand on the seabed with the deck on top; until the Great Bloom its middle span lies broken under the sea.
-      const C = CAUSEWAY;
-      const len = (C.x1 - C.x0 + 1) / C.spans;
-      const i = Math.round((t.x - C.x0) / len);
-      if (t.z !== C.z0 || Math.abs(C.x0 + i * len - t.x) > 0.01) return true;
-      const broken = i === C.brokenSpan && !this.sim.ending.bloomed;
-      const name = broken ? 'causeway-broken' : 'causeway-span';
-      const model = oldCityModel(name);
-      const width = C.z1 - C.z0 + 1;
-      const sx = len / 8;
-      const sz = width / (broken ? 5.54 : 3.66);
-      const sy = sx;
-      const top = (broken ? 4.63 : 3.34) * sy;
-      const cx = C.x0 + i * len + len / 2;
-      const cz = (C.z0 + C.z1 + 1) / 2;
-      const cy = y - top - (broken ? 1.2 : 0);
-      if (model && this.batch?.add(model, cx, cy, cz, 0, sx, sy, sz)) return true;
-      if (!broken) b.add('box', PALETTE.stone.light, [cx, y - 0.15, cz], [len, 0.3, width]);
-      return true;
-    }
     if (prop.startsWith('page:')) {
       // E23.9.1: a page of the maker's journal on its post (the post stays once the page is read)
       const rot = dhash(t.x, t.z, 217) * Math.PI * 2;
@@ -1553,11 +1530,13 @@ export class ChunkRenderer {
       if (t.x === J.x || t.x === J.x + J.w - 1) b.add('cylinder', PALETTE.wood.deep, [t.x === J.x ? x - 0.42 : x + 0.42, h - 0.25, z], [0.09, 0.7, 0.09]);
       return;
     }
-    // E23.9.3: the Long Causeway: the sea one level below its deck, and its spans
-    if (t.prop === 'causeway') {
+    // E23.8.3.1: the Long Causeway's broken middle: its low deck under the sea, a few deck stones breaking the surface,
+    // until the Great Bloom raises it (then it draws as the road it is)
+    if (t.blocked && t.prop === 'causeway-broken') {
       const sea = PALETTE.ground.sea;
-      this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop - OLD_CITY.levelHeight, z], [1, 0.08, 1]);
-      this.oldCityProp(b, t, x, h + 0.08, z);
+      this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
+      if (t.variant % 3 === 0) b.add('box', PALETTE.stone.light, [x + r.range(-0.25, 0.25), h + 0.02 - WATER.drop, z + r.range(-0.25, 0.25)], [r.range(0.3, 0.55), 0.16, r.range(0.25, 0.45)]);
+      if (t.variant % 4 === 1) b.add('box', PALETTE.paving.grout, [x + r.range(-0.3, 0.3), h - WATER.drop, z + r.range(-0.3, 0.3)], [0.3, 0.1, 0.24]);
       return;
     }
     // E21.4: the Old City's open sea: deep water, never restored

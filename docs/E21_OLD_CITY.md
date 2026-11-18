@@ -1,5 +1,7 @@
 # E21: The Old City — a sandbox of exploring, salvaging and restoring
 
+> **Superseded in part by E23.** [E23: A living world](E23_LIVING_WORLD.md) builds on this design and overrides it where they disagree (one rule set, no idle layer, charge, grid, water, farm, crafting and research). See its "Changes to E21" table.
+
 ## Goal
 Solarbloom becomes a sandbox, exploration and restoration game, in the way Dreamlight Valley and Satisfactory are. I walk bloombot out of the park into a foggy city split into ten named regions, with a beach close to home. Each region has a material found nowhere else, a landmark I can see from far away, something in my way, and a sleeping robot who wakes up and asks for help. I salvage by hand, store what I find, carry it to the fountain, and each delivery gives bloombot a new way to move and new things to build. I have a house that grows with me. Days turn to nights and the weather changes. Helpers only take over what I have already restored myself.
 

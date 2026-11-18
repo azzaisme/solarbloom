@@ -1,6 +1,6 @@
 import { OLD_CITY, PARK_SET, REGIONS, type RampDef } from '../data/oldcity';
-import { CAUSEWAY } from '../data/ending';
-import { inOldCity, inRect, isSeaChunk, onCauseway, onJetty, regionOfChunk, regionWater, seaCell } from './OldCityLayout';
+import { causewayBroken, causewayRamps, isMainlandCell, mainlandShore, onCauseway } from './Mainland';
+import { inOldCity, inRect, isSeaChunk, onJetty, regionOfChunk, regionWater, seaCell } from './OldCityLayout';
 
 /**
  * E21.24 (§7 "Height"): the Old City's terraces. Every ground tile has a level 0–4 (one level is 1.2 tiles high),
@@ -32,6 +32,7 @@ function ramps() {
   rampsBuilt = true;
   PARK_SET.ramps.forEach((ramp, i) => RAMPS.push({ ramp, key: `park${i}` }));
   for (const r of regionsWithRamps()) r.ramps.forEach((ramp, i) => RAMPS.push({ ramp, key: `${r.id}${i}` }));
+  causewayRamps().forEach((ramp, i) => RAMPS.push({ ramp, key: `causeway${i}` })); // E23.8.3.1
   return RAMPS;
 }
 
@@ -55,8 +56,10 @@ export function rampAt(x: number, z: number): RampHit | undefined {
 export function levelAt(x: number, z: number): number {
   const cx = Math.floor(x / CHUNK);
   const cz = Math.floor(z / CHUNK);
-  // E23.9.3: the Long Causeway's deck is level with the streets it leaves from
-  if (onCauseway(x, z)) return CAUSEWAY.level;
+  // E23.8.3.1: the Long Causeway and the mainland stand at the island's base level; the causeway's broken middle is a
+  // low deck at sea level (flooded until the Great Bloom), with ramps down to it
+  if (causewayBroken(x, z)) return OLD_CITY.seaLevel;
+  if (onCauseway(x, z) || (isMainlandCell(x) && !mainlandShore(x, z))) return OLD_CITY.baseLevel;
   // the sea all round (E21.26), the bay, the coast, the jetty and canals are all at sea level
   if (!inOldCity(cx, cz) || isSeaChunk(cx, cz) || seaCell(x, z) || onJetty(x, z) || regionWater(x, z)) return OLD_CITY.seaLevel;
   if (cx === 0 && cz === 0) return PARK_SET.level;
