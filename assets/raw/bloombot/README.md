@@ -8,6 +8,7 @@ Generated in Meshy on 17 Nov 2026 from `docs/reference/bloombot-sheet.png`. 41 c
 | `bloombot-mesh.glb` + `_base_color.png` | Static mesh, meshy-t2.5 smart topology, 8,347 tris, meshy-n1 texture | `01a1e779-1a80-735f-beb6-5f5fd8c85671` |
 | `bloombot-meshy.glb` | Meshy's rig (24 bones) and clips, merged, untouched | rig `01a1e779-c5f4-7703-9e9d-27fb8eecfa24`, clips `01a1e77a-b1dd-75a7-9683-1af54d31c958` |
 | `meshy-parts/` | Meshy's separate downloads, not committed (rebuild `bloombot.glb` from them) | |
+| `bloombot-e23-clips.glb` | E23 clips on the same rig, untouched: Sit Cross-legged on Floor (363), Stand to Sit (57), Chair Sit Idle (33), Sit to Stand (53), Sit and Doze Off (268). 15 credits, 18 Nov 2026 | animation `01a1ed0d-c41f-762b-a698-83ccbbaa9872` |
 | `bloombot.glb` | **The one to use.** `bloombot-meshy.glb` after `blender-pass.py` | |
 | `preview-mesh.png`, `preview-clips.png` | Meshy output: front, 3/4, side, back; middle frame of each clip | |
 | `bloombot.blend` | The same model as a Blender file, saved by the pass | |
@@ -18,7 +19,7 @@ Forward, interact 290 Wave One Hand, cheer 298 Cheer with Both Hands Up; walk an
 
 ## Blender pass
 
-`timeout 120 blender -b -P blender-pass.py -- bloombot-meshy.glb bloombot.glb preview-fixed.png` (Blender 5.0):
+`timeout 1200 blender -b -P blender-pass.py -- bloombot-meshy.glb bloombot.glb preview-fixed.png bloombot-e23-clips.glb` (Blender 5.0; the check sheet takes most of the time):
 
 - **Pulse and assemble** keep 35% of the hip and spine lean, so the big head no longer dives at the ground.
   The hips hand the removed rotation to the thighs, so the feet stay where they were.
@@ -44,6 +45,10 @@ Forward, interact 290 Wave One Hand, cheer 298 Cheer with Both Hands Up; walk an
 - **Visor:** two layers, both skinned to the head. The dark paint on the front of the head is cut out and
   smoothed; it becomes the face screen (material `bloombot_visor`, flat front-on UVs), sunk 8 mm into the head,
   under a sheet of dark see-through glass (`bloombot_glass`) at the surface.
+
+- **E23 clips** (`meditate`, `sit-down`, `sit`, `stand-up`, `doze`) come from the fourth file and are rebuilt like the
+  rest. The sitting ones keep 35% of the hip and spine lean (the big head no longer dives) and keep their feet flat
+  on the ground every frame; `meditate` sits on the ground. `sit` puts the hips 0.203 m up.
 
 Never add a remesh (voxel or Quadriflow) to the pass: it froze the PC. Details: `docs/art/bloombot-pipeline.md`.
 

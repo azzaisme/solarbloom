@@ -11,8 +11,9 @@ Files go to `assets/raw/models/final/<name>.glb` (plus `.lod1.glb` and a `.png` 
 through `src/rendering/Models.ts`; machines are mapped in `MACHINE_MODELS` (`src/rendering/MachineVisuals.ts`).
 Real-world scale (1 tile = 1 m), pivot at the base centre, PBR with no baked lighting.
 
-**Nothing here has been generated.** Meshy spends need the owner's OK first. The batches and their costs are at the
-end.
+**Status (18 Nov 2026):** the owner approved batch A plus the crops (B6). Those 19 models and bloombot's five clips
+are made, within budget and in `assets/raw/` (see "What has been made" at the end). Every other batch waits for the
+owner's OK. Meshy spends always need it first.
 
 ## Routes and budgets
 
@@ -204,7 +205,7 @@ Prices are from `meshy-assets.md`'s routes as of 2026-10-12 (check https://docs.
 Crops first appear in Milestone A, so until B6 is approved the planters have no crop model. The owner may want B6
 folded into A (303 credits for A then).
 
-The Meshy balance on 18 Nov 2026 was **7 credits**, so even batch A needs a top-up.
+Batch A and B6 are done (303 credits). The balance after them was about 1,700 credits.
 
 ## Getting each model into the game
 
@@ -218,4 +219,37 @@ plays (#468). That takes three things, in order:
    reused models included.
 3. **It is played in the browser** and checked from all round at near zoom, both on and off.
 
-None of the three has happened yet for any E23 object.
+## What has been made
+
+Batch A and the crops (B6), approved by the owner on 18 Nov 2026: 303 credits. Meshy task ids are in
+`assets/raw/models/e23-meshy-tasks.md`.
+
+| Model | LOD0 / budget | LOD1 | Notes |
+|---|---|---|---|
+| charger | 2,898 / 3,000 | 709 | Image route; matches its concept (pad, gold ring, cyan glow, seat, pole mast) |
+| compost-bin | 1,342 / 1,500 | 328 | Reads as one timber bin with a lid rather than three open bays |
+| watering-can | 490 / 500 | 147 | |
+| crop-seedling, crop-lettuce, crop-watercress | 294, 1,176, 837 / 300, 1,200, 1,200 | | One `plant` part (nothing to hide) |
+| 13 other crops | 700–1,176 / 1,200 | 195–341 | `plant` and `fruit` parts |
+
+Every model is finished by `assets/tools/meshy_finish.py` (Blender 5.0): real scale, pivot at the base centre,
+textures 512 (1024 for the charger), LOD1 by Decimate, a preview from the game camera. For crops it sorts the
+fruit, pods, heads and flowers into a `fruit` node: the game hides it and scales the plant down for the growing
+stage.
+
+**Known limits, for the owner:**
+- **crop-lavender** came out as a grey spiky mound with no purple spikes. It needs a redo (15 credits, owner's OK).
+- **crop-moonflower and crop-mint** keep some flowers on the growing stage: their flowers are fused to the stems and
+  too close to the leaves in colour to sort automatically. A hand pass in Blender can move them to `fruit`.
+
+**Bloombot's clips** (`meditate`, `sit-down`, `sit`, `stand-up`, `doze`, 15 credits) are in `bloombot.glb`, rebuilt by
+`blender-pass.py` from `bloombot-e23-clips.glb`. They get the same fixes as the E20 clips: the hip and spine lean is
+damped to 35% so the big head doesn't dive at the floor, and the feet stay flat on the ground on every frame.
+`meditate` sits cross-legged on the ground. The chair clips put the hips 0.203 m up (`BLOOMBOT_CLIPS.seatHips` in
+`src/data/e23models.ts`), so on the park bench bloombot is lifted onto the seat and its legs dangle.
+
+**In the game:** `npm run test:e23models` starts a game headless, checks each new model loaded in the ModelLibrary,
+sets them out beside bloombot and plays each clip (screenshots in `docs/review/e23-models-*.png` and
+`e23-clip-*.png`). Placing them for real waits on the systems that build them: the charger on E23.3.3, the compost
+bin, planters and crops on E23.5, the watering can and the bench clips on E23.2.3. Eating (`eat`) and the low-power
+walk (`low-walk`) are Blender-keyed clips still to do with E23.2.1.

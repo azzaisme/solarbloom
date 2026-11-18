@@ -92,6 +92,22 @@ export const E23_CLIPS: { name: string; batch: Batch; count: number; what: strin
   { name: 'keepers', batch: 'B5', count: 20, what: 'each of 10 Keepers: sit-down and sit' },
 ];
 
+/**
+ * Bloombot's E23 clips in `assets/raw/bloombot/bloombot.glb` (blender-pass.py, from bloombot-e23-clips.glb), for
+ * E23.2.3: `meditate` sits cross-legged on the ground (at a charger); `sit-down`, `sit`, `stand-up` and `doze` are a
+ * chair sit with the feet on the ground and the hips `seatHips` metres up. On a bench whose seat is higher, lift
+ * bloombot by (seat height − seatHips) so it sits on the seat with its short legs dangling.
+ */
+export const BLOOMBOT_CLIPS = {
+  meditate: 'meditate',
+  sitDown: 'sit-down',
+  sit: 'sit',
+  standUp: 'stand-up',
+  doze: 'doze',
+  /** hip height above the feet in `sit`, metres (from the pass's log) */
+  seatHips: 0.203,
+} as const;
+
 /** Credits for one batch. */
 export function batchCredits(b: Batch): number {
   const models = E23_MODELS.filter((m) => m.batch === b).reduce((s, m) => s + (m.route === 'image' ? ROUTE_CREDITS.image : m.route === 'text' ? ROUTE_CREDITS.text : 0), 0);

@@ -47,6 +47,20 @@ def build(name, lod):
     return objs
 
 
+def fit(objs, budget):
+    """Over its class budget: Decimate (collapse) every part by the same ratio until it fits (never a remesh)."""
+    have = K.tri_count(objs)
+    if not budget or have <= budget:
+        return False
+    ratio = budget * 0.97 / have
+    for o in objs:
+        m = o.modifiers.new("fit", "DECIMATE")
+        m.ratio = ratio
+        bpy.context.view_layer.objects.active = o
+        bpy.ops.object.modifier_apply(modifier=m.name)
+    return True
+
+
 def export(path, objs):
     for o in bpy.context.scene.objects:
         o.select_set(o in objs)
@@ -90,6 +104,7 @@ for name in names:
     klass = M.MODELS[name][0]
     b0, b1 = BUDGET[klass]
     objs = build(name, 0)
+    fitted = fit(objs, b0)
     t0 = K.tri_count(objs)
     part_names = [o.name for o in objs]
     if DETAIL:
@@ -109,8 +124,10 @@ for name in names:
     if b1:
         objs = build(name, 1)
         far = K.join(name + "_lod1", objs)
+        fitted = fit([far], b1) or fitted
         t1 = K.tri_count([far])
         export(os.path.join(out_dir, name + ".lod1.glb"), [far])
     flag = "" if t0 <= b0 and (not b1 or t1 <= b1) else "  OVER BUDGET"
-    report.append(f"{name:20s} {klass:9s} LOD0 {t0:6d}/{b0}  LOD1 {t1:5d}/{b1}  parts {part_names}{flag}")
+    report.append(f"{name:20s} {klass:9s} LOD0 {t0:6d}/{b0}  LOD1 {t1:5d}/{b1}  parts {part_names}{flag}"
+                  + ("  (decimated to fit)" if fitted else ""))
 print("\n".join(["PROPS"] + report))
