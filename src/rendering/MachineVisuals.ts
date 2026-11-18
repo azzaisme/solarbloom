@@ -8,6 +8,7 @@ import { color, glow, mat, PALETTE, uniqueMat } from './Materials';
 import { group, shape, vshape, type ShapeOpts } from './Shapes';
 import { TUNING } from '../data/tuning';
 import { POWER } from '../data/power';
+import { POLE_ARM } from './PowerLines';
 import { SLAB_TOP } from './SceneBuilder';
 import { ease, type Tweens } from './Tween';
 import { foliageMaterial, FoliageBuilder, treeMesh } from './Foliage';
@@ -59,6 +60,8 @@ interface MachineView {
   /** Phase 5 E16: really working right now (refreshed twice a second), and when its next active wisp is due */
   running?: boolean;
   wispAt?: number;
+  /** E23.3.2.3: a relay's power-pole crossarm (kept when the hand-built model replaces the procedural body) */
+  poleArm?: pc.Entity;
   /** E23.3.2: a wind turbine's rotor angle (degrees), turned by its output */
   turn?: number;
   /** E23.3: the status light's own material (it goes dark while the machine has no power, or a pole is tripped) */
@@ -130,6 +133,8 @@ const vent = () => mat(PALETTE.darkFace, { gloss: 0.5 });
 const cable = () => mat(PALETTE.grille, { gloss: 0.4 });
 const gridLine = () => mat(PALETTE.panelGrid, { metal: 0.4, gloss: 0.7 });
 const glassMat = () => mat(PALETTE.glass, { opacity: 0.3, gloss: 0.95 });
+/** E23.3.2.3: a pole insulator's glaze (a pale celadon, like old ceramic insulators) */
+const glazeMat = () => mat(PALETTE.water, { gloss: 0.9 });
 const waterGlow = () => mat(PALETTE.water, { emissive: PALETTE.waterGlow, emissiveIntensity: 1.2, gloss: 0.9 });
 const leafMat = (i = 0) => mat([PALETTE.shrub[1], PALETTE.leafFin, PALETTE.shrub[0]][i % 3], { gloss: 0.3 });
 /** Unit stem / rod (diameter 1, height 1, centred): scale it like the 'cylinder' primitive. */
@@ -1153,7 +1158,7 @@ export class MachineVisuals {
       v.model = e;
       return;
     }
-    const keep = new Set<pc.Entity>([v.extras]);
+    const keep = new Set<pc.Entity>([v.extras, ...(v.poleArm ? [v.poleArm] : [])]);
     if (v.water) {
       keep.add(v.water);
       if (v.water.parent !== v.body) v.water.reparent(v.body);
@@ -1500,6 +1505,7 @@ export class MachineVisuals {
     part(b, latheAuto('relayDish', [[0, 1.02], [0.06, 1.04], [0.14, 1.12], [0.16, 1.17], [0.16, 1.17], [0.13, 1.15], [0.05, 1.1], [0, 1.09]], 14), cream(), { shadow: true });
     part(b, ring(18, 4, 0.12), metal(), { pos: [0, 1.17, 0], scale: [0.33, 0.06, 0.33] });
     v.light = part(b, ball(5, 8), mat(PALETTE.relayGlow, { emissive: PALETTE.relayGlow, emissiveIntensity: 1.6 }), { pos: [0, 1.28, 0], scale: 0.1 });
+    this.poleArm(v);
     for (let i = 0; i < 3; i++) {
       const a = i * 2.1;
       v.bob.push(part(b, ball(4, 6), mat(PALETTE.flower[i % PALETTE.flower.length]), { pos: [Math.cos(a) * 0.22, 0.16, Math.sin(a) * 0.22], scale: [0.08, 0.05, 0.08] }));
@@ -1583,6 +1589,25 @@ export class MachineVisuals {
     part(mast, ball(3, 6), leafMat(0), { pos: [0.07, 0.58, 0.02], scale: [0.16, 0.035, 0.07], rot: [0, -40, 20] });
     v.light = part(mast, ball(5, 8), mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1.2 }), { pos: [0, 0.68, 0], scale: 0.07 });
     part(b, tube('chargerCable', bezier([-0.3, 0.1, -0.3], [-0.15, 0.04, -0.2], [-0.05, 0.08, -0.1], 6), 0.014, { sides: 6 }), cable(), {});
+  }
+
+  /**
+   * E23.3.2.3: Bloom Relays are the grid's power poles. A cream crossarm with a gold band crosses the column under the
+   * crystal, braced from below, with a glazed insulator at each end where the lines meet (PowerLines POLE_ARM).
+   */
+  private poleArm(v: MachineView) {
+    const A = POLE_ARM;
+    const arm = group(v.body, 'poleArm', [0, A.y, 0]);
+    part(arm, rbox(A.half * 2 + 0.12, 0.06, 0.08, 0.02), cream(), { shadow: true });
+    part(arm, rbox(0.12, 0.075, 0.095, 0.01), gold(), {});
+    for (const s of [-1, 1]) {
+      // a diagonal brace down to the column, and the insulator: two glazed bells on a short pin
+      part(arm, rbox(0.03, 0.2, 0.03, 0.01), creamSeam(), { pos: [s * 0.13, -0.08, 0], rot: [0, 0, s * 50] });
+      part(arm, rcyl(0.012, 0.03, 0.06, 0, 0, 6), metal(), { pos: [s * A.half, 0, 0] });
+      part(arm, rcyl(0.04, 0.05, 0.08, 0.012, 0.005, 10), glazeMat(), { pos: [s * A.half, 0, 0] });
+      part(arm, rcyl(0.032, 0.085, 0.11, 0.01, 0.005, 10), glazeMat(), { pos: [s * A.half, 0, 0] });
+    }
+    v.poleArm = arm;
   }
 
   /** Reservoir Overflow: the basin spills over with a splash. */

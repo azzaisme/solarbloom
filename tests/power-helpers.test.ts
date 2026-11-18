@@ -152,7 +152,9 @@ describe('E23.3.3 powered helpers', () => {
     const dock = put(sim, 'cultivator', 30, 30);
     sim.advance(10);
     expect(sim.power.isPowered(dock)).toBe(false);
-    for (const u of dock.cult?.units ?? []) {
+    const units = dock.cult?.units ?? [];
+    expect(units.length).toBeGreaterThan(0); // the loop below must check real tillers
+    for (const u of units) {
       expect(u.parked).toBe(true);
       expect(Math.hypot(u.px - 30.5, u.pz - 30.5)).toBeLessThan(0.1);
     }
