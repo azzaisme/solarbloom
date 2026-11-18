@@ -367,7 +367,8 @@ export class PowerGrid {
       const want = this.draw(c, sky);
       demand += want;
       let frac = 0;
-      if (want <= 0) frac = 1; // idle: on, drawing nothing
+      // idle (drawing nothing): on only if its network has power to give, so a charger on a dead line reads dark
+      if (want <= 0) frac = left > 1e-9 ? 1 : 0;
       else if (!blocked && left + 1e-9 >= want) frac = 1;
       else if (!blocked && role.dims && left > 1e-9) frac = left / want;
       if (want > 0 && frac < 1) blocked = true; // strict shed order: nothing below a dark consumer runs
