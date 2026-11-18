@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { DAY, DAY_SECONDS, gameDays, gameMinutes, NIGHT_FINDS } from '../src/data/time';
+import { SALVAGE } from '../src/data/salvage';
 import { TUNING } from '../src/data/tuning';
 import { GATHER } from '../src/data/farm';
 import { Sim } from '../src/gameplay/Sim';
@@ -112,6 +113,31 @@ describe('E23.7.1.1: every timer counts in game days', () => {
     expect(sim.nightFinds.visible(f.id)).toBe(false);
     sim.advance(gameDays(1) - 1);
     expect(sim.nightFinds.visible(f.id)).toBe(true);
+  });
+
+  it('E23.7.2: the weather turns once a game day, at dawn on the game clock, in both clock modes', { timeout: 120_000 }, () => {
+    for (const real of [false, true]) {
+      const sim = oldSim(5);
+      sim.clock.now = at(2);
+      sim.clock.real = real;
+      const days: number[] = [];
+      sim.bus.on('weather.changed', (e) => days.push(e.day));
+      sim.advance(gameDays(2));
+      expect(days, real ? 'follow my clock' : 'own day').toEqual([2, 3]);
+    }
+  });
+
+  it('E23.7.4: a salvage pile refills over game days of play, the same in both clock modes', { timeout: 300_000 }, () => {
+    const empty = (s: Sim) => {
+      while (s.salvage.left('pk-s1') > 0) s.salvage.salvage('pk-s1');
+    };
+    const full = (s: Sim) => s.salvage.left('pk-s1') >= SALVAGE.units.small;
+    const game = ticksUntil(false, empty, full, 400_000);
+    const real = ticksUntil(true, empty, full, 400_000);
+    // a whole pile: SALVAGE.refillDays game days (checked every few seconds)
+    expect(game * TUNING.simStep).toBeGreaterThanOrEqual(gameDays(SALVAGE.refillDays) - 1e-6);
+    expect(game * TUNING.simStep).toBeLessThanOrEqual(gameDays(SALVAGE.refillDays) + SALVAGE.refillCheckSeconds + 0.2);
+    expect(real).toBe(game);
   });
 
   it('growth can ask whether it is night on the game clock, which "follow my clock" never changes', () => {

@@ -20,7 +20,6 @@ import { LuckyCatSystem } from './LuckyCatSystem';
 import { AreaSystem } from './AreaSystem';
 import { DebugLog } from './DebugLog';
 import { Metrics } from './Metrics';
-import { MilestoneSystem } from './Milestones';
 import { EcosystemSystem } from './Ecosystem';
 import { ProductionSystem } from './ProductionSystem';
 import { ProgressionSystem } from './ProgressionSystem';
@@ -40,6 +39,7 @@ import { LandmarkSystem } from './LandmarkSystem';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
+import { Weather } from './Weather';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -69,7 +69,6 @@ export class Sim {
   /** E23.3: the power grid (networks of poles, sources, batteries and consumers). */
   readonly power: PowerGrid;
   readonly clusters: RooftopClusters;
-  readonly milestones: MilestoneSystem;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
   readonly ecosystem: EcosystemSystem;
   /** Look 6: living transitions (what each tile is visibly turning into). */
@@ -78,7 +77,7 @@ export class Sim {
   readonly cultivators: CultivatorSystem;
   /** E21.1: the backpack and the store (old-city rules). */
   readonly inventory: Inventory;
-  /** E21.2: salvage piles, seams and Reclaimers (old-city rules). */
+  /** E21.2 / E23.7.4: salvage piles, refilling over game days and in storms (old-city rules). */
   readonly salvage: SalvageSystem;
   /** E21.5: gates (old-city rules). */
   readonly gates: GateSystem;
@@ -96,8 +95,8 @@ export class Sim {
   readonly clock: Clock;
   /** E23.7.1.3: finds that are out only at night. */
   readonly nightFinds: NightFinds;
-  /** E23.7.2: the weather (solar share and the rest). Optional until it lands; read `sim.weather?.solar() ?? 1`. */
-  weather?: { solar(): number };
+  /** E23.7.2: the weather: one kind a game day, each with its effects (data/weather). See gameplay/Weather. */
+  readonly weather: Weather;
   /** E23.5.1: gathering biomass from restored ground (old-city rules). */
   readonly gather: GatherSystem;
   /**
@@ -149,6 +148,7 @@ export class Sim {
     this.landmarks = new LandmarkSystem(this);
     this.clock = new Clock(this);
     this.nightFinds = new NightFinds(this);
+    this.weather = new Weather(this);
     this.salvage = new SalvageSystem(this);
     this.gates = new GateSystem(this);
     this.fountain = new FountainSystem(this);
@@ -174,7 +174,6 @@ export class Sim {
     this.progression = new ProgressionSystem(this);
     this.areas = new AreaSystem(this);
     this.districts = new DistrictSystem(this);
-    this.milestones = new MilestoneSystem(this);
     this.ecosystem = new EcosystemSystem(this);
     this.metrics = new Metrics(this);
     this.log = new DebugLog(this);
@@ -280,10 +279,10 @@ export class Sim {
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
     this.clock.tick();
+    this.weather.tick();
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();
-    this.milestones.tick();
     this.ecosystem.tick();
     this.metrics.tick(dt);
     s.rngState = this.rng.state;

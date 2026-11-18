@@ -6,6 +6,7 @@ import { packChunk } from '../core/TilePack';
 import type { GameState } from '../core/types';
 import { TIERS } from '../data/salvage';
 import { gameDayOf } from '../gameplay/Clock';
+import { migrateSave } from '../core/SaveMigrations';
 
 /** The single save from before E22.12; it moves to slot 1 the first time the game starts. */
 export const SAVE_KEY = 'solarbloom.save';
@@ -322,7 +323,7 @@ export class SaveService {
       const base = createInitialState(s.seed, s.rules ?? 'classic');
       // Phase 5 E12: resource quantities are saved as Decimal strings.
       const raw = s as unknown as { resources?: Record<string, BigLike>; caps?: Record<string, BigLike> };
-      return {
+      return migrateSave({
         ...base,
         ...s,
         resources: amounts(raw.resources ?? {}),
@@ -331,7 +332,7 @@ export class SaveService {
         progression: { ...base.progression, ...s.progression },
         stats: { ...base.stats, ...s.stats, firsts: { ...(s.stats?.firsts ?? {}) } },
         salvage: base.salvage ? { ...base.salvage, ...s.salvage } : undefined,
-      };
+      });
     } catch {
       return undefined;
     }

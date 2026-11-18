@@ -38,8 +38,8 @@ house-shed · house-cottage · house-two-storey · house-home (budget 8k) · bed
 ## Island (5)
 boat (image route, 5k) · jetty · causeway-span · causeway-broken · sea-cliff (landmark budget, close-range; the skyline cliff stays for distance)
 
-## Machines and storage (2), text route, machine budget 5k
-reclaimer · storage-chest
+## Machines and storage (1), text route, machine budget 5k
+storage-chest (E23.7.4 dropped the Reclaimer and its model)
 
 ## Salvage piles (6), text route, obstacle budget 1.2k
 salvage-copper · salvage-driftwood · salvage-glass · salvage-clay · salvage-gears · salvage-sunstone
@@ -65,5 +65,5 @@ VFX, journal paper.
 |---|---|---|
 | Keepers | 10 | 320 |
 | Landmarks, towers, house stages, boat | 12 | 216 |
-| Text-route props | 36 | 540 |
-| **Total** | **58** | **1,076** |
+| Text-route props | 35 | 525 |
+| **Total** | **57** | **1,061** |

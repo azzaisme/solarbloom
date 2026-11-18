@@ -77,6 +77,8 @@ export class OldCityController {
       flyUp(host.hud.root, `+${e.got} ${MATERIALS.biomass.icon} ${MATERIALS.biomass.name}`, sc.x, sc.y);
       host.sound('salvage', 'biomass');
     });
+    // E23.7.4: a pile coming back (slowly, or blown in by a storm) is redrawn at its new size
+    host.sim.bus.on('pile.refilled', (e) => host.markTile(e.x, e.z));
     host.sim.bus.on('fountain.tier', () => this.panel.close());
     host.sim.bus.on('pack.full', (e) => host.hud.toast(`Your ${MATERIALS[e.material].name} stack is full<small>Put some in storage at the fountain or a chest.</small>`, '', 2.6));
   }
