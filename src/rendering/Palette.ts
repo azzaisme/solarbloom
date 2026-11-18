@@ -515,6 +515,8 @@ const families = { cozy, retaining, stone, paving, ground, roof, lawn, flowers, 
 
 export const PALETTE = {
   ...families,
+  /** E23.7.1.3: night finds: a glowing plant's stems and buds, night salvage's scraps and its glint */
+  nightFind: { stem: '#4f7d5a', bud: '#c8ffe6', budGlow: '#7dffd0', scrap: '#8a8f96', glint: '#fff2c8', glintGlow: '#ffd98a' },
   // ───── legacy names (pre-Look 2), kept as aliases ─────
   concrete: ['#9a9286', '#8f877b', '#a39b8f', '#958d81'],
   concreteDark: '#6b6358',
