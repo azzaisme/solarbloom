@@ -1,22 +1,19 @@
 import type { AreaMode, MachineData } from '../core/types';
-import { formatPriceHtml } from '../core/Economy';
 import { MACHINES, TIER2, TIER3 } from '../data/machines';
-import { GROUP_ICONS, ICONS, iconize } from './Icons';
+import { ICONS, iconize } from './Icons';
 import { $, esc, HudPart } from './HudPart';
 import { hudHeight, hudWidth, toHud } from './UiScale';
 import type { PlotPickerHandlers, PlotPickerModel } from './Hud';
 
 /**
- * E22.5 (#342): the panels the HUD opens over the world: upgrades (classic), the plot picker, a machine's inspect panel, the Lucky Cat's reward card, the welcome card,
+ * E22.5 (#342): the panels the HUD opens over the world: the plot picker, a machine's inspect panel, the Lucky Cat's reward card, the welcome card,
  * the hover tooltip and the "can't do that" note, and the classic quick chips (home, cats, paw prints).
  */
 export class Panels extends HudPart {
-  private upgradesOpen = false;
   private failTimer = 0;
 
   wire() {
     const r = this.root;
-    $(r, '#upgrades h2 button').addEventListener('click', () => this.toggleUpgrades(false));
     $(r, '#catBtn').addEventListener('click', () => this.hud.backpack.open('collection'));
     $(r, '#pawBtn').addEventListener('click', () => this.cb.findCat());
     $(r, '#homeBtn').addEventListener('click', () => this.cb.goHome($(r, '#homeBtn').classList.contains('ready')));
@@ -25,10 +22,6 @@ export class Panels extends HudPart {
       $(r, '#intro').hidden = true;
       this.sim.state.progression.introSeen = true;
     });
-    $(r, '#upgList').addEventListener('click', (e) => {
-      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-buy]');
-      if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
-    });
     $(r, '#inspect').addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
       if (t.closest('[data-close]')) this.cb.closeInspect();
@@ -36,8 +29,6 @@ export class Panels extends HudPart {
       if (w && !w.disabled) this.cb.wake(w.dataset.wake!);
       const db = t.closest<HTMLButtonElement>('[data-district]');
       if (db && !db.disabled) this.cb.districtBloom(db.dataset.district!, db.dataset.replay === '1');
-      const b = t.closest<HTMLButtonElement>('[data-buy]');
-      if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
       const rl = t.closest<HTMLButtonElement>('[data-role]');
       if (rl && !rl.disabled) this.cb.chooseRole(rl.dataset.role!);
       const am = t.closest<HTMLButtonElement>('[data-area-mode]');
@@ -65,12 +56,6 @@ export class Panels extends HudPart {
 
   get introOpen() {
     return !$(this.root, '#intro').hidden;
-  }
-
-  toggleUpgrades(open = !this.upgradesOpen) {
-    this.upgradesOpen = open;
-    $(this.root, '#upgrades').classList.toggle('open', open);
-    if (open) this.renderUpgrades(true);
   }
 
   private picker?: PlotPickerHandlers;
@@ -118,10 +103,6 @@ export class Panels extends HudPart {
     return !!this.picker;
   }
 
-  get isUpgradesOpen() {
-    return this.upgradesOpen;
-  }
-
   /** E22.11: the game's stats for Settings › Game (numbers live in panels, never over the world). */
   statsHtml(): string {
     const s = this.sim.state.stats;
@@ -130,40 +111,6 @@ export class Panels extends HudPart {
       `<p class="set-stats">Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Average: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b></p>` +
         `<details class="set-timings"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre></details>`,
     );
-  }
-
-  renderUpgrades(force = false) {
-    if (!this.upgradesOpen && !force) return;
-    const u = this.sim.upgrades;
-    // Grouped by system.
-    const sorted = u
-      .grouped()
-      .flatMap((g) => g.upgrades);
-    let lastGroup = '';
-    const html = sorted
-      .map((def) => {
-        const head = def.group !== lastGroup ? `<h3 class="ugroup">${GROUP_ICONS[def.group] ? ICONS[GROUP_ICONS[def.group]] : ''} ${def.group}</h3>` : '';
-        lastGroup = def.group;
-        // Phase 5 E12: per-machine upgrades show the type's range of levels and an "Upgrade all" button that buys
-        // cheapest-first; long-tail upgrades (no last level) show their level number instead of pips.
-        const per = !!def.machine;
-        const st = u.status(def);
-        const n = per ? u.targets(def).length : 0;
-        const lvl = per ? (st.machine ? u.levelOf(st.machine, def.id) : u.maxLevelOf(def.id)) : u.level(def.id);
-        const maxed = st.reason === 'Maxed';
-        const finite = Number.isFinite(def.maxLevel) && def.maxLevel <= 8;
-        const pips = finite && !per ? `<span class="pips">${Array.from({ length: def.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</span>` : '';
-        const lvTxt = maxed ? '<em>MAX</em>' : per ? `<em>${n} built · next Lv ${lvl + 1}</em>` : `<em>Lv ${lvl}</em>`;
-        const btn = per
-          ? `<button class="buy" data-buy="${def.id}|*" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : `All · ${formatPriceHtml(st.price, u.short(st))}`}</button>`
-          : `<button class="buy" data-buy="${def.id}" ${st.ok ? '' : 'disabled'}>${maxed ? '✓' : formatPriceHtml(st.price, u.short(st))}</button>`;
-        return `${head}<div class="card"><span class="ci">${def.icon}</span><span class="cn">${esc(def.name)} ${lvTxt}</span>
-          ${btn}
-          <span class="cd2">${esc(def.describe(lvl + 1))}${per && n ? ' · inspect a machine to upgrade just that one' : ''}</span>${pips}
-          ${!st.ok && !maxed && st.reason && !st.reason.startsWith('Need ') ? `<span class="why">${esc(st.reason)}</span>` : ''}</div>`;
-      })
-      .join('');
-    this.set('upgList', $(this.root, '#upgList'), 'html', html);
   }
 
   showTip(x: number, y: number, html: string) {

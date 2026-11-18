@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { areaMapFor } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
@@ -6,7 +6,6 @@ import { canStep, levelAt } from '../src/core/Height';
 import { brokenCells, chunkPiles, isMainlandArea, landingArea, mainlandType } from '../src/core/Mainland';
 import { pileById, seaCell, setPieceAt } from '../src/core/OldCityLayout';
 import { MAINLAND } from '../src/data/mainland';
-import { TUNING } from '../src/data/tuning';
 import { OLD_CITY } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -80,11 +79,7 @@ describe('E23.8.3.1: mainland layout', () => {
 });
 
 describe('E23.8.3.1: mainland generation and the Great Bloom', () => {
-  // the real game runs with region unlocks on (tests default it off): the mainland must still never be sealed or priced
-  const U = TUNING.city.unlock as { enabled: boolean };
-  const was = U.enabled;
-  beforeEach(() => (U.enabled = true));
-  afterEach(() => (U.enabled = was));
+  // E23.1.5: nothing is ever bought; the mainland is never sealed either
 
   it('the same tiles whatever order the chunks stream in', () => {
     const cells: [number, number][] = [];

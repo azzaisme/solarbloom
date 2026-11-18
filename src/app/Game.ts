@@ -92,9 +92,14 @@ import { Loading, type LoadSteps } from '../ui/Loading';
 import { ModelLibrary, useModels } from '../rendering/Models';
 import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
 import { padStick, PhotoMode } from './PhotoMode';
+import { PHOTO_FILTERS } from '../data/photo';
+import { sceneNow } from './PhotoScene';
 import { DayNight, type LightMoment } from '../rendering/DayNight';
 import { NightFindVisuals } from '../rendering/NightFindVisuals';
 import { NIGHT_FIND_GIVES } from '../data/time';
+import { WEATHER, WEATHER_WORDS } from '../data/weather';
+import { WeatherVisuals, type WeatherLook } from '../rendering/WeatherVisuals';
+import { buildRadio } from '../rendering/HouseRadio';
 import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
 import { HOTBAR_DEFAULT } from '../ui/Hotbar';
 import { actionGlyph, GlyphTracker, padName, type PadStyle } from '../ui/Glyphs';
@@ -108,7 +113,7 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 /** Bloombot: the camera zoom of the close default view (G.3), and how near counts as "within reach". */
 const BOT_ZOOM = 3.2;
 /** E22.1: while a panel is open, these walking actions still reach the game (they close the panel they opened). */
-const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'upgrades', 'menu']);
+const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'menu']);
 /**
  * E19.2 (#245, "Building and placing"): build mode is Satisfactory-style. With something to build in hand (a
  * machine, a core, a decoration) the camera stays in the close view; a hologram sits where you aim, snapped to the
@@ -179,6 +184,8 @@ export class Game {
   private titleRealClock?: boolean;
   /** E23.7.1.3: glowing plants and night salvage */
   private nightFindVisuals!: NightFindVisuals;
+  /** E23.7.2: rain, storms, fog and wind on screen */
+  private weatherVisuals!: WeatherVisuals;
   private skyline!: Skyline;
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
@@ -336,7 +343,7 @@ export class Game {
     this.chunks.onParkStage = (stage) => {
       const lines: Record<number, string> = {
         1: '🧹 The park paths are swept clean.<small>A quarter of the way to waking the fountain.</small>',
-        2: '🪑 The benches are mended.<small>Halfway there: people will want to sit here again.</small>',
+        2: '🪑 The benches are mended.<small>Halfway there: the birds will want to sit here again.</small>',
         3: '💡 The lamps are lit again!<small>The planter trees leaf out and bunting goes up on the bandstand.</small>',
       };
       if (lines[stage]) this.hud.toast(lines[stage], 'gold', 4);
@@ -384,6 +391,8 @@ export class Game {
     this.pollinators = new Pollinators(this.sim, this.scene.world, this.app.batcher!.addGroup('pollinators', true, 400).id);
     this.fauna = new Fauna(this.sim, this.scene.world, this.app.batcher ?? undefined);
     this.nightFindVisuals = new NightFindVisuals(this.sim, this.scene.world, (x, z) => this.groundY(x, z));
+    this.weatherVisuals = new WeatherVisuals(this.app, this.scene.world);
+    buildRadio(this.scene.world, (x, z) => this.groundY(x, z));
     this.tileFx = new TileFx(this.sim, this.scene.world, this.app.graphicsDevice);
     this.machines.onWisp = (_m, at) => this.vfx.burst(at, 1, { up: 0.5, speed: 0.12, size: 0.035, life: 1.3, gravity: 0 }); // Phase 5 E16: running machines only
     this.machines.onActivated = (_m, at) => {
@@ -398,17 +407,11 @@ export class Game {
       {
         selectTool: (t) => this.selectTool(t),
         harvest: () => this.harvest(),
-        // Phase 5 E12: "id" (global or cheapest machine), "id|machineId" (that machine) or "id|*" (Upgrade all).
         chooseRole: (key) => {
           const [hubId, role, slot, index] = key.split('|');
           if (slot === 'drone') this.sim.roles.chooseForDrone(hubId, Number(index), role === '-' ? undefined : (role as DroneRole));
           else this.sim.roles.choose(hubId, role as DroneRole, Number(slot) || 1);
           this.renderInspect();
-        },
-        buyUpgrade: (key) => {
-          const [id, target] = key.split('|');
-          if (target === '*') this.sim.upgrades.purchaseAll(id);
-          else this.sim.upgrades.purchase(id, target || undefined);
         },
         activateCore: () => {
           // Bloombot (G.17): bloombot walks to the fountain and wakes it there.
@@ -959,7 +962,6 @@ export class Game {
     this.closeMenu();
     this.hud.toggleTray(false);
     this.hud.toggleBackpack(false);
-    this.hud.toggleUpgrades(false);
     this.hud.closePlotPicker();
     if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
   }
@@ -1024,7 +1026,25 @@ export class Game {
 
   /** E23.7.1: the moment the sky and light show: the light clock (photo mode may set its own, E23.7.3). */
   private lightMoment(): LightMoment {
-    return { f: this.sim.clock.dayFraction() };
+    const wv = this.weatherVisuals;
+    // E23.7.3: photo mode may show its own time of day (the game's clock doesn't move)
+    return { f: sceneNow(this.sim, this.photo).f, overcast: wv?.overcast ?? 0, flash: wv?.lightning ?? 0 };
+  }
+
+  /** E23.7.2: the weather the screen shows (photo mode may pick its own, E23.7.3). */
+  private weatherLook(): WeatherLook {
+    return { kind: sceneNow(this.sim, this.photo).weather };
+  }
+
+  /**
+   * E23.7.2.2 (#449): the forecast. An old radio on a crate by the house's door; by day, Interact listens to it and
+   * it says tomorrow's weather (always the right one: the weather is fixed per game day).
+   */
+  /** E23.7.2.2: tomorrow's weather, from the radio. */
+  private listenToRadio() {
+    const k = this.sim.weather.forecast();
+    this.hud.toast(WEATHER_WORDS[k].forecast, '', 5);
+    this.sim.bus.emit('weather.forecast', { kind: k });
   }
 
   private menuHeader(): MenuHeader {
@@ -1129,7 +1149,12 @@ export class Game {
   /** E19.4.1 (#260): photo mode, wired to the camera, bloombot, the HUD and the look. */
   private createPhotoMode() {
     const b = this.bot;
-    this.photoBar = new PhotoBar((a) => this.photo.action(a), (a) => this.hudKey(a));
+    this.photoBar = new PhotoBar(
+      (a) => this.photo.action(a),
+      (a) => this.hudKey(a),
+      (h) => this.photo.setHour(h),
+      () => this.sim.clock.hour() + this.sim.clock.minute() / 60,
+    );
     this.photo = new PhotoMode(
       {
         camera: this.camera,
@@ -1163,6 +1188,8 @@ export class Game {
         capture: () => this.savePicture(),
         render: (st) => this.photoBar.render(st),
         stick: () => padStick(),
+        clockHour: () => this.sim.clock.hour() + this.sim.clock.minute() / 60,
+        setFilter: (css) => ((this.app.graphicsDevice.canvas as HTMLCanvasElement).style.filter = css),
       },
       this.bindings,
     );
@@ -1176,7 +1203,7 @@ export class Game {
    * post-processing), the haze colour fills in behind it.
    */
   private savePicture() {
-    this.app.once('frameend', () => saveCanvasPng(this.app.graphicsDevice.canvas as HTMLCanvasElement, LOOK.haze.color));
+    this.app.once('frameend', () => saveCanvasPng(this.app.graphicsDevice.canvas as HTMLCanvasElement, LOOK.haze.color, PHOTO_FILTERS[this.photo.filter].css));
     this.photoBar.flashNow();
     this.sfx.click();
   }
@@ -1243,7 +1270,6 @@ export class Game {
       else if (k === 'h') this.harvest();
       else if (k === 'f') this.focusNextArea();
       else if (k === 'home') this.focusArea(PARK);
-      else if (k === 'u') this.hud.toggleUpgrades();
       else if (k === 'b') this.hud.toggleTray();
       else if (k === 'p') this.setPaused(!this.paused);
       else if (k === 'f3' || k === '`') {
@@ -1277,8 +1303,6 @@ export class Game {
         return this.toggleMenu();
       case 'harvest':
         return this.harvest();
-      case 'upgrades':
-        return this.hud.toggleUpgrades();
       case 'backpack':
         this.hud.toggleBackpack();
         return this.syncPanelPause(); // paused from this very moment
@@ -1325,7 +1349,7 @@ export class Game {
   /** A panel or menu that takes the input is open. */
   private panelOpen(): boolean {
     const h = this.hud;
-    return h.modalOpen || h.backpackOpen || h.plotPickerOpen || h.isUpgradesOpen || h.trayOpen || !!this.oc?.panel.isOpen;
+    return h.modalOpen || h.backpackOpen || h.plotPickerOpen || h.trayOpen || !!this.oc?.panel.isOpen;
   }
 
   /** The action a key (or mouse input) means now. With a panel open, the key that opened it closes it again. */
@@ -1341,7 +1365,7 @@ export class Game {
   private togglesOpenPanel(a: Action): boolean {
     if (!PANEL_TOGGLES.has(a)) return false;
     const h = this.hud;
-    const open: Action | undefined = this.settingsUi.isOpen || this.menu.isOpen ? 'menu' : h.backpackOpen ? 'backpack' : h.trayOpen ? 'buildMenu' : h.isUpgradesOpen ? 'upgrades' : undefined;
+    const open: Action | undefined = this.settingsUi.isOpen || this.menu.isOpen ? 'menu' : h.backpackOpen ? 'backpack' : h.trayOpen ? 'buildMenu' : undefined;
     return a === open;
   }
 
@@ -1511,7 +1535,6 @@ export class Game {
     if (this.settingsUi.isOpen) this.settingsUi.close();
     else if (this.menu.isOpen) this.closeMenu();
     else if (this.oc?.escape()) void 0; // E21: an Old City panel or a hold
-    else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
     else if (this.hud.trayOpen) this.hud.toggleTray(false);
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
     else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
@@ -1716,23 +1739,12 @@ export class Game {
     const front = this.sim.grid.get(b.pose.roofId, f.x, f.z);
     const fd = Math.hypot(f.x + 0.5 - b.pose.x, f.z + 0.5 - b.pose.z);
     if (this.oc) out.push(...this.oldCityCandidates(f, front, fd));
-    // Region unlocks: facing a sealed area's fog, Interact opens it (or says what it still needs). The Old City has
-    // no price: its gates open by prying, repairing or waking, and the prompt says what is in the way.
+    // Facing a sealed area's fog: nothing is bought (E23.1.5). Its gate opens by prying, repairing or waking, and
+    // the prompt says what is in the way.
     const sealed = this.sealedAhead();
-    if (sealed && this.sim.oldCity) {
+    if (sealed) {
       if (!out.some((c) => c.kind === 'gate'))
         out.push({ kind: 'gate', id: `seal:${sealed}`, verb: 'Look at', name: 'the clouds', distance: fd, at: front, refused: this.sim.areas.sealText(sealed).replace(/<[^>]*>/g, ''), run: () => {} });
-    } else if (sealed) {
-      const s = this.sim.areas;
-      const cost = s.unlockCost(sealed)!;
-      const short = this.sim.econ.shortfall(cost);
-      out.push({
-        kind: 'gate', id: `gate:${sealed}`, verb: 'Unlock', name: `the ${AREA_TYPES[s.info(sealed).type].name.toLowerCase()}`, distance: fd, at: front,
-        refused: short ? `Needs ${fmt(cost.biomass)} ${this.hud.oldCity ? 'Greens' : 'biomass'} and ${fmt(cost.energy)} energy` : undefined,
-        run: () => {
-          if (this.sim.areas.unlock(sealed)) b.visuals.play('cheer');
-        },
-      });
     }
     const lift = this.liftAhead();
     if (lift) {
@@ -1803,6 +1815,8 @@ export class Game {
       const g = NIGHT_FIND_GIVES[nf.kind];
       out.push({ kind: 'salvage', id: `night:${nf.id}`, verb: g.verb, name: g.name, distance: fd, at: front, refused: s.nightFinds.problem(nf.id), run: () => void s.nightFinds.take(nf.id) });
     }
+    // the house: its radio's forecast by day, its bed from dusk
+    if (this.atHouse(f) && s.weather.on && !s.clock.canSleep()) out.push({ kind: 'door', id: 'house:radio', verb: 'Listen to', name: 'the radio', distance: fd, at: front, run: () => this.listenToRadio() });
     if (this.atHouse(f) && s.clock.canSleep()) out.push({ kind: 'door', id: 'house:sleep', verb: 'Sleep', name: 'until morning', distance: fd, at: front, run: () => this.sleep() });
     const pile = s.salvage.pileAt(f.x, f.z);
     if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: SALVAGE.holdSeconds, refused: s.salvage.problem(pile.id), run });
@@ -2238,6 +2252,10 @@ export class Game {
       const reach = this.deck ? DECK.closeReach : (CLOSE_VIEW_REACH[this.gfxTier as keyof typeof CLOSE_VIEW_REACH] ?? 1);
       c.hazeEnd *= 1 - (1 - reach) * close;
     }
+    // E23.7.2: fog (and rain) shorten the view
+    const view = this.weatherVisuals?.view ?? 1;
+    c.hazeStart *= view * view * view;
+    c.hazeEnd *= view * view;
     this.app.scene.fog.start = c.fogDepth(c.dist + c.hazeStart);
     this.app.scene.fog.end = c.fogDepth(c.dist + c.hazeEnd);
     if (this.sky) {
@@ -2915,10 +2933,6 @@ export class Game {
       return;
     }
     if (button !== 0) return;
-    if (this.hud.isUpgradesOpen && window.innerWidth < 760) {
-      this.hud.toggleUpgrades(false);
-      return;
-    }
     const catId = this.catHit(x, y);
     if (catId) {
       this.claimingCat = catId;
@@ -3120,20 +3134,6 @@ export class Game {
     return html;
   }
 
-  /** Phase 5 E12: this machine's own upgrade (per-machine levels), plus "all of this type" when there are several. */
-  private upgradeButton(id: string, m: MachineData) {
-    const def = UPGRADE_BY_ID[id];
-    const u = this.sim.upgrades;
-    if (def.available && !def.available(this.sim.state)) return '';
-    const st = u.status(def, m);
-    const lvl = u.levelOf(m, id);
-    if (lvl >= def.maxLevel) return `<p class="stat">${def.icon} ${def.name}: MAX</p>`;
-    const n = u.targets(def).length;
-    const all = u.status(def);
-    const allBtn = n > 1 ? `<button class="buy all" data-buy="${id}|*" ${all.ok ? '' : 'disabled'} title="Buys levels cheapest-first on every ${def.machine}">All ${n}</button>` : '';
-    return `<div class="card" style="margin-top:8px"><span class="ci">${def.icon}</span><span class="cn">${def.name} <em>Lv ${lvl}</em></span><button class="buy" data-buy="${id}|${m.id}" ${st.ok ? '' : 'disabled'}>${formatPriceHtml(st.price, u.short(st))}</button>${allBtn}<span class="cd2">${def.describe(lvl + 1)}</span></div>`;
-  }
-
   private renderInspect() {
     const m = this.sim.machine(this.selected);
     if (!m) return this.hud.renderInspect(null);
@@ -3143,21 +3143,21 @@ export class Game {
       case 'solar': {
         const out = s.production.solarOutput(m);
         const boosted = m.boostUntil > s.time;
-        extra = `<p class="stat">⚡ ${out.toFixed(1)} energy/s${boosted ? ' · 🌸 bloom boost!' : ''}${s.production.surgeActive() ? ` · 🐱 Solar Surge ×${TUNING.cat.frenzyMult}` : ''}</p><p>Restore tiles right next to it for a 5 s ×2 boost.</p>${this.upgradeButton('solarArray', m)}`;
+        extra = `<p class="stat">⚡ ${out.toFixed(1)} energy/s${boosted ? ' · 🌸 bloom boost!' : ''}${s.production.surgeActive() ? ` · 🐱 Solar Surge ×${TUNING.cat.frenzyMult}` : ''}</p><p>Restore tiles right next to it for a 5 s ×2 boost.</p>`;
         break;
       }
       case 'condenser': {
         const near = s.grid.tilesNear(m, TUNING.condenser.radius);
         const mossy = near.filter((t) => t.ground === 'prepared').length;
         const pct = Math.round(((m.charge ?? 0) / TUNING.condenser.threshold) * 100);
-        extra = `<p class="stat">💧 +${s.upgrades.waterMult(m)} water/s</p><p class="stat">🌧️ Watering charge ${pct}% · ${mossy} dry tile${mossy === 1 ? '' : 's'} beside it</p><p>When full, it waters the dry soil next to it into bloom and starts a chain. ${mossy ? '' : 'Pulse a neighbour so moss appears beside it.'}</p>${this.upgradeButton('waterBloom', m)}`;
+        extra = `<p class="stat">💧 +${s.upgrades.waterMult(m)} water/s</p><p class="stat">🌧️ Watering charge ${pct}% · ${mossy} dry tile${mossy === 1 ? '' : 's'} beside it</p><p>When full, it waters the dry soil next to it into bloom and starts a chain. ${mossy ? '' : 'Pulse a neighbour so moss appears beside it.'}</p>`;
         break;
       }
       case 'pollinator': {
         const zone = s.grid.tilesNear(m, s.upgrades.pollinatorReach(m));
         const mossy = zone.filter((t) => t.ground === 'prepared').length;
         const green = zone.filter((t) => t.ground === 'restored').length;
-        extra = `<p class="stat">🌸 Zone radius ${s.upgrades.pollinatorReach(m)} · ${green}/${zone.length} blooming (×${s.upgrades.gardenMult(m)} 🌿)</p><p class="stat">✨ ${mossy} mossy tiles ready to chain</p><p>Restore a tile right next to it: it pollinates another neighbour (up to ${s.upgrades.pollinatorTriggers}× per chain). Line gardens, panels and the Mother Tree up so chains jump between them.</p>${this.upgradeButton('pollinatorReach', m)}`;
+        extra = `<p class="stat">🌸 Zone radius ${s.upgrades.pollinatorReach(m)} · ${green}/${zone.length} blooming (×${s.upgrades.gardenMult(m)} 🌿)</p><p class="stat">✨ ${mossy} mossy tiles ready to chain</p><p>Restore a tile right next to it: it pollinates another neighbour (up to ${s.upgrades.pollinatorTriggers}× per chain). Line gardens, panels and the Mother Tree up so chains jump between them.</p>`;
         break;
       }
       case 'droneHub': {
@@ -3168,19 +3168,18 @@ export class Game {
             return `<p class="stat">${ROLE_INFO[role].icon} Drone ${i + 1}${d.expiresAt ? ' (party!)' : ''}: ${this.droneLabel(role, s.drones.statusOf(d))} · ${d.jobs} jobs</p>`;
           })
           .join('') +
-          this.rolePicker(m) +
-          ['droneSpeed', 'droneRadius', 'secondDrone', 'droneSweep', 'chainIntel'].map((u) => this.upgradeButton(u, m)).join('');
+          this.rolePicker(m);
         break;
       }
       case 'relay': {
         const linked = s.relays.linked(m);
         const ready = linked.filter((o) => s.relays.ready(relayLinkId(m, o))).length;
-        extra = `<p class="stat">📡 Linked to ${linked.length} relay${linked.length === 1 ? '' : 's'} within ${s.relays.range(m)} tiles · ${ready} ready</p><p>Each pulse blooms ${s.relays.targets(m)} tiles around this relay when a chain arrives, and can pass it on. Links recharge for ${TUNING.relay.cooldown} s.${linked.length ? '' : ' <b>Build another Bloom Relay within range to link them.</b>'}</p>${this.upgradeButton('relayLens', m)}`;
+        extra = `<p class="stat">📡 Linked to ${linked.length} relay${linked.length === 1 ? '' : 's'} within ${s.relays.range(m)} tiles · ${ready} ready</p><p>Each pulse blooms ${s.relays.targets(m)} tiles around this relay when a chain arrives, and can pass it on. Links recharge for ${TUNING.relay.cooldown} s.${linked.length ? '' : ' <b>Build another Bloom Relay within range to link them.</b>'}</p>`;
         break;
       }
       case 'motherTree': {
         const pct = Math.round(((m.charge ?? 0) / TUNING.motherTree.threshold) * 100);
-        extra = `<p class="stat">🌳 Charge ${m.charge ?? 0}/${TUNING.motherTree.threshold} (${pct}%)</p><p>Each restoration or new bloom within ${s.upgrades.treeRadius(m)} tiles adds charge. When full, it releases a Bloom Pulse over that whole area. Its own pulse can't recharge it.</p>${this.upgradeButton('treeResonance', m)}`;
+        extra = `<p class="stat">🌳 Charge ${m.charge ?? 0}/${TUNING.motherTree.threshold} (${pct}%)</p><p>Each restoration or new bloom within ${s.upgrades.treeRadius(m)} tiles adds charge. When full, it releases a Bloom Pulse over that whole area. Its own pulse can't recharge it.</p>`;
         break;
       }
       case 'reservoirGarden': {
@@ -3509,16 +3508,11 @@ export class Game {
       this.sfx.powerUp();
       this.hud.flashResource('biomass', 'flash');
     });
-    b.on('upgrade.purchased', ({ id, level, bulk, machineId }) => {
+    b.on('upgrade.granted', ({ id, level, machineId }) => {
       if (id === 'droneSpeed') this.drones.restyle();
       this.machines.refreshUpgrades();
-      if (bulk) return; // "Upgrade all" celebrates once, at the end (upgrade.bulk)
       const def = UPGRADE_BY_ID[id];
       this.celebrateUpgrade(id, `${def.icon} ${def.name} · level ${level}<small>${def.describe(level)}</small>`, machineId);
-    });
-    b.on('upgrade.bulk', ({ id, count }) => {
-      const def = UPGRADE_BY_ID[id];
-      this.celebrateUpgrade(id, `${def.icon} ${def.name} ×${count}<small>${count} level${count === 1 ? '' : 's'} bought across your ${def.machine ? MACHINES[def.machine].name : ''}s, cheapest first</small>`);
     });
     b.on('drone.spawned', ({ droneId }) => {
       const d = s.state.drones.find((x) => x.id === droneId);
@@ -4285,7 +4279,7 @@ export class Game {
     this.birds.resident = eco.has('birds');
     this.clouds.happy = eco.has('birds'); // the sky wakes up with the songbirds: sleepy faces on a couple of clouds
     this.birds.update(wdt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
-    this.fauna.update(wdt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: this.settings.fireflies !== false && !this.settings.highContrast && this.dayNight.light < 0.5 });
+    this.fauna.update(wdt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: this.settings.fireflies !== false && !this.settings.highContrast && this.dayNight.light < 0.5, fog: WEATHER[this.weatherLook().kind].fogFinds });
     this.nightFindVisuals.reducedMotion = this.settings.reducedMotion;
     this.nightFindVisuals.update(wdt);
     this.eco?.update(wdt);
@@ -4320,6 +4314,14 @@ export class Game {
     this.camera.update(dt);
     this.sky.clarity += (this.skyClarity() - this.sky.clarity) * Math.min(1, dt * 0.8);
     this.sky.reducedMotion = this.settings.reducedMotion;
+    {
+      const wv = this.weatherVisuals;
+      wv.reducedMotion = this.settings.reducedMotion;
+      wv.lowVfx = !!this.settings.lowVfx;
+      wv.update(wdt, this.weatherLook(), this.camera.target);
+      this.sky.wind = wv.wind;
+      this.clouds.gust = wv.wind;
+    }
     this.dayNight.apply(this.lightMoment());
     this.look.rimShare = this.dayNight.rim;
     this.chunks.fogTint.copy(this.dayNight.cloudTint);

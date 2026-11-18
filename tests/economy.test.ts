@@ -78,13 +78,13 @@ describe('economy & restoration', () => {
   it('upgrades change costs and caps', () => {
     const sim = makeSim();
     sim.state.resources.biomass = big(40);
-    expect(sim.upgrades.purchase('efficientPulse')).toBe(true);
+    expect(sim.upgrades.grant('efficientPulse')).toBeGreaterThan(0);
     expect(sim.restoration.pulseCost(setGround(sim, 6, 6, 'polluted')).energy).toBeCloseTo(TUNING.pulse.polluted.energy * 0.75);
     sim.state.resources.biomass = big(40);
-    expect(sim.upgrades.purchase('seedVault')).toBe(true);
+    expect(sim.upgrades.grant('seedVault')).toBeGreaterThan(0);
     expect(toNum(sim.state.caps.energy)).toBe(TUNING.storageTiers.energy[1]);
     expect(sim.econ.cap('biomass')).toBeUndefined();
-    expect(sim.upgrades.purchase('droneSpeed')).toBe(false); // needs hub
+    expect(sim.upgrades.grant('droneSpeed')).toBe(0); // needs hub
   });
 
   it('broad pulse restores extra neighbours for free', () => {

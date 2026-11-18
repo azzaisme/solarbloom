@@ -100,7 +100,6 @@ export class GateSystem {
       if (st && !st.sealed) return;
       if (st) {
         st.sealed = undefined;
-        st.price = undefined;
         st.unlockedAt = s.time;
         st.revealedAt = s.time;
       } else s.state.areas[aid] = { fog: 'frontier', revealedAt: s.time, unlockedAt: s.time };
