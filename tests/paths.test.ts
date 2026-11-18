@@ -19,15 +19,13 @@ function park() {
   for (let x = 4; x < 26; x++)
     for (let z = 6; z < 26; z++) {
       const t = sim.grid.get(GROUND, x, z);
-      if (!t) continue;
+      if (!t || t.occupantId) continue; // the fountain and the starter lamp stay (the store is reached through them)
       t.blocked = false;
-      t.occupantId = undefined;
       t.ground = 'restored';
       t.pollution = 0;
       if (t.feature === 'water') t.feature = 'lawn';
       sim.grid.touch(t);
     }
-  sim.state.machines = sim.state.machines.filter((m) => m.x < 4 || m.x > 26 || m.z < 6 || m.z > 26);
   sim.inventory.addToStore('scrap', 400);
   sim.inventory.addToStore('timber', 100);
   return sim;
@@ -120,21 +118,23 @@ describe('E23.6.7: paths', () => {
   it('depaving old road turns it back into ground that can be restored, and never back to dead', () => {
     const sim = park();
     // an old road in the park area: make one
-    const road = sim.grid.get(GROUND, 20, 20)!;
+    sim.state.resources.energy = sim.state.caps.energy;
+    sim.state.resources.water = sim.state.caps.water;
+    const road = sim.grid.get(GROUND, 10, 12)!;
     road.feature = 'road';
     road.ground = 'polluted';
     road.pollution = 80;
-    const done = sim.grid.get(GROUND, 21, 20)!;
+    const done = sim.grid.get(GROUND, 11, 12)!;
     done.feature = 'paving';
     done.ground = 'restored';
     expect(sim.paths.canDepave(sim.grid.get(GROUND, 12, 12))).toBe('Only old road and paving can be broken up');
-    expect(sim.paths.depave(20, 20)).toBeUndefined();
-    expect(sim.paths.depave(21, 20)).toBeUndefined();
+    expect(sim.paths.depave(10, 12)).toBeUndefined();
+    expect(sim.paths.depave(11, 12)).toBeUndefined();
     expect(road.feature).toBe('lawn');
     expect(road.ground).toBe('polluted'); // dead stays dead, ready for a pulse
     expect(done.ground).toBe('restored'); // restored paving becomes restored soil
-    expect(sim.restoration.checkPulse(road).ok).toBe(true);
-    expect(sim.state.salvage!.depaved).toEqual(['20,20', '21,20']);
+    expect(sim.restoration.checkPulse(road)).toMatchObject({ ok: true });
+    expect(sim.state.salvage!.depaved).toEqual(['10,12', '11,12']);
     // saved: a chunk loaded again loses its paving again
     const fresh = [{ ...road, feature: 'road' as const }];
     sim.paths.applyChunk(fresh);
