@@ -141,6 +141,8 @@ export interface MachineData {
   project?: { stage: number; costs: Partial<Record<ResourceKind, string>>[] };
   /** Phase 5 E14: a superstructure's ability: charge (events), uses, automation switch. */
   ability?: { charge: number; used: number; auto?: boolean };
+  /** E23.3: a power pole tripped by lightning (it carries nothing until bloombot resets it with one press). */
+  tripped?: boolean;
   /** Look 6.8: a Cultivator's tillers (mobile units working dead ground near the dock), and tiles finished. */
   cult?: { units: CultivatorUnit[]; done: number };
   /** E18: a Drone Hub's role (unset = restorer; slot 1 on a Fleet Hub). */
