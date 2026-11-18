@@ -1,10 +1,11 @@
 import { DAY_SECONDS } from '../data/time';
 import { WEATHER, WEATHER_KINDS, WEATHER_ODDS, WEATHER_RULES, WEATHER_WORDS, type WeatherEffects, type WeatherKind } from '../data/weather';
+import type { Rng } from '../core/Rng';
 import type { Sim } from './Sim';
 
 /** What a storm's lightning needs from the grid (E23.3): trip one pole, which bloombot resets with one press. */
 interface PowerLike {
-  trip?(rng: () => number): string | undefined;
+  trip?(rng: Rng): string | undefined;
 }
 
 /** Neutral weather: classic rules have none. */
@@ -127,9 +128,8 @@ export class Weather {
       if (this.fresh && f >= strikes[i]) this.struck.add(key);
       if (f >= strikes[i] && !this.struck.has(key)) {
         this.struck.add(key);
-        let n = day * 31 + i;
-        const rng = () => hash01(s.state.seed, ++n);
-        const pole = (s as unknown as { power?: PowerLike }).power?.trip?.(rng);
+        // E23.3's grid trips one working pole (deterministic: the sim's own rng); one press resets it
+        const pole = (s as unknown as { power?: PowerLike }).power?.trip?.(s.rng);
         s.bus.emit('weather.lightning', { day, poleId: pole });
       }
     }

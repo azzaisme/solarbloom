@@ -7,8 +7,8 @@ export interface WeatherLook {
   kind: WeatherKind;
 }
 
-const DROPS = 700;
-const BOX = 22; // drops fall in a box this wide round the camera's target
+const DROPS = 1400;
+const BOX = 16; // drops fall in a box this wide round the camera's target
 const TOP = 14;
 
 /**
@@ -38,13 +38,17 @@ export class WeatherVisuals {
     this.pos = new Float32Array(DROPS * 2 * 3);
     this.mesh = new pc.Mesh(app.graphicsDevice);
     this.mesh.setPositions(this.pos);
+    // the shader asks for normals even unlit (a console error every frame without them): straight up
+    const nrm = new Float32Array(DROPS * 2 * 3);
+    for (let i = 1; i < nrm.length; i += 3) nrm[i] = 1;
+    this.mesh.setNormals(nrm);
     const idx: number[] = [];
     for (let i = 0; i < DROPS * 2; i++) idx.push(i);
     this.mesh.setIndices(idx);
     this.mesh.update(pc.PRIMITIVE_LINES);
     const m = new pc.StandardMaterial();
     m.useLighting = false;
-    m.emissive = new pc.Color(0.78, 0.84, 0.92);
+    m.emissive = new pc.Color(0.5, 0.58, 0.7);
     m.diffuse = new pc.Color(0, 0, 0);
     m.opacity = 0.45;
     m.blendType = pc.BLEND_NORMAL;
@@ -105,7 +109,7 @@ export class WeatherVisuals {
     const count = Math.floor(DROPS * this.rainA * (this.lowVfx ? 0.4 : 1));
     const fall = (look.kind === 'storm' ? 16 : 11) * dt;
     const slant = 0.12 + this.windNow * 0.35;
-    const len = look.kind === 'storm' ? 0.55 : 0.4;
+    const len = look.kind === 'storm' ? 1.1 : 0.8;
     const p = this.pos;
     for (let i = 0; i < DROPS; i++) {
       const d = this.drops[i];
@@ -135,6 +139,6 @@ export class WeatherVisuals {
     }
     this.mesh.setPositions(p);
     this.mesh.update(pc.PRIMITIVE_LINES, false);
-    this.material.opacity = 0.35 + 0.2 * this.rainA;
+    this.material.opacity = 0.5 + 0.3 * this.rainA;
   }
 }

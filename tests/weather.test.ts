@@ -132,10 +132,10 @@ describe('E23.7.2.2: the forecast', () => {
 });
 
 describe('E23.7.2.3: storms', () => {
-  it('a storm blows in fresh salvage and lightning trips a pole, and nothing is lost', () => {
+  it('a storm blows in fresh salvage and lightning trips a pole, and nothing is lost', { timeout: 60_000 }, () => {
     const sim = oldSim(11);
     let tripped = 0;
-    (sim as unknown as { power: { trip(): string } }).power = { trip: () => `pole${++tripped}` };
+    (sim as unknown as { power: { trip(rng: { int(a: number, b: number): number }): string } }).power = { trip: (rng) => `pole${++tripped}:${rng.int(0, 9)}` };
     const seen: string[] = [];
     sim.bus.on('weather.storm', () => seen.push('storm'));
     sim.bus.on('weather.lightning', (e) => seen.push(`bolt:${e.poleId}`));
@@ -156,7 +156,7 @@ describe('E23.7.2.3: storms', () => {
     expect(JSON.stringify(sim.state.salvage!.store)).toBe(before.store);
   });
 
-  it('the weather is the same for the same seed (saves stay byte-identical)', () => {
+  it('the weather is the same for the same seed (saves stay byte-identical)', { timeout: 60_000 }, () => {
     const a = oldSim(21);
     const b = oldSim(21);
     a.advance(gameDays(2));

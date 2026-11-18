@@ -1039,7 +1039,7 @@ export class Game {
   /** E23.7.2.2: tomorrow's weather, from the radio. */
   private listenToRadio() {
     const k = this.sim.weather.forecast();
-    this.hud.toast(`📻 ${WEATHER_WORDS[k].forecast}`, '', 5);
+    this.hud.toast(WEATHER_WORDS[k].forecast, '', 5);
     this.sim.bus.emit('weather.forecast', { kind: k });
   }
 
@@ -2238,8 +2238,8 @@ export class Game {
     }
     // E23.7.2: fog (and rain) shorten the view
     const view = this.weatherVisuals?.view ?? 1;
-    c.hazeStart *= view;
-    c.hazeEnd *= view;
+    c.hazeStart *= view * view * view;
+    c.hazeEnd *= view * view;
     this.app.scene.fog.start = c.fogDepth(c.dist + c.hazeStart);
     this.app.scene.fog.end = c.fogDepth(c.dist + c.hazeEnd);
     if (this.sky) {
