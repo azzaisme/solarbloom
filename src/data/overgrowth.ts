@@ -2,6 +2,7 @@
 // poles, round pipe runs, and up machines, chests, benches, walls and ruins. All data, no rules: starting values.
 
 import type { ItemCost, Unlock } from './crafting';
+import { DAY_SECONDS } from './time';
 
 /** What overgrowth can grow on. */
 export type OvergrowthHost = 'line' | 'pipe' | 'machine' | 'decor' | 'ruin';
@@ -40,7 +41,8 @@ export const OVERGROWTH_BY_ID: Record<OvergrowthKind, OvergrowthDef> = Object.fr
 export const OVERGROWTH_TUNING = {
   /** game days from a sprout to full (a game day is 48 minutes of play) */
   growDays: 1,
-  daySeconds: 2880,
+  /** a game day in sim seconds (E23.7's clock, data/time) */
+  daySeconds: DAY_SECONDS,
   /** a sprig every this many tiles along a line or pipe run, and per tile of a machine's edge */
   sprigsPerTile: 3,
   /** at most this many sprigs on one host, and triangles for all of it (the Deck preset's budget: one draw call) */
