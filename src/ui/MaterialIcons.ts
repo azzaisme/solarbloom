@@ -2,7 +2,7 @@ import type { MaterialId } from '../core/types';
 
 /**
  * E22.6 (#343): material icons for the backpack and the build menu. Each has its own shape as well as its own
- * colour (nothing is told by colour alone): a brick stack, a seed, a coil, a log, a pane, a pot, a cog, a star.
+ * colour (nothing is told by colour alone): a brick stack, a seed, a coil, a log, a pane, a pot, a cog, a star, a beam.
  * Inline SVG on a 32-unit grid; colours are classes styled from tokens (and a colour-safe set, E22.8).
  */
 const BODY: Record<MaterialId | 'biomass' | 'unknown', string> = {
@@ -22,6 +22,8 @@ const BODY: Record<MaterialId | 'biomass' | 'unknown', string> = {
   gears: `<path d="M14 3 h4 l1 4 l3 1.4 l3.6 -2 l2.8 2.8 l-2 3.6 l1.4 3 l4 1 v4 l-4 1 l-1.4 3 l2 3.6 l-2.8 2.8 l-3.6 -2 l-3 1.4 l-1 4 h-4 l-1 -4 l-3 -1.4 l-3.6 2 l-2.8 -2.8 l2 -3.6 l-1.4 -3 l-4 -1 v-4 l4 -1 l1.4 -3 l-2 -3.6 l2.8 -2.8 l3.6 2 l3 -1.4 Z" transform="translate(1.6 1.6) scale(.9)"/><circle cx="16" cy="16" r="4.5" class="mi-cut"/>`,
   // Sunstone: an eight-point star
   sunstone: `<path d="M16 2 L19 11 L28 8 L22 16 L28 24 L19 21 L16 30 L13 21 L4 24 L10 16 L4 8 L13 11 Z"/><circle cx="16" cy="16" r="3.4" class="mi-hi"/>`,
+  // Steel (E23.8.3.2, mainland only): an I-beam, end on
+  steel: `<path d="M5 4 H27 V10 H19.5 V22 H27 V28 H5 V22 H12.5 V10 H5 Z"/><path d="M8 7 H24" class="mi-line"/>`,
   // Greens (biomass): a leaf
   biomass: `<path d="M6 26 C4 12 14 4 28 4 C28 18 20 28 6 26 Z"/><path d="M7 25 C13 19 19 13 26 6" class="mi-line"/>`,
   // not found yet

@@ -15,6 +15,8 @@ export interface MaterialDef {
   home: string[];
   /** a tint for its fly-ups and panel row */
   colour: string;
+  /** E23.8.3.2: found only on the mainland (and never traded for on the island) */
+  mainlandOnly?: boolean;
 }
 
 export const MATERIALS: Record<MaterialId, MaterialDef> = {
@@ -26,6 +28,8 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
   clay: { id: 'clay', name: 'Clay', icon: '🏺', models: ['salvage-clay'], home: ['cistern'], colour: '#b97a5a' },
   gears: { id: 'gears', name: 'Gears', icon: '⚙️', models: ['salvage-gears'], home: ['clockPlaza'], colour: '#b8a26a' },
   sunstone: { id: 'sunstone', name: 'Sunstone', icon: '✨', models: ['salvage-sunstone'], home: ['terraces'], colour: '#f2c84a' },
+  // E23.8.3.2: steel, from the mainland's industrial ruins only
+  steel: { id: 'steel', name: 'Steel', icon: '🔩', models: ['salvage-steel'], home: ['mainland'], colour: '#8d9aa5', mainlandOnly: true },
 };
 
 export const MATERIAL_IDS = Object.keys(MATERIALS) as MaterialId[];
@@ -105,6 +109,9 @@ export const RECIPES: Partial<Record<BuildableType | 'reclaimer' | 'chest', Reci
   motherTree: { cost: { seeds: 30, clay: 20, biomass: 100 }, tier: 3 },
   relay: { cost: { copper: 20, gears: 10, sunstone: 10 }, tier: 4 },
   cultivator: { cost: { scrap: 30, gears: 20, copper: 10 }, tier: 4 },
+  // E23.8.3.2: mainland-only machines, after the Great Bloom (numbers in data/mainland MAINLAND_MACHINES)
+  gridBattery: { cost: { steel: 30, copper: 20, gears: 10 }, tier: 5 },
+  longPump: { cost: { steel: 25, clay: 15, gears: 10 }, tier: 5 },
 };
 
 // ───────────── §5 fountain tiers ─────────────

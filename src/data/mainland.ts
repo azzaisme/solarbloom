@@ -53,7 +53,8 @@ export const SALVAGE_FIELDS = {
   /** what each district type's fields hold, by weight */
   materials: {
     street: { scrap: 3, copper: 2, glass: 1 },
-    downtown: { scrap: 3, gears: 2, copper: 2 },
+    // the industrial ruins: the only place steel is found
+    downtown: { steel: 4, scrap: 2, gears: 1, copper: 1 },
     grove: { seeds: 3, timber: 2 },
     park: { seeds: 2, timber: 2, clay: 1 },
     market: { glass: 2, scrap: 2, timber: 1 },
@@ -63,4 +64,26 @@ export const SALVAGE_FIELDS = {
   sizes: { small: 1, medium: 2, large: 2 } as Record<PileSize, number>,
   /** a pile's model when its material has none */
   models: { small: 'rubble-pile', medium: 'crate', large: 'stone-block' } as Record<PileSize, string>,
+};
+
+/**
+ * E23.8.3.2: the mainland-only machines, built from steel (recipes in data/salvage RECIPES). Starting values.
+ * The grid battery joins the power grid (E23.3, `sim.power`) as storage; the long-range pump joins it as a consumer
+ * (shed with the pumps) and the water network (E23.4, `sim.water`) as a pump with a long reach.
+ */
+export const MAINLAND_MACHINES = {
+  gridBattery: {
+    /** stored energy (power units × seconds): about ten island batteries */
+    capacity: 4000,
+    /** charge / discharge per second */
+    rate: 60,
+  },
+  longPump: {
+    /** power drawn while pumping */
+    draw: 6,
+    /** pipe cells it can push water along (an island pump reaches far less) */
+    reach: 96,
+    /** water moved per game hour */
+    flow: 40,
+  },
 };

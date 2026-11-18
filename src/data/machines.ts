@@ -19,6 +19,8 @@ export interface MachineDef {
   cityOnly?: boolean;
   /** E21: only under old-city rules. */
   oldCity?: boolean;
+  /** E23.8.3.2: only buildable on the mainland. */
+  mainlandOnly?: boolean;
 }
 
 export const MACHINES: Record<MachineType, MachineDef> = {
@@ -118,6 +120,29 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     allowedGround: ['restored', 'prepared', 'polluted'],
     blurb: 'A way into the city’s shared store: open it to put things away or take them out.',
     oldCity: true,
+  },
+  // E23.8.3.2: the mainland's big machines (behaviour in gameplay/MainlandSystem, numbers in data/mainland)
+  gridBattery: {
+    type: 'gridBattery',
+    name: 'Grid Battery',
+    icon: '🔋',
+    size: 2,
+    cost: {},
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'A grid-scale battery: stores a whole network’s sun and wind for the night. Mainland only.',
+    oldCity: true,
+    mainlandOnly: true,
+  },
+  longPump: {
+    type: 'longPump',
+    name: 'Long-range Pump',
+    icon: '🚰',
+    size: 2,
+    cost: {},
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Pushes water down a long pipe run, far further than a pump. Mainland only.',
+    oldCity: true,
+    mainlandOnly: true,
   },
   // E21.2: stands on a woken region's seam and sends its material to the store, for ever.
   reclaimer: {
