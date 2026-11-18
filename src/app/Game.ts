@@ -236,7 +236,6 @@ export class Game {
   menu!: Menu;
   settingsUi!: SettingsScreen;
   private padFocus?: PadFocus;
-  /** City 06.5: simulated seconds still owed after a hitch or a hidden tab, run within the frame budget. */
   /** Simulation milliseconds spent in the last frame, and the worst since the counter was reset (perf harness). */
   simMs = 0;
   simMsWorst = 0;
