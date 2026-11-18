@@ -33,11 +33,16 @@ import { Inventory, type BotAt } from './Inventory';
 import { SalvageSystem } from './SalvageSystem';
 import { GateSystem } from './GateSystem';
 import { FountainSystem } from './FountainSystem';
+import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
+import { MainlandSystem } from './MainlandSystem';
 import { LandmarkSystem } from './LandmarkSystem';
 import { ChargeSystem } from './Charge';
 import { PulseLoad } from './PulseLoad';
 import { BuriedSystem } from './Buried';
+import { Clock } from './Clock';
+import { NightFinds } from './NightFinds';
+import { Weather } from './Weather';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -76,7 +81,7 @@ export class Sim {
   readonly cultivators: CultivatorSystem;
   /** E21.1: the backpack and the store (old-city rules). */
   readonly inventory: Inventory;
-  /** E21.2: salvage piles, seams and Reclaimers (old-city rules). */
+  /** E21.2 / E23.7.4: salvage piles, refilling over game days and in storms (old-city rules). */
   readonly salvage: SalvageSystem;
   /** E21.5: gates (old-city rules). */
   readonly gates: GateSystem;
@@ -84,6 +89,10 @@ export class Sim {
   readonly fountain: FountainSystem;
   /** E21.8: the Keepers and their requests (old-city rules). */
   readonly keepers: KeeperSystem;
+  /** E23.8.3: the causeway and the endless mainland. */
+  readonly mainland: MainlandSystem;
+  /** E23.9.1: the maker's journal (pages on posts, his last page at the Great Bloom). */
+  readonly journal: JournalSystem;
   /** E21.9: waking landmarks and their lasting rewards (old-city rules). */
   readonly landmarks: LandmarkSystem;
   /** E23.2.1: bloombot's charge, the only meter (old-city rules). */
@@ -92,6 +101,12 @@ export class Sim {
   readonly pulseLoad: PulseLoad;
   /** E23.2.2.3: seeds and salvage buried in open ground (the ripple reveals them). */
   readonly buried: BuriedSystem;
+  /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
+  readonly clock: Clock;
+  /** E23.7.1.3: finds that are out only at night. */
+  readonly nightFinds: NightFinds;
+  /** E23.7.2: the weather: one kind a game day, each with its effects (data/weather). See gameplay/Weather. */
+  readonly weather: Weather;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -140,10 +155,15 @@ export class Sim {
     this.pulseLoad = new PulseLoad(this);
     this.buried = new BuriedSystem(this);
     this.landmarks = new LandmarkSystem(this);
+    this.clock = new Clock(this);
+    this.nightFinds = new NightFinds(this);
+    this.weather = new Weather(this);
     this.salvage = new SalvageSystem(this);
     this.gates = new GateSystem(this);
     this.fountain = new FountainSystem(this);
     this.keepers = new KeeperSystem(this);
+    this.mainland = new MainlandSystem(this);
+    this.journal = new JournalSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
@@ -268,6 +288,8 @@ export class Sim {
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
     this.charge.tick(dt);
+    this.clock.tick();
+    this.weather.tick();
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();
