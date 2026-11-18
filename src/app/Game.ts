@@ -9,7 +9,11 @@ import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
 import type { BuildableType, DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
-import { BUILDABLE, MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
+import { TIERS } from '../data/salvage';
+import { EXPLORE } from '../rendering/CameraController';
+import { OLD_CITY, REGIONS } from '../data/oldcity';
+import { seaCell } from '../core/OldCityLayout';
+import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
@@ -47,7 +51,8 @@ import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
 import { Skyline } from '../rendering/Skyline';
 import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
-import { droneTapRadius, pickDrone, pickLayers } from '../core/Picking';
+import { droneTapRadius, pickDrone, pickLayers, pickTerraced } from '../core/Picking';
+import { heightAt, levelY } from '../core/Height';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
 import { relayLinkId } from '../gameplay/RelaySystem';
 import { initLowPoly } from '../rendering/Shapes';
@@ -69,6 +74,8 @@ import { type Action, Bindings, BUILD_DIGITS, keyLabel, padLabel } from './Bindi
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
+import { OldCityController } from './OldCity';
+import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Cozy } from '../gameplay/Cozy';
 import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
 import { chunkKey } from '../core/Grid';
@@ -95,9 +102,11 @@ const MOUSE_AIM_MS = 8000;
 /** the shortest time between two quarter turns from the mouse wheel (a trackpad sends many small wheel events) */
 const WHEEL_TURN_MS = 140;
 /** Bloombot: how far in the camera may come (the cursor view stops at 1.9). */
-const BOT_MAX_ZOOM = 4.2;
+const BOT_MAX_ZOOM = 4.3; // E21.22: the close step (EXPLORE.zoomSteps[0])
 const BOT_REACH = 1.6;
 /** Bloombot is the game; `?cursor=1` keeps the old click-to-act play for tests that drive tiles directly. */
+/** E21: the rule set a new game starts with (the Old City, unless `?rules=classic`). */
+const newGameRules = () => (typeof location !== 'undefined' && new URLSearchParams(location.search).get('rules') === 'classic' ? 'classic' : 'oldcity');
 const botMode = () => typeof location === 'undefined' || new URLSearchParams(location.search).get('cursor') !== '1';
 type ActResult = 'pulse' | 'build' | 'select' | 'wake' | 'none';
 
@@ -208,6 +217,10 @@ export class Game {
   private plotPreview?: { id: string; option: string };
   private cozyCheckAt = 0;
   private selected?: string;
+  /** E21: the Old City's panels and held actions (old-city rules with bloombot only) */
+  private oc?: OldCityController;
+  /** E21.8: the Keepers (old-city rules) */
+  private keepers?: KeeperVisuals;
   private inspectTimer = 0;
   private cinematic = false;
   private specialtyToasted = new Set<string>();
@@ -225,7 +238,8 @@ export class Game {
   constructor(canvas: HTMLCanvasElement, lr: LoadResult = new SaveService().loadResult()) {
     this.settings = loadSettings();
     const loaded = lr.state;
-    const state = loaded ?? createInitialState();
+    // E21: a new game plays the Old City; `?rules=classic` (dev) starts a classic one. A loaded save keeps its own rules.
+    const state = loaded ?? createInitialState(undefined, newGameRules());
     this.sim = new Sim(state, this.bus);
     // Phase 4 E01: time away since the last save earns bounded offline progress (before anything renders).
     // A clock that went backwards earns nothing; the result is saved right away so a reload can't count it twice.
@@ -432,6 +446,7 @@ export class Game {
     }
     if (state.progression.coreActivated) this.machines.setCoreState('awake', true);
     else if (this.sim.progression.coreReady()) this.machines.setCoreState('ready');
+    this.applyFountainLook(true); // E21.6
 
     this.wireEvents();
     this.cloudWall.sync();
@@ -444,14 +459,25 @@ export class Game {
       this.overlays.holo.eye = (out) => visuals.eyeWorld(out);
       this.overlays.holo.sink = () => new MeshBuilder();
       bot.walker.solid = (r, x, z) => this.cozy.solidAt(r, x, z); // E19: solid plot options block like machines (a decoration blocks through its tile)
-      bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble' || !!this.photo?.active;
-      bot.onZoom = (f) => this.photo?.active && this.photo.zoom(f); // the right stick zooms only in photo mode
+      bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble' || !!this.photo?.active || !!this.oc?.busy;
+      // E21.22: the right stick's up and down tilts the view (it zooms only in photo mode)
+      bot.onZoom = (f) => (this.photo?.active ? this.photo.zoom(f) : this.camTurn(0, -(Math.log(f) / Math.log(1.8)) * 60));
       bot.onPad = (a) => this.doAction(a);
       bot.onButton = (i) => this.padListener?.(i);
+      if (this.sim.oldCity) {
+        this.hud.root.dataset.rules = 'oldcity'; // E21.12: the intro card's Old City words
+        this.keepers = new KeeperVisuals(this.sim, this.scene.world, this.app);
+        this.keepers.reducedMotion = !!this.settings.reducedMotion;
+        this.oc = new OldCityController(this.oldCityHost());
+      }
       const focus = new PadFocus(this.hud.root);
       bot.padCapture = (i) => !this.padListener && focus.button(i);
       // E19.2: no zoom in play or while building (the right stick's up and down do nothing for now)
-      bot.onTurn = (deg) => this.camera.orbit(deg);
+      bot.onTurn = (deg) => this.camTurn(deg, 0);
+      // E21.22: the exploration camera (pitch the player's, 0.15 s smoothing, never below the ground)
+      this.camera.explore = true;
+      if (this.sim.oldCity) this.chunks.fadeTo = 0.3; // E21.22: buildings between the camera and bloombot fade to 30%
+      this.camera.ground = (x, z) => this.groundY(x, z);
       this.hud.setKeyMap('keys', this.bindings);
       // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad).
       const touchOnly = typeof matchMedia !== 'undefined' && !matchMedia('(any-pointer: fine)').matches && navigator.maxTouchPoints > 0;
@@ -477,9 +503,9 @@ export class Game {
       },
       // Bloombot: while the camera follows it, zoom about the middle of the view (bloombot), not the cursor.
       // Bloombot: a right-button drag turns the view around bloombot (a third of a degree per pixel).
-      orbit: (dx) => {
+      orbit: (dx, dy) => {
         if (!this.bot || this.cinematic) return false;
-        this.camera.orbit(-dx * 0.35);
+        this.camTurn(-dx * 0.35, dy * 0.25); // E21.22: right-button drag turns and tilts the view
         return true;
       },
       // Bloombot: the camera's distance is fixed; the wheel turns what you're building (E19.2).
@@ -577,6 +603,32 @@ export class Game {
     }
     if (w > 0) this.sfx.setBrook(Math.min(1, w / 3), x / w, 0, z / w);
     else this.sfx.setBrook(0, 0, 0, 0);
+    this.placeSea();
+  }
+
+  /**
+   * E21.12: the Old City's sea is heard from the nearest open water (the bay south of the park, and all round the
+   * island): louder near the shore, from its direction. Classic games have no sea.
+   */
+  private placeSea() {
+    if (!this.sim.oldCity) return;
+    const f = this.camera.target;
+    let best = Infinity;
+    let bx = 0;
+    let bz = 0;
+    for (let a = 0; a < 16; a++) {
+      const dx = Math.sin((a * Math.PI) / 8);
+      const dz = Math.cos((a * Math.PI) / 8);
+      for (let r = 2; r < 60; r += 2) {
+        const x = Math.floor(f.x + dx * r);
+        const z = Math.floor(f.z + dz * r);
+        if (!seaCell(x, z)) continue;
+        if (r < best) [best, bx, bz] = [r, x + 0.5, z + 0.5];
+        break;
+      }
+    }
+    if (best < Infinity) this.sfx.setSea(Math.max(0.15, 1 - best / 60), bx, 0, bz);
+    else this.sfx.setSea(0, 0, 0, 0);
   }
 
   /**
@@ -880,8 +932,8 @@ export class Game {
     else if ((a === 'prevTool' || a === 'nextTool') && this.bot?.lastInput === 'pad' && this.turnable()) this.turnBuild(a === 'nextTool' ? 1 : -1);
     else if (a === 'prevTool') this.cycleTool(-1);
     else if (a === 'nextTool') this.cycleTool(1);
-    else if (a === 'zoomIn') (this.photo?.active ? this.photo.zoom(1.15) : this.turnBuild(1));
-    else if (a === 'zoomOut') (this.photo?.active ? this.photo.zoom(1 / 1.15) : this.turnBuild(-1));
+    else if (a === 'zoomIn') (this.photo?.active ? this.photo.zoom(1.15) : this.bot && !this.turnable() ? this.zoomStepBy(-1) : this.turnBuild(1));
+    else if (a === 'zoomOut') (this.photo?.active ? this.photo.zoom(1 / 1.15) : this.bot && !this.turnable() ? this.zoomStepBy(1) : this.turnBuild(-1));
     else if (a === 'overview') this.toggleOverview();
     else if (a === 'pause') this.setPaused(!this.paused);
     else if (a === 'frenzy') this.sim.frenzy.activate();
@@ -915,6 +967,7 @@ export class Game {
   }
 
   private escape() {
+    if (this.oc?.escape()) return;
     if (this.mergeSel) this.cancelMerge();
     else if (this.hud.modalOpen) this.hud.openSettings(false);
     else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
@@ -932,7 +985,7 @@ export class Game {
    */
   private cycleTool(step: number) {
     const tools: Tool[] = ['pulse', 'inspect'];
-    for (const t of BUILDABLE) if (this.sim.build.isUnlocked(t)) tools.push(t);
+    for (const t of this.sim.oldCity ? OLD_CITY_BUILDABLE : BUILDABLE) if (this.sim.build.isUnlocked(t)) tools.push(t);
     for (const btn of this.hud.root.querySelectorAll<HTMLElement>('#buildTray .super[data-tool]')) if (!btn.hidden) tools.push(btn.dataset.tool as Tool);
     // E19.2: the decoration last held, then the remove tool. With a decoration in hand the keys step through every
     // decoration earned (so the keyboard alone can choose one); on the pad the bumpers turn it and the tray chooses.
@@ -972,7 +1025,62 @@ export class Game {
     const now = performance.now();
     if (factor === 1 || now - this.wheelAt < WHEEL_TURN_MS) return;
     this.wheelAt = now;
+    if (this.bot && !this.turnable()) return this.zoomStepBy(factor > 1 ? -1 : 1); // E21.22: out of build mode the wheel steps the zoom
     this.turnBuild(factor > 1 ? 1 : -1);
+  }
+
+  // ───────────── E21.22: the exploration camera ─────────────
+
+  /** 0 close, 1 normal (today's), 2 far */
+  private zoomStep = 1;
+  /** seconds since the player last moved the camera, and how long bloombot has walked since */
+  private camIdle = 99;
+  private walkedFor = 0;
+  private stillFor = 0;
+
+  /** Steps the zoom (−1 closer, +1 further). */
+  private zoomStepBy(step: number) {
+    const next = Math.max(0, Math.min(EXPLORE.zoomSteps.length - 1, this.zoomStep + step));
+    if (next === this.zoomStep) return;
+    this.zoomStep = next;
+    this.camIdle = 0;
+    this.sfx.click();
+  }
+
+  /** The camera's speed and axes from the settings. */
+  private camFactor(axis: 'x' | 'y'): number {
+    const s = this.settings;
+    return ((s.camSensitivity ?? 100) / 100) * ((axis === 'x' ? s.invertX : s.invertY) ? -1 : 1);
+  }
+
+  /** The player turned or tilted the view. */
+  private camTurn(yawDeg: number, pitchDeg: number) {
+    if (yawDeg) this.camera.orbit(yawDeg * this.camFactor('x'));
+    if (pitchDeg) this.camera.pitchBy(pitchDeg * this.camFactor('y'));
+    this.camIdle = 0;
+  }
+
+  /**
+   * Per frame: the look-ahead, and the drift back behind bloombot after 3 s of walking with no camera input (a
+   * setting). On a rooftop the view eases to the far step.
+   */
+  private updateExploreCamera(dt: number) {
+    const b = this.bot;
+    if (!b || this.cinematic || this.photo?.active) return;
+    this.camIdle += dt;
+    const moving = b.speed > 0.05;
+    // walking time survives a frame's pause at a path corner; half a second standing still resets it
+    this.stillFor = moving ? 0 : this.stillFor + dt;
+    this.walkedFor = moving ? this.walkedFor + dt : this.stillFor > 0.5 ? 0 : this.walkedFor;
+    const f = b.pose.facing;
+    this.camera.setLead(moving && b.following ? Math.sin(f) * EXPLORE.lead : 0, moving && b.following ? Math.cos(f) * EXPLORE.lead : 0);
+    if (!this.settings.noRecentre && this.stillFor < 0.5 && this.camIdle >= EXPLORE.recentreAfter && this.walkedFor >= EXPLORE.recentreAfter) {
+      const behind = (f * 180) / Math.PI + 180;
+      const now = this.camera.heading;
+      const diff = ((((behind - now) % 360) + 540) % 360) - 180;
+      const step = Math.sign(diff) * Math.min(Math.abs(diff), EXPLORE.recentreSpeed * dt);
+      if (Math.abs(diff) > 0.5) this.camera.turnTo(now + step, true);
+    }
   }
 
   /** Bloombot: hold the camera at the close view's distance (E19.2: building no longer pulls it back). */
@@ -981,7 +1089,8 @@ export class Game {
     if (!b || this.cinematic) return;
     if (this.overviewOn && b.speed > 0.05) this.overviewOn = false; // walking leaves the overview
     if (this.overviewOn || !b.following) return; // the overview, or a camera-only fly-to, keeps its own zoom
-    const want = BOT_ZOOM;
+    // E21.22: the chosen step; on a rooftop the view eases out to the far step
+    const want = b.pose.roofId !== GROUND ? EXPLORE.zoomSteps[2] : EXPLORE.zoomSteps[this.zoomStep];
     if (Math.abs(this.camera.zoomTarget - want) > 1e-3) this.camera.zoomTo(want);
   }
 
@@ -1044,6 +1153,7 @@ export class Game {
   /** Bloombot (G.4): E / A: the current tool on the tile in front (Inspect pulses; build tools build). */
   private botAct() {
     if (!this.bot || this.cinematic || this.paused || this.hud.modalOpen || this.bot.visuals.busy === 'assemble') return;
+    if (this.oc && !this.building() && this.oc.pulse(this.bot.front())) return; // E21.8: a pulse stirs a sleeping Keeper
     const aim = this.building() ? this.buildAim() : undefined; // E19.2: build mode acts where the hologram is
     const p = aim ? aim.p : this.frontPick();
     if (!p || !p.tile) return;
@@ -1070,6 +1180,12 @@ export class Game {
         b.visuals.play('cheer');
         return;
       }
+    }
+    // E21: piles, barricades, Keepers, the fountain and the store come first under old-city rules.
+    if (this.oc) {
+      const f = b.front();
+      const ft = this.sim.grid.get(b.pose.roofId, f.x, f.z);
+      if (this.oc.interact(f, ft ? this.sim.occupant(ft) : undefined)) return;
     }
     // Region unlocks: facing a sealed area's fog, interact buys it (or says what it costs).
     const sealed = this.sealedAhead();
@@ -1104,6 +1220,39 @@ export class Game {
       return;
     }
     this.hud.showTip(sc.x, sc.y, `<b>${this.tileTitle(p.tile)}</b>${this.tileDetail(p.tile)}${this.pawHint(p.tile)}${this.plotLine(p.roofId, p.tile)}`);
+  }
+
+  /** E21: what the Old City controller borrows from the game. */
+  private oldCityHost() {
+    return {
+      sim: this.sim,
+      hud: this.hud,
+      bot: this.bot!,
+      bindings: this.bindings,
+      game: this,
+      screenOf: (x: number, z: number) => {
+        const t = this.sim.grid.get(this.bot!.pose.roofId, x, z);
+        return t ? this.botTileScreen(t) : { x: innerWidth / 2, y: innerHeight / 2 };
+      },
+      sound: (name: string, material?: string) => {
+        if (name === 'tier' || name === 'wake') this.sfx.fanfare();
+        else if (name === 'deliver') this.sfx.coin();
+        else if (name === 'pry') this.sfx.stage('crack');
+        // a sound per material
+        else if (name === 'salvage') this.sfx.stage(({ scrap: 'thud', seeds: 'rustle', copper: 'hum', timber: 'creak', glass: 'crack', clay: 'thud', gears: 'grind', sunstone: 'hum' } as const)[material as 'scrap'] ?? 'thud');
+        else this.sfx.click();
+      },
+      vista: (x: number, z: number, secs: number, done: (seen: string[]) => void) => this.vista(x, z, secs, done),
+      keeperScreen: (id: string) => {
+        const p = this.keepers?.headWorld(id);
+        const s = p && this.camera.onScreen(p, 20);
+        return s ? { x: s.x, y: s.y } : undefined;
+      },
+      markTile: (x: number, z: number) => {
+        const t = this.sim.grid.get(GROUND, x, z);
+        if (t) this.chunks.markTile(t);
+      },
+    };
   }
 
   /** G.13: the rooftop whose building stands on this ground cell. */
@@ -1209,6 +1358,7 @@ export class Game {
       this.select(undefined);
       return;
     }
+    if (this.oc?.click(p.tile)) return; // E21.2: a pile: walk there and salvage it
     const tool = this.hud.currentTool;
     // Another layer: reading a tile is fine from anywhere, but acting needs bloombot there (the lift, G.13).
     if (p.roofId !== b.pose.roofId || this.sim.grid.roof(p.roofId)?.preview) {
@@ -1300,6 +1450,11 @@ export class Game {
       this.overlays.hideGhost();
       this.overlays.hideFrame();
       const s = this.sim.areas;
+      // E21.5: no price in the Old City: the tip says what is in the way
+      if (this.sim.oldCity) {
+        this.hud.showTip(v.x, v.y, `<b>🌫️ Behind the clouds</b>${s.sealText(sealed)}`);
+        return;
+      }
       const cost = s.unlockCost(sealed)!;
       const price = `${fmt(cost.biomass)} 🌿 and ${fmt(cost.energy)} ⚡`;
       const ok = !this.sim.econ.shortfall(cost);
@@ -1326,6 +1481,12 @@ export class Game {
     const layers = this.sim.grid.allLayers.filter((l) => l.kind === 'raised' || l.unlocked);
     const hit = pickLayers(layers, o, d);
     if (!hit) return undefined;
+    // E21.24: the Old City's terraces: the first ground the ray meets as drawn (terraces, slopes, sunk fog)
+    if (hit.layerId === GROUND && this.sim.grid.terraced(GROUND)) {
+      const l = this.sim.grid.layer(GROUND)!;
+      const tp = pickTerraced(o, d, l.origin[1] + l.height + SLAB_TOP, (x, z) => heightAt(x, z) - (this.sunkAt(x, z) ? SINK / OLD_CITY.levelHeight : 0));
+      return tp ? { roofId: GROUND, fx: tp.fx, fz: tp.fz, tile: this.sim.grid.get(GROUND, Math.floor(tp.fx), Math.floor(tp.fz)) } : undefined;
+    }
     // Look 4.9: unrevealed areas are drawn SINK lower. A ray that lands on one at the city level carries on
     // down to the sunk ground; if it ends under the revealed terrace instead, it hit the facade (nothing).
     if (hit.layerId === GROUND && this.city && this.sunkAt(hit.fx, hit.fz)) {
@@ -1337,6 +1498,12 @@ export class Game {
       return { roofId: GROUND, fx, fz, tile: this.sim.grid.get(GROUND, Math.floor(fx), Math.floor(fz)) };
     }
     return { roofId: hit.layerId, fx: hit.fx, fz: hit.fz, tile: this.sim.grid.get(hit.layerId, Math.floor(hit.fx), Math.floor(hit.fz)) };
+  }
+
+  /** E21.24: world y of the ground's top under a point as drawn (terraces, slopes, fog sunk; the picking e2e reads it). */
+  groundY(px: number, pz: number): number {
+    const l = this.sim.grid.layer(GROUND)!;
+    return l.origin[1] + l.height + SLAB_TOP + (this.sim.grid.terraced(GROUND) ? levelY(heightAt(px, pz)) : 0) - (this.city && this.sunkAt(px, pz) ? SINK : 0);
   }
 
   /** Look 4.9: how far unrevealed ground is drawn below the city (tests read it). */
@@ -1369,7 +1536,9 @@ export class Game {
       const f = this.camera.entity.forward;
       keep.push({ x: ptr.x, y: ptr.y, depth: d.x * t * f.x + d.y * t * f.y + d.z * t * f.z + (o.x - this.camera.entity.getPosition().x) * f.x + (o.y - this.camera.entity.getPosition().y) * f.y + (o.z - this.camera.entity.getPosition().z) * f.z });
     }
-    if (w && h && !this.cinematic) this.chunks.fadeTowers(dt, this.camera.cam, keep);
+    // E21.22: and whatever stands between the camera and bloombot
+    const through = this.bot && this.sim.oldCity ? (([x, y, z]) => new pc.Vec3(x, y + 0.45, z))(this.bot.world()) : undefined;
+    if (w && h && !this.cinematic) this.chunks.fadeTowers(dt, this.camera.cam, keep, through);
     if (this.treeFade < 0.002 || !w || !h) return setTreeCursor(0, 0, 0, 0, w || 1, h || 1);
     const { o, d } = this.camera.ray(ptr.x, ptr.y);
     // The ground under the cursor (or far away if the ray misses it) as a view depth.
@@ -1596,6 +1765,8 @@ export class Game {
   }
 
   private tileTitle(t: TileData): string {
+    const piece = this.sim.salvage.describe(t); // E21: Old City set pieces
+    if (piece) return piece.title;
     if (t.blocked) return 'Rusty vent';
     switch (t.ground) {
       case 'polluted':
@@ -1848,6 +2019,20 @@ export class Game {
   private removeDecorAt(p: Pick, x: number, y: number, pickUp: boolean): ActResult {
     const t = p.tile!;
     const d = this.cozy.decorOf(t.occupantId);
+    // E21.3: under old-city rules the remove tool also takes down a machine, giving its whole recipe back
+    const occ = !d && !pickUp && this.sim.oldCity ? this.sim.occupant(t) : undefined;
+    if (occ && occ.type !== 'core' && !occ.starter) {
+      if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
+      if (this.sim.build.remove(occ.id)) {
+        this.machines.remove(occ.id);
+        for (const c of this.sim.grid.footprint(occ.roofId, occ.x, occ.z, occ.size)) if (c) this.chunks.markTile(c);
+        this.hud.toast(`${machineName(occ)} taken down<small>Everything it was built from is back in your backpack.</small>`, '', 2.4);
+        return 'build';
+      }
+    }
     if (!d) {
       this.hud.showFail('Aim at a decoration', x, y);
       return 'none';
@@ -2059,6 +2244,8 @@ export class Game {
   }
 
   private tileDetail(t: TileData): string {
+    const piece = this.sim.salvage.describe(t); // E21: Old City set pieces
+    if (piece) return piece.detail;
     if (t.blocked) return 'Nothing grows here.';
     const zone = this.sim.production.inPollinatorZone(t);
     switch (t.ground) {
@@ -2618,8 +2805,10 @@ export class Game {
       this.chunks.markArea(areaId);
       for (const nb of s.areas.info(areaId).neighbours) this.chunks.markArea(nb); // soft fog edges
       const info = s.areas.info(areaId);
-      this.hud.toast(`🔓 ${AREA_TYPES[info.type].name} unlocked!<small>The fog lifts. Restore it to wake the ${info.landmarkName}.</small>`, 'gold', 4);
-      this.sfx.fanfare();
+      // E21.5: an Old City region names itself; its backstreets open quietly
+      if (info.region) this.hud.toast(`🔓 ${s.gates.regionById(info.region)!.name} is open!<small>The clouds lift. Find its Keeper and bring it back to life.</small>`, 'gold', 4);
+      else if (!info.noLandmark) this.hud.toast(`🔓 ${AREA_TYPES[info.type].name} unlocked!<small>The fog lifts. Restore it to wake the ${info.landmarkName}.</small>`, 'gold', 4);
+      if (!info.noLandmark) this.sfx.fanfare();
       this.save();
     });
     // City 12.1: rooftop clusters appear with their area and come alive when a Bloom Relay reaches them.
@@ -3087,6 +3276,23 @@ export class Game {
       this.sfx.chainEnd(10);
     });
     b.on('rooftop.coreRestored', () => this.playCoreSequence());
+    // E21.6: the Old City's fountain tiers: tier 1 is the water returning (the old fountain sequence); later tiers a toast
+    // E21.22: the first time a region's gate opens, the camera rises for 2 s over it (a setting; off with reduced motion)
+    b.on('gate.opened', ({ region }) => {
+      const r = REGIONS.find((q) => q.id === region);
+      if (!r || r.gate.opensRegion === false || this.settings.noVistas || this.settings.reducedMotion) return;
+      if (!s.salvage.see(`vista:${region}`)) return;
+      setTimeout(() => this.vista(r.landmark.x + 1, r.landmark.z + 1, 2, () => {}), 300);
+    });
+    b.on('fountain.tier', ({ tier }) => {
+      this.applyFountainLook(false);
+      this.celebrateTier(tier);
+      if (tier === 1) return this.playCoreSequence();
+      const t = TIERS[tier - 1];
+      this.hud.toast(`⛲ ${t.name}!<small>${t.gives.join(' · ')}</small>`, 'gold', 6);
+      this.sfx.fanfare();
+      this.save();
+    });
     // City 10.4: a pulse arcs from one Bloom Relay to the next, landing as a ring.
     b.on('relay.city', ({ from, to, travel }) => {
       const a = this.posOf(from);
@@ -3311,6 +3517,80 @@ export class Game {
 
   // ───────────────────────── core sequence ─────────────────────────
 
+  /**
+   * E21.24: a vista from a lookout: the camera pulls up and out over the city for `secs`, then returns to bloombot.
+   * Any Cancel skips it; with reduced motion it cuts to the view and back (a still frame). `done` gets the Old City
+   * regions whose landmark was on screen at the top of the view.
+   */
+  private vista(x: number, z: number, secs: number, done: (seen: string[]) => void, sweep = 0) {
+    if (this.cinematic) return;
+    const cam = this.camera;
+    const before = { zoom: cam.zoom, yaw: cam.heading };
+    const rm = !!this.settings.reducedMotion;
+    this.cinematic = true;
+    if (this.bot) this.bot.following = false;
+    // look away from the park when far from it, toward the city centre when near it
+    const toward = Math.atan2(x - 8, -(z - 8)) * (180 / Math.PI);
+    cam.turnTo(Math.hypot(x - 8, z - 8) > 12 ? toward + 180 : before.yaw, rm);
+    if (rm) cam.jumpZoom(0.35);
+    cam.glide(x, 0, z, Math.max(cam.minZoom, 0.35));
+    const seen = () => {
+      const out: string[] = [];
+      for (const r of REGIONS) {
+        const t = this.sim.grid.get(GROUND, r.landmark.x, r.landmark.z);
+        const y = t ? this.sim.grid.tileWorld(t)[1] + 3 : 3;
+        if (cam.onScreen(new pc.Vec3(r.landmark.x + 1, y, r.landmark.z + 1), 0)) out.push(r.id);
+      }
+      return out;
+    };
+    let finished = false;
+    const end = () => {
+      if (finished) return;
+      finished = true;
+      done(seen());
+      this.cinematic = false;
+      cam.turnTo(before.yaw, rm);
+      if (this.bot) {
+        this.bot.following = true;
+        const [bx, , bz] = this.bot.world();
+        cam.glide(bx, 0, bz, before.zoom);
+      }
+      this.cinematicEnd = undefined;
+    };
+    this.cinematicEnd = end;
+    // E21.12: a sweep turns the view past what's around (a still frame with reduced motion)
+    if (sweep && !rm) {
+      const from = cam.heading;
+      this.tweens.add(secs, (k) => cam.turnTo(from + sweep * k));
+    }
+    this.tweens.add(0.01, () => {}, { delay: secs, done: end });
+  }
+
+  /** E21.6: the Old City fountain shows its tier (dry, trickle, flowing, lit, in bloom). */
+  private applyFountainLook(instant: boolean) {
+    const tier = this.sim.state.salvage?.tier ?? 0;
+    const park = this.sim.areas.landmark(PARK);
+    if (!park || tier < 1) return;
+    this.machines.setFountainLook(park.id, TIERS[tier - 1].look, instant);
+  }
+
+  /** E21.6: a short celebration per tier: rings and sparks from the fountain, a fanfare. */
+  private celebrateTier(tier: number) {
+    const park = this.sim.areas.landmark(PARK);
+    if (!park) return;
+    const [x, y, z] = this.sim.grid.tileWorld(this.sim.grid.get(GROUND, park.x + 1, park.z + 1)!);
+    const at = new pc.Vec3(x - 0.5, y + 0.3, z - 0.5);
+    for (let i = 0; i < 2 + tier; i++)
+      this.tweens.add(0.01, () => {}, {
+        delay: i * 0.3,
+        done: () => {
+          this.vfx.ring(at, i % 2 ? PALETTE.gold : PALETTE.coreGlow, 2 + i * 1.6, 1.1);
+          this.vfx.burst(new pc.Vec3(at.x, at.y + 1, at.z), 16, { up: 4, speed: 2, size: 0.07, life: 1.4 });
+        },
+      });
+    this.sfx.fanfare();
+  }
+
   private playCoreSequence() {
     this.cinematic = true;
     this.select(undefined);
@@ -3339,7 +3619,12 @@ export class Game {
       if (!this.cinematic) return;
       this.cinematic = false;
       this.hud.cinematic(false);
-      this.hud.toast('🌫️ The fog rolls back!<small>The park now grows +25% biomass, and the fountain filled your ✨ Bloom Frenzy: fire it at the fog’s edge. Restore the areas around it and wake their landmarks.</small>', 'gold', 7);
+      if (this.sim.oldCity) {
+        this.hud.toast('⛲ Water returns!<small>Bloombot can Pry now, and build. Rubble blocks the avenues north, east and west: pry one open.</small>', 'gold', 7);
+        // E21.12: a 4 s vista turning past the beacons around the park (skippable; a still with reduced motion)
+        if (!this.settings.noVistas) setTimeout(() => this.vista(8, 8, 4, (seen) => seen.forEach((r) => this.sim.salvage.see(`beacon:${r}`)), 300), 200);
+      }
+      else this.hud.toast('🌫️ The fog rolls back!<small>The park now grows +25% biomass, and the fountain filled your ✨ Bloom Frenzy: fire it at the fog’s edge. Restore the areas around it and wake their landmarks.</small>', 'gold', 7);
       this.save();
     };
     this.tweens.add(0.01, () => {}, { delay: TUNING.core.sequenceSeconds, done: () => this.cinematicEnd?.() });
@@ -3363,6 +3648,12 @@ export class Game {
   private wakeLandmark(m: MachineData) {
     if (this.cinematic) return;
     const id = this.sim.areas.areaOf(m)!;
+    if (this.sim.oldCity) {
+      // E21.9: an Old City landmark is woken by bloombot's own delivery, by hand (the fountain by its tiers)
+      if (id === PARK) this.oc?.openFountain();
+      else if (this.sim.landmarks.interact(id) === 'woke') this.sfx.fanfare();
+      return;
+    }
     if (id === PARK) this.sim.progression.activateCore();
     else this.sim.areas.clear(id);
   }
@@ -3416,13 +3707,15 @@ export class Game {
         }
       for (const id of s.areas.revealed()) {
         const a = s.areas.info(id);
+        if (a.noLandmark) continue; // E21: Old City backstreets carry no label
         const fog = s.areas.fog(id);
         const ready = id !== PARK && s.areas.ready(id);
         if (!ready && !zoomedOut) continue;
         // Look 4.6: never behind the camera or past the haze; sized by distance close up.
         const sp = this.camera.onScreen(new pc.Vec3(a.landmark[0] + 1, 2.4, a.landmark[1] + 1), 50);
         if (!sp) continue;
-        const def = AREA_TYPES[a.type];
+        // E21: an Old City region is labelled with its own name
+        const def = a.region ? { ...AREA_TYPES[a.type], name: s.gates.regionById(a.region)!.name } : AREA_TYPES[a.type];
         const key = `areaLabel-${id}`;
         live.add(key);
         const lm = s.areas.landmark(id);
@@ -3721,6 +4014,9 @@ export class Game {
     this.overlays.update(dt);
     if (this.bot) {
       this.bot.update(this.hiddenPause ? 0 : dt);
+      this.updateExploreCamera(this.hiddenPause ? 0 : dt);
+      this.oc?.update(this.hiddenPause ? 0 : dt);
+      this.keepers?.update(this.hiddenPause ? 0 : dt);
       this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();

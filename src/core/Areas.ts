@@ -2,6 +2,8 @@ import { AREA_TYPE_LIST, AREA_TYPES, CITY_GEN, THEMES, type AreaType, type Theme
 import { arterialsInChunk, runCovers } from './Arterials';
 import { CHUNK, hashString, tileRandom } from './Hash';
 import { ROOF_TEMPLATES } from '../data/templates';
+import { OLD_CITY } from '../data/oldcity';
+import { inOldCity, isSeaChunk, regionById, regionOfChunk } from './OldCityLayout';
 
 /**
  * Static area layout of the endless ground: a pure function of the seed, so every area's shape, neighbours
@@ -31,6 +33,10 @@ export interface AreaInfo {
   landmarkName: string;
   /** a rare, authored landmark (a long-term goal) */
   authored: boolean;
+  /** E21.4: an Old City area with no landmark to wake (a backstreet, the sea, the cloud beyond) */
+  noLandmark?: boolean;
+  /** E21.4: the Old City region this is (data/oldcity RegionId), if it is one */
+  region?: string;
 }
 
 /** City 12.1: a rooftop cluster's raised roof (ground cells; a template from the old campaign). */
@@ -46,8 +52,8 @@ export interface RooftopPlan {
   core: [number, number];
 }
 
-/** Generations that change the area layout: 2, 3 (rooftop clusters), 4 (roads: landmarks clear of arterials). */
-export const genKey = (gen: number) => (gen >= 4 ? 4 : gen >= 3 ? 3 : 2);
+/** Generations that change the area layout: 2, 3 (rooftop clusters), 4 (roads: landmarks clear of arterials), 5 (E21: the Old City). */
+export const genKey = (gen: number) => (gen >= 5 ? 5 : gen >= 4 ? 4 : gen >= 3 ? 3 : 2);
 
 /** Shared map per seed and ground generation (generation and the area system use the same cache). */
 const MAPS = new Map<string, AreaMap>();
@@ -56,7 +62,7 @@ export function areaMapFor(seed: number, gen = 2): AreaMap {
   let m = MAPS.get(key);
   if (!m) {
     if (MAPS.size > 8) MAPS.clear();
-    m = new AreaMap(seed, gen);
+    m = genKey(gen) === 5 ? new OldCityMap(seed) : new AreaMap(seed, gen);
     MAPS.set(key, m);
   }
   return m;
@@ -384,5 +390,101 @@ export class AreaMap {
   /** Does this area contain the ground cell? */
   contains(id: string, x: number, z: number): boolean {
     return this.areaOfCell(x, z) === id;
+  }
+}
+
+// ───────────── E21.4: the Old City ─────────────
+
+/** E21.4: the sea's area id (every sea chunk of the Old City). */
+export const SEA = 'sea';
+
+/**
+ * E21.4 (generation 5): the Old City's fixed map. Chunks −6…6 hold the park (0, 0), the nine regions from
+ * data/oldcity, the sea (z ≥ 3, x ≤ 1) and backstreets (every other land chunk, one area each). Beyond is the
+ * cloud wall: one-chunk areas that stay hidden until the finale. The same for every seed.
+ */
+export class OldCityMap extends AreaMap {
+  private oc = new Map<string, AreaInfo>();
+
+  constructor(seed: number) {
+    super(seed, 5);
+  }
+
+  areaOfChunk(cx: number, cz: number): string {
+    if (cx === 0 && cz === 0) return PARK;
+    if (!inOldCity(cx, cz)) return `out_${cx}_${cz}`;
+    if (isSeaChunk(cx, cz)) return SEA;
+    const r = regionOfChunk(cx, cz);
+    return r ? r.id : `bs_${cx}_${cz}`;
+  }
+
+  /** Every chunk of an area. */
+  private chunksOf(id: string): [number, number][] {
+    if (id === PARK) return [[0, 0]];
+    const out: [number, number][] = [];
+    const r = regionById(id);
+    if (r) {
+      for (let cz = r.chunks.z0; cz <= r.chunks.z1; cz++) for (let cx = r.chunks.x0; cx <= r.chunks.x1; cx++) out.push([cx, cz]);
+      return out;
+    }
+    if (id === SEA) {
+      for (let cz = OLD_CITY.seaMinZ; cz <= OLD_CITY.max; cz++) for (let cx = OLD_CITY.min; cx <= OLD_CITY.seaMaxX; cx++) out.push([cx, cz]);
+      return out;
+    }
+    const m = /^(?:bs|out)_(-?\d+)_(-?\d+)$/.exec(id);
+    return m ? [[Number(m[1]), Number(m[2])]] : [[0, 0]];
+  }
+
+  info(id: string): AreaInfo {
+    const hit = this.oc.get(id);
+    if (hit) return hit;
+    const chunks = this.chunksOf(id);
+    const nb = new Set<string>();
+    for (const [cx, cz] of chunks)
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const o = this.areaOfChunk(cx + dx, cz + dz);
+        if (o !== id) nb.add(o);
+      }
+    const r = regionById(id);
+    const mx = chunks.reduce((a, [cx]) => a + cx + 0.5, 0) / chunks.length;
+    const mz = chunks.reduce((a, [, cz]) => a + cz + 0.5, 0) / chunks.length;
+    const ring = r?.ring ?? 1;
+    const mult = { 1: 1, 2: 1.2, 3: 1.4 }[ring] ?? 1;
+    const type: AreaType = id === PARK ? 'park' : r ? r.type : id === SEA ? 'beach' : 'street';
+    const centre: [number, number] = [Math.floor(mx * CHUNK) - 1, Math.floor(mz * CHUNK) - 1];
+    const info: AreaInfo = {
+      id,
+      chunks,
+      neighbours: [...nb].sort(),
+      distance: Math.round(Math.hypot(mx - 0.5, mz - 0.5)),
+      landmark: id === PARK ? [7, 7] : r ? [r.landmark.x, r.landmark.z] : centre,
+      type,
+      theme: 'oldtown',
+      difficulty: mult,
+      pollutionFloor: (ring - 1) * 10,
+      landmarkKind: id === PARK ? 'fountain' : r ? r.landmark.kind : '',
+      landmarkName: id === PARK ? 'Dry Fountain' : r ? r.landmark.name : '',
+      authored: false,
+      noLandmark: id !== PARK && !r ? true : undefined,
+      region: r?.id,
+    };
+    this.oc.set(id, info);
+    return info;
+  }
+
+  rooftop(): RooftopPlan | undefined {
+    return undefined;
+  }
+
+  underRoof(): boolean {
+    return false;
+  }
+
+  theme(): Theme {
+    return 'oldtown';
+  }
+
+  authoredArea(): string {
+    return '';
   }
 }

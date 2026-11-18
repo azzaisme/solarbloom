@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import { GROUND } from '../core/GameState';
+import { levelAt, levelY } from '../core/Height';
 import { CHUNK } from '../core/Hash';
 import type { Sim } from '../gameplay/Sim';
 import { wallCloudParts } from './Clouds';
@@ -85,7 +86,9 @@ export class CloudWall {
             const x = along === 'z' ? edge + inward * depth : a + (h - 0.5) * 0.6;
             const z = along === 'z' ? a + (h - 0.5) * 0.6 : edge + inward * depth;
             const size = (row ? 1.35 : 1.0) + h * 0.45;
-            this.cloud(root, x, y - 0.15 + (row ? 0.5 : 0), z, size, h * 360);
+            // E21.24: on the Old City's terraces the wall stands on the higher of the two grounds it divides
+            const lift = s.grid.terraced(GROUND) ? Math.max(levelY(levelAt(Math.floor(x), Math.floor(z))), levelY(levelAt(Math.floor(x - (along === 'z' ? inward * 2 : 0)), Math.floor(z - (along === 'x' ? inward * 2 : 0))))) : 0;
+            this.cloud(root, x, y - 0.15 + (row ? 0.5 : 0) + lift, z, size, h * 360);
           }
         }
       }

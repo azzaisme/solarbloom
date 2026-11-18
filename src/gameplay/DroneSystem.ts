@@ -122,7 +122,8 @@ export class DroneSystem {
     const r = g.roof(this.roofOf(d))!;
     const t = d.far && d.targetTileId ? g.byTileId(d.targetTileId) : undefined;
     const [px, pz] = t ? this.farPos(d, t) : [d.px, d.pz];
-    return [r.origin[0] + px, r.origin[1] + r.height, r.origin[2] + pz];
+    // E21.24: drones fly above the terrace under them
+    return [r.origin[0] + px, r.origin[1] + r.height + g.groundOffset(this.roofOf(d), Math.floor(px), Math.floor(pz)), r.origin[2] + pz];
   }
 
 
@@ -266,6 +267,7 @@ export class DroneSystem {
     for (const t of inRange) {
       const mode = modeOf(t);
       if (mode === 'off') continue; // "Leave this area alone"
+      if (!s.restoration.helperMay(t)) continue; // E21.9: bloombot's share first
       const dx = t.x + 0.5 - d.px;
       const dz = t.z + 0.5 - d.pz;
       let score: number;
@@ -285,7 +287,7 @@ export class DroneSystem {
     if (best) return best;
     // Nothing left to restore in range: nurture green tiles toward full bloom instead.
     for (const t of inRange) {
-      if (!nurturable(t) || modeOf(t) === 'off') continue;
+      if (!nurturable(t) || modeOf(t) === 'off' || !s.restoration.helperMay(t)) continue;
       const dx = t.x + 0.5 - d.px;
       const dz = t.z + 0.5 - d.pz;
       // Phase 4 E05: finish tiles to full bloom (what goals count) before taking any on to Radiant.

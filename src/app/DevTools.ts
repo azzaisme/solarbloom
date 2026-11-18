@@ -73,6 +73,13 @@ export function installDevTools(game: Game) {
     get seed() {
       return game.sim.state.seed;
     },
+    /** E21: the running sim, for poking at the Old City from the console */
+    get sim() {
+      return game.sim;
+    },
+    get game() {
+      return game;
+    },
     reset(seed = Math.floor(Math.random() * 1e9)) {
       api.preset('fresh', seed);
     },

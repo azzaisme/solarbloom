@@ -17,6 +17,8 @@ export interface MachineDef {
   areaTypes?: string[];
   /** Only in the endless city (not the rooftop campaign). */
   cityOnly?: boolean;
+  /** E21: only under old-city rules. */
+  oldCity?: boolean;
 }
 
 export const MACHINES: Record<MachineType, MachineDef> = {
@@ -106,6 +108,28 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     unlock: { needs: 'droneHub', label: 'Build a Drone Hub to unlock' },
     cityOnly: true,
   },
+  // E21.1: a way into the city's store (old-city rules only; never in the classic build list).
+  chest: {
+    type: 'chest',
+    name: 'Storage Chest',
+    icon: '📦',
+    size: 1,
+    cost: {},
+    allowedGround: ['restored', 'prepared', 'polluted'],
+    blurb: 'A way into the city’s shared store: open it to put things away or take them out.',
+    oldCity: true,
+  },
+  // E21.2: stands on a woken region's seam and sends its material to the store, for ever.
+  reclaimer: {
+    type: 'reclaimer',
+    name: 'Reclaimer',
+    icon: '🔧',
+    size: 2,
+    cost: {},
+    allowedGround: ['restored', 'prepared', 'polluted'],
+    blurb: 'Built on a woken region’s seam: it sends 6 of the region’s material a minute to the store.',
+    oldCity: true,
+  },
   core: {
     type: 'core',
     name: 'Rooftop Core',
@@ -118,6 +142,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
 };
 
 export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
+/** E21.3: the old-city build list (the classic list plus the Storage Chest and the Reclaimer). */
+export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'pollinator', 'droneHub', 'reclaimer', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

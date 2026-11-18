@@ -1,11 +1,11 @@
-import { machinesStamp } from '../core/GameState';
+import { machinesStamp, rulesOf } from '../core/GameState';
 import { decorOccupant, parseDecorKey } from '../core/Decor';
 import { EventBus } from '../app/EventBus';
 import { Economy } from '../core/Economy';
 import { Grid } from '../core/Grid';
 import { hasGrowth, unpackChunk } from '../core/TilePack';
 import { Rng } from '../core/Rng';
-import type { GameState, MachineData, TileData } from '../core/types';
+import type { GameState, MachineData, Rules, TileData } from '../core/types';
 import { BloomChainSystem } from './BloomChainSystem';
 import { BuildSystem } from './BuildSystem';
 import { CanalNetwork } from './CanalNetwork';
@@ -35,6 +35,12 @@ import { UpgradeSystem } from './UpgradeSystem';
 import { TUNING } from '../data/tuning';
 import { Transitions } from './Transitions';
 import { CultivatorSystem } from './CultivatorSystem';
+import { Inventory, type BotAt } from './Inventory';
+import { SalvageSystem } from './SalvageSystem';
+import { GateSystem } from './GateSystem';
+import { FountainSystem } from './FountainSystem';
+import { KeeperSystem } from './KeeperSystem';
+import { LandmarkSystem } from './LandmarkSystem';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -77,6 +83,23 @@ export class Sim {
   readonly transitions: Transitions;
   /** Look 6.8: Cultivators (solar tillers). */
   readonly cultivators: CultivatorSystem;
+  /** E21.1: the backpack and the store (old-city rules). */
+  readonly inventory: Inventory;
+  /** E21.2: salvage piles, seams and Reclaimers (old-city rules). */
+  readonly salvage: SalvageSystem;
+  /** E21.5: gates (old-city rules). */
+  readonly gates: GateSystem;
+  /** E21.6: the fountain's tiers and deliveries (old-city rules). */
+  readonly fountain: FountainSystem;
+  /** E21.8: the Keepers and their requests (old-city rules). */
+  readonly keepers: KeeperSystem;
+  /** E21.9: waking landmarks and their lasting rewards (old-city rules). */
+  readonly landmarks: LandmarkSystem;
+  /**
+   * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
+   * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
+   */
+  bot?: BotAt;
 
   constructor(
     readonly state: GameState,
@@ -115,6 +138,12 @@ export class Sim {
       this.grid.chunkAt(layer, Number(cx), Number(cz));
     }
     this.econ = new Economy(state.resources, state.caps);
+    this.inventory = new Inventory(this);
+    this.landmarks = new LandmarkSystem(this);
+    this.salvage = new SalvageSystem(this);
+    this.gates = new GateSystem(this);
+    this.fountain = new FountainSystem(this);
+    this.keepers = new KeeperSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
@@ -154,6 +183,16 @@ export class Sim {
 
   get time() {
     return this.state.time;
+  }
+
+  /** E21: the rule set, from the state (never from the URL). */
+  get rules(): Rules {
+    return rulesOf(this.state);
+  }
+
+  /** E21: playing under old-city rules? */
+  get oldCity(): boolean {
+    return this.state.rules === 'oldcity';
   }
 
   newId(prefix: string) {
@@ -236,10 +275,12 @@ export class Sim {
     this.drones.tick(dt);
     this.roles.tick(dt);
     this.cultivators.tick(dt);
+    this.salvage.tick(dt);
     this.supers.tick(dt);
     this.cat.tick();
     this.events.tick();
     this.progression.tick();
+    this.fountain.tick();
     this.milestones.tick();
     this.ecosystem.tick();
     this.metrics.tick(dt);

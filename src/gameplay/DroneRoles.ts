@@ -262,7 +262,7 @@ export class DroneRoles {
       }
     } else if (role === 'scout') {
       const t = job.tileId ? s.grid.byTileId(job.tileId) : undefined;
-      if (t && s.restoration.isEligible(t)) {
+      if (t && s.restoration.isEligible(t) && s.restoration.helperMay(t)) {
         s.restoration.beginGrowth(t, 'drone', TUNING.pulse.growSeconds);
         tileIds.push(t.id);
         // E20.1 (#284): the Scout no longer hints Lucky Cats (E18.3's add-on): bloombot finds them.

@@ -1,5 +1,6 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
-export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core';
+/** `chest` and `reclaimer` exist only under old-city rules (E21.1, E21.2). */
+export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'reclaimer';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
 /** Plain per-resource numbers (tuning tables, small per-second coefficients). */
@@ -76,6 +77,10 @@ export interface TileData {
   prop?: string;
   /** A generated obstacle was cleared so a fogged area stays reachable (saved). */
   unblocked?: boolean;
+  /** E21.24: the Old City's terrace height at the tile's middle, in levels (generated, not saved; unset = flat) */
+  level?: number;
+  /** E21.24: the tile is part of a ramp or stair (generated) */
+  ramp?: boolean;
 }
 
 /**
@@ -328,6 +333,8 @@ export interface AreaState {
    * the area behaves exactly as hidden fog (nothing can be walked, restored or built). Absent on older saves.
    */
   sealed?: boolean;
+  /** E21.9: tiles in this area bloombot restored itself (old-city rules: helpers wait until it has done its share) */
+  byBot?: number;
   /** the unlock price, set when the area was revealed (biomass as a big-number string) */
   price?: { biomass: string; energy: number };
   /** sim time the player unlocked it */
@@ -342,8 +349,79 @@ export interface LinkState {
   crossings: number;
 }
 
+/**
+ * E21 (#312): which rules a game plays by. 'oldcity' is the Old City (docs/E21_OLD_CITY.md): a fixed map of nine
+ * regions, materials salvaged by hand, fountain tiers. 'classic' is the endless idle city every game before E21
+ * played. A save without the field is classic (the field is never written for classic, so those saves stay
+ * byte-identical).
+ */
+export type Rules = 'oldcity' | 'classic';
+
+/** E21 §1: the eight materials. */
+export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone';
+/** E21 §6: bloombot's abilities, one per fountain tier 1–4. */
+export type AbilityId = 'pry' | 'hover' | 'climb' | 'glide';
+/** E21 §8: where a Keeper is in its story. Woken (pulsed and handed 5 of anything) goes straight to request1. */
+export type KeeperStep = 'asleep' | 'request1' | 'request2' | 'landmark' | 'settled';
+export type WeatherKind = 'clear' | 'cloudy' | 'rain' | 'mist' | 'windy';
+
+export interface KeeperState {
+  step: KeeperStep;
+  /** asleep only: bloombot has pulsed it (it stirs; 5 of anything wakes it) */
+  pulsed?: boolean;
+  /** what has been handed over toward the current delivery (request 1 or the landmark) */
+  given?: Partial<Record<MaterialId, number>>;
+}
+
+/**
+ * E21: everything the Old City adds to a save. Present only under old-city rules; each part belongs to its own
+ * ticket (E21.1 pack and store, E21.2 piles, E21.5 opened gates, E21.6 tier, E21.8 keepers, …).
+ */
+export interface SalvageState {
+  /** E21.1: what bloombot carries (whole numbers, a stack limit per material) */
+  pack: Partial<Record<MaterialId, number>>;
+  /** E21.1: the city's shared, unlimited store */
+  store: Partial<Record<MaterialId, number>>;
+  /** E21.2: units left in each pile bloombot has touched (pile id → left); untouched piles are full */
+  piles: Record<string, number>;
+  /** E21.5: gates opened for good (barricades pried, bridges repaired), by gate id */
+  opened: string[];
+  /** E21.6: fountain tier reached (0 = dry) */
+  tier: number;
+  /** E21.6: materials handed in toward the next tier */
+  delivered: Partial<Record<MaterialId, number>>;
+  /** E21.6: abilities granted by the fountain */
+  abilities: AbilityId[];
+  /** E21.8: Keepers met, by Keeper id (absent = asleep, never pulsed) */
+  keepers: Record<string, KeeperState>;
+  /** E21.10: caches opened, by id */
+  caches: string[];
+  /** E21.10: journal pages found, by id */
+  pages: string[];
+  /** E21.10: blueprints found, by id */
+  blueprints: string[];
+  /** E21.11: the house's level (0 = the ruined shed) */
+  house: number;
+  /** E21.13: seconds added to sim time to get the time of day (only the bed changes it) */
+  clockOffset: number;
+  /** E21.13: the weather now, and when it next changes (sim time) */
+  weather?: { kind: WeatherKind; until: number };
+  /** E21.9: Reclaimers' undelivered fractions, by machine id (so 6 a minute pays exactly) */
+  reclaim?: Record<string, number>;
+  /** E21.6 / E21.17: one-off items carried for the Great Bloom (the Heart Seed, the Star Lens) */
+  items?: string[];
+  /** E21.9: lasting region rewards in effect (data/oldcity RewardId), in the order they were won */
+  rewards?: string[];
+  /** E21.12: lookouts and vistas already seen, beacons spotted (presentation, but saved so they play once) */
+  seen?: string[];
+}
+
 export interface GameState {
   version: number;
+  /** E21: the rule set (absent = classic). Read it through `rulesOf`. */
+  rules?: Rules;
+  /** E21: Old City state (old-city rules only). */
+  salvage?: SalvageState;
   seed: number;
   rngState: number;
   time: number;

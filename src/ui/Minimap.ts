@@ -1,3 +1,4 @@
+import { REGIONS } from '../data/oldcity';
 import { GROUND } from '../core/GameState';
 import type { TileData } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
@@ -103,16 +104,43 @@ export class Minimap {
         // peek, not get: the map must never generate chunks.
         const t = hidden ? undefined : g.peek(v.roofId, cx, cz);
         const c = frontier && t && t.ground !== 'restored' && !t.occupantId ? C.frontier : this.colour(t, hidden);
+        // E21.24: terraces shade by level (higher is lighter), with a dark line along each cliff's foot
+        const lv = t?.level;
+        const shade = lv === undefined ? 1 : 0.82 + 0.09 * lv;
+        const cliffW = t && lv !== undefined && !t.ramp && ((g.peek(v.roofId, cx - 1, cz)?.level ?? lv) > lv + 0.5);
+        const cliffN = t && lv !== undefined && !t.ramp && ((g.peek(v.roofId, cx, cz - 1)?.level ?? lv) > lv + 0.5);
         for (let py = 0; py < PX; py++)
           for (let px = 0; px < PX; px++) {
             const k = ((j * PX + py) * W + i * PX + px) * 4;
-            d[k] = c[0];
-            d[k + 1] = c[1];
-            d[k + 2] = c[2];
+            const line = (cliffW && px === 0) || (cliffN && py === 0) ? 0.45 : 1;
+            d[k] = Math.min(255, c[0] * shade * line);
+            d[k + 1] = Math.min(255, c[1] * shade * line);
+            d[k + 2] = Math.min(255, c[2] * shade * line);
             d[k + 3] = 255;
           }
       }
     this.ctx.putImageData(this.img, 0, 0);
+    // E21.9: Mast Row's reward shows every Old City landmark beacon (amber), Observatory Hill's every cache
+    if (this.sim.landmarks.has('beacons') && v.roofId === GROUND)
+      for (const r of REGIONS) {
+        if (areas.fog(r.id) !== 'hidden') continue;
+        const i = r.landmark.x + 1 - x0;
+        const j = r.landmark.z + 1 - z0;
+        if (i < 0 || j < 0 || i > CELLS || j > CELLS) continue;
+        this.ctx.beginPath();
+        this.ctx.arc(i * PX, j * PX, 4, 0, Math.PI * 2);
+        this.ctx.fillStyle = 'rgb(232, 168, 64)';
+        this.ctx.fill();
+      }
+    if (this.sim.landmarks.has('starLens') && v.roofId === GROUND)
+      for (const c of REGIONS.flatMap((r) => r.caches)) {
+        if (this.sim.state.salvage?.caches.includes(c.id)) continue;
+        const i = c.x + 0.5 - x0;
+        const j = c.z + 0.5 - z0;
+        if (i < 0 || j < 0 || i > CELLS || j > CELLS) continue;
+        this.ctx.fillStyle = 'rgb(240, 220, 150)';
+        this.ctx.fillRect(i * PX - 2, j * PX - 2, 4, 4);
+      }
     // Landmarks: gold when awake, a white ring when ready to wake (it needs you).
     for (const m of this.sim.state.machines) {
       if (m.type !== 'core' || m.roofId !== v.roofId) continue;

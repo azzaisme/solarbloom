@@ -43,7 +43,10 @@ const ramp = (x: number, a: number, b: number) => {
  * 'atmos' is the world's own sound and follows the Sound setting. New layers go here: a file, a bus, a level
  * curve. Atmos levels also even out the raw files' loudness (wind is loud, crickets very quiet).
  */
-export const AUDIO_BEDS: { file: string; bus: 'music' | 'atmos'; level: (life: number) => number; spatial?: 'brook' }[] = [
+export const AUDIO_BEDS: { file: string; bus: 'music' | 'atmos'; level: (life: number) => number; spatial?: 'brook' | 'sea' }[] = [
+  // E21.12: the Old City's sea, a 3D wash placed at the nearest shore (level and position from setSea). Running
+  // water stands in for surf until a surf recording is added.
+  { file: 'atmos/water-flowing.ogg', bus: 'atmos', level: () => 0, spatial: 'sea' },
   // 3D: a babbling brook placed at the clean water nearest the view (level and position from setBrook).
   { file: 'atmos/brook.wav', bus: 'atmos', level: () => 0, spatial: 'brook' },
   // The synth-and-birds score: the atmospheric bed under the melody.
@@ -84,6 +87,9 @@ export class Sfx {
   /** The brook's 3D emitter (HRTF), and how much clean water is near the view (0..1). */
   private brookPanner?: PannerNode;
   private brookLevel = 0;
+  /** E21.12: the sea's 3D emitter and level (0 away from the Old City's shore) */
+  private seaPanner?: PannerNode;
+  private seaLevel = 0;
 
   /**
    * 3D object audio (the web's take on what Atmos does over headphones): the listener sits at the camera, looking
@@ -194,6 +200,17 @@ export class Sfx {
     p.positionZ.setTargetAtTime(z, t, 0.3);
   }
 
+  /** E21.12: places the sea's wash at (x, y, z) with `amount` 0..1 (0 fades it out). */
+  setSea(amount: number, x: number, y: number, z: number) {
+    this.seaLevel = 0.45 * Math.max(0, Math.min(1, amount));
+    const p = this.seaPanner;
+    if (!p || !this.ctx || amount <= 0) return;
+    const t = this.ctx.currentTime;
+    p.positionX.setTargetAtTime(x, t, 0.3);
+    p.positionY.setTargetAtTime(y, t, 0.3);
+    p.positionZ.setTargetAtTime(z, t, 0.3);
+  }
+
   /** Starts every bed fading in to its level; update() follows `life` from there. */
   private startBeds() {
     const ctx = this.ctx;
@@ -207,7 +224,7 @@ export class Sfx {
         el.preload = 'auto';
         const gain = ctx.createGain();
         // Fade in to the current level now, so music never waits on the frame loop to become audible.
-        const level = b.spatial === 'brook' ? () => this.brookLevel : b.level;
+        const level = b.spatial === 'brook' ? () => this.brookLevel : b.spatial === 'sea' ? () => this.seaLevel : b.level;
         const at = level(this.life);
         gain.gain.setValueAtTime(0, ctx.currentTime);
         gain.gain.setTargetAtTime(at, ctx.currentTime, 1.5);
@@ -217,7 +234,8 @@ export class Sfx {
           // Inverse distance from the camera: zooming in on the water brings the brook up close.
           const p = new PannerNode(ctx, { ...SPATIAL, refDistance: AMBIENT_REF });
           src.connect(p).connect(out);
-          this.brookPanner = p;
+          if (b.spatial === 'sea') this.seaPanner = p;
+          else this.brookPanner = p;
         } else src.connect(out);
         this.beds.push({ el, gain, bus: b.bus, level, at });
       } catch {

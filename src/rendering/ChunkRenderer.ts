@@ -12,6 +12,11 @@ import { PALETTE } from './Materials';
 import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { plotsInChunk, type PlotSpot } from '../core/Plots';
+import { onJetty, pileById, setPieceAt } from '../core/OldCityLayout';
+import { oldCityModel } from './Models';
+import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
+import { GATE_MODELS, LANDING, PARK_SET } from '../data/oldcity';
+import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
 import { drawDecor } from './DecorArt';
 import type { Decoration } from '../core/Decor';
@@ -334,6 +339,8 @@ export class MeshBuilder {
 
 /** Ground colours per material, dead → alive (Look 2: PALETTE.ground / PALETTE.lawn). */
 const DEAD = PALETTE.ground.dead;
+/** E21.5: the gate models' length in metres (#379), so a gate model can be fitted to its cells. */
+const GATE_LENGTH: Record<string, number> = { barricade: 4, 'bridge-broken': 14, 'bridge-repaired': 14, 'skybridge-collapsed': 12, 'lift-bridge': 6, 'glide-perch': 1.2 };
 const EDGE_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 /**
  * Curved paths: the radius of the quarter circle that rounds a path's corner (half a tile: stepped tiles join into
@@ -462,6 +469,8 @@ const TALL_DROP = 2;
  */
 export class ChunkRenderer {
   private views = new Map<string, ChunkView>();
+  /** E21.22: how far a building in front of the view fades (the Old City's exploration camera: to 30%) */
+  fadeTo = TOWER_FADE.opacity;
   private root: pc.Entity;
   reducedMotion = false;
   /** Max chunk meshes rebuilt per frame (keeps frames smooth while panning or during big chains). */
@@ -766,6 +775,153 @@ export class ChunkRenderer {
     return this.batch.add(name, x, y, z, rot, scale, scale, scale, this.neglected);
   }
 
+  /**
+   * E21.24: the Old City's terraces. Where a neighbour's edge is lower, an old retaining wall (brick and stone,
+   * coping on top) drops to it, with ivy once the ground above is restored. A ramp or stair tile is drawn as
+   * steps from its low end to its high end. `h` is the chunk's base height, `th` this tile's.
+   */
+  private terrace(b: Sink, t: TileData, h: number, th: number) {
+    const R = PALETTE.retaining;
+    const x = t.x + 0.5;
+    const z = t.z + 0.5;
+    const alive = t.ground === 'restored' ? 0 : 1;
+    if (t.ramp) {
+      const hit = rampAt(t.x, t.z);
+      if (!hit) return;
+      const steps = hit.ramp.kind === 'stair' ? 2 : 3;
+      const [fx, fz] = ({ n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] } as const)[hit.ramp.dir];
+      const col = t.ground === 'restored' ? PALETTE.paving.slabs[0] : R.stone[1];
+      for (let k = 0; k < steps; k++) {
+        const lv = hit.ramp.from + ((hit.ramp.to - hit.ramp.from) * (hit.i + (k + 0.5) / steps)) / hit.n;
+        const top = h + levelY(lv);
+        const low = Math.min(top, h + levelY(Math.min(hit.ramp.from, hit.ramp.to))) - 0.4;
+        const off = (k + 0.5) / steps - 0.5;
+        const cx = x + fx * off;
+        const cz = z + fz * off;
+        const len = 1 / steps;
+        b.add('box', col, [cx, (top + low) / 2 + 0.08, cz], [fx ? len : 1, top - low, fz ? len : 1]);
+        b.add('box', R.coping[alive], [cx, top + 0.085, cz], [fx ? len : 1.02, 0.03, fz ? len : 1.02]);
+      }
+      return;
+    }
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const mine = edgeHeight(t.x, t.z, dx, dz);
+      const theirs = edgeHeight(t.x + dx, t.z + dz, -dx, -dz);
+      if (typeof mine !== 'number') continue;
+      // a ramp's side: drop to the ramp's lowest point
+      const lowLv = typeof theirs === 'number' ? theirs : (rampAt(t.x + dx, t.z + dz)?.ramp ? Math.min(rampAt(t.x + dx, t.z + dz)!.ramp.from, rampAt(t.x + dx, t.z + dz)!.ramp.to) : mine);
+      if (lowLv >= mine - 1e-6) continue;
+      const top = th + 0.08;
+      const bottom = h + levelY(lowLv) - 0.1;
+      const H = top - bottom;
+      const wx = x + dx * 0.5;
+      const wz = z + dz * 0.5;
+      const sx = dx ? 0.12 : 1;
+      const sz = dz ? 0.12 : 1;
+      // a weir: where a canal drops a level, its water falls over the edge
+      const below = this.sim.grid.peek(GROUND, t.x + dx, t.z + dz);
+      if (t.feature === 'water' && below?.feature === 'water') {
+        b.add('box', PALETTE.aqua.foam, [wx + dx * 0.04, bottom + H / 2, wz + dz * 0.04], [dx ? 0.1 : 1, H, dz ? 0.1 : 1], 0.3);
+        b.add('box', PALETTE.ground.seaFoam, [wx + dx * 0.25, bottom + 0.06, wz + dz * 0.25], [dx ? 0.4 : 1, 0.05, dz ? 0.4 : 1]);
+        continue;
+      }
+      // stone wall with brick courses, a coping stone on top
+      b.add('box', R.stone[alive], [wx, bottom + H / 2, wz], [sx, H, sz]);
+      const bricks = PALETTE.bricks;
+      for (let c = 0; c < Math.floor(H / 0.45); c++) b.add('box', bricks[(((t.x * 7 + t.z * 3 + c) % bricks.length) + bricks.length) % bricks.length], [wx + dx * 0.01, bottom + 0.25 + c * 0.45, wz + dz * 0.01], [dx ? 0.12 : 0.9, 0.06, dz ? 0.12 : 0.9]);
+      b.add('box', R.coping[alive], [wx, top + 0.02, wz], [dx ? 0.18 : 1.04, 0.06, dz ? 0.18 : 1.04]);
+      // ivy and hanging plants once the ground above is restored
+      if (t.ground === 'restored') {
+        const n = 2 + (t.variant % 3);
+        for (let i = 0; i < n; i++) {
+          const along = ((t.variant >> (i * 2)) % 10) / 10 - 0.45;
+          const len = 0.3 + ((t.variant >> i) % 5) * 0.12;
+          b.add('box', R.vine[i % 2], [wx + dx * 0.07 + (dz ? along : 0), top - len / 2, wz + dz * 0.07 + (dx ? along : 0)], [dx ? 0.04 : 0.14, len, dz ? 0.04 : 0.14]);
+        }
+      }
+    }
+  }
+
+  /**
+   * E21.2: the Old City's set pieces on their tile. A salvage pile is its material's model in three sizes,
+   * shrinking as it empties; a barricade is a heap of rubble across the avenue; the ruined shed is drawn once
+   * from its corner tile; a Keeper stands on bare ground (KeeperVisuals draws it). True when handled.
+   */
+  private oldCityProp(b: Sink, t: TileData, x: number, y: number, z: number): boolean {
+    const prop = t.prop!;
+    if (prop.startsWith('pile:')) {
+      const pile = pileById(prop.slice(5));
+      if (!pile) return false;
+      const size = SALVAGE.units[pile.size];
+      const k = Math.max(0, this.sim.salvage.left(pile.id)) / size;
+      // the salvage-* models (#379) are made one tile across; the older scrap and seed props are smaller
+      const own = pile.model.startsWith('salvage-');
+      const base = own ? (pile.size === 'large' ? 1.05 : pile.size === 'medium' ? 0.85 : 0.65) : pile.size === 'large' ? 1.45 : pile.size === 'medium' ? 1.15 : 0.9;
+      const sc = base * (0.45 + 0.55 * k);
+      const rot = dhash(t.x, t.z, 213) * Math.PI * 2;
+      const model = oldCityModel(pile.model); // the file once it lands, else its stand-in
+      if (model && this.batch?.add(model, x, y, z, rot, sc, sc, sc, this.neglected)) return true;
+      // no model (or not loaded yet): a heap in the material's colour
+      const hex = MATERIALS[pile.material].colour;
+      b.add('sphere', hex, [x, y + 0.12 * sc, z], [0.8 * sc, 0.35 * sc, 0.7 * sc]);
+      b.add('box', PALETTE.stone.light, [x + 0.15 * sc, y + 0.2 * sc, z - 0.1 * sc], [0.3 * sc, 0.2 * sc, 0.25 * sc]);
+      return true;
+    }
+    if (prop.startsWith('gate:')) {
+      // E21.5: a gate is one model over all its cells (drawn from its first cell), fitted to the gate's length
+      // and turned along its long side: the barricade (4 m), the bridges (14 m, along +X) and the skybridge (12 m)
+      const sp = setPieceAt(t.x, t.z);
+      if (sp?.kind !== 'gate') return true;
+      const g = sp.gate;
+      const xs = g.cells.map((c) => c[0]);
+      const zs = g.cells.map((c) => c[1]);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
+      if (t.x !== x0 || t.z !== z0) return true;
+      const name = GATE_MODELS[g.kind];
+      const model = oldCityModel(name);
+      const spanX = x1 - x0 + 1;
+      const spanZ = z1 - z0 + 1;
+      const alongX = spanX >= spanZ;
+      const length = GATE_LENGTH[name] ?? 4;
+      // a barricade fills the opening across the avenue; a bridge spans the gap along its length
+      const across = name === 'barricade' ? Math.max(spanX, spanZ) : alongX ? spanX : spanZ;
+      const sc = across / length;
+      const cx = (x0 + x1 + 1) / 2;
+      const cz = (z0 + z1 + 1) / 2;
+      if (!model || !this.batch?.add(model, cx, y, cz, alongX ? 0 : Math.PI / 2, sc, sc, sc, !!model && model === 'barricade' ? true : false))
+        for (const [gx, gz] of g.cells) b.add('sphere', PALETTE.stone.dark, [gx + 0.5, y + 0.15, gz + 0.5], [0.95, 0.45, 0.9]);
+      return true;
+    }
+    if (prop.startsWith('keeper:')) return true;
+    if (prop.startsWith('lookout:')) {
+      // E21.24: a lookout: its model once it lands, else a bench and a brass telescope on a tripod (stand-in)
+      const model = oldCityModel('lookout-telescope');
+      if (model) return !!this.batch?.add(model, x, y, z, 0, 0.65, 0.65, 0.65);
+      if (!this.batch?.add('bench', x, y, z + 0.2, 0, 0.58, 0.58, 0.58)) b.add('box', PALETTE.wood.mid, [x, y + 0.18, z + 0.2], [0.8, 0.05, 0.3]);
+      for (const a of [0, 2.1, 4.2]) b.add('cylinder', PALETTE.metal.iron, [x + Math.cos(a) * 0.12, y + 0.25, z - 0.2 + Math.sin(a) * 0.12], [0.03, 0.5, 0.03]);
+      b.add('cylinder', PALETTE.trim.gold ?? PALETTE.metal.iron, [x, y + 0.55, z - 0.2], [0.09, 0.42, 0.09]);
+      return true;
+    }
+    if (prop === 'shed') {
+      const sh = PARK_SET.shed;
+      if (t.x !== sh.x || t.z !== sh.z) return true;
+      const cx = sh.x + sh.size / 2;
+      const cz = sh.z + sh.size / 2;
+      const house = this.sim.state.salvage?.house ?? 0;
+      const W = sh.size - 0.3;
+      const wall = house >= 1 ? PALETTE.wood.mid : PALETTE.wood.deep;
+      // four walls (the front one broken until the shed is patched), a sagging roof
+      b.add('box', wall, [cx, y + 0.5, cz - W / 2], [W, 1, 0.12]);
+      b.add('box', wall, [cx - W / 2, y + 0.5, cz], [0.12, 1, W]);
+      b.add('box', wall, [cx + W / 2, y + (house >= 1 ? 0.5 : 0.3), cz], [0.12, house >= 1 ? 1 : 0.6, W]);
+      b.add('box', wall, [cx - 0.5, y + 0.5, cz + W / 2], [W - 1.1, 1, 0.12]);
+      b.add('box', house >= 1 ? PALETTE.wood.dark : PALETTE.metal.iron, [cx, y + 1.08, cz], [W + 0.2, 0.08, W + 0.2]);
+      if (house < 1) b.add('box', PALETTE.wood.dark, [cx + 0.6, y + 0.12, cz + 0.4], [0.9, 0.06, 0.2]);
+      return true;
+    }
+    return false;
+  }
+
   private setMesh(holder: pc.Entity | undefined, name: string, mesh: pc.Mesh | undefined, material: pc.Material, shadows: boolean): pc.Entity | undefined {
     holder?.destroy();
     if (!mesh) return undefined;
@@ -881,30 +1037,37 @@ export class ChunkRenderer {
       const ahead = fog === 'cleared' && tr?.waveAhead(area, t.x, t.z);
       b.grey = fog === 'hidden' ? 0.75 : (fog === 'cleared' && !ahead) || t.ground === 'restored' ? 0 : 0.35;
       fb.grey = b.grey;
+      // E21.24: an Old City tile stands at its terrace's height; cliff faces drop to lower neighbours
+      const th = t.level !== undefined ? h + levelY(t.level) : h;
+      if (t.level !== undefined) this.terrace(b, t, h, th);
+      if (t.ramp) {
+        yield;
+        continue;
+      }
       if (tr && tB) {
-        const end = tr.buildTile(this.host, t, h, !!v.far, { b, fb, sb: tB.sb, tb: tB.tb }, area);
+        const end = tr.buildTile(this.host, t, th, !!v.far, { b, fb, sb: tB.sb, tb: tB.tb }, area);
         if (end > 0) {
           trEnd = Math.max(trEnd, end);
           trLive++;
         }
-      } else if (v.far) this.farTile(b, t, h);
-      else this.tile(b, t, h);
+      } else if (v.far) this.farTile(b, t, th);
+      else this.tile(b, t, th);
       // Look 3.10: railings, vines, banners and clutter on area boundaries (near chunks; with transitions on too).
       // Look 3.8 (#135): while an area wave rolls over the edge, the new dressing grows in through the transition.
       if (!v.far) {
-        const end = tr && tB ? tr.edgeTile(this.host, area, t, h, tB.tb, fb, b.grey) : 0;
+        const end = tr && tB ? tr.edgeTile(this.host, area, t, th, tB.tb, fb, b.grey) : 0;
         if (end > 0) {
           trEnd = Math.max(trEnd, end);
           trLive++;
         } else {
           this.sink = b;
-          areaEdges(this.ctx, t, h + 0.08);
+          areaEdges(this.ctx, t, th + 0.08);
         }
       }
-      if (!v.far && fog !== 'hidden') this.pathCorners(b, t, h);
+      if (!v.far && fog !== 'hidden') this.pathCorners(b, t, th);
       if (!v.far && this.isWater(t)) {
-        this.poolBanks(b, t, h);
-        if (t.ground === 'restored' && fog !== 'hidden') this.poolSurface(pool, t, h);
+        this.poolBanks(b, t, th);
+        if (t.ground === 'restored' && fog !== 'hidden') this.poolSurface(pool, t, th);
       }
       yield; // a tile done: `update` decides whether this frame has time for the next
     }
@@ -921,8 +1084,10 @@ export class ChunkRenderer {
         // An entry fix may have opened one of its tiles: then it's rubble, not a building.
         const whole = s.grid.peek(GROUND, p.x, p.z)?.feature === 'building' && s.grid.peek(GROUND, p.x + p.w - 1, p.z + p.d - 1)?.feature === 'building';
         if (!whole) continue;
-        if (p.storeys >= 6 && !v.far && fog !== 'hidden') towers.push(this.tower(p, h, fog === 'cleared', b.grey));
-        else this.building(b, p, h, fog === 'cleared', v.far);
+        const bh = h + s.grid.groundOffset(GROUND, p.x, p.z); // E21.24: on its terrace
+        // E21.22: in the Old City every near building can fade (one standing between the camera and bloombot)
+        if ((p.storeys >= 6 || s.grid.terraced(GROUND)) && !v.far && fog !== 'hidden') towers.push(this.tower(p, bh, fog === 'cleared', b.grey));
+        else this.building(b, p, bh, fog === 'cleared', v.far);
       }
     }
     // E19.1.5: plots, in the chunk's own meshes and model batch (no extra draw calls)
@@ -934,7 +1099,7 @@ export class ChunkRenderer {
         model: (name: string, x: number, y: number, z: number, rot: number, sc: number) => !!this.batch?.add(name, x, y, z, rot, sc),
         lod: (v.far ? 0 : this.band >= 2 ? 2 : 1) as Lod,
       };
-      for (const { p, look } of this.chunkPlots) drawPlot(host, p, look ?? undefined, h + 0.08, !!v.far);
+      for (const { p, look } of this.chunkPlots) drawPlot(host, p, look ?? undefined, h + 0.08 + s.grid.groundOffset(GROUND, p.x, p.z), !!v.far);
     }
     // E19.2: decorations, the same way
     const decor = this.decor && fog !== 'hidden' ? this.decor.inChunk(v.cx, v.cz) : [];
@@ -946,7 +1111,7 @@ export class ChunkRenderer {
         model: (name: string, x: number, y: number, z: number, rot: number, sc: number) => !!this.batch?.add(name, x, y, z, rot, sc),
         lod: (v.far ? 0 : this.band >= 2 ? 2 : 1) as Lod,
       };
-      for (const d of decor) drawDecor(host, d.kind, d.x + 0.5, h + 0.08, d.z + 0.5, d.rot, !!v.far);
+      for (const d of decor) drawDecor(host, d.kind, d.x + 0.5, h + 0.08 + s.grid.groundOffset(GROUND, d.x, d.z), d.z + 0.5, d.rot, !!v.far);
     }
     this.fb = fb;
     this.sink = b;
@@ -986,6 +1151,8 @@ export class ChunkRenderer {
     const f = t.feature ?? 'lawn';
     const dead = DEAD[f] ?? DEAD.lawn;
     const stage = Math.max(1, Math.min(4, t.bloom || 1));
+    // E21.4: the open sea stays sea zoomed out
+    if (t.blocked && f === 'water' && t.level !== undefined) return this.slab(b, PALETTE.ground.sea[t.variant % PALETTE.ground.sea.length], [t.x + 0.5, h + 0.04 - WATER.drop, t.z + 0.5], [1, 0.08, 1]);
     const col = t.blocked ? (this.level >= 4 && f !== 'building' ? PALETTE.stone.light : dead[0]) : t.ground === 'restored' ? (f === 'water' ? ALIVE.water : f === 'paving' ? this.slabTone(t) : f === 'road' ? PALETTE.paving.roadAlive : grassTone(stage, t.x, t.z)) : t.ground === 'polluted' ? dead[t.variant % dead.length] : t.ground === 'growing' ? PALETTE.ground.growing : PALETTE.ground.prepared;
     this.slab(b, col, [t.x + 0.5, f === 'water' && !t.blocked ? h - WATER.drop : h, t.z + 0.5], [1, 0.16, 1]);
     // Phase 5 E16: stages stay apart zoomed out too: a colour patch for Blooming, a gold disc for Radiant.
@@ -1288,6 +1455,29 @@ export class ChunkRenderer {
     const f = t.feature ?? 'lawn';
     const r = new VRng(t.variant * 7919 + 13);
     const dead = DEAD[f] ?? DEAD.lawn;
+    // E21.26: the Landing's jetty: its model (once it lands) from the first plank, else procedural planks on posts
+    if (t.level !== undefined && onJetty(t.x, t.z)) {
+      const J = LANDING.jetty;
+      const model = oldCityModel('jetty');
+      if (model === 'jetty') {
+        // the model (8 m long along +X, 4.2 m from its posts' feet to the deck) turned along the jetty, deck at the beach
+        const sc = J.d / 8;
+        if (t.x === J.x && t.z === J.z) this.batch?.add('jetty', J.x + J.w / 2, h + 0.08 - 4.18 * sc, J.z + J.d / 2, Math.PI / 2, sc, sc, sc);
+        return;
+      }
+      const sea = PALETTE.ground.sea;
+      this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
+      for (let i = 0; i < 4; i++) b.add('box', i % 2 ? PALETTE.wood.mid : PALETTE.wood.dark, [x, h + 0.06, z - 0.375 + i * 0.25], [0.98, 0.05, 0.22]);
+      if (t.x === J.x || t.x === J.x + J.w - 1) b.add('cylinder', PALETTE.wood.deep, [t.x === J.x ? x - 0.42 : x + 0.42, h - 0.25, z], [0.09, 0.7, 0.09]);
+      return;
+    }
+    // E21.4: the Old City's open sea: deep water, never restored
+    if (t.blocked && f === 'water') {
+      const sea = PALETTE.ground.sea;
+      this.slab(b, sea[t.variant % sea.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
+      if (t.variant % 5 === 0) b.add('box', PALETTE.ground.seaFoam, [x + r.range(-0.3, 0.3), h + 0.085 - WATER.drop, z + r.range(-0.3, 0.3)], [r.range(0.2, 0.5), 0.006, 0.05]);
+      return;
+    }
     if (t.blocked) {
       // Look 2.5: once its area is alive, an obstacle stands on a clean stone plinth instead of dead ground.
       if (t.feature !== 'building' && this.level >= 4) {
@@ -1295,6 +1485,7 @@ export class ChunkRenderer {
         this.slab(b, PALETTE.stone.light, [x, h + 0.02, z], [0.9, 0.2, 0.9]);
       } else this.slab(b, dead[t.variant % dead.length], [x, h, z], [0.96, 0.16, 0.96]);
       if (t.feature === 'building') return;
+      if (t.prop && this.oldCityProp(b, t, x, h + 0.08, z)) return; // E21: piles, barricades, the shed, Keepers
       if (t.id === this.localMark) this.landmark(b, x, h + 0.08, z, t.variant);
       else if ((t.prop ?? 'stump') === 'stump' && dhash(t.x, t.z, 211) < 0.45) planterBed(this.ctx, t, this.level >= 3, x, z, h + 0.08, 0.82, 0.82); // Look 3.9
       else this.prop(b, t.prop ?? 'stump', x, h + 0.08, z, r);
@@ -1829,7 +2020,7 @@ export class ChunkRenderer {
    * ground there: the cursor and the middle of the view. A tower standing in front of one fades to a ghost; it
    * comes back when it no longer covers any. Called once per frame.
    */
-  fadeTowers(dt: number, cam: pc.CameraComponent, points: { x: number; y: number; depth: number }[]) {
+  fadeTowers(dt: number, cam: pc.CameraComponent, points: { x: number; y: number; depth: number }[], through?: pc.Vec3) {
     const eye = cam.entity.getPosition();
     const fwd = cam.entity.forward;
     const a = new pc.Vec3();
@@ -1854,7 +2045,9 @@ export class ChunkRenderer {
             if (Math.hypot(p.x - (a.x + sx * u), p.y - (a.y + sy * u)) < half) cover = true;
           }
         }
-        t.to = cover ? TOWER_FADE.opacity : 1;
+        // E21.22: anything standing between the camera and bloombot fades (a world-space test of the sight line)
+        if (!cover && through && blocksSight(eye, through, t)) cover = true;
+        t.to = cover ? this.fadeTo : 1;
         if (Math.abs(t.to - t.a) < 0.004) {
           if (t.a === t.to) continue;
           t.a = t.to;
@@ -2256,6 +2449,7 @@ export class ChunkRenderer {
     const col: number[] = [];
     const idx: number[] = [];
     const h = this.sim.grid.layer(GROUND)!.height - (v.sunk ? SINK : 0);
+    const terraced = this.sim.grid.terraced(GROUND);
     // Denser fog (owner, 18 Nov 2026): three thicker sheets (one on Simple fog), stacked higher.
     const sheets = this.lowFog
       ? [{ y: 0.5, alpha: 0.95, tint: [112, 121, 132] }]
@@ -2270,7 +2464,9 @@ export class ChunkRenderer {
         for (let x = 0; x <= N; x++) {
           const a = (cell(x - 1, z - 1) + cell(x, z - 1) + cell(x - 1, z) + cell(x, z)) / 4;
           const wob = 0.9 + 0.2 * Math.sin((x0 + x) * 0.9 + (z0 + z) * 1.3);
-          pos.push(x0 + x, h + sh.y + a * 0.25, z0 + z);
+          // E21.24: on the terraces the fog follows the highest ground at each vertex
+          const lift = terraced ? Math.max(levelY(levelAt(x0 + x - 1, z0 + z - 1)), levelY(levelAt(x0 + x, z0 + z - 1)), levelY(levelAt(x0 + x - 1, z0 + z)), levelY(levelAt(x0 + x, z0 + z))) : 0;
+          pos.push(x0 + x, h + sh.y + a * 0.25 + lift, z0 + z);
           col.push(sh.tint[0], sh.tint[1], sh.tint[2], Math.round(Math.min(1, a * sh.alpha * wob) * 255));
         }
       for (let z = 0; z < N; z++)
@@ -2340,4 +2536,16 @@ export class ChunkRenderer {
 
 function dist(v: ChunkView, f: { x: number; z: number }) {
   return Math.hypot(v.cx * CHUNK + 8 - f.x, v.cz * CHUNK + 8 - f.z);
+}
+
+/** E21.22: does the sight line from the eye to a point pass through a building's box (its footprint, base to top)? */
+export function blocksSight(eye: { x: number; y: number; z: number }, to: { x: number; y: number; z: number }, t: { x: number; z: number; r: number; base: number; top: number }): boolean {
+  for (let i = 1; i < 40; i++) {
+    const k = i / 40;
+    const x = eye.x + (to.x - eye.x) * k;
+    const y = eye.y + (to.y - eye.y) * k;
+    const z = eye.z + (to.z - eye.z) * k;
+    if (Math.abs(x - t.x) <= t.r && Math.abs(z - t.z) <= t.r && y >= t.base && y <= t.top) return true;
+  }
+  return false;
 }

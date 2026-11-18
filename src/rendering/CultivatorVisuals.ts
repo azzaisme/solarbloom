@@ -167,7 +167,7 @@ export class CultivatorVisuals {
   private pose(v: UnitView, m: MachineData, u: CultivatorUnit, dt: number) {
     const s = this.sim;
     const r = s.grid.roof(m.roofId);
-    const y = (r ? r.origin[1] + r.height : 0) + 0.08;
+    const y = (r ? r.origin[1] + r.height : 0) + 0.08 + s.grid.groundOffset(m.roofId, Math.floor(u.px), Math.floor(u.pz)); // E21.24
     const ox = r ? r.origin[0] : 0;
     const oz = r ? r.origin[2] : 0;
     // ease the model toward the sim position (the sim moves in 0.1 s steps)

@@ -3,6 +3,7 @@ import type { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { SLAB_TOP } from '../core/Picking';
 import type { Sim } from '../gameplay/Sim';
 import { BOT, type BotPose, spawnPose, Walker } from '../gameplay/Walker';
+import { heightAt, levelY } from '../core/Height';
 import type { Action, Bindings } from './Bindings';
 
 /**
@@ -90,7 +91,9 @@ export class BotController {
   world(): [number, number, number] {
     const l = this.sim.grid.layer(this.pose.roofId)!;
     const sink = this.walker.wading(this.pose) ? 0.07 : 0;
-    let y = l.origin[1] + l.height + SLAB_TOP - sink;
+    // E21.24: on the Old City's terraces bloombot stands at the ground's height (sloping on ramps)
+    const lift = this.sim.grid.terraced(this.pose.roofId) ? levelY(heightAt(this.pose.x, this.pose.z)) : 0;
+    let y = l.origin[1] + l.height + SLAB_TOP - sink + lift;
     if (this.lift) {
       const k = Math.min(1, this.lift.t / this.lift.dur);
       y = this.lift.fromY + (this.lift.toY - this.lift.fromY) * (k * k * (3 - 2 * k));

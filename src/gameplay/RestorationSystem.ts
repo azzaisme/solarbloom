@@ -30,6 +30,11 @@ export class RestorationSystem {
     return { energy: Math.round(base.energy * this.sim.upgrades.pulseEnergyMult * roofMult * 100) / 100, water: Math.ceil(base.water * roofMult) };
   }
 
+  /** E21.9: may a helper (drone, Cultivator, Mother Tree) work this tile? (Old City: bloombot's share first.) */
+  helperMay(t: TileData): boolean {
+    return t.roofId !== GROUND || this.sim.areas.helpersMayWork(this.sim.areas.areaOf(t));
+  }
+
   /** Can this tile be turned into a restoration target at all (ignoring cost)? */
   isEligible(t: TileData, allowPolluted = true): boolean {
     const roof = this.sim.grid.roof(t.roofId);
@@ -48,6 +53,9 @@ export class RestorationSystem {
     if (!roof || !roof.unlocked || roof.preview) return { ok: false, reason: 'This rooftop is not reachable yet', cost };
     const fog = this.sim.areas.fogReason(t);
     if (fog) return { ok: false, reason: fog, cost };
+    if (t.blocked && t.feature === 'water') return { ok: false, reason: 'The open sea — nothing grows out there', cost };
+    const piece = t.blocked ? this.sim.salvage?.describe(t) : undefined; // E21: a pile, a gate, a Keeper
+    if (piece) return { ok: false, reason: piece.detail, cost };
     if (t.blocked) return { ok: false, reason: t.feature === 'building' ? 'An old building: its roof garden wakes when this area clears' : 'A rusty vent — nothing grows here', cost };
     if (this.sim.isCoreTile(t)) return { ok: false, reason: 'The Rooftop Core — awaken it when it is ready', cost };
     if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in full bloom', cost };
@@ -274,6 +282,8 @@ export class RestorationSystem {
         this.sim.bus.emit('tile.softened', { tile: nb });
       }
     }
+    // E21.9: bloombot's own pulses count toward its share of an Old City region
+    if (source === 'pulse' || source === 'broad' || source === 'mega') this.sim.areas.countBot(t);
     this.sim.areas.onRestored(t);
     if (quiet) {
       this.sim.bus.emit('tile.restored', { tile: t, source, chainId: -1, biomass });

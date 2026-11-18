@@ -158,7 +158,7 @@ export class Advisor {
     // 4. Push the fog back: an affordable tile at the edge of the current goal (or anywhere in the park).
     const goal = city && s.state.progression.coreActivated ? s.areas.nextGoal() : undefined;
     // 3b. Region unlocks: nothing open to work on, but sealed regions wait: point at the cheapest one.
-    if (city && s.state.progression.coreActivated && !goal) {
+    if (city && s.state.progression.coreActivated && !goal && !s.oldCity) {
       const id = s.areas
         .sealedAreas()
         .sort((a, b) => s.areas.unlockCost(a)!.biomass.cmp(s.areas.unlockCost(b)!.biomass) || s.areas.info(a).distance - s.areas.info(b).distance)[0];

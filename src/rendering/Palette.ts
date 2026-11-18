@@ -57,9 +57,14 @@ const ground = {
     litter: ['#7f7563', '#776d5c', '#877c69'],
     obstacle: ['#837b70', '#7b7368', '#8b8377'],
     building: ['#90887c', '#898175', '#978f83'],
+    sand: ['#d1bd8e', '#c9b484', '#d8c69a'],
   } as Record<string, string[]>,
+  /** E21.4: the Old City's sea (open water nothing crosses), its surf, and the beach once restored */
+  sea: ['#2f6f8a', '#2b6880', '#337693'],
+  surf: '#9fdcef',
+  seaFoam: '#eaf8fb',
   /** restored ground that isn't lawn ('' = use the stage grass) */
-  alive: { lawn: '', paving: '#b4afa5', road: '#6c675e', water: '#5cc6e6', clay: '', litter: '', obstacle: '#d6d0c6' } as Record<string, string>,
+  alive: { lawn: '', paving: '#b4afa5', road: '#6c675e', water: '#5cc6e6', clay: '', litter: '', obstacle: '#d6d0c6', sand: '#e6d3a0' } as Record<string, string>,
   /**
    * Look 2.9: prepared and growing must read apart for every vision type, so they differ in lightness, not just
    * in their small details: prepared is dark tilled soil, growing a lighter olive soil hazed with sprouts.

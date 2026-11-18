@@ -24,7 +24,7 @@ const OFFSETS = [[0.5, 0.5], [0.15, 0.15], [0.85, 0.2], [0.2, 0.85], [0.85, 0.85
 
 const server = await preview({ preview: { port: 4179, strictPort: true }, logLevel: 'silent' });
 // Bloombot (G.17): this checks pointer picking itself, so it runs the internal cursor path.
-const url = 'http://localhost:4179/?cursor=1';
+const url = 'http://localhost:4179/?cursor=1&rules=classic'; // E21: the classic flat city (tests/e2e/picking-oldcity.e2e.mjs covers terraces)
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let failures = 0;
 let checks = 0;

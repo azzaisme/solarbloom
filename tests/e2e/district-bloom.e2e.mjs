@@ -10,7 +10,7 @@ let ok = true;
 const fail = (m) => { ok = false; console.error('  ✗', m); };
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-  await page.goto('http://localhost:4191/');
+  await page.goto('http://localhost:4191/?rules=classic');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);

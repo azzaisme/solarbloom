@@ -4,6 +4,8 @@ A cozy solarpunk restoration game for the browser, set in an endless city lost i
 
 Built with **PlayCanvas Engine 2 + TypeScript + Vite**. The camera is a perspective view that changes with the zoom (a low, wide three-quarter view close up with a sky and a distant skyline; near-isometric for the city overview), and the world is a logical square grid rendered in 3D. All art is procedural primitives and all sound is synthesised; there are no asset files.
 
+**Direction (E21, Nov 2026):** new games play under the Old City rules: a fixed city of nine regions to explore, salvage and restore by hand. The design is [docs/E21_OLD_CITY.md](docs/E21_OLD_CITY.md); saves from before it keep the classic rules (`?rules=classic` starts a classic game).
+
 ![The park, early on](docs/park.png)
 
 ![A cleared stretch of the city: white buildings with roof gardens around the park](docs/city-overview.png)

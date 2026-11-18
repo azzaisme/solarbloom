@@ -5,7 +5,9 @@ import { Economy, formatCost, formatPriceHtml, KINDS } from '../core/Economy';
 import { big, fmt, toNum, type Big } from '../core/Big';
 import type { Cost } from '../core/types';
 import type { BuildableType, MachineData, ResourceKind } from '../core/types';
-import { BUILDABLE, MACHINES, TIER2, TIER3 } from '../data/machines';
+import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE, TIER2, TIER3 } from '../data/machines';
+import { MATERIAL_IDS, MATERIALS } from '../data/salvage';
+import { oldCityHint, oldCityObjective } from './OldCityGuide';
 import { AREA_TYPES } from '../data/city';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
@@ -110,6 +112,12 @@ export interface Settings {
   showNumbers?: boolean;
   /** E19.4.3 (#262): the potter-about pace: no objective nudges or advisor tips, softer chains. Presentation only. */
   potter?: boolean;
+  /** E21.22: the camera: how fast it turns (percent), inverted axes, no drift back behind bloombot, no vistas */
+  camSensitivity?: number;
+  invertX?: boolean;
+  invertY?: boolean;
+  noRecentre?: boolean;
+  noVistas?: boolean;
   /** Bloombot (G.16): rebound keys and gamepad buttons (only what differs from the default map). */
   keys?: SavedBindings['keys'];
   pad?: SavedBindings['pad'];
@@ -181,9 +189,10 @@ export class Hud {
       `<span class="sep"></span>`,
       `<button class="slot" id="buildToggle" aria-label="Build menu (B)" aria-expanded="false"><span class="key">B</span><span class="si">${ICONS.build}</span><span class="sl">Build</span><span class="sc"></span></button>`,
       `<div id="buildTray">`,
-      ...BUILDABLE.map(
+      // E21.3: the Old City adds the Storage Chest and the Reclaimer (no number keys: the tray and the bumpers reach them)
+      ...(this.sim.oldCity ? OLD_CITY_BUILDABLE : BUILDABLE).map(
         (t) =>
-          `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name} (${MACHINES[t].hotkey})"><span class="key">${MACHINES[t].hotkey}</span><span class="si">${ICONS[MACHINE_ICONS[t]]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
+          `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name}${MACHINES[t].hotkey ? ` (${MACHINES[t].hotkey})` : ''}"><span class="key">${MACHINES[t].hotkey ?? ''}</span><span class="si">${ICONS[MACHINE_ICONS[t]]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
       ),
       ...SUPER_TOOLS.map((t) => {
         const d = TIER3[superType(t)!]!;
@@ -239,8 +248,14 @@ export class Hud {
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
       <div id="intro" hidden><div class="panel card-intro">
         <h2>${LOGO_MARK}<span>Welcome to Solarbloom</span></h2>
-        <p>This old park is dead and grey, and the city around it is lost in a gloomy fog. Bring it back to life.</p>
-        <ol>
+        <p data-rules="classic">This old park is dead and grey, and the city around it is lost in a gloomy fog. Bring it back to life.</p>
+        <p data-rules="oldcity">The fog came and the island city emptied. A small boat has brought you, bloombot, from the mainland to bring it back to life.</p>
+        <ol data-rules="oldcity">
+          <li><b>Salvage what lies around</b>: Scrap, Seeds and more, by hand. Tidied ground can be restored.</li>
+          <li><b>Pulse dead ground back to life</b>, and bring the fountain what it asks for. Each delivery gives you a new way to move.</li>
+          <li><b>Clear the way</b> into the city's regions and wake the robot who sleeps in each.</li>
+        </ol>
+        <ol data-rules="classic">
           <li><b>Walk up to a grey tile and pulse it</b> to restore it. Each pulse uses a little ⚡ energy and 💧 water, which refill on their own.</li>
           <li><b>Green tiles grow 🌿 biomass.</b> Spend it on machines and upgrades. Pulse a green tile again to grow flowers.</li>
           <li><b>Goal:</b> wake the dry fountain. Then the fog starts to lift. The checklist is in the top-right corner.</li>
@@ -270,6 +285,11 @@ export class Hud {
         <label>Show numbers (rates, income, time to afford) <input type="checkbox" data-set="showNumbers"></label>
         <label>Potter about (no nudges or tips, gentler chains) <input type="checkbox" data-set="potter"></label>
         <label>Tutorial hints <input type="checkbox" data-set="hints"></label>
+        <label>Camera speed <select id="camSensSel" aria-label="Camera speed"><option value="50">Slow</option><option value="75">Gentle</option><option value="100">Normal</option><option value="150">Quick</option><option value="200">Fast</option></select></label>
+        <label>Invert camera left and right <input type="checkbox" data-set="invertX"></label>
+        <label>Invert camera up and down <input type="checkbox" data-set="invertY"></label>
+        <label>Keep the view where I turn it <input type="checkbox" data-set="noRecentre"></label>
+        <label>Skip region vistas <input type="checkbox" data-set="noVistas"></label>
         <label>Debug / FPS (F3) <input type="checkbox" data-set="debug"></label>
         <div id="controlsBox" class="controls"></div>
         <div class="stats" id="statsBox"></div>
@@ -350,6 +370,9 @@ export class Hud {
     const uis = $<HTMLSelectElement>(r, '#uiScaleSel');
     uis.value = String(this.settings.uiScale ?? 100);
     uis.addEventListener('change', () => this.cb.setSetting('uiScale', Number(uis.value)));
+    const cs = $<HTMLSelectElement>(r, '#camSensSel'); // E21.22
+    cs.value = String(this.settings.camSensitivity ?? 100);
+    cs.addEventListener('change', () => this.cb.setSetting('camSensitivity', Number(cs.value)));
     r.querySelectorAll<HTMLInputElement>('[data-set]').forEach((inp) => {
       const key = inp.dataset.set as keyof Settings;
       inp.checked = !!this.settings[key];
@@ -798,7 +821,17 @@ export class Hud {
       .map((id) => this.sim.areas.info(id));
     const card = (icon: string, name: string, detail: string) => `<div class="card"><span class="ci">${icon}</span><span class="cn">${name}</span><span class="cd2">${detail}</span></div>`;
     const fauna = Object.keys(st.fauna ?? {});
+    // E21.1 / E21.8: in the Old City the backpack lists what bloombot carries and the Keepers' other requests
+    const oldCity = this.sim.oldCity
+      ? [
+          '<h3 class="bp-h">Carrying</h3>',
+          ...MATERIAL_IDS.filter((m) => this.sim.inventory.count(m)).map((m) => card(MATERIALS[m].icon, `${MATERIALS[m].name}: ${this.sim.inventory.count(m)}/${this.sim.inventory.stackLimit()}`, `${this.sim.inventory.stored(m)} in storage`)),
+          '<h3 class="bp-h">Requests</h3>',
+          ...(this.sim.keepers.requests().length ? this.sim.keepers.requests().map((r, i) => card('🤖', i === 0 ? 'Pinned' : 'Waiting', esc(r.text))) : [card('🤖', 'No requests yet', 'Wake a Keeper and it will ask for help.')]),
+        ]
+      : [];
     const parts = [
+      ...oldCity,
       '<h3 class="bp-h">Discoveries</h3>',
       card('🐱', `Lucky Cats found: ${st.stats.catsFound}`, st.stats.catsFound ? 'Keep wandering: more hide as the city wakes.' : 'Wander the city. Paw prints mean a cat is close.'),
       card('⛲', `Landmarks woken: ${woken.length}`, woken.length ? woken.map((a) => a.landmarkName).join(', ') : 'Restore the park to wake the fountain.'),
@@ -1225,11 +1258,11 @@ export class Hud {
     this.updateEvents();
     this.set('frTitle', fb, 'title', fActive ? 'Bloom Frenzy! Pulse reach +2 tiers, biomass ×10, drones ×3' : fReady ? `Bloom Frenzy is ready: press ${this.cb.keyFor('frenzy')} to fire it` : 'Bloom Frenzy charges as you restore, chain and overflow');
     // Hotbar costs
-    for (const t of BUILDABLE) {
+    for (const t of s.oldCity ? OLD_CITY_BUILDABLE : BUILDABLE) {
       const btn = $(this.root, `#hotbar [data-tool="${t}"]`);
-      const cost = s.build.cost(t);
-      this.set(`hc-${t}`, $(btn, '.sc'), 'text', formatCost(cost));
-      this.set(`hk-${t}`, btn, 'cls', s.econ.canAfford(cost) ? '0' : '1', 'cant');
+      // E21.3: under old-city rules the price is the recipe (material icons, have / need)
+      this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.costLabel(t));
+      this.set(`hk-${t}`, btn, 'cls', s.build.affordable(t) ? '0' : '1', 'cant');
       const locked = !s.build.isUnlocked(t);
       this.set(`hl-${t}`, btn, 'cls', locked ? '1' : '0', 'locked');
       // A rooftop's specialty piece only appears once that rooftop is reachable.
@@ -1298,7 +1331,16 @@ export class Hud {
     const total = p.restorableCount(HOME);
     const pct = Math.round((restored / Math.max(1, total)) * 100);
     let hoodNext = '';
-    if (s.state.progression.coreActivated) {
+    // E21.8 / E21.12: the Old City pins one request (a Keeper's, else the next fountain tier)
+    const oc = s.oldCity ? oldCityObjective(s) : undefined;
+    if (oc) {
+      this.set('objTitle', $(this.root, '#objTitle'), 'text', oc.title);
+      this.set('objPct', $(this.root, '#objPct'), 'text', oc.pct);
+      this.set('objBar', $(this.root, '#objBar'), 'width', `${Math.round(oc.bar * 100)}%`);
+      this.set('objList', $(this.root, '#objList'), 'html', oc.list.map((r) => `<li class="${r.done ? 'done' : ''}"><span class="ck">${r.done ? '✓' : ''}</span>${esc(r.label)}</li>`).join(''));
+      this.set('objAct', $(this.root, '#objAct'), 'html', '');
+      hoodNext = oc.next;
+    } else if (s.state.progression.coreActivated) {
       hoodNext = this.cityObjective();
     } else {
       this.set('objAct', $(this.root, '#objAct'), 'html', p.homeIsPark ? this.suggestionHtml() : '');
@@ -1312,7 +1354,7 @@ export class Hud {
     const ready = p.coreReady();
     // Look 5.8: the card's checkbox ticks (with a flourish) once the current goal is ready to complete.
     const goal = s.state.progression.coreActivated ? s.areas.nextGoal() : undefined;
-    const done = s.state.progression.coreActivated ? !!goal && s.areas.ready(goal) : ready;
+    const done = oc ? oc.done : s.state.progression.coreActivated ? !!goal && s.areas.ready(goal) : ready;
     this.set('objDone', $(this.root, '#obj'), 'cls', done ? '1' : '0', 'done');
     this.set('objDoneLabel', $(this.root, '#objCheck'), 'title', done ? 'Ready: complete it now' : 'Not done yet');
     $(this.root, '#objCheck').setAttribute('aria-label', done ? 'Ready to complete' : 'Not done yet');
@@ -1323,7 +1365,7 @@ export class Hud {
     // Hint
     const step = s.state.progression.tutorialStep;
     const hint = $(this.root, '#hint');
-    const h = this.hintFor(step);
+    const h = s.oldCity ? oldCityHint(s, step, (a) => this.cb.keyFor(a)) : this.hintFor(step); // E21.12
     const showHint = this.settings.hints && !this.settings.potter && step !== this.hintDismissedStep && !this.introOpen;
     this.set('hintText', $(this.root, '#hintText'), 'text', h.text);
     this.set('hintShow', hint, 'cls', showHint ? '0' : '1', 'hide');
@@ -1339,7 +1381,7 @@ export class Hud {
     // "Next:" line (visible on phones, where the checklist is collapsed)
     const nextReq = s.state.progression.coreActivated ? undefined : p.requirements().find((r) => !r.done);
     const nm = s.state.progression.coreActivated ? undefined : p.nextMilestone();
-    const nextText = s.state.progression.coreActivated ? hoodNext : ready ? 'Next: wake the fountain ✨' : nextReq ? `Next: ${nextReq.label}${nm && nextReq.label.startsWith('Restore') ? ` · 🌱 reward at ${nm.at}` : ''}` : '';
+    const nextText = oc || s.state.progression.coreActivated ? hoodNext : ready ? 'Next: wake the fountain ✨' : nextReq ? `Next: ${nextReq.label}${nm && nextReq.label.startsWith('Restore') ? ` · 🌱 reward at ${nm.at}` : ''}` : '';
     // "Next:" is dropped on phones (CSS), so the goal itself fits on one line.
     this.set('objNext', $(this.root, '#objNext'), 'html', nextText.startsWith('Next: ') ? `<span class="nx">Next: </span>${esc(nextText.slice(6))}` : esc(nextText));
 

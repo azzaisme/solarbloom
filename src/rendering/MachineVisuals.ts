@@ -15,9 +15,11 @@ import { treeGeo } from './TreeGen';
 import { machineRunning } from './FaunaPlan';
 import { arcPath, ball, bezier, dome, latheAuto, matOf, part, rbox, rcyl, ring, setMat, tube } from './MachineParts';
 import { cultivatorDock } from './CultivatorVisuals';
-import { MODELS } from './Models';
+import { oldCityModel, MODELS } from './Models';
 
 interface MachineView {
+  /** E21.6: how full the Old City fountain may get (a trickle at tier 1) */
+  fountainCap?: number;
   m: MachineData;
   root: pc.Entity;
   body: pc.Entity;
@@ -78,6 +80,9 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   droneHub: ['drone-hub', 1.0],
   reservoirGarden: ['reservoir-basin', 0.55],
   relay: ['bloom-relay', 0.72],
+  // E21: the Storage Chest and the Reclaimer (data/oldcity MODEL_NAMES; a stand-in until the files land)
+  chest: ['storage-chest', 1.0],
+  reclaimer: ['reclaimer', 1.0],
 };
 /** The Mother Tree's collar model: its scale (the planter fits the procedural ring, radius 0.85) and planter top (model metres). */
 const MotherCollar = { scale: 1.12, top: 0.84 };
@@ -89,6 +94,12 @@ const LANDMARK_MODELS: Record<string, [string, number]> = {
   mast: ['signal-mast', 0.6],
   clock: ['clock-tower', 0.62],
   hall: ['market-hall', 0.46],
+  // E21.4: the Old City's own landmarks (data/oldcity MODEL_NAMES; a stand-in until the files land)
+  sealock: ['lock-gate', 0.62],
+  greenhouse: ['great-greenhouse', 0.5],
+  observatory: ['sky-observatory', 0.5],
+  // the Spire's own tower (15 m on a 6 x 6 footprint) stands with #352's terraces; the landmark core shows it at half size
+  spire: ['solar-spire', 0.5],
 };
 
 const orbOn = () => mat(PALETTE.orbLit, { emissive: PALETTE.coreGlow, emissiveIntensity: 1.6 });
@@ -144,6 +155,9 @@ function solarPanel(parent: pc.Entity, w: number, d: number, cols: number, rows:
 }
 
 /** The fountain's two looks: `dry` shows until it wakes, `wet` and `lush` after; `k` is how far it has woken (0–1). */
+/** E21.6: the fountain's tier looks: how full a trickle is, and how much the lit and blooming looks glow and grow. */
+const FOUNTAIN_LOOK = { trickle: 0.35, litHalo: 1.45, bloomHalo: 1.8, bloomBeds: 1.35, litGlow: 1.7, trimGlow: 0.35 };
+
 interface FountainFx {
   k: number;
   trim: pc.StandardMaterial;
@@ -337,7 +351,8 @@ export class MachineVisuals {
 
   worldOf(m: MachineData): [number, number, number] {
     const r = this.sim.grid.roof(m.roofId)!;
-    return [r.origin[0] + m.x + m.size / 2, r.origin[1] + r.height + SLAB_TOP, r.origin[2] + m.z + m.size / 2];
+    // E21.24: a machine stands on its terrace
+    return [r.origin[0] + m.x + m.size / 2, r.origin[1] + r.height + SLAB_TOP + this.sim.grid.groundOffset(m.roofId, m.x, m.z), r.origin[2] + m.z + m.size / 2];
   }
 
   view(id: string) {
@@ -1106,7 +1121,7 @@ export class MachineVisuals {
     if (v.m.type === 'motherTree') return this.motherCollar(v);
     const pick = v.m.type === 'core' ? LANDMARK_MODELS[this.landmarkKind(v.m)] : MACHINE_MODELS[v.m.type];
     if (!pick) return;
-    const e = MODELS.instantiateMerged(pick[0]);
+    const e = MODELS.instantiateMerged(oldCityModel(pick[0]) ?? pick[0]); // E21: a new model, or its stand-in
     if (!e) return;
     if (v.fountain) {
       // The park fountain: the hand-built model is its dry look; the flowing three-tier fountain replaces it on waking.
@@ -1636,6 +1651,41 @@ export class MachineVisuals {
   }
 
   /** Core look: dormant / ready (pulsing gold) / awakened. */
+  /**
+   * E21.6: the Old City fountain's five looks, one per tier: dry (0), a trickle (1), flowing (2), lit (3, 4: the
+   * sprout and rims glow), in bloom (5: the beds overflow). Each later look eases in from the one before.
+   */
+  setFountainLook(machineId: string, look: 'dry' | 'trickle' | 'flowing' | 'lit' | 'bloom', instant = false) {
+    const v = this.views.get(machineId);
+    if (!v?.fountain || look === 'dry') return;
+    const cap = look === 'trickle' ? FOUNTAIN_LOOK.trickle : 1;
+    v.fountainCap = cap;
+    if (!v.root.tags.has('awake')) {
+      this.applyCoreState(v, 'awake', instant);
+    } else {
+      const f = v.fountain;
+      const k0 = f.k;
+      this.tweens.add(instant ? 0.01 : 1.6, (k) => this.fountainWake(v, k0 + (cap - k0) * k));
+    }
+    const lit = look === 'lit' || look === 'bloom';
+    const halo = look === 'bloom' ? FOUNTAIN_LOOK.bloomHalo : lit ? FOUNTAIN_LOOK.litHalo : 1;
+    const lush = look === 'bloom' ? FOUNTAIN_LOOK.bloomBeds : 1;
+    this.tweens.add(instant ? 0.01 : 1.8, (k) => {
+      const f = v.fountain!;
+      const h = 0.62 * Math.max(0.0001, f.k) * (1 + (halo - 1) * k);
+      f.halo.setLocalScale(h, h, h);
+      const b = Math.max(0.0001, f.k) * (1 + (lush - 1) * k);
+      f.lush.setLocalScale(b, b, b);
+      if (lit && v.coreMat) {
+        v.coreMat.emissiveIntensity = 0.85 + (FOUNTAIN_LOOK.litGlow - 0.85) * k;
+        v.coreMat.update();
+        f.trim.emissive = new pc.Color().lerp(new pc.Color(0, 0, 0), color(PALETTE.gold), FOUNTAIN_LOOK.trimGlow * k);
+        f.trim.update();
+      }
+    });
+    if (v.batched) this.batch(v);
+  }
+
   setCoreState(state: 'dormant' | 'ready' | 'awake', instant = false, roofId = GROUND) {
     const v = this.coreView(roofId);
     if (v) this.applyCoreState(v, state, instant);
@@ -1683,7 +1733,7 @@ export class MachineVisuals {
         v.coreMat!.emissive = new pc.Color().lerp(lit, color(PALETTE.leafFin), k);
         v.coreMat!.emissiveIntensity = 0.85;
         v.coreMat!.update();
-        this.fountainWake(v, k0 + (1 - k0) * k);
+        this.fountainWake(v, (k0 + (1 - k0) * k) * (v.fountainCap ?? 1));
       }, { done: () => (f.dry.enabled = false) });
       return;
     }
