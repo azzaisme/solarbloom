@@ -32,13 +32,27 @@ export class ChargerSystem {
     return typeof c.value === 'number' && typeof c.max === 'number' ? c.value >= c.max - 1e-9 : true;
   }
 
-  /** The charger bloombot stands on, if any. */
+  /**
+   * The charger bloombot is sitting at, if any: standing on its tile or right beside it (a machine's tile can't be
+   * walked onto, so bloombot sits at the pad's edge). The nearest pad wins.
+   */
   docked(): MachineData | undefined {
     const b = this.sim.bot;
     if (!b) return undefined;
-    const x = Math.floor(b.x);
-    const z = Math.floor(b.z);
-    return this.sim.machinesOfType('charger').find((m) => m.roofId === b.roofId && x >= m.x && x < m.x + m.size && z >= m.z && z < m.z + m.size);
+    let best: MachineData | undefined;
+    let bestD = Infinity;
+    for (const m of this.sim.machinesOfType('charger')) {
+      if (m.roofId !== b.roofId) continue;
+      // distance from bloombot to the pad's footprint (0 inside it)
+      const dx = Math.max(m.x - b.x, 0, b.x - (m.x + m.size));
+      const dz = Math.max(m.z - b.z, 0, b.z - (m.z + m.size));
+      const d = Math.hypot(dx, dz);
+      if (d <= POWER.charger.reach + 1e-9 && d < bestD) {
+        best = m;
+        bestD = d;
+      }
+    }
+    return best;
   }
 
   /** Is this charger topping bloombot up (docked, and not yet full)? */
