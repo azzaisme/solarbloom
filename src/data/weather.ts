@@ -11,7 +11,7 @@ export const WEATHER_KINDS: readonly WeatherKind[] = ['sunny', 'cloudy', 'rain',
 export interface WeatherEffects {
   /** share of solar output (times the time of day) */
   solar: number;
-  /** wind turbine share, 0 … 1 */
+  /** wind turbine share, 0 … 1: turbines turn only on windy days and in storms (E23.3 uses it as given) */
   wind: number;
   /** rain falling: water into ponds and reservoirs, and planters watered, in units of a day's steady rain (0 = dry) */
   rain: number;
@@ -36,12 +36,12 @@ export interface WeatherEffects {
 }
 
 export const WEATHER: Record<WeatherKind, WeatherEffects> = {
-  sunny: { solar: 1, wind: 0.15, rain: 0, planterDrying: 1.5, evaporation: 0.05, bloomSpeed: 1, gatherBonus: 1, blowsInSalvage: false, lightning: 0, view: 1, fogFinds: false, overcast: 0 },
-  cloudy: { solar: 0.8, wind: 0.3, rain: 0, planterDrying: 1, evaporation: 0, bloomSpeed: 1, gatherBonus: 1, blowsInSalvage: false, lightning: 0, view: 1, fogFinds: false, overcast: 0.45 },
-  rain: { solar: 0.35, wind: 0.3, rain: 1, planterDrying: 0, evaporation: 0, bloomSpeed: 1.5, gatherBonus: 1, blowsInSalvage: false, lightning: 0, view: 0.8, fogFinds: false, overcast: 0.7 },
+  sunny: { solar: 1, wind: 0, rain: 0, planterDrying: 1.5, evaporation: 0.05, bloomSpeed: 1, gatherBonus: 1, blowsInSalvage: false, lightning: 0, view: 1, fogFinds: false, overcast: 0 },
+  cloudy: { solar: 0.8, wind: 0, rain: 0, planterDrying: 1, evaporation: 0, bloomSpeed: 1, gatherBonus: 1, blowsInSalvage: false, lightning: 0, view: 1, fogFinds: false, overcast: 0.45 },
+  rain: { solar: 0.35, wind: 0, rain: 1, planterDrying: 0, evaporation: 0, bloomSpeed: 1.5, gatherBonus: 1, blowsInSalvage: false, lightning: 0, view: 0.8, fogFinds: false, overcast: 0.7 },
   wind: { solar: 0.9, wind: 0.85, rain: 0, planterDrying: 1.2, evaporation: 0, bloomSpeed: 1, gatherBonus: 2, blowsInSalvage: false, lightning: 0, view: 1, fogFinds: false, overcast: 0.2 },
   storm: { solar: 0, wind: 1, rain: 2, planterDrying: 0, evaporation: 0, bloomSpeed: 1.25, gatherBonus: 1.5, blowsInSalvage: true, lightning: 2, view: 0.65, fogFinds: false, overcast: 1 },
-  fog: { solar: 0.6, wind: 0.05, rain: 0, planterDrying: 0.7, evaporation: 0, bloomSpeed: 1, gatherBonus: 1, blowsInSalvage: false, lightning: 0, view: 0.32, fogFinds: true, overcast: 0.85 },
+  fog: { solar: 0.6, wind: 0, rain: 0, planterDrying: 0.7, evaporation: 0, bloomSpeed: 1, gatherBonus: 1, blowsInSalvage: false, lightning: 0, view: 0.32, fogFinds: true, overcast: 0.85 },
 };
 
 /** How often each kind comes up (weights). Day 1 is always sunny: the first morning is a gentle one. */

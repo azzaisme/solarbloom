@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
+import type { MachineData } from '../src/core/types';
 import { DAY_SECONDS, gameDays } from '../src/data/time';
 import { WEATHER, WEATHER_KINDS, type WeatherKind } from '../src/data/weather';
 import { Sim } from '../src/gameplay/Sim';
@@ -64,6 +65,10 @@ describe('E23.7.2.1: weather effects (every row in data)', () => {
       return n;
     };
     expect(ticks('rain')).toBeLessThan(ticks('sunny'));
+  });
+
+  it('turbines turn only on windy days and in storms', () => {
+    for (const k of WEATHER_KINDS) expect(WEATHER[k].wind > 0, k).toBe(k === 'wind' || k === 'storm');
   });
 
   it('wind: turbines spin; blown leaves make biomass easy to gather', () => {
@@ -132,29 +137,52 @@ describe('E23.7.2.2: the forecast', () => {
 });
 
 describe('E23.7.2.3: storms', () => {
-  it('a storm blows in fresh salvage and lightning trips a pole, and nothing is lost', { timeout: 60_000 }, () => {
+  it('a storm blows salvage in and lightning trips real poles; nothing is lost, and one reset each brings the power back', { timeout: 120_000 }, () => {
     const sim = oldSim(11);
-    let tripped = 0;
-    // the real grid (E23.3) is on the sim; only its trip is watched here
-    (sim.power as unknown as { trip(rng: { int(a: number, b: number): number }): string }).trip = (rng) => `pole${++tripped}:${rng.int(0, 9)}`;
-    const seen: string[] = [];
-    sim.bus.on('weather.storm', () => seen.push('storm'));
-    sim.bus.on('weather.lightning', (e) => seen.push(`bolt:${e.poleId}`));
-    // something to lose: restored ground, a machine, the backpack and the store
+    // a small real grid (E23.3): a generator, two poles and a pump at the far end
+    sim.power.skyOverride = () => ({ sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 });
+    sim.power.register('gen', { source: () => 10 });
+    sim.power.register('pump', { consumer: { shed: 'pump', draw: 3 } });
+    const put = (type: string, x: number, z: number): MachineData => {
+      const m = { id: sim.newId('m'), type, roofId: GROUND, x, z, size: 1, boostUntil: 0, timer: 0, charge: 0 } as unknown as MachineData;
+      sim.state.machines.push(m);
+      return m;
+    };
+    put('gen', 20, 20);
+    const a = put('relay', 21, 20);
+    const b = put('relay', 32, 20);
+    const pump = put('pump', 33, 21);
+    sim.power.tick(1);
+    expect(sim.power.isPowered(pump)).toBe(true);
+    const bolts: (string | undefined)[] = [];
+    let storms = 0;
+    sim.bus.on('weather.storm', () => storms++);
+    sim.bus.on('weather.lightning', (e) => bolts.push(e.poleId));
+    // something to lose: restored ground, machines, the backpack and the store, a salvage pile
     const t = sim.grid.get(GROUND, 7, 4)!;
     sim.restoration.beginGrowth(t, 'pulse', 1);
     sim.advance(2);
     sim.inventory.add('scrap', 5);
+    sim.salvage.salvage('pk-s1');
     const before = { machines: sim.state.machines.map((m) => m.id).sort(), restored: t.ground, scrap: sim.inventory.count('scrap'), store: JSON.stringify(sim.state.salvage!.store) };
     sim.weather.forceForTest('storm', gameDays(1));
-    sim.advance(gameDays(1));
-    expect(seen[0]).toBe('storm');
-    expect(seen.filter((x) => x.startsWith('bolt')).length).toBe(WEATHER.storm.lightning);
-    expect(tripped).toBe(WEATHER.storm.lightning);
+    sim.advance(gameDays(0.93)); // the rest of the stormy day (its strikes fall between 0.1 and 0.9 of it)
+    expect(storms).toBe(1);
+    // two strikes, each tripping one working pole: both poles are down and the pump is dark
+    expect(bolts.length).toBe(WEATHER.storm.lightning);
+    expect([...bolts].sort()).toEqual([a.id, b.id].sort());
+    expect(sim.power.isTripped(a) && sim.power.isTripped(b)).toBe(true);
+    expect(sim.power.isPowered(pump)).toBe(false);
+    // nothing lost or destroyed
     expect(sim.state.machines.map((m) => m.id).sort()).toEqual(before.machines);
     expect(t.ground).toBe(before.restored);
     expect(sim.inventory.count('scrap')).toBe(before.scrap);
     expect(JSON.stringify(sim.state.salvage!.store)).toBe(before.store);
+    // one press each: the power comes back
+    expect(sim.power.reset(a)).toBe(true);
+    expect(sim.power.reset(b)).toBe(true);
+    sim.power.tick(1);
+    expect(sim.power.isPowered(pump)).toBe(true);
   });
 
   it('the weather is the same for the same seed (saves stay byte-identical)', { timeout: 60_000 }, () => {
