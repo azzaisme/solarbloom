@@ -1,4 +1,4 @@
-import { big, Decimal } from '../core/Big';
+import { big } from '../core/Big';
 import { PARK } from '../core/Areas';
 import { Economy } from '../core/Economy';
 import { GROUND } from '../core/GameState';
@@ -111,12 +111,11 @@ export class DroneRoles {
     return role === 'restorer' || !!hub.roles?.includes(role);
   }
 
-  /** One-time refit price for this hub (free when owned). The biomass part grows per other hub refitted to the role. */
+  /** One-time refit price for this hub (free when owned). The same for every hub (E23.1.5: no price grows). */
   refitPrice(hub: MachineData, role: DroneRole): Cost {
     if (this.owns(hub, role)) return {};
     const base = TUNING.drone.roles.refit[role];
-    const others = this.sim.machinesOfType('droneHub').filter((h) => h !== hub && this.owns(h, role)).length;
-    const out: Cost = { biomass: big(base.biomass).mul(Decimal.pow(TUNING.drone.roles.refitGrowth, others)).ceil() };
+    const out: Cost = { biomass: big(base.biomass) };
     for (const k of ['energy', 'water'] as const) {
       const v = base[k];
       if (!v) continue;

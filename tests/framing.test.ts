@@ -58,7 +58,7 @@ describe('E19.4.3: the potter-about pace is presentation only', () => {
       onSecond: (sim) => {
         last = sim;
         shown.push(!!advisorStep(sim, potter));
-        sim.advisor.nextPurchase();
+        sim.advisor.suggest();
         sim.advisor.nearestFrontier();
       },
     });
@@ -169,7 +169,7 @@ describe('E19.4.1: photo mode', () => {
     expect(hud.shots).toBe(1);
     photo.action('photo'); // the photo key leaves too
     expect(photo.frozen).toBe(false); // never frozen outside photo mode
-    photo.action('upgrades');
+    photo.action('map');
     expect(photo.active).toBe(false);
   });
 

@@ -1,6 +1,5 @@
 import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
-import { meetSpecialty } from './city-helpers';
 import { SaveService } from '../src/app/SaveService';
 import { AreaMap, PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
@@ -137,7 +136,6 @@ describe('areas: the fog (City 03.2–03.4)', () => {
     const d0 = sim.areas.density(id);
     restoreArea(sim, id);
     expect(sim.areas.density(id)).toBeLessThan(d0);
-    meetSpecialty(sim, id);
     sim.areas.clear(id);
     expect(sim.areas.density(id)).toBe(0);
     expect(sim.areas.fog(id)).toBe('cleared');
@@ -189,7 +187,6 @@ describe('areas: reachability (City 03.5)', () => {
         revealedNow.length = 0;
         const id = frontier[Math.floor(rng.next() * frontier.length)];
         restoreArea(sim, id, TUNING.city.clearShare, true);
-        meetSpecialty(sim, id);
         expect(sim.areas.clear(id)).toBe(true);
         cleared++;
       }
