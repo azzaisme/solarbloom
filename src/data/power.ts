@@ -25,10 +25,21 @@ export const POWER = {
   },
   /** Solar panel (E23.3.2.1): output at full sun. Cloud takes −20%; none at night. */
   solar: { output: 4, cloudFactor: 0.8 },
-  /** Wind turbine (E23.3.2.2): output at full wind. */
-  wind: { output: 10 },
+  /**
+   * Wind turbine (E23.3.2.2): output at full wind (a storm). On flat ground a turbine gets `groundShare` of it;
+   * each terrace level adds `perLevel` (rooftops count as `roofLevel`), up to the full output.
+   */
+  wind: { output: 10, groundShare: 0.5, perLevel: 0.25, roofLevel: 2 },
+  /**
+   * Region strengths (#377, E23.8.1): a matching machine in its region makes about 1.5×. Provisional until E23.8
+   * owns the table (its `sim.regions?.strength?.(m, kind)` wins when present).
+   */
+  regionBoost: 1.5,
+  /** Wind (0..1) while there is no weather system yet (before E23.7 lands). */
+  fallbackWind: 0.4,
+  regionStrengths: { wind: ['saltwind', 'terraces', 'spireHeights'], solar: ['glasshouse', 'observatory'] } as Record<'wind' | 'solar', string[]>,
   /** Battery (E23.3.2.1): stores surplus and covers deficits, up to `rate` either way. */
-  battery: { capacity: 4000, rate: 20 },
+  battery: { capacity: 6000, rate: 20 }, // a night (~0.4 day, 1150 s) of a pump and a lamp is ~4600 W·s
   /** Starting draws per shed class (consumers may override with their own draw). */
   draw: { lamp: 0.5, pump: 3, helper: 4, charger: 6 } satisfies Record<ShedClass, number>,
 };

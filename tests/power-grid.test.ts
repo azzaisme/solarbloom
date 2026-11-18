@@ -196,3 +196,68 @@ describe('E23.3.1 power grid', () => {
 function tick(sim: Sim) {
   sim.power.tick(1);
 }
+
+describe('E23.3.2 sources and storage', () => {
+  it('a small home grid of solar and a battery runs a lamp and a pump through a whole day and night', () => {
+    const { sim, put } = world();
+    const clock = { f: 0.3 };
+    (sim as unknown as { clock: { dayFraction: () => number } }).clock = { dayFraction: () => clock.f };
+    sim.power.skyOverride = undefined;
+    for (let i = 0; i < 3; i++) put('solar', i, 0);
+    put('battery', 3, 0);
+    const pump = put('pump', 4, 0);
+    const lamp = put('lamp', 5, 0);
+    sim.power.register('pump', { consumer: { shed: 'pump', draw: 3 } });
+    sim.power.register('lamp', { consumer: { shed: 'lamp', draw: 0.5, dims: true } });
+    const day = POWER.daySeconds;
+    let dark = 0;
+    // Two full days from mid-morning, in 1 s steps.
+    for (let s = 0; s < 2 * day; s++) {
+      clock.f = (0.3 + s / day) % 1;
+      sim.power.tick(1);
+      if (!sim.power.isPowered(pump) || sim.power.level(lamp) < 0.99) dark++;
+    }
+    expect(dark).toBe(0);
+  });
+
+  it('turbine output follows the weather, and is stronger on high ground and in windy regions', () => {
+    const { sim, put } = world();
+    sim.power.skyOverride = undefined;
+    const t = put('windTurbine', 0, 0);
+    const weather = { kind: 'clear' };
+    (sim as unknown as { weather: { current: () => string } }).weather = { current: () => weather.kind };
+    expect(sim.power.output(t)).toBe(0);
+    weather.kind = 'windy';
+    const windy = sim.power.output(t);
+    expect(windy).toBeGreaterThan(0);
+    weather.kind = 'storm';
+    const storm = sim.power.output(t);
+    expect(storm).toBeGreaterThan(windy);
+    // Flat ground gives half; three terrace levels up gives the full output.
+    expect(storm).toBeCloseTo(POWER.wind.output * POWER.wind.groundShare);
+    sim.grid.get(GROUND, 0, 0)!.level = 3;
+    expect(sim.power.output(t)).toBeCloseTo(POWER.wind.output);
+    // E23.8's region strengths win when present.
+    (sim as unknown as { regions: { strength: () => number } }).regions = { strength: () => 1.5 };
+    expect(sim.power.output(t)).toBeCloseTo(POWER.wind.output * 1.5);
+  });
+
+  it('batteries are on the grid by default and keep their charge in the machine (saved)', () => {
+    const { sim, put } = world();
+    put('solar', 0, 0);
+    const b = put('battery', 1, 0);
+    sim.power.tick(10);
+    expect(b.charge).toBeCloseTo(Math.min(POWER.battery.rate, POWER.solar.output) * 10);
+    expect(JSON.parse(JSON.stringify(b)).charge).toBe(b.charge);
+  });
+
+  it('Bloom Relays are poles: networks form across them, and their chain links are unchanged', () => {
+    const { sim, put } = world();
+    const a = put('relay', 0, 0);
+    const b = put('relay', 10, 0);
+    const s = put('solar', 1, 0);
+    const p = put('pump', 11, 0);
+    expect(sim.power.networkOf(s)).toBe(sim.power.networkOf(p));
+    expect(sim.relays.linked(a).map((m) => m.id)).toEqual([b.id]);
+  });
+});

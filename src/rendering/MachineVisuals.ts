@@ -7,6 +7,7 @@ import type { Sim } from '../gameplay/Sim';
 import { color, glow, mat, PALETTE, uniqueMat } from './Materials';
 import { group, shape, vshape, type ShapeOpts } from './Shapes';
 import { TUNING } from '../data/tuning';
+import { POWER } from '../data/power';
 import { SLAB_TOP } from './SceneBuilder';
 import { ease, type Tweens } from './Tween';
 import { foliageMaterial, FoliageBuilder, treeMesh } from './Foliage';
@@ -58,6 +59,8 @@ interface MachineView {
   /** Phase 5 E16: really working right now (refreshed twice a second), and when its next active wisp is due */
   running?: boolean;
   wispAt?: number;
+  /** E23.3.2: a wind turbine's rotor angle (degrees), turned by its output */
+  turn?: number;
   /** Look 3.12 Core gazebo: the vines on its arch (dry while dormant), their leaf material, and the flowers */
   vines?: pc.Entity;
   vineMat?: pc.StandardMaterial;
@@ -104,6 +107,9 @@ const LANDMARK_MODELS: Record<string, [string, number]> = {
 
 const orbOn = () => mat(PALETTE.orbLit, { emissive: PALETTE.coreGlow, emissiveIntensity: 1.6 });
 const orbOff = () => mat(PALETTE.orbDark, { gloss: 0.6 });
+/** E23.3.2: a battery's charge cells (lit mint when full, dark glass when empty). */
+const cellOn = () => mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1.3 });
+const cellOff = () => mat(PALETTE.orbDark, { gloss: 0.6 });
 // matte enough to read navy while tilted toward the sun (glossy, it mirrored the sky and read white)
 const panelMat = () => mat(PALETTE.panel, { gloss: 0.45, metal: 0 });
 // boosted: the cells keep their blue with a warm glow (at 0.6 the gold washed them out to near white inside the cream frame)
@@ -555,6 +561,12 @@ export class MachineVisuals {
         break;
       case 'cultivator': // Look 6.9: the dock (its tillers are drawn by CultivatorVisuals)
         cultivatorDock(v.body);
+        break;
+      case 'battery':
+        this.battery(v);
+        break;
+      case 'windTurbine':
+        this.windTurbine(v);
         break;
     }
     this.applyModel(v);
@@ -1489,6 +1501,65 @@ export class MachineVisuals {
     }
   }
 
+  /**
+   * E23.3.2.1 Battery: a squat cream cabinet on a bevelled plinth with a glass front. Behind the glass a stack of
+   * four cells lights up mint from the bottom as it fills (the stored share, read from the grid); terminals and a
+   * cable on top, a gold trim band.
+   */
+  private battery(v: MachineView) {
+    // turned so the window faces the camera (which looks from +x +z)
+    const b = group(v.body, 'cabinet');
+    b.setLocalEulerAngles(0, 45, 0);
+    part(b, rbox(0.66, 0.08, 0.5, 0.03), creamSeam(), { pos: [0, 0.04, 0], shadow: true });
+    part(b, rbox(0.56, 0.74, 0.42, 0.07), cream(), { pos: [0, 0.45, 0], shadow: true });
+    part(b, rbox(0.565, 0.02, 0.425, 0.008), gold(), { pos: [0, 0.76, 0] });
+    part(b, rbox(0.565, 0.014, 0.425, 0.006), creamSeam(), { pos: [0, 0.18, 0] });
+    // cells sit behind a glass pane on the front face
+    const face = group(b, 'face', [0, 0, 0.21]);
+    part(face, rbox(0.34, 0.52, 0.02, 0.02), darkMetal(), { pos: [0, 0.46, 0] });
+    v.orbs = [];
+    for (let i = 0; i < 4; i++) v.orbs.push(part(face, rbox(0.26, 0.09, 0.03, 0.02), cellOff(), { pos: [0, 0.27 + i * 0.125, 0.01] }));
+    part(face, rbox(0.34, 0.52, 0.01, 0.02), glassMat(), { pos: [0, 0.46, 0.03] });
+    // terminals: one gold, one dark, with a cable looping down the back
+    part(b, rcyl(0.045, 0.82, 0.9, 0.01, 0.005, 10), gold(), { pos: [-0.14, 0, 0] });
+    part(b, rcyl(0.045, 0.82, 0.9, 0.01, 0.005, 10), darkMetal(), { pos: [0.14, 0, 0] });
+    part(b, tube('battCable', bezier([0.14, 0.88, 0], [0.24, 1.0, -0.12], [0.3, 0.3, -0.26], 7), 0.016, { sides: 6 }), cable(), {});
+    bolts(b, [[-0.24, 0.7, 0.215], [0.24, 0.7, 0.215], [-0.24, 0.22, 0.215], [0.24, 0.22, 0.215]], 0.025, gold());
+    v.light = part(b, ball(5, 8), mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1 }), { pos: [0.22, 0.82, 0.12], scale: 0.05 });
+  }
+
+  /**
+   * E23.3.2.2 Wind Turbine: a slender cream mast on a round base, a rounded nacelle with a gold band and three
+   * long cream blades on a hub that turn with the turbine's output (still when there is no wind).
+   */
+  private windTurbine(v: MachineView) {
+    const b = v.body;
+    part(b, rcyl(0.3, 0, 0.12, 0.035, 0.01, 18), cream(), { shadow: true });
+    part(b, rcyl(0.305, 0.05, 0.062, 0.004, 0.004, 18), creamSeam(), {});
+    bolts(b, [0, 1, 2, 3].map((i) => [Math.cos(i * 1.571 + 0.4) * 0.24, 0.12, Math.sin(i * 1.571 + 0.4) * 0.24] as [number, number, number]), 0.03, gold());
+    part(b, latheAuto('windMast', [[0.09, 0.1], [0.09, 0.16], [0.07, 0.24], [0.04, 2.1], [0.04, 2.1], [0, 2.1]], 10), cream(), { shadow: true });
+    for (const y of [0.6, 1.2]) part(b, rcyl(0.06, y, y + 0.03, 0.01, 0.01, 10), metal(), {});
+    // the head faces +x +z (towards the camera, so the blades read)
+    const head = group(b, 'head', [0, 2.12, 0]);
+    head.setLocalEulerAngles(0, 45, 0);
+    part(head, latheAuto('windNacelle', [[0, -0.28], [0.08, -0.26], [0.1, -0.1], [0.1, 0.14], [0.07, 0.24], [0, 0.27]], 12), cream(), { rot: [90, 0, 0], shadow: true });
+    part(head, ring(16, 5), gold(), { pos: [0, 0, 0.05], rot: [90, 0, 0], scale: [0.21, 0.05, 0.21] });
+    part(head, rbox(0.02, 0.16, 0.14, 0.01), creamSeam(), { pos: [0, 0.06, -0.33] }); // tail fin
+    const rotor = group(head, 'rotor', [0, 0, 0.29]);
+    part(rotor, ball(6, 8), gold(), { scale: [0.12, 0.12, 0.14] });
+    for (let i = 0; i < 3; i++) {
+      const arm = group(rotor, 'blade', [0, 0, 0.02]);
+      arm.setLocalEulerAngles(0, 0, i * 120);
+      part(arm, latheAuto('windBlade', [[0, 0.04], [0.035, 0.08], [0.05, 0.3], [0.035, 0.7], [0.012, 0.86], [0, 0.88]], 6), cream(), { scale: [1, 1, 0.35], shadow: true });
+    }
+    v.spin.push(rotor);
+    v.turn = 0;
+    for (let i = 0; i < 3; i++) {
+      const a = i * 2.1;
+      v.bob.push(part(b, ball(4, 6), mat(PALETTE.flower[i % PALETTE.flower.length]), { pos: [Math.cos(a) * 0.22, 0.16, Math.sin(a) * 0.22], scale: [0.08, 0.05, 0.08] }));
+    }
+  }
+
   /** Reservoir Overflow: the basin spills over with a splash. */
   splash(id: string) {
     const v = this.views.get(id);
@@ -1919,6 +1990,28 @@ export class MachineVisuals {
           const s = v.running ? 0.07 + 0.03 * Math.max(0, Math.sin(t * 4)) : 0.065 + 0.005 * Math.sin(t * 1.2);
           v.light!.setLocalScale(s, s, s);
           if (!rm && v.running) v.rings![0].setLocalEulerAngles(0, t * 30, 0);
+          break;
+        }
+        case 'battery': {
+          // The cells fill from the bottom with the stored share.
+          const { stored, capacity } = this.sim.power.stored(v.m);
+          const lit = capacity > 0 ? Math.ceil((stored / capacity) * v.orbs!.length - 0.05) : 0;
+          v.orbs!.forEach((o, i) => {
+            const want = i < lit ? cellOn() : cellOff();
+            if (matOf(o) !== want) setMat(o, want);
+          });
+          const flow = this.sim.power.networkOf(v.m)?.batteryFlow ?? 0;
+          const s = 0.05 + (flow > 1e-6 && !rm ? 0.012 * (1 + Math.sin(t * 3)) : 0);
+          v.light!.setLocalScale(s, s, s);
+          break;
+        }
+        case 'windTurbine': {
+          // Blades turn with the output: still in calm air, brisk in a storm.
+          const out = this.sim.power.output(v.m) / POWER.wind.output;
+          if (!rm) {
+            v.turn = ((v.turn ?? 0) + dt * 260 * out) % 360;
+            v.spin[0]?.setLocalEulerAngles(0, 0, v.turn);
+          }
           break;
         }
         case 'reservoirGarden': {
