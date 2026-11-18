@@ -76,8 +76,9 @@ export class PowerGrid {
   skyOverride?: () => PowerSky;
 
   constructor(private sim: Sim) {
-    this.register('relay', { pole: { range: (m, s) => s.relays.range(m) } });
-    this.register('solar', { source: (_m, _s, sky) => POWER.solar.output * sky.solar });
+    // E23.6.2: Longer lines and Clearer panels (research) stretch pole range and solar output
+    this.register('relay', { pole: { range: (m, s) => s.relays.range(m) * (1 + (s.research?.effect('poleReach') ?? 0)) } });
+    this.register('solar', { source: (_m, s, sky) => POWER.solar.output * sky.solar * (1 + (s.research?.effect('solarYield') ?? 0)) });
   }
 
   /** Adds (or merges into) a machine type's role. Types need not exist yet (other sub-epics add them). */
@@ -197,7 +198,13 @@ export class PowerGrid {
   // ---- networks ----
 
   private capacityOf(m: MachineData, b: NonNullable<PowerRole['battery']>): number {
-    return typeof b.capacity === 'function' ? b.capacity(m) : b.capacity;
+    const base = typeof b.capacity === 'function' ? b.capacity(m) : b.capacity;
+    return base * (1 + (this.sim.research?.effect('batteryStore') ?? 0)); // E23.6.2: Deeper batteries
+  }
+
+  /** E23.6.2: is any machine type a battery yet (so research can offer Deeper batteries)? */
+  hasBatteries(): boolean {
+    return [...this.roles.values()].some((r) => !!r.battery);
   }
 
   private centre(m: MachineData): [number, number] {

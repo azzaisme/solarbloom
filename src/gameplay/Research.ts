@@ -2,8 +2,7 @@ import { GROUND } from '../core/GameState';
 import type { ResearchState, SalvageState } from '../core/types';
 import { KEEPERS, PARK_SET, REGIONS } from '../data/oldcity';
 import { itemDef } from '../data/items';
-import { UPGRADE_BY_ID } from '../data/upgrades';
-import { GRANTS, PROJECTS, RESEARCH, RESEARCH_UPGRADES, type Find, type ProjectDef, type ResearchUpgradeDef } from '../data/research';
+import { PROJECTS, RESEARCH, RESEARCH_UPGRADES, type Find, type ProjectDef, type ResearchUpgradeDef, type UpgradeSystemId } from '../data/research';
 import type { Sim } from './Sim';
 
 /** E23.3's grid, read optionally until it lands (`isPowered` is true for anything the grid doesn't power). */
@@ -17,6 +16,8 @@ export const STATION = { id: 'research-station', type: 'researchStation', roofId
 /** A find's key in the save. */
 export function findKey(f: Find): string {
   if ('material' in f) return `material:${f.material}`;
+  if ('crop' in f) return `crop:${f.crop}`;
+  if ('creature' in f) return `creature:${f.creature}`;
   if ('keeper' in f) return `keeper:${f.keeper}`;
   if ('tech' in f) return `tech:${f.tech}`;
   return `project:${f.project}`;
@@ -32,12 +33,7 @@ export function findKey(f: Find): string {
  * Other sub-epics read upgrade levels with `sim.research.level(id)` (charge, sprint, pulse, poles, pumps, drones…).
  */
 export class Research {
-  constructor(private sim: Sim) {
-    // a machine built after a level was bought gets that level too
-    sim.bus.on('machine.built', () => {
-      for (const id of Object.keys(GRANTS)) if (this.level(id)) this.grant(id, this.level(id));
-    });
-  }
+  constructor(private sim: Sim) {}
 
   private get sv(): SalvageState | undefined {
     return this.sim.state.salvage;
@@ -85,6 +81,8 @@ export class Research {
       const m = f.material;
       return this.sim.inventory.count(m) > 0 || this.sim.inventory.stored(m) > 0 || !!sv.seen?.includes(`mat:${m}`) || m === 'scrap' || m === 'seeds';
     }
+    if ('crop' in f) return !!(sv as { crops?: string[] }).crops?.includes(f.crop);
+    if ('creature' in f) return this.sim.state.fauna?.[f.creature] !== undefined;
     if ('keeper' in f) {
       const k = KEEPERS.find((x) => x.region === f.keeper);
       const st = k && sv.keepers[k.id];
@@ -97,6 +95,8 @@ export class Research {
   /** A find's name, in plain words. */
   findName(f: Find): string {
     if ('material' in f) return itemDef(f.material).name;
+    if ('crop' in f) return `${f.crop[0].toUpperCase()}${f.crop.slice(1)} seeds`;
+    if ('creature' in f) return { butterflies: 'Butterflies', birds: 'Songbirds', koi: 'Koi' }[f.creature];
     if ('keeper' in f) return KEEPERS.find((x) => x.region === f.keeper)?.name ?? f.keeper;
     if ('tech' in f) {
       const r = REGIONS.find((x) => x.caches.some((c) => c.id === f.tech));
@@ -210,10 +210,38 @@ export class Research {
 
   // ───────────── upgrades (bought at the crafting table) ─────────────
 
-  /** Upgrades research has opened, in data order. */
+  /** Is an upgrade's system in the game (so a level bought does something)? */
+  systemReady(needs: UpgradeSystemId): boolean {
+    const s = this.sim as unknown as { charge?: unknown; power?: { hasBatteries?(): boolean }; water?: unknown; farm?: { researchReady?: boolean }; couriers?: unknown };
+    switch (needs) {
+      case 'always':
+      case 'drones':
+        return true;
+      case 'charge':
+        return !!s.charge;
+      case 'power':
+        return !!s.power;
+      case 'batteries':
+        return !!s.power?.hasBatteries?.();
+      case 'water':
+        return !!(s.water as { researchReady?: boolean } | undefined)?.researchReady;
+      case 'farm':
+        return !!s.farm?.researchReady;
+      case 'couriers':
+        return !!s.couriers;
+    }
+  }
+
+  /** Upgrades research has opened whose system reads them, in data order. */
   upgrades(): ResearchUpgradeDef[] {
     const open = new Set(PROJECTS.filter((p) => 'upgrade' in p.gives && this.done(p.id)).map((p) => (p.gives as { upgrade: string }).upgrade));
-    return RESEARCH_UPGRADES.filter((u) => open.has(u.id));
+    return RESEARCH_UPGRADES.filter((u) => open.has(u.id) && this.systemReady(u.needs));
+  }
+
+  /** What an upgrade's levels add up to now (its level × what one level does), for the system that reads it. */
+  effect(id: string): number {
+    const u = this.upgradeDef(id);
+    return u ? this.level(id) * u.per : 0;
   }
 
   upgradeDef(id: string): ResearchUpgradeDef | undefined {
@@ -243,31 +271,13 @@ export class Research {
     return lvl + 1;
   }
 
-  /**
-   * Brings an existing upgrade effect (GRANTS) up to `level`: through E23.1.5's `sim.upgrades.grant` when it is
-   * there, else by setting the level where the effect getters read it (the state, or each machine of its type).
-   */
-  private grant(id: string, level: number) {
-    const target = GRANTS[id];
-    const def = target && UPGRADE_BY_ID[target];
-    if (!def) return;
-    const lvl = Math.min(level, def.maxLevel);
-    const ups = this.sim.upgrades as unknown as { grant?: (id: string, machineId?: string) => number };
-    const machines = def.machine ? this.sim.machinesOfType(def.machine) : [];
-    if (ups.grant) {
-      if (def.machine) for (const m of machines) while ((m.upg?.[target] ?? 0) < lvl && ups.grant(target, m.id)) void 0;
-      else while (this.sim.upgrades.level(target) < lvl && ups.grant(target)) void 0;
-    } else if (def.machine) for (const m of machines) m.upg = { ...m.upg, [target]: Math.max(m.upg?.[target] ?? 0, lvl) };
-    else this.sim.state.upgrades[target] = Math.max(this.sim.upgrades.level(target), lvl);
-    this.sim.upgrades.version++;
-  }
-
-  /** Hands a level to the systems that keep their own numbers (E23.2's charge, existing effects). Others read `level(id)`. */
+  /** Hands a level to E23.2.1's charge, which keeps its own numbers. Every other system reads `level` / `effect`. */
   private apply(id: string, level: number) {
-    this.grant(id, level);
-    const charge = (this.sim.state as { charge?: { cells?: number; efficiency?: number } }).charge;
-    if (!charge) return;
-    if (id === 'chargeCells') charge.cells = level;
-    if (id === 'chargeEfficiency') charge.efficiency = level;
+    const s = this.sim as unknown as { charge?: { max: number }; state: { charge?: { value: number; cells?: number; efficiency?: number } } };
+    if (id !== 'chargeCells' && id !== 'chargeEfficiency') return;
+    if (!s.charge) return;
+    const c = (s.state.charge ??= { value: s.charge.max });
+    if (id === 'chargeCells') c.cells = level;
+    else c.efficiency = level;
   }
 }
