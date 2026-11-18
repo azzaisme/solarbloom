@@ -23,10 +23,6 @@ export interface BotAt {
 export class Inventory {
   constructor(private sim: Sim) {}
 
-  /** Old-city rules (the inventory exists)? */
-  get on(): boolean {
-    return !!this.sim.state.salvage;
-  }
 
   private get sv(): SalvageState {
     return this.sim.state.salvage!;
@@ -44,7 +40,6 @@ export class Inventory {
 
   /** The stack limit: 40, then 60, 80 and 120 at fountain tiers 2, 3 and 4; the Pack Frame adds 40. */
   stackLimit(): number {
-    if (!this.on) return 0;
     const tier = Math.min(PACK.stack.length - 1, this.sv.tier);
     return PACK.stack[tier] + (this.sv.blueprints.includes('packFrame') ? PACK.packFrame : 0);
   }
@@ -61,7 +56,7 @@ export class Inventory {
 
   /** Puts units in the backpack; returns how many did not fit (they stay where they were). */
   add(m: MaterialId, n: number): number {
-    if (!this.on || n <= 0) return n;
+    if (n <= 0) return n;
     const fit = Math.min(Math.floor(n), this.room(m));
     if (fit > 0) {
       this.set('pack', m, this.count(m) + fit);
@@ -74,7 +69,7 @@ export class Inventory {
 
   /** Takes units out of the backpack (all or nothing). */
   take(m: MaterialId, n: number): boolean {
-    if (!this.on || n <= 0) return n <= 0;
+    if (n <= 0) return n <= 0;
     if (this.count(m) < n) return false;
     this.set('pack', m, this.count(m) - n);
     this.sim.bus.emit('pack.changed', { material: m, delta: -n });
@@ -85,9 +80,9 @@ export class Inventory {
     return this.count(m) >= n;
   }
 
-  /** Puts units straight into the store (Reclaimers, overflow from refunds). */
+  /** Puts units straight into the store (overflow from refunds). */
   addToStore(m: MaterialId, n: number) {
-    if (!this.on || n <= 0) return;
+    if (n <= 0) return;
     this.set('store', m, this.stored(m) + Math.floor(n));
     this.sim.bus.emit('store.changed', { material: m, delta: Math.floor(n) });
   }
@@ -95,7 +90,7 @@ export class Inventory {
   /** Moves units from the backpack to the store (default: the whole stack). Returns how many moved. */
   deposit(m: MaterialId, n = this.count(m)): number {
     const k = Math.min(Math.floor(n), this.count(m));
-    if (!this.on || k <= 0) return 0;
+    if (k <= 0) return 0;
     this.set('pack', m, this.count(m) - k);
     this.set('store', m, this.stored(m) + k);
     this.sim.bus.emit('pack.changed', { material: m, delta: -k });
@@ -113,7 +108,7 @@ export class Inventory {
   /** Moves units from the store to the backpack, as many as fit (default: a full stack). Returns how many moved. */
   withdraw(m: MaterialId, n = this.stackLimit()): number {
     const k = Math.min(Math.floor(n), this.stored(m), this.room(m));
-    if (!this.on || k <= 0) return 0;
+    if (k <= 0) return 0;
     this.set('store', m, this.stored(m) - k);
     this.set('pack', m, this.count(m) + k);
     this.sim.bus.emit('store.changed', { material: m, delta: -k });
@@ -135,7 +130,7 @@ export class Inventory {
       if (id === PARK || (id && s.areas.fog(id) === 'cleared')) out.push(m);
     }
     for (const m of s.machinesOfType('chest')) out.push(m);
-    if (this.on && this.sv.house >= 1) {
+    if (this.sv.house >= 1) {
       const sh = PARK_SET.shed;
       out.push({ roofId: GROUND, x: sh.x, z: sh.z, size: sh.size });
     }
@@ -170,7 +165,7 @@ export class Inventory {
   }
 
   canPay(cost: MaterialCost, at: BotAt | undefined = this.sim.bot): boolean {
-    return this.on && !this.shortfall(cost, at);
+    return !this.shortfall(cost, at);
   }
 
   /** Pays a cost: from the backpack first, then from the store (only near a way into it). All or nothing. */

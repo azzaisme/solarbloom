@@ -131,7 +131,7 @@ export class BuildSystem {
     return MATERIALS[m].home.includes('park') ? ' — the park' : '';
   }
 
-  /** E21.3: placement: the tier lock, the recipe, the Reclaimer's seam, the chest limit. */
+  /** E21.3: placement: the tier lock, the recipe, the chest limit. */
   check(type: BuildableType, roofId: string, x: number, z: number): PlacementCheck {
     const s = this.sim;
     const def = MACHINES[type];
@@ -142,11 +142,6 @@ export class BuildSystem {
     if (!this.isUnlocked(type)) return fail(`Unlocks at fountain tier ${this.recipeTier(type)}`);
     const roof = s.grid.roof(roofId);
     if (!roof || !roof.unlocked || roof.preview) return fail('This rooftop is not reachable yet');
-    if (type === 'reclaimer') {
-      const r = s.salvage.seamAt(x, z);
-      if (!r) return fail('A Reclaimer stands only on a seam (the marked 2×2 spot in each region)');
-      if (!s.salvage.woken(r)) return fail(`Wake ${r.landmark.name} first: then its seam takes a Reclaimer`);
-    }
     if (type === 'chest' && s.machinesOfType('chest').length >= STORE.maxChests) return fail(`At most ${STORE.maxChests} Storage Chests`);
     if (roofId === GROUND && def.areaTypes) {
       const t = AREA_TYPES[s.areas.info(s.areas.map.areaOfCell(x, z)).type];
@@ -172,7 +167,6 @@ export class BuildSystem {
     if (m.type === 'droneHub') s.drones.removeHub(m.id);
     s.state.machines = s.state.machines.filter((q) => q.id !== m.id);
     machinesRemoved();
-    if (s.state.salvage?.reclaim) delete s.state.salvage.reclaim[m.id];
     if (recipe) s.inventory.refund(recipe);
     s.production.markNear(m.roofId, m.x, m.z, m.size);
     s.production.markDirty();

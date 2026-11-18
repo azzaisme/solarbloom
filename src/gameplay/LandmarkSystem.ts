@@ -17,14 +17,11 @@ export const REWARD_EFFECT = {
  * E21.9 (§8, §9): waking an Old City region's landmark. Bloombot always wakes it by hand: when half the region is
  * restored and its Keeper's second request is done, Interact at the landmark hands over the landmark delivery
  * (a bit at a time is fine). Waking clears the region (helpers may work there, it becomes a travel point and a
- * way into the store, its seam takes a Reclaimer), settles its Keeper, and applies the region's lasting reward.
+ * way into the store, settles its Keeper, and applies the region's lasting reward.
  */
 export class LandmarkSystem {
   constructor(private sim: Sim) {}
 
-  get on(): boolean {
-    return !!this.sim.state.salvage;
-  }
 
   /** Lasting rewards in effect. */
   has(r: RewardId): boolean {
@@ -39,7 +36,7 @@ export class LandmarkSystem {
   /** Why a landmark can't be woken now (undefined: hand over the delivery). */
   problem(regionId: string): string | undefined {
     const r = regionById(regionId);
-    if (!r || !this.on) return 'Nothing to wake here';
+    if (!r) return 'Nothing to wake here';
     const a = this.sim.areas;
     if (a.fog(r.id) === 'cleared') return `The ${r.landmark.name} is awake`;
     const need = a.need(r.id);

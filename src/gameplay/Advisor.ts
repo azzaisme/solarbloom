@@ -1,7 +1,8 @@
 import { PARK } from '../core/Areas';
-import type { MachineData, TileData } from '../core/types';
-import { REGIONS } from '../data/oldcity';
-import { TUNING } from '../data/tuning';
+import type { MachineData, MaterialId, TileData } from '../core/types';
+import { REGIONS, type PileDef } from '../data/oldcity';
+import { allPiles } from '../core/OldCityLayout';
+import { MATERIALS } from '../data/salvage';
 import { AREA_TYPES } from '../data/city';
 import type { Sim } from './Sim';
 
@@ -36,8 +37,8 @@ export interface Frontier {
  * optionally, so the advisor runs before they land and picks each one up once it does.
  */
 interface LoopHandles {
-  /** E23.2.1: bloombot's charge, 0 (empty) … 1 (full). */
-  charge?: { fraction(): number };
+  /** E23.2.1 (ChargeSystem): `low` is true below CHARGE.lowShare; `share` is 0 (empty) … 1 (full). */
+  charge?: { readonly low: boolean; readonly share?: number };
   /** E23.3.1: is this machine getting power right now? */
   power?: { isPowered(m: MachineData): boolean };
   /** E23.4.1: is this area short of water (its land fading)? */
@@ -77,8 +78,7 @@ export class Advisor {
 
   /** E23.2: low on charge → the nearest powered place to rest, else eat something from the backpack. */
   chargeStep(): Suggestion | undefined {
-    const c = this.loop.charge?.fraction();
-    if (c === undefined || c > TUNING.advisor.lowCharge) return undefined;
+    if (!this.loop.charge?.low) return undefined;
     const rest = this.nearest(this.sim.state.machines.filter((m) => RESTING.has(m.type) && this.powered(m)));
     if (rest) return { topic: 'charge', text: 'Bloombot is running low. Rest a while to charge up.', label: '⚡ Show me where', action: { kind: 'focus', x: rest.x, z: rest.z } };
     return { topic: 'charge', text: 'Bloombot is running low. Eat something from the backpack, or walk home to rest.', label: '⚡ Charge up', action: { kind: 'wait', seconds: 5 } };
@@ -145,13 +145,55 @@ export class Advisor {
     };
     const open = shut.find((q) => !s.gates.problem(q.gate));
     if (open) return gate(open, `A Keeper sleeps in ${open.name}. The way in is clear: open it.`);
-    const t = s.fountain.next();
-    if (t) {
-      const [x, z] = s.areas.info(PARK).landmark;
-      return { topic: 'keeper', text: `The fountain is waiting for ${t.name}. It helps bloombot reach the Keepers.`, label: '⛲ Show me', action: { kind: 'focus', x, z } };
-    }
+    const f = this.fountainStep();
+    if (f) return f;
     if (shut[0]) return gate(shut[0], `A Keeper sleeps in ${shut[0].name}. ${shut[0].gate.blocked}`);
     return undefined;
+  }
+
+  /**
+   * The fountain's next tier, one step at a time: bring what bloombot carries for it; else salvage the nearest pile
+   * of what it still wants; else what its own condition asks (park ground to restore; landmarks wake through the
+   * Keepers above). Its tiers give the abilities the gates need.
+   */
+  fountainStep(): Suggestion | undefined {
+    const s = this.sim;
+    const t = s.fountain.next();
+    if (!t) return undefined;
+    const [fx, fz] = s.areas.info(PARK).landmark;
+    const wanted = (Object.keys(t.delivery) as string[]).filter((k) => k !== 'biomass' && s.fountain.remaining(k as MaterialId) > 0) as MaterialId[];
+    const carried = wanted.filter((m) => s.inventory.available(m) > 0);
+    // carrying all of it, or as much as the piles in reach give: hand it in
+    const missing = wanted.filter((m) => s.inventory.available(m) < s.fountain.remaining(m));
+    const pile = this.nearestPile(missing);
+    if (carried.length && (!pile || !missing.length)) {
+      return { topic: 'keeper', text: `Bring the ${carried.map((m) => MATERIALS[m].name).join(' and ')} to the fountain.`, label: '⛲ Show me', action: { kind: 'focus', x: fx, z: fz } };
+    }
+    if (pile) return { topic: 'keeper', text: `The fountain wants ${MATERIALS[pile.material].name}: salvage it here.`, label: `${MATERIALS[pile.material].icon} Show me where`, action: { kind: 'focus', x: pile.x, z: pile.z } };
+    if (carried.length) return { topic: 'keeper', text: `Bring the ${carried.map((m) => MATERIALS[m].name).join(' and ')} to the fountain.`, label: '⛲ Show me', action: { kind: 'focus', x: fx, z: fz } };
+    const c = s.fountain.condition(t);
+    if (!c.done && t.needs.parkTiles !== undefined) {
+      const tile = this.parkTile();
+      if (tile) return { topic: 'restore', text: `The fountain wants the park alive around it: restore it (${Math.min(c.have, c.need)} of ${c.need}).`, label: '🌱 Show me where', action: { kind: 'focus', x: tile.x, z: tile.z } };
+    }
+    return undefined;
+  }
+
+  /** The nearest pile with something left of one of these materials that bloombot can salvage now. */
+  private nearestPile(materials: MaterialId[]): PileDef | undefined {
+    if (!materials.length) return undefined;
+    const s = this.sim;
+    const [fx, fz] = s.areas.info(PARK).landmark;
+    const bx = s.bot?.x ?? s.state.bot?.x ?? fx;
+    const bz = s.bot?.z ?? s.state.bot?.z ?? fz;
+    let best: PileDef | undefined;
+    let bd = Infinity;
+    for (const p of allPiles()) {
+      if (!materials.includes(p.material) || s.salvage.left(p.id) <= 0 || s.salvage.problem(p.id)) continue;
+      const d = Math.abs(p.x - bx) + Math.abs(p.z - bz);
+      if (d < bd) [best, bd] = [p, d];
+    }
+    return best;
   }
 
   /** Restoring towards the current goal: a tile at its edge, or in the park. */

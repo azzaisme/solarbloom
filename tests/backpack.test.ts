@@ -82,7 +82,7 @@ describe('E22.6: the backpack', () => {
     sim.state.salvage!.pages = ['p-mastRow-1'];
     const pages = journalPages(sim);
     expect(pages.length).toBe(Object.keys(PAGES).length);
-    expect(pages.filter((p) => p.found).map((p) => p.title)).toEqual(['Tram timetable']);
+    expect(pages.filter((p) => p.found).map((p) => p.title)).toEqual(['The mast']);
     expect(pages[0]).toMatchObject({ n: 1, found: false, title: 'A missing page' });
   });
 
@@ -102,6 +102,12 @@ describe('E22.6: the backpack', () => {
     expect(collection(sim).map((g) => g.title)).toEqual(['Lucky Cats', 'Keepsakes', 'Wildlife', 'Landmarks', 'Plots', 'Decorations']);
     const words = [...collection(sim).flatMap((g) => [g.title, g.count, g.empty, ...g.rows.flatMap((r) => [r.name, r.detail])]), ...itemCells(sim).flatMap((c) => [c.label, c.from, c.next]), ...requestRows(sim).map((r) => r.text)];
     expect(words.filter((w) => bannedIn(w).length)).toEqual([]);
+  });
+
+  it('a keepsake not found yet never hints at a Lucky Cat (they stay hidden)', () => {
+    const sim = oldCity();
+    const keeps = collection(sim).find((g) => g.title === 'Keepsakes')!;
+    for (const r of keeps.rows.filter((r) => !r.found)) expect(`${r.name} ${r.detail}`).not.toMatch(/cat/i);
   });
 
   it('a classic game has no materials or requests to show', () => {

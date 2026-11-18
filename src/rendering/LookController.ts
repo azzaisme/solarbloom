@@ -24,6 +24,8 @@ export class LookController {
   /** Look 1.7: restoration of the area in view, 0 (dead, fogged) … 1 (restored); the grade follows it. */
   moodTarget = 0;
   mood = 0;
+  /** E23.7.1: the rim's share by the time of day (DayNight sets it: weaker at night) */
+  rimShare = 1;
   /** Settings: high contrast flattens the grade and drops the vignette so outlines and text stay readable. */
   highContrast = false;
 
@@ -110,6 +112,6 @@ export class LookController {
     else this.post.grade(G.dead, G.warm, this.mood, LOOK.vignette.intensity);
     this.atmosphere.update(dt, g, Math.max(6, cam.viewHeight * 1.2), this.toSun, fwd);
     const R = LOOK.rim;
-    setLookRim(this.app.graphicsDevice, this.rimColour, LOOK.tiers[this.tier].rim ? R.intensity : 0, R.power, this.toSun, this.camera.entity.getPosition(), LOOK.emissive.vertexGlow);
+    setLookRim(this.app.graphicsDevice, this.rimColour, LOOK.tiers[this.tier].rim ? R.intensity * this.rimShare : 0, R.power, this.toSun, this.camera.entity.getPosition(), LOOK.emissive.vertexGlow);
   }
 }

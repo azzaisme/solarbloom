@@ -20,7 +20,9 @@ import { PadFocus } from './PadFocus';
 export interface TitleHost {
   slots(): Promise<(SlotHeader | undefined)[]>;
   /** start a slot (fresh: clear it first) */
-  start(slot: Slot, fresh: boolean, device: 'keys' | 'pad'): void;
+  start(slot: Slot, fresh: boolean, device: 'keys' | 'pad', realClock?: boolean): void;
+  /** E23.7.1.2: Settings' "Follow my clock" on the title: the new-game question offers it first */
+  preferRealClock?(): boolean;
   rename(slot: Slot, name: string): void;
   remove(slot: Slot): void;
   /** opens Settings over the title (the same screen as in game); `back` when it closes */
@@ -45,7 +47,7 @@ export class Title {
   private focus: PadFocus;
   private padPrev: boolean[] = [];
   private raf = 0;
-  private confirm?: { text: string; yes: string; then: () => void };
+  private confirm?: { text: string; yes: string; then: () => void; detail?: string; alt?: { label: string; then: () => void } };
   private view: 'press' | 'menu' | 'play' = 'press';
   private renaming?: Slot;
   private onKey = (e: KeyboardEvent) => this.key(e);
@@ -131,14 +133,14 @@ export class Title {
         `</nav>`;
     const slots = this.view === 'play' ? this.slotsHtml() : '';
     const confirm = this.confirm
-      ? `<div class="t-confirm panel" role="alertdialog" aria-labelledby="tConfirmText"><p id="tConfirmText">${esc(this.confirm.text)}</p><div class="t-row"><button id="tYes" data-t="yes">${esc(this.confirm.yes)}</button><button id="tNo" data-t="no">Cancel</button></div></div>`
+      ? `<div class="t-confirm panel${this.confirm.alt ? ' t-choice' : ''}" role="alertdialog" aria-labelledby="tConfirmText"><p id="tConfirmText">${esc(this.confirm.text)}</p>${this.confirm.detail ? `<p class="t-detail">${esc(this.confirm.detail)}</p>` : ''}<div class="t-row"><button id="tYes" data-t="yes">${esc(this.confirm.yes)}</button>${this.confirm.alt ? `<button id="tAlt" data-t="alt">${esc(this.confirm.alt.label)}</button>` : ''}<button id="tNo" data-t="no">Cancel</button></div></div>`
       : '';
     // Keep Settings (if open) where it is: it lives in its own element.
     const settings = this.el.querySelector('#settings');
     // the left third: a pale veil with the logo and the menu in its middle; the slots open over the rest
     this.el.innerHTML = `${art}<div class="t-side">${logo}${body}</div>${slots ? `<div class="t-main">${slots}</div>` : ''}${confirm}`;
     if (settings) this.el.appendChild(settings);
-    const target = focusId ? this.el.querySelector<HTMLElement>(`#${focusId}`) : this.confirm ? this.el.querySelector<HTMLElement>('#tNo') : this.el.querySelector<HTMLElement>(this.view === 'play' ? this.slotFocus() : '.t-side button');
+    const target = focusId ? this.el.querySelector<HTMLElement>(`#${focusId}`) : this.confirm ? this.el.querySelector<HTMLElement>(this.confirm.alt ? '#tYes' : '#tNo') : this.el.querySelector<HTMLElement>(this.view === 'play' ? this.slotFocus() : '.t-side button');
     target?.focus({ focusVisible: true } as FocusOptions);
   }
 
@@ -195,8 +197,8 @@ export class Title {
       case 'fresh': // E23.1.1: an earlier version's garden
         return this.host.start(slot, true, this.device);
       case 'start':
-        if (!this.heads[slot - 1]) return this.host.start(slot, true, this.device);
-        this.confirm = { text: `Start a new garden in ${this.heads[slot - 1]!.name}? The garden saved there will be replaced.`, yes: 'Start a new garden', then: () => this.host.start(slot, true, this.device) };
+        if (!this.heads[slot - 1]) return this.askClock(slot);
+        this.confirm = { text: `Start a new garden in ${this.heads[slot - 1]!.name}? The garden saved there will be replaced.`, yes: 'Start a new garden', then: () => this.askClock(slot) };
         return this.render();
       case 'rename':
         this.renaming = slot;
@@ -229,10 +231,33 @@ export class Title {
         this.confirm = undefined;
         return c?.then();
       }
+      case 'alt': {
+        const a = this.confirm?.alt;
+        this.confirm = undefined;
+        return a?.then();
+      }
       case 'no':
         this.confirm = undefined;
         return this.render();
     }
+  }
+
+  /**
+   * E23.7.1.2 (#446): a new garden asks how its days go: the game's own day (48 minutes of play), or the real clock
+   * (only the sky, the light and solar follow it). Settings can switch it later.
+   */
+  private askClock(slot: Slot) {
+    const own = { label: "The game's own day", then: () => this.host.start(slot, true, this.device, false) };
+    const real = { label: 'Follow my clock', then: () => this.host.start(slot, true, this.device, true) };
+    const [first, second] = this.host.preferRealClock?.() ? [real, own] : [own, real];
+    this.confirm = {
+      text: 'How should the days go?',
+      detail: "The game's own day lasts 48 minutes of play. Following your clock, the sky and the sun keep your local time. Everything grows at the same pace either way, and Settings can switch it later.",
+      yes: first.label,
+      then: first.then,
+      alt: second,
+    };
+    this.render();
   }
 
   private async reload(focusId?: string) {

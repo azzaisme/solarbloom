@@ -99,11 +99,4 @@ describe('E21.1: saving', () => {
     expect(saver.serialize(back.state)).toBe(json);
   });
 
-  it('nothing changes under classic rules', () => {
-    const sim = new Sim(createInitialState(7));
-    expect(sim.inventory.on).toBe(false);
-    expect(sim.inventory.add('scrap', 5)).toBe(5);
-    expect(sim.inventory.canPay({ scrap: 1 }, NEAR)).toBe(false);
-    expect('salvage' in sim.state).toBe(false);
-  });
 });

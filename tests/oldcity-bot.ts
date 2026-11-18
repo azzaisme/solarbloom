@@ -7,6 +7,7 @@ import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
 import { BOT, spawnPose, Walker, type BotPose } from '../src/gameplay/Walker';
 import { oldCityHint } from '../src/ui/OldCityGuide';
+import { canWalk, CHARGE, handle } from './e23-gentle';
 
 /**
  * E21.12 / E21.23: the Old City's walking bot. It plays a new old-city game the way a player would, on foot:
@@ -26,6 +27,16 @@ export interface OldCityBotReport {
   longestIdle: number;
   walked: number;
   time: number;
+  /**
+   * E23.3 (#480): the grid, once on the sim: the Solar Panel bloombot built is on a network, and that network's
+   * supply in daylight (watts). Undefined without a grid or before the panel is built.
+   */
+  grid?: { onNetwork: boolean; supply: number };
+  /**
+   * E23.10.1 (#405): bloombot's charge, once E23.2.1 lands (undefined until then): the lowest it fell, seconds
+   * spent at zero, and seconds stranded (at zero and unable to walk: must stay 0).
+   */
+  charge?: { min: number; atZero: number; stranded: number };
   /** the game as the bot left it */
   sim: Sim;
 }
@@ -57,6 +68,11 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
   sim.bus.on('fountain.tier', (e) => e.tier === 1 && first('tier1'));
   sim.bus.on('gate.opened', () => first('gate'));
   sim.bus.on('keeper.step', (e) => e.step === 'request1' && first('keeper'));
+  // E23.2.1's charge, once it is on the sim: read through its real `value()` (fails loudly if it lacks it)
+  const chargeSys = CHARGE.present(sim) ? handle(sim, 'charge')! : undefined;
+  if (chargeSys && typeof chargeSys.value !== 'function') throw new Error('sim.charge is here but lacks value(): update tests/oldcity-bot.ts');
+  const charge = chargeSys ? { min: Infinity, atZero: 0, stranded: 0 } : undefined;
+  const chargeNow = () => (chargeSys!.value as () => number).call(chargeSys);
   const pass = (secs: number) => {
     const n = Math.round(secs / TUNING.simStep);
     for (let i = 0; i < n; i++) {
@@ -65,6 +81,14 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
       if (opts.onSecond && Math.floor(sim.time) > lastSecond) {
         lastSecond = Math.floor(sim.time);
         opts.onSecond(sim);
+      }
+      if (charge) {
+        const c = chargeNow() ?? 0;
+        charge.min = Math.min(charge.min, c);
+        if (c <= 0) {
+          charge.atZero += TUNING.simStep;
+          if (!canWalk(sim)) charge.stranded += TUNING.simStep;
+        }
       }
     }
   };
@@ -124,7 +148,7 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
         const spot = sim.areas.tiles(PARK).filter((t) => t.ground === 'restored' && !t.occupantId && !t.blocked && sim.build.check('solar', GROUND, t.x, t.z).ok).sort((a, b) => dist(a.x, a.z) - dist(b.x, b.z))[0];
         if (spot && walkTo(spot.x, spot.z)) {
           pass(ACT.build);
-          if (sim.build.place('solar', GROUND, spot.x, spot.z)) did = true;
+          if (sim.build.place('solar', GROUND, spot.x, spot.z)) (first('solar'), (did = true));
         }
       } else if (firsts.gate === undefined) {
         const gates = REGIONS.filter((r) => r.ring === 1 && r.gate.kind === 'barricade' && r.gate.opensRegion !== false).sort((a, b) => dist(a.gate.cells[0][0], a.gate.cells[0][1]) - dist(b.gate.cells[0][0], b.gate.cells[0][1]));
@@ -194,7 +218,9 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
     pass(ACT.think);
   }
   record();
-  return { seed, firsts, hints, steps, longestIdle, walked, time: sim.time, sim };
+  const solar = sim.state.machines.find((m) => m.type === 'solar' && !m.starter);
+  const grid = sim.power ? { onNetwork: !!solar && !!sim.power.networkOf(solar), supply: (solar && sim.power.networkOf(solar)?.supply) || 0 } : undefined;
+  return { seed, firsts, hints, steps, longestIdle, walked, time: sim.time, charge, grid, sim };
 
   function affordableNear(): boolean {
     return !!nearestPulse();

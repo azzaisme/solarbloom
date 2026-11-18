@@ -17,9 +17,6 @@ export const WAKE_GIFT = 5;
 export class KeeperSystem {
   constructor(private sim: Sim) {}
 
-  get on(): boolean {
-    return !!this.sim.state.salvage;
-  }
 
   /** A Keeper's state (a Keeper never met is asleep). */
   state(id: string): KeeperState {
@@ -63,7 +60,7 @@ export class KeeperSystem {
 
   /** A pulse on a sleeping Keeper: it stirs (and asks for 5 of anything). True when it did something. */
   pulse(id: string): boolean {
-    if (!this.on || !this.visible(id)) return false;
+    if (!this.visible(id)) return false;
     const st = this.state(id);
     if (st.step !== 'asleep') return false;
     if (!st.pulsed) this.set(id, { step: 'asleep', pulsed: true });
@@ -98,7 +95,7 @@ export class KeeperSystem {
    */
   interact(id: string): 'stirs' | 'woke' | 'gave' | 'done' | 'talked' | 'none' {
     const s = this.sim;
-    if (!this.on || !this.visible(id)) return 'none';
+    if (!this.visible(id)) return 'none';
     const st = this.state(id);
     const d = this.def(id);
     if (st.step === 'asleep') {
@@ -168,7 +165,6 @@ export class KeeperSystem {
 
   /** A restored tile inside a waiting patch may finish request 2 (called by the area system). */
   onRestored(x: number, z: number) {
-    if (!this.on) return;
     for (const k of KEEPERS) if (this.step(k.id) === 'request2' && inRect(this.region(k.id).patch, x, z)) this.check(k.id);
   }
 

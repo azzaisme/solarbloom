@@ -61,7 +61,7 @@ describe('E21.0: the data', () => {
       for (const p of r.pages) expect(PAGES[p.id], p.id).toBeDefined();
       expect(r.patch.w * r.patch.d).toBeGreaterThan(0);
     }
-    expect(Object.keys(PAGES)).toHaveLength(22);
+    expect(Object.keys(PAGES)).toHaveLength(23);
     for (const p of PARK_SET.pages) expect(PAGES[p.id]).toBeDefined();
     expect(BLUEPRINTS.map((b) => b.region)).toEqual(REGIONS.map((r) => r.id));
     expect(KEEPSAKES.map((b) => b.region)).toEqual(REGIONS.map((r) => r.id));

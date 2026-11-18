@@ -3,7 +3,7 @@ import { big } from '../src/core/Big';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { BuildableType, GroundState } from '../src/core/types';
 import { BUILDABLE, MACHINES } from '../src/data/machines';
-import { RECIPES } from '../src/data/salvage';
+import { RECIPES, TIERS } from '../src/data/salvage';
 import { Sim } from '../src/gameplay/Sim';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
@@ -34,7 +34,6 @@ function stock(sim: Sim, type: BuildableType) {
 describe('E21.3: recipes', () => {
   it('each recipe is paid exactly, with no price growth, and the tray never shows a classic price', () => {
     for (const type of Object.keys(RECIPES) as BuildableType[]) {
-      if (type === 'reclaimer') continue; // seams only (below)
       const sim = oldSim();
       sim.state.resources.biomass = big(0);
       const x = 12;
@@ -105,18 +104,9 @@ describe('E21.3: recipes', () => {
     expect(sim.build.remove(sim.state.machines.find((q) => q.starter)!.id)).toBe(false);
   });
 
-  it('a Reclaimer stands only on the seam of a woken region', () => {
-    const sim = oldSim(2);
-    stock(sim, 'reclaimer');
-    sim.bot = { roofId: GROUND, x: 20.5, z: -6.5 };
-    sim.inventory.withdraw('scrap');
-    sim.inventory.withdraw('copper');
-    sim.inventory.withdraw('timber');
-    sim.state.areas.mastRow = { fog: 'thinning', revealedAt: 0 };
-    ground(sim, 23, -8);
-    expect(sim.build.check('reclaimer', GROUND, 22, -8).reason).toMatch(/seam/);
-    expect(sim.build.check('reclaimer', GROUND, 23, -8).reason).toMatch(/Wake Signal Mast/);
-    sim.state.areas.mastRow.fog = 'cleared';
-    expect(sim.build.check('reclaimer', GROUND, 23, -8).ok).toBe(true);
+  it('E23.7.4: the Reclaimer is gone: not in the build list, no recipe, no tier gives it', () => {
+    expect(BUILDABLE as string[]).not.toContain('reclaimer');
+    expect(Object.keys(RECIPES)).not.toContain('reclaimer');
+    expect(TIERS.flatMap((t) => t.gives).join(' ')).not.toMatch(/Reclaimer/);
   });
 });
