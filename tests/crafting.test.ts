@@ -11,6 +11,7 @@ import { Sim } from '../src/gameplay/Sim';
 import { SaveService } from '../src/app/SaveService';
 import { componentRows, machineRows } from '../src/ui/CraftTable';
 import { itemCells } from '../src/ui/BackpackModel';
+import { Cozy } from '../src/gameplay/Cozy';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const oldSim = () => {
@@ -185,6 +186,28 @@ describe('E23.6.1: the crafting table', () => {
     const wire = itemCells(sim).find((c) => c.id === 'wire')!;
     expect(wire.label).toBe(`Wire, 3 of ${sim.inventory.stackLimit()} in backpack, 0 in store`);
     expect(wire.from).toBe('Made at the crafting table');
+  });
+
+  it('a decoration costs its recipe, comes back whole when removed, and a found one waits for its cache', () => {
+    const sim = oldSim();
+    const cozy = new Cozy(sim);
+    const t = sim.grid.get(GROUND, 12, 12)!;
+    t.ground = 'restored';
+    t.pollution = 0;
+    sim.grid.touch(t);
+    expect(cozy.canDecorate('bench', GROUND, 12, 12)).toBe('Needs Planks');
+    sim.inventory.add('planks', 3);
+    expect(cozy.placeDecor('bench', 0, GROUND, 12, 12)).toBeUndefined();
+    expect(sim.inventory.count('planks')).toBe(1);
+    cozy.removeDecor(GROUND, 12, 12);
+    expect(sim.inventory.count('planks')).toBe(3);
+    // the crate stack is found in a Saltwind Beach cache
+    expect(cozy.canDecorate('cratestack', GROUND, 12, 12)).toBe('Not known yet: Not found yet');
+    expect(cozy.decorChoices().find((c) => c.option.id === 'cratestack')!.unlocked).toBe(false);
+    sim.state.salvage!.caches.push('c-saltwind-1');
+    expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['cratestack']);
+    expect(cozy.checkDecorUnlocks()).toEqual([]);
+    expect(cozy.canDecorate('cratestack', GROUND, 12, 12)).toBeUndefined();
   });
 
   it('the queue survives a save (it lives in the salvage state)', () => {
