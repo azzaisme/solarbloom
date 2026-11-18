@@ -19,6 +19,8 @@ export interface OldCityHost {
   screenOf(x: number, z: number): { x: number; y: number };
   /** E22.6: opens the store as the backpack screen's storage grid (the plain panel otherwise) */
   openStorage?(title: string): void;
+  /** E23.9.1: opens the backpack's journal at a page */
+  openPage?(id: string): void;
   /** plays a sound by name, if the game has it */
   sound(name: 'click' | 'salvage' | 'pry' | 'deliver' | 'tier' | 'wake', material?: MaterialId): void;
   /** redraws the ground tile at a cell */
@@ -68,6 +70,8 @@ export class OldCityController {
       host.sound('salvage', e.material);
       this.panel.refresh();
     });
+    // E23.7.4: a pile coming back (slowly, or blown in by a storm) is redrawn at its new size
+    host.sim.bus.on('pile.refilled', (e) => host.markTile(e.x, e.z));
     host.sim.bus.on('fountain.tier', () => this.panel.close());
     host.sim.bus.on('pack.full', (e) => host.hud.toast(`Your ${MATERIALS[e.material].name} stack is full<small>Put some in storage at the fountain or a chest.</small>`, '', 2.6));
   }
@@ -158,6 +162,15 @@ export class OldCityController {
     if (keeper && this.sim.keepers.visible(keeper.id)) {
       const r = this.sim.keepers.interact(keeper.id);
       if (r === 'gave' || r === 'done' || r === 'woke') this.host.sound('deliver');
+      this.host.bot.visuals.play('interact');
+      return true;
+    }
+    // E23.9.1: a page of the maker's journal: keep it and read it (again, if it was read before)
+    const page = onGround ? this.sim.journal.pageAt(front.x, front.z) : undefined;
+    if (page) {
+      this.host.sound('click');
+      this.sim.journal.read(page);
+      this.host.openPage?.(page);
       this.host.bot.visuals.play('interact');
       return true;
     }

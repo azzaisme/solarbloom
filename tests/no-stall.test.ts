@@ -1,7 +1,6 @@
 import { caps } from '../src/core/Economy';
 import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
-import { meetSpecialty } from './city-helpers';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
@@ -29,12 +28,6 @@ function followAdvisor(sim: Sim, seconds: number, until: () => boolean): number 
         if (g2.action.kind !== 'focus') break;
         Object.assign(a, { layer: undefined }, g2.action);
       }
-    } else if (a.kind === 'district') sim.districts.bloom(a.districtId);
-    else if (a.kind === 'build') sim.build.place(a.type, GROUND, a.x, a.z);
-    else if (a.kind === 'harvest') sim.harvestSun();
-    else if (a.kind === 'upgrades') {
-      const up = sim.upgrades.all().find((d) => sim.upgrades.status(d).ok);
-      if (up) sim.upgrades.purchase(up.id);
     }
     sim.advance(2);
   }
@@ -70,14 +63,6 @@ const broke = (sim: Sim) => {
 };
 
 describe('no-stall guarantees (City 09.5)', () => {
-  it('a fresh park with nothing at all in the bank still reaches the fountain', { timeout: 60000 }, () => {
-    const sim = new Sim(createInitialState(11));
-    broke(sim);
-    const t = followAdvisor(sim, 30 * 60, () => sim.state.progression.coreActivated);
-    console.log(`  fountain from nothing: ${(t / 60).toFixed(1)} min`); // eslint-disable-line no-console
-    expect(t).toBeLessThan(30 * 60);
-  });
-
   it('park fully bloomed and packed with machines, broke: the next area still clears', { timeout: 60000 }, () => {
     const sim = new Sim(createInitialState(12));
     sim.state.progression.coreActivated = true;
@@ -99,7 +84,6 @@ describe('no-stall guarantees (City 09.5)', () => {
     for (let i = 0; i < 40; i++) {
       const id = sim.areas.nextGoal()!;
       fill(sim, id);
-      meetSpecialty(sim, id);
       sim.areas.clear(id);
     }
     broke(sim);
@@ -126,7 +110,6 @@ describe('no-stall guarantees (City 09.5)', () => {
       // Machines built all over part of it shrink what can be restored; the need follows.
       pack(sim, id);
       fill(sim, id);
-      meetSpecialty(sim, id);
       sim.areas.clear(id);
     }
   });

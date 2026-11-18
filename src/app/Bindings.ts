@@ -48,7 +48,6 @@ export type Action =
   | 'nextTab'
   | 'debug'
   // Classic rules only (decision 7): old-city rules give these no default (E21 hides them).
-  | 'upgrades'
   | 'nextArea'
   | 'home';
 
@@ -113,7 +112,6 @@ export const ACTIONS: readonly ActionDef[] = [
   A('slot9', 'Hotbar slot 9', 'build', 'world'),
   A('backpack', 'Backpack', 'menus', 'world'),
   A('map', 'Map', 'menus', 'world'),
-  A('upgrades', 'Upgrades', 'menus', 'world', true, true, true),
   A('photo', 'Photo mode', 'menus', 'world'),
   A('cancel', 'Back', 'menus', 'any'),
   A('menu', 'Pause and menu', 'menus', 'any'),
@@ -173,7 +171,6 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
     prevTab: ['KeyQ'],
     nextTab: ['KeyE'],
     debug: ['F3'],
-    upgrades: ['KeyU'],
     nextArea: ['KeyN'],
     home: ['Home'],
   };
@@ -211,10 +208,6 @@ export function defaultPad(oldCity = false): Partial<Record<Action, number>> {
     // E23.2.1: d-pad left eats instead of harvesting sunlight (classic only)
     delete p.harvest;
     p.eat = 14;
-  } else {
-    // Classic keeps a pad button for Upgrades. Every button is taken by the new map, so it shares d-pad right with
-    // Pin next request, which only exists under old-city rules.
-    p.upgrades = 15;
   }
   return p;
 }

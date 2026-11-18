@@ -104,7 +104,7 @@ try {
   });
   check(await until(page, () => window.solarbloom.sim.charge.atHome()), 'by the fountain counts as home');
   // software rendering runs the sim slowly: allow two minutes of real time for a pulse's worth to come back
-  const trickled = await page.waitForFunction(() => window.solarbloom.sim.charge.value >= 1, undefined, { timeout: 120000 }).then(() => true, () => false);
+  const trickled = await page.waitForFunction(() => window.solarbloom.sim.charge.value() >= 1, undefined, { timeout: 120000 }).then(() => true, () => false);
   check(trickled, 'standing still at home, the charge trickles back (enough for a pulse)');
   await shot(page, '05-resting-home', 'resting by the fountain: the charge creeps back up from zero');
   const pulsed = await page.evaluate(() => {
@@ -121,7 +121,7 @@ try {
     s.econ.add('biomass', 3);
   });
   await key(page, 'KeyF');
-  check(await until(page, () => window.solarbloom.sim.charge.value >= 15.9 && !window.solarbloom.sim.charge.eating), 'F eats a snack and the charge comes back');
+  check(await until(page, () => window.solarbloom.sim.charge.value() >= 15.9 && !window.solarbloom.sim.charge.eating), 'F eats a snack and the charge comes back');
   await page.close();
 } finally {
   await browser.close();

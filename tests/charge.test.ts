@@ -27,7 +27,7 @@ describe('E23.2.1: bloombot\'s charge', () => {
     const sim = new Sim(createInitialState(7));
     expect(sim.charge.on).toBe(false);
     expect(sim.charge.use('pulse')).toBe(true);
-    expect(sim.charge.value).toBe(CHARGE.max);
+    expect(sim.charge.value()).toBe(CHARGE.max);
     expect(sim.state.charge).toBeUndefined();
   });
 
@@ -53,7 +53,7 @@ describe('E23.2.1: bloombot\'s charge', () => {
     const sim = oldSim();
     const [t, t2, t3] = pulseable(sim, 3);
     expect(sim.restoration.pulse(t.id)).toBe(true);
-    expect(sim.charge.value).toBeCloseTo(CHARGE.max - CHARGE.pulse);
+    expect(sim.charge.value()).toBeCloseTo(CHARGE.max - CHARGE.pulse);
     // run it down
     sim.state.charge!.value = 0.3;
     expect(sim.charge.canUse('pulse')).toBe(true); // a little left still fires
@@ -92,16 +92,16 @@ describe('E23.2.1: bloombot\'s charge', () => {
     expect(sim.charge.eat()).toBe('busy');
     expect((sim.state.salvage!.pack as Record<string, number>).food).toBeUndefined();
     sim.advance(1);
-    expect(sim.charge.value).toBeGreaterThan(10);
-    expect(sim.charge.value).toBeLessThan(10 + 15);
+    expect(sim.charge.value()).toBeGreaterThan(10);
+    expect(sim.charge.value()).toBeLessThan(10 + 15);
     sim.advance(3);
-    expect(sim.charge.value).toBeCloseTo(25, 5);
+    expect(sim.charge.value()).toBeCloseTo(25, 5);
     // then biomass (the old resource until E23.5 makes it an item)
     const had = bio();
     expect(sim.charge.eat()).toMatchObject({ id: 'biomass' });
     expect(bio()).toBeCloseTo(had - 1, 5);
     sim.advance(3);
-    expect(sim.charge.value).toBeCloseTo(31, 5);
+    expect(sim.charge.value()).toBeCloseTo(31, 5);
     sim.state.charge!.value = CHARGE.max;
     expect(sim.charge.eat()).toBe('full');
   });
@@ -117,13 +117,13 @@ describe('E23.2.1: bloombot\'s charge', () => {
     sim.state.charge!.cells = 2;
     expect(sim.charge.max).toBe(CHARGE.max + 2 * CHARGE.cellCapacity);
     sim.charge.sleep();
-    expect(sim.charge.value).toBe(sim.charge.max);
+    expect(sim.charge.value()).toBe(sim.charge.max);
     sim.state.charge!.efficiency = 1;
     expect(sim.charge.cost('pulse')).toBeCloseTo(CHARGE.pulse * (1 - CHARGE.efficiencyStep));
     sim.charge.use('pulse');
     const saver = new SaveService(undefined);
     const back = new Sim(saver.deserialize(saver.serialize(sim.state))!);
-    expect(back.charge.value).toBeCloseTo(sim.charge.value);
+    expect(back.charge.value()).toBeCloseTo(sim.charge.value());
     expect(back.charge.max).toBe(sim.charge.max);
   });
 });
@@ -161,7 +161,7 @@ describe('E23.2.1: never stranded', () => {
     sim.advance(CHARGE.home.stillSeconds + 0.5);
     expect(sim.charge.resting).toBe(true);
     sim.advance(10);
-    expect(sim.charge.value).toBeGreaterThan(CHARGE.pulse);
+    expect(sim.charge.value()).toBeGreaterThan(CHARGE.pulse);
     expect(sim.restoration.pulse(far.id)).toBe(true);
   });
 
@@ -170,7 +170,7 @@ describe('E23.2.1: never stranded', () => {
     sim.state.charge = { value: 0 };
     sim.bot = { roofId: GROUND, x: 8.5, z: -40.5 };
     sim.advance(30);
-    expect(sim.charge.value).toBe(0);
+    expect(sim.charge.value()).toBe(0);
   });
 
   it('the gentle-failure hooks: drain, refill, and walking is always possible', () => {
@@ -180,7 +180,7 @@ describe('E23.2.1: never stranded', () => {
     expect(sim.charge.low).toBe(true);
     expect(sim.charge.canWalk()).toBe(true);
     sim.charge.refillForTest();
-    expect(sim.charge.value).toBe(sim.charge.max);
+    expect(sim.charge.value()).toBe(sim.charge.max);
     expect(sim.charge.low).toBe(false);
   });
 });

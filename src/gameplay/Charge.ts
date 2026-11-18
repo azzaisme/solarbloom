@@ -48,19 +48,19 @@ export class ChargeSystem {
   }
 
   /** The charge now, 0 to `max`. Full when off. */
-  get value(): number {
+  value(): number {
     if (!this.on) return this.max;
     return Math.max(0, Math.min(this.max, this.st.value));
   }
 
   /** The charge as a share of full, 0 to 1. */
   get share(): number {
-    return this.value / this.max;
+    return this.value() / this.max;
   }
 
   /** Out of charge: the low-power walk, no pulses or abilities. */
   get empty(): boolean {
-    return this.on && this.value <= 1e-6;
+    return this.on && this.value() <= 1e-6;
   }
 
   /** Running low (the meter shows it). */
@@ -86,17 +86,17 @@ export class ChargeSystem {
     const c = this.cost(use) * (use === 'sprint' ? seconds : 1);
     if (c <= 0) return true;
     if (this.empty) return false;
-    this.set(this.value - c);
+    this.set(this.value() - c);
     return true;
   }
 
   /** Adds charge (chargers, benches, meals). Returns what was actually added (it stops at full). */
   recharge(amount: number, source: ChargeSource = 'other'): number {
     if (!this.on || amount <= 0) return 0;
-    const before = this.value;
+    const before = this.value();
     this.set(before + amount);
-    const got = this.value - before;
-    if (got > 0 && this.value >= this.max - 1e-6 && before < this.max - 1e-6) this.sim.bus.emit('charge.full', { source });
+    const got = this.value() - before;
+    if (got > 0 && this.value() >= this.max - 1e-6 && before < this.max - 1e-6) this.sim.bus.emit('charge.full', { source });
     return got;
   }
 
@@ -145,7 +145,7 @@ export class ChargeSystem {
   eat(id?: EdibleDef['id']): EdibleDef | 'full' | 'none' | 'busy' | 'off' {
     if (!this.on) return 'off';
     if (this.meal) return 'busy';
-    if (this.value >= this.max - 1e-6) return 'full';
+    if (this.value() >= this.max - 1e-6) return 'full';
     const item = CHARGE.edibles.find((e) => (id ? e.id === id : true) && this.carried(e.id) > 0);
     if (!item || !this.takeOne(item.id)) return 'none';
     this.meal = { item, left: item.charge, perSecond: item.charge / item.seconds };
