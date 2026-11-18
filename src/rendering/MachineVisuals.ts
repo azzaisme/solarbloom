@@ -83,6 +83,8 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   // E21: the Storage Chest and the Reclaimer (data/oldcity MODEL_NAMES; a stand-in until the files land)
   chest: ['storage-chest', 1.0],
   reclaimer: ['reclaimer', 1.0],
+  // E23.5.2: the planter box (its crop is drawn by CropVisuals)
+  planter: ['planter-bed', 0.9],
 };
 /** The Mother Tree's collar model: its scale (the planter fits the procedural ring, radius 0.85) and planter top (model metres). */
 const MotherCollar = { scale: 1.12, top: 0.84 };

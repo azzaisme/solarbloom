@@ -12,6 +12,12 @@ export interface GameEvents {
   'pile.salvaged': { pileId: string; material: import('../core/types').MaterialId; got: number; left: number; x: number; z: number };
   /** E23.5.1: bloombot clipped restored ground for biomass (`got` units into the backpack). */
   'biomass.gathered': { tileId: string; x: number; z: number; got: number };
+  /** E23.5.2: a planter's bed changed (planted, a new stage, fed, an extra, harvested). */
+  'planter.changed': { machineId: string };
+  'planter.ripe': { machineId: string; crop: string };
+  'planter.harvested': { machineId: string; crop: string; food: number; biomass: number; seeds: number };
+  /** E23.5.2.3: a crop's seed packet found while exploring. */
+  'seeds.found': { crop: string; region: string };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
   /** E21.2: a Reclaimer sent units to the store. */

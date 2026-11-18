@@ -12,6 +12,7 @@ import type { DroneRole, LayerData, MachineData, ResourceKind, TileData } from '
 import { MACHINES, machineIcon, machineName } from '../data/machines';
 import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
 import { GATHER } from '../data/farm';
+import { CROPS } from '../data/crops';
 import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
@@ -38,6 +39,7 @@ import { MACHINE_MODELS } from '../rendering/MachineVisuals';
 import type { HoloShape } from '../rendering/Hologram';
 import { TransitionRenderer } from '../rendering/transitions/TransitionRenderer';
 import { CultivatorVisuals } from '../rendering/CultivatorVisuals';
+import { CropVisuals } from '../rendering/CropVisuals';
 import { ProgressRings } from '../rendering/transitions/ProgressRings';
 import { areaPanelHtml } from '../ui/AreaPanel';
 import { upgradeHighlights } from '../gameplay/UpgradeEffects';
@@ -176,6 +178,8 @@ export class Game {
   readonly transitions: TransitionRenderer;
   /** Look 6.9: Cultivator tillers. */
   readonly tillers: CultivatorVisuals;
+  /** E23.5.2: what grows in each planter. */
+  readonly crops: CropVisuals;
   /** Look 6.10: progress rings on tiles mid-process (near zoom). */
   readonly rings: ProgressRings;
   private stageSoundAt = 0;
@@ -346,6 +350,7 @@ export class Game {
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
+    this.crops = new CropVisuals(this.sim, this.scene.world);
     this.rings = new ProgressRings(this.sim, this.scene.world);
     // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
     // its procedural look. Once they're in, what was already drawn is rebuilt with them.
@@ -498,6 +503,7 @@ export class Game {
         // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
         this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
         this.sim.bus.on('biomass.gathered', (e) => this.hud.pickup(MATERIALS.biomass.name, e.got));
+        this.sim.bus.on('planter.harvested', (e) => e.food > 0 && this.hud.pickup(MATERIALS.food.name, e.food));
       }
       const focus = new PadFocus(this.hud.root);
       this.padFocus = focus;
@@ -1746,6 +1752,11 @@ export class Game {
       if (r && s.areas.fog(r.id) !== 'cleared') out.push({ kind: 'landmark', id: `lm:${occ.id}`, verb: 'Wake', name: `the ${r.landmark.name}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
       else if (s.inventory.accessPoints().some((p) => p.x === occ.x && p.z === occ.z && p.roofId === occ.roofId)) out.push({ kind: 'storage', id: `store:${occ.id}`, verb: 'Open', name: 'the store', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
     } else if (occ?.type === 'chest') out.push({ kind: 'storage', id: `chest:${occ.id}`, verb: 'Open', name: 'the chest', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+    // E23.5.2: a planter: Harvest when ripe, otherwise Plant in or Tend it
+    if (occ?.type === 'planter') {
+      const lk = s.farm.look(occ);
+      out.push({ kind: 'machine', id: `planter:${occ.id}`, verb: lk.ripe ? 'Harvest' : lk.crop ? 'Tend' : 'Plant in', name: lk.ripe ? CROPS[lk.crop!].name : 'the planter', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.planter(occ) });
+    }
     // E23.5.1: flowered, restored ground in front can be clipped for biomass
     if (!pile && s.gather.canGather(front))
       out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });
@@ -4165,6 +4176,7 @@ export class Game {
     detailTextures.setCamera(camP.x, camP.y, camP.z);
     this.machines.update(wdt, rect);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
+    this.crops.update(dt);
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.
     if (!this.paused && this.camera.zoom > 0.9) {

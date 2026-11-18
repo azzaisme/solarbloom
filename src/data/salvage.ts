@@ -105,6 +105,8 @@ export const RECIPES: Partial<Record<BuildableType | 'reclaimer' | 'chest', Reci
   solar: { cost: { scrap: 10 }, tier: 1 },
   condenser: { cost: { scrap: 12, copper: 6 }, tier: 1 },
   chest: { cost: { timber: 8, scrap: 4 }, tier: 1 },
+  // E23.5.2: planters come with the first water (no Timber yet in the park)
+  planter: { cost: { scrap: 6, biomass: 4 }, tier: 1 },
   pollinator: { cost: { seeds: 10, timber: 6, biomass: 20 }, tier: 2 },
   droneHub: { cost: { scrap: 20, copper: 15, glass: 10 }, tier: 2 },
   reclaimer: { cost: { scrap: 20, copper: 10, timber: 10 }, tier: 2 },
