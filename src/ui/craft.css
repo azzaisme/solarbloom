@@ -1,0 +1,35 @@
+/* E23.6.1: the crafting table. It shares the backpack's panel, grid and detail styles (backpack.css). */
+#craftScreen { z-index: 11; }
+#craftScreen .panel.bp-card { width: min(980px, calc(96vw / var(--ui-zoom, 1))); height: min(680px, calc(92vh / var(--ui-zoom, 1))); max-height: none; }
+#craftScreen .set-h { margin: 4px 0 8px; font: 600 18px var(--font-display); color: var(--gold); }
+#craftScreen .bp-cell.cr-short .bp-count { color: var(--text-soft); }
+.cr-parts { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.cr-part { display: inline-flex; align-items: center; gap: 4px; font: 700 16px var(--font-ui); color: var(--text-strong); }
+.cr-part.cr-miss { color: var(--text-soft); }
+.cr-part small { font-size: 16px; }
+.cr-machines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cr-machines li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 12px; border-radius: 12px; background: var(--glass-hi); border: 1px solid var(--edge-soft); }
+.cr-machines li b { font: 600 16px var(--font-display); color: var(--text-strong); min-width: 9em; }
+.cr-machines li.cr-short b { color: var(--text); }
+.cr-queue { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cr-queue li { display: flex; align-items: center; gap: 8px; font: 700 16px var(--font-ui); color: var(--text-strong); }
+.cr-queue li button { margin-left: auto; min-height: 36px; padding: 2px 12px; border-radius: 10px; font: 600 16px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge); color: var(--text-strong); }
+.cr-bar { flex: 1; height: 8px; border-radius: 4px; background: var(--glass-sunk); border: 1px solid var(--edge-soft); overflow: hidden; }
+.cr-bar > i { display: block; height: 100%; background: var(--good); }
+.cr-upgrades { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.cr-upgrades li { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--glass-hi); border: 1px solid var(--edge-soft); }
+.cr-uhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cr-uhead b { font: 600 17px var(--font-display); color: var(--text-strong); }
+.cr-each { font: 700 16px var(--font-ui); color: var(--text); }
+.cr-pips { display: inline-flex; gap: 4px; }
+.cr-pips i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--edge); background: transparent; }
+.cr-pips i.on { background: var(--gold); border-color: var(--gold); }
+.cr-upgrades button { align-self: flex-start; min-height: 40px; padding: 4px 14px; border-radius: 12px; font: 600 16px var(--font-display); background: var(--glass-hi-2); border: 1px solid var(--edge); color: var(--text-strong); }
+.cr-upgrades button[aria-disabled=true] { color: var(--text-dim); border-color: var(--edge-soft); background: var(--btn-off); }
+.rs-projects { display: flex; flex-direction: column; gap: 6px; }
+.rs-projects .bp-req { grid-template-columns: 1fr; }
+.rs-projects .bp-req[aria-selected=true] { border-color: var(--edge-strong); background: var(--glass-hi-2); }
+.rs-bar.rs-off > i { background: var(--text-soft); }
+#craftScreen .tabs [hidden] { display: none; }
+@media (max-width: 900px) { .cr-upgrades { grid-template-columns: 1fr; } }
+#craftScreen .bp-detail:empty { display: none; }

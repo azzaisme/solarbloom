@@ -325,6 +325,10 @@ export type Rules = 'oldcity' | 'classic';
 
 /** E21 §1: the eight materials. */
 export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone';
+/** E23.6.1 (#390): components made at the crafting table (data in src/data/crafting.ts). */
+export type ComponentId = 'wire' | 'planks' | 'glassPane' | 'pipe' | 'motor' | 'batteryCell' | 'sunCell';
+/** E23.6.1: anything the backpack and the store hold (materials and components; see src/data/items.ts). */
+export type ItemId = MaterialId | ComponentId;
 /** E21 §6: bloombot's abilities, one per fountain tier 1–4. */
 export type AbilityId = 'pry' | 'hover' | 'climb' | 'glide';
 /** E21 §8: where a Keeper is in its story. Woken (pulsed and handed 5 of anything) goes straight to request1. */
@@ -345,9 +349,9 @@ export interface KeeperState {
  */
 export interface SalvageState {
   /** E21.1: what bloombot carries (whole numbers, a stack limit per material) */
-  pack: Partial<Record<MaterialId, number>>;
+  pack: Partial<Record<ItemId, number>>;
   /** E21.1: the city's shared, unlimited store */
-  store: Partial<Record<MaterialId, number>>;
+  store: Partial<Record<ItemId, number>>;
   /** E21.2: units left in each pile bloombot has touched (pile id → left); untouched piles are full */
   piles: Record<string, number>;
   /** E21.5: gates opened for good (barricades pried, bridges repaired), by gate id */
@@ -380,6 +384,24 @@ export interface SalvageState {
   rewards?: string[];
   /** E21.12: lookouts and vistas already seen, beacons spotted (presentation, but saved so they play once) */
   seen?: string[];
+  /** E23.6.1: the crafting table's queue (recipe id, crafts left, seconds left on the one in hand) */
+  craft?: { id: string; n: number; left: number }[];
+  /** E23.6.2: the research station (finds analysed, projects done and running, upgrade levels bought) */
+  research?: ResearchState;
+  /** E23.6.6: overgrowth by host key (a machine, a decoration, a ruin, a pipe tile, a power line), and since when */
+  overgrowth?: Record<string, { kind: import('../data/overgrowth').OvergrowthKind; t0: number }>;
+}
+
+/** E23.6.2: what the research station keeps. */
+export interface ResearchState {
+  /** finds looked at (keys such as 'material:copper', 'keeper:mastRow', 'tech:c-mastRow-1') */
+  analysed: string[];
+  /** projects finished, in order */
+  done: string[];
+  /** projects on the bench: seconds of powered work left */
+  running: { id: string; left: number }[];
+  /** upgrade levels bought at the crafting table */
+  levels: Record<string, number>;
 }
 
 export interface GameState {

@@ -2,7 +2,7 @@
 // The numbers are the epic's starting values (docs/E21_OLD_CITY.md §1–§5). Yields are tuned here; gates and
 // recipes only change if the pacing bot (§19) fails.
 
-import type { AbilityId, BuildableType, MaterialId } from '../core/types';
+import type { AbilityId, BuildableType, ItemId, MaterialId } from '../core/types';
 
 export interface MaterialDef {
   id: MaterialId;
@@ -30,8 +30,11 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
 
 export const MATERIAL_IDS = Object.keys(MATERIALS) as MaterialId[];
 
-/** A cost in materials (biomass may be part of a recipe: it stays a resource, read through Inventory.canPay). */
-export type MaterialCost = Partial<Record<MaterialId, number>> & { biomass?: number };
+/**
+ * A cost in materials (biomass may be part of a recipe: it stays a resource, read through Inventory.canPay).
+ * E23.6.1: components (data/crafting) can be part of one too.
+ */
+export type MaterialCost = Partial<Record<ItemId, number>> & { biomass?: number };
 
 // ───────────── §1 backpack ─────────────
 
@@ -40,6 +43,8 @@ export const PACK = {
   stack: [40, 40, 60, 80, 120, 120],
   /** the Pack Frame blueprint adds this to every stack */
   packFrame: 40,
+  /** E23.6.2: each level of the "Roomier backpack" research upgrade adds this to every stack */
+  perResearchLevel: 20,
 };
 
 // ───────────── §2 storage ─────────────

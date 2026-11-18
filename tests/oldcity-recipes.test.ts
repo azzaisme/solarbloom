@@ -5,6 +5,7 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { BuildableType, GroundState } from '../src/core/types';
 import { BUILDABLE, MACHINES } from '../src/data/machines';
 import { RECIPES } from '../src/data/salvage';
+import { KEEPERS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
@@ -13,6 +14,10 @@ const oldSim = (tier = 4) => {
   sim.state.salvage!.tier = tier;
   sim.bot = NEAR;
   return sim;
+};
+/** E23.6.1: wakes every Keeper (crafting-table machines unlock from them). */
+const wakeKeepers = (sim: Sim) => {
+  for (const k of KEEPERS) sim.state.salvage!.keepers[k.id] = { step: 'settled' };
 };
 /** Restores a 2×2 of park ground for building. */
 function ground(sim: Sim, x: number, z: number, g: GroundState = 'restored') {
@@ -26,7 +31,7 @@ function ground(sim: Sim, x: number, z: number, g: GroundState = 'restored') {
 }
 /** Gives the backpack and store everything a recipe needs. */
 function stock(sim: Sim, type: BuildableType) {
-  for (const [k, v] of Object.entries(RECIPES[type]!.cost)) {
+  for (const [k, v] of Object.entries(sim.build.recipe(type)!)) {
     if (k === 'biomass') sim.state.resources.biomass = sim.state.resources.biomass.add(v!);
     else sim.inventory.addToStore(k as 'scrap', v!);
   }
@@ -37,6 +42,7 @@ describe('E21.3: recipes', () => {
     for (const type of Object.keys(RECIPES) as BuildableType[]) {
       if (type === 'reclaimer') continue; // seams only (below)
       const sim = oldSim();
+      wakeKeepers(sim);
       sim.state.resources.biomass = big(0);
       const x = 12;
       const z = 12;
@@ -47,7 +53,7 @@ describe('E21.3: recipes', () => {
       const first = sim.build.place(type, GROUND, x, z);
       expect(first, type).toBeDefined();
       // the second costs the same (what is left is exactly one more recipe)
-      for (const [k, v] of Object.entries(RECIPES[type]!.cost)) {
+      for (const [k, v] of Object.entries(sim.build.recipe(type)!)) {
         if (k === 'biomass') expect(sim.econ.get('biomass').toNumber()).toBe(v);
         else expect(sim.inventory.stored(k as 'scrap'), `${type} ${k}`).toBe(v);
       }
@@ -59,9 +65,10 @@ describe('E21.3: recipes', () => {
     const sim = oldSim(0);
     for (const t of BUILDABLE) expect(sim.build.isUnlocked(t), t).toBe(false);
     sim.state.salvage!.tier = 1;
-    expect(sim.build.isUnlocked('solar')).toBe(true);
+    // E23.6.1: the Solar panel and the Storage chest come from Keepers now (crafting-table recipes)
+    expect(sim.build.isUnlocked('solar')).toBe(false);
     expect(sim.build.isUnlocked('condenser')).toBe(true);
-    expect(sim.build.isUnlocked('chest')).toBe(true);
+    expect(sim.build.isUnlocked('chest')).toBe(false);
     expect(sim.build.isUnlocked('droneHub')).toBe(false);
     ground(sim, 12, 12);
     stock(sim, 'droneHub');
@@ -82,11 +89,12 @@ describe('E21.3: recipes', () => {
   it('the store only counts within reach of it', () => {
     const sim = oldSim(1);
     ground(sim, 12, 12);
-    sim.inventory.addToStore('scrap', 10);
+    sim.inventory.addToStore('scrap', 12);
+    sim.inventory.addToStore('copper', 6);
     sim.bot = { roofId: GROUND, x: 8.5, z: -60.5 };
-    expect(sim.build.check('solar', GROUND, 12, 12).ok).toBe(false);
+    expect(sim.build.check('condenser', GROUND, 12, 12).ok).toBe(false);
     sim.bot = NEAR;
-    expect(sim.build.place('solar', GROUND, 12, 12)).toBeDefined();
+    expect(sim.build.place('condenser', GROUND, 12, 12)).toBeDefined();
   });
 
   it('removing a machine gives the whole recipe back, over a stack to the store', () => {

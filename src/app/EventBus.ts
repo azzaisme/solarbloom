@@ -4,12 +4,22 @@ import type { BuffType, CatRewardType, CatVariant, MachineData, ResourceKind, Re
 
 export interface GameEvents {
   /** E21.1: the backpack or the store changed (`material` unset = several at once). */
-  'pack.changed': { material?: import('../core/types').MaterialId; delta?: number };
-  'store.changed': { material?: import('../core/types').MaterialId; delta?: number };
+  'pack.changed': { material?: import('../core/types').ItemId; delta?: number };
+  'store.changed': { material?: import('../core/types').ItemId; delta?: number };
   /** E21.1: a stack is full; `left` units stayed where they were. */
-  'pack.full': { material: import('../core/types').MaterialId; left: number };
+  'pack.full': { material: import('../core/types').ItemId; left: number };
   /** E21.2: bloombot salvaged a pile (`got` units; `left` in the pile; 0 = it is gone). */
   'pile.salvaged': { pileId: string; material: import('../core/types').MaterialId; got: number; left: number; x: number; z: number };
+  /** E23.6.1: crafts queued at the crafting table (negative: cancelled), and one craft made. */
+  'craft.queued': { id: string; n: number };
+  'craft.done': { id: string; made: number };
+  /** E23.6.2: the research station: a find analysed, a project started or finished, an upgrade level bought. */
+  'research.analysed': { find: string };
+  'research.started': { id: string };
+  'research.done': { id: string };
+  'research.upgraded': { id: string; level: number };
+  /** E23.6.6: overgrowth placed on or taken off a host */
+  'overgrowth.changed': { key: string };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
   /** E21.2: a Reclaimer sent units to the store. */

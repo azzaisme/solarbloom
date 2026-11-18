@@ -27,7 +27,7 @@ const CITY_MIN = 60;
 
 /** Read-only drone probe: sampled once per simulated second, never changes the sim. */
 function probe() {
-  const secs: Record<DroneStatus, number> = { working: 0, travelling: 0, waitingEnergy: 0, napping: 0 };
+  const secs: Record<DroneStatus, number> = { working: 0, travelling: 0, waitingEnergy: 0, napping: 0, docked: 0 };
   const p = { secs, droneSeconds: 0, fullBloomAt: -1, areas: 0, hooked: false };
   const sample = (sim: Sim) => {
     if (!p.hooked) {

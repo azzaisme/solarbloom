@@ -12,7 +12,7 @@ import type { DroneRole, LayerData, MachineData, ResourceKind, TileData } from '
 import { MACHINES, machineIcon, machineName } from '../data/machines';
 import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
 import { EXPLORE } from '../rendering/CameraController';
-import { OLD_CITY, REGIONS } from '../data/oldcity';
+import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
@@ -61,7 +61,7 @@ import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
 import { FlyText } from '../ui/Fly';
-import { decorType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
+import { decorType, growType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
 import { BOT } from '../gameplay/Walker';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
 import { EventBus } from './EventBus';
@@ -77,6 +77,9 @@ import { settingsRows } from '../ui/SettingsRows';
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
+import { OvergrowthVisuals } from '../rendering/OvergrowthVisuals';
+import { OVERGROWTH_BY_ID, type OvergrowthKind } from '../data/overgrowth';
+import { decorCostLabel } from '../gameplay/Cozy';
 import { OldCityController } from './OldCity';
 import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Cozy } from '../gameplay/Cozy';
@@ -220,6 +223,8 @@ export class Game {
   menu!: Menu;
   settingsUi!: SettingsScreen;
   private padFocus?: PadFocus;
+  /** E23.6.6: overgrowth's generated vines (one merged mesh) */
+  private overgrowthArt!: OvergrowthVisuals;
   /** City 06.5: simulated seconds still owed after a hitch or a hidden tab, run within the frame budget. */
   catchUpDebt = 0;
   private hiddenAt = 0;
@@ -345,6 +350,7 @@ export class Game {
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
+    this.overgrowthArt = new OvergrowthVisuals(this.sim, this.scene.world, () => this.app.graphicsDevice);
     this.rings = new ProgressRings(this.sim, this.scene.world);
     // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
     // its procedural look. Once they're in, what was already drawn is rebuilt with them.
@@ -930,6 +936,7 @@ export class Game {
     this.closeMenu();
     this.hud.toggleTray(false);
     this.hud.toggleBackpack(false);
+    this.hud.craft.close();
     this.hud.toggleUpgrades(false);
     this.hud.closePlotPicker();
     if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
@@ -938,7 +945,7 @@ export class Game {
   /** E22.11: a full-screen panel pauses the game while it is open (also called the moment one closes, so the next
    *  key press already reaches the game, however slow the frame). */
   private syncPanelPause() {
-    this.pause.set('panel', this.hud.backpackOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
+    this.pause.set('panel', this.hud.backpackOpen || this.hud.craft.isOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
   }
 
   private openMenu() {
@@ -1250,6 +1257,7 @@ export class Game {
   private panelTab(dir: number) {
     if (this.settingsUi.isOpen) this.settingsUi.tab(dir, true);
     else if (this.hud.backpack.isOpen) this.hud.backpack.tab(dir, true);
+    else if (this.hud.craft.isOpen) this.hud.craft.tab(dir, true);
   }
 
   /** E22.1: the input contexts in effect now (Bindings: an open panel, build mode, or walking). */
@@ -1261,7 +1269,7 @@ export class Game {
   /** A panel or menu that takes the input is open. */
   private panelOpen(): boolean {
     const h = this.hud;
-    return h.modalOpen || h.backpackOpen || h.plotPickerOpen || h.isUpgradesOpen || h.trayOpen || !!this.oc?.panel.isOpen;
+    return h.modalOpen || h.backpackOpen || h.craft.isOpen || h.plotPickerOpen || h.isUpgradesOpen || h.trayOpen || !!this.oc?.panel.isOpen;
   }
 
   /** The action a key (or mouse input) means now. With a panel open, the key that opened it closes it again. */
@@ -1451,6 +1459,7 @@ export class Game {
     else if (this.hud.trayOpen) this.hud.toggleTray(false);
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
     else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
+    else if (this.hud.craft.isOpen) this.hud.craft.close();
     else if (this.selected) this.select(undefined);
     else if (this.bot?.walking) this.bot.cancelWalk();
     else if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
@@ -1744,6 +1753,17 @@ export class Game {
       if (r && s.areas.fog(r.id) !== 'cleared') out.push({ kind: 'landmark', id: `lm:${occ.id}`, verb: 'Wake', name: `the ${r.landmark.name}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
       else if (s.inventory.accessPoints().some((p) => p.x === occ.x && p.z === occ.z && p.roofId === occ.roofId)) out.push({ kind: 'storage', id: `store:${occ.id}`, verb: 'Open', name: 'the store', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
     } else if (occ?.type === 'chest') out.push({ kind: 'storage', id: `chest:${occ.id}`, verb: 'Open', name: 'the chest', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+    // E23.6.1: the crafting table is in the house (the shed by the fountain) from the start
+    const sh = PARK_SET.shed;
+    if (f.x >= sh.x && f.x < sh.x + sh.size && f.z >= sh.z && f.z < sh.z + sh.size)
+      out.push({
+        kind: 'door', id: 'craft:table', verb: 'Use', name: 'the crafting table', distance: fd, at: front, frame: { roofId: GROUND, x: sh.x, z: sh.z, size: sh.size },
+        run: () => {
+          this.oc?.panel.close();
+          this.hud.craft.open();
+          this.syncPanelPause();
+        },
+      });
     return out;
   }
 
@@ -1762,7 +1782,8 @@ export class Game {
     if (this.building()) {
       const tool = this.hud.currentTool;
       const dk = decorType(tool);
-      const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
+      const gk = growType(tool);
+      const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : gk ? `Grow ${OVERGROWTH_BY_ID[gk as OvergrowthKind]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
       return what ? { glyph: this.glyph(this.glyphs.style !== 'keys' ? 'place' : 'pulse'), text: what } : undefined;
     }
     const f = b.front();
@@ -2390,6 +2411,8 @@ export class Game {
     const t = p.tile;
     const dk = decorType(tool);
     if (dk) return this.previewDecor(p, x, y, dk);
+    const gk = growType(tool);
+    if (gk) return this.previewGrow(p, x, y, gk as OvergrowthKind);
     if (tool === 'remove') return this.previewRemove(p, x, y);
     if (machineTool(tool)) {
       const bt = tool;
@@ -2511,11 +2534,53 @@ export class Game {
     this.overlays.hideRadius();
     this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
     const how = `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
-    this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${o?.solid ? 'Solid' : 'Walk over it'} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
+    const price = decorCostLabel(this.sim, kind) ? this.sim.inventory.describe(this.sim.crafting.decor(kind)!.cost).map((c) => `${c.need} ${c.name}`).join(', ') : 'free';
+    this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${o?.solid ? 'Solid' : 'Walk over it'} · ${price}</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
+  }
+
+  /** E23.6.6: the host under the cursor lights up (green: it can grow there), with what it costs. */
+  private previewGrow(p: Pick, x: number, y: number, kind: OvergrowthKind) {
+    const t = p.tile!;
+    const host = this.sim.overgrowth.hostAt(p.roofId, t.x, t.z);
+    const o = OVERGROWTH_BY_ID[kind];
+    const why = this.sim.overgrowth.problem(kind, host) ?? (host && !this.inReach(p.roofId, t.x, t.z, 1) ? TOO_FAR : undefined);
+    this.overlays.hideRadius();
+    this.overlays.hideGhost();
+    if (host?.kind === 'line') this.overlays.showFrame(p.roofId, t.x, t.z, 1, why ? 'bad' : 'ok');
+    else if (host) this.overlays.showFrame(host.roofId, host.x, host.z, host.size, why ? 'bad' : 'ok');
+    else this.overlays.showFrame(p.roofId, t.x, t.z, 1, 'hover');
+    const cost = this.sim.inventory.describe(o.cost).map((c) => `${c.need} ${c.name}`).join(', ');
+    this.hud.showTip(x, y, `<b>${o.icon} ${o.name}</b><small>${cost}</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${this.press('E')} to grow it here</span>`}`);
+  }
+
+  /** E23.6.6: grows the kind in hand over what is on this tile (it stays in hand for the next one). */
+  private growAt(p: Pick, x: number, y: number, kind: OvergrowthKind): ActResult {
+    const t = p.tile!;
+    const host = this.sim.overgrowth.hostAt(p.roofId, t.x, t.z);
+    const why = host && !this.inReach(p.roofId, t.x, t.z, 1) ? TOO_FAR : this.sim.overgrowth.place(kind, host);
+    if (why) {
+      this.hud.showFail(why, x, y);
+      return 'none';
+    }
+    this.sfx.build();
+    this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.4), 10, { up: 1.2, size: 0.035, life: 0.9 });
+    this.buildKey = '';
+    return 'select';
   }
 
   private previewRemove(p: Pick, x: number, y: number) {
     const t = p.tile!;
+    // E23.6.6: overgrowth comes off first
+    const og = this.sim.overgrowth.hostAt(p.roofId, t.x, t.z);
+    const grown = og && this.sim.overgrowth.at(og.key);
+    if (grown) {
+      const o = OVERGROWTH_BY_ID[grown.kind];
+      this.overlays.hideRadius();
+      this.overlays.hideGhost();
+      this.overlays.showFrame(og.roofId, og.kind === 'line' ? t.x : og.x, og.kind === 'line' ? t.z : og.z, og.kind === 'line' ? 1 : og.size, 'bad');
+      this.hud.showTip(x, y, `<b>${o.icon} ${o.name}</b><span class="ok">${this.press('E')} to take it off (everything comes back)</span>`);
+      return;
+    }
     const d = this.cozy.decorOf(t.occupantId);
     this.overlays.hideRadius();
     if (!d) {
@@ -2560,6 +2625,16 @@ export class Game {
   /** Removes the decoration on a tile (free, instant); with `pickUp` it goes into bloombot's hands, turned as it was. */
   private removeDecorAt(p: Pick, x: number, y: number, pickUp: boolean): ActResult {
     const t = p.tile!;
+    // E23.6.6: the remove tool takes overgrowth off first (its cost comes back whole)
+    const og = !pickUp ? this.sim.overgrowth.hostAt(p.roofId, t.x, t.z) : undefined;
+    if (og && this.sim.overgrowth.at(og.key)) {
+      if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
+      this.sim.overgrowth.remove(og.key);
+      return 'build';
+    }
     const d = this.cozy.decorOf(t.occupantId);
     // E21.3: under old-city rules the remove tool also takes down a machine, giving its whole recipe back
     const occ = !d && !pickUp && this.sim.oldCity ? this.sim.occupant(t) : undefined;
@@ -2755,7 +2830,7 @@ export class Game {
     if (this.clock < this.cozyCheckAt) return;
     this.cozyCheckAt = this.clock + 1;
     for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Look for empty plots in restored ground.</small>`, 'gold', 4.5);
-    for (const o of this.cozy.checkDecorUnlocks()) this.hud.toast(`${o.icon} New decoration: ${o.name}<small>${o.blurb} It’s in the build menu (${this.hudKey('buildMenu')}), free to place.</small>`, 'gold', 4.5);
+    for (const o of this.cozy.checkDecorUnlocks()) this.hud.toast(`${o.icon} New decoration: ${o.name}<small>${o.blurb} It’s in the build menu (${this.hudKey('buildMenu')})${this.sim.oldCity ? '' : ', free to place'}.</small>`, 'gold', 4.5);
     // The picker closes if bloombot wanders off.
     const pp = this.pickerPlot;
     if (pp && this.bot) {
@@ -2864,6 +2939,8 @@ export class Game {
     const t = p.tile;
     const dk = decorType(tool);
     if (dk) return this.placeDecorAt(p, x, y, dk);
+    const gk = growType(tool);
+    if (gk) return this.growAt(p, x, y, gk as OvergrowthKind);
     if (tool === 'remove') return this.removeDecorAt(p, x, y, false);
     if (machineTool(tool)) {
       const bt = tool;
@@ -2969,7 +3046,7 @@ export class Game {
   }
 
   /** E18: what a drone of this role is doing, in words. */
-  private droneLabel(role: DroneRole, status: 'working' | 'travelling' | 'napping' | 'waitingEnergy'): string {
+  private droneLabel(role: DroneRole, status: 'working' | 'travelling' | 'napping' | 'waitingEnergy' | 'docked', short?: string): string {
     const work: Record<DroneRole, string> = {
       restorer: 'restoring a tile',
       gardener: 'watering tiles',
@@ -2987,6 +3064,8 @@ export class Game {
       harvester: 'resting — no store is full',
     };
     const wait = role === 'gardener' || role === 'courier' ? 'waiting for water 💧 or energy ⚡' : 'waiting for energy ⚡';
+    // E23.6.3: docked until its hub has what the role runs on again
+    if (status === 'docked') return `docked — waiting for ${short === 'water' ? 'water' : short === 'biomass' ? 'Greens in a chest beside the hub' : 'power'}`;
     return status === 'working' ? work[role] : status === 'travelling' ? 'flying to a job' : status === 'napping' ? idle[role] : wait;
   }
 
@@ -3074,7 +3153,7 @@ export class Game {
         extra = ds
           .map((d, i) => {
             const role = s.roles.roleFor(d, m);
-            return `<p class="stat">${ROLE_INFO[role].icon} Drone ${i + 1}${d.expiresAt ? ' (party!)' : ''}: ${this.droneLabel(role, s.drones.statusOf(d))} · ${d.jobs} jobs</p>`;
+            return `<p class="stat">${ROLE_INFO[role].icon} Drone ${i + 1}${d.expiresAt ? ' (party!)' : ''}: ${this.droneLabel(role, s.drones.statusOf(d), s.droneFuel.short(m, role))} · ${d.jobs} jobs</p>`;
           })
           .join('') +
           this.rolePicker(m) +
@@ -4131,7 +4210,20 @@ export class Game {
 
   /** this frame's dt (holds read it) */
   private frameDt = 0;
+  private lastReal = 0;
+  /**
+   * Seconds of wall time since the last frame (the engine's dt is 0 while paused). Not clamped to a frame's worth:
+   * the crafting table counts real seconds even when frames are slow, up to a second at a time (a long stall, such as
+   * a hidden window, doesn't finish a queue at once).
+   */
+  private realDt(): number {
+    const now = performance.now();
+    const d = this.lastReal ? (now - this.lastReal) / 1000 : 0;
+    this.lastReal = now;
+    return Math.min(d, 1);
+  }
   private update(rawDt: number) {
+    if (!this.pause.paused) this.lastReal = performance.now();
     const dt = Math.min(rawDt, TUNING.maxFrameDt);
     this.frameDt = dt;
     this.clock += dt;
@@ -4142,6 +4234,8 @@ export class Game {
     // E22.11: a full-screen panel (the backpack, Settings) pauses the game while it is open.
     this.syncPanelPause();
     const paused = this.pause.paused;
+    // E23.6.1: the table keeps working while its panel holds the game paused (the engine's clock is stopped then)
+    this.hud.craft.update(paused ? this.realDt() : dt, paused);
     if (!paused && !this.photo.frozen) {
       if (rawDt > TUNING.maxFrameDt && !this.hiddenAt) this.awayFor(Math.min(rawDt, 30) - TUNING.maxFrameDt); // a hitch
       this.runSim(dt);
@@ -4160,6 +4254,7 @@ export class Game {
     detailTextures.setCamera(camP.x, camP.y, camP.z);
     this.machines.update(wdt, rect);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
+    this.overgrowthArt.update(dt); // E23.6.6: rebuilt only when something is placed or grows a stage
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.
     if (!this.paused && this.camera.zoom > 0.9) {
