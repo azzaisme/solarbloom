@@ -23,13 +23,13 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  page.on('console', (m) => m.type() === 'error' && !/AudioContext/.test(m.text()) && errors.push(m.text())); // headless has no audio device
   await page.addInitScript(() => {
     if (sessionStorage.getItem('seeded')) return;
     sessionStorage.setItem('seeded', '1');
     localStorage.clear();
   });
-  await page.goto('http://localhost:4242/?slot=1&new');
+  await page.goto('http://localhost:4242/?slot=1&new', { timeout: 180_000 });
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 180_000 });
   await page.waitForTimeout(1500);
   const title = () => page.evaluate(() => document.querySelector('#objTitle')?.textContent ?? '');
@@ -43,13 +43,15 @@ try {
   await page.screenshot({ path: `${dir}/advisor-start.png`, timeout: 180_000 });
 
   // bloombot runs low (E23.2's ChargeSystem shape: low / share)
+  // (the card asks the advisor twice a second; a software-rendered frame can take seconds, so wait for the line)
+  const lineIs = (re) => page.waitForFunction((src) => new RegExp(src, 'i').test(document.querySelector('#objTitle')?.textContent ?? ''), re.source, { timeout: 60_000 }).catch(() => {});
   await page.evaluate(() => (window.solarbloom.sim.charge = { low: true, share: 0.1 }));
-  await page.waitForTimeout(1200);
+  await lineIs(/running low/);
   const low = await title();
   check(/running low/i.test(low), `running low shows on the objective line ("${low}")`);
   await page.screenshot({ path: `${dir}/advisor-low.png`, timeout: 180_000 });
   await page.evaluate(() => (window.solarbloom.sim.charge = { low: false, share: 1 }));
-  await page.waitForTimeout(1200);
+  await lineIs(/fountain/);
   const back = await title();
   check(back === start, `and goes back to the fountain once charged ("${back}")`);
 
