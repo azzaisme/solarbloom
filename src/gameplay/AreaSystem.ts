@@ -1,3 +1,4 @@
+import { isMainlandArea } from '../core/Mainland';
 import { areaMapFor, AreaMap, OldCityMap, PARK, SEA, type AreaInfo } from '../core/Areas';
 import { regionById } from '../core/OldCityLayout';
 import { GROUND, isRestorable } from '../core/GameState';
@@ -301,7 +302,8 @@ export class AreaSystem {
     if (this.map instanceof OldCityMap && (id === SEA || id.startsWith('out_'))) return; // E21.4: the sea and the cloud beyond
     s.state.areas[id] = { fog: 'frontier', revealedAt: s.time };
     // E21.5: in the Old City a revealed area stays sealed until its gate is opened (E23.1.5: fog is never bought)
-    if (this.oldCity && id !== PARK) s.state.areas[id].sealed = true;
+    // E23.8.3.1: the mainland has no gates and no prices: past the causeway, restoring a district reveals the next, open
+    if (this.oldCity && id !== PARK && !isMainlandArea(id)) s.state.areas[id].sealed = true;
     this.placeLandmark(id);
     if (!this.sealed(id)) this.ensureEntry(id);
     s.bus.emit('area.revealed', { areaId: id });
