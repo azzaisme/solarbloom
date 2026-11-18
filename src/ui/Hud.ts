@@ -398,6 +398,8 @@ export class Hud {
     const pct = percent === 125 || percent === 150 ? percent : 100;
     ui.scale = pct / 100;
     this.root.style.zoom = pct === 100 ? '' : String(ui.scale);
+    // viewport units inside a zoomed HUD are zoomed too: panels divide by this to stay on screen
+    this.root.style.setProperty('--ui-zoom', String(ui.scale));
   }
 
   /** E22.11: the menu or Settings is open (the game sets how it knows). */

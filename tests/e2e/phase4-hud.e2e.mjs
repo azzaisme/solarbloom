@@ -61,6 +61,7 @@ try {
       for (const scale of SCALES) {
         const name = `${rules}-${w}x${h}-${scale}`;
         const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+        page.setDefaultTimeout(180000);
         await page.goto(`http://localhost:4198/?slot=1&ui=${rules}`);
         await page.evaluate((scale) => {
           localStorage.clear();
@@ -68,6 +69,8 @@ try {
         }, scale);
         await page.reload();
         await page.waitForFunction(() => !!window.solarbloom?.hud);
+        // Layout, not motion, is under test: panels sit where they end up (software GL makes slides crawl).
+        await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; animation-duration: 0s !important; }' });
         await page.waitForTimeout(1200);
         // A few restored tiles, like the Phase 4 screenshot, and a toast.
         await page.evaluate(() => {
@@ -101,7 +104,7 @@ try {
           ['settings', (g) => (g.doAction('menu'), g.menuChoose('settings')), '#settings.open'],
         ]) {
           await page.evaluate(`(${open.toString()})(window.solarbloom)`);
-          await page.waitForTimeout(350);
+          await page.waitForTimeout(1200); // drawers slide in
           const r = await page.evaluate((sel) => {
             const el = document.querySelector(sel);
             if (!el) return null;
