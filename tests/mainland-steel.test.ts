@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { chunkPiles, landingArea, mainlandType, mainlandAreaOfChunk } from '../src/core/Mainland';
 import { allPiles } from '../src/core/OldCityLayout';
-import type { BuildableType, MaterialId } from '../src/core/types';
+import type { BuildableType, MachineData, MaterialId } from '../src/core/types';
 import { MACHINES } from '../src/data/machines';
 import { MAINLAND, MAINLAND_MACHINES, SALVAGE_FIELDS } from '../src/data/mainland';
 import { MATERIALS, RECIPES } from '../src/data/salvage';
@@ -107,7 +107,38 @@ describe('E23.8.3.2: mainland machines', () => {
       ['longPump', { consumer: { shed: 'pump', draw: MAINLAND_MACHINES.longPump.draw } }],
       ['water:longPump', { reach: MAINLAND_MACHINES.longPump.reach, flow: MAINLAND_MACHINES.longPump.flow }],
     ]);
-    // without them (today on testing), nothing breaks and nothing is wired
+    // without a water network (E23.4 not landed yet), nothing breaks and the pump is not wired to it
     expect(new Sim(createInitialState(7, 'oldcity')).mainland.wired.water).toBe(false);
+  });
+
+  it('on the real grid: the Grid Battery stores the day and carries the Long-range Pump through the night', () => {
+    const sim = new Sim(createInitialState(7, 'oldcity'));
+    expect(sim.mainland.wired.power).toBe(true);
+    let sky = { sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 };
+    sim.power.skyOverride = () => sky;
+    const put = (type: string, x: number, z: number, size = 2): MachineData => {
+      const m = { id: sim.newId('m'), type, roofId: GROUND, x, z, size, boostUntil: 0, timer: 0, charge: 0 } as unknown as MachineData;
+      sim.state.machines.push(m);
+      return m;
+    };
+    const x = MAINLAND.minChunkX * 16 + 20;
+    const sun = put('solar', x, 0, 1); // a small farm: three 4 W panels for one 6 W pump
+    put('solar', x, 1, 1);
+    put('solar', x + 1, 1, 1);
+    const bat = put('gridBattery', x + 2, 0);
+    const pump = put('longPump', x + 4, 0);
+    const net = sim.power.networkOf(sun)!;
+    expect(sim.power.networkOf(bat)).toBe(net);
+    expect(net.batteries).toContain(bat);
+    expect(net.consumers).toContain(pump);
+    expect(sim.power.stored(bat).capacity).toBe(MAINLAND_MACHINES.gridBattery.capacity);
+    for (let i = 0; i < 200; i++) sim.power.tick(0.5);
+    expect(sim.power.isPowered(pump)).toBe(true);
+    const day = sim.power.stored(bat).stored;
+    expect(day).toBeGreaterThan(0);
+    sky = { sun: 0, solar: 0, cloudy: false, wind: 0, dark: 1 };
+    sim.power.tick(0.5);
+    expect(sim.power.isPowered(pump)).toBe(true); // the battery carries it
+    expect(sim.power.stored(bat).stored).toBeLessThan(day);
   });
 });
