@@ -1,10 +1,11 @@
-import type { BuildableType, ItemId, MaterialId } from '../core/types';
+import type { ItemId, MaterialId } from '../core/types';
 import { COMPONENT_IDS, COMPONENTS } from '../data/crafting';
 import { PARK } from '../core/Areas';
 import { BLUEPRINTS, ITEMS, KEEPSAKES, PAGES, REGIONS } from '../data/oldcity';
 import { DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
 import { MACHINES } from '../data/machines';
-import { MATERIAL_IDS, MATERIALS, RECIPES } from '../data/salvage';
+import { MATERIAL_IDS, MATERIALS } from '../data/salvage';
+import { itemDef } from '../data/items';
 import type { Sim } from '../gameplay/Sim';
 
 /**
@@ -54,8 +55,9 @@ export function neededNext(sim: Sim, m: MaterialId): string {
   if (pin && want) return `${sim.keepers.def(pin.id).name} asks for ${want}`;
   const t = sim.fountain.next();
   if (t && t.delivery[m] && sim.fountain.remaining(m) > 0) return `The fountain still needs ${sim.fountain.remaining(m)}`;
-  const tier = sim.state.salvage?.tier ?? 0;
-  for (const [type, r] of Object.entries(RECIPES)) if (r && r.cost[m] && r.tier <= Math.max(1, tier)) return `A ${MACHINES[type as BuildableType].name} takes ${r.cost[m]}`;
+  // E23.6.1: the first known machine or component recipe that takes it
+  for (const r of sim.crafting.machines()) if (r.builds && r.cost[m]) return `A ${MACHINES[r.builds].name} takes ${r.cost[m]}`;
+  for (const r of sim.crafting.components()) if (r.cost[m]) return `${itemDef(r.id).name} takes ${r.cost[m]}`;
   return 'Nothing needs it yet';
 }
 

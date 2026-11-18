@@ -16,8 +16,9 @@ export type ItemCost = Partial<Record<ItemId, number>> & { biomass?: number };
  * - `keeper`: handed over when that region's Keeper wakes (one region at a time)
  * - `research`: a finished research project (E23.6.2), by project id
  * - `find`: a cache opened, by cache id (data/oldcity caches)
+ * - `tier`: a step of the fountain (E21.6), for the Old City's own machines
  */
-export type Unlock = { home: true } | { keeper: RegionId } | { research: string } | { find: string };
+export type Unlock = { home: true } | { keeper: RegionId } | { research: string } | { find: string } | { tier: number };
 
 export interface ComponentDef {
   id: ComponentId;
@@ -91,6 +92,15 @@ export const MACHINE_RECIPES: MachineRecipe[] = [
   { id: 'drone', name: 'Drone', cost: { motor: 1, wire: 2, glassPane: 1 }, unlock: { keeper: 'clockPlaza' }, owner: 'E23.6.3' },
   { id: 'largeSolar', name: 'Large solar array', cost: { sunCell: 4, scrap: 6, wire: 2 }, unlock: { keeper: 'observatory' }, owner: 'E23.3' },
   { id: 'assembler', name: 'Assembler', cost: { motor: 4, gears: 10, glassPane: 6 }, unlock: { keeper: 'spireHeights' }, owner: 'E23.6.5' },
+  // The Old City's own machines (E21.3), on the table too: one way to build everything. They keep the fountain step
+  // that opened them, and their recipes move onto components where one fits.
+  { id: 'condenser', name: 'Water Condenser', cost: { scrap: 8, pipe: 2, glassPane: 1 }, unlock: { tier: 1 }, builds: 'condenser' },
+  { id: 'pollinator', name: 'Pollinator Garden', cost: { seeds: 10, planks: 3, biomass: 20 }, unlock: { tier: 2 }, builds: 'pollinator' },
+  { id: 'droneHub', name: 'Drone Hub', cost: { scrap: 12, motor: 1, wire: 4, glassPane: 2 }, unlock: { tier: 2 }, builds: 'droneHub' },
+  { id: 'reservoirGarden', name: 'Reservoir Garden', cost: { clay: 15, seeds: 10, biomass: 30 }, unlock: { tier: 3 }, builds: 'reservoirGarden' },
+  { id: 'motherTree', name: 'Mother Tree', cost: { seeds: 30, clay: 20, biomass: 100 }, unlock: { tier: 3 }, builds: 'motherTree' },
+  { id: 'relay', name: 'Bloom Relay', cost: { wire: 10, gears: 10, sunCell: 2 }, unlock: { tier: 4 }, builds: 'relay' },
+  { id: 'cultivator', name: 'Cultivator', cost: { scrap: 20, motor: 2, gears: 10, planks: 4 }, unlock: { tier: 4 }, builds: 'cultivator' },
 ];
 
 export interface DecorRecipe {
@@ -101,8 +111,9 @@ export interface DecorRecipe {
 }
 
 /**
- * Decorations cost a little and come back whole when removed. The everyday ones are known from the start; the
- * rest are found in caches round the city (old things, mended).
+ * Decorations are made once at the crafting table: its recipe paid once, the decoration is bloombot's for good and
+ * every copy placed after that is free (decorating stays a sandbox; exploring finds new ones). The everyday ones
+ * are known from the start, the rest found in caches round the city (old things, mended) or researched.
  */
 export const DECOR_RECIPES: DecorRecipe[] = [
   { id: 'bench', cost: { planks: 2 }, unlock: { home: true } },

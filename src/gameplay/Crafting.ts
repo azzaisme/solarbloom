@@ -36,6 +36,7 @@ export class Crafting {
       return !!st && st.step !== 'asleep';
     }
     if ('research' in u) return (this.sim as { research?: ResearchLike }).research?.done(u.research) ?? false;
+    if ('tier' in u) return sv.tier >= u.tier;
     return sv.caches.includes(u.find);
   }
 
@@ -48,6 +49,7 @@ export class Crafting {
       return `🔒 ${k?.name ?? 'A Keeper'}, ${r?.name ?? u.keeper}`;
     }
     if ('research' in u) return '🔒 Research';
+    if ('tier' in u) return `🔒 Fountain tier ${u.tier}`;
     return '🔒 Not found yet';
   }
 
@@ -72,6 +74,36 @@ export class Crafting {
 
   decor(id: string): DecorRecipe | undefined {
     return DECOR_RECIPES.find((r) => r.id === id);
+  }
+
+  /** Decorations whose recipe is known now (made or not). */
+  decorations(): DecorRecipe[] {
+    return DECOR_RECIPES.filter((r) => this.unlocked(r.unlock));
+  }
+
+  /** Has a decoration been made at the table? (Then placing copies of it is free.) */
+  decorMade(id: string): boolean {
+    return !!this.sv?.decorMade?.includes(id);
+  }
+
+  /** Why a decoration can't be made now, if it can't. */
+  decorProblem(id: string): string | undefined {
+    const r = this.decor(id);
+    if (!r || !this.sv) return 'Unknown recipe';
+    if (this.decorMade(id)) return 'Already made: place it from the build menu';
+    if (!this.unlocked(r.unlock)) return this.unlockLabel(r.unlock);
+    const short = this.sim.inventory.shortfall(r.cost);
+    if (short) return `Needs ${short === 'biomass' ? 'Greens' : itemDef(short).name}`;
+    return undefined;
+  }
+
+  /** Makes a decoration once (pays its recipe); it is bloombot's for good. True when made. */
+  makeDecor(id: string): boolean {
+    if (this.decorProblem(id)) return false;
+    if (!this.sim.inventory.pay(this.decor(id)!.cost)) return false;
+    const sv = this.sv!;
+    sv.decorMade = [...(sv.decorMade ?? []), id].sort();
+    return true;
   }
 
   /** The craft queue (read-only view). */

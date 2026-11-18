@@ -16,3 +16,6 @@
 .cr-queue li button { margin-left: auto; min-height: 36px; padding: 2px 12px; border-radius: 10px; font: 600 16px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge); color: var(--text-strong); }
 .cr-bar { flex: 1; height: 8px; border-radius: 4px; background: var(--glass-sunk); border: 1px solid var(--edge-soft); overflow: hidden; }
 .cr-bar > i { display: block; height: 100%; background: var(--good); }
+.cr-decor li button { margin-left: auto; min-height: 36px; padding: 2px 12px; border-radius: 10px; font: 600 16px var(--font-display); background: var(--glass-hi-2); border: 1px solid var(--edge); color: var(--text-strong); }
+.cr-decor li button[aria-disabled=true] { color: var(--text-dim); border-color: var(--edge-soft); background: var(--btn-off); }
+.cr-decor li.cr-made b, .cr-note { color: var(--good); }

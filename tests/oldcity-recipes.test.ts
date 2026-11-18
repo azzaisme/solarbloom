@@ -78,19 +78,21 @@ describe('E21.3: recipes', () => {
   });
 
   it('a missing material is named, with its region once that region has been seen', () => {
-    const sim = oldSim(1);
+    const sim = oldSim(4);
     ground(sim, 12, 12);
-    sim.inventory.add('scrap', 12);
-    expect(sim.build.check('condenser', GROUND, 12, 12).reason).toBe('Needs Copper 🔧');
-    sim.state.areas.mastRow = { fog: 'frontier', revealedAt: 0, sealed: true };
-    expect(sim.build.check('condenser', GROUND, 12, 12).reason).toBe('Needs Copper 🔧 — Mast Row');
+    // E23.6.1: a component is named with where it is made; a material with its region once seen
+    expect(sim.build.check('relay', GROUND, 12, 12).reason).toBe('Needs Wire ➰ — make it at the crafting table');
+    sim.inventory.add('wire', 10);
+    sim.inventory.add('sunCell', 2);
+    expect(sim.build.check('relay', GROUND, 12, 12).reason).toBe('Needs Gears ⚙️');
+    sim.state.areas.clockPlaza = { fog: 'frontier', revealedAt: 0, sealed: true };
+    expect(sim.build.check('relay', GROUND, 12, 12).reason).toBe('Needs Gears ⚙️ — Clock Plaza');
   });
 
   it('the store only counts within reach of it', () => {
     const sim = oldSim(1);
     ground(sim, 12, 12);
-    sim.inventory.addToStore('scrap', 12);
-    sim.inventory.addToStore('copper', 6);
+    stock(sim, 'condenser');
     sim.bot = { roofId: GROUND, x: 8.5, z: -60.5 };
     expect(sim.build.check('condenser', GROUND, 12, 12).ok).toBe(false);
     sim.bot = NEAR;
@@ -100,15 +102,17 @@ describe('E21.3: recipes', () => {
   it('removing a machine gives the whole recipe back, over a stack to the store', () => {
     const sim = oldSim(1);
     ground(sim, 12, 12);
-    sim.inventory.add('scrap', 12);
-    sim.inventory.add('copper', 6);
+    sim.inventory.add('scrap', 8);
+    sim.inventory.add('pipe', 2);
+    sim.inventory.add('glassPane', 1);
     const m = sim.build.place('condenser', GROUND, 12, 12)!;
     expect(sim.inventory.count('scrap')).toBe(0);
     sim.inventory.add('scrap', 35);
     expect(sim.build.remove(m.id)).toBe(true);
     expect(sim.inventory.count('scrap')).toBe(40);
-    expect(sim.inventory.stored('scrap')).toBe(7);
-    expect(sim.inventory.count('copper')).toBe(6);
+    expect(sim.inventory.stored('scrap')).toBe(3);
+    expect(sim.inventory.count('pipe')).toBe(2);
+    expect(sim.inventory.count('glassPane')).toBe(1);
     expect(sim.grid.get(GROUND, 12, 12)!.occupantId).toBeUndefined();
     // the fountain and the starter lamp never come down
     expect(sim.build.remove(sim.state.machines.find((q) => q.starter)!.id)).toBe(false);

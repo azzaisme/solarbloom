@@ -388,6 +388,8 @@ export interface SalvageState {
   seen?: string[];
   /** E23.6.1: the crafting table's queue (recipe id, crafts left, seconds left on the one in hand) */
   craft?: { id: string; n: number; left: number }[];
+  /** E23.6.1: decorations made at the crafting table (each once; placing copies after that is free) */
+  decorMade?: string[];
 }
 
 export interface GameState {
