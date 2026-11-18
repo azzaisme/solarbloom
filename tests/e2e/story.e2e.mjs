@@ -202,7 +202,7 @@ try {
       await page.waitForTimeout(6000);
       await shot(page, 'ending-3-blooming');
       await page.waitForFunction(() => !document.querySelector('#cine')?.classList.contains('on'));
-      await page.waitForTimeout(4000);
+      await page.waitForTimeout(8000);
       await shot(page, 'ending-4-causeway-rising');
       await page.waitForTimeout(6000);
       await shot(page, 'ending-5-causeway-up');
@@ -220,6 +220,9 @@ try {
       // walk out along it
       await page.evaluate(() => window.solarbloom.hud.backpack.close());
       await stand(page, 124.5, 8.5, Math.PI / 2);
+      // the sea chunks round the causeway build slowly in a software-rendered browser
+      await page.waitForFunction(() => window.solarbloom.chunks.pending === 0).catch(() => {});
+      await page.waitForTimeout(8000);
       const walked = await page.evaluate(() => window.solarbloom.bot.walker.walkable('g', 125, 8));
       check(!!walked, 'ending: bloombot stands on the causeway');
       await shot(page, 'ending-7-on-causeway');
