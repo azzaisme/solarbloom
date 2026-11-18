@@ -101,6 +101,12 @@ export class Backpack {
     if (storage) this.body.querySelector<HTMLElement>('.bp-cell')?.focus({ focusVisible: true } as FocusOptions);
   }
 
+  /** E23.9.1: opens the journal at a page (a page just read from its post). */
+  openPage(id: string) {
+    this.selPage = id;
+    this.open('journal');
+  }
+
   close() {
     if (!this.isOpen) return;
     this.el.hidden = true;

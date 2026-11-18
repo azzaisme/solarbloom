@@ -548,7 +548,8 @@ export const PARK_SET = {
   /** broad steps down to the beach through the south gate */
   ramps: [{ x: 6, z: 14, w: 4, d: 2, dir: 's', from: 1, to: 0, kind: 'stair' }] as RampDef[],
   pages: [
-    { id: 'p-park-1', x: 1, z: 4 },
+    // E23.9.1: his first note waits at the top of the beach steps, where bloombot first comes into the park
+    { id: 'p-park-1', x: 7, z: 12 },
     { id: 'p-park-2', x: 14, z: 9 },
   ] as SpotDef[],
 };
@@ -747,31 +748,8 @@ export const KEEPSAKES: { id: string; name: string; model: string; region: Regio
   { id: 'ks-spire', name: 'Lift dial', model: 'keepsake-lift-dial', region: 'spireHeights' },
 ];
 
-/** The journal: 22 pages, two per region and two in the park, by page id. */
-export const PAGES: Record<string, { title: string; text: string }> = {
-  'p-park-1': { title: 'Orders from the mainland', text: 'The fog came and the island emptied in a week. We are sending one small robot by boat to bring it back to life.' },
-  'p-park-2': { title: 'A child\'s drawing', text: 'Crayon flowers round a fountain, and a little robot watering them. Someone wrote "bloombot" underneath.' },
-  'p-mastRow-1': { title: 'Tram timetable', text: 'Mast Row, every ten minutes, last tram at midnight. The last tram ran at four in the afternoon.' },
-  'p-mastRow-2': { title: 'Engineer\'s log', text: 'The mast carried the city\'s signals. When it went dark, the keepers lost each other one by one.' },
-  'p-oldMarket-1': { title: 'Price board', text: 'Lamps, two coins. Glass jars, one coin. Bring your own bag.' },
-  'p-oldMarket-2': { title: 'A stallholder\'s letter', text: 'We are closing the hall. Tally says it will keep count until we come back.' },
-  'p-saltwind-1': { title: 'Tide table', text: 'High water at the Sea Lock twice a day. The lock kept the canals full.' },
-  'p-saltwind-2': { title: 'A note in a bottle', text: 'If you find this, the sea is still here. It always will be.' },
-  'p-elderGrove-1': { title: 'Planting record', text: 'The Elder Tree was planted when the city was founded. Every seed in the grove came from it.' },
-  'p-elderGrove-2': { title: 'Moss\'s list', text: 'Water the stumps. Talk to the tree. Wait.' },
-  'p-cistern-1': { title: 'Water board notice', text: 'The cistern will be drained for repairs. Repairs were never booked.' },
-  'p-cistern-2': { title: 'Clay works ledger', text: 'Bricks for the whole city came from the basin\'s clay.' },
-  'p-clockPlaza-1': { title: 'Clockmaker\'s card', text: 'The tower clock wants winding every Sunday. Tock does it.' },
-  'p-clockPlaza-2': { title: 'A torn poster', text: 'Concert in the plaza tonight. Bring a lantern.' },
-  'p-terraces-1': { title: 'Roof garden plan', text: 'Beans on the south roofs, herbs on the north. Sunstone in the gutters keeps them warm.' },
-  'p-terraces-2': { title: 'Gable\'s sketch', text: 'The roofs step down the hill like stairs. You can see the sea from every one.' },
-  'p-glasshouse-1': { title: 'Greenhouse label', text: 'The Heart Seed: the first of every plant the city ever grew.' },
-  'p-glasshouse-2': { title: 'Bridge notice', text: 'Bridge closed. Use the ferry. The ferry is also closed.' },
-  'p-observatory-1': { title: 'Star chart', text: 'From the hill the whole city shows, and the sea beyond it.' },
-  'p-observatory-2': { title: 'Vega\'s note', text: 'The Star Lens focuses sunlight. With it the fountain could make the whole city bloom.' },
-  'p-spireHeights-1': { title: 'Lift inspection', text: 'All five towers passed. The Spire\'s crown lift sticks at ten; Atlas knows the trick.' },
-  'p-spireHeights-2': { title: 'A view from the top', text: 'From the Spire you can see the causeway, the bay and on a clear day the mainland.' },
-};
+/** E23.9.1: the journal's pages live in data/journal (book order, by stage); the posts are placed above. */
+export { PAGES } from './journal';
 
 // ───────────── §11 the house ─────────────
 

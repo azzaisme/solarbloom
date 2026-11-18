@@ -21,6 +21,8 @@ const QUICK = [
   'region-strengths', 'region-unlocks-e23',
   // E23.8.3: the mainland
   'mainland',
+  // E23.9: the story
+  'journal',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
