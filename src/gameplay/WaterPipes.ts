@@ -23,6 +23,17 @@ export interface PipeSource {
   machine: string;
 }
 
+/**
+ * What makes a machine type a pump (E23.8.3's mainland Long-range Pump registers its own): how far along its line it
+ * feeds (pipe steps from the tiles touching it), how much it pushes (units per game day), its grid draw, its size.
+ */
+export interface PumpSpec {
+  reach: number;
+  flow: number;
+  power?: number;
+  size?: number;
+}
+
 /** One connected run of pipe and the pumps and reservoirs it touches. */
 export interface PipeNet {
   tiles: string[];
@@ -54,7 +65,9 @@ export class WaterPipes {
   readonly pumping = new Set<string>();
   /** bumped when pipes are laid or lifted (the renderer rebuilds) */
   version = 0;
-  private registered = false;
+  private registered = new Set<string>();
+  /** Pump types and their numbers: bloombot's own pump, and any another sub-epic registers. */
+  private pumpTypes = new Map<string, PumpSpec>([['pump', { reach: Infinity, flow: WATER_NET.pump.perDay, power: WATER_NET.pump.power, size: 1 }]]);
 
   constructor(
     private sim: Sim,
@@ -63,6 +76,19 @@ export class WaterPipes {
 
   private get save() {
     return (this.sim.state.water ??= { levels: {} });
+  }
+
+  /** Makes a machine type a pump (or changes its numbers). Safe to call before or after the grid exists. */
+  registerPump(type: string, spec: PumpSpec) {
+    this.pumpTypes.set(type, { size: 1, power: WATER_NET.pump.power, ...spec });
+    this.registered.delete(type);
+    this.stamp = '';
+    this.registerPower();
+  }
+
+  /** A pump type's numbers (undefined: not a pump). */
+  pumpSpec(type: string): PumpSpec | undefined {
+    return this.pumpTypes.get(type);
   }
 
   /** All pipe tiles, `x,z`. */
@@ -148,7 +174,7 @@ export class WaterPipes {
     for (const [dx, dz] of SIDES) {
       const t = this.sim.grid.peek(GROUND, x + dx, z + dz);
       const m = t && this.sim.occupant(t);
-      if (m && (m.type === 'pump' || m.type === 'reservoir' || m.type === 'desalination')) out.push({ m, dx, dz });
+      if (m && (this.pumpTypes.has(m.type) || m.type === 'reservoir' || m.type === 'desalination')) out.push({ m, dx, dz });
     }
     return out;
   }
@@ -290,10 +316,13 @@ export class WaterPipes {
       // pumps fill the reservoirs on their line (uphill or not)
       for (const p of net.pumps) {
         const src = this.pumpSource(p);
-        if (src && w.amountOf(src.id) > 0 && p.type === 'pump') this.pumping.add(p.id); // (a plant asks through sim.water)
+        if (src && w.amountOf(src.id) > 0 && p.type !== 'desalination') this.pumping.add(p.id); // (a plant asks through sim.water)
         if (!this.pumpLive(p)) continue;
-        let budget = WATER_NET.pump.perDay * days;
-        const tanks = net.tanks.filter((t) => w.levelOf(tankId(t)) < 1);
+        // a desalination plant pushes what it has made at its own rate (its tank limits it)
+        const spec = this.pumpTypes.get(p.type) ?? { reach: Infinity, flow: WATER_NET.desal.perDay };
+        let budget = spec.flow * days;
+        const inReach = this.reachOf(p, net);
+        const tanks = net.tanks.filter((t) => w.levelOf(tankId(t)) < 1 && this.touches(t, inReach));
         for (let i = 0; i < tanks.length && budget > 1e-9; i++) {
           const share = budget / (tanks.length - i);
           const id = tankId(tanks[i]);
@@ -329,9 +358,10 @@ export class WaterPipes {
       };
       // a running pump carries its water to every tile of its line (and pressure carries the tanks' water too)
       for (const p of pumped) {
-        for (const k of net.tiles) add(k, { kind: 'pump', body: this.pumpSource(p)!.id, machine: p.id });
+        const reach = this.reachOf(p, net);
+        for (const k of reach) add(k, { kind: 'pump', body: this.pumpSource(p)!.id, machine: p.id });
         for (const t of net.tanks)
-          if (w.amountOf(tankId(t)) > 0) for (const k of net.tiles) add(k, { kind: 'tank', body: tankId(t), machine: t.id });
+          if (w.amountOf(tankId(t)) > 0 && this.touches(t, reach)) for (const k of reach) add(k, { kind: 'tank', body: tankId(t), machine: t.id });
       }
       // a reservoir with water feeds what lies no higher than it
       for (const t of net.tanks) {
@@ -378,6 +408,35 @@ export class WaterPipes {
       if (down.length) out.set(k, down);
     }
     return out;
+  /** The pipe tiles a pump feeds: its whole line, or (a pump with a reach) those within that many steps of it. */
+  reachOf(p: MachineData, net: PipeNet): Set<string> {
+    const reach = this.pumpTypes.get(p.type)?.reach ?? Infinity;
+    if (reach === Infinity) return new Set(net.tiles);
+    const inNet = new Set(net.tiles);
+    const dist = new Map<string, number>();
+    const queue: string[] = [];
+    for (const t of this.sim.grid.footprint(p.roofId, p.x, p.z, p.size))
+      if (t)
+        for (const [dx, dz] of SIDES) {
+          const k = pipeKey(t.x + dx, t.z + dz);
+          if (inNet.has(k) && !dist.has(k)) dist.set(k, 1), queue.push(k);
+        }
+    for (let i = 0; i < queue.length; i++) {
+      const d = dist.get(queue[i])!;
+      if (d >= reach) continue;
+      const [x, z] = parse(queue[i]);
+      for (const [dx, dz] of SIDES) {
+        const k = pipeKey(x + dx, z + dz);
+        if (inNet.has(k) && !dist.has(k)) dist.set(k, d + 1), queue.push(k);
+      }
+    }
+    return new Set(dist.keys());
+  }
+
+  /** Does a machine's footprint touch any of these pipe tiles? */
+  private touches(m: MachineData, tiles: Set<string>): boolean {
+    for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size)) if (t && SIDES.some(([dx, dz]) => tiles.has(pipeKey(t.x + dx, t.z + dz)))) return true;
+    return false;
   }
 
   /** Does this pipe tile carry water now? */
@@ -424,15 +483,20 @@ export class WaterPipes {
     return got;
   }
 
-  /** E23.3: pumps and desalination plants are grid consumers (shed after lamps); they draw only while they want to run. */
+  /** E23.3: pumps are grid consumers (shed after lamps); they draw only while they move water. */
   registerPower() {
-    if (this.registered) return;
-    const power = (this.sim as { power?: { register?: (type: string, def: unknown) => void } }).power;
+    const power = (this.sim as unknown as { power?: { register?: (type: string, def: unknown) => void } }).power;
     if (!power?.register) return;
-    this.registered = true;
-    power.register('pump', { consumer: { shed: 'pump', draw: (m: MachineData) => (this.pumping.has(m.id) ? WATER_NET.pump.power : 0) } });
+    for (const [type, spec] of this.pumpTypes) {
+      if (this.registered.has(type)) continue;
+      this.registered.add(type);
+      power.register(type, { consumer: { shed: 'pump', draw: (m: MachineData) => (this.pumping.has(m.id) ? (spec.power ?? WATER_NET.pump.power) : 0) } });
+    }
     // E23.4.3: the desalination plant, a heavy load, shed with the pumps
-    power.register('desalination', { consumer: { shed: 'pump', draw: (m: MachineData) => (this.water.desalinating.has(m.id) ? WATER_NET.desal.power : 0) } });
+    if (!this.registered.has('desalination')) {
+      this.registered.add('desalination');
+      power.register('desalination', { consumer: { shed: 'pump', draw: (m: MachineData) => (this.water.desalinating.has(m.id) ? WATER_NET.desal.power : 0) } });
+    }
   }
 }
 
