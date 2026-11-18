@@ -55,7 +55,7 @@ describe('E23.10.2: the E23 model list', () => {
   });
 
   it('batch costs match docs/art/e23-models.md', () => {
-    const cost: Record<Batch, number> = { A: 63, B1: 111, B2: 111, B3: 111, B4: 234, B5: 60, B6: 240 };
+    const cost: Record<Batch, number> = { A: 63, B1: 114, B2: 111, B3: 111, B4: 234, B5: 60, B6: 240 };
     for (const [b, c] of Object.entries(cost)) expect(batchCredits(b as Batch), b).toBe(c);
     const doc = readFileSync('docs/art/e23-models.md', 'utf8');
     expect(doc).toContain(`**${Object.values(cost).reduce((a, b) => a + b, 0)}**`);
@@ -65,11 +65,23 @@ describe('E23.10.2: the E23 model list', () => {
     for (const n of ['bench', 'bloom-relay', 'reservoir-basin']) expect(glbTriangles(`${DIR}/${n}.glb`), n).toBeGreaterThan(50);
   });
 
-  it('every new model that has landed is within its LOD0 budget', () => {
+  it('the bench bloombot sits on is within its obstacle budget (1,200; it was 1,924 before build_props fitted it)', () => {
+    const t = glbTriangles(`${DIR}/bench.glb`);
+    expect(t).toBeGreaterThan(50);
+    expect(t).toBeLessThanOrEqual(1200);
+    expect(glbTriangles(`${DIR}/bench.lod1.glb`)).toBeLessThanOrEqual(300);
+  });
+
+  it('every new model that has landed is within its LOD0 budget, and its LOD1 within the far budget', () => {
     const fresh = E23_MODELS.filter((m) => m.route === 'text' || m.route === 'image');
     const landed = fresh.filter((m) => existsSync(`${DIR}/${m.name}.glb`));
     const missing = fresh.filter((m) => !landed.includes(m)).map((m) => m.name);
     if (missing.length) console.log(`E23 models not generated yet (${missing.length}): ${missing.join(', ')}`);
     for (const m of landed) expect(glbTriangles(`${DIR}/${m.name}.glb`), m.name).toBeLessThanOrEqual(m.tris!);
+    // the far version: at most 1,000 (the machine class's LOD1 budget) and well under the near one
+    for (const m of landed) {
+      const far = glbTriangles(`${DIR}/${m.name}.lod1.glb`);
+      expect(far, `${m.name}.lod1`).toBeLessThanOrEqual(Math.min(1000, Math.ceil(m.tris! / 2)));
+    }
   });
 });

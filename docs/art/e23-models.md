@@ -78,7 +78,7 @@ Dead and worn looks come from the neglected-look shader (E20.6), not re-textures
 | charger | Image | Machine 3k | A low round ceramic pad with a gold ring and a cushion-shaped seat where bloombot sits cross-legged. A cyan ring glows as it charges; a short mast holds the pole insulator. |
 | battery | Text | Small machine 2k | A squat cream cabinet with four glass cell windows that fill with cyan light as it charges, a gold terminal on top. |
 | wind-turbine | Image | Machine 4k | A slim limestone-and-copper tower with a three-blade cream rotor (separate mesh, spins) and a little weathervane tail. Reads tall on high ground. |
-| large-solar-array | Text | Machine 3k | A cream ceramic gantry with gold bracing and a slow tracking motor that holds four of the procedural solar panels (the panels stay procedural, like every solar panel). Observatory Hill. |
+| large-solar-array | Image | Machine 3k | Four dark-blue panels with gold cell lines in a two by two grid on a low cream ceramic frame, on limestone posts, a brass tracking motor underneath. One whole model: an empty gantry for procedural panels came out as an upright board twice on the text route, and a whole array reads better as one object. Observatory Hill. |
 
 ### Water (#465)
 | Name | Route | Class | Look |
@@ -194,18 +194,18 @@ Prices are from `meshy-assets.md`'s routes as of 2026-10-12 (check https://docs.
 | Batch | What | Count | Credits |
 |---|---|---|---|
 | **A: the home loop** | charger (18), compost-bin (15), watering-can (15), bloombot clips (5 × 3) | 3 models, 5 clips | **63** |
-| B1: power and water | battery, wind-turbine, large-solar-array, pump, desalination-plant, sprinkler, feed-tank | 7 | 111 |
+| B1: power and water | battery, wind-turbine, large-solar-array, pump, desalination-plant, sprinkler, feed-tank | 7 | 114 |
 | B2: farm | bio-digester, beehive, mushroom-log, bird-box, bat-box, hedgehog-house, greenhouse | 7 | 111 |
 | B3: crafting and automation | research-station, assembler, mulcher, hopper-composter, auto-feeder, seed-drill, forecast-board | 7 | 111 |
 | B4: animals | 13 animals | 13 | 234 |
 | B5: Keepers on benches | 10 Keepers × 2 clips × 3 | 20 clips | 60 |
 | B6: crops | crop-seedling and 15 crops | 16 | 240 |
-| **Total** | | **53 models, 25 clips** | **930** |
+| **Total** | | **53 models, 25 clips** | **933** |
 
 Crops first appear in Milestone A, so until B6 is approved the planters have no crop model. The owner may want B6
 folded into A (303 credits for A then).
 
-Batch A and B6 are done (303 credits), plus a lavender redo the owner approved on 19 Nov (15 credits).
+Batch A and B6 are done (303 credits), plus a lavender redo the owner approved on 19 Nov (15 credits). B1 is done (approved 19 Nov): 124 credits spent against 114 planned, because the large solar array failed twice on the text route before the image route worked; the owner gave standing permission for regenerations.
 
 ## Getting each model into the game
 
@@ -231,16 +231,28 @@ Batch A and the crops (B6), approved by the owner on 18 Nov 2026: 303 credits. M
 | watering-can | 490 / 500 | 147 | |
 | crop-seedling, crop-lettuce, crop-watercress | 294, 1,176, 837 / 300, 1,200, 1,200 | | One `plant` part (nothing to hide) |
 | 13 other crops | 700–1,176 / 1,200 | 195–341 | `plant` and `fruit` parts |
+| **B1** (19 Nov) | | | |
+| wind-turbine | 3,920 / 4,000 | 960 | Image route; limestone tower, copper bands, cream rotor, weathervane tail |
+| desalination-plant | 4,835 / 5,000 | 980 | Image route; ceramic boiler, glass dome, copper coils, intake and tap |
+| large-solar-array | 2,939 / 3,000 | 719 | Image route; four panels on a low frame (see its row above) |
+| battery | 1,948 / 2,000 | 477 | Cyan cell windows |
+| pump | 1,960 / 2,000 | 480 | Flywheel and pressure dial |
+| sprinkler | 587 / 600 | 147 | On a stone foot with its hose |
+| feed-tank | 1,469 / 1,500 | 359 | Copper tank, green sight glass |
 
 Every model is finished by `assets/tools/meshy_finish.py` (Blender 5.0): real scale, pivot at the base centre,
-textures 512 (1024 for the charger), LOD1 by Decimate, a preview from the game camera. For crops it sorts the
+textures 512 (1024 for the charger and the big B1 machines), LOD1 by Decimate (a quarter, never over 1,000), a preview
+from the game camera. For crops it sorts the
 fruit, pods, heads and flowers into a `fruit` node: the game hides it and scales the plant down for the growing
 stage.
 
 **Known limits, for the owner:**
 - **crop-lavender** first came out as a grey spiky mound with no purple spikes. The owner approved a redo (15 credits, 19 Nov). The new one has chunky violet spikes, 1,051 triangles; its growing stage keeps the leaves and soil base on bare stems (a couple of spike tips are fused on and stay).
-- **crop-moonflower and crop-mint** still keep some flowers on the growing stage: their flowers are fused to the stems and
-  too close to the leaves in colour to sort automatically. A hand pass in Blender can move them to `fruit`.
+- **crop-moonflower** (fixed 19 Nov): its trumpets are pale cream-green, so it is finished with a cutoff measured on its own
+  albedo (`pale=0.35,0.65`, faces sorted one by one); the growing stage now drops them.
+- **crop-mint** (19 Nov): the same treatment (`pale=0.3,0.55`) takes off its flower pieces, but some grey-lilac is painted
+  onto the leaves themselves, so it stays at both stages and reads as variegated mint. Cutting those faces would hole
+  the leaves.
 
 **Bloombot's clips** (`meditate`, `sit-down`, `sit`, `stand-up`, `doze`, 15 credits) are in `bloombot.glb`, rebuilt by
 `blender-pass.py` from `bloombot-e23-clips.glb`. They get the same fixes as the E20 clips: the hip and spine lean is

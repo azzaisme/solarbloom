@@ -11,6 +11,7 @@
   down for the growing stage and shows it at ripe. Leafy greens, blue-greens and dark stems are plant; white
   (flowers) and every other colour are fruit.
 - `crop-faces`: the same, but each face is sorted by its own colour (flowers or grain heads fused to their stems).
+  Add `pale=S,V` for a model whose flowers are pale tints close to its leaves (moonflower 0.35,0.65; mint 0.25,0.65).
 - `leafy`: a crop with nothing to hide (seedling, lettuce, watercress): one `plant` object, no split.
 - Writes <name>.glb, <name>.lod1.glb (Decimate to a quarter, at least 150 triangles) and <name>.png, a preview
   from the game camera (pitch 40°, yaw 45°).
@@ -30,6 +31,9 @@ from model_io import base_color_image, load  # noqa: E402
 argv = sys.argv[sys.argv.index("--") + 1:]
 src, out_dir, name, size_m, axis, tris, tex = argv[:7]
 mode = argv[7] if len(argv) > 7 else ""
+# optional `pale=S,V`: a per-model cutoff measured on its albedo; faces under saturation S and at or over value V are
+# flowers (moonflower's cream trumpets, mint's lilac tips sit too close to their leaves for the general rule)
+pale = next((tuple(float(x) for x in a[5:].split(",")) for a in argv[8:] if a.startswith("pale=")), None)
 crop = mode in ("crop", "crop-faces")  # crop-faces: flowers fused to their stems, so each face is sorted alone
 size_m, tris, tex = float(size_m), int(tris), int(tex)
 
@@ -126,11 +130,16 @@ if crop:
         r = g = b = 0.0
         n = 0
         for fi in isl:
-            for loop in bm.faces[fi].loops:
-                c = albedo(loop[uvl].uv)
-                r, g, b, n = r + c[0], g + c[1], b + c[2], n + 1
+            uvs = [loop[uvl].uv for loop in bm.faces[fi].loops]
+            mid = sum((u for u in uvs), uvs[0] * 0) / len(uvs)
+            # the face's UV centre counts three times: corners sit on atlas seams and pick up neighbouring colours
+            for u, k in [(mid, 3)] + [(u, 1) for u in uvs]:
+                c = albedo(u)
+                r, g, b, n = r + c[0] * k, g + c[1] * k, b + c[2] * k, n + k
         hh, s, v = colorsys.rgb_to_hsv(r / n, g / n, b / n)
         hue = hh * 360
+        if pale and s < pale[0] and v >= pale[1]:
+            return False  # this model's measured flower colour
         if s < 0.2 and v > 0.6 or s < 0.35 and v > 0.75:
             return False  # white, cream and pale tints: flowers
         if v < 0.45 and 10 <= hue <= 60:
@@ -178,7 +187,8 @@ for o in parts:
     c = o.copy()
     c.data = o.data.copy()
     bpy.context.scene.collection.objects.link(c)
-    decimate(c, max(150 // len(parts), tri_count(o) // 4))
+    # a quarter of the near version, never over the machine class's far budget (1,000; docs/art/meshy-assets.md)
+    decimate(c, max(150 // len(parts), min(tri_count(o) // 4, 1000 // len(parts))))
     copies.append(c)
 export(os.path.join(out_dir, f"{name}.lod1.glb"), copies)
 print("LOD1", name, sum(tri_count(o) for o in copies))

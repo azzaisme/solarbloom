@@ -31,7 +31,7 @@ export const E23_MODELS: E23Model[] = [
   { name: 'charger', group: 'power', route: 'image', tris: 3000, batch: 'A', what: 'Charger: bloombot meditates on it' },
   { name: 'battery', group: 'power', route: 'text', tris: 2000, batch: 'B1', what: 'Battery (big battery is 1.6× with a second cell bank)' },
   { name: 'wind-turbine', group: 'power', route: 'image', tris: 4000, batch: 'B1', what: 'Wind turbine (turbine fields are several)' },
-  { name: 'large-solar-array', group: 'power', route: 'text', tris: 3000, batch: 'B1', what: 'Gantry for the large solar array; its four panels are the procedural solar panel' },
+  { name: 'large-solar-array', group: 'power', route: 'image', tris: 3000, batch: 'B1', what: 'Large solar array: four panels on a low cream frame, one whole model' },
   { name: 'power-pole', group: 'power', route: 'reuse', from: 'bloom-relay', what: 'Power pole (relays become poles)' },
   { name: 'lamp', group: 'power', route: 'reuse', from: 'lamp-post', what: 'Night lighting: lamp post' },
   { name: 'lantern-light', group: 'power', route: 'reuse', from: 'lantern', what: 'Night lighting: lantern' },

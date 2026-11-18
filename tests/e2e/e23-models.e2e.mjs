@@ -12,6 +12,7 @@ const { chromium } = require('playwright');
 const dir = process.env.SHOTS_DIR ?? 'docs/review';
 mkdirSync(dir, { recursive: true });
 const MACHINES = ['charger', 'compost-bin', 'watering-can'];
+const B1 = ['battery', 'wind-turbine', 'large-solar-array', 'pump', 'desalination-plant', 'sprinkler', 'feed-tank'];
 const CROPS = ['seedling', 'radish', 'lettuce', 'potato', 'beans', 'tomato', 'sweetcorn', 'pumpkin', 'sunflower', 'watercress', 'rice', 'lavender', 'mint', 'moonflower', 'flowers', 'sea-kale'].map((c) => `crop-${c}`);
 const CLIPS = ['meditate', 'sit-down', 'sit', 'stand-up', 'doze'];
 const server = await preview({ preview: { port: 4251, strictPort: true }, logLevel: 'silent' });
@@ -31,7 +32,7 @@ try {
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
   await page.waitForFunction(() => window.solarbloom.models?.ready);
 
-  const loaded = await page.evaluate((names) => names.map((n) => [n, window.solarbloom.models.has(n)]), [...MACHINES, ...CROPS]);
+  const loaded = await page.evaluate((names) => names.map((n) => [n, window.solarbloom.models.has(n)]), [...MACHINES, ...B1, ...CROPS]);
   for (const [n, ok] of loaded) check(ok, `model ${n} loaded in the game`);
 
   // Bloombot by the fountain, the park restored round it, the camera close (near zoom, the default angle).
@@ -87,6 +88,19 @@ try {
   await layout([{ away: 1.6, gap: 1.6, items: MACHINES.map((name) => ({ name })) }]);
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${dir}/e23-models-machines.png` });
+
+  // 1b. batch B1, the small machines: battery, pump, sprinkler, feed tank (one tile each), close in
+  await layout([{ away: 1.3, gap: 1.05, items: ['battery', 'pump', 'sprinkler', 'feed-tank'].map((name) => ({ name })) }]);
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `${dir}/e23-models-power-water.png` });
+  // 1c. the big ones: wind turbine (4 m), solar array, desalination plant, with the camera pulled back
+  await page.evaluate(() => window.solarbloom.camera.zoomTo(1.2));
+  await page.waitForTimeout(2500);
+  await layout([{ away: 3.2, gap: 3.0, items: ['wind-turbine', 'large-solar-array', 'desalination-plant'].map((name) => ({ name })) }]);
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `${dir}/e23-models-power-water-big.png` });
+  await page.evaluate(() => window.solarbloom.camera.zoomTo(window.solarbloom.camera.minZoom));
+  await page.waitForTimeout(2500);
 
   // 2. crops: ripe (back row) and growing (front row: fruit hidden, scaled down) in two sets of eight
   for (const [k, set] of [CROPS.slice(0, 8), CROPS.slice(8)].entries()) {

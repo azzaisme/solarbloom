@@ -1,6 +1,6 @@
-# E23 Meshy tasks (batch A and crops, 18 Nov 2026)
+# E23 Meshy tasks
 
-For re-downloading or refining. Previews are meshy-t2 smart topology; refines add PBR textures.
+For re-downloading or refining. Text route: meshy-t2 smart-topology preview, then a PBR refine. Image route: a nano-banana concept from docs/reference/target-look.png, then meshy-t2 + meshy-n1.
 
 ```
 charger-concept image-to-image 01a1ed0d-a259-7199-ad14-575ebebb353c
@@ -18,7 +18,7 @@ crop-pumpkin preview 01a1ed10-95e7-71e4-bdb7-106aa6f916bb
 crop-sunflower preview 01a1ed11-2c09-7786-b994-bf9d02c9b285
 crop-watercress preview 01a1ed11-978e-70e4-8ec0-d4bc9a17c56f
 crop-rice preview 01a1ed11-e734-70d7-b888-7110c6f20a8d
-crop-lavender preview 01a1ed12-5e2c-76b5-a822-b09be1aae96d (first try, replaced)
+crop-lavender preview 01a1ed12-5e2c-76b5-a822-b09be1aae96d
 crop-mint preview 01a1ed12-7c84-703a-9cbd-7ade7b420973
 crop-moonflower preview 01a1ed12-897a-74b3-9ffe-a8c4e3fbc691
 crop-flowers preview 01a1ed12-95a8-7395-80e7-4e0e19124501
@@ -38,13 +38,28 @@ crop-pumpkin 01a1ed14-98a9-7027-bef9-063754df3171
 crop-sunflower 01a1ed14-a366-75fa-ac72-a99dc529a2e0
 crop-watercress 01a1ed14-ad1f-76d3-9bd5-fd617b2758e8
 crop-rice 01a1ed14-b788-7662-8153-4e05aad4f8df
-crop-lavender 01a1ed14-c2c8-75e2-9620-e1c032c06390 (first try, replaced)
-REDO (19 Nov, owner-approved, 15 credits):
-crop-lavender preview 01a1f066-b7dd-7268-8cb1-1bffd31b18a9
-crop-lavender refine 01a1f067-4516-733d-847b-698bc4bee61a
+crop-lavender 01a1ed14-c2c8-75e2-9620-e1c032c06390
 crop-mint 01a1ed14-cd3e-76e2-a905-405c18a2a7fd
 crop-moonflower 01a1ed14-d6b4-7302-a9fe-ab109f41a69b
 crop-flowers 01a1ed14-e982-7127-b481-9caed6de6b01
 crop-sea-kale 01a1ed14-f4d2-72d7-a673-3e77bf0559c8
+B1 (19 Nov, owner-approved, 111 credits):
+wind-turbine concept image-to-image 01a1f06e-2cc3-739d-979b-3eff151af813
+desalination-plant concept image-to-image 01a1f06e-3a64-75d7-984b-d99cc7aeba3e
+battery preview 01a1f06e-4610-76cf-b311-dadffce095a5
+large-solar-array preview 01a1f06e-4ffd-7618-a4cd-1fe905ab761f
+pump preview 01a1f06e-5b53-7584-a70b-b84146709031
+sprinkler preview 01a1f06e-66f6-7356-860c-5fb8852b61ea
+feed-tank preview 01a1f06e-792c-7554-b45b-5546568b7045
+wind-turbine image-to-3d 01a1f077-0760-736e-bd7f-734e43bc4200
+desalination-plant image-to-3d 01a1f077-0b99-77bd-a6d3-00e28fb2fac8
+battery refine 01a1f078-5eca-70da-bbf8-d477b472f38b
+pump refine 01a1f078-6ee4-74a2-93d1-55c60155ad72
+sprinkler refine 01a1f078-7b4d-773e-a94c-333324b0d9b9
+feed-tank refine 01a1f078-8bd6-77c4-8f00-40f17040fbb3
+large-solar-array: preview came out as an upright board; not refined
+large-solar-array preview (retry, owner OK) 01a1f07a-41d1-7134-b273-75c43064cd9e
+large-solar-array concept (image route) 01a1f085-b7e0-7525-a95c-b4029f9177d3
+large-solar-array image-to-3d 01a1f08e-16aa-728b-8992-002203ea13a8
 bloombot rig (G.1) 01a1e779-c5f4-7703-9e9d-27fb8eecfa24
 ```
