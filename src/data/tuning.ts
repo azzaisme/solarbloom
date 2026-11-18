@@ -1,3 +1,4 @@
+import { gameMinutes } from './time';
 // Every balance knob lives here. Prototype numbers: tune by playing.
 
 export const TUNING = {
@@ -59,7 +60,8 @@ export const TUNING = {
   pulse: {
     polluted: { energy: 6, water: 1 },
     prepared: { energy: 3, water: 1 },
-    growSeconds: 0.8,
+    /** E23.7.1: in game time (0.4 game minutes = 0.8 s of play), like every timer */
+    growSeconds: gameMinutes(0.4),
   },
 
   restore: {
@@ -231,7 +233,8 @@ export const TUNING = {
      * big purchase drones wait for the stores to refill past it.
      */
     reserve: 0.25,
-    old: { enabled: true, radius: 6, cycleSeconds: 7, flySpeed: 1.5, workSeconds: 0.8 },
+    // E23.7.1: helper timers in game time (3.5 game minutes = 7 s of play; 0.4 = 0.8 s)
+    old: { enabled: true, radius: 6, cycleSeconds: gameMinutes(3.5), flySpeed: 1.5, workSeconds: gameMinutes(0.4) },
     /**
      * E18: drone roles. Every number is a starting guess from the design (the E18 epic, section 4), to tune
      * against the bots in docs/E18_AUDIT.md.
@@ -498,7 +501,7 @@ export const TUNING = {
     routeRadius: 9, // with Fog Seeker
     driveSpeed: 0.8, // tiles/s
     softenRate: 20, // pollution/s
-    growSeconds: 3,
+    growSeconds: gameMinutes(1.5), // E23.7.1: 1.5 game minutes = 3 s of play
     energyPerSec: 0.5, // drawn while working; parks below drone.reserve of the energy store
     speedPerLevel: 0.4, // Tiller Speed: +40 % work and drive speed per level
     /** a tap on a tile it's working: share of the current phase, at most `max` per phase, `gap` s apart */
