@@ -10,6 +10,10 @@ import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
 import type { BuildableType, DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
 import { MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
+import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
+import { EXPLORE } from '../rendering/CameraController';
+import { OLD_CITY, REGIONS } from '../data/oldcity';
+import { seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
@@ -98,8 +102,6 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 /** Bloombot: the camera zoom of the close default view (G.3), and how near counts as "within reach". */
 const BOT_ZOOM = 3.2;
-/** E22.1: the camera's zoom steps while walking (the wheel and d-pad down step through them; closest first). */
-const BOT_ZOOMS = [BOT_ZOOM, 2.6, 2.0];
 /** E22.1: while a panel is open, these walking actions still reach the game (they close the panel they opened). */
 const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'upgrades', 'menu']);
 /**
@@ -123,6 +125,8 @@ type ActResult = 'pulse' | 'build' | 'select' | 'wake' | 'none';
 /** E22.2: an Interact target with what it does, where it is, and the outline to draw round it. */
 interface InteractTarget extends Candidate {
   run: () => void;
+  /** E21: a hold the Old City controller runs itself (salvage 0.6 s, pry 2 s) */
+  ocHold?: number;
   at?: TileData;
   frame?: { roofId: string; x: number; z: number; size: number };
 }
@@ -491,8 +495,9 @@ export class Game {
       this.overlays.holo.eye = (out) => visuals.eyeWorld(out);
       this.overlays.holo.sink = () => new MeshBuilder();
       bot.walker.solid = (r, x, z) => this.cozy.solidAt(r, x, z); // E19: solid plot options block like machines (a decoration blocks through its tile)
-      bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble' || !!this.photo?.active;
-      bot.onZoom = (f) => this.photo?.active && this.photo.zoom(f); // the right stick zooms only in photo mode
+      bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble' || !!this.photo?.active || !!this.oc?.busy;
+      // E21.22: the right stick's up and down tilts the view (it zooms only in photo mode)
+      bot.onZoom = (f) => (this.photo?.active ? this.photo.zoom(f) : this.camTurn(0, -(Math.log(f) / Math.log(1.8)) * 60));
       bot.onPad = (i) => {
         const a = this.resolveButton(i);
         if (a && a !== 'sprint') this.doAction(a);
@@ -503,6 +508,15 @@ export class Game {
         this.padListener(i);
         this.swallowPad = i;
       };
+      if (this.sim.oldCity) {
+        this.hud.root.dataset.rules = 'oldcity'; // E21.12: the intro card's Old City words
+        this.keepers = new KeeperVisuals(this.sim, this.scene.world, this.app);
+        this.keepers.reducedMotion = !!this.settings.reducedMotion;
+        this.oc = new OldCityController(this.oldCityHost());
+        this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
+        // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
+        this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
+      }
       const focus = new PadFocus(this.hud.root);
       this.padFocus = focus;
       bot.padCapture = (i) => {
@@ -512,8 +526,11 @@ export class Game {
         }
         return !this.padListener && focus.button(i);
       };
-      // E19.2: no zoom in play or while building (the right stick's up and down do nothing for now)
-      bot.onTurn = (deg) => this.camera.orbit(deg);
+      bot.onTurn = (deg) => this.camTurn(deg, 0);
+      // E21.22: the exploration camera (pitch the player's, 0.15 s smoothing, never below the ground)
+      this.camera.explore = true;
+      if (this.sim.oldCity) this.chunks.fadeTo = 0.3; // E21.22: buildings between the camera and bloombot fade to 30%
+      this.camera.ground = (x, z) => this.groundY(x, z);
       this.glyphs.deckBuild = !!desktopApi()?.deck;
       this.hud.setKeyMap('keys', this.bindings);
       // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad).
@@ -539,9 +556,9 @@ export class Game {
       },
       // Bloombot: while the camera follows it, zoom about the middle of the view (bloombot), not the cursor.
       // Bloombot: a right-button drag turns the view around bloombot (a third of a degree per pixel).
-      orbit: (dx, button) => {
+      orbit: (dx, dy, button) => {
         if (!this.bot || this.cinematic || !this.bindings.keys.look.includes(`Mouse${button}`)) return false;
-        this.camera.orbit(-dx * 0.35);
+        this.camTurn(-dx * 0.35, dy * 0.25); // E21.22: dragging with the look button turns and tilts the view
         return true;
       },
       // Bloombot: the camera's distance is fixed; the wheel turns what you're building (E19.2).
@@ -797,6 +814,7 @@ export class Game {
     document.body.classList.toggle('potter', potterPace(s));
     document.body.classList.toggle('details', !!s.showNumbers); // E22.10: "Show details" adds figures to the gauges
     this.glyphs.setting = s.glyphs ?? 'auto'; // E22.3
+    if (this.oc) this.oc.holdToAct = s.holdToAct !== false; // E22.2
     this.hud.settings = s;
     if (!s.debug) this.hud.setDebug(null);
   }
@@ -918,6 +936,12 @@ export class Game {
     if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
   }
 
+  /** E22.11: a full-screen panel pauses the game while it is open (also called the moment one closes, so the next
+   *  key press already reaches the game, however slow the frame). */
+  private syncPanelPause() {
+    this.pause.set('panel', this.hud.backpackOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
+  }
+
   private openMenu() {
     if (this.photo.active) this.photo.exit();
     this.hud.toggleTray(false);
@@ -930,6 +954,7 @@ export class Game {
     this.settingsUi.close();
     this.menu.close();
     this.pause.clear('menu', 'padLost');
+    this.syncPanelPause();
   }
 
   /** Esc with nothing open, or Menu on the pad. */
@@ -1193,7 +1218,7 @@ export class Game {
       case 'map':
         return this.toggleOverview();
       case 'zoomCamera':
-        return this.stepZoom(1, true);
+        return this.cycleZoom();
       case 'sprintToggle':
         if (this.bot) this.bot.sprintLatched = !this.bot.sprintLatched;
         return;
@@ -1229,7 +1254,7 @@ export class Game {
   /** A panel or menu that takes the input is open. */
   private panelOpen(): boolean {
     const h = this.hud;
-    return h.modalOpen || h.backpackOpen || h.plotPickerOpen || h.isUpgradesOpen || h.trayOpen;
+    return h.modalOpen || h.backpackOpen || h.plotPickerOpen || h.isUpgradesOpen || h.trayOpen || !!this.oc?.panel.isOpen;
   }
 
   /** The action a key (or mouse input) means now. With a panel open, the key that opened it closes it again. */
@@ -1276,16 +1301,6 @@ export class Game {
     this.hud.toast('No requests to pin yet', '', 2);
   }
 
-  /** E22.1: the walking camera's zoom step (0 closest). `wrap` cycles (the pad); the wheel stops at the ends. */
-  private zoomStep = 0;
-  private stepZoom(dir: number, wrap = false) {
-    if (!this.bot || this.cinematic) return;
-    const n = BOT_ZOOMS.length;
-    this.zoomStep = wrap ? (this.zoomStep + dir + n) % n : Math.max(0, Math.min(n - 1, this.zoomStep + dir));
-    this.overviewOn = false;
-    this.bot.following = true;
-  }
-
   /** The mouse wheel: turns the piece in build mode, otherwise zooms the camera (as bound). */
   private wheel(factor: number) {
     if (factor === 1) return;
@@ -1297,7 +1312,69 @@ export class Game {
       this.turnBuild(factor > 1 ? 1 : -1);
     } else if (a === 'zoomCamera') {
       this.wheelAt = now;
-      this.stepZoom(factor > 1 ? -1 : 1);
+      this.zoomStepBy(factor > 1 ? -1 : 1); // E21.22's zoom steps
+    }
+  }
+
+  // ───────────── E21.22: the exploration camera ─────────────
+
+  /** 0 close, 1 normal (today's), 2 far */
+  private zoomStep = 1;
+  /** seconds since the player last moved the camera, and how long bloombot has walked since */
+  private camIdle = 99;
+  private walkedFor = 0;
+  private stillFor = 0;
+
+  /** Steps the zoom (−1 closer, +1 further). */
+  private zoomStepBy(step: number) {
+    const next = Math.max(0, Math.min(EXPLORE.zoomSteps.length - 1, this.zoomStep + step));
+    if (next === this.zoomStep) return;
+    this.zoomStep = next;
+    this.camIdle = 0;
+    this.overviewOn = false;
+    if (this.bot) this.bot.following = true;
+    this.sfx.click();
+  }
+
+  /** E22.1: the pad's zoom button cycles the steps (close, normal, far, close…). */
+  private cycleZoom() {
+    if (!this.bot || this.cinematic) return;
+    this.zoomStepBy(this.zoomStep >= EXPLORE.zoomSteps.length - 1 ? -this.zoomStep : 1);
+  }
+
+  /** The camera's speed and axes from the settings. */
+  private camFactor(axis: 'x' | 'y'): number {
+    const s = this.settings;
+    return ((s.camSensitivity ?? 100) / 100) * ((axis === 'x' ? s.invertX : s.invertY) ? -1 : 1);
+  }
+
+  /** The player turned or tilted the view. */
+  private camTurn(yawDeg: number, pitchDeg: number) {
+    if (yawDeg) this.camera.orbit(yawDeg * this.camFactor('x'));
+    if (pitchDeg) this.camera.pitchBy(pitchDeg * this.camFactor('y'));
+    this.camIdle = 0;
+  }
+
+  /**
+   * Per frame: the look-ahead, and the drift back behind bloombot after 3 s of walking with no camera input (a
+   * setting). On a rooftop the view eases to the far step.
+   */
+  private updateExploreCamera(dt: number) {
+    const b = this.bot;
+    if (!b || this.cinematic || this.photo?.active) return;
+    this.camIdle += dt;
+    const moving = b.speed > 0.05;
+    // walking time survives a frame's pause at a path corner; half a second standing still resets it
+    this.stillFor = moving ? 0 : this.stillFor + dt;
+    this.walkedFor = moving ? this.walkedFor + dt : this.stillFor > 0.5 ? 0 : this.walkedFor;
+    const f = b.pose.facing;
+    this.camera.setLead(moving && b.following ? Math.sin(f) * EXPLORE.lead : 0, moving && b.following ? Math.cos(f) * EXPLORE.lead : 0);
+    if (!this.settings.noRecentre && this.stillFor < 0.5 && this.camIdle >= EXPLORE.recentreAfter && this.walkedFor >= EXPLORE.recentreAfter) {
+      const behind = (f * 180) / Math.PI + 180;
+      const now = this.camera.heading;
+      const diff = ((((behind - now) % 360) + 540) % 360) - 180;
+      const step = Math.sign(diff) * Math.min(Math.abs(diff), EXPLORE.recentreSpeed * dt);
+      if (Math.abs(diff) > 0.5) this.camera.turnTo(now + step, true);
     }
   }
 
@@ -1361,6 +1438,7 @@ export class Game {
   private escape(fromCancel = false) {
     if (this.settingsUi.isOpen) this.settingsUi.close();
     else if (this.menu.isOpen) this.closeMenu();
+    else if (this.oc?.escape()) void 0; // E21: an Old City panel or a hold
     else if (this.mergeSel) this.cancelMerge();
     else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
     else if (this.hud.trayOpen) this.hud.toggleTray(false);
@@ -1370,6 +1448,7 @@ export class Game {
     else if (this.bot?.walking) this.bot.cancelWalk();
     else if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
     else if (!fromCancel) this.openMenu();
+    this.syncPanelPause();
   }
 
   /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
@@ -1401,7 +1480,8 @@ export class Game {
     if (!b || this.cinematic) return;
     if (this.overviewOn && b.speed > 0.05) this.overviewOn = false; // walking leaves the overview
     if (this.overviewOn || !b.following) return; // the overview, or a camera-only fly-to, keeps its own zoom
-    const want = BOT_ZOOMS[this.zoomStep] ?? BOT_ZOOM;
+    // E21.22: the chosen step; on a rooftop the view eases out to the far step
+    const want = b.pose.roofId !== GROUND ? EXPLORE.zoomSteps[2] : EXPLORE.zoomSteps[this.zoomStep];
     if (Math.abs(this.camera.zoomTarget - want) > 1e-3) this.camera.zoomTo(want);
   }
 
@@ -1411,7 +1491,7 @@ export class Game {
     const out = !this.overviewOn;
     this.overviewOn = out;
     const t = this.bot ? this.bot.world() : [c.target.x, 0, c.target.z];
-    c.glide(t[0], 0, t[2], out ? c.minZoom : (BOT_ZOOMS[this.zoomStep] ?? BOT_ZOOM));
+    c.glide(t[0], 0, t[2], out ? c.minZoom : EXPLORE.zoomSteps[this.zoomStep]);
     if (!out && this.bot) this.bot.following = true;
   }
 
@@ -1564,9 +1644,14 @@ export class Game {
     const f = b.front();
     const front = this.sim.grid.get(b.pose.roofId, f.x, f.z);
     const fd = Math.hypot(f.x + 0.5 - b.pose.x, f.z + 0.5 - b.pose.z);
-    // Region unlocks: facing a sealed area's fog, Interact opens it (or says what it still needs).
+    if (this.oc) out.push(...this.oldCityCandidates(f, front, fd));
+    // Region unlocks: facing a sealed area's fog, Interact opens it (or says what it still needs). The Old City has
+    // no price: its gates open by prying, repairing or waking, and the prompt says what is in the way.
     const sealed = this.sealedAhead();
-    if (sealed) {
+    if (sealed && this.sim.oldCity) {
+      if (!out.some((c) => c.kind === 'gate'))
+        out.push({ kind: 'gate', id: `seal:${sealed}`, verb: 'Look at', name: 'the clouds', distance: fd, at: front, refused: this.sim.areas.sealText(sealed).replace(/<[^>]*>/g, ''), run: () => {} });
+    } else if (sealed) {
       const s = this.sim.areas;
       const cost = s.unlockCost(sealed)!;
       const short = this.sim.econ.shortfall(cost);
@@ -1600,7 +1685,7 @@ export class Game {
         kind: 'decoration', id: `decor:${tile.occupantId}`, verb: 'Pick up', name: DECOR_OPTION[dec.kind]?.name ?? 'the decoration', distance: dist, at: tile,
         run: () => this.botAnim(this.removeDecorAt(p, sc().x, sc().y, true)),
       });
-    } else if (occ) {
+    } else if (occ && !out.some((c) => c.id.endsWith(`:${occ.id}`))) {
       const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
       const lmName = area === PARK ? 'the fountain' : area ? this.sim.areas.info(area).landmarkName : undefined;
       const ready = occ.type === 'core' && this.landmarkReady(occ);
@@ -1622,6 +1707,36 @@ export class Game {
           },
         });
     }
+    return out;
+  }
+
+  /**
+   * E21 through E22.2's one prompt: a salvage pile, a Keeper, a lookout, a gate, the fountain, a sleeping landmark
+   * or the store in front of bloombot. The Old City controller acts on them (and runs their holds).
+   */
+  private oldCityCandidates(f: { x: number; z: number }, front: TileData | undefined, fd: number): InteractTarget[] {
+    const s = this.sim;
+    const oc = this.oc!;
+    const b = this.bot!;
+    if (b.pose.roofId !== GROUND) return [];
+    const occ = front ? s.occupant(front) : undefined;
+    const run = () => void oc.interact(f, occ);
+    const out: InteractTarget[] = [];
+    const pile = s.salvage.pileAt(f.x, f.z);
+    if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: SALVAGE.holdSeconds, refused: s.salvage.problem(pile.id), run });
+    const keeper = s.keepers.at(f.x, f.z);
+    if (keeper && s.keepers.visible(keeper.id)) out.push({ kind: 'keeper', id: `keeper:${keeper.id}`, verb: keeper.id === 'tally' && s.landmarks.canTrade() ? 'Trade with' : 'Talk to', name: keeper.name, distance: fd, at: front, run });
+    const sp = setPieceAt(f.x, f.z);
+    if (sp?.kind === 'lookout') out.push({ kind: 'gate', id: `lookout:${sp.id}`, verb: 'Look out', name: '', distance: fd, at: front, run });
+    const gate = s.gates.gateAt(f.x, f.z);
+    if (gate) out.push({ kind: 'gate', id: `gate:${gate.id}`, verb: gate.kind === 'barricade' ? 'Pry' : 'Repair', name: '', distance: fd, at: front, ocHold: gate.kind === 'barricade' ? SALVAGE.pryHoldSeconds : undefined, refused: s.gates.problem(gate), run });
+    if (occ?.type === 'core' && s.areas.areaOf(occ) === PARK)
+      out.push({ kind: 'landmark', id: `fountain:${occ.id}`, verb: 'Bring things to', name: 'the fountain', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+    else if (occ?.type === 'core') {
+      const r = s.landmarks.regionAt(occ.x, occ.z);
+      if (r && s.areas.fog(r.id) !== 'cleared') out.push({ kind: 'landmark', id: `lm:${occ.id}`, verb: 'Wake', name: `the ${r.landmark.name}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+      else if (s.inventory.accessPoints().some((p) => p.x === occ.x && p.z === occ.z && p.roofId === occ.roofId)) out.push({ kind: 'storage', id: `store:${occ.id}`, verb: 'Open', name: 'the store', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+    } else if (occ?.type === 'chest') out.push({ kind: 'storage', id: `chest:${occ.id}`, verb: 'Open', name: 'the chest', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
     return out;
   }
 
@@ -1649,13 +1764,13 @@ export class Game {
     const chk = t && !t.occupantId ? this.sim.restoration.checkPulse(t) : undefined;
     const pulse = chk?.ok ? { glyph: this.glyph('pulse'), text: t!.ground === 'restored' ? 'Nurture' : 'Pulse' } : undefined;
     if (!target) return pulse ? { glyph: pulse.glyph, text: pulse.text } : undefined;
-    const hold = holdFor(target, this.settings.holdToAct !== false);
+    const hold = holdFor(target, this.settings.holdToAct !== false) || (target.ocHold && this.settings.holdToAct !== false ? target.ocHold : 0);
     const h = this.holding;
     return {
       glyph: this.glyph('interact'),
       text: promptText(target),
       hold: hold > 0,
-      progress: h && h.id === target.id ? h.t / h.need : 0,
+      progress: h && h.id === target.id ? h.t / h.need : target.ocHold ? (this.oc?.holdProgress() ?? 0) : 0,
       refused: target.refused,
       pulse,
     };
@@ -4369,7 +4484,7 @@ export class Game {
     const view = this.city ? this.groundRect() : undefined;
     this.sim.drones.focus = view ? { x: (view.x0 + view.x1) / 2, z: (view.z0 + view.z1) / 2, radius: Math.hypot(view.x1 - view.x0, view.z1 - view.z0) / 2 + 24 } : undefined;
     // E22.11: a full-screen panel (the backpack, Settings) pauses the game while it is open.
-    this.pause.set('panel', this.hud.backpackOpen || this.settingsUi.isOpen);
+    this.syncPanelPause();
     const paused = this.pause.paused;
     if (!paused && !this.photo.frozen) {
       if (rawDt > TUNING.maxFrameDt && !this.hiddenAt) this.awayFor(Math.min(rawDt, 30) - TUNING.maxFrameDt); // a hitch
@@ -4438,6 +4553,9 @@ export class Game {
     this.overlays.update(dt);
     if (this.bot) {
       this.bot.update(wdt); // still reads the pad (the menu's focus ring), but nothing moves
+      this.updateExploreCamera(wdt);
+      this.oc?.update(wdt);
+      this.keepers?.update(wdt);
       this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();

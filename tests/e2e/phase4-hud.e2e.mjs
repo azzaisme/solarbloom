@@ -62,7 +62,7 @@ try {
         const name = `${rules}-${w}x${h}-${scale}`;
         const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
         page.setDefaultTimeout(180000);
-        await page.goto(`http://localhost:4198/?slot=1&ui=${rules}`);
+        await page.goto(`http://localhost:4198/?slot=1${rules === 'classic' ? '&rules=classic' : ''}`);
         await page.evaluate((scale) => {
           localStorage.clear();
           localStorage.setItem('solarbloom.settings', JSON.stringify({ uiScale: scale, showNumbers: !!globalThis.NUMBERS }));

@@ -8,8 +8,8 @@ export interface InputHandlers {
   zoom(factor: number, x?: number, y?: number): void;
   /** A two-finger pinch finished: its overall zoom factor (spread end / start) and how long it took. */
   pinchEnd?(factor: number, ms: number): void;
-  /** A drag with `button` held moved sideways by dx pixels. Return true if it was used (else it pans). */
-  orbit?(dx: number, button: number): boolean;
+  /** A drag with `button` held moved by dx, dy pixels (it turns and tilts the view). Return true if it was used (else it pans). */
+  orbit?(dx: number, dy: number, button: number): boolean;
 }
 
 /**
@@ -98,7 +98,7 @@ export class InputController {
       this.suppressClick = true;
     }
     if (this.dragging) {
-      if (!(e.pointerType === 'mouse' && this.h.orbit?.(dx, this.downButton))) this.h.pan(dx, dy, p.x, p.y);
+      if (!(e.pointerType === 'mouse' && this.h.orbit?.(dx, dy, this.downButton))) this.h.pan(dx, dy, p.x, p.y);
     } else if (e.pointerType === 'mouse') this.h.hover(p.x, p.y);
   };
 

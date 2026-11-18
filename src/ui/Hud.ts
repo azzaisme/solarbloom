@@ -221,7 +221,7 @@ export class Hud {
       </div>
       <div id="eventBanner" role="status" aria-live="polite" hidden><span class="ei"></span><span class="et"></span><span class="ec"></span><i class="ebar"></i></div>
       <div id="combo"><div id="comboFx" aria-hidden="true"></div><div class="big" id="comboBig" role="status" aria-label="Bloom chain combo"><span class="cic">${ICONS.biomass}</span><span class="cl">Combo</span> <span class="cx">×0</span></div><div class="cbody panel"><ul id="comboParts"></ul><div class="total" id="comboTotal"></div><div id="chainAreas"></div></div><div id="feed"></div></div>
-      <div id="hotbar" class="panel">${Hotbar.template()}</div>
+      <div id="hotbar" class="panel">${Hotbar.template(this.sim.oldCity)}</div>
       ${BuildBar.template()}
       <button id="frenzyBtn" class="frenzy-btn" aria-label="Bloom Frenzy (Q)" hidden><span class="fill"></span><span class="fi">${ICONS.frenzy}</span><span class="ft">0%</span></button>
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>

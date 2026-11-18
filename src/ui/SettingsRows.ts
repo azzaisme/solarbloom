@@ -61,6 +61,12 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
         { kind: 'check', key: 'highContrast', label: 'High contrast' },
         { kind: 'check', key: 'reducedMotion', label: 'Reduced motion and effects' },
         { kind: 'check', key: 'holdToAct', label: 'Hold to act', hint: 'Off: one press salvages or pries', defaultOn: true },
+        { kind: 'heading', label: 'Camera' },
+        { kind: 'select', key: 'camSensitivity', label: 'Camera speed', options: [['50', 'Slow'], ['75', 'Gentle'], ['100', 'Normal'], ['150', 'Quick'], ['200', 'Fast']], fallback: '100', numeric: true },
+        { kind: 'check', key: 'invertX', label: 'Invert camera left and right' },
+        { kind: 'check', key: 'invertY', label: 'Invert camera up and down' },
+        { kind: 'check', key: 'noRecentre', label: 'Keep the view where I turn it' },
+        { kind: 'check', key: 'noVistas', label: 'Skip region vistas' },
       ];
   }
 }

@@ -155,7 +155,8 @@ try {
     await wait(page, 300);
     await page.keyboard.press('KeyT');
     await wait(page, 300);
-    const used = await page.evaluate(() => !!window.solarbloom.selected); // the fountain is selected: its panel follows
+    // the fountain answers: its delivery panel opens (old-city rules) or it is selected (classic)
+    const used = await page.evaluate(() => !!window.solarbloom.selected || !!document.querySelector('#ocPanel.open'));
     const why = await page.evaluate(() => JSON.stringify({ p: window.solarbloom.pause.list(), m: window.solarbloom.menu.isOpen, s: window.solarbloom.settingsUi.isOpen, prompt: document.getElementById('prompt').innerText, k: window.solarbloom.bindings.keys.interact }));
     check(used, `E22.4 keyboard: T interacts with the fountain (its panel opens) ${used ? '' : why}`);
     check(!errors.length, `E22.4 keyboard: no page errors ${errors.join(' | ')}`);
@@ -173,7 +174,7 @@ try {
     await press(page, 0);
     await press(page, 10); // left stick click: Sprint on or off has it, so the row asks
     const asked = await page.evaluate(() => document.querySelector('.ctl-ask')?.textContent ?? '');
-    check(/Swap with Sprint on or off/.test(asked), `E22.4 pad: a clash asks first (${asked})`);
+    check(/Swap with Hover on or off/.test(asked), `E22.4 pad: a clash asks first (${asked})`);
     check(await padTo(page, '#ctlSwap'), 'E22.4 pad: reach Swap');
     await press(page, 0);
     const pb = await page.evaluate(() => [window.solarbloom.bindings.pad.interact, window.solarbloom.bindings.pad.sprintToggle]);
@@ -184,7 +185,7 @@ try {
     await wait(page, 300);
     await press(page, 10);
     await wait(page, 300);
-    check(await page.evaluate(() => !!window.solarbloom.selected), 'E22.4 pad: the left stick click interacts with the fountain');
+    check(await page.evaluate(() => !!window.solarbloom.selected || !!document.querySelector('#ocPanel.open')), 'E22.4 pad: the left stick click interacts with the fountain');
     check(!errors.length, `E22.4 pad: no page errors ${errors.join(' | ')}`);
     await page.close();
   }

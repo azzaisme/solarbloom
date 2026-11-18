@@ -221,7 +221,9 @@ export class BotController {
     }
     const frozen = this.frozen();
     if (mag < 0.01 && !this.walk) this.sprintLatched = false; // a toggled sprint ends when bloombot stops
-    this.sprinting = !frozen && (this.bindings.isDown('sprint', this.held) || !!pad?.sprint || this.sprintLatched);
+    // Sprinting is the Hover upgrade: until it is bought the sprint inputs do nothing.
+    const canHover = (this.sim.state.upgrades.hover ?? 0) > 0;
+    this.sprinting = !frozen && canHover && (this.bindings.isDown('sprint', this.held) || !!pad?.sprint || this.sprintLatched);
     const p = this.pose;
     const w = this.walker;
     const wade = w.wading(p) ? BOT.wade : 1;

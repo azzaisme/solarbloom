@@ -12,6 +12,9 @@ import type { Sim } from '../gameplay/Sim';
 import { HOME } from '../gameplay/ProgressionSystem';
 import { TUNING } from '../data/tuning';
 import { WORDS } from './words';
+import { MATERIALS } from '../data/salvage';
+import type { MaterialId } from '../core/types';
+import { oldCityHint, oldCityObjective as oldCityCard } from './OldCityGuide';
 
 /**
  * E22.10 (#348) / E22.5 (#342): the objective card (top left). Under old-city rules it is one plain sentence about
@@ -32,11 +35,32 @@ export function pinnedRequest(state: object): { text: string; have?: number; nee
   return undefined;
 }
 
-export function oldCityObjective(sim: Sim): Objective {
-  const pin = pinnedRequest(sim.state);
-  if (pin) return { text: pin.text, count: pin.need ? WORDS.objective.count(Math.min(pin.have ?? 0, pin.need), pin.need) : undefined };
-  const p = sim.progression;
+export function objectiveSentence(sim: Sim): Objective {
   const W = WORDS.objective;
+  if (sim.oldCity) {
+    // E21.8: the pinned Keeper request (with a count only while its patch is restored by hand)
+    const pinned = sim.keepers.pinned();
+    if (pinned) {
+      const step = sim.keepers.step(pinned.id);
+      const p = step === 'request2' ? sim.keepers.patch(pinned.id) : undefined;
+      return { text: pinned.text, count: p ? W.count(Math.min(p.restored, p.total), p.total) : undefined };
+    }
+    // E21.6: the fountain's next step, by its name: what it still wants, then its own condition
+    const f = sim.fountain;
+    const t = f.next();
+    if (!t) return { text: W.explore };
+    const want = (Object.keys(t.delivery) as (MaterialId | 'biomass')[])
+      .map((k) => [k, k === 'biomass' ? t.delivery[k]! : f.remaining(k as MaterialId)] as const)
+      .filter(([, n]) => n > 0)
+      .map(([k, n]) => `${n} ${k === 'biomass' ? 'Greens' : MATERIALS[k as MaterialId].name}`);
+    if (want.length) return { text: `Bring ${want.length > 1 ? `${want.slice(0, -1).join(', ')} and ${want[want.length - 1]}` : want[0]} to the fountain` };
+    const c = f.condition(t);
+    if (!c.done) return { text: c.label, count: W.count(Math.min(c.have, c.need), c.need) };
+    return { text: `${t.name}: the fountain is ready` };
+  }
+  const pin = pinnedRequest(sim.state);
+  if (pin) return { text: pin.text, count: pin.need ? W.count(Math.min(pin.have ?? 0, pin.need), pin.need) : undefined };
+  const p = sim.progression;
   if (!sim.state.progression.coreActivated) {
     const g = p.homeIsPark ? TUNING.park : TUNING.core; // the same goals ProgressionSystem counts
     const n = p.restoredCount(HOME);
@@ -252,7 +276,16 @@ export class ObjectiveCard extends HudPart {
     const total = p.restorableCount(HOME);
     const pct = Math.round((restored / Math.max(1, total)) * 100);
     let hoodNext = '';
-    if (s.state.progression.coreActivated) {
+    // E21.8 / E21.12: the Old City pins one request (a Keeper's, else the next fountain step)
+    const ocard = s.oldCity ? oldCityCard(s) : undefined;
+    if (ocard) {
+      this.set('objTitle', $(this.root, '#objTitle'), 'text', ocard.title);
+      this.set('objPct', $(this.root, '#objPct'), 'text', ocard.pct);
+      this.set('objBar', $(this.root, '#objBar'), 'width', `${Math.round(ocard.bar * 100)}%`);
+      this.set('objList', $(this.root, '#objList'), 'html', ocard.list.map((r) => `<li class="${r.done ? 'done' : ''}"><span class="ck">${r.done ? '✓' : ''}</span>${esc(r.label)}</li>`).join(''));
+      this.set('objAct', $(this.root, '#objAct'), 'html', '');
+      hoodNext = ocard.next;
+    } else if (s.state.progression.coreActivated) {
       hoodNext = this.cityObjective();
     } else {
       this.set('objAct', $(this.root, '#objAct'), 'html', p.homeIsPark ? this.suggestionHtml() : '');
@@ -266,7 +299,7 @@ export class ObjectiveCard extends HudPart {
     const ready = p.coreReady();
     // Look 5.8: the card's checkbox ticks (with a flourish) once the current goal is ready to complete.
     const goal = s.state.progression.coreActivated ? s.areas.nextGoal() : undefined;
-    const done = s.state.progression.coreActivated ? !!goal && s.areas.ready(goal) : ready;
+    const done = ocard ? ocard.done : s.state.progression.coreActivated ? !!goal && s.areas.ready(goal) : ready;
     this.set('objDone', $(this.root, '#obj'), 'cls', done ? '1' : '0', 'done');
     this.set('objDoneLabel', $(this.root, '#objCheck'), 'title', done ? 'Ready: complete it now' : 'Not done yet');
     $(this.root, '#objCheck').setAttribute('aria-label', done ? 'Ready to complete' : 'Not done yet');
@@ -279,7 +312,7 @@ export class ObjectiveCard extends HudPart {
     // Hint
     const step = s.state.progression.tutorialStep;
     const hint = $(this.root, '#hint');
-    const h = this.hintFor(step);
+    const h = s.oldCity ? oldCityHint(s, step, (a) => this.cb.keyFor(a)) : this.hintFor(step); // E21.12
     const showHint = this.settings.hints && !this.settings.potter && step !== this.hintDismissedStep && !this.hud.introOpen;
     this.set('hintText', $(this.root, '#hintText'), 'text', h.text);
     this.set('hintShow', hint, 'cls', showHint ? '0' : '1', 'hide');
@@ -295,7 +328,7 @@ export class ObjectiveCard extends HudPart {
     // "Next:" line (visible on phones, where the checklist is collapsed)
     const nextReq = s.state.progression.coreActivated ? undefined : p.requirements().find((r) => !r.done);
     const nm = s.state.progression.coreActivated ? undefined : p.nextMilestone();
-    const nextText = s.state.progression.coreActivated ? hoodNext : ready ? 'Next: wake the fountain ✨' : nextReq ? `Next: ${nextReq.label}${nm && nextReq.label.startsWith('Restore') ? ` · 🌱 reward at ${nm.at}` : ''}` : '';
+    const nextText = ocard || s.state.progression.coreActivated ? hoodNext : ready ? 'Next: wake the fountain ✨' : nextReq ? `Next: ${nextReq.label}${nm && nextReq.label.startsWith('Restore') ? ` · 🌱 reward at ${nm.at}` : ''}` : '';
     // "Next:" is dropped on phones (CSS), so the goal itself fits on one line.
     this.set('objNext', $(this.root, '#objNext'), 'html', nextText.startsWith('Next: ') ? `<span class="nx">Next: </span>${esc(nextText.slice(6))}` : esc(nextText));
 
@@ -303,7 +336,7 @@ export class ObjectiveCard extends HudPart {
 
   /** E22.10: the old-city sentence. */
   private updateOldCity() {
-    const o = oldCityObjective(this.sim);
+    const o = objectiveSentence(this.sim);
     this.set('objTitle', $(this.root, '#objTitle'), 'html', `${esc(o.text)}${o.count ? ` <span class="ocount">${esc(o.count)}</span>` : ''}`);
   }
 }

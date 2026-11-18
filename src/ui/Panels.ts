@@ -1,5 +1,6 @@
 import type { AreaMode, MachineData } from '../core/types';
 import { DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTION, PLOT_OPTIONS } from '../data/cozy';
+import { MATERIAL_IDS, MATERIALS } from '../data/salvage';
 import { formatPriceHtml } from '../core/Economy';
 import { MACHINES, TIER2, TIER3 } from '../data/machines';
 import { GROUP_ICONS, ICONS, iconize } from './Icons';
@@ -148,7 +149,17 @@ export class Panels extends HudPart {
       .map((id) => this.sim.areas.info(id));
     const card = (icon: string, name: string, detail: string) => `<div class="card"><span class="ci">${icon}</span><span class="cn">${name}</span><span class="cd2">${detail}</span></div>`;
     const fauna = Object.keys(st.fauna ?? {});
+    // E21.1 / E21.8: in the Old City the backpack lists what bloombot carries and the Keepers' other requests
+    const oldCity = this.sim.oldCity
+      ? [
+          '<h3 class="bp-h">Carrying</h3>',
+          ...MATERIAL_IDS.filter((m) => this.sim.inventory.count(m)).map((m) => card(MATERIALS[m].icon, `${MATERIALS[m].name}: ${this.sim.inventory.count(m)}/${this.sim.inventory.stackLimit()}`, `${this.sim.inventory.stored(m)} in storage`)),
+          '<h3 class="bp-h">Requests</h3>',
+          ...(this.sim.keepers.requests().length ? this.sim.keepers.requests().map((r, i) => card('🤖', i === 0 ? 'Pinned' : 'Waiting', esc(r.text))) : [card('🤖', 'No requests yet', 'Wake a Keeper and it will ask for help.')]),
+        ]
+      : [];
     const parts = [
+      ...oldCity,
       '<h3 class="bp-h">Discoveries</h3>',
       card('🐱', `Lucky Cats found: ${st.stats.catsFound}`, st.stats.catsFound ? 'Keep wandering: more hide as the city wakes.' : 'Wander the city. Paw prints mean a cat is close.'),
       card('⛲', `Landmarks woken: ${woken.length}`, woken.length ? woken.map((a) => a.landmarkName).join(', ') : 'Restore the park to wake the fountain.'),
