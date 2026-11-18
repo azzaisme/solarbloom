@@ -75,6 +75,16 @@ export const SALVAGE = {
 };
 
 /**
+ * E23.7.4: what an old save's Reclaimer is worth when it is taken down on load (its E21 recipe, refunded to the
+ * store), and the blueprint that replaced Reclaimer Mk 2.
+ */
+export const LEGACY_RECLAIMER = {
+  refund: { scrap: 20, copper: 10, timber: 10 } as Partial<Record<'scrap' | 'copper' | 'timber', number>>,
+  blueprint: 'reclaimerMk2',
+  becomes: 'salvageLore',
+};
+
+/**
  * §3 loose yield of each region's own material (the target the piles in data/oldcity add up to) and Scrap.
  * Piles come in sizes of 6, so 80 Scrap is laid as 78. The park holds 18 Seeds, not 12: in the Milestone A slice
  * Elder Grove is not laid out yet, and the Pylon's first request (8 Seeds) must be payable after tier 1 (6 Seeds).
