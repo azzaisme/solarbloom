@@ -116,20 +116,11 @@ export class ObjectiveCard extends HudPart {
       }
       if (t.closest('[data-upg]')) this.hud.toggleUpgrades(true);
       if (t.closest('[data-harvest]')) this.cb.harvest();
-      const mg = t.closest<HTMLButtonElement>('[data-merge-at]');
-      if (mg) this.cb.mergeAt(mg.dataset.mergeAt!);
       const ia = t.closest<HTMLButtonElement>('[data-inspect-at]');
       if (ia) this.cb.inspectAt(ia.dataset.inspectAt!);
-      const ct = t.closest<HTMLButtonElement>('[data-core-tool]');
-      if (ct) this.cb.selectTool(ct.dataset.coreTool as Tool);
-      const su = t.closest<HTMLButtonElement>('[data-super]');
-      if (su) {
-        const [action, id] = su.dataset.super!.split('|');
-        this.cb.superAction(action as 'stage' | 'activate', id);
-      }
       const db = t.closest<HTMLButtonElement>('[data-district]');
       if (db && !db.disabled) this.cb.districtBloom(db.dataset.district!, db.dataset.replay === '1');
-      if (fo || wk || db || mg || ct || su || t.closest('[data-upg]') || t.closest('[data-harvest]')) this.suggestionAt = -1;
+      if (fo || wk || db || ia || t.closest('[data-upg]') || t.closest('[data-harvest]')) this.suggestionAt = -1;
     });
   }
 
@@ -210,7 +201,7 @@ export class ObjectiveCard extends HudPart {
     if (!g) return (this.suggestionBtn = '');
     const a = g.action;
     const attr =
-      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'merge' ? `data-merge-at="${a.machineId}"` : a.kind === 'role' ? `data-inspect-at="${a.machineId}"` : a.kind === 'placeCore' ? `data-core-tool="super:${a.type}"` : a.kind === 'super' ? `data-super="${a.action}|${a.machineId}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
+      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'role' ? `data-inspect-at="${a.machineId}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
     this.suggestionBtn = `<p class="sugg">${esc(g.text)}</p><button class="act" ${attr}>${esc(g.label)}</button>`;
     return this.suggestionBtn;
   }

@@ -197,7 +197,7 @@ export class Inventory {
   refund(cost: MaterialCost) {
     for (const [k, v] of Object.entries(cost) as [MaterialId | 'biomass', number][]) {
       if (!v) continue;
-      if (k === 'biomass') this.sim.econ.add('biomass', v, { frenzy: false });
+      if (k === 'biomass') this.sim.econ.add('biomass', v);
       else this.addToStore(k, this.add(k, v));
     }
   }

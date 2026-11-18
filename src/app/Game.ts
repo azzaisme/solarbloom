@@ -8,8 +8,8 @@ import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
-import type { BuildableType, DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
-import { MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
+import type { DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
+import { MACHINES, machineIcon, machineName } from '../data/machines';
 import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
 import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, REGIONS } from '../data/oldcity';
@@ -18,8 +18,6 @@ import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
-import { WORLD_EVENT_INFO } from '../gameplay/WorldEventSystem';
-import type { OfflineReport } from '../gameplay/OfflineSystem';
 import { Sim } from '../gameplay/Sim';
 import { Butterflies } from '../rendering/Butterflies';
 import { Birds } from '../rendering/Birds';
@@ -63,11 +61,9 @@ import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
 import { FlyText } from '../ui/Fly';
-import { decorType, Hud, machineTool, superType, type Settings, type Tool } from '../ui/Hud';
+import { decorType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
 import { BOT } from '../gameplay/Walker';
-import { SuperSystem } from '../gameplay/SuperSystem';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
-import type { MergePlan } from '../gameplay/MergeSystem';
 import { EventBus } from './EventBus';
 import { BotController } from './BotController';
 import { type Action, Bindings, type Context, FIXED_KEY, keyLabel, migrateBindings, SLOTS } from './Bindings';
@@ -280,10 +276,6 @@ export class Game {
     // E21: a new game plays the Old City; `?rules=classic` (dev) starts a classic one. A loaded save keeps its own rules.
     const state = loaded ?? createInitialState(undefined, newGameRules());
     this.sim = new Sim(state, this.bus);
-    // Phase 4 E01: time away since the last save earns bounded offline progress (before anything renders).
-    // A clock that went backwards earns nothing; the result is saved right away so a reload can't count it twice.
-    const awayMs = loaded?.savedAt !== undefined ? Date.now() - loaded.savedAt : 0;
-    const offline = awayMs > 0 ? this.sim.offline.apply(awayMs / 1000) : undefined;
 
     this.app = new pc.Application(canvas, {
       graphicsDeviceOptions: { antialias: true, alpha: true, powerPreference: 'high-performance' },
@@ -395,7 +387,6 @@ export class Game {
           if (f) this.botWake(f);
           else this.sim.progression.activateCore();
         },
-        activateFrenzy: () => this.sim.frenzy.activate(),
         findCat: () => this.findCat(),
         keyFor: (a) => this.hudKey(a),
         goHome: (attention) => (attention ? this.focusNextArea() : this.focusArea(PARK)),
@@ -409,26 +400,6 @@ export class Game {
           this.selectTool('inspect');
           this.select(id);
         },
-        mergeAt: (id) => {
-          const m = this.sim.machine(id);
-          if (!m) return;
-          const w = this.machines.worldOf(m);
-          this.camera.glide(w[0], 0, w[2], Math.max(this.camera.zoom, 1));
-          this.selectTool('pulse');
-          this.select(id);
-          this.startMerge();
-        },
-        superAction: (action, id) => {
-          const s = this.sim.supers;
-          if (action === 'stage') s.advance(id);
-          else if (action === 'activate') s.activate(id);
-          else {
-            const m = this.sim.machine(id);
-            if (m?.ability) s.setAuto(id, !m.ability.auto);
-          }
-          this.renderInspect();
-        },
-        merge: (action) => (action === 'start' ? this.startMerge() : action === 'confirm' ? this.confirmMerge() : this.cancelMerge()),
         districtBloom: (id, replay) => this.playDistrictBloom(id, replay),
         openArea: (id) => this.openArea(id),
         setAreaMode: (id, mode) => {
@@ -464,8 +435,6 @@ export class Game {
 
     this.sim.cat.anchorView = (a) => this.anchorView(this.cat.anchorWorld(a));
     for (const c of this.sim.cat.spots()) this.cat.show(c, false);
-    // Phase 5 E15: world events act where the player is looking.
-    this.sim.events.focus = () => ({ roofId: GROUND, x: this.camera.target.x, z: this.camera.target.z });
     {
       this.camera.minZoom = 0.22; // the city overview
       this.updateCityBounds();
@@ -612,17 +581,13 @@ export class Game {
     this.app.start();
     if (lr.scrapped) setTimeout(() => this.hud.toast('A new city awaits — older gardens were cleared for this update. 🌱', '', 7), 400);
     if (lr.backedUpAs) setTimeout(() => this.hud.toast(`Your old save couldn't be read by this version, so it was kept safely as a backup and a new rooftop started.<small>${lr.backedUpAs}</small>`, '', 8), 400);
-    this.sfx.frenzy = this.sim.frenzy.active(); // loaded mid-Frenzy
     // Phase 4 E10.1: no blocking welcome card. The first pulse works at once; a short note says what this is.
     if (!state.progression.introSeen && state.stats.tilesRestored === 0 && !this.sim.oldCity) {
       state.progression.introSeen = true;
       const how = `Walk with ${this.hudKey('up')} ${this.hudKey('left')} ${this.hudKey('down')} ${this.hudKey('right')}. Press ${this.hudKeys('pulse')} to pulse the grey tile in front of you, and ${this.hudKey('interact')} to interact.`;
       setTimeout(() => this.hud.toast(`🌱 Welcome to Solarbloom<small>This park is dead and grey. ${how}</small>`, 'gold', 6), 600);
     }
-    else if (offline) {
-      this.saveNow();
-      setTimeout(() => this.hud.toast(offlineToast(offline, 'Welcome back!'), 'gold', 6), 400);
-    } else if (loaded) setTimeout(() => this.hud.toast('Welcome back! Your garden kept its shape. 🌱', '', 2.6), 400);
+    else if (loaded) setTimeout(() => this.hud.toast('Welcome back! Your garden kept its shape. 🌱', '', 2.6), 400);
   }
 
   // ───────────────────────── settings / persistence ─────────────────────────
@@ -1176,7 +1141,6 @@ export class Game {
       else if (k === 'home') this.focusArea(PARK);
       else if (k === 'u') this.hud.toggleUpgrades();
       else if (k === 'b') this.hud.toggleTray();
-      else if (k === 'q') this.sim.frenzy.activate();
       else if (k === 'p') this.setPaused(!this.paused);
       else if (k === 'f3' || k === '`') {
         e.preventDefault();
@@ -1227,8 +1191,6 @@ export class Game {
         return;
       case 'pinNext':
         return this.pinNext();
-      case 'frenzy':
-        return void this.sim.frenzy.activate();
       case 'nextArea':
         return this.focusNextArea();
       case 'home':
@@ -1442,7 +1404,6 @@ export class Game {
     if (this.settingsUi.isOpen) this.settingsUi.close();
     else if (this.menu.isOpen) this.closeMenu();
     else if (this.oc?.escape()) void 0; // E21: an Old City panel or a hold
-    else if (this.mergeSel) this.cancelMerge();
     else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
     else if (this.hud.trayOpen) this.hud.toggleTray(false);
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
@@ -1758,8 +1719,7 @@ export class Game {
     if (this.building()) {
       const tool = this.hud.currentTool;
       const dk = decorType(tool);
-      const st = superType(tool);
-      const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : st ? `Lay the foundation of the ${TIER3[st]!.name}` : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
+      const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
       return what ? { glyph: this.glyph(this.glyphs.style !== 'keys' ? 'place' : 'pulse'), text: what } : undefined;
     }
     const f = b.front();
@@ -1950,11 +1910,10 @@ export class Game {
     }
     // What the action covers: a machine's footprint, a build ghost's footprint, or the one tile.
     let rect = { x: p.tile.x, z: p.tile.z, size: 1 };
-    if (occ && !this.mergeSel) rect = { x: occ.x, z: occ.z, size: occ.size };
-    else if (superType(tool) || machineTool(tool)) {
-      const st = superType(tool);
-      const a = st ? this.sim.supers.anchorFor(st, p.fx, p.fz) : this.sim.build.anchorFor(tool as BuildableType, p.fx, p.fz);
-      rect = { x: a.x, z: a.z, size: st ? TIER3[st]!.size : MACHINES[tool as BuildableType].size };
+    if (occ) rect = { x: occ.x, z: occ.z, size: occ.size };
+    else if (machineTool(tool)) {
+      const a = this.sim.build.anchorFor(tool, p.fx, p.fz);
+      rect = { x: a.x, z: a.z, size: MACHINES[tool].size };
     }
     const tile = p.tile;
     const go = b.goTo(p.roofId, rect.x, rect.z, rect.size, () => {
@@ -2383,23 +2342,6 @@ export class Game {
     const dk = decorType(tool);
     if (dk) return this.previewDecor(p, x, y, dk);
     if (tool === 'remove') return this.previewRemove(p, x, y);
-    const st = superType(tool);
-    if (st) {
-      // Phase 5 E14: placing a Superstructure Core: footprint ghost, reach, and the whole build's price first.
-      const a = this.sim.supers.anchorFor(st, p.fx, p.fz);
-      const d = TIER3[st]!;
-      const chk = { ...this.sim.supers.check(st, p.roofId, a.x, a.z) };
-      if (chk.ok && !this.inReach(p.roofId, a.x, a.z, d.size)) Object.assign(chk, { ok: false, reason: TOO_FAR });
-      this.overlays.showGhost(p.roofId, a.x, a.z, d.size, chk.ok, 0.3, this.bot ? this.holoShape(st, d.size) : undefined);
-      this.overlays.showRadius(this.sim.grid.tilesNear({ roofId: p.roofId, x: a.x, z: a.z, size: d.size }, 2), chk.ok ? 'ok' : 'info');
-      const stages = chk.costs.map((c, i) => `${SuperSystem.stageName(i)} ${formatCost(c)}`).join('<br>');
-      this.hud.showTip(
-        x,
-        y,
-        `<b>${d.icon} ${d.name}</b>${d.blurb}. ${d.ability}.<br><small>${stages}<br>Total ${formatCost(this.sim.supers.totalCost(chk.costs))} · prices fixed once placed</small><br>${chk.ok ? `<span class="ok">${this.press('E')} to lay the foundation</span>` : `<span class="bad">${chk.reason}</span>`}`,
-      );
-      return;
-    }
     if (machineTool(tool)) {
       const bt = tool;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
@@ -2412,7 +2354,7 @@ export class Game {
       this.hud.showTip(
         x,
         y,
-        `<b>${def.icon} ${def.name}</b>${def.blurb}<br>${this.mergeHint(bt, p.roofId, a.x, a.z, def.size)}${chk.ok ? `<span class="ok">${this.press('E')} to build · ${formatCost(chk.cost)}</span>` : `<span class="bad">${chk.reason}</span>`}`,
+        `<b>${def.icon} ${def.name}</b>${def.blurb}<br>${chk.ok ? `<span class="ok">${this.press('E')} to build · ${formatCost(chk.cost)}</span>` : `<span class="bad">${chk.reason}</span>`}`,
       );
       return;
     }
@@ -2874,24 +2816,6 @@ export class Game {
     const dk = decorType(tool);
     if (dk) return this.placeDecorAt(p, x, y, dk);
     if (tool === 'remove') return this.removeDecorAt(p, x, y, false);
-    const st = superType(tool);
-    if (st) {
-      const a = this.sim.supers.anchorFor(st, p.fx, p.fz);
-      if (!this.inReach(p.roofId, a.x, a.z, TIER3[st]!.size)) {
-        this.hud.showFail(TOO_FAR, x, y);
-        return 'none';
-      }
-      if (this.cozy.plotUnder(p.roofId, a.x, a.z, TIER3[st]!.size)) {
-        this.hud.showFail(PLOT_IN_WAY, x, y);
-        return 'none';
-      }
-      const m = this.sim.supers.place(st, p.roofId, a.x, a.z);
-      if (m) {
-        this.selectTool('pulse');
-        this.select(m.id);
-      }
-      return m ? 'build' : 'none';
-    }
     if (machineTool(tool)) {
       const bt = tool;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
@@ -2911,18 +2835,6 @@ export class Game {
       return m ? 'build' : 'none';
     }
     const occ = this.sim.occupant(t);
-    if (occ && this.mergeSel) {
-      const plan = this.sim.merge.plan(this.mergeSel.anchor, this.mergeSel.partners);
-      if (occ.id === this.mergeSel.anchor || (plan && plan.partners.some((p) => p.id === occ.id))) return 'none';
-      const ids = plan && this.sim.merge.swap(plan, occ.id);
-      if (ids) {
-        this.mergeSel = { anchor: this.mergeSel.anchor, partners: ids };
-        this.sfx.click();
-        this.showMergeHighlights();
-        this.renderInspect();
-        return 'select';
-      }
-    }
     if (occ) {
       if (occ.type === 'core' && this.landmarkReady(occ)) {
         this.wakeLandmark(occ);
@@ -2994,150 +2906,7 @@ export class Game {
     }
   }
 
-  // ───────────── Phase 5 E13: merging ─────────────
-  /** The merge being previewed: the anchor (the selected machine) and its two partners. */
-  private mergeSel?: { anchor: string; partners: string[] };
-  private mergeKeys: string[] = [];
-
-  private startMerge() {
-    const plan = this.selected ? this.sim.merge.plan(this.selected) : undefined;
-    if (!plan || plan.partners.length < 2) return;
-    this.mergeSel = { anchor: plan.anchor.id, partners: plan.partners.map((p) => p.id) };
-    this.sfx.click();
-    this.showMergeHighlights();
-    this.renderInspect();
-  }
-
-  private cancelMerge(render = true) {
-    if (!this.mergeSel) return;
-    this.mergeSel = undefined;
-    this.showMergeHighlights();
-    if (render) this.renderInspect();
-  }
-
-  private confirmMerge() {
-    const sel = this.mergeSel;
-    if (!sel) return;
-    const plan = this.sim.merge.plan(sel.anchor, sel.partners);
-    this.cancelMerge(false);
-    if (plan?.ok) this.sim.merge.commit(sel.anchor, sel.partners, plan.key, plan.fee);
-    this.renderInspect();
-  }
-
-  /** Gold: the three that merge (the anchor brighter); pale blue: others you can tap to swap in. */
-  private showMergeHighlights() {
-    for (const k of this.mergeKeys) this.tileFx.release(k);
-    this.mergeKeys = [];
-    const sel = this.mergeSel;
-    if (!sel) return;
-    const plan = this.sim.merge.plan(sel.anchor, sel.partners);
-    if (!plan) return;
-    const mark = (m: MachineData, tone: string) => {
-      for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size)) {
-        if (!t) continue;
-        const k = `merge:${t.id}`;
-        this.tileFx.hold(k, t, tone);
-        this.mergeKeys.push(k);
-      }
-    };
-    for (const o of plan.options) if (!plan.partners.includes(o)) mark(o, '#9fe8ff');
-    for (const p of plan.partners) mark(p, '#ffd34d');
-    mark(plan.anchor, '#fff1a0');
-  }
-
-  /** Phase 5 E13: a build tooltip line when this spot joins machines of the same kind. */
-  private mergeHint(type: MachineData['type'], roofId: string, x: number, z: number, size: number): string {
-    const n = this.sim.merge.groupIfPlaced(type, roofId, x, z, size);
-    const t2 = TIER2[type];
-    if (!t2) return '';
-    const name = MACHINES[type].name;
-    const line =
-      n < 2
-        ? ''
-        : n >= TUNING.merge.count
-          ? `<span class="ok">🔀 Completes a merge: ${TUNING.merge.count} ${name}s → ${t2.icon} ${t2.name}</span><br>`
-          : `🔀 Touches a ${name}: one more alongside makes a ${t2.icon} ${t2.name}<br>`;
-    // Pacing pass: point the way to a superstructure. A tier 2 merged here (tap this one to merge) lands beside the
-    // tier 2s it touches; three touching tier 2s merge into a core.
-    const t3 = TIER3[type];
-    const beside = Math.min(this.sim.merge.tier2Beside(type, roofId, x, z, size), TUNING.merge.count - 1);
-    if (!t3 || !beside) return line;
-    const yours = beside > 1 ? `${beside} ${t2.name}s` : `${t2.name}`;
-    return (
-      line +
-      (beside + 1 >= TUNING.merge.count
-        ? `<span class="ok">✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (this one too) and the new ${t2.name} completes a ${t3.icon} ${t3.name} core</span><br>`
-        : `✨ Beside your ${yours}: merge ${TUNING.merge.count} ${name}s here (this one too) and ${TUNING.merge.count} touching ${t2.name}s make a ${t3.icon} ${t3.name} core<br>`)
-    );
-  }
-
-  /** Phase 5 E14: a superstructure's card: construction stages, then its ability (charge, fire, automatic). */
-  private superHtml(m: MachineData): string {
-    const s = this.sim;
-    const sup = s.supers;
-    const d = TIER3[m.type];
-    if (!d || (m.tier ?? 1) < 3) return '';
-    if (m.project) {
-      const st = m.project.stage;
-      const steps = [0, 1, 2]
-        .map((i) => `<li class="${i < st ? 'done' : i === st ? 'now' : ''}">${i < st ? '✓' : i === st ? '▶' : '○'} ${SuperSystem.stageName(i)}${i >= st ? ` · ${formatCost(sup.nextCost(m) && i === st ? sup.nextCost(m)! : fromCostStrings(m.project!.costs[i]))}` : ''}</li>`)
-        .join('');
-      const cost = sup.nextCost(m)!;
-      const ok = s.econ.canAfford(cost);
-      return `<div class="super"><b>🏗️ Building the ${esc(d.name)}</b><ul class="stages">${steps}</ul><p>${esc(d.blurb)}. ${esc(d.ability)}.</p><button class="merge-btn" data-super="stage|${m.id}" ${ok ? '' : 'disabled'}>${st === 2 ? '✨ Activate' : '🔧 Assemble'} · ${formatCost(cost)}</button>${ok ? '' : `<p class="why">Prices were fixed when you placed it: save up, there's no timer.</p>`}</div>`;
-    }
-    const a = m.ability ?? { charge: 0, used: 0 };
-    const th = sup.threshold(m);
-    const max = sup.maxCharge(m);
-    const why = sup.blocked(m);
-    const stored = Math.floor(a.charge / th);
-    const sk = sup.kind(m);
-    const charging =
-      sk === 'megahub'
-        ? 'Its own drones’ finished jobs charge it'
-        : `Restorations within ${TUNING.super[sk as 'megaflower' | 'nexus' | 'treeOfLife'].reach} tiles and its own production charge it` +
-          (sk === 'nexus' || sk === 'treeOfLife' ? `; with everything nearby grown, it pays ${TUNING.super.bountySeconds} s of biomass income instead` : '');
-    return (
-      `<div class="super"><b>${d.icon} ${esc(d.ability)}</b>` +
-      `<div class="bar"><i style="width:${Math.min(100, (a.charge / max) * 100).toFixed(0)}%"></i></div>` +
-      `<p>⚡ Charge ${Math.floor(a.charge)}/${max}${max > th ? ` · ${stored} stored` : ''} · ${charging}.${a.used ? ` Fired ${a.used}×.` : ''}</p>` +
-      (why && why !== 'Charging' ? `<p class="why">${esc(why)}</p>` : '') +
-      `<div class="row"><button class="merge-btn" data-super="activate|${m.id}" ${why ? 'disabled' : ''}>${why === 'Still running' ? '⏳ Running…' : '✨ Fire'}</button>` +
-      (a.used ? `<button class="mode${a.auto ? ' on' : ''}" data-super="auto|${m.id}">${a.auto ? '🔁 Auto: on' : 'Auto: off'}</button>` : '') +
-      `</div>${a.used ? '' : '<p class="sphint">Fire it once by hand to unlock automatic firing.</p>'}</div>`
-    );
-  }
-
-  /** The merge section of a machine's inspect panel. */
-  private mergeHtml(m: MachineData): string {
-    const s = this.sim;
-    if (!s.merge.canMerge(m)) return '';
-    const sel = this.mergeSel?.anchor === m.id ? this.mergeSel : undefined;
-    const plan = s.merge.plan(m.id, sel?.partners);
-    if (!plan) return '';
-    const t2 = (m.tier ?? 1) >= 2 ? { ...TIER3[m.type]!, blurb: `${TIER3[m.type]!.blurb}; ${TIER3[m.type]!.ability}` } : TIER2[m.type]!;
-    if (!sel) {
-      if (plan.partners.length < 2) return `<p class="sphint">🔀 Place ${TUNING.merge.count} ${esc(plan.fromName)}s touching edge to edge to merge them into a <b>${esc(plan.toName)}</b>.</p>`;
-      return `<button class="merge-btn" data-merge="start">🔀 Merge ${TUNING.merge.count} → ${t2.icon} ${esc(plan.toName)}${plan.core ? ' core' : ''}</button>`;
-    }
-    const freed = plan.freed.length;
-    const lost = plan.lost.map((l) => `<p class="loss">⚠️ ${esc(l.name)}: keeps Lv ${l.kept}, loses Lv ${l.lost.join(' and ')}</p>`).join('');
-    const swap = plan.options.length > 2 ? `<p>Pick another highlighted ${esc(plan.fromName)} to swap it in.</p>` : '';
-    return (
-      `<div class="merge"><b>🔀 ${TUNING.merge.count} × ${esc(plan.fromName)} → ${t2.icon} ${esc(plan.toName)}</b>` +
-      `<p class="gain">Output ${plan.before} → ${plan.after} (+${Math.round((plan.after / plan.before - 1) * 100)}%) · ${esc(t2.blurb)}</p>` +
-      `<p>💰 ${plan.free ? 'Free: your first ' + esc(plan.fromName) + ' merge' : 'Fee ' + formatCost(plan.fee)} · 🧩 Frees ${freed} tile${freed === 1 ? '' : 's'}</p>` +
-      (plan.core ? `<p>✨ All three leave the grid as a Superstructure Core: place it anywhere (${TIER3[m.type]!.size}×${TIER3[m.type]!.size}), then build it in three stages.</p>` : '') +
-      lost +
-      this.mergeRolesText(plan) +
-      swap +
-      (plan.ok ? '' : `<p class="why">${esc(plan.reason ?? '')}</p>`) +
-      `<div class="row"><button data-merge="confirm" ${plan.ok ? '' : 'disabled'}>Merge</button><button data-merge="cancel">Cancel</button></div></div>`
-    );
-  }
-
   private select(id: string | undefined) {
-    if (this.mergeSel && this.mergeSel.anchor !== id) this.cancelMerge(false);
     this.selected = id;
     this.showDroneTasks();
     const m = this.sim.machine(id);
@@ -3209,16 +2978,6 @@ export class Game {
     const reach = current === 'scout' ? r.scoutReach(m) : s.upgrades.droneRadius(m);
     html += `<p>Works within ${reach} tiles (highlighted). ${esc(ROLE_INFO[current].upgrades)}. A new role is a one-time refit; switching back to a role this hub owns is free.</p></div>`;
     return html;
-  }
-
-  /** E18.8: what a hub merge does to roles, said before confirming. */
-  private mergeRolesText(plan: MergePlan): string {
-    const r = plan.roles;
-    if (!r) return '';
-    const name = (x: DroneRole) => `${ROLE_INFO[x].icon} ${ROLE_INFO[x].name}`;
-    const owned = r.owned.length ? ` · keeps refits: ${r.owned.map((x) => ROLE_INFO[x].name).join(', ')}` : '';
-    if (plan.core) return `<p>🛸 The Megahub keeps ${name(r.slot1)}${owned}; set each of its drones' roles once it's built.</p>`;
-    return `<p>🛸 Roles: slot 1 ${name(r.slot1)}${r.slot2 ? `, slot 2 ${name(r.slot2)} (half the drones each)` : ' (all drones)'}${owned}</p>`;
   }
 
   /** Phase 5 E12: this machine's own upgrade (per-machine levels), plus "all of this type" when there are several. */
@@ -3303,7 +3062,6 @@ export class Game {
         return;
       }
     }
-    extra = this.superHtml(m) + extra + this.mergeHtml(m);
     if ((m.overchargeUntil ?? 0) > s.time) extra = `<p class="stat boost">⚡ Boosted by your pulse — next trigger +1 (${Math.ceil(m.overchargeUntil! - s.time)} s)</p>` + extra;
     this.hud.renderInspect(this.hud.machineHtml(m, extra));
   }
@@ -3542,107 +3300,6 @@ export class Game {
       };
       if (first && msg[machine.type]) this.hud.toast(msg[machine.type]!, 'gold', 4);
     });
-    // ───────────── Phase 5 E14: superstructures ─────────────
-    b.on('core.created', ({ type, consumed }) => {
-      for (const c of consumed)
-        for (const t of s.grid.footprint(c.roofId, c.x, c.z, c.size))
-          if (t) {
-            this.grid.refresh(t, false);
-            this.chunks.markTile(t);
-          }
-      const at = this.machines.worldOf(consumed[0]);
-      for (const c of consumed) this.machines.remove(c.id, at);
-      const p = new pc.Vec3(at[0], at[1], at[2]);
-      this.sfx.powerUp();
-      this.tweens.add(0.01, () => {}, {
-        delay: 0.45,
-        done: () => {
-          this.vfx.ring(p, PALETTE.gold, 2.4, 0.9);
-          this.vfx.burst(new pc.Vec3(p.x, p.y + 1, p.z), 44, { up: 5, speed: 2.6, size: 0.09, life: 1.4 });
-          this.sfx.fanfare();
-        },
-      });
-      const d = TIER3[type]!;
-      this.hud.toast(`✨ ${esc(d.name)} Core!<small>Three merged into a Superstructure Core. Place it from the Build menu: ${esc(d.ability)}.</small>`, 'gold', 6);
-      if (this.selected && consumed.some((c) => c.id === this.selected)) this.select(undefined);
-    });
-    b.on('super.stage', ({ machine, stage }) => {
-      this.machines.superStage(machine, stage);
-      for (const t of s.grid.footprint(machine.roofId, machine.x, machine.z, machine.size)) if (t) this.chunks.markTile(t);
-      const d = TIER3[machine.type]!;
-      const w = this.machines.worldOf(machine);
-      const p = new pc.Vec3(w[0], w[1], w[2]);
-      if (stage < 3) {
-        this.vfx.ring(p, PALETTE.white, machine.size * 1.2, 0.6);
-        this.sfx.at(p, (q) => q.build());
-        this.hud.toast(`🏗️ ${esc(d.name)}: ${stage === 1 ? 'foundation laid' : 'assembled'}<small>Next: ${SuperSystem.stageName(stage)} · ${formatCost(s.supers.nextCost(machine)!)} (fixed price, no timer)</small>`, undefined, 3.5);
-      } else {
-        // Built: unfolding machinery, light spreading out in rings, a crescendo. The first one is an event.
-        const first = (s.state.stats.supers ?? 0) === 1;
-        if (first && !this.settings.reducedMotion) this.camera.glide(w[0], 0, w[2], Math.max(this.camera.zoom, 1.1));
-        for (let i = 0; i < 4; i++)
-          this.tweens.add(0.01, () => {}, { delay: 0.25 + i * 0.28, done: () => this.vfx.ring(p, i % 2 ? PALETTE.gold : '#ffffff', machine.size * (1.5 + i * 1.3), 1.1) });
-        this.tweens.add(0.01, () => {}, { delay: 0.6, done: () => this.vfx.burst(new pc.Vec3(p.x, p.y + 1.5, p.z), 60, { up: 6, speed: 3, size: 0.1, life: 1.6 }) });
-        this.sfx.powerUp();
-        for (let i = 0; i < 3; i++) this.tweens.add(0.01, () => {}, { delay: 0.3 + i * 0.25, done: () => this.sfx.chainEnd(10 + i * 20) });
-        this.tweens.add(0.01, () => {}, { delay: 1.1, done: () => this.sfx.fanfare() });
-        this.camera.shake(0.12);
-        this.hud.toast(
-          `${d.icon} ${esc(d.name)} is alive!<small>${esc(d.blurb)}: ${TUNING.super.outputMult}× a single machine, permanently (three tier 2s were ${3 * TUNING.merge.solarMult}×), and every superstructure enriches all biomass. ${esc(d.ability)}: it charges as you play; fire it from its panel.</small>`,
-          'gold',
-          first ? 7 : 4.5,
-        );
-      }
-      if (this.selected === machine.id) this.renderInspect();
-    });
-    b.on('super.ability', ({ machine, tiles, bounty }) => {
-      this.machines.superPulse(machine.id);
-      const w = this.machines.worldOf(machine);
-      const p = new pc.Vec3(w[0], w[1], w[2]);
-      const k = s.supers.kind(machine);
-      const tone = k === 'megaflower' ? PALETTE.gold : k === 'nexus' ? PALETTE.water : k === 'treeOfLife' ? '#ffe27a' : PALETTE.eyeCyan;
-      for (let i = 0; i < 3; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.2, done: () => this.vfx.ring(p, tone, machine.size * (1.4 + i * 1.6), 0.9) });
-      this.vfx.burst(new pc.Vec3(p.x, p.y + 1.2, p.z), 30, { up: 4, speed: 2.2, size: 0.08, life: 1.2 });
-      this.sfx.powerUp();
-      const d = TIER3[machine.type]!;
-      const what = k === 'megaflower' ? `every panel ×${TUNING.super.megaflower.mult} for ${TUNING.super.megaflower.seconds} s` : k === 'megahub' ? `${TUNING.super.megahub.drones} swarm drones for ${TUNING.super.megahub.seconds} s` : bounty ? `everything nearby is grown: +${fmt(bounty)} 🌿` : `${tiles.length} tiles bloom`;
-      this.hud.feed(`${d.icon} ${d.ability.split(':')[0]}! ${what}`);
-      if (this.selected === machine.id) this.renderInspect();
-    });
-    b.on('machine.merged', ({ machine, consumed, fee, lost }) => {
-      for (const c of consumed)
-        for (const t of s.grid.footprint(c.roofId, c.x, c.z, c.size))
-          if (t) {
-            this.grid.refresh(t, false);
-            this.chunks.markTile(t);
-          }
-      const land = this.machines.merged(machine, consumed);
-      const w = this.machines.worldOf(machine);
-      const p = new pc.Vec3(w[0], w[1], w[2]);
-      for (const c of consumed) {
-        const cw = this.machines.worldOf(c);
-        this.vfx.arc(new pc.Vec3(cw[0], cw[1] + 0.4, cw[2]), new pc.Vec3(p.x, p.y + 0.6, p.z), PALETTE.gold);
-      }
-      this.sfx.powerUp();
-      this.tweens.add(0.01, () => {}, {
-        delay: land,
-        done: () => {
-          this.vfx.ring(p, PALETTE.gold, machine.size * 1.6, 0.8);
-          this.vfx.ring(p, '#ffffff', machine.size * 2.4, 1.0);
-          this.vfx.burst(new pc.Vec3(p.x, p.y + 0.8, p.z), 36, { up: 4, speed: 2.4, size: 0.08, life: 1.2 });
-          this.camera.shake(0.08);
-          this.sfx.fanfare();
-        },
-      });
-      const t2 = TIER2[machine.type];
-      const first = (s.state.stats.merges?.[machine.type] ?? 0) === 1;
-      this.hud.toast(
-        `${t2?.icon ?? '✨'} ${esc(machineName(machine))}!<small>${consumed.length + 1} ${esc(MACHINES[machine.type].name)}s → 1 · ${esc(t2?.blurb ?? '')}${fee.biomass ? ` · fee ${formatCost(fee)}` : first ? ' · first merge free' : ''}${lost.length ? ' · some upgrade levels merged away' : ''}</small>`,
-        'gold',
-        4,
-      );
-      if (this.selected === machine.id) this.renderInspect();
-    });
     b.on('chain.started', ({ chainId, originTileId }) => {
       const o = s.grid.byTileId(originTileId);
       if (o) this.tileFx.hold(`chain${chainId}`, o);
@@ -3697,24 +3354,6 @@ export class Game {
       }
       if (reason.includes('💧')) this.hud.flashResource('water', 'short');
       if (reason.includes('🌿')) this.hud.flashResource('biomass', 'short');
-    });
-    b.on('frenzy.ready', () => {
-      this.hud.feed('✨ Bloom Frenzy is ready: fire it whenever you like (Q)');
-      this.sfx.powerUp();
-    });
-    b.on('frenzy.started', ({ seconds }) => {
-      document.body.classList.add('frenzy');
-      this.sfx.frenzy = true;
-      this.hud.toast(`✨ BLOOM FRENZY! ${seconds}s<small>Pulse reach +${TUNING.frenzy.pulseTierBonus} tiers · biomass ×${TUNING.frenzy.biomassMult} · drones ×${TUNING.frenzy.droneSpeedMult}</small>`, 'gold', 3);
-      this.sfx.fanfare();
-      const g = this.camera.goalPoint;
-      const c = new pc.Vec3(g.x, g.y, g.z);
-      for (let i = 0; i < 3; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.18, done: () => this.vfx.ring(c, i % 2 ? '#c8ff8a' : PALETTE.gold, 3 + i * 1.5, 0.8) });
-    });
-    b.on('frenzy.ended', () => {
-      document.body.classList.remove('frenzy');
-      this.sfx.frenzy = false;
-      this.hud.feed('🌿 Bloom Frenzy is over: back to normal power');
     });
     b.on('area.step', ({ areaId, step, share, credited }) => {
       const a = s.areas.info(areaId);
@@ -3786,39 +3425,6 @@ export class Game {
     b.on('cat.moved', ({ catId }) => {
       const spot = catId ? this.sim.cat.find(catId) : this.sim.state.cat.active;
       if (spot) this.cat.show(spot, true);
-      this.save();
-    });
-    // Phase 5 E15: world events. A small banner (HUD) carries the effect and timer; these are the extras.
-    b.on('world.started', ({ type, fallback }) => {
-      const info = WORLD_EVENT_INFO[type];
-      this.hud.feed(`${info.icon} ${info.name}${type === 'invasion' ? '' : `: ${info.effect}`}`);
-      if (fallback) this.hud.feed(fallback);
-      this.sfx.chainEnd(type === 'supernova' ? 8 : 5);
-      if (type === 'invasion') this.sfx.meow(true);
-      this.save();
-    });
-    b.on('world.wave', ({ tiles, fallback }) => {
-      if (fallback) this.hud.feed(`🌧️ ${fallback}`);
-      const t = tiles[0] ? this.sim.grid.byTileId(tiles[0]) : undefined;
-      if (t) {
-        const [x, y, z] = this.sim.grid.tileWorld(t);
-        this.vfx.ring(new pc.Vec3(x, y + 0.1, z), PALETTE.water, this.cat.softSparkle ? 1.2 : 2.4, 0.9);
-      }
-    });
-    b.on('world.tile', ({ type, tileId }) => {
-      const t = this.sim.grid.byTileId(tileId);
-      if (!t || this.cat.softSparkle) return;
-      const [x, y, z] = this.sim.grid.tileWorld(t);
-      const p = new pc.Vec3(x, y + 0.15, z);
-      if (type === 'rain') this.vfx.ring(p, PALETTE.water, 0.6, 0.5);
-      else this.vfx.burst(p, 6, { up: 1.6, speed: 0.6, size: 0.05, life: 1.1 });
-    });
-    b.on('world.ended', ({ type, done, fallback }) => {
-      const info = WORLD_EVENT_INFO[type];
-      // Only real progress is celebrated: a fallback already said what it paid instead.
-      if (done > 0 && type !== 'invasion') this.hud.feed(`${info.icon} ${info.name}: ${type === 'migration' ? `${done} tiles grew` : `${done} tiles watered`}`);
-      else if (type === 'supernova') this.hud.feed(`${info.icon} ${info.name} fades`);
-      void fallback;
       this.save();
     });
     b.on('cat.goldenRelay', () => {
@@ -4458,15 +4064,6 @@ export class Game {
   awayFor(seconds: number) {
     if (!(seconds > 0)) return;
     const C = TUNING.catchUp;
-    // Phase 4 E01: time beyond what the live catch-up covers becomes offline progress (reduced, bounded).
-    const beyond = seconds - Math.max(0, C.maxSeconds - this.catchUpDebt);
-    if (beyond > 0) {
-      const r = this.sim.offline.apply(beyond);
-      if (r) {
-        this.hud.toast(offlineToast(r, 'While you were away'), 'gold', 6);
-        this.saveNow();
-      }
-    }
     const was = this.catchUpDebt;
     this.catchUpDebt = Math.min(C.maxSeconds, this.catchUpDebt + seconds);
     if (was < C.toastFrom && this.catchUpDebt >= C.toastFrom) {
@@ -4643,27 +4240,6 @@ export class Game {
       }
     }
   }
-}
-
-/** "While you were away" summary for the offline report (Phase 4 E01). */
-export function offlineToast(r: OfflineReport, title: string): string {
-  const h = Math.floor(r.away / 3600);
-  const m = Math.round((r.away % 3600) / 60);
-  const away = h ? `${h} h ${m} min` : `${m} min`;
-  const icons = { energy: '⚡', water: '💧', biomass: '🌿' } as const;
-  const got = (['energy', 'water', 'biomass'] as const).filter((k) => r.credited[k].gte(1)).map((k) => `+${fmt(r.credited[k])}${icons[k]}`);
-  const lost = (['energy', 'water', 'biomass'] as const).filter((k) => r.lost[k].gte(1)).map((k) => `${fmt(r.lost[k])}${icons[k]}`);
-  const lines = [`🌙 ${title} (${away})`];
-  const capped = r.away > r.seconds + 1 ? ` · counted up to ${Math.round(r.seconds / 3600)} h` : '';
-  lines.push(`<small>Your helpers kept the garden growing at half pace${capped}: ${got.join(' ') || 'nothing new'}${r.droneJobs ? ` · your drones restored ${r.restored} and nurtured ${r.grown} tiles` : ''}${r.cultivated ? ` · your cultivators broke up ${r.cultivated} slab${r.cultivated === 1 ? '' : 's'}` : ''}${lost.length ? ` · ${lost.join(' ')} didn't fit in storage` : ''}</small>`);
-  return lines.join('');
-}
-
-/** A superstructure's locked stage price (saved as strings) as a cost. */
-function fromCostStrings(c: Partial<Record<ResourceKind, string>>): import('../core/types').Cost {
-  const o: import('../core/types').Cost = {};
-  for (const k of ['energy', 'water', 'biomass'] as const) if (c[k] !== undefined) o[k] = big(c[k]);
-  return o;
 }
 
 /** E22.11: what the desktop (Steam Deck) build's preload offers the page, if anything. */

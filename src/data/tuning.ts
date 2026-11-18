@@ -56,35 +56,6 @@ export const TUNING = {
     { at: 130, reward: { biomass: 120, energy: 40 } },
   ] as { at: number; reward: Partial<Record<'energy' | 'water' | 'biomass', number>> }[],
 
-  /**
-   * Phase 4 E06: Bloom Frenzy. Charge is earned by play (taps count most); first Frenzy aimed at about minute
-   * 4–6 of active play. While it runs: pulse reach +2 tiers (at least Bloom), biomass ×10, drones ×3 faster.
-   */
-  frenzy: {
-    seconds: 15,
-    biomassMult: 10,
-    droneSpeedMult: 3,
-    pulseTierBonus: 2,
-    charge: {
-      restoreTap: 0.9, // a tap that restores a dead tile
-      perFootprintTile: 0.05, // …plus a little per extra tile its reach restores
-      footprintMax: 1.5,
-      nurtureTap: 0.3,
-      // #287: Frenzy is bloombot's: automation (drones, machines) no longer charges it; chains still do.
-      autoRestore: 0, // was 0.05: a tile restored by drones, machines or chains
-      autoNurture: 0, // was 0.03: a tile grown a stage by automation
-      perChainStep: 0.4, // per activation beyond the first, when a chain ends…
-      chainMax: 8, // …capped per chain
-    },
-    /**
-     * Phase 5 E12 (spec rule): wasted production charges the meter by `perResource` × the share of a capped
-     * store's steady income lost to its cap, per second (0.1/s at 100% waste ≈ 17 min from overflow alone),
-     * summed over energy and water and capped at `maxPerSecond`. Biomass is uncapped, so it never overflows.
-     * Harvest Sunlight into a full store never counts.
-     */
-    overflow: { perResource: 0.1, maxPerSecond: 0.15 },
-  },
-
   pulse: {
     polluted: { energy: 6, water: 1 },
     prepared: { energy: 3, water: 1 },
@@ -201,7 +172,7 @@ export const TUNING = {
       birds: { thrivingTreeTiles: 20 },
       /** the park fountain flowing counts as a restored pond; otherwise this many restored water tiles */
       koi: { waterTiles: 4, fountain: true },
-      robots: { superstructures: 1 },
+      robots: { landmarks: 2 }, // E23.1.2: was one superstructure; now two landmarks woken
     },
     /** most actors of each kind at once, per quality tier */
     caps: {
@@ -352,34 +323,6 @@ export const TUNING = {
     hintAfter: 90,
   },
 
-  /**
-   * Phase 5 E15: central stacking policy for temporary boosts (Modifiers). Within one category the strongest
-   * boost wins; boosts from different categories multiply, capped at `maxProduct`. Applied once, to the
-   * baseline rate. Categories: Bloom Frenzy, short boosts (Solar Surge, Solar Burst), world events.
-   */
-  modifiers: { maxProduct: 20 },
-
-  /**
-   * Phase 5 E15: world events. Seeded, in simulation time (pause stops them; nothing happens offline). The first
-   * opportunity comes 3–6 active minutes after automation unlocks (the first Drone Hub), then every 3–6 minutes
-   * after the last one ended. Nothing is lost by missing one; no notifications.
-   */
-  events: {
-    firstMin: 180,
-    firstMax: 360,
-    laterMin: 180,
-    laterMax: 360,
-    /** weights (an event irrelevant right now gets 0; the same event never comes twice in a row) */
-    weights: { supernova: 30, migration: 30, rain: 25, invasion: 15 },
-    supernova: { seconds: 20, mult: 10 },
-    migration: { seconds: 15, tiles: 20, reach: 10, fallbackAreas: 12 }, // fallbackAreas: nearest revealed areas searched when nothing near can grow
-    rain: { seconds: 25, mult: 3, waves: 3, waveTiles: 12, waveRadius: 6 },
-    invasion: { cats: 3 },
-    /** Nothing eligible to grow or water: seconds of steady biomass income instead (at least `fallbackMin`). */
-    fallbackSeconds: { migration: 20, rain: 8 },
-    fallbackMin: 30,
-  },
-
   core: {
     restoredTiles: 42,
     fullBloomTiles: 24,
@@ -401,18 +344,6 @@ export const TUNING = {
   advisor: { upgradeHintCooldown: 15, savingFreshSeconds: 10, roleHintSeconds: 30 },
 
   autosaveSeconds: 10,
-
-  /**
-   * Phase 4 E01: progress while the game is closed (or a tab hidden for longer than catchUp.maxSeconds).
-   * Only steady production and drone work, at a reduced rate, for a bounded time. Landmarks, cats, Frenzy,
-   * chains, milestones and other one-time rewards never happen while away. Nothing is lost by staying away longer.
-   */
-  offline: {
-    minSeconds: 60, // shorter absences earn nothing extra
-    maxSeconds: 4 * 3600,
-    rate: 0.5, // share of the sustained rate (no temporary boosts)
-    maxDroneJobs: 300, // drone jobs credited per absence, across all drones
-  },
 
   /** The starting park's Core (the fountain): replaces TUNING.core when the game starts in the city. */
   /** Mega Pulse: manual taps charge it; the next tap after it is full releases a city-scale chain. */

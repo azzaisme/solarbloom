@@ -4,7 +4,6 @@ import type { BuildableType, MachineData, ResourceKind } from '../core/types';
 import { MACHINES } from '../data/machines';
 import type { Sim } from '../gameplay/Sim';
 import { ICONS, LOGO_MARK, hasEmoji, iconize, installIconDefs, plain } from './Icons';
-import { WORLD_EVENT_INFO } from '../gameplay/WorldEventSystem';
 import { Prompt } from './Prompt';
 import { plainWords } from './words';
 import { ObjectiveCard } from './ObjectiveCard';
@@ -15,13 +14,9 @@ import { Panels } from './Panels';
 import type { SetProp } from './HudPart';
 import type { GlyphSetting, GlyphStyle } from './Glyphs';
 
-/** Phase 5 E14: `super:<type>` places a Superstructure Core of that family. */
-export type SuperTool = `super:${'solar' | 'condenser' | 'pollinator' | 'droneHub'}`;
 /** E19.2: `decor:<id>` holds a decoration to place; `remove` aims at decorations to remove or pick up. */
 export type DecorTool = `decor:${string}`;
-export type Tool = 'inspect' | 'pulse' | BuildableType | SuperTool | DecorTool | 'remove';
-export const SUPER_TOOLS: SuperTool[] = ['super:solar', 'super:condenser', 'super:pollinator', 'super:droneHub'];
-export const superType = (t: Tool) => (t.startsWith('super:') ? (t.slice(6) as 'solar' | 'condenser' | 'pollinator' | 'droneHub') : undefined);
+export type Tool = 'inspect' | 'pulse' | BuildableType | DecorTool | 'remove';
 /** E19.2: the decoration a tool holds, if it holds one. */
 export const decorType = (t: Tool) => (t.startsWith('decor:') ? t.slice(6) : undefined);
 /** A machine build tool (a machine type), not pulse, inspect, a core, a decoration or remove. */
@@ -35,8 +30,6 @@ export interface HudCallbacks {
   /** E18: `hubId|role|slot` (slot 2 on a Fleet Hub), or `hubId|role|drone|index` for a Megahub drone. */
   chooseRole(key: string): void;
   activateCore(): void;
-  /** Phase 4 E06: fire Bloom Frenzy. */
-  activateFrenzy(): void;
   /** Phase 5 E15: the 🐾 chip: show where a hinted cat hides. */
   findCat(): void;
   /** E20.2 (#285): the key or pad button bound to an action, as the player last used them (for hint text). */
@@ -55,14 +48,8 @@ export interface HudCallbacks {
   setAreaMode(areaId: string, mode: AreaMode | undefined): void;
   /** Fly the camera to a ground tile and point at it (the objective's suggestion). */
   focusTile(x: number, z: number): void;
-  /** Phase 5 E13: the inspect panel's merge buttons. */
-  merge(action: 'start' | 'confirm' | 'cancel'): void;
-  /** Phase 5 E13: the advisor's merge button (select the machine and open its merge preview). */
-  mergeAt(machineId: string): void;
   /** E18.5: open a machine's panel (the advisor's role hint). */
   inspectAt(machineId: string): void;
-  /** Phase 5 E14: superstructure panel buttons: pay the next stage, fire the ability, toggle automatic firing. */
-  superAction(action: 'stage' | 'activate' | 'auto', machineId: string): void;
 }
 
 export interface Settings {
@@ -219,11 +206,9 @@ export class Hud {
         <button class="rbtn qbtn" id="catBtn" aria-label="Lucky Cat garden" title="Lucky Cat garden" hidden>${ICONS.garden}<span class="qn" id="catCount">0</span></button>
         <button class="rbtn qbtn" id="pawBtn" aria-label="Paw prints: which way a hiding cat went" title="Paw prints: a Lucky Cat is hiding. Which way do they lead?" hidden>${ICONS.paw}<span class="qn" id="pawCount">0</span></button>
       </div>
-      <div id="eventBanner" role="status" aria-live="polite" hidden><span class="ei"></span><span class="et"></span><span class="ec"></span><i class="ebar"></i></div>
       <div id="combo"><div id="comboFx" aria-hidden="true"></div><div class="big" id="comboBig" role="status" aria-label="Bloom chain combo"><span class="cic">${ICONS.biomass}</span><span class="cl">Combo</span> <span class="cx">×0</span></div><div class="cbody panel"><ul id="comboParts"></ul><div class="total" id="comboTotal"></div><div id="chainAreas"></div></div><div id="feed"></div></div>
       <div id="hotbar" class="panel">${Hotbar.template(this.sim.oldCity)}</div>
       ${BuildBar.template()}
-      <button id="frenzyBtn" class="frenzy-btn" aria-label="Bloom Frenzy (Q)" hidden><span class="fill"></span><span class="fi">${ICONS.frenzy}</span><span class="ft">0%</span></button>
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
       <div id="toasts" role="status" aria-live="polite"></div>
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
@@ -362,7 +347,7 @@ export class Hud {
   update(dt: number) {
     this.bars.update();
     this.hotbar.update();
-    this.updateEvents();
+    this.updateCatChip();
     this.panels.renderUpgrades();
     this.panels.update(dt);
     this.objective.update();
@@ -518,30 +503,9 @@ export class Hud {
     if (text !== null) el.textContent = text;
   }
 
-  /**
-   * Phase 5 E15: the world event banner (small, above the hotbar, never blocks input: pointer-transparent) with
-   * its effect and a timer bar, and the 🐾 chip once a cat has been hiding a while.
-   */
-  private updateEvents() {
+  /** Phase 5 E15: the paw chip once a cat has been hiding a while. */
+  private updateCatChip() {
     const s = this.sim;
-    const el = $(this.root, '#eventBanner');
-    const a = s.events.active;
-    if (!a) {
-      if (!el.hidden) el.hidden = true;
-      this.last.delete('evT');
-    } else {
-      if (el.hidden) el.hidden = false;
-      const info = WORLD_EVENT_INFO[a.type];
-      const left = Math.max(0, a.until - s.time);
-      const total = Math.max(0.1, a.until - a.startedAt);
-      const hiding = s.state.cat.invasion?.length ?? 0;
-      const effect = a.fallback ? a.fallback : a.type === 'invasion' ? `${hiding} cat${hiding === 1 ? '' : 's'} hiding · each with its own reward · no rush` : a.type === 'migration' ? `growing ${a.done ?? 0}/${(a.done ?? 0) + (a.queue?.length ?? 0)} tiles` : info.effect;
-      this.set('evI', $(el, '.ei'), 'text', info.icon);
-      this.set('evT', $(el, '.et'), 'html', `<b>${esc(info.name)}</b> ${esc(effect)}`);
-      this.set('evC', $(el, '.ec'), 'text', a.type === 'invasion' ? '' : `${Math.ceil(left)}s`);
-      this.set('evBar', $(el, '.ebar'), 'width', `${Math.round((left / total) * 100)}%`);
-      this.set('evKind', el, 'title', `${info.name}: ${info.effect}`);
-    }
     const hinted = s.cat.spots().filter((c) => s.cat.hinted(c)).length;
     const paw = $(this.root, '#pawBtn');
     if (paw.hidden !== !hinted) paw.hidden = !hinted;

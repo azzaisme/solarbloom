@@ -64,6 +64,12 @@ describe('E22.1: the new button map', () => {
       for (let i = 0; i < 9; i++) expect(keys(b, SLOTS[i])).toEqual([`Digit${i + 1}`]);
     });
 
+  it('a saved pad binding for an action that no longer exists is ignored (E23.1.2: Bloom Frenzy)', () => {
+    const b = new Bindings({ pad: { frenzy: 7 } as never });
+    expect(b.actionForButton(7, ['build', 'world', 'any'])).toBe('removeMode');
+    expect(Object.keys(b.pad)).not.toContain('frenzy');
+  });
+
     it(`matches every gamepad default in the epic (${rules})`, () => {
       const b = new Bindings(undefined, { oldCity });
       for (const [a, p] of PAD) expect(b.pad[a], a).toBe(p);
@@ -96,12 +102,12 @@ describe('E22.1: the new button map', () => {
     expect(b.actionForButton(5, ['panel', 'any'])).toBe('nextTab');
   });
 
-  it('Frenzy, upgrades and next area keep their keys under classic rules and lose them under old-city rules', () => {
+  it('upgrades and next area keep their keys under classic rules and lose them under old-city rules', () => {
     const classic = new Bindings();
-    expect([classic.label('frenzy'), classic.label('upgrades'), classic.label('nextArea')]).toEqual(['R', 'U', 'N']);
-    expect([classic.pad.frenzy, classic.pad.upgrades]).toEqual([7, 15]);
+    expect([classic.label('upgrades'), classic.label('nextArea')]).toEqual(['U', 'N']);
+    expect(classic.pad.upgrades).toBe(15);
     const old = new Bindings(undefined, { oldCity: true });
-    for (const a of ['frenzy', 'upgrades', 'nextArea', 'home'] as Action[]) {
+    for (const a of ['upgrades', 'nextArea', 'home'] as Action[]) {
       expect(old.keys[a], a).toEqual([]);
       expect(old.pad[a], a).toBeUndefined();
     }

@@ -17,11 +17,8 @@ export class Economy {
   /** Phase 5 E12: everything banked, and everything lost to a full store, this session (the HUD's breakdown). */
   readonly earned: Amounts = { energy: new Decimal(0), water: new Decimal(0), biomass: new Decimal(0) };
   readonly lost: Amounts = { energy: new Decimal(0), water: new Decimal(0), biomass: new Decimal(0) };
-  /**
-   * Told about income lost to a full store. `frenzy` is false for sources that must never charge the meter
-   * (Harvest Sunlight on a full store: Phase 5 E12 closes that loop).
-   */
-  onOverflow?: (kind: CappedKind, amount: Decimal, frenzy: boolean) => void;
+  /** Told about income lost to a full store. */
+  onOverflow?: (kind: CappedKind, amount: Decimal) => void;
 
   constructor(
     private res: Amounts,
@@ -82,11 +79,8 @@ export class Economy {
     return true;
   }
 
-  /**
-   * Adds income; energy and water stop at their cap. Returns the amount actually banked. `frenzy: false`
-   * reports overflow without letting it charge Bloom Frenzy.
-   */
-  add(kind: ResourceKind, amount: BigLike, opts?: { frenzy?: boolean }): Decimal {
+  /** Adds income; energy and water stop at their cap. Returns the amount actually banked. */
+  add(kind: ResourceKind, amount: BigLike): Decimal {
     const a = big(amount);
     if (a.lte(0)) return ZERO;
     const before = this.res[kind];
@@ -103,7 +97,7 @@ export class Economy {
     this.earned[kind] = this.earned[kind].add(got);
     if (lost.gt(1e-9)) {
       this.lost[kind] = this.lost[kind].add(lost);
-      this.onOverflow?.(kind as CappedKind, lost, opts?.frenzy !== false);
+      this.onOverflow?.(kind as CappedKind, lost);
     }
     return got;
   }

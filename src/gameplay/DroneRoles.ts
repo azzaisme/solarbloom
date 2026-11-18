@@ -299,7 +299,6 @@ export class DroneRoles {
     if (done) {
       d.jobs++;
       s.state.stats.droneJobs++;
-      if (!d.swarm) s.supers.onDroneJob(hub);
       s.bus.emit('drone.roleWork', { droneId: d.id, role, tileIds, machineIds });
     }
   }

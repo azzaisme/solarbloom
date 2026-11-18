@@ -110,7 +110,6 @@ async function play(seed: number, areas: number, hours: number, check: boolean) 
     if (env.SOAK_PROFILE && check) {
       const parts: [string, () => void][] = [
         // Every system Sim.tick runs, in its order (keep in step with Sim.tick).
-        ['frenzy', () => sim.frenzy.tick()],
         ['prod', () => sim.production.tick(step)],
         ['rest', () => sim.restoration.tick(step)],
         ['transitions', () => sim.transitions.tick()],
@@ -118,14 +117,11 @@ async function play(seed: number, areas: number, hours: number, check: boolean) 
         ['drones', () => sim.drones.tick(step)],
         ['roles', () => sim.roles.tick(step)],
         ['cultivators', () => sim.cultivators.tick(step)],
-        ['supers', () => sim.supers.tick(step)],
         ['cat', () => sim.cat.tick()],
-        ['events', () => sim.events.tick()],
         ['prog', () => sim.progression.tick()],
         ['milestones', () => sim.milestones.tick()],
         ['ecosystem', () => sim.ecosystem.tick()],
         ['metrics', () => sim.metrics.tick(step)],
-        ['ledger', () => sim.ledger.tick()],
       ];
       st.time += step;
       st.buffs = st.buffs.filter((b) => b.until > st.time);

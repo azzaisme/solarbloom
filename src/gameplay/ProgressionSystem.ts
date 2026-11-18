@@ -114,9 +114,6 @@ export class ProgressionSystem {
     s.areas.clear(PARK, true);
     s.production.markDirty();
     s.bus.emit('rooftop.coreRestored', {});
-    // Phase 4 E10.3: the fountain's blessing: a full Bloom Frenzy meter, so the climax leads straight into a
-    // burst of power in the newly revealed city (fired whenever the player likes).
-    s.frenzy.add(100);
     return true;
   }
 

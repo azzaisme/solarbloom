@@ -47,7 +47,6 @@ export type Action =
   | 'nextTab'
   | 'debug'
   // Classic rules only (decision 7): old-city rules give these no default (E21 hides them).
-  | 'frenzy'
   | 'upgrades'
   | 'nextArea'
   | 'home';
@@ -92,7 +91,6 @@ export const ACTIONS: readonly ActionDef[] = [
   A('pulse', 'Pulse, use the tool, place', 'act', 'world'),
   A('harvest', 'Harvest Sunlight', 'act', 'world'),
   A('pinNext', 'Pin the next request', 'act', 'world'),
-  A('frenzy', 'Bloom Frenzy', 'act', 'world', true, true, true),
   A('nextArea', 'Go to the area that needs you', 'act', 'world', true, true, true),
   A('home', 'Back to the park', 'act', 'world', true, true, true),
   A('buildMenu', 'Build menu', 'build', 'world'),
@@ -169,7 +167,6 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
     prevTab: ['KeyQ'],
     nextTab: ['KeyE'],
     debug: ['F3'],
-    frenzy: ['KeyR'],
     upgrades: ['KeyU'],
     nextArea: ['KeyN'],
     home: ['Home'],
@@ -205,10 +202,8 @@ export function defaultPad(oldCity = false): Partial<Record<Action, number>> {
   };
   if (oldCity) p.pinNext = 15;
   else {
-    // Classic keeps a pad button for Frenzy and Upgrades. Every button is taken by the new map, so they share
-    // ones whose other meaning only applies in a different context: Frenzy on RT (Remove mode in build mode),
-    // Upgrades on d-pad right (Pin next request, which only exists under old-city rules).
-    p.frenzy = 7;
+    // Classic keeps a pad button for Upgrades. Every button is taken by the new map, so it shares d-pad right with
+    // Pin next request, which only exists under old-city rules.
     p.upgrades = 15;
   }
   return p;
@@ -288,6 +283,7 @@ export class Bindings {
     this.keys = Object.fromEntries(Object.entries(dk).map(([a, k]) => [a, [...(saved?.keys?.[a as Action] ?? k)]])) as Record<Action, string[]>;
     this.pad = { ...defaultPad(this.oldCity) };
     for (const [a, b] of Object.entries(saved?.pad ?? {})) {
+      if (!ACTIONS.some((x) => x.id === a)) continue; // an action that no longer exists (E23.1.2: Bloom Frenzy)
       if (b === null || b === undefined) delete this.pad[a as Action];
       else this.pad[a as Action] = b;
     }

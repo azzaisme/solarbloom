@@ -43,13 +43,6 @@ export class Panels extends HudPart {
       if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
       const rl = t.closest<HTMLButtonElement>('[data-role]');
       if (rl && !rl.disabled) this.cb.chooseRole(rl.dataset.role!);
-      const sp = t.closest<HTMLButtonElement>('[data-super]');
-      if (sp && !sp.disabled) {
-        const [action, id] = sp.dataset.super!.split('|');
-        this.cb.superAction(action as 'stage' | 'activate' | 'auto', id);
-      }
-      const mg = t.closest<HTMLButtonElement>('[data-merge]');
-      if (mg && !mg.disabled) this.cb.merge(mg.dataset.merge as 'start' | 'confirm' | 'cancel');
       const am = t.closest<HTMLButtonElement>('[data-area-mode]');
       if (am) {
         const [id, mode] = am.dataset.areaMode!.split('|');

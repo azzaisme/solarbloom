@@ -47,7 +47,6 @@ function gameplaySnapshot(sim: Sim) {
     stats: s.stats,
     upgrades: s.upgrades,
     buffs: s.buffs,
-    frenzy: s.frenzy,
     areas: s.areas,
     progression: s.progression,
     cat: s.cat,
@@ -127,22 +126,17 @@ describe('E16 fauna unlocks', () => {
     expect(sim.ecosystem.has('birds')).toBe(true);
   });
 
-  it('koi arrive when the fountain flows; robots with the first finished superstructure', () => {
+  it('koi arrive when the fountain flows; robots once a second landmark wakes', () => {
     const sim = freshSim();
     sim.ecosystem.refresh();
     expect(sim.ecosystem.has('koi')).toBe(false);
     sim.state.progression.coreActivated = true;
     sim.ecosystem.refresh();
     expect(sim.ecosystem.has('koi')).toBe(true);
+    // The flowing fountain is the first landmark: not enough for robots yet…
     expect(sim.ecosystem.has('robots')).toBe(false);
-    // A superstructure still under construction doesn't count…
-    const spot = parkTiles(sim)[0];
-    const m = { id: 'mX', type: 'solar' as const, roofId: GROUND, x: spot.x, z: spot.z, size: 2, boostUntil: 0, timer: 0, charge: 0, tier: 3, project: { stage: 2, costs: [] } };
-    sim.state.machines.push(m);
-    sim.ecosystem.refresh();
-    expect(sim.ecosystem.has('robots')).toBe(false);
-    // …a finished one does.
-    delete (m as { project?: unknown }).project;
+    // …a second woken landmark (another cleared area) brings them.
+    sim.state.areas.nearby = { ...sim.state.areas.park!, fog: 'cleared' };
     sim.ecosystem.refresh();
     expect(sim.ecosystem.has('robots')).toBe(true);
     expect(sim.ecosystem.unlocked()).toEqual(['koi', 'robots']);

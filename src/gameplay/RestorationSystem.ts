@@ -146,9 +146,8 @@ export class RestorationSystem {
   /** Phase 4 E04.2: the pulse's reach (Euclidean, in tiles) from Pulse Reach; Overcharge reaches a tier further. */
   pulseRadius(overcharged = false): number {
     const tiers = TUNING.pulseTiers;
-    const bonus = this.sim.mods.pulseTierBonus(); // Bloom Frenzy (Phase 4 E06)
-    const lvl = Math.min(tiers.length - 1, this.sim.upgrades.broadExtra + (overcharged ? 1 : 0) + bonus);
-    return overcharged || bonus > 0 ? Math.max(tiers[2].radius, tiers[lvl].radius) : tiers[lvl].radius;
+    const lvl = Math.min(tiers.length - 1, this.sim.upgrades.broadExtra + (overcharged ? 1 : 0));
+    return overcharged ? Math.max(tiers[2].radius, tiers[lvl].radius) : tiers[lvl].radius;
   }
 
   /**

@@ -26,7 +26,7 @@ try {
       s.state.resources.energy = new D(s.state.caps.energy);
     });
     await page.waitForTimeout(25000); // let the ledger warm up (20 s window)
-    const rects = await page.evaluate(() => ['#res', '#obj', '#hotbar', '#hint', '#chips', '#toasts', '#frenzyBtn'].map((sel) => { const e = document.querySelector(sel); if (!e) return `${sel}: none`; const r = e.getBoundingClientRect(); const vis = getComputedStyle(e).display !== 'none' && r.width > 0; return `${sel} ${Math.round(r.width)}×${Math.round(r.height)}${vis ? '' : ' (hidden)'}`; }).join('  '));
+    const rects = await page.evaluate(() => ['#res', '#obj', '#hotbar', '#hint', '#chips', '#toasts'].map((sel) => { const e = document.querySelector(sel); if (!e) return `${sel}: none`; const r = e.getBoundingClientRect(); const vis = getComputedStyle(e).display !== 'none' && r.width > 0; return `${sel} ${Math.round(r.width)}×${Math.round(r.height)}${vis ? '' : ' (hidden)'}`; }).join('  '));
     console.log(name, rects);
     console.log(name, 'res text:', await page.evaluate(() => [...document.querySelectorAll('[data-res]')].map((r) => r.textContent.replace(/\s+/g, ' ').trim()).join(' | ')));
     await page.screenshot({ path: `${out}/p5-hud-${name}.png` });
