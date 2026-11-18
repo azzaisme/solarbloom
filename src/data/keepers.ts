@@ -41,6 +41,21 @@ export const FRIENDSHIP = {
   everyoneLikes: 'tomato',
 };
 
+/**
+ * Keepers help out: a settled Keeper tends its region, bringing one restored tile near it one bloom step on (never
+ * past full bloom) every so often; a friend does it twice as often. Starting values.
+ */
+export const KEEPER_HELP = {
+  /** seconds between a settled Keeper's tending (a game day is 2880 s: about 24 tiles a day) */
+  tendEverySeconds: 120,
+  /** a friend tends this many times as often */
+  friendMult: 2,
+  /** how far from where it sleeps a Keeper wanders and tends, in tiles */
+  radius: 8,
+  /** a wandering Keeper heads home when bloombot comes this close to it, so it can be talked to */
+  comeHomeTiles: 6,
+};
+
 export const KEEPER_STORIES: Record<string, KeeperStory> = {
   pylon: {
     personality: 'Eager and loyal, a little loud. Learning to listen instead of passing on orders.',

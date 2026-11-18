@@ -250,6 +250,7 @@ export class Sim {
     this.roles.tick(dt);
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
+    this.keepers.tick(dt); // E23.9.2: settled Keepers tend their regions
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MaterialId } from '../src/core/types';
-import { ARC_BEATS, FRIENDSHIP, KEEPER_STORIES } from '../src/data/keepers';
+import { ARC_BEATS, FRIENDSHIP, KEEPER_HELP, KEEPER_STORIES } from '../src/data/keepers';
 import { KEEPERS, KEEPSAKES, REGIONS } from '../src/data/oldcity';
 import { MATERIALS } from '../src/data/salvage';
 import { Sim } from '../src/gameplay/Sim';
@@ -129,5 +129,51 @@ describe('E23.9.2: Keepers as friends', () => {
     const sim = new Sim(createInitialState(7, 'oldcity'));
     for (const k of KEEPERS) expect(sim.keepers.likes(k.id)).toContain(FRIENDSHIP.everyoneLikes);
     void (FRIENDSHIP.everyoneLikes as MaterialId);
+  });
+
+  it('settled Keepers help out: they tend their region a bloom step at a time, friends twice as often', () => {
+    const sim = new Sim(createInitialState(7, 'oldcity'));
+    sim.state.salvage!.tier = 1;
+    sim.state.salvage!.abilities.push('pry');
+    sim.areas.clear('park', true);
+    sim.gates.open('g-mastRow');
+    const p = REGIONS[0].patch;
+    const tiles = [];
+    for (let z = p.z; z < p.z + p.d; z++) for (let x = p.x; x < p.x + p.w; x++) tiles.push(sim.grid.get(GROUND, x, z)!);
+    // Pylon sleeps at (10, -4); restore a tile beside it
+    const near = sim.grid.get(GROUND, 10, -6)!;
+    sim.restoration.complete(near, 'pulse');
+    for (let z = -8; z <= -6; z++) for (let x = 8; x <= 12; x++) { const t = sim.grid.get(GROUND, x, z)!; if (!t.blocked && t.ground !== 'restored') sim.restoration.complete(t, 'pulse'); }
+    const area: ReturnType<typeof sim.grid.get>[] = [];
+    for (let z = -8; z <= -6; z++) for (let x = 8; x <= 12; x++) area.push(sim.grid.get(GROUND, x, z));
+    const bloomSum = () => area.reduce((a, t) => a + (t?.bloom ?? 0), 0);
+    const before = bloomSum();
+    // awake but not settled: no help yet
+    sim.state.salvage!.keepers.pylon = { step: 'landmark' };
+    const tended: unknown[] = [];
+    sim.bus.on('keeper.tended', (e) => tended.push(e));
+    sim.keepers.tick(KEEPER_HELP.tendEverySeconds + 1);
+    expect(tended).toEqual([]);
+    sim.keepers.settle('pylon');
+    const t0 = sim.time;
+    // tick at fixed times: exactly one tending per period
+    let n = 0;
+    for (let s = 1; s <= KEEPER_HELP.tendEverySeconds * 2; s++) {
+      sim.state.time = t0 + s;
+      sim.keepers.tick(1);
+      n = tended.length;
+    }
+    expect(n).toBe(2);
+    // each tending is one bloom step on a tile beside it
+    expect(bloomSum()).toBe(before + 2);
+    // a friend tends twice as often
+    sim.state.salvage!.keepers.pylon = { ...sim.keepers.state('pylon'), hearts: FRIENDSHIP.giftsToFriend };
+    tended.length = 0;
+    for (let s = 1; s <= KEEPER_HELP.tendEverySeconds * 2; s++) {
+      sim.state.time += 1;
+      sim.keepers.tick(1);
+    }
+    expect(tended.length).toBe(2 * KEEPER_HELP.friendMult);
+    void tiles;
   });
 });

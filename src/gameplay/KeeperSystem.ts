@@ -1,7 +1,8 @@
 import { GROUND } from '../core/GameState';
+import { TUNING } from '../data/tuning';
 import { inRect, keeperById, regionById } from '../core/OldCityLayout';
 import type { KeeperState, KeeperStep, MaterialId } from '../core/types';
-import { FRIENDSHIP, KEEPER_STORIES, type ArcBeat, type KeeperStory } from '../data/keepers';
+import { FRIENDSHIP, KEEPER_HELP, KEEPER_STORIES, type ArcBeat, type KeeperStory } from '../data/keepers';
 import { KEEPERS, KEEPSAKES, type KeeperDef, type RegionDef, type RegionId } from '../data/oldcity';
 import { MATERIAL_IDS, MATERIALS, type MaterialCost } from '../data/salvage';
 import type { Sim } from './Sim';
@@ -196,6 +197,44 @@ export class KeeperSystem {
   }
 
   // ───────────── E23.9.2: friendship ─────────────
+
+  /**
+   * Keepers help out: every settled Keeper tends one restored tile near it every KEEPER_HELP.tendEverySeconds (a
+   * friend twice as often): the least bloomed tile within its radius, in its own region, one step toward full bloom.
+   * Deterministic (fixed times, world order), and it only touches loaded ground.
+   */
+  tick(dt: number) {
+    if (!this.on) return;
+    const now = this.sim.time;
+    for (const k of KEEPERS) {
+      if (this.step(k.id) !== 'settled') continue;
+      const every = KEEPER_HELP.tendEverySeconds / (this.isFriend(k.id) ? KEEPER_HELP.friendMult : 1);
+      if (Math.floor(now / every) === Math.floor((now - dt) / every)) continue;
+      this.tend(k.id);
+    }
+  }
+
+  /** One tending: the tile it helped, if any. */
+  tend(id: string): { x: number; z: number } | undefined {
+    const d = this.def(id);
+    const r = this.region(id);
+    const R = KEEPER_HELP.radius;
+    let best: { x: number; z: number; bloom: number } | undefined;
+    for (let z = d.z - R; z <= d.z + R; z++)
+      for (let x = d.x - R; x <= d.x + R; x++) {
+        if (Math.abs(x - d.x) + Math.abs(z - d.z) > R) continue;
+        const cx = Math.floor(x / 16);
+        const cz = Math.floor(z / 16);
+        if (cx < r.chunks.x0 || cx > r.chunks.x1 || cz < r.chunks.z0 || cz > r.chunks.z1) continue;
+        const t = this.sim.grid.peek(GROUND, x, z);
+        if (!t || t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom || t.occupantId) continue;
+        if (!best || t.bloom < best.bloom) best = { x, z, bloom: t.bloom };
+      }
+    if (!best) return undefined;
+    this.sim.restoration.grow(this.sim.grid.peek(GROUND, best.x, best.z)!, undefined, 'auto', true);
+    this.sim.bus.emit('keeper.tended', { keeperId: id, x: best.x, z: best.z });
+    return { x: best.x, z: best.z };
+  }
 
   /** Gifts it has liked so far (0 until it settles). */
   hearts(id: string): number {
