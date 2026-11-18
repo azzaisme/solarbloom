@@ -1443,6 +1443,23 @@ export class ChunkRenderer {
   transitions?: TransitionRenderer;
   private slabCap?: (hex: string, p: [number, number, number], s: [number, number, number]) => void;
 
+  /** E23.7.1: the fog sheets' tint by the time of day (unlit, so the light can't dim them): DayNight sets it */
+  fogTint = new pc.Color(1, 1, 1);
+  private fogTintBuilt = new pc.Color(1, 1, 1);
+
+  /** E23.7.1: applies `fogTint` to every fog sheet when it changes (and to new sheets as they're built). */
+  tintFog(force = false) {
+    const t = this.fogTint;
+    const b = this.fogTintBuilt;
+    if (!force && Math.abs(t.r - b.r) + Math.abs(t.g - b.g) + Math.abs(t.b - b.b) < 0.004) return;
+    b.copy(t);
+    for (const v of this.views.values()) {
+      if (!v.fogMat) continue;
+      v.fogMat.emissive = new pc.Color(t.r, t.g, t.b);
+      v.fogMat.update();
+    }
+  }
+
   /** Look 6.18: pushes each fogged chunk's receding front (if its area is clearing) to its fog material. */
   private fogFronts() {
     const tr = this.transitions!;
@@ -2581,7 +2598,7 @@ export class ChunkRenderer {
       const mat = new pc.StandardMaterial();
       mat.useLighting = false;
       mat.diffuse = new pc.Color(0, 0, 0);
-      mat.emissive = new pc.Color(1, 1, 1);
+      mat.emissive = new pc.Color(this.fogTintBuilt.r, this.fogTintBuilt.g, this.fogTintBuilt.b);
       mat.emissiveVertexColor = true;
       mat.opacityVertexColor = true;
       mat.opacityVertexColorChannel = 'a';

@@ -787,3 +787,7 @@ body.contrast svg.glyph .g-cap { fill: var(--glass-solid); stroke: var(--text-st
 .ctl-ask { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 8px; border-radius: 12px; background: var(--glass-hi-2); border: 1px solid var(--gold); font: 600 17px var(--font-display); }
 .ctl-ask button, .ctl-resets button { min-height: 40px; padding: 0 16px; border-radius: 12px; font: 600 16px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge-soft); color: var(--text-strong); }
 .ctl-resets { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+
+/* E23.7.1.3: sleeping in the house: the screen dims to a deep night blue and back */
+#sleepVeil { position: fixed; inset: 0; z-index: 60; pointer-events: none; background: #0b1226; opacity: 0; transition: opacity 900ms ease; }
+#sleepVeil.on { opacity: 1; }

@@ -3,6 +3,15 @@ import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import type { BuffType, CatRewardType, CatVariant, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
+  /** E23.7.1: the light clock crossed dawn or dusk (`day`: the game day). */
+  'clock.dawn': { day: number };
+  'clock.dusk': { day: number };
+  /** E23.7.1: bloombot slept in the house (`from` → `day`; in "follow my clock" mode the day doesn't change). */
+  'clock.slept': { from: number; day: number; real: boolean };
+  /** E23.7.1: "follow my clock" switched on or off. */
+  'clock.mode': { real: boolean };
+  /** E23.7.1.3: a night find was taken. */
+  'night.found': { id: string; material: import('../core/types').MaterialId; n: number; x: number; z: number };
   /** E21.1: the backpack or the store changed (`material` unset = several at once). */
   'pack.changed': { material?: import('../core/types').MaterialId; delta?: number };
   'store.changed': { material?: import('../core/types').MaterialId; delta?: number };
