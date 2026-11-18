@@ -339,6 +339,8 @@ export class MeshBuilder {
 
 /** Ground colours per material, dead → alive (Look 2: PALETTE.ground / PALETTE.lawn). */
 const DEAD = PALETTE.ground.dead;
+/** E21.5: the gate models' length in metres (#379), so a gate model can be fitted to its cells. */
+const GATE_LENGTH: Record<string, number> = { barricade: 4, 'bridge-broken': 14, 'bridge-repaired': 14, 'skybridge-collapsed': 12, 'lift-bridge': 6, 'glide-perch': 1.2 };
 const EDGE_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 /**
  * Curved paths: the radius of the quarter circle that rounds a path's corner (half a tile: stepped tiles join into
@@ -850,7 +852,9 @@ export class ChunkRenderer {
       if (!pile) return false;
       const size = SALVAGE.units[pile.size];
       const k = Math.max(0, this.sim.salvage.left(pile.id)) / size;
-      const base = pile.size === 'large' ? 1.45 : pile.size === 'medium' ? 1.15 : 0.9;
+      // the salvage-* models (#379) are made one tile across; the older scrap and seed props are smaller
+      const own = pile.model.startsWith('salvage-');
+      const base = own ? (pile.size === 'large' ? 1.05 : pile.size === 'medium' ? 0.85 : 0.65) : pile.size === 'large' ? 1.45 : pile.size === 'medium' ? 1.15 : 0.9;
       const sc = base * (0.45 + 0.55 * k);
       const rot = dhash(t.x, t.z, 213) * Math.PI * 2;
       const model = oldCityModel(pile.model); // the file once it lands, else its stand-in
@@ -862,20 +866,35 @@ export class ChunkRenderer {
       return true;
     }
     if (prop.startsWith('gate:')) {
-      // a rubble barricade (or a broken bridge deck): heaped stone and rubble
-      const r = new VRng(t.variant * 31 + 7);
+      // E21.5: a gate is one model over all its cells (drawn from its first cell), fitted to the gate's length
+      // and turned along its long side: the barricade (4 m), the bridges (14 m, along +X) and the skybridge (12 m)
       const sp = setPieceAt(t.x, t.z);
-      const name = sp?.kind === 'gate' ? GATE_MODELS[sp.gate.kind] : 'barricade';
-      const model = oldCityModel(name); // the file once it lands, else its stand-in
-      if (!model || !this.batch?.add(model, x, y, z, r.range(0, 6.28), 0.9, 0.9, 0.9, true)) b.add('sphere', PALETTE.stone.dark, [x, y + 0.15, z], [0.95, 0.45, 0.9]);
-      if (name === 'barricade' && model !== 'barricade') this.batch?.add('stone-block', x + r.range(-0.25, 0.25), y, z + r.range(-0.25, 0.25), r.range(0, 6.28), 0.5, 0.5, 0.5, true);
+      if (sp?.kind !== 'gate') return true;
+      const g = sp.gate;
+      const xs = g.cells.map((c) => c[0]);
+      const zs = g.cells.map((c) => c[1]);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
+      if (t.x !== x0 || t.z !== z0) return true;
+      const name = GATE_MODELS[g.kind];
+      const model = oldCityModel(name);
+      const spanX = x1 - x0 + 1;
+      const spanZ = z1 - z0 + 1;
+      const alongX = spanX >= spanZ;
+      const length = GATE_LENGTH[name] ?? 4;
+      // a barricade fills the opening across the avenue; a bridge spans the gap along its length
+      const across = name === 'barricade' ? Math.max(spanX, spanZ) : alongX ? spanX : spanZ;
+      const sc = across / length;
+      const cx = (x0 + x1 + 1) / 2;
+      const cz = (z0 + z1 + 1) / 2;
+      if (!model || !this.batch?.add(model, cx, y, cz, alongX ? 0 : Math.PI / 2, sc, sc, sc, !!model && model === 'barricade' ? true : false))
+        for (const [gx, gz] of g.cells) b.add('sphere', PALETTE.stone.dark, [gx + 0.5, y + 0.15, gz + 0.5], [0.95, 0.45, 0.9]);
       return true;
     }
     if (prop.startsWith('keeper:')) return true;
     if (prop.startsWith('lookout:')) {
       // E21.24: a lookout: its model once it lands, else a bench and a brass telescope on a tripod (stand-in)
       const model = oldCityModel('lookout-telescope');
-      if (model) return !!this.batch?.add(model, x, y, z, 0, 0.8, 0.8, 0.8);
+      if (model) return !!this.batch?.add(model, x, y, z, 0, 0.65, 0.65, 0.65);
       if (!this.batch?.add('bench', x, y, z + 0.2, 0, 0.58, 0.58, 0.58)) b.add('box', PALETTE.wood.mid, [x, y + 0.18, z + 0.2], [0.8, 0.05, 0.3]);
       for (const a of [0, 2.1, 4.2]) b.add('cylinder', PALETTE.metal.iron, [x + Math.cos(a) * 0.12, y + 0.25, z - 0.2 + Math.sin(a) * 0.12], [0.03, 0.5, 0.03]);
       b.add('cylinder', PALETTE.trim.gold ?? PALETTE.metal.iron, [x, y + 0.55, z - 0.2], [0.09, 0.42, 0.09]);
@@ -1438,7 +1457,9 @@ export class ChunkRenderer {
       const J = LANDING.jetty;
       const model = oldCityModel('jetty');
       if (model === 'jetty') {
-        if (t.x === J.x && t.z === J.z) this.batch?.add('jetty', J.x + J.w / 2, h - 0.1, J.z + J.d / 2, 0, 1, 1, 1);
+        // the model (8 m long along +X, 4.2 m from its posts' feet to the deck) turned along the jetty, deck at the beach
+        const sc = J.d / 8;
+        if (t.x === J.x && t.z === J.z) this.batch?.add('jetty', J.x + J.w / 2, h + 0.08 - 4.18 * sc, J.z + J.d / 2, Math.PI / 2, sc, sc, sc);
         return;
       }
       const sea = PALETTE.ground.sea;

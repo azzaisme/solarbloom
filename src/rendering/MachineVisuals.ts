@@ -81,8 +81,8 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   reservoirGarden: ['reservoir-basin', 0.55],
   relay: ['bloom-relay', 0.72],
   // E21: the Storage Chest and the Reclaimer (data/oldcity MODEL_NAMES; a stand-in until the files land)
-  chest: ['storage-chest', 0.66],
-  reclaimer: ['reclaimer', 1.1],
+  chest: ['storage-chest', 1.0],
+  reclaimer: ['reclaimer', 1.0],
 };
 /** The Mother Tree's collar model: its scale (the planter fits the procedural ring, radius 0.85) and planter top (model metres). */
 const MotherCollar = { scale: 1.12, top: 0.84 };
@@ -97,8 +97,9 @@ const LANDMARK_MODELS: Record<string, [string, number]> = {
   // E21.4: the Old City's own landmarks (data/oldcity MODEL_NAMES; a stand-in until the files land)
   sealock: ['lock-gate', 0.62],
   greenhouse: ['great-greenhouse', 0.5],
-  observatory: ['sky-observatory', 0.7],
-  spire: ['solar-spire', 0.9],
+  observatory: ['sky-observatory', 0.5],
+  // the Spire's own tower (15 m on a 6 x 6 footprint) stands with #352's terraces; the landmark core shows it at half size
+  spire: ['solar-spire', 0.5],
 };
 
 const orbOn = () => mat(PALETTE.orbLit, { emissive: PALETTE.coreGlow, emissiveIntensity: 1.6 });

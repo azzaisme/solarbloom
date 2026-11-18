@@ -24,6 +24,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
+  page.setDefaultTimeout(180_000); // a loaded machine (SwiftShader) can take minutes
   await page.goto('http://localhost:4197/');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
