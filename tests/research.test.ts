@@ -105,7 +105,8 @@ describe('E23.6.2: the research station', { timeout: 60000 }, () => {
     expect(sim.research.bench()[0].progress).toBeCloseTo(0.5, 1);
     // the grid runs dry: the project waits, and carries on by itself when power comes back
     let on = false;
-    (sim as unknown as { power: { isPowered(): boolean } }).power = { isPowered: () => on };
+    // the real grid (E23.3) stays; only whether the house is powered is stood in
+    Object.assign(sim.power, { isPowered: () => on });
     const before = sim.research.bench()[0].progress;
     sim.research.tick(p.days * DAY);
     expect(sim.research.bench()[0].progress).toBe(before);
