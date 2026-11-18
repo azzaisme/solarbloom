@@ -36,17 +36,23 @@ export class PowerOverlay {
   private netMats: pc.StandardMaterial[];
   private darkMat: pc.StandardMaterial;
   private on = false;
+  /** Frames, lines and rings are batched into one static group (rebatched when the networks or a frame's state
+   * change), so a big grid costs a few draw calls, not one per frame and line. Battery bars move and stay
+   * unbatched. */
+  private group = -1;
 
   constructor(
     private sim: Sim,
     parent: pc.Entity,
     private worldOf: (m: PowerNode) => [number, number, number],
+    private batcher?: pc.BatchManager,
   ) {
     this.root = group(parent, 'powerOverlay');
     this.root.enabled = false;
     this.device = pc.AppBase.getApplication()!.graphicsDevice;
     this.netMats = P.nets.map((c) => glowMaterial(c));
     this.darkMat = glowMaterial(P.dark);
+    if (batcher) this.group = batcher.addGroup('powerOverlay', false, 10000).id;
   }
 
   get visible(): boolean {
@@ -71,12 +77,17 @@ export class PowerOverlay {
     this.refreshIn -= dt;
     if (this.refreshIn > 0) return;
     this.refreshIn = 0.25;
+    let changed = false;
     for (const v of this.members) {
       const role = this.sim.power.roleOf(v.m);
       const dark = !!role?.consumer && !this.sim.power.isPowered(v.m);
       const want = dark ? this.darkMat : this.netMats[v.net % this.netMats.length];
-      if (v.frame.material !== want) v.frame.material = want;
+      if (v.frame.material !== want) {
+        v.frame.material = want;
+        changed = true;
+      }
     }
+    if (changed) this.rebatch();
     for (const b of this.bars) {
       const { stored, capacity } = this.sim.power.stored(b.m);
       const k = capacity > 0 ? Math.max(0.02, stored / capacity) : 0.02;
@@ -126,7 +137,18 @@ export class PowerOverlay {
       const [x, y, z] = this.worldOf(m);
       part(this.root, ring(28, 6), red, { pos: [x, y + 0.08, z], scale: [1.3, 0.08, 1.3] });
     }
+    if (this.group >= 0) for (const c of this.root.children) if (c.name !== 'pbar') this.batch(c as pc.Entity);
+    this.rebatch();
     this.refreshIn = 0;
+  }
+
+  private batch(e: pc.Entity) {
+    if (e.render) e.render.batchGroupId = this.group;
+    for (const c of e.children) this.batch(c as pc.Entity);
+  }
+
+  private rebatch() {
+    if (this.batcher && this.group >= 0) this.batcher.markGroupDirty(this.group);
   }
 
   /** A battery's level bar, standing above it and facing the camera (which looks from +x +z). */
