@@ -341,6 +341,45 @@ export class WaterPipes {
     }
   }
 
+  /**
+   * E23.4.5: which way the water runs on each pipe tile carrying it: the sides (dx, dz) leading downstream, away from
+   * what feeds the line (a running pump or plant feeds every tile it reaches; a reservoir the tiles it feeds by
+   * gravity). Found by a walk out from the tiles next to each source; a tile's arrows point at neighbours one step
+   * further from every source.
+   */
+  flow(): Map<string, [number, number][]> {
+    const dist = new Map<string, number>();
+    const queue: string[] = [];
+    const start = (k: string) => {
+      if (!this.fed.has(k) || dist.has(k)) return;
+      dist.set(k, 0);
+      queue.push(k);
+    };
+    for (const net of this.networks()) {
+      const inNet = new Set(net.tiles);
+      for (const m of [...net.pumps.filter((q) => this.pumpLive(q)), ...net.tanks.filter((t) => this.water.amountOf(tankId(t)) > 0)])
+        for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size))
+          if (t) for (const [dx, dz] of SIDES) if (inNet.has(pipeKey(t.x + dx, t.z + dz))) start(pipeKey(t.x + dx, t.z + dz));
+    }
+    for (let i = 0; i < queue.length; i++) {
+      const [x, z] = parse(queue[i]);
+      const d = dist.get(queue[i])!;
+      for (const [dx, dz] of SIDES) {
+        const k = pipeKey(x + dx, z + dz);
+        if (!this.fed.has(k) || dist.has(k)) continue;
+        dist.set(k, d + 1);
+        queue.push(k);
+      }
+    }
+    const out = new Map<string, [number, number][]>();
+    for (const [k, d] of dist) {
+      const [x, z] = parse(k);
+      const down = SIDES.filter(([dx, dz]) => dist.get(pipeKey(x + dx, z + dz)) === d + 1).map(([dx, dz]) => [dx, dz] as [number, number]);
+      if (down.length) out.set(k, down);
+    }
+    return out;
+  }
+
   /** Does this pipe tile carry water now? */
   carries(x: number, z: number): boolean {
     return this.fed.has(pipeKey(x, z));

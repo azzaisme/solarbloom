@@ -9,7 +9,7 @@
 //   6 desal: a desalination plant on the Landing's shore with its panels and a pipe inland
 //   7 overlay: the Water view in build mode (if this build has it)
 // Prints ✓/✗ checks and exits non-zero if any fails. Requires Playwright.
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { preview } from 'vite';
 
@@ -26,6 +26,21 @@ const check = (ok, what) => {
 };
 
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+// the repo's virtual gamepad (tests/e2e/gamepad-driver.js), so the Water view is tried on the pad too
+const driver = readFileSync(new URL('./gamepad-driver.js', import.meta.url), 'utf8').replace(/^export /gm, '');
+await page.addInitScript(driver + '
+installVirtualPad(); window.padDriver = padDriver;');
+/** Press a virtual pad button for two drawn frames, release it for two. */
+const press = (b) =>
+  page.evaluate(async (b) => {
+    const frames = (n) => new Promise((r) => (function f(k) { k ? requestAnimationFrame(() => f(k - 1)) : r(); })(n));
+    window.__pad.buttons[b].pressed = true;
+    window.__pad.buttons[b].value = 1;
+    await frames(2);
+    window.__pad.buttons[b].pressed = false;
+    window.__pad.buttons[b].value = 0;
+    await frames(2);
+  }, b);
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.setDefaultTimeout(240000);
@@ -69,7 +84,7 @@ try {
     g.bot.teleport('g', 5.5, 14.5);
     s.bot = { roofId: 'g', x: 5.5, z: 14.5 };
   });
-  await settle(4000);
+  await settle(9000);
 
   // 1: levels on the water
   const pond = await run(() => window.solarbloom.sim.water.bodyAt(window.solarbloom.sim.grid.get('g', 2, 11))?.id);
@@ -113,7 +128,9 @@ try {
   });
   check(tray.open && tray.reservoir && tray.pump && tray.pipe, `the build menu shows the water pieces (${JSON.stringify(tray)})`);
   await shot('3-build-menu');
-  await page.keyboard.press('KeyQ');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  if (await run(() => window.solarbloom.hud.trayOpen)) await run(() => window.solarbloom.hud.toggleTray(false));
 
   // 4: a pump on the pond's bank and a pipe line, first without power, then with a panel beside it
   const built = await run(() => {
@@ -155,6 +172,9 @@ try {
   const grav = await run(() => {
     const g = window.solarbloom;
     const s = g.sim;
+    // through Mast Row's barricade the way bloombot opens it (Pry), then its landmark woken
+    if (!s.state.salvage.abilities.includes('pry')) s.state.salvage.abilities.push('pry');
+    s.gates.open('g-mastRow');
     s.areas.clear('mastRow', true);
     for (let z = -26; z <= -16; z++)
       for (let x = 24; x <= 29; x++) {
@@ -228,7 +248,23 @@ try {
     await page.keyboard.press('KeyV');
     await settle(2500);
     check(await run(() => window.solarbloom.waterView), 'V turns the Water view on in build mode');
+    check(await run(() => window.solarbloom.waterOverlay.visible), 'the Water view is drawn');
     await shot('7-overlay');
+    await press(14);
+    await page.waitForTimeout(500);
+    check(!(await run(() => window.solarbloom.waterView)), 'd-pad left turns it off (pad)');
+    await press(14);
+    await page.waitForTimeout(500);
+    check(await run(() => window.solarbloom.waterView), 'd-pad left turns it back on (pad)');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(600);
+    check(!(await run(() => window.solarbloom.waterOverlay.visible)), 'out of build mode the Water view is hidden');
+    // the view over the terrace's gravity line and tank
+    await run(() => window.solarbloom.bot.teleport('g', 26.5, -22.6));
+    await settle(3000);
+    await run(() => window.solarbloom.selectTool('pipe'));
+    await settle(2500);
+    await shot('7-overlay-gravity');
   }
 } catch (e) {
   failures.push(String(e));

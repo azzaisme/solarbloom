@@ -258,6 +258,9 @@ const aqua = {
   /** E23.4.1: a drained bed (damp silt), and its darker wet rim at the waterline */
   bed: '#5e4b39',
   bedWet: '#3f3328',
+  /** E23.4.5: the Water view: a dry pipe tile, and the ring round a dry planter */
+  viewDry: '#8f9aa0',
+  viewThirsty: '#e2674f',
   foam: '#a8ecff',
   teal: '#6fe3e0',
 };

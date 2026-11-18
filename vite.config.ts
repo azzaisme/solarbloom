@@ -26,7 +26,7 @@ const QUICK = [
   // E23.9: the story
   'journal',
   // E23.4: the water network
-  'water-levels', 'water-fade', 'water-pipes', 'water-desal',
+  'water-levels', 'water-fade', 'water-pipes', 'water-desal', 'water-overlay',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

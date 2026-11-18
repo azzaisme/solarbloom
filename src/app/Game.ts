@@ -34,6 +34,7 @@ import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
 import { WaterLevels } from '../rendering/WaterLevels';
 import { PipeVisuals } from '../rendering/PipeVisuals';
+import { WaterOverlay } from '../rendering/WaterOverlay';
 import { WATER_NET } from '../data/water';
 import { ChunkRenderer, MeshBuilder, SINK } from '../rendering/ChunkRenderer';
 import { MACHINE_MODELS } from '../rendering/MachineVisuals';
@@ -187,6 +188,8 @@ export class Game {
   readonly waterLevels: WaterLevels;
   /** E23.4.2: pipe runs */
   readonly pipes: PipeVisuals;
+  /** E23.4.5: the Water view (build mode) */
+  readonly waterOverlay: WaterOverlay;
   /** Look 6.12: living transitions (every tile change plays as a process). */
   readonly transitions: TransitionRenderer;
   /** Look 6.9: Cultivator tillers. */
@@ -330,6 +333,7 @@ export class Game {
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
     this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice);
     this.pipes = new PipeVisuals(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.waterOverlay = new WaterOverlay(this.sim, this.scene.world, this.app.graphicsDevice);
     this.transitions = new TransitionRenderer(this.sim);
     this.chunks.transitions = this.transitions;
     this.cozy = new Cozy(this.sim);
@@ -1288,6 +1292,8 @@ export class Game {
         return this.turnBuild(a === 'rotate' ? 1 : -1);
       case 'removeMode':
         return this.selectTool(this.hud.currentTool === 'remove' ? 'pulse' : 'remove');
+      case 'waterOverlay':
+        return this.toggleWaterView();
       case 'map':
         return this.toggleOverview();
       case 'zoomCamera':
@@ -1521,6 +1527,19 @@ export class Game {
     else if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
     else if (!fromCancel) this.openMenu();
     this.syncPanelPause();
+  }
+
+  /** E23.4.5: the Water view is on (shown while building; it stays on for the next time you build). */
+  waterView = false;
+  private waterViewSeen = false;
+  /** E23.4.5: V / d-pad left in build mode. A new concept: one short introduction, the first time only. */
+  toggleWaterView() {
+    if (!this.building()) return;
+    this.waterView = !this.waterView;
+    if (this.waterView && !this.waterViewSeen) {
+      this.waterViewSeen = true;
+      this.hud.toast('Water view: pipes that carry water glow blue, with arrows the way it flows. Each pond and tank shows how full it is.', 'gold', 4.5);
+    }
   }
 
   /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
@@ -4341,6 +4360,8 @@ export class Game {
     this.overlays.update(dt);
     this.waterLevels.update();
     this.pipes.update(dt);
+    this.waterOverlay.visible = this.waterView && this.building();
+    if (this.bot) this.waterOverlay.update(dt, this.bot.pose);
     for (const r of this.sim.water.takeFadeChanges()) this.chunks.markRect(...r); // E23.4.4: land around low water
     if (this.bot) {
       this.bot.update(wdt); // still reads the pad (the menu's focus ring), but nothing moves
