@@ -38,6 +38,7 @@ import { Crafting } from './Crafting';
 import { Research } from './Research';
 import { DroneFuel } from './DroneFuel';
 import { Overgrowth } from './Overgrowth';
+import { Paths } from './Paths';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -92,6 +93,8 @@ export class Sim {
   readonly droneFuel: DroneFuel;
   /** E23.6.6: vines and plants grown over what bloombot has built. */
   readonly overgrowth: Overgrowth;
+  /** E23.6.7: footpaths bloombot lays, and old road broken up. */
+  readonly paths: Paths;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -116,6 +119,7 @@ export class Sim {
       if (p) unpackChunk(c, p);
       c.packed = p ?? '';
       if (p && this.transitions) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
+      this.paths?.applyChunk(c.tiles); // E23.6.7: depaved tiles lose their road again
       for (const m of this.grid.machinesInChunk(c.key)) for (const t of this.grid.footprint(m.roofId, m.x, m.z, m.size)) if (t) t.occupantId = m.id;
       for (const k of this.grid.decorInChunk(c.key)) {
         const at = parseDecorKey(k)!;
@@ -145,6 +149,7 @@ export class Sim {
     this.research = new Research(this);
     this.droneFuel = new DroneFuel(this);
     this.overgrowth = new Overgrowth(this);
+    this.paths = new Paths(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);

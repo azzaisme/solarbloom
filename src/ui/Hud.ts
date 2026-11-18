@@ -20,7 +20,11 @@ import type { GlyphSetting, GlyphStyle } from './Glyphs';
 export type DecorTool = `decor:${string}`;
 /** E23.6.6: overgrowth in hand (a kind of vine or plant to grow over something built). */
 export type GrowTool = `grow:${string}`;
-export type Tool = 'inspect' | 'pulse' | BuildableType | DecorTool | GrowTool | 'remove';
+/** E23.6.7: a path material in hand (draw a path), reshaping paths, and breaking up old road. */
+export type PathTool = `path:${string}` | 'pathEdit' | 'depave';
+export type Tool = 'inspect' | 'pulse' | BuildableType | DecorTool | GrowTool | PathTool | 'remove';
+/** E23.6.7: the path material a tool holds, if it holds one. */
+export const pathType = (t: Tool) => (t.startsWith('path:') ? t.slice(5) : undefined);
 /** E23.6.6: the overgrowth kind a tool holds, if it holds one. */
 export const growType = (t: Tool) => (t.startsWith('grow:') ? t.slice(5) : undefined);
 /** E19.2: the decoration a tool holds, if it holds one. */

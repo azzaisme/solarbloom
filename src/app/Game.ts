@@ -61,7 +61,7 @@ import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
 import { FlyText } from '../ui/Fly';
-import { decorType, growType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
+import { decorType, growType, Hud, machineTool, pathType, type Settings, type Tool } from '../ui/Hud';
 import { BOT } from '../gameplay/Walker';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
 import { EventBus } from './EventBus';
@@ -78,6 +78,8 @@ import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
 import { OvergrowthVisuals } from '../rendering/OvergrowthVisuals';
+import { PathVisuals } from '../rendering/PathVisuals';
+import { PATH_MATERIAL, PATHS, type PathMaterial } from '../data/paths';
 import { OVERGROWTH_BY_ID, type OvergrowthKind } from '../data/overgrowth';
 import { decorCostLabel } from '../gameplay/Cozy';
 import { OldCityController } from './OldCity';
@@ -225,6 +227,11 @@ export class Game {
   private padFocus?: PadFocus;
   /** E23.6.6: overgrowth's generated vines (one merged mesh) */
   private overgrowthArt!: OvergrowthVisuals;
+  /** E23.6.7: the paths' ground decal, and the path being drawn (points placed so far) or reshaped (a point held) */
+  private pathArt!: PathVisuals;
+  private pathDraft?: { pts: [number, number][]; w: number; mat: PathMaterial };
+  private pathHold?: { id: string; i: number };
+  private pathWidth = 1;
   /** City 06.5: simulated seconds still owed after a hitch or a hidden tab, run within the frame budget. */
   catchUpDebt = 0;
   private hiddenAt = 0;
@@ -351,6 +358,11 @@ export class Game {
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
     this.overgrowthArt = new OvergrowthVisuals(this.sim, this.scene.world, () => this.app.graphicsDevice);
+    this.pathArt = new PathVisuals(this.sim, this.scene.world, () => this.app.graphicsDevice);
+    this.sim.bus.on('paths.depaved', ({ x, z }) => {
+      const t = this.sim.grid.get(GROUND, x, z);
+      if (t) this.chunks.markTile(t);
+    });
     this.rings = new ProgressRings(this.sim, this.scene.world);
     // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
     // its procedural look. Once they're in, what was already drawn is rebuilt with them.
@@ -1058,6 +1070,11 @@ export class Game {
   // ───────────────────────── tools & input ─────────────────────────
 
   private selectTool(t: Tool) {
+    if (!pathType(t) && this.pathDraft) {
+      this.pathDraft = undefined;
+      this.pathArt?.setDraft(undefined);
+    }
+    if (t !== 'pathEdit') this.pathHold = undefined;
     if (this.cinematic) return;
     this.buildKey = '';
     this.sfx.click();
@@ -1455,6 +1472,12 @@ export class Game {
     if (this.settingsUi.isOpen) this.settingsUi.close();
     else if (this.menu.isOpen) this.closeMenu();
     else if (this.oc?.escape()) void 0; // E21: an Old City panel or a hold
+    else if (this.pathDraft || this.pathHold) {
+      // E23.6.7: a path being drawn, or a point held, is dropped (nothing was paid yet)
+      this.pathDraft = undefined;
+      this.pathHold = undefined;
+      this.pathArt.setDraft(undefined);
+    }
     else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
     else if (this.hud.trayOpen) this.hud.toggleTray(false);
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
@@ -1479,12 +1502,33 @@ export class Game {
 
   /** Is what's in hand something that turns (a decoration)? */
   private turnable(): boolean {
-    return !!this.bot && !!decorType(this.hud.currentTool);
+    const t = this.hud.currentTool;
+    return !!this.bot && (!!decorType(t) || !!pathType(t) || t === 'pathEdit');
   }
 
   /** E19.2: a quarter turn of the decoration in hand (wheel, + / -, or the pad's bumpers). */
   private turnBuild(step: number) {
     if (!this.turnable() || this.cinematic || this.hud.modalOpen) return;
+    // E23.6.7: with a path in hand, turning changes its width (a trail … a promenade); reshaping, the aimed path's
+    const tool = this.hud.currentTool;
+    if (pathType(tool) || tool === 'pathEdit') {
+      const n = PATHS.widths.length;
+      if (tool === 'pathEdit') {
+        const aim = this.buildAim().p?.tile;
+        const path = aim && this.sim.paths.pathAt(aim.x, aim.z);
+        if (path) {
+          const why = this.sim.paths.change(path.id, { w: Math.max(0, Math.min(n - 1, path.w + (step > 0 ? 1 : -1))) });
+          if (why) this.hud.showFail(why);
+        }
+      } else {
+        this.pathWidth = Math.max(0, Math.min(n - 1, this.pathWidth + (step > 0 ? 1 : -1)));
+        if (this.pathDraft) this.pathDraft.w = this.pathWidth;
+        this.pathArt.setDraft(this.pathDraft);
+      }
+      this.buildKey = '';
+      this.sfx.click();
+      return;
+    }
     this.buildRot = (this.buildRot + (step > 0 ? 1 : 3)) % 4;
     this.buildKey = '';
     this.sfx.click();
@@ -1783,7 +1827,18 @@ export class Game {
       const tool = this.hud.currentTool;
       const dk = decorType(tool);
       const gk = growType(tool);
-      const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : gk ? `Grow ${OVERGROWTH_BY_ID[gk as OvergrowthKind]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
+      const pk = pathType(tool);
+      const what = dk
+        ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}`
+        : gk
+          ? `Grow ${OVERGROWTH_BY_ID[gk as OvergrowthKind]?.name ?? 'it'}`
+          : pk
+            ? this.pathDraft && this.pathDraft.pts.length >= 2 ? 'Add a point (again here to lay the path)' : 'Place a point'
+            : tool === 'pathEdit'
+              ? this.pathHold ? 'Put the point here' : 'Pick up a point'
+              : tool === 'depave'
+                ? 'Break up'
+                : tool === 'remove' ? 'Remove' : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
       return what ? { glyph: this.glyph(this.glyphs.style !== 'keys' ? 'place' : 'pulse'), text: what } : undefined;
     }
     const f = b.front();
@@ -2413,6 +2468,7 @@ export class Game {
     if (dk) return this.previewDecor(p, x, y, dk);
     const gk = growType(tool);
     if (gk) return this.previewGrow(p, x, y, gk as OvergrowthKind);
+    if (pathType(tool) || tool === 'pathEdit' || tool === 'depave') return this.previewPath(p, x, y, tool);
     if (tool === 'remove') return this.previewRemove(p, x, y);
     if (machineTool(tool)) {
       const bt = tool;
@@ -2538,6 +2594,133 @@ export class Game {
     this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${o?.solid ? 'Solid' : 'Walk over it'} · ${price}</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
   }
 
+  /** E23.6.7: the path tools' hint where they aim (and the path being drawn, through to the aimed tile). */
+  private previewPath(p: Pick, x: number, y: number, tool: Tool) {
+    const t = p.tile!;
+    this.overlays.hideRadius();
+    this.overlays.hideGhost();
+    const width = ['a narrow trail', 'a path', 'a wide path', 'a promenade'][this.pathWidth] ?? 'a path';
+    const turn = this.turnHint().replace('to turn', 'to change the width');
+    if (tool === 'depave') {
+      const why = this.sim.paths.canDepave(t) ?? (!this.inReach(p.roofId, t.x, t.z, 1) ? TOO_FAR : undefined);
+      this.overlays.showFrame(p.roofId, t.x, t.z, 1, why ? 'bad' : 'ok');
+      this.hud.showTip(x, y, `<b>⛏️ Break up old road</b>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${this.press('E')} to break it up: the ground can come back</span>`}`);
+      return;
+    }
+    if (tool === 'pathEdit') {
+      const path = this.sim.paths.pathAt(t.x, t.z);
+      this.overlays.showFrame(p.roofId, t.x, t.z, 1, path || this.pathHold ? 'ok' : 'hover');
+      const how = this.pathHold ? `${this.press('E')} to put the point here` : path ? `${this.press('E')} to pick up a point (or add one here) · ${turn}` : 'Aim at a path';
+      this.hud.showTip(x, y, `<b>〰️ Reshape a path</b><span class="${path || this.pathHold ? 'ok' : 'bad'}">${how}</span>`);
+      return;
+    }
+    const mat = pathType(tool) as PathMaterial;
+    const def = PATH_MATERIAL[mat];
+    const pts: [number, number][] = [...(this.pathDraft?.pts ?? []), [t.x + 0.5, t.z + 0.5]];
+    const draft = { pts, w: this.pathWidth, mat };
+    this.pathArt.setDraft(pts.length >= 2 ? draft : undefined);
+    const why = pts.length >= 2 ? this.sim.paths.problem(draft) : undefined;
+    const tiles = pts.length >= 2 ? this.sim.paths.tiles(draft).size : 0;
+    const cost = tiles ? this.sim.inventory.describe(this.sim.paths.cost(mat, tiles)).map((c) => `${c.need} ${c.name}`).join(', ') : '';
+    this.overlays.showFrame(p.roofId, t.x, t.z, 1, why ? 'bad' : 'ok');
+    const how = !this.pathDraft ? `${this.press('E')} to place the first point · ${turn}` : `${this.press('E')} to add a point, again on the last one to lay ${width}`;
+    this.hud.showTip(x, y, `<b>${def.icon} ${def.name}</b>${cost ? `<small>${cost}</small>` : ''}<br>${why && why !== 'Place a second point' ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
+  }
+
+  /** E23.6.7: what a path tool does on a tile. */
+  private pathAct(p: Pick, x: number, y: number, tool: Tool): ActResult {
+    const t = p.tile!;
+    if (p.roofId !== GROUND) {
+      this.hud.showFail('Paths go on the ground', x, y);
+      return 'none';
+    }
+    if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+      this.hud.showFail(TOO_FAR, x, y);
+      return 'none';
+    }
+    const at: [number, number] = [t.x + 0.5, t.z + 0.5];
+    if (tool === 'depave') {
+      const why = this.sim.paths.depave(t.x, t.z);
+      if (why) {
+        this.hud.showFail(why, x, y);
+        return 'none';
+      }
+      this.sfx.stage('crack');
+      this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.1), 10, { up: 1.4, size: 0.04, life: 0.7 });
+      return 'build';
+    }
+    if (tool === 'pathEdit') {
+      if (this.pathHold) {
+        const path = this.sim.paths.get(this.pathHold.id);
+        const pts = path ? path.pts.map((q, k) => (k === this.pathHold!.i ? at : q)) : undefined;
+        const why = pts ? this.sim.paths.change(path!.id, { pts }) : 'That path is gone';
+        if (why) {
+          this.hud.showFail(why, x, y);
+          return 'none';
+        }
+        this.pathHold = undefined;
+        return 'build';
+      }
+      const path = this.sim.paths.pathAt(t.x, t.z);
+      if (!path) {
+        this.hud.showFail('Aim at a path', x, y);
+        return 'none';
+      }
+      let i = this.sim.paths.nearestPoint(path, at[0], at[1], 1.5);
+      if (i === undefined) {
+        // a new point where aimed, picked up straight away
+        i = this.sim.paths.insertAt(path, at[0], at[1]);
+        const pts = [...path.pts];
+        pts.splice(i, 0, at);
+        const why = this.sim.paths.change(path.id, { pts });
+        if (why) {
+          this.hud.showFail(why, x, y);
+          return 'none';
+        }
+      }
+      this.pathHold = { id: path.id, i };
+      this.buildKey = '';
+      return 'select';
+    }
+    const mat = pathType(tool) as PathMaterial;
+    // on an existing path with nothing drawn yet: repave it in this material
+    const under = !this.pathDraft ? this.sim.paths.pathAt(t.x, t.z) : undefined;
+    if (under && under.mat !== mat) {
+      const why = this.sim.paths.change(under.id, { mat });
+      if (why) {
+        this.hud.showFail(why, x, y);
+        return 'none';
+      }
+      return 'build';
+    }
+    const d = this.pathDraft;
+    const last = d?.pts[d.pts.length - 1];
+    if (d && last && last[0] === at[0] && last[1] === at[1]) {
+      if (d.pts.length < 2) {
+        this.hud.showFail('Place a second point', x, y);
+        return 'none';
+      }
+      const r = this.sim.paths.add(d.pts, d.w, d.mat);
+      if (r.why) {
+        this.hud.showFail(r.why, x, y);
+        return 'none';
+      }
+      this.pathDraft = undefined;
+      this.pathArt.setDraft(undefined);
+      this.sfx.build();
+      return 'build';
+    }
+    if (d && d.pts.length >= PATHS.maxPoints) {
+      this.hud.showFail(`At most ${PATHS.maxPoints} points on one path`, x, y);
+      return 'none';
+    }
+    this.pathDraft = { pts: [...(d?.pts ?? []), at], w: this.pathWidth, mat };
+    this.pathArt.setDraft(this.pathDraft.pts.length >= 2 ? this.pathDraft : undefined);
+    this.buildKey = '';
+    this.sfx.click();
+    return 'select';
+  }
+
   /** E23.6.6: the host under the cursor lights up (green: it can grow there), with what it costs. */
   private previewGrow(p: Pick, x: number, y: number, kind: OvergrowthKind) {
     const t = p.tile!;
@@ -2625,6 +2808,21 @@ export class Game {
   /** Removes the decoration on a tile (free, instant); with `pickUp` it goes into bloombot's hands, turned as it was. */
   private removeDecorAt(p: Pick, x: number, y: number, pickUp: boolean): ActResult {
     const t = p.tile!;
+    // E23.6.7: on a path: take away the point aimed at (a path keeps two), or the whole path; its materials come back
+    const path = !pickUp && p.roofId === GROUND && !t.occupantId ? this.sim.paths.pathAt(t.x, t.z) : undefined;
+    if (path) {
+      if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
+      const i = this.sim.paths.nearestPoint(path, t.x + 0.5, t.z + 0.5, 1);
+      if (i !== undefined && path.pts.length > 2) {
+        const why = this.sim.paths.change(path.id, { pts: path.pts.filter((_, k) => k !== i) });
+        if (why) this.hud.showFail(why, x, y);
+      } else this.sim.paths.remove(path.id);
+      this.sfx.click();
+      return 'build';
+    }
     // E23.6.6: the remove tool takes overgrowth off first (its cost comes back whole)
     const og = !pickUp ? this.sim.overgrowth.hostAt(p.roofId, t.x, t.z) : undefined;
     if (og && this.sim.overgrowth.at(og.key)) {
@@ -2941,6 +3139,7 @@ export class Game {
     if (dk) return this.placeDecorAt(p, x, y, dk);
     const gk = growType(tool);
     if (gk) return this.growAt(p, x, y, gk as OvergrowthKind);
+    if (pathType(tool) || tool === 'pathEdit' || tool === 'depave') return this.pathAct(p, x, y, tool);
     if (tool === 'remove') return this.removeDecorAt(p, x, y, false);
     if (machineTool(tool)) {
       const bt = tool;
@@ -4255,6 +4454,7 @@ export class Game {
     this.machines.update(wdt, rect);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
     this.overgrowthArt.update(dt); // E23.6.6: rebuilt only when something is placed or grows a stage
+    this.pathArt.update(); // E23.6.7: rebuilt only when a path (or the one being drawn) changes
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.
     if (!this.paused && this.camera.zoom > 0.9) {

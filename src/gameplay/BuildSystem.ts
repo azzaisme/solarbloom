@@ -130,6 +130,7 @@ export class BuildSystem {
       if (!c) continue;
       if (!s.areas.isClear(c) && !s.areas.canTouch(c)) return 'Lost in the fog — clear the ground here first';
       if (c.blocked) return 'A rusty vent is in the way';
+      if (c.roofId === GROUND && s.paths?.pathAt(c.x, c.z)) return 'A path runs here'; // E23.6.7
       if (c.occupantId) {
         const m = s.occupant(c);
         return m ? `${machineName(m)} is already here` : DECOR_IN_WAY; // E19.2: a decoration (free and instant to remove)

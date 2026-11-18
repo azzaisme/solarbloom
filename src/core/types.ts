@@ -390,6 +390,10 @@ export interface SalvageState {
   research?: ResearchState;
   /** E23.6.6: overgrowth by host key (a machine, a decoration, a ruin, a pipe tile, a power line), and since when */
   overgrowth?: Record<string, { kind: import('../data/overgrowth').OvergrowthKind; t0: number }>;
+  /** E23.6.7: paths laid (points, width step, material), in lay order */
+  paths?: { id: string; pts: [number, number][]; w: number; mat: import('../data/paths').PathMaterial }[];
+  /** E23.6.7: old road and paving broken up ("x,z" ground tiles, sorted) */
+  depaved?: string[];
 }
 
 /** E23.6.2: what the research station keeps. */

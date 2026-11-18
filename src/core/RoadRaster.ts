@@ -344,3 +344,35 @@ export function gateCells(g: Gate, id: string, plan: RoadPlan): [number, number]
 function gateStart(g: Gate, id: string, plan: RoadPlan): [number, number][] {
   return [gateCells(g, id, plan)[0]];
 }
+
+/**
+ * E23.6.7 (#472): a player's path, rasterised like a road: every cell whose centre lies within half the width of the
+ * curve (points sampled along it, in layer cells) is road of tier 'lane'. Bloombot's paths reuse this module's
+ * `AreaRaster` so walking, building and restoring treat them as they treat the city's lanes.
+ */
+export function rasterCurve(samples: readonly (readonly [number, number])[], width: number): AreaRaster {
+  const out: AreaRaster = new Map();
+  const half = width / 2;
+  const near = (px: number, pz: number) => {
+    let best = Infinity;
+    for (let i = 0; i < samples.length; i++) {
+      const [ax, az] = samples[i];
+      const [bx, bz] = samples[Math.min(samples.length - 1, i + 1)];
+      const dx = bx - ax;
+      const dz = bz - az;
+      const k = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz || 1)));
+      best = Math.min(best, Math.hypot(ax + dx * k - px, az + dz * k - pz));
+    }
+    return best;
+  };
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const [x, z] of samples) {
+    x0 = Math.min(x0, x);
+    z0 = Math.min(z0, z);
+    x1 = Math.max(x1, x);
+    z1 = Math.max(z1, z);
+  }
+  for (let z = Math.floor(z0 - half); z <= Math.ceil(z1 + half); z++)
+    for (let x = Math.floor(x0 - half); x <= Math.ceil(x1 + half); x++) if (near(x + 0.5, z + 0.5) <= Math.max(half, 0.5)) out.set(K(x, z), { tier: 'lane', bridge: false });
+  return out;
+}

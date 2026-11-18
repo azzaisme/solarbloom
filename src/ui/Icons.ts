@@ -278,6 +278,8 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '➰': 'link', '🪵': 'build', '🔲': 'glasshouse', '🚰': 'water', '🌀': 'settings', '🔋': 'bulb',
   // E23.6.6 overgrowth.
   '🟩': 'garden', '💜': 'flower', '🌺': 'flower',
+  // E23.6.7 paths.
+  '〰': 'road', '⛏': 'build', '🏖': 'boat',
 };
 
 /** Emoji (with optional variation selector / ZWJ sequences). */

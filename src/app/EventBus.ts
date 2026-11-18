@@ -20,6 +20,9 @@ export interface GameEvents {
   'research.upgraded': { id: string; level: number };
   /** E23.6.6: overgrowth placed on or taken off a host */
   'overgrowth.changed': { key: string };
+  /** E23.6.7: a path laid, reshaped or removed; a tile of old road depaved */
+  'paths.changed': { id: string };
+  'paths.depaved': { x: number; z: number };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
   /** E21.2: a Reclaimer sent units to the store. */

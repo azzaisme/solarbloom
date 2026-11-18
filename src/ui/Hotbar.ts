@@ -6,9 +6,10 @@ import { type Action, type Bindings, keyLabel } from '../app/Bindings';
 import { type GlyphStyle, type PadStyle, padName } from './Glyphs';
 import { ICONS, iconize, MACHINE_ICONS, plain } from './Icons';
 import { $, esc, HudPart } from './HudPart';
-import { decorType, etaText, growType, machineTool, type Tool } from './Hud';
+import { decorType, etaText, growType, machineTool, pathType, type Tool } from './Hud';
 import { decorCostLabel, decorOpen } from '../gameplay/Cozy';
 import { OVERGROWTH, OVERGROWTH_BY_ID, type OvergrowthKind } from '../data/overgrowth';
+import { PATH_MATERIAL, PATH_MATERIALS, type PathMaterial } from '../data/paths';
 
 /**
  * E22.5 (#342): the classic hotbar (Inspect, Pulse, the build tray, Harvest, Upgrades).
@@ -39,6 +40,14 @@ export class Hotbar extends HudPart {
       ...(oldCity
         ? OVERGROWTH.map((o) => `<button class="slot decor grow" data-tool="grow:${o.id}" hidden aria-label="Grow ${esc(o.name)} over something built"><span class="si">${o.icon}</span><span class="sl">${esc(o.name)}</span><span class="sc"></span></button>`)
         : []),
+      // E23.6.7: paths (Old City): a slot per material once known, reshaping, and breaking up old road
+      ...(oldCity
+        ? [
+            ...PATH_MATERIALS.map((m) => `<button class="slot decor path" data-tool="path:${m.id}" hidden aria-label="Lay a path of ${esc(m.name)}"><span class="si">${m.icon}</span><span class="sl">${esc(m.name)}</span><span class="sc"></span></button>`),
+            `<button class="slot decor" data-tool="pathEdit" aria-label="Reshape a path: move, add or take away its points, or change its width"><span class="si">〰️</span><span class="sl">Reshape</span><span class="sc">a path</span></button>`,
+            `<button class="slot decor" data-tool="depave" aria-label="Break up old road and paving"><span class="si">⛏️</span><span class="sl">Break up</span><span class="sc">old road</span></button>`,
+          ]
+        : []),
       `<button class="slot decor" data-tool="remove" aria-label="Remove or move a decoration"><span class="si">🧹</span><span class="sl">Remove</span><span class="sc">or move</span></button>`,
       `</div>`,
       `<span class="sep"></span>`,
@@ -67,7 +76,8 @@ export class Hotbar extends HudPart {
     tg.classList.toggle('active', building);
     const dk = decorType(t);
     const gk = growType(t);
-    const dec = dk ? DECOR_OPTION[dk] : gk ? OVERGROWTH_BY_ID[gk as OvergrowthKind] : undefined;
+    const pk = pathType(t);
+    const dec = dk ? DECOR_OPTION[dk] : gk ? OVERGROWTH_BY_ID[gk as OvergrowthKind] : pk ? PATH_MATERIAL[pk as PathMaterial] : t === 'pathEdit' ? { icon: '〰️', name: 'Reshape' } : t === 'depave' ? { icon: '⛏️', name: 'Break up' } : undefined;
     const def = machineTool(t) ? MACHINES[t] : undefined;
     $(tg, '.si').innerHTML = machineTool(t) ? ICONS[MACHINE_ICONS[t]] : dec ? iconize(dec.icon) : t === 'remove' ? iconize('🧹') : ICONS.build;
     $(tg, '.sl').textContent = def ? def.name.replace('Water ', '').replace('Pollinator ', '') : dec ? dec.name : t === 'remove' ? 'Remove' : 'Build';
@@ -138,6 +148,16 @@ export class Hotbar extends HudPart {
       if (this.last.get(`dc-${o.id}`) === String(on)) continue;
       this.last.set(`dc-${o.id}`, String(on));
       $(this.root, `#hotbar [data-tool="decor:${o.id}"]`).hidden = !on;
+    }
+    // E23.6.7: a path material's slot appears once known, with what a tile of it takes
+    if (s.oldCity) {
+      const known = new Set(s.paths.known());
+      for (const m of PATH_MATERIALS) {
+        const btn = this.root.querySelector<HTMLElement>(`#hotbar [data-tool="path:${m.id}"]`);
+        if (!btn) continue;
+        btn.hidden = !known.has(m.id);
+        this.set(`pc-${m.id}`, $(btn, '.sc'), 'text', s.inventory.describe(PATH_MATERIAL[m.id as PathMaterial].perTile).map((p) => `${p.icon}${p.need}`).join(' ') || 'free');
+      }
     }
     // E23.6.6: an overgrowth slot appears once its kind is known, with what it costs
     if (s.oldCity) {

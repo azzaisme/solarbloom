@@ -142,5 +142,7 @@ export const PROJECTS: ProjectDef[] = [
   { id: 'dc-clematis', branch: 'decor', name: 'Clematis', about: 'A climber with star flowers, for poles and walls.', cost: { seeds: 10 }, days: 0.05, opens: { material: 'seeds' }, gives: { recipe: 'clematis' } },
   { id: 'dc-morningGlory', branch: 'decor', name: 'Morning glory', about: 'Blue trumpets that open with the sun.', cost: { seeds: 12 }, days: 0.08, opens: { project: 'dc-clematis' }, gives: { recipe: 'morningGlory' } },
   { id: 'dc-wisteria', branch: 'decor', name: 'Wisteria', about: 'Long purple trails to hang from the lines.', cost: { seeds: 16, timber: 4 }, days: 0.12, opens: { project: 'dc-morningGlory' }, gives: { recipe: 'wisteria' } },
+  { id: 'dc-boardwalk', branch: 'decor', name: 'Boardwalks', about: 'Planks laid over wet ground and shallow water.', cost: { timber: 10 }, days: 0.1, opens: { keeper: 'saltwind' }, gives: { recipe: 'boardwalk' } },
+  { id: 'dc-cobbles', branch: 'decor', name: 'Mossy cobbles', about: 'Old cobbles, with moss let into the cracks.', cost: { scrap: 10, seeds: 6 }, days: 0.1, opens: { project: 'dc-boardwalk' }, gives: { recipe: 'mossyCobbles' } },
   { id: 'dc-birdbath', branch: 'decor', name: 'A bowl of water', about: 'Somewhere for the birds to bathe.', cost: { clay: 6 }, days: 0.05, opens: { tech: 'c-cistern-1' }, gives: { recipe: 'birdbath' } },
 ];
