@@ -119,7 +119,7 @@ export class Clock {
    * the weather's solar share (E23.7.2). The grid (E23.3) multiplies a panel's output by this.
    */
   solarFactor(): number {
-    return solarAt(this.dayFraction()) * (this.sim.weather?.solar() ?? 1);
+    return solarAt(this.dayFraction()) * (this.sim.weather?.solar?.() ?? 1);
   }
 
   /** The clock face: hours and minutes (06:00 is dawn). */
