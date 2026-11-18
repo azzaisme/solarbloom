@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import { GROUND } from '../core/GameState';
 import type { TileData } from '../core/types';
+import { ENDING } from '../data/ending';
 import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
 import { WATER } from './Water';
@@ -287,7 +288,8 @@ export class Fauna {
   // ─────────────── planning (once a second) ───────────────
 
   private assign(kind: Kind, slots: { key: string; home: { x: number; z: number }; y: number; rot?: number }[], opts: FaunaOptions) {
-    const cap = TUNING.ecosystem.caps[opts.quality][kind];
+    // E23.9.3: after the Great Bloom, wildlife floods back: more of every kind
+    const cap = TUNING.ecosystem.caps[opts.quality][kind] * (this.sim.ending?.bloomed ? ENDING.wildlifeCapMult : 1);
     // E21.24: every animal stands on its terrace (the offset is 0 on flat classic ground)
     const g = this.sim.grid;
     const want = slots.slice(0, cap).map((s) => ({ ...s, y: s.y + g.groundOffset(GROUND, Math.floor(s.home.x), Math.floor(s.home.z)) }));

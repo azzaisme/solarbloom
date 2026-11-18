@@ -32,6 +32,7 @@ import { Inventory, type BotAt } from './Inventory';
 import { SalvageSystem } from './SalvageSystem';
 import { GateSystem } from './GateSystem';
 import { FountainSystem } from './FountainSystem';
+import { EndingSystem } from './EndingSystem';
 import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
 import { LandmarkSystem } from './LandmarkSystem';
@@ -81,6 +82,8 @@ export class Sim {
   readonly keepers: KeeperSystem;
   /** E23.9.1: the maker's journal (pages on posts, his last page at the Great Bloom). */
   readonly journal: JournalSystem;
+  /** E23.9.3: the Great Bloom ending (wildlife, the causeway rising). */
+  readonly ending: EndingSystem;
   /** E21.9: waking landmarks and their lasting rewards (old-city rules). */
   readonly landmarks: LandmarkSystem;
   /**
@@ -133,6 +136,7 @@ export class Sim {
     this.fountain = new FountainSystem(this);
     this.keepers = new KeeperSystem(this);
     this.journal = new JournalSystem(this);
+    this.ending = new EndingSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);

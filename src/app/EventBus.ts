@@ -20,6 +20,8 @@ export interface GameEvents {
   'fountain.delivered': { material: import('../core/types').MaterialId; n: number };
   'fountain.tier': { tier: number };
   /** E21.8: a Keeper speaks (one to three lines) or moves to a new step. */
+  /** E23.9.3: the Great Bloom happened: the causeway is up (E23.8.3 opens the mainland past `mainlandX`) */
+  'ending.bloomed': { causewayEnd: { x: number; z: number }; mainlandX: number };
   /** E23.9.1: a page of the maker's journal was kept */
   'journal.page': { id: string };
   'keeper.said': { keeperId: string; lines: string[] };

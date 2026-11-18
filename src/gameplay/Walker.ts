@@ -60,6 +60,8 @@ export class Walker {
     } else if (!g.isPlayable(roofId) || !g.inBounds(roofId, cx, cz)) return false;
     const t = g.get(roofId, cx, cz);
     if (!t || t.blocked) return false;
+    // E23.9.3: the Long Causeway lies broken under the sea until the Great Bloom
+    if (t.prop === 'causeway' && !this.sim.ending.bloomed) return false;
     // E21.5: a deep-water gate (a canal, the basin's moat) is only crossed with Hover
     if (t.feature === 'water' && t.prop?.startsWith('gate:') && !this.sim.state.salvage?.abilities.includes('hover') && !this.sim.gates.isOpen(t.prop.slice(5))) return false;
     // E19.2: a flat decoration (a flower patch, stepping stones) occupies its tile but can be walked over.
@@ -95,7 +97,8 @@ export class Walker {
 
   /** In water (bloombot wades: slower, with a splash)? */
   wading(p: BotPose): boolean {
-    return this.sim.grid.get(p.roofId, Math.floor(p.x), Math.floor(p.z))?.feature === 'water';
+    const t = this.sim.grid.get(p.roofId, Math.floor(p.x), Math.floor(p.z));
+    return t?.feature === 'water' && t.prop !== 'causeway';
   }
 
   /**

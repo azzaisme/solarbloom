@@ -1,3 +1,4 @@
+import { CAUSEWAY } from '../data/ending';
 import { COAST, KEEPERS, LANDING, OLD_CITY, PARK_SET, REGIONS, type GateDef, type KeeperDef, type PileDef, type RegionDef, type RegionId } from '../data/oldcity';
 
 /**
@@ -90,6 +91,11 @@ export function coastSea(x: number, z: number): boolean {
 /** E21.26: the shore just inland of a beach coast (sand). */
 export function coastSand(_x: number, z: number): boolean {
   return COAST.south.kind === 'beach' && z > HI - COAST.south.band - 3 && z <= HI - COAST.south.band;
+}
+
+/** E23.9.3: a cell of the Long Causeway (walkable only after the Great Bloom; EndingSystem). */
+export function onCauseway(x: number, z: number): boolean {
+  return x >= CAUSEWAY.x0 && x <= CAUSEWAY.x1 && z >= CAUSEWAY.z0 && z <= CAUSEWAY.z1;
 }
 
 /** E21.26: the Landing's jetty (walkable planks over the surf and the bay). */
