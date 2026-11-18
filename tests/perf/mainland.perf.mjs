@@ -51,6 +51,7 @@ try {
   page.setDefaultTimeout(600_000);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  if (process.env.ML_DIAG) await page.addInitScript(() => (window.__mlDiag = true));
   const url = `http://localhost:${PORT}/?slot=1&gfx=deck`;
   await page.goto(url, { waitUntil: 'commit' });
   await page.evaluate(() => localStorage.clear());
@@ -121,7 +122,7 @@ try {
       power: !!s.power,
       water: !!s.water,
       wired: s.mainland.wired,
-      bytes: localStorage.getItem('solarbloom.save')?.length ?? 0,
+      bytes: Object.keys(localStorage).reduce((a, k) => a + (localStorage.getItem(k)?.length ?? 0), 0),
     };
   }, { DISTRICTS, MACHINES });
   phase(`built: ${JSON.stringify(results.build)}`);
@@ -174,6 +175,49 @@ try {
     if (R.drawCalls > LIMITS.drawCalls) failures.push(`${name}: ${R.drawCalls} draw calls (median) > ${LIMITS.drawCalls}`);
   };
 
+  // Diagnostics (ML_DIAG=1): what the draw calls are, by top-level scene entity, over the middle of the build.
+  if (process.env.ML_DIAG) {
+    results.diag = await page.evaluate(async () => {
+      const g = window.solarbloom;
+      const ms = g.sim.state.machines.filter((m) => m.x >= 144);
+      const x = ms.reduce((a, m) => a + m.x, 0) / ms.length;
+      const z = ms.reduce((a, m) => a + m.z, 0) / ms.length;
+      g.camera.bounds = { minX: -1e4, maxX: 1e4, minZ: -1e4, maxZ: 1e4 };
+      if (g.bot) g.bot.following = false;
+      g.camera.glide(x, 0, z, 0.5);
+      for (let i = 0; i < 300; i++) g.camera.update(0.05);
+      const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r))));
+      for (let i = 0; i < 40; i++) await frame();
+      const draws = () => g.app.stats.drawCalls.total;
+      const base = draws();
+      const out = { base };
+      const walk = (e, depth) => {
+        for (const c of e.children) {
+          if (!c.enabled) continue;
+          c.enabled = false;
+          out[`${'  '.repeat(depth)}${c.name}`] = 0;
+          c.__probe = true;
+        }
+      };
+      for (const c of g.app.root.children[0]?.children ?? []) void c;
+      // one top-level child at a time
+      const tops = [];
+      const collect = (e, depth) => { for (const c of e.children) { tops.push([c, depth]); if (depth < 1) collect(c, depth + 1); } };
+      collect(g.app.root, 0);
+      for (const [c, depth] of tops) {
+        if (!c.enabled) continue;
+        c.enabled = false;
+        await frame();
+        out[`${depth ? '  ' : ''}${c.name}`] = base - draws();
+        c.enabled = true;
+        await frame();
+      }
+      void walk;
+      return out;
+    });
+    console.log('  diag:', JSON.stringify(results.diag, null, 1));
+  }
+
   // 3. Pan a loop across the build at the middle zoom step, with the camera following a moving point.
   await page.evaluate(() => {
     const g = window.solarbloom;
@@ -196,6 +240,20 @@ try {
   // 6. The sim alone: one game tick over the whole build, timed (the grid and water solve live here).
   results.simTick = await page.evaluate(() => {
     const s = window.solarbloom.sim;
+    // ML_DIAG: the slowest call of each subsystem's tick/update across the run
+    const slow = {};
+    if (window.__mlDiag)
+      for (const [name, sys] of Object.entries(s)) {
+        if (!sys || typeof sys !== 'object') continue;
+        for (const k of ['tick', 'update']) {
+          const f = sys[k];
+          if (typeof f !== 'function') continue;
+          sys[k] = function (...a) {
+            const t = performance.now();
+            try { return f.apply(this, a); } finally { const d = performance.now() - t; if (d > (slow[`${name}.${k}`] ?? 0)) slow[`${name}.${k}`] = d; }
+          };
+        }
+      }
     const ts = [];
     for (let i = 0; i < 60; i++) {
       const t = performance.now();
@@ -203,7 +261,8 @@ try {
       ts.push(performance.now() - t);
     }
     ts.sort((a, b) => a - b);
-    return { median: ts[30], worst: ts[59] };
+    const top = Object.entries(slow).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ${v.toFixed(1)}`);
+    return { median: ts[30], worst: ts[59], ...(top.length ? { slowest: top } : {}) };
   });
   phase(`sim tick: ${JSON.stringify(results.simTick)}`);
   if (results.simTick.median > LIMITS.simTickMs) failures.push(`sim tick median ${results.simTick.median.toFixed(1)} ms > ${LIMITS.simTickMs}`);
