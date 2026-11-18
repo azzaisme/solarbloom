@@ -2,6 +2,7 @@
 // `node tests/e2e/story.e2e.mjs [journal|keepers|ending ...]` after `vite build` (all scenes when none are named).
 // - journal: walk up to the first page post, read it, the Journal opens at it.
 // - keepers: a woken Keeper wanders and comes home; a settled one takes a gift, becomes a friend and tends its patch.
+// - bench:   (with E23.2.3's benches) a Keeper only sits beside bloombot once it is a friend.
 // - ending:  the broken causeway; the last delivery: the island blooms, the causeway rises, his last page opens;
 //            bloombot walks out along the causeway.
 // Screenshots go to $SHOTS_DIR (default docs/review/story). The script fails on a page error or a failed check.
@@ -13,7 +14,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const dir = process.env.SHOTS_DIR ?? 'docs/review/story';
 mkdirSync(dir, { recursive: true });
-const scenes = process.argv.slice(2).length ? process.argv.slice(2) : ['journal', 'keepers', 'ending'];
+const scenes = process.argv.slice(2).length ? process.argv.slice(2) : ['journal', 'keepers', 'bench', 'ending'];
 const port = Number(process.env.STORY_PORT ?? 4251);
 const server = await preview({ preview: { port, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -188,6 +189,63 @@ try {
       await shot(page, 'keepers-8-friends-list');
     }
     check(!errors.length, `keepers: no page errors ${errors.join(' | ')}`);
+    await page.close();
+  }
+
+  if (scenes.includes('bench')) {
+    const { page, errors } = await open();
+    const has = await page.evaluate(() => !!window.solarbloom.resting && !!window.solarbloom.sim.rest);
+    if (!has) console.log('  (bench: this build has no E23.2.3 benches; skipped)');
+    else {
+      // Mast Row open and Pylon settled near the park; an old park bench, mended
+      const bench = await page.evaluate(() => {
+        const g = window.solarbloom;
+        const s = g.sim;
+        const sv = s.state.salvage;
+        sv.tier = 1;
+        if (!sv.abilities.includes('pry')) sv.abilities.push('pry');
+        s.areas.clear('park', true);
+        s.gates.open('g-mastRow');
+        sv.keepers.pylon = { step: 'landmark' };
+        s.keepers.settle('pylon');
+        // the last old bench in the park (out in the open, south of the pergola)
+        let found;
+        for (let z = 0; z < 16; z++) for (let x = 0; x < 16; x++) if (s.rest.benchAt(x, z)) found = { x, z };
+        if (!found) return undefined;
+        s.inventory.add('scrap', 10);
+        s.rest.mend(s.rest.benchAt(found.x, found.z));
+        return found;
+      });
+      check(!!bench, `bench: an old park bench found and mended (${JSON.stringify(bench)})`);
+      await stand(page, bench.x + 0.5, bench.z + 1.6, Math.PI);
+      // not yet a friend: bloombot sits alone
+      const alone = await page.evaluate(([x, z]) => {
+        const g = window.solarbloom;
+        g.resting.sitBench(g.sim.rest.benchAt(x, z));
+        return { friend: g.resting.friend ?? null, beside: g.keepers.beside?.id ?? null };
+      }, [bench.x, bench.z]);
+      check(!alone.friend && !alone.beside, `bench: a Keeper who is not yet a friend does not sit (${JSON.stringify(alone)})`);
+      await page.waitForTimeout(1500);
+      await shot(page, 'bench-1-alone');
+      await page.evaluate(() => window.solarbloom.resting.stand?.());
+      // three gifts later: a friend
+      await page.evaluate(() => (window.solarbloom.sim.state.salvage.keepers.pylon.hearts = 3));
+      const together = await page.evaluate(([x, z]) => {
+        const g = window.solarbloom;
+        g.resting.sitBench(g.sim.rest.benchAt(x, z));
+        return { friend: g.resting.friend ?? null, beside: g.keepers.beside?.id ?? null };
+      }, [bench.x, bench.z]);
+      check(together.beside === 'pylon', `bench: Pylon, a friend, sits beside bloombot (${JSON.stringify(together)})`);
+      // frame the bench up close
+      await page.evaluate(([x, z]) => {
+        const c = window.solarbloom.camera;
+        c.glide(x + 0.5, 0, z + 0.5, c.maxZoom * 0.8);
+        for (let i = 0; i < 300; i++) c.update(0.05);
+      }, [bench.x, bench.z]);
+      await page.waitForTimeout(6000);
+      await shot(page, 'bench-2-with-a-friend');
+    }
+    check(!errors.length, `bench: no page errors ${errors.join(' | ')}`);
     await page.close();
   }
 
