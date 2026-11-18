@@ -127,3 +127,60 @@ describe('E23.2.1: bloombot\'s charge', () => {
     expect(back.charge.max).toBe(sim.charge.max);
   });
 });
+
+describe('E23.2.1: never stranded', () => {
+  it('at zero with an empty backpack, bloombot walks home, rests, and pulses again (no shortcuts)', () => {
+    const sim = oldSim();
+    const [far] = pulseable(sim, 1);
+    sim.econ.spend({ biomass: sim.econ.get('biomass') }); // nothing to eat anywhere
+    for (const k of Object.keys(sim.state.salvage!.pack)) delete (sim.state.salvage!.pack as Record<string, number>)[k];
+    sim.state.charge = { value: 0 };
+    expect(sim.charge.eat()).toBe('none');
+    expect(sim.restoration.checkPulse(far).ok).toBe(false);
+    // walk home on foot (the low-power walk), the way a player would
+    const w = new Walker(sim);
+    const p = spawnPose(sim, w);
+    const fountain = sim.state.machines.find((m) => m.type === 'core' && sim.areas.areaOf(m) === PARK)!;
+    const path = w.path(GROUND, p.x, p.z, (x, z) => Math.abs(x - (fountain.x + 0.5)) <= 2.5 && Math.abs(z - (fountain.z + 0.5)) <= 2.5, { x: fountain.x, z: fountain.z });
+    expect(path).toBeTruthy();
+    const end = path![path!.length - 1];
+    let walked = 0;
+    let px = p.x;
+    let pz = p.z;
+    for (const step of path!) {
+      walked += Math.hypot(step.x - px, step.z - pz);
+      px = step.x;
+      pz = step.z;
+      sim.bot = { roofId: GROUND, x: px, z: pz };
+      sim.tick();
+    }
+    sim.advance(walked / (BOT.walk * CHARGE.lowPowerWalk));
+    // passing through gives nothing: only standing still there does
+    sim.bot = { roofId: GROUND, x: end.x, z: end.z };
+    expect(sim.charge.atHome()).toBe(true);
+    sim.advance(CHARGE.home.stillSeconds + 0.5);
+    expect(sim.charge.resting).toBe(true);
+    sim.advance(10);
+    expect(sim.charge.value).toBeGreaterThan(CHARGE.pulse);
+    expect(sim.restoration.pulse(far.id)).toBe(true);
+  });
+
+  it('away from home, standing still gives nothing back', () => {
+    const sim = oldSim();
+    sim.state.charge = { value: 0 };
+    sim.bot = { roofId: GROUND, x: 8.5, z: -40.5 };
+    sim.advance(30);
+    expect(sim.charge.value).toBe(0);
+  });
+
+  it('the gentle-failure hooks: drain, refill, and walking is always possible', () => {
+    const sim = oldSim();
+    sim.charge.drainForTest();
+    expect(sim.charge.empty).toBe(true);
+    expect(sim.charge.low).toBe(true);
+    expect(sim.charge.canWalk()).toBe(true);
+    sim.charge.refillForTest();
+    expect(sim.charge.value).toBe(sim.charge.max);
+    expect(sim.charge.low).toBe(false);
+  });
+});
