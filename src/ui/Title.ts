@@ -8,9 +8,10 @@ import { PadFocus } from './PadFocus';
  *
  * - Splash: the logo on a plain background for up to 2 s; any input skips it.
  * - Title: the logo over a slow turn across the restored park at dawn (a painted still, src/ui/images), "Press any button" until the first input
- *   (which picks the glyph set: keys or pad), then Continue · New game · Load game · Settings · Quit (the Deck
- *   build only). Three slots, each with its name, day, time played, the fountain's step, the last region and a
- *   "Classic" tag for old-rules saves; rename and delete, each confirmed. New game on a used slot asks first.
+ *   (which picks the glyph set: keys or pad), then Play · Settings (and Quit in the Deck build), centred in a pale
+ *   panel over the left third (owner, 18 Nov 2026). Play opens the three slots, each with its name, day, time played,
+ *   the fountain's step, the last region and a "Classic" tag for old-rules saves: Load, Rename, Start over or Delete a
+ *   garden, or Start one in an empty slot. Rename, Start over and Delete each ask first.
  *
  * Everything works with the keyboard (Tab, arrows, Enter, Esc) and the pad alone (the d-pad's focus ring, A,
  * B to go back). The title draws no 3D: it costs next to nothing, so it holds any frame limit.
@@ -44,7 +45,7 @@ export class Title {
   private padPrev: boolean[] = [];
   private raf = 0;
   private confirm?: { text: string; yes: string; then: () => void };
-  private view: 'press' | 'menu' | 'load' | 'new' = 'press';
+  private view: 'press' | 'menu' | 'play' = 'press';
   private renaming?: Slot;
   private onKey = (e: KeyboardEvent) => this.key(e);
 
@@ -122,41 +123,43 @@ export class Title {
     if (this.view === 'press') body = `<button class="t-press" id="tPress">Press any button</button>`;
     else if (this.view === 'menu')
       body =
-        `<nav class="t-panel t-menu" aria-label="Title menu">` +
-        (latest ? `<button id="tContinue" data-t="continue">Continue <small>${esc(this.heads[latest - 1]!.name)}</small></button>` : '') +
-        `<button id="tNew" data-t="new">New game</button>` +
-        (this.heads.some(Boolean) ? `<button id="tLoad" data-t="load">Load game</button>` : '') +
+        `<nav class="t-menu" aria-label="Title menu">` +
+        `<button id="tPlay" data-t="play">Play${latest ? ` <small>${esc(this.heads[latest - 1]!.name)}</small>` : ''}</button>` +
         `<button id="tSettings" data-t="settings">Settings</button>` +
         (this.host.quit ? `<button id="tQuit" data-t="quit">Quit</button>` : '') +
         `</nav>`;
-    else body = this.slotsHtml(this.view);
+    const slots = this.view === 'play' ? this.slotsHtml() : '';
     const confirm = this.confirm
       ? `<div class="t-confirm panel" role="alertdialog" aria-labelledby="tConfirmText"><p id="tConfirmText">${esc(this.confirm.text)}</p><div class="t-row"><button id="tYes" data-t="yes">${esc(this.confirm.yes)}</button><button id="tNo" data-t="no">Cancel</button></div></div>`
       : '';
     // Keep Settings (if open) where it is: it lives in its own element.
     const settings = this.el.querySelector('#settings');
-    this.el.innerHTML = `${art}<div class="t-fore">${logo}${body}</div>${confirm}`;
+    // the left third: a pale veil with the logo and the menu in its middle; the slots open over the rest
+    this.el.innerHTML = `${art}<div class="t-side">${logo}${body}</div>${slots ? `<div class="t-main">${slots}</div>` : ''}${confirm}`;
     if (settings) this.el.appendChild(settings);
-    const target = focusId ? this.el.querySelector<HTMLElement>(`#${focusId}`) : this.confirm ? this.el.querySelector<HTMLElement>('#tNo') : this.el.querySelector<HTMLElement>('.t-fore button, .t-fore input');
+    const target = focusId ? this.el.querySelector<HTMLElement>(`#${focusId}`) : this.confirm ? this.el.querySelector<HTMLElement>('#tNo') : this.el.querySelector<HTMLElement>(this.view === 'play' ? this.slotFocus() : '.t-side button');
     target?.focus({ focusVisible: true } as FocusOptions);
   }
 
-  private slotsHtml(mode: 'load' | 'new'): string {
+  /** The slot picker's first focus: Load on the latest garden, else the first empty slot's Start. */
+  private slotFocus(): string {
+    const latest = this.latest();
+    return latest ? `#tLoad${latest}` : '.t-main button';
+  }
+
+  private slotsHtml(): string {
     const cards = this.heads
       .map((h, i) => {
         const slot = (i + 1) as Slot;
         if (!h)
-          return `<div class="t-slot empty"><h3>Empty slot ${slot}</h3>${mode === 'new' ? `<button id="tStart${slot}" data-t="start" data-slot="${slot}">Start here</button>` : '<p>No garden here yet</p>'}</div>`;
+          return `<div class="t-slot empty"><h3>Empty slot ${slot}</h3><p>No garden here yet</p><button id="tStart${slot}" data-t="start" data-slot="${slot}">Start here</button></div>`;
         const name = this.renaming === slot ? `<label class="t-rename">Name <input id="tName${slot}" maxlength="40" value="${esc(h.name)}"></label><button id="tSaveName${slot}" data-t="saveName" data-slot="${slot}">Save name</button>` : `<h3>${esc(h.name)}${h.rules === 'classic' ? ' <em class="t-tag">Classic</em>' : ''}</h3>`;
         const facts = [h.day !== undefined ? `Day ${h.day}` : '', `Played for ${playedText(h.played)}`, h.step, h.region].filter(Boolean).map((f) => `<li>${esc(f)}</li>`).join('');
-        const actions =
-          mode === 'load'
-            ? `<button id="tLoad${slot}" data-t="loadSlot" data-slot="${slot}">Load</button><button id="tRename${slot}" data-t="rename" data-slot="${slot}">Rename</button><button id="tDelete${slot}" data-t="delete" data-slot="${slot}" class="danger">Delete</button>`
-            : `<button id="tStart${slot}" data-t="start" data-slot="${slot}">Start a new garden here</button>`;
+        const actions = `<button id="tLoad${slot}" class="primary" data-t="loadSlot" data-slot="${slot}">Load</button><button id="tRename${slot}" data-t="rename" data-slot="${slot}">Rename</button><button id="tStart${slot}" data-t="start" data-slot="${slot}">Start over</button><button id="tDelete${slot}" data-t="delete" data-slot="${slot}" class="danger">Delete</button>`;
         return `<div class="t-slot" aria-label="Slot ${slot}: ${esc(h.name)}">${name}<ul>${facts}</ul><div class="t-row">${actions}</div></div>`;
       })
       .join('');
-    return `<section class="t-panel t-slots" aria-label="${mode === 'load' ? 'Load game' : 'New game'}"><h2>${mode === 'load' ? 'Load game' : 'New game: choose a slot'}</h2><div class="t-slot-list">${cards}</div><button id="tBack" data-t="back">Back</button></section>`;
+    return `<section class="t-panel t-slots" aria-label="Choose a garden"><h2>Choose a garden</h2><div class="t-slot-list">${cards}</div><button id="tBack" data-t="back">Back</button></section>`;
   }
 
   private wake(device: 'keys' | 'pad') {
@@ -173,13 +176,8 @@ export class Title {
     if (b.id === 'tPress') return this.wake('keys');
     const slot = Number(b.dataset.slot) as Slot;
     switch (b.dataset.t) {
-      case 'continue':
-        return this.host.start(this.latest()!, false, this.device);
-      case 'new':
-        this.view = 'new';
-        return this.render();
-      case 'load':
-        this.view = 'load';
+      case 'play':
+        this.view = 'play';
         return this.render();
       case 'settings':
         return this.host.settings(this.el, () => this.render('tSettings'));
@@ -188,7 +186,7 @@ export class Title {
       case 'back':
         this.view = 'menu';
         this.renaming = undefined;
-        return this.render(this.heads.some(Boolean) ? 'tLoad' : 'tNew');
+        return this.render('tPlay');
       case 'loadSlot':
         return this.host.start(slot, false, this.device);
       case 'start':
@@ -234,7 +232,6 @@ export class Title {
 
   private async reload(focusId?: string) {
     this.heads = await this.host.slots();
-    if (this.view === 'load' && !this.heads.some(Boolean)) this.view = 'menu';
     this.render(focusId);
   }
 
@@ -245,10 +242,10 @@ export class Title {
       this.confirm = undefined;
       return this.render();
     }
-    if (this.view === 'load' || this.view === 'new') {
+    if (this.view === 'play') {
       this.view = 'menu';
       this.renaming = undefined;
-      this.render();
+      this.render('tPlay');
     }
   }
 

@@ -13,23 +13,26 @@
 body.reduced #splash .sp-logo { animation: none; }
 
 /* ───── title ───── */
-#title { position: fixed; inset: 0; z-index: 40; overflow: hidden; background: var(--glass-solid); color: var(--text); font-family: var(--font-ui); }
+#title { --title-veil: rgb(255 255 255 / 25%); position: fixed; inset: 0; z-index: 40; overflow: hidden; background: var(--glass-solid); color: var(--text); font-family: var(--font-ui); }
 #title .t-art { position: absolute; inset: -3% -6%; background: url('./images/title-backdrop.webp') center / cover no-repeat; animation: titleTurn 70s ease-in-out infinite alternate; will-change: transform; }
 @keyframes titleTurn { from { transform: translateX(-4%) scale(1.04); } to { transform: translateX(4%) scale(1.09); } }
 #title.still .t-art, body.reduced #title .t-art { animation: none; transform: none; inset: 0; }
-#title .t-fore { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; padding: 4vh 16px 3vh; gap: 2.5vh; }
-#title .t-logo { flex: none; margin-top: 1vh; }
-.t-press { margin-top: auto; margin-bottom: 9vh; min-height: 52px; padding: 0 28px; border-radius: 999px; font: 600 22px var(--font-display); background: var(--glass-strong); border: 1px solid var(--edge-strong); color: var(--text-strong); box-shadow: var(--shadow), var(--inner-glow); animation: pressPulse 2.2s ease-in-out infinite; }
+/* the left third: a 25% white veil over the painting, the logo and the menu in its dead centre (owner, 18 Nov 2026) */
+#title .t-side { position: absolute; left: 0; top: 0; bottom: 0; width: 33.333%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5vh; padding: 16px; background: var(--title-veil); }
+#title .t-logo { flex: none; }
+#title .t-main { position: absolute; left: 33.333%; right: 0; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.t-press { min-height: 52px; padding: 0 28px; border-radius: 999px; font: 600 22px var(--font-display); background: var(--glass-strong); border: 1px solid var(--edge-strong); color: var(--text-strong); box-shadow: var(--shadow), var(--inner-glow); animation: pressPulse 2.2s ease-in-out infinite; }
 @keyframes pressPulse { 50% { box-shadow: var(--shadow), var(--glow-active); } }
 body.reduced .t-press { animation: none; }
-.t-panel { margin-top: auto; margin-bottom: 4vh; padding: 14px; border-radius: var(--radius-lg); background: var(--glass-strong); border: 1px solid var(--edge); box-shadow: var(--shadow), var(--inner-glow); max-height: 62vh; overflow-y: auto; }
-.t-menu { display: flex; flex-direction: column; gap: 8px; width: min(360px, 92vw); }
+.t-panel { padding: 14px; border-radius: var(--radius-lg); background: var(--glass-strong); border: 1px solid var(--edge); box-shadow: var(--shadow), var(--inner-glow); max-height: 62vh; overflow-y: auto; }
+.t-menu { display: flex; flex-direction: column; gap: 10px; width: min(300px, 80%); }
 .t-menu button, .t-slots > button, .t-slot button, .t-confirm button { min-height: 46px; padding: 0 18px; border-radius: 14px; font: 600 18px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge-soft); color: var(--text-strong); }
 .t-menu button:hover, .t-menu button:focus-visible, .t-slot button:hover, .t-slot button:focus-visible, .t-slots > button:hover, .t-confirm button:hover { background: var(--glass-hi-2); border-color: var(--edge-strong); }
 .t-menu button small { display: block; font: 700 14px var(--font-ui); color: var(--text-soft); }
-#tContinue { background: var(--btn-gold); color: var(--ink-dark); border-color: var(--btn-gold-edge); }
-#tContinue small { color: var(--ink-dark); }
-.t-slots { width: min(960px, 94vw); }
+#tPlay, .t-slot button.primary { background: var(--btn-gold); color: var(--ink-dark); border-color: var(--btn-gold-edge); }
+#tPlay { min-height: 56px; font-size: 22px; }
+#tPlay small { color: var(--ink-dark); }
+.t-slots { width: min(900px, 100%); }
 .t-slots h2 { margin: 2px 4px 10px; font: 600 22px var(--font-display); color: var(--gold); }
 .t-slot-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
 .t-slot { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: var(--radius); background: var(--glass-hi); border: 1px solid var(--edge-soft); }
@@ -45,7 +48,7 @@ body.reduced .t-press { animation: none; }
 .t-rename input { min-height: 40px; padding: 0 10px; border-radius: 10px; font: 600 17px var(--font-ui); color: var(--text-strong); background: var(--glass-sunk); border: 1px solid var(--edge); }
 .t-confirm { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5; width: min(460px, 92vw); padding: 18px; background: var(--glass-solid); }
 .t-confirm p { margin: 0 0 14px; font: 600 19px/1.35 var(--font-display); color: var(--text-strong); }
-#title:has(.t-confirm) .t-fore { filter: brightness(.6); pointer-events: none; }
+#title:has(.t-confirm) .t-side, #title:has(.t-confirm) .t-main { filter: brightness(.6); pointer-events: none; }
 @media (max-width: 900px) { .t-slot-list { grid-template-columns: 1fr; } }
 
 /* ───── loading ───── */
@@ -88,3 +91,10 @@ body.loading-on #hud { visibility: hidden; }
 #saveLeaf { position: absolute; top: calc(18px + var(--safe-t)); right: calc(284px + var(--safe-r)); width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--glass); border: 1px solid var(--edge-soft); opacity: 0; transform: scale(.8); transition: opacity .25s, transform .25s; pointer-events: none; }
 #saveLeaf.on { opacity: 1; transform: none; }
 #saveLeaf .icon { width: 18px; height: 18px; }
+
+/* the title menu sits on the pale veil, not in a panel: its buttons carry their own dark glass so they read */
+#title .t-menu button:not(#tPlay) { background: var(--glass-strong); border-color: var(--edge); box-shadow: var(--shadow); }
+#title .t-menu button:not(#tPlay):hover, #title .t-menu button:not(#tPlay):focus-visible { background: var(--glass-solid); border-color: var(--edge-strong); }
+/* a saved slot's four actions: two by two, each on one line */
+.t-slot:not(.empty) .t-row { display: grid; grid-template-columns: 1fr 1fr; }
+.t-slot button { white-space: nowrap; font-size: 16px; padding: 0 10px; }

@@ -217,10 +217,12 @@ try {
     const before = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time, bot: window.solarbloom.sim.state.bot }));
     await keyTo(page, '#menu-title');
     await Promise.all([page.waitForNavigation(), page.keyboard.press('Enter')]);
-    // E22.12: the title; any key, then Continue (it has the focus)
+    // E22.12: the title; any key, then Play and Load (each has the focus in turn)
     await page.waitForSelector('#tPress');
     await page.keyboard.press('Space');
-    await page.waitForSelector('#tContinue');
+    await page.waitForSelector('#tPlay');
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('#tLoad1');
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
     const after = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time, bot: window.solarbloom.sim.state.bot }));
@@ -249,8 +251,10 @@ try {
     await Promise.all([page.waitForNavigation(), press(page, 0).catch(() => {})]); // the page leaves mid-press
     await page.waitForSelector('#tPress');
     await press(page, 0); // any button
-    await page.waitForSelector('#tContinue');
-    await press(page, 0); // Continue has the focus
+    await page.waitForSelector('#tPlay');
+    await press(page, 0); // Play has the focus
+    await page.waitForSelector('#tLoad1');
+    await press(page, 0); // then Load on the latest garden
     await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
     check(true, 'E22.11 pad: quit to title and the game continues');
     await page.evaluate(() => window.solarbloom.pause.clear('blur'));
