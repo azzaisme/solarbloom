@@ -11,12 +11,14 @@ describe('E21.26 (data and the Landing, for Milestone A): the island', () => {
   it('every chunk outside the island, the coast band and the bay are unwalkable sea', () => {
     const sim = oldSim();
     const w = new Walker(sim);
-    for (const [x, z] of [[120, 0], [-120, 0], [0, -120], [40, 140], [-97, 0], [111, 0], [0, -96], [60, 110], [0, 60]]) {
+    for (const [x, z] of [[120, 8], [-120, 0], [0, -120], [40, 140], [-97, 0], [111, 8], [0, -96], [60, 110], [0, 60]]) {
       const t = sim.grid.get(GROUND, x, z)!;
       expect(t.feature, `${x},${z}`).toBe('water');
       expect(w.walkable(GROUND, x, z), `${x},${z}`).toBe(false);
       expect(levelAt(x, z)).toBe(0);
     }
+    // E23.9.3: the Long Causeway (z −1..1 out of the east shore) stands at street level but can't be walked before the Great Bloom
+    for (const x of [111, 120, 143]) expect(w.walkable(GROUND, x, 0), `causeway ${x}`).toBe(false);
   });
 
   it('the coastline is closed: from the Landing nothing walkable leaves the island', () => {
