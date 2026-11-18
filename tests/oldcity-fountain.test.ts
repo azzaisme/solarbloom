@@ -80,7 +80,10 @@ describe('E21.6: the fountain', () => {
       expect(sim.fountain.tier, `tier ${tier}`).toBe(tier);
       expect(sim.state.salvage!.abilities).toEqual(abilities.slice(0, Math.min(4, tier)));
       expect(sim.inventory.stackLimit()).toBe(PACK.stack[tier]);
-      for (const [type, r] of Object.entries(RECIPES)) expect(sim.build.isUnlocked(type as 'solar'), `${type} at ${tier}`).toBe(r!.tier <= tier);
+      for (const [type, r] of Object.entries(RECIPES)) {
+        if (sim.water.unlockFor(type as 'solar')) continue; // E23.4: handed over by Cistern Basin's Keeper (E23.8.2), not a tier
+        expect(sim.build.isUnlocked(type as 'solar'), `${type} at ${tier}`).toBe(r!.tier <= tier);
+      }
     }
     expect(tiers).toEqual([1, 2, 3, 4, 5]);
   });
