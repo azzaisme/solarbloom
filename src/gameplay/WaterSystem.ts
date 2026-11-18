@@ -5,7 +5,7 @@ import type { BuildableType, MachineData, TileData, WeatherKind } from '../core/
 import { KEEPERS, REGIONS, type RegionId } from '../data/oldcity';
 import { WATER_NET } from '../data/water';
 import type { Sim } from './Sim';
-import { tankId, WaterPipes } from './WaterPipes';
+import { tankId, WaterPipes, type PumpSpec } from './WaterPipes';
 
 /**
  * A body of fresh water: one connected stretch of water tiles (a pond, a canal, a basin). Its id is its anchor
@@ -154,6 +154,14 @@ export class WaterSystem {
     return this.sim.machinesOfType('reservoir').flatMap((m) => this.tank(m.id) ?? []);
   }
 
+  /**
+   * E23.8.3: makes another sub-epic's machine type a pump (the mainland's Long-range Pump): the bank rule, the pipe
+   * feed (within `reach` pipe steps), `flow` units per game day, and the grid draw `power`.
+   */
+  registerPump(type: string, spec: PumpSpec) {
+    this.pipes.registerPump(type, spec);
+  }
+
   /** E23.4.2: the region unlock (E23.8.2, Cistern Basin) a water machine needs, if it is one. */
   unlockFor(type: BuildableType): WaterUnlock | undefined {
     return type === 'reservoir' ? 'reservoir' : type === 'pump' ? 'pump' : undefined;
@@ -176,8 +184,9 @@ export class WaterSystem {
 
   /** E23.4.2: why a water machine can't stand here (undefined: it can). Called by the build check. */
   placeProblem(type: BuildableType, roofId: string, x: number, z: number): string | undefined {
-    if (type !== 'pump' && type !== 'reservoir') return undefined;
-    const size = type === 'reservoir' ? 2 : 1;
+    const pump = this.pipes.pumpSpec(type);
+    if (!pump && type !== 'reservoir') return undefined;
+    const size = type === 'reservoir' ? 2 : (pump?.size ?? 1);
     const foot = this.sim.grid.footprint(roofId, x, z, size);
     if (foot.some((t) => t?.feature === 'water')) return 'Not in the water: on its bank';
     if (type === 'reservoir') return undefined;

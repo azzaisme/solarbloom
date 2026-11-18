@@ -197,6 +197,29 @@ describe('E23.4.2.2: pumps and pipe placement', () => {
     expect(sim.water.isWatered(far)).toBe(false);
   });
 
+  it("another sub-epic's machine can be a pump (E23.8.3's Long-range Pump): bank rule, its reach, its flow, its draw", () => {
+    const { sim } = park();
+    sim.water.registerPump('longPump', { reach: 3, flow: 2 * WATER_NET.pump.perDay, power: 8, size: 2 });
+    // never in the water, and on a bank
+    expect(sim.water.placeProblem('longPump' as MachineType, GROUND, 2, 10)).toMatch(/water/);
+    expect(sim.water.placeProblem('longPump' as MachineType, GROUND, 9, 4)).toMatch(/bank/);
+    expect(sim.water.placeProblem('longPump' as MachineType, GROUND, 4, 10)).toBeUndefined();
+    const lp = put(sim, 'longPump' as MachineType, 4, 10, 2);
+    put(sim, 'solar', 6, 9);
+    put(sim, 'solar', 6, 12);
+    lay(sim, run(6, 11, 11));
+    sim.power.tick(1);
+    days(sim, 0.02);
+    sim.power.tick(1);
+    days(sim, 0.02);
+    expect(sim.power.draw(lp)).toBe(8);
+    expect(sim.power.isPowered(lp)).toBe(true);
+    // it feeds three pipe steps along its line, no further
+    expect(sim.water.pipes.carries(6, 11)).toBe(true);
+    expect(sim.water.pipes.carries(8, 11)).toBe(true);
+    expect(sim.water.pipes.carries(9, 11)).toBe(false);
+  });
+
   it('a pump pushes water uphill into a higher reservoir, and stops without power', () => {
     const { sim, pond } = park();
     const pump = put(sim, 'pump', 4, 11);
