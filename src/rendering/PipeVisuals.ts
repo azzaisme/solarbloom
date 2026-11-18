@@ -6,7 +6,7 @@ import { mat } from './Materials';
 import { PALETTE } from './Palette';
 
 /** Pipe size (tiles): the tube's radius, how high its centre sits above the ground, its joints and flanges. */
-const PIPE = { r: 0.075, y: 0.11, joint: 0.105, flange: 0.098, flangeLen: 0.035, sides: 10, glass: 0.06 };
+const PIPE = { r: 0.075, y: 0.11, joint: 0.105, flange: 0.098, flangeLen: 0.035, sides: 10, glass: 0.13 };
 
 /** Flat lists a mesh is built from. */
 class Geo {
@@ -213,7 +213,7 @@ export class PipeVisuals {
     for (const k of p.keys()) {
       const [x, z] = k.split(',').map(Number);
       const y = this.y(x, z) + PIPE.r * 0.85;
-      (p.carries(x, z) ? wet : dry).box(x + 0.5, y, z + 0.5, PIPE.glass, 0.03, PIPE.glass);
+      (p.carries(x, z) ? wet : dry).box(x + 0.5, y + 0.01, z + 0.5, PIPE.glass, 0.05, PIPE.glass);
     }
     const parts: pc.MeshInstance[] = [];
     const add = (g: Geo, m: pc.Material) => {
