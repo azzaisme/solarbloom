@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { SKY } from '../data/sky';
+import { NIGHT_SKY, SKY } from '../data/sky';
 
 /** sRGB hex → 0–1 components. */
 function rgb(hex: string): [number, number, number] {
@@ -68,6 +68,18 @@ export class Sky {
   private sunDir = new pc.Vec3(0, 1, 0);
   private time = 0;
   clarity = 0.4;
+  /** E23.7.1: how far into night the sky is (0 day … 1 deep night), set by DayNight */
+  night = 0;
+  /** E23.7.1: dawn and dusk warmth near the horizon (0 … 1) */
+  dusk = 0;
+  /** E23.7.2: overcast (0 clear … 1 heavy cloud), greys the sky and hides the sun */
+  overcast = 0;
+  /** E23.7.2: wind, 0 … 1 (the clouds drift faster) */
+  wind = 0;
+  private drift = 0;
+  private builtNight = -1;
+  private builtDusk = -1;
+  private builtOvercast = -1;
   reducedMotion = false;
   readonly layer: pc.Layer;
   readonly clearLayer: pc.Layer;
@@ -203,19 +215,37 @@ export class Sky {
     this.softMesh.update(pc.PRIMITIVE_TRIANGLES);
   }
 
+  /** How much of the sun's disc and glow shows: none at night or under heavy cloud. */
+  private sunShow(): number {
+    return (1 - this.night) * (1 - this.overcast * 0.9);
+  }
+
   /** The haze colour now (scene fog and the horizon), as linear-ish 0–1 sRGB components. */
   hazeColour(): [number, number, number] {
-    return skyColour(SKY.haze, this.clarity);
+    return this.timeOfDay(skyColour(SKY.haze, this.clarity), 'haze');
+  }
+
+  /** E23.7.1 / E23.7.2: a day colour shifted for dusk, night and overcast. */
+  private timeOfDay(c: [number, number, number], band: 'haze' | 'glow' | 'upper' | 'zenith' | 'sun' | 'cloud'): [number, number, number] {
+    let out = c;
+    if (this.overcast > 0) {
+      const grey = band === 'cloud' ? 0.82 : band === 'zenith' ? 0.62 : 0.74;
+      const l = out[0] * 0.3 + out[1] * 0.55 + out[2] * 0.15;
+      out = mix(out, [l * 0.6 + grey * 0.4, l * 0.6 + grey * 0.4 + 0.01, l * 0.6 + grey * 0.4 + 0.03], this.overcast * 0.85);
+    }
+    if (this.dusk > 0 && band !== 'zenith') out = mix(out, rgb(NIGHT_SKY.dusk[band]), this.dusk * (band === 'upper' ? 0.35 : 0.7));
+    if (this.night > 0) out = mix(out, rgb(NIGHT_SKY.night[band]), this.night);
+    return out;
   }
 
   /** Sky colour in a direction (unit vector), for the dome's vertices. */
   private colourAt(d: [number, number, number], k: number): [number, number, number] {
     const el = Math.asin(Math.max(-1, Math.min(1, d[1]))) * (180 / Math.PI);
-    const haze = skyColour(SKY.haze, k);
+    const haze = this.timeOfDay(skyColour(SKY.haze, k), 'haze');
     if (el <= 0) return haze;
-    const glow = skyColour(SKY.glow, k);
-    const upper = skyColour(SKY.upper, k);
-    const zen = skyColour(SKY.zenith, k);
+    const glow = this.timeOfDay(skyColour(SKY.glow, k), 'glow');
+    const upper = this.timeOfDay(skyColour(SKY.upper, k), 'upper');
+    const zen = this.timeOfDay(skyColour(SKY.zenith, k), 'zenith');
     let c: [number, number, number];
     if (el < 4) c = mix(haze, glow, smooth(el / 4));
     else if (el < 25) c = mix(glow, upper, smooth((el - 4) / 21));
@@ -224,7 +254,7 @@ export class Sky {
     const s = this.sunDir;
     const cos = d[0] * s.x + d[1] * s.y + d[2] * s.z;
     const w = Math.pow(Math.max(0, cos), 6) * 0.55 + Math.pow(Math.max(0, cos), 2) * 0.15 * (1 - smooth(el / 40));
-    return mix(c, skyColour(SKY.sunGlow, k), Math.min(0.8, w));
+    return mix(c, this.timeOfDay(skyColour(SKY.sunGlow, k), 'sun'), Math.min(0.8, w) * this.sunShow());
   }
 
   private recolour() {
@@ -237,27 +267,30 @@ export class Sky {
     }
     this.domeMesh.setColors32(dc);
     this.domeMesh.update(pc.PRIMITIVE_TRIANGLES);
-    const sun = skyColour(SKY.sunCore, k);
-    const glow = skyColour(SKY.sunGlow, k);
+    const sun = this.timeOfDay(skyColour(SKY.sunCore, k), 'sun');
+    const glow = this.timeOfDay(skyColour(SKY.sunGlow, k), 'sun');
     const sc: number[] = [];
-    // The sun fades behind the fog: weaker while the city is grey.
-    const sunA = 0.45 + 0.55 * k;
+    // The sun fades behind the fog: weaker while the city is grey (and gone at night or under cloud).
+    const sunA = (0.45 + 0.55 * k) * this.sunShow();
     for (const v of this.softBase) {
       const c = v.col === 'sun' ? sun : glow;
       sc.push(b(c[0]), b(c[1]), b(c[2]), b(v.a * sunA));
     }
     this.softMesh.setColors32(sc);
     this.softMesh.update(pc.PRIMITIVE_TRIANGLES);
-    const lit = skyColour(SKY.cloudLit, k);
-    const shade = skyColour(SKY.cloudShade, k);
+    const lit = this.timeOfDay(skyColour(SKY.cloudLit, k), 'cloud');
+    const shade = this.timeOfDay(skyColour(SKY.cloudShade, k), 'cloud');
     const cc: number[] = [];
     for (const v of this.cloudCols) {
       const c = v.lit ? lit : shade;
-      cc.push(b(c[0]), b(c[1]), b(c[2]), b(v.a * (0.85 + 0.15 * (1 - k))));
+      cc.push(b(c[0]), b(c[1]), b(c[2]), b(Math.min(1, v.a * (0.85 + 0.15 * (1 - k)) * (1 + this.overcast * 0.6))));
     }
     this.cloudMesh.setColors32(cc);
     this.cloudMesh.update(pc.PRIMITIVE_TRIANGLES);
     this.builtClarity = k;
+    this.builtNight = this.night;
+    this.builtDusk = this.dusk;
+    this.builtOvercast = this.overcast;
   }
 
   /** Follow the camera; recolour when the progress tint or the light moves. */
@@ -269,11 +302,13 @@ export class Sky {
       this.buildSoft();
       this.builtClarity = -1;
     }
-    if (Math.abs(this.builtClarity - this.clarity) > 0.004) this.recolour();
+    if (Math.abs(this.builtClarity - this.clarity) > 0.004 || Math.abs(this.builtNight - this.night) > 0.004 || Math.abs(this.builtDusk - this.dusk) > 0.004 || Math.abs(this.builtOvercast - this.overcast) > 0.004) this.recolour();
     const R = farClip * 0.97;
     this.root.setPosition(cam.x, cam.y, cam.z);
     this.root.setLocalScale(R, R, R);
     // Clouds drift slowly around the horizon (a full turn takes about 40 minutes).
-    if (!this.reducedMotion) this.clouds.setLocalEulerAngles(0, (this.time * 0.15) % 360, 0);
+    // E23.7.2: wind hurries them along
+    this.drift += dt * 0.15 * (1 + this.wind * 5);
+    if (!this.reducedMotion) this.clouds.setLocalEulerAngles(0, this.drift % 360, 0);
   }
 }

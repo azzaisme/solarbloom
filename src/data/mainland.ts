@@ -37,6 +37,27 @@ export const MAINLAND_TYPES: { type: AreaType; weight: number }[] = [
 ];
 
 /**
+ * Fresh water on the mainland, so pumps, planters and reservoirs work there as on the island. Cells are district-local
+ * (a district is 32 × 32). Every chunk's avenues (chunk cells 7–8) cross the water on bridges, so a canal never cuts
+ * the mainland in two. Sunk to sea level between walls, like the island's canals.
+ */
+export const MAINLAND_WATER = {
+  /** a canal runs east–west through every district whose row (district z) is a multiple of this: every 2 × 2 of
+   *  districts has one, and no district is more than one district from a canal */
+  canalEvery: 2,
+  /** the canal's rows inside its district (clear of the avenues at 7–8 and 23–24) */
+  canalRows: [14, 15],
+  /** a pond in the quiet band at the district's south end (rows 25–31, columns 9–22), by district type */
+  ponds: {
+    // a reservoir district is an open basin: a long rectangular pool
+    reservoir: { chance: 1, rect: [10, 25, 21, 30] as [number, number, number, number] },
+    plaza: { chance: 1, centre: [16, 28] as [number, number], radius: 2.6 },
+    park: { chance: 0.6, centre: [16, 28] as [number, number], radius: 2.2 },
+    grove: { chance: 0.3, centre: [15, 28] as [number, number], radius: 1.8 },
+  } as Partial<Record<AreaType, { chance: number; rect?: [number, number, number, number]; centre?: [number, number]; radius?: number }>>,
+};
+
+/**
  * Salvage fields: the mainland's best salvage. In a district of a type below, each chunk holds a field (a cluster of
  * piles) with this chance. Fields are bigger and richer than the island's piles, and respawn quickly (E23.7.4 owns
  * respawning; `respawnDays` is the mainland's value for it).
@@ -81,9 +102,11 @@ export const MAINLAND_MACHINES = {
   longPump: {
     /** power drawn while pumping */
     draw: 6,
-    /** pipe cells it can push water along (an island pump reaches far less) */
-    reach: 96,
-    /** water moved per game hour */
-    flow: 40,
+    /** pipe steps it can feed along (the island's pump reaches without limit too: this one never reaches less) */
+    reach: Infinity,
+    /** water units per game day: twice the island pump's (E23.4.2 `WATER_NET.pump.perDay`, 1,200) */
+    flow: 2400,
+    /** it also stands on the sea's bank: its own filter makes the sea fresh, so the shore can feed the mainland */
+    sea: true,
   },
 };

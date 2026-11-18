@@ -38,8 +38,8 @@ house-shed · house-cottage · house-two-storey · house-home (budget 8k) · bed
 ## Island (5)
 boat (image route, 5k) · jetty · causeway-span · causeway-broken · sea-cliff (landmark budget, close-range; the skyline cliff stays for distance)
 
-## Machines and storage (4), text route, machine budget 5k
-reclaimer · storage-chest · grid-battery (E23.8.3.2, mainland only: a 2 × 2 grid-scale battery bank) · long-range-pump (E23.8.3.2, mainland only: a 2 × 2 pump house for long pipe runs)
+## Machines and storage (3), text route, machine budget 5k
+storage-chest · grid-battery (E23.8.3.2, mainland only: a 2 × 2 grid-scale battery bank) · long-range-pump (E23.8.3.2, mainland only: a 2 × 2 pump house for long pipe runs). (E23.7.4 dropped the Reclaimer and its model.)
 
 ## Salvage piles (7), text route, obstacle budget 1.2k
 salvage-copper · salvage-driftwood · salvage-glass · salvage-clay · salvage-gears · salvage-sunstone · salvage-steel (E23.8.3.2: girders from the mainland's industrial ruins)
@@ -65,5 +65,5 @@ VFX, journal paper.
 |---|---|---|
 | Keepers | 10 | 320 |
 | Landmarks, towers, house stages, boat | 12 | 216 |
-| Text-route props | 39 | 585 |
-| **Total** | **61** | **1,121** |
+| Text-route props | 38 | 570 |
+| **Total** | **60** | **1,106** |

@@ -79,6 +79,7 @@ try {
       return { x: g.bot.pose.x, z: g.bot.pose.z, ys };
     }, secs);
   const track = [];
+  const gaps = new Set();
   const shot = async (name) => {
     await page.waitForTimeout(6000);
     await page.screenshot({ path: `${dir}/${name}.png` });
@@ -87,6 +88,7 @@ try {
   await shot('causeway-walk-1-start');
   for (let i = 0; i < 60; i++) {
     const r = await walkFor(1);
+    gaps.add(track.length); // the real game loop walks bloombot between batches too (the shots wait): no frame pair there
     track.push(...r.ys);
     if (i === 8) await shot('causeway-walk-2-ramp');
     if (r.x >= 122 && !track.shotMiddle) {
@@ -109,7 +111,13 @@ try {
   check(lo < hi - 0.2, `down the ramp onto the raised sea-level middle and back up (deck ends ${hi.toFixed(2)} m, middle ${lo.toFixed(2)} m)`);
   // never a jump: bloombot's height changes smoothly along the ramps
   let worst = 0;
-  for (let i = 1; i < track.length; i++) worst = Math.max(worst, Math.abs(track[i][1] - track[i - 1][1]));
+  let worstAt = 0;
+  for (let i = 1; i < track.length; i++) {
+    if (gaps.has(i)) continue;
+    const d = Math.abs(track[i][1] - track[i - 1][1]);
+    if (d > worst) { worst = d; worstAt = i; }
+  }
+  if (worst >= 0.25) console.log('  jump at', JSON.stringify(track.slice(Math.max(0, worstAt - 3), worstAt + 3)));
   check(worst < 0.25, `no step or jump on the way (largest height change per frame ${worst.toFixed(3)} m)`);
   check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
 } catch (e) {

@@ -1,12 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { areaMapFor } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { canStep, levelAt } from '../src/core/Height';
-import { brokenCells, chunkPiles, isMainlandArea, landingArea, mainlandType } from '../src/core/Mainland';
-import { pileById, seaCell, setPieceAt } from '../src/core/OldCityLayout';
-import { MAINLAND } from '../src/data/mainland';
-import { TUNING } from '../src/data/tuning';
+import { brokenCells, chunkPiles, isMainlandArea, landingArea, mainlandType, mainlandWater } from '../src/core/Mainland';
+import { pileById, seaCell, setPieceAt, surfCell } from '../src/core/OldCityLayout';
+import { MAINLAND, MAINLAND_WATER } from '../src/data/mainland';
 import { OLD_CITY } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -80,11 +79,7 @@ describe('E23.8.3.1: mainland layout', () => {
 });
 
 describe('E23.8.3.1: mainland generation and the Great Bloom', () => {
-  // the real game runs with region unlocks on (tests default it off): the mainland must still never be sealed or priced
-  const U = TUNING.city.unlock as { enabled: boolean };
-  const was = U.enabled;
-  beforeEach(() => (U.enabled = true));
-  afterEach(() => (U.enabled = was));
+  // E23.1.5: nothing is ever bought; the mainland is never sealed either
 
   it('the same tiles whatever order the chunks stream in', () => {
     const cells: [number, number][] = [];
@@ -106,8 +101,10 @@ describe('E23.8.3.1: mainland generation and the Great Bloom', () => {
       for (let x = 150; x < 260; x++) {
         const t = s.grid.get(GROUND, x, z)!;
         feats.set(t.feature ?? '-', (feats.get(t.feature ?? '-') ?? 0) + 1);
+        // the only water is the mainland's own fresh canals and ponds, never the sea
+        if (t.feature === 'water') expect(mainlandWater(x, z) && !seaCell(x, z), `${x},${z}`).toBe(true);
       }
-    expect(feats.get('water') ?? 0).toBe(0);
+    expect(feats.get('water') ?? 0).toBeGreaterThan(0);
     expect(feats.get('road') ?? 0).toBeGreaterThan(500);
     expect(feats.get('building') ?? 0).toBeGreaterThan(50);
     expect((feats.get('obstacle') ?? 0)).toBeGreaterThan(20);
@@ -147,5 +144,80 @@ describe('E23.8.3.1: mainland generation and the Great Bloom', () => {
       expect(s.areas.fog(nb)).toBe('frontier');
       expect(s.areas.sealed(nb)).toBe(false);
     }
+  });
+});
+
+describe('E23.8.3: fresh water on the mainland', () => {
+  const D = MAINLAND.district * 16;
+  const districtHasWater = (dx: number, dz: number) => {
+    for (let z = dz * D; z < (dz + 1) * D; z++) for (let x = dx * D; x < (dx + 1) * D; x++) if (mainlandWater(x, z)) return true;
+    return false;
+  };
+
+  it('every 2 × 2 of districts has a canal or a pond, and no district is more than one district from water', () => {
+    for (let dz = -12; dz < 12; dz++)
+      for (let dx = 5; dx < 30; dx++) {
+        const block = [districtHasWater(dx, dz), districtHasWater(dx + 1, dz), districtHasWater(dx, dz + 1), districtHasWater(dx + 1, dz + 1)];
+        expect(block.some(Boolean), `block at ${dx},${dz}`).toBe(true);
+        let near = false;
+        for (let j = -1; j <= 1 && !near; j++) for (let i = -1; i <= 1 && !near; i++) near = districtHasWater(dx + i, dz + j);
+        expect(near, `district ${dx},${dz}`).toBe(true);
+      }
+    // the landing district has its canal: water as soon as the causeway lands
+    const [lx, lz] = MAINLAND.landing;
+    expect(districtHasWater(Math.floor(lx / MAINLAND.district), Math.floor(lz / MAINLAND.district))).toBe(true);
+    // reservoir districts are open basins, plazas have a pond
+    let reservoirs = 0;
+    for (let dz = -20; dz < 20; dz++)
+      for (let dx = 5; dx < 40; dx++) {
+        const t = mainlandType(`ml_${dx}_${dz}`);
+        if (t !== 'reservoir' && t !== 'plaza') continue;
+        reservoirs++;
+        const [x0, z0] = [dx * D, dz * D];
+        const probe = MAINLAND_WATER.ponds[t]!.rect ?? [MAINLAND_WATER.ponds[t]!.centre![0], MAINLAND_WATER.ponds[t]!.centre![1]];
+        expect(mainlandWater(x0 + probe[0] + 1, z0 + probe[1] + 1), `${t} ml_${dx}_${dz}`).toBe(true);
+      }
+    expect(reservoirs).toBeGreaterThan(10);
+  });
+
+  it('is fresh, still water in a sunken channel (as e23-water counts it), and the shore and causeway stay dry', () => {
+    const s = sim();
+    let n = 0;
+    for (let z = -40; z < 40; z++)
+      for (let x = 144; x < 240; x++) {
+        const t = s.grid.get(GROUND, x, z)!;
+        if (!mainlandWater(x, z)) continue;
+        n++;
+        // E23.4's fresh water: old-city water that is blocked (deep) and neither the sea nor the surf
+        expect(t.feature).toBe('water');
+        expect(t.blocked).toBe(true);
+        expect(seaCell(x, z) || surfCell(x, z)).toBe(false);
+        expect(levelAt(x, z)).toBe(OLD_CITY.seaLevel);
+        expect(t.prop).toBeUndefined();
+      }
+    expect(n).toBeGreaterThan(100);
+    for (let z = C.z0; z <= C.z1; z++) for (let x = C.x0; x <= C.x1; x++) expect(mainlandWater(x, z)).toBe(false);
+    for (let x = 144; x < 144 + MAINLAND.shoreBand; x++) for (let z = -40; z < 40; z++) expect(mainlandWater(x, z)).toBe(false);
+  });
+
+  it('the avenues bridge every canal: north and south of it are joined on foot, and no pile is in the water', () => {
+    // a canal district row: dz = 0 (the landing's row); its canal rows are district rows 14–15
+    const [r0, r1] = MAINLAND_WATER.canalRows;
+    const s = sim();
+    for (let dx = 5; dx < 25; dx++) {
+      const x0 = dx * D;
+      let bridges = 0;
+      for (let x = x0; x < x0 + D; x++) {
+        if (x < 144 + MAINLAND.shoreBand) continue;
+        if (mainlandWater(x, r0) || mainlandWater(x, r1)) continue;
+        // a dry crossing: level ground from the row north of the canal to the row south of it
+        let ok = true;
+        for (let z = r0 - 1; z < r1 + 1; z++) ok &&= canStep(x, z, x, z + 1) && !s.grid.get(GROUND, x, z)!.blocked && !s.grid.get(GROUND, x, z + 1)!.blocked;
+        if (ok) bridges++;
+      }
+      expect(bridges, `district ${dx}`).toBeGreaterThanOrEqual(2);
+    }
+    for (let cx = 9; cx < 40; cx++)
+      for (let cz = -10; cz < 10; cz++) for (const p of chunkPiles(cx, cz).values()) expect(mainlandWater(p.x, p.z), p.id).toBe(false);
   });
 });

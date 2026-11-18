@@ -11,7 +11,7 @@ describe('E22.4: rebinding', () => {
     expect(b.bindKey('recentre', 'Mouse1').ok).toBe(true);
     expect(b.actionForCode('Mouse4')).toBe('photo');
     expect(b.bindButton('photo', 13).ok).toBe(false); // d-pad down is Zoom camera: a clash, not a silent steal
-    expect(b.bindButton('backpack', 15).ok).toBe(classicHas15() ? false : true);
+    expect(b.bindButton('backpack', 15).ok).toBe(true);
     expect(b.conflicts()).toEqual([]);
   });
 
@@ -66,7 +66,3 @@ describe('E22.4: rebinding', () => {
   });
 });
 
-/** Classic rules keep Upgrades on d-pad right, so binding the backpack there is a clash. */
-function classicHas15() {
-  return defaultPad(false).upgrades === 15;
-}

@@ -11,8 +11,11 @@ export interface PowerHook {
   register(type: string, spec: { battery?: { capacity: number; rate: number }; consumer?: { shed: string; draw: number } }): void;
 }
 export interface WaterHook {
-  /** E23.4: a pump of this machine type, pushing `flow` along up to `reach` pipe cells (API to settle with e23-water) */
-  registerPump?(type: string, spec: { reach: number; flow: number }): void;
+  /**
+   * E23.4.2 (e23-water, PR #514): a pump of this machine type. `reach` is pipe steps it can feed, `flow` units per
+   * game day, `power` its grid draw (registered as a consumer, shed 'pump'), `sea` lets it stand on the sea's bank too.
+   */
+  registerPump?(type: string, spec: { reach: number; flow: number; power?: number; sea?: boolean }): void;
 }
 
 /**
@@ -46,7 +49,7 @@ export class MainlandSystem {
       this.wired.power = true;
     }
     if (sim.water?.registerPump) {
-      sim.water.registerPump('longPump', { reach: P.reach, flow: P.flow });
+      sim.water.registerPump('longPump', { reach: P.reach, flow: P.flow, power: P.draw, sea: P.sea });
       this.wired.water = true;
     }
   }

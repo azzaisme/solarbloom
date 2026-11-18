@@ -125,6 +125,29 @@ try {
   if (steel.built[0]) await shot('mainland-machines', steel.built[0][1] + 3, steel.built[0][2] + 1, 1.0, 0, 15000);
   if (steel.at) await shot('mainland-steel-field', steel.at[0] + 0.5, steel.at[1] + 0.5, 1.3, 0, 15000);
   else { failed = true; console.log('  ✗ no steel field in the industrial ruins nearby'); }
+  // E23.8.3: fresh water on the mainland: the landing district's canal (bridged by its avenues) and a reservoir basin
+  await shot('mainland-canal', 168, 15, 0.7, 90, 12000);
+  const basin = await page.evaluate(() => {
+    const g = window.solarbloom;
+    const s = g.sim;
+    for (let r = 1; r < 12; r++)
+      for (let dz = -r; dz <= r; dz++)
+        for (let dx = 4; dx <= 4 + r; dx++) {
+          const id = `ml_${dx}_${dz}`;
+          if (s.areas.info(id).type !== 'reservoir') continue;
+          s.state.areas[id] ??= { fog: 'frontier', revealedAt: 0 };
+          s.areas.clear(id, true);
+          g.chunks.markAll();
+          const [x, z] = [dx * 32 + 16, dz * 32 + 28];
+          let water = 0;
+          for (let j = -4; j <= 4; j++) for (let i = -8; i <= 8; i++) if (s.grid.get('g', x + i, z + j)?.feature === 'water') water++;
+          return { id, x, z, water };
+        }
+    return undefined;
+  });
+  console.log('  basin:', JSON.stringify(basin));
+  if (!basin || basin.water < 40) { failed = true; console.log('  ✗ a reservoir district should hold an open basin of fresh water'); }
+  else await shot('mainland-reservoir-basin', basin.x, basin.z, 0.8, 30, 15000);
   if (errors.length) {
     failed = true;
     console.log('  ✗ page errors:\n   ', errors.join('\n    '));

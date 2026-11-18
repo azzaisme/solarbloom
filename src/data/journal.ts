@@ -44,7 +44,7 @@ export const JOURNAL: JournalPage[] = [
     id: 'p-mastRow-1',
     stage: 'ring1',
     title: 'The mast',
-    text: 'The mast told every machine in the city what to do, day and night. Pump more. Dig deeper. Burn what is left over. In all those years, nobody ever thought to tell it to stop.',
+    text: 'The mast told every machine in the city what to do, day and night. Pump more. Dig deeper. Burn what is left over. I keep wondering what it would say if we let it listen instead.',
   },
   {
     id: 'p-mastRow-2',
@@ -56,7 +56,7 @@ export const JOURNAL: JournalPage[] = [
     id: 'p-oldMarket-1',
     stage: 'ring1',
     title: 'The price board',
-    text: 'Water by the jar, soil by the sack, shade by the hour. Everything here had a price. When something ran out, we bought it from further away, until there was no further away left.',
+    text: 'Water by the jar, soil by the sack, shade by the hour. Everything here had a price, and when something ran out we fetched more from further away. I would like to try growing it here instead.',
   },
   {
     id: 'p-oldMarket-2',
@@ -100,7 +100,7 @@ export const JOURNAL: JournalPage[] = [
     id: 'p-cistern-2',
     stage: 'ring2',
     title: 'Sluice\'s map',
-    text: 'Sluice drew me every pipe under the city. They all run the same way: out of the ground and into the machines. Not one of them leads back.',
+    text: 'Sluice drew me every pipe under the city. They all run the same way, out of the ground and into the machines. Tomorrow we are going to draw one that runs the other way.',
   },
   {
     id: 'p-clockPlaza-1',
@@ -170,7 +170,7 @@ export const JOURNAL: JournalPage[] = [
     id: LAST_PAGE,
     stage: 'bloom',
     title: 'His last page',
-    text: 'If this page has found you, the island is blooming. The bees are back, and the frogs in the fountain, and the swallows on the Spire. I built you to give back what we took, gently, with the world and never against it. You did. It was never for us. It was for them. There is more fog out there, and more ground that remembers how to grow. Go and see it, little one. Take your friends.',
+    text: 'If this page has found you, the island is blooming. The bees are back, and the frogs in the fountain, and the swallows on the Spire. I built you to help the world grow back, gently, with it and never against it. You did. It was never for us. It was for them. There is more fog out there, and more ground that remembers how to grow. Go and see it, little one. Take your friends.',
   },
 ];
 

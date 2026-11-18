@@ -80,9 +80,8 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   droneHub: ['drone-hub', 1.0],
   reservoirGarden: ['reservoir-basin', 0.55],
   relay: ['bloom-relay', 0.72],
-  // E21: the Storage Chest and the Reclaimer (data/oldcity MODEL_NAMES; a stand-in until the files land)
+  // E21: the Storage Chest (data/oldcity MODEL_NAMES; a stand-in until the files land)
   chest: ['storage-chest', 1.0],
-  reclaimer: ['reclaimer', 1.0],
   // E23.8.3.2: the mainland's machines (stand-ins until E23.10.2's models land)
   gridBattery: ['grid-battery', 2.0],
   longPump: ['long-range-pump', 1.7],
