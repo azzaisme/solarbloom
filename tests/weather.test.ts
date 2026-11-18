@@ -135,7 +135,8 @@ describe('E23.7.2.3: storms', () => {
   it('a storm blows in fresh salvage and lightning trips a pole, and nothing is lost', { timeout: 60_000 }, () => {
     const sim = oldSim(11);
     let tripped = 0;
-    (sim as unknown as { power: { trip(rng: { int(a: number, b: number): number }): string } }).power = { trip: (rng) => `pole${++tripped}:${rng.int(0, 9)}` };
+    // the real grid (E23.3) is on the sim; only its trip is watched here
+    (sim.power as unknown as { trip(rng: { int(a: number, b: number): number }): string }).trip = (rng) => `pole${++tripped}:${rng.int(0, 9)}`;
     const seen: string[] = [];
     sim.bus.on('weather.storm', () => seen.push('storm'));
     sim.bus.on('weather.lightning', (e) => seen.push(`bolt:${e.poleId}`));
