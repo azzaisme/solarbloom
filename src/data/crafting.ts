@@ -78,7 +78,8 @@ export interface MachineRecipe {
 export const MACHINE_RECIPES: MachineRecipe[] = [
   { id: 'planterBox', name: 'Planter box', cost: { planks: 3 }, unlock: { home: true }, owner: 'E23.5' },
   { id: 'compostBin', name: 'Compost bin', cost: { planks: 4, scrap: 2 }, unlock: { home: true }, owner: 'E23.5' },
-  { id: 'powerPole', name: 'Power pole', cost: { planks: 1, wire: 1 }, unlock: { keeper: 'mastRow' }, owner: 'E23.3' },
+  // E23.3 (#422): Bloom Relays are the grid's poles, so the power pole builds one
+  { id: 'powerPole', name: 'Power pole', cost: { planks: 1, wire: 1 }, unlock: { keeper: 'mastRow' }, builds: 'relay' },
   { id: 'charger', name: 'Charger', cost: { scrap: 4, wire: 2 }, unlock: { keeper: 'mastRow' }, owner: 'E23.2' },
   { id: 'solar', name: 'Solar panel', cost: { scrap: 4, glassPane: 2, wire: 1 }, unlock: { keeper: 'oldMarket' }, builds: 'solar' },
   { id: 'windTurbine', name: 'Wind turbine', cost: { planks: 6, scrap: 4, wire: 2 }, unlock: { keeper: 'saltwind' }, owner: 'E23.3' },
@@ -99,7 +100,6 @@ export const MACHINE_RECIPES: MachineRecipe[] = [
   { id: 'droneHub', name: 'Drone Hub', cost: { scrap: 12, motor: 1, wire: 4, glassPane: 2 }, unlock: { tier: 2 }, builds: 'droneHub' },
   { id: 'reservoirGarden', name: 'Reservoir Garden', cost: { clay: 15, seeds: 10, biomass: 30 }, unlock: { tier: 3 }, builds: 'reservoirGarden' },
   { id: 'motherTree', name: 'Mother Tree', cost: { seeds: 30, clay: 20, biomass: 100 }, unlock: { tier: 3 }, builds: 'motherTree' },
-  { id: 'relay', name: 'Bloom Relay', cost: { wire: 10, gears: 10, sunCell: 2 }, unlock: { tier: 4 }, builds: 'relay' },
   { id: 'cultivator', name: 'Cultivator', cost: { scrap: 20, motor: 2, gears: 10, planks: 4 }, unlock: { tier: 4 }, builds: 'cultivator' },
 ];
 
