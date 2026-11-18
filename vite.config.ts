@@ -24,7 +24,7 @@ const QUICK = [
   // E23.8.3: the mainland
   'mainland',
   // E23.9: the story
-  'journal', 'keepers-friends', 'keepers-arcs',
+  'journal', 'keepers-friends', 'keepers-arcs', 'keepers-tally',
   // E23.10: the proof
   'e23-gentle-failure',
 ].map((name) => `tests/${name}.test.ts`);

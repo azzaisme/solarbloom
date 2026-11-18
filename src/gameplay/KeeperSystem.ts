@@ -298,20 +298,26 @@ export class KeeperSystem {
   }
 
   /** Talking to a settled Keeper: hand it a gift it loves (once a game day), or just chat. */
+  /** A settled Keeper says something, and nothing changes hands (Pulse on it, or a friend with nothing to give). */
+  chat(id: string): 'talked' {
+    const st = this.state(id);
+    const story = this.story(id);
+    if (!story || !this.isFriend(id)) {
+      this.say(id, this.def(id).say.settled);
+      return 'talked';
+    }
+    const n = st.chats ?? 0;
+    this.set(id, { ...st, chats: n + 1 });
+    this.say(id, [story.chatter[n % story.chatter.length]]);
+    return 'talked';
+  }
+
+  /** Hands a settled Keeper the gift it loves most that bloombot carries (once a game day); otherwise it chats. */
   private befriend(id: string): 'gave' | 'talked' {
     const st = this.state(id);
     const story = this.story(id);
     const gift = this.giftFor(id);
-    if (!story || !gift || !this.sim.inventory.take(gift, 1)) {
-      if (!story || !this.isFriend(id)) {
-        this.say(id, this.def(id).say.settled);
-        return 'talked';
-      }
-      const n = st.chats ?? 0;
-      this.set(id, { ...st, chats: n + 1 });
-      this.say(id, [story.chatter[n % story.chatter.length]]);
-      return 'talked';
-    }
+    if (!story || !gift || !this.sim.inventory.take(gift, 1)) return this.chat(id);
     const hearts = (st.hearts ?? 0) + 1;
     this.set(id, { ...st, hearts, giftedAt: this.sim.time });
     this.sim.bus.emit('keeper.gift', { keeperId: id, item: gift, hearts });

@@ -156,6 +156,30 @@ try {
       await shot(page, 'keepers-7-tended');
       const bloom1 = await page.evaluate(([x, z]) => window.solarbloom.sim.grid.get('g', x, z).bloom, [target.x, target.z]);
       check(bloom1 === bloom0 + 1, `keepers: once tended, the tile is a bloom step on (${bloom0} → ${bloom1})`);
+      // Tally: Interact opens the trade panel, which offers a gift as a choice (never given away by surprise)
+      await page.evaluate(() => {
+        const s = window.solarbloom.sim;
+        s.gates.open('g-oldMarket', true);
+        s.state.salvage.keepers.tally = { step: 'landmark' };
+        s.landmarks.reward('trade');
+        s.keepers.settle('tally');
+        s.inventory.add('glass', 5);
+      });
+      await stand(page, 19.5, 11.4, Math.PI);
+      const p2 = await prompt(page);
+      check(/Trade with Tally/.test(p2), `keepers: facing Tally, the prompt says Trade (${p2})`);
+      await page.keyboard.press('KeyE');
+      await page.waitForTimeout(800);
+      const panel = await page.evaluate(() => document.querySelector('[data-act="gift"]')?.textContent ?? '');
+      check(/Give Tally 1 Glass/.test(panel), `keepers: Tally's panel offers the gift as a choice (${panel})`);
+      const before = await page.evaluate(() => ({ glass: window.solarbloom.sim.inventory.count('glass'), hearts: window.solarbloom.sim.keepers.hearts('tally') }));
+      check(before.glass === 5 && before.hearts === 0, 'keepers: opening the panel gave nothing away');
+      await shot(page, 'keepers-9-tally-choice');
+      await page.click('[data-act="gift"]');
+      await page.waitForTimeout(600);
+      const after = await page.evaluate(() => ({ glass: window.solarbloom.sim.inventory.count('glass'), hearts: window.solarbloom.sim.keepers.hearts('tally') }));
+      check(after.glass === 4 && after.hearts === 1, `keepers: choosing the gift gives one Glass (${JSON.stringify(after)})`);
+      await page.evaluate(() => window.solarbloom.oc.panel.close());
       // the Friends list in the backpack
       await page.evaluate(() => window.solarbloom.hud.backpack.open('collection'));
       await page.waitForTimeout(500);

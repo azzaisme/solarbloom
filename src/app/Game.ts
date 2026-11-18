@@ -1835,7 +1835,7 @@ export class Game {
     const pile = s.salvage.pileAt(f.x, f.z);
     if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: SALVAGE.holdSeconds, refused: s.salvage.problem(pile.id), run });
     const keeper = s.keepers.at(f.x, f.z);
-    if (keeper && s.keepers.visible(keeper.id)) out.push({ kind: 'keeper', id: `keeper:${keeper.id}`, verb: s.keepers.giftFor(keeper.id) ? 'Give a gift to' : keeper.id === 'tally' && s.landmarks.canTrade() ? 'Trade with' : 'Talk to', name: keeper.name, distance: fd, at: front, run });
+    if (keeper && s.keepers.visible(keeper.id)) out.push({ kind: 'keeper', id: `keeper:${keeper.id}`, verb: keeper.id === 'tally' && s.landmarks.canTrade() ? 'Trade with' : s.keepers.giftFor(keeper.id) ? 'Give a gift to' : 'Talk to', name: keeper.name, distance: fd, at: front, run });
     const page = s.journal.pageAt(f.x, f.z);
     if (page) out.push({ kind: 'cache', id: `page:${page}`, verb: 'Read', name: s.journal.found(page) ? 'the page again' : 'the page', distance: fd, at: front, run });
     const sp = setPieceAt(f.x, f.z);
