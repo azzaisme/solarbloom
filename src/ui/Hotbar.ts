@@ -79,6 +79,9 @@ export class Hotbar extends HudPart {
     const o = open ?? !tray.classList.contains('open');
     tray.classList.toggle('open', o);
     $(this.root, '#buildToggle').setAttribute('aria-expanded', String(o));
+    // A closed menu keeps no focus: the pad's A and the keyboard's Space go back to the game, not to a hidden card.
+    const a = document.activeElement as HTMLElement | null;
+    if (!o && a && $(this.root, '#hotbar').contains(a)) a.blur();
   }
 
   get trayOpen() {

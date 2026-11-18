@@ -214,7 +214,8 @@ export function padDriver(game) {
           if (!menuOpen()) press(BUILD_MENU);
           else if (!chooseCard(target.type)) press(1);
         }
-      } else if (!menuOpen()) {
+      } else if (!menuOpen() && !pad.buttons[PLACE].pressed && st.frames % 4 === 0) {
+        // a fresh press (A also chose the card: it must come up before it can place)
         press(PLACE);
         st.built = (st.built ?? 0) + 1;
         target = undefined;

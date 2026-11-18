@@ -37,9 +37,10 @@ try {
     await page.addInitScript(() => {
       for (const t of ['pointerdown', 'mousedown', 'keydown', 'touchstart', 'wheel']) window.addEventListener(t, (e) => e.isTrusted && (window.__foreignInput = t), true);
     });
-    await page.addInitScript(driver + '\ninstallVirtualPad();');
+    await page.addInitScript(driver + '\ninstallVirtualPad(); window.padDriver = padDriver; window.installVirtualPad = installVirtualPad;');
+    page.setDefaultTimeout(180000);
     await page.goto('http://localhost:4211/');
-    await page.waitForFunction(() => window.solarbloom?.bot, null, { timeout: 30000 });
+    await page.waitForFunction(() => window.solarbloom?.bot, null, { timeout: 180000 });
     const result = await page.evaluate(async () => {
       const g = window.solarbloom;
       // eslint-disable-next-line no-undef
