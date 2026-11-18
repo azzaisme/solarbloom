@@ -53,7 +53,7 @@ try {
   if (scenes.includes('journal')) {
     const { page, errors } = await open();
     // his first note waits at the top of the beach steps
-    await stand(page, 7.5, 13.4, Math.PI);
+    await stand(page, 4.5, 14.4, Math.PI);
     const p = await prompt(page);
     check(/Read the page/.test(p), `journal: facing the post, the prompt says "Read the page" (${p})`);
     await shot(page, 'journal-1-post');

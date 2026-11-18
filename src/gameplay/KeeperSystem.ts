@@ -208,7 +208,7 @@ export class KeeperSystem {
     if (!this.on) return;
     const now = this.sim.time;
     // a Keeper dozes at night (E23.7's clock), and so does its tending
-    const night = !!(this.sim as { clock?: { isNight?(): boolean } }).clock?.isNight?.();
+    const night = this.sim.clock.isNight();
     for (const k of KEEPERS) {
       if (this.step(k.id) !== 'settled') continue;
       const st = this.state(k.id);

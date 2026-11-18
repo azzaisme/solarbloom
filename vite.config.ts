@@ -15,6 +15,8 @@ const QUICK = [
   'bloombot-walk', 'bindings', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glyphs', 'rebind', 'save-slots', 'backpack',
   // E21: the Old City
   'oldcity-data', 'oldcity-inventory', 'oldcity-salvage', 'oldcity-recipes', 'oldcity-map', 'oldcity-height', 'oldcity-island', 'oldcity-gates', 'oldcity-fountain', 'oldcity-models', 'oldcity-keepers', 'oldcity-bloombot-first',
+  // E23.7: time, weather and salvage
+  'clock', 'timers', 'photo-scene', 'weather',
   // E23.3: the power grid
   'power-grid',
   // E23.8: regions and the mainland
@@ -23,6 +25,8 @@ const QUICK = [
   'mainland',
   // E23.9: the story
   'journal', 'keepers-friends', 'keepers-arcs',
+  // E23.10: the proof
+  'e23-gentle-failure',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

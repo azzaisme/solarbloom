@@ -163,18 +163,15 @@ export class Minimap {
   }
 
   /**
-   * E22.5: the clock and the weather on the map's rim, from E21's clock (E21.20) and weather (E21.21). Hidden
-   * until they exist. Read only; the shapes are E21's.
+   * E22.5: the clock and the weather on the map's rim. E23.7.1: the clock is the light clock (the real time in
+   * "follow my clock" mode); the weather (E23.7.2) is shown when it exists. Read only.
    */
   private rim() {
-    const st = this.sim.state as unknown as { clock?: { hour?: number; minute?: number }; weather?: { kind?: string } };
     const rim = this.el.querySelector<HTMLElement>('.mm-rim');
     if (!rim) return;
-    const h = st.clock?.hour;
-    // the weather in a word until E21 brings its icon set
-    const icon: Record<string, string> = { clear: 'Clear', sun: 'Sunny', cloud: 'Cloudy', cloudy: 'Cloudy', rain: 'Rain', fog: 'Fog', storm: 'Storm', snow: 'Snow' };
-    const w = st.weather?.kind ? (icon[st.weather.kind] ?? '') : '';
-    const text = h !== undefined ? `${String(h).padStart(2, '0')}:${String(st.clock?.minute ?? 0).padStart(2, '0')}${w ? ` ${w}` : ''}` : w;
+    const c = this.sim.clock;
+    const w = this.sim.weather.label();
+    const text = `${String(c.hour()).padStart(2, '0')}:${String(c.minute()).padStart(2, '0')}${w ? ` ${w}` : ''}`;
     rim.hidden = !text;
     if (rim.textContent !== text) rim.textContent = text;
     rim.setAttribute('aria-label', text ? `Time ${text}` : '');
