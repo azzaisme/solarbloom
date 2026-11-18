@@ -4,6 +4,7 @@ import { CHUNK, hashString, tileRandom } from './Hash';
 import { ROOF_TEMPLATES } from '../data/templates';
 import { OLD_CITY } from '../data/oldcity';
 import { inOldCity, isSeaChunk, regionById, regionOfChunk } from './OldCityLayout';
+import { isMainlandArea, isMainlandChunk, mainlandAreaOfChunk, mainlandChunks, mainlandType } from './Mainland';
 
 /**
  * Static area layout of the endless ground: a pure function of the seed, so every area's shape, neighbours
@@ -412,6 +413,7 @@ export class OldCityMap extends AreaMap {
 
   areaOfChunk(cx: number, cz: number): string {
     if (cx === 0 && cz === 0) return PARK;
+    if (isMainlandChunk(cx)) return mainlandAreaOfChunk(cx, cz); // E23.8.3.1: the endless mainland
     if (!inOldCity(cx, cz)) return `out_${cx}_${cz}`;
     if (isSeaChunk(cx, cz)) return SEA;
     const r = regionOfChunk(cx, cz);
@@ -427,6 +429,7 @@ export class OldCityMap extends AreaMap {
       for (let cz = r.chunks.z0; cz <= r.chunks.z1; cz++) for (let cx = r.chunks.x0; cx <= r.chunks.x1; cx++) out.push([cx, cz]);
       return out;
     }
+    if (isMainlandArea(id)) return mainlandChunks(id);
     if (id === SEA) {
       for (let cz = OLD_CITY.seaMinZ; cz <= OLD_CITY.max; cz++) for (let cx = OLD_CITY.min; cx <= OLD_CITY.seaMaxX; cx++) out.push([cx, cz]);
       return out;
@@ -450,7 +453,7 @@ export class OldCityMap extends AreaMap {
     const mz = chunks.reduce((a, [, cz]) => a + cz + 0.5, 0) / chunks.length;
     const ring = r?.ring ?? 1;
     const mult = { 1: 1, 2: 1.2, 3: 1.4 }[ring] ?? 1;
-    const type: AreaType = id === PARK ? 'park' : r ? r.type : id === SEA ? 'beach' : 'street';
+    const type: AreaType = id === PARK ? 'park' : r ? r.type : id === SEA ? 'beach' : isMainlandArea(id) ? mainlandType(id) : 'street';
     const centre: [number, number] = [Math.floor(mx * CHUNK) - 1, Math.floor(mz * CHUNK) - 1];
     const info: AreaInfo = {
       id,
