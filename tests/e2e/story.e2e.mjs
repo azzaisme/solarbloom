@@ -175,13 +175,14 @@ try {
       await page.waitForSelector('[data-act="gift"]', { timeout: 60000 }).catch(() => {});
       const panel = await page.evaluate(() => document.querySelector('[data-act="gift"]')?.textContent ?? '');
       check(/Give Tally 1 Glass/.test(panel), `keepers: Tally's panel offers the gift as a choice (${panel})`);
-      const before = await page.evaluate(() => ({ glass: window.solarbloom.sim.inventory.count('glass'), hearts: window.solarbloom.sim.keepers.hearts('tally') }));
+      const before = await page.evaluate(() => ({ glass: window.solarbloom.sim.inventory.count('glass'), copper: window.solarbloom.sim.inventory.count('copper') + window.solarbloom.sim.inventory.stored('copper'), hearts: window.solarbloom.sim.keepers.hearts('tally') }));
       check(before.glass === 5 && before.hearts === 0, 'keepers: opening the panel gave nothing away');
       await shot(page, 'keepers-9-tally-choice');
       await page.click('[data-act="gift"]');
       await page.waitForTimeout(600);
-      const after = await page.evaluate(() => ({ glass: window.solarbloom.sim.inventory.count('glass'), hearts: window.solarbloom.sim.keepers.hearts('tally') }));
+      const after = await page.evaluate(() => ({ glass: window.solarbloom.sim.inventory.count('glass'), copper: window.solarbloom.sim.inventory.count('copper') + window.solarbloom.sim.inventory.stored('copper'), hearts: window.solarbloom.sim.keepers.hearts('tally') }));
       check(after.glass === 4 && after.hearts === 1, `keepers: choosing the gift gives one Glass (${JSON.stringify(after)})`);
+      check(after.copper === before.copper + 5, `keepers: Tally's first gift back is five Copper (${before.copper} → ${after.copper})`);
       await page.evaluate(() => window.solarbloom.oc.panel.close());
       // the Friends list in the backpack
       await page.evaluate(() => window.solarbloom.hud.backpack.open('collection'));

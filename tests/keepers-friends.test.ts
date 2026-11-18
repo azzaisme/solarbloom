@@ -39,6 +39,8 @@ describe('E23.9.2: Keepers as friends', () => {
       // at least one thing it loves can be found today
       expect(st.likes.some((m) => m in MATERIALS), k.id).toBe(true);
       for (const m of Object.keys(st.giftBack)) expect(m in MATERIALS, `${k.id} gives ${m}`).toBe(true);
+      // a gift back is never the thing just given (no glass-for-glass loop)
+      for (const m of Object.keys(st.giftBack)) expect(st.likes.includes(m), `${k.id} gives back ${m}, which it also loves`).toBe(false);
       expect(st.chatter.length).toBeGreaterThanOrEqual(3);
       expect(KEEPSAKES.some((ks) => ks.region === k.region), k.id).toBe(true);
     }
