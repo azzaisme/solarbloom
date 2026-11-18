@@ -388,6 +388,8 @@ export interface SalvageState {
   craft?: { id: string; n: number; left: number }[];
   /** E23.6.2: the research station (finds analysed, projects done and running, upgrade levels bought) */
   research?: ResearchState;
+  /** E23.6.6: overgrowth by host key (a machine, a decoration, a ruin, a pipe tile, a power line), and since when */
+  overgrowth?: Record<string, { kind: import('../data/overgrowth').OvergrowthKind; t0: number }>;
 }
 
 /** E23.6.2: what the research station keeps. */

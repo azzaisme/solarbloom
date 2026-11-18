@@ -18,7 +18,11 @@ import type { GlyphSetting, GlyphStyle } from './Glyphs';
 
 /** E19.2: `decor:<id>` holds a decoration to place; `remove` aims at decorations to remove or pick up. */
 export type DecorTool = `decor:${string}`;
-export type Tool = 'inspect' | 'pulse' | BuildableType | DecorTool | 'remove';
+/** E23.6.6: overgrowth in hand (a kind of vine or plant to grow over something built). */
+export type GrowTool = `grow:${string}`;
+export type Tool = 'inspect' | 'pulse' | BuildableType | DecorTool | GrowTool | 'remove';
+/** E23.6.6: the overgrowth kind a tool holds, if it holds one. */
+export const growType = (t: Tool) => (t.startsWith('grow:') ? t.slice(5) : undefined);
 /** E19.2: the decoration a tool holds, if it holds one. */
 export const decorType = (t: Tool) => (t.startsWith('decor:') ? t.slice(6) : undefined);
 /** A machine build tool (a machine type), not pulse, inspect, a core, a decoration or remove. */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { COMPONENT_RECIPES, DECOR_RECIPES, MACHINE_RECIPES } from '../src/data/crafting';
+import { OVERGROWTH } from '../src/data/overgrowth';
 import { ITEM_DEFS } from '../src/data/items';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { MATERIALS } from '../src/data/salvage';
@@ -11,7 +12,7 @@ import { projectMinutes, upgradeRows } from '../src/ui/CraftTable';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const CACHES = new Set(REGIONS.flatMap((r) => r.caches.map((c) => c.id)));
-const RECIPE_IDS = new Set([...COMPONENT_RECIPES, ...MACHINE_RECIPES, ...DECOR_RECIPES].map((r) => r.id));
+const RECIPE_IDS = new Set([...COMPONENT_RECIPES, ...MACHINE_RECIPES, ...DECOR_RECIPES, ...OVERGROWTH].map((r) => r.id));
 const realItem = (k: string) => k === 'biomass' || k in ITEM_DEFS;
 
 /** A new old-city game with Pylon (Mast Row) awake: the station is there. */
@@ -67,7 +68,7 @@ describe('E23.6.2: research in data', () => {
   });
 
   it('every recipe the crafting table says comes from research names a real project that gives it', () => {
-    for (const r of [...COMPONENT_RECIPES, ...MACHINE_RECIPES, ...DECOR_RECIPES]) {
+    for (const r of [...COMPONENT_RECIPES, ...MACHINE_RECIPES, ...DECOR_RECIPES, ...OVERGROWTH]) {
       if (!('research' in r.unlock)) continue;
       const pid = r.unlock.research;
       const p = PROJECTS.find((x) => x.id === pid);

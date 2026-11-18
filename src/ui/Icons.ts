@@ -276,6 +276,8 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '🪨': 'restore', '🧱': 'restore', '🟫': 'garden', '🍃': 'biomass', '🚜': 'build', '🔱': 'build', '🧭': 'telescope',
   // E23.6.1 components.
   '➰': 'link', '🪵': 'build', '🔲': 'glasshouse', '🚰': 'water', '🌀': 'settings', '🔋': 'bulb',
+  // E23.6.6 overgrowth.
+  '🟩': 'garden', '💜': 'flower', '🌺': 'flower',
 };
 
 /** Emoji (with optional variation selector / ZWJ sequences). */

@@ -37,6 +37,7 @@ import { LandmarkSystem } from './LandmarkSystem';
 import { Crafting } from './Crafting';
 import { Research } from './Research';
 import { DroneFuel } from './DroneFuel';
+import { Overgrowth } from './Overgrowth';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -89,6 +90,8 @@ export class Sim {
   readonly research: Research;
   /** E23.6.3: what drones run on (power, water, biomass by role). */
   readonly droneFuel: DroneFuel;
+  /** E23.6.6: vines and plants grown over what bloombot has built. */
+  readonly overgrowth: Overgrowth;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -141,6 +144,7 @@ export class Sim {
     this.crafting = new Crafting(this);
     this.research = new Research(this);
     this.droneFuel = new DroneFuel(this);
+    this.overgrowth = new Overgrowth(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);

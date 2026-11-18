@@ -61,7 +61,7 @@ import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
 import { FlyText } from '../ui/Fly';
-import { decorType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
+import { decorType, growType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
 import { BOT } from '../gameplay/Walker';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
 import { EventBus } from './EventBus';
@@ -77,6 +77,9 @@ import { settingsRows } from '../ui/SettingsRows';
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
+import { OvergrowthVisuals } from '../rendering/OvergrowthVisuals';
+import { OVERGROWTH_BY_ID, type OvergrowthKind } from '../data/overgrowth';
+import { decorCostLabel } from '../gameplay/Cozy';
 import { OldCityController } from './OldCity';
 import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Cozy } from '../gameplay/Cozy';
@@ -220,6 +223,8 @@ export class Game {
   menu!: Menu;
   settingsUi!: SettingsScreen;
   private padFocus?: PadFocus;
+  /** E23.6.6: overgrowth's generated vines (one merged mesh) */
+  private overgrowthArt!: OvergrowthVisuals;
   /** City 06.5: simulated seconds still owed after a hitch or a hidden tab, run within the frame budget. */
   catchUpDebt = 0;
   private hiddenAt = 0;
@@ -345,6 +350,7 @@ export class Game {
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
+    this.overgrowthArt = new OvergrowthVisuals(this.sim, this.scene.world, () => this.app.graphicsDevice);
     this.rings = new ProgressRings(this.sim, this.scene.world);
     // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
     // its procedural look. Once they're in, what was already drawn is rebuilt with them.
@@ -1776,7 +1782,8 @@ export class Game {
     if (this.building()) {
       const tool = this.hud.currentTool;
       const dk = decorType(tool);
-      const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
+      const gk = growType(tool);
+      const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : gk ? `Grow ${OVERGROWTH_BY_ID[gk as OvergrowthKind]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
       return what ? { glyph: this.glyph(this.glyphs.style !== 'keys' ? 'place' : 'pulse'), text: what } : undefined;
     }
     const f = b.front();
@@ -2404,6 +2411,8 @@ export class Game {
     const t = p.tile;
     const dk = decorType(tool);
     if (dk) return this.previewDecor(p, x, y, dk);
+    const gk = growType(tool);
+    if (gk) return this.previewGrow(p, x, y, gk as OvergrowthKind);
     if (tool === 'remove') return this.previewRemove(p, x, y);
     if (machineTool(tool)) {
       const bt = tool;
@@ -2525,11 +2534,53 @@ export class Game {
     this.overlays.hideRadius();
     this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
     const how = `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
-    this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${o?.solid ? 'Solid' : 'Walk over it'} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
+    const price = decorCostLabel(this.sim, kind) ? this.sim.inventory.describe(this.sim.crafting.decor(kind)!.cost).map((c) => `${c.need} ${c.name}`).join(', ') : 'free';
+    this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${o?.solid ? 'Solid' : 'Walk over it'} · ${price}</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
+  }
+
+  /** E23.6.6: the host under the cursor lights up (green: it can grow there), with what it costs. */
+  private previewGrow(p: Pick, x: number, y: number, kind: OvergrowthKind) {
+    const t = p.tile!;
+    const host = this.sim.overgrowth.hostAt(p.roofId, t.x, t.z);
+    const o = OVERGROWTH_BY_ID[kind];
+    const why = this.sim.overgrowth.problem(kind, host) ?? (host && !this.inReach(p.roofId, t.x, t.z, 1) ? TOO_FAR : undefined);
+    this.overlays.hideRadius();
+    this.overlays.hideGhost();
+    if (host?.kind === 'line') this.overlays.showFrame(p.roofId, t.x, t.z, 1, why ? 'bad' : 'ok');
+    else if (host) this.overlays.showFrame(host.roofId, host.x, host.z, host.size, why ? 'bad' : 'ok');
+    else this.overlays.showFrame(p.roofId, t.x, t.z, 1, 'hover');
+    const cost = this.sim.inventory.describe(o.cost).map((c) => `${c.need} ${c.name}`).join(', ');
+    this.hud.showTip(x, y, `<b>${o.icon} ${o.name}</b><small>${cost}</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${this.press('E')} to grow it here</span>`}`);
+  }
+
+  /** E23.6.6: grows the kind in hand over what is on this tile (it stays in hand for the next one). */
+  private growAt(p: Pick, x: number, y: number, kind: OvergrowthKind): ActResult {
+    const t = p.tile!;
+    const host = this.sim.overgrowth.hostAt(p.roofId, t.x, t.z);
+    const why = host && !this.inReach(p.roofId, t.x, t.z, 1) ? TOO_FAR : this.sim.overgrowth.place(kind, host);
+    if (why) {
+      this.hud.showFail(why, x, y);
+      return 'none';
+    }
+    this.sfx.build();
+    this.vfx.burst(this.tileVec(t, SLAB_TOP + 0.4), 10, { up: 1.2, size: 0.035, life: 0.9 });
+    this.buildKey = '';
+    return 'select';
   }
 
   private previewRemove(p: Pick, x: number, y: number) {
     const t = p.tile!;
+    // E23.6.6: overgrowth comes off first
+    const og = this.sim.overgrowth.hostAt(p.roofId, t.x, t.z);
+    const grown = og && this.sim.overgrowth.at(og.key);
+    if (grown) {
+      const o = OVERGROWTH_BY_ID[grown.kind];
+      this.overlays.hideRadius();
+      this.overlays.hideGhost();
+      this.overlays.showFrame(og.roofId, og.kind === 'line' ? t.x : og.x, og.kind === 'line' ? t.z : og.z, og.kind === 'line' ? 1 : og.size, 'bad');
+      this.hud.showTip(x, y, `<b>${o.icon} ${o.name}</b><span class="ok">${this.press('E')} to take it off (everything comes back)</span>`);
+      return;
+    }
     const d = this.cozy.decorOf(t.occupantId);
     this.overlays.hideRadius();
     if (!d) {
@@ -2574,6 +2625,16 @@ export class Game {
   /** Removes the decoration on a tile (free, instant); with `pickUp` it goes into bloombot's hands, turned as it was. */
   private removeDecorAt(p: Pick, x: number, y: number, pickUp: boolean): ActResult {
     const t = p.tile!;
+    // E23.6.6: the remove tool takes overgrowth off first (its cost comes back whole)
+    const og = !pickUp ? this.sim.overgrowth.hostAt(p.roofId, t.x, t.z) : undefined;
+    if (og && this.sim.overgrowth.at(og.key)) {
+      if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
+      this.sim.overgrowth.remove(og.key);
+      return 'build';
+    }
     const d = this.cozy.decorOf(t.occupantId);
     // E21.3: under old-city rules the remove tool also takes down a machine, giving its whole recipe back
     const occ = !d && !pickUp && this.sim.oldCity ? this.sim.occupant(t) : undefined;
@@ -2878,6 +2939,8 @@ export class Game {
     const t = p.tile;
     const dk = decorType(tool);
     if (dk) return this.placeDecorAt(p, x, y, dk);
+    const gk = growType(tool);
+    if (gk) return this.growAt(p, x, y, gk as OvergrowthKind);
     if (tool === 'remove') return this.removeDecorAt(p, x, y, false);
     if (machineTool(tool)) {
       const bt = tool;
@@ -4191,6 +4254,7 @@ export class Game {
     detailTextures.setCamera(camP.x, camP.y, camP.z);
     this.machines.update(wdt, rect);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
+    this.overgrowthArt.update(dt); // E23.6.6: rebuilt only when something is placed or grows a stage
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.
     if (!this.paused && this.camera.zoom > 0.9) {

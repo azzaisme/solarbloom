@@ -219,7 +219,8 @@ export class EcosystemSystem {
       species |= t.species;
       features |= t.features;
     }
-    c.species = bits(species);
+    // E23.6.6: each overgrowth kind growing counts as one more plant species
+    c.species = bits(species) + (s.overgrowth?.kinds().length ?? 0);
     c.features = bits(features);
     for (const a of Object.values(s.state.areas)) if (a.fog === 'cleared') c.landmarks++;
     if (c.fountain && s.state.areas.park?.fog !== 'cleared') c.landmarks++;

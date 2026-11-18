@@ -6,8 +6,9 @@ import { type Action, type Bindings, keyLabel } from '../app/Bindings';
 import { type GlyphStyle, type PadStyle, padName } from './Glyphs';
 import { ICONS, iconize, MACHINE_ICONS, plain } from './Icons';
 import { $, esc, HudPart } from './HudPart';
-import { decorType, etaText, machineTool, type Tool } from './Hud';
+import { decorType, etaText, growType, machineTool, type Tool } from './Hud';
 import { decorCostLabel, decorOpen } from '../gameplay/Cozy';
+import { OVERGROWTH, OVERGROWTH_BY_ID, type OvergrowthKind } from '../data/overgrowth';
 
 /**
  * E22.5 (#342): the classic hotbar (Inspect, Pulse, the build tray, Harvest, Upgrades).
@@ -34,6 +35,10 @@ export class Hotbar extends HudPart {
       ...DECOR_OPTIONS.map(
         (o) => `<button class="slot decor" data-tool="decor:${o.id}" hidden aria-label="Place a ${esc(plain(o.name))}" title="${esc(plain(o.blurb))}"><span class="si">${o.icon}</span><span class="sl">${esc(o.name)}</span><span class="sc">${o.solid ? '' : 'walk over'}</span></button>`,
       ),
+      // E23.6.6: overgrowth (Old City), each once known
+      ...(oldCity
+        ? OVERGROWTH.map((o) => `<button class="slot decor grow" data-tool="grow:${o.id}" hidden aria-label="Grow ${esc(o.name)} over something built"><span class="si">${o.icon}</span><span class="sl">${esc(o.name)}</span><span class="sc"></span></button>`)
+        : []),
       `<button class="slot decor" data-tool="remove" aria-label="Remove or move a decoration"><span class="si">🧹</span><span class="sl">Remove</span><span class="sc">or move</span></button>`,
       `</div>`,
       `<span class="sep"></span>`,
@@ -61,7 +66,8 @@ export class Hotbar extends HudPart {
     const tg = $(this.root, '#buildToggle');
     tg.classList.toggle('active', building);
     const dk = decorType(t);
-    const dec = dk ? DECOR_OPTION[dk] : undefined;
+    const gk = growType(t);
+    const dec = dk ? DECOR_OPTION[dk] : gk ? OVERGROWTH_BY_ID[gk as OvergrowthKind] : undefined;
     const def = machineTool(t) ? MACHINES[t] : undefined;
     $(tg, '.si').innerHTML = machineTool(t) ? ICONS[MACHINE_ICONS[t]] : dec ? iconize(dec.icon) : t === 'remove' ? iconize('🧹') : ICONS.build;
     $(tg, '.sl').textContent = def ? def.name.replace('Water ', '').replace('Pollinator ', '') : dec ? dec.name : t === 'remove' ? 'Remove' : 'Build';
@@ -132,6 +138,17 @@ export class Hotbar extends HudPart {
       if (this.last.get(`dc-${o.id}`) === String(on)) continue;
       this.last.set(`dc-${o.id}`, String(on));
       $(this.root, `#hotbar [data-tool="decor:${o.id}"]`).hidden = !on;
+    }
+    // E23.6.6: an overgrowth slot appears once its kind is known, with what it costs
+    if (s.oldCity) {
+      const known = new Set(s.overgrowth.known());
+      for (const o of OVERGROWTH) {
+        const btn = this.root.querySelector<HTMLElement>(`#hotbar [data-tool="grow:${o.id}"]`);
+        if (!btn) continue;
+        this.set(`gk-${o.id}`, btn, 'cls', known.has(o.id) ? '1' : '0', 'known');
+        btn.hidden = !known.has(o.id);
+        this.set(`gc-${o.id}`, $(btn, '.sc'), 'text', s.inventory.describe(OVERGROWTH_BY_ID[o.id as OvergrowthKind].cost).map((p) => `${p.icon}${Math.min(p.have, p.need)}/${p.need}`).join(' '));
+      }
     }
     // Overcharge countdown on the Pulse button
     const every = s.upgrades.overchargeEvery;

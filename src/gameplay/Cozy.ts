@@ -350,6 +350,7 @@ export class Cozy {
     // E23.6.1: everything it cost comes back
     const r = decorRecipe(this.sim, d.kind);
     if (r) this.sim.inventory.refund(r.cost);
+    this.sim.overgrowth?.tidy(); // E23.6.6: what grew on it comes back too
     if (!Object.keys(s.decor).length) delete s.decor;
     this.sim.grid.unindexDecor(d.key);
     const t = this.sim.grid.peek(roofId, x, z);
