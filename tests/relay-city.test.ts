@@ -136,7 +136,7 @@ describe('buildable Bloom Relays (City 10.4)', () => {
     expect(sim.relays.linked(a)).toEqual([]);
     relay(sim, -20, 3); // a relay exists, so the upgrade is available
     const before = sim.relays.targets(a);
-    expect(sim.upgrades.purchase('relayLens', a.id)).toBe(true); // Phase 5 E12: per relay
+    expect(sim.upgrades.grant('relayLens', a.id)).toBeGreaterThan(0); // Phase 5 E12: per relay
     expect(sim.relays.linked(a).map((m) => m.id)).toContain(b.id);
     expect(sim.relays.linked(b).map((m) => m.id)).toContain(a.id); // the stronger lens links both ways
     expect(sim.relays.targets(a)).toBe(before + 1);

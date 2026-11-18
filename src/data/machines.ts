@@ -144,17 +144,6 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     oldCity: true,
     mainlandOnly: true,
   },
-  // E21.2: stands on a woken region's seam and sends its material to the store, for ever.
-  reclaimer: {
-    type: 'reclaimer',
-    name: 'Reclaimer',
-    icon: '🔧',
-    size: 2,
-    cost: {},
-    allowedGround: ['restored', 'prepared', 'polluted'],
-    blurb: 'Built on a woken region’s seam: it sends 6 of the region’s material a minute to the store.',
-    oldCity: true,
-  },
   core: {
     type: 'core',
     name: 'Rooftop Core',
@@ -167,8 +156,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
 };
 
 export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
-/** E21.3: the old-city build list (the classic list plus the Storage Chest and the Reclaimer). */
-export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'pollinator', 'droneHub', 'reclaimer', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+/** E21.3: the old-city build list (the classic list plus the Storage Chest; E23.7.4 dropped the Reclaimer). */
+export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'pollinator', 'droneHub', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the
