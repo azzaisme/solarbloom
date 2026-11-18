@@ -47,11 +47,11 @@ export function extraHtml(sim: Sim, m: MachineData): string {
       const say = ready
         ? 'Mushrooms are up.'
         : spent
-          ? 'Spent: it wants compost to grow more.'
+          ? 'It wants compost: feed it some and mushrooms will grow.'
           : !x.logShaded(m)
             ? 'Too bright here: it needs shade beside it.'
             : x.logGrowing(m)
-              ? 'Mushrooms are coming up in the dark.'
+              ? 'Mushrooms are coming up.'
               : 'Resting: mushrooms grow at night and in fog.';
       return `<h2>${icon} ${name}</h2><p>${say}</p>${row(`<button data-act="mushrooms" ${ready ? '' : 'disabled'}>🍄 Pick the mushrooms</button><button data-act="inoculate" ${spent && sim.inventory.available('compost') >= MUSHROOM_LOG.compost ? '' : 'disabled'}>🟫 Feed it Compost</button>`)}`;
     }

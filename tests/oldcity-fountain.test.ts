@@ -5,6 +5,7 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MaterialId } from '../src/core/types';
 import { PARK_SET, REGIONS } from '../src/data/oldcity';
 import { PACK, RECIPES, TIERS } from '../src/data/salvage';
+import { KEEPER_RECIPES } from '../src/data/farmExtras';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
@@ -80,7 +81,8 @@ describe('E21.6: the fountain', () => {
       expect(sim.fountain.tier, `tier ${tier}`).toBe(tier);
       expect(sim.state.salvage!.abilities).toEqual(abilities.slice(0, Math.min(4, tier)));
       expect(sim.inventory.stackLimit()).toBe(PACK.stack[tier]);
-      for (const [type, r] of Object.entries(RECIPES)) expect(sim.build.isUnlocked(type as 'solar'), `${type} at ${tier}`).toBe(r!.tier <= tier);
+      // E23.5.4.6: four recipes come from Keeper gardens, not the fountain (tests/farm-extras covers them)
+      for (const [type, r] of Object.entries(RECIPES)) expect(sim.build.isUnlocked(type as 'solar'), `${type} at ${tier}`).toBe(r!.tier <= tier && !KEEPER_RECIPES.includes(type));
     }
     expect(tiers).toEqual([1, 2, 3, 4, 5]);
   });

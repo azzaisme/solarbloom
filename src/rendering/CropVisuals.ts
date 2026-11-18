@@ -140,8 +140,8 @@ export class CropVisuals {
         const up = (st.ready ?? 0) >= 1 ? 1 : x.logGrowing(m) ? 0.45 : 0;
         if (!up) return;
         for (const [px, pz] of [[-0.2, 0.08], [0.05, 0.12], [0.22, 0.06], [-0.05, -0.12]] as const) {
-          shape(root, 'cylinder', mat(PALETTE.stoneCreamTop), { pos: [px, 0.29 + 0.04 * up, pz], scale: [0.025, 0.08 * up, 0.025] });
-          shape(root, 'sphere', mat(PALETTE.terracotta), { pos: [px, 0.29 + 0.08 * up, pz], scale: [0.09 * up, 0.04 * up, 0.09 * up] });
+          shape(root, 'cylinder', mat(PALETTE.stoneCreamTop), { pos: [px, 0.28 + 0.06 * up, pz], scale: [0.04, 0.12 * up, 0.04] });
+          shape(root, 'sphere', mat(PALETTE.terracotta), { pos: [px, 0.28 + 0.12 * up, pz], scale: [0.15 * up, 0.07 * up, 0.15 * up] });
         }
         return;
       }
