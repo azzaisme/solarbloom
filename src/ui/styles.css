@@ -287,7 +287,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 #hotbar .slot[data-tool="pulse"].mega { box-shadow: 0 0 0 4px var(--glass), 0 0 0 6px var(--gold-hi), 0 0 30px var(--gold); animation: megaPulse 1.2s ease-in-out infinite; }
 @keyframes megaPulse { 50% { box-shadow: 0 0 0 4px var(--glass), 0 0 0 7px var(--gold-hi), 0 0 40px var(--gold); } }
 /* The Build tray pops up above the hotbar on every screen. */
-#hotbar #buildTray { display: none; order: 0; position: absolute; left: 50%; bottom: calc(100% + 14px); transform: translateX(-50%); gap: 8px; padding: 9px; background: var(--glass-strong); border: 1px solid var(--edge-strong); border-radius: 20px; box-shadow: var(--shadow), var(--inner-glow); flex-wrap: wrap; justify-content: center; width: max-content; max-width: calc(100vw - 16px - var(--safe-l) - var(--safe-r)); }
+#hotbar #buildTray { display: none; order: 0; position: absolute; left: 50%; bottom: calc(100% + 14px); transform: translateX(-50%); gap: 8px; padding: 9px; background: var(--glass-strong); border: 1px solid var(--edge-strong); border-radius: 20px; box-shadow: var(--shadow), var(--inner-glow); flex-wrap: wrap; justify-content: center; width: max-content; max-width: calc(100vw / var(--ui-zoom, 1) - 16px - var(--safe-l) - var(--safe-r)); }
 #hotbar #buildTray.open { display: flex; animation: trayIn .2s; }
 @keyframes trayIn { from { transform: translateX(-50%) translateY(10px) scale(.96); opacity: 0; } to { transform: translateX(-50%); opacity: 1; } }
 #hotbar #buildTray .slot { width: 74px; height: 70px; }
@@ -354,18 +354,18 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 5px
 #inspect p { margin: 4px 0; font-size: 12.5px; color: var(--text-soft); }
 #inspect .stat { font-size: 13px; font-weight: 800; margin: 3px 0; color: var(--text); }
 #inspect .stat.boost { color: var(--cyan-hi); }
-#modal { position: absolute; inset: 0; display: none; place-items: center; background: var(--scrim); z-index: 10; }
-#modal.open { display: grid; }
-#modal .panel { width: min(340px, 92vw); padding: 16px; background: var(--glass-strong); }
-#modal h2 { margin: 0 0 10px; font-size: 20px; color: var(--gold); }
-#modal label { display: flex; justify-content: space-between; align-items: center; padding: 8px 2px; font-weight: 700; font-size: 14px; border-bottom: 1px solid var(--edge-soft); }
-#modal input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--leaf); }
-#modal select { font: inherit; font-weight: 600; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--edge-soft); background: var(--glass-hi); color: var(--text); }
-#modal .row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-#modal .row button { flex: 1; padding: 10px; border-radius: 12px; font: 600 14px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge-soft); min-height: 42px; }
-#modal .row button.danger { background: var(--bad-bg); border-color: var(--bad); color: var(--text-strong); }
-#modal .stats { font-size: 12.5px; color: var(--text-soft); margin-top: 10px; line-height: 1.6; }
-#modal .stats b { color: var(--text-strong); }
+.screen { position: absolute; inset: 0; display: none; place-items: center; background: var(--scrim); z-index: 10; }
+.screen.open { display: grid; }
+.screen .panel { width: min(340px, 92vw); padding: 16px; background: var(--glass-strong); }
+.screen h2 { margin: 0 0 10px; font-size: 20px; color: var(--gold); }
+.screen label { display: flex; justify-content: space-between; align-items: center; padding: 8px 2px; font-weight: 700; font-size: 14px; border-bottom: 1px solid var(--edge-soft); }
+.screen input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--leaf); }
+.screen select { font: inherit; font-weight: 600; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--edge-soft); background: var(--glass-hi); color: var(--text); }
+.screen .row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.screen .row button { flex: 1; padding: 10px; border-radius: 12px; font: 600 14px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge-soft); min-height: 42px; }
+.screen .row button.danger { background: var(--bad-bg); border-color: var(--bad); color: var(--text-strong); }
+.screen .stats { font-size: 12.5px; color: var(--text-soft); margin-top: 10px; line-height: 1.6; }
+.screen .stats b { color: var(--text-strong); }
 
 /* Cinematic */
 #cine { position: absolute; inset: 0; pointer-events: none; display: none; z-index: 8; }
@@ -406,7 +406,7 @@ kbd { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 5px
 #disc .rws { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 #disc .rw { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--glass-hi); color: var(--text-dim); }
 #disc .rw.got { background: var(--btn-gold); color: var(--ink-dark); }
-#modal .panel { max-height: 90vh; overflow-y: auto; }
+.screen .panel { max-height: 90vh; overflow-y: auto; }
 @media (max-width: 760px) {
   #disc .spots { grid-template-columns: 1fr; }
 }
@@ -526,7 +526,7 @@ body.contrast .panel, body.contrast .chip { background: var(--glass-strong); bor
 body.contrast .slot { background: var(--glass-solid); outline: 2px solid var(--edge-strong); }
 body.contrast .slot.active, body.contrast .slot[data-tool="pulse"].active { outline: 4px solid var(--leaf-hi); }
 body.contrast .res-row .rate, body.contrast .slot .sc { color: var(--text-strong); }
-#modal input[type="range"] { width: 140px; accent-color: var(--leaf); }
+.screen input[type="range"] { width: 140px; accent-color: var(--leaf); }
 
 /* Look 5.9: bottom-left quick buttons, round glass like the reference: the house (home; a badge while a
    landmark is ready to wake), the Lucky Cat garden, and the paw when a cat is hinted. Build stays in the hotbar,
@@ -588,14 +588,14 @@ body.contrast .res-row .rate, body.contrast .slot .sc { color: var(--text-strong
 #cine button .icon { width: 16px; height: 16px; vertical-align: -3px; }
 /* Settings: glass toggle switches, gold sliders and selects. New controls (e.g. Look 1's Graphics quality)
    drop in as another <label>Name <input|select></label> row and pick these styles up. */
-#modal input[type=checkbox] { appearance: none; -webkit-appearance: none; flex: none; width: 46px; height: 26px; margin: 0; border-radius: 999px; background: var(--glass-sunk); border: 1px solid var(--edge); position: relative; cursor: pointer; transition: background .2s, border-color .2s; }
-#modal input[type=checkbox]::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--text-soft); box-shadow: var(--shadow-sm); transition: transform .2s, background .2s; }
-#modal input[type=checkbox]:checked { background: var(--btn-green); border-color: var(--leaf-hi); }
-#modal input[type=checkbox]:checked::after { transform: translateX(20px); background: var(--text-strong); }
-#modal input[type=range] { accent-color: var(--gold); }
-#modal select { font: 700 13px var(--font-ui); color: var(--text); background: var(--glass-hi); border: 1px solid var(--edge); border-radius: 10px; padding: 5px 8px; min-height: 32px; }
-#modal select option { background: var(--glass-solid); color: var(--text); }
-#modal h3 { margin: 14px 0 4px; font-size: 14px; color: var(--gold); }
+.screen input[type=checkbox] { appearance: none; -webkit-appearance: none; flex: none; width: 46px; height: 26px; margin: 0; border-radius: 999px; background: var(--glass-sunk); border: 1px solid var(--edge); position: relative; cursor: pointer; transition: background .2s, border-color .2s; }
+.screen input[type=checkbox]::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--text-soft); box-shadow: var(--shadow-sm); transition: transform .2s, background .2s; }
+.screen input[type=checkbox]:checked { background: var(--btn-green); border-color: var(--leaf-hi); }
+.screen input[type=checkbox]:checked::after { transform: translateX(20px); background: var(--text-strong); }
+.screen input[type=range] { accent-color: var(--gold); }
+.screen select { font: 700 13px var(--font-ui); color: var(--text); background: var(--glass-hi); border: 1px solid var(--edge); border-radius: 10px; padding: 5px 8px; min-height: 32px; }
+.screen select option { background: var(--glass-solid); color: var(--text); }
+.screen h3 { margin: 14px 0 4px; font-size: 14px; color: var(--gold); }
 #statsBox summary { cursor: pointer; color: var(--text); font-weight: 700; }
 
 /* ───────── Look 5.11: phones, contrast and accessibility ─────────
@@ -650,3 +650,140 @@ body.photo #hud { display: none; }
 #photoFlash { position: fixed; inset: 0; z-index: 39; pointer-events: none; background: var(--text-strong); opacity: 0; transition: opacity .35s; }
 #photoFlash.on { opacity: .55; transition: none; }
 body.reduced #photoFlash { display: none; }
+
+/* ───────── E22.2: the one prompt (bottom centre) ───────── */
+#prompt { position: absolute; left: 50%; bottom: calc(118px + var(--safe-b)); transform: translateX(-50%); z-index: 4; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+#prompt[hidden] { display: none; }
+#prompt .pr-main, #prompt .pr-sub { display: flex; align-items: center; gap: 10px; padding: 7px 16px 7px 8px; border-radius: 999px; background: var(--glass-strong); border: 1px solid var(--edge); box-shadow: var(--shadow-sm), var(--inner-glow); color: var(--text-strong); font: 600 18px/1.2 var(--font-display); white-space: nowrap; }
+#prompt .pr-sub { font-size: 15px; padding: 4px 12px 4px 6px; border-color: var(--edge-soft); color: var(--text); }
+#prompt .pr-glyph { position: relative; display: inline-grid; place-items: center; min-width: 32px; height: 32px; }
+#prompt .pr-sub .pr-glyph { min-width: 26px; height: 26px; }
+#prompt kbd { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 7px; border-radius: 8px; background: var(--glass-hi-2); border: 2px solid var(--edge-strong); font: 700 15px var(--font-ui); color: var(--text-strong); }
+#prompt .pr-ring { position: absolute; inset: -5px; border-radius: 50%; background: conic-gradient(var(--gold) calc(var(--p, 0) * 360deg), transparent 0); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px)); mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px)); }
+#prompt .pr-refused { border-color: var(--bad); }
+#prompt .pr-refused .pr-glyph { opacity: .55; }
+#prompt .pr-why { font: 700 15px var(--font-ui); color: var(--bad); }
+body.photo #prompt { display: none; }
+
+/* ───────── E22.11: the pause, the menu and the Settings screen ───────── */
+body.paused canvas#app { filter: brightness(.55) blur(4px); transition: filter .25s; }
+body.paused.no-blur canvas#app, body.reduced.paused canvas#app { filter: brightness(.55); }
+.screen[hidden] { display: none !important; }
+.screen .panel.screen-card { width: min(720px, calc(94vw / var(--ui-zoom, 1))); max-height: min(720px, calc(92vh / var(--ui-zoom, 1))); display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.screen-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px 8px; }
+.screen-head h2 { margin: 0; font: 600 24px var(--font-display); color: var(--gold); }
+.screen-back { min-height: 40px; padding: 0 16px; border-radius: 12px; font: 600 16px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge-soft); }
+.tabs { display: flex; gap: 6px; padding: 0 14px 8px; border-bottom: 1px solid var(--edge-soft); flex-wrap: wrap; }
+.tabs [role=tab] { min-height: 40px; padding: 0 14px; border-radius: 12px 12px 0 0; font: 600 16px var(--font-display); color: var(--text-soft); border: 1px solid transparent; border-bottom: 3px solid transparent; }
+.tabs [role=tab][aria-selected=true] { color: var(--text-strong); border-bottom-color: var(--gold); background: var(--glass-hi); }
+.screen-body { overflow-y: auto; padding: 8px 18px 18px; font-size: 16px; }
+.set-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 10px 2px; font-weight: 700; font-size: 16px; border-bottom: 1px solid var(--edge-soft); }
+.set-row small { display: block; font-weight: 600; font-size: 14px; color: var(--text-soft); }
+.set-row button { min-height: 40px; padding: 0 16px; border-radius: 12px; font: 600 16px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge-soft); }
+.set-row button.danger { background: var(--bad-bg); border-color: var(--bad); color: var(--text-strong); }
+.set-h { margin: 14px 0 2px; font: 600 17px var(--font-display); color: var(--gold); }
+.set-stats { font-size: 16px; color: var(--text-soft); line-height: 1.6; }
+.set-stats b { color: var(--text-strong); }
+.ctl-help { font-size: 16px; color: var(--text-soft); }
+#menu .menu-card { width: min(380px, calc(92vw / var(--ui-zoom, 1))); max-height: calc(94vh / var(--ui-zoom, 1)); overflow-y: auto; padding: 18px 20px; }
+.menu-head h2 { margin: 0; font: 600 24px var(--font-display); color: var(--gold); }
+.menu-head p { margin: 4px 0 0; font-size: 16px; color: var(--text-soft); }
+.menu-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.menu-list button { min-height: 46px; border-radius: 14px; font: 600 18px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge-soft); color: var(--text-strong); }
+.menu-list button:hover, .menu-list button:focus-visible { background: var(--glass-hi-2); border-color: var(--edge-strong); }
+.menu-saved { min-height: 20px; margin: 10px 0 0; font-size: 16px; color: var(--good); text-align: center; }
+#settings { z-index: 12; }
+
+/* ───────── E22.10: plain words, few numbers (old-city rules) ───────── */
+body.oldcity #logo, body.oldcity #quick, body.oldcity #upgBtn, body.oldcity #combo, body.oldcity #hint,
+body.oldcity #obj .olab, body.oldcity #obj .ock, body.oldcity #obj .otog, body.oldcity #objNext, body.oldcity #objMore, body.oldcity #objAct, body.oldcity #coreBtn,
+body.oldcity #obj .oic, body.oldcity .res-row[data-res=biomass], body.oldcity .res-row .rate, body.oldcity #resInfo { display: none !important; }
+body.oldcity:not(.details) .res-row .val { display: none; }
+body.oldcity #obj h3 { font: 600 18px/1.3 var(--font-display); }
+body.oldcity #obj .ocount { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--glass-hi-2); font: 700 16px var(--font-ui); color: var(--gold-hi); white-space: nowrap; }
+body.oldcity .res-row { transition: opacity .6s, box-shadow .3s, border-color .3s; }
+body.oldcity .res-row.faded { opacity: 0; pointer-events: none; }
+body.oldcity .res-row.low { border-color: var(--bad); }
+body.oldcity #obj .ohead { display: block; }
+
+/* ───────── E22.5: a HUD about the place (the epic's table) ─────────
+   Top left the objective card; top right energy and water; bottom left the minimap; bottom centre the prompt with
+   the build hotbar above it while building; bottom right the toasts. Classic rules keep their hotbar along the
+   bottom (the prompt and toasts sit above it) and their chips under the bars. Everything fits 1280 × 800 at
+   100, 125 and 150% interface size (tests/e2e/phase4-hud.e2e.mjs). */
+#logo { display: none; }
+#obj { top: calc(12px + var(--safe-t)); left: calc(12px + var(--safe-l)); right: auto; width: 300px; }
+#res { top: calc(12px + var(--safe-t)); right: calc(12px + var(--safe-r)); left: auto; width: 260px; }
+#minimap { left: calc(14px + var(--safe-l)); bottom: calc(14px + var(--safe-b)); }
+#quick { left: auto; bottom: auto; right: calc(12px + var(--safe-r)); top: calc(158px + var(--safe-t)); }
+#toasts { top: auto; left: auto; transform: none; right: calc(12px + var(--safe-r)); bottom: calc(118px + var(--safe-b)); align-items: flex-end; max-width: 280px; }
+#toasts .toast { max-width: 280px; }
+#toasts .toast.pickup { font: 700 16px var(--font-display); padding: 6px 14px; }
+#combo { left: calc(14px + var(--safe-l)); top: calc(50% - 90px); }
+#hint { top: calc(12px + var(--safe-t)); bottom: auto; max-width: max(220px, calc(100% - 640px)); }
+#inspect { bottom: calc(176px + var(--safe-b)); }
+#catPanel { top: calc(214px + var(--safe-t)); }
+#buildbar { position: absolute; left: 50%; bottom: calc(176px + var(--safe-b)); transform: translateX(-50%); z-index: 3; display: flex; gap: 5px; padding: 5px 7px; border-radius: 16px; max-width: calc(100% - 352px); overflow: hidden; }
+#buildbar[hidden] { display: none; }
+#buildbar .bslot { position: relative; width: 50px; height: 54px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--glass-hi); border: 1px solid var(--edge-soft); color: var(--text-strong); }
+#buildbar .bslot.on { border-color: var(--edge-strong); box-shadow: var(--glow-active); }
+#buildbar .bslot.empty { opacity: .55; }
+#buildbar .bslot.locked .si { opacity: .45; }
+#buildbar .bslot .key { position: absolute; top: 2px; left: 5px; font: 700 13px var(--font-ui); color: var(--gold-hi); }
+#buildbar .bslot .si .icon { width: 26px; height: 26px; }
+#buildbar .bslot .sl { font: 600 11px/1.1 var(--font-display); max-width: 46px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Old-city rules: no hotbar on the walking view, so the prompt, the toasts and the build hotbar sit lower. */
+body.oldcity #hotbar { display: none !important; }
+body.oldcity #prompt { bottom: calc(16px + var(--safe-b)); }
+body.oldcity #toasts { bottom: calc(14px + var(--safe-b)); }
+body.oldcity #buildbar { bottom: calc(74px + var(--safe-b)); }
+body.oldcity #inspect { bottom: calc(176px + var(--safe-b)); }
+body.oldcity #res { width: 220px; }
+#minimap .mm-rim { position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%); font: 700 13px/1 var(--font-display); color: var(--text-strong); text-shadow: 0 1px 2px var(--glass-solid); white-space: nowrap; }
+#minimap .mm-rim[hidden] { display: none; }
+
+/* ───────── E22.3: button glyphs (src/ui/Glyphs.ts) ───────── */
+:root {
+  --pad-a: #2f8a3c; --pad-b: #c23a33; --pad-x: #2a6fc0; --pad-y: #b98a12;
+  --ps-cross: #8fb4f0; --ps-circle: #f08a92; --ps-square: #e59ad2; --ps-triangle: #62d0b3;
+  --deck-btn: #2c3136; --glyph-ink-dark: #10181a;
+}
+svg.glyph { display: block; overflow: visible; flex: none; }
+svg.glyph text { font-family: var(--font-ui); font-weight: 800; dominant-baseline: auto; }
+svg.glyph .g-cap { fill: var(--glass-hi-2); stroke: var(--edge-strong); stroke-width: 1.6; }
+svg.glyph .g-cap-edge { fill: var(--edge-soft); }
+svg.glyph .g-ink { fill: var(--text-strong); }
+svg.glyph .g-ink-fill { fill: var(--text-strong); }
+svg.glyph .g-lit { fill: var(--gold); stroke: var(--edge-strong); stroke-width: 1.2; }
+svg.glyph .g-stroke { fill: none; stroke: var(--text-strong); stroke-width: 2; stroke-linecap: round; }
+svg.glyph .g-face-ink { fill: var(--text-strong); stroke: var(--glyph-ink-dark); stroke-width: 2.4; paint-order: stroke; }
+svg.glyph .g-pad-a { fill: var(--pad-a); stroke: var(--text-strong); stroke-width: 1.4; }
+svg.glyph .g-pad-b { fill: var(--pad-b); stroke: var(--text-strong); stroke-width: 1.4; }
+svg.glyph .g-pad-x { fill: var(--pad-x); stroke: var(--text-strong); stroke-width: 1.4; }
+svg.glyph .g-pad-y { fill: var(--pad-y); stroke: var(--text-strong); stroke-width: 1.4; }
+svg.glyph .g-deck { fill: var(--deck-btn); stroke: var(--text-strong); stroke-width: 1.4; }
+svg.glyph .g-ps-disc { fill: var(--deck-btn); stroke: var(--text-strong); stroke-width: 1.4; }
+svg.glyph .g-shape { fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; stroke: var(--text-strong); }
+svg.glyph.g-ps-cross .g-shape { stroke: var(--ps-cross); }
+svg.glyph.g-ps-circle .g-shape { stroke: var(--ps-circle); }
+svg.glyph.g-ps-square .g-shape { stroke: var(--ps-square); }
+svg.glyph.g-ps-triangle .g-shape { stroke: var(--ps-triangle); }
+#prompt .pr-glyph { min-width: 40px; height: 30px; }
+#prompt .pr-sub .pr-glyph { min-width: 40px; height: 30px; transform: scale(.85); }
+body.contrast svg.glyph .g-cap { fill: var(--glass-solid); stroke: var(--text-strong); }
+
+/* ───────── E22.4: Settings › Controls ───────── */
+.ctl-table { display: flex; flex-direction: column; }
+.ctl-table .ctl-row { display: grid; grid-template-columns: minmax(150px, 1.3fr) 1fr 1fr; align-items: center; gap: 10px; padding: 5px 2px; border-bottom: 1px solid var(--edge-soft); font-size: 16px; font-weight: 700; }
+.ctl-table .ctl-headrow { font: 600 15px var(--font-display); color: var(--text-soft); border-bottom: 2px solid var(--edge); }
+.ctl-key { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; min-width: 56px; padding: 2px 8px; border-radius: 10px; background: var(--glass-hi); border: 1px solid var(--edge-soft); color: var(--text-strong); font: 700 15px var(--font-ui); }
+.ctl-key:hover, .ctl-key:focus-visible { background: var(--glass-hi-2); border-color: var(--edge-strong); }
+.ctl-key[data-locked] { opacity: .7; }
+.ctl-key.listening { border-color: var(--gold); box-shadow: var(--glow-active); }
+.ctl-key svg.glyph { width: 34px; height: 26px; }
+.ctl-none, .ctl-unset { color: var(--text-soft); font-weight: 700; font-size: 15px; }
+.ctl-wait { color: var(--gold-hi); font-size: 15px; }
+.ctl-note { min-height: 22px; margin: 4px 0; font-size: 16px; color: var(--good); }
+.ctl-ask { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 8px; border-radius: 12px; background: var(--glass-hi-2); border: 1px solid var(--gold); font: 600 17px var(--font-display); }
+.ctl-ask button, .ctl-resets button { min-height: 40px; padding: 0 16px; border-radius: 12px; font: 600 16px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge-soft); color: var(--text-strong); }
+.ctl-resets { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }

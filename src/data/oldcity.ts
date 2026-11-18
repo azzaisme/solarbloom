@@ -481,7 +481,8 @@ export const COAST: Record<'north' | 'south' | 'east' | 'west', { kind: CoastKin
  * park's south steps, facing north toward the park (the boat arrival cinematic comes with #353).
  */
 export const LANDING = {
-  jetty: { x: 6, z: 45, w: 4, d: 6 } as CellRect,
+  /** 3 × 4 tiles: the jetty model at half size, so its planks and rope posts suit bloombot (0.85 m) */
+  jetty: { x: 7, z: 45, w: 3, d: 4 } as CellRect,
   spawn: [8.5, 45.5] as [number, number],
   /** radians, 0 = +z (south): π faces north, up the beach to the park */
   facing: Math.PI,

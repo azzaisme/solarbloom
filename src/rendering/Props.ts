@@ -144,7 +144,7 @@ export function pavingGaps(layout: number): [number, number][] {
 export function buildPaving(layout: number, variant: number, alive: boolean, shades: string[], lod: Lod): TreeGeo {
   const B = new Buf();
   const R = rng(variant * 2654 + layout * 71 + (alive ? 9 : 0));
-  const gap = 0.022;
+  const gap = 0.008; // thin grout lines (owner, 18 Nov 2026: the ground should read less like a grid of tiles)
   const T = 0.05;
   for (const [x0, z0, x1, z1] of LAYOUTS[layout]) {
     const missing = R() < (alive ? 0.02 : 0.1);

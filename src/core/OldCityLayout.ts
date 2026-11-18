@@ -134,3 +134,9 @@ export function regionOfCell(x: number, z: number): RegionDef | undefined {
 export function inRect(r: { x: number; z: number; w: number; d: number }, x: number, z: number): boolean {
   return x >= r.x && z >= r.z && x < r.x + r.w && z < r.z + r.d;
 }
+
+/** The beach's shallow surf: the wadable rows just before the bay (it reads as shallow sea, not a dried canal bed). */
+export function surfCell(x: number, z: number): boolean {
+  const cx = Math.floor(x / 16);
+  return !seaCell(x, z) && isSeaChunk(cx, Math.floor((z + OLD_CITY.surfRows) / 16)) && regionOfCell(x, z)?.type === 'beach';
+}

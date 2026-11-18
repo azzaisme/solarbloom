@@ -1,6 +1,10 @@
-// Phase 4 E00/E02: the fresh-park HUD at phone widths (320, 360, 390, 430 CSS px), a phone in landscape,
-// a tablet and a desktop. Reports overlapping panels, panels off screen and how much of the screen the HUD
-// covers; screenshots go to docs/review/phase4-hud-*.png. Run after `vite build`.
+// E22.5 (#342): the HUD laid out as the epic's table (docs/E22_CONTROLS_UI.md, "The HUD"), checked on the
+// platforms the game ships for (desktop and Steam Deck): 1280 × 800 and 1920 × 1080, at 100, 125 and 150%
+// interface size, under both rule sets (old-city rules previewed with ?ui=oldcity until E21 lands). Reports
+// overlapping parts, parts off screen and how much of the screen the HUD covers; under old-city rules plain
+// walking may show only the five parts in the table. Also opens the build menu, the backpack, the pause menu and
+// Settings (each tab) and checks they stay on screen. Screenshots go to docs/review/hud-*.png. Run after
+// `vite build`; STRICT=1 fails on any problem.
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { preview } from 'vite';
@@ -11,121 +15,119 @@ const strict = !!process.env.STRICT;
 mkdirSync(dir, { recursive: true });
 const server = await preview({ preview: { port: 4198, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-const PANELS = ['#res', '#obj', '#hotbar', '#hint', '#chips', '#toasts', '#quick'];
+/** Everything that can be on the walking view. */
+const PARTS = ['#res', '#obj', '#hotbar', '#hint', '#toasts', '#quick', '#prompt', '#minimap', '#buildbar', '#combo'];
+/** Old-city rules: plain walking shows these and nothing else (the epic's table). */
+const FIVE = new Set(['#obj', '#res', '#minimap', '#prompt', '#toasts']);
 const SIZES = [
-  ['320', 320, 640],
-  ['360', 360, 740],
-  ['390', 390, 844],
-  ['430', 430, 932],
-  ['phone-landscape', 844, 390],
-  ['tablet', 820, 1180],
-  ['desktop', 1280, 800],
+  [1280, 800],
+  [1920, 1080],
 ];
+const SCALES = [100, 125, 150];
 let problems = 0;
+
+async function visibleRects(page, sels) {
+  return page.evaluate((sels) => {
+    const out = [];
+    for (const sel of sels) {
+      const el = document.querySelector(sel);
+      if (!el) continue;
+      const cs = getComputedStyle(el);
+      if (el.hidden || cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0 || el.classList.contains('hide')) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      out.push({ sel, l: r.left, t: r.top, r: r.right, b: r.bottom });
+    }
+    return out;
+  }, sels);
+}
+
+function overlaps(rects, w, h) {
+  const issues = [];
+  for (let i = 0; i < rects.length; i++)
+    for (let j = i + 1; j < rects.length; j++) {
+      const a = rects[i], b = rects[j];
+      const ox = Math.min(a.r, b.r) - Math.max(a.l, b.l);
+      const oy = Math.min(a.b, b.b) - Math.max(a.t, b.t);
+      if (ox > 1 && oy > 1) issues.push(`${a.sel} overlaps ${b.sel} (${Math.round(ox)}×${Math.round(oy)})`);
+    }
+  for (const r of rects) if (r.l < -1 || r.t < -1 || r.r > w + 1 || r.b > h + 1) issues.push(`${r.sel} off screen`);
+  return issues;
+}
+
 try {
-  for (const [name, w, h] of SIZES) {
-    const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
-    await page.goto('http://localhost:4198/');
-    // E20.7 (#290): calm is the default; NUMBERS=1 runs the same checks with "Show numbers" on.
-    await page.evaluate((numbers) => {
-      localStorage.clear();
-      if (numbers) localStorage.setItem('solarbloom.settings', JSON.stringify({ showNumbers: true }));
-    }, !!process.env.NUMBERS);
-    await page.reload();
-    await page.waitForFunction(() => !!window.solarbloom);
-    await page.waitForTimeout(1200);
-    const intro = (await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible());
-    if (intro) await page.click('#introGo');
-    await page.waitForTimeout(800);
-    // A few restored tiles, like the Phase 4 screenshot.
-    await page.evaluate(() => {
-      const s = window.solarbloom.sim;
-      const tiles = s.areas.tiles('park').filter((t) => s.restoration.isEligible(t)).slice(0, 19);
-      for (const t of tiles) s.restoration.complete(t, 'pulse');
-      s.state.resources.energy = new (s.state.resources.energy.constructor)(s.state.caps.energy);
-      s.state.resources.water = new (s.state.resources.energy.constructor)(s.state.caps.water);
-      s.state.resources.biomass = new (s.state.resources.energy.constructor)(24);
-    });
-    await page.waitForTimeout(1500);
-    const rects = await page.evaluate((PANELS) => {
-      const out = [];
-      for (const sel of PANELS) {
-        const el = document.querySelector(sel);
-        if (!el) continue;
-        const cs = getComputedStyle(el);
-        if (el.hidden || cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0 || el.classList.contains('hide')) continue;
-        const r = el.getBoundingClientRect();
-        if (r.width < 2 || r.height < 2) continue;
-        out.push({ sel, l: r.left, t: r.top, r: r.right, b: r.bottom });
-      }
-      return out;
-    }, PANELS);
-    const issues = [];
-    for (let i = 0; i < rects.length; i++)
-      for (let j = i + 1; j < rects.length; j++) {
-        const a = rects[i], b = rects[j];
-        const ox = Math.min(a.r, b.r) - Math.max(a.l, b.l);
-        const oy = Math.min(a.b, b.b) - Math.max(a.t, b.t);
-        if (ox > 1 && oy > 1) issues.push(`${a.sel} overlaps ${b.sel} (${Math.round(ox)}×${Math.round(oy)})`);
-      }
-    for (const r of rects) if (r.l < -1 || r.t < -1 || r.r > w + 1 || r.b > h + 1) issues.push(`${r.sel} off screen`);
-    const covered = rects.reduce((a, r) => a + Math.max(0, Math.min(r.r, w) - Math.max(r.l, 0)) * Math.max(0, Math.min(r.b, h) - Math.max(r.t, 0)), 0);
-    console.log(`${name} ${w}×${h}: HUD covers ~${Math.round((100 * covered) / (w * h))}% · ${issues.length ? issues.join('; ') : 'no overlaps'}`);
-    console.log(`   ${rects.map((r) => `${r.sel} ${Math.round(r.r - r.l)}×${Math.round(r.b - r.t)}@${Math.round(r.l)},${Math.round(r.t)}`).join('  ')}`);
-    // Look 5.2: no emoji on screen (game strings carry them; the HUD draws icons instead).
-    const emoji = await page.evaluate(() => {
-      const t = document.getElementById('hud').innerText;
-      const titles = [...document.querySelectorAll('#hud [title], #hud [aria-label]')].map((e) => `${e.getAttribute('title') ?? ''} ${e.getAttribute('aria-label') ?? ''}`).join(' ');
-      return [...`${t} ${titles}`.matchAll(/\p{Extended_Pictographic}/gu)].map((m) => m[0]).join('');
-    });
-    if (emoji) issues.push(`emoji on screen: ${emoji}`);
-    problems += issues.length;
-    await page.screenshot({ path: `${dir}/phase4-hud-${name}.png` });
-    // The Build tray opens above the hotbar and stays on screen.
-    await page.click('#buildToggle');
-    await page.waitForTimeout(400);
-    const tray = await page.evaluate(() => {
-      const r = document.querySelector('#buildTray').getBoundingClientRect();
-      return { l: r.left, t: r.top, r: r.right, b: r.bottom, open: document.querySelector('#buildTray').classList.contains('open') };
-    });
-    if (!tray.open || tray.l < -1 || tray.t < -1 || tray.r > w + 1 || tray.b > h + 1) {
-      console.log(`   build tray problem: ${JSON.stringify(tray)}`);
-      problems++;
-    }
-    await page.screenshot({ path: `${dir}/phase4-hud-${name}-tray.png` });
-    // Look 5.6: on a keyboard-sized screen every key badge matches the binding it shows.
-    if (name === 'desktop') {
-      await page.keyboard.press('Escape');
-      const badge = (sel) => page.evaluate((sel) => document.querySelector(`${sel} .key`)?.textContent, sel);
-      const checks = [
-        ['1', '[data-tool="inspect"]', () => page.evaluate(() => document.querySelector('[data-tool="inspect"]').classList.contains('active'))],
-        ['2', '[data-tool="pulse"]', () => page.evaluate(() => document.querySelector('[data-tool="pulse"]').classList.contains('active'))],
-        ['B', '#buildToggle', () => page.evaluate(() => document.querySelector('#buildTray').classList.contains('open'))],
-        ['U', '#upgBtn', () => page.evaluate(() => window.solarbloom.hud.isUpgradesOpen)],
-      ];
-      for (const [key, sel, did] of checks) {
-        if ((await badge(sel)) !== key) {
-          console.log(`   key badge ${sel} shows "${await badge(sel)}", not ${key}`);
-          problems++;
+  for (const rules of ['classic', 'oldcity'])
+    for (const [w, h] of SIZES)
+      for (const scale of SCALES) {
+        const name = `${rules}-${w}x${h}-${scale}`;
+        const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+        page.setDefaultTimeout(180000);
+        await page.goto(`http://localhost:4198/?slot=1${rules === 'classic' ? '&rules=classic' : ''}`);
+        await page.evaluate((scale) => {
+          localStorage.clear();
+          localStorage.setItem('solarbloom.settings', JSON.stringify({ uiScale: scale, showNumbers: !!globalThis.NUMBERS }));
+        }, scale);
+        await page.reload();
+        await page.waitForFunction(() => !!window.solarbloom?.hud);
+        // Layout, not motion, is under test: panels sit where they end up (software GL makes slides crawl).
+        await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; animation-duration: 0s !important; }' });
+        await page.waitForTimeout(1200);
+        // A few restored tiles, like the Phase 4 screenshot, and a toast.
+        await page.evaluate(() => {
+          const g = window.solarbloom;
+          g.pause.clear('blur');
+          const s = g.sim;
+          const tiles = s.areas.tiles('park').filter((t) => s.restoration.isEligible(t)).slice(0, 19);
+          for (const t of tiles) s.restoration.complete(t, 'pulse');
+          g.hud.pickup('Copper', 3);
+        });
+        await page.waitForTimeout(1500);
+        const rects = await visibleRects(page, PARTS);
+        const issues = overlaps(rects, w, h);
+        if (rules === 'oldcity') for (const r of rects) if (!FIVE.has(r.sel)) issues.push(`${r.sel} is on the walking view (only the five parts may be)`);
+        // Look 5.2: no emoji on screen (game strings carry them; the HUD draws icons instead).
+        const emoji = await page.evaluate(() => {
+          const t = document.getElementById('hud').innerText;
+          const titles = [...document.querySelectorAll('#hud [title], #hud [aria-label]')].map((e) => `${e.getAttribute('title') ?? ''} ${e.getAttribute('aria-label') ?? ''}`).join(' ');
+          return [...`${t} ${titles}`.matchAll(/\p{Extended_Pictographic}/gu)].map((m) => m[0]).join('');
+        });
+        if (emoji) issues.push(`emoji on screen: ${emoji}`);
+        const covered = rects.reduce((a, r) => a + Math.max(0, Math.min(r.r, w) - Math.max(r.l, 0)) * Math.max(0, Math.min(r.b, h) - Math.max(r.t, 0)), 0);
+        console.log(`${name}: HUD covers ~${Math.round((100 * covered) / (w * h))}% · ${issues.length ? issues.join('; ') : 'no overlaps'}`);
+        problems += issues.length;
+        await page.screenshot({ path: `${dir}/hud-${name}.png` });
+        // The panels open on screen: the build menu, the backpack, the menu and every Settings tab.
+        for (const [label, open, sel] of [
+          ['build menu', (g) => g.doAction('buildMenu'), '#buildMenu.open, #buildTray.open'],
+          ['backpack', (g) => g.doAction('backpack'), '#bpScreen.open, #backpack.open'],
+          ['menu', (g) => g.doAction('menu'), '#menu.open'],
+          ['settings', (g) => (g.doAction('menu'), g.menuChoose('settings')), '#settings.open'],
+        ]) {
+          await page.evaluate(`(${open.toString()})(window.solarbloom)`);
+          await page.waitForTimeout(1200); // drawers slide in
+          const r = await page.evaluate((sel) => {
+            const el = document.querySelector(sel);
+            if (!el) return null;
+            const card = el.querySelector('.screen-card, .menu-card, .bm-card') ?? el;
+            const b = card.getBoundingClientRect();
+            return { l: b.left, t: b.top, r: b.right, b: b.bottom };
+          }, sel);
+          if (!r || r.l < -1 || r.t < -1 || r.r > w + 1 || r.b > h + 1) {
+            console.log(`   ${label} problem: ${JSON.stringify(r)}`);
+            problems++;
+          }
+          await page.screenshot({ path: `${dir}/hud-${name}-${label.replace(' ', '-')}.png` });
+          await page.evaluate(() => {
+            const g = window.solarbloom;
+            g.closeAll();
+          });
+          await page.waitForTimeout(200);
         }
-        await page.keyboard.press(key.toLowerCase());
-        await page.waitForTimeout(250);
-        if (!(await did())) {
-          console.log(`   key ${key} did not act on ${sel}`);
-          problems++;
-        }
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(150);
+        await page.close();
       }
-      if ((await badge('#harvestBtn')) !== 'H') problems++;
-    }
-    await page.close();
-  }
 } finally {
   await browser.close();
   server.httpServer.close();
 }
-if (strict && problems) {
-  console.error(`${problems} HUD problems`);
-  process.exit(1);
-}
+if (problems) console.error(`${problems} HUD problems`);
+if (strict && problems) process.exit(1);

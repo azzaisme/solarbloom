@@ -10,10 +10,10 @@ import type { Action, Bindings } from './Bindings';
  * Leaving restores the camera (position, turn, zoom, zoom limits, pitch) and the HUD exactly as they were.
  *
  * Controls reuse the rebindable map (src/app/Bindings.ts), so a rebound key works here too:
- * move pans, sprint pans faster, zoom keys / wheel / right stick zoom, the right stick or a right-button drag
- * turns, previous / next tool tilt, recentre turns back, pulse saves the picture, interact hides bloombot, the
- * build tray key freezes the game, Frenzy toggles depth of field, the backpack key hides the controls bar, and
- * cancel, pause or the photo key leave.
+ * move pans, sprint pans faster, the wheel / right stick / zoom button zoom, the right stick or a right-button
+ * drag turns, the turn-piece inputs (R, LB / RB) tilt, recentre turns back, pulse saves the picture, interact
+ * hides bloombot, the build menu key freezes the game, Harvest (F, for focus) toggles depth of field, the
+ * backpack key hides the controls bar, and back, the menu or the photo key leave (E22.1 names).
  *
  * This file only steers the view and the presentation; it never touches the simulation (freezing simply skips
  * the sim step, as pausing does).
@@ -164,7 +164,7 @@ export class PhotoMode {
     switch (a) {
       case 'photo':
       case 'cancel':
-      case 'pause':
+      case 'menu':
         this.exit();
         return true;
       case 'pulse':
@@ -174,26 +174,23 @@ export class PhotoMode {
         this.hideBot = !this.hideBot;
         this.host.bot?.setVisible(!this.hideBot);
         break;
-      case 'tray':
+      case 'buildMenu':
         this.freeze = !this.freeze;
         break;
-      case 'frenzy':
+      case 'harvest': // F for focus
         this.dof = !this.dof;
         this.host.setDof(this.dof);
         break;
       case 'backpack':
         this.clean = !this.clean;
         break;
-      case 'zoomIn':
+      case 'zoomCamera':
         c.zoomBy(PHOTO.zoomStep);
         return true;
-      case 'zoomOut':
-        c.zoomBy(1 / PHOTO.zoomStep);
-        return true;
-      case 'nextTool':
+      case 'rotate':
         this.tilt(PHOTO.tiltStep);
         return true;
-      case 'prevTool':
+      case 'rotateBack':
         this.tilt(-PHOTO.tiltStep);
         return true;
       case 'recentre':

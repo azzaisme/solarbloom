@@ -53,7 +53,7 @@ export class Minimap {
     el.className = 'panel';
     el.setAttribute('role', 'img');
     el.setAttribute('aria-label', 'Map around bloombot, north up');
-    el.innerHTML = `<canvas width="${CELLS * PX}" height="${CELLS * PX}"></canvas><span class="mm-n" aria-hidden="true">N</span><span class="mm-arrow" aria-hidden="true"></span>`;
+    el.innerHTML = `<canvas width="${CELLS * PX}" height="${CELLS * PX}"></canvas><span class="mm-n" aria-hidden="true">N</span><span class="mm-arrow" aria-hidden="true"></span><span class="mm-rim" hidden></span>`;
     parent.appendChild(el);
     this.el = el;
     this.canvas = el.querySelector('canvas')!;
@@ -79,6 +79,7 @@ export class Minimap {
     this.t += dt;
     if (this.t < EVERY || !this.ctx) return;
     this.t = 0;
+    this.rim();
     const W = CELLS * PX;
     this.img ??= this.ctx.createImageData(W, W);
     const d = this.img.data;
@@ -159,6 +160,24 @@ export class Minimap {
         this.ctx.stroke();
       }
     }
+  }
+
+  /**
+   * E22.5: the clock and the weather on the map's rim, from E21's clock (E21.20) and weather (E21.21). Hidden
+   * until they exist. Read only; the shapes are E21's.
+   */
+  private rim() {
+    const st = this.sim.state as unknown as { clock?: { hour?: number; minute?: number }; weather?: { kind?: string } };
+    const rim = this.el.querySelector<HTMLElement>('.mm-rim');
+    if (!rim) return;
+    const h = st.clock?.hour;
+    // the weather in a word until E21 brings its icon set
+    const icon: Record<string, string> = { clear: 'Clear', sun: 'Sunny', cloud: 'Cloudy', cloudy: 'Cloudy', rain: 'Rain', fog: 'Fog', storm: 'Storm', snow: 'Snow' };
+    const w = st.weather?.kind ? (icon[st.weather.kind] ?? '') : '';
+    const text = h !== undefined ? `${String(h).padStart(2, '0')}:${String(st.clock?.minute ?? 0).padStart(2, '0')}${w ? ` ${w}` : ''}` : w;
+    rim.hidden = !text;
+    if (rim.textContent !== text) rim.textContent = text;
+    rim.setAttribute('aria-label', text ? `Time ${text}` : '');
   }
 
   set visible(on: boolean) {

@@ -92,8 +92,11 @@ export class OldCityController {
    * Starts a held Interact: it completes after `need` seconds if Interact stays down (a click-to-walk arrival
    * completes it without holding). Moving away or letting go cancels it.
    */
+  /** E22.2: false turns holds into a single press (the hold then runs to the end without the button). */
+  holdToAct = true;
+
   startHold(kind: string, need: number, done: () => void, viaClick = false) {
-    this.hold = { kind, t: 0, need, done, padHeld: !viaClick };
+    this.hold = { kind, t: 0, need, done, padHeld: !viaClick && this.holdToAct };
     this.host.bot.visuals.play('assemble');
   }
 

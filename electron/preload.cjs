@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld('solarbloomDesktop', {
     },
     removeItem: (k) => ipcRenderer.sendSync('sb:save-remove', String(k)),
   },
+  // E22.11: the menu's "Quit to desktop", and pausing while the Deck sleeps.
+  quit: () => ipcRenderer.send('sb:quit'),
+  onPower: (cb) => ipcRenderer.on('sb:power', (_e, state) => cb(state)),
 });
 
 window.addEventListener('DOMContentLoaded', () => {

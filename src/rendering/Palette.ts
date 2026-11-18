@@ -61,7 +61,11 @@ const ground = {
   } as Record<string, string[]>,
   /** E21.4: the Old City's sea (open water nothing crosses), its surf, and the beach once restored */
   sea: ['#2f6f8a', '#2b6880', '#337693'],
+  /** the beach's shallow surf while dead: murky shallow sea (it clears to bright pool water once restored) */
+  shallows: ['#4f8592', '#4a7f8b', '#568b98'],
   surf: '#9fdcef',
+  /** the slab under painted dead ground (GroundTex): each painting's average colour, for its sides and the far view */
+  painted: { sand: ['#e2bf7e'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
   seaFoam: '#eaf8fb',
   /** restored ground that isn't lawn ('' = use the stage grass) */
   alive: { lawn: '', paving: '#b4afa5', road: '#6c675e', water: '#5cc6e6', clay: '', litter: '', obstacle: '#d6d0c6', sand: '#e6d3a0' } as Record<string, string>,

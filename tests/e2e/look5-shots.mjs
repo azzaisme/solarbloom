@@ -62,13 +62,13 @@ try {
       const g = window.solarbloom;
       g.hud.toggleUpgrades(false);
       g.select?.(undefined);
-      g.hud.openSettings(true);
+      g.settingsUi.open();
     });
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${out}/${prefix}-desktop-settings.png` });
     await page.evaluate(() => {
       const g = window.solarbloom;
-      g.hud.openSettings(false);
+      g.settingsUi.close();
       g.hud.catReward('Lucky Harvest', 'A full harvest of every resource, banked.');
     });
     await page.waitForTimeout(800);

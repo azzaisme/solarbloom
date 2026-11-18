@@ -113,6 +113,8 @@ export class Atmosphere {
       }
     const m = new pc.Mesh(this.device);
     m.setPositions(pos);
+    // the shader asks for normals even unlit (a console error every frame without them): flat, facing the card
+    m.setNormals(pos.map((_, i) => (i % 3 === 2 ? 1 : 0)));
     m.setColors32(col);
     m.setIndices(idx);
     m.update(pc.PRIMITIVE_TRIANGLES);
