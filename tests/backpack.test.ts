@@ -82,7 +82,7 @@ describe('E22.6: the backpack', () => {
     sim.state.salvage!.pages = ['p-mastRow-1'];
     const pages = journalPages(sim);
     expect(pages.length).toBe(Object.keys(PAGES).length);
-    expect(pages.filter((p) => p.found).map((p) => p.title)).toEqual(['Tram timetable']);
+    expect(pages.filter((p) => p.found).map((p) => p.title)).toEqual(['The mast']);
     expect(pages[0]).toMatchObject({ n: 1, found: false, title: 'A missing page' });
   });
 

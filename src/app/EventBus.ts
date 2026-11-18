@@ -26,6 +26,8 @@ export interface GameEvents {
   'keeper.tended': { keeperId: string; x: number; z: number };
   /** E23.9.2: a Keeper calls bloombot a friend */
   'keeper.friend': { keeperId: string };
+  /** E23.9.1: a page of the maker's journal was kept */
+  'journal.page': { id: string };
   'keeper.said': { keeperId: string; lines: string[] };
   'keeper.step': { keeperId: string; step: import('../core/types').KeeperStep };
   /** E21.9: a region's landmark woke (by bloombot's own delivery). */
