@@ -235,6 +235,7 @@ export class SalvageSystem {
     }
     if (sp.kind === 'gate' && !this.sim.gates.isOpen(sp.gate.id)) return { title: 'In the way', detail: sp.gate.blocked };
     if (sp.kind === 'keeper') return { title: `🤖 ${sp.keeper.name}`, detail: this.sim.keepers.hint(sp.keeper.id) };
+    if (sp.kind === 'page') return { title: 'A page on a post', detail: this.sim.journal.found(sp.id) ? "A page of the maker's journal. You have read this one." : "A page in the maker's handwriting." };
     if (sp.kind === 'shed') return { title: 'A ruined shed', detail: 'Bloombot\'s house, one day.' };
     if (sp.kind === 'lookout') return { title: 'A lookout', detail: 'A bench and an old telescope. Interact to look out over the city.' };
     return undefined;

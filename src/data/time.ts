@@ -33,6 +33,11 @@ export function gameHours(n: number): number {
   return gameDays(n / 24);
 }
 
+/** A span of game minutes (1/1440 of a game day, two seconds of play) in sim seconds: for short timers. */
+export function gameMinutes(n: number): number {
+  return gameDays(n / 1440);
+}
+
 /**
  * E23.7.1.3: night-only finds. Each appears at dusk and goes at dawn; one taken tonight is back the next night.
  * Fireflies are the third night find: they only fly at night (rendering/Fauna), and they are ambience, not items.
