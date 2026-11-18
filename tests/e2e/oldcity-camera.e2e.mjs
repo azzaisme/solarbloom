@@ -28,7 +28,7 @@ try {
   page.setDefaultTimeout(180_000);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('http://localhost:4185/?gfx=deck');
+  await page.goto('http://localhost:4185/?slot=1&gfx=deck');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom?.bot);

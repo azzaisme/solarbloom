@@ -11,6 +11,7 @@ import { Bars } from './Bars';
 import { BuildBar, Hotbar } from './Hotbar';
 import { Toasts } from './Toasts';
 import { Panels } from './Panels';
+import { Backpack } from './Backpack';
 import type { SetProp } from './HudPart';
 import type { GlyphSetting, GlyphStyle } from './Glyphs';
 
@@ -156,6 +157,8 @@ export class Hud {
   readonly buildBar: BuildBar;
   readonly toasts: Toasts;
   readonly panels: Panels;
+  /** E22.6: the backpack screen (and the storage panel) */
+  readonly backpack: Backpack;
 
   constructor(
     readonly sim: Sim,
@@ -178,6 +181,7 @@ export class Hud {
     this.panels.wire();
     this.wire();
     this.prompt = new Prompt(this.root);
+    this.backpack = new Backpack(this.root, { sim: this.sim });
   }
 
   private template() {
@@ -211,6 +215,7 @@ export class Hud {
       ${BuildBar.template()}
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
       <div id="toasts" role="status" aria-live="polite"></div>
+      <div id="saveLeaf" role="img" aria-label="Saved">${ICONS.biomass}</div>
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
       <div id="intro" hidden><div class="panel card-intro">
         <h2>${LOGO_MARK}<span>Welcome to Solarbloom</span></h2>
@@ -231,7 +236,6 @@ export class Hud {
       <div id="tip" class="panel"></div>
       <div id="fail"></div>
       <div id="plotPicker" class="drawer panel" aria-label="Plot picker"><h2><span id="ppTitle">Plot</span> <button aria-label="Close plot picker">×</button></h2><p id="ppSub" class="pp-sub"></p><div id="ppList"></div></div>
-      <div id="backpack" class="drawer panel" aria-label="Backpack"><h2>Backpack <button aria-label="Close backpack">×</button></h2><div id="bpList"></div></div>
       <div id="upgrades" class="drawer panel"><h2>Upgrades <button aria-label="Close upgrades">×</button></h2><p id="upgNext" class="upg-next"></p><div id="upgList"></div></div>
       <div id="inspect" class="panel"></div>
       <div id="cine"><div class="bar t"></div><div class="bar b"></div><div class="title" id="cineTitle"></div><button id="skipBtn">Skip ⏭</button></div>
@@ -310,11 +314,13 @@ export class Hud {
   renderUpgrades(force = false) {
     this.panels.renderUpgrades(force);
   }
-  toggleBackpack(open?: boolean) {
-    this.panels.toggleBackpack(open);
+  /** E22.6: the backpack screen (Tab / I, d-pad up). */
+  toggleBackpack(open = !this.backpack.isOpen) {
+    if (open) this.backpack.open();
+    else this.backpack.close();
   }
   get backpackOpen() {
-    return this.panels.backpackOpen;
+    return this.backpack.isOpen;
   }
   openPlotPicker(m: PlotPickerModel, h: PlotPickerHandlers) {
     this.panels.openPlotPicker(m, h);
@@ -327,9 +333,6 @@ export class Hud {
   }
   statsHtml(): string {
     return this.panels.statsHtml();
-  }
-  discoveriesHtml(): string {
-    return this.panels.discoveriesHtml();
   }
   renderInspect(html: string | null) {
     this.panels.renderInspect(html);

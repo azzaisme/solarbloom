@@ -72,7 +72,7 @@ async function shoot(sceneKey, sizeKey) {
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(`${sceneKey}/${sizeKey}: ${e.message}`));
   await page.addInitScript(() => { try { localStorage.clear(); } catch {} });
-  await page.goto(`http://localhost:${PORT}/${query}`);
+  await page.goto(`http://localhost:${PORT}/${query ? query + '&' : '?'}slot=1`);
   await page.waitForFunction(() => !!window.solarbloom, null, { timeout: 60000 });
   await page.waitForLoadState('networkidle');
   if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');

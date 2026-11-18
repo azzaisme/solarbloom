@@ -746,7 +746,7 @@ body.oldcity #res { width: 220px; }
 :root {
   --pad-a: #2f8a3c; --pad-b: #c23a33; --pad-x: #2a6fc0; --pad-y: #b98a12;
   --ps-cross: #8fb4f0; --ps-circle: #f08a92; --ps-square: #e59ad2; --ps-triangle: #62d0b3;
-  --deck-btn: #2c3136; --glyph-ink-dark: #10181a;
+  --deck-btn: #2c3136; --glyph-ink-dark: #10181a; --bot-joint: #4a4640;
 }
 svg.glyph { display: block; overflow: visible; flex: none; }
 svg.glyph text { font-family: var(--font-ui); font-weight: 800; dominant-baseline: auto; }

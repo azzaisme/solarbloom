@@ -15,7 +15,7 @@ try {
     const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: dpr });
     page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
     page.on('console', (m) => m.type() === 'error' && errors.push(`${name}: ${m.text()}`));
-    await page.goto('http://localhost:4199/');
+    await page.goto('http://localhost:4199/?slot=1');
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom);

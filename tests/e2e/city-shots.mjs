@@ -18,7 +18,7 @@ const server = await preview({ preview: { port: 4195, strictPort: true }, logLev
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-  await page.goto('http://localhost:4195/?rules=classic'); // the classic city (E21: new games are Old Cities)
+  await page.goto('http://localhost:4195/?slot=1&rules=classic'); // the classic city (E21: new games are Old Cities)
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);

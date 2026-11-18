@@ -4,16 +4,19 @@
  * direction), A presses the focused one, and B is left to Cancel (which closes the panel). With no panel open
  * the d-pad keeps its game actions (E22.1: the hotbar is for the keyboard; the pad builds from the build menu).
  */
-const PANELS = ['#settings.open', '#menu.open', '#ocPanel.open', '#intro:not([hidden])', '#catPanel:not([hidden])', '#upgrades.open', '#plotPicker.open', '#backpack.open', '#buildTray.open', '#inspect.open'] as const;
+const PANELS = ['#settings.open', '#bpScreen.open', '#menu.open', '#ocPanel.open', '#intro:not([hidden])', '#catPanel:not([hidden])', '#upgrades.open', '#plotPicker.open', '#buildTray.open', '#inspect.open'] as const;
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]';
 const DIRS: Partial<Record<number, [number, number]>> = { 12: [0, -1], 13: [0, 1], 14: [-1, 0], 15: [1, 0] };
 
 export class PadFocus {
-  constructor(private root: HTMLElement) {}
+  constructor(
+    private root: HTMLElement,
+    private panels: readonly string[] = PANELS,
+  ) {}
 
   /** The topmost open panel, if any. */
   panel(): HTMLElement | undefined {
-    for (const sel of PANELS) {
+    for (const sel of this.panels) {
       const el = this.root.querySelector<HTMLElement>(sel);
       if (el && el.offsetParent !== null) return el;
     }

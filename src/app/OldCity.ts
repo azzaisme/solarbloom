@@ -17,6 +17,8 @@ export interface OldCityHost {
   bindings: Bindings;
   /** where a tile is on screen, for prompts anchored to it */
   screenOf(x: number, z: number): { x: number; y: number };
+  /** E22.6: opens the store as the backpack screen's storage grid (the plain panel otherwise) */
+  openStorage?(title: string): void;
   /** plays a sound by name, if the game has it */
   sound(name: 'click' | 'salvage' | 'pry' | 'deliver' | 'tier' | 'wake', material?: MaterialId): void;
   /** redraws the ground tile at a cell */
@@ -283,6 +285,7 @@ export class OldCityController {
 
   openStorage(title = 'Storage') {
     this.host.sound('click');
+    if (this.host.openStorage) return this.host.openStorage(title); // E22.6: the backpack's storage grid
     this.panel.open(
       () => storageHtml(this.sim, title),
       (act, arg) => storageAct(this.sim, act, arg),
