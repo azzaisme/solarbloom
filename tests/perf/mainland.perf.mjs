@@ -188,31 +188,29 @@ try {
       for (let i = 0; i < 300; i++) g.camera.update(0.05);
       const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r))));
       for (let i = 0; i < 40; i++) await frame();
-      const draws = () => g.app.stats.drawCalls.total;
-      const base = draws();
-      const out = { base };
-      const walk = (e, depth) => {
-        for (const c of e.children) {
-          if (!c.enabled) continue;
-          c.enabled = false;
-          out[`${'  '.repeat(depth)}${c.name}`] = 0;
-          c.__probe = true;
+      // a census of the last frame: visible mesh instances by top-level entity and by machine type,
+      // batched or not (a dynamic batch is one draw call for many parts)
+      const out = { drawCalls: g.app.stats.drawCalls.total, byTop: {}, unbatchedByMachine: {}, batches: 0 };
+      const types = new Map(g.sim.state.machines.map((m) => [m.id, m.type]));
+      const seen = new Set();
+      for (const layer of g.app.scene.layers.layerList) {
+        if (!layer.enabled) continue;
+        for (const mi of layer.meshInstances ?? []) {
+          if (seen.has(mi) || !mi.visibleThisFrame) continue;
+          seen.add(mi);
+          let n = mi.node;
+          let top = null;
+          let machine = null;
+          while (n && n.parent) {
+            if (types.has(n.name)) machine = types.get(n.name);
+            if (!n.parent.parent) top = n.name;
+            n = n.parent;
+          }
+          if (!top) { out.batches++; continue; }
+          out.byTop[top] = (out.byTop[top] ?? 0) + 1;
+          if (machine) out.unbatchedByMachine[machine] = (out.unbatchedByMachine[machine] ?? 0) + 1;
         }
-      };
-      for (const c of g.app.root.children[0]?.children ?? []) void c;
-      // one top-level child at a time
-      const tops = [];
-      const collect = (e, depth) => { for (const c of e.children) { tops.push([c, depth]); if (depth < 1) collect(c, depth + 1); } };
-      collect(g.app.root, 0);
-      for (const [c, depth] of tops) {
-        if (!c.enabled) continue;
-        c.enabled = false;
-        await frame();
-        out[`${depth ? '  ' : ''}${c.name}`] = base - draws();
-        c.enabled = true;
-        await frame();
       }
-      void walk;
       return out;
     });
     console.log('  diag:', JSON.stringify(results.diag, null, 1));
