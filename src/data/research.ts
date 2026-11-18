@@ -5,6 +5,7 @@
 import type { MaterialId } from '../core/types';
 import type { ItemCost } from './crafting';
 import type { RegionId } from './oldcity';
+import { DAY_SECONDS } from './time';
 
 export type Branch = 'bloombot' | 'power' | 'water' | 'farm' | 'drones' | 'decor';
 
@@ -82,9 +83,8 @@ export interface ResearchUpgradeDef {
 }
 
 export const RESEARCH = {
-  /** a game day in sim seconds (48 minutes of play). E23.7's data/time owns the clock: this reads its value once
-   *  #493 lands on e23-integration (until then the same 2880). */
-  daySeconds: 2880,
+  /** a game day in sim seconds (48 minutes of play), from E23.7's clock (data/time) */
+  daySeconds: DAY_SECONDS,
   /** stations at the start; research adds a second */
   stations: 1,
   maxStations: 2,
