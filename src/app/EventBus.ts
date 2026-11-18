@@ -10,6 +10,10 @@ export interface GameEvents {
   /** E23.2.2: the wheel picked a load; a load just ran out (the next pulse fires empty); a pulse's reveal ripple. */
   'pulse.load': { load: import('../data/pulse').PulseLoadId };
   'pulse.loadEmpty': { load: import('../data/pulse').PulseLoadId };
+  /** E23.2.3: an old bench mended; bloombot sat down (on a bench, or to meditate at a charger); stood up. */
+  'bench.mended': { benchId: string; x: number; z: number };
+  'rest.sat': { kind: 'bench' | 'charger' };
+  'rest.stood': Record<string, never>;
   'tile.planted': { tile: TileData; plant: import('../core/types').PlantKind };
   'pulse.ripple': { tileId: string; targets: import('../gameplay/PulseLoad').RippleTarget[] };
   /** E21.1: the backpack or the store changed (`material` unset = several at once). */

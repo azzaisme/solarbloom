@@ -36,6 +36,7 @@ import { KeeperSystem } from './KeeperSystem';
 import { LandmarkSystem } from './LandmarkSystem';
 import { ChargeSystem } from './Charge';
 import { PulseLoad } from './PulseLoad';
+import { RestSystem } from './Rest';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -86,6 +87,8 @@ export class Sim {
   readonly charge: ChargeSystem;
   /** E23.2.2: what the pulse is loaded with, and its reveal ripple (old-city rules). */
   readonly pulseLoad: PulseLoad;
+  /** E23.2.3: benches and meditating at chargers. */
+  readonly rest: RestSystem;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -132,6 +135,7 @@ export class Sim {
     this.inventory = new Inventory(this);
     this.charge = new ChargeSystem(this);
     this.pulseLoad = new PulseLoad(this);
+    this.rest = new RestSystem(this);
     this.landmarks = new LandmarkSystem(this);
     this.salvage = new SalvageSystem(this);
     this.gates = new GateSystem(this);
@@ -258,6 +262,7 @@ export class Sim {
     this.roles.tick(dt);
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
+    this.rest.tick(dt);
     this.charge.tick(dt);
     this.cat.tick();
     this.progression.tick();

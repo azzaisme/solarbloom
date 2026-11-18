@@ -51,6 +51,13 @@ export class BloombotVisuals {
   reducedMotion = false;
   /** true once the real model is drawn */
   loaded = false;
+  /** the model's holder (the seated poses move it) */
+  private holder?: pc.Entity;
+  /**
+   * E23.2.3: a seated pose. 'sit': up on a bench seat, leaning back a little; 'meditate': settled low on the
+   * ground, eyes closed, breathing slowly. Procedural until the cross-legged clip lands (an art pass).
+   */
+  private pose?: 'sit' | 'meditate';
 
   constructor(
     private app: pc.AppBase,
@@ -89,6 +96,7 @@ export class BloombotVisuals {
     // scale a holder around it instead.
     const holder = new pc.Entity('bloombot-model');
     holder.setLocalScale(SCALE, SCALE, SCALE);
+    this.holder = holder;
     const e = res.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
     holder.addChild(e);
     this.root.addChild(holder);
@@ -161,6 +169,34 @@ export class BloombotVisuals {
     this.root.setEulerAngles(0, (facing * 180) / Math.PI, 0);
   }
 
+  /** E23.2.3: sit on a bench, meditate at a charger, or stand (undefined). */
+  setPose(pose: 'sit' | 'meditate' | undefined) {
+    this.pose = pose;
+    if (pose === 'meditate') this.setFace('blink', 1e9);
+    else if (this.face === 'blink') this.setFace('happy');
+    if (!pose) {
+      this.holder?.setLocalPosition(0, 0, 0);
+      this.holder?.setLocalEulerAngles(0, 0, 0);
+      this.standIn?.setLocalPosition(0, 0.4, 0);
+    }
+  }
+
+  private posed() {
+    const h = this.holder;
+    const breathe = this.reducedMotion ? 0 : Math.sin(this.clock * 1.6);
+    if (this.pose === 'sit') {
+      h?.setLocalPosition(0, 0.2, -0.1);
+      h?.setLocalEulerAngles(-8, 0, 0);
+      this.standIn?.setLocalPosition(0, 0.6, -0.1);
+    } else if (this.pose === 'meditate') {
+      h?.setLocalPosition(0, -0.14 + breathe * 0.012, 0);
+      h?.setLocalEulerAngles(4, 0, 0);
+      this.standIn?.setLocalPosition(0, 0.26, 0);
+    }
+    const anim = this.model?.anim;
+    if (anim && !this.action) anim.speed = this.pose === 'meditate' ? 0.35 : 0.6;
+  }
+
   /** The looping clip, from how fast bloombot moves (world units per second) and whether it hovers (sprint). */
   setMotion(speed: number, hovering: boolean) {
     const want: BotLoop = speed < 0.05 ? 'idle' : hovering ? 'hover' : 'walk';
@@ -194,6 +230,7 @@ export class BloombotVisuals {
 
   update(dt: number) {
     this.clock += dt;
+    if (this.pose) this.posed();
     // Faces: an expression times out back to happy; now and then a blink.
     if (this.faceUntil && this.clock >= this.faceUntil) this.setFace('happy');
     if (this.clock >= this.blinkAt) {

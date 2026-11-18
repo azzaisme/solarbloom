@@ -2,14 +2,14 @@
  * E22.2 (#339): one prompt, one obvious action. Interact acts on a single target, chosen by a fixed priority
  * (docs/E22_CONTROLS_UI.md, decision 3) and, within a kind, nearest first:
  *
- *   Lucky Cat → Keeper → salvage pile → cache or page → gate, ladder or perch → door → storage → landmark or
+ *   Lucky Cat → Keeper → salvage pile → cache or page → gate, ladder or perch → door → storage → bench (E23.2.3) → landmark or
  *   fountain → machine → decoration → plot → nothing.
  *
  * The game gathers what is within reach and in front of bloombot (`Candidate`s); `pickTarget` chooses. Pure, so
  * the priority can be tested pair by pair. E21's kinds (Keepers, salvage, caches, doors, storage) slot in by
  * adding candidates of their kind; nothing here changes.
  */
-export const PRIORITY = ['cat', 'keeper', 'salvage', 'cache', 'gate', 'door', 'storage', 'landmark', 'machine', 'decoration', 'plot'] as const;
+export const PRIORITY = ['cat', 'keeper', 'salvage', 'cache', 'gate', 'door', 'storage', 'bench', 'landmark', 'machine', 'decoration', 'plot'] as const;
 export type TargetKind = (typeof PRIORITY)[number];
 
 /** How long a hold takes, in seconds, for the actions that are holds (decision 4). */

@@ -63,6 +63,8 @@ export class BotController {
   padCapture?: (button: number) => boolean;
   /** any gamepad button press, by index (the rebinding screen listens here) */
   onButton?: (button: number) => void;
+  /** E23.2.3: sitting (a bench, a charger): drawn here instead of at its pose, and input doesn't move it */
+  seat?: { x: number; y: number; z: number; facing: number };
   /** true while input must not move bloombot (cinematics, open modal, paused) */
   frozen = () => false;
 
@@ -219,6 +221,17 @@ export class BotController {
         this.follow(x, y, z);
         return;
       }
+    }
+    if (this.seat) {
+      const st = this.seat;
+      this.walk = undefined;
+      this.speed = 0;
+      this.sprinting = false;
+      this.visuals.place(st.x, st.y, st.z, st.facing);
+      this.visuals.setMotion(0, false);
+      this.visuals.update(dt);
+      this.follow(st.x, st.y, st.z);
+      return;
     }
     const frozen = this.frozen();
     if (mag < 0.01 && !this.walk) this.sprintLatched = false; // a toggled sprint ends when bloombot stops

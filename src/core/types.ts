@@ -435,6 +435,8 @@ export interface GameState {
    * production, chains, milestones or pacing). Optional and sparse, so no save version change.
    */
   cozy?: CozyState;
+  /** E23.2.3: old park benches mended, by id (`bench:x:z`). Optional, so no save version change. */
+  rest?: { mended: string[] };
   /** E23.2.2: what the pulse is loaded with (absent = nothing). Optional, so no save version change. */
   pulseLoad?: 'none' | 'seeds' | 'rare' | 'fertiliser';
   /** E23.2.1: bloombot's charge (old-city rules; absent = full). Optional, so no save version change. */

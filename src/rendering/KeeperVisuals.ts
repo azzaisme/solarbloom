@@ -46,6 +46,8 @@ export class KeeperVisuals {
   private root: pc.Entity;
   private clock = 0;
   reducedMotion = false;
+  /** E23.2.3: a Keeper who is a friend sits beside bloombot on a bench (world position, facing) */
+  beside?: { id: string; x: number; y: number; z: number; facing: number };
 
   constructor(
     private sim: Sim,
@@ -220,6 +222,14 @@ export class KeeperVisuals {
             }
           }
         } else this.play(v, waving ? 'wave' : 'idle', waving ? 'interact' : 'idle');
+      }
+      const b = this.beside?.id === def.id ? this.beside : undefined;
+      if (b) {
+        // sitting beside bloombot: up on the bench, idling (it walks back to where it was afterwards)
+        if (step !== 'asleep') this.play(v, 'idle');
+        v.root.setPosition(b.x, b.y, b.z);
+        v.root.setEulerAngles(0, (b.facing * 180) / Math.PI, 0);
+        continue;
       }
       v.root.setPosition(v.x, this.y(v.x, v.z), v.z);
       v.root.setEulerAngles(0, (v.facing * 180) / Math.PI, 0);
