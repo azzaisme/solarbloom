@@ -1,54 +1,67 @@
+import { POWER } from '../data/power';
 import type { Sim } from './Sim';
 
 /**
- * E23.3: what the grid needs to know about the sky. This is the ONE place power reads time of day and weather,
- * so E23.7's clock and weather plug in here.
+ * E23.3: what the grid needs to know about the sky. This is the ONE place power reads time of day and weather.
  *
- * Until E23.7 lands it reads, if present, `sim.clock?.dayFraction()` (0..1, 0 = midnight) and
- * `sim.weather?.current()` (a kind string). With neither, it is always a clear, still day (the world has no
- * night yet), so the grid behaves exactly as before.
+ * It reads E23.7's handles when they exist (see e23-time's clock API):
+ *   sim.clock.solarFactor()  0..1, night 0, includes the weather's solar share
+ *   sim.clock.daylight()     0..1
+ *   sim.clock.dayFraction()  0 dawn .. 2/3 dusk .. 1 (fallback for daylight)
+ *   sim.weather.kind()       'sunny' | 'cloudy' | 'rain' | 'wind' | 'storm' | 'fog'
+ *   sim.weather.wind()       0..1, the turbine share
+ * With neither, it is always a clear day (E21 has no night) with a steady breeze, so the grid behaves as before.
  */
 export interface PowerSky {
-  /** 0 (night) .. 1 (full sun), before cloud. */
+  /** 0 (night) .. 1 (full daylight). */
   sun: number;
-  /** The sky is overcast (cloud, rain, storm, fog): solar −20%. */
+  /** A solar panel's share of its full output right now (daylight × weather: cloud −20%). */
+  solar: number;
+  /** The sky is overcast (cloud, rain, storm, fog). */
   cloudy: boolean;
-  /** 0 (still) .. 1 (storm). */
+  /** 0 (still) .. 1 (storm): a turbine's share of its full output, before height and region. */
   wind: number;
-  /** Lights should be on (dusk to dawn, or fog and storms), 0..1 so lights fade in and out with the sun. */
+  /** How much lights should be on, 0..1: dusk to dawn, or in fog and storms (lights fade with the sun). */
   dark: number;
 }
 
 interface ClockLike {
+  solarFactor?: () => number;
+  daylight?: () => number;
   dayFraction?: () => number;
 }
 interface WeatherLike {
-  current?: () => string | { kind?: string; wind?: number } | undefined;
+  kind?: () => string | undefined;
+  wind?: () => number | undefined;
 }
 
-const CLOUDY = new Set(['cloud', 'cloudy', 'overcast', 'rain', 'drizzle', 'storm', 'fog', 'mist']);
-const WIND: Record<string, number> = { windy: 0.75, gale: 0.9, storm: 1, rain: 0.35, cloudy: 0.25, cloud: 0.25, clear: 0.15, sunny: 0.1, fog: 0, mist: 0 };
-const GLOOMY = new Set(['fog', 'mist', 'storm']);
+const CLOUDY = new Set(['cloud', 'cloudy', 'overcast', 'rain', 'storm', 'fog']);
+/** Wind by weather kind when the weather gives no number: turbines turn on windy days and in storms (a little in rain). */
+const WIND: Record<string, number> = { wind: 0.75, windy: 0.75, storm: 1, rain: 0.3 };
+const GLOOMY = new Set(['fog', 'storm']);
 
-/** Daylight 0..1 from a day fraction: dark before 0.25 (6:00) and after 0.79 (19:00), ramps over ~45 min of clock. */
+/** Daylight 0..1 from E23.7's day fraction (0 dawn, 2/3 dusk, 1 the next dawn), easing over a short twilight. */
 export function sunAt(f: number): number {
-  const ramp = 0.03;
-  const rise = 0.25;
-  const set = 0.79;
   const x = ((f % 1) + 1) % 1;
-  if (x <= rise - ramp || x >= set + ramp) return 0;
-  if (x < rise + ramp) return (x - (rise - ramp)) / (2 * ramp);
-  if (x > set - ramp) return ((set + ramp) - x) / (2 * ramp);
+  const dusk = 2 / 3;
+  const ramp = 0.03;
+  if (x < ramp) return 0.5 + (0.5 * x) / ramp;
+  if (x > 1 - ramp) return (0.5 * (x - (1 - ramp))) / ramp;
+  if (x >= dusk + ramp) return 0;
+  if (x > dusk - ramp) return (dusk + ramp - x) / (2 * ramp);
   return 1;
 }
 
 export function readSky(sim: Sim): PowerSky {
   const s = sim as unknown as { clock?: ClockLike; weather?: WeatherLike };
-  const f = s.clock?.dayFraction?.();
-  const sun = f === undefined ? 1 : sunAt(f);
-  const w = s.weather?.current?.();
-  const kind = typeof w === 'string' ? w : (w?.kind ?? 'clear');
-  const wind = typeof w === 'object' && w && typeof w.wind === 'number' ? w.wind : (WIND[kind] ?? 0.15);
-  const gloom = GLOOMY.has(kind) ? 1 : 0;
-  return { sun, cloudy: CLOUDY.has(kind), wind, dark: Math.max(1 - sun, gloom) };
+  const c = s.clock;
+  const w = s.weather;
+  const kind = w?.kind?.() ?? 'sunny';
+  const cloudy = CLOUDY.has(kind);
+  const f = c?.dayFraction?.();
+  const sun = c?.daylight?.() ?? (f === undefined ? 1 : sunAt(f));
+  // E23.7's solar factor already includes the weather; without it, apply cloud here.
+  const solar = c?.solarFactor?.() ?? sun * (cloudy ? POWER.solar.cloudFactor : 1);
+  const wind = !w ? POWER.fallbackWind : (w.wind?.() ?? WIND[kind] ?? 0);
+  return { sun, solar, cloudy, wind, dark: Math.max(1 - sun, GLOOMY.has(kind) ? 1 : 0) };
 }

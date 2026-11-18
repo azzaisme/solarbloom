@@ -27,6 +27,8 @@ export const POWER = {
   solar: { output: 4, cloudFactor: 0.8 },
   /** Wind turbine (E23.3.2.2): output at full wind. */
   wind: { output: 10 },
+  /** Wind (0..1) while there is no weather system yet (before E23.7 lands): a steady breeze. */
+  fallbackWind: 0.4,
   /** Battery (E23.3.2.1): stores surplus and covers deficits, up to `rate` either way. */
   battery: { capacity: 4000, rate: 20 },
   /** Starting draws per shed class (consumers may override with their own draw). */
