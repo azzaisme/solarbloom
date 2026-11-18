@@ -107,10 +107,10 @@ try {
   check(left.seeds === 5 && left.rareSeed === 1 && left.fertiliser === 1, 'each pulse used one unit of its load');
   await page.evaluate((c) => {
     const g = window.solarbloom;
-    g.bot.teleport('g', c.x, c.z + 3);
+    g.bot.teleport('g', c.x, c.z + 8); // out of the way, behind the camera
     g.camera.turnTo(0, true); // looking along the row's normal: the three plots left to right
     g.bot.following = false;
-    g.camera.focus(c.x + 0.5, 0, c.z + 0.5, 2.2, 0.01);
+    g.camera.focus(c.x + 0.5, 0, c.z + 0.5, 1.1, 0.01);
   }, grown[1]);
   await page.waitForTimeout(2500);
   await shot(page, '04-loads-grown', 'left to right: a wildflower meadow (seeds), the region\'s rare flowers, a young tree in shrubs over a bigger patch (fertiliser)');
@@ -138,6 +138,7 @@ try {
       for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
         const t = g.sim.grid.get('g', f.x + dx, f.z + dz);
         if (!t || t.blocked || t.occupantId) continue;
+        g.bot.following = true;
         g.bot.teleport('g', f.x + dx, f.z + dz);
         g.bot.pose.x = f.x + dx + 0.5;
         g.bot.pose.z = f.z + dz + 0.5;
