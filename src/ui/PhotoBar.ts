@@ -43,16 +43,16 @@ export class PhotoBar {
     const tog = (a: Action, label: string, on: boolean) => `<button data-photo="${a}" aria-pressed="${on}">${label}${k(a)}</button>`;
     const pad = this.keyFor('up') === '—'; // the pad moves and zooms with its sticks
     const move = pad ? 'left stick' : `${this.keyFor('up')}${this.keyFor('left')}${this.keyFor('down')}${this.keyFor('right')}`;
-    const zoom = pad ? 'right stick' : `${this.keyFor('zoomIn')} ${this.keyFor('zoomOut')} or the wheel`;
+    const zoom = pad ? 'right stick' : 'the mouse wheel';
     const html =
       `<span class="pb-title">Photo mode</span>` +
       `<button data-photo="pulse">Save picture${k('pulse')}</button>` +
       tog('interact', 'Hide bloombot', s.hideBot) +
-      tog('tray', 'Freeze the garden', s.freeze) +
-      tog('frenzy', 'Depth of field', s.dof) +
+      tog('buildMenu', 'Freeze the garden', s.freeze) +
+      tog('harvest', 'Depth of field', s.dof) +
       `<button data-photo="backpack">Hide this bar${k('backpack')}</button>` +
       `<button data-photo="cancel">Leave${k('cancel')}</button>` +
-      `<span class="pb-help">Move ${move} · zoom ${zoom} · tilt ${this.keyFor('prevTool')} ${this.keyFor('nextTool')} · turn with a right-button drag or the right stick</span>`;
+      `<span class="pb-help">Move ${move} · zoom ${zoom} · tilt ${this.keyFor('rotateBack')} ${this.keyFor('rotate')} · turn with a right-button drag or the right stick</span>`;
     if (html !== this.shown) {
       this.el.innerHTML = html;
       this.shown = html;

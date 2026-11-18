@@ -1,7 +1,7 @@
 // Desktop wrapper for the Steam Deck build (#243): shows the built game (dist/) full screen.
 // The game is served from app://solarbloom/ instead of file://, so its fetches (models, textures) work and the
 // save in localStorage always belongs to the same origin.
-const { app, BrowserWindow, ipcMain, net, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, net, powerMonitor, protocol } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -38,6 +38,7 @@ ipcMain.on('sb:save-set', (e, key, value) => {
     e.returnValue = String(err && err.message ? err.message : err);
   }
 });
+ipcMain.on('sb:quit', () => app.quit());
 ipcMain.on('sb:save-remove', (e, key) => {
   try {
     fs.rmSync(saveFile(key), { force: true });
@@ -70,6 +71,9 @@ app.whenReady().then(() => {
     if (!url.startsWith('app://solarbloom/')) e.preventDefault();
   });
   win.loadURL('app://solarbloom/');
+  // E22.11: the game pauses while the Deck (or computer) sleeps.
+  powerMonitor.on('suspend', () => win.webContents.send('sb:power', 'suspend'));
+  powerMonitor.on('resume', () => win.webContents.send('sb:power', 'resume'));
 });
 
 app.on('window-all-closed', () => app.quit());

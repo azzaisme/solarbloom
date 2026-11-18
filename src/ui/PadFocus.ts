@@ -2,9 +2,9 @@
  * Bloombot (G.7): gamepad navigation for the HUD's panels. While a panel is open and the pad is in use, the
  * d-pad moves a visible focus ring between its buttons and controls (spatially: the nearest one in that
  * direction), A presses the focused one, and B is left to Cancel (which closes the panel). With no panel open
- * the d-pad keeps its game actions. On the hotbar, d-pad down from the game focuses the tools.
+ * the d-pad keeps its game actions (E22.1: the hotbar is for the keyboard; the pad builds from the build menu).
  */
-const PANELS = ['#modal.open', '#ocPanel.open', '#intro:not([hidden])', '#catPanel:not([hidden])', '#upgrades.open', '#plotPicker.open', '#backpack.open', '#buildTray.open', '#inspect.open'] as const;
+const PANELS = ['#settings.open', '#menu.open', '#ocPanel.open', '#intro:not([hidden])', '#catPanel:not([hidden])', '#upgrades.open', '#plotPicker.open', '#backpack.open', '#buildTray.open', '#inspect.open'] as const;
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]';
 const DIRS: Partial<Record<number, [number, number]>> = { 12: [0, -1], 13: [0, 1], 14: [-1, 0], 15: [1, 0] };
 
@@ -30,14 +30,7 @@ export class PadFocus {
    * nothing open focuses the hotbar.
    */
   button(i: number): boolean {
-    let panel = this.panel();
-    if (!panel && i === 13) {
-      panel = this.root.querySelector<HTMLElement>('#hotbar') ?? undefined;
-      const items = panel ? this.items(panel) : [];
-      const first = items.find((e) => e.classList.contains('on')) ?? items[0];
-      first?.focus({ focusVisible: true } as FocusOptions);
-      return !!first;
-    }
+    const panel = this.panel();
     if (!panel) return false;
     const items = this.items(panel);
     const cur = items.includes(document.activeElement as HTMLElement) ? (document.activeElement as HTMLElement) : undefined;
@@ -84,7 +77,10 @@ export class PadFocus {
       const along = vx * dx + vy * dy;
       if (along <= 2) continue;
       const across = Math.abs(vx * dy - vy * dx);
-      const score = along + across * 2.5;
+      // E22.4: in a table, left and right stay on the row (and up and down in the column) when anything does:
+      // something in the same band beats anything off it, however near.
+      const band = dx ? b.top < a.bottom - 2 && b.bottom > a.top + 2 : b.left < a.right - 2 && b.right > a.left + 2;
+      const score = band ? along : along + across * 2.5 + 10000;
       if (score < bestScore) {
         bestScore = score;
         best = e;

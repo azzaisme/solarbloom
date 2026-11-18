@@ -9,11 +9,11 @@ import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
 import type { BuildableType, DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
-import { TIERS } from '../data/salvage';
+import { MACHINES, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
+import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
 import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, REGIONS } from '../data/oldcity';
-import { seaCell } from '../core/OldCityLayout';
-import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE, TIER2, TIER3, machineIcon, machineName } from '../data/machines';
+import { seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
@@ -70,7 +70,14 @@ import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
 import type { MergePlan } from '../gameplay/MergeSystem';
 import { EventBus } from './EventBus';
 import { BotController } from './BotController';
-import { type Action, Bindings, BUILD_DIGITS, keyLabel, padLabel } from './Bindings';
+import { type Action, Bindings, type Context, FIXED_KEY, keyLabel, migrateBindings, SLOTS } from './Bindings';
+import { isOldCity, rulesViewFromUrl } from './Rules';
+import { type Candidate, holdFor, pickTarget, promptText } from './Interact';
+import type { PromptModel } from '../ui/Prompt';
+import { Pause, runSimFrame } from './Pause';
+import { Menu, type MenuHeader, type MenuItem } from '../ui/Menu';
+import { type SettingKey, SettingsScreen } from '../ui/SettingsScreen';
+import { settingsRows } from '../ui/SettingsRows';
 import { BloombotVisuals } from '../rendering/BloombotVisuals';
 import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
@@ -85,6 +92,9 @@ import { type LoadResult, SaveService } from './SaveService';
 import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
 import { padStick, PhotoMode } from './PhotoMode';
 import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
+import { HOTBAR_DEFAULT } from '../ui/Hotbar';
+import { actionGlyph, GlyphTracker, padName, type PadStyle } from '../ui/Glyphs';
+import { ControlsTable } from '../ui/ControlsTable';
 import { LOOK } from '../data/look';
 
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Thriving (full bloom)', 'Radiant'];
@@ -92,6 +102,8 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 /** Bloombot: the camera zoom of the close default view (G.3), and how near counts as "within reach". */
 const BOT_ZOOM = 3.2;
+/** E22.1: while a panel is open, these walking actions still reach the game (they close the panel they opened). */
+const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'upgrades', 'menu']);
 /**
  * E19.2 (#245, "Building and placing"): build mode is Satisfactory-style. With something to build in hand (a
  * machine, a core, a decoration) the camera stays in the close view; a hologram sits where you aim, snapped to the
@@ -109,6 +121,15 @@ const BOT_REACH = 1.6;
 const newGameRules = () => (typeof location !== 'undefined' && new URLSearchParams(location.search).get('rules') === 'classic' ? 'classic' : 'oldcity');
 const botMode = () => typeof location === 'undefined' || new URLSearchParams(location.search).get('cursor') !== '1';
 type ActResult = 'pulse' | 'build' | 'select' | 'wake' | 'none';
+
+/** E22.2: an Interact target with what it does, where it is, and the outline to draw round it. */
+interface InteractTarget extends Candidate {
+  run: () => void;
+  /** E21: a hold the Old City controller runs itself (salvage 0.6 s, pry 2 s) */
+  ocHold?: number;
+  at?: TileData;
+  frame?: { roofId: string; x: number; z: number; size: number };
+}
 
 interface Pick {
   roofId: string;
@@ -184,9 +205,21 @@ export class Game {
   readonly sfx = new Sfx();
   settings: Settings;
 
-  private acc = 0;
-  paused = false;
-  private hiddenPause = false;
+  /** simulated seconds not yet ticked (runSimFrame) */
+  acc = 0;
+  /** E22.11: one pause with reasons (menu, panel, blur, sleep, padLost); nothing in the world moves while set */
+  readonly pause = new Pause();
+  get paused(): boolean {
+    return this.pause.paused;
+  }
+  /** Tools and tests freeze the game this way (no menu). */
+  set paused(v: boolean) {
+    this.pause.set('menu', v);
+  }
+  /** E22.11: the in-game menu and the shared Settings screen */
+  menu!: Menu;
+  settingsUi!: SettingsScreen;
+  private padFocus?: PadFocus;
   /** City 06.5: simulated seconds still owed after a hitch or a hidden tab, run within the frame budget. */
   catchUpDebt = 0;
   private hiddenAt = 0;
@@ -205,7 +238,9 @@ export class Game {
   private previewFromBot = false;
   private botPreviewAt = 0;
   private botPreviewKey = '';
-  private keyMapShown: 'keys' | 'pad' = 'keys';
+  private keyMapShown = '';
+  /** E22.3: which glyph set is on screen (the setting, the last device used, the pad's family) */
+  readonly glyphs = new GlyphTracker();
   /** Bloombot (G.16): the controls map, rebindable in Settings */
   readonly bindings = new Bindings();
   /** Bloombot (G.14): the round map at the bottom left */
@@ -240,6 +275,7 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement, lr: LoadResult = new SaveService().loadResult()) {
     this.settings = loadSettings();
+    rulesViewFromUrl();
     const loaded = lr.state;
     // E21: a new game plays the Old City; `?rules=classic` (dev) starts a classic one. A loaded save keeps its own rules.
     const state = loaded ?? createInitialState(undefined, newGameRules());
@@ -359,15 +395,10 @@ export class Game {
           if (f) this.botWake(f);
           else this.sim.progression.activateCore();
         },
-        newGame: () => this.newGame(),
-        photoMode: () => this.photo.enter(),
-        setSetting: (k, v) => this.setSetting(k, v),
         activateFrenzy: () => this.sim.frenzy.activate(),
         findCat: () => this.findCat(),
         keyFor: (a) => this.hudKey(a),
         goHome: (attention) => (attention ? this.focusNextArea() : this.focusArea(PARK)),
-        setVolume: (k, v) => this.setVolume(k, v),
-        setGraphics: (v) => this.setGraphics(v),
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
         inspectAt: (id) => {
@@ -398,7 +429,6 @@ export class Game {
           this.renderInspect();
         },
         merge: (action) => (action === 'start' ? this.startMerge() : action === 'confirm' ? this.confirmMerge() : this.cancelMerge()),
-        togglePause: () => this.setPaused(!this.paused),
         districtBloom: (id, replay) => this.playDistrictBloom(id, replay),
         openArea: (id) => this.openArea(id),
         setAreaMode: (id, mode) => {
@@ -420,15 +450,14 @@ export class Game {
           if (this.bot) this.botWake(m);
           else this.wakeLandmark(m);
         },
-        cycleSpeed: () => {
-          this.speed = this.speed === 1 ? 2 : this.speed === 2 ? 3 : 1;
-          this.hud.toast(this.speed === 1 ? '▶ Normal speed' : `⏩ ${this.speed}× speed`, '', 1.4);
-          return this.speed;
-        },
       },
       this.settings,
     );
     this.fly = new FlyText(this.hud.root);
+    this.createMenu();
+    // E22.10: old-city rules strip the walking view to the place: plain words, two gauges, one objective.
+    this.hud.oldCity = isOldCity(state);
+    document.body.classList.toggle('oldcity', this.hud.oldCity);
     this.eco = new EcoBadge(this.sim, (h, k, t) => this.hud.toast(h, k, t));
     this.hud.setTool('pulse');
     this.applySettings();
@@ -456,7 +485,14 @@ export class Game {
     if (botMode()) {
       const visuals = new BloombotVisuals(this.app, this.scene.world);
       visuals.reducedMotion = !!this.settings.reducedMotion;
-      Object.assign(this, { bindings: new Bindings({ keys: this.settings.keys, pad: this.settings.pad }) });
+      // E22.1: bindings saved before the new map are reset once, with a notice.
+      const st = this.settings;
+      const mig = migrateBindings(st.keys || st.pad ? { v: st.bindingsV, keys: st.keys, pad: st.pad } : undefined);
+      Object.assign(this, { bindings: new Bindings(mig.saved, { oldCity: isOldCity(state) }) });
+      if (mig.reset) {
+        this.saveBindings(false);
+        setTimeout(() => this.hud.toast('Controls were updated. Your custom keys were reset.', '', 6), 900);
+      }
       const bot = new BotController(this.sim, this.camera, visuals, this.bindings);
       this.bot = bot;
       this.overlays.holo.eye = (out) => visuals.eyeWorld(out);
@@ -465,27 +501,44 @@ export class Game {
       bot.frozen = () => this.cinematic || this.paused || this.hud.modalOpen || visuals.busy === 'assemble' || !!this.photo?.active || !!this.oc?.busy;
       // E21.22: the right stick's up and down tilts the view (it zooms only in photo mode)
       bot.onZoom = (f) => (this.photo?.active ? this.photo.zoom(f) : this.camTurn(0, -(Math.log(f) / Math.log(1.8)) * 60));
-      bot.onPad = (a) => this.doAction(a);
-      bot.onButton = (i) => this.padListener?.(i);
+      bot.onPad = (i) => {
+        const a = this.resolveButton(i);
+        if (a && a !== 'sprint') this.doAction(a);
+      };
+      // E22.4: the rebinding screen takes the next press; that press then does nothing else.
+      bot.onButton = (i) => {
+        if (!this.padListener) return;
+        this.padListener(i);
+        this.swallowPad = i;
+      };
       if (this.sim.oldCity) {
         this.hud.root.dataset.rules = 'oldcity'; // E21.12: the intro card's Old City words
         this.keepers = new KeeperVisuals(this.sim, this.scene.world, this.app);
         this.keepers.reducedMotion = !!this.settings.reducedMotion;
         this.oc = new OldCityController(this.oldCityHost());
+        this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
+        // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
+        this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
       }
       const focus = new PadFocus(this.hud.root);
-      bot.padCapture = (i) => !this.padListener && focus.button(i);
-      // E19.2: no zoom in play or while building (the right stick's up and down do nothing for now)
+      this.padFocus = focus;
+      bot.padCapture = (i) => {
+        if (this.swallowPad === i) {
+          this.swallowPad = undefined;
+          return true;
+        }
+        return !this.padListener && focus.button(i);
+      };
       bot.onTurn = (deg) => this.camTurn(deg, 0);
       // E21.22: the exploration camera (pitch the player's, 0.15 s smoothing, never below the ground)
       this.camera.explore = true;
       if (this.sim.oldCity) this.chunks.fadeTo = 0.3; // E21.22: buildings between the camera and bloombot fade to 30%
       this.camera.ground = (x, z) => this.groundY(x, z);
+      this.glyphs.deckBuild = !!desktopApi()?.deck;
       this.hud.setKeyMap('keys', this.bindings);
       // G.17: phones and tablets are not supported for now (bloombot needs keys or a gamepad).
       const touchOnly = typeof matchMedia !== 'undefined' && !matchMedia('(any-pointer: fine)').matches && navigator.maxTouchPoints > 0;
       if (touchOnly) setTimeout(() => this.hud.toast('Solarbloom needs a keyboard or a gamepad for now<small>Phones and tablets will be supported again later. Connect a controller to play.</small>', 'gold', 12), 900);
-      this.hud.renderControls(this.bindings, (kind, done) => this.listenForBinding(kind, done), () => this.saveBindings());
       this.minimap = new Minimap(this.sim, this.hud.root, (id) => {
         const m = this.sim.state.machines.find((q) => q.id === id);
         return !!m && this.landmarkReady(m);
@@ -506,13 +559,14 @@ export class Game {
       },
       // Bloombot: while the camera follows it, zoom about the middle of the view (bloombot), not the cursor.
       // Bloombot: a right-button drag turns the view around bloombot (a third of a degree per pixel).
-      orbit: (dx, dy) => {
-        if (!this.bot || this.cinematic) return false;
-        this.camTurn(-dx * 0.35, dy * 0.25); // E21.22: right-button drag turns and tilts the view
+      orbit: (dx, dy, button) => {
+        if (!this.bot || this.cinematic || !this.bindings.keys.look.includes(`Mouse${button}`)) return false;
+        this.camTurn(-dx * 0.35, dy * 0.25); // E21.22: dragging with the look button turns and tilts the view
         return true;
       },
       // Bloombot: the camera's distance is fixed; the wheel turns what you're building (E19.2).
-      zoom: (f, x, y) => (this.photo?.active ? this.photo.zoom(f) : this.bot ? this.wheelTurn(f) : this.camera.zoomBy(f, x, y)),
+      // E22.1: in build mode the wheel turns the piece (and the camera's zoom waits); otherwise it zooms.
+      zoom: (f, x, y) => (this.photo?.active ? this.photo.zoom(f) : this.bot ? this.wheel(f) : this.camera.zoomBy(f, x, y)),
       // A quick, strong pinch-out snaps to the city overview (one gesture from anywhere).
       pinchEnd: (f, ms) => {
         if (this.city && !this.cinematic && f < 0.6 && ms < 450) this.camera.glide(this.camera.target.x, 0, this.camera.target.z, this.camera.minZoom);
@@ -522,16 +576,36 @@ export class Game {
     const unlock = () => this.sfx.unlock();
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
+    // E22.11: a hidden page or a window without focus pauses the game (setting, on by default): the time away
+    // is not counted. With the setting off, a hidden tab catches up on return as before (City 06.5).
+    const pauseOnBlur = () => this.settings.pauseOnBlur !== false;
     document.addEventListener('visibilitychange', () => {
-      this.hiddenPause = document.hidden;
       if (document.hidden) {
-        this.hiddenAt = performance.now();
         this.saveNow();
-      } else if (this.hiddenAt) {
-        this.awayFor((performance.now() - this.hiddenAt) / 1000);
-        this.hiddenAt = 0;
+        if (pauseOnBlur()) this.pause.set('blur');
+        else this.hiddenAt = performance.now();
+      } else {
+        if (document.hasFocus()) this.pause.clear('blur');
+        if (this.hiddenAt) {
+          this.awayFor((performance.now() - this.hiddenAt) / 1000);
+          this.hiddenAt = 0;
+        }
       }
     });
+    window.addEventListener('blur', () => pauseOnBlur() && this.pause.set('blur'));
+    window.addEventListener('focus', () => this.pause.clear('blur'));
+    // The pad in use disconnected: open the menu (resuming clears it). The Deck going to sleep pauses too.
+    window.addEventListener('gamepaddisconnected', () => {
+      if (this.bot?.lastInput !== 'pad' || this.menu.isOpen) return;
+      this.openMenu();
+      this.pause.set('padLost');
+      this.menu.note('The controller was disconnected');
+    });
+    desktopApi()?.onPower?.((s) => this.pause.set('sleep', s === 'suspend'));
+    this.pause.onChange = (p) => {
+      document.body.classList.toggle('paused', p);
+      this.applyVolumes();
+    };
     window.addEventListener('beforeunload', () => this.saveNow());
 
     this.app.on('update', (dt: number) => this.update(dt));
@@ -542,7 +616,7 @@ export class Game {
     // Phase 4 E10.1: no blocking welcome card. The first pulse works at once; a short note says what this is.
     if (!state.progression.introSeen && state.stats.tilesRestored === 0 && !this.sim.oldCity) {
       state.progression.introSeen = true;
-      const how = `Walk with ${this.hudKey('up')}${this.hudKey('left')}${this.hudKey('down')}${this.hudKey('right')} and press ${this.hudKey('pulse')} to pulse the grey tile in front of you.`;
+      const how = `Walk with ${this.hudKey('up')} ${this.hudKey('left')} ${this.hudKey('down')} ${this.hudKey('right')}. Press ${this.hudKeys('pulse')} to pulse the grey tile in front of you, and ${this.hudKey('interact')} to interact.`;
       setTimeout(() => this.hud.toast(`🌱 Welcome to Solarbloom<small>This park is dead and grey. ${how}</small>`, 'gold', 6), 600);
     }
     else if (offline) {
@@ -674,7 +748,7 @@ export class Game {
   private setSetting(k: keyof Settings, v: boolean | string | number) {
     (this.settings as unknown as Record<string, unknown>)[k] = v;
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...this.settings, speed: undefined }));
     } catch {
       /* private mode */
     }
@@ -683,7 +757,7 @@ export class Game {
 
   private applySettings() {
     const s = this.settings;
-    this.sfx.setVolumes((s.sfxVolume ?? 100) / 100, (s.musicVolume ?? 100) / 100);
+    this.applyVolumes();
     this.sfx.setMuted(!s.sound);
     this.sfx.setMusic(s.music);
     document.body.classList.toggle('contrast', !!s.highContrast);
@@ -704,6 +778,8 @@ export class Game {
       this.app.resizeCanvas();
     }
     this.look.setTier(this.gfxTier);
+    // E22.11: the paused world dims; it blurs too except on the Low and Deck presets (dim only).
+    document.body.classList.toggle('no-blur', this.deck || this.gfxTier === 'low');
     this.hud.gfxTier = this.gfxTier;
     this.hud.gfxDeck = this.deck;
     this.hud.setUiScale(s.uiScale ?? 100);
@@ -739,6 +815,9 @@ export class Game {
     // E19.4.2 / E20.7: the calm HUD is the default; E19.4.3: the potter-about pace. Both presentation only.
     document.body.classList.toggle('calm', calmHud(s));
     document.body.classList.toggle('potter', potterPace(s));
+    document.body.classList.toggle('details', !!s.showNumbers); // E22.10: "Show details" adds figures to the gauges
+    this.glyphs.setting = s.glyphs ?? 'auto'; // E22.3
+    if (this.oc) this.oc.holdToAct = s.holdToAct !== false; // E22.2
     this.hud.settings = s;
     if (!s.debug) this.hud.setDebug(null);
   }
@@ -784,17 +863,192 @@ export class Game {
     location.reload();
   }
 
-  private setPaused(p: boolean) {
-    this.paused = p;
-    this.hud.setPaused(p);
-    this.hud.toast(p ? '⏸ Paused — the garden waits for you' : '▶ Back to blooming', '', 1.6);
+  /** Freezes or unfreezes the game without the menu (tools, screenshots). */
+  setPaused(p: boolean) {
+    this.pause.set('menu', p);
+  }
+
+  /** E22.11: volumes, with world sound off and the music down to a quiet bed while paused. */
+  private applyVolumes() {
+    const s = this.settings;
+    const quiet = this.pause.paused;
+    this.sfx.setVolumes(quiet ? 0 : (s.sfxVolume ?? 100) / 100, ((s.musicVolume ?? 100) / 100) * (quiet ? 0.3 : 1));
+  }
+
+  // ───────────────────────── E22.11: the menu and Settings ─────────────────────────
+
+  private createMenu() {
+    this.settingsUi = new SettingsScreen(this.hud.root, {
+      settings: this.settings,
+      set: (k, v) => this.changeSetting(k, v),
+      rows: (tab) => [
+        ...settingsRows(tab, { inGame: true, debug: !!this.settings.debug, autoLabel: this.autoLabel(), stats: this.hud.statsHtml() }),
+        // Until the title screen's save slots (E22.12), a new game starts from here, with a second press to confirm.
+        ...(tab === 'game' ? [{ kind: 'button' as const, id: 'newGame', label: this.newGameArmed > performance.now() ? 'Press again to clear your garden' : 'New game', danger: true }] : []),
+      ],
+      button: (id) => {
+        if (id !== 'newGame') return;
+        if (this.newGameArmed > performance.now()) return this.newGame();
+        this.newGameArmed = performance.now() + 4000;
+        this.settingsUi.refresh();
+      },
+      controls: (body) => this.renderControls(body),
+      onClose: () => {
+        this.cancelListen();
+        if (this.menu.isOpen) this.menu.focus('settings');
+      },
+    });
+    this.menu = new Menu(this.hud.root, { desktop: !!desktopApi()?.quit, header: () => this.menuHeader(), choose: (i) => this.menuChoose(i) });
+    this.hud.modalCheck = () => this.menu.isOpen || this.settingsUi.isOpen;
+  }
+
+  private newGameArmed = 0;
+
+  /** "Auto (High)", "Auto (Steam Deck)": what Auto picked, beside it in Settings › Display. */
+  private autoLabel(): string {
+    return this.deck ? 'Auto (Steam Deck)' : `Auto (${this.gfxTier[0].toUpperCase()}${this.gfxTier.slice(1)})`;
+  }
+
+  /** One change from the Settings screen. */
+  private changeSetting(k: SettingKey, v: boolean | number | string) {
+    if (k === 'speed') {
+      this.speed = Number(v) || 1;
+      this.settings.speed = this.speed;
+      return;
+    }
+    if (k === 'sfxVolume' || k === 'musicVolume') return this.setVolume(k, Number(v));
+    if (k === 'gfx') {
+      this.setGraphics(v as GfxSetting);
+      this.settingsUi.refresh();
+      return;
+    }
+    this.setSetting(k, v);
+    if (k === 'debug') {
+      if (!v) this.speed = 1; // fast-forward is a developer tool only
+      this.settingsUi.refresh();
+    }
+  }
+
+  /** Closes every panel and menu and puts the tool away (tests, scripted runs). */
+  closeAll() {
+    this.closeMenu();
+    this.hud.toggleTray(false);
+    this.hud.toggleBackpack(false);
+    this.hud.toggleUpgrades(false);
+    this.hud.closePlotPicker();
+    if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
+  }
+
+  /** E22.11: a full-screen panel pauses the game while it is open (also called the moment one closes, so the next
+   *  key press already reaches the game, however slow the frame). */
+  private syncPanelPause() {
+    this.pause.set('panel', this.hud.backpackOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
+  }
+
+  private openMenu() {
+    if (this.photo.active) this.photo.exit();
+    this.hud.toggleTray(false);
+    this.hud.hideTip();
+    this.menu.open();
+    this.pause.set('menu');
+  }
+
+  private closeMenu() {
+    this.settingsUi.close();
+    this.menu.close();
+    this.pause.clear('menu', 'padLost');
+    this.syncPanelPause();
+  }
+
+  /** Esc with nothing open, or Menu on the pad. */
+  private toggleMenu() {
+    if (this.menu.isOpen || this.settingsUi.isOpen) this.closeMenu();
+    else this.openMenu();
+  }
+
+  private menuHeader(): MenuHeader {
+    const st = this.sim.state as unknown as { clock?: { day?: number }; day?: number };
+    return { name: this.saveName, region: this.regionName(), day: st.clock?.day ?? st.day, played: this.sim.time };
+  }
+
+  /** E22.12 names saves; until a slot has a name, this. */
+  saveName = 'My garden';
+
+  /** The region bloombot is in, by name. */
+  private regionName(): string {
+    const b = this.bot;
+    const at = b ? b.world() : [this.camera.target.x, 0, this.camera.target.z];
+    if (b && b.pose.roofId !== GROUND) return 'On a rooftop';
+    const id = this.sim.areas.areaOf({ roofId: GROUND, x: Math.floor(at[0]), z: Math.floor(at[2]) });
+    if (!id) return 'The city';
+    return id === PARK ? 'The park' : AREA_TYPES[this.sim.areas.info(id).type].name;
+  }
+
+  private menuChoose(i: MenuItem) {
+    switch (i) {
+      case 'resume':
+        return this.closeMenu();
+      case 'backpack':
+        this.closeMenu();
+        return this.hud.toggleBackpack(true);
+      case 'map':
+        this.closeMenu();
+        if (!this.overviewOn) this.toggleOverview();
+        return;
+      case 'photo':
+        this.closeMenu();
+        return this.photo.enter();
+      case 'settings':
+        return this.settingsUi.open();
+      case 'save':
+        this.saveNow();
+        this.menu.note('Saved');
+        return;
+      case 'title':
+        return this.quitToTitle();
+      case 'desktop':
+        this.saveNow();
+        return desktopApi()?.quit?.();
+    }
+  }
+
+  /** "Quit to title" saves first (nothing in the menu loses progress), then goes to the title screen. */
+  quitToTitle() {
+    this.saveNow();
+    this.resetting = true; // nothing writes after this save
+    location.href = `${location.pathname}?title=1`;
+  }
+
+  /** E22.4: Settings › Controls (src/ui/ControlsTable.ts). */
+  private renderControls(body: HTMLElement) {
+    new ControlsTable(body, {
+      bindings: this.bindings,
+      padStyle: () => {
+        const st = this.glyphs.style;
+        const set = this.settings.glyphs;
+        return st !== 'keys' ? st : set === 'xbox' || set === 'ps' || set === 'deck' ? set : (this.glyphs.padType as PadStyle);
+      },
+      glyphSetting: () => this.settings.glyphs ?? 'auto',
+      listen: (kind, done) => this.listenForBinding(kind, done),
+      changed: () => this.saveBindings(),
+    }).render();
+  }
+
+  /** the pad button the rebinding screen just took (it does nothing else) */
+  private swallowPad?: number;
+  private listenCleanup?: () => void;
+
+  private cancelListen() {
+    this.keyListener = undefined;
+    this.padListener = undefined;
+    this.listenCleanup?.();
+    this.listenCleanup = undefined;
   }
 
   // ───────────────────────── tools & input ─────────────────────────
 
   private selectTool(t: Tool) {
     if (this.cinematic) return;
-    if (decorType(t)) this.lastDecor = t as `decor:${string}`;
     this.buildKey = '';
     this.sfx.click();
     this.hud.setTool(t);
@@ -872,8 +1126,12 @@ export class Game {
   }
 
   private wireKeys() {
+    window.addEventListener('keyup', (e) => this.heldKeys.delete(e.code));
+    window.addEventListener('blur', () => this.heldKeys.clear());
     window.addEventListener('keydown', (e) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      this.heldKeys.add(e.code);
+      const field = (e.target instanceof HTMLInputElement && e.target.type !== 'checkbox') || e.target instanceof HTMLSelectElement;
+      if (field && e.code !== FIXED_KEY) return;
       if (this.keyListener) {
         e.preventDefault();
         this.keyListener(e.code);
@@ -882,22 +1140,31 @@ export class Game {
       if (this.bot && this.photo.active) {
         // E19.4.1: photo mode reads the same map with its own meanings (PhotoMode); held keys pan.
         this.photo.key(e.code, true);
-        const a = this.bindings.actionForCode(e.code);
-        if (a === 'backpack' || a === 'debug' || e.code.startsWith('Arrow')) e.preventDefault();
-        if (!a || (e.repeat && a !== 'zoomIn' && a !== 'zoomOut' && a !== 'prevTool' && a !== 'nextTool')) return;
+        const a = e.code === FIXED_KEY ? 'cancel' : this.bindings.actionForCode(e.code, ['build', 'world', 'any']);
+        if (a === 'backpack' || a === 'debug' || e.code.startsWith('Arrow') || e.code === 'Space' || e.code === 'Tab') e.preventDefault();
+        if (!a || (e.repeat && a !== 'zoomCamera' && a !== 'rotate' && a !== 'rotateBack')) return;
         if (a === 'debug') this.doAction(a);
         else this.photo.action(a);
         return;
       }
       if (this.bot) {
-        // Bloombot's map (docs/BLOOMBOT_EPIC.md §7), rebindable; build tools stay on the number row.
-        const slot = BUILD_DIGITS.indexOf(e.code as (typeof BUILD_DIGITS)[number]);
-        const tools: Tool[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
-        if (slot >= 0) return this.selectTool(tools[slot]);
-        const a = this.bindings.actionForCode(e.code);
+        // E22.1: the epic's map (docs/E22_CONTROLS_UI.md), every action rebindable. Esc is back, or the menu.
+        if (e.code === FIXED_KEY) {
+          e.preventDefault();
+          if (!e.repeat) this.escape();
+          return;
+        }
+        // E22.11: in a panel the arrow keys move the focus ring, as the d-pad does.
+        const dpad: Record<string, number> = { ArrowUp: 12, ArrowDown: 13, ArrowLeft: 14, ArrowRight: 15 };
+        if (this.panelOpen() && dpad[e.code] !== undefined && this.padFocus && !(e.target as HTMLElement)?.closest?.('[role=tablist]')) {
+          e.preventDefault();
+          this.padFocus.button(dpad[e.code]);
+          return;
+        }
+        const a = this.resolveKey(e.code);
         if (!a) return;
-        if (a === 'backpack' || a === 'debug') e.preventDefault();
-        if (e.repeat && a !== 'zoomIn' && a !== 'zoomOut') return;
+        if (a === 'backpack' || a === 'debug' || e.code === 'Space' || e.code === 'Tab') e.preventDefault();
+        if (e.repeat && a !== 'rotate' && a !== 'rotateBack') return;
         this.doAction(a);
         return;
       }
@@ -920,116 +1187,136 @@ export class Game {
     });
   }
 
-  /** Bloombot: one action from a key or a gamepad button. Movement and sprint are read by BotController. */
+  /** Bloombot: one action from a key, mouse input or pad button. Movement and sprint are read by BotController. */
   private doAction(a: Action) {
     if ((this.photo.active && a !== 'debug') || a === 'photo') {
       if (!this.cinematic || this.photo.active) this.photo.action(a);
-    } else if (a === 'pulse') this.botAct();
-    else if (a === 'interact') this.botInteract();
-    else if (a === 'tray') this.hud.toggleTray();
-    else if (a === 'cancel') this.escape();
-    else if (a === 'harvest') this.harvest();
-    else if (a === 'upgrades') this.hud.toggleUpgrades();
-    else if (a === 'backpack') this.hud.toggleBackpack();
-    // E19.2: on the pad the bumpers turn a decoration in hand (they cycle tools otherwise)
-    else if ((a === 'prevTool' || a === 'nextTool') && this.bot?.lastInput === 'pad' && this.turnable()) this.turnBuild(a === 'nextTool' ? 1 : -1);
-    else if (a === 'prevTool') this.cycleTool(-1);
-    else if (a === 'nextTool') this.cycleTool(1);
-    else if (a === 'zoomIn') (this.photo?.active ? this.photo.zoom(1.15) : this.bot && !this.turnable() ? this.zoomStepBy(-1) : this.turnBuild(1));
-    else if (a === 'zoomOut') (this.photo?.active ? this.photo.zoom(1 / 1.15) : this.bot && !this.turnable() ? this.zoomStepBy(1) : this.turnBuild(-1));
-    else if (a === 'overview') this.toggleOverview();
-    else if (a === 'pause') this.setPaused(!this.paused);
-    else if (a === 'frenzy') this.sim.frenzy.activate();
-    else if (a === 'nextArea') this.focusNextArea();
-    else if (a === 'home') this.focusArea(PARK);
-    else if (a === 'recentre') this.camera.recentre();
-    else if (a === 'debug') this.setSetting('debug', !this.settings.debug);
+      return;
+    }
+    const slot = SLOTS.indexOf(a as (typeof SLOTS)[number]);
+    if (slot >= 0) return this.useSlot(slot);
+    switch (a) {
+      case 'pulse':
+      case 'place':
+        return this.botAct();
+      case 'interact':
+        return this.botInteract();
+      case 'buildMenu':
+        return this.hud.toggleTray();
+      case 'cancel':
+        return this.escape(true);
+      case 'menu':
+        return this.toggleMenu();
+      case 'harvest':
+        return this.harvest();
+      case 'upgrades':
+        return this.hud.toggleUpgrades();
+      case 'backpack':
+        return this.hud.toggleBackpack();
+      case 'rotate':
+      case 'rotateBack':
+        return this.turnBuild(a === 'rotate' ? 1 : -1);
+      case 'removeMode':
+        return this.selectTool(this.hud.currentTool === 'remove' ? 'pulse' : 'remove');
+      case 'map':
+        return this.toggleOverview();
+      case 'zoomCamera':
+        return this.cycleZoom();
+      case 'sprintToggle':
+        if (this.bot) this.bot.sprintLatched = !this.bot.sprintLatched;
+        return;
+      case 'pinNext':
+        return this.pinNext();
+      case 'frenzy':
+        return void this.sim.frenzy.activate();
+      case 'nextArea':
+        return this.focusNextArea();
+      case 'home':
+        return this.focusArea(PARK);
+      case 'recentre':
+        return this.camera.recentre();
+      case 'debug':
+        return this.changeSetting('debug', !this.settings.debug);
+      case 'prevTab':
+      case 'nextTab':
+        return this.panelTab(a === 'nextTab' ? 1 : -1);
+    }
   }
 
-  /** G.16: the rebinding screen waits for one key or button. */
-  private keyListener?: (code: string) => void;
-  private padListener?: (button: number) => void;
-  private listenForBinding(kind: 'key' | 'pad', done: (code: string | number | undefined) => void) {
-    const finish = (v: string | number | undefined) => {
-      this.keyListener = undefined;
-      this.padListener = undefined;
-      done(v);
-    };
-    this.keyListener = (code) => finish(code === 'Escape' ? undefined : kind === 'key' ? code : undefined);
-    if (kind === 'pad') this.padListener = (i) => finish(i);
+  /** LB / RB, Q / E: the tabs of the panel on top. */
+  private panelTab(dir: number) {
+    if (this.settingsUi.isOpen) this.settingsUi.tab(dir, true);
   }
 
-  private saveBindings() {
-    const saved = this.bindings.save();
-    this.settings.keys = saved.keys;
-    this.settings.pad = saved.pad;
-    this.setSetting('keys', saved.keys as unknown as string);
-    this.hud.setKeyMap(this.bot?.lastInput ?? 'keys', this.bindings);
-    this.hud.renderControls(this.bindings, (kind, done) => this.listenForBinding(kind, done), () => this.saveBindings());
-    this.botPreviewKey = '';
+  /** E22.1: the input contexts in effect now (Bindings: an open panel, build mode, or walking). */
+  private contexts(): Context[] {
+    if (this.panelOpen()) return ['panel', 'any'];
+    return this.building() ? ['build', 'world', 'any'] : ['world', 'any'];
   }
 
-  private escape() {
-    if (this.oc?.escape()) return;
-    if (this.mergeSel) this.cancelMerge();
-    else if (this.hud.modalOpen) this.hud.openSettings(false);
-    else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
-    else if (this.hud.trayOpen) this.hud.toggleTray(false);
-    else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
-    else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
-    else if (this.selected) this.select(undefined);
-    else if (this.bot?.walking) this.bot.cancelWalk();
-    else this.selectTool('pulse');
+  /** A panel or menu that takes the input is open. */
+  private panelOpen(): boolean {
+    const h = this.hud;
+    return h.modalOpen || h.backpackOpen || h.plotPickerOpen || h.isUpgradesOpen || h.trayOpen || !!this.oc?.panel.isOpen;
   }
 
-  /**
-   * Bloombot: 1 / 2 and the bumpers step through the tools: Pulse, Inspect, then every machine that's unlocked
-   * (and any Superstructure Core waiting to be placed), so a gamepad can build without opening the tray.
-   */
-  private cycleTool(step: number) {
-    const tools: Tool[] = ['pulse', 'inspect'];
-    for (const t of this.sim.oldCity ? OLD_CITY_BUILDABLE : BUILDABLE) if (this.sim.build.isUnlocked(t)) tools.push(t);
-    for (const btn of this.hud.root.querySelectorAll<HTMLElement>('#buildTray .super[data-tool]')) if (!btn.hidden) tools.push(btn.dataset.tool as Tool);
-    // E19.2: the decoration last held, then the remove tool. With a decoration in hand the keys step through every
-    // decoration earned (so the keyboard alone can choose one); on the pad the bumpers turn it and the tray chooses.
-    const cur = this.hud.currentTool;
-    const decor = [...this.hud.root.querySelectorAll<HTMLElement>('#buildTray .decor[data-tool^="decor:"]')].filter((b) => !b.hidden).map((b) => b.dataset.tool as Tool);
-    tools.push(...(decorType(cur) ? decor : [this.lastDecor]), 'remove');
-    const i = Math.max(0, tools.indexOf(cur));
-    this.selectTool(tools[(i + step + tools.length) % tools.length]);
+  /** The action a key (or mouse input) means now. With a panel open, the key that opened it closes it again. */
+  private resolveKey(code: string): Action | undefined {
+    const ctx = this.contexts();
+    const a = this.bindings.actionForCode(code, ctx);
+    if (a || ctx[0] !== 'panel') return a;
+    const w = this.bindings.actionForCode(code, ['world']);
+    return w && this.togglesOpenPanel(w) ? w : undefined;
   }
 
-  /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
-  private building(t: Tool = this.hud.currentTool): boolean {
-    return !!this.bot && t !== 'inspect' && t !== 'pulse';
-  }
-  /** the overview (M) is showing; walking, or M again, leaves it */
-  private overviewOn = false;
-  /** E19.2: the decoration the tool cycle offers (the last one held) */
-  private lastDecor: `decor:${string}` = 'decor:bench';
-  /** E19.2: how a decoration in hand is turned, in quarter turns (kept between placements, as in Satisfactory) */
-  private buildRot = 0;
-  private wheelAt = 0;
-
-  /** Is what's in hand something that turns (a decoration)? */
-  private turnable(): boolean {
-    return !!this.bot && !!decorType(this.hud.currentTool);
+  /** The key or button that opened the panel on top closes it again (Tab still moves the focus elsewhere). */
+  private togglesOpenPanel(a: Action): boolean {
+    if (!PANEL_TOGGLES.has(a)) return false;
+    const h = this.hud;
+    const open: Action | undefined = this.settingsUi.isOpen || this.menu.isOpen ? 'menu' : h.backpackOpen ? 'backpack' : h.trayOpen ? 'buildMenu' : h.isUpgradesOpen ? 'upgrades' : undefined;
+    return a === open;
   }
 
-  /** E19.2: a quarter turn of the decoration in hand (wheel, + / -, or the pad's bumpers). */
-  private turnBuild(step: number) {
-    if (!this.turnable() || this.cinematic || this.hud.modalOpen) return;
-    this.buildRot = (this.buildRot + (step > 0 ? 1 : 3)) % 4;
-    this.buildKey = '';
-    this.sfx.click();
+  private resolveButton(i: number): Action | undefined {
+    const ctx = this.contexts();
+    const a = this.bindings.actionForButton(i, ctx);
+    if (a || ctx[0] !== 'panel') return a;
+    const w = this.bindings.actionForButton(i, ['world']);
+    return w && this.togglesOpenPanel(w) ? w : undefined;
   }
 
-  private wheelTurn(factor: number) {
+  /** E22.1: hotbar slots 1–9 take a pinned build card into bloombot's hands (again: put it away). */
+  private useSlot(i: number) {
+    const t = (this.settings.hotbar ?? HOTBAR_DEFAULT)[i] as Tool | '' | undefined;
+    if (!t) {
+      this.hud.toast(`Hotbar slot ${i + 1} is empty. Pin something to it from the build menu.`, '', 2.6);
+      return;
+    }
+    if (machineTool(t) && !this.sim.build.isUnlocked(t)) {
+      this.hud.showFail(this.sim.build.lockLabel(t));
+      return;
+    }
+    this.selectTool(this.hud.currentTool === t ? 'pulse' : t);
+  }
+
+  /** E22.1: Pin the next request (E21's requests; until they exist there is nothing to pin). */
+  private pinNext() {
+    this.hud.toast('No requests to pin yet', '', 2);
+  }
+
+  /** The mouse wheel: turns the piece in build mode, otherwise zooms the camera (as bound). */
+  private wheel(factor: number) {
+    if (factor === 1) return;
     const now = performance.now();
-    if (factor === 1 || now - this.wheelAt < WHEEL_TURN_MS) return;
-    this.wheelAt = now;
-    if (this.bot && !this.turnable()) return this.zoomStepBy(factor > 1 ? -1 : 1); // E21.22: out of build mode the wheel steps the zoom
-    this.turnBuild(factor > 1 ? 1 : -1);
+    if (now - this.wheelAt < WHEEL_TURN_MS) return;
+    const a = this.resolveKey('Wheel');
+    if (a === 'rotate' || a === 'rotateBack') {
+      this.wheelAt = now;
+      this.turnBuild(factor > 1 ? 1 : -1);
+    } else if (a === 'zoomCamera') {
+      this.wheelAt = now;
+      this.zoomStepBy(factor > 1 ? -1 : 1); // E21.22's zoom steps
+    }
   }
 
   // ───────────── E21.22: the exploration camera ─────────────
@@ -1047,7 +1334,15 @@ export class Game {
     if (next === this.zoomStep) return;
     this.zoomStep = next;
     this.camIdle = 0;
+    this.overviewOn = false;
+    if (this.bot) this.bot.following = true;
     this.sfx.click();
+  }
+
+  /** E22.1: the pad's zoom button cycles the steps (close, normal, far, close…). */
+  private cycleZoom() {
+    if (!this.bot || this.cinematic) return;
+    this.zoomStepBy(this.zoomStep >= EXPLORE.zoomSteps.length - 1 ? -this.zoomStep : 1);
   }
 
   /** The camera's speed and axes from the settings. */
@@ -1086,6 +1381,102 @@ export class Game {
     }
   }
 
+  /** G.16: the rebinding screen waits for one key or button. */
+  private keyListener?: (code: string) => void;
+  private padListener?: (button: number) => void;
+  /**
+   * E22.4: waits for one input for the rebinding screen. Keyboard column: a key, a mouse button or the wheel
+   * (Esc cancels, Backspace clears). Gamepad column: a pad button (Menu or Esc cancels).
+   */
+  private listenForBinding(kind: 'key' | 'pad', done: (input: string | number | 'clear' | undefined) => void) {
+    this.cancelListen();
+    const finish = (v: string | number | 'clear' | undefined) => {
+      this.cancelListen();
+      done(v);
+    };
+    if (kind === 'key') {
+      this.keyListener = (code) => finish(code === 'Escape' ? undefined : code === 'Backspace' ? 'clear' : code);
+      // Mouse buttons and the wheel, from the next press (the click that chose the cell is already over).
+      setTimeout(() => {
+        if (!this.keyListener) return;
+        const swallow = (e: Event) => {
+          e.preventDefault();
+          e.stopPropagation();
+        };
+        const md = (e: MouseEvent) => {
+          swallow(e);
+          window.addEventListener('click', swallow, { capture: true, once: true });
+          window.addEventListener('contextmenu', swallow, { capture: true, once: true });
+          finish(`Mouse${e.button}`);
+        };
+        const wh = (e: WheelEvent) => {
+          swallow(e);
+          finish('Wheel');
+        };
+        window.addEventListener('mousedown', md, { capture: true });
+        window.addEventListener('wheel', wh, { capture: true, passive: false });
+        this.listenCleanup = () => {
+          window.removeEventListener('mousedown', md, { capture: true });
+          window.removeEventListener('wheel', wh, { capture: true });
+        };
+      }, 0);
+    } else {
+      this.keyListener = (code) => code === 'Escape' && finish(undefined);
+      this.padListener = (i) => finish(i === 9 ? undefined : i);
+    }
+  }
+
+  private saveBindings(render = true) {
+    const saved = this.bindings.save();
+    this.settings.keys = saved.keys;
+    this.settings.pad = saved.pad;
+    this.settings.bindingsV = saved.v;
+    this.setSetting('keys', saved.keys as unknown as string);
+    if (!render) return;
+    this.hud.setKeyMap(this.glyphs.style, this.bindings);
+    this.botPreviewKey = '';
+  }
+
+  /** Esc / B: closes or puts away the nearest thing; with nothing to close, Esc (not B) opens the menu. */
+  private escape(fromCancel = false) {
+    if (this.settingsUi.isOpen) this.settingsUi.close();
+    else if (this.menu.isOpen) this.closeMenu();
+    else if (this.oc?.escape()) void 0; // E21: an Old City panel or a hold
+    else if (this.mergeSel) this.cancelMerge();
+    else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
+    else if (this.hud.trayOpen) this.hud.toggleTray(false);
+    else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
+    else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
+    else if (this.selected) this.select(undefined);
+    else if (this.bot?.walking) this.bot.cancelWalk();
+    else if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
+    else if (!fromCancel) this.openMenu();
+    this.syncPanelPause();
+  }
+
+  /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
+  private building(t: Tool = this.hud.currentTool): boolean {
+    return !!this.bot && t !== 'inspect' && t !== 'pulse';
+  }
+  /** the overview (M) is showing; walking, or M again, leaves it */
+  private overviewOn = false;
+  /** E19.2: how a decoration in hand is turned, in quarter turns (kept between placements, as in Satisfactory) */
+  private buildRot = 0;
+  private wheelAt = 0;
+
+  /** Is what's in hand something that turns (a decoration)? */
+  private turnable(): boolean {
+    return !!this.bot && !!decorType(this.hud.currentTool);
+  }
+
+  /** E19.2: a quarter turn of the decoration in hand (wheel, + / -, or the pad's bumpers). */
+  private turnBuild(step: number) {
+    if (!this.turnable() || this.cinematic || this.hud.modalOpen) return;
+    this.buildRot = (this.buildRot + (step > 0 ? 1 : 3)) % 4;
+    this.buildKey = '';
+    this.sfx.click();
+  }
+
   /** Bloombot: hold the camera at the close view's distance (E19.2: building no longer pulls it back). */
   private updateBotZoom() {
     const b = this.bot;
@@ -1103,20 +1494,29 @@ export class Game {
     const out = !this.overviewOn;
     this.overviewOn = out;
     const t = this.bot ? this.bot.world() : [c.target.x, 0, c.target.z];
-    c.glide(t[0], 0, t[2], out ? c.minZoom : BOT_ZOOM);
+    c.glide(t[0], 0, t[2], out ? c.minZoom : EXPLORE.zoomSteps[this.zoomStep]);
     if (!out && this.bot) this.bot.following = true;
   }
 
   /** E20.2 (#285): an action's key or pad button as plain text, as the player last used them. */
   private hudKey(a: Action): string {
-    return this.bot?.lastInput === 'pad' ? padLabel(this.bindings.pad[a]) : keyLabel(this.bindings.keys[a][0] ?? '');
+    const st = this.glyphs.style;
+    return st !== 'keys' ? padName(st, this.bindings.pad[a]) || '—' : keyLabel(this.bindings.keys[a][0] ?? '');
+  }
+
+  /** Every key for an action ("Left mouse or Space"), or its pad button. */
+  private hudKeys(a: Action): string {
+    const st = this.glyphs.style;
+    if (st !== 'keys') return padName(st, this.bindings.pad[a]) || '—';
+    const ks = this.bindings.keys[a].map(keyLabel);
+    return ks.length ? ks.slice(0, 2).join(' or ') : '—';
   }
 
   /** A key or button name for hints: the pointer's "Click", or bloombot's key / pad button. */
   private press(key: 'E' | 'Q', bot = this.previewFromBot): string {
     if (!bot) return 'Select'; // the internal cursor path (bots, dev tools)
-    const a: Action = key === 'E' ? 'pulse' : 'interact';
-    if (this.bot?.lastInput === 'pad') return `<kbd>${padLabel(this.bindings.pad[a])}</kbd>`;
+    const a: Action = key === 'E' ? (this.building() && this.bot?.lastInput === 'pad' ? 'place' : 'pulse') : 'interact';
+    if (this.glyphs.style !== 'keys') return `<kbd>${esc(this.hudKey(a))}</kbd>`;
     return `<kbd>${keyLabel(this.bindings.keys[a][0] ?? '')}</kbd>`;
   }
 
@@ -1168,61 +1568,215 @@ export class Game {
     this.buildKey = '';
   }
 
-  /** Bloombot (G.5): Q / X: say hello to a cat within reach, wake or inspect what's in front, or read the tile. */
+  /**
+   * E22.2 (#339): Interact acts on the one target the prompt names (Interact.ts chooses it by the epic's priority,
+   * nearest first). A refused action says why; a hold starts the ring instead (unless holds are single presses).
+   */
   private botInteract() {
     const b = this.bot;
     if (!b || this.cinematic || this.paused || this.hud.modalOpen) return;
+    const t = this.interactTarget();
+    if (!t) return;
+    if (t.refused) {
+      const sc = t.at ? this.botTileScreen(t.at) : undefined;
+      this.hud.showFail(t.refused, sc?.x, sc?.y);
+      return;
+    }
+    const hold = holdFor(t, this.settings.holdToAct !== false);
+    if (hold) {
+      this.holding = { id: t.id, t: 0, need: hold };
+      return;
+    }
+    t.run();
+  }
+
+  /** E22.2: a hold under way (Interact kept down on the same target until `need` seconds pass). */
+  private holding?: { id: string; t: number; need: number };
+  /** keys held down right now (for holds) */
+  private heldKeys = new Set<string>();
+
+  /** Is Interact still held (a key, or the pad button)? */
+  private interactHeld(): boolean {
+    if (this.bindings.keys.interact.some((k) => this.heldKeys.has(k))) return true;
+    const btn = this.bindings.pad.interact;
+    if (btn === undefined) return false;
+    const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [];
+    return [...pads].some((p) => p?.connected && p.buttons[btn]?.pressed);
+  }
+
+  private updateHold(dt: number, target: InteractTarget | undefined) {
+    const h = this.holding;
+    if (!h) return;
+    if (!target || target.id !== h.id || !this.interactHeld() || this.paused) {
+      this.holding = undefined;
+      return;
+    }
+    h.t += dt;
+    if (h.t >= h.need) {
+      this.holding = undefined;
+      target.run();
+    }
+  }
+
+  /**
+   * E22.2: everything Interact could act on now: a Lucky Cat within reach, the fog gate or rooftop lift ahead,
+   * and what stands on the tile in front (or aimed at, in build mode): a landmark, a machine, a decoration, a plot.
+   * E21 adds its kinds (Keepers, salvage, caches, doors, storage) here.
+   */
+  private interactCandidates(): InteractTarget[] {
+    const b = this.bot;
+    if (!b) return [];
+    const out: InteractTarget[] = [];
     const [wx, , wz] = b.world();
     for (const id of this.cat.ids()) {
       const v = this.cat.targetWorld(id);
-      if (v && Math.hypot(v.x - wx, v.z - wz) < BOT_REACH + 0.6) {
-        b.pose.facing = Math.atan2(v.x - wx, v.z - wz);
-        this.claimingCat = id;
-        this.sim.cat.claim(id);
-        this.claimingCat = undefined;
-        b.visuals.play('cheer');
-        return;
-      }
+      if (!v) continue;
+      const d = Math.hypot(v.x - wx, v.z - wz);
+      if (d >= BOT_REACH + 0.6) continue;
+      out.push({
+        kind: 'cat', id: `cat:${id}`, verb: 'Say hello', name: '', distance: d,
+        run: () => {
+          b.pose.facing = Math.atan2(v.x - wx, v.z - wz);
+          this.claimingCat = id;
+          this.sim.cat.claim(id);
+          this.claimingCat = undefined;
+          b.visuals.play('cheer');
+        },
+      });
     }
-    // E21: piles, barricades, Keepers, the fountain and the store come first under old-city rules.
-    if (this.oc) {
-      const f = b.front();
-      const ft = this.sim.grid.get(b.pose.roofId, f.x, f.z);
-      if (this.oc.interact(f, ft ? this.sim.occupant(ft) : undefined)) return;
-    }
-    // Region unlocks: facing a sealed area's fog, interact buys it (or says what it costs).
+    const f = b.front();
+    const front = this.sim.grid.get(b.pose.roofId, f.x, f.z);
+    const fd = Math.hypot(f.x + 0.5 - b.pose.x, f.z + 0.5 - b.pose.z);
+    if (this.oc) out.push(...this.oldCityCandidates(f, front, fd));
+    // Region unlocks: facing a sealed area's fog, Interact opens it (or says what it still needs). The Old City has
+    // no price: its gates open by prying, repairing or waking, and the prompt says what is in the way.
     const sealed = this.sealedAhead();
-    if (sealed) {
-      if (this.sim.areas.unlock(sealed)) b.visuals.play('cheer');
-      return;
+    if (sealed && this.sim.oldCity) {
+      if (!out.some((c) => c.kind === 'gate'))
+        out.push({ kind: 'gate', id: `seal:${sealed}`, verb: 'Look at', name: 'the clouds', distance: fd, at: front, refused: this.sim.areas.sealText(sealed).replace(/<[^>]*>/g, ''), run: () => {} });
+    } else if (sealed) {
+      const s = this.sim.areas;
+      const cost = s.unlockCost(sealed)!;
+      const short = this.sim.econ.shortfall(cost);
+      out.push({
+        kind: 'gate', id: `gate:${sealed}`, verb: 'Unlock', name: `the ${AREA_TYPES[s.info(sealed).type].name.toLowerCase()}`, distance: fd, at: front,
+        refused: short ? `Needs ${fmt(cost.biomass)} ${this.hud.oldCity ? 'Greens' : 'biomass'} and ${fmt(cost.energy)} energy` : undefined,
+        run: () => {
+          if (this.sim.areas.unlock(sealed)) b.visuals.play('cheer');
+        },
+      });
     }
     const lift = this.liftAhead();
     if (lift) {
-      this.rideLift(lift);
-      return;
+      const up = lift.up;
+      out.push({
+        kind: 'gate', id: `lift:${up?.id ?? 'down'}`, verb: up ? 'Ride up' : 'Ride down', name: up ? 'to the rooftop' : 'to the street', distance: fd, at: front,
+        refused: up && (up.preview || !this.sim.grid.isPlayable(up.id)) ? this.lockedReason(up.id) : undefined,
+        run: () => this.rideLift(lift),
+      });
     }
     const aim = this.building() ? this.buildAim() : undefined;
     const p = aim ? aim.p : this.frontPick();
-    if (!p || !p.tile) return;
-    const occ = this.sim.occupant(p.tile);
-    const sc = aim ?? this.botTileScreen(p.tile);
-    // E19.2: a decoration in front (or aimed at) is picked up into bloombot's hands, to place again (a move)
-    if (this.cozy.decorOf(p.tile.occupantId)) {
-      this.botAnim(this.removeDecorAt(p, sc.x, sc.y, true));
-      return;
+    if (!p?.tile) return out;
+    const tile = p.tile;
+    const sc = () => aim ?? this.botTileScreen(tile);
+    const dist = Math.hypot(tile.x + 0.5 - b.pose.x, tile.z + 0.5 - b.pose.z);
+    const occ = this.sim.occupant(tile);
+    const dec = this.cozy.decorOf(tile.occupantId);
+    if (dec) {
+      out.push({
+        kind: 'decoration', id: `decor:${tile.occupantId}`, verb: 'Pick up', name: DECOR_OPTION[dec.kind]?.name ?? 'the decoration', distance: dist, at: tile,
+        run: () => this.botAnim(this.removeDecorAt(p, sc().x, sc().y, true)),
+      });
+    } else if (occ && !out.some((c) => c.id.endsWith(`:${occ.id}`))) {
+      const area = occ.type === 'core' ? this.sim.areas.areaOf(occ) : undefined;
+      const lmName = area === PARK ? 'the fountain' : area ? this.sim.areas.info(area).landmarkName : undefined;
+      const ready = occ.type === 'core' && this.landmarkReady(occ);
+      out.push({
+        kind: lmName ? 'landmark' : 'machine', id: `m:${occ.id}`, verb: ready ? 'Wake' : 'Look at', name: lmName ?? machineName(occ), distance: dist, at: tile,
+        frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size },
+        run: () => this.botAnim(this.actAt(p, sc().x, sc().y, 'inspect', false)),
+      });
+    } else {
+      const plot = this.openablePlot(p.roofId, tile.x, tile.z);
+      if (plot)
+        out.push({
+          kind: 'plot', id: `plot:${p.roofId}:${plot.x},${plot.z}`, verb: 'Choose what grows on', name: 'this plot', distance: dist, at: tile,
+          frame: { roofId: p.roofId, x: plot.x, z: plot.z, size: plot.size },
+          run: () => {
+            this.select(undefined);
+            b.visuals.play('interact');
+            this.openPlotPicker(plot);
+          },
+        });
     }
-    if (occ) {
-      this.botAnim(this.actAt(p, sc.x, sc.y, 'inspect', false));
-      return;
+    return out;
+  }
+
+  /**
+   * E21 through E22.2's one prompt: a salvage pile, a Keeper, a lookout, a gate, the fountain, a sleeping landmark
+   * or the store in front of bloombot. The Old City controller acts on them (and runs their holds).
+   */
+  private oldCityCandidates(f: { x: number; z: number }, front: TileData | undefined, fd: number): InteractTarget[] {
+    const s = this.sim;
+    const oc = this.oc!;
+    const b = this.bot!;
+    if (b.pose.roofId !== GROUND) return [];
+    const occ = front ? s.occupant(front) : undefined;
+    const run = () => void oc.interact(f, occ);
+    const out: InteractTarget[] = [];
+    const pile = s.salvage.pileAt(f.x, f.z);
+    if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: SALVAGE.holdSeconds, refused: s.salvage.problem(pile.id), run });
+    const keeper = s.keepers.at(f.x, f.z);
+    if (keeper && s.keepers.visible(keeper.id)) out.push({ kind: 'keeper', id: `keeper:${keeper.id}`, verb: keeper.id === 'tally' && s.landmarks.canTrade() ? 'Trade with' : 'Talk to', name: keeper.name, distance: fd, at: front, run });
+    const sp = setPieceAt(f.x, f.z);
+    if (sp?.kind === 'lookout') out.push({ kind: 'gate', id: `lookout:${sp.id}`, verb: 'Look out', name: '', distance: fd, at: front, run });
+    const gate = s.gates.gateAt(f.x, f.z);
+    if (gate) out.push({ kind: 'gate', id: `gate:${gate.id}`, verb: gate.kind === 'barricade' ? 'Pry' : 'Repair', name: '', distance: fd, at: front, ocHold: gate.kind === 'barricade' ? SALVAGE.pryHoldSeconds : undefined, refused: s.gates.problem(gate), run });
+    if (occ?.type === 'core' && s.areas.areaOf(occ) === PARK)
+      out.push({ kind: 'landmark', id: `fountain:${occ.id}`, verb: 'Bring things to', name: 'the fountain', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+    else if (occ?.type === 'core') {
+      const r = s.landmarks.regionAt(occ.x, occ.z);
+      if (r && s.areas.fog(r.id) !== 'cleared') out.push({ kind: 'landmark', id: `lm:${occ.id}`, verb: 'Wake', name: `the ${r.landmark.name}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+      else if (s.inventory.accessPoints().some((p) => p.x === occ.x && p.z === occ.z && p.roofId === occ.roofId)) out.push({ kind: 'storage', id: `store:${occ.id}`, verb: 'Open', name: 'the store', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+    } else if (occ?.type === 'chest') out.push({ kind: 'storage', id: `chest:${occ.id}`, verb: 'Open', name: 'the chest', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+    return out;
+  }
+
+  private interactTarget(): InteractTarget | undefined {
+    return pickTarget(this.interactCandidates());
+  }
+
+  /** E22.3: an action's button as a glyph from the set in use (a rebound action shows its new input). */
+  private glyph(a: Action): string {
+    return actionGlyph(this.bindings, a, this.glyphs.style);
+  }
+
+  /** E22.2: the prompt for this frame: the Interact target (or why not), and Pulse when it also applies. */
+  private promptModel(target: InteractTarget | undefined): PromptModel | undefined {
+    const b = this.bot!;
+    if (this.building()) {
+      const tool = this.hud.currentTool;
+      const dk = decorType(tool);
+      const st = superType(tool);
+      const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : st ? `Lay the foundation of the ${TIER3[st]!.name}` : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
+      return what ? { glyph: this.glyph(this.glyphs.style !== 'keys' ? 'place' : 'pulse'), text: what } : undefined;
     }
-    this.select(undefined);
-    const plot = this.openablePlot(p.roofId, p.tile.x, p.tile.z);
-    if (plot) {
-      b.visuals.play('interact');
-      this.openPlotPicker(plot);
-      return;
-    }
-    this.hud.showTip(sc.x, sc.y, `<b>${this.tileTitle(p.tile)}</b>${this.tileDetail(p.tile)}${this.pawHint(p.tile)}${this.plotLine(p.roofId, p.tile)}`);
+    const f = b.front();
+    const t = this.sim.grid.get(b.pose.roofId, f.x, f.z);
+    const chk = t && !t.occupantId ? this.sim.restoration.checkPulse(t) : undefined;
+    const pulse = chk?.ok ? { glyph: this.glyph('pulse'), text: t!.ground === 'restored' ? 'Nurture' : 'Pulse' } : undefined;
+    if (!target) return pulse ? { glyph: pulse.glyph, text: pulse.text } : undefined;
+    const hold = holdFor(target, this.settings.holdToAct !== false) || (target.ocHold && this.settings.holdToAct !== false ? target.ocHold : 0);
+    const h = this.holding;
+    return {
+      glyph: this.glyph('interact'),
+      text: promptText(target),
+      hold: hold > 0,
+      progress: h && h.id === target.id ? h.t / h.need : target.ocHold ? (this.oc?.holdProgress() ?? 0) : 0,
+      refused: target.refused,
+      pulse,
+    };
   }
 
   /** E21: what the Old City controller borrows from the game. */
@@ -1417,65 +1971,54 @@ export class Game {
   /** Bloombot (G.4): highlight the tile in front and preview what E would do there (yields to an active mouse). */
   private updateBotPreview() {
     if (!this.bot) return;
-    if (this.bot.lastInput !== this.keyMapShown) {
-      this.keyMapShown = this.bot.lastInput;
-      if (this.photo.active) this.photoBar.render(this.photo.state); // its key names follow the device too
-      this.hud.setKeyMap(this.bot.lastInput, this.bindings);
+    // E22.3: the glyph set follows the last device used; every glyph on screen swaps in the same frame.
+    if (this.bot.lastInput !== this.glyphs.device) {
+      this.glyphs.device = this.bot.lastInput;
+      if (this.glyphs.device === 'pad') this.glyphs.sensePad(typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : undefined);
     }
-    if (this.cinematic || this.photo.active) return;
+    if (this.glyphs.style !== this.keyMapShown) {
+      this.keyMapShown = this.glyphs.style;
+      if (this.photo.active) this.photoBar.render(this.photo.state); // its key names follow the device too
+      this.hud.setKeyMap(this.glyphs.style, this.bindings);
+    }
+    if (this.cinematic || this.photo.active || this.panelOpen()) {
+      this.holding = undefined;
+      this.hud.prompt.show(undefined);
+      return;
+    }
+    // E22.2: one prompt, every frame (the hold ring fills smoothly); the target gets a soft outline.
+    const target = this.interactTarget();
+    this.updateHold(this.frameDt, target);
+    this.hud.prompt.show(this.promptModel(target));
     if (this.updateBuildPreview()) return; // E19.2: build mode aims the hologram itself
     if (this.pointerRecent()) return;
     const p = this.frontPick();
     const now = performance.now();
-    const key = `${this.bot.pose.roofId}:${this.bot.front().x},${this.bot.front().z}|${p?.roofId}:${p?.tile?.x},${p?.tile?.z}|${this.hud.currentTool}|${p?.tile?.ground}|${p?.tile?.bloom}|${this.bot.lastInput}`;
+    const key = `${this.bot.pose.roofId}:${this.bot.front().x},${this.bot.front().z}|${p?.roofId}:${p?.tile?.x},${p?.tile?.z}|${this.hud.currentTool}|${p?.tile?.ground}|${p?.tile?.bloom}|${this.bot.lastInput}|${target?.id}`;
     if (key === this.botPreviewKey && now - this.botPreviewAt < 400) return;
     this.botPreviewKey = key;
     this.botPreviewAt = now;
-    const lift = this.liftAhead();
-    if (lift) {
-      const [bx, by, bz] = this.bot.world();
-      const v = this.camera.toScreen(new pc.Vec3(bx, by + 1.1, bz));
-      const sc = p?.tile ? this.botTileScreen(p.tile) : { x: v.x, y: v.y };
+    if (target?.frame || (target && (target.kind === 'gate' || target.kind === 'cat'))) {
+      // The target's soft outline; the prompt says the rest (no tooltip over the world).
       this.overlays.hideGhost();
-      if (p?.tile) this.overlays.showFrame(p.roofId, p.tile.x, p.tile.z, 1, 'info');
+      this.overlays.hideRadius();
+      const fr = target.frame ?? (target.at && { roofId: target.at.roofId, x: target.at.x, z: target.at.z, size: 1 });
+      if (fr && target.kind !== 'cat') this.overlays.showFrame(fr.roofId, fr.x, fr.z, fr.size, 'info');
       else this.overlays.hideFrame();
-      const up = lift.up;
-      const k = this.press('Q', true);
-      const what = up ? (up.preview ? `<span class="bad">${this.lockedReason(up.id)}</span>` : `<span class="ok">${k} Ride up to the rooftop</span>`) : `<span class="ok">${k} Ride down to the street</span>`;
-      this.hud.showTip(sc.x, sc.y, `<b>Rooftop lift</b>${what}`);
-      return;
-    }
-    // Region unlocks: facing sealed fog, the prompt names the area and its price.
-    const sealed = this.sealedAhead();
-    if (sealed) {
-      const [bx, by, bz] = this.bot.world();
-      const v = this.camera.toScreen(new pc.Vec3(bx, by + 1.1, bz));
-      this.overlays.hideGhost();
-      this.overlays.hideFrame();
-      const s = this.sim.areas;
-      // E21.5: no price in the Old City: the tip says what is in the way
-      if (this.sim.oldCity) {
-        this.hud.showTip(v.x, v.y, `<b>🌫️ Behind the clouds</b>${s.sealText(sealed)}`);
-        return;
-      }
-      const cost = s.unlockCost(sealed)!;
-      const price = `${fmt(cost.biomass)} 🌿 and ${fmt(cost.energy)} ⚡`;
-      const ok = !this.sim.econ.shortfall(cost);
-      const line = ok ? `<span class="ok">${this.press('Q', true)} Unlock for ${price}</span>` : `<span class="bad">Unlock for ${price}</span>`;
-      this.hud.showTip(v.x, v.y, `<b>🔒 ${AREA_TYPES[s.info(sealed).type].name} in thick fog</b>${line}`);
+      this.hud.hideTip();
       return;
     }
     if (!p?.tile) {
       this.previewAt(undefined, 0, 0);
       return;
     }
-    const sc = this.botTileScreen(p.tile);
     this.previewFromBot = true;
     try {
-      this.previewAt(p, sc.x, sc.y);
+      this.previewAt(p, 0, 0);
     } finally {
       this.previewFromBot = false;
     }
+    this.hud.hideTip(); // E22.2: walking, the prompt speaks; the frame and footprint stay
   }
 
   pick(x: number, y: number): Pick | undefined {
@@ -1946,8 +2489,8 @@ export class Game {
   /** Words for turning what's in hand, for the input used last. */
   private turnHint(): string {
     if (!this.bot) return '';
-    if (this.bot.lastInput === 'pad') return `${padLabel(this.bindings.pad.prevTool)} / ${padLabel(this.bindings.pad.nextTool)} to turn`;
-    return `wheel or ${keyLabel(this.bindings.keys.zoomOut[0] ?? '')} / ${keyLabel(this.bindings.keys.zoomIn[0] ?? '')} to turn`;
+    if (this.glyphs.style !== 'keys') return `${this.hudKey('rotateBack')} / ${this.hudKey('rotate')} to turn`;
+    return `${this.bindings.keys.rotate.map(keyLabel).join(' or ')} to turn`;
   }
 
   /** Build mode's preview, every frame: the hologram where you aim (true while building). */
@@ -2221,7 +2764,7 @@ export class Game {
     if (this.clock < this.cozyCheckAt) return;
     this.cozyCheckAt = this.clock + 1;
     for (const o of this.cozy.checkUnlocks()) this.hud.toast(`${o.icon} New plot option: ${o.name}<small>${o.blurb} Look for empty plots in restored ground.</small>`, 'gold', 4.5);
-    for (const o of this.cozy.checkDecorUnlocks()) this.hud.toast(`${o.icon} New decoration: ${o.name}<small>${o.blurb} It’s in the Build tray (${this.hudKey('tray')}), free to place.</small>`, 'gold', 4.5);
+    for (const o of this.cozy.checkDecorUnlocks()) this.hud.toast(`${o.icon} New decoration: ${o.name}<small>${o.blurb} It’s in the build menu (${this.hudKey('buildMenu')}), free to place.</small>`, 'gold', 4.5);
     // The picker closes if bloombot wanders off.
     const pp = this.pickerPlot;
     if (pp && this.bot) {
@@ -2280,13 +2823,18 @@ export class Game {
   }
 
   private onClick(x: number, y: number, button: number) {
-    if (button !== 0 || this.cinematic || this.photo.active) return;
-    if (this.hud.isUpgradesOpen && window.innerWidth < 760) {
-      this.hud.toggleUpgrades(false);
+    if (this.cinematic || this.photo.active) return;
+    if (this.bot) {
+      // E22.1: mouse buttons are bindable: the pulse button uses the tool on the aimed tile (walking there first if
+      // it's out of reach); any other bound button does its action.
+      const a = this.resolveKey(`Mouse${button}`);
+      if (a === 'pulse' || a === 'place') this.botClick(x, y);
+      else if (a && a !== 'look') this.doAction(a);
       return;
     }
-    if (this.bot) {
-      this.botClick(x, y);
+    if (button !== 0) return;
+    if (this.hud.isUpgradesOpen && window.innerWidth < 760) {
+      this.hud.toggleUpgrades(false);
       return;
     }
     const catId = this.catHit(x, y);
@@ -3929,43 +4477,34 @@ export class Game {
 
   /** Runs simulation ticks within the frame budget: the frame's own time first, then any catch-up owed. */
   private runSim(dt: number) {
-    const budget = TUNING.catchUp.frameBudgetMs;
     const t0 = performance.now();
-    this.acc += dt * this.speed;
-    let n = 0;
-    while (this.acc >= TUNING.simStep && (n === 0 || performance.now() - t0 < budget)) {
-      this.sim.tick(TUNING.simStep);
-      this.acc -= TUNING.simStep;
-      n++;
-    }
-    // More owed than the budget allows (a slow device at high speed): carry it as catch-up, not a backlog.
-    if (this.acc > 1) {
-      this.catchUpDebt = Math.min(TUNING.catchUp.maxSeconds, this.catchUpDebt + this.acc - TUNING.simStep);
-      this.acc = TUNING.simStep;
-    }
-    while (this.catchUpDebt >= TUNING.simStep && performance.now() - t0 < budget) {
-      this.sim.tick(TUNING.simStep);
-      this.catchUpDebt -= TUNING.simStep;
-    }
-    if (this.catchUpDebt < TUNING.simStep) this.catchUpDebt = 0;
+    runSimFrame(this.sim, this, dt, { pause: this.pause, speed: this.speed, step: TUNING.simStep, budgetMs: TUNING.catchUp.frameBudgetMs, maxCatchUp: TUNING.catchUp.maxSeconds });
     this.simMs = performance.now() - t0;
     this.simMsWorst = Math.max(this.simMsWorst, this.simMs);
   }
 
+  /** this frame's dt (holds read it) */
+  private frameDt = 0;
   private update(rawDt: number) {
     const dt = Math.min(rawDt, TUNING.maxFrameDt);
+    this.frameDt = dt;
     this.clock += dt;
     this.adaptQuality(rawDt);
     // City 11.4: drones well outside the view fly by the clock (no per-tick moves); near ones fly for real.
     const view = this.city ? this.groundRect() : undefined;
     this.sim.drones.focus = view ? { x: (view.x0 + view.x1) / 2, z: (view.z0 + view.z1) / 2, radius: Math.hypot(view.x1 - view.x0, view.z1 - view.z0) / 2 + 24 } : undefined;
-    if (!this.paused && !this.hiddenPause && !this.hud.modalOpen && !this.photo.frozen) {
+    // E22.11: a full-screen panel (the backpack, Settings) pauses the game while it is open.
+    this.syncPanelPause();
+    const paused = this.pause.paused;
+    if (!paused && !this.photo.frozen) {
       if (rawDt > TUNING.maxFrameDt && !this.hiddenAt) this.awayFor(Math.min(rawDt, 30) - TUNING.maxFrameDt); // a hitch
       this.runSim(dt);
     }
-    this.tweens.update(dt);
-    this.scene.update(dt);
-    this.grid.update(dt);
+    /** the world's own time: nothing moves while paused (the camera, streaming and the HUD still run) */
+    const wdt = paused ? 0 : dt;
+    this.tweens.update(wdt);
+    this.scene.update(wdt);
+    this.grid.update(wdt);
     const rect = view;
     if (rect) this.grid.stream(rect);
     this.transitions.sync(this.sim.time + Math.min(this.acc, TUNING.simStep));
@@ -3973,8 +4512,8 @@ export class Game {
     detailTextures.step(); // Look 3.1: builds the detail maps a slice per frame after first paint
     const camP = this.camera.entity.getPosition();
     detailTextures.setCamera(camP.x, camP.y, camP.z);
-    this.machines.update(dt, rect);
-    this.tillers.update(this.paused || this.hiddenPause || this.photo.frozen ? 0 : dt);
+    this.machines.update(wdt, rect);
+    this.tillers.update(paused || this.photo.frozen ? 0 : dt);
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.
     if (!this.paused && this.camera.zoom > 0.9) {
@@ -3991,8 +4530,8 @@ export class Game {
       this.placeBrook();
       this.placeBirds();
     }
-    this.drones.update(this.paused || this.hiddenPause || this.photo.frozen ? 0 : dt); // drone personality freezes with the game
-    this.cat.update(dt);
+    this.drones.update(paused || this.photo.frozen ? 0 : dt); // drone personality freezes with the game
+    this.cat.update(wdt);
     // Phase 5 E16: fauna by unlock, capped per quality tier ("Fewer particles" = low).
     const eco = this.sim.ecosystem;
     const quality = this.faunaTier ?? (this.settings.lowVfx ? 'low' : 'high');
@@ -4001,20 +4540,20 @@ export class Game {
     // Fauna live around where the camera looks (the ground rect of a low perspective view reaches far beyond it).
     const ct = this.camera.target;
     const near = rect ? { x0: ct.x - 12, x1: ct.x + 12, z0: ct.z - 12, z1: ct.z + 12 } : undefined;
-    this.butterflies.update(dt, near);
+    this.butterflies.update(wdt, near);
     this.pollinators.enabled = !this.settings.reducedMotion && !ChunkRenderer.still;
     this.pollinators.quality = quality;
-    this.pollinators.update(dt, near);
+    this.pollinators.update(wdt, near);
     this.birds.resident = eco.has('birds');
     this.clouds.happy = eco.has('birds'); // the sky wakes up with the songbirds: sleepy faces on a couple of clouds
-    this.birds.update(dt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
-    this.fauna.update(dt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: !!this.settings.fireflies && !this.settings.highContrast });
-    this.eco?.update(dt);
-    this.tileFx.update(dt);
+    this.birds.update(wdt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
+    this.fauna.update(wdt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: !!this.settings.fireflies && !this.settings.highContrast });
+    this.eco?.update(wdt);
+    this.tileFx.update(wdt);
     this.frameNo++;
-    this.updateChainPresentation(dt);
+    this.updateChainPresentation(wdt);
     if (!this.cinematic) this.checkCozyUnlocks();
-    this.vfx.update(dt);
+    this.vfx.update(wdt);
     // First-tile beacon until the player restores something.
     if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic && !this.photo.active) {
       const tiles = this.sim.progression.tilesFor(HOME);
@@ -4023,10 +4562,10 @@ export class Game {
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
     if (this.bot) {
-      this.bot.update(this.hiddenPause ? 0 : dt);
-      this.updateExploreCamera(this.hiddenPause ? 0 : dt);
-      this.oc?.update(this.hiddenPause ? 0 : dt);
-      this.keepers?.update(this.hiddenPause ? 0 : dt);
+      this.bot.update(wdt); // still reads the pad (the menu's focus ring), but nothing moves
+      this.updateExploreCamera(wdt);
+      this.oc?.update(wdt);
+      this.keepers?.update(wdt);
       this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();
@@ -4037,16 +4576,16 @@ export class Game {
     this.camera.update(dt);
     this.sky.clarity += (this.skyClarity() - this.sky.clarity) * Math.min(1, dt * 0.8);
     this.sky.reducedMotion = this.settings.reducedMotion;
-    this.sky.update(dt, this.camera.entity.getPosition(), this.camera.cam.farClip);
+    this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
     this.skyline.clarity = this.sky.clarity;
     this.skyline.reducedMotion = this.settings.reducedMotion;
-    this.skyline.update(dt, this.camera.target, this.camera.entity.getPosition(), this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
+    this.skyline.update(wdt, this.camera.target, this.camera.entity.getPosition(), this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
     this.syncView();
     {
       const c = this.camera;
       const cv = this.app.graphicsDevice.canvas as HTMLCanvasElement;
-      this.cloudWall.update(dt);
-      this.clouds.update(dt, { zoom: c.zoom, yaw: c.yaw, dist: c.dist, viewHeight: c.viewHeight, aspect: cv.clientWidth / Math.max(1, cv.clientHeight), position: c.entity.getPosition(), forward: c.entity.forward });
+      this.cloudWall.update(wdt);
+      this.clouds.update(wdt, { zoom: c.zoom, yaw: c.yaw, dist: c.dist, viewHeight: c.viewHeight, aspect: cv.clientWidth / Math.max(1, cv.clientHeight), position: c.entity.getPosition(), forward: c.entity.forward });
     }
     this.updateMood(dt);
     this.look.update(dt);
@@ -4055,7 +4594,7 @@ export class Game {
     const restored = this.sim.progression.restoredCount(HOME);
     this.sfx.layers = Math.min(3, Math.floor(restored / 12));
     this.sfx.life = Math.min(1, restored / 48);
-    this.sfx.update(dt);
+    this.sfx.update(wdt);
 
     if (this.selected) {
       this.inspectTimer -= dt;
@@ -4079,7 +4618,7 @@ export class Game {
     this.updateAreaLabels();
     this.updateBoostRings(dt);
 
-    this.saveTimer += dt;
+    if (!paused) this.saveTimer += dt; // E22.11: a pause writes nothing (savedAt doesn't move)
     if (this.saveTimer >= TUNING.autosaveSeconds) {
       this.saveTimer = 0;
       this.save();
@@ -4125,6 +4664,11 @@ function fromCostStrings(c: Partial<Record<ResourceKind, string>>): import('../c
   const o: import('../core/types').Cost = {};
   for (const k of ['energy', 'water', 'biomass'] as const) if (c[k] !== undefined) o[k] = big(c[k]);
   return o;
+}
+
+/** E22.11: what the desktop (Steam Deck) build's preload offers the page, if anything. */
+export function desktopApi(): { quit?: () => void; onPower?: (cb: (state: 'suspend' | 'resume') => void) => void; deck?: boolean } | undefined {
+  return (globalThis as { solarbloomDesktop?: { quit?: () => void; onPower?: (cb: (state: 'suspend' | 'resume') => void) => void; deck?: boolean } }).solarbloomDesktop;
 }
 
 /** E20.1: a rough direction in words, north up as on the minimap (north is -z, east is +x). */

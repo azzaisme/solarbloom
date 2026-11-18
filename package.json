@@ -33,6 +33,7 @@
     "test:merge": "vite build && node tests/e2e/merge.e2e.mjs",
     "test:events": "vite build && node tests/e2e/events.e2e.mjs",
     "test:gamepad": "vite build && node tests/e2e/gamepad.e2e.mjs",
+    "test:ui": "vite build && node tests/e2e/e22-ui.e2e.mjs",
     "shots:look2": "vite build && node tests/e2e/look2-shots.mjs",
     "desktop": "vite build && electron . --windowed",
     "package:deck": "vite build && electron-builder --linux AppImage --x64 --publish never",
@@ -44,8 +45,10 @@
     "playcanvas": "^2.23.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "electron": "^41.7.1",
     "electron-builder": "^26.18.0",
+    "playwright": "^1.65.1",
     "typescript": "~5.9.3",
     "vite": "^7.3.8",
     "vitest": "^3.2.7"

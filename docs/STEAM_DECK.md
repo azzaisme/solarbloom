@@ -40,12 +40,29 @@ To update, download the new AppImage and run the script again.
 
 ## Controls
 
-The game reads the Deck as a standard gamepad, so Steam Input's built-in **Gamepad** template works as it is:
-left stick to walk, A to pulse, X to interact, Y for the build tray, B to cancel, right trigger to sprint,
-bumpers to change tool, right stick to turn the view (sideways; up and down zooms only while placing something), a right stick click
-to recentre it, View for the overview, Menu to pause, and the d-pad for the
-backpack, harvest and upgrades. Buttons can be rebound in Settings → Controls. A custom Steam Input template is
-not shipped yet.
+The game reads the Deck as a standard gamepad, so Steam Input's built-in **Gamepad** template works as it is.
+The map is E22's (docs/E22_CONTROLS_UI.md):
+
+| Action | Deck |
+|---|---|
+| Walk | Left stick |
+| Sprint | L2 (hold), or click the left stick to switch it on |
+| Turn the view | Right stick; click it to recentre |
+| Interact (the prompt at the bottom says what it does) | A |
+| Pulse, use the tool in hand | X |
+| Build menu | Y; in build mode A places, L1 / R1 turn the piece, R2 is remove mode |
+| Zoom the camera | D-pad down (cycles) |
+| Backpack | D-pad up |
+| Harvest Sunlight | D-pad left |
+| Pin the next request (old-city rules) / Upgrades (classic rules) | D-pad right |
+| Map | View |
+| Back / cancel | B |
+| Pause and menu (photo mode is in it) | Menu |
+| Tabs in a panel | L1 / R1 |
+
+Under classic rules R2 also fires Bloom Frenzy while walking. Every action can be rebound in Settings →
+Controls; bindings saved before this map are reset once, with a notice. A custom Steam Input template is not
+shipped yet.
 
 ## Test checklist (on a real Deck)
 
@@ -55,8 +72,8 @@ Record the result of each on the issue (#243, #244).
 - [ ] Cold start to standing in the park takes under 15 seconds.
 - [ ] Settings → Graphics shows "Auto (Steam Deck)".
 - [ ] A new game can be played to waking the fountain with the Deck's controls only.
-- [ ] Every panel opens, can be moved through with the d-pad and closes with B: build tray, upgrades, backpack,
-      settings, an area panel.
+- [ ] Every panel opens, can be moved through with the d-pad and closes with B: build menu, upgrades, backpack,
+      the pause menu and settings, an area panel.
 - [ ] Text is readable at 100%; try 125% and 150% and check nothing overlaps or leaves the screen.
 - [ ] Restored park, close default view, a ×300 chain running and drones working: 30 fps or better (turn on the
       debug overlay with Settings → Debug, or Steam's performance overlay; attach a frame-time log).
