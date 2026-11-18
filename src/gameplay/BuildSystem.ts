@@ -31,8 +31,10 @@ export class BuildSystem {
     return this.sim.crafting.machineRecipe(type)?.cost ?? RECIPES[type]?.cost;
   }
 
-  /** E21.3: the fountain tier that unlocks a machine under old-city rules. */
+  /** E21.3: the fountain tier that unlocks a machine under old-city rules (a table recipe's tier, else E21.3's). */
   recipeTier(type: BuildableType): number {
+    const u = this.sim.crafting.machineRecipe(type)?.unlock;
+    if (u && 'tier' in u) return u.tier;
     return RECIPES[type]?.tier ?? 99;
   }
 

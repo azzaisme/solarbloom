@@ -5,24 +5,22 @@ import type { CozyState } from '../core/types';
 import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, KEEPSAKE_HINTS, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type Keepsake, type PlotOption } from '../data/cozy';
 import type { Sim } from './Sim';
 import type { DecorRecipe } from '../data/crafting';
-import { itemDef } from '../data/items';
 
-/** E23.6.1: a decoration's crafting recipe under old-city rules (it costs this, and unlocks where the recipe says). */
+/** E23.6.1: a decoration's crafting recipe under old-city rules (made once at the table, then free to place). */
 export function decorRecipe(sim: Sim, id: string): DecorRecipe | undefined {
   return sim.oldCity ? sim.crafting.decor(id) : undefined;
 }
 
-/** Is a decoration open to place? Old-city decorations with a recipe follow it; the rest keep E19.2's unlocks. */
+/** Is a decoration open to place? Old-city decorations with a recipe once made at the table; the rest keep E19.2's. */
 export function decorOpen(sim: Sim, o: DecorOption): boolean {
   const r = decorRecipe(sim, o.id);
-  if (r) return sim.crafting.unlocked(r.unlock);
+  if (r) return sim.crafting.decorMade(o.id);
   return 'start' in o.unlock || !!sim.state.cozy?.decorUnlocked?.includes(o.id);
 }
 
-/** A decoration's cost for the build menu ("🪵1/2 🧱3/3"), or '' when it is free. */
-export function decorCostLabel(sim: Sim, id: string): string {
-  const r = decorRecipe(sim, id);
-  return r ? sim.inventory.describe(r.cost).map((p) => `${p.icon}${Math.min(p.have, p.need)}/${p.need}`).join(' ') : '';
+/** A decoration's cost for the build menu: none (made once at the table, then free). Kept for the slot label. */
+export function decorCostLabel(_sim: Sim, _id: string): string {
+  return '';
 }
 
 export interface DecorChoice {
@@ -273,6 +271,7 @@ export class Cozy {
   /** What a locked decoration waits for. */
   private decorHint(o: DecorOption): string {
     const r = decorRecipe(this.sim, o.id);
+    if (r && this.sim.crafting.unlocked(r.unlock)) return 'it is made at the crafting table';
     return r ? this.sim.crafting.unlockLabel(r.unlock).replace('🔒 ', '') : this.hint(o.unlock);
   }
 
@@ -287,8 +286,8 @@ export class Cozy {
     for (const o of DECOR_OPTIONS) {
       const r = decorRecipe(this.sim, o.id);
       if (r) {
-        // E23.6.1: a recipe found (a cache) or researched: announced once; the everyday ones are known from the start
-        if ('home' in r.unlock || !this.sim.crafting.unlocked(r.unlock) || this.st?.decorUnlocked?.includes(o.id)) continue;
+        // E23.6.1: made at the table: announced once (the build menu has it now)
+        if (!this.sim.crafting.decorMade(o.id) || this.st?.decorUnlocked?.includes(o.id)) continue;
       } else if (this.isDecorUnlocked(o) || !this.met(o.unlock)) continue;
       (this.write().decorUnlocked ??= []).push(o.id);
       out.push(o);
@@ -304,7 +303,7 @@ export class Cozy {
   canDecorate(kind: string, roofId: string, x: number, z: number): string | undefined {
     const o = DECOR_OPTION[kind];
     if (!o) return 'There is no such decoration';
-    if (!this.isDecorUnlocked(o)) return decorRecipe(this.sim, o.id) ? `Not known yet: ${this.decorHint(o)}` : `Unlocks when ${this.hint(o.unlock)}`;
+    if (!this.isDecorUnlocked(o)) return decorRecipe(this.sim, o.id) ? `Not made yet: ${this.decorHint(o)}` : `Unlocks when ${this.hint(o.unlock)}`;
     if (this.groundOnly && roofId !== GROUND) return 'Decorations go on the city’s ground for now';
     if (this.decorCount() >= DECOR_GEN.max) return `The city holds ${DECOR_GEN.max} decorations at most: remove one first`;
     const t = this.sim.grid.peek(roofId, x, z); // never loads a chunk (the sim decides that)
@@ -313,10 +312,6 @@ export class Cozy {
     const why = this.sim.build.footprintProblem(roofId, x, z, 1, ['restored']);
     if (why) return why === 'Needs restored or mossy ground — pulse it first' ? 'Restore the ground here first' : why;
     if (this.plotUnder(roofId, x, z, 1)) return 'A plot is chosen here: clear it first';
-    // E23.6.1: under old-city rules a decoration costs its recipe (paid from the backpack, then the store)
-    const r = decorRecipe(this.sim, kind);
-    const short = r && this.sim.inventory.shortfall(r.cost);
-    if (short) return `Needs ${short === 'biomass' ? 'Greens' : itemDef(short).name}`;
     return undefined;
   }
 
@@ -328,8 +323,6 @@ export class Cozy {
   placeDecor(kind: string, rot: number, roofId: string, x: number, z: number): string | undefined {
     const why = this.canDecorate(kind, roofId, x, z);
     if (why) return why;
-    const r = decorRecipe(this.sim, kind);
-    if (r && !this.sim.inventory.pay(r.cost)) return 'Could not pay for it';
     const s = this.write();
     const key = decorKey(roofId, x, z);
     const decor = { ...(s.decor ?? {}), [key]: decorValue(kind, rot) };
@@ -347,9 +340,6 @@ export class Cozy {
     const s = this.st;
     if (!d || !s?.decor) return undefined;
     delete s.decor[d.key];
-    // E23.6.1: everything it cost comes back
-    const r = decorRecipe(this.sim, d.kind);
-    if (r) this.sim.inventory.refund(r.cost);
     this.sim.overgrowth?.tidy(); // E23.6.6: what grew on it comes back too
     if (!Object.keys(s.decor).length) delete s.decor;
     this.sim.grid.unindexDecor(d.key);

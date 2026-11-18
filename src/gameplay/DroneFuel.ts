@@ -42,8 +42,13 @@ export class DroneFuel {
     return (this.sim as { water?: WaterLike }).water;
   }
 
+  /** What a role draws now: its data, less the Lighter drones research (E23.6.2), never below one unit a job. */
   supply(role: DroneRole | 'cultivator'): DroneSupply {
-    return DRONE_SUPPLY[role];
+    const base = DRONE_SUPPLY[role];
+    const k = 1 - Math.min(0.9, this.sim.research?.effect('droneThrift') ?? 0);
+    if (k >= 1) return base;
+    const less = (n: number | undefined) => (n ? Math.max(1, Math.round(n * k)) : n);
+    return { power: base.power * k, water: less(base.water), biomass: less(base.biomass) };
   }
 
   /** What a role needs from its hub, in words for the hub's panel. */

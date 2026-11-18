@@ -89,6 +89,16 @@ describe('E23.6.3: what drones run on', () => {
     for (const d of mine()) expect(sim.drones.statusOf(d)).not.toBe('docked');
   });
 
+  it('Lighter drones (research) make every role draw less from its hub', () => {
+    const { sim } = hubSim();
+    expect(sim.droneFuel.supply('gardener')).toEqual(DRONE_SUPPLY.gardener);
+    sim.state.salvage!.research = { analysed: [], done: [], running: [], levels: { droneThrift: 3 } };
+    const g = sim.droneFuel.supply('gardener');
+    expect(g.power).toBeCloseTo(DRONE_SUPPLY.gardener.power * 0.55, 6);
+    expect(g.water).toBe(1);
+    expect(sim.droneFuel.supply('restorer').biomass).toBe(1);
+  });
+
   it('a hub draws power for each drone out on a job', () => {
     const { sim, hub } = hubSim();
     expect(sim.droneFuel.draw(hub)).toBe(0);
