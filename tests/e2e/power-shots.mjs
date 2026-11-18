@@ -184,6 +184,16 @@ try {
     const dcNight = await shot('lights-night', 7, 41, 1.2, 20, 8000);
     await shot('lights-night-close', 5, 41, 2.2, 20, 4000);
     await shot('lights-night-lines', 9, 40, 1.6, 0, 4000);
+    // the Power overlay at night (it must read clearly in the dark)
+    if (hasOverlay) {
+      await page.evaluate(() => {
+        const g = window.solarbloom;
+        g.selectTool('battery');
+        if (!g.powerOverlay.visible) g.togglePowerView();
+      });
+      await shot('power-overlay-night', 8, 42, 1.0, 20, 4000);
+      await page.evaluate(() => window.solarbloom.selectTool('pulse'));
+    }
     const stats = await page.evaluate(() => window.solarbloom.lightVisuals.stats());
     console.log('night', JSON.stringify(stats), 'draw calls', dcNight);
   }
