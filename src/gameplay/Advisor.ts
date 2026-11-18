@@ -133,7 +133,6 @@ export class Advisor {
    */
   keeperStep(): Suggestion | undefined {
     const s = this.sim;
-    if (!s.oldCity) return undefined;
     const pinned = s.keepers.pinned();
     if (pinned) {
       const k = s.keepers.def(pinned.id);

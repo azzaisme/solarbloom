@@ -11,7 +11,7 @@ import { PLOT_GEN, PLOT_OPTIONS, plotOptionsFor } from '../src/data/cozy';
 import { AREA_TYPES, CITY_GEN, PARK_LAYOUT, type AreaType } from '../src/data/city';
 import { Cozy } from '../src/gameplay/Cozy';
 import { Sim } from '../src/gameplay/Sim';
-import { runBot } from './bots';
+import { runOldCityBot } from './oldcity-bot';
 import { drawPlot, PLOT_ART } from '../src/rendering/PlotArt';
 import { Walker } from '../src/gameplay/Walker';
 
@@ -189,13 +189,11 @@ describe('E19.1.5 plots stay cosmetic', () => {
       return JSON.stringify(o);
     };
     let plainSim: Sim | undefined;
-    runBot({ seed: 11, minutes: 25, onSecond: (sim) => (plainSim = sim) });
+    runOldCityBot(11, 25, 'keeper', { onSecond: (sim) => (plainSim = sim) });
     // The same bot, choosing a look for every plot the moment it's ready, changing them now and then.
     let n = 0;
     let chosenSim: Sim | undefined;
-    runBot({
-      seed: 11,
-      minutes: 25,
+    runOldCityBot(11, 25, 'keeper', {
       onSecond: (sim) => {
         chosenSim = sim;
         const cozy = ((sim as unknown as { __cozy?: Cozy }).__cozy ??= new Cozy(sim));

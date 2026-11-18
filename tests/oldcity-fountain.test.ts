@@ -93,8 +93,6 @@ describe('E21.6: the fountain', () => {
     expect(sim.state.progression.coreActivated).toBe(true);
     expect(sim.areas.fog(PARK)).toBe('cleared');
     for (const id of ['mastRow', 'oldMarket', 'elderGrove']) expect(sim.areas.sealed(id), id).toBe(true);
-    // the classic fountain never runs in the Old City
-    expect(sim.progression.coreReady()).toBe(false);
   });
 
   it('tier 1 can be reached in a new game using only what the park holds', () => {

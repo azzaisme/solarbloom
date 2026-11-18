@@ -173,7 +173,7 @@ export class Panels extends HudPart {
     this.set('catCount', $(this.root, '#catCount'), 'text', String(cats));
     if (cats > 0) $(this.root, '#catBtn').hidden = false;
     // Look 5.9: the house shows a badge while a landmark (or the fountain) is ready to wake; a tap then flies there.
-    const wakeReady = s.state.progression.coreActivated ? s.areas.revealed().some((id) => s.areas.fog(id) !== 'cleared' && s.areas.ready(id)) : s.progression.coreReady();
+    const wakeReady = s.areas.revealed().some((id) => s.areas.fog(id) !== 'cleared' && s.areas.ready(id));
     const homeB = $(this.root, '#homeBtn');
     this.set('homeReady', homeB, 'cls', wakeReady ? '1' : '0', 'ready');
     this.set('homeTitle', homeB, 'title', wakeReady ? 'A landmark is ready to wake: look at it from above' : 'Home (Home key)');

@@ -324,7 +324,7 @@ export class SaveService {
         cat: { ...base.cat, ...s.cat },
         progression: { ...base.progression, ...s.progression },
         stats: { ...base.stats, ...s.stats, firsts: { ...(s.stats?.firsts ?? {}) } },
-        salvage: base.salvage ? { ...base.salvage, ...s.salvage } : undefined,
+        salvage: { ...base.salvage, ...s.salvage },
       };
     } catch {
       return undefined;

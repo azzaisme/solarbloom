@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { big } from '../src/core/Big';
-import { formatCost } from '../src/core/Economy';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { BuildableType, GroundState } from '../src/core/types';
 import { BUILDABLE, MACHINES } from '../src/data/machines';
@@ -119,12 +118,5 @@ describe('E21.3: recipes', () => {
     expect(sim.build.check('reclaimer', GROUND, 23, -8).reason).toMatch(/Wake Signal Mast/);
     sim.state.areas.mastRow.fog = 'cleared';
     expect(sim.build.check('reclaimer', GROUND, 23, -8).ok).toBe(true);
-  });
-
-  it('classic costs are untouched', () => {
-    const classic = new Sim(createInitialState(7));
-    expect(classic.build.costLabel('solar')).toBe(formatCost(classic.build.cost('solar')));
-    expect(classic.build.isUnlocked('chest')).toBe(false);
-    expect(classic.build.cost('droneHub')).toEqual({ biomass: big(80), energy: big(30) });
   });
 });

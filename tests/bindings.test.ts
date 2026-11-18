@@ -56,10 +56,9 @@ const PAD: [Action, number | undefined][] = [
 ];
 
 describe('E22.1: the new button map', () => {
-  for (const oldCity of [false, true]) {
-    const rules = oldCity ? 'old-city rules' : 'classic rules';
-    it(`matches every keyboard and mouse default in the epic (${rules})`, () => {
-      const b = new Bindings(undefined, { oldCity });
+  {
+    it('matches every keyboard and mouse default in the epic', () => {
+      const b = new Bindings();
       for (const [a, k] of KEYS) expect(keys(b, a), a).toEqual(k);
       for (let i = 0; i < 9; i++) expect(keys(b, SLOTS[i])).toEqual([`Digit${i + 1}`]);
     });
@@ -70,15 +69,15 @@ describe('E22.1: the new button map', () => {
     expect(Object.keys(b.pad)).not.toContain('frenzy');
   });
 
-    it(`matches every gamepad default in the epic (${rules})`, () => {
-      const b = new Bindings(undefined, { oldCity });
+    it('matches every gamepad default in the epic', () => {
+      const b = new Bindings();
       for (const [a, p] of PAD) expect(b.pad[a], a).toBe(p);
       for (const s of SLOTS) expect(b.pad[s]).toBeUndefined(); // the pad uses the build menu
-      expect(b.pad.pinNext).toBe(oldCity ? 15 : undefined); // d-pad right
+      expect(b.pad.pinNext).toBe(15); // d-pad right
     });
 
-    it(`gives no two actions that can apply together the same input (${rules})`, () => {
-      expect(new Bindings(undefined, { oldCity }).conflicts()).toEqual([]);
+    it('gives no two actions that can apply together the same input', () => {
+      expect(new Bindings().conflicts()).toEqual([]);
     });
   }
 
@@ -102,14 +101,13 @@ describe('E22.1: the new button map', () => {
     expect(b.actionForButton(5, ['panel', 'any'])).toBe('nextTab');
   });
 
-  it('next area keeps its key under classic rules and loses it under old-city rules', () => {
-    const classic = new Bindings();
-    expect(classic.label('nextArea')).toBe('N');
-    const old = new Bindings(undefined, { oldCity: true });
-    for (const a of ['nextArea', 'home'] as Action[]) {
-      expect(old.keys[a], a).toEqual([]);
-      expect(old.pad[a], a).toBeUndefined();
-    }
+  it('E23.1.1: one map; the classic-only actions (next area, back to the park) are gone', () => {
+    const ids = ACTIONS.map((a) => a.id) as string[];
+    for (const a of ['nextArea', 'home', 'upgrades']) expect(ids, a).not.toContain(a);
+    // a saved binding for one of them is ignored
+    const b = new Bindings({ v: BINDINGS_VERSION, keys: { nextArea: ['KeyN'] } as never, pad: { home: 15 } as never });
+    expect(b.actionForCode('KeyN')).toBeUndefined();
+    expect(b.pad.pinNext).toBe(15);
   });
 
   it('lists every action on the rebinding screen, and every default is an action', () => {

@@ -11,7 +11,7 @@ import { Cozy } from '../src/gameplay/Cozy';
 import { Sim } from '../src/gameplay/Sim';
 import { Walker } from '../src/gameplay/Walker';
 import { DECOR_ART, drawDecor } from '../src/rendering/DecorArt';
-import { runBot } from './bots';
+import { runOldCityBot } from './oldcity-bot';
 import { fill, makeSim, PAD, rich } from './helpers';
 
 /** The test pad, fully restored and in full bloom, with a Drone Hub: only tiles left at bloom 1 can be nurtured. */
@@ -213,12 +213,10 @@ describe('E19.2 stays cosmetic for the pacing bots', () => {
       return JSON.stringify(o);
     };
     let plain: Sim | undefined;
-    runBot({ seed: 21, minutes: 12, onSecond: (sim) => (plain = sim) });
+    runOldCityBot(21, 12, 'keeper', { onSecond: (sim) => (plain = sim) });
     let checked: Sim | undefined;
     let earned = 0;
-    runBot({
-      seed: 21,
-      minutes: 12,
+    runOldCityBot(21, 12, 'keeper', {
       onSecond: (sim) => {
         checked = sim;
         const cozy = ((sim as unknown as { __cozy?: Cozy }).__cozy ??= new Cozy(sim));

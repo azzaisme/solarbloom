@@ -3,7 +3,7 @@ import { $, esc, HudPart } from './HudPart';
 import { calmToast } from './Pace';
 
 /**
- * E22.5 (#342): toasts, bottom right. One at a time on the calm HUD (always under old-city rules); a toast with
+ * E22.5 (#342): toasts, bottom right. One at a time on the calm HUD; a toast with
  * the same headline as the one showing refreshes it instead of stacking. Material pick-ups merge: "+3 Copper"
  * then "+3 Copper" shows "+6 Copper".
  */
@@ -14,21 +14,17 @@ export class Toasts extends HudPart {
    */
   toast(html: string, kind: '' | 'gold' | 'cat' = '', secs = 3.2) {
     const box = $(this.root, '#toasts');
-    // E19.4.2: the calm HUD keeps one toast at a time, drops number-heavy detail lines and the repeat count.
-    const calm = !this.settings.showNumbers || this.hud.oldCity;
-    if (calm) html = calmToast(html);
+    // E19.4.2 / E22.10: the calm HUD drops number-heavy detail lines and the repeat count (numbers live in panels).
+    html = calmToast(html);
     html = this.hud.words(html);
     const head = html.split('<small>')[0].replace(/[×x]\d+|\d+/g, '#');
     for (const c of Array.from(box.children) as HTMLElement[]) {
       if (c.dataset.head !== head || c.style.opacity === '0') continue;
-      const n = Number(c.dataset.n ?? '1') + 1;
-      c.dataset.n = String(n);
-      if (!calm) c.innerHTML = iconize(`${html.replace('<small>', ` <b class="tn">×${n}</b><small>`)}${html.includes('<small>') ? '' : ` <b class="tn">×${n}</b>`}`);
       clearTimeout(Number(c.dataset.timer));
       c.dataset.timer = String(this.fadeLater(c, secs));
       return;
     }
-    while (box.children.length >= (calm ? 1 : 2)) box.firstElementChild!.remove();
+    while (box.children.length >= 1) box.firstElementChild!.remove();
     const el = document.createElement('div');
     el.dataset.head = head;
     el.className = `toast panel ${kind}`;

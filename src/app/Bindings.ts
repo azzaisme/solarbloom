@@ -47,8 +47,7 @@ export type Action =
   | 'nextTab'
   | 'debug'
   // Classic rules only (decision 7): old-city rules give these no default (E21 hides them).
-  | 'nextArea'
-  | 'home';
+;
 
 export type Context = 'world' | 'build' | 'panel' | 'any';
 /** The rebinding screen's groups (E22.4). */
@@ -69,11 +68,9 @@ export interface ActionDef {
   keys: boolean;
   /** can be put on a pad button (movement and look are the sticks) */
   pad: boolean;
-  /** only under classic rules */
-  classic?: boolean;
 }
 
-const A = (id: Action, label: string, group: Group, context: Context, keys = true, pad = true, classic = false): ActionDef => ({ id, label, group, context, keys, pad, classic });
+const A = (id: Action, label: string, group: Group, context: Context, keys = true, pad = true): ActionDef => ({ id, label, group, context, keys, pad });
 
 /** Every action, in the order the rebinding screen lists them. */
 export const ACTIONS: readonly ActionDef[] = [
@@ -90,8 +87,6 @@ export const ACTIONS: readonly ActionDef[] = [
   A('pulse', 'Pulse, use the tool, place', 'act', 'world'),
   A('harvest', 'Harvest Sunlight', 'act', 'world'),
   A('pinNext', 'Pin the next request', 'act', 'world'),
-  A('nextArea', 'Go to the area that needs you', 'act', 'world', true, true, true),
-  A('home', 'Back to the park', 'act', 'world', true, true, true),
   A('buildMenu', 'Build menu', 'build', 'world'),
   A('place', 'Place (in build mode)', 'build', 'build'),
   A('rotate', 'Turn the piece', 'build', 'build'),
@@ -127,8 +122,8 @@ export const FIXED_PAD: Partial<Record<Action, number>> = { menu: 9 };
 /** Saved bindings carry this version; older ones are reset once, with a notice (decision 6). */
 export const BINDINGS_VERSION = 2;
 
-/** The keyboard defaults from the epic's table. `oldCity` drops the classic-only keys (decision 7). */
-export function defaultKeys(oldCity = false): Record<Action, string[]> {
+/** The keyboard defaults from the epic's table. */
+export function defaultKeys(): Record<Action, string[]> {
   const k: Record<Action, string[]> = {
     up: ['KeyW', 'ArrowUp'],
     down: ['KeyS', 'ArrowDown'],
@@ -165,10 +160,7 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
     prevTab: ['KeyQ'],
     nextTab: ['KeyE'],
     debug: ['F3'],
-    nextArea: ['KeyN'],
-    home: ['Home'],
   };
-  if (oldCity) for (const a of ACTIONS) if (a.classic) k[a.id] = [];
   return k;
 }
 
@@ -176,7 +168,7 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
  * Standard gamepad buttons: 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 6 LT, 7 RT, 8 View, 9 Menu, 10 LS, 11 RS,
  * 12–15 d-pad up, down, left, right. Movement, looking and the camera's turn are the sticks.
  */
-export function defaultPad(oldCity = false): Partial<Record<Action, number>> {
+export function defaultPad(): Partial<Record<Action, number>> {
   const p: Partial<Record<Action, number>> = {
     sprint: 6,
     sprintToggle: 10,
@@ -197,7 +189,7 @@ export function defaultPad(oldCity = false): Partial<Record<Action, number>> {
     prevTab: 4,
     nextTab: 5,
   };
-  if (oldCity) p.pinNext = 15;
+  p.pinNext = 15;
   return p;
 }
 
@@ -267,13 +259,10 @@ export type BindResult = { ok: true; swapped?: Action } | { ok: false; reason: '
 export class Bindings {
   readonly keys: Record<Action, string[]>;
   readonly pad: Partial<Record<Action, number>>;
-  readonly oldCity: boolean;
-
-  constructor(saved?: SavedBindings, opts: { oldCity?: boolean } = {}) {
-    this.oldCity = !!opts.oldCity;
-    const dk = defaultKeys(this.oldCity);
+  constructor(saved?: SavedBindings) {
+    const dk = defaultKeys();
     this.keys = Object.fromEntries(Object.entries(dk).map(([a, k]) => [a, [...(saved?.keys?.[a as Action] ?? k)]])) as Record<Action, string[]>;
-    this.pad = { ...defaultPad(this.oldCity) };
+    this.pad = { ...defaultPad() };
     for (const [a, b] of Object.entries(saved?.pad ?? {})) {
       if (!ACTIONS.some((x) => x.id === a)) continue; // an action that no longer exists (E23.1.2: Bloom Frenzy)
       if (b === null || b === undefined) delete this.pad[a as Action];
@@ -287,10 +276,10 @@ export class Bindings {
 
   /** Back to the default map (both columns, or one: `keys` or `pad`). */
   reset(column?: 'keys' | 'pad') {
-    if (column !== 'pad') for (const [a, k] of Object.entries(defaultKeys(this.oldCity))) this.keys[a as Action] = [...k];
+    if (column !== 'pad') for (const [a, k] of Object.entries(defaultKeys())) this.keys[a as Action] = [...k];
     if (column !== 'keys') {
       for (const a of Object.keys(this.pad) as Action[]) delete this.pad[a];
-      Object.assign(this.pad, defaultPad(this.oldCity));
+      Object.assign(this.pad, defaultPad());
     }
   }
 
@@ -387,8 +376,8 @@ export class Bindings {
 
   /** Only what differs from the defaults is saved. */
   save(): SavedBindings {
-    const dk = defaultKeys(this.oldCity);
-    const dp = defaultPad(this.oldCity);
+    const dk = defaultKeys();
+    const dp = defaultPad();
     const keys: Partial<Record<Action, string[]>> = {};
     for (const [a, k] of Object.entries(this.keys)) if (k.join() !== dk[a as Action].join()) keys[a as Action] = [...k];
     const pad: Partial<Record<Action, number | null>> = {};

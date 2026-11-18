@@ -29,15 +29,13 @@ const doneOf = (m: MachineData) => m.cult?.done ?? 0;
 const restored = (sim: Sim) => sim.grid.tilesOf(PAD).filter((t) => t.z < 6 && t.ground === 'restored').length;
 
 describe('Look 6.8: the Cultivator (#177)', () => {
-  it('unlocks with a Drone Hub, is priced in biomass with an energy part, and does not merge', () => {
+  it('unlocks at its fountain tier (E21.3), is built from a recipe, and does not merge', () => {
     const sim = makeSim(9);
     expect(sim.build.isUnlocked('cultivator')).toBe(false);
-    rich(sim);
-    fill(sim, 0, 6, 7, 7, 'restored');
-    sim.build.place('droneHub', PAD, 4, 6);
+    rich(sim); // every buildable tier
     expect(sim.build.isUnlocked('cultivator')).toBe(true);
-    const c = sim.build.cost('cultivator');
-    expect(big(c.biomass!).gt(0) && big(c.energy!).gt(0)).toBe(true);
+    const r = sim.build.recipe('cultivator')!;
+    expect(Object.values(r).every((n) => (n ?? 0) > 0) && Object.keys(r).length > 0).toBe(true);
     expect(isMergeable('cultivator')).toBe(false);
   });
 

@@ -110,7 +110,7 @@ export async function boot(canvas: HTMLCanvasElement) {
     settings: (parent, back) => {
       onBack = back;
       const mig = migrateBindings(settings.keys || settings.pad ? { v: settings.bindingsV, keys: settings.keys, pad: settings.pad } : undefined);
-      const bindings = new Bindings(mig.saved, { oldCity: true });
+      const bindings = new Bindings(mig.saved);
       screen ??= new SettingsScreen(parent, {
         settings,
         set: (k, v) => {

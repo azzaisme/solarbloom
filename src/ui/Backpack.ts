@@ -252,7 +252,6 @@ export class Backpack {
   // ───────── Blueprints ─────────
 
   private blueprints(): string {
-    if (!this.host.sim.oldCity) return `<p class="bp-empty">Blueprints belong to the Old City.</p>`;
     const rows = blueprintRows(this.host.sim);
     return `<section class="bp-group" tabindex="0" role="group" aria-labelledby="bpbh"><h3 id="bpbh">Blueprints <span class="bp-gcount">${rows.filter((r) => r.found).length} of ${rows.length}</span></h3><ul>${rows.map((r) => `<li class="${r.found ? '' : 'unseen'}"><b>${esc(r.name)}</b> <span>${esc(r.where)}</span></li>`).join('')}</ul></section>`;
   }

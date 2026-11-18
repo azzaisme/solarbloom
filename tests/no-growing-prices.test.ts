@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { Economy, KINDS } from '../src/core/Economy';
-import type { BuildableType, MachineData } from '../src/core/types';
+import type { BuildableType, Cost, MachineData } from '../src/core/types';
 import { BUILDABLE } from '../src/data/machines';
 import { REGIONS } from '../src/data/oldcity';
 import { UPGRADES } from '../src/data/upgrades';
@@ -14,17 +14,22 @@ import { fill, makeSim, PAD, rich } from './helpers';
  * price, and a machine or a refit costs the same however many were bought before.
  */
 describe('E23.1.5: no price grows with purchases', () => {
-  const same = (a: ReturnType<Sim['build']['cost']>, b: ReturnType<Sim['build']['cost']>) => KINDS.every((k) => Economy.part(a, k).eq(Economy.part(b, k)));
+  const same = (a: Cost, b: Cost) => KINDS.every((k) => Economy.part(a, k).eq(Economy.part(b, k)));
 
-  it('every machine costs the same for the tenth copy as for the first', () => {
+  it('every machine pays the same recipe for the tenth copy as for the first', () => {
     const sim = makeSim();
     rich(sim);
     fill(sim, 0, 0, 7, 7, 'restored');
-    const first = Object.fromEntries(BUILDABLE.map((t) => [t, sim.build.cost(t)]));
+    const first = Object.fromEntries(BUILDABLE.map((t) => [t, JSON.stringify(sim.build.recipe(t))]));
     // pretend ten of each were already built
     sim.state.stats.built = Object.fromEntries(BUILDABLE.map((t) => [t, 10]));
-    sim.build.place('solar', PAD, 5, 5);
-    for (const t of BUILDABLE) expect(same(sim.build.cost(t as BuildableType), first[t]), t).toBe(true);
+    expect(sim.build.place('solar', PAD, 5, 5)).toBeTruthy();
+    for (const t of BUILDABLE) expect(JSON.stringify(sim.build.recipe(t as BuildableType)), t).toBe(first[t]);
+    // and what the backpack pays is the recipe, every time
+    const scrap = () => sim.state.salvage.pack.scrap ?? 0;
+    const before = scrap();
+    expect(sim.build.place('solar', PAD, 6, 6)).toBeTruthy();
+    expect(before - scrap()).toBe(sim.build.recipe('solar')!.scrap);
   });
 
   it('a drone refit costs the same on every hub', () => {

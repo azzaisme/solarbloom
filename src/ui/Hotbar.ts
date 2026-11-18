@@ -1,5 +1,5 @@
 import { DECOR_OPTION, DECOR_OPTIONS } from '../data/cozy';
-import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE } from '../data/machines';
+import { BUILDABLE, MACHINES } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { type Action, type Bindings, keyLabel } from '../app/Bindings';
 import { type GlyphStyle, type PadStyle, padName } from './Glyphs';
@@ -15,15 +15,15 @@ import { decorType, machineTool, type Tool } from './Hud';
 export class Hotbar extends HudPart {
   private tool: Tool = 'pulse';
 
-  static template(oldCity = false): string {
+  static template(): string {
     return [
       `<button class="slot" data-tool="inspect" aria-label="Inspect tool (1)"><span class="key">1</span><span class="si">${ICONS.inspect}</span><span class="sl">Inspect</span><span class="sc">&nbsp;</span></button>`,
       `<button class="slot" data-tool="pulse" aria-label="Restoration Pulse (2)"><span class="key">2</span><span class="si">${ICONS.pulse}</span><span class="sl"><span class="long">Restoration </span>Pulse</span><span class="sc"></span></button>`,
       `<span class="sep"></span>`,
       `<button class="slot" id="buildToggle" aria-label="Build menu (B)" aria-expanded="false"><span class="key">B</span><span class="si">${ICONS.build}</span><span class="sl">Build</span><span class="sc"></span></button>`,
       `<div id="buildTray">`,
-      // E21.3: the Old City adds the Storage Chest and the Reclaimer (no number keys: the build menu reaches them)
-      ...(oldCity ? OLD_CITY_BUILDABLE : BUILDABLE).map(
+      // E21.3: the Storage Chest and the Reclaimer have no number keys: the build menu reaches them
+      ...BUILDABLE.map(
         (t) =>
           `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name}${MACHINES[t].hotkey ? ` (${MACHINES[t].hotkey})` : ''}"><span class="key">${MACHINES[t].hotkey ?? ''}</span><span class="si">${ICONS[MACHINE_ICONS[t]]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
       ),
@@ -106,7 +106,7 @@ export class Hotbar extends HudPart {
   update() {
     const s = this.sim;
     // Hotbar costs
-    for (const t of s.oldCity ? OLD_CITY_BUILDABLE : BUILDABLE) {
+    for (const t of BUILDABLE) {
       const btn = $(this.root, `#hotbar [data-tool="${t}"]`);
       // E21.3: under old-city rules the price is the recipe (material icons, have / need)
       this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.costLabel(t));

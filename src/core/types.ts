@@ -311,14 +311,6 @@ export interface LinkState {
   crossings: number;
 }
 
-/**
- * E21 (#312): which rules a game plays by. 'oldcity' is the Old City (docs/E21_OLD_CITY.md): a fixed map of nine
- * regions, materials salvaged by hand, fountain tiers. 'classic' is the endless idle city every game before E21
- * played. A save without the field is classic (the field is never written for classic, so those saves stay
- * byte-identical).
- */
-export type Rules = 'oldcity' | 'classic';
-
 /** E21 §1: the eight materials. */
 export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone';
 /** E21 §6: bloombot's abilities, one per fountain tier 1–4. */
@@ -380,10 +372,8 @@ export interface SalvageState {
 
 export interface GameState {
   version: number;
-  /** E21: the rule set (absent = classic). Read it through `rulesOf`. */
-  rules?: Rules;
-  /** E21: Old City state (old-city rules only). */
-  salvage?: SalvageState;
+  /** E21: the Old City's own state (E23.1.1: every game has it: one rule set). */
+  salvage: SalvageState;
   seed: number;
   rngState: number;
   time: number;

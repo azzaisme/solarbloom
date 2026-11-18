@@ -1,5 +1,5 @@
+import { TIERS } from '../data/salvage';
 import { PARK } from '../core/Areas';
-import { formatCost } from '../core/Economy';
 import { AREA_TYPES } from '../data/city';
 import { MACHINES } from '../data/machines';
 import { TUNING } from '../data/tuning';
@@ -57,7 +57,7 @@ export function areaPanelData(sim: Sim, id: string): AreaPanelData {
     fog,
     restored: c.restored,
     need,
-    ready: id === PARK ? s.progression.coreReady() : s.areas.ready(id),
+    ready: id !== PARK && s.areas.ready(id),
     bonus,
     machines,
   };
@@ -77,14 +77,12 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
   const fogName: Record<string, string> = { hidden: 'Hidden in fog', frontier: 'Thick fog', thinning: 'Thinning fog', cleared: 'Clear' };
   const pct = Math.min(100, Math.round((d.restored / Math.max(1, d.need)) * 100));
   const cleared = d.fog === 'cleared';
-  const parkAwake = id === PARK && s.state.progression.coreActivated;
+  const parkAwake = id === PARK && s.state.salvage.tier >= 1; // E21.6: the fountain wakes at tier 1
   let checklist: string;
   if (id === PARK) {
-    checklist = s.progression
-      .requirements()
-      .map((r) => `<li>${r.done || parkAwake ? '✅' : '⬜'} ${r.label}</li>`)
-      .concat(`<li>${parkAwake ? '✅' : '⬜'} Wake the ${esc(a.landmarkName)} (${formatCost(TUNING.core.cost)})</li>`)
-      .join('');
+    // E21.6: the fountain wakes tier by tier, from what bloombot brings it
+    const tier = s.state.salvage.tier;
+    checklist = TIERS.map((t) => `<li>${tier >= t.tier ? '✅' : '⬜'} Fountain tier ${t.tier}: ${esc(t.name)}</li>`).join('');
   } else {
     const steps = [
       { done: d.fog !== 'hidden', label: 'Revealed next to clear ground' },
@@ -143,7 +141,7 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
 
 /** E21.9: under old-city rules a region shows bloombot's share until helpers may join in. */
 function oldCityShare(s: Sim, id: string): string {
-  if (!s.oldCity || id === PARK || s.areas.info(id).noLandmark || s.areas.fog(id) === 'cleared') return '';
+  if (id === PARK || s.areas.info(id).noLandmark || s.areas.fog(id) === 'cleared') return '';
   const have = s.state.areas[id]?.byBot ?? 0;
   const need = s.areas.shareTarget(id);
   return s.areas.shareMet(id) ? `<p class="stat" data-share="${esc(id)}">🛸 Helpers can work here</p>` : `<p class="stat" data-share="${esc(id)}">🤖 Your share: ${Math.min(have, need)} / ${need}</p>`;

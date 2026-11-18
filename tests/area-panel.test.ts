@@ -1,3 +1,4 @@
+import { TIERS } from '../src/data/salvage';
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
@@ -66,10 +67,13 @@ describe('area panel (City 14.2)', () => {
     expect(areaPanelData(sim, id).bonus[first[0] as 'energy']).toBeCloseTo(first[1] * 60, 1); // the first area of its type
   });
 
-  it('the park lists its fountain milestones', () => {
+  it('the park lists its fountain tiers (E21.6), ticked as they are reached', () => {
     const sim = new Sim(createInitialState(4));
-    const html = areaPanelHtml(sim, PARK, sim.areas.landmark(PARK)?.id);
-    for (const r of sim.progression.requirements()) expect(html).toContain(r.label);
-    expect(html).toContain('Wake the');
+    let html = areaPanelHtml(sim, PARK, sim.areas.landmark(PARK)?.id);
+    for (const t of TIERS) expect(html).toContain(`⬜ Fountain tier ${t.tier}: ${t.name}`);
+    sim.state.salvage.tier = 2;
+    html = areaPanelHtml(sim, PARK, sim.areas.landmark(PARK)?.id);
+    expect(html).toContain(`✅ Fountain tier 2: ${TIERS[1].name}`);
+    expect(html).toContain(`⬜ Fountain tier 3: ${TIERS[2].name}`);
   });
 });

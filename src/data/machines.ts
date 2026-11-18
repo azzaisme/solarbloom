@@ -141,9 +141,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
   },
 };
 
-export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
-/** E21.3: the old-city build list (the classic list plus the Storage Chest and the Reclaimer). */
-export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'pollinator', 'droneHub', 'reclaimer', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+/** E21.3: what can be built (E23.1.1: one list, the Old City's). */
+export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'pollinator', 'droneHub', 'reclaimer', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

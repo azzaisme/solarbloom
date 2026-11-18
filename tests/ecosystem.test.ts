@@ -13,7 +13,7 @@ import faunaSrc from '../src/rendering/Fauna.ts?raw';
 import planSrc from '../src/rendering/FaunaPlan.ts?raw';
 import butterfliesSrc from '../src/rendering/Butterflies.ts?raw';
 import birdsSrc from '../src/rendering/Birds.ts?raw';
-import { mmss, runBot } from './bots';
+import { mmss, runOldCityBot } from './oldcity-bot';
 import { GROUND } from './helpers';
 
 /** Phase 5 E16: biodiversity (derived, never spent) and one-time fauna unlocks (cosmetic). */
@@ -184,14 +184,12 @@ describe('E16 fauna unlocks', () => {
 
   it('a played session reaches butterflies, birds and koi (scripted bot, seed 7, not a person)', () => {
     const times: Partial<Record<FaunaId, number>> = {};
-    const r = runBot({
-      seed: 7,
-      minutes: 30,
+    const r = runOldCityBot(7, 30, 'keeper', {
       onSecond: (sim) => {
         for (const id of FAUNA) if (sim.state.fauna?.[id] !== undefined && times[id] === undefined) times[id] = sim.state.fauna[id];
       },
     });
-    console.log(`E16 fauna (bot seed 7, 30 min): ${FAUNA.map((id) => `${id} ${mmss(times[id])}`).join(' · ')} · fountain ${mmss(r.fountain)}`);
+    console.log(`E16 fauna (Old City bot seed 7): ${FAUNA.map((id) => `${id} ${mmss(times[id])}`).join(' · ')} · fountain ${mmss(r.firsts.tier1)}`);
     expect(times.butterflies).toBeDefined();
     expect(times.birds).toBeDefined();
     expect(times.koi).toBeDefined();

@@ -1,4 +1,4 @@
-import { areaMapFor, AreaMap, OldCityMap, PARK, SEA, type AreaInfo } from '../core/Areas';
+import { areaMapFor, AreaMap, PARK, SEA, type AreaInfo } from '../core/Areas';
 import { regionById } from '../core/OldCityLayout';
 import { GROUND, isRestorable } from '../core/GameState';
 import type { AreaMode, FogState, TileData } from '../core/types';
@@ -70,7 +70,7 @@ export class AreaSystem {
 
   /** A sealed area (region unlocks) is still hidden fog to everything in the game until it is bought. */
   fog(id: string): FogState {
-    if ((id === SEA || id.startsWith('out_')) && this.map instanceof OldCityMap) return 'cleared'; // E21.4 / E21.26: the sea all round is always in view
+    if (id === SEA || id.startsWith('out_')) return 'cleared'; // E21.4 / E21.26: the sea all round is always in view
     const st = this.sim.state.areas[id];
     return !st || st.sealed ? 'hidden' : st.fog;
   }
@@ -89,10 +89,6 @@ export class AreaSystem {
       .sort((a, b) => this.info(a).distance - this.info(b).distance || (a < b ? -1 : 1));
   }
 
-  /** E21.5: the Old City opens by clearing the way, never by buying it. */
-  private get oldCity(): boolean {
-    return this.map instanceof OldCityMap;
-  }
 
   /** E21.5: what an Old City area's seal says: its region's gate, or (a backstreet) the region beside it. */
   sealText(id: string): string {
@@ -124,15 +120,13 @@ export class AreaSystem {
     return t.ground === 'restored' || this.fog(this.map.areaOfCell(t.x, t.z)) === 'cleared';
   }
 
-  /** May play change this tile? Hidden: never. Frontier/thinning: only next to clear ground (the park: anywhere). */
+  /** May play change this tile? Hidden fog: never. A revealed region: anywhere (E21.5: no receding frontier). */
   canTouch(t: TileData): boolean {
     if (t.roofId !== GROUND) return true;
     const id = this.map.areaOfCell(t.x, t.z);
     const fog = this.fog(id);
     if (fog === 'hidden') return false;
-    if (fog === 'cleared' || id === PARK || t.ground === 'restored') return true;
-    if (this.oldCity) return true; // E21.5: an opened Old City region can be restored anywhere (no receding frontier)
-    return this.sim.grid.neighbors(t).some((n) => this.isClear(n));
+    return true; // E21.5: a revealed region can be restored anywhere (no receding frontier); gates keep bloombot out of sealed ones
   }
 
   /** Why a tile can't be touched (tooltips, failed actions). */
@@ -170,9 +164,9 @@ export class AreaSystem {
 
   // ───────────── E21.9: bloombot first ─────────────
 
-  /** Counts a tile bloombot restored itself (its own pulse), in the Old City only. */
+  /** Counts a tile bloombot restored itself (its own pulse). */
   countBot(t: TileData) {
-    if (!this.oldCity || t.roofId !== GROUND) return;
+    if (t.roofId !== GROUND) return;
     const id = this.areaOf(t);
     const st = id ? this.sim.state.areas[id] : undefined;
     if (!st || id === PARK) return;
@@ -189,22 +183,15 @@ export class AreaSystem {
     return (this.sim.state.areas[id]?.byBot ?? 0) >= this.shareTarget(id);
   }
 
-  /**
-   * May helpers (drones, Cultivators, Mother Tree pulses) work here? Always under classic rules; in the Old City
-   * only in the park, in woken regions, and where bloombot has done its share.
-   */
+  /** May helpers (drones, Cultivators, Mother Tree pulses) work here? In the park, in woken regions, and where bloombot has done its share (E21.9). */
   helpersMayWork(id: string | undefined): boolean {
-    if (!this.oldCity || !id || id === PARK) return true;
+    if (!id || id === PARK) return true;
     return this.fog(id) === 'cleared' || this.shareMet(id);
   }
 
-  /** Tiles to restore before the landmark can be woken: a share of the area, capped (scaled by difficulty). */
+  /** Tiles to restore before the landmark can be woken: half the region (E21.9), less with Fog Lanterns. */
   need(id: string): number {
-    if (this.oldCity) return Math.max(1, Math.ceil(this.counts(id).restorable / 2)); // E21.9: half the region
-    const c = this.counts(id);
-    const cap = Math.round(TUNING.city.clearCap * this.info(id).difficulty);
-    const mult = this.sim.upgrades.wakeNeedMult; // Fog Lanterns
-    return Math.max(1, Math.ceil(Math.min(c.restorable * TUNING.city.clearShare, cap) * mult));
+    return Math.max(1, Math.ceil((this.counts(id).restorable / 2) * this.sim.upgrades.wakeNeedMult));
   }
 
   /** 0 = untouched, 1 = everything restored. */
@@ -222,15 +209,11 @@ export class AreaSystem {
     return TUNING.city.fogFull + (TUNING.city.fogThin - TUNING.city.fogFull) * k;
   }
 
-  /** The landmark can be woken: enough restored, not yet cleared. */
+  /** E21.9: a region's landmark can be woken: half of it restored and its Keeper's second request done, not yet cleared. */
   ready(id: string): boolean {
     const f = this.fog(id);
-    // E21.9: an Old City region is ready when half of it is restored and its Keeper's second request is done
-    if (this.oldCity) {
-      const r = regionById(id);
-      return !!r && (f === 'frontier' || f === 'thinning') && this.counts(id).restored >= this.need(id) && this.sim.keepers.step(r.keeper) === 'landmark';
-    }
-    return (f === 'frontier' || f === 'thinning') && this.counts(id).restored >= this.need(id);
+    const r = regionById(id);
+    return !!r && (f === 'frontier' || f === 'thinning') && this.counts(id).restored >= this.need(id) && this.sim.keepers.step(r.keeper) === 'landmark';
   }
 
   /** Announces an area that has just become ready (once). */
@@ -298,10 +281,10 @@ export class AreaSystem {
   reveal(id: string) {
     const s = this.sim;
     if (s.state.areas[id]) return;
-    if (this.map instanceof OldCityMap && (id === SEA || id.startsWith('out_'))) return; // E21.4: the sea and the cloud beyond
+    if (id === SEA || id.startsWith('out_')) return; // E21.4: the sea and the cloud beyond
     s.state.areas[id] = { fog: 'frontier', revealedAt: s.time };
     // E21.5: in the Old City a revealed area stays sealed until its gate is opened (E23.1.5: fog is never bought)
-    if (this.oldCity && id !== PARK) s.state.areas[id].sealed = true;
+    if (id !== PARK) s.state.areas[id].sealed = true;
     this.placeLandmark(id);
     if (!this.sealed(id)) this.ensureEntry(id);
     s.bus.emit('area.revealed', { areaId: id });

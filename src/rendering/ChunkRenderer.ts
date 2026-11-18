@@ -2481,15 +2481,9 @@ export class ChunkRenderer {
     const fog = s.areas.fog(id);
     if (fog === 'cleared') return 0;
     if (fog === 'hidden') return 1; // hidden and sealed areas: a solid wall of fog (owner, 18 Nov 2026)
-    // An open Old City region has no fog left: it is restored anywhere (E21.5), so a sheet over every dead tile
-    // only washed the whole region out to a white haze. Its dead ground reads by colour instead.
-    if (s.oldCity) return 0;
-    const t = s.grid.peek(GROUND, x, z);
-    if (!t) return s.areas.density(id);
-    if (t.ground === 'restored' || t.ground === 'growing') return 0;
-    if (id === 'park') return 0;
-    if (s.areas.canTouch(t)) return 0.4;
-    return 0.5 + 0.5 * s.areas.density(id);
+    // An open region has no fog left: it is restored anywhere (E21.5), so a sheet over every dead tile only washed
+    // the whole region out to a white haze. Its dead ground reads by colour instead.
+    return 0;
   }
 
   private buildFog(v: ChunkView) {
