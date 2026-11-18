@@ -8,7 +8,7 @@ import { SLAB_TOP } from './SceneBuilder';
 import { group, shape } from './Shapes';
 
 /** Soil height inside the planter-bed model at its game scale (metres above the ground). */
-const SOIL = 0.3;
+const SOIL = 0.37;
 /** How tall each stage stands (sprout … ripe). */
 const HEIGHT = [0, 0.12, 0.24, 0.34, 0.4];
 /** Plants per bed, on a 3 × 2 grid inside the box. */
@@ -80,8 +80,8 @@ export class CropVisuals {
 
   private build(root: pc.Entity, m: MachineData, lk: PlanterLook) {
     const st = this.sim.farm.bed(m);
-    if (st.flooded) shape(root, 'box', mat(PALETTE.water, { gloss: 0.9, opacity: 0.75 }), { pos: [0, SOIL + 0.005, 0], scale: [0.7, 0.01, 0.42] });
-    if (st.fed) shape(root, 'box', mat(PALETTE.soilDark), { pos: [0, SOIL + 0.002, 0], scale: [0.68, 0.006, 0.4] });
+    if (st.flooded) shape(root, 'box', mat(PALETTE.water, { gloss: 0.9, opacity: 0.55 }), { pos: [0, SOIL + 0.025, 0], scale: [0.74, 0.012, 0.5] });
+    if (st.fed) shape(root, 'box', mat(PALETTE.soilDark), { pos: [0, SOIL + 0.012, 0], scale: [0.72, 0.01, 0.48] });
     if (st.trellis) {
       const wood = mat(PALETTE.woodPlank);
       for (const x of [-0.32, 0.32]) shape(root, 'cylinder', wood, { pos: [x, SOIL + 0.25, -0.24], scale: [0.025, 0.5, 0.025] });
