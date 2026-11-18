@@ -87,7 +87,7 @@ export class OldCityController {
     });
     host.sim.bus.on('seeds.found', (e) => {
       const c = CROPS[e.crop as CropId];
-      if (c) host.hud.toast(`${c.icon} ${c.name} seeds<small>Plant them in a planter.</small>`, '', 3);
+      if (c) host.hud.toast(`${c.icon} ${c.name} seeds<small>Plant them in a planter.</small>`, '', 5);
     });
     host.sim.bus.on('fountain.tier', () => this.panel.close());
     host.sim.bus.on('pack.full', (e) => host.hud.toast(`Your ${MATERIALS[e.material].name} stack is full<small>Put some in storage at the fountain or a chest.</small>`, '', 2.6));

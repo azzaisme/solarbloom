@@ -91,9 +91,9 @@ export class CropVisuals {
     const def = CROPS[lk.crop as CropId];
     const h = HEIGHT[lk.stage] ?? 0.1;
     // a thirsty bed droops and dulls
-    const leaf = mat(lk.wilting ? PALETTE.woodDead : def.leaf, { gloss: 0.3 });
+    const leaf = mat(lk.wilting ? PALETTE.bladeTip[0] : def.leaf, { gloss: 0.3 });
     const fruit = mat(def.fruit, { gloss: 0.5 });
-    const droop = lk.wilting ? 38 : 0;
+    const droop = lk.wilting ? 22 : 0;
     for (let i = 0; i < SPOTS.length; i++) {
       const [x, z] = SPOTS[i];
       const p = group(root, 'plant', [x, SOIL, z]);

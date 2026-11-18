@@ -227,14 +227,23 @@ describe('E23.5.2.3: seeds from exploring', () => {
     expect(homes.get('seaKale')).toEqual(['saltwind']);
   });
 
-  it('gathering a region’s restored ground turns up its seed packets, one after another (reachability)', () => {
+  it('reachability: gathering each region’s own restored ground finds every crop’s seeds', () => {
     const sim = farm();
     const found: string[] = [];
     sim.bus.on('seeds.found', (e) => found.push(e.crop));
     for (const region of Object.keys(CROP_HOMES)) {
-      const cell = region === 'park' ? { x: 10, z: 14 } : regionCell(sim, region);
-      const t = sim.grid.get(GROUND, cell.x, cell.z)!;
-      for (let i = 0; i < SEED_FINDS.gathersPerPacket * 3; i++) sim.bus.emit('biomass.gathered', { tileId: t.id, x: cell.x, z: cell.z, got: 2 });
+      // an open ground tile of the region (generated walkable ground, not sea or a building), restored to flowers
+      const t = openTile(sim, region);
+      t.ground = 'restored';
+      t.pollution = 0;
+      t.bloom = 2;
+      sim.grid.touch(t);
+      for (let i = 0; i < SEED_FINDS.gathersPerPacket * CROP_HOMES[region].length; i++) {
+        expect(sim.gather.gather(t), `${region} gather ${i}`).toBeGreaterThan(0);
+        sim.inventory.deposit('biomass');
+        sim.state.time += 2000; // past the regrow
+      }
+      for (const c of CROP_HOMES[region]) expect(sim.farm.knows(c), `${c} from ${region}`).toBe(true);
     }
     for (const c of CROP_IDS) expect(sim.farm.knows(c), c).toBe(true);
     expect(found.length).toBe(CROP_IDS.length - STARTING_CROPS.length);
@@ -247,6 +256,21 @@ describe('E23.5.2.3: seeds from exploring', () => {
     expect(sim.farm.knows('tomato')).toBe(true);
   });
 });
+
+/** An open, generated ground tile inside a region (park: by the fountain). */
+function openTile(sim: Sim, region: string) {
+  for (let cx = -8; cx <= 8; cx++)
+    for (let cz = -8; cz <= 8; cz++)
+      for (let i = 0; i < 16; i++)
+        for (let j = 0; j < 16; j++) {
+          const x = cx * 16 + i;
+          const z = cz * 16 + j;
+          if (sim.farm.regionAt(x, z) !== region) continue;
+          const t = sim.grid.get(GROUND, x, z);
+          if (t && !t.blocked && !t.occupantId && t.feature !== 'water') return t;
+        }
+  throw new Error(`no open tile in ${region}`);
+}
 
 /** A cell inside a region (searching its chunks). */
 function regionCell(sim: Sim, region: string): { x: number; z: number } {

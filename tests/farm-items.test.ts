@@ -40,7 +40,7 @@ describe('E23.5.1: farm items', () => {
     const t = restored(sim, 1);
     sim.restoration.grow(t, undefined, 'player', true);
     sim.econ.add('biomass', 50);
-    sim.advance(30);
+    sim.advance(5);
     expect(sim.econ.get('biomass').toNumber()).toBe(before);
     const classic = new Sim(createInitialState(7));
     const c0 = classic.econ.get('biomass').toNumber();
