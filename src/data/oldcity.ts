@@ -507,8 +507,8 @@ export const PARK_SET = {
   /** broad steps down to the beach through the south gate */
   ramps: [{ x: 6, z: 14, w: 4, d: 2, dir: 's', from: 1, to: 0, kind: 'stair' }] as RampDef[],
   pages: [
-    // E23.9.1: his first note waits at the top of the beach steps, where bloombot first comes into the park
-    { id: 'p-park-1', x: 7, z: 12 },
+    // E23.9.1: his first note waits at the top of the beach steps, beside the path up (never across the way in)
+    { id: 'p-park-1', x: 4, z: 13 },
     { id: 'p-park-2', x: 14, z: 9 },
   ] as SpotDef[],
 };
