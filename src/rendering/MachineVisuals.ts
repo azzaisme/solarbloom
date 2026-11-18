@@ -61,7 +61,7 @@ interface MachineView {
   wispAt?: number;
   /** E23.3.2: a wind turbine's rotor angle (degrees), turned by its output */
   turn?: number;
-  /** E23.3.3: the status light's own material (it goes dark while the machine has no power) */
+  /** E23.3: the status light's own material (it goes dark while the machine has no power, or a pole is tripped) */
   lightOn?: pc.Material;
   /** Look 3.12 Core gazebo: the vines on its arch (dry while dormant), their leaf material, and the flowers */
   vines?: pc.Entity;
@@ -2039,6 +2039,18 @@ export class MachineVisuals {
           const charging = on && this.sim.chargers.charging(v.m);
           const s = 0.07 + (charging && !rm ? 0.025 * (1 + Math.sin(t * 4)) : 0);
           v.light!.setLocalScale(s, s, s);
+          break;
+        }
+        case 'relay': {
+          // E23.3: a pole lightning tripped goes dark and gives the odd spark until bloombot resets it.
+          if (!v.light) break;
+          if (!v.lightOn) v.lightOn = matOf(v.light);
+          const tripped = this.sim.power.isTripped(v.m);
+          const want = tripped ? orbOff() : v.lightOn;
+          if (want && matOf(v.light) !== want) setMat(v.light, want);
+          const spark = tripped && !rm && Math.sin(t * 13 + v.m.x) > 0.97;
+          const s = tripped ? (spark ? 0.14 : 0.07) : 0.1;
+          v.light.setLocalScale(s, s, s);
           break;
         }
         case 'windTurbine': {

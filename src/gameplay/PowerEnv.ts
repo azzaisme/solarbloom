@@ -11,8 +11,9 @@ import type { Sim } from './Sim';
  *   sim.clock.solarFactor()  0..1, night 0, includes the weather's solar share
  *   sim.clock.daylight()     0..1
  *   sim.clock.dayFraction()  0 dawn .. 2/3 dusk .. 1 (fallback for daylight)
- *   sim.weather.kind()       'sunny' | 'cloudy' | 'rain' | 'wind' | 'storm' | 'fog'
- *   sim.weather.wind()       0..1, the turbine share
+ *   sim.weather.current()    { kind, wind, solar, rain }: kind 'sunny' | 'cloudy' | 'rain' | 'wind' | 'storm' | 'fog',
+ *                            wind 0..1 (the turbine share)
+ *   (sim.weather.kind() and .wind() are read too, if E23.7 offers them as methods)
  * With neither, it is always a clear day (E21 has no night) with a steady breeze, so the grid behaves as before.
  */
 export interface PowerSky {
@@ -33,7 +34,12 @@ interface ClockLike {
   daylight?: () => number;
   dayFraction?: () => number;
 }
+interface WeatherNow {
+  kind?: string;
+  wind?: number;
+}
 interface WeatherLike {
+  current?: () => WeatherNow | string | undefined;
   kind?: () => string | undefined;
   wind?: () => number | undefined;
 }
@@ -75,12 +81,14 @@ export function readSky(sim: Sim): PowerSky {
   const s = sim as unknown as { clock?: ClockLike; weather?: WeatherLike };
   const c = s.clock;
   const w = s.weather;
-  const kind = w?.kind?.() ?? 'sunny';
+  const now = w?.current?.();
+  const cur: WeatherNow = typeof now === 'string' ? { kind: now } : (now ?? {});
+  const kind = cur.kind ?? w?.kind?.() ?? 'sunny';
   const cloudy = CLOUDY.has(kind);
   const f = c?.dayFraction?.();
   const sun = c?.daylight?.() ?? (f === undefined ? 1 : sunAt(f));
   // E23.7's solar factor already includes the weather; without it, apply cloud here.
   const solar = c?.solarFactor?.() ?? sun * (cloudy ? POWER.solar.cloudFactor : 1);
-  const wind = !w ? POWER.fallbackWind : (w.wind?.() ?? WIND[kind] ?? 0);
+  const wind = !w ? POWER.fallbackWind : (cur.wind ?? w.wind?.() ?? WIND[kind] ?? 0);
   return { sun, solar, cloudy, wind, dark: Math.max(1 - sun, GLOOMY.has(kind) ? 1 : 0) };
 }
