@@ -6,6 +6,7 @@ import type { BuildableType, GroundState } from '../src/core/types';
 import { BUILDABLE, MACHINES } from '../src/data/machines';
 import { RECIPES } from '../src/data/salvage';
 import { KEEPER_RECIPES } from '../src/data/farmExtras';
+import { KEEPERS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
@@ -37,6 +38,7 @@ describe('E21.3: recipes', () => {
       const sim = oldSim();
       sim.state.resources.biomass = big(0);
       sim.state.salvage!.recipes = [...KEEPER_RECIPES]; // E23.5.4.6: these recipes come from Keeper gardens (tested there)
+      for (const k of KEEPERS) sim.state.salvage!.keepers[k.id] = { step: 'request1' }; // E23.8.2: region unlocks (tested in farm tests)
       const x = 12;
       const z = 12;
       ground(sim, x, z);

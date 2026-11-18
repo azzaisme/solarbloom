@@ -16,6 +16,8 @@ SaveService.clock = () => 0;
 function farm(): Sim {
   const sim = new Sim(createInitialState(7, 'oldcity'));
   sim.state.salvage!.tier = 3;
+  // E23.8.2: Moss (Elder Grove) hands over beehives and orchards
+  sim.state.salvage!.keepers.moss = { step: 'request1' };
   sim.state.salvage!.recipes = ['wormBin', 'fishPond', 'butterflyGarden', 'batBox'];
   sim.bot = { roofId: GROUND, x: 8.5, z: 11.5 };
   return sim;
@@ -55,6 +57,20 @@ function run(sim: Sim, seconds: number) {
     sim.farmExtras.tick(dt);
   }
 }
+
+describe('E23.8.2: beehives and orchards come from Elder Grove', () => {
+  it('locked until Moss wakes, with a reason that names Moss', () => {
+    const sim = new Sim(createInitialState(7, 'oldcity'));
+    sim.state.salvage!.tier = 5;
+    ground(sim, 12, 16, 0, 1);
+    for (const t of ['beehive', 'orchard'] as const) {
+      expect(sim.build.isUnlocked(t), t).toBe(false);
+      expect(sim.build.check(t, GROUND, 12, 16).reason).toMatch(/Moss/);
+    }
+    sim.state.salvage!.keepers.moss = { step: 'request1' };
+    for (const t of ['beehive', 'orchard'] as const) expect(sim.build.isUnlocked(t), t).toBe(true);
+  });
+});
 
 describe('E23.5.4.1: beehives', () => {
   it('bees settle near flowers, make honey over game days, and speed the crops in reach', () => {
@@ -290,7 +306,7 @@ describe('E23.5.4.6: Keeper gardens', () => {
   it('a sleeping Keeper has no garden; recipe rewards unlock their machines', () => {
     const sim = farm();
     sim.state.salvage!.recipes = [];
-    const k = keeperById('moss')!;
+    const k = keeperById('fern')!;
     ground(sim, k.x + 2, k.z, 1, 1);
     const p = build(sim, 'planter', k.x + 2, k.z);
     expect(sim.farmExtras.gardenOf(p)).toBeUndefined();

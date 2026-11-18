@@ -6,6 +6,10 @@ import { AREA_TYPES, type AreaType } from '../data/city';
 import { GROUND, machinesRemoved } from '../core/GameState';
 import { RECIPES, MATERIALS, STORE, type MaterialCost } from '../data/salvage';
 import { KEEPER_RECIPES } from '../data/farmExtras';
+import { REGION_UNLOCKED_FARM } from '../data/farm';
+import { unlockSource } from '../data/unlocks';
+import { KEEPERS } from '../data/oldcity';
+import { isUsable } from './Unlocks';
 import { regionById } from '../core/OldCityLayout';
 import type { MaterialId } from '../core/types';
 import { TUNING } from '../data/tuning';
@@ -38,7 +42,13 @@ export class BuildSystem {
   isUnlocked(type: BuildableType) {
     const def = MACHINES[type];
     // E21.3: under old-city rules a machine is locked until its fountain tier, and nothing else.
-    if (this.sim.oldCity) return !!RECIPES[type] && (this.sim.state.salvage?.tier ?? 0) >= this.recipeTier(type) && (!KEEPER_RECIPES.includes(type) || !!this.sim.farmExtras?.hasRecipe(type));
+    if (this.sim.oldCity) {
+      if (!RECIPES[type]) return false;
+      if (KEEPER_RECIPES.includes(type) && !this.sim.farmExtras?.hasRecipe(type)) return false;
+      // E23.8.2: farm machines come from their region's Keeper, not a fountain tier
+      if (REGION_UNLOCKED_FARM.includes(type)) return isUsable(this.sim.state, type);
+      return (this.sim.state.salvage?.tier ?? 0) >= this.recipeTier(type);
+    }
     if (def.oldCity) return false;
     const u = def.unlock;
     if (u && !this.sim.state.machines.some((m) => m.type === u.needs)) return false;
@@ -210,6 +220,11 @@ export class BuildSystem {
     const fail = (reason: string, spotOk = false): PlacementCheck => ({ ok: false, reason, cost, spotOk });
     const recipe = this.recipe(type);
     if (!recipe) return fail(`${def.name} is not built in the Old City`);
+    if (!this.isUnlocked(type) && REGION_UNLOCKED_FARM.includes(type)) {
+      const from = unlockSource(type);
+      const k = KEEPERS.find((q) => q.region === from);
+      return fail(k ? `${k.name} hands this over: wake ${k.name} in ${regionById(from as string)?.name ?? 'its region'}` : 'Not unlocked yet');
+    }
     if (!this.isUnlocked(type)) return fail(KEEPER_RECIPES.includes(type) && (s.state.salvage?.tier ?? 0) >= this.recipeTier(type) ? 'A Keeper hands over this recipe: grow what one asks for in its garden' : `Unlocks at fountain tier ${this.recipeTier(type)}`);
     const roof = s.grid.roof(roofId);
     if (!roof || !roof.unlocked || roof.preview) return fail('This rooftop is not reachable yet');

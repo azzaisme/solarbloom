@@ -6,6 +6,12 @@ import type { MaterialId } from '../core/types';
 // E23 rule 5: every farm timer counts in game days. The day itself (48 minutes of play) and the helpers that turn
 // game days into sim seconds live in data/time (E23.7): use gameDays(n) from there.
 
+/**
+ * E23.8.2: farm machines handed over by a region's Keeper (data/unlocks) rather than by a fountain tier: planters and
+ * the compost bin at home from the start, beehives and orchards from Elder Grove, the Bio Digester from Clock Plaza.
+ */
+export const REGION_UNLOCKED_FARM: string[] = ['planter', 'compostBin', 'beehive', 'orchard', 'bioDigester'];
+
 /** The four farm items, in backpack order. */
 export const FARM_ITEMS = ['biomass', 'food', 'compost', 'fertiliser', 'honey'] as const satisfies readonly MaterialId[];
 export type FarmItem = (typeof FARM_ITEMS)[number];
