@@ -102,6 +102,8 @@ export const PLANTER = {
   extras: { trellis: { timber: 2 }, flooded: { clay: 2 } } as Record<'trellis' | 'flooded', Partial<Record<'timber' | 'clay' | 'scrap', number>>>,
   /** fertiliser one feeding takes (it lasts until the next harvest) */
   feedCost: 1,
+  /** E23.4: water a growing bed draws from the network a game day (one water tile holds 20 units) */
+  waterPerDay: 4,
   /** growth stages drawn in the planter (sprout, leafy, flowering, ripe) */
   stages: 4,
 };

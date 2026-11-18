@@ -97,6 +97,38 @@ describe('E23.5.2.1: planter growth', () => {
     expect(sim.farm.look(m).ripe).toBe(true);
   });
 
+  it('a growing bed draws water from the network near it (E23.4), and none when the sky waters it', () => {
+    const sim = farm();
+    const m = planter(sim, 12, 16);
+    sow(sim, m, 'radish');
+    let drawn = 0;
+    let dry = 1;
+    const hooks = sim as unknown as { water: unknown; weather: unknown };
+    hooks.water = { isWatered: () => true, drawNear: (_t: unknown, n: number) => ((drawn += n), n) };
+    hooks.weather = { kind: () => 'sunny', effects: () => ({ planterDrying: dry }) };
+    grow(sim, DAY_SECONDS / 2);
+    // whole units only (a fraction carries over), so half a day draws 2 units give or take the last fraction
+    expect(drawn).toBeGreaterThanOrEqual(PLANTER.waterPerDay / 2 - 1);
+    expect(drawn).toBeLessThanOrEqual(PLANTER.waterPerDay / 2);
+    drawn = 0;
+    dry = 0;
+    grow(sim, DAY_SECONDS / 4);
+    expect(drawn).toBe(0);
+  });
+
+  it('reads E23.7’s weather kinds: storms rain and blow, fog is mist', () => {
+    const sim = farm();
+    const m = planter(sim, 12, 16);
+    let kind = 'storm';
+    (sim as unknown as { weather: unknown }).weather = { kind: () => kind };
+    expect(sim.farm.weather()).toBe('rain');
+    expect(sim.farm.likeMet(m, 'wind')).toBe(true);
+    kind = 'fog';
+    expect(sim.farm.weather()).toBe('mist');
+    kind = 'sunny';
+    expect(sim.farm.likeMet(m, 'rain')).toBe(false);
+  });
+
   it('rain waters every planter', () => {
     const sim = farm();
     const m = planter(sim, 12, 16);

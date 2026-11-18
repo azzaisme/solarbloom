@@ -10,11 +10,16 @@ import type { Sim } from './Sim';
  * clock and weather from E23.7. Without them every planter is watered, night is the second half of each 48-minute
  * day, and the weather is whatever E21's state holds (clear when unset).
  */
+type At = { roofId: string; x: number; z: number };
 interface FarmHooks {
-  water?: { isWatered?(t: { roofId: string; x: number; z: number }): boolean; isRunning?(t: { roofId: string; x: number; z: number }): boolean };
+  water?: { isWatered?(t: At): boolean; isRunning?(t: At): boolean; drawNear?(t: At, units: number): number };
   clock?: { isNight?(): boolean };
-  weather?: { kind?(): WeatherKind };
+  /** E23.7.2's weather: its own kinds (sunny, wind, storm, fog), and how fast planters dry (0 when the sky waters them) */
+  weather?: { kind?(): string; effects?(): { planterDrying?: number } };
 }
+
+/** E23.7.2's weather kinds in E21's words (storms count as rain; they also blow). */
+const SKY: Record<string, WeatherKind> = { sunny: 'clear', clear: 'clear', cloudy: 'cloudy', rain: 'rain', storm: 'rain', wind: 'windy', windy: 'windy', fog: 'mist', mist: 'mist' };
 
 /** Why a planter is (or isn't) growing right now, for tests, tooltips and the crop visuals. */
 export interface PlanterLook {
@@ -104,7 +109,28 @@ export class FarmSystem {
   }
 
   weather(): WeatherKind {
-    return this.hooks.weather?.kind?.() ?? this.sim.state.salvage?.weather?.kind ?? 'clear';
+    const k = this.hooks.weather?.kind?.();
+    if (k !== undefined) return SKY[k] ?? 'cloudy';
+    return this.sim.state.salvage?.weather?.kind ?? 'clear';
+  }
+
+  /** E23.7.2: a storm blows as well as rains (wind-loving crops count it as windy). */
+  private stormy(): boolean {
+    return this.hooks.weather?.kind?.() === 'storm';
+  }
+
+  /** Water drunk but not yet drawn from the network, per planter (fractions of a unit; not saved). */
+  private thirst = new Map<string, number>();
+
+  /** E23.4: a growing bed drinks from the water near it (the sky waters it in rain: planterDrying 0). */
+  private drink(m: MachineData, days: number) {
+    const w = this.hooks.water;
+    if (!w?.drawNear) return;
+    const drying = this.hooks.weather?.effects?.().planterDrying ?? (this.weather() === 'rain' ? 0 : 1);
+    const want = (this.thirst.get(m.id) ?? 0) + PLANTER.waterPerDay * drying * days;
+    const whole = Math.floor(want);
+    if (whole > 0) w.drawNear(m, whole);
+    this.thirst.set(m.id, want - whole);
   }
 
   /** Is something tall beside the planter (a machine, a building, a blocked tile)? */
@@ -160,7 +186,7 @@ export class FarmSystem {
       case 'rain':
         return w === 'rain';
       case 'wind':
-        return w === 'windy';
+        return w === 'windy' || this.stormy();
       case 'shade':
         return this.shaded(m);
       case 'trellis':
@@ -213,6 +239,7 @@ export class FarmSystem {
       if (!st.crop) continue;
       const lk = this.look(m);
       if (lk.rate <= 0) continue;
+      this.drink(m, days);
       const def = CROPS[st.crop as CropId];
       const was = lk.stage;
       const grown = Math.min(def.days, (st.grown ?? 0) + lk.rate * days);

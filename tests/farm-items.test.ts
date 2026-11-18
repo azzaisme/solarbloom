@@ -89,6 +89,13 @@ describe('E23.5.1: gathering biomass from restored ground', () => {
     expect(sim.inventory.count('biomass')).toBe(6);
   });
 
+  it('E23.7.2: a windy day’s gather bonus multiplies the clippings', () => {
+    const sim = oldSim();
+    const t = restored(sim, 2);
+    (sim as unknown as { weather: unknown }).weather = { effects: () => ({ gatherBonus: 2 }) };
+    expect(sim.gather.yieldOf(t)).toBe(GATHER.base * 2);
+  });
+
   it('a full stack refuses with a reason and leaves the tile unclipped', () => {
     const sim = oldSim();
     const t = restored(sim, 2);
