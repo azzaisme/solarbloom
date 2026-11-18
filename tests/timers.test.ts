@@ -84,6 +84,18 @@ describe('E23.7.1.1: every timer counts in game days', () => {
     expect(sim.nightFinds.visible(f.id)).toBe(true);
   });
 
+  it('E23.7.2: the weather turns once a game day, at dawn on the game clock, in both clock modes', { timeout: 120_000 }, () => {
+    for (const real of [false, true]) {
+      const sim = oldSim(5);
+      sim.clock.now = at(2);
+      sim.clock.real = real;
+      const days: number[] = [];
+      sim.bus.on('weather.changed', (e) => days.push(e.day));
+      sim.advance(gameDays(2));
+      expect(days, real ? 'follow my clock' : 'own day').toEqual([2, 3]);
+    }
+  });
+
   it('growth can ask whether it is night on the game clock, which "follow my clock" never changes', () => {
     const sim = oldSim();
     sim.clock.now = at(13); // the real midday
