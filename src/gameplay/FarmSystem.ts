@@ -3,6 +3,7 @@ import { regionOfCell } from '../core/OldCityLayout';
 import type { MachineData, PlanterState, WeatherKind } from '../core/types';
 import { CROP_HOMES, CROP_IDS, CROPS, PLANTER, SEED_FINDS, STARTING_CROPS, type CropId, type Like } from '../data/crops';
 import { DAY_SECONDS } from '../data/time';
+import { machineStrengthAt } from '../core/RegionStrengths';
 import type { Sim } from './Sim';
 
 /**
@@ -223,6 +224,7 @@ export class FarmSystem {
       rate = PLANTER.unmetLike ** unmet.length;
       if (crop !== 'pumpkin' && this.fertilised(m)) rate *= PLANTER.fertilisedBoost;
       if (this.pollinated(m)) rate *= PLANTER.pollinatorBoost;
+      rate *= machineStrengthAt('planter', m.x, m.z); // E23.8.1: fertile soil (Elder Grove) grows faster
     }
     return { crop, progress, stage, ripe, wilting, resting, rate, met, unmet };
   }
