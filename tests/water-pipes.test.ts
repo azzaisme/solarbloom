@@ -30,6 +30,9 @@ function park() {
     }
   sim.state.salvage!.pack = { clay: 60, copper: 30, scrap: 40 };
   weather(sim, 'cloudy');
+  // midday, all day (E23.7.1's clock turns the sun off at night; these tests are about the water, not the hour)
+  const noon = { ...sim.power.sky(), sun: 1, solar: 1 };
+  sim.power.skyOverride = () => noon;
   return { sim, pond: sim.water.body('1,10')! };
 }
 
