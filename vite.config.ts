@@ -18,6 +18,8 @@ const QUICK = [
   // E23: a living world
   'crafting', 'research',
   'crafting',
+  // E23.7: time, weather and salvage
+  'clock', 'timers', 'photo-scene', 'weather',
   // E23.3: the power grid
   'power-grid',
   // E23.8: regions and the mainland
