@@ -82,6 +82,13 @@ try {
     return out;
   });
   console.log('built', JSON.stringify(built));
+  // a sunny midday for the day shots (E23.7's clock and weather, where they exist)
+  await page.evaluate(() => {
+    const s = window.solarbloom.sim;
+    if (!s.clock?.gameSeconds) return;
+    s.weather?.forceForTest?.('sunny', 1e9);
+    (s.state.clock ??= { offset: 0 }).offset += (0.33 - s.clock.dayFraction()) * 2880;
+  });
   await shot('power-day', 8, 42, 1.0, 20);
   await shot('power-day-close', 6, 41, 1.8, 20);
   // The Power overlay in build mode (O / d-pad right), where it exists
@@ -144,13 +151,18 @@ try {
       return { n };
     });
     console.log('lights placed', JSON.stringify(placed));
-    // A stand-in clock when E23.7's isn't here; with it, its own time of day. The scene is dimmed by hand without it.
+    // E23.7's real clock (its day/night renderer darkens the scene); a stand-in clock and a hand-dimmed scene without it.
     const night = async (f) =>
       page.evaluate((f) => {
         const g = window.solarbloom;
         const s = g.sim;
-        if (!s.clock?.setTime) s.clock = { dayFraction: () => f };
-        else s.clock.setTime(f);
+        if (s.clock?.gameSeconds) {
+          s.weather?.forceForTest?.('sunny', 1e9);
+          const st = s.state;
+          (st.clock ??= { offset: 0 }).offset += (f - s.clock.dayFraction()) * 2880;
+          return;
+        }
+        s.clock = { dayFraction: () => f };
         const app = g.app;
         const k = Math.max(0, Math.min(1, (f - 0.6) / 0.12));
         clearInterval(window.__dim);
@@ -165,7 +177,7 @@ try {
         dim();
         window.__dim = setInterval(dim, 100);
       }, f);
-    await night(0.66);
+    await night(0.68);
     await shot('lights-dusk', 7, 41, 1.2, 20, 8000);
     await night(0.85);
     await page.waitForTimeout(8000);

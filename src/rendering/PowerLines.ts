@@ -53,7 +53,8 @@ export class PowerLines {
     const line = mat(PALETTE.grille, { gloss: 0.4 });
     for (const n of nets) {
       for (const [a, b] of n.links) this.cable(a, b, line, 0.022, 0.08);
-      for (const [p, m] of n.feeds) this.cable(p, m, line, 0.012, 0.12);
+      // Lights are wired underground (no web of drop cables over a lit path); the Power overlay still shows them.
+      for (const [p, m] of n.feeds) if (!m.type.startsWith('light:')) this.cable(p, m, line, 0.012, 0.12);
     }
   }
 
