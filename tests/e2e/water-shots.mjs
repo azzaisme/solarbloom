@@ -17,7 +17,9 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const out = process.argv[2] ?? 'docs/review/water';
 mkdirSync(out, { recursive: true });
-const server = await preview({ preview: { port: 4241, strictPort: true }, logLevel: 'silent' });
+// other sessions run their own e2e servers at the same time: take the first free port from 4241 up
+const server = await preview({ preview: { port: 4241, strictPort: false }, logLevel: 'silent' });
+const base = server.resolvedUrls.local[0].replace(/\/$/, '');
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
 const check = (ok, what) => {
@@ -43,7 +45,7 @@ const press = (b) =>
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.setDefaultTimeout(240000);
-await page.goto('http://localhost:4241/?slot=1&ui=oldcity');
+await page.goto(`${base}/?slot=1&ui=oldcity`);
 await page.evaluate(() => localStorage.clear());
 await page.reload();
 await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 240000 });
