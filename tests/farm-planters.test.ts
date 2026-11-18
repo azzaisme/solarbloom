@@ -248,6 +248,17 @@ describe('E23.5.2.2: every crop’s likes change its growth', () => {
     expect(sim.farm.look(c).rate).toBeCloseTo(before * PLANTER.pollinatorBoost);
   });
 
+  it('E23.8.1: a planter in Elder Grove (fertile soil) grows 1.5× as fast', () => {
+    const sim = farm();
+    const m = planter(sim, 12, 16);
+    sow(sim, m, 'radish');
+    const here = sim.farm.look(m).rate;
+    const grove = regionCell(sim, 'elderGrove');
+    const g = planter(sim, grove.x, grove.z);
+    sow(sim, g, 'radish');
+    expect(sim.farm.look(g).rate).toBeCloseTo(here * 1.5);
+  });
+
   it('a crop grows over its days in game time with every like met', () => {
     const sim = farm();
     const m = planter(sim, 12, 16);
