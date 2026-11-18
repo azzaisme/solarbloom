@@ -94,6 +94,18 @@ describe('E23.6.7: paths', () => {
     expect(sim.paths.all()).toEqual([]);
   });
 
+  it("moss and flowers creep onto a path's edges as it ages, and reshaping it keeps its age", () => {
+    const sim = park();
+    const { id } = sim.paths.add([[8.5, 12.5], [18.5, 12.5]], 1, 'gravel');
+    expect(sim.paths.creep(sim.paths.get(id!)!)).toBe(0);
+    sim.state.time += PATHS.creepDays * PATHS.daySeconds * 0.5;
+    expect(sim.paths.creep(sim.paths.get(id!)!)).toBeCloseTo(0.5, 5);
+    expect(sim.paths.change(id!, { w: 2 })).toBeUndefined();
+    expect(sim.paths.creep(sim.paths.get(id!)!)).toBeCloseTo(0.5, 5);
+    sim.state.time += PATHS.creepDays * PATHS.daySeconds;
+    expect(sim.paths.creep(sim.paths.get(id!)!)).toBe(1);
+  });
+
   it('nothing is built on a path, and a path goes round what is built', () => {
     const sim = park();
     const { id } = sim.paths.add([[8.5, 12.5], [18.5, 12.5]], 1, 'gravel');

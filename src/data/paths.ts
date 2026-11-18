@@ -51,4 +51,9 @@ export const PATHS = {
   edgeBlend: 0.25,
   /** the decal sits this far above the ground (no z-fighting) */
   lift: 0.015,
+  /** moss and flowers creep onto a path's edges: a clump every this many tiles along each edge once fully crept,
+   *  creeping in over this many game days (a game day is 2880 s of play) */
+  creepEvery: 0.9,
+  creepDays: 2,
+  daySeconds: 2880,
 };

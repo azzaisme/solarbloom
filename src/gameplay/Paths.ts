@@ -13,6 +13,8 @@ export interface PathData {
   /** index into PATHS.widths */
   w: number;
   mat: PathMaterial;
+  /** sim time it was laid (moss and flowers creep onto its edges from then) */
+  t0?: number;
 }
 
 /** A Catmull-Rom curve through the points, sampled evenly enough for the decal and the tiles under it. */
@@ -146,7 +148,7 @@ export class Paths {
     if (why) return { why };
     if (!this.sim.inventory.pay(this.cost(mat, this.tiles(p).size))) return { why: 'Could not pay for it' };
     const id = this.sim.newId('path');
-    this.write([...this.all(), { id, ...p }]);
+    this.write([...this.all(), { id, ...p, t0: this.sim.time }]);
     this.sim.bus.emit('paths.changed', { id });
     return { id };
   }
@@ -167,7 +169,7 @@ export class Paths {
     }
     this.sim.inventory.refund(this.cost(old.mat, this.tiles(old).size));
     this.sim.inventory.pay(this.cost(next.mat, this.tiles(next).size));
-    this.write(this.inOrder(order, [...others, { id, ...next }]));
+    this.write(this.inOrder(order, [...others, { id, ...next, t0: old.t0 }]));
     this.sim.bus.emit('paths.changed', { id });
     return undefined;
   }
@@ -175,6 +177,11 @@ export class Paths {
   /** Paths in their lay order (draw order is lay order). */
   private inOrder(order: string[], list: PathData[]): PathData[] {
     return [...list].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+  }
+
+  /** How far moss and flowers have crept onto a path's edges (0 freshly laid … 1). */
+  creep(p: PathData): number {
+    return Math.max(0, Math.min(1, (this.sim.time - (p.t0 ?? this.sim.time)) / (PATHS.creepDays * PATHS.daySeconds)));
   }
 
   /** Removes a path; its materials come back whole. */

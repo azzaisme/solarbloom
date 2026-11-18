@@ -3,7 +3,8 @@
 // - draw a curved path through three points (the same spot again lays it), wider with a turn;
 // - reshape it: pick up its middle point and put it down elsewhere; take it away with the remove tool, everything back;
 // - break up a stretch of old paving and restore it with a pulse; reroute a park path round it;
-// - paths follow the land's height and blend at the edges (the decal's edge colour), and a region full of paths stays
+// - paths follow the land's height and blend at the edges (the decal's edge colour, moss and flowers creeping on as it
+//   ages), and a region full of paths stays
 //   within the Deck preset's draw calls (450): all paths are one draw call.
 // Screenshots go to SHOTS_DIR (default docs/review). Run after `vite build` (npm run test:paths), or BASE_URL.
 import { readFileSync, mkdirSync } from 'node:fs';
@@ -121,6 +122,11 @@ try {
     });
     await page.waitForTimeout(2000);
     await page.screenshot({ path: `${dir}/ui-path-laid-${dev}.png` });
+    // moss and flowers creep onto its edges as it ages (two game days)
+    await page.evaluate(() => (window.solarbloom.sim.state.time += 2880 * 2.05));
+    await page.waitForFunction(() => !!window.solarbloom.pathArt.creepEntity, null, { timeout: 120000 }).catch(() => {});
+    check(await page.evaluate(() => !!window.solarbloom.pathArt.creepEntity), T('moss and flowers creep onto its edges as it ages'));
+    await page.screenshot({ path: `${dir}/ui-path-crept-${dev}.png` });
     // reshape: pick up the middle point and put it down three tiles further on
     await tool(page, 'pathEdit');
     await at(page, dev, 14, 18);

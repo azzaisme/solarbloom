@@ -4454,7 +4454,7 @@ export class Game {
     this.machines.update(wdt, rect);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
     this.overgrowthArt.update(dt); // E23.6.6: rebuilt only when something is placed or grows a stage
-    this.pathArt.update(); // E23.6.7: rebuilt only when a path (or the one being drawn) changes
+    this.pathArt.update(dt); // E23.6.7: rebuilt only when a path (or the one being drawn) changes, or creeps on
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.
     if (!this.paused && this.camera.zoom > 0.9) {

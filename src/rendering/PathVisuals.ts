@@ -4,6 +4,9 @@ import { PATH_MATERIAL, PATHS } from '../data/paths';
 import { pathCurve, type PathData } from '../gameplay/Paths';
 import type { Sim } from '../gameplay/Sim';
 import { SLAB_TOP } from './SceneBuilder';
+import { buildFlowers, buildTurf } from './Flora';
+import { foliageMaterial, FoliageBuilder } from './Foliage';
+import type { TreeGeo } from './TreeGen';
 
 /**
  * E23.6.7 (#472): how paths look. Each path is a ground decal: a strip following its smooth curve, as wide as the
@@ -14,6 +17,11 @@ import { SLAB_TOP } from './SceneBuilder';
  */
 export class PathVisuals {
   private entity?: pc.Entity;
+  /** moss and flowers crept onto the edges (one merged foliage mesh) */
+  private creepEntity?: pc.Entity;
+  private creepKey = '';
+  private creepCheck = 0;
+  private sprigs = new Map<string, TreeGeo>();
   private dirty = true;
   /** the decal's triangles (for budgets) */
   tris = 0;
@@ -51,7 +59,12 @@ export class PathVisuals {
     return (r ? r.origin[1] + r.height : 0) + SLAB_TOP + this.sim.grid.groundOffset(GROUND, Math.floor(x), Math.floor(z)) + PATHS.lift;
   }
 
-  update() {
+  update(dt = 0) {
+    this.creepCheck -= dt;
+    if (this.creepCheck <= 0 || this.dirty) {
+      this.creepCheck = 2;
+      this.updateCreep();
+    }
     if (!this.dirty) return;
     this.dirty = false;
     this.entity?.destroy();
@@ -134,5 +147,59 @@ export class PathVisuals {
     e.addComponent('render', { meshInstances: [new pc.MeshInstance(m, this.mat())], castShadows: false, receiveShadows: true });
     this.parent.addChild(e);
     this.entity = e;
+  }
+
+  /**
+   * Moss and small flowers creep onto a path's edges as it ages (show, don't tell): clumps along both edges, more of
+   * them as it creeps in, drawn from cached templates into one merged foliage mesh. Rebuilt only when a path changes
+   * or crosses into its next quarter of creep.
+   */
+  private updateCreep() {
+    const paths = this.sim.paths.all();
+    const key = paths.map((p) => `${p.id}:${p.w}:${p.pts.length}:${p.pts.map((q) => q.join(',')).join(';')}:${Math.floor(this.sim.paths.creep(p) * 4)}`).join('|');
+    if (key === this.creepKey) return;
+    this.creepKey = key;
+    this.creepEntity?.destroy();
+    this.creepEntity = undefined;
+    const fb = new FoliageBuilder();
+    const r = this.sim.grid.roof(GROUND);
+    const ox = r ? r.origin[0] : 0;
+    const oz = r ? r.origin[2] : 0;
+    const sprig = (moss: boolean, v: number) => {
+      const k = `${moss ? 'm' : 'f'}${v}`;
+      let g = this.sprigs.get(k);
+      if (!g) this.sprigs.set(k, (g = moss ? buildTurf(3, v, 0) : buildFlowers('wild', v, true, v, 0)));
+      return g;
+    };
+    for (const p of paths) {
+      const creep = this.sim.paths.creep(p);
+      if (creep < 0.25 || PATH_MATERIAL[p.mat]?.overWater) continue; // nothing creeps onto planks over water
+      const c = pathCurve(p.pts);
+      const half = (PATHS.widths[p.w] ?? PATHS.widths[0]) / 2;
+      let acc = 0;
+      let n = 0;
+      const every = PATHS.creepEvery / creep;
+      for (let i = 1; i < c.length; i++) {
+        const dx = c[i][0] - c[i - 1][0], dz = c[i][1] - c[i - 1][1];
+        acc += Math.hypot(dx, dz);
+        if (acc < every) continue;
+        acc = 0;
+        const l = Math.hypot(dx, dz) || 1;
+        const nx = -dz / l, nz = dx / l;
+        for (const side of [-1, 1]) {
+          const h = (n * 2654435761 + (side > 0 ? 7 : 3)) >>> 0;
+          const x = c[i][0] + nx * side * half * 0.92;
+          const z = c[i][1] + nz * side * half * 0.92;
+          fb.add(sprig(h % 3 !== 0, h % 4), ox + x, this.y(x, z) - PATHS.lift, oz + z, (h % 628) / 100, 0.55);
+        }
+        n++;
+      }
+    }
+    const mesh = fb.build(this.device());
+    if (!mesh) return;
+    const e = new pc.Entity('path-creep');
+    e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, foliageMaterial())], castShadows: false, receiveShadows: true });
+    this.parent.addChild(e);
+    this.creepEntity = e;
   }
 }
