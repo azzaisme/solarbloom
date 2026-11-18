@@ -3,6 +3,9 @@
 Every new object in epic #354 needs real art (E21 rule 7: no stand-ins). This is the list for E23.10.2 (#406) and
 its children: power (#464), water (#465), farm (#466), crafting and automation (#467), companions and clips (#468).
 It follows the style, budgets and routes in `docs/art/meshy-assets.md` and `docs/art/old-city-models.md`.
+The same list lives in data as `src/data/e23models.ts`, and `tests/e23-models.test.ts` checks it: reuse sources
+exist, every child issue's objects are listed, the batch costs match this page, and every new model that has landed
+is within its LOD0 budget.
 
 Files go to `assets/raw/models/final/<name>.glb` (plus `.lod1.glb` and a `.png` preview) and are loaded by name
 through `src/rendering/Models.ts`; machines are mapped in `MACHINE_MODELS` (`src/rendering/MachineVisuals.ts`).
@@ -48,20 +51,21 @@ Dead and worn looks come from the neglected-look shader (E20.6), not re-textures
 | Power pole (E23.3.2) | `bloom-relay` | Relays become poles (#422). Wires between poles are procedural catenaries. A tripped pole dims its crystal. |
 | Lamps, night lights (E23.3.5) | `lantern`, `lamp-post` | String lights stay procedural. |
 | Big battery (Observatory Hill) | `battery` (new, below) at 1.6× with a second cell bank | |
-| Large solar array (Observatory Hill) | the procedural solar panel, 2×2 on a gantry | Solar panels have always been procedural. |
 | Reservoir (E23.4.2.1) | `reservoir-basin` | The water level is procedural. |
 | Large reservoir (Spire Heights) | `reservoir-basin` at 1.6× | |
-| Pipe pieces (E23.4.2.2) | procedural copper tubes; joints and valves from `copper-pipe` | Pipes tile, so code builds straight, corner, tee, cross and end pieces. |
+| Pipe pieces (E23.4.2.2) | joints and valves from `copper-pipe`; runs are procedural copper tubes | Pipes tile, so code builds straight, corner, tee, cross and end runs, capped by the `copper-pipe` joint. |
 | Planter box (E23.5.2) | `planter-bed` | Crops and soil are procedural (growth stages scale and recolour). |
 | Flooded bed (rice) | `planter-trough` | Procedural water surface inside. |
-| Keeper garden, butterfly garden | `planter-bed` | Procedural flowers. |
+| Keeper garden, butterfly garden, roof garden (The Terraces) | `planter-bed` | Procedural flowers. |
 | Worm bin | `crate` | A procedural soil top and lid. |
 | Fish pond | procedural stone rim and water | It follows an outline. The koi is a new animal (below). |
 | Orchard trees | `TreeGen` | Procedural fruit. |
 | Trellis (beans) | procedural lattice | |
+| Night finds (fireflies, glowing plants) | procedural | Like today's fireflies. |
 | Bench (E23.2.3) | `bench` | |
 | Crafting table (E23.6.1) | `workbench` | Already in the house. |
-| Storage chest | `storage-chest` | |
+| Storage chest | `storage-chest` | The E21 model. |
+| Small chest (courier and mulcher drop-offs) | `crate` | #467 asks for chests from `crate`; the big chest already has its own model. |
 | Harvester and courier drones | the drone | Role parts are built with the drone in Blender (drone redesign), not Meshy. |
 | Sleeping in the house | `bed` | |
 
@@ -73,12 +77,15 @@ Dead and worn looks come from the neglected-look shader (E20.6), not re-textures
 | charger | Image | Machine 3k | A low round ceramic pad with a gold ring and a cushion-shaped seat where bloombot sits cross-legged. A cyan ring glows as it charges; a short mast holds the pole insulator. |
 | battery | Text | Small machine 2k | A squat cream cabinet with four glass cell windows that fill with cyan light as it charges, a gold terminal on top. |
 | wind-turbine | Image | Machine 4k | A slim limestone-and-copper tower with a three-blade cream rotor (separate mesh, spins) and a little weathervane tail. Reads tall on high ground. |
+| large-solar-array | Text | Machine 3k | A cream ceramic gantry with gold bracing and a slow tracking motor that holds four of the procedural solar panels (the panels stay procedural, like every solar panel). Observatory Hill. |
 
 ### Water (#465)
 | Name | Route | Class | Look |
 |---|---|---|---|
 | pump | Text | Small machine 2k | A copper hand-pump-style housing with a ceramic motor drum, a pressure dial and a flywheel (separate mesh, turns when powered). |
 | desalination-plant | Image | Machine 5k | A shoreline machine: a cream ceramic boiler with a glass condensing dome, copper coils, a seawater intake pipe and a fresh-water spout. Steam is VFX. |
+| sprinkler | Text | Clutter 600 | A brass pop-up head on a short copper riser; the head is separate and spins. Spray is VFX. |
+| feed-tank | Text | Small machine 1.5k | A copper tank with a ceramic lid and a glass sight tube showing the fertiliser mix, on a pipe stand. |
 
 ### Farm (#466)
 | Name | Route | Class | Look |
@@ -91,6 +98,31 @@ Dead and worn looks come from the neglected-look shader (E20.6), not re-textures
 | bat-box | Text | Clutter 800 | A tall narrow timber box with a slotted underside, on a post. |
 | hedgehog-house | Text | Clutter 1k | A low domed timber-and-leaf shelter with an arched entrance. |
 | greenhouse | Image | Machine 5k | A small cream-framed glasshouse with gold ridge trim and opening roof vents (separate). Plants inside are procedural. Glasshouse Gardens unlock. |
+| watering-can | Text | Clutter 500 | A cream ceramic can with a gold rose. Held by bloombot and hung by the door. |
+
+### Crops by stage (#466)
+Each crop shows three stages in its planter: **seedling**, **growing** and **ripe**. One shared `crop-seedling`
+(300 tris) is every crop's first stage. Each crop then has one model (1.2k tris, text route, batch B6) with its
+fruit, pods, heads or flowers as separate parts: the growing stage is the plant scaled down with those parts hidden,
+the ripe stage shows them. Wilting is a droop and desaturation in the shader, never a dead model (crops never die).
+
+| Crop | Ripe look |
+|---|---|
+| crop-radish | Leafy rosette with pink-red radish shoulders showing |
+| crop-lettuce | Loose round head of frilly pale-green leaves |
+| crop-potato | Bushy leafy plant with small white flowers |
+| crop-beans | Climbing vine with long green pods (grows up the procedural trellis) |
+| crop-tomato | Staked plant with clusters of red tomatoes |
+| crop-sweetcorn | Tall stalks with tassels and husked cobs |
+| crop-pumpkin | Sprawling vine with big leaves and one fat orange pumpkin |
+| crop-sunflower | Tall stem with one big gold sunflower head that turns to the sun (head separate) |
+| crop-watercress | Low dense mat of round leaves |
+| crop-rice | Tufts of grass with drooping golden grain heads |
+| crop-lavender | Silvery mound with purple flower spikes |
+| crop-mint | Bright square-stemmed leafy clump |
+| crop-moonflower | Twining vine with big white trumpet flowers (emissive at night) |
+| crop-flowers | A mixed posy of cottage flowers |
+| crop-sea-kale | Blue-grey crinkled leaves with a white flower spray |
 
 ### Crafting and automation (#467)
 | Name | Route | Class | Look |
@@ -98,13 +130,10 @@ Dead and worn looks come from the neglected-look shader (E20.6), not re-textures
 | research-station | Image | Machine 4k | A writing desk grown into a machine: a brass microscope, seed jars, a glass specimen dome and the maker's open notebook. |
 | assembler | Image | Machine 5k | A tall cream ceramic cabinet with two gold arms behind a glass front (arms separate, animated), input and output hatches. Spire Heights. |
 | mulcher | Text | Small machine 2k | A wheeled ceramic hopper with a rake-tined front drum (separate, spins) and a chute into a chest. |
-| feed-tank | Text | Small machine 1.5k | A copper tank with a ceramic lid and a glass sight tube showing the fertiliser mix, on a pipe stand. |
-| sprinkler | Text | Clutter 600 | A brass pop-up head on a short copper riser; the head is separate and spins. Spray is VFX. |
 | hopper-composter | Text | Small machine 1.5k | A timber hopper on legs feeding a ceramic drum with a crank. |
 | auto-feeder | Text | Clutter 800 | A small copper chute and timer dial that clips onto a Bio Digester's feed hatch. |
 | seed-drill | Text | Small machine 1.5k | A wheeled timber seed box with copper tubes down to little disc coulters. |
 | forecast-board | Text | Clutter 1k | A chalk board on a post outside the house, with a turning weathervane on top (separate). Weather symbols are drawn in code. |
-| watering-can | Text | Clutter 500 | A cream ceramic can with a gold rose. Held by bloombot and hung by the door. |
 
 ### Companions and visitors (#468)
 The wildlife of E23.2.4 and E23.2.5. Wild animals, drawn the way the Keepers are: rounded, soft, a little toy-like,
@@ -130,9 +159,11 @@ never cute-ified to plush. Each is split into parts (head, body, tail, wings, le
 
 The companion butterfly stays procedural like every other butterfly.
 
-**Animal clips are keyed by hand in Blender**, not Meshy (Meshy rigs bipeds only). Each animal gets a small set on
-its split parts: `idle`, `move` (walk, hop, swim or fly), `rest` (curl, sit, roost) and, for animals that climb onto
-bloombot, `climb` and `perch`. Keep every Blender run short and time-limited.
+**Every animal is rigged in Blender**, not by Meshy (Meshy's auto-rig is for bipeds). Each gets a small armature
+over its split parts and four clips, as #468 asks: `idle`; `follow` (its own gait: trot, waddle, hop, swim or fly,
+for travelling with bloombot); `sit` (sit, curl or roost, beside bloombot or in its lap); and `climb` (onto
+bloombot's head, shoulders or lap, ending in a perch). The koi and the bumblebee `climb` by swimming or flying to
+the spot. Keep every Blender run short and time-limited.
 
 ### Bloombot's clips (#468, E23.2)
 From bloombot's existing Meshy rig with `meshy_animate`, then refitted to the big head and toddler proportions by the
@@ -162,11 +193,29 @@ Prices are from `meshy-assets.md`'s routes as of 2026-10-12 (check https://docs.
 | Batch | What | Count | Credits |
 |---|---|---|---|
 | **A: the home loop** | charger (18), compost-bin (15), watering-can (15), bloombot clips (5 × 3) | 3 models, 5 clips | **63** |
-| B1: power and water | battery, wind-turbine, pump, desalination-plant | 4 | 66 |
+| B1: power and water | battery, wind-turbine, large-solar-array, pump, desalination-plant, sprinkler, feed-tank | 7 | 111 |
 | B2: farm | bio-digester, beehive, mushroom-log, bird-box, bat-box, hedgehog-house, greenhouse | 7 | 111 |
-| B3: crafting and automation | research-station, assembler, mulcher, feed-tank, sprinkler, hopper-composter, auto-feeder, seed-drill, forecast-board | 9 | 141 |
+| B3: crafting and automation | research-station, assembler, mulcher, hopper-composter, auto-feeder, seed-drill, forecast-board | 7 | 111 |
 | B4: animals | 13 animals | 13 | 234 |
 | B5: Keepers on benches | 10 Keepers × 2 clips × 3 | 20 clips | 60 |
-| **Total** | | **36 models, 25 clips** | **675** |
+| B6: crops | crop-seedling and 15 crops | 16 | 240 |
+| **Total** | | **53 models, 25 clips** | **930** |
+
+Crops first appear in Milestone A, so until B6 is approved the planters have no crop model. The owner may want B6
+folded into A (303 credits for A then).
 
 The Meshy balance on 18 Nov 2026 was **7 credits**, so even batch A needs a top-up.
+
+## Getting each model into the game
+
+Each child issue is done when its models are in the game within budget (#464–#467), or when each animal and clip
+plays (#468). That takes three things, in order:
+
+1. **The owner approves the batch** and it is generated by the routes above, then reduced and split in Blender, with
+   a `.lod1.glb`. `tests/e23-models.test.ts` then checks its budget.
+2. **The system that places the object has landed** (E23.3 power, E23.4 water, E23.5 farm, E23.6 crafting, E23.2
+   bloombot and companions). Its machine type gets an entry in `MACHINE_MODELS` (`src/rendering/MachineVisuals.ts`),
+   reused models included.
+3. **It is played in the browser** and checked from all round at near zoom, both on and off.
+
+None of the three has happened yet for any E23 object.
