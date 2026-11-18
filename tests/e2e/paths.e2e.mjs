@@ -178,7 +178,8 @@ try {
     }
     const left = await page.evaluate(() => window.solarbloom.sim.paths.all().length);
     check(left === 0 && ids.length === 2, T('the remove tool takes the paths away (points first, then the path)'));
-    check((await scrap()) === before + 40, T(`everything they took came back (${before + 40} Scrap, ${spent2} of it from the second path)`));
+    const after = await scrap();
+    check(after === before + 40, T(`everything they took came back (${after} of ${before + 40} Scrap, ${spent2} of it from the second path)`));
     if (dev === 'keys') {
       // a region full of paths in the Deck preset: one draw call for all of them
       const draws = async () => {
@@ -198,8 +199,15 @@ try {
         s.bot = { roofId: 'g', x: 8.5, z: 11.5 };
         s.inventory.addToStore('scrap', 2000);
         let laid = 0;
-        for (let z = 11; z < 26; z += 3) if (s.paths.add([[6.5, z + 0.5], [15.5, z + 1.5], [23.5, z + 0.5]], z % 2, 'gravel').id) laid++;
-        for (let x = 7; x < 24; x += 4) if (s.paths.add([[x + 0.5, 10.5], [x + 1.5, 26.5]], 0, 'steppingStones').id) laid++;
+        const why = [];
+        const tryAdd = (pts, w, m) => {
+          const r = s.paths.add(pts, w, m);
+          if (r.id) laid++;
+          else why.push(r.why);
+        };
+        for (let z = 11; z < 26; z += 3) tryAdd([[6.5, z + 0.5], [15.5, z + 1.5], [23.5, z + 0.5]], z % 2, 'gravel');
+        for (let x = 7; x < 24; x += 4) tryAdd([[x + 0.5, 10.5], [x + 1.5, 26.5]], 0, 'steppingStones');
+        if (why.length) console.log('    not laid:', JSON.stringify(why));
         return laid;
       });
       await page.waitForTimeout(1500);
