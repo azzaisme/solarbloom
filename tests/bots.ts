@@ -6,7 +6,6 @@ import type { BuildableType, DroneRole, GameState, ResourceKind, TileData } from
 import { HOME } from '../src/gameplay/ProgressionSystem';
 import { MACHINES } from '../src/data/machines';
 import { Sim } from '../src/gameplay/Sim';
-import { TUNING } from '../src/data/tuning';
 import { BOT, type BotPose, spawnPose, Walker } from '../src/gameplay/Walker';
 
 /**
@@ -14,11 +13,11 @@ import { BOT, type BotPose, spawnPose, Walker } from '../src/gameplay/Walker';
  * and economy (when things become affordable, how long storage sits full, how far automation gets alone).
  *
  * - `active`: one action every few seconds; builds machines next to each other, aims pulses at synergy tiles,
- *   buys upgrades when nothing better is pending, claims the cat ~40 s after it appears. After the fountain it
+ *   claims the cat ~40 s after it appears. After the fountain it
  *   pushes the fog back where the objective panel points.
  * - `handsOff`: plays exactly like `active` until its first Drone Hub stands, then never taps the ground
  *   again (no pulses, no Harvest, no cat). It still makes the decisions an idle player checks in for: buying
- *   machines and upgrades, and waking landmarks. Compared with `active` over the same window it says how idle
+ *   machines and waking landmarks. Compared with `active` over the same window it says how idle
  *   the game is.
  *
  * The active bot finds every hiding cat about 40 s after it appears.
@@ -31,10 +30,6 @@ export interface BotOptions {
   actionEvery?: number;
   /** start from this state instead of a fresh one */
   state?: GameState;
-  /** never buy upgrades (checks the main path doesn't depend on them) */
-  noUpgrades?: boolean;
-  /** buy any affordable upgrade at once instead of saving for the next machine */
-  eager?: boolean;
   /** never claim a Lucky Cat (checks the main path doesn't depend on luck) */
   noCats?: boolean;
   /** called once per simulated second (for extra measurements) */
@@ -54,11 +49,6 @@ export interface BotOptions {
    * Menu actions (upgrades, roles, Frenzy, Harvest) stay instant. Merging and superstructures are not walked.
    */
   walk?: boolean;
-  /**
-   * Region unlocks (18 Nov 2026): play with sealed regions on (the game's default; tests default it off). After
-   * the fountain the bot buys the nearest sealed area whenever it can, keeping the next machine's price.
-   */
-  unlocks?: boolean;
 }
 
 /** E18: the bots' fixed role rule, by hub order (see BotOptions.roles). */
@@ -98,8 +88,6 @@ export interface BotReport {
   roleAt: Partial<Record<DroneRole, number>>;
   /** E20.3: with `walk`, seconds spent walking, trips made and actions dropped because no path reached them */
   walk?: { seconds: number; trips: number; unreachable: number; failedOnArrival: number };
-  /** Region unlocks: when each area was bought (sim seconds) */
-  unlocked: number[];
   /** E20.3: tiles restored by the player's own pulses vs everything else (drones, chains, machines, events) */
   restoredBy: { player: number; helpers: number };
   /** per-minute snapshot */
@@ -109,14 +97,7 @@ export interface BotReport {
 const ORDER: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'pollinator', 'motherTree', 'solar', 'pollinator', 'droneHub', 'condenser'];
 
 function* botRun(opts: BotOptions): Generator<void, BotReport> {
-  const U = TUNING.city.unlock as { enabled: boolean };
-  const was = U.enabled;
-  U.enabled = !!opts.unlocks;
-  try {
-    return yield* botRunInner(opts);
-  } finally {
-    U.enabled = was;
-  }
+  return yield* botRunInner(opts);
 }
 
 function* botRunInner(opts: BotOptions): Generator<void, BotReport> {
@@ -140,7 +121,7 @@ function* botRunInner(opts: BotOptions): Generator<void, BotReport> {
     longestGap = Math.max(longestGap, sim.time - lastMeaningful);
     lastMeaningful = sim.time;
   };
-  sim.bus.on('upgrade.purchased', ({ id, level }) => {
+  sim.bus.on('upgrade.granted', ({ id, level }) => {
     upgrades.push({ t: Math.round(sim.time), id, level });
     meaningful();
   });
@@ -159,7 +140,6 @@ function* botRunInner(opts: BotOptions): Generator<void, BotReport> {
   const cats: Record<string, number> = {};
   sim.bus.on('cat.found', ({ variant }) => (cats[variant ?? 'standard'] = (cats[variant ?? 'standard'] ?? 0) + 1));
   const restoredBy = { player: 0, helpers: 0 };
-  const unlocked: number[] = [];
   sim.bus.on('tile.restored', ({ source }) => (source === 'pulse' || source === 'broad' ? restoredBy.player++ : restoredBy.helpers++));
   const walk = opts.walk ? walking(sim) : undefined;
 
@@ -212,13 +192,6 @@ function* botRunInner(opts: BotOptions): Generator<void, BotReport> {
     }
     // 1b. after the fountain: wake any landmark that's ready, and put a Drone Hub at the edge of the next goal
     if (s.progression.coreActivated) {
-      // Region unlocks: buy the nearest sealed area when affordable, keeping the next machine's biomass.
-      const sealed = sim.areas.sealedAreas()[0];
-      const price = sealed ? sim.areas.unlockCost(sealed) : undefined;
-      if (sealed && price && sim.econ.canAfford(price)) {
-        const keep = ORDER[next] ? big(sim.build.cost(ORDER[next]).biomass ?? 0) : big(0);
-        if (s.resources.biomass.sub(price.biomass).gte(keep) && sim.areas.unlock(sealed)) unlocked.push(Math.round(sim.time));
-      }
       for (const id of sim.areas.revealed()) if (sim.areas.fog(id) !== 'cleared' && sim.areas.ready(id)) sim.areas.clear(id);
       const goal = sim.areas.nextGoal();
       if (goal && !ORDER[next] && !hubFor.has(goal) && sim.econ.canAfford(sim.build.cost('droneHub'))) {
@@ -256,18 +229,7 @@ function* botRunInner(opts: BotOptions): Generator<void, BotReport> {
       if (target) sim.restoration.pulse(target.id);
       else if (s.resources.energy.lt(3)) sim.harvestSun();
     }
-    // 3. upgrades when the next machine is far off
-    // Phase 5 E12: biomass is uncapped, so keep back only the next machine's price. Per-machine upgrades go to
-    // the cheapest machine of the type (as "Upgrade all" would), a few levels per action.
-
     const nextCost = (ORDER[next] ? big(sim.build.cost(ORDER[next]).biomass ?? 0) : big(0));
-    for (const u of opts.noUpgrades ? [] : sim.upgrades.all()) {
-      for (let i = 0; i < 4; i++) {
-        const st = sim.upgrades.status(u);
-        if (!(st.ok && (opts.eager || s.resources.biomass.sub(st.cost).gte(nextCost)))) break;
-        if (!sim.upgrades.purchase(u.id)) break;
-      }
-    }
     if (sim.progression.coreReady()) sim.progression.activateCore();
     // 3a. E18: roles by the fixed rule (a refit is a purchase, like an upgrade: idle players make it too).
     if (opts.roles) {
@@ -339,7 +301,6 @@ function* botRunInner(opts: BotOptions): Generator<void, BotReport> {
     cats,
     roleAt,
     walk: walk?.report(),
-    unlocked,
     restoredBy,
     minutesLog,
   };

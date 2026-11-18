@@ -1,6 +1,6 @@
 // Look 5: HUD screenshots for the before/after comparison with docs/reference/target-look.png.
 // `node tests/e2e/look5-shots.mjs <outDir> <prefix>` after `vite build`. Scenes: a busy desktop HUD (1280×800)
-// with a combo and its breakdown, the same on a phone (390×844), the upgrades drawer with an inspect panel,
+// with a combo and its breakdown, the same on a phone (390×844), an inspect panel,
 // settings, and a world event with the Lucky Cat panel.
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -52,7 +52,6 @@ try {
     await page.screenshot({ path: `${out}/${prefix}-desktop.png` });
     await page.evaluate(() => {
       const g = window.solarbloom;
-      g.hud.toggleUpgrades(true);
       const m = g.sim.state.machines.find((m) => m.type !== 'core');
       if (m) g.select?.(m.id);
     });
@@ -60,7 +59,6 @@ try {
     await page.screenshot({ path: `${out}/${prefix}-desktop-drawers.png` });
     await page.evaluate(() => {
       const g = window.solarbloom;
-      g.hud.toggleUpgrades(false);
       g.select?.(undefined);
       g.settingsUi.open();
     });
