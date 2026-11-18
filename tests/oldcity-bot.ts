@@ -25,6 +25,8 @@ export interface OldCityBotReport {
   steps: number[];
   /** the longest wait with nothing to do (seconds) */
   longestIdle: number;
+  /** E23.2.1: times bloombot ran out of charge with nothing to eat and walked home to rest */
+  restedAtHome: number;
   walked: number;
   time: number;
 }
@@ -41,6 +43,8 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
   let walked = 0;
   let idle = 0;
   let longestIdle = 0;
+  /** E23.2.1: times bloombot ran out of charge and walked home to rest */
+  let restedAtHome = 0;
   const first = (k: string) => (firsts[k] ??= sim.time);
   sim.bus.on('pile.salvaged', (e) => (first('salvage'), e.material === 'seeds' && first('seeds')));
   sim.bus.on('pulse.fired', () => first('pulse'));
@@ -95,7 +99,8 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
     if (firsts.keeper !== undefined) break;
     let did = false;
     const tier = sim.fountain.tier;
-    // 0. E23.2.1: running low: eat something carried; out of charge with nothing to eat: home to sleep
+    // 0. E23.2.1: running low: eat something carried; out of charge with nothing to eat: walk home and rest there
+    //    (stand still by the fountain until the charge has come back far enough to be worth going out again)
     if (sim.charge.low) {
       const meal = sim.charge.eat();
       if (typeof meal === 'object') {
@@ -104,8 +109,8 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
       }
       if (sim.charge.empty) {
         walkTo(fountain.x, fountain.z, 2);
-        pass(ACT.think);
-        sim.charge.sleep();
+        restedAtHome++;
+        while (sim.charge.share < 0.6) pass(1);
         continue;
       }
     }
@@ -196,7 +201,7 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
     pass(ACT.think);
   }
   record();
-  return { seed, firsts, hints, steps, longestIdle, walked, time: sim.time };
+  return { seed, firsts, hints, steps, longestIdle, walked, time: sim.time, restedAtHome };
 
   function affordableNear(): boolean {
     return !!nearestPulse();

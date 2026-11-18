@@ -280,11 +280,17 @@ export class BotController {
       if (moved > 0.001) this.following = true;
     }
     this.speed = dt > 0 ? moved / dt : 0;
-    if (this.sprinting && moved > 0.001) this.sim.charge.use('sprint', dt);
+    if (this.sprinting && moved > 0.001) {
+      // E23.6.7: sprinting along a laid path costs less (e23-craft's sim.paths, once it lands)
+      const paths = (this.sim as unknown as { paths?: { onPath?(x: number, z: number): boolean; sprintChargeShare?: number } }).paths;
+      const k = paths?.onPath?.(this.pose.x, this.pose.z) ? (paths.sprintChargeShare ?? CHARGE.pathSprintShare) : 1;
+      this.sim.charge.use('sprint', dt * k);
+    }
     // A machine built or a plot turned solid under bloombot: step aside.
     if (!w.fits(p.roofId, p.x, p.z)) w.settle(p);
     const [x, y, z] = this.world();
     this.visuals.place(x, y, z, p.facing);
+    this.visuals.setTired(flat);
     this.visuals.setMotion(this.speed, this.sprinting);
     this.visuals.update(dt);
     this.follow(x, y, z);

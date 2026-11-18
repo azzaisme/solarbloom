@@ -1,11 +1,15 @@
 import { CHARGE, type EdibleDef } from '../data/charge';
 import type { ChargeState } from '../core/types';
+import { PARK } from '../core/Areas';
+import { distToFootprint } from '../core/Grid';
+import { GROUND } from '../core/GameState';
+import { PARK_SET } from '../data/oldcity';
 import type { Sim } from './Sim';
 
 /** What costs charge. */
 export type ChargeUse = 'pulse' | 'sprint' | 'pry' | 'hover' | 'climb' | 'glide';
 /** Where charge comes back from (E23.3's chargers call `recharge(amount, 'charger')`). */
-export type ChargeSource = 'eat' | 'charger' | 'bench' | 'sleep' | 'other';
+export type ChargeSource = 'eat' | 'charger' | 'bench' | 'home' | 'sleep' | 'other';
 
 /**
  * E23.2.1 (#371): bloombot's charge, the only meter on screen. Old-city rules only: under classic rules it is
@@ -15,12 +19,16 @@ export type ChargeSource = 'eat' | 'charger' | 'bench' | 'sleep' | 'other';
  * pulse or use abilities. Nothing is lost and bloombot is never stranded. A pulse with a little charge left
  * always fires (the meter just bottoms out at zero).
  *
- * Refill: eat biomass or food anywhere (slow, uses an item), meditate at a charger (E23.3.3 calls
- * `recharge`), sit on a bench (a trickle, E23.2.3) or sleep in the house (`sleep`, full).
+ * Refill: eat biomass or food anywhere (slow, uses an item), rest at home (stand still by the fountain or the
+ * house: a trickle, always there), meditate at a charger (E23.3.3 calls `recharge`), sit on a bench (a trickle,
+ * E23.2.3) or sleep in the house (`sleep`, full, E23.7.1.3).
  */
 export class ChargeSystem {
   /** the meal in progress (never saved: closing the game mid-bite only loses the rest of that bite) */
   private meal?: { item: EdibleDef; left: number; perSecond: number };
+  /** where bloombot stood last tick, and how long it has stood still (for resting at home) */
+  private lastAt?: { x: number; z: number };
+  private still = 0;
 
   constructor(private sim: Sim) {}
 
@@ -145,12 +153,50 @@ export class ChargeSystem {
     return item;
   }
 
+  /** Is bloombot standing at home (by the park's fountain or the house) right now? */
+  atHome(at = this.sim.bot): boolean {
+    if (!at || at.roofId !== GROUND) return false;
+    const R = CHARGE.home.radius;
+    const x = Math.floor(at.x);
+    const z = Math.floor(at.z);
+    const shed = PARK_SET.shed;
+    if (distToFootprint(x, z, shed.x, shed.z, shed.size) <= R) return true;
+    const f = this.sim.state.machines.find((m) => m.type === 'core' && this.sim.areas.areaOf(m) === PARK);
+    return !!f && distToFootprint(x, z, f.x, f.z, f.size) <= R;
+  }
+
+  /** Resting at home: standing still there (not just passing through) for a moment. */
+  get resting(): boolean {
+    return this.on && this.still >= CHARGE.home.stillSeconds && this.atHome();
+  }
+
   tick(dt: number) {
+    if (!this.on) return;
     const m = this.meal;
-    if (!m || !this.on) return;
-    const bite = Math.min(m.left, m.perSecond * dt);
-    m.left -= bite;
-    this.recharge(bite, 'eat');
-    if (m.left <= 1e-6) this.meal = undefined;
+    if (m) {
+      const bite = Math.min(m.left, m.perSecond * dt);
+      m.left -= bite;
+      this.recharge(bite, 'eat');
+      if (m.left <= 1e-6) this.meal = undefined;
+    }
+    // home: a trickle back while bloombot stands still by the fountain or the house
+    const at = this.sim.bot;
+    const moved = !at || !this.lastAt || Math.hypot(at.x - this.lastAt.x, at.z - this.lastAt.z) > 0.02;
+    this.still = moved ? 0 : this.still + dt;
+    this.lastAt = at ? { x: at.x, z: at.z } : undefined;
+    if (this.resting) this.recharge(CHARGE.home.perSecond * dt, 'home');
+  }
+
+  /** Bloombot can always walk (at zero, the low-power walk). For the gentle-failure suite (E23.10). */
+  canWalk(): boolean {
+    return true;
+  }
+
+  /** Test hooks for the gentle-failure suite (E23.10): run the charge out, or fill it. */
+  drainForTest() {
+    if (this.on) this.set(0);
+  }
+  refillForTest() {
+    if (this.on) this.set(this.max);
   }
 }

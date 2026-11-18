@@ -51,6 +51,9 @@ export class BloombotVisuals {
   reducedMotion = false;
   /** true once the real model is drawn */
   loaded = false;
+  /** E23.2.1: out of charge: bloombot droops a little and its walk slows (the low-power walk) */
+  private tired = false;
+  private holder?: pc.Entity;
 
   constructor(
     private app: pc.AppBase,
@@ -89,6 +92,7 @@ export class BloombotVisuals {
     // scale a holder around it instead.
     const holder = new pc.Entity('bloombot-model');
     holder.setLocalScale(SCALE, SCALE, SCALE);
+    this.holder = holder;
     const e = res.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
     holder.addChild(e);
     this.root.addChild(holder);
@@ -159,6 +163,14 @@ export class BloombotVisuals {
   place(x: number, y: number, z: number, facing: number) {
     this.root.setPosition(x, y, z);
     this.root.setEulerAngles(0, (facing * 180) / Math.PI, 0);
+  }
+
+  /** E23.2.1: out of charge (or not): a tired droop, head and shoulders forward. */
+  setTired(on: boolean) {
+    if (on === this.tired) return;
+    this.tired = on;
+    this.holder?.setLocalEulerAngles(on ? 9 : 0, 0, 0);
+    this.standIn?.setLocalEulerAngles(on ? 9 : 0, 0, 0);
   }
 
   /** The looping clip, from how fast bloombot moves (world units per second) and whether it hovers (sprint). */
