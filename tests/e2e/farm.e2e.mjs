@@ -97,7 +97,7 @@ try {
         for (let dz = -r; dz <= r; dz++) {
           if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
           const t = s.grid.get('g', bx + dx, bz + dz);
-          if (t && !t.blocked && !t.occupantId && t.feature !== 'water' && (t.level ?? 0) === level) open.push([bx + dx, bz + dz]);
+          if (t && !t.blocked && !t.occupantId && t.feature !== 'water' && (t.level ?? 0) === level && !s.salvage.pileAt(bx + dx, bz + dz)) open.push([bx + dx, bz + dz]);
         }
     for (const [x, z] of open) {
       const t = s.grid.get('g', x, z);
