@@ -101,6 +101,10 @@ export const RECIPES: Partial<Record<BuildableType | 'reclaimer' | 'chest', Reci
   pollinator: { cost: { seeds: 10, timber: 6, biomass: 20 }, tier: 2 },
   droneHub: { cost: { scrap: 20, copper: 15, glass: 10 }, tier: 2 },
   reclaimer: { cost: { scrap: 20, copper: 10, timber: 10 }, tier: 2 },
+  // E23.4.2 (design §6: Reservoir 10 Clay, 4 Scrap; Pump 6 Scrap, 2 Wire, 2 Clay). Wire is E23.6's component: until it
+  // lands the pump takes 2 Copper in its place. Both unlock with Cistern Basin (E23.8.2); until then, fountain tier 2.
+  reservoir: { cost: { clay: 10, scrap: 4 }, tier: 2 },
+  pump: { cost: { scrap: 6, copper: 2, clay: 2 }, tier: 2 },
   reservoirGarden: { cost: { clay: 15, seeds: 10, biomass: 30 }, tier: 3 },
   motherTree: { cost: { seeds: 30, clay: 20, biomass: 100 }, tier: 3 },
   relay: { cost: { copper: 20, gears: 10, sunstone: 10 }, tier: 4 },
@@ -126,7 +130,7 @@ export interface TierDef {
 
 export const TIERS: TierDef[] = [
   { tier: 1, name: 'Water returns', needs: { parkTiles: 60 }, delivery: { scrap: 20, seeds: 6 }, ability: 'pry', gives: ['Pry', 'Build mode', 'Solar Panel', 'Water Condenser', 'Storage Chest', 'The house plot'], look: 'trickle' },
-  { tier: 2, name: 'The pump turns', needs: { landmarks: 2 }, delivery: { copper: 30, timber: 30, glass: 20 }, ability: 'hover', gives: ['Hover', 'Pollinator Garden', 'Drone Hub', 'Reclaimer', 'Stacks of 60'], look: 'flowing' },
+  { tier: 2, name: 'The pump turns', needs: { landmarks: 2 }, delivery: { copper: 30, timber: 30, glass: 20 }, ability: 'hover', gives: ['Hover', 'Pollinator Garden', 'Drone Hub', 'Reclaimer', 'Reservoir', 'Pump', 'Pipe', 'Stacks of 60'], look: 'flowing' },
   { tier: 3, name: 'The garden climbs', needs: { landmarks: 4 }, delivery: { clay: 40, gears: 30, seeds: 40 }, ability: 'climb', gives: ['Climb', 'Reservoir Garden', 'Mother Tree', 'Stacks of 80'], look: 'lit' },
   { tier: 4, name: 'Light on the roofs', needs: { landmarks: 6 }, delivery: { sunstone: 40, copper: 60, gears: 40 }, ability: 'glide', gives: ['Glide', 'Bloom Relay', 'Cultivator', 'Stacks of 120'], look: 'lit' },
   { tier: 5, name: 'The Great Bloom', needs: { landmarks: 10 }, delivery: { sunstone: 80, glass: 80, seeds: 80 }, items: ['heartSeed', 'starLens'], gives: ['The Great Bloom'], look: 'bloom' },

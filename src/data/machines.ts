@@ -130,6 +130,27 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     blurb: 'Built on a woken region’s seam: it sends 6 of the region’s material a minute to the store.',
     oldCity: true,
   },
+  // E23.4.2: the water network's storage and its pump (old-city rules only).
+  reservoir: {
+    type: 'reservoir',
+    name: 'Reservoir',
+    icon: '🛢',
+    size: 2,
+    cost: {},
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Stores water. Rain fills it, and so does a canal or pond on its bank, a spring, or a pipe from a pump. Up high, it feeds the pipes below on its own.',
+    oldCity: true,
+  },
+  pump: {
+    type: 'pump',
+    name: 'Pump',
+    icon: '⛲',
+    size: 1,
+    cost: {},
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Stands on the bank of a pond or canal and pushes its water along the pipes it touches, uphill or far away. Runs on grid power.',
+    oldCity: true,
+  },
   core: {
     type: 'core',
     name: 'Rooftop Core',
@@ -143,7 +164,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
 
 export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
 /** E21.3: the old-city build list (the classic list plus the Storage Chest and the Reclaimer). */
-export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'pollinator', 'droneHub', 'reclaimer', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'pollinator', 'droneHub', 'reclaimer', 'reservoir', 'pump', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

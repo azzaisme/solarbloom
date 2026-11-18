@@ -36,6 +36,19 @@ export const WATER_NET = {
   fadeReach: 5,
   fadeBelow: 0.35,
   fadeSteps: 2,
+  /** E23.4.2.1: a reservoir: what it holds, how fast a canal or pond on its bank fills it (share of capacity per game day) */
+  reservoir: { capacity: 400, bankFillPerDay: 2, startLevel: 0 },
+  /**
+   * E23.4.2.2: a pump stands on a bank and pushes water from that body into the pipes it touches: up to this many
+   * units per game day into reservoirs on the line, uphill or across any distance. Grid power (E23.3) it draws.
+   */
+  pump: { perDay: 1200, power: 3 },
+  /** E23.4.2.3: a higher reservoir feeds a lower one down a pipe with no pump, this many units per game day */
+  gravityPerDay: 600,
+  /** E23.4.2.2: one Pipe (1 Copper, 2 Clay, E23 design §6) lays this many pipe tiles */
+  pipe: { cost: { copper: 1, clay: 2 }, tilesPerPipe: 4 },
+  /** a tile is fed by a pipe when a fed pipe tile is within this many tiles (square reach) */
+  pipeReach: 1,
   /** the drained bed shows in this many steps (the renderer rebuilds a body's look only when its step changes) */
   lookSteps: 10,
 };

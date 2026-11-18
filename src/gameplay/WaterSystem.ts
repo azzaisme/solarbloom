@@ -1,9 +1,10 @@
 import { GROUND } from '../core/GameState';
 import { regionOfCell, seaCell, surfCell } from '../core/OldCityLayout';
-import type { TileData, WeatherKind } from '../core/types';
+import type { BuildableType, MachineData, TileData, WeatherKind } from '../core/types';
 import { REGIONS, type RegionId } from '../data/oldcity';
 import { WATER_NET } from '../data/water';
 import type { Sim } from './Sim';
+import { tankId, WaterPipes } from './WaterPipes';
 
 /**
  * A body of fresh water: one connected stretch of water tiles (a pond, a canal, a basin). Its id is its anchor
@@ -17,6 +18,8 @@ export interface WaterBody {
   capacity: number;
   /** the region its anchor lies in (springs, starting level) */
   region?: RegionId;
+  /** E23.4.2.1: a reservoir (a built tank, id `r:<machine id>`; `tiles` is its footprint, not water) */
+  reservoir?: MachineData;
 }
 
 /** E23.4.1: what a save keeps. Levels are shares of capacity (0…1), only for bodies that have changed. */
@@ -68,8 +71,11 @@ export class WaterSystem {
   private acc = 0;
   /** bumped whenever any level changes (renderers redraw on change) */
   version = 0;
+  /** E23.4.2: pipes, pumps and gravity feeds */
+  readonly pipes: WaterPipes;
 
   constructor(private sim: Sim) {
+    this.pipes = new WaterPipes(sim, this);
     sim.grid.touchListeners.push((t) => {
       if (t.feature === 'water' && this.byTile.size) this.forget();
     });
@@ -100,13 +106,50 @@ export class WaterSystem {
     return this.byTile.get(t.id) ?? this.flood(t);
   }
 
-  /** The body with this id (its anchor `x,z`). */
+  /** The body with this id (its anchor `x,z`, or a reservoir's `r:<machine id>`). */
   body(id: string): WaterBody | undefined {
+    if (id.startsWith('r:')) return this.tank(id.slice(2));
     const hit = this.bodies.get(id);
     if (hit) return hit;
     const [x, z] = id.split(',').map(Number);
     const b = this.bodyAt(this.sim.grid.get(GROUND, x, z));
     return b?.id === id ? b : undefined;
+  }
+
+  private tanks = new Map<string, WaterBody>();
+
+  /** E23.4.2.1: a reservoir's water, by its machine id (undefined once it is taken down). */
+  tank(machineId: string): WaterBody | undefined {
+    const m = this.sim.machine(machineId);
+    if (!m || m.type !== 'reservoir') {
+      this.tanks.delete(machineId);
+      return undefined;
+    }
+    let b = this.tanks.get(machineId);
+    if (b?.reservoir !== m) {
+      const tiles = new Set(this.sim.grid.footprint(m.roofId, m.x, m.z, m.size).flatMap((t) => (t ? [t.id] : [])));
+      const region = this.sim.oldCity ? (regionOfCell(m.x, m.z)?.id as RegionId | undefined) : undefined;
+      b = { id: tankId(m), tiles, capacity: WATER_NET.reservoir.capacity, region, reservoir: m };
+      this.tanks.set(machineId, b);
+    }
+    return b;
+  }
+
+  /** Every reservoir's water. */
+  reservoirs(): WaterBody[] {
+    return this.sim.machinesOfType('reservoir').flatMap((m) => this.tank(m.id) ?? []);
+  }
+
+  /** E23.4.2: why a water machine can't stand here (undefined: it can). Called by the build check. */
+  placeProblem(type: BuildableType, roofId: string, x: number, z: number): string | undefined {
+    if (type !== 'pump' && type !== 'reservoir') return undefined;
+    const size = type === 'reservoir' ? 2 : 1;
+    const foot = this.sim.grid.footprint(roofId, x, z, size);
+    if (foot.some((t) => t?.feature === 'water')) return 'Not in the water: on its bank';
+    if (type === 'reservoir') return undefined;
+    if (roofId !== GROUND) return 'A pump stands on the ground, on the bank of a pond or canal';
+    for (const t of foot) if (t && this.bodyNear(t, 1)) return undefined;
+    return 'A pump stands on the bank of a pond or canal';
   }
 
   /** The nearest body (by square distance, then fullest) within `reach` tiles of a tile. */
@@ -197,6 +240,7 @@ export class WaterSystem {
   levelOf(id: string): number {
     const saved = this.save.levels[id];
     if (saved !== undefined) return saved;
+    if (id.startsWith('r:')) return WATER_NET.reservoir.startLevel;
     const b = this.bodies.get(id) ?? this.body(id);
     return (b?.region && WATER_NET.startLevel[b.region]) ?? 1;
   }
@@ -224,10 +268,14 @@ export class WaterSystem {
     return got;
   }
 
-  /** Takes up to `units` from the nearest body within reach of a tile. */
+  /**
+   * Takes up to `units` from the nearest body within reach of a tile; with none in reach (or it ran dry), through a
+   * pipe beside the tile that carries water (E23.4.2).
+   */
   drawNear(t: TileData, units: number): number {
     const b = this.bodyNear(t);
-    return b ? this.draw(b.id, units) : 0;
+    const got = b ? this.draw(b.id, units) : 0;
+    return got < units ? got + this.pipes.drawAt(t, units - got) : got;
   }
 
   /** Adds up to `units` to a body; returns what fitted. */
@@ -240,9 +288,9 @@ export class WaterSystem {
     return put;
   }
 
-  /** Does a body within reach still hold water? (planters, the land's look) */
+  /** Does a body within reach still hold water, or does a pipe beside the tile carry some? (planters) */
   isWatered(t: TileData): boolean {
-    return this.wetness(t) > WATER_NET.dryBelow;
+    return this.wetness(t) > WATER_NET.dryBelow || this.pipes.feeds(t);
   }
 
   /** 0…1: the fullest body within reach (0 if there is none). */
@@ -274,6 +322,7 @@ export class WaterSystem {
     for (const id of Object.keys(this.save.levels).sort()) {
       const b = this.body(id);
       if (b) out.push(b);
+      else if (id.startsWith('r:') && !this.sim.machine(id.slice(2))) delete this.save.levels[id]; // taken down
     }
     return out;
   }
@@ -314,6 +363,7 @@ export class WaterSystem {
     const low: WaterBody[] = [];
     let key = '';
     for (const b of this.live()) {
+      if (b.reservoir) continue; // a tank's level is its own: the land beside it doesn't depend on it
       const s = WaterSystem.fadeSteps(this.levelOf(b.id));
       if (!s) continue;
       low.push(b);
@@ -352,6 +402,7 @@ export class WaterSystem {
     const out: [number, number, number, number][] = [];
     const now = new Map<string, number>();
     for (const b of this.live()) {
+      if (b.reservoir) continue;
       const s = WaterSystem.fadeSteps(this.levelOf(b.id));
       now.set(b.id, s);
       if ((this.shownSteps.get(b.id) ?? 0) !== s) out.push(this.fadeBounds(b));
@@ -428,6 +479,7 @@ export class WaterSystem {
     if (!this.sim.oldCity) return out;
     const regions = new Set([...Object.keys(WATER_NET.springs), ...Object.keys(WATER_NET.startLevel)] as RegionId[]);
     for (const r of regions) for (const b of this.springBodies(r)) if (!out.includes(b)) out.push(b);
+    for (const b of this.reservoirs()) if (!out.includes(b)) out.push(b);
     return out;
   }
 
@@ -458,5 +510,23 @@ export class WaterSystem {
       if (evap && lv > WATER_NET.evaporationFloor) lv = Math.max(WATER_NET.evaporationFloor, lv - evap * days);
       if (lv !== before) this.set(b.id, lv);
     }
+    // E23.4.2.1: a canal or pond on a reservoir's bank fills it
+    for (const r of this.reservoirs()) {
+      const room = (1 - this.levelOf(r.id)) * r.capacity;
+      if (room <= 0) continue;
+      const src = this.bankOf(r.reservoir!);
+      if (!src) continue;
+      this.fill(r.id, this.draw(src.id, Math.min(room, WATER_NET.reservoir.bankFillPerDay * r.capacity * days)));
+    }
+    this.pipes.tick(days);
+  }
+
+  /** The pond or canal on a reservoir's bank (touching its footprint), if any. */
+  bankOf(m: MachineData): WaterBody | undefined {
+    for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size)) {
+      const b = t && this.bodyNear(t, 1);
+      if (b) return b;
+    }
+    return undefined;
   }
 }

@@ -44,6 +44,7 @@ export class WaterLevels {
     this.seen = w.version;
     const live = new Set<string>();
     for (const b of w.live()) {
+      if (b.reservoir) continue; // a reservoir shows its level in its own model
       live.add(b.id);
       const step = Math.round((1 - w.levelOf(b.id)) * WATER_NET.lookSteps);
       const v = this.views.get(b.id) ?? { step: -1, meshes: [] };

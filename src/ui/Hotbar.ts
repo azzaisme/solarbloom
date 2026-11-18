@@ -1,6 +1,7 @@
 import { formatCost } from '../core/Economy';
 import { DECOR_OPTION, DECOR_OPTIONS } from '../data/cozy';
 import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE } from '../data/machines';
+import { WATER_NET } from '../data/water';
 import { TUNING } from '../data/tuning';
 import { type Action, type Bindings, keyLabel } from '../app/Bindings';
 import { type GlyphStyle, type PadStyle, padName } from './Glyphs';
@@ -28,6 +29,8 @@ export class Hotbar extends HudPart {
         (t) =>
           `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name}${MACHINES[t].hotkey ? ` (${MACHINES[t].hotkey})` : ''}"><span class="key">${MACHINES[t].hotkey ?? ''}</span><span class="si">${ICONS[MACHINE_ICONS[t]]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
       ),
+      // E23.4.2.2: the pipe, laid tile by tile (Old City only)
+      ...(oldCity ? [`<button class="slot" data-tool="pipe" aria-label="Lay pipe"><span class="key"></span><span class="si">${ICONS.pipe}</span><span class="sl">Pipe</span><span class="sc"></span></button>`] : []),
       // E19.2: decorations, free once earned, and the remove tool
       `<span class="tray-break" aria-hidden="true"></span>`,
       ...DECOR_OPTIONS.map(
@@ -121,6 +124,15 @@ export class Hotbar extends HudPart {
       const roofOnly = MACHINES[t].roofs;
       btn.hidden = !!roofOnly && !s.build.isUnlocked(t);
       if (locked) this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.lockLabel(t));
+    }
+    // E23.4.2.2: the pipe's slot: what's left of the last Pipe, or its price; it unlocks with the pump
+    const pipeBtn = s.oldCity ? this.root.querySelector<HTMLElement>('#hotbar [data-tool="pipe"]') : null;
+    if (pipeBtn) {
+      const p = s.water.pipes;
+      const locked = !s.build.isUnlocked('pump');
+      this.set('hc-pipe', $(pipeBtn, '.sc'), 'text', locked ? s.build.lockLabel('pump') : p.stock > 0 ? `${p.stock} left` : p.costText());
+      this.set('hk-pipe', pipeBtn, 'cls', p.stock > 0 || s.inventory.canPay(WATER_NET.pipe.cost) ? '0' : '1', 'cant');
+      this.set('hl-pipe', pipeBtn, 'cls', locked ? '1' : '0', 'locked');
     }
     // E19.2: a decoration's slot appears once it's earned
     const earned = s.state.cozy?.decorUnlocked;

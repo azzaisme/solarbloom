@@ -42,6 +42,7 @@ describe('E21.3: recipes', () => {
       const z = 12;
       ground(sim, x, z);
       if (MACHINES[type].areaTypes) continue; // needs its area type (the Reservoir Garden)
+      if (type === 'pump') continue; // on a bank only: paid exactly in tests/water-pipes.test.ts
       stock(sim, type);
       stock(sim, type);
       const first = sim.build.place(type, GROUND, x, z);

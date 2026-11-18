@@ -734,6 +734,11 @@ body.oldcity #obj .ohead { display: block; }
 #buildbar .bslot .sl { font: 600 11px/1.1 var(--font-display); max-width: 46px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Old-city rules: no hotbar on the walking view, so the prompt, the toasts and the build hotbar sit lower. */
 body.oldcity #hotbar { display: none !important; }
+/* E23.4.2: …but the build menu (Q / the pad's build button) opens its tray from it: show the tray alone, above the
+   build hotbar, so every piece (the chest, the reclaimer, the water network's pump, reservoir and pipe) can be picked. */
+body.oldcity #hotbar:has(#buildTray.open) { display: flex !important; background: none; border-color: transparent; box-shadow: none; padding: 0; }
+body.oldcity #hotbar:has(#buildTray.open) > :not(#buildTray) { display: none; }
+body.oldcity #hotbar #buildTray { bottom: calc(100% + 136px); }
 body.oldcity #prompt { bottom: calc(16px + var(--safe-b)); }
 body.oldcity #toasts { bottom: calc(14px + var(--safe-b)); }
 body.oldcity #buildbar { bottom: calc(74px + var(--safe-b)); }

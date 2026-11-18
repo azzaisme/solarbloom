@@ -187,6 +187,10 @@ const BODIES = {
   robot: L('M12 3.5v2.4', '#3a2a1a', 1.6) + C(12, 3, 1.3, 'red') + R(5, 6, 14, 10, 3, 'steel') + `<rect x="8" y="9.4" width="2.6" height="2.6" rx="1" fill="#8fe9ff"/><rect x="13.4" y="9.4" width="2.6" height="2.6" rx="1" fill="#8fe9ff"/>` + R(7.5, 16.5, 9, 4.5, 1.5, 'steel'),
   wrench: P('M14.5 3.5a5 5 0 0 0-4.6 6.9L3.8 16.5a1.9 1.9 0 0 0 2.7 2.7l6.1-6.1a5 5 0 0 0 6.9-4.6l-3 3-2.6-.5-.5-2.6z', 'steel'),
   crane: L('M7 21V3.5h12.5M7 7l4.5-3.5M17 3.5V9', '#d9a03a', 2) + R(15, 9, 4, 3.4, .8, 'wood') + P('M4 20.5h7v1.5H4z', 'stone'),
+  // E23.4.2: the water network
+  reservoir: R(4, 7, 16, 13, 2.4, 'stone') + R(5.6, 11, 12.8, 7.4, 1.4, 'water') + L('M4 7h16M7.5 4.5v2.5M16.5 4.5v2.5', '#fff', 1.4),
+  pump: R(7, 9, 10, 11, 2, 'steel') + C(12, 14.5, 2.6, 'water') + L('M12 9V4.5M12 4.5h5.5M4 20.5h16', '#fff', 1.6) + P('M18 3.4c-.8 1.2-1.3 1.9-1.3 2.6a1.3 1.3 0 0 0 2.6 0c0-.7-.5-1.4-1.3-2.6z', 'water'),
+  pipe: L('M3.5 9h9.5a3.5 3.5 0 0 1 3.5 3.5V21', '#5aa3c9', 4.6) + L('M3.5 9h9.5a3.5 3.5 0 0 1 3.5 3.5V21', '#9fe3f5', 1.4) + R(2.5, 6.6, 2.6, 4.8, 0.6, 'steel') + R(14.2, 18.5, 4.6, 2.6, 0.6, 'steel'),
   crate: R(4, 6, 16, 14, 1.8, 'wood') + L('M4 11h16M12 6v14', '#3a2a1a', 1.2) + P('M4 6l2.4-2.5h11.2L20 6z', 'wood'),
   // E19: plot options
   carrot: P('M14.5 9.5 5 20.5l11.2-8.8a2.6 2.6 0 0 0-1.7-2.2z', 'orange') + L('M9 15.6l1.6 1.2M11.6 12.8l1.4 1.2', '#b5560f', 1.1) + P('M15.4 8.6c-.4-2.6.6-4.6 2.8-5.4.6 2.4-.6 4.6-2.8 5.4z', 'leaf') + P('M16 9.4c2.2-1.2 4.4-.8 5.6 1-2 1.2-4.2.8-5.6-1z', 'leaf'),
@@ -240,6 +244,8 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   cultivator: 'carrot', // the tiller: its tray slot showed 'undefined' without one
   chest: 'parcel', // E21.1
   reclaimer: 'wrench', // E21.2
+  reservoir: 'reservoir', // E23.4.2
+  pump: 'pump', // E23.4.2
   core: 'sparkle',
 };
 

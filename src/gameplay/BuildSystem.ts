@@ -222,7 +222,7 @@ export class BuildSystem {
       const t = AREA_TYPES[s.areas.info(s.areas.map.areaOfCell(x, z)).type];
       if (!def.areaTypes.includes(t.type)) return fail(`Only grows in a ${def.areaTypes.map((a) => AREA_TYPES[a as AreaType].name.toLowerCase()).join(' or ')} area`);
     }
-    const why = this.footprintProblem(roofId, x, z, def.size, def.allowedGround);
+    const why = this.footprintProblem(roofId, x, z, def.size, def.allowedGround) ?? s.water.placeProblem(type, roofId, x, z); // E23.4.2: a pump on a bank
     if (why) return fail(why);
     if (!s.inventory.canPay(recipe)) return fail(this.missingLabel(type) ?? 'Missing materials', true);
     return { ok: true, cost, spotOk: true };
