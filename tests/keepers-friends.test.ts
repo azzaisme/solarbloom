@@ -125,6 +125,33 @@ describe('E23.9.2: Keepers as friends', () => {
     expect(groups.find((g) => g.title === 'Keepsakes')!.rows.find((r) => r.name === 'Tram sign')?.found).toBe(true);
   });
 
+  it('a Keeper dozes at night, and so does its tending (the E23.7 clock)', () => {
+    const sim = new Sim(createInitialState(7, 'oldcity'));
+    sim.state.salvage!.tier = 1;
+    sim.state.salvage!.abilities.push('pry');
+    sim.areas.clear('park', true);
+    sim.gates.open('g-mastRow');
+    for (let z = -8; z <= -5; z++) for (let x = 8; x <= 12; x++) { const t = sim.grid.get(GROUND, x, z)!; if (!t.blocked && t.ground !== 'restored') sim.restoration.complete(t, 'pulse'); }
+    sim.state.salvage!.keepers.pylon = { step: 'landmark' };
+    sim.keepers.settle('pylon');
+    const started: unknown[] = [];
+    sim.bus.on('keeper.tending', (e) => started.push(e));
+    // on to the night, then a whole tending period of it
+    while (!sim.clock.isNight()) sim.state.time += 60;
+    for (let s = 0; s < KEEPER_HELP.tendEverySeconds * 2 && sim.clock.isNight(); s++) {
+      sim.state.time += 1;
+      sim.keepers.tick(1);
+    }
+    expect(started).toEqual([]);
+    // morning: it sets off again
+    while (sim.clock.isNight()) sim.state.time += 60;
+    for (let s = 0; s < KEEPER_HELP.tendEverySeconds * 2; s++) {
+      sim.state.time += 1;
+      sim.keepers.tick(1);
+    }
+    expect(started.length).toBeGreaterThan(0);
+  });
+
   it('every Keeper loves a tomato once the farm grows them', () => {
     const sim = new Sim(createInitialState(7, 'oldcity'));
     for (const k of KEEPERS) expect(sim.keepers.likes(k.id)).toContain(FRIENDSHIP.everyoneLikes);
