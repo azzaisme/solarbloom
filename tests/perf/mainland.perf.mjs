@@ -190,7 +190,7 @@ try {
       for (let i = 0; i < 40; i++) await frame();
       // a census of the last frame: visible mesh instances by top-level entity and by machine type,
       // batched or not (a dynamic batch is one draw call for many parts)
-      const out = { drawCalls: g.app.stats.drawCalls.total, byTop: {}, unbatchedByMachine: {}, batches: 0 };
+      const out = { drawCalls: g.app.stats.drawCalls.total, byTop: {}, bySecond: {}, unbatchedByMachine: {}, batches: 0, batchNames: {} };
       const types = new Map(g.sim.state.machines.map((m) => [m.id, m.type]));
       const seen = new Set();
       for (const layer of g.app.scene.layers.layerList) {
@@ -200,20 +200,34 @@ try {
           seen.add(mi);
           let n = mi.node;
           let top = null;
+          let second = null;
           let machine = null;
+          const chain = [];
           while (n && n.parent) {
-            if (types.has(n.name)) machine = types.get(n.name);
+            chain.push(n.name);
+            const id = n.name?.startsWith('machine-') ? n.name.slice(8) : null;
+            if (id && types.has(id)) machine = types.get(id);
             if (!n.parent.parent) top = n.name;
             n = n.parent;
           }
-          if (!top) { out.batches++; continue; }
+          if (!top) {
+            out.batches++;
+            const bn = (mi.node?.name ?? '?').replace(/[-:_]?-?\d+/g, '#');
+            out.batchNames[bn] = (out.batchNames[bn] ?? 0) + 1;
+            continue;
+          }
+          second = chain.length >= 2 ? chain[chain.length - 2] : '(self)';
+          second = String(second).replace(/\d+/g, '#');
           out.byTop[top] = (out.byTop[top] ?? 0) + 1;
+          const k2 = `${top}/${second}`;
+          out.bySecond[k2] = (out.bySecond[k2] ?? 0) + 1;
           if (machine) out.unbatchedByMachine[machine] = (out.unbatchedByMachine[machine] ?? 0) + 1;
         }
       }
       return out;
     });
     console.log('  diag:', JSON.stringify(results.diag, null, 1));
+    if (process.env.ML_DIAG === 'only') throw new Error('ML_DIAG=only: stopping after the census');
   }
 
   // 3. Pan a loop across the build at the middle zoom step, with the camera following a moving point.
