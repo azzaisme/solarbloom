@@ -28,7 +28,7 @@ export const WATER_NET = {
   /** largest body one flood fill walks (safety cap) */
   maxTiles: 6000,
   /** what the helpers draw (units per tile they work); planters and pumps bring their own (E23.5, E23.4.2) */
-  draw: { cultivatorPerTile: 2 },
+  draw: { cultivatorPerTile: 2, gardenerPerTile: 1 },
   /** the drained bed shows in this many steps (the renderer rebuilds a body's look only when its step changes) */
   lookSteps: 10,
 };

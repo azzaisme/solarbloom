@@ -1,4 +1,5 @@
 import { big, Decimal } from '../core/Big';
+import { WATER_NET } from '../data/water';
 import { PARK } from '../core/Areas';
 import { Economy } from '../core/Economy';
 import { GROUND } from '../core/GameState';
@@ -258,6 +259,8 @@ export class DroneRoles {
           s.restoration.grow(g, undefined, 'auto', true);
           tileIds.push(g.id);
         }
+        // E23.4.1: the watering comes out of the water nearby
+        s.water.drawNear(t, WATER_NET.draw.gardenerPerTile * tileIds.length);
         done = true;
       }
     } else if (role === 'scout') {
@@ -618,6 +621,7 @@ export class DroneRoles {
       if (!s.drones.payJob({ water: Economy.part(s.restoration.pulseCost(t), 'water') })) return 'broke';
       const all = [t, ...this.gardenNeighbours(t, hub)];
       for (const g of all) s.restoration.grow(g, undefined, 'auto', true);
+      s.water.drawNear(t, WATER_NET.draw.gardenerPerTile * all.length); // E23.4.1
       return { restored: 0, grown: all.length };
     }
     if (role === 'scout') {
