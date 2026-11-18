@@ -2,6 +2,7 @@
 // `node tests/e2e/story.e2e.mjs [journal|keepers|ending ...]` after `vite build` (all scenes when none are named).
 // - journal: walk up to the first page post, read it, the Journal opens at it.
 // - keepers: a woken Keeper wanders and comes home; a settled one takes a gift, becomes a friend and tends its patch.
+// - bench:   (with E23.2.3's benches) a Keeper only sits beside bloombot once it is a friend.
 // - ending:  the broken causeway; the last delivery: the island blooms, the causeway rises, his last page opens;
 //            bloombot walks out along the causeway.
 // Screenshots go to $SHOTS_DIR (default docs/review/story). The script fails on a page error or a failed check.
@@ -13,8 +14,8 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const dir = process.env.SHOTS_DIR ?? 'docs/review/story';
 mkdirSync(dir, { recursive: true });
-const scenes = process.argv.slice(2).length ? process.argv.slice(2) : ['journal', 'keepers', 'ending'];
-const port = 4251;
+const scenes = process.argv.slice(2).length ? process.argv.slice(2) : ['journal', 'keepers', 'bench', 'ending'];
+const port = Number(process.env.STORY_PORT ?? 4251);
 const server = await preview({ preview: { port, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
@@ -53,7 +54,7 @@ try {
   if (scenes.includes('journal')) {
     const { page, errors } = await open();
     // his first note waits at the top of the beach steps
-    await stand(page, 7.5, 13.4, Math.PI);
+    await stand(page, 4.5, 14.4, Math.PI);
     const p = await prompt(page);
     check(/Read the page/.test(p), `journal: facing the post, the prompt says "Read the page" (${p})`);
     await shot(page, 'journal-1-post');
@@ -89,7 +90,11 @@ try {
       });
       // far off: it wanders
       await stand(page, 14.5, -14.5, 0);
-      await page.waitForTimeout(9000);
+      // headless runs the game slowly: wait until it has stepped off, rather than for a fixed time
+      await page.waitForFunction(() => {
+        const p = window.solarbloom.keepers?.headWorld?.('pylon');
+        return p && Math.hypot(p.x - 10.5, p.z - -3.5) > 0.4;
+      }).catch(() => {});
       const away = await page.evaluate(() => {
         const p = window.solarbloom.keepers?.headWorld?.('pylon');
         return p ? Math.hypot(p.x - 10.5, p.z - -3.5) : -1;
@@ -97,8 +102,11 @@ try {
       check(away > 0.4, `keepers: a woken Keeper wanders from where it sleeps (${away.toFixed(2)} tiles away)`);
       await shot(page, 'keepers-1-wandering');
       // come close: it walks home to be talked to
-      await stand(page, 10.5, -1.6, Math.PI);
-      await page.waitForTimeout(9000);
+      await stand(page, 10.5, -2.6, Math.PI);
+      await page.waitForFunction(() => {
+        const p = window.solarbloom.keepers?.headWorld?.('pylon');
+        return p && Math.hypot(p.x - 10.5, p.z - -3.5) < 0.3;
+      }).catch(() => {});
       const home = await page.evaluate(() => {
         const p = window.solarbloom.keepers?.headWorld?.('pylon');
         return p ? Math.hypot(p.x - 10.5, p.z - -3.5) : -1;
@@ -128,29 +136,116 @@ try {
       const bubble = await page.evaluate(() => document.querySelector('.oc-bubble')?.textContent ?? '');
       check(/listen/.test(bubble), `keepers: the friend beat plays (${bubble.slice(0, 80)})`);
       await shot(page, 'keepers-4-friend');
-      // it tends its patch over time
-      const before = await page.evaluate(() => {
+      // it tends its patch: walks to a tile, leans over it, and the tile blooms when it is done
+      await page.evaluate(() => window.solarbloom.hud.backpack.close());
+      await stand(page, 12.5, -0.6, Math.PI);
+      const target = await page.evaluate(() => window.solarbloom.sim.keepers.startTending('pylon'));
+      check(!!target, `keepers: a friend sets off to tend a tile (${JSON.stringify(target)})`);
+      const bloom0 = await page.evaluate(([x, z]) => window.solarbloom.sim.grid.get('g', x, z).bloom, [target.x, target.z]);
+      await page.waitForFunction(() => window.solarbloom.keepers.views.get('pylon')?.to);
+      await shot(page, 'keepers-5-walking-to-tend');
+      await page.waitForFunction(([x, z]) => {
+        const p = window.solarbloom.keepers.headWorld('pylon');
+        return p && Math.hypot(p.x - (x + 0.5), p.z - (z + 0.5)) < 0.3;
+      }, [target.x, target.z]);
+      await page.waitForTimeout(800);
+      await shot(page, 'keepers-6-tending');
+      const bloomMid = await page.evaluate(([x, z]) => window.solarbloom.sim.grid.get('g', x, z).bloom, [target.x, target.z]);
+      check(bloomMid === bloom0, `keepers: the tile has not bloomed before it is tended (${bloom0} → ${bloomMid})`);
+      await page.waitForFunction(() => !window.solarbloom.sim.keepers.tendingAt('pylon'));
+      await page.waitForTimeout(600);
+      await shot(page, 'keepers-7-tended');
+      const bloom1 = await page.evaluate(([x, z]) => window.solarbloom.sim.grid.get('g', x, z).bloom, [target.x, target.z]);
+      check(bloom1 === bloom0 + 1, `keepers: once tended, the tile is a bloom step on (${bloom0} → ${bloom1})`);
+      // Tally: Interact opens the trade panel, which offers a gift as a choice (never given away by surprise)
+      await page.evaluate(() => {
         const s = window.solarbloom.sim;
-        let n = 0;
-        for (let z = -12; z <= -1; z++) for (let x = 4; x <= 16; x++) n += s.grid.get('g', x, z)?.bloom ?? 0;
-        return n;
+        s.gates.open('g-oldMarket', true);
+        s.state.salvage.keepers.tally = { step: 'landmark' };
+        s.landmarks.reward('trade');
+        s.keepers.settle('tally');
+        s.inventory.add('glass', 5);
       });
-      await page.evaluate(() => window.solarbloom.sim.advance(240));
-      const after = await page.evaluate(() => {
-        const s = window.solarbloom.sim;
-        let n = 0;
-        for (let z = -12; z <= -1; z++) for (let x = 4; x <= 16; x++) n += s.grid.get('g', x, z)?.bloom ?? 0;
-        return n;
-      });
-      check(after > before, `keepers: a friend tends its patch (${before} → ${after} bloom steps)`);
+      await stand(page, 19.5, 11.4, Math.PI);
+      // a newly opened region builds slowly headless: wait for its Keeper to be what Interact faces
+      await page.waitForFunction(() => /Trade with Tally/.test(document.querySelector('#prompt, .prompt, [class*=prompt]')?.textContent ?? '')).catch(() => {});
+      const p2 = await prompt(page);
+      check(/Trade with Tally/.test(p2), `keepers: facing Tally, the prompt says Trade (${p2})`);
+      await page.keyboard.press('KeyE');
+      await page.waitForSelector('[data-act="gift"]', { timeout: 60000 }).catch(() => {});
+      const panel = await page.evaluate(() => document.querySelector('[data-act="gift"]')?.textContent ?? '');
+      check(/Give Tally 1 Glass/.test(panel), `keepers: Tally's panel offers the gift as a choice (${panel})`);
+      const before = await page.evaluate(() => ({ glass: window.solarbloom.sim.inventory.count('glass'), hearts: window.solarbloom.sim.keepers.hearts('tally') }));
+      check(before.glass === 5 && before.hearts === 0, 'keepers: opening the panel gave nothing away');
+      await shot(page, 'keepers-9-tally-choice');
+      await page.click('[data-act="gift"]');
+      await page.waitForTimeout(600);
+      const after = await page.evaluate(() => ({ glass: window.solarbloom.sim.inventory.count('glass'), hearts: window.solarbloom.sim.keepers.hearts('tally') }));
+      check(after.glass === 4 && after.hearts === 1, `keepers: choosing the gift gives one Glass (${JSON.stringify(after)})`);
+      await page.evaluate(() => window.solarbloom.oc.panel.close());
       // the Friends list in the backpack
-      await page.keyboard.press('Tab');
-      await page.waitForTimeout(500);
       await page.evaluate(() => window.solarbloom.hud.backpack.open('collection'));
       await page.waitForTimeout(500);
-      await shot(page, 'keepers-5-friends-list');
+      await shot(page, 'keepers-8-friends-list');
     }
     check(!errors.length, `keepers: no page errors ${errors.join(' | ')}`);
+    await page.close();
+  }
+
+  if (scenes.includes('bench')) {
+    const { page, errors } = await open();
+    const has = await page.evaluate(() => !!window.solarbloom.resting && !!window.solarbloom.sim.rest);
+    if (!has) console.log('  (bench: this build has no E23.2.3 benches; skipped)');
+    else {
+      // Mast Row open and Pylon settled near the park; an old park bench, mended
+      const bench = await page.evaluate(() => {
+        const g = window.solarbloom;
+        const s = g.sim;
+        const sv = s.state.salvage;
+        sv.tier = 1;
+        if (!sv.abilities.includes('pry')) sv.abilities.push('pry');
+        s.areas.clear('park', true);
+        s.gates.open('g-mastRow');
+        sv.keepers.pylon = { step: 'landmark' };
+        s.keepers.settle('pylon');
+        // the last old bench in the park (out in the open, south of the pergola)
+        let found;
+        for (let z = 0; z < 16; z++) for (let x = 0; x < 16; x++) if (s.rest.benchAt(x, z)) found = { x, z };
+        if (!found) return undefined;
+        s.inventory.add('scrap', 10);
+        s.rest.mend(s.rest.benchAt(found.x, found.z));
+        return found;
+      });
+      check(!!bench, `bench: an old park bench found and mended (${JSON.stringify(bench)})`);
+      await stand(page, bench.x + 0.5, bench.z + 1.6, Math.PI);
+      // not yet a friend: bloombot sits alone
+      const alone = await page.evaluate(([x, z]) => {
+        const g = window.solarbloom;
+        g.resting.sitBench(g.sim.rest.benchAt(x, z));
+        return { friend: g.resting.friend ?? null, beside: g.keepers.beside?.id ?? null };
+      }, [bench.x, bench.z]);
+      check(!alone.friend && !alone.beside, `bench: a Keeper who is not yet a friend does not sit (${JSON.stringify(alone)})`);
+      await page.waitForTimeout(1500);
+      await shot(page, 'bench-1-alone');
+      await page.evaluate(() => window.solarbloom.resting.stand?.());
+      // three gifts later: a friend
+      await page.evaluate(() => (window.solarbloom.sim.state.salvage.keepers.pylon.hearts = 3));
+      const together = await page.evaluate(([x, z]) => {
+        const g = window.solarbloom;
+        g.resting.sitBench(g.sim.rest.benchAt(x, z));
+        return { friend: g.resting.friend ?? null, beside: g.keepers.beside?.id ?? null };
+      }, [bench.x, bench.z]);
+      check(together.beside === 'pylon', `bench: Pylon, a friend, sits beside bloombot (${JSON.stringify(together)})`);
+      // frame the bench up close
+      await page.evaluate(([x, z]) => {
+        const c = window.solarbloom.camera;
+        c.glide(x + 0.5, 0, z + 0.5, c.maxZoom * 0.8);
+        for (let i = 0; i < 300; i++) c.update(0.05);
+      }, [bench.x, bench.z]);
+      await page.waitForTimeout(6000);
+      await shot(page, 'bench-2-with-a-friend');
+    }
+    check(!errors.length, `bench: no page errors ${errors.join(' | ')}`);
     await page.close();
   }
 

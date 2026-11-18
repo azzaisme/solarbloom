@@ -8,6 +8,7 @@ import { REGIONS } from '../src/data/oldcity';
 import { TIERS } from '../src/data/salvage';
 import { Sim } from '../src/gameplay/Sim';
 import { Walker } from '../src/gameplay/Walker';
+import type { MaterialId } from '../src/core/types';
 
 SaveService.clock = () => 0;
 const C = MAINLAND.causeway;
@@ -47,7 +48,30 @@ function walkToMainland(sim: Sim) {
   return leg2 && [...leg1, ...leg2];
 }
 
-describe('E23.9.3: the Great Bloom ending', () => {
+describe('E23.9.3: the Great Bloom ending', { timeout: 60_000 }, () => {
+  it('the real last delivery plays it: 80 Sunstone, Glass and Seeds, the Heart Seed and the Star Lens, ten landmarks awake', () => {
+    const sim = nearTheEnd();
+    const t = TIERS[TIERS.length - 1];
+    // the Heart Seed and the Star Lens come from Fern's and Vega's landmarks (their rewards)
+    sim.landmarks.reward('heartSeed');
+    sim.landmarks.reward('starLens');
+    expect(sim.fountain.condition(t).done, 'every landmark awake').toBe(true);
+    // bloombot carries the delivery and hands it in at the fountain
+    for (const [m, n] of Object.entries(t.delivery) as [MaterialId, number][]) sim.inventory.add(m, n);
+    const events: unknown[] = [];
+    sim.bus.on('ending.bloomed', (e) => events.push(e));
+    expect(sim.ending.bloomed).toBe(false);
+    sim.fountain.giveAll();
+    // the fountain reached its last tier by itself: the Great Bloom, his last page, the wildlife, the causeway
+    expect(sim.state.salvage!.tier).toBe(TIERS.length);
+    expect(sim.ending.bloomed).toBe(true);
+    expect(events.length).toBe(1);
+    expect(sim.journal.found(LAST_PAGE)).toBe(true);
+    expect(Object.keys(sim.state.fauna ?? {}).length).toBe(4);
+    expect(sim.mainland.opened).toBe(true);
+    expect(walkToMainland(sim), 'a walk from the island onto the mainland').toBeDefined();
+  });
+
   it('before the Great Bloom there is no way to the mainland; after it, bloombot walks there from Clock Plaza', () => {
     const sim = nearTheEnd();
     expect(sim.ending.bloomed).toBe(false);

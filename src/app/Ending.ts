@@ -37,7 +37,7 @@ export function playGreatBloom(host: EndingHost) {
   host.fanfare();
   host.bounds();
   host.overview(true);
-  host.bloomAt(8, 8, 0);
+  host.bloomAt(ENDING.fountain.x, ENDING.fountain.z, 0);
   // from the fountain outward: the regions in ring order
   const order = [...REGIONS].sort((a, b) => a.ring - b.ring || a.n - b.n);
   const step = ENDING.bloomSeconds / (order.length + 1);

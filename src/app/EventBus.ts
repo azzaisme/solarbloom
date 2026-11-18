@@ -3,6 +3,23 @@ import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import type { BuffType, CatRewardType, CatVariant, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
+  /** E23.7.1: the light clock crossed dawn or dusk (`day`: the game day). */
+  'clock.dawn': { day: number };
+  'clock.dusk': { day: number };
+  /** E23.7.1: bloombot slept in the house (`from` → `day`; in "follow my clock" mode the day doesn't change). */
+  'clock.slept': { from: number; day: number; real: boolean };
+  /** E23.7.1: "follow my clock" switched on or off. */
+  'clock.mode': { real: boolean };
+  /** E23.7.2: a new day's weather (or a held one, in tests and photo mode never). */
+  'weather.changed': { kind: import('../data/weather').WeatherKind; day: number };
+  /** E23.7.2.3: a storm blew in at dawn: fresh salvage (E23.7.4 refills the piles). */
+  'weather.storm': { day: number };
+  /** E23.7.2.3: lightning struck; `poleId`: the power pole it tripped (reset with one press), if the grid has one. */
+  'weather.lightning': { day: number; poleId?: string };
+  /** E23.7.2.2: bloombot listened to the forecast on the radio. */
+  'weather.forecast': { kind: import('../data/weather').WeatherKind };
+  /** E23.7.1.3: a night find was taken. */
+  'night.found': { id: string; material: import('../core/types').MaterialId; n: number; x: number; z: number };
   /** E21.1: the backpack or the store changed (`material` unset = several at once). */
   'pack.changed': { material?: import('../core/types').MaterialId; delta?: number };
   'store.changed': { material?: import('../core/types').MaterialId; delta?: number };
@@ -12,8 +29,8 @@ export interface GameEvents {
   'pile.salvaged': { pileId: string; material: import('../core/types').MaterialId; got: number; left: number; x: number; z: number };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
-  /** E21.2: a Reclaimer sent units to the store. */
-  'reclaimer.delivered': { machineId: string; material: import('../core/types').MaterialId; n: number };
+  /** E23.7.4: a pile gained units back (slowly over game days, or all at once in a storm); `left` units now. */
+  'pile.refilled': { pileId: string; left: number; x: number; z: number; storm: boolean };
   /** E21.5: a gate opened for good (a barricade pried, a bridge repaired, the lock bridge risen). */
   'gate.opened': { gateId: string; region: string };
   /** E21.6: something was handed in at the fountain; the fountain reached a tier. */
@@ -22,6 +39,14 @@ export interface GameEvents {
   /** E21.8: a Keeper speaks (one to three lines) or moves to a new step. */
   /** E23.9.3: the Great Bloom happened: the causeway is up (E23.8.3 opens the mainland past `mainlandX`) */
   'ending.bloomed': { causewayEnd: { x: number; z: number }; mainlandX: number };
+  /** E23.9.2: a settled Keeper took a gift it loves */
+  'keeper.gift': { keeperId: string; item: string; hearts: number };
+  /** E23.9.2: a settled Keeper sets off to tend a tile of its region */
+  'keeper.tending': { keeperId: string; x: number; z: number };
+  /** E23.9.2: a settled Keeper tended a tile of its region (one bloom step) */
+  'keeper.tended': { keeperId: string; x: number; z: number };
+  /** E23.9.2: a Keeper calls bloombot a friend */
+  'keeper.friend': { keeperId: string };
   /** E23.9.1: a page of the maker's journal was kept */
   'journal.page': { id: string };
   'keeper.said': { keeperId: string; lines: string[] };

@@ -25,8 +25,8 @@ import { SLAB_TOP } from './SceneBuilder';
  * `make*` with the loaded model and keep the returned parts (root, plus the named moving pieces).
  */
 
-type Kind = 'koi' | 'robots' | 'groundBirds' | 'cats' | 'fireflies' | LocalSpecies;
-const KINDS: readonly Kind[] = ['koi', 'robots', 'groundBirds', 'cats', 'fireflies', ...LOCAL_SPECIES];
+type Kind = 'koi' | 'robots' | 'groundBirds' | 'cats' | 'fireflies' | 'mistMoths' | LocalSpecies;
+const KINDS: readonly Kind[] = ['koi', 'robots', 'groundBirds', 'cats', 'fireflies', 'mistMoths', ...LOCAL_SPECIES];
 const perKind = <T,>(v: () => T) => Object.fromEntries(KINDS.map((k) => [k, v()])) as Record<Kind, T>;
 
 interface Actor {
@@ -52,6 +52,8 @@ export interface FaunaOptions {
   reducedMotion: boolean;
   /** Settings → Fireflies (ambience only). */
   fireflies: boolean;
+  /** E23.7.2: fog is down: pale mist moths drift over open ground (fog-only fauna) */
+  fog?: boolean;
 }
 
 /** Placeholder scales: songbirds read at gameplay zoom; a sleeping cat stays well under a Lucky Cat's height. */
@@ -259,6 +261,19 @@ export class Fauna {
     this.pond.setPosition(at.x, y + Fauna.POND_Y, at.z);
   }
 
+  private mothMat?: pc.StandardMaterial;
+  /** E23.7.2: a mist moth: a pale body and two soft wings that flutter */
+  private makeMoth(): Actor {
+    this.mothMat ??= mat(PALETTE.nightFind.moth, { emissive: PALETTE.nightFind.moth, emissiveIntensity: 0.35, doubleSided: true });
+    const root = group(this.root, 'moth');
+    shape(root, 'sphere', this.mothMat, { scale: [0.025, 0.025, 0.06] });
+    const l = group(root, 'wingL');
+    shape(l, 'box', this.mothMat, { pos: [0.045, 0, 0], scale: [0.08, 0.004, 0.06] });
+    const r = group(root, 'wingR');
+    shape(r, 'box', this.mothMat, { pos: [-0.045, 0, 0], scale: [0.08, 0.004, 0.06] });
+    return this.actor(root, [l, r], 'mistMoths');
+  }
+
   private fireflyMat?: pc.StandardMaterial;
   private makeFirefly(): Actor {
     this.fireflyMat ??= mat(PALETTE.glow.firefly, { emissive: PALETTE.glow.fireflyCore, emissiveIntensity: 2.2 });
@@ -278,7 +293,7 @@ export class Fauna {
     const p = this.pools[kind];
     while (p.length < n) {
       const i = p.length;
-      const a = kind === 'koi' ? this.makeKoi(i) : kind === 'robots' ? this.makeRobot(i) : kind === 'groundBirds' ? this.makeBird(i) : kind === 'cats' ? this.makeCat(i) : kind === 'fireflies' ? this.makeFirefly() : this.makeLocal(kind, i);
+      const a = kind === 'koi' ? this.makeKoi(i) : kind === 'robots' ? this.makeRobot(i) : kind === 'groundBirds' ? this.makeBird(i) : kind === 'cats' ? this.makeCat(i) : kind === 'fireflies' ? this.makeFirefly() : kind === 'mistMoths' ? this.makeMoth() : this.makeLocal(kind, i);
       a.phase = i * 1.37;
       p.push(a);
     }
@@ -388,6 +403,14 @@ export class Fauna {
     }
     this.assign('fireflies', flies, opts);
 
+    // E23.7.2: in fog, pale mist moths drift low over any open ground, restored or not (fog-only fauna)
+    const moths: { key: string; home: { x: number; z: number }; y: number }[] = [];
+    if (opts.fog && !opts.reducedMotion) {
+      const open = tilesIn(s, rect, (t) => !t.blocked && !t.occupantId && t.feature !== 'water', 200).sort(near);
+      for (let i = 0; i < open.length; i += 7) moths.push({ key: `m:${open[i].x}:${open[i].z}`, home: { x: open[i].x + 0.5, z: open[i].z + 0.5 }, y: y + 0.55 });
+    }
+    this.assign('mistMoths', moths, opts);
+
     // E19.3.1 (#257): animals that moved into cleared areas (by area type), nearest the view first.
     const locals = localSlots(s, rect);
     for (const sp of LOCAL_SPECIES)
@@ -451,6 +474,17 @@ export class Fauna {
       a.parts[1].setLocalEulerAngles(0, Math.sin(t * 0.7 + a.phase) * 6, 0);
     }
     if (!rm) this.updateLocals(dt, t, okWalk, okWater);
+    for (const a of this.pools.mistMoths) {
+      if (!a.used) continue;
+      const k = a.phase;
+      const x = a.home.x + Math.sin(t * 0.35 + k) * 0.9 + Math.sin(t * 0.9 + k * 2) * 0.2;
+      const z = a.home.z + Math.cos(t * 0.3 + k * 3) * 0.9;
+      a.root.setPosition(x, a.y + Math.sin(t * 0.7 + k) * 0.25, z);
+      a.root.setEulerAngles(0, ((t * 0.35 + k) * 180) / Math.PI, 0);
+      const flap = Math.sin(t * 14 + k) * 50;
+      a.parts[0].setLocalEulerAngles(0, 0, flap);
+      a.parts[1].setLocalEulerAngles(0, 0, -flap);
+    }
     for (const a of this.pools.fireflies) {
       if (!a.used) continue;
       const k = a.leg;

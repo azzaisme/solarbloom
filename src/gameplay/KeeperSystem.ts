@@ -1,9 +1,13 @@
 import { GROUND } from '../core/GameState';
+import { canStep } from '../core/Height';
+import { TUNING } from '../data/tuning';
 import { inRect, keeperById, regionById } from '../core/OldCityLayout';
 import type { KeeperState, KeeperStep, MaterialId } from '../core/types';
-import { KEEPERS, type KeeperDef, type RegionDef } from '../data/oldcity';
+import { FRIENDSHIP, KEEPER_HELP, KEEPER_STORIES, type ArcBeat, type KeeperStory } from '../data/keepers';
+import { KEEPERS, KEEPSAKES, type KeeperDef, type RegionDef, type RegionId } from '../data/oldcity';
 import { MATERIAL_IDS, MATERIALS, type MaterialCost } from '../data/salvage';
 import type { Sim } from './Sim';
+import { Walker } from './Walker';
 
 /** Units of anything a stirring Keeper takes to wake. */
 export const WAKE_GIFT = 5;
@@ -13,6 +17,11 @@ export const WAKE_GIFT = 5;
  * asleep → (a pulse makes it stir, 5 of anything wakes it) → request1 (bring something from another region) →
  * request2 (restore a named patch, every tile) → landmark (wake the landmark with a delivery, E21.9) → settled.
  * Each step speaks one to three lines from data/oldcity (`keeper.said`). Saved in `salvage.keepers`.
+ *
+ * E23.9.2: each Keeper is a friend with an arc from taker to tender (data/keepers). It remembers the old way when it
+ * wakes, notices the new way when its patch comes back, takes up its job the new way when its landmark wakes, and
+ * once settled takes gifts it likes (one a game day). After three it is bloombot's friend and gives its region's
+ * keepsake. Friends can sit with bloombot on a bench (`benchFriend`, for E23.2.3).
  */
 export class KeeperSystem {
   constructor(private sim: Sim) {}
@@ -53,7 +62,17 @@ export class KeeperSystem {
   }
 
   private say(id: string, lines: string[]) {
-    this.sim.bus.emit('keeper.said', { keeperId: id, lines: lines.slice(0, 3) });
+    this.sim.bus.emit('keeper.said', { keeperId: id, lines: lines.slice(0, 4) });
+  }
+
+  /** E23.9.2: a Keeper's story (personality, arc, likes, gifts). */
+  story(id: string): KeeperStory | undefined {
+    return KEEPER_STORIES[id];
+  }
+
+  /** E23.9.2: one beat of its arc (empty when it has none). */
+  beat(id: string, b: ArcBeat): string[] {
+    return this.story(id)?.arc[b] ?? [];
   }
 
   private go(id: string, step: KeeperStep) {
@@ -113,7 +132,7 @@ export class KeeperSystem {
         return 'stirs';
       }
       this.go(id, 'request1');
-      this.say(id, [...d.say.woke, ...d.say.request1].slice(0, 3));
+      this.say(id, [...d.say.woke, ...this.beat(id, 'taker'), ...d.say.request1]);
       return 'woke';
     }
     if (st.step === 'request1') {
@@ -136,8 +155,8 @@ export class KeeperSystem {
       }
       return 'gave';
     }
-    const lines = st.step === 'request2' ? d.say.request2 : st.step === 'landmark' ? d.say.landmark : d.say.settled;
-    this.say(id, lines);
+    if (st.step === 'settled') return this.befriend(id);
+    this.say(id, st.step === 'request2' ? d.say.request2 : d.say.landmark);
     return 'talked';
   }
 
@@ -162,7 +181,7 @@ export class KeeperSystem {
     const p = this.patch(id);
     if (p.total > 0 && p.restored >= p.total) {
       this.go(id, 'landmark');
-      this.say(id, this.def(id).say.landmark);
+      this.say(id, [...this.beat(id, 'turning'), ...this.def(id).say.landmark]);
     }
   }
 
@@ -176,7 +195,161 @@ export class KeeperSystem {
   settle(id: string) {
     if (this.step(id) === 'settled') return;
     this.go(id, 'settled');
-    this.say(id, this.def(id).say.settled);
+    this.say(id, [...this.beat(id, 'tender'), ...this.def(id).say.settled]);
+  }
+
+  // ───────────── E23.9.2: friendship ─────────────
+
+  /**
+   * Keepers help out: every settled Keeper tends one restored tile near it every KEEPER_HELP.tendEverySeconds (a
+   * friend twice as often): the least bloomed tile within its radius, in its own region, one step toward full bloom.
+   * Deterministic (fixed times, world order), and it only touches loaded ground.
+   */
+  tick(dt: number) {
+    if (!this.on) return;
+    const now = this.sim.time;
+    // a Keeper dozes at night (E23.7's clock), and so does its tending
+    const night = this.sim.clock.isNight();
+    for (const k of KEEPERS) {
+      if (this.step(k.id) !== 'settled') continue;
+      const st = this.state(k.id);
+      // on its way: the tile blooms once it has walked there and tended it
+      if (st.tending) {
+        if (now >= st.tending.at) this.finishTending(k.id);
+        continue;
+      }
+      if (night) continue;
+      const every = KEEPER_HELP.tendEverySeconds / (this.isFriend(k.id) ? KEEPER_HELP.friendMult : 1);
+      if (Math.floor(now / every) === Math.floor((now - dt) / every)) continue;
+      this.startTending(k.id);
+    }
+  }
+
+  /**
+   * Picks the tile a Keeper will tend next: the least bloomed restored tile it can walk to (nearest first on a tie),
+   * and when it will have walked there and tended it. Saved, so a reload carries on where it was.
+   */
+  startTending(id: string): { x: number; z: number } | undefined {
+    let best: { x: number; z: number; steps: number; bloom: number } | undefined;
+    for (const c of keeperReach(this.sim, id)) {
+      const t = this.sim.grid.peek(GROUND, c.x, c.z)!;
+      if (t.bloom >= TUNING.restore.maxBloom) continue;
+      if (!best || t.bloom < best.bloom) best = { ...c, bloom: t.bloom };
+    }
+    if (!best) return undefined;
+    const at = this.sim.time + best.steps / KEEPER_HELP.walkSpeed + KEEPER_HELP.tendSeconds;
+    this.set(id, { ...this.state(id), tending: { x: best.x, z: best.z, at } });
+    this.sim.bus.emit('keeper.tending', { keeperId: id, x: best.x, z: best.z });
+    return { x: best.x, z: best.z };
+  }
+
+  /** The Keeper has walked to its tile and tended it: one bloom step. */
+  finishTending(id: string): { x: number; z: number } | undefined {
+    const st = this.state(id);
+    const c = st.tending;
+    if (!c) return undefined;
+    this.set(id, { ...st, tending: undefined });
+    const t = this.sim.grid.peek(GROUND, c.x, c.z);
+    if (!t || t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom || t.occupantId || t.blocked) return undefined;
+    this.sim.restoration.grow(t, undefined, 'auto', true);
+    this.sim.bus.emit('keeper.tended', { keeperId: id, x: c.x, z: c.z });
+    return { x: c.x, z: c.z };
+  }
+
+  /**
+   * E23.9.2 → E23.2.3: a Keeper's walk from a cell to beside another (a bench seat), over ground bloombot could walk,
+   * so a friend walks over to sit rather than appearing. Cell centres, the start left out; [] when already beside it;
+   * undefined when there is no way within bloombot's search budget.
+   */
+  pathTo(id: string, from: { x: number; z: number }, to: { x: number; z: number }): { x: number; z: number }[] | undefined {
+    if (!keeperById(id)) return undefined;
+    const tx = Math.floor(to.x);
+    const tz = Math.floor(to.z);
+    return new Walker(this.sim).path(GROUND, from.x, from.z, (x, z) => Math.abs(x - tx) + Math.abs(z - tz) <= 1 && !(x === tx && z === tz), { x: tx, z: tz });
+  }
+
+  /** Where a Keeper is off to tend (undefined: nowhere). */
+  tendingAt(id: string): { x: number; z: number } | undefined {
+    const t = this.state(id).tending;
+    return t && { x: t.x, z: t.z };
+  }
+
+  /** Gifts it has liked so far (0 until it settles). */
+  hearts(id: string): number {
+    return this.state(id).hearts ?? 0;
+  }
+
+  isFriend(id: string): boolean {
+    return this.hearts(id) >= FRIENDSHIP.giftsToFriend;
+  }
+
+  /** Every Keeper that calls bloombot a friend, in map order. */
+  friends(): string[] {
+    return KEEPERS.filter((k) => this.isFriend(k.id)).map((k) => k.id);
+  }
+
+  /**
+   * E23.2.3's hook: the friend who comes to sit beside bloombot on a bench in a region (undefined: none). A Keeper sits
+   * only in its own region, and only once it is a friend.
+   */
+  benchFriend(region: RegionId | string | undefined): string | undefined {
+    return KEEPERS.find((k) => k.region === region && this.isFriend(k.id))?.id;
+  }
+
+  /** Everything it loves, best first (its own likes, then what every Keeper loves). */
+  likes(id: string): string[] {
+    const own = this.story(id)?.likes ?? [];
+    return [...own, ...(own.includes(FRIENDSHIP.everyoneLikes) ? [] : [FRIENDSHIP.everyoneLikes])];
+  }
+
+  /** The gift bloombot would hand over now: the best thing it loves that bloombot carries (undefined: none, or not today). */
+  giftFor(id: string): MaterialId | undefined {
+    const st = this.state(id);
+    if (!this.on || st.step !== 'settled' || this.isFriend(id) || !this.story(id)) return undefined;
+    if (st.giftedAt !== undefined && this.sim.time - st.giftedAt < FRIENDSHIP.giftEverySeconds) return undefined;
+    return this.likes(id).find((m) => this.sim.inventory.count(m as MaterialId) > 0) as MaterialId | undefined;
+  }
+
+  /** Talking to a settled Keeper: hand it a gift it loves (once a game day), or just chat. */
+  /** A settled Keeper says something, and nothing changes hands (Pulse on it, or a friend with nothing to give). */
+  chat(id: string): 'talked' {
+    const st = this.state(id);
+    const story = this.story(id);
+    if (!story || !this.isFriend(id)) {
+      this.say(id, this.def(id).say.settled);
+      return 'talked';
+    }
+    const n = st.chats ?? 0;
+    this.set(id, { ...st, chats: n + 1 });
+    this.say(id, [story.chatter[n % story.chatter.length]]);
+    return 'talked';
+  }
+
+  /** Hands a settled Keeper the gift it loves most that bloombot carries (once a game day); otherwise it chats. */
+  private befriend(id: string): 'gave' | 'talked' {
+    const st = this.state(id);
+    const story = this.story(id);
+    const gift = this.giftFor(id);
+    if (!story || !gift || !this.sim.inventory.take(gift, 1)) return this.chat(id);
+    const hearts = (st.hearts ?? 0) + 1;
+    this.set(id, { ...st, hearts, giftedAt: this.sim.time });
+    this.sim.bus.emit('keeper.gift', { keeperId: id, item: gift, hearts });
+    if (hearts === 1)
+      for (const [m, n] of Object.entries(story.giftBack) as [MaterialId, number][]) {
+        const left = this.sim.inventory.add(m, n);
+        if (left > 0) this.sim.inventory.addToStore(m, left);
+      }
+    if (hearts < FRIENDSHIP.giftsToFriend) {
+      this.say(id, [story.thanks]);
+      return 'gave';
+    }
+    // the friend beat, and its region's keepsake
+    const ks = KEEPSAKES.find((k) => k.region === this.def(id).region);
+    const sv = this.sim.state.salvage!;
+    if (ks && !sv.items?.includes(ks.id)) (sv.items ??= []).push(ks.id);
+    this.sim.bus.emit('keeper.friend', { keeperId: id });
+    this.say(id, this.beat(id, 'friend'));
+    return 'gave';
   }
 
   /** What a Keeper is waiting for, in one line (tooltips, the objective card). */
@@ -194,8 +367,12 @@ export class KeeperSystem {
       }
       case 'landmark':
         return `${d.name}: wake the ${this.region(id).landmark.name} with ${costText(this.wants(id) ?? {})}.`;
-      default:
-        return `${d.name} looks after ${this.region(id).name}.`;
+      default: {
+        // E23.9.2: until it is a friend, what it loves (the backpack's names; things not found yet stay unnamed)
+        if (this.isFriend(id) || !this.story(id)) return `${d.name} looks after ${this.region(id).name}.`;
+        const named = this.likes(id).filter((m) => m in MATERIALS).map((m) => MATERIALS[m as MaterialId].name);
+        return `${d.name} looks after ${this.region(id).name}.${named.length ? ` It loves ${named.join(' and ')}.` : ''}`;
+      }
     }
   }
 
@@ -208,6 +385,74 @@ export class KeeperSystem {
   pinned(): { id: string; text: string } | undefined {
     return this.requests()[0];
   }
+}
+
+/**
+ * E23.9.2: can a Keeper stand on this cell? Restored, open ground of its own region within KEEPER_HELP.radius of
+ * where it sleeps (its own sleeping cell counts). Pure: the sim's tending and the visuals' walking agree on it.
+ */
+export function keeperCanStand(sim: Sim, id: string, x: number, z: number): boolean {
+  const d = keeperById(id)!;
+  if (x === d.x && z === d.z) return true;
+  if (Math.abs(x - d.x) + Math.abs(z - d.z) > KEEPER_HELP.radius) return false;
+  const r = regionById(d.region)!;
+  const cx = Math.floor(x / 16);
+  const cz = Math.floor(z / 16);
+  if (cx < r.chunks.x0 || cx > r.chunks.x1 || cz < r.chunks.z0 || cz > r.chunks.z1) return false;
+  const t = sim.grid.peek(GROUND, x, z);
+  return !!t && !t.blocked && !t.occupantId && t.ground === 'restored' && t.feature !== 'water';
+}
+
+const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
+
+/** Every cell a Keeper can walk to from where it sleeps, nearest first, with how many steps away. */
+export function keeperReach(sim: Sim, id: string): { x: number; z: number; steps: number }[] {
+  const d = keeperById(id)!;
+  const seen = new Set([`${d.x},${d.z}`]);
+  const out: { x: number; z: number; steps: number }[] = [];
+  let edge = [{ x: d.x, z: d.z, steps: 0 }];
+  while (edge.length) {
+    const next: typeof edge = [];
+    for (const c of edge)
+      for (const [dx, dz] of N4) {
+        const x = c.x + dx;
+        const z = c.z + dz;
+        const k = `${x},${z}`;
+        if (seen.has(k) || !keeperCanStand(sim, id, x, z) || !canStep(c.x, c.z, x, z)) continue;
+        seen.add(k);
+        const n = { x, z, steps: c.steps + 1 };
+        out.push(n);
+        next.push(n);
+      }
+    edge = next;
+  }
+  return out;
+}
+
+/** A Keeper's walk between two cells it can stand on (both included), or undefined when there is none. */
+export function keeperPath(sim: Sim, id: string, from: { x: number; z: number }, to: { x: number; z: number }): { x: number; z: number }[] | undefined {
+  const key = (x: number, z: number) => `${x},${z}`;
+  const prev = new Map<string, string | null>([[key(from.x, from.z), null]]);
+  let edge = [from];
+  while (edge.length && !prev.has(key(to.x, to.z))) {
+    const next: { x: number; z: number }[] = [];
+    for (const c of edge)
+      for (const [dx, dz] of N4) {
+        const x = c.x + dx;
+        const z = c.z + dz;
+        if (prev.has(key(x, z)) || !keeperCanStand(sim, id, x, z) || !canStep(c.x, c.z, x, z)) continue;
+        prev.set(key(x, z), key(c.x, c.z));
+        next.push({ x, z });
+      }
+    edge = next;
+  }
+  if (!prev.has(key(to.x, to.z))) return undefined;
+  const path: { x: number; z: number }[] = [];
+  for (let k: string | null = key(to.x, to.z); k; k = prev.get(k) ?? null) {
+    const [x, z] = k.split(',').map(Number);
+    path.unshift({ x, z });
+  }
+  return path;
 }
 
 /** "8 Seeds and 20 Biomass" */

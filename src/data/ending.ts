@@ -19,4 +19,8 @@ export const ENDING = {
    * east edge (its chunks end at x = 79) through the backstreets to the shore, so the way to the mainland is open.
    */
   clearFromX: 64,
+  /** the first bloom: the fountain, at the middle of the park */
+  fountain: { x: 8, z: 8 },
+  /** where the camera looks while the island blooms: the island's middle, just north of the park, from the farthest zoom */
+  overview: { x: 8, z: -8 },
 };
