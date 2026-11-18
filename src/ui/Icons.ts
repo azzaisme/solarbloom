@@ -239,6 +239,8 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   relay: 'relay',
   cultivator: 'carrot', // the tiller: its tray slot showed 'undefined' without one
   chest: 'parcel', // E21.1
+  crate: 'basket', // E23.6.4
+  assembler: 'settings', // E23.6.5
   core: 'sparkle',
 };
 
@@ -279,6 +281,8 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '🟩': 'garden', '💜': 'flower', '🌺': 'flower',
   // E23.6.7 paths.
   '〰': 'road', '⛏': 'build', '🏖': 'boat',
+  // E23.6.5 the Assembler.
+  '🛠': 'wrench',
 };
 
 /** Emoji (with optional variation selector / ZWJ sequences). */

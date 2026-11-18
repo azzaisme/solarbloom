@@ -95,6 +95,8 @@ export class DroneRoles {
         // (once its neighbours clear, the frontier moves out: the role must not lock again).
         return s.areas.revealed().some((id) => id !== PARK && s.areas.fog(id) !== 'cleared') || this.anyOwns('scout') ? undefined : 'Wake the fountain to reveal the fog first';
       case 'courier':
+        // E23.6.4: in the Old City, couriers open once things have been carried to and from the store by hand
+        if (s.oldCity && s.automation?.handDone('carry')) return undefined;
         return has('motherTree') || has('relay') ? undefined : 'Build a Mother Tree or a Bloom Relay first';
       case 'spark':
         return has('pollinator', R.spark.unlockGardens) ? undefined : `Build ${R.spark.unlockGardens} Pollinator Gardens first`;
@@ -475,6 +477,12 @@ export class DroneRoles {
   }
 
   private startCourier(d: DroneData, hub: MachineData): 'none' | 'broke' | 'started' {
+    // E23.6.4: routes the player set come first (they run on the hub's grid power, no job price)
+    const route = this.sim.automation?.routeFor(hub, d);
+    if (route) {
+      this.sim.automation.startRoute(d, route);
+      return 'started';
+    }
     const cands = this.courierCandidates(d, hub);
     if (!cands.length) return 'none';
     // If one store is low, serve the machines it can still pay for.

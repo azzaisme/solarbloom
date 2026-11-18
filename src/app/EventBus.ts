@@ -37,6 +37,15 @@ export interface GameEvents {
   'research.upgraded': { id: string; level: number };
   /** E23.6.6: overgrowth placed on or taken off a host */
   'overgrowth.changed': { key: string };
+  /** E23.6.4: automation: things carried to or from the store by hand; a job's automation opened; a crate's contents
+   *  changed; a route set, changed or removed, or a basket delivered; an Assembler's recipe changed or a craft made */
+  'store.moved': { material: import('../core/types').ItemId; n: number };
+  'automation.opened': { job: import('../data/automation').HandJob };
+  'crate.changed': { id: string };
+  'route.changed': { id: string };
+  'route.delivered': { id: string; items: number };
+  'assembler.changed': { id: string };
+  'assembler.made': { id: string; item: string; made: number };
   /** E23.6.7: a path laid, reshaped or removed; a tile of old road depaved */
   'paths.changed': { id: string };
   'paths.depaved': { x: number; z: number };

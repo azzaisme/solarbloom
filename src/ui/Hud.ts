@@ -13,6 +13,7 @@ import { Toasts } from './Toasts';
 import { Panels } from './Panels';
 import { Backpack } from './Backpack';
 import { CraftTable } from './CraftTable';
+import { CratePanel } from './CratePanel';
 import type { SetProp } from './HudPart';
 import type { GlyphSetting, GlyphStyle } from './Glyphs';
 
@@ -172,6 +173,8 @@ export class Hud {
   readonly backpack: Backpack;
   /** E23.6.1: the crafting table */
   readonly craft: CraftTable;
+  /** E23.6.4: a supply crate's panel */
+  readonly crate: CratePanel;
 
   constructor(
     readonly sim: Sim,
@@ -196,6 +199,7 @@ export class Hud {
     this.prompt = new Prompt(this.root);
     this.backpack = new Backpack(this.root, { sim: this.sim });
     this.craft = new CraftTable(this.root, { sim: this.sim });
+    this.crate = new CratePanel(this.root, { sim: this.sim });
   }
 
   private template() {

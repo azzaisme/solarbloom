@@ -82,6 +82,9 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   relay: ['bloom-relay', 0.72],
   // E21: the Storage Chest (data/oldcity MODEL_NAMES; a stand-in until the files land)
   chest: ['storage-chest', 1.0],
+  // E23.6.4 / E23.6.5: the supply crate is the old city's crate; the Assembler a workbench on its 2 × 2
+  crate: ['crate', 0.85],
+  assembler: ['workbench', 1.6],
 };
 /** The Mother Tree's collar model: its scale (the planter fits the procedural ring, radius 0.85) and planter top (model metres). */
 const MotherCollar = { scale: 1.12, top: 0.84 };

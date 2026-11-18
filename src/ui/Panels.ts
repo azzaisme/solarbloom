@@ -1,4 +1,4 @@
-import type { AreaMode, MachineData } from '../core/types';
+import type { AreaMode, ComponentId, MachineData } from '../core/types';
 import { formatPriceHtml } from '../core/Economy';
 import { MACHINES, TIER2, TIER3 } from '../data/machines';
 import { GROUP_ICONS, ICONS, iconize } from './Icons';
@@ -40,6 +40,13 @@ export class Panels extends HudPart {
       if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
       const rl = t.closest<HTMLButtonElement>('[data-role]');
       if (rl && !rl.disabled) this.cb.chooseRole(rl.dataset.role!);
+      // E23.6.5: what an Assembler makes
+      const as = t.closest<HTMLButtonElement>('[data-asm]');
+      if (as) {
+        const [id, recipe] = as.dataset.asm!.split('|');
+        const m = this.sim.machine(id);
+        if (m) this.sim.automation.setRecipe(m, (recipe || undefined) as ComponentId | undefined);
+      }
       const am = t.closest<HTMLButtonElement>('[data-area-mode]');
       if (am) {
         const [id, mode] = am.dataset.areaMode!.split('|');

@@ -106,6 +106,10 @@ import { PhotoBar, saveCanvasPng } from '../ui/PhotoBar';
 import { HOTBAR_DEFAULT } from '../ui/Hotbar';
 import { actionGlyph, GlyphTracker, padName, type PadStyle } from '../ui/Glyphs';
 import { ControlsTable } from '../ui/ControlsTable';
+import { crateName } from '../ui/CratePanel';
+import { materialIcon } from '../ui/MaterialIcons';
+import { AUTOMATION } from '../data/automation';
+import { itemDef } from '../data/items';
 import { pinNext } from '../ui/BackpackModel';
 import { LOOK } from '../data/look';
 
@@ -991,6 +995,7 @@ export class Game {
     this.hud.toggleTray(false);
     this.hud.toggleBackpack(false);
     this.hud.craft.close();
+    this.hud.crate.close();
     this.hud.toggleUpgrades(false);
     this.hud.closePlotPicker();
     if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
@@ -999,7 +1004,7 @@ export class Game {
   /** E22.11: a full-screen panel pauses the game while it is open (also called the moment one closes, so the next
    *  key press already reaches the game, however slow the frame). */
   private syncPanelPause() {
-    this.pause.set('panel', this.hud.backpackOpen || this.hud.craft.isOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
+    this.pause.set('panel', this.hud.backpackOpen || this.hud.craft.isOpen || this.hud.crate.isOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
   }
 
   private openMenu() {
@@ -1388,7 +1393,7 @@ export class Game {
   /** A panel or menu that takes the input is open. */
   private panelOpen(): boolean {
     const h = this.hud;
-    return h.modalOpen || h.backpackOpen || h.craft.isOpen || h.plotPickerOpen || h.isUpgradesOpen || h.trayOpen || !!this.oc?.panel.isOpen;
+    return h.modalOpen || h.backpackOpen || h.craft.isOpen || h.crate.isOpen || h.plotPickerOpen || h.isUpgradesOpen || h.trayOpen || !!this.oc?.panel.isOpen;
   }
 
   /** The action a key (or mouse input) means now. With a panel open, the key that opened it closes it again. */
@@ -1585,6 +1590,7 @@ export class Game {
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
     else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
     else if (this.hud.craft.isOpen) this.hud.craft.close();
+    else if (this.hud.crate.isOpen) this.hud.crate.close();
     else if (this.selected) this.select(undefined);
     else if (this.bot?.walking) this.bot.cancelWalk();
     else if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
@@ -1914,6 +1920,16 @@ export class Game {
       if (r && s.areas.fog(r.id) !== 'cleared') out.push({ kind: 'landmark', id: `lm:${occ.id}`, verb: 'Wake', name: `the ${r.landmark.name}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
       else if (s.inventory.accessPoints().some((p) => p.x === occ.x && p.z === occ.z && p.roofId === occ.roofId)) out.push({ kind: 'storage', id: `store:${occ.id}`, verb: 'Open', name: 'the store', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
     } else if (occ?.type === 'chest') out.push({ kind: 'storage', id: `chest:${occ.id}`, verb: 'Open', name: 'the chest', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+    // E23.6.4: a supply crate opens its own panel (its things, and the courier routes from it)
+    else if (occ?.type === 'crate')
+      out.push({
+        kind: 'storage', id: `crate:${occ.id}`, verb: 'Open', name: 'the crate', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size },
+        run: () => {
+          this.oc?.panel.close();
+          this.hud.crate.open(occ);
+          this.syncPanelPause();
+        },
+      });
     // E23.6.1: the crafting table is in the house (the shed by the fountain) from the start
     const sh = PARK_SET.shed;
     if (f.x >= sh.x && f.x < sh.x + sh.size && f.z >= sh.z && f.z < sh.z + sh.size)
@@ -3510,6 +3526,26 @@ export class Game {
         extra = canal + `<p class="stat">⛲ Basin ${Math.floor(m.charge ?? 0)}/${R.threshold} · ${conds} 💧 condenser${conds === 1 ? '' : 's'} within ${R.condenserRange} tiles fill it</p><p class="stat">🌱 ${dry} dry tile${dry === 1 ? '' : 's'} within ${R.radius} tiles (highlighted) · Overflow irrigates up to ${R.targets}</p><p>Each time a nearby Water Condenser fills its meter, the basin rises. Full → Overflow: the closest dry tiles burst into lush bloom (×${R.lushMult} 🌿 for ${R.lushSeconds} s).${conds ? '' : ' <b>Build a Water Condenser within 2 tiles to fill it.</b>'}</p>`;
         break;
       }
+      // E23.6.4: a supply crate, and (E23.6.5) the Assembler and what it makes
+      case 'crate': {
+        const a = s.automation;
+        const routes = a.routes().filter((r) => r.from === m.id || r.to === m.id).length;
+        extra = `<p class="stat">🧺 ${crateName(s, m.id)} · ${a.load(m.id)} of ${AUTOMATION.crate.capacity} inside${routes ? ` · ${routes} courier route${routes === 1 ? '' : 's'}` : ''}</p>`;
+        break;
+      }
+      case 'assembler': {
+        const a = s.automation;
+        const { input, output } = a.io(m);
+        const recipe = a.recipeOf(m);
+        const why = a.assemblerProblem(m);
+        const io = input ? `<p class="stat">🧺 Takes from ${crateName(s, input.id)} · puts in ${crateName(s, output!.id)}</p>` : '';
+        const picks = s.crafting
+          .components()
+          .map((r) => `<button class="role-btn${r.id === recipe ? ' on' : ''}" data-asm="${m.id}|${r.id}" aria-pressed="${r.id === recipe}"><span class="ri">${materialIcon(r.id, 22)}</span><span class="rn">${esc(itemDef(r.id).name)}</span></button>`)
+          .join('');
+        extra = `<p class="stat">${why ? esc(why) : `Making ${esc(itemDef(recipe!).name)}`}</p>${io}<p class="rh">What it makes</p><div class="role-row">${picks}${recipe ? `<button class="role-btn" data-asm="${m.id}|"><span class="rn">Stop</span></button>` : ''}</div>`;
+        break;
+      }
       case 'core': {
         // Every Core is an area landmark now (on the ground, or on a city rooftop).
         this.hud.renderInspect(this.landmarkHtml(m));
@@ -3561,6 +3597,10 @@ export class Game {
     b.on('tile.nurtured', ({ tile, level }) => this.chunks.growTree(tile, level - 1));
     b.on('machine.built', ({ machine }) => {
       for (const t of s.grid.footprint(machine.roofId, machine.x, machine.z, machine.size)) if (t) this.chunks.markTile(t);
+    });
+    // E23.6.5: an Assembler's choice shows at once in its panel
+    b.on('assembler.changed', ({ id }) => {
+      if (this.selected === id) this.renderInspect();
     });
     b.on('area.revealed', ({ areaId }) => {
       this.chunks.markArea(areaId);

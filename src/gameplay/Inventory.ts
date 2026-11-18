@@ -101,6 +101,7 @@ export class Inventory {
     this.set('store', m, this.stored(m) + k);
     this.sim.bus.emit('pack.changed', { material: m, delta: -k });
     this.sim.bus.emit('store.changed', { material: m, delta: k });
+    this.sim.bus.emit('store.moved', { material: m, n: k }); // E23.6.4: carried by hand
     return k;
   }
 
@@ -119,6 +120,7 @@ export class Inventory {
     this.set('pack', m, this.count(m) + k);
     this.sim.bus.emit('store.changed', { material: m, delta: -k });
     this.sim.bus.emit('pack.changed', { material: m, delta: k });
+    this.sim.bus.emit('store.moved', { material: m, n: k }); // E23.6.4: carried by hand
     return k;
   }
 

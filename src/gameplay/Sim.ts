@@ -42,6 +42,7 @@ import { Research } from './Research';
 import { DroneFuel } from './DroneFuel';
 import { Overgrowth } from './Overgrowth';
 import { Paths } from './Paths';
+import { Automation } from './Automation';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
 import { Weather } from './Weather';
@@ -107,6 +108,8 @@ export class Sim {
   readonly overgrowth: Overgrowth;
   /** E23.6.7: footpaths bloombot lays, and old road broken up. */
   readonly paths: Paths;
+  /** E23.6.4 / E23.6.5: supply crates, courier routes, jobs done by hand, the Assembler. */
+  readonly automation: Automation;
   /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
   readonly clock: Clock;
   /** E23.7.1.3: finds that are out only at night. */
@@ -171,6 +174,7 @@ export class Sim {
     this.droneFuel = new DroneFuel(this);
     this.overgrowth = new Overgrowth(this);
     this.paths = new Paths(this);
+    this.automation = new Automation(this);
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
     this.rng = new Rng(state.rngState);
@@ -298,6 +302,7 @@ export class Sim {
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
     this.crafting.tick(dt);
+    this.automation.tick(dt);
     this.research.tick(dt);
     this.clock.tick();
     this.weather.tick();

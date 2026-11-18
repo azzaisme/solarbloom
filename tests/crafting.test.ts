@@ -7,6 +7,7 @@ import { ITEM_DEFS } from '../src/data/items';
 import { MACHINES, OLD_CITY_BUILDABLE } from '../src/data/machines';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { PROJECTS } from '../src/data/research';
+import { HAND_JOBS } from '../src/data/automation';
 import { Sim } from '../src/gameplay/Sim';
 import { SaveService } from '../src/app/SaveService';
 import { componentRows, machineRows } from '../src/ui/CraftTable';
@@ -28,6 +29,8 @@ function reachable(u: Unlock): boolean {
   if ('keeper' in u) return KEEPERS.some((k) => k.region === u.keeper);
   if ('find' in u) return CACHES.has(u.find);
   if ('tier' in u) return u.tier >= 1 && u.tier <= 5;
+  if ('hand' in u) return u.hand in HAND_JOBS; // E23.6.4: a job done by hand
+  if ('all' in u) return u.all.every(reachable);
   return PROJECTS.some((p) => p.id === u.research); // E23.6.2: a real project
 }
 

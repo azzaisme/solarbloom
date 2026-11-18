@@ -16,7 +16,7 @@ const QUICK = [
   // E21: the Old City
   'oldcity-data', 'oldcity-inventory', 'oldcity-salvage', 'oldcity-recipes', 'oldcity-map', 'oldcity-height', 'oldcity-island', 'oldcity-gates', 'oldcity-fountain', 'oldcity-models', 'oldcity-keepers', 'oldcity-bloombot-first',
   // E23: a living world
-  'crafting', 'research', 'drone-fuel', 'overgrowth', 'paths',
+  'crafting', 'research', 'drone-fuel', 'overgrowth', 'paths', 'automation',
   // E23.7: time, weather and salvage
   'clock', 'timers', 'photo-scene', 'weather',
   // E23.3: the power grid
