@@ -642,6 +642,10 @@ body.photo #hud { display: none; }
 #photoBar { position: fixed; left: 50%; bottom: calc(14px + var(--safe-b)); transform: translateX(-50%); z-index: 40; display: none; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 10px; padding: 8px 14px; max-width: calc(100vw - 24px); font: 600 13px var(--font-ui); color: var(--text); }
 #photoBar.on { display: flex; }
 #photoBar.on.clean { display: none; }
+/* E23.7.3: the scene: time of day, weather and filter */
+#photoBar .pb-scene { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 8px; border-left: 1px solid var(--edge-soft); border-right: 1px solid var(--edge-soft); }
+#photoBar .pb-scene label { display: inline-flex; align-items: center; gap: 6px; }
+#photoBar .pb-scene input[type='range'] { width: 140px; accent-color: var(--gold-hi); }
 #photoBar .pb-title { font: 700 14px var(--font-display); color: var(--gold-hi); }
 #photoBar button { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 4px 10px; border-radius: 999px; background: var(--glass-hi); border: 1px solid var(--edge-soft); color: var(--text-strong); font: 600 13px var(--font-ui); }
 #photoBar button:hover, #photoBar button:focus-visible { background: var(--glass-hi-2); border-color: var(--edge-strong); }

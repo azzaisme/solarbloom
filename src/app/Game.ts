@@ -88,7 +88,7 @@ import { type LoadResult, SaveService, type Slot } from './SaveService';
 import { Loading, type LoadSteps } from '../ui/Loading';
 import { ModelLibrary, useModels } from '../rendering/Models';
 import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
-import { padStick, PhotoMode } from './PhotoMode';
+import { padStick, PHOTO_FILTERS, PhotoMode } from './PhotoMode';
 import { DayNight, type LightMoment } from '../rendering/DayNight';
 import { NightFindVisuals } from '../rendering/NightFindVisuals';
 import { NIGHT_FIND_GIVES } from '../data/time';
@@ -1024,12 +1024,13 @@ export class Game {
   /** E23.7.1: the moment the sky and light show: the light clock (photo mode may set its own, E23.7.3). */
   private lightMoment(): LightMoment {
     const wv = this.weatherVisuals;
-    return { f: this.sim.clock.dayFraction(), overcast: wv?.overcast ?? 0, flash: wv?.lightning ?? 0 };
+    // E23.7.3: photo mode may show its own time of day (the game's clock doesn't move)
+    return { f: this.photo?.lightOverride() ?? this.sim.clock.dayFraction(), overcast: wv?.overcast ?? 0, flash: wv?.lightning ?? 0 };
   }
 
   /** E23.7.2: the weather the screen shows (photo mode may pick its own, E23.7.3). */
   private weatherLook(): WeatherLook {
-    return { kind: this.sim.weather.kind() };
+    return { kind: this.photo?.weatherOverride() ?? this.sim.weather.kind() };
   }
 
   /**
@@ -1145,7 +1146,12 @@ export class Game {
   /** E19.4.1 (#260): photo mode, wired to the camera, bloombot, the HUD and the look. */
   private createPhotoMode() {
     const b = this.bot;
-    this.photoBar = new PhotoBar((a) => this.photo.action(a), (a) => this.hudKey(a));
+    this.photoBar = new PhotoBar(
+      (a) => this.photo.action(a),
+      (a) => this.hudKey(a),
+      (h) => this.photo.setHour(h),
+      () => this.sim.clock.hour() + this.sim.clock.minute() / 60,
+    );
     this.photo = new PhotoMode(
       {
         camera: this.camera,
@@ -1179,6 +1185,8 @@ export class Game {
         capture: () => this.savePicture(),
         render: (st) => this.photoBar.render(st),
         stick: () => padStick(),
+        clockHour: () => this.sim.clock.hour() + this.sim.clock.minute() / 60,
+        setFilter: (css) => ((this.app.graphicsDevice.canvas as HTMLCanvasElement).style.filter = css),
       },
       this.bindings,
     );
@@ -1192,7 +1200,7 @@ export class Game {
    * post-processing), the haze colour fills in behind it.
    */
   private savePicture() {
-    this.app.once('frameend', () => saveCanvasPng(this.app.graphicsDevice.canvas as HTMLCanvasElement, LOOK.haze.color));
+    this.app.once('frameend', () => saveCanvasPng(this.app.graphicsDevice.canvas as HTMLCanvasElement, LOOK.haze.color, PHOTO_FILTERS[this.photo.filter].css));
     this.photoBar.flashNow();
     this.sfx.click();
   }
