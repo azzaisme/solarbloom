@@ -408,6 +408,8 @@ export class WaterPipes {
       if (down.length) out.set(k, down);
     }
     return out;
+  }
+
   /** The pipe tiles a pump feeds: its whole line, or (a pump with a reach) those within that many steps of it. */
   reachOf(p: MachineData, net: PipeNet): Set<string> {
     const reach = this.pumpTypes.get(p.type)?.reach ?? Infinity;

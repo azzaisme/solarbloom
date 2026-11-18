@@ -28,8 +28,7 @@ const check = (ok, what) => {
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 // the repo's virtual gamepad (tests/e2e/gamepad-driver.js), so the Water view is tried on the pad too
 const driver = readFileSync(new URL('./gamepad-driver.js', import.meta.url), 'utf8').replace(/^export /gm, '');
-await page.addInitScript(driver + '
-installVirtualPad(); window.padDriver = padDriver;');
+await page.addInitScript(`${driver}\ninstallVirtualPad(); window.padDriver = padDriver;`);
 /** Press a virtual pad button for two drawn frames, release it for two. */
 const press = (b) =>
   page.evaluate(async (b) => {
