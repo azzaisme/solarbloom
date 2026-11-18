@@ -4,6 +4,7 @@ import { KEEPERS, PARK_SET, REGIONS } from '../data/oldcity';
 import { itemDef } from '../data/items';
 import { PROJECTS, RESEARCH, RESEARCH_UPGRADES, type Find, type ProjectDef, type ResearchUpgradeDef, type UpgradeSystemId } from '../data/research';
 import type { Sim } from './Sim';
+import { gameDays } from '../data/time';
 
 /** E23.3's grid, read optionally until it lands (`isPowered` is true for anything the grid doesn't power). */
 interface PowerLike {
@@ -158,7 +159,7 @@ export class Research {
   bench(): { project: ProjectDef; progress: number }[] {
     return (this.sv?.research?.running ?? []).flatMap((j) => {
       const p = this.project(j.id);
-      return p ? [{ project: p, progress: 1 - j.left / (p.days * RESEARCH.daySeconds) }] : [];
+      return p ? [{ project: p, progress: 1 - j.left / gameDays(p.days) }] : [];
     });
   }
 
@@ -180,7 +181,7 @@ export class Research {
     if (this.problem(id)) return false;
     const p = this.project(id)!;
     if (!this.sim.inventory.pay(p.cost)) return false;
-    this.st.running.push({ id, left: p.days * RESEARCH.daySeconds });
+    this.st.running.push({ id, left: gameDays(p.days) }); // game time (E23.7), the same in both clock modes
     this.sim.bus.emit('research.started', { id });
     return true;
   }

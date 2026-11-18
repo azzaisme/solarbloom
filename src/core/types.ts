@@ -1,6 +1,6 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
-/** `chest` and `reclaimer` exist only under old-city rules (E21.1, E21.2). */
-export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'reclaimer';
+/** `chest` exists only under old-city rules (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
+export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
 /** Plain per-resource numbers (tuning tables, small per-second coefficients). */
@@ -335,7 +335,6 @@ export type ItemId = MaterialId | ComponentId;
 export type AbilityId = 'pry' | 'hover' | 'climb' | 'glide';
 /** E21 §8: where a Keeper is in its story. Woken (pulsed and handed 5 of anything) goes straight to request1. */
 export type KeeperStep = 'asleep' | 'request1' | 'request2' | 'landmark' | 'settled';
-export type WeatherKind = 'clear' | 'cloudy' | 'rain' | 'mist' | 'windy';
 
 export interface KeeperState {
   step: KeeperStep;
@@ -374,12 +373,10 @@ export interface SalvageState {
   blueprints: string[];
   /** E21.11: the house's level (0 = the ruined shed) */
   house: number;
-  /** E21.13: seconds added to sim time to get the time of day (only the bed changes it) */
+  /** E21.13 (unused since E23.7.1: the clock lives in `GameState.clock`; kept until E23.1 bumps the save) */
   clockOffset: number;
-  /** E21.13: the weather now, and when it next changes (sim time) */
-  weather?: { kind: WeatherKind; until: number };
-  /** E21.9: Reclaimers' undelivered fractions, by machine id (so 6 a minute pays exactly) */
-  reclaim?: Record<string, number>;
+  /** E23.7.4: when each pile that isn't full last gained a unit (sim time), by pile id: it refills from there */
+  since?: Record<string, number>;
   /** E21.6 / E21.17: one-off items carried for the Great Bloom (the Heart Seed, the Star Lens) */
   items?: string[];
   /** E21.9: lasting region rewards in effect (data/oldcity RewardId), in the order they were won */
@@ -454,6 +451,19 @@ export interface GameState {
    * production, chains, milestones or pacing). Optional and sparse, so no save version change.
    */
   cozy?: CozyState;
+  /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
+  clock?: ClockState;
+}
+
+/**
+ * E23.7.1 (#395): the clock. Game time is sim time plus `offset` (only sleeping moves it). `real`: "follow my
+ * clock", where the sky, the light and solar follow the real clock (timers still count in game days).
+ * `nights`: night finds taken, by find id → the game day they were taken on (back the next night).
+ */
+export interface ClockState {
+  offset: number;
+  real?: boolean;
+  nights?: Record<string, number>;
 }
 
 /** E19: what the player chose for the look of their city. */

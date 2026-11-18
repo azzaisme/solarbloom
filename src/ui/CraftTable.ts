@@ -3,8 +3,9 @@ import { MACHINES } from '../data/machines';
 import { DECOR_OPTION } from '../data/cozy';
 import { itemDef } from '../data/items';
 import type { ItemCost } from '../data/crafting';
-import { BRANCHES, RESEARCH, type Find } from '../data/research';
+import { BRANCHES, type Find } from '../data/research';
 import { findKey } from '../gameplay/Research';
+import { gameDays } from '../data/time';
 import type { Sim } from '../gameplay/Sim';
 import { materialIcon } from './MaterialIcons';
 import './craft.css';
@@ -74,7 +75,7 @@ export function componentRows(sim: Sim): ComponentRow[] {
 }
 
 /** Minutes of play a project takes (a game day is 48 minutes of play). */
-export const projectMinutes = (days: number) => Math.max(1, Math.round((days * RESEARCH.daySeconds) / 60));
+export const projectMinutes = (days: number) => Math.max(1, Math.round(gameDays(days) / 60));
 
 /** The Upgrade tab's rows (pure read). */
 export function upgradeRows(sim: Sim) {
