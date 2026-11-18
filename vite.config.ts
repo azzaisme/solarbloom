@@ -25,6 +25,8 @@ const QUICK = [
   'mainland',
   // E23.9: the story
   'journal',
+  // E23.10: the proof
+  'e23-gentle-failure',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({
