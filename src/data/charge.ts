@@ -1,0 +1,43 @@
+// E23.2.1 (#371): bloombot's charge, the only meter. All data, no rules: starting values for tuning.
+// A full charge lasts about 10 minutes of active play (the `active` profile below, checked by tests/charge.test.ts).
+// Walking is free; pulses, abilities and sprinting cost charge. At zero bloombot walks on, slower, and can't pulse.
+
+export interface EdibleDef {
+  /** the backpack item eaten (E23.5 adds biomass and food as items; until then biomass comes from the old resource) */
+  id: 'biomass' | 'food';
+  name: string;
+  /** charge one unit gives back */
+  charge: number;
+  /** seconds it takes to eat one unit (the charge arrives over this time) */
+  seconds: number;
+}
+
+export const CHARGE = {
+  /** a full charge */
+  max: 100,
+  /** E23.6.2 research: each battery cell adds this much to the full charge */
+  cellCapacity: 25,
+  /** E23.6.2 research: each efficiency step takes this share off every cost (multiplies) */
+  efficiencyStep: 0.1,
+  /** charge one pulse uses (the load it carries is paid separately, E23.2.2) */
+  pulse: 1,
+  /** charge a second of sprinting (hovering) uses, while moving */
+  sprintPerSecond: 1 / 6,
+  /** charge each use of an ability costs */
+  ability: { pry: 3, hover: 0, climb: 2, glide: 2 } as Record<string, number>,
+  /** at zero: walking speed is this share of a normal walk (never stranded) */
+  lowPowerWalk: 0.7,
+  /** at or below this share of a full charge the meter shows it is running low */
+  lowShare: 0.2,
+  /** what bloombot can eat anywhere, best first when eating picks for you (slow, uses items) */
+  edibles: [
+    { id: 'food', name: 'Food', charge: 15, seconds: 3 },
+    { id: 'biomass', name: 'Biomass', charge: 6, seconds: 2 },
+  ] as EdibleDef[],
+  /** E23.3.3: sitting and meditating at a charger, per second (fast, free, on the grid) */
+  meditatePerSecond: 6,
+  /** E23.2.3: sitting on a bench, per second (a trickle) */
+  benchPerSecond: 0.4,
+  /** the active-play profile a full charge is sized for: a pulse every few seconds, sprinting part of the time */
+  active: { pulseEverySeconds: 8, sprintShare: 0.25, minutes: 10 },
+} as const;

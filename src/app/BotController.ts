@@ -5,6 +5,7 @@ import type { Sim } from '../gameplay/Sim';
 import { BOT, type BotPose, spawnPose, Walker } from '../gameplay/Walker';
 import { heightAt, levelY } from '../core/Height';
 import type { Action, Bindings } from './Bindings';
+import { CHARGE } from '../data/charge';
 
 /**
  * Bloombot (#234): input, movement and the camera follow (G.2, G.3, G.11, G.12). The game owns what an action
@@ -223,11 +224,13 @@ export class BotController {
     if (mag < 0.01 && !this.walk) this.sprintLatched = false; // a toggled sprint ends when bloombot stops
     // Sprinting is the Hover upgrade: until it is bought the sprint inputs do nothing.
     const canHover = (this.sim.state.upgrades.hover ?? 0) > 0;
-    this.sprinting = !frozen && canHover && (this.bindings.isDown('sprint', this.held) || !!pad?.sprint || this.sprintLatched);
+    // E23.2.1: sprinting costs charge; at zero, a low-power walk (slower, never stranded)
+    const flat = this.sim.charge.empty;
+    this.sprinting = !frozen && canHover && !flat && (this.bindings.isDown('sprint', this.held) || !!pad?.sprint || this.sprintLatched);
     const p = this.pose;
     const w = this.walker;
     const wade = w.wading(p) ? BOT.wade : 1;
-    const top = (this.sprinting ? BOT.sprint : BOT.walk) * wade;
+    const top = (this.sprinting ? BOT.sprint : BOT.walk * (flat ? CHARGE.lowPowerWalk : 1)) * wade;
     let dirX = 0;
     let dirZ = 0;
     let want = 0;
@@ -277,6 +280,7 @@ export class BotController {
       if (moved > 0.001) this.following = true;
     }
     this.speed = dt > 0 ? moved / dt : 0;
+    if (this.sprinting && moved > 0.001) this.sim.charge.use('sprint', dt);
     // A machine built or a plot turned solid under bloombot: step aside.
     if (!w.fits(p.roofId, p.x, p.z)) w.settle(p);
     const [x, y, z] = this.world();

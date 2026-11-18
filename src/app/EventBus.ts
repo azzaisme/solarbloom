@@ -3,6 +3,10 @@ import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import type { BuffType, CatRewardType, CatVariant, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
+  /** E23.2.1: bloombot's charge ran out (the low-power walk); reached full; bloombot began eating one unit. */
+  'charge.empty': Record<string, never>;
+  'charge.full': { source: import('../gameplay/Charge').ChargeSource };
+  'charge.eat': { item: 'biomass' | 'food' };
   /** E21.1: the backpack or the store changed (`material` unset = several at once). */
   'pack.changed': { material?: import('../core/types').MaterialId; delta?: number };
   'store.changed': { material?: import('../core/types').MaterialId; delta?: number };

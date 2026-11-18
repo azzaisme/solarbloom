@@ -3,6 +3,7 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { TileData } from '../src/core/types';
 import { PARK_SET, REGIONS } from '../src/data/oldcity';
 import { SALVAGE } from '../src/data/salvage';
+import { CHARGE } from '../src/data/charge';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
 import { BOT, spawnPose, Walker, type BotPose } from '../src/gameplay/Walker';
@@ -74,7 +75,9 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
       px = p.x;
       pz = p.z;
     }
-    const secs = len / (len > 8 ? BOT.sprint : BOT.walk);
+    // E23.2.1: a long walk is sprinted while there is charge for it; at zero, the low-power walk
+    const sprint = len > 8 && sim.charge.use('sprint', len / BOT.sprint);
+    const secs = len / (sprint ? BOT.sprint : BOT.walk * (sim.charge.empty ? CHARGE.lowPowerWalk : 1));
     walked += secs;
     pass(secs);
     pose.x = px;
@@ -92,6 +95,20 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
     if (firsts.keeper !== undefined) break;
     let did = false;
     const tier = sim.fountain.tier;
+    // 0. E23.2.1: running low: eat something carried; out of charge with nothing to eat: home to sleep
+    if (sim.charge.low) {
+      const meal = sim.charge.eat();
+      if (typeof meal === 'object') {
+        pass(meal.seconds);
+        continue;
+      }
+      if (sim.charge.empty) {
+        walkTo(fountain.x, fountain.z, 2);
+        pass(ACT.think);
+        sim.charge.sleep();
+        continue;
+      }
+    }
     // 1. Hand in what the fountain wants (once carrying enough to be worth the trip)
     const wantScrap = sim.fountain.remaining('scrap');
     const wantSeeds = sim.fountain.remaining('seeds');

@@ -1117,6 +1117,18 @@ export class Game {
     this.sfx.click();
   }
 
+  /** E23.2.1: F / d-pad left: eat one snack (biomass or food) to recharge. */
+  private eat() {
+    const r = this.sim.charge.eat();
+    if (typeof r === 'object') {
+      this.bot?.visuals.play('interact');
+      this.sfx.coin();
+      return;
+    }
+    if (r === 'full') this.hud.showFail('Fully charged');
+    else if (r === 'none') this.hud.showFail('Nothing to eat. Biomass or food recharges bloombot');
+  }
+
   private harvest() {
     if (this.sim.harvestSun()) {
       const starter = this.sim.state.machines.find((m) => m.type === 'solar');
@@ -1213,6 +1225,8 @@ export class Game {
         return this.toggleMenu();
       case 'harvest':
         return this.harvest();
+      case 'eat':
+        return this.eat();
       case 'upgrades':
         return this.hud.toggleUpgrades();
       case 'backpack':
@@ -3483,6 +3497,13 @@ export class Game {
     });
     b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Surge ×${TUNING.cat.frenzyMult} for ${Math.round(seconds)}s`));
     b.on('harvest', () => this.sfx.coin());
+    // E23.2.1: the charge is a new concept: one short introduction the first time it runs out, then the meter shows it
+    b.on('charge.empty', () => {
+      const f = s.state.stats.firsts;
+      if (f.chargeEmpty !== undefined) return;
+      f.chargeEmpty = Math.round(s.time);
+      this.hud.toast(`Out of charge<small>Bloombot walks slower and can't pulse. Press ${this.hudKeys('eat')} to eat biomass or food, or rest.</small>`, '', 6);
+    });
     b.on('rooftop.coreReady', () => {
       this.machines.setCoreState('ready');
       this.hud.toast(`✨ The Rooftop Core is humming!<small>Walk up and press ${this.hudKey('interact')} (or use the button) to awaken the building.</small>`, 'gold', 5);
