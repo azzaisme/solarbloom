@@ -127,7 +127,9 @@ export class PathVisuals {
           const x = c[i][0] + nx * o, z = c[i][1] + nz * o;
           pos.push(ox + x, this.y(x, z), oz + z);
           nrm.push(0, 1, 0);
-          col.push(k[0], k[1], k[2], alpha);
+          // a little grain: each vertex a touch lighter or darker (stable: hashed from where it is)
+          const g = 0.88 + 0.24 * (((Math.imul(Math.round(x * 7) * 73856093, 1) ^ Math.imul(Math.round(z * 7), 19349663)) >>> 0) % 1000) / 1000;
+          col.push(Math.min(255, k[0] * g), Math.min(255, k[1] * g), Math.min(255, k[2] * g), alpha);
         }
       }
       for (let i = 0; i < c.length - 1; i++)

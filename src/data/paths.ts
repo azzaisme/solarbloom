@@ -2,6 +2,7 @@
 // trail to a wide promenade, and a material. All data, no rules: the numbers are starting values for tuning.
 
 import type { ItemCost, Unlock } from './crafting';
+import { DAY_SECONDS } from './time';
 
 export type PathMaterial = 'gravel' | 'steppingStones' | 'oldBrick' | 'woodChip' | 'mossyCobbles' | 'boardwalk' | 'sandTrail';
 
@@ -24,7 +25,7 @@ export interface PathMaterialDef {
 }
 
 export const PATH_MATERIALS: PathMaterialDef[] = [
-  { id: 'gravel', name: 'Gravel', icon: '🪨', colour: '#b9ad98', edge: '#8f9a6a', perTile: { scrap: 1 }, unlock: { home: true } },
+  { id: 'gravel', name: 'Gravel', icon: '🪨', colour: '#a99b84', edge: '#8a8a62', perTile: { scrap: 1 }, unlock: { home: true } },
   { id: 'steppingStones', name: 'Stepping stones', icon: '🪨', colour: '#a9a39a', edge: '#7fa05a', perTile: { scrap: 1 }, unlock: { home: true }, pieces: 'stones' },
   { id: 'woodChip', name: 'Wood chip', icon: '🪵', colour: '#9c7650', edge: '#7a8a50', perTile: { timber: 1 }, unlock: { keeper: 'saltwind' } },
   { id: 'sandTrail', name: 'Sand trail', icon: '🏖️', colour: '#e3cf9c', edge: '#cdb57e', perTile: {}, unlock: { keeper: 'saltwind' }, sandOnly: true },
@@ -55,5 +56,5 @@ export const PATHS = {
    *  creeping in over this many game days (a game day is 2880 s of play) */
   creepEvery: 0.9,
   creepDays: 2,
-  daySeconds: 2880,
+  daySeconds: DAY_SECONDS,
 };
