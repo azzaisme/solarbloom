@@ -1733,6 +1733,8 @@ export class Game {
     if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: SALVAGE.holdSeconds, refused: s.salvage.problem(pile.id), run });
     const keeper = s.keepers.at(f.x, f.z);
     if (keeper && s.keepers.visible(keeper.id)) out.push({ kind: 'keeper', id: `keeper:${keeper.id}`, verb: keeper.id === 'tally' && s.landmarks.canTrade() ? 'Trade with' : 'Talk to', name: keeper.name, distance: fd, at: front, run });
+    const page = s.journal.pageAt(f.x, f.z);
+    if (page) out.push({ kind: 'cache', id: `page:${page}`, verb: 'Read', name: s.journal.found(page) ? 'the page again' : 'the page', distance: fd, at: front, run });
     const sp = setPieceAt(f.x, f.z);
     if (sp?.kind === 'lookout') out.push({ kind: 'gate', id: `lookout:${sp.id}`, verb: 'Look out', name: '', distance: fd, at: front, run });
     const gate = s.gates.gateAt(f.x, f.z);
@@ -1790,6 +1792,12 @@ export class Game {
       bot: this.bot!,
       bindings: this.bindings,
       game: this,
+      // E23.9.1: a page read from its post opens the journal at it
+      openPage: (id: string) => {
+        this.oc?.panel.close();
+        this.hud.backpack.openPage(id);
+        this.syncPanelPause();
+      },
       // E22.6: the store opens as the backpack's Items grid with the store beside it
       openStorage: (title: string) => {
         this.oc?.panel.close();

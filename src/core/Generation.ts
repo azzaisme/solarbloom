@@ -54,6 +54,8 @@ export function stampOldCity(t: TileData): TileData {
   if (p.kind === 'shed') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: 'shed' });
   // E21.24: a lookout: a bench and a telescope on a terrace's edge
   if (p.kind === 'lookout') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `lookout:${p.id}` });
+  // E23.9.1: a page of the maker's journal, pinned to a post
+  if (p.kind === 'page') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `page:${p.id}` });
   if (p.kind === 'gate') {
     const g = p.gate;
     if (g.kind === 'barricade') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `gate:${g.id}` });

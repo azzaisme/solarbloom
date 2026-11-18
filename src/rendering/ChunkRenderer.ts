@@ -922,6 +922,15 @@ export class ChunkRenderer {
       b.add('cylinder', PALETTE.trim.gold ?? PALETTE.metal.iron, [x, y + 0.55, z - 0.2], [0.09, 0.42, 0.09]);
       return true;
     }
+    if (prop.startsWith('page:')) {
+      // E23.9.1: a page of the maker's journal on its post (the post stays once the page is read)
+      const rot = dhash(t.x, t.z, 217) * Math.PI * 2;
+      const model = oldCityModel('journal-page-post');
+      if (model && this.batch?.add(model, x, y, z, rot, 0.7, 0.7, 0.7)) return true;
+      b.add('cylinder', PALETTE.wood.mid, [x, y + 0.35, z], [0.06, 0.7, 0.06]);
+      b.add('box', PALETTE.stone.light, [x, y + 0.62, z + 0.05], [0.26, 0.32, 0.02]);
+      return true;
+    }
     if (prop === 'shed') {
       const sh = PARK_SET.shed;
       if (t.x !== sh.x || t.z !== sh.z) return true;
