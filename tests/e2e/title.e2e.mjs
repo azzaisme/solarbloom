@@ -179,7 +179,7 @@ try {
     else await page.keyboard.press('Space');
     await page.waitForSelector('#tPlay');
     const head = await page.evaluate(() => JSON.parse(localStorage.getItem('solarbloom.save.1.head')));
-    check(head && head.name === 'Garden 1' && head.rules === 'oldcity' && head.played >= 0 && !!head.region && !!head.step, T(`slot 1 has its header (${JSON.stringify(head)})`));
+    check(head && head.name === 'Garden 1' && head.version >= 8 && !head.rules && head.played >= 0 && !!head.region && !!head.step, T(`slot 1 has its header (${JSON.stringify(head)})`));
 
     // ── Load game: the slot's card; rename and delete ask first (keyboard run) ──
     if (dev === 'keys') {

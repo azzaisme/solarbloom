@@ -116,8 +116,6 @@ const WHEEL_TURN_MS = 140;
 const BOT_MAX_ZOOM = 4.3; // E21.22: the close step (EXPLORE.zoomSteps[0])
 const BOT_REACH = 1.6;
 /** Bloombot is the game; `?cursor=1` keeps the old click-to-act play for tests that drive tiles directly. */
-/** E21: the rule set a new game starts with (the Old City, unless `?rules=classic`). */
-const newGameRules = () => (typeof location !== 'undefined' && new URLSearchParams(location.search).get('rules') === 'classic' ? 'classic' : 'oldcity');
 const botMode = () => typeof location === 'undefined' || new URLSearchParams(location.search).get('cursor') !== '1';
 type ActResult = 'pulse' | 'build' | 'select' | 'wake' | 'none';
 
@@ -280,8 +278,8 @@ export class Game {
     this.settings = loadSettings();
     rulesViewFromUrl();
     const loaded = lr.state;
-    // E21: a new game plays the Old City; `?rules=classic` (dev) starts a classic one. A loaded save keeps its own rules.
-    const state = loaded ?? createInitialState(undefined, newGameRules());
+    // E23.1.1: one rule set. Every new game is the Old City.
+    const state = loaded ?? createInitialState(undefined, 'oldcity');
     this.sim = new Sim(state, this.bus);
 
     this.app = new pc.Application(canvas, {
@@ -584,8 +582,9 @@ export class Game {
 
     this.app.on('update', (dt: number) => this.update(dt));
     this.app.start();
-    if (lr.scrapped) setTimeout(() => this.hud.toast('A new city awaits — older gardens were cleared for this update. 🌱', '', 7), 400);
-    if (lr.backedUpAs) setTimeout(() => this.hud.toast(`Your old save couldn't be read by this version, so it was kept safely as a backup and a new rooftop started.<small>${lr.backedUpAs}</small>`, '', 8), 400);
+    // E23.1.1: a garden from an earlier version starts fresh, said calmly once, when the world is on screen
+    if (lr.scrapped) this.openingNotes.push(() => this.hud.toast('Starting fresh 🌱<small>Your garden was from an earlier version, so a new one begins here.</small>', '', 7));
+    if (lr.backedUpAs) this.openingNotes.push(() => this.hud.toast(`Your old save couldn't be read by this version, so it was kept safely as a backup and a new garden started.<small>${lr.backedUpAs}</small>`, '', 8));
     // Phase 4 E10.1: no blocking welcome card. The first pulse works at once; a short note says what this is.
     if (!state.progression.introSeen && state.stats.tilesRestored === 0 && !this.sim.oldCity) {
       state.progression.introSeen = true;
@@ -851,6 +850,15 @@ export class Game {
    * world (done once this exists), the chunks round bloombot built with those models, and a few frames drawn
    * with everything in place (shaders compiled).
    */
+  /** Notes for the player that wait until the loading screen has faded (`shown`), so none expires unseen. */
+  private openingNotes: (() => void)[] = [];
+
+  /** E23.1.1: the loading screen has faded and the world is on screen: show the waiting notes. */
+  shown() {
+    const notes = this.openingNotes.splice(0);
+    notes.forEach((n, i) => setTimeout(n, 400 + i * 600));
+  }
+
   loadSteps(): LoadSteps {
     const m = this.models;
     const total = Math.max(1, ModelLibrary.names().length);

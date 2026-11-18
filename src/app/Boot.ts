@@ -80,6 +80,7 @@ export async function boot(canvas: HTMLCanvasElement) {
       await frame();
     }
     await loading.done(500);
+    game.shown();
   };
 
   const slotQ = Number(q.get('slot'));

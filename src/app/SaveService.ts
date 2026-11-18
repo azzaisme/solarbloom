@@ -27,7 +27,10 @@ export interface SlotHeader {
   step: string;
   /** the region bloombot was last in */
   region: string;
-  rules: 'classic' | 'oldcity';
+  /** SAVE_VERSION when written (E23.1.1); missing on headers from before it */
+  version?: number;
+  /** E23.1.1: the save is from an earlier version and starts fresh (worked out when the slots are listed) */
+  old?: boolean;
   savedAt: number;
 }
 /** Prefix of a gzip-compressed, base64 save. Anything else is plain JSON. */
@@ -43,7 +46,7 @@ export interface LoadResult {
   state?: GameState;
   /** An unreadable or newer save was copied here instead of being overwritten. */
   backedUpAs?: string;
-  /** An older (pre-city, v1–v3) save was discarded: the game starts fresh. */
+  /** A save from an earlier version was discarded: the game starts fresh (E23.1.1: with a calm note). */
   scrapped?: boolean;
 }
 
@@ -173,26 +176,16 @@ export class SaveService {
   headerFor(state: GameState): SlotHeader {
     const prev = this.readHeader();
     const st = state as unknown as { clock?: { day?: number }; day?: number };
-    const cleared = Object.values(state.areas ?? {}).filter((a) => a.fog === 'cleared').length;
-    // E21.6: an Old City save shows the fountain's step by its name; a classic one whether the fountain is awake
+    // E21.6: the fountain's step by its name
     const tier = state.salvage?.tier ?? 0;
-    const step =
-      state.rules === 'oldcity'
-        ? tier > 0
-          ? `Fountain: ${TIERS[tier - 1].name}`
-          : 'The fountain is dry'
-        : state.progression.coreActivated
-          ? cleared > 1
-            ? `The fountain is awake, ${cleared - 1} more places woken`
-            : 'The fountain is awake'
-          : 'The fountain is asleep';
+    const step = tier > 0 ? `Fountain: ${TIERS[tier - 1].name}` : 'The fountain is dry';
     return {
       name: prev?.name ?? `Garden ${this.slot}`,
       day: st.clock?.day ?? st.day,
       played: Math.round(state.time ?? 0),
       step,
       region: prev?.region ?? 'The park',
-      rules: state.rules === 'oldcity' ? 'oldcity' : 'classic',
+      version: SAVE_VERSION,
       ...this.headerExtra?.(),
       savedAt: this.now(),
     };
@@ -248,7 +241,8 @@ export class SaveService {
           h = svc.readHeader(slot);
         }
       }
-      out.push(h);
+      // E23.1.1: a garden from an earlier version can't be loaded: the title offers to start it fresh
+      out.push(h && { ...h, old: (h.version ?? 0) < SAVE_VERSION });
     }
     return out;
   }
@@ -310,7 +304,7 @@ export class SaveService {
     return new TextDecoder().decode(await pipe(fromBase64(raw.slice(Z.length)), new DecompressionStream('gzip')));
   }
 
-  /** Parses a plain-JSON save. Returns 'scrapped' for pre-city saves, undefined for unreadable/newer ones. */
+  /** Parses a plain-JSON save. Returns 'scrapped' for saves from an earlier version, undefined for unreadable/newer ones. */
   parse(json: string): GameState | 'scrapped' | undefined {
     try {
       const s = JSON.parse(json) as GameState;

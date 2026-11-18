@@ -10,8 +10,9 @@ import { PadFocus } from './PadFocus';
  * - Title: the logo over a slow turn across the restored park at dawn (a painted still, src/ui/images), "Press any button" until the first input
  *   (which picks the glyph set: keys or pad), then Play · Settings (and Quit in the Deck build), centred in a pale
  *   panel over the left third (owner, 18 Nov 2026). Play opens the three slots, each with its name, day, time played,
- *   the fountain's step, the last region and a "Classic" tag for old-rules saves: Load, Rename, Start over or Delete a
- *   garden, or Start one in an empty slot. Rename, Start over and Delete each ask first.
+ *   the fountain's step and the last region: Load, Rename, Start over or Delete a garden, or Start one in an empty
+ *   slot. Rename, Start over and Delete each ask first. A garden from an earlier version (E23.1.1) can't be loaded:
+ *   its card says so calmly and offers Start fresh (no question: nothing playable is lost) or Delete.
  *
  * Everything works with the keyboard (Tab, arrows, Enter, Esc) and the pad alone (the d-pad's focus ring, A,
  * B to go back). The title draws no 3D: it costs next to nothing, so it holds any frame limit.
@@ -107,7 +108,7 @@ export class Title {
     let best: Slot | undefined;
     let at = -1;
     this.heads.forEach((h, i) => {
-      if (h && h.savedAt > at) {
+      if (h && !h.old && h.savedAt > at) {
         at = h.savedAt;
         best = (i + 1) as Slot;
       }
@@ -153,7 +154,9 @@ export class Title {
         const slot = (i + 1) as Slot;
         if (!h)
           return `<div class="t-slot empty"><h3>Empty slot ${slot}</h3><p>No garden here yet</p><button id="tStart${slot}" data-t="start" data-slot="${slot}">Start here</button></div>`;
-        const name = this.renaming === slot ? `<label class="t-rename">Name <input id="tName${slot}" maxlength="40" value="${esc(h.name)}"></label><button id="tSaveName${slot}" data-t="saveName" data-slot="${slot}">Save name</button>` : `<h3>${esc(h.name)}${h.rules === 'classic' ? ' <em class="t-tag">Classic</em>' : ''}</h3>`;
+        if (h.old)
+          return `<div class="t-slot old" aria-label="Slot ${slot}: ${esc(h.name)}, from an earlier version"><h3>${esc(h.name)} <em class="t-tag">Earlier version</em></h3><p>This garden grew in an earlier version of Solarbloom. It starts fresh here.</p><div class="t-row"><button id="tLoad${slot}" class="primary" data-t="fresh" data-slot="${slot}">Start fresh</button><button id="tDelete${slot}" data-t="delete" data-slot="${slot}" class="danger">Delete</button></div></div>`;
+        const name = this.renaming === slot ? `<label class="t-rename">Name <input id="tName${slot}" maxlength="40" value="${esc(h.name)}"></label><button id="tSaveName${slot}" data-t="saveName" data-slot="${slot}">Save name</button>` : `<h3>${esc(h.name)}</h3>`;
         const facts = [h.day !== undefined ? `Day ${h.day}` : '', `Played for ${playedText(h.played)}`, h.step, h.region].filter(Boolean).map((f) => `<li>${esc(f)}</li>`).join('');
         const actions = `<button id="tLoad${slot}" class="primary" data-t="loadSlot" data-slot="${slot}">Load</button><button id="tRename${slot}" data-t="rename" data-slot="${slot}">Rename</button><button id="tStart${slot}" data-t="start" data-slot="${slot}">Start over</button><button id="tDelete${slot}" data-t="delete" data-slot="${slot}" class="danger">Delete</button>`;
         return `<div class="t-slot" aria-label="Slot ${slot}: ${esc(h.name)}">${name}<ul>${facts}</ul><div class="t-row">${actions}</div></div>`;
@@ -189,6 +192,8 @@ export class Title {
         return this.render('tPlay');
       case 'loadSlot':
         return this.host.start(slot, false, this.device);
+      case 'fresh': // E23.1.1: an earlier version's garden
+        return this.host.start(slot, true, this.device);
       case 'start':
         if (!this.heads[slot - 1]) return this.host.start(slot, true, this.device);
         this.confirm = { text: `Start a new garden in ${this.heads[slot - 1]!.name}? The garden saved there will be replaced.`, yes: 'Start a new garden', then: () => this.host.start(slot, true, this.device) };

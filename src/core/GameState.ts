@@ -8,9 +8,10 @@ import type { GameState, LayerData, MachineData, Rules, SalvageState, TileData }
  * v1 Round 1 · v2 Round 2 · v3 Phase 3 · v4 the endless city (chunked world, tile deltas) · v5 Phase 5: big-number
  * resources, uncapped biomass, per-machine upgrades · v6 Phase 5: E13/E14 machine tiers, merges, cores and superstructure projects, E15 world events, cat ids and rarities. Older saves
  * are scrapped with a notice (no players yet, so no migration, as agreed) · v7 Look 6: tile transitions in the
- * chunk extras (a new column layout), the Cultivator.
+ * chunk extras (a new column layout), the Cultivator · v8 E23.1.1: one rule set (the Old City) and no idle layer.
+ * Every older save starts fresh with a calm note, no conversion (the owner is the only player).
  */
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 /** Id of the endless ground layer (the city). */
 export const GROUND = 'g';
