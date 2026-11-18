@@ -149,6 +149,7 @@ try {
     await page.waitForTimeout(200);
     const closed = await page.evaluate(() => ({ open: window.solarbloom.hud.craft.isOpen, paused: window.solarbloom.paused }));
     check(!closed.open && !closed.paused, T('Esc / B closes it and the game runs again'));
+    {
     // a decoration is made once at the table (Make, on the Craft tab), then placed free from the build menu
     await page.evaluate(() => {
       const g = window.solarbloom;
@@ -157,11 +158,11 @@ try {
     });
     await interact(page, dev);
     await page.waitForSelector('#craftScreen.open');
-    const before = await page.evaluate(() => window.solarbloom.sim.inventory.count('planks') + window.solarbloom.sim.inventory.stored('planks'));
+    const planksBefore = await page.evaluate(() => window.solarbloom.sim.inventory.count('planks') + window.solarbloom.sim.inventory.stored('planks'));
     check(await moveTo(page, '#cr-decor-bench', dev), T('reach the bench under Decorations'));
     await go(page, dev);
     const made = await page.evaluate(() => ({ made: window.solarbloom.sim.crafting.decorMade('bench'), planks: window.solarbloom.sim.inventory.count('planks') + window.solarbloom.sim.inventory.stored('planks'), live: document.querySelector('#craftScreen .bp-live').textContent }));
-    check(made.made && made.planks === before - 2, T(`make the bench once: 2 Planks (${JSON.stringify(made)})`));
+    check(made.made && made.planks === planksBefore - 2, T(`make the bench once: 2 Planks (${JSON.stringify(made)})`));
     await page.screenshot({ path: `${dir}/ui-workshop-decor-${dev}.png` });
     await back(page, dev);
     await page.waitForTimeout(200);
@@ -183,6 +184,7 @@ try {
       return { why, why2, before, placed, hidden };
     });
     check(!dec.why && dec.placed === dec.before && dec.hidden === false, T(`then the bench is placed free from the build menu (${JSON.stringify(dec)})`));
+    }
     check(errors.length === 0, T(`no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`));
     await page.context().close();
   }
