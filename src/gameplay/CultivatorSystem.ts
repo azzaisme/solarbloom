@@ -259,40 +259,4 @@ export class CultivatorSystem {
     if (t.ground === 'growing') return t.growthRemainingSec;
     return C().growSeconds / sp;
   }
-
-  /**
-   * Offline progress (OfflineSystem): each tiller works its sustained pace for the credited time, paying energy
-   * from the same store, through the normal quiet restore (no chains). Returns tiles finished.
-   */
-  offline(eff: number, budget: number): number {
-    const s = this.sim;
-    let done = 0;
-    for (const m of this.docks()) {
-      this.ensureUnits(m);
-      const sp = this.speed(m);
-      const perTile = (100 / C().softenRate + C().growSeconds) / sp + 1.5 / (C().driveSpeed * sp);
-      for (const u of m.cult!.units) {
-        let n = Math.floor(eff / perTile) * this.width(m);
-        while (n > 0 && done < budget) {
-          let job = u.work.map((id) => s.grid.byTileId(id)!).filter((t) => t && t.ground !== 'restored');
-          if (!job.length) job = this.findJob(m, u);
-          if (!job.length) break;
-          for (const id of u.work) this.release(u, id);
-          for (const t of job) {
-            if (n <= 0 || done >= budget) break;
-            const cost = (100 / C().softenRate / sp) * C().energyPerSec;
-            if (!this.canDraw(cost)) return done;
-            s.econ.spend({ energy: cost });
-            s.restoration.complete(t, 'cultivator', undefined, true);
-            this.finished(m, u, t);
-            n--;
-            done++;
-          }
-        }
-        u.px = m.x + 0.5;
-        u.pz = m.z + 0.5;
-      }
-    }
-    return done;
-  }
 }

@@ -1,7 +1,7 @@
 // Look 1.1: the look comparison harness (`npm run shots:look`), the baseline for every Look epic.
 //
 // Captures fixed scenes (dead park, half-restored park with a pulse in progress, fully restored park, a machine
-// cluster, the drone mid-spray, the same drone during Bloom Frenzy, mid and far zoom) at 1280×800 and 390×844,
+// cluster, the drone mid-spray, mid and far zoom) at 1280×800 and 390×844,
 // each next to the target reference (docs/reference/target-look.png) as a side-by-side image, and records draw
 // calls and frame time per scene.
 //
@@ -141,16 +141,6 @@ const SCENES = {
       return {};`,
     until: `() => new Set(g.sim.state.drones.filter((d) => d.mode === 'working' || d.mode === 'flying').map((d) => g.sim.roles.roleFor(d, g.sim.machine(d.hubId)))).size >= 4`,
     settle: 2500,
-  },
-  // Look 3.20 (#209): the same shot as `drone`, mid-Frenzy, so the two can be compared for gold accents and
-  // frame time. The accents fade in over 0.3 s, so the shot lands well after that.
-  frenzy: {
-    title: 'Drone mid-spray during Bloom Frenzy',
-    setup: `g.camera.glide(8, 0, 8, 1.5); return {};`,
-    until: `() => g.sim.state.drones.some((d) => d.mode === 'working')`,
-    after: `() => { g.sim.state.frenzy = { ...(g.sim.state.frenzy ?? {}), charge: 100 }; if (!g.sim.frenzy.activate()) throw new Error('Frenzy did not start'); const d = g.sim.state.drones.find((d) => d.mode === 'working'); const p = g.drones.worldPos(d.id); g.camera.glide(p.x, 0, p.z, 1.75); for (let i = 0; i < 240; i++) g.camera.update(0.05); }`,
-    settle: 400,
-    afterSettle: 600,
   },
   mid: {
     title: 'Mid zoom (restored park)',

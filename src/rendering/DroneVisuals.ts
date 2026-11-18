@@ -192,7 +192,6 @@ export class DroneVisuals {
       if (milestones.has(e.combo)) this.cheerAll();
     });
     bus.on('milestone.reached', () => this.cheerAll());
-    bus.on('frenzy.started', () => this.cheerAll());
     bus.on('cat.found', () => this.cheerAll(true));
   }
 
@@ -598,7 +597,7 @@ export class DroneVisuals {
    * while it moves (a few material updates for ~0.3 s at the start and end; nothing in between).
    */
   private updateFrenzy(dt: number) {
-    const goal = this.sim.frenzy.active() ? 1 : 0;
+    const goal = 0; // E23.1.2: Bloom Frenzy is gone, so the gold blend stays at rest
     if (this.fz !== goal) this.fz = goal > this.fz ? Math.min(1, this.fz + dt / FRENZY_FADE_S) : Math.max(0, this.fz - dt / FRENZY_FADE_S);
     if (this.fz === this.fzApplied) return;
     this.fzApplied = this.fz;

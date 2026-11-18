@@ -87,7 +87,7 @@ export function faunaConditionMet(id: FaunaId, c: BioCounts): boolean {
     case 'koi':
       return (F.koi.fountain && c.fountain) || c.water >= F.koi.waterTiles;
     case 'robots':
-      return c.supers >= F.robots.superstructures;
+      return c.landmarks >= F.robots.landmarks;
   }
 }
 
@@ -102,7 +102,7 @@ export function faunaGoal(id: FaunaId, c: BioCounts): { label: string; have: num
     case 'koi':
       return { label: F.koi.fountain ? 'a flowing fountain or restored water tiles' : 'restored water tiles', have: c.fountain ? F.koi.waterTiles : c.water, need: F.koi.waterTiles };
     case 'robots':
-      return { label: 'finished superstructures', have: c.supers, need: F.robots.superstructures };
+      return { label: 'landmarks woken', have: c.landmarks, need: F.robots.landmarks };
   }
 }
 

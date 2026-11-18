@@ -13,16 +13,11 @@ import { TUNING } from '../data/tuning';
 import type { Sim } from '../gameplay/Sim';
 import { SEED_CORE_MACHINES } from '../gameplay/ProgressionSystem';
 import { ICONS, GROUP_ICONS, LOGO_MARK, MACHINE_ICONS, hasEmoji, iconize, installIconDefs, plain } from './Icons';
-import { WORLD_EVENT_INFO } from '../gameplay/WorldEventSystem';
 import { advisorStep, calmToast } from './Pace';
 
-/** Phase 5 E14: `super:<type>` places a Superstructure Core of that family. */
-export type SuperTool = `super:${'solar' | 'condenser' | 'pollinator' | 'droneHub'}`;
 /** E19.2: `decor:<id>` holds a decoration to place; `remove` aims at decorations to remove or pick up. */
 export type DecorTool = `decor:${string}`;
-export type Tool = 'inspect' | 'pulse' | BuildableType | SuperTool | DecorTool | 'remove';
-export const SUPER_TOOLS: SuperTool[] = ['super:solar', 'super:condenser', 'super:pollinator', 'super:droneHub'];
-export const superType = (t: Tool) => (t.startsWith('super:') ? (t.slice(6) as 'solar' | 'condenser' | 'pollinator' | 'droneHub') : undefined);
+export type Tool = 'inspect' | 'pulse' | BuildableType | DecorTool | 'remove';
 /** E19.2: the decoration a tool holds, if it holds one. */
 export const decorType = (t: Tool) => (t.startsWith('decor:') ? t.slice(6) : undefined);
 /** A machine build tool (a machine type), not pulse, inspect, a core, a decoration or remove. */
@@ -43,8 +38,6 @@ export interface HudCallbacks {
   /** E18: `hubId|role|slot` (slot 2 on a Fleet Hub), or `hubId|role|drone|index` for a Megahub drone. */
   chooseRole(key: string): void;
   activateCore(): void;
-  /** Phase 4 E06: fire Bloom Frenzy. */
-  activateFrenzy(): void;
   /** Phase 5 E15: the 🐾 chip: show where a hinted cat hides. */
   findCat(): void;
   /** E20.2 (#285): the key or pad button bound to an action, as the player last used them (for hint text). */
@@ -72,14 +65,8 @@ export interface HudCallbacks {
   setAreaMode(areaId: string, mode: AreaMode | undefined): void;
   /** Fly the camera to a ground tile and point at it (the objective's suggestion). */
   focusTile(x: number, z: number): void;
-  /** Phase 5 E13: the inspect panel's merge buttons. */
-  merge(action: 'start' | 'confirm' | 'cancel'): void;
-  /** Phase 5 E13: the advisor's merge button (select the machine and open its merge preview). */
-  mergeAt(machineId: string): void;
   /** E18.5: open a machine's panel (the advisor's role hint). */
   inspectAt(machineId: string): void;
-  /** Phase 5 E14: superstructure panel buttons: pay the next stage, fire the ability, toggle automatic firing. */
-  superAction(action: 'stage' | 'activate' | 'auto', machineId: string): void;
 }
 
 export interface Settings {
@@ -194,10 +181,6 @@ export class Hud {
         (t) =>
           `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name}${MACHINES[t].hotkey ? ` (${MACHINES[t].hotkey})` : ''}"><span class="key">${MACHINES[t].hotkey ?? ''}</span><span class="si">${ICONS[MACHINE_ICONS[t]]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
       ),
-      ...SUPER_TOOLS.map((t) => {
-        const d = TIER3[superType(t)!]!;
-        return `<button class="slot super" data-tool="${t}" hidden aria-label="Place ${d.name} core"><span class="si">${d.icon}</span><span class="sl">${d.name.split(' ').pop()}</span><span class="sc"></span></button>`;
-      }),
       // E19.2: decorations, free once earned, and the remove tool
       `<span class="tray-break" aria-hidden="true"></span>`,
       ...DECOR_OPTIONS.map(
@@ -239,10 +222,8 @@ export class Hud {
         <button class="rbtn qbtn" id="catBtn" aria-label="Lucky Cat garden" title="Lucky Cat garden" hidden>${ICONS.garden}<span class="qn" id="catCount">0</span></button>
         <button class="rbtn qbtn" id="pawBtn" aria-label="Paw prints: which way a hiding cat went" title="Paw prints: a Lucky Cat is hiding. Which way do they lead?" hidden>${ICONS.paw}<span class="qn" id="pawCount">0</span></button>
       </div>
-      <div id="eventBanner" role="status" aria-live="polite" hidden><span class="ei"></span><span class="et"></span><span class="ec"></span><i class="ebar"></i></div>
       <div id="combo"><div id="comboFx" aria-hidden="true"></div><div class="big" id="comboBig" role="status" aria-label="Bloom chain combo"><span class="cic">${ICONS.biomass}</span><span class="cl">Combo</span> <span class="cx">×0</span></div><div class="cbody panel"><ul id="comboParts"></ul><div class="total" id="comboTotal"></div><div id="chainAreas"></div></div><div id="feed"></div></div>
       <div id="hotbar" class="panel">${slots}</div>
-      <button id="frenzyBtn" class="frenzy-btn" aria-label="Bloom Frenzy (Q)" hidden><span class="fill"></span><span class="fi">${ICONS.frenzy}</span><span class="ft">0%</span></button>
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
       <div id="toasts"></div>
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
@@ -306,7 +287,6 @@ export class Hud {
     const r = this.root;
     r.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((b) => b.addEventListener('click', () => this.cb.selectTool(b.dataset.tool as Tool)));
     $(r, '#harvestBtn').addEventListener('click', () => this.cb.harvest());
-    $(r, '#frenzyBtn').addEventListener('click', () => this.cb.activateFrenzy());
     $(r, '#upgBtn').addEventListener('click', () => this.toggleUpgrades());
     $(r, '#upgrades h2 button').addEventListener('click', () => this.toggleUpgrades(false));
     $(r, '#coreBtn').addEventListener('click', () => this.cb.activateCore());
@@ -431,20 +411,11 @@ export class Hud {
       }
       if (t.closest('[data-upg]')) this.toggleUpgrades(true);
       if (t.closest('[data-harvest]')) this.cb.harvest();
-      const mg = t.closest<HTMLButtonElement>('[data-merge-at]');
-      if (mg) this.cb.mergeAt(mg.dataset.mergeAt!);
       const ia = t.closest<HTMLButtonElement>('[data-inspect-at]');
       if (ia) this.cb.inspectAt(ia.dataset.inspectAt!);
-      const ct = t.closest<HTMLButtonElement>('[data-core-tool]');
-      if (ct) this.cb.selectTool(ct.dataset.coreTool as Tool);
-      const su = t.closest<HTMLButtonElement>('[data-super]');
-      if (su) {
-        const [action, id] = su.dataset.super!.split('|');
-        this.cb.superAction(action as 'stage' | 'activate', id);
-      }
       const db = t.closest<HTMLButtonElement>('[data-district]');
       if (db && !db.disabled) this.cb.districtBloom(db.dataset.district!, db.dataset.replay === '1');
-      if (fo || wk || db || mg || ct || su || t.closest('[data-upg]') || t.closest('[data-harvest]')) this.suggestionAt = -1;
+      if (fo || wk || db || ia || t.closest('[data-upg]') || t.closest('[data-harvest]')) this.suggestionAt = -1;
     });
     $(r, '#inspect').addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
@@ -457,13 +428,6 @@ export class Hud {
       if (b && !b.disabled) this.cb.buyUpgrade(b.dataset.buy!);
       const rl = t.closest<HTMLButtonElement>('[data-role]');
       if (rl && !rl.disabled) this.cb.chooseRole(rl.dataset.role!);
-      const sp = t.closest<HTMLButtonElement>('[data-super]');
-      if (sp && !sp.disabled) {
-        const [action, id] = sp.dataset.super!.split('|');
-        this.cb.superAction(action as 'stage' | 'activate' | 'auto', id);
-      }
-      const mg = t.closest<HTMLButtonElement>('[data-merge]');
-      if (mg && !mg.disabled) this.cb.merge(mg.dataset.merge as 'start' | 'confirm' | 'cancel');
       const am = t.closest<HTMLButtonElement>('[data-area-mode]');
       if (am) {
         const [id, mode] = am.dataset.areaMode!.split('|');
@@ -479,16 +443,9 @@ export class Hud {
   /** Where a resource's numbers come from right now (popover and tooltip). */
   private resourceBreakdown(k: ResourceKind, plain = false): string {
     const s = this.sim;
-    const L = s.ledger;
     const pm = (x: Big) => `${fmt(x.mul(60), 1)}/min`;
     const c = s.econ.cap(k);
-    const lines: [string, string][] = [
-      ['Producing', pm(L.warm ? L.gross(k) : s.production.rates()[k])],
-      ['Spending', pm(L.spent(k))],
-    ];
-    if (c) lines.push(['Lost to full storage', `${pm(L.wasted(k))}${L.wasted(k).gt(0) ? ' (charges Bloom Frenzy)' : ''}`]);
-    const net = L.net(k);
-    lines.push(['Net', `${net.lt(0) ? '−' : '+'}${pm(net.abs())}`]);
+    const lines: [string, string][] = [['Producing', pm(s.production.rates()[k])]];
     lines.push(['Stored', c ? `${fmt(s.econ.get(k))} / ${fmt(c)}` : `${fmt(s.econ.get(k))} (no limit)`]);
     if (plain) return `${RES_META[k].name}: ${lines.map(([a, b]) => `${a} ${b}`).join(' · ')}`;
     return `<b>${RES_META[k].icon} ${RES_META[k].name}</b>${lines.map(([a, b]) => `<div><span>${a}</span><span>${b}</span></div>`).join('')}`;
@@ -603,7 +560,7 @@ export class Hud {
     if (!g) return (this.suggestionBtn = '');
     const a = g.action;
     const attr =
-      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'merge' ? `data-merge-at="${a.machineId}"` : a.kind === 'role' ? `data-inspect-at="${a.machineId}"` : a.kind === 'placeCore' ? `data-core-tool="super:${a.type}"` : a.kind === 'super' ? `data-super="${a.action}|${a.machineId}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
+      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'role' ? `data-inspect-at="${a.machineId}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
     this.suggestionBtn = `<p class="sugg">${esc(g.text)}</p><button class="act" ${attr}>${esc(g.label)}</button>`;
     return this.suggestionBtn;
   }
@@ -667,12 +624,11 @@ export class Hud {
     const building = t !== 'pulse' && t !== 'inspect';
     const tg = $(this.root, '#buildToggle');
     tg.classList.toggle('active', building);
-    const st = superType(t);
     const dk = decorType(t);
     const dec = dk ? DECOR_OPTION[dk] : undefined;
-    const def = st ? TIER3[st]! : machineTool(t) ? MACHINES[t] : undefined;
-    $(tg, '.si').innerHTML = st ? iconize(def!.icon) : machineTool(t) ? ICONS[MACHINE_ICONS[t]] : dec ? iconize(dec.icon) : t === 'remove' ? iconize('🧹') : ICONS.build;
-    $(tg, '.sl').textContent = def ? (st ? def.name.split(' ').pop()! : def.name.replace('Water ', '').replace('Pollinator ', '')) : dec ? dec.name : t === 'remove' ? 'Remove' : 'Build';
+    const def = machineTool(t) ? MACHINES[t] : undefined;
+    $(tg, '.si').innerHTML = machineTool(t) ? ICONS[MACHINE_ICONS[t]] : dec ? iconize(dec.icon) : t === 'remove' ? iconize('🧹') : ICONS.build;
+    $(tg, '.sl').textContent = def ? def.name.replace('Water ', '').replace('Pollinator ', '') : dec ? dec.name : t === 'remove' ? 'Remove' : 'Build';
     this.toggleTray(false);
   }
 
@@ -1168,30 +1124,9 @@ export class Hud {
     this.set('inspect', el, 'html', html);
   }
 
-  /**
-   * Phase 5 E15: the world event banner (small, above the hotbar, never blocks input: pointer-transparent) with
-   * its effect and a timer bar, and the 🐾 chip once a cat has been hiding a while.
-   */
-  private updateEvents() {
+  /** Phase 5 E15: the paw chip once a cat has been hiding a while. */
+  private updateCatChip() {
     const s = this.sim;
-    const el = $(this.root, '#eventBanner');
-    const a = s.events.active;
-    if (!a) {
-      if (!el.hidden) el.hidden = true;
-      this.last.delete('evT');
-    } else {
-      if (el.hidden) el.hidden = false;
-      const info = WORLD_EVENT_INFO[a.type];
-      const left = Math.max(0, a.until - s.time);
-      const total = Math.max(0.1, a.until - a.startedAt);
-      const hiding = s.state.cat.invasion?.length ?? 0;
-      const effect = a.fallback ? a.fallback : a.type === 'invasion' ? `${hiding} cat${hiding === 1 ? '' : 's'} hiding · each with its own reward · no rush` : a.type === 'migration' ? `growing ${a.done ?? 0}/${(a.done ?? 0) + (a.queue?.length ?? 0)} tiles` : info.effect;
-      this.set('evI', $(el, '.ei'), 'text', info.icon);
-      this.set('evT', $(el, '.et'), 'html', `<b>${esc(info.name)}</b> ${esc(effect)}`);
-      this.set('evC', $(el, '.ec'), 'text', a.type === 'invasion' ? '' : `${Math.ceil(left)}s`);
-      this.set('evBar', $(el, '.ebar'), 'width', `${Math.round((left / total) * 100)}%`);
-      this.set('evKind', el, 'title', `${info.name}: ${info.effect}`);
-    }
     const hinted = s.cat.spots().filter((c) => s.cat.hinted(c)).length;
     const paw = $(this.root, '#pawBtn');
     if (paw.hidden !== !hinted) paw.hidden = !hinted;
@@ -1217,9 +1152,6 @@ export class Hud {
     this.layoutToasts();
     const s = this.sim;
     const rates = s.production.rates();
-    // Phase 5 E12: the rate shown is NET (banked − spent over the last ~20 s), so production lost to a full store
-    // is never shown as income. Tap a resource for the breakdown (gross, spending, overflow).
-    const L = s.ledger;
     const surge = s.production.surgeActive();
     for (const k of KINDS) {
       const row = $(this.root, `[data-res="${k}"]`);
@@ -1234,7 +1166,7 @@ export class Hud {
       this.set(`c-${k}`, $(row, '.c'), 'text', c ? fmt(c) : '');
       this.set(`cw-${k}`, $(row, '.capw'), 'cls', c ? '0' : '1', 'nocap');
       const full = s.econ.isFull(k);
-      const net = (L.warm ? L.net(k) : rates[k]).mul(60);
+      const net = rates[k].mul(60);
       const boost = k === 'energy' && surge ? ` ☀️×${TUNING.cat.frenzyMult}` : '';
       const sign = net.lt(0) ? '−' : '+';
       const rateTxt = `${sign}${fmt(net.abs(), 1)}/min`; // "· full" comes from the .full class
@@ -1244,19 +1176,7 @@ export class Hud {
       this.set(`f-${k}`, row, 'cls', full ? '1' : '0', 'full');
     }
     if (this.resInfo) this.set('resInfo', $(this.root, '#resInfo'), 'html', this.resourceBreakdown(this.resInfo));
-    // Phase 4 E06: the Bloom Frenzy meter (appears with the first restored tile).
-    const fb = $(this.root, '#frenzyBtn');
-    if (fb.hidden && s.state.stats.tilesRestored > 0) fb.hidden = false;
-    const fActive = s.frenzy.active();
-    const fReady = s.frenzy.ready();
-    const fill = fActive ? s.frenzy.remaining() / TUNING.frenzy.seconds : s.frenzy.charge / 100;
-    this.set('frFill', fb, 'style', fill.toFixed(3), '--fill');
-    this.set('frReady', fb, 'cls', fReady ? '1' : '0', 'ready');
-    this.set('frActive', fb, 'cls', fActive ? '1' : '0', 'active');
-    this.set('frBody', document.body, 'cls', fActive ? '1' : '0', 'frenzy'); // also right after loading mid-Frenzy
-    this.set('frText', $(fb, '.ft'), 'text', fActive ? `${Math.ceil(s.frenzy.remaining())}s` : fReady ? 'FRENZY!' : `${Math.floor(s.frenzy.charge)}%`);
-    this.updateEvents();
-    this.set('frTitle', fb, 'title', fActive ? 'Bloom Frenzy! Pulse reach +2 tiers, biomass ×10, drones ×3' : fReady ? `Bloom Frenzy is ready: press ${this.cb.keyFor('frenzy')} to fire it` : 'Bloom Frenzy charges as you restore, chain and overflow');
+    this.updateCatChip();
     // Hotbar costs
     for (const t of s.oldCity ? OLD_CITY_BUILDABLE : BUILDABLE) {
       const btn = $(this.root, `#hotbar [data-tool="${t}"]`);
@@ -1270,16 +1190,6 @@ export class Hud {
       btn.hidden = !!roofOnly && !s.build.isUnlocked(t);
       if (locked) this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.lockLabel(t));
     }
-    // Phase 5 E14: core slots appear while a core waits to be placed; the Build button shows a badge.
-    let cores = 0;
-    for (const t of SUPER_TOOLS) {
-      const n = s.supers.coreCount(superType(t)!);
-      cores += n;
-      const btn = $(this.root, `#hotbar [data-tool="${t}"]`);
-      btn.hidden = !n;
-      this.set(`hcs-${t}`, $(btn, '.sc'), 'text', n ? `core ×${n}` : '');
-    }
-    this.set('coresBadge', $(this.root, '#buildToggle .sc'), 'text', cores ? `✨ ${cores} core${cores > 1 ? 's' : ''}` : '');
     // E19.2: a decoration's slot appears once it's earned
     const earned = s.state.cozy?.decorUnlocked;
     for (const o of DECOR_OPTIONS) {

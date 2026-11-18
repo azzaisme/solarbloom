@@ -234,40 +234,6 @@ export interface CatState {
   log: { anchorId: string; reward: CatRewardType; at: number; variant?: CatVariant }[];
 }
 
-/** Phase 5 E15: world events (optional, short, never punishing). */
-export type WorldEventType = 'supernova' | 'migration' | 'rain' | 'invasion';
-
-export interface WorldEventActive {
-  type: WorldEventType;
-  /** event number (1, 2, …): identifies it in logs and HUD */
-  n: number;
-  startedAt: number;
-  until: number;
-  /** Great Migration / Super Rain: tiles still to be visited, in order (saved, so reload resumes, never repeats) */
-  queue?: string[];
-  /** every tile queued so far in this event (bounded: a tile is never queued twice) */
-  seen?: string[];
-  /** sim time the next queued tile is visited */
-  nextStepAt?: number;
-  /** tiles actually grown or restored so far */
-  done?: number;
-  /** Super Rain: irrigation waves started so far (bounded) */
-  waves?: number;
-  /** a fallback reward was paid instead (nothing eligible) */
-  fallback?: string;
-}
-
-export interface WorldEventsState {
-  /** sim time of the next event opportunity (-1 until automation is unlocked) */
-  nextAt: number;
-  /** the event's own seeded random stream (never disturbs the game's rng) */
-  rng: number;
-  count: number;
-  last?: WorldEventType;
-  active?: WorldEventActive;
-  byType: Partial<Record<WorldEventType, number>>;
-}
-
 export interface Progression {
   coreActivated: boolean;
   coreActivatedAt: number;
@@ -447,11 +413,7 @@ export interface GameState {
   cat: CatState;
   progression: Progression;
   stats: Stats;
-  /** Phase 5 E15: the world event scheduler and the running event. */
-  events?: WorldEventsState;
-  /** Phase 4 E06: the Bloom Frenzy meter (0–100), the sim time a running Frenzy ends, and how many so far. */
-  frenzy?: { charge: number; until?: number; count?: number };
-  /** Phase 4 E01: wall-clock time (ms since 1970) this state was last saved, for offline progress. */
+  /** Phase 4 E01: wall-clock time (ms since 1970) this state was last saved. */
   savedAt?: number;
   /** City 10.7: district blooms claimed, by district id (sim time). Optional: older saves have none. */
   districts?: Record<string, number>;

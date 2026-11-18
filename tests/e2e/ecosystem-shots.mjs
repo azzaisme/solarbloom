@@ -85,17 +85,10 @@ try {
     }
     st.progression.coreActivated = true;
     g.machines.setCoreState('awake', true);
-    st.cores = [...(st.cores ?? []), { type: 'pollinator' }];
-    const spot = s.areas.tiles('park').find((t) => t.x <= 6 && s.supers.check('pollinator', 'g', t.x, t.z).ok);
-    const sup = spot ? s.supers.place('pollinator', 'g', spot.x, spot.z) : undefined;
-    if (sup) {
-      s.supers.advance(sup.id);
-      s.supers.advance(sup.id);
-    }
     s.ecosystem.refresh(true);
     st.fauna = { butterflies: st.time, birds: st.time, koi: st.time, robots: st.time };
     g.chunks.markAll();
-    return { placed: placed.length, super: !!sup, unlocked: s.ecosystem.unlocked() };
+    return { placed: placed.length, unlocked: s.ecosystem.unlocked() };
   });
   console.log('fauna scene:', JSON.stringify(info));
   await page.evaluate(() => window.solarbloom.setPaused?.(false));

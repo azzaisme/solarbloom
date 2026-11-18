@@ -18,15 +18,8 @@ import { Advisor } from './Advisor';
 import { LuckyCatSystem } from './LuckyCatSystem';
 import { AreaSystem } from './AreaSystem';
 import { DebugLog } from './DebugLog';
-import { OfflineSystem } from './OfflineSystem';
-import { FrenzySystem } from './FrenzySystem';
-import { EconomyLedger } from './EconomyLedger';
-import { Modifiers } from './Modifiers';
-import { WorldEventSystem } from './WorldEventSystem';
 import { Metrics } from './Metrics';
 import { MilestoneSystem } from './Milestones';
-import { MergeSystem } from './MergeSystem';
-import { SuperSystem } from './SuperSystem';
 import { EcosystemSystem } from './Ecosystem';
 import { ProductionSystem } from './ProductionSystem';
 import { ProgressionSystem } from './ProgressionSystem';
@@ -63,20 +56,12 @@ export class Sim {
   readonly progression: ProgressionSystem;
   readonly metrics: Metrics;
   readonly log: DebugLog;
-  readonly offline: OfflineSystem;
-  readonly frenzy: FrenzySystem;
-  readonly ledger: EconomyLedger;
-  readonly mods: Modifiers;
   readonly areas: AreaSystem;
   readonly districts: DistrictSystem;
   readonly canals: CanalNetwork;
   readonly relays: RelaySystem;
   readonly clusters: RooftopClusters;
   readonly milestones: MilestoneSystem;
-  readonly merge: MergeSystem;
-  readonly supers: SuperSystem;
-  /** Phase 5 E15: world events. */
-  readonly events: WorldEventSystem;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
   readonly ecosystem: EcosystemSystem;
   /** Look 6: living transitions (what each tile is visibly turning into). */
@@ -162,20 +147,10 @@ export class Sim {
     this.areas = new AreaSystem(this);
     this.districts = new DistrictSystem(this);
     this.milestones = new MilestoneSystem(this);
-    this.merge = new MergeSystem(this);
-    this.supers = new SuperSystem(this);
     this.ecosystem = new EcosystemSystem(this);
     this.metrics = new Metrics(this);
     this.log = new DebugLog(this);
-    this.offline = new OfflineSystem(this);
-    this.frenzy = new FrenzySystem(this);
-    this.ledger = new EconomyLedger(this);
-    this.events = new WorldEventSystem(this);
-    this.mods = new Modifiers(this);
-    this.econ.onOverflow = (k, a, frenzy) => {
-      this.log.onOverflow(k, a);
-      if (frenzy) this.frenzy.onOverflow(k, a);
-    };
+    this.econ.onOverflow = (k, a) => this.log.onOverflow(k, a);
     this.restoration.adoptGrowing();
     for (const c of this.grid.loadedChunks()) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
     this.upgrades.applyCaps();
@@ -267,7 +242,6 @@ export class Sim {
     const s = this.state;
     s.time += dt;
     s.buffs = s.buffs.filter((b) => b.until > s.time);
-    this.frenzy.tick();
     this.production.tick(dt);
     this.restoration.tick(dt);
     this.transitions.tick();
@@ -276,15 +250,12 @@ export class Sim {
     this.roles.tick(dt);
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
-    this.supers.tick(dt);
     this.cat.tick();
-    this.events.tick();
     this.progression.tick();
     this.fountain.tick();
     this.milestones.tick();
     this.ecosystem.tick();
     this.metrics.tick(dt);
-    this.ledger.tick();
     s.rngState = this.rng.state;
   }
 
@@ -300,8 +271,7 @@ export class Sim {
       this.bus.emit('action.failed', { reason: `Sunlight gathers again in ${Math.ceil(s.harvestReadyAt - s.time)} s` });
       return false;
     }
-    // Phase 5 E12: Harvest on a full store never charges Bloom Frenzy (no tapping a maxed store for charge).
-    const got = this.econ.add('energy', TUNING.harvest.energy, { frenzy: false });
+    const got = this.econ.add('energy', TUNING.harvest.energy);
     s.harvestReadyAt = s.time + TUNING.harvest.cooldown;
     this.bus.emit('harvest', { amount: got });
     if (got.gt(0)) this.bus.emit('resource.gain', { kind: 'energy', amount: got, reason: 'harvest' });

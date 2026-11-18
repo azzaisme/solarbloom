@@ -51,7 +51,8 @@ export const ACTIONS: readonly { id: Action; label: string; pad: boolean }[] = [
   { id: 'zoomOut', label: 'Turn a decoration anticlockwise', pad: false },
   { id: 'overview', label: 'Overview', pad: true },
   { id: 'pause', label: 'Settings / pause', pad: true },
-  { id: 'frenzy', label: 'Bloom Frenzy', pad: true },
+  // E23.1.2: Bloom Frenzy is gone; the id stays so saved bindings keep working. Photo mode uses it.
+  { id: 'frenzy', label: 'Photo mode: depth of field', pad: true },
   { id: 'nextArea', label: 'Go to the area that needs you', pad: true },
   { id: 'home', label: 'Back to the park', pad: true },
   { id: 'recentre', label: 'Recentre the camera', pad: true },

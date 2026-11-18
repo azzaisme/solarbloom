@@ -69,7 +69,6 @@ try {
     await page.evaluate(() => {
       const g = window.solarbloom;
       g.hud.openSettings(false);
-      g.sim.events.trigger('supernova');
       g.hud.catReward('Lucky Harvest', 'A full harvest of every resource, banked.');
     });
     await page.waitForTimeout(800);

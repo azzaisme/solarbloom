@@ -21,9 +21,7 @@ import { BOT, type BotPose, spawnPose, Walker } from '../src/gameplay/Walker';
  *   machines and upgrades, and waking landmarks. Compared with `active` over the same window it says how idle
  *   the game is.
  *
- * Phase 5 E15: world events run as in the game (seeded, sim time). The active bot reacts to them: during a
- * Solar Supernova or Super Rain it pulses twice per action (spending the boosted income), and it finds every
- * hiding cat, invasion cats included, ~40 s after it appears. `noEvents` switches the scheduler off.
+ * The active bot finds every hiding cat about 40 s after it appears.
  */
 export interface BotOptions {
   seed: number;
@@ -41,13 +39,6 @@ export interface BotOptions {
   noCats?: boolean;
   /** called once per simulated second (for extra measurements) */
   onSecond?: (sim: Sim) => void;
-  /**
-   * Phase 5 E13: after the build list, keep buying panels, gardens and condensers beside matching ones and merge
-   * every ready group (off by default so earlier pacing measurements stay comparable).
-   */
-  merges?: boolean | 'buildOnly';
-  /** Phase 5 E15: no world events at all (checks nothing depends on them; comparison runs) */
-  noEvents?: boolean;
   /** Look 6.8: build Cultivators (one as soon as it unlocks and is affordable, another after the fountain) */
   cultivator?: boolean;
   /**
@@ -97,16 +88,11 @@ export interface BotReport {
   parkRestored: number;
   maxCombo: number;
   chains: number;
-  /** longest stretch (s) without a "meaningful improvement": upgrade, machine, cat, chain ×5+, milestone or Frenzy */
+  /** longest stretch (s) without a "meaningful improvement": upgrade, machine, cat, chain ×5+, milestone */
   longestGap: number;
   stuck: number;
   pulses: number;
-  /** Bloom Frenzies fired */
-  frenzies: number;
-  /** Phase 5 E13: merges made, and when */
-  merges: { t: number; type: string }[];
-  /** Phase 5 E15: world events started (sim time, type) and cats found by rarity */
-  events: { t: number; type: string }[];
+  /** cats found by rarity */
   cats: Record<string, number>;
   /** E18: when each role was first chosen (sim seconds), with `roles` on */
   roleAt: Partial<Record<DroneRole, number>>;
@@ -138,12 +124,11 @@ function* botRunInner(opts: BotOptions): Generator<void, BotReport> {
   const actionEvery = opts.actionEvery ?? 3;
   const sim = new Sim(opts.state ?? createInitialState(opts.seed));
   sim.cat.anchorView = () => 'offscreen';
-  if (opts.noEvents) sim.events.tick = () => {};
   const s = sim.state;
   const earned: Record<ResourceKind, number> = { energy: 0, water: 0, biomass: 0 };
   const add = sim.econ.add.bind(sim.econ);
-  sim.econ.add = (k, a, o) => {
-    const got = add(k, a, o);
+  sim.econ.add = (k, a) => {
+    const got = add(k, a);
     earned[k] += toNum(got);
     return got;
   };
@@ -166,18 +151,12 @@ function* botRunInner(opts: BotOptions): Generator<void, BotReport> {
   sim.bus.on('cat.found', meaningful);
   sim.bus.on('milestone.reached', meaningful);
   sim.bus.on('area.step', meaningful);
-  sim.bus.on('frenzy.started', meaningful);
   sim.bus.on('rooftop.coreRestored', meaningful);
   sim.bus.on('area.cleared', meaningful);
   sim.bus.on('chain.ended', ({ combo }) => combo >= 5 && meaningful());
   let pulses = 0;
   sim.bus.on('pulse.fired', () => pulses++);
-  const events: BotReport['events'] = [];
   const cats: Record<string, number> = {};
-  sim.bus.on('world.started', ({ type }) => {
-    events.push({ t: Math.round(sim.time), type });
-    meaningful();
-  });
   sim.bus.on('cat.found', ({ variant }) => (cats[variant ?? 'standard'] = (cats[variant ?? 'standard'] ?? 0) + 1));
   const restoredBy = { player: 0, helpers: 0 };
   const unlocked: number[] = [];
@@ -186,8 +165,6 @@ function* botRunInner(opts: BotOptions): Generator<void, BotReport> {
 
   const built: Record<string, number> = {};
   const roleAt: BotReport['roleAt'] = {};
-  const merges: BotReport['merges'] = [];
-  sim.bus.on('machine.merged', meaningful);
   const hubFor = new Set<string>();
   let next = 0;
   let handsOffAt: number | undefined;
@@ -204,15 +181,6 @@ function* botRunInner(opts: BotOptions): Generator<void, BotReport> {
       if (m.type === 'solar' && d === 1) return a + 1;
       return a;
     }, 0);
-
-  /** A 1×1 spot shares an edge with a tier-2 machine of this type. */
-  const touchesTier2 = (type: string, x: number, z: number) =>
-    sim.grid.machinesNear(GROUND, x, z, 3).some((m) => {
-      if (m.type !== type || (m.tier ?? 1) !== 2) return false;
-      const inX = x >= m.x && x < m.x + m.size;
-      const inZ = z >= m.z && z < m.z + m.size;
-      return (inX && (z === m.z - 1 || z === m.z + m.size)) || (inZ && (x === m.x - 1 || x === m.x + m.size));
-    });
 
   const act = (taps = true) => {
     // 1. build the next machine if affordable, next to existing ones
@@ -287,20 +255,12 @@ function* botRunInner(opts: BotOptions): Generator<void, BotReport> {
     if (taps) {
       if (target) sim.restoration.pulse(target.id);
       else if (s.resources.energy.lt(3)) sim.harvestSun();
-      // Phase 5 E15: a boosted store is worth spending: one more pulse while a Supernova or Super Rain runs.
-      const ev = sim.events.active?.type;
-      if ((ev === 'supernova' || ev === 'rain') && target) {
-        const again = target.ground === 'restored' ? target : park().find((t) => t.id !== target!.id && sim.restoration.checkPulse(t).ok);
-        if (again && sim.restoration.checkPulse(again).ok) sim.restoration.pulse(again.id);
-      }
     }
     // 3. upgrades when the next machine is far off
     // Phase 5 E12: biomass is uncapped, so keep back only the next machine's price. Per-machine upgrades go to
     // the cheapest machine of the type (as "Upgrade all" would), a few levels per action.
-    // Phase 5 E14: a waiting core or a pending stage is saved for too (as a player saving up would).
-    const proj = opts.merges === true ? s.machines.find((m) => m.project) : undefined;
-    const superCost = proj ? big(sim.supers.nextCost(proj)!.biomass ?? 0) : opts.merges === true && sim.supers.cores().length ? big(sim.supers.stageCosts()[0].biomass ?? 0) : big(0);
-    const nextCost = (ORDER[next] ? big(sim.build.cost(ORDER[next]).biomass ?? 0) : big(0)).add(superCost);
+
+    const nextCost = (ORDER[next] ? big(sim.build.cost(ORDER[next]).biomass ?? 0) : big(0));
     for (const u of opts.noUpgrades ? [] : sim.upgrades.all()) {
       for (let i = 0; i < 4; i++) {
         const st = sim.upgrades.status(u);
@@ -320,62 +280,9 @@ function* botRunInner(opts: BotOptions): Generator<void, BotReport> {
         if (sim.roles.choose(h.id, want)) roleAt[want] ??= Math.round(sim.time);
       });
     }
-    // 3b. Phase 5 E13: grow groups of matching machines and merge them.
-    if (opts.merges && !ORDER[next]) {
-      for (const type of ['solar', 'pollinator', 'condenser'] as const) {
-        const cost = sim.build.cost(type);
-        const pending = s.machines.find((m) => m.project);
-        const reserve = pending ? big(sim.supers.nextCost(pending)!.biomass ?? 0) : sim.supers.cores().length ? big(sim.supers.stageCosts()[0].biomass ?? 0) : big(0);
-        // Pacing pass: a stage waiting to be paid keeps its energy and water too (as a player saving up would).
-        const keep = pending && opts.merges === true ? sim.supers.totalCost([cost, { ...sim.supers.nextCost(pending)!, biomass: undefined }]) : cost;
-        if (!sim.econ.canAfford(keep) || s.resources.biomass.lt(big(cost.biomass ?? 0).mul(2).add(reserve))) continue;
-        // Pacing pass: grow the biggest tier-1 group; among equals (and when starting a new group) prefer a spot
-        // touching a tier-2 of the type, so the next tier 2 lands beside it and three of them can make a core.
-        let best: TileData | undefined;
-        let bestScore = 0;
-        for (const t of park()) {
-          if (t.ground !== 'restored' || !sim.build.check(type, GROUND, t.x, t.z).ok) continue;
-          const n = sim.merge.groupIfPlaced(type, GROUND, t.x, t.z, 1);
-          const score = n * 2 + (touchesTier2(type, t.x, t.z) ? 1 : 0);
-          if (score > bestScore && (n > 1 || score > 2)) {
-            best = t;
-            bestScore = score;
-          }
-        }
-        // No group to join yet: start one beside the fewest other machines.
-        best ??= park().find((t) => t.ground === 'restored' && sim.build.check(type, GROUND, t.x, t.z).ok);
-        if (best && sim.build.place(type, GROUND, best.x, best.z)) break;
-      }
-      for (const c of opts.merges === 'buildOnly' ? [] : sim.merge.ready(4)) {
-        // Anchor on a machine touching a tier-2 of its type (the merged machine stays there), if one does.
-        const anchor = c.find((m) => (m.tier ?? 1) === 1 && touchesTier2(m.type, m.x, m.z)) ?? c[0];
-        const p = sim.merge.plan(anchor.id);
-        if (p?.ok && sim.merge.commit(anchor.id, p.partners.map((m) => m.id), p.key, p.fee)) merges.push({ t: Math.round(sim.time), type: p.core ? `${c[0].type}:core` : c[0].type });
-      }
-      // Phase 5 E14: place cores (nearest the park's middle that fits), pay stages, fire abilities.
-      if (opts.merges === true) {
-        for (const core of sim.supers.cores().slice(0, 1)) {
-          // The park first, then any cleared area (a packed park has no 2×2 room left).
-          const pool = [...park(), ...sim.areas.revealed().filter((id) => sim.areas.fog(id) === 'cleared').flatMap((id) => sim.areas.tiles(id))];
-          const spots: TileData[] = [];
-          for (const t of pool) {
-            if (sim.supers.check(core.type, GROUND, t.x, t.z).ok) spots.push(t);
-            if (spots.length >= 40) break;
-          }
-          spots.sort((a, b) => Math.hypot(a.x - 8, a.z - 8) - Math.hypot(b.x - 8, b.z - 8));
-          if (spots[0]) sim.supers.place(core.type, GROUND, spots[0].x, spots[0].z);
-        }
-        for (const m of s.machines) {
-          if (m.project && sim.econ.canAfford(sim.supers.nextCost(m)!)) sim.supers.advance(m.id);
-          if (sim.supers.ready(m) && !m.ability?.auto && sim.supers.activate(m.id, true)) sim.supers.setAuto(m.id, true);
-        }
-      }
-    }
     // 4. find the cat ~40 s after it appears
     // Phase 5 E15: every hiding cat (invasion cats too), each about 40 s after it appeared.
     if (taps && !opts.noCats) for (const c of sim.cat.spots()) if (sim.time - c.spawnedAt > 40) sim.cat.claim(c.id);
-    // 5. fire Bloom Frenzy as soon as it's ready (an idle player checking in would too)
-    if (sim.frenzy.ready()) sim.frenzy.activate();
   };
 
   const stepsPerAction = Math.round(actionEvery / 0.1);
@@ -429,9 +336,6 @@ function* botRunInner(opts: BotOptions): Generator<void, BotReport> {
     longestGap: Math.round(longestGap),
     stuck: Math.round(s.stats.stuckSeconds),
     pulses,
-    frenzies: s.frenzy?.count ?? 0,
-    merges,
-    events,
     cats,
     roleAt,
     walk: walk?.report(),
