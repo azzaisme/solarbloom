@@ -100,6 +100,16 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
   { id: 'droneThrift', branch: 'drones', name: 'Lighter drones', each: 'Drones draw less from their hub', levels: [{ cost: { batteryCell: 1, wire: 4 } }, { cost: { batteryCell: 2, glassPane: 4 } }, { cost: { batteryCell: 3, sunCell: 1 } }] },
 ];
 
+/**
+ * Research upgrades that drive an effect the game already has (data/upgrades): each level bought grants one level
+ * of it (`sim.upgrades.grant`, E23.1.5), on every machine of its type for a per-machine one, new ones included.
+ */
+export const GRANTS: Record<string, string> = {
+  pulseRadius: 'broadPulse',
+  droneSpeed: 'droneSpeed',
+  droneRange: 'droneRadius',
+};
+
 /** Every project, by branch. A branch's first project opens from a find; the rest follow on. */
 export const PROJECTS: ProjectDef[] = [
   // Bloombot

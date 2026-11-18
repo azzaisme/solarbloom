@@ -2,7 +2,8 @@ import { GROUND } from '../core/GameState';
 import type { ResearchState, SalvageState } from '../core/types';
 import { KEEPERS, PARK_SET, REGIONS } from '../data/oldcity';
 import { itemDef } from '../data/items';
-import { PROJECTS, RESEARCH, RESEARCH_UPGRADES, type Find, type ProjectDef, type ResearchUpgradeDef } from '../data/research';
+import { UPGRADE_BY_ID } from '../data/upgrades';
+import { GRANTS, PROJECTS, RESEARCH, RESEARCH_UPGRADES, type Find, type ProjectDef, type ResearchUpgradeDef } from '../data/research';
 import type { Sim } from './Sim';
 
 /** E23.3's grid, read optionally until it lands (`isPowered` is true for anything the grid doesn't power). */
@@ -31,7 +32,12 @@ export function findKey(f: Find): string {
  * Other sub-epics read upgrade levels with `sim.research.level(id)` (charge, sprint, pulse, poles, pumps, drones…).
  */
 export class Research {
-  constructor(private sim: Sim) {}
+  constructor(private sim: Sim) {
+    // a machine built after a level was bought gets that level too
+    sim.bus.on('machine.built', () => {
+      for (const id of Object.keys(GRANTS)) if (this.level(id)) this.grant(id, this.level(id));
+    });
+  }
 
   private get sv(): SalvageState | undefined {
     return this.sim.state.salvage;
@@ -237,8 +243,28 @@ export class Research {
     return lvl + 1;
   }
 
-  /** Hands a level to the systems that keep their own numbers (E23.2's charge). Others read `level(id)`. */
+  /**
+   * Brings an existing upgrade effect (GRANTS) up to `level`: through E23.1.5's `sim.upgrades.grant` when it is
+   * there, else by setting the level where the effect getters read it (the state, or each machine of its type).
+   */
+  private grant(id: string, level: number) {
+    const target = GRANTS[id];
+    const def = target && UPGRADE_BY_ID[target];
+    if (!def) return;
+    const lvl = Math.min(level, def.maxLevel);
+    const ups = this.sim.upgrades as unknown as { grant?: (id: string, machineId?: string) => number };
+    const machines = def.machine ? this.sim.machinesOfType(def.machine) : [];
+    if (ups.grant) {
+      if (def.machine) for (const m of machines) while ((m.upg?.[target] ?? 0) < lvl && ups.grant(target, m.id)) void 0;
+      else while (this.sim.upgrades.level(target) < lvl && ups.grant(target)) void 0;
+    } else if (def.machine) for (const m of machines) m.upg = { ...m.upg, [target]: Math.max(m.upg?.[target] ?? 0, lvl) };
+    else this.sim.state.upgrades[target] = Math.max(this.sim.upgrades.level(target), lvl);
+    this.sim.upgrades.version++;
+  }
+
+  /** Hands a level to the systems that keep their own numbers (E23.2's charge, existing effects). Others read `level(id)`. */
   private apply(id: string, level: number) {
+    this.grant(id, level);
     const charge = (this.sim.state as { charge?: { cells?: number; efficiency?: number } }).charge;
     if (!charge) return;
     if (id === 'chargeCells') charge.cells = level;

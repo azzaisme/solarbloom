@@ -32,3 +32,4 @@
 .rs-bar.rs-off > i { background: var(--text-soft); }
 #craftScreen .tabs [hidden] { display: none; }
 @media (max-width: 900px) { .cr-upgrades { grid-template-columns: 1fr; } }
+#craftScreen .bp-detail:empty { display: none; }

@@ -4146,12 +4146,16 @@ export class Game {
   /** this frame's dt (holds read it) */
   private frameDt = 0;
   private lastReal = 0;
-  /** Seconds of wall time since the last frame (the engine's dt is 0 while paused), at most a frame's worth. */
+  /**
+   * Seconds of wall time since the last frame (the engine's dt is 0 while paused). Not clamped to a frame's worth:
+   * the crafting table counts real seconds even when frames are slow, up to a second at a time (a long stall, such as
+   * a hidden window, doesn't finish a queue at once).
+   */
   private realDt(): number {
     const now = performance.now();
     const d = this.lastReal ? (now - this.lastReal) / 1000 : 0;
     this.lastReal = now;
-    return Math.min(d, TUNING.maxFrameDt);
+    return Math.min(d, 1);
   }
   private update(rawDt: number) {
     if (!this.pause.paused) this.lastReal = performance.now();

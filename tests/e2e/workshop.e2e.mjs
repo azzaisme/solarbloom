@@ -92,7 +92,7 @@ async function open(dev) {
 }
 
 try {
-  for (const dev of ['keys', 'pad']) {
+  for (const dev of (process.env.DEVS ?? 'keys,pad').split(',')) {
     const { page, errors } = await open(dev);
     const T = (s) => `E23.6 ${dev}: ${s}`;
     const prompt = await page.evaluate(() => window.solarbloom.interactTarget()?.id);
@@ -106,7 +106,8 @@ try {
     check(await page.evaluate(() => document.activeElement?.id === 'cr-make-1'), T('Enter / A on Wire steps into Make'));
     await go(page, dev);
     await page.waitForFunction(() => window.solarbloom.sim.inventory.count('wire') >= 2, null, { timeout: 30000 }).catch(() => {});
-    const made = await page.evaluate(() => ({ wire: window.solarbloom.sim.inventory.count('wire'), copper: window.solarbloom.sim.inventory.count('copper'), live: document.querySelector('#craftScreen .bp-live').textContent }));
+    const made = await page.evaluate(() => ({ wire: window.solarbloom.sim.inventory.count('wire'), copper: window.solarbloom.sim.inventory.count('copper'), live: document.querySelector('#craftScreen .bp-live').textContent, paused: window.solarbloom.paused, why: [...(window.solarbloom.pause.reasons ?? [])], q: JSON.stringify(window.solarbloom.sim.state.salvage.craft) }));
+    if (made.wire !== 2) console.log('   ', JSON.stringify(made));
     check(made.wire === 2 && made.copper === 30, T(`make Wire while paused: ${made.wire} Wire, ${made.copper} Copper, "${made.live}"`));
     await page.screenshot({ path: `${dir}/ui-workshop-craft-${dev}.png` });
     // Upgrade: the backpack

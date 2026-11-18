@@ -157,6 +157,23 @@ describe('E23.6.2: the research station', { timeout: 60000 }, () => {
     expect(sim.research.upgrade('sprint')).toBe(0);
   });
 
+  it('upgrades that drive an existing effect grant its levels, also to machines built later', () => {
+    const sim = station();
+    sim.state.salvage!.research = { analysed: [], done: ['rb-pulse', 'dr-speed'], running: [], levels: {} };
+    for (const m of ['seeds', 'copper', 'motor', 'gears'] as const) sim.inventory.addToStore(m, 40);
+    expect(sim.upgrades.level('broadPulse')).toBe(0);
+    expect(sim.research.upgrade('pulseRadius')).toBe(1);
+    expect(sim.upgrades.level('broadPulse')).toBe(1);
+    const hub = { id: 'h1', type: 'droneHub', roofId: GROUND, x: 20, z: 20, size: 2 } as never;
+    sim.state.machines.push(hub);
+    expect(sim.research.upgrade('droneSpeed')).toBe(1);
+    expect(sim.upgrades.levelOf(hub, 'droneSpeed')).toBe(1);
+    const later = { id: 'h2', type: 'droneHub', roofId: GROUND, x: 30, z: 20, size: 2 } as never;
+    sim.state.machines.push(later);
+    sim.bus.emit('machine.built', { machine: later });
+    expect(sim.upgrades.levelOf(later, 'droneSpeed')).toBe(1);
+  });
+
   it('a research recipe appears at the crafting table once its project is done', () => {
     const sim = station();
     expect(sim.crafting.unlocked(DECOR_RECIPES.find((r) => r.id === 'topiary')!.unlock)).toBe(false);
