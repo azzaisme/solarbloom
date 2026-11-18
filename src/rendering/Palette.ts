@@ -432,6 +432,14 @@ const signal = {
   beaconPool: '#fff3a0',
   /** E19: the build hologram bloombot projects */
   holo: '#5fe8ff',
+  /** E23.3.4: the Power overlay. Each network gets one of `nets` (warm, bright, readable at night). */
+  power: {
+    nets: ['#ffd23f', '#6fe3ff', '#b6ff6a', '#ff9ed8', '#ffb15c', '#a9a2ff'],
+    dark: '#ff6b6b',
+    tripped: '#ff3b3b',
+    cell: '#8ff5c8',
+    cellBack: '#1d3640',
+  },
 };
 
 /** Scene lights (Look 1 owns lighting; on its branch these move to src/data/look.ts). */

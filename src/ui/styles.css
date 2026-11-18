@@ -732,6 +732,10 @@ body.oldcity #obj .ohead { display: block; }
 #buildbar .bslot .key { position: absolute; top: 2px; left: 5px; font: 700 13px var(--font-ui); color: var(--gold-hi); }
 #buildbar .bslot .si .icon { width: 26px; height: 26px; }
 #buildbar .bslot .sl { font: 600 11px/1.1 var(--font-display); max-width: 46px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* E23.3.4: the Power view toggle at the end of the build bar */
+#buildbar .bslot.power { margin-left: 8px; gap: 4px; }
+#buildbar .bslot.power .key { position: static; display: flex; }
+#buildbar .bslot.power .key svg { height: 22px; width: auto; }
 /* Old-city rules: no hotbar on the walking view, so the prompt, the toasts and the build hotbar sit lower. */
 body.oldcity #hotbar { display: none !important; }
 body.oldcity #prompt { bottom: calc(16px + var(--safe-b)); }

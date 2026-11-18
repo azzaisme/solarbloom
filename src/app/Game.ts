@@ -46,6 +46,7 @@ import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
 import { PowerLines } from '../rendering/PowerLines';
+import { PowerOverlay } from '../rendering/PowerOverlay';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
 import { Skyline } from '../rendering/Skyline';
@@ -178,6 +179,8 @@ export class Game {
   readonly tillers: CultivatorVisuals;
   /** E23.3: the grid's cables. */
   readonly powerLines: PowerLines;
+  /** E23.3.4: the Power overlay (build mode). */
+  readonly powerOverlay: PowerOverlay;
   /** Look 6.10: progress rings on tiles mid-process (near zoom). */
   readonly rings: ProgressRings;
   private stageSoundAt = 0;
@@ -349,6 +352,7 @@ export class Game {
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
     this.powerLines = new PowerLines(this.sim, this.scene.world, (m) => this.machines.worldOf(m));
+    this.powerOverlay = new PowerOverlay(this.sim, this.scene.world, (m) => this.machines.worldOf(m));
     this.rings = new ProgressRings(this.sim, this.scene.world);
     // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
     // its procedural look. Once they're in, what was already drawn is rebuilt with them.
@@ -1227,6 +1231,8 @@ export class Game {
         return this.turnBuild(a === 'rotate' ? 1 : -1);
       case 'removeMode':
         return this.selectTool(this.hud.currentTool === 'remove' ? 'pulse' : 'remove');
+      case 'powerOverlay':
+        return this.togglePowerView();
       case 'map':
         return this.toggleOverview();
       case 'zoomCamera':
@@ -1463,6 +1469,21 @@ export class Game {
   }
 
   /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
+  /** E23.3.4: the Power view is on (shown while building; it stays on for the next time you build). */
+  private powerView = false;
+  private togglePowerView() {
+    if (!this.building()) return;
+    this.powerView = !this.powerView;
+    this.hud.buildBar.powerOn = this.powerView;
+    this.hud.buildBar.render(this.hud.currentTool);
+    // A new concept gets one short introduction, the first time only.
+    if (this.powerView && !this.powerViewSeen) {
+      this.powerViewSeen = true;
+      this.hud.toast('Power view: each network glows in its own colour. Red means a machine has no power.', 'gold', 4);
+    }
+  }
+  private powerViewSeen = false;
+
   private building(t: Tool = this.hud.currentTool): boolean {
     return !!this.bot && t !== 'inspect' && t !== 'pulse';
   }
@@ -4168,6 +4189,8 @@ export class Game {
     detailTextures.setCamera(camP.x, camP.y, camP.z);
     this.machines.update(wdt, rect);
     this.powerLines.update();
+    this.powerOverlay.show(this.powerView && this.building());
+    this.powerOverlay.update(wdt);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.

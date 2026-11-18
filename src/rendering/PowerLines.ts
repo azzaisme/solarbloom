@@ -7,7 +7,9 @@ import { bezier, part, tube } from './MachineParts';
 import { group } from './Shapes';
 
 /** How high a cable meets a machine, by type (world units above its base); poles carry theirs at the top. */
-const CABLE_Y: Record<string, number> = { relay: 1.0, windTurbine: 0.5, battery: 0.85, solar: 0.3 };
+const CABLE_Y: Record<string, number> = { relay: 1.0, windTurbine: 0.5, battery: 0.85, solar: 0.3, charger: 0.6 };
+/** Where a cable meets this machine, above its base. */
+export const cableY = (m: MachineData): number => CABLE_Y[m.type] ?? 0.5;
 
 /**
  * E23.3.2.3: the grid's cables, drawn in the world. Linked poles are strung together with a sagging cable, and every
@@ -41,8 +43,8 @@ export class PowerLines {
   private cable(a: MachineData, b: MachineData, m: pc.Material, r: number, sagPerTile: number) {
     const pa = this.worldOf(a);
     const pb = this.worldOf(b);
-    const A: [number, number, number] = [pa[0], pa[1] + (CABLE_Y[a.type] ?? 0.5), pa[2]];
-    const B: [number, number, number] = [pb[0], pb[1] + (CABLE_Y[b.type] ?? 0.5), pb[2]];
+    const A: [number, number, number] = [pa[0], pa[1] + cableY(a), pa[2]];
+    const B: [number, number, number] = [pb[0], pb[1] + cableY(b), pb[2]];
     const len = Math.hypot(B[0] - A[0], B[2] - A[2]);
     const sag = Math.min(1.2, len * sagPerTile);
     const mid: [number, number, number] = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2 - sag * 2, (A[2] + B[2]) / 2];
