@@ -18,6 +18,12 @@ export interface GameEvents {
   'planter.harvested': { machineId: string; crop: string; food: number; biomass: number; seeds: number };
   /** E23.5.3: a compost bin or Bio Digester changed (filled, made something, emptied). */
   'farm.machine': { machineId: string };
+  /** E23.5.4: something tended gave something (honey, fruit, mushrooms, timber). */
+  'farm.harvested': { machineId: string; item: import('../core/types').MaterialId; n: number };
+  /** E23.5.4.5: a creature moved into (or gently out of) a wildlife home. */
+  'wildlife.moved': { machineId: string; creature: string; in: boolean };
+  /** E23.5.4.6: a Keeper's garden request was grown. */
+  'garden.fulfilled': { keeperId: string; crop: string; reward: import('../data/farmExtras').GardenReward };
   /** E23.5.2.3: a crop's seed packet found while exploring. */
   'seeds.found': { crop: string; region: string };
   /** E21.3: a machine was taken down (its recipe refunded). */

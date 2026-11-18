@@ -243,6 +243,15 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   planter: 'garden', // E23.5.2
   compostBin: 'basket', // E23.5.3
   bioDigester: 'energy', // E23.5.3
+  beehive: 'flower', // E23.5.4
+  fishPond: 'fish',
+  orchard: 'apple',
+  mushroomLog: 'stump',
+  wormBin: 'garden',
+  birdBox: 'bird',
+  batBox: 'moon',
+  hedgehogHouse: 'hut',
+  butterflyGarden: 'butterfly',
   core: 'sparkle',
 };
 
@@ -278,7 +287,7 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '🌷': 'flower', '🎏': 'rainbow', '🛢': 'vase',
   '🪨': 'restore', '🧱': 'restore', '🟫': 'garden', '🍃': 'biomass', '🚜': 'build', '🔱': 'build', '🧭': 'telescope',
   // E23.5.1 farm items (food is the carrot, compost the garden bed above).
-  '🧪': 'sparkle',
+  '🧪': 'sparkle', '🍯': 'vase',
 };
 
 /** Emoji (with optional variation selector / ZWJ sequences). */

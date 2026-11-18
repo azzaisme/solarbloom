@@ -30,6 +30,8 @@ const BODY: Record<MaterialId | 'biomass' | 'unknown', string> = {
   compost: `<path d="M3 26 C5 16 11 10 16 10 C21 10 27 16 29 26 Z"/><circle cx="12" cy="19" r="1.6" class="mi-hi"/><circle cx="19" cy="16" r="1.4" class="mi-hi"/><circle cx="21" cy="22" r="1.6" class="mi-hi"/><path d="M16 10 C16 7 18 5 21 5" class="mi-line"/>`,
   // Fertiliser: a tied sack with a drop on it
   fertiliser: `<path d="M11 6 H21 L19 10 C26 13 27 24 23 28 H9 C5 24 6 13 13 10 Z"/><path d="M12 10 H20" class="mi-line"/><path d="M16 15 C18 18 19 20 19 21.5 a3 3 0 0 1 -6 0 C13 20 14 18 16 15 Z" class="mi-hi"/>`,
+  // E23.5.4.1 Honey: a round pot with a dipper
+  honey: `<path d="M7 12 C5 20 8 28 16 28 C24 28 27 20 25 12 Z"/><path d="M6 12 H26" class="mi-line"/><path d="M19 4 L14 14" class="mi-line"/><circle cx="12" cy="20" r="2" class="mi-hi"/>`,
   // not found yet
   unknown: `<circle cx="16" cy="16" r="12" class="mi-ghost"/><path d="M12 13 a4 4 0 1 1 6 3.4 c-1.6 1 -2 1.8 -2 3.4" class="mi-line"/><circle cx="16" cy="24" r="1.4" class="mi-dot"/>`,
 };

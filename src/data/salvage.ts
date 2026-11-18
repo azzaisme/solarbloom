@@ -32,6 +32,7 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
   biomass: { id: 'biomass', name: 'Biomass', icon: '🌿', models: [], home: [], colour: '#94e46e', from: 'Gathered from restored ground' },
   food: { id: 'food', name: 'Food', icon: '🥕', models: [], home: [], colour: '#f0a04a', from: 'Grown in planters' },
   compost: { id: 'compost', name: 'Compost', icon: '🟫', models: [], home: [], colour: '#8a6a4a', from: 'Made in a compost bin' },
+  honey: { id: 'honey', name: 'Honey', icon: '🍯', models: [], home: [], colour: '#f2b632', from: 'From beehives settled near flowers' },
   fertiliser: { id: 'fertiliser', name: 'Fertiliser', icon: '🧪', models: [], home: [], colour: '#c9b06a', from: 'Compost left to mature in a compost bin' },
 };
 
@@ -110,6 +111,17 @@ export const RECIPES: Partial<Record<BuildableType | 'reclaimer' | 'chest', Reci
   // E23.5.3: the compost bin is home kit (Timber washes up on the beach); the digester needs Clock Plaza's Gears
   compostBin: { cost: { timber: 4, scrap: 2 }, tier: 1 },
   bioDigester: { cost: { scrap: 10, gears: 4, clay: 4 }, tier: 2 },
+  // E23.5.4: beyond planters. Keeper gardens hand over the worm bin, fish pond, butterfly garden and bat box recipes
+  // (FarmExtras.hasRecipe); the rest come with the fountain's tiers.
+  beehive: { cost: { timber: 4, seeds: 2 }, tier: 2 },
+  orchard: { cost: { seeds: 4, biomass: 6 }, tier: 2 },
+  mushroomLog: { cost: { timber: 3, compost: 1 }, tier: 2 },
+  wormBin: { cost: { timber: 3, scrap: 2 }, tier: 1 },
+  fishPond: { cost: { clay: 8, scrap: 4 }, tier: 2 },
+  birdBox: { cost: { timber: 2 }, tier: 1 },
+  batBox: { cost: { timber: 2, scrap: 1 }, tier: 2 },
+  hedgehogHouse: { cost: { timber: 3, biomass: 2 }, tier: 1 },
+  butterflyGarden: { cost: { seeds: 4, biomass: 4 }, tier: 1 },
   pollinator: { cost: { seeds: 10, timber: 6, biomass: 20 }, tier: 2 },
   droneHub: { cost: { scrap: 20, copper: 15, glass: 10 }, tier: 2 },
   reclaimer: { cost: { scrap: 20, copper: 10, timber: 10 }, tier: 2 },

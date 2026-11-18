@@ -15,7 +15,7 @@ export function gameDays(sim: { time: number; clock?: { days?: number } }): numb
 }
 
 /** The four farm items, in backpack order. */
-export const FARM_ITEMS = ['biomass', 'food', 'compost', 'fertiliser'] as const satisfies readonly MaterialId[];
+export const FARM_ITEMS = ['biomass', 'food', 'compost', 'fertiliser', 'honey'] as const satisfies readonly MaterialId[];
 export type FarmItem = (typeof FARM_ITEMS)[number];
 
 export function isFarmItem(m: string): m is FarmItem {
@@ -31,6 +31,8 @@ export const FARM_USES: Record<FarmItem, { charge: number; load: boolean; blurb:
   food: { charge: 0.12, load: false, blurb: 'Grown in planters. Better charge than biomass, and Keepers love a gift of it.' },
   compost: { charge: 0, load: false, blurb: 'From the compost bin. Given time it turns into fertiliser.' },
   fertiliser: { charge: 0, load: true, blurb: 'Pulsed into the ground for full bloom, big trees and rare flowers.' },
+  // E23.5.4.1: a strong snack
+  honey: { charge: 0.25, load: false, blurb: 'From beehives. A strong snack: much more charge than food.' },
 };
 
 /** E23.5.1: gathering biomass from restored ground (hold Interact facing it). */

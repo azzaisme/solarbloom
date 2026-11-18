@@ -5,7 +5,17 @@ export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'm
   | 'planter'
   // E23.5.3: the end of the farm chain
   | 'compostBin'
-  | 'bioDigester';
+  | 'bioDigester'
+  // E23.5.4: beyond planters
+  | 'beehive'
+  | 'fishPond'
+  | 'orchard'
+  | 'mushroomLog'
+  | 'wormBin'
+  | 'birdBox'
+  | 'batBox'
+  | 'hedgehogHouse'
+  | 'butterflyGarden';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
 /** Plain per-resource numbers (tuning tables, small per-second coefficients). */
@@ -330,7 +340,7 @@ export type Rules = 'oldcity' | 'classic';
 
 /** E21 §1: the eight materials. */
 /** E23.5.1: biomass, food, compost and fertiliser are backpack items too (data/farm). */
-export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser';
+export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser' | 'honey';
 /** E21 §6: bloombot's abilities, one per fountain tier 1–4. */
 export type AbilityId = 'pry' | 'hover' | 'climb' | 'glide';
 /** E21 §8: where a Keeper is in its story. Woken (pulsed and handed 5 of anything) goes straight to request1. */
@@ -398,6 +408,32 @@ export interface SalvageState {
   bins?: Record<string, BinState>;
   /** E23.5.3: biomass in each Bio Digester's hopper, by machine id */
   digesters?: Record<string, number>;
+  /** E23.5.4: hives, orchards, logs, worm bins and wildlife homes, by machine id */
+  extras?: Record<string, ExtraState>;
+  /** E23.5.4.6: Keeper garden requests fulfilled, by Keeper id */
+  gardens?: Record<string, number>;
+  /** E23.5.4.6: machine recipes handed over by Keeper gardens */
+  recipes?: string[];
+}
+
+/** E23.5.4: the state of one tended thing (each kind uses the fields it needs; progress in game days). */
+export interface ExtraState {
+  /** honey combs, fruit or mushrooms ready to take */
+  ready?: number;
+  /** progress toward the next */
+  growing?: number;
+  /** orchard: days since planting, since the last pruning, crops so far, whether the waiting crop grew overgrown */
+  age?: number;
+  sincePrune?: number;
+  crops?: number;
+  overgrownCrop?: boolean;
+  /** mushroom log: crops left before it wants compost again */
+  flushes?: number;
+  /** worm bin: game days of feeding left */
+  fed?: number;
+  /** wildlife home: the creature lives here; days its habitat has been right while waiting */
+  settled?: boolean;
+  waiting?: number;
 }
 
 /** E23.5.3: what is in a compost bin (feed in feed units; progress in game days). */
