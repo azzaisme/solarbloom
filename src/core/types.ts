@@ -1,6 +1,6 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
-/** `chest` and `reclaimer` exist only under old-city rules (E21.1, E21.2). */
-export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'reclaimer';
+/** `chest` exists only under old-city rules (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
+export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
 /** Plain per-resource numbers (tuning tables, small per-second coefficients). */
@@ -369,8 +369,8 @@ export interface SalvageState {
   house: number;
   /** E21.13 (unused since E23.7.1: the clock lives in `GameState.clock`; kept until E23.1 bumps the save) */
   clockOffset: number;
-  /** E21.9: Reclaimers' undelivered fractions, by machine id (so 6 a minute pays exactly) */
-  reclaim?: Record<string, number>;
+  /** E23.7.4: when each pile that isn't full last gained a unit (sim time), by pile id: it refills from there */
+  since?: Record<string, number>;
   /** E21.6 / E21.17: one-off items carried for the Great Bloom (the Heart Seed, the Star Lens) */
   items?: string[];
   /** E21.9: lasting region rewards in effect (data/oldcity RewardId), in the order they were won */

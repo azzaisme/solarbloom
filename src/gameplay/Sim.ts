@@ -73,7 +73,7 @@ export class Sim {
   readonly cultivators: CultivatorSystem;
   /** E21.1: the backpack and the store (old-city rules). */
   readonly inventory: Inventory;
-  /** E21.2: salvage piles, seams and Reclaimers (old-city rules). */
+  /** E21.2 / E23.7.4: salvage piles, refilling over game days and in storms (old-city rules). */
   readonly salvage: SalvageSystem;
   /** E21.5: gates (old-city rules). */
   readonly gates: GateSystem;

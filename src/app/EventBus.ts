@@ -29,8 +29,8 @@ export interface GameEvents {
   'pile.salvaged': { pileId: string; material: import('../core/types').MaterialId; got: number; left: number; x: number; z: number };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
-  /** E21.2: a Reclaimer sent units to the store. */
-  'reclaimer.delivered': { machineId: string; material: import('../core/types').MaterialId; n: number };
+  /** E23.7.4: a pile gained units back (slowly over game days, or all at once in a storm); `left` units now. */
+  'pile.refilled': { pileId: string; left: number; x: number; z: number; storm: boolean };
   /** E21.5: a gate opened for good (a barricade pried, a bridge repaired, the lock bridge risen). */
   'gate.opened': { gateId: string; region: string };
   /** E21.6: something was handed in at the fountain; the fountain reached a tier. */
