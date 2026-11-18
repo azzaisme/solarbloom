@@ -190,7 +190,8 @@ try {
     const sprout = await page.evaluate(() => ({ tris: window.solarbloom.overgrowthArt.tris, growth: window.solarbloom.sim.overgrowth.growth(Object.values(window.solarbloom.sim.overgrowth.all())[0]) }));
     await page.screenshot({ path: `${dir}/ui-overgrowth-sprout.png` });
     await page.evaluate(() => (window.solarbloom.sim.state.time += 2880 * 1.01));
-    await page.waitForTimeout(2500);
+    // the mesh is rebuilt on its next check (once a second of play): wait for it, however slow the frames
+    await page.waitForFunction((t) => window.solarbloom.overgrowthArt.tris > t, sprout.tris, { timeout: 120000 }).catch(() => {});
     const full = await page.evaluate(() => ({ tris: window.solarbloom.overgrowthArt.tris, growth: window.solarbloom.sim.overgrowth.growth(Object.values(window.solarbloom.sim.overgrowth.all())[0]) }));
     check(sprout.growth < 0.05 && full.growth === 1 && full.tris > sprout.tris, T(`grows in over a game day: ${sprout.tris} → ${full.tris} triangles`));
     await page.screenshot({ path: `${dir}/ui-overgrowth-full.png` });
