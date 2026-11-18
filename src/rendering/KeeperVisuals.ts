@@ -13,7 +13,10 @@ const KEEPER_URLS = import.meta.glob('../../assets/raw/models/final/keeper-*.glb
 /** STAND-IN until a Keeper's model lands: bloombot's rig, tinted, with the Keeper's prop. Not the finished art. */
 const STAND_IN_URL = new URL('../../assets/raw/bloombot/bloombot.glb', import.meta.url).href;
 const STAND_IN_SCALE = 0.95; // bloombot's own holder scale (its rig root carries a 0.01 centimetre scale)
-const MODEL_SCALE = 1;
+/** The Keepers' own models share bloombot's rig layout (an Armature at 0.01) and stand 1.0 m (bloombot 0.85 m). */
+const MODEL_SCALE = 0.95;
+/** The sleep clip lowers into a seated doze with nothing underneath: a dozing Keeper sits on a stone block this high. */
+const SEAT = { model: 'stone-block', scale: 0.42, height: 0.32 };
 
 interface KeeperView {
   def: KeeperDef;
@@ -96,6 +99,17 @@ export class KeeperVisuals {
       v.rig = e;
       v.clip = undefined;
     });
+    // a stone block to doze on (the real sleep clip sits down; the stand-in only slumps)
+    if (own) {
+      const seat = MODELS?.instantiateMerged(SEAT.model);
+      if (seat) {
+        seat.name = 'seat';
+        seat.setLocalScale(SEAT.scale, SEAT.scale, SEAT.scale);
+        seat.setLocalPosition(0, 0, -0.12);
+        seat.enabled = false;
+        root.addChild(seat);
+      }
+    }
     // the Keeper's prop (its own model once it lands; stand-in models until then)
     const prop = oldCityModel(def.prop) ?? (MODELS?.has(def.prop) ? def.prop : undefined);
     const p = prop ? MODELS?.instantiateMerged(prop) : undefined;
@@ -165,12 +179,17 @@ export class KeeperVisuals {
       if (!v) this.views.set(def.id, (v = this.make(def)));
       v.root.enabled = true;
       const step = k.step(def.id);
+      const seat = v.root.findByName('seat') as pc.Entity | null;
+      const dozing = step === 'asleep' || (step === 'settled' && night);
+      if (seat) seat.enabled = dozing && !v.standIn;
       if (step === 'asleep') {
-        // slumped, visor dark
-        v.body.setLocalEulerAngles(28, 0, 8);
+        // the real model dozes on its seat; the stand-in slumps forward, visor dark
+        if (v.standIn) v.body.setLocalEulerAngles(28, 0, 8);
+        else v.body.setLocalPosition(0, SEAT.height, 0);
         this.play(v, 'sleep');
       } else {
         v.body.setLocalEulerAngles(0, 0, 0);
+        v.body.setLocalPosition(0, dozing && !v.standIn ? SEAT.height : 0, 0);
         const waving = this.clock < v.waveUntil && !this.reducedMotion;
         if (step === 'settled' && !waving) {
           if (night) this.play(v, 'sleep');
