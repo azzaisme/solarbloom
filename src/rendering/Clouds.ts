@@ -149,6 +149,18 @@ function softMaterial(): pc.StandardMaterial {
   return m;
 }
 
+/**
+ * E23.7.1: tints every soft cloud (the sky's clouds and the cloud walls) by the time of day: warm at dusk, a dim
+ * blue at night. The clouds are unlit, so the light alone can't do it. Cheap: one shared material.
+ */
+export function tintClouds(r: number, g: number, b: number) {
+  const m = softMaterial();
+  const e = m.emissive;
+  if (Math.abs(e.r - r) + Math.abs(e.g - g) + Math.abs(e.b - b) < 0.004) return;
+  m.emissive = new pc.Color(r, g, b);
+  m.update();
+}
+
 /** A soft top-down footprint of the puffs (blurred), used as the cloud's shadow. */
 function shadowTexture(device: pc.GraphicsDevice): pc.Texture {
   const N = 128;
