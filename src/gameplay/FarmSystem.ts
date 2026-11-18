@@ -2,18 +2,17 @@ import { PARK } from '../core/Areas';
 import { regionOfCell } from '../core/OldCityLayout';
 import type { MachineData, PlanterState, WeatherKind } from '../core/types';
 import { CROP_HOMES, CROP_IDS, CROPS, PLANTER, SEED_FINDS, STARTING_CROPS, type CropId, type Like } from '../data/crops';
-import { DAY_SECONDS, gameDays } from '../data/farm';
+import { DAY_SECONDS } from '../data/time';
 import type { Sim } from './Sim';
 
 /**
- * What the farm borrows from other sub-epics, each optional until it lands: watering from E23.4 (`sim.water`), the
- * clock and weather from E23.7. Without them every planter is watered, night is the second half of each 48-minute
- * day, and the weather is whatever E21's state holds (clear when unset).
+ * What the farm borrows from other sub-epics, each optional until it lands: watering from E23.4 (`sim.water`) and
+ * the weather from E23.7.2. Without them every planter is watered and the weather is whatever E21's state holds
+ * (clear when unset). Day and night come from E23.7.1's game clock (`sim.clock`).
  */
 type At = { roofId: string; x: number; z: number };
 interface FarmHooks {
   water?: { isWatered?(t: At): boolean; isRunning?(t: At): boolean; drawNear?(t: At, units: number): number };
-  clock?: { isNight?(): boolean };
   /** E23.7.2's weather: its own kinds (sunny, wind, storm, fog), and how fast planters dry (0 when the sky waters them) */
   weather?: { kind?(): string; effects?(): { planterDrying?: number } };
 }
@@ -55,6 +54,7 @@ export class FarmSystem {
       if (e.left <= 0) this.findIn(this.regionAt(e.x, e.z));
     });
     sim.bus.on('machine.removed', ({ machine }) => this.forget(machine.id));
+    sim.bus.on('cache.opened', (e) => this.onCache(e.x, e.z));
   }
 
   get on(): boolean {
@@ -100,12 +100,12 @@ export class FarmSystem {
     return this.hooks.water?.isWatered?.(m) ?? true;
   }
 
+  /**
+   * Night on the GAME clock (E23.7.1: 32 minutes of day, then 16 of night). Growth reads this, never the sky, so a
+   * night-only or sun-loving crop takes the same play time in both clock modes ("follow my clock" moves only the sky).
+   */
   isNight(): boolean {
-    const hook = this.hooks.clock?.isNight?.();
-    if (hook !== undefined) return hook;
-    const offset = (this.sim.state.salvage?.clockOffset ?? 0) / DAY_SECONDS;
-    const f = (gameDays(this.sim) + offset) % 1;
-    return f >= 0.5;
+    return this.sim.clock.gameIsNight();
   }
 
   weather(): WeatherKind {
@@ -210,7 +210,8 @@ export class FarmSystem {
     const crop = st.crop as CropId | undefined;
     if (!crop || !CROPS[crop]) return { progress: 0, stage: 0, ripe: false, wilting: false, resting: false, rate: 0, met: [], unmet: [] };
     const def = CROPS[crop];
-    const progress = Math.min(1, (st.grown ?? 0) / def.days);
+    // growth is saved to six decimals: within that of ripe counts as ripe
+    const progress = (st.grown ?? 0) >= def.days - 1e-5 ? 1 : (st.grown ?? 0) / def.days;
     const ripe = progress >= 1;
     const stage = ripe ? PLANTER.stages : 1 + Math.min(PLANTER.stages - 2, Math.floor(progress * (PLANTER.stages - 1)));
     const wilting = !ripe && !this.isWatered(m);
@@ -344,6 +345,14 @@ export class FarmSystem {
     (this.sim.state.salvage!.crops ??= []).push(c);
     this.sim.bus.emit('seeds.found', { crop: c, region: region! });
     return c;
+  }
+
+  /** A cache holds its region's next seed packet, or plain Seeds once that region's packets are all found. */
+  private onCache(x: number, z: number) {
+    if (!this.on) return;
+    if (this.findIn(this.regionAt(x, z))) return;
+    const inv = this.sim.inventory;
+    inv.addToStore('seeds', inv.add('seeds', SEED_FINDS.cacheSeeds));
   }
 
   private onGathered(x: number, z: number) {

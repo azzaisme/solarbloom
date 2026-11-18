@@ -1,5 +1,10 @@
 // E23.5.2 (#387): planter boxes and the 14 starting crops. All data, no rules; numbers are the epic's starting
-// values for tuning. Growth is in game days (48 minutes of play, data/farm DAY_SECONDS).
+// values for tuning. Growth is in game days (48 minutes of play: 32 of day, 16 of night; data/time DAY).
+
+import { DAY } from './time';
+
+/** The share of a game day that is night (16 of 48 minutes). */
+const NIGHT = 1 - DAY.dayShare;
 
 /** The 14 starting crops. "Lavender and mint" is one crop (a bed of both). */
 export type CropId =
@@ -58,7 +63,8 @@ export const CROPS: Record<CropId, CropDef> = {
   watercress: { id: 'watercress', name: 'Watercress', icon: '🌿', days: 2, likes: [], needs: ['runningWater'], harvest: { food: 3, biomass: 1, seeds: 2 }, use: 'Only grows beside running water', leaf: '#3a9a5a', fruit: '#6ac87a' },
   rice: { id: 'rice', name: 'Rice', icon: '🌾', days: 4, likes: [], needs: ['flooded'], harvest: { food: 6, biomass: 3, seeds: 3 }, use: 'Only grows in a flooded bed', leaf: '#9ac85a', fruit: '#e8dca0' },
   herbs: { id: 'herbs', name: 'Lavender and mint', icon: '🌸', days: 2, likes: [], needs: [], harvest: { food: 1, biomass: 2, seeds: 2 }, use: 'Brings pollinators: crops nearby grow faster', leaf: '#5aa070', fruit: '#a080d0' },
-  moonflower: { id: 'moonflower', name: 'Moonflower', icon: '🌙', days: 1, likes: [], needs: ['night'], harvest: { food: 1, biomass: 1, seeds: 2 }, use: 'Opens only at night (two nights to bloom)', leaf: '#4a7a6a', fruit: '#f4f0e0' },
+  moonflower: { id: 'moonflower', name: 'Moonflower', icon: '🌙', days: 2 * NIGHT, // two whole nights of growth (it grows only at night)
+    likes: [], needs: ['night'], harvest: { food: 1, biomass: 1, seeds: 2 }, use: 'Opens only at night (two nights to bloom)', leaf: '#4a7a6a', fruit: '#f4f0e0' },
   flowers: { id: 'flowers', name: 'Flowers', icon: '🌷', days: 2, likes: [], needs: [], harvest: { food: 0, biomass: 1, seeds: 2 }, use: 'For decoration and gifts', leaf: '#5a9a4a', fruit: '#f080a8' },
   seaKale: { id: 'seaKale', name: 'Sea kale', icon: '🌿', days: 3, likes: ['saltAir'], needs: [], harvest: { food: 4, biomass: 2, seeds: 2 }, use: 'Loves salt air; seeds only from Saltwind Beach', leaf: '#7aa8a0', fruit: '#c0d8d0' },
 };
@@ -82,6 +88,15 @@ export const CROP_HOMES: Record<string, CropId[]> = {
   observatory: ['moonflower'],
   spireHeights: ['sunflower'],
 };
+
+/**
+ * E23.10 (#466): the hand-built crop models. Every crop starts as the shared seedling, then grows as its own plant;
+ * each crop model has a `plant` part and a `fruit` part (fruit or flower heads), shown only once ripe. Lavender and
+ * mint share a bed. Sizes are real (metres); the planter fits as many as its soil holds.
+ */
+export const CROP_SEEDLING = 'crop-seedling';
+export const CROP_MODELS: Partial<Record<CropId, string[]>> = { herbs: ['crop-lavender', 'crop-mint'], seaKale: ['crop-sea-kale'] };
+export const cropModels = (c: CropId): string[] => CROP_MODELS[c] ?? [`crop-${c}`];
 
 /** Crops known at the start of a game (planted with plain Seeds). */
 export const STARTING_CROPS: CropId[] = ['radish'];
@@ -109,9 +124,12 @@ export const PLANTER = {
 };
 
 /**
- * E23.5.2.3: finding seeds. Every `gathersPerPacket` gathers of restored ground in a region (or the first pile
- * emptied there, or any cache opened there) turns up the next seed packet that region holds.
+ * E23.5.2.3: finding seeds. Every `gathersPerPacket` gathers of restored ground in a region, the first pile emptied
+ * there, or any cache opened there (E21.10's `caches` in data/oldcity) turns up the next seed packet that region
+ * holds. A cache in a region whose packets are all found holds plain Seeds instead, so no cache is ever empty.
  */
 export const SEED_FINDS = {
   gathersPerPacket: 4,
+  /** a cache holds its region's next seed packet; once that region's packets are all found, this many plain Seeds */
+  cacheSeeds: 4,
 };

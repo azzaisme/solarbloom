@@ -3,7 +3,7 @@ import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { CROP_HOMES, CROP_IDS, CROPS, PLANTER, SEED_FINDS, STARTING_CROPS, type CropId, type Like } from '../src/data/crops';
-import { DAY_SECONDS } from '../src/data/farm';
+import { DAY, DAY_SECONDS } from '../src/data/time';
 import { REGIONS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -41,6 +41,13 @@ function sow(sim: Sim, m: MachineData, crop: CropId) {
   if (!sim.farm.knows(crop)) (sim.state.salvage!.crops ??= []).push(crop);
   sim.inventory.add('seeds', 1);
   expect(sim.farm.plant(m, crop), crop).toBe(true);
+}
+
+/** Moves sim time to a point of the GAME day (0 dawn … 2/3 dusk … 1), on E23.7.1's game clock. */
+function at(sim: Sim, fraction: number) {
+  sim.state.time = 0;
+  const f0 = sim.clock.gameDayFraction();
+  sim.state.time = (((fraction - f0) % 1) + 1) % 1 * DAY_SECONDS;
 }
 
 /** Runs the farm for some seconds of play (in minute steps: the farm alone, so a game day stays quick). */
@@ -163,7 +170,7 @@ describe('E23.5.2.2: every crop’s likes change its growth', () => {
   const set: Record<Like, (sim: Sim, m: MachineData, on: boolean) => void> = {
     sun: (sim, _m, on) => {
       sim.state.salvage!.weather = { kind: on ? 'clear' : 'cloudy', until: 1e9 };
-      sim.state.time = 0; // morning
+      at(sim, 0.2); // morning
     },
     rain: (sim, _m, on) => void (sim.state.salvage!.weather = { kind: on ? 'rain' : 'clear', until: 1e9 }),
     wind: (sim, _m, on) => void (sim.state.salvage!.weather = { kind: on ? 'windy' : 'cloudy', until: 1e9 }),
@@ -180,7 +187,7 @@ describe('E23.5.2.2: every crop’s likes change its growth', () => {
       t.feature = on ? 'water' : undefined;
       sim.grid.touch(t);
     },
-    night: (sim, _m, on) => void (sim.state.time = on ? DAY_SECONDS * 0.6 : 0),
+    night: (sim, _m, on) => at(sim, on ? 0.85 : 0.2),
     saltAir: () => {},
   };
 
@@ -250,6 +257,47 @@ describe('E23.5.2.2: every crop’s likes change its growth', () => {
   });
 });
 
+describe('E23.5.2.2 × E23.7.1: growth follows the game clock', () => {
+  it('the day is 32 minutes of light and 16 of night, and a moonflower takes two whole nights', () => {
+    expect(DAY.dayShare).toBeCloseTo(2 / 3);
+    const sim = farm();
+    const m = planter(sim, 12, 16);
+    sow(sim, m, 'moonflower');
+    at(sim, 0); // dawn: a whole day before its first night
+    let nights = 0;
+    let wasNight = sim.clock.gameIsNight();
+    while (!sim.farm.look(m).ripe && sim.time < DAY_SECONDS * 5) {
+      grow(sim, 60);
+      const night = sim.clock.gameIsNight();
+      if (night && !wasNight) nights++;
+      wasNight = night;
+    }
+    expect(sim.farm.look(m).ripe).toBe(true);
+    expect(nights).toBe(2);
+    // ripe right at the end of the second night: it grew only in the dark
+    expect(sim.clock.gameDayFraction()).toBeLessThan(0.02);
+  });
+
+  it('a night crop and a sun crop take the same play time in both clock modes, whatever the real clock says', () => {
+    const playTime = (crop: CropId, real: boolean, hour: number): number => {
+      const sim = farm();
+      sim.clock.now = () => new Date(2026, 10, 18, hour, 0, 0);
+      sim.clock.real = real;
+      sim.state.salvage!.weather = { kind: 'clear', until: 1e9 };
+      const m = planter(sim, 12, 16);
+      sow(sim, m, crop);
+      const t0 = sim.time;
+      while (!sim.farm.look(m).ripe && sim.time - t0 < DAY_SECONDS * 8) grow(sim, 60);
+      return sim.time - t0;
+    };
+    for (const crop of ['moonflower', 'tomato'] as CropId[]) {
+      const game = playTime(crop, false, 14);
+      expect(playTime(crop, true, 14), `${crop}: follow my clock at 14:00`).toBe(game);
+      expect(playTime(crop, true, 2), `${crop}: follow my clock at 02:00`).toBe(game);
+    }
+  });
+});
+
 describe('E23.5.2.3: seeds from exploring', () => {
   it('every crop’s seeds are found somewhere reachable, and each region has a crop of its own', () => {
     const homes = new Map<CropId, string[]>();
@@ -279,6 +327,18 @@ describe('E23.5.2.3: seeds from exploring', () => {
     }
     for (const c of CROP_IDS) expect(sim.farm.knows(c), c).toBe(true);
     expect(found.length).toBe(CROP_IDS.length - STARTING_CROPS.length);
+  });
+
+  it('a cache holds its region’s seed packet, then plain Seeds once that region’s packets are found', () => {
+    const sim = farm();
+    const c = REGIONS.find((r) => r.id === 'saltwind')!.caches;
+    sim.bus.emit('cache.opened', { cacheId: c[0].id, x: c[0].x, z: c[0].z });
+    expect(sim.farm.knows('seaKale')).toBe(true);
+    const before = sim.inventory.count('seeds') + sim.inventory.stored('seeds');
+    sim.bus.emit('cache.opened', { cacheId: c[1].id, x: c[1].x, z: c[1].z });
+    expect(sim.inventory.count('seeds') + sim.inventory.stored('seeds')).toBe(before + SEED_FINDS.cacheSeeds);
+    // every region's caches stand in that region, so each holds its own region's packets
+    for (const r of REGIONS) for (const k of r.caches) expect(sim.farm.regionAt(k.x, k.z), k.id).toBe(r.id);
   });
 
   it('emptying a pile finds the region’s next packet at once', () => {

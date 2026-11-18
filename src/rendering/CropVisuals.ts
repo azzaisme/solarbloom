@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import type { MachineData } from '../core/types';
-import { CROPS, PLANTER, type CropId } from '../data/crops';
+import { CROP_SEEDLING, cropModels, CROPS, PLANTER, type CropId } from '../data/crops';
+import { MODELS } from './Models';
 import type { PlanterLook } from '../gameplay/FarmSystem';
 import type { Sim } from '../gameplay/Sim';
 import { mat, PALETTE } from './Materials';
@@ -20,6 +21,21 @@ const SPOTS: [number, number][] = [
   [0, 0.15],
   [0.26, 0.15],
 ];
+
+/** A model's size in metres (its render bounds, at scale 1). */
+function modelSize(e: pc.Entity): { x: number; y: number; z: number } {
+  let aabb: pc.BoundingBox | undefined;
+  for (const r of e.findComponents('render') as pc.RenderComponent[])
+    for (const mi of r.meshInstances) {
+      if (!aabb) {
+        aabb = new pc.BoundingBox();
+        aabb.copy(mi.aabb);
+      } else aabb.add(mi.aabb);
+    }
+  if (!aabb) return { x: 0.3, y: 0.3, z: 0.3 };
+  const h = aabb.halfExtents;
+  return { x: h.x * 2, y: h.y * 2, z: h.z * 2 };
+}
 
 interface CropView {
   root: pc.Entity;
@@ -51,7 +67,8 @@ export class CropVisuals {
 
   private keyOf(lk: PlanterLook, m: MachineData): string {
     const st = this.sim.farm.bed(m);
-    return `${lk.crop ?? ''}|${lk.stage}|${lk.wilting ? 1 : 0}|${st.trellis ? 1 : 0}|${st.flooded ? 1 : 0}|${st.fed ? 1 : 0}`;
+    const models = lk.crop && MODELS?.has(cropModels(lk.crop)[0]) ? 1 : 0; // rebuild once the crop models load
+    return `${lk.crop ?? ''}|${lk.stage}|${lk.wilting ? 1 : 0}|${st.trellis ? 1 : 0}|${st.flooded ? 1 : 0}|${st.fed ? 1 : 0}|${models}`;
   }
 
   private drop(id: string) {
@@ -88,6 +105,7 @@ export class CropVisuals {
       for (const y of [0.2, 0.36, 0.5]) shape(root, 'box', wood, { pos: [0, SOIL + y, -0.24], scale: [0.66, 0.018, 0.018] });
     }
     if (!lk.crop) return;
+    if (this.buildModels(root, lk)) return;
     const def = CROPS[lk.crop as CropId];
     const h = HEIGHT[lk.stage] ?? 0.1;
     // a thirsty bed droops and dulls
@@ -108,6 +126,48 @@ export class CropVisuals {
       }
     }
     if (lk.ripe && PLANTER.stages > 3) shape(root, 'box', mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 0.15 }), { pos: [0, SOIL - 0.02, 0.27], scale: [0.6, 0.012, 0.01] });
+  }
+
+  /**
+   * E23.10's crop models (#466), when loaded: the shared seedling at the first stage, then the crop's own plant, smaller
+   * while growing with its fruit or flower heads hidden, full size with them at ripe. As many plants as the soil
+   * (0.72 × 0.48 m) holds at their real size. A thirsty bed droops. Returns false until the models are in.
+   */
+  private buildModels(root: pc.Entity, lk: PlanterLook): boolean {
+    const names = cropModels(lk.crop as CropId);
+    if (!MODELS || !names.every((n) => MODELS!.has(n)) || !MODELS.has(CROP_SEEDLING)) return false;
+    const seedling = lk.stage <= 1;
+    const name0 = seedling ? CROP_SEEDLING : names[0];
+    const probe = MODELS.instantiate(name0);
+    if (!probe) return false;
+    const box = modelSize(probe);
+    probe.destroy();
+    const W = 0.72;
+    const D = 0.48;
+    const cols = Math.max(1, Math.min(3, Math.floor(W / Math.max(0.05, box.x))));
+    const rows = Math.max(1, Math.min(2, Math.floor(D / Math.max(0.05, box.z))));
+    const fit = Math.min(1, W / (cols * box.x), D / (rows * box.z)) * 0.95;
+    // growing stages: 55% then 80% of full size; ripe: full size with fruit
+    const grow = seedling ? 1 : lk.ripe ? 1 : lk.stage === 2 ? 0.55 : 0.8;
+    const droop = lk.wilting ? 18 : 0;
+    let i = 0;
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++, i++) {
+        const e = MODELS.instantiate(seedling ? CROP_SEEDLING : names[i % names.length]);
+        if (!e) continue;
+        const x = (c + 0.5) * (W / cols) - W / 2;
+        const z = (r + 0.5) * (D / rows) - D / 2;
+        const p = group(root, 'plant', [x, SOIL, z]);
+        p.addChild(e);
+        const s = fit * grow;
+        e.setLocalScale(s, s, s);
+        p.setLocalEulerAngles(droop * (i % 2 ? 1 : -1), (i * 97) % 360, 0);
+        if (!seedling && !lk.ripe) {
+          const fruit = e.findByName('fruit') as pc.Entity | null;
+          if (fruit) fruit.enabled = false;
+        }
+      }
+    return true;
   }
 
   /** Per frame: picks up planters built or loaded since, and a bed's wilting turning on or off (checked twice a second). */

@@ -3,6 +3,15 @@ import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import type { BuffType, CatRewardType, CatVariant, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
+  /** E23.7.1: the light clock crossed dawn or dusk (`day`: the game day). */
+  'clock.dawn': { day: number };
+  'clock.dusk': { day: number };
+  /** E23.7.1: bloombot slept in the house (`from` → `day`; in "follow my clock" mode the day doesn't change). */
+  'clock.slept': { from: number; day: number; real: boolean };
+  /** E23.7.1: "follow my clock" switched on or off. */
+  'clock.mode': { real: boolean };
+  /** E23.7.1.3: a night find was taken. */
+  'night.found': { id: string; material: import('../core/types').MaterialId; n: number; x: number; z: number };
   /** E21.1: the backpack or the store changed (`material` unset = several at once). */
   'pack.changed': { material?: import('../core/types').MaterialId; delta?: number };
   'store.changed': { material?: import('../core/types').MaterialId; delta?: number };
@@ -16,6 +25,11 @@ export interface GameEvents {
   'planter.changed': { machineId: string };
   'planter.ripe': { machineId: string; crop: string };
   'planter.harvested': { machineId: string; crop: string; food: number; biomass: number; seeds: number };
+  /**
+   * E21.10 caches: one was opened (emitted by whoever opens caches; E23.5.2.3 listens for the seeds inside).
+   * Nothing opens caches yet: the E21.10 data lists them but no system emits this so far.
+   */
+  'cache.opened': { cacheId: string; x: number; z: number };
   /** E23.5.2.3: a crop's seed packet found while exploring. */
   'seeds.found': { crop: string; region: string };
   /** E21.3: a machine was taken down (its recipe refunded). */
@@ -28,6 +42,8 @@ export interface GameEvents {
   'fountain.delivered': { material: import('../core/types').MaterialId; n: number };
   'fountain.tier': { tier: number };
   /** E21.8: a Keeper speaks (one to three lines) or moves to a new step. */
+  /** E23.9.1: a page of the maker's journal was kept */
+  'journal.page': { id: string };
   'keeper.said': { keeperId: string; lines: string[] };
   'keeper.step': { keeperId: string; step: import('../core/types').KeeperStep };
   /** E21.9: a region's landmark woke (by bloombot's own delivery). */

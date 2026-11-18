@@ -10,6 +10,7 @@ import { BloomChainSystem } from './BloomChainSystem';
 import { BuildSystem } from './BuildSystem';
 import { CanalNetwork } from './CanalNetwork';
 import { RelaySystem } from './RelaySystem';
+import { PowerGrid } from './PowerGrid';
 import { RooftopClusters } from './RooftopClusters';
 import { DistrictSystem } from './DistrictSystem';
 import { DroneSystem } from './DroneSystem';
@@ -32,8 +33,12 @@ import { Inventory, type BotAt } from './Inventory';
 import { SalvageSystem } from './SalvageSystem';
 import { GateSystem } from './GateSystem';
 import { FountainSystem } from './FountainSystem';
+import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
+import { MainlandSystem } from './MainlandSystem';
 import { LandmarkSystem } from './LandmarkSystem';
+import { Clock } from './Clock';
+import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
 import { FarmSystem } from './FarmSystem';
 
@@ -62,6 +67,8 @@ export class Sim {
   readonly districts: DistrictSystem;
   readonly canals: CanalNetwork;
   readonly relays: RelaySystem;
+  /** E23.3: the power grid (networks of poles, sources, batteries and consumers). */
+  readonly power: PowerGrid;
   readonly clusters: RooftopClusters;
   readonly milestones: MilestoneSystem;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
@@ -80,8 +87,18 @@ export class Sim {
   readonly fountain: FountainSystem;
   /** E21.8: the Keepers and their requests (old-city rules). */
   readonly keepers: KeeperSystem;
+  /** E23.8.3: the causeway and the endless mainland. */
+  readonly mainland: MainlandSystem;
+  /** E23.9.1: the maker's journal (pages on posts, his last page at the Great Bloom). */
+  readonly journal: JournalSystem;
   /** E21.9: waking landmarks and their lasting rewards (old-city rules). */
   readonly landmarks: LandmarkSystem;
+  /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
+  readonly clock: Clock;
+  /** E23.7.1.3: finds that are out only at night. */
+  readonly nightFinds: NightFinds;
+  /** E23.7.2: the weather (solar share and the rest). Optional until it lands; read `sim.weather?.solar() ?? 1`. */
+  weather?: { solar(): number };
   /** E23.5.1: gathering biomass from restored ground (old-city rules). */
   readonly gather: GatherSystem;
   /** E23.5.2: planters and crops (old-city rules). */
@@ -133,10 +150,14 @@ export class Sim {
     if (this.oldCity) this.econ.noIncome = new Set(['biomass']);
     this.inventory = new Inventory(this);
     this.landmarks = new LandmarkSystem(this);
+    this.clock = new Clock(this);
+    this.nightFinds = new NightFinds(this);
     this.salvage = new SalvageSystem(this);
     this.gates = new GateSystem(this);
     this.fountain = new FountainSystem(this);
     this.keepers = new KeeperSystem(this);
+    this.mainland = new MainlandSystem(this);
+    this.journal = new JournalSystem(this);
     this.gather = new GatherSystem(this);
     this.farm = new FarmSystem(this);
     this.rng = new Rng(state.rngState);
@@ -145,6 +166,7 @@ export class Sim {
     this.restoration = new RestorationSystem(this);
     this.canals = new CanalNetwork(this);
     this.relays = new RelaySystem(this);
+    this.power = new PowerGrid(this);
     this.clusters = new RooftopClusters(this);
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
@@ -252,6 +274,7 @@ export class Sim {
     const s = this.state;
     s.time += dt;
     s.buffs = s.buffs.filter((b) => b.until > s.time);
+    this.power.tick(dt);
     this.production.tick(dt);
     this.restoration.tick(dt);
     this.transitions.tick();
@@ -260,6 +283,7 @@ export class Sim {
     this.roles.tick(dt);
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
+    this.clock.tick();
     this.farm.tick(dt);
     this.cat.tick();
     this.progression.tick();
