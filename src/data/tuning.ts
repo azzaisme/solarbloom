@@ -1,3 +1,4 @@
+import { gameMinutes } from './time';
 // Every balance knob lives here. Prototype numbers: tune by playing.
 
 export const TUNING = {
@@ -59,7 +60,8 @@ export const TUNING = {
   pulse: {
     polluted: { energy: 6, water: 1 },
     prepared: { energy: 3, water: 1 },
-    growSeconds: 0.8,
+    /** E23.7.1: in game time (0.4 game minutes = 0.8 s of play), like every timer */
+    growSeconds: gameMinutes(0.4),
   },
 
   restore: {
@@ -176,10 +178,10 @@ export const TUNING = {
     },
     /** most actors of each kind at once, per quality tier */
     caps: {
-      high: { butterflies: 10, groundBirds: 4, koi: 8, robots: 4, cats: 6, fireflies: 24, rabbits: 5, pigeons: 8, ducks: 6, frogs: 5, squirrels: 5 },
-      medium: { butterflies: 8, groundBirds: 3, koi: 6, robots: 3, cats: 4, fireflies: 16, rabbits: 3, pigeons: 5, ducks: 4, frogs: 3, squirrels: 3 },
-      low: { butterflies: 5, groundBirds: 2, koi: 4, robots: 2, cats: 3, fireflies: 10, rabbits: 2, pigeons: 3, ducks: 2, frogs: 2, squirrels: 2 },
-    } as Record<'low' | 'medium' | 'high', Record<'butterflies' | 'groundBirds' | 'koi' | 'robots' | 'cats' | 'fireflies' | 'rabbits' | 'pigeons' | 'ducks' | 'frogs' | 'squirrels', number>>,
+      high: { butterflies: 10, groundBirds: 4, koi: 8, robots: 4, cats: 6, fireflies: 24, mistMoths: 14, rabbits: 5, pigeons: 8, ducks: 6, frogs: 5, squirrels: 5 },
+      medium: { butterflies: 8, groundBirds: 3, koi: 6, robots: 3, cats: 4, fireflies: 16, mistMoths: 10, rabbits: 3, pigeons: 5, ducks: 4, frogs: 3, squirrels: 3 },
+      low: { butterflies: 5, groundBirds: 2, koi: 4, robots: 2, cats: 3, fireflies: 10, mistMoths: 6, rabbits: 2, pigeons: 3, ducks: 2, frogs: 2, squirrels: 2 },
+    } as Record<'low' | 'medium' | 'high', Record<'butterflies' | 'groundBirds' | 'koi' | 'robots' | 'cats' | 'fireflies' | 'mistMoths' | 'rabbits' | 'pigeons' | 'ducks' | 'frogs' | 'squirrels', number>>,
     /** sleeping cats: this share of finished machines (seeded by machine id) on restored ground has one */
     cats: { share: 0.3 },
     /**
@@ -231,7 +233,8 @@ export const TUNING = {
      * big purchase drones wait for the stores to refill past it.
      */
     reserve: 0.25,
-    old: { enabled: true, radius: 6, cycleSeconds: 7, flySpeed: 1.5, workSeconds: 0.8 },
+    // E23.7.1: helper timers in game time (3.5 game minutes = 7 s of play; 0.4 = 0.8 s)
+    old: { enabled: true, radius: 6, cycleSeconds: gameMinutes(3.5), flySpeed: 1.5, workSeconds: gameMinutes(0.4) },
     /**
      * E18: drone roles. Every number is a starting guess from the design (the E18 epic, section 4), to tune
      * against the bots in docs/E18_AUDIT.md.
@@ -467,7 +470,7 @@ export const TUNING = {
     routeRadius: 9, // with Fog Seeker
     driveSpeed: 0.8, // tiles/s
     softenRate: 20, // pollution/s
-    growSeconds: 3,
+    growSeconds: gameMinutes(1.5), // E23.7.1: 1.5 game minutes = 3 s of play
     energyPerSec: 0.5, // drawn while working; parks below drone.reserve of the energy store
     speedPerLevel: 0.4, // Tiller Speed: +40 % work and drive speed per level
     /** a tap on a tile it's working: share of the current phase, at most `max` per phase, `gap` s apart */

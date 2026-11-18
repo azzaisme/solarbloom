@@ -19,6 +19,7 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
     case 'game':
       return [
         { kind: 'check', key: 'hints', label: 'Tutorial hints' },
+        { kind: 'check', key: 'realClock', label: 'Follow my clock', hint: c.inGame ? 'The sky and the sun keep your local time; everything grows at the same pace' : 'New gardens offer to follow your local time first' },
         { kind: 'check', key: 'potter', label: 'Potter about', hint: 'No nudges or tips, and gentler chains' },
         { kind: 'check', key: 'showNumbers', label: 'Show details', hint: 'Adds the figures to the energy and water gauges' },
         { kind: 'check', key: 'followChains', label: 'Camera follows big chains' },
@@ -46,7 +47,7 @@ export function settingsRows(tab: SettingsTab, c: RowContext): Row[] {
         },
         { kind: 'check', key: 'lowVfx', label: 'Fewer particles and softer sparkles' },
         { kind: 'check', key: 'lowFog', label: 'Simple fog (faster on small devices)' },
-        { kind: 'check', key: 'fireflies', label: 'Fireflies' },
+        { kind: 'check', key: 'fireflies', label: 'Fireflies at night', defaultOn: true },
       ];
     case 'sound':
       return [
