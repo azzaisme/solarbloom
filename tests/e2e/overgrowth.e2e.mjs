@@ -81,7 +81,7 @@ async function open(dev) {
     };
     const a = add('pole-a', 'relay', 10, 20);
     const b = add('pole-b', 'relay', 16, 20);
-    s.power = { networks: () => [{ links: [[a, b]] }], isPowered: () => true };
+    Object.assign(s.power, { networks: () => [{ links: [[a, b]] }], isPowered: () => true }); // the real grid stays; its lines are stood in
     s.state.water = { ...(s.state.water ?? {}), pipes: ['11,23', '12,23', '13,23', '14,23'] };
     window.chests = [];
     for (const [x, z] of [[14, 14], [8, 10], [8, 14], [12, 9], [16, 16], [20, 14], [7, 18], [19, 19]]) {

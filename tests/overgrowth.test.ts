@@ -25,7 +25,8 @@ function park() {
   sim.grid.get(GROUND, 14, 14)!.occupantId = chest.id;
   sim.state.cozy = { ...(sim.state.cozy ?? {}), decor: { [decorKey(GROUND, 12, 12)]: 'bench' } } as never;
   (sim.state as unknown as { water: { pipes: string[] } }).water = { pipes: ['18,10', '19,10', '20,10'] };
-  Object.assign(sim, { power: { networks: () => [{ links: [[a, b]] }] } });
+  // the real grid (E23.3) stays; its pole-to-pole lines are stood in
+  Object.assign(sim.power, { networks: () => [{ links: [[a, b]] }] });
   for (const k of ['c-elderGrove-2', 'c-saltwind-1']) sim.state.salvage!.caches.push(k);
   sim.state.salvage!.research = { analysed: [], done: PROJECTS.filter((p) => p.branch === 'decor').map((p) => p.id), running: [], levels: {} };
   sim.inventory.addToStore('seeds', 200);
