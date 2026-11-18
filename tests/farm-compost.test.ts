@@ -5,6 +5,7 @@ import type { MachineData } from '../src/core/types';
 import { COMPOST, DIGESTER } from '../src/data/compost';
 import { DAY_SECONDS } from '../src/data/time';
 import { RECIPES } from '../src/data/salvage';
+import { REGIONS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
@@ -174,6 +175,18 @@ describe('E23.5.3: the Bio Digester', () => {
     expect(sim.power.networkOf(pole)?.sources.some((s) => s.id === dig.id)).toBe(true);
     expect(dark).toBe(0);
     expect(sim.compost.fuel(dig)).toBeGreaterThan(0);
+  });
+
+  it('E23.8.1: a digester in Clock Plaza (machinery) gives 1.5× power for the same biomass', () => {
+    const sim = farm();
+    const dig = build(sim, 'bioDigester', 12, 16);
+    sim.inventory.add('biomass', 5);
+    sim.compost.feed(dig);
+    expect(sim.compost.output(dig)).toBe(DIGESTER.output);
+    const plaza = REGIONS.find((r) => r.id === 'clockPlaza')!;
+    const at = { ...dig, x: plaza.landmark.x + 3, z: plaza.landmark.z + 3 };
+    (sim.state.salvage!.digesters ??= {})[at.id] = 5;
+    expect(sim.compost.output(at)).toBe(DIGESTER.output * 1.5);
   });
 
   it('day or night alike; an empty digester just stops, and runs again when fed', () => {
