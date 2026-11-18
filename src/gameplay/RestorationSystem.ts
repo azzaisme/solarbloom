@@ -237,18 +237,26 @@ export class RestorationSystem {
   }
 
   /**
-   * Chains a loaded pulse set off grow what it carried. Saved with the game (`state.chainPlants`), so a chain still
-   * running when the game is saved keeps growing the same plant after a reload. The newest 64 are kept.
+   * Chains a loaded pulse set off grow what it carried, for as long as each chain runs: every chain is remembered
+   * until it ends (no cap), then let go. Chains themselves are never saved (a reload ends them), and what they
+   * grew is saved on each tile (`TileData.plant`), so a reload keeps every plant that grew and loses nothing.
    */
+  private chainPlants = new Map<number, PlantKind>();
+  private chainWatch = false;
   private rememberChainPlant(id: number, kind: PlantKind) {
-    const m = (this.sim.state.chainPlants ??= {});
-    m[id] = kind;
-    const ids = Object.keys(m).map(Number).sort((a, b) => a - b);
-    for (const old of ids.slice(0, Math.max(0, ids.length - 64))) delete m[old];
+    if (!this.chainWatch) {
+      this.chainWatch = true;
+      this.sim.bus.on('chain.ended', ({ chainId }) => this.chainPlants.delete(chainId));
+    }
+    this.chainPlants.set(id, kind);
+  }
+  /** Chains still running with a load's plant (tests). */
+  get plantedChains(): number {
+    return this.chainPlants.size;
   }
   private chainPlantOn(t: TileData, chainId?: number) {
     if (t.plant || chainId === undefined || chainId < 0) return;
-    const k = this.sim.state.chainPlants?.[chainId];
+    const k = this.chainPlants.get(chainId);
     if (k) this.plant(t, k);
   }
 

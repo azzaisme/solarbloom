@@ -276,13 +276,18 @@ describe('E23.2.2.2: rare plants and chains', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('what a chain grows survives a reload', () => {
+  it('every running chain keeps its plant (no cap) until it ends; what it grew survives a reload', () => {
     const sim = oldSim();
-    (sim.restoration as unknown as { rememberChainPlant(id: number, k: string): void }).rememberChainPlant(7, 'rare');
+    const remember = (sim.restoration as unknown as { rememberChainPlant(id: number, k: string): void }).rememberChainPlant.bind(sim.restoration);
+    for (let id = 1; id <= 200; id++) remember(id, id % 2 ? 'rare' : 'meadow');
+    expect(sim.restoration.plantedChains).toBe(200); // nothing dropped
+    const [dead] = deadTiles(sim, 1);
+    sim.restoration.complete(dead, 'chain', 1); // the oldest still grows its plant
+    expect(dead.plant).toBe('rare');
+    sim.bus.emit('chain.ended', { chainId: 1 } as never);
+    expect(sim.restoration.plantedChains).toBe(199);
     const saver = new SaveService(undefined);
     const back = new Sim(saver.deserialize(saver.serialize(sim.state))!);
-    const [dead] = deadTiles(back, 1);
-    back.restoration.complete(dead, 'chain', 7);
-    expect(dead.plant).toBe('rare');
+    expect(back.grid.get(GROUND, dead.x, dead.z)!.plant).toBe('rare'); // what grew is on the tile
   });
 });

@@ -436,8 +436,6 @@ export interface GameState {
   cozy?: CozyState;
   /** E23.2.2.3: buried finds revealed (a mound shows) and dug up, by id (`bur:x:z`). Optional. */
   buried?: { known: string[]; dug: string[] };
-  /** E23.2.2: the plant each chain a loaded pulse set off grows, by chain id (the newest 64). Optional. */
-  chainPlants?: Record<number, PlantKind>;
   /** E23.2.2: what the pulse is loaded with (absent = nothing). Optional, so no save version change. */
   pulseLoad?: 'none' | 'seeds' | 'rare' | 'fertiliser';
   /** E23.2.1: bloombot's charge (old-city rules; absent = full). Optional, so no save version change. */

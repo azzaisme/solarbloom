@@ -1654,8 +1654,8 @@ export class ChunkRenderer {
     }
     // E23.2.2.3: a buried find the ripple revealed: a little mound of turned earth with a sprout, until dug up
     if (t.roofId === GROUND && this.sim.buried?.known(t.x, t.z)) {
-      b.add('sphere', '#7b5134', [x + 0.08, top + 0.02, z - 0.06], [0.36, 0.11, 0.3]); // freshly turned earth
-      b.add('sphere', '#5d3b25', [x + 0.02, top + 0.06, z - 0.02], [0.18, 0.07, 0.15]);
+      b.add('sphere', PALETTE.turnedEarth, [x + 0.08, top + 0.02, z - 0.06], [0.36, 0.11, 0.3]);
+      b.add('sphere', PALETTE.turnedEarthDark, [x + 0.02, top + 0.06, z - 0.02], [0.18, 0.07, 0.15]);
       this.fb.add(grassGeo(2, t.variant, 1), x + 0.04, top + 0.06, z - 0.04, t.variant, 0.5);
     }
   }

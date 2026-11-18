@@ -75,12 +75,12 @@ export class Pollinators {
     let wings: pc.Entity[] | undefined;
     if (kind === 'moth') {
       // E23.2.2.2: a hummingbird hawk-moth: a stout rusty body and broad wings, hovering at the rare flowers
-      vshape(root, 'sphere', '#9a6a3e', { scale: [0.03, 0.026, 0.05] });
+      vshape(root, 'sphere', PALETTE.mothBody, { scale: [0.03, 0.026, 0.05] });
       vshape(root, 'sphere', PALETTE.insectDark, { pos: [0, 0.002, 0.026], scale: 0.016 });
       wings = [];
       for (const s of [-1, 1]) {
         const w = group(root, 'wing', [s * 0.012, 0.012, 0]);
-        vshape(w, 'box', '#e0a24a', { pos: [s * 0.024, 0, 0], scale: [0.05, 0.003, 0.03] });
+        vshape(w, 'box', PALETTE.mothWing, { pos: [s * 0.024, 0, 0], scale: [0.05, 0.003, 0.03] });
         wings.push(w);
       }
     } else if (kind === 'bee' || kind === 'hoverfly') {
