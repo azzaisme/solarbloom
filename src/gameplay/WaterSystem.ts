@@ -29,6 +29,14 @@ const REGION_WATER = new Map(
   REGIONS.filter((r) => r.water?.length).map((r) => [r.id, r.water!]),
 );
 
+/** E23.7's weather names, as the water reads them. */
+const WEATHER_ALIASES: Record<string, WeatherKind> = {
+  sunny: "clear",
+  storm: "rain",
+  fog: "mist",
+  wind: "windy",
+};
+
 const SIDES = [
   [1, 0],
   [-1, 0],
@@ -390,9 +398,35 @@ export class WaterSystem {
     return [x0 - R, z0 - R, x1 + R, z1 + R];
   }
 
-  /** The weather now: E21.13's field (E23.7 writes it); unset is plain cloud (no rain, no sun). */
+  /**
+   * The weather now: E23.7's `sim.weather.kind()` when it is there, else E21.13's saved field; unset is plain cloud
+   * (no rain, no sun).
+   */
   weather(): WeatherKind {
+    const live = (
+      this.sim as { weather?: { kind?: () => string } }
+    ).weather?.kind?.();
+    if (live) return WEATHER_ALIASES[live] ?? (live as WeatherKind);
     return this.sim.state.salvage?.weather?.kind ?? "cloudy";
+  }
+
+  // ───────────── hooks for the gentle-failure suite (E23.10) ─────────────
+
+  /** Every body this session knows of, empty. */
+  drainForTest() {
+    for (const b of new Set([...this.bodies.values(), ...this.live()]))
+      this.draw(b.id, b.capacity);
+  }
+
+  /** Every body this session knows of, full. */
+  refillForTest() {
+    for (const b of new Set([...this.bodies.values(), ...this.live()]))
+      this.fill(b.id, b.capacity);
+  }
+
+  /** No water within reach that still holds any. */
+  isDry(t: TileData): boolean {
+    return !this.isWatered(t);
   }
 
   /** Spring flow for a body (share of capacity per game day). */

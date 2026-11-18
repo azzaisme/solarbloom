@@ -101,4 +101,21 @@ describe('E23.4.4: land fades around low water', () => {
     sim.water.fill(body.id, body.capacity);
     expect(sim.water.takeFadeChanges().length).toBe(1);
   });
+
+  it("has the gentle-failure suite's hooks, and reads E23.7's weather names", () => {
+    const { sim, pond, land, body } = park();
+    const bank = near(sim, land, body.id)[0];
+    expect(sim.water.isDry(bank)).toBe(false);
+    sim.water.bodyAt(pond[0]);
+    sim.water.drainForTest();
+    expect(sim.water.levelOf(body.id)).toBe(0);
+    expect(sim.water.isDry(bank)).toBe(true);
+    expect(land.every((t) => t.ground === 'restored')).toBe(true);
+    sim.water.refillForTest();
+    expect(sim.water.isDry(bank)).toBe(false);
+    (sim as unknown as { weather: { kind: () => string } }).weather = { kind: () => 'sunny' };
+    expect(sim.water.weather()).toBe('clear');
+    (sim as unknown as { weather: { kind: () => string } }).weather = { kind: () => 'storm' };
+    expect(sim.water.weather()).toBe('rain');
+  });
 });
