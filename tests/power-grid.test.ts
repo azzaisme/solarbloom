@@ -233,9 +233,11 @@ function tick(sim: Sim) {
 describe('E23.3.2 sources and storage', () => {
   it('a small home grid of solar and a battery runs a lamp and a pump through a whole day and night', () => {
     const { sim, put } = world();
-    const clock = { f: 0.3 };
-    (sim as unknown as { clock: { dayFraction: () => number } }).clock = { dayFraction: () => clock.f };
+    // E23.7's real clock and weather drive the sky: a sunny spell, starting mid-morning.
     sim.power.skyOverride = undefined;
+    const st = sim.state;
+    sim.weather.forceForTest('sunny', 1e9);
+    (st.clock ??= { offset: 0 }).offset = 0.3 * POWER.daySeconds - st.time;
     for (let i = 0; i < 3; i++) put('solar', i, 0);
     put('battery', 3, 0);
     const pump = put('pump', 4, 0);
@@ -246,7 +248,7 @@ describe('E23.3.2 sources and storage', () => {
     let dark = 0;
     // Two full days from mid-morning, in 1 s steps.
     for (let s = 0; s < 2 * day; s++) {
-      clock.f = (0.3 + s / day) % 1;
+      st.time += 1; // the clock moves with play time (only the grid is ticked here)
       sim.power.tick(1);
       if (!sim.power.isPowered(pump) || sim.power.level(lamp) < 0.99) dark++;
     }

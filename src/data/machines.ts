@@ -119,17 +119,6 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     blurb: 'A way into the city’s shared store: open it to put things away or take them out.',
     oldCity: true,
   },
-  // E21.2: stands on a woken region's seam and sends its material to the store, for ever.
-  reclaimer: {
-    type: 'reclaimer',
-    name: 'Reclaimer',
-    icon: '🔧',
-    size: 2,
-    cost: {},
-    allowedGround: ['restored', 'prepared', 'polluted'],
-    blurb: 'Built on a woken region’s seam: it sends 6 of the region’s material a minute to the store.',
-    oldCity: true,
-  },
   // E23.3.2: the grid's storage and its weather power (old-city rules only).
   battery: {
     type: 'battery',
@@ -163,8 +152,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
 };
 
 export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
-/** E21.3: the old-city build list (the classic list plus the Storage Chest and the Reclaimer). */
-export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'battery', 'pollinator', 'droneHub', 'reclaimer', 'windTurbine', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+/** E21.3: the old-city build list (the classic list plus the Storage Chest; E23.7.4 dropped the Reclaimer; E23.3 adds the grid). */
+export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'battery', 'pollinator', 'droneHub', 'windTurbine', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

@@ -243,7 +243,6 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   chest: 'parcel', // E21.1
   battery: 'battery', // E23.3.2
   windTurbine: 'windTurbine', // E23.3.2
-  reclaimer: 'wrench', // E21.2
   core: 'sparkle',
 };
 
