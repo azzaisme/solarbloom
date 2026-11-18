@@ -205,7 +205,7 @@ Prices are from `meshy-assets.md`'s routes as of 2026-10-12 (check https://docs.
 Crops first appear in Milestone A, so until B6 is approved the planters have no crop model. The owner may want B6
 folded into A (303 credits for A then).
 
-Batch A and B6 are done (303 credits). The balance after them was about 1,700 credits.
+Batch A and B6 are done (303 credits), plus a lavender redo the owner approved on 19 Nov (15 credits).
 
 ## Getting each model into the game
 
@@ -238,8 +238,8 @@ fruit, pods, heads and flowers into a `fruit` node: the game hides it and scales
 stage.
 
 **Known limits, for the owner:**
-- **crop-lavender** came out as a grey spiky mound with no purple spikes. It needs a redo (15 credits, owner's OK).
-- **crop-moonflower and crop-mint** keep some flowers on the growing stage: their flowers are fused to the stems and
+- **crop-lavender** first came out as a grey spiky mound with no purple spikes. The owner approved a redo (15 credits, 19 Nov). The new one has chunky violet spikes, 1,051 triangles; its growing stage keeps the leaves and soil base on bare stems (a couple of spike tips are fused on and stay).
+- **crop-moonflower and crop-mint** still keep some flowers on the growing stage: their flowers are fused to the stems and
   too close to the leaves in colour to sort automatically. A hand pass in Blender can move them to `fruit`.
 
 **Bloombot's clips** (`meditate`, `sit-down`, `sit`, `stand-up`, `doze`, 15 credits) are in `bloombot.glb`, rebuilt by

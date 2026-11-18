@@ -18,7 +18,7 @@ crop-pumpkin preview 01a1ed10-95e7-71e4-bdb7-106aa6f916bb
 crop-sunflower preview 01a1ed11-2c09-7786-b994-bf9d02c9b285
 crop-watercress preview 01a1ed11-978e-70e4-8ec0-d4bc9a17c56f
 crop-rice preview 01a1ed11-e734-70d7-b888-7110c6f20a8d
-crop-lavender preview 01a1ed12-5e2c-76b5-a822-b09be1aae96d
+crop-lavender preview 01a1ed12-5e2c-76b5-a822-b09be1aae96d (first try, replaced)
 crop-mint preview 01a1ed12-7c84-703a-9cbd-7ade7b420973
 crop-moonflower preview 01a1ed12-897a-74b3-9ffe-a8c4e3fbc691
 crop-flowers preview 01a1ed12-95a8-7395-80e7-4e0e19124501
@@ -38,7 +38,10 @@ crop-pumpkin 01a1ed14-98a9-7027-bef9-063754df3171
 crop-sunflower 01a1ed14-a366-75fa-ac72-a99dc529a2e0
 crop-watercress 01a1ed14-ad1f-76d3-9bd5-fd617b2758e8
 crop-rice 01a1ed14-b788-7662-8153-4e05aad4f8df
-crop-lavender 01a1ed14-c2c8-75e2-9620-e1c032c06390
+crop-lavender 01a1ed14-c2c8-75e2-9620-e1c032c06390 (first try, replaced)
+REDO (19 Nov, owner-approved, 15 credits):
+crop-lavender preview 01a1f066-b7dd-7268-8cb1-1bffd31b18a9
+crop-lavender refine 01a1f067-4516-733d-847b-698bc4bee61a
 crop-mint 01a1ed14-cd3e-76e2-a905-405c18a2a7fd
 crop-moonflower 01a1ed14-d6b4-7302-a9fe-ab109f41a69b
 crop-flowers 01a1ed14-e982-7127-b481-9caed6de6b01

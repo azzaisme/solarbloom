@@ -133,6 +133,8 @@ if crop:
         hue = hh * 360
         if s < 0.2 and v > 0.6 or s < 0.35 and v > 0.75:
             return False  # white, cream and pale tints: flowers
+        if v < 0.45 and 10 <= hue <= 60:
+            return True  # dark browns: soil and pebbles at the base stay with the plant
         return s < 0.18 and v < 0.5 or 60 <= hue <= 230  # greens, blue-greens (sea kale) and dark stems are plant
 
     if mode == "crop-faces":
