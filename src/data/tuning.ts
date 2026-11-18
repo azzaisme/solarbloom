@@ -5,7 +5,8 @@ export const TUNING = {
   simStep: 0.1, // seconds per deterministic simulation tick
   maxFrameDt: 0.25, // clamp for large frame gaps (tab switch, hitch): the rest becomes catch-up
   /** City 06.5: simulation work per frame is capped; time lost to a hitch or a hidden tab is caught up over a few frames. */
-  catchUp: { frameBudgetMs: 8, maxSeconds: 600, toastFrom: 20 },
+  /** City 06.5: the most simulation one frame may run (ms); time beyond it is dropped, never owed (E23.1). */
+  frameSimBudgetMs: 8,
 
   start: {
     resources: { energy: 20, water: 12, biomass: 0 },
