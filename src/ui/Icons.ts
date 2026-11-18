@@ -269,7 +269,7 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '☀': 'sun', '🌞': 'sun', '🔆': 'sun', '🌙': 'moon', '🌈': 'rainbow', '🌊': 'wave', '🌫': 'fog', '🌧': 'rain', '🌟': 'star', '💥': 'burst',
   '🦋': 'butterfly', '🐦': 'bird', '🐟': 'fish', '🐱': 'cat', '🐾': 'paw', '🤖': 'robot',
   '⛲': 'fountain', '📡': 'relay', '🛰': 'satellite', '🛸': 'drone', '🚀': 'rocket', '💠': 'crystal', '🏺': 'vase', '🏢': 'building', '🏙': 'building', '🗼': 'building',
-  '🛣': 'road', '🛤': 'road', '🛶': 'boat', '🧺': 'basket', '🔭': 'telescope', '📦': 'parcel', '🏮': 'lantern', '🔋': 'battery', '🌬': 'windTurbine', '🔌': 'charger', '🏗': 'crane',
+  '🛣': 'road', '🛤': 'road', '🛶': 'boat', '🧺': 'basket', '🔭': 'telescope', '📦': 'parcel', '🏮': 'lantern', '🔋': 'battery', '🌬': 'windTurbine', '🔦': 'bulb', '🔌': 'charger', '🏗': 'crane',
   '🔒': 'lock', '🔓': 'lock', '✅': 'check', '⬜': 'box', '⏳': 'hourglass', '🔗': 'link', '🔀': 'merge', '🔁': 'repeat', '⬆': 'up', '⚠': 'warning', '❔': 'question',
   '📋': 'clipboard', '🧹': 'broom', '🪑': 'bench', '💡': 'bulb', '💰': 'coins', '🧩': 'puzzle', '👑': 'crown', '🧠': 'brain', '🕸': 'web', '✋': 'hand',
   '⚙': 'settings', '🔧': 'wrench', '▶': 'play', '⏸': 'pause', '⏩': 'fastForward', '⏭': 'fastForward',
