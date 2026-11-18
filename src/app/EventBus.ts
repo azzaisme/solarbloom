@@ -13,6 +13,11 @@ export interface GameEvents {
   /** E23.6.1: crafts queued at the crafting table (negative: cancelled), and one craft made. */
   'craft.queued': { id: string; n: number };
   'craft.done': { id: string; made: number };
+  /** E23.6.2: the research station: a find analysed, a project started or finished, an upgrade level bought. */
+  'research.analysed': { find: string };
+  'research.started': { id: string };
+  'research.done': { id: string };
+  'research.upgraded': { id: string; level: number };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
   /** E21.2: a Reclaimer sent units to the store. */

@@ -47,7 +47,7 @@ export class Inventory {
   stackLimit(): number {
     if (!this.on) return 0;
     const tier = Math.min(PACK.stack.length - 1, this.sv.tier);
-    return PACK.stack[tier] + (this.sv.blueprints.includes('packFrame') ? PACK.packFrame : 0);
+    return PACK.stack[tier] + (this.sv.blueprints.includes('packFrame') ? PACK.packFrame : 0) + (this.sim.research?.level('backpack') ?? 0) * PACK.perResearchLevel;
   }
 
   /** Room left in a material's stack. */

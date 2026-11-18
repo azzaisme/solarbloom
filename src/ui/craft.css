@@ -16,3 +16,19 @@
 .cr-queue li button { margin-left: auto; min-height: 36px; padding: 2px 12px; border-radius: 10px; font: 600 16px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge); color: var(--text-strong); }
 .cr-bar { flex: 1; height: 8px; border-radius: 4px; background: var(--glass-sunk); border: 1px solid var(--edge-soft); overflow: hidden; }
 .cr-bar > i { display: block; height: 100%; background: var(--good); }
+.cr-upgrades { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.cr-upgrades li { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--glass-hi); border: 1px solid var(--edge-soft); }
+.cr-uhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cr-uhead b { font: 600 17px var(--font-display); color: var(--text-strong); }
+.cr-each { font: 700 16px var(--font-ui); color: var(--text); }
+.cr-pips { display: inline-flex; gap: 4px; }
+.cr-pips i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--edge); background: transparent; }
+.cr-pips i.on { background: var(--gold); border-color: var(--gold); }
+.cr-upgrades button { align-self: flex-start; min-height: 40px; padding: 4px 14px; border-radius: 12px; font: 600 16px var(--font-display); background: var(--glass-hi-2); border: 1px solid var(--edge); color: var(--text-strong); }
+.cr-upgrades button[aria-disabled=true] { color: var(--text-dim); border-color: var(--edge-soft); background: var(--btn-off); }
+.rs-projects { display: flex; flex-direction: column; gap: 6px; }
+.rs-projects .bp-req { grid-template-columns: 1fr; }
+.rs-projects .bp-req[aria-selected=true] { border-color: var(--edge-strong); background: var(--glass-hi-2); }
+.rs-bar.rs-off > i { background: var(--text-soft); }
+#craftScreen .tabs [hidden] { display: none; }
+@media (max-width: 900px) { .cr-upgrades { grid-template-columns: 1fr; } }

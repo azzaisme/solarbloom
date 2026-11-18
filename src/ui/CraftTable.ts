@@ -2,6 +2,8 @@ import type { ComponentId, ItemId } from '../core/types';
 import { MACHINES } from '../data/machines';
 import { itemDef } from '../data/items';
 import type { ItemCost } from '../data/crafting';
+import { BRANCHES, RESEARCH, type Find } from '../data/research';
+import { findKey } from '../gameplay/Research';
 import type { Sim } from '../gameplay/Sim';
 import { materialIcon } from './MaterialIcons';
 import './craft.css';
@@ -14,7 +16,10 @@ import './craft.css';
  * - Craft: the components known, each with what it needs and how many are at hand; the one in focus shows its
  *   recipe, "Make 1" and "Make 5", and the queue with the craft in hand. Below, the machines the table knows
  *   (built from the build menu, paid there).
- * - Upgrade: what research has opened (E23.6.2); until then it says so in one line.
+ * - Upgrade: the upgrades research has opened, each with its level (at most 3) and the next level's cost.
+ * - Research (E23.6.2, once the first Keeper wakes): the station. New finds to look at, the bench (projects
+ *   running, or waiting for power), and the open projects by branch; the one in focus shows what it is about,
+ *   what it takes and how long it runs.
  */
 export interface CraftHost {
   sim: Sim;
@@ -26,6 +31,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 export const CRAFT_TABS = [
   { id: 'craft', label: 'Craft' },
   { id: 'upgrade', label: 'Upgrade' },
+  { id: 'research', label: 'Research' },
 ] as const;
 export type CraftTabId = (typeof CRAFT_TABS)[number]['id'];
 
@@ -66,6 +72,18 @@ export function componentRows(sim: Sim): ComponentRow[] {
   });
 }
 
+/** Minutes of play a project takes (a game day is 48 minutes of play). */
+export const projectMinutes = (days: number) => Math.max(1, Math.round((days * RESEARCH.daySeconds) / 60));
+
+/** The Upgrade tab's rows (pure read). */
+export function upgradeRows(sim: Sim) {
+  return sim.research.upgrades().map((u) => {
+    const level = sim.research.level(u.id);
+    const next = u.levels[level];
+    return { id: u.id, name: u.name, each: u.each, level, max: u.levels.length, parts: next ? costParts(sim, next.cost) : [], problem: sim.research.upgradeProblem(u.id) };
+  });
+}
+
 /** The machines the table knows that can be built now (a recipe waiting for its machine stays off the list). */
 export function machineRows(sim: Sim): { id: string; name: string; parts: CostPart[]; ready: boolean }[] {
   return sim.crafting
@@ -84,6 +102,7 @@ export class CraftTable {
   private live: HTMLElement;
   current: CraftTabId = 'craft';
   private sel?: ComponentId;
+  private selProject?: string;
 
   constructor(
     parent: HTMLElement,
@@ -122,7 +141,16 @@ export class CraftTable {
         this.sel = t.dataset.comp as ComponentId;
         this.select();
       }
+      const p = (e.target as HTMLElement).closest<HTMLElement>('[data-project]');
+      if (p && p.dataset.project !== this.selProject) {
+        this.selProject = p.dataset.project;
+        this.selectProject();
+      }
     });
+    for (const ev of ['research.done', 'research.upgraded'] as const)
+      host.sim.bus.on(ev, () => {
+        if (this.isOpen) this.refresh();
+      });
     host.sim.bus.on('craft.done', (e) => {
       if (!this.isOpen) return;
       this.say(`Made ${e.made} ${itemDef(e.id as ItemId).name}`);
@@ -148,14 +176,23 @@ export class CraftTable {
     this.el.classList.remove('open');
   }
 
+  /** The tabs shown now (Research once the station is there). */
+  private tabsNow() {
+    return CRAFT_TABS.filter((t) => t.id !== 'research' || this.host.sim.research.on);
+  }
+
   tab(dir: number, focusTab = false) {
-    const i = CRAFT_TABS.findIndex((t) => t.id === this.current);
-    this.show(CRAFT_TABS[(i + dir + CRAFT_TABS.length) % CRAFT_TABS.length].id, focusTab);
+    const tabs = this.tabsNow();
+    const i = Math.max(0, tabs.findIndex((t) => t.id === this.current));
+    this.show(tabs[(i + dir + tabs.length) % tabs.length].id, focusTab);
   }
 
   show(tab: CraftTabId, focusTab = false) {
+    if (!this.tabsNow().some((t) => t.id === tab)) tab = 'craft';
     this.current = tab;
+    this.el.querySelector('#crTitle')!.textContent = this.host.sim.research.on ? 'Workshop' : 'Crafting table';
     for (const b of this.tabs.querySelectorAll<HTMLElement>('[data-tab]')) {
+      b.hidden = !this.tabsNow().some((t) => t.id === b.dataset.tab);
       const on = b.dataset.tab === tab;
       b.setAttribute('aria-selected', String(on));
       b.tabIndex = on ? 0 : -1;
@@ -180,6 +217,10 @@ export class CraftTable {
     const p = this.host.sim.crafting.progress();
     const bar = this.body.querySelector<HTMLElement>('.cr-bar > i');
     if (bar && p !== undefined) bar.style.width = `${Math.round(p * 100)}%`;
+    const bench = this.host.sim.research.bench();
+    this.body.querySelectorAll<HTMLElement>('.rs-bar > i').forEach((b, i) => {
+      if (bench[i]) b.style.width = `${Math.round(bench[i].progress * 100)}%`;
+    });
   }
 
   private say(text: string) {
@@ -248,7 +289,70 @@ export class CraftTable {
   // ───────── Upgrade ─────────
 
   private upgrade(): string {
-    return `<p class="bp-empty">Nothing to upgrade yet.</p>`;
+    const rows = upgradeRows(this.host.sim);
+    if (!rows.length) return `<p class="bp-empty">Nothing to upgrade yet.</p>`;
+    return `<ul class="cr-upgrades">${rows
+      .map((u) => {
+        const pips = Array.from({ length: u.max }, (_, i) => `<i class="${i < u.level ? 'on' : ''}"></i>`).join('');
+        const full = u.level >= u.max;
+        return (
+          `<li><div class="cr-uhead"><b>${esc(u.name)}</b><span class="cr-pips" aria-hidden="true">${pips}</span></div><span class="cr-each">${esc(u.each)}</span>` +
+          (full ? '' : this.partsHtml(u.parts)) +
+          `<button id="cr-up-${u.id}" data-upgrade="${u.id}" aria-label="${esc(full ? `${u.name}, all ${u.max} levels` : `Upgrade ${u.name} to level ${u.level + 1} of ${u.max}: ${costText(u.parts)}`)}" ${u.problem ? 'aria-disabled="true"' : ''}>${full ? 'Done' : `Level ${u.level + 1}`}</button></li>`
+        );
+      })
+      .join('')}</ul>`;
+  }
+
+  // ───────── Research ─────────
+
+  private research(): string {
+    const r = this.host.sim.research;
+    const finds = r.finds();
+    const bench = r.bench();
+    const open = r.open();
+    if (!this.selProject || !open.some((p) => p.id === this.selProject)) this.selProject = open[0]?.id;
+    const findList = finds.length
+      ? `<h3 class="set-h">New finds</h3><div class="bp-moves rs-finds">${finds.map((f, i) => `<button id="rs-find-${i}" data-find="${esc(findKey(f))}" aria-label="${esc(`Look closely at ${r.findName(f)}`)}">${esc(r.findName(f))}</button>`).join('')}</div>`
+      : '';
+    const powered = r.powered();
+    const benchList = bench.length
+      ? `<h3 class="set-h">On the bench</h3><ul class="cr-queue">${bench
+          .map(
+            (b) =>
+              `<li><span>${esc(b.project.name)}</span><span class="cr-bar rs-bar${powered ? '' : ' rs-off'}" aria-hidden="true"><i style="width:${Math.round(b.progress * 100)}%"></i></span><button id="rs-stop-${b.project.id}" data-stop="${b.project.id}" aria-label="${esc(`Stop ${b.project.name}, and take back what it used`)}">Stop</button></li>`,
+          )
+          .join('')}</ul>${powered ? '' : '<p class="bp-note">Waiting for power.</p>'}`
+      : '';
+    const groups = BRANCHES.map((br) => {
+      const ps = open.filter((p) => p.branch === br.id);
+      if (!ps.length) return '';
+      return `<h4>${esc(br.name)}</h4><div class="rs-projects" role="listbox" aria-label="${esc(br.name)} projects">${ps
+        .map((p) => `<button class="bp-req" role="option" id="rs-p-${p.id}" data-project="${p.id}" aria-selected="${p.id === this.selProject}"><b>${esc(p.name)}</b></button>`)
+        .join('')}</div>`;
+    }).join('');
+    const empty = !finds.length && !bench.length && !open.length ? `<p class="bp-empty">Nothing to look into yet. New things turn up out in the city.</p>` : '';
+    return `<div class="bp-split"><div>${findList}${benchList}${groups ? `<h3 class="set-h">Projects</h3>${groups}` : ''}${empty}</div><div class="bp-detail" id="rsDetail">${this.projectDetail()}</div></div>`;
+  }
+
+  private projectDetail(): string {
+    const r = this.host.sim.research;
+    const p = this.selProject ? r.project(this.selProject) : undefined;
+    if (!p || !r.open().includes(p)) return '';
+    const problem = r.problem(p.id);
+    return (
+      `<h3>${esc(p.name)}</h3><p>${esc(p.about)}</p>` +
+      `<dl><dt>Takes</dt><dd>About ${projectMinutes(p.days)} minutes</dd></dl>` +
+      `<h4>Needs</h4>${this.partsHtml(costParts(this.host.sim, p.cost))}` +
+      `<div class="bp-moves"><button id="rs-start" data-start="${p.id}" aria-label="${esc(`Start ${p.name}`)}" ${problem ? 'aria-disabled="true"' : ''}>Start</button></div>` +
+      (problem ? `<p class="bp-note">${esc(problem)}</p>` : '')
+    );
+  }
+
+  private selectProject() {
+    for (const b of this.body.querySelectorAll<HTMLElement>('[data-project]')) b.setAttribute('aria-selected', String(b.dataset.project === this.selProject));
+    const d = this.body.querySelector<HTMLElement>('#rsDetail');
+    if (d) d.innerHTML = this.projectDetail();
   }
 
   private click(t: HTMLElement) {
@@ -268,6 +372,49 @@ export class CraftTable {
       this.say('Stopped, and took back what it used');
       this.host.changed?.();
       return this.refresh();
+    }
+    const r = sim.research;
+    const up = t.closest<HTMLElement>('[data-upgrade]');
+    if (up) {
+      const id = up.dataset.upgrade!;
+      const name = r.upgradeDef(id)?.name ?? '';
+      if (up.getAttribute('aria-disabled')) return this.say(r.upgradeProblem(id) ?? '');
+      const lvl = r.upgrade(id);
+      this.say(lvl ? `${name}: level ${lvl}` : (r.upgradeProblem(id) ?? ''));
+      this.host.changed?.();
+      return this.refresh();
+    }
+    const fd = t.closest<HTMLElement>('[data-find]');
+    if (fd) {
+      const f = r.finds().find((x) => findKey(x) === fd.dataset.find) as Find | undefined;
+      if (f && r.analyse(f)) this.say(`Looked closely at ${r.findName(f)}`);
+      this.refresh();
+      this.body.querySelector<HTMLElement>('[data-find], [data-project]')?.focus({ focusVisible: true } as FocusOptions);
+      return;
+    }
+    const st = t.closest<HTMLElement>('[data-start]');
+    if (st) {
+      const id = st.dataset.start!;
+      if (st.getAttribute('aria-disabled')) return this.say(r.problem(id) ?? '');
+      if (r.start(id)) this.say(`Started ${r.project(id)!.name}`);
+      this.host.changed?.();
+      this.refresh();
+      this.body.querySelector<HTMLElement>('[data-project], [data-stop]')?.focus({ focusVisible: true } as FocusOptions);
+      return;
+    }
+    const sp = t.closest<HTMLElement>('[data-stop]');
+    if (sp) {
+      r.stop(sp.dataset.stop!);
+      this.say('Stopped, and took back what it used');
+      this.host.changed?.();
+      return this.refresh();
+    }
+    const pj = t.closest<HTMLElement>('[data-project]');
+    if (pj) {
+      this.selProject = pj.dataset.project;
+      this.selectProject();
+      this.body.querySelector<HTMLElement>('#rsDetail [data-start]:not([aria-disabled])')?.focus({ focusVisible: true } as FocusOptions);
+      return;
     }
     const cell = t.closest<HTMLElement>('[data-comp]');
     if (cell) {

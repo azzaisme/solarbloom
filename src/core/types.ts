@@ -386,6 +386,20 @@ export interface SalvageState {
   seen?: string[];
   /** E23.6.1: the crafting table's queue (recipe id, crafts left, seconds left on the one in hand) */
   craft?: { id: string; n: number; left: number }[];
+  /** E23.6.2: the research station (finds analysed, projects done and running, upgrade levels bought) */
+  research?: ResearchState;
+}
+
+/** E23.6.2: what the research station keeps. */
+export interface ResearchState {
+  /** finds looked at (keys such as 'material:copper', 'keeper:mastRow', 'tech:c-mastRow-1') */
+  analysed: string[];
+  /** projects finished, in order */
+  done: string[];
+  /** projects on the bench: seconds of powered work left */
+  running: { id: string; left: number }[];
+  /** upgrade levels bought at the crafting table */
+  levels: Record<string, number>;
 }
 
 export interface GameState {

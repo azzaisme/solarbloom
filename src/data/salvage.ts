@@ -43,6 +43,8 @@ export const PACK = {
   stack: [40, 40, 60, 80, 120, 120],
   /** the Pack Frame blueprint adds this to every stack */
   packFrame: 40,
+  /** E23.6.2: each level of the "Roomier backpack" research upgrade adds this to every stack */
+  perResearchLevel: 20,
 };
 
 // ───────────── §2 storage ─────────────

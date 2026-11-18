@@ -6,6 +6,7 @@ import { DECOR_OPTION } from '../src/data/cozy';
 import { ITEM_DEFS } from '../src/data/items';
 import { MACHINES } from '../src/data/machines';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
+import { PROJECTS } from '../src/data/research';
 import { Sim } from '../src/gameplay/Sim';
 import { SaveService } from '../src/app/SaveService';
 import { componentRows, machineRows } from '../src/ui/CraftTable';
@@ -25,7 +26,7 @@ function reachable(u: Unlock): boolean {
   if ('home' in u) return true;
   if ('keeper' in u) return KEEPERS.some((k) => k.region === u.keeper);
   if ('find' in u) return CACHES.has(u.find);
-  return false; // research (E23.6.2) checks its own projects
+  return PROJECTS.some((p) => p.id === u.research); // E23.6.2: a real project
 }
 
 describe('E23.6.1: recipes in data', () => {

@@ -35,6 +35,7 @@ import { FountainSystem } from './FountainSystem';
 import { KeeperSystem } from './KeeperSystem';
 import { LandmarkSystem } from './LandmarkSystem';
 import { Crafting } from './Crafting';
+import { Research } from './Research';
 
 /**
  * Headless, deterministic game simulation. Owns no rendering.
@@ -83,6 +84,8 @@ export class Sim {
   readonly landmarks: LandmarkSystem;
   /** E23.6.1: the crafting table (components; machine and decoration recipes). */
   readonly crafting: Crafting;
+  /** E23.6.2: the research station (projects, and the upgrades they open). */
+  readonly research: Research;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -133,6 +136,7 @@ export class Sim {
     this.fountain = new FountainSystem(this);
     this.keepers = new KeeperSystem(this);
     this.crafting = new Crafting(this);
+    this.research = new Research(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
@@ -255,6 +259,7 @@ export class Sim {
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
     this.crafting.tick(dt);
+    this.research.tick(dt);
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();
