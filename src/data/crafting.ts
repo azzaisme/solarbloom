@@ -18,6 +18,7 @@ export type ItemCost = Partial<Record<ItemId, number>>;
  * - `research`: a finished research project (E23.6.2), by project id
  * - `find`: a cache opened, by cache id (data/oldcity caches)
  * - `tier`: a step of the fountain (E21.6), for the Old City's own machines
+ * - `cat`: E23.12.2 (#529), a cat-only decoration, known once a Lucky Cat has left it (it comes made)
  * - `hand`: a job done by hand enough times (E23.6.4's automation; data/automation HAND_JOBS)
  * - `all`: every one of several (the Assembler: its Keeper, and crafting by hand)
  */
@@ -27,6 +28,7 @@ export type Unlock =
   | { research: string }
   | { find: string }
   | { tier: number }
+  | { cat: string }
   | { hand: import('./automation').HandJob }
   | { all: Unlock[] };
 
@@ -141,6 +143,14 @@ export const DECOR_RECIPES: DecorRecipe[] = [
   { id: 'barrel', cost: { planks: 2, seeds: 1 }, unlock: { find: 'c-saltwind-2' } },
   { id: 'rug', cost: { seeds: 2 }, unlock: { find: 'c-oldMarket-2' } },
   { id: 'topiary', cost: { seeds: 3, clay: 1 }, unlock: { research: 'dc-topiary' } },
+  // E23.12.2 (#529): the cat-only decorations. A Lucky Cat leaves each one made (free to place); from then on its
+  // recipe is on the table like any other (made once, so it reads as made).
+  { id: 'catstatue', cost: { clay: 4, scrap: 2 }, unlock: { cat: 'catstatue' } },
+  { id: 'catbench', cost: { planks: 3, scrap: 1 }, unlock: { cat: 'catbench' } },
+  { id: 'pawstones', cost: { scrap: 3, clay: 1 }, unlock: { cat: 'pawstones' } },
+  { id: 'catfountain', cost: { clay: 5, pipe: 1 }, unlock: { cat: 'catfountain' } },
+  { id: 'goldlantern', cost: { scrap: 2, glassPane: 1 }, unlock: { cat: 'goldlantern' } },
+  { id: 'rainbowbunting', cost: { planks: 1, seeds: 3 }, unlock: { cat: 'rainbowbunting' } },
   // E23.3.5: every night light (data/lights) is made here too, at its own cost, known where its data says
   ...LIGHTS.map((l) => ({ id: l.id, cost: l.cost, unlock: lightUnlock(l) })),
 ];

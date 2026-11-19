@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { GroundState } from '../src/core/types';
 import { COMPONENT_IDS, COMPONENT_RECIPES, DECOR_RECIPES, MACHINE_RECIPES, type Unlock } from '../src/data/crafting';
-import { DECOR_OPTION } from '../src/data/cozy';
+import { CAT_DECOR, DECOR_OPTION } from '../src/data/cozy';
 import { LIGHTS } from '../src/data/lights';
 import { ITEM_DEFS } from '../src/data/items';
 import { BUILDABLE, MACHINES } from '../src/data/machines';
@@ -30,6 +30,7 @@ function reachable(u: Unlock): boolean {
   if ('keeper' in u) return KEEPERS.some((k) => k.region === u.keeper);
   if ('find' in u) return CACHES.has(u.find);
   if ('tier' in u) return u.tier >= 1 && u.tier <= 5;
+  if ('cat' in u) return CAT_DECOR.includes(u.cat); // E23.12.2: a cat-only decoration (a Lucky Cat leaves it)
   if ('hand' in u) return u.hand in HAND_JOBS; // E23.6.4: a job done by hand
   if ('all' in u) return u.all.every(reachable);
   return PROJECTS.some((p) => p.id === u.research); // E23.6.2: a real project
