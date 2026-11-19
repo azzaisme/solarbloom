@@ -143,10 +143,18 @@ try {
     const hub = s.machine(id), chest = s.droneFuel.chestBeside(hub);
     const x = (hub.x + hub.size / 2 + chest.x + 0.5) / 2, z = (hub.z + hub.size / 2 + chest.z + 0.5) / 2;
     g.photo.hideBot = true;
+    g.photo.clean = true; // nothing but the picture: no controls bar
     g.photo.enter();
-    cam.goal.set(x, (cam.ground?.(x, z) ?? cam.goal.y) + 0.6, z);
-    cam.zoomGoal = 3;
-  }, hubId);
+    return { x, z };
+  }, hubId).then(async ({ x, z }) => {
+    await page.waitForTimeout(300);
+    await page.evaluate(({ x, z }) => {
+      const cam = window.solarbloom.camera;
+      cam.goal.set(x, (cam.ground?.(x, z) ?? cam.goal.y) + 0.6, z);
+      cam.zoomGoal = 4.2; // bigger is closer
+      cam.follow = 6;
+    }, { x, z });
+  });
   await page.waitForTimeout(3000);
   const cue = await page.evaluate((id) => {
     const g = window.solarbloom;
@@ -164,6 +172,7 @@ try {
     const g = window.solarbloom;
     g.photo.exit();
     g.photo.hideBot = false;
+    g.photo.clean = false;
   });
   // Biomass back: they start again by themselves
   await page.evaluate(() => window.solarbloom.sim.inventory.addToStore('biomass', 50));
