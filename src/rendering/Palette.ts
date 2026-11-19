@@ -328,6 +328,9 @@ const props = {
   gazeboFinial: ['#8f8160', '#e8c04f'],
   bunting: ['#ff6f91', '#ffd25e', '#6fd3ff', '#8be06b', '#c38bff'],
   lampToppled: '#8d8a78',
+  /** E23.8.3.2: the industrial ruins: deep-rusted girders and the rust run-off staining the ground round them */
+  girderRust: '#6b4330',
+  rustStain: '#8c5634',
   stallDead: '#9a8a70',
   stallAlive: '#c9a77a',
   awning: ['#b5655a', '#5a7fb5'],

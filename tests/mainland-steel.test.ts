@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import { chunkPiles, landingArea, mainlandType, mainlandAreaOfChunk } from '../src/core/Mainland';
-import { allPiles } from '../src/core/OldCityLayout';
+import { chunkPiles, chunkRuins, landingArea, mainlandType, mainlandAreaOfChunk, mainlandWater } from '../src/core/Mainland';
+import { canStep } from '../src/core/Height';
+import { allPiles, seaCell, setPieceAt } from '../src/core/OldCityLayout';
 import type { BuildableType, MachineData, MaterialId } from '../src/core/types';
 import { MACHINES } from '../src/data/machines';
 import { MAINLAND, MAINLAND_MACHINES, SALVAGE_FIELDS } from '../src/data/mainland';
@@ -66,6 +67,84 @@ describe('E23.8.3.2: steel', () => {
     expect(steel).toBeGreaterThan(20);
     expect(elsewhere).toBe(0);
   });
+
+  it('lies in industrial ruins: frames, a broken gantry and rust stains round every steel field, and nowhere else', () => {
+    const bad: string[] = [];
+    let fields = 0;
+    let gantries = 0;
+    for (let cx = 9; cx < 60; cx++)
+      for (let cz = -25; cz < 25; cz++) {
+        const piles = [...chunkPiles(cx, cz).values()];
+        const ruins = [...chunkRuins(cx, cz).values()];
+        // a field in the industrial ruins (a downtown district): its piles are mostly steel
+        const steel = piles.length > 0 && mainlandType(mainlandAreaOfChunk(cx, cz)) === 'downtown';
+        if (!steel) {
+          expect(ruins, `${cx},${cz}`).toEqual([]);
+          continue;
+        }
+        fields++;
+        expect(ruins.filter((q) => q.kind === 'frame').length, `${cx},${cz} frames`).toBeGreaterThan(0);
+        expect(ruins.filter((q) => q.kind === 'stain').length, `${cx},${cz} stains`).toBeGreaterThan(0);
+        const g = ruins.filter((q) => q.kind === 'gantry');
+        if (g.length) {
+          gantries++;
+          expect(g.map((q) => q.part).sort()).toEqual(['a', 'b']);
+        }
+        for (const q of ruins) {
+          const lx = q.x - cx * 16;
+          const lz = q.z - cz * 16;
+          const at = `${q.kind} ${q.x},${q.z}`;
+          if (lx === 7 || lx === 8 || lz === 7 || lz === 8) bad.push(`${at} on an avenue`);
+          if (seaCell(q.x, q.z) || mainlandWater(q.x, q.z)) bad.push(`${at} in the water`);
+          const sp = setPieceAt(q.x, q.z);
+          if (sp?.kind !== 'ruin' || sp.ruin !== q) bad.push(`${at} is not its cell's set piece`);
+          // a frame or a gantry leg never stands next to a pile
+          if (q.kind !== 'stain') for (const p of piles) if (Math.max(Math.abs(p.x - q.x), Math.abs(p.z - q.z)) <= 1) bad.push(`${at} by ${p.id}`);
+        }
+      }
+    expect(bad).toEqual([]);
+    expect(fields).toBeGreaterThan(10);
+    expect(gantries).toBeGreaterThan(fields / 2);
+  });
+
+  it('the ruins never wall a pile in: every steel field pile is reached on foot from its avenues', () => {
+    const sim = new Sim(createInitialState(7));
+    const tile = (x: number, z: number) => sim.grid.get(GROUND, x, z)!;
+    let checked = 0;
+    for (let cx = 9; cx < 40; cx++)
+      for (let cz = -12; cz < 12; cz++) {
+        if (!chunkRuins(cx, cz).size) continue;
+        // a walk inside the chunk from where its avenues cross
+        const x0 = cx * 16;
+        const z0 = cz * 16;
+        const seen = new Set<string>();
+        const q: [number, number][] = [];
+        for (const [x, z] of [[x0 + 7, z0 + 7], [x0 + 8, z0 + 8]]) if (!tile(x, z).blocked) q.push([x, z]);
+        while (q.length) {
+          const [x, z] = q.pop()!;
+          const k = `${x},${z}`;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nx = x + dx;
+            const nz = z + dz;
+            if (nx < x0 || nz < z0 || nx >= x0 + 16 || nz >= z0 + 16) continue;
+            if (!tile(nx, nz).blocked && canStep(x, z, nx, nz)) q.push([nx, nz]);
+          }
+        }
+        for (const p of chunkPiles(cx, cz).values()) {
+          const reached = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => seen.has(`${p.x + dx},${p.z + dz}`));
+          expect(reached, p.id).toBe(true);
+          checked++;
+        }
+        // frames and gantry legs stand solid; the ground under a gantry stays walkable
+        for (const r of chunkRuins(cx, cz).values()) if (r.kind !== 'stain') expect(tile(r.x, r.z).blocked, `${r.kind} ${r.x},${r.z}`).toBe(true);
+        for (const r of chunkRuins(cx, cz).values())
+          if (r.kind === 'gantry' && r.part === 'a')
+            for (let d = 1; d < r.span!; d++) expect(tile(r.x + (r.turn === 0 ? d : 0), r.z + (r.turn === 1 ? d : 0)).blocked).toBe(false);
+      }
+    expect(checked).toBeGreaterThan(30);
+  }, 20000);
 
   it('is never traded for: Tally gives every other material, not steel', () => {
     const sim = bloomed();

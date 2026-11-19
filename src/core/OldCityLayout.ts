@@ -1,4 +1,4 @@
-import { isMainlandCell, mainlandPileAt, mainlandPileById, mainlandShore, onCauseway } from './Mainland';
+import { isMainlandCell, mainlandPileAt, mainlandPileById, mainlandRuinAt, mainlandShore, onCauseway, type RuinDef } from './Mainland';
 import { COAST, KEEPERS, LANDING, OLD_CITY, PARK_SET, REGIONS, type GateDef, type KeeperDef, type PileDef, type RegionDef, type RegionId } from '../data/oldcity';
 
 /**
@@ -14,7 +14,8 @@ export type SetPiece =
   | { kind: 'cache'; id: string; region: RegionId }
   | { kind: 'page'; id: string; region?: RegionId }
   | { kind: 'lookout'; id: string; region: RegionId }
-  | { kind: 'shed' };
+  | { kind: 'shed' }
+  | { kind: 'ruin'; ruin: RuinDef };
 
 const key = (x: number, z: number) => `${x},${z}`;
 
@@ -57,10 +58,13 @@ export function pileById(id: string): PileDef | undefined {
   return piles!.get(id) ?? mainlandPileById(id);
 }
 
-/** E23.8.3.1: the mainland's set pieces are its salvage fields, generated per chunk (core/Mainland). */
+/** E23.8.3.1: the mainland's set pieces are its salvage fields, generated per chunk (core/Mainland), and the ruins round its steel. */
 function mainlandPiece(x: number, z: number): SetPiece | undefined {
   const pile = mainlandPileAt(x, z);
-  return pile ? { kind: 'pile', pile } : undefined;
+  if (pile) return { kind: 'pile', pile };
+  // E23.8.3.2: and the industrial ruins round a steel field
+  const ruin = mainlandRuinAt(x, z);
+  return ruin ? { kind: 'ruin', ruin } : undefined;
 }
 
 /** Every pile in the Old City (park first, then the regions in map order). */

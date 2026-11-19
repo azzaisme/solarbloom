@@ -83,6 +83,8 @@ export const SALVAGE_FIELDS = {
     reservoir: { clay: 3, scrap: 1 },
   } as Partial<Record<AreaType, Partial<Record<MaterialId, number>>>>,
   sizes: { small: 1, medium: 2, large: 2 } as Record<PileSize, number>,
+  /** E23.8.3.2: the industrial ruins round a steel field (core/Mainland chunkRuins): cells from its centre, and how many */
+  ruins: { reach: 5, frames: 3, gantrySpan: 3, stains: 7 },
   /** a pile's model when its material has none */
   models: { small: 'rubble-pile', medium: 'crate', large: 'stone-block' } as Record<PileSize, string>,
 };

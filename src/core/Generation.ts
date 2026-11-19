@@ -52,6 +52,12 @@ export function stampOldCity(t: TileData): TileData {
   if (!p) return t;
   if (p.kind === 'pile') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `pile:${p.pile.id}` });
   if (p.kind === 'keeper') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `keeper:${p.keeper.id}` });
+  // E23.8.3.2: the industrial ruins round a steel field: frames and gantry legs block, stains are on the ground
+  if (p.kind === 'ruin') {
+    const q = p.ruin;
+    const solid = q.kind !== 'stain';
+    return Object.assign(t, { blocked: solid || t.blocked, feature: solid ? 'obstacle' : t.feature, prop: `ruin:${q.kind}:${q.turn}:${q.part ?? ''}:${q.span ?? 0}` });
+  }
   if (p.kind === 'shed') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: 'shed' });
   // E21.24: a lookout: a bench and a telescope on a terrace's edge
   if (p.kind === 'lookout') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `lookout:${p.id}` });

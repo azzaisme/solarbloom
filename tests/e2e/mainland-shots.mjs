@@ -125,7 +125,7 @@ try {
     console.log('  ✗ the Grid Battery should build past the causeway and refuse the island');
   }
   if (steel.built[0]) await shot('mainland-machines', steel.built[0][1] + 3, steel.built[0][2] + 1, 1.0, 0, 15000);
-  if (steel.at) await shot('mainland-steel-field', steel.at[0] + 0.5, steel.at[1] + 0.5, 1.3, 0, 15000);
+  if (steel.at) await shot('mainland-steel-field', steel.at[0] + 0.5, steel.at[1] - 1.5, 0.9, 30, 15000);
   else { failed = true; console.log('  ✗ no steel field in the industrial ruins nearby'); }
   // E23.8.3: fresh water on the mainland: the landing district's canal (bridged by its avenues) and a reservoir basin
   await shot('mainland-canal', 168, 15, 0.7, 90, 12000);
