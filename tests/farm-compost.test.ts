@@ -140,7 +140,7 @@ describe('E23.5.3: the compost bin', () => {
   });
 });
 
-/** A stand-in for E23.3's grid: one network around the digester with a steady demand and an optional battery. */
+/** A controlled grid for the digester's own rules (a steady demand); the real E23.3 grid is tested above. */
 function grid(sim: Sim, demand: () => number) {
   const sources: ((m: MachineData) => number)[] = [];
   const power = {
@@ -174,7 +174,7 @@ describe('E23.5.3: the Bio Digester', () => {
   it('done when, on the real E23.3 grid: a fed digester alone carries a game night for a charger-sized load', () => {
     const sim = farm();
     sim.state.salvage!.tier = 4;
-    // a stand-in for E23.3.3's charger (not on e23-integration yet): a chest drawing a charger's 6 W
+    // a load drawing a charger's 6 W all night (a real charger draws only while bloombot sits on it): a chest
     sim.power.register('chest', { consumer: { shed: 'charger', draw: 6 } });
     // the power pole and the chest come from Mast Row's and Saltwind's Keepers (data/crafting)
     for (const r of ['mastRow', 'saltwind']) sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === r)!.id] = { step: 'settled' };

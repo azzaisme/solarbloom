@@ -55,6 +55,11 @@ export class DayNight {
    * `exposure` shares. Glows that should stay bright multiply their emissive by `boost` to make up for the exposure. */
   dim = 0;
 
+  /** The share of their strength the scene's lights keep under the Power view's dim (lamps follow it). */
+  get lightShare(): number {
+    return this.lightKeep;
+  }
+
   private get lightKeep(): number {
     return 1 - this.dim * (1 - POWER.view.light);
   }
@@ -107,14 +112,14 @@ export class DayNight {
       const e = (elDeg * Math.PI) / 180;
       return out.set(Math.sin(azR) * Math.cos(e), -Math.sin(e), Math.cos(azR) * Math.cos(e));
     };
-    const moonW = 1 - smooth(day * 1.6);
+    const moonW = 1 - smooth(day * L.moonBlend);
     toDir(sunEl, sunAz, this.dir);
     toDir(moonEl, moonAz, this.fd);
     this.dir.lerp(this.dir, this.fd, moonW).normalize();
     this.scene.sun.setRotation(this.q.setFromDirections(pc.Vec3.DOWN, this.dir));
     // colour: warm when low, LOOK's golden hour in the middle of the day, moonlight at night
     const sunLight = this.scene.sun.light!;
-    const warm = 1 - smooth(h / 0.45);
+    const warm = 1 - smooth(h / L.warmBelow);
     this.tmp.lerp(this.base.sun, this.base.low, warm);
     this.tmp.lerp(this.base.moon, this.tmp, day);
     // the Power view: the light goes cool and grey as it dims, so the world reads muted and the yellow grid pops
@@ -132,9 +137,11 @@ export class DayNight {
     if (this.dim > 0) this.fillCol.lerp(this.fillCol, this.viewLight, this.dim);
     fill.color = this.fillCol.clone();
     fill.intensity = LOOK.fill.intensity * lerp(L.fillNight, 1, day) * (1 + oc * 0.6) * keep;
+    this.scene.setEnvNight(1 - day);
     this.app.scene.skyboxIntensity = LOOK.env.intensity * lerp(L.envNight, 1, day) * (1 - oc * 0.1) * keep;
     this.rim = lerp(L.rimNight, 1, day) * (1 - oc * 0.5);
-    this.app.scene.exposure = LOOK.exposure * lerp(L.exposureNight, 1, day) * (1 - oc * 0.22) * (1 + (m.flash ?? 0) * 0.5) * this.exposureKeep;
+    // E23.7.5: night keeps the day's exposure: it is a blue moonlit look made of light and colour, not a darker picture
+    this.app.scene.exposure = LOOK.exposure * (1 - oc * 0.22) * (1 + (m.flash ?? 0) * 0.5) * this.exposureKeep;
     // the sky: night, the warm band at dawn and dusk, and the weather's cloud
     this.sky.night = 1 - day;
     const edge = Math.min(Math.abs(f - DAY.dayShare), f, 1 - f); // distance to the nearer horizon
