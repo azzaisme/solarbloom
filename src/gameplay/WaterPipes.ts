@@ -64,8 +64,9 @@ export class WaterPipes {
   /** what each pipe tile carrying water is fed by, refreshed every water step */
   private fed = new Map<string, PipeSource[]>();
   /**
-   * Pumps that want to run (on a bank with water, on a line): they ask the grid for power. Whether they then push
-   * water is up to the grid (`powered`), so what they ask for never depends on being powered.
+   * Pumps that want to run (on a bank with water, on a line, and their water has somewhere to go: `wanted`): they
+   * ask the grid for power. Whether they then push water is up to the grid (`powered`), so what they ask for never
+   * depends on being powered.
    */
   readonly pumping = new Set<string>();
   /** bumped when pipes are laid or lifted (the renderer rebuilds) */
@@ -232,15 +233,30 @@ export class WaterPipes {
     return undefined;
   }
 
-  /** Is a pump on grid power? (E23.3; true until the grid lands) */
+  /** Is a pump on grid power? (E23.3) */
   powered(m: MachineData): boolean {
-    return (this.sim as { power?: { isPowered?: (m: MachineData) => boolean } }).power?.isPowered?.(m) ?? true;
+    return this.sim.power.isPowered(m);
   }
 
-  /** Would this pump push water now (powered, on a bank with water in it)? */
+  /** Would this pump push water now (it wants to run, as of the last water step, and it is powered)? */
   pumpLive(m: MachineData): boolean {
-    const b = this.pumpSource(m);
-    return !!b && this.powered(m) && this.water.amountOf(b.id) > 0;
+    return this.pumping.has(m.id) && this.powered(m);
+  }
+
+  /**
+   * Has this pump's water somewhere to go? A reservoir in its reach with room, or a stretch of its line that its
+   * full reservoirs can't feed by gravity (a line with no reservoir: all of it, since what draws on it takes the
+   * pump's water). Like the desalination plant, a pump whose tanks are full and already feed its whole line stands
+   * idle and asks the grid for nothing; once water is drawn from them it starts again.
+   */
+  wanted(p: MachineData, net: PipeNet): boolean {
+    const reach = this.reachOf(p, net);
+    const tanks = net.tanks.filter((t) => this.touches(t, reach));
+    if (tanks.some((t) => this.water.levelOf(tankId(t)) < 1)) return true;
+    const byGravity = new Set<string>();
+    for (const t of tanks) for (const k of this.gravityTiles(t, net)) byGravity.add(k);
+    for (const k of reach) if (!byGravity.has(k)) return true;
+    return false;
   }
 
   /** A reservoir's water height in terrace levels (its highest footprint tile; flat ground everywhere else is 1). */
@@ -306,7 +322,7 @@ export class WaterPipes {
       // pumps fill the reservoirs on their line (uphill or not)
       for (const p of net.pumps) {
         const src = this.pumpSource(p);
-        if (src && w.amountOf(src.id) > 0) this.pumping.add(p.id);
+        if (src && w.amountOf(src.id) > 0 && this.wanted(p, net)) this.pumping.add(p.id);
         if (!this.pumpLive(p)) continue;
         const spec = this.pumpTypes.get(p.type)!;
         let budget = spec.flow * days;
@@ -437,12 +453,11 @@ export class WaterPipes {
 
   /** E23.3: pumps are grid consumers (shed after lamps); they draw only while they move water. */
   registerPower() {
-    const power = (this.sim as unknown as { power?: { register?: (type: string, def: unknown) => void } }).power;
-    if (!power?.register) return;
+    const power = this.sim.power;
     for (const [type, spec] of this.pumpTypes) {
       if (this.registered.has(type)) continue;
       this.registered.add(type);
-      power.register(type, { consumer: { shed: 'pump', draw: (m: MachineData) => (this.pumping.has(m.id) ? (spec.power ?? WATER_NET.pump.power) : 0) } });
+      power.register(type, { consumer: { shed: 'pump', draw: (m) => (this.pumping.has(m.id) ? (spec.power ?? WATER_NET.pump.power) : 0) } });
     }
   }
 }
