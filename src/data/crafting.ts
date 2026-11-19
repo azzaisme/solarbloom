@@ -80,7 +80,7 @@ export interface MachineRecipe {
 export const MACHINE_RECIPES: MachineRecipe[] = [
   // the owner's call: planter boxes open when Timber does (Tide, Saltwind Beach); until then the farm is gathering
   { id: 'planterBox', name: 'Planter box', cost: { planks: 3 }, unlock: { keeper: 'saltwind' }, builds: 'planter' },
-  { id: 'compostBin', name: 'Compost bin', cost: { planks: 4, scrap: 2 }, unlock: { home: true }, owner: 'E23.5' },
+  { id: 'compostBin', name: 'Compost bin', cost: { planks: 4, scrap: 2 }, unlock: { home: true }, builds: 'compostBin' },
   // E23.3 (#422): Bloom Relays are the grid's poles, so the power pole builds one
   { id: 'powerPole', name: 'Power pole', cost: { planks: 1, wire: 1 }, unlock: { keeper: 'mastRow' }, builds: 'relay' },
   { id: 'charger', name: 'Charger', cost: { scrap: 4, wire: 2 }, unlock: { keeper: 'mastRow' }, builds: 'charger' },
@@ -92,7 +92,7 @@ export const MACHINE_RECIPES: MachineRecipe[] = [
   { id: 'pump', name: 'Pump', cost: { scrap: 6, wire: 2, clay: 2 }, unlock: { keeper: 'cistern' }, builds: 'pump', owner: 'E23.4' },
   { id: 'desalination', name: 'Desalination plant', cost: { scrap: 10, pipe: 4, glassPane: 4, wire: 2 }, unlock: { keeper: 'cistern' }, builds: 'desalination', owner: 'E23.4' },
   { id: 'battery', name: 'Battery', cost: { batteryCell: 4 }, unlock: { keeper: 'clockPlaza' }, builds: 'battery' },
-  { id: 'bioDigester', name: 'Bio Digester', cost: { scrap: 10, motor: 2, clay: 4 }, unlock: { keeper: 'clockPlaza' }, owner: 'E23.5' },
+  { id: 'bioDigester', name: 'Bio Digester', cost: { scrap: 10, motor: 2, clay: 4 }, unlock: { keeper: 'clockPlaza' }, builds: 'bioDigester' },
   { id: 'drone', name: 'Drone', cost: { motor: 1, wire: 2, glassPane: 1 }, unlock: { keeper: 'clockPlaza' }, owner: 'E23.6.3' },
   { id: 'largeSolar', name: 'Large solar array', cost: { sunCell: 4, scrap: 6, wire: 2 }, unlock: { keeper: 'observatory' }, owner: 'unassigned: no sub-epic builds it yet (raised with the coordinator)' },
   { id: 'assembler', name: 'Assembler', cost: { motor: 4, gears: 10, glassPane: 6 }, unlock: { keeper: 'spireHeights' }, owner: 'E23.6.5' },
@@ -103,7 +103,8 @@ export const MACHINE_RECIPES: MachineRecipe[] = [
   { id: 'pollinator', name: 'Pollinator Garden', cost: { seeds: 10, planks: 3, biomass: 20 }, unlock: { tier: 2 }, builds: 'pollinator' },
   { id: 'droneHub', name: 'Drone Hub', cost: { scrap: 12, motor: 1, wire: 4, glassPane: 2 }, unlock: { tier: 2 }, builds: 'droneHub' },
   { id: 'reservoirGarden', name: 'Reservoir Garden', cost: { clay: 15, seeds: 10, biomass: 30 }, unlock: { tier: 3 }, builds: 'reservoirGarden' },
-  { id: 'motherTree', name: 'Mother Tree', cost: { seeds: 30, clay: 20, biomass: 100 }, unlock: { tier: 3 }, builds: 'motherTree' },
+  // E23.5.3: a landmark tree wants fertiliser
+  { id: 'motherTree', name: 'Mother Tree', cost: { seeds: 30, clay: 20, biomass: 100, fertiliser: 4 }, unlock: { tier: 3 }, builds: 'motherTree' },
   { id: 'cultivator', name: 'Cultivator', cost: { scrap: 20, motor: 2, gears: 10, planks: 4 }, unlock: { tier: 4 }, builds: 'cultivator' },
 ];
 

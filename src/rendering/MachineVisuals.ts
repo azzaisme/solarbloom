@@ -19,6 +19,7 @@ import { treeGeo } from './TreeGen';
 import { machineRunning } from './FaunaPlan';
 import { arcPath, ball, bezier, dome, latheAuto, matOf, part, rbox, rcyl, ring, setMat, tube } from './MachineParts';
 import { cultivatorDock } from './CultivatorVisuals';
+import { compostBinBody, digesterBody } from './FarmBodies';
 import { plantId, tankId } from '../gameplay/WaterPipes';
 import { oldCityModel, MODELS } from './Models';
 
@@ -95,6 +96,10 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   chest: ['storage-chest', 1.0],
   // E23.5.2: the planter box (its crop is drawn by CropVisuals)
   planter: ['planter-bed', 0.9],
+  // E23.5.3: E23.10's hand-built bin (1 m cube, scaled to its tile) and digester; the procedural bodies stand in
+  // until their files are in assets/raw/models/final (MODELS loads whatever is there)
+  compostBin: ['compost-bin', 0.82],
+  bioDigester: ['bio-digester', 0.8],
 };
 /** The Mother Tree's collar model: its scale (the planter fits the procedural ring, radius 0.85) and planter top (model metres). */
 const MotherCollar = { scale: 1.12, top: 0.84 };
@@ -649,6 +654,12 @@ export class MachineVisuals {
         break;
       case 'cultivator': // Look 6.9: the dock (its tillers are drawn by CultivatorVisuals)
         cultivatorDock(v.body);
+        break;
+      case 'compostBin': // E23.5.3 (its heap is drawn by CropVisuals)
+        compostBinBody(v.body);
+        break;
+      case 'bioDigester': // E23.5.3 (its glow is drawn by CropVisuals)
+        digesterBody(v.body);
         break;
       case 'reservoir': // E23.4.2.1
         this.waterTank(v);

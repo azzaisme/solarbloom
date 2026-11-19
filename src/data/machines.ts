@@ -115,6 +115,24 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     allowedGround: ['restored', 'prepared'],
     blurb: 'A raised bed: plant seeds in it, keep it watered and harvest food.',
   },
+  // E23.5.3: biomass and food scraps rot down into compost, then fertiliser.
+  compostBin: {
+    type: 'compostBin',
+    name: 'Compost Bin',
+    icon: '🟫',
+    size: 1,
+    allowedGround: ['restored', 'prepared', 'polluted'],
+    blurb: 'Fill it with biomass and food scraps: they rot down into compost, and compost left inside becomes fertiliser.',
+  },
+  // E23.5.3: biomass into grid power, day or night, while fed.
+  bioDigester: {
+    type: 'bioDigester',
+    name: 'Bio Digester',
+    icon: '⚡',
+    size: 1,
+    allowedGround: ['restored', 'prepared', 'polluted'],
+    blurb: 'Feed it biomass and it powers its grid, day or night. When it runs empty it simply stops.',
+  },
   // E23.3.2: the grid's storage and its weather power.
   battery: {
     type: 'battery',
@@ -177,7 +195,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
 };
 
 /** E21.3: what can be built (E23.1.1: one list, the Old City's; E23.7.4 dropped the Reclaimer; E23.3 adds the grid; E23.5.2 the Planter; E23.4 the water). */
-export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoir', 'pump', 'desalination', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'compostBin', 'bioDigester', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoir', 'pump', 'desalination', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

@@ -248,6 +248,8 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   cultivator: 'carrot', // the tiller: its tray slot showed 'undefined' without one
   chest: 'parcel', // E21.1
   planter: 'garden', // E23.5.2
+  compostBin: 'basket', // E23.5.3
+  bioDigester: 'energy', // E23.5.3
   battery: 'battery', // E23.3.2
   windTurbine: 'windTurbine', // E23.3.2
   charger: 'charger', // E23.3.3

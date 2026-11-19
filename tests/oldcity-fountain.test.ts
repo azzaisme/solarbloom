@@ -90,7 +90,7 @@ describe('E21.6: the fountain', () => {
         if ('tier' in r.unlock) expect(at, r.id).toBe(r.unlock.tier);
         else expect(at, r.id).toBe(99);
         if (at < 99) expect(sim.build.isUnlocked(r.builds), `${r.id} at ${tier}`).toBe(at <= tier);
-        else expect(sim.build.isUnlocked(r.builds), `${r.id} at ${tier}`).toBe(false);
+        else expect(sim.build.isUnlocked(r.builds), `${r.id} at ${tier}`).toBe('home' in r.unlock); // home kit: from the start
       }
       // and the fountain says so: its list names every machine it opens at this tier, and only those
       const named = MACHINE_RECIPES.filter((r) => r.builds && 'tier' in r.unlock).map((r) => ({ name: MACHINES[r.builds!].name, tier: (r.unlock as { tier: number }).tier }));
