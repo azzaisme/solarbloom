@@ -1,6 +1,9 @@
 // E23.6.3 (#392): what drones run on, in the game, on the real grid and store. A Drone Hub with a Storage chest
 // beside it: with no power on its line its drones wait at home; solar panels beside it start them; with no Biomass
 // left in the store they finish, dock and say why in the hub's panel; Biomass back, they start again by themselves.
+// Then water: a Gardener hub by the park's canal, which starts dry: its drones dock; the canal filled, they start again.
+// Docked drones settle on their hub under a small dim glyph of what's missing; the docked shot is framed close on the
+// hub, its drones and the chest, with no panel open.
 // Screenshots go to SHOTS_DIR (default docs/review). Run after `vite build` (npm run test:drone-fuel), or against a
 // dev server with BASE_URL.
 import { mkdirSync } from 'node:fs';
@@ -100,11 +103,21 @@ try {
           else if (s.build.place('solar', 'g', x, z) && (s.power.invalidate(), s.power.isPowered(hub) || n < 2)) n++;
         }
     s.power.invalidate();
-    return { panels: n, powered: s.power.isPowered(hub), draw: s.power.draw(hub), want: s.droneFuel.supply('restorer').power, why: [...why] };
+    return { panels: n, powered: s.power.isPowered(hub), room: s.power.headroom(hub), want: s.droneFuel.supply('restorer').power, why: [...why] };
   }, hubId);
-  check(lit.panels > 0 && lit.powered && lit.draw === lit.want, `solar panels beside the hub power it; it draws its Restorer's ${lit.want} W (${JSON.stringify(lit)})`);
+  check(lit.panels > 0 && lit.powered && lit.room >= lit.want, `solar panels beside the hub power it, with room for a Restorer at work (${lit.want} W) (${JSON.stringify(lit)})`);
   await all('waitingEnergy', true);
   let st = await status();
+  // a drone at work draws its Restorer's power from the line (napping or docked, nothing)
+  const drew = await page
+    .waitForFunction((id) => {
+      const s = window.solarbloom.sim, hub = s.machine(id);
+      const out = s.state.drones.filter((d) => d.hubId === id && d.mode !== 'idle' && d.mode !== 'cooldown').length;
+      return out > 0 && s.power.draw(hub) === out * s.droneFuel.supply('restorer').power && { out, draw: s.power.draw(hub) };
+    }, hubId, { timeout: 120000 })
+    .then((h) => h.jsonValue())
+    .catch(() => undefined);
+  check(!!drew, `drones at work draw their Restorer's power from the line (${JSON.stringify(drew)})`);
   check(st.every((x) => x !== 'waitingEnergy' && x !== 'docked'), `powered: the drones go to work by themselves (${st.join(', ')})`);
   // the store runs out of Biomass: they finish what they're on, then dock
   const used = await page.evaluate(() => {
@@ -119,6 +132,40 @@ try {
   check(st.length > 0 && st.every((x) => x === 'docked'), `no Biomass: the hub's drones dock (${st.join(', ')})`);
   said = await line();
   check(/docked — waiting for Biomass in the store/.test(said), `the hub's panel says why: "${said}"`);
+  // no panel: bloombot a few tiles off the hub and chest, facing them; the camera recentres behind it
+  const glyphs = await page.evaluate((id) => {
+    const g = window.solarbloom, s = g.sim;
+    g.closeInspect?.();
+    g.select?.(undefined);
+    const hub = s.machine(id), chest = s.droneFuel.chestBeside(hub);
+    const mx = (hub.x + hub.size / 2 + chest.x + 0.5) / 2, mz = (hub.z + hub.size / 2 + chest.z + 0.5) / 2;
+    for (const [dx, dz] of [[0, 4], [0, -4], [4, 0], [-4, 0], [3, 3], [-3, 3]]) {
+      g.bot.cancelWalk?.();
+      g.bot.teleport('g', mx + dx, mz + dz);
+      if (Math.hypot(g.bot.pose.x - mx - dx, g.bot.pose.z - mz - dz) < 0.05) {
+        g.bot.pose.facing = Math.atan2(-dx, -dz);
+        break;
+      }
+    }
+    return true;
+  }, hubId);
+  await page.keyboard.press('KeyC');
+  await page
+    .waitForFunction((id) => window.solarbloom.sim.state.drones.filter((d) => d.hubId === id).every((d) => d.mode === 'idle'), hubId, { timeout: 120000 })
+    .catch(() => {});
+  await page.waitForTimeout(3000);
+  const cue = await page.evaluate((id) => {
+    const g = window.solarbloom;
+    const views = g.drones?.views;
+    const out = [];
+    for (const d of g.sim.state.drones.filter((d) => d.hubId === id)) {
+      const v = views?.get?.(d.id);
+      out.push({ glyph: v?.glyph?.root?.enabled ?? null, kind: v?.glyph?.kind ?? null, y: v ? +(v.root.getPosition().y).toFixed(2) : null });
+    }
+    return { out, panel: !!document.querySelector('#inspect')?.offsetParent };
+  }, hubId);
+  console.log('cue', JSON.stringify(cue));
+  check(cue.out.length > 0 && cue.out.every((c) => c.glyph && c.kind === 'biomass') && !cue.panel, `docked drones settle on their hub under the Biomass glyph, no panel open (${JSON.stringify(cue)})`);
   await page.screenshot({ path: `${dir}/ui-drone-fuel-docked.png` });
   // Biomass back: they start again by themselves
   await page.evaluate(() => window.solarbloom.sim.inventory.addToStore('biomass', 50));
@@ -126,6 +173,88 @@ try {
   st = await status();
   check(st.length > 0 && st.every((x) => x !== 'docked' && x !== 'waitingEnergy'), `Biomass back: they start again by themselves (${st.join(', ')})`);
   await page.screenshot({ path: `${dir}/ui-drone-fuel-back.png` });
+  // Water: a second hub, its Gardeners on the park's canal (it starts dry), powered by panels beside it
+  const wet = await page.evaluate(() => {
+    const g = window.solarbloom, s = g.sim;
+    let canal, tiles = [];
+    for (let x = 0; x < 120; x++)
+      for (let z = 0; z < 120; z++) {
+        const t = s.grid.get('g', x, z), b = t && s.water.bodyAt(t);
+        if (b && (!canal || b.id === canal.id)) {
+          canal = b;
+          tiles.push([x, z]);
+        }
+      }
+    if (!canal) return { why: 'no water body on the ground' };
+    const area = s.areas.areaOf({ roofId: 'g', x: tiles[0][0], z: tiles[0][1] });
+    if (area) s.areas.clear(area, true);
+    for (const [wx, wz] of tiles)
+      for (let x = wx - 4; x <= wx + 4; x++)
+        for (let z = wz - 4; z <= wz + 4; z++) {
+          const t = s.grid.get('g', x, z);
+          if (!t || t.occupantId || s.water.bodyAt(t)) continue;
+          t.ground = 'restored';
+          t.pollution = 0;
+          s.grid.touch(t);
+        }
+    s.water.draw(canal.id, s.water.amountOf(canal.id)); // dry, as the canal starts
+    for (const [k, v] of Object.entries(s.build.recipe('droneHub'))) s.inventory.add(k, v);
+    for (const [k, v] of Object.entries(s.build.recipe('solar'))) s.inventory.add(k, v * 3);
+    const why = new Set();
+    let hub;
+    for (const [wx, wz] of tiles) {
+      for (const [dx, dz] of [[1, -1], [-2, -1], [-1, 1], [-1, -2], [2, -1], [-1, 2], [-3, -1], [-1, -3]]) {
+        const x = wx + dx, z = wz + dz;
+        g.bot.teleport('g', x + 1, z + 3.5);
+        s.bot = { roofId: 'g', x: g.bot.pose.x, z: g.bot.pose.z };
+        const c = s.build.check('droneHub', 'g', x, z);
+        if (!c.ok) {
+          why.add(c.reason);
+          continue;
+        }
+        hub = s.build.place('droneHub', 'g', x, z);
+        if (hub && s.droneFuel.waterBeside(hub, 0)) break;
+        if (hub) s.build.remove?.(hub.id);
+        hub = undefined;
+      }
+      if (hub) break;
+    }
+    if (!hub) return { why: [...why].slice(0, 6) };
+    (hub.roles ??= []).push('gardener'); // the Gardener's unlock (a Water Condenser built) is not what this checks
+    const chose = s.roles.choose(hub.id, 'gardener');
+    let n = 0;
+    for (let ring = 0; ring < 3 && n < 3; ring++)
+      for (let x = hub.x - 1 - ring; x <= hub.x + hub.size + ring && n < 3; x++)
+        for (let z = hub.z - 1 - ring; z <= hub.z + hub.size + ring && n < 3; z++)
+          if (s.build.check('solar', 'g', x, z).ok && s.build.place('solar', 'g', x, z)) n++;
+    s.power.invalidate();
+    return { id: hub.id, canal: canal.id, chose, panels: n, powered: s.power.isPowered(hub), water: s.water.amountOf(canal.id) };
+  });
+  check(!!wet.id && wet.chose && wet.powered && wet.water === 0, `a Gardener hub by the dry canal, on panels of its own (${JSON.stringify(wet)})`);
+  if (wet.id) {
+    const gst = () => page.evaluate((id) => window.solarbloom.sim.state.drones.filter((d) => d.hubId === id).map((d) => window.solarbloom.sim.drones.statusOf(d)), wet.id);
+    const every = (want, not = false) =>
+      page
+        .waitForFunction(
+          ({ id, want, not }) => {
+            const s = window.solarbloom.sim, ds = s.state.drones.filter((d) => d.hubId === id);
+            return ds.length > 0 && ds.every((d) => (s.drones.statusOf(d) === want) !== not);
+          },
+          { id: wet.id, want, not },
+          { timeout: 180000 },
+        )
+        .catch(() => {});
+    await every('docked');
+    let w = await gst();
+    check(w.length > 0 && w.every((x) => x === 'docked'), `the canal dry: the Gardeners dock (${w.join(', ')})`);
+    const short = await page.evaluate((id) => window.solarbloom.sim.droneFuel.short(window.solarbloom.sim.machine(id), 'gardener'), wet.id);
+    check(short === 'water', `what the hub is short of: ${short}`);
+    // rain (here, a fill): the Gardeners start again by themselves
+    await page.evaluate((c) => window.solarbloom.sim.water.fill(c, 40), wet.canal);
+    await every('docked', true);
+    w = await gst();
+    check(w.length > 0 && w.every((x) => x !== 'docked' && x !== 'waitingEnergy'), `the canal filled: the Gardeners start again by themselves (${w.join(', ')})`);
+  }
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
 } finally {
   await browser.close();
