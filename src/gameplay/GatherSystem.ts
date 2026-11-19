@@ -46,21 +46,30 @@ export class GatherSystem {
 
   /** Clips a tile: biomass into the backpack (as much as fits), and the tile regrows later. Returns units taken. */
   gather(t: TileData): number {
-    const s = this.sim;
     const why = this.problem(t);
     if (why) {
-      s.bus.emit('action.failed', { reason: why });
+      this.sim.bus.emit('action.failed', { reason: why });
       return 0;
     }
+    return this.clip(t, 'pack');
+  }
+
+  /**
+   * Clips a gatherable tile into the backpack (as much as fits) or, for a Harvester drone (E23.1.4), into the
+   * city's store. The tile regrows later. Returns units taken (0: nothing to clip, or no room in the backpack).
+   */
+  clip(t: TileData, into: 'pack' | 'store'): number {
+    const s = this.sim;
+    if (!this.canGather(t)) return 0;
     const want = this.yieldOf(t);
-    const got = want - s.inventory.add('biomass', want);
+    const got = into === 'store' ? (s.inventory.addToStore('biomass', want), want) : want - s.inventory.add('biomass', want);
     if (got <= 0) return 0;
     const sv = s.state.salvage!;
     const clipped = (sv.clipped ??= {});
     // forget tiles that have regrown, so the save stays small
     for (const [id, at] of Object.entries(clipped)) if (at <= s.time) delete clipped[id];
     clipped[t.id] = s.time + gameDays(GATHER.regrowDays);
-    s.bus.emit('biomass.gathered', { tileId: t.id, x: t.x, z: t.z, got });
+    s.bus.emit('biomass.gathered', { tileId: t.id, x: t.x, z: t.z, got, by: into === 'store' ? 'drone' : 'bot' });
     return got;
   }
 }

@@ -1,4 +1,3 @@
-import { big } from '../src/core/Big';
 import { createInitialState, GROUND, placeFixed } from '../src/core/GameState';
 import type { GroundState, LayerData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
@@ -26,9 +25,7 @@ export function makeSim(seed = 1234) {
 }
 
 export function rich(sim: Sim) {
-  const s = sim.state;
-  s.caps.energy = big(10000); s.caps.water = big(10000);
-  s.resources.energy = big(5000); s.resources.water = big(5000); s.resources.biomass = big(5000);
+  // E23.1.4: no counters left: plenty means a full backpack and every tier open
   unlockAll(sim);
 }
 
@@ -65,7 +62,6 @@ export function setGround(sim: Sim, x: number, z: number, g: GroundState, roof =
   t.pollution = g === 'polluted' ? 100 : 0;
   t.bloom = g === 'restored' ? Math.max(1, t.bloom) : 0;
   sim.grid.touch(t);
-  sim.production.markDirty();
   return t;
 }
 

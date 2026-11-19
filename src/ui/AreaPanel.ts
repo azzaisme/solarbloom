@@ -9,18 +9,16 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 /** What each area type is good for, in plain language. */
 export const AREA_SPECIALTY: Record<string, string> = {
-  park: 'Lawns that grow biomass. Home.',
-  street: 'Long paved runs: street gardens here pass chains along green corridors, and it adds steady energy.',
-  plaza: 'Open paving that soaks up sun: the best energy bonus, and room for corridors.',
-  canal: 'Water channels: adds steady water, and Reservoir Gardens grow here.',
-  market: 'Crowded with stalls: a bit of biomass and energy once cleared.',
-  reservoir: 'Dry clay basins: the best water bonus, and Reservoir Gardens grow here.',
-  grove: 'Leaf litter around an Elder Tree: blooms nearby charge its Canopy Burst, and it adds biomass.',
+  park: 'Lawns that flower into biomass to gather. Home.',
+  street: 'Long paved runs: street gardens here pass chains along green corridors.',
+  plaza: 'Open paving that soaks up sun, with room for corridors.',
+  canal: 'Water channels, where Reservoir Gardens grow.',
+  market: 'Crowded with stalls and their old wares.',
+  reservoir: 'Dry clay basins, where Reservoir Gardens grow.',
+  grove: 'Leaf litter around an Elder Tree: blooms nearby charge its Canopy Burst.',
   beach: 'Sand and driftwood where the boat comes in. The Sea Lock across the canal wakes it.',
   downtown: 'Glass towers on a raised plateau around the Solar Spire, the tallest light in the city.',
 };
-
-const RES = { energy: '⚡', water: '💧', biomass: '🌿' } as const;
 
 export interface AreaPanelData {
   id: string;
@@ -30,8 +28,6 @@ export interface AreaPanelData {
   restored: number;
   need: number;
   ready: boolean;
-  /** this area's share of its type's bonus, per minute */
-  bonus: Partial<Record<keyof typeof RES, number>>;
   machines: Record<string, number>;
 }
 
@@ -42,13 +38,6 @@ export function areaPanelData(sim: Sim, id: string): AreaPanelData {
   const fog = s.areas.fog(id);
   const c = s.areas.counts(id);
   const need = id === PARK ? TUNING.park.restoredTiles : s.areas.need(id);
-  // The bonus this area gives: the type's total with it minus without it (soft-scaled), per minute.
-  const C = TUNING.city;
-  const n = s.areas.clearedByType()[a.type] ?? 0;
-  const counted = fog === 'cleared' && id !== PARK;
-  const k = counted ? Math.pow(n, C.bonusExponent) - Math.pow(n - 1, C.bonusExponent) : Math.pow(n + 1, C.bonusExponent) - Math.pow(n, C.bonusExponent);
-  const bonus: AreaPanelData['bonus'] = {};
-  for (const [r, v] of Object.entries(C.bonuses[a.type] ?? {})) bonus[r as keyof typeof RES] = Math.round(v * k * 60 * 10) / 10;
   const machines: Record<string, number> = {};
   for (const m of s.state.machines) if (m.type !== 'core' && s.areas.areaOf(m) === id) machines[m.type] = (machines[m.type] ?? 0) + 1;
   return {
@@ -59,7 +48,6 @@ export function areaPanelData(sim: Sim, id: string): AreaPanelData {
     restored: c.restored,
     need,
     ready: id !== PARK && s.areas.ready(id),
-    bonus,
     machines,
   };
 }
@@ -92,9 +80,6 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     ];
     checklist = steps.map((x) => `<li>${x.done ? '✅' : '⬜'} ${x.label}</li>`).join('');
   }
-  const bonusText = Object.entries(d.bonus)
-    .map(([r, v]) => `+${v} ${RES[r as keyof typeof RES]}/min`)
-    .join(' ');
   const machineText = Object.entries(d.machines)
     .map(([t, n]) => `${MACHINES[t as keyof typeof MACHINES]?.icon ?? '⚙️'} ${n} ${MACHINES[t as keyof typeof MACHINES]?.name ?? t}${n === 1 ? '' : 's'}`)
     .join(' · ');
@@ -120,7 +105,6 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     `<p class="stat">🌫️ ${cleared || parkAwake ? 'Clear' : `${fogName[d.fog]} · ${pct}%`}</p>` +
     (cleared || parkAwake ? '' : `<div class="bar"><i style="width:${pct}%"></i></div>`) +
     `<ul style="margin:6px 0;padding-left:18px;font-size:12.5px;list-style:none">${checklist}</ul>` +
-    (id === PARK ? '' : `<p class="stat">${cleared ? 'Bonus' : 'Bonus once clear'}: ${bonusText || '—'}</p>`) +
     `<p class="stat">Machines: ${machineText || 'none yet'}</p>` +
     oldCityShare(s, id) +
     (cultivating(s, id) ? `<p class="stat" data-cultivating="${esc(id)}">🚜 ${cultivating(s, id)} tile${cultivating(s, id) === 1 ? '' : 's'} being cultivated</p>` : '') +

@@ -2,6 +2,7 @@ import { GROUND } from '../core/GameState';
 import { machineStrengthAt } from '../core/RegionStrengths';
 import type { MachineData } from '../core/types';
 import { POWER } from '../data/power';
+import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
 /** Where something on the grid stands. */
@@ -54,6 +55,23 @@ interface WeatherLike {
 export function regionBoost(_sim: Sim, m: Pick<MachineData, 'roofId' | 'x' | 'z'> & { type: string }): number {
   if (m.roofId !== GROUND) return 1;
   return machineStrengthAt(m.type, m.x, m.z);
+}
+
+/** E23.12 (#528): is a panel inside a Lucky Cat's Solar Surge right now? (within its reach of where the cat was) */
+export function inSurge(sim: Sim, m: Pick<MachineData, 'roofId' | 'x' | 'z'>): boolean {
+  for (const b of sim.state.buffs)
+    if (b.type === 'solarFrenzy' && b.until > sim.time && b.at?.roofId === m.roofId && Math.hypot(b.at.x - m.x, b.at.z - m.z) <= TUNING.cat.surgeRadius) return true;
+  return false;
+}
+
+/**
+ * A panel's extra shine: ×2 for a few seconds after a bloom beside it (a chain's PRODUCE_ENERGY, E23.1.4), and ×3
+ * inside a Lucky Cat's Solar Surge (#528). Both feed the grid, never a counter.
+ */
+export function solarBoost(sim: Sim, m: Pick<MachineData, 'roofId' | 'x' | 'z'> & { boostUntil?: number }): number {
+  let k = (m.boostUntil ?? 0) > sim.time ? TUNING.solarBloomBoost.mult : 1;
+  if (inSurge(sim, m)) k *= TUNING.cat.surgeShine;
+  return k;
 }
 
 /** How high a machine stands, in terrace levels (rooftops count as high ground). */

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
-import { big } from '../src/core/Big';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -65,18 +64,16 @@ describe('E21.1: paying', () => {
     expect(inv.nearStore({ roofId: GROUND, x: 8.5, z: 21.5 })).toBe(false);
   });
 
-  it('E23.5.1: a recipe’s biomass is a carried item, paid like any material (the counter is never read)', () => {
+  it('E23.5.1: a recipe’s biomass is a carried item, paid like any material', () => {
     const sim = oldSim();
     const inv = sim.inventory;
-    sim.state.resources.biomass = big(1000);
     inv.add('biomass', 5);
     inv.add('seeds', 10);
     expect(inv.shortfall({ seeds: 10, biomass: 20 }, FAR)).toBe('biomass');
     inv.add('biomass', 20);
     expect(inv.pay({ seeds: 10, biomass: 20 }, FAR)).toBe(true);
     expect(inv.count('biomass')).toBe(5);
-    expect(sim.state.resources.biomass.toNumber()).toBe(1000); // the old counter is never touched
-    expect(sim.econ.get('biomass').toNumber()).toBe(5); // econ's biomass is what bloombot carries
+    expect(inv.available('biomass', FAR)).toBe(5); // the biomass there is is what bloombot carries
   });
 
   it('a refund goes to the pack, anything over a stack to the store', () => {

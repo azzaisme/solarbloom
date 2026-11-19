@@ -53,12 +53,11 @@ export function wanderStop(seed: number, actor: number, leg: number, home: { x: 
 /** A machine that is really working right now (drives its "active" effects; idle machines only breathe). */
 export function machineRunning(sim: Sim, m: MachineData): boolean {
   if (!isBuilt(m)) return false;
-  const e = sim.econ;
   switch (m.type) {
     case 'solar':
-      return !e.isFull('energy');
+      return sim.power.output(m) > 0; // E23.1.4: shining into the grid (not just a store with room)
     case 'condenser':
-      return !e.isFull('water');
+      return true; // it always fills its meter and waters the soil beside it
     case 'droneHub':
       return sim.state.drones.some((d) => d.hubId === m.id && d.mode !== 'idle');
     case 'core':

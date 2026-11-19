@@ -120,12 +120,11 @@ describe('E21.6: the fountain', () => {
     for (const p of PARK_SET.piles) while (sim.salvage.left(p.id) > 0) if (!sim.salvage.salvage(p.id)) break;
     expect(sim.fountain.remaining('scrap')).toBe(0);
     expect(sim.fountain.remaining('seeds')).toBe(0);
-    // restore the park by hand: pulse, wait for energy and water, repeat
+    // restore the park by hand: pulse, and when the charge runs out rest by the fountain (E23.1.4: a pulse costs only charge)
     for (let i = 0; i < 4000 && sim.areas.counts(PARK).restored < 60; i++) {
       const t = sim.areas.tiles(PARK).find((q) => sim.restoration.checkPulse(q).ok && q.ground !== 'restored');
       if (t) sim.restoration.pulse(t.id);
       sim.advance(1);
-      if (!sim.state.progression.coreActivated && sim.time % 20 < 1) sim.harvestSun();
     }
     sim.advance(2);
     expect(sim.fountain.tier).toBe(1);

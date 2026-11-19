@@ -142,10 +142,7 @@ try {
         t.bloom = 2;
         s.grid.touch(t);
       }
-      const D = st.resources.biomass.constructor;
-      st.caps.energy = new D(1e6);
-      st.caps.water = new D(1e6);
-      for (const k of ['energy', 'water', 'biomass']) st.resources[k] = new D(1e6);
+      for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) st.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
       st.progression.coreActivated = true;
       st.fauna = { butterflies: 0, birds: 0, koi: 0, robots: 0 };
       g.chunks.markAll();
@@ -196,9 +193,7 @@ try {
       const g = window.solarbloom;
       const s = g.sim;
       const V = g.camera.target.constructor;
-      const B = s.state.resources.energy.constructor;
-      s.state.caps.energy = new B(1e6); s.state.caps.water = new B(1e6);
-      s.state.resources.energy = new B(1e6); s.state.resources.water = new B(1e6);
+      for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) s.state.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
       // machines unlock at their fountain tier and are paid with their recipe
       const sv = s.state.salvage;
       sv.tier = Math.max(sv.tier, 4);

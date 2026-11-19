@@ -1,111 +1,15 @@
-import { machinesStamp } from '../core/GameState';
-import { KINDS } from '../core/Economy';
-import { chunkKey, distToFootprint, type Chunk } from '../core/Grid';
-import { CHUNK } from '../core/Hash';
-import { bloomCounts } from '../core/TilePack';
-import { isRestorable } from '../core/GameState';
-import type { MachineData, Rates, TileData } from '../core/types';
-import { big } from '../core/Big';
+import { distToFootprint } from '../core/Grid';
+import type { TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
 /**
- * Passive income. Biomass is cached per chunk: a tile change only re-sums its own chunk, so the cost of
- * restoring a tile does not grow with the city. Global changes (upgrades, new machines, Cores) re-sum all.
+ * What machines do on their own each tick, now that nothing earns a counter (E23.1.4: passive income stopped; the
+ * grid, E23.3, and the water network, E23.4, carry what machines make). Pollinator Gardens mark their zones (chains
+ * and the renderer read them), and Water Condensers fill and water the dry soil beside them.
  */
 export class ProductionSystem {
-  private dirty = true;
-  private biomassRate = 0;
-  private wasFull: Record<string, boolean> = {};
-  private chunkRate = new Map<string, number>();
-  private dirtyChunks = new Set<string>();
-  /** chunk → earliest lush expiry inside it */
-  private lushAt = new Map<string, number>();
-
-  constructor(private sim: Sim) {
-    sim.grid.touchListeners.push((t) => this.dirtyChunks.add(chunkKey(t.roofId, Math.floor(t.x / CHUNK), Math.floor(t.z / CHUNK))));
-  }
-
-  /** A chunk was generated (or loaded with saved progress): include it, and drop its saved-data estimate. */
-  chunkLoaded(key: string) {
-    this.dirtyChunks.add(key);
-    const est = this.pendingEstimate.get(key);
-    if (est !== undefined) {
-      this.biomassRate -= est;
-      this.pendingEstimate.delete(key);
-    }
-  }
-
-  /** Income of saved chunks not loaded yet, estimated from their packed columns (no pollinator/lush bonus). */
-  private pendingEstimate = new Map<string, number>();
-
-  private estimatePending(): number {
-    this.pendingEstimate.clear();
-    const R = TUNING.restore;
-    let mult = this.sim.upgrades.soilMult;
-    if (this.sim.state.progression.coreActivated) mult *= TUNING.core.resonanceBiomassMult;
-    let sum = 0;
-    for (const [key, packed] of Object.entries(this.sim.grid.pending)) {
-      if (!this.sim.grid.isPlayable(key.split('|')[0])) continue;
-      const c = bloomCounts(packed);
-      const r = R.biomassPerSec * mult * c.reduce((a, n, lvl) => a + n * (R.bloomRateMult[lvl] ?? 0), 0);
-      this.pendingEstimate.set(key, r);
-      sum += r;
-    }
-    return sum;
-  }
-
-  /** Something global changed (upgrade, Core, a new rooftop): re-sum every chunk. */
-  markDirty() {
-    this.dirty = true;
-  }
-
-  /**
-   * A machine appeared or moved: only tiles under it or inside a garden's reach change rate, so re-sum just
-   * the chunks around it (a full re-sum of a 1,000-area city takes hundreds of ms).
-   */
-  markNear(roofId: string, x: number, z: number, size = 1) {
-    const r = this.sim.upgrades.maxPollinatorReach + 1;
-    for (let cz = Math.floor((z - r) / CHUNK); cz <= Math.floor((z + size + r) / CHUNK); cz++)
-      for (let cx = Math.floor((x - r) / CHUNK); cx <= Math.floor((x + size + r) / CHUNK); cx++) this.dirtyChunks.add(chunkKey(roofId, cx, cz));
-  }
-
-  private sumChunk(c: Chunk): number {
-    let b = 0;
-    let lush = Infinity;
-    const now = this.sim.time;
-    for (const t of c.tiles) {
-      if (!t) continue;
-      if (isRestorable(t, this.sim.state.machines)) b += this.tileBiomassRate(t);
-      if ((t.lushUntil ?? 0) > now) lush = Math.min(lush, t.lushUntil!);
-    }
-    if (lush < Infinity) this.lushAt.set(c.key, lush);
-    else this.lushAt.delete(c.key);
-    return b;
-  }
-
-  /** The Lucky Cat's Solar Surge buff (saved as 'solarFrenzy'). */
-  surgeActive() {
-    return this.sim.state.buffs.some((b) => b.type === 'solarFrenzy');
-  }
-
-  /** Solar output multiplier from Solar Surge (1 when it isn't running). */
-  surgeMult(): number {
-    return this.surgeActive() ? TUNING.cat.frenzyMult : 1;
-  }
-
-  /**
-   * `sustained`: without temporary boosts (bloom boosts, the Lucky Cat's Solar Surge), for cat rewards.
-   * `boost` is Solar Surge's multiplier, applied once here.
-   */
-  solarOutput(m: MachineData, sustained = false, boost = sustained ? 1 : this.surgeMult()): number {
-    const t = this.sim.time;
-    let v = (m.starter ? TUNING.starterSolarRate : TUNING.solarRate) * this.sim.upgrades.solarMult(m);
-    if (sustained) return v;
-    if (m.boostUntil > t) v *= TUNING.solarBloomBoost.mult;
-    v *= boost; // Solar Surge (composed centrally, Phase 4 E06.6; looked up once per rates() call)
-    return v;
-  }
+  constructor(private sim: Sim) {}
 
   /** True if the tile lies inside any pollinator's zone. */
   inPollinatorZone(t: TileData): boolean {
@@ -122,103 +26,7 @@ export class ProductionSystem {
     return best;
   }
 
-  tileBiomassRate(t: TileData): number {
-    if (t.ground !== 'restored') return 0;
-    let v = TUNING.restore.biomassPerSec * TUNING.restore.bloomRateMult[Math.max(1, t.bloom)] * this.sim.upgrades.soilMult;
-    v *= this.gardenZoneMult(t);
-    if (this.sim.state.progression.coreActivated) v *= TUNING.core.resonanceBiomassMult;
-    if ((t.lushUntil ?? 0) > this.sim.time) v *= TUNING.neighbourhood.reservoir.lushMult;
-    return v;
-  }
-
-
-  /**
-   * Income per second. `sustained` leaves out temporary solar boosts (Phase 4 E01: offline progress). Biomass
-   * from briefly lush tiles is still counted (it lasts 25 s and is a small share).
-   */
-  rates(sustained = false): Rates {
-    const grid = this.sim.grid;
-    if (this.dirty) {
-      this.dirty = false;
-      this.dirtyChunks.clear();
-      this.chunkRate.clear();
-      this.lushAt.clear();
-      let b = 0;
-      for (const l of grid.playableLayers()) {
-        if (l.kind === 'raised') grid.tilesOf(l.id); // make sure a rooftop is fully generated
-        for (const c of grid.loadedChunks(l.id)) {
-          const r = this.sumChunk(c);
-          this.chunkRate.set(c.key, r);
-          b += r;
-        }
-      }
-      this.biomassRate = b + this.estimatePending();
-    } else if (this.dirtyChunks.size) {
-      for (const key of this.dirtyChunks) {
-        const [layer, cx, cz] = key.split('|');
-        if (!grid.isPlayable(layer)) continue;
-        const c = grid.chunkAt(layer, Number(cx), Number(cz));
-        if (!c) continue;
-        const r = this.sumChunk(c);
-        this.biomassRate += r - (this.chunkRate.get(key) ?? 0);
-        this.chunkRate.set(key, r);
-      }
-      this.dirtyChunks.clear();
-    }
-    const bonus = this.sim.areas.bonusIncome();
-    const solarBoost = sustained ? 1 : this.surgeMult();
-    const sums = this.machineSums();
-    // Phase 4 E11: solar and condenser totals are cached (they only change with machines and upgrades); only the
-    // few panels in a bloom boost right now are visited each tick.
-    let energy = bonus.energy + sums.solar * solarBoost;
-    if (!sustained) {
-      const now = this.sim.time;
-      for (const m of this.boostedSolar) {
-        if (m.boostUntil > now) energy += this.solarOutput(m, true) * (TUNING.solarBloomBoost.mult - 1) * solarBoost;
-        else this.boostedSolar.delete(m);
-      }
-    }
-    const water = TUNING.rainBarrelRate + bonus.water + sums.condensers;
-    // Phase 5 E12: per-tile and per-machine coefficients are plain numbers; the totals are big numbers.
-    return { energy: big(energy), water: big(water), biomass: big(this.biomassRate + bonus.biomass) };
-  }
-
-  /** Solar panels in a bloom boost (kept small: boosts last seconds). */
-  private boostedSolar = new Set<MachineData>();
-  private sums?: { key: string; solar: number; condensers: number };
-
-  /** A solar panel just got a bloom boost (BloomChainSystem). */
-  solarBoosted(m: MachineData) {
-    this.boostedSolar.add(m);
-  }
-
-  private machineSums() {
-    const ms = this.sim.state.machines;
-    const key = `${machinesStamp(ms)}|${this.sim.upgrades.version}`;
-    if (this.sums?.key === key) return this.sums;
-    let solar = 0;
-    let condensers = 0;
-    const now = this.sim.time;
-    this.boostedSolar.clear();
-    for (const m of ms) {
-      if (m.type === 'solar') {
-        solar += this.solarOutput(m, true);
-        if (m.boostUntil > now) this.boostedSolar.add(m);
-      } else if (m.type === 'condenser') condensers += this.sim.upgrades.waterMult(m);
-    }
-    return (this.sums = { key, solar, condensers });
-  }
-
   tick(dt: number) {
-    for (const [key, at] of this.lushAt) if (this.sim.time >= at) this.dirtyChunks.add(key);
-    const r = this.rates();
-    for (const k of KINDS) {
-      const amt = r[k].mul(dt);
-      this.sim.econ.add(k, amt);
-      const full = this.sim.econ.isFull(k);
-      if (full && !this.wasFull[k]) this.sim.bus.emit('resource.full', { kind: k });
-      this.wasFull[k] = full;
-    }
     this.tickCondensers(dt);
   }
 
@@ -229,7 +37,7 @@ export class ProductionSystem {
     const num = (id: string) => Number(id.slice(1)) || 0;
     for (const m of s.machinesOfType('condenser')) {
       if (m.project && m.project.stage < 3) continue; // Phase 5 E14: still being built
-      const rate = TUNING.condenser.chargePerSec * (1 + 0.25 * s.upgrades.waterBloom(m));
+      const rate = TUNING.condenser.chargePerSec * (1 + 0.25 * s.upgrades.waterBloom(m)) * s.landmarks.condenserMult(); // Cistern Basin
       const was = m.charge ?? 0;
       m.charge = Math.min(TUNING.condenser.threshold, was + rate * dt);
       if (m.charge < TUNING.condenser.threshold) continue;

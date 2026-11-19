@@ -4,17 +4,6 @@ export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'm
   // E23.5.2: the farm
   | 'planter';
 export type BuildableType = Exclude<MachineType, 'core'>;
-export type ResourceKind = 'energy' | 'water' | 'biomass';
-/** Plain per-resource numbers (tuning tables, small per-second coefficients). */
-export type Resources = Record<ResourceKind, number>;
-/** Phase 5 E12: resource quantities are big numbers (see core/Big). */
-export type Amounts = Record<ResourceKind, import('./Big').Big>;
-/** Only energy and water have storage; biomass is uncapped. */
-export type CappedKind = Exclude<ResourceKind, 'biomass'>;
-export type Caps = Record<CappedKind, import('./Big').Big>;
-/** Income per second, per resource (totals are big numbers too). */
-export type Rates = Amounts;
-export type Cost = Partial<Record<ResourceKind, import('./Big').BigLike>>;
 export type RestoreSource =
   | 'pulse'
   | 'broad'
@@ -128,6 +117,8 @@ export interface MachineData {
   size: number;
   starter?: boolean;
   boostUntil: number; // solar bloom boost
+  /** E23.12 (#528): a Lucky Cat's Golden Relay: this relay carries power further, for good. */
+  golden?: boolean;
   timer: number; // per-machine automation timer
   charge: number; // condenser / Mother Tree / Reservoir Garden / Elder Tree charge meter
   /** Overcharge Pulse: a manual restoration right next to it boosts its next trigger until this time. */
@@ -138,9 +129,9 @@ export interface MachineData {
   tier?: number;
   /**
    * Phase 5 E14: a superstructure under construction. `stage` = stages paid (1 foundation, 2 assembly,
-   * 3 activation = built); `costs` = the three stage prices locked at placement (Decimal strings).
+   * 3 activation = built). E23.1.4: its counter prices went with the counters.
    */
-  project?: { stage: number; costs: Partial<Record<ResourceKind, string>>[] };
+  project?: { stage: number };
   /** Phase 5 E14: a superstructure's ability: charge (events), uses, automation switch. */
   ability?: { charge: number; used: number; auto?: boolean };
   /** E23.3: a power pole tripped by lightning (it carries nothing until bloombot resets it with one press). */
@@ -204,10 +195,12 @@ export interface DroneData {
   targetMachineId?: string;
 }
 
-export type BuffType = 'solarFrenzy' | 'megaflower';
+export type BuffType = 'solarFrenzy' | 'megaflower' | 'droneParty';
 export interface Buff {
   type: BuffType;
   until: number;
+  /** E23.12 (#528): where it was set off (a Solar Surge lights the panels near the cat; a Drone Party speeds the drones near it) */
+  at?: { roofId: string; x: number; z: number };
 }
 
 export type CatRewardType = 'luckyHarvest' | 'solarFrenzy' | 'megaBloom' | 'droneParty' | 'jackpot' | 'goldenRelay' | 'catsGarden' | 'fogWhisker';
@@ -251,8 +244,6 @@ export interface Progression {
   introSeen: boolean;
   /** manual pulses since the last Overcharge */
   pulseCharge: number;
-  /** Phase 4 E04.3: park milestones already paid (restored-tile thresholds). Missing in older saves. */
-  parkMilestones?: number[];
   /** Mega Pulse meter: manual taps since the last Mega Pulse (full at TUNING.mega.charge) */
   megaCharge?: number;
   /** Old saves only (the rooftop campaign's Cores). */
@@ -299,8 +290,6 @@ export interface AreaState {
   clearedAt?: number;
   /** what drones do here: keep it blooming, push from it into the fog, or leave it alone */
   mode?: AreaMode;
-  /** Phase 5 E12: rewarded progress steps already paid here (count of TUNING.areaSteps.at reached). */
-  steps?: number;
   /**
    * Revealed but still sealed in thick fog until its gate opens (E21.5; E23.1.5: never bought). While sealed
    * the area behaves exactly as hidden fog (nothing can be walked, restored or built). Absent on older saves.
@@ -432,8 +421,6 @@ export interface GameState {
   rngState: number;
   time: number;
   nextId: number;
-  resources: Amounts;
-  caps: Caps;
   layers: LayerData[];
   /** Only present in a save being loaded: packed tile deltas per chunk (consumed by Sim). */
   tiles?: Record<string, string>;
@@ -443,13 +430,10 @@ export interface GameState {
   drones: DroneData[];
   upgrades: Record<string, number>;
   buffs: Buff[];
-  harvestReadyAt: number;
   /** City areas that have been revealed (frontier or further). Static area data comes from the seed. */
   areas: Record<string, AreaState>;
   /** Bridges and relays by link id (see data/rooftops LINKS). */
   links: Record<string, LinkState>;
-  /** Golden Relay (Lucky Cat): extra remote blooms on the next cross-roof chain. */
-  relayBonus: number;
   cat: CatState;
   progression: Progression;
   stats: Stats;

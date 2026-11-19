@@ -129,14 +129,14 @@ describe('E19.1.2 choosing a plot', () => {
     sim.grid.get(GROUND, p.x, p.z);
     expect(cozy.choose(p.id, 'garden')).toMatch(/Restore/);
     restorePlot(sim, p);
-    const before = JSON.stringify(sim.state.resources);
+    const before = JSON.stringify(sim.state.salvage);
     expect(cozy.choose(p.id, 'garden')).toBeUndefined();
     expect(cozy.choice(p.id)?.id).toBe('garden');
     expect(cozy.choose(p.id, 'orchard')).toBeUndefined();
     expect(cozy.choice(p.id)?.id).toBe('orchard');
     expect(cozy.choose(p.id, 'mooring')).toBeDefined(); // a beach option, not offered here
     expect(cozy.choose(p.id, 'cafe')).toMatch(/Unlocks/); // not earned yet
-    expect(JSON.stringify(sim.state.resources)).toBe(before); // never costs anything
+    expect(JSON.stringify(sim.state.salvage)).toBe(before); // never costs anything
     expect(cozy.solidAt(GROUND, p.x, p.z)).toBe(true); // the orchard is solid
     expect(cozy.plotUnder(GROUND, p.x - 1, p.z - 1, 2)?.id).toBe(p.id);
     expect(cozy.choose(p.id, undefined)).toBeUndefined();
@@ -194,7 +194,7 @@ describe('E19.1.1 / E19.1.4 saves and unlocks', () => {
 });
 
 describe('E19.1.5 plots stay cosmetic', () => {
-  it('production, chains, milestones and biodiversity are identical whatever is chosen', { timeout: 240_000 }, () => {
+  it('the whole saved game, chains and biodiversity are identical whatever is chosen', { timeout: 240_000 }, () => {
     const saver = new SaveService(undefined);
     saver.now = () => 0;
     const strip = (s: string) => {

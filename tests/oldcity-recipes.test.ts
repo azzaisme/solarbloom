@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { big } from '../src/core/Big';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { BuildableType, GroundState } from '../src/core/types';
 import { BUILDABLE, MACHINES } from '../src/data/machines';
@@ -39,7 +38,6 @@ describe('E21.3: recipes', () => {
     for (const type of MACHINE_RECIPES.flatMap((r) => (r.builds ? [r.builds] : []))) {
       const sim = oldSim();
       wakeKeepers(sim);
-      sim.state.resources.biomass = big(0);
       const x = 12;
       const z = 12;
       ground(sim, x, z);

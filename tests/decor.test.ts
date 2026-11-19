@@ -27,7 +27,6 @@ function padScene() {
   rich(sim);
   fill(sim, 0, 0, 7, 7, 'restored');
   for (const t of sim.grid.tilesOf(PAD)) if (t.ground === 'restored') t.bloom = TUNING.restore.maxBloom;
-  sim.production.markDirty();
   const cozy = new Cozy(sim);
   cozy.groundOnly = false; // the pad is a raised layer
   return { sim, cozy };
@@ -85,7 +84,7 @@ describe('E19.2.1 decorations occupy their tile like a machine', () => {
     expect(free.d.bloom).toBeGreaterThan(1);
     const taken = run(true);
     for (const t of [taken.m, taken.d]) {
-      expect(t.ground).toBe('restored'); // the tile stays restored (and counts for milestones)
+      expect(t.ground).toBe('restored'); // the tile stays restored (and counts as restored)
       expect(t.bloom, t.id).toBe(1); // never nurtured
       expect(taken.touched.has(t.id), t.id).toBe(false); // never a drone's or a pulse's target
     }
@@ -100,10 +99,10 @@ describe('E19.2.1 decorations occupy their tile like a machine', () => {
     expect(taken.cozy.canDecorate('lantern', PAD, M.x, M.z)).toMatch(/already here/);
     expect(taken.cozy.canDecorate('lantern', PAD, D.x, D.z)).toBe(DECOR_IN_WAY);
     // Removing is free and instant: the tile is free at once.
-    const before = JSON.stringify(taken.sim.state.resources);
+    const before = JSON.stringify(taken.sim.state.salvage);
     expect(taken.cozy.removeDecor(PAD, D.x, D.z)?.kind).toBe('bench');
     expect(taken.d.occupantId).toBeUndefined();
-    expect(JSON.stringify(taken.sim.state.resources)).toBe(before);
+    expect(JSON.stringify(taken.sim.state.salvage)).toBe(before); // nothing paid, nothing handed back
     expect(taken.sim.build.check('condenser', PAD, D.x, D.z).ok).toBe(true);
     expect(taken.sim.state.cozy?.decor).toBeUndefined(); // sparse: nothing left behind
   });

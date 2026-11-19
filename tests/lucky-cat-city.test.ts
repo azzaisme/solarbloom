@@ -1,15 +1,12 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
-import { TUNING } from '../src/data/tuning';
 import { AREA_TYPES } from '../src/data/city';
-import type { MachineData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
 import { openNextGoal } from './helpers';
 
-type Applier = { apply(t: string, mult: number, hidden: number): string };
+type Applier = { apply(t: string, mult: number, at?: { roofId: string; x: number; z: number }): string };
 const saver = new SaveService(undefined);
 
 /**
@@ -91,7 +88,7 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     expect(tiles.length).toBeGreaterThan(3);
     expect(tiles.length).toBeLessThanOrEqual(sim.cat.fogWhiskerCap(id));
     for (const t of tiles) expect(sim.areas.areaOf(t)).toBe(id);
-    const summary = (sim.cat as unknown as Applier).apply('fogWhisker', 1, 0);
+    const summary = (sim.cat as unknown as Applier).apply('fogWhisker', 1);
     expect(summary).toMatch(/fog thins/);
     sim.advance(5);
     for (const t of tiles) expect(t.ground).toBe('restored');
@@ -122,56 +119,20 @@ describe('Lucky Cat in the endless city (City 13)', () => {
       for (const t of tiles) expect(sim.areas.areaOf(t)).toBe(area);
     }
     const bad = watchFog(sim);
-    expect((sim.cat as unknown as Applier).apply('catsGarden', 1, 0)).toMatch(/garden blooms in the /);
+    expect((sim.cat as unknown as Applier).apply('catsGarden', 1)).toMatch(/garden blooms in the /);
     sim.advance(5);
-    expect(bad).toEqual([]);
-  });
-
-  it('Golden Relay rides a green corridor: the next hop blooms extra tiles, then it is spent', () => {
-    const sim = grownCity(6, 3);
-    const st = sim.state;
-    st.caps.energy = big(1e7); st.caps.water = big(1e7);
-    st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
-    expect(sim.cat.goldenRelayAvailable()).toBe(false); // no corridor yet: it never rolls
-    // Two street gardens five tiles apart inside the cleared park.
-    const spots = sim.areas.tiles(PARK).filter((t) => !t.blocked && !t.occupantId && !sim.isCoreTile(t));
-    const a = spots.find((t) => spots.some((o) => o.z === t.z && o.x === t.x + 5))!;
-    const gardens = [a.x, a.x + 5].map((x) => {
-      const t = sim.grid.get(GROUND, x, a.z)!;
-      t.feature = 'paving';
-      const m: MachineData = { id: sim.newId('m'), type: 'pollinator', roofId: GROUND, x, z: a.z, size: 1, boostUntil: 0, timer: 0, charge: 0 };
-      st.machines.push(m);
-      sim.grid.indexMachine(m);
-      t.occupantId = m.id;
-      return m;
-    });
-    expect(sim.cat.goldenRelayAvailable()).toBe(true);
-    expect((sim.cat as unknown as Applier).apply('goldenRelay', 1, 0)).toMatch(/green corridor/);
-    expect(st.relayBonus).toBe(sim.cat.goldenCorridorTiles());
-    expect(sim.cat.goldenRelayAvailable()).toBe(false); // one at a time
-    const bad = watchFog(sim);
-    const relayed: string[] = [];
-    sim.bus.on('chain.event', (e) => {
-      if (e.event.cause === 'relay') relayed.push(e.event.target);
-    });
-    const start = sim.grid.neighbors(sim.grid.get(GROUND, gardens[0].x, a.z)!).find((t) => !t.blocked && !t.occupantId)!;
-    start.ground = 'polluted';
-    sim.restoration.complete(start, 'pulse');
-    sim.advance(10);
-    expect(st.relayBonus).toBe(0);
-    expect(relayed.length).toBeGreaterThan(0);
-    expect(relayed.length).toBeLessThanOrEqual(sim.cat.goldenCorridorTiles());
     expect(bad).toEqual([]);
   });
 
   it('Mega Bloom and Drone Party pick from the player’s network and never touch fog', () => {
     const sim = grownCity(7, 5);
     const bad = watchFog(sim);
-    for (let i = 0; i < 5; i++) (sim.cat as unknown as Applier).apply('megaBloom', 1, 0);
+    for (let i = 0; i < 5; i++) (sim.cat as unknown as Applier).apply('megaBloom', 1);
     sim.advance(30);
     expect(bad).toEqual([]);
-    // With no hub, a party degrades to a harvest.
-    expect((sim.cat as unknown as Applier).apply('droneParty', 1, 0)).toMatch(/🌿/);
+    // With no drones anywhere, a party degrades to a gift.
+    sim.state.drones = [];
+    expect((sim.cat as unknown as Applier).apply('droneParty', 1)).toMatch(/^A gift in your backpack/);
   });
 
   it('every reward stays out of the fog over many claims', { timeout: 60000 }, () => {
@@ -188,7 +149,7 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     expect(bad).toEqual([]);
   });
 
-  it('city-scale rewards are capped: Fog Whisker never wakes an area alone, Golden Corridor tops out', { timeout: 60000 }, () => {
+  it('city-scale rewards are capped: Fog Whisker never wakes an area alone', { timeout: 60000 }, () => {
     const sim = grownCity(21, 2);
     const id = sim.areas.nextGoal()!;
     // Nearly ready: the whisker may only take it to one tile short.
@@ -206,18 +167,14 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     expect(sim.areas.counts(id).restored).toBe(need - 4);
     expect(sim.cat.fogWhiskerCap(id)).toBe(3);
     expect(sim.cat.fogWhiskerTiles().length).toBeLessThanOrEqual(3);
-    (sim.cat as unknown as Applier).apply('fogWhisker', 1, 0);
+    (sim.cat as unknown as Applier).apply('fogWhisker', 1);
     sim.advance(5);
     expect(sim.areas.counts(id).restored).toBeLessThanOrEqual(need - 1);
     expect(sim.areas.ready(id)).toBe(false);
     // One tile short of ready: no Fog Whisker at all (it would be useless), so it degrades to a harvest.
     fillTo(need - 1);
     expect(sim.cat.fogWhiskerTiles()).toEqual([]);
-    expect((sim.cat as unknown as Applier).apply('fogWhisker', 1, 0)).toMatch(/🌿/);
-    // A huge city: the corridor bonus is capped.
-    const big = grownCity(22, 150);
-    expect(big.cat.goldenCorridorTiles()).toBe(TUNING.cat.goldenCorridorMax);
-    expect(new Sim(createInitialState(22)).cat.goldenCorridorTiles()).toBe(TUNING.cat.goldenCorridorTiles);
+    expect((sim.cat as unknown as Applier).apply('fogWhisker', 1)).toMatch(/^A gift in your backpack/);
   });
 
   // ~50 s alone (500 restored areas, 300 claims, Mega Blooms among them); over 200 s while the full suite runs in

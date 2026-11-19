@@ -13,10 +13,7 @@ import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
 const oldSim = (seed = 7) => {
-  const sim = new Sim(createInitialState(seed));
-  sim.econ.add('energy', 1e6);
-  sim.econ.add('water', 1e6);
-  return sim;
+  return new Sim(createInitialState(seed)); // E23.1.4: a pulse costs only charge
 };
 const pack = (sim: Sim) => sim.state.salvage!.pack as Record<string, number | undefined>;
 /** Dead park tiles far apart, so one pulse never reaches another's tile. */

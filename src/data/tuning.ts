@@ -7,27 +7,6 @@ export const TUNING = {
   /** City 06.5: the most simulation one frame may run (ms); time beyond it is dropped, never owed (E23.1). */
   frameSimBudgetMs: 8,
 
-  start: {
-    resources: { energy: 20, water: 12, biomass: 0 },
-    caps: { energy: 60, water: 40, biomass: 100 },
-  },
-
-  /**
-   * Phase 4 E01.3: storage tiers, one per Seed Vault level (tier 0 is the starting store). Cleared city areas
-   * still multiply these (see city.storagePerArea). Every purchase the fountain requires fits in tier 0.
-   */
-  storageTiers: {
-    energy: [60, 150, 400, 1000, 2500],
-    water: [40, 100, 250, 600, 1500],
-    biomass: [100, 250, 600, 1500, 4000],
-  },
-
-  // Energy / water income that always exists, so the player can never softlock.
-  starterSolarRate: 1, // energy/sec from the pre-placed (damaged) panel
-  solarRate: 1.2, // energy/sec from each panel the player builds
-  rainBarrelRate: 0.15, // water/sec trickle from the rain barrel
-  /** burstSeconds: Phase 5 E12 Harvest Burst: seconds of steady biomass income per level, paid on each Harvest. */
-  harvest: { energy: 8, cooldown: 12, burstSeconds: 4 },
 
   /**
    * Phase 4 E04.2: pulse reach tiers (Pulse Reach levels 0–4). Euclidean radius on the integer grid, so the
@@ -42,41 +21,13 @@ export const TUNING = {
     { name: 'Radiant', radius: 7.1 },
   ],
 
-  /**
-   * Phase 4 E04.3: rewarded milestones for restored park tiles (unique tiles, not bloom stages), paid once each.
-   * The fountain still needs 130; these fill the gap on the way there.
-   */
-  parkMilestones: [
-    { at: 5, reward: { biomass: 10 } },
-    { at: 10, reward: { biomass: 15, water: 10 } },
-    { at: 20, reward: { biomass: 25, energy: 20 } },
-    { at: 35, reward: { biomass: 40, water: 15 } },
-    { at: 50, reward: { biomass: 60, energy: 30 } },
-    { at: 75, reward: { biomass: 80, water: 25 } },
-    { at: 100, reward: { biomass: 100, energy: 40 } },
-    { at: 130, reward: { biomass: 120, energy: 40 } },
-  ] as { at: number; reward: Partial<Record<'energy' | 'water' | 'biomass', number>> }[],
 
   pulse: {
-    polluted: { energy: 6, water: 1 },
-    prepared: { energy: 3, water: 1 },
     /** E23.7.1: in game time (0.4 game minutes = 0.8 s of play), like every timer */
     growSeconds: gameMinutes(0.4),
   },
 
   restore: {
-    instantBiomass: 1.5,
-    biomassPerSec: 0.04, // per restored tile (bloom level 1)
-    // Phase 4 E05: production weight per stage (0 barren, 1 restored, 2 blooming, 3 thriving, 4 radiant)
-    bloomRateMult: [0, 1, 2, 4, 8],
-    nurture: [
-      { energy: 0, water: 0 },
-      { energy: 0, water: 0 },
-      { energy: 8, water: 2 }, // → level 2
-      { energy: 12, water: 3 }, // → level 3
-      { energy: 18, water: 5 }, // → level 4 (Radiant, Phase 4 E05)
-    ],
-    nurtureBiomass: 1,
     /** Phase 4 E05: the last stage (Radiant). */
     maxBloom: 4,
     /** "Full bloom" (Thriving): what the fountain and area goals count. Radiant counts too. */
@@ -95,17 +46,12 @@ export const TUNING = {
     corridorRange: 6, // Pollinator Gardens on streets/paths pass a chain to another within this many tiles
     maxDepth: 40,
     fastForwardAfter: 6, // seconds; long chains resolve the remainder instantly
-    perEffectBiomass: 0.5, // modest bonus for each unique triggered effect
-    // Highest milestone reached applies (not stacked): % bonus on everything the chain earned.
-    milestones: [
-      { effects: 5, pct: 0.1 },
-      { effects: 10, pct: 0.25 },
-      { effects: 20, pct: 0.5 },
-    ],
+    // Combo sizes that get a cheer from the drones and a bigger note (E23.1.4: a chain pays nothing extra).
+    milestones: [{ effects: 5 }, { effects: 10 }, { effects: 20 }],
   },
 
   /** Solar Panel synergy: a bloom right next to it → one burst per panel per chain. */
-  solarBloomBoost: { mult: 2, seconds: 5, burstEnergy: 3 },
+  solarBloomBoost: { mult: 2, seconds: 5 },
 
   /** Water Condenser ("Rain Collector"): fills a charge meter, then waters dry soil beside it. */
   condenser: { radius: 1, chargePerSec: 1, threshold: 6, targets: 2, maxExtraTargets: 2 }, // Phase 5: Water Bloom's extra waterings stop at +2 (automation chains stay below taps)
@@ -227,12 +173,6 @@ export const TUNING = {
      * and free (sun-powered): it restores and nurtures nearby tiles on its own, but tapping always outpaces it.
      * Upgrades don't affect it.
      */
-    /**
-     * Phase 4 E01: drones never spend a store below this share of its cap, so the player's own taps always have
-     * something left (without it, drones drained city water and slowed the scripted player by a third). After a
-     * big purchase drones wait for the stores to refill past it.
-     */
-    reserve: 0.25,
     // E23.7.1: helper timers in game time (3.5 game minutes = 7 s of play; 0.4 = 0.8 s)
     old: { enabled: true, radius: 6, cycleSeconds: gameMinutes(3.5), flySpeed: 1.5, workSeconds: gameMinutes(0.4) },
     /**
@@ -240,41 +180,30 @@ export const TUNING = {
      * against the bots in docs/E18_AUDIT.md.
      */
     roles: {
-      /** One-time refit per hub, the same for every hub. */
-      refit: {
-        gardener: { biomass: 60, water: 20 },
-        scout: { biomass: 60, energy: 30 },
-        courier: { biomass: 80, energy: 15, water: 15 },
-        spark: { biomass: 120, energy: 30 },
-        harvester: { biomass: 50, energy: 35, water: 20 },
-      } as Record<string, { biomass: number; energy?: number; water?: number }>,
-      /** Grows the target plus this many orthogonal neighbours (+1 per Drone Sweep level), paying the target's nurture water only. */
+      /** One-time refit per hub in biomass from the backpack (and the store within reach), the same for every hub. */
+      refit: { gardener: 60, scout: 60, courier: 80, spark: 120, harvester: 50 } as Record<string, number>,
+      /** Grows the target plus this many orthogonal neighbours (+1 per Drone Sweep level). */
       gardener: { neighbours: 2, unlockFullBloom: 10 },
-      /** Reach is the hub's radius + (reach − 1) × the base radius; flies `speed`× as fast; +1 ⚡ per `tilesPerEnergy` tiles past the base radius. */
-      scout: { reach: 1.5, speed: 1.5, tilesPerEnergy: 4 },
-      /** Deliveries, each machine at most once per `everySeconds`; priced in what the machine runs on. */
+      /** Reach is the hub's radius + (reach − 1) × the base radius; flies `speed`× as fast. */
+      scout: { reach: 1.5, speed: 1.5 },
+      /** Deliveries, each machine at most once per `everySeconds`. */
       courier: {
         everySeconds: 8,
-        cost: { motherTree: { water: 4 }, condenser: { energy: 4 }, reservoirGarden: { energy: 4 }, solar: { water: 3 }, relay: { energy: 6 } } as Record<string, { energy?: number; water?: number }>,
         treeCharge: 2,
         storeCharge: 1, // condenser or Reservoir Garden
         relayCut: 0.25, // of a link's remaining recharge
       },
       /** One chain per hub per `everySeconds`, from a garden with `cluster`+ other gardens in chain reach. */
-      spark: { everySeconds: 30, energy: 10, unlockGardens: 3, cluster: 2 },
+      spark: { everySeconds: 30, unlockGardens: 3, cluster: 2 },
       /**
-       * Turns income lost to full stores into biomass: each drone collects up to `perDronePerSec` lost ⚡/💧 a
-       * second, keeps `keep` of it as its running cost and pays out the rest as biomass, `rate` 🌿 per unit.
+       * E23.1.4: gathering, automated. A Harvester clips flowered ground in its hub's reach (as bloombot does by
+       * hand, E23.5.1) and brings the biomass to the store. It unlocks once bloombot has gathered by hand.
        */
-      harvester: { unlockLostSeconds: 60, perDronePerSec: 2, keep: 0.7, rate: 1 },
+      harvester: {},
     },
   },
 
   /** Phase 5 E12: long-tail upgrade strength (see UpgradeSystem.soilMult). */
-  upgradeCurve: { soilStep: 1.2 },
-
-  /** Phase 5 E12: a machine's energy or water price never passes this share of that store (drones keep 25%). */
-  machineCostMaxShare: 0.6,
 
   cat: {
     firstMinTime: 180, // Phase 4 E08.1: first cat at about minute 3–4 (was 4–6), once the player knows the grid
@@ -284,18 +213,25 @@ export const TUNING = {
     laterMax: 300,
     hiddenBonusCapSec: 180, // reward grows a little with hidden time, up to this
     hiddenBonusMax: 0.5,
-    harvestSecondsMin: 30, // Phase 4 E08.4: Lucky Harvest: 30–60 s of sustained biomass production (no temporary boosts)
-    harvestSecondsMax: 60,
-    harvestMin: 15,
-    frenzySeconds: 45,
-    frenzyMult: 3,
+    /**
+     * E23.12 (#528) Lucky Harvest: a gift into the backpack (whatever doesn't fit goes to the store), scaled by the
+     * reward's multiplier. `local` is the material the cat's region is known for (copper on Mast Row, clay in the
+     * Cistern Basin…; seeds in the park); fertile soil (Elder Grove) multiplies the biomass by its strength.
+     */
+    gift: { food: 2, biomass: 6, local: 3 },
+    /** Solar Surge: charge to full, and the panels within `surgeRadius` tiles of the cat shine ×`surgeShine` into the grid. */
+    surgeSeconds: 45,
+    surgeShine: 3,
+    surgeRadius: 14,
     megaBloomTiles: 8,
+    /** Drone Party: drones of hubs within `partyRadius` tiles of the cat fly and work ×`partyMult` as fast. */
     dronePartySeconds: 45,
+    partyRadius: 24,
+    partyMult: 1.75,
     weights: { luckyHarvest: 40, solarFrenzy: 25, megaBloom: 20, droneParty: 12, jackpot: 3, goldenRelay: 14, catsGarden: 14, fogWhisker: 18 },
     fogWhiskerTiles: 10, // Fog Whisker: tiles of the next fogged area restored from its edge, capped
-    goldenRelayExtra: 1, // Golden Relay: extra remote blooms on the next crossing
-    goldenCorridorTiles: 5, // Golden Relay in the city: extra blooms on the next green corridor hop…
-    goldenCorridorMax: 12, // …+1 per 10 cleared areas, up to this
+    /** Golden Relay: the relay nearest the cat turns gold for good and carries power this many tiles further. */
+    goldenRelayRange: 8,
     /** E20.1 (#284): the cat hides: never in view, never this close to bloombot (tiles)… */
     minFromBot: 6,
     /** …and preferably within a short walk of it (tiles), so finding it is a stroll, not a trek. */
@@ -304,8 +240,8 @@ export const TUNING = {
     inViewTiles: 12,
     catsGardenTiles: 6, // Cat's Garden: tiles restored (and decorated) on a random unlocked roof
     /**
-     * Phase 5 E15: rarer cats (rolled when one appears, 80 / 18 / 2). `mult` scales the reward (harvest seconds,
-     * buff and party time, Mega Bloom size); a Rainbow Cat also gives two different rewards. The first cat is
+     * Phase 5 E15: rarer cats (rolled when one appears, 80 / 18 / 2). `mult` scales the reward (the gift, surge and
+     * party time, Mega Bloom size); a Rainbow Cat also gives two different rewards. The first cat is
      * always a standard one with a Lucky Harvest (onboarding).
      */
     variants: {
@@ -337,7 +273,6 @@ export const TUNING = {
    * needs, a reward of this many seconds of steady biomass income (no temporary boosts), at least `min`, plus a
    * little energy and water. Paid once each, in order.
    */
-  areaSteps: { at: [0.25, 0.5, 0.75], incomeSeconds: [10, 15, 20], min: 20, energy: 20, water: 10 },
 
 
   autosaveSeconds: 10,
@@ -366,24 +301,6 @@ export const TUNING = {
     /** fog density at 0% restored and just before clearing (it thins linearly in between) */
     fogFull: 1,
     fogThin: 0.25,
-    /** Each cleared area (beyond the park) adds this share of the starting storage, with diminishing returns. */
-    storagePerArea: 0.35,
-    storageExponent: 0.85,
-    /**
-     * Permanent bonus per cleared area, by type (per second). Soft-scaled: n areas of a type give
-     * base × n^bonusExponent, so numbers stay readable after hundreds of areas.
-     */
-    bonusExponent: 0.75,
-    bonuses: {
-      park: { biomass: 0.3 },
-      street: { energy: 0.25 },
-      plaza: { energy: 0.35 },
-      canal: { water: 0.35 },
-      market: { biomass: 0.25, energy: 0.1 },
-      reservoir: { water: 0.5 },
-      grove: { biomass: 0.4 },
-      rooftops: { energy: 0.3, biomass: 0.15 },
-    } as Record<string, Partial<Record<'energy' | 'water' | 'biomass', number>>>,
   },
 
   /** City 10.4: buildable Bloom Relays (any two within range link; range is measured in world space). */
@@ -463,7 +380,6 @@ export const TUNING = {
     driveSpeed: 0.8, // tiles/s
     softenRate: 20, // pollution/s
     growSeconds: gameMinutes(1.5), // E23.7.1: 1.5 game minutes = 3 s of play
-    energyPerSec: 0.5, // drawn while working; parks below drone.reserve of the energy store
     speedPerLevel: 0.4, // Tiller Speed: +40 % work and drive speed per level
     /** a tap on a tile it's working: share of the current phase, at most `max` per phase, `gap` s apart */
     knock: { share: 0.15, max: 3, gap: 0.4 },

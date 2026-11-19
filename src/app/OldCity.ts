@@ -76,6 +76,7 @@ export class OldCityController {
       this.panel.refresh();
     });
     host.sim.bus.on('biomass.gathered', (e) => {
+      if (e.by !== 'bot') return; // a Harvester drone's clippings go quietly to the store
       const sc = host.screenOf(e.x, e.z);
       flyUp(host.hud.root, `+${e.got} ${MATERIALS.biomass.icon} ${MATERIALS.biomass.name}`, sc.x, sc.y);
       host.sound('salvage', 'biomass');

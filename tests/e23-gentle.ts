@@ -1,5 +1,4 @@
 import { SaveService } from '../src/app/SaveService';
-import { big } from '../src/core/Big';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { GroundState, MachineData, TileData } from '../src/core/types';
 import { PARK } from '../src/core/Areas';
@@ -238,10 +237,6 @@ export function homeScene(seed: number): Sim {
   salvage.abilities.push('pry', 'hover');
   sim.areas.clear(PARK, true);
   sim.gates.open('g-mastRow');
-  for (const k of ['energy', 'water'] as const) {
-    sim.state.caps[k] = big(1e6);
-    sim.state.resources[k] = big(1e6);
-  }
   // Mast Row part-way: a strip prepared, a strip growing, a strip restored.
   const mast = sim.areas.tiles('mastRow').filter((t) => !t.blocked && !t.occupantId);
   mast.slice(0, 30).forEach((t) => setGround(sim, t, 'prepared'));

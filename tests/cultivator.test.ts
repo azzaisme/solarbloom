@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
-import { big } from '../src/core/Big';
 import type { MachineData } from '../src/core/types';
 import { isMergeable } from '../src/data/machines';
 import { TUNING } from '../src/data/tuning';
@@ -39,25 +38,14 @@ describe('Look 6.8: the Cultivator (#177)', () => {
     expect(isMergeable('cultivator')).toBe(false);
   });
 
-  it('works dead ground near its dock with no player input, drawing energy instead of pulse costs', () => {
+  it('works dead ground near its dock with no player input', () => {
     const { sim, m } = setup();
-    let spentWater = 0;
-    let drawn = 0;
-    const spend = sim.econ.spend.bind(sim.econ);
-    sim.econ.spend = (c) => {
-      const ok = spend(c);
-      if (ok && c.energy && !c.water) drawn += big(c.energy).toNumber();
-      return ok;
-    };
     const mine: string[] = [];
     sim.bus.on('tile.restored', ({ tile, source }) => source === 'cultivator' && mine.push(tile.id));
-    sim.bus.on('drone.jobStarted', () => (spentWater = 1));
     sim.advance(60);
     expect(doneOf(m)).toBeGreaterThanOrEqual(4);
     expect(mine.length).toBe(doneOf(m));
     expect(restored(sim)).toBeGreaterThanOrEqual(doneOf(m));
-    expect(drawn).toBeGreaterThan(doneOf(m) * 1.5); // energy drawn while working (about 2.5 ⚡ a tile)
-    void spentWater;
   });
 
   it('its tiles take gameplay time: softening, then growth, with gameplay-flagged transitions', () => {
@@ -99,16 +87,6 @@ describe('Look 6.8: the Cultivator (#177)', () => {
     const mine = seeded.mine.map((id) => seeded.sim.grid.byTileId(id)!);
     expect(mine.length).toBeGreaterThan(0);
     expect(mine.every((t) => t.bloom >= TUNING.cultivator.seedBloom)).toBe(true);
-  });
-
-  it('parks when the energy store is below the drones’ reserve', () => {
-    const { sim, m } = setup(6);
-    sim.state.resources.energy = big(sim.state.caps.energy.toNumber() * TUNING.drone.reserve * 0.5);
-    sim.production.markDirty();
-    for (const x of sim.state.machines) if (x.type === 'solar') x.starter = true;
-    sim.advance(10);
-    expect(m.cult!.units[0].parked).toBe(true);
-    expect(doneOf(m)).toBe(0);
   });
 
   it('a tap knocks its tile along, within limits', () => {

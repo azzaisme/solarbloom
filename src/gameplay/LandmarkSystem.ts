@@ -1,4 +1,4 @@
-import type { CappedKind, MaterialId } from '../core/types';
+import type { MaterialId } from '../core/types';
 import { regionById } from '../core/OldCityLayout';
 import { REGIONS, type RegionDef, type RewardId } from '../data/oldcity';
 import { MATERIAL_IDS, MATERIALS, TRADE } from '../data/salvage';
@@ -9,8 +9,10 @@ import type { Sim } from './Sim';
 export const REWARD_EFFECT = {
   /** Clock Plaza: helpers work this much faster */
   helperSpeed: 1.25,
-  /** Cistern Basin (water) and The Terraces (energy): storage multiplied by */
-  capMult: 2,
+  /** Cistern Basin: Water Condensers fill this much faster (E23.1.4; water storage left with the counters) */
+  condenserMult: 2,
+  /** The Terraces: batteries hold this much more (E23.1.4; energy storage left with the counters) */
+  batteryMult: 2,
 };
 
 /**
@@ -94,7 +96,7 @@ export class LandmarkSystem {
     if ((sv.rewards ??= []).includes(id)) return;
     sv.rewards.push(id);
     if (id === 'heartSeed' || id === 'starLens') (sv.items ??= []).includes(id) || sv.items.push(id);
-    if (id === 'waterCap' || id === 'energyCap') this.sim.upgrades.applyCaps();
+    if (id === 'energyCap') this.sim.power.invalidate();
   }
 
   /** Clock Plaza's reward: helpers (drones, Cultivators) work 25% faster. */
@@ -102,9 +104,14 @@ export class LandmarkSystem {
     return this.has('helpersFast') ? REWARD_EFFECT.helperSpeed : 1;
   }
 
-  /** Cistern Basin doubles water storage, The Terraces energy storage. */
-  capMult(k: CappedKind): number {
-    return (k === 'water' && this.has('waterCap')) || (k === 'energy' && this.has('energyCap')) ? REWARD_EFFECT.capMult : 1;
+  /** Cistern Basin's reward: Water Condensers fill twice as fast. */
+  condenserMult(): number {
+    return this.has('waterCap') ? REWARD_EFFECT.condenserMult : 1;
+  }
+
+  /** The Terraces' reward: batteries hold twice as much. */
+  batteryMult(): number {
+    return this.has('energyCap') ? REWARD_EFFECT.batteryMult : 1;
   }
 
   // ───────────── Tally's trade (§3: no dead ends) ─────────────

@@ -1,5 +1,3 @@
-import { amounts, caps } from '../core/Economy';
-import type { BigLike } from '../core/Big';
 import { createInitialState, SAVE_VERSION } from '../core/GameState';
 import type { Grid } from '../core/Grid';
 import { packChunk } from '../core/TilePack';
@@ -314,13 +312,15 @@ export class SaveService {
       if (s.version > SAVE_VERSION || !Array.isArray(s.layers)) return undefined;
       // Fill any fields added after this save was written.
       const base = createInitialState(s.seed);
-      // Phase 5 E12: resource quantities are saved as Decimal strings.
-      const raw = s as unknown as { resources?: Record<string, BigLike>; caps?: Record<string, BigLike> };
+      // E23.1.4: the energy, water and biomass counters are gone; a save written while they existed drops them
+      const old = s as unknown as Record<string, unknown>;
+      delete old.resources;
+      delete old.caps;
+      delete old.harvestReadyAt;
+      delete old.relayBonus; // E23.12 (#528): Golden Relay is a gold relay now, not a stored bonus
       return migrateSave({
         ...base,
         ...s,
-        resources: amounts(raw.resources ?? {}),
-        caps: caps(raw.caps ?? {}),
         cat: { ...base.cat, ...s.cat },
         progression: { ...base.progression, ...s.progression },
         stats: { ...base.stats, ...s.stats, firsts: { ...(s.stats?.firsts ?? {}) } },

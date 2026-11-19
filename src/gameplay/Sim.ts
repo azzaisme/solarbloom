@@ -1,7 +1,6 @@
 import { machinesStamp } from '../core/GameState';
 import { decorOccupant, parseDecorKey } from '../core/Decor';
 import { EventBus } from '../app/EventBus';
-import { Economy } from '../core/Economy';
 import { Grid } from '../core/Grid';
 import { hasGrowth, unpackChunk } from '../core/TilePack';
 import { Rng } from '../core/Rng';
@@ -54,7 +53,6 @@ import { Weather } from './Weather';
  */
 export class Sim {
   readonly grid: Grid;
-  readonly econ: Economy;
   readonly rng: Rng;
   readonly upgrades: UpgradeSystem;
   readonly production: ProductionSystem;
@@ -153,7 +151,6 @@ export class Sim {
         const t = this.grid.peek(at.roofId, at.x, at.z);
         if (t && !t.occupantId) t.occupantId = decorOccupant(k);
       }
-      this.production?.chunkLoaded(c.key);
     };
     // The world travels with the state (for saving) but is never part of its JSON.
     Object.defineProperty(state, 'world', { value: this.grid, enumerable: false, configurable: true, writable: true });
@@ -165,15 +162,6 @@ export class Sim {
       const [layer, cx, cz] = key.split('|');
       this.grid.chunkAt(layer, Number(cx), Number(cz));
     }
-    this.econ = new Economy(state.resources, state.caps);
-    // E23.5.1: biomass is gathered into the backpack (GatherSystem), never earned as a counter, and every biomass
-    // price (drone refits and jobs, the core, ...) is paid from the backpack and the store within reach
-    this.econ.noIncome = new Set(['biomass']);
-    this.econ.items = {
-      kinds: new Set(['biomass']),
-      have: () => this.inventory.available('biomass'),
-      take: (_k, units) => this.inventory.pay({ biomass: units }),
-    };
     this.inventory = new Inventory(this);
     this.charge = new ChargeSystem(this);
     this.pulseLoad = new PulseLoad(this);
@@ -214,10 +202,8 @@ export class Sim {
     this.ecosystem = new EcosystemSystem(this);
     this.metrics = new Metrics(this);
     this.log = new DebugLog(this);
-    this.econ.onOverflow = (k, a) => this.log.onOverflow(k, a);
     this.restoration.adoptGrowing();
     for (const c of this.grid.loadedChunks()) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
-    this.upgrades.applyCaps();
   }
 
   get time() {
@@ -304,7 +290,6 @@ export class Sim {
     this.transitions.tick();
     this.chains.tick();
     this.drones.tick(dt);
-    this.roles.tick(dt);
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
     this.water.tick(dt);
@@ -327,24 +312,5 @@ export class Sim {
   advance(seconds: number) {
     const steps = Math.round(seconds / TUNING.simStep);
     for (let i = 0; i < steps; i++) this.tick(TUNING.simStep);
-  }
-
-  harvestSun(): boolean {
-    const s = this.state;
-    if (s.time < s.harvestReadyAt) {
-      this.bus.emit('action.failed', { reason: `Sunlight gathers again in ${Math.ceil(s.harvestReadyAt - s.time)} s` });
-      return false;
-    }
-    const got = this.econ.add('energy', TUNING.harvest.energy);
-    s.harvestReadyAt = s.time + TUNING.harvest.cooldown;
-    this.bus.emit('harvest', { amount: got });
-    if (got.gt(0)) this.bus.emit('resource.gain', { kind: 'energy', amount: got, reason: 'harvest' });
-    // Phase 5 E12: Harvest Burst also gathers seconds of steady biomass income (no temporary boosts).
-    const burst = this.upgrades.harvestBurstSeconds;
-    if (burst > 0) {
-      const b = this.econ.add('biomass', this.production.rates(true).biomass.mul(burst));
-      if (b.gt(0)) this.bus.emit('resource.gain', { kind: 'biomass', amount: b, reason: 'harvest' });
-    }
-    return true;
   }
 }

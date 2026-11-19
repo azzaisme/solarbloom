@@ -1,15 +1,8 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
-
-function rich(sim: Sim) {
-  const st = sim.state;
-  st.caps.energy = big(1e7); st.caps.water = big(1e7);
-  st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
-}
 
 function insert(sim: Sim, type: MachineData['type'], x: number, z: number, size = 1) {
   const m: MachineData = { id: sim.newId('m'), type, roofId: GROUND, x, z, size, boostUntil: 0, timer: 0, charge: 0 };
@@ -21,7 +14,6 @@ function insert(sim: Sim, type: MachineData['type'], x: number, z: number, size 
 describe('upgrade effects in the city (City 14.4; E23.1.5: granted, never bought)', () => {
   it('Green Corridors reach further, Drone Mesh links hubs further apart, Fog Lanterns lower wake needs', () => {
     const sim = new Sim(createInitialState(4));
-    rich(sim);
     sim.state.progression.coreActivated = true;
     sim.areas.clear(PARK, true);
     // Corridors: two street gardens 8 apart only link after an upgrade.

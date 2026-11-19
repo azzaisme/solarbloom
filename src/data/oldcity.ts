@@ -111,7 +111,7 @@ export interface RegionDef {
   /** E21.7: ladders (Climb) and perches (Glide, with their landing cell) */
   ladders: { x: number; z: number; to: [number, number] }[];
   perches: { x: number; z: number; to: [number, number] }[];
-  /** loose piles (Milestone A lays out the park and Mast Row; the others land with E21.14–E21.16) */
+  /** loose piles (Milestone A lays out the park and Mast Row, E23.1.4 Old Market's glass; the others land with E21.14–E21.16) */
   piles: PileDef[];
   /** the region's main street: a road from its gate (cells, two wide, for generation) */
   roads: CellRect[];
@@ -201,7 +201,16 @@ export const REGIONS: RegionDef[] = [
     ramps: [],
     ladders: [],
     perches: [],
-    piles: [],
+    // E23.1.4 (#536): the market's glass, so Tally's Solar Panel can be made once Tally wakes (glass panes): two
+    // just past the barricade, two along the market road, two by the Glassworks. They refill like every pile (E23.7.4).
+    piles: [
+      P('om-g1', 22, 5, 'glass', 'medium', 'salvage-glass'),
+      P('om-g2', 27, 11, 'glass', 'small', 'salvage-glass'),
+      P('om-g3', 36, 10, 'glass', 'medium', 'salvage-glass'),
+      P('om-g4', 44, 4, 'glass', 'small', 'salvage-glass'),
+      P('om-g5', 40, 22, 'glass', 'large', 'salvage-glass'),
+      P('om-g6', 35, 25, 'glass', 'small', 'salvage-glass'),
+    ],
     roads: [{ x: 16, z: 7, w: 32, d: 2 }],
   },
   {
@@ -642,7 +651,7 @@ export const KEEPERS: KeeperDef[] = [
   },
   {
     id: 'sluice', name: 'Sluice', region: 'cistern', x: 38, z: 37, tint: '#6a8fb0', prop: 'dry-drain',
-    request1: { gears: 12 }, landmark: { clay: 30, copper: 15 }, reward: 'waterCap', rewardText: 'Water storage doubled',
+    request1: { gears: 12 }, landmark: { clay: 30, copper: 15 }, reward: 'waterCap', rewardText: 'Water Condensers fill twice as fast',
     say: {
       asleep: ['A robot on the rim of a dry basin.'],
       stirred: ['Water? No… five of anything, then.'],
@@ -668,7 +677,7 @@ export const KEEPERS: KeeperDef[] = [
   },
   {
     id: 'gable', name: 'Gable', region: 'terraces', x: 10, z: -36, tint: '#b07a8a', prop: 'planter-trough',
-    request1: { clay: 15 }, landmark: { sunstone: 30, gears: 15 }, reward: 'energyCap', rewardText: 'Energy storage doubled',
+    request1: { clay: 15 }, landmark: { sunstone: 30, gears: 15 }, reward: 'energyCap', rewardText: 'Batteries hold twice as much',
     say: {
       asleep: ['A robot asleep against a chimney.'],
       stirred: ['Up here? Five of anything and I will wake.'],

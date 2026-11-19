@@ -1,6 +1,5 @@
-import type { Big } from '../core/Big';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
-import type { BuffType, CatRewardType, CatVariant, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
+import type { BuffType, CatRewardType, CatVariant, MachineData, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
   /** E23.2.1: bloombot's charge ran out (the low-power walk); reached full; bloombot began eating one unit. */
@@ -51,7 +50,7 @@ export interface GameEvents {
   'research.done': { id: string };
   'research.upgraded': { id: string; level: number };
   /** E23.5.1: bloombot clipped restored ground for biomass (`got` units into the backpack). */
-  'biomass.gathered': { tileId: string; x: number; z: number; got: number };
+  'biomass.gathered': { tileId: string; x: number; z: number; got: number; by: 'bot' | 'drone' };
   /** E23.5.2: a planter's bed changed (planted, a new stage, fed, an extra, harvested). */
   'planter.changed': { machineId: string };
   'planter.ripe': { machineId: string; crop: string };
@@ -82,7 +81,7 @@ export interface GameEvents {
   /** E21.9: a region's landmark woke (by bloombot's own delivery). */
   'landmark.woken': { region: string };
   'tile.restoring': { tile: TileData; source: RestoreSource };
-  'tile.restored': { tile: TileData; source: RestoreSource; chainId: number; biomass: Big };
+  'tile.restored': { tile: TileData; source: RestoreSource; chainId: number };
   'tile.prepared': { tile: TileData };
   'tile.softened': { tile: TileData };
   'tile.nurtured': { tile: TileData; level: number; auto?: boolean };
@@ -92,13 +91,11 @@ export interface GameEvents {
   'tile.knocked': { tile: TileData };
   /** Look 6: a tile's transition changed without a state change (a delayed wave, a Cultivator phase). */
   'tile.transition': { tile: TileData };
-  'resource.gain': { kind: ResourceKind; amount: Big; tileId?: string; reason?: string };
-  'resource.full': { kind: ResourceKind };
   'machine.built': { machine: MachineData };
   'chain.started': { chainId: number; originTileId: string };
   'chain.event': { event: ChainEvent; combo: number };
   'chain.fastForward': { chainId: number };
-  'chain.ended': { chainId: number; combo: number; bonus: Big; total: Big; milestonePct: number; energy: Big; roofs: string[]; crossings: number; areas: number; areaIds?: string[]; starter: 'player' | 'auto' };
+  'chain.ended': { chainId: number; combo: number; roofs: string[]; crossings: number; areas: number; areaIds?: string[]; starter: 'player' | 'auto' };
   'mega.released': { tileId: string; budget: number };
   'mega.ready': Record<string, never>;
   'area.modeChanged': { areaId: string; mode: 'bloom' | 'frontier' | 'off' | undefined };
@@ -132,14 +129,9 @@ export interface GameEvents {
   'cat.spawned': { anchorId: string; catId?: string; variant?: CatVariant; invasion?: boolean };
   'cat.found': { anchorId: string; reward: CatRewardType; summary: string; extras: number; catId?: string; variant?: CatVariant; rewards?: CatRewardType[] };
   'cat.moved': { from: string; anchorId: string; catId?: string };
-  'cat.goldenRelay': Record<string, never>;
+  'cat.goldenRelay': { machineId: string };
   'buff.started': { type: BuffType; seconds: number };
-  'harvest': { amount: Big };
   'tutorial.step': { step: number };
-  /** Phase 4 E04.3: a park milestone was reached and paid (once). */
-  /** Phase 5 E12: a rewarded step on the way to an area's landmark (25 / 50 / 75% of the tiles it needs). */
-  'area.step': { areaId: string; step: number; share: number; credited: Partial<Record<ResourceKind, Big>> };
-  'milestone.reached': { at: number; credited: Partial<Record<ResourceKind, Big>>; next?: number };
   'area.revealed': { areaId: string };
   /** region unlocks: the player paid to lift a sealed area's fog */
   'area.unlocked': { areaId: string };
