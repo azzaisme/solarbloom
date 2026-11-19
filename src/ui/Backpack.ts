@@ -1,4 +1,4 @@
-import type { MaterialId } from '../core/types';
+import type { ItemId } from '../core/types';
 import type { Sim } from '../gameplay/Sim';
 import { blueprintRows, collection, itemCells, journalPages, oneOffItems, pinRequest, requestRows, TABS, type TabId } from './BackpackModel';
 import { materialIcon } from './MaterialIcons';
@@ -37,7 +37,7 @@ export class Backpack {
   current: TabId = 'items';
   /** the storage panel's title while opened at a store */
   private storage?: string;
-  private selMat: MaterialId = 'scrap';
+  private selMat: ItemId = 'scrap';
   private selPage?: string;
 
   constructor(
@@ -77,7 +77,7 @@ export class Backpack {
       const t = (e.target as HTMLElement).closest<HTMLElement>('[data-mat], [data-page]');
       if (!t) return;
       if (t.dataset.mat && t.dataset.mat !== this.selMat) {
-        this.selMat = t.dataset.mat as MaterialId;
+        this.selMat = t.dataset.mat as ItemId;
         this.select();
       } else if (t.dataset.page && t.dataset.page !== this.selPage) {
         this.selPage = t.dataset.page;
@@ -275,7 +275,7 @@ export class Backpack {
       return this.refresh();
     }
     const cell = t.closest<HTMLElement>('[data-mat], [data-page]');
-    if (cell?.dataset.mat) this.selMat = cell.dataset.mat as MaterialId;
+    if (cell?.dataset.mat) this.selMat = cell.dataset.mat as ItemId;
     if (cell?.dataset.page) this.selPage = cell.dataset.page;
     if (cell) this.select();
     // Enter or A on a material steps into its moves (the grid beside it would change the selection on the way)

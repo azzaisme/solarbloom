@@ -12,6 +12,7 @@ import { BuildBar, Hotbar } from './Hotbar';
 import { Toasts } from './Toasts';
 import { Panels } from './Panels';
 import { Backpack } from './Backpack';
+import { CraftTable } from './CraftTable';
 import { ChargeMeter } from './ChargeMeter';
 import type { SetProp } from './HudPart';
 import type { GlyphSetting, GlyphStyle } from './Glyphs';
@@ -161,6 +162,8 @@ export class Hud {
   readonly panels: Panels;
   /** E22.6: the backpack screen (and the storage panel) */
   readonly backpack: Backpack;
+  /** E23.6.1: the crafting table */
+  readonly craft: CraftTable;
   /** E23.2.1: bloombot's charge, the only meter */
   readonly charge: ChargeMeter;
 
@@ -188,6 +191,7 @@ export class Hud {
     this.wire();
     this.prompt = new Prompt(this.root);
     this.backpack = new Backpack(this.root, { sim: this.sim });
+    this.craft = new CraftTable(this.root, { sim: this.sim });
   }
 
   private template() {

@@ -21,6 +21,14 @@ svg.mi-clay { fill: var(--mat-clay); }
 svg.mi-gears { fill: var(--mat-gears); }
 svg.mi-sunstone { fill: var(--mat-sunstone); }
 svg.mi-biomass { fill: var(--mat-greens); }
+/* E23.6.1: components */
+svg.mi-wire { fill: var(--mat-copper); }
+svg.mi-planks { fill: var(--mat-timber); }
+svg.mi-glassPane { fill: var(--mat-glass); }
+svg.mi-pipe { fill: var(--mat-clay); }
+svg.mi-motor { fill: var(--mat-gears); }
+svg.mi-batteryCell { fill: var(--mat-greens); }
+svg.mi-sunCell { fill: var(--mat-sunstone); }
 svg.mi-food { fill: var(--mat-food); }
 svg.mi-compost { fill: var(--mat-compost); }
 svg.mi-fertiliser { fill: var(--mat-fertiliser); }

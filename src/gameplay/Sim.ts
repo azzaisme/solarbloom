@@ -39,6 +39,7 @@ import { KeeperSystem } from './KeeperSystem';
 import { MainlandSystem } from './MainlandSystem';
 import { LandmarkSystem } from './LandmarkSystem';
 import { WaterSystem } from './WaterSystem';
+import { Crafting } from './Crafting';
 import { ChargeSystem } from './Charge';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
@@ -101,6 +102,8 @@ export class Sim {
   readonly landmarks: LandmarkSystem;
   /** E23.4.1: water levels of ponds, canals and reservoirs (`sim.water`). */
   readonly water: WaterSystem;
+  /** E23.6.1: the crafting table (components; machine and decoration recipes). */
+  readonly crafting: Crafting;
   /** E23.2.1: bloombot's charge, the only meter (old-city rules). */
   readonly charge: ChargeSystem;
   /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
@@ -174,6 +177,7 @@ export class Sim {
     this.gates = new GateSystem(this);
     this.fountain = new FountainSystem(this);
     this.keepers = new KeeperSystem(this);
+    this.crafting = new Crafting(this);
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
     this.gather = new GatherSystem(this);
@@ -305,6 +309,7 @@ export class Sim {
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
     this.water.tick(dt);
+    this.crafting.tick(dt);
     this.charge.tick(dt);
     this.clock.tick();
     this.weather.tick();
