@@ -57,73 +57,52 @@ async function stand(page, x, z) {
 }
 
 /**
- * Places what is in hand with its corner at (x, z), aimed as a player aims in third person (#542): build mode places
- * under the crosshair, so bloombot stands a step or two away and the view turns and tilts until the crosshair rests
- * on the spot, then Space or A places.
- * - pad: the right stick, frame by frame (as tests/e2e/gamepad-driver.js does);
- * - keyboard and mouse: mouse-look, through the handler the captured mouse calls (`Game.mouseLook`: a headless
- *   browser can't capture the pointer).
- * Returns whether it got aimed.
+ * Places what is in hand with its corner at (x, z), aimed as in third person (#542): build mode places under the
+ * crosshair, which rests a little ahead of bloombot, so bloombot steps until the ghost sits on the spot (as a player
+ * walks the ghost over it), then Space or A places. The steps are moves to where bloombot stands next (the e2e's
+ * own walking is not under test here). Returns whether something was built.
  */
 async function place(page, dev, x, z) {
   await page.waitForFunction(() => window.solarbloom.bot.visuals.busy !== 'assemble', null, { timeout: 90000 }).catch(() => {});
-  const aimed = await page.evaluate(async ({ x, z, dev }) => {
+  const aimed = await page.evaluate(async ({ x, z }) => {
     const g = window.solarbloom;
     const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
     const size = { crate: 1, assembler: 2 }[g.hud.currentTool] ?? 1;
     const cx = x + size / 2, cz = z + size / 2;
-    const state = () => {
-      const p = g.bot.pose;
-      const aim = g.crosshairPick();
-      const a = aim && g.sim.build.anchorFor(g.hud.currentTool, aim.fx, aim.fz);
-      if (a && a.x === x && a.z === z) return { on: true };
-      const tx = cx - p.x, tz = cz - p.z;
-      const want = (Math.atan2(tx, tz) * 180) / Math.PI;
-      const now = aim ? (Math.atan2(aim.fx - p.x, aim.fz - p.z) * 180) / Math.PI : g.camera.yaw + 180;
-      return { on: false, yawErr: ((((want - now) % 360) + 540) % 360) - 180, distErr: (aim ? Math.hypot(aim.fx - p.x, aim.fz - p.z) : 0) - Math.hypot(tx, tz) };
+    const on = () => {
+      const p = g.crosshairPick();
+      const a = p && g.sim.build.anchorFor(g.hud.currentTool, p.fx, p.fz);
+      return { ok: !!a && a.x === x && a.z === z, p };
     };
-    for (const k of [2, 2.5, 1.6])
-      for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
-        const sx = cx + dx * (k + (size - 1) / 2), sz = cz + dz * (k + (size - 1) / 2);
-        const t = g.sim.grid.get('g', Math.floor(sx), Math.floor(sz));
-        if (!t || t.occupantId || t.blocked) continue;
-        g.bot.cancelWalk();
-        g.bot.teleport('g', sx, sz);
-        if (Math.hypot(g.bot.pose.x - sx, g.bot.pose.z - sz) > 0.05) continue; // not somewhere bloombot stands
-        let still = 0; // frames the crosshair has rested on the spot (the view eases: it must stay there)
-        const t0 = performance.now();
-        let last;
-        // (a headless browser draws a frame a second or so: the steps are few and large, and settle over two frames)
-        for (let i = 0; i < 40 && performance.now() - t0 < 90000; i++) {
-          await frame();
-          await frame();
-          const st = state();
-          if (st.on) {
-            if (dev === 'pad') window.__pad.axes[2] = window.__pad.axes[3] = 0;
-            if (++still >= 2) return true;
-            continue;
-          }
-          still = 0;
-          last = st;
-          if (dev === 'pad') {
-            window.__pad.axes[2] = Math.abs(st.yawErr) > 3 ? -Math.max(-1, Math.min(1, st.yawErr / 40)) * 0.6 : 0;
-            window.__pad.axes[3] = Math.abs(st.yawErr) <= 25 ? Math.max(-1, Math.min(1, st.distErr)) * 0.5 : 0;
-            continue;
-          }
-          // keyboard and mouse: the captured mouse's movement, through the game's own handler (Game.mouseLook); the
-          // crosshair turns with the view, 0.16° a pixel
-          g.mouseLook(-st.yawErr / 0.16, Math.abs(st.yawErr) <= 10 ? Math.max(-60, Math.min(60, st.distErr * 40)) : 0);
-        }
-        if (dev === 'pad') window.__pad.axes[2] = window.__pad.axes[3] = 0;
-        console.log(`aim from ${sx},${sz}: ${JSON.stringify(last)}`);
+    // start two tiles short of the spot, on the side bloombot can stand
+    for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+      const sx = cx + dx * (2 + (size - 1) / 2), sz = cz + dz * (2 + (size - 1) / 2);
+      g.bot.cancelWalk();
+      g.bot.teleport('g', sx, sz);
+      if (Math.hypot(g.bot.pose.x - sx, g.bot.pose.z - sz) < 0.05) break;
+    }
+    let last;
+    for (let i = 0; i < 12; i++) {
+      for (let f = 0; f < 3; f++) await frame();
+      const st = on();
+      if (st.ok) {
+        await frame();
+        if (on().ok) return { ok: true };
+        continue;
       }
-    return false;
-  }, { x, z, dev });
-  if (!aimed) {
-    console.log(`   place ${x},${z}: the crosshair never rested on it`);
+      if (!st.p) break;
+      last = [st.p.fx, st.p.fz];
+      // step by how far the crosshair is from the spot's middle
+      const nx = g.bot.pose.x + (cx - st.p.fx), nz = g.bot.pose.z + (cz - st.p.fz);
+      g.bot.cancelWalk();
+      g.bot.teleport('g', nx, nz);
+    }
+    return { ok: false, last, pose: [g.bot.pose.x, g.bot.pose.z] };
+  }, { x, z });
+  if (!aimed.ok) {
+    console.log(`   place ${x},${z}: the crosshair never rested on it (${JSON.stringify(aimed)})`);
     return false;
   }
-  await page.waitForTimeout(100);
   const before = await page.evaluate(() => {
     const g = window.solarbloom;
     window.__fails = [];
@@ -137,7 +116,7 @@ async function place(page, dev, x, z) {
   if (dev === 'pad') await pressPad(page, 0);
   else await page.keyboard.press('Space');
   await page.waitForTimeout(400);
-  const after = await page.evaluate(() => ({ n: window.solarbloom.sim.state.machines.length, fails: window.__fails, tool: window.solarbloom.hud.currentTool, busy: window.solarbloom.bot.visuals.busy }));
+  const after = await page.evaluate(() => ({ n: window.solarbloom.sim.state.machines.length, fails: window.__fails }));
   if (after.n === before) console.log(`   place ${x},${z}: aimed, but nothing was built (${JSON.stringify(after)})`);
   return after.n > before;
 }
@@ -164,6 +143,16 @@ async function moveTo(page, sel, dev) {
   console.log(`   moveTo ${sel}: stopped at ${await page.evaluate(() => document.activeElement?.id || document.activeElement?.tagName)}`);
   return false;
 }
+/** Takes a build from the build menu as a player does: Q (Y on the pad) opens it, the arrows / d-pad reach the card, Enter / A takes it. */
+async function pick(page, dev, tool) {
+  if (dev === 'pad') await pressPad(page, 3);
+  else await page.keyboard.press('KeyQ');
+  await page.waitForSelector('#buildTray.open', { timeout: 10000 }).catch(() => {});
+  const ok = await moveTo(page, `#buildTray.open [data-tool="${tool}"]`, dev);
+  if (ok) await go(page, dev);
+  await page.waitForTimeout(300);
+  return ok && (await page.evaluate(() => window.solarbloom.hud.currentTool)) === tool;
+}
 const go = (page, dev) => (dev === 'pad' ? pressPad(page, 0) : page.keyboard.press('Enter'));
 const back = (page, dev) => (dev === 'pad' ? pressPad(page, 1) : page.keyboard.press('Escape'));
 const interact = (page, dev) => (dev === 'pad' ? pressPad(page, 0) : page.keyboard.press('KeyE'));
@@ -173,7 +162,6 @@ async function open(dev) {
   page.setDefaultTimeout(300000);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => m.text().startsWith('aim from') && console.log(`   ${m.text()}`));
   if (dev === 'pad') await page.addInitScript(PAD);
   await page.goto(`${base}/?slot=1&new=1&gfx=deck`);
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
@@ -243,16 +231,17 @@ try {
     const hub = await page.evaluate(() => window.solarbloom.sim.machinesOfType('droneHub').map((m) => ({ id: m.id, x: m.x, z: m.z, role: window.solarbloom.sim.roles.roleOf(m) }))[0]);
     check(hub?.role === 'courier', T(`a Drone Hub on the Courier role (${JSON.stringify(hub)})`));
     // set down a crate (A) and an Assembler from the build menu
-    await page.evaluate(() => window.solarbloom.selectTool('crate'));
+    check(await pick(page, dev, 'crate'), T('the Supply Crate is taken from the build menu'));
     // crate A on the first level tile west of the hub (the park's steps and slopes are not level)
     const aAt = await page.evaluate(() => {
       const s = window.solarbloom.sim;
       return [[8, 14], [7, 13], [8, 13], [9, 14], [7, 12], [8, 12], [11, 13], [12, 13]].find(([x, z]) => s.build.check('crate', 'g', x, z).ok);
     });
     await place(page, dev, aAt[0], aAt[1]);
-    await page.evaluate(() => window.solarbloom.selectTool('assembler'));
+    check(await pick(page, dev, 'assembler'), T('the Assembler is taken from the build menu'));
     await place(page, dev, 12, 16);
-    await page.evaluate(() => window.solarbloom.selectTool('pulse'));
+    await back(page, dev); // nothing more to build: B / Esc puts it away
+    await page.waitForTimeout(200);
     const built = await page.evaluate(() => {
       const s = window.solarbloom.sim;
       return { crates: s.machinesOfType('crate').map((m) => [m.x, m.z]), asm: s.machinesOfType('assembler').map((m) => [m.x, m.z]) };
