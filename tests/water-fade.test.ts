@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import type { TileData } from '../src/core/types';
+import type { MachineData, TileData } from '../src/core/types';
 import { WATER_NET } from '../src/data/water';
 import { Sim } from '../src/gameplay/Sim';
 import { WaterSystem } from '../src/gameplay/WaterSystem';
@@ -79,6 +79,49 @@ describe('E23.4.4: land fades around low water', () => {
     for (let i = 0; i < 12; i++) sim.water.tick(DAY / 24);
     expect(sim.water.levelOf(body.id)).toBe(1);
     for (const t of land) expect(sim.water.bloomShown(t)).toBe(t.bloom);
+  });
+
+  it("E23.5's planters by a drained pond wilt with the land, no crop is removed, and they grow on when it refills", () => {
+    const { sim, land, body } = park();
+    sim.weather.forceForTest('sunny', Infinity); // dry days: rain would water the beds itself
+    const banks = near(sim, land, body.id).filter((t) => !t.occupantId);
+    const beds: MachineData[] = [];
+    for (const t of banks.slice(0, 3)) {
+      const m: MachineData = { id: sim.newId('m'), type: 'planter', roofId: GROUND, x: t.x, z: t.z, size: 1, boostUntil: 0, timer: 0, charge: 0 };
+      sim.state.machines.push(m);
+      t.occupantId = m.id;
+      sim.grid.indexMachine(m);
+      beds.push(m);
+    }
+    expect(beds.length).toBe(3);
+    (sim.state.salvage!.crops ??= []).push('radish');
+    sim.inventory.add('seeds', 5);
+    for (const m of beds) expect(sim.farm.plant(m, 'radish')).toBe(true);
+    expect(beds.every((m) => !sim.farm.look(m).wilting)).toBe(true);
+    const step = () => {
+      sim.state.time += DAY / 24;
+      sim.water.tick(DAY / 24);
+      sim.farm.tick(DAY / 24);
+    };
+    for (let i = 0; i < 3; i++) step();
+    const grown = beds.map((m) => sim.state.salvage!.planters![m.id].grown!);
+    expect(grown.every((g) => g > 0)).toBe(true);
+    // the pond runs dry: the land fades, the beds wilt and wait
+    sim.water.draw(body.id, body.capacity);
+    for (const m of beds) {
+      expect(sim.farm.look(m).wilting).toBe(true);
+      expect(sim.water.fadeAt(sim.grid.get(GROUND, m.x, m.z)!)).toBe(WATER_NET.fadeSteps);
+    }
+    for (let i = 0; i < 24; i++) step();
+    beds.forEach((m, i) => {
+      expect(sim.state.machines).toContain(m);
+      expect(sim.state.salvage!.planters![m.id]).toMatchObject({ crop: 'radish', grown: grown[i] }); // nothing removed, nothing lost
+    });
+    // refilled: green again, and they grow on
+    sim.water.fill(body.id, body.capacity);
+    expect(beds.every((m) => !sim.farm.look(m).wilting)).toBe(true);
+    for (let i = 0; i < 3; i++) step();
+    beds.forEach((m, i) => expect(sim.state.salvage!.planters![m.id].grown).toBeGreaterThan(grown[i]));
   });
 
   it('a nearby full body keeps the land green even when another runs dry (two bodies)', () => {
