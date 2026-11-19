@@ -5,7 +5,7 @@ import { areaMapFor, genKey, PARK, SEA, type AreaInfo } from './Areas';
 import { canalRow } from './Arterials';
 import { distToFootprintRaw } from './Footprint';
 import { roadPlanFor } from './RoadPlan';
-import { coastSand, inRect, isSeaChunk, onJetty, regionById, regionWater, seaCell, setPieceAt } from './OldCityLayout';
+import { coastSand, inRect, isSeaChunk, onJetty, regionById, regionPond, regionWater, seaCell, setPieceAt } from './OldCityLayout';
 import { rampAt, tileLevel } from './Height';
 import { causewayBroken, onCauseway } from './Mainland';
 import { OLD_CITY } from '../data/oldcity';
@@ -319,6 +319,12 @@ function generateOldCity(seed: number, layer: LayerData, lh: number, x: number, 
   }
   // the sea all round the island, the bay and the coast band: open water nothing crosses; canals: deep water
   if (area.id === SEA || area.id.startsWith('out_') || seaCell(x, z) || regionWater(x, z)) return stampOldCity(Object.assign(base, { feature: 'water' as TileFeature, blocked: true }));
+  // E23.5.4.6: a Keeper's garden pond: a silted bed (dead, walkable) until restored, then fresh water
+  if (regionPond(x, z)) {
+    const lo = Math.max(pollutionMin, area.pollutionFloor);
+    const pollution = Math.min(100, Math.round(lo + (Math.max(lo, pollutionMax) - lo) * tileRandom(seed, lh, x, z, 1)));
+    return stampOldCity(Object.assign(base, { feature: 'water' as TileFeature, pollution }));
+  }
   const def = AREA_TYPES[area.type];
   let feature: TileFeature = area.noLandmark ? 'paving' : def.ground;
   const road = oldCityRoad(x, z, area);

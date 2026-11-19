@@ -12,6 +12,7 @@ import { DECOR_OPTION } from '../src/data/cozy';
 import { Cozy, decorOpen } from '../src/gameplay/Cozy';
 import { FARM_USES } from '../src/data/farm';
 import { CHARGE } from '../src/data/charge';
+import { WATER_NET } from '../src/data/water';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
@@ -304,18 +305,32 @@ function gardenSpot(sim: Sim, keeperId: string): { x: number; z: number } | unde
   if (area) {
     sim.areas.reveal(area);
     sim.areas.clear(area, true);
+    sim.state.areas[area]!.sealed = false; // its gate open: the way in, as waking the Keeper needs
   }
+  // E23.5.4.6: the Keeper's garden pond comes back with the ground (bloombot pulses its silted bed)
+  for (const t of pondTiles(sim, keeperId)) if (t.ground !== 'restored') sim.restoration.complete(t, 'pulse');
   const near = [];
   for (let dx = -R; dx <= R; dx++) for (let dz = -R; dz <= R; dz++) near.push([k.x + dx, k.z + dz, Math.max(Math.abs(dx), Math.abs(dz))]);
   near.sort((a, b) => a[2] - b[2]);
+  let dry: { x: number; z: number } | undefined;
   for (const [x, z] of near) {
     const t = sim.grid.get(GROUND, x, z);
     if (!t || t.blocked || t.occupantId || t.feature === 'water') continue;
     sim.restoration.complete(t, 'pulse');
     const chk = sim.build.check('planter', GROUND, x, z);
-    if (chk.ok || chk.spotOk) return { x, z };
+    if (!(chk.ok || chk.spotOk)) continue;
+    if (sim.water.isWatered(t)) return { x, z }; // a spot the pond's water reaches, as a player would pick
+    dry ??= { x, z };
   }
-  return undefined;
+  return dry;
+}
+
+/** The tiles of a Keeper's garden pond (data/oldcity `ponds` of the Keeper's region). */
+function pondTiles(sim: Sim, keeperId: string) {
+  const r = REGIONS.find((q) => q.id === keeperById(keeperId)!.region)!;
+  const out = [];
+  for (const q of r.ponds ?? []) for (let x = q.x; x < q.x + q.w; x++) for (let z = q.z; z < q.z + q.d; z++) out.push(sim.grid.get(GROUND, x, z)!);
+  return out;
 }
 
 /** Builds a Keeper's garden on the real map, grows the crop it asked for and harvests it there. */
@@ -417,6 +432,47 @@ describe('E23.5.4.6: Keeper gardens', () => {
       const p = sim.build.place('planter', GROUND, spot!.x, spot!.z);
       expect(p, `${k.name}'s planter placed`).toBeDefined();
       expect(sim.farmExtras.gardenOf(p!), k.name).toBe(k.id);
+    }
+  });
+
+  it('every Keeper’s garden has fresh water: a silted pond beside it fills once restored, and waters the garden', () => {
+    for (const k of KEEPERS) {
+      const sim = farm();
+      const ponds = pondTiles(sim, k.id);
+      if (!ponds.length) {
+        // only Moss's Elder Grove has its own canal close by
+        expect(k.region, `${k.name} needs a pond`).toBe('elderGrove');
+        continue;
+      }
+      // a dead, walkable silted bed beside the Keeper: not water to drink yet
+      for (const t of ponds) {
+        expect(t.feature, `${k.name} pond ${t.x},${t.z}`).toBe('water');
+        expect(t.blocked).toBe(false);
+        expect(t.ground).not.toBe('restored');
+        expect(sim.water.isFresh(t)).toBe(false);
+        expect(Math.max(Math.abs(t.x - k.x), Math.abs(t.z - k.z))).toBeLessThanOrEqual(KEEPER_GARDEN.reach);
+      }
+      sim.state.salvage!.keepers[k.id] = { step: 'request1' };
+      const spot = gardenSpot(sim, k.id)!; // restores the pond as bloombot would
+      const body = sim.water.bodyAt(ponds[0]);
+      expect(body, `${k.name}'s pond is fresh water once restored`).toBeDefined();
+      if (sim.water.levelOf(body!.id) < 0.5) {
+        // only the Cistern's dry basin: Sluice's pond fills with it once the Old Cistern wakes and its springs run
+        expect(k.region).toBe('cistern');
+        sim.areas.clear('cistern', true);
+        expect(sim.water.dormant(body!)).toBe(false);
+        // its springs fill it within the day (the wake's rush may have come before the pond was restored)
+        for (let h = 0; h < 12; h++) sim.water.tick(DAY_SECONDS / 24);
+        expect(WATER_NET.springs.cistern! / 2).toBeGreaterThan(0.5);
+      }
+      expect(sim.water.levelOf(body!.id), `${k.name}'s pond level`).toBeGreaterThan(0.5);
+      // a planter in the Keeper's garden is watered by it, with no rain
+      for (const [key, v] of Object.entries(sim.build.recipe('planter')!)) sim.inventory.add(key as 'scrap', v!);
+      const p = sim.build.place('planter', GROUND, spot.x, spot.z)!;
+      expect(sim.farmExtras.gardenOf(p), k.name).toBe(k.id);
+      sim.weather.forceForTest('sunny', 1e9);
+      expect(sim.water.isWatered(sim.grid.get(GROUND, p.x, p.z)!), `${k.name}'s garden is watered`).toBe(true);
+      expect(sim.farm.look(p).wilting ?? false).toBe(false);
     }
   });
 

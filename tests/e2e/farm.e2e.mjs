@@ -328,7 +328,29 @@ try {
     await closePanel();
   }
 
-  // ── E23.5.4.6: a Keeper garden ──
+  // ── E23.5.4.6: a Keeper garden, watered by the rock pool beside Tide ──
+  const pool = await game((g, s) => {
+    const q = { x: 7, z: 16, w: 2, d: 3 }; // Saltwind's `ponds` in data/oldcity (tests/farm-extras checks every Keeper's)
+    const tiles = [];
+    for (let x = q.x; x < q.x + q.w; x++) for (let z = q.z; z < q.z + q.d; z++) tiles.push(s.grid.get('g', x, z));
+    return { x: q.x + q.w - 1, z: q.z + 1, silted: tiles.every((t) => t.feature === 'water' && !t.blocked && t.ground !== 'restored' && !s.water.isFresh(t)), ids: tiles.map((t) => [t.x, t.z]) };
+  });
+  check(pool.silted, 'a silted rock pool lies beside Tide, dead until restored');
+  await morning();
+  await face(pool.x, pool.z);
+  await page.waitForTimeout(2000);
+  await snap('tide-pool-silted');
+  // bloombot restores it: fresh water again
+  await game((g, s, ids) => {
+    for (const [x, z] of ids) s.restoration.complete(s.grid.get('g', x, z), 'pulse');
+  }, pool.ids);
+  const filled = await game((g, s, ids) => {
+    const b = s.water.bodyAt(s.grid.get('g', ids[0][0], ids[0][1]));
+    return b ? s.water.levelOf(b.id) : -1;
+  }, pool.ids);
+  check(filled > 0.5, `restored, the rock pool is fresh water (level ${filled.toFixed(2)})`);
+  await page.waitForTimeout(3000);
+  await snap('tide-pool-restored');
   const garden = await game((g, s) => {
     const k = s.keepers.def('tide');
     s.state.salvage.keepers.tide = { step: 'request1' };
@@ -340,6 +362,7 @@ try {
           const t = s.grid.get('g', x, z);
           if (!t || t.blocked || t.occupantId || t.feature === 'water') continue;
           s.restoration.complete(t, 'pulse');
+          if (!s.water.isWatered(t)) continue; // a spot the rock pool's water reaches
           s.inventory.add('planks', 3); // the Planter box's table recipe
           const m = s.build.place('planter', 'g', x, z);
           if (m) return { id: m.id, x, z, keeper: s.farmExtras.gardenOf(m) };
@@ -368,7 +391,9 @@ try {
         s.farm.plant(s.machine(id), 'seaKale');
       }, garden.id);
     }
-    await game((g, s) => void s.weather.forceForTest('rain', 1e9)); // no fresh water by the beach: the rain waters it
+    // a dry spell: the rock pool waters Tide's garden
+    await game((g, s) => void s.weather.forceForTest('sunny', 1e9));
+    check(await game((g, s, id) => !s.farm.look(s.machine(id)).wilting, garden.id), 'Tide’s garden drinks from the rock pool, no rain needed');
     await days(4);
     await pressE();
     await page.waitForTimeout(500);

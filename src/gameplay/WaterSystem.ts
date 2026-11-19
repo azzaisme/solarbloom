@@ -26,7 +26,8 @@ export interface WaterSave {
 }
 
 /** Each region's water rectangles (its canals and ponds), by region. */
-const REGION_WATER = new Map(REGIONS.filter((r) => r.water?.length).map((r) => [r.id, r.water!]));
+// E23.5.4.6: a Keeper's garden pond is its region's water too (the Cistern's springs fill Sluice's once it wakes)
+const REGION_WATER = new Map(REGIONS.filter((r) => r.water?.length || r.ponds?.length).map((r) => [r.id, [...(r.water ?? []), ...(r.ponds ?? [])]]));
 
 const SIDES = [
   [1, 0],
