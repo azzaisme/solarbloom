@@ -49,14 +49,19 @@ async function stand(page, x, z) {
   await page.evaluate(({ x, z }) => {
     const g = window.solarbloom;
     g.bot.cancelWalk();
-    for (const [dx, dz, f] of [[0, 1.1, Math.PI], [0, -1.1, 0], [1.1, 0, -Math.PI / 2], [-1.1, 0, Math.PI / 2]]) {
-      const t = g.sim.grid.get('g', Math.floor(x + 0.5 + dx), Math.floor(z + 0.5 + dz));
-      if (!t || t.occupantId || t.blocked) continue;
-      g.bot.teleport('g', x + 0.5 + dx, z + 0.5 + dz);
-      g.bot.pose.facing = f;
-      const fr = g.bot.front();
-      if (fr.x === x && fr.z === z) return;
-    }
+    // what stands at (x, z): bloombot may face any tile of it (a 2 x 2 machine has free sides beyond its own tiles)
+    const at = g.sim.grid.get('g', x, z)?.occupantId;
+    const sides = [[0, 1, Math.PI], [0, -1, 0], [1, 0, -Math.PI / 2], [-1, 0, Math.PI / 2]];
+    for (const r of [1.1, 2.1])
+      for (const [ux, uz, f] of sides) {
+        const dx = ux * r, dz = uz * r;
+        const t = g.sim.grid.get('g', Math.floor(x + 0.5 + dx), Math.floor(z + 0.5 + dz));
+        if (!t || t.occupantId || t.blocked) continue;
+        g.bot.teleport('g', x + 0.5 + dx, z + 0.5 + dz);
+        g.bot.pose.facing = f;
+        const fr = g.bot.front();
+        if ((fr.x === x && fr.z === z) || (at && g.sim.grid.get('g', fr.x, fr.z)?.occupantId === at)) return;
+      }
   }, { x, z });
   await page.waitForTimeout(300);
 }
