@@ -194,9 +194,8 @@ async function open(dev) {
     for (const type of ['crate', 'crate', 'crate', 'assembler', 'droneHub'])
       for (const [k, v] of Object.entries(s.build.recipe(type))) if (k !== 'biomass') s.inventory.add(k, v);
     s.inventory.add('copper', 40);
-    // the hub's refit to a new role (E18) is paid from the Energy and Water gauges and, in the Old City, Biomass from
-    // the backpack: the Courier's 80 fits once the Roomier backpack research has two levels (stacks of 80)
-    for (const k of ['energy', 'water']) s.econ.add(k, 200);
+    // the hub's refit to a new role is paid in Biomass from the backpack (E23.1.4): the Courier's 80 fits once the
+    // Roomier backpack research has two levels (stacks of 80)
     sv.research = { analysed: [], done: [], running: [], levels: { backpack: 2 } };
     s.inventory.add('biomass', 80);
     const why = s.build.check('droneHub', 'g', 10, 10);
