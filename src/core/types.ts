@@ -480,6 +480,8 @@ export interface GameState {
    * production, chains, milestones or pacing). Optional and sparse, so no save version change.
    */
   cozy?: CozyState;
+  /** E23.4.1: water levels (share of capacity) of bodies that have changed, by body id `x,z`. Optional. */
+  water?: { levels: Record<string, number> };
   /** E23.2.3: old park benches mended, by id (`bench:x:z`). Optional, so no save version change. */
   rest?: { mended: string[] };
   /**

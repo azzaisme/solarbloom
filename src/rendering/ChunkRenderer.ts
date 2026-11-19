@@ -1899,7 +1899,9 @@ export class ChunkRenderer {
       return;
     }
     if (t.ground !== 'restored') return;
-    // clear water (its surface is `poolSurface`): lily pads, and lotus flowers as it blooms
+    // clear water (its surface is `poolSurface`): lily pads, and lotus flowers as it blooms. As a pond drains they
+    // ride down with it: none where its bed now shows (E23.4.1).
+    if (!this.sim.water.covered(t)) return;
     const pads = (t.variant % 3) + (t.bloom >= 3 ? 1 : 0);
     for (let i = 0; i < pads; i++) {
       const px = x + r.range(-0.28, 0.28);
