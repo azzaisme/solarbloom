@@ -107,7 +107,7 @@ export class WaterPipes {
     return this.cache.set;
   }
 
-  /** Pipe tiles left over from the last Pipe crafted (a Pipe lays `tilesPerPipe`). */
+  /** Pipe tiles a save from before the crafting table had left over (laid first; nothing adds to it now). */
   get stock(): number {
     return this.save.pipeStock ?? 0;
   }
@@ -134,7 +134,7 @@ export class WaterPipes {
       .join(', ');
   }
 
-  /** Lays one pipe tile (paying a Pipe when the last one is used up). */
+  /** Lays one pipe tile (one crafted Pipe from the pack or the store). */
   lay(roofId: string, x: number, z: number): boolean {
     const why = this.layProblem(roofId, x, z);
     if (why) {
@@ -142,23 +142,20 @@ export class WaterPipes {
       return false;
     }
     const s = this.save;
-    if (this.stock <= 0) {
-      if (!this.sim.inventory.pay(WATER_NET.pipe.cost)) return false;
-      s.pipeStock = WATER_NET.pipe.tilesPerPipe;
-    }
-    s.pipeStock = this.stock - 1;
+    if (this.stock > 0) s.pipeStock = this.stock - 1;
+    else if (!this.sim.inventory.pay(WATER_NET.pipe.cost)) return false;
     s.pipes = [...this.keys(), pipeKey(x, z)].sort();
     this.version++;
     return true;
   }
 
-  /** Lifts one pipe tile (it goes back into the stock). */
+  /** Lifts one pipe tile (its Pipe goes back into the pack). */
   lift(x: number, z: number): boolean {
     if (!this.has(x, z)) return false;
     const k = pipeKey(x, z);
     const s = this.save;
     s.pipes = this.keys().filter((p) => p !== k);
-    s.pipeStock = this.stock + 1;
+    this.sim.inventory.refund(WATER_NET.pipe.cost);
     this.version++;
     return true;
   }

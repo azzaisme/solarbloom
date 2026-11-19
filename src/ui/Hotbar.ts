@@ -1,13 +1,13 @@
-import { formatCost } from '../core/Economy';
 import { DECOR_OPTION, DECOR_OPTIONS } from '../data/cozy';
 import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE } from '../data/machines';
 import { WATER_NET } from '../data/water';
 import { TUNING } from '../data/tuning';
 import { type Action, type Bindings, keyLabel } from '../app/Bindings';
-import { type GlyphStyle, type PadStyle, padName } from './Glyphs';
+import { actionGlyph, type GlyphStyle, type PadStyle, padName } from './Glyphs';
 import { ICONS, iconize, MACHINE_ICONS, plain } from './Icons';
 import { $, esc, HudPart } from './HudPart';
-import { decorType, etaText, machineTool, type Tool } from './Hud';
+import { decorType, machineTool, type Tool } from './Hud';
+import { decorOpen } from '../gameplay/Cozy';
 
 /**
  * E22.5 (#342): the classic hotbar (Inspect, Pulse, the build tray, Harvest, Upgrades).
@@ -24,7 +24,7 @@ export class Hotbar extends HudPart {
       `<span class="sep"></span>`,
       `<button class="slot" id="buildToggle" aria-label="Build menu (B)" aria-expanded="false"><span class="key">B</span><span class="si">${ICONS.build}</span><span class="sl">Build</span><span class="sc"></span></button>`,
       `<div id="buildTray">`,
-      // E21.3: the Old City adds the Storage Chest and the Reclaimer (no number keys: the build menu reaches them)
+      // E21.3: the Old City adds the Storage Chest (no number keys: the build menu reaches them)
       ...(oldCity ? OLD_CITY_BUILDABLE : BUILDABLE).map(
         (t) =>
           `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name}${MACHINES[t].hotkey ? ` (${MACHINES[t].hotkey})` : ''}"><span class="key">${MACHINES[t].hotkey ?? ''}</span><span class="si">${ICONS[MACHINE_ICONS[t]]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
@@ -40,7 +40,6 @@ export class Hotbar extends HudPart {
       `</div>`,
       `<span class="sep"></span>`,
       `<button class="slot" id="harvestBtn" aria-label="Harvest sunlight (H)"><span class="key">H</span><span class="si">${ICONS.harvest}</span><span class="sl">Harvest</span><span class="sc">+${TUNING.harvest.energy}⚡</span><span class="cd"></span></button>`,
-      `<button class="slot" id="upgBtn" aria-label="Upgrades (U)"><span class="key">U</span><span class="si">${ICONS.upgrades}</span><span class="sl">Upgrades</span><span class="sc">&nbsp;</span><span class="badge" aria-label="Something useful to buy"></span></button>`,
     ].join('');
   }
 
@@ -48,7 +47,6 @@ export class Hotbar extends HudPart {
     const r = this.root;
     r.querySelectorAll<HTMLButtonElement>('#hotbar [data-tool]').forEach((b) => b.addEventListener('click', () => this.cb.selectTool(b.dataset.tool as Tool)));
     $(r, '#harvestBtn').addEventListener('click', () => this.cb.harvest());
-    $(r, '#upgBtn').addEventListener('click', () => this.hud.toggleUpgrades());
     $(r, '#buildToggle').addEventListener('click', () => this.toggleTray());
   }
 
@@ -98,7 +96,6 @@ export class Hotbar extends HudPart {
       ['[data-tool="pulse"]', 'pulse', '2'],
       ['#buildToggle', 'buildMenu', 'B'],
       ['#harvestBtn', 'harvest', 'H'],
-      ['#upgBtn', 'upgrades', 'U'],
     ];
     for (const [sel, action, cursor] of slots) {
       const el = this.root.querySelector<HTMLElement>(`#hotbar ${sel} .key`);
@@ -135,9 +132,8 @@ export class Hotbar extends HudPart {
       this.set('hl-pipe', pipeBtn, 'cls', locked ? '1' : '0', 'locked');
     }
     // E19.2: a decoration's slot appears once it's earned
-    const earned = s.state.cozy?.decorUnlocked;
     for (const o of DECOR_OPTIONS) {
-      const on = 'start' in o.unlock || !!earned?.includes(o.id);
+      const on = decorOpen(s, o);
       if (this.last.get(`dc-${o.id}`) === String(on)) continue;
       this.last.set(`dc-${o.id}`, String(on));
       $(this.root, `#hotbar [data-tool="decor:${o.id}"]`).hidden = !on;
@@ -158,16 +154,6 @@ export class Hotbar extends HudPart {
     this.set('hcd', $(hb, '.cd'), 'html', '');
     ($(hb, '.cd') as HTMLElement).style.transform = `scaleY(${cd / TUNING.harvest.cooldown})`;
     this.set('hsc', $(hb, '.sc'), 'text', cd > 0 ? `${Math.ceil(cd)}s` : `+${TUNING.harvest.energy}⚡`);
-    // Phase 4 E02.5: a dot when there is something worth buying now, not a count of notifications.
-    const useful = s.upgrades.all().find((u) => s.upgrades.status(u).ok);
-    const badge = $(this.root, '#upgBtn .badge');
-    this.set('badgeOn', badge, 'cls', useful ? '1' : '0', 'on');
-    // Phase 5 E12: otherwise, how long until the next thing (seconds of current net income).
-    const next = useful ? undefined : s.advisor.nextPurchase();
-    // E19.4.2 / E20.7: time-to-afford is a number the calm HUD leaves out.
-    const eta = this.settings.showNumbers && next ? (next.eta < 0.5 ? ' · affordable now' : ` · ~${etaText(next.eta)}`) : '';
-    this.set('upgSc', $(this.root, '#upgBtn .sc'), 'text', useful ? formatCost(s.upgrades.status(useful).price).replace(/ /g, '') : next && eta ? `~${etaText(next.eta)}` : '\u00a0');
-    this.set('upgNext', $(this.root, '#upgNext'), 'html', next ? `Next: ${next.icon} ${esc(next.name)} · ${formatCost(next.cost)}${eta}` : useful ? '' : '');
   }
 }
 
@@ -196,6 +182,9 @@ export function toolFace(t: string): { icon: string; name: string } | undefined 
  */
 export class BuildBar extends HudPart {
   private keys: string[] = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+  /** E23.3.4: the Power view's glyph, and whether it is on (the game sets it). */
+  private powerGlyph = '';
+  powerOn = false;
 
   static template(): string {
     return `<div id="buildbar" class="panel" role="toolbar" aria-label="Build hotbar" hidden></div>`;
@@ -209,7 +198,7 @@ export class BuildBar extends HudPart {
   setKeys(style: GlyphStyle | undefined, b?: Bindings) {
     if (!b) return;
     this.keys = (['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6', 'slot7', 'slot8', 'slot9'] as Action[]).map((a) => (b.keys[a][0] ? keyLabel(b.keys[a][0]) : ''));
-    void style;
+    this.powerGlyph = actionGlyph(b, 'powerOverlay', style ?? 'keys');
     this.last.delete('buildbar');
   }
 
@@ -227,6 +216,10 @@ export class BuildBar extends HudPart {
         return `<div class="bslot${t === tool ? ' on' : ''}${f ? '' : ' empty'}${locked ? ' locked' : ''}" aria-label="${f ? `Slot ${i + 1}: ${esc(f.name)}` : `Slot ${i + 1}: empty`}"><span class="key">${esc(this.keys[i] ?? '')}</span>${f ? `<span class="si">${f.icon}</span><span class="sl">${esc(f.name)}</span>` : ''}</div>`;
       })
       .join('');
-    this.set('buildbar', el, 'html', html);
+    // E23.3.4: the Power view toggle sits at the end of the bar (once there is a grid to show)
+    const power = this.sim.power.networks().length
+      ? `<div class="bslot power${this.powerOn ? ' on' : ''}" aria-label="Power view ${this.powerOn ? 'on' : 'off'}"><span class="key glyph">${this.powerGlyph}</span><span class="sl">Power</span></div>`
+      : '';
+    this.set('buildbar', el, 'html', html + power);
   }
 }

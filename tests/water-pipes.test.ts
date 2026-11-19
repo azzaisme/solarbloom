@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import type { BuildableType, MachineData, MachineType, WeatherKind } from '../src/core/types';
+import type { BuildableType, MachineData, MachineType } from '../src/core/types';
+import type { WeatherKind } from '../src/data/weather';
 import { WATER_NET } from '../src/data/water';
 import { Sim } from '../src/gameplay/Sim';
 import { tankId } from '../src/gameplay/WaterPipes';
@@ -12,7 +13,7 @@ const DAY = WATER_NET.daySeconds;
 const days = (sim: Sim, n: number) => {
   for (let i = 0; i < Math.round(n * 48); i++) sim.water.tick(DAY / 48);
 };
-const weather = (sim: Sim, kind: WeatherKind) => (sim.state.salvage!.weather = { kind, until: Infinity });
+const weather = (sim: Sim, kind: WeatherKind) => sim.weather.forceForTest(kind, Infinity);
 
 /** The park with its pond restored (full), plenty of materials, the bot standing by the store. */
 function park() {
@@ -28,7 +29,7 @@ function park() {
         sim.grid.touch(t);
       }
     }
-  sim.state.salvage!.pack = { clay: 60, copper: 30, scrap: 40 };
+  sim.state.salvage!.pack = { clay: 60, copper: 30, scrap: 40, pipe: 40, wire: 10 };
   weather(sim, 'cloudy');
   // midday, all day (E23.7.1's clock turns the sun off at night; these tests are about the water, not the hour)
   const noon = { ...sim.power.sky(), sun: 1, solar: 1 };
@@ -118,24 +119,26 @@ describe('E23.4.2.1: reservoirs', () => {
 });
 
 describe('E23.4.2.2: pumps and pipe placement', () => {
-  it('pipes are laid tile by tile: a Pipe lays 4, not in water or under machines, and lift back into the stock', () => {
+  it('pipes are laid tile by tile, one crafted Pipe each, not in water or under machines, and lift back into the pack', () => {
     const { sim } = park();
     const pack = sim.state.salvage!.pack;
     lay(sim, [[6, 4]]);
-    expect(pack.copper).toBe(29);
-    expect(pack.clay).toBe(58);
-    expect(sim.water.pipes.stock).toBe(3);
-    lay(sim, [[7, 4], [8, 4], [9, 4]]);
-    expect(pack.copper).toBe(29); // still the first Pipe
-    lay(sim, [[10, 4]]);
-    expect(pack.copper).toBe(28);
+    expect(pack.pipe).toBe(39);
+    expect(pack.copper).toBe(30); // the crafting table turned the Copper and Clay into Pipes already
+    lay(sim, [[7, 4], [8, 4], [9, 4], [10, 4]]);
+    expect(pack.pipe).toBe(35);
     expect(sim.water.pipes.layProblem(GROUND, 2, 11)).toMatch(/water/);
     expect(sim.water.pipes.layProblem(GROUND, 6, 4)).toMatch(/already/);
     expect(sim.water.pipes.layProblem(GROUND, 3, 3)).toMatch(/in the way/);
     put(sim, 'solar', 12, 4);
     expect(sim.water.pipes.layProblem(GROUND, 12, 4)).toMatch(/stands/);
     expect(sim.water.pipes.lift(10, 4)).toBe(true);
-    expect(sim.water.pipes.stock).toBe(4);
+    expect(pack.pipe).toBe(36);
+    // with no Pipes at hand, it says so
+    const saved = pack.pipe;
+    pack.pipe = 0;
+    expect(sim.water.pipes.layProblem(GROUND, 10, 4)).toMatch(/Pipe/);
+    pack.pipe = saved;
     // corners and junctions: links per tile
     lay(sim, [[8, 5], [8, 3]]);
     expect(sim.water.pipes.links(8, 4).length).toBe(4);
@@ -145,13 +148,14 @@ describe('E23.4.2.2: pumps and pipe placement', () => {
     expect(sim.water.pipes.networks().length).toBe(1);
   });
 
-  it('the pump and the reservoir are built from their recipes, paid exactly', () => {
+  it('the pump and the reservoir are built from their crafting-table recipes (E23.6.1), paid exactly', () => {
     const { sim } = park();
     sim.bot = { roofId: GROUND, x: 5, z: 11 };
     for (const [x, z] of [[4, 11], [9, 4], [10, 4], [9, 5], [10, 5]]) Object.assign(tile(sim, x, z), { ground: 'restored', pollution: 0 });
-    sim.state.salvage!.pack = { scrap: 10, copper: 2, clay: 12 };
+    // Pump: 6 Scrap, 2 Wire, 2 Clay; Reservoir: 10 Clay, 4 Scrap
+    sim.state.salvage!.pack = { scrap: 10, wire: 2, clay: 12 };
     expect(sim.build.place('pump', GROUND, 4, 11)).toBeDefined();
-    expect(sim.state.salvage!.pack).toEqual({ scrap: 4, clay: 10 }); // the copper is used up (empty stacks are dropped)
+    expect(sim.state.salvage!.pack).toEqual({ scrap: 4, clay: 10 }); // the wire is used up (empty stacks are dropped)
     sim.bot = { roofId: GROUND, x: 9, z: 6 };
     expect(sim.build.place('reservoir', GROUND, 9, 4)).toBeDefined();
     expect(sim.state.salvage!.pack).toEqual({});

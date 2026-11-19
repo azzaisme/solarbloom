@@ -26,6 +26,10 @@ export class NightFindVisuals {
     const bud = mat(P.bud, { emissive: P.budGlow, emissiveIntensity: 3.2 });
     const metal = mat(P.scrap, { metal: 0.6, gloss: 0.7 });
     const glint = mat(P.glint, { emissive: P.glintGlow, emissiveIntensity: 3.5 });
+    const dewStem = mat(P.dewStem);
+    const dewCap = mat(P.dewCap, { gloss: 0.6 });
+    const dewDrop = mat(P.dewDrop, { emissive: P.dewDrop, emissiveIntensity: 0.6, gloss: 0.9 });
+    const glass = mat(P.glass, { opacity: 0.75, gloss: 0.95 });
     for (const def of sim.nightFinds.all()) {
       const root = new pc.Entity(`night-${def.id}`);
       const x = def.x + 0.5;
@@ -42,6 +46,25 @@ export class NightFindVisuals {
           s.setLocalEulerAngles((rnd() - 0.5) * 20, 0, (rnd() - 0.5) * 20);
           const b = 0.07 + rnd() * 0.05;
           add(root, 'sphere', bud, [Math.cos(a) * r, h + b * 0.4, Math.sin(a) * r], [b, b * 1.2, b]);
+        }
+      } else if (def.kind === 'dewcap') {
+        // a ring of pale mushrooms beaded with dew
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + rnd() * 0.4;
+          const r = 0.12 + rnd() * 0.12;
+          const h = 0.08 + rnd() * 0.1;
+          add(root, 'cylinder', dewStem, [Math.cos(a) * r, h / 2, Math.sin(a) * r], [0.03, h, 0.03]);
+          const c = 0.08 + rnd() * 0.05;
+          add(root, 'sphere', dewCap, [Math.cos(a) * r, h, Math.sin(a) * r], [c * 1.6, c * 0.7, c * 1.6]);
+          add(root, 'sphere', dewDrop, [Math.cos(a) * r + 0.02, h + c * 0.35, Math.sin(a) * r], [0.025, 0.025, 0.025]);
+        }
+      } else if (def.kind === 'driftglass') {
+        // shards of old glass lying in the mist
+        for (let i = 0; i < 4; i++) {
+          const a = rnd() * Math.PI * 2;
+          const r = rnd() * 0.2;
+          const p = add(root, 'box', glass, [Math.cos(a) * r, 0.03, Math.sin(a) * r], [0.14 + rnd() * 0.08, 0.015, 0.1 + rnd() * 0.06]);
+          p.setLocalEulerAngles((rnd() - 0.5) * 30, rnd() * 180, (rnd() - 0.5) * 30);
         }
       } else {
         for (let i = 0; i < 4; i++) {

@@ -40,8 +40,6 @@ try {
           else s.areas.clear(id);
         } else if (sug.action.kind === 'build') s.build.place(sug.action.type, 'g', sug.action.x, sug.action.z);
         else if (sug.action.kind === 'harvest') s.harvestSun();
-        const up = s.upgrades.all().find((u) => s.upgrades.status(u).ok);
-        if (up) s.upgrades.purchase(up.id);
         if (s.state.cat.active) s.cat.claim();
       }
       s.tick();
