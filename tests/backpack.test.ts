@@ -99,7 +99,7 @@ describe('E22.6: the backpack', () => {
     sim.state.cat.found = 2;
     const text = JSON.stringify(collection(sim));
     for (const old of ['Lucky Harvest', 'Solar Surge', 'Mega Bloom', 'Drone Party', 'Jackpot', 'Golden Relay', "Cat's Garden", 'Fog Whisker']) expect(text).not.toContain(old);
-    expect(collection(sim).map((g) => g.title)).toEqual(['Lucky Cats', 'Keepsakes', 'Wildlife', 'Landmarks', 'Plots', 'Decorations']);
+    expect(collection(sim).map((g) => g.title)).toEqual(['Lucky Cats', 'Keepsakes', 'Wildlife', 'Visitors', 'Landmarks', 'Plots', 'Decorations']);
     const words = [...collection(sim).flatMap((g) => [g.title, g.count, g.empty, ...g.rows.flatMap((r) => [r.name, r.detail])]), ...itemCells(sim).flatMap((c) => [c.label, c.from, c.next]), ...requestRows(sim).map((r) => r.text)];
     expect(words.filter((w) => bannedIn(w).length)).toEqual([]);
   });

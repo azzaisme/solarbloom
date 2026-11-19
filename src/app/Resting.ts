@@ -34,7 +34,7 @@ export type RestCandidate = Candidate & { run: () => void; at?: TileData };
  * A Keeper who is a friend comes and sits beside bloombot on a bench.
  */
 export class Resting {
-  private before?: { zoom: number; yaw: number };
+  private before?: { zoom: number; yaw: number; maxZoom: number };
 
   constructor(private h: RestHost) {
     h.bot.onSeatMove = () => this.stand();
@@ -120,7 +120,8 @@ export class Resting {
 
   private calm() {
     const h = this.h;
-    this.before = { zoom: h.camera.zoomTarget, yaw: h.camera.heading };
+    this.before = { zoom: h.camera.zoomTarget, yaw: h.camera.heading, maxZoom: h.camera.maxZoom };
+    h.camera.maxZoom = Math.max(h.camera.maxZoom, REST.visitZoom);
     h.camera.zoomTo(Math.max(h.camera.minZoom, this.before.zoom * REST.calmZoom));
     document.body.classList.add('resting');
     h.sfx.swell(REST.musicSwell);
@@ -142,6 +143,7 @@ export class Resting {
     document.body.classList.remove('resting');
     h.sfx.swell(0);
     if (this.before) {
+      h.camera.maxZoom = this.before.maxZoom;
       h.camera.zoomTo(this.before.zoom);
       h.camera.turnTo(this.before.yaw);
       this.before = undefined;

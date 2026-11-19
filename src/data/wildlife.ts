@@ -125,8 +125,8 @@ export const VISIT_POINTS: Record<Perch, { bone?: string; offset: [number, numbe
   lap: { bone: 'Hips', offset: [0, 0.07, 0.15], fallback: [0, 0.32, 0.16], clear: 0.07 },
   landOn: { bone: 'LeftForeArm', offset: [0, 0.05, 0], fallback: [0.2, 0.38, 0.06], clear: 0.06 },
   // beside bloombot on its right: up on the bench seat when it is free, else on the ground (a friend Keeper sits on
-  // bloombot's left, on the seat)
-  beside: { offset: [-0.42, 0, 0.02], fallback: [-0.42, 0, 0.02], clear: 0.24 },
+  // bloombot's left, on the seat). Back 0.14: the seat's middle, as bloombot sits forward on it (REST.seat.out 0.16)
+  beside: { offset: [-0.42, 0, -0.14], fallback: [-0.42, 0, -0.14], clear: 0.24 },
   sniff: { offset: [0.12, 0, 0.5], fallback: [0.12, 0, 0.5], clear: 0.3 },
   perchNear: { offset: [-0.9, 0, 0.6], fallback: [-0.9, 0, 0.6], clear: 0.6 },
   passBy: { offset: [0, 0.6, 0.7], fallback: [0, 0.6, 0.7], clear: 0.5 },
