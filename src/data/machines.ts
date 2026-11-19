@@ -148,7 +148,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '🛢',
     size: 2,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Stores water. Rain fills it, and so does a canal or pond on its bank, a spring, or a pipe from a pump. Up high, it feeds the pipes below on its own.',
+    blurb: 'Stores water. Rain fills it, and so does a canal or pond on its bank, or a pipe from a pump. Up high, it feeds the pipes below on its own.',
   },
   pump: {
     type: 'pump',
