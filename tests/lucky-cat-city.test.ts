@@ -4,6 +4,7 @@ import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
 import { TUNING } from '../src/data/tuning';
+import { AREA_TYPES } from '../src/data/city';
 import type { MachineData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
 import { wakeNextArea } from './helpers';
@@ -167,7 +168,8 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     }
     const d = sim.cat.discoveries();
     expect(d.anchors).toEqual([]);
-    expect(d.byType.length).toBeLessThanOrEqual(8); // one line per area type, however many areas
+    expect(d.byType.length).toBeLessThanOrEqual(Object.keys(AREA_TYPES).length); // one line per area type (ten since the Old City's beach and downtown), however many areas
+    expect(new Set(d.byType.map((t) => t.type)).size).toBe(d.byType.length);
     expect(d.byType.reduce((a, t) => a + t.cats, 0)).toBe(300);
     expect(d.byType.filter((t) => t.cats > 0).length).toBeGreaterThan(3);
     for (const t of d.byType) expect(t.kinds).toBeLessThanOrEqual(t.totalKinds);
