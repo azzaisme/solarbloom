@@ -271,6 +271,7 @@ export const DECOR_VISITORS: Record<string, VisitorKind> = {
   barrel: 'groundBirds',
   bunting: 'pigeons',
   lamppost: 'pigeons',
+  solarlamppost: 'pigeons',
   cratestack: 'squirrels',
   stones: 'frogs',
 };

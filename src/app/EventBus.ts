@@ -3,6 +3,10 @@ import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import type { BuffType, CatRewardType, CatVariant, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
+  /** E23.2.1: bloombot's charge ran out (the low-power walk); reached full; bloombot began eating one unit. */
+  'charge.empty': Record<string, never>;
+  'charge.full': { source: import('../gameplay/Charge').ChargeSource };
+  'charge.eat': { item: 'biomass' | 'food' };
   /** E23.7.1: the light clock crossed dawn or dusk (`day`: the game day). */
   'clock.dawn': { day: number };
   'clock.dusk': { day: number };
@@ -10,15 +14,26 @@ export interface GameEvents {
   'clock.slept': { from: number; day: number; real: boolean };
   /** E23.7.1: "follow my clock" switched on or off. */
   'clock.mode': { real: boolean };
+  /** E23.7.2: a new day's weather (or a held one, in tests and photo mode never). */
+  'weather.changed': { kind: import('../data/weather').WeatherKind; day: number };
+  /** E23.7.2.3: a storm blew in at dawn: fresh salvage (E23.7.4 refills the piles). */
+  'weather.storm': { day: number };
+  /** E23.7.2.3: lightning struck; `poleId`: the power pole it tripped (reset with one press), if the grid has one. */
+  'weather.lightning': { day: number; poleId?: string };
+  /** E23.7.2.2: bloombot listened to the forecast on the radio. */
+  'weather.forecast': { kind: import('../data/weather').WeatherKind };
   /** E23.7.1.3: a night find was taken. */
   'night.found': { id: string; material: import('../core/types').MaterialId; n: number; x: number; z: number };
   /** E21.1: the backpack or the store changed (`material` unset = several at once). */
-  'pack.changed': { material?: import('../core/types').MaterialId; delta?: number };
-  'store.changed': { material?: import('../core/types').MaterialId; delta?: number };
+  'pack.changed': { material?: import('../core/types').ItemId; delta?: number };
+  'store.changed': { material?: import('../core/types').ItemId; delta?: number };
   /** E21.1: a stack is full; `left` units stayed where they were. */
-  'pack.full': { material: import('../core/types').MaterialId; left: number };
+  'pack.full': { material: import('../core/types').ItemId; left: number };
   /** E21.2: bloombot salvaged a pile (`got` units; `left` in the pile; 0 = it is gone). */
   'pile.salvaged': { pileId: string; material: import('../core/types').MaterialId; got: number; left: number; x: number; z: number };
+  /** E23.6.1: crafts queued at the crafting table (negative: cancelled), and one craft made. */
+  'craft.queued': { id: string; n: number };
+  'craft.done': { id: string; made: number };
   /** E23.5.1: bloombot clipped restored ground for biomass (`got` units into the backpack). */
   'biomass.gathered': { tileId: string; x: number; z: number; got: number };
   /** E23.5.2: a planter's bed changed (planted, a new stage, fed, an extra, harvested). */
@@ -42,8 +57,8 @@ export interface GameEvents {
   'seeds.found': { crop: string; region: string };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
-  /** E21.2: a Reclaimer sent units to the store. */
-  'reclaimer.delivered': { machineId: string; material: import('../core/types').MaterialId; n: number };
+  /** E23.7.4: a pile gained units back (slowly over game days, or all at once in a storm); `left` units now. */
+  'pile.refilled': { pileId: string; left: number; x: number; z: number; storm: boolean };
   /** E21.5: a gate opened for good (a barricade pried, a bridge repaired, the lock bridge risen). */
   'gate.opened': { gateId: string; region: string };
   /** E21.6: something was handed in at the fountain; the fountain reached a tier. */
@@ -95,9 +110,8 @@ export interface GameEvents {
   'solar.boost': { machineId: string };
   'pulse.fired': { tileId: string; extra: string[]; overcharged: boolean };
   'action.failed': { reason: string; tileId?: string };
-  'upgrade.purchased': { id: string; level: number; machineId?: string; bulk?: boolean };
-  /** Phase 5 E12: "Upgrade all" finished: `count` levels bought across machines of one type. */
-  'upgrade.bulk': { id: string; count: number };
+  /** E23.1.5: an upgrade level was granted (research; nothing is bought). */
+  'upgrade.granted': { id: string; level: number; machineId?: string };
   'drone.spawned': { droneId: string };
   'drone.despawned': { droneId: string };
   'drone.jobStarted': { droneId: string; tileId: string };

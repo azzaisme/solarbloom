@@ -32,8 +32,6 @@ export interface AreaPanelData {
   /** this area's share of its type's bonus, per minute */
   bonus: Partial<Record<keyof typeof RES, number>>;
   machines: Record<string, number>;
-  /** City 09.1: the landmark's specialty action */
-  specialty: { kind: string; label: string; hint: string; met: boolean; have: number; need: number };
 }
 
 /** Live facts about one area (pure: used by the panel and its tests). */
@@ -62,7 +60,6 @@ export function areaPanelData(sim: Sim, id: string): AreaPanelData {
     ready: id === PARK ? s.progression.coreReady() : s.areas.ready(id),
     bonus,
     machines,
-    specialty: s.milestones.specialty(id),
   };
 }
 
@@ -92,7 +89,6 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     const steps = [
       { done: d.fog !== 'hidden', label: 'Revealed next to clear ground' },
       { done: cleared || d.restored >= d.need, label: `Restore ${d.need} tiles (${Math.min(d.restored, d.need)}/${d.need})` },
-      { done: cleared || d.specialty.met, label: esc(d.specialty.label) + (cleared || d.specialty.met ? '' : `<br><span class="sphint">${esc(d.specialty.hint)}</span>`) },
       { done: cleared, label: `Wake the ${esc(a.landmarkName)}` },
     ];
     checklist = steps.map((x) => `<li>${x.done ? '✅' : '⬜'} ${x.label}</li>`).join('');

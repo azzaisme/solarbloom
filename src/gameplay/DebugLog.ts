@@ -29,7 +29,7 @@ export class DebugLog {
     b.on('tile.restored', ({ source }) => this.count(`tile.${source}`));
     b.on('tile.nurtured', ({ level }) => this.count(`tile.bloom${level}`));
     b.on('chain.ended', ({ combo, total, starter, areas }) => this.push('chain.resolved', { combo, total: toNum(total), starter, areas }));
-    b.on('upgrade.purchased', ({ id, level }) => this.push('upgrade.purchased', { id, level }));
+    b.on('upgrade.granted', ({ id, level }) => this.push('upgrade.granted', { id, level }));
     b.on('machine.built', ({ machine }) => this.push('machine.built', { type: machine.type, id: machine.id }));
     b.on('cat.found', ({ reward, extras }) => this.push('cat.found', { reward, extras }));
     b.on('cat.spawned', ({ anchorId }) => this.push('cat.spawned', { anchorId }));

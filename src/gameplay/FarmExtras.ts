@@ -97,7 +97,7 @@ export class FarmExtras {
   }
 
   private foggy(): boolean {
-    return this.sim.farm.weather() === 'mist';
+    return this.sim.farm.weather() === 'fog';
   }
 
   // ───────────── E23.5.4.1 beehives ─────────────

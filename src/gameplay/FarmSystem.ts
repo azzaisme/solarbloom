@@ -1,6 +1,8 @@
 import { PARK } from '../core/Areas';
 import { regionOfCell } from '../core/OldCityLayout';
-import type { MachineData, PlanterState, WeatherKind } from '../core/types';
+import { PARK_SET, REGIONS } from '../data/oldcity';
+import type { MachineData, PlanterState } from '../core/types';
+import type { WeatherKind } from '../data/weather';
 import { CROP_HOMES, CROP_IDS, CROPS, PLANTER, SEED_FINDS, STARTING_CROPS, type CropId, type Like } from '../data/crops';
 import { DAY_SECONDS } from '../data/time';
 import { machineStrengthAt } from '../core/RegionStrengths';
@@ -8,18 +10,13 @@ import type { Sim } from './Sim';
 
 /**
  * What the farm borrows from other sub-epics, each optional until it lands: watering from E23.4 (`sim.water`) and
- * the weather from E23.7.2. Without them every planter is watered and the weather is whatever E21's state holds
- * (clear when unset). Day and night come from E23.7.1's game clock (`sim.clock`).
+ * the weather from E23.7.2 (`sim.weather`; classic games have calm sunny days).
+ * Without water every planter is watered. Day and night come from E23.7.1's game clock (`sim.clock`).
  */
 type At = { roofId: string; x: number; z: number };
 interface FarmHooks {
   water?: { isWatered?(t: At): boolean; isRunning?(t: At): boolean; drawNear?(t: At, units: number): number };
-  /** E23.7.2's weather: its own kinds (sunny, wind, storm, fog), and how fast planters dry (0 when the sky waters them) */
-  weather?: { kind?(): string; effects?(): { planterDrying?: number } };
 }
-
-/** E23.7.2's weather kinds in E21's words (storms count as rain; they also blow). */
-const SKY: Record<string, WeatherKind> = { sunny: 'clear', clear: 'clear', cloudy: 'cloudy', rain: 'rain', storm: 'rain', wind: 'windy', windy: 'windy', fog: 'mist', mist: 'mist' };
 
 /** Why a planter is (or isn't) growing right now, for tests, tooltips and the crop visuals. */
 export interface PlanterLook {
@@ -45,7 +42,8 @@ export interface PlanterLook {
  * `salvage.planters`. A planted crop grows in game days while watered, at full rate when everything it likes is
  * met, slower when not; with no water it wilts and simply waits (crops never die). A ripe crop is harvested into
  * the backpack (food, biomass from the spent plants, seeds) and the bed is empty again. Seeds for new crops are
- * found by exploring: gathering a region's restored ground and emptying its piles turns up that region's packets.
+ * found by exploring: gathering a region's restored ground, emptying its piles, reading its journal page and night or
+ * fog plant finds turn up that region's packets.
  * Old-city rules only.
  */
 export class FarmSystem {
@@ -55,7 +53,15 @@ export class FarmSystem {
       if (e.left <= 0) this.findIn(this.regionAt(e.x, e.z));
     });
     sim.bus.on('machine.removed', ({ machine }) => this.forget(machine.id));
+    // E21.10's caches: whoever opens them emits this (nothing on integration opens a cache yet)
     sim.bus.on('cache.opened', (e) => this.onCache(e.x, e.z));
+    // exploring today: a journal page post is found once, like a cache, and holds its region's packet (or Seeds)
+    sim.bus.on('journal.page', (e) => this.onPage(e.id));
+    // a glowing plant or dewcap found at night or in fog may carry its region's next packet (they come back daily,
+    // so they never fall back to plain Seeds)
+    sim.bus.on('night.found', (e) => {
+      if (e.material === 'seeds') this.findIn(this.regionAt(e.x, e.z));
+    });
   }
 
   get on(): boolean {
@@ -97,7 +103,7 @@ export class FarmSystem {
   // ───────────── the world around a planter ─────────────
 
   isWatered(m: MachineData): boolean {
-    if (this.weather() === 'rain') return true;
+    if (this.sky().rain > 0) return true; // rain and storms water every planter
     return this.hooks.water?.isWatered?.(m) ?? true;
   }
 
@@ -109,15 +115,14 @@ export class FarmSystem {
     return this.sim.clock.gameIsNight();
   }
 
+  /** E23.7.2's weather today (sunny, cloudy, rain, wind, storm, fog). */
   weather(): WeatherKind {
-    const k = this.hooks.weather?.kind?.();
-    if (k !== undefined) return SKY[k] ?? 'cloudy';
-    return this.sim.state.salvage?.weather?.kind ?? 'clear';
+    return this.sim.weather.kind();
   }
 
-  /** E23.7.2: a storm blows as well as rains (wind-loving crops count it as windy). */
-  private stormy(): boolean {
-    return this.hooks.weather?.kind?.() === 'storm';
+  /** E23.7.2's effects today (rain, planterDrying, ...). */
+  private sky() {
+    return this.sim.weather.effects();
   }
 
   /** Water drunk but not yet drawn from the network, per planter (fractions of a unit; not saved). */
@@ -127,7 +132,7 @@ export class FarmSystem {
   private drink(m: MachineData, days: number) {
     const w = this.hooks.water;
     if (!w?.drawNear) return;
-    const drying = this.hooks.weather?.effects?.().planterDrying ?? (this.weather() === 'rain' ? 0 : 1);
+    const drying = this.sky().planterDrying;
     const want = (this.thirst.get(m.id) ?? 0) + PLANTER.waterPerDay * drying * days;
     const whole = Math.floor(want);
     if (whole > 0) w.drawNear(m, whole);
@@ -184,11 +189,11 @@ export class FarmSystem {
     const w = this.weather();
     switch (like) {
       case 'sun':
-        return !this.isNight() && (w === 'clear' || w === 'windy');
+        return !this.isNight() && (w === 'sunny' || w === 'wind');
       case 'rain':
-        return w === 'rain';
+        return w === 'rain' || w === 'storm'; // a storm rains as well as blows
       case 'wind':
-        return w === 'windy' || this.stormy();
+        return w === 'wind' || w === 'storm';
       case 'shade':
         return this.shaded(m);
       case 'trellis':
@@ -223,7 +228,8 @@ export class FarmSystem {
     let rate = 0;
     if (!ripe && !wilting && !resting) {
       rate = PLANTER.unmetLike ** unmet.length;
-      if (crop !== 'pumpkin' && this.fertilised(m)) rate *= PLANTER.fertilisedBoost;
+      // a crop that likes fertiliser (data/crops) gets it through that like, not the general boost as well
+      if (!def.likes.includes('fertiliser') && this.fertilised(m)) rate *= PLANTER.fertilisedBoost;
       if (this.pollinated(m)) rate *= PLANTER.pollinatorBoost;
       rate *= this.sim.farmExtras?.cropBoost(m) ?? 1; // E23.5.4.1: settled beehives in reach
       rate *= machineStrengthAt('planter', m.x, m.z); // E23.8.1: fertile soil (Elder Grove) grows faster
@@ -355,6 +361,16 @@ export class FarmSystem {
   private onCache(x: number, z: number) {
     if (!this.on) return;
     if (this.findIn(this.regionAt(x, z))) return;
+    const inv = this.sim.inventory;
+    inv.addToStore('seeds', inv.add('seeds', SEED_FINDS.cacheSeeds));
+  }
+
+  /** A journal page read for the first time: its post's region holds a packet, like a cache. */
+  private onPage(id: string) {
+    if (!this.on) return;
+    const region = PARK_SET.pages.some((p) => p.id === id) ? 'park' : REGIONS.find((r) => r.pages.some((p) => p.id === id))?.id;
+    if (!region) return; // the last page comes with the Great Bloom, not from a post
+    if (this.findIn(region)) return;
     const inv = this.sim.inventory;
     inv.addToStore('seeds', inv.add('seeds', SEED_FINDS.cacheSeeds));
   }

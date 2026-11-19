@@ -8,7 +8,6 @@ import { CROPS } from '../src/data/crops';
 import { DAY_SECONDS } from '../src/data/time';
 import { BEEHIVE, GARDEN_REQUESTS, HOMES, MUSHROOM_LOG, ORCHARD, WORM_BIN, type HomeKind } from '../src/data/farmExtras';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
-import { RECIPES } from '../src/data/salvage';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
@@ -37,9 +36,14 @@ function ground(sim: Sim, x: number, z: number, r: number, bloom: number) {
     }
 }
 
-/** Builds a farm machine (stocking its recipe first). */
+/** Builds a farm machine (waking the Keeper its crafting-table recipe comes from, and stocking the recipe first). */
 function build(sim: Sim, type: MachineType, x: number, z: number): MachineData {
-  for (const [k, v] of Object.entries(RECIPES[type as 'planter']!.cost)) sim.inventory.addToStore(k as 'scrap', v!);
+  const cr = sim.crafting.machineRecipe(type as 'planter')!;
+  if ('keeper' in cr.unlock) {
+    const region = cr.unlock.keeper;
+    sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === region)!.id] ??= { step: 'request1' };
+  }
+  for (const [k, v] of Object.entries(sim.build.recipe(type as 'planter')!)) sim.inventory.addToStore(k as 'scrap', v!);
   const t = sim.grid.get(GROUND, x, z)!;
   if (t.ground !== 'restored') ground(sim, x, z, 0, 1);
   const m = sim.build.place(type as 'planter', GROUND, x, z);
@@ -148,10 +152,10 @@ describe('E23.5.4.4: mushroom logs and worm bins', () => {
     night = false;
     run(sim, DAY_SECONDS);
     expect(sim.farmExtras.st(log).ready ?? 0).toBe(0); // shaded, but daytime and clear
-    sim.state.salvage!.weather = { kind: 'mist', until: 1e9 };
+    sim.weather.forceForTest('fog', 1e9);
     run(sim, MUSHROOM_LOG.flushDays * DAY_SECONDS + 60);
     expect(sim.farmExtras.pickMushrooms(log)).toBe(MUSHROOM_LOG.food);
-    sim.state.salvage!.weather = { kind: 'clear', until: 1e9 };
+    sim.weather.forceForTest('sunny', 1e9);
     night = true;
     run(sim, MUSHROOM_LOG.flushDays * DAY_SECONDS + 60);
     expect(sim.farmExtras.pickMushrooms(log)).toBe(MUSHROOM_LOG.food);
@@ -169,7 +173,7 @@ describe('E23.5.4.4: mushroom logs and worm bins', () => {
     sim.inventory.add('compost', 1);
     sim.farmExtras.inoculate(log);
     sim.clock.gameIsNight = () => false;
-    sim.state.salvage!.weather = { kind: 'clear', until: 1e9 };
+    sim.weather.forceForTest('sunny', 1e9);
     expect(sim.farmExtras.logGrowing(log)).toBe(true);
   });
 
@@ -295,7 +299,7 @@ describe('E23.5.4.6: Keeper gardens', () => {
     expect(fulfilled).toEqual([]);
     sim.state.salvage!.crops = ['tomato'];
     sim.farm.plant(p, 'tomato');
-    sim.state.salvage!.weather = { kind: 'clear', until: 1e9 };
+    sim.weather.forceForTest('sunny', 1e9);
     run(sim, 6 * DAY_SECONDS);
     sim.farm.harvest(p);
     expect(fulfilled).toEqual(['tomato']);
@@ -313,8 +317,7 @@ describe('E23.5.4.6: Keeper gardens', () => {
     expect(sim.build.check('wormBin', GROUND, 12, 16).ok).toBe(false);
     sim.state.salvage!.recipes = ['wormBin'];
     ground(sim, 12, 16, 0, 1);
-    sim.inventory.addToStore('timber', 3);
-    sim.inventory.addToStore('scrap', 2);
+    for (const [k, v] of Object.entries(sim.build.recipe('wormBin')!)) sim.inventory.addToStore(k as 'scrap', v!);
     expect(sim.build.check('wormBin', GROUND, 12, 16).ok).toBe(true);
   });
 

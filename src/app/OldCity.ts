@@ -5,6 +5,7 @@ import type { Hud } from '../ui/Hud';
 import type { MachineData, MaterialId } from '../core/types';
 import { GROUND } from '../core/GameState';
 import { MATERIALS, SALVAGE } from '../data/salvage';
+import { itemDef } from '../data/items';
 import { GATHER } from '../data/farm';
 import { CROPS, type CropId } from '../data/crops';
 import { planterHtml } from '../ui/PlanterPanel';
@@ -109,8 +110,10 @@ export class OldCityController {
       const c = CROPS[e.crop as CropId];
       if (c) host.hud.toast(`${c.icon} ${c.name} seeds<small>Plant them in a planter.</small>`, '', 5);
     });
+    // E23.7.4: a pile coming back (slowly, or blown in by a storm) is redrawn at its new size
+    host.sim.bus.on('pile.refilled', (e) => host.markTile(e.x, e.z));
     host.sim.bus.on('fountain.tier', () => this.panel.close());
-    host.sim.bus.on('pack.full', (e) => host.hud.toast(`Your ${MATERIALS[e.material].name} stack is full<small>Put some in storage at the fountain or a chest.</small>`, '', 2.6));
+    host.sim.bus.on('pack.full', (e) => host.hud.toast(`Your ${itemDef(e.material).name} stack is full<small>Put some in storage at the fountain or a chest.</small>`, '', 2.6));
   }
 
   get sim(): Sim {

@@ -24,6 +24,11 @@ export type DigesterMood = 'running' | 'idle' | 'empty';
 export class CompostSystem {
   private registered = false;
 
+  /** E23.6.2: compost research reads this before it offers 'compostSpeed' (the bins exist, so it is ready). */
+  get researchReady(): boolean {
+    return true;
+  }
+
   constructor(private sim: Sim) {
     sim.bus.on('machine.removed', ({ machine }) => this.forget(machine));
   }
@@ -96,8 +101,10 @@ export class CompostSystem {
 
   /** E23.5.4.4: worm bins next door speed a bin up (twice as fast). Returns the speed multiplier. */
   speed(m: MachineData): number {
-    const hook = (this.sim as unknown as { farmExtras?: { compostSpeed?(m: MachineData): number } }).farmExtras;
-    return hook?.compostSpeed?.(m) ?? 1;
+    const sim = this.sim as unknown as { farmExtras?: { compostSpeed?(m: MachineData): number }; research?: { effect(id: string): number } };
+    // E23.6.2: compost research ('compostSpeed') speeds every bin
+    const research = 1 + (sim.research?.effect('compostSpeed') ?? 0);
+    return (sim.farmExtras?.compostSpeed?.(m) ?? 1) * research;
   }
 
   private tickBin(m: MachineData, days: number) {

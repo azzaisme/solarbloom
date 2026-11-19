@@ -4,8 +4,8 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { COMPOST, DIGESTER } from '../src/data/compost';
 import { DAY_SECONDS } from '../src/data/time';
-import { RECIPES } from '../src/data/salvage';
-import { REGIONS } from '../src/data/oldcity';
+import { MACHINE_RECIPES } from '../src/data/crafting';
+import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
@@ -16,17 +16,19 @@ function farm(): Sim {
   // E23.8.2: Tock (Clock Plaza) hands over the Bio Digester; the compost bin is home kit
   sim.state.salvage!.keepers.tock = { step: 'request1' };
   sim.bot = { roofId: GROUND, x: 8.5, z: 11.5 };
+  // the digester's recipe is handed over by Clock Plaza's Keeper (data/crafting)
+  sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === 'clockPlaza')!.id] = { step: 'settled' };
   return sim;
 }
 
-/** Builds a farm machine on open ground (stocking its recipe first). */
+/** Builds a farm machine on open ground (stocking its crafting-table recipe first). */
 function build(sim: Sim, type: 'compostBin' | 'bioDigester', x: number, z: number): MachineData {
   const t = sim.grid.get(GROUND, x, z)!;
   t.blocked = false;
   t.feature = undefined;
   t.ground = 'restored';
   sim.grid.touch(t);
-  for (const [k, v] of Object.entries(RECIPES[type]!.cost)) sim.inventory.addToStore(k as 'scrap', v!);
+  for (const [k, v] of Object.entries(sim.build.recipe(type)!)) sim.inventory.addToStore(k as 'scrap', v!);
   const m = sim.build.place(type, GROUND, x, z);
   expect(m, type).toBeDefined();
   return m!;
@@ -45,7 +47,7 @@ describe('E23.8.2: unlocks', () => {
   it('the compost bin is home kit from the start; the Bio Digester waits for Tock in Clock Plaza', () => {
     const sim = new Sim(createInitialState(7, 'oldcity'));
     expect(sim.build.isUnlocked('compostBin')).toBe(true);
-    expect(sim.build.isUnlocked('planter')).toBe(true);
+    expect(sim.build.isUnlocked('planter')).toBe(false); // planters open with Timber (Tide, Saltwind)
     expect(sim.build.isUnlocked('bioDigester')).toBe(false);
     sim.state.salvage!.keepers.tock = { step: 'request1' };
     expect(sim.build.isUnlocked('bioDigester')).toBe(true);
@@ -124,8 +126,17 @@ describe('E23.5.3: the compost bin', () => {
     expect(sim.state.salvage!.bins?.[m.id]).toBeUndefined();
   });
 
+  it('E23.6.2: compost research speeds every bin (the compostSpeed effect)', () => {
+    const sim = farm();
+    const m = build(sim, 'compostBin', 12, 16);
+    expect(sim.compost.researchReady).toBe(true);
+    const base = sim.compost.speed(m);
+    (sim as unknown as { research: { effect(id: string): number } }).research = { effect: (id) => (id === 'compostSpeed' ? 0.5 : 0) };
+    expect(sim.compost.speed(m)).toBeCloseTo(base * 1.5);
+  });
+
   it('fertiliser is what a landmark tree (the Mother Tree) asks for', () => {
-    expect(RECIPES.motherTree!.cost.fertiliser).toBeGreaterThan(0);
+    expect(MACHINE_RECIPES.find((r) => r.builds === 'motherTree')!.cost.fertiliser).toBeGreaterThan(0);
   });
 });
 
@@ -165,6 +176,8 @@ describe('E23.5.3: the Bio Digester', () => {
     sim.state.salvage!.tier = 4;
     // a stand-in for E23.3.3's charger (not on e23-integration yet): a chest drawing a charger's 6 W
     sim.power.register('chest', { consumer: { shed: 'charger', draw: 6 } });
+    // the power pole and the chest come from Mast Row's and Saltwind's Keepers (data/crafting)
+    for (const r of ['mastRow', 'saltwind']) sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === r)!.id] = { step: 'settled' };
     const pole = build(sim, 'relay' as 'bioDigester', 12, 16);
     const dig = build(sim, 'bioDigester', 13, 16);
     const load = build(sim, 'chest' as 'bioDigester', 12, 17);
