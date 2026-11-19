@@ -29,7 +29,7 @@ describe('E22.6: the backpack', () => {
     const copper = itemCells(sim).find((c) => c.id === 'copper')!;
     expect(copper.label).toBe('Copper, 32 of 40 in backpack, 110 in store');
     expect([copper.count, copper.limit, copper.stored]).toEqual([32, 40, 110]);
-    expect(copper.from).toBe('Found in Mast Row');
+    expect(copper.from).toBe('Found in Mast Row and Observatory Hill'); // E23.8: copper piles lie in both
     expect(copper.next).toMatch(/Copper|needs|takes|asks/i);
     expect(itemCells(sim).map((c) => c.id)).toEqual(MATERIAL_IDS);
   });
