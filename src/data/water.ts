@@ -40,10 +40,11 @@ export const WATER_NET = {
   draw: { cultivatorPerTile: 2, gardenerPerTile: 1 },
   /**
    * E23.4.4: land around low water fades. Restored ground within `fadeReach` of a body below `fadeBelow` shows up to
-   * `fadeSteps` bloom stages less (lush → flowers → plain restored), more the emptier it is. Never below restored.
+   * `fadeSteps` bloom stages less, more the emptier it is: the whole bloom range (TUNING's maxBloom 4 down to 1), so
+   * at empty water even the lushest land shows plain restored ground and its flowers close. Never below restored.
    */
   fadeReach: 5,
-  fadeSteps: 2,
+  fadeSteps: 3,
   /** the drained bed shows in this many steps (the renderer rebuilds a body's look only when its step changes) */
   lookSteps: 10,
 };

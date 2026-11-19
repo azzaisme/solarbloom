@@ -58,6 +58,12 @@ export interface CellRect {
   d: number;
 }
 
+/**
+ * Deep water in a region: a rectangle, all water unless `mask` draws its outline (one string a row from `z`, one
+ * character a cell from `x`; `#` water). `pond`: a natural pond, drawn as a pool (banks, rocks, reeds), not a canal.
+ */
+export type WaterRect = CellRect & { pond?: boolean; mask?: string[] };
+
 export type RampDir = 'n' | 's' | 'e' | 'w';
 
 /** E21.24: a ramp (one level over 3 tiles) or a stair (one level over 2), walked along `dir` from `from` to `to`. */
@@ -119,7 +125,7 @@ export interface RegionDef {
    * deep water inside the region (a canal: never walked, until Hover; level 0). `pond`: a natural pond rather than
    * a canal, drawn as a pool (rounded painted banks, rocks and reeds, the pool's surface) instead of open water.
    */
-  water?: (CellRect & { pond?: boolean })[];
+  water?: WaterRect[];
 }
 
 const P = (id: string, x: number, z: number, material: MaterialId, size: PileSize, model: string): PileDef => ({ id, x, z, material, size, model });
@@ -309,7 +315,32 @@ export const REGIONS: RegionDef[] = [
     piles: [],
     roads: [],
     // E23.4.1: the spring-fed pond east of the island (dry until the Old Cistern wakes and its springs run)
-    water: [{ x: 64, z: 41, w: 8, d: 12, pond: true }],
+    // its outline is irregular (a natural pond, not a tank): `#` is water, `.` the basin floor round it
+    water: [
+      {
+        x: 63,
+        z: 40,
+        w: 11,
+        d: 14,
+        pond: true,
+        mask: [
+          '...####....',
+          '..#######..',
+          '.#########.',
+          '.##########',
+          '###########',
+          '##########.',
+          '.#########.',
+          '.########..',
+          '..#######..',
+          '..########.',
+          '.#########.',
+          '.########..',
+          '..######...',
+          '....###....',
+        ],
+      },
+    ],
   },
   {
     id: 'clockPlaza',

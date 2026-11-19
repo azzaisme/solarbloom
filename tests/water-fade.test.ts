@@ -5,6 +5,10 @@ import type { MachineData, TileData } from '../src/core/types';
 import { WATER_NET } from '../src/data/water';
 import { Sim } from '../src/gameplay/Sim';
 import { WaterSystem } from '../src/gameplay/WaterSystem';
+import { TUNING } from '../src/data/tuning';
+
+/** the lushest bloom (the land starts there: the fade has to take all of it back to plain restored ground) */
+const LUSH = TUNING.restore.maxBloom;
 
 const DAY = WATER_NET.daySeconds;
 
@@ -22,7 +26,7 @@ function park() {
       else continue;
       t.ground = 'restored';
       t.pollution = 0;
-      t.bloom = 3;
+      t.bloom = LUSH;
       sim.grid.touch(t);
     }
   const body = sim.water.bodyAt(pond[0])!;
@@ -41,13 +45,15 @@ describe('E23.4.4: land fades around low water', () => {
   it('fade steps grow as a body empties, from nothing at the threshold', () => {
     expect(WaterSystem.fadeSteps(1)).toBe(0);
     expect(WaterSystem.fadeSteps(WATER_NET.fadeBelow)).toBe(0);
-    expect(WaterSystem.fadeSteps(WATER_NET.fadeBelow * 0.75)).toBe(1);
+    expect(WaterSystem.fadeSteps(WATER_NET.fadeBelow * 0.9)).toBe(1);
+    expect(WaterSystem.fadeSteps(WATER_NET.fadeBelow * 0.5)).toBe(2); // lush → flowers → closing → plain restored
+    expect(WaterSystem.fadeSteps(WATER_NET.fadeBelow * 0.1)).toBe(3);
     expect(WaterSystem.fadeSteps(0)).toBe(WATER_NET.fadeSteps);
   });
 
   it('a full pond fades nothing', () => {
     const { sim, land } = park();
-    expect(land.every((t) => sim.water.bloomShown(t) === 3)).toBe(true);
+    expect(land.every((t) => sim.water.bloomShown(t) === LUSH)).toBe(true);
   });
 
   it('draining a pond fades the ground beside it, never below restored, and loses nothing', () => {
@@ -65,10 +71,12 @@ describe('E23.4.4: land fades around low water', () => {
     expect(sim.water.levelOf(body.id)).toBe(0);
     for (const t of land) {
       expect(t.ground).toBe('restored'); // never back to dead ground
-      expect(t.bloom).toBeGreaterThanOrEqual(3); // the tile itself keeps its bloom (it may even grow)
+      expect(t.bloom).toBe(LUSH); // the tile itself keeps its bloom
       expect(sim.water.bloomShown(t)).toBeGreaterThanOrEqual(1);
     }
-    for (const t of banks) expect(sim.water.bloomShown(t)).toBe(Math.max(1, t.bloom - WATER_NET.fadeSteps));
+    // the fade spans the whole bloom range: the lushest bank shows plain restored ground, its flowers closed
+    expect(WATER_NET.fadeSteps).toBe(LUSH - 1);
+    for (const t of banks) expect(sim.water.bloomShown(t)).toBe(1);
     expect(sim.state.machines.length).toBe(machines);
     expect(JSON.stringify(sim.state.cozy?.decor ?? {})).toBe(decor);
     // land beyond the water's reach doesn't depend on it

@@ -1,5 +1,5 @@
 import { GROUND } from '../core/GameState';
-import { regionOfCell, seaCell, surfCell } from '../core/OldCityLayout';
+import { regionOfCell, seaCell, surfCell, waterAnchor } from '../core/OldCityLayout';
 import type { TileData } from '../core/types';
 import type { WeatherKind } from '../data/weather';
 import { REGIONS, type RegionId } from '../data/oldcity';
@@ -338,6 +338,7 @@ export class WaterSystem {
   }
   private changesVersion = -1;
   private changesShape = -1;
+  private changesSleep?: string;
 
   /** Bloom stages a level takes off the land around it (0 at or above `fadeBelow`). */
   static fadeSteps(level: number): number {
@@ -437,15 +438,19 @@ export class WaterSystem {
    * their chunks are rebuilt.
    */
   takeFadeChanges(): [number, number, number, number][] {
-    if (this.changesVersion === this.version && this.changesShape === this.shapeRev) return [];
+    const sleep = this.sleepKey();
+    if (this.changesVersion === this.version && this.changesShape === this.shapeRev && this.changesSleep === sleep) return [];
+    const woke = this.changesSleep !== undefined && this.changesSleep !== sleep;
     this.changesVersion = this.version;
     this.changesShape = this.shapeRev;
+    this.changesSleep = sleep;
     const out: [number, number, number, number][] = [];
     const now = new Map<string, number>();
-    for (const b of this.live()) {
-      const s = WaterSystem.fadeSteps(this.levelOf(b.id));
+    for (const b of this.known()) {
+      // a sleeping body fades nothing (as the fade map); a landmark waking repaints all the land round its water
+      const s = this.dormant(b) ? 0 : WaterSystem.fadeSteps(this.levelOf(b.id));
       now.set(b.id, s);
-      if ((this.shownSteps.get(b.id) ?? 0) !== s) out.push(this.fadeBounds(b));
+      if ((this.shownSteps.get(b.id) ?? 0) !== s || (woke && !!b.region && !!WATER_NET.springs[b.region])) out.push(this.fadeBounds(b));
     }
     for (const [id, s] of this.shownSteps) {
       if (now.has(id) || !s) continue;
@@ -574,7 +579,8 @@ export class WaterSystem {
     const def = this.sim.oldCity ? REGION_WATER.get(region) : undefined;
     const out: WaterBody[] = [];
     for (const q of def ?? []) {
-      const b = this.bodyAt(this.sim.grid.get(GROUND, q.x, q.z));
+      const a = waterAnchor(q);
+      const b = this.bodyAt(this.sim.grid.get(GROUND, a.x, a.z));
       if (b && !out.includes(b)) out.push(b);
     }
     return out;
