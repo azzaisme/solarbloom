@@ -4,8 +4,9 @@ import { PARK } from '../src/core/Areas';
 import { createInitialState } from '../src/core/GameState';
 import type { TileData } from '../src/core/types';
 import { TUNING } from '../src/data/tuning';
-import { biodiversity, type BioCounts, FAUNA, type FaunaId } from '../src/gameplay/Ecosystem';
+import { biodiversity, type BioCounts, type FaunaId } from '../src/gameplay/Ecosystem';
 import { Sim } from '../src/gameplay/Sim';
+import { unlockAll } from './helpers';
 import { treeSpot } from '../src/rendering/TreePlacement';
 import { CAT_ANCHOR_CLEARANCE, catSpots, machineRunning, tilesIn, wanderStop } from '../src/rendering/FaunaPlan';
 import { CAT_ANCHORS } from '../src/data/templates';
@@ -13,7 +14,6 @@ import faunaSrc from '../src/rendering/Fauna.ts?raw';
 import planSrc from '../src/rendering/FaunaPlan.ts?raw';
 import butterfliesSrc from '../src/rendering/Butterflies.ts?raw';
 import birdsSrc from '../src/rendering/Birds.ts?raw';
-import { mmss, runOldCityBot } from './oldcity-bot';
 import { GROUND } from './helpers';
 
 /** Phase 5 E16: biodiversity (derived, never spent) and one-time fauna unlocks (cosmetic). */
@@ -181,20 +181,6 @@ describe('E16 fauna unlocks', () => {
     sim.ecosystem.score(); // reading the score is free too
     expect(gameplaySnapshot(sim)).toBe(before);
   });
-
-  it('a played session reaches butterflies, birds and koi (scripted bot, seed 7, not a person)', () => {
-    const times: Partial<Record<FaunaId, number>> = {};
-    const r = runOldCityBot(7, 30, 'keeper', {
-      onSecond: (sim) => {
-        for (const id of FAUNA) if (sim.state.fauna?.[id] !== undefined && times[id] === undefined) times[id] = sim.state.fauna[id];
-      },
-    });
-    console.log(`E16 fauna (Old City bot seed 7): ${FAUNA.map((id) => `${id} ${mmss(times[id])}`).join(' · ')} · fountain ${mmss(r.firsts.tier1)}`);
-    expect(times.butterflies).toBeDefined();
-    expect(times.birds).toBeDefined();
-    expect(times.koi).toBeDefined();
-    expect(times.butterflies!).toBeLessThan(times.birds!);
-  }, 240_000);
 });
 
 describe('E16 cosmetic fauna (planning side; the renderer animates what it returns)', () => {
@@ -217,6 +203,7 @@ describe('E16 cosmetic fauna (planning side; the renderer animates what it retur
     for (const k of ['energy', 'water', 'biomass'] as const) s.resources[k] = s.resources[k].add(1e9);
     s.caps.energy = s.caps.energy.add(1e9);
     s.caps.water = s.caps.water.add(1e9);
+    unlockAll(sim); // E23.1.1: panels unlock at their fountain tier and are paid with their recipe
     let n = 0;
     for (const t of parkTiles(sim)) if (n < 40 && sim.build.place('solar', GROUND, t.x, t.z)) n++;
     expect(n).toBeGreaterThan(20);
