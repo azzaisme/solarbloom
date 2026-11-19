@@ -20,7 +20,6 @@ import { LuckyCatSystem } from './LuckyCatSystem';
 import { AreaSystem } from './AreaSystem';
 import { DebugLog } from './DebugLog';
 import { Metrics } from './Metrics';
-import { MilestoneSystem } from './Milestones';
 import { EcosystemSystem } from './Ecosystem';
 import { ProductionSystem } from './ProductionSystem';
 import { ProgressionSystem } from './ProgressionSystem';
@@ -70,7 +69,6 @@ export class Sim {
   /** E23.3: the power grid (networks of poles, sources, batteries and consumers). */
   readonly power: PowerGrid;
   readonly clusters: RooftopClusters;
-  readonly milestones: MilestoneSystem;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
   readonly ecosystem: EcosystemSystem;
   /** Look 6: living transitions (what each tile is visibly turning into). */
@@ -174,7 +172,6 @@ export class Sim {
     this.progression = new ProgressionSystem(this);
     this.areas = new AreaSystem(this);
     this.districts = new DistrictSystem(this);
-    this.milestones = new MilestoneSystem(this);
     this.ecosystem = new EcosystemSystem(this);
     this.metrics = new Metrics(this);
     this.log = new DebugLog(this);
@@ -285,7 +282,6 @@ export class Sim {
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();
-    this.milestones.tick();
     this.ecosystem.tick();
     this.metrics.tick(dt);
     s.rngState = this.rng.state;
