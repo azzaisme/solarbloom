@@ -5,6 +5,8 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import { DAY, DAY_SECONDS, gameDays, gameMinutes, NIGHT_FINDS } from '../src/data/time';
 import { SALVAGE } from '../src/data/salvage';
 import { TUNING } from '../src/data/tuning';
+import { GATHER } from '../src/data/farm';
+import { PROJECTS } from '../src/data/research';
 import { Sim } from '../src/gameplay/Sim';
 
 /**
@@ -71,6 +73,58 @@ describe('E23.7.1.1: every timer counts in game days', () => {
     const game = ticksUntil(false, pulse, done);
     const real = ticksUntil(true, pulse, done);
     expect(game).toBe(Math.round(TUNING.pulse.growSeconds / TUNING.simStep));
+    expect(real).toBe(game);
+  });
+
+  it('E23.5.1: clipped ground grows back in the same play time in both clock modes, whatever the real clock does', { timeout: 300_000 }, () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 18, 2, 0, 0));
+    /** Seconds of play from clipping a flowered tile until it can be gathered again (whole-sim ticks of 1 s). */
+    const regrow = (real: boolean): number => {
+      const sim = oldSim();
+      sim.clock.now = at(2);
+      sim.clock.real = real;
+      const t = sim.grid.get(GROUND, 10, 14)!;
+      t.blocked = false;
+      t.ground = 'restored';
+      t.pollution = 0;
+      t.bloom = 2;
+      sim.grid.touch(t);
+      expect(sim.gather.gather(t)).toBeGreaterThan(0);
+      // the real clock jumps a whole day forward mid-regrow: nothing in the sim may notice
+      vi.setSystemTime(new Date(2026, 10, 19, 14, 0, 0));
+      let n = 0;
+      while (!sim.gather.canGather(t) && n < 10_000) {
+        sim.tick(1);
+        n++;
+      }
+      return n;
+    };
+    const game = regrow(false);
+    expect(game).toBe(Math.ceil(gameDays(GATHER.regrowDays)));
+    expect(regrow(true)).toBe(game);
+  });
+
+  it('E23.6.2: a research project takes its game days of play in both clock modes, whatever the real clock does', { timeout: 300_000 }, () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 18, 2, 0, 0));
+    const p = PROJECTS.find((x) => x.id === 'pw-lines')!;
+    const start = (s: Sim) => {
+      s.state.salvage!.tier = 1;
+      s.state.salvage!.keepers.pylon = { step: 'request1' }; // the station is there once Pylon wakes
+      s.bot = { roofId: GROUND, x: 8.5, z: 11.5 };
+      // the station runs on the house's grid (E23.3); here it stands on a powered network (no poles laid in a test)
+      Object.assign(s.power, { isPowered: () => true });
+      s.research.analyse({ keeper: 'mastRow' });
+      s.inventory.add('copper', 12);
+      expect(s.research.start(p.id)).toBe(true);
+      // the real clock jumps a whole day forward mid-project: nothing in the sim may notice
+      vi.setSystemTime(new Date(2026, 10, 19, 14, 0, 0));
+    };
+    const done = (s: Sim) => s.research.done(p.id);
+    const game = ticksUntil(false, start, done);
+    const real = ticksUntil(true, start, done);
+    expect(game).toBe(Math.ceil(gameDays(p.days) / TUNING.simStep - 1e-6));
     expect(real).toBe(game);
   });
 

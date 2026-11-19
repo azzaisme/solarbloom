@@ -3,6 +3,10 @@ import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import type { BuffType, CatRewardType, CatVariant, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
+  /** E23.2.1: bloombot's charge ran out (the low-power walk); reached full; bloombot began eating one unit. */
+  'charge.empty': Record<string, never>;
+  'charge.full': { source: import('../gameplay/Charge').ChargeSource };
+  'charge.eat': { item: 'biomass' | 'food' };
   /** E23.7.1: the light clock crossed dawn or dusk (`day`: the game day). */
   'clock.dawn': { day: number };
   'clock.dusk': { day: number };
@@ -35,6 +39,8 @@ export interface GameEvents {
   'research.started': { id: string };
   'research.done': { id: string };
   'research.upgraded': { id: string; level: number };
+  /** E23.5.1: bloombot clipped restored ground for biomass (`got` units into the backpack). */
+  'biomass.gathered': { tileId: string; x: number; z: number; got: number };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
   /** E23.7.4: a pile gained units back (slowly over game days, or all at once in a storm); `left` units now. */
@@ -90,9 +96,8 @@ export interface GameEvents {
   'solar.boost': { machineId: string };
   'pulse.fired': { tileId: string; extra: string[]; overcharged: boolean };
   'action.failed': { reason: string; tileId?: string };
-  'upgrade.purchased': { id: string; level: number; machineId?: string; bulk?: boolean };
-  /** Phase 5 E12: "Upgrade all" finished: `count` levels bought across machines of one type. */
-  'upgrade.bulk': { id: string; count: number };
+  /** E23.1.5: an upgrade level was granted (research; nothing is bought). */
+  'upgrade.granted': { id: string; level: number; machineId?: string };
   'drone.spawned': { droneId: string };
   'drone.despawned': { droneId: string };
   'drone.jobStarted': { droneId: string; tileId: string };

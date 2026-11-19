@@ -11,6 +11,8 @@ import { BuildSystem } from './BuildSystem';
 import { CanalNetwork } from './CanalNetwork';
 import { RelaySystem } from './RelaySystem';
 import { PowerGrid } from './PowerGrid';
+import { ChargerSystem } from './ChargerSystem';
+import { Lights } from './Lights';
 import { RooftopClusters } from './RooftopClusters';
 import { DistrictSystem } from './DistrictSystem';
 import { DroneSystem } from './DroneSystem';
@@ -20,7 +22,6 @@ import { LuckyCatSystem } from './LuckyCatSystem';
 import { AreaSystem } from './AreaSystem';
 import { DebugLog } from './DebugLog';
 import { Metrics } from './Metrics';
-import { MilestoneSystem } from './Milestones';
 import { EcosystemSystem } from './Ecosystem';
 import { ProductionSystem } from './ProductionSystem';
 import { ProgressionSystem } from './ProgressionSystem';
@@ -39,8 +40,10 @@ import { MainlandSystem } from './MainlandSystem';
 import { LandmarkSystem } from './LandmarkSystem';
 import { Crafting } from './Crafting';
 import { Research } from './Research';
+import { ChargeSystem } from './Charge';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
+import { GatherSystem } from './GatherSystem';
 import { Weather } from './Weather';
 
 /**
@@ -70,8 +73,11 @@ export class Sim {
   readonly relays: RelaySystem;
   /** E23.3: the power grid (networks of poles, sources, batteries and consumers). */
   readonly power: PowerGrid;
+  /** E23.3.3: chargers (bloombot recharges on a powered pad). */
+  readonly chargers: ChargerSystem;
+  /** E23.3.5: night lights (decorations on the grid, solar or glow-pods). */
+  readonly lights: Lights;
   readonly clusters: RooftopClusters;
-  readonly milestones: MilestoneSystem;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
   readonly ecosystem: EcosystemSystem;
   /** Look 6: living transitions (what each tile is visibly turning into). */
@@ -98,12 +104,16 @@ export class Sim {
   readonly crafting: Crafting;
   /** E23.6.2: the research station (projects, and the upgrades they open). */
   readonly research: Research;
+  /** E23.2.1: bloombot's charge, the only meter (old-city rules). */
+  readonly charge: ChargeSystem;
   /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
   readonly clock: Clock;
   /** E23.7.1.3: finds that are out only at night. */
   readonly nightFinds: NightFinds;
   /** E23.7.2: the weather: one kind a game day, each with its effects (data/weather). See gameplay/Weather. */
   readonly weather: Weather;
+  /** E23.5.1: gathering biomass from restored ground (old-city rules). */
+  readonly gather: GatherSystem;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -147,7 +157,18 @@ export class Sim {
       this.grid.chunkAt(layer, Number(cx), Number(cz));
     }
     this.econ = new Economy(state.resources, state.caps);
+    // E23.5.1: under old-city rules biomass is gathered into the backpack (GatherSystem), never earned as a counter
+    // and every biomass price (drone refits and jobs, the core, ...) is paid from the backpack and the store within reach
+    if (this.oldCity) {
+      this.econ.noIncome = new Set(['biomass']);
+      this.econ.items = {
+        kinds: new Set(['biomass']),
+        have: () => this.inventory.available('biomass'),
+        take: (_k, units) => this.inventory.pay({ biomass: units }),
+      };
+    }
     this.inventory = new Inventory(this);
+    this.charge = new ChargeSystem(this);
     this.landmarks = new LandmarkSystem(this);
     this.clock = new Clock(this);
     this.nightFinds = new NightFinds(this);
@@ -160,6 +181,7 @@ export class Sim {
     this.research = new Research(this);
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
+    this.gather = new GatherSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
@@ -167,6 +189,8 @@ export class Sim {
     this.canals = new CanalNetwork(this);
     this.relays = new RelaySystem(this);
     this.power = new PowerGrid(this);
+    this.chargers = new ChargerSystem(this);
+    this.lights = new Lights(this);
     this.clusters = new RooftopClusters(this);
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
@@ -178,7 +202,6 @@ export class Sim {
     this.progression = new ProgressionSystem(this);
     this.areas = new AreaSystem(this);
     this.districts = new DistrictSystem(this);
-    this.milestones = new MilestoneSystem(this);
     this.ecosystem = new EcosystemSystem(this);
     this.metrics = new Metrics(this);
     this.log = new DebugLog(this);
@@ -274,7 +297,9 @@ export class Sim {
     const s = this.state;
     s.time += dt;
     s.buffs = s.buffs.filter((b) => b.until > s.time);
+    this.lights.tick(dt);
     this.power.tick(dt);
+    this.chargers.tick(dt);
     this.production.tick(dt);
     this.restoration.tick(dt);
     this.transitions.tick();
@@ -285,12 +310,12 @@ export class Sim {
     this.salvage.tick(dt);
     this.crafting.tick(dt);
     this.research.tick(dt);
+    this.charge.tick(dt);
     this.clock.tick();
     this.weather.tick();
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();
-    this.milestones.tick();
     this.ecosystem.tick();
     this.metrics.tick(dt);
     s.rngState = this.rng.state;

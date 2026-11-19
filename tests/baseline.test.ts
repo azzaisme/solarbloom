@@ -37,9 +37,6 @@ describe('Phase 4 baseline (scripted bots)', () => {
       };
       // eslint-disable-next-line no-console
       console.log(`${line(a)}\n${line(h)}\n    hands-off from ${mmss(h.handsOffAt)}: tiles after that ${after(h, 'tiles')} vs active ${after(a, 'tiles')} (${Math.round((100 * after(h, 'tiles')) / Math.max(1, after(a, 'tiles')))}%)`);
-      const e = runBot({ seed, minutes: 3, eager: true });
-      // eslint-disable-next-line no-console
-      console.log(`    eager buyer: first upgrade ${mmss(e.firsts.upgrade)} · park milestones 5/10/20 at ${mmss(e.firsts.park5)}/${mmss(e.firsts.park10)}/${mmss(e.firsts.park20)}`);
       if (verbose) for (const r of [a, h]) for (const m of r.minutesLog) console.log(`  ${r.mode} ${m.m}m park ${m.parkRestored} tiles ${m.tiles} res ${JSON.stringify(m.res)} caps ${JSON.stringify(m.caps)} rates/min ${JSON.stringify(m.rates)}`);
       expect(a.tilesRestored).toBeGreaterThan(0);
     }

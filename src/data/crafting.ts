@@ -6,9 +6,10 @@
 
 import type { BuildableType, ComponentId, ItemId } from '../core/types';
 import type { RegionId } from './oldcity';
+import { LIGHTS, type LightDef } from './lights';
 
-/** A cost in items. Biomass may be part of one: it is read through Inventory.canPay like any cost. */
-export type ItemCost = Partial<Record<ItemId, number>> & { biomass?: number };
+/** A cost in items (biomass is a backpack item like any other, E23.5.1). */
+export type ItemCost = Partial<Record<ItemId, number>>;
 
 /**
  * Where a recipe is unlocked:
@@ -80,22 +81,23 @@ export const MACHINE_RECIPES: MachineRecipe[] = [
   { id: 'compostBin', name: 'Compost bin', cost: { planks: 4, scrap: 2 }, unlock: { home: true }, owner: 'E23.5' },
   // E23.3 (#422): Bloom Relays are the grid's poles, so the power pole builds one
   { id: 'powerPole', name: 'Power pole', cost: { planks: 1, wire: 1 }, unlock: { keeper: 'mastRow' }, builds: 'relay' },
-  { id: 'charger', name: 'Charger', cost: { scrap: 4, wire: 2 }, unlock: { keeper: 'mastRow' }, owner: 'E23.2' },
+  { id: 'charger', name: 'Charger', cost: { scrap: 4, wire: 2 }, unlock: { keeper: 'mastRow' }, builds: 'charger' },
   { id: 'solar', name: 'Solar panel', cost: { scrap: 4, glassPane: 2, wire: 1 }, unlock: { keeper: 'oldMarket' }, builds: 'solar' },
-  { id: 'windTurbine', name: 'Wind turbine', cost: { planks: 6, scrap: 4, wire: 2 }, unlock: { keeper: 'saltwind' }, owner: 'E23.3' },
+  { id: 'windTurbine', name: 'Wind turbine', cost: { planks: 6, scrap: 4, wire: 2 }, unlock: { keeper: 'saltwind' }, builds: 'windTurbine' },
   { id: 'chest', name: 'Storage chest', cost: { planks: 4, scrap: 2 }, unlock: { keeper: 'saltwind' }, builds: 'chest' },
   { id: 'beehive', name: 'Beehive', cost: { planks: 4, seeds: 2 }, unlock: { keeper: 'elderGrove' }, owner: 'E23.5' },
   { id: 'reservoir', name: 'Reservoir', cost: { clay: 10, scrap: 4 }, unlock: { keeper: 'cistern' }, owner: 'E23.4' },
   { id: 'pump', name: 'Pump', cost: { scrap: 6, wire: 2, clay: 2 }, unlock: { keeper: 'cistern' }, owner: 'E23.4' },
   { id: 'desalination', name: 'Desalination plant', cost: { scrap: 10, pipe: 4, glassPane: 4, wire: 2 }, unlock: { keeper: 'cistern' }, owner: 'E23.4' },
-  { id: 'battery', name: 'Battery', cost: { batteryCell: 4 }, unlock: { keeper: 'clockPlaza' }, owner: 'E23.3' },
+  { id: 'battery', name: 'Battery', cost: { batteryCell: 4 }, unlock: { keeper: 'clockPlaza' }, builds: 'battery' },
   { id: 'bioDigester', name: 'Bio Digester', cost: { scrap: 10, motor: 2, clay: 4 }, unlock: { keeper: 'clockPlaza' }, owner: 'E23.5' },
   { id: 'drone', name: 'Drone', cost: { motor: 1, wire: 2, glassPane: 1 }, unlock: { keeper: 'clockPlaza' }, owner: 'E23.6.3' },
   { id: 'largeSolar', name: 'Large solar array', cost: { sunCell: 4, scrap: 6, wire: 2 }, unlock: { keeper: 'observatory' }, owner: 'unassigned: no sub-epic builds it yet (raised with the coordinator)' },
   { id: 'assembler', name: 'Assembler', cost: { motor: 4, gears: 10, glassPane: 6 }, unlock: { keeper: 'spireHeights' }, owner: 'E23.6.5' },
   // The Old City's own machines (E21.3), on the table too: one way to build everything. They keep the fountain step
   // that opened them, and their recipes move onto components where one fits.
-  { id: 'condenser', name: 'Water Condenser', cost: { scrap: 8, pipe: 2, glassPane: 1 }, unlock: { tier: 1 }, builds: 'condenser' },
+  // no Pipe: Pipe needs Clay (tier 2), and the condenser opens at tier 1, so it is buildable the day it opens
+  { id: 'condenser', name: 'Water Condenser', cost: { scrap: 12, copper: 6, wire: 2 }, unlock: { tier: 1 }, builds: 'condenser' },
   { id: 'pollinator', name: 'Pollinator Garden', cost: { seeds: 10, planks: 3, biomass: 20 }, unlock: { tier: 2 }, builds: 'pollinator' },
   { id: 'droneHub', name: 'Drone Hub', cost: { scrap: 12, motor: 1, wire: 4, glassPane: 2 }, unlock: { tier: 2 }, builds: 'droneHub' },
   { id: 'reservoirGarden', name: 'Reservoir Garden', cost: { clay: 15, seeds: 10, biomass: 30 }, unlock: { tier: 3 }, builds: 'reservoirGarden' },
@@ -117,19 +119,28 @@ export interface DecorRecipe {
  */
 export const DECOR_RECIPES: DecorRecipe[] = [
   { id: 'bench', cost: { planks: 2 }, unlock: { home: true } },
-  { id: 'lantern', cost: { glassPane: 1, scrap: 1 }, unlock: { home: true } },
   { id: 'pot', cost: { clay: 2 }, unlock: { home: true } },
   { id: 'flowerbed', cost: { seeds: 2 }, unlock: { home: true } },
   { id: 'stones', cost: { scrap: 3 }, unlock: { home: true } },
   { id: 'trough', cost: { clay: 3, seeds: 1 }, unlock: { find: 'c-elderGrove-1' } },
   { id: 'birdbath', cost: { clay: 4 }, unlock: { research: 'dc-birdbath' } },
-  { id: 'lamppost', cost: { scrap: 3, wire: 1, glassPane: 1 }, unlock: { research: 'dc-lamppost' } },
   { id: 'bunting', cost: { planks: 1, seeds: 1 }, unlock: { find: 'c-oldMarket-1' } },
   { id: 'cratestack', cost: { planks: 3 }, unlock: { find: 'c-saltwind-1' } },
   { id: 'barrel', cost: { planks: 2, seeds: 1 }, unlock: { find: 'c-saltwind-2' } },
   { id: 'rug', cost: { seeds: 2 }, unlock: { find: 'c-oldMarket-2' } },
   { id: 'topiary', cost: { seeds: 3, clay: 1 }, unlock: { research: 'dc-topiary' } },
+  // E23.3.5: every night light (data/lights) is made here too, at its own cost, known where its data says
+  ...LIGHTS.map((l) => ({ id: l.id, cost: l.cost, unlock: lightUnlock(l) })),
 ];
+
+/** Where a light's recipe is known: the starting set from home, a cache find, or Decor research. */
+function lightUnlock(l: LightDef): Unlock {
+  const u = l.unlock;
+  if ('start' in u) return { home: true };
+  if ('find' in u) return { find: u.find };
+  if ('research' in u) return { research: u.research };
+  throw new Error(`light ${l.id}: a light is known from the start, a find or research`);
+}
 
 export const CRAFT = {
   /** the most crafts the table queues at once */

@@ -5,6 +5,8 @@ import type { Sim } from '../gameplay/Sim';
 import { BOT, type BotPose, spawnPose, Walker } from '../gameplay/Walker';
 import { heightAt, levelY } from '../core/Height';
 import type { Action, Bindings } from './Bindings';
+import { RESEARCH } from '../data/research';
+import { CHARGE } from '../data/charge';
 
 /**
  * Bloombot (#234): input, movement and the camera follow (G.2, G.3, G.11, G.12). The game owns what an action
@@ -222,12 +224,16 @@ export class BotController {
     const frozen = this.frozen();
     if (mag < 0.01 && !this.walk) this.sprintLatched = false; // a toggled sprint ends when bloombot stops
     // Sprinting is the Hover upgrade: until it is bought the sprint inputs do nothing.
-    const canHover = (this.sim.state.upgrades.hover ?? 0) > 0;
-    this.sprinting = !frozen && canHover && (this.bindings.isDown('sprint', this.held) || !!pad?.sprint || this.sprintLatched);
+    const canHover = (this.sim.state.upgrades.hover ?? 0) > 0 || !!this.sim.state.salvage?.abilities.includes('hover'); // E23.1.5: the fountain's tier-2 ability
+    // E23.2.1: sprinting costs charge; at zero, a low-power walk (slower, never stranded)
+    const flat = this.sim.charge.empty;
+    this.sprinting = !frozen && canHover && !flat && (this.bindings.isDown('sprint', this.held) || !!pad?.sprint || this.sprintLatched);
     const p = this.pose;
     const w = this.walker;
     const wade = w.wading(p) ? BOT.wade : 1;
-    const top = (this.sprinting ? BOT.sprint : BOT.walk) * wade;
+    // E23.6.2: "Longer stride" research makes sprinting a little faster
+    const stride = 1 + RESEARCH.sprintSpeedPerLevel * (this.sim.research?.level('sprint') ?? 0);
+    const top = (this.sprinting ? BOT.sprint * stride : BOT.walk * (flat ? CHARGE.lowPowerWalk : 1)) * wade;
     let dirX = 0;
     let dirZ = 0;
     let want = 0;
@@ -277,10 +283,17 @@ export class BotController {
       if (moved > 0.001) this.following = true;
     }
     this.speed = dt > 0 ? moved / dt : 0;
+    if (this.sprinting && moved > 0.001) {
+      // E23.6.7: sprinting along a laid path costs less (e23-craft's sim.paths, once it lands)
+      const paths = (this.sim as unknown as { paths?: { onPath?(x: number, z: number): boolean; sprintChargeShare?: number } }).paths;
+      const k = paths?.onPath?.(this.pose.x, this.pose.z) ? (paths.sprintChargeShare ?? CHARGE.pathSprintShare) : 1;
+      this.sim.charge.use('sprint', dt * k);
+    }
     // A machine built or a plot turned solid under bloombot: step aside.
     if (!w.fits(p.roofId, p.x, p.z)) w.settle(p);
     const [x, y, z] = this.world();
     this.visuals.place(x, y, z, p.facing);
+    this.visuals.setTired(flat);
     this.visuals.setMotion(this.speed, this.sprinting);
     this.visuals.update(dt);
     this.follow(x, y, z);

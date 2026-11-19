@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { gameDays } from '../src/data/time';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { COMPONENT_RECIPES, DECOR_RECIPES, MACHINE_RECIPES } from '../src/data/crafting';
 import { ITEM_DEFS } from '../src/data/items';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { MATERIALS } from '../src/data/salvage';
 import { BRANCHES, PROJECTS, RESEARCH, RESEARCH_UPGRADES } from '../src/data/research';
+import { CHARGE } from '../src/data/charge';
 import { Sim } from '../src/gameplay/Sim';
 import { SaveService } from '../src/app/SaveService';
 import { projectMinutes, upgradeRows } from '../src/ui/CraftTable';
@@ -12,7 +14,7 @@ import { projectMinutes, upgradeRows } from '../src/ui/CraftTable';
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const CACHES = new Set(REGIONS.flatMap((r) => r.caches.map((c) => c.id)));
 const RECIPE_IDS = new Set([...COMPONENT_RECIPES, ...MACHINE_RECIPES, ...DECOR_RECIPES].map((r) => r.id));
-const realItem = (k: string) => k === 'biomass' || k in ITEM_DEFS;
+const realItem = (k: string) => k in ITEM_DEFS;
 
 /** A new old-city game with Pylon (Mast Row) awake: the station is there. */
 function station() {
@@ -22,7 +24,7 @@ function station() {
   sim.state.salvage!.keepers.pylon = { step: 'request1' };
   return sim;
 }
-const DAY = RESEARCH.daySeconds;
+const DAY = gameDays(1);
 
 describe('E23.6.2: research in data', () => {
   it('each branch has at least three projects, and every project unlocks something real', () => {
@@ -32,7 +34,7 @@ describe('E23.6.2: research in data', () => {
     for (const p of PROJECTS) {
       const g = p.gives;
       if ('upgrade' in g) expect(RESEARCH_UPGRADES.some((u) => u.id === g.upgrade), p.id).toBe(true);
-      else if ('recipe' in g) expect(RECIPE_IDS.has(g.recipe), p.id).toBe(true);
+      else if ('recipes' in g) for (const id of g.recipes) expect(RECIPE_IDS.has(id), `${p.id}: ${id}`).toBe(true);
       else expect(g.station).toBe(2);
       for (const k of Object.keys(p.cost)) expect(realItem(k), `${p.id}: ${k}`).toBe(true);
       expect(p.days).toBeGreaterThan(0);
@@ -74,7 +76,7 @@ describe('E23.6.2: research in data', () => {
       const pid = r.unlock.research;
       const p = PROJECTS.find((x) => x.id === pid);
       expect(p, r.id).toBeDefined();
-      expect(p!.gives, r.id).toEqual({ recipe: r.id });
+      expect((p!.gives as { recipes?: string[] }).recipes, r.id).toContain(r.id);
     }
   });
 });
@@ -191,15 +193,45 @@ describe('E23.6.2: the research station', { timeout: 60000 }, () => {
     expect(role(solar).source!(solar, sim, { solar: 1, wind: 0, night: false })).toBeCloseTo(out * 1.1, 6);
   });
 
+  it('the bloombot upgrades feed its charge (E23.2.1): battery cells, a gentler pulse and a longer stride', () => {
+    const sim = station();
+    sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
+    for (const m of ['batteryCell', 'wire', 'copper', 'gears', 'motor', 'sunstone'] as const) sim.inventory.addToStore(m, 60);
+    // Bigger charge: each battery cell makes a full charge bigger
+    const max = sim.charge.max;
+    expect(sim.research.upgrade('chargeCells')).toBe(1);
+    expect(sim.charge.max).toBe(max + CHARGE.cellCapacity);
+    expect(sim.research.upgrade('chargeCells')).toBe(2);
+    expect(sim.charge.max).toBe(max + 2 * CHARGE.cellCapacity);
+    // Gentler on charge: every pulse and ability costs a little less
+    const pulse = sim.charge.cost('pulse');
+    const pry = sim.charge.cost('pry');
+    expect(sim.research.upgrade('chargeEfficiency')).toBe(1);
+    expect(sim.charge.cost('pulse')).toBeCloseTo(pulse * (1 - CHARGE.efficiencyStep), 6);
+    expect(sim.charge.cost('pry')).toBeCloseTo(pry * (1 - CHARGE.efficiencyStep), 6);
+    // Longer stride: sprinting costs less (bloombot's sprint speed reads the same level, BotController)
+    const sprint = sim.charge.cost('sprint');
+    expect(sim.research.upgrade('sprint')).toBe(1);
+    expect(sim.charge.cost('sprint')).toBeCloseTo(sprint * (1 - 0.1), 6);
+    expect(sim.research.level('sprint') * RESEARCH.sprintSpeedPerLevel).toBeCloseTo(0.05, 6);
+    // and they survive a save, in the charge's own numbers
+    const loaded = new Sim(new SaveService().deserialize(new SaveService().serialize(sim.state))!);
+    expect(loaded.charge.max).toBe(max + 2 * CHARGE.cellCapacity);
+    expect(loaded.charge.cost('pulse')).toBeCloseTo(pulse * (1 - CHARGE.efficiencyStep), 6);
+  });
+
   it('an upgrade whose system has not landed yet is never offered', () => {
     const sim = station();
     sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
     const offered = sim.research.upgrades().map((u) => u.id);
-    // E23.4 water, E23.5 farm, E23.2.1 charge and E23.6.4 couriers are not in this game yet; no battery machine either
-    for (const id of ['pumpRate', 'reservoirSize', 'evaporation', 'compostSpeed', 'cropGrowth', 'crossbreed', 'chargeCells', 'chargeEfficiency', 'sprint', 'droneCarry', 'batteryStore'])
+    // E23.4 water, E23.5's planters and compost, and E23.6.4 couriers are not in this game yet
+    for (const id of ['pumpRate', 'reservoirSize', 'evaporation', 'compostSpeed', 'cropGrowth', 'crossbreed', 'droneCarry'])
       expect(offered, id).not.toContain(id);
     expect(sim.research.upgradeProblem('cropGrowth')).toBe('Not open yet');
-    for (const id of ['backpack', 'pulseRadius', 'poleReach', 'solarYield', 'droneRange', 'droneSpeed', 'droneThrift']) expect(offered, id).toContain(id);
+    // E23.2.1's charge and E23.3's batteries are: their upgrades are offered
+    for (const id of ['backpack', 'pulseRadius', 'poleReach', 'solarYield', 'droneRange', 'droneSpeed', 'chargeCells', 'chargeEfficiency', 'sprint', 'batteryStore']) expect(offered, id).toContain(id);
+    // "Lighter drones" waits for E23.6.3's reader (#502), so it is not in the data yet
+    expect(RESEARCH_UPGRADES.map((u) => u.id)).not.toContain('droneThrift');
   });
 
   it('crops and creatures found open projects', () => {

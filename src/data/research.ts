@@ -5,7 +5,6 @@
 import type { MaterialId } from '../core/types';
 import type { ItemCost } from './crafting';
 import type { RegionId } from './oldcity';
-import { DAY_SECONDS } from './time';
 
 export type Branch = 'bloombot' | 'power' | 'water' | 'farm' | 'drones' | 'decor';
 
@@ -43,8 +42,8 @@ export type UpgradeSystemId = 'always' | 'charge' | 'power' | 'batteries' | 'wat
 
 /** What a finished project gives. */
 export type Gift =
-  /** a crafting-table recipe (component, machine or decoration id, data/crafting) */
-  | { recipe: string }
+  /** crafting-table recipes (component, machine or decoration ids, data/crafting); usually one */
+  | { recipes: string[] }
   /** an upgrade at the crafting table's Upgrade tab (levels bought there, for materials) */
   | { upgrade: string }
   /** a second station: two projects run at once */
@@ -83,13 +82,13 @@ export interface ResearchUpgradeDef {
 }
 
 export const RESEARCH = {
-  /** a game day in sim seconds (48 minutes of play), from E23.7's clock (data/time) */
-  daySeconds: DAY_SECONDS,
   /** stations at the start; research adds a second */
   stations: 1,
   maxStations: 2,
   /** the station's draw on the house's grid (E23.3 registers the house as a consumer) */
   draw: 2,
+  /** "Longer stride": each level makes sprinting this share faster (its `per` is the share off sprint's charge) */
+  sprintSpeedPerLevel: 0.05,
 };
 
 /** Research-opened upgrades. Who reads each level: the sub-epic named beside it, through `sim.research.level(id)`. */
@@ -97,7 +96,7 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
   // Bloombot (E23.2 reads charge, efficiency, sprint and pulse; the backpack is ours)
   { id: 'chargeCells', branch: 'bloombot', name: 'Bigger charge', each: 'A battery cell more in bloombot', per: 1, needs: 'charge', levels: [{ cost: { batteryCell: 2 } }, { cost: { batteryCell: 3, gears: 4 } }, { cost: { batteryCell: 4, sunstone: 4 } }] },
   { id: 'chargeEfficiency', branch: 'bloombot', name: 'Gentler on charge', each: 'Pulses and abilities use a little less charge', per: 1, needs: 'charge', levels: [{ cost: { wire: 4, copper: 6 } }, { cost: { wire: 6, gears: 6 } }, { cost: { motor: 2, sunstone: 6 } }] },
-  { id: 'sprint', branch: 'bloombot', name: 'Longer stride', each: 'Sprinting costs less and goes a little faster', per: 1, needs: 'charge', levels: [{ cost: { gears: 4, wire: 2 } }, { cost: { motor: 1, gears: 6 } }, { cost: { motor: 2, sunstone: 4 } }] },
+  { id: 'sprint', branch: 'bloombot', name: 'Longer stride', each: 'Sprinting costs less and goes a little faster', per: 0.1, needs: 'charge', levels: [{ cost: { gears: 4, wire: 2 } }, { cost: { motor: 1, gears: 6 } }, { cost: { motor: 2, sunstone: 4 } }] },
   { id: 'pulseRadius', branch: 'bloombot', name: 'Wider pulse', each: 'The pulse reaches a tile further', per: 1, needs: 'always', levels: [{ cost: { seeds: 10, copper: 6 } }, { cost: { seeds: 16, glassPane: 4 } }, { cost: { seeds: 24, sunCell: 2 } }] },
   { id: 'backpack', branch: 'bloombot', name: 'Roomier backpack', each: '20 more in every stack', per: 20, needs: 'always', levels: [{ cost: { planks: 6, scrap: 10 } }, { cost: { planks: 10, clay: 10 } }, { cost: { planks: 14, gears: 10 } }] },
   // Power (E23.3 reads these)
@@ -116,7 +115,6 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
   { id: 'droneRange', branch: 'drones', name: 'Further wings', each: 'Drones work further from their hub', per: 2, needs: 'drones', levels: [{ cost: { glassPane: 2, wire: 2 } }, { cost: { glassPane: 4, motor: 1 } }, { cost: { sunCell: 1, motor: 2 } }] },
   { id: 'droneSpeed', branch: 'drones', name: 'Quicker wings', each: 'Drones fly a little faster', per: 0.15, needs: 'drones', levels: [{ cost: { motor: 1 } }, { cost: { motor: 2, gears: 4 } }, { cost: { motor: 3, sunstone: 4 } }] },
   { id: 'droneCarry', branch: 'drones', name: 'Bigger baskets', each: 'Couriers carry more at a time', per: 1, needs: 'couriers', levels: [{ cost: { planks: 6 } }, { cost: { planks: 10, wire: 4 } }, { cost: { planks: 14, motor: 1 } }] },
-  { id: 'droneThrift', branch: 'drones', name: 'Lighter drones', each: 'Drones draw less from their hub', per: 0.15, needs: 'drones', levels: [{ cost: { batteryCell: 1, wire: 4 } }, { cost: { batteryCell: 2, glassPane: 4 } }, { cost: { batteryCell: 3, sunCell: 1 } }] },
 ];
 
 /** Every project, by branch. A branch's first project opens from a find; the rest follow on. */
@@ -144,9 +142,9 @@ export const PROJECTS: ProjectDef[] = [
   { id: 'dr-range', branch: 'drones', name: 'Wing notes', about: 'Drones that fly further from home.', cost: { glass: 6, copper: 6 }, days: 0.1, opens: { keeper: 'clockPlaza' }, gives: { upgrade: 'droneRange' } },
   { id: 'dr-speed', branch: 'drones', name: 'Oiled gears', about: 'Drones that hurry, a little.', cost: { gears: 10 }, days: 0.15, opens: { project: 'dr-range' }, gives: { upgrade: 'droneSpeed' } },
   { id: 'dr-carry', branch: 'drones', name: 'Baskets', about: 'Couriers that carry more.', cost: { timber: 10, copper: 4 }, days: 0.15, opens: { project: 'dr-range' }, gives: { upgrade: 'droneCarry' } },
-  { id: 'dr-thrift', branch: 'drones', name: 'Light frames', about: 'Drones that take less from their hub.', cost: { glass: 8, gears: 6 }, days: 0.2, opens: { project: 'dr-speed' }, gives: { upgrade: 'droneThrift' } },
   // Decor
-  { id: 'dc-topiary', branch: 'decor', name: 'Clipped shapes', about: 'Shrubs grown into shapes.', cost: { seeds: 8 }, days: 0.05, opens: { tech: 'c-glasshouse-1' }, gives: { recipe: 'topiary' } },
-  { id: 'dc-lamppost', branch: 'decor', name: 'Old lamps', about: 'Mending the lamps along the old streets.', cost: { copper: 4, glass: 4 }, days: 0.1, opens: { tech: 'c-mastRow-1' }, gives: { recipe: 'lamppost' } },
-  { id: 'dc-birdbath', branch: 'decor', name: 'A bowl of water', about: 'Somewhere for the birds to bathe.', cost: { clay: 6 }, days: 0.05, opens: { creature: 'birds' }, gives: { recipe: 'birdbath' } },
+  { id: 'dc-topiary', branch: 'decor', name: 'Clipped shapes', about: 'Shrubs grown into shapes.', cost: { seeds: 8 }, days: 0.05, opens: { tech: 'c-glasshouse-1' }, gives: { recipes: ['topiary'] } },
+  // E23.3.5: the lights that wait for research (data/lights `research: 'dc-lights'`): fairy lights, uplights, table lamps
+  { id: 'dc-lights', branch: 'decor', name: 'Old lamps', about: 'Mending the little lamps from the old streets and houses.', cost: { copper: 4, glass: 4 }, days: 0.1, opens: { tech: 'c-mastRow-1' }, gives: { recipes: ['fairylights', 'uplight', 'tablelight'] } },
+  { id: 'dc-birdbath', branch: 'decor', name: 'A bowl of water', about: 'Somewhere for the birds to bathe.', cost: { clay: 6 }, days: 0.05, opens: { creature: 'birds' }, gives: { recipes: ['birdbath'] } },
 ];

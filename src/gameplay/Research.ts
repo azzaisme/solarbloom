@@ -172,7 +172,7 @@ export class Research {
     if (!this.isOpen(p)) return 'Not open yet';
     if ((this.sv?.research?.running.length ?? 0) >= this.stations()) return 'The bench is busy';
     const short = this.sim.inventory.shortfall(p.cost);
-    if (short) return `Needs ${short === 'biomass' ? 'Greens' : itemDef(short).name}`;
+    if (short) return `Needs ${itemDef(short).name}`;
     return undefined;
   }
 
@@ -256,7 +256,7 @@ export class Research {
     const lvl = this.level(id);
     if (lvl >= u.levels.length) return 'As good as it gets';
     const short = this.sim.inventory.shortfall(u.levels[lvl].cost);
-    if (short) return `Needs ${short === 'biomass' ? 'Greens' : itemDef(short).name}`;
+    if (short) return `Needs ${itemDef(short).name}`;
     return undefined;
   }
 

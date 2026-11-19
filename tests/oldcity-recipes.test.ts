@@ -4,7 +4,8 @@ import { formatCost } from '../src/core/Economy';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { BuildableType, GroundState } from '../src/core/types';
 import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE } from '../src/data/machines';
-import { RECIPES, TIERS } from '../src/data/salvage';
+import { TIERS } from '../src/data/salvage';
+import { MACHINE_RECIPES } from '../src/data/crafting';
 import { KEEPERS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -31,15 +32,12 @@ function ground(sim: Sim, x: number, z: number, g: GroundState = 'restored') {
 }
 /** Gives the backpack and store everything a recipe needs. */
 function stock(sim: Sim, type: BuildableType) {
-  for (const [k, v] of Object.entries(sim.build.recipe(type)!)) {
-    if (k === 'biomass') sim.state.resources.biomass = sim.state.resources.biomass.add(v!);
-    else sim.inventory.addToStore(k as 'scrap', v!);
-  }
+  for (const [k, v] of Object.entries(sim.build.recipe(type)!)) sim.inventory.addToStore(k as 'scrap', v!);
 }
 
 describe('E21.3: recipes', () => {
   it('each recipe is paid exactly, with no price growth, and the tray never shows a classic price', () => {
-    for (const type of Object.keys(RECIPES) as BuildableType[]) {
+    for (const type of MACHINE_RECIPES.flatMap((r) => (r.builds ? [r.builds] : []))) {
       const sim = oldSim();
       wakeKeepers(sim);
       sim.state.resources.biomass = big(0);
@@ -52,10 +50,7 @@ describe('E21.3: recipes', () => {
       const first = sim.build.place(type, GROUND, x, z);
       expect(first, type).toBeDefined();
       // the second costs the same (what is left is exactly one more recipe)
-      for (const [k, v] of Object.entries(sim.build.recipe(type)!)) {
-        if (k === 'biomass') expect(sim.econ.get('biomass').toNumber()).toBe(v);
-        else expect(sim.inventory.stored(k as 'scrap'), `${type} ${k}`).toBe(v);
-      }
+      for (const [k, v] of Object.entries(sim.build.recipe(type)!)) expect(sim.inventory.stored(k as 'scrap'), `${type} ${k}`).toBe(v);
       expect(sim.build.costLabel(type)).not.toMatch(/⚡|💧/);
     }
   });
@@ -103,17 +98,17 @@ describe('E21.3: recipes', () => {
   it('removing a machine gives the whole recipe back, over a stack to the store', () => {
     const sim = oldSim(1);
     ground(sim, 12, 12);
-    sim.inventory.add('scrap', 8);
-    sim.inventory.add('pipe', 2);
-    sim.inventory.add('glassPane', 1);
+    sim.inventory.add('scrap', 12);
+    sim.inventory.add('copper', 6);
+    sim.inventory.add('wire', 2);
     const m = sim.build.place('condenser', GROUND, 12, 12)!;
     expect(sim.inventory.count('scrap')).toBe(0);
-    sim.inventory.add('scrap', 35);
+    sim.inventory.add('scrap', 31);
     expect(sim.build.remove(m.id)).toBe(true);
     expect(sim.inventory.count('scrap')).toBe(40);
     expect(sim.inventory.stored('scrap')).toBe(3);
-    expect(sim.inventory.count('pipe')).toBe(2);
-    expect(sim.inventory.count('glassPane')).toBe(1);
+    expect(sim.inventory.count('copper')).toBe(6);
+    expect(sim.inventory.count('wire')).toBe(2);
     expect(sim.grid.get(GROUND, 12, 12)!.occupantId).toBeUndefined();
     // the fountain and the starter lamp never come down
     expect(sim.build.remove(sim.state.machines.find((q) => q.starter)!.id)).toBe(false);
@@ -121,7 +116,7 @@ describe('E21.3: recipes', () => {
 
   it('E23.7.4: the Reclaimer is gone: not in the build list, no recipe, no tier gives it', () => {
     expect(OLD_CITY_BUILDABLE as string[]).not.toContain('reclaimer');
-    expect(Object.keys(RECIPES)).not.toContain('reclaimer');
+    expect(MACHINE_RECIPES.map((r) => r.id)).not.toContain('reclaimer');
     expect(TIERS.flatMap((t) => t.gives).join(' ')).not.toMatch(/Reclaimer/);
   });
 

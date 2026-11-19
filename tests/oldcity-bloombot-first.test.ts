@@ -35,6 +35,16 @@ function hub(sim: Sim, x = 12, z = -12): MachineData {
   for (const t of sim.grid.footprint(GROUND, x, z, 2)) if (t) t.occupantId = m.id;
   sim.grid.indexMachine(m);
   sim.drones.spawn(m);
+  // E23.3.3: helpers run on the grid. Two solar panels touching the hub power it (a clear day without E23.7).
+  for (const sx of [x + 2, x + 3]) {
+    const t = sim.grid.get(GROUND, sx, z)!;
+    t.ground = 'restored';
+    t.blocked = false;
+    const p: MachineData = { id: sim.newId('m'), type: 'solar', roofId: GROUND, x: sx, z, size: 1, boostUntil: 0, timer: 0, charge: 0 };
+    sim.state.machines.push(p);
+    t.occupantId = p.id;
+    sim.grid.indexMachine(p);
+  }
   return m;
 }
 /** The cap the store would have without a reward (the reward is put back after). */
@@ -67,6 +77,7 @@ describe('E21.9: bloombot first', () => {
     for (let z = -30; z < -2 && (sim.state.areas.mastRow.byBot ?? 0) < target; z++)
       for (let x = 1; x < 30 && (sim.state.areas.mastRow.byBot ?? 0) < target; x++) {
         const t = sim.grid.get(GROUND, x, z)!;
+        sim.charge.sleep(); // E23.2.1: kept topped up (this test is about the share, not the charge)
         if (!sim.restoration.checkPulse(t).ok || t.ground === 'restored') continue;
         sim.restoration.pulse(t.id);
         sim.advance(2);
@@ -120,10 +131,7 @@ describe('E21.9: bloombot first', () => {
       for (const t of sim.areas.tiles(region)) if (!t.blocked && !t.occupantId) { t.ground = 'restored'; t.bloom = 1; t.pollution = 0; sim.grid.touch(t); }
       sim.state.salvage!.keepers[r.keeper] = { step: 'landmark' };
       sim.bot = { roofId: GROUND, x: r.landmark.x + 0.5, z: r.landmark.z - 0.5 };
-      for (const [k, v] of Object.entries(KEEPERS.find((q) => q.id === r.keeper)!.landmark)) {
-        if (k === 'biomass') sim.state.resources.biomass = big(v!);
-        else sim.inventory.addToStore(k as 'scrap', v!), sim.inventory.withdraw(k as 'scrap', v!);
-      }
+      for (const [k, v] of Object.entries(KEEPERS.find((q) => q.id === r.keeper)!.landmark)) sim.inventory.addToStore(k as 'scrap', v!), sim.inventory.withdraw(k as 'scrap', v!);
       expect(sim.landmarks.interact(region), region).toBe('woke');
     };
     const waterBefore = sim.state.caps.water.toNumber();
