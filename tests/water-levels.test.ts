@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import type { TileData } from '../src/core/types';
+import type { MachineData, TileData } from '../src/core/types';
 import type { WeatherKind } from '../src/data/weather';
 import { REGIONS } from '../src/data/oldcity';
 import { WATER_NET } from '../src/data/water';
@@ -237,5 +237,54 @@ describe('E23.4.1: water levels (sim.water)', () => {
     expect(sim.water.isLow(area)).toBe(false);
     // Cistern Basin's pond starts dry: its area is short of water until rain or its springs fill it
     expect(sim.water.isLow(other)).toBe(true);
+  });
+  it("E23.5's planters drink from the water in reach: a dry pond wilts them (never kills them), and refilling brings them back", () => {
+    const sim = city();
+    weather(sim, 'sunny'); // dry days (rain would water the bed itself)
+    const c = canalTile(sim);
+    const b = sim.water.bodyAt(c)!;
+    // open land two tiles from the canal
+    let spot: TileData | undefined;
+    for (let dz = -3; dz <= 3 && !spot; dz++)
+      for (let dx = -3; dx <= 3 && !spot; dx++) {
+        const t = sim.grid.get(GROUND, c.x + dx, c.z + dz);
+        if (t && t.feature !== 'water' && !t.blocked && !t.occupantId && t.feature !== 'building' && sim.water.bodyNear(t)?.id === b.id) spot = t;
+      }
+    expect(spot).toBeDefined();
+    Object.assign(spot!, { ground: 'restored', pollution: 0 });
+    const m: MachineData = { id: sim.newId('m'), type: 'planter', roofId: GROUND, x: spot!.x, z: spot!.z, size: 1, boostUntil: 0, timer: 0, charge: 0 };
+    sim.state.machines.push(m);
+    spot!.occupantId = m.id;
+    sim.grid.indexMachine(m);
+    (sim.state.salvage!.crops ??= []).push('radish');
+    sim.inventory.add('seeds', 5);
+    expect(sim.farm.plant(m, 'radish')).toBe(true);
+    expect(sim.water.isWatered(m as unknown as TileData)).toBe(true);
+    expect(sim.farm.look(m).wilting).toBe(false);
+    // a growing bed drinks from the canal
+    const before = sim.water.amountOf(b.id);
+    for (let i = 0; i < 24; i++) {
+      sim.state.time += DAY / 48;
+      sim.farm.tick(DAY / 48);
+    }
+    expect(sim.water.amountOf(b.id)).toBeLessThan(before);
+    // the canal runs dry: the bed wilts (growth waits), and nothing is lost
+    sim.water.draw(b.id, b.capacity);
+    const grown = sim.state.salvage!.planters![m.id].grown;
+    expect(sim.farm.look(m).wilting).toBe(true);
+    for (let i = 0; i < 24; i++) {
+      sim.state.time += DAY / 48;
+      sim.farm.tick(DAY / 48);
+    }
+    expect(sim.state.salvage!.planters![m.id]).toMatchObject({ crop: 'radish', grown });
+    expect(sim.state.machines).toContain(m);
+    // water back: it grows on
+    sim.water.fill(b.id, b.capacity);
+    expect(sim.farm.look(m).wilting).toBe(false);
+    for (let i = 0; i < 4; i++) {
+      sim.state.time += DAY / 48;
+      sim.farm.tick(DAY / 48);
+    }
+    expect(sim.state.salvage!.planters![m.id].grown).toBeGreaterThan(grown!);
   });
 });
