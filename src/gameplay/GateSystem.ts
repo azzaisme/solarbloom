@@ -50,6 +50,8 @@ export class GateSystem {
     if (g.kind === 'lockBridge') return n.landmark && this.sim.areas.fog(n.landmark) === 'cleared' ? undefined : this.has('hover') ? undefined : g.blocked;
     if (n.repair) return this.sim.inventory.canPay(n.repair) ? undefined : `${g.blocked}${this.missing(n.repair)}`;
     if (n.ability && !this.has(n.ability)) return g.blocked;
+    // E23.2.1: abilities cost charge; at zero bloombot can't use them (it walks on, nothing is lost)
+    if (n.ability && !this.sim.charge.canUse(n.ability as 'pry')) return 'Out of charge. Eat something, rest or find a charger';
     return undefined;
   }
 
@@ -71,6 +73,7 @@ export class GateSystem {
         return false;
       }
       if (g.needs.repair && !s.inventory.pay(g.needs.repair)) return false;
+      if (g.needs.ability) s.charge.use(g.needs.ability as 'pry');
     }
     s.state.salvage!.opened.push(id);
     // its rubble or bridge deck becomes open ground (saved as an entry fix)

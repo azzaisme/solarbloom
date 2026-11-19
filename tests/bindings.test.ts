@@ -23,7 +23,6 @@ const KEYS: [Action, string[]][] = [
   ['removeMode', ['KeyX']],
   ['backpack', ['Tab', 'KeyI']],
   ['map', ['KeyM']],
-  ['harvest', ['KeyF']],
   ['pinNext', ['KeyG']],
   ['cancel', ['Escape']],
   ['menu', ['Escape']],
@@ -47,7 +46,6 @@ const PAD: [Action, number | undefined][] = [
   ['removeMode', 7], // right trigger
   ['backpack', 12], // d-pad up
   ['map', 8], // View
-  ['harvest', 14], // d-pad left
   ['cancel', 1], // B
   ['menu', 9], // Menu
   ['prevTab', 4],
@@ -61,6 +59,8 @@ describe('E22.1: the new button map', () => {
       const b = new Bindings();
       for (const [a, k] of KEYS) expect(keys(b, a), a).toEqual(k);
       for (let i = 0; i < 9; i++) expect(keys(b, SLOTS[i])).toEqual([`Digit${i + 1}`]);
+      // E23.2.1: F eats a snack (bloombot's charge); Harvest Sunlight has no key
+      expect([keys(b, 'harvest'), keys(b, 'eat')]).toEqual([[], ['KeyF']]);
     });
 
   it('a saved pad binding for an action that no longer exists is ignored (E23.1.2: Bloom Frenzy)', () => {
@@ -74,6 +74,7 @@ describe('E22.1: the new button map', () => {
       for (const [a, p] of PAD) expect(b.pad[a], a).toBe(p);
       for (const s of SLOTS) expect(b.pad[s]).toBeUndefined(); // the pad uses the build menu
       expect(b.pad.pinNext).toBe(15); // d-pad right
+      expect([b.pad.harvest, b.pad.eat]).toEqual([undefined, 14]); // d-pad left eats (E23.2.1)
     });
 
     it('gives no two actions that can apply together the same input', () => {

@@ -39,6 +39,7 @@ export type Action =
   | 'backpack'
   | 'map'
   | 'harvest'
+  | 'eat'
   | 'pinNext'
   | 'cancel'
   | 'menu'
@@ -68,9 +69,11 @@ export interface ActionDef {
   keys: boolean;
   /** can be put on a pad button (movement and look are the sticks) */
   pad: boolean;
+  /** E23.2.1: no default binding and not listed: Harvest Sunlight, which goes with the counters in E23.1.4 */
+  retired?: boolean;
 }
 
-const A = (id: Action, label: string, group: Group, context: Context, keys = true, pad = true): ActionDef => ({ id, label, group, context, keys, pad });
+const A = (id: Action, label: string, group: Group, context: Context, keys = true, pad = true, retired = false): ActionDef => ({ id, label, group, context, keys, pad, retired });
 
 /** Every action, in the order the rebinding screen lists them. */
 export const ACTIONS: readonly ActionDef[] = [
@@ -85,7 +88,8 @@ export const ACTIONS: readonly ActionDef[] = [
   A('recentre', 'Recentre the camera', 'move', 'world'),
   A('interact', 'Interact', 'act', 'world'),
   A('pulse', 'Pulse, use the tool, place', 'act', 'world'),
-  A('harvest', 'Harvest Sunlight', 'act', 'world'),
+  A('harvest', 'Harvest Sunlight', 'act', 'world', true, true, true),
+  A('eat', 'Eat a snack (recharge)', 'act', 'world'),
   A('pinNext', 'Pin the next request', 'act', 'world'),
   A('buildMenu', 'Build menu', 'build', 'world'),
   A('place', 'Place (in build mode)', 'build', 'build'),
@@ -153,6 +157,8 @@ export function defaultKeys(): Record<Action, string[]> {
     backpack: ['Tab', 'KeyI'],
     map: ['KeyM'],
     harvest: ['KeyF'],
+    // E23.2.1: under old-city rules F eats instead (Harvest Sunlight is classic only)
+    eat: ['KeyF'],
     pinNext: ['KeyG'],
     cancel: [FIXED_KEY],
     menu: [FIXED_KEY],
@@ -161,6 +167,7 @@ export function defaultKeys(): Record<Action, string[]> {
     nextTab: ['KeyE'],
     debug: ['F3'],
   };
+  for (const a of ACTIONS) if (a.retired) k[a.id] = [];
   return k;
 }
 
@@ -190,6 +197,9 @@ export function defaultPad(): Partial<Record<Action, number>> {
     nextTab: 5,
     pinNext: 15,
   };
+  // E23.2.1: d-pad left eats (Harvest Sunlight has no button any more)
+  delete p.harvest;
+  p.eat = 14;
   return p;
 }
 

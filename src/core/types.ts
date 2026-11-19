@@ -416,6 +416,8 @@ export interface GameState {
    * production, chains, milestones or pacing). Optional and sparse, so no save version change.
    */
   cozy?: CozyState;
+  /** E23.2.1: bloombot's charge (old-city rules; absent = full). Optional, so no save version change. */
+  charge?: ChargeState;
   /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
   clock?: ClockState;
 }
@@ -429,6 +431,16 @@ export interface ClockState {
   offset: number;
   real?: boolean;
   nights?: Record<string, number>;
+}
+
+/** E23.2.1 (#371): bloombot's charge. */
+export interface ChargeState {
+  /** the charge now, 0 to the full charge */
+  value: number;
+  /** E23.6.2 research: battery cells fitted (each makes a full charge bigger) */
+  cells?: number;
+  /** E23.6.2 research: efficiency steps (each makes every cost a little smaller) */
+  efficiency?: number;
 }
 
 /** E19: what the player chose for the look of their city. */
