@@ -96,7 +96,7 @@ export interface RegionDef {
   material: MaterialId;
   landmark: { kind: string; name: string; x: number; z: number };
   keeper: string;
-  /** the 2×2 seam (a Reclaimer stands on it once the landmark wakes) */
+  /** the 2×2 seam: kept clear of generated clutter (E21's Reclaimers stood here; E23.7.4 dropped them) */
   seam: { name: string; x: number; z: number };
   gate: GateDef;
   /** the Keeper's second request: restore every tile of this patch */
@@ -550,8 +550,8 @@ export const PARK_SET = {
   /** broad steps down to the beach through the south gate */
   ramps: [{ x: 6, z: 14, w: 4, d: 2, dir: 's', from: 1, to: 0, kind: 'stair' }] as RampDef[],
   pages: [
-    // E23.9.1: his first note waits at the top of the beach steps, where bloombot first comes into the park
-    { id: 'p-park-1', x: 7, z: 12 },
+    // E23.9.1: his first note waits at the top of the beach steps, beside the path up (never across the way in)
+    { id: 'p-park-1', x: 4, z: 13 },
     { id: 'p-park-2', x: 14, z: 9 },
   ] as SpotDef[],
 };
@@ -730,7 +730,7 @@ export const BLUEPRINTS: { id: string; name: string; region: RegionId }[] = [
   { id: 'machines3', name: 'Machines, level 3', region: 'elderGrove' },
   { id: 'drones3', name: 'Drones, level 3', region: 'cistern' },
   { id: 'storage3', name: 'Storage, level 3', region: 'clockPlaza' },
-  { id: 'reclaimerMk2', name: 'Reclaimer Mk 2 (12 a minute)', region: 'terraces' },
+  { id: 'salvageLore', name: 'Salvage Lore (piles refill twice as fast)', region: 'terraces' },
   { id: 'packFrame', name: 'Pack Frame (+40 to every stack)', region: 'glasshouse' },
   { id: 'sprintServos', name: 'Sprint Servos (faster sprint)', region: 'observatory' },
   { id: 'longGlide', name: 'Long Glide (glides from a tower top reach twice as far)', region: 'spireHeights' },
@@ -824,7 +824,6 @@ export const MODEL_NAMES: Record<string, { standIn: string; what: string }> = {
   'causeway-broken': { standIn: 'procedural', what: 'The Long Causeway\'s broken middle' },
   'sea-cliff': { standIn: 'skyline-cliff', what: 'Close-range sea cliffs in the north' },
   // machines
-  reclaimer: { standIn: 'ac-unit', what: 'The Reclaimer (on a seam)' },
   'storage-chest': { standIn: 'crate', what: 'The Storage Chest' },
   // salvage piles (Scrap stays rubble-pile, crate, stone-block; Seeds stays broken-pot, stump)
   'salvage-copper': { standIn: 'copper-pipe', what: 'A Copper pile' },

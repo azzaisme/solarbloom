@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import type { TileData, WeatherKind } from '../src/core/types';
+import type { TileData } from '../src/core/types';
+import type { WeatherKind } from '../src/data/weather';
 import { REGIONS } from '../src/data/oldcity';
 import { WATER_NET } from '../src/data/water';
 import { Sim } from '../src/gameplay/Sim';
@@ -16,7 +17,8 @@ function city(seed = 7) {
   sim.areas.clear(PARK, true);
   return sim;
 }
-const weather = (sim: Sim, kind: WeatherKind) => (sim.state.salvage!.weather = { kind, until: Infinity });
+/** E23.7.2's weather, held for the rest of the test. */
+const weather = (sim: Sim, kind: WeatherKind) => sim.weather.forceForTest(kind, Infinity);
 /** Runs the water for `days` game days in hour-long steps (the rest of the sim is not needed). */
 const days = (sim: Sim, n: number) => {
   for (let i = 0; i < n * 24; i++) sim.water.tick(DAY / 24);
@@ -84,10 +86,12 @@ describe('E23.4.1: water levels (sim.water)', () => {
     weather(sim, 'cloudy');
     days(sim, 2);
     expect(sim.water.levelOf(b.id)).toBeCloseTo(0.9, 6);
-    weather(sim, 'clear');
+    weather(sim, 'sunny');
+    const evap = sim.weather.effects().evaporation;
+    expect(evap).toBeGreaterThan(0);
     days(sim, 1);
-    expect(sim.water.levelOf(b.id)).toBeCloseTo(0.9 - WATER_NET.evaporationPerDay, 2);
-    days(sim, 5);
+    expect(sim.water.levelOf(b.id)).toBeCloseTo(0.9 - evap, 2);
+    days(sim, Math.ceil(0.4 / evap) + 1);
     expect(sim.water.levelOf(b.id)).toBeCloseTo(WATER_NET.evaporationFloor, 6);
     // below the floor, evaporation takes nothing
     sim.water.draw(b.id, b.capacity);
@@ -125,7 +129,7 @@ describe('E23.4.1: water levels (sim.water)', () => {
     days(sim, 0.25);
     expect(sim.water.levelOf(p.id)).toBeCloseTo(WATER_NET.springs.cistern! * 0.25, 2);
     // springs outrun the sun
-    weather(sim, 'clear');
+    weather(sim, 'sunny');
     days(sim, 3);
     expect(sim.water.levelOf(p.id)).toBe(1);
     // and keep it full while the farm draws a little every hour

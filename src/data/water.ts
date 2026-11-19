@@ -1,7 +1,6 @@
 // E23.4 (#358): the water network's numbers. Starting values for tuning; every rate is per game day.
 
 import type { RegionId } from './oldcity';
-import type { WeatherKind } from '../core/types';
 import { DAY_SECONDS } from './time';
 
 export const WATER_NET = {
@@ -16,11 +15,8 @@ export const WATER_NET = {
    * share of its capacity per game day for each unit of rain. Its `effects().evaporation` is the sun's share per day.
    */
   rainShare: 3,
-  /** without E23.7.2's weather: what each kind refills (share of capacity per game day): rain, and a little from mist */
-  weatherFill: { rain: 3, mist: 0.2 } as Partial<Record<WeatherKind, number>>,
-  /** sunny ('clear') days evaporate this share of capacity per game day… */
-  evaporationPerDay: 0.2,
-  /** …but evaporation alone never takes a body below this (weather never empties a pond: cozy wins) */
+  /** E23.7.2's sunny days evaporate a little (`effects().evaporation`, a share of capacity per game day), but evaporation
+   * alone never takes a body below this (weather never empties a pond: cozy wins) */
   evaporationFloor: 0.5,
   /** E23.4.1: springs top up the water of these regions by this share of capacity per game day, any weather */
   springs: { cistern: 1.5 } as Partial<Record<RegionId, number>>,

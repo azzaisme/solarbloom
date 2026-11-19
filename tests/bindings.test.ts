@@ -102,12 +102,11 @@ describe('E22.1: the new button map', () => {
     expect(b.actionForButton(5, ['panel', 'any'])).toBe('nextTab');
   });
 
-  it('upgrades and next area keep their keys under classic rules and lose them under old-city rules', () => {
+  it('next area keeps its key under classic rules and loses it under old-city rules', () => {
     const classic = new Bindings();
-    expect([classic.label('upgrades'), classic.label('nextArea')]).toEqual(['U', 'N']);
-    expect(classic.pad.upgrades).toBe(15);
+    expect(classic.label('nextArea')).toBe('N');
     const old = new Bindings(undefined, { oldCity: true });
-    for (const a of ['upgrades', 'nextArea', 'home'] as Action[]) {
+    for (const a of ['nextArea', 'home'] as Action[]) {
       expect(old.keys[a], a).toEqual([]);
       expect(old.pad[a], a).toBeUndefined();
     }

@@ -10,6 +10,14 @@ export interface GameEvents {
   'clock.slept': { from: number; day: number; real: boolean };
   /** E23.7.1: "follow my clock" switched on or off. */
   'clock.mode': { real: boolean };
+  /** E23.7.2: a new day's weather (or a held one, in tests and photo mode never). */
+  'weather.changed': { kind: import('../data/weather').WeatherKind; day: number };
+  /** E23.7.2.3: a storm blew in at dawn: fresh salvage (E23.7.4 refills the piles). */
+  'weather.storm': { day: number };
+  /** E23.7.2.3: lightning struck; `poleId`: the power pole it tripped (reset with one press), if the grid has one. */
+  'weather.lightning': { day: number; poleId?: string };
+  /** E23.7.2.2: bloombot listened to the forecast on the radio. */
+  'weather.forecast': { kind: import('../data/weather').WeatherKind };
   /** E23.7.1.3: a night find was taken. */
   'night.found': { id: string; material: import('../core/types').MaterialId; n: number; x: number; z: number };
   /** E21.1: the backpack or the store changed (`material` unset = several at once). */
@@ -21,8 +29,8 @@ export interface GameEvents {
   'pile.salvaged': { pileId: string; material: import('../core/types').MaterialId; got: number; left: number; x: number; z: number };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
-  /** E21.2: a Reclaimer sent units to the store. */
-  'reclaimer.delivered': { machineId: string; material: import('../core/types').MaterialId; n: number };
+  /** E23.7.4: a pile gained units back (slowly over game days, or all at once in a storm); `left` units now. */
+  'pile.refilled': { pileId: string; left: number; x: number; z: number; storm: boolean };
   /** E21.5: a gate opened for good (a barricade pried, a bridge repaired, the lock bridge risen). */
   'gate.opened': { gateId: string; region: string };
   /** E21.6: something was handed in at the fountain; the fountain reached a tier. */
@@ -74,9 +82,8 @@ export interface GameEvents {
   'solar.boost': { machineId: string };
   'pulse.fired': { tileId: string; extra: string[]; overcharged: boolean };
   'action.failed': { reason: string; tileId?: string };
-  'upgrade.purchased': { id: string; level: number; machineId?: string; bulk?: boolean };
-  /** Phase 5 E12: "Upgrade all" finished: `count` levels bought across machines of one type. */
-  'upgrade.bulk': { id: string; count: number };
+  /** E23.1.5: an upgrade level was granted (research; nothing is bought). */
+  'upgrade.granted': { id: string; level: number; machineId?: string };
   'drone.spawned': { droneId: string };
   'drone.despawned': { droneId: string };
   'drone.jobStarted': { droneId: string; tileId: string };
