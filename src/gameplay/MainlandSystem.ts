@@ -4,19 +4,11 @@ import { MAINLAND, MAINLAND_MACHINES } from '../data/mainland';
 import type { Sim } from './Sim';
 
 /**
- * E23.8.3.2: the grid (E23.3, `sim.power`, PR #480) and water network (E23.4, `sim.water`) as far as the mainland's
- * machines need them. Both are optional until those land: a machine they don't know simply stands there (cozy).
+ * E23.8.3.2: the grid (E23.3, `sim.power`, PR #480) as far as the mainland's machines need it. Optional: a machine it
+ * doesn't know simply stands there (cozy). The Long-range Pump joins the water network in its own PR, after E23.4 (#514).
  */
 export interface PowerHook {
-  register(type: string, spec: { battery?: { capacity: number; rate: number }; consumer?: { shed: string; draw: number } }): void;
-}
-export interface WaterHook {
-  /**
-   * E23.4.2 (e23-water, PR #514): a pump of this machine type. `reach` is pipe steps it can feed, `flow` units per
-   * game day, `power` its grid draw (registered as a consumer, shed 'pump'), `size` its footprint (for the bank check); `sea`
-   * (stand on the sea's bank too) is a request #514 does not take yet, harmless to it, and the mainland has fresh water anyway.
-   */
-  registerPump?(type: string, spec: { reach: number; flow: number; power?: number; size?: number; sea?: boolean }): void;
+  register(type: string, spec: { battery?: { capacity: number; rate: number } }): void;
 }
 
 /**
@@ -32,26 +24,19 @@ export class MainlandSystem {
     });
   }
 
-  /** The grid and water hooks the mainland's machines joined (for tests and the PR's checklist). */
-  wired = { power: false, water: false };
+  /** The grid hooks the mainland's machines joined (for tests and the PR's checklist). */
+  wired = { power: false };
 
   /**
-   * E23.8.3.2: joins the mainland's machines to the grid and the water network, once the Sim has built them
-   * (called at the end of the Sim's constructor). The Grid Battery is storage; the Long-range Pump is a consumer that
-   * sheds with the pumps, and a pump with a long reach.
+   * E23.8.3.2: joins the mainland's machines to the grid, once the Sim has built it (called at the end of the Sim's
+   * constructor). The Grid Battery is storage.
    */
   wire(): void {
-    const sim = this.sim as unknown as { power?: PowerHook; water?: WaterHook };
+    const sim = this.sim as unknown as { power?: PowerHook };
     const B = MAINLAND_MACHINES.gridBattery;
-    const P = MAINLAND_MACHINES.longPump;
     if (sim.power?.register) {
       sim.power.register('gridBattery', { battery: { capacity: B.capacity, rate: B.rate } });
-      sim.power.register('longPump', { consumer: { shed: 'pump', draw: P.draw } });
       this.wired.power = true;
-    }
-    if (sim.water?.registerPump) {
-      sim.water.registerPump('longPump', { reach: P.reach, flow: P.flow, power: P.draw, size: 2, sea: P.sea });
-      this.wired.water = true;
     }
   }
 

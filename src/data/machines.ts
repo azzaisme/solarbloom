@@ -153,15 +153,6 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     blurb: 'A grid-scale battery: stores a whole network’s sun and wind for the night. Mainland only.',
     mainlandOnly: true,
   },
-  longPump: {
-    type: 'longPump',
-    name: 'Long-range Pump',
-    icon: '🚰',
-    size: 2,
-    allowedGround: ['restored', 'prepared'],
-    blurb: 'Draws from a canal, a pond or the sea (it filters the salt) and sends twice a pump’s water down the pipes. Mainland only.',
-    mainlandOnly: true,
-  },
   core: {
     type: 'core',
     name: 'Rooftop Core',

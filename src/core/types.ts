@@ -4,7 +4,7 @@ export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'm
   // E23.5.2: the farm
   | 'planter'
   // E23.8.3.2: the mainland's big machines
-  | 'gridBattery' | 'longPump';
+  | 'gridBattery';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type RestoreSource =
   | 'pulse'

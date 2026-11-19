@@ -1,10 +1,10 @@
 // E23.8.3.3 (#453): performance with a very large mainland build, at the Deck preset (?gfx=deck).
 // Builds a big save on the mainland in the page: the Great Bloom, ML_DISTRICTS districts restored outward from the
-// causeway, and hundreds of machines placed through the real build path (grid batteries, long-range pumps, panels,
+// causeway, and hundreds of machines placed through the real build path (grid batteries, panels,
 // relays as the grid's poles, drone hubs with their drones, condensers, gardens). Reloads it the way a player would,
 // at ?gfx=deck, then pans across it, zooms through every step and lets the sim run, recording frame time, the game's
 // update time per frame, hitches and draw calls. Fails past the Deck budget. Headless SwiftShader, like the other perf
-// runs (`npm run test:perf:browser` runs it after the city harness).
+// runs (`npm run test:perf:mainland` builds and runs it).
 //
 //   node tests/perf/mainland.perf.mjs          (after `vite build`)
 //   ML_DISTRICTS=20 ML_MACHINES=200 ...        (smaller, quicker)
@@ -86,7 +86,7 @@ try {
       for (const nb of s.areas.info(id).neighbours) if (nb.startsWith('ml_') && !done.includes(nb)) queue.push(nb);
     }
     // hundreds of machines, placed through BuildSystem (recipes paid, drones made, events fired)
-    const mix = ['solar', 'solar', 'relay', 'gridBattery', 'longPump', 'droneHub', 'condenser', 'pollinator', 'solar', 'relay'];
+    const mix = ['solar', 'solar', 'relay', 'gridBattery', 'droneHub', 'condenser', 'pollinator', 'solar', 'relay'];
     const RECIPE_FILL = 200;
     let placed = 0;
     const byType = {};
@@ -126,7 +126,7 @@ try {
   }, { DISTRICTS, MACHINES });
   phase(`built: ${JSON.stringify(results.build)}`);
   if (results.build.placed < MACHINES * 0.9) failures.push(`placed only ${results.build.placed} of ${MACHINES} machines (${JSON.stringify(results.build.topFails)})`);
-  if (!results.build.byType.gridBattery || !results.build.byType.longPump) failures.push('the mainland machines were not built');
+  if (!results.build.byType.gridBattery) failures.push('no grid battery was built');
 
   // 2. Reload like a player coming back, at the Deck preset.
   const t0 = Date.now();

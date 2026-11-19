@@ -96,7 +96,6 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   planter: ['planter-bed', 0.9],
   // E23.8.3.2: the mainland's machines (stand-ins until E23.10.2's models land)
   gridBattery: ['grid-battery', 2.0],
-  longPump: ['long-range-pump', 1.7],
 };
 /** The Mother Tree's collar model: its scale (the planter fits the procedural ring, radius 0.85) and planter top (model metres). */
 const MotherCollar = { scale: 1.12, top: 0.84 };

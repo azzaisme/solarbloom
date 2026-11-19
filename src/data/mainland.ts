@@ -89,8 +89,7 @@ export const SALVAGE_FIELDS = {
 
 /**
  * E23.8.3.2: the mainland-only machines, built from steel (recipes on the crafting table, data/crafting MACHINE_RECIPES). Starting values.
- * The grid battery joins the power grid (E23.3, `sim.power`) as storage; the long-range pump joins it as a consumer
- * (shed with the pumps) and the water network (E23.4, `sim.water`) as a pump with a long reach.
+ * The grid battery joins the power grid (E23.3, `sim.power`) as storage.
  */
 export const MAINLAND_MACHINES = {
   gridBattery: {
@@ -98,15 +97,5 @@ export const MAINLAND_MACHINES = {
     capacity: 4000,
     /** charge / discharge per second */
     rate: 60,
-  },
-  longPump: {
-    /** power drawn while pumping */
-    draw: 6,
-    /** pipe steps it can feed along (the island's pump reaches without limit too: this one never reaches less) */
-    reach: Infinity,
-    /** water units per game day: twice the island pump's (E23.4.2 `WATER_NET.pump.perDay`, 1,200) */
-    flow: 2400,
-    /** it also stands on the sea's bank: its own filter makes the sea fresh, so the shore can feed the mainland */
-    sea: true,
   },
 };

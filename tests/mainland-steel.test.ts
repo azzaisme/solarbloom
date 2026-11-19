@@ -8,13 +8,14 @@ import { MAINLAND, MAINLAND_MACHINES, SALVAGE_FIELDS } from '../src/data/mainlan
 import { MATERIALS } from '../src/data/salvage';
 import { MACHINE_RECIPES } from '../src/data/crafting';
 import { Sim } from '../src/gameplay/Sim';
-import type { PowerHook, WaterHook } from '../src/gameplay/MainlandSystem';
+import { itemCells } from '../src/ui/BackpackModel';
+import type { PowerHook } from '../src/gameplay/MainlandSystem';
 
 const RECIPE = (t: string) => MACHINE_RECIPES.find((r) => r.builds === t);
 
 /** E23.8.3.2 (#452): steel from the industrial ruins, and mainland-only machines with recipes. */
 
-const MACHS: BuildableType[] = ['gridBattery', 'longPump'];
+const MACHS: BuildableType[] = ['gridBattery'];
 
 /** A Great Bloom game with the landing district cleared and plenty in the backpack. */
 function bloomed() {
@@ -74,6 +75,16 @@ describe('E23.8.3.2: steel', () => {
     expect(sim.inventory.count('steel')).toBe(40);
     expect(sim.landmarks.trade('scrap', 'copper')).toBe(true);
   });
+
+  it('says where it lies in world words: the backpack and a missing recipe point past the causeway', () => {
+    const sim = bloomed();
+    const cell = itemCells(sim).find((c) => c.id === 'steel')!;
+    expect(cell.from).toBe('Found in the industrial ruins past the causeway');
+    expect(sim.build.whereFrom('steel')).toBe(' — the industrial ruins past the causeway');
+    sim.state.salvage!.pack.steel = 0;
+    sim.state.salvage!.store.steel = 0;
+    expect(sim.build.missingLabel('gridBattery')).toBe('Needs Steel 🔩 — the industrial ruins past the causeway');
+  });
 });
 
 describe('E23.8.3.2: mainland machines', () => {
@@ -98,24 +109,19 @@ describe('E23.8.3.2: mainland machines', () => {
     expect(sim.inventory.count('steel')).toBe(40 - RECIPE('gridBattery')!.cost.steel!);
   });
 
-  it('joins the grid as storage and a pumping consumer, and the water network as a long-reach pump, when they exist', () => {
+  it('joins the grid as storage when the grid exists', () => {
     const sim = new Sim(createInitialState(7));
     const calls: [string, unknown][] = [];
-    const host = sim as unknown as { power?: PowerHook; water?: WaterHook };
+    const host = sim as unknown as { power?: PowerHook };
     host.power = { register: (t, spec) => calls.push([t, spec]) };
-    host.water = { registerPump: (t, spec) => calls.push([`water:${t}`, spec]) };
     sim.mainland.wire();
-    expect(sim.mainland.wired).toEqual({ power: true, water: true });
+    expect(sim.mainland.wired).toEqual({ power: true });
     expect(calls).toEqual([
       ['gridBattery', { battery: { capacity: MAINLAND_MACHINES.gridBattery.capacity, rate: MAINLAND_MACHINES.gridBattery.rate } }],
-      ['longPump', { consumer: { shed: 'pump', draw: MAINLAND_MACHINES.longPump.draw } }],
-      ['water:longPump', { reach: Infinity, flow: MAINLAND_MACHINES.longPump.flow, power: MAINLAND_MACHINES.longPump.draw, size: 2, sea: true }],
     ]);
-    // without a water network (E23.4 not landed yet), nothing breaks and the pump is not wired to it
-    expect(new Sim(createInitialState(7)).mainland.wired.water).toBe(false);
   });
 
-  it('on the real grid: the Grid Battery stores the day and carries the Long-range Pump through the night', () => {
+  it('on the real grid: the Grid Battery stores the day and carries a drone hub through the night', () => {
     const sim = new Sim(createInitialState(7));
     expect(sim.mainland.wired.power).toBe(true);
     let sky = { sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 };
@@ -126,23 +132,23 @@ describe('E23.8.3.2: mainland machines', () => {
       return m;
     };
     const x = MAINLAND.minChunkX * 16 + 20;
-    const sun = put('solar', x, 0, 1); // a small farm: three 4 W panels for one 6 W pump
+    const sun = put('solar', x, 0, 1); // a small farm
     put('solar', x, 1, 1);
     put('solar', x + 1, 1, 1);
     const bat = put('gridBattery', x + 2, 0);
-    const pump = put('longPump', x + 4, 0);
+    const hub = put('droneHub', x + 4, 0);
     const net = sim.power.networkOf(sun)!;
     expect(sim.power.networkOf(bat)).toBe(net);
     expect(net.batteries).toContain(bat);
-    expect(net.consumers).toContain(pump);
+    expect(net.consumers).toContain(hub);
     expect(sim.power.stored(bat).capacity).toBe(MAINLAND_MACHINES.gridBattery.capacity);
     for (let i = 0; i < 200; i++) sim.power.tick(0.5);
-    expect(sim.power.isPowered(pump)).toBe(true);
+    expect(sim.power.isPowered(hub)).toBe(true);
     const day = sim.power.stored(bat).stored;
     expect(day).toBeGreaterThan(0);
     sky = { sun: 0, solar: 0, cloudy: false, wind: 0, dark: 1 };
     sim.power.tick(0.5);
-    expect(sim.power.isPowered(pump)).toBe(true); // the battery carries it
+    expect(sim.power.isPowered(hub)).toBe(true); // the battery carries it
     expect(sim.power.stored(bat).stored).toBeLessThan(day);
   });
 });

@@ -129,8 +129,9 @@ export class BuildSystem {
     return `Needs ${MATERIALS[m].name} ${MATERIALS[m].icon}${this.whereFrom(m)}`;
   }
 
-  /** " — Mast Row" once a region holding the material has been seen (revealed), else nothing. */
+  /** " — Mast Row" once a region holding the material has been seen (revealed), else nothing; a place outside the regions always (steel's industrial ruins). */
   whereFrom(m: MaterialId): string {
+    if (MATERIALS[m].place) return ` — ${MATERIALS[m].place}`;
     for (const home of MATERIALS[m].home) {
       if (home === 'park' || home === 'backstreet') continue;
       const r = regionById(home);

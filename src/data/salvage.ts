@@ -19,6 +19,8 @@ export interface MaterialDef {
   mainlandOnly?: boolean;
   /** E23.5.1: where it comes from, for items that never lie in piles (the backpack says this instead of regions) */
   from?: string;
+  /** E23.8.3.2: where it lies when that is not an Old City region, in world words ("Found in …", "Needs Steel — …") */
+  place?: string;
 }
 
 export const MATERIALS: Record<MaterialId, MaterialDef> = {
@@ -31,7 +33,7 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
   gears: { id: 'gears', name: 'Gears', icon: '⚙️', models: ['salvage-gears'], home: ['clockPlaza', 'spireHeights'], colour: '#b8a26a' },
   sunstone: { id: 'sunstone', name: 'Sunstone', icon: '✨', models: ['salvage-sunstone'], home: ['terraces', 'observatory', 'saltwind'], colour: '#f2c84a' },
   // E23.8.3.2: steel, from the mainland's industrial ruins only
-  steel: { id: 'steel', name: 'Steel', icon: '🔩', models: ['salvage-steel'], home: ['mainland'], colour: '#8d9aa5', mainlandOnly: true },
+  steel: { id: 'steel', name: 'Steel', icon: '🔩', models: ['salvage-steel'], home: [], colour: '#8d9aa5', mainlandOnly: true, place: 'the industrial ruins past the causeway' },
   // E23.5.1: farm items (data/farm). Never lying in piles: gathered from restored ground, grown or composted.
   biomass: { id: 'biomass', name: 'Biomass', icon: '🌿', models: [], home: [], colour: '#94e46e', from: 'Gathered from restored ground' },
   food: { id: 'food', name: 'Food', icon: '🥕', models: [], home: [], colour: '#f0a04a', from: 'Grown in planters' },

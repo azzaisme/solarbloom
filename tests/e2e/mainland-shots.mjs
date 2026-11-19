@@ -99,12 +99,12 @@ try {
           }
       }
     if (at) { s.state.areas[at[2]] ??= { fog: 'frontier', revealedAt: 0 }; s.areas.clear(at[2], true); }
-    // the two machines, on restored ground in the landing district
+    // the Grid Battery, on restored ground in the landing district
     for (const m of ['steel', 'copper', 'gears', 'clay']) s.inventory.add(m, 60);
-    // the recipes are on the crafting table: battery cells, pipe and motors made there (data/crafting MACHINE_RECIPES)
-    for (const c of ['batteryCell', 'pipe', 'motor']) s.inventory.add(c, 10);
+    // the recipes are on the crafting table: battery cells made there (data/crafting MACHINE_RECIPES)
+    for (const c of ['batteryCell']) s.inventory.add(c, 10);
     const built = [];
-    for (const type of ['gridBattery', 'longPump']) {
+    for (const type of ['gridBattery']) {
       let done = false;
       for (let z = 2; z < 30 && !done; z++)
         for (let x = 150; x < 175 && !done; x++) {
@@ -120,9 +120,9 @@ try {
     return { at, built, island, steelInPack: s.inventory.count('steel') };
   });
   console.log('  steel:', JSON.stringify(steel));
-  if (steel.built.length !== 2 || !/only on the mainland/.test(steel.island ?? '')) {
+  if (steel.built.length !== 1 || !/only on the mainland/.test(steel.island ?? '')) {
     failed = true;
-    console.log('  ✗ both mainland machines should build past the causeway and refuse the island');
+    console.log('  ✗ the Grid Battery should build past the causeway and refuse the island');
   }
   if (steel.built[0]) await shot('mainland-machines', steel.built[0][1] + 3, steel.built[0][2] + 1, 1.0, 0, 15000);
   if (steel.at) await shot('mainland-steel-field', steel.at[0] + 0.5, steel.at[1] + 0.5, 1.3, 0, 15000);
