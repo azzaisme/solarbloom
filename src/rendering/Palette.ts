@@ -439,6 +439,8 @@ const signal = {
     tripped: '#ff3b3b',
     cell: '#8ff5c8',
     cellBack: '#1d3640',
+    /** the Power view: powered electrical machines glow this soft yellow */
+    machineGlow: '#ffd75e',
   },
 };
 

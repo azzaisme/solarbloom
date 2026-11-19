@@ -49,6 +49,8 @@ export class DayNight {
   rim = 1;
   /** daylight now, 0 … 1 (for anything that wants to glow at night) */
   light = 1;
+  /** E23.3.4: the Power view's dim, 0 … 1 of `POWER.view.darken`: the lit world darkens, glows and unlit marks don't */
+  dim = 0;
 
   constructor(
     private app: pc.AppBase,
@@ -102,14 +104,15 @@ export class DayNight {
     sunLight.color = this.tmp.clone();
     // under cloud the sun all but goes: soft, shadowless light from the sky instead
     const sunI = LOOK.sun.intensity * lerp(L.moonShare, 1, day) * (1 - oc * 0.88);
-    sunLight.intensity = sunI + (m.flash ?? 0) * LOOK.sun.intensity * 0.8;
+    const keep = 1 - this.dim;
+    sunLight.intensity = (sunI + (m.flash ?? 0) * LOOK.sun.intensity * 0.8) * keep;
     // the fill keeps its own side, opposite the key light
     const fill = this.scene.fill.light!;
     this.fd.set(-this.dir.x, -0.75, -this.dir.z).normalize();
     this.scene.fill.setRotation(this.q.setFromDirections(pc.Vec3.DOWN, this.fd));
     fill.color = this.fillCol.lerp(this.base.fillNight, this.base.fill, day).clone();
-    fill.intensity = LOOK.fill.intensity * lerp(L.fillNight, 1, day) * (1 + oc * 0.6);
-    this.app.scene.skyboxIntensity = LOOK.env.intensity * lerp(L.envNight, 1, day) * (1 - oc * 0.1);
+    fill.intensity = LOOK.fill.intensity * lerp(L.fillNight, 1, day) * (1 + oc * 0.6) * keep;
+    this.app.scene.skyboxIntensity = LOOK.env.intensity * lerp(L.envNight, 1, day) * (1 - oc * 0.1) * keep;
     this.rim = lerp(L.rimNight, 1, day) * (1 - oc * 0.5);
     this.app.scene.exposure = LOOK.exposure * lerp(L.exposureNight, 1, day) * (1 - oc * 0.22) * (1 + (m.flash ?? 0) * 0.5);
     // the sky: night, the warm band at dawn and dusk, and the weather's cloud
@@ -122,6 +125,7 @@ export class DayNight {
     const d = this.sky.dusk;
     const grey = 1 - oc * 0.25;
     this.cloudTint.set(lerp(1, L.cloudNight[0], n) * grey, lerp(lerp(1, 0.86, d), L.cloudNight[1], n) * grey, lerp(lerp(1, 0.8, d), L.cloudNight[2], n) * grey);
+    this.cloudTint.mulScalar(keep);
     tintClouds(this.cloudTint.r, this.cloudTint.g, this.cloudTint.b);
   }
 }

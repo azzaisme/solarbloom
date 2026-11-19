@@ -1,3 +1,4 @@
+import { POWER } from '../data/power';
 import { big, fmt, type Big } from '../core/Big';
 import { HOME } from '../gameplay/ProgressionSystem';
 import * as pc from 'playcanvas';
@@ -1562,6 +1563,18 @@ export class Game {
     }
   }
   private powerViewSeen = false;
+  /** Machines on the grid that have power now: sources, batteries, poles and fed consumers (a dark one stays dark). */
+  private poweredMachines(): Set<string> {
+    const out = new Set<string>();
+    for (const m of this.sim.state.machines) {
+      const role = this.sim.power.roleOf(m);
+      if (!role) continue;
+      if (role.consumer && !this.sim.power.isPowered(m)) continue;
+      if (role.pole && this.sim.power.isTripped(m)) continue;
+      out.add(m.id);
+    }
+    return out;
+  }
   /** the overview (M) is showing; walking, or M again, leaves it */
   private overviewOn = false;
   /** E19.2: how a decoration in hand is turned, in quarter turns (kept between placements, as in Satisfactory) */
@@ -4237,8 +4250,14 @@ export class Game {
     detailTextures.setCamera(camP.x, camP.y, camP.z);
     this.machines.update(wdt, rect);
     this.powerLines.update();
-    this.powerOverlay.show(this.powerView && this.building());
+    const powerOn = this.powerView && this.building();
+    this.powerOverlay.show(powerOn);
     this.powerOverlay.update(wdt);
+    // E23.3.4: in the Power view, powered electrical machines glow soft yellow and the rest of the world darkens
+    this.machines.powerGlow(powerOn ? this.poweredMachines() : undefined, wdt);
+    const dimTo = powerOn ? POWER.view.darken : 0;
+    const k = Math.min(1, wdt / POWER.view.fade);
+    this.dayNight.dim = Math.abs(dimTo - this.dayNight.dim) < 1e-3 ? dimTo : this.dayNight.dim + (dimTo - this.dayNight.dim) * k;
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.
