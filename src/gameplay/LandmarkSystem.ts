@@ -17,7 +17,7 @@ export const REWARD_EFFECT = {
  * E21.9 (§8, §9): waking an Old City region's landmark. Bloombot always wakes it by hand: when half the region is
  * restored and its Keeper's second request is done, Interact at the landmark hands over the landmark delivery
  * (a bit at a time is fine). Waking clears the region (helpers may work there, it becomes a travel point and a
- * way into the store, its seam takes a Reclaimer), settles its Keeper, and applies the region's lasting reward.
+ * way into the store, settles its Keeper, and applies the region's lasting reward.
  */
 export class LandmarkSystem {
   constructor(private sim: Sim) {}
@@ -66,14 +66,7 @@ export class LandmarkSystem {
     const st = s.keepers.state(id);
     const given = { ...(st.given ?? {}) };
     let gave = false;
-    for (const [k, v] of Object.entries(s.keepers.wants(id) ?? {}) as [MaterialId | 'biomass', number][]) {
-      if (k === 'biomass') {
-        if (s.econ.get('biomass').gte(v) && s.inventory.pay({ biomass: v })) {
-          (given as Record<string, number>).biomass = v;
-          gave = true;
-        }
-        continue;
-      }
+    for (const [k, v] of Object.entries(s.keepers.wants(id) ?? {}) as [MaterialId, number][]) {
       const n = Math.min(v, s.inventory.available(k));
       if (n > 0 && s.inventory.pay({ [k]: n })) {
         given[k] = (given[k] ?? 0) + n;

@@ -69,8 +69,10 @@ try {
     const s = g.sim;
     s.areas.clear('park', true);
     s.state.salvage.tier = 2;
-    s.state.salvage.keepers.sluice = { step: 'request1' };
-    s.state.salvage.pack = { scrap: 80, copper: 60, clay: 80, glass: 40 };
+    s.state.salvage.keepers.sluice = { step: 'request1' }; // Cistern Basin: reservoirs, pumps, pipes, desalination
+    s.state.salvage.keepers.tally = { step: 'request1' }; // Old Market: solar panels (E23.6.1's crafting table)
+    // crafted parts (E23.6.1) for the recipes, and Pipes, one a tile
+    s.state.salvage.pack = { scrap: 80, copper: 20, clay: 80, pipe: 60, wire: 30, glassPane: 40 };
     for (let z = -2; z < 18; z++)
       for (let x = -2; x < 18; x++) {
         const t = s.grid.get('g', x, z);
@@ -226,7 +228,7 @@ try {
     const m = s.build.place('desalination', 'g', x, z);
     const panels = [[2, 0], [2, 1], [-1, 0], [-1, 1], [2, -1]].map(([dx, dz]) => s.build.place('solar', 'g', x + dx, z + dz)).filter(Boolean).length;
     const laid = [1, 2, 3, 4, 5, 6].map((k) => s.water.pipes.lay('g', x, z - k));
-    g.bot.teleport('g', x + 2.5, z - 3.5);
+    g.bot.teleport('g', x + 1, z - 1.2);
     return { spot, built: !!m, panels, laid: laid.every(Boolean) };
   });
   check(desal.built && desal.panels >= 3 && desal.laid, `desalination plant on the shore with panels and a pipe (${JSON.stringify(desal)})`);

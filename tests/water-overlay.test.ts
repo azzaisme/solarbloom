@@ -10,7 +10,7 @@ function park() {
   const sim = new Sim(createInitialState(7, 'oldcity'));
   sim.areas.clear(PARK, true);
   sim.state.salvage!.keepers.sluice = { step: 'request1' };
-  sim.state.salvage!.pack = { copper: 20, clay: 40 };
+  sim.state.salvage!.pack = { pipe: 40 }; // crafted Pipes (E23.6.1), one a tile
   for (let z = 0; z < 16; z++)
     for (let x = 0; x < 16; x++) {
       const t = sim.grid.get(GROUND, x, z)!;

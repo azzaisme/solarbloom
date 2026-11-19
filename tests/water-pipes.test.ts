@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import type { BuildableType, MachineData, MachineType, WeatherKind } from '../src/core/types';
+import type { BuildableType, MachineData, MachineType } from '../src/core/types';
+import type { WeatherKind } from '../src/data/weather';
 import { WATER_NET } from '../src/data/water';
 import { Sim } from '../src/gameplay/Sim';
 import { tankId } from '../src/gameplay/WaterPipes';
@@ -12,7 +13,7 @@ const DAY = WATER_NET.daySeconds;
 const days = (sim: Sim, n: number) => {
   for (let i = 0; i < Math.round(n * 48); i++) sim.water.tick(DAY / 48);
 };
-const weather = (sim: Sim, kind: WeatherKind) => (sim.state.salvage!.weather = { kind, until: Infinity });
+const weather = (sim: Sim, kind: WeatherKind) => sim.weather.forceForTest(kind, Infinity);
 
 /** The park with its pond restored (full), plenty of materials, the bot standing by the store. */
 function park() {
@@ -28,7 +29,7 @@ function park() {
         sim.grid.touch(t);
       }
     }
-  sim.state.salvage!.pack = { clay: 60, copper: 30, scrap: 40 };
+  sim.state.salvage!.pack = { clay: 60, copper: 30, scrap: 40, pipe: 40, wire: 10 };
   weather(sim, 'cloudy');
   // midday, all day (E23.7.1's clock turns the sun off at night; these tests are about the water, not the hour)
   const noon = { ...sim.power.sky(), sun: 1, solar: 1 };
@@ -118,24 +119,26 @@ describe('E23.4.2.1: reservoirs', () => {
 });
 
 describe('E23.4.2.2: pumps and pipe placement', () => {
-  it('pipes are laid tile by tile: a Pipe lays 4, not in water or under machines, and lift back into the stock', () => {
+  it('pipes are laid tile by tile, one crafted Pipe each, not in water or under machines, and lift back into the pack', () => {
     const { sim } = park();
     const pack = sim.state.salvage!.pack;
     lay(sim, [[6, 4]]);
-    expect(pack.copper).toBe(29);
-    expect(pack.clay).toBe(58);
-    expect(sim.water.pipes.stock).toBe(3);
-    lay(sim, [[7, 4], [8, 4], [9, 4]]);
-    expect(pack.copper).toBe(29); // still the first Pipe
-    lay(sim, [[10, 4]]);
-    expect(pack.copper).toBe(28);
+    expect(pack.pipe).toBe(39);
+    expect(pack.copper).toBe(30); // the crafting table turned the Copper and Clay into Pipes already
+    lay(sim, [[7, 4], [8, 4], [9, 4], [10, 4]]);
+    expect(pack.pipe).toBe(35);
     expect(sim.water.pipes.layProblem(GROUND, 2, 11)).toMatch(/water/);
     expect(sim.water.pipes.layProblem(GROUND, 6, 4)).toMatch(/already/);
     expect(sim.water.pipes.layProblem(GROUND, 3, 3)).toMatch(/in the way/);
     put(sim, 'solar', 12, 4);
     expect(sim.water.pipes.layProblem(GROUND, 12, 4)).toMatch(/stands/);
     expect(sim.water.pipes.lift(10, 4)).toBe(true);
-    expect(sim.water.pipes.stock).toBe(4);
+    expect(pack.pipe).toBe(36);
+    // with no Pipes at hand, it says so
+    const saved = pack.pipe;
+    pack.pipe = 0;
+    expect(sim.water.pipes.layProblem(GROUND, 10, 4)).toMatch(/Pipe/);
+    pack.pipe = saved;
     // corners and junctions: links per tile
     lay(sim, [[8, 5], [8, 3]]);
     expect(sim.water.pipes.links(8, 4).length).toBe(4);
@@ -145,13 +148,14 @@ describe('E23.4.2.2: pumps and pipe placement', () => {
     expect(sim.water.pipes.networks().length).toBe(1);
   });
 
-  it('the pump and the reservoir are built from their recipes, paid exactly', () => {
+  it('the pump and the reservoir are built from their crafting-table recipes (E23.6.1), paid exactly', () => {
     const { sim } = park();
     sim.bot = { roofId: GROUND, x: 5, z: 11 };
     for (const [x, z] of [[4, 11], [9, 4], [10, 4], [9, 5], [10, 5]]) Object.assign(tile(sim, x, z), { ground: 'restored', pollution: 0 });
-    sim.state.salvage!.pack = { scrap: 10, copper: 2, clay: 12 };
+    // Pump: 6 Scrap, 2 Wire, 2 Clay; Reservoir: 10 Clay, 4 Scrap
+    sim.state.salvage!.pack = { scrap: 10, wire: 2, clay: 12 };
     expect(sim.build.place('pump', GROUND, 4, 11)).toBeDefined();
-    expect(sim.state.salvage!.pack).toEqual({ scrap: 4, clay: 10 }); // the copper is used up (empty stacks are dropped)
+    expect(sim.state.salvage!.pack).toEqual({ scrap: 4, clay: 10 }); // the wire is used up (empty stacks are dropped)
     sim.bot = { roofId: GROUND, x: 9, z: 6 };
     expect(sim.build.place('reservoir', GROUND, 9, 4)).toBeDefined();
     expect(sim.state.salvage!.pack).toEqual({});
@@ -197,6 +201,46 @@ describe('E23.4.2.2: pumps and pipe placement', () => {
     expect(sim.water.isWatered(far)).toBe(false);
   });
 
+  it("E23.5's planters far from water: dry and wilting, then watered by pump and pipe; watercress grows beside running pipe", () => {
+    const { sim, pond } = park();
+    weather(sim, 'sunny'); // dry days: rain would water the beds itself
+    const bed = (x: number, z: number) => {
+      Object.assign(tile(sim, x, z), { ground: 'restored', pollution: 0 });
+      return put(sim, 'planter', x, z);
+    };
+    const radish = bed(11, 12); // beside the pipe's far end (11,11)
+    const cress = bed(10, 12); // watercress needs running water beside it
+    (sim.state.salvage!.crops ??= []).push('radish', 'watercress');
+    sim.inventory.add('seeds', 5);
+    expect(sim.farm.plant(radish, 'radish')).toBe(true);
+    expect(sim.farm.plant(cress, 'watercress')).toBe(true);
+    expect(sim.farm.look(radish).wilting).toBe(true); // no water in reach
+    expect(sim.water.isRunning(cress)).toBe(false);
+    // pump on the pond's bank, a pipe to the beds, a panel to power it
+    put(sim, 'pump', 4, 11);
+    lay(sim, run(5, 11, 11));
+    powerUp(sim);
+    sim.power.tick(1);
+    days(sim, 0.05);
+    expect(sim.farm.look(radish).wilting).toBe(false);
+    expect(sim.water.isRunning(cress)).toBe(true);
+    expect(sim.farm.look(cress).resting).toBe(false);
+    // growing, they drink from the pond through the pipe
+    const before = sim.water.amountOf(pond.id);
+    for (let i = 0; i < 12; i++) {
+      sim.state.time += DAY / 24;
+      sim.farm.tick(DAY / 24);
+    }
+    expect(sim.water.amountOf(pond.id)).toBeLessThan(before);
+    expect(sim.state.salvage!.planters![radish.id].grown).toBeGreaterThan(0);
+    // the line cut: no running water for the cress, the radish wilts; nothing is removed
+    sim.water.pipes.lift(8, 11);
+    days(sim, 0.05);
+    expect(sim.farm.look(radish).wilting).toBe(true);
+    expect(sim.water.isRunning(cress)).toBe(false);
+    expect(sim.state.salvage!.planters![cress.id].crop).toBe('watercress');
+  });
+
   it("another sub-epic's machine can be a pump (E23.8.3's Long-range Pump): bank rule, its reach, its flow, its draw", () => {
     const { sim } = park();
     sim.water.registerPump('longPump', { reach: 3, flow: 2 * WATER_NET.pump.perDay, power: 8, size: 2 });
@@ -218,6 +262,47 @@ describe('E23.4.2.2: pumps and pipe placement', () => {
     expect(sim.water.pipes.carries(6, 11)).toBe(true);
     expect(sim.water.pipes.carries(8, 11)).toBe(true);
     expect(sim.water.pipes.carries(9, 11)).toBe(false);
+  });
+
+  it("a sea pump (E23.8.3, PumpSpec.sea) may stand on the shore and draws from the sea, which never runs dry", () => {
+    const { sim } = park();
+    sim.water.registerPump('seaPump', { reach: Infinity, flow: 2 * WATER_NET.pump.perDay, power: 6, sea: true });
+    const open = (t: ReturnType<typeof tile> | undefined) =>
+      !!t && t.feature !== 'water' && !t.blocked && !t.occupantId && t.feature !== 'building' && sim.areas.fog(sim.areas.map.areaOfCell(t.x, t.z)) !== 'hidden';
+    // a shore tile by the Landing with no fresh water near, three tiles of land inland of it and two beside them
+    let spot: { x: number; z: number } | undefined;
+    for (let z = 47; z >= 30 && !spot; z--)
+      for (let x = 2; x <= 26 && !spot; x++) {
+        const t = sim.grid.get(GROUND, x, z);
+        if (!open(t) || !sim.water.onShore(t!) || sim.water.bodyNear(t!, 1)) continue;
+        if ([1, 2, 3].every((k) => open(sim.grid.get(GROUND, x, z - k)) && !sim.water.onShore(sim.grid.get(GROUND, x, z - k)!)) && open(sim.grid.get(GROUND, x + 1, z - 1)) && open(sim.grid.get(GROUND, x + 1, z - 2)))
+          spot = { x, z };
+      }
+    expect(spot).toBeDefined();
+    const { x, z } = spot!;
+    for (const k of [0, 1, 2, 3]) Object.assign(tile(sim, x, z - k), { ground: 'restored', pollution: 0 });
+    for (const k of [1, 2]) Object.assign(tile(sim, x + 1, z - k), { ground: 'restored', pollution: 0 });
+    // the shore is no bank for an ordinary pump; a sea pump stands there
+    expect(sim.water.placeProblem('pump', GROUND, x, z)).toMatch(/bank/);
+    expect(sim.water.placeProblem('seaPump' as BuildableType, GROUND, x, z)).toBeUndefined();
+    expect(sim.water.placeProblem('seaPump' as BuildableType, GROUND, x, z - 3)).toMatch(/shore/);
+    const sp = put(sim, 'seaPump' as MachineType, x, z, 1);
+    put(sim, 'solar', x + 1, z - 1);
+    put(sim, 'solar', x + 1, z - 2); // two panels carry its 6
+    lay(sim, [[x, z - 1], [x, z - 2], [x, z - 3]]);
+    sim.power.tick(1);
+    days(sim, 0.02);
+    sim.power.tick(1);
+    days(sim, 0.02);
+    expect(sim.water.pipes.pumpSource(sp)?.id).toBe('sea');
+    expect(powered(sim, sp)).toBe(true);
+    expect(sim.power.draw(sp)).toBe(6);
+    expect(sim.water.pipes.carries(x, z - 3)).toBe(true);
+    // a planter's worth of water a day for a long while: the sea never runs dry, and nothing about it is saved
+    const end = tile(sim, x + 1, z - 3);
+    for (let i = 0; i < 200; i++) expect(sim.water.pipes.drawAt(end, 50)).toBe(50);
+    expect(sim.water.levelOf('sea')).toBe(1);
+    expect(sim.state.water?.levels.sea).toBeUndefined();
   });
 
   it('a pump pushes water uphill into a higher reservoir, and stops without power', () => {

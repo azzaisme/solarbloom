@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import type { TileData } from '../src/core/types';
+import type { MachineData, TileData } from '../src/core/types';
 import { WATER_NET } from '../src/data/water';
 import { Sim } from '../src/gameplay/Sim';
 import { WaterSystem } from '../src/gameplay/WaterSystem';
@@ -53,10 +53,11 @@ describe('E23.4.4: land fades around low water', () => {
   it('draining a pond fades the ground beside it, never below restored, and loses nothing', () => {
     const { sim, land, body } = park();
     const banks = near(sim, land, body.id);
-    expect(banks.length).toBeGreaterThan(4);
+    // the bank column east of the pond (x 4, z 9…14) less the rock at (4,12) and E23.9.1's first journal page at (4,13)
+    expect(banks.length).toBeGreaterThanOrEqual(4);
     const machines = sim.state.machines.length;
     const decor = JSON.stringify(sim.state.cozy?.decor ?? {});
-    sim.state.salvage!.weather = { kind: 'clear', until: Infinity };
+    sim.weather.forceForTest('sunny', Infinity);
     sim.water.draw(body.id, body.capacity);
     // a whole sunny game day of the full sim at the water's step, plus a few minutes of every system
     for (let i = 0; i < 24; i++) sim.water.tick(DAY / 24);
@@ -74,10 +75,53 @@ describe('E23.4.4: land fades around low water', () => {
     const far = land.filter((t) => sim.water.fadeAt(t) === 0);
     expect(far.length).toBeGreaterThan(0);
     // refilling greens it all up again
-    sim.state.salvage!.weather = { kind: 'rain', until: Infinity };
+    sim.weather.forceForTest('rain', Infinity);
     for (let i = 0; i < 12; i++) sim.water.tick(DAY / 24);
     expect(sim.water.levelOf(body.id)).toBe(1);
     for (const t of land) expect(sim.water.bloomShown(t)).toBe(t.bloom);
+  });
+
+  it("E23.5's planters by a drained pond wilt with the land, no crop is removed, and they grow on when it refills", () => {
+    const { sim, land, body } = park();
+    sim.weather.forceForTest('sunny', Infinity); // dry days: rain would water the beds itself
+    const banks = near(sim, land, body.id).filter((t) => !t.occupantId);
+    const beds: MachineData[] = [];
+    for (const t of banks.slice(0, 3)) {
+      const m: MachineData = { id: sim.newId('m'), type: 'planter', roofId: GROUND, x: t.x, z: t.z, size: 1, boostUntil: 0, timer: 0, charge: 0 };
+      sim.state.machines.push(m);
+      t.occupantId = m.id;
+      sim.grid.indexMachine(m);
+      beds.push(m);
+    }
+    expect(beds.length).toBe(3);
+    (sim.state.salvage!.crops ??= []).push('radish');
+    sim.inventory.add('seeds', 5);
+    for (const m of beds) expect(sim.farm.plant(m, 'radish')).toBe(true);
+    expect(beds.every((m) => !sim.farm.look(m).wilting)).toBe(true);
+    const step = () => {
+      sim.state.time += DAY / 24;
+      sim.water.tick(DAY / 24);
+      sim.farm.tick(DAY / 24);
+    };
+    for (let i = 0; i < 3; i++) step();
+    const grown = beds.map((m) => sim.state.salvage!.planters![m.id].grown!);
+    expect(grown.every((g) => g > 0)).toBe(true);
+    // the pond runs dry: the land fades, the beds wilt and wait
+    sim.water.draw(body.id, body.capacity);
+    for (const m of beds) {
+      expect(sim.farm.look(m).wilting).toBe(true);
+      expect(sim.water.fadeAt(sim.grid.get(GROUND, m.x, m.z)!)).toBe(WATER_NET.fadeSteps);
+    }
+    for (let i = 0; i < 24; i++) step();
+    beds.forEach((m, i) => {
+      expect(sim.state.machines).toContain(m);
+      expect(sim.state.salvage!.planters![m.id]).toMatchObject({ crop: 'radish', grown: grown[i] }); // nothing removed, nothing lost
+    });
+    // refilled: green again, and they grow on
+    sim.water.fill(body.id, body.capacity);
+    expect(beds.every((m) => !sim.farm.look(m).wilting)).toBe(true);
+    for (let i = 0; i < 3; i++) step();
+    beds.forEach((m, i) => expect(sim.state.salvage!.planters![m.id].grown).toBeGreaterThan(grown[i]));
   });
 
   it('a nearby full body keeps the land green even when another runs dry (two bodies)', () => {
@@ -137,7 +181,7 @@ describe('E23.4.4: land fades around low water', () => {
     expect(sim.water.takeFadeChanges().length).toBe(1);
   });
 
-  it("has the gentle-failure suite's hooks, and reads E23.7's weather names", () => {
+  it("has the gentle-failure suite's hooks, and reads E23.7.2's weather", () => {
     const { sim, pond, land, body } = park();
     const bank = near(sim, land, body.id)[0];
     expect(sim.water.isDry(bank)).toBe(false);
@@ -148,14 +192,14 @@ describe('E23.4.4: land fades around low water', () => {
     expect(land.every((t) => t.ground === 'restored')).toBe(true);
     sim.water.refillForTest();
     expect(sim.water.isDry(bank)).toBe(false);
-    (sim as unknown as { weather: { kind: () => string } }).weather = { kind: () => 'sunny' };
-    expect(sim.water.weather()).toBe('clear');
-    (sim as unknown as { weather: { kind: () => string } }).weather = { kind: () => 'storm' };
-    expect(sim.water.weather()).toBe('rain');
-    // with E23.7.2's full weather: its rain units and its evaporation share
-    (sim as unknown as { weather: unknown }).weather = { kind: () => 'storm', rain: () => 2, effects: () => ({ evaporation: 0 }) };
+    // E23.7.2's weather: its rain units and its evaporation share
+    sim.weather.forceForTest('storm', Infinity);
+    expect(sim.water.weather()).toBe('storm');
     expect(sim.water.sky()).toEqual({ fill: 2 * WATER_NET.rainShare, evap: 0 });
-    (sim as unknown as { weather: unknown }).weather = { kind: () => 'sunny', rain: () => 0, effects: () => ({ evaporation: 0.05 }) };
-    expect(sim.water.sky()).toEqual({ fill: 0, evap: 0.05 });
+    sim.weather.forceForTest('rain', Infinity);
+    expect(sim.water.sky()).toEqual({ fill: WATER_NET.rainShare, evap: 0 });
+    sim.weather.forceForTest('sunny', Infinity);
+    expect(sim.water.sky()).toEqual({ fill: 0, evap: sim.weather.effects().evaporation });
+    expect(sim.water.sky().evap).toBeGreaterThan(0);
   });
 });

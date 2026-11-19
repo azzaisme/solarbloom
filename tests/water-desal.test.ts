@@ -1,20 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import type { MachineData, MachineType, TileData, WeatherKind } from '../src/core/types';
+import type { MachineData, MachineType, TileData } from '../src/core/types';
+import type { WeatherKind } from '../src/data/weather';
 import { WATER_NET } from '../src/data/water';
 import { Sim } from '../src/gameplay/Sim';
 import { plantId } from '../src/gameplay/WaterPipes';
 
 const DAY = WATER_NET.daySeconds;
 const HOUR = DAY / 24;
-const weather = (sim: Sim, kind: WeatherKind) => (sim.state.salvage!.weather = { kind, until: Infinity });
+const weather = (sim: Sim, kind: WeatherKind) => sim.weather.forceForTest(kind, Infinity);
 
 function city() {
   const sim = new Sim(createInitialState(7, 'oldcity'));
   sim.areas.clear(PARK, true);
   sim.state.salvage!.keepers.sluice = { step: 'request1' }; // Cistern Basin's unlocks held (E23.8.2)
-  weather(sim, 'clear');
+  weather(sim, 'sunny');
   // midday, all day (E23.7.1's clock turns the sun off at night; the dry-spell test keeps the panels in sun: "enough power")
   const noon = { ...sim.power.sky(), sun: 1, solar: 1 };
   sim.power.skyOverride = () => noon;
@@ -76,7 +77,8 @@ describe('E23.4.3: the desalination plant', () => {
     const sim = city();
     const s = shore(sim);
     sim.bot = { roofId: GROUND, x: s.x + 1, z: s.z - 1 };
-    sim.state.salvage!.pack = { scrap: 10, copper: 3, clay: 2, glass: 8 };
+    // E23.6.1's crafting-table recipe: 10 Scrap, 4 Pipe, 4 Glass pane, 2 Wire
+    sim.state.salvage!.pack = { scrap: 10, pipe: 4, glassPane: 4, wire: 2 };
     expect(sim.build.check('desalination', GROUND, s.x, s.z - 6).reason).toMatch(/shore/);
     for (const [x, z] of [[2, 10], [3, 10], [2, 11], [3, 11]]) Object.assign(sim.grid.get(GROUND, x, z)!, { ground: 'restored', pollution: 0 });
     expect(sim.build.check('desalination', GROUND, 2, 10).reason).toMatch(/water/); // the park's pond
@@ -99,7 +101,7 @@ describe('E23.4.3: the desalination plant', () => {
     const pump = put(sim, 'pump', 4, 11);
     panels(sim, m, 4);
     const rates: number[] = [];
-    for (const kind of ['clear', 'cloudy', 'rain', 'mist', 'windy'] as WeatherKind[]) {
+    for (const kind of ['sunny', 'cloudy', 'rain', 'fog', 'wind'] as WeatherKind[]) {
       weather(sim, kind);
       sim.water.draw(plantId(m), 1e9);
       sim.water.tick(HOUR / 4);
@@ -148,32 +150,45 @@ describe('E23.4.3: the desalination plant', () => {
     const s = shore(sim);
     const m = put(sim, 'desalination', s.x, s.z);
     panels(sim, m, 4, [...s.run, ...s.farm.map((t) => [t.x, t.z] as [number, number])]);
-    sim.state.salvage!.pack = { copper: 10, clay: 20 };
+    sim.state.salvage!.pack = { pipe: 20 };
     for (const [x, z] of s.run) expect(sim.water.pipes.layProblem(GROUND, x, z) ?? 'ok', `${x},${z}`).toBe('ok');
     for (const [x, z] of s.run) expect(sim.water.pipes.lay(GROUND, x, z)).toBe(true);
-    // the farm: six plots beside the pipe, far from any pond or canal (planters, E23.5, will draw the same way)
+    // the farm: six planters (E23.5.2) beside the pipe, far from any pond or canal, potatoes in them
     for (const t of s.farm) expect(sim.water.wetness(t)).toBe(0);
+    const beds = s.farm.map((t) => put(sim, 'planter', t.x, t.z, 1));
+    (sim.state.salvage!.crops ??= []).push('potato');
+    sim.inventory.add('seeds', 10);
+    for (const b of beds) expect(sim.farm.plant(b, 'potato')).toBe(true);
+    // and a heavy draw on each plot on top of what the beds drink (a busy farm's cultivators and gardeners)
     const perPlotHour = 10;
     let short = 0;
+    let wilted = 0;
     // five sunny game days: no rain, the sun on every pond
     for (let h = 0; h < 24 * 5; h++) {
       sim.water.tick(HOUR / 2);
       sim.power.tick(1);
       sim.water.tick(HOUR / 2);
+      sim.state.time += HOUR;
+      sim.farm.tick(HOUR);
       for (const t of s.farm) {
         if (!sim.water.isWatered(t)) short++;
         if (sim.water.drawNear(t, perPlotHour) < perPlotHour) short++;
       }
+      wilted += beds.filter((b) => sim.farm.look(b).wilting).length;
     }
     expect(short).toBe(0);
-    // without the grid the same farm goes dry (and nothing is lost: the ground stays restored)
+    expect(wilted).toBe(0);
+    expect(beds.every((b) => (sim.state.salvage!.planters![b.id].grown ?? 0) > 0)).toBe(true);
+    // without the grid the same farm goes dry: the beds wilt, nothing is lost (the ground stays restored, the crops stay)
     gridOff(sim);
     for (let h = 0; h < 24; h++) {
       sim.water.tick(HOUR);
       for (const t of s.farm) sim.water.drawNear(t, perPlotHour);
     }
     expect(s.farm.some((t) => sim.water.isWatered(t))).toBe(false);
+    expect(beds.every((b) => sim.farm.look(b).wilting || sim.farm.look(b).ripe)).toBe(true);
     for (const t of s.farm) expect(t.ground).toBe('restored');
+    for (const b of beds) expect(sim.state.salvage!.planters![b.id].crop).toBe('potato');
   });
 
   it('through days and nights on the real clock: a reservoir on the line, filled by day, carries the farm through the night', () => {
@@ -189,7 +204,7 @@ describe('E23.4.3: the desalination plant', () => {
     }
     const tank = put(sim, 'reservoir', rx, rz);
     panels(sim, m, 5, [...s.run, ...s.farm.map((t) => [t.x, t.z] as [number, number]), [rx, rz], [rx + 1, rz], [rx, rz + 1], [rx + 1, rz + 1]]);
-    sim.state.salvage!.pack = { copper: 10, clay: 20 };
+    sim.state.salvage!.pack = { pipe: 20 };
     for (const [x, z] of s.run) expect(sim.water.pipes.lay(GROUND, x, z)).toBe(true);
     const perPlotHour = 6;
     let short = 0;

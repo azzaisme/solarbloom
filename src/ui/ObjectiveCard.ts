@@ -1,7 +1,7 @@
 import type { Cost } from '../core/types';
 import type { BuildableType } from '../core/types';
 import { Economy, formatCost, KINDS } from '../core/Economy';
-import { fmt, type Big } from '../core/Big';
+import { fmt } from '../core/Big';
 import { SEED_CORE_MACHINES } from '../gameplay/ProgressionSystem';
 import { $, esc, HudPart } from './HudPart';
 import { advisorStep } from './Pace';
@@ -9,6 +9,7 @@ import type { Tool } from './Hud';
 import { AREA_TYPES } from '../data/city';
 import { MACHINES } from '../data/machines';
 import type { Sim } from '../gameplay/Sim';
+import type { Suggestion } from '../gameplay/Advisor';
 import { HOME } from '../gameplay/ProgressionSystem';
 import { TUNING } from '../data/tuning';
 import { WORDS } from './words';
@@ -36,9 +37,18 @@ export function pinnedRequest(state: object): { text: string; have?: number; nee
   return undefined;
 }
 
-export function objectiveSentence(sim: Sim): Objective {
+/** E23.1.5: the advisor's topics that come before any request: a shortage in the loop the player should see now. */
+const URGENT = new Set<Suggestion['topic']>(['charge', 'grid', 'water', 'farm']);
+
+/**
+ * The sentence. E23.1.5: under the calm HUD the hint strip is hidden, so the advisor speaks through this line: a
+ * shortage in the loop first, then the pinned request, then the fountain, and its next step once the fountain is
+ * done. `advice` is the advisor's current suggestion (the card asks for it twice a second; tests may leave it out).
+ */
+export function objectiveSentence(sim: Sim, advice: Suggestion | undefined = sim.oldCity ? sim.advisor.suggest() : undefined): Objective {
   const W = WORDS.objective;
   if (sim.oldCity) {
+    if (advice && URGENT.has(advice.topic)) return { text: advice.text };
     // E21.8: the pinned Keeper request (with a count only while its patch is restored by hand)
     const pinned = pinnedKeeper(sim); // E22.6: the request the player pinned, else the first open one
     if (pinned) {
@@ -49,7 +59,7 @@ export function objectiveSentence(sim: Sim): Objective {
     // E21.6: the fountain's next step, by its name: what it still wants, then its own condition
     const f = sim.fountain;
     const t = f.next();
-    if (!t) return { text: W.explore };
+    if (!t) return { text: advice?.text ?? W.explore };
     const want = (Object.keys(t.delivery) as (MaterialId | 'biomass')[])
       .map((k) => [k, k === 'biomass' ? t.delivery[k]! : f.remaining(k as MaterialId)] as const)
       .filter(([, n]) => n > 0)
@@ -115,7 +125,6 @@ export class ObjectiveCard extends HudPart {
         this.cb.focusTile(x, z);
         if (fo.dataset.tool) this.cb.selectTool(fo.dataset.tool as Tool);
       }
-      if (t.closest('[data-upg]')) this.hud.toggleUpgrades(true);
       if (t.closest('[data-harvest]')) this.cb.harvest();
       const ia = t.closest<HTMLButtonElement>('[data-inspect-at]');
       if (ia) this.cb.inspectAt(ia.dataset.inspectAt!);
@@ -159,11 +168,7 @@ export class ObjectiveCard extends HudPart {
       case 1:
       case 2: {
         if (step === 1) return { text: `Green tiles grow 🌿. Restore a few more · ${n}/4` };
-        const open = s.upgrades.all().map((u) => s.upgrades.status(u)).filter((st) => st.ok || st.reason?.startsWith('Need '));
-        const cheapest = open.reduce<Big | undefined>((m, st) => (m && m.lte(st.cost) ? m : st.cost), undefined);
-        return !cheapest || s.econ.get('biomass').gte(cheapest)
-          ? { text: 'An upgrade is ready: open Upgrades', target: '#upgBtn' }
-          : { text: `First upgrade · ${fmt(s.econ.get('biomass'))}/${fmt(cheapest)}🌿` };
+        return build('solar', 'Steady energy:');
       }
       case 3:
         return build('condenser', 'Steady water:');
@@ -197,12 +202,11 @@ export class ObjectiveCard extends HudPart {
     const now = performance.now();
     if (now - this.suggestionAt < 500) return this.suggestionBtn;
     this.suggestionAt = now;
-    // E19.4.3: the advisor is asked either way (its "saving up" note steers drone spending); potter just hides it.
     const g = advisorStep(this.sim, !!this.settings.potter);
     if (!g) return (this.suggestionBtn = '');
     const a = g.action;
     const attr =
-      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'district' ? `data-district="${a.districtId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : a.kind === 'build' ? `data-focus="${a.x},${a.z}" data-tool="${a.type}"` : a.kind === 'role' ? `data-inspect-at="${a.machineId}"` : a.kind === 'upgrades' ? 'data-upg="1"' : a.kind === 'harvest' ? 'data-harvest="1"' : 'disabled';
+      a.kind === 'wake' ? `data-wake="${a.machineId}"` : a.kind === 'focus' ? `data-focus="${a.x + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[0] ?? 0) : 0)},${a.z + (a.layer ? (this.sim.grid.layer(a.layer)?.origin[2] ?? 0) : 0)}"` : 'disabled';
     this.suggestionBtn = `<p class="sugg">${esc(g.text)}</p><button class="act" ${attr}>${esc(g.label)}</button>`;
     return this.suggestionBtn;
   }
@@ -227,7 +231,6 @@ export class ObjectiveCard extends HudPart {
     this.set('objPct', $(this.root, '#objPct'), 'text', `${a.landmarkName}: ${Math.min(c.restored, need)}/${need} tiles · ${cleared} area${cleared === 1 ? '' : 's'} cleared`);
     this.set('objBar', $(this.root, '#objBar'), 'width', `${pct}%`);
     const ready = s.areas.ready(id);
-    const sp = s.milestones.specialty(id); // City 09.1: the landmark's specialty action
     const fr = s.advisor.nearestFrontier();
     const frontier = fr && fr.areaId !== id && !this.settings.potter ? `<li><span class="ck">·</span>Nearest frontier: the ${esc(fr.name.toLowerCase())}, ${fr.distance} block${fr.distance === 1 ? '' : 's'} out (${Math.round(fr.share * 100)}% restored)</li>` : '';
     this.set(
@@ -235,13 +238,12 @@ export class ObjectiveCard extends HudPart {
       objList,
       'html',
       `<li class="${c.restored >= need ? 'done' : ''}"><span class="ck">${c.restored >= need ? '✓' : ''}</span>Restore ${need} tiles of the ${esc(def.name.toLowerCase())} (next to clear ground first)</li>` +
-        `<li class="${sp.met ? 'done' : ''}" title="${esc(sp.hint)}"><span class="ck">${sp.met ? '✓' : ''}</span>${esc(sp.label)}</li>` +
         `<li><span class="ck"></span>Wake the ${esc(a.landmarkName)}</li>${frontier}`,
     );
     // The suggested next step sits outside the checklist, so it stays visible when the list is collapsed.
     this.set('objAct', $(this.root, '#objAct'), 'html', this.suggestionHtml());
     if (ready) return '';
-    return c.restored >= need && !sp.met ? `Next: ${sp.label.charAt(0).toLowerCase()}${sp.label.slice(1)}` : `Next: restore the ${def.name.toLowerCase()} (${Math.min(c.restored, need)}/${need})`;
+    return `Next: restore the ${def.name.toLowerCase()} (${Math.min(c.restored, need)}/${need})`;
   }
 
   /** After the fountain: hints follow the city objective. */
@@ -253,9 +255,7 @@ export class ObjectiveCard extends HudPart {
       const a = s.areas.info(id);
       return s.areas.ready(id)
         ? { text: `The ${a.landmarkName} is ready. Wake it to clear this area's fog and reveal what lies beyond.`, target: '#objAct [data-wake]' }
-        : s.areas.counts(id).restored >= s.areas.need(id) && !s.milestones.met(id)
-          ? { text: `The ${a.landmarkName} wants one more thing: ${s.milestones.specialty(id).hint}` }
-          : { text: `The fog recedes tile by tile: restore tiles touching clear ground. Drones, chains and Wide Pulse all help push it back.` };
+        : { text: `The fog recedes tile by tile: restore tiles touching clear ground. Drones, chains and Wide Pulse all help push it back.` };
     }
     return { text: 'Restore the park and wake its fountain.' };
   }
@@ -327,8 +327,16 @@ export class ObjectiveCard extends HudPart {
   }
 
   /** E22.10: the old-city sentence. */
+  private advice?: Suggestion;
+  private adviceAt = -Infinity;
   private updateOldCity() {
-    const o = objectiveSentence(this.sim);
+    // E23.1.5: the advisor is asked at most twice a second (it scans tiles)
+    const now = performance.now();
+    if (now - this.adviceAt > 500) {
+      this.adviceAt = now;
+      this.advice = this.sim.advisor.suggest();
+    }
+    const o = objectiveSentence(this.sim, this.advice);
     this.set('objTitle', $(this.root, '#objTitle'), 'html', `${esc(o.text)}${o.count ? ` <span class="ocount">${esc(o.count)}</span>` : ''}`);
   }
 }
