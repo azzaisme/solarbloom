@@ -3,6 +3,10 @@ import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import type { BuffType, CatRewardType, CatVariant, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
+  /** E23.2.1: bloombot's charge ran out (the low-power walk); reached full; bloombot began eating one unit. */
+  'charge.empty': Record<string, never>;
+  'charge.full': { source: import('../gameplay/Charge').ChargeSource };
+  'charge.eat': { item: 'biomass' | 'food' };
   /** E23.7.1: the light clock crossed dawn or dusk (`day`: the game day). */
   'clock.dawn': { day: number };
   'clock.dusk': { day: number };

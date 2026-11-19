@@ -37,6 +37,7 @@ import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
 import { MainlandSystem } from './MainlandSystem';
 import { LandmarkSystem } from './LandmarkSystem';
+import { ChargeSystem } from './Charge';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
@@ -94,6 +95,8 @@ export class Sim {
   readonly journal: JournalSystem;
   /** E21.9: waking landmarks and their lasting rewards (old-city rules). */
   readonly landmarks: LandmarkSystem;
+  /** E23.2.1: bloombot's charge, the only meter (old-city rules). */
+  readonly charge: ChargeSystem;
   /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
   readonly clock: Clock;
   /** E23.7.1.3: finds that are out only at night. */
@@ -156,6 +159,7 @@ export class Sim {
       };
     }
     this.inventory = new Inventory(this);
+    this.charge = new ChargeSystem(this);
     this.landmarks = new LandmarkSystem(this);
     this.clock = new Clock(this);
     this.nightFinds = new NightFinds(this);
@@ -291,6 +295,7 @@ export class Sim {
     this.roles.tick(dt);
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
+    this.charge.tick(dt);
     this.clock.tick();
     this.weather.tick();
     this.cat.tick();

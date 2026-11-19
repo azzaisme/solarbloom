@@ -77,6 +77,7 @@ describe('E21.9: bloombot first', () => {
     for (let z = -30; z < -2 && (sim.state.areas.mastRow.byBot ?? 0) < target; z++)
       for (let x = 1; x < 30 && (sim.state.areas.mastRow.byBot ?? 0) < target; x++) {
         const t = sim.grid.get(GROUND, x, z)!;
+        sim.charge.sleep(); // E23.2.1: kept topped up (this test is about the share, not the charge)
         if (!sim.restoration.checkPulse(t).ok || t.ground === 'restored') continue;
         sim.restoration.pulse(t.id);
         sim.advance(2);
