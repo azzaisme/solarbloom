@@ -369,10 +369,10 @@ export const REGIONS: RegionDef[] = [
       P('sw-u4', -10, 26, 'sunstone', 'small', 'salvage-sunstone'),
     ],
     dressing: [
-      D('mooring-post', -15, 44, 1),
-      D('mooring-post', -1, 44, 2),
-      D('mooring-post', 12, 44, 1),
+      D('mooring-post', -13, 44, 1),
+      D('mooring-post', 5, 44, 1),
       D('mooring-post', -4, 33, 0),
+      D('mooring-post', -4, 43, 0),
       D('boat', -4, 16, 0),
       D('boat', -4, 26, 0),
       D('barrel', -15, 20, 3),
