@@ -7,6 +7,7 @@ import type { WeatherKind } from '../src/data/weather';
 import { REGIONS } from '../src/data/oldcity';
 import { WATER_NET } from '../src/data/water';
 import { Sim } from '../src/gameplay/Sim';
+import { waterAnchor } from '../src/core/OldCityLayout';
 
 SaveService.clock = () => 0;
 const DAY = WATER_NET.daySeconds;
@@ -45,8 +46,8 @@ const garden = (sim: Sim, w: TileData): TileData => {
   return first!;
 };
 const pondTile = (sim: Sim) => {
-  const q = region('cistern').water![0];
-  return sim.grid.get(GROUND, q.x, q.z)!;
+  const a = waterAnchor(region('cistern').water![0]);
+  return sim.grid.get(GROUND, a.x, a.z)!;
 };
 
 describe('E23.4.1: water levels (sim.water)', () => {
@@ -163,6 +164,37 @@ describe('E23.4.1: water levels (sim.water)', () => {
       sim.water.tick(DAY / 24);
     }
     expect(sim.water.levelOf(p.id)).toBeGreaterThan(0.9);
+  });
+
+  it("the Cistern pond has a natural outline, and its land is repainted when the Old Cistern wakes", () => {
+    const sim = city();
+    const p = sim.water.bodyAt(pondTile(sim))!;
+    const cells = [...p.tiles].map((id) => sim.grid.byTileId(id)!);
+    const xs = cells.map((t) => t.x);
+    const zs = cells.map((t) => t.z);
+    const box = (Math.max(...xs) - Math.min(...xs) + 1) * (Math.max(...zs) - Math.min(...zs) + 1);
+    expect(cells.length).toBeGreaterThan(80); // a pond, not a puddle
+    expect(cells.length).toBeLessThan(box * 0.85); // not a rectangle
+    // its rows start and end in different places: a wandering bank, no straight edge longer than 3 tiles
+    const rows = new Map<number, number[]>();
+    for (const t of cells) rows.set(t.z, [...(rows.get(t.z) ?? []), t.x]);
+    const starts = [...rows.values()].map((r) => Math.min(...r));
+    const ends = [...rows.values()].map((r) => Math.max(...r));
+    expect(new Set(starts).size).toBeGreaterThan(3);
+    expect(new Set(ends).size).toBeGreaterThan(3);
+    // the renderer's repaints: nothing while it sleeps, then its land once the landmark wakes and the pond fills
+    weather(sim, 'cloudy');
+    sim.water.takeFadeChanges();
+    days(sim, 1);
+    const bounds = sim.water.fadeBounds(p);
+    const has = (rs: [number, number, number, number][]) => rs.some((r) => r.join() === bounds.join());
+    expect(has(sim.water.takeFadeChanges())).toBe(false);
+    sim.areas.clear('cistern', true);
+    expect(has(sim.water.takeFadeChanges())).toBe(true); // woken: its land is repainted at once
+    for (let i = 0; i <= WATER_NET.wakeRush; i++) sim.water.tick(1);
+    expect(sim.water.levelOf(p.id)).toBe(1);
+    sim.water.takeFadeChanges();
+    expect(sim.water.takeFadeChanges()).toEqual([]); // and then quiet
   });
 
   it('the springs only feed their own region', () => {

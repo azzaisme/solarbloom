@@ -2893,7 +2893,7 @@ export class Game {
     this.overlays.hideRadius();
     const why = pipes.layProblem(p.roofId, t.x, t.z) ?? (this.inReach(p.roofId, t.x, t.z, 1) ? undefined : TOO_FAR);
     this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.12);
-    const have = pipes.stock + this.sim.inventory.available('pipe');
+    const have = this.sim.inventory.available('pipe');
     const left = `${have} Pipe${have === 1 ? '' : 's'} at hand (the crafting table makes them)`;
     this.hud.showTip(x, y, `<b>Pipe</b>Carries water from a pump or a reservoir to whatever stands beside it.<br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${this.press('E')} to lay · ${left}</span>`}`);
   }
@@ -2918,9 +2918,9 @@ export class Game {
     const d = this.cozy.decorOf(t.occupantId);
     this.overlays.hideRadius();
     if (!d && p.roofId === GROUND && !t.occupantId && this.sim.water.pipes.has(t.x, t.z)) {
-      // E23.4.2.2: a pipe tile lifts back into the stock
+      // E23.4.2.2: a pipe tile lifts back into the pack (its Pipe)
       this.overlays.showGhost(p.roofId, t.x, t.z, 1, false, 0.12);
-      this.hud.showTip(x, y, `<b>🧹 Lift the pipe</b>${this.press('E')} to lift it (it goes back into your pipe stock)`);
+      this.hud.showTip(x, y, `<b>🧹 Lift the pipe</b>${this.press('E')} to lift it (its Pipe goes back into your pack)`);
       return;
     }
     if (!d) {
@@ -2982,7 +2982,7 @@ export class Game {
   private removeDecorAt(p: Pick, x: number, y: number, pickUp: boolean): ActResult {
     const t = p.tile!;
     const d = this.cozy.decorOf(t.occupantId);
-    // E23.4.2.2: the remove tool lifts a pipe tile (back into the pipe stock)
+    // E23.4.2.2: the remove tool lifts a pipe tile (its Pipe back into the pack)
     if (!d && !pickUp && p.roofId === GROUND && !t.occupantId && this.sim.water.pipes.has(t.x, t.z)) {
       if (!this.inReach(p.roofId, t.x, t.z, 1)) {
         this.hud.showFail(TOO_FAR, x, y);

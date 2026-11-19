@@ -124,6 +124,35 @@ describe('E23.4.3: the desalination plant', () => {
     expect(sim.machine(m.id)).toBeDefined();
   });
 
+  it('draws power and makes water only while its water has somewhere to go', () => {
+    const sim = city();
+    const s = shore(sim);
+    const m = put(sim, 'desalination', s.x, s.z);
+    panels(sim, m, 4, s.run);
+    sim.state.salvage!.pack = { pipe: 20 };
+    for (const [x, z] of s.run.slice(0, 3)) expect(sim.water.pipes.lay(GROUND, x, z)).toBe(true); // a line to nothing
+    // it fills its tank on power...
+    for (let i = 0; i < 8 && sim.water.levelOf(plantId(m)) < 1; i++) {
+      sim.water.tick(HOUR);
+      sim.power.tick(1);
+    }
+    expect(sim.water.levelOf(plantId(m))).toBe(1);
+    // ...then, full with nothing drawing from its line, it idles: no power asked for
+    sim.water.tick(HOUR);
+    sim.power.tick(1);
+    expect(sim.water.desalinating.has(m.id)).toBe(false);
+    expect(sim.power.draw(m)).toBe(0);
+    expect(sim.water.levelOf(plantId(m))).toBe(1);
+    // something beside the pipe drinks: the tank has room again, and it runs
+    const [x, z] = s.run[1];
+    const drink = sim.grid.get(GROUND, x + 1, z)!;
+    expect(sim.water.drawNear(drink, 30)).toBe(30);
+    sim.water.tick(HOUR);
+    sim.power.tick(1);
+    expect(sim.water.desalinating.has(m.id)).toBe(true);
+    expect(sim.power.draw(m)).toBe(WATER_NET.desal.power);
+  });
+
   it('empties into a pond or canal on its bank', () => {
     const sim = city();
     for (let z = 0; z < 16; z++)
