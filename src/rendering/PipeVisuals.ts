@@ -354,8 +354,9 @@ export class PipeVisuals {
         if (p.has(x + dx, z + dz)) {
           const ex = cx + dx * 0.5;
           const ez = cz + dz * 0.5;
-          const ny = this.pipeY(ex + dx * 0.01, ez + dz * 0.01);
-          if (ny < last.yb - 1e-4) this.riser(tube, trim, ex, ez, -dx, -dz, ny, last.yb);
+          // read right at the edge: a slope running on into the next tile meets it level there (no drop, no collars)
+          const ny = this.pipeY(ex + dx * 1e-4, ez + dz * 1e-4);
+          if (ny < last.yb - 1e-3) this.riser(tube, trim, ex, ez, -dx, -dz, ny, last.yb);
         }
         // a flange where tiles join (none along a slope: rings stacked down a flight read as clutter)
         if (!last.sloped) {
@@ -417,6 +418,8 @@ export class PipeVisuals {
     const dry = new Geo();
     for (const k of p.keys()) {
       const [x, z] = k.split(',').map(Number);
+      // none on a slope: a level glass would stick out of a pipe running down a stair (the flat runs show it)
+      if (this.sloped(x, z)) continue;
       // on the highest run through the tile's middle
       const y = Math.max(...this.middles(x, z)) + PIPE.r * 0.85;
       (p.carries(x, z) ? wet : dry).box(x + 0.5, y + 0.01, z + 0.5, PIPE.glass, 0.05, PIPE.glass);
@@ -436,6 +439,14 @@ export class PipeVisuals {
     e.enabled = !this.holoMat;
     this.parent.addChild(e);
     this.glass = e;
+  }
+
+  /** Does the pipe on this tile run up or down a stair or ramp (on any side it joins)? */
+  private sloped(x: number, z: number): boolean {
+    if (!this.sim.grid.peek(GROUND, x, z)?.ramp) return false;
+    const p = this.sim.water.pipes;
+    const sides: [number, number][] = [...p.links(x, z).map(([nx, nz]) => [nx - x, nz - z] as [number, number]), ...p.machineLinks(x, z).map((l) => [l.dx, l.dz] as [number, number])];
+    return sides.some(([dx]) => alongRamp(x + 0.5, z + 0.5, dx !== 0));
   }
 
   /** The heights of the runs leaving a tile's middle (one per side it joins; its own height if it joins none). */
