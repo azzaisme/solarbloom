@@ -2,7 +2,7 @@ import { DECOR_OPTION, DECOR_OPTIONS } from '../data/cozy';
 import { BUILDABLE, MACHINES } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import { type Action, type Bindings, keyLabel } from '../app/Bindings';
-import { type GlyphStyle, type PadStyle, padName } from './Glyphs';
+import { actionGlyph, type GlyphStyle, type PadStyle, padName } from './Glyphs';
 import { ICONS, iconize, MACHINE_ICONS, plain } from './Icons';
 import { $, esc, HudPart } from './HudPart';
 import { decorType, machineTool, type Tool } from './Hud';
@@ -170,6 +170,9 @@ export function toolFace(t: string): { icon: string; name: string } | undefined 
  */
 export class BuildBar extends HudPart {
   private keys: string[] = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+  /** E23.3.4: the Power view's glyph, and whether it is on (the game sets it). */
+  private powerGlyph = '';
+  powerOn = false;
 
   static template(): string {
     return `<div id="buildbar" class="panel" role="toolbar" aria-label="Build hotbar" hidden></div>`;
@@ -183,7 +186,7 @@ export class BuildBar extends HudPart {
   setKeys(style: GlyphStyle | undefined, b?: Bindings) {
     if (!b) return;
     this.keys = (['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6', 'slot7', 'slot8', 'slot9'] as Action[]).map((a) => (b.keys[a][0] ? keyLabel(b.keys[a][0]) : ''));
-    void style;
+    this.powerGlyph = actionGlyph(b, 'powerOverlay', style ?? 'keys');
     this.last.delete('buildbar');
   }
 
@@ -201,6 +204,10 @@ export class BuildBar extends HudPart {
         return `<div class="bslot${t === tool ? ' on' : ''}${f ? '' : ' empty'}${locked ? ' locked' : ''}" aria-label="${f ? `Slot ${i + 1}: ${esc(f.name)}` : `Slot ${i + 1}: empty`}"><span class="key">${esc(this.keys[i] ?? '')}</span>${f ? `<span class="si">${f.icon}</span><span class="sl">${esc(f.name)}</span>` : ''}</div>`;
       })
       .join('');
-    this.set('buildbar', el, 'html', html);
+    // E23.3.4: the Power view toggle sits at the end of the bar (once there is a grid to show)
+    const power = this.sim.power.networks().length
+      ? `<div class="bslot power${this.powerOn ? ' on' : ''}" aria-label="Power view ${this.powerOn ? 'on' : 'off'}"><span class="key glyph">${this.powerGlyph}</span><span class="sl">Power</span></div>`
+      : '';
+    this.set('buildbar', el, 'html', html + power);
   }
 }

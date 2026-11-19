@@ -215,7 +215,8 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     expect(new Sim(createInitialState(22)).cat.goldenCorridorTiles()).toBe(TUNING.cat.goldenCorridorTiles);
   });
 
-  it('the discovery log groups finds by area type and stays short in a huge city', { timeout: 120000 }, () => {
+  // ~30 s alone (500 areas, 300 claims, Mega Blooms among them); much longer while the whole suite runs in parallel
+  it('the discovery log groups finds by area type and stays short in a huge city', { timeout: 400000 }, () => {
     const sim = grownCity(23, 500);
     sim.state.cat.found = 1;
     for (let i = 0; i < 300; i++) {

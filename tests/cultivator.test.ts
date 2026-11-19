@@ -5,7 +5,7 @@ import type { MachineData } from '../src/core/types';
 import { isMergeable } from '../src/data/machines';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
-import { fill, makeSim, PAD, rich } from './helpers';
+import { fill, makeSim, offGrid, PAD, rich } from './helpers';
 
 SaveService.clock = () => 0;
 const saver = new SaveService(undefined);
@@ -133,7 +133,7 @@ describe('Look 6.8: the Cultivator (#177)', () => {
     const { sim, m } = setup(8);
     sim.advance(4);
     const json = saver.serialize(sim.state);
-    const copy = new Sim(saver.deserialize(json)!);
+    const copy = offGrid(new Sim(saver.deserialize(json)!));
     expect(saver.serialize(copy.state)).toBe(json);
     const cm = copy.state.machines.find((x) => x.id === m.id)!;
     copy.advance(40);

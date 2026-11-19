@@ -167,13 +167,14 @@ describe('buildable Bloom Relays (City 10.4)', () => {
     expect(c.ended).toHaveLength(1);
   });
 
-  it('placement: from fountain tier 4, on restored or mossy ground; cooldowns survive a reload', () => {
+  it('placement: from fountain tier 1, on restored or mossy ground; cooldowns survive a reload', () => {
     const sim = city();
     mossy(sim, -6, -6, 6, 6);
-    // E23.1.1: one rule set: the Relay unlocks with its recipe at fountain tier 4 (E21.3), not after a Drone Hub
+    // E23.1.1: one rule set: the Relay unlocks with its recipe at its fountain tier (E21.3), not after a Drone Hub.
+    // E23.3.2.3: Relays are the grid's poles, so that is tier 1, with the first panels.
     const tier = sim.state.salvage.tier;
-    sim.state.salvage.tier = 3;
-    expect(sim.build.check('relay', GROUND, 2, 2).reason).toMatch(/fountain tier 4/i);
+    sim.state.salvage.tier = 0;
+    expect(sim.build.check('relay', GROUND, 2, 2).reason).toMatch(/fountain tier 1/i);
     sim.state.salvage.tier = tier;
     expect(sim.build.check('relay', GROUND, 2, 2).ok).toBe(true);
     const polluted = sim.areas.tiles(PARK).find((t) => t.ground === 'polluted' && !t.blocked && !t.occupantId);

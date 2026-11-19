@@ -10,6 +10,8 @@ import { BloomChainSystem } from './BloomChainSystem';
 import { BuildSystem } from './BuildSystem';
 import { RelaySystem } from './RelaySystem';
 import { PowerGrid } from './PowerGrid';
+import { ChargerSystem } from './ChargerSystem';
+import { Lights } from './Lights';
 import { DroneSystem } from './DroneSystem';
 import { DroneRoles } from './DroneRoles';
 import { Advisor } from './Advisor';
@@ -64,6 +66,10 @@ export class Sim {
   readonly relays: RelaySystem;
   /** E23.3: the power grid (networks of poles, sources, batteries and consumers). */
   readonly power: PowerGrid;
+  /** E23.3.3: chargers (bloombot recharges on a powered pad). */
+  readonly chargers: ChargerSystem;
+  /** E23.3.5: night lights (decorations on the grid, solar or glow-pods). */
+  readonly lights: Lights;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
   readonly ecosystem: EcosystemSystem;
   /** Look 6: living transitions (what each tile is visibly turning into). */
@@ -166,6 +172,8 @@ export class Sim {
     this.restoration = new RestorationSystem(this);
     this.relays = new RelaySystem(this);
     this.power = new PowerGrid(this);
+    this.chargers = new ChargerSystem(this);
+    this.lights = new Lights(this);
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
     this.drones = new DroneSystem(this);
@@ -260,7 +268,9 @@ export class Sim {
     const s = this.state;
     s.time += dt;
     s.buffs = s.buffs.filter((b) => b.until > s.time);
+    this.lights.tick(dt);
     this.power.tick(dt);
+    this.chargers.tick(dt);
     this.production.tick(dt);
     this.restoration.tick(dt);
     this.transitions.tick();

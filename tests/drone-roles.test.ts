@@ -7,7 +7,7 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { Cost, DroneRole, MachineData, TileData } from '../src/core/types';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
-import { openIsland } from './helpers';
+import { offGrid, openIsland } from './helpers';
 
 /** E18.1–E18.4 and E18.6 (#201–#204, #206): drone roles. */
 
@@ -260,7 +260,7 @@ describe('E18.2 Gardener', () => {
 describe('E18.3 Scout', () => {
   /** A park with one revealed area beside it in fog, and a Scout hub near their edge. */
   function frontier() {
-    const sim = new Sim(createInitialState(8));
+    const sim = offGrid(new Sim(createInitialState(8)));
     const st = sim.state;
     st.caps.energy = big(1e7); st.caps.water = big(1e7);
     st.resources.energy = big(1e7); st.resources.water = big(1e7); st.resources.biomass = big(1e7);

@@ -1,3 +1,4 @@
+import { POWER } from '../data/power';
 import { big, fmt, type Big } from '../core/Big';
 import { HOME } from '../gameplay/ProgressionSystem';
 import * as pc from 'playcanvas';
@@ -46,6 +47,10 @@ import { InputController } from '../rendering/InputController';
 import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
+import { PowerLines } from '../rendering/PowerLines';
+import { PowerOverlay } from '../rendering/PowerOverlay';
+import { LightVisuals } from '../rendering/LightVisuals';
+import { LIGHT } from '../data/lights';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
 import { Skyline } from '../rendering/Skyline';
@@ -189,6 +194,12 @@ export class Game {
   readonly transitions: TransitionRenderer;
   /** Look 6.9: Cultivator tillers. */
   readonly tillers: CultivatorVisuals;
+  /** E23.3: the grid's cables. */
+  readonly powerLines: PowerLines;
+  /** E23.3.4: the Power overlay (build mode). */
+  readonly powerOverlay: PowerOverlay;
+  /** E23.3.5: night lights' glows, ground pools and insects. */
+  readonly lightVisuals: LightVisuals;
   /** Look 6.10: progress rings on tiles mid-process (near zoom). */
   readonly rings: ProgressRings;
   private stageSoundAt = 0;
@@ -360,6 +371,9 @@ export class Game {
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
+    this.powerLines = new PowerLines(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData));
+    this.lightVisuals = new LightVisuals(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
+    this.powerOverlay = new PowerOverlay(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
     this.rings = new ProgressRings(this.sim, this.scene.world);
     // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
     // its procedural look. Once they're in, what was already drawn is rebuilt with them.
@@ -757,6 +771,7 @@ export class Game {
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.clouds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
     if (this.overlays) this.overlays.holo.reducedMotion = rm;
+    if (this.lightVisuals) this.lightVisuals.reducedMotion = rm;
     if (this.transitions) {
       // Look 6: reduced motion keeps the timings with simpler visuals; detail follows the quality tier (Look 1's
       // setting when it lands, the "fewer effects" switch until then).
@@ -1301,6 +1316,8 @@ export class Game {
         return this.turnBuild(a === 'rotate' ? 1 : -1);
       case 'removeMode':
         return this.selectTool(this.hud.currentTool === 'remove' ? 'pulse' : 'remove');
+      case 'powerOverlay':
+        return this.togglePowerView();
       case 'map':
         return this.toggleOverview();
       case 'zoomCamera':
@@ -1534,6 +1551,34 @@ export class Game {
   /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
   private building(t: Tool = this.hud.currentTool): boolean {
     return !!this.bot && t !== 'inspect' && t !== 'pulse';
+  }
+  /** E23.3.4: the Power view is on (shown while building; it stays on for the next time you build). */
+  private powerView = false;
+  private togglePowerView() {
+    if (!this.building()) return;
+    this.powerView = !this.powerView;
+    this.hud.buildBar.powerOn = this.powerView;
+    this.hud.buildBar.render(this.hud.currentTool);
+    // A new concept gets one short introduction, the first time only.
+    if (this.powerView && !this.powerViewSeen) {
+      this.powerViewSeen = true;
+      this.hud.toast('Power view: each network glows in its own colour. Red means a machine has no power.', 'gold', 4);
+    }
+  }
+  private powerViewSeen = false;
+  /** where the pointer (or bloombot's cursor) is, for the Power view's highlight */
+  private powerFocus?: { roofId: string; x: number; z: number };
+  /** Machines on the grid that have power now: sources, batteries, poles and fed consumers (a dark one stays dark). */
+  private poweredMachines(): Set<string> {
+    const out = new Set<string>();
+    for (const m of this.sim.state.machines) {
+      const role = this.sim.power.roleOf(m);
+      if (!role) continue;
+      if (role.consumer && !this.sim.power.isPowered(m)) continue;
+      if (role.pole && this.sim.power.isTripped(m)) continue;
+      out.add(m.id);
+    }
+    return out;
   }
   /** the overview (M) is showing; walking, or M again, leaves it */
   private overviewOn = false;
@@ -2460,6 +2505,7 @@ export class Game {
   }
 
   private previewAt(p: Pick | undefined, x: number, y: number) {
+    this.powerFocus = p ? { roofId: p.roofId, x: p.fx, z: p.fz } : undefined; // E23.3.4: the Power view highlights the network here
     if (this.hud.plotPickerOpen) return; // the picker's hologram owns the preview while it's open
     const tool = this.hud.currentTool;
     if (!p || !p.tile) {
@@ -2598,9 +2644,16 @@ export class Game {
     const o = DECOR_OPTION[kind];
     const why = this.decorProblem(kind, p.roofId, t.x, t.z);
     this.overlays.hideRadius();
-    this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
-    const how = `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
-    this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${o?.solid ? 'Solid' : 'Walk over it'} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
+    const line = LIGHT[kind]?.line ? this.sim.lights.poleNear(p.roofId, t.x, t.z) : undefined;
+    if (LIGHT[kind]?.line) {
+      // a line light shows on the pole it would hang on
+      this.overlays.hideGhost();
+      if (line) this.overlays.showFrame(line.roofId, line.x, line.z, line.size, why ? 'bad' : 'ok');
+      else this.overlays.showFrame(p.roofId, t.x, t.z, 1, 'bad');
+    } else this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
+    const how = line ? `${this.press('E')} to hang it on this pole` : `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
+    const kindNote = LIGHT[kind]?.line ? 'On the pole’s lines' : o?.solid ? 'Solid' : 'Walk over it';
+    this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${kindNote} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
   }
 
   private previewRemove(p: Pick, x: number, y: number) {
@@ -2623,6 +2676,15 @@ export class Game {
 
   /** Why a decoration in hand can't go here (the tile's rules, reach, and not on top of bloombot if it's solid). */
   private decorProblem(kind: string, roofId: string, x: number, z: number): string | undefined {
+    // E23.3.5: line lights hang on a power pole's lines (aim at the pole) instead of standing on a tile
+    if (LIGHT[kind]?.line) {
+      const o = DECOR_OPTION[kind];
+      if (o && !this.cozy.isDecorUnlocked(o)) return `Unlocks when ${this.cozy.hint(o.unlock)}`;
+      const hang = this.sim.lights.canHang(kind, roofId, x, z);
+      if (hang) return hang;
+      const pole = this.sim.lights.poleNear(roofId, x, z)!;
+      return this.inReach(roofId, pole.x, pole.z, pole.size) ? undefined : TOO_FAR;
+    }
     const why = this.cozy.canDecorate(kind, roofId, x, z);
     if (why) return why;
     if (!this.inReach(roofId, x, z, 1)) return TOO_FAR;
@@ -2634,10 +2696,17 @@ export class Game {
   /** Places the decoration in hand on a tile (free); it stays in hand for the next one. */
   private placeDecorAt(p: Pick, x: number, y: number, kind: string): ActResult {
     const t = p.tile!;
-    const why = this.decorProblem(kind, p.roofId, t.x, t.z) ?? this.cozy.placeDecor(kind, this.buildRot, p.roofId, t.x, t.z);
+    const line = !!LIGHT[kind]?.line;
+    const why = this.decorProblem(kind, p.roofId, t.x, t.z) ?? (line ? this.sim.lights.hang(kind, p.roofId, t.x, t.z) : this.cozy.placeDecor(kind, this.buildRot, p.roofId, t.x, t.z));
     if (why) {
       this.hud.showFail(why, x, y);
       return 'none';
+    }
+    if (line) {
+      this.sfx.build();
+      this.vfx.burst(this.tileVec(t, SLAB_TOP + 1.0), 8, { up: 1.2, size: 0.04, life: 0.8 });
+      this.buildKey = '';
+      return 'select';
     }
     this.chunks.markTile(t);
     this.sfx.build();
@@ -2652,6 +2721,19 @@ export class Game {
     const d = this.cozy.decorOf(t.occupantId);
     // E21.3: under old-city rules the remove tool also takes down a machine, giving its whole recipe back
     const occ = !d && !pickUp ? this.sim.occupant(t) : undefined;
+    // E23.3.5: a pole with lights on its lines: the lights come down first (the pole stays)
+    const poleLights = !d ? this.sim.lights.onPole(this.sim.occupant(t)) : undefined;
+    if (poleLights) {
+      if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
+      this.sim.lights.unhang(this.sim.occupant(t));
+      this.sfx.click();
+      if (pickUp) this.selectTool(`decor:${poleLights}`);
+      this.buildKey = '';
+      return 'select';
+    }
     if (occ && occ.type !== 'core' && !occ.starter) {
       if (!this.inReach(p.roofId, t.x, t.z, 1)) {
         this.hud.showFail(TOO_FAR, x, y);
@@ -4083,6 +4165,19 @@ export class Game {
     const camP = this.camera.entity.getPosition();
     detailTextures.setCamera(camP.x, camP.y, camP.z);
     this.machines.update(wdt, rect);
+    this.powerLines.update();
+    const powerOn = this.powerView && this.building();
+    this.powerOverlay.show(powerOn);
+    this.powerOverlay.update(wdt, this.powerFocus);
+    this.lightVisuals.update(wdt, this.camera.entity.getPosition());
+    // E23.3.4: in the Power view, powered electrical machines glow soft yellow and the rest of the world darkens
+    this.machines.powerGlow(powerOn ? this.poweredMachines() : undefined, wdt);
+    const D = POWER.view.darken;
+    const dimTo = powerOn ? D.night + (D.day - D.night) * this.dayNight.light : 0; // night is dark already
+    const k = Math.min(1, wdt / POWER.view.fade);
+    this.dayNight.dim = Math.abs(dimTo - this.dayNight.dim) < 1e-3 ? dimTo : this.dayNight.dim + (dimTo - this.dayNight.dim) * k;
+    this.powerOverlay.setBoost(this.dayNight.boost);
+    this.machines.setGlowBoost(this.dayNight.boost);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.

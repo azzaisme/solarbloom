@@ -107,11 +107,18 @@ try {
       const g = window.solarbloom;
       g.paused = true; // keep state still while we inspect it
       const V = g.camera.target.constructor;
-      const s = g.camera.toScreen(new V(2.5, g.groundY(2.5, 4.5), 4.5));
-      return { x: s.x, y: s.y };
+      // a park tile that can be pulsed (on the island not every dead tile can: some need tidying first)
+      for (const t of g.sim.areas.tiles('park')) {
+        if (!g.sim.restoration.isEligible(t)) continue;
+        const s = g.camera.toScreen(new V(t.x + 0.5, g.groundY(t.x + 0.5, t.z + 0.5), t.z + 0.5));
+        if (s.x < 40 || s.y < 120 || s.x > innerWidth - 40 || s.y > innerHeight - 160) continue;
+        if (g.pick(s.x, s.y)?.tile?.id !== t.id || document.elementFromPoint(s.x, s.y)?.id !== 'app') continue;
+        return { x: s.x, y: s.y, id: t.id };
+      }
+      return { x: 0, y: 0, id: 'none' };
     });
     await page.mouse.click(target.x, target.y);
-    const clicked = await page.evaluate(() => window.solarbloom.sim.grid.get('g', 2, 4).ground);
+    const clicked = await page.evaluate((id) => window.solarbloom.sim.grid.byTileId(id)?.ground, target.id);
     checks++;
     if (clicked !== 'growing') {
       const why = await page.evaluate(({ x, y }) => {
@@ -119,7 +126,7 @@ try {
         const el = document.elementFromPoint(x, y);
         return { pick: g.pick(x, y)?.tile?.id, el: el?.id || el?.className, res: g.sim.state.resources, tool: g.hud.currentTool };
       }, target);
-      fail(`${vp.name}: real click on g:2:4 left it '${clicked}' ${JSON.stringify(why)}`);
+      fail(`${vp.name}: real click on ${target.id} left it '${clicked}' ${JSON.stringify(why)}`);
     }
     // Phase 5 E16: fauna never take a tap. With every creature unlocked around a lush park, the tile under each
     // actor picks as that tile, and a real click on a songbird's spot nurtures the lawn under it.
@@ -145,7 +152,7 @@ try {
       g.paused = false;
     });
     // Fauna re-plan once a second of frames; software rendering can be slow, so wait for them rather than a fixed time.
-    await page.waitForFunction(() => Object.values(window.solarbloom.fauna.active).some((n) => n > 0), null, { timeout: 30000 }).catch(() => {});
+    await page.waitForFunction(() => Object.values(window.solarbloom.fauna.active).some((n) => n > 0), null, { timeout: 120000 }).catch(() => {});
     await page.waitForTimeout(500);
     const fauna = await page.evaluate(() => {
       const g = window.solarbloom;

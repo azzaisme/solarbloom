@@ -41,6 +41,18 @@ export function unlockAll(sim: Sim, plenty = 9999) {
   sv.tier = Math.max(sv.tier, 4);
   for (const t of TIERS.slice(0, 4)) if (t.ability && !sv.abilities.includes(t.ability)) sv.abilities.push(t.ability);
   for (const m of MATERIAL_IDS) sv.pack[m] = plenty;
+  offGrid(sim);
+}
+
+/**
+ * E23.3.3: Drone Hubs and Cultivators run on the power grid. Mechanics tests are about what a helper does once it
+ * runs, so here helpers need no line (tests/power-helpers.test.ts covers helpers on and off the grid). A sim
+ * loaded from a save is a new sim: call this on it too.
+ */
+export function offGrid<S extends Sim>(sim: S): S {
+  sim.power.register('droneHub', { consumer: undefined });
+  sim.power.register('cultivator', { consumer: undefined });
+  return sim;
 }
 
 export function setGround(sim: Sim, x: number, z: number, g: GroundState, roof = PAD) {

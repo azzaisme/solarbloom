@@ -5,7 +5,7 @@ import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
-import { openIsland } from './helpers';
+import { offGrid, openIsland } from './helpers';
 
 function city(seed = 6) {
   const sim = new Sim(createInitialState(seed));
@@ -70,7 +70,7 @@ describe('drone networks (City 11)', () => {
   });
 
   it('drones prefer restoring at the fog’s edge', () => {
-    const sim = new Sim(createInitialState(8));
+    const sim = offGrid(new Sim(createInitialState(8)));
     const st = sim.state;
     st.caps.energy = big(1e7); st.caps.water = big(1e7);
     st.resources.energy = big(1e7); st.resources.water = big(1e7); st.resources.biomass = big(1e7); // full: drones keep a reserve of the cap
@@ -122,7 +122,7 @@ describe('far-away drones as work rates (City 11.4)', () => {
   async function fleet(seed = 21) {
     const { createInitialState: create, GROUND: G } = await import('../src/core/GameState');
     const { Sim: S } = await import('../src/gameplay/Sim');
-    const sim = new S(create(seed));
+    const sim = offGrid(new S(create(seed)));
     const st = sim.state;
     st.caps.energy = big(1e7); st.caps.water = big(1e7);
     st.resources.energy = big(1e7); st.resources.water = big(1e7); st.resources.biomass = big(1e7); // full: drones keep a reserve of the cap

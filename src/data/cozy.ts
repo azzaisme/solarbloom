@@ -1,3 +1,4 @@
+import { LIGHTS } from './lights';
 // E19 (#245): the cozy city. Plot options and when they unlock. All data, no rules: cosmetic only, so nothing
 // here may ever feed production, chains, milestones, pacing or the biodiversity score.
 
@@ -8,7 +9,15 @@ import type { AreaType } from './city';
  * ProgressionSystem.parkStage), once this many city areas are cleared, or (E19.2, for #288) a Lucky Cat
  * keepsake: a decoration that only a cat find unlocks.
  */
-export type CozyUnlock = { start: true } | { parkStage: number } | { areas: number } | { keepsake: Keepsake };
+export type CozyUnlock =
+  | { start: true }
+  | { parkStage: number }
+  | { areas: number }
+  | { keepsake: Keepsake }
+  /** E23.3.5: a cache opened (data/oldcity caches) */
+  | { find: string }
+  /** E23.3.5: a research project finished (E23.6.2, `sim.research.done`) */
+  | { research: string };
 
 /**
  * E19.2 × #288: the cat finds that unlock keepsake decorations. Only the first find exists so far; #288 adds the
@@ -100,18 +109,18 @@ export interface DecorOption {
 /** Tray order. Art: rendering/DecorArt.ts (existing prop models where one fits, primitives otherwise). */
 export const DECOR_OPTIONS: DecorOption[] = [
   { id: 'bench', name: 'Bench', icon: '🪑', blurb: 'A slatted park bench.', solid: true, unlock: { start: true } },
-  { id: 'lantern', name: 'Lantern', icon: '🏮', blurb: 'A little lantern on the ground, lit at dusk.', solid: false, unlock: { start: true } },
   { id: 'pot', name: 'Flower pot', icon: '🪴', blurb: 'A terracotta pot of flowers.', solid: true, unlock: { start: true } },
   { id: 'flowerbed', name: 'Flower patch', icon: '🌷', blurb: 'A low ring of tulips. Walk right over it.', solid: false, unlock: { start: true } },
   { id: 'stones', name: 'Stepping stones', icon: '🪨', blurb: 'Three flat stones for a garden path.', solid: false, unlock: { parkStage: 1 } },
   { id: 'trough', name: 'Planter trough', icon: '🌿', blurb: 'A long stone trough of herbs.', solid: true, unlock: { parkStage: 1 } },
   { id: 'birdbath', name: 'Bird bath', icon: '🐦', blurb: 'A stone bowl of water on a pedestal.', solid: true, unlock: { parkStage: 2 } },
-  { id: 'lamppost', name: 'Lamp post', icon: '💡', blurb: 'An old iron street lamp.', solid: true, unlock: { parkStage: 3 } },
   { id: 'bunting', name: 'Bunting pole', icon: '🎏', blurb: 'A pole with a bright banner.', solid: true, unlock: { areas: 1 } },
   { id: 'cratestack', name: 'Crate stack', icon: '📦', blurb: 'Two old crates, one on the other.', solid: true, unlock: { areas: 2 } },
   { id: 'barrel', name: 'Barrel planter', icon: '🛢️', blurb: 'A barrel cut down and filled with flowers.', solid: true, unlock: { areas: 2 } },
   { id: 'rug', name: 'Picnic rug', icon: '🧺', blurb: 'A checked rug and a basket.', solid: false, unlock: { areas: 3 } },
   { id: 'topiary', name: 'Topiary', icon: '🌳', blurb: 'A clipped round shrub in a square tub.', solid: true, unlock: { areas: 4 } },
+  // E23.3.5: night lights (data/lights.ts), each a decoration that comes on at dusk
+  ...LIGHTS.map((l) => ({ id: l.id, name: l.name, icon: l.icon, blurb: l.blurb, solid: l.solid, unlock: l.unlock })),
   // Keepsakes (#288): only Lucky Cat finds unlock these.
   { id: 'catstatue', name: 'Lucky Cat statue', icon: '🐱', blurb: 'A keepsake from your first Lucky Cat.', solid: true, unlock: { keepsake: 'firstFind' } },
   { id: 'pawstones', name: 'Paw-print stones', icon: '🐾', blurb: 'Stepping stones in the shape of a paw. Walk right over them.', solid: false, unlock: { keepsake: 'finds5' } },

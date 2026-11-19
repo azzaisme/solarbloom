@@ -116,6 +116,35 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     allowedGround: ['restored', 'prepared', 'polluted'],
     blurb: 'A way into the city’s shared store: open it to put things away or take them out.',
   },
+  // E23.3.2: the grid's storage and its weather power.
+  battery: {
+    type: 'battery',
+    name: 'Battery',
+    icon: '🔋',
+    size: 1,
+    cost: {},
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Stores what the grid has spare and gives it back after dark.',
+  },
+  windTurbine: {
+    type: 'windTurbine',
+    name: 'Wind Turbine',
+    icon: '🌬',
+    size: 1,
+    cost: {},
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Turns on windy days and in storms. It catches more wind on high ground.',
+  },
+  // E23.3.3: bloombot sits on it to recharge from the grid.
+  charger: {
+    type: 'charger',
+    name: 'Charger',
+    icon: '🔌',
+    size: 1,
+    cost: {},
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'A pad on the grid. Sit on it and bloombot fills up fast.',
+  },
   core: {
     type: 'core',
     name: 'Rooftop Core',
@@ -127,8 +156,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
   },
 };
 
-/** E21.3: what can be built (E23.1.1: one list, the Old City's; E23.7.4 dropped the Reclaimer). */
-export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'pollinator', 'droneHub', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+/** E21.3: what can be built (E23.1.1: one list, the Old City's; E23.7.4 dropped the Reclaimer; E23.3 adds the grid). */
+export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the
