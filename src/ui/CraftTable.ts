@@ -31,7 +31,7 @@ export const CRAFT_TABS = [
 export type CraftTabId = (typeof CRAFT_TABS)[number]['id'];
 
 export interface CostPart {
-  id: ItemId | 'biomass';
+  id: ItemId;
   name: string;
   have: number;
   need: number;
@@ -235,7 +235,7 @@ export class CraftTable {
 
   private partsHtml(parts: CostPart[]): string {
     return `<span class="cr-parts">${parts
-      .map((p) => `<span class="cr-part${p.have >= p.need ? '' : ' cr-miss'}">${p.id === 'biomass' ? materialIcon('biomass', 20) : materialIcon(p.id, 20)} ${p.need} ${esc(p.name)}${p.have >= p.need ? '' : ` <small>(${p.have})</small>`}</span>`)
+      .map((p) => `<span class="cr-part${p.have >= p.need ? '' : ' cr-miss'}">${materialIcon(p.id, 20)} ${p.need} ${esc(p.name)}${p.have >= p.need ? '' : ` <small>(${p.have})</small>`}</span>`)
       .join('')}</span>`;
   }
 

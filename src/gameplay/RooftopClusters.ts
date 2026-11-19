@@ -15,7 +15,7 @@ export class RooftopClusters {
     sim.bus.on('machine.built', ({ machine }) => {
       if (machine.type === 'relay') this.checkReach();
     });
-    sim.bus.on('upgrade.purchased', ({ id }) => {
+    sim.bus.on('upgrade.granted', ({ id }) => {
       if (id === 'relayLens') this.checkReach();
     });
   }

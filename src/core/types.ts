@@ -1,6 +1,6 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
 /** `chest` exists only under old-city rules (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
-export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest';
+export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
 /** Plain per-resource numbers (tuning tables, small per-second coefficients). */
@@ -292,19 +292,15 @@ export interface AreaState {
   clearedAt?: number;
   /** what drones do here: keep it blooming, push from it into the fog, or leave it alone */
   mode?: AreaMode;
-  /** City 09.1: progress on the landmark's specialty action (a count, or the best chain for 'chain') */
-  spec?: number;
   /** Phase 5 E12: rewarded progress steps already paid here (count of TUNING.areaSteps.at reached). */
   steps?: number;
   /**
-   * Region unlocks (18 Nov 2026): revealed but still sealed in thick fog until the player pays `price`. While sealed
+   * Revealed but still sealed in thick fog until its gate opens (E21.5; E23.1.5: never bought). While sealed
    * the area behaves exactly as hidden fog (nothing can be walked, restored or built). Absent on older saves.
    */
   sealed?: boolean;
   /** E21.9: tiles in this area bloombot restored itself (old-city rules: helpers wait until it has done its share) */
   byBot?: number;
-  /** the unlock price, set when the area was revealed (biomass as a big-number string) */
-  price?: { biomass: string; energy: number };
   /** sim time the player unlocked it */
   unlockedAt?: number;
 }
@@ -326,7 +322,8 @@ export interface LinkState {
 export type Rules = 'oldcity' | 'classic';
 
 /** E21 §1: the eight materials. */
-export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone';
+/** E23.5.1: biomass, food, compost and fertiliser are backpack items too (data/farm). */
+export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser';
 /** E23.6.1 (#390): components made at the crafting table (data in src/data/crafting.ts). */
 export type ComponentId = 'wire' | 'planks' | 'glassPane' | 'pipe' | 'motor' | 'batteryCell' | 'sunCell';
 /** E23.6.1: anything the backpack and the store hold (materials and components; see src/data/items.ts). */
@@ -387,6 +384,8 @@ export interface SalvageState {
   craft?: { id: string; n: number; left: number }[];
   /** E23.6.1: decorations made at the crafting table (each once; placing copies after that is free) */
   decorMade?: string[];
+  /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
+  clipped?: Record<string, number>;
 }
 
 export interface GameState {
@@ -437,6 +436,14 @@ export interface GameState {
    * production, chains, milestones or pacing). Optional and sparse, so no save version change.
    */
   cozy?: CozyState;
+  /** E23.3.5: stored energy of grid nodes that are not machines (solar garden lights), by node id. Optional. */
+  power?: {
+    cells?: Record<string, number>;
+    /** E23.3.5: set once lights placed before night lighting have been carried over (see Lights.carryOver) */
+    lights?: number;
+  };
+  /** E23.2.1: bloombot's charge (old-city rules; absent = full). Optional, so no save version change. */
+  charge?: ChargeState;
   /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
   clock?: ClockState;
 }
@@ -450,6 +457,16 @@ export interface ClockState {
   offset: number;
   real?: boolean;
   nights?: Record<string, number>;
+}
+
+/** E23.2.1 (#371): bloombot's charge. */
+export interface ChargeState {
+  /** the charge now, 0 to the full charge */
+  value: number;
+  /** E23.6.2 research: battery cells fitted (each makes a full charge bigger) */
+  cells?: number;
+  /** E23.6.2 research: efficiency steps (each makes every cost a little smaller) */
+  efficiency?: number;
 }
 
 /** E19: what the player chose for the look of their city. */
@@ -467,4 +484,6 @@ export interface CozyState {
   decor?: Record<string, string>;
   /** E19.2.2: decorations earned so far, in the order they unlocked (ones open from the start aren't listed) */
   decorUnlocked?: string[];
+  /** E23.3.5: line lights hung on power poles, pole machine id → light id (data/lights) */
+  poleLights?: Record<string, string>;
 }

@@ -1,10 +1,10 @@
 import { CAPPED, formatCost, scaleCost } from '../core/Economy';
-import { big, Decimal } from '../core/Big';
+import { big } from '../core/Big';
 import type { BuildableType, Cost, GroundState, MachineData } from '../core/types';
 import { MACHINES, machineName } from '../data/machines';
 import { AREA_TYPES, type AreaType } from '../data/city';
 import { GROUND, machinesRemoved } from '../core/GameState';
-import { RECIPES, MATERIALS, STORE, type MaterialCost } from '../data/salvage';
+import { MATERIALS, STORE, type MaterialCost } from '../data/salvage';
 import { regionById } from '../core/OldCityLayout';
 import type { MaterialId } from '../core/types';
 import { TUNING } from '../data/tuning';
@@ -28,24 +28,22 @@ export class BuildSystem {
   /** E21.3: the old-city recipe for a machine (undefined: it can't be built under old-city rules). */
   recipe(type: BuildableType): MaterialCost | undefined {
     // E23.6.1: a machine with a crafting-table recipe is built from it (components and materials)
-    return this.sim.crafting.machineRecipe(type)?.cost ?? RECIPES[type]?.cost;
+    return this.sim.crafting.machineRecipe(type)?.cost;
   }
 
-  /** E21.3: the fountain tier that unlocks a machine under old-city rules (a table recipe's tier, else E21.3's). */
+  /** E21.3: the fountain tier that unlocks a machine under old-city rules (99: a Keeper, research or a find opens it). */
   recipeTier(type: BuildableType): number {
     const u = this.sim.crafting.machineRecipe(type)?.unlock;
-    if (u && 'tier' in u) return u.tier;
-    return RECIPES[type]?.tier ?? 99;
+    return u && 'tier' in u ? u.tier : 99;
   }
 
   isUnlocked(type: BuildableType) {
     const def = MACHINES[type];
-    // E21.3: under old-city rules a machine is locked until its fountain tier, and nothing else.
+    // E21.3: under old-city rules a machine is locked until its recipe is known (a fountain tier, a Keeper, ...).
     if (this.sim.oldCity) {
-      // E23.6.1: a crafting-table machine unlocks where its recipe says (a Keeper, research or a find)
+      // E23.6.1: every Old City machine is built from its crafting-table recipe and unlocks where it says
       const cr = this.sim.crafting.machineRecipe(type);
-      if (cr) return this.sim.crafting.unlocked(cr.unlock);
-      return !!RECIPES[type] && (this.sim.state.salvage?.tier ?? 0) >= this.recipeTier(type);
+      return !!cr && this.sim.crafting.unlocked(cr.unlock);
     }
     if (def.oldCity) return false;
     const u = def.unlock;
@@ -96,27 +94,16 @@ export class BuildSystem {
     return st.built;
   }
 
-  /** The price before Phase 5's storage clamp: copies × machineCostGrowth, less permits (the specialty safety valve reads it). */
-  rawCost(type: BuildableType): Cost {
-    // Cleared city areas grant permits: each waives one copy's worth of cost growth.
-    const permits = (this.sim.areas?.clearedCount() ?? 0) * TUNING.city.permitsPerArea;
-    return scaleCost(MACHINES[type].cost, Decimal.pow(TUNING.machineCostGrowth, Math.max(0, this.built(type) - permits)));
-  }
-
+  /**
+   * A machine's price: the same for every copy (E23.1.5: no price grows with purchases). The energy and water
+   * parts never pass TUNING.machineCostMaxShare of their store, so a price is always reachable.
+   */
   cost(type: BuildableType): Cost {
-    const cost = this.rawCost(type);
-    // Phase 5 E12: never an impossible price. Energy and water incomes barely grow while biomass has no cap, so
-    // the energy/water part grows for the first few copies only (further copies cost more biomass), and never
-    // passes a share of that store. While the advisor says "save up", drones leave that much alone.
-    const permits = (this.sim.areas?.clearedCount() ?? 0) * TUNING.city.permitsPerArea;
-    const copies = Math.min(TUNING.machineCappedGrowthCopies, Math.max(0, this.built(type) - permits));
-    const base = MACHINES[type].cost;
+    const cost = scaleCost(MACHINES[type].cost, 1);
     for (const k of CAPPED) {
       const cap = this.sim.econ.cap(k);
-      if (base[k] === undefined) continue;
-      let v = big(base[k]).mul(Decimal.pow(TUNING.machineCostGrowth, copies)).ceil();
-      if (cap) v = v.min(cap.mul(TUNING.machineCostMaxShare).floor());
-      cost[k] = v;
+      const v = cost[k];
+      if (v !== undefined && cap) cost[k] = big(v).min(cap.mul(TUNING.machineCostMaxShare).floor());
     }
     return cost;
   }
@@ -179,7 +166,7 @@ export class BuildSystem {
     if (!r) return undefined;
     const m = this.sim.inventory.shortfall(r);
     if (!m) return undefined;
-    if (m === 'biomass') return 'Needs more Biomass 🌿 — restored ground grows it';
+    if (m === 'biomass') return 'Needs more Biomass 🌿 — gather it from restored ground';
     // E23.6.1: a component is made at the crafting table (no region to name)
     if (!isMaterial(m)) return `Needs ${itemDef(m).name} ${itemDef(m).icon} — make it at the crafting table`;
     return `Needs ${MATERIALS[m].name} ${MATERIALS[m].icon}${this.whereFrom(m)}`;
@@ -225,7 +212,7 @@ export class BuildSystem {
     if (!recipe) return fail(`${def.name} is not built in the Old City`);
     if (!this.isUnlocked(type)) {
       const cr = s.crafting.machineRecipe(type);
-      return fail(cr ? `Not known yet: ${s.crafting.unlockLabel(cr.unlock).replace('🔒 ', '')}` : `Unlocks at fountain tier ${this.recipeTier(type)}`);
+      return fail(cr ? `Not known yet: ${s.crafting.unlockLabel(cr.unlock).replace('🔒 ', '')}` : `${def.name} is not built in the Old City`);
     }
     const roof = s.grid.roof(roofId);
     if (!roof || !roof.unlocked || roof.preview) return fail('This rooftop is not reachable yet');

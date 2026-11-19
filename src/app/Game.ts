@@ -1,3 +1,4 @@
+import { POWER } from '../data/power';
 import { big, fmt, type Big } from '../core/Big';
 import { HOME } from '../gameplay/ProgressionSystem';
 import * as pc from 'playcanvas';
@@ -11,6 +12,7 @@ import { distToFootprint } from '../core/Grid';
 import type { DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
 import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
+import { GATHER } from '../data/farm';
 import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
@@ -45,6 +47,10 @@ import { InputController } from '../rendering/InputController';
 import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
+import { PowerLines } from '../rendering/PowerLines';
+import { PowerOverlay } from '../rendering/PowerOverlay';
+import { LightVisuals } from '../rendering/LightVisuals';
+import { LIGHT } from '../data/lights';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
 import { Skyline } from '../rendering/Skyline';
@@ -110,7 +116,7 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 /** Bloombot: the camera zoom of the close default view (G.3), and how near counts as "within reach". */
 const BOT_ZOOM = 3.2;
 /** E22.1: while a panel is open, these walking actions still reach the game (they close the panel they opened). */
-const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'upgrades', 'menu']);
+const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'menu']);
 /**
  * E19.2 (#245, "Building and placing"): build mode is Satisfactory-style. With something to build in hand (a
  * machine, a core, a decoration) the camera stays in the close view; a hologram sits where you aim, snapped to the
@@ -191,6 +197,12 @@ export class Game {
   readonly transitions: TransitionRenderer;
   /** Look 6.9: Cultivator tillers. */
   readonly tillers: CultivatorVisuals;
+  /** E23.3: the grid's cables. */
+  readonly powerLines: PowerLines;
+  /** E23.3.4: the Power overlay (build mode). */
+  readonly powerOverlay: PowerOverlay;
+  /** E23.3.5: night lights' glows, ground pools and insects. */
+  readonly lightVisuals: LightVisuals;
   /** Look 6.10: progress rings on tiles mid-process (near zoom). */
   readonly rings: ProgressRings;
   private stageSoundAt = 0;
@@ -236,9 +248,6 @@ export class Game {
   menu!: Menu;
   settingsUi!: SettingsScreen;
   private padFocus?: PadFocus;
-  /** City 06.5: simulated seconds still owed after a hitch or a hidden tab, run within the frame budget. */
-  catchUpDebt = 0;
-  private hiddenAt = 0;
   /** Simulation milliseconds spent in the last frame, and the worst since the counter was reset (perf harness). */
   simMs = 0;
   simMsWorst = 0;
@@ -338,7 +347,7 @@ export class Game {
     this.chunks.onParkStage = (stage) => {
       const lines: Record<number, string> = {
         1: '🧹 The park paths are swept clean.<small>A quarter of the way to waking the fountain.</small>',
-        2: '🪑 The benches are mended.<small>Halfway there: people will want to sit here again.</small>',
+        2: '🪑 The benches are mended.<small>Halfway there: the birds will want to sit here again.</small>',
         3: '💡 The lamps are lit again!<small>The planter trees leaf out and bunting goes up on the bandstand.</small>',
       };
       if (lines[stage]) this.hud.toast(lines[stage], 'gold', 4);
@@ -366,6 +375,9 @@ export class Game {
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
+    this.powerLines = new PowerLines(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData));
+    this.lightVisuals = new LightVisuals(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
+    this.powerOverlay = new PowerOverlay(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
     this.rings = new ProgressRings(this.sim, this.scene.world);
     // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
     // its procedural look. Once they're in, what was already drawn is rebuilt with them.
@@ -401,17 +413,11 @@ export class Game {
       {
         selectTool: (t) => this.selectTool(t),
         harvest: () => this.harvest(),
-        // Phase 5 E12: "id" (global or cheapest machine), "id|machineId" (that machine) or "id|*" (Upgrade all).
         chooseRole: (key) => {
           const [hubId, role, slot, index] = key.split('|');
           if (slot === 'drone') this.sim.roles.chooseForDrone(hubId, Number(index), role === '-' ? undefined : (role as DroneRole));
           else this.sim.roles.choose(hubId, role as DroneRole, Number(slot) || 1);
           this.renderInspect();
-        },
-        buyUpgrade: (key) => {
-          const [id, target] = key.split('|');
-          if (target === '*') this.sim.upgrades.purchaseAll(id);
-          else this.sim.upgrades.purchase(id, target || undefined);
         },
         activateCore: () => {
           // Bloombot (G.17): bloombot walks to the fountain and wakes it there.
@@ -520,6 +526,7 @@ export class Game {
         this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
         // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
         this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
+        this.sim.bus.on('biomass.gathered', (e) => this.hud.pickup(MATERIALS.biomass.name, e.got));
       }
       const focus = new PadFocus(this.hud.root);
       this.padFocus = focus;
@@ -578,20 +585,18 @@ export class Game {
     const unlock = () => this.sfx.unlock();
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
-    // E22.11: a hidden page or a window without focus pauses the game (setting, on by default): the time away
-    // is not counted. With the setting off, a hidden tab catches up on return as before (City 06.5).
+    // E22.11: a window without focus pauses the game (setting, on by default). E23.1: a hidden page always does,
+    // and the time away is never counted or caught up.
     const pauseOnBlur = () => this.settings.pauseOnBlur !== false;
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         this.saveNow();
+        // E23.1: a hidden page always waits, like a closed game; nothing is owed or paid back on return
+        this.pause.set('hidden');
         if (pauseOnBlur()) this.pause.set('blur');
-        else this.hiddenAt = performance.now();
       } else {
+        this.pause.clear('hidden');
         if (document.hasFocus()) this.pause.clear('blur');
-        if (this.hiddenAt) {
-          this.awayFor((performance.now() - this.hiddenAt) / 1000);
-          this.hiddenAt = 0;
-        }
       }
     });
     window.addEventListener('blur', () => pauseOnBlur() && this.pause.set('blur'));
@@ -788,6 +793,7 @@ export class Game {
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.clouds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
     if (this.overlays) this.overlays.holo.reducedMotion = rm;
+    if (this.lightVisuals) this.lightVisuals.reducedMotion = rm;
     if (this.transitions) {
       // Look 6: reduced motion keeps the timings with simpler visuals; detail follows the quality tier (Look 1's
       // setting when it lands, the "fewer effects" switch until then).
@@ -961,7 +967,6 @@ export class Game {
     this.hud.toggleTray(false);
     this.hud.toggleBackpack(false);
     this.hud.craft.close();
-    this.hud.toggleUpgrades(false);
     this.hud.closePlotPicker();
     if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
   }
@@ -1208,6 +1213,18 @@ export class Game {
     this.sfx.click();
   }
 
+  /** E23.2.1: F / d-pad left: eat one snack (biomass or food) to recharge. */
+  private eat() {
+    const r = this.sim.charge.eat();
+    if (typeof r === 'object') {
+      this.bot?.visuals.play('interact');
+      this.sfx.coin();
+      return;
+    }
+    if (r === 'full') this.hud.showFail('Fully charged');
+    else if (r === 'none') this.hud.showFail('Nothing to eat. Biomass or food recharges bloombot');
+  }
+
   private harvest() {
     if (this.sim.harvestSun()) {
       const starter = this.sim.state.machines.find((m) => m.type === 'solar');
@@ -1270,7 +1287,6 @@ export class Game {
       else if (k === 'h') this.harvest();
       else if (k === 'f') this.focusNextArea();
       else if (k === 'home') this.focusArea(PARK);
-      else if (k === 'u') this.hud.toggleUpgrades();
       else if (k === 'b') this.hud.toggleTray();
       else if (k === 'p') this.setPaused(!this.paused);
       else if (k === 'f3' || k === '`') {
@@ -1304,8 +1320,8 @@ export class Game {
         return this.toggleMenu();
       case 'harvest':
         return this.harvest();
-      case 'upgrades':
-        return this.hud.toggleUpgrades();
+      case 'eat':
+        return this.eat();
       case 'backpack':
         this.hud.toggleBackpack();
         return this.syncPanelPause(); // paused from this very moment
@@ -1314,6 +1330,8 @@ export class Game {
         return this.turnBuild(a === 'rotate' ? 1 : -1);
       case 'removeMode':
         return this.selectTool(this.hud.currentTool === 'remove' ? 'pulse' : 'remove');
+      case 'powerOverlay':
+        return this.togglePowerView();
       case 'map':
         return this.toggleOverview();
       case 'zoomCamera':
@@ -1353,7 +1371,7 @@ export class Game {
   /** A panel or menu that takes the input is open. */
   private panelOpen(): boolean {
     const h = this.hud;
-    return h.modalOpen || h.backpackOpen || h.craft.isOpen || h.plotPickerOpen || h.isUpgradesOpen || h.trayOpen || !!this.oc?.panel.isOpen;
+    return h.modalOpen || h.backpackOpen || h.craft.isOpen || h.plotPickerOpen || h.trayOpen || !!this.oc?.panel.isOpen;
   }
 
   /** The action a key (or mouse input) means now. With a panel open, the key that opened it closes it again. */
@@ -1369,7 +1387,7 @@ export class Game {
   private togglesOpenPanel(a: Action): boolean {
     if (!PANEL_TOGGLES.has(a)) return false;
     const h = this.hud;
-    const open: Action | undefined = this.settingsUi.isOpen || this.menu.isOpen ? 'menu' : h.backpackOpen ? 'backpack' : h.trayOpen ? 'buildMenu' : h.isUpgradesOpen ? 'upgrades' : undefined;
+    const open: Action | undefined = this.settingsUi.isOpen || this.menu.isOpen ? 'menu' : h.backpackOpen ? 'backpack' : h.trayOpen ? 'buildMenu' : undefined;
     return a === open;
   }
 
@@ -1539,7 +1557,6 @@ export class Game {
     if (this.settingsUi.isOpen) this.settingsUi.close();
     else if (this.menu.isOpen) this.closeMenu();
     else if (this.oc?.escape()) void 0; // E21: an Old City panel or a hold
-    else if (this.hud.isUpgradesOpen) this.hud.toggleUpgrades(false);
     else if (this.hud.trayOpen) this.hud.toggleTray(false);
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
     else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
@@ -1554,6 +1571,34 @@ export class Game {
   /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
   private building(t: Tool = this.hud.currentTool): boolean {
     return !!this.bot && t !== 'inspect' && t !== 'pulse';
+  }
+  /** E23.3.4: the Power view is on (shown while building; it stays on for the next time you build). */
+  private powerView = false;
+  private togglePowerView() {
+    if (!this.building()) return;
+    this.powerView = !this.powerView;
+    this.hud.buildBar.powerOn = this.powerView;
+    this.hud.buildBar.render(this.hud.currentTool);
+    // A new concept gets one short introduction, the first time only.
+    if (this.powerView && !this.powerViewSeen) {
+      this.powerViewSeen = true;
+      this.hud.toast('Power view: each network glows in its own colour. Red means a machine has no power.', 'gold', 4);
+    }
+  }
+  private powerViewSeen = false;
+  /** where the pointer (or bloombot's cursor) is, for the Power view's highlight */
+  private powerFocus?: { roofId: string; x: number; z: number };
+  /** Machines on the grid that have power now: sources, batteries, poles and fed consumers (a dark one stays dark). */
+  private poweredMachines(): Set<string> {
+    const out = new Set<string>();
+    for (const m of this.sim.state.machines) {
+      const role = this.sim.power.roleOf(m);
+      if (!role) continue;
+      if (role.consumer && !this.sim.power.isPowered(m)) continue;
+      if (role.pole && this.sim.power.isTripped(m)) continue;
+      out.add(m.id);
+    }
+    return out;
   }
   /** the overview (M) is showing; walking, or M again, leaves it */
   private overviewOn = false;
@@ -1745,23 +1790,12 @@ export class Game {
     const front = this.sim.grid.get(b.pose.roofId, f.x, f.z);
     const fd = Math.hypot(f.x + 0.5 - b.pose.x, f.z + 0.5 - b.pose.z);
     if (this.oc) out.push(...this.oldCityCandidates(f, front, fd));
-    // Region unlocks: facing a sealed area's fog, Interact opens it (or says what it still needs). The Old City has
-    // no price: its gates open by prying, repairing or waking, and the prompt says what is in the way.
+    // Facing a sealed area's fog: nothing is bought (E23.1.5). Its gate opens by prying, repairing or waking, and
+    // the prompt says what is in the way.
     const sealed = this.sealedAhead();
-    if (sealed && this.sim.oldCity) {
+    if (sealed) {
       if (!out.some((c) => c.kind === 'gate'))
         out.push({ kind: 'gate', id: `seal:${sealed}`, verb: 'Look at', name: 'the clouds', distance: fd, at: front, refused: this.sim.areas.sealText(sealed).replace(/<[^>]*>/g, ''), run: () => {} });
-    } else if (sealed) {
-      const s = this.sim.areas;
-      const cost = s.unlockCost(sealed)!;
-      const short = this.sim.econ.shortfall(cost);
-      out.push({
-        kind: 'gate', id: `gate:${sealed}`, verb: 'Unlock', name: `the ${AREA_TYPES[s.info(sealed).type].name.toLowerCase()}`, distance: fd, at: front,
-        refused: short ? `Needs ${fmt(cost.biomass)} ${this.hud.oldCity ? 'Greens' : 'biomass'} and ${fmt(cost.energy)} energy` : undefined,
-        run: () => {
-          if (this.sim.areas.unlock(sealed)) b.visuals.play('cheer');
-        },
-      });
     }
     const lift = this.liftAhead();
     if (lift) {
@@ -1863,6 +1897,9 @@ export class Game {
           this.syncPanelPause();
         },
       });
+    // E23.5.1: flowered, restored ground in front can be clipped for biomass
+    if (!pile && s.gather.canGather(front))
+      out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });
     return out;
   }
 
@@ -1930,7 +1967,7 @@ export class Game {
         else if (name === 'deliver') this.sfx.coin();
         else if (name === 'pry') this.sfx.stage('crack');
         // a sound per material
-        else if (name === 'salvage') this.sfx.stage(({ scrap: 'thud', seeds: 'rustle', copper: 'hum', timber: 'creak', glass: 'crack', clay: 'thud', gears: 'grind', sunstone: 'hum' } as const)[material as 'scrap'] ?? 'thud');
+        else if (name === 'salvage') this.sfx.stage(({ biomass: 'rustle', scrap: 'thud', seeds: 'rustle', copper: 'hum', timber: 'creak', glass: 'crack', clay: 'thud', gears: 'grind', sunstone: 'hum' } as const)[material as 'scrap'] ?? 'thud');
         else this.sfx.click();
       },
       vista: (x: number, z: number, secs: number, done: (seen: string[]) => void) => this.vista(x, z, secs, done),
@@ -2500,6 +2537,7 @@ export class Game {
   }
 
   private previewAt(p: Pick | undefined, x: number, y: number) {
+    this.powerFocus = p ? { roofId: p.roofId, x: p.fx, z: p.fz } : undefined; // E23.3.4: the Power view highlights the network here
     if (this.hud.plotPickerOpen) return; // the picker's hologram owns the preview while it's open
     const tool = this.hud.currentTool;
     if (!p || !p.tile) {
@@ -2638,9 +2676,16 @@ export class Game {
     const o = DECOR_OPTION[kind];
     const why = this.decorProblem(kind, p.roofId, t.x, t.z);
     this.overlays.hideRadius();
-    this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
-    const how = `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
-    this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${o?.solid ? 'Solid' : 'Walk over it'} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
+    const line = LIGHT[kind]?.line ? this.sim.lights.poleNear(p.roofId, t.x, t.z) : undefined;
+    if (LIGHT[kind]?.line) {
+      // a line light shows on the pole it would hang on
+      this.overlays.hideGhost();
+      if (line) this.overlays.showFrame(line.roofId, line.x, line.z, line.size, why ? 'bad' : 'ok');
+      else this.overlays.showFrame(p.roofId, t.x, t.z, 1, 'bad');
+    } else this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
+    const how = line ? `${this.press('E')} to hang it on this pole` : `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
+    const kindNote = LIGHT[kind]?.line ? 'On the pole’s lines' : o?.solid ? 'Solid' : 'Walk over it';
+    this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${kindNote} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
   }
 
   private previewRemove(p: Pick, x: number, y: number) {
@@ -2663,6 +2708,15 @@ export class Game {
 
   /** Why a decoration in hand can't go here (the tile's rules, reach, and not on top of bloombot if it's solid). */
   private decorProblem(kind: string, roofId: string, x: number, z: number): string | undefined {
+    // E23.3.5: line lights hang on a power pole's lines (aim at the pole) instead of standing on a tile
+    if (LIGHT[kind]?.line) {
+      const o = DECOR_OPTION[kind];
+      if (o && !this.cozy.isDecorUnlocked(o)) return `Unlocks when ${this.cozy.hint(o.unlock)}`;
+      const hang = this.sim.lights.canHang(kind, roofId, x, z);
+      if (hang) return hang;
+      const pole = this.sim.lights.poleNear(roofId, x, z)!;
+      return this.inReach(roofId, pole.x, pole.z, pole.size) ? undefined : TOO_FAR;
+    }
     const why = this.cozy.canDecorate(kind, roofId, x, z);
     if (why) return why;
     if (!this.inReach(roofId, x, z, 1)) return TOO_FAR;
@@ -2674,10 +2728,17 @@ export class Game {
   /** Places the decoration in hand on a tile (free); it stays in hand for the next one. */
   private placeDecorAt(p: Pick, x: number, y: number, kind: string): ActResult {
     const t = p.tile!;
-    const why = this.decorProblem(kind, p.roofId, t.x, t.z) ?? this.cozy.placeDecor(kind, this.buildRot, p.roofId, t.x, t.z);
+    const line = !!LIGHT[kind]?.line;
+    const why = this.decorProblem(kind, p.roofId, t.x, t.z) ?? (line ? this.sim.lights.hang(kind, p.roofId, t.x, t.z) : this.cozy.placeDecor(kind, this.buildRot, p.roofId, t.x, t.z));
     if (why) {
       this.hud.showFail(why, x, y);
       return 'none';
+    }
+    if (line) {
+      this.sfx.build();
+      this.vfx.burst(this.tileVec(t, SLAB_TOP + 1.0), 8, { up: 1.2, size: 0.04, life: 0.8 });
+      this.buildKey = '';
+      return 'select';
     }
     this.chunks.markTile(t);
     this.sfx.build();
@@ -2692,6 +2753,19 @@ export class Game {
     const d = this.cozy.decorOf(t.occupantId);
     // E21.3: under old-city rules the remove tool also takes down a machine, giving its whole recipe back
     const occ = !d && !pickUp && this.sim.oldCity ? this.sim.occupant(t) : undefined;
+    // E23.3.5: a pole with lights on its lines: the lights come down first (the pole stays)
+    const poleLights = !d ? this.sim.lights.onPole(this.sim.occupant(t)) : undefined;
+    if (poleLights) {
+      if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
+      this.sim.lights.unhang(this.sim.occupant(t));
+      this.sfx.click();
+      if (pickUp) this.selectTool(`decor:${poleLights}`);
+      this.buildKey = '';
+      return 'select';
+    }
     if (occ && occ.type !== 'core' && !occ.starter) {
       if (!this.inReach(p.roofId, t.x, t.z, 1)) {
         this.hud.showFail(TOO_FAR, x, y);
@@ -2953,10 +3027,6 @@ export class Game {
       return;
     }
     if (button !== 0) return;
-    if (this.hud.isUpgradesOpen && window.innerWidth < 760) {
-      this.hud.toggleUpgrades(false);
-      return;
-    }
     const catId = this.catHit(x, y);
     if (catId) {
       this.claimingCat = catId;
@@ -3158,20 +3228,6 @@ export class Game {
     return html;
   }
 
-  /** Phase 5 E12: this machine's own upgrade (per-machine levels), plus "all of this type" when there are several. */
-  private upgradeButton(id: string, m: MachineData) {
-    const def = UPGRADE_BY_ID[id];
-    const u = this.sim.upgrades;
-    if (def.available && !def.available(this.sim.state)) return '';
-    const st = u.status(def, m);
-    const lvl = u.levelOf(m, id);
-    if (lvl >= def.maxLevel) return `<p class="stat">${def.icon} ${def.name}: MAX</p>`;
-    const n = u.targets(def).length;
-    const all = u.status(def);
-    const allBtn = n > 1 ? `<button class="buy all" data-buy="${id}|*" ${all.ok ? '' : 'disabled'} title="Buys levels cheapest-first on every ${def.machine}">All ${n}</button>` : '';
-    return `<div class="card" style="margin-top:8px"><span class="ci">${def.icon}</span><span class="cn">${def.name} <em>Lv ${lvl}</em></span><button class="buy" data-buy="${id}|${m.id}" ${st.ok ? '' : 'disabled'}>${formatPriceHtml(st.price, u.short(st))}</button>${allBtn}<span class="cd2">${def.describe(lvl + 1)}</span></div>`;
-  }
-
   private renderInspect() {
     const m = this.sim.machine(this.selected);
     if (!m) return this.hud.renderInspect(null);
@@ -3181,21 +3237,21 @@ export class Game {
       case 'solar': {
         const out = s.production.solarOutput(m);
         const boosted = m.boostUntil > s.time;
-        extra = `<p class="stat">⚡ ${out.toFixed(1)} energy/s${boosted ? ' · 🌸 bloom boost!' : ''}${s.production.surgeActive() ? ` · 🐱 Solar Surge ×${TUNING.cat.frenzyMult}` : ''}</p><p>Restore tiles right next to it for a 5 s ×2 boost.</p>${this.upgradeButton('solarArray', m)}`;
+        extra = `<p class="stat">⚡ ${out.toFixed(1)} energy/s${boosted ? ' · 🌸 bloom boost!' : ''}${s.production.surgeActive() ? ` · 🐱 Solar Surge ×${TUNING.cat.frenzyMult}` : ''}</p><p>Restore tiles right next to it for a 5 s ×2 boost.</p>`;
         break;
       }
       case 'condenser': {
         const near = s.grid.tilesNear(m, TUNING.condenser.radius);
         const mossy = near.filter((t) => t.ground === 'prepared').length;
         const pct = Math.round(((m.charge ?? 0) / TUNING.condenser.threshold) * 100);
-        extra = `<p class="stat">💧 +${s.upgrades.waterMult(m)} water/s</p><p class="stat">🌧️ Watering charge ${pct}% · ${mossy} dry tile${mossy === 1 ? '' : 's'} beside it</p><p>When full, it waters the dry soil next to it into bloom and starts a chain. ${mossy ? '' : 'Pulse a neighbour so moss appears beside it.'}</p>${this.upgradeButton('waterBloom', m)}`;
+        extra = `<p class="stat">💧 +${s.upgrades.waterMult(m)} water/s</p><p class="stat">🌧️ Watering charge ${pct}% · ${mossy} dry tile${mossy === 1 ? '' : 's'} beside it</p><p>When full, it waters the dry soil next to it into bloom and starts a chain. ${mossy ? '' : 'Pulse a neighbour so moss appears beside it.'}</p>`;
         break;
       }
       case 'pollinator': {
         const zone = s.grid.tilesNear(m, s.upgrades.pollinatorReach(m));
         const mossy = zone.filter((t) => t.ground === 'prepared').length;
         const green = zone.filter((t) => t.ground === 'restored').length;
-        extra = `<p class="stat">🌸 Zone radius ${s.upgrades.pollinatorReach(m)} · ${green}/${zone.length} blooming (×${s.upgrades.gardenMult(m)} 🌿)</p><p class="stat">✨ ${mossy} mossy tiles ready to chain</p><p>Restore a tile right next to it: it pollinates another neighbour (up to ${s.upgrades.pollinatorTriggers}× per chain). Line gardens, panels and the Mother Tree up so chains jump between them.</p>${this.upgradeButton('pollinatorReach', m)}`;
+        extra = `<p class="stat">🌸 Zone radius ${s.upgrades.pollinatorReach(m)} · ${green}/${zone.length} blooming (×${s.upgrades.gardenMult(m)} 🌿)</p><p class="stat">✨ ${mossy} mossy tiles ready to chain</p><p>Restore a tile right next to it: it pollinates another neighbour (up to ${s.upgrades.pollinatorTriggers}× per chain). Line gardens, panels and the Mother Tree up so chains jump between them.</p>`;
         break;
       }
       case 'droneHub': {
@@ -3206,19 +3262,18 @@ export class Game {
             return `<p class="stat">${ROLE_INFO[role].icon} Drone ${i + 1}${d.expiresAt ? ' (party!)' : ''}: ${this.droneLabel(role, s.drones.statusOf(d))} · ${d.jobs} jobs</p>`;
           })
           .join('') +
-          this.rolePicker(m) +
-          ['droneSpeed', 'droneRadius', 'secondDrone', 'droneSweep', 'chainIntel'].map((u) => this.upgradeButton(u, m)).join('');
+          this.rolePicker(m);
         break;
       }
       case 'relay': {
         const linked = s.relays.linked(m);
         const ready = linked.filter((o) => s.relays.ready(relayLinkId(m, o))).length;
-        extra = `<p class="stat">📡 Linked to ${linked.length} relay${linked.length === 1 ? '' : 's'} within ${s.relays.range(m)} tiles · ${ready} ready</p><p>Each pulse blooms ${s.relays.targets(m)} tiles around this relay when a chain arrives, and can pass it on. Links recharge for ${TUNING.relay.cooldown} s.${linked.length ? '' : ' <b>Build another Bloom Relay within range to link them.</b>'}</p>${this.upgradeButton('relayLens', m)}`;
+        extra = `<p class="stat">📡 Linked to ${linked.length} relay${linked.length === 1 ? '' : 's'} within ${s.relays.range(m)} tiles · ${ready} ready</p><p>Each pulse blooms ${s.relays.targets(m)} tiles around this relay when a chain arrives, and can pass it on. Links recharge for ${TUNING.relay.cooldown} s.${linked.length ? '' : ' <b>Build another Bloom Relay within range to link them.</b>'}</p>`;
         break;
       }
       case 'motherTree': {
         const pct = Math.round(((m.charge ?? 0) / TUNING.motherTree.threshold) * 100);
-        extra = `<p class="stat">🌳 Charge ${m.charge ?? 0}/${TUNING.motherTree.threshold} (${pct}%)</p><p>Each restoration or new bloom within ${s.upgrades.treeRadius(m)} tiles adds charge. When full, it releases a Bloom Pulse over that whole area. Its own pulse can't recharge it.</p>${this.upgradeButton('treeResonance', m)}`;
+        extra = `<p class="stat">🌳 Charge ${m.charge ?? 0}/${TUNING.motherTree.threshold} (${pct}%)</p><p>Each restoration or new bloom within ${s.upgrades.treeRadius(m)} tiles adds charge. When full, it releases a Bloom Pulse over that whole area. Its own pulse can't recharge it.</p>`;
         break;
       }
       case 'reservoirGarden': {
@@ -3547,16 +3602,11 @@ export class Game {
       this.sfx.powerUp();
       this.hud.flashResource('biomass', 'flash');
     });
-    b.on('upgrade.purchased', ({ id, level, bulk, machineId }) => {
+    b.on('upgrade.granted', ({ id, level, machineId }) => {
       if (id === 'droneSpeed') this.drones.restyle();
       this.machines.refreshUpgrades();
-      if (bulk) return; // "Upgrade all" celebrates once, at the end (upgrade.bulk)
       const def = UPGRADE_BY_ID[id];
       this.celebrateUpgrade(id, `${def.icon} ${def.name} · level ${level}<small>${def.describe(level)}</small>`, machineId);
-    });
-    b.on('upgrade.bulk', ({ id, count }) => {
-      const def = UPGRADE_BY_ID[id];
-      this.celebrateUpgrade(id, `${def.icon} ${def.name} ×${count}<small>${count} level${count === 1 ? '' : 's'} bought across your ${def.machine ? MACHINES[def.machine].name : ''}s, cheapest first</small>`);
     });
     b.on('drone.spawned', ({ droneId }) => {
       const d = s.state.drones.find((x) => x.id === droneId);
@@ -3612,6 +3662,13 @@ export class Game {
     });
     b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Surge ×${TUNING.cat.frenzyMult} for ${Math.round(seconds)}s`));
     b.on('harvest', () => this.sfx.coin());
+    // E23.2.1: the charge is a new concept: one short introduction the first time it runs out, then the meter shows it
+    b.on('charge.empty', () => {
+      const f = s.state.stats.firsts;
+      if (f.chargeEmpty !== undefined) return;
+      f.chargeEmpty = Math.round(s.time);
+      this.hud.toast(`Out of charge<small>Bloombot walks slower and can't pulse. Press ${this.hudKeys('eat')} to eat biomass or food, or rest.</small>`, '', 6);
+    });
     b.on('rooftop.coreReady', () => {
       this.machines.setCoreState('ready');
       this.hud.toast(`✨ The Rooftop Core is humming!<small>Walk up and press ${this.hudKey('interact')} (or use the button) to awaken the building.</small>`, 'gold', 5);
@@ -4235,25 +4292,10 @@ export class Game {
     }
   }
 
-  /**
-   * City 06.5: time passed without frames (a hidden tab, a long hitch) is owed to the simulation, up to a cap,
-   * and paid back a few milliseconds per frame so no frame stalls.
-   */
-  awayFor(seconds: number) {
-    if (!(seconds > 0)) return;
-    const C = TUNING.catchUp;
-    const was = this.catchUpDebt;
-    this.catchUpDebt = Math.min(C.maxSeconds, this.catchUpDebt + seconds);
-    if (was < C.toastFrom && this.catchUpDebt >= C.toastFrom) {
-      const m = Math.round(this.catchUpDebt / 60);
-      this.hud.toast(`⏩ Catching up${m >= 1 ? ` ${m} min` : ''}…<small>Your city kept growing while you were away.</small>`, '', 3);
-    }
-  }
-
-  /** Runs simulation ticks within the frame budget: the frame's own time first, then any catch-up owed. */
+  /** Runs simulation ticks within the frame budget: the frame's own time (E23.1: nothing owed is ever paid back). */
   private runSim(dt: number) {
     const t0 = performance.now();
-    runSimFrame(this.sim, this, dt, { pause: this.pause, speed: this.speed, step: TUNING.simStep, budgetMs: TUNING.catchUp.frameBudgetMs, maxCatchUp: TUNING.catchUp.maxSeconds });
+    runSimFrame(this.sim, this, dt, { pause: this.pause, speed: this.speed, step: TUNING.simStep, budgetMs: TUNING.frameSimBudgetMs });
     this.simMs = performance.now() - t0;
     this.simMsWorst = Math.max(this.simMsWorst, this.simMs);
   }
@@ -4283,7 +4325,6 @@ export class Game {
     // E23.6.1: the table keeps working while its panel holds the game paused (the engine's clock is stopped then)
     this.hud.craft.update(paused ? this.realDt() : dt, paused);
     if (!paused && !this.photo.frozen) {
-      if (rawDt > TUNING.maxFrameDt && !this.hiddenAt) this.awayFor(Math.min(rawDt, 30) - TUNING.maxFrameDt); // a hitch
       this.runSim(dt);
     }
     /** the world's own time: nothing moves while paused (the camera, streaming and the HUD still run) */
@@ -4299,6 +4340,19 @@ export class Game {
     const camP = this.camera.entity.getPosition();
     detailTextures.setCamera(camP.x, camP.y, camP.z);
     this.machines.update(wdt, rect);
+    this.powerLines.update();
+    const powerOn = this.powerView && this.building();
+    this.powerOverlay.show(powerOn);
+    this.powerOverlay.update(wdt, this.powerFocus);
+    this.lightVisuals.update(wdt, this.camera.entity.getPosition());
+    // E23.3.4: in the Power view, powered electrical machines glow soft yellow and the rest of the world darkens
+    this.machines.powerGlow(powerOn ? this.poweredMachines() : undefined, wdt);
+    const D = POWER.view.darken;
+    const dimTo = powerOn ? D.night + (D.day - D.night) * this.dayNight.light : 0; // night is dark already
+    const k = Math.min(1, wdt / POWER.view.fade);
+    this.dayNight.dim = Math.abs(dimTo - this.dayNight.dim) < 1e-3 ? dimTo : this.dayNight.dim + (dimTo - this.dayNight.dim) * k;
+    this.powerOverlay.setBoost(this.dayNight.boost);
+    this.machines.setGlowBoost(this.dayNight.boost);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.

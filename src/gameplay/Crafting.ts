@@ -93,7 +93,7 @@ export class Crafting {
     if (this.decorMade(id)) return 'Already made: place it from the build menu';
     if (!this.unlocked(r.unlock)) return this.unlockLabel(r.unlock);
     const short = this.sim.inventory.shortfall(r.cost);
-    if (short) return `Needs ${short === 'biomass' ? 'Greens' : itemDef(short).name}`;
+    if (short) return `Needs ${itemDef(short).name}`;
     return undefined;
   }
 
@@ -123,7 +123,7 @@ export class Crafting {
     if (!this.unlocked(r.unlock)) return this.unlockLabel(r.unlock);
     if (this.queued() >= CRAFT.queue) return 'The table is busy';
     const short = this.sim.inventory.shortfall(r.cost);
-    if (short) return `Needs ${short === 'biomass' ? 'Greens' : itemDef(short).name}`;
+    if (short) return `Needs ${itemDef(short).name}`;
     return undefined;
   }
 

@@ -307,15 +307,11 @@ export class DroneSystem {
    */
   payJob(cost: Cost): boolean {
     const s = this.sim;
-    const saving = s.advisor.savingFor(); // Phase 5 E12: leave what the player is saving up for
-    const upgrade = s.upgrades.pendingParts(); // E18.7: and a drone upgrade's energy or water part
     for (const k of KINDS) {
       const p = Economy.part(cost, k);
       const cap = s.econ.cap(k);
       if (!cap || p.lte(0)) continue; // biomass is uncapped: no reserve to keep
       let floor = cap.mul(TUNING.drone.reserve);
-      if (saving) floor = floor.max(Economy.part(saving, k).min(cap.mul(TUNING.machineCostMaxShare)));
-      if (upgrade) floor = floor.max(Economy.part(upgrade, k).min(cap.mul(TUNING.machineCostMaxShare)));
       if (s.econ.get(k).sub(p).lt(floor.sub(1e-9))) return false;
     }
     return s.econ.spend(cost);
@@ -442,6 +438,16 @@ export class DroneSystem {
         case 'idle': {
           d.timer -= dt;
           if (d.timer > 0) break;
+          // E23.3.3: a hub off the grid (or shed when power runs short) sends no one out; its drones finish what
+          // they were doing, come home and wait there until the power is back.
+          if (!s.power.isPowered(hub)) {
+            this.status.set(d.id, 'waitingEnergy');
+            const hx = hub.x + hub.size / 2;
+            const hz = hub.z + hub.size / 2;
+            if (Math.hypot(d.px - hx, d.pz - hz) > 0.05) d.mode = 'returning';
+            d.timer = TUNING.drone.retrySeconds;
+            break;
+          }
           // E18: a hub with another role sends its drones on that role's job (Restorers carry on below, unchanged).
           const role = s.roles.roleFor(d, hub);
           if (role !== 'restorer') {

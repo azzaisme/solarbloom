@@ -78,7 +78,7 @@ export function itemCells(sim: Sim): ItemCell[] {
       limit,
       stored,
       label: seen ? `${name}, ${count} of ${limit} in backpack, ${stored} in store` : 'A material not found yet',
-      from: seen ? `Found in ${list(MATERIALS[id].home.slice(0, 3).map(regionName))}${MATERIALS[id].home.length > 3 ? ' and across the city' : ''}` : 'Somewhere in the city',
+      from: !seen ? 'Somewhere in the city' : MATERIALS[id].from ?? `Found in ${list(MATERIALS[id].home.slice(0, 3).map(regionName))}${MATERIALS[id].home.length > 3 ? ' and across the city' : ''}`,
       next: seen ? neededNext(sim, id) : '',
     };
   }).concat(componentCells(sim, limit));
@@ -208,7 +208,7 @@ export function collection(sim: Sim): CollectionGroup[] {
   };
   // keepsakes: the ones Lucky Cats leave, and one per region
   const unlocked = new Set([...(cz?.decorUnlocked ?? []), ...(st.salvage?.items ?? []), ...(st.salvage?.caches ?? [])]);
-  const catKeeps = DECOR_OPTIONS.filter((o) => 'keepsake' in o.unlock).map((o) => ({ name: unlocked.has(o.id) ? o.name : 'Not found yet', detail: unlocked.has(o.id) ? o.blurb : 'A Lucky Cat keeps it for you', found: unlocked.has(o.id) }));
+  const catKeeps = DECOR_OPTIONS.filter((o) => 'keepsake' in o.unlock).map((o) => ({ name: unlocked.has(o.id) ? o.name : 'Not found yet', detail: unlocked.has(o.id) ? o.blurb : 'Still out there somewhere', found: unlocked.has(o.id) }));
   const regionKeeps = sim.oldCity ? KEEPSAKES.map((k) => ({ name: unlocked.has(k.id) ? k.name : 'Not found yet', detail: unlocked.has(k.id) ? `From ${regionName(k.region)}` : 'Hidden in a cache somewhere', found: unlocked.has(k.id) })) : [];
   const keeps = [...catKeeps, ...regionKeeps];
   const fauna = Object.keys(st.fauna ?? {});

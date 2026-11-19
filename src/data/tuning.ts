@@ -3,9 +3,9 @@ import { gameMinutes } from './time';
 
 export const TUNING = {
   simStep: 0.1, // seconds per deterministic simulation tick
-  maxFrameDt: 0.25, // clamp for large frame gaps (tab switch, hitch): the rest becomes catch-up
-  /** City 06.5: simulation work per frame is capped; time lost to a hitch or a hidden tab is caught up over a few frames. */
-  catchUp: { frameBudgetMs: 8, maxSeconds: 600, toastFrom: 20 },
+  maxFrameDt: 0.25, // clamp for large frame gaps (a hitch): the rest is dropped, never owed (E23.1)
+  /** City 06.5: the most simulation one frame may run (ms); time beyond it is dropped, never owed (E23.1). */
+  frameSimBudgetMs: 8,
 
   start: {
     resources: { energy: 20, water: 12, biomass: 0 },
@@ -240,7 +240,7 @@ export const TUNING = {
      * against the bots in docs/E18_AUDIT.md.
      */
     roles: {
-      /** One-time refit per hub. The biomass part grows ×refitGrowth for each other hub already refitted to it. */
+      /** One-time refit per hub, the same for every hub. */
       refit: {
         gardener: { biomass: 60, water: 20 },
         scout: { biomass: 60, energy: 30 },
@@ -248,7 +248,6 @@ export const TUNING = {
         spark: { biomass: 120, energy: 30 },
         harvester: { biomass: 50, energy: 35, water: 20 },
       } as Record<string, { biomass: number; energy?: number; water?: number }>,
-      refitGrowth: 1.5,
       /** Grows the target plus this many orthogonal neighbours (+1 per Drone Sweep level), paying the target's nurture water only. */
       gardener: { neighbours: 2, unlockFullBloom: 10 },
       /** Reach is the hub's radius + (reach − 1) × the base radius; flies `speed`× as fast; +1 ⚡ per `tilesPerEnergy` tiles past the base radius. */
@@ -274,11 +273,8 @@ export const TUNING = {
   /** Phase 5 E12: long-tail upgrade strength (see UpgradeSystem.soilMult). */
   upgradeCurve: { soilStep: 1.2 },
 
-  machineCostGrowth: 1.5, // each extra copy of a machine costs this much more
   /** Phase 5 E12: a machine's energy or water price never passes this share of that store (drones keep 25%). */
   machineCostMaxShare: 0.6,
-  /** Phase 5 E12: a machine's energy/water price grows for this many copies, then only its biomass price does. */
-  machineCappedGrowthCopies: 9,
 
   cat: {
     firstMinTime: 180, // Phase 4 E08.1: first cat at about minute 3–4 (was 4–6), once the player knows the grid
@@ -343,8 +339,6 @@ export const TUNING = {
    */
   areaSteps: { at: [0.25, 0.5, 0.75], incomeSeconds: [10, 15, 20], min: 20, energy: 20, water: 10 },
 
-  /** Phase 5 E12: after any upgrade purchase, the advisor points at progress for this long before upgrades again. */
-  advisor: { upgradeHintCooldown: 15, savingFreshSeconds: 10, roleHintSeconds: 30 },
 
   autosaveSeconds: 10,
 
@@ -369,21 +363,12 @@ export const TUNING = {
     clearShare: 0.6,
     /** …but never more than this many tiles (× the area's distance difficulty), so big areas stay a session's goal */
     clearCap: 160,
-    /**
-     * Region unlocks (owner, 18 Nov 2026): a newly revealed area stays sealed in thick fog until bought. The price
-     * is set when the area appears: `biomass` × `growth`^n (n = areas already unlocked), but at least
-     * `incomeSeconds` of sustained biomass income, so it stays a real choice as the economy grows; and `energy` ×
-     * `energyGrowth`^n, never more than `capShare` of the energy cap (always affordable by waiting).
-     */
-    unlock: { enabled: true, biomass: 1000, growth: 1.6, incomeSeconds: 120, energy: 60, energyGrowth: 1.25, capShare: 0.6 },
     /** fog density at 0% restored and just before clearing (it thins linearly in between) */
     fogFull: 1,
     fogThin: 0.25,
     /** Each cleared area (beyond the park) adds this share of the starting storage, with diminishing returns. */
     storagePerArea: 0.35,
     storageExponent: 0.85,
-    /** Each cleared area waives one copy's worth of the ×machineCostGrowth for every machine type. */
-    permitsPerArea: 1,
     /**
      * Permanent bonus per cleared area, by type (per second). Soft-scaled: n areas of a type give
      * base × n^bonusExponent, so numbers stay readable after hundreds of areas.
@@ -400,22 +385,6 @@ export const TUNING = {
       rooftops: { energy: 0.3, biomass: 0.15 },
     } as Record<string, Partial<Record<'energy' | 'water' | 'biomass', number>>>,
   },
-
-  /**
-   * City 09.1: each area's landmark also asks for one specialty action for its type. Sizes grow with distance
-   * from the park (base + perChunk × distance, capped at max); `share` caps a size by the area's own restorable
-   * tiles, so building can never put it out of reach.
-   */
-  milestones: {
-    park: { kind: 'fullBloom', base: 4, perChunk: 0.5, max: 16, share: 0.08 },
-    street: { kind: 'corridor', base: 1, perChunk: 0.1, max: 3 },
-    plaza: { kind: 'solarBoost', base: 2, perChunk: 0.2, max: 6 },
-    canal: { kind: 'canalFlow', base: 1, perChunk: 0.05, max: 2 },
-    market: { kind: 'chain', base: 6, perChunk: 0.5, max: 20, share: 0.12 },
-    reservoir: { kind: 'overflow', base: 1, perChunk: 0.05, max: 2 },
-    grove: { kind: 'canopy', base: 1, perChunk: 0, max: 1 },
-    rooftops: { kind: 'roofBloom', base: 10, perChunk: 0.5, max: 24, share: 0.5 },
-  } as Record<string, { kind: 'fullBloom' | 'corridor' | 'solarBoost' | 'canalFlow' | 'chain' | 'overflow' | 'canopy' | 'roofBloom'; base: number; perChunk: number; max: number; share?: number }>,
 
   /** City 10.7: district-wide blooms (a district is one CITY_GEN.districtChunks square of chunks). */
   district: {
