@@ -44,7 +44,7 @@ export class ControlsTable {
   render(focusId?: string) {
     const b = this.host.bindings;
     const style = this.host.padStyle();
-    const list = ACTIONS.filter((a) => !a.classic || !b.oldCity);
+    const list = ACTIONS.filter((a) => (b.oldCity ? !a.classic : !a.oldCity));
     const cell = (a: (typeof ACTIONS)[number], kind: Kind) => {
       const can = kind === 'key' ? a.keys : a.pad;
       const locked = b.locked(a.id, kind);
