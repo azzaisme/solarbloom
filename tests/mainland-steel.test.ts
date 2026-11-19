@@ -18,7 +18,7 @@ const MACHS: BuildableType[] = ['gridBattery', 'longPump'];
 
 /** A Great Bloom game with the landing district cleared and plenty in the backpack. */
 function bloomed() {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = MAINLAND.opensAtTier;
   sim.state.salvage!.abilities = ['pry', 'hover', 'climb', 'glide'];
   sim.mainland.open();
@@ -99,7 +99,7 @@ describe('E23.8.3.2: mainland machines', () => {
   });
 
   it('joins the grid as storage and a pumping consumer, and the water network as a long-reach pump, when they exist', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     const calls: [string, unknown][] = [];
     const host = sim as unknown as { power?: PowerHook; water?: WaterHook };
     host.power = { register: (t, spec) => calls.push([t, spec]) };
@@ -112,11 +112,11 @@ describe('E23.8.3.2: mainland machines', () => {
       ['water:longPump', { reach: Infinity, flow: MAINLAND_MACHINES.longPump.flow, power: MAINLAND_MACHINES.longPump.draw, size: 2, sea: true }],
     ]);
     // without a water network (E23.4 not landed yet), nothing breaks and the pump is not wired to it
-    expect(new Sim(createInitialState(7, 'oldcity')).mainland.wired.water).toBe(false);
+    expect(new Sim(createInitialState(7)).mainland.wired.water).toBe(false);
   });
 
   it('on the real grid: the Grid Battery stores the day and carries the Long-range Pump through the night', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     expect(sim.mainland.wired.power).toBe(true);
     let sky = { sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 };
     sim.power.skyOverride = () => sky;

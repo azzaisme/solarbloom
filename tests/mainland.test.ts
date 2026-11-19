@@ -14,7 +14,7 @@ import { Sim } from '../src/gameplay/Sim';
 SaveService.clock = () => 0;
 const saver = new SaveService(undefined);
 
-const sim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
+const sim = (seed = 7) => new Sim(createInitialState(seed));
 const C = MAINLAND.causeway;
 
 describe('E23.8.3.1: mainland layout', () => {

@@ -22,14 +22,14 @@ export interface MaterialDef {
 }
 
 export const MATERIALS: Record<MaterialId, MaterialDef> = {
-  scrap: { id: 'scrap', name: 'Scrap', icon: '🧱', models: ['rubble-pile', 'crate', 'stone-block'], home: ['park', 'backstreet', 'mastRow', 'oldMarket', 'saltwind', 'elderGrove', 'cistern', 'clockPlaza', 'terraces', 'glasshouse', 'observatory'], colour: '#9a8f84' },
-  seeds: { id: 'seeds', name: 'Seeds', icon: '🌱', models: ['broken-pot', 'stump'], home: ['park', 'elderGrove'], colour: '#8fbf5a' },
-  copper: { id: 'copper', name: 'Copper', icon: '🔧', models: ['salvage-copper'], home: ['mastRow'], colour: '#c87a4a' },
+  scrap: { id: 'scrap', name: 'Scrap', icon: '🧱', models: ['rubble-pile', 'crate', 'stone-block'], home: ['park', 'backstreet', 'mastRow', 'oldMarket', 'saltwind', 'elderGrove', 'cistern', 'clockPlaza', 'terraces', 'glasshouse', 'observatory', 'spireHeights'], colour: '#9a8f84' },
+  seeds: { id: 'seeds', name: 'Seeds', icon: '🌱', models: ['broken-pot', 'stump'], home: ['park', 'elderGrove', 'glasshouse'], colour: '#8fbf5a' },
+  copper: { id: 'copper', name: 'Copper', icon: '🔧', models: ['salvage-copper'], home: ['mastRow', 'observatory'], colour: '#c87a4a' },
   timber: { id: 'timber', name: 'Timber', icon: '🛢️', models: ['salvage-driftwood'], home: ['saltwind'], colour: '#a8764a' },
-  glass: { id: 'glass', name: 'Glass', icon: '🪟', models: ['salvage-glass'], home: ['oldMarket'], colour: '#8fd0d8' },
-  clay: { id: 'clay', name: 'Clay', icon: '🏺', models: ['salvage-clay'], home: ['cistern'], colour: '#b97a5a' },
-  gears: { id: 'gears', name: 'Gears', icon: '⚙️', models: ['salvage-gears'], home: ['clockPlaza'], colour: '#b8a26a' },
-  sunstone: { id: 'sunstone', name: 'Sunstone', icon: '✨', models: ['salvage-sunstone'], home: ['terraces'], colour: '#f2c84a' },
+  glass: { id: 'glass', name: 'Glass', icon: '🪟', models: ['salvage-glass'], home: ['oldMarket', 'glasshouse'], colour: '#8fd0d8' },
+  clay: { id: 'clay', name: 'Clay', icon: '🏺', models: ['salvage-clay'], home: ['cistern', 'elderGrove'], colour: '#b97a5a' },
+  gears: { id: 'gears', name: 'Gears', icon: '⚙️', models: ['salvage-gears'], home: ['clockPlaza', 'spireHeights'], colour: '#b8a26a' },
+  sunstone: { id: 'sunstone', name: 'Sunstone', icon: '✨', models: ['salvage-sunstone'], home: ['terraces', 'observatory', 'saltwind'], colour: '#f2c84a' },
   // E23.8.3.2: steel, from the mainland's industrial ruins only
   steel: { id: 'steel', name: 'Steel', icon: '🔩', models: ['salvage-steel'], home: ['mainland'], colour: '#8d9aa5', mainlandOnly: true },
   // E23.5.1: farm items (data/farm). Never lying in piles: gathered from restored ground, grown or composted.
@@ -155,7 +155,7 @@ export const WORKBENCH = {
   groups: { pulse: 'copper', machines: 'gears', drones: 'glass', storage: 'timber', networks: 'sunstone', fog: 'clay' } as Record<string, MaterialId>,
 };
 
-/** Lucky Cat rewards under old-city rules: units of the local material by variant. */
+/** Lucky Cat rewards: units of the local material by variant. */
 export const CAT_REWARD = { standard: 10, golden: 25, rainbow: 60 };
 
 /** §3: Tally's trade once the Market Hall is awake. */

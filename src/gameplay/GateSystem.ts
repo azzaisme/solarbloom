@@ -6,7 +6,7 @@ import { itemDef } from '../data/items';
 import type { Sim } from './Sim';
 
 /**
- * E21.5 (§6, §7): what is in the way. Under old-city rules a region opens because bloombot cleared its gate, never
+ * E21.5 (§6, §7): what is in the way. A region opens because bloombot cleared its gate, never
  * because something was bought. Gates open for good (`salvage.opened`):
  * - a barricade needs Pry (held Interact, 2 s);
  * - deep water needs Hover (Walker refuses gate water without it);
@@ -23,9 +23,6 @@ export class GateSystem {
     });
   }
 
-  get on(): boolean {
-    return !!this.sim.state.salvage;
-  }
 
   isOpen(id: string): boolean {
     return !!this.sim.state.salvage?.opened.includes(id);
@@ -48,7 +45,6 @@ export class GateSystem {
 
   /** Why a gate can't be opened now (its prompt), or undefined. */
   problem(g: GateDef): string | undefined {
-    if (!this.on) return 'Nothing to open here';
     if (this.isOpen(g.id)) return 'Already open';
     const n = g.needs;
     if (g.kind === 'lockBridge') return n.landmark && this.sim.areas.fog(n.landmark) === 'cleared' ? undefined : this.has('hover') ? undefined : g.blocked;
@@ -68,7 +64,7 @@ export class GateSystem {
   open(id: string, free = false): boolean {
     const s = this.sim;
     const r = REGIONS.find((q) => q.gate.id === id);
-    if (!r || !this.on || this.isOpen(id)) return false;
+    if (!r || this.isOpen(id)) return false;
     const g = r.gate;
     if (!free) {
       const why = this.problem(g);

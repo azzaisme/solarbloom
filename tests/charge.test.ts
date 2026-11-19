@@ -9,11 +9,9 @@ import { Sim } from '../src/gameplay/Sim';
 import { BOT, spawnPose, Walker } from '../src/gameplay/Walker';
 
 SaveService.clock = () => 0;
-const oldSim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
-/** A dead park tile bloombot can pulse (energy and water topped up so only the charge decides). */
+const oldSim = (seed = 7) => new Sim(createInitialState(seed));
+/** A dead park tile bloombot can pulse (E23.1.4: a pulse costs only charge). */
 const pulseable = (sim: Sim, n = 1): TileData[] => {
-  sim.econ.add('energy', 1e6);
-  sim.econ.add('water', 1e6);
   const out: TileData[] = [];
   for (const t of sim.areas.tiles(PARK)) {
     if (out.length >= n) break;
@@ -24,13 +22,13 @@ const pulseable = (sim: Sim, n = 1): TileData[] => {
 };
 
 describe('E23.2.1: bloombot\'s charge', () => {
-  it('is off under classic rules: always full, nothing costs charge', () => {
+  it('every game has a charge: it starts full and a pulse costs some (E23.1.1: one rule set)', () => {
     const sim = new Sim(createInitialState(7));
-    expect(sim.charge.on).toBe(false);
-    expect(sim.charge.use('pulse')).toBe(true);
     expect(sim.charge.value()).toBe(CHARGE.max);
-    expect(sim.state.charge).toBeUndefined();
+    expect(sim.charge.use('pulse')).toBe(true);
+    expect(sim.charge.value()).toBeLessThan(CHARGE.max);
   });
+
 
   it('a full charge lasts about 10 minutes of active play (the data\'s profile)', () => {
     const sim = oldSim();
@@ -84,7 +82,6 @@ describe('E23.2.1: bloombot\'s charge', () => {
     sim.state.charge = { value: 10 };
     const pack = sim.state.salvage!.pack as Record<string, number>;
     for (const k of Object.keys(pack)) delete pack[k];
-    sim.econ.add('biomass', 50); // the old city-wide resource is not something bloombot can eat
     expect(sim.charge.eat()).toBe('none');
     // the numbers come from E23.5.1's farm items
     const food = FARM_USES.food.charge * CHARGE.max;
@@ -138,7 +135,7 @@ describe('E23.2.1: never stranded', () => {
   it('at zero with an empty backpack, bloombot walks home, rests, and pulses again (no shortcuts)', () => {
     const sim = oldSim();
     const [far] = pulseable(sim, 1);
-    sim.econ.spend({ biomass: sim.econ.get('biomass') }); // nothing to eat anywhere
+    // nothing to eat anywhere
     for (const k of Object.keys(sim.state.salvage!.pack)) delete (sim.state.salvage!.pack as Record<string, number>)[k];
     sim.state.charge = { value: 0 };
     expect(sim.charge.eat()).toBe('none');
