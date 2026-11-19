@@ -10,7 +10,7 @@ describe('E21: the Old City model list', () => {
     for (const n of used) expect(MODEL_NAMES[n], n).toBeDefined();
     for (const n of piles) expect(MODEL_NAMES[n] !== undefined || have.has(n), n).toBe(true);
     for (const [n, m] of Object.entries(MODEL_NAMES)) expect(m.standIn === 'procedural' || have.has(m.standIn), `${n} -> ${m.standIn}`).toBe(true);
-    // the 60 files of docs/art/old-city-models.md (57 after E23.7.4 dropped the Reclaimer, plus E23.8.3.2's steel, grid battery and long-range pump)
+    // the 59 files of docs/art/old-city-models.md (57 after E23.7.4 dropped the Reclaimer, plus E23.8.3.2's steel and grid battery)
     expect(Object.keys(MODEL_NAMES)).toHaveLength(59);
   });
 });

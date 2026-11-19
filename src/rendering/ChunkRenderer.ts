@@ -1031,8 +1031,8 @@ export class ChunkRenderer {
     if (kind === 'stain') {
       if (t.ground === 'restored') return;
       const j = (s: number) => (dhash(t.x, t.z, s) - 0.5) * 0.4;
-      b.add('sphere', PALETTE.props.rustStain, [x + j(241), y + 0.006, z + j(242)], [0.7 + j(243), 0.012, 0.55 + j(244)]);
-      b.add('sphere', PALETTE.ground.rustStreak, [x + j(245), y + 0.009, z + j(246)], [0.3, 0.012, 0.22]);
+      b.add('sphere', PALETTE.props.rustStain, [x + j(241), y + 0.004, z + j(242)], [0.7 + j(243), 0.012, 0.55 + j(244)]);
+      b.add('sphere', PALETTE.ground.rustStreak, [x + j(245), y + 0.008, z + j(246)], [0.3, 0.012, 0.22]);
       return;
     }
     // stained ground under every piece
@@ -1244,6 +1244,11 @@ export class ChunkRenderer {
         const k = Math.round(255 * (1 - 0.3 * b.grey));
         if (this.raisedPaving(t)) this.pavedTop(b, t, th, gtex, k);
         else addGroundQuad(gtex[GROUND_TEXTURES.indexOf(gt)], gt, t.x, t.z, th + 0.086, [k, k, k]);
+      }
+      // E23.8.3.2: a rust stain in the industrial ruins, laid over the ground (and its pavers, when they are raised)
+      if (!v.far && !t.blocked && t.prop?.startsWith('ruin:stain')) {
+        this.sink = b;
+        this.ruin(b, t, t.prop, t.x + 0.5, th + 0.086 + (gt && this.raisedPaving(t) ? PAVING_RAISE.lift : 0), t.z + 0.5);
       }
       yield; // a tile done: `update` decides whether this frame has time for the next
     }
@@ -1662,19 +1667,6 @@ export class ChunkRenderer {
     this.sink = b;
     const x = t.x + 0.5;
     const z = t.z + 0.5;
-    // E23.8.3.2: a rust stain is ground: the cell as usual, the stain laid on it
-    if (!t.blocked && t.prop?.startsWith('ruin:stain')) {
-      const prop = t.prop;
-      t.prop = undefined;
-      try {
-        this.tile(b, t, h);
-      } finally {
-        t.prop = prop;
-      }
-      this.sink = b;
-      this.ruin(b, t, prop, x, h + 0.08, z);
-      return;
-    }
     // E23.7.4: a salvage pile blown back onto ground bloombot restored sits on that ground (never on a dead slab)
     if (t.blocked && t.ground === 'restored' && t.prop?.startsWith('pile:')) {
       t.blocked = false;

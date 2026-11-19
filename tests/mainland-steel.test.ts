@@ -10,7 +10,6 @@ import { MATERIALS } from '../src/data/salvage';
 import { MACHINE_RECIPES } from '../src/data/crafting';
 import { Sim } from '../src/gameplay/Sim';
 import { itemCells } from '../src/ui/BackpackModel';
-import type { PowerHook } from '../src/gameplay/MainlandSystem';
 
 const RECIPE = (t: string) => MACHINE_RECIPES.find((r) => r.builds === t);
 
@@ -188,21 +187,14 @@ describe('E23.8.3.2: mainland machines', () => {
     expect(sim.inventory.count('steel')).toBe(40 - RECIPE('gridBattery')!.cost.steel!);
   });
 
-  it('joins the grid as storage when the grid exists', () => {
+  it('joins the grid as storage', () => {
     const sim = new Sim(createInitialState(7));
-    const calls: [string, unknown][] = [];
-    const host = sim as unknown as { power?: PowerHook };
-    host.power = { register: (t, spec) => calls.push([t, spec]) };
-    sim.mainland.wire();
-    expect(sim.mainland.wired).toEqual({ power: true });
-    expect(calls).toEqual([
-      ['gridBattery', { battery: { capacity: MAINLAND_MACHINES.gridBattery.capacity, rate: MAINLAND_MACHINES.gridBattery.rate } }],
-    ]);
+    const bat = { id: 'b', type: 'gridBattery', roofId: GROUND, x: 0, z: 0, size: 2 } as unknown as MachineData;
+    expect(sim.power.roleOf(bat)).toEqual({ battery: { capacity: MAINLAND_MACHINES.gridBattery.capacity, rate: MAINLAND_MACHINES.gridBattery.rate } });
   });
 
   it('on the real grid: the Grid Battery stores the day and carries a drone hub through the night', () => {
     const sim = new Sim(createInitialState(7));
-    expect(sim.mainland.wired.power).toBe(true);
     let sky = { sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 };
     sim.power.skyOverride = () => sky;
     const put = (type: string, x: number, z: number, size = 2): MachineData => {

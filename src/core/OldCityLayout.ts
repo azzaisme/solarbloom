@@ -1,4 +1,4 @@
-import { isMainlandCell, mainlandPileAt, mainlandPileById, mainlandRuinAt, mainlandShore, onCauseway, type RuinDef } from './Mainland';
+import { chunkPiles, chunkRuins, isMainlandCell, mainlandPileById, mainlandShore, onCauseway, type RuinDef } from './Mainland';
 import { COAST, KEEPERS, LANDING, OLD_CITY, PARK_SET, REGIONS, type GateDef, type KeeperDef, type PileDef, type RegionDef, type RegionId } from '../data/oldcity';
 
 /**
@@ -59,12 +59,24 @@ export function pileById(id: string): PileDef | undefined {
 }
 
 /** E23.8.3.1: the mainland's set pieces are its salvage fields, generated per chunk (core/Mainland), and the ruins round its steel. */
+const mlPieces = new Map<number, (SetPiece | undefined)[]>();
+
+/** A mainland cell's set piece, from its chunk's table (built once: generation asks every cell and its neighbours). */
 function mainlandPiece(x: number, z: number): SetPiece | undefined {
-  const pile = mainlandPileAt(x, z);
-  if (pile) return { kind: 'pile', pile };
-  // E23.8.3.2: and the industrial ruins round a steel field
-  const ruin = mainlandRuinAt(x, z);
-  return ruin ? { kind: 'ruin', ruin } : undefined;
+  if (!isMainlandCell(x)) return undefined;
+  const cx = Math.floor(x / 16);
+  const cz = Math.floor(z / 16);
+  const k = cx * 65536 + cz;
+  let a = mlPieces.get(k);
+  if (!a) {
+    if (mlPieces.size > 4096) mlPieces.clear();
+    a = new Array<SetPiece | undefined>(256);
+    for (const pile of chunkPiles(cx, cz).values()) a[(pile.z - cz * 16) * 16 + pile.x - cx * 16] = { kind: 'pile', pile };
+    // E23.8.3.2: and the industrial ruins round a steel field
+    for (const ruin of chunkRuins(cx, cz).values()) a[(ruin.z - cz * 16) * 16 + ruin.x - cx * 16] ??= { kind: 'ruin', ruin };
+    mlPieces.set(k, a);
+  }
+  return a[(z - cz * 16) * 16 + x - cx * 16];
 }
 
 /** Every pile in the Old City (park first, then the regions in map order). */

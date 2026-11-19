@@ -4,14 +4,6 @@ import { MAINLAND, MAINLAND_MACHINES } from '../data/mainland';
 import type { Sim } from './Sim';
 
 /**
- * E23.8.3.2: the grid (E23.3, `sim.power`, PR #480) as far as the mainland's machines need it. Optional: a machine it
- * doesn't know simply stands there (cozy). The Long-range Pump joins the water network in its own PR, after E23.4 (#514).
- */
-export interface PowerHook {
-  register(type: string, spec: { battery?: { capacity: number; rate: number } }): void;
-}
-
-/**
  * E23.8.3.1 (#451): the mainland. The Long Causeway's broken middle rises with the Great Bloom (fountain tier 5) and
  * the district it lands in comes out of the cloud; after that the mainland opens by restoring, one district revealing
  * the next, for ever. No gates, no prices and nothing idle: the same tools and rules as the island.
@@ -24,20 +16,13 @@ export class MainlandSystem {
     });
   }
 
-  /** The grid hooks the mainland's machines joined (for tests and the PR's checklist). */
-  wired = { power: false };
-
   /**
-   * E23.8.3.2: joins the mainland's machines to the grid, once the Sim has built it (called at the end of the Sim's
-   * constructor). The Grid Battery is storage.
+   * E23.8.3.2: joins the mainland's machines to the grid (E23.3, `sim.power`), once the Sim has built it (called at
+   * the end of the Sim's constructor). The Grid Battery is storage.
    */
   wire(): void {
-    const sim = this.sim as unknown as { power?: PowerHook };
     const B = MAINLAND_MACHINES.gridBattery;
-    if (sim.power?.register) {
-      sim.power.register('gridBattery', { battery: { capacity: B.capacity, rate: B.rate } });
-      this.wired.power = true;
-    }
+    this.sim.power.register('gridBattery', { battery: { capacity: B.capacity, rate: B.rate } });
   }
 
   /** Has the Great Bloom raised the causeway? */

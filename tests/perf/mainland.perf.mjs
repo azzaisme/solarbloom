@@ -120,7 +120,6 @@ try {
       drones: s.state.drones.length,
       power: !!s.power,
       water: !!s.water,
-      wired: s.mainland.wired,
       bytes: localStorage.getItem('solarbloom.save')?.length ?? 0,
     };
   }, { DISTRICTS, MACHINES });

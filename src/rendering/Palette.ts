@@ -330,7 +330,7 @@ const props = {
   lampToppled: '#8d8a78',
   /** E23.8.3.2: the industrial ruins: deep-rusted girders and the rust run-off staining the ground round them */
   girderRust: '#6b4330',
-  rustStain: '#8c5634',
+  rustStain: '#5e3a28',
   stallDead: '#9a8a70',
   stallAlive: '#c9a77a',
   awning: ['#b5655a', '#5a7fb5'],
