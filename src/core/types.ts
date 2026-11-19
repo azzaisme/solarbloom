@@ -5,7 +5,11 @@ export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'm
   | 'planter'
   // E23.5.3: the end of the farm chain
   | 'compostBin'
-  | 'bioDigester';
+  | 'bioDigester'
+  // E23.4.2: the water network
+  | 'reservoir'
+  | 'pump'
+  | 'desalination';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type RestoreSource =
   | 'pulse'
@@ -481,7 +485,11 @@ export interface GameState {
    */
   cozy?: CozyState;
   /** E23.4.1: water levels (share of capacity) of bodies that have changed, by body id `x,z`. Optional. */
-  water?: { levels: Record<string, number> };
+  water?: {
+    levels: Record<string, number>;
+    /** E23.4.2.2: pipe tiles on the ground, `x,z`, sorted */
+    pipes?: string[];
+  };
   /** E23.2.3: old park benches mended, by id (`bench:x:z`). Optional, so no save version change. */
   rest?: { mended: string[] };
   /** E23.2.2.3: buried finds revealed (a mound shows) and dug up, by id (`bur:x:z`). Optional. */

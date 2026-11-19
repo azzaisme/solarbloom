@@ -39,6 +39,7 @@ import { Pollinators } from '../rendering/Pollinators';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
 import { WaterLevels } from '../rendering/WaterLevels';
+import { PipeVisuals } from '../rendering/PipeVisuals';
 import { ChunkRenderer, MeshBuilder, SINK } from '../rendering/ChunkRenderer';
 import { MACHINE_MODELS } from '../rendering/MachineVisuals';
 import type { HoloShape } from '../rendering/Hologram';
@@ -200,6 +201,8 @@ export class Game {
   readonly chunks: ChunkRenderer;
   /** E23.4.1: water levels drawn on the water (the drained bed) */
   readonly waterLevels: WaterLevels;
+  /** E23.4.2: pipe runs */
+  readonly pipes: PipeVisuals;
   /** Look 6.12: living transitions (every tile change plays as a process). */
   readonly transitions: TransitionRenderer;
   /** Look 6.9: Cultivator tillers. */
@@ -349,6 +352,7 @@ export class Game {
     this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice, (tiles) => {
       for (const t of tiles) this.chunks.markTile(t);
     });
+    this.pipes = new PipeVisuals(this.sim, this.scene.world, this.app.graphicsDevice);
     this.transitions = new TransitionRenderer(this.sim);
     this.chunks.transitions = this.transitions;
     this.cozy = new Cozy(this.sim);
@@ -734,7 +738,7 @@ export class Game {
       for (let tx = Math.floor(f.x - R); tx <= f.x + R; tx++) {
         const t = this.sim.grid.get(GROUND, tx, tz);
         if (!t || t.feature === 'water') continue;
-        const stage = treeStage(t);
+        const stage = treeStage(t, this.sim.water.bloomShown(t)); // E23.4.4: a faded tree sheds like its stage
         if (!stage || stage < 2) continue;
         const area = this.sim.areas.areaOf(t);
         const spot = area ? treeSpot(t, this.sim.areas.info(area).type) : undefined;
@@ -2008,7 +2012,7 @@ export class Game {
     if (this.building()) {
       const tool = this.hud.currentTool;
       const dk = decorType(tool);
-      const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
+      const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : tool === 'pipe' ? 'Lay a pipe' : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
       return what ? { glyph: this.glyph(this.glyphs.style !== 'keys' ? 'place' : 'pulse'), text: what } : undefined;
     }
     const f = b.front();
@@ -2649,6 +2653,7 @@ export class Game {
     const dk = decorType(tool);
     if (dk) return this.previewDecor(p, x, y, dk);
     if (tool === 'remove') return this.previewRemove(p, x, y);
+    if (tool === 'pipe') return this.previewPipe(p, x, y);
     if (machineTool(tool)) {
       const bt = tool;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
@@ -2820,10 +2825,43 @@ export class Game {
     this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${kindNote} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
   }
 
+  /** E23.4.2.2: the pipe tool's ghost and tip: one tile at a time; the tool stays in hand to lay the next. */
+  private previewPipe(p: Pick, x: number, y: number) {
+    const t = p.tile!;
+    const pipes = this.sim.water.pipes;
+    this.overlays.hideRadius();
+    const why = pipes.layProblem(p.roofId, t.x, t.z) ?? (this.inReach(p.roofId, t.x, t.z, 1) ? undefined : TOO_FAR);
+    this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.12);
+    const have = this.sim.inventory.available('pipe');
+    const left = `${have} Pipe${have === 1 ? '' : 's'} at hand (the crafting table makes them)`;
+    this.hud.showTip(x, y, `<b>Pipe</b>Carries water from a pump or a reservoir to whatever stands beside it.<br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${this.press('E')} to lay · ${left}</span>`}`);
+  }
+
+  /** E23.4.2.2: lays one pipe tile (the tool stays in hand, tile by tile). */
+  private layPipeAt(p: Pick, x: number, y: number): ActResult {
+    const t = p.tile!;
+    if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+      this.hud.showFail(TOO_FAR, x, y);
+      return 'none';
+    }
+    const why = this.sim.water.pipes.layProblem(p.roofId, t.x, t.z);
+    if (why) {
+      this.hud.showFail(why, x, y);
+      return 'none';
+    }
+    return this.sim.water.pipes.lay(p.roofId, t.x, t.z) ? 'build' : 'none';
+  }
+
   private previewRemove(p: Pick, x: number, y: number) {
     const t = p.tile!;
     const d = this.cozy.decorOf(t.occupantId);
     this.overlays.hideRadius();
+    if (!d && p.roofId === GROUND && !t.occupantId && this.sim.water.pipes.has(t.x, t.z)) {
+      // E23.4.2.2: a pipe tile lifts back into the pack (its Pipe)
+      this.overlays.showGhost(p.roofId, t.x, t.z, 1, false, 0.12);
+      this.hud.showTip(x, y, `<b>🧹 Lift the pipe</b>${this.press('E')} to lift it (its Pipe goes back into your pack)`);
+      return;
+    }
     if (!d) {
       this.overlays.hideGhost();
       this.overlays.showFrame(p.roofId, t.x, t.z, 1, 'hover');
@@ -2883,6 +2921,14 @@ export class Game {
   private removeDecorAt(p: Pick, x: number, y: number, pickUp: boolean): ActResult {
     const t = p.tile!;
     const d = this.cozy.decorOf(t.occupantId);
+    // E23.4.2.2: the remove tool lifts a pipe tile (its Pipe back into the pack)
+    if (!d && !pickUp && p.roofId === GROUND && !t.occupantId && this.sim.water.pipes.has(t.x, t.z)) {
+      if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
+      return this.sim.water.pipes.lift(t.x, t.z) ? 'build' : 'none';
+    }
     // E21.3: the remove tool also takes down a machine, giving its whole recipe back
     const occ = !d && !pickUp ? this.sim.occupant(t) : undefined;
     // E23.3.5: a pole with lights on its lines: the lights come down first (the pole stays)
@@ -3189,6 +3235,7 @@ export class Game {
     const dk = decorType(tool);
     if (dk) return this.placeDecorAt(p, x, y, dk);
     if (tool === 'remove') return this.removeDecorAt(p, x, y, false);
+    if (tool === 'pipe') return this.layPipeAt(p, x, y);
     if (machineTool(tool)) {
       const bt = tool;
       const a = this.sim.build.anchorFor(bt, p.fx, p.fz);
@@ -4378,6 +4425,8 @@ export class Game {
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
     this.waterLevels.update();
+    this.pipes.update(dt);
+    for (const r of this.sim.water.takeFadeChanges()) this.chunks.markRect(...r); // E23.4.4: land around low water
     if (this.bot) {
       this.bot.update(wdt); // still reads the pad (the menu's focus ring), but nothing moves
       this.updateExploreCamera(wdt);
