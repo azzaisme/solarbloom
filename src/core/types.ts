@@ -1,6 +1,8 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
 /** `chest` exists only under old-city rules (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
-export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger';
+export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger'
+  // E23.5.2: the farm
+  | 'planter';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
 /** Plain per-resource numbers (tuning tables, small per-second coefficients). */
@@ -308,6 +310,10 @@ export interface LinkState {
 /** E21 §1: the eight materials. */
 /** E23.5.1: biomass, food, compost and fertiliser are backpack items too (data/farm). */
 export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser';
+/** E23.6.1 (#390): components made at the crafting table (data in src/data/crafting.ts). */
+export type ComponentId = 'wire' | 'planks' | 'glassPane' | 'pipe' | 'motor' | 'batteryCell' | 'sunCell';
+/** E23.6.1: anything the backpack and the store hold (materials and components; see src/data/items.ts). */
+export type ItemId = MaterialId | ComponentId;
 /** E21 §6: bloombot's abilities, one per fountain tier 1–4. */
 export type AbilityId = 'pry' | 'hover' | 'climb' | 'glide';
 /** E21 §8: where a Keeper is in its story. Woken (pulsed and handed 5 of anything) goes straight to request1. */
@@ -327,9 +333,9 @@ export interface KeeperState {
  */
 export interface SalvageState {
   /** E21.1: what bloombot carries (whole numbers, a stack limit per material) */
-  pack: Partial<Record<MaterialId, number>>;
+  pack: Partial<Record<ItemId, number>>;
   /** E21.1: the city's shared, unlimited store */
-  store: Partial<Record<MaterialId, number>>;
+  store: Partial<Record<ItemId, number>>;
   /** E21.2: units left in each pile bloombot has touched (pile id → left); untouched piles are full */
   piles: Record<string, number>;
   /** E21.5: gates opened for good (barricades pried, bridges repaired), by gate id */
@@ -360,8 +366,31 @@ export interface SalvageState {
   rewards?: string[];
   /** E21.12: lookouts and vistas already seen, beacons spotted (presentation, but saved so they play once) */
   seen?: string[];
+  /** E23.6.1: the crafting table's queue (recipe id, crafts left, seconds left on the one in hand) */
+  craft?: { id: string; n: number; left: number }[];
+  /** E23.6.1: decorations made at the crafting table (each once; placing copies after that is free) */
+  decorMade?: string[];
   /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
   clipped?: Record<string, number>;
+  /** E23.5.2: each planter's bed, by machine id (absent = empty, no extras) */
+  planters?: Record<string, PlanterState>;
+  /** E23.5.2.3: crops whose seeds have been found (data/crops CropId), in the order found */
+  crops?: string[];
+  /** E23.5.2.3: gathers counted toward each region's next seed packet, by region id */
+  seedFinds?: Record<string, number>;
+}
+
+/** E23.5.2: one planter box. */
+export interface PlanterState {
+  /** the crop growing (data/crops CropId); absent = empty */
+  crop?: string;
+  /** growth so far, in game days at full rate (ripe at the crop's `days`) */
+  grown?: number;
+  /** fed with fertiliser (until the next harvest) */
+  fed?: boolean;
+  /** extras built onto it */
+  trellis?: boolean;
+  flooded?: boolean;
 }
 
 export interface GameState {

@@ -67,6 +67,21 @@ export const LIGHTS: LightDef[] = [
 export const LIGHT: Record<string, LightDef> = Object.fromEntries(LIGHTS.map((l) => [l.id, l]));
 
 export const LIGHTING = {
+  /**
+   * E23.7.5: the light lamps really cast. Each lit lamp is a point light at its bulb with inverse-square falloff
+   * and no shadows. PlayCanvas' falloff is 16 / (d² + 1), so at `intensity` 0.5 a full-brightness lamp lights the
+   * ground a tile away about as brightly as the sun (LOOK's 3.4) and fades to a glow by three tiles; `range` (tiles)
+   * is where it ends. `minHeight` is the lowest a light shines from (a ground light's pool would be a pinprick
+   * otherwise). `max` real lights at once go to the lit lamps nearest the view (`maxLow` on the low graphics tier).
+   * Line lights get one real light per `lineEvery` tiles of bulbs, at `linePower`; glow-pods glow faintly.
+   */
+  /**
+   * E23.7.5: the lit bulb. `glow` is its emissive at the dimmest and at full brightness, authored as a glow (Look 1.9:
+   * 1 and above is scaled into the bloom range), so a lit lamp's head shines and blooms. `cover` scales the lit bulb a
+   * little past the lamp's unlit glass (DecorArt), so the glass reads as lit, not as a dull shape around a light.
+   */
+  bulb: { glow: [1, 3] as [number, number], cover: 1.15 },
+  cast: { intensity: 0.5, range: 5, minHeight: 0.55, max: 48, maxLow: 24, lineEvery: 2.2, linePower: 0.7, glowPower: 0.4 },
   /** seconds a light takes to fade in at dusk (or out at dawn), on top of the sky's own twilight */
   fadeSeconds: 4,
   /** a solar light: its panel at full sun (W), its battery (W·s) and its lamp's draw (W) */

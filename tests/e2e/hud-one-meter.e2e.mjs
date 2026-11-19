@@ -109,6 +109,19 @@ try {
         check(r.bad.length === 0, `${tag} ${phase}: no resource amounts or rates in the HUD (${r.bad.join(' | ')})`);
         await page.screenshot({ path: `${dir}/one-meter-${name}${numbers ? '-numbers' : ''}-${phase}.png` });
       }
+      // The check itself: a planted energy row and a rate in the HUD must be caught (so a pass means something).
+      const caught = await page.evaluate((scanSrc) => {
+        const scan = new Function(`return (${scanSrc})()`);
+        const row = document.createElement('div');
+        row.dataset.res = 'energy';
+        row.textContent = '⚡ 120 · +3.5/s';
+        row.style.cssText = 'width:80px;height:20px';
+        document.querySelector('#res').appendChild(row);
+        const r = scan();
+        row.remove();
+        return r.meters.length > 0 && r.rows.length > 1 && r.bad.length > 0;
+      }, scan.toString());
+      check(caught, `${tag}: the check catches a planted energy meter and rate`);
       check(errors.length === 0, `${tag}: no errors (${errors.join(' / ')})`);
       await page.close();
     }

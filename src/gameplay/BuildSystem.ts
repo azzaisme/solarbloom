@@ -2,9 +2,10 @@ import type { BuildableType, GroundState, MachineData } from '../core/types';
 import { MACHINES, machineName } from '../data/machines';
 import { AREA_TYPES, type AreaType } from '../data/city';
 import { GROUND, machinesRemoved } from '../core/GameState';
-import { RECIPES, MATERIALS, STORE, type MaterialCost } from '../data/salvage';
+import { MATERIALS, STORE, type MaterialCost } from '../data/salvage';
 import { regionById } from '../core/OldCityLayout';
 import type { MaterialId } from '../core/types';
+import { isMaterial, itemDef } from '../data/items';
 import type { Sim } from './Sim';
 
 /** E19.2: what building over a decoration says (a decoration is free and instant to remove). */
@@ -22,22 +23,27 @@ export class BuildSystem {
 
   /** E21.3: the old-city recipe for a machine (undefined: it can't be built under old-city rules). */
   recipe(type: BuildableType): MaterialCost | undefined {
-    return RECIPES[type]?.cost;
+    // E23.6.1: a machine with a crafting-table recipe is built from it (components and materials)
+    return this.sim.crafting.machineRecipe(type)?.cost;
   }
 
-  /** E21.3: the fountain tier that unlocks a machine under old-city rules. */
+  /** E21.3: the fountain tier that unlocks a machine under old-city rules (99: a Keeper, research or a find opens it). */
   recipeTier(type: BuildableType): number {
-    return RECIPES[type]?.tier ?? 99;
+    const u = this.sim.crafting.machineRecipe(type)?.unlock;
+    return u && 'tier' in u ? u.tier : 99;
   }
 
   /** E21.3: a machine is locked until its fountain tier, and nothing else (E23.1.1: the one rule set). */
   isUnlocked(type: BuildableType) {
-    return !!RECIPES[type] && (this.sim.state.salvage.tier ?? 0) >= this.recipeTier(type);
+    // E23.6.1: every machine is built from its crafting-table recipe and unlocks where it says
+    const cr = this.sim.crafting.machineRecipe(type);
+    return !!cr && this.sim.crafting.unlocked(cr.unlock);
   }
 
   /** Short reason a machine is still locked (hotbar label). */
   lockLabel(type: BuildableType): string {
-    return `🔒 Fountain tier ${this.recipeTier(type)}`;
+    const cr = this.sim.crafting.machineRecipe(type);
+    return cr ? this.sim.crafting.unlockLabel(cr.unlock) : `🔒 Fountain tier ${this.recipeTier(type)}`;
   }
 
   /** Copies of a type standing now (a merged machine counts once). */
@@ -117,6 +123,8 @@ export class BuildSystem {
     const m = this.sim.inventory.shortfall(r);
     if (!m) return undefined;
     if (m === 'biomass') return 'Needs more Biomass 🌿 — gather it from restored ground';
+    // E23.6.1: a component is made at the crafting table (no region to name)
+    if (!isMaterial(m)) return `Needs ${itemDef(m).name} ${itemDef(m).icon} — make it at the crafting table`;
     return `Needs ${MATERIALS[m].name} ${MATERIALS[m].icon}${this.whereFrom(m)}`;
   }
 
@@ -137,7 +145,10 @@ export class BuildSystem {
     const fail = (reason: string, spotOk = false): PlacementCheck => ({ ok: false, reason, spotOk });
     const recipe = this.recipe(type);
     if (!recipe) return fail(`${def.name} is not built in the Old City`);
-    if (!this.isUnlocked(type)) return fail(`Unlocks at fountain tier ${this.recipeTier(type)}`);
+    if (!this.isUnlocked(type)) {
+      const cr = s.crafting.machineRecipe(type);
+      return fail(cr ? `Not known yet: ${s.crafting.unlockLabel(cr.unlock).replace('🔒 ', '')}` : `${def.name} is not built in the Old City`);
+    }
     const roof = s.grid.roof(roofId);
     if (!roof || !roof.unlocked || roof.preview) return fail('This rooftop is not reachable yet');
     if (type === 'chest' && s.machinesOfType('chest').length >= STORE.maxChests) return fail(`At most ${STORE.maxChests} Storage Chests`);
