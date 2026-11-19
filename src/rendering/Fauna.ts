@@ -303,7 +303,7 @@ export class Fauna {
 
   private assign(kind: Kind, slots: { key: string; home: { x: number; z: number }; y: number; rot?: number }[], opts: FaunaOptions) {
     const cap = TUNING.ecosystem.caps[opts.quality][kind];
-    // E21.24: every animal stands on its terrace (the offset is 0 on flat classic ground)
+    // E21.24: every animal stands on its terrace (the offset is 0 on flat ground)
     const g = this.sim.grid;
     const want = slots.slice(0, cap).map((s) => ({ ...s, y: s.y + g.groundOffset(GROUND, Math.floor(s.home.x), Math.floor(s.home.z)) }));
     const pool = want.length ? this.pool(kind, want.length) : this.pools[kind];

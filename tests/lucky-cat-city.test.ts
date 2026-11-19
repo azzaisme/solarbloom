@@ -220,8 +220,9 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     expect(new Sim(createInitialState(22)).cat.goldenCorridorTiles()).toBe(TUNING.cat.goldenCorridorTiles);
   });
 
-  // ~50 s alone on a busy machine (500 restored areas, 300 claims, Mega Blooms among them); room for a parallel suite
-  it('the discovery log groups finds by area type and stays short in a huge city', { timeout: 200000 }, () => {
+  // ~50 s alone (500 restored areas, 300 claims, Mega Blooms among them); over 200 s while the full suite runs in
+  // parallel on a shared machine, so the timeout stays generous
+  it('the discovery log groups finds by area type and stays short in a huge city', { timeout: 400000 }, () => {
     const sim = grownCity(23, 500);
     // really 500 restored areas besides the park (through the gates and onto the mainland)
     const restored = sim.areas.revealed().filter((id) => id !== PARK && sim.areas.fog(id) === 'cleared' && sim.areas.counts(id).restored > 0);
