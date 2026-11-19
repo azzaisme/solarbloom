@@ -29,9 +29,12 @@ const ABILITY_AT = (tier: number) => TIERS.filter((t) => t.tier <= tier && t.abi
 const unitsOf = (piles: { material: MaterialId; size: keyof typeof SALVAGE.units }[], m: MaterialId) =>
   piles.filter((p) => p.material === m).reduce((a, p) => a + SALVAGE.units[p.size], 0);
 
-/** Materials with piles in the park and in these regions (Biomass comes from restored ground anywhere). */
+/** E23.5.1: the farm's items (biomass, food, compost, fertiliser) come from restored ground and the bins, anywhere, never piles. */
+const FARMED = (Object.values(MATERIALS) as { id: MaterialId; from?: string }[]).filter((m) => m.from).map((m) => m.id);
+
+/** Materials with piles in the park and in these regions, and the farm's items. */
 function pileable(regions: Iterable<RegionId>): Set<MaterialId> {
-  const out = new Set<MaterialId>(['biomass']);
+  const out = new Set<MaterialId>(FARMED);
   for (const p of PARK_SET.piles) out.add(p.material);
   const ids = new Set(regions);
   for (const r of REGIONS) if (ids.has(r.id)) for (const p of r.piles) out.add(p.material);
@@ -278,7 +281,7 @@ describe('E23.8: the whole game from piles alone (no finds, no Lucky Cats, no tr
 
   /** Units lying in piles in the park and these regions (biomass: restored ground, never short). */
   const unitsIn = (regions: Set<RegionId>, m: MaterialId) =>
-    m === 'biomass' ? Infinity : unitsOf(PARK_SET.piles, m) + REGIONS.filter((r) => regions.has(r.id)).reduce((a, r) => a + unitsOf(r.piles, m), 0);
+    FARMED.includes(m) ? Infinity : unitsOf(PARK_SET.piles, m) + REGIONS.filter((r) => regions.has(r.id)).reduce((a, r) => a + unitsOf(r.piles, m), 0);
 
   it('every Keeper request (the first ask and the landmark) can be gathered from piles the moment its region opens', () => {
     const short: string[] = [];
