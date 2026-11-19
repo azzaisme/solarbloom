@@ -200,6 +200,8 @@ export class OldCityController {
     // E21.8: a Keeper: wake it, hand over what it asks for, or hear it
     const keeper = onGround ? this.sim.keepers.at(front.x, front.z) : undefined;
     // E21.9: once the Market Hall is awake, Tally trades any 3 of one material for 1 of another
+    // E23.9.2: Tally's panel offers both, trading and (when bloombot carries something it loves) a gift: one press
+    // never gives anything away by surprise
     if (keeper && keeper.id === 'tally' && this.sim.landmarks.canTrade()) {
       this.openTrade();
       return true;
@@ -279,7 +281,11 @@ export class OldCityController {
     if (this.host.bot.pose.roofId !== GROUND) return false;
     const keeper = this.sim.keepers.at(front.x, front.z);
     if (!keeper || !this.sim.keepers.visible(keeper.id)) return false;
-    if (!this.sim.keepers.pulse(keeper.id)) this.sim.keepers.interact(keeper.id);
+    // E23.9.2: a settled Keeper only chats when pulsed: nothing is handed over without Interact
+    if (!this.sim.keepers.pulse(keeper.id)) {
+      if (this.sim.keepers.step(keeper.id) === 'settled') this.sim.keepers.chat(keeper.id);
+      else this.sim.keepers.interact(keeper.id);
+    }
     this.host.bot.visuals.play('pulse');
     return true;
   }
@@ -406,6 +412,10 @@ export class OldCityController {
     this.panel.open(
       () => tradeHtml(this.sim, give),
       (act, arg) => {
+        if (act === 'gift') {
+          if (this.sim.keepers.interact('tally') === 'gave') this.host.sound('deliver');
+          return;
+        }
         if (act === 'give') give = arg as MaterialId;
         else if (act === 'get' && give && this.sim.landmarks.trade(give, arg as MaterialId)) this.host.sound('deliver');
       },

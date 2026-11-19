@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { GroundState } from '../src/core/types';
 import { COMPONENT_IDS, COMPONENT_RECIPES, DECOR_RECIPES, MACHINE_RECIPES, type Unlock } from '../src/data/crafting';
-import { DECOR_OPTION } from '../src/data/cozy';
+import { CAT_DECOR, DECOR_OPTION } from '../src/data/cozy';
 import { LIGHTS } from '../src/data/lights';
 import { ITEM_DEFS } from '../src/data/items';
 import { BUILDABLE, MACHINES } from '../src/data/machines';
@@ -32,6 +32,7 @@ function reachable(u: Unlock): boolean {
   if ('tier' in u) return u.tier >= 1 && u.tier <= 5;
   // E23.5.4.6: a garden gift is handed over by some Keeper's garden request
   if ('gift' in u) return Object.values(GARDEN_REQUESTS).some((rs) => rs.some((r) => r.reward.kind === 'recipe' && r.reward.machine === u.gift));
+  if ('cat' in u) return CAT_DECOR.includes(u.cat); // E23.12.2: a cat-only decoration (a Lucky Cat leaves it)
   return PROJECTS.some((p) => p.id === u.research); // E23.6.2: a real project
 }
 

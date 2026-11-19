@@ -293,6 +293,20 @@ export class FarmSystem {
     }
   }
 
+  /**
+   * E23.12.2 (#529): a Lucky Cat's "Ripe all around": a growing crop ripens at once (wilting or resting too: the cat
+   * doesn't mind). True when it ripened (false: nothing growing, or ripe already).
+   */
+  ripenNow(m: MachineData): boolean {
+    const st = this.bed(m);
+    const crop = st.crop as CropId | undefined;
+    if (!crop || !CROPS[crop] || this.look(m).ripe) return false;
+    this.write(m, { ...st, grown: CROPS[crop].days });
+    this.sim.bus.emit('planter.changed', { machineId: m.id });
+    this.sim.bus.emit('planter.ripe', { machineId: m.id, crop });
+    return true;
+  }
+
   // ───────────── what bloombot does at a planter ─────────────
 
   /** Why a crop can't be planted here now (undefined: it can). */

@@ -11,7 +11,8 @@ import type { Sim } from './Sim';
  * craft makes goes to the backpack, anything over a stack to the store. Machines are paid for where they are
  * built (build mode reads `machineRecipe`), and removing one gives everything back.
  *
- * Unlocks: from the start (`home`), when a region's Keeper wakes, from research (E23.6.2) or from a cache.
+ * Unlocks: from the start (`home`), when a region's Keeper wakes, from research (E23.6.2), from a cache, or (E23.12.2)
+ * a cat-only decoration a Lucky Cat left.
  */
 export class Crafting {
   constructor(private sim: Sim) {}
@@ -33,6 +34,7 @@ export class Crafting {
     if ('research' in u) return this.sim.research.done(u.research);
     if ('tier' in u) return sv.tier >= u.tier;
     if ('gift' in u) return !!sv.recipes?.includes(u.gift); // E23.5.4.6: a Keeper's garden handed it over
+    if ('cat' in u) return !!sv.decorMade?.includes(u.cat); // E23.12.2: a Lucky Cat left it
     return sv.caches.includes(u.find);
   }
 
@@ -92,6 +94,17 @@ export class Crafting {
     const short = this.sim.inventory.shortfall(r.cost);
     if (short) return `Needs ${itemDef(short).name}`;
     return undefined;
+  }
+
+  /**
+   * E23.12.2 (#529): a Lucky Cat leaves a decoration made (nothing paid): it is bloombot's for good, free to place,
+   * and its recipe reads as made on the table. False when it was made already.
+   */
+  giveDecor(id: string): boolean {
+    const sv = this.sv;
+    if (!sv || !this.decor(id) || this.decorMade(id)) return false;
+    sv.decorMade = [...(sv.decorMade ?? []), id].sort();
+    return true;
   }
 
   /** Makes a decoration once (pays its recipe); it is bloombot's for good. True when made. */

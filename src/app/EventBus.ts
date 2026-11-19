@@ -82,10 +82,18 @@ export interface GameEvents {
   'fountain.delivered': { material: import('../core/types').MaterialId; n: number };
   'fountain.tier': { tier: number };
   /** E21.8: a Keeper speaks (one to three lines) or moves to a new step. */
-  /** E23.9.1: a page of the maker's journal was kept */
-  'journal.page': { id: string };
   'keeper.said': { keeperId: string; lines: string[] };
   'keeper.step': { keeperId: string; step: import('../core/types').KeeperStep };
+  /** E23.9.2: a Keeper took a gift it loves, or bloombot grew its garden */
+  'keeper.gift': { keeperId: string; /** a material, or 'garden' for a grown Keeper garden (E23.5.4.6) */ item: string; hearts: number };
+  /** E23.9.2: a settled Keeper sets off to tend a tile of its region */
+  'keeper.tending': { keeperId: string; x: number; z: number };
+  /** E23.9.2: a settled Keeper tended a tile of its region (one bloom step) */
+  'keeper.tended': { keeperId: string; x: number; z: number };
+  /** E23.9.2: a Keeper calls bloombot a friend */
+  'keeper.friend': { keeperId: string };
+  /** E23.9.1: a page of the maker's journal was kept */
+  'journal.page': { id: string };
   /** E21.9: a region's landmark woke (by bloombot's own delivery). */
   'landmark.woken': { region: string };
   'tile.restoring': { tile: TileData; source: RestoreSource };
