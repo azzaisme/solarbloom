@@ -27,6 +27,7 @@ export type Action =
   | 'rotate'
   | 'rotateBack'
   | 'removeMode'
+  | 'powerOverlay'
   | 'slot1'
   | 'slot2'
   | 'slot3'
@@ -101,6 +102,7 @@ export const ACTIONS: readonly ActionDef[] = [
   A('rotate', 'Turn the piece', 'build', 'build'),
   A('rotateBack', 'Turn the piece back', 'build', 'build'),
   A('removeMode', 'Remove mode', 'build', 'build'),
+  A('powerOverlay', 'Power view (in build mode)', 'build', 'build'),
   A('slot1', 'Hotbar slot 1', 'build', 'world'),
   A('slot2', 'Hotbar slot 2', 'build', 'world'),
   A('slot3', 'Hotbar slot 3', 'build', 'world'),
@@ -150,6 +152,7 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
     rotate: ['KeyR', 'Wheel'],
     rotateBack: [],
     removeMode: ['KeyX'],
+    powerOverlay: ['KeyO'],
     slot1: ['Digit1'],
     slot2: ['Digit2'],
     slot3: ['Digit3'],
@@ -195,6 +198,7 @@ export function defaultPad(oldCity = false): Partial<Record<Action, number>> {
     rotate: 5,
     rotateBack: 4,
     removeMode: 7,
+    powerOverlay: 15, // d-pad right (Pin next request while walking)
     backpack: 12,
     map: 8,
     harvest: 14,

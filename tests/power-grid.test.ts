@@ -63,6 +63,23 @@ describe('E23.3.1 power grid', () => {
     expect(sim.power.isPowered(far)).toBe(true);
   });
 
+  it('networkNear finds the network at a point with a margin: on a machine, near a pole line, not far off', () => {
+    const { sim, put } = world();
+    const range = Math.floor(sim.relays.range());
+    const g = put('gen', 0, 0);
+    put('relay', 1, 0); // touching the generator
+    put('relay', 1 + range, 0); // a pole line along z = 0.5
+    const other = put('pump', 0, 30);
+    tick(sim);
+    const net = sim.power.networkOf(g)!;
+    expect(sim.power.networkNear(GROUND, 0.5, 0.5, 1.2)).toBe(net); // on the generator
+    // half way along the line, 1 tile off it: still the line's network, though not on any machine
+    expect(sim.power.networkNear(GROUND, 1.5 + range / 2, 1.5, 1.2)).toBe(net);
+    expect(sim.power.networkNear(GROUND, 1.5 + range / 2, 3, 1.2)).toBeUndefined(); // too far off the line
+    expect(sim.power.networkNear(GROUND, 0.5, 30.5, 1.2)).toBe(sim.power.networkOf(other)); // the nearer one wins
+    expect(sim.power.networkNear('roof:none', 0.5, 0.5, 1.2)).toBeUndefined(); // other roofs don't count
+  });
+
   it('surplus charges the battery; at night the battery covers the deficit, then drains', () => {
     const { sim, put, setSky } = world();
     sim.power.register('gen', { source: (_m, _s, sky) => 10 * sky.sun });

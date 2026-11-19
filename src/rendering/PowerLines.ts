@@ -7,7 +7,7 @@ import { bezier, part, tube } from './MachineParts';
 import { group } from './Shapes';
 
 /** How high a cable meets a machine, by type (world units above its base). Poles carry theirs on the crossarm. */
-const CABLE_Y: Record<string, number> = { windTurbine: 0.5, battery: 0.85, solar: 0.3 };
+const CABLE_Y: Record<string, number> = { windTurbine: 0.5, battery: 0.85, solar: 0.3, charger: 0.6 };
 
 type V3 = [number, number, number];
 
@@ -25,6 +25,9 @@ export function anchorOf(m: { type: string }, base: V3, toward?: V3): V3 {
   }
   return [base[0], base[1] + (CABLE_Y[m.type] ?? 0.5), base[2]];
 }
+
+/** Height above its base where a cable meets this machine (a pole: its insulators). */
+export const cableY = (m: { type: string }): number => anchorOf(m, [0, 0, 0])[1];
 
 /**
  * E23.3.2.3: the grid's cables, drawn in the world. Linked poles are strung together with a sagging cable, and every
