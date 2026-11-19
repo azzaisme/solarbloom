@@ -64,24 +64,26 @@ export function glowMaterial(color: string, intensity = GLOW_INTENSITY): pc.Stan
   return m;
 }
 
-const glowMeshes = new WeakMap<pc.GraphicsDevice, Map<number, pc.Mesh>>();
+const glowMeshes = new WeakMap<pc.GraphicsDevice, Map<number | string, pc.Mesh>>();
 
 /**
  * Look 3.14: a glowing tile square (as in docs/reference/target-look.png), flat at y=0 and centred: a thin bright
  * line set just inside the tile's edge, a soft halo either side of it and a faint inner fill. `size` is the
  * footprint in tiles; the line keeps the same width at every size. Shared and cached per device and size.
  */
-export function glowTileMesh(device: pc.GraphicsDevice, size = 1): pc.Mesh {
+export function glowTileMesh(device: pc.GraphicsDevice, size = 1, width = 1): pc.Mesh {
   let bySize = glowMeshes.get(device);
   if (!bySize) glowMeshes.set(device, (bySize = new Map()));
-  let mesh = bySize.get(size);
+  const key = width === 1 ? size : `${size}|${width}`;
+  let mesh = bySize.get(key);
   if (mesh) return mesh;
   const h = size / 2;
+  const w = width; // E23.3.4: the Power view draws its frames thinner (the machines carry the outline)
   // Concentric squares from the outside in: [half size, alpha, brightness].
   const rings: [number, number, number][][] = [
-    [[h - 0.0, 0, 0.5], [h - 0.045, 0.6, 0.55]], // outer halo (deeper green, so the line reads on pale paving)
-    [[h - 0.045, 1, 1], [h - 0.083, 1, 1]], // the line
-    [[h - 0.083, 0.6, 0.55], [h - 0.24, 0.2, 0.5]], // inner glow
+    [[h - 0.0, 0, 0.5], [h - 0.045 * w, 0.6, 0.55]], // outer halo (deeper green, so the line reads on pale paving)
+    [[h - 0.045 * w, 1, 1], [h - 0.083 * w, 1, 1]], // the line
+    [[h - 0.083 * w, 0.6, 0.55], [h - 0.24 * w, 0.2, 0.5]], // inner glow
   ];
   const pos: number[] = [];
   const nrm: number[] = [];
@@ -118,7 +120,7 @@ export function glowTileMesh(device: pc.GraphicsDevice, size = 1): pc.Mesh {
   mesh.setIndices(idx);
   mesh.update();
   mesh.incRefCount(); // shared by pooled entities; never let the engine free it
-  bySize.set(size, mesh);
+  bySize.set(key, mesh);
   return mesh;
 }
 

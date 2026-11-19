@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
-import { big } from '../src/core/Big';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MaterialId } from '../src/core/types';
 import { FRIENDSHIP, KEEPER_STORIES } from '../src/data/keepers';
@@ -30,7 +29,7 @@ describe('E23.9.2: every Keeper, from waking to friendship', () => {
     it(`${k.name} (${k.region})`, () => {
       const r = REGIONS.find((q) => q.id === k.region)!;
       const story = KEEPER_STORIES[k.id];
-      let sim = new Sim(createInitialState(7, 'oldcity'));
+      let sim = new Sim(createInitialState(7));
       const sv = sim.state.salvage!;
       sv.tier = 4;
       sv.abilities.push('pry', 'hover', 'climb', 'glide');
@@ -70,13 +69,11 @@ describe('E23.9.2: every Keeper, from waking to friendship', () => {
 
       // 3. tender: its landmark wakes (the region restored enough, its delivery handed in)
       for (const t of sim.areas.tiles(r.id)) if (sim.areas.counts(r.id).restored < sim.areas.need(r.id) && sim.restoration.isEligible(t)) sim.restoration.complete(t, 'pulse');
-      for (const [m, n] of Object.entries(k.landmark) as [MaterialId | 'biomass', number][]) {
-        if (m === 'biomass') sim.state.resources.biomass = big(n * 2);
-        else sim.inventory.addToStore(m, n);
-      }
+      // biomass is a backpack item like the rest (E23.5.1)
+      for (const [m, n] of Object.entries(k.landmark) as [MaterialId, number][]) sim.inventory.addToStore(m, n);
       sim.bot = { roofId: GROUND, x: k.x + 0.5, z: k.z + 1.5 };
       // the store is reached from anywhere once it's near; hand everything over from the pack to be sure
-      for (const [m, n] of Object.entries(k.landmark) as [MaterialId | 'biomass', number][]) if (m !== 'biomass') sim.inventory.withdraw(m, n);
+      for (const [m, n] of Object.entries(k.landmark) as [MaterialId, number][]) sim.inventory.withdraw(m, n);
       expect(sim.landmarks.interact(r.id)).toBe('woke');
       expect(sim.keepers.step(k.id)).toBe('settled');
       expect(said.at(-1)).toContain(story.arc.tender[0]);

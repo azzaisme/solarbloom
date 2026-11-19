@@ -6,7 +6,7 @@ import { tradeHtml } from '../src/ui/OldCityPanel';
 
 /** The Old Market open, its hall awake (Tally trades), Tally settled, bloombot beside it. */
 function marketAwake() {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   const sv = sim.state.salvage!;
   sv.tier = 1;
   sv.abilities.push('pry');
@@ -53,7 +53,7 @@ describe('E23.9.2: Tally trades, and takes a gift only when asked', () => {
 
 describe('E23.9.2 → E23.2.3: a friend walks over to a bench', () => {
   it('pathTo gives a Keeper a walk to beside a seat, over ground bloombot could walk', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     sim.state.salvage!.tier = 1;
     sim.state.salvage!.abilities.push('pry');
     sim.areas.clear('park', true);

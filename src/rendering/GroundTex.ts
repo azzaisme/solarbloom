@@ -132,7 +132,8 @@ function paintDeadEarth(px: Uint8ClampedArray) {
       // where the ground cracks: patches, the rest is dusty and smooth
       const patch = smooth(0.5, 0.66, n1(u, v, 3) * 0.7 + n2(u, v, 6) * 0.3);
       // drifts of lighter dust running diagonally (the wind), and darker damp earth
-      const drift = n1(u + v, v - u * 0.35, 4) * 0.6 + n2(u, v, 9) * 0.4;
+      // (whole-number shears only: the noise repeats once per texture, so any other slant leaves a seam where it tiles)
+      const drift = n1(u + v, v - u, 4) * 0.6 + n2(u, v, 9) * 0.4;
       let c = mix(mix(darkEarth, base, smooth(0.2, 0.55, drift)), lightDust, smooth(0.55, 0.9, drift) * 0.8);
       c = mix(c, mix(darkEarth, lightDust, tone), patch * 0.16); // each plate its own tone
       // plate edges: a soft bevel into a dark hairline
@@ -259,7 +260,8 @@ function paintDeadPaving(px: Uint8ClampedArray, H: Float32Array) {
       // a missing paver: bare dusty earth, darker at its rim
       if (gone[id]) c = mix(mix(dustDark, dust, n1(u, v, 24) * 0.7), shadow, smooth(0.2, 0.03, edge) * 0.5);
       // dust drifted over the paving on the wind: thick in places, a thin wash elsewhere
-      const drift = n1(u + v * 0.6, v - u * 0.3, 3) * 0.65 + n2(u, v, 7) * 0.35;
+      // (whole-number shears only, so it tiles without a seam)
+      const drift = n1(u + v, v - u, 3) * 0.65 + n2(u, v, 7) * 0.35;
       c = mix(c, dustC, smooth(0.62, 0.8, drift) * 0.7 + 0.02);
       // height: a rounded top standing above the joint, each paver sunk or tilted a little, pitted and cracked;
       // drifted dust levels it out
@@ -385,6 +387,49 @@ export function addGroundQuad(g: GroundTexGeo, name: GroundTexName, x: number, z
     g.col.push(rgb[0], rgb[1], rgb[2], 255);
   }
   g.idx.push(i, i + 2, i + 1, i, i + 3, i + 2);
+}
+
+/**
+ * Adds a flat fan (a centre and a rim of points, at height y) with the same world-space texture coordinates as the
+ * tile tops, so a curved path corner carries its tile's painted ground on across the corner without a seam.
+ */
+export function addGroundFan(g: GroundTexGeo, name: GroundTexName, o: [number, number], rim: [number, number][], y: number, rgb: [number, number, number]) {
+  const s = TILE_M[name];
+  const i = g.pos.length / 3;
+  for (const [x, z] of [o, ...rim]) {
+    g.pos.push(x, y, z);
+    g.uv.push(x / s, z / s);
+    g.col.push(rgb[0], rgb[1], rgb[2], 255);
+  }
+  for (let k = 1; k < rim.length; k++) {
+    const [ax, az] = rim[k - 1];
+    const [bx, bz] = rim[k];
+    // facing up, whichever way round the rim runs
+    const up = (ax - o[0]) * (bz - o[1]) - (az - o[1]) * (bx - o[0]) < 0;
+    g.idx.push(i, up ? i + k : i + k + 1, up ? i + k + 1 : i + k);
+  }
+}
+
+/**
+ * Adds a flat band between two lines of points (same count), tinted `inner` along the first and `outer` along the
+ * second: a soft contact shadow painted onto the ground beside something that stands above it.
+ */
+export function addGroundStrip(g: GroundTexGeo, name: GroundTexName, a: [number, number][], b: [number, number][], y: number, inner: [number, number, number], outer: [number, number, number]) {
+  const s = TILE_M[name];
+  const i = g.pos.length / 3;
+  for (let k = 0; k < a.length; k++)
+    for (const [p, rgb] of [[a[k], inner], [b[k], outer]] as const) {
+      g.pos.push(p[0], y, p[1]);
+      g.uv.push(p[0] / s, p[1] / s);
+      g.col.push(rgb[0], rgb[1], rgb[2], 255);
+    }
+  for (let k = 0; k + 1 < a.length; k++) {
+    const A = i + k * 2, B = A + 1, C = A + 2, D = A + 3;
+    // facing up, whichever way round the band runs
+    const up = (b[k][0] - a[k][0]) * (a[k + 1][1] - a[k][1]) - (b[k][1] - a[k][1]) * (a[k + 1][0] - a[k][0]) < 0;
+    if (up) g.idx.push(A, B, C, B, D, C);
+    else g.idx.push(A, C, B, B, C, D);
+  }
 }
 
 export function groundTexMesh(device: pc.GraphicsDevice, g: GroundTexGeo): pc.Mesh | undefined {

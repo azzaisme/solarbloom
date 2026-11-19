@@ -1,4 +1,3 @@
-import { big, toNum } from '../src/core/Big';
 import { TUNING } from '../src/data/tuning';
 import { describe, expect, it } from 'vitest';
 import { fill, makeSim, rich, setGround } from './helpers';
@@ -19,19 +18,6 @@ describe('drones', () => {
     expect(sim.state.stats.droneJobs).toBeGreaterThanOrEqual(4);
     const targets = sim.state.drones.map((d) => d.targetTileId).filter(Boolean);
     expect(new Set(targets).size).toBe(targets.length);
-  });
-
-  it('respects resource costs and waits when broke', () => {
-    const sim = makeSim();
-    rich(sim);
-    fill(sim, 4, 4, 5, 5, 'restored');
-    sim.build.place('droneHub', 'r1', 4, 4);
-    sim.state.machines = sim.state.machines.filter((m) => m.type !== 'solar');
-    sim.state.resources.energy = big(0);
-    sim.advance(10);
-    expect(sim.state.stats.droneJobs).toBe(0);
-    expect(toNum(sim.state.resources.energy)).toBeGreaterThanOrEqual(0);
-    expect(sim.drones.statusOf(sim.state.drones[0])).toBe('waitingEnergy');
   });
 
   it('stays stable with zero eligible jobs', () => {

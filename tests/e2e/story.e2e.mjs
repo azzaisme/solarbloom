@@ -128,6 +128,10 @@ try {
       await shot(page, 'keepers-3-thanks');
       for (let i = 0; i < 2; i++) {
         await page.evaluate(() => (window.solarbloom.sim.state.time += 48 * 60));
+        // the prompt refreshes on the next frames (slow headless)
+        await page.waitForFunction(() => /Give a gift to Pylon/.test(document.querySelector('#prompt, .prompt, [class*=prompt]')?.textContent ?? ''), null, { timeout: 60000 }).catch(() => {});
+        const before = await page.evaluate(() => ({ prompt: document.querySelector('#prompt, .prompt, [class*=prompt]')?.textContent ?? '', hearts: window.solarbloom.sim.keepers.hearts('pylon'), gift: window.solarbloom.sim.keepers.giftFor('pylon') ?? null, copper: window.solarbloom.sim.inventory.count('copper'), pose: window.solarbloom.sim.keepers.pose('pylon').doing, panel: !!document.querySelector('.oc-panel:not([hidden]), .bp-open, #backpack:not([hidden])') }));
+        console.log('  gift try', i + 2, JSON.stringify(before));
         await page.keyboard.press('KeyE');
         await page.waitForTimeout(700);
       }
@@ -142,16 +146,27 @@ try {
       const target = await page.evaluate(() => window.solarbloom.sim.keepers.startTending('pylon'));
       check(!!target, `keepers: a friend sets off to tend a tile (${JSON.stringify(target)})`);
       const bloom0 = await page.evaluate(([x, z]) => window.solarbloom.sim.grid.get('g', x, z).bloom, [target.x, target.z]);
-      await page.waitForFunction(() => window.solarbloom.keepers.views.get('pylon')?.to);
+      // bloombot a couple of tiles off, looking at the tile, so the camera frames the Keeper at work
+      await stand(page, target.x + 0.5, target.z + 2.2, Math.PI);
+      await page.waitForFunction(() => ['walk', 'tend'].includes(window.solarbloom.sim.keepers.pose('pylon').doing));
       await shot(page, 'keepers-5-walking-to-tend');
-      await page.waitForFunction(([x, z]) => {
-        const p = window.solarbloom.keepers.headWorld('pylon');
-        return p && Math.hypot(p.x - (x + 0.5), p.z - (z + 0.5)) < 0.3;
+      await page.waitForFunction(() => window.solarbloom.sim.keepers.pose('pylon').doing === 'tend', null, { timeout: 120000 });
+      // frame the Keeper at work, up close
+      await page.evaluate(([x, z]) => {
+        const c = window.solarbloom.camera;
+        c.glide(x + 0.5, 0, z + 1.2, c.maxZoom);
+        for (let i = 0; i < 300; i++) c.update(0.05);
       }, [target.x, target.z]);
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(500);
+      await page.waitForFunction(() => window.solarbloom.keepers.views.get('pylon').body.getLocalEulerAngles().x > 10, null, { timeout: 30000 }).catch(() => {});
+      const lean = await page.evaluate(() => window.solarbloom.keepers.views.get('pylon').body.getLocalEulerAngles().x);
+      check(lean > 10, `keepers: tending, it leans in over the tile (${lean.toFixed(0)}°)`);
       await shot(page, 'keepers-6-tending');
       const bloomMid = await page.evaluate(([x, z]) => window.solarbloom.sim.grid.get('g', x, z).bloom, [target.x, target.z]);
       check(bloomMid === bloom0, `keepers: the tile has not bloomed before it is tended (${bloom0} → ${bloomMid})`);
+      // it is talked to where it is working, not where it sleeps
+      const found = await page.evaluate(([x, z]) => ({ there: window.solarbloom.sim.keepers.at(x, z)?.id ?? null, home: window.solarbloom.sim.keepers.at(10, -4)?.id ?? null }), [target.x, target.z]);
+      check(found.there === 'pylon' && found.home === null, `keepers: Interact finds it on the tile it is tending (${JSON.stringify(found)})`);
       await page.waitForFunction(() => !window.solarbloom.sim.keepers.tendingAt('pylon'));
       await page.waitForTimeout(600);
       await shot(page, 'keepers-7-tended');
@@ -229,8 +244,23 @@ try {
       await page.waitForTimeout(1500);
       await shot(page, 'bench-1-alone');
       await page.evaluate(() => window.solarbloom.resting.stand?.());
-      // three gifts later: a friend
-      await page.evaluate(() => (window.solarbloom.sim.state.salvage.keepers.pylon.hearts = 3));
+      // three gifts later, a game day apart, handed over facing Pylon at home: a friend
+      await page.evaluate(() => window.solarbloom.sim.inventory.add('copper', 3));
+      await stand(page, 10.5, -2.6, Math.PI);
+      await page.waitForFunction(() => /Give a gift to Pylon/.test(document.querySelector('#prompt, .prompt, [class*=prompt]')?.textContent ?? ''), null, { timeout: 120000 }).catch(() => {});
+      for (let i = 0; i < 3; i++) {
+        if (i) await page.evaluate(() => (window.solarbloom.sim.state.time += 48 * 60));
+        // the prompt refreshes on the next frames (slow headless)
+        await page.waitForFunction(() => /Give a gift to Pylon/.test(document.querySelector('#prompt, .prompt, [class*=prompt]')?.textContent ?? ''), null, { timeout: 60000 }).catch(() => {});
+        const pr = await prompt(page);
+        check(/Give a gift to Pylon/.test(pr), `bench: gift ${i + 1}: the prompt offers it (${pr})`);
+        await page.keyboard.press('KeyE');
+        await page.waitForTimeout(700);
+      }
+      const earned = await page.evaluate(() => ({ hearts: window.solarbloom.sim.keepers.hearts('pylon'), friend: window.solarbloom.sim.keepers.isFriend('pylon'), copper: window.solarbloom.sim.inventory.count('copper') }));
+      check(earned.friend && earned.hearts === 3, `bench: three real gifts made Pylon a friend (${JSON.stringify(earned)})`);
+      await page.evaluate(() => window.solarbloom.hud.backpack?.close?.());
+      await stand(page, bench.x + 0.5, bench.z + 1.6, Math.PI);
       const together = await page.evaluate(([x, z]) => {
         const g = window.solarbloom;
         g.resting.sitBench(g.sim.rest.benchAt(x, z));

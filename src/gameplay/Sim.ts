@@ -1,18 +1,16 @@
-import { machinesStamp, rulesOf } from '../core/GameState';
+import { machinesStamp } from '../core/GameState';
 import { decorOccupant, parseDecorKey } from '../core/Decor';
 import { EventBus } from '../app/EventBus';
-import { Economy } from '../core/Economy';
 import { Grid } from '../core/Grid';
 import { hasGrowth, unpackChunk } from '../core/TilePack';
 import { Rng } from '../core/Rng';
-import type { GameState, MachineData, Rules, TileData } from '../core/types';
+import type { GameState, MachineData, TileData } from '../core/types';
 import { BloomChainSystem } from './BloomChainSystem';
 import { BuildSystem } from './BuildSystem';
-import { CanalNetwork } from './CanalNetwork';
 import { RelaySystem } from './RelaySystem';
 import { PowerGrid } from './PowerGrid';
-import { RooftopClusters } from './RooftopClusters';
-import { DistrictSystem } from './DistrictSystem';
+import { ChargerSystem } from './ChargerSystem';
+import { Lights } from './Lights';
 import { DroneSystem } from './DroneSystem';
 import { DroneRoles } from './DroneRoles';
 import { Advisor } from './Advisor';
@@ -36,8 +34,17 @@ import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
 import { MainlandSystem } from './MainlandSystem';
 import { LandmarkSystem } from './LandmarkSystem';
+import { WaterSystem } from './WaterSystem';
+import { Crafting } from './Crafting';
+import { Research } from './Research';
+import { ChargeSystem } from './Charge';
+import { PulseLoad } from './PulseLoad';
+import { RestSystem } from './Rest';
+import { BuriedSystem } from './Buried';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
+import { GatherSystem } from './GatherSystem';
+import { FarmSystem } from './FarmSystem';
 import { Weather } from './Weather';
 
 /**
@@ -46,7 +53,6 @@ import { Weather } from './Weather';
  */
 export class Sim {
   readonly grid: Grid;
-  readonly econ: Economy;
   readonly rng: Rng;
   readonly upgrades: UpgradeSystem;
   readonly production: ProductionSystem;
@@ -62,40 +68,59 @@ export class Sim {
   readonly metrics: Metrics;
   readonly log: DebugLog;
   readonly areas: AreaSystem;
-  readonly districts: DistrictSystem;
-  readonly canals: CanalNetwork;
   readonly relays: RelaySystem;
   /** E23.3: the power grid (networks of poles, sources, batteries and consumers). */
   readonly power: PowerGrid;
-  readonly clusters: RooftopClusters;
+  /** E23.3.3: chargers (bloombot recharges on a powered pad). */
+  readonly chargers: ChargerSystem;
+  /** E23.3.5: night lights (decorations on the grid, solar or glow-pods). */
+  readonly lights: Lights;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
   readonly ecosystem: EcosystemSystem;
   /** Look 6: living transitions (what each tile is visibly turning into). */
   readonly transitions: Transitions;
   /** Look 6.8: Cultivators (solar tillers). */
   readonly cultivators: CultivatorSystem;
-  /** E21.1: the backpack and the store (old-city rules). */
+  /** E21.1: the backpack and the store. */
   readonly inventory: Inventory;
-  /** E21.2 / E23.7.4: salvage piles, refilling over game days and in storms (old-city rules). */
+  /** E21.2 / E23.7.4: salvage piles, refilling over game days and in storms. */
   readonly salvage: SalvageSystem;
-  /** E21.5: gates (old-city rules). */
+  /** E21.5: gates. */
   readonly gates: GateSystem;
-  /** E21.6: the fountain's tiers and deliveries (old-city rules). */
+  /** E21.6: the fountain's tiers and deliveries. */
   readonly fountain: FountainSystem;
-  /** E21.8: the Keepers and their requests (old-city rules). */
+  /** E21.8: the Keepers and their requests. */
   readonly keepers: KeeperSystem;
   /** E23.8.3: the causeway and the endless mainland. */
   readonly mainland: MainlandSystem;
   /** E23.9.1: the maker's journal (pages on posts, his last page at the Great Bloom). */
   readonly journal: JournalSystem;
-  /** E21.9: waking landmarks and their lasting rewards (old-city rules). */
+  /** E21.9: waking landmarks and their lasting rewards. */
   readonly landmarks: LandmarkSystem;
+  /** E23.4.1: water levels of ponds, canals and reservoirs (`sim.water`). */
+  readonly water: WaterSystem;
+  /** E23.6.1: the crafting table (components; machine and decoration recipes). */
+  readonly crafting: Crafting;
+  /** E23.6.2: the research station (projects, and the upgrades they open). */
+  readonly research: Research;
+  /** E23.2.1: bloombot's charge, the only meter. */
+  readonly charge: ChargeSystem;
+  /** E23.2.2: what the pulse is loaded with, and its reveal ripple. */
+  readonly pulseLoad: PulseLoad;
+  /** E23.2.3: benches and meditating at chargers. */
+  readonly rest: RestSystem;
+  /** E23.2.2.3: seeds and salvage buried in open ground (the ripple reveals them). */
+  readonly buried: BuriedSystem;
   /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
   readonly clock: Clock;
   /** E23.7.1.3: finds that are out only at night. */
   readonly nightFinds: NightFinds;
   /** E23.7.2: the weather: one kind a game day, each with its effects (data/weather). See gameplay/Weather. */
   readonly weather: Weather;
+  /** E23.5.1: gathering biomass from restored ground. */
+  readonly gather: GatherSystem;
+  /** E23.5.2: planters and crops. */
+  readonly farm: FarmSystem;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -126,7 +151,6 @@ export class Sim {
         const t = this.grid.peek(at.roofId, at.x, at.z);
         if (t && !t.occupantId) t.occupantId = decorOccupant(k);
       }
-      this.production?.chunkLoaded(c.key);
     };
     // The world travels with the state (for saving) but is never part of its JSON.
     Object.defineProperty(state, 'world', { value: this.grid, enumerable: false, configurable: true, writable: true });
@@ -138,8 +162,11 @@ export class Sim {
       const [layer, cx, cz] = key.split('|');
       this.grid.chunkAt(layer, Number(cx), Number(cz));
     }
-    this.econ = new Economy(state.resources, state.caps);
     this.inventory = new Inventory(this);
+    this.charge = new ChargeSystem(this);
+    this.pulseLoad = new PulseLoad(this);
+    this.rest = new RestSystem(this);
+    this.buried = new BuriedSystem(this);
     this.landmarks = new LandmarkSystem(this);
     this.clock = new Clock(this);
     this.nightFinds = new NightFinds(this);
@@ -148,16 +175,21 @@ export class Sim {
     this.gates = new GateSystem(this);
     this.fountain = new FountainSystem(this);
     this.keepers = new KeeperSystem(this);
+    this.crafting = new Crafting(this);
+    this.research = new Research(this);
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
+    this.gather = new GatherSystem(this);
+    this.farm = new FarmSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
     this.restoration = new RestorationSystem(this);
-    this.canals = new CanalNetwork(this);
+    this.water = new WaterSystem(this);
     this.relays = new RelaySystem(this);
     this.power = new PowerGrid(this);
-    this.clusters = new RooftopClusters(this);
+    this.chargers = new ChargerSystem(this);
+    this.lights = new Lights(this);
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
     this.drones = new DroneSystem(this);
@@ -167,28 +199,15 @@ export class Sim {
     this.advisor = new Advisor(this);
     this.progression = new ProgressionSystem(this);
     this.areas = new AreaSystem(this);
-    this.districts = new DistrictSystem(this);
     this.ecosystem = new EcosystemSystem(this);
     this.metrics = new Metrics(this);
     this.log = new DebugLog(this);
-    this.econ.onOverflow = (k, a) => this.log.onOverflow(k, a);
     this.restoration.adoptGrowing();
     for (const c of this.grid.loadedChunks()) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
-    this.upgrades.applyCaps();
   }
 
   get time() {
     return this.state.time;
-  }
-
-  /** E21: the rule set, from the state (never from the URL). */
-  get rules(): Rules {
-    return rulesOf(this.state);
-  }
-
-  /** E21: playing under old-city rules? */
-  get oldCity(): boolean {
-    return this.state.rules === 'oldcity';
   }
 
   newId(prefix: string) {
@@ -263,17 +282,24 @@ export class Sim {
     const s = this.state;
     s.time += dt;
     s.buffs = s.buffs.filter((b) => b.until > s.time);
+    this.lights.tick(dt);
     this.power.tick(dt);
+    this.chargers.tick(dt);
     this.production.tick(dt);
     this.restoration.tick(dt);
     this.transitions.tick();
     this.chains.tick();
     this.drones.tick(dt);
-    this.roles.tick(dt);
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
+    this.water.tick(dt);
+    this.rest.tick(dt);
+    this.crafting.tick(dt);
+    this.research.tick(dt);
+    this.charge.tick(dt);
     this.clock.tick();
     this.weather.tick();
+    this.farm.tick(dt);
     this.keepers.tick(dt); // E23.9.2: settled Keepers tend their regions
     this.cat.tick();
     this.progression.tick();
@@ -287,24 +313,5 @@ export class Sim {
   advance(seconds: number) {
     const steps = Math.round(seconds / TUNING.simStep);
     for (let i = 0; i < steps; i++) this.tick(TUNING.simStep);
-  }
-
-  harvestSun(): boolean {
-    const s = this.state;
-    if (s.time < s.harvestReadyAt) {
-      this.bus.emit('action.failed', { reason: `Sunlight gathers again in ${Math.ceil(s.harvestReadyAt - s.time)} s` });
-      return false;
-    }
-    const got = this.econ.add('energy', TUNING.harvest.energy);
-    s.harvestReadyAt = s.time + TUNING.harvest.cooldown;
-    this.bus.emit('harvest', { amount: got });
-    if (got.gt(0)) this.bus.emit('resource.gain', { kind: 'energy', amount: got, reason: 'harvest' });
-    // Phase 5 E12: Harvest Burst also gathers seconds of steady biomass income (no temporary boosts).
-    const burst = this.upgrades.harvestBurstSeconds;
-    if (burst > 0) {
-      const b = this.econ.add('biomass', this.production.rates(true).biomass.mul(burst));
-      if (b.gt(0)) this.bus.emit('resource.gain', { kind: 'biomass', amount: b, reason: 'harvest' });
-    }
-    return true;
   }
 }

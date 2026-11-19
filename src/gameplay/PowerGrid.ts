@@ -1,7 +1,13 @@
 import { machinesStamp } from '../core/GameState';
 import type { MachineData } from '../core/types';
+
+/**
+ * Anything on the grid: a machine, or a node another system provides (E23.3.5: grid lights are decorations).
+ * The stored energy of a battery is its `charge` (saved with the machine, or by the node's provider).
+ */
+export type PowerNode = Pick<MachineData, 'id' | 'roofId' | 'x' | 'z' | 'size' | 'tripped' | 'upg'> & { type: string; charge: number };
 import { POWER, SHED_ORDER, type ShedClass } from '../data/power';
-import { readSky, type PowerSky } from './PowerEnv';
+import { groundLevel, readSky, regionBoost, solarBoost, type PowerSky } from './PowerEnv';
 import type { Sim } from './Sim';
 
 /**
@@ -10,29 +16,35 @@ import type { Sim } from './Sim';
  */
 export interface PowerRole {
   /** A pole: links to other poles within range (the larger of the two), and machines attach to it. */
-  pole?: { range: (m: MachineData, sim: Sim) => number; attachReach?: number };
+  pole?: { range: (m: PowerNode, sim: Sim) => number; attachReach?: number };
   /** Supply right now, in watts (may read the sky). */
-  source?: (m: MachineData, sim: Sim, sky: PowerSky) => number;
+  source?: (m: PowerNode, sim: Sim, sky: PowerSky) => number;
   /** Storage in watt-seconds. The stored amount is saved in the machine's `charge`. */
-  battery?: { capacity: number | ((m: MachineData) => number); rate: number };
+  battery?: { capacity: number | ((m: PowerNode) => number); rate: number };
   /**
    * A load. `draw` may return 0 when the machine is idle (a charger with no bloombot on it). Consumers in a
    * `dims` class (lamps) take whatever is left and dim; everything else is all or nothing.
    */
-  consumer?: { shed: ShedClass; draw?: number | ((m: MachineData, sim: Sim, sky: PowerSky) => number); dims?: boolean };
+  /** Never links to anything else: a network of its own (a solar garden light with its own panel and battery). */
+  standalone?: boolean;
+  /** Joins only through a pole in reach, never by touching (grid lights: placed within reach of a pole). */
+  poleOnly?: boolean;
+  consumer?: { shed: ShedClass; draw?: number | ((m: PowerNode, sim: Sim, sky: PowerSky) => number); dims?: boolean };
 }
 
 /** One connected network. Read-only outside this file. */
 export interface PowerNetwork {
   /** Deterministic id: `net:<lowest member id>`. */
   id: string;
-  members: MachineData[];
-  poles: MachineData[];
-  sources: MachineData[];
-  batteries: MachineData[];
-  consumers: MachineData[];
+  members: PowerNode[];
+  poles: PowerNode[];
+  sources: PowerNode[];
+  batteries: PowerNode[];
+  consumers: PowerNode[];
   /** Pole-to-pole links, as [a, b] pairs (for the overlay). */
-  links: [MachineData, MachineData][];
+  links: [PowerNode, PowerNode][];
+  /** Each machine fed by a pole, with the nearest pole that reaches it, as [pole, machine] (for drawn cables). */
+  feeds: [PowerNode, PowerNode][];
   /** Last solve: total supply (W), total wanted draw (W), draw served (W), battery flow (+ charging, − draining). */
   supply: number;
   demand: number;
@@ -43,13 +55,19 @@ export interface PowerNetwork {
   capacity: number;
 }
 
-const idNum = (m: MachineData) => Number(m.id.replace(/^\D+/, '')) || 0;
-const byId = (a: MachineData, b: MachineData) => idNum(a) - idNum(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+/** E23.3.2.2: a turbine's output: the wind, more on high ground and in windy regions. */
+export function windOutput(sim: Sim, m: PowerNode, sky: PowerSky): number {
+  const w = POWER.wind;
+  const height = Math.min(1, w.groundShare + w.perLevel * Math.max(0, groundLevel(sim, m)));
+  return w.output * sky.wind * height * regionBoost(sim, m);
+}
+
+const idNum = (m: PowerNode) => Number(m.id.replace(/^\D+/, '')) || 0;
+const byId = (a: PowerNode, b: PowerNode) => idNum(a) - idNum(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 const KEEP_ORDER = [...SHED_ORDER].reverse(); // served first = shed last
 
 /**
- * E23.3.1: the power grid (`sim.power`). Machines join networks through poles in range (flood fill, like
- * `CanalNetwork`), or by touching. Each tick a network sums its supply, serves its consumers from the most
+ * E23.3.1: the power grid (`sim.power`). Machines join networks through poles in range (flood fill), or by touching. Each tick a network sums its supply, serves its consumers from the most
  * important (chargers) to the least (lamps), covers any deficit from its batteries and stores any surplus.
  * When short, consumers go dark one at a time in shed order and come back by themselves. Deterministic and
  * headless; networks are cached until a machine is built or removed (or `invalidate()` is called).
@@ -76,8 +94,26 @@ export class PowerGrid {
   skyOverride?: () => PowerSky;
 
   constructor(private sim: Sim) {
-    this.register('relay', { pole: { range: (m, s) => s.relays.range(m) } });
-    this.register('solar', { source: (_m, _s, sky) => POWER.solar.output * sky.solar });
+    // E23.6.2: Longer lines and Clearer panels (research) stretch pole range and solar output
+    this.register('relay', { pole: { range: (m, s) => s.relays.range(m as MachineData) * (1 + (s.research?.effect('poleReach') ?? 0)) } });
+    // E23.1.4 / #528: Solar Wings, blooms beside a panel and a Lucky Cat's Solar Surge make it feed the grid more
+    this.register('solar', { source: (m, s, sky) => POWER.solar.output * sky.solar * regionBoost(s, m) * solarBoost(s, m) * s.upgrades.solarMult(m as MachineData) * (1 + (s.research?.effect('solarYield') ?? 0)) });
+    this.register('battery', { battery: { capacity: () => POWER.battery.capacity * (sim.landmarks?.batteryMult() ?? 1), rate: POWER.battery.rate } });
+    this.register('windTurbine', { source: (m, s, sky) => windOutput(s, m, sky) });
+    // E23.3.3: helpers run on the grid.
+    this.register('droneHub', { consumer: { shed: 'helper', draw: POWER.helper.droneHub } });
+    this.register('cultivator', { consumer: { shed: 'helper', draw: POWER.helper.cultivator } });
+  }
+
+  private providers: (() => readonly PowerNode[])[] = [];
+
+  /**
+   * Adds grid members that are not machines (E23.3.5: lights placed as decorations). The provider returns the same
+   * node objects while they stand; call `invalidate()` when the set changes.
+   */
+  addNodes(provider: () => readonly PowerNode[]): void {
+    this.providers.push(provider);
+    this.invalidate();
   }
 
   /** Adds (or merges into) a machine type's role. Types need not exist yet (other sub-epics add them). */
@@ -86,7 +122,7 @@ export class PowerGrid {
     this.invalidate();
   }
 
-  roleOf(m: MachineData): PowerRole | undefined {
+  roleOf(m: PowerNode): PowerRole | undefined {
     return this.roles.get(m.type);
   }
 
@@ -105,28 +141,62 @@ export class PowerGrid {
     return this.nets;
   }
 
-  networkOf(m: MachineData | undefined): PowerNetwork | undefined {
+  /**
+   * E23.3.4: the network at a point (tile coordinates on a roof), with a margin: the one with a member, a pole line or
+   * a drop cable nearest the point, if within `reach` tiles. The Power view highlights it, so the player needn't aim
+   * at a thin line exactly.
+   */
+  networkNear(roofId: string, x: number, z: number, reach: number): PowerNetwork | undefined {
+    const c = (m: PowerNode): [number, number] => [m.x + m.size / 2, m.z + m.size / 2];
+    const toSeg = (a: PowerNode, b: PowerNode) => {
+      const [ax, az] = c(a);
+      const [bx, bz] = c(b);
+      const dx = bx - ax;
+      const dz = bz - az;
+      const L = dx * dx + dz * dz;
+      const t = L > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L)) : 0;
+      return Math.hypot(x - (ax + dx * t), z - (az + dz * t));
+    };
+    let best: PowerNetwork | undefined;
+    let bestD = reach;
+    for (const n of this.networks()) {
+      for (const m of n.members) {
+        if (m.roofId !== roofId) continue;
+        // a machine: distance to its footprint's edge (0 inside)
+        const d = Math.hypot(Math.max(m.x - x, 0, x - (m.x + m.size)), Math.max(m.z - z, 0, z - (m.z + m.size)));
+        if (d <= bestD) [best, bestD] = [n, d];
+      }
+      for (const [a, b] of [...n.links, ...n.feeds]) {
+        if (a.roofId !== roofId || b.roofId !== roofId) continue;
+        const d = toSeg(a, b);
+        if (d <= bestD) [best, bestD] = [n, d];
+      }
+    }
+    return best;
+  }
+
+  networkOf(m: PowerNode | undefined): PowerNetwork | undefined {
     if (!m) return undefined;
     this.fresh();
     return this.netOf.get(m.id);
   }
 
   /** Does this machine have the power it needs? Always true for machines the grid does not power. */
-  isPowered(m: MachineData | undefined): boolean {
+  isPowered(m: PowerNode | undefined): boolean {
     if (!m || !this.roleOf(m)?.consumer) return true;
     this.fresh();
     return (this.servedFrac.get(m.id) ?? 0) > 0;
   }
 
   /** 0..1: how lit or running a consumer is, eased so lights fade. 1 for machines the grid does not power. */
-  level(m: MachineData): number {
+  level(m: PowerNode): number {
     if (!this.roleOf(m)?.consumer) return 1;
     this.fresh();
     return this.eased.get(m.id) ?? this.servedFrac.get(m.id) ?? 0;
   }
 
   /** A battery's stored energy and capacity (W·s). */
-  stored(m: MachineData): { stored: number; capacity: number } {
+  stored(m: PowerNode): { stored: number; capacity: number } {
     const b = this.roleOf(m)?.battery;
     if (!b) return { stored: 0, capacity: 0 };
     const cap = this.capacityOf(m, b);
@@ -134,12 +204,12 @@ export class PowerGrid {
   }
 
   /** A source's output right now (W). */
-  output(m: MachineData, sky = this.sky()): number {
+  output(m: PowerNode, sky = this.sky()): number {
     return Math.max(0, this.roleOf(m)?.source?.(m, this.sim, sky) ?? 0);
   }
 
   /** The draw a consumer wants right now (W). */
-  draw(m: MachineData, sky = this.sky()): number {
+  draw(m: PowerNode, sky = this.sky()): number {
     const c = this.roleOf(m)?.consumer;
     if (!c) return 0;
     const d = typeof c.draw === 'function' ? c.draw(m, this.sim, sky) : (c.draw ?? POWER.draw[c.shed]);
@@ -182,12 +252,12 @@ export class PowerGrid {
   }
 
   /** Is this a pole lightning has tripped? */
-  isTripped(m: MachineData | undefined): boolean {
+  isTripped(m: PowerNode | undefined): boolean {
     return !!m?.tripped && !!this.roleOf(m)?.pole;
   }
 
   /** Resets a tripped pole (one press). True if it was tripped. */
-  reset(m: MachineData | undefined): boolean {
+  reset(m: PowerNode | undefined): boolean {
     if (!m || !this.isTripped(m)) return false;
     delete m.tripped;
     this.invalidate();
@@ -196,11 +266,17 @@ export class PowerGrid {
 
   // ---- networks ----
 
-  private capacityOf(m: MachineData, b: NonNullable<PowerRole['battery']>): number {
-    return typeof b.capacity === 'function' ? b.capacity(m) : b.capacity;
+  private capacityOf(m: PowerNode, b: NonNullable<PowerRole['battery']>): number {
+    const base = typeof b.capacity === 'function' ? b.capacity(m) : b.capacity;
+    return base * (1 + (this.sim.research?.effect('batteryStore') ?? 0)); // E23.6.2: Deeper batteries
   }
 
-  private centre(m: MachineData): [number, number] {
+  /** E23.6.2: is any machine type a battery yet (so research can offer Deeper batteries)? */
+  hasBatteries(): boolean {
+    return [...this.roles.values()].some((r) => !!r.battery);
+  }
+
+  private centre(m: PowerNode): [number, number] {
     const o = this.sim.grid.layer(m.roofId)?.origin ?? [0, 0, 0];
     return [o[0] + m.x + m.size / 2, o[2] + m.z + m.size / 2];
   }
@@ -224,7 +300,9 @@ export class PowerGrid {
   private rebuild(): void {
     const sim = this.sim;
     // A tripped pole carries nothing until it is reset: it is on no network.
-    const members = sim.state.machines.filter((m) => this.roles.has(m.type) && sim.grid.isPlayable(m.roofId) && !(m.tripped && this.roles.get(m.type)!.pole)).sort(byId);
+    const all: PowerNode[] = [...sim.state.machines];
+    for (const p of this.providers) all.push(...p());
+    const members = all.filter((m) => this.roles.has(m.type) && sim.grid.isPlayable(m.roofId) && !(m.tripped && this.roles.get(m.type)!.pole)).sort(byId);
     const index = new Map<string, number>();
     members.forEach((m, i) => index.set(m.id, i));
     const parent = members.map((_, i) => i);
@@ -240,7 +318,8 @@ export class PowerGrid {
     const centres = members.map((m) => this.centre(m));
     const poles = members.filter((m) => this.roles.get(m.type)!.pole);
     const range = new Map(poles.map((p) => [p.id, this.roles.get(p.type)!.pole!.range(p, sim)]));
-    const links: [MachineData, MachineData][] = [];
+    const links: [PowerNode, PowerNode][] = [];
+    const feed = new Map<string, { pole: PowerNode; d: number }>();
 
     // Bucket every member by a coarse cell so linking is near-linear.
     const cell = Math.max(8, POWER.pole.attachReach, ...range.values());
@@ -267,6 +346,7 @@ export class PowerGrid {
       for (const j of near(i)) {
         const b = members[j];
         const rb = this.roles.get(b.type)!;
+        if (ra.standalone || rb.standalone) continue;
         const d = Math.hypot(centres[i][0] - centres[j][0], centres[i][1] - centres[j][1]);
         let joined = false;
         if (ra.pole && rb.pole && d <= Math.max(range.get(a.id)!, range.get(b.id)!) + 1e-9) {
@@ -275,9 +355,14 @@ export class PowerGrid {
         } else if (ra.pole || rb.pole) {
           const reach = (ra.pole ?? rb.pole)!.attachReach ?? POWER.pole.attachReach;
           joined = d <= reach + 1e-9;
+          if (joined) {
+            const [pole, m] = ra.pole ? [a, b] : [b, a];
+            const was = feed.get(m.id);
+            if (!was || d < was.d - 1e-9) feed.set(m.id, { pole, d });
+          }
         }
         // Touching footprints (diagonals included) on the same layer share a network.
-        if (!joined && a.roofId === b.roofId) {
+        if (!joined && a.roofId === b.roofId && !ra.poleOnly && !rb.poleOnly) {
           const gapX = Math.max(a.x, b.x) - Math.min(a.x + a.size, b.x + b.size);
           const gapZ = Math.max(a.z, b.z) - Math.min(a.z + a.size, b.z + b.size);
           joined = gapX <= 0 && gapZ <= 0;
@@ -293,7 +378,7 @@ export class PowerGrid {
       const r = find(i);
       let n = groups.get(r);
       if (!n) {
-        n = { id: `net:${members[r].id}`, members: [], poles: [], sources: [], batteries: [], consumers: [], links: [], supply: 0, demand: 0, served: 0, batteryFlow: 0, stored: 0, capacity: 0 };
+        n = { id: `net:${members[r].id}`, members: [], poles: [], sources: [], batteries: [], consumers: [], links: [], feeds: [], supply: 0, demand: 0, served: 0, batteryFlow: 0, stored: 0, capacity: 0 };
         groups.set(r, n);
         this.nets.push(n);
       }
@@ -306,8 +391,12 @@ export class PowerGrid {
       this.netOf.set(m.id, n);
     });
     for (const l of links) this.netOf.get(l[0].id)!.links.push(l);
+    for (const m of members) {
+      const f = feed.get(m.id);
+      if (f) this.netOf.get(m.id)!.feeds.push([f.pole, m]);
+    }
     // Consumers in keep order: chargers first, lamps last; build order within a class.
-    const rank = (m: MachineData) => KEEP_ORDER.indexOf(this.roles.get(m.type)!.consumer!.shed);
+    const rank = (m: PowerNode) => KEEP_ORDER.indexOf(this.roles.get(m.type)!.consumer!.shed);
     for (const n of this.nets) n.consumers.sort((a, b) => rank(a) - rank(b) || byId(a, b));
     for (const id of [...this.servedFrac.keys()]) if (!this.netOf.has(id)) this.servedFrac.delete(id);
     for (const id of [...this.eased.keys()]) if (!this.netOf.has(id)) this.eased.delete(id);
@@ -341,7 +430,8 @@ export class PowerGrid {
       const want = this.draw(c, sky);
       demand += want;
       let frac = 0;
-      if (want <= 0) frac = 1; // idle: on, drawing nothing
+      // idle (drawing nothing): on only if its network has power to give, so a charger on a dead line reads dark
+      if (want <= 0) frac = left > 1e-9 ? 1 : 0;
       else if (!blocked && left + 1e-9 >= want) frac = 1;
       else if (!blocked && role.dims && left > 1e-9) frac = left / want;
       if (want > 0 && frac < 1) blocked = true; // strict shed order: nothing below a dark consumer runs

@@ -1,5 +1,6 @@
 import type { MaterialId } from '../core/types';
 import { MATERIALS, MATERIAL_IDS } from '../data/salvage';
+import { giftLabel } from '../gameplay/KeeperSystem';
 import type { Sim } from '../gameplay/Sim';
 import { iconize } from './Icons';
 import './oldcity.css';
@@ -186,8 +187,9 @@ export function tradeHtml(sim: Sim, give: MaterialId | undefined): string {
   const gets = MATERIAL_IDS.filter((m) => m !== give).map((m) => `<button data-act="get" data-arg="${m}" ${give ? '' : 'disabled'}>${MATERIALS[m].icon} ${MATERIALS[m].name}</button>`).join('');
   // E23.9.2: when bloombot carries something Tally loves, it can be given as a gift (a choice, never a surprise)
   const gift = sim.keepers.giftFor('tally');
+  const label = giftLabel(gift ?? '');
   const giftRow = gift
-    ? `<h3>A gift</h3><div class="oc-row"><button data-act="gift" data-arg="${gift}">${MATERIALS[gift as MaterialId]?.icon ?? ''} Give Tally 1 ${MATERIALS[gift as MaterialId]?.name ?? gift}</button></div>`
+    ? `<h3>A gift</h3><div class="oc-row"><button data-act="gift" data-arg="${gift}">${label.icon ? `${label.icon} ` : ''}Give Tally 1 ${label.name}</button></div>`
     : '';
   return `<h2>🤖 Tally's trade</h2><p class="oc-soft">Any 3 of one material for 1 of another.</p>
     ${giftRow}<h3>Give 3</h3><div class="oc-row">${gives}</div>

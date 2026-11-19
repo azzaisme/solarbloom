@@ -8,6 +8,7 @@
 //   friend   after three gifts it likes: it says so, and gives bloombot its region's keepsake
 // Its mechanical requests (what it asks for, its landmark's delivery) stay in data/oldcity KEEPERS.
 
+import { gameDays, gameHours, gameMinutes } from './time';
 import type { MaterialCost } from './salvage';
 
 export type ArcBeat = 'taker' | 'turning' | 'tender' | 'friend';
@@ -35,10 +36,12 @@ export interface KeeperStory {
 export const FRIENDSHIP = {
   /** gifts a Keeper likes before it calls bloombot a friend */
   giftsToFriend: 3,
-  /** a Keeper takes one gift a game day (a game day is 48 minutes of play; E23.7 owns the clock) */
-  giftEverySeconds: 48 * 60,
+  /** a Keeper takes one gift a game day (E23.7's clock) */
+  giftEverySeconds: gameDays(1),
   /** every Keeper's favourite, whatever else it likes */
   everyoneLikes: 'tomato',
+  /** E23.5 crops count as gifts: each harvest keeps one of its crop for a friend, up to this many of each */
+  basketMax: 5,
 };
 
 /**
@@ -46,18 +49,20 @@ export const FRIENDSHIP = {
  * past full bloom) every so often; a friend does it twice as often. Starting values.
  */
 export const KEEPER_HELP = {
-  /** seconds between a settled Keeper's tending (a game day is 2880 s: about 24 tiles a day) */
-  tendEverySeconds: 120,
+  /** time between a settled Keeper's tending: one game hour (about 24 tiles a game day) */
+  tendEverySeconds: gameHours(1),
   /** a friend tends this many times as often */
   friendMult: 2,
   /** how far from where it sleeps a Keeper wanders and tends, in tiles */
   radius: 8,
   /** a wandering Keeper heads home when bloombot comes this close to it, so it can be talked to */
   comeHomeTiles: 6,
+  /** with bloombot this close (talking to it), a Keeper waits to set off to tend until bloombot steps away */
+  talkTiles: 1.6,
   /** how fast a Keeper walks, in tiles a second (bloombot strolls at about 2) */
   walkSpeed: 0.7,
-  /** seconds a Keeper spends tending a tile once it gets there */
-  tendSeconds: 2.5,
+  /** time a Keeper spends tending a tile once it gets there (a little over a game minute) */
+  tendSeconds: gameMinutes(1.25),
   /** how close to a cell's centre counts as there, in tiles */
   arriveTiles: 0.05,
   /** while tending, a Keeper leans over its tile this many degrees, bobbing this much */
@@ -165,7 +170,7 @@ export const KEEPER_STORIES: Record<string, KeeperStory> = {
       tender: ['I open the panes every morning now. The bees come in, and the plants go out.'],
       friend: ['You\'re the first friend I\'ve had who isn\'t a plant. I\'m glad it\'s you.', 'This terrarium is for you. Leave the lid off.'],
     },
-    likes: ['flowers', 'lavender', 'glass'],
+    likes: ['flowers', 'herbs', 'glass'],
     thanks: 'Oh! For me? Thank you. Sorry. Thank you.',
     giftBack: { seeds: 5 },
     chatter: ['The lavender\'s out. The bees are very happy about it.', 'I left a window open for the moths.', 'The seedlings are hardier now. So am I.'],

@@ -10,6 +10,13 @@ export interface InputHandlers {
   pinchEnd?(factor: number, ms: number): void;
   /** A drag with `button` held moved by dx, dy pixels (it turns and tilts the view). Return true if it was used (else it pans). */
   orbit?(dx: number, dy: number, button: number): boolean;
+  /**
+   * Third person: the mouse is captured (pointer lock) and moved by dx, dy pixels. While captured there is no
+   * cursor: moves only turn the view and a press is a click at once (no drags, no hover).
+   */
+  look?(dx: number, dy: number): void;
+  /** A press on the canvas while the mouse is free. Return true to swallow it (it captured the mouse). */
+  capture?(button: number): boolean;
 }
 
 /**
@@ -39,6 +46,10 @@ export class InputController {
       if (!this.pointers.size) this.h.leave();
     });
     el.addEventListener('wheel', this.wheel, { passive: false });
+    // Captured, a mouse button acts the moment it goes down (every button, also pressed together with another).
+    el.addEventListener('mousedown', (e) => {
+      if (this.locked) this.h.click(this.el.clientWidth / 2, this.el.clientHeight / 2, e.button);
+    });
     el.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
@@ -47,7 +58,20 @@ export class InputController {
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
 
+  /** Is the mouse captured by the canvas (pointer lock)? */
+  get locked(): boolean {
+    return typeof document !== 'undefined' && document.pointerLockElement === this.el;
+  }
+
+  /** a press that captured the mouse: its release does nothing */
+  private swallowUp = false;
+
   private down = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse' && this.locked) return; // captured: the press acted already (mousedown)
+    if (e.pointerType === 'mouse' && this.h.capture?.(e.button)) {
+      this.swallowUp = true;
+      return;
+    }
     const p = this.local(e);
     try {
       this.el.setPointerCapture?.(e.pointerId);
@@ -73,6 +97,10 @@ export class InputController {
   }
 
   private move = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse' && this.locked) {
+      if (e.movementX || e.movementY) this.h.look?.(e.movementX, e.movementY);
+      return;
+    }
     const p = this.local(e);
     const ptr = this.pointers.get(e.pointerId);
     if (!ptr) {
@@ -103,6 +131,11 @@ export class InputController {
   };
 
   private up = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse' && (this.locked || this.swallowUp)) {
+      this.swallowUp = false;
+      this.pointers.delete(e.pointerId);
+      return;
+    }
     const p = this.local(e);
     const had = this.pointers.has(e.pointerId);
     this.pointers.delete(e.pointerId);

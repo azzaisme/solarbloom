@@ -12,7 +12,7 @@ const region = (id: string) => REGIONS.find((r) => r.id === id)!;
 
 /** An Old City just past tier 1: the park cleared, the ring-1 regions revealed behind their barricades. */
 function tier1(seed = 7) {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   sim.state.salvage!.tier = 1;
   sim.areas.clear(PARK, true);
   return sim;

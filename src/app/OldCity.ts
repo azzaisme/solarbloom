@@ -5,6 +5,11 @@ import type { Hud } from '../ui/Hud';
 import type { MachineData, MaterialId } from '../core/types';
 import { GROUND } from '../core/GameState';
 import { MATERIALS, SALVAGE } from '../data/salvage';
+import { itemDef } from '../data/items';
+import { GATHER } from '../data/farm';
+import { crossName, CROPS, type CropId } from '../data/crops';
+import { planterHtml } from '../ui/PlanterPanel';
+import type { TileData } from '../core/types';
 import { flyUp, fountainHtml, OldCityPanel, SpeechBubble, storageAct, storageHtml, tradeHtml } from '../ui/OldCityPanel';
 import { PARK } from '../core/Areas';
 import { setPieceAt } from '../core/OldCityLayout';
@@ -70,10 +75,33 @@ export class OldCityController {
       host.sound('salvage', e.material);
       this.panel.refresh();
     });
+    host.sim.bus.on('biomass.gathered', (e) => {
+      if (e.by !== 'bot') return; // a Harvester drone's clippings go quietly to the store
+      const sc = host.screenOf(e.x, e.z);
+      flyUp(host.hud.root, `+${e.got} ${MATERIALS.biomass.icon} ${MATERIALS.biomass.name}`, sc.x, sc.y);
+      host.sound('salvage', 'biomass');
+    });
+    host.sim.bus.on('planter.harvested', (e) => {
+      const m = host.sim.machine(e.machineId);
+      if (!m) return;
+      const sc = host.screenOf(m.x, m.z);
+      const parts = (['food', 'biomass', 'seeds'] as const).filter((k) => e[k] > 0).map((k) => `+${e[k]} ${MATERIALS[k].icon}`);
+      flyUp(host.hud.root, parts.join('  '), sc.x, sc.y);
+      host.sound('salvage', 'seeds');
+    });
+    host.sim.bus.on('seeds.found', (e) => {
+      const c = CROPS[e.crop as CropId];
+      if (c) host.hud.toast(`${c.icon} ${c.name} seeds<small>Plant them in a planter.</small>`, '', 5);
+    });
+    // E23.6.2: a crossbreed found at a harvest
+    host.sim.bus.on('cross.found', (e) => {
+      const c = CROPS[e.a as CropId];
+      if (c) host.hud.toast(`${c.icon} ${crossName(e.a as CropId, e.b as CropId)}<small>A new cross. Plant it in a planter.</small>`, '', 5);
+    });
     // E23.7.4: a pile coming back (slowly, or blown in by a storm) is redrawn at its new size
     host.sim.bus.on('pile.refilled', (e) => host.markTile(e.x, e.z));
     host.sim.bus.on('fountain.tier', () => this.panel.close());
-    host.sim.bus.on('pack.full', (e) => host.hud.toast(`Your ${MATERIALS[e.material].name} stack is full<small>Put some in storage at the fountain or a chest.</small>`, '', 2.6));
+    host.sim.bus.on('pack.full', (e) => host.hud.toast(`Your ${itemDef(e.material).name} stack is full<small>Put some in storage at the fountain or a chest.</small>`, '', 2.6));
   }
 
   get sim(): Sim {
@@ -145,7 +173,6 @@ export class OldCityController {
    * nothing else).
    */
   interact(front: { x: number; z: number }, occupant?: MachineData): boolean {
-    if (!this.sim.oldCity) return false;
     const onGround = this.host.bot.pose.roofId === GROUND;
     const pile = onGround ? this.sim.salvage.pileAt(front.x, front.z) : undefined;
     if (pile) {
@@ -233,7 +260,7 @@ export class OldCityController {
    * does nothing else).
    */
   pulse(front: { x: number; z: number }): boolean {
-    if (!this.sim.oldCity || this.host.bot.pose.roofId !== GROUND) return false;
+    if (this.host.bot.pose.roofId !== GROUND) return false;
     const keeper = this.sim.keepers.at(front.x, front.z);
     if (!keeper || !this.sim.keepers.visible(keeper.id)) return false;
     // E23.9.2: a settled Keeper only chats when pulsed: nothing is handed over without Interact
@@ -256,11 +283,48 @@ export class OldCityController {
     this.startHold('salvage', SALVAGE.holdSeconds, () => this.sim.salvage.salvage(id), viaClick);
   }
 
+  /** E23.5.2: a planter: harvest a ripe bed straight away, otherwise open its panel (plant, feed, extras). */
+  planter(m: MachineData) {
+    const f = this.sim.farm;
+    if (f.look(m).ripe) {
+      f.harvest(m);
+      this.host.bot.visuals.play('interact');
+      return;
+    }
+    this.host.sound('click');
+    this.panel.open(
+      () => planterHtml(this.sim, m),
+      (act, arg) => {
+        // a crossbreed's arg is its two parents, 'a+b' (E23.6.2)
+        const [crop, cross] = (arg ?? '').split('+') as [CropId, CropId | undefined];
+        if (act === 'plant' && f.plant(m, crop, cross)) {
+          this.host.sound('salvage', 'seeds');
+          this.panel.close();
+        } else if (act === 'harvest') {
+          f.harvest(m);
+          this.panel.close();
+        } else if (act === 'feed' && f.feed(m)) this.host.sound('deliver');
+        else if (act === 'extra' && f.addExtra(m, arg as 'trellis' | 'flooded')) this.host.sound('deliver');
+      },
+    );
+  }
+
+  /** E23.5.1: clip restored ground for biomass: hold Interact 0.6 s, like salvaging. */
+  gatherHold(t: TileData) {
+    const why = this.sim.gather.problem(t);
+    if (why) {
+      const sc = this.host.screenOf(t.x, t.z);
+      this.host.hud.showFail(why, sc.x, sc.y);
+      return;
+    }
+    this.startHold('gather', GATHER.holdSeconds, () => this.sim.gather.gather(t));
+  }
+
   /**
-   * A click on a tile under old-city rules: a pile walks bloombot there and salvages it. True when handled.
+   * A click on a tile: a pile walks bloombot there and salvages it. True when handled.
    */
   click(tile: { roofId: string; x: number; z: number }): boolean {
-    if (!this.sim.oldCity || tile.roofId !== GROUND) return false;
+    if (tile.roofId !== GROUND) return false;
     const pile = this.sim.salvage.pileAt(tile.x, tile.z);
     if (!pile) return false;
     const b = this.host.bot;

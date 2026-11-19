@@ -1,24 +1,30 @@
-import { big, fmt, type Big } from '../core/Big';
+import { CHUNK } from '../core/Hash';
+import { POWER } from '../data/power';
 import { HOME } from '../gameplay/ProgressionSystem';
 import * as pc from 'playcanvas';
 import { BIRD_VOICES, Sfx } from '../audio/Sfx';
 import { treeSpot, treeStage } from '../rendering/TreePlacement';
-import { formatCost, formatPriceHtml, RES_ICON } from '../core/Economy';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
-import type { DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
+import type { DroneRole, LayerData, MachineData, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
 import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
+import { GATHER } from '../data/farm';
+import { CROPS } from '../data/crops';
 import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
+import { LOAD_WHEEL, RIPPLE } from '../data/pulse';
+import { REST } from '../data/rest';
+import { Resting } from './Resting';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
 import { Sim } from '../gameplay/Sim';
+import { inSurge } from '../gameplay/PowerEnv';
 import { Butterflies } from '../rendering/Butterflies';
 import { Birds } from '../rendering/Birds';
 import { Clouds } from '../rendering/Clouds';
@@ -32,11 +38,13 @@ import { detailTextures } from '../rendering/DetailTex';
 import { Pollinators } from '../rendering/Pollinators';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
+import { WaterLevels } from '../rendering/WaterLevels';
 import { ChunkRenderer, MeshBuilder, SINK } from '../rendering/ChunkRenderer';
 import { MACHINE_MODELS } from '../rendering/MachineVisuals';
 import type { HoloShape } from '../rendering/Hologram';
 import { TransitionRenderer } from '../rendering/transitions/TransitionRenderer';
 import { CultivatorVisuals } from '../rendering/CultivatorVisuals';
+import { CropVisuals } from '../rendering/CropVisuals';
 import { ProgressRings } from '../rendering/transitions/ProgressRings';
 import { areaPanelHtml } from '../ui/AreaPanel';
 import { upgradeHighlights } from '../gameplay/UpgradeEffects';
@@ -45,6 +53,10 @@ import { InputController } from '../rendering/InputController';
 import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
+import { PowerLines } from '../rendering/PowerLines';
+import { PowerOverlay } from '../rendering/PowerOverlay';
+import { LightVisuals } from '../rendering/LightVisuals';
+import { LIGHT, LIGHTING } from '../data/lights';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
 import { Skyline } from '../rendering/Skyline';
@@ -60,14 +72,12 @@ import type { GfxTier } from '../data/look';
 import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
-import { FlyText } from '../ui/Fly';
 import { decorType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
 import { BOT } from '../gameplay/Walker';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
 import { EventBus } from './EventBus';
 import { BotController } from './BotController';
 import { type Action, Bindings, type Context, FIXED_KEY, keyLabel, migrateBindings, SLOTS } from './Bindings';
-import { isOldCity, rulesViewFromUrl } from './Rules';
 import { type Candidate, holdFor, pickTarget, promptText } from './Interact';
 import type { PromptModel } from '../ui/Prompt';
 import { Pause, runSimFrame } from './Pause';
@@ -91,6 +101,8 @@ import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
 import { padStick, PhotoMode } from './PhotoMode';
 import { PHOTO_FILTERS } from '../data/photo';
 import { sceneNow } from './PhotoScene';
+import { daylightAt } from '../gameplay/Clock';
+import { GLOOMY } from '../gameplay/PowerEnv';
 import { DayNight, type LightMoment } from '../rendering/DayNight';
 import { NightFindVisuals } from '../rendering/NightFindVisuals';
 import { NIGHT_FIND_GIVES } from '../data/time';
@@ -114,8 +126,9 @@ const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'menu']);
 /**
  * E19.2 (#245, "Building and placing"): build mode is Satisfactory-style. With something to build in hand (a
  * machine, a core, a decoration) the camera stays in the close view; a hologram sits where you aim, snapped to the
- * grid, within DECOR_GEN.reach tiles of bloombot, red where it can't go. The mouse aims while it is over the world
- * and was moved in the last MOUSE_AIM_MS; otherwise (pad, keys) the aim is the tile in front of bloombot.
+ * grid, within DECOR_GEN.reach tiles of bloombot, red where it can't go. Third person: the aim is the crosshair in
+ * the middle of the screen (`crosshairPick`), for mouse and pad alike. Only the cursor view (no bloombot) aims with
+ * the pointer, while it is over the world and was moved in the last MOUSE_AIM_MS.
  */
 const MOUSE_AIM_MS = 8000;
 /** the shortest time between two quarter turns from the mouse wheel (a trackpad sends many small wheel events) */
@@ -124,8 +137,6 @@ const WHEEL_TURN_MS = 140;
 const BOT_MAX_ZOOM = 4.3; // E21.22: the close step (EXPLORE.zoomSteps[0])
 const BOT_REACH = 1.6;
 /** Bloombot is the game; `?cursor=1` keeps the old click-to-act play for tests that drive tiles directly. */
-/** E21: the rule set a new game starts with (the Old City, unless `?rules=classic`). */
-const newGameRules = () => (typeof location !== 'undefined' && new URLSearchParams(location.search).get('rules') === 'classic' ? 'classic' : 'oldcity');
 const botMode = () => typeof location === 'undefined' || new URLSearchParams(location.search).get('cursor') !== '1';
 type ActResult = 'pulse' | 'build' | 'select' | 'wake' | 'none';
 
@@ -187,10 +198,20 @@ export class Game {
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
   readonly chunks: ChunkRenderer;
+  /** E23.4.1: water levels drawn on the water (the drained bed) */
+  readonly waterLevels: WaterLevels;
   /** Look 6.12: living transitions (every tile change plays as a process). */
   readonly transitions: TransitionRenderer;
   /** Look 6.9: Cultivator tillers. */
   readonly tillers: CultivatorVisuals;
+  /** E23.5.2: what grows in each planter. */
+  readonly crops: CropVisuals;
+  /** E23.3: the grid's cables. */
+  readonly powerLines: PowerLines;
+  /** E23.3.4: the Power overlay (build mode). */
+  readonly powerOverlay: PowerOverlay;
+  /** E23.3.5: night lights' glows, ground pools and insects. */
+  readonly lightVisuals: LightVisuals;
   /** Look 6.10: progress rings on tiles mid-process (near zoom). */
   readonly rings: ProgressRings;
   private stageSoundAt = 0;
@@ -217,7 +238,6 @@ export class Game {
   readonly vfx: Vfx;
   readonly overlays: Overlays;
   readonly hud: Hud;
-  readonly fly: FlyText;
   readonly sfx = new Sfx();
   settings: Settings;
 
@@ -236,9 +256,6 @@ export class Game {
   menu!: Menu;
   settingsUi!: SettingsScreen;
   private padFocus?: PadFocus;
-  /** City 06.5: simulated seconds still owed after a hitch or a hidden tab, run within the frame budget. */
-  catchUpDebt = 0;
-  private hiddenAt = 0;
   /** Simulation milliseconds spent in the last frame, and the worst since the counter was reset (perf harness). */
   simMs = 0;
   simMsWorst = 0;
@@ -271,10 +288,12 @@ export class Game {
   private plotPreview?: { id: string; option: string };
   private cozyCheckAt = 0;
   private selected?: string;
-  /** E21: the Old City's panels and held actions (old-city rules with bloombot only) */
+  /** E21: the Old City's panels and held actions */
   private oc?: OldCityController;
-  /** E21.8: the Keepers (old-city rules) */
+  /** E21.8: the Keepers */
   private keepers?: KeeperVisuals;
+  /** E23.2.3: sitting on benches and meditating at chargers */
+  private resting?: Resting;
   private inspectTimer = 0;
   private cinematic = false;
   private specialtyToasted = new Set<string>();
@@ -295,10 +314,9 @@ export class Game {
     this.startDevice = opts.device ?? 'keys';
     this.settings = loadSettings();
     this.titleRealClock = this.settings.realClock;
-    rulesViewFromUrl();
     const loaded = lr.state;
-    // E21: a new game plays the Old City; `?rules=classic` (dev) starts a classic one. A loaded save keeps its own rules.
-    const state = loaded ?? createInitialState(undefined, newGameRules());
+    // E23.1.1: one rule set. Every new game is the Old City.
+    const state = loaded ?? createInitialState(undefined);
     this.sim = new Sim(state, this.bus);
     // E23.7.1.2: a new game's choice of day (the game's own, or the real clock's); Settings shows the save's
     if (!loaded && opts.realClock) this.sim.clock.real = true;
@@ -328,6 +346,9 @@ export class Game {
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice, (tiles) => {
+      for (const t of tiles) this.chunks.markTile(t);
+    });
     this.transitions = new TransitionRenderer(this.sim);
     this.chunks.transitions = this.transitions;
     this.cozy = new Cozy(this.sim);
@@ -344,7 +365,7 @@ export class Game {
       if (lines[stage]) this.hud.toast(lines[stage], 'gold', 4);
       this.vfx.ring(new pc.Vec3(8, 0.3, 8), PALETTE.gold, 6, 1.0);
     };
-    this.grid.streaming = this.city; // City 07 (#8): rooftop clusters stream with the view
+    this.grid.streaming = this.city; // City 07 (#8): the city's chunks stream with the view
     this.grid.build();
     this.machines = new MachineVisuals(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     // City 07 (#8): in the city, machine models stream with the view; a landmark streaming in takes its area's state.
@@ -352,7 +373,7 @@ export class Game {
     this.machines.landmarkState = (m) => {
       const s = this.sim;
       const id = s.areas.areaOf({ roofId: m.roofId, x: m.x, z: m.z });
-      if (!id || id === PARK) return s.state.progression.coreActivated ? 'awake' : s.progression.coreReady() ? 'ready' : 'dormant';
+      if (!id || id === PARK) return s.state.progression.coreActivated ? 'awake' : 'dormant'; // E21.6: the fountain wakes by its tiers
       if (s.areas.fog(id) === 'cleared') return 'awake';
       return s.areas.ready(id) ? 'ready' : 'dormant';
     };
@@ -366,6 +387,10 @@ export class Game {
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
+    this.crops = new CropVisuals(this.sim, this.scene.world);
+    this.powerLines = new PowerLines(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData));
+    this.lightVisuals = new LightVisuals(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
+    this.powerOverlay = new PowerOverlay(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
     this.rings = new ProgressRings(this.sim, this.scene.world);
     // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
     // its procedural look. Once they're in, what was already drawn is rebuilt with them.
@@ -400,18 +425,11 @@ export class Game {
       this.sim,
       {
         selectTool: (t) => this.selectTool(t),
-        harvest: () => this.harvest(),
         chooseRole: (key) => {
           const [hubId, role, slot, index] = key.split('|');
           if (slot === 'drone') this.sim.roles.chooseForDrone(hubId, Number(index), role === '-' ? undefined : (role as DroneRole));
           else this.sim.roles.choose(hubId, role as DroneRole, Number(slot) || 1);
           this.renderInspect();
-        },
-        activateCore: () => {
-          // Bloombot (G.17): bloombot walks to the fountain and wakes it there.
-          const f = this.bot && this.sim.state.machines.find((m) => m.type === 'core' && this.sim.areas.areaOf(m) === PARK);
-          if (f) this.botWake(f);
-          else this.sim.progression.activateCore();
         },
         findCat: () => this.findCat(),
         keyFor: (a) => this.hudKey(a),
@@ -426,7 +444,6 @@ export class Game {
           this.selectTool('inspect');
           this.select(id);
         },
-        districtBloom: (id, replay) => this.playDistrictBloom(id, replay),
         openArea: (id) => this.openArea(id),
         setAreaMode: (id, mode) => {
           if (this.sim.areas.setMode(id, mode)) {
@@ -450,11 +467,9 @@ export class Game {
       },
       this.settings,
     );
-    this.fly = new FlyText(this.hud.root);
     this.createMenu();
-    // E22.10: old-city rules strip the walking view to the place: plain words, two gauges, one objective.
-    this.hud.oldCity = isOldCity(state);
-    document.body.classList.toggle('oldcity', this.hud.oldCity);
+    // E22.10: the walking view is stripped to the place: plain words, two gauges, one objective.
+    document.body.classList.add('oldcity');
     this.eco = new EcoBadge(this.sim, (h, k, t) => this.hud.toast(h, k, t));
     this.hud.setTool('pulse');
     this.applySettings();
@@ -472,7 +487,6 @@ export class Game {
       }
     }
     if (state.progression.coreActivated) this.machines.setCoreState('awake', true);
-    else if (this.sim.progression.coreReady()) this.machines.setCoreState('ready');
     this.applyFountainLook(true); // E21.6
 
     this.wireEvents();
@@ -483,7 +497,7 @@ export class Game {
       // E22.1: bindings saved before the new map are reset once, with a notice.
       const st = this.settings;
       const mig = migrateBindings(st.keys || st.pad ? { v: st.bindingsV, keys: st.keys, pad: st.pad } : undefined);
-      Object.assign(this, { bindings: new Bindings(mig.saved, { oldCity: isOldCity(state) }) });
+      Object.assign(this, { bindings: new Bindings(mig.saved) });
       if (mig.reset) {
         this.saveBindings(false);
         setTimeout(() => this.hud.toast('Controls were updated. Your custom keys were reset.', '', 6), 900);
@@ -506,15 +520,23 @@ export class Game {
         this.padListener(i);
         this.swallowPad = i;
       };
-      if (this.sim.oldCity) {
-        this.hud.root.dataset.rules = 'oldcity'; // E21.12: the intro card's Old City words
-        this.keepers = new KeeperVisuals(this.sim, this.scene.world, this.app);
-        this.keepers.reducedMotion = !!this.settings.reducedMotion;
-        this.oc = new OldCityController(this.oldCityHost());
-        this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
-        // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
-        this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
-      }
+      this.keepers = new KeeperVisuals(this.sim, this.scene.world, this.app);
+      this.keepers.reducedMotion = !!this.settings.reducedMotion;
+      this.oc = new OldCityController(this.oldCityHost());
+      this.resting = new Resting({
+        sim: this.sim, bot, camera: this.camera, hud: this.hud, sfx: this.sfx, keepers: this.keepers,
+        glyph: (a) => this.glyph(a),
+        showFail: (msg, at) => {
+          const sc = at ? this.botTileScreen(at) : undefined;
+          this.hud.showFail(msg, sc?.x, sc?.y);
+        },
+      });
+      this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
+      // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
+      this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
+      this.sim.bus.on('buried.dug', (e) => this.hud.pickup(MATERIALS[e.material].name, e.n)); // E23.2.2.3
+      this.sim.bus.on('biomass.gathered', (e) => e.by === 'bot' && this.hud.pickup(MATERIALS.biomass.name, e.got));
+      this.sim.bus.on('planter.harvested', (e) => e.food > 0 && this.hud.pickup(MATERIALS.food.name, e.food));
       const focus = new PadFocus(this.hud.root);
       this.padFocus = focus;
       bot.padCapture = (i) => {
@@ -527,7 +549,7 @@ export class Game {
       bot.onTurn = (deg) => this.camTurn(deg, 0);
       // E21.22: the exploration camera (pitch the player's, 0.15 s smoothing, never below the ground)
       this.camera.explore = true;
-      if (this.sim.oldCity) this.chunks.fadeTo = 0.3; // E21.22: buildings between the camera and bloombot fade to 30%
+      this.chunks.fadeTo = 0.3; // E21.22: buildings between the camera and bloombot fade to 30%
       this.camera.ground = (x, z) => this.groundY(x, z);
       this.glyphs.deckBuild = !!desktopApi()?.deck;
       bot.lastInput = this.startDevice; // E22.12: the title's first input picked the glyph set
@@ -560,6 +582,10 @@ export class Game {
         this.camTurn(-dx * 0.35, dy * 0.25); // E21.22: dragging with the look button turns and tilts the view
         return true;
       },
+      // Third person: the captured mouse turns and tilts the view directly (no button held).
+      look: (dx, dy) => this.mouseLook(dx, dy),
+      // Third person: a press on the world while the mouse is free captures it (and does nothing else).
+      capture: () => this.captureMouse(),
       // Bloombot: the camera's distance is fixed; the wheel turns what you're building (E19.2).
       // E22.1: in build mode the wheel turns the piece (and the camera's zoom waits); otherwise it zooms.
       zoom: (f, x, y) => (this.photo?.active ? this.photo.zoom(f) : this.bot ? this.wheel(f) : this.camera.zoomBy(f, x, y)),
@@ -572,20 +598,18 @@ export class Game {
     const unlock = () => this.sfx.unlock();
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
-    // E22.11: a hidden page or a window without focus pauses the game (setting, on by default): the time away
-    // is not counted. With the setting off, a hidden tab catches up on return as before (City 06.5).
+    // E22.11: a window without focus pauses the game (setting, on by default). E23.1: a hidden page always does,
+    // and the time away is never counted or caught up.
     const pauseOnBlur = () => this.settings.pauseOnBlur !== false;
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         this.saveNow();
+        // E23.1: a hidden page always waits, like a closed game; nothing is owed or paid back on return
+        this.pause.set('hidden');
         if (pauseOnBlur()) this.pause.set('blur');
-        else this.hiddenAt = performance.now();
       } else {
+        this.pause.clear('hidden');
         if (document.hasFocus()) this.pause.clear('blur');
-        if (this.hiddenAt) {
-          this.awayFor((performance.now() - this.hiddenAt) / 1000);
-          this.hiddenAt = 0;
-        }
       }
     });
     window.addEventListener('blur', () => pauseOnBlur() && this.pause.set('blur'));
@@ -608,14 +632,10 @@ export class Game {
 
     this.app.on('update', (dt: number) => this.update(dt));
     this.app.start();
-    if (lr.scrapped) setTimeout(() => this.hud.toast('A new city awaits — older gardens were cleared for this update. 🌱', '', 7), 400);
-    if (lr.backedUpAs) setTimeout(() => this.hud.toast(`Your old save couldn't be read by this version, so it was kept safely as a backup and a new rooftop started.<small>${lr.backedUpAs}</small>`, '', 8), 400);
-    // Phase 4 E10.1: no blocking welcome card. The first pulse works at once; a short note says what this is.
-    if (!state.progression.introSeen && state.stats.tilesRestored === 0 && !this.sim.oldCity) {
-      state.progression.introSeen = true;
-      const how = `Walk with ${this.hudKey('up')} ${this.hudKey('left')} ${this.hudKey('down')} ${this.hudKey('right')}. Press ${this.hudKeys('pulse')} to pulse the grey tile in front of you, and ${this.hudKey('interact')} to interact.`;
-      setTimeout(() => this.hud.toast(`🌱 Welcome to Solarbloom<small>This park is dead and grey. ${how}</small>`, 'gold', 6), 600);
-    }
+    // E23.1.1: a garden from an earlier version starts fresh, said calmly once, when the world is on screen. From the
+    // title the new-garden question already said it (and cleared the slot); this is for a start with no title (?slot=)
+    if (lr.scrapped) this.openingNotes.push(() => this.hud.toast('Starting fresh 🌱<small>Your garden was from an earlier version, so a new one begins here.</small>', '', 7));
+    if (lr.backedUpAs) this.openingNotes.push(() => this.hud.toast(`Your old save couldn't be read by this version, so it was kept safely as a backup and a new garden started.<small>${lr.backedUpAs}</small>`, '', 8));
     else if (loaded) setTimeout(() => this.hud.toast('Welcome back! Your garden kept its shape. 🌱', '', 2.6), 400);
   }
 
@@ -679,10 +699,9 @@ export class Game {
 
   /**
    * E21.12: the Old City's sea is heard from the nearest open water (the bay south of the park, and all round the
-   * island): louder near the shore, from its direction. Classic games have no sea.
+   * island): louder near the shore, from its direction.
    */
   private placeSea() {
-    if (!this.sim.oldCity) return;
     const f = this.camera.target;
     let best = Infinity;
     let bx = 0;
@@ -779,9 +798,10 @@ export class Game {
     this.hud.setUiScale(s.uiScale ?? 100);
     // Phase 5 E16's fauna caps (TUNING.ecosystem.caps) follow the graphics tier.
     this.faunaTier = this.gfxTier;
-    this.tileFx.reducedMotion = this.birds.reducedMotion = this.clouds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
+    this.tileFx.reducedMotion = this.birds.reducedMotion = this.clouds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
     if (this.overlays) this.overlays.holo.reducedMotion = rm;
+    if (this.lightVisuals) this.lightVisuals.reducedMotion = rm;
     if (this.transitions) {
       // Look 6: reduced motion keeps the timings with simpler visuals; detail follows the quality tier (Look 1's
       // setting when it lands, the "fewer effects" switch until then).
@@ -875,13 +895,24 @@ export class Game {
    * world (done once this exists), the chunks round bloombot built with those models, and a few frames drawn
    * with everything in place (shaders compiled).
    */
+  /** Notes for the player that wait until the loading screen has faded (`shown`), so none expires unseen. */
+  private openingNotes: (() => void)[] = [];
+
+  /** E23.1.1: the loading screen has faded and the world is on screen: show the waiting notes. */
+  shown() {
+    const notes = this.openingNotes.splice(0);
+    notes.forEach((n, i) => setTimeout(n, 400 + i * 600));
+  }
+
   loadSteps(): LoadSteps {
     const m = this.models;
     const total = Math.max(1, ModelLibrary.names().length);
     // no models to wait for (?models=classic), or they never arrive: don't hold the game for ever
     const modelsDone = !m || m.ready || !useModels() || performance.now() - this.builtAt > 30000;
     const loaded = this.chunks.loadedCount;
-    const pending = this.chunks.pending;
+    // Third person looks out to the horizon: the loading screen waits for the ground round bloombot (two chunks
+    // out); the hazy distance streams in while playing.
+    const pending = this.bot ? this.chunks.pendingNear(this.camera.target, CHUNK * 2) : this.chunks.pending;
     const view = loaded ? (loaded - pending) / loaded : 0;
     // the camera has settled on bloombot (its opening zoom is over), so the view that fades in is the view that stays
     const settled = Math.abs(this.camera.zoom - this.camera.zoomTarget) < 0.02;
@@ -954,6 +985,7 @@ export class Game {
     this.closeMenu();
     this.hud.toggleTray(false);
     this.hud.toggleBackpack(false);
+    this.hud.craft.close();
     this.hud.closePlotPicker();
     if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
   }
@@ -961,7 +993,7 @@ export class Game {
   /** E22.11: a full-screen panel pauses the game while it is open (also called the moment one closes, so the next
    *  key press already reaches the game, however slow the frame). */
   private syncPanelPause() {
-    this.pause.set('panel', this.hud.backpackOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
+    this.pause.set('panel', this.hud.backpackOpen || this.hud.craft.isOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
   }
 
   private openMenu() {
@@ -1200,15 +1232,16 @@ export class Game {
     this.sfx.click();
   }
 
-  private harvest() {
-    if (this.sim.harvestSun()) {
-      const starter = this.sim.state.machines.find((m) => m.type === 'solar');
-      if (starter) {
-        const p = this.machines.worldOf(starter);
-        this.vfx.burst(new pc.Vec3(p[0], p[1] + 0.4, p[2]), 14, { up: 3, size: 0.07 });
-        this.vfx.ring(new pc.Vec3(p[0], p[1], p[2]), PALETTE.gold, 1.4);
-      }
+  /** E23.2.1: F / d-pad left: eat one snack (biomass or food) to recharge. */
+  private eat() {
+    const r = this.sim.charge.eat();
+    if (typeof r === 'object') {
+      this.bot?.visuals.play('interact');
+      this.sfx.coin();
+      return;
     }
+    if (r === 'full') this.hud.showFail('Fully charged');
+    else if (r === 'none') this.hud.showFail('Nothing to eat. Biomass or food recharges bloombot');
   }
 
   private wireKeys() {
@@ -1259,7 +1292,6 @@ export class Game {
       const k = e.key.toLowerCase();
       const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden', '9': 'relay', '0': 'cultivator' };
       if (map[k]) this.selectTool(map[k]);
-      else if (k === 'h') this.harvest();
       else if (k === 'f') this.focusNextArea();
       else if (k === 'home') this.focusArea(PARK);
       else if (k === 'b') this.hud.toggleTray();
@@ -1279,6 +1311,7 @@ export class Game {
       if (!this.cinematic || this.photo.active) this.photo.action(a);
       return;
     }
+    if (this.resting?.action(a)) return; // E23.2.3: sitting: Interact or Back stands, Pulse runs time faster
     const slot = SLOTS.indexOf(a as (typeof SLOTS)[number]);
     if (slot >= 0) return this.useSlot(slot);
     switch (a) {
@@ -1293,8 +1326,13 @@ export class Game {
         return this.escape(true);
       case 'menu':
         return this.toggleMenu();
-      case 'harvest':
-        return this.harvest();
+      case 'eat':
+        return this.eat();
+      case 'loadNext':
+      case 'loadPrev':
+        // E23.2.2: turn the pulse load wheel
+        this.sim.pulseLoad.step(a === 'loadNext' ? 1 : -1);
+        return this.hud.loadWheel.show();
       case 'backpack':
         this.hud.toggleBackpack();
         return this.syncPanelPause(); // paused from this very moment
@@ -1303,6 +1341,8 @@ export class Game {
         return this.turnBuild(a === 'rotate' ? 1 : -1);
       case 'removeMode':
         return this.selectTool(this.hud.currentTool === 'remove' ? 'pulse' : 'remove');
+      case 'powerOverlay':
+        return this.togglePowerView();
       case 'map':
         return this.toggleOverview();
       case 'zoomCamera':
@@ -1312,10 +1352,6 @@ export class Game {
         return;
       case 'pinNext':
         return this.pinNext();
-      case 'nextArea':
-        return this.focusNextArea();
-      case 'home':
-        return this.focusArea(PARK);
       case 'recentre':
         return this.camera.recentre();
       case 'debug':
@@ -1330,6 +1366,7 @@ export class Game {
   private panelTab(dir: number) {
     if (this.settingsUi.isOpen) this.settingsUi.tab(dir, true);
     else if (this.hud.backpack.isOpen) this.hud.backpack.tab(dir, true);
+    else if (this.hud.craft.isOpen) this.hud.craft.tab(dir, true);
   }
 
   /** E22.1: the input contexts in effect now (Bindings: an open panel, build mode, or walking). */
@@ -1341,7 +1378,7 @@ export class Game {
   /** A panel or menu that takes the input is open. */
   private panelOpen(): boolean {
     const h = this.hud;
-    return h.modalOpen || h.backpackOpen || h.plotPickerOpen || h.trayOpen || !!this.oc?.panel.isOpen;
+    return h.modalOpen || h.backpackOpen || h.craft.isOpen || h.plotPickerOpen || h.trayOpen || !!this.oc?.panel.isOpen;
   }
 
   /** The action a key (or mouse input) means now. With a panel open, the key that opened it closes it again. */
@@ -1443,6 +1480,62 @@ export class Game {
     this.camIdle = 0;
   }
 
+  // ───────────── Third person: the captured mouse ─────────────
+
+  /** degrees the view turns (and tilts) per pixel of mouse movement, before the sensitivity setting */
+  private static readonly MOUSE_DEG = { yaw: 0.16, pitch: 0.12 };
+  /** pointer lock was refused (an embedded page, a test browser): clicks act as before */
+  private lockRefused = false;
+  /** shown the "click to look around" hint once */
+  private lookHinted = false;
+
+  private mouseCaptured(): boolean {
+    return typeof document !== 'undefined' && !!document.pointerLockElement && document.pointerLockElement === this.app.graphicsDevice.canvas;
+  }
+
+  /** May the mouse be captured now (bloombot's walking view with nothing open on top)? */
+  private mayCapture(): boolean {
+    return !!this.bot && !this.cinematic && !this.paused && !this.photo?.active && !this.overviewOn && !this.panelOpen() && this.settings.mouseLook !== false;
+  }
+
+  /** A press on the free mouse: capture it for looking around. True when the press was used for that. */
+  private captureMouse(): boolean {
+    if (this.lockRefused || this.mouseCaptured() || !this.mayCapture()) return false;
+    const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    if (!c.requestPointerLock) return false;
+    try {
+      const r = c.requestPointerLock() as unknown as Promise<void> | undefined;
+      r?.catch?.(() => (this.lockRefused = true));
+    } catch {
+      this.lockRefused = true;
+      return false;
+    }
+    return true;
+  }
+
+  /** The captured mouse moved: the view turns and tilts at once (a mouse wants no easing). */
+  private mouseLook(dx: number, dy: number) {
+    if (!this.bot || this.cinematic || this.photo?.active) return;
+    this.bot.lastInput = 'keys'; // looking with the mouse: prompts show keys again
+    const k = Game.MOUSE_DEG;
+    this.camera.look(-dx * k.yaw * this.camFactor('x'), dy * k.pitch * this.camFactor('y'));
+    this.camIdle = 0;
+  }
+
+  /** Per frame: lets go of the mouse when a panel, the menu, the map or a cinematic needs the pointer. */
+  private updateMouseCapture() {
+    if (this.mouseCaptured() && !this.mayCapture()) document.exitPointerLock?.();
+    this.hud.root.classList.toggle('mouse-look', this.mouseCaptured());
+    const aiming = !!this.bot && this.building() && !this.panelOpen() && !this.cinematic && !this.photo?.active && !this.overviewOn;
+    this.hud.root.classList.toggle('aiming', aiming);
+    this.camera.shoulderGoal = aiming ? 0.75 : 0; // building: over bloombot's shoulder, so the hologram is in view
+    if (this.bot) this.bot.strafe = aiming; // aiming: bloombot faces where the camera looks and steps sideways
+    if (!this.lookHinted && this.bot && this.mayCapture() && !this.mouseCaptured() && this.bot.lastInput === 'keys' && typeof matchMedia !== 'undefined' && matchMedia('(any-pointer: fine)').matches) {
+      this.lookHinted = true;
+      this.hud.toast('Press a mouse button over the world to look around with the mouse<small>Esc frees the mouse again.</small>', '', 5);
+    }
+  }
+
   /**
    * Per frame: the look-ahead, and the drift back behind bloombot after 3 s of walking with no camera input (a
    * setting). On a rooftop the view eases to the far step.
@@ -1457,12 +1550,16 @@ export class Game {
     this.walkedFor = moving ? this.walkedFor + dt : this.stillFor > 0.5 ? 0 : this.walkedFor;
     const f = b.pose.facing;
     this.camera.setLead(moving && b.following ? Math.sin(f) * EXPLORE.lead : 0, moving && b.following ? Math.cos(f) * EXPLORE.lead : 0);
-    if (!this.settings.noRecentre && this.stillFor < 0.5 && this.camIdle >= EXPLORE.recentreAfter && this.walkedFor >= EXPLORE.recentreAfter) {
+    // Third person, as action-platformers do: running, the camera swings in behind bloombot once the player has
+    // left it alone for a moment (eased, faster the further round it is). Running at the camera never flips it
+    // round, and aiming a build leaves it where it is.
+    if (!this.settings.noRecentre && !this.building() && this.stillFor < 0.5 && this.camIdle >= EXPLORE.recentreAfter && this.walkedFor >= EXPLORE.recentreWalk) {
       const behind = (f * 180) / Math.PI + 180;
       const now = this.camera.heading;
       const diff = ((((behind - now) % 360) + 540) % 360) - 180;
-      const step = Math.sign(diff) * Math.min(Math.abs(diff), EXPLORE.recentreSpeed * dt);
-      if (Math.abs(diff) > 0.5) this.camera.turnTo(now + step, true);
+      const rate = EXPLORE.recentreSpeed * Math.min(1, Math.abs(diff) / 45) * Math.min(1, b.speed / 2);
+      const step = Math.sign(diff) * Math.min(Math.abs(diff), rate * dt);
+      if (Math.abs(diff) > 0.5 && Math.abs(diff) < 150) this.camera.turnTo(now + step, true);
     }
   }
 
@@ -1527,9 +1624,11 @@ export class Game {
     if (this.settingsUi.isOpen) this.settingsUi.close();
     else if (this.menu.isOpen) this.closeMenu();
     else if (this.oc?.escape()) void 0; // E21: an Old City panel or a hold
+    else if (this.resting?.active) this.resting.stand(); // E23.2.3: Back stands bloombot up before any menu
     else if (this.hud.trayOpen) this.hud.toggleTray(false);
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
     else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
+    else if (this.hud.craft.isOpen) this.hud.craft.close();
     else if (this.selected) this.select(undefined);
     else if (this.bot?.walking) this.bot.cancelWalk();
     else if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
@@ -1540,6 +1639,34 @@ export class Game {
   /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
   private building(t: Tool = this.hud.currentTool): boolean {
     return !!this.bot && t !== 'inspect' && t !== 'pulse';
+  }
+  /** E23.3.4: the Power view is on (shown while building; it stays on for the next time you build). */
+  private powerView = false;
+  private togglePowerView() {
+    if (!this.building()) return;
+    this.powerView = !this.powerView;
+    this.hud.buildBar.powerOn = this.powerView;
+    this.hud.buildBar.render(this.hud.currentTool);
+    // A new concept gets one short introduction, the first time only.
+    if (this.powerView && !this.powerViewSeen) {
+      this.powerViewSeen = true;
+      this.hud.toast('Power view: each network glows in its own colour. Red means a machine has no power.', 'gold', 4);
+    }
+  }
+  private powerViewSeen = false;
+  /** where the pointer (or bloombot's cursor) is, for the Power view's highlight */
+  private powerFocus?: { roofId: string; x: number; z: number };
+  /** Machines on the grid that have power now: sources, batteries, poles and fed consumers (a dark one stays dark). */
+  private poweredMachines(): Set<string> {
+    const out = new Set<string>();
+    for (const m of this.sim.state.machines) {
+      const role = this.sim.power.roleOf(m);
+      if (!role) continue;
+      if (role.consumer && !this.sim.power.isPowered(m)) continue;
+      if (role.pole && this.sim.power.isTripped(m)) continue;
+      out.add(m.id);
+    }
+    return out;
   }
   /** the overview (M) is showing; walking, or M again, leaves it */
   private overviewOn = false;
@@ -1563,7 +1690,7 @@ export class Game {
   /** Bloombot: hold the camera at the close view's distance (E19.2: building no longer pulls it back). */
   private updateBotZoom() {
     const b = this.bot;
-    if (!b || this.cinematic) return;
+    if (!b || this.cinematic || this.resting?.active) return; // E23.2.3: sitting keeps its calm, wider view
     if (this.overviewOn && b.speed > 0.05) this.overviewOn = false; // walking leaves the overview
     if (this.overviewOn || !b.following) return; // the overview, or a camera-only fly-to, keeps its own zoom
     // E21.22: the chosen step; on a rooftop the view eases out to the far step
@@ -1643,6 +1770,7 @@ export class Game {
     const aim = this.building() ? this.buildAim() : undefined; // E19.2: build mode acts where the hologram is
     const p = aim ? aim.p : this.frontPick();
     if (!p || !p.tile) return;
+    if (aim && p.roofId === this.bot.pose.roofId && !this.bot.walking) this.bot.pose.facing = Math.atan2(p.fx - this.bot.pose.x, p.fz - this.bot.pose.z); // turns to build
     this.bot.following = true;
     const tool = this.hud.currentTool === 'inspect' ? 'pulse' : this.hud.currentTool;
     const sc = aim ?? this.botTileScreen(p.tile);
@@ -1720,9 +1848,7 @@ export class Game {
         kind: 'cat', id: `cat:${id}`, verb: 'Say hello', name: '', distance: d,
         run: () => {
           b.pose.facing = Math.atan2(v.x - wx, v.z - wz);
-          this.claimingCat = id;
           this.sim.cat.claim(id);
-          this.claimingCat = undefined;
           b.visuals.play('cheer');
         },
       });
@@ -1755,6 +1881,19 @@ export class Game {
     const dist = Math.hypot(tile.x + 0.5 - b.pose.x, tile.z + 0.5 - b.pose.z);
     const occ = this.sim.occupant(tile);
     const dec = this.cozy.decorOf(tile.occupantId);
+    if (this.resting && !aim) out.push(...this.resting.candidates(tile, dist)); // E23.2.3: benches and chargers
+    // E23.2.2.3: a buried find the ripple revealed: dig it up
+    const buried = !aim && tile.roofId === GROUND ? this.sim.buried.known(tile.x, tile.z) : undefined;
+    if (buried) {
+      const room = this.sim.inventory.room(buried.material) > 0;
+      out.push({
+        kind: 'cache', id: buried.id, verb: 'Dig up', name: `buried ${MATERIALS[buried.material].name}`, distance: dist, at: tile,
+        refused: room ? undefined : 'Backpack full',
+        run: () => {
+          if (this.sim.buried.dig(tile.x, tile.z) > 0) this.bot?.visuals.play('interact');
+        },
+      });
+    }
     if (dec) {
       out.push({
         kind: 'decoration', id: `decor:${tile.occupantId}`, verb: 'Pick up', name: DECOR_OPTION[dec.kind]?.name ?? 'the decoration', distance: dist, at: tile,
@@ -1807,8 +1946,20 @@ export class Game {
       const g = NIGHT_FIND_GIVES[nf.kind];
       out.push({ kind: 'salvage', id: `night:${nf.id}`, verb: g.verb, name: g.name, distance: fd, at: front, refused: s.nightFinds.problem(nf.id), run: () => void s.nightFinds.take(nf.id) });
     }
+    // E23.6.1: the crafting table is in the house (the shed by the fountain) from the start. Facing the shed's walls
+    // uses the table (listed first, so it wins the tie); the door in front of it is for the radio and the bed.
+    const sh = PARK_SET.shed;
+    if (f.x >= sh.x && f.x < sh.x + sh.size && f.z >= sh.z && f.z < sh.z + sh.size)
+      out.push({
+        kind: 'door', id: 'craft:table', verb: 'Use', name: 'the crafting table', distance: fd, at: front, frame: { roofId: GROUND, x: sh.x, z: sh.z, size: sh.size },
+        run: () => {
+          this.oc?.panel.close();
+          this.hud.craft.open();
+          this.syncPanelPause();
+        },
+      });
     // the house: its radio's forecast by day, its bed from dusk
-    if (this.atHouse(f) && s.weather.on && !s.clock.canSleep()) out.push({ kind: 'door', id: 'house:radio', verb: 'Listen to', name: 'the radio', distance: fd, at: front, run: () => this.listenToRadio() });
+    if (this.atHouse(f) && !s.clock.canSleep()) out.push({ kind: 'door', id: 'house:radio', verb: 'Listen to', name: 'the radio', distance: fd, at: front, run: () => this.listenToRadio() });
     if (this.atHouse(f) && s.clock.canSleep()) out.push({ kind: 'door', id: 'house:sleep', verb: 'Sleep', name: 'until morning', distance: fd, at: front, run: () => this.sleep() });
     const pile = s.salvage.pileAt(f.x, f.z);
     if (pile) out.push({ kind: 'salvage', id: `pile:${pile.id}`, verb: 'Salvage', name: MATERIALS[pile.material].name, distance: fd, at: front, ocHold: SALVAGE.holdSeconds, refused: s.salvage.problem(pile.id), run });
@@ -1827,6 +1978,14 @@ export class Game {
       if (r && s.areas.fog(r.id) !== 'cleared') out.push({ kind: 'landmark', id: `lm:${occ.id}`, verb: 'Wake', name: `the ${r.landmark.name}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
       else if (s.inventory.accessPoints().some((p) => p.x === occ.x && p.z === occ.z && p.roofId === occ.roofId)) out.push({ kind: 'storage', id: `store:${occ.id}`, verb: 'Open', name: 'the store', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
     } else if (occ?.type === 'chest') out.push({ kind: 'storage', id: `chest:${occ.id}`, verb: 'Open', name: 'the chest', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+    // E23.5.2: a planter: Harvest when ripe, otherwise Plant in or Tend it
+    if (occ?.type === 'planter') {
+      const lk = s.farm.look(occ);
+      out.push({ kind: 'machine', id: `planter:${occ.id}`, verb: lk.ripe ? 'Harvest' : lk.crop ? 'Tend' : 'Plant in', name: lk.ripe ? CROPS[lk.crop!].name : 'the planter', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.planter(occ) });
+    }
+    // E23.5.1: flowered, restored ground in front can be clipped for biomass
+    if (!pile && s.gather.canGather(front))
+      out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });
     return out;
   }
 
@@ -1841,6 +2000,7 @@ export class Game {
 
   /** E22.2: the prompt for this frame: the Interact target (or why not), and Pulse when it also applies. */
   private promptModel(target: InteractTarget | undefined): PromptModel | undefined {
+    if (this.resting?.active) return this.resting.prompt();
     const b = this.bot!;
     if (this.building()) {
       const tool = this.hud.currentTool;
@@ -1894,7 +2054,7 @@ export class Game {
         else if (name === 'deliver') this.sfx.coin();
         else if (name === 'pry') this.sfx.stage('crack');
         // a sound per material
-        else if (name === 'salvage') this.sfx.stage(({ scrap: 'thud', seeds: 'rustle', copper: 'hum', timber: 'creak', glass: 'crack', clay: 'thud', gears: 'grind', sunstone: 'hum' } as const)[material as 'scrap'] ?? 'thud');
+        else if (name === 'salvage') this.sfx.stage(({ biomass: 'rustle', scrap: 'thud', seeds: 'rustle', copper: 'hum', timber: 'creak', glass: 'crack', clay: 'thud', gears: 'grind', sunstone: 'hum' } as const)[material as 'scrap'] ?? 'thud');
         else this.sfx.click();
       },
       vista: (x: number, z: number, secs: number, done: (seen: string[]) => void) => this.vista(x, z, secs, done),
@@ -1976,7 +2136,7 @@ export class Game {
     return !!id && this.sim.areas.fog(id) === 'cleared';
   }
 
-  /** Bloombot (G.11): a click walks to the clicked thing, then does what the click would have done. */
+  /** Bloombot (G.11): from the map's overview only (third person has no cursor): travel, or walk to and act. */
   private botClick(x: number, y: number) {
     const b = this.bot!;
     const catId = this.catHit(x, y);
@@ -1984,9 +2144,7 @@ export class Game {
       const v = this.cat.targetWorld(catId) ?? new pc.Vec3(b.world()[0], 0, b.world()[2]);
       const l = this.sim.grid.layer(b.pose.roofId)!;
       const claim = () => {
-        this.claimingCat = catId;
         this.sim.cat.claim(catId);
-        this.claimingCat = undefined;
         b.visuals.play('cheer');
       };
       if (!b.goTo(b.pose.roofId, Math.floor(v.x - l.origin[0]), Math.floor(v.z - l.origin[2]), 1, claim)) this.hud.showFail("Bloombot can't reach that cat from here", x, y);
@@ -2062,6 +2220,7 @@ export class Game {
   }
 
   private pointerRecent(): boolean {
+    if (this.bot && !this.overviewOn) return false;
     return this.pointer.inside && performance.now() - this.pointerAt < 1500;
   }
 
@@ -2180,7 +2339,7 @@ export class Game {
       keep.push({ x: ptr.x, y: ptr.y, depth: d.x * t * f.x + d.y * t * f.y + d.z * t * f.z + (o.x - this.camera.entity.getPosition().x) * f.x + (o.y - this.camera.entity.getPosition().y) * f.y + (o.z - this.camera.entity.getPosition().z) * f.z });
     }
     // E21.22: and whatever stands between the camera and bloombot
-    const through = this.bot && this.sim.oldCity ? (([x, y, z]) => new pc.Vec3(x, y + 0.45, z))(this.bot.world()) : undefined;
+    const through = this.bot ? (([x, y, z]) => new pc.Vec3(x, y + 0.45, z))(this.bot.world()) : undefined;
     // In the Old City every building can fade, so only the sight line to bloombot fades one: the view's middle and
     // the cursor would ghost whole blocks the player is just looking at.
     if (w && h && !this.cinematic) this.chunks.fadeTowers(dt, this.camera.cam, through ? [] : keep, through);
@@ -2419,8 +2578,7 @@ export class Game {
     if (t.blocked) return 'Rusty vent';
     switch (t.ground) {
       case 'polluted':
-        if (this.sim.oldCity) return OLD_DEAD_NAME[t.feature ?? 'lawn'] ?? 'Dead ground';
-        return 'Cracked concrete';
+        return OLD_DEAD_NAME[t.feature ?? 'lawn'] ?? 'Dead ground';
       case 'prepared':
         return 'Mossy soil';
       case 'growing':
@@ -2431,6 +2589,9 @@ export class Game {
   }
 
   private onHover(x: number, y: number) {
+    // Third person: bloombot's play has no cursor on the world (the map's overview aside); what bloombot faces,
+    // or the build crosshair, is what the preview shows.
+    if (this.bot && !this.overviewOn) return;
     this.pointer = { x, y, inside: true };
     this.pointerAt = performance.now();
     if (this.cinematic || this.photo.active) return;
@@ -2464,6 +2625,7 @@ export class Game {
   }
 
   private previewAt(p: Pick | undefined, x: number, y: number) {
+    this.powerFocus = p ? { roofId: p.roofId, x: p.fx, z: p.fz } : undefined; // E23.3.4: the Power view highlights the network here
     if (this.hud.plotPickerOpen) return; // the picker's hologram owns the preview while it's open
     const tool = this.hud.currentTool;
     if (!p || !p.tile) {
@@ -2496,7 +2658,7 @@ export class Game {
       this.hud.showTip(
         x,
         y,
-        `<b>${def.icon} ${def.name}</b>${def.blurb}<br>${chk.ok ? `<span class="ok">${this.press('E')} to build · ${formatCost(chk.cost)}</span>` : `<span class="bad">${chk.reason}</span>`}`,
+        `<b>${def.icon} ${def.name}</b>${def.blurb}<br>${chk.ok ? `<span class="ok">${this.press('E')} to build</span>` : `<span class="bad">${chk.reason}</span>`}`,
       );
       return;
     }
@@ -2536,11 +2698,8 @@ export class Game {
     if (fp.length) this.overlays.showRadius([t, ...fp.map((f) => f.tile)], 'ok');
     else if (!this.selected) this.overlays.hideRadius();
     if (this.sim.salvage.describe(t)) action = '';
-    else if (chk.ok && this.sim.oldCity) action = `<span class="ok">${t.ground === 'restored' ? 'Pulse to help it flower' : 'Pulse to bring it back'}</span>`;
-    else if (chk.ok) {
-      const verb = t.ground === 'restored' ? `Nurture → ${BLOOM_NAMES[t.bloom + 1]}` : this.sim.restoration.nextIsOvercharged() ? '🌟 Overcharged pulse' : 'Pulse';
-      action = `<span class="ok">${verb}: ${formatCost(chk.cost)}${fp.length ? ` · restores ${fp.length + 1} tiles` : ''}</span>`;
-    } else if (chk.reason && !maxed) action = `<span class="bad">${chk.reason}</span>`;
+    else if (chk.ok) action = `<span class="ok">${t.ground === 'restored' ? 'Pulse to help it flower' : 'Pulse to bring it back'}</span>`;
+    else if (chk.reason && !maxed) action = `<span class="bad">${chk.reason}</span>`;
     this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${action ? '<br>' + action : ''}${this.plotLine(t.roofId, t)}`);
   }
 
@@ -2551,15 +2710,59 @@ export class Game {
 
   /** Does the mouse aim builds (over the world, moved lately, and the pad isn't what was used last)? */
   private mouseAims(): boolean {
-    return this.pointer.inside && this.bot?.lastInput !== 'pad' && performance.now() - this.pointerAt < MOUSE_AIM_MS;
+    return !this.bot && this.pointer.inside && performance.now() - this.pointerAt < MOUSE_AIM_MS;
   }
 
   /** Where a build is aimed, and where on screen to say so: the pointer's tile, or the tile in front of bloombot. */
   private buildAim(): { p?: Pick; x: number; y: number } {
     if (this.mouseAims()) return { p: this.pick(this.pointer.x, this.pointer.y), x: this.pointer.x, y: this.pointer.y };
+    if (this.bot) {
+      const p = this.crosshairPick();
+      if (p?.tile) {
+        const sc = this.botTileScreen(p.tile);
+        return { p, x: sc.x, y: sc.y };
+      }
+    }
     const p = this.frontPick();
     const sc = p?.tile ? this.botTileScreen(p.tile) : { x: innerWidth / 2, y: innerHeight / 2 };
     return { p, x: sc.x, y: sc.y };
+  }
+
+  /**
+   * Third person: where the build crosshair (the middle of the screen) meets bloombot's ground, kept between one
+   * tile and the build reach from bloombot. Looking down places close, looking ahead places further; past the
+   * reach (or at the sky, or onto another layer) the aim stops at the reach in the direction the camera faces.
+   */
+  private crosshairPick(): Pick | undefined {
+    const b = this.bot;
+    if (!b) return undefined;
+    const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    const hit = c.clientWidth ? this.pick(c.clientWidth / 2, c.clientHeight / 2) : undefined;
+    const reach = DECOR_GEN.reach - 0.5;
+    let fx: number;
+    let fz: number;
+    if (hit && hit.roofId === b.pose.roofId) {
+      fx = hit.fx;
+      fz = hit.fz;
+    } else {
+      const f = this.camera.entity.forward;
+      const l = Math.hypot(f.x, f.z) || 1;
+      fx = b.pose.x + (f.x / l) * reach;
+      fz = b.pose.z + (f.z / l) * reach;
+    }
+    let dx = fx - b.pose.x;
+    let dz = fz - b.pose.z;
+    let d = Math.hypot(dx, dz);
+    if (d < 1e-3) {
+      dx = Math.sin(b.pose.facing);
+      dz = Math.cos(b.pose.facing);
+      d = 1;
+    }
+    const want = Math.min(reach, Math.max(1, d));
+    fx = b.pose.x + (dx / d) * want;
+    fz = b.pose.z + (dz / d) * want;
+    const tile = this.sim.grid.get(b.pose.roofId, Math.floor(fx), Math.floor(fz));
+    return tile ? { roofId: b.pose.roofId, fx, fz, tile } : undefined;
   }
 
   /** Is a footprint within bloombot's reach, on its layer? (Always, without bloombot.) */
@@ -2602,9 +2805,16 @@ export class Game {
     const o = DECOR_OPTION[kind];
     const why = this.decorProblem(kind, p.roofId, t.x, t.z);
     this.overlays.hideRadius();
-    this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
-    const how = `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
-    this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${o?.solid ? 'Solid' : 'Walk over it'} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
+    const line = LIGHT[kind]?.line ? this.sim.lights.poleNear(p.roofId, t.x, t.z) : undefined;
+    if (LIGHT[kind]?.line) {
+      // a line light shows on the pole it would hang on
+      this.overlays.hideGhost();
+      if (line) this.overlays.showFrame(line.roofId, line.x, line.z, line.size, why ? 'bad' : 'ok');
+      else this.overlays.showFrame(p.roofId, t.x, t.z, 1, 'bad');
+    } else this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
+    const how = line ? `${this.press('E')} to hang it on this pole` : `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
+    const kindNote = LIGHT[kind]?.line ? 'On the pole’s lines' : o?.solid ? 'Solid' : 'Walk over it';
+    this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${kindNote} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
   }
 
   private previewRemove(p: Pick, x: number, y: number) {
@@ -2627,6 +2837,15 @@ export class Game {
 
   /** Why a decoration in hand can't go here (the tile's rules, reach, and not on top of bloombot if it's solid). */
   private decorProblem(kind: string, roofId: string, x: number, z: number): string | undefined {
+    // E23.3.5: line lights hang on a power pole's lines (aim at the pole) instead of standing on a tile
+    if (LIGHT[kind]?.line) {
+      const o = DECOR_OPTION[kind];
+      if (o && !this.cozy.isDecorUnlocked(o)) return `Unlocks when ${this.cozy.hint(o.unlock)}`;
+      const hang = this.sim.lights.canHang(kind, roofId, x, z);
+      if (hang) return hang;
+      const pole = this.sim.lights.poleNear(roofId, x, z)!;
+      return this.inReach(roofId, pole.x, pole.z, pole.size) ? undefined : TOO_FAR;
+    }
     const why = this.cozy.canDecorate(kind, roofId, x, z);
     if (why) return why;
     if (!this.inReach(roofId, x, z, 1)) return TOO_FAR;
@@ -2638,10 +2857,17 @@ export class Game {
   /** Places the decoration in hand on a tile (free); it stays in hand for the next one. */
   private placeDecorAt(p: Pick, x: number, y: number, kind: string): ActResult {
     const t = p.tile!;
-    const why = this.decorProblem(kind, p.roofId, t.x, t.z) ?? this.cozy.placeDecor(kind, this.buildRot, p.roofId, t.x, t.z);
+    const line = !!LIGHT[kind]?.line;
+    const why = this.decorProblem(kind, p.roofId, t.x, t.z) ?? (line ? this.sim.lights.hang(kind, p.roofId, t.x, t.z) : this.cozy.placeDecor(kind, this.buildRot, p.roofId, t.x, t.z));
     if (why) {
       this.hud.showFail(why, x, y);
       return 'none';
+    }
+    if (line) {
+      this.sfx.build();
+      this.vfx.burst(this.tileVec(t, SLAB_TOP + 1.0), 8, { up: 1.2, size: 0.04, life: 0.8 });
+      this.buildKey = '';
+      return 'select';
     }
     this.chunks.markTile(t);
     this.sfx.build();
@@ -2654,8 +2880,21 @@ export class Game {
   private removeDecorAt(p: Pick, x: number, y: number, pickUp: boolean): ActResult {
     const t = p.tile!;
     const d = this.cozy.decorOf(t.occupantId);
-    // E21.3: under old-city rules the remove tool also takes down a machine, giving its whole recipe back
-    const occ = !d && !pickUp && this.sim.oldCity ? this.sim.occupant(t) : undefined;
+    // E21.3: the remove tool also takes down a machine, giving its whole recipe back
+    const occ = !d && !pickUp ? this.sim.occupant(t) : undefined;
+    // E23.3.5: a pole with lights on its lines: the lights come down first (the pole stays)
+    const poleLights = !d ? this.sim.lights.onPole(this.sim.occupant(t)) : undefined;
+    if (poleLights) {
+      if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
+      this.sim.lights.unhang(this.sim.occupant(t));
+      this.sfx.click();
+      if (pickUp) this.selectTool(`decor:${poleLights}`);
+      this.buildKey = '';
+      return 'select';
+    }
     if (occ && occ.type !== 'core' && !occ.starter) {
       if (!this.inReach(p.roofId, t.x, t.z, 1)) {
         this.hud.showFail(TOO_FAR, x, y);
@@ -2887,22 +3126,14 @@ export class Game {
       case 'polluted': {
         const left = this.sim.cultivators.remaining(t);
         if (left !== undefined) return `🚜 The Cultivator is softening this slab — ${Math.ceil(left)} s to bloom. Pulse it to knock it along.`;
-        if (this.sim.oldCity) return 'Dead and grey. A pulse brings it back.';
-        return `Pollution ${Math.round(t.pollution)}% — restoring neighbours softens it into moss.`;
+        return 'Dead and grey. A pulse brings it back.';
       }
       case 'prepared':
         return zone ? '🌸 Inside a garden zone — may set off a Bloom Chain!' : 'Ready to bloom — cheaper to restore.';
       case 'growing':
         return `${this.stageName(t) ?? 'Roots are breaking through'} — ${Math.max(1, Math.ceil(t.growthRemainingSec))} s`;
-      case 'restored': {
-        if (this.sim.oldCity) return t.bloom >= TUNING.restore.fullBloom ? 'In flower.' : 'Alive again. Pulse it again to help it flower.';
-        const rate = this.sim.production.tileBiomassRate(t);
-        const lush = (t.lushUntil ?? 0) > this.sim.time ? ` · 💧 lush ${Math.ceil(t.lushUntil! - this.sim.time)} s` : '';
-        const st = this.stageName(t);
-        const left = t.tr ? Math.ceil(t.tr.t0 + t.tr.d - this.sim.time) : 0;
-        const proc = st && left > 0 ? ` · ${st} (${left} s)` : '';
-        return `+${rate.toFixed(2)}🌿/s${zone ? ' (garden ×2)' : ''}${lush}${proc}${t.bloom >= TUNING.restore.maxBloom ? ' · radiant ✦' : t.bloom >= TUNING.restore.fullBloom ? ' · full bloom ✓' : ''}`;
-      }
+      case 'restored':
+        return t.bloom >= TUNING.restore.fullBloom ? 'In flower.' : 'Alive again. Pulse it again to help it flower.';
     }
   }
 
@@ -2911,17 +3142,18 @@ export class Game {
     if (this.bot) {
       // E22.1: mouse buttons are bindable: the pulse button uses the tool on the aimed tile (walking there first if
       // it's out of reach); any other bound button does its action.
+      // Third person: the pulse button acts on what bloombot faces (or, building, on the crosshair's hologram);
+      // only the map's overview still takes a pointer (travel to a woken landmark).
       const a = this.resolveKey(`Mouse${button}`);
-      if (a === 'pulse' || a === 'place') this.botClick(x, y);
+      if ((a === 'pulse' || a === 'place') && this.overviewOn) this.botClick(x, y);
+      else if (a === 'pulse' || a === 'place') this.botAct();
       else if (a && a !== 'look') this.doAction(a);
       return;
     }
     if (button !== 0) return;
     const catId = this.catHit(x, y);
     if (catId) {
-      this.claimingCat = catId;
       this.sim.cat.claim(catId);
-      this.claimingCat = undefined;
       return;
     }
     const droneId = this.droneHit(x, y);
@@ -3065,7 +3297,7 @@ export class Game {
       scout: 'pushing back the fog',
       courier: 'delivering charge',
       spark: 'sparking a chain',
-      harvester: 'harvesting lost income',
+      harvester: 'gathering biomass for the store',
     };
     const idle: Record<DroneRole, string> = {
       restorer: 'napping — nothing to do in range',
@@ -3073,9 +3305,9 @@ export class Game {
       scout: 'napping — nothing left to restore in reach',
       courier: 'napping — no machine needs charge yet',
       spark: 'resting — one chain per 30 s, or no garden cluster in reach',
-      harvester: 'resting — no store is full',
+      harvester: 'napping — nothing in reach has flowered',
     };
-    const wait = role === 'gardener' || role === 'courier' ? 'waiting for water 💧 or energy ⚡' : 'waiting for energy ⚡';
+    const wait = 'waiting at home — its hub has no power'; // E23.3.3: the only wait is the grid
     return status === 'working' ? work[role] : status === 'travelling' ? 'flying to a job' : status === 'napping' ? idle[role] : wait;
   }
 
@@ -3091,7 +3323,7 @@ export class Game {
         const st = r.check(m.id, role, slot);
         const owned = r.owns(m, role);
         const on = role === current;
-        const note = on ? 'In use' : owned ? 'Owned' : st.reason && !st.reason.startsWith('Need ') ? esc(st.reason) : formatPriceHtml(st.price, s.econ.shortfall(st.price));
+        const note = on ? 'In use' : owned ? 'Owned' : st.reason && !st.reason.startsWith('Needs ') ? esc(st.reason) : `<span class="${st.ok ? '' : 'short'}">${st.price} Biomass</span>`;
         return `<button class="role-btn${on ? ' on' : ''}" data-role="${m.id}|${role}|${slot}" ${on || (!owned && !st.ok) ? 'disabled' : ''} aria-pressed="${on}" title="${esc(ROLE_INFO[role].job)}"><span class="ri">${ROLE_INFO[role].icon}</span><span class="rn">${ROLE_INFO[role].name}</span><span class="rp">${note}</span></button>`;
       }).join('');
     const tier = m.tier ?? 1;
@@ -3125,16 +3357,17 @@ export class Game {
     let extra = '';
     switch (m.type) {
       case 'solar': {
-        const out = s.production.solarOutput(m);
+        // E23.1.4: in words (no rates); what it makes goes into the grid
+        const shining = s.power.output(m) > 0;
         const boosted = m.boostUntil > s.time;
-        extra = `<p class="stat">⚡ ${out.toFixed(1)} energy/s${boosted ? ' · 🌸 bloom boost!' : ''}${s.production.surgeActive() ? ` · 🐱 Solar Surge ×${TUNING.cat.frenzyMult}` : ''}</p><p>Restore tiles right next to it for a 5 s ×2 boost.</p>`;
+        extra = `<p class="stat">${shining ? 'Shining into the grid' : 'Resting until the sun is up'}${boosted ? ' · a bloom beside it makes it shine brighter' : ''}${inSurge(s, m) ? ' · the Lucky Cat’s sunshine' : ''}</p><p>Restore tiles right next to it and it shines brighter for a few seconds.</p>`;
         break;
       }
       case 'condenser': {
         const near = s.grid.tilesNear(m, TUNING.condenser.radius);
         const mossy = near.filter((t) => t.ground === 'prepared').length;
         const pct = Math.round(((m.charge ?? 0) / TUNING.condenser.threshold) * 100);
-        extra = `<p class="stat">💧 +${s.upgrades.waterMult(m)} water/s</p><p class="stat">🌧️ Watering charge ${pct}% · ${mossy} dry tile${mossy === 1 ? '' : 's'} beside it</p><p>When full, it waters the dry soil next to it into bloom and starts a chain. ${mossy ? '' : 'Pulse a neighbour so moss appears beside it.'}</p>`;
+        extra = `<p class="stat">🌧️ Watering charge ${pct}% · ${mossy} dry tile${mossy === 1 ? '' : 's'} beside it</p><p>When full, it waters the dry soil next to it into bloom and starts a chain. ${mossy ? '' : 'Pulse a neighbour so moss appears beside it.'}</p>`;
         break;
       }
       case 'pollinator': {
@@ -3170,13 +3403,7 @@ export class Game {
         const R = TUNING.neighbourhood.reservoir;
         const conds = s.state.machines.filter((x) => x.type === 'condenser' && x.roofId === m.roofId && distToFootprint(x.x, x.z, m.x, m.z, m.size) <= R.condenserRange).length;
         const dry = s.chains.overflowTargets(m, 99).length;
-        const net = s.canals.of(m);
-        const canal = net
-          ? `<p class="stat">🛶 On a canal: ${net.gardens.length} garden${net.gardens.length === 1 ? '' : 's'} · ${net.condensers.length} condenser${net.condensers.length === 1 ? '' : 's'} share its water</p><p>Condensers along the canal fill the emptiest basin on it, and when this basin overflows it also spills at the connected garden with the most dry ground (once per chain).</p>`
-          : m.roofId === GROUND
-            ? '<p>Build it beside clean canal water to join a canal network.</p>'
-            : '';
-        extra = canal + `<p class="stat">⛲ Basin ${Math.floor(m.charge ?? 0)}/${R.threshold} · ${conds} 💧 condenser${conds === 1 ? '' : 's'} within ${R.condenserRange} tiles fill it</p><p class="stat">🌱 ${dry} dry tile${dry === 1 ? '' : 's'} within ${R.radius} tiles (highlighted) · Overflow irrigates up to ${R.targets}</p><p>Each time a nearby Water Condenser fills its meter, the basin rises. Full → Overflow: the closest dry tiles burst into lush bloom (×${R.lushMult} 🌿 for ${R.lushSeconds} s).${conds ? '' : ' <b>Build a Water Condenser within 2 tiles to fill it.</b>'}</p>`;
+        extra = `<p class="stat">⛲ Basin ${Math.floor(m.charge ?? 0)}/${R.threshold} · ${conds} 💧 condenser${conds === 1 ? '' : 's'} within ${R.condenserRange} tiles fill it</p><p class="stat">🌱 ${dry} dry tile${dry === 1 ? '' : 's'} within ${R.radius} tiles (highlighted) · Overflow irrigates up to ${R.targets}</p><p>Each time a nearby Water Condenser fills its meter, the basin rises. Full → Overflow: the closest dry tiles burst into lush bloom.${conds ? '' : ' <b>Build a Water Condenser within 2 tiles to fill it.</b>'}</p>`;
         break;
       }
       case 'core': {
@@ -3191,34 +3418,9 @@ export class Game {
 
   // ───────────────────────── events → presentation ─────────────────────────
 
-  private tileScreen(tileId: string): { x: number; y: number } | undefined {
-    const t = this.sim.grid.byTileId(tileId);
-    if (!t) return undefined;
-    const [x, y, z] = this.sim.grid.tileWorld(t);
-    // Behind the camera or far off screen: the number flies from the default spot instead.
-    const s = this.camera.onScreen(new pc.Vec3(x, y + 0.3, z), 0);
-    return s && { x: s.x, y: s.y };
-  }
-
   private tileVec(t: TileData, up = SLAB_TOP): pc.Vec3 {
     const [x, y, z] = this.sim.grid.tileWorld(t);
     return new pc.Vec3(x, y + up, z);
-  }
-
-  /** Gains waiting to fly, per resource: big chains coalesce into a few numbers instead of hundreds. */
-  private flyPending = new Map<ResourceKind, { amount: Big; at: number }>();
-
-  private flyGain(kind: ResourceKind, amount: Big, from?: { x: number; y: number }) {
-    const now = performance.now();
-    const p = this.flyPending.get(kind) ?? { amount: big(0), at: -1e9 };
-    p.amount = p.amount.add(amount);
-    this.flyPending.set(kind, p);
-    if (now - p.at < 120) return; // the next one carries the sum
-    p.at = now;
-    const total = p.amount;
-    p.amount = big(0);
-    const src = from ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-    this.fly.spawn(kind, total, src, this.hud.resourceRect(kind), () => this.hud.flashResource(kind, 'flash'));
   }
 
   private wireEvents() {
@@ -3250,20 +3452,10 @@ export class Game {
       if (!info.noLandmark) this.sfx.fanfare();
       this.save();
     });
-    // City 12.1: rooftop clusters appear with their area and come alive when a Bloom Relay reaches them.
+    // a raised layer added to the world gets its roof drawn
     b.on('layer.added', ({ layerId }) => {
       const l = s.grid.layer(layerId);
       if (l) this.grid.addRoof(l);
-    });
-    b.on('layer.unlocked', ({ layerId }) => {
-      const l = s.grid.layer(layerId);
-      if (!l?.cluster) return;
-      this.grid.clusterBuilding(l);
-      for (const t of s.grid.tilesOf(l.id)) this.grid.refresh(t, false);
-      const c = new pc.Vec3(l.origin[0] + l.width / 2, l.height + 0.3, l.origin[2] + l.depth / 2);
-      this.vfx.ring(c, '#9ff7ff', Math.max(l.width, l.depth) * 0.7, 1.0);
-      this.sfx.powerUp();
-      this.hud.toast(`📡 The relay reaches the rooftop!<small>${l.name}: restore its tiles and wake the Rooftop Core.</small>`, 'gold', 4);
     });
     b.on('area.ready', ({ areaId }) => {
       const lm = s.areas.landmark(areaId);
@@ -3305,6 +3497,24 @@ export class Game {
       if (t) for (let i = 0; i < 4; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.18, done: () => this.vfx.ring(this.tileVec(t), i % 2 ? PALETTE.gold : PALETTE.coreGlow, 3 + i * 3, 1.1) });
       this.camera.shake?.(0.25);
       this.hud.feed(`💥 Mega Pulse: up to ${budget} tiles bloom outward`);
+    });
+    // E23.2.2.3: the reveal ripple: a wide soft ring, then what it found glows for a few seconds (never a cat:
+    // its targets come from the salvage data alone)
+    b.on('pulse.ripple', ({ tileId, targets }) => {
+      const t = s.grid.byTileId(tileId);
+      if (!t) return;
+      this.vfx.ring(this.tileVec(t), PALETTE[RIPPLE.tint], RIPPLE.radius, RIPPLE.ringSeconds);
+      for (const g of targets) {
+        const at = s.grid.get(GROUND, g.x, g.z);
+        if (!at) continue;
+        const d = Math.hypot(g.x - t.x, g.z - t.z);
+        const hex = PALETTE[RIPPLE.found[g.kind]];
+        for (let i = 0; i < RIPPLE.pings; i++)
+          this.tweens.add(0.01, () => {}, {
+            delay: RIPPLE.delayPerTile * d + i * (RIPPLE.seconds / RIPPLE.pings),
+            done: () => (this.vfx.ring(this.tileVec(at), hex, RIPPLE.pingRadius, RIPPLE.pingSeconds), this.vfx.sparkles(this.tileVec(at), RIPPLE.sparkles, true)),
+          });
+      }
     });
     b.on('pulse.fired', ({ tileId, extra, overcharged }) => {
       const t = s.grid.byTileId(tileId);
@@ -3383,24 +3593,6 @@ export class Game {
       this.vfx.ring(this.tileVec(tile), PALETTE.pink, 0.9, 0.5);
       this.sfx.at(p, (q) => q.nurture(level));
     });
-    b.on('resource.gain', ({ kind, amount, tileId, reason }) => {
-      if (amount.lt(0.05)) return;
-      let from = tileId ? this.tileScreen(tileId) : undefined;
-      if (!from && reason === 'cat') {
-        const c = this.cat.targetWorld(this.claimingCat) ?? this.lastCatPos;
-        const sp = c && this.camera.onScreen(c, 0);
-        if (sp) from = { x: sp.x, y: sp.y };
-      }
-      if (!from && reason === 'harvest') {
-        const panel = s.state.machines.find((m) => m.type === 'solar');
-        if (panel) {
-          const w = this.machines.worldOf(panel);
-          const sp = this.camera.onScreen(new pc.Vec3(w[0], w[1] + 0.6, w[2]), 0);
-          if (sp) from = { x: sp.x, y: sp.y };
-        }
-      }
-      this.flyGain(kind, amount, from);
-    });
     b.on('machine.built', ({ machine }) => {
       this.machines.add(machine, true);
       for (const t of s.grid.footprint(machine.roofId, machine.x, machine.z, machine.size)) if (t) this.grid.refresh(t, false);
@@ -3441,18 +3633,16 @@ export class Game {
       this.sfx.chainEnd(10);
       if (!s.state.stats.firsts.treePulse || s.state.stats.firsts.treePulse === Math.round(s.time)) this.hud.toast('🌳 Mother Tree Bloom Pulse!<small>Everything around it bursts into life.</small>', 'gold', 3);
     });
-    b.on('chain.ended', ({ chainId, combo, bonus, total, milestonePct, energy, crossings, areas }) => {
+    b.on('chain.ended', ({ chainId, combo, crossings, areas }) => {
       if (areas >= 3) this.hud.feed(`🌸 Bloom chain ×${combo} swept ${areas} areas`);
       if (areas >= 6 && !potterPace(this.settings)) this.hud.toast(`🌸 A city-wide bloom! ×${combo}<small>It swept across ${areas} areas.</small>`, 'gold', 3);
       this.tileFx.release(`chain${chainId}`);
       if (crossings > 0) this.hud.feed(`📡 Chain crossed ${crossings} Bloom Relay link${crossings > 1 ? 's' : ''}`);
       if (combo < 2) return;
-      const ms = milestonePct ? ` · ×${combo >= 20 ? 20 : combo >= 10 ? 10 : 5} milestone +${Math.round(milestonePct * 100)}%` : '';
-      this.hud.combo(combo, `+${fmt(total)}🌿${energy.gte(1) ? ` +${fmt(energy)}⚡` : ''} earned${ms}`);
-      this.hud.feed(`🌸 Bloom chain ×${combo}${bonus.gte(1) ? ` · +${fmt(bonus)}🌿 bonus` : ''}`);
+      this.hud.feed(`🌸 Bloom chain ×${combo}`);
       this.sfx.chainEnd(combo);
       if (combo >= 5 && !potterPace(this.settings)) {
-        this.hud.toast(`🌸 BLOOM CHAIN ×${combo}!${bonus ? `<small>Chain bonus +${bonus} 🌿${ms}</small>` : ''}`, 'gold', 2.6);
+        this.hud.toast(`🌸 BLOOM CHAIN ×${combo}!`, 'gold', 2.6);
         this.camera.shake(0.04);
       }
     });
@@ -3471,26 +3661,6 @@ export class Game {
       if (ft) this.grid.shake(ft);
       this.hud.showFail(reason, this.pointer.x, this.pointer.y);
       this.sfx.error();
-      if (reason.includes('⚡')) {
-        this.hud.flashResource('energy', 'short');
-        if (s.state.time >= s.state.harvestReadyAt) this.hud.nudge('#harvestBtn', 5);
-      }
-      if (reason.includes('💧')) this.hud.flashResource('water', 'short');
-      if (reason.includes('🌿')) this.hud.flashResource('biomass', 'short');
-    });
-    b.on('area.step', ({ areaId, step, share, credited }) => {
-      const a = s.areas.info(areaId);
-      const got = (['biomass', 'energy', 'water'] as const).filter((k) => credited[k]?.gte(1)).map((k) => `+${fmt(credited[k]!)}${RES_ICON[k]}`).join(' ');
-      this.hud.toast(`🌱 ${a.landmarkName}: ${Math.round(share * 100)}% of the way<small>${got}${step < TUNING.areaSteps.at.length ? '' : ' · the landmark is close'}</small>`, 'gold', 2.4);
-      this.sfx.powerUp();
-      this.hud.flashResource('biomass', 'flash');
-    });
-    b.on('milestone.reached', ({ at, credited, next }) => {
-      const icons = { energy: '⚡', water: '💧', biomass: '🌿' } as const;
-      const got = (Object.entries(credited) as [keyof typeof icons, Big][]).filter(([, v]) => v.gte(1)).map(([k, v]) => `+${fmt(v)}${icons[k]}`).join(' ');
-      this.hud.toast(`🌱 ${at} tiles restored!<small>${got || 'Storage was full'}${next ? ` · next reward at ${next}` : ''}</small>`, 'gold', 2.6);
-      this.sfx.powerUp();
-      this.hud.flashResource('biomass', 'flash');
     });
     b.on('upgrade.granted', ({ id, level, machineId }) => {
       if (id === 'droneSpeed') this.drones.restyle();
@@ -3523,7 +3693,6 @@ export class Game {
       const p = id ? this.cat.targetWorld(id) : undefined;
       const rare = variant === 'golden' || variant === 'rainbow';
       if (p) {
-        this.lastCatPos = p.clone();
         const soft = this.cat.softSparkle;
         this.vfx.burst(p, soft ? 12 : rare ? 60 : 40, { up: soft ? 2 : 4, speed: soft ? 1 : 2, size: soft ? 0.05 : 0.07, life: soft ? 1 : 1.4 });
         this.vfx.ring(p, PALETTE.gold, soft ? 0.9 : 1.6, 0.8);
@@ -3537,7 +3706,7 @@ export class Game {
       const label = variant === 'rainbow' ? '🌈 RAINBOW CAT FOUND!' : variant === 'golden' ? '👑 GOLDEN CAT FOUND!' : '🐱 LUCKY CAT FOUND!';
       this.hud.toast(label, 'cat', 2.4);
       const kind = variant === 'rainbow' ? 'Rainbow Cat: ' : variant === 'golden' ? 'Golden Cat: ' : '';
-      this.hud.catReward(`${kind}${CAT_REWARD_NAMES[reward]}${extras ? ` + ${extras} saved-up harvest${extras > 1 ? 's' : ''}` : ''}`, summary);
+      this.hud.catReward(`${kind}${CAT_REWARD_NAMES[reward]}${extras ? ' + saved-up gifts' : ''}`, summary);
       this.save();
     });
     b.on('cat.moved', ({ catId }) => {
@@ -3545,19 +3714,24 @@ export class Game {
       if (spot) this.cat.show(spot, true);
       this.save();
     });
-    b.on('cat.goldenRelay', () => {
-      this.hud.feed(
-        `🐱✨ Golden Relay: your next green corridor hop blooms ${this.sim.state.relayBonus} extra tiles`,
-      );
+    b.on('cat.goldenRelay', () => this.machines.refreshUpgrades());
+    // E23.2.1: the charge is a new concept: one short introduction the first time it runs out, then the meter shows it
+    b.on('charge.empty', () => {
+      const f = s.state.stats.firsts;
+      if (f.chargeEmpty !== undefined) return;
+      f.chargeEmpty = Math.round(s.time);
+      this.hud.toast(`Out of charge<small>Bloombot walks slower and can't pulse. Press ${this.hudKeys('eat')} to eat biomass or food, or rest.</small>`, '', 6);
     });
-    b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Surge ×${TUNING.cat.frenzyMult} for ${Math.round(seconds)}s`));
-    b.on('harvest', () => this.sfx.coin());
-    b.on('rooftop.coreReady', () => {
-      this.machines.setCoreState('ready');
-      this.hud.toast(`✨ The Rooftop Core is humming!<small>Walk up and press ${this.hudKey('interact')} (or use the button) to awaken the building.</small>`, 'gold', 5);
-      this.sfx.chainEnd(10);
-    });
-    b.on('rooftop.coreRestored', () => this.playCoreSequence());
+    // E23.2.2.1: the load wheel is a new concept: one short introduction the first time bloombot carries something
+    // to load (the ring shows with it); after that the wheel and the chip show it
+    const introWheel = () => {
+      if (!s.pulseLoad.introDue()) return;
+      s.pulseLoad.introduced();
+      this.hud.loadWheel.show(LOAD_WHEEL.introSeconds);
+      this.hud.toast(`Bloombot can load its pulse<small>Press ${this.hudKeys('loadNext')} or ${this.hudKeys('loadPrev')} to choose what a pulse grows. Each loaded pulse uses one.</small>`, '', LOAD_WHEEL.introSeconds);
+    };
+    b.on('pack.changed', introWheel);
+    introWheel();
     // E21.6: the Old City's fountain tiers: tier 1 is the water returning (the old fountain sequence); later tiers a toast
     // E21.22: the first time a region's gate opens, the camera rises for 2 s over it (a setting; off with reduced motion)
     b.on('gate.opened', ({ region }) => {
@@ -3618,20 +3792,6 @@ export class Game {
       if (a && b2) this.vfx.arc(a, b2, PALETTE.water, 0.6);
       if (b2) this.vfx.burst(b2, 4, { up: 1, size: 0.04, speed: 0.4 });
     });
-    // City 10.3: water runs along the canal, tile by tile, from one machine to another.
-    b.on('canal.flow', ({ from, to, path, kind }) => {
-      const step = Math.min(0.04, 1.6 / Math.max(1, path.length));
-      path.forEach((id, i) => {
-        const t = s.grid.byTileId(id);
-        if (!t) return;
-        this.tileFx.flash(t, '#f2fdff', kind === 'overflow' ? 0.85 : 0.55, 0.55, i * step);
-        if (kind === 'overflow' && i % 3 === 0) this.tweens.add(0.01, () => {}, { delay: i * step, done: () => this.vfx.burst(this.tileVec(t), 3, { up: 1.2, size: 0.045, speed: 0.6 }) });
-      });
-      const a = this.posOf(from);
-      const b2 = this.posOf(to);
-      if (b2) this.tweens.add(0.01, () => {}, { delay: path.length * step, done: () => this.vfx.burst(b2, kind === 'overflow' ? 14 : 5, { up: 1.6, size: 0.05, speed: 0.8 }) });
-      if (a && !path.length && b2) this.vfx.arc(a, b2, PALETTE.water, 0.6);
-    });
     b.on('reservoir.overflow', ({ machineId }) => {
       const p = this.posOf(machineId);
       this.machines.splash(machineId);
@@ -3661,13 +3821,6 @@ export class Game {
       if ((s.state.progression.canopyBursts ?? 0) <= 1) this.hud.toast(`🌳 Canopy Burst!<small>The Elder Tree releases its charge.${gardens.length ? ` ${gardens.length} 🌸 garden${gardens.length > 1 ? 's' : ''} carried it further!` : ' 🌸 Gardens inside its reach would carry it further.'}</small>`, 'gold', 3.5);
       else this.hud.feed(`🌳 Canopy Burst${gardens.length ? ` · amplified by ${gardens.length} garden${gardens.length > 1 ? 's' : ''}` : ''}`);
     });
-    b.on('district.ready', ({ districtId }) =>
-      this.hud.toast(`🌸 ${this.sim.districts.title(districtId)} is ready to bloom!<small>${TUNING.district.minAwake} neighbouring landmarks are awake. Open any of its areas to set off the district bloom.</small>`, 'gold', 5),
-    );
-    b.on('district.bloom', (e) => {
-      if (!e.replay) this.save(); // claimed before any presentation: a reload can never pay twice
-      this.runDistrictBloom(e.districtId, e.restored.length + e.lusher.length, e.reward, e.replay);
-    });
   }
 
   /** A purchase's moment: toast, coin, and sparkles where it changed the world (one machine, or all it affects). */
@@ -3689,9 +3842,6 @@ export class Game {
     this.save();
   }
 
-  private lastCatPos?: pc.Vec3;
-  /** Phase 5 E15: the cat being claimed right now (its rewards fly from it). */
-  private claimingCat?: string;
   /** World position of a tile or machine id (chain sources/targets can be either). */
   private posOf(id: string | undefined, _towardRoof?: string): pc.Vec3 | undefined {
     if (!id) return undefined;
@@ -3721,7 +3871,6 @@ export class Game {
     if (this.summaryAt <= 0) {
       this.summaryAt = 0.25;
       this.hud.chainAreas(tr && tr.total >= 12 && tr.perArea.size > 1 ? this.chainSummary.lines(tr) : []);
-      if (tr) this.hud.chainBreakdown(this.chainSummary.breakdown(tr.chainId)); // Look 5.5: the combo panel's lines
     }
     if (!tr || tr.total < 20 || this.frontAt > 0 || this.settings.reducedMotion) return;
     this.frontAt = 0.3;
@@ -3746,7 +3895,6 @@ export class Game {
         this.tileFx.flash(t, combo >= 100 ? '#ff5fb8' : '#ffb81f', 0.45, 0.9);
         this.sfx.at(this.tileVec(t), (q) => q.bloom(combo));
       }
-      if (combo >= 2) this.hud.combo(combo);
       return;
     }
     const targetRoof = s.grid.byTileId(ev.target)?.roofId;
@@ -3762,7 +3910,6 @@ export class Game {
         if (t) this.tileFx.flash(t, wave, 0.45, 0.9);
         if (from && to && ev.cause !== 'motherTree' && ev.cause !== 'canopy')
           this.vfx.arc(from, to, ev.cause === 'overflow' ? PALETTE.water : ev.cause === 'relay' ? PALETTE.coreGlow : combo >= 5 ? PALETTE.pink : PALETTE.flowerCore, 0.5);
-        if (combo >= 2) this.hud.combo(combo);
         this.sfx.at(t && this.tileVec(t), (q) => q.bloom(combo));
         break;
       }
@@ -3771,7 +3918,6 @@ export class Game {
           this.vfx.arc(from, to, '#7fe07a', 0.7);
           this.vfx.burst(to, 8, { up: 1.6, size: 0.05 });
         }
-        if (combo >= 2) this.hud.combo(combo);
         break;
       case 'POLLINATE':
         if (from && to) {
@@ -3781,7 +3927,6 @@ export class Game {
         break;
       case 'PRODUCE_ENERGY':
         if (from && to) this.vfx.arc(from, to, PALETTE.gold, 0.5);
-        if (combo >= 2) this.hud.combo(combo);
         break;
       case 'PRODUCE_WATER':
         if (to) this.vfx.ring(to, PALETTE.water, 1.4, 0.6);
@@ -3796,7 +3941,6 @@ export class Game {
         const arrive = this.posOf(dest?.id);
         if (arrive) this.vfx.burst(new pc.Vec3(arrive.x, arrive.y + 1, arrive.z), 16, { up: 2.5, size: 0.07 });
         this.sfx.chainEnd(Math.min(10, 3 + combo));
-        if (combo >= 2) this.hud.combo(combo);
         break;
       }
       default:
@@ -3908,12 +4052,9 @@ export class Game {
       if (!this.cinematic) return;
       this.cinematic = false;
       this.hud.cinematic(false);
-      if (this.sim.oldCity) {
-        this.hud.toast('⛲ Water returns!<small>Bloombot can Pry now, and build. Rubble blocks the avenues north, east and west: pry one open.</small>', 'gold', 7);
-        // E21.12: a 4 s vista turning past the beacons around the park (skippable; a still with reduced motion)
-        if (!this.settings.noVistas) setTimeout(() => this.vista(8, 8, 4, (seen) => seen.forEach((r) => this.sim.salvage.see(`beacon:${r}`)), 300), 200);
-      }
-      else this.hud.toast('🌫️ The fog rolls back!<small>The park now grows +25% biomass, and the fountain filled your ✨ Bloom Frenzy: fire it at the fog’s edge. Restore the areas around it and wake their landmarks.</small>', 'gold', 7);
+      this.hud.toast('⛲ Water returns!<small>Bloombot can Pry now, and build. Rubble blocks the avenues north, east and west: pry one open.</small>', 'gold', 7);
+      // E21.12: a 4 s vista turning past the beacons around the park (skippable; a still with reduced motion)
+      if (!this.settings.noVistas) setTimeout(() => this.vista(8, 8, 4, (seen) => seen.forEach((r) => this.sim.salvage.see(`beacon:${r}`)), 300), 200);
       this.save();
     };
     this.tweens.add(0.01, () => {}, { delay: TUNING.core.sequenceSeconds, done: () => this.cinematicEnd?.() });
@@ -3931,20 +4072,15 @@ export class Game {
   /** A landmark Core (on the ground or a city rooftop) that can be woken now. */
   private landmarkReady(m: MachineData): boolean {
     const id = this.sim.areas.areaOf(m)!;
-    return id === PARK ? this.sim.progression.coreReady() : this.sim.areas.ready(id);
+    return id !== PARK && this.sim.areas.ready(id); // E21.6: the fountain wakes by its tiers, at the fountain
   }
 
   private wakeLandmark(m: MachineData) {
     if (this.cinematic) return;
     const id = this.sim.areas.areaOf(m)!;
-    if (this.sim.oldCity) {
-      // E21.9: an Old City landmark is woken by bloombot's own delivery, by hand (the fountain by its tiers)
-      if (id === PARK) this.oc?.openFountain();
-      else if (this.sim.landmarks.interact(id) === 'woke') this.sfx.fanfare();
-      return;
-    }
-    if (id === PARK) this.sim.progression.activateCore();
-    else this.sim.areas.clear(id);
+    // E21.9: a landmark is woken by bloombot's own delivery, by hand (the fountain by its tiers)
+    if (id === PARK) this.oc?.openFountain();
+    else if (this.sim.landmarks.interact(id) === 'woke') this.sfx.fanfare();
   }
 
   private landmarkHtml(m: MachineData): string {
@@ -4061,79 +4197,6 @@ export class Game {
     this.save();
   }
 
-  // ───────────────────────── district blooms (City 10.7) ─────────────────────────
-
-  private playDistrictBloom(id: string, replay: boolean) {
-    if (this.cinematic) return;
-    if (replay) this.sim.districts.replay(id);
-    else this.sim.districts.bloom(id);
-  }
-
-  /**
-   * A district bloom on screen: the camera pulls back over the district, each awake landmark sends out a ring,
-   * a green wave rolls outward over its cleared areas, then the reward. Skippable; a replay changes nothing.
-   */
-  private runDistrictBloom(id: string, changed: number, reward: Partial<Record<'energy' | 'water' | 'biomass', Big>>, replay: boolean) {
-    const s = this.sim;
-    const at = (delay: number, fn: () => void) => this.tweens.add(0.01, () => {}, { delay, done: fn });
-    const awake = s.districts.members(id).filter((a) => s.areas.fog(a) === 'cleared');
-    if (!awake.length) return;
-    const name = s.districts.title(id);
-    this.cinematic = true;
-    this.select(undefined);
-    this.overlays.hideFrame();
-    this.overlays.hideGhost();
-    this.hud.hideTip();
-    this.hud.cinematic(true, replay ? `${name}: the district bloom` : `${name} blooms!`);
-    this.sfx.fanfare();
-    const lms = awake.map((a) => s.areas.info(a).landmark);
-    const cx = lms.reduce((a, l) => a + l[0] + 1, 0) / lms.length;
-    const cz = lms.reduce((a, l) => a + l[1] + 1, 0) / lms.length;
-    this.camera.focus(cx, 0, cz, Math.max(this.camera.minZoom, 0.3), 1.8);
-    // 1. Every awake landmark rings out, nearest the middle first.
-    lms.forEach((l, i) => {
-      const p = new pc.Vec3(l[0] + 1, 0.1, l[1] + 1);
-      at(0.6 + Math.min(1.6, Math.hypot(l[0] - cx, l[1] - cz) * 0.02) + i * 0.05, () => {
-        this.vfx.ring(p, i % 2 ? PALETTE.gold : PALETTE.coreGlow, 5, 1.1);
-        this.vfx.burst(new pc.Vec3(p.x, 1.5, p.z), 16, { up: 3, size: 0.08 });
-      });
-    });
-    // 2. The green wave: the ground re-renders lusher, area by area, outward from the middle.
-    awake.forEach((a) => {
-      const [ax, az] = s.areas.info(a).landmark;
-      at(2.4 + Math.min(2.6, Math.hypot(ax - cx, az - cz) * 0.03), () => {
-        if (!replay) this.chunks.markArea(a, true);
-        const tiles = s.areas.tiles(a);
-        for (let i = 0; i < tiles.length; i += 23) {
-          const t = tiles[i];
-          if (t.blocked || t.occupantId) continue;
-          this.tileFx.flash(t, '#38d94a', 0.5, 0.9, (i % 7) * 0.05);
-        }
-      });
-    });
-    // 3. Reward.
-    at(5.6, () => {
-      const c = new pc.Vec3(cx, 0.4, cz);
-      for (let k = 0; k < 4; k++) at(k * 0.2, () => this.vfx.ring(c, k % 2 ? PALETTE.gold : PALETTE.coreGlow, 10 + k * 6, 1.2));
-      this.vfx.burst(new pc.Vec3(cx, 3, cz), 60, { up: 5, speed: 3, size: 0.09, life: 1.6 });
-      this.camera.shake(0.1);
-      this.sfx.chainEnd(8);
-      if (!replay) (['biomass', 'water', 'energy'] as const).forEach((k, i) => reward[k] && at(i * 0.15, () => this.flyGain(k, reward[k]!)));
-    });
-    this.cinematicEnd = () => {
-      if (!this.cinematic) return;
-      this.cinematic = false;
-      this.hud.cinematic(false);
-      if (!replay) {
-        // A skip lands every tile at once.
-        for (const a of awake) this.chunks.markArea(a, true);
-        this.hud.toast(`🌸 ${name} is in full bloom!<small>${changed} tiles grew lusher · +${reward.biomass ?? 0}🌿 +${reward.water ?? 0}💧 +${reward.energy ?? 0}⚡. Your machines are just as you left them.</small>`, 'gold', 6);
-      }
-      this.save();
-    };
-    at(TUNING.district.seconds, () => this.cinematicEnd?.());
-  }
-
   private lastBoostFeed = -99;
   private boostPulseT = 0;
   /** A soft cyan ring keeps pulsing on machines your taps have boosted. */
@@ -4182,32 +4245,30 @@ export class Game {
     }
   }
 
-  /**
-   * City 06.5: time passed without frames (a hidden tab, a long hitch) is owed to the simulation, up to a cap,
-   * and paid back a few milliseconds per frame so no frame stalls.
-   */
-  awayFor(seconds: number) {
-    if (!(seconds > 0)) return;
-    const C = TUNING.catchUp;
-    const was = this.catchUpDebt;
-    this.catchUpDebt = Math.min(C.maxSeconds, this.catchUpDebt + seconds);
-    if (was < C.toastFrom && this.catchUpDebt >= C.toastFrom) {
-      const m = Math.round(this.catchUpDebt / 60);
-      this.hud.toast(`⏩ Catching up${m >= 1 ? ` ${m} min` : ''}…<small>Your city kept growing while you were away.</small>`, '', 3);
-    }
-  }
-
-  /** Runs simulation ticks within the frame budget: the frame's own time first, then any catch-up owed. */
+  /** Runs simulation ticks within the frame budget: the frame's own time (E23.1: nothing owed is ever paid back). */
   private runSim(dt: number) {
     const t0 = performance.now();
-    runSimFrame(this.sim, this, dt, { pause: this.pause, speed: this.speed, step: TUNING.simStep, budgetMs: TUNING.catchUp.frameBudgetMs, maxCatchUp: TUNING.catchUp.maxSeconds });
+    runSimFrame(this.sim, this, dt, { pause: this.pause, speed: this.speed * (this.sim.rest.fast ? REST.fastTime : 1), step: TUNING.simStep, budgetMs: TUNING.frameSimBudgetMs });
     this.simMs = performance.now() - t0;
     this.simMsWorst = Math.max(this.simMsWorst, this.simMs);
   }
 
   /** this frame's dt (holds read it) */
   private frameDt = 0;
+  private lastReal = 0;
+  /**
+   * Seconds of wall time since the last frame (the engine's dt is 0 while paused). Not clamped to a frame's worth:
+   * the crafting table counts real seconds even when frames are slow, up to a second at a time (a long stall, such as
+   * a hidden window, doesn't finish a queue at once).
+   */
+  private realDt(): number {
+    const now = performance.now();
+    const d = this.lastReal ? (now - this.lastReal) / 1000 : 0;
+    this.lastReal = now;
+    return Math.min(d, 1);
+  }
   private update(rawDt: number) {
+    if (!this.pause.paused) this.lastReal = performance.now();
     const dt = Math.min(rawDt, TUNING.maxFrameDt);
     this.frameDt = dt;
     this.clock += dt;
@@ -4218,8 +4279,9 @@ export class Game {
     // E22.11: a full-screen panel (the backpack, Settings) pauses the game while it is open.
     this.syncPanelPause();
     const paused = this.pause.paused;
+    // E23.6.1: the table keeps working while its panel holds the game paused (the engine's clock is stopped then)
+    this.hud.craft.update(paused ? this.realDt() : dt, paused);
     if (!paused && !this.photo.frozen) {
-      if (rawDt > TUNING.maxFrameDt && !this.hiddenAt) this.awayFor(Math.min(rawDt, 30) - TUNING.maxFrameDt); // a hitch
       this.runSim(dt);
     }
     /** the world's own time: nothing moves while paused (the camera, streaming and the HUD still run) */
@@ -4235,7 +4297,30 @@ export class Game {
     const camP = this.camera.entity.getPosition();
     detailTextures.setCamera(camP.x, camP.y, camP.z);
     this.machines.update(wdt, rect);
+    this.powerLines.update();
+    const powerOn = this.powerView && this.building();
+    this.powerOverlay.show(powerOn);
+    this.powerOverlay.update(wdt, this.powerFocus);
+    // E23.7.5: lamps cast real light: fewer at once on the low tier, and they dim with the scene in the Power view
+    this.lightVisuals.maxCast = this.gfxTier === 'low' ? LIGHTING.cast.maxLow : LIGHTING.cast.max;
+    this.lightVisuals.share = this.dayNight.lightShare;
+    // E23.7.5: photo mode's own time or weather lights the lamps as that hour would (on screen only)
+    const ownScene = this.photo.lightOverride() !== undefined || this.photo.weatherOverride() !== undefined;
+    if (ownScene) {
+      const sc = sceneNow(this.sim, this.photo);
+      this.lightVisuals.dark = Math.max(1 - daylightAt(sc.f), GLOOMY.has(sc.weather) ? 1 : 0);
+    } else this.lightVisuals.dark = undefined;
+    this.lightVisuals.update(wdt, this.camera.entity.getPosition());
+    // E23.3.4: in the Power view, powered electrical machines become yellow holograms and the rest of the world darkens
+    this.machines.powerHolo(powerOn ? this.poweredMachines() : undefined, wdt);
+    const D = POWER.view.darken;
+    const dimTo = powerOn ? D.night + (D.day - D.night) * this.dayNight.light : 0;
+    const k = Math.min(1, wdt / POWER.view.fade);
+    this.dayNight.dim = Math.abs(dimTo - this.dayNight.dim) < 1e-3 ? dimTo : this.dayNight.dim + (dimTo - this.dayNight.dim) * k;
+    this.powerOverlay.setBoost(this.dayNight.boost);
+    this.machines.setHoloBoost(this.dayNight.boost);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
+    this.crops.update(dt);
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.
     if (!this.paused && this.camera.zoom > 0.9) {
@@ -4289,11 +4374,14 @@ export class Game {
       if (t) this.overlays.showBeacon(t.roofId, t.x, t.z);
     } else this.overlays.hideBeacon();
     this.overlays.update(dt);
+    this.waterLevels.update();
     if (this.bot) {
       this.bot.update(wdt); // still reads the pad (the menu's focus ring), but nothing moves
       this.updateExploreCamera(wdt);
+      this.updateMouseCapture();
       this.oc?.update(wdt);
       this.keepers?.update(wdt);
+      this.resting?.update(wdt);
       this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();
@@ -4314,6 +4402,7 @@ export class Game {
     }
     this.dayNight.apply(this.lightMoment());
     this.look.rimShare = this.dayNight.rim;
+    this.look.night = 1 - this.dayNight.light;
     this.chunks.fogTint.copy(this.dayNight.cloudTint);
     this.chunks.tintFog();
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);

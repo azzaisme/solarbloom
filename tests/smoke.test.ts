@@ -3,15 +3,17 @@
 // saves and reloads. The deep checks (pacing, economy curves, soaks) live in `npm run test:full`.
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
-import { toNum } from '../src/core/Big';
 import { createInitialState } from '../src/core/GameState';
 import { Sim } from '../src/gameplay/Sim';
 import { fill, makeSim, rich } from './helpers';
 
 SaveService.clock = () => 0;
 
-const finite = (sim: Sim) =>
-  (['energy', 'water', 'biomass'] as const).every((k) => Number.isFinite(toNum(sim.state.resources[k])) && toNum(sim.state.resources[k]) >= 0);
+/** E23.1.4: charge is the only meter, and the backpack holds finite, non-negative counts */
+const finite = (sim: Sim) => {
+  const c = sim.charge.value();
+  return Number.isFinite(c) && c >= 0 && c <= sim.charge.max && Object.values(sim.state.salvage.pack).every((n) => Number.isFinite(n) && (n ?? 0) >= 0);
+};
 
 /** Pulses the first tile the player could pulse right now; true if it worked. */
 function pulseOne(sim: Sim) {
@@ -20,25 +22,25 @@ function pulseOne(sim: Sim) {
 }
 
 describe('smoke: the game works', () => {
-  it('a new game boots with a park to restore and energy to start with', () => {
+  it('a new game boots with a park to restore and charge to start with', () => {
     const sim = new Sim(createInitialState(42));
     expect(sim.areas.tiles('park').length).toBeGreaterThan(100);
     expect(sim.areas.counts('park').restored).toBeLessThan(sim.areas.tiles('park').length);
-    expect(toNum(sim.state.resources.energy)).toBeGreaterThan(0);
+    expect(sim.charge.value()).toBeGreaterThan(0);
     expect(finite(sim)).toBe(true);
   });
 
-  it('a player pulse costs energy and restores a park tile', () => {
+  it('a player pulse costs charge and restores a park tile', () => {
     const sim = new Sim(createInitialState(42));
     const before = sim.areas.counts('park').restored;
-    const energy = toNum(sim.state.resources.energy);
+    const charge = sim.charge.value();
     expect(pulseOne(sim)).toBe(true);
-    expect(toNum(sim.state.resources.energy)).toBeLessThan(energy);
+    expect(sim.charge.value()).toBeLessThan(charge);
     sim.advance(3);
     expect(sim.areas.counts('park').restored).toBeGreaterThan(before);
   });
 
-  it('three minutes of play: tiles keep getting restored, resources stay sane, the old drone turns up and works', () => {
+  it('three minutes of play: tiles keep getting restored, the charge and backpack stay sane, the old drone turns up and works', () => {
     const sim = new Sim(createInitialState(42));
     const start = sim.areas.counts('park').restored;
     for (let s = 0; s < 180; s++) {
@@ -76,7 +78,8 @@ describe('smoke: the game works', () => {
     const again = new Sim(loaded!);
     expect(again.areas.counts('park').restored).toBe(sim.areas.counts('park').restored);
     expect(again.state.drones.length).toBe(sim.state.drones.length);
-    expect(toNum(again.state.resources.biomass)).toBeCloseTo(toNum(sim.state.resources.biomass), 6);
+    expect(again.charge.value()).toBeCloseTo(sim.charge.value(), 6);
+    expect(again.state.salvage.pack).toEqual(sim.state.salvage.pack);
     expect(saver.serialize(again.state)).toBe(json);
   });
 });

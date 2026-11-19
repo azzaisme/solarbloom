@@ -1,8 +1,7 @@
 import * as pc from 'playcanvas';
+import { foldLegs, hipsAbove, SEAT_HIPS } from './SeatPose';
 import { GROUND } from '../core/GameState';
-import { canStep } from '../core/Height';
 import { KEEPER_HELP } from '../data/keepers';
-import { keeperCanStand, keeperPath } from '../gameplay/KeeperSystem';
 import { KEEPERS, MODEL_NAMES, type KeeperDef } from '../data/oldcity';
 import type { Sim } from '../gameplay/Sim';
 import { MODELS, oldCityModel } from './Models';
@@ -25,13 +24,11 @@ interface KeeperView {
   body: pc.Entity;
   rig?: pc.Entity;
   standIn: boolean;
-  /** where it stands now (cells), and where it walks to when settled */
+  /** the Keeper's prop (set down while it sits beside bloombot) */
+  prop?: pc.Entity;
+  /** where it is drawn: the sim's pose (KeeperSystem.pose) */
   x: number;
   z: number;
-  to?: { x: number; z: number };
-  wait: number;
-  /** E23.9.2: the cells still to walk through (cell centres), after `to` */
-  path: { x: number; z: number }[];
   facing: number;
   waveUntil: number;
   clip?: string;
@@ -49,6 +46,8 @@ export class KeeperVisuals {
   private root: pc.Entity;
   private clock = 0;
   reducedMotion = false;
+  /** E23.2.3: a Keeper who is a friend sits beside bloombot on a bench (world position, facing) */
+  beside?: { id: string; x: number; y: number; z: number; facing: number; seat: number };
 
   constructor(
     private sim: Sim,
@@ -81,11 +80,10 @@ export class KeeperVisuals {
     const body = new pc.Entity('body');
     root.addChild(body);
     this.root.addChild(root);
-    const v: KeeperView = { def, root, body, standIn: true, x: def.x + 0.5, z: def.z + 0.5, wait: 2, path: [], facing: Math.PI, waveUntil: 0 };
+    const v: KeeperView = { def, root, body, standIn: true, x: def.x + 0.5, z: def.z + 0.5, facing: Math.PI, waveUntil: 0 };
     const own = KEEPER_URLS[`../../assets/raw/models/final/keeper-${def.id}.glb`];
     v.standIn = !own;
-    // registered before loading: a model the library already holds comes back synchronously, inside this call, and
-    // a Keeper not yet in `views` would throw its rig away (Pylon, in Mast Row, never got its body)
+    // in the map before loading: a model already in the cache calls back at once, before make() returns
     this.views.set(def.id, v);
     this.app.assets.loadFromUrl(own ?? STAND_IN_URL, 'container', (err, asset) => {
       if (err || !asset || !this.views.has(def.id)) return;
@@ -123,6 +121,7 @@ export class KeeperVisuals {
       p.setLocalScale(0.32, 0.32, 0.32);
       p.setLocalPosition(0.32, 0, 0.1);
       body.addChild(p);
+      v.prop = p;
     }
     return v;
   }
@@ -150,29 +149,6 @@ export class KeeperVisuals {
     anim.baseLayer?.transition(want, 0.25);
   }
 
-  /** A woken Keeper's next wandering step: a cell it can stand on beside it (a slow random walk, never off a cliff). */
-  private nextStep(v: KeeperView): { x: number; z: number } | undefined {
-    const cx = Math.floor(v.x);
-    const cz = Math.floor(v.z);
-    const opts: { x: number; z: number }[] = [];
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const x = cx + dx;
-      const z = cz + dz;
-      if (!keeperCanStand(this.sim, v.def.id, x, z) || !canStep(cx, cz, x, z)) continue;
-      opts.push({ x: x + 0.5, z: z + 0.5 });
-    }
-    if (!opts.length) return undefined;
-    return opts[Math.floor((Math.sin(this.clock * 12.9898 + v.def.x * 78.233) * 0.5 + 0.5) * opts.length) % opts.length];
-  }
-
-  /** E23.9.2: sets a Keeper walking to a cell along ground it can stand on (straight there if there is no such way). */
-  private route(v: KeeperView, to: { x: number; z: number }) {
-    const from = { x: Math.floor(v.x), z: Math.floor(v.z) };
-    const cells = keeperPath(this.sim, v.def.id, from, to) ?? [from, to];
-    v.path = cells.slice(1).map((c) => ({ x: c.x + 0.5, z: c.z + 0.5 }));
-    v.to = v.path.shift();
-  }
-
   /** Per frame. `night`: settled Keepers doze (E21.20's day and night tells the game when). */
   update(dt: number, night = false) {
     this.clock += dt;
@@ -184,7 +160,7 @@ export class KeeperVisuals {
         if (v) v.root.enabled = false;
         continue;
       }
-      if (!v) this.views.set(def.id, (v = this.make(def)));
+      if (!v) v = this.make(def);
       v.root.enabled = true;
       const step = k.step(def.id);
       const seat = v.root.findByName('seat') as pc.Entity | null;
@@ -199,51 +175,37 @@ export class KeeperVisuals {
         v.body.setLocalEulerAngles(0, 0, 0);
         v.body.setLocalPosition(0, dozing && !v.standIn ? SEAT.height : 0, 0);
         const waving = this.clock < v.waveUntil && !this.reducedMotion;
+        // E23.9.2: where it is and what it is doing come from the sim (KeeperSystem.pose: it wanders its region,
+        // walks home when bloombot is near, walks to a tile and works it), so it is talked to where it is drawn
+        const p = k.pose(def.id);
+        v.x = p.x;
+        v.z = p.z;
+        v.facing = p.facing;
         if (!waving && !(step === 'settled' && night)) {
-          // E23.9.2: a woken Keeper hangs around its region by day. Off to tend a tile, it walks there and tends it
-          // (the tile blooms when it is done, KeeperSystem); otherwise, with bloombot near, it walks home to be
-          // talked to; otherwise it wanders.
-          const bot = this.sim.bot;
-          const near = !!bot && Math.hypot(bot.x - (def.x + 0.5), bot.z - (def.z + 0.5)) < KEEPER_HELP.comeHomeTiles;
-          const cx = Math.floor(v.x);
-          const cz = Math.floor(v.z);
-          const tend = k.tendingAt(def.id);
-          const goal = tend ?? (near ? { x: def.x, z: def.z } : undefined);
-          if (!v.to && goal && (cx !== goal.x || cz !== goal.z)) this.route(v, goal);
-          if (v.to) {
-            const dx = v.to.x - v.x;
-            const dz = v.to.z - v.z;
-            const d = Math.hypot(dx, dz);
-            const sp = KEEPER_HELP.walkSpeed * dt;
-            if (d <= Math.max(sp, KEEPER_HELP.arriveTiles)) {
-              v.x = v.to.x;
-              v.z = v.to.z;
-              v.to = v.path.shift();
-            } else {
-              v.x += (dx / d) * sp;
-              v.z += (dz / d) * sp;
-              v.facing = Math.atan2(dx, dz);
-            }
-            this.play(v, 'walk');
-          } else if (tend) {
+          if (p.doing === 'walk') this.play(v, 'walk');
+          else if (p.doing === 'tend') {
             // tending: leaning over its tile, working the soil (a bob on top of whatever clip it has)
             this.play(v, 'interact', 'idle');
             if (!this.reducedMotion) v.body.setLocalEulerAngles(KEEPER_HELP.tendLean + Math.sin(this.clock * 6) * KEEPER_HELP.tendBob, 0, 0);
-          } else if (near) {
-            v.facing = Math.atan2(bot!.x - v.x, bot!.z - v.z);
-            this.play(v, 'idle');
-          } else {
-            v.wait -= dt;
-            if (v.wait <= 0) {
-              v.to = this.nextStep(v);
-              v.path = [];
-              v.wait = 1.5 + (Math.sin(this.clock + def.z) * 0.5 + 0.5) * 3;
-            }
-            this.play(v, 'idle');
-          }
+          } else this.play(v, 'idle');
         } else if (step === 'settled' && night && !waving) this.play(v, 'sleep');
         else this.play(v, waving ? 'wave' : 'idle', waving ? 'interact' : 'idle');
       }
+      const b = this.beside?.id === def.id ? this.beside : undefined;
+      if (b) {
+        // sitting beside bloombot: down on the bench seat (the sit-down clip the Keepers doze with, which is seat
+        // height), then back to where it was afterwards. The stand-in has no sitting clip: it just stands there.
+        this.play(v, 'idle');
+        v.root.setPosition(b.x, b.y, b.z);
+        v.root.setEulerAngles(0, (b.facing * 180) / Math.PI, 0);
+        v.body.setLocalEulerAngles(0, 0, 0);
+        // the legs bent by hand (SeatPose: the Keepers share bloombot's rig, and have no sitting clip), the hips
+        // down on the seat; its prop set down while it sits
+        if (v.rig && foldLegs(v.rig, v.root, 'sit')) v.body.setLocalPosition(0, v.body.getLocalPosition().y + b.seat + SEAT_HIPS.sit - hipsAbove(v.rig, v.root), -0.08);
+        if (v.prop) v.prop.enabled = false;
+        continue;
+      }
+      if (v.prop) v.prop.enabled = true;
       v.root.setPosition(v.x, this.y(v.x, v.z), v.z);
       v.root.setEulerAngles(0, (v.facing * 180) / Math.PI, 0);
     }
