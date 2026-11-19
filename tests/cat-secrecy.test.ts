@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
@@ -29,6 +29,7 @@ import * as water from '../src/data/water';
 import * as charge from '../src/data/charge';
 import * as unlocks from '../src/data/unlocks';
 import { CAT_DECOR, DECOR_OPTIONS, PLOT_OPTIONS } from '../src/data/cozy';
+import { CAT_SIGHT, catPixels, catSeen, sightClear } from '../src/core/CatSight';
 import { openNextGoal } from './helpers';
 
 SaveService.clock = () => 0;
@@ -40,8 +41,9 @@ SaveService.clock = () => 0;
  * player-facing string E23 added and every system that could point at a cat, and it fails on a single hint.
  */
 
-/** A word that names or hints at a cat. */
-export const CAT_WORD = /\b(cats?|kitt(?:y|en|ens)|meows?|paws?|pawprints?|whiskers?|purr\w*)\b|🐱|🐈|🐾|😺/i;
+/** A word or phrase that names or hints at a cat (the old loading tip's "something small is hiding" among them). */
+export const CAT_WORD =
+  /\b(cats?|kitt(?:y|en|ens)|kitties|meows?|mews?|paws?|pawprints?|whiskers?|purr\w*|felines?|tabby|something (?:small|little)|hiding (?:nearby|close by|close|here))\b|🐱|🐈|🐾|😺|😸/i;
 
 /** Every string inside a value (objects and arrays, all the way down). */
 function strings(v: unknown, out: string[] = [], seen = new Set<unknown>()): string[] {
@@ -55,6 +57,54 @@ function strings(v: unknown, out: string[] = [], seen = new Set<unknown>()): str
 
 /** The strings that hint at a cat. */
 const hints = (list: string[]) => list.filter((s) => CAT_WORD.test(s));
+
+const STR = /'((?:\\.|[^'\\\n])*)'|"((?:\\.|[^"\\\n])*)"|`((?:\\.|[^`\\])*)`/g;
+
+/** The cat-word string literals in code (.ts, .css, a page's scripts and styles), comments aside, in order. */
+function scanCode(text: string): string[] {
+  const out: string[] = [];
+  const noBlock = text.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
+  for (const l of noBlock.split('\n')) {
+    if (l.trim().startsWith('//')) continue;
+    for (const m of l.replace(/(^|[^:'"`])\/\/ .*$/, '$1').matchAll(STR)) {
+      const s = m[1] ?? m[2] ?? m[3];
+      if (CAT_WORD.test(s)) out.push(s);
+    }
+  }
+  return out;
+}
+
+/** The cat words in a page: its text, every attribute, its scripts and styles (comments aside). */
+function scanHtml(text: string): string[] {
+  const t = text.replace(/<!--[\s\S]*?-->/g, '');
+  const out: string[] = [];
+  for (const m of t.matchAll(/>([^<]+)</g)) if (CAT_WORD.test(m[1])) out.push(m[1].trim());
+  for (const m of t.matchAll(/=\s*"([^"]*)"/g)) if (CAT_WORD.test(m[1])) out.push(m[1]);
+  for (const m of t.matchAll(/<style[^>]*>([\s\S]*?)<\/style>|<script[^>]*>([\s\S]*?)<\/script>/g)) out.push(...scanCode(m[1] ?? m[2]));
+  return out;
+}
+
+/** Every .ts, .css and .html file under a folder. */
+function sourceFiles(d: string, out: string[] = []): string[] {
+  for (const f of readdirSync(d)) {
+    const p = join(d, f).replace(/\\/g, '/');
+    if (statSync(p).isDirectory()) sourceFiles(p, out);
+    else if (/\.(ts|css|html)$/.test(p)) out.push(p);
+  }
+  return out;
+}
+
+/** File → its cat-word strings (each once, sorted), for src/ and the game's page. */
+function catStrings(d: string): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  const files = [...sourceFiles(d), ...(existsSync('index.html') ? ['index.html'] : [])];
+  for (const f of files) {
+    const text = readFileSync(f, 'utf8');
+    const list = f.endsWith('.html') ? scanHtml(text) : scanCode(text);
+    if (list.length) out[f] = [...new Set(list)].sort();
+  }
+  return out;
+}
 
 /** The fountain is awake and two areas grown (the city has nooks), and a cat has hidden long past its paw prints. */
 function hidingCat(seed: number): Sim {
@@ -110,8 +160,32 @@ function visible(sim: Sim): string[] {
 
 describe('E23.12.3: the cats stay hidden until one is found (audit)', () => {
   it('the check itself catches a planted hint', () => {
-    for (const planted of ['🐾 Paw prints lead north', 'A Lucky Cat is hiding', 'You hear a meow', 'whiskers in the hedge', 'Cats: 0']) expect(hints([planted]), planted).toEqual([planted]);
-    for (const clean of ['Scatter seeds', 'Catch the light', 'A category of crops', 'Educate', 'Pawn shop']) expect(hints([clean]), clean).toEqual([]);
+    const planted = ['🐾 Paw prints lead north', 'A Lucky Cat is hiding', 'You hear a meow', 'whiskers in the hedge', 'Cats: 0', 'Cats', 'Paw', 'Something small is hiding nearby.', 'Something little is hiding', 'A soft purr from the hedge', 'Purring', 'A tabby', 'Kitties!'];
+    for (const s of planted) expect(hints([s]), s).toEqual([s]);
+    for (const clean of ['Scatter seeds', 'Catch the light', 'A category of crops', 'Educate', 'Pawn shop', 'A small lamp', 'Hiding the cables']) expect(hints([clean]), clean).toEqual([]);
+  });
+
+  it('before the first find, the pointer only finds a cat the player can see: big enough, nothing in the way (core/CatSight)', () => {
+    const flat = () => 0;
+    const eye = { x: 0, y: 6, z: 12 };
+    const cat = { x: 0, y: 0.1, z: 0 };
+    // size on screen: a far overview makes it a few pixels; up close it is plain
+    expect(catPixels(0.1, 1)).toBeCloseTo(CAT_SIGHT.catHeight / 0.1);
+    expect(catPixels(0.08, 1)).toBeLessThan(CAT_SIGHT.minPixels);
+    expect(catPixels(0.01, 1)).toBeGreaterThan(CAT_SIGHT.minPixels);
+    // open ground: clear; a building (3 storeys) halfway along the line: blocked; one off to the side: clear
+    expect(sightClear(eye, cat, flat)).toBe(true);
+    const tower = (x0: number, z0: number) => (x: number, z: number) => (Math.abs(x - x0) < 1 && Math.abs(z - z0) < 1 ? 3 * 0.42 + 1 : 0);
+    expect(sightClear(eye, cat, tower(0, 3))).toBe(false);
+    expect(sightClear(eye, cat, tower(4, 3))).toBe(true);
+    // a building behind the cat (further from the camera) never hides it
+    expect(sightClear(eye, cat, tower(0, -3))).toBe(true);
+    // the cat's own nook beside it doesn't count
+    expect(sightClear(eye, cat, (x, z) => (Math.hypot(x, z) < CAT_SIGHT.skipNear - 0.05 ? 5 : 0))).toBe(true);
+    // seen = both
+    expect(catSeen(eye, cat, 30, flat)).toBe(true);
+    expect(catSeen(eye, cat, 6, flat)).toBe(false);
+    expect(catSeen(eye, cat, 30, tower(0, 3))).toBe(false);
   });
 
   it("E23's words name no cat: tips, Keepers' lines, journal pages, photo mode, night finds, crops, research, lights, items", () => {
@@ -200,43 +274,102 @@ describe('E23.12.3: the cats stay hidden until one is found (audit)', () => {
     SaveService.clock = () => 0;
   });
 
-  it('every string in src/ that names a cat is one only a found cat (or the cat itself) shows', { timeout: 60_000 }, () => {
-    // file → how many such strings it holds, and why each is safe. A new one fails here until it is gated and listed.
-    const ALLOWED: Record<string, { n: number; why: string }> = {
+  it('every string in src/ (.ts, .css, .html) that names a cat is listed, exactly, with why only a found cat shows it', { timeout: 60_000 }, () => {
+    // Every such string, word for word, by file. One-word strings are checked too: each is an internal key here, and
+    // a new one (a 'Cats' label, say) fails until it is gated and listed. A listed string that's gone fails as well.
+    const KEY = 'an internal key (a type, event, model, icon or fauna id), never shown';
+    const FOUND = 'shown only once a cat has been found (cat.found / sim.cat.known)';
+    const ALLOWED: Record<string, Record<string, string>> = {
+      'src/app/EventBus.ts': { 'cat.spawned': KEY, 'cat.found': KEY, 'cat.moved': KEY, 'cat.goldenRelay': KEY },
       'src/app/Game.ts': {
-        n: 13,
-        why:
-          'an internal key (cat:id); the cat itself under the pointer or a click (the hover tip, "can\'t reach that cat"); paw-print lines read hinted() (never before the first find); found toasts and names on cat.found; a solar panel under a cat surge (after a find); overview icons from the find log; the debug readout (Settings › debug)',
+        cat: KEY,
+        'cat:${id}': KEY,
+        'cat.spawned': KEY,
+        'cat.found': KEY,
+        'cat.moved': KEY,
+        'cat.goldenRelay': KEY,
+        "Bloombot can't reach that cat from here": 'a click on the cat itself, and before the first find only on one the player can really see (catVisible, core/CatSight)',
+        '<b>🐱 …is that a cat?</b>Go and say hello!': 'the pointer on the cat itself, and before the first find only on one the player can really see (catVisible, core/CatSight)',
+        '🐾 Paw prints lead ${compass(p.x - fx, p.z - fz)}, ${a.hint}…': 'the paw chip: only when hinted(), never before the first find',
+        '<br><span class="ok">🐾 Faint paw prints… a cat is hiding very close.</span>': 'pawHint: only when hinted(), never before the first find',
+        "<p class=\"stat\">${shining ? 'Shining into the grid' : 'Resting until the sun is up'}${boosted ? ' · a bloom beside it makes it shine brighter' : ''}${inSurge(s, m) ? ' · the Lucky Cat’s sunshine' : ''}</p><p>Restore tiles right next to it and it shines brighter for a few seconds.</p>":
+          'a solar panel inside a Solar Surge, which only a found cat gives',
+        '🌈 RAINBOW CAT FOUND!': 'the found toast',
+        '👑 GOLDEN CAT FOUND!': 'the found toast',
+        '🐱 LUCKY CAT FOUND!': 'the found toast',
+        'Rainbow Cat: ': 'the reward panel title, on a find',
+        'Golden Cat: ': 'the reward panel title, on a find',
+        "${chaining.has(id) ? ' 🔗' : ''}${catAreas.has(id) ? ' 🐱' : ''}": 'overview area labels: catAreas comes from the find log',
+        'cat ${st.cat.active ? st.cat.active.anchorId : ': 'the debug readout (Settings › debug only)',
       },
-      'src/data/cozy.ts': { n: 12, why: 'the cat-only decorations: shown only once a cat has left them (E23.12.2)' },
-      'src/gameplay/LuckyCatSystem.ts': { n: 2, why: 'reward names, shown when a cat is found' },
-      'src/ui/BackpackModel.ts': { n: 4, why: 'the Lucky Cats group: only once a cat is found (sim.cat.known)' },
-      'src/ui/Hud.ts': { n: 4, why: 'the Lucky Cat garden button (shown once one is found) and the paw-print chip (shown when hinted())' },
-      'src/ui/Icons.ts': { n: 2, why: 'the icon set (used by the strings above)' },
-      'src/ui/Panels.ts': { n: 2, why: 'the reward panel (cat.found) and the stats line (only when sim.cat.known)' },
+      'src/app/Interact.ts': { cat: KEY },
+      'src/core/TilePack.ts': { cat: KEY },
+      'src/core/types.ts': { cat: KEY },
+      'src/data/cozy.ts': {
+        cat: KEY,
+        '🐱': 'a cat-only decoration (E23.12.2): only once a cat has left it',
+        '🐾': 'a cat-only decoration (E23.12.2): only once a cat has left it',
+        'Lucky Cat statue': 'a cat-only decoration (E23.12.2): only once a cat has left it',
+        'A little stone cat with one paw raised.': 'a cat-only decoration (E23.12.2): only once a cat has left it',
+        'Cat bench': 'a cat-only decoration (E23.12.2): only once a cat has left it',
+        'A bench with cat ears on its back, for two.': 'a cat-only decoration (E23.12.2): only once a cat has left it',
+        'Paw-print stones': 'a cat-only decoration (E23.12.2): only once a cat has left it',
+        'Stepping stones in the shape of a paw. Walk right over them.': 'a cat-only decoration (E23.12.2): only once a cat has left it',
+        'Cat fountain': 'a cat-only decoration (E23.12.2): only once a cat has left it',
+        'A stone bowl with a cat on top, spouting water.': 'a cat-only decoration (E23.12.2): only once a cat has left it',
+        'A cat-eared lantern that glows gold all night.': 'a cat-only decoration (E23.12.2): only once a cat has left it',
+        'A pole of bright flags, every colour of a Rainbow Cat.': 'a cat-only decoration (E23.12.2): only once a cat has left it',
+      },
+      'src/data/tuning.ts': { cats: KEY },
+      'src/gameplay/BloomChainSystem.ts': { cat: KEY },
+      'src/gameplay/Charge.ts': { cat: KEY },
+      'src/gameplay/Cozy.ts': { cat: KEY },
+      'src/gameplay/Crafting.ts': { cat: KEY },
+      'src/gameplay/DebugLog.ts': { 'cat.found': KEY, 'cat.spawned': KEY },
+      'src/gameplay/LuckyCatSystem.ts': {
+        cat: KEY,
+        'lucky-cat': KEY,
+        'cat.spawned': KEY,
+        'cat.moved': KEY,
+        'cat.found': KEY,
+        'cat.goldenRelay': KEY,
+        "Cat's Garden": 'a reward name, shown on a find',
+        'Fog Whisker': 'a reward name, shown on a find',
+      },
+      'src/gameplay/Metrics.ts': { cat: KEY, 'cat.found': KEY },
+      'src/gameplay/Transitions.ts': { cat: KEY },
+      'src/rendering/CatVisuals.ts': { 'lucky-cat': KEY, paw: KEY },
+      'src/rendering/DecorArt.ts': { 'lucky-cat': KEY },
+      'src/rendering/DroneVisuals.ts': { 'cat.found': KEY },
+      'src/rendering/Fauna.ts': { cats: KEY },
+      'src/rendering/FaunaPlan.ts': { cats: KEY },
+      'src/ui/BackpackModel.ts': { cat: KEY, 'Lucky Cats': `the collection group: ${FOUND}`, '${st.cat.found} found': `the collection group: ${FOUND}`, 'One cat found': `the collection group: ${FOUND}`, '${n} cats found': `the collection group: ${FOUND}` },
+      'src/ui/EcoBadge.ts': { cat: KEY },
+      'src/ui/Hud.ts': {
+        cat: KEY,
+        'Lucky Cat garden': `the garden button: ${FOUND}`,
+        'Paw prints: which way a hiding cat went': 'the paw chip: only when hinted()',
+        'Paw prints: a Lucky Cat is hiding. Which way do they lead?': 'the paw chip: only when hinted()',
+      },
+      'src/ui/Icons.ts': { cat: KEY, paw: KEY, '🐱': 'the icon set: drawn only where a string above uses it', '🐾': 'the icon set: drawn only where a string above uses it' },
+      'src/ui/Panels.ts': {
+        '<b>${ICONS.cat} ${iconize(esc(title))}</b><span>${iconize(esc(detail))}</span>': 'the reward panel, on a find',
+        '<p class="set-stats">Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Average: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b>${this.sim.cat.known ? ':
+          'Settings › Game: the Lucky Cats line only when sim.cat.known',
+      },
+      'src/ui/Toasts.ts': { cat: KEY },
     };
-    const STR = /'((?:\\.|[^'\\])*)'|"((?:\\.|[^"\\])*)"|`((?:\\.|[^`\\])*)`/g;
-    const found: Record<string, string[]> = {};
-    const walk = (d: string) => {
-      for (const f of readdirSync(d)) {
-        const p = join(d, f);
-        if (statSync(p).isDirectory()) walk(p);
-        else if (p.endsWith('.ts')) {
-          readFileSync(p, 'utf8')
-            .split('\n')
-            .forEach((l) => {
-              const t = l.trim();
-              if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
-              for (const m of l.replace(/\/\/ .*$/, '').matchAll(STR)) {
-                const s = m[1] ?? m[2] ?? m[3];
-                if (CAT_WORD.test(s) && !/^[\w.:-]+$/.test(s)) (found[p.replace(/\\/g, '/')] ??= []).push(s);
-              }
-            });
-        }
-      }
-    };
-    walk('src');
-    const counts = Object.fromEntries(Object.entries(found).map(([f, l]) => [f, l.length]));
-    expect(counts, JSON.stringify(found, null, 1)).toEqual(Object.fromEntries(Object.entries(ALLOWED).map(([f, a]) => [f, a.n])));
+    const found = catStrings('src');
+    const listed = Object.fromEntries(Object.entries(ALLOWED).map(([f, m]) => [f, Object.keys(m).sort()]));
+    expect(found, 'a string naming a cat that is not listed (gate it, then list it), or a listed one that is gone').toEqual(listed);
+    // the scan reads the stylesheets and pages too
+    expect(sourceFiles('src').filter((f) => f.endsWith('.css')).length).toBeGreaterThan(0);
+    expect(existsSync('index.html')).toBe(true);
+  });
+
+  it('the scan finds a cat word wherever it is: a one-word label, a stylesheet, a page', () => {
+    expect(scanCode("label('Cats')\nconst k = 'cat'")).toEqual(['Cats', 'cat']);
+    expect(scanCode(".chip::after { content: '🐾'; }\n/* 'paw' in a comment is fine */")).toEqual(['🐾']);
+    expect(scanHtml('<div id="x" title="Purring nearby">Something small is hiding here</div><!-- a meow -->')).toEqual(['Something small is hiding here', 'Purring nearby']);
   });
 });

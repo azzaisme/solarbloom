@@ -6,7 +6,9 @@ import { BIRD_VOICES, Sfx } from '../audio/Sfx';
 import { treeSpot, treeStage } from '../rendering/TreePlacement';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
-import { AREA_TYPES } from '../data/city';
+import { AREA_TYPES, CITY_GEN } from '../data/city';
+import { catPixels, catSeen } from '../core/CatSight';
+import { buildingAt } from '../core/Generation';
 import { distToFootprint } from '../core/Grid';
 import type { DroneRole, LayerData, MachineData, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
@@ -2502,7 +2504,37 @@ export class Game {
     return !!t && !!this.sim.occupant(t);
   }
 
-  /** The cat under the pointer (Phase 5 E15: several can hide at once), by id. */
+  /**
+   * E23.12.3 (#530): could the player spot this cat by eye? Big enough on screen to make out, and nothing solid
+   * (a building, a tall machine, a terrace) between it and the camera (core/CatSight). Public for the e2e.
+   */
+  catVisible(id: string): boolean {
+    const p = this.cat.targetWorld(id);
+    const s = p && this.camera.onScreen(p, 0);
+    if (!p || !s) return false;
+    const e = this.camera.entity.getPosition();
+    return catSeen({ x: e.x, y: e.y, z: e.z }, p, catPixels(this.camera.worldPerPixel(), s.scale), (x, z) => this.solidTop(x, z));
+  }
+
+  /** The top of whatever stands at a ground point (world units): the ground as drawn, a building's roof, a tall machine. */
+  private solidTop(x: number, z: number): number {
+    const tx = Math.floor(x);
+    const tz = Math.floor(z);
+    const g = this.groundY(x, z);
+    const t = this.sim.grid.peek(GROUND, tx, tz);
+    if (!t) return g;
+    if (t.feature === 'building') {
+      const plot = buildingAt(this.sim.state.seed, tx, tz, this.sim.grid.layer(GROUND)?.gen ?? 4);
+      return g + Math.max(1, plot?.storeys ?? 2) * CITY_GEN.buildings.storey;
+    }
+    const m = t.occupantId ? this.sim.occupant(t) : undefined;
+    return m && (m.tier ?? 1) >= 3 ? g + 1.2 : g;
+  }
+
+  /**
+   * The cat under the pointer (Phase 5 E15: several can hide at once), by id. E23.12.3: before the first find, only
+   * a cat the player can really see (catVisible): the cursor is never a detector for a tiny or hidden one.
+   */
   private catHit(x: number, y: number): string | undefined {
     // Generous enough to tap, small enough that a tile next to the cat still gets its own click.
     const r = Math.max(20, 0.26 / this.camera.worldPerPixel());
@@ -2511,6 +2543,7 @@ export class Game {
     for (const id of this.cat.ids()) {
       const p = this.cat.targetWorld(id);
       if (!p) continue;
+      if (!this.sim.cat.known && !this.catVisible(id)) continue;
       const s = this.camera.onScreen(p);
       if (!s) continue;
       const d = Math.hypot(s.x - x, s.y - y);
