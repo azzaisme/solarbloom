@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { big } from '../src/core/Big';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { POWER } from '../src/data/power';
@@ -6,6 +7,7 @@ import type { PowerSky } from '../src/gameplay/PowerEnv';
 import { sunAt } from '../src/gameplay/PowerEnv';
 import { Sim } from '../src/gameplay/Sim';
 import { Rng } from '../src/core/Rng';
+import { machineStrengthAt } from '../src/core/RegionStrengths';
 
 const DAY: PowerSky = { sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 };
 const NIGHT: PowerSky = { sun: 0, solar: 0, cloudy: false, wind: 0, dark: 1 };
@@ -146,13 +148,20 @@ describe('E23.3.1 power grid', () => {
     expect(sim.power.level(lamp)).toBeCloseTo(0.5, 3);
   });
 
-  it('an idle consumer (draw 0) is on and costs nothing', () => {
+  it('an idle consumer (draw 0) costs nothing, and is on only where its network has power to give', () => {
     const { sim, put } = world();
     let docked = false;
     sim.power.register('charger', { consumer: { shed: 'charger', draw: () => (docked ? 5 : 0) } });
     const c = put('charger', 0, 0);
-    expect(sim.power.isPowered(c)).toBe(true);
+    expect(sim.power.isPowered(c)).toBe(false); // a pad on its own: nothing to give, so it reads dark
+    const g = put('gen', 1, 0);
+    sim.power.tick(1);
+    expect(sim.power.isPowered(c)).toBe(true); // idle on a live network: on, drawing nothing
+    expect(sim.power.networkOf(c)!.served).toBe(0);
     docked = true;
+    sim.power.tick(1);
+    expect(sim.power.isPowered(c)).toBe(true); // 5 W of the generator's 10
+    sim.state.machines = sim.state.machines.filter((m) => m !== g);
     sim.power.tick(1);
     expect(sim.power.isPowered(c)).toBe(false);
   });
@@ -180,7 +189,7 @@ describe('E23.3.1 power grid', () => {
     expect(sim.power.output(s, DAY)).toBe(POWER.solar.output);
     setSky(NIGHT);
     expect(sim.power.output(s)).toBe(0);
-    // Through the adapter: no clock or weather means a clear day. (E23.7's real handles are taken away first.)
+    // Through the adapter: no clock or weather means a clear day (E23.7's real ones are cleared for this check).
     sim.power.skyOverride = undefined;
     const any = sim as unknown as { weather: unknown; clock: unknown };
     any.clock = undefined;
@@ -228,6 +237,101 @@ function tick(sim: Sim) {
   sim.power.tick(1);
 }
 
+describe('E23.3.2 sources and storage', () => {
+  it('a small home grid of solar and a battery runs a lamp and a pump through a whole day and night', () => {
+    const { sim, put } = world();
+    // E23.7's real clock and weather drive the sky: a sunny spell, starting mid-morning.
+    sim.power.skyOverride = undefined;
+    const st = sim.state;
+    sim.weather.forceForTest('sunny', 1e9);
+    (st.clock ??= { offset: 0 }).offset = 0.3 * POWER.daySeconds - st.time;
+    for (let i = 0; i < 3; i++) put('solar', i, 0);
+    put('battery', 3, 0);
+    const pump = put('pump', 4, 0);
+    const lamp = put('lamp', 5, 0);
+    sim.power.register('pump', { consumer: { shed: 'pump', draw: 3 } });
+    sim.power.register('lamp', { consumer: { shed: 'lamp', draw: 0.5, dims: true } });
+    const day = POWER.daySeconds;
+    let dark = 0;
+    // Two full days from mid-morning, in 1 s steps.
+    for (let s = 0; s < 2 * day; s++) {
+      st.time += 1; // the clock moves with play time (only the grid is ticked here)
+      sim.power.tick(1);
+      if (!sim.power.isPowered(pump) || sim.power.level(lamp) < 0.99) dark++;
+    }
+    expect(dark).toBe(0);
+  });
+
+  it('turbine output follows the weather, and is stronger on high ground and in windy regions', () => {
+    const { sim, put } = world();
+    sim.power.skyOverride = undefined;
+    const t = put('windTurbine', 0, 0);
+    // No weather system: calm, the turbine stands still.
+    (sim as unknown as { weather: unknown }).weather = undefined;
+    expect(sim.power.output(t)).toBe(0);
+    const weather = { kind: 'sunny' };
+    (sim as unknown as { weather: { kind: () => string } }).weather = { kind: () => weather.kind };
+    expect(sim.power.output(t)).toBe(0);
+    weather.kind = 'rain'; // rain alone brings no wind: only windy days and storms do
+    expect(sim.power.output(t)).toBe(0);
+    weather.kind = 'windy';
+    const windy = sim.power.output(t);
+    expect(windy).toBeGreaterThan(0);
+    weather.kind = 'storm';
+    const storm = sim.power.output(t);
+    expect(storm).toBeGreaterThan(windy);
+    // Flat ground gives half; three terrace levels up gives the full output.
+    expect(storm).toBeCloseTo(POWER.wind.output * POWER.wind.groundShare);
+    sim.grid.get(GROUND, 0, 0)!.level = 3;
+    expect(sim.power.output(t)).toBeCloseTo(POWER.wind.output);
+  });
+
+  it('a turbine in a windy region makes more (E23.8 region strengths), and solar only in sunny ones', () => {
+    const sim = new Sim(createInitialState(7, 'oldcity'));
+    sim.power.skyOverride = () => ({ sun: 1, solar: 1, cloudy: false, wind: 1, dark: 0 });
+    // find a ground cell where E23.8 gives wind turbines a strength, and one where it gives none
+    let strong: [number, number] | undefined;
+    let plain: [number, number] | undefined;
+    for (let z = -60; z <= 90 && !(strong && plain); z += 3)
+      for (let x = -60; x <= 120 && !(strong && plain); x += 3) {
+        const k = machineStrengthAt('windTurbine', x, z);
+        if (k > 1 && !strong) strong = [x, z];
+        if (k === 1 && !plain && machineStrengthAt('solar', x, z) === 1) plain = [x, z];
+      }
+    expect(strong && plain).toBeTruthy();
+    const mk = (type: string, [x, z]: [number, number]) => {
+      const m = { id: sim.newId('m'), type, roofId: GROUND, x, z, size: 1, boostUntil: 0, timer: 0, charge: 0 } as unknown as MachineData;
+      sim.state.machines.push(m);
+      sim.grid.get(GROUND, x, z)!.level = 0;
+      return m;
+    };
+    const a = mk('windTurbine', strong!);
+    const b = mk('windTurbine', plain!);
+    const k = machineStrengthAt('windTurbine', strong![0], strong![1]);
+    expect(sim.power.output(a)).toBeCloseTo(sim.power.output(b) * k);
+    expect(k).toBeGreaterThanOrEqual(1.5);
+  });
+
+  it('batteries are on the grid by default and keep their charge in the machine (saved)', () => {
+    const { sim, put } = world();
+    put('solar', 0, 0);
+    const b = put('battery', 1, 0);
+    sim.power.tick(10);
+    expect(b.charge).toBeCloseTo(Math.min(POWER.battery.rate, POWER.solar.output) * 10);
+    expect(JSON.parse(JSON.stringify(b)).charge).toBe(b.charge);
+  });
+
+  it('Bloom Relays are poles: networks form across them, and their chain links are unchanged', () => {
+    const { sim, put } = world();
+    const a = put('relay', 0, 0);
+    const b = put('relay', 10, 0);
+    const s = put('solar', 1, 0);
+    const p = put('pump', 11, 0);
+    expect(sim.power.networkOf(s)).toBe(sim.power.networkOf(p));
+    expect(sim.relays.linked(a).map((m) => m.id)).toEqual([b.id]);
+  });
+});
+
 describe('E23.3 lightning (for E23.7.2)', () => {
   it('trip(rng) trips one pole deterministically; what it carried goes dark until one reset brings it back', () => {
     const run = () => {
@@ -261,11 +365,70 @@ describe('E23.3 lightning (for E23.7.2)', () => {
     sim.power.register('turb', { source: (_m, _s, sky) => 10 * sky.wind });
     const t = put('turb', 0, 0);
     const s = put('solar', 2, 0);
-    (sim as unknown as { clock: unknown }).clock = undefined; // the weather alone (E23.7's real clock would set the hour)
+    (sim as unknown as { clock: unknown }).clock = undefined; // the sky alone: no clock deciding the hour
     (sim as unknown as { weather: unknown }).weather = { current: () => ({ kind: 'storm', wind: 1, solar: 0, rain: 1 }) };
     expect(sim.power.output(t)).toBe(10);
     expect(sim.power.sky().cloudy).toBe(true);
     expect(sim.power.sky().dark).toBe(1); // lights come on in storms
     expect(sim.power.output(s)).toBeCloseTo(POWER.solar.output * 0.8);
+  });
+});
+
+describe('E23.3.2.3 relays are poles and still carry Bloom Chains', () => {
+  it('a chain crosses a relay link that is also carrying power, and blooms the ground round the far pole', () => {
+    const sim = new Sim(createInitialState(6));
+    const st = sim.state;
+    st.caps.energy = big(1e7);
+    st.caps.water = big(1e7);
+    st.resources.energy = big(1e6);
+    st.resources.water = big(1e6);
+    st.resources.biomass = big(1e6);
+    st.progression.coreActivated = true;
+    // the chunks the two poles and their blooms use (x −20…20, z −4…4)
+    for (let cz = -1; cz <= 0; cz++) for (let cx = -2; cx <= 1; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
+    for (let z = -4; z <= 4; z++)
+      for (let x = -20; x <= 20; x++) {
+        const t = sim.grid.get(GROUND, x, z)!;
+        if (t.occupantId) continue;
+        Object.assign(t, { blocked: false, ground: 'prepared', pollution: 0, bloom: 0 });
+        sim.grid.touch(t);
+      }
+    const place = (type: string, x: number, z: number): MachineData => {
+      const t = sim.grid.get(GROUND, x, z)!;
+      t.blocked = false;
+      const m = { id: sim.newId('m'), type, roofId: GROUND, x, z, size: 1, boostUntil: 0, timer: 0, charge: 0 } as unknown as MachineData;
+      st.machines.push(m);
+      sim.grid.indexMachine(m);
+      t.occupantId = m.id;
+      return m;
+    };
+    sim.power.skyOverride = () => ({ sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 });
+    sim.power.register('pump', { consumer: { shed: 'pump', draw: 3 } });
+    const a = place('relay', -10, 0);
+    const b = place('relay', 4, 0);
+    place('solar', -10, -2); // fed by pole a
+    const pump = place('pump', 4, -2); // fed by pole b, 14 tiles away
+    const sent: { from: string; to: string }[] = [];
+    const remote: string[] = [];
+    sim.bus.on('relay.city', (e) => sent.push(e));
+    sim.bus.on('chain.event', (e) => {
+      if (e.event.cause === 'relay' && (e.event.type === 'RESTORE' || e.event.type === 'GROW')) remote.push(e.event.target);
+    });
+    sim.power.tick(1);
+    // the link is a power line: the pump far away runs on the panel by pole a
+    expect(sim.power.networkOf(a)).toBe(sim.power.networkOf(pump));
+    expect(sim.power.networkOf(a)!.links).toEqual([[a, b]]);
+    expect(sim.power.isPowered(pump)).toBe(true);
+    // a bloom beside pole a sends a chain pulse along the same link to pole b
+    sim.restoration.complete(sim.grid.get(GROUND, a.x + 1, a.z)!, 'pulse');
+    sim.advance(4);
+    expect(sent).toEqual([expect.objectContaining({ from: a.id, to: b.id })]);
+    expect(remote.length).toBeGreaterThan(0);
+    for (const id of remote.slice(0, 2)) {
+      const t = sim.grid.byTileId(id)!;
+      expect(Math.abs(t.x - b.x) + Math.abs(t.z - b.z)).toBeLessThanOrEqual(8);
+    }
+    // and the grid is unchanged by the chain
+    expect(sim.power.isPowered(pump)).toBe(true);
   });
 });

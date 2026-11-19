@@ -46,6 +46,7 @@ import { InputController } from '../rendering/InputController';
 import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
+import { PowerLines } from '../rendering/PowerLines';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
 import { Skyline } from '../rendering/Skyline';
@@ -192,6 +193,8 @@ export class Game {
   readonly transitions: TransitionRenderer;
   /** Look 6.9: Cultivator tillers. */
   readonly tillers: CultivatorVisuals;
+  /** E23.3: the grid's cables. */
+  readonly powerLines: PowerLines;
   /** Look 6.10: progress rings on tiles mid-process (near zoom). */
   readonly rings: ProgressRings;
   private stageSoundAt = 0;
@@ -364,6 +367,7 @@ export class Game {
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
+    this.powerLines = new PowerLines(this.sim, this.scene.world, (m) => this.machines.worldOf(m));
     this.rings = new ProgressRings(this.sim, this.scene.world);
     // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
     // its procedural look. Once they're in, what was already drawn is rebuilt with them.
@@ -4233,6 +4237,7 @@ export class Game {
     const camP = this.camera.entity.getPosition();
     detailTextures.setCamera(camP.x, camP.y, camP.z);
     this.machines.update(wdt, rect);
+    this.powerLines.update();
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.

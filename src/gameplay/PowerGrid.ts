@@ -1,7 +1,7 @@
 import { machinesStamp } from '../core/GameState';
 import type { MachineData } from '../core/types';
 import { POWER, SHED_ORDER, type ShedClass } from '../data/power';
-import { readSky, type PowerSky } from './PowerEnv';
+import { groundLevel, readSky, regionBoost, type PowerSky } from './PowerEnv';
 import type { Sim } from './Sim';
 
 /**
@@ -33,6 +33,8 @@ export interface PowerNetwork {
   consumers: MachineData[];
   /** Pole-to-pole links, as [a, b] pairs (for the overlay). */
   links: [MachineData, MachineData][];
+  /** Each machine fed by a pole, with the nearest pole that reaches it, as [pole, machine] (for drawn cables). */
+  feeds: [MachineData, MachineData][];
   /** Last solve: total supply (W), total wanted draw (W), draw served (W), battery flow (+ charging, − draining). */
   supply: number;
   demand: number;
@@ -41,6 +43,13 @@ export interface PowerNetwork {
   /** Stored and capacity (W·s) over all batteries. */
   stored: number;
   capacity: number;
+}
+
+/** E23.3.2.2: a turbine's output: the wind, more on high ground and in windy regions. */
+export function windOutput(sim: Sim, m: MachineData, sky: PowerSky): number {
+  const w = POWER.wind;
+  const height = Math.min(1, w.groundShare + w.perLevel * Math.max(0, groundLevel(sim, m)));
+  return w.output * sky.wind * height * regionBoost(sim, m);
 }
 
 const idNum = (m: MachineData) => Number(m.id.replace(/^\D+/, '')) || 0;
@@ -77,7 +86,9 @@ export class PowerGrid {
 
   constructor(private sim: Sim) {
     this.register('relay', { pole: { range: (m, s) => s.relays.range(m) } });
-    this.register('solar', { source: (_m, _s, sky) => POWER.solar.output * sky.solar });
+    this.register('solar', { source: (m, s, sky) => POWER.solar.output * sky.solar * regionBoost(s, m) });
+    this.register('battery', { battery: { capacity: POWER.battery.capacity, rate: POWER.battery.rate } });
+    this.register('windTurbine', { source: (m, s, sky) => windOutput(s, m, sky) });
   }
 
   /** Adds (or merges into) a machine type's role. Types need not exist yet (other sub-epics add them). */
@@ -241,6 +252,7 @@ export class PowerGrid {
     const poles = members.filter((m) => this.roles.get(m.type)!.pole);
     const range = new Map(poles.map((p) => [p.id, this.roles.get(p.type)!.pole!.range(p, sim)]));
     const links: [MachineData, MachineData][] = [];
+    const feed = new Map<string, { pole: MachineData; d: number }>();
 
     // Bucket every member by a coarse cell so linking is near-linear.
     const cell = Math.max(8, POWER.pole.attachReach, ...range.values());
@@ -275,6 +287,11 @@ export class PowerGrid {
         } else if (ra.pole || rb.pole) {
           const reach = (ra.pole ?? rb.pole)!.attachReach ?? POWER.pole.attachReach;
           joined = d <= reach + 1e-9;
+          if (joined) {
+            const [pole, m] = ra.pole ? [a, b] : [b, a];
+            const was = feed.get(m.id);
+            if (!was || d < was.d - 1e-9) feed.set(m.id, { pole, d });
+          }
         }
         // Touching footprints (diagonals included) on the same layer share a network.
         if (!joined && a.roofId === b.roofId) {
@@ -293,7 +310,7 @@ export class PowerGrid {
       const r = find(i);
       let n = groups.get(r);
       if (!n) {
-        n = { id: `net:${members[r].id}`, members: [], poles: [], sources: [], batteries: [], consumers: [], links: [], supply: 0, demand: 0, served: 0, batteryFlow: 0, stored: 0, capacity: 0 };
+        n = { id: `net:${members[r].id}`, members: [], poles: [], sources: [], batteries: [], consumers: [], links: [], feeds: [], supply: 0, demand: 0, served: 0, batteryFlow: 0, stored: 0, capacity: 0 };
         groups.set(r, n);
         this.nets.push(n);
       }
@@ -306,6 +323,10 @@ export class PowerGrid {
       this.netOf.set(m.id, n);
     });
     for (const l of links) this.netOf.get(l[0].id)!.links.push(l);
+    for (const m of members) {
+      const f = feed.get(m.id);
+      if (f) this.netOf.get(m.id)!.feeds.push([f.pole, m]);
+    }
     // Consumers in keep order: chargers first, lamps last; build order within a class.
     const rank = (m: MachineData) => KEEP_ORDER.indexOf(this.roles.get(m.type)!.consumer!.shed);
     for (const n of this.nets) n.consumers.sort((a, b) => rank(a) - rank(b) || byId(a, b));
@@ -341,7 +362,8 @@ export class PowerGrid {
       const want = this.draw(c, sky);
       demand += want;
       let frac = 0;
-      if (want <= 0) frac = 1; // idle: on, drawing nothing
+      // idle (drawing nothing): on only if its network has power to give, so a charger on a dead line reads dark
+      if (want <= 0) frac = left > 1e-9 ? 1 : 0;
       else if (!blocked && left + 1e-9 >= want) frac = 1;
       else if (!blocked && role.dims && left > 1e-9) frac = left / want;
       if (want > 0 && frac < 1) blocked = true; // strict shed order: nothing below a dark consumer runs
