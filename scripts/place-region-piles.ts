@@ -2,7 +2,7 @@
 //   npx vite-node scripts/place-region-piles.ts [regionId ...]
 // Prints `P(...)` lines to paste into a region's `piles`. Deterministic: the same ground gives the same cells.
 // A pile goes only on open, reachable ground: a walkable cell whose eight neighbours are walkable too (so a pile
-// never closes a path), off roads and ramps, clear of the region's set pieces, at least three cells from any other
+// never closes a path), off roads, ramps and shallow water, clear of the region's set pieces, at least three cells from any other
 // pile, and spread out across the region (farthest-point sampling from the Keeper).
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { regionOfCell } from '../src/core/OldCityLayout';
@@ -97,7 +97,7 @@ function place(r: RegionDef) {
   for (const k of seen) {
     const [x, z] = k.split(',').map(Number);
     const t = sim.grid.get(GROUND, x, z)!;
-    if (clear.has(k) || !inRegion(x, z) || t.feature === 'road' || t.ramp || !open(x, z)) continue;
+    if (clear.has(k) || !inRegion(x, z) || t.feature === 'road' || t.feature === 'water' || t.ramp || !open(x, z)) continue;
     cands.push([x, z]);
   }
   cands.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
