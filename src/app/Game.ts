@@ -1,3 +1,4 @@
+import { CHUNK } from '../core/Hash';
 import { POWER } from '../data/power';
 import { big, fmt, type Big } from '../core/Big';
 import { HOME } from '../gameplay/ProgressionSystem';
@@ -127,8 +128,9 @@ const PANEL_TOGGLES = new Set<Action>(['backpack', 'map', 'buildMenu', 'menu']);
 /**
  * E19.2 (#245, "Building and placing"): build mode is Satisfactory-style. With something to build in hand (a
  * machine, a core, a decoration) the camera stays in the close view; a hologram sits where you aim, snapped to the
- * grid, within DECOR_GEN.reach tiles of bloombot, red where it can't go. The mouse aims while it is over the world
- * and was moved in the last MOUSE_AIM_MS; otherwise (pad, keys) the aim is the tile in front of bloombot.
+ * grid, within DECOR_GEN.reach tiles of bloombot, red where it can't go. Third person: the aim is the crosshair in
+ * the middle of the screen (`crosshairPick`), for mouse and pad alike. Only the cursor view (no bloombot) aims with
+ * the pointer, while it is over the world and was moved in the last MOUSE_AIM_MS.
  */
 const MOUSE_AIM_MS = 8000;
 /** the shortest time between two quarter turns from the mouse wheel (a trackpad sends many small wheel events) */
@@ -595,6 +597,10 @@ export class Game {
         this.camTurn(-dx * 0.35, dy * 0.25); // E21.22: dragging with the look button turns and tilts the view
         return true;
       },
+      // Third person: the captured mouse turns and tilts the view directly (no button held).
+      look: (dx, dy) => this.mouseLook(dx, dy),
+      // Third person: a press on the world while the mouse is free captures it (and does nothing else).
+      capture: () => this.captureMouse(),
       // Bloombot: the camera's distance is fixed; the wheel turns what you're building (E19.2).
       // E22.1: in build mode the wheel turns the piece (and the camera's zoom waits); otherwise it zooms.
       zoom: (f, x, y) => (this.photo?.active ? this.photo.zoom(f) : this.bot ? this.wheel(f) : this.camera.zoomBy(f, x, y)),
@@ -915,7 +921,9 @@ export class Game {
     // no models to wait for (?models=classic), or they never arrive: don't hold the game for ever
     const modelsDone = !m || m.ready || !useModels() || performance.now() - this.builtAt > 30000;
     const loaded = this.chunks.loadedCount;
-    const pending = this.chunks.pending;
+    // Third person looks out to the horizon: the loading screen waits for the ground round bloombot (two chunks
+    // out); the hazy distance streams in while playing.
+    const pending = this.bot ? this.chunks.pendingNear(this.camera.target, CHUNK * 2) : this.chunks.pending;
     const view = loaded ? (loaded - pending) / loaded : 0;
     // the camera has settled on bloombot (its opening zoom is over), so the view that fades in is the view that stays
     const settled = Math.abs(this.camera.zoom - this.camera.zoomTarget) < 0.02;
@@ -1501,6 +1509,62 @@ export class Game {
     this.camIdle = 0;
   }
 
+  // ───────────── Third person: the captured mouse ─────────────
+
+  /** degrees the view turns (and tilts) per pixel of mouse movement, before the sensitivity setting */
+  private static readonly MOUSE_DEG = { yaw: 0.16, pitch: 0.12 };
+  /** pointer lock was refused (an embedded page, a test browser): clicks act as before */
+  private lockRefused = false;
+  /** shown the "click to look around" hint once */
+  private lookHinted = false;
+
+  private mouseCaptured(): boolean {
+    return typeof document !== 'undefined' && !!document.pointerLockElement && document.pointerLockElement === this.app.graphicsDevice.canvas;
+  }
+
+  /** May the mouse be captured now (bloombot's walking view with nothing open on top)? */
+  private mayCapture(): boolean {
+    return !!this.bot && !this.cinematic && !this.paused && !this.photo?.active && !this.overviewOn && !this.panelOpen() && this.settings.mouseLook !== false;
+  }
+
+  /** A press on the free mouse: capture it for looking around. True when the press was used for that. */
+  private captureMouse(): boolean {
+    if (this.lockRefused || this.mouseCaptured() || !this.mayCapture()) return false;
+    const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    if (!c.requestPointerLock) return false;
+    try {
+      const r = c.requestPointerLock() as unknown as Promise<void> | undefined;
+      r?.catch?.(() => (this.lockRefused = true));
+    } catch {
+      this.lockRefused = true;
+      return false;
+    }
+    return true;
+  }
+
+  /** The captured mouse moved: the view turns and tilts at once (a mouse wants no easing). */
+  private mouseLook(dx: number, dy: number) {
+    if (!this.bot || this.cinematic || this.photo?.active) return;
+    this.bot.lastInput = 'keys'; // looking with the mouse: prompts show keys again
+    const k = Game.MOUSE_DEG;
+    this.camera.look(-dx * k.yaw * this.camFactor('x'), dy * k.pitch * this.camFactor('y'));
+    this.camIdle = 0;
+  }
+
+  /** Per frame: lets go of the mouse when a panel, the menu, the map or a cinematic needs the pointer. */
+  private updateMouseCapture() {
+    if (this.mouseCaptured() && !this.mayCapture()) document.exitPointerLock?.();
+    this.hud.root.classList.toggle('mouse-look', this.mouseCaptured());
+    const aiming = !!this.bot && this.building() && !this.panelOpen() && !this.cinematic && !this.photo?.active && !this.overviewOn;
+    this.hud.root.classList.toggle('aiming', aiming);
+    this.camera.shoulderGoal = aiming ? 0.75 : 0; // building: over bloombot's shoulder, so the hologram is in view
+    if (this.bot) this.bot.strafe = aiming; // aiming: bloombot faces where the camera looks and steps sideways
+    if (!this.lookHinted && this.bot && this.mayCapture() && !this.mouseCaptured() && this.bot.lastInput === 'keys' && typeof matchMedia !== 'undefined' && matchMedia('(any-pointer: fine)').matches) {
+      this.lookHinted = true;
+      this.hud.toast('Press a mouse button over the world to look around with the mouse<small>Esc frees the mouse again.</small>', '', 5);
+    }
+  }
+
   /**
    * Per frame: the look-ahead, and the drift back behind bloombot after 3 s of walking with no camera input (a
    * setting). On a rooftop the view eases to the far step.
@@ -1515,12 +1579,16 @@ export class Game {
     this.walkedFor = moving ? this.walkedFor + dt : this.stillFor > 0.5 ? 0 : this.walkedFor;
     const f = b.pose.facing;
     this.camera.setLead(moving && b.following ? Math.sin(f) * EXPLORE.lead : 0, moving && b.following ? Math.cos(f) * EXPLORE.lead : 0);
-    if (!this.settings.noRecentre && this.stillFor < 0.5 && this.camIdle >= EXPLORE.recentreAfter && this.walkedFor >= EXPLORE.recentreAfter) {
+    // Third person, as action-platformers do: running, the camera swings in behind bloombot once the player has
+    // left it alone for a moment (eased, faster the further round it is). Running at the camera never flips it
+    // round, and aiming a build leaves it where it is.
+    if (!this.settings.noRecentre && !this.building() && this.stillFor < 0.5 && this.camIdle >= EXPLORE.recentreAfter && this.walkedFor >= EXPLORE.recentreWalk) {
       const behind = (f * 180) / Math.PI + 180;
       const now = this.camera.heading;
       const diff = ((((behind - now) % 360) + 540) % 360) - 180;
-      const step = Math.sign(diff) * Math.min(Math.abs(diff), EXPLORE.recentreSpeed * dt);
-      if (Math.abs(diff) > 0.5) this.camera.turnTo(now + step, true);
+      const rate = EXPLORE.recentreSpeed * Math.min(1, Math.abs(diff) / 45) * Math.min(1, b.speed / 2);
+      const step = Math.sign(diff) * Math.min(Math.abs(diff), rate * dt);
+      if (Math.abs(diff) > 0.5 && Math.abs(diff) < 150) this.camera.turnTo(now + step, true);
     }
   }
 
@@ -1731,6 +1799,7 @@ export class Game {
     const aim = this.building() ? this.buildAim() : undefined; // E19.2: build mode acts where the hologram is
     const p = aim ? aim.p : this.frontPick();
     if (!p || !p.tile) return;
+    if (aim && p.roofId === this.bot.pose.roofId && !this.bot.walking) this.bot.pose.facing = Math.atan2(p.fx - this.bot.pose.x, p.fz - this.bot.pose.z); // turns to build
     this.bot.following = true;
     const tool = this.hud.currentTool === 'inspect' ? 'pulse' : this.hud.currentTool;
     const sc = aim ?? this.botTileScreen(p.tile);
@@ -2098,7 +2167,7 @@ export class Game {
     return !!id && this.sim.areas.fog(id) === 'cleared';
   }
 
-  /** Bloombot (G.11): a click walks to the clicked thing, then does what the click would have done. */
+  /** Bloombot (G.11): from the map's overview only (third person has no cursor): travel, or walk to and act. */
   private botClick(x: number, y: number) {
     const b = this.bot!;
     const catId = this.catHit(x, y);
@@ -2184,6 +2253,7 @@ export class Game {
   }
 
   private pointerRecent(): boolean {
+    if (this.bot && !this.overviewOn) return false;
     return this.pointer.inside && performance.now() - this.pointerAt < 1500;
   }
 
@@ -2553,6 +2623,9 @@ export class Game {
   }
 
   private onHover(x: number, y: number) {
+    // Third person: bloombot's play has no cursor on the world (the map's overview aside); what bloombot faces,
+    // or the build crosshair, is what the preview shows.
+    if (this.bot && !this.overviewOn) return;
     this.pointer = { x, y, inside: true };
     this.pointerAt = performance.now();
     if (this.cinematic || this.photo.active) return;
@@ -2674,15 +2747,59 @@ export class Game {
 
   /** Does the mouse aim builds (over the world, moved lately, and the pad isn't what was used last)? */
   private mouseAims(): boolean {
-    return this.pointer.inside && this.bot?.lastInput !== 'pad' && performance.now() - this.pointerAt < MOUSE_AIM_MS;
+    return !this.bot && this.pointer.inside && performance.now() - this.pointerAt < MOUSE_AIM_MS;
   }
 
   /** Where a build is aimed, and where on screen to say so: the pointer's tile, or the tile in front of bloombot. */
   private buildAim(): { p?: Pick; x: number; y: number } {
     if (this.mouseAims()) return { p: this.pick(this.pointer.x, this.pointer.y), x: this.pointer.x, y: this.pointer.y };
+    if (this.bot) {
+      const p = this.crosshairPick();
+      if (p?.tile) {
+        const sc = this.botTileScreen(p.tile);
+        return { p, x: sc.x, y: sc.y };
+      }
+    }
     const p = this.frontPick();
     const sc = p?.tile ? this.botTileScreen(p.tile) : { x: innerWidth / 2, y: innerHeight / 2 };
     return { p, x: sc.x, y: sc.y };
+  }
+
+  /**
+   * Third person: where the build crosshair (the middle of the screen) meets bloombot's ground, kept between one
+   * tile and the build reach from bloombot. Looking down places close, looking ahead places further; past the
+   * reach (or at the sky, or onto another layer) the aim stops at the reach in the direction the camera faces.
+   */
+  private crosshairPick(): Pick | undefined {
+    const b = this.bot;
+    if (!b) return undefined;
+    const c = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    const hit = c.clientWidth ? this.pick(c.clientWidth / 2, c.clientHeight / 2) : undefined;
+    const reach = DECOR_GEN.reach - 0.5;
+    let fx: number;
+    let fz: number;
+    if (hit && hit.roofId === b.pose.roofId) {
+      fx = hit.fx;
+      fz = hit.fz;
+    } else {
+      const f = this.camera.entity.forward;
+      const l = Math.hypot(f.x, f.z) || 1;
+      fx = b.pose.x + (f.x / l) * reach;
+      fz = b.pose.z + (f.z / l) * reach;
+    }
+    let dx = fx - b.pose.x;
+    let dz = fz - b.pose.z;
+    let d = Math.hypot(dx, dz);
+    if (d < 1e-3) {
+      dx = Math.sin(b.pose.facing);
+      dz = Math.cos(b.pose.facing);
+      d = 1;
+    }
+    const want = Math.min(reach, Math.max(1, d));
+    fx = b.pose.x + (dx / d) * want;
+    fz = b.pose.z + (dz / d) * want;
+    const tile = this.sim.grid.get(b.pose.roofId, Math.floor(fx), Math.floor(fz));
+    return tile ? { roofId: b.pose.roofId, fx, fz, tile } : undefined;
   }
 
   /** Is a footprint within bloombot's reach, on its layer? (Always, without bloombot.) */
@@ -3070,8 +3187,11 @@ export class Game {
     if (this.bot) {
       // E22.1: mouse buttons are bindable: the pulse button uses the tool on the aimed tile (walking there first if
       // it's out of reach); any other bound button does its action.
+      // Third person: the pulse button acts on what bloombot faces (or, building, on the crosshair's hologram);
+      // only the map's overview still takes a pointer (travel to a woken landmark).
       const a = this.resolveKey(`Mouse${button}`);
-      if (a === 'pulse' || a === 'place') this.botClick(x, y);
+      if ((a === 'pulse' || a === 'place') && this.overviewOn) this.botClick(x, y);
+      else if (a === 'pulse' || a === 'place') this.botAct();
       else if (a && a !== 'look') this.doAction(a);
       return;
     }
@@ -4501,6 +4621,7 @@ export class Game {
     if (this.bot) {
       this.bot.update(wdt); // still reads the pad (the menu's focus ring), but nothing moves
       this.updateExploreCamera(wdt);
+      this.updateMouseCapture();
       this.oc?.update(wdt);
       this.keepers?.update(wdt);
       this.resting?.update(wdt);

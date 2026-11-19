@@ -522,6 +522,13 @@ export class ChunkRenderer {
     return n;
   }
 
+  /** Third person: chunks waiting within `radius` world units of a point (the ground round bloombot). */
+  pendingNear(f: { x: number; z: number }, radius: number): number {
+    let n = 0;
+    for (const v of this.views.values()) if ((v.dirty || v.fogDirty) && dist(v, f) <= radius) n++;
+    return n;
+  }
+
   /** A tile changed: rebuild its chunk (and fog) soon. */
   markTile(t: TileData) {
     if (t.roofId !== GROUND) return;
