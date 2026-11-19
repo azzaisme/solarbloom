@@ -15,6 +15,8 @@ export interface MaterialDef {
   home: string[];
   /** a tint for its fly-ups and panel row */
   colour: string;
+  /** E23.5.1: where it comes from, for items that never lie in piles (the backpack says this instead of regions) */
+  from?: string;
 }
 
 export const MATERIALS: Record<MaterialId, MaterialDef> = {
@@ -26,12 +28,17 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
   clay: { id: 'clay', name: 'Clay', icon: '🏺', models: ['salvage-clay'], home: ['cistern'], colour: '#b97a5a' },
   gears: { id: 'gears', name: 'Gears', icon: '⚙️', models: ['salvage-gears'], home: ['clockPlaza'], colour: '#b8a26a' },
   sunstone: { id: 'sunstone', name: 'Sunstone', icon: '✨', models: ['salvage-sunstone'], home: ['terraces'], colour: '#f2c84a' },
+  // E23.5.1: farm items (data/farm). Never lying in piles: gathered from restored ground, grown or composted.
+  biomass: { id: 'biomass', name: 'Biomass', icon: '🌿', models: [], home: [], colour: '#94e46e', from: 'Gathered from restored ground' },
+  food: { id: 'food', name: 'Food', icon: '🥕', models: [], home: [], colour: '#f0a04a', from: 'Grown in planters' },
+  compost: { id: 'compost', name: 'Compost', icon: '🟫', models: [], home: [], colour: '#8a6a4a', from: 'Made in a compost bin' },
+  fertiliser: { id: 'fertiliser', name: 'Fertiliser', icon: '🧪', models: [], home: [], colour: '#c9b06a', from: 'Compost left to mature in a compost bin' },
 };
 
 export const MATERIAL_IDS = Object.keys(MATERIALS) as MaterialId[];
 
-/** A cost in materials (biomass may be part of a recipe: it stays a resource, read through Inventory.canPay). */
-export type MaterialCost = Partial<Record<MaterialId, number>> & { biomass?: number };
+/** A cost in materials. E23.5.1: biomass is a backpack item like any other, so a recipe's biomass is carried too. */
+export type MaterialCost = Partial<Record<MaterialId, number>>;
 
 // ───────────── §1 backpack ─────────────
 
@@ -64,14 +71,24 @@ export const SALVAGE = {
   holdSeconds: 0.6,
   /** seconds Interact is held at a barricade to Pry it */
   pryHoldSeconds: 2,
-  /** Reclaimer output, units a minute, and Mk 2 (blueprint) */
-  reclaimerPerMinute: 6,
-  reclaimerMk2PerMinute: 12,
-  /** away: Reclaimers earn this share for at most this many hours */
-  offlineShare: 0.5,
-  offlineHours: 4,
+  /** E23.7.4: game days of play for an emptied pile to fill again (one unit at a time); storms fill them at once */
+  refillDays: 3,
+  /** E23.7.4: how often (sim seconds) piles are checked for a returning unit */
+  refillCheckSeconds: 5,
+  /** E23.7.4: the Terraces' Salvage Lore blueprint: piles refill this many times as fast */
+  loreRefill: 2,
   /** Elder Grove's reward: loose Seeds piles give this many times as much per take */
   seedsBonus: 2,
+};
+
+/**
+ * E23.7.4: what an old save's Reclaimer is worth when it is taken down on load (its E21 recipe, refunded to the
+ * store), and the blueprint that replaced Reclaimer Mk 2.
+ */
+export const LEGACY_RECLAIMER = {
+  refund: { scrap: 20, copper: 10, timber: 10 } as Partial<Record<'scrap' | 'copper' | 'timber', number>>,
+  blueprint: 'reclaimerMk2',
+  becomes: 'salvageLore',
 };
 
 /**
@@ -93,17 +110,19 @@ export interface Recipe {
   tier: number;
 }
 
-/** Old-city build recipes: fixed, no price growth. The Reclaimer and Storage Chest are old-city machines. */
-export const RECIPES: Partial<Record<BuildableType | 'reclaimer' | 'chest', Recipe>> = {
+/** Old-city build recipes: fixed, no price growth. The Storage Chest is an old-city machine. */
+export const RECIPES: Partial<Record<BuildableType | 'chest', Recipe>> = {
   solar: { cost: { scrap: 10 }, tier: 1 },
   condenser: { cost: { scrap: 12, copper: 6 }, tier: 1 },
   chest: { cost: { timber: 8, scrap: 4 }, tier: 1 },
+  battery: { cost: { scrap: 10, copper: 8 }, tier: 1 }, // E23.3.2
+  charger: { cost: { scrap: 6, copper: 4 }, tier: 1 }, // E23.3.3
+  windTurbine: { cost: { scrap: 15, timber: 10, copper: 6 }, tier: 2 }, // E23.3.2
   pollinator: { cost: { seeds: 10, timber: 6, biomass: 20 }, tier: 2 },
   droneHub: { cost: { scrap: 20, copper: 15, glass: 10 }, tier: 2 },
-  reclaimer: { cost: { scrap: 20, copper: 10, timber: 10 }, tier: 2 },
   reservoirGarden: { cost: { clay: 15, seeds: 10, biomass: 30 }, tier: 3 },
   motherTree: { cost: { seeds: 30, clay: 20, biomass: 100 }, tier: 3 },
-  relay: { cost: { copper: 20, gears: 10, sunstone: 10 }, tier: 4 },
+  relay: { cost: { scrap: 8, copper: 6 }, tier: 1 }, // E23.3.2.3: Bloom Relays are the grid's poles, so they come with the first panels
   cultivator: { cost: { scrap: 30, gears: 20, copper: 10 }, tier: 4 },
 };
 
@@ -125,10 +144,10 @@ export interface TierDef {
 }
 
 export const TIERS: TierDef[] = [
-  { tier: 1, name: 'Water returns', needs: { parkTiles: 60 }, delivery: { scrap: 20, seeds: 6 }, ability: 'pry', gives: ['Pry', 'Build mode', 'Solar Panel', 'Water Condenser', 'Storage Chest', 'The house plot'], look: 'trickle' },
-  { tier: 2, name: 'The pump turns', needs: { landmarks: 2 }, delivery: { copper: 30, timber: 30, glass: 20 }, ability: 'hover', gives: ['Hover', 'Pollinator Garden', 'Drone Hub', 'Reclaimer', 'Stacks of 60'], look: 'flowing' },
+  { tier: 1, name: 'Water returns', needs: { parkTiles: 60 }, delivery: { scrap: 20, seeds: 6 }, ability: 'pry', gives: ['Pry', 'Build mode', 'Solar Panel', 'Battery', 'Bloom Relay', 'Charger', 'Water Condenser', 'Storage Chest', 'The house plot'], look: 'trickle' },
+  { tier: 2, name: 'The pump turns', needs: { landmarks: 2 }, delivery: { copper: 30, timber: 30, glass: 20 }, ability: 'hover', gives: ['Hover', 'Pollinator Garden', 'Drone Hub', 'Wind Turbine', 'Stacks of 60'], look: 'flowing' },
   { tier: 3, name: 'The garden climbs', needs: { landmarks: 4 }, delivery: { clay: 40, gears: 30, seeds: 40 }, ability: 'climb', gives: ['Climb', 'Reservoir Garden', 'Mother Tree', 'Stacks of 80'], look: 'lit' },
-  { tier: 4, name: 'Light on the roofs', needs: { landmarks: 6 }, delivery: { sunstone: 40, copper: 60, gears: 40 }, ability: 'glide', gives: ['Glide', 'Bloom Relay', 'Cultivator', 'Stacks of 120'], look: 'lit' },
+  { tier: 4, name: 'Light on the roofs', needs: { landmarks: 6 }, delivery: { sunstone: 40, copper: 60, gears: 40 }, ability: 'glide', gives: ['Glide', 'Cultivator', 'Stacks of 120'], look: 'lit' },
   { tier: 5, name: 'The Great Bloom', needs: { landmarks: 10 }, delivery: { sunstone: 80, glass: 80, seeds: 80 }, items: ['heartSeed', 'starLens'], gives: ['The Great Bloom'], look: 'bloom' },
 ];
 

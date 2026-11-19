@@ -1,6 +1,7 @@
 import { GROUND } from '../core/GameState';
 import { regionOfCell, seaCell, surfCell } from '../core/OldCityLayout';
-import type { TileData, WeatherKind } from '../core/types';
+import type { TileData } from '../core/types';
+import type { WeatherKind } from '../data/weather';
 import { REGIONS, type RegionId } from '../data/oldcity';
 import { WATER_NET } from '../data/water';
 import type { Sim } from './Sim';
@@ -260,9 +261,46 @@ export class WaterSystem {
     return out;
   }
 
-  /** The weather now: E21.13's field (E23.7 writes it); unset is plain cloud (no rain, no sun). */
+  /** The weather now (E23.7.2's `sim.weather`). */
   weather(): WeatherKind {
-    return this.sim.state.salvage?.weather?.kind ?? 'cloudy';
+    return this.sim.weather.kind();
+  }
+
+  /**
+   * What the weather does to the water now (shares of capacity per game day): E23.7.2's rain (`rainShare` of
+   * capacity for each unit: 1 a day's steady rain, 2 a storm) and its sun's evaporation.
+   */
+  sky(): { fill: number; evap: number } {
+    const wx = this.sim.weather;
+    return { fill: WATER_NET.rainShare * wx.rain(), evap: wx.effects().evaporation };
+  }
+
+  // ───────────── hooks for the gentle-failure suite (E23.10) ─────────────
+
+  /** Every body in the areas bloombot has seen (and any this session has looked at), empty. */
+  drainForTest() {
+    for (const b of this.allSeen()) this.draw(b.id, b.capacity);
+  }
+
+  /** Every body in the areas bloombot has seen (and any this session has looked at), full. */
+  refillForTest() {
+    for (const b of this.allSeen()) this.fill(b.id, b.capacity);
+  }
+
+  private allSeen(): Set<WaterBody> {
+    const out = new Set<WaterBody>([...this.bodies.values(), ...this.live()]);
+    for (const id of Object.keys(this.sim.state.areas))
+      for (const t of this.sim.areas.tiles(id)) {
+        const b = this.bodyAt(t);
+        if (b) out.add(b);
+      }
+    return out;
+  }
+
+  /** Land that lives off water and has none: a body within reach, but none in reach still holds any (land with no
+   * water near it never depended on water, so it is never dry). */
+  isDry(t: TileData): boolean {
+    return !!this.bodyNear(t) && !this.isWatered(t);
   }
 
   /** Spring flow for a body (share of capacity per game day). */
@@ -303,9 +341,7 @@ export class WaterSystem {
     const span = this.acc;
     this.acc = 0;
     const days = span / WATER_NET.daySeconds;
-    const w = this.weather();
-    const fill = WATER_NET.weatherFill[w] ?? 0;
-    const evap = w === 'clear' ? WATER_NET.evaporationPerDay : 0;
+    const { fill, evap } = this.sky();
     for (const b of this.live()) {
       let lv = this.levelOf(b.id);
       const before = lv;

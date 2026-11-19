@@ -1523,6 +1523,18 @@ export class ChunkRenderer {
     this.sink = b;
     const x = t.x + 0.5;
     const z = t.z + 0.5;
+    // E23.7.4: a salvage pile blown back onto ground bloombot restored sits on that ground (never on a dead slab)
+    if (t.blocked && t.ground === 'restored' && t.prop?.startsWith('pile:')) {
+      t.blocked = false;
+      try {
+        this.tile(b, t, h);
+      } finally {
+        t.blocked = true;
+      }
+      this.sink = b;
+      this.oldCityProp(b, t, x, h + 0.08, z);
+      return;
+    }
     const f = t.feature ?? 'lawn';
     const r = new VRng(t.variant * 7919 + 13);
     const dead = paintedDead(t) ?? DEAD[f] ?? DEAD.lawn;

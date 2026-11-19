@@ -205,6 +205,8 @@ export class Clouds {
   private root: pc.Entity;
   private clouds: Cloud[] = [];
   private wind = 0;
+  /** E23.7.2: the weather's wind, 0 … 1 (the clouds drift faster) */
+  gust = 0;
   private t = 0;
   private right = new pc.Vec3();
   private back = new pc.Vec3();
@@ -304,7 +306,7 @@ export class Clouds {
     this.root.enabled = true;
     const still = this.reducedMotion;
     if (!still) {
-      this.wind += dt * 0.012;
+      this.wind += dt * 0.012 * (1 + this.gust * 4);
       this.t += dt;
     }
     const vh = cam.viewHeight;

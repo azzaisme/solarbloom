@@ -3,8 +3,8 @@ import { big } from '../src/core/Big';
 import { formatCost } from '../src/core/Economy';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { BuildableType, GroundState } from '../src/core/types';
-import { BUILDABLE, MACHINES } from '../src/data/machines';
-import { RECIPES } from '../src/data/salvage';
+import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE } from '../src/data/machines';
+import { RECIPES, TIERS } from '../src/data/salvage';
 import { Sim } from '../src/gameplay/Sim';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
@@ -26,16 +26,12 @@ function ground(sim: Sim, x: number, z: number, g: GroundState = 'restored') {
 }
 /** Gives the backpack and store everything a recipe needs. */
 function stock(sim: Sim, type: BuildableType) {
-  for (const [k, v] of Object.entries(RECIPES[type]!.cost)) {
-    if (k === 'biomass') sim.state.resources.biomass = sim.state.resources.biomass.add(v!);
-    else sim.inventory.addToStore(k as 'scrap', v!);
-  }
+  for (const [k, v] of Object.entries(RECIPES[type]!.cost)) sim.inventory.addToStore(k as 'scrap', v!);
 }
 
 describe('E21.3: recipes', () => {
   it('each recipe is paid exactly, with no price growth, and the tray never shows a classic price', () => {
     for (const type of Object.keys(RECIPES) as BuildableType[]) {
-      if (type === 'reclaimer') continue; // seams only (below)
       const sim = oldSim();
       sim.state.resources.biomass = big(0);
       const x = 12;
@@ -47,10 +43,7 @@ describe('E21.3: recipes', () => {
       const first = sim.build.place(type, GROUND, x, z);
       expect(first, type).toBeDefined();
       // the second costs the same (what is left is exactly one more recipe)
-      for (const [k, v] of Object.entries(RECIPES[type]!.cost)) {
-        if (k === 'biomass') expect(sim.econ.get('biomass').toNumber()).toBe(v);
-        else expect(sim.inventory.stored(k as 'scrap'), `${type} ${k}`).toBe(v);
-      }
+      for (const [k, v] of Object.entries(RECIPES[type]!.cost)) expect(sim.inventory.stored(k as 'scrap'), `${type} ${k}`).toBe(v);
       expect(sim.build.costLabel(type)).not.toMatch(/⚡|💧/);
     }
   });
@@ -106,19 +99,10 @@ describe('E21.3: recipes', () => {
     expect(sim.build.remove(sim.state.machines.find((q) => q.starter)!.id)).toBe(false);
   });
 
-  it('a Reclaimer stands only on the seam of a woken region', () => {
-    const sim = oldSim(2);
-    stock(sim, 'reclaimer');
-    sim.bot = { roofId: GROUND, x: 20.5, z: -6.5 };
-    sim.inventory.withdraw('scrap');
-    sim.inventory.withdraw('copper');
-    sim.inventory.withdraw('timber');
-    sim.state.areas.mastRow = { fog: 'thinning', revealedAt: 0 };
-    ground(sim, 23, -8);
-    expect(sim.build.check('reclaimer', GROUND, 22, -8).reason).toMatch(/seam/);
-    expect(sim.build.check('reclaimer', GROUND, 23, -8).reason).toMatch(/Wake Signal Mast/);
-    sim.state.areas.mastRow.fog = 'cleared';
-    expect(sim.build.check('reclaimer', GROUND, 23, -8).ok).toBe(true);
+  it('E23.7.4: the Reclaimer is gone: not in the build list, no recipe, no tier gives it', () => {
+    expect(OLD_CITY_BUILDABLE as string[]).not.toContain('reclaimer');
+    expect(Object.keys(RECIPES)).not.toContain('reclaimer');
+    expect(TIERS.flatMap((t) => t.gives).join(' ')).not.toMatch(/Reclaimer/);
   });
 
   it('classic costs are untouched', () => {

@@ -54,12 +54,14 @@ export class GateSystem {
     if (g.kind === 'lockBridge') return n.landmark && this.sim.areas.fog(n.landmark) === 'cleared' ? undefined : this.has('hover') ? undefined : g.blocked;
     if (n.repair) return this.sim.inventory.canPay(n.repair) ? undefined : `${g.blocked}${this.missing(n.repair)}`;
     if (n.ability && !this.has(n.ability)) return g.blocked;
+    // E23.2.1: abilities cost charge; at zero bloombot can't use them (it walks on, nothing is lost)
+    if (n.ability && !this.sim.charge.canUse(n.ability as 'pry')) return 'Out of charge. Eat something, rest or find a charger';
     return undefined;
   }
 
   private missing(cost: Record<string, number | undefined>): string {
     const m = this.sim.inventory.shortfall(cost);
-    return m && m !== 'biomass' ? ` (short of ${MATERIALS[m].name})` : '';
+    return m ? ` (short of ${MATERIALS[m].name})` : '';
   }
 
   /** Opens a gate for good. `free`: a reward (the lock bridge) — no check. */
@@ -75,6 +77,7 @@ export class GateSystem {
         return false;
       }
       if (g.needs.repair && !s.inventory.pay(g.needs.repair)) return false;
+      if (g.needs.ability) s.charge.use(g.needs.ability as 'pry');
     }
     s.state.salvage!.opened.push(id);
     // its rubble or bridge deck becomes open ground (saved as an entry fix)
@@ -100,7 +103,6 @@ export class GateSystem {
       if (st && !st.sealed) return;
       if (st) {
         st.sealed = undefined;
-        st.price = undefined;
         st.unlockedAt = s.time;
         st.revealedAt = s.time;
       } else s.state.areas[aid] = { fog: 'frontier', revealedAt: s.time, unlockedAt: s.time };

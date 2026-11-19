@@ -74,6 +74,9 @@ export class Sky {
   dusk = 0;
   /** E23.7.2: overcast (0 clear … 1 heavy cloud), greys the sky and hides the sun */
   overcast = 0;
+  /** E23.7.2: wind, 0 … 1 (the clouds drift faster) */
+  wind = 0;
+  private drift = 0;
   private builtNight = -1;
   private builtDusk = -1;
   private builtOvercast = -1;
@@ -304,6 +307,8 @@ export class Sky {
     this.root.setPosition(cam.x, cam.y, cam.z);
     this.root.setLocalScale(R, R, R);
     // Clouds drift slowly around the horizon (a full turn takes about 40 minutes).
-    if (!this.reducedMotion) this.clouds.setLocalEulerAngles(0, (this.time * 0.15) % 360, 0);
+    // E23.7.2: wind hurries them along
+    this.drift += dt * 0.15 * (1 + this.wind * 5);
+    if (!this.reducedMotion) this.clouds.setLocalEulerAngles(0, this.drift % 360, 0);
   }
 }

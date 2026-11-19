@@ -24,6 +24,12 @@ const BODY: Record<MaterialId | 'biomass' | 'unknown', string> = {
   sunstone: `<path d="M16 2 L19 11 L28 8 L22 16 L28 24 L19 21 L16 30 L13 21 L4 24 L10 16 L4 8 L13 11 Z"/><circle cx="16" cy="16" r="3.4" class="mi-hi"/>`,
   // Greens (biomass): a leaf
   biomass: `<path d="M6 26 C4 12 14 4 28 4 C28 18 20 28 6 26 Z"/><path d="M7 25 C13 19 19 13 26 6" class="mi-line"/>`,
+  // E23.5.1 Food: a carrot with its leaves
+  food: `<path d="M9 27 C7 25 9 20 13 15 L19 9 L23 13 L17 19 C12 23 11 29 9 27 Z"/><path d="M20 8 C19 4 21 2 23 2 M22 10 C25 8 28 9 30 11 M21 9 C24 5 27 5 28 6" class="mi-line"/><path d="M12 20 L15 21 M15 16 L17 18" class="mi-line"/>`,
+  // Compost: a heap with crumbs
+  compost: `<path d="M3 26 C5 16 11 10 16 10 C21 10 27 16 29 26 Z"/><circle cx="12" cy="19" r="1.6" class="mi-hi"/><circle cx="19" cy="16" r="1.4" class="mi-hi"/><circle cx="21" cy="22" r="1.6" class="mi-hi"/><path d="M16 10 C16 7 18 5 21 5" class="mi-line"/>`,
+  // Fertiliser: a tied sack with a drop on it
+  fertiliser: `<path d="M11 6 H21 L19 10 C26 13 27 24 23 28 H9 C5 24 6 13 13 10 Z"/><path d="M12 10 H20" class="mi-line"/><path d="M16 15 C18 18 19 20 19 21.5 a3 3 0 0 1 -6 0 C13 20 14 18 16 15 Z" class="mi-hi"/>`,
   // not found yet
   unknown: `<circle cx="16" cy="16" r="12" class="mi-ghost"/><path d="M12 13 a4 4 0 1 1 6 3.4 c-1.6 1 -2 1.8 -2 3.4" class="mi-line"/><circle cx="16" cy="24" r="1.4" class="mi-dot"/>`,
 };

@@ -1,5 +1,5 @@
 import { CAPPED, formatCost, scaleCost } from '../core/Economy';
-import { big, Decimal } from '../core/Big';
+import { big } from '../core/Big';
 import type { BuildableType, Cost, GroundState, MachineData } from '../core/types';
 import { MACHINES, machineName } from '../data/machines';
 import { AREA_TYPES, type AreaType } from '../data/city';
@@ -84,27 +84,16 @@ export class BuildSystem {
     return st.built;
   }
 
-  /** The price before Phase 5's storage clamp: copies × machineCostGrowth, less permits (the specialty safety valve reads it). */
-  rawCost(type: BuildableType): Cost {
-    // Cleared city areas grant permits: each waives one copy's worth of cost growth.
-    const permits = (this.sim.areas?.clearedCount() ?? 0) * TUNING.city.permitsPerArea;
-    return scaleCost(MACHINES[type].cost, Decimal.pow(TUNING.machineCostGrowth, Math.max(0, this.built(type) - permits)));
-  }
-
+  /**
+   * A machine's price: the same for every copy (E23.1.5: no price grows with purchases). The energy and water
+   * parts never pass TUNING.machineCostMaxShare of their store, so a price is always reachable.
+   */
   cost(type: BuildableType): Cost {
-    const cost = this.rawCost(type);
-    // Phase 5 E12: never an impossible price. Energy and water incomes barely grow while biomass has no cap, so
-    // the energy/water part grows for the first few copies only (further copies cost more biomass), and never
-    // passes a share of that store. While the advisor says "save up", drones leave that much alone.
-    const permits = (this.sim.areas?.clearedCount() ?? 0) * TUNING.city.permitsPerArea;
-    const copies = Math.min(TUNING.machineCappedGrowthCopies, Math.max(0, this.built(type) - permits));
-    const base = MACHINES[type].cost;
+    const cost = scaleCost(MACHINES[type].cost, 1);
     for (const k of CAPPED) {
       const cap = this.sim.econ.cap(k);
-      if (base[k] === undefined) continue;
-      let v = big(base[k]).mul(Decimal.pow(TUNING.machineCostGrowth, copies)).ceil();
-      if (cap) v = v.min(cap.mul(TUNING.machineCostMaxShare).floor());
-      cost[k] = v;
+      const v = cost[k];
+      if (v !== undefined && cap) cost[k] = big(v).min(cap.mul(TUNING.machineCostMaxShare).floor());
     }
     return cost;
   }
@@ -167,7 +156,7 @@ export class BuildSystem {
     if (!r) return undefined;
     const m = this.sim.inventory.shortfall(r);
     if (!m) return undefined;
-    if (m === 'biomass') return 'Needs more Biomass 🌿 — restored ground grows it';
+    if (m === 'biomass') return 'Needs more Biomass 🌿 — gather it from restored ground';
     return `Needs ${MATERIALS[m].name} ${MATERIALS[m].icon}${this.whereFrom(m)}`;
   }
 
@@ -201,7 +190,7 @@ export class BuildSystem {
     return { ok: true, cost, spotOk: true };
   }
 
-  /** E21.3: placement under old-city rules: tier lock, the recipe, the Reclaimer's seam, the chest limit. */
+  /** E21.3: placement under old-city rules: tier lock, the recipe, the chest limit. */
   private checkOldCity(type: BuildableType, roofId: string, x: number, z: number): PlacementCheck {
     const s = this.sim;
     const def = MACHINES[type];
@@ -212,11 +201,6 @@ export class BuildSystem {
     if (!this.isUnlocked(type)) return fail(`Unlocks at fountain tier ${this.recipeTier(type)}`);
     const roof = s.grid.roof(roofId);
     if (!roof || !roof.unlocked || roof.preview) return fail('This rooftop is not reachable yet');
-    if (type === 'reclaimer') {
-      const r = s.salvage.seamAt(x, z);
-      if (!r) return fail('A Reclaimer stands only on a seam (the marked 2×2 spot in each region)');
-      if (!s.salvage.woken(r)) return fail(`Wake ${r.landmark.name} first: then its seam takes a Reclaimer`);
-    }
     if (type === 'chest' && s.machinesOfType('chest').length >= STORE.maxChests) return fail(`At most ${STORE.maxChests} Storage Chests`);
     if (roofId === GROUND && def.areaTypes) {
       const t = AREA_TYPES[s.areas.info(s.areas.map.areaOfCell(x, z)).type];
@@ -242,7 +226,6 @@ export class BuildSystem {
     if (m.type === 'droneHub') s.drones.removeHub(m.id);
     s.state.machines = s.state.machines.filter((q) => q.id !== m.id);
     machinesRemoved();
-    if (s.state.salvage?.reclaim) delete s.state.salvage.reclaim[m.id];
     if (recipe) s.inventory.refund(recipe);
     s.production.markNear(m.roofId, m.x, m.z, m.size);
     s.production.markDirty();

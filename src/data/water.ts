@@ -1,20 +1,21 @@
 // E23.4 (#358): the water network's numbers. Starting values for tuning; every rate is per game day.
 
 import type { RegionId } from './oldcity';
-import type { WeatherKind } from '../core/types';
+import { DAY_SECONDS } from './time';
 
 export const WATER_NET = {
   /** E23 rule 5: a game day is 48 minutes of play (E23.7 owns the clock; this is only the unit rates count in). */
-  daySeconds: 48 * 60,
+  daySeconds: DAY_SECONDS,
   /** how much one water tile holds (units; a planter's or a pump's draw is counted in these) */
   perTile: 20,
   /** the sim updates levels this often (seconds of sim time), not every step */
   step: 1,
-  /** weather that refills every body (share of its capacity per game day): rain, and a little from mist */
-  weatherFill: { rain: 3, mist: 0.2 } as Partial<Record<WeatherKind, number>>,
-  /** sunny ('clear') days evaporate this share of capacity per game day… */
-  evaporationPerDay: 0.2,
-  /** …but evaporation alone never takes a body below this (weather never empties a pond: cozy wins) */
+  /**
+   * E23.7.2's weather (`sim.weather.rain()`: 1 a day's steady rain, 2 a storm's downpour) refills every body by this
+   * share of its capacity per game day for each unit of rain. Its `effects().evaporation` is the sun's share per day.
+   */
+  rainShare: 3,
+  /** evaporation alone never takes a body below this (weather never empties a pond: cozy wins) */
   evaporationFloor: 0.5,
   /** E23.4.1: springs top up the water of these regions by this share of capacity per game day, any weather */
   springs: { cistern: 1.5 } as Partial<Record<RegionId, number>>,

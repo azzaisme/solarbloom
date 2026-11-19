@@ -59,6 +59,8 @@ export class RestorationSystem {
     if (t.blocked) return { ok: false, reason: t.feature === 'building' ? 'An old building: its roof garden wakes when this area clears' : 'A rusty vent — nothing grows here', cost };
     if (this.sim.isCoreTile(t)) return { ok: false, reason: 'The Rooftop Core — awaken it when it is ready', cost };
     if (t.ground === 'restored' && t.bloom >= TUNING.restore.maxBloom) return { ok: false, reason: 'Already in full bloom', cost };
+    // E23.2.1: out of charge, no pulse (bloombot walks on; eat, sit or find a charger)
+    if (!this.sim.charge.canUse('pulse')) return { ok: false, reason: 'Out of charge. Eat something, rest or find a charger', cost };
     if (t.ground === 'growing') return { ok: false, reason: `Roots are breaking through — ${Math.max(1, Math.ceil(t.growthRemainingSec))}s`, cost };
     const tilling = this.sim.cultivators?.remaining(t);
     if (tilling !== undefined) return { ok: false, reason: `The Cultivator is breaking up this slab — ${Math.max(1, Math.ceil(tilling))}s`, cost };
@@ -91,6 +93,7 @@ export class RestorationSystem {
       return false;
     }
     this.sim.econ.spend(chk.cost);
+    this.sim.charge.use('pulse');
     if (this.megaReady()) return this.releaseMega(t);
     this.chargeMega();
     if (t.ground === 'restored') {
@@ -236,6 +239,9 @@ export class RestorationSystem {
 
   tick(dt: number) {
     if (!this.growing.size) return;
+    // E23.7.2: rain (and a storm's downpour) makes restoring ground bloom faster; nothing makes it slower
+    const speed = Math.max(1, this.sim.weather?.bloomSpeed() ?? 1);
+    dt *= speed;
     for (const t of [...this.growing.values()]) {
       if (t.ground !== 'growing') {
         this.growing.delete(t.id);

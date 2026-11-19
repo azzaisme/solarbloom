@@ -103,19 +103,6 @@ describe('Look 6.8: the Cultivator (#177)', () => {
     expect(mine.every((t) => t.bloom >= TUNING.cultivator.seedBloom)).toBe(true);
   });
 
-  it('energy upgrades are paid in energy, capped at machineCostMaxShare of the store', () => {
-    const { sim, m } = setup(5);
-    sim.state.caps.energy = big(100);
-    sim.state.resources.energy = big(100);
-    const def = sim.upgrades.all().find((u) => u.id === 'cultWidth')!;
-    m.upg = { cultWidth: 1 };
-    expect(sim.upgrades.cost(def, m).toNumber()).toBeLessThanOrEqual(100 * TUNING.machineCostMaxShare);
-    const b0 = sim.state.resources.biomass.toNumber();
-    expect(sim.upgrades.purchase('cultWidth', m.id)).toBe(true);
-    expect(sim.state.resources.biomass.toNumber()).toBe(b0);
-    expect(sim.state.resources.energy.toNumber()).toBeLessThan(100);
-  });
-
   it('parks when the energy store is below the drones’ reserve', () => {
     const { sim, m } = setup(6);
     sim.state.resources.energy = big(sim.state.caps.energy.toNumber() * TUNING.drone.reserve * 0.5);

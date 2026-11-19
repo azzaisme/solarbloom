@@ -170,7 +170,7 @@ export class Minimap {
     const rim = this.el.querySelector<HTMLElement>('.mm-rim');
     if (!rim) return;
     const c = this.sim.clock;
-    const w = (this.sim.weather as { label?(): string } | undefined)?.label?.() ?? '';
+    const w = this.sim.weather.label();
     const text = `${String(c.hour()).padStart(2, '0')}:${String(c.minute()).padStart(2, '0')}${w ? ` ${w}` : ''}`;
     rim.hidden = !text;
     if (rim.textContent !== text) rim.textContent = text;
