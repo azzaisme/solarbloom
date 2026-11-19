@@ -99,6 +99,10 @@ try {
     g.togglePowerView();
   });
   if (hasOverlay) await shot('power-overlay', 8, 42, 1.0, 20);
+  if (hasOverlay) console.log('  power view light', JSON.stringify(await page.evaluate(() => {
+    const g = window.solarbloom;
+    return { dim: g.dayNight.dim, sun: g.scene.sun.light.intensity, fill: g.scene.fill.light.intensity, sky: g.app.scene.skyboxIntensity, exposure: g.app.scene.exposure };
+  })));
   // Lightning trips a pole: what it carried goes dark (red frames), the pole gets a red ring
   const tripped = await page.evaluate(() => {
     const g = window.solarbloom;
