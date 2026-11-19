@@ -3,6 +3,7 @@ import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { TileData } from '../src/core/types';
+import { FARM_USES } from '../src/data/farm';
 import { CHARGE } from '../src/data/charge';
 import { Sim } from '../src/gameplay/Sim';
 import { BOT, spawnPose, Walker } from '../src/gameplay/Walker';
@@ -81,27 +82,32 @@ describe('E23.2.1: bloombot\'s charge', () => {
   it('eating biomass or food recharges slowly and uses the item; nothing to eat says so', () => {
     const sim = oldSim();
     sim.state.charge = { value: 10 };
-    sim.econ.spend({ biomass: sim.econ.get('biomass') });
+    const pack = sim.state.salvage!.pack as Record<string, number>;
+    for (const k of Object.keys(pack)) delete pack[k];
+    sim.econ.add('biomass', 50); // the old city-wide resource is not something bloombot can eat
     expect(sim.charge.eat()).toBe('none');
-    // food (E23.5's item) first, from the backpack
-    (sim.state.salvage!.pack as Record<string, number>).food = 1;
-    sim.econ.add('biomass', 3);
-    const bio = () => sim.econ.get('biomass').toNumber();
+    // the numbers come from E23.5.1's farm items
+    const food = FARM_USES.food.charge * CHARGE.max;
+    const biomass = FARM_USES.biomass.charge * CHARGE.max;
+    expect(CHARGE.edibles.map((e) => [e.id, e.charge])).toEqual([['food', food], ['biomass', biomass]]);
+    // food first, from the backpack
+    pack.food = 1;
+    pack.biomass = 3;
+    const bio = () => pack.biomass ?? 0;
     const meal = sim.charge.eat();
     expect(meal).toMatchObject({ id: 'food' });
     expect(sim.charge.eat()).toBe('busy');
     expect((sim.state.salvage!.pack as Record<string, number>).food).toBeUndefined();
     sim.advance(1);
     expect(sim.charge.value()).toBeGreaterThan(10);
-    expect(sim.charge.value()).toBeLessThan(10 + 15);
+    expect(sim.charge.value()).toBeLessThan(10 + food);
     sim.advance(3);
-    expect(sim.charge.value()).toBeCloseTo(25, 5);
-    // then biomass (the old resource until E23.5 makes it an item)
-    const had = bio();
+    expect(sim.charge.value()).toBeCloseTo(10 + food, 5);
+    // then biomass, also from the backpack
     expect(sim.charge.eat()).toMatchObject({ id: 'biomass' });
-    expect(bio()).toBeCloseTo(had - 1, 5);
+    expect(bio()).toBe(2);
     sim.advance(3);
-    expect(sim.charge.value()).toBeCloseTo(31, 5);
+    expect(sim.charge.value()).toBeCloseTo(10 + food + biomass, 5);
     sim.state.charge!.value = CHARGE.max;
     expect(sim.charge.eat()).toBe('full');
   });

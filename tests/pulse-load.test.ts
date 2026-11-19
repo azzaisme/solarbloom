@@ -77,15 +77,14 @@ describe('E23.2.2.2: what grows from each load', () => {
     sim.inventory.add('seeds', 5);
     pack(sim).rareSeed = 5;
     pack(sim).fertiliser = 5;
-    const paid = new Map<string, number>();
-    sim.bus.on('tile.restored', (e) => paid.set(e.tile.id, e.biomass.toNumber()));
     (['none', 'seeds', 'rare', 'fertiliser'] as const).forEach((load, i) => {
       const t = tiles[i];
       sim.pulseLoad.choose(load);
       const reach = sim.restoration.footprint(t).length;
       sim.restoration.pulse(t.id);
       grown(sim);
-      results[load] = { plant: t.plant, bloom: t.bloom, reach, biomass: paid.get(t.id) ?? 0 };
+      // biomass is gathered, never earned (E23.5.1): what clipping the grown tile gives
+      results[load] = { plant: t.plant, bloom: t.bloom, reach, biomass: sim.gather.yieldOf(t) };
     });
     expect(results.none.plant).toBeUndefined();
     expect(results.seeds.plant).toBe('meadow');
@@ -97,6 +96,11 @@ describe('E23.2.2.2: what grows from each load', () => {
     expect(results.fertiliser.reach).toBeGreaterThan(results.none.reach); // a bigger radius
     expect(results.seeds.biomass).toBeGreaterThan(results.none.biomass);
     expect(results.fertiliser.biomass).toBeGreaterThan(results.seeds.biomass);
+    // and at the same bloom, the load's own multiplier: a meadow gives more than plain flowered ground
+    const meadow = tiles[1];
+    const plainYield = sim.gather.yieldOf({ ...meadow, plant: undefined });
+    expect(sim.gather.yieldOf(meadow)).toBe(Math.round(plainYield * PULSE_LOAD.seeds.biomass));
+    expect(sim.gather.yieldOf(meadow)).toBeGreaterThan(plainYield);
     expect([pack(sim).seeds, pack(sim).rareSeed, pack(sim).fertiliser]).toEqual([4, 4, 4]);
   });
 

@@ -113,12 +113,10 @@ export class ChargeSystem {
 
   // ───────── eating ─────────
 
-  /** Units of an edible bloombot carries (biomass falls back to the old resource until E23.5 makes it an item). */
+  /** Units of an edible bloombot carries in its backpack (E23.5.1's farm items). */
   carried(id: EdibleDef['id']): number {
     const pack = this.sim.state.salvage?.pack as Record<string, number | undefined> | undefined;
-    const n = pack?.[id] ?? 0;
-    if (n > 0 || id !== 'biomass') return n;
-    return Math.floor(this.sim.econ.get('biomass').toNumber());
+    return pack?.[id] ?? 0;
   }
 
   private takeOne(id: EdibleDef['id']): boolean {
@@ -129,7 +127,6 @@ export class ChargeSystem {
       this.sim.bus.emit('pack.changed', {});
       return true;
     }
-    if (id === 'biomass' && this.carried('biomass') >= 1) return this.sim.econ.spend({ biomass: 1 });
     return false;
   }
 

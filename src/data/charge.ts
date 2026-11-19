@@ -2,11 +2,16 @@
 // A full charge lasts about 10 minutes of active play (the `active` profile below, checked by tests/charge.test.ts).
 // Walking is free; pulses, abilities and sprinting cost charge. At zero bloombot walks on, slower, and can't pulse.
 
+import { FARM_USES } from './farm';
+
+/** a full charge with no research (the meter's 100%) */
+const FULL = 100;
+
 export interface EdibleDef {
-  /** the backpack item eaten (E23.5 adds biomass and food as items; until then biomass comes from the old resource) */
+  /** the backpack item eaten (E23.5.1's farm items) */
   id: 'biomass' | 'food';
   name: string;
-  /** charge one unit gives back */
+  /** charge one unit gives back (from E23.5.1's FARM_USES: its share of a full battery) */
   charge: number;
   /** seconds it takes to eat one unit (the charge arrives over this time) */
   seconds: number;
@@ -14,7 +19,7 @@ export interface EdibleDef {
 
 export const CHARGE = {
   /** a full charge */
-  max: 100,
+  max: FULL,
   /** E23.6.2 research: each battery cell adds this much to the full charge */
   cellCapacity: 25,
   /** E23.6.2 research: each efficiency step takes this share off every cost (multiplies) */
@@ -33,8 +38,8 @@ export const CHARGE = {
   lowShare: 0.2,
   /** what bloombot can eat anywhere, best first when eating picks for you (slow, uses items) */
   edibles: [
-    { id: 'food', name: 'Food', charge: 15, seconds: 3 },
-    { id: 'biomass', name: 'Biomass', charge: 6, seconds: 2 },
+    { id: 'food', name: 'Food', charge: FARM_USES.food.charge * FULL, seconds: 3 },
+    { id: 'biomass', name: 'Biomass', charge: FARM_USES.biomass.charge * FULL, seconds: 2 },
   ] as EdibleDef[],
   /** E23.3.3: sitting and meditating at a charger, per second (fast, free, on the grid) */
   meditatePerSecond: 6,
