@@ -97,6 +97,10 @@ try {
     const g = window.solarbloom;
     g.selectTool('battery');
     g.togglePowerView();
+    // The hover preview sets the Power view's focus every frame (from bloombot's cursor here). Hold it still, so the
+    // plain shots have no focus and the focus shot has exactly the one set below.
+    g.previewAt = () => {};
+    g.powerFocus = undefined;
   });
   // the Power view's dim eases in (slowly at headless frame rates): wait until it has settled
   const settled = (on) => page.waitForFunction((on) => {
@@ -114,6 +118,12 @@ try {
       const a = g.sim.machine('m8');
       g.powerFocus = { roofId: a.roofId, x: 8.5, z: 41.6 };
     });
+    await page.waitForTimeout(800);
+    console.log('  focus', JSON.stringify(await page.evaluate(() => {
+      const g = window.solarbloom;
+      const n = g.sim.power.networkNear(g.powerFocus.roofId, g.powerFocus.x, g.powerFocus.z, 1.2);
+      return { network: n?.id, machines: n?.members.length };
+    })));
     await shot('power-overlay-focus', 8, 42, 1.0, 20);
     await page.evaluate(() => (window.solarbloom.powerFocus = undefined));
   }
