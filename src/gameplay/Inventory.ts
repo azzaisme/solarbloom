@@ -16,8 +16,7 @@ export interface BotAt {
 /**
  * E21.1 (§1, §2): what bloombot carries and the city's shared store. Whole numbers; the backpack has a stack
  * limit per material (from the fountain tier and the Pack Frame), the store none. E23.5.1: biomass, food,
- * compost and fertiliser are items here like any material. Old-city rules only: under classic rules
- * there is no salvage state and every call here is inert.
+ * compost and fertiliser are items here like any material.
  */
 export class Inventory {
   constructor(private sim: Sim) {}

@@ -219,17 +219,11 @@ export class Hud {
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
       <div id="intro" hidden><div class="panel card-intro">
         <h2>${LOGO_MARK}<span>Welcome to Solarbloom</span></h2>
-        <p data-rules="classic">This old park is dead and grey, and the city around it is lost in a gloomy fog. Bring it back to life.</p>
-        <p data-rules="oldcity">The fog came and the island city emptied. A small boat has brought you, bloombot, from the mainland to bring it back to life.</p>
-        <ol data-rules="oldcity">
+        <p>The fog came and the island city emptied. A small boat has brought you, bloombot, from the mainland to bring it back to life.</p>
+        <ol>
           <li><b>Salvage what lies around</b>: Scrap, Seeds and more, by hand. Tidied ground can be restored.</li>
           <li><b>Pulse dead ground back to life</b>, and bring the fountain what it asks for. Each delivery gives you a new way to move.</li>
           <li><b>Clear the way</b> into the city's regions and wake the robot who sleeps in each.</li>
-        </ol>
-        <ol data-rules="classic">
-          <li><b>Walk up to a grey tile and pulse it</b> to restore it. Each pulse uses a little ⚡ energy and 💧 water, which refill on their own.</li>
-          <li><b>Green tiles grow 🌿 biomass.</b> Spend it on machines. Pulse a green tile again to grow flowers.</li>
-          <li><b>Goal:</b> wake the dry fountain. Then the fog starts to lift. The objective is in the top-left corner.</li>
         </ol>
         <button id="introGo">Start restoring ✨</button>
       </div></div>

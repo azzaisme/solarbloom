@@ -19,7 +19,7 @@ export const GROUND = 'g';
 /** The current ground generation version (new games). */
 export const GROUND_GEN = 4;
 
-/** E21: the Old City's ground generation (old-city rules only; classic games keep GROUND_GEN). */
+/** E21: the Old City's ground generation (laid over GROUND_GEN's city ground). */
 export const OLD_CITY_GEN = 5;
 
 export function groundLayer(playable = true, gen = GROUND_GEN): LayerData {

@@ -106,7 +106,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     unlock: { needs: 'droneHub', label: 'Build a Drone Hub to unlock' },
     cityOnly: true,
   },
-  // E21.1: a way into the city's store (old-city rules only; never in the classic build list).
+  // E21.1: a way into the city's store (placed by the world, never in the build list).
   chest: {
     type: 'chest',
     name: 'Storage Chest',

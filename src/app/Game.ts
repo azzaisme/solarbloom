@@ -491,7 +491,6 @@ export class Game {
         this.padListener(i);
         this.swallowPad = i;
       };
-      this.hud.root.dataset.rules = 'oldcity'; // E21.12: the intro card's Old City words
       this.keepers = new KeeperVisuals(this.sim, this.scene.world, this.app);
       this.keepers.reducedMotion = !!this.settings.reducedMotion;
       this.oc = new OldCityController(this.oldCityHost());

@@ -96,12 +96,6 @@ describe('E23.7.2.1: weather effects (every row in data)', () => {
     noon(clear);
     expect(clear.nightFinds.out().some((f) => f.when === 'fog')).toBe(false);
   });
-
-  it('classic games have no weather', () => {
-    const sim = new Sim(createInitialState(7));
-    expect(sim.weather.kind()).toBe('sunny');
-    expect(sim.weather.solar()).toBe(1);
-  });
 });
 
 describe('E23.7.2.2: the forecast', () => {

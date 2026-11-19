@@ -48,8 +48,7 @@ const byId = (a: MachineData, b: MachineData) => idNum(a) - idNum(b) || (a.id < 
 const KEEP_ORDER = [...SHED_ORDER].reverse(); // served first = shed last
 
 /**
- * E23.3.1: the power grid (`sim.power`). Machines join networks through poles in range (flood fill, like
- * `CanalNetwork`), or by touching. Each tick a network sums its supply, serves its consumers from the most
+ * E23.3.1: the power grid (`sim.power`). Machines join networks through poles in range (flood fill), or by touching. Each tick a network sums its supply, serves its consumers from the most
  * important (chargers) to the least (lamps), covers any deficit from its batteries and stores any surplus.
  * When short, consumers go dark one at a time in shed order and come back by themselves. Deterministic and
  * headless; networks are cached until a machine is built or removed (or `invalidate()` is called).

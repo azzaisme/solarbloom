@@ -39,8 +39,6 @@
 .oc-bubble b { display: block; font: 600 13px var(--font-display); color: var(--gold); margin-bottom: 2px; }
 .oc-bubble p { margin: 0; }
 
-/* E21.12: the intro card speaks of the Old City under old-city rules, of the park and fog otherwise */
-#hud[data-rules="oldcity"] #intro [data-rules="classic"], #hud:not([data-rules="oldcity"]) #intro [data-rules="oldcity"] { display: none; }
 
 /* E23.2.1: bloombot's charge, the only meter (old-city rules). Calm when full, warm when low, grey at zero. */
 #chargeRow { grid-template-columns: 24px auto 1fr; cursor: default; transition: opacity .6s, border-color .3s; }

@@ -157,7 +157,7 @@ export function defaultKeys(): Record<Action, string[]> {
     backpack: ['Tab', 'KeyI'],
     map: ['KeyM'],
     harvest: ['KeyF'],
-    // E23.2.1: under old-city rules F eats instead (Harvest Sunlight is classic only)
+    // E23.2.1: F eats (Harvest Sunlight is retired; it goes in E23.1.4)
     eat: ['KeyF'],
     pinNext: ['KeyG'],
     cancel: [FIXED_KEY],

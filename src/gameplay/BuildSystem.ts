@@ -154,8 +154,8 @@ export class BuildSystem {
   }
 
   /**
-   * E21.3: removes a machine the player built (old-city rules): the whole recipe comes back, to the backpack
-   * and anything over a stack to the store. False for landmarks, the starter panel or under classic rules.
+   * E21.3: removes a machine the player built: the whole recipe comes back, to the backpack
+   * and anything over a stack to the store. False for landmarks and the starter panel.
    */
   remove(id: string): boolean {
     const s = this.sim;

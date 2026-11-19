@@ -12,8 +12,7 @@ export type ChargeUse = 'pulse' | 'sprint' | 'pry' | 'hover' | 'climb' | 'glide'
 export type ChargeSource = 'eat' | 'charger' | 'bench' | 'home' | 'sleep' | 'other';
 
 /**
- * E23.2.1 (#371): bloombot's charge, the only meter on screen. Old-city rules only: under classic rules it is
- * off, every cost is free and nothing here changes the game (so classic runs stay byte-identical).
+ * E23.2.1 (#371): bloombot's charge, the only meter on screen.
  *
  * Cozy wins every tie: walking never costs charge, and at zero bloombot walks on (a little slower) but can't
  * pulse or use abilities. Nothing is lost and bloombot is never stranded. A pulse with a little charge left

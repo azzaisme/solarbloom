@@ -9,8 +9,7 @@ import type { Sim } from './Sim';
  * `salvage.delivered`) plus an "also needs" condition (park tiles restored, or landmarks awake). When both are done
  * the fountain advances: it grants the tier's ability, unlocks its recipes (BuildSystem reads the tier), raises the
  * stack limit (Inventory reads the tier) and emits `fountain.tier`. Tier 1 wakes the park (water returns): the
- * park clears and the ring-1 regions appear, still sealed behind their barricades. Old-city rules only; classic
- * games keep ProgressionSystem's fountain.
+ * park clears and the ring-1 regions appear, still sealed behind their barricades.
  */
 export class FountainSystem {
   constructor(private sim: Sim) {}

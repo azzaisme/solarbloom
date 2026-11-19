@@ -14,7 +14,7 @@ interface PowerLike {
  * in data/weather; systems read the share they care about (`solar()`, `wind()`, `rain()`, `bloomSpeed()`, ...).
  * Nothing the weather does ever destroys anything: a storm's lightning can only trip a power pole.
  *
- * Read through `sim.weather`. Only under old-city rules; classic games have calm, sunny days.
+ * Read through `sim.weather`.
  */
 export class Weather {
   private forced?: { kind: WeatherKind; until: number };

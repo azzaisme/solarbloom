@@ -313,7 +313,6 @@ export class SaveService {
       if (s.version < SAVE_VERSION) return 'scrapped';
       if (s.version > SAVE_VERSION || !Array.isArray(s.layers)) return undefined;
       // Fill any fields added after this save was written.
-      // E21: a save without `rules` is classic (and has no salvage state).
       const base = createInitialState(s.seed);
       // Phase 5 E12: resource quantities are saved as Decimal strings.
       const raw = s as unknown as { resources?: Record<string, BigLike>; caps?: Record<string, BigLike> };

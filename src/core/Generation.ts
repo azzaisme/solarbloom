@@ -90,7 +90,7 @@ function generatePark(seed: number, lh: number, x: number, z: number, gen = GROU
   return gen >= OLD_CITY_GEN_ID ? stampOldCity(t) : t;
 }
 
-/** Ground generations: classic games are 4 at most; 5 is the Old City (core/GameState OLD_CITY_GEN). */
+/** Ground generations: 4 is the city ground; 5 is the Old City laid over it (core/GameState OLD_CITY_GEN). */
 const GROUND_GEN_CLASSIC = 4;
 const OLD_CITY_GEN_ID = 5;
 
