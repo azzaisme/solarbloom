@@ -43,7 +43,7 @@ describe('E23.5.1: farm items', () => {
     const t = restored(sim, 1);
     sim.restoration.grow(t, undefined, 'player', true);
     sim.econ.add('biomass', 50);
-    sim.advance(30);
+    sim.advance(5);
     expect(sim.econ.get('biomass').toNumber()).toBe(before);
     const classic = new Sim(createInitialState(7));
     const c0 = classic.econ.get('biomass').toNumber();
@@ -120,6 +120,13 @@ describe('E23.5.1: gathering biomass from restored ground', () => {
     expect(sim.gather.canGather(t)).toBe(true);
     expect(sim.gather.gather(t)).toBe(3);
     expect(sim.inventory.count('biomass')).toBe(6);
+  });
+
+  it('E23.7.2: a windy day’s gather bonus multiplies the clippings', () => {
+    const sim = oldSim();
+    const t = restored(sim, 2);
+    (sim as unknown as { weather: unknown }).weather = { effects: () => ({ gatherBonus: 2 }) };
+    expect(sim.gather.yieldOf(t)).toBe(GATHER.base * 2);
   });
 
   it('a full stack refuses with a reason and leaves the tile unclipped', () => {

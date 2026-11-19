@@ -7,6 +7,8 @@ import { GROUND } from '../core/GameState';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { itemDef } from '../data/items';
 import { GATHER } from '../data/farm';
+import { crossName, CROPS, type CropId } from '../data/crops';
+import { planterHtml } from '../ui/PlanterPanel';
 import type { TileData } from '../core/types';
 import { flyUp, fountainHtml, OldCityPanel, SpeechBubble, storageAct, storageHtml, tradeHtml } from '../ui/OldCityPanel';
 import { PARK } from '../core/Areas';
@@ -80,6 +82,23 @@ export class OldCityController {
     });
     // E23.7.4: a pile coming back (slowly, or blown in by a storm) is redrawn at its new size
     host.sim.bus.on('pile.refilled', (e) => host.markTile(e.x, e.z));
+    host.sim.bus.on('planter.harvested', (e) => {
+      const m = host.sim.machine(e.machineId);
+      if (!m) return;
+      const sc = host.screenOf(m.x, m.z);
+      const parts = (['food', 'biomass', 'seeds'] as const).filter((k) => e[k] > 0).map((k) => `+${e[k]} ${MATERIALS[k].icon}`);
+      flyUp(host.hud.root, parts.join('  '), sc.x, sc.y);
+      host.sound('salvage', 'seeds');
+    });
+    host.sim.bus.on('seeds.found', (e) => {
+      const c = CROPS[e.crop as CropId];
+      if (c) host.hud.toast(`${c.icon} ${c.name} seeds<small>Plant them in a planter.</small>`, '', 5);
+    });
+    // E23.6.2: a crossbreed found at a harvest
+    host.sim.bus.on('cross.found', (e) => {
+      const a = CROPS[e.a as CropId];
+      if (a) host.hud.toast(`${a.icon} ${crossName(e.a as CropId, e.b as CropId)}<small>A new cross. Plant it in a planter.</small>`, '', 5);
+    });
     host.sim.bus.on('fountain.tier', () => this.panel.close());
     host.sim.bus.on('pack.full', (e) => host.hud.toast(`Your ${itemDef(e.material).name} stack is full<small>Put some in storage at the fountain or a chest.</small>`, '', 2.6));
   }
@@ -256,6 +275,32 @@ export class OldCityController {
       return;
     }
     this.startHold('salvage', SALVAGE.holdSeconds, () => this.sim.salvage.salvage(id), viaClick);
+  }
+
+  /** E23.5.2: a planter: harvest a ripe bed straight away, otherwise open its panel (plant, feed, extras). */
+  planter(m: MachineData) {
+    const f = this.sim.farm;
+    if (f.look(m).ripe) {
+      f.harvest(m);
+      this.host.bot.visuals.play('interact');
+      return;
+    }
+    this.host.sound('click');
+    this.panel.open(
+      () => planterHtml(this.sim, m),
+      (act, arg) => {
+        // a crossbreed's arg is its two parents, 'a+b' (E23.6.2)
+        const [crop, cross] = (arg ?? '').split('+') as [CropId, CropId | undefined];
+        if (act === 'plant' && f.plant(m, crop, cross)) {
+          this.host.sound('salvage', 'seeds');
+          this.panel.close();
+        } else if (act === 'harvest') {
+          f.harvest(m);
+          this.panel.close();
+        } else if (act === 'feed' && f.feed(m)) this.host.sound('deliver');
+        else if (act === 'extra' && f.addExtra(m, arg as 'trellis' | 'flooded')) this.host.sound('deliver');
+      },
+    );
   }
 
   /** E23.5.1: clip restored ground for biomass: hold Interact 0.6 s, like salvaging. */

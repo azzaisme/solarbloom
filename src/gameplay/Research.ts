@@ -213,7 +213,7 @@ export class Research {
 
   /** Is an upgrade's system in the game (so a level bought does something)? */
   systemReady(needs: UpgradeSystemId): boolean {
-    const s = this.sim as unknown as { charge?: unknown; power?: { hasBatteries?(): boolean }; water?: unknown; farm?: { researchReady?: boolean }; couriers?: unknown };
+    const s = this.sim as unknown as { charge?: unknown; power?: { hasBatteries?(): boolean }; water?: unknown; farm?: { researchReady?: boolean }; compost?: { researchReady?: boolean }; couriers?: unknown };
     switch (needs) {
       case 'always':
       case 'drones':
@@ -228,6 +228,8 @@ export class Research {
         return !!(s.water as { researchReady?: boolean } | undefined)?.researchReady;
       case 'farm':
         return !!s.farm?.researchReady;
+      case 'compost':
+        return !!s.compost?.researchReady; // E23.5.3 (#509): CompostSystem reads compostSpeed
       case 'couriers':
         return !!s.couriers;
     }

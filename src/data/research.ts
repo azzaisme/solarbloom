@@ -38,7 +38,7 @@ export type Find =
  * The system an upgrade works through. An upgrade is offered only once its system is in the game and reads it:
  * research never sells a level that does nothing.
  */
-export type UpgradeSystemId = 'always' | 'charge' | 'power' | 'batteries' | 'water' | 'farm' | 'drones' | 'couriers';
+export type UpgradeSystemId = 'always' | 'charge' | 'power' | 'batteries' | 'water' | 'farm' | 'compost' | 'drones' | 'couriers';
 
 /** What a finished project gives. */
 export type Gift =
@@ -108,9 +108,9 @@ export const RESEARCH_UPGRADES: ResearchUpgradeDef[] = [
   { id: 'reservoirSize', branch: 'water', name: 'Bigger reservoirs', each: 'Reservoirs hold more', per: 0.25, needs: 'water', levels: [{ cost: { clay: 12 } }, { cost: { clay: 20, scrap: 10 } }, { cost: { clay: 30, gears: 6 } }] },
   { id: 'evaporation', branch: 'water', name: 'Shaded water', each: 'Ponds and reservoirs lose less to the sun', per: 0.2, needs: 'water', levels: [{ cost: { glassPane: 2, planks: 4 } }, { cost: { glassPane: 4, planks: 6 } }, { cost: { glassPane: 6, clay: 10 } }] },
   // Farm (E23.5 reads these)
-  { id: 'compostSpeed', branch: 'farm', name: 'Busy worms', each: 'Compost and fertiliser come sooner', per: 0.2, needs: 'farm', levels: [{ cost: { planks: 6, seeds: 6 } }, { cost: { planks: 10, clay: 6 } }, { cost: { planks: 14, seeds: 16 } }] },
+  { id: 'compostSpeed', branch: 'farm', name: 'Busy worms', each: 'Compost and fertiliser come sooner', per: 0.2, needs: 'compost', levels: [{ cost: { planks: 6, seeds: 6 } }, { cost: { planks: 10, clay: 6 } }, { cost: { planks: 14, seeds: 16 } }] },
   { id: 'cropGrowth', branch: 'farm', name: 'Kind soil', each: 'Crops grow a little faster', per: 0.1, needs: 'farm', levels: [{ cost: { seeds: 10, clay: 6 } }, { cost: { seeds: 16, glassPane: 2 } }, { cost: { seeds: 24, sunstone: 4 } }] },
-  { id: 'crossbreed', branch: 'farm', name: 'Crossbreeds', each: 'Neighbouring crops sometimes cross into a new kind', per: 1, needs: 'farm', levels: [{ cost: { seeds: 20, glassPane: 2 } }] },
+  { id: 'crossbreed', branch: 'farm', name: 'Crossbreeds', each: 'A crop harvested beside a different one gives a cross of the two', per: 1, needs: 'farm', levels: [{ cost: { seeds: 20, glassPane: 2 } }] },
   // Drones (E23.6.3 and E18's roles read these)
   { id: 'droneRange', branch: 'drones', name: 'Further wings', each: 'Drones work further from their hub', per: 2, needs: 'drones', levels: [{ cost: { glassPane: 2, wire: 2 } }, { cost: { glassPane: 4, motor: 1 } }, { cost: { sunCell: 1, motor: 2 } }] },
   { id: 'droneSpeed', branch: 'drones', name: 'Quicker wings', each: 'Drones fly a little faster', per: 0.15, needs: 'drones', levels: [{ cost: { motor: 1 } }, { cost: { motor: 2, gears: 4 } }, { cost: { motor: 3, sunstone: 4 } }] },
