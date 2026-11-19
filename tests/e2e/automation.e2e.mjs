@@ -456,7 +456,10 @@ try {
     await page.waitForTimeout(300);
     await page.evaluate((id) => {
       const g = window.solarbloom, m = g.sim.machine(id), cam = g.camera;
-      cam.goal.set(m.x + m.size / 2, (cam.ground?.(m.x + m.size / 2, m.z + m.size / 2) ?? cam.goal.y) + 0.5, m.z + m.size / 2);
+      // the chase camera looks a little past its goal: set the goal a step toward the camera so the line sits mid-frame
+      const yr = (cam.yaw * Math.PI) / 180, back = 2.2;
+      const x = m.x + m.size / 2 + Math.sin(yr) * back, z = m.z + m.size / 2 + Math.cos(yr) * back;
+      cam.goal.set(x, (cam.ground?.(m.x + m.size / 2, m.z + m.size / 2) ?? cam.goal.y) + 0.5, z);
       cam.zoomGoal = 4.2; // bigger is closer
       cam.follow = 6;
     }, ids.asm);
