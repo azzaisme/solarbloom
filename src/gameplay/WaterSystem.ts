@@ -856,7 +856,11 @@ export class WaterSystem {
     this.pipes.tick(days);
   }
 
-  /** Plants asking the grid for power this step (they run whenever their tank has room or somewhere to empty). */
+  /**
+   * Plants asking the grid for power this step: only while their water has somewhere to go (room in the tank, or
+   * in the pond or canal on its bank). A full tank on a line nothing draws from sits idle and draws nothing; as soon
+   * as the pipes take from it, it has room again and runs.
+   */
   readonly desalinating = new Set<string>();
 
   /**
@@ -870,7 +874,7 @@ export class WaterSystem {
       const bank = this.bankOf(m);
       const room = (1 - this.levelOf(t.id)) * t.capacity;
       const outlet = bank ? (1 - this.levelOf(bank.id)) * bank.capacity : 0;
-      if (room <= 1e-9 && outlet <= 1e-9 && !this.pipes.netsOf(m).length) continue;
+      if (room <= 1e-9 && outlet <= 1e-9) continue; // full, and nowhere for more to go: idle, no power
       this.desalinating.add(m.id);
       if (this.pipes.powered(m)) this.fill(t.id, WATER_NET.desal.perDay * days);
       // what it has made runs out into its bank's pond or canal with or without power
