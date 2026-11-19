@@ -77,7 +77,8 @@ export interface MachineRecipe {
 
 /** §machines, in the order they are unlocked. */
 export const MACHINE_RECIPES: MachineRecipe[] = [
-  { id: 'planterBox', name: 'Planter box', cost: { planks: 3 }, unlock: { home: true }, owner: 'E23.5' },
+  // the owner's call: planter boxes open when Timber does (Tide, Saltwind Beach); until then the farm is gathering
+  { id: 'planterBox', name: 'Planter box', cost: { planks: 3 }, unlock: { keeper: 'saltwind' }, builds: 'planter' },
   { id: 'compostBin', name: 'Compost bin', cost: { planks: 4, scrap: 2 }, unlock: { home: true }, owner: 'E23.5' },
   // E23.3 (#422): Bloom Relays are the grid's poles, so the power pole builds one
   { id: 'powerPole', name: 'Power pole', cost: { planks: 1, wire: 1 }, unlock: { keeper: 'mastRow' }, builds: 'relay' },

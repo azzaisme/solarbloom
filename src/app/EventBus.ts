@@ -36,6 +36,17 @@ export interface GameEvents {
   'craft.done': { id: string; made: number };
   /** E23.5.1: bloombot clipped restored ground for biomass (`got` units into the backpack). */
   'biomass.gathered': { tileId: string; x: number; z: number; got: number };
+  /** E23.5.2: a planter's bed changed (planted, a new stage, fed, an extra, harvested). */
+  'planter.changed': { machineId: string };
+  'planter.ripe': { machineId: string; crop: string };
+  'planter.harvested': { machineId: string; crop: string; food: number; biomass: number; seeds: number };
+  /**
+   * E21.10 caches: one was opened (emitted by whoever opens caches; E23.5.2.3 listens for the seeds inside).
+   * Nothing opens caches yet: the E21.10 data lists them but no system emits this so far.
+   */
+  'cache.opened': { cacheId: string; x: number; z: number };
+  /** E23.5.2.3: a crop's seed packet found while exploring. */
+  'seeds.found': { crop: string; region: string };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
   /** E23.7.4: a pile gained units back (slowly over game days, or all at once in a storm); `left` units now. */
