@@ -1812,6 +1812,14 @@ export class Game {
     else if (r === 'select' || r === 'wake') v.play('interact');
   }
 
+  /**
+   * E23.6.4: a machine's panel opened from the keyboard takes the focus, so the arrows and Enter reach its choices (a
+   * hub's roles, an Assembler's recipe) as the d-pad and A do; Esc closes it and the arrows walk again.
+   */
+  private focusPanelForKeys() {
+    if (this.bot?.lastInput !== 'pad') requestAnimationFrame(() => this.padFocus?.button(13));
+  }
+
   /** Bloombot (G.4): E / A: the current tool on the tile in front (Inspect pulses; build tools build). */
   private botAct() {
     if (!this.bot || this.cinematic || this.paused || this.hud.modalOpen || this.bot.visuals.busy === 'assemble') return;
@@ -1825,9 +1833,7 @@ export class Game {
     const sc = aim ?? this.botTileScreen(p.tile);
     const r = this.actAt(p, sc.x, sc.y, tool, false);
     this.botAnim(r);
-    // E23.6.4: a machine's panel opened from the keyboard takes the focus, so the arrows reach its choices (as the
-    // d-pad does); Esc closes it and the arrows walk again
-    if (r === 'select' && this.bot.lastInput !== 'pad') requestAnimationFrame(() => this.padFocus?.button(13));
+    if (r === 'select') this.focusPanelForKeys();
     this.botPreviewKey = '';
     this.buildKey = '';
   }
@@ -1964,7 +1970,9 @@ export class Game {
         frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size },
         run: () => {
           if (this.sim.power.reset(occ)) return b.visuals.play('interact');
-          this.botAnim(this.actAt(p, sc().x, sc().y, 'inspect', false));
+          const r = this.actAt(p, sc().x, sc().y, 'inspect', false);
+          this.botAnim(r);
+          if (r === 'select') this.focusPanelForKeys();
         },
       });
     } else {

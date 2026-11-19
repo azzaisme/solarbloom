@@ -56,14 +56,90 @@ async function stand(page, x, z) {
   await page.waitForTimeout(300);
 }
 
-/** Places what is in hand at (x, z): Space on the keyboard, A on the pad. */
+/**
+ * Places what is in hand with its corner at (x, z), aimed as a player aims in third person (#542): build mode places
+ * under the crosshair, so bloombot stands a step or two away and the view turns and tilts until the crosshair rests
+ * on the spot, then Space or A places.
+ * - pad: the right stick, frame by frame (as tests/e2e/gamepad-driver.js does);
+ * - keyboard and mouse: mouse-look, through the handler the captured mouse calls (`Game.mouseLook`: a headless
+ *   browser can't capture the pointer).
+ * Returns whether it got aimed.
+ */
 async function place(page, dev, x, z) {
-  await stand(page, x, z);
-  if (dev === 'keys') {
-    await page.evaluate(() => window.solarbloom.onLeave()); // keyboard alone: build mode aims in front of bloombot
-    await page.keyboard.press('Space');
-  } else await pressPad(page, 0);
-  await page.waitForTimeout(250);
+  await page.waitForFunction(() => window.solarbloom.bot.visuals.busy !== 'assemble', null, { timeout: 90000 }).catch(() => {});
+  const aimed = await page.evaluate(async ({ x, z, dev }) => {
+    const g = window.solarbloom;
+    const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+    const size = { crate: 1, assembler: 2 }[g.hud.currentTool] ?? 1;
+    const cx = x + size / 2, cz = z + size / 2;
+    const state = () => {
+      const p = g.bot.pose;
+      const aim = g.crosshairPick();
+      const a = aim && g.sim.build.anchorFor(g.hud.currentTool, aim.fx, aim.fz);
+      if (a && a.x === x && a.z === z) return { on: true };
+      const tx = cx - p.x, tz = cz - p.z;
+      const want = (Math.atan2(tx, tz) * 180) / Math.PI;
+      const now = aim ? (Math.atan2(aim.fx - p.x, aim.fz - p.z) * 180) / Math.PI : g.camera.yaw + 180;
+      return { on: false, yawErr: ((((want - now) % 360) + 540) % 360) - 180, distErr: (aim ? Math.hypot(aim.fx - p.x, aim.fz - p.z) : 0) - Math.hypot(tx, tz) };
+    };
+    for (const k of [2, 2.5, 1.6])
+      for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+        const sx = cx + dx * (k + (size - 1) / 2), sz = cz + dz * (k + (size - 1) / 2);
+        const t = g.sim.grid.get('g', Math.floor(sx), Math.floor(sz));
+        if (!t || t.occupantId || t.blocked) continue;
+        g.bot.cancelWalk();
+        g.bot.teleport('g', sx, sz);
+        if (Math.hypot(g.bot.pose.x - sx, g.bot.pose.z - sz) > 0.05) continue; // not somewhere bloombot stands
+        let still = 0; // frames the crosshair has rested on the spot (the view eases: it must stay there)
+        const t0 = performance.now();
+        let last;
+        // (a headless browser draws a frame a second or so: the steps are few and large, and settle over two frames)
+        for (let i = 0; i < 40 && performance.now() - t0 < 90000; i++) {
+          await frame();
+          await frame();
+          const st = state();
+          if (st.on) {
+            if (dev === 'pad') window.__pad.axes[2] = window.__pad.axes[3] = 0;
+            if (++still >= 2) return true;
+            continue;
+          }
+          still = 0;
+          last = st;
+          if (dev === 'pad') {
+            window.__pad.axes[2] = Math.abs(st.yawErr) > 3 ? -Math.max(-1, Math.min(1, st.yawErr / 40)) * 0.6 : 0;
+            window.__pad.axes[3] = Math.abs(st.yawErr) <= 25 ? Math.max(-1, Math.min(1, st.distErr)) * 0.5 : 0;
+            continue;
+          }
+          // keyboard and mouse: the captured mouse's movement, through the game's own handler (Game.mouseLook); the
+          // crosshair turns with the view, 0.16° a pixel
+          g.mouseLook(-st.yawErr / 0.16, Math.abs(st.yawErr) <= 10 ? Math.max(-60, Math.min(60, st.distErr * 40)) : 0);
+        }
+        if (dev === 'pad') window.__pad.axes[2] = window.__pad.axes[3] = 0;
+        console.log(`aim from ${sx},${sz}: ${JSON.stringify(last)}`);
+      }
+    return false;
+  }, { x, z, dev });
+  if (!aimed) {
+    console.log(`   place ${x},${z}: the crosshair never rested on it`);
+    return false;
+  }
+  await page.waitForTimeout(100);
+  const before = await page.evaluate(() => {
+    const g = window.solarbloom;
+    window.__fails = [];
+    if (!g.hud.__failHook) {
+      const o = g.hud.showFail.bind(g.hud);
+      g.hud.showFail = (m, ...a) => (window.__fails.push(m), o(m, ...a));
+      g.hud.__failHook = true;
+    }
+    return g.sim.state.machines.length;
+  });
+  if (dev === 'pad') await pressPad(page, 0);
+  else await page.keyboard.press('Space');
+  await page.waitForTimeout(400);
+  const after = await page.evaluate(() => ({ n: window.solarbloom.sim.state.machines.length, fails: window.__fails, tool: window.solarbloom.hud.currentTool, busy: window.solarbloom.bot.visuals.busy }));
+  if (after.n === before) console.log(`   place ${x},${z}: aimed, but nothing was built (${JSON.stringify(after)})`);
+  return after.n > before;
 }
 
 /** Moves the focus onto an element with the d-pad or the arrow keys, as a player would. */
@@ -90,7 +166,6 @@ async function moveTo(page, sel, dev) {
 }
 const go = (page, dev) => (dev === 'pad' ? pressPad(page, 0) : page.keyboard.press('Enter'));
 const back = (page, dev) => (dev === 'pad' ? pressPad(page, 1) : page.keyboard.press('Escape'));
-const act = (page, dev) => (dev === 'pad' ? pressPad(page, 2) : page.keyboard.press('Space'));
 const interact = (page, dev) => (dev === 'pad' ? pressPad(page, 0) : page.keyboard.press('KeyE'));
 
 async function open(dev) {
@@ -98,6 +173,7 @@ async function open(dev) {
   page.setDefaultTimeout(300000);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => m.text().startsWith('aim from') && console.log(`   ${m.text()}`));
   if (dev === 'pad') await page.addInitScript(PAD);
   await page.goto(`${base}/?slot=1&new=1&gfx=deck`);
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
@@ -146,16 +222,18 @@ try {
     const { page, errors } = await open(dev);
     const T = (s) => `E23.6.4 ${dev}: ${s}`;
     // the hub's panel: the Courier role is open (things were carried by hand); pick it with the arrows / d-pad
-    // (bloombot acts on the hub, Space or X, and its panel opens)
+    // (Interact, E or A, on the hub: "Look at Drone Hub" opens its panel)
     const hubAt = await page.evaluate(() => {
       const m = window.solarbloom.sim.machinesOfType('droneHub')[0];
       return m && { id: m.id, x: m.x, z: m.z };
     });
     const hubId = hubAt?.id;
     await stand(page, hubAt.x, hubAt.z);
-    await act(page, dev);
+    const hubTarget = await page.evaluate(() => window.solarbloom.interactTarget()?.id);
+    check(hubTarget === `m:${hubId}`, T(`facing the hub, Interact offers to look at it (${hubTarget})`));
+    await interact(page, dev);
     await page.waitForSelector('#inspect.open', { timeout: 10000 }).catch(() => {});
-    check(await moveTo(page, `[data-role="${hubId}|courier|1"]`, dev), T('acting on the hub opens its panel; reach the Courier role there'));
+    check(await moveTo(page, `[data-role="${hubId}|courier|1"]`, dev), T('Interact on the hub opens its panel; reach the Courier role there'));
     await page.screenshot({ path: `${dir}/ui-hub-courier-${dev}.png` });
     await go(page, dev);
     await page.waitForTimeout(200);
@@ -235,7 +313,7 @@ try {
       return { x: m.x, z: m.z };
     }, ids.asm);
     await stand(page, asmAt.x, asmAt.z);
-    await act(page, dev);
+    await interact(page, dev);
     await page.waitForSelector('#inspect.open', { timeout: 10000 }).catch(() => {});
     const wireBtn = `[data-asm="${ids.asm}|wire"]`;
     check(await moveTo(page, wireBtn, dev), T('reach Wire in the Assembler panel'));
