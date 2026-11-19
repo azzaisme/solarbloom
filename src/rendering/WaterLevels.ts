@@ -4,7 +4,7 @@ import { levelY } from '../core/Height';
 import type { TileData } from '../core/types';
 import { WATER_NET } from '../data/water';
 import type { Sim } from '../gameplay/Sim';
-import type { WaterBody } from '../gameplay/WaterSystem';
+import { WaterSystem, type WaterBody } from '../gameplay/WaterSystem';
 import { mat } from './Materials';
 import { PALETTE } from './Palette';
 import { WATER } from './Water';
@@ -36,6 +36,8 @@ export class WaterLevels {
     private sim: Sim,
     private parent: pc.Entity,
     private device: pc.GraphicsDevice,
+    /** a body's look stepped: its tiles' lily pads move to the water still there (the chunks redraw them) */
+    private onStep?: (tiles: TileData[]) => void,
   ) {}
 
   update() {
@@ -49,9 +51,11 @@ export class WaterLevels {
       const v = this.views.get(b.id) ?? { step: -1, meshes: [] };
       this.views.set(b.id, v);
       if (v.step === step) continue;
+      const first = v.step < 0;
       v.step = step;
       this.drop(v);
       if (step > 0) this.build(v, b, step / WATER_NET.lookSteps);
+      if (!first || step > 0) this.onStep?.([...b.tiles].map((id) => this.sim.grid.byTileId(id)).filter((t): t is TileData => !!t));
     }
     for (const [id, v] of this.views) {
       if (live.has(id)) continue;
@@ -67,53 +71,12 @@ export class WaterLevels {
     v.meshes = [];
   }
 
-  /** How far each tile lies from the bank (1 = on it), by breadth-first walk inward. */
-  private depths(b: WaterBody): { tiles: TileData[]; d: Map<string, number>; max: number } {
+  private build(v: View, b: WaterBody, empty: number) {
+    const { d, count, max } = this.sim.water.depths(b);
     const g = this.sim.grid;
     const tiles = [...b.tiles].map((id) => g.byTileId(id)).filter((t): t is TileData => !!t);
-    const d = new Map<string, number>();
-    const queue: TileData[] = [];
-    for (const t of tiles)
-      if (SIDES.some(([dx, dz]) => !b.tiles.has(g.peek(GROUND, t.x + dx, t.z + dz)?.id ?? ''))) {
-        d.set(t.id, 1);
-        queue.push(t);
-      }
-    let max = 1;
-    for (let i = 0; i < queue.length; i++) {
-      const t = queue[i];
-      const k = d.get(t.id)!;
-      for (const [dx, dz] of SIDES) {
-        const n = g.peek(GROUND, t.x + dx, t.z + dz);
-        if (!n || !b.tiles.has(n.id) || d.has(n.id)) continue;
-        d.set(n.id, k + 1);
-        max = Math.max(max, k + 1);
-        queue.push(n);
-      }
-    }
-    return { tiles, d, max };
-  }
-
-  /**
-   * How far in from the bank the bed shows (tiles), so the bed's area matches the share drained: each tile at
-   * depth k shows `clamp(front − (k − 1), 0, 1)` of itself, and those add up to `empty` × the body's area.
-   */
-  static front(depths: number[], max: number, empty: number): number {
-    const want = empty * depths.length;
-    const count = new Array<number>(max + 2).fill(0);
-    for (const k of depths) count[k]++;
-    let done = 0;
-    for (let k = 1; k <= max; k++) {
-      if (done + count[k] >= want) return k - 1 + (count[k] ? (want - done) / count[k] : 0);
-      done += count[k];
-    }
-    return max;
-  }
-
-  private build(v: View, b: WaterBody, empty: number) {
-    const { tiles, d, max } = this.depths(b);
-    const g = this.sim.grid;
     const base = g.layer(GROUND)!.height;
-    const front = WaterLevels.front(tiles.map((t) => d.get(t.id)!), max, empty);
+    const front = WaterSystem.front(count, max, empty);
     const bed: number[] = [];
     const rim: number[] = [];
     const quad = (out: number[], x0: number, z0: number, x1: number, z1: number, y: number) => out.push(x0, y, z0, x1, y, z0, x1, y, z1, x0, y, z1);

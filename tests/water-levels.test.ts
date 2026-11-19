@@ -112,20 +112,30 @@ describe('E23.4.1: water levels (sim.water)', () => {
     expect(sim.water.levelOf(b.id)).toBe(1);
   });
 
-  it("Cistern Basin's pond starts dry; rain fills it; its springs top it up once the Old Cistern wakes", () => {
+  it("Cistern Basin's pond stays dry until the Old Cistern wakes; waking fills it; its springs keep it topped up", () => {
     const sim = city();
     const p = sim.water.bodyAt(pondTile(sim))!;
     expect(p.region).toBe('cistern');
     expect(sim.water.levelOf(p.id)).toBe(0);
+    expect(sim.water.dormant(p)).toBe(true);
     weather(sim, 'cloudy');
     days(sim, 2);
     expect(sim.water.levelOf(p.id)).toBe(0); // no springs while it sleeps
-    weather(sim, 'rain');
-    days(sim, 0.1);
-    expect(sim.water.levelOf(p.id)).toBeGreaterThan(0.2);
-    sim.water.draw(p.id, p.capacity);
-    sim.areas.clear('cistern', true);
+    weather(sim, 'storm');
+    days(sim, 1);
+    expect(sim.water.levelOf(p.id)).toBe(0); // and no rain: the pond is the landmark's payoff
+    // the Old Cistern wakes: its pond fills before the player's eyes, over `wakeRush` seconds
     weather(sim, 'cloudy');
+    sim.areas.clear('cistern', true);
+    expect(sim.water.dormant(p)).toBe(false);
+    for (let i = 0; i < WATER_NET.wakeRush / 2; i++) sim.water.tick(1);
+    const half = sim.water.levelOf(p.id);
+    expect(half).toBeGreaterThan(0.4);
+    expect(half).toBeLessThan(0.6);
+    for (let i = 0; i < WATER_NET.wakeRush / 2 + 1; i++) sim.water.tick(1);
+    expect(sim.water.levelOf(p.id)).toBe(1);
+    // after the rush, only the springs
+    sim.water.draw(p.id, p.capacity);
     days(sim, 0.25);
     expect(sim.water.levelOf(p.id)).toBeCloseTo(WATER_NET.springs.cistern! * 0.25, 2);
     // springs outrun the sun
@@ -178,6 +188,100 @@ describe('E23.4.1: water levels (sim.water)', () => {
     expect(Object.keys(sim.state.water!.levels)).toEqual([b2.id]);
   });
 
+  it('weather acts on every body alike, even one nothing has touched', () => {
+    const sim = city();
+    const b = sim.water.bodyAt(canalTile(sim))!;
+    expect(sim.water.tracked()).toEqual([]);
+    weather(sim, 'sunny');
+    days(sim, 1);
+    const evap = sim.weather.effects().evaporation;
+    expect(sim.water.levelOf(b.id)).toBeCloseTo(1 - evap, 2);
+    // every region's canals and ponds, not just the ones looked at
+    for (const r of REGIONS)
+      for (const q of r.water ?? []) {
+        const w = sim.water.bodyAt(sim.grid.get(GROUND, q.x, q.z));
+        if (!w || sim.water.dormant(w)) continue;
+        expect(sim.water.levelOf(w.id), `${r.id} ${w.id}`).toBeLessThan(1);
+        expect(sim.water.levelOf(w.id)).toBeGreaterThanOrEqual(WATER_NET.evaporationFloor);
+      }
+  });
+
+  /** The park's shallow pond, restored. */
+  const parkPond = (sim: Sim) => {
+    const pond: TileData[] = [];
+    for (let z = 0; z < 16; z++)
+      for (let x = 0; x < 16; x++) {
+        const t = sim.grid.get(GROUND, x, z)!;
+        if (t.feature === 'water' && !t.blocked) pond.push(t);
+      }
+    for (const t of pond) {
+      t.ground = 'restored';
+      sim.grid.touch(t);
+    }
+    return pond;
+  };
+
+  it('a body split in two keeps its level in both pieces (never full again), and the gone tile leaves it', () => {
+    const sim = city();
+    const pond = parkPond(sim);
+    const b = sim.water.bodyAt(pond[0])!;
+    expect(b.tiles.size).toBe(pond.length);
+    sim.water.draw(b.id, b.capacity * 0.6); // at 0.4
+    // silt up a whole column across the pond: it splits in two
+    const xs = [...new Set(pond.map((t) => t.x))].sort((a, c) => a - c);
+    const cut = xs[Math.floor(xs.length / 2)];
+    const gone = pond.filter((t) => t.x === cut);
+    const west = pond.filter((t) => t.x < cut);
+    const east = pond.filter((t) => t.x > cut);
+    expect(west.length).toBeGreaterThan(0);
+    expect(east.length).toBeGreaterThan(0);
+    for (const t of gone) {
+      t.ground = 'polluted';
+      sim.grid.touch(t);
+    }
+    for (const t of gone) expect(sim.water.bodyAt(t)).toBeUndefined();
+    const w = sim.water.bodyAt(west[0])!;
+    const e = sim.water.bodyAt(east[0])!;
+    expect(w).not.toBe(e);
+    expect(w.tiles.size + e.tiles.size).toBe(pond.length - gone.length);
+    expect(sim.water.levelOf(w.id)).toBeCloseTo(0.4, 6);
+    expect(sim.water.levelOf(e.id)).toBeCloseTo(0.4, 6);
+    expect(Object.keys(sim.state.water!.levels).sort()).toEqual([w.id, e.id].sort());
+    // joined again, the pool keeps what the pieces hold; the restored column arrives full
+    for (const t of gone) {
+      t.ground = 'restored';
+      sim.grid.touch(t);
+    }
+    const j = sim.water.bodyAt(pond[0])!;
+    expect(j.tiles.size).toBe(pond.length);
+    expect(sim.water.levelOf(j.id)).toBeCloseTo((0.4 * (pond.length - gone.length) + gone.length) / pond.length, 6);
+    // a bloom on a water tile is not a change of shape: the cache stays
+    pond[0].bloom = 2;
+    sim.grid.touch(pond[0]);
+    expect(sim.water.bodyAt(pond[0])).toBe(j);
+  });
+
+  it('as a pond drains, its lily pads and koi keep to the water still there (the bank bares first)', () => {
+    const sim = city();
+    const pond = parkPond(sim);
+    const b = sim.water.bodyAt(pond[0])!;
+    const { d, max } = sim.water.depths(b);
+    const bank = pond.find((t) => d.get(t.id) === 1)!;
+    const deep = pond.find((t) => d.get(t.id) === max)!;
+    expect(max).toBeGreaterThan(1);
+    expect(pond.every((t) => sim.water.covered(t))).toBe(true);
+    sim.water.draw(b.id, b.capacity * 0.5);
+    expect(sim.water.covered(bank)).toBe(false);
+    expect(sim.water.covered(deep)).toBe(true);
+    // some of the pond is still water (the park pond is small: its bank is most of it)
+    const wet = pond.filter((t) => sim.water.covered(t)).length;
+    expect(wet).toBeGreaterThan(0);
+    expect(wet).toBeLessThan(pond.length);
+    sim.water.draw(b.id, b.capacity);
+    expect(pond.some((t) => sim.water.covered(t))).toBe(false);
+    expect(sim.water.covered(sim.grid.get(GROUND, 30, 30))).toBe(false); // not water at all
+  });
+
   it('levels survive a save and load', () => {
     const sim = city();
     const b = sim.water.bodyAt(canalTile(sim))!;
@@ -227,6 +331,7 @@ describe('E23.4.1: water levels (sim.water)', () => {
     const other = sim.areas.map.areaOfCell(pondTile(sim).x, pondTile(sim).z);
     expect(area).not.toBe(other);
     weather(sim, 'cloudy');
+    sim.areas.clear(area, true); // seen
     expect(sim.water.isLow(area)).toBe(false); // full
     sim.water.draw(b.id, b.capacity * (1 - WATER_NET.fadeBelow) - 1); // just above the line
     expect(sim.water.isLow(area)).toBe(false);
@@ -235,8 +340,26 @@ describe('E23.4.1: water levels (sim.water)', () => {
     expect(sim.water.isLow(PARK)).toBe(false);
     sim.water.fill(b.id, b.capacity);
     expect(sim.water.isLow(area)).toBe(false);
-    // Cistern Basin's pond starts dry: its area is short of water until rain or its springs fill it
+    // Cistern Basin's pond starts dry, but that is its landmark's story, not a shortage (and unseen at first)
+    expect(sim.water.isLow(other)).toBe(false);
+    sim.areas.clear(other, true); // seen, and the Old Cistern wakes
+    const pond = sim.water.bodyAt(pondTile(sim))!;
+    expect(sim.water.isLow(other)).toBe(sim.water.levelOf(pond.id) < WATER_NET.fadeBelow);
+    sim.water.draw(pond.id, pond.capacity);
     expect(sim.water.isLow(other)).toBe(true);
+  });
+
+  it('the advisor never hints at an area the player has not seen (still behind the clouds)', () => {
+    const sim = city();
+    const t = canalTile(sim);
+    const b = sim.water.bodyAt(t)!;
+    const area = sim.areas.map.areaOfCell(t.x, t.z);
+    sim.state.areas[area].sealed = true; // behind the clouds, as before its gate opens
+    expect(sim.areas.fog(area)).toBe('hidden');
+    sim.water.draw(b.id, b.capacity);
+    expect(sim.water.isLow(area)).toBe(false);
+    delete sim.state.areas[area].sealed; // its gate opens
+    expect(sim.water.isLow(area)).toBe(true);
   });
   it("E23.5's planters drink from the water in reach: a dry pond wilts them (never kills them), and refilling brings them back", () => {
     const sim = city();

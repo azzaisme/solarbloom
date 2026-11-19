@@ -344,7 +344,9 @@ export class Game {
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
-    this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice, (tiles) => {
+      for (const t of tiles) this.chunks.markTile(t);
+    });
     this.transitions = new TransitionRenderer(this.sim);
     this.chunks.transitions = this.transitions;
     this.cozy = new Cozy(this.sim);

@@ -21,6 +21,11 @@ export const WATER_NET = {
   springs: { cistern: 1.5 } as Partial<Record<RegionId, number>>,
   /** springs only run once this region's landmark is awake (the Old Cistern holds water again) */
   springsNeedLandmark: true,
+  /**
+   * until then that water is dormant (dry, whatever the weather); waking the landmark fills it from empty to full
+   * over this many seconds, so the player sees the payoff, then the springs keep it topped up
+   */
+  wakeRush: 40,
   /** the level a body starts at before anything has touched it (default full); the dry basin starts empty */
   startLevel: { cistern: 0 } as Partial<Record<RegionId, number>>,
   /** a tile is watered when a body this close (tiles, square reach) has more than `dryBelow` of its capacity */

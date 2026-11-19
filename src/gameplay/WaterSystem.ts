@@ -63,8 +63,14 @@ export class WaterSystem {
   version = 0;
 
   constructor(private sim: Sim) {
+    // A tile that joins or leaves the water (a pond restored a tile further, a tile filled in) changes the bodies
+    // around it; anything else on a water tile (its bloom, say) does not.
     sim.grid.touchListeners.push((t) => {
-      if (t.feature === 'water' && this.byTile.size) this.forget();
+      if (!this.byTile.size) return;
+      const was = this.byTile.has(t.id);
+      if (was === this.isFresh(t)) return;
+      if (!was && !SIDES.some(([dx, dz]) => this.byTile.has(sim.grid.peek(GROUND, t.x + dx, t.z + dz)?.id ?? ''))) return;
+      this.forget();
     });
   }
 
@@ -72,9 +78,41 @@ export class WaterSystem {
     return (this.sim.state.water ??= { levels: {} });
   }
 
+  /**
+   * The bodies' shapes changed: find them again. The water the changed bodies held stays with their tiles, so a
+   * body split in two leaves both pieces at its level (never full again), joined bodies pool theirs, and a tile
+   * that stopped being water takes its share with it.
+   */
   private forget() {
+    const levels = this.save.levels;
+    const pieces: { tiles: string[]; level: number }[] = [];
+    for (const b of this.bodies.values()) {
+      const lv = levels[b.id];
+      if (lv === undefined) continue;
+      pieces.push({ tiles: [...b.tiles], level: lv });
+      delete levels[b.id];
+    }
     this.byTile.clear();
     this.bodies.clear();
+    this.shapes.clear();
+    if (!pieces.length) return;
+    const pool = new Map<WaterBody, { held: number; n: number }>();
+    for (const p of pieces)
+      for (const id of p.tiles) {
+        const b = this.bodyAt(this.sim.grid.byTileId(id));
+        if (!b) continue;
+        const e = pool.get(b) ?? { held: 0, n: 0 };
+        e.held += p.level;
+        e.n++;
+        pool.set(b, e);
+      }
+    for (const [b, e] of pool) this.set(b.id, (e.held + (b.tiles.size - e.n) * this.startOf(b)) / b.tiles.size);
+    this.version++;
+  }
+
+  /** The level a body has before anything touches it: full, or its region's `startLevel` (the dry basin). */
+  private startOf(b: WaterBody): number {
+    return (b.region && WATER_NET.startLevel[b.region]) ?? 1;
   }
 
   /**
@@ -173,7 +211,7 @@ export class WaterSystem {
       if (key !== b.id) delete levels[key];
     }
     if (!found) return;
-    const start = (b.region && WATER_NET.startLevel[b.region]) ?? 1;
+    const start = this.startOf(b);
     const v = Math.max(0, Math.min(1, (held + (b.tiles.size - counted) * start) / b.tiles.size));
     if (levels[b.id] !== v) {
       levels[b.id] = v;
@@ -186,7 +224,7 @@ export class WaterSystem {
     const saved = this.save.levels[id];
     if (saved !== undefined) return saved;
     const b = this.bodies.get(id) ?? this.body(id);
-    return (b?.region && WATER_NET.startLevel[b.region]) ?? 1;
+    return b ? this.startOf(b) : 1;
   }
 
   /** Units a body holds. */
@@ -277,12 +315,14 @@ export class WaterSystem {
 
   /**
    * E23.1.5's advisor: is this area short of water? True when a body with water in the area is below `fadeBelow`
-   * (its land fading). Only bodies whose level has moved (or that start low, like Cistern Basin's) are looked at.
+   * (its land fading). Only areas the player has seen count (the advisor never hints at unseen places), and a
+   * body still waiting for its landmark (the dry Cistern pond) is the landmark's story, not a shortage.
    */
   isLow(areaId: string): boolean {
+    if (this.sim.areas.fog(areaId) === 'hidden') return false;
     const map = this.sim.areas.map;
     for (const b of this.live()) {
-      if (this.levelOf(b.id) >= WATER_NET.fadeBelow) continue;
+      if (this.dormant(b) || this.levelOf(b.id) >= WATER_NET.fadeBelow) continue;
       for (const id of b.tiles) {
         const t = this.sim.grid.byTileId(id);
         if (t && map.areaOfCell(t.x, t.z) === areaId) return true;
@@ -351,19 +391,141 @@ export class WaterSystem {
     return out;
   }
 
+  /**
+   * A body waiting for its landmark: spring-fed water whose landmark still sleeps (the Cistern pond until the Old
+   * Cistern wakes). It stays as it is, dry, whatever the weather; waking the landmark fills it.
+   */
+  dormant(b: WaterBody): boolean {
+    const r = b.region;
+    return !!r && WATER_NET.springsNeedLandmark && !!WATER_NET.springs[r] && this.sim.areas.fog(r) !== 'cleared';
+  }
+
+  /**
+   * Every body the sim knows: the live ones, every region's canals and ponds, and any body found this session.
+   * The weather acts on all of them alike (only a dormant body waits).
+   */
+  known(): WaterBody[] {
+    const out = new Set(this.live());
+    if (this.sim.oldCity) for (const r of REGION_WATER.keys()) for (const b of this.springBodies(r)) out.add(b);
+    for (const b of this.bodies.values()) out.add(b);
+    return [...out];
+  }
+
+  /** Each body's depth map, for `bared`/`covered` and the drained bed's look (cleared when shapes change). */
+  private shapes = new Map<WaterBody, { d: Map<string, number>; count: number[]; max: number }>();
+
+  /** How far each tile of a body lies from its bank (1 = on it), by breadth-first walk inward. */
+  depths(b: WaterBody): { d: Map<string, number>; count: number[]; max: number } {
+    const hit = this.shapes.get(b);
+    if (hit) return hit;
+    const g = this.sim.grid;
+    const d = new Map<string, number>();
+    const queue: TileData[] = [];
+    for (const id of b.tiles) {
+      const t = g.byTileId(id);
+      if (t && SIDES.some(([dx, dz]) => !b.tiles.has(g.peek(GROUND, t.x + dx, t.z + dz)?.id ?? ''))) {
+        d.set(t.id, 1);
+        queue.push(t);
+      }
+    }
+    let max = 1;
+    for (let i = 0; i < queue.length; i++) {
+      const t = queue[i];
+      const k = d.get(t.id)!;
+      for (const [dx, dz] of SIDES) {
+        const n = g.peek(GROUND, t.x + dx, t.z + dz);
+        if (!n || !b.tiles.has(n.id) || d.has(n.id)) continue;
+        d.set(n.id, k + 1);
+        max = Math.max(max, k + 1);
+        queue.push(n);
+      }
+    }
+    const count = new Array<number>(max + 2).fill(0);
+    for (const k of d.values()) count[k]++;
+    const out = { d, count, max };
+    this.shapes.set(b, out);
+    return out;
+  }
+
+  /**
+   * How far in from the bank the bed shows (tiles), so the bed's area matches the share drained: each tile at
+   * depth k shows `clamp(front - (k - 1), 0, 1)` of itself, and those add up to `empty` x the body's area.
+   * `count[k]` is how many tiles lie at depth k.
+   */
+  static front(count: number[], max: number, empty: number): number {
+    let total = 0;
+    for (let k = 1; k <= max; k++) total += count[k] ?? 0;
+    const want = empty * total;
+    let done = 0;
+    for (let k = 1; k <= max; k++) {
+      const c = count[k] ?? 0;
+      if (done + c >= want) return k - 1 + (c ? (want - done) / c : 0);
+      done += c;
+    }
+    return max;
+  }
+
+  /** How much of a water tile its body's drained bed covers (0 = all water, 1 = bare bed). */
+  bared(t: TileData | undefined): number {
+    const b = this.bodyAt(t);
+    if (!b) return 0;
+    // in the renderer's steps, so the pads and koi agree with the bed drawn
+    const empty = Math.round((1 - this.levelOf(b.id)) * WATER_NET.lookSteps) / WATER_NET.lookSteps;
+    if (empty <= 0) return 0;
+    const { d, count, max } = this.depths(b);
+    const front = WaterSystem.front(count, max, empty);
+    return Math.max(0, Math.min(1, front - ((d.get(t!.id) ?? 1) - 1)));
+  }
+
+  /** Is this water tile still under water? Lily pads and koi keep to these as a pond drains. */
+  covered(t: TileData | undefined): boolean {
+    return this.bodyAt(t) !== undefined && this.bared(t) < 0.5;
+  }
+
+  /** sim seconds counted by `tick` (for the wake rush) */
+  private clock = 0;
+  /** spring regions awake at the last tick (undefined until the first, so a loaded game never rushes) */
+  private awake?: Set<RegionId>;
+  /** region -> sim second its wake rush ends */
+  private rushUntil = new Map<RegionId, number>();
+
   tick(dt: number) {
     this.acc += dt;
     if (this.acc < WATER_NET.step) return;
     const span = this.acc;
     this.acc = 0;
+    this.clock += span;
+    this.wakes();
     const days = span / WATER_NET.daySeconds;
     const { fill, evap } = this.sky();
-    for (const b of this.live()) {
+    for (const b of this.known()) {
+      if (this.dormant(b)) continue;
       let lv = this.levelOf(b.id);
       const before = lv;
-      lv += (fill + this.springOf(b)) * days;
+      lv += (fill + this.springOf(b)) * days + this.rushOf(b, span);
       if (evap && lv > WATER_NET.evaporationFloor) lv = Math.max(WATER_NET.evaporationFloor, lv - evap * days);
       if (lv !== before) this.set(b.id, lv);
     }
+  }
+
+  /** A spring region whose landmark just woke starts its rush: its water fills over `wakeRush` seconds. */
+  private wakes() {
+    const now = new Set<RegionId>();
+    if (this.sim.oldCity)
+      for (const r of Object.keys(WATER_NET.springs) as RegionId[]) if (this.sim.areas.fog(r) === 'cleared') now.add(r);
+    if (this.awake) for (const r of now) if (!this.awake.has(r)) this.rushUntil.set(r, this.clock + WATER_NET.wakeRush);
+    this.awake = now;
+  }
+
+  /** The share a body gains from its region's wake rush this step. */
+  private rushOf(b: WaterBody, span: number): number {
+    const end = b.region ? this.rushUntil.get(b.region) : undefined;
+    if (end === undefined) return 0;
+    const from = this.clock - span;
+    if (from >= end) {
+      this.rushUntil.delete(b.region!);
+      return 0;
+    }
+    return Math.min(span, end - from) / WATER_NET.wakeRush;
   }
 }
