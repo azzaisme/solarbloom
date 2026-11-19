@@ -153,6 +153,21 @@ describe('E23.4.3: the desalination plant', () => {
     expect(sim.power.draw(m)).toBe(WATER_NET.desal.power);
   });
 
+  it("keeps its tank apart from the reservoirs': asking for a reservoir by a plant's id never drops the plant's water", () => {
+    const sim = city();
+    const s = shore(sim);
+    const m = put(sim, 'desalination', s.x, s.z);
+    const tank = sim.water.plantTank(m.id)!;
+    sim.water.fill(plantId(m), 30);
+    expect(sim.water.tank(m.id)).toBeUndefined(); // a plant is not a reservoir…
+    expect(sim.water.plantTank(m.id)).toBe(tank); // …and asking never clears the plant's own entry
+    expect(sim.water.amountOf(plantId(m))).toBeCloseTo(30, 9);
+    const r = put(sim, 'reservoir', 4, 4);
+    const rt = sim.water.tank(r.id)!;
+    expect(sim.water.plantTank(r.id)).toBeUndefined(); // and the other way round
+    expect(sim.water.tank(r.id)).toBe(rt);
+  });
+
   it('empties into a pond or canal on its bank', () => {
     const sim = city();
     for (let z = 0; z < 16; z++)

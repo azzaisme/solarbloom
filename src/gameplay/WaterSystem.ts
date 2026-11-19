@@ -160,7 +160,9 @@ export class WaterSystem {
     return b?.id === id ? b : undefined;
   }
 
+  /** reservoirs' water by machine id (desalination plants keep their own map, `plantTanks`, so one never clears the other) */
   private tanks = new Map<string, WaterBody>();
+  private plantTanks = new Map<string, WaterBody>();
 
   /** E23.4.2.1: a reservoir's water, by its machine id (undefined once it is taken down). */
   tank(machineId: string): WaterBody | undefined {
@@ -198,12 +200,15 @@ export class WaterSystem {
   /** E23.4.3: a desalination plant's fresh-water tank (its id is `d:<machine id>`). */
   plantTank(machineId: string): WaterBody | undefined {
     const m = this.sim.machine(machineId);
-    if (!m || m.type !== 'desalination') return undefined;
-    let b = this.tanks.get(machineId);
+    if (!m || m.type !== 'desalination') {
+      this.plantTanks.delete(machineId);
+      return undefined;
+    }
+    let b = this.plantTanks.get(machineId);
     if (b?.reservoir !== m) {
       const tiles = new Set(this.sim.grid.footprint(m.roofId, m.x, m.z, m.size).flatMap((t) => (t ? [t.id] : [])));
       b = { id: plantId(m), tiles, capacity: WATER_NET.desal.tank, reservoir: m };
-      this.tanks.set(machineId, b);
+      this.plantTanks.set(machineId, b);
     }
     return b;
   }

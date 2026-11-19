@@ -176,9 +176,27 @@ try {
   await water(3);
   check(await run(() => window.solarbloom.sim.water.pipes.carries(27, -18)), 'the pipe carries water down the stairs');
   check(await run(() => window.solarbloom.sim.water.isWatered(window.solarbloom.sim.grid.get('g', 28, -17))), 'the street below the terrace is fed by gravity, with no power');
-  await frame(26.5, -21, 1.6, 0);
+  /** bloombot's own follow camera, close in (no clouds, which only show zoomed out), from a spot on the terrace */
+  const follow = async (x, z, yaw) => {
+    await run(({ x, z, yaw }) => {
+      const g = window.solarbloom;
+      g.bot.following = true;
+      g.bot.teleport('g', x, z);
+      g.camera.turnTo(yaw);
+    }, { x, z, yaw });
+    await settle(5000);
+    return run(() => {
+      const g = window.solarbloom;
+      return { zoom: g.camera.zoom, clouds: g.scene.world.findByName('clouds')?.enabled ?? false };
+    });
+  };
+  // the tank on the terrace and its pipe heading for the stairs, from beside it
+  const v4 = await follow(26.5, -22.6, 0);
+  check(!v4.clouds, `the tank shot is close, with no clouds in it (${JSON.stringify(v4)})`);
   await shot('4-gravity-tank');
-  await frame(27.5, -19.5, 3.4, 70);
+  // the pipe stepping down the stairs to the street, the tank at the top, from the foot of the stairs
+  const v5 = await follow(27.5, -16.2, 0);
+  check(!v5.clouds, `the stairs shot is close, with no clouds in it (${JSON.stringify(v5)})`);
   await shot('5-gravity-stairs');
 } catch (e) {
   failures.push(String(e));
