@@ -413,3 +413,29 @@ export function* warmFlora(): Generator<void> {
   }
 }
 
+
+const tinted = new WeakMap<TreeGeo, Map<string, TreeGeo>>();
+/**
+ * E23.2.2.2: a flower template with its petals recoloured (stems and leaves, the green vertices, keep theirs):
+ * each region's rare plant blooms in its own colour. Cached per template and colour.
+ */
+export function tintGeo(g: TreeGeo, hex: string): TreeGeo {
+  let byHex = tinted.get(g);
+  if (!byHex) tinted.set(g, (byHex = new Map()));
+  const hit = byHex.get(hex);
+  if (hit) return hit;
+  const lin = (c: number) => Math.round(Math.pow(c / 255, 2.2) * 255);
+  const tr = lin(parseInt(hex.slice(1, 3), 16)), tg = lin(parseInt(hex.slice(3, 5), 16)), tb = lin(parseInt(hex.slice(5, 7), 16));
+  const col = new Uint8Array(g.col);
+  for (let i = 0; i < col.length; i += 4) {
+    const r = col[i], gr = col[i + 1], b = col[i + 2];
+    if (gr > r * 1.05 && gr > b * 1.05) continue; // green: a stem or a leaf
+    const shade = (r + gr + b) / 3 / 255 + 0.35; // keep the petal's light and dark
+    col[i] = Math.min(255, Math.round(tr * shade));
+    col[i + 1] = Math.min(255, Math.round(tg * shade));
+    col[i + 2] = Math.min(255, Math.round(tb * shade));
+  }
+  const out: TreeGeo = { ...g, col };
+  byHex.set(hex, out);
+  return out;
+}

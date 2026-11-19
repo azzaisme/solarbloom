@@ -180,13 +180,13 @@ export class PowerOverlay {
         // A light gets a small glowing dot, not a tile frame and no line, so the machines and the grid's shape read
         // first; you can still see which lights a network powers (or that one has none, in red).
         const size = isLight(m) ? 0.4 : m.size + 0.2;
-        const mi = new pc.MeshInstance(glowTileMesh(this.device, size), this.netMats[i % this.netMats.length]);
+        const mi = new pc.MeshInstance(glowTileMesh(this.device, size, POWER.view.frame), this.netMats[i % this.netMats.length]);
         e.addComponent('render', { meshInstances: [mi], castShadows: false, receiveShadows: false });
         this.members.push({ m, frame: mi, net: i, network: n });
         if (this.sim.power.roleOf(m)?.battery) this.bar(m, x, y, z);
       }
-      for (const [a, b] of n.links) this.lines.push({ mi: this.glowCable(a, b, line, 0.045), net: i, network: n });
-      for (const [p, m] of n.feeds) if (!isLight(m)) this.lines.push({ mi: this.glowCable(p, m, line, 0.022), net: i, network: n });
+      for (const [a, b] of n.links) this.lines.push({ mi: this.glowCable(a, b, line, POWER.view.cable[0]), net: i, network: n });
+      for (const [p, m] of n.feeds) if (!isLight(m)) this.lines.push({ mi: this.glowCable(p, m, line, POWER.view.cable[1]), net: i, network: n });
     });
     // Poles lightning tripped: a red ring at the foot (they are on no network until reset).
     const red = this.redMat;

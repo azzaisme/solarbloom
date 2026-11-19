@@ -114,13 +114,32 @@ describe('E23.5.3: the compost bin', () => {
     expect(sim.state.salvage!.bins?.[m.id]).toBeUndefined();
   });
 
-  it('E23.6.2: compost research speeds every bin (the compostSpeed effect)', () => {
+  it('E23.6.2: the real "Busy worms" research speeds every bin, level by level', () => {
     const sim = farm();
     const m = build(sim, 'compostBin', 12, 16);
     expect(sim.compost.researchReady).toBe(true);
+    const offered = () => sim.research.upgrades().map((u) => u.id);
+    expect(offered()).not.toContain('compostSpeed'); // not until "Worm notes" is researched
+    // Seeds are found, analysed at the station, and "Worm notes" runs on the bench to the end
+    for (const k of ['seeds', 'timber', 'planks', 'clay'] as const) sim.inventory.addToStore(k, 60);
+    sim.inventory.add('seeds', 1);
+    expect(sim.research.analyse({ material: 'seeds' })).toBe(true);
+    expect(sim.research.start('fm-compost')).toBe(true);
+    sim.research.tick(sim.research.project('fm-compost')!.days * DAY_SECONDS + 1);
+    expect(sim.research.done('fm-compost')).toBe(true);
+    // the upgrade is offered because the bins read it, and each level bought speeds the bin by its share
+    expect(offered()).toContain('compostSpeed');
+    const per = sim.research.upgradeDef('compostSpeed')!.per;
     const base = sim.compost.speed(m);
-    (sim as unknown as { research: { effect(id: string): number } }).research = { effect: (id) => (id === 'compostSpeed' ? 0.5 : 0) };
-    expect(sim.compost.speed(m)).toBeCloseTo(base * 1.5);
+    expect(sim.research.upgrade('compostSpeed')).toBe(1);
+    expect(sim.compost.speed(m)).toBeCloseTo(base * (1 + per), 6);
+    expect(sim.research.upgrade('compostSpeed')).toBe(2);
+    expect(sim.compost.speed(m)).toBeCloseTo(base * (1 + 2 * per), 6);
+    // and it shows in play: compost that took the full time before now matures sooner
+    sim.inventory.add('compost', 1);
+    sim.compost.returnCompost(m);
+    run(sim, (COMPOST.matureDays * DAY_SECONDS) / (base * (1 + 2 * per)) + 61);
+    expect(sim.compost.bin(m).fertiliser).toBe(1);
   });
 
   it('fertiliser is what a landmark tree (the Mother Tree) asks for', () => {

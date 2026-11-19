@@ -7,6 +7,7 @@ import { LIGHTS } from '../src/data/lights';
 import { ITEM_DEFS } from '../src/data/items';
 import { MACHINES, OLD_CITY_BUILDABLE } from '../src/data/machines';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
+import { PROJECTS } from '../src/data/research';
 import { Sim } from '../src/gameplay/Sim';
 import { SaveService } from '../src/app/SaveService';
 import { componentRows, machineRows } from '../src/ui/CraftTable';
@@ -28,7 +29,7 @@ function reachable(u: Unlock): boolean {
   if ('keeper' in u) return KEEPERS.some((k) => k.region === u.keeper);
   if ('find' in u) return CACHES.has(u.find);
   if ('tier' in u) return u.tier >= 1 && u.tier <= 5;
-  return u.research.length > 0; // research (E23.6.2): research.test checks each id names a project
+  return PROJECTS.some((p) => p.id === u.research); // E23.6.2: a real project
 }
 
 describe('E23.6.1: recipes in data', () => {
@@ -59,6 +60,8 @@ describe('E23.6.1: recipes in data', () => {
     const ids = MACHINE_RECIPES.map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const want of ['planterBox', 'compostBin', 'powerPole', 'charger', 'solar', 'windTurbine', 'chest', 'beehive', 'reservoir', 'pump', 'desalination', 'battery', 'bioDigester', 'drone', 'largeSolar', 'assembler']) expect(ids).toContain(want);
+    // planter boxes are Planks, so they open with Timber (Tide, Saltwind Beach); before that the farm is the ground
+    expect(MACHINE_RECIPES.find((r) => r.id === 'planterBox')).toMatchObject({ cost: { planks: 3 }, unlock: { keeper: 'saltwind' } });
     for (const r of MACHINE_RECIPES) {
       expect(Object.keys(r.cost).length, r.id).toBeGreaterThan(0);
       for (const k of Object.keys(r.cost)) expect(realItem(k), `${r.id}: ${k}`).toBe(true);

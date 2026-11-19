@@ -125,12 +125,12 @@ export const DECOR_RECIPES: DecorRecipe[] = [
   { id: 'flowerbed', cost: { seeds: 2 }, unlock: { home: true } },
   { id: 'stones', cost: { scrap: 3 }, unlock: { home: true } },
   { id: 'trough', cost: { clay: 3, seeds: 1 }, unlock: { find: 'c-elderGrove-1' } },
-  { id: 'birdbath', cost: { clay: 4 }, unlock: { find: 'c-cistern-1' } },
+  { id: 'birdbath', cost: { clay: 4 }, unlock: { research: 'dc-birdbath' } },
   { id: 'bunting', cost: { planks: 1, seeds: 1 }, unlock: { find: 'c-oldMarket-1' } },
   { id: 'cratestack', cost: { planks: 3 }, unlock: { find: 'c-saltwind-1' } },
   { id: 'barrel', cost: { planks: 2, seeds: 1 }, unlock: { find: 'c-saltwind-2' } },
   { id: 'rug', cost: { seeds: 2 }, unlock: { find: 'c-oldMarket-2' } },
-  { id: 'topiary', cost: { seeds: 3, clay: 1 }, unlock: { find: 'c-glasshouse-1' } },
+  { id: 'topiary', cost: { seeds: 3, clay: 1 }, unlock: { research: 'dc-topiary' } },
   // E23.3.5: every night light (data/lights) is made here too, at its own cost, known where its data says
   ...LIGHTS.map((l) => ({ id: l.id, cost: l.cost, unlock: lightUnlock(l) })),
 ];

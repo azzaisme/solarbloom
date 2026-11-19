@@ -42,14 +42,17 @@ export const POWER = {
   /** Helpers on the grid (E23.3.3, old-city rules): their draw while they stand. */
   helper: { droneHub: 4, cultivator: 4 },
   /**
-   * E23.3.4 the Power view: powered electrical machines glow soft yellow (`glow`, emissive intensity) while the rest
-   * of the world darkens, easing over `fade` s. `darken` is how far, by day and by night (night is dark already). At
+   * E23.3.4 the Power view: powered electrical machines become pure-yellow holograms (the build preview's look;
+   * `holo` is its opacity and emissive glow); `frame` is the width of the network's frame under each machine, a share of the build frame's, and `cable`
+   * the radius in tiles of a pole-to-pole line and of a drop cable: thin, world-sized lines) while the rest
+   * of the world darkens, easing over `fade` s. `darken` is how far, by day and by night (E23.7.5's moonlit night is
+   * readable, not dark, so it darkens nearly as far as day; the lamps dim with the scene). At
    * full darken the sun, fill and sky light keep `light` of their strength and the exposure `exposure` of its own;
    * glows make up for the exposure only (emissive ignores the lights). Either alone barely shows by day: the Neutral
    * tone map and the display's gamma keep a sixth of the light looking bright.
    */
   /** `focus`: how near (tiles) the cursor must be to a network's machine or line for the view to highlight it */
-  view: { focus: 1.2, glow: 0.4, darken: { day: 1, night: 0.6 }, light: 0.22, exposure: 0.45, fade: 0.3 },
+  view: { focus: 1.2, holo: { opacity: 0.35, glow: 0.8 }, frame: 0.5, cable: [0.022, 0.012] as [number, number], darken: { day: 1, night: 0.85 }, light: 0.22, exposure: 0.45, fade: 0.3 },
   /** Starting draws per shed class (consumers may override with their own draw). */
   draw: { lamp: 0.5, pump: 3, helper: 4, charger: 6 } satisfies Record<ShedClass, number>,
 };
