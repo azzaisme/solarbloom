@@ -17,7 +17,7 @@ const weather = (sim: Sim, kind: WeatherKind) => sim.weather.forceForTest(kind, 
 
 /** The park with its pond restored (full), plenty of materials, the bot standing by the store. */
 function park() {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.areas.clear(PARK, true);
   sim.state.salvage!.tier = 2;
   sim.state.salvage!.keepers.sluice = { step: 'request1' }; // E23.8.2: Cistern Basin's Keeper is awake (its unlocks held)

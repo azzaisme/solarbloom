@@ -6,20 +6,20 @@ import { CHUNK } from '../src/core/Hash';
 import { Rng } from '../src/core/Rng';
 import { Sim } from '../src/gameplay/Sim';
 import { BOT, spawnPose, Walker } from '../src/gameplay/Walker';
-import { runBot } from './bots';
+import { runOldCityBot } from './oldcity-bot';
+import { unlockAll } from './helpers';
+import { REGIONS } from '../src/data/oldcity';
 
-/** A city with the park and at least 40 areas around it revealed, most of them cleared. */
+/** E23.1.1: the whole island open: the fountain awake, every ability, every region's gate open and its landmark woken. */
 function bigCity(seed = 7) {
   const sim = new Sim(createInitialState(seed));
+  unlockAll(sim);
   sim.state.progression.coreActivated = true;
   sim.areas.clear(PARK, true);
-  for (let r = 1; r <= 6 && sim.areas.revealed().length < 40; r++)
-    for (let cz = -r; cz <= r; cz++)
-      for (let cx = -r; cx <= r; cx++) {
-        if (Math.max(Math.abs(cx), Math.abs(cz)) !== r) continue;
-        const id = sim.areas.map.areaOfChunk(cx, cz);
-        if (sim.areas.fog(id) !== 'hidden') sim.areas.clear(id, true);
-      }
+  for (const r of REGIONS) {
+    sim.gates.open(r.gate.id, true);
+    if (sim.areas.fog(r.id) !== 'hidden') sim.areas.clear(r.id, true);
+  }
   return sim;
 }
 
@@ -35,14 +35,14 @@ describe('bloombot walking (G.2)', () => {
   const sim = bigCity();
   const w = new Walker(sim);
 
-  it('reveals a city of at least 40 areas for the walk tests', () => {
-    expect(sim.areas.revealed().length).toBeGreaterThanOrEqual(40);
+  it('opens every region of the island for the walk tests', () => {
+    for (const r of REGIONS) expect(sim.areas.fog(r.id), r.id).toBe('cleared');
   });
 
-  it('starts beside the park fountain, on legal ground', () => {
+  it('starts at the Landing on Saltwind Beach (E21.26), on legal ground', () => {
     const p = spawnPose(sim, w);
     expect(w.fits(p.roofId, p.x, p.z)).toBe(true);
-    expect(sim.areas.map.areaOfCell(Math.floor(p.x), Math.floor(p.z))).toBe(PARK);
+    expect(sim.areas.map.areaOfCell(Math.floor(p.x), Math.floor(p.z))).toBe('saltwind');
   });
 
   it('never stands in fog, an obstacle or a machine after 10 minutes of random input', () => {
@@ -90,11 +90,19 @@ describe('bloombot walking (G.2)', () => {
   });
 
   it('finds a path across the park and around the fountain', () => {
+    // E23.1.1: from the Landing on the beach, up through the park to the far side of the fountain
     const p = spawnPose(sim, w);
-    const goal = { x: 2, z: 2 };
+    const [fx, fz] = sim.areas.info(PARK).landmark;
+    const far = Math.sign(fz - p.z) || 1; // the fountain lies this way from the Landing
+    const goal = sim.areas
+      .tiles(PARK)
+      .filter((t) => (t.z - fz) * far >= 4 && w.walkable(GROUND, t.x, t.z))
+      .sort((a, b) => Math.abs(a.x - fx) + Math.abs(a.z - fz) - (Math.abs(b.x - fx) + Math.abs(b.z - fz)))[0];
+    expect(goal).toBeDefined();
     const path = w.path(GROUND, p.x, p.z, (x, z) => x === goal.x && z === goal.z, goal);
     expect(path).toBeDefined();
-    expect(path!.at(-1)).toEqual({ x: 2.5, z: 2.5 });
+    expect(path!.at(-1)).toEqual({ x: goal.x + 0.5, z: goal.z + 0.5 });
+    expect(path!.some((c) => sim.areas.areaOf({ roofId: GROUND, x: Math.floor(c.x), z: Math.floor(c.z) }) === PARK)).toBe(true);
     for (const c of path!) expect(w.walkable(GROUND, Math.floor(c.x), Math.floor(c.z))).toBe(true);
   });
 
@@ -127,9 +135,9 @@ describe('bloombot walking (G.2)', () => {
     expect(saver.deserialize(saver.serialize(fresh.state))!.bot).toEqual({ roofId: GROUND, x: 9.25, z: 11.75, facing: 1.5 });
   });
 
-  it('leaves the cursor path alone: a pacing bot run never writes bloombot into its save', () => {
+  it('leaves the save alone: a scripted run never writes bloombot into its save', () => {
     let sim: Sim | undefined;
-    runBot({ seed: 5, minutes: 3, onSecond: (x) => (sim = x) });
+    runOldCityBot(5, 3, 'tier1', { onSecond: (x) => (sim = x) });
     expect(sim!.state.bot).toBeUndefined();
     expect(new SaveService().serialize(sim!.state)).not.toContain('"bot"');
   });

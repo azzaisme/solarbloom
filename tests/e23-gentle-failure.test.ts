@@ -14,7 +14,7 @@ import { bindOrFail, CHARGE, DAY, forceStorm, GAME_DAY, GentleWatch, homeScene, 
  */
 const SEEDS = [7, 21];
 // Detect which systems exist once, at collection time, so the skips show in the report.
-const probeSim = new Sim(createInitialState(7, 'oldcity'));
+const probeSim = new Sim(createInitialState(7));
 const has = (name: string) => PROBES.find((p) => p.name === name)!.present(probeSim);
 const hasWeather = weatherPresent(probeSim);
 

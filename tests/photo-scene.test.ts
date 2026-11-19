@@ -21,7 +21,7 @@ function setup(realHour = 13.25) {
       clockHour: () => realHour,
       setFilter: (css) => (out.filter = css),
     },
-    new Bindings(undefined, { oldCity: true }),
+    new Bindings(),
   );
   return { photo, out };
 }
@@ -83,8 +83,8 @@ describe('E23.7.3: photo mode sets the time and the weather', () => {
 
   it('nothing set in photo mode changes the game: bound to a running Sim, the screen changes and the game does not', { timeout: 120_000 }, () => {
     // two identical games: one with photo mode open and busy, one without
-    const sim = new Sim(createInitialState(9, 'oldcity'));
-    const control = new Sim(createInitialState(9, 'oldcity'));
+    const sim = new Sim(createInitialState(9));
+    const control = new Sim(createInitialState(9));
     const out = { filter: '' };
     const photo = new PhotoMode(
       {
@@ -97,7 +97,7 @@ describe('E23.7.3: photo mode sets the time and the weather', () => {
         clockHour: () => sim.clock.hour() + sim.clock.minute() / 60,
         setFilter: (css) => (out.filter = css),
       },
-      new Bindings(undefined, { oldCity: true }),
+      new Bindings(),
     );
     const real = sceneNow(sim, photo);
     photo.enter();

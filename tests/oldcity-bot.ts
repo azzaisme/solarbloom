@@ -2,25 +2,28 @@ import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { TileData } from '../src/core/types';
 import { PARK_SET, REGIONS } from '../src/data/oldcity';
-import { SALVAGE } from '../src/data/salvage';
 import { CHARGE as CHARGE_DATA } from '../src/data/charge';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
 import { BOT, spawnPose, Walker, type BotPose } from '../src/gameplay/Walker';
-import { oldCityHint } from '../src/ui/OldCityGuide';
+import { MATERIALS, SALVAGE } from '../src/data/salvage';
+import { COMPONENT_RECIPES } from '../src/data/crafting';
+import { oldCityHint, panelNeeds } from '../src/ui/OldCityGuide';
 import { canWalk, CHARGE, handle } from './e23-gentle';
 
 /**
  * E21.12 / E21.23: the Old City's walking bot. It plays a new old-city game the way a player would, on foot:
  * walks (real paths, sprinting on long ones) to the nearest pile and salvages it, pulses dead park ground, brings
- * Scrap and Seeds to the fountain, harvests sunlight when energy runs short, builds a Solar Panel, pries a
- * barricade and wakes the Keeper behind it. Time passes for walking, for each action and for waiting; the report
+ * Scrap and Seeds to the fountain, eats or rests when charge runs low, pries a barricade and wakes the Keeper
+ * behind it, then (E23.1.4, #536) makes the first Solar Panel the way the guide says: Tally's craft, so it opens
+ * the Old Market and wakes Tally, salvages its glass and Mast Row's copper, makes panes and wire at the table in
+ * the shed and builds the panel. Time passes for walking, for each action and for waiting; the report
  * gives the sim time of each milestone, the tutorial hints in the order they showed, and the longest stretch
  * with nothing reachable to do.
  */
 export interface OldCityBotReport {
   seed: number;
-  /** sim seconds of each first: salvage, pulse, seeds, tier1, solar, gate, keeper */
+  /** sim seconds of each first: salvage, pulse, seeds, tier1, gate, keeper, solar */
   firsts: Record<string, number>;
   hints: string[];
   steps: number[];
@@ -40,18 +43,33 @@ export interface OldCityBotReport {
    * spent at zero, and seconds stranded (at zero and unable to walk: must stay 0).
    */
   charge?: { min: number; atZero: number; stranded: number };
+  /** the game as the bot left it */
+  sim: Sim;
+}
+
+export interface OldCityBotOptions {
+  /** called once on the new game before the bot plays (e.g. to switch a sim mode on) */
+  setup?: (sim: Sim) => void;
+  /** called once per simulated second, after that second's ticks (measurements, or what the HUD does each second) */
+  onSecond?: (sim: Sim) => void;
 }
 
 const ACT = { salvage: SALVAGE.holdSeconds + 0.5, pulse: 0.7, interact: 0.6, build: 1.2, pry: SALVAGE.pryHoldSeconds + 0.4, think: 0.4 };
 
-export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'keeper' = 'keeper'): OldCityBotReport {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+/**
+ * `until`: stop at fountain tier 1, at the first Keeper awake, or (the default) at the first Solar Panel, the last of
+ * the first fifteen minutes' steps.
+ */
+export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'keeper' | 'panel' = 'panel', opts: OldCityBotOptions = {}): OldCityBotReport {
+  const sim = new Sim(createInitialState(seed));
+  opts.setup?.(sim);
   const w = new Walker(sim);
   const pose: BotPose = spawnPose(sim, w);
   const firsts: Record<string, number> = {};
   const hints: string[] = [];
   const steps: number[] = [];
   let walked = 0;
+  let lastSecond = 0;
   let idle = 0;
   let longestIdle = 0;
   /** E23.2.1: times bloombot ran out of charge and walked home to rest */
@@ -72,6 +90,10 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
     for (let i = 0; i < n; i++) {
       sim.tick();
       record();
+      if (opts.onSecond && Math.floor(sim.time) > lastSecond) {
+        lastSecond = Math.floor(sim.time);
+        opts.onSecond(sim);
+      }
       if (charge) {
         const c = chargeNow() ?? 0;
         charge.min = Math.min(charge.min, c);
@@ -120,7 +142,8 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
   record();
   while (sim.time < end) {
     if (until === 'tier1' && firsts.tier1 !== undefined) break;
-    if (firsts.keeper !== undefined) break;
+    if (until === 'keeper' && firsts.keeper !== undefined) break;
+    if (firsts.solar !== undefined) break;
     let did = false;
     const tier = sim.fountain.tier;
     // 0. E23.2.1: running low: eat something carried; out of charge with nothing to eat: walk home and rest there
@@ -149,41 +172,14 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
         did = true;
       }
     }
-    // 2. After tier 1: a Solar Panel, then the nearest barricade, then its Keeper
+    // 2. After tier 1: the nearest barricade, then its Keeper, then (E23.1.4) the first Solar Panel, as the guide asks
     if (!did && tier >= 1) {
-      if (!sim.state.machines.some((m) => m.type === 'solar' && !m.starter)) {
-        const spot = sim.areas.tiles(PARK).filter((t) => t.ground === 'restored' && !t.occupantId && !t.blocked && sim.build.check('solar', GROUND, t.x, t.z).ok).sort((a, b) => dist(a.x, a.z) - dist(b.x, b.z))[0];
-        if (spot && walkTo(spot.x, spot.z)) {
-          pass(ACT.build);
-          if (sim.build.place('solar', GROUND, spot.x, spot.z)) (first('solar'), (did = true));
-        }
-      } else if (firsts.gate === undefined) {
+      if (firsts.gate === undefined) {
         const gates = REGIONS.filter((r) => r.ring === 1 && r.gate.kind === 'barricade' && r.gate.opensRegion !== false).sort((a, b) => dist(a.gate.cells[0][0], a.gate.cells[0][1]) - dist(b.gate.cells[0][0], b.gate.cells[0][1]));
-        for (const r of gates) {
-          const [gx, gz] = r.gate.cells[0];
-          if (walkTo(gx, gz)) {
-            pass(ACT.pry);
-            if (sim.gates.open(r.gate.id)) {
-              did = true;
-              break;
-            }
-          }
-        }
-      } else {
-        const r = REGIONS.find((q) => sim.gates.isOpen(q.gate.id) && q.gate.opensRegion !== false)!;
-        const k = sim.keepers.def(r.keeper);
-        if (walkTo(k.x, k.z)) {
-          pass(ACT.pulse);
-          sim.keepers.pulse(k.id);
-          if (!sim.keepers.giftMaterial()) {
-            // nothing to give: salvage on (below)
-          } else {
-            pass(ACT.interact);
-            sim.keepers.interact(k.id);
-            did = true;
-          }
-        }
-      }
+        for (const r of gates) if ((did = pry(r))) break;
+      } else if (firsts.keeper === undefined) {
+        did = wake(REGIONS.find((q) => sim.gates.isOpen(q.gate.id) && q.gate.opensRegion !== false)!);
+      } else did = panel();
     }
     // 3. Salvage the nearest pile that still has something and fits in the pack
     if (!did) {
@@ -210,9 +206,9 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
       }
     }
     if (!did) {
-      // nothing to do right now: harvest sunlight if it's ready, else wait a moment for energy and water
-      if (sim.time >= sim.state.harvestReadyAt && sim.econ.get('energy').lt(10)) {
-        sim.harvestSun();
+      // nothing to do right now: out of charge, eat something carried (E23.1.4: charge is all a pulse costs), else wait
+      const ate = sim.charge.empty ? sim.charge.eat() : 'none';
+      if (ate !== 'none' && ate !== 'full' && ate !== 'busy') {
         pass(ACT.think);
       } else {
         pass(1);
@@ -227,8 +223,72 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
   record();
   const solar = sim.state.machines.find((m) => m.type === 'solar' && !m.starter);
   const grid = sim.power ? { onNetwork: !!solar && !!sim.power.networkOf(solar), supply: (solar && sim.power.networkOf(solar)?.supply) || 0 } : undefined;
-  return { seed, firsts, hints, steps, longestIdle, walked, time: sim.time, charge, grid, restedAtHome };
+  return { seed, firsts, hints, steps, longestIdle, walked, time: sim.time, charge, grid, restedAtHome, sim };
 
+  /** Walks to a region's barricade and pries it open. */
+  function pry(r: (typeof REGIONS)[number]): boolean {
+    const [gx, gz] = r.gate.cells[0];
+    if (!walkTo(gx, gz)) return false;
+    pass(ACT.pry);
+    return sim.gates.open(r.gate.id);
+  }
+  /** Walks to a region's Keeper, pulses it awake and hands it a gift (false: nothing to give yet, salvage on). */
+  function wake(r: (typeof REGIONS)[number]): boolean {
+    const k = sim.keepers.def(r.keeper);
+    if (!walkTo(k.x, k.z)) return false;
+    pass(ACT.pulse);
+    sim.keepers.pulse(k.id);
+    if (!sim.keepers.giftMaterial()) return false;
+    pass(ACT.interact);
+    sim.keepers.interact(k.id);
+    return true;
+  }
+  /** Salvages the nearest pile of one material that has something left (false: none right now, they refill). */
+  function salvageOf(m: string): boolean {
+    const pile = allPiles.filter((p) => p.material === m && sim.salvage.left(p.id) > 0 && !sim.salvage.problem(p.id)).sort((a, b) => dist(a.x, a.z) - dist(b.x, b.z))[0];
+    if (!pile || !walkTo(pile.x, pile.z)) return false;
+    while (sim.salvage.left(pile.id) > 0 && !sim.salvage.problem(pile.id)) {
+      pass(ACT.salvage);
+      sim.salvage.salvage(pile.id);
+    }
+    return true;
+  }
+  /**
+   * E23.1.4 (#536): the first Solar Panel, step by step as the guide's hint says: its Keeper's barricade and the
+   * Keeper (the recipe), each missing material where it's found (its barricade first), the components at the table
+   * in the shed, then the panel beside home.
+   */
+  function panel(): boolean {
+    const u = sim.crafting.machineRecipe('solar')!.unlock;
+    if (!sim.crafting.unlocked(u)) {
+      const r = REGIONS.find((q) => 'keeper' in u && q.id === u.keeper)!;
+      return sim.gates.isOpen(r.gate.id) ? wake(r) : pry(r);
+    }
+    const need = panelNeeds(sim);
+    const m = need.salvage[0];
+    if (m) {
+      const home = MATERIALS[m].home.includes('park') ? undefined : REGIONS.find((q) => MATERIALS[m].home.includes(q.id));
+      if (home && !sim.gates.isOpen(home.gate.id)) return pry(home);
+      return salvageOf(m);
+    }
+    if (need.craft.length) {
+      const sh = PARK_SET.shed;
+      if (!walkTo(sh.x, sh.z, sh.size)) return false;
+      for (const c of need.craft) {
+        const r = COMPONENT_RECIPES.find((q) => q.id === c)!;
+        const n = sim.crafting.machineRecipe('solar')!.cost[c]! - sim.inventory.count(c) - sim.inventory.stored(c);
+        sim.crafting.craft(c, Math.ceil(n / r.makes));
+      }
+      while (sim.crafting.queued() > 0) pass(1); // at the table while it works
+      return true;
+    }
+    const spot = sim.areas.tiles(PARK).filter((t) => t.ground === 'restored' && !t.occupantId && !t.blocked && sim.build.check('solar', GROUND, t.x, t.z).ok).sort((a, b) => dist(a.x, a.z) - dist(b.x, b.z))[0];
+    if (!spot || !walkTo(spot.x, spot.z)) return false;
+    pass(ACT.build);
+    if (!sim.build.place('solar', GROUND, spot.x, spot.z)) return false;
+    first('solar');
+    return true;
+  }
   function affordableNear(): boolean {
     return !!nearestPulse();
   }

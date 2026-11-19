@@ -30,8 +30,7 @@ try {
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
   await page.addStyleTag({ content: '#hint, #intro, .toast, #toasts { display: none !important; }' });
-  const rules = await page.evaluate(() => window.solarbloom.sim.state.rules);
-  if (rules !== 'oldcity') throw new Error(`a new game should be an Old City, got ${rules}`);
+  if (!(await page.evaluate(() => !!window.solarbloom.sim.state.salvage))) throw new Error('a new game should be an Old City');
   /** Points the camera at (x, z) from a yaw (degrees, 0 = looking north) and zoom, holds it, takes a shot. */
   const shot = async (name, x, z, zoom, yaw = 0, wait = 6000) => {
     await page.evaluate(({ x, z, zoom, yaw }) => {
