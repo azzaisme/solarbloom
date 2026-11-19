@@ -71,7 +71,7 @@ export { GROUND };
 
 /**
  * E23.1.1: the whole island open, for tests about the world at scale (chains, drones, walking): every ability, the
- * fountain awake, every region's gate open and its landmark woken. The Old City is one fixed world, so the places
+ * fountain awake, every region's gate open and its landmark woken, bloombot's share done in every backstreet. The Old City is one fixed world, so the places
  * below are the same in every game.
  */
 export function openIsland(sim: Sim): Sim {
@@ -82,6 +82,8 @@ export function openIsland(sim: Sim): Sim {
     sim.gates.open(r.gate.id, true);
     if (sim.areas.fog(r.id) !== 'hidden') sim.areas.clear(r.id, true);
   }
+  // backstreets have no landmark to wake: bloombot has done its share there, so helpers and chains may work (E21.9)
+  for (const id of sim.areas.revealed()) if (sim.areas.fog(id) !== 'cleared') sim.state.areas[id].byBot = sim.areas.shareTarget(id);
   return sim;
 }
 
@@ -99,13 +101,20 @@ export function streetGarden(sim: Sim, x: number, z: number, street = true): Mac
 
 /**
  * The island's longest crossing: row z = -30 runs x -80…79 through eight areas (Glasshouse Row, the Mast Row and
- * six backstreets) and column x = 34 runs z -96…79 through six more (the Old Market, the Cistern, the Observatory
- * and three backstreets). `streetCross` lines both with street gardens five tiles apart; a pulse at `start` sets
- * the chain off at the row's west end.
+ * six backstreets) and column x = 32 runs z -96…79 through six more (the Old Market, the Cistern, the Observatory
+ * and three backstreets). `streetCross` lines both with street gardens five tiles apart; a pulse at `start`, beside
+ * the crossing, sets the chain off down all four arms (a chain stops growing at TUNING.chain.maxDepth, ~20 gardens).
  */
-export const CROSS = { row: -30, col: 34, start: [-80, -30] as const };
+export const CROSS = { row: -30, col: 32, start: [31, -30] as const };
 
 export function streetCross(sim: Sim) {
   for (let x = -78; x <= 79; x += 5) streetGarden(sim, x, CROSS.row);
-  for (let z = -95; z <= 79; z += 5) if (z !== CROSS.row) streetGarden(sim, CROSS.col, z);
+  // the column, and a second one (x = -28) on the row's west arm, so the chain fans out within its depth
+  for (const col of [CROSS.col, -28])
+    for (let z = -95; z <= 79; z += 5) {
+      if (z === CROSS.row) continue;
+      const t = sim.grid.get(GROUND, col, z);
+      const id = t && sim.areas.areaOf(t);
+      if (id && sim.state.areas[id] && !sim.areas.sealed(id) && !id.startsWith('out_') && id !== 'sea') streetGarden(sim, col, z);
+    }
 }

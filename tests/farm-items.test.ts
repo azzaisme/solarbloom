@@ -76,9 +76,9 @@ describe('E23.5.1: farm items', () => {
     expect(sim.roles.choose(hub.id, 'gardener')).toBe(true);
     expect(sim.inventory.count('biomass') + sim.inventory.stored('biomass')).toBe(30); // the refit took exactly its price
     expect(sim.inventory.count('biomass')).toBe(0); // the backpack is spent first
-    // with nothing gathered, a biomass price can't be paid, whatever the old counter says
+    // more than was gathered can't be paid, whatever the old counter says
     sim.state.resources.biomass = big(10_000);
-    expect(sim.econ.spend({ biomass: 5 })).toBe(false);
+    expect(sim.econ.spend({ biomass: sim.inventory.available('biomass') + 1 })).toBe(false);
   });
 
   it('a game day is 48 minutes of play', () => {

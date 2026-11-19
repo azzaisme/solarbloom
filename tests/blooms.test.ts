@@ -21,12 +21,14 @@ describe('massive blooms (City 10)', () => {
     const sim = new Sim(createInitialState(5));
     sim.areas.clear(PARK, true);
     expect(sim.areas.fog('mastRow')).toBe('hidden');
+    sim.state.areas.saltwind.byBot = sim.areas.shareTarget('saltwind'); // E21.9: chains help where bloombot did its share
     const row: MachineData[] = [];
     for (let z = 46; z > -40; z -= 2) if (!sim.grid.get(GROUND, 4, z)?.occupantId) row.push(garden(sim, 4, z, false));
     const { events } = collect(sim);
     sim.restoration.complete(sim.grid.get(GROUND, 4, 47)!, 'pulse');
     sim.advance(20);
-    const touched = events.filter((e) => e.type === 'RESTORE' || e.type === 'GROW').map((e) => sim.grid.byTileId(e.target)!);
+    // off paving, gardens pollinate (a POLLINATE arc, then the restore or grow); every tile the chain changed counts
+    const touched = events.filter((e) => e.type === 'RESTORE' || e.type === 'GROW' || e.type === 'POLLINATE').map((e) => sim.grid.byTileId(e.target)!);
     const areas = new Set(touched.map((t) => sim.areas.areaOf(t)));
     expect(areas.size).toBeGreaterThanOrEqual(2);
     for (const t of touched) expect(sim.areas.fog(sim.areas.areaOf(t)!)).not.toBe('hidden');
@@ -56,7 +58,7 @@ describe('massive blooms (City 10)', () => {
 
   it('a ×200+ chain sweeps a dozen areas, terminates and pays once', () => {
     const sim = openIsland(new Sim(createInitialState(11)));
-    // A cross of street corridors over the island (the row and the column cross at x = 34)
+    // A cross of street corridors over the island (the row and the column cross at x = 32)
     streetCross(sim);
     const { ended } = collect(sim);
     let paid = 0;
