@@ -342,6 +342,19 @@ export class WaterSystem {
     return this.wetness(t) > WATER_NET.dryBelow || this.pipes.feeds(t);
   }
 
+  /**
+   * E23.5.2's watercress: is water running beside this tile? A pipe carrying water on one of its four sides (E23.4.2),
+   * or a canal, pond or the sea beside it (what the farm read before the network landed).
+   */
+  isRunning(t: { roofId: string; x: number; z: number }): boolean {
+    if (t.roofId !== GROUND) return false;
+    for (const [dx, dz] of SIDES) {
+      if (this.pipes.carries(t.x + dx, t.z + dz)) return true;
+      if (this.sim.grid.peek(GROUND, t.x + dx, t.z + dz)?.feature === 'water') return true;
+    }
+    return false;
+  }
+
   /** 0…1: the fullest body within reach (0 if there is none). */
   wetness(t: TileData, reach = WATER_NET.reach): number {
     return this.fullest(t, reach) ?? 0;

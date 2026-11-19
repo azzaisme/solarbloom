@@ -1,6 +1,11 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
 /** `chest` exists only under old-city rules (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
-export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger' | 'reservoir' | 'pump';
+export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger'
+  // E23.5.2: the farm
+  | 'planter'
+  // E23.4.2: the water network
+  | 'reservoir'
+  | 'pump';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
 /** Plain per-resource numbers (tuning tables, small per-second coefficients). */
@@ -386,6 +391,25 @@ export interface SalvageState {
   decorMade?: string[];
   /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
   clipped?: Record<string, number>;
+  /** E23.5.2: each planter's bed, by machine id (absent = empty, no extras) */
+  planters?: Record<string, PlanterState>;
+  /** E23.5.2.3: crops whose seeds have been found (data/crops CropId), in the order found */
+  crops?: string[];
+  /** E23.5.2.3: gathers counted toward each region's next seed packet, by region id */
+  seedFinds?: Record<string, number>;
+}
+
+/** E23.5.2: one planter box. */
+export interface PlanterState {
+  /** the crop growing (data/crops CropId); absent = empty */
+  crop?: string;
+  /** growth so far, in game days at full rate (ripe at the crop's `days`) */
+  grown?: number;
+  /** fed with fertiliser (until the next harvest) */
+  fed?: boolean;
+  /** extras built onto it */
+  trellis?: boolean;
+  flooded?: boolean;
 }
 
 export interface GameState {

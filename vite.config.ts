@@ -20,7 +20,7 @@ const QUICK = [
   // E23.7: time, weather and salvage
   'clock', 'timers', 'photo-scene', 'weather',
   // E23.3: the power grid
-  'power-grid', 'power-helpers', 'power-lights',
+  'power-grid', 'power-helpers', 'power-lights', 'moonlit-night',
   // E23.8: regions and the mainland
   'region-strengths', 'region-unlocks-e23',
   // E23.8.3: the mainland
@@ -30,7 +30,7 @@ const QUICK = [
   // E23.4: the water network
   'water-levels', 'water-fade', 'water-pipes',
   // E23.5: the farm
-  'farm-items',
+  'farm-items', 'farm-planters',
   // E23.10: the proof
   'e23-gentle-failure',
 ].map((name) => `tests/${name}.test.ts`);

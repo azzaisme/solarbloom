@@ -201,6 +201,46 @@ describe('E23.4.2.2: pumps and pipe placement', () => {
     expect(sim.water.isWatered(far)).toBe(false);
   });
 
+  it("E23.5's planters far from water: dry and wilting, then watered by pump and pipe; watercress grows beside running pipe", () => {
+    const { sim, pond } = park();
+    weather(sim, 'sunny'); // dry days: rain would water the beds itself
+    const bed = (x: number, z: number) => {
+      Object.assign(tile(sim, x, z), { ground: 'restored', pollution: 0 });
+      return put(sim, 'planter', x, z);
+    };
+    const radish = bed(11, 12); // beside the pipe's far end (11,11)
+    const cress = bed(10, 12); // watercress needs running water beside it
+    (sim.state.salvage!.crops ??= []).push('radish', 'watercress');
+    sim.inventory.add('seeds', 5);
+    expect(sim.farm.plant(radish, 'radish')).toBe(true);
+    expect(sim.farm.plant(cress, 'watercress')).toBe(true);
+    expect(sim.farm.look(radish).wilting).toBe(true); // no water in reach
+    expect(sim.water.isRunning(cress)).toBe(false);
+    // pump on the pond's bank, a pipe to the beds, a panel to power it
+    put(sim, 'pump', 4, 11);
+    lay(sim, run(5, 11, 11));
+    powerUp(sim);
+    sim.power.tick(1);
+    days(sim, 0.05);
+    expect(sim.farm.look(radish).wilting).toBe(false);
+    expect(sim.water.isRunning(cress)).toBe(true);
+    expect(sim.farm.look(cress).resting).toBe(false);
+    // growing, they drink from the pond through the pipe
+    const before = sim.water.amountOf(pond.id);
+    for (let i = 0; i < 12; i++) {
+      sim.state.time += DAY / 24;
+      sim.farm.tick(DAY / 24);
+    }
+    expect(sim.water.amountOf(pond.id)).toBeLessThan(before);
+    expect(sim.state.salvage!.planters![radish.id].grown).toBeGreaterThan(0);
+    // the line cut: no running water for the cress, the radish wilts; nothing is removed
+    sim.water.pipes.lift(8, 11);
+    days(sim, 0.05);
+    expect(sim.farm.look(radish).wilting).toBe(true);
+    expect(sim.water.isRunning(cress)).toBe(false);
+    expect(sim.state.salvage!.planters![cress.id].crop).toBe('watercress');
+  });
+
   it("another sub-epic's machine can be a pump (E23.8.3's Long-range Pump): bank rule, its reach, its flow, its draw", () => {
     const { sim } = park();
     sim.water.registerPump('longPump', { reach: 3, flow: 2 * WATER_NET.pump.perDay, power: 8, size: 2 });

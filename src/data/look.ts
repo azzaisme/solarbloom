@@ -49,8 +49,10 @@ export const LOOK = {
   /**
    * Look 1.5: bloom on emissive and very bright pixels only. The threshold is scene-referred (before exposure and
    * tone mapping): sunlit grass and paving peak around 1.0–1.3, so glows are authored at 3 and above (Look 1.9).
+   * E23.7.5: `night` multiplies the intensity by deep night, so lamps, the pulse ring and glows wear soft halos
+   * against the blue (by day it would wash the sunlit ground).
    */
-  bloom: { intensity: 0.14, threshold: 1.15, blurLevel: 14 },
+  bloom: { intensity: 0.14, threshold: 1.15, blurLevel: 14, night: 6 },
   /**
    * Look 1.9: emissive budget (scene-referred, before exposure; bloom starts at 1.5). See docs/art/rendering.md.
    * `gain` multiplies every standard material authored as a glow (emissiveIntensity >= 1); weaker emissive tints
