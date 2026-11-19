@@ -7,6 +7,7 @@ import { DAY_SECONDS } from '../src/data/time';
 import { MACHINE_RECIPES } from '../src/data/crafting';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
+import type { PowerSky } from '../src/gameplay/PowerEnv';
 
 SaveService.clock = () => 0;
 
@@ -140,47 +141,39 @@ describe('E23.5.3: the compost bin', () => {
   });
 });
 
-/** A controlled grid for the digester's own rules (a steady demand); the real E23.3 grid is tested above. */
-function grid(sim: Sim, demand: () => number) {
-  const sources: ((m: MachineData) => number)[] = [];
-  const power = {
-    register: (_type: string, def: { source: (m: MachineData) => number }) => sources.push(def.source),
-    networkOf: () => ({ demand: demand(), stored: 0, capacity: 0 }),
-    supplied: (m: MachineData) => sources.reduce((n, f) => n + f(m), 0),
-  };
-  (sim as unknown as { power: typeof power }).power = power;
-  return power;
+/**
+ * A small real E23.3 grid: a power pole, a fed digester and a real charger (E23.3.3) with bloombot docked at it and
+ * kept low, so the charger draws its 6 W the whole time. `solar` adds that many panels.
+ */
+function realGrid(sim: Sim, solar = 0) {
+  sim.state.salvage!.tier = 4;
+  // the pole and charger come from Mast Row's Keeper, solar panels from the Old Market's (data/crafting)
+  for (const r of ['mastRow', 'oldMarket']) sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === r)!.id] = { step: 'settled' };
+  const pole = build(sim, 'relay' as 'bioDigester', 12, 16);
+  const dig = build(sim, 'bioDigester', 13, 16);
+  const charger = build(sim, 'charger' as 'bioDigester', 12, 17);
+  const panels = Array.from({ length: solar }, (_, k) => build(sim, 'solar' as 'bioDigester', 11, 15 + k));
+  sim.bot = { roofId: GROUND, x: 12.5, z: 18.3 }; // sitting at the charger's edge
+  return { pole, dig, charger, panels };
 }
 
-describe('E23.5.3: the Bio Digester', () => {
-  it('done when: a night can be carried by a fed digester alone', () => {
-    const sim = farm();
-    const m = build(sim, 'bioDigester', 12, 16);
-    const nightLoad = 6; // a charger (E23.3's heaviest consumer) all night
-    const power = grid(sim, () => nightLoad);
-    sim.inventory.add('biomass', DIGESTER.capacity);
-    expect(sim.compost.feed(m)).toBe(DIGESTER.capacity);
-    const night = DAY_SECONDS / 3; // dusk at 2/3 of the day to dawn (E23.7's clock)
-    let short = 0;
-    for (let t = 0; t < night; t += 60) {
-      run(sim, 60);
-      if (power.supplied(m) < nightLoad) short++;
-    }
-    expect(short).toBe(0);
-    expect(sim.compost.mood(m)).toBe('running');
-    expect(sim.compost.fuel(m)).toBeCloseTo(DIGESTER.capacity - DIGESTER.burnPerDay / 3, 3);
-  });
+/** Steps the grid and the farm together (10 s at a time), bloombot kept low so the charger keeps drawing. */
+function step(sim: Sim, seconds: number) {
+  for (let t = 0; t < seconds; t += 10) {
+    sim.charge.drainForTest();
+    sim.state.time += 10;
+    sim.power.tick(10);
+    sim.compost.tick(10);
+  }
+}
 
-  it('done when, on the real E23.3 grid: a fed digester alone carries a game night for a charger-sized load', () => {
+const NIGHT: PowerSky = { sun: 0, solar: 0, cloudy: false, wind: 0, dark: 1 };
+const NOON: PowerSky = { sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 };
+
+describe('E23.5.3: the Bio Digester', () => {
+  it('done when, on the real E23.3 grid: a fed digester alone carries a game night for a charging charger', () => {
     const sim = farm();
-    sim.state.salvage!.tier = 4;
-    // a load drawing a charger's 6 W all night (a real charger draws only while bloombot sits on it): a chest
-    sim.power.register('chest', { consumer: { shed: 'charger', draw: 6 } });
-    // the power pole and the chest come from Mast Row's and Saltwind's Keepers (data/crafting)
-    for (const r of ['mastRow', 'saltwind']) sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === r)!.id] = { step: 'settled' };
-    const pole = build(sim, 'relay' as 'bioDigester', 12, 16);
-    const dig = build(sim, 'bioDigester', 13, 16);
-    const load = build(sim, 'chest' as 'bioDigester', 12, 17);
+    const { pole, dig, charger } = realGrid(sim);
     sim.inventory.add('biomass', DIGESTER.capacity);
     sim.compost.feed(dig);
     // to dusk on the game clock: no sun, so nothing but the digester can power it
@@ -191,11 +184,10 @@ describe('E23.5.3: the Bio Digester', () => {
     let dark = 0;
     let steps = 0;
     while (sim.clock.gameIsNight()) {
-      sim.state.time += 10;
-      sim.power.tick(10);
-      sim.compost.tick(10);
-      const net = sim.power.networkOf(load)!;
-      if (steps++ > 2 && (!net || net.served < net.demand - 1e-6 || !sim.power.isPowered(load))) dark++;
+      step(sim, 10);
+      expect(sim.chargers.charging(charger), 'the charger is charging bloombot').toBe(true);
+      const net = sim.power.networkOf(charger)!;
+      if (steps++ > 2 && (!net || net.served < net.demand - 1e-6 || !sim.power.isPowered(charger))) dark++;
     }
     expect(steps * 10).toBeGreaterThan(DAY_SECONDS / 3 - 20); // a whole night went by
     expect(sim.power.networkOf(pole)?.sources.some((s) => s.id === dig.id)).toBe(true);
@@ -215,36 +207,58 @@ describe('E23.5.3: the Bio Digester', () => {
     expect(sim.compost.output(at)).toBe(DIGESTER.output * 1.5);
   });
 
-  it('day or night alike; an empty digester just stops, and runs again when fed', () => {
+  it('burns only for the shortfall: by day the sun carries the grid and no biomass burns; at night it does', () => {
     const sim = farm();
-    const m = build(sim, 'bioDigester', 12, 16);
-    const power = grid(sim, () => 6);
-    sim.inventory.add('biomass', 2);
-    sim.compost.feed(m);
-    run(sim, 60);
-    expect(power.supplied(m)).toBe(DIGESTER.output);
-    run(sim, DAY_SECONDS);
-    expect(sim.compost.mood(m)).toBe('empty');
-    expect(power.supplied(m)).toBe(0);
-    sim.inventory.add('biomass', 5);
-    sim.compost.feed(m);
-    expect(power.supplied(m)).toBe(DIGESTER.output);
+    const { dig } = realGrid(sim, 2); // two panels: 8 W in full sun, more than the charger's 6 W
+    sim.inventory.add('biomass', 10);
+    sim.compost.feed(dig);
+    sim.power.skyOverride = () => NOON;
+    step(sim, DAY_SECONDS / 4);
+    expect(sim.compost.fuel(dig)).toBe(10); // nothing wasted
+    expect(sim.compost.mood(dig)).toBe('idle');
+    expect(sim.compost.supplying(dig)).toBe(0);
+    // night: the panels give nothing, so the digester covers the charger
+    sim.power.skyOverride = () => NIGHT;
+    step(sim, DAY_SECONDS / 8);
+    expect(sim.compost.mood(dig)).toBe('running');
+    expect(sim.compost.supplying(dig)).toBeCloseTo(6, 6);
+    expect(sim.compost.fuel(dig)).toBeCloseTo(10 - DIGESTER.burnPerDay / 8, 1);
   });
 
-  it('burns nothing while its grid wants no power, or with no grid at all (it waits, fed)', () => {
+  it('with one panel by day it gives only the 2 W the panel cannot, and burns a third as much', () => {
     const sim = farm();
-    const m = build(sim, 'bioDigester', 12, 16);
+    const { dig } = realGrid(sim, 1); // 4 W of sun against 6 W drawn
     sim.inventory.add('biomass', 10);
-    sim.compost.feed(m);
-    run(sim, DAY_SECONDS);
-    expect(sim.compost.fuel(m)).toBe(10);
-    let want = 0;
-    grid(sim, () => want);
-    run(sim, DAY_SECONDS / 4);
-    expect(sim.compost.mood(m)).toBe('idle');
-    expect(sim.compost.fuel(m)).toBe(10);
-    want = 6;
-    run(sim, DAY_SECONDS / 4);
-    expect(sim.compost.fuel(m)).toBeCloseTo(10 - DIGESTER.burnPerDay / 4, 3);
+    sim.compost.feed(dig);
+    sim.power.skyOverride = () => NOON;
+    step(sim, DAY_SECONDS / 4);
+    expect(sim.compost.supplying(dig)).toBeCloseTo(6 - 4, 6);
+    expect(sim.compost.fuel(dig)).toBeCloseTo(10 - (DIGESTER.burnPerDay / 4) * (2 / DIGESTER.output), 1);
+  });
+
+  it('day or night alike it never wastes: off any grid it waits, fed; an empty one just stops, and runs again when fed', () => {
+    const sim = farm();
+    // a lone digester (no pole, nothing drawing): fed, it waits and burns nothing
+    sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === 'clockPlaza')!.id] = { step: 'settled' };
+    const lone = build(sim, 'bioDigester', 4, 22); // well out of the pole's reach
+    sim.inventory.add('biomass', 10);
+    sim.compost.feed(lone);
+    step(sim, DAY_SECONDS / 4);
+    expect(sim.compost.fuel(lone)).toBe(10);
+    expect(sim.compost.mood(lone)).toBe('idle');
+    // on a grid at night: it runs until empty, then stops (nothing breaks), and runs again when fed
+    const { dig } = realGrid(sim);
+    sim.power.skyOverride = () => NIGHT;
+    sim.inventory.add('biomass', 2);
+    sim.compost.feed(dig);
+    step(sim, 20);
+    expect(sim.compost.mood(dig)).toBe('running');
+    step(sim, DAY_SECONDS / 4);
+    expect(sim.compost.mood(dig)).toBe('empty');
+    expect(sim.compost.supplying(dig)).toBe(0);
+    sim.inventory.add('biomass', 5);
+    sim.compost.feed(dig);
+    step(sim, 20);
+    expect(sim.compost.mood(dig)).toBe('running');
   });
 });

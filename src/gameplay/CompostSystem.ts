@@ -2,6 +2,8 @@ import type { BinState, MachineData } from '../core/types';
 import { COMPOST, DIGESTER } from '../data/compost';
 import { DAY_SECONDS } from '../data/time';
 import { machineStrengthAt } from '../core/RegionStrengths';
+import type { PowerNetwork } from './PowerGrid';
+import type { PowerSky } from './PowerEnv';
 import type { Sim } from './Sim';
 
 export type DigesterMood = 'running' | 'idle' | 'empty';
@@ -10,8 +12,8 @@ export type DigesterMood = 'running' | 'idle' | 'empty';
  * E23.5.3 (#388): the end of the farm chain. A compost bin takes biomass and food scraps and rots them down into
  * compost over game days; compost left in the bin matures into fertiliser. A full bin just waits for bloombot.
  * The Bio Digester is a source on E23.3's grid (`sim.power`): it turns biomass into power, day or night, while fed.
- * It burns only while its grid wants power (a draw, or a battery with room); off any grid it waits, fed, and an empty
- * one just stops (nothing breaks). Old-city rules only. State lives in `salvage.bins` / `salvage.digesters`.
+ * It gives (and burns for) only the shortfall the other sources and charged batteries can't cover, so no biomass is
+ * wasted by day; off any grid it waits, fed, and an empty one just stops (nothing breaks). Old-city rules only. State lives in `salvage.bins` / `salvage.digesters`.
  */
 export class CompostSystem {
   private registered = false;
@@ -150,30 +152,72 @@ export class CompostSystem {
     return n;
   }
 
-  /** Does the digester's grid want power right now (something drawing, or a battery with room)? */
-  private wanted(m: MachineData): boolean {
-    const net = this.sim.power.networkOf(m);
-    return !!net && (net.demand > 1e-9 || net.stored < net.capacity - 1e-9);
-  }
-
-  /** Running (burning, powering its grid), idle (fed, nothing wants power) or empty (stopped). */
+  /** Running (burning, powering its grid), idle (fed, nothing it needs to cover) or empty (stopped). */
   mood(m: MachineData): DigesterMood {
     if (this.fuel(m) <= 1e-9) return 'empty';
-    return this.wanted(m) ? 'running' : 'idle';
+    return this.supplying(m) > 1e-9 ? 'running' : 'idle';
   }
 
   /**
-   * What it supplies to the grid this moment (E23.3 watts): its output while fed, nothing when empty. E23.8.1: a
-   * digester in a machinery region (Clock Plaza) runs at that region's strength (1.5×).
+   * The most it can give the grid (E23.3 watts): its output while fed, nothing when empty. E23.8.1: a digester in a
+   * machinery region (Clock Plaza) runs at that region's strength (1.5×).
    */
   output(m: MachineData): number {
     return this.fuel(m) > 1e-9 ? DIGESTER.output * machineStrengthAt('bioDigester', m.x, m.z) : 0;
   }
 
+  /** What it gave its grid at the last solve (W): only the shortfall nothing else covered. */
+  supplying(m: MachineData): number {
+    return this.fuel(m) > 1e-9 ? (this.gave.get(m.id) ?? 0) : 0;
+  }
+
+  /** Last solve's supply per digester, and each digester's network (cached outside the solve). */
+  private gave = new Map<string, number>();
+  private nets = new Map<string, PowerNetwork | undefined>();
+
+  /**
+   * The grid asks a digester for its supply (inside the solve). It covers only what the other sources and the
+   * charged batteries can't: by day the sun runs the grid and no biomass burns; at night it carries the load.
+   * Several digesters on one network share the shortfall in id order.
+   */
+  private supplyNow(m: MachineData, sky: PowerSky): number {
+    const full = this.output(m);
+    // its network as last seen outside the solve; off any grid (or not yet seen) it gives nothing and burns nothing
+    const net = this.nets.get(m.id);
+    let give = 0;
+    if (full > 1e-9 && net) {
+      const power = this.sim.power;
+      let others = 0;
+      const digesters: MachineData[] = [];
+      for (const s of net.sources) {
+        if (s.type === 'bioDigester') digesters.push(s as MachineData);
+        else others += power.output(s, sky);
+      }
+      for (const b of net.batteries) if (power.stored(b).stored > 1e-9) others += power.roleOf(b)?.battery?.rate ?? 0;
+      let need = -others;
+      for (const c of net.consumers) need += power.draw(c, sky);
+      need = Math.max(0, need);
+      give = 0;
+      for (const d of digesters) {
+        const g = Math.min(this.output(d), need);
+        if (d.id === m.id) {
+          give = g;
+          break;
+        }
+        need -= g;
+      }
+    }
+    this.gave.set(m.id, give);
+    return give;
+  }
+
   private tickDigester(m: MachineData, days: number) {
+    this.nets.set(m.id, this.sim.power.networkOf(m));
     const f = this.fuel(m);
-    if (f <= 1e-9 || !this.wanted(m)) return;
-    const after = Math.max(0, f - DIGESTER.burnPerDay * days);
+    const full = this.output(m);
+    if (f <= 1e-9 || full <= 1e-9) return;
+    // biomass burns in step with the power it gave (nothing while the sun or a battery covers the grid)
+    const after = Math.max(0, f - DIGESTER.burnPerDay * (this.supplying(m) / full) * days);
     this.setFuel(m, after);
     if (after <= 1e-9) this.sim.bus.emit('farm.machine', { machineId: m.id });
   }
@@ -184,7 +228,7 @@ export class CompostSystem {
     if (!this.on) return;
     // registered on the first tick (the grid is built after the farm systems)
     if (!this.registered) {
-      this.sim.power.register('bioDigester', { source: (m) => this.output(m as MachineData) });
+      this.sim.power.register('bioDigester', { source: (m, _sim, sky) => this.supplyNow(m as MachineData, sky) });
       this.registered = true;
     }
     const days = dt / DAY_SECONDS;
