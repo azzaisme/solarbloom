@@ -9,11 +9,10 @@ import type { Sim } from './Sim';
 /** What costs charge. */
 export type ChargeUse = 'pulse' | 'sprint' | 'pry' | 'hover' | 'climb' | 'glide';
 /** Where charge comes back from (E23.3's chargers call `recharge(amount, 'charger')`). */
-export type ChargeSource = 'eat' | 'charger' | 'bench' | 'home' | 'sleep' | 'other';
+export type ChargeSource = 'eat' | 'charger' | 'bench' | 'home' | 'sleep' | 'cat' | 'other';
 
 /**
- * E23.2.1 (#371): bloombot's charge, the only meter on screen. Old-city rules only: under classic rules it is
- * off, every cost is free and nothing here changes the game (so classic runs stay byte-identical).
+ * E23.2.1 (#371): bloombot's charge, the only meter on screen.
  *
  * Cozy wins every tie: walking never costs charge, and at zero bloombot walks on (a little slower) but can't
  * pulse or use abilities. Nothing is lost and bloombot is never stranded. A pulse with a little charge left
@@ -32,11 +31,6 @@ export class ChargeSystem {
 
   constructor(private sim: Sim) {}
 
-  /** Is there a charge at all (old-city rules)? */
-  get on(): boolean {
-    return this.sim.oldCity;
-  }
-
   private get st(): ChargeState {
     const s = this.sim.state;
     return (s.charge ??= { value: this.max });
@@ -49,7 +43,6 @@ export class ChargeSystem {
 
   /** The charge now, 0 to `max`. Full when off. */
   value(): number {
-    if (!this.on) return this.max;
     return Math.max(0, Math.min(this.max, this.st.value));
   }
 
@@ -60,12 +53,12 @@ export class ChargeSystem {
 
   /** Out of charge: the low-power walk, no pulses or abilities. */
   get empty(): boolean {
-    return this.on && this.value() <= 1e-6;
+    return this.value() <= 1e-6;
   }
 
   /** Running low (the meter shows it). */
   get low(): boolean {
-    return this.on && this.share <= CHARGE.lowShare;
+    return this.share <= CHARGE.lowShare;
   }
 
   /** The cost of one use (pulse, an ability) or of one second of sprinting, after research's efficiency. */
@@ -79,12 +72,11 @@ export class ChargeSystem {
 
   /** May bloombot do this now? Anything is allowed with charge left, however little (it bottoms out at zero). */
   canUse(use: ChargeUse): boolean {
-    return !this.on || this.cost(use) <= 0 || !this.empty;
+    return this.cost(use) <= 0 || !this.empty;
   }
 
   /** Pays for one use (or `seconds` of sprinting). False, and nothing paid, when out of charge. */
   use(use: ChargeUse, seconds = 1): boolean {
-    if (!this.on) return true;
     const c = this.cost(use) * (use === 'sprint' ? seconds : 1);
     if (c <= 0) return true;
     if (this.empty) return false;
@@ -94,7 +86,7 @@ export class ChargeSystem {
 
   /** Adds charge (chargers, benches, meals). Returns what was actually added (it stops at full). */
   recharge(amount: number, source: ChargeSource = 'other'): number {
-    if (!this.on || amount <= 0) return 0;
+    if (amount <= 0) return 0;
     const before = this.value();
     this.set(before + amount);
     const got = this.value() - before;
@@ -141,8 +133,7 @@ export class ChargeSystem {
    * Eats one unit: the best edible carried, or the one asked for. The charge arrives over the item's eating time.
    * 'full' when there's no room, 'none' when there's nothing to eat, 'busy' mid-bite.
    */
-  eat(id?: EdibleDef['id']): EdibleDef | 'full' | 'none' | 'busy' | 'off' {
-    if (!this.on) return 'off';
+  eat(id?: EdibleDef['id']): EdibleDef | 'full' | 'none' | 'busy' {
     if (this.meal) return 'busy';
     if (this.value() >= this.max - 1e-6) return 'full';
     const item = CHARGE.edibles.find((e) => (id ? e.id === id : true) && this.carried(e.id) > 0);
@@ -166,11 +157,10 @@ export class ChargeSystem {
 
   /** Resting at home: standing still there (not just passing through) for a moment. */
   get resting(): boolean {
-    return this.on && this.still >= CHARGE.home.stillSeconds && this.atHome();
+    return this.still >= CHARGE.home.stillSeconds && this.atHome();
   }
 
   tick(dt: number) {
-    if (!this.on) return;
     const m = this.meal;
     if (m) {
       const bite = Math.min(m.left, m.perSecond * dt);
@@ -193,9 +183,9 @@ export class ChargeSystem {
 
   /** Test hooks for the gentle-failure suite (E23.10): run the charge out, or fill it. */
   drainForTest() {
-    if (this.on) this.set(0);
+    this.set(0);
   }
   refillForTest() {
-    if (this.on) this.set(this.max);
+    this.set(this.max);
   }
 }

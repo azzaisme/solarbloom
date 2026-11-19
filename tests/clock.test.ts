@@ -7,7 +7,7 @@ const NIGHT_FINDS = ALL_FINDS.filter((f) => f.when !== 'fog');
 import { daylightAt, gameDayOf, realFraction, solarAt } from '../src/gameplay/Clock';
 import { Sim } from '../src/gameplay/Sim';
 
-const oldSim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
+const oldSim = (seed = 7) => new Sim(createInitialState(seed));
 /** a real clock stuck at this local hour */
 const at = (h: number, m = 0) => () => new Date(2026, 10, 18, h, m, 0);
 /** moves the game clock to a day fraction (as sleeping does: through the offset) */

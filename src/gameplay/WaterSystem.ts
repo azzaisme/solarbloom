@@ -125,8 +125,8 @@ export class WaterSystem {
    */
   isFresh(t: TileData | undefined): t is TileData {
     if (!t || t.roofId !== GROUND || t.feature !== 'water') return false;
-    if (this.sim.oldCity && (seaCell(t.x, t.z) || surfCell(t.x, t.z))) return false;
-    return (this.sim.oldCity && t.blocked) || t.ground === 'restored';
+    if (seaCell(t.x, t.z) || surfCell(t.x, t.z)) return false;
+    return t.blocked || t.ground === 'restored';
   }
 
   /** The body a water tile belongs to. */
@@ -181,13 +181,8 @@ export class WaterSystem {
       }
     }
     const id = `${anchor.x},${anchor.z}`;
-    const region = this.sim.oldCity ? (regionOfCell(anchor.x, anchor.z)?.id as RegionId | undefined) : undefined;
-    const body: WaterBody = {
-      id,
-      tiles,
-      capacity: tiles.size * WATER_NET.perTile,
-      region,
-    };
+    const region = regionOfCell(anchor.x, anchor.z)?.id as RegionId | undefined;
+    const body: WaterBody = { id, tiles, capacity: tiles.size * WATER_NET.perTile, region };
     for (const tid of tiles) this.byTile.set(tid, body);
     this.bodies.set(id, body);
     this.carryOver(body);
@@ -329,7 +324,7 @@ export class WaterSystem {
 
   /** Spring regions whose landmark still sleeps (their water is dormant), as a key. */
   private sleepKey(): string {
-    if (!this.sim.oldCity || !WATER_NET.springsNeedLandmark) return '';
+    if (!WATER_NET.springsNeedLandmark) return '';
     return (Object.keys(WATER_NET.springs) as RegionId[]).filter((r) => this.sim.areas.fog(r) !== 'cleared').join();
   }
 
@@ -568,7 +563,6 @@ export class WaterSystem {
    */
   live(): WaterBody[] {
     const out = this.tracked();
-    if (!this.sim.oldCity) return out;
     const regions = new Set([...Object.keys(WATER_NET.springs), ...Object.keys(WATER_NET.startLevel)] as RegionId[]);
     for (const r of regions) for (const b of this.springBodies(r)) if (!out.includes(b)) out.push(b);
     return out;
@@ -576,7 +570,7 @@ export class WaterSystem {
 
   /** The fresh water in a region (from its data rectangles: the canals and ponds it was drawn with). */
   springBodies(region: RegionId): WaterBody[] {
-    const def = this.sim.oldCity ? REGION_WATER.get(region) : undefined;
+    const def = REGION_WATER.get(region);
     const out: WaterBody[] = [];
     for (const q of def ?? []) {
       const a = waterAnchor(q);
@@ -601,7 +595,7 @@ export class WaterSystem {
    */
   known(): WaterBody[] {
     const out = new Set(this.live());
-    if (this.sim.oldCity) for (const r of REGION_WATER.keys()) for (const b of this.springBodies(r)) out.add(b);
+    for (const r of REGION_WATER.keys()) for (const b of this.springBodies(r)) out.add(b);
     for (const b of this.bodies.values()) out.add(b);
     return [...out];
   }
@@ -706,8 +700,7 @@ export class WaterSystem {
   /** A spring region whose landmark just woke starts its rush: its water fills over `wakeRush` seconds. */
   private wakes() {
     const now = new Set<RegionId>();
-    if (this.sim.oldCity)
-      for (const r of Object.keys(WATER_NET.springs) as RegionId[]) if (this.sim.areas.fog(r) === 'cleared') now.add(r);
+    for (const r of Object.keys(WATER_NET.springs) as RegionId[]) if (this.sim.areas.fog(r) === 'cleared') now.add(r);
     if (this.awake) for (const r of now) if (!this.awake.has(r)) this.rushUntil.set(r, this.clock + WATER_NET.wakeRush);
     this.awake = now;
   }

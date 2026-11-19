@@ -1,7 +1,7 @@
 // E22.5 (#342): the HUD laid out as the epic's table (docs/E22_CONTROLS_UI.md, "The HUD"), checked on the
 // platforms the game ships for (desktop and Steam Deck): 1280 × 800 and 1920 × 1080, at 100, 125 and 150%
-// interface size, under both rule sets (old-city rules previewed with ?ui=oldcity until E21 lands). Reports
-// overlapping parts, parts off screen and how much of the screen the HUD covers; under old-city rules plain
+// interface size. Reports
+// overlapping parts, parts off screen and how much of the screen the HUD covers; plain
 // walking may show only the five parts in the table. Also opens the build menu, the backpack, the pause menu and
 // Settings (each tab) and checks they stay on screen. Screenshots go to docs/review/hud-*.png. Run after
 // `vite build`; STRICT=1 fails on any problem.
@@ -56,13 +56,13 @@ function overlaps(rects, w, h) {
 }
 
 try {
-  for (const rules of ['classic', 'oldcity'])
+  for (const rules of ['oldcity'])
     for (const [w, h] of SIZES)
       for (const scale of SCALES) {
         const name = `${rules}-${w}x${h}-${scale}`;
         const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
         page.setDefaultTimeout(180000);
-        await page.goto(`http://localhost:4198/?slot=1${rules === 'classic' ? '&rules=classic' : ''}`);
+        await page.goto('http://localhost:4198/?slot=1');
         await page.evaluate((scale) => {
           localStorage.clear();
           localStorage.setItem('solarbloom.settings', JSON.stringify({ uiScale: scale, showNumbers: !!globalThis.NUMBERS }));
@@ -84,7 +84,7 @@ try {
         await page.waitForTimeout(1500);
         const rects = await visibleRects(page, PARTS);
         const issues = overlaps(rects, w, h);
-        if (rules === 'oldcity') for (const r of rects) if (!FIVE.has(r.sel)) issues.push(`${r.sel} is on the walking view (only the five parts may be)`);
+        for (const r of rects) if (!FIVE.has(r.sel)) issues.push(`${r.sel} is on the walking view (only the five parts may be)`);
         // Look 5.2: no emoji on screen (game strings carry them; the HUD draws icons instead).
         const emoji = await page.evaluate(() => {
           const t = document.getElementById('hud').innerText;
