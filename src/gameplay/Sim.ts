@@ -40,7 +40,11 @@ import { MainlandSystem } from './MainlandSystem';
 import { LandmarkSystem } from './LandmarkSystem';
 import { WaterSystem } from './WaterSystem';
 import { Crafting } from './Crafting';
+import { Research } from './Research';
 import { ChargeSystem } from './Charge';
+import { PulseLoad } from './PulseLoad';
+import { RestSystem } from './Rest';
+import { BuriedSystem } from './Buried';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
@@ -105,8 +109,16 @@ export class Sim {
   readonly water: WaterSystem;
   /** E23.6.1: the crafting table (components; machine and decoration recipes). */
   readonly crafting: Crafting;
+  /** E23.6.2: the research station (projects, and the upgrades they open). */
+  readonly research: Research;
   /** E23.2.1: bloombot's charge, the only meter (old-city rules). */
   readonly charge: ChargeSystem;
+  /** E23.2.2: what the pulse is loaded with, and its reveal ripple (old-city rules). */
+  readonly pulseLoad: PulseLoad;
+  /** E23.2.3: benches and meditating at chargers. */
+  readonly rest: RestSystem;
+  /** E23.2.2.3: seeds and salvage buried in open ground (the ripple reveals them). */
+  readonly buried: BuriedSystem;
   /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
   readonly clock: Clock;
   /** E23.7.1.3: finds that are out only at night. */
@@ -172,6 +184,9 @@ export class Sim {
     }
     this.inventory = new Inventory(this);
     this.charge = new ChargeSystem(this);
+    this.pulseLoad = new PulseLoad(this);
+    this.rest = new RestSystem(this);
+    this.buried = new BuriedSystem(this);
     this.landmarks = new LandmarkSystem(this);
     this.clock = new Clock(this);
     this.nightFinds = new NightFinds(this);
@@ -181,6 +196,7 @@ export class Sim {
     this.fountain = new FountainSystem(this);
     this.keepers = new KeeperSystem(this);
     this.crafting = new Crafting(this);
+    this.research = new Research(this);
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
     this.gather = new GatherSystem(this);
@@ -313,7 +329,9 @@ export class Sim {
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
     this.water.tick(dt);
+    this.rest.tick(dt);
     this.crafting.tick(dt);
+    this.research.tick(dt);
     this.charge.tick(dt);
     this.clock.tick();
     this.weather.tick();

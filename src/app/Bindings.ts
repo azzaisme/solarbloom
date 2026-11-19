@@ -42,6 +42,8 @@ export type Action =
   | 'map'
   | 'harvest'
   | 'eat'
+  | 'loadNext'
+  | 'loadPrev'
   | 'pinNext'
   | 'cancel'
   | 'menu'
@@ -95,6 +97,8 @@ export const ACTIONS: readonly ActionDef[] = [
   A('pulse', 'Pulse, use the tool, place', 'act', 'world'),
   A('harvest', 'Harvest Sunlight', 'act', 'world', true, true, true),
   A('eat', 'Eat a snack (recharge)', 'act', 'world', true, true, false, true),
+  A('loadNext', 'Pulse load: next', 'act', 'world', true, true, false, true),
+  A('loadPrev', 'Pulse load: previous', 'act', 'world', true, true, false, true),
   A('pinNext', 'Pin the next request', 'act', 'world'),
   A('nextArea', 'Go to the area that needs you', 'act', 'world', true, true, true),
   A('home', 'Back to the park', 'act', 'world', true, true, true),
@@ -170,6 +174,9 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
     harvest: ['KeyF'],
     // E23.2.1: under old-city rules F eats instead (Harvest Sunlight is classic only)
     eat: oldCity ? ['KeyF'] : [],
+    // E23.2.2: the pulse load wheel
+    loadNext: ['KeyV'],
+    loadPrev: ['KeyZ'],
     pinNext: ['KeyG'],
     cancel: [FIXED_KEY],
     menu: [FIXED_KEY],
@@ -216,6 +223,9 @@ export function defaultPad(oldCity = false): Partial<Record<Action, number>> {
     // E23.2.1: d-pad left eats instead of harvesting sunlight (classic only)
     delete p.harvest;
     p.eat = 14;
+    // E23.2.2: the bumpers turn the load wheel while walking (in build mode they turn the piece)
+    p.loadPrev = 4;
+    p.loadNext = 5;
   }
   return p;
 }

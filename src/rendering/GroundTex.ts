@@ -7,6 +7,8 @@ import * as pc from 'playcanvas';
  *  - `sand`: the beach's dead sand (warm gold, wind ripples, pale pebbles)
  *  - `dead-earth`: dead grass, leaf litter and clay (dry brown earth, cracked in patches, small stones)
  *  - `dead-paving`: dead paving (worn cream stone pavers, orange dust in the joints and drifted across)
+ *  - `silt-bed`: a dried-out pond's bed (dark silt cracked into curled plates, damp patches, a few pebbles); the
+ *    dead ponds wear it, and so does the bed a draining pond bares (E23.4.1), so the two match
  *
  * Each is painted procedurally at startup (512², seamless, no download), in the hand-painted look of the owner's
  * reference images. A file in `assets/raw/textures/` named `<name>.png`, `.webp` or `.jpg` replaces the painted
@@ -15,11 +17,11 @@ import * as pc from 'playcanvas';
 
 const FILES = import.meta.glob('../../assets/raw/textures/*.{png,webp,jpg}', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
 
-export type GroundTexName = 'sand' | 'dead-earth' | 'dead-paving';
-export const GROUND_TEXTURES: GroundTexName[] = ['sand', 'dead-earth', 'dead-paving'];
+export type GroundTexName = 'sand' | 'dead-earth' | 'dead-paving' | 'silt-bed';
+export const GROUND_TEXTURES: GroundTexName[] = ['sand', 'dead-earth', 'dead-paving', 'silt-bed'];
 
 /** World metres one copy of each texture covers. */
-const TILE_M: Record<GroundTexName, number> = { sand: 5, 'dead-earth': 5, 'dead-paving': 4 };
+export const GROUND_TEX_METRES: Record<GroundTexName, number> = { sand: 5, 'dead-earth': 5, 'dead-paving': 4, 'silt-bed': 4 };
 const SIZE = 512;
 
 function urlOf(name: GroundTexName): string | undefined {
@@ -132,7 +134,8 @@ function paintDeadEarth(px: Uint8ClampedArray) {
       // where the ground cracks: patches, the rest is dusty and smooth
       const patch = smooth(0.5, 0.66, n1(u, v, 3) * 0.7 + n2(u, v, 6) * 0.3);
       // drifts of lighter dust running diagonally (the wind), and darker damp earth
-      const drift = n1(u + v, v - u * 0.35, 4) * 0.6 + n2(u, v, 9) * 0.4;
+      // (whole-number shears only: the noise repeats once per texture, so any other slant leaves a seam where it tiles)
+      const drift = n1(u + v, v - u, 4) * 0.6 + n2(u, v, 9) * 0.4;
       let c = mix(mix(darkEarth, base, smooth(0.2, 0.55, drift)), lightDust, smooth(0.55, 0.9, drift) * 0.8);
       c = mix(c, mix(darkEarth, lightDust, tone), patch * 0.16); // each plate its own tone
       // plate edges: a soft bevel into a dark hairline
@@ -144,6 +147,62 @@ function paintDeadEarth(px: Uint8ClampedArray) {
       px[i] = c[0] + g;
       px[i + 1] = c[1] + g * 0.8;
       px[i + 2] = c[2] + g * 0.7;
+      px[i + 3] = 255;
+    }
+}
+
+/**
+ * A dried-out pond bed: dark silt cracked into plates whose rims curl up and dry pale, the cracks dark and deep;
+ * in damp patches (where the last of the water lay) the mud is darker, smoother and barely cracked. A few pebbles
+ * and bits of old shell. Its average is the drained-bed colour (PALETTE.aqua.bed), so a draining pond's bed and a
+ * long-dead one match. Writes heights into `H` for the normal map.
+ */
+function paintSiltBed(px: Uint8ClampedArray, H: Float32Array) {
+  const n1 = makeNoise(71), n2 = makeNoise(83), n3 = makeNoise(97);
+  const R = rng(19);
+  const G = 9; // plates about 45 cm across (the texture spans 4 m)
+  const seeds: [number, number, number][] = [];
+  for (let i = 0; i < G * G; i++) seeds.push([((i % G) + 0.15 + R() * 0.7) / G, (Math.floor(i / G) + 0.15 + R() * 0.7) / G, R()]);
+  const peb = stones(rng(29), 34, 0.004, 0.012);
+  const silt: RGB = [100, 80, 61], crust: RGB = [134, 110, 86], damp: RGB = [70, 57, 45], crack: RGB = [40, 31, 25];
+  const stoneBody: RGB = [128, 116, 104], stoneLight: RGB = [190, 178, 160], stoneDark: RGB = [58, 48, 40];
+  for (let y = 0; y < SIZE; y++)
+    for (let x = 0; x < SIZE; x++) {
+      const u = x / SIZE, v = y / SIZE;
+      const wu = u + (n2(u, v, 10) - 0.5) * 0.03, wv = v + (n3(u, v, 10) - 0.5) * 0.03;
+      let d1 = 9, d2 = 9, tone = 0;
+      const gx = Math.floor(wu * G), gy = Math.floor(wv * G);
+      for (let k = 0; k < 9; k++) {
+        const sd = seeds[((((gy + Math.floor(k / 3) - 1) % G) + G) % G) * G + ((((gx + (k % 3) - 1) % G) + G) % G)];
+        let dx = wu - sd[0], dy = wv - sd[1];
+        dx -= Math.round(dx);
+        dy -= Math.round(dy);
+        const d = dx * dx + dy * dy;
+        if (d < d1) {
+          d2 = d1;
+          d1 = d;
+          tone = sd[2];
+        } else if (d < d2) d2 = d;
+      }
+      const edge = Math.sqrt(d2) - Math.sqrt(d1);
+      // damp patches: soft blobs where the mud never dried through (less cracked, darker)
+      const wet = smooth(0.55, 0.75, n1(u, v, 3) * 0.65 + n2(u, v, 7) * 0.35);
+      const dry = 1 - wet * 0.85;
+      // crack width varies along its run (wider where the plates pulled apart most)
+      const width = 0.004 + n3(u, v, 14) * 0.006;
+      const inCrack = smooth(width, width * 0.35, edge) * dry;
+      const rim = smooth(0.03, 0.008, edge) * dry; // the curled, paler rim of a plate
+      let c = mix(silt, crust, smooth(0.25, 0.85, n2(u, v, 5)) * 0.45 + tone * 0.15);
+      c = mix(c, crust, rim * 0.45);
+      c = mix(c, damp, wet * 0.75);
+      c = mix(c, crack, inCrack * 0.9);
+      c = stonePass(c, u, v, peb, stoneBody, stoneLight, stoneDark);
+      H[y * SIZE + x] = (1 - inCrack) * (0.4 + rim * 0.35 + tone * 0.1) * (1 - wet * 0.6) + (n3(u, v, 80) - 0.5) * 0.05;
+      const g = (n3(u, v, 140) - 0.5) * 8 + (n1(u, v, 64) - 0.5) * 5; // fine grit
+      const i = (y * SIZE + x) * 4;
+      px[i] = c[0] + g;
+      px[i + 1] = c[1] + g * 0.9;
+      px[i + 2] = c[2] + g * 0.8;
       px[i + 3] = 255;
     }
 }
@@ -259,7 +318,8 @@ function paintDeadPaving(px: Uint8ClampedArray, H: Float32Array) {
       // a missing paver: bare dusty earth, darker at its rim
       if (gone[id]) c = mix(mix(dustDark, dust, n1(u, v, 24) * 0.7), shadow, smooth(0.2, 0.03, edge) * 0.5);
       // dust drifted over the paving on the wind: thick in places, a thin wash elsewhere
-      const drift = n1(u + v * 0.6, v - u * 0.3, 3) * 0.65 + n2(u, v, 7) * 0.35;
+      // (whole-number shears only, so it tiles without a seam)
+      const drift = n1(u + v, v - u, 3) * 0.65 + n2(u, v, 7) * 0.35;
       c = mix(c, dustC, smooth(0.62, 0.8, drift) * 0.7 + 0.02);
       // height: a rounded top standing above the joint, each paver sunk or tilted a little, pitted and cracked;
       // drifted dust levels it out
@@ -293,9 +353,9 @@ function canvasOf(fill: (px: Uint8ClampedArray) => void): HTMLCanvasElement {
 }
 
 function painted(name: GroundTexName): { colour: HTMLCanvasElement; normal?: HTMLCanvasElement } {
-  if (name !== 'dead-paving') return { colour: canvasOf(name === 'sand' ? paintSand : paintDeadEarth) };
+  if (name !== 'dead-paving' && name !== 'silt-bed') return { colour: canvasOf(name === 'sand' ? paintSand : paintDeadEarth) };
   const H = new Float32Array(SIZE * SIZE);
-  const colour = canvasOf((px) => paintDeadPaving(px, H));
+  const colour = canvasOf((px) => (name === 'silt-bed' ? paintSiltBed(px, H) : paintDeadPaving(px, H)));
   // a tangent-space normal map from the heights (wrapped, so it tiles like the colour)
   const at = (x: number, y: number) => H[((y + SIZE) % SIZE) * SIZE + ((x + SIZE) % SIZE)];
   const normal = canvasOf((px) => {
@@ -377,7 +437,7 @@ export const emptyGroundTexGeo = (): GroundTexGeo => ({ pos: [], uv: [], col: []
 
 /** Adds one tile's top (a 1 × 1 m quad at height y) with world-space texture coordinates. */
 export function addGroundQuad(g: GroundTexGeo, name: GroundTexName, x: number, z: number, y: number, rgb: [number, number, number]) {
-  const s = TILE_M[name];
+  const s = GROUND_TEX_METRES[name];
   const i = g.pos.length / 3;
   for (const [dx, dz] of [[0, 0], [1, 0], [1, 1], [0, 1]]) {
     g.pos.push(x + dx, y, z + dz);
@@ -385,6 +445,49 @@ export function addGroundQuad(g: GroundTexGeo, name: GroundTexName, x: number, z
     g.col.push(rgb[0], rgb[1], rgb[2], 255);
   }
   g.idx.push(i, i + 2, i + 1, i, i + 3, i + 2);
+}
+
+/**
+ * Adds a flat fan (a centre and a rim of points, at height y) with the same world-space texture coordinates as the
+ * tile tops, so a curved path corner carries its tile's painted ground on across the corner without a seam.
+ */
+export function addGroundFan(g: GroundTexGeo, name: GroundTexName, o: [number, number], rim: [number, number][], y: number, rgb: [number, number, number]) {
+  const s = GROUND_TEX_METRES[name];
+  const i = g.pos.length / 3;
+  for (const [x, z] of [o, ...rim]) {
+    g.pos.push(x, y, z);
+    g.uv.push(x / s, z / s);
+    g.col.push(rgb[0], rgb[1], rgb[2], 255);
+  }
+  for (let k = 1; k < rim.length; k++) {
+    const [ax, az] = rim[k - 1];
+    const [bx, bz] = rim[k];
+    // facing up, whichever way round the rim runs
+    const up = (ax - o[0]) * (bz - o[1]) - (az - o[1]) * (bx - o[0]) < 0;
+    g.idx.push(i, up ? i + k : i + k + 1, up ? i + k + 1 : i + k);
+  }
+}
+
+/**
+ * Adds a flat band between two lines of points (same count), tinted `inner` along the first and `outer` along the
+ * second: a soft contact shadow painted onto the ground beside something that stands above it.
+ */
+export function addGroundStrip(g: GroundTexGeo, name: GroundTexName, a: [number, number][], b: [number, number][], y: number, inner: [number, number, number], outer: [number, number, number]) {
+  const s = GROUND_TEX_METRES[name];
+  const i = g.pos.length / 3;
+  for (let k = 0; k < a.length; k++)
+    for (const [p, rgb] of [[a[k], inner], [b[k], outer]] as const) {
+      g.pos.push(p[0], y, p[1]);
+      g.uv.push(p[0] / s, p[1] / s);
+      g.col.push(rgb[0], rgb[1], rgb[2], 255);
+    }
+  for (let k = 0; k + 1 < a.length; k++) {
+    const A = i + k * 2, B = A + 1, C = A + 2, D = A + 3;
+    // facing up, whichever way round the band runs
+    const up = (b[k][0] - a[k][0]) * (a[k + 1][1] - a[k][1]) - (b[k][1] - a[k][1]) * (a[k + 1][0] - a[k][0]) < 0;
+    if (up) g.idx.push(A, B, C, B, D, C);
+    else g.idx.push(A, C, B, B, C, D);
+  }
 }
 
 export function groundTexMesh(device: pc.GraphicsDevice, g: GroundTexGeo): pc.Mesh | undefined {

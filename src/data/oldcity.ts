@@ -115,8 +115,11 @@ export interface RegionDef {
   piles: PileDef[];
   /** the region's main street: a road from its gate (cells, two wide, for generation) */
   roads: CellRect[];
-  /** deep water inside the region (a canal: never walked, until Hover; level 0) */
-  water?: CellRect[];
+  /**
+   * deep water inside the region (a canal: never walked, until Hover; level 0). `pond`: a natural pond rather than
+   * a canal, drawn as a pool (rounded painted banks, rocks and reeds, the pool's surface) instead of open water.
+   */
+  water?: (CellRect & { pond?: boolean })[];
 }
 
 const P = (id: string, x: number, z: number, material: MaterialId, size: PileSize, model: string): PileDef => ({ id, x, z, material, size, model });
@@ -306,7 +309,7 @@ export const REGIONS: RegionDef[] = [
     piles: [],
     roads: [],
     // E23.4.1: the spring-fed pond east of the island (dry until the Old Cistern wakes and its springs run)
-    water: [{ x: 64, z: 41, w: 8, d: 12 }],
+    water: [{ x: 64, z: 41, w: 8, d: 12, pond: true }],
   },
   {
     id: 'clockPlaza',

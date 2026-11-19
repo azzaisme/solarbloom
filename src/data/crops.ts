@@ -133,3 +133,30 @@ export const SEED_FINDS = {
   /** a cache holds its region's next seed packet; once that region's packets are all found, this many plain Seeds */
   cacheSeeds: 4,
 };
+
+/**
+ * E23.6.2 (#391): crossbreeds, opened by the Crossbreeds research. A ripe crop harvested while a different crop
+ * grows in a planter beside it gives a cross seed of the two (once a pair). A cross grows like its first parent
+ * (its days, its harvest) but carries both parents' likes: it grows at full speed when either parent's likes are
+ * all met, and needs only what both parents need. It is planted with plain Seeds like any crop.
+ */
+export const CROSS = {
+  /** planters this many tiles apart (or closer) are side by side */
+  reach: 1,
+};
+
+/** A cross's id: its two parents, in data order (the first is the parent it grows like). */
+export function crossKey(a: CropId, b: CropId): string {
+  return CROP_IDS.indexOf(a) <= CROP_IDS.indexOf(b) ? `${a}+${b}` : `${b}+${a}`;
+}
+
+/** A cross's two parents, from its id (undefined if it is not one). */
+export function crossParents(key: string): [CropId, CropId] | undefined {
+  const [a, b] = key.split('+') as CropId[];
+  return a && b && a !== b && CROPS[a] && CROPS[b] ? [a, b] : undefined;
+}
+
+/** "Radish × Lettuce". */
+export function crossName(a: CropId, b: CropId): string {
+  return `${CROPS[a].name} × ${CROPS[b].name}`;
+}
