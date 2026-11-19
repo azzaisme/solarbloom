@@ -134,9 +134,9 @@ describe('E18.1 role framework: unlocks, refits, switching', () => {
     expect(sim.roles.choose(h.id, 'gardener')).toBe(true);
     expect(toNum(sim.state.resources.biomass)).toBe(before - 60);
     expect(toNum(sim.state.resources.water)).toBe(980);
-    // The next hub's refit costs ×1.5 biomass (energy and water don't grow).
+    // E23.1.5: the next hub's refit costs the same (no price grows with purchases).
     const h2 = put(sim, 'droneHub', 30, 20);
-    expect(sim.roles.refitPrice(h2, 'gardener')).toEqual({ biomass: big(90), water: 20 });
+    expect(sim.roles.refitPrice(h2, 'gardener')).toEqual({ biomass: big(60), water: 20 });
     // Stale: the hub is gone.
     sim.state.machines = sim.state.machines.filter((m) => m !== h2);
     expect(sim.roles.choose(h2.id, 'gardener')).toBe(false);

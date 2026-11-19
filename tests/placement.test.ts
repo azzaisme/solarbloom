@@ -32,13 +32,14 @@ describe('placement', () => {
     expect(toNum(sim.state.resources.biomass)).toBe(0);
   });
 
-  it('costs grow with each copy; the anchor centres 2x2 footprints on the cursor', () => {
+  it('every copy costs the same (E23.1.5); the anchor centres 2x2 footprints on the cursor', () => {
     const sim = makeSim();
     rich(sim);
     fill(sim, 0, 0, 7, 7, 'restored');
     const c0 = toNum(sim.build.cost('solar').biomass!);
     sim.build.place('solar', 'r1', 5, 5);
-    expect(toNum(sim.build.cost('solar').biomass!)).toBeGreaterThan(c0);
+    sim.build.place('solar', 'r1', 6, 6);
+    expect(toNum(sim.build.cost('solar').biomass!)).toBe(c0);
     expect(sim.build.anchorFor('droneHub', 4.6, 4.6)).toEqual({ x: 4, z: 4 });
     expect(sim.build.anchorFor('droneHub', 4.4, 4.4)).toEqual({ x: 3, z: 3 });
     expect(sim.build.anchorFor('solar', 4.4, 4.9)).toEqual({ x: 4, z: 4 });
