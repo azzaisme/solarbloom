@@ -219,4 +219,23 @@ describe('E23.4.1: water levels (sim.water)', () => {
     expect(dock.cult.done).toBe(1);
     expect(sim.water.levelOf(b.id)).toBeCloseTo(afterGardener - WATER_NET.draw.cultivatorPerTile / b.capacity, 9);
   });
+  it("tells E23.1.5's advisor which area is short of water (a body there below the fade line), and only that one", () => {
+    const sim = city();
+    const t = canalTile(sim);
+    const b = sim.water.bodyAt(t)!;
+    const area = sim.areas.map.areaOfCell(t.x, t.z);
+    const other = sim.areas.map.areaOfCell(pondTile(sim).x, pondTile(sim).z);
+    expect(area).not.toBe(other);
+    weather(sim, 'cloudy');
+    expect(sim.water.isLow(area)).toBe(false); // full
+    sim.water.draw(b.id, b.capacity * (1 - WATER_NET.fadeBelow) - 1); // just above the line
+    expect(sim.water.isLow(area)).toBe(false);
+    sim.water.draw(b.id, 2);
+    expect(sim.water.isLow(area)).toBe(true);
+    expect(sim.water.isLow(PARK)).toBe(false);
+    sim.water.fill(b.id, b.capacity);
+    expect(sim.water.isLow(area)).toBe(false);
+    // Cistern Basin's pond starts dry: its area is short of water until rain or its springs fill it
+    expect(sim.water.isLow(other)).toBe(true);
+  });
 });

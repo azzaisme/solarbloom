@@ -26,6 +26,8 @@ export const WATER_NET = {
   /** a tile is watered when a body this close (tiles, square reach) has more than `dryBelow` of its capacity */
   reach: 3,
   dryBelow: 0.08,
+  /** below this share a body's land starts to fade (E23.4.4), and the advisor (E23.1.5) calls its area short of water */
+  fadeBelow: 0.35,
   /** largest body one flood fill walks (safety cap) */
   maxTiles: 6000,
   /** what the helpers draw (units per tile they work); planters and pumps bring their own (E23.5, E23.4.2) */

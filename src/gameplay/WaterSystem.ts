@@ -275,6 +275,22 @@ export class WaterSystem {
     return { fill: WATER_NET.rainShare * wx.rain(), evap: wx.effects().evaporation };
   }
 
+  /**
+   * E23.1.5's advisor: is this area short of water? True when a body with water in the area is below `fadeBelow`
+   * (its land fading). Only bodies whose level has moved (or that start low, like Cistern Basin's) are looked at.
+   */
+  isLow(areaId: string): boolean {
+    const map = this.sim.areas.map;
+    for (const b of this.live()) {
+      if (this.levelOf(b.id) >= WATER_NET.fadeBelow) continue;
+      for (const id of b.tiles) {
+        const t = this.sim.grid.byTileId(id);
+        if (t && map.areaOfCell(t.x, t.z) === areaId) return true;
+      }
+    }
+    return false;
+  }
+
   // ───────────── hooks for the gentle-failure suite (E23.10) ─────────────
 
   /** Every body in the areas bloombot has seen (and any this session has looked at), empty. */
