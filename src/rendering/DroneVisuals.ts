@@ -145,7 +145,7 @@ interface DroneView {
 
 /** E23.6.3: what a docked drone waits for, as a small dim glyph: a drop of water, a leaf of Biomass, a bolt of power. */
 function fuelGlyph(parent: pc.Entity): { root: pc.Entity; parts: Record<Shortage, pc.Entity> } {
-  const root = group(parent, 'fuelGlyph', [0, 0.55, 0]);
+  const root = group(parent, 'fuelGlyph', [0, 0.95, 0]); // clear of the hub's ring when it rests on top
   const dim = (hex: string) => mat(hex, { opacity: 0.85, emissive: hex, emissiveIntensity: 0.35, gloss: 0.4 });
   const water = group(root, 'water');
   shape(water, 'sphere', dim(PALETTE.water), { scale: 0.12 });
@@ -369,7 +369,7 @@ export class DroneVisuals {
     // it turns slowly and breathes, so it reads from any side (still, with reduced motion)
     const m = this.reducedMotion ? 0 : 1;
     g.root.setLocalEulerAngles(0, t * 40 * m, 0);
-    const s = 1 + 0.08 * Math.sin(t * 2.2 + v.phase) * m;
+    const s = 1.35 + 0.1 * Math.sin(t * 2.2 + v.phase) * m;
     g.root.setLocalScale(s, s, s);
   }
 
