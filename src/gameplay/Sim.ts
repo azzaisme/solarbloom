@@ -38,10 +38,12 @@ import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
 import { MainlandSystem } from './MainlandSystem';
 import { LandmarkSystem } from './LandmarkSystem';
+import { WaterSystem } from './WaterSystem';
 import { Crafting } from './Crafting';
 import { Research } from './Research';
 import { ChargeSystem } from './Charge';
 import { PulseLoad } from './PulseLoad';
+import { RestSystem } from './Rest';
 import { BuriedSystem } from './Buried';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
@@ -105,6 +107,8 @@ export class Sim {
   readonly journal: JournalSystem;
   /** E21.9: waking landmarks and their lasting rewards (old-city rules). */
   readonly landmarks: LandmarkSystem;
+  /** E23.4.1: water levels of ponds, canals and reservoirs (`sim.water`). */
+  readonly water: WaterSystem;
   /** E23.6.1: the crafting table (components; machine and decoration recipes). */
   readonly crafting: Crafting;
   /** E23.6.2: the research station (projects, and the upgrades they open). */
@@ -113,6 +117,8 @@ export class Sim {
   readonly charge: ChargeSystem;
   /** E23.2.2: what the pulse is loaded with, and its reveal ripple (old-city rules). */
   readonly pulseLoad: PulseLoad;
+  /** E23.2.3: benches and meditating at chargers. */
+  readonly rest: RestSystem;
   /** E23.2.2.3: seeds and salvage buried in open ground (the ripple reveals them). */
   readonly buried: BuriedSystem;
   /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
@@ -185,6 +191,7 @@ export class Sim {
     this.inventory = new Inventory(this);
     this.charge = new ChargeSystem(this);
     this.pulseLoad = new PulseLoad(this);
+    this.rest = new RestSystem(this);
     this.buried = new BuriedSystem(this);
     this.landmarks = new LandmarkSystem(this);
     this.clock = new Clock(this);
@@ -207,6 +214,7 @@ export class Sim {
     this.production = new ProductionSystem(this);
     this.restoration = new RestorationSystem(this);
     this.canals = new CanalNetwork(this);
+    this.water = new WaterSystem(this);
     this.relays = new RelaySystem(this);
     this.power = new PowerGrid(this);
     this.chargers = new ChargerSystem(this);
@@ -328,6 +336,8 @@ export class Sim {
     this.roles.tick(dt);
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
+    this.water.tick(dt);
+    this.rest.tick(dt);
     this.crafting.tick(dt);
     this.research.tick(dt);
     this.charge.tick(dt);

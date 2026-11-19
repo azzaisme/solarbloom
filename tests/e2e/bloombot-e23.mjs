@@ -287,6 +287,100 @@ try {
     check(view2.yaw === view.yaw && Math.hypot(view2.x - view.x, view2.z - view.z) < 0.05, 'the same view as before digging');
     await shot(page, '06-buried-dug', 'the same view after digging: the mound is gone and the ground is plain again');
   }
+  // ── E23.2.3: benches ──
+  const bench = { x: 10, z: 6 };
+  const sitAt = async () =>
+    page.evaluate((b) => {
+      const g = window.solarbloom;
+      g.bot.following = true;
+      g.bot.teleport('g', b.x, b.z + 1);
+      g.bot.pose.x = b.x + 0.5;
+      g.bot.pose.z = b.z + 1.6;
+      g.bot.pose.facing = Math.PI; // facing the bench
+    }, bench);
+  await page.evaluate(() => {
+    const s = window.solarbloom.sim;
+    s.state.charge.value = 30;
+    s.inventory.add('scrap', 3);
+  });
+  await sitAt();
+  const p1ok = await until(page, () => /Mend/.test(document.getElementById('prompt')?.innerText ?? ''));
+  const p1 = await page.evaluate(() => document.getElementById('prompt')?.innerText.replace(/\s+/g, ' ') ?? '');
+  check(p1ok, `facing an old bench, the prompt offers to mend it: "${p1}"`);
+  await shot(page, '10-bench-broken', 'an old park bench, sagging and weathered until mended; the prompt says Mend the old bench');
+  await key(page, 'KeyE');
+  check(await until(page, (b) => window.solarbloom.sim.rest.usable(window.solarbloom.sim.rest.benchAt(b.x, b.z)), bench), 'E mends it for 3 Scrap');
+  const cam0 = await page.evaluate(() => ({ zoom: window.solarbloom.camera.zoomTarget, yaw: window.solarbloom.camera.heading }));
+  await key(page, 'KeyE');
+  check(await until(page, () => window.solarbloom.sim.rest.sitting?.kind === 'bench'), 'E sits on the mended bench');
+  check(await until(page, () => document.body.classList.contains('resting')), 'the HUD fades away while sitting');
+  const calm = await page.evaluate(() => window.solarbloom.camera.zoomTarget);
+  check(calm < cam0.zoom, `the camera eases out to a calm view (zoom ${cam0.zoom.toFixed(2)} → ${calm.toFixed(2)})`);
+  await page.waitForTimeout(2500);
+  await shot(page, '11-bench-sitting', 'sitting on the bench: the calm, wider view turning slowly, the HUD gone, only the prompt (Stand up · Let time run faster)');
+  const c0 = await page.evaluate(() => window.solarbloom.sim.charge.value());
+  await page.waitForTimeout(3000);
+  const c1 = await page.evaluate(() => window.solarbloom.sim.charge.value());
+  check(c1 > c0, `sitting trickles charge back (${c0.toFixed(2)} → ${c1.toFixed(2)})`);
+  await key(page, 'Space');
+  check(await page.evaluate(() => window.solarbloom.sim.rest.fast), 'Space lets time run faster');
+  await key(page, 'Space');
+  check(!(await page.evaluate(() => window.solarbloom.sim.rest.fast)), 'Space again: back to normal time');
+  await key(page, 'KeyP');
+  check(await until(page, () => window.solarbloom.photo.active), 'photo mode opens while sitting');
+  await shot(page, '12-bench-photo', 'photo mode while sitting on the bench');
+  await key(page, 'KeyP');
+  check(await until(page, () => !window.solarbloom.photo.active && window.solarbloom.sim.rest.sitting?.kind === 'bench'), 'leaving photo mode, bloombot is still sitting');
+  // a friend Keeper sits beside bloombot
+  await key(page, 'KeyE');
+  await until(page, () => !window.solarbloom.sim.rest.sitting);
+  await page.evaluate(() => {
+    const s = window.solarbloom.sim;
+    s.state.salvage.keepers.pylon = { step: 'settled' };
+    // Pylon's region is open (a Keeper is never shown, or met, in fog)
+    s.state.areas.mastRow = { ...(s.state.areas.mastRow ?? { revealedAt: 0 }), fog: 'cleared' };
+  });
+  await page.waitForTimeout(800);
+  await key(page, 'KeyE');
+  check(await until(page, () => window.solarbloom.resting?.friend === 'Pylon'), 'a friend Keeper (Pylon) sits beside bloombot');
+  await page.waitForTimeout(1500);
+  await page.evaluate(() => {
+    const g = window.solarbloom;
+    g.camera.turnTo(20, true);
+    g.camera.jumpZoom(6);
+  });
+  await shot(page, '13-bench-friend', 'close up: bloombot and Pylon sitting side by side on the bench');
+  // standing: the camera returns to where it was
+  await page.keyboard.down('KeyS');
+  await page.waitForTimeout(400);
+  await page.keyboard.up('KeyS');
+  check(await until(page, () => !window.solarbloom.sim.rest.sitting && !document.body.classList.contains('resting')), 'walking stands bloombot up and the HUD comes back');
+  await page.waitForTimeout(1500);
+  const cam1 = await page.evaluate(() => ({ zoom: window.solarbloom.camera.zoomTarget, yaw: window.solarbloom.camera.heading }));
+  check(Math.abs(cam1.zoom - cam0.zoom) < 0.01 && Math.abs(cam1.yaw - cam0.yaw) < 0.5, `the camera returns (zoom ${cam1.zoom.toFixed(2)}, yaw ${cam1.yaw.toFixed(1)} vs ${cam0.zoom.toFixed(2)}, ${cam0.yaw.toFixed(1)})`);
+  await shot(page, '14-bench-stood', 'standing again: the HUD is back and the camera where it was');
+  // never stranded by day: zero charge, nothing to eat, sit on the bench, pulse again
+  await page.evaluate(() => {
+    const s = window.solarbloom.sim;
+    for (const k of Object.keys(s.state.salvage.pack)) delete s.state.salvage.pack[k];
+    s.econ.spend({ biomass: s.econ.get('biomass') });
+    s.state.charge.value = 0;
+  });
+  await sitAt();
+  await key(page, 'KeyE');
+  check(await until(page, () => window.solarbloom.sim.rest.sitting?.kind === 'bench'), 'at zero with an empty pack, bloombot sits on the bench by day');
+  await page.waitForTimeout(500);
+  await key(page, 'Space'); // let time run faster while resting
+  const back = await page.waitForFunction(() => window.solarbloom.sim.charge.value() >= 1, undefined, { timeout: 180000 }).then(() => true, () => false);
+  check(back, 'resting on the bench brings back enough charge for a pulse');
+  await key(page, 'KeyE');
+  await until(page, () => !window.solarbloom.sim.rest.sitting);
+  const again = await page.evaluate(() => {
+    const s = window.solarbloom.sim;
+    const t = s.areas.tiles('park').find((q) => q.ground === 'polluted' && !q.blocked && !q.occupantId && s.restoration.checkPulse(q).ok);
+    return !!t && s.restoration.pulse(t.id);
+  });
+  check(again, 'and the pulse works again');
   await page.close();
 } finally {
   await browser.close();
