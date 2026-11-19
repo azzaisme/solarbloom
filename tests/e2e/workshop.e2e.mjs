@@ -59,6 +59,32 @@ async function moveTo(page, sel, dev) {
   console.log(`   moveTo ${sel}: stopped at ${await page.evaluate(() => document.activeElement?.id || document.activeElement?.tagName)}`);
   return false;
 }
+/** Bloombot stands beside (x, z), facing it (the first free side). */
+async function stand(page, x, z) {
+  await page.evaluate(({ x, z }) => {
+    const g = window.solarbloom;
+    for (const [dx, dz, f] of [[0, 1.1, Math.PI], [0, -1.1, 0], [1.1, 0, -Math.PI / 2], [-1.1, 0, Math.PI / 2]]) {
+      const t = g.sim.grid.get('g', Math.floor(x + 0.5 + dx), Math.floor(z + 0.5 + dz));
+      if (!t || t.occupantId || t.blocked) continue;
+      g.bot.teleport('g', x + 0.5 + dx, z + 0.5 + dz);
+      g.bot.pose.facing = f;
+      const fr = g.bot.front();
+      if (fr.x === x && fr.z === z) return;
+    }
+  }, { x, z });
+  await page.waitForTimeout(300);
+}
+
+/** Places what is in hand on the tile bloombot faces: Space on the keyboard, A on the pad. */
+async function placeAt(page, dev, x, z) {
+  await stand(page, x, z);
+  if (dev === 'keys') {
+    await page.evaluate(() => window.solarbloom.onLeave()); // keyboard alone: build mode aims in front of bloombot
+    await page.keyboard.press('Space');
+  } else await pressPad(page, 0);
+  await page.waitForTimeout(400);
+}
+
 const go = (page, dev) => (dev === 'pad' ? pressPad(page, 0) : page.keyboard.press('Enter'));
 const nextTab = (page, dev) => (dev === 'pad' ? pressPad(page, 5) : page.keyboard.press('KeyE'));
 const back = (page, dev) => (dev === 'pad' ? pressPad(page, 1) : page.keyboard.press('Escape'));
@@ -198,6 +224,59 @@ try {
       return { why, why2, before, placed, hidden };
     });
     check(!dec.why && dec.placed === dec.before && dec.hidden === false, T(`then the bench is placed free from the build menu (${JSON.stringify(dec)})`));
+    }
+    {
+    // E23.3.5 × E23.6.1: a night light is made at the table too (the Solar garden light: a Sun cell and a Scrap),
+    // then placed from the build menu with Space / A like any decoration
+    await page.evaluate(() => {
+      const g = window.solarbloom, s = g.sim;
+      s.inventory.add('sunCell', 1);
+      for (const [x, z] of [[7, 9], [9, 9], [7, 10], [9, 10], [8, 10], [8, 9], [7, 11], [9, 11], [8, 11]]) {
+        const t = s.grid.get('g', x, z);
+        t.blocked = false;
+        t.ground = 'restored';
+        t.pollution = 0;
+        t.bloom = 1;
+        s.grid.touch(t);
+        g.chunks.markTile(t);
+      }
+      g.bot.teleport('g', 3.5, 5.5);
+      g.bot.pose.facing = Math.PI;
+    });
+    await page.waitForTimeout(300);
+    await interact(page, dev);
+    await page.waitForSelector('#craftScreen.open');
+    check(await moveTo(page, '#cr-decor-solarstake', dev), T('reach the Solar garden light under Decorations'));
+    await go(page, dev);
+    const light = await page.evaluate(() => ({ made: window.solarbloom.sim.crafting.decorMade('solarstake'), sunCells: window.solarbloom.sim.inventory.count('sunCell'), live: document.querySelector('#craftScreen .bp-live').textContent }));
+    check(light.made && light.sunCells === 0, T(`make the light: a Sun cell and a Scrap (${JSON.stringify(light)})`));
+    await page.evaluate(() => document.querySelector('#cr-decor-solarstake, #craftScreen .cr-decor li:last-child')?.scrollIntoView({ block: 'center' }));
+    await page.screenshot({ path: `${dir}/ui-workshop-light-${dev}.png` });
+    await back(page, dev);
+    await page.waitForTimeout(300);
+    await page.evaluate(() => window.solarbloom.selectTool('decor:solarstake'));
+    await placeAt(page, dev, 7, 10);
+    const lit = await page.evaluate(() => window.solarbloom.cozy.decorAt('g', 7, 10)?.kind);
+    check(lit === 'solarstake', T(`Space / A places the light (${lit})`));
+    // a machine from its table recipe: the Water Condenser (12 Scrap, 6 Copper, 2 Wire), paid where it is built
+    await page.evaluate(() => window.solarbloom.selectTool('condenser'));
+    const before = await page.evaluate(() => ({ scrap: window.solarbloom.sim.inventory.count('scrap'), copper: window.solarbloom.sim.inventory.count('copper'), wire: window.solarbloom.sim.inventory.count('wire') }));
+    await placeAt(page, dev, 9, 10);
+    const built = await page.evaluate(() => {
+      const s = window.solarbloom.sim;
+      const m = s.machinesOfType('condenser')[0];
+      return { at: m && [m.x, m.z], scrap: s.inventory.count('scrap') + s.inventory.stored('scrap'), copper: s.inventory.count('copper'), wire: s.inventory.count('wire') };
+    });
+    check(!!built.at && built.copper === before.copper - 6 && built.wire === before.wire - 2, T(`Space / A builds the Water Condenser from its recipe (${JSON.stringify({ before, built })})`));
+    await page.evaluate(() => window.solarbloom.selectTool('pulse'));
+    await stand(page, 8, 12);
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      g.bot.teleport('g', 8.5, 13.5);
+      g.bot.pose.facing = Math.PI;
+    });
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: `${dir}/ui-workshop-placed-${dev}.png` });
     }
     check(errors.length === 0, T(`no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`));
     await page.context().close();
