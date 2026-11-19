@@ -5,6 +5,7 @@ import type { TileData } from '../core/types';
 import { WATER_NET } from '../data/water';
 import type { Sim } from '../gameplay/Sim';
 import { WaterSystem, type WaterBody } from '../gameplay/WaterSystem';
+import { GROUND_TEX_METRES, groundTexMaterial } from './GroundTex';
 import { mat } from './Materials';
 import { PALETTE } from './Palette';
 import { WATER } from './Water';
@@ -118,22 +119,27 @@ export class WaterLevels {
     if (!bed.length) return;
     const e = new pc.Entity(`water-bed-${b.id}`);
     const parts: pc.MeshInstance[] = [];
-    for (const [pos, colour] of [
-      [bed, PALETTE.aqua.bed],
-      [rim, PALETTE.aqua.bedWet],
-    ] as const) {
-      if (!pos.length) continue;
-      const m = this.mesh(pos);
+    // the bared bed wears the painted silt a dead pond has (GroundTex `silt-bed`), the wet line a glossy dark band
+    if (bed.length) {
+      const m = this.mesh(bed, true);
       v.meshes.push(m);
-      parts.push(new pc.MeshInstance(m, mat(colour, { gloss: colour === PALETTE.aqua.bedWet ? 0.7 : 0.3 })));
+      parts.push(new pc.MeshInstance(m, groundTexMaterial(this.device, 'silt-bed')));
+    }
+    if (rim.length) {
+      const m = this.mesh(rim);
+      v.meshes.push(m);
+      parts.push(new pc.MeshInstance(m, mat(PALETTE.aqua.bedWet, { gloss: 0.7 })));
     }
     e.addComponent('render', { meshInstances: parts, castShadows: false, receiveShadows: true });
     this.parent.addChild(e);
     v.entity = e;
   }
 
-  /** Flat up-facing quads (4 corners each, in order) as one mesh. */
-  private mesh(pos: number[]): pc.Mesh {
+  /**
+   * Flat up-facing quads (4 corners each, in order) as one mesh; `painted`: with the painted ground's world-space
+   * texture coordinates and a white tint (GroundTex's material reads both).
+   */
+  private mesh(pos: number[], painted = false): pc.Mesh {
     const idx: number[] = [];
     const nrm: number[] = [];
     for (let i = 0; i < pos.length / 3; i += 4) idx.push(i, i + 2, i + 1, i, i + 3, i + 2);
@@ -141,6 +147,16 @@ export class WaterLevels {
     const m = new pc.Mesh(this.device);
     m.setPositions(pos);
     m.setNormals(nrm);
+    if (painted) {
+      const uv: number[] = [];
+      const col: number[] = [];
+      for (let i = 0; i < pos.length; i += 3) {
+        uv.push(pos[i] / GROUND_TEX_METRES['silt-bed'], pos[i + 2] / GROUND_TEX_METRES['silt-bed']);
+        col.push(255, 255, 255, 255);
+      }
+      m.setUvs(0, uv);
+      m.setColors32(col);
+    }
     m.setIndices(idx);
     m.update(pc.PRIMITIVE_TRIANGLES);
     return m;

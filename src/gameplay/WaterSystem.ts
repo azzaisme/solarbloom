@@ -1,5 +1,5 @@
 import { GROUND } from '../core/GameState';
-import { regionOfCell, seaCell, surfCell } from '../core/OldCityLayout';
+import { regionOfCell, seaCell, surfCell, waterAnchor } from '../core/OldCityLayout';
 import type { TileData } from '../core/types';
 import type { WeatherKind } from '../data/weather';
 import { REGIONS, type RegionId } from '../data/oldcity';
@@ -61,11 +61,14 @@ export class WaterSystem {
   private acc = 0;
   /** bumped whenever any level changes (renderers redraw on change) */
   version = 0;
+  /** bumped whenever bodies change shape (a water tile changed): the fade cache keys on both */
+  private shapeRev = 0;
 
   constructor(private sim: Sim) {
     // A tile that joins or leaves the water (a pond restored a tile further, a tile filled in) changes the bodies
     // around it; anything else on a water tile (its bloom, say) does not.
     sim.grid.touchListeners.push((t) => {
+      this.landRev++;
       if (!this.byTile.size) return;
       const was = this.byTile.has(t.id);
       if (was === this.isFresh(t)) return;
@@ -94,6 +97,7 @@ export class WaterSystem {
     }
     this.byTile.clear();
     this.bodies.clear();
+    this.shapeRev++;
     this.shapes.clear();
     if (!pieces.length) return;
     const pool = new Map<WaterBody, { held: number; n: number }>();
@@ -273,8 +277,13 @@ export class WaterSystem {
 
   /** 0…1: the fullest body within reach (0 if there is none). */
   wetness(t: TileData, reach = WATER_NET.reach): number {
-    if (t.roofId !== GROUND) return 0;
-    let best = 0;
+    return this.fullest(t, reach) ?? 0;
+  }
+
+  /** The level of the fullest body within reach, or undefined if there is no water in reach. */
+  private fullest(t: TileData, reach: number): number | undefined {
+    if (t.roofId !== GROUND) return undefined;
+    let best: number | undefined;
     const seen = new Set<WaterBody>();
     const g = this.sim.grid;
     for (let dz = -reach; dz <= reach; dz++)
@@ -284,7 +293,7 @@ export class WaterSystem {
         const b = this.bodyAt(n)!;
         if (seen.has(b)) continue;
         seen.add(b);
-        best = Math.max(best, this.levelOf(b.id));
+        best = Math.max(best ?? 0, this.levelOf(b.id));
       }
     return best;
   }
@@ -297,6 +306,172 @@ export class WaterSystem {
       if (b) out.push(b);
     }
     return out;
+  }
+
+  // ───────────── E23.4.4: land fades around low water ─────────────
+
+  private fadeMap = new Map<string, number>();
+  private fadeKey = '';
+  /**
+   * What the fade map was built from (`version`, `shapeRev`). Levels and shapes only change in a water step or when a
+   * water tile or a level is touched, so between those the land's look is one map lookup per tile: a chunk rebuild
+   * never walks the bodies, and the renderer's per-frame check is two number compares.
+   */
+  private fadeAtVersion = -1;
+  private fadeAtShape = -1;
+  /** the spring regions still asleep when the fade map was built (waking one changes what fades) */
+  private fadeAtSleep = '';
+
+  /** Spring regions whose landmark still sleeps (their water is dormant), as a key. */
+  private sleepKey(): string {
+    if (!WATER_NET.springsNeedLandmark) return '';
+    return (Object.keys(WATER_NET.springs) as RegionId[]).filter((r) => this.sim.areas.fog(r) !== 'cleared').join();
+  }
+
+  private fadeStale(): boolean {
+    return this.fadeAtVersion !== this.version || this.fadeAtShape !== this.shapeRev || this.fadeAtSleep !== this.sleepKey();
+  }
+  private changesVersion = -1;
+  private changesShape = -1;
+  private changesSleep?: string;
+
+  /** Bloom stages a level takes off the land around it (0 at or above `fadeBelow`). */
+  static fadeSteps(level: number): number {
+    const { fadeBelow, fadeSteps } = WATER_NET;
+    if (level >= fadeBelow) return 0;
+    return Math.min(fadeSteps, Math.ceil(((fadeBelow - level) / fadeBelow) * fadeSteps));
+  }
+
+  /**
+   * How many bloom stages a tile shows less because the water near it is low (0 almost everywhere). Land with no
+   * water within `fadeReach` never fades: it never depended on it. The fullest body in reach decides.
+   */
+  fadeAt(t: TileData): number {
+    if (this.fadeStale()) this.refreshFade();
+    return this.fadeMap.size ? (this.fadeMap.get(t.id) ?? 0) : 0;
+  }
+
+  /**
+   * The bloom stage a tile shows: its own bloom less the fade, never below 1 on restored ground. The tile itself
+   * never changes (nothing is lost): refilling the water brings it all straight back.
+   */
+  bloomShown(t: TileData): number {
+    if (t.ground !== 'restored' || t.bloom <= 1) return t.bloom;
+    const f = this.fadeAt(t);
+    return f ? Math.max(1, t.bloom - f) : t.bloom;
+  }
+
+  /** Bodies whose fade step is above 0, with the step, as a key (the map is rebuilt only when this changes). */
+  private fadeState(): { key: string; low: WaterBody[] } {
+    const low: WaterBody[] = [];
+    let key = '';
+    for (const b of this.live()) {
+      if (this.dormant(b)) continue; // the dry Cistern pond is its landmark's story: its land doesn't fade for it
+      const s = WaterSystem.fadeSteps(this.levelOf(b.id));
+      if (!s) continue;
+      low.push(b);
+      key += `${b.id}:${s}:${b.tiles.size};`;
+    }
+    return { key, low };
+  }
+
+  private refreshFade() {
+    this.fadeAtVersion = this.version;
+    this.fadeAtShape = this.shapeRev;
+    this.fadeAtSleep = this.sleepKey();
+    const { key, low } = this.fadeState();
+    if (key === this.fadeKey) return;
+    this.fadeKey = key;
+    this.fadeMap.clear();
+    if (!low.length) return;
+    const R = WATER_NET.fadeReach;
+    const g = this.sim.grid;
+    const cell = (x: number, z: number) => x * 65536 + z;
+    // every body within reach of the faded areas (the low ones and any fuller neighbour), found once
+    const near = new Set<WaterBody>();
+    for (const b of low) {
+      near.add(b);
+      const [x0, z0, x1, z1] = this.fadeBounds(b);
+      for (let z = z0 - R; z <= z1 + R; z++)
+        for (let x = x0 - R; x <= x1 + R; x++) {
+          const t = g.get(GROUND, x, z);
+          if (this.isFresh(t)) near.add(this.bodyAt(t)!);
+        }
+    }
+    // each body marks the land within its reach with its level; the fullest mark wins (no water in reach: no mark)
+    const best = new Map<number, number>();
+    for (const b of near) {
+      const lv = this.levelOf(b.id);
+      for (const id of b.tiles) {
+        const t = g.byTileId(id);
+        if (!t) continue;
+        for (let dz = -R; dz <= R; dz++)
+          for (let dx = -R; dx <= R; dx++) {
+            const k = cell(t.x + dx, t.z + dz);
+            const have = best.get(k);
+            if (have === undefined || lv > have) best.set(k, lv);
+          }
+      }
+    }
+    for (const b of low) {
+      const [x0, z0, x1, z1] = this.fadeBounds(b);
+      for (let z = z0; z <= z1; z++)
+        for (let x = x0; x <= x1; x++) {
+          const lv = best.get(cell(x, z));
+          const steps = lv === undefined ? 0 : WaterSystem.fadeSteps(lv);
+          if (!steps) continue;
+          const t = g.get(GROUND, x, z);
+          if (t && t.feature !== 'water') this.fadeMap.set(t.id, steps);
+        }
+    }
+  }
+
+  private shownSteps = new Map<string, number>();
+
+  /**
+   * For the renderer: the areas whose look changed since the last call (a body crossed a fade step), so only
+   * their chunks are rebuilt.
+   */
+  takeFadeChanges(): [number, number, number, number][] {
+    const sleep = this.sleepKey();
+    if (this.changesVersion === this.version && this.changesShape === this.shapeRev && this.changesSleep === sleep) return [];
+    const woke = this.changesSleep !== undefined && this.changesSleep !== sleep;
+    this.changesVersion = this.version;
+    this.changesShape = this.shapeRev;
+    this.changesSleep = sleep;
+    const out: [number, number, number, number][] = [];
+    const now = new Map<string, number>();
+    for (const b of this.known()) {
+      // a sleeping body fades nothing (as the fade map); a landmark waking repaints all the land round its water
+      const s = this.dormant(b) ? 0 : WaterSystem.fadeSteps(this.levelOf(b.id));
+      now.set(b.id, s);
+      if ((this.shownSteps.get(b.id) ?? 0) !== s || (woke && !!b.region && !!WATER_NET.springs[b.region])) out.push(this.fadeBounds(b));
+    }
+    for (const [id, s] of this.shownSteps) {
+      if (now.has(id) || !s) continue;
+      const b = this.body(id);
+      if (b) out.push(this.fadeBounds(b));
+    }
+    this.shownSteps = now;
+    return out;
+  }
+
+  /** The area (inclusive tile bounds, grown by the fade reach) whose look a body's level touches. */
+  fadeBounds(b: WaterBody): [number, number, number, number] {
+    let x0 = Infinity,
+      z0 = Infinity,
+      x1 = -Infinity,
+      z1 = -Infinity;
+    for (const id of b.tiles) {
+      const t = this.sim.grid.byTileId(id);
+      if (!t) continue;
+      x0 = Math.min(x0, t.x);
+      z0 = Math.min(z0, t.z);
+      x1 = Math.max(x1, t.x);
+      z1 = Math.max(z1, t.z);
+    }
+    const R = WATER_NET.fadeReach;
+    return [x0 - R, z0 - R, x1 + R, z1 + R];
   }
 
   /** The weather now (E23.7.2's `sim.weather`). */
@@ -314,21 +489,35 @@ export class WaterSystem {
   }
 
   /**
-   * E23.1.5's advisor: is this area short of water? True when a body with water in the area is below `fadeBelow`
-   * (its land fading). Only areas the player has seen count (the advisor never hints at unseen places), and a
-   * body still waiting for its landmark (the dry Cistern pond) is the landmark's story, not a shortage.
+   * E23.1.5's advisor: is this area short of water? True only where its land actually shows a fade (restored,
+   * blooming ground in reach of water below `fadeBelow`). Only areas the player has seen count (the advisor never
+   * hints at unseen places), and a body still waiting for its landmark (the dry Cistern pond) fades nothing.
    */
   isLow(areaId: string): boolean {
     if (this.sim.areas.fog(areaId) === 'hidden') return false;
+    return this.fadingAreas().has(areaId);
+  }
+
+  private fading?: { version: number; shape: number; land: number; sleep: string; areas: Set<string> };
+  /** bumped on every tile change (a tile restored or bloomed changes which land shows a fade) */
+  private landRev = 0;
+
+  /**
+   * Areas where land actually shows a fade now (E23.4.4): restored ground with some bloom on it, in reach of low
+   * water. Low water with no such land beside it (a canal through dead streets) is not a hint worth giving.
+   */
+  private fadingAreas(): Set<string> {
+    if (this.fadeStale()) this.refreshFade();
+    const f = this.fading;
+    if (f && f.version === this.version && f.shape === this.shapeRev && f.land === this.landRev && f.sleep === this.fadeAtSleep) return f.areas;
+    const areas = new Set<string>();
     const map = this.sim.areas.map;
-    for (const b of this.live()) {
-      if (this.dormant(b) || this.levelOf(b.id) >= WATER_NET.fadeBelow) continue;
-      for (const id of b.tiles) {
-        const t = this.sim.grid.byTileId(id);
-        if (t && map.areaOfCell(t.x, t.z) === areaId) return true;
-      }
+    for (const id of this.fadeMap.keys()) {
+      const t = this.sim.grid.byTileId(id);
+      if (t && t.ground === 'restored' && t.bloom > 1) areas.add(map.areaOfCell(t.x, t.z));
     }
-    return false;
+    this.fading = { version: this.version, shape: this.shapeRev, land: this.landRev, sleep: this.fadeAtSleep, areas };
+    return areas;
   }
 
   // ───────────── hooks for the gentle-failure suite (E23.10) ─────────────
@@ -384,7 +573,8 @@ export class WaterSystem {
     const def = REGION_WATER.get(region);
     const out: WaterBody[] = [];
     for (const q of def ?? []) {
-      const b = this.bodyAt(this.sim.grid.get(GROUND, q.x, q.z));
+      const a = waterAnchor(q);
+      const b = this.bodyAt(this.sim.grid.get(GROUND, a.x, a.z));
       if (b && !out.includes(b)) out.push(b);
     }
     return out;
