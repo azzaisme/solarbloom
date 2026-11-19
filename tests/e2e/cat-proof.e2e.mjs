@@ -51,6 +51,68 @@ const shot = async (file) => {
 /** The same word list as tests/cat-secrecy.test.ts. */
 const CAT_WORD = /\b(cats?|kitt(?:y|en|ens)|kitties|meows?|mews?|paws?|pawprints?|whiskers?|purr\w*|felines?|tabby|something (?:small|little)|hiding (?:nearby|close by|close|here))\b|🐱|🐈|🐾|😺|😸/i; // as tests/cat-secrecy.test.ts
 
+/** In the page: bloombot just beyond (x, z) as seen from a heading, in the overview: the follow camera frames it. */
+const addView = () =>
+  page.evaluate(() => {
+    const g = window.solarbloom;
+    window.view = (x, z, yaw = g.camera.heading, zoom = 2) => {
+      const yr = (yaw * Math.PI) / 180;
+      g.overviewOn = true;
+      g.camera.turnTo(yaw, true);
+      // just beyond the spot; if that cell is taken, nearer the camera side instead (still within reach)
+      for (const k of [0.8, 0.6, -0.8]) {
+        g.bot.teleport('g', x - Math.sin(yr) * k, z - Math.cos(yr) * k);
+        const b = g.bot.world();
+        if (Math.hypot(b[0] - x, b[2] - z) < 1.3) break;
+      }
+      g.camera.zoomTo(zoom);
+      for (let i = 0; i < 240; i++) g.camera.update(0.05);
+    };
+  });
+
+/** Waits until the camera has stopped: at its zoom, and still across two looks (frames are slow in software GL). */
+const settle = async () => {
+  await page
+    .waitForFunction(
+      () => {
+        // at its goals (the point it eases to, its zoom, its heading), and not moving between two looks
+        const c = window.solarbloom.camera;
+        const p = c.entity.getPosition();
+        const g = c.goalPoint;
+        const key = `${p.x.toFixed(3)},${p.y.toFixed(3)},${p.z.toFixed(3)}`;
+        const still = window.__camKey === key;
+        window.__camKey = key;
+        const there = Math.hypot(c.target.x - g.x, c.target.z - g.z) < 0.01 && Math.abs(c.zoom - c.zoomTarget) < 0.005 && Math.abs(c.yaw - c.heading) < 0.1;
+        return still && there;
+      },
+      null,
+      { timeout: 45000, polling: 500 },
+    )
+    .catch(() => {});
+  await page.waitForTimeout(300);
+};
+
+/**
+ * Before the first find a cat only answers when the player can see it: as a player would, the view turns around the
+ * cat (a quarter turn at a time) until enough of it shows. Returns that heading, or undefined.
+ */
+const lookAround = async (c, zoom, best = false) => {
+  const start = await page.evaluate(() => window.solarbloom.camera.heading);
+  let top;
+  for (const turn of [0, 90, 180, 270, 45, 135, 225, 315]) {
+    await page.evaluate(([c, yaw, zoom]) => window.view(c.x, c.z, yaw, zoom), [c, start + turn, zoom]);
+    await settle();
+    const px = await page.evaluate(() => window.solarbloom.catSeenPixels(window.solarbloom.sim.state.cat.active.id));
+    if (px >= 100 && !best) {
+      await page.waitForTimeout(600); // the frame's own measure catches up (Game.measureCatsAfterFrame)
+      return start + turn;
+    }
+    if (px >= 100 && (!top || px > top.px)) top = { yaw: start + turn, px };
+  }
+  // `best`: the heading that shows the most of the cat (for a clear shot of it)
+  return top?.yaw;
+};
+
 try {
   await load();
 
@@ -102,7 +164,10 @@ try {
     // where wildlife cats would come: a bench and a rug in the park
     s.state.salvage.decorMade = [...new Set([...(s.state.salvage.decorMade ?? []), 'bench', 'rug'])].sort();
     let placed = 0;
-    for (const t of s.areas.tiles('park')) if (placed < 2 && !g.cozy.canDecorate('bench', 'g', t.x, t.z) && !g.cozy.placeDecor(placed ? 'rug' : 'bench', 0, 'g', t.x, t.z)) placed++;
+    // away from every spot a cat may hide at: a bench set down on top of one would hide the cat itself
+    const spots = s.cat.candidates().map((a) => a.pos);
+    const clear = (t) => spots.every(([x, , z]) => Math.hypot(t.x + 0.5 - x, t.z + 0.5 - z) > 3);
+    for (const t of s.areas.tiles('park')) if (placed < 2 && clear(t) && !g.cozy.canDecorate('bench', 'g', t.x, t.z) && !g.cozy.placeDecor(placed ? 'rug' : 'bench', 0, 'g', t.x, t.z)) placed++;
     g.chunks.markAll();
     const c = window.hide();
     window.__c = c;
@@ -145,56 +210,113 @@ try {
   await page.evaluate(() => window.solarbloom.hud.toggleBackpack(false));
 
   // ── 1b. the pointer is no detector: before the first find it only finds a cat the player can really see ──
-  // In the overview (M), the camera looks wherever it is set; the pointer goes to the cat's spot on screen.
-  await page.keyboard.press('m');
-  await page.waitForTimeout(1500);
-  /** Sets the overview camera on (x, z) at a zoom, then puts the pointer on the cat. Reads what the pointer shows. */
+  // "Seen" is measured on the frame (Game.catVisible): the screen pixels where the cat itself is drawn in front.
+  await addView();
+  await page.keyboard.press('m'); // the overview, as the player opens it
+  await settle();
+  /**
+   * Optionally frames a view (bloombot just beyond the spot, the overview's free pointer), then puts the pointer on
+   * the cat and reads what it shows: the tip, bloombot's prompt, and how much of the cat is drawn.
+   */
   const pointAtCat = async (view, file) => {
-    const at = await page.evaluate((view) => {
+    if (view) {
+      await page.evaluate((v) => window.view(v.x, v.z, v.yaw, v.zoom), view);
+      await settle(); // the follow camera settles
+    }
+    const at = await page.evaluate(() => {
       const g = window.solarbloom;
-      g.overviewOn = true; // the overview's free pointer, wherever the camera is
-      if (g.bot) g.bot.following = false;
-      if (view?.yaw !== undefined) g.camera.turnTo(view.yaw, true);
-      if (view) g.camera.glide(view.x, 0, view.z, view.zoom);
-      for (let i = 0; i < 240; i++) g.camera.update(0.05);
+      g.overviewOn = true;
       g.hud.hideTip();
       const id = g.sim.state.cat.active.id;
-      const p = g.cat.targetWorld(id);
-      const sc = g.camera.onScreen(p, 0);
-      return sc && { x: sc.x, y: sc.y, px: (0.32 / g.camera.worldPerPixel()) * sc.scale, visible: g.catVisible(id) };
-    }, view);
+      const sc = g.camera.onScreen(g.cat.targetWorld(id), 0);
+      const c = g.cat.targetWorld(id);
+      const b = g.bot.world();
+      return sc && { x: sc.x, y: sc.y, px: g.catSeenPixels(id), visible: g.catVisible(id), botDist: Math.hypot(b[0] - c.x, b[2] - c.z) };
+    });
     if (!at) return undefined;
     await page.mouse.move(at.x + 40, at.y + 40);
     await page.waitForTimeout(150);
     await page.mouse.move(at.x, at.y, { steps: 4 });
-    await page.waitForTimeout(500);
-    const tip = await page.evaluate(() => {
+    // A hand on the mouse never rests quite still. Headless frames can take longer than the 1.5 s the pointer counts
+    // as recent (after that bloombot's own preview takes the tip back), so the pointer keeps moving by a pixel, as a
+    // player's would, until the tip is up; it keeps moving through the shot.
+    await page.evaluate(({ x, y }) => {
+      const el = document.elementFromPoint(x, y);
+      let k = 0;
+      const app = window.solarbloom.app;
+      // at the start of every frame, however slow the frame (software GL here can take longer than 1.5 s)
+      window.__jiggle = () => el?.dispatchEvent(new PointerEvent('pointermove', { clientX: x + (k++ % 2), clientY: y, pointerType: 'mouse', pointerId: 1, bubbles: true }));
+      window.__jiggle();
+      app.on('frameupdate', window.__jiggle);
+    }, at);
+    await page.waitForFunction(() => document.querySelector('#tip')?.style.display !== 'none' && document.querySelector('#tip')?.innerText.trim(), null, { timeout: 15000, polling: 100 }).catch(() => {});
+    const read = await page.evaluate(({ x, y }) => {
       const t = document.querySelector('#tip');
-      return t && t.style.display !== 'none' ? t.innerText : '';
-    });
+      const g = window.solarbloom;
+      const el = document.elementFromPoint(x, y);
+      return {
+        tip: t && t.style.display !== 'none' ? t.innerText : '',
+        prompt: document.querySelector('#prompt')?.innerText ?? '',
+        under: el ? `${el.tagName}#${el.id}.${el.className}` : 'none',
+        hit: g.catHit(x, y) ?? 'none',
+      };
+    }, at);
     // the tip shows while the pointer moves (bloombot's own preview takes over once it rests): the shot is taken then
-    if (file) {
-      await page.mouse.move(at.x + 1, at.y);
-      await page.waitForTimeout(200);
-      await shot(file);
-    }
-    return { ...at, tip };
+    if (file && read.tip) {
+      // the shot must show the tip: a watcher notes if it is hidden at any moment while the frame is captured, and
+      // then the shot is taken again (headless frames are slow; on a real screen the tip simply stays up)
+      // While a screenshot is taken, headless software-GL frames take 3-4 s, so even a move every frame leaves the
+      // pointer "idle" (over 1.5 s) by the time bloombot's own preview looks, and it takes the tip back. For the
+      // capture only, the pointer counts as in use, as a hand resting on the mouse does: the tip itself is the game's
+      // own, shown by onHover through catHit's real sight check, and its words were checked above through real input.
+      await page.evaluate(() => {
+        const g = window.solarbloom;
+        g.pointerRecent = () => true;
+      });
+      let held = false;
+      for (let n = 0; n < 8 && !held; n++) {
+        await page.waitForFunction(() => document.querySelector('#tip')?.style.display !== 'none', null, { timeout: 15000, polling: 50 }).catch(() => {});
+        await page.evaluate(() => {
+          const t = document.querySelector('#tip');
+          window.__tipHeld = t.style.display !== 'none';
+          window.__tipWatch?.disconnect();
+          window.__tipWatch = new MutationObserver(() => { if (t.style.display === 'none') window.__tipHeld = false; });
+
+          window.__tipWatch.observe(t, { attributes: true, attributeFilter: ['style'] });
+        });
+        await shot(file);
+        held = await page.evaluate(() => {
+          window.__tipWatch.disconnect();
+          return window.__tipHeld && document.querySelector('#tip').style.display !== 'none';
+        });
+      }
+      await page.evaluate(() => delete window.solarbloom.pointerRecent); // back to the class's own
+      check(held, `${file}: the tip is on screen in the shot`);
+    } else if (file) await shot(file);
+    await page.evaluate(() => window.solarbloom.app.off('frameupdate', window.__jiggle));
+    return { ...at, ...read };
   };
+  const flat = (t) => t.replace(/\n/g, ' ') || 'nothing';
   // (a) the overview as M opens it: the cat is a few pixels across
   const far = await pointAtCat(undefined, '1-pointer-overview.png');
-  check(!!far && !far.visible && far.px < 14, `overview: the cat is too small to make out (${far?.px.toFixed(1)} px tall)`);
-  check(!!far && !CAT_WORD.test(far.tip), `overview: the pointer on its spot says nothing of a cat (${far?.tip.replace(/\n/g, ' ') || 'no tip'})`);
+  check(!!far && !far.visible && far.px < 100, `overview: too little of the cat shows to make out (${far?.px} px of it drawn)`);
+  check(!!far && !CAT_WORD.test(far.tip), `overview: the pointer on its spot says nothing of a cat (${flat(far?.tip ?? '')})`);
   // (b), a cat behind a building, runs last in a game of its own (section 6): it grows more of the city.
-  // (c) close, in plain view: the player can see it, so the pointer may ask
-  const near = await pointAtCat({ x: hid.c.x, z: hid.c.z, zoom: 1.2 }, '1-pointer-in-view.png');
-  check(!!near && near.visible && near.px >= 14, `close and in plain view: the cat can be seen (${near?.px.toFixed(1)} px)`);
-  check(!!near && /is that a cat/.test(near.tip), `close and in plain view: the pointer asks "…is that a cat?" (${near?.tip.replace(/\n/g, ' ')})`);
+  // (c) close, in plain view: the player can see it, so the pointer may ask, and bloombot beside it says hello.
+  // M again leaves the overview's glide first (it holds the zoom), then the view is framed.
+  await page.keyboard.press('m');
+  await settle();
+  const seenYaw = await lookAround(hid.c, 2.6, true);
+  check(seenYaw !== undefined, `close up, a heading the cat can be seen from (${seenYaw?.toFixed(0)}°)`);
+  const near = await pointAtCat({ x: hid.c.x, z: hid.c.z, yaw: seenYaw, zoom: 2.6 }, '1-pointer-in-view.png');
+  check(!!near && near.visible && near.px >= 100, `close and in plain view: the cat is drawn (${near?.px} px of it)`);
+  check(!!near && /is that a cat/.test(near.tip), `close and in plain view: the pointer asks "…is that a cat?" (${flat(near?.tip ?? '')}; under ${near?.under}, hit ${near?.hit})`);
+  check(!!near && near.botDist < 1.6 && /Say hello/.test(near.prompt), `close and in plain view: bloombot beside it offers "Say hello" (${flat(near?.prompt ?? '')})`);
   // back to bloombot's view
   await page.mouse.move(5, 5);
   await page.evaluate(() => {
     const g = window.solarbloom;
     g.overviewOn = false;
-    if (g.bot) g.bot.following = true;
     g.hud.hideTip();
     window.aim(window.__c.x + 4, window.__c.z + 4, 1.3);
   });
@@ -217,12 +339,18 @@ try {
 
   // ── 3. finding the first cat ──
   const findWith = async (c, label) => {
-    await page.evaluate((c) => window.goTo(c), c);
-    await page.waitForTimeout(1200);
+    const known = await page.evaluate(() => window.solarbloom.sim.cat.known);
+    if (known) {
+      await page.evaluate((c) => window.goTo(c), c);
+      await page.waitForTimeout(1200);
+    } else {
+      check((await lookAround(c, 1.6)) !== undefined, `${label}: the view turns until the cat can be seen`);
+    }
     const prompt = await page.evaluate(() => document.querySelector('#interactPrompt, .interact-prompt, #prompt')?.textContent ?? '');
     const found0 = await page.evaluate(() => window.solarbloom.sim.state.cat.found);
     await page.keyboard.press('e');
     await page.waitForTimeout(1500);
+    await page.evaluate(() => (window.solarbloom.overviewOn = false));
     const r = await page.evaluate(() => ({ found: window.solarbloom.sim.state.cat.found, panel: document.querySelector('#catPanelBody')?.innerText ?? '', last: window.solarbloom.sim.state.cat.lastReward }));
     check(r.found === found0 + 1, `${label}: bloombot finds the cat with Interact${prompt ? ` ("${prompt.trim()}")` : ''}`);
     return r;
@@ -515,12 +643,13 @@ try {
   await page.close();
   await load();
   check(await page.evaluate(() => window.solarbloom.sim.state.cat.found === 0 && !window.solarbloom.sim.cat.known), 'a new game: no cat found yet');
-  // ── 6. the pointer and a cat behind a building, in a new game (no cat found yet) ──
-  // Up close, but a building between the camera and the cat. Cats never hide right behind something from the
-  // usual heading, so the player turns the view: every spot a cat may hide at, from every heading, in the real city.
-  // The park has no building close enough to stand between a cat and the camera, so two more areas are grown
-  // and cleared first (as the audit's unit fixture does): their city nooks sit among the buildings.
-  const spots = await page.evaluate(() => {
+  // ── 6. a cat behind a building, in a new game (no cat found yet) ──
+  // The park has no building close enough, so two more areas are grown and cleared first (as the audit's unit
+  // fixture does): their city nooks sit among the buildings. The view is chosen from the map, not from catVisible:
+  // a hiding spot and a building tile near it, the camera turned so the building is on the line to the cat. A depth
+  // pick then says what is drawn at the cat's spot: it must be that building, in front of the cat.
+  await addView();
+  const pairs = await page.evaluate(() => {
     const g = window.solarbloom;
     const s = g.sim;
     s.state.progression.coreActivated = true;
@@ -538,44 +667,69 @@ try {
     }
     g.chunks.markAll();
     s.state.cat.active = undefined;
-    // the city nooks first (they sit among buildings), then the park's spots
-    return s.cat
-      .candidates()
-      .map((a) => a.id)
-      .sort((a, b) => Number(b.startsWith('nook')) - Number(a.startsWith('nook')));
-  });
-  let hidden;
-  for (const spot of spots) {
-    await page.evaluate((spot) => {
-      const s = window.solarbloom.sim;
-      s.state.cat.active = undefined;
-      s.cat.spawn(spot);
-    }, spot);
-    await page.waitForTimeout(250); // the cat's model goes in on the next frame
-    hidden = await page.evaluate(() => {
-      const g = window.solarbloom;
-      const id = g.sim.state.cat.active?.id;
-      const p = id && g.cat.targetWorld(id);
-      if (!p) return undefined;
-      for (let yaw = 0; yaw < 360; yaw += 30)
-        for (const zoom of [1.2, 1.6, 2.2, 3]) {
-          g.camera.turnTo(yaw, true);
-          g.camera.glide(p.x, 0, p.z, zoom);
-          for (let i = 0; i < 160; i++) g.camera.update(0.05);
-          const sc = g.camera.onScreen(g.cat.targetWorld(id), 0);
-          if (!sc || sc.x < 80 || sc.y < 80 || sc.x > innerWidth - 80 || sc.y > innerHeight - 160) continue;
-          const px = (0.32 / g.camera.worldPerPixel()) * sc.scale;
-          if (px >= 14 && !g.catVisible(id)) return { x: p.x, z: p.z, zoom, yaw, anchor: g.sim.state.cat.active.anchorId };
+    // every spot a cat may hide at: the renderer's "under the HUD on this screen" filter is set aside (headless
+    // default) while the spot is chosen and the cat hides, so the pick doesn't depend on where the camera was
+    window.__anchorView = s.cat.anchorView;
+    s.cat.anchorView = () => 'offscreen';
+    const out = [];
+    for (const a of s.cat.candidates()) {
+      const [cx, cy, cz] = a.pos;
+      for (let dx = -5; dx <= 5; dx++)
+        for (let dz = -5; dz <= 5; dz++) {
+          const t = s.grid.get('g', Math.floor(cx) + dx, Math.floor(cz) + dz); // generates the chunk if need be
+          if (t?.feature !== 'building') continue;
+          const d = Math.hypot(t.x + 0.5 - cx, t.z + 0.5 - cz);
+          if (d < 1.5 || d > 5) continue;
+          out.push({ anchor: a.id, cx, cy, cz, bx: t.x, bz: t.z, d, yaw: (Math.atan2(t.x + 0.5 - cx, t.z + 0.5 - cz) * 180) / Math.PI });
         }
-      return undefined;
-    });
-    if (hidden) break;
+    }
+    return out.sort((p, q) => p.d - q.d);
+  });
+  await page.waitForTimeout(2500); // the grown areas draw
+  let behind;
+  const tries = [];
+  for (const p of pairs.slice(0, 40)) {
+    await page.evaluate((p) => {
+      const s = window.solarbloom.sim;
+      if (s.state.cat.active?.anchorId === p.anchor) return;
+      s.state.cat.active = undefined;
+      s.cat.spawn(p.anchor);
+    }, p);
+    check(await page.evaluate((p) => window.solarbloom.sim.state.cat.active?.anchorId === p.anchor, p), `a cat hides at ${p.anchor}`);
+    await page.waitForTimeout(300); // the cat's model goes in on the next frame
+    await page.evaluate((p) => window.view(p.cx, p.cz, p.yaw, 1.6), p);
+    await settle();
+    let drawn;
+    for (let n = 0; n < 3 && !drawn; n++) {
+      if (n) {
+        await page.evaluate((p) => window.view(p.cx, p.cz, p.yaw, 1.6), p);
+        await settle();
+      }
+      drawn = await page.evaluate(async () => {
+        const g = window.solarbloom;
+        const id = g.sim.state.cat.active.id;
+        const sc = g.camera.onScreen(g.cat.targetWorld(id), 0);
+        if (!sc) return undefined;
+        const pick = await g.sight.at(sc.x, sc.y);
+        const t = pick.point && g.sim.grid.peek('g', Math.floor(pick.point.x), Math.floor(pick.point.z));
+        return { path: pick.path, point: pick.point, tile: t && { x: t.x, z: t.z, feature: t.feature } };
+      });
+    }
+    tries.push(`${p.anchor}@${p.bx},${p.bz}: ${drawn ? `${drawn.tile?.feature ?? 'no tile'} ${drawn.tile ? `${drawn.tile.x},${drawn.tile.z}` : ''} y${drawn.point ? (drawn.point.y - p.cy).toFixed(2) : '?'} ${drawn.path.slice(0, 2).join('<')}` : 'off screen'}`);
+    if (drawn?.tile?.feature === 'building' && drawn.point.y > p.cy + 0.2) {
+      behind = { p, drawn };
+      break;
+    }
   }
-  check(!!hidden, `a view where a building hides a hiding cat${hidden ? ` (${hidden.anchor}, heading ${hidden.yaw}°)` : ` (none of ${spots.length} spots)`}`);
-  if (hidden) {
-    const behind = await pointAtCat(hidden, '1-pointer-behind-building.png');
-    check(!!behind && behind.px >= 14 && !behind.visible, `behind a building: big enough on screen (${behind?.px.toFixed(1)} px), but out of sight`);
-    check(!!behind && !CAT_WORD.test(behind.tip), `behind a building: the pointer on its spot says nothing of a cat (${behind?.tip.replace(/\n/g, ' ') || 'no tip'})`);
+  await page.evaluate(() => (window.solarbloom.sim.cat.anchorView = window.__anchorView));
+  check(!!behind, `a hiding spot with a building on the line to it, from the map (${behind ? `${behind.p.anchor}, the building at ${behind.p.bx},${behind.p.bz}, heading ${behind.p.yaw.toFixed(0)}°` : `none of ${pairs.length} pairs: ${tries.join(' | ')}`})`);
+  if (behind) {
+    const { p, drawn } = behind;
+    check(!drawn.path.some((n) => /cat/i.test(n)), `the depth pick at the cat's spot: a building tile (${drawn.tile.x},${drawn.tile.z}) drawn ${(drawn.point.y - p.cy).toFixed(2)} above the cat (${drawn.path.slice(0, 3).join(' < ')})`);
+    const hiddenCat = await pointAtCat({ x: p.cx, z: p.cz, yaw: p.yaw, zoom: 1.6 }, '1-pointer-behind-building.png');
+    check(!!hiddenCat && !hiddenCat.visible && hiddenCat.px < 100, `behind the building: the cat is not seen (${hiddenCat?.px} px of it drawn)`);
+    check(!!hiddenCat && !CAT_WORD.test(hiddenCat.tip), `behind the building: the pointer on its spot says nothing of a cat (${flat(hiddenCat?.tip ?? '')})`);
+    check(!!hiddenCat && hiddenCat.botDist < 1.6 && !/Say hello/.test(hiddenCat.prompt), `behind the building: bloombot right beside it doesn't offer "Say hello" (${flat(hiddenCat?.prompt ?? '')})`);
   }
   check(errors.length === 0, `no page errors ${errors.join(' | ')}`);
 } finally {

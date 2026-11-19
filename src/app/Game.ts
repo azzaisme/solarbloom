@@ -6,9 +6,9 @@ import { BIRD_VOICES, Sfx } from '../audio/Sfx';
 import { treeSpot, treeStage } from '../rendering/TreePlacement';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
-import { AREA_TYPES, CITY_GEN } from '../data/city';
-import { catPixels, catSeen } from '../core/CatSight';
-import { buildingAt } from '../core/Generation';
+import { AREA_TYPES } from '../data/city';
+import { CAT_SIGHT, seenEnough } from '../core/CatSight';
+import { SightPicker } from '../rendering/SightPicker';
 import { distToFootprint } from '../core/Grid';
 import type { DroneRole, LayerData, MachineData, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
@@ -633,6 +633,7 @@ export class Game {
     window.addEventListener('beforeunload', () => this.saveNow());
 
     this.app.on('update', (dt: number) => this.update(dt));
+    this.app.on('frameend', () => this.measureCatsAfterFrame()); // E23.12.3: what the player could see on that frame
     this.app.start();
     // E23.1.1: a garden from an earlier version starts fresh, said calmly once, when the world is on screen. From the
     // title the new-garden question already said it (and cleared the slot); this is for a start with no title (?slot=)
@@ -1846,6 +1847,8 @@ export class Game {
       if (!v) continue;
       const d = Math.hypot(v.x - wx, v.z - wz);
       if (d >= BOT_REACH + 0.6) continue;
+      // E23.12.3 (#530): before the first find, bloombot only offers to say hello to a cat the player can see
+      if (!this.sim.cat.known && !this.catVisible(id)) continue;
       out.push({
         kind: 'cat', id: `cat:${id}`, verb: 'Say hello', name: '', distance: d,
         run: () => {
@@ -2504,31 +2507,50 @@ export class Game {
     return !!t && !!this.sim.occupant(t);
   }
 
+  /** E23.12.3 (#530): what the player can really see, measured on the frame (rendering/SightPicker). */
+  private sightPicker?: SightPicker;
+  get sight(): SightPicker {
+    return (this.sightPicker ??= new SightPicker(this.app, () => this.camera.cam));
+  }
+  private catSeenAt = new Map<string, { at: number; seen: boolean }>();
+
   /**
-   * E23.12.3 (#530): could the player spot this cat by eye? Big enough on screen to make out, and nothing solid
-   * (a building, a tall machine, a terrace) between it and the camera (core/CatSight). Public for the e2e.
+   * E23.12.3 (#530): could the player spot this cat by eye? Enough of it is drawn in front of everything else on
+   * this frame (core/CatSight): anything the player can't see through hides it, at its real shape and height, and a
+   * cat a few pixels across is too small to make out. Cached briefly (the pointer and the prompt ask every frame).
+   * Public for the e2e.
    */
   catVisible(id: string): boolean {
-    const p = this.cat.targetWorld(id);
-    const s = p && this.camera.onScreen(p, 0);
-    if (!p || !s) return false;
-    const e = this.camera.entity.getPosition();
-    return catSeen({ x: e.x, y: e.y, z: e.z }, p, catPixels(this.camera.worldPerPixel(), s.scale), (x, z) => this.solidTop(x, z));
+    const hit = this.catSeenAt.get(id);
+    if (hit && performance.now() - hit.at < CAT_SIGHT.cacheSeconds * 1000) return hit.seen;
+    // not measured yet (or a while ago): measure now, outside the frame (a click, a key, the e2e)
+    return this.measureCat(id);
   }
 
-  /** The top of whatever stands at a ground point (world units): the ground as drawn, a building's roof, a tall machine. */
-  private solidTop(x: number, z: number): number {
-    const tx = Math.floor(x);
-    const tz = Math.floor(z);
-    const g = this.groundY(x, z);
-    const t = this.sim.grid.peek(GROUND, tx, tz);
-    if (!t) return g;
-    if (t.feature === 'building') {
-      const plot = buildingAt(this.sim.state.seed, tx, tz, this.sim.grid.layer(GROUND)?.gen ?? 4);
-      return g + Math.max(1, plot?.storeys ?? 2) * CITY_GEN.buildings.storey;
+  private measureCat(id: string): boolean {
+    const root = this.cat.rootOf(id);
+    const seen = !!root && seenEnough(this.sight.visiblePixels(root));
+    this.catSeenAt.set(id, { at: performance.now(), seen });
+    return seen;
+  }
+
+  /**
+   * After each frame is drawn (never mid-update, when the scene is half moved): the hiding cats are measured again,
+   * at most every CAT_SIGHT.cacheSeconds, and only before the first find (afterwards nothing asks).
+   */
+  private measureCatsAfterFrame() {
+    if (this.sim.cat.known) return;
+    const now = performance.now();
+    for (const id of this.cat.ids()) {
+      const hit = this.catSeenAt.get(id);
+      if (!hit || now - hit.at >= CAT_SIGHT.cacheSeconds * 1000 * 0.8) this.measureCat(id);
     }
-    const m = t.occupantId ? this.sim.occupant(t) : undefined;
-    return m && (m.tier ?? 1) >= 3 ? g + 1.2 : g;
+  }
+
+  /** How many screen pixels of a cat the player can see right now (for the e2e). */
+  catSeenPixels(id: string): number {
+    const root = this.cat.rootOf(id);
+    return root ? this.sight.visiblePixels(root) : 0;
   }
 
   /**

@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
@@ -29,7 +30,7 @@ import * as water from '../src/data/water';
 import * as charge from '../src/data/charge';
 import * as unlocks from '../src/data/unlocks';
 import { CAT_DECOR, DECOR_OPTIONS, PLOT_OPTIONS } from '../src/data/cozy';
-import { CAT_SIGHT, catPixels, catSeen, sightClear } from '../src/core/CatSight';
+import { CAT_SIGHT, countIds, screenBox, seenEnough, toScreenPixels } from '../src/core/CatSight';
 import { openNextGoal } from './helpers';
 
 SaveService.clock = () => 0;
@@ -58,18 +59,31 @@ function strings(v: unknown, out: string[] = [], seen = new Set<unknown>()): str
 /** The strings that hint at a cat. */
 const hints = (list: string[]) => list.filter((s) => CAT_WORD.test(s));
 
-const STR = /'((?:\\.|[^'\\\n])*)'|"((?:\\.|[^"\\\n])*)"|`((?:\\.|[^`\\])*)`/g;
-
-/** The cat-word string literals in code (.ts, .css, a page's scripts and styles), comments aside, in order. */
-function scanCode(text: string): string[] {
+/**
+ * The cat-word strings in TypeScript, from its syntax tree (the compiler's own scanner): every string literal, every
+ * template's text (head, middles and tail, however the template is nested or split over lines) and JSX text.
+ * Comments are never strings, so they never count.
+ */
+function scanCode(text: string, file = 'x.ts'): string[] {
   const out: string[] = [];
-  const noBlock = text.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
-  for (const l of noBlock.split('\n')) {
-    if (l.trim().startsWith('//')) continue;
-    for (const m of l.replace(/(^|[^:'"`])\/\/ .*$/, '$1').matchAll(STR)) {
-      const s = m[1] ?? m[2] ?? m[3];
-      if (CAT_WORD.test(s)) out.push(s);
-    }
+  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const visit = (n: ts.Node) => {
+    let t: string | undefined;
+    if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n)) t = n.text;
+    else if (ts.isJsxText(n)) t = n.text.trim();
+    if (t !== undefined && CAT_WORD.test(t)) out.push(t);
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+/** The cat-word strings in a stylesheet (its quoted values: `content: '…'`, attribute selectors), comments aside. */
+function scanCss(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/'((?:\\.|[^'\\])*)'|"((?:\\.|[^"\\])*)"/g)) {
+    const t = m[1] ?? m[2];
+    if (CAT_WORD.test(t)) out.push(t);
   }
   return out;
 }
@@ -80,7 +94,8 @@ function scanHtml(text: string): string[] {
   const out: string[] = [];
   for (const m of t.matchAll(/>([^<]+)</g)) if (CAT_WORD.test(m[1])) out.push(m[1].trim());
   for (const m of t.matchAll(/=\s*"([^"]*)"/g)) if (CAT_WORD.test(m[1])) out.push(m[1]);
-  for (const m of t.matchAll(/<style[^>]*>([\s\S]*?)<\/style>|<script[^>]*>([\s\S]*?)<\/script>/g)) out.push(...scanCode(m[1] ?? m[2]));
+  for (const m of t.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)) out.push(...scanCss(m[1]));
+  for (const m of t.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)) out.push(...scanCode(m[1]));
   return out;
 }
 
@@ -89,7 +104,7 @@ function sourceFiles(d: string, out: string[] = []): string[] {
   for (const f of readdirSync(d)) {
     const p = join(d, f).replace(/\\/g, '/');
     if (statSync(p).isDirectory()) sourceFiles(p, out);
-    else if (/\.(ts|css|html)$/.test(p)) out.push(p);
+    else if (/\.(tsx?|css|html)$/.test(p)) out.push(p);
   }
   return out;
 }
@@ -100,7 +115,7 @@ function catStrings(d: string): Record<string, string[]> {
   const files = [...sourceFiles(d), ...(existsSync('index.html') ? ['index.html'] : [])];
   for (const f of files) {
     const text = readFileSync(f, 'utf8');
-    const list = f.endsWith('.html') ? scanHtml(text) : scanCode(text);
+    const list = f.endsWith('.html') ? scanHtml(text) : f.endsWith('.css') ? scanCss(text) : scanCode(text, f);
     if (list.length) out[f] = [...new Set(list)].sort();
   }
   return out;
@@ -165,27 +180,37 @@ describe('E23.12.3: the cats stay hidden until one is found (audit)', () => {
     for (const clean of ['Scatter seeds', 'Catch the light', 'A category of crops', 'Educate', 'Pawn shop', 'A small lamp', 'Hiding the cables']) expect(hints([clean]), clean).toEqual([]);
   });
 
-  it('before the first find, the pointer only finds a cat the player can see: big enough, nothing in the way (core/CatSight)', () => {
-    const flat = () => 0;
-    const eye = { x: 0, y: 6, z: 12 };
-    const cat = { x: 0, y: 0.1, z: 0 };
-    // size on screen: a far overview makes it a few pixels; up close it is plain
-    expect(catPixels(0.1, 1)).toBeCloseTo(CAT_SIGHT.catHeight / 0.1);
-    expect(catPixels(0.08, 1)).toBeLessThan(CAT_SIGHT.minPixels);
-    expect(catPixels(0.01, 1)).toBeGreaterThan(CAT_SIGHT.minPixels);
-    // open ground: clear; a building (3 storeys) halfway along the line: blocked; one off to the side: clear
-    expect(sightClear(eye, cat, flat)).toBe(true);
-    const tower = (x0: number, z0: number) => (x: number, z: number) => (Math.abs(x - x0) < 1 && Math.abs(z - z0) < 1 ? 3 * 0.42 + 1 : 0);
-    expect(sightClear(eye, cat, tower(0, 3))).toBe(false);
-    expect(sightClear(eye, cat, tower(4, 3))).toBe(true);
-    // a building behind the cat (further from the camera) never hides it
-    expect(sightClear(eye, cat, tower(0, -3))).toBe(true);
-    // the cat's own nook beside it doesn't count
-    expect(sightClear(eye, cat, (x, z) => (Math.hypot(x, z) < CAT_SIGHT.skipNear - 0.05 ? 5 : 0))).toBe(true);
-    // seen = both
-    expect(catSeen(eye, cat, 30, flat)).toBe(true);
-    expect(catSeen(eye, cat, 6, flat)).toBe(false);
-    expect(catSeen(eye, cat, 30, tower(0, 3))).toBe(false);
+  it('before the first find, only a cat the player can see counts: its own pixels on the frame (core/CatSight)', () => {
+    // the pick buffer: RGBA per pixel, the mesh id in ARGB order (as PlayCanvas's Picker writes it); white = nothing
+    const px = (ids: number[]) => {
+      const out = new Uint8Array(ids.length * 4);
+      ids.forEach((id, i) => {
+        out[i * 4] = (id >>> 16) & 255;
+        out[i * 4 + 1] = (id >>> 8) & 255;
+        out[i * 4 + 2] = id & 255;
+        out[i * 4 + 3] = (id >>> 24) & 255;
+      });
+      return out;
+    };
+    const cat = new Set([7, 8]); // the cat's meshes (body, collar)
+    const NONE = 0xffffffff;
+    // in the open: all of its box that is cat counts; a building (id 300) in front hides what it covers
+    expect(countIds(px([7, 7, 8, NONE, 7, 8]), cat)).toBe(5);
+    expect(countIds(px([300, 300, 300, 300, 7, 300]), cat)).toBe(1);
+    expect(countIds(px([300, 300, 300, 300]), cat)).toBe(0);
+    // a big id (many meshes in the city) decodes whole
+    expect(countIds(px([0x01020304]), new Set([0x01020304]))).toBe(1);
+    // the pass runs at half resolution: each pick pixel stands for four on screen
+    expect(toScreenPixels(30, 0.5)).toBe(120);
+    // enough to make out: 100 screen pixels (about 10 × 10)
+    expect(seenEnough(CAT_SIGHT.minPixels)).toBe(true);
+    expect(seenEnough(CAT_SIGHT.minPixels - 1)).toBe(false);
+    expect(seenEnough(toScreenPixels(4))).toBe(false); // a cat 4 px tall in the overview: a few pick pixels
+    expect(seenEnough(0)).toBe(false); // fully behind a building or a tree
+    // the box read from the buffer: the cat's projected bounds, clipped to the screen, whole pixels
+    expect(screenBox([{ x: 10.4, y: 20.6 }, { x: 30.2, y: 40.1 }], 1280, 760)).toEqual({ x: 10, y: 20, w: 21, h: 21 });
+    expect(screenBox([{ x: -50, y: 700 }, { x: 20, y: 800 }], 1280, 760)).toEqual({ x: 0, y: 700, w: 20, h: 60 });
+    expect(screenBox([{ x: -50, y: -40 }, { x: -10, y: -5 }], 1280, 760)).toBeUndefined();
   });
 
   it("E23's words name no cat: tips, Keepers' lines, journal pages, photo mode, night finds, crops, research, lights, items", () => {
@@ -283,24 +308,23 @@ describe('E23.12.3: the cats stay hidden until one is found (audit)', () => {
       'src/app/EventBus.ts': { 'cat.spawned': KEY, 'cat.found': KEY, 'cat.moved': KEY, 'cat.goldenRelay': KEY },
       'src/app/Game.ts': {
         cat: KEY,
-        'cat:${id}': KEY,
+        'cat:': KEY,
         'cat.spawned': KEY,
         'cat.found': KEY,
         'cat.moved': KEY,
         'cat.goldenRelay': KEY,
         "Bloombot can't reach that cat from here": 'a click on the cat itself, and before the first find only on one the player can really see (catVisible, core/CatSight)',
         '<b>🐱 …is that a cat?</b>Go and say hello!': 'the pointer on the cat itself, and before the first find only on one the player can really see (catVisible, core/CatSight)',
-        '🐾 Paw prints lead ${compass(p.x - fx, p.z - fz)}, ${a.hint}…': 'the paw chip: only when hinted(), never before the first find',
+        '🐾 Paw prints lead ': 'the paw chip: only when hinted(), never before the first find',
         '<br><span class="ok">🐾 Faint paw prints… a cat is hiding very close.</span>': 'pawHint: only when hinted(), never before the first find',
-        "<p class=\"stat\">${shining ? 'Shining into the grid' : 'Resting until the sun is up'}${boosted ? ' · a bloom beside it makes it shine brighter' : ''}${inSurge(s, m) ? ' · the Lucky Cat’s sunshine' : ''}</p><p>Restore tiles right next to it and it shines brighter for a few seconds.</p>":
-          'a solar panel inside a Solar Surge, which only a found cat gives',
+        ' · the Lucky Cat’s sunshine': 'a solar panel inside a Solar Surge, which only a found cat gives',
         '🌈 RAINBOW CAT FOUND!': 'the found toast',
         '👑 GOLDEN CAT FOUND!': 'the found toast',
         '🐱 LUCKY CAT FOUND!': 'the found toast',
         'Rainbow Cat: ': 'the reward panel title, on a find',
         'Golden Cat: ': 'the reward panel title, on a find',
-        "${chaining.has(id) ? ' 🔗' : ''}${catAreas.has(id) ? ' 🐱' : ''}": 'overview area labels: catAreas comes from the find log',
-        'cat ${st.cat.active ? st.cat.active.anchorId : ': 'the debug readout (Settings › debug only)',
+        ' 🐱': 'overview area labels: from the find log (catAreas)',
+        'cat ': 'the debug readout (Settings › debug only)',
       },
       'src/app/Interact.ts': { cat: KEY },
       'src/core/TilePack.ts': { cat: KEY },
@@ -336,27 +360,24 @@ describe('E23.12.3: the cats stay hidden until one is found (audit)', () => {
         "Cat's Garden": 'a reward name, shown on a find',
         'Fog Whisker': 'a reward name, shown on a find',
       },
-      'src/gameplay/Metrics.ts': { cat: KEY, 'cat.found': KEY },
+      'src/gameplay/Metrics.ts': { cat: KEY, 'cat.found': KEY, 'Lucky Cats found ': `the playtest timings: ${FOUND}` },
       'src/gameplay/Transitions.ts': { cat: KEY },
       'src/rendering/CatVisuals.ts': { 'lucky-cat': KEY, paw: KEY },
       'src/rendering/DecorArt.ts': { 'lucky-cat': KEY },
       'src/rendering/DroneVisuals.ts': { 'cat.found': KEY },
       'src/rendering/Fauna.ts': { cats: KEY },
       'src/rendering/FaunaPlan.ts': { cats: KEY },
-      'src/ui/BackpackModel.ts': { cat: KEY, 'Lucky Cats': `the collection group: ${FOUND}`, '${st.cat.found} found': `the collection group: ${FOUND}`, 'One cat found': `the collection group: ${FOUND}`, '${n} cats found': `the collection group: ${FOUND}` },
+      'src/ui/BackpackModel.ts': { cat: KEY, 'Lucky Cats': `the collection group: ${FOUND}`, ' cats found': `the collection group: ${FOUND}`, 'One cat found': `the collection group: ${FOUND}` },
       'src/ui/EcoBadge.ts': { cat: KEY },
       'src/ui/Hud.ts': {
         cat: KEY,
-        'Lucky Cat garden': `the garden button: ${FOUND}`,
-        'Paw prints: which way a hiding cat went': 'the paw chip: only when hinted()',
-        'Paw prints: a Lucky Cat is hiding. Which way do they lead?': 'the paw chip: only when hinted()',
+        '<span class="qbadge" aria-hidden="true"></span></button>\n        <button class="rbtn qbtn" id="catBtn" aria-label="Lucky Cat garden" title="Lucky Cat garden" hidden>':
+          `the garden button, built hidden: ${FOUND}`,
+        '<span class="qn" id="catCount">0</span></button>\n        <button class="rbtn qbtn" id="pawBtn" aria-label="Paw prints: which way a hiding cat went" title="Paw prints: a Lucky Cat is hiding. Which way do they lead?" hidden>':
+          'the paw chip, built hidden: shown only when hinted()',
       },
       'src/ui/Icons.ts': { cat: KEY, paw: KEY, '🐱': 'the icon set: drawn only where a string above uses it', '🐾': 'the icon set: drawn only where a string above uses it' },
-      'src/ui/Panels.ts': {
-        '<b>${ICONS.cat} ${iconize(esc(title))}</b><span>${iconize(esc(detail))}</span>': 'the reward panel, on a find',
-        '<p class="set-stats">Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Average: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b>${this.sim.cat.known ? ':
-          'Settings › Game: the Lucky Cats line only when sim.cat.known',
-      },
+      'src/ui/Panels.ts': { ' · Lucky Cats: <b>': 'Settings › Game: only when sim.cat.known' },
       'src/ui/Toasts.ts': { cat: KEY },
     };
     const found = catStrings('src');
@@ -369,7 +390,13 @@ describe('E23.12.3: the cats stay hidden until one is found (audit)', () => {
 
   it('the scan finds a cat word wherever it is: a one-word label, a stylesheet, a page', () => {
     expect(scanCode("label('Cats')\nconst k = 'cat'")).toEqual(['Cats', 'cat']);
-    expect(scanCode(".chip::after { content: '🐾'; }\n/* 'paw' in a comment is fine */")).toEqual(['🐾']);
+    // a template over several lines, one nested in another's expression, and JSX text
+    expect(scanCode('const a = `Biggest chain\n  ${x ? `Lucky Cats found ${n}` : \'\'} done`;')).toEqual(['Lucky Cats found ']);
+    expect(scanCode('h(`<p>${known ? ` · Lucky Cats: <b>${n}</b>` : \'\'}</p>`)')).toEqual([' · Lucky Cats: <b>']);
+    expect(scanCode('const v = <div>A purr in the hedge</div>;', 'x.tsx')).toEqual(['A purr in the hedge']);
+    // comments are not strings
+    expect(scanCode("// 'cat' here is a comment\n/* and 'paw' here */ const k = 1;")).toEqual([]);
+    expect(scanCss(".chip::after { content: '🐾'; }\n/* 'paw' in a comment is fine */")).toEqual(['🐾']);
     expect(scanHtml('<div id="x" title="Purring nearby">Something small is hiding here</div><!-- a meow -->')).toEqual(['Something small is hiding here', 'Purring nearby']);
   });
 });
