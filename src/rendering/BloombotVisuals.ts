@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import { color, PALETTE } from './Materials';
 import { BOT_CLIPS, seatLift } from '../data/rest';
+import { foldLegs, hipsAbove, SEAT_HIPS, type SeatKind } from './SeatPose';
 
 /**
  * Bloombot (#234, G.10 + G.1): the player character, and the game's first skinned model. The GLB comes from
@@ -209,20 +210,32 @@ export class BloombotVisuals {
     const h = this.holder;
     const clip = (n: string) => this.clips.has(n);
     if (this.pose === 'sit') {
-      // with the sit clip the hips come down to the seat's height; without it (until #482's clips land) never stand
-      // up on the seat: settle low at the bench's foot, leaning back against it
+      // with the sit clip the hips come down to the seat's height; without it (the model has no sitting clips yet,
+      // #482) the legs are bent by hand: thighs along the seat, shins hanging, the hips resting on the seat
       if (clip(BOT_CLIPS.sit)) h?.setLocalPosition(0, seatLift(this.seat, SCALE), -0.12);
-      else h?.setLocalPosition(0, -0.14, 0.32);
-      h?.setLocalEulerAngles(clip(BOT_CLIPS.sit) ? 0 : -8, 0, 0);
+      else h?.setLocalPosition(0, this.fold('sit') + this.seat, -0.12);
+      h?.setLocalEulerAngles(0, 0, 0);
       this.standIn?.setLocalPosition(0, 0.4 + this.seat, -0.1);
     } else if (this.pose === 'meditate') {
-      // the clip sits cross-legged on the ground; without it, settled low, breathing slowly
+      // the clip sits cross-legged on the ground; without it the legs are crossed by hand, settled low, breathing
       const breathe = this.reducedMotion ? 0 : Math.sin(this.clock * 1.6) * 0.012;
-      h?.setLocalPosition(0, clip(BOT_CLIPS.meditate) ? 0 : -0.14 + breathe, 0);
+      h?.setLocalPosition(0, clip(BOT_CLIPS.meditate) ? 0 : this.fold('meditate') + breathe, 0);
+      h?.setLocalEulerAngles(0, 0, 0);
       this.standIn?.setLocalPosition(0, 0.26, 0);
     }
     const anim = this.model?.anim;
     if (anim && !this.action) anim.speed = this.pose === 'meditate' ? 0.6 : 0.8; // slow, calm breathing
+  }
+
+  /**
+   * E23.2.3: the seated poses without their clips: bends the legs of the idle pose by hand (SeatPose), every frame
+   * after the animation has run. Returns how far to move the model so the hips rest on the seat (or the ground).
+   */
+  private fold(kind: SeatKind): number {
+    const rig = this.model;
+    const holder = this.holder;
+    if (!rig || !holder || !foldLegs(rig, this.root, kind)) return kind === 'sit' ? 0 : -0.14;
+    return SEAT_HIPS[kind] - hipsAbove(rig, holder);
   }
 
   /** E23.2.1: out of charge (or not): a tired droop, head and shoulders forward. */

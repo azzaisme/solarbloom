@@ -68,8 +68,12 @@ export class RestSystem {
     return true;
   }
 
-  /** E23.3.3: sits cross-legged at a charger and meditates while it charges. */
+  /**
+   * E23.3.3: sits cross-legged at a charger and meditates. Only a charger the grid knows (its 'charger' role) can
+   * be meditated at; the charge itself comes from the pad (sim.chargers), while bloombot is docked at it.
+   */
   meditate(m: MachineData): boolean {
+    if (!this.sim.power.roleOf(m)) return false;
     this.sitting = { kind: 'charger', machineId: m.id };
     this.sim.bus.emit('rest.sat', { kind: 'charger' });
     return true;
@@ -83,12 +87,12 @@ export class RestSystem {
   }
 
   /**
-   * Is a charger giving charge now? E23.3's grid decides for any machine it has a role for (a charger on a network
-   * with power). E23.3.3 registers the charger's role; until it does, a charger counts as powered.
+   * Is a charger giving charge now? Only one on E23.3's grid (the 'charger' role) whose network has power: a
+   * machine the grid has no role for is never a powered charger.
    */
   powered(m: MachineData): boolean {
     const p = this.sim.power;
-    return p.roleOf(m) ? p.isPowered(m) : true;
+    return !!p.roleOf(m) && p.isPowered(m);
   }
 
   /**
@@ -110,11 +114,15 @@ export class RestSystem {
   tick(dt: number) {
     const s = this.sitting;
     if (!s) return;
-    if (s.kind === 'bench') this.sim.charge.recharge(CHARGE.benchPerSecond * dt, 'bench');
-    else {
-      const m = this.sim.machine(s.machineId);
-      if (!m) return this.stand();
-      if (this.powered(m)) this.sim.charge.recharge(CHARGE.meditatePerSecond * dt, 'charger');
+    if (s.kind === 'bench') {
+      // the bench was taken away (a placed one picked up) while bloombot sat on it: stand
+      if (!this.benchAt(s.bench.x, s.bench.z)) return this.stand();
+      this.sim.charge.recharge(CHARGE.benchPerSecond * dt, 'bench');
+      return;
     }
+    // meditating: the pad charges bloombot (sim.chargers) while it is docked there; the charger gone, or bloombot
+    // no longer at it, ends the meditation
+    const m = this.sim.machine(s.machineId);
+    if (!m || this.sim.chargers.docked() !== m) this.stand();
   }
 }

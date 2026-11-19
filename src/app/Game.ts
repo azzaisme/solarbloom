@@ -1583,6 +1583,7 @@ export class Game {
     if (this.settingsUi.isOpen) this.settingsUi.close();
     else if (this.menu.isOpen) this.closeMenu();
     else if (this.oc?.escape()) void 0; // E21: an Old City panel or a hold
+    else if (this.resting?.active) this.resting.stand(); // E23.2.3: Back stands bloombot up before any menu
     else if (this.hud.trayOpen) this.hud.toggleTray(false);
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
     else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);

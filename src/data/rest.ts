@@ -7,10 +7,17 @@ export const REST = {
   mendCost: { scrap: 3 } as MaterialCost,
   /** "let time run faster" while sitting: the world runs this many times as fast (a game day is 48 minutes) */
   fastTime: 4,
-  /** the calm view: the camera eases out to this zoom (1 = the usual follow) and lifts this many degrees */
+  /** the calm view: the camera eases out to this zoom (1 = the usual follow) */
   calmZoom: 0.55,
-  /** seconds the camera takes to ease out and back */
-  ease: 1.4,
+  /** the calm view turns this many degrees a second round bloombot */
+  orbitDegPerSecond: 2.5,
+  /**
+   * Where bloombot and a friend sit on a bench (world units from its middle): `out` forward of the seat's middle,
+   * bloombot `along` to one end when a friend joins, the friend `friend` to the other end.
+   */
+  seat: { out: 0.04, along: 0.2, friend: 0.24 },
+  /** meditating: bloombot sits this far out from the charger pad's edge (inside the pad's reach, POWER.charger) */
+  padGap: 0.35,
   /** the music swells to this share above its level while sitting */
   musicSwell: 0.6,
   /**

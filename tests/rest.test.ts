@@ -4,6 +4,7 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { CHARGE } from '../src/data/charge';
 import { KEEPERS } from '../src/data/oldcity';
+import { PROJECTS } from '../src/data/research';
 import { BOT_CLIPS, REST, seatLift } from '../src/data/rest';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -103,33 +104,118 @@ describe('E23.2.3: benches', () => {
 });
 
 describe('E23.2.3: meditating at a charger', () => {
-  const charger = (sim: Sim): MachineData => {
-    const m = { id: 'mc1', type: 'charger', roofId: GROUND, x: 6, z: 12, size: 1, boostUntil: 0, timer: 0, charge: 0 } as unknown as MachineData;
+  /** A machine on cleared ground, as the build system leaves it (E23.3's grid finds it by its tiles). */
+  const put = (sim: Sim, type: string, x: number, z: number): MachineData => {
+    const t = sim.grid.get(GROUND, x, z)!;
+    t.ground = 'restored';
+    t.blocked = false;
+    const m = { id: sim.newId('m'), type, roofId: GROUND, x, z, size: 1, boostUntil: 0, timer: 0, charge: 0 } as unknown as MachineData;
     sim.state.machines.push(m);
+    t.occupantId = m.id;
+    sim.grid.indexMachine(m);
     return m;
   };
+  /** Clear noon, so solar panels give their full power (E23.7's sky is not what these tests are about). */
+  const noon = (sim: Sim) => {
+    sim.power.skyOverride = () => ({ sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 });
+    return sim;
+  };
 
-  it('charges fast while powered, nothing while the grid is short, and stops if the charger goes', () => {
-    const sim = oldSim();
-    const m = charger(sim);
+  it('meditates at a real charger: the pad charges it while the grid has power, and nothing on a dead line', () => {
+    const sim = noon(oldSim());
+    const pad = put(sim, 'charger', 30, 30);
+    expect(sim.power.roleOf(pad), "the charger's role on the grid").toBeTruthy();
     sim.state.charge = { value: 0 };
-    sim.rest.meditate(m);
-    sim.advance(5);
-    expect(sim.charge.value()).toBeCloseTo(5 * CHARGE.meditatePerSecond, 1);
-    expect(CHARGE.meditatePerSecond).toBeGreaterThan(CHARGE.benchPerSecond * 5); // fast, next to a bench
-    // E23.3's grid, once the charger has a role on it (E23.3.3): an unpowered charger gives nothing
-    let powered = false;
-    sim.power.roleOf = (() => ({})) as typeof sim.power.roleOf;
-    sim.power.isPowered = () => powered;
-    const v = sim.charge.value();
+    sim.bot = { roofId: GROUND, x: 30.5, z: 31.35 }; // sitting at the pad's edge, as Resting seats it
+    expect(sim.rest.meditate(pad)).toBe(true);
+    // a lone pad: no power, no charge (never powered without a source on its network)
     sim.advance(3);
-    expect(sim.charge.value()).toBeCloseTo(v, 5);
-    powered = true;
-    sim.advance(1);
-    expect(sim.charge.value()).toBeGreaterThan(v);
-    sim.state.machines.splice(sim.state.machines.indexOf(m), 1);
+    expect(sim.rest.powered(pad)).toBe(false);
+    expect(sim.charge.value()).toBe(0);
+    expect(sim.rest.sitting?.kind).toBe('charger');
+    // panels beside it: the pad charges fast, once (no second fill from the meditation itself)
+    put(sim, 'solar', 31, 30);
+    put(sim, 'solar', 29, 30);
+    sim.advance(2);
+    expect(sim.rest.powered(pad)).toBe(true);
+    expect(sim.charge.value()).toBeCloseTo(2 * CHARGE.meditatePerSecond, 1);
+    expect(CHARGE.meditatePerSecond).toBeGreaterThan(CHARGE.benchPerSecond * 5); // fast, next to a bench
+  });
+
+  it('stands up when the charger goes, or when bloombot is no longer at it', () => {
+    const sim = noon(oldSim());
+    const pad = put(sim, 'charger', 30, 30);
+    sim.bot = { roofId: GROUND, x: 30.5, z: 31.35 };
+    sim.rest.meditate(pad);
+    sim.bot = { roofId: GROUND, x: 30.5, z: 33.5 }; // moved away
     sim.advance(1);
     expect(sim.rest.sitting).toBeUndefined();
+    sim.bot = { roofId: GROUND, x: 30.5, z: 31.35 };
+    sim.rest.meditate(pad);
+    sim.state.machines.splice(sim.state.machines.indexOf(pad), 1);
+    sim.advance(1);
+    expect(sim.rest.sitting).toBeUndefined();
+  });
+
+  it('a machine with no grid role is never a powered charger, and cannot be meditated at', () => {
+    const sim = noon(oldSim());
+    const odd = put(sim, 'notACharger', 30, 30);
+    expect(sim.power.roleOf(odd)).toBeUndefined();
+    expect(sim.rest.powered(odd)).toBe(false);
+    expect(sim.rest.meditate(odd)).toBe(false);
+    expect(sim.rest.sitting).toBeUndefined();
+  });
+});
+
+describe('E23.2.1 (#371): one meter, fed by the grid and by research', () => {
+  it('battery cells researched make a bigger charge, and meditating at a powered pad fills it to the new top', () => {
+    const sim = oldSim();
+    sim.power.skyOverride = () => ({ sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 });
+    // the research is done and the cells are in the pack: buy "Bigger charge" twice through the real research
+    sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
+    sim.inventory.add('batteryCell', 5);
+    sim.inventory.add('gears', 4);
+    const max0 = sim.charge.max;
+    expect(sim.research.upgrade('chargeCells')).toBe(1);
+    expect(sim.research.upgrade('chargeCells')).toBe(2);
+    expect(sim.charge.max).toBe(max0 + 2 * CHARGE.cellCapacity);
+    // a charger with panels beside it, bloombot sat at its edge meditating
+    const put = (type: string, x: number, z: number): MachineData => {
+      const t = sim.grid.get(GROUND, x, z)!;
+      t.ground = 'restored';
+      t.blocked = false;
+      const m = { id: sim.newId('m'), type, roofId: GROUND, x, z, size: 1, boostUntil: 0, timer: 0, charge: 0 } as unknown as MachineData;
+      sim.state.machines.push(m);
+      t.occupantId = m.id;
+      sim.grid.indexMachine(m);
+      return m;
+    };
+    const pad = put('charger', 30, 30);
+    put('solar', 31, 30);
+    put('solar', 29, 30);
+    sim.state.charge = { ...sim.state.charge!, value: max0 - 1 };
+    sim.bot = { roofId: GROUND, x: 30.5, z: 31.35 };
+    expect(sim.rest.meditate(pad)).toBe(true);
+    sim.advance(Math.ceil((2 * CHARGE.cellCapacity + 1) / CHARGE.meditatePerSecond) + 2);
+    expect(sim.charge.value()).toBeCloseTo(sim.charge.max, 3); // past the old top, to the new one
+    expect(sim.charge.max).toBeGreaterThan(max0);
+  });
+});
+
+describe('E23.2.3: a bench taken away', () => {
+  it('stands bloombot up when the placed bench it sits on is picked up', () => {
+    const sim = oldSim();
+    sim.state.cozy = { decor: { [`${GROUND}|2|12`]: 'bench@0' } };
+    const b = sim.rest.benchAt(2, 12)!;
+    const stood: unknown[] = [];
+    sim.bus.on('rest.stood', (e) => stood.push(e));
+    expect(sim.rest.sitOnBench(b)).toBe(true);
+    sim.advance(1);
+    expect(sim.rest.sitting?.kind).toBe('bench');
+    delete sim.state.cozy.decor![`${GROUND}|2|12`];
+    sim.advance(1);
+    expect(sim.rest.sitting).toBeUndefined();
+    expect(stood.length).toBe(1); // the game puts the view back on this event
   });
 });
 

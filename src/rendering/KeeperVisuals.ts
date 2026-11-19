@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { foldLegs, hipsAbove, SEAT_HIPS } from './SeatPose';
 import { GROUND } from '../core/GameState';
 import { canStep } from '../core/Height';
 import { inRect } from '../core/OldCityLayout';
@@ -24,6 +25,8 @@ interface KeeperView {
   body: pc.Entity;
   rig?: pc.Entity;
   standIn: boolean;
+  /** the Keeper's prop (set down while it sits beside bloombot) */
+  prop?: pc.Entity;
   /** where it stands now (cells), and where it walks to when settled */
   x: number;
   z: number;
@@ -47,7 +50,7 @@ export class KeeperVisuals {
   private clock = 0;
   reducedMotion = false;
   /** E23.2.3: a Keeper who is a friend sits beside bloombot on a bench (world position, facing) */
-  beside?: { id: string; x: number; y: number; z: number; facing: number };
+  beside?: { id: string; x: number; y: number; z: number; facing: number; seat: number };
 
   constructor(
     private sim: Sim,
@@ -119,6 +122,7 @@ export class KeeperVisuals {
       p.setLocalScale(0.32, 0.32, 0.32);
       p.setLocalPosition(0.32, 0, 0.1);
       body.addChild(p);
+      v.prop = p;
     }
     return v;
   }
@@ -227,15 +231,17 @@ export class KeeperVisuals {
       if (b) {
         // sitting beside bloombot: down on the bench seat (the sit-down clip the Keepers doze with, which is seat
         // height), then back to where it was afterwards. The stand-in has no sitting clip: it just stands there.
-        if (!v.standIn) {
-          v.body.setLocalEulerAngles(0, 0, 0);
-          v.body.setLocalPosition(0, SEAT.height * 0.35, -0.08);
-          this.play(v, 'sleep');
-        } else this.play(v, 'idle');
+        this.play(v, 'idle');
         v.root.setPosition(b.x, b.y, b.z);
         v.root.setEulerAngles(0, (b.facing * 180) / Math.PI, 0);
+        v.body.setLocalEulerAngles(0, 0, 0);
+        // the legs bent by hand (SeatPose: the Keepers share bloombot's rig, and have no sitting clip), the hips
+        // down on the seat; its prop set down while it sits
+        if (v.rig && foldLegs(v.rig, v.root, 'sit')) v.body.setLocalPosition(0, v.body.getLocalPosition().y + b.seat + SEAT_HIPS.sit - hipsAbove(v.rig, v.root), -0.08);
+        if (v.prop) v.prop.enabled = false;
         continue;
       }
+      if (v.prop) v.prop.enabled = true;
       v.root.setPosition(v.x, this.y(v.x, v.z), v.z);
       v.root.setEulerAngles(0, (v.facing * 180) / Math.PI, 0);
     }
