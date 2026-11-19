@@ -295,6 +295,9 @@ try {
     await page.keyboard.press('KeyV');
     await settle(2500);
     check(await run(() => window.solarbloom.waterView), 'V turns the Water view on in build mode');
+    // drawn on the next frame (slow headless): wait for the overlay and the holograms, up to 15 s
+    await page.waitForFunction(() => window.solarbloom.waterOverlay.visible && window.solarbloom.machines.holos.water.parts.size > 0, null, { timeout: 15000 }).catch(() => {});
+    await settle(1000);
     check(await run(() => window.solarbloom.waterOverlay.visible), 'the Water view is drawn');
     // E23.4.5: the running pump and the line it fills are blue holograms, in a dimmed world
     const holo = await run(() => {
@@ -318,6 +321,8 @@ try {
     // one view at a time: the Power view (O) turns the Water view off, and its holograms with it
     await page.keyboard.press('KeyO');
     await settle(1500);
+    // the holograms swap on the next drawn frame (slow headless): wait for it, up to 10 s
+    await page.waitForFunction(() => window.solarbloom.machines.holos.water.parts.size === 0 && window.solarbloom.machines.holos.power.parts.size > 0, null, { timeout: 10000 }).catch(() => {});
     const swap = await run(() => ({ water: window.solarbloom.waterView, parts: window.solarbloom.machines.holos.water.parts.size, power: window.solarbloom.machines.holos.power.parts.size }));
     check(!swap.water && swap.parts === 0 && swap.power > 0, `the Power view takes over: no blue left (${JSON.stringify(swap)})`);
     await page.keyboard.press('KeyV');
@@ -347,11 +352,11 @@ try {
     await settle(3000);
     await run(() => window.solarbloom.selectTool('pipe'));
     await settle(2500);
-    const tank = await run(() => {
+    const tank = await page.waitForFunction(() => {
       const g = window.solarbloom;
-      const r = g.sim.machinesOfType('reservoir')[0];
-      return g.machines.holos.water.sig.split(',').includes(r.id);
-    });
+      const r = g.sim.machinesOfType('reservoir').find((m) => m.z < 0); // the terrace's (Mast Row lies north)
+      return !!r && g.machines.holos.water.sig.split(',').includes(r.id);
+    }, null, { timeout: 10000 }).then(() => true, () => false);
     check(tank, 'the terrace tank holding water is a blue hologram');
     await shot('7-overlay-gravity');
     // the plant on the shore, making water, in the same blue
