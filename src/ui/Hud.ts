@@ -92,6 +92,8 @@ export interface Settings {
   invertY?: boolean;
   noRecentre?: boolean;
   noVistas?: boolean;
+  /** Third person: a click on the world captures the mouse to look around (on unless switched off) */
+  mouseLook?: boolean;
   /** Bloombot (G.16): rebound keys and gamepad buttons (only what differs from the default map). */
   keys?: SavedBindings['keys'];
   pad?: SavedBindings['pad'];
@@ -183,6 +185,11 @@ export class Hud {
     this.panels = new Panels(this);
     this.charge = new ChargeMeter(this);
     this.root.innerHTML = iconize(this.template());
+    // Third person: the build crosshair in the middle of the screen (shown while aiming a build: `.aiming`)
+    const xh = document.createElement('div');
+    xh.className = 'crosshair';
+    xh.setAttribute('aria-hidden', 'true');
+    this.root.appendChild(xh);
     this.bars.wire();
     this.objective.wire();
     this.hotbar.wire();
