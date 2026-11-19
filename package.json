@@ -30,6 +30,7 @@
     "shots:look": "vite build && node tests/e2e/look-shots.mjs",
     "test:gamepad": "vite build && node tests/e2e/gamepad.e2e.mjs",
     "test:ui": "vite build && node tests/e2e/e22-ui.e2e.mjs",
+    "test:water": "vite build && node tests/e2e/water-shots.mjs",
     "test:title": "vite build && node tests/e2e/title.e2e.mjs",
     "test:backpack": "vite build && node tests/e2e/backpack.e2e.mjs",
     "test:workshop": "vite build && node tests/e2e/workshop.e2e.mjs",
