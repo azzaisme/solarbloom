@@ -222,13 +222,14 @@ export class PipeVisuals {
   update(dt: number) {
     const p = this.sim.water.pipes;
     const st = `${p.version}|${p.keys().length}|${machinesStamp(this.sim.state.machines)}`;
+    let rebuilt = false;
     if (st !== this.stamp) {
       this.stamp = st;
       this.wetStamp = '';
-      this.buildBody();
+      rebuilt = true;
     }
     this.acc += dt;
-    if (this.acc < 0.25 && this.wetStamp) return;
+    if (!rebuilt && this.acc < 0.25 && this.wetStamp) return;
     this.acc = 0;
     const wet = p
       .keys()
@@ -237,10 +238,25 @@ export class PipeVisuals {
         return p.carries(x, z) ? '1' : '0';
       })
       .join('');
-    if (wet !== this.wetStamp) {
+    if (wet !== this.wetStamp || rebuilt) {
       this.wetStamp = wet;
+      // the body keeps carrying and dry pipes apart (the Water view turns only the carrying ones into holograms)
+      this.buildBody();
       this.buildGlass();
     }
+  }
+
+  /** E23.4.5 the Water view's hologram for the pipes that carry water (undefined: their own look). */
+  private holoMat?: pc.Material;
+  private wetParts: pc.MeshInstance[] = [];
+  private wetOrig = new Map<pc.MeshInstance, pc.Material>();
+
+  /** The Water view: pipes that carry water show as `mat` (a hologram); undefined puts their own look back. */
+  holo(mat: pc.Material | undefined) {
+    if (mat === this.holoMat) return;
+    this.holoMat = mat;
+    for (const mi of this.wetParts) mi.material = mat ?? this.wetOrig.get(mi)!;
+    if (this.glass) this.glass.enabled = !mat; // the sight glasses would float inside the hologram
   }
 
   private clear(which: 'body' | 'glass') {
@@ -307,10 +323,10 @@ export class PipeVisuals {
   private buildBody() {
     this.clear('body');
     const p = this.sim.water.pipes;
-    const tube = new Geo();
-    const trim = new Geo();
+    const geo = { wet: { tube: new Geo(), trim: new Geo() }, dry: { tube: new Geo(), trim: new Geo() } };
     for (const k of p.keys()) {
       const [x, z] = k.split(',').map(Number);
+      const { tube, trim } = p.carries(x, z) ? geo.wet : geo.dry;
       const cx = x + 0.5;
       const cz = z + 0.5;
       const sides: [number, number][] = [...p.links(x, z).map(([nx, nz]) => [nx - x, nz - z] as [number, number]), ...p.machineLinks(x, z).map((l) => [l.dx, l.dz] as [number, number])];
@@ -369,14 +385,24 @@ export class PipeVisuals {
       } else if (!straight) trim.drum(cx, cz, lo - PIPE.joint * 0.9, hi + PIPE.joint * 0.9, PIPE.joint); // a joint, junction or cap
     }
     const parts: pc.MeshInstance[] = [];
-    const add = (g: Geo, m: pc.Material) => {
+    this.wetParts = [];
+    this.wetOrig.clear();
+    const add = (g: Geo, m: pc.Material, wet: boolean) => {
       const mesh = g.mesh(this.device);
       if (!mesh) return;
       this.meshes.push(mesh);
-      parts.push(new pc.MeshInstance(mesh, m));
+      const mi = new pc.MeshInstance(mesh, wet && this.holoMat ? this.holoMat : m);
+      if (wet) {
+        this.wetParts.push(mi);
+        this.wetOrig.set(mi, m);
+      }
+      parts.push(mi);
     };
-    add(tube, mat(PALETTE.aqua.pipe, { gloss: 0.6, metal: 0.2 }));
-    add(trim, mat(PALETTE.shell, { gloss: 0.5 }));
+    for (const wet of [true, false]) {
+      const g = wet ? geo.wet : geo.dry;
+      add(g.tube, mat(PALETTE.aqua.pipe, { gloss: 0.6, metal: 0.2 }), wet);
+      add(g.trim, mat(PALETTE.shell, { gloss: 0.5 }), wet);
+    }
     if (!parts.length) return;
     const e = new pc.Entity('pipes');
     e.addComponent('render', { meshInstances: parts, castShadows: true, receiveShadows: true });
@@ -407,6 +433,7 @@ export class PipeVisuals {
     if (!parts.length) return;
     const e = new pc.Entity('pipe-glass');
     e.addComponent('render', { meshInstances: parts, castShadows: false, receiveShadows: false });
+    e.enabled = !this.holoMat;
     this.parent.addChild(e);
     this.glass = e;
   }

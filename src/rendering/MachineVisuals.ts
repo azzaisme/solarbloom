@@ -23,6 +23,9 @@ import { compostBinBody, digesterBody } from './FarmBodies';
 import { plantId, tankId } from '../gameplay/WaterPipes';
 import { oldCityModel, MODELS } from './Models';
 
+/** The views that turn machines into holograms (one colour each). */
+export type HoloView = 'power' | 'water';
+
 interface MachineView {
   /** E21.6: how full the Old City fountain may get (a trickle at tier 1) */
   fountainCap?: number;
@@ -347,21 +350,22 @@ export class MachineVisuals {
   static readonly BATCH_REGION = 64;
   private batchGroups = new Map<string, number>();
 
-  // ───── E23.3.4 the Power view: powered machines become yellow holograms ─────
-  private holoMat?: pc.StandardMaterial;
-  /** each part shown as a hologram, and the material it had */
-  private holo = new Map<pc.MeshInstance, pc.Material>();
-  private holoSig = '';
-  private holoIn = 0;
+  // ───── E23.3.4 / E23.4.5 the Power and Water views: machines become holograms ─────
+  /** one channel per view: its shared hologram material, each part shown with it (and the material it had) */
+  private holos: Record<HoloView, { mat?: pc.StandardMaterial; parts: Map<pc.MeshInstance, pc.Material>; sig: string; in: number }> = {
+    power: { parts: new Map(), sig: '', in: 0 },
+    water: { parts: new Map(), sig: '', in: 0 },
+  };
   private holoBoost = 1;
 
-  /** Keeps the hologram as bright while the Power view's dim lowers the exposure (DayNight.boost). */
+  /** Keeps the holograms as bright while a view's dim lowers the exposure (DayNight.boost). */
   setHoloBoost(b: number): void {
     if (Math.abs(b - this.holoBoost) < 0.01) return;
     this.holoBoost = b;
-    if (this.holoMat) {
-      this.holoMat.emissiveIntensity = POWER.view.holo.glow * b;
-      this.holoMat.update();
+    for (const ch of Object.values(this.holos)) {
+      if (!ch.mat) continue;
+      ch.mat.emissiveIntensity = POWER.view.holo.glow * b;
+      ch.mat.update();
     }
   }
 
@@ -373,27 +377,44 @@ export class MachineVisuals {
    * model arriving) pick it up.
    */
   powerHolo(ids: Set<string> | undefined, dt: number): void {
+    this.holoView('power', ids, dt);
+  }
+
+  /** E23.4.5 the Water view: the given machines (water that runs or is held) become blue holograms, as `powerHolo`. */
+  waterHolo(ids: Set<string> | undefined, dt: number): void {
+    this.holoView('water', ids, dt);
+  }
+
+  /** A view's one hologram material (made on first use), for other parts to wear (the Water view's pipes). */
+  holoMat(view: HoloView): pc.StandardMaterial {
+    const ch = this.holos[view];
+    const V = POWER.view.holo; // one hologram look for both views (the owner's numbers)
+    const hex = view === 'power' ? PALETTE.signal.power.machineHolo : PALETTE.signal.water.machineHolo;
+    return (ch.mat ??= holoMaterial(hex, V.opacity, V.glow * this.holoBoost, false));
+  }
+
+  private holoView(view: HoloView, ids: Set<string> | undefined, dt: number): void {
+    const ch = this.holos[view];
     const dirty = new Set<number>();
     const mark = (mi: pc.MeshInstance) => {
       const g = (mi.node as pc.Entity | null)?.render?.batchGroupId;
       if (g !== undefined && g >= 0) dirty.add(g);
     };
     if (!ids) {
-      if (!this.holo.size) return;
-      for (const [mi, orig] of this.holo) {
-        if (mi.material === this.holoMat) mi.material = orig; // unless something swapped it since
+      if (!ch.parts.size) return;
+      for (const [mi, orig] of ch.parts) {
+        if (mi.material === ch.mat) mi.material = orig; // unless something swapped it since
         mark(mi);
       }
-      this.holo.clear();
-      this.holoSig = '';
+      ch.parts.clear();
+      ch.sig = '';
     } else {
       const sig = [...ids].sort().join(',');
-      this.holoIn -= dt;
-      if (sig === this.holoSig && this.holoIn > 0) return;
-      this.holoSig = sig;
-      this.holoIn = 0.25;
-      const V = POWER.view.holo;
-      this.holoMat ??= holoMaterial(PALETTE.signal.power.machineHolo, V.opacity, V.glow * this.holoBoost, false);
+      ch.in -= dt;
+      if (sig === ch.sig && ch.in > 0) return;
+      ch.sig = sig;
+      ch.in = 0.25;
+      const hm = this.holoMat(view);
       const want = new Set<pc.MeshInstance>();
       for (const v of this.views.values()) {
         if (!ids.has(v.m.id)) continue;
@@ -402,17 +423,17 @@ export class MachineVisuals {
             const cur = mi.material;
             if (!cur) continue;
             want.add(mi);
-            if (cur === this.holoMat) continue;
-            this.holo.set(mi, cur);
-            mi.material = this.holoMat;
+            if (cur === hm) continue;
+            ch.parts.set(mi, cur);
+            mi.material = hm;
             mark(mi);
           }
         }
       }
-      for (const [mi, orig] of this.holo) {
+      for (const [mi, orig] of ch.parts) {
         if (want.has(mi)) continue;
-        if (mi.material === this.holoMat) mi.material = orig;
-        this.holo.delete(mi);
+        if (mi.material === ch.mat) mi.material = orig;
+        ch.parts.delete(mi);
         mark(mi);
       }
     }
