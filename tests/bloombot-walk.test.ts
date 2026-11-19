@@ -90,11 +90,19 @@ describe('bloombot walking (G.2)', () => {
   });
 
   it('finds a path across the park and around the fountain', () => {
+    // E23.1.1: from the Landing on the beach, up through the park to the far side of the fountain
     const p = spawnPose(sim, w);
-    const goal = { x: 2, z: 2 };
+    const [fx, fz] = sim.areas.info(PARK).landmark;
+    const far = Math.sign(fz - p.z) || 1; // the fountain lies this way from the Landing
+    const goal = sim.areas
+      .tiles(PARK)
+      .filter((t) => (t.z - fz) * far >= 4 && w.walkable(GROUND, t.x, t.z))
+      .sort((a, b) => Math.abs(a.x - fx) + Math.abs(a.z - fz) - (Math.abs(b.x - fx) + Math.abs(b.z - fz)))[0];
+    expect(goal).toBeDefined();
     const path = w.path(GROUND, p.x, p.z, (x, z) => x === goal.x && z === goal.z, goal);
     expect(path).toBeDefined();
-    expect(path!.at(-1)).toEqual({ x: 2.5, z: 2.5 });
+    expect(path!.at(-1)).toEqual({ x: goal.x + 0.5, z: goal.z + 0.5 });
+    expect(path!.some((c) => sim.areas.areaOf({ roofId: GROUND, x: Math.floor(c.x), z: Math.floor(c.z) }) === PARK)).toBe(true);
     for (const c of path!) expect(w.walkable(GROUND, Math.floor(c.x), Math.floor(c.z))).toBe(true);
   });
 

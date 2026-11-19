@@ -8,10 +8,10 @@ import type { Sim } from './Sim';
 
 
 /**
- * The fog over the endless city. Every area starts hidden. When a neighbour clears, an area becomes
- * Frontier: heavy fog, and only tiles touching clear ground can be restored, so the fog recedes tile by tile.
- * Restoring thins it; once enough is restored the area's landmark can be woken, which clears it and turns its
- * hidden neighbours into Frontier. Nothing ever waits on a timer.
+ * The fog over the Old City. Every area starts hidden. When a neighbour clears, an area comes into view sealed
+ * behind its gate (the mainland's districts open straight away). An open region can be restored anywhere;
+ * restoring thins its fog, and once half is restored and its Keeper asks, its landmark wakes and clears it.
+ * Nothing ever waits on a timer.
  */
 export class AreaSystem {
   readonly map: AreaMap;
@@ -278,7 +278,7 @@ export class AreaSystem {
     return true;
   }
 
-  /** Hidden → Frontier, guaranteeing a way in. */
+  /** Hidden → in view (sealed behind its gate, except on the mainland). */
   reveal(id: string) {
     const s = this.sim;
     if (s.state.areas[id]) return;
@@ -288,29 +288,12 @@ export class AreaSystem {
     // E23.8.3.1: the mainland has no gates and no prices: past the causeway, restoring a district reveals the next, open
     if (id !== PARK && !isMainlandArea(id)) s.state.areas[id].sealed = true;
     this.placeLandmark(id);
-    if (!this.sealed(id)) this.ensureEntry(id);
     s.bus.emit('area.revealed', { areaId: id });
   }
 
   /** Tiles of a fogged area that can be restored right now. */
   entryTiles(id: string): TileData[] {
     return this.tiles(id).filter((t) => !t.blocked && !t.occupantId && t.ground !== 'restored' && this.canTouch(t));
-  }
-
-  /**
-   * Reachability guarantee: a Frontier area always has at least one restorable tile on an edge it shares with
-   * clear ground. If generated obstacles cover that whole edge, one of them is cleared (and saved).
-   */
-  ensureEntry(id: string): boolean {
-    if (this.entryTiles(id).length) return false;
-    const edge = this.tiles(id).filter((t) => t.blocked && this.sim.grid.neighbors(t).some((n) => this.isClear(n)));
-    const t = edge[0];
-    if (!t) return false;
-    t.blocked = false;
-    t.unblocked = true;
-    this.sim.transitions.unblock(t);
-    this.sim.grid.touch(t);
-    return true;
   }
 
   /**

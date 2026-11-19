@@ -5,6 +5,7 @@ import { createInitialState, GROUND, isRestorable } from '../src/core/GameState'
 import type { MachineData } from '../src/core/types';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
+import { regionById } from '../src/core/OldCityLayout';
 import { AREA_SPECIALTY, areaPanelData, areaPanelHtml } from '../src/ui/AreaPanel';
 
 function city(seed = 3) {
@@ -31,7 +32,7 @@ describe('area panel (City 14.2)', () => {
     const lm = sim.areas.landmark(id)!;
     const a = sim.areas.info(id);
     let d = areaPanelData(sim, id);
-    expect(d.fog).toBe('frontier');
+    expect(d.fog).toBe('thinning'); // E23.1.1: Saltwind is in view from the start, its fog already thinning
     expect(d.restored).toBe(0);
     expect(d.need).toBe(sim.areas.need(id));
     let html = areaPanelHtml(sim, id, lm.id);
@@ -57,14 +58,18 @@ describe('area panel (City 14.2)', () => {
 
     // Ready: the wake button appears; cleared: the bonus is its share of the type's total.
     restore(sim, id, 999);
+    expect(areaPanelHtml(sim, id, lm.id)).not.toContain('data-wake'); // E21.9: not before its Keeper asks
+    sim.state.salvage.keepers[regionById(id)!.keeper] = { step: 'landmark' };
     expect(areaPanelHtml(sim, id, lm.id)).toContain(`data-wake="${lm.id}"`);
     expect(sim.areas.clear(id)).toBe(true);
     html = areaPanelHtml(sim, id, lm.id);
     expect(html).toContain('🌫️ Clear');
     expect(html).not.toContain('data-wake');
-    const per = TUNING.city.bonuses[a.type];
-    const first = Object.entries(per)[0];
-    expect(areaPanelData(sim, id).bonus[first[0] as 'energy']).toBeCloseTo(first[1] * 60, 1); // the first area of its type
+    // the first area of its type: its share is the type's whole bonus (a beach has none)
+    const bonus = areaPanelData(sim, id).bonus;
+    const per = TUNING.city.bonuses[a.type] ?? {};
+    expect(Object.keys(bonus).filter((k) => bonus[k as 'energy']).sort()).toEqual(Object.keys(per).sort());
+    for (const [k, v] of Object.entries(per)) expect(bonus[k as 'energy']).toBeCloseTo(v * 60, 1);
   });
 
   it('the park lists its fountain tiers (E21.6), ticked as they are reached', () => {

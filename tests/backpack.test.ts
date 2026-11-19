@@ -109,11 +109,4 @@ describe('E22.6: the backpack', () => {
     const keeps = collection(sim).find((g) => g.title === 'Keepsakes')!;
     for (const r of keeps.rows.filter((r) => !r.found)) expect(`${r.name} ${r.detail}`).not.toMatch(/cat/i);
   });
-
-  it('a classic game has no materials or requests to show', () => {
-    const sim = new Sim(createInitialState(3));
-    expect(itemCells(sim)).toEqual([]);
-    expect(requestRows(sim)).toEqual([]);
-    expect(collection(sim).length).toBe(6);
-  });
 });

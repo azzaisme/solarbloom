@@ -3,6 +3,9 @@ import { createInitialState, GROUND, placeFixed } from '../src/core/GameState';
 import type { GroundState, LayerData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
 import { MATERIAL_IDS, TIERS } from '../src/data/salvage';
+import { PARK } from '../src/core/Areas';
+import { REGIONS } from '../src/data/oldcity';
+import type { MachineData } from '../src/core/types';
 
 /**
  * Mechanics tests run on a small bounded test layer (`PAD`, 8×8, laid out like the Seed rooftop template:
@@ -65,3 +68,44 @@ export function ground(sim: Sim, roof: string, x: number, z: number, g: GroundSt
 }
 
 export { GROUND };
+
+/**
+ * E23.1.1: the whole island open, for tests about the world at scale (chains, drones, walking): every ability, the
+ * fountain awake, every region's gate open and its landmark woken. The Old City is one fixed world, so the places
+ * below are the same in every game.
+ */
+export function openIsland(sim: Sim): Sim {
+  unlockAll(sim);
+  sim.state.progression.coreActivated = true;
+  sim.areas.clear(PARK, true);
+  for (const r of REGIONS) {
+    sim.gates.open(r.gate.id, true);
+    if (sim.areas.fog(r.id) !== 'hidden') sim.areas.clear(r.id, true);
+  }
+  return sim;
+}
+
+/** A street garden (a Pollinator on paving), inserted directly: these tests measure chains, not building. */
+export function streetGarden(sim: Sim, x: number, z: number, street = true): MachineData {
+  const t = sim.grid.get(GROUND, x, z)!;
+  t.blocked = false;
+  if (street) t.feature = 'paving';
+  const m: MachineData = { id: sim.newId('m'), type: 'pollinator', roofId: GROUND, x, z, size: 1, boostUntil: 0, timer: 0, charge: 0 };
+  sim.state.machines.push(m);
+  sim.grid.indexMachine(m);
+  t.occupantId = m.id;
+  return m;
+}
+
+/**
+ * The island's longest crossing: row z = -30 runs x -80…79 through eight areas (Glasshouse Row, the Mast Row and
+ * six backstreets) and column x = 34 runs z -96…79 through six more (the Old Market, the Cistern, the Observatory
+ * and three backstreets). `streetCross` lines both with street gardens five tiles apart; a pulse at `start` sets
+ * the chain off at the row's west end.
+ */
+export const CROSS = { row: -30, col: 34, start: [-80, -30] as const };
+
+export function streetCross(sim: Sim) {
+  for (let x = -78; x <= 79; x += 5) streetGarden(sim, x, CROSS.row);
+  for (let z = -95; z <= 79; z += 5) if (z !== CROSS.row) streetGarden(sim, CROSS.col, z);
+}

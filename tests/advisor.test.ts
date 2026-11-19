@@ -5,6 +5,7 @@ import { createInitialState, GROUND, isRestorable } from '../src/core/GameState'
 import type { MachineData } from '../src/core/types';
 import { Rng } from '../src/core/Rng';
 import { Sim } from '../src/gameplay/Sim';
+import { regionById } from '../src/core/OldCityLayout';
 import { objectiveSentence } from '../src/ui/ObjectiveCard';
 
 const TOPICS = ['charge', 'grid', 'water', 'farm', 'keeper', 'restore'];
@@ -49,6 +50,9 @@ describe('objective advisor (City 14.1)', () => {
     sim.areas.clear(PARK, true);
     const id = sim.areas.nextGoal()!;
     restoreArea(sim, id);
+    // E21.9: a region's landmark wakes once half of it is restored and its Keeper has asked for it
+    sim.state.salvage.keepers[regionById(id)!.keeper] = { step: 'landmark' };
+    expect(sim.areas.ready(id)).toBe(true);
     const g = check(sim, 'ready');
     expect(g.action).toEqual({ kind: 'wake', machineId: sim.areas.landmark(id)!.id });
   });
@@ -122,8 +126,8 @@ describe('objective advisor (City 14.1)', () => {
 
   it('names the nearest frontier', () => {
     const sim = new Sim(createInitialState(5));
-    expect(sim.advisor.nearestFrontier()).toBeUndefined();
-    sim.state.progression.coreActivated = true;
+    // E23.1.1: the Old City opens with the park and the first region (Saltwind) in view, nothing else
+    expect(sim.advisor.nearestFrontier()?.areaId).toBe('saltwind');
     sim.areas.clear(PARK, true);
     const f = sim.advisor.nearestFrontier()!;
     expect(sim.areas.fog(f.areaId)).not.toBe('cleared');

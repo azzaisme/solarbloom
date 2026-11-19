@@ -17,6 +17,8 @@ export const AREA_SPECIALTY: Record<string, string> = {
   reservoir: 'Dry clay basins: the best water bonus, and Reservoir Gardens grow here.',
   rooftops: 'An old building carries a rooftop garden-to-be: reach it with a Bloom Relay, then restore it. Its Core wakes the area.',
   grove: 'Leaf litter around an Elder Tree: blooms nearby charge its Canopy Burst, and it adds biomass.',
+  beach: 'Sand and driftwood where the boat comes in. The Sea Lock across the canal wakes it.',
+  downtown: 'Glass towers on a raised plateau around the Solar Spire, the tallest light in the city.',
 };
 
 const RES = { energy: '⚡', water: '💧', biomass: '🌿' } as const;
