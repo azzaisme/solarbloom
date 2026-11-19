@@ -363,7 +363,8 @@ export class Fauna {
     if (eco.has('koi')) {
       if (pond && pond.x > rect.x0 - 2 && pond.x < rect.x1 + 2 && pond.z > rect.z0 - 2 && pond.z < rect.z1 + 2)
         for (let i = 0; i < 4; i++) koi.push({ key: `pond:${i}`, home: pond, y: y + Fauna.POND_Y + 0.012 });
-      const water = tilesIn(s, rect, (t) => t.ground === 'restored' && t.feature === 'water', 200).sort(near);
+      // only where the water still is: as a pond drains, its koi gather in the deeper middle (E23.4.1)
+      const water = tilesIn(s, rect, (t) => t.ground === 'restored' && t.feature === 'water' && s.water.covered(t), 200).sort(near);
       for (let i = 0; i < water.length; i += 3) koi.push({ key: `w:${water[i].x}:${water[i].z}`, home: { x: water[i].x + 0.5, z: water[i].z + 0.5 }, y: y - WATER.drop + 0.012 });
     }
     this.assign('koi', koi, opts);
