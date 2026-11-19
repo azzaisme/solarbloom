@@ -19,6 +19,7 @@ import { treeGeo } from './TreeGen';
 import { machineRunning } from './FaunaPlan';
 import { arcPath, ball, bezier, dome, latheAuto, matOf, part, rbox, rcyl, ring, setMat, tube } from './MachineParts';
 import { cultivatorDock } from './CultivatorVisuals';
+import { tankId } from '../gameplay/WaterPipes';
 import { oldCityModel, MODELS } from './Models';
 
 interface MachineView {
@@ -119,6 +120,11 @@ const LANDMARK_MODELS: Record<string, [string, number]> = {
 
 const orbOn = () => mat(PALETTE.orbLit, { emissive: PALETTE.coreGlow, emissiveIntensity: 1.6 });
 const orbOff = () => mat(PALETTE.orbDark, { gloss: 0.6 });
+/** E23.4.2: a pump's lamp, running and idle. */
+const pumpOn = () => mat(PALETTE.water, { emissive: PALETTE.waterGlow, emissiveIntensity: 1.4 });
+const pumpOff = () => mat(PALETTE.orbDark, { gloss: 0.6 });
+/** E23.4.2.1: a reservoir tank's heights: its floor, its rim, and its gauge's span. */
+const TANK = { floor: 0.14, top: 0.72, gauge0: 0.16, gauge1: 0.66 };
 /** E23.3.2: a battery's charge cells (lit mint when full, dark glass when empty). */
 const cellOn = () => mat(PALETTE.eyeCyan, { emissive: PALETTE.eyeCyan, emissiveIntensity: 1.3 });
 const cellOff = () => mat(PALETTE.orbDark, { gloss: 0.6 });
@@ -647,6 +653,12 @@ export class MachineVisuals {
         break;
       case 'cultivator': // Look 6.9: the dock (its tillers are drawn by CultivatorVisuals)
         cultivatorDock(v.body);
+        break;
+      case 'reservoir': // E23.4.2.1
+        this.waterTank(v);
+        break;
+      case 'pump': // E23.4.2.2
+        this.pump(v);
         break;
       case 'battery':
         this.battery(v);
@@ -1595,6 +1607,65 @@ export class MachineVisuals {
   }
 
   /**
+   * E23.4.2.1 Reservoir: a round cream tank on a stone footing filling its 2×2 plot, with a gold rim and a dark
+   * inner wall. Its water (a gently turning glowing disc) sits as high as its level; a glass gauge up its side fills
+   * blue to match, and a ladder climbs to the rim. Empty, it shows its dry floor.
+   */
+  private waterTank(v: MachineView) {
+    const b = v.body;
+    part(b, rcyl(0.92, 0, 0.1, 0.03, 0.01, 28), creamSeam(), { shadow: true });
+    // an open cup: up the outside, over the lip, down the inside to the floor (so the water inside shows)
+    const cup: [number, number][] = [[0.84, 0.1], [0.84, TANK.top], [0.81, TANK.top + 0.045], [0.78, TANK.top], [0.78, TANK.floor], [0, TANK.floor]];
+    part(b, latheAuto('waterTankCup', cup, 28), cream(), { shadow: true });
+    part(b, rcyl(0.77, TANK.floor, TANK.floor + 0.004, 0, 0, 28), darkMetal(), {}); // the damp floor, seen when it runs dry
+    // (ring() lies flat with an outer diameter of 1: scale is the diameter)
+    part(b, ring(28, 6, 0.025), gold(), { pos: [0, TANK.top + 0.04, 0], scale: 1.7 });
+    for (const y of [0.32, 0.56]) part(b, ring(28, 4, 0.012), creamSeam(), { pos: [0, y, 0], scale: [1.71, 1.2, 1.71] });
+    v.water = part(b, rcyl(0.76, -0.015, 0.015, 0.005, 0.005, 28), waterGlow(), { pos: [0, TANK.floor, 0] });
+    // the gauge: a glass tube with a blue column, on the side facing the camera (+x +z)
+    const gauge = group(b, 'gauge');
+    gauge.setLocalEulerAngles(0, 45, 0);
+    const side = group(gauge, 'side', [0, 0, 0.86]);
+    part(side, rbox(0.08, TANK.gauge1 - TANK.gauge0 + 0.06, 0.05, 0.02), cream(), { pos: [0, (TANK.gauge0 + TANK.gauge1) / 2, -0.02] });
+    v.rings = [part(side, rbox(0.04, TANK.gauge1 - TANK.gauge0, 0.03, 0.01), waterGlow(), { pos: [0, TANK.gauge0, 0.02] })];
+    part(side, rbox(0.06, TANK.gauge1 - TANK.gauge0 + 0.02, 0.035, 0.015), glassMat(), { pos: [0, (TANK.gauge0 + TANK.gauge1) / 2, 0.02] });
+    // a ladder up the back
+    const ladder = group(b, 'ladder');
+    ladder.setLocalEulerAngles(0, -135, 0);
+    for (const x of [-0.08, 0.08]) part(ladder, rbox(0.02, TANK.top + 0.1, 0.02, 0.005), metal(), { pos: [x, (TANK.top + 0.1) / 2, 0.86] });
+    for (let i = 1; i <= 4; i++) part(ladder, rbox(0.16, 0.015, 0.015, 0.004), metal(), { pos: [0, (i * TANK.top) / 4.5, 0.86] });
+    bolts(b, [0, 1, 2, 3, 4, 5].map((i) => [Math.cos(i * 1.047) * 0.88, 0.1, Math.sin(i * 1.047) * 0.88] as [number, number, number]), 0.028, gold());
+  }
+
+  /**
+   * E23.4.2.2 Pump: a cream pump house on a stone plinth with a gold-hubbed flywheel on its side that turns while it
+   * pushes water, a pipe stub down into the water beside it, an outlet collar for the pipes, and a small lamp: aqua
+   * while running, dark when idle or without power.
+   */
+  private pump(v: MachineView) {
+    const b = v.body;
+    part(b, rbox(0.8, 0.1, 0.8, 0.03), creamSeam(), { pos: [0, 0.05, 0], shadow: true });
+    part(b, rbox(0.46, 0.44, 0.5, 0.08), cream(), { pos: [0, 0.32, 0], shadow: true });
+    part(b, rbox(0.48, 0.03, 0.52, 0.012), gold(), { pos: [0, 0.55, 0] });
+    part(b, dome(0.2, 0.12, 0, 10), cream(), { pos: [0, 0.56, 0], shadow: true });
+    // the flywheel (turns), facing +x +z
+    const side = group(b, 'side');
+    side.setLocalEulerAngles(0, 45, 0);
+    const wheel = group(side, 'wheel', [0, 0.34, 0.3]);
+    part(wheel, ring(18, 6, 0.08), darkMetal(), { rot: [90, 0, 0], scale: 0.4 }); // stood up to face out
+    for (let i = 0; i < 4; i++) part(wheel, rbox(0.03, 0.36, 0.02, 0.008), metal(), { rot: [0, 0, i * 45] });
+    part(wheel, ball(6, 8), gold(), { scale: [0.06, 0.06, 0.05] });
+    v.spin.push(wheel);
+    v.turn = 0;
+    // a pipe stub dropping into the water, and the outlet collar on top
+    part(b, rcyl(0.06, 0.05, 0.42, 0.01, 0.01, 10), mat(PALETTE.aqua.pipe, { gloss: 0.6, metal: 0.2 }), { pos: [-0.3, 0, -0.3] });
+    part(b, rcyl(0.075, 0.4, 0.46, 0.01, 0.01, 10), cream(), { pos: [-0.3, 0, -0.3] });
+    part(b, rcyl(0.09, 0.66, 0.72, 0.01, 0.01, 10), gold(), {});
+    v.light = part(b, ball(5, 8), pumpOff(), { pos: [0.2, 0.5, 0.2], scale: 0.05 });
+    bolts(b, [[-0.33, 0.1, 0.33], [0.33, 0.1, 0.33], [-0.33, 0.1, -0.33], [0.33, 0.1, -0.33]], 0.025, gold());
+  }
+
+  /**
    * E23.3.2.1 Battery: a squat cream cabinet on a bevelled plinth with a glass front. Behind the glass a stack of
    * four cells lights up mint from the bottom as it fills (the stored share, read from the grid); terminals and a
    * cable on top, a gold trim band.
@@ -2170,6 +2241,29 @@ export class MachineVisuals {
           const s = v.running ? 0.07 + 0.03 * Math.max(0, Math.sin(t * 4)) : 0.065 + 0.005 * Math.sin(t * 1.2);
           v.light!.setLocalScale(s, s, s);
           if (!rm && v.running) v.rings![0].setLocalEulerAngles(0, t * 30, 0);
+          break;
+        }
+        case 'reservoir': {
+          // E23.4.2.1: the water inside rises and falls with the level; the side gauge shows it too
+          const lv = this.sim.water.levelOf(tankId(v.m));
+          v.water!.enabled = lv > 0.01;
+          v.water!.setLocalPosition(0, TANK.floor + (TANK.top - TANK.floor) * lv, 0);
+          const g = v.rings![0];
+          g.enabled = lv > 0.01;
+          g.setLocalScale(1, Math.max(0.001, lv), 1);
+          g.setLocalPosition(0, TANK.gauge0 + (TANK.gauge1 - TANK.gauge0) * lv * 0.5, 0);
+          if (!rm && lv > 0.01) v.water!.setLocalEulerAngles(0, t * 4, 0);
+          break;
+        }
+        case 'pump': {
+          // E23.4.2.2: the wheel turns while it pushes water (powered, on a bank with water, on a line)
+          const on = this.sim.water.pipes.pumping.has(v.m.id) && this.sim.water.pipes.powered(v.m);
+          if (on && !rm) {
+            v.turn = ((v.turn ?? 0) + dt * 220) % 360;
+            v.spin[0]?.setLocalEulerAngles(0, 0, v.turn);
+          }
+          const want = on ? pumpOn() : pumpOff();
+          if (matOf(v.light!) !== want) setMat(v.light!, want);
           break;
         }
         case 'battery': {
