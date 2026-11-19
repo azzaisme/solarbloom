@@ -38,11 +38,14 @@ try {
     const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
+    page.setDefaultTimeout(180000); // software rendering on a busy machine
     await page.goto(url);
     await page.evaluate(() => localStorage.clear());
     await page.reload();
-    await page.waitForFunction(() => !!window.solarbloom);
+    // the loading screen covers the world (and takes clicks) until the first view is complete
+    await page.waitForFunction(() => window.solarbloom && (document.querySelector('#loading')?.classList.contains('gone') ?? true));
     if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
+    await page.evaluate(() => window.solarbloom.pause.clear('blur'));
     // The city ground, focused at a few spots (the park and its surroundings), at each zoom.
     for (const [fx, fz] of [[8, 8], [24, -10], [-12, 20]]) {
       // On the phone, also at both zoom limits (the far overview and the closest view).
@@ -58,16 +61,24 @@ try {
             for (let z = fz - 14; z < fz + 14; z++)
               for (let x = fx - 14; x < fx + 14; x++) {
                 const t = g.sim.grid.get('g', x, z);
+                if (!t) continue;
                 for (const [ox, oz] of OFFSETS) {
-                  // Look 4.9: unrevealed ground is drawn sunk; it's only seen where the city doesn't hide it.
-                  const sunk = g.sunkAt(x + ox, z + oz);
-                  const s = g.camera.toScreen(new V(x + ox, 0.08 - (sunk ? g.sinkDepth : 0), z + oz));
-                  if (s.x < 0 || s.y < 0 || s.x > innerWidth || s.y > innerHeight) continue;
-                  if (sunk) {
-                    const { o, d } = g.camera.ray(s.x, s.y);
-                    const k = (0.08 - o.y) / d.y;
-                    if (!g.sunkAt(o.x + d.x * k, o.z + d.z * k)) continue; // behind the raised city's edge
+                  // The island has terraces: aim at the ground where it is drawn, and leave out points that
+                  // higher ground hides (as tests/e2e/picking-oldcity.e2e.mjs does).
+                  const px = x + ox;
+                  const pz = z + oz;
+                  const y = g.groundY(px, pz);
+                  const s = g.camera.toScreen(new V(px, y, pz));
+                  if (s.x < 4 || s.y < 4 || s.x > innerWidth - 4 || s.y > innerHeight - 4) continue;
+                  const { o, d } = g.camera.ray(s.x, s.y);
+                  const tEnd = (y - o.y) / d.y;
+                  let blocked = false;
+                  for (let k = 0; k < 400 && !blocked; k++) {
+                    const tt = (tEnd * k) / 400;
+                    if (tEnd - tt < 0.06) break;
+                    if (o.y + d.y * tt < g.groundY(o.x + d.x * tt, o.z + d.z * tt) - 1e-3) blocked = true;
                   }
+                  if (blocked) continue;
                   const p = g.pick(s.x, s.y);
                   out.push({ want: t.id, got: p?.tile?.id ?? null, sameRoof: true });
                 }
@@ -80,7 +91,8 @@ try {
         checks += res.length;
         const bad = res.filter((r) => r.want !== r.got);
         if (res.length === 1 && res[0].want === 'camera') fail(`${vp.name} (${fx},${fz}) zoom ${zoom}: no tiles on screen, camera ${res[0].got}`);
-        if (bad.length) fail(`${vp.name} (${fx},${fz}) zoom ${zoom}: ${bad.length}/${res.length} mispicked, e.g. ${JSON.stringify(bad[0])}`);
+        // a point exactly on a terrace or tile edge can round either way: allow 0.5%, as the island picking test does
+        if (bad.length > Math.floor(res.length * 0.005)) fail(`${vp.name} (${fx},${fz}) zoom ${zoom}: ${bad.length}/${res.length} mispicked, e.g. ${JSON.stringify(bad[0])}`);
       }
     }
     await page.evaluate(() => {
@@ -95,7 +107,7 @@ try {
       const g = window.solarbloom;
       g.paused = true; // keep state still while we inspect it
       const V = g.camera.target.constructor;
-      const s = g.camera.toScreen(new V(2.5, 0.08, 4.5));
+      const s = g.camera.toScreen(new V(2.5, g.groundY(2.5, 4.5), 4.5));
       return { x: s.x, y: s.y };
     });
     await page.mouse.click(target.x, target.y);
@@ -144,7 +156,7 @@ try {
         for (const a of pool) {
           if (!a.used) continue;
           const p = a.root.getPosition();
-          const s = g.camera.toScreen(new V(p.x, 0.08, p.z));
+          const s = g.camera.toScreen(new V(p.x, g.groundY(p.x, p.z), p.z));
           if (s.x < 0 || s.y < 0 || s.x > innerWidth || s.y > innerHeight) continue;
           out.push({ kind, x: s.x, y: s.y, want: `g:${Math.floor(p.x)}:${Math.floor(p.z)}`, got: g.pick(s.x, s.y)?.tile?.id ?? null });
         }
@@ -165,11 +177,11 @@ try {
     }
     // Clicking the HUD must never act on the world underneath.
     const before = await page.evaluate(() => JSON.stringify(window.solarbloom.sim.state.resources));
-    const box = await page.locator('#hotbar').boundingBox();
-    await page.mouse.click(box.x + box.width / 2, box.y + 4);
+    const box = await page.locator('#chargeRow').boundingBox(); // the charge meter: always on the walking view
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     const after = await page.evaluate(() => JSON.stringify(window.solarbloom.sim.state.resources));
     checks++;
-    if (before !== after) fail(`${vp.name}: clicking the hotbar changed resources`);
+    if (before !== after) fail(`${vp.name}: clicking the HUD changed resources`);
     // Regression (found by merge.e2e in E14): a drone hovering beside a machine took taps meant for the machine
     // (drones have a generous tap radius). A tap on a machine's footprint selects the machine; a tap right on the
     // drone still selects the drone's hub. Mouse and touch alike.
@@ -178,12 +190,19 @@ try {
       const s = g.sim;
       const V = g.camera.target.constructor;
       const B = s.state.resources.energy.constructor;
-      s.state.resources.biomass = new B(1e9);
       s.state.caps.energy = new B(1e6); s.state.caps.water = new B(1e6);
       s.state.resources.energy = new B(1e6); s.state.resources.water = new B(1e6);
-      let m;
-      for (let z = 6; z < 14 && !m; z++) for (let x = 4; x < 14 && !m; x++) if (s.build.check('solar', 'g', x, z).ok) m = s.build.place('solar', 'g', x, z);
-      if (!m) return { error: 'no room for a panel' };
+      // machines unlock at their fountain tier and are paid with their recipe
+      const sv = s.state.salvage;
+      sv.tier = Math.max(sv.tier, 4);
+      for (const type of ['solar', 'droneHub']) for (const m of Object.keys(s.build.recipe(type) ?? {})) sv.pack[m] = 999;
+      const put = (type) => {
+        for (let z = 6; z < 14; z++) for (let x = 4; x < 14; x++) if (s.build.check(type, 'g', x, z).ok) return s.build.place(type, 'g', x, z);
+      };
+      const m = put('solar');
+      if (!m) return { error: `no room for a panel (${JSON.stringify(s.build.check('solar', 'g', 8, 8))})` };
+      if (!s.state.drones.some((d) => d.hubId !== m.id) && !put('droneHub')) return { error: `no hub for a drone (${JSON.stringify(s.build.check('droneHub', 'g', 8, 8))})` };
+      if (!s.state.drones.some((d) => d.hubId !== m.id)) return { error: 'the hub brought no drone' };
       g.selectTool('pulse');
       const [wx, wy, wz] = s.grid.tileWorld(s.grid.get('g', m.x, m.z));
       g.camera.glide(wx, 0, wz, 1);
