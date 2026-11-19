@@ -4,11 +4,6 @@ import { KEEPERS, REGIONS } from '../data/oldcity';
 import { itemDef } from '../data/items';
 import type { Sim } from './Sim';
 
-/** E23.6.2 hands over finished research through this (optional until the research station lands). */
-export interface ResearchLike {
-  done(projectId: string): boolean;
-}
-
 /**
  * E23.6.1 (#390): the crafting table. Components are made here: a craft pays its recipe from the backpack, then
  * the store (the table is in the house, within reach of it), and takes a few seconds. Crafts queue; the one in
@@ -35,7 +30,7 @@ export class Crafting {
       const st = k && sv.keepers[k.id];
       return !!st && st.step !== 'asleep';
     }
-    if ('research' in u) return (this.sim as { research?: ResearchLike }).research?.done(u.research) ?? false;
+    if ('research' in u) return this.sim.research.done(u.research);
     if ('tier' in u) return sv.tier >= u.tier;
     if ('gift' in u) return !!sv.recipes?.includes(u.gift); // E23.5.4.6: a Keeper's garden handed it over
     return sv.caches.includes(u.find);

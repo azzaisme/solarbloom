@@ -3,7 +3,7 @@ import { regionOfCell } from '../core/OldCityLayout';
 import { PARK_SET, REGIONS } from '../data/oldcity';
 import type { MachineData, PlanterState } from '../core/types';
 import type { WeatherKind } from '../data/weather';
-import { CROP_HOMES, CROP_IDS, CROPS, PLANTER, SEED_FINDS, STARTING_CROPS, type CropId, type Like } from '../data/crops';
+import { CROP_HOMES, CROP_IDS, CROPS, CROSS, crossKey, crossParents, PLANTER, SEED_FINDS, STARTING_CROPS, type CropId, type Like } from '../data/crops';
 import { DAY_SECONDS } from '../data/time';
 import { machineStrengthAt } from '../core/RegionStrengths';
 import type { Sim } from './Sim';
@@ -68,6 +68,11 @@ export class FarmSystem {
     return !!this.sim.state.salvage;
   }
 
+  /** E23.6.2: the farm reads research's Kind soil and Crossbreeds, so the station may offer them. */
+  get researchReady(): boolean {
+    return this.on;
+  }
+
   private get hooks(): FarmHooks {
     return this.sim as unknown as FarmHooks;
   }
@@ -98,6 +103,18 @@ export class FarmSystem {
 
   knows(c: CropId): boolean {
     return this.known().includes(c);
+  }
+
+  /** E23.6.2: crossbreeds found, as their two parents (the first is the one each grows like). */
+  crosses(): [CropId, CropId][] {
+    return (this.sim.state.salvage?.crosses ?? []).flatMap((k) => {
+      const p = crossParents(k);
+      return p ? [p] : [];
+    });
+  }
+
+  knowsCross(a: CropId, b: CropId): boolean {
+    return !!this.sim.state.salvage?.crosses?.includes(crossKey(a, b));
   }
 
   // ───────────── the world around a planter ─────────────
@@ -217,14 +234,20 @@ export class FarmSystem {
     const crop = st.crop as CropId | undefined;
     if (!crop || !CROPS[crop]) return { progress: 0, stage: 0, ripe: false, wilting: false, resting: false, rate: 0, met: [], unmet: [] };
     const def = CROPS[crop];
+    // E23.6.2: a crossbreed carries both parents' likes and needs only what both need
+    const other = st.cross ? CROPS[st.cross as CropId] : undefined;
+    const needs = other ? def.needs.filter((n) => other.needs.includes(n)) : def.needs;
+    const likes = other ? [...new Set([...def.likes, ...other.likes])] : def.likes;
     // growth is saved to nine decimals: within a millionth of a day of ripe counts as ripe
     const progress = (st.grown ?? 0) >= def.days - 1e-6 ? 1 : (st.grown ?? 0) / def.days;
     const ripe = progress >= 1;
     const stage = ripe ? PLANTER.stages : 1 + Math.min(PLANTER.stages - 2, Math.floor(progress * (PLANTER.stages - 1)));
     const wilting = !ripe && !this.isWatered(m);
-    const resting = !ripe && def.needs.some((n) => !this.likeMet(m, n));
-    const met = def.likes.filter((l) => this.likeMet(m, l));
-    const unmet = def.likes.filter((l) => !met.includes(l));
+    const resting = !ripe && needs.some((n) => !this.likeMet(m, n));
+    const met = likes.filter((l) => this.likeMet(m, l));
+    // a cross is as happy as its happier parent
+    const unmetOf = (d: { likes: Like[] }) => d.likes.filter((l) => !met.includes(l));
+    const unmet = other && unmetOf(other).length < unmetOf(def).length ? unmetOf(other) : unmetOf(def);
     let rate = 0;
     if (!ripe && !wilting && !resting) {
       rate = PLANTER.unmetLike ** unmet.length;
@@ -233,6 +256,7 @@ export class FarmSystem {
       if (this.pollinated(m)) rate *= PLANTER.pollinatorBoost;
       rate *= this.sim.farmExtras?.cropBoost(m) ?? 1; // E23.5.4.1: settled beehives in reach
       rate *= machineStrengthAt('planter', m.x, m.z); // E23.8.1: fertile soil (Elder Grove) grows faster
+      rate *= 1 + (this.sim.research?.effect('cropGrowth') ?? 0); // E23.6.2: Kind soil (research)
     }
     return { crop, progress, stage, ripe, wilting, resting, rate, met, unmet };
   }
@@ -264,22 +288,23 @@ export class FarmSystem {
   // ───────────── what bloombot does at a planter ─────────────
 
   /** Why a crop can't be planted here now (undefined: it can). */
-  plantProblem(m: MachineData, crop: CropId): string | undefined {
+  plantProblem(m: MachineData, crop: CropId, cross?: CropId): string | undefined {
     if (!this.on || m.type !== 'planter') return 'Not a planter';
     if (this.bed(m).crop) return 'Something is already growing here';
-    if (!this.knows(crop)) return 'No seeds for that yet';
+    if (cross ? !this.knowsCross(crop, cross) : !this.knows(crop)) return 'No seeds for that yet';
     if (!this.sim.inventory.canPay({ seeds: PLANTER.seedCost })) return 'Needs Seeds';
     return undefined;
   }
 
-  plant(m: MachineData, crop: CropId): boolean {
-    const why = this.plantProblem(m, crop);
+  /** Plants a crop, or (E23.6.2) a crossbreed of `crop` and `cross`, for one plain Seed. */
+  plant(m: MachineData, crop: CropId, cross?: CropId): boolean {
+    const why = this.plantProblem(m, crop, cross);
     if (why) {
       this.sim.bus.emit('action.failed', { reason: why });
       return false;
     }
     this.sim.inventory.pay({ seeds: PLANTER.seedCost });
-    this.write(m, { ...this.bed(m), crop, grown: 0 });
+    this.write(m, { ...this.bed(m), crop, cross, grown: 0 });
     this.sim.bus.emit('planter.changed', { machineId: m.id });
     return true;
   }
@@ -298,7 +323,28 @@ export class FarmSystem {
     this.write(m, { trellis: st.trellis, flooded: st.flooded });
     this.sim.bus.emit('planter.harvested', { machineId: m.id, crop: lk.crop, ...got });
     this.sim.bus.emit('planter.changed', { machineId: m.id });
+    // E23.6.2: after the harvest's own news, so a cross found is the last word (the calm HUD shows one toast)
+    this.findCross(m, lk.crop, st.cross as CropId | undefined);
     return got;
+  }
+
+  /**
+   * E23.6.2: with the Crossbreeds research, a ripe crop harvested beside a planter growing a different crop gives a
+   * cross seed of the two, the first time that pair meets.
+   */
+  private findCross(m: MachineData, crop: CropId, cross?: CropId) {
+    if ((this.sim.research?.level('crossbreed') ?? 0) < 1) return;
+    const sv = this.sim.state.salvage!;
+    for (const o of this.planters()) {
+      if (o.id === m.id || o.roofId !== m.roofId || Math.max(Math.abs(o.x - m.x), Math.abs(o.z - m.z)) > CROSS.reach) continue;
+      const other = this.bed(o).crop as CropId | undefined;
+      if (!other || !CROPS[other] || other === crop || other === cross) continue;
+      const key = crossKey(crop, other);
+      if (sv.crosses?.includes(key)) continue;
+      (sv.crosses ??= []).push(key);
+      const [a, b] = crossParents(key)!;
+      this.sim.bus.emit('cross.found', { key, a, b });
+    }
   }
 
   /** Feeds a bed one fertiliser (it lasts until the next harvest). */

@@ -14,6 +14,7 @@ const server = await preview({ preview: { port: 4237, strictPort: true }, logLev
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let failed = false;
 const QUICK = !!process.env.QUICK; // one size, midnight only: for tuning
+const ONLY = process.env.ONLY; // just the shot with this name (one size): checking one thing
 const SIZES = [
   // desktop on the high tier: headless auto-detects the low one, which has no bloom
   { name: 'desktop', width: 1920, height: 1080, query: '&gfx=high' },
@@ -22,7 +23,7 @@ const SIZES = [
 const TIMES = { dusk: 0.662, midnight: 0.83, dawn: 0.996 };
 const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 try {
-  for (const size of QUICK ? SIZES.slice(0, 1) : SIZES) {
+  for (const size of QUICK || ONLY ? SIZES.slice(0, 1) : SIZES) {
     const page = await browser.newPage({ viewport: { width: size.width, height: size.height } });
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
@@ -36,6 +37,7 @@ try {
     // The game's own camera: bloombot stands at (x, z) and the camera follows it at the game's zoom, as a player
     // sees it (only the yaw is turned, as a player can).
     const shot = async (name, x, z, yaw = 0, wait = 5000) => {
+      if (ONLY && name !== ONLY) return [0, 0, 1];
       await page.evaluate(({ x, z, yaw }) => {
         const g = window.solarbloom;
         g.bot.teleport('g', x, z);
@@ -141,7 +143,7 @@ try {
       for (const [name, f] of Object.entries(TIMES).filter(([n]) => !QUICK || n === 'midnight')) {
         await at(f, weather);
         const mean = await shot(`${name}-${w}`, 7, 42, 20, 8000);
-        if (name !== 'midnight') continue;
+        if (name !== 'midnight' || ONLY) continue;
         const share = lum(mean) / lum(noon);
         console.log(`    midnight is ${(share * 100).toFixed(0)}% as bright as noon; blue − red = ${mean[2] - mean[0]}`);
         // moonlit, not dimmed: blue leads, and the picture keeps a good share of the day's brightness
@@ -165,6 +167,15 @@ try {
       g.togglePowerView();
       g.selectTool('pulse');
     });
+    // photo mode's time slider at 02:00 while the game's clock says afternoon: the same moonlit night
+    await at(0.35, 'sunny');
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      g.photo.enter();
+      g.photo.setHour(2);
+    });
+    await shot('photo-slider-0200', 7, 42, 20, 6000);
+    await page.evaluate(() => window.solarbloom.photo.exit());
     if (errors.length) {
       failed = true;
       console.error('page errors:\n' + [...new Set(errors)].slice(0, 5).join('\n'));
