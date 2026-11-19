@@ -83,6 +83,43 @@ const mix = (a: number[], b: number[], t: number) => a.map((v, i) => v + (b[i] -
  * moves 25–40°, so view-dependent terms bake fine.
  */
 function puffMesh(device: pc.GraphicsDevice, p: Puff, sunWorld: pc.Vec3, bands: [number, number] = [18, 26]): pc.Mesh {
+  const m = pc.Mesh.fromGeometry(device, puffGeometry(p, sunWorld, bands));
+  m.incRefCount();
+  return m;
+}
+
+/**
+ * E23.8.3.3 (#453): a whole cloud's puffs as one mesh, each puff at its place: one draw call a cloud, not one a
+ * puff (the shading is baked per vertex, so nothing is lost).
+ */
+function cloudMesh(device: pc.GraphicsDevice, sunWorld: pc.Vec3): pc.Mesh {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const colors: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  for (const p of PUFFS) {
+    const g = puffGeometry(p, sunWorld);
+    const base = positions.length / 3;
+    const pos = g.positions!;
+    for (let i = 0; i < pos.length; i += 3) positions.push(pos[i] + p.pos[0], pos[i + 1] + p.pos[1], pos[i + 2] + p.pos[2]);
+    normals.push(...g.normals!);
+    colors.push(...g.colors!);
+    uvs.push(...(g.uvs ?? new Array((pos.length / 3) * 2).fill(0)));
+    for (const k of g.indices!) indices.push(base + k);
+  }
+  const m = new pc.Mesh(device);
+  m.setPositions(positions);
+  m.setNormals(normals);
+  m.setColors32(colors);
+  m.setUvs(0, uvs);
+  m.setIndices(indices);
+  m.update();
+  m.incRefCount();
+  return m;
+}
+
+function puffGeometry(p: Puff, sunWorld: pc.Vec3, bands: [number, number] = [18, 26]): pc.Geometry {
   const g = new pc.SphereGeometry({ radius: 1, latitudeBands: bands[0], longitudeBands: bands[1] });
   const pos = g.positions!;
   const n = pos.length / 3;
@@ -122,9 +159,7 @@ function puffMesh(device: pc.GraphicsDevice, p: Puff, sunWorld: pc.Vec3, bands: 
   }
   g.positions = pos;
   g.colors = colors;
-  const m = pc.Mesh.fromGeometry(device, g);
-  m.incRefCount();
-  return m;
+  return g;
 }
 
 /**
@@ -239,8 +274,8 @@ export class Clouds {
     shadowMat.blendType = pc.BLEND_NORMAL;
     shadowMat.depthWrite = false;
     shadowMat.update();
-    // Each puff's shading is baked into its own smooth mesh (shared by every cloud).
-    const puffs = PUFFS.map((p) => ({ p, mesh: puffMesh(device, p, sunUp) }));
+    // Each puff's shading is baked into the vertices; a cloud's puffs are one mesh (shared by every cloud).
+    const whole = cloudMesh(device, sunUp);
     // Hand-placed so the view never has a clump or a hole.
     const homes: [number, number, number, number][] = [
       [-0.72, 0.38, 0.2, 0.3],
@@ -254,12 +289,9 @@ export class Clouds {
     homes.forEach(([u, w, y, size], i) => {
       const r = group(this.root, 'cloud');
       const body = group(r, 'body');
-      for (const { p, mesh } of puffs) {
-        const e = new pc.Entity('puff');
-        e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, soft)], castShadows: false, receiveShadows: false });
-        e.setLocalPosition(p.pos[0], p.pos[1], p.pos[2]);
-        body.addChild(e);
-      }
+      const puffs = new pc.Entity('puffs');
+      puffs.addComponent('render', { meshInstances: [new pc.MeshInstance(whole, soft)], castShadows: false, receiveShadows: false });
+      body.addChild(puffs);
       const shadow = shape(this.root, 'plane', shadowMat, { name: 'cloudShadow', receive: false });
       const c: Cloud = { root: r, shadow, u, w, y, size, bob: i * 1.7 };
       if (FACES.includes(i)) {
