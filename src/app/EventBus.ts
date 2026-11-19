@@ -34,6 +34,11 @@ export interface GameEvents {
   /** E23.6.1: crafts queued at the crafting table (negative: cancelled), and one craft made. */
   'craft.queued': { id: string; n: number };
   'craft.done': { id: string; made: number };
+  /** E23.6.2: the research station: a find analysed, a project started or finished, an upgrade level bought. */
+  'research.analysed': { find: string };
+  'research.started': { id: string };
+  'research.done': { id: string };
+  'research.upgraded': { id: string; level: number };
   /** E23.5.1: bloombot clipped restored ground for biomass (`got` units into the backpack). */
   'biomass.gathered': { tileId: string; x: number; z: number; got: number };
   /** E23.5.2: a planter's bed changed (planted, a new stage, fed, an extra, harvested). */
@@ -47,6 +52,8 @@ export interface GameEvents {
   'cache.opened': { cacheId: string; x: number; z: number };
   /** E23.5.2.3: a crop's seed packet found while exploring. */
   'seeds.found': { crop: string; region: string };
+  /** E23.6.2: a crossbreed found at a harvest (data/crops crossKey and its two parents) */
+  'cross.found': { key: string; a: string; b: string };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
   /** E23.7.4: a pile gained units back (slowly over game days, or all at once in a storm); `left` units now. */

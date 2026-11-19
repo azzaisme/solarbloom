@@ -100,6 +100,8 @@ import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
 import { padStick, PhotoMode } from './PhotoMode';
 import { PHOTO_FILTERS } from '../data/photo';
 import { sceneNow } from './PhotoScene';
+import { daylightAt } from '../gameplay/Clock';
+import { GLOOMY } from '../gameplay/PowerEnv';
 import { DayNight, type LightMoment } from '../rendering/DayNight';
 import { NightFindVisuals } from '../rendering/NightFindVisuals';
 import { NIGHT_FIND_GIVES } from '../data/time';
@@ -1940,6 +1942,18 @@ export class Game {
       const g = NIGHT_FIND_GIVES[nf.kind];
       out.push({ kind: 'salvage', id: `night:${nf.id}`, verb: g.verb, name: g.name, distance: fd, at: front, refused: s.nightFinds.problem(nf.id), run: () => void s.nightFinds.take(nf.id) });
     }
+    // E23.6.1: the crafting table is in the house (the shed by the fountain) from the start. Facing the shed's walls
+    // uses the table (listed first, so it wins the tie); the door in front of it is for the radio and the bed.
+    const sh = PARK_SET.shed;
+    if (f.x >= sh.x && f.x < sh.x + sh.size && f.z >= sh.z && f.z < sh.z + sh.size)
+      out.push({
+        kind: 'door', id: 'craft:table', verb: 'Use', name: 'the crafting table', distance: fd, at: front, frame: { roofId: GROUND, x: sh.x, z: sh.z, size: sh.size },
+        run: () => {
+          this.oc?.panel.close();
+          this.hud.craft.open();
+          this.syncPanelPause();
+        },
+      });
     // the house: its radio's forecast by day, its bed from dusk
     if (this.atHouse(f) && s.weather.on && !s.clock.canSleep()) out.push({ kind: 'door', id: 'house:radio', verb: 'Listen to', name: 'the radio', distance: fd, at: front, run: () => this.listenToRadio() });
     if (this.atHouse(f) && s.clock.canSleep()) out.push({ kind: 'door', id: 'house:sleep', verb: 'Sleep', name: 'until morning', distance: fd, at: front, run: () => this.sleep() });
@@ -1965,17 +1979,6 @@ export class Game {
       const lk = s.farm.look(occ);
       out.push({ kind: 'machine', id: `planter:${occ.id}`, verb: lk.ripe ? 'Harvest' : lk.crop ? 'Tend' : 'Plant in', name: lk.ripe ? CROPS[lk.crop!].name : 'the planter', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.planter(occ) });
     }
-    // E23.6.1: the crafting table is in the house (the shed by the fountain) from the start
-    const sh = PARK_SET.shed;
-    if (f.x >= sh.x && f.x < sh.x + sh.size && f.z >= sh.z && f.z < sh.z + sh.size)
-      out.push({
-        kind: 'door', id: 'craft:table', verb: 'Use', name: 'the crafting table', distance: fd, at: front, frame: { roofId: GROUND, x: sh.x, z: sh.z, size: sh.size },
-        run: () => {
-          this.oc?.panel.close();
-          this.hud.craft.open();
-          this.syncPanelPause();
-        },
-      });
     // E23.5.1: flowered, restored ground in front can be clipped for biomass
     if (!pile && s.gather.canGather(front))
       out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });
@@ -4433,12 +4436,16 @@ export class Game {
   /** this frame's dt (holds read it) */
   private frameDt = 0;
   private lastReal = 0;
-  /** Seconds of wall time since the last frame (the engine's dt is 0 while paused), at most a frame's worth. */
+  /**
+   * Seconds of wall time since the last frame (the engine's dt is 0 while paused). Not clamped to a frame's worth:
+   * the crafting table counts real seconds even when frames are slow, up to a second at a time (a long stall, such as
+   * a hidden window, doesn't finish a queue at once).
+   */
   private realDt(): number {
     const now = performance.now();
     const d = this.lastReal ? (now - this.lastReal) / 1000 : 0;
     this.lastReal = now;
-    return Math.min(d, TUNING.maxFrameDt);
+    return Math.min(d, 1);
   }
   private update(rawDt: number) {
     if (!this.pause.paused) this.lastReal = performance.now();
@@ -4477,15 +4484,21 @@ export class Game {
     // E23.7.5: lamps cast real light: fewer at once on the low tier, and they dim with the scene in the Power view
     this.lightVisuals.maxCast = this.gfxTier === 'low' ? LIGHTING.cast.maxLow : LIGHTING.cast.max;
     this.lightVisuals.share = this.dayNight.lightShare;
+    // E23.7.5: photo mode's own time or weather lights the lamps as that hour would (on screen only)
+    const ownScene = this.photo.lightOverride() !== undefined || this.photo.weatherOverride() !== undefined;
+    if (ownScene) {
+      const sc = sceneNow(this.sim, this.photo);
+      this.lightVisuals.dark = Math.max(1 - daylightAt(sc.f), GLOOMY.has(sc.weather) ? 1 : 0);
+    } else this.lightVisuals.dark = undefined;
     this.lightVisuals.update(wdt, this.camera.entity.getPosition());
-    // E23.3.4: in the Power view, powered electrical machines glow soft yellow and the rest of the world darkens
-    this.machines.powerGlow(powerOn ? this.poweredMachines() : undefined, wdt);
+    // E23.3.4: in the Power view, powered electrical machines become yellow holograms and the rest of the world darkens
+    this.machines.powerHolo(powerOn ? this.poweredMachines() : undefined, wdt);
     const D = POWER.view.darken;
-    const dimTo = powerOn ? D.night + (D.day - D.night) * this.dayNight.light : 0; // night is dark already
+    const dimTo = powerOn ? D.night + (D.day - D.night) * this.dayNight.light : 0;
     const k = Math.min(1, wdt / POWER.view.fade);
     this.dayNight.dim = Math.abs(dimTo - this.dayNight.dim) < 1e-3 ? dimTo : this.dayNight.dim + (dimTo - this.dayNight.dim) * k;
     this.powerOverlay.setBoost(this.dayNight.boost);
-    this.machines.setGlowBoost(this.dayNight.boost);
+    this.machines.setHoloBoost(this.dayNight.boost);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
     this.crops.update(dt);
     this.rings.update(this.camera.zoom, this.camera.target);

@@ -388,18 +388,36 @@ export interface SalvageState {
   decorMade?: string[];
   /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
   clipped?: Record<string, number>;
+  /** E23.6.2: the research station (finds analysed, projects done and running, upgrade levels bought) */
+  research?: ResearchState;
   /** E23.5.2: each planter's bed, by machine id (absent = empty, no extras) */
   planters?: Record<string, PlanterState>;
   /** E23.5.2.3: crops whose seeds have been found (data/crops CropId), in the order found */
   crops?: string[];
+  /** E23.6.2: crossbreeds found (data/crops crossKey, e.g. 'radish+lettuce'), in the order found */
+  crosses?: string[];
   /** E23.5.2.3: gathers counted toward each region's next seed packet, by region id */
   seedFinds?: Record<string, number>;
+}
+
+/** E23.6.2: what the research station keeps. */
+export interface ResearchState {
+  /** finds looked at (keys such as 'material:copper', 'keeper:mastRow', 'tech:c-mastRow-1') */
+  analysed: string[];
+  /** projects finished, in order */
+  done: string[];
+  /** projects on the bench: seconds of powered work left */
+  running: { id: string; left: number }[];
+  /** upgrade levels bought at the crafting table */
+  levels: Record<string, number>;
 }
 
 /** E23.5.2: one planter box. */
 export interface PlanterState {
   /** the crop growing (data/crops CropId); absent = empty */
   crop?: string;
+  /** E23.6.2: a crossbreed's second parent (it grows like `crop`, with both parents' likes) */
+  cross?: string;
   /** growth so far, in game days at full rate (ripe at the crop's `days`) */
   grown?: number;
   /** fed with fertiliser (until the next harvest) */
