@@ -568,7 +568,13 @@ export class DroneSystem {
           if (this.travel(d, hub.roofId, hub.x + hub.size / 2, hub.z + hub.size / 2, dt)) {
             d.mode = 'idle';
             d.timer = TUNING.drone.retrySeconds;
-          } else if (this.roofOf(d) === hub.roofId && s.roles.roleFor(d, hub) === 'restorer' && this.findJob(d)) {
+          } else if (
+            this.roofOf(d) === hub.roofId &&
+            s.roles.roleFor(d, hub) === 'restorer' &&
+            // E23.6.3: only when its hub can pay for the job; a docked drone goes all the way home and waits there
+            (d.old || !s.droneFuel.short(hub, 'restorer')) &&
+            this.findJob(d)
+          ) {
             d.mode = 'idle';
             d.timer = 0;
           }

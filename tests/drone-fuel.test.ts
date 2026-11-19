@@ -104,6 +104,30 @@ describe('E23.6.3: what drones run on', () => {
       expect(['idle', 'returning', 'cooldown'], d.mode).toContain(d.mode);
       expect(sim.drones.statusOf(d)).toBe('docked');
     }
+    // with jobs all round (young lawn to nurture), they still go all the way home and wait there (never hover part way)
+    sim.areas.clear(sim.areas.areaOf(hub)!, true); // helpers may work there
+    for (let x = 16; x < 27; x++)
+      for (let z = 16; z < 27; z++) {
+        const t = sim.grid.get(GROUND, x, z);
+        if (t && !t.occupantId && t.feature !== 'water' && !t.blocked) Object.assign(t, { ground: 'restored', bloom: 0.2, pollution: 0 });
+      }
+    expect(sim.drones.findJob(mine()[0])).toBeTruthy();
+    // send them out to a job, then run the store dry under them
+    sim.inventory.addToStore('biomass', 100);
+    const home = (d: { px: number; pz: number }) => Math.hypot(d.px - (hub.x + hub.size / 2), d.pz - (hub.z + hub.size / 2));
+    for (let t = 0; t < 30 && !mine().some((d) => home(d) > 2); t += 0.25) sim.advance(0.25);
+    expect(mine().some((d) => home(d) > 2)).toBe(true);
+    sim.inventory.takeFromStore('biomass', sim.inventory.stored('biomass'));
+    let strayIdle = 0;
+    for (let t = 0; t < 30; t += 0.25) {
+      sim.advance(0.25);
+      for (const d of mine()) if (sim.drones.statusOf(d) === 'docked' && d.mode === 'idle' && home(d) > 0.06) strayIdle++;
+    }
+    expect(strayIdle).toBe(0);
+    for (const d of mine()) {
+      expect(d.mode).toBe('idle');
+      expect(Math.hypot(d.px - (hub.x + hub.size / 2), d.pz - (hub.z + hub.size / 2)), d.id).toBeLessThan(0.06);
+    }
     sim.inventory.addToStore('biomass', 100);
     sim.advance(10);
     for (const d of mine()) expect(sim.drones.statusOf(d)).not.toBe('docked');

@@ -164,9 +164,11 @@ try {
       .filter((d) => d.hubId === id)
       .map((d) => {
         const v = g.drones.views.get(d.id);
-        return { mode: d.mode, glyph: v?.glyph?.root?.enabled ?? null, kind: v?.glyph?.kind ?? null, y: v ? +v.root.getPosition().y.toFixed(2) : null };
+        const p = v?.root.getPosition();
+        return { mode: d.mode, glyph: v?.glyph?.root?.enabled ?? null, kind: v?.glyph?.kind ?? null, at: [+d.px.toFixed(1), +d.pz.toFixed(1)], view: p ? [+p.x.toFixed(1), +p.y.toFixed(2), +p.z.toFixed(1)] : null };
       });
-    return { out, panel: !!document.querySelector('#inspect')?.offsetParent };
+    const hub = g.sim.machine(id), chest = g.sim.droneFuel.chestBeside(hub), cam = g.camera.goalPoint;
+    return { out, hub: [hub.x, hub.z], chest: [chest.x, chest.z], bot: [+g.bot.pose.x.toFixed(1), +g.bot.pose.z.toFixed(1)], goal: [+cam.x.toFixed(1), +cam.z.toFixed(1)], others: g.sim.state.drones.filter((d) => d.hubId !== id).map((d) => [d.hubId, +d.px.toFixed(1), +d.pz.toFixed(1), !!d.old]), panel: !!document.querySelector('#inspect')?.offsetParent };
   }, hubId);
   check(cue.out.length > 0 && cue.out.every((c) => c.glyph && c.kind === 'biomass') && !cue.panel, `docked drones settle on their hub under the Biomass glyph, no panel open (${JSON.stringify(cue)})`);
   await page.screenshot({ path: `${dir}/ui-drone-fuel-docked.png` });
