@@ -169,10 +169,10 @@ describe('E19.2.1 decorations are saved', () => {
 });
 
 describe('E19.2.2 decoration set and unlocks', () => {
-  it('about a dozen decorations, ids unique, each with art inside a small budget, keepsakes from cats', () => {
+  it('about a dozen decorations, ids unique, each with art inside a small budget, some only from cats', () => {
     expect(DECOR_OPTIONS.length).toBeGreaterThanOrEqual(12);
     expect(new Set(DECOR_OPTIONS.map((o) => o.id)).size).toBe(DECOR_OPTIONS.length);
-    expect(DECOR_OPTIONS.some((o) => 'keepsake' in o.unlock)).toBe(true);
+    expect(DECOR_OPTIONS.some((o) => 'cat' in o.unlock)).toBe(true);
     expect(DECOR_OPTIONS.some((o) => o.solid) && DECOR_OPTIONS.some((o) => !o.solid)).toBe(true);
     for (const o of DECOR_OPTIONS) {
       expect(DECOR_ART, o.id).toContain(o.id);
@@ -189,7 +189,7 @@ describe('E19.2.2 decoration set and unlocks', () => {
     for (const o of DECOR_OPTIONS) expect(PLOT_OPTIONS.some((p) => p.id === o.id), o.id).toBe(false);
   });
 
-  it('an unlock happens once, survives a reload, and a keepsake waits for a cat', () => {
+  it('an unlock happens once, survives a reload, and a cat-only decoration waits for a cat', () => {
     const saver = new SaveService(undefined);
     const sim = new Sim(createInitialState(5));
     const cozy = new Cozy(sim);
@@ -204,7 +204,9 @@ describe('E19.2.2 decoration set and unlocks', () => {
     expect(got).toEqual(['bunting', 'cratestack', 'barrel']);
     expect(cozy.checkDecorUnlocks()).toEqual([]); // once each
     expect(cozy.isDecorUnlocked(DECOR_OPTION.catstatue)).toBe(false);
-    sim.state.stats.catsFound = 1;
+    sim.state.stats.catsFound = 1; // a count alone opens nothing: the cat leaves the piece itself (E23.12.2)
+    expect(cozy.checkDecorUnlocks()).toEqual([]);
+    expect(sim.crafting.giveDecor('catstatue')).toBe(true);
     expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['catstatue']);
     const copy = new Sim(saver.deserialize(saver.serialize(sim.state))!);
     const c2 = new Cozy(copy);
@@ -243,18 +245,20 @@ describe('E19.2 stays cosmetic for the pacing bots', () => {
     expect(JSON.stringify(checked!.ecosystem.score())).toBe(JSON.stringify(plain!.ecosystem.score()));
   });
 
-  it('E20.5: keepsakes come only from Lucky Cat finds: five finds, a Golden Cat, a Rainbow Cat', () => {
+  it('E23.12.2: cat-only decorations come only from a Lucky Cat, and a locked one never says so', () => {
     const sim = new Sim(createInitialState(6));
     const cozy = new Cozy(sim);
-    sim.state.stats.catsFound = 1;
-    expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['catstatue']);
-    sim.state.cat.log = [{ anchorId: 'park-bench', reward: 'luckyHarvest', at: 10, variant: 'golden' }];
-    expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['goldlantern']);
+    // E20.5's milestones open nothing now: five finds, a Golden Cat and a Rainbow Cat in the log
     sim.state.stats.catsFound = 5;
-    sim.state.cat.log.push({ anchorId: 'hedge-gap', reward: 'jackpot', at: 20, variant: 'rainbow' });
-    expect(cozy.checkDecorUnlocks().map((o) => o.id).sort()).toEqual(['pawstones', 'rainbowbunting']);
+    sim.state.cat.log = [
+      { anchorId: 'park-bench', reward: 'luckyHarvest', at: 10, variant: 'golden' },
+      { anchorId: 'hedge-gap', reward: 'jackpot', at: 20, variant: 'rainbow' },
+    ];
     expect(cozy.checkDecorUnlocks()).toEqual([]);
-    const fresh = new Cozy(new Sim(createInitialState(6)));
-    expect(fresh.decorChoices().find((c) => c.option.id === 'rainbowbunting')?.hint ?? '').toMatch(/Rainbow Cat/);
+    // the tray's hint for a locked one names no cat (epic rule 8)
+    for (const id of ['catstatue', 'pawstones', 'goldlantern', 'rainbowbunting']) expect(cozy.decorChoices().find((c) => c.option.id === id)?.hint ?? '', id).not.toMatch(/cat/i);
+    expect(sim.crafting.giveDecor('rainbowbunting')).toBe(true);
+    expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(['rainbowbunting']);
+    expect(sim.crafting.giveDecor('rainbowbunting')).toBe(false); // given once
   });
 });

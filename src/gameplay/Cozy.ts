@@ -2,7 +2,7 @@ import { decoration, decorKey, decorKeyOf, decorOccupant, decorValue, type Decor
 import { GROUND } from '../core/GameState';
 import { plotAt, plotById, plotSpots, type PlotSpot } from '../core/Plots';
 import type { CozyState } from '../core/types';
-import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, KEEPSAKE_HINTS, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type Keepsake, type PlotOption } from '../data/cozy';
+import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type PlotOption } from '../data/cozy';
 import type { Sim } from './Sim';
 import type { DecorRecipe } from '../data/crafting';
 
@@ -125,29 +125,15 @@ export class Cozy {
 
   // ───────────── unlocks (E19.1.4) ─────────────
 
-  /** Has this unlock rule been met (the park's look stage, areas cleared, or a Lucky Cat keepsake)? */
+  /** Has this unlock rule been met (the park's look stage, areas cleared, a find or research)? */
   private met(u: CozyUnlock): boolean {
     if ('start' in u) return true;
     if ('parkStage' in u) return this.sim.progression.parkStage() >= u.parkStage;
-    if ('keepsake' in u) return this.keepsakeMet(u.keepsake);
+    if ('cat' in u) return false; // E23.12.2: only a Lucky Cat gives these (data/crafting's `{ cat }` recipes)
     if ('find' in u) return !!this.sim.state.salvage?.caches.includes(u.find);
     // E23.6.2's research (`sim.research`); until it lands, research-only styles stay locked
     if ('research' in u) return !!(this.sim as unknown as { research?: { done?: (id: string) => boolean } }).research?.done?.(u.research);
     return this.sim.areas.clearedCount() >= u.areas;
-  }
-
-  /** E20.5 (#288): Lucky Cat finds that unlock keepsakes. Read from the cat's own record; nothing else unlocks them. */
-  private keepsakeMet(k: Keepsake): boolean {
-    const cat = this.sim.state.cat;
-    switch (k) {
-      case 'firstFind':
-        return this.sim.state.stats.catsFound >= 1;
-      case 'finds5':
-        return this.sim.state.stats.catsFound >= 5;
-      case 'golden':
-      case 'rainbow':
-        return (cat.log ?? []).some((e) => e.variant === k);
-    }
   }
 
   isUnlocked(o: PlotOption): boolean {
@@ -157,7 +143,7 @@ export class Cozy {
   /** Words for what a locked option waits for. */
   hint(u: CozyUnlock): string {
     if ('start' in u) return '';
-    if ('keepsake' in u) return KEEPSAKE_HINTS[u.keepsake];
+    if ('cat' in u) return 'it turns up somewhere'; // never names what leaves it (epic rule 8)
     if ('parkStage' in u) return ['', 'the park’s paths are swept', 'the park’s benches are mended', 'the park’s lamps are lit', 'the fountain wakes'][u.parkStage] ?? 'the park grows';
     if ('find' in u) return 'you find it in an old cache';
     if ('research' in u) return 'Decor research';
@@ -275,7 +261,7 @@ export class Cozy {
     return r ? this.sim.crafting.unlockLabel(r.unlock).replace('🔒 ', '') : this.hint(o.unlock);
   }
 
-  /** The tray's list: every decoration, unlocked or with what it waits for (keepsakes only once earned). */
+  /** The tray's list: every decoration, unlocked or with what it waits for. */
   decorChoices(): DecorChoice[] {
     return DECOR_OPTIONS.map((o) => ({ option: o, unlocked: this.isDecorUnlocked(o), hint: this.isDecorUnlocked(o) ? undefined : this.decorHint(o) }));
   }
