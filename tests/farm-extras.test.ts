@@ -4,10 +4,14 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import { keeperById } from '../src/core/OldCityLayout';
 import type { MachineData, MachineType } from '../src/core/types';
 import { COMPOST } from '../src/data/compost';
-import { CROPS } from '../src/data/crops';
+import { CROP_IDS, CROPS, type CropId } from '../src/data/crops';
 import { DAY_SECONDS } from '../src/data/time';
-import { BEEHIVE, GARDEN_REQUESTS, HOMES, MUSHROOM_LOG, ORCHARD, WORM_BIN, type HomeKind } from '../src/data/farmExtras';
+import { BEEHIVE, DIVERSITY, GARDEN_REQUESTS, HOMES, KEEPER_GARDEN, MUSHROOM_LOG, ORCHARD, WORM_BIN, type HomeKind } from '../src/data/farmExtras';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
+import { DECOR_OPTION } from '../src/data/cozy';
+import { Cozy, decorOpen } from '../src/gameplay/Cozy';
+import { FARM_USES } from '../src/data/farm';
+import { CHARGE } from '../src/data/charge';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
@@ -272,6 +276,63 @@ describe('E23.5.4: every one raises its area’s diversity', () => {
   });
 });
 
+/**
+ * A spot for a Keeper's garden on the real map: a tile within reach of the Keeper that a planter can stand on once
+ * bloombot restores it (the way into the region opened, as waking the Keeper needs). Restores it, as the player would.
+ */
+function gardenSpot(sim: Sim, keeperId: string): { x: number; z: number } | undefined {
+  const k = keeperById(keeperId)!;
+  const R = KEEPER_GARDEN.reach;
+  sim.state.salvage!.keepers.tide ??= { step: 'request1' }; // planters open with Timber (Tide)
+  const area = sim.areas.areaOf({ roofId: GROUND, x: k.x, z: k.z });
+  if (area) {
+    sim.areas.reveal(area);
+    sim.areas.clear(area, true);
+  }
+  const near = [];
+  for (let dx = -R; dx <= R; dx++) for (let dz = -R; dz <= R; dz++) near.push([k.x + dx, k.z + dz, Math.max(Math.abs(dx), Math.abs(dz))]);
+  near.sort((a, b) => a[2] - b[2]);
+  for (const [x, z] of near) {
+    const t = sim.grid.get(GROUND, x, z);
+    if (!t || t.blocked || t.occupantId || t.feature === 'water') continue;
+    sim.restoration.complete(t, 'pulse');
+    const chk = sim.build.check('planter', GROUND, x, z);
+    if (chk.ok || chk.spotOk) return { x, z };
+  }
+  return undefined;
+}
+
+/** Builds a Keeper's garden on the real map, grows the crop it asked for and harvests it there. */
+function fulfil(sim: Sim, keeperId: string, crop: CropId, learn = true) {
+  const spot = gardenSpot(sim, keeperId)!;
+  for (const [key, v] of Object.entries(sim.build.recipe('planter')!)) sim.inventory.add(key as 'scrap', v!);
+  const p = sim.build.place('planter', GROUND, spot.x, spot.z)!;
+  expect(sim.farmExtras.gardenOf(p)).toBe(keeperId);
+  if (learn && !sim.farm.knows(crop)) (sim.state.salvage!.crops ??= []).push(crop);
+  sim.inventory.add('seeds', 1);
+  expect(sim.farm.plant(p, crop)).toBe(true);
+  sim.weather.forceForTest('sunny', 1e9);
+  run(sim, (CROPS[crop].days + 1) * 4 * DAY_SECONDS);
+  expect(sim.farm.look(p).ripe, `${crop} ripe`).toBe(true);
+  sim.farm.harvest(p);
+}
+
+describe('E23.5.4.1: honey', () => {
+  it('honey is eaten like food, a strong snack (more charge than food)', () => {
+    const sim = farm();
+    sim.state.charge = { value: 10 };
+    sim.bot = { roofId: GROUND, x: 30, z: 30 }; // away from home (no trickle)
+    const pack = sim.state.salvage!.pack as Record<string, number>;
+    for (const key of Object.keys(pack)) delete pack[key];
+    pack.honey = 1;
+    pack.food = 1;
+    expect(sim.charge.eat()).toMatchObject({ id: 'honey' }); // best first
+    sim.advance(4);
+    expect(sim.charge.value()).toBeCloseTo(10 + FARM_USES.honey.charge * CHARGE.max, 1); // (less a hair of idle use)
+    expect(FARM_USES.honey.charge).toBeGreaterThan(FARM_USES.food.charge);
+  });
+});
+
 describe('E23.5.4.6: Keeper gardens', () => {
   it('done when: each Keeper has at least one garden request', () => {
     for (const k of KEEPERS) {
@@ -319,6 +380,69 @@ describe('E23.5.4.6: Keeper gardens', () => {
     ground(sim, 12, 16, 0, 1);
     for (const [k, v] of Object.entries(sim.build.recipe('wormBin')!)) sim.inventory.addToStore(k as 'scrap', v!);
     expect(sim.build.check('wormBin', GROUND, 12, 16).ok).toBe(true);
+  });
+
+  it('every Keeper’s garden can really be made: a planter fits within reach of each Keeper on the real map', () => {
+    for (const k of KEEPERS) {
+      const sim = farm();
+      sim.state.salvage!.keepers[k.id] = { step: 'request1' };
+      const spot = gardenSpot(sim, k.id);
+      expect(spot, `${k.name}: a planter spot within ${KEEPER_GARDEN.reach} tiles`).toBeDefined();
+      for (const [key, v] of Object.entries(sim.build.recipe('planter')!)) sim.inventory.add(key as 'scrap', v!);
+      const p = sim.build.place('planter', GROUND, spot!.x, spot!.z);
+      expect(p, `${k.name}'s planter placed`).toBeDefined();
+      expect(sim.farmExtras.gardenOf(p!), k.name).toBe(k.id);
+    }
+  });
+
+  it('a decoration gift is really given: made, open to place, and announced once', () => {
+    const sim = farm();
+    sim.state.salvage!.keepers.pylon = { step: 'request1' };
+    const option = DECOR_OPTION.birdbath;
+    expect(decorOpen(sim, option)).toBe(false);
+    fulfil(sim, 'pylon', 'radish');
+    expect(sim.crafting.decorMade('birdbath')).toBe(true);
+    expect(decorOpen(sim, option)).toBe(true);
+    const cozy = new Cozy(sim);
+    expect(cozy.checkDecorUnlocks().map((o) => o.id)).toContain('birdbath');
+    expect(cozy.checkDecorUnlocks().map((o) => o.id)).not.toContain('birdbath'); // announced once
+  });
+
+  it('a seed reward is always real seeds: a crop already known gives the next one not known, then plain Seeds', () => {
+    const said: unknown[] = [];
+    // Tally's first reward is sunflower seeds; sunflower already known
+    let sim = farm();
+    sim.state.salvage!.keepers.tally = { step: 'request1' };
+    sim.state.salvage!.crops = ['sunflower'];
+    sim.bus.on('garden.fulfilled', (e) => said.push(e.reward));
+    fulfil(sim, 'tally', 'tomato');
+    const got = said[0] as { kind: string; crop: string };
+    expect(got.kind).toBe('seeds');
+    expect(got.crop).not.toBe('sunflower');
+    expect(sim.farm.knows(got.crop as 'radish')).toBe(true);
+    // every crop known: a handful of plain Seeds, in the backpack
+    sim = farm();
+    sim.state.salvage!.keepers.tally = { step: 'request1' };
+    sim.state.salvage!.crops = [...CROP_IDS];
+    const seeds = () => sim.inventory.count('seeds') + sim.inventory.stored('seeds');
+    let rewards: unknown[] = [];
+    sim.bus.on('garden.fulfilled', (e) => rewards.push(e.reward));
+    const before = seeds();
+    fulfil(sim, 'tally', 'tomato', false);
+    expect(rewards[0]).toEqual({ kind: 'items', item: 'seeds', n: KEEPER_GARDEN.plainSeeds });
+    expect(seeds() - before).toBeGreaterThanOrEqual(KEEPER_GARDEN.plainSeeds - 1); // planting took one
+    rewards = [];
+  });
+
+  it('a Keeper’s garden raises its area’s diversity', () => {
+    const sim = farm();
+    sim.state.salvage!.keepers.pylon = { step: 'request1' };
+    const spot = gardenSpot(sim, 'pylon')!;
+    const area = sim.areas.areaOf({ roofId: GROUND, x: spot.x, z: spot.z });
+    const before = sim.farmExtras.diversityIn(area);
+    for (const [key, v] of Object.entries(sim.build.recipe('planter')!)) sim.inventory.add(key as 'scrap', v!);
+    sim.build.place('planter', GROUND, spot.x, spot.z);
+    expect(sim.farmExtras.diversityIn(area)).toBe(before + DIVERSITY.perGarden);
   });
 
   it('extras survive a save', () => {

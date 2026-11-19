@@ -98,14 +98,27 @@ export const DIVERSITY = {
   perKind: 1,
   /** each kind of creature living in an area's homes counts this much */
   perCreature: 2,
+  /** each Keeper's garden in an area (E23.5.4.6) counts this much */
+  perGarden: 1,
   /** what each point is worth in the city-wide biodiversity score (Ecosystem; a landmark is 25) */
   cityWeight: 10,
 };
 
 /** E23.5.4.6 (#434): Keeper gardens. A planter within `reach` of a woken Keeper is that Keeper's garden. */
-export const KEEPER_GARDEN = { reach: 4 };
+export const KEEPER_GARDEN = {
+  reach: 4,
+  /** a seed reward for a crop already known gives the next crop not yet known; with every crop known, this many Seeds */
+  plainSeeds: 4,
+};
 
-export type GardenReward = { kind: 'decor'; id: string; name: string } | { kind: 'seeds'; crop: CropId } | { kind: 'recipe'; machine: string; name: string };
+/** What counts as flowering for bees and butterflies: restored ground in flower, and these crops' beds (each worth `bedWeight`). */
+export const FLOWERING = {
+  crops: ['flowers', 'herbs', 'sunflower', 'moonflower'] as CropId[],
+  bedWeight: 2,
+};
+
+/** `items` is only what a reward became when its crop was already known and every crop is (plain Seeds). */
+export type GardenReward = { kind: 'decor'; id: string; name: string } | { kind: 'seeds'; crop: CropId } | { kind: 'recipe'; machine: string; name: string } | { kind: 'items'; item: 'seeds'; n: number };
 
 export interface GardenRequest {
   /** the crop the Keeper asks you to grow in its garden */

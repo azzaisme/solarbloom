@@ -89,7 +89,8 @@ describe('E23.2.1: bloombot\'s charge', () => {
     // the numbers come from E23.5.1's farm items
     const food = FARM_USES.food.charge * CHARGE.max;
     const biomass = FARM_USES.biomass.charge * CHARGE.max;
-    expect(CHARGE.edibles.map((e) => [e.id, e.charge])).toEqual([['food', food], ['biomass', biomass]]);
+    const honey = FARM_USES.honey.charge * CHARGE.max; // E23.5.4.1: beehives' strong snack, best first
+    expect(CHARGE.edibles.map((e) => [e.id, e.charge])).toEqual([['honey', honey], ['food', food], ['biomass', biomass]]);
     // food first, from the backpack
     pack.food = 1;
     pack.biomass = 3;

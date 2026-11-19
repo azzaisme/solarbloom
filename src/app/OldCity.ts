@@ -98,7 +98,7 @@ export class OldCityController {
     });
     host.sim.bus.on('garden.fulfilled', (e) => {
       const r = e.reward;
-      const got = r.kind === 'seeds' ? `${CROPS[r.crop].name} seeds` : r.kind === 'recipe' ? `the ${r.name} recipe` : `a ${r.name} to place`;
+      const got = r.kind === 'seeds' ? `${CROPS[r.crop].name} seeds` : r.kind === 'items' ? `${r.n} Seeds` : r.kind === 'recipe' ? `the ${r.name} recipe` : `a ${r.name} to place`;
       this.sim.bus.emit('keeper.said', { keeperId: e.keeperId, lines: [`Thank you. Here: ${got}.`] });
       host.sound('deliver');
     });

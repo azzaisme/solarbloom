@@ -1,9 +1,9 @@
 import { GROUND } from '../core/GameState';
 import { keeperById } from '../core/OldCityLayout';
 import type { ExtraState, MachineData, MachineType } from '../core/types';
-import { CROPS, type CropId } from '../data/crops';
+import { CROP_IDS, CROPS, type CropId } from '../data/crops';
 import { DAY_SECONDS } from '../data/time';
-import { BEEHIVE, DIVERSITY, FISH_POND, GARDEN_REQUESTS, HOME, HOMES, KEEPER_GARDEN, MUSHROOM_LOG, ORCHARD, WORM_BIN, type GardenRequest, type Habitat, type HomeKind } from '../data/farmExtras';
+import { BEEHIVE, DIVERSITY, FISH_POND, FLOWERING, GARDEN_REQUESTS, HOME, HOMES, KEEPER_GARDEN, MUSHROOM_LOG, ORCHARD, WORM_BIN, type GardenRequest, type GardenReward, type Habitat, type HomeKind } from '../data/farmExtras';
 import { machineStrengthAt } from '../core/RegionStrengths';
 import type { Sim } from './Sim';
 
@@ -87,8 +87,8 @@ export class FarmExtras {
   /** Flowering things in reach: restored ground in flower (bloom 2+) and flower or herb beds. */
   flowersNear(m: MachineData, reach: number): number {
     const ground = this.tilesNear(m, reach).filter((t) => t.ground === 'restored' && t.bloom >= 2 && !t.occupantId).length;
-    const beds = this.machinesNear(m, reach, (o) => o.type === 'planter' && ['flowers', 'herbs', 'sunflower', 'moonflower'].includes(this.sim.farm.bed(o).crop ?? '')).length;
-    return ground + beds * 2;
+    const beds = this.machinesNear(m, reach, (o) => o.type === 'planter' && FLOWERING.crops.includes(this.sim.farm.bed(o).crop as CropId)).length;
+    return ground + beds * FLOWERING.bedWeight;
   }
 
   /** Night on the GAME clock (E23.7.1), never the sky: the same play time in both clock modes. */
@@ -376,22 +376,40 @@ export class FarmExtras {
     if (!keeper || !req || req.crop !== crop) return;
     const sv = this.sim.state.salvage!;
     (sv.gardens ??= {})[keeper] = (sv.gardens[keeper] ?? 0) + 1;
-    this.give(req);
+    const given = this.give(req);
     this.hooks.keepers?.tend?.(keeper);
-    this.sim.bus.emit('garden.fulfilled', { keeperId: keeper, crop, reward: req.reward });
+    this.sim.bus.emit('garden.fulfilled', { keeperId: keeper, crop, reward: given });
   }
 
-  private give(req: GardenRequest) {
+  /** Hands over a request's reward. Returns what was really given (the Keeper names it). */
+  private give(req: GardenRequest): GardenReward {
     const r = req.reward;
     const sv = this.sim.state.salvage!;
     if (r.kind === 'seeds') {
-      if (!this.sim.farm.knows(r.crop)) (sv.crops ??= []).push(r.crop);
-    } else if (r.kind === 'recipe') {
-      if (!(sv.recipes ??= []).includes(r.machine)) sv.recipes.push(r.machine);
-    } else {
-      const cozy = (this.sim.state.cozy ??= {} as NonNullable<typeof this.sim.state.cozy>);
-      if (!(cozy.decorUnlocked ??= []).includes(r.id)) cozy.decorUnlocked.push(r.id);
+      // always real seeds: the crop if it's new, else the next crop not yet known, else a handful of plain Seeds
+      const crop = !this.sim.farm.knows(r.crop) ? r.crop : CROP_IDS.find((c) => !this.sim.farm.knows(c));
+      if (crop) {
+        (sv.crops ??= []).push(crop);
+        return { kind: 'seeds', crop };
+      }
+      const inv = this.sim.inventory;
+      inv.addToStore('seeds', inv.add('seeds', KEEPER_GARDEN.plainSeeds));
+      return { kind: 'items', item: 'seeds', n: KEEPER_GARDEN.plainSeeds };
     }
+    if (r.kind === 'recipe') {
+      if (!(sv.recipes ??= []).includes(r.machine)) sv.recipes.push(r.machine);
+      return r;
+    }
+    if (r.kind === 'decor') {
+      // E23.6.1: a decoration is bloombot's once made (then free to place): a Keeper's gift counts as made
+      if (this.sim.crafting.decor(r.id)) {
+        if (!this.sim.crafting.decorMade(r.id)) sv.decorMade = [...(sv.decorMade ?? []), r.id].sort();
+      } else {
+        const cozy = (this.sim.state.cozy ??= {} as NonNullable<typeof this.sim.state.cozy>);
+        if (!(cozy.decorUnlocked ??= []).includes(r.id)) cozy.decorUnlocked.push(r.id);
+      }
+    }
+    return r;
   }
 
   /** A recipe a Keeper's garden hands over (BuildSystem keeps these machines locked until then). */
@@ -419,7 +437,14 @@ export class FarmExtras {
         if (type === 'beehive' && !this.hiveSettled(m)) continue;
         kinds.add(type);
       }
-    return kinds.size * DIVERSITY.perKind + creatures.size * DIVERSITY.perCreature;
+    // E23.5.4.6: each Keeper's garden in the area (a planter tended for a woken Keeper) counts too
+    const gardens = new Set<string>();
+    for (const p of this.sim.machinesOfType('planter')) {
+      if (areaId !== undefined && this.sim.areas?.areaOf(p) !== areaId) continue;
+      const k = this.gardenOf(p);
+      if (k) gardens.add(k);
+    }
+    return kinds.size * DIVERSITY.perKind + creatures.size * DIVERSITY.perCreature + gardens.size * DIVERSITY.perGarden;
   }
 
   // ───────────── per step ─────────────
