@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { collection } from '../src/ui/BackpackModel';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
@@ -174,6 +175,17 @@ describe('E23.2.4.2: visits scale with diversity', () => {
     const back = new Sim(saver.deserialize(saver.serialize(sim.state))!);
     expect(back.state.wildlife!.log).toEqual(log);
     expect(back.wildlife.logRows().filter((r) => r.seen).map((r) => r.def.id).sort()).toEqual([...new Set(plan)].sort());
+    // the visitor log in the backpack (Collection → Visitors): who sat with bloombot, how often and where; the rest
+    // keep their names to themselves
+    const group = collection(back).find((g) => g.title === 'Visitors')!;
+    const met = [...new Set(plan)];
+    expect(group.count).toBe(`${met.length} of ${VISITORS.length}`);
+    for (const id of met) {
+      const d = VISITORS.find((v) => v.id === id)!;
+      expect(group.rows.find((r) => r.name.endsWith(d.name))).toMatchObject({ found: true, detail: expect.stringMatching(/^Sat with you once, in the park/) });
+    }
+    expect(group.rows.filter((r) => !r.found).every((r) => r.name === 'Not met yet')).toBe(true);
+    expect(group.rows.filter((r) => !r.found).length).toBe(VISITORS.length - met.length);
   });
 
   it('a second sitting brings a different mix, from the same tier', () => {

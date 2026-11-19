@@ -93,6 +93,7 @@ import { PadFocus } from '../ui/PadFocus';
 import { OldCityController } from './OldCity';
 import { KeeperVisuals } from '../rendering/KeeperVisuals';
 import { Visitors } from '../rendering/Visitors';
+import { VISITORS } from '../data/wildlife';
 import { Cozy } from '../gameplay/Cozy';
 import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
 import { chunkKey } from '../core/Grid';
@@ -555,6 +556,12 @@ export class Game {
           },
         });
         this.visitors = new Visitors(this.scene.world);
+        // E23.2.4.3: a kind that has never visited before goes in the log (Backpack → Collection → Visitors)
+        this.sim.bus.on('wildlife.logged', (e) => {
+          if (!e.first) return;
+          const d = VISITORS.find((v) => v.id === e.id);
+          if (d) this.hud.toast(`${d.icon} ${d.name} came to sit with you<small>New in your visitor log</small>`, '', 3);
+        });
         this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
         // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
         this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
