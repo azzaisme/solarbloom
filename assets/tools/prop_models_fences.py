@@ -37,6 +37,16 @@ def picket_board(x, w, h, key, tilt, y=0.0):
     return slab("picket", o, 0.022, key, place((x, y, 0.04), (0, tilt, 0)), bevel=0.004)
 
 
+def keeper(hinge_x, latch_x, zs=(0.22, 0.56)):
+    """The fixed part of a gate (it stays put while the leaf swings): hinge pins on the post side and a latch catch
+    on the other, so a gate is always two parts and the game finds its "gate" by name."""
+    p = []
+    for z in zs:
+        p.append(K.cyl("pin", 0.012, 0.07, "iron", place((hinge_x, 0.03, z - 0.035)), n=6, bevel=0))
+    p.append(box("catch", (0.035, 0.05, 0.05), "iron", place((latch_x, -0.01, zs[-1] - 0.06)), bevel=0.004))
+    return p
+
+
 # ================================================================ salvaged-plank picket
 def picket_panel(x0, x1, R, h=0.78):
     parts = []
@@ -74,7 +84,7 @@ def fence_picket_gate():
     leaf.append(box("latch", (0.06, 0.03, 0.03), "iron", place((0.4, -0.03, 0.5)), bevel=0.004))
     for z in (0.22, 0.56):
         leaf.append(box("hinge", (0.12, 0.012, 0.03), "iron", place((-0.39, 0.055, z)), bevel=0.003))
-    return {"gate": (leaf, (-0.45, 0, 0))}
+    return {"frame": keeper(-0.47, 0.48), "gate": (leaf, (-0.45, 0, 0))}
 
 
 # ================================================================ woven willow hurdle
@@ -114,7 +124,7 @@ def fence_willow_gate():
     leaf.append(K.cyl("hingepost", 0.024, 0.74, "willowDark", place((-0.45, 0, 0)), n=8, bevel=0))
     leaf.append(tube("hoop", [(-0.45 + 0.03 * math.cos(a), 0.03 * math.sin(a), 0.55) for a in
                               [2 * math.pi * i / 8 for i in range(9)]], 0.008, "iron", n=4))
-    return {"gate": (leaf, (-0.45, 0, 0))}
+    return {"frame": keeper(-0.48, 0.47, (0.2, 0.55)), "gate": (leaf, (-0.45, 0, 0))}
 
 
 # ================================================================ scrap metal and pipe rail
@@ -155,12 +165,12 @@ def fence_pipe_post():
 
 @model("fence-pipe-gate", "fence")
 def fence_pipe_gate():
-    leaf = [tube("frame", [(-0.45, 0, 0.06), (-0.45, 0, 0.82), (0.43, 0, 0.82), (0.43, 0, 0.06), (-0.45, 0, 0.06)],
+    leaf = [tube("leafframe", [(-0.45, 0, 0.06), (-0.45, 0, 0.82), (0.43, 0, 0.82), (0.43, 0, 0.06), (-0.45, 0, 0.06)],
                  0.02, "iron", n=8),
             tube("brace", [(-0.43, 0, 0.1), (0.41, 0, 0.78)], 0.014, "copper", n=8),
             box("sheet", (0.8, 0.012, 0.3), "rust", place((-0.01, 0.022, 0.25)), bevel=0.003),
             box("latch", (0.05, 0.04, 0.03), "gold", place((0.44, -0.02, 0.6)), bevel=0.004)]
-    return {"gate": (leaf, (-0.45, 0, 0))}
+    return {"frame": keeper(-0.48, 0.48, (0.2, 0.66)), "gate": (leaf, (-0.45, 0, 0))}
 
 
 # ================================================================ low dry-stone wall

@@ -78,5 +78,38 @@ bird-box preview (retry: first had no post) 01a1f0d9-5f46-72f4-a3e6-5b681a3aec84
 bat-box preview (retry: first was an open feeder) 01a1f0d9-6e51-70a9-bc8a-7ba50747034f
 bird-box (image route, after two text misses) concept 01a1f0da-9bab-757c-bc3d-c2939d2d3cce, image-to-3d 01a1f0dd-0704-7299-bbb7-b63911e475f1
 bat-box (image route, after two text misses) concept 01a1f0da-ba0c-7655-b0f0-95ffdeb24507, image-to-3d 01a1f0dd-0b3f-705c-98bc-01ea7a599438
+B4 (19 Nov, owner-approved: both lists combined, 16 animals):
+fox concept 01a1f387-98c2-744a-b616-59075f91af34
+hedgehog concept 01a1f387-a6cb-7570-92a7-82bc16033217
+squirrel concept 01a1f387-da07-7555-bdd1-6d2fd362edd1
+otter concept 01a1f387-e899-71a6-9e84-0dd0221b6530
+owl concept 01a1f387-f629-75be-8a67-73b5f7a94ea3
+magpie concept 01a1f388-026d-725b-9ba8-213e419076db
+frog concept 01a1f388-0f2d-73f0-a036-dc37d82fb35d
+bumblebee concept 01a1f388-1d2e-7561-ada9-c391e49f25fa
+songbird concept 01a1f388-9de5-72c5-a2c6-51861308d977
+koi concept 01a1f388-ae58-75ae-8b35-ddacec0b742b
+heron concept 01a1f388-bd6c-729f-b763-18111333f8e4
+badger concept 01a1f388-db88-75c2-a6bf-ca464751dbb7
+kingfisher concept 01a1f388-e75a-74e8-9485-069eded25bfe
+butterfly concept 01a1f388-f584-73f1-83c7-182e27413772
+swallowtail concept 01a1f389-0321-72e8-924f-3adc8e4c2236
+fawn concept 01a1f389-1095-74bd-a23d-3d053f95b13d
+fox image-to-3d 01a1f38b-7c68-70c0-ab0a-3c83a7adec5c
+hedgehog image-to-3d 01a1f38b-814f-7363-b997-6ac96002e21e
+squirrel image-to-3d 01a1f38b-85e0-73b4-9bf1-18ea6f8d34fb
+otter image-to-3d 01a1f38b-8b41-7058-b4c7-b8608ae5310a
+owl image-to-3d 01a1f38b-904a-705f-b21c-570993cca6c1
+magpie image-to-3d 01a1f38b-9494-71f5-9ee8-8ac54859196e
+frog image-to-3d 01a1f38b-97e2-7468-ba56-5ad73e421b65
+bumblebee image-to-3d 01a1f38b-9db7-77a8-b434-d20da872e572
+songbird image-to-3d 01a1f38b-eac2-74bd-ab38-918c34f7d966
+koi image-to-3d 01a1f38b-f112-76fb-a7dd-e32916382240
+heron image-to-3d 01a1f38b-fb31-7031-b97a-641ec5aae8df
+badger image-to-3d 01a1f38c-00c0-7121-b861-68d053bd4a6a
+kingfisher image-to-3d 01a1f38c-062e-71da-bdd2-eb410d882d01
+butterfly image-to-3d 01a1f38c-168d-76c7-92a0-4df7736284a6
+swallowtail image-to-3d 01a1f38c-2059-72be-abab-984a15eb7a82
+fawn image-to-3d 01a1f38c-2650-73fe-be4e-474dd1a94765
 bloombot rig (G.1) 01a1e779-c5f4-7703-9e9d-27fb8eecfa24
 ```

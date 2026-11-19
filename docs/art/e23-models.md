@@ -157,14 +157,25 @@ never cute-ified to plush. Each is split into parts (head, body, tail, wings, le
 | heron | Image | Animal 3k | Rare visitor |
 | badger | Image | Animal 3k | Rare visitor |
 | kingfisher | Image | Small animal 1.2k | Rare visitor |
+| butterfly | Image | Small animal 600 | Visitor: passes by, lands on bloombot (#374); added by the owner on 19 Nov |
+| swallowtail | Image | Small animal 600 | Visitor; added by the owner on 19 Nov |
+| fawn | Image | Animal 2.5k | Visitor; added by the owner on 19 Nov |
 
-The companion butterfly stays procedural like every other butterfly.
+The wild butterflies over the flowers stay procedural; the butterfly and swallowtail visitors that come to bloombot use these models.
 
 **Every animal is rigged in Blender**, not by Meshy (Meshy's auto-rig is for bipeds). Each gets a small armature
 over its split parts and four clips, as #468 asks: `idle`; `follow` (its own gait: trot, waddle, hop, swim or fly,
 for travelling with bloombot); `sit` (sit, curl or roost, beside bloombot or in its lap); and `climb` (onto
 bloombot's head, shoulders or lap, ending in a perch). The koi and the bumblebee `climb` by swimming or flying to
 the spot. Keep every Blender run short and time-limited.
+
+**Done (19 Nov):** `assets/tools/rig_animals.py` rigs all 16 in one short Blender run (no credits). Each animal has a body
+plan: four-legged (fox, hedgehog, squirrel, otter, badger, fawn), frog, bird (owl, magpie, songbird, kingfisher,
+heron), winged insect (bumblebee, butterfly, swallowtail) or fish (koi). From the plan it places 4 to 7 bones, weights
+the mesh by distance to each bone, and keys the four clips at 24 fps. `idle`, `follow` and `sit` loop. `climb` plays once:
+a crouch, a spring and a landing, ending in the `sit` pose, while the game moves the animal to the perch. Its sit tips
+the body just enough to keep the feet on the ground, and a roosting bird tucks its legs up. Run it again after a model
+changes: it strips the old rig first. `tests/e23-models.test.ts` checks every file has a skeleton and the four clips.
 
 ### Bloombot's clips (#468, E23.2)
 From bloombot's existing Meshy rig with `meshy_animate`, then refitted to the big head and toddler proportions by the
@@ -197,15 +208,15 @@ Prices are from `meshy-assets.md`'s routes as of 2026-10-12 (check https://docs.
 | B1: power and water | battery, wind-turbine, large-solar-array, pump, desalination-plant, sprinkler, feed-tank | 7 | 114 |
 | B2: farm | bio-digester, beehive, mushroom-log, bird-box, bat-box, hedgehog-house, greenhouse | 7 | 117 |
 | B3: crafting and automation | research-station, assembler, mulcher, hopper-composter, auto-feeder, seed-drill, forecast-board | 7 | 111 |
-| B4: animals | 13 animals | 13 | 234 |
+| B4: animals | 16 animals (the owner added butterfly, swallowtail and fawn on 19 Nov) | 16 | 288 |
 | B5: Keepers on benches | 10 Keepers × 2 clips × 3 | 20 clips | 60 |
 | B6: crops | crop-seedling and 15 crops | 16 | 240 |
-| **Total** | | **53 models, 25 clips** | **939** |
+| **Total** | | **56 models, 25 clips** | **993** |
 
 Crops first appear in Milestone A, so until B6 is approved the planters have no crop model. The owner may want B6
 folded into A (303 credits for A then).
 
-Batch A and B6 are done (303 credits), plus a lavender redo the owner approved on 19 Nov (15 credits). B1 is done (approved 19 Nov): 124 credits spent against 114 planned, because the large solar array failed twice on the text route before the image route worked; the owner gave standing permission for regenerations. B2 is done (approved 19 Nov): 137 credits spent against 117 planned (the bird and bat boxes each missed twice on the text route before the image route).
+Batch A and B6 are done (303 credits), plus a lavender redo the owner approved on 19 Nov (15 credits). B1 is done (approved 19 Nov): 124 credits spent against 114 planned, because the large solar array failed twice on the text route before the image route worked; the owner gave standing permission for regenerations. B2 is done (approved 19 Nov): 137 credits spent against 117 planned (the bird and bat boxes each missed twice on the text route before the image route). B4 is done (approved 19 Nov, "both lists combined": the doc's 13 and the wildlife visitors of #544, 16 animals): 288 credits, as planned, with no redos.
 
 ## Getting each model into the game
 
@@ -250,6 +261,23 @@ Batch A and the crops (B6), approved by the owner on 18 Nov 2026: 303 credits. M
 | **Fences and trellis** (#466, hand-built, no credits) | | | |
 | fence-<style>-run, -post, -gate | ≤ 800 | ≤ 200 | Built by `assets/tools/prop_models_fences.py` (`build_props.py`): five styles of salvaged materials (picket, willow hurdle, pipe rail, dry-stone wall, clipped hedge). A run spans one tile edge (x −0.5…0.5), a post sits on a tile corner, a gate's part `gate` swings about Z on its hinge (its origin). The hedge's part `leaves` is the one the wind sways. Decoration only. |
 | trellis | ≤ 800 | ≤ 200 | Two posts and a diamond lattice, 0.8 × 1.5 m, on a planter or farmland tile |
+| **B4** (19 Nov), in `assets/raw/models/visitors/<id>.glb` | | | Image route (concept on the November reference, then meshy-t2.5 smart topology). Real size, pivot at the feet, facing +z; the butterfly is laid flat. Rigged with `idle`, `follow`, `sit` and `climb` (see below). |
+| fox | 2,939 / 3,000 | 719 | |
+| hedgehog | 1,960 / 2,000 | 480 | |
+| squirrel | 1,960 / 2,000 | 480 | |
+| otter | 2,940 / 3,000 | 720 | |
+| owl | 2,450 / 2,500 | 599 | |
+| magpie | 1,960 / 2,000 | 480 | |
+| frog | 980 / 1,000 | 240 | |
+| bumblebee | 784 / 800 | 192 | |
+| songbird | 1,470 / 1,500 | 359 | |
+| koi | 980 / 1,000 | 240 | |
+| heron | 2,940 / 3,000 | 720 | |
+| badger | 2,939 / 3,000 | 719 | |
+| kingfisher | 1,176 / 1,200 | 288 | |
+| butterfly | 481 / 600 | 147 | |
+| swallowtail | 584 / 600 | 147 | |
+| fawn | 2,449 / 2,500 | 599 | |
 
 Every model is finished by `assets/tools/meshy_finish.py` (Blender 5.0): real scale, pivot at the base centre,
 textures 512 (1024 for the charger and the big B1 machines), LOD1 by Decimate (a quarter, never over 1,000), a preview

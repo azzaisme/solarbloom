@@ -3,7 +3,7 @@
 // game's ModelLibrary, sets them out beside bloombot in the park (machines, then each crop ripe and growing),
 // plays each new bloombot clip, and saves screenshots to docs/review/e23-models-*.png. Look at them: this proves
 // the files load and draw in the engine. Placing them for real is each system's job (E23.3, E23.5, E23.2.3).
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { preview } from 'vite';
 
@@ -14,6 +14,11 @@ mkdirSync(dir, { recursive: true });
 const MACHINES = ['charger', 'compost-bin', 'watering-can'];
 const B1 = ['battery', 'wind-turbine', 'large-solar-array', 'pump', 'desalination-plant', 'sprinkler', 'feed-tank'];
 const CROPS = ['seedling', 'radish', 'lettuce', 'potato', 'beans', 'tomato', 'sweetcorn', 'pumpkin', 'sunflower', 'watercress', 'rice', 'lavender', 'mint', 'moonflower', 'flowers', 'sea-kale'].map((c) => `crop-${c}`);
+const B2 = ['bio-digester', 'greenhouse', 'beehive', 'mushroom-log', 'hedgehog-house', 'bird-box', 'bat-box'];
+const STYLES = ['picket', 'willow', 'pipe', 'stone', 'hedge'];
+const FENCES = [...STYLES.flatMap((s) => ['run', 'post', 'gate'].map((p) => `fence-${s}-${p}`)), 'trellis'];
+// B4: the animals live in assets/raw/models/visitors/ (the wildlife visitors load them, #544); fed in by hand here
+const ANIMALS = ['fox', 'hedgehog', 'squirrel', 'otter', 'owl', 'magpie', 'frog', 'bumblebee', 'songbird', 'koi', 'heron', 'badger', 'kingfisher', 'butterfly', 'swallowtail', 'fawn'];
 const CLIPS = ['meditate', 'sit-down', 'sit', 'stand-up', 'doze'];
 const server = await preview({ preview: { port: 4251, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -32,7 +37,7 @@ try {
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
   await page.waitForFunction(() => window.solarbloom.models?.ready);
 
-  const loaded = await page.evaluate((names) => names.map((n) => [n, window.solarbloom.models.has(n)]), [...MACHINES, ...B1, ...CROPS]);
+  const loaded = await page.evaluate((names) => names.map((n) => [n, window.solarbloom.models.has(n)]), [...MACHINES, ...B1, ...B2, ...FENCES, ...CROPS]);
   for (const [n, ok] of loaded) check(ok, `model ${n} loaded in the game`);
 
   // Bloombot by the fountain, the park restored round it, the camera close (near zoom, the default angle).
@@ -68,13 +73,23 @@ try {
       holder.setEulerAngles(0, 0, 0);
       rows.forEach((row, ri) => {
         row.items.forEach((it, i) => {
-          const e = g.models.instantiate(it.name);
+          const e = it.animal ? g.__animals[it.name]?.resource.instantiateRenderEntity() : g.models.instantiate(it.name);
           if (!e) return;
           const across = (i - (row.items.length - 1) / 2) * row.gap;
           const away = row.away;
           e.setLocalPosition(ax * across + bx * away, 0, az * across + bz * away);
           e.setLocalEulerAngles(0, faceYaw, 0);
+          if (it.clip) {
+            const clip = g.__animals[it.name].resource.animations.find((c) => (c.resource?.name ?? c.name) === it.clip);
+            e.addComponent('anim', { activate: true });
+            e.anim.assignAnimation(it.clip, clip.resource);
+          }
+          if (it.at !== undefined) e.setLocalPosition(ax * it.at + bx * row.away, 0, az * it.at + bz * row.away);
           if (it.scale) e.setLocalScale(it.scale, it.scale, it.scale);
+          if (it.open) {
+            const gate = e.findByName('gate');
+            if (gate) gate.setLocalEulerAngles(0, it.open, 0);
+          }
           if (it.hideFruit) {
             const fruit = e.findByName('fruit');
             if (fruit) fruit.enabled = false;
@@ -101,6 +116,68 @@ try {
   await page.screenshot({ path: `${dir}/e23-models-power-water-big.png` });
   await page.evaluate(() => window.solarbloom.camera.zoomTo(window.solarbloom.camera.minZoom));
   await page.waitForTimeout(2500);
+
+  // 1d. batch B2 (farm): the small ones close, then the bio-digester and the greenhouse pulled back
+  await layout([{ away: 1.4, gap: 1.0, items: ['beehive', 'mushroom-log', 'hedgehog-house', 'bird-box', 'bat-box'].map((name) => ({ name })) }]);
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `${dir}/e23-models-farm.png` });
+  await page.evaluate(() => window.solarbloom.camera.zoomTo(1.2));
+  await page.waitForTimeout(2500);
+  await layout([{ away: 3.0, gap: 3.2, items: ['bio-digester', 'greenhouse'].map((name) => ({ name })) }]);
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `${dir}/e23-models-farm-big.png` });
+
+  // 1e. the fences (#466): each style a short run along tile edges (post, run, gate opened 70°, run, post), the
+  // trellis beside them, by day and by night (the clock pinned to noon, then to midnight)
+  const fenceRows = STYLES.map((st, r) => ({
+    away: 1.2 + r * 1.25,
+    gap: 1,
+    items: [
+      { name: `fence-${st}-post`, at: -1.5 }, { name: `fence-${st}-run`, at: -1 }, { name: `fence-${st}-post`, at: -0.5 },
+      { name: `fence-${st}-gate`, at: 0, open: r % 2 ? 0 : 70 }, { name: `fence-${st}-post`, at: 0.5 }, { name: `fence-${st}-run`, at: 1 },
+      { name: `fence-${st}-post`, at: 1.5 }, ...(r === 2 ? [{ name: 'trellis', at: 2.6 }] : []),
+    ],
+  }));
+  await layout(fenceRows);
+  for (const [when, hour] of [['day', 12], ['night', 0]]) {
+    await page.evaluate((hour) => {
+      const c = window.solarbloom.sim.clock;
+      c.now = () => new Date(2026, 10, 19, hour, 0);
+      c.real = true;
+    }, hour);
+    await page.waitForTimeout(3000);
+    await page.screenshot({ path: `${dir}/e23-models-fences-${when}.png` });
+  }
+  await page.evaluate(() => (window.solarbloom.sim.clock.real = false));
+  const gateParts = await page.evaluate((st) => st.map((s) => !!window.solarbloom.models.instantiate(`fence-${s}-gate`)?.findByName('gate')), STYLES);
+  check(gateParts.every(Boolean), `every fence gate has its swinging part (${gateParts.join(', ')})`);
+
+  // 1f. batch B4: the animals, fed in from assets/raw/models/visitors/ (16 GLBs, as #544 loads them)
+  const files = Object.fromEntries(ANIMALS.map((n) => [n, readFileSync(`assets/raw/models/visitors/${n}.glb`).toString('base64')]));
+  const got = await page.evaluate(async (files) => {
+    const g = window.solarbloom;
+    g.__animals = {};
+    await Promise.all(Object.entries(files).map(([n, b64]) => new Promise((done) => {
+      const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bin], { type: 'model/gltf-binary' }));
+      g.app.assets.loadFromUrlAndFilename(url, `${n}.glb`, 'container', (err, asset) => {
+        if (!err && asset) g.__animals[n] = asset;
+        done();
+      });
+    })));
+    return Object.keys(g.__animals);
+  }, files);
+  for (const n of ANIMALS) check(got.includes(n), `animal ${n} loads in the game`);
+  const clipNames = await page.evaluate(() => Object.entries(window.solarbloom.__animals).map(([n, a]) => [n, a.resource.animations.map((c) => c.resource?.name ?? c.name).sort().join(',')]));
+  for (const [n, c] of clipNames) check(c === 'climb,follow,idle,sit', `animal ${n} has its clips in the game (${c})`);
+  await page.evaluate(() => window.solarbloom.camera.zoomTo(window.solarbloom.camera.minZoom));
+  await page.waitForTimeout(2500);
+  for (const [k, set] of [ANIMALS.slice(0, 8), ANIMALS.slice(8)].entries()) {
+    // the first eight in their idle, the rest in their sit (each clip running in the engine)
+    await layout([{ away: 1.6, gap: 0.85, items: set.map((name) => ({ name, animal: true, clip: k ? 'sit' : 'idle' })) }]);
+    await page.waitForTimeout(2000);
+    await page.screenshot({ path: `${dir}/e23-models-animals-${k + 1}.png` });
+  }
 
   // 2. crops: ripe (back row) and growing (front row: fruit hidden, scaled down) in two sets of eight
   for (const [k, set] of [CROPS.slice(0, 8), CROPS.slice(8)].entries()) {

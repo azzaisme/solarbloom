@@ -99,6 +99,8 @@ export const E23_MODELS: E23Model[] = [
     [
       ['fox', 3000], ['hedgehog', 2000], ['squirrel', 2000], ['otter', 3000], ['owl', 2500], ['magpie', 2000], ['frog', 1000], ['bumblebee', 800],
       ['songbird', 1500], ['koi', 1000], ['heron', 3000], ['badger', 3000], ['kingfisher', 1200],
+      // the owner added these three on 19 Nov, so B4 covers every visitor of #544 as well
+      ['butterfly', 600], ['swallowtail', 600], ['fawn', 2500],
     ] as const
   ).map(([n, tris]): E23Model => ({ name: `animal-${n}`, group: 'companions', route: 'image', tris, batch: 'B4', what: `${n}, rigged with idle, follow, sit and climb` })),
 ];
