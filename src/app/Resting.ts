@@ -38,6 +38,8 @@ export class Resting {
 
   constructor(private h: RestHost) {
     h.bot.onSeatMove = () => this.stand();
+    // the sim may stand bloombot up by itself (its bench taken away, its charger gone): put the view back too
+    h.sim.bus.on('rest.stood', () => this.settle());
   }
 
   get active(): boolean {
@@ -79,20 +81,36 @@ export class Resting {
     const sx = Math.cos(facing);
     const sz = -Math.sin(facing);
     const friend = h.sim.rest.friends(b.x, b.z).find((id) => h.sim.keepers.visible(id));
-    const side = friend ? 0.2 : 0;
-    h.bot.seat = { x: cx + fx * 0.04 - sx * side, y: by, z: cz + fz * 0.04 - sz * side, facing };
+    const { out, along, friend: other } = REST.seat;
+    const side = friend ? along : 0;
+    h.bot.seat = { x: cx + fx * out - sx * side, y: by, z: cz + fz * out - sz * side, facing };
     h.bot.visuals.setPose('sit', REST.benchSeat);
     // a Keeper who is a friend sits beside (only one already out and about: never in fog)
-    if (friend && h.keepers) h.keepers.beside = { id: friend, x: cx + fx * 0.04 + sx * 0.24, y: by, z: cz + fz * 0.04 + sz * 0.24, facing };
+    if (friend && h.keepers) h.keepers.beside = { id: friend, x: cx + fx * out + sx * other, y: by, z: cz + fz * out + sz * other, facing, seat: REST.benchSeat };
     this.calm();
   }
 
-  /** E23.3.3: sits cross-legged by the charger in front and meditates while it charges. */
+  /**
+   * E23.3.3: sits cross-legged at the edge of the charger in front, facing it, and meditates while the pad charges
+   * (sim.chargers: it charges while bloombot is docked there and the grid has power).
+   */
   meditate(m: MachineData) {
     const h = this.h;
-    h.sim.rest.meditate(m);
-    const [x, y, z] = h.bot.world();
-    h.bot.seat = { x, y, z, facing: h.bot.pose.facing };
+    if (!h.sim.rest.meditate(m)) return;
+    const p = h.bot.pose;
+    const [, y] = h.bot.world();
+    // the pad's edge on bloombot's side: inside the pad's reach, so it is docked
+    const half = m.size / 2;
+    const cx = m.x + half;
+    const cz = m.z + half;
+    const d = Math.hypot(p.x - cx, p.z - cz) || 1;
+    const k = (half + REST.padGap) / d;
+    p.x = cx + (p.x - cx) * k;
+    p.z = cz + (p.z - cz) * k;
+    h.sim.bot = { roofId: p.roofId, x: p.x, z: p.z };
+    const facing = Math.atan2(cx - p.x, cz - p.z);
+    p.facing = facing;
+    h.bot.seat = { x: p.x, y, z: p.z, facing };
     h.bot.visuals.setPose('meditate');
     this.calm();
   }
@@ -105,10 +123,16 @@ export class Resting {
     h.sfx.swell(REST.musicSwell);
   }
 
+  /** Stands bloombot up (the sim's 'rest.stood' then puts the view back). */
   stand() {
+    if (this.active) this.h.sim.rest.stand();
+    else this.settle();
+  }
+
+  /** Back to standing in the world: the pose, the friend, the HUD, the music and the camera. */
+  private settle() {
     const h = this.h;
-    if (!this.active) return;
-    h.sim.rest.stand();
+    if (!h.bot.seat && !this.before) return;
     h.bot.seat = undefined;
     h.bot.visuals.setPose(undefined);
     if (h.keepers) h.keepers.beside = undefined;
@@ -144,7 +168,7 @@ export class Resting {
   /** Each frame: the calm view turns slowly while sitting. */
   update(dt: number) {
     if (!this.active || !this.before) return;
-    this.h.camera.orbit(dt * 2.5);
+    this.h.camera.orbit(dt * REST.orbitDegPerSecond);
   }
 
   /** The name of the Keeper sitting beside bloombot, if any (tests and the debug overlay). */

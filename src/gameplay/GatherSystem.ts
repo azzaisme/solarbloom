@@ -19,12 +19,13 @@ export class GatherSystem {
 
   /**
    * Biomass one gather of this tile gives (0: nothing to clip). E23.2.2: what a loaded pulse grew there gives more
-   * (a meadow ×1.5, a grove ×2: PULSE_LOAD's `biomass`).
+   * (a meadow x1.5, a grove x2: PULSE_LOAD's `biomass`). E23.7.2: windy days shake more loose.
    */
   yieldOf(t: TileData): number {
     if (t.ground !== 'restored' || t.bloom < GATHER.minBloom) return 0;
+    const bonus = (this.sim as unknown as { weather?: { effects?(): { gatherBonus?: number } } }).weather?.effects?.().gatherBonus ?? 1;
     const plain = GATHER.base + (t.bloom - GATHER.minBloom) * GATHER.perBloom;
-    return Math.round(plain * this.sim.restoration.plantDef(t).biomass);
+    return Math.round(plain * this.sim.restoration.plantDef(t).biomass * bonus);
   }
 
   /** Sim time a clipped tile can be gathered again (undefined: it isn't clipped). */

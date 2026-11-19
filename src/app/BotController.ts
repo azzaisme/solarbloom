@@ -5,6 +5,7 @@ import type { Sim } from '../gameplay/Sim';
 import { BOT, type BotPose, spawnPose, Walker } from '../gameplay/Walker';
 import { heightAt, levelY } from '../core/Height';
 import type { Action, Bindings } from './Bindings';
+import { RESEARCH } from '../data/research';
 import { CHARGE } from '../data/charge';
 
 /**
@@ -12,8 +13,8 @@ import { CHARGE } from '../data/charge';
  * does; this owns where bloombot is and when it gets there. Docs: docs/BLOOMBOT_EPIC.md.
  *
  * Moving: WASD / arrows or the left stick, relative to where the camera is looking; once the Hover upgrade is
- * bought, Shift or the right trigger hovers (bloombot's sprint: faster, a little off the ground). A click sets
- * a walk target: bloombot paths there and then runs the click's action (`arrive`).
+ * bought, Shift or the right trigger hovers (bloombot's sprint: faster, a little off the ground). The game can
+ * still set a walk target (`goTo`: a wake button, the map's travel): bloombot paths there and runs `arrive`.
  * The camera follows bloombot unless something else moved it (a drag, a fly-to, Home, the overview's travel);
  * it picks bloombot up again as soon as bloombot moves.
  */
@@ -57,6 +58,8 @@ export class BotController {
   onTurn?: (degrees: number) => void;
   /** a gamepad button was pressed (the game resolves it to an action for the context in effect) */
   onPad?: (button: number) => void;
+  /** Third person: aiming a build, bloombot faces the way the camera looks and strafes instead of turning */
+  strafe = false;
   /** E22.1: sprint switched on by the toggle (left stick click); it ends when bloombot stops */
   sprintLatched = false;
   /** a menu that wants pad buttons first (G.7 focus navigation); true when it used the press */
@@ -246,7 +249,9 @@ export class BotController {
     const p = this.pose;
     const w = this.walker;
     const wade = w.wading(p) ? BOT.wade : 1;
-    const top = (this.sprinting ? BOT.sprint : BOT.walk * (flat ? CHARGE.lowPowerWalk : 1)) * wade;
+    // E23.6.2: "Longer stride" research makes sprinting a little faster
+    const stride = 1 + RESEARCH.sprintSpeedPerLevel * (this.sim.research?.level('sprint') ?? 0);
+    const top = (this.sprinting ? BOT.sprint * stride : BOT.walk * (flat ? CHARGE.lowPowerWalk : 1)) * wade;
     let dirX = 0;
     let dirZ = 0;
     let want = 0;
@@ -282,9 +287,16 @@ export class BotController {
       }
     }
     let moved = 0;
+    const yr = (this.camera.yaw * Math.PI) / 180;
+    const strafing = this.strafe && !this.walk && !frozen;
+    if (strafing && want <= 0) {
+      // standing while aiming: turn with the camera
+      const diff = Math.atan2(Math.sin(Math.atan2(-Math.sin(yr), -Math.cos(yr)) - p.facing), Math.cos(Math.atan2(-Math.sin(yr), -Math.cos(yr)) - p.facing));
+      p.facing = Math.atan2(Math.sin(p.facing + diff * Math.min(1, dt * BOT.turn)), Math.cos(p.facing + diff * Math.min(1, dt * BOT.turn)));
+    }
     if (want > 0) {
       moved = w.move(p, dirX * want * dt, dirZ * want * dt);
-      const goal = Math.atan2(dirX, dirZ);
+      const goal = strafing ? Math.atan2(-Math.sin(yr), -Math.cos(yr)) : Math.atan2(dirX, dirZ);
       let diff = goal - p.facing;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       p.facing += diff * Math.min(1, dt * BOT.turn);

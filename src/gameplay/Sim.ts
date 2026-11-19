@@ -11,6 +11,8 @@ import { BuildSystem } from './BuildSystem';
 import { CanalNetwork } from './CanalNetwork';
 import { RelaySystem } from './RelaySystem';
 import { PowerGrid } from './PowerGrid';
+import { ChargerSystem } from './ChargerSystem';
+import { Lights } from './Lights';
 import { RooftopClusters } from './RooftopClusters';
 import { DistrictSystem } from './DistrictSystem';
 import { DroneSystem } from './DroneSystem';
@@ -36,6 +38,8 @@ import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
 import { MainlandSystem } from './MainlandSystem';
 import { LandmarkSystem } from './LandmarkSystem';
+import { Crafting } from './Crafting';
+import { Research } from './Research';
 import { ChargeSystem } from './Charge';
 import { PulseLoad } from './PulseLoad';
 import { RestSystem } from './Rest';
@@ -44,6 +48,7 @@ import { BuriedSystem } from './Buried';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
+import { FarmSystem } from './FarmSystem';
 import { Weather } from './Weather';
 
 /**
@@ -73,6 +78,10 @@ export class Sim {
   readonly relays: RelaySystem;
   /** E23.3: the power grid (networks of poles, sources, batteries and consumers). */
   readonly power: PowerGrid;
+  /** E23.3.3: chargers (bloombot recharges on a powered pad). */
+  readonly chargers: ChargerSystem;
+  /** E23.3.5: night lights (decorations on the grid, solar or glow-pods). */
+  readonly lights: Lights;
   readonly clusters: RooftopClusters;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
   readonly ecosystem: EcosystemSystem;
@@ -96,6 +105,10 @@ export class Sim {
   readonly journal: JournalSystem;
   /** E21.9: waking landmarks and their lasting rewards (old-city rules). */
   readonly landmarks: LandmarkSystem;
+  /** E23.6.1: the crafting table (components; machine and decoration recipes). */
+  readonly crafting: Crafting;
+  /** E23.6.2: the research station (projects, and the upgrades they open). */
+  readonly research: Research;
   /** E23.2.1: bloombot's charge, the only meter (old-city rules). */
   readonly charge: ChargeSystem;
   /** E23.2.2: what the pulse is loaded with, and its reveal ripple (old-city rules). */
@@ -114,6 +127,8 @@ export class Sim {
   readonly weather: Weather;
   /** E23.5.1: gathering biomass from restored ground (old-city rules). */
   readonly gather: GatherSystem;
+  /** E23.5.2: planters and crops (old-city rules). */
+  readonly farm: FarmSystem;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -181,9 +196,12 @@ export class Sim {
     this.gates = new GateSystem(this);
     this.fountain = new FountainSystem(this);
     this.keepers = new KeeperSystem(this);
+    this.crafting = new Crafting(this);
+    this.research = new Research(this);
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
     this.gather = new GatherSystem(this);
+    this.farm = new FarmSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
@@ -191,6 +209,8 @@ export class Sim {
     this.canals = new CanalNetwork(this);
     this.relays = new RelaySystem(this);
     this.power = new PowerGrid(this);
+    this.chargers = new ChargerSystem(this);
+    this.lights = new Lights(this);
     this.clusters = new RooftopClusters(this);
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
@@ -297,7 +317,9 @@ export class Sim {
     const s = this.state;
     s.time += dt;
     s.buffs = s.buffs.filter((b) => b.until > s.time);
+    this.lights.tick(dt);
     this.power.tick(dt);
+    this.chargers.tick(dt);
     this.production.tick(dt);
     this.restoration.tick(dt);
     this.transitions.tick();
@@ -308,9 +330,12 @@ export class Sim {
     this.salvage.tick(dt);
     this.rest.tick(dt);
     this.wildlife.tick();
+    this.crafting.tick(dt);
+    this.research.tick(dt);
     this.charge.tick(dt);
     this.clock.tick();
     this.weather.tick();
+    this.farm.tick(dt);
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();

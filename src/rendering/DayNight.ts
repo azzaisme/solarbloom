@@ -1,10 +1,11 @@
 import * as pc from 'playcanvas';
 import { LOOK } from '../data/look';
+import { POWER } from '../data/power';
 import { DAY_LIGHT } from '../data/sky';
 import { DAY } from '../data/time';
 import { daylightAt, sunHeightAt } from '../gameplay/Clock';
 import { tintClouds } from './Clouds';
-import { color } from './Materials';
+import { color, PALETTE } from './Materials';
 import type { SceneBuilder } from './SceneBuilder';
 import type { Sky } from './Sky';
 
@@ -43,12 +44,34 @@ export class DayNight {
   private fd = new pc.Vec3();
   private tmp = new pc.Color();
   private fillCol = new pc.Color();
+  private viewLight = color(PALETTE.signal.power.viewLight);
   /** the unlit clouds' and fog sheets' tint now (warm at dusk, dim blue at night) */
   readonly cloudTint = new pc.Color(1, 1, 1);
   /** the rim light's share now (LookController multiplies by it) */
   rim = 1;
   /** daylight now, 0 … 1 (for anything that wants to glow at night) */
   light = 1;
+  /** E23.3.4: the Power view's dim, 0 … 1: the scene lights and the exposure ease down to POWER.view's `light` and
+   * `exposure` shares. Glows that should stay bright multiply their emissive by `boost` to make up for the exposure. */
+  dim = 0;
+
+  /** The share of their strength the scene's lights keep under the Power view's dim (lamps follow it). */
+  get lightShare(): number {
+    return this.lightKeep;
+  }
+
+  private get lightKeep(): number {
+    return 1 - this.dim * (1 - POWER.view.light);
+  }
+
+  private get exposureKeep(): number {
+    return 1 - this.dim * (1 - POWER.view.exposure);
+  }
+
+  /** What a glow multiplies its emissive by so the Power view's dim leaves it as bright as before. */
+  get boost(): number {
+    return 1 / this.exposureKeep;
+  }
 
   constructor(
     private app: pc.AppBase,
@@ -89,29 +112,36 @@ export class DayNight {
       const e = (elDeg * Math.PI) / 180;
       return out.set(Math.sin(azR) * Math.cos(e), -Math.sin(e), Math.cos(azR) * Math.cos(e));
     };
-    const moonW = 1 - smooth(day * 1.6);
+    const moonW = 1 - smooth(day * L.moonBlend);
     toDir(sunEl, sunAz, this.dir);
     toDir(moonEl, moonAz, this.fd);
     this.dir.lerp(this.dir, this.fd, moonW).normalize();
     this.scene.sun.setRotation(this.q.setFromDirections(pc.Vec3.DOWN, this.dir));
     // colour: warm when low, LOOK's golden hour in the middle of the day, moonlight at night
     const sunLight = this.scene.sun.light!;
-    const warm = 1 - smooth(h / 0.45);
+    const warm = 1 - smooth(h / L.warmBelow);
     this.tmp.lerp(this.base.sun, this.base.low, warm);
     this.tmp.lerp(this.base.moon, this.tmp, day);
+    // the Power view: the light goes cool and grey as it dims, so the world reads muted and the yellow grid pops
+    if (this.dim > 0) this.tmp.lerp(this.tmp, this.viewLight, this.dim);
     sunLight.color = this.tmp.clone();
     // under cloud the sun all but goes: soft, shadowless light from the sky instead
     const sunI = LOOK.sun.intensity * lerp(L.moonShare, 1, day) * (1 - oc * 0.88);
-    sunLight.intensity = sunI + (m.flash ?? 0) * LOOK.sun.intensity * 0.8;
+    const keep = this.lightKeep;
+    sunLight.intensity = (sunI + (m.flash ?? 0) * LOOK.sun.intensity * 0.8) * keep;
     // the fill keeps its own side, opposite the key light
     const fill = this.scene.fill.light!;
     this.fd.set(-this.dir.x, -0.75, -this.dir.z).normalize();
     this.scene.fill.setRotation(this.q.setFromDirections(pc.Vec3.DOWN, this.fd));
-    fill.color = this.fillCol.lerp(this.base.fillNight, this.base.fill, day).clone();
-    fill.intensity = LOOK.fill.intensity * lerp(L.fillNight, 1, day) * (1 + oc * 0.6);
-    this.app.scene.skyboxIntensity = LOOK.env.intensity * lerp(L.envNight, 1, day) * (1 - oc * 0.1);
+    this.fillCol.lerp(this.base.fillNight, this.base.fill, day);
+    if (this.dim > 0) this.fillCol.lerp(this.fillCol, this.viewLight, this.dim);
+    fill.color = this.fillCol.clone();
+    fill.intensity = LOOK.fill.intensity * lerp(L.fillNight, 1, day) * (1 + oc * 0.6) * keep;
+    this.scene.setEnvNight(1 - day);
+    this.app.scene.skyboxIntensity = LOOK.env.intensity * lerp(L.envNight, 1, day) * (1 - oc * 0.1) * keep;
     this.rim = lerp(L.rimNight, 1, day) * (1 - oc * 0.5);
-    this.app.scene.exposure = LOOK.exposure * lerp(L.exposureNight, 1, day) * (1 - oc * 0.22) * (1 + (m.flash ?? 0) * 0.5);
+    // E23.7.5: night keeps the day's exposure: it is a blue moonlit look made of light and colour, not a darker picture
+    this.app.scene.exposure = LOOK.exposure * (1 - oc * 0.22) * (1 + (m.flash ?? 0) * 0.5) * this.exposureKeep;
     // the sky: night, the warm band at dawn and dusk, and the weather's cloud
     this.sky.night = 1 - day;
     const edge = Math.min(Math.abs(f - DAY.dayShare), f, 1 - f); // distance to the nearer horizon
@@ -122,6 +152,7 @@ export class DayNight {
     const d = this.sky.dusk;
     const grey = 1 - oc * 0.25;
     this.cloudTint.set(lerp(1, L.cloudNight[0], n) * grey, lerp(lerp(1, 0.86, d), L.cloudNight[1], n) * grey, lerp(lerp(1, 0.8, d), L.cloudNight[2], n) * grey);
+    this.cloudTint.mulScalar(keep); // the clouds and fog sheets are unlit: they take the lights' dim by hand
     tintClouds(this.cloudTint.r, this.cloudTint.g, this.cloudTint.b);
   }
 }
