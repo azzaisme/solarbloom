@@ -190,6 +190,15 @@ try {
       return { zoom: g.camera.zoom, clouds: g.scene.world.findByName('clouds')?.enabled ?? false };
     });
   };
+  // The grid is switched off on purpose here (water runs down with no power), so the park's pump is really dark and
+  // the guide card says so: right, but not what these two shots are about. It is hidden for them, then shown again.
+  const card = (show) =>
+    run((show) => {
+      const el = document.querySelector('#objTitle')?.parentElement?.closest('[id]');
+      if (el) el.style.visibility = show ? '' : 'hidden';
+      return !!el;
+    }, show);
+  check(await card(false), 'the guide card (saying the park pump is dark, as it is with the grid off) is hidden for the gravity shots');
   // the tank on the terrace and its pipe heading for the stairs, from beside it
   const v4 = await follow(26.5, -22.6, 0);
   check(!v4.clouds, `the tank shot is close, with no clouds in it (${JSON.stringify(v4)})`);
@@ -198,6 +207,7 @@ try {
   const v5 = await follow(27.5, -16.2, 0);
   check(!v5.clouds, `the stairs shot is close, with no clouds in it (${JSON.stringify(v5)})`);
   await shot('5-gravity-stairs');
+  await card(true);
 } catch (e) {
   failures.push(String(e));
   console.log('✗', e);

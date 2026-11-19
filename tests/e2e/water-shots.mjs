@@ -9,7 +9,7 @@
 //   6 desal: a desalination plant on the Landing's shore with its panels and a pipe inland
 //   7 overlay: the Water view in build mode (if this build has it)
 // Prints ✓/✗ checks and exits non-zero if any fails. Requires Playwright.
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { preview } from 'vite';
 
@@ -17,7 +17,9 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const out = process.argv[2] ?? 'docs/review/water';
 mkdirSync(out, { recursive: true });
-const server = await preview({ preview: { port: 4241, strictPort: true }, logLevel: 'silent' });
+// other sessions run their own e2e servers at the same time: take the first free port from 4241 up
+const server = await preview({ preview: { port: 4241, strictPort: false }, logLevel: 'silent' });
+const base = server.resolvedUrls.local[0].replace(/\/$/, '');
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
 const check = (ok, what) => {
@@ -26,10 +28,24 @@ const check = (ok, what) => {
 };
 
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+// the repo's virtual gamepad (tests/e2e/gamepad-driver.js), so the Water view is tried on the pad too
+const driver = readFileSync(new URL('./gamepad-driver.js', import.meta.url), 'utf8').replace(/^export /gm, '');
+await page.addInitScript(`${driver}\ninstallVirtualPad(); window.padDriver = padDriver;`);
+/** Press a virtual pad button for two drawn frames, release it for two. */
+const press = (b) =>
+  page.evaluate(async (b) => {
+    const frames = (n) => new Promise((r) => (function f(k) { k ? requestAnimationFrame(() => f(k - 1)) : r(); })(n));
+    window.__pad.buttons[b].pressed = true;
+    window.__pad.buttons[b].value = 1;
+    await frames(2);
+    window.__pad.buttons[b].pressed = false;
+    window.__pad.buttons[b].value = 0;
+    await frames(2);
+  }, b);
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.setDefaultTimeout(240000);
-await page.goto('http://localhost:4241/?slot=1&ui=oldcity');
+await page.goto(`${base}/?slot=1&ui=oldcity`);
 await page.evaluate(() => localStorage.clear());
 await page.reload();
 await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 240000 });
@@ -41,10 +57,29 @@ async function settle(ms = 2500) {
   await page.waitForTimeout(ms);
 }
 const shot = async (name) => {
+  // the build cursor's tooltip would cover what the shot is of
+  await page.addStyleTag({ content: '#tip { visibility: hidden !important; }' });
   await page.screenshot({ path: `${out}/${name}.png` });
   console.log(`  ${out}/${name}.png`);
 };
 const run = (fn, arg) => page.evaluate(fn, arg);
+/** Frames a spot from above (bloombot stood beside it: the explore camera follows it), then waits for the chunks. */
+const frame = async (x, z, zoom, yaw = 0, ms = 6000, pitch = 0) => {
+  await run(({ x, z, zoom, yaw, pitch }) => {
+    const g = window.solarbloom;
+    g.camera.bounds = { minX: -1e4, maxX: 1e4, minZ: -1e4, maxZ: 1e4 };
+    g.camera.minZoom = 0.12;
+    if (g.bot) {
+      g.bot.teleport('g', x + 0.5, z + 2.5);
+      g.bot.following = false;
+    }
+    g.camera.glide(x, 0, z, zoom);
+    g.camera.turnTo(yaw);
+    if (pitch) g.camera.pitchBy(pitch); // positive looks down more (within the camera's 20°–60°)
+    for (let i = 0; i < 300; i++) g.camera.update(0.05);
+  }, { x, z, zoom, yaw, pitch });
+  await settle(ms);
+};
 
 try {
   // The park restored and lush, its pond restored; Cistern Basin's Keeper awake (the water pieces unlock), materials.
@@ -53,8 +88,10 @@ try {
     const s = g.sim;
     s.areas.clear('park', true);
     s.state.salvage.tier = 2;
-    s.state.salvage.keepers.sluice = { step: 'request1' };
-    s.state.salvage.pack = { scrap: 80, copper: 60, clay: 80, glass: 40 };
+    s.state.salvage.keepers.sluice = { step: 'request1' }; // Cistern Basin: reservoirs, pumps, pipes, desalination
+    s.state.salvage.keepers.tally = { step: 'request1' }; // Old Market: solar panels (E23.6.1's crafting table)
+    // crafted parts (E23.6.1) for the recipes, and Pipes, one a tile
+    s.state.salvage.pack = { scrap: 80, copper: 20, clay: 80, pipe: 60, wire: 30, glassPane: 40 };
     for (let z = -2; z < 18; z++)
       for (let x = -2; x < 18; x++) {
         const t = s.grid.get('g', x, z);
@@ -69,7 +106,7 @@ try {
     g.bot.teleport('g', 5.5, 14.5);
     s.bot = { roofId: 'g', x: 5.5, z: 14.5 };
   });
-  await settle(4000);
+  await settle(9000);
 
   // 1: levels on the water
   const pond = await run(() => window.solarbloom.sim.water.bodyAt(window.solarbloom.sim.grid.get('g', 2, 11))?.id);
@@ -113,7 +150,9 @@ try {
   });
   check(tray.open && tray.reservoir && tray.pump && tray.pipe, `the build menu shows the water pieces (${JSON.stringify(tray)})`);
   await shot('3-build-menu');
-  await page.keyboard.press('KeyQ');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  if (await run(() => window.solarbloom.hud.trayOpen)) await run(() => window.solarbloom.hud.toggleTray(false));
 
   // 4: a pump on the pond's bank and a pipe line, first without power, then with a panel beside it
   const built = await run(() => {
@@ -155,6 +194,9 @@ try {
   const grav = await run(() => {
     const g = window.solarbloom;
     const s = g.sim;
+    // through Mast Row's barricade the way bloombot opens it (Pry), then its landmark woken
+    if (!s.state.salvage.abilities.includes('pry')) s.state.salvage.abilities.push('pry');
+    s.gates.open('g-mastRow');
     s.areas.clear('mastRow', true);
     for (let z = -26; z <= -16; z++)
       for (let x = 24; x <= 29; x++) {
@@ -171,11 +213,15 @@ try {
   });
   check(grav.r && grav.laid, `terrace reservoir built and pipe laid down the stairs (${JSON.stringify(grav)})`);
   await page.waitForFunction(() => window.solarbloom.sim.water.pipes.carries(27, -18), null, { timeout: 120000 });
-  await settle(4000);
+  // waking Mast Row's landmark plays its camera cinematic: wait for the camera to come back to bloombot
+  await page.waitForFunction(() => !window.solarbloom.cinematic, null, { timeout: 240000 });
+  await run(() => window.solarbloom.bot.teleport('g', 26.5, -22.6));
+  await settle(5000);
   check(await run(() => window.solarbloom.sim.water.isWatered(window.solarbloom.sim.grid.get('g', 28, -17))), 'the street below the terrace is fed by gravity');
   await shot('5-gravity-tank');
-  await run(() => window.solarbloom.bot.teleport('g', 28.5, -17.5));
-  await settle(3000);
+  // beside the pipe where it runs down the stairs (it sits 10 cm over each tread on small sticks)
+  await run(() => window.solarbloom.bot.teleport('g', 28.6, -19.2));
+  await settle(4000);
   await shot('5-gravity-stairs');
 
   // 6: a desalination plant on the Landing's shore
@@ -205,7 +251,7 @@ try {
     const m = s.build.place('desalination', 'g', x, z);
     const panels = [[2, 0], [2, 1], [-1, 0], [-1, 1], [2, -1]].map(([dx, dz]) => s.build.place('solar', 'g', x + dx, z + dz)).filter(Boolean).length;
     const laid = [1, 2, 3, 4, 5, 6].map((k) => s.water.pipes.lay('g', x, z - k));
-    g.bot.teleport('g', x + 2.5, z - 3.5);
+    g.bot.teleport('g', x + 1, z - 1.2);
     return { spot, built: !!m, panels, laid: laid.every(Boolean) };
   });
   check(desal.built && desal.panels >= 3 && desal.laid, `desalination plant on the shore with panels and a pipe (${JSON.stringify(desal)})`);
@@ -219,8 +265,29 @@ try {
   // 7: the Water view (build mode), when this build has it
   const hasView = await run(() => typeof window.solarbloom.toggleWaterView === 'function');
   if (hasView) {
-    await run(() => window.solarbloom.bot.teleport('g', 7.5, 13.5));
-    await settle(3000);
+    // the scene: the pump line from 4 now feeding a reservoir, a planter beside it (watered) and one far off (dry)
+    const scene = await run(() => {
+      const s = window.solarbloom.sim;
+      const put = (type, x, z, size) => {
+        if (s.grid.footprint('g', x, z, size).some((t) => !t || t.blocked || t.occupantId || t.feature === 'water' || s.water.pipes.has(t.x, t.z))) return null;
+        const m = { id: s.newId('m'), type, roofId: 'g', x, z, size, boostUntil: 0, timer: 0, charge: 0 };
+        s.state.machines.push(m);
+        for (const t of s.grid.footprint('g', x, z, size)) t.occupantId = m.id;
+        s.grid.indexMachine(m);
+        return m;
+      };
+      const first = (type, size, spots) => spots.map(([x, z]) => put(type, x, z, size)).find(Boolean) ?? null;
+      const tank = s.machinesOfType('reservoir').find((r) => r.x < 20 && r.z < 20) ?? first('reservoir', 2, [[10, 9], [12, 9], [9, 9]]);
+      const wet = first('planter', 1, [[8, 12], [9, 12], [7, 12], [8, 10]]);
+      const dry = first('planter', 1, [[13, 6], [12, 6], [13, 5], [12, 5], [11, 6]]);
+      for (let i = 0; i < 3; i++) {
+        s.power.tick(1);
+        s.water.tick(1);
+      }
+      return { tank: tank?.id, wet: wet?.id, dry: dry?.id, ringed: window.solarbloom.waterOverlay.constructor.dryPlanters(s).map((m) => m.id) };
+    });
+    check(!!scene.tank && !!scene.wet && !!scene.dry && scene.ringed.includes(scene.dry) && !scene.ringed.includes(scene.wet), `a reservoir on the pump line, a watered planter by it and a dry one far off (${JSON.stringify(scene)})`);
+    await frame(9.5, 8.5, 0.9, 0);
     await page.keyboard.press('KeyQ');
     await page.waitForTimeout(400);
     await page.click('#buildTray [data-tool="pipe"]');
@@ -228,7 +295,75 @@ try {
     await page.keyboard.press('KeyV');
     await settle(2500);
     check(await run(() => window.solarbloom.waterView), 'V turns the Water view on in build mode');
+    // drawn on the next frame (slow headless): wait for the overlay and the holograms, up to 15 s
+    await page.waitForFunction(() => window.solarbloom.waterOverlay.visible && window.solarbloom.machines.holos.water.parts.size > 0, null, { timeout: 15000 }).catch(() => {});
+    await settle(1000);
+    check(await run(() => window.solarbloom.waterOverlay.visible), 'the Water view is drawn');
+    // E23.4.5: the running pump and the line it fills are blue holograms, in a dimmed world
+    const holo = await run(() => {
+      const g = window.solarbloom;
+      const pump = g.sim.machinesOfType('pump')[0];
+      return { parts: g.machines.holos.water.parts.size, pump: g.machines.holos.water.sig.split(',').includes(pump.id), pipes: g.pipes.wetParts.filter((mi) => mi.material === g.machines.holoMat('water')).length, dim: g.dayNight.dim };
+    });
+    check(holo.pump && holo.parts > 0 && holo.pipes > 0 && holo.dim > 0.5, `the pump and its line are blue holograms, the world dimmed (${JSON.stringify(holo)})`);
     await shot('7-overlay');
+    // the build bar shows the Water view's slot, lit, with its key; the first-time line is saved with the game
+    const bar = await run(() => {
+      const el = document.querySelector('#buildbar .bslot.water');
+      return { slot: !!el, on: !!el?.classList.contains('on'), key: !!el?.querySelector('.key')?.innerHTML.trim(), label: el?.querySelector('.sl')?.textContent.trim(), saved: window.solarbloom.sim.state.salvage.seen?.includes('tip:waterView') };
+    });
+    check(bar.slot && bar.on && bar.key && bar.label === 'Water' && bar.saved, `the build bar's Water slot, lit, with its key; the first-time line saved (${JSON.stringify(bar)})`);
+    // the dry planter's red ring, closer
+    const dryAt = await run((id) => { const m = window.solarbloom.sim.machine(id); return [m.x, m.z]; }, scene.dry);
+    await frame(dryAt[0] + 0.5, dryAt[1] + 0.5, 1.4, 0, 4000, 40);
+    await shot('7-dry-planter');
+    await frame(9.5, 8.5, 0.9, 0, 3000, -40);
+    // one view at a time: the Power view (O) turns the Water view off, and its holograms with it
+    await page.keyboard.press('KeyO');
+    await settle(1500);
+    // the holograms swap on the next drawn frame (slow headless): wait for it, up to 10 s
+    await page.waitForFunction(() => window.solarbloom.machines.holos.water.parts.size === 0 && window.solarbloom.machines.holos.power.parts.size > 0, null, { timeout: 10000 }).catch(() => {});
+    const swap = await run(() => ({ water: window.solarbloom.waterView, parts: window.solarbloom.machines.holos.water.parts.size, power: window.solarbloom.machines.holos.power.parts.size }));
+    check(!swap.water && swap.parts === 0 && swap.power > 0, `the Power view takes over: no blue left (${JSON.stringify(swap)})`);
+    await page.keyboard.press('KeyV');
+    await settle(1500);
+    // the yellow goes on the next drawn frame (headless frames are slow): wait for it, up to 10 s
+    await page.waitForFunction(() => window.solarbloom.machines.holos.power.parts.size === 0, null, { timeout: 10000 }).catch(() => {});
+    const back = await run(() => ({ water: window.solarbloom.waterView, power: window.solarbloom.machines.holos.power.parts.size }));
+    check(back.water && back.power === 0, `V brings the Water view back and the yellow goes (${JSON.stringify(back)})`);
+    await press(14);
+    await page.waitForTimeout(500);
+    check(!(await run(() => window.solarbloom.waterView)), 'd-pad left turns it off (pad)');
+    await press(14);
+    await page.waitForTimeout(500);
+    check(await run(() => window.solarbloom.waterView), 'd-pad left turns it back on (pad)');
+    // Esc closes the build tray first, then puts the Pipe tool away (out of build mode)
+    for (let i = 0; i < 3 && (await run(() => window.solarbloom.hud.currentTool)) !== 'pulse'; i++) {
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(600);
+    }
+    check((await run(() => window.solarbloom.hud.currentTool)) === 'pulse', 'Esc leaves build mode');
+    // the view follows on the next drawn frame (headless frames are slow): wait for it, up to 10 s
+    const hidden = await page.waitForFunction(() => !window.solarbloom.waterOverlay.visible, null, { timeout: 10000 }).then(() => true, () => false);
+    check(hidden, 'out of build mode the Water view is hidden');
+    // the view over the terrace's gravity line and tank
+    await run(() => (window.solarbloom.bot.following = true));
+    await run(() => window.solarbloom.bot.teleport('g', 26.5, -22.6));
+    await settle(3000);
+    await run(() => window.solarbloom.selectTool('pipe'));
+    await settle(2500);
+    const tank = await page.waitForFunction(() => {
+      const g = window.solarbloom;
+      const r = g.sim.machinesOfType('reservoir').find((m) => m.z < 0); // the terrace's (Mast Row lies north)
+      return !!r && g.machines.holos.water.sig.split(',').includes(r.id);
+    }, null, { timeout: 10000 }).then(() => true, () => false);
+    check(tank, 'the terrace tank holding water is a blue hologram');
+    await shot('7-overlay-gravity');
+    // the plant on the shore, making water, in the same blue
+    if (desal.spot) {
+      await frame(desal.spot.x + 1, desal.spot.z - 0.5, 1.4, 0, 4000);
+      await shot('7-overlay-desal');
+    }
   }
 } catch (e) {
   failures.push(String(e));
