@@ -1,4 +1,3 @@
-import { big } from '../core/Big';
 import { GROUND } from '../core/GameState';
 import { PARK } from '../core/Areas';
 import { distToFootprint } from '../core/Grid';
@@ -16,8 +15,8 @@ export interface BotAt {
 
 /**
  * E21.1 (§1, §2): what bloombot carries and the city's shared store. Whole numbers; the backpack has a stack
- * limit per material (from the fountain tier and the Pack Frame), the store none. Biomass stays a resource,
- * but recipes may ask for it, so `canPay` and `pay` read it too. Old-city rules only: under classic rules
+ * limit per material (from the fountain tier and the Pack Frame), the store none. E23.5.1: biomass, food,
+ * compost and fertiliser are items here like any material. Old-city rules only: under classic rules
  * there is no salvage state and every call here is inert.
  */
 export class Inventory {
@@ -155,15 +154,11 @@ export class Inventory {
     return this.count(m) + (this.nearStore(at) ? this.stored(m) : 0);
   }
 
-  /** The first part of a cost that can't be paid here (a material id or 'biomass'), if any. */
-  shortfall(cost: MaterialCost, at: BotAt | undefined = this.sim.bot): MaterialId | 'biomass' | undefined {
+  /** The first part of a cost that can't be paid here, if any. */
+  shortfall(cost: MaterialCost, at: BotAt | undefined = this.sim.bot): MaterialId | undefined {
     const near = this.nearStore(at);
-    for (const [k, v] of Object.entries(cost) as [MaterialId | 'biomass', number][]) {
+    for (const [k, v] of Object.entries(cost) as [MaterialId, number][]) {
       if (!v) continue;
-      if (k === 'biomass') {
-        if (this.sim.econ.get('biomass').lt(v)) return 'biomass';
-        continue;
-      }
       if (this.count(k) + (near ? this.stored(k) : 0) < v) return k;
     }
     return undefined;
@@ -176,12 +171,8 @@ export class Inventory {
   /** Pays a cost: from the backpack first, then from the store (only near a way into it). All or nothing. */
   pay(cost: MaterialCost, at: BotAt | undefined = this.sim.bot): boolean {
     if (!this.canPay(cost, at)) return false;
-    for (const [k, v] of Object.entries(cost) as [MaterialId | 'biomass', number][]) {
+    for (const [k, v] of Object.entries(cost) as [MaterialId, number][]) {
       if (!v) continue;
-      if (k === 'biomass') {
-        this.sim.econ.spend({ biomass: big(v) });
-        continue;
-      }
       const fromPack = Math.min(v, this.count(k));
       if (fromPack) this.take(k, fromPack);
       const rest = v - fromPack;
@@ -193,23 +184,15 @@ export class Inventory {
     return true;
   }
 
-  /** Gives a cost back (removing a machine): to the backpack, anything over a stack to the store. Biomass too. */
+  /** Gives a cost back (removing a machine): to the backpack, anything over a stack to the store. */
   refund(cost: MaterialCost) {
-    for (const [k, v] of Object.entries(cost) as [MaterialId | 'biomass', number][]) {
-      if (!v) continue;
-      if (k === 'biomass') this.sim.econ.add('biomass', v);
-      else this.addToStore(k, this.add(k, v));
-    }
+    for (const [k, v] of Object.entries(cost) as [MaterialId, number][]) if (v) this.addToStore(k, this.add(k, v));
   }
 
   /** "Copper 12/20" style label for a cost, part by part (for panels and the build tray). */
-  describe(cost: MaterialCost, at: BotAt | undefined = this.sim.bot): { id: MaterialId | 'biomass'; name: string; icon: string; have: number; need: number }[] {
-    return (Object.entries(cost) as [MaterialId | 'biomass', number][])
+  describe(cost: MaterialCost, at: BotAt | undefined = this.sim.bot): { id: MaterialId; name: string; icon: string; have: number; need: number }[] {
+    return (Object.entries(cost) as [MaterialId, number][])
       .filter(([, v]) => v)
-      .map(([k, v]) =>
-        k === 'biomass'
-          ? { id: k, name: 'Biomass', icon: '🌿', have: Math.floor(this.sim.econ.get('biomass').toNumber()), need: v }
-          : { id: k, name: MATERIALS[k].name, icon: MATERIALS[k].icon, have: this.available(k, at), need: v },
-      );
+      .map(([k, v]) => ({ id: k, name: MATERIALS[k].name, icon: MATERIALS[k].icon, have: this.available(k, at), need: v }));
   }
 }
