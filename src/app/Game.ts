@@ -4298,7 +4298,8 @@ export class Game {
     this.lightVisuals.update(wdt, this.camera.entity.getPosition());
     // E23.3.4: in the Power view, powered electrical machines glow soft yellow and the rest of the world darkens
     this.machines.powerGlow(powerOn ? this.poweredMachines() : undefined, wdt);
-    const dimTo = powerOn ? POWER.view.darken : 0;
+    const D = POWER.view.darken;
+    const dimTo = powerOn ? D.night + (D.day - D.night) * this.dayNight.light : 0;
     const k = Math.min(1, wdt / POWER.view.fade);
     this.dayNight.dim = Math.abs(dimTo - this.dayNight.dim) < 1e-3 ? dimTo : this.dayNight.dim + (dimTo - this.dayNight.dim) * k;
     this.powerOverlay.setBoost(this.dayNight.boost);
