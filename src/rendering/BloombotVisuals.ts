@@ -1,8 +1,8 @@
 import * as pc from 'playcanvas';
 import { color, PALETTE } from './Materials';
-import { BOT_CLIPS, seatLift } from '../data/rest';
+import { BOT_CLIPS, REST, seatLift } from '../data/rest';
 import { VISIT_POINTS, type Perch } from '../data/wildlife';
-import { foldLegs, hipsAbove, SEAT_HIPS, type SeatKind } from './SeatPose';
+import { foldLegs, hipsAbove, SEAT_HIPS, swingShins, type SeatKind } from './SeatPose';
 
 /**
  * Bloombot (#234, G.10 + G.1): the player character, and the game's first skinned model. The GLB comes from
@@ -236,6 +236,7 @@ export class BloombotVisuals {
       if (clip(BOT_CLIPS.sit)) h?.setLocalPosition(0, seatLift(this.seat, SCALE), -0.12);
       else h?.setLocalPosition(0, this.fold('sit') + this.seat, -0.12);
       h?.setLocalEulerAngles(0, 0, 0);
+      this.swingLegs();
       this.standIn?.setLocalPosition(0, 0.4 + this.seat, -0.1);
     } else if (this.pose === 'meditate') {
       // the clip sits cross-legged on the ground; without it the legs are crossed by hand, settled low, breathing
@@ -246,6 +247,15 @@ export class BloombotVisuals {
     }
     const anim = this.model?.anim;
     if (anim && !this.action) anim.speed = this.pose === 'meditate' ? 0.6 : 0.8; // slow, calm breathing
+  }
+
+  /** On a bench: its little legs swing, one forward as the other goes back, now livelier, now nearly still. */
+  private swingLegs() {
+    if (!this.model || this.reducedMotion) return;
+    const s = REST.legSwing;
+    const drift = 0.5 - 0.5 * Math.cos((this.clock * Math.PI * 2) / s.driftSeconds);
+    const deg = s.degrees * (s.calmest + (1 - s.calmest) * drift) * Math.sin(this.clock * Math.PI * 2 * s.perSecond);
+    swingShins(this.model, this.root, deg, -deg);
   }
 
   /**

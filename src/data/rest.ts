@@ -30,6 +30,12 @@ export const REST = {
   padGap: 0.35,
   /** meditating: bloombot sits this high on the charger pad (its glowing top, MachineVisuals.charger, plus a hair) */
   padTop: 0.11,
+  /**
+   * On a bench bloombot swings its little legs, one forward as the other goes back: up to `degrees` each way at
+   * `perSecond` swings a second, the swing growing and settling every `driftSeconds` so it now and then nearly
+   * stops (`calmest`: the smallest share of the full swing). None with reduced motion.
+   */
+  legSwing: { degrees: 26, perSecond: 0.75, driftSeconds: 11, calmest: 0.2 },
   /** the music swells to this share above its level while sitting */
   musicSwell: 0.6,
   /**

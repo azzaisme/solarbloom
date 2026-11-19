@@ -106,6 +106,20 @@ try {
   await shot(page, '11-bench-sitting', 'sitting on the bench: the calm, wider view turning slowly, the HUD gone, only the prompt; legs bent along the seat, hips on it');
   await close(page, 30, 5);
   await shot(page, '11b-bench-sitting-close', 'close up: bloombot seated on the bench, thighs along the seat and shins hanging');
+  // its little legs swing: one foot forward as the other goes back, and back again
+  const swing = await page.evaluate(async () => {
+    const m = window.solarbloom.bot.visuals.model;
+    const toes = () => ['LeftToeBase', 'RightToeBase'].map((n) => m.findByName(n).getPosition().z);
+    const zs = [];
+    for (let i = 0; i < 12; i++) {
+      zs.push(toes());
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    const range = (k) => Math.max(...zs.map((z) => z[k])) - Math.min(...zs.map((z) => z[k]));
+    const apart = Math.max(...zs.map(([l, r]) => Math.abs(l - r)));
+    return { l: range(0), r: range(1), apart };
+  });
+  check(swing.l > 0.01 && swing.r > 0.01 && swing.apart > 0.01, `its legs swing while it sits, one forward as the other goes back (feet move ${swing.l.toFixed(3)} / ${swing.r.toFixed(3)}, up to ${swing.apart.toFixed(3)} apart)`);
   // from behind and from the side (a camera yaw of 0 looks at a bench facing 0 from the front)
   const benchYaw = await page.evaluate(() => (window.solarbloom.sim.rest.sitting.bench.facing * 180) / Math.PI);
   await close(page, benchYaw + 180, 7);
