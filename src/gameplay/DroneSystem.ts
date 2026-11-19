@@ -438,6 +438,16 @@ export class DroneSystem {
         case 'idle': {
           d.timer -= dt;
           if (d.timer > 0) break;
+          // E23.3.3: a hub off the grid (or shed when power runs short) sends no one out; its drones finish what
+          // they were doing, come home and wait there until the power is back.
+          if (!s.power.isPowered(hub)) {
+            this.status.set(d.id, 'waitingEnergy');
+            const hx = hub.x + hub.size / 2;
+            const hz = hub.z + hub.size / 2;
+            if (Math.hypot(d.px - hx, d.pz - hz) > 0.05) d.mode = 'returning';
+            d.timer = TUNING.drone.retrySeconds;
+            break;
+          }
           // E18: a hub with another role sends its drones on that role's job (Restorers carry on below, unchanged).
           const role = s.roles.roleFor(d, hub);
           if (role !== 'restorer') {

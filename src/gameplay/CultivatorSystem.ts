@@ -128,7 +128,14 @@ export class CultivatorSystem {
     for (const m of docks) {
       this.ensureUnits(m);
       const sp = this.speed(m);
+      // E23.3.3: off the grid (or shed), the tillers drive home and park on the dock until the power is back.
+      const powered = s.power.isPowered(m);
       for (const u of m.cult!.units) {
+        if (!powered) {
+          u.parked = true;
+          this.drive(u, m.x + 0.5, m.z + 0.5, sp, dt);
+          continue;
+        }
         // drop tiles something else finished (a pulse, a chain) or that became unreachable
         for (const id of [...u.work]) {
           const t = s.grid.byTileId(id);

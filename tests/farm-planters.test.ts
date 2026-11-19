@@ -4,7 +4,7 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { CROP_HOMES, CROP_IDS, CROPS, PLANTER, SEED_FINDS, STARTING_CROPS, type CropId, type Like } from '../src/data/crops';
 import { DAY, DAY_SECONDS, NIGHT_FINDS } from '../src/data/time';
-import { PARK_SET, REGIONS } from '../src/data/oldcity';
+import { KEEPERS, PARK_SET, REGIONS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
@@ -29,8 +29,9 @@ function planter(sim: Sim, x: number, z: number): MachineData {
       t.bloom = 1;
       sim.grid.touch(t);
     }
-  sim.inventory.addToStore('scrap', 6);
-  sim.inventory.addToStore('biomass', 4);
+  // the Planter box is on the crafting table (3 Planks), open once Tide wakes on Saltwind Beach (Timber)
+  sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === 'saltwind')!.id] ??= { step: 'settled' };
+  sim.inventory.addToStore('planks', 3);
   const m = sim.build.place('planter', GROUND, x, z);
   expect(m, 'planter placed').toBeDefined();
   return m!;
@@ -271,6 +272,14 @@ describe('E23.5.2.2: every crop’s likes change its growth', () => {
     sim.farm.feed(p);
     expect(sim.farm.look(r).rate).toBeCloseTo(r0 * PLANTER.fertilisedBoost);
     expect(sim.farm.look(p).rate).toBeCloseTo(p0 / PLANTER.unmetLike); // the like met, no second boost
+  });
+
+  it('the Planter box is built from the crafting table (3 Planks) and opens when Tide wakes (Timber)', () => {
+    const sim = farm();
+    expect(sim.build.recipe('planter')).toEqual({ planks: 3 });
+    expect(sim.build.isUnlocked('planter')).toBe(false); // the farm starts as gathering
+    sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === 'saltwind')!.id] = { step: 'settled' };
+    expect(sim.build.isUnlocked('planter')).toBe(true);
   });
 
   it('E23.8.1: a planter in Elder Grove (fertile soil) grows 1.5× as fast', () => {

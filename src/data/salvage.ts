@@ -2,7 +2,7 @@
 // The numbers are the epic's starting values (docs/E21_OLD_CITY.md §1–§5). Yields are tuned here; gates and
 // recipes only change if the pacing bot (§19) fails.
 
-import type { AbilityId, BuildableType, MaterialId } from '../core/types';
+import type { AbilityId, ItemId, MaterialId } from '../core/types';
 
 export interface MaterialDef {
   id: MaterialId;
@@ -37,8 +37,11 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
 
 export const MATERIAL_IDS = Object.keys(MATERIALS) as MaterialId[];
 
-/** A cost in materials. E23.5.1: biomass is a backpack item like any other, so a recipe's biomass is carried too. */
-export type MaterialCost = Partial<Record<MaterialId, number>>;
+/**
+ * A cost in materials. E23.5.1: biomass is a backpack item like any other, so a recipe's biomass is carried too.
+ * E23.6.1: components (data/crafting) can be part of one too.
+ */
+export type MaterialCost = Partial<Record<ItemId, number>>;
 
 // ───────────── §1 backpack ─────────────
 
@@ -104,26 +107,7 @@ export const LOOSE_YIELD = {
 
 // ───────────── §4 recipes ─────────────
 
-export interface Recipe {
-  cost: MaterialCost;
-  /** fountain tier that unlocks it */
-  tier: number;
-}
-
-/** Old-city build recipes: fixed, no price growth. The Storage Chest is an old-city machine. */
-export const RECIPES: Partial<Record<BuildableType | 'chest', Recipe>> = {
-  solar: { cost: { scrap: 10 }, tier: 1 },
-  condenser: { cost: { scrap: 12, copper: 6 }, tier: 1 },
-  chest: { cost: { timber: 8, scrap: 4 }, tier: 1 },
-  // E23.5.2: planters come with the first water (no Timber yet in the park)
-  planter: { cost: { scrap: 6, biomass: 4 }, tier: 1 },
-  pollinator: { cost: { seeds: 10, timber: 6, biomass: 20 }, tier: 2 },
-  droneHub: { cost: { scrap: 20, copper: 15, glass: 10 }, tier: 2 },
-  reservoirGarden: { cost: { clay: 15, seeds: 10, biomass: 30 }, tier: 3 },
-  motherTree: { cost: { seeds: 30, clay: 20, biomass: 100 }, tier: 3 },
-  relay: { cost: { copper: 20, gears: 10, sunstone: 10 }, tier: 4 },
-  cultivator: { cost: { scrap: 30, gears: 20, copper: 10 }, tier: 4 },
-};
+// Old-city build recipes are on the crafting table (data/crafting MACHINE_RECIPES, E23.6.1): one way to build.
 
 // ───────────── §5 fountain tiers ─────────────
 
@@ -143,10 +127,10 @@ export interface TierDef {
 }
 
 export const TIERS: TierDef[] = [
-  { tier: 1, name: 'Water returns', needs: { parkTiles: 60 }, delivery: { scrap: 20, seeds: 6 }, ability: 'pry', gives: ['Pry', 'Build mode', 'Solar Panel', 'Water Condenser', 'Storage Chest', 'The house plot'], look: 'trickle' },
+  { tier: 1, name: 'Water returns', needs: { parkTiles: 60 }, delivery: { scrap: 20, seeds: 6 }, ability: 'pry', gives: ['Pry', 'Build mode', 'Water Condenser', 'The house plot'], look: 'trickle' },
   { tier: 2, name: 'The pump turns', needs: { landmarks: 2 }, delivery: { copper: 30, timber: 30, glass: 20 }, ability: 'hover', gives: ['Hover', 'Pollinator Garden', 'Drone Hub', 'Stacks of 60'], look: 'flowing' },
   { tier: 3, name: 'The garden climbs', needs: { landmarks: 4 }, delivery: { clay: 40, gears: 30, seeds: 40 }, ability: 'climb', gives: ['Climb', 'Reservoir Garden', 'Mother Tree', 'Stacks of 80'], look: 'lit' },
-  { tier: 4, name: 'Light on the roofs', needs: { landmarks: 6 }, delivery: { sunstone: 40, copper: 60, gears: 40 }, ability: 'glide', gives: ['Glide', 'Bloom Relay', 'Cultivator', 'Stacks of 120'], look: 'lit' },
+  { tier: 4, name: 'Light on the roofs', needs: { landmarks: 6 }, delivery: { sunstone: 40, copper: 60, gears: 40 }, ability: 'glide', gives: ['Glide', 'Cultivator', 'Stacks of 120'], look: 'lit' },
   { tier: 5, name: 'The Great Bloom', needs: { landmarks: 10 }, delivery: { sunstone: 80, glass: 80, seeds: 80 }, items: ['heartSeed', 'starLens'], gives: ['The Great Bloom'], look: 'bloom' },
 ];
 

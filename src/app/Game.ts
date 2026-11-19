@@ -1,3 +1,4 @@
+import { POWER } from '../data/power';
 import { big, fmt, type Big } from '../core/Big';
 import { HOME } from '../gameplay/ProgressionSystem';
 import * as pc from 'playcanvas';
@@ -48,6 +49,10 @@ import { InputController } from '../rendering/InputController';
 import { MachineVisuals } from '../rendering/MachineVisuals';
 import { PALETTE } from '../rendering/Materials';
 import { Overlays } from '../rendering/Overlays';
+import { PowerLines } from '../rendering/PowerLines';
+import { PowerOverlay } from '../rendering/PowerOverlay';
+import { LightVisuals } from '../rendering/LightVisuals';
+import { LIGHT } from '../data/lights';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
 import { Skyline } from '../rendering/Skyline';
@@ -196,6 +201,12 @@ export class Game {
   readonly tillers: CultivatorVisuals;
   /** E23.5.2: what grows in each planter. */
   readonly crops: CropVisuals;
+  /** E23.3: the grid's cables. */
+  readonly powerLines: PowerLines;
+  /** E23.3.4: the Power overlay (build mode). */
+  readonly powerOverlay: PowerOverlay;
+  /** E23.3.5: night lights' glows, ground pools and insects. */
+  readonly lightVisuals: LightVisuals;
   /** Look 6.10: progress rings on tiles mid-process (near zoom). */
   readonly rings: ProgressRings;
   private stageSoundAt = 0;
@@ -241,9 +252,6 @@ export class Game {
   menu!: Menu;
   settingsUi!: SettingsScreen;
   private padFocus?: PadFocus;
-  /** City 06.5: simulated seconds still owed after a hitch or a hidden tab, run within the frame budget. */
-  catchUpDebt = 0;
-  private hiddenAt = 0;
   /** Simulation milliseconds spent in the last frame, and the worst since the counter was reset (perf harness). */
   simMs = 0;
   simMsWorst = 0;
@@ -372,6 +380,9 @@ export class Game {
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
     this.crops = new CropVisuals(this.sim, this.scene.world);
+    this.powerLines = new PowerLines(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData));
+    this.lightVisuals = new LightVisuals(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
+    this.powerOverlay = new PowerOverlay(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
     this.rings = new ProgressRings(this.sim, this.scene.world);
     // Look 3.19: the hand-built models load in the background; until then (or with ?models=classic) everything keeps
     // its procedural look. Once they're in, what was already drawn is rebuilt with them.
@@ -580,20 +591,18 @@ export class Game {
     const unlock = () => this.sfx.unlock();
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
-    // E22.11: a hidden page or a window without focus pauses the game (setting, on by default): the time away
-    // is not counted. With the setting off, a hidden tab catches up on return as before (City 06.5).
+    // E22.11: a window without focus pauses the game (setting, on by default). E23.1: a hidden page always does,
+    // and the time away is never counted or caught up.
     const pauseOnBlur = () => this.settings.pauseOnBlur !== false;
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         this.saveNow();
+        // E23.1: a hidden page always waits, like a closed game; nothing is owed or paid back on return
+        this.pause.set('hidden');
         if (pauseOnBlur()) this.pause.set('blur');
-        else this.hiddenAt = performance.now();
       } else {
+        this.pause.clear('hidden');
         if (document.hasFocus()) this.pause.clear('blur');
-        if (this.hiddenAt) {
-          this.awayFor((performance.now() - this.hiddenAt) / 1000);
-          this.hiddenAt = 0;
-        }
       }
     });
     window.addEventListener('blur', () => pauseOnBlur() && this.pause.set('blur'));
@@ -790,6 +799,7 @@ export class Game {
     this.tileFx.reducedMotion = this.birds.reducedMotion = this.clouds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
     if (this.overlays) this.overlays.holo.reducedMotion = rm;
+    if (this.lightVisuals) this.lightVisuals.reducedMotion = rm;
     if (this.transitions) {
       // Look 6: reduced motion keeps the timings with simpler visuals; detail follows the quality tier (Look 1's
       // setting when it lands, the "fewer effects" switch until then).
@@ -962,6 +972,7 @@ export class Game {
     this.closeMenu();
     this.hud.toggleTray(false);
     this.hud.toggleBackpack(false);
+    this.hud.craft.close();
     this.hud.closePlotPicker();
     if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
   }
@@ -969,7 +980,7 @@ export class Game {
   /** E22.11: a full-screen panel pauses the game while it is open (also called the moment one closes, so the next
    *  key press already reaches the game, however slow the frame). */
   private syncPanelPause() {
-    this.pause.set('panel', this.hud.backpackOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
+    this.pause.set('panel', this.hud.backpackOpen || this.hud.craft.isOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
   }
 
   private openMenu() {
@@ -1208,6 +1219,18 @@ export class Game {
     this.sfx.click();
   }
 
+  /** E23.2.1: F / d-pad left: eat one snack (biomass or food) to recharge. */
+  private eat() {
+    const r = this.sim.charge.eat();
+    if (typeof r === 'object') {
+      this.bot?.visuals.play('interact');
+      this.sfx.coin();
+      return;
+    }
+    if (r === 'full') this.hud.showFail('Fully charged');
+    else if (r === 'none') this.hud.showFail('Nothing to eat. Biomass or food recharges bloombot');
+  }
+
   private harvest() {
     if (this.sim.harvestSun()) {
       const starter = this.sim.state.machines.find((m) => m.type === 'solar');
@@ -1303,6 +1326,8 @@ export class Game {
         return this.toggleMenu();
       case 'harvest':
         return this.harvest();
+      case 'eat':
+        return this.eat();
       case 'backpack':
         this.hud.toggleBackpack();
         return this.syncPanelPause(); // paused from this very moment
@@ -1311,6 +1336,8 @@ export class Game {
         return this.turnBuild(a === 'rotate' ? 1 : -1);
       case 'removeMode':
         return this.selectTool(this.hud.currentTool === 'remove' ? 'pulse' : 'remove');
+      case 'powerOverlay':
+        return this.togglePowerView();
       case 'map':
         return this.toggleOverview();
       case 'zoomCamera':
@@ -1338,6 +1365,7 @@ export class Game {
   private panelTab(dir: number) {
     if (this.settingsUi.isOpen) this.settingsUi.tab(dir, true);
     else if (this.hud.backpack.isOpen) this.hud.backpack.tab(dir, true);
+    else if (this.hud.craft.isOpen) this.hud.craft.tab(dir, true);
   }
 
   /** E22.1: the input contexts in effect now (Bindings: an open panel, build mode, or walking). */
@@ -1349,7 +1377,7 @@ export class Game {
   /** A panel or menu that takes the input is open. */
   private panelOpen(): boolean {
     const h = this.hud;
-    return h.modalOpen || h.backpackOpen || h.plotPickerOpen || h.trayOpen || !!this.oc?.panel.isOpen;
+    return h.modalOpen || h.backpackOpen || h.craft.isOpen || h.plotPickerOpen || h.trayOpen || !!this.oc?.panel.isOpen;
   }
 
   /** The action a key (or mouse input) means now. With a panel open, the key that opened it closes it again. */
@@ -1538,6 +1566,7 @@ export class Game {
     else if (this.hud.trayOpen) this.hud.toggleTray(false);
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
     else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
+    else if (this.hud.craft.isOpen) this.hud.craft.close();
     else if (this.selected) this.select(undefined);
     else if (this.bot?.walking) this.bot.cancelWalk();
     else if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
@@ -1548,6 +1577,34 @@ export class Game {
   /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
   private building(t: Tool = this.hud.currentTool): boolean {
     return !!this.bot && t !== 'inspect' && t !== 'pulse';
+  }
+  /** E23.3.4: the Power view is on (shown while building; it stays on for the next time you build). */
+  private powerView = false;
+  private togglePowerView() {
+    if (!this.building()) return;
+    this.powerView = !this.powerView;
+    this.hud.buildBar.powerOn = this.powerView;
+    this.hud.buildBar.render(this.hud.currentTool);
+    // A new concept gets one short introduction, the first time only.
+    if (this.powerView && !this.powerViewSeen) {
+      this.powerViewSeen = true;
+      this.hud.toast('Power view: each network glows in its own colour. Red means a machine has no power.', 'gold', 4);
+    }
+  }
+  private powerViewSeen = false;
+  /** where the pointer (or bloombot's cursor) is, for the Power view's highlight */
+  private powerFocus?: { roofId: string; x: number; z: number };
+  /** Machines on the grid that have power now: sources, batteries, poles and fed consumers (a dark one stays dark). */
+  private poweredMachines(): Set<string> {
+    const out = new Set<string>();
+    for (const m of this.sim.state.machines) {
+      const role = this.sim.power.roleOf(m);
+      if (!role) continue;
+      if (role.consumer && !this.sim.power.isPowered(m)) continue;
+      if (role.pole && this.sim.power.isTripped(m)) continue;
+      out.add(m.id);
+    }
+    return out;
   }
   /** the overview (M) is showing; walking, or M again, leaves it */
   private overviewOn = false;
@@ -1840,6 +1897,17 @@ export class Game {
       const lk = s.farm.look(occ);
       out.push({ kind: 'machine', id: `planter:${occ.id}`, verb: lk.ripe ? 'Harvest' : lk.crop ? 'Tend' : 'Plant in', name: lk.ripe ? CROPS[lk.crop!].name : 'the planter', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.planter(occ) });
     }
+    // E23.6.1: the crafting table is in the house (the shed by the fountain) from the start
+    const sh = PARK_SET.shed;
+    if (f.x >= sh.x && f.x < sh.x + sh.size && f.z >= sh.z && f.z < sh.z + sh.size)
+      out.push({
+        kind: 'door', id: 'craft:table', verb: 'Use', name: 'the crafting table', distance: fd, at: front, frame: { roofId: GROUND, x: sh.x, z: sh.z, size: sh.size },
+        run: () => {
+          this.oc?.panel.close();
+          this.hud.craft.open();
+          this.syncPanelPause();
+        },
+      });
     // E23.5.1: flowered, restored ground in front can be clipped for biomass
     if (!pile && s.gather.canGather(front))
       out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });
@@ -2480,6 +2548,7 @@ export class Game {
   }
 
   private previewAt(p: Pick | undefined, x: number, y: number) {
+    this.powerFocus = p ? { roofId: p.roofId, x: p.fx, z: p.fz } : undefined; // E23.3.4: the Power view highlights the network here
     if (this.hud.plotPickerOpen) return; // the picker's hologram owns the preview while it's open
     const tool = this.hud.currentTool;
     if (!p || !p.tile) {
@@ -2618,9 +2687,16 @@ export class Game {
     const o = DECOR_OPTION[kind];
     const why = this.decorProblem(kind, p.roofId, t.x, t.z);
     this.overlays.hideRadius();
-    this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
-    const how = `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
-    this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${o?.solid ? 'Solid' : 'Walk over it'} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
+    const line = LIGHT[kind]?.line ? this.sim.lights.poleNear(p.roofId, t.x, t.z) : undefined;
+    if (LIGHT[kind]?.line) {
+      // a line light shows on the pole it would hang on
+      this.overlays.hideGhost();
+      if (line) this.overlays.showFrame(line.roofId, line.x, line.z, line.size, why ? 'bad' : 'ok');
+      else this.overlays.showFrame(p.roofId, t.x, t.z, 1, 'bad');
+    } else this.overlays.showGhost(p.roofId, t.x, t.z, 1, !why, 0.4, this.bot ? { kind: 'decor', decor: kind, rot: this.buildRot } : undefined);
+    const how = line ? `${this.press('E')} to hang it on this pole` : `${this.press('E')} to place${this.bot ? ` · ${this.turnHint()}` : ''}`;
+    const kindNote = LIGHT[kind]?.line ? 'On the pole’s lines' : o?.solid ? 'Solid' : 'Walk over it';
+    this.hud.showTip(x, y, `<b>${o?.icon ?? ''} ${o?.name ?? kind}</b>${o?.blurb ?? ''} <small>${kindNote} · free</small><br>${why ? `<span class="bad">${why}</span>` : `<span class="ok">${how}</span>`}`);
   }
 
   private previewRemove(p: Pick, x: number, y: number) {
@@ -2643,6 +2719,15 @@ export class Game {
 
   /** Why a decoration in hand can't go here (the tile's rules, reach, and not on top of bloombot if it's solid). */
   private decorProblem(kind: string, roofId: string, x: number, z: number): string | undefined {
+    // E23.3.5: line lights hang on a power pole's lines (aim at the pole) instead of standing on a tile
+    if (LIGHT[kind]?.line) {
+      const o = DECOR_OPTION[kind];
+      if (o && !this.cozy.isDecorUnlocked(o)) return `Unlocks when ${this.cozy.hint(o.unlock)}`;
+      const hang = this.sim.lights.canHang(kind, roofId, x, z);
+      if (hang) return hang;
+      const pole = this.sim.lights.poleNear(roofId, x, z)!;
+      return this.inReach(roofId, pole.x, pole.z, pole.size) ? undefined : TOO_FAR;
+    }
     const why = this.cozy.canDecorate(kind, roofId, x, z);
     if (why) return why;
     if (!this.inReach(roofId, x, z, 1)) return TOO_FAR;
@@ -2654,10 +2739,17 @@ export class Game {
   /** Places the decoration in hand on a tile (free); it stays in hand for the next one. */
   private placeDecorAt(p: Pick, x: number, y: number, kind: string): ActResult {
     const t = p.tile!;
-    const why = this.decorProblem(kind, p.roofId, t.x, t.z) ?? this.cozy.placeDecor(kind, this.buildRot, p.roofId, t.x, t.z);
+    const line = !!LIGHT[kind]?.line;
+    const why = this.decorProblem(kind, p.roofId, t.x, t.z) ?? (line ? this.sim.lights.hang(kind, p.roofId, t.x, t.z) : this.cozy.placeDecor(kind, this.buildRot, p.roofId, t.x, t.z));
     if (why) {
       this.hud.showFail(why, x, y);
       return 'none';
+    }
+    if (line) {
+      this.sfx.build();
+      this.vfx.burst(this.tileVec(t, SLAB_TOP + 1.0), 8, { up: 1.2, size: 0.04, life: 0.8 });
+      this.buildKey = '';
+      return 'select';
     }
     this.chunks.markTile(t);
     this.sfx.build();
@@ -2672,6 +2764,19 @@ export class Game {
     const d = this.cozy.decorOf(t.occupantId);
     // E21.3: under old-city rules the remove tool also takes down a machine, giving its whole recipe back
     const occ = !d && !pickUp && this.sim.oldCity ? this.sim.occupant(t) : undefined;
+    // E23.3.5: a pole with lights on its lines: the lights come down first (the pole stays)
+    const poleLights = !d ? this.sim.lights.onPole(this.sim.occupant(t)) : undefined;
+    if (poleLights) {
+      if (!this.inReach(p.roofId, t.x, t.z, 1)) {
+        this.hud.showFail(TOO_FAR, x, y);
+        return 'none';
+      }
+      this.sim.lights.unhang(this.sim.occupant(t));
+      this.sfx.click();
+      if (pickUp) this.selectTool(`decor:${poleLights}`);
+      this.buildKey = '';
+      return 'select';
+    }
     if (occ && occ.type !== 'core' && !occ.starter) {
       if (!this.inReach(p.roofId, t.x, t.z, 1)) {
         this.hud.showFail(TOO_FAR, x, y);
@@ -3568,6 +3673,13 @@ export class Game {
     });
     b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Surge ×${TUNING.cat.frenzyMult} for ${Math.round(seconds)}s`));
     b.on('harvest', () => this.sfx.coin());
+    // E23.2.1: the charge is a new concept: one short introduction the first time it runs out, then the meter shows it
+    b.on('charge.empty', () => {
+      const f = s.state.stats.firsts;
+      if (f.chargeEmpty !== undefined) return;
+      f.chargeEmpty = Math.round(s.time);
+      this.hud.toast(`Out of charge<small>Bloombot walks slower and can't pulse. Press ${this.hudKeys('eat')} to eat biomass or food, or rest.</small>`, '', 6);
+    });
     b.on('rooftop.coreReady', () => {
       this.machines.setCoreState('ready');
       this.hud.toast(`✨ The Rooftop Core is humming!<small>Walk up and press ${this.hudKey('interact')} (or use the button) to awaken the building.</small>`, 'gold', 5);
@@ -4191,32 +4303,26 @@ export class Game {
     }
   }
 
-  /**
-   * City 06.5: time passed without frames (a hidden tab, a long hitch) is owed to the simulation, up to a cap,
-   * and paid back a few milliseconds per frame so no frame stalls.
-   */
-  awayFor(seconds: number) {
-    if (!(seconds > 0)) return;
-    const C = TUNING.catchUp;
-    const was = this.catchUpDebt;
-    this.catchUpDebt = Math.min(C.maxSeconds, this.catchUpDebt + seconds);
-    if (was < C.toastFrom && this.catchUpDebt >= C.toastFrom) {
-      const m = Math.round(this.catchUpDebt / 60);
-      this.hud.toast(`⏩ Catching up${m >= 1 ? ` ${m} min` : ''}…<small>Your city kept growing while you were away.</small>`, '', 3);
-    }
-  }
-
-  /** Runs simulation ticks within the frame budget: the frame's own time first, then any catch-up owed. */
+  /** Runs simulation ticks within the frame budget: the frame's own time (E23.1: nothing owed is ever paid back). */
   private runSim(dt: number) {
     const t0 = performance.now();
-    runSimFrame(this.sim, this, dt, { pause: this.pause, speed: this.speed, step: TUNING.simStep, budgetMs: TUNING.catchUp.frameBudgetMs, maxCatchUp: TUNING.catchUp.maxSeconds });
+    runSimFrame(this.sim, this, dt, { pause: this.pause, speed: this.speed, step: TUNING.simStep, budgetMs: TUNING.frameSimBudgetMs });
     this.simMs = performance.now() - t0;
     this.simMsWorst = Math.max(this.simMsWorst, this.simMs);
   }
 
   /** this frame's dt (holds read it) */
   private frameDt = 0;
+  private lastReal = 0;
+  /** Seconds of wall time since the last frame (the engine's dt is 0 while paused), at most a frame's worth. */
+  private realDt(): number {
+    const now = performance.now();
+    const d = this.lastReal ? (now - this.lastReal) / 1000 : 0;
+    this.lastReal = now;
+    return Math.min(d, TUNING.maxFrameDt);
+  }
   private update(rawDt: number) {
+    if (!this.pause.paused) this.lastReal = performance.now();
     const dt = Math.min(rawDt, TUNING.maxFrameDt);
     this.frameDt = dt;
     this.clock += dt;
@@ -4227,8 +4333,9 @@ export class Game {
     // E22.11: a full-screen panel (the backpack, Settings) pauses the game while it is open.
     this.syncPanelPause();
     const paused = this.pause.paused;
+    // E23.6.1: the table keeps working while its panel holds the game paused (the engine's clock is stopped then)
+    this.hud.craft.update(paused ? this.realDt() : dt, paused);
     if (!paused && !this.photo.frozen) {
-      if (rawDt > TUNING.maxFrameDt && !this.hiddenAt) this.awayFor(Math.min(rawDt, 30) - TUNING.maxFrameDt); // a hitch
       this.runSim(dt);
     }
     /** the world's own time: nothing moves while paused (the camera, streaming and the HUD still run) */
@@ -4244,6 +4351,19 @@ export class Game {
     const camP = this.camera.entity.getPosition();
     detailTextures.setCamera(camP.x, camP.y, camP.z);
     this.machines.update(wdt, rect);
+    this.powerLines.update();
+    const powerOn = this.powerView && this.building();
+    this.powerOverlay.show(powerOn);
+    this.powerOverlay.update(wdt, this.powerFocus);
+    this.lightVisuals.update(wdt, this.camera.entity.getPosition());
+    // E23.3.4: in the Power view, powered electrical machines glow soft yellow and the rest of the world darkens
+    this.machines.powerGlow(powerOn ? this.poweredMachines() : undefined, wdt);
+    const D = POWER.view.darken;
+    const dimTo = powerOn ? D.night + (D.day - D.night) * this.dayNight.light : 0; // night is dark already
+    const k = Math.min(1, wdt / POWER.view.fade);
+    this.dayNight.dim = Math.abs(dimTo - this.dayNight.dim) < 1e-3 ? dimTo : this.dayNight.dim + (dimTo - this.dayNight.dim) * k;
+    this.powerOverlay.setBoost(this.dayNight.boost);
+    this.machines.setGlowBoost(this.dayNight.boost);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
     this.crops.update(dt);
     this.rings.update(this.camera.zoom, this.camera.target);

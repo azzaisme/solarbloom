@@ -6,6 +6,7 @@ import { DAY, DAY_SECONDS, gameDays, gameMinutes, NIGHT_FINDS } from '../src/dat
 import { SALVAGE } from '../src/data/salvage';
 import { TUNING } from '../src/data/tuning';
 import { GATHER } from '../src/data/farm';
+import { KEEPERS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
 /**
@@ -120,8 +121,9 @@ describe('E23.7.1.1: every timer counts in game days', () => {
       t.ground = 'restored';
       t.pollution = 0;
       sim.grid.touch(t);
-      sim.inventory.addToStore('scrap', 6);
-      sim.inventory.addToStore('biomass', 4);
+      // the Planter box is on the crafting table (3 Planks), open once Tide wakes on Saltwind Beach (Timber)
+      sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === 'saltwind')!.id] ??= { step: 'settled' };
+      sim.inventory.addToStore('planks', 3);
       sim.bot = { roofId: GROUND, x: 8.5, z: 11.5 };
       const m = sim.build.place('planter', GROUND, 12, 16)!;
       (sim.state.salvage!.crops ??= []).push(crop);
