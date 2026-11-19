@@ -1,5 +1,5 @@
 import { GROUND } from '../core/GameState';
-import { regionById, regionOfCell, seaCell, surfCell } from '../core/OldCityLayout';
+import { regionById, regionOfCell, seaCell, surfCell, waterAnchor } from '../core/OldCityLayout';
 import { isUsable } from './Unlocks';
 import type { BuildableType, MachineData, TileData } from '../core/types';
 import type { WeatherKind } from '../data/weather';
@@ -473,6 +473,7 @@ export class WaterSystem {
   }
   private changesVersion = -1;
   private changesShape = -1;
+  private changesSleep?: string;
 
   /** Bloom stages a level takes off the land around it (0 at or above `fadeBelow`). */
   static fadeSteps(level: number): number {
@@ -574,16 +575,20 @@ export class WaterSystem {
    * their chunks are rebuilt.
    */
   takeFadeChanges(): [number, number, number, number][] {
-    if (this.changesVersion === this.version && this.changesShape === this.shapeRev) return [];
+    const sleep = this.sleepKey();
+    if (this.changesVersion === this.version && this.changesShape === this.shapeRev && this.changesSleep === sleep) return [];
+    const woke = this.changesSleep !== undefined && this.changesSleep !== sleep;
     this.changesVersion = this.version;
     this.changesShape = this.shapeRev;
+    this.changesSleep = sleep;
     const out: [number, number, number, number][] = [];
     const now = new Map<string, number>();
-    for (const b of this.live()) {
+    for (const b of this.known()) {
       if (b.reservoir) continue;
-      const s = WaterSystem.fadeSteps(this.levelOf(b.id));
+      // a sleeping body fades nothing (as the fade map); a landmark waking repaints all the land round its water
+      const s = this.dormant(b) ? 0 : WaterSystem.fadeSteps(this.levelOf(b.id));
       now.set(b.id, s);
-      if ((this.shownSteps.get(b.id) ?? 0) !== s) out.push(this.fadeBounds(b));
+      if ((this.shownSteps.get(b.id) ?? 0) !== s || (woke && !!b.region && !!WATER_NET.springs[b.region])) out.push(this.fadeBounds(b));
     }
     for (const [id, s] of this.shownSteps) {
       if (now.has(id) || !s) continue;
@@ -688,6 +693,7 @@ export class WaterSystem {
 
   /** Spring flow for a body (share of capacity per game day). */
   private springOf(b: WaterBody): number {
+    if (b.reservoir) return 0; // springs feed the region's natural water, never a tank built there
     const r = b.region;
     const rate = r ? (WATER_NET.springs[r] ?? 0) : 0;
     if (!rate) return 0;
@@ -713,7 +719,8 @@ export class WaterSystem {
     const def = this.sim.oldCity ? REGION_WATER.get(region) : undefined;
     const out: WaterBody[] = [];
     for (const q of def ?? []) {
-      const b = this.bodyAt(this.sim.grid.get(GROUND, q.x, q.z));
+      const a = waterAnchor(q);
+      const b = this.bodyAt(this.sim.grid.get(GROUND, a.x, a.z));
       if (b && !out.includes(b)) out.push(b);
     }
     return out;
@@ -724,6 +731,7 @@ export class WaterSystem {
    * Cistern wakes). It stays as it is, dry, whatever the weather; waking the landmark fills it.
    */
   dormant(b: WaterBody): boolean {
+    if (b.reservoir) return false; // a tank fills from pumps, pipes, gravity and rain, landmark or not
     const r = b.region;
     return !!r && WATER_NET.springsNeedLandmark && !!WATER_NET.springs[r] && this.sim.areas.fog(r) !== 'cleared';
   }
@@ -890,7 +898,7 @@ export class WaterSystem {
 
   /** The share a body gains from its region's wake rush this step. */
   private rushOf(b: WaterBody, span: number): number {
-    const end = b.region ? this.rushUntil.get(b.region) : undefined;
+    const end = b.region && !b.reservoir ? this.rushUntil.get(b.region) : undefined; // (the pond's, not a tank's)
     if (end === undefined) return 0;
     const from = this.clock - span;
     if (from >= end) {

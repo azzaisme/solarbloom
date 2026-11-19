@@ -522,6 +522,13 @@ export class ChunkRenderer {
     return n;
   }
 
+  /** Third person: chunks waiting within `radius` world units of a point (the ground round bloombot). */
+  pendingNear(f: { x: number; z: number }, radius: number): number {
+    let n = 0;
+    for (const v of this.views.values()) if ((v.dirty || v.fogDirty) && dist(v, f) <= radius) n++;
+    return n;
+  }
+
   /** A tile changed: rebuild its chunk (and fog) soon. */
   markTile(t: TileData) {
     if (t.roofId !== GROUND) return;
@@ -1900,7 +1907,16 @@ export class ChunkRenderer {
    */
   /** A dead shallow pond tile: its bed wears the painted silt (`silt-bed`). Not the surf, not deep water. */
   private siltBed(t: TileData): boolean {
+    if (this.livePond(t)) return false; // its water is back: the bed it bares as it drains is WaterLevels'
     return t.ground === 'polluted' && (!t.blocked || pondCell(t.x, t.z)) && !(t.level !== undefined && surfCell(t.x, t.z));
+  }
+
+  /**
+   * A region's natural pond whose landmark has woken (the Cistern's): living water, drawn as a restored pool is (its
+   * bed a clear pool's, not the dead silt, which would show through the surface's tile seams as dark dots).
+   */
+  private livePond(t: TileData): boolean {
+    return t.ground !== 'restored' && pondCell(t.x, t.z) && this.poolAlive(t);
   }
 
   private waterTile(b: Sink, t: TileData, h: number, x: number, z: number, r: VRng) {
@@ -1908,7 +1924,7 @@ export class ChunkRenderer {
     // the beach's surf is shallow sea, murky while dead: never the dried-out canal bed
     const shallows = t.level !== undefined && t.ground !== 'restored' && surfCell(t.x, t.z);
     // a dead pond's slab is one colour, the painted silt's own (its top wears the silt texture: see `siltBed`)
-    const hex = shallows ? PALETTE.ground.shallows[t.variant % PALETTE.ground.shallows.length] : t.ground === 'restored' ? ALIVE.water : t.ground === 'polluted' ? PALETTE.aqua.bed : PALETTE.ground.wetSoil;
+    const hex = shallows ? PALETTE.ground.shallows[t.variant % PALETTE.ground.shallows.length] : t.ground === 'restored' || this.livePond(t) ? ALIVE.water : t.ground === 'polluted' ? PALETTE.aqua.bed : PALETTE.ground.wetSoil;
     this.slab(b, hex, [x, surf - 0.04, z], [1, 0.08, 1]);
     if (shallows) {
       if (t.variant % 4 === 0) b.add('box', PALETTE.ground.seaFoam, [x + r.range(-0.3, 0.3), surf + 0.004, z + r.range(-0.3, 0.3)], [r.range(0.2, 0.45), 0.006, 0.05]);

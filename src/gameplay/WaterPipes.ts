@@ -112,11 +112,6 @@ export class WaterPipes {
     return this.cache.set;
   }
 
-  /** Pipe tiles a save from before the crafting table had left over (laid first; nothing adds to it now). */
-  get stock(): number {
-    return this.save.pipeStock ?? 0;
-  }
-
   /** Why a pipe can't go here (undefined: it can). */
   layProblem(roofId: string, x: number, z: number): string | undefined {
     if (!this.water.unlocked('pipe')) return this.water.lockReason();
@@ -128,7 +123,7 @@ export class WaterPipes {
     if (t.blocked || t.feature === 'building') return 'Something is in the way';
     if (this.sim.areas.fog(this.sim.areas.map.areaOfCell(x, z)) === 'hidden') return 'Not under the fog';
     if (t.occupantId) return 'Something stands here';
-    if (this.stock <= 0 && !this.sim.inventory.canPay(WATER_NET.pipe.cost)) return `Need a Pipe: ${this.costText()}`;
+    if (!this.sim.inventory.canPay(WATER_NET.pipe.cost)) return `Need a Pipe: ${this.costText()}`;
     return undefined;
   }
 
@@ -147,8 +142,7 @@ export class WaterPipes {
       return false;
     }
     const s = this.save;
-    if (this.stock > 0) s.pipeStock = this.stock - 1;
-    else if (!this.sim.inventory.pay(WATER_NET.pipe.cost)) return false;
+    if (!this.sim.inventory.pay(WATER_NET.pipe.cost)) return false;
     s.pipes = [...this.keys(), pipeKey(x, z)].sort();
     this.version++;
     return true;

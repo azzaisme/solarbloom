@@ -1,5 +1,5 @@
 import { isMainlandCell, mainlandPileAt, mainlandPileById, mainlandShore, onCauseway } from './Mainland';
-import { COAST, KEEPERS, LANDING, OLD_CITY, PARK_SET, REGIONS, type GateDef, type KeeperDef, type PileDef, type RegionDef, type RegionId } from '../data/oldcity';
+import { COAST, KEEPERS, LANDING, OLD_CITY, PARK_SET, REGIONS, type GateDef, type KeeperDef, type PileDef, type RegionDef, type RegionId, type WaterRect } from '../data/oldcity';
 
 /**
  * E21: the Old City's fixed layout as lookups, built once from data/oldcity (pure, no seed: the Old City is the
@@ -118,13 +118,28 @@ export function seaCell(x: number, z: number): boolean {
 /** Deep water inside a region (a canal), from data/oldcity. */
 export function regionWater(x: number, z: number): boolean {
   const r = regionOfCell(x, z);
-  return !!r?.water?.some((q) => inRect(q, x, z));
+  return !!r?.water?.some((q) => inWater(q, x, z));
+}
+
+/** Is the cell water in this region water rectangle (inside it, and `#` in its outline if it has one)? */
+export function inWater(q: WaterRect, x: number, z: number): boolean {
+  return inRect(q, x, z) && (!q.mask || q.mask[z - q.z]?.[x - q.x] === '#');
+}
+
+/** A water cell of a region water rectangle (its first, row by row). */
+export function waterAnchor(q: WaterRect): { x: number; z: number } {
+  if (!q.mask) return { x: q.x, z: q.z };
+  for (let dz = 0; dz < q.d; dz++) {
+    const dx = q.mask[dz]?.indexOf('#') ?? -1;
+    if (dx >= 0) return { x: q.x + dx, z: q.z + dz };
+  }
+  return { x: q.x, z: q.z };
 }
 
 /** Deep water inside a region that is a natural pond (the Cistern's), drawn as a pool, not open water. */
 export function pondCell(x: number, z: number): boolean {
   const r = regionOfCell(x, z);
-  return !!r?.water?.some((q) => q.pond && inRect(q, x, z));
+  return !!r?.water?.some((q) => q.pond && inWater(q, x, z));
 }
 
 /** The region a chunk belongs to (undefined for the park, backstreets, the sea and anything outside). */
