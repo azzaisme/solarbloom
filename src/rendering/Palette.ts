@@ -418,6 +418,16 @@ const fauna = {
   duckBill: '#f2b33d',
   frog: ['#6aa84f', '#c7d98a'],
   squirrel: ['#b5652e', '#e8c9a0'],
+  /** E23.2.4: visitors who come to sit with bloombot (coat, light, dark or accent) */
+  fox: ['#d9692c', '#f4efe6', '#3b2e28'],
+  hedgehog: ['#8a6a4f', '#d9c3a3', '#3b2e28'],
+  owl: ['#8b6f52', '#e9dcc0', '#f2b33d'],
+  otter: ['#6e4f39', '#c8ab8a', '#2b2b33'],
+  magpie: ['#24242b', '#f4efe6', '#3a5aa8'],
+  kingfisher: ['#2f8fc9', '#e87a2f', '#f4efe6'],
+  fawn: ['#b5774a', '#f4efe6', '#3b2e28'],
+  swallowtail: ['#f2d24a', '#2b2b33', '#3a6fd1'],
+  bumble: ['#f2b630', '#2b2620', '#eef6ff'],
 };
 
 /** Overlays: hover frames, placement tones, the beacon. */

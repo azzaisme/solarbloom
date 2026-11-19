@@ -83,6 +83,7 @@ import { Minimap } from '../ui/Minimap';
 import { PadFocus } from '../ui/PadFocus';
 import { OldCityController } from './OldCity';
 import { KeeperVisuals } from '../rendering/KeeperVisuals';
+import { Visitors } from '../rendering/Visitors';
 import { Cozy } from '../gameplay/Cozy';
 import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
 import { chunkKey } from '../core/Grid';
@@ -278,6 +279,8 @@ export class Game {
   private keepers?: KeeperVisuals;
   /** E23.2.3: sitting on benches and meditating at chargers */
   private resting?: Resting;
+  /** E23.2.4.2: the animals that come over while bloombot sits */
+  private visitors?: Visitors;
   private inspectTimer = 0;
   private cinematic = false;
   private specialtyToasted = new Set<string>();
@@ -522,6 +525,7 @@ export class Game {
             this.hud.showFail(msg, sc?.x, sc?.y);
           },
         });
+        this.visitors = new Visitors(this.scene.world);
         this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
         // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
         this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
@@ -4245,6 +4249,22 @@ export class Game {
     }
   }
 
+  /** E23.2.4.2: places the animals visiting bloombot (they ride its rig while it sits). */
+  private updateVisitors(dt: number) {
+    const b = this.bot;
+    if (!this.visitors || !b) return;
+    const [, by] = b.world();
+    const r = this.sim.rest.sitting;
+    this.visitors.update(dt, this.sim.time, this.sim.wildlife.visits, {
+      point: (p, out) => b.visuals.visitPoint(p, out),
+      facing: b.pose.facing,
+      groundY: () => by,
+      // up on the seat beside bloombot, unless a friend Keeper is sitting there
+      seatY: r?.kind === 'bench' && !this.resting?.friend ? by + REST.benchSeat : undefined,
+      reducedMotion: !!this.settings.reducedMotion,
+    });
+  }
+
   /** Runs simulation ticks within the frame budget: the frame's own time (E23.1: nothing owed is ever paid back). */
   private runSim(dt: number) {
     const t0 = performance.now();
@@ -4342,6 +4362,7 @@ export class Game {
       this.oc?.update(wdt);
       this.keepers?.update(wdt);
       this.resting?.update(wdt);
+      this.updateVisitors(wdt);
       this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();

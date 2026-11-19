@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import { color, PALETTE } from './Materials';
 import { BOT_CLIPS, seatLift } from '../data/rest';
+import { VISIT_POINTS, type Perch } from '../data/wildlife';
 
 /**
  * Bloombot (#234, G.10 + G.1): the player character, and the game's first skinned model. The GLB comes from
@@ -193,6 +194,26 @@ export class BloombotVisuals {
       this.holder?.setLocalEulerAngles(this.tired ? 9 : 0, 0, 0);
       this.standIn?.setLocalPosition(0, 0.4, 0);
     }
+  }
+
+  private bones = new Map<string, pc.GraphNode | null>();
+  private pointTmp = new pc.Vec3();
+
+  /**
+   * E23.2.4.2: where a visitor settles on or beside bloombot, in world space. Perches on bloombot ride its rig
+   * (the head, the shoulders, the hips for the lap, a forearm), so they follow the sitting and meditating poses;
+   * the stand-in uses fixed offsets from bloombot's feet. Offsets turn with bloombot's facing.
+   */
+  visitPoint(p: Perch, out: pc.Vec3): pc.Vec3 {
+    const vp = VISIT_POINTS[p];
+    let bone: pc.GraphNode | null = null;
+    if (vp.bone && this.model) {
+      if (!this.bones.has(vp.bone)) this.bones.set(vp.bone, this.model.findByName(vp.bone));
+      bone = this.bones.get(vp.bone) ?? null;
+    }
+    const o = bone ? vp.offset : vp.fallback;
+    this.root.getRotation().transformVector(this.pointTmp.set(o[0], o[1], o[2]), this.pointTmp);
+    return out.copy(bone ? bone.getPosition() : this.root.getPosition()).add(this.pointTmp);
   }
 
   /** A one-shot clip by name (the sitting transitions), back to the loop afterwards. */

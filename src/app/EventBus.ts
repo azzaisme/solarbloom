@@ -14,6 +14,9 @@ export interface GameEvents {
   'bench.mended': { benchId: string; x: number; z: number };
   'rest.sat': { kind: 'bench' | 'charger' };
   'rest.stood': Record<string, never>;
+  /** E23.2.4: an animal came over while bloombot sits, and the visitor log took it in (first: a new kind) */
+  'wildlife.arrived': { id: string; perch: import('../data/wildlife').Perch; area: string };
+  'wildlife.logged': { id: string; first: boolean };
   /** E23.2.2.3: a buried find dug up */
   'buried.dug': { id: string; material: import('../core/types').MaterialId; n: number; x: number; z: number };
   'tile.planted': { tile: TileData; plant: import('../core/types').PlantKind };
