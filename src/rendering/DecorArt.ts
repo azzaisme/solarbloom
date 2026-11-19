@@ -15,6 +15,7 @@ import type { VPrim } from './Shapes';
 type V3 = [number, number, number];
 const C = PALETTE.cozy;
 const P = PALETTE;
+const L = PALETTE.light;
 
 interface At {
   h: PlotHost;
@@ -53,6 +54,18 @@ function model(a: At, name: string, dx: number, dz: number, scale: number, extra
   return a.h.model(name, a.x + ox, a.y + dy, a.z + oz, -a.rot * (Math.PI / 2) + extraRot, scale);
 }
 
+/** A short sagging string of bulbs (a line light's look in hand). */
+function lineSample(a: At, hex: string, size: number, n: number) {
+  // far away, half the bulbs and never more than four, spread along the same curve: the string still reads, inside
+  // the far-art budget (under 400 triangles)
+  if (a.far) n = Math.min(4, Math.ceil(n / 2));
+  for (let i = 0; i < n; i++) {
+    const t = n > 1 ? i / (n - 1) : 0.5;
+    put(a, 'sphere', hex, -0.4 + 0.8 * t, 0.9 - Math.sin(t * Math.PI) * 0.15, 0, size);
+  }
+  if (!a.far) put(a, 'box', P.metal.dark, 0, 0.95, 0, [0.84, 0.015, 0.015]);
+}
+
 function flowersRing(a: At, r: number, n: number, dy = 0.12, size = 0.12) {
   for (let i = 0; i < n; i++) {
     const ang = (i / n) * Math.PI * 2;
@@ -70,8 +83,9 @@ const ART: Record<string, (a: At) => void> = {
   lantern: (a) => {
     if (model(a, 'lantern', 0, 0, 0.5)) return;
     put(a, 'box', P.metal.dark, 0, 0.04, 0, [0.22, 0.08, 0.22]);
-    put(a, 'box', P.glow.lamp, 0, 0.2, 0, [0.16, 0.22, 0.16], 1);
+    put(a, 'box', L.bulbOff, 0, 0.2, 0, [0.16, 0.22, 0.16]); // E23.3.5: lit by LightVisuals at dusk
     put(a, 'cone', P.metal.dark, 0, 0.36, 0, [0.24, 0.1, 0.24]);
+    if (!a.far) put(a, 'box', P.solar.panel, 0, 0.42, 0, [0.14, 0.02, 0.14]); // its sun cell
   },
   pot: (a) => {
     if (!model(a, 'planter-pot', 0, 0, 0.5)) put(a, 'cylinder', C.kerb, 0, 0.16, 0, [0.4, 0.32, 0.4]);
@@ -103,8 +117,69 @@ const ART: Record<string, (a: At) => void> = {
   },
   lamppost: (a) => {
     if (model(a, 'lamp-post', 0, 0, 0.48)) return;
-    put(a, 'cylinder', P.metal.dark, 0, 0.7, 0, [0.07, 1.4, 0.07]);
-    put(a, 'sphere', P.glow.lamp, 0, 1.45, 0, 0.2, 1);
+    put(a, 'cylinder', P.metal.dark, 0, 0.47, 0, [0.07, 0.94, 0.07]);
+    put(a, 'sphere', L.bulbOff, 0, 1.02, 0, 0.2); // E23.3.5: lit by LightVisuals at dusk (data/lights bulbY)
+  },
+  solarlamppost: (a) => {
+    if (!model(a, 'lamp-post', 0, 0, 0.48)) {
+      put(a, 'cylinder', P.metal.dark, 0, 0.47, 0, [0.07, 0.94, 0.07]);
+      put(a, 'sphere', L.bulbOff, 0, 1.02, 0, 0.2);
+    }
+    if (a.far) return;
+    // its own little sun panel, tilted on a short arm above the lamp
+    put(a, 'box', P.metal.dark, 0, 1.3, 0, [0.03, 0.2, 0.03]);
+    put(a, 'box', P.metal.dark, 0, 1.4, 0, [0.3, 0.015, 0.24]);
+    put(a, 'box', P.solar.panel, 0, 1.41, 0, [0.27, 0.015, 0.21]);
+  },
+  // ───── E23.3.5 night lights (data/lights.ts). The glowing parts are LightVisuals', drawn dark here. ─────
+  pathlight: (a) => {
+    if (model(a, 'bollard', 0, 0, 0.42)) return;
+    put(a, 'cylinder', P.metal.dark, 0, 0.16, 0, [0.14, 0.32, 0.14]);
+    put(a, 'cylinder', L.bulbOff, 0, 0.36, 0, [0.12, 0.08, 0.12]);
+    put(a, 'cylinder', P.metal.dark, 0, 0.42, 0, [0.16, 0.03, 0.16]);
+  },
+  solarstake: (a) => {
+    put(a, 'cylinder', P.metal.dark, 0, 0.14, 0, [0.03, 0.28, 0.03]);
+    put(a, 'sphere', L.bulbOff, 0, 0.3, 0, 0.09);
+    if (a.far) return;
+    put(a, 'box', P.solar.panel, 0, 0.36, 0, [0.12, 0.015, 0.12]);
+    put(a, 'box', P.metal.dark, 0, 0.35, 0, [0.14, 0.01, 0.14]);
+  },
+  uplight: (a) => {
+    put(a, 'cylinder', P.stone.light, 0, 0.03, 0, [0.22, 0.06, 0.22]);
+    put(a, 'cylinder', L.bulbOff, 0, 0.07, 0, [0.14, 0.02, 0.14]);
+  },
+  porchlight: (a) => {
+    put(a, 'box', P.stone.light, 0, 0.5, -0.32, [0.26, 1.0, 0.16]);
+    if (a.far) return;
+    put(a, 'box', P.metal.dark, 0, 1.12, -0.18, [0.04, 0.04, 0.2]);
+    put(a, 'box', L.bulbOff, 0, 1.03, -0.1, [0.12, 0.14, 0.12]);
+    put(a, 'cone', P.metal.dark, 0, 1.13, -0.1, [0.16, 0.06, 0.16]);
+  },
+  tablelight: (a) => {
+    put(a, 'cylinder', P.wood.mid, 0, 0.42, 0, [0.6, 0.04, 0.6]);
+    put(a, 'cylinder', P.wood.mid, 0, 0.2, 0, [0.06, 0.4, 0.06]);
+    if (a.far) return;
+    put(a, 'cylinder', P.wood.mid, 0, 0.02, 0, [0.3, 0.03, 0.3]);
+    put(a, 'cylinder', P.metal.dark, 0.08, 0.5, 0.04, [0.04, 0.12, 0.04]);
+    put(a, 'cone', L.bulbOff, 0.08, 0.62, 0.04, [0.18, 0.12, 0.18]);
+  },
+  glowpod: (a) => {
+    put(a, 'cylinder', C.bedSoil, 0, 0.02, 0, [0.5, 0.04, 0.5]);
+    if (a.far) return put(a, 'sphere', P.leaf.mid, 0, 0.18, 0, 0.3);
+    for (let i = 0; i < 5; i++) {
+      const ang = (i / 5) * Math.PI * 2;
+      put(a, 'cylinder', P.leaf.mid, Math.cos(ang) * 0.12, 0.12, Math.sin(ang) * 0.12, [0.03, 0.22, 0.03]);
+      put(a, 'sphere', P.leaf.shrub[0], Math.cos(ang) * 0.12, 0.25, Math.sin(ang) * 0.12, 0.08);
+    }
+  },
+  // Line lights hang on a pole's lines (never on a tile): this is only their look in hand (the hologram).
+  festoon: (a) => lineSample(a, L.bulbOff, 0.09, 5),
+  fairylights: (a) => lineSample(a, L.bulbOff, 0.04, 11),
+  paperlanterns: (a) => lineSample(a, L.lamps.rose, 0.16, 3),
+  glasslanterns: (a) => {
+    put(a, 'box', P.metal.dark, 0, 0.9, 0, [0.7, 0.02, 0.02]);
+    if (!model(a, 'lantern', 0, 0, 0.4, 0, 0.5)) put(a, 'box', L.bulbOff, 0, 0.7, 0, [0.14, 0.2, 0.14]);
   },
   bunting: (a) => {
     if (model(a, 'banner-pole', 0, 0, 0.5)) return;

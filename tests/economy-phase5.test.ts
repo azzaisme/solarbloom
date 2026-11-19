@@ -3,12 +3,9 @@ import { big, toNum } from '../src/core/Big';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { PARK } from '../src/core/Areas';
 import { TUNING } from '../src/data/tuning';
-import { UPGRADE_BY_ID } from '../src/data/upgrades';
 import { Sim } from '../src/gameplay/Sim';
 import { fill, makeSim, PAD, rich } from './helpers';
-import { runBot } from './bots';
 
-const panels = (sim: Sim) => sim.machinesOfType('solar');
 
 describe('Phase 5 E12: uncapped biomass', () => {
   it('biomass passes 100 and keeps growing; a full energy store still caps', () => {
@@ -24,7 +21,7 @@ describe('Phase 5 E12: uncapped biomass', () => {
   it('Seed Vault still grows energy and water, never biomass', () => {
     const sim = new Sim(createInitialState(4));
     sim.state.resources.biomass = big(1e6);
-    expect(sim.upgrades.purchase('seedVault')).toBe(true);
+    expect(sim.upgrades.grant('seedVault')).toBeGreaterThan(0);
     expect(toNum(sim.state.caps.energy)).toBe(TUNING.storageTiers.energy[1]);
     expect(toNum(sim.state.caps.water)).toBe(TUNING.storageTiers.water[1]);
     expect(sim.econ.cap('biomass')).toBeUndefined();
@@ -39,55 +36,19 @@ describe('Phase 5 E12: per-machine upgrades', () => {
     const a = sim.build.place('solar', PAD, 5, 5)!;
     const b = sim.build.place('solar', PAD, 6, 6)!;
     const e0 = sim.production.solarOutput(b, true);
-    expect(sim.upgrades.purchase('solarArray', a.id)).toBe(true);
+    expect(sim.upgrades.grant('solarArray', a.id)).toBeGreaterThan(0);
     expect(sim.upgrades.levelOf(a, 'solarArray')).toBe(1);
     expect(sim.upgrades.levelOf(b, 'solarArray')).toBe(0);
     expect(sim.production.solarOutput(b, true)).toBe(e0);
     expect(sim.production.solarOutput(a, true)).toBeCloseTo(e0 * 1.5, 9);
   });
 
-  it('"Upgrade all" buys cheapest-first while biomass lasts, never overspends, one transaction per level', () => {
+  it('a grant for a machine that is gone, or of the wrong type, changes nothing (E23.1.5)', () => {
     const sim = makeSim();
-    rich(sim);
-    fill(sim, 0, 0, 7, 7, 'restored');
-    sim.build.place('solar', PAD, 5, 5);
-    sim.build.place('solar', PAD, 6, 6);
-    const def = UPGRADE_BY_ID.solarArray;
-    // Exactly enough for one level on every panel (base cost each; the park and the pad each have an old one).
-    const count = panels(sim).length;
-    expect(count).toBeGreaterThanOrEqual(3);
-    sim.state.resources.biomass = big(def.baseCost * count);
-    const n = sim.upgrades.purchaseAll('solarArray');
-    expect(n).toBe(count);
-    for (const m of panels(sim)) expect(sim.upgrades.levelOf(m, 'solarArray')).toBe(1);
-    expect(toNum(sim.state.resources.biomass)).toBe(0);
-    expect(sim.upgrades.purchaseAll('solarArray')).toBe(0); // nothing left: no change, no negative balance
-    expect(toNum(sim.state.resources.biomass)).toBe(0);
-  });
-
-  it('long-tail upgrades have no last level, and costs grow ×1.65 as big numbers', () => {
-    const sim = makeSim();
-    const def = UPGRADE_BY_ID.richSoil;
-    expect(def.maxLevel).toBe(Infinity);
-    sim.state.upgrades.richSoil = 300;
-    const c = sim.upgrades.cost(def);
-    expect(c.exponent).toBeGreaterThan(50); // 40 × 1.55^300 ≈ 1e58: no overflow, no NaN
-    expect(Number.isFinite(sim.upgrades.soilMult)).toBe(true);
-    sim.state.resources.biomass = c.mul(0.999); // (c − 1 is c at 15 significant digits)
-    expect(sim.upgrades.purchase('richSoil')).toBe(false);
-    sim.state.resources.biomass = c;
-    expect(sim.upgrades.purchase('richSoil')).toBe(true);
-    expect(sim.upgrades.level('richSoil')).toBe(301);
-  });
-
-  it('a stale per-machine button (machine gone or wrong type) changes nothing', () => {
-    const sim = makeSim();
-    rich(sim);
-    const b0 = toNum(sim.state.resources.biomass);
-    expect(sim.upgrades.purchase('solarArray', 'm-gone')).toBe(false);
+    expect(sim.upgrades.grant('solarArray', 'm-gone')).toBe(0);
     const core = sim.state.machines.find((m) => m.type === 'core')!;
-    expect(sim.upgrades.purchase('solarArray', core.id)).toBe(false);
-    expect(toNum(sim.state.resources.biomass)).toBe(b0);
+    expect(sim.upgrades.grant('solarArray', core.id)).toBe(0);
+    expect(sim.upgrades.levelOf(core, 'solarArray')).toBe(0);
   });
 });
 
@@ -113,10 +74,10 @@ describe('Phase 5 E12: smaller goals and no specialty stall', () => {
     expect(sim.state.areas[id].steps).toBe(3);
   });
 
-  it('an area restored all the way never waits on its specialty', () => {
+  it('an area restored all the way is ready to wake', () => {
     const sim = new Sim(createInitialState(7));
     sim.areas.clear(PARK, true);
-    const id = sim.areas.revealed().find((a) => a !== PARK && sim.milestones.specialty(a).kind === 'corridor') ?? sim.areas.revealed().find((a) => a !== PARK)!;
+    const id = sim.areas.revealed().find((a) => a !== PARK)!;
     for (let pass = 0; pass < 400; pass++) {
       const open = sim.areas.entryTiles(id).filter((t) => sim.restoration.isEligible(t));
       if (!open.length) break;
@@ -124,24 +85,7 @@ describe('Phase 5 E12: smaller goals and no specialty stall', () => {
     }
     const c = sim.areas.counts(id);
     expect(c.restored).toBe(c.restorable);
-    expect(sim.milestones.specialty(id).met).toBe(true);
     expect(sim.areas.ready(id)).toBe(true);
     void GROUND;
-  });
-});
-
-describe('Phase 5 E12: progression with uncapped biomass (scripted bot, not people)', () => {
-  it('keeps something to buy for 30 minutes and never stalls', { timeout: 120_000 }, () => {
-    let maxedAt = -1;
-    const r = runBot({
-      seed: 7,
-      minutes: 30,
-      onSecond: (sim) => {
-        if (maxedAt < 0 && !sim.upgrades.all().some((u) => sim.upgrades.status(u).reason !== 'Maxed' && (!u.available || u.available(sim.state)))) maxedAt = sim.time;
-      },
-    });
-    expect(maxedAt).toBe(-1); // there is always an upgrade left (Phase 4 ran out at ~5 min)
-    expect(r.stuck).toBe(0);
-    expect(r.fountain).toBeGreaterThan(0);
   });
 });

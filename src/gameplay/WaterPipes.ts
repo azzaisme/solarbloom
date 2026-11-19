@@ -32,6 +32,11 @@ export interface PumpSpec {
   flow: number;
   power?: number;
   size?: number;
+  /**
+   * E23.8.3: it has its own filter, so it may also stand on the sea's shore and draw from the sea (which never runs
+   * dry). Beside a pond or canal it still draws from that.
+   */
+  sea?: boolean;
 }
 
 /** One connected run of pipe and the pumps and reservoirs it touches. */
@@ -107,7 +112,7 @@ export class WaterPipes {
     return this.cache.set;
   }
 
-  /** Pipe tiles left over from the last Pipe crafted (a Pipe lays `tilesPerPipe`). */
+  /** Pipe tiles a save from before the crafting table had left over (laid first; nothing adds to it now). */
   get stock(): number {
     return this.save.pipeStock ?? 0;
   }
@@ -134,7 +139,7 @@ export class WaterPipes {
       .join(', ');
   }
 
-  /** Lays one pipe tile (paying a Pipe when the last one is used up). */
+  /** Lays one pipe tile (one crafted Pipe from the pack or the store). */
   lay(roofId: string, x: number, z: number): boolean {
     const why = this.layProblem(roofId, x, z);
     if (why) {
@@ -142,23 +147,20 @@ export class WaterPipes {
       return false;
     }
     const s = this.save;
-    if (this.stock <= 0) {
-      if (!this.sim.inventory.pay(WATER_NET.pipe.cost)) return false;
-      s.pipeStock = WATER_NET.pipe.tilesPerPipe;
-    }
-    s.pipeStock = this.stock - 1;
+    if (this.stock > 0) s.pipeStock = this.stock - 1;
+    else if (!this.sim.inventory.pay(WATER_NET.pipe.cost)) return false;
     s.pipes = [...this.keys(), pipeKey(x, z)].sort();
     this.version++;
     return true;
   }
 
-  /** Lifts one pipe tile (it goes back into the stock). */
+  /** Lifts one pipe tile (its Pipe goes back into the pack). */
   lift(x: number, z: number): boolean {
     if (!this.has(x, z)) return false;
     const k = pipeKey(x, z);
     const s = this.save;
     s.pipes = this.keys().filter((p) => p !== k);
-    s.pipeStock = this.stock + 1;
+    this.sim.inventory.refund(WATER_NET.pipe.cost);
     this.version++;
     return true;
   }
@@ -233,10 +235,12 @@ export class WaterPipes {
   /** The water a pump pushes: the pond or canal it stands on the bank of (a desalination plant: its own tank). */
   pumpSource(m: MachineData): WaterBody | undefined {
     if (m.type === 'desalination') return this.water.plantTank(m.id);
-    for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size)) {
+    const foot = this.sim.grid.footprint(m.roofId, m.x, m.z, m.size);
+    for (const t of foot) {
       const b = t && this.water.bodyNear(t, 1);
       if (b) return b;
     }
+    if (this.pumpTypes.get(m.type)?.sea && foot.some((t) => t && this.water.onShore(t))) return this.water.body(SEA_ID);
     return undefined;
   }
 
@@ -467,3 +471,5 @@ export class WaterPipes {
 export const tankId = (m: MachineData) => `r:${m.id}`;
 /** A desalination plant's tank id. */
 export const plantId = (m: MachineData) => `d:${m.id}`;
+/** The sea, as a body a sea pump (PumpSpec.sea) draws from: never runs dry, never saved. */
+export const SEA_ID = 'sea';

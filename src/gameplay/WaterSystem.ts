@@ -1,11 +1,12 @@
 import { GROUND } from '../core/GameState';
 import { regionById, regionOfCell, seaCell, surfCell } from '../core/OldCityLayout';
 import { isUsable } from './Unlocks';
-import type { BuildableType, MachineData, TileData, WeatherKind } from '../core/types';
+import type { BuildableType, MachineData, TileData } from '../core/types';
+import type { WeatherKind } from '../data/weather';
 import { KEEPERS, REGIONS, type RegionId } from '../data/oldcity';
 import { WATER_NET } from '../data/water';
 import type { Sim } from './Sim';
-import { plantId, tankId, WaterPipes, type PumpSpec } from './WaterPipes';
+import { plantId, SEA_ID, tankId, WaterPipes, type PumpSpec } from './WaterPipes';
 
 /**
  * A body of fresh water: one connected stretch of water tiles (a pond, a canal, a basin). Its id is its anchor
@@ -31,23 +32,11 @@ export interface WaterSave {
   levels: Record<string, number>;
 }
 
+/** The sea as a body (E23.8.3's sea pumps draw from it): no tiles of its own, bottomless. */
+const SEA: WaterBody = { id: SEA_ID, tiles: new Set(), capacity: Infinity };
+
 /** Each region's water rectangles (its canals and ponds), by region. */
 const REGION_WATER = new Map(REGIONS.filter((r) => r.water?.length).map((r) => [r.id, r.water!]));
-
-/** What the water reads from E23.7.2's `sim.weather` (all optional until it lands). */
-interface WeatherLike {
-  kind?(): string;
-  rain?(): number;
-  effects?(): { evaporation?: number };
-}
-
-/** E23.7's weather names, as the water reads them. */
-const WEATHER_ALIASES: Record<string, WeatherKind> = {
-  sunny: 'clear',
-  storm: 'rain',
-  fog: 'mist',
-  wind: 'windy',
-};
 
 const SIDES = [
   [1, 0],
@@ -122,6 +111,7 @@ export class WaterSystem {
 
   /** The body with this id (its anchor `x,z`, or a reservoir's `r:<machine id>`). */
   body(id: string): WaterBody | undefined {
+    if (id === SEA_ID) return SEA;
     if (id.startsWith('r:')) return this.tank(id.slice(2));
     if (id.startsWith('d:')) return this.plantTank(id.slice(2));
     const hit = this.bodies.get(id);
@@ -223,6 +213,7 @@ export class WaterSystem {
     if (type === 'desalination') return foot.some((t) => t && this.onShore(t)) ? undefined : 'A desalination plant stands on the shore, beside the sea';
     if (roofId !== GROUND) return 'A pump stands on the ground, on the bank of a pond or canal';
     for (const t of foot) if (t && this.bodyNear(t, 1)) return undefined;
+    if (pump?.sea) return foot.some((t) => t && this.onShore(t)) ? undefined : 'It stands on the shore, or on the bank of a pond or canal';
     return 'A pump stands on the bank of a pond or canal';
   }
 
@@ -312,6 +303,7 @@ export class WaterSystem {
 
   /** 0…1: how full a body is. */
   levelOf(id: string): number {
+    if (id === SEA_ID) return 1;
     const saved = this.save.levels[id];
     if (saved !== undefined) return saved;
     if (id.startsWith('r:') || id.startsWith('d:')) return WATER_NET.reservoir.startLevel;
@@ -321,6 +313,7 @@ export class WaterSystem {
 
   /** Units a body holds. */
   amountOf(id: string): number {
+    if (id === SEA_ID) return Infinity;
     const b = this.body(id);
     return b ? this.levelOf(id) * b.capacity : 0;
   }
@@ -334,6 +327,7 @@ export class WaterSystem {
 
   /** Takes up to `units` from a body; returns what it got. */
   draw(id: string, units: number): number {
+    if (id === SEA_ID) return Math.max(0, units); // the sea never runs dry
     const b = this.body(id);
     if (!b || units <= 0) return 0;
     const have = this.levelOf(id) * b.capacity;
@@ -354,6 +348,7 @@ export class WaterSystem {
 
   /** Adds up to `units` to a body; returns what fitted. */
   fill(id: string, units: number): number {
+    if (id === SEA_ID) return 0;
     const b = this.body(id);
     if (!b || units <= 0) return 0;
     const have = this.levelOf(id) * b.capacity;
@@ -365,6 +360,19 @@ export class WaterSystem {
   /** Does a body within reach still hold water, or does a pipe beside the tile carry some? (planters) */
   isWatered(t: TileData): boolean {
     return this.wetness(t) > WATER_NET.dryBelow || this.pipes.feeds(t);
+  }
+
+  /**
+   * E23.5.2's watercress: is water running beside this tile? A pipe carrying water on one of its four sides (E23.4.2),
+   * or a canal, pond or the sea beside it (what the farm read before the network landed).
+   */
+  isRunning(t: { roofId: string; x: number; z: number }): boolean {
+    if (t.roofId !== GROUND) return false;
+    for (const [dx, dz] of SIDES) {
+      if (this.pipes.carries(t.x + dx, t.z + dz)) return true;
+      if (this.sim.grid.peek(GROUND, t.x + dx, t.z + dz)?.feature === 'water') return true;
+    }
+    return false;
   }
 
   /** 0…1: the fullest body within reach (0 if there is none). */
@@ -551,42 +559,62 @@ export class WaterSystem {
     return [x0 - R, z0 - R, x1 + R, z1 + R];
   }
 
-  /**
-   * The weather now: E23.7's `sim.weather.kind()` when it is there, else E21.13's saved field; unset is plain cloud
-   * (no rain, no sun).
-   */
+  /** The weather now (E23.7.2's `sim.weather`). */
   weather(): WeatherKind {
-    const live = (this.sim as unknown as { weather?: WeatherLike }).weather?.kind?.();
-    if (live) return WEATHER_ALIASES[live] ?? (live as WeatherKind);
-    return this.sim.state.salvage?.weather?.kind ?? 'cloudy';
+    return this.sim.weather.kind();
   }
 
   /**
-   * What the weather does to the water now (shares of capacity per game day): E23.7.2's rain and evaporation when
-   * its weather is there, else this file's own table by kind.
+   * What the weather does to the water now (shares of capacity per game day): E23.7.2's rain (`rainShare` of
+   * capacity for each unit: 1 a day's steady rain, 2 a storm) and its sun's evaporation.
    */
   sky(): { fill: number; evap: number } {
-    const wx = (this.sim as unknown as { weather?: WeatherLike }).weather;
-    if (wx?.rain && wx.effects) return { fill: WATER_NET.rainShare * wx.rain(), evap: wx.effects().evaporation ?? 0 };
-    const w = this.weather();
-    return { fill: WATER_NET.weatherFill[w] ?? 0, evap: w === 'clear' ? WATER_NET.evaporationPerDay : 0 };
+    const wx = this.sim.weather;
+    return { fill: WATER_NET.rainShare * wx.rain(), evap: wx.effects().evaporation };
+  }
+
+  /**
+   * E23.1.5's advisor: is this area short of water? True when a body with water in the area is below `fadeBelow`
+   * (its land fading). Only bodies whose level has moved (or that start low, like Cistern Basin's) are looked at.
+   */
+  isLow(areaId: string): boolean {
+    const map = this.sim.areas.map;
+    for (const b of this.live()) {
+      if (this.levelOf(b.id) >= WATER_NET.fadeBelow) continue;
+      for (const id of b.tiles) {
+        const t = this.sim.grid.byTileId(id);
+        if (t && map.areaOfCell(t.x, t.z) === areaId) return true;
+      }
+    }
+    return false;
   }
 
   // ───────────── hooks for the gentle-failure suite (E23.10) ─────────────
 
-  /** Every body this session knows of, empty. */
+  /** Every body in the areas bloombot has seen (and any this session has looked at), empty. */
   drainForTest() {
-    for (const b of new Set([...this.bodies.values(), ...this.live()])) this.draw(b.id, b.capacity);
+    for (const b of this.allSeen()) this.draw(b.id, b.capacity);
   }
 
-  /** Every body this session knows of, full. */
+  /** Every body in the areas bloombot has seen (and any this session has looked at), full. */
   refillForTest() {
-    for (const b of new Set([...this.bodies.values(), ...this.live()])) this.fill(b.id, b.capacity);
+    for (const b of this.allSeen()) this.fill(b.id, b.capacity);
   }
 
-  /** No water within reach that still holds any. */
+  private allSeen(): Set<WaterBody> {
+    const out = new Set<WaterBody>([...this.bodies.values(), ...this.live()]);
+    for (const id of Object.keys(this.sim.state.areas))
+      for (const t of this.sim.areas.tiles(id)) {
+        const b = this.bodyAt(t);
+        if (b) out.add(b);
+      }
+    return out;
+  }
+
+  /** Land that lives off water and has none: a body within reach, but none in reach still holds any (land with no
+   * water near it never depended on water, so it is never dry). */
   isDry(t: TileData): boolean {
-    return !this.isWatered(t);
+    return !!this.bodyNear(t) && !this.isWatered(t);
   }
 
   /** Spring flow for a body (share of capacity per game day). */

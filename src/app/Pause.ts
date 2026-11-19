@@ -5,11 +5,13 @@
  *
  * - `menu`: the in-game menu is open (Esc with nothing open, or Menu on the pad).
  * - `panel`: a full-screen panel is open (backpack, settings, storage, Workbench, house).
- * - `blur`: the window lost focus or the page was hidden (setting "Pause when the window is not in focus").
+ * - `hidden`: the page is hidden (another tab, minimised). Always: the world waits, exactly as when the game is
+ *   closed, and nothing is paid back on return (E23.1: no idle catch-up).
+ * - `blur`: the window lost focus while still showing (setting "Pause when the window is not in focus").
  * - `sleep`: the Steam Deck (or the computer) went to sleep.
  * - `padLost`: the pad in use disconnected (the menu opens; resuming clears it).
  */
-export type PauseReason = 'menu' | 'panel' | 'blur' | 'sleep' | 'padLost';
+export type PauseReason = 'menu' | 'panel' | 'hidden' | 'blur' | 'sleep' | 'padLost';
 
 export class Pause {
   private reasons = new Set<PauseReason>();
@@ -42,10 +44,8 @@ export class Pause {
 
 /** What the frame loop owes the simulation (Game keeps one; tests drive it directly). */
 export interface SimClock {
-  /** simulated seconds not yet ticked */
+  /** simulated seconds not yet ticked (never more than one step carried between frames) */
   acc: number;
-  /** seconds owed after a hitch or a hidden tab, paid back within the frame budget (City 06.5) */
-  catchUpDebt: number;
 }
 
 export interface SimTicker {
@@ -53,10 +53,11 @@ export interface SimTicker {
 }
 
 /**
- * Runs the simulation for one frame (City 06.5's budgeted loop): nothing at all while paused, otherwise the
- * frame's own time first, then any catch-up owed, within `budgetMs`. Returns the number of ticks run.
+ * Runs the simulation for one frame (City 06.5's budgeted loop): nothing at all while paused, otherwise the frame's
+ * own time, within `budgetMs`. Time the budget can't fit is dropped, never owed (E23.1: no catch-up, so nothing in
+ * the world moves on while the player is away or the device stalls). Returns the number of ticks run.
  */
-export function runSimFrame(sim: SimTicker, clock: SimClock, dt: number, o: { pause?: Pause; speed?: number; step: number; budgetMs: number; maxCatchUp: number; now?: () => number }): number {
+export function runSimFrame(sim: SimTicker, clock: SimClock, dt: number, o: { pause?: Pause; speed?: number; step: number; budgetMs: number; now?: () => number }): number {
   if (o.pause?.paused) return 0;
   const now = o.now ?? (() => performance.now());
   const t0 = now();
@@ -67,16 +68,7 @@ export function runSimFrame(sim: SimTicker, clock: SimClock, dt: number, o: { pa
     clock.acc -= o.step;
     n++;
   }
-  // More owed than the budget allows (a slow device at high speed): carry it as catch-up, not a backlog.
-  if (clock.acc > 1) {
-    clock.catchUpDebt = Math.min(o.maxCatchUp, clock.catchUpDebt + clock.acc - o.step);
-    clock.acc = o.step;
-  }
-  while (clock.catchUpDebt >= o.step && now() - t0 < o.budgetMs) {
-    sim.tick(o.step);
-    clock.catchUpDebt -= o.step;
-    n++;
-  }
-  if (clock.catchUpDebt < o.step) clock.catchUpDebt = 0;
+  // More than the budget allows (a slow device at high speed): drop it, so it never piles up as a backlog.
+  if (clock.acc > o.step) clock.acc = o.step;
   return n;
 }

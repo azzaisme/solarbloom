@@ -12,7 +12,7 @@ describe('save & progression', () => {
     rich(sim);
     fill(sim, 2, 2, 5, 5, 'restored');
     sim.build.place('condenser', 'r1', 3, 3);
-    sim.upgrades.purchase('solarArray');
+    sim.upgrades.grant('solarArray');
     const copy = new Sim(saver.deserialize(saver.serialize(sim.state))!);
     expect(copy.progression.restoredCount('r1')).toBe(sim.progression.restoredCount('r1'));
     expect(copy.state.machines.length).toBe(sim.state.machines.length);
@@ -64,7 +64,6 @@ describe('save & progression', () => {
           if (spot) sim.build.place(type, GROUND, spot.x, spot.z);
           break;
         }
-        if (sim.upgrades.status(sim.upgrades.all().find((u) => u.id === 'seedVault')!).ok) sim.upgrades.purchase('seedVault');
         if (sim.progression.coreReady()) sim.progression.activateCore();
         if (sim.state.resources.energy.lt(2)) sim.harvestSun();
       }

@@ -1,5 +1,11 @@
+import { GROUND } from '../core/GameState';
+import { machineStrengthAt } from '../core/RegionStrengths';
+import type { MachineData } from '../core/types';
 import { POWER } from '../data/power';
 import type { Sim } from './Sim';
+
+/** Where something on the grid stands. */
+type Placed = Pick<MachineData, 'id' | 'roofId' | 'x' | 'z'>;
 
 /**
  * E23.3: what the grid needs to know about the sky. This is the ONE place power reads time of day and weather.
@@ -41,9 +47,24 @@ interface WeatherLike {
   wind?: () => number | undefined;
 }
 
+/**
+ * A source's region strength multiplier (E23.8.1): about 1.5× for a matching machine in its region (wind on
+ * Saltwind more), from E23.8's `machineStrengthAt`. Old-city ground only.
+ */
+export function regionBoost(sim: Sim, m: Pick<MachineData, 'roofId' | 'x' | 'z'> & { type: string }): number {
+  if (m.roofId !== GROUND || !sim.oldCity) return 1;
+  return machineStrengthAt(m.type, m.x, m.z);
+}
+
+/** How high a machine stands, in terrace levels (rooftops count as high ground). */
+export function groundLevel(sim: Sim, m: Placed): number {
+  if (m.roofId !== GROUND) return POWER.wind.roofLevel;
+  return sim.grid.get(GROUND, m.x, m.z)?.level ?? 0;
+}
+
 const CLOUDY = new Set(['cloud', 'cloudy', 'overcast', 'rain', 'storm', 'fog']);
-/** Wind by weather kind when the weather gives no number: turbines turn on windy days and in storms (a little in rain). */
-const WIND: Record<string, number> = { wind: 0.75, windy: 0.75, storm: 1, rain: 0.3 };
+/** Wind by weather kind when the weather gives no number: turbines turn only on windy days and in storms. */
+const WIND: Record<string, number> = { wind: 0.75, windy: 0.75, storm: 1 };
 const GLOOMY = new Set(['fog', 'storm']);
 
 /** Daylight 0..1 from E23.7's day fraction (0 dawn, 2/3 dusk, 1 the next dawn), easing over a short twilight. */
