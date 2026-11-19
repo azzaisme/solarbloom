@@ -1,7 +1,15 @@
 import type { MachineData } from '../core/types';
 import { CROPS, PLANTER, type CropId, type Like } from '../data/crops';
+import { MATERIALS, type MaterialCost } from '../data/salvage';
 import type { Sim } from '../gameplay/Sim';
 import { escHtml } from './OldCityPanel';
+
+/** A price from data as words ("2 Timber", "1 Fertiliser"). */
+const price = (c: MaterialCost) =>
+  (Object.entries(c) as [keyof typeof MATERIALS, number][])
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${v} ${MATERIALS[k].name}`)
+    .join(' + ');
 
 /** Short words for what a crop likes (the planter panel; no numbers). */
 const LIKE_WORDS: Record<Like, string> = {
@@ -28,8 +36,8 @@ export function planterHtml(sim: Sim, m: MachineData): string {
   const lk = f.look(m);
   const inv = sim.inventory;
   const extras = `<h3>Extras</h3><div class="oc-row">
-      <button data-act="extra" data-arg="trellis" ${st.trellis || !inv.canPay(PLANTER.extras.trellis) ? 'disabled' : ''}>${st.trellis ? 'Trellis ✓' : 'Add a trellis · 2 Timber'}</button>
-      <button data-act="extra" data-arg="flooded" ${st.flooded || !inv.canPay(PLANTER.extras.flooded) ? 'disabled' : ''}>${st.flooded ? 'Flooded ✓' : 'Flood the bed · 2 Clay'}</button>
+      <button data-act="extra" data-arg="trellis" ${st.trellis || !inv.canPay(PLANTER.extras.trellis) ? 'disabled' : ''}>${st.trellis ? 'Trellis ✓' : `Add a trellis · ${price(PLANTER.extras.trellis)}`}</button>
+      <button data-act="extra" data-arg="flooded" ${st.flooded || !inv.canPay(PLANTER.extras.flooded) ? 'disabled' : ''}>${st.flooded ? 'Flooded ✓' : `Flood the bed · ${price(PLANTER.extras.flooded)}`}</button>
     </div>`;
   if (!lk.crop) {
     const seeds = inv.available('seeds');
@@ -55,6 +63,6 @@ export function planterHtml(sim: Sim, m: MachineData): string {
     <p>${escHtml(mood)}</p>
     <div class="oc-row">
       ${lk.ripe ? '<button data-act="harvest">Harvest</button>' : ''}
-      <button data-act="feed" ${st.fed || !inv.canPay({ fertiliser: PLANTER.feedCost }) ? 'disabled' : ''}>${st.fed ? 'Fed ✓' : 'Feed · 1 Fertiliser'}</button>
+      <button data-act="feed" ${st.fed || !inv.canPay({ fertiliser: PLANTER.feedCost }) ? 'disabled' : ''}>${st.fed ? 'Fed ✓' : `Feed · ${price({ fertiliser: PLANTER.feedCost })}`}</button>
     </div>${extras}`;
 }

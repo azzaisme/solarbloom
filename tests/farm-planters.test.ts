@@ -3,8 +3,8 @@ import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { CROP_HOMES, CROP_IDS, CROPS, PLANTER, SEED_FINDS, STARTING_CROPS, type CropId, type Like } from '../src/data/crops';
-import { DAY, DAY_SECONDS } from '../src/data/time';
-import { REGIONS } from '../src/data/oldcity';
+import { DAY, DAY_SECONDS, NIGHT_FINDS } from '../src/data/time';
+import { PARK_SET, REGIONS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
@@ -89,6 +89,7 @@ describe('E23.5.2.1: planter growth', () => {
     const sim = farm();
     const m = planter(sim, 12, 16);
     sow(sim, m, 'radish');
+    sim.weather.forceForTest('sunny', 1e9); // dry days for certain (rain would water the bed)
     let wet = true;
     (sim as unknown as { water: { isWatered(): boolean } }).water = { isWatered: () => wet };
     grow(sim, DAY_SECONDS / 4);
@@ -255,6 +256,23 @@ describe('E23.5.2.2: every crop’s likes change its growth', () => {
     expect(sim.farm.look(c).rate).toBeCloseTo(before * PLANTER.pollinatorBoost);
   });
 
+  it('fertiliser speeds any crop by the general boost, except a crop that likes it (data), which gets it through the like', () => {
+    const sim = farm();
+    const r = planter(sim, 12, 16);
+    const p = planter(sim, 12, 19);
+    sow(sim, r, 'radish');
+    sow(sim, p, 'pumpkin');
+    expect(CROPS.pumpkin.likes).toContain('fertiliser');
+    expect(CROPS.radish.likes).not.toContain('fertiliser');
+    const r0 = sim.farm.look(r).rate;
+    const p0 = sim.farm.look(p).rate;
+    sim.inventory.add('fertiliser', 2);
+    sim.farm.feed(r);
+    sim.farm.feed(p);
+    expect(sim.farm.look(r).rate).toBeCloseTo(r0 * PLANTER.fertilisedBoost);
+    expect(sim.farm.look(p).rate).toBeCloseTo(p0 / PLANTER.unmetLike); // the like met, no second boost
+  });
+
   it('E23.8.1: a planter in Elder Grove (fertile soil) grows 1.5× as fast', () => {
     const sim = farm();
     const m = planter(sim, 12, 16);
@@ -362,11 +380,52 @@ describe('E23.5.2.3: seeds from exploring', () => {
     for (const r of REGIONS) for (const k of r.caches) expect(sim.farm.regionAt(k.x, k.z), k.id).toBe(r.id);
   });
 
-  it('emptying a pile finds the region’s next packet at once', () => {
+  it('emptying a pile (the real salvage) finds the region’s next packet at once', () => {
     const sim = farm();
-    const cell = regionCell(sim, 'oldMarket');
-    sim.bus.emit('pile.salvaged', { pileId: 'x', material: 'glass', got: 3, left: 0, x: cell.x, z: cell.z });
+    sim.areas.fog = () => 'cleared'; // the way to the Old Market is open
+    const pile = REGIONS.find((r) => r.id === 'oldMarket')!.piles[0];
+    let takes = 0;
+    while (sim.salvage.left(pile.id) > 0 && takes++ < 50) {
+      expect(sim.farm.knows('tomato')).toBe(false); // not until it's empty
+      sim.inventory.depositAll(); // room in the backpack
+      expect(sim.salvage.salvage(pile.id)).toBeGreaterThan(0);
+    }
+    expect(sim.salvage.left(pile.id)).toBe(0);
     expect(sim.farm.knows('tomato')).toBe(true);
+  });
+
+  it('reading a journal page post for the first time is a find like a cache: its region’s packet, then plain Seeds', () => {
+    const sim = farm();
+    const salt = REGIONS.find((r) => r.id === 'saltwind')!.pages[0];
+    expect(sim.journal.read(salt.id)).toBe(true);
+    expect(sim.farm.knows('seaKale')).toBe(true);
+    // a page read again gives nothing more
+    const seeds = () => sim.inventory.count('seeds') + sim.inventory.stored('seeds');
+    const before = seeds();
+    expect(sim.journal.read(salt.id)).toBe(false);
+    expect(seeds()).toBe(before);
+    // a region whose packets are all found: its page holds plain Seeds
+    sim.farm.findIn('oldMarket');
+    const market = REGIONS.find((r) => r.id === 'oldMarket')!.pages[0];
+    expect(sim.journal.read(market.id)).toBe(true);
+    expect(seeds()).toBe(before + SEED_FINDS.cacheSeeds);
+    // the park's page holds a park packet
+    expect(sim.journal.read(PARK_SET.pages[0].id)).toBe(true);
+    expect(sim.farm.knows('lettuce')).toBe(true);
+  });
+
+  it('a glowing plant found at night (the real night find) carries its region’s next packet; glinting salvage doesn’t', () => {
+    const sim = farm();
+    sim.clock.isNight = () => true;
+    const glow = NIGHT_FINDS.find((f) => f.kind === 'glowplant')!;
+    const region = sim.farm.regionAt(glow.x, glow.z)!;
+    const next = sim.farm.nextIn(region)!;
+    expect(next).toBeTruthy();
+    const scrap = NIGHT_FINDS.find((f) => f.kind === 'salvage')!;
+    expect(sim.nightFinds.take(scrap.id)).toBeGreaterThan(0);
+    expect(sim.farm.knows(next)).toBe(false);
+    expect(sim.nightFinds.take(glow.id)).toBeGreaterThan(0);
+    expect(sim.farm.knows(next)).toBe(true);
   });
 });
 

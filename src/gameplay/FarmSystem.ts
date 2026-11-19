@@ -1,5 +1,6 @@
 import { PARK } from '../core/Areas';
 import { regionOfCell } from '../core/OldCityLayout';
+import { PARK_SET, REGIONS } from '../data/oldcity';
 import type { MachineData, PlanterState } from '../core/types';
 import type { WeatherKind } from '../data/weather';
 import { CROP_HOMES, CROP_IDS, CROPS, PLANTER, SEED_FINDS, STARTING_CROPS, type CropId, type Like } from '../data/crops';
@@ -41,7 +42,8 @@ export interface PlanterLook {
  * `salvage.planters`. A planted crop grows in game days while watered, at full rate when everything it likes is
  * met, slower when not; with no water it wilts and simply waits (crops never die). A ripe crop is harvested into
  * the backpack (food, biomass from the spent plants, seeds) and the bed is empty again. Seeds for new crops are
- * found by exploring: gathering a region's restored ground and emptying its piles turns up that region's packets.
+ * found by exploring: gathering a region's restored ground, emptying its piles, reading its journal page and night or
+ * fog plant finds turn up that region's packets.
  * Old-city rules only.
  */
 export class FarmSystem {
@@ -51,7 +53,15 @@ export class FarmSystem {
       if (e.left <= 0) this.findIn(this.regionAt(e.x, e.z));
     });
     sim.bus.on('machine.removed', ({ machine }) => this.forget(machine.id));
+    // E21.10's caches: whoever opens them emits this (nothing on integration opens a cache yet)
     sim.bus.on('cache.opened', (e) => this.onCache(e.x, e.z));
+    // exploring today: a journal page post is found once, like a cache, and holds its region's packet (or Seeds)
+    sim.bus.on('journal.page', (e) => this.onPage(e.id));
+    // a glowing plant or dewcap found at night or in fog may carry its region's next packet (they come back daily,
+    // so they never fall back to plain Seeds)
+    sim.bus.on('night.found', (e) => {
+      if (e.material === 'seeds') this.findIn(this.regionAt(e.x, e.z));
+    });
   }
 
   get on(): boolean {
@@ -217,7 +227,8 @@ export class FarmSystem {
     let rate = 0;
     if (!ripe && !wilting && !resting) {
       rate = PLANTER.unmetLike ** unmet.length;
-      if (crop !== 'pumpkin' && this.fertilised(m)) rate *= PLANTER.fertilisedBoost;
+      // a crop that likes fertiliser (data/crops) gets it through that like, not the general boost as well
+      if (!def.likes.includes('fertiliser') && this.fertilised(m)) rate *= PLANTER.fertilisedBoost;
       if (this.pollinated(m)) rate *= PLANTER.pollinatorBoost;
       rate *= machineStrengthAt('planter', m.x, m.z); // E23.8.1: fertile soil (Elder Grove) grows faster
     }
@@ -348,6 +359,16 @@ export class FarmSystem {
   private onCache(x: number, z: number) {
     if (!this.on) return;
     if (this.findIn(this.regionAt(x, z))) return;
+    const inv = this.sim.inventory;
+    inv.addToStore('seeds', inv.add('seeds', SEED_FINDS.cacheSeeds));
+  }
+
+  /** A journal page read for the first time: its post's region holds a packet, like a cache. */
+  private onPage(id: string) {
+    if (!this.on) return;
+    const region = PARK_SET.pages.some((p) => p.id === id) ? 'park' : REGIONS.find((r) => r.pages.some((p) => p.id === id))?.id;
+    if (!region) return; // the last page comes with the Great Bloom, not from a post
+    if (this.findIn(region)) return;
     const inv = this.sim.inventory;
     inv.addToStore('seeds', inv.add('seeds', SEED_FINDS.cacheSeeds));
   }
