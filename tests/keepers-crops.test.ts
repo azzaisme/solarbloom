@@ -19,7 +19,7 @@ function farm(): Sim {
   const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = 1;
   sim.bot = { roofId: GROUND, x: 8.5, z: 11.5 };
-  (sim as unknown as { water: unknown }).water = { isWatered: () => true };
+  sim.water.isWatered = () => true; // every bed watered; the rest of the water system stays real (E23.4.2 checks a build against it)
   return sim;
 }
 

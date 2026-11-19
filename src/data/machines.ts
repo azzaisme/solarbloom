@@ -141,6 +141,23 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     allowedGround: ['restored', 'prepared'],
     blurb: 'A pad on the grid. Sit on it and bloombot fills up fast.',
   },
+  // E23.4.2: the water network's storage and its pump (crafting-table recipes: data/crafting).
+  reservoir: {
+    type: 'reservoir',
+    name: 'Reservoir',
+    icon: '🛢',
+    size: 2,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Stores water. Rain fills it, and so does a canal or pond on its bank, or a pipe from a pump. Up high, it feeds the pipes below on its own.',
+  },
+  pump: {
+    type: 'pump',
+    name: 'Pump',
+    icon: '⛲',
+    size: 1,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Stands on the bank of a pond or canal and pushes its water along the pipes it touches, uphill or far away. Runs on grid power.',
+  },
   core: {
     type: 'core',
     name: 'Rooftop Core',
@@ -151,8 +168,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
   },
 };
 
-/** E21.3: what can be built (E23.1.1: one list, the Old City's; E23.7.4 dropped the Reclaimer; E23.3 adds the grid; E23.5.2 the Planter). */
-export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+/** E21.3: what can be built (E23.1.1: one list, the Old City's; E23.7.4 dropped the Reclaimer; E23.3 adds the grid; E23.5.2 the Planter; E23.4 the water). */
+export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoir', 'pump', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

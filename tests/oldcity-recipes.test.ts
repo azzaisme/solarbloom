@@ -42,6 +42,8 @@ describe('E21.3: recipes', () => {
       const z = 12;
       ground(sim, x, z);
       if (MACHINES[type].areaTypes) continue; // needs its area type (the Reservoir Garden)
+      if (type === 'pump') continue; // on a bank only: paid exactly in tests/water-pipes.test.ts
+      if (sim.water.unlockFor(type)) sim.state.salvage!.keepers.sluice = { step: 'request1' }; // E23.4: Cistern Basin's unlocks
       stock(sim, type);
       stock(sim, type);
       const first = sim.build.place(type, GROUND, x, z);
