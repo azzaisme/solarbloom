@@ -12,7 +12,7 @@ import { PALETTE } from '../src/rendering/Palette';
 import { POWER } from '../src/data/power';
 
 function park() {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.areas.clear(PARK, true);
   sim.state.salvage!.keepers.sluice = { step: 'request1' };
   sim.state.salvage!.pack = { pipe: 60 }; // crafted Pipes (E23.6.1), one a tile
@@ -191,15 +191,13 @@ describe('E23.4.5: the Water view', () => {
   });
 
   it('is toggled in build mode on keyboard (V) and pad (d-pad left), clashing with nothing', () => {
-    for (const oldCity of [false, true]) {
-      expect(defaultKeys(oldCity).waterOverlay).toEqual(['KeyV']);
-      expect(defaultPad(oldCity).waterOverlay).toBe(14);
-      const b = new Bindings(undefined, { oldCity });
-      expect(b.conflicts()).toEqual([]);
-      expect(b.actionForButton(14, ['build', 'world', 'any'])).toBe('waterOverlay');
-      expect(b.actionForCode('KeyV', ['build', 'world', 'any'])).toBe('waterOverlay');
-      // walking, V is the pulse's own (E23.2.2 loads the next seed): the Water view never takes it there
-      expect(b.actionForCode('KeyV', ['world', 'any'])).not.toBe('waterOverlay');
-    }
+    expect(defaultKeys().waterOverlay).toEqual(['KeyV']);
+    expect(defaultPad().waterOverlay).toBe(14);
+    const b = new Bindings();
+    expect(b.conflicts()).toEqual([]);
+    expect(b.actionForButton(14, ['build', 'world', 'any'])).toBe('waterOverlay');
+    expect(b.actionForCode('KeyV', ['build', 'world', 'any'])).toBe('waterOverlay');
+    // walking, V is the pulse's own (E23.2.2 loads the next seed): the Water view never takes it there
+    expect(b.actionForCode('KeyV', ['world', 'any'])).not.toBe('waterOverlay');
   });
 });
