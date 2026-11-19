@@ -11,7 +11,7 @@ import { PALETTE } from './Palette';
  * below: a slab, a stair's or a ramp's tread), held up by a stick; its joints, flanges and sight glass. `treadTop` is
  * how far a stair's tread (its coping) stands above its step's level (ChunkRenderer.terrace).
  */
-const PIPE = { r: 0.075, clear: 0.1, stick: 0.035, foot: 0.09, joint: 0.105, flange: 0.098, flangeLen: 0.035, sides: 10, glass: 0.13, treadTop: 0.1 };
+const PIPE = { r: 0.075, clear: 0.1, stick: 0.035, foot: 0.09, joint: 0.105, flange: 0.098, flangeLen: 0.035, elbow: 0.04, sides: 10, glass: 0.13, treadTop: 0.1 };
 
 /** Flat lists a mesh is built from. */
 class Geo {
@@ -222,8 +222,9 @@ export class PipeVisuals {
     const vz = pz - dz * PIPE.r;
     tube.drum(vx, vz, lo, hi, PIPE.r);
     tube.tube(vx, vz, px, pz, hi, PIPE.r);
-    trim.drum(vx, vz, lo - PIPE.joint * 0.9, lo + PIPE.joint * 0.9, PIPE.joint);
-    trim.drum(vx, vz, hi - PIPE.joint * 0.9, hi + PIPE.joint * 0.9, PIPE.joint);
+    // short elbow fittings at each bend (tall collars hid the whole upright on a stair's low riser)
+    trim.drum(vx, vz, lo - PIPE.elbow, lo + PIPE.elbow, PIPE.joint);
+    trim.drum(vx, vz, hi - PIPE.elbow, hi + PIPE.elbow, PIPE.joint);
   }
 
   private buildBody() {
@@ -283,7 +284,11 @@ export class PipeVisuals {
       // halves on different treads meet in the middle (a stair's riser can fall there): an upright joins them
       if (hi - lo > 1e-4) tube.drum(cx, cz, lo, hi, PIPE.r);
       const straight = sides.length === 2 && sides[0][0] === -sides[1][0] && sides[0][1] === -sides[1][1];
-      if (!straight || hi - lo > 1e-4) trim.drum(cx, cz, lo - PIPE.joint * 0.9, hi + PIPE.joint * 0.9, PIPE.joint); // a joint, junction or cap
+      if (hi - lo > 1e-4) {
+        // the upright shows blue between two short elbow fittings
+        trim.drum(cx, cz, lo - PIPE.elbow, lo + PIPE.elbow, PIPE.joint);
+        trim.drum(cx, cz, hi - PIPE.elbow, hi + PIPE.elbow, PIPE.joint);
+      } else if (!straight) trim.drum(cx, cz, lo - PIPE.joint * 0.9, hi + PIPE.joint * 0.9, PIPE.joint); // a joint, junction or cap
     }
     const parts: pc.MeshInstance[] = [];
     const add = (g: Geo, m: pc.Material) => {
