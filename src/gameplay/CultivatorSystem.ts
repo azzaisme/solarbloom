@@ -3,6 +3,7 @@ import type { CultivatorUnit, MachineData, TileData } from '../core/types';
 import { isBuilt } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
+import { WATER_NET } from '../data/water';
 
 const C = () => TUNING.cultivator;
 
@@ -222,6 +223,8 @@ export class CultivatorSystem {
   private finished(m: MachineData, u: CultivatorUnit, t: TileData) {
     this.release(u, t.id);
     m.cult!.done++;
+    // E23.4.1: tilling drinks from the water nearby (the land around shows it when that runs low)
+    this.sim.water.drawNear(t, WATER_NET.draw.cultivatorPerTile);
     if (this.level(m, 'cultSeed') && t.bloom < C().seedBloom) {
       t.bloom = C().seedBloom;
       this.sim.transitions.bloom(t, t.bloom, true);
