@@ -1,6 +1,6 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
-/** `chest` and `reclaimer` exist only under old-city rules (E21.1, E21.2). */
-export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'reclaimer'
+/** `chest` exists only under old-city rules (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
+export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger'
   // E23.5.2: the farm
   | 'planter'
   // E23.5.3: the end of the farm chain
@@ -297,19 +297,15 @@ export interface AreaState {
   clearedAt?: number;
   /** what drones do here: keep it blooming, push from it into the fog, or leave it alone */
   mode?: AreaMode;
-  /** City 09.1: progress on the landmark's specialty action (a count, or the best chain for 'chain') */
-  spec?: number;
   /** Phase 5 E12: rewarded progress steps already paid here (count of TUNING.areaSteps.at reached). */
   steps?: number;
   /**
-   * Region unlocks (18 Nov 2026): revealed but still sealed in thick fog until the player pays `price`. While sealed
+   * Revealed but still sealed in thick fog until its gate opens (E21.5; E23.1.5: never bought). While sealed
    * the area behaves exactly as hidden fog (nothing can be walked, restored or built). Absent on older saves.
    */
   sealed?: boolean;
   /** E21.9: tiles in this area bloombot restored itself (old-city rules: helpers wait until it has done its share) */
   byBot?: number;
-  /** the unlock price, set when the area was revealed (biomass as a big-number string) */
-  price?: { biomass: string; energy: number };
   /** sim time the player unlocked it */
   unlockedAt?: number;
 }
@@ -333,11 +329,14 @@ export type Rules = 'oldcity' | 'classic';
 /** E21 §1: the eight materials. */
 /** E23.5.1: biomass, food, compost and fertiliser are backpack items too (data/farm). */
 export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser';
+/** E23.6.1 (#390): components made at the crafting table (data in src/data/crafting.ts). */
+export type ComponentId = 'wire' | 'planks' | 'glassPane' | 'pipe' | 'motor' | 'batteryCell' | 'sunCell';
+/** E23.6.1: anything the backpack and the store hold (materials and components; see src/data/items.ts). */
+export type ItemId = MaterialId | ComponentId;
 /** E21 §6: bloombot's abilities, one per fountain tier 1–4. */
 export type AbilityId = 'pry' | 'hover' | 'climb' | 'glide';
 /** E21 §8: where a Keeper is in its story. Woken (pulsed and handed 5 of anything) goes straight to request1. */
 export type KeeperStep = 'asleep' | 'request1' | 'request2' | 'landmark' | 'settled';
-export type WeatherKind = 'clear' | 'cloudy' | 'rain' | 'mist' | 'windy';
 
 export interface KeeperState {
   step: KeeperStep;
@@ -353,9 +352,9 @@ export interface KeeperState {
  */
 export interface SalvageState {
   /** E21.1: what bloombot carries (whole numbers, a stack limit per material) */
-  pack: Partial<Record<MaterialId, number>>;
+  pack: Partial<Record<ItemId, number>>;
   /** E21.1: the city's shared, unlimited store */
-  store: Partial<Record<MaterialId, number>>;
+  store: Partial<Record<ItemId, number>>;
   /** E21.2: units left in each pile bloombot has touched (pile id → left); untouched piles are full */
   piles: Record<string, number>;
   /** E21.5: gates opened for good (barricades pried, bridges repaired), by gate id */
@@ -376,18 +375,20 @@ export interface SalvageState {
   blueprints: string[];
   /** E21.11: the house's level (0 = the ruined shed) */
   house: number;
-  /** E21.13: seconds added to sim time to get the time of day (only the bed changes it) */
+  /** E21.13 (unused since E23.7.1: the clock lives in `GameState.clock`; kept until E23.1 bumps the save) */
   clockOffset: number;
-  /** E21.13: the weather now, and when it next changes (sim time) */
-  weather?: { kind: WeatherKind; until: number };
-  /** E21.9: Reclaimers' undelivered fractions, by machine id (so 6 a minute pays exactly) */
-  reclaim?: Record<string, number>;
+  /** E23.7.4: when each pile that isn't full last gained a unit (sim time), by pile id: it refills from there */
+  since?: Record<string, number>;
   /** E21.6 / E21.17: one-off items carried for the Great Bloom (the Heart Seed, the Star Lens) */
   items?: string[];
   /** E21.9: lasting region rewards in effect (data/oldcity RewardId), in the order they were won */
   rewards?: string[];
   /** E21.12: lookouts and vistas already seen, beacons spotted (presentation, but saved so they play once) */
   seen?: string[];
+  /** E23.6.1: the crafting table's queue (recipe id, crafts left, seconds left on the one in hand) */
+  craft?: { id: string; n: number; left: number }[];
+  /** E23.6.1: decorations made at the crafting table (each once; placing copies after that is free) */
+  decorMade?: string[];
   /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
   clipped?: Record<string, number>;
   /** E23.5.2: each planter's bed, by machine id (absent = empty, no extras) */
@@ -474,6 +475,14 @@ export interface GameState {
    * production, chains, milestones or pacing). Optional and sparse, so no save version change.
    */
   cozy?: CozyState;
+  /** E23.3.5: stored energy of grid nodes that are not machines (solar garden lights), by node id. Optional. */
+  power?: {
+    cells?: Record<string, number>;
+    /** E23.3.5: set once lights placed before night lighting have been carried over (see Lights.carryOver) */
+    lights?: number;
+  };
+  /** E23.2.1: bloombot's charge (old-city rules; absent = full). Optional, so no save version change. */
+  charge?: ChargeState;
   /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
   clock?: ClockState;
 }
@@ -487,6 +496,16 @@ export interface ClockState {
   offset: number;
   real?: boolean;
   nights?: Record<string, number>;
+}
+
+/** E23.2.1 (#371): bloombot's charge. */
+export interface ChargeState {
+  /** the charge now, 0 to the full charge */
+  value: number;
+  /** E23.6.2 research: battery cells fitted (each makes a full charge bigger) */
+  cells?: number;
+  /** E23.6.2 research: efficiency steps (each makes every cost a little smaller) */
+  efficiency?: number;
 }
 
 /** E19: what the player chose for the look of their city. */
@@ -504,4 +523,6 @@ export interface CozyState {
   decor?: Record<string, string>;
   /** E19.2.2: decorations earned so far, in the order they unlocked (ones open from the start aren't listed) */
   decorUnlocked?: string[];
+  /** E23.3.5: line lights hung on power poles, pole machine id → light id (data/lights) */
+  poleLights?: Record<string, string>;
 }

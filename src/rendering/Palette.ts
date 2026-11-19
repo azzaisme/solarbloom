@@ -432,6 +432,20 @@ const signal = {
   beaconPool: '#fff3a0',
   /** E19: the build hologram bloombot projects */
   holo: '#5fe8ff',
+  /** E23.3.4: the Power overlay. Each network gets one of `nets` (warm, bright, readable at night). */
+  power: {
+    nets: ['#ffd23f', '#6fe3ff', '#b6ff6a', '#ff9ed8', '#ffb15c', '#a9a2ff'],
+    dark: '#ff6b6b',
+    tripped: '#ff3b3b',
+    cell: '#8ff5c8',
+    cellBack: '#1d3640',
+    /** the Power view: powered electrical machines glow this soft yellow */
+    machineGlow: '#ffd75e',
+    /** the network under the cursor, in the Power view: near white, so it stands out from the yellow */
+    focus: '#fff6d8',
+    /** the Power view's light: the world goes cool and grey under it, so the yellow grid pops */
+    viewLight: '#8c98ab',
+  },
 };
 
 /** Scene lights (Look 1 owns lighting; on its branch these move to src/data/look.ts). */
@@ -439,6 +453,11 @@ const light = {
   ambient: '#8a90a3',
   sun: '#ffe6bd',
   fill: '#b9d7ff',
+  /** E23.3.5: night lights, warm and low (data/lights.ts `tone`), and the insects that gather round them */
+  lamps: { warm: '#ffc46b', amber: '#ffa94d', rose: '#ff9fa8', cream: '#fff0c8', green: '#9dffb0' },
+  firefly: '#e9ff8a',
+  moth: '#f3eadb',
+  bulbOff: '#8a7e6c',
 };
 
 /**
@@ -513,7 +532,9 @@ const families = { cozy, retaining, stone, paving, ground, roof, lawn, flowers, 
 export const PALETTE = {
   ...families,
   /** E23.7.1.3: night finds: a glowing plant's stems and buds, night salvage's scraps and its glint */
-  nightFind: { stem: '#4f7d5a', bud: '#c8ffe6', budGlow: '#7dffd0', scrap: '#8a8f96', glint: '#fff2c8', glintGlow: '#ffd98a' },
+  /** E23.7.2.2: the house's radio (the forecast) */
+  radio: { crate: '#9a7652', body: '#c9a074', grille: '#4b4741', dial: '#f3e2b8', dialGlow: '#ffcf7a' },
+  nightFind: { stem: '#4f7d5a', bud: '#c8ffe6', budGlow: '#7dffd0', scrap: '#8a8f96', glint: '#fff2c8', glintGlow: '#ffd98a', dewStem: '#d9d2c2', dewCap: '#9fb7c9', dewDrop: '#e8f6ff', glass: '#bfe3ef', moth: '#e9e4d8' },
   // ───── legacy names (pre-Look 2), kept as aliases ─────
   concrete: ['#9a9286', '#8f877b', '#a39b8f', '#958d81'],
   concreteDark: '#6b6358',

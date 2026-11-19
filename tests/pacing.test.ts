@@ -55,12 +55,6 @@ export function playSession(seed: number, actionEvery = 3, minutes = 20) {
       cands.sort((a, b) => rank(a) - rank(b) || a.pollution - b.pollution);
       if (cands[0]) sim.restoration.pulse(cands[0].id);
       else if (sim.state.resources.energy.lt(3)) sim.harvestSun();
-      // 3. upgrades when the next machine is far off
-      const nextCost = order[next] ? sim.build.cost(order[next]).biomass ?? 0 : 0;
-      for (const u of sim.upgrades.all()) {
-        const st = sim.upgrades.status(u);
-        if (st.ok && sim.state.resources.biomass.sub(st.cost).gte(nextCost)) sim.upgrades.purchase(u.id);
-      }
       if (sim.progression.coreReady()) sim.progression.activateCore();
       // 4. find the cat ~40 s after it appears (players notice it eventually)
       const c = sim.state.cat.active;

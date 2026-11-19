@@ -3,8 +3,8 @@ import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { CROP_HOMES, CROP_IDS, CROPS, PLANTER, SEED_FINDS, STARTING_CROPS, type CropId, type Like } from '../src/data/crops';
-import { DAY, DAY_SECONDS } from '../src/data/time';
-import { REGIONS } from '../src/data/oldcity';
+import { DAY, DAY_SECONDS, NIGHT_FINDS } from '../src/data/time';
+import { KEEPERS, PARK_SET, REGIONS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
@@ -29,8 +29,9 @@ function planter(sim: Sim, x: number, z: number): MachineData {
       t.bloom = 1;
       sim.grid.touch(t);
     }
-  sim.inventory.addToStore('scrap', 6);
-  sim.inventory.addToStore('biomass', 4);
+  // the Planter box is on the crafting table (3 Planks), open once Tide wakes on Saltwind Beach (Timber)
+  sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === 'saltwind')!.id] ??= { step: 'settled' };
+  sim.inventory.addToStore('planks', 3);
   const m = sim.build.place('planter', GROUND, x, z);
   expect(m, 'planter placed').toBeDefined();
   return m!;
@@ -89,6 +90,7 @@ describe('E23.5.2.1: planter growth', () => {
     const sim = farm();
     const m = planter(sim, 12, 16);
     sow(sim, m, 'radish');
+    sim.weather.forceForTest('sunny', 1e9); // dry days for certain (rain would water the bed)
     let wet = true;
     (sim as unknown as { water: { isWatered(): boolean } }).water = { isWatered: () => wet };
     grow(sim, DAY_SECONDS / 4);
@@ -123,16 +125,23 @@ describe('E23.5.2.1: planter growth', () => {
     expect(drawn).toBe(0);
   });
 
-  it('reads E23.7’s weather kinds: storms rain and blow, fog is mist', () => {
+  it('reads E23.7’s weather: storms rain and blow, fog is neither sunny nor wet', () => {
     const sim = farm();
     const m = planter(sim, 12, 16);
-    let kind = 'storm';
-    (sim as unknown as { weather: unknown }).weather = { kind: () => kind };
-    expect(sim.farm.weather()).toBe('rain');
+    sow(sim, m, 'radish');
+    (sim as unknown as { water: { isWatered(): boolean } }).water = { isWatered: () => false };
+    at(sim, 0.2); // morning
+    sim.weather.forceForTest('storm', 1e9);
+    expect(sim.farm.weather()).toBe('storm');
+    expect(sim.farm.likeMet(m, 'rain')).toBe(true);
     expect(sim.farm.likeMet(m, 'wind')).toBe(true);
-    kind = 'fog';
-    expect(sim.farm.weather()).toBe('mist');
-    kind = 'sunny';
+    expect(sim.farm.look(m).wilting).toBe(false);
+    sim.weather.forceForTest('fog', 1e9);
+    expect(sim.farm.likeMet(m, 'sun')).toBe(false);
+    expect(sim.farm.likeMet(m, 'rain')).toBe(false);
+    expect(sim.farm.look(m).wilting).toBe(true);
+    sim.weather.forceForTest('sunny', 1e9);
+    expect(sim.farm.likeMet(m, 'sun')).toBe(true);
     expect(sim.farm.likeMet(m, 'rain')).toBe(false);
   });
 
@@ -142,7 +151,7 @@ describe('E23.5.2.1: planter growth', () => {
     sow(sim, m, 'radish');
     (sim as unknown as { water: { isWatered(): boolean } }).water = { isWatered: () => false };
     expect(sim.farm.look(m).wilting).toBe(true);
-    sim.state.salvage!.weather = { kind: 'rain', until: 1e9 };
+    sim.weather.forceForTest('rain', 1e12);
     expect(sim.farm.look(m).wilting).toBe(false);
   });
 
@@ -169,11 +178,11 @@ describe('E23.5.2.2: every crop’s likes change its growth', () => {
   /** Puts a planter in each condition for a like (true = met). */
   const set: Record<Like, (sim: Sim, m: MachineData, on: boolean) => void> = {
     sun: (sim, _m, on) => {
-      sim.state.salvage!.weather = { kind: on ? 'clear' : 'cloudy', until: 1e9 };
+      sim.weather.forceForTest(on ? 'sunny' : 'cloudy', 1e9);
       at(sim, 0.2); // morning
     },
-    rain: (sim, _m, on) => void (sim.state.salvage!.weather = { kind: on ? 'rain' : 'clear', until: 1e9 }),
-    wind: (sim, _m, on) => void (sim.state.salvage!.weather = { kind: on ? 'windy' : 'cloudy', until: 1e9 }),
+    rain: (sim, _m, on) => void (sim.weather.forceForTest(on ? 'rain' : 'sunny', 1e9)),
+    wind: (sim, _m, on) => void (sim.weather.forceForTest(on ? 'wind' : 'cloudy', 1e9)),
     shade: (sim, m, on) => {
       const t = sim.grid.get(GROUND, m.x + 1, m.z)!;
       t.blocked = on;
@@ -248,6 +257,31 @@ describe('E23.5.2.2: every crop’s likes change its growth', () => {
     expect(sim.farm.look(c).rate).toBeCloseTo(before * PLANTER.pollinatorBoost);
   });
 
+  it('fertiliser speeds any crop by the general boost, except a crop that likes it (data), which gets it through the like', () => {
+    const sim = farm();
+    const r = planter(sim, 12, 16);
+    const p = planter(sim, 12, 19);
+    sow(sim, r, 'radish');
+    sow(sim, p, 'pumpkin');
+    expect(CROPS.pumpkin.likes).toContain('fertiliser');
+    expect(CROPS.radish.likes).not.toContain('fertiliser');
+    const r0 = sim.farm.look(r).rate;
+    const p0 = sim.farm.look(p).rate;
+    sim.inventory.add('fertiliser', 2);
+    sim.farm.feed(r);
+    sim.farm.feed(p);
+    expect(sim.farm.look(r).rate).toBeCloseTo(r0 * PLANTER.fertilisedBoost);
+    expect(sim.farm.look(p).rate).toBeCloseTo(p0 / PLANTER.unmetLike); // the like met, no second boost
+  });
+
+  it('the Planter box is built from the crafting table (3 Planks) and opens when Tide wakes (Timber)', () => {
+    const sim = farm();
+    expect(sim.build.recipe('planter')).toEqual({ planks: 3 });
+    expect(sim.build.isUnlocked('planter')).toBe(false); // the farm starts as gathering
+    sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === 'saltwind')!.id] = { step: 'settled' };
+    expect(sim.build.isUnlocked('planter')).toBe(true);
+  });
+
   it('E23.8.1: a planter in Elder Grove (fertile soil) grows 1.5× as fast', () => {
     const sim = farm();
     const m = planter(sim, 12, 16);
@@ -297,7 +331,7 @@ describe('E23.5.2.2 × E23.7.1: growth follows the game clock', () => {
       const sim = farm();
       sim.clock.now = () => new Date(2026, 10, 18, hour, 0, 0);
       sim.clock.real = real;
-      sim.state.salvage!.weather = { kind: 'clear', until: 1e9 };
+      sim.weather.forceForTest('sunny', 1e12);
       const m = planter(sim, 12, 16);
       sow(sim, m, crop);
       const t0 = sim.time;
@@ -355,11 +389,56 @@ describe('E23.5.2.3: seeds from exploring', () => {
     for (const r of REGIONS) for (const k of r.caches) expect(sim.farm.regionAt(k.x, k.z), k.id).toBe(r.id);
   });
 
-  it('emptying a pile finds the region’s next packet at once', () => {
+  it('emptying a pile (the real salvage) finds the region’s next packet at once', () => {
     const sim = farm();
-    const cell = regionCell(sim, 'oldMarket');
-    sim.bus.emit('pile.salvaged', { pileId: 'x', material: 'glass', got: 3, left: 0, x: cell.x, z: cell.z });
-    expect(sim.farm.knows('tomato')).toBe(true);
+    sim.areas.fog = () => 'cleared'; // the way there is open
+    // a region that still has its own piles (E23.7.4 moved most piles out of the region data)
+    const region = REGIONS.find((r) => r.piles.length > 0 && (CROP_HOMES[r.id] ?? []).length > 0)!;
+    expect(region, 'a region with piles').toBeDefined();
+    const pile = region.piles[0];
+    const crop = CROP_HOMES[region.id][0];
+    let takes = 0;
+    while (sim.salvage.left(pile.id) > 0 && takes++ < 50) {
+      expect(sim.farm.knows(crop)).toBe(false); // not until it's empty
+      sim.inventory.depositAll(); // room in the backpack
+      expect(sim.salvage.salvage(pile.id)).toBeGreaterThan(0);
+    }
+    expect(sim.salvage.left(pile.id)).toBe(0);
+    expect(sim.farm.knows(crop)).toBe(true);
+  });
+
+  it('reading a journal page post for the first time is a find like a cache: its region’s packet, then plain Seeds', () => {
+    const sim = farm();
+    const salt = REGIONS.find((r) => r.id === 'saltwind')!.pages[0];
+    expect(sim.journal.read(salt.id)).toBe(true);
+    expect(sim.farm.knows('seaKale')).toBe(true);
+    // a page read again gives nothing more
+    const seeds = () => sim.inventory.count('seeds') + sim.inventory.stored('seeds');
+    const before = seeds();
+    expect(sim.journal.read(salt.id)).toBe(false);
+    expect(seeds()).toBe(before);
+    // a region whose packets are all found: its page holds plain Seeds
+    sim.farm.findIn('oldMarket');
+    const market = REGIONS.find((r) => r.id === 'oldMarket')!.pages[0];
+    expect(sim.journal.read(market.id)).toBe(true);
+    expect(seeds()).toBe(before + SEED_FINDS.cacheSeeds);
+    // the park's page holds a park packet
+    expect(sim.journal.read(PARK_SET.pages[0].id)).toBe(true);
+    expect(sim.farm.knows('lettuce')).toBe(true);
+  });
+
+  it('a glowing plant found at night (the real night find) carries its region’s next packet; glinting salvage doesn’t', () => {
+    const sim = farm();
+    sim.clock.isNight = () => true;
+    const glow = NIGHT_FINDS.find((f) => f.kind === 'glowplant')!;
+    const region = sim.farm.regionAt(glow.x, glow.z)!;
+    const next = sim.farm.nextIn(region)!;
+    expect(next).toBeTruthy();
+    const scrap = NIGHT_FINDS.find((f) => f.kind === 'salvage')!;
+    expect(sim.nightFinds.take(scrap.id)).toBeGreaterThan(0);
+    expect(sim.farm.knows(next)).toBe(false);
+    expect(sim.nightFinds.take(glow.id)).toBeGreaterThan(0);
+    expect(sim.farm.knows(next)).toBe(true);
   });
 });
 

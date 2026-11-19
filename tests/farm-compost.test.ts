@@ -4,8 +4,8 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { COMPOST, DIGESTER } from '../src/data/compost';
 import { DAY_SECONDS } from '../src/data/time';
-import { RECIPES } from '../src/data/salvage';
-import { REGIONS } from '../src/data/oldcity';
+import { MACHINE_RECIPES } from '../src/data/crafting';
+import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
@@ -14,17 +14,19 @@ function farm(): Sim {
   const sim = new Sim(createInitialState(7, 'oldcity'));
   sim.state.salvage!.tier = 2;
   sim.bot = { roofId: GROUND, x: 8.5, z: 11.5 };
+  // the digester's recipe is handed over by Clock Plaza's Keeper (data/crafting)
+  sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === 'clockPlaza')!.id] = { step: 'settled' };
   return sim;
 }
 
-/** Builds a farm machine on open ground (stocking its recipe first). */
+/** Builds a farm machine on open ground (stocking its crafting-table recipe first). */
 function build(sim: Sim, type: 'compostBin' | 'bioDigester', x: number, z: number): MachineData {
   const t = sim.grid.get(GROUND, x, z)!;
   t.blocked = false;
   t.feature = undefined;
   t.ground = 'restored';
   sim.grid.touch(t);
-  for (const [k, v] of Object.entries(RECIPES[type]!.cost)) sim.inventory.addToStore(k as 'scrap', v!);
+  for (const [k, v] of Object.entries(sim.build.recipe(type)!)) sim.inventory.addToStore(k as 'scrap', v!);
   const m = sim.build.place(type, GROUND, x, z);
   expect(m, type).toBeDefined();
   return m!;
@@ -111,8 +113,17 @@ describe('E23.5.3: the compost bin', () => {
     expect(sim.state.salvage!.bins?.[m.id]).toBeUndefined();
   });
 
+  it('E23.6.2: compost research speeds every bin (the compostSpeed effect)', () => {
+    const sim = farm();
+    const m = build(sim, 'compostBin', 12, 16);
+    expect(sim.compost.researchReady).toBe(true);
+    const base = sim.compost.speed(m);
+    (sim as unknown as { research: { effect(id: string): number } }).research = { effect: (id) => (id === 'compostSpeed' ? 0.5 : 0) };
+    expect(sim.compost.speed(m)).toBeCloseTo(base * 1.5);
+  });
+
   it('fertiliser is what a landmark tree (the Mother Tree) asks for', () => {
-    expect(RECIPES.motherTree!.cost.fertiliser).toBeGreaterThan(0);
+    expect(MACHINE_RECIPES.find((r) => r.builds === 'motherTree')!.cost.fertiliser).toBeGreaterThan(0);
   });
 });
 

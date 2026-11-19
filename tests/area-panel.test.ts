@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { meetSpecialty } from './city-helpers';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
@@ -39,7 +38,6 @@ describe('area panel (City 14.2)', () => {
     expect(html).toContain(`Restore ${d.need} tiles (0/${d.need})`);
     expect(html).toContain('Bonus once clear');
     expect(html).toContain('Machines: none yet');
-    expect(html).toContain(sim.milestones.specialty(id).label.replace(/&/g, '&amp;')); // City 09.1: the specialty line
     expect(html).not.toContain('data-wake');
 
     // Progress updates live.
@@ -58,7 +56,6 @@ describe('area panel (City 14.2)', () => {
 
     // Ready: the wake button appears; cleared: the bonus is its share of the type's total.
     restore(sim, id, 999);
-    meetSpecialty(sim, id);
     expect(areaPanelHtml(sim, id, lm.id)).toContain(`data-wake="${lm.id}"`);
     expect(sim.areas.clear(id)).toBe(true);
     html = areaPanelHtml(sim, id, lm.id);
