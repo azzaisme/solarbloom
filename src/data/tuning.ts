@@ -228,7 +228,9 @@ export const TUNING = {
     dronePartySeconds: 45,
     partyRadius: 24,
     partyMult: 1.75,
-    weights: { luckyHarvest: 40, solarFrenzy: 25, megaBloom: 20, droneParty: 12, jackpot: 3, goldenRelay: 14, catsGarden: 14, fogWhisker: 18 },
+    weights: { luckyHarvest: 40, solarFrenzy: 25, megaBloom: 20, droneParty: 12, jackpot: 3, goldenRelay: 14, catsGarden: 14, fogWhisker: 18, ripeAround: 16 },
+    /** E23.12.2 (#529) Ripe all around: every growing crop in a planter within this many tiles of bloombot ripens at once. */
+    ripeRadius: 12,
     fogWhiskerTiles: 10, // Fog Whisker: tiles of the next fogged area restored from its edge, capped
     /** Golden Relay: the relay nearest the cat turns gold for good and carries power this many tiles further. */
     goldenRelayRange: 8,
