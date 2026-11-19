@@ -65,7 +65,6 @@ export class Automation {
     const before = h[job] ?? 0;
     if (before >= HAND_JOBS[job].times) return; // enough: the count stops (saves stay small)
     h[job] = Math.min(HAND_JOBS[job].times, before + n);
-    if (h[job]! >= HAND_JOBS[job].times) this.sim.bus.emit('automation.opened', { job });
   }
 
   handCount(job: HandJob): number {
@@ -134,6 +133,8 @@ export class Automation {
 
   /** Bloombot puts things from the backpack in a crate (as many as fit). Returns how many moved. */
   fill(id: string, item: ItemId, n = this.sim.inventory.count(item)): number {
+    // a crate that still stands, checked before anything leaves the backpack (a stale panel button moves nothing)
+    if (this.sim.machine(id)?.type !== 'crate') return 0;
     const k = Math.min(n, this.sim.inventory.count(item), this.room(id));
     if (k <= 0 || !this.sim.inventory.take(item, k)) return 0;
     return this.put(id, item, k);
@@ -161,12 +162,12 @@ export class Automation {
 
   /**
    * Puts things somewhere they are kept, never lost: the first of `prefer` with room, then the nearest crate to
-   * `at` with room, then bloombot's backpack, then the store (which has no limit).
+   * `at` with room (never `except`, a crate going), then bloombot's backpack, then the store (which has no limit).
    */
-  stash(item: ItemId, n: number, at?: Spot, prefer: string[] = []) {
+  stash(item: ItemId, n: number, at?: Spot, prefer: string[] = [], except?: string) {
     let left = Math.floor(n);
-    for (const id of prefer) if (left > 0) left -= this.put(id, item, left);
-    if (left > 0 && at) for (const c of this.cratesNear(at, Infinity)) if (left > 0) left -= this.put(c.id, item, left);
+    for (const id of prefer) if (left > 0 && id !== except) left -= this.put(id, item, left);
+    if (left > 0 && at) for (const c of this.cratesNear(at, Infinity, except)) if (left > 0) left -= this.put(c.id, item, left);
     if (left > 0) left = this.sim.inventory.add(item, left);
     if (left > 0) this.sim.inventory.addToStore(item, left);
   }
@@ -179,7 +180,8 @@ export class Automation {
     if (c) {
       delete sv.crates![m.id];
       if (!Object.keys(sv.crates!).length) delete sv.crates;
-      for (const [item, n] of Object.entries(c) as [ItemId, number][]) this.stash(item, n);
+      // to the crate nearest where it stood, then the backpack, then the store
+      for (const [item, n] of Object.entries(c) as [ItemId, number][]) this.stash(item, n, m, [], m.id);
     }
     if (sv.routes?.some((r) => r.from === m.id || r.to === m.id)) {
       const gone = new Set(sv.routes.filter((r) => r.from === m.id || r.to === m.id).map((r) => r.id));
@@ -497,7 +499,6 @@ export class Automation {
       this.stash(r.id, r.makes, m, out ? [out.id] : []);
       st.left = undefined;
       st.taken = undefined;
-      this.sim.bus.emit('assembler.made', { id: m.id, item: r.id, made: r.makes });
     }
   }
 

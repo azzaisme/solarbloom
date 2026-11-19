@@ -4,6 +4,7 @@ import type { ItemId, MachineData } from '../src/core/types';
 import { AUTOMATION, HAND_JOBS } from '../src/data/automation';
 import { gameDays } from '../src/data/time';
 import { Sim } from '../src/gameplay/Sim';
+import { SaveService } from '../src/app/SaveService';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 
@@ -89,7 +90,7 @@ describe('E23.6.4: supply crates', () => {
     expect(sim.automation.room(c.id)).toBe(0);
   });
 
-  it('taking a crate down gives its contents back and drops its routes', () => {
+  it('taking a crate down keeps its contents (in the nearest crate) and drops its routes', () => {
     const sim = park();
     carryByHand(sim);
     const a = put(sim, 'crate', 12, 12);
@@ -98,7 +99,9 @@ describe('E23.6.4: supply crates', () => {
     expect(sim.automation.addRoute(a.id, b.id).id).toBeDefined();
     const copper = sim.inventory.count('copper') + sim.inventory.stored('copper');
     sim.build.remove(a.id);
-    expect(sim.inventory.count('copper') + sim.inventory.stored('copper')).toBe(copper + 30);
+    // to the crate nearest where it stood (nothing in the backpack or store)
+    expect(sim.automation.count(b.id, 'copper')).toBe(30);
+    expect(sim.inventory.count('copper') + sim.inventory.stored('copper')).toBe(copper);
     expect(sim.automation.routes()).toEqual([]);
   });
 });
@@ -289,7 +292,7 @@ describe('E23.6.4 / E23.6.5: nothing is lost', () => {
     expect(sim.automation.count(a.id, 'scrap')).toBe(30);
   });
 
-  it('a crate taken down while a basket is on its way to it: the basket goes back, its contents to bloombot', () => {
+  it('a crate taken down while a basket is on its way to it: the basket goes back, its contents to the nearest crate', () => {
     const { sim, a, b } = courierLine();
     sim.automation.put(a.id, 'scrap', 30);
     sim.automation.put(b.id, 'clay', 5);
@@ -522,5 +525,119 @@ describe('E23.6.4: building from supply crates', () => {
     expect(sim.automation.count(site.id, 'scrap')).toBe(before.scrap - 12);
     expect(sim.automation.count(site.id, 'copper')).toBe(before.copper - 6);
     expect(sim.automation.count(site.id, 'wire')).toBe(before.wire - 2);
+  });
+});
+
+describe('E23.6.4 / E23.6.5: nothing is lost (review 2)', () => {
+  it('a crate taken down: what it held goes to the crate nearest where it stood, then the backpack', () => {
+    const sim = park();
+    const gone = put(sim, 'crate', 14, 14);
+    const near = put(sim, 'crate', 16, 14);
+    const far = put(sim, 'crate', 26, 26);
+    sim.automation.put(gone.id, 'scrap', 50);
+    sim.automation.put(gone.id, 'clay', 20);
+    sim.automation.put(near.id, 'copper', AUTOMATION.crate.capacity - 40); // room for 40
+    const clayPack = sim.inventory.count('clay');
+    expect(sim.build.remove(gone.id)).toBe(true);
+    // the nearest crate takes all it has room for, the next nearest the rest; nothing goes to the backpack
+    expect(sim.automation.count(near.id, 'scrap') + sim.automation.count(near.id, 'clay')).toBe(40);
+    expect(sim.automation.count(far.id, 'scrap') + sim.automation.count(far.id, 'clay')).toBe(30);
+    expect(sim.inventory.count('clay')).toBe(clayPack);
+    expect(total(sim, 'clay')).toBe(20);
+    // with every crate full, the backpack (then the store)
+    const last = put(sim, 'crate', 18, 14);
+    sim.automation.put(last.id, 'timber', 7);
+    sim.automation.put(near.id, 'clay', AUTOMATION.crate.capacity);
+    sim.automation.put(far.id, 'clay', AUTOMATION.crate.capacity);
+    const timber = sim.inventory.count('timber') + sim.inventory.stored('timber');
+    sim.build.remove(last.id);
+    expect(sim.inventory.count('timber') + sim.inventory.stored('timber')).toBe(timber + 7);
+  });
+
+  it('filling a crate that is gone (a stale panel button) takes nothing from the backpack', () => {
+    const sim = park();
+    const c = put(sim, 'crate', 14, 14);
+    sim.inventory.add('scrap', 30);
+    sim.build.remove(c.id);
+    const had = sim.inventory.count('scrap');
+    expect(sim.automation.fill(c.id, 'scrap', 10)).toBe(0);
+    expect(sim.inventory.count('scrap')).toBe(had);
+    // nor into a machine that is not a crate
+    const asm = put(sim, 'assembler', 20, 20, 2);
+    expect(sim.automation.fill(asm.id, 'scrap', 10)).toBe(0);
+    expect(sim.inventory.count('scrap')).toBe(had);
+  });
+
+  it('a save mid-trip and mid-craft loads with every item, booking and link kept', () => {
+    const sim = park();
+    carryByHand(sim);
+    const hub = put(sim, 'droneHub', 18, 18, 2);
+    hub.role = 'courier';
+    (hub.roles ??= []).push('courier');
+    const a = put(sim, 'crate', 14, 16);
+    const b = put(sim, 'crate', 22, 20);
+    const asm = put(sim, 'assembler', 16, 22, 2);
+    const inp = put(sim, 'crate', 15, 22);
+    const out = put(sim, 'crate', 19, 23);
+    const other = put(sim, 'crate', 16, 25);
+    sim.automation.put(a.id, 'scrap', 30);
+    sim.automation.addRoute(a.id, b.id, 'scrap');
+    expect(sim.automation.setCrate(asm, 'input', inp.id)).toBe(true);
+    expect(sim.automation.setCrate(asm, 'output', other.id)).toBe(true);
+    sim.automation.setRecipe(asm, 'motor'); // 2 Gears and 1 Wire, 4 s
+    sim.automation.put(inp.id, 'gears', 4);
+    sim.automation.put(inp.id, 'wire', 2);
+    const saver = new SaveService(undefined);
+    const reload = () => {
+      const l = new Sim(saver.deserialize(saver.serialize(sim.state))!);
+      Object.assign(l.power, { isPowered: () => true });
+      l.bot = NEAR;
+      return l;
+    };
+    // a courier on its way to fetch: the room it booked in the target is kept through a save
+    for (let t = 0; t < 600 && !sim.state.drones.some((d) => d.reserve); t += 0.25) sim.advance(0.25);
+    const booker = sim.state.drones.find((d) => d.reserve)!;
+    expect(booker.reserve).toBeGreaterThan(0);
+    const early = reload();
+    expect(early.state.drones.find((d) => d.id === booker.id)!.reserve).toBe(booker.reserve);
+    expect(early.automation.booked(b.id)).toBe(sim.automation.booked(b.id));
+    expect(early.automation.booked(b.id)).toBeGreaterThan(0);
+    // run until a basket is in the air and the craft is part way
+    for (let t = 0; t < 600 && !sim.state.drones.some((d) => d.cargo?.length); t += 0.25) sim.advance(0.25);
+    const d0 = sim.state.drones.find((d) => d.cargo?.length)!;
+    expect(d0).toBeDefined();
+    const booked = sim.automation.booked(b.id);
+    expect(booked).toBeGreaterThan(0); // its basket, now
+    const st0 = sim.state.salvage!.assemblers![asm.id];
+    expect(st0.left).toBeGreaterThan(0);
+    expect(st0.taken).toBeTruthy();
+    const items: ItemId[] = ['scrap', 'gears', 'wire', 'motor'];
+    // a craft in hand holds what it took: count it with the rest
+    const held = (s: Sim, i: ItemId) => total(s, i) + (s.state.salvage!.assemblers?.[asm.id]?.taken?.[i] ?? 0);
+    const before = Object.fromEntries(items.map((i) => [i, held(sim, i)]));
+    const loaded = reload();
+    for (const i of items) expect(held(loaded, i), i).toBe(before[i]);
+    // the courier still carries its basket on its route, with its booking in the target
+    const d1 = loaded.state.drones.find((d) => d.id === d0.id)!;
+    expect(d1.cargo).toEqual(d0.cargo);
+    expect(d1.route).toBe(d0.route);
+    expect(d1.reserve).toBe(d0.reserve);
+    expect(loaded.automation.booked(b.id)).toBe(booked);
+    expect(loaded.automation.routes()).toEqual(sim.automation.routes());
+    // the Assembler keeps its recipe, its craft in hand and the crates the player chose
+    const st1 = loaded.state.salvage!.assemblers![asm.id];
+    expect(st1).toEqual(st0);
+    const asm1 = loaded.machine(asm.id)!;
+    expect(loaded.automation.io(asm1).input?.id).toBe(inp.id);
+    expect(loaded.automation.io(asm1).output?.id).toBe(other.id);
+    // and both finish after the load, with nothing lost or made twice
+    for (let t = 0; t < 120; t += 0.25) loaded.advance(0.25);
+    expect(loaded.automation.count(other.id, 'motor')).toBe(2);
+    expect(loaded.automation.count(out.id, 'motor')).toBe(0);
+    expect(held(loaded, 'gears')).toBe(before.gears - 4);
+    expect(held(loaded, 'wire')).toBe(before.wire - 2);
+    expect(held(loaded, 'scrap')).toBe(before.scrap);
+    expect(loaded.automation.count(b.id, 'scrap')).toBeGreaterThan(0);
+    expect(loaded.state.drones.every((d) => !d.reserve || d.cargo?.length)).toBe(true);
   });
 });

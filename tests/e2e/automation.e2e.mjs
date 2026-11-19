@@ -406,7 +406,12 @@ try {
           const b = g.sim.machine(g.sim.automation.routes()[0].to);
           // halfway or so between the two crates
           const t = Math.hypot(d.px - (a.x + 0.5), d.pz - (a.z + 0.5)) / Math.hypot(b.x - a.x, b.z - a.z);
-          return t > 0.3 && t < 0.75 && { px: d.px, pz: d.pz, cargo: d.cargo };
+          if (!(t > 0.3 && t < 0.75)) return false;
+          // caught mid-flight: photo mode (E19.4.1) freezes the game there and frees the camera from bloombot
+          g.photo.hideBot = true;
+          g.photo.enter();
+          g.photo.freeze = true;
+          return { id: d.id, px: d.px, pz: d.pz, cargo: d.cargo };
         },
         null,
         { timeout: 240000, polling: 'raf' },
@@ -414,20 +419,45 @@ try {
       .then((h) => h.jsonValue())
       .catch(() => undefined);
     check(!!flying, T(`a courier is seen flying a basket from crate A toward crate B (${JSON.stringify(flying)})`));
-    await page.waitForTimeout(800);
+    // the camera on the courier, close, bloombot out of the picture; its basket shows what it carries
+    const framed = await page.evaluate((id) => {
+      const g = window.solarbloom, cam = g.camera;
+      const v = g.drones.views.get(id);
+      const p = v.root.getPosition();
+      cam.goal.set(p.x, p.y - 0.3, p.z);
+      cam.zoomGoal = cam.maxZoom;
+      return { basket: !!v.basket?.root.enabled, item: v.basket?.item, bot: g.bot.visible ?? null, frozen: g.photo.frozen ?? g.photo.freeze };
+    }, flying?.id);
+    await page.waitForTimeout(2500);
+    check(framed.basket && framed.item === 'copper', T(`the courier carries a basket heaped with Copper (${JSON.stringify(framed)})`));
     await page.screenshot({ path: `${dir}/ui-courier-flying-${dev}.png` });
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      g.photo.freeze = false;
+      g.photo.exit();
+      g.photo.hideBot = false;
+    });
     await page.waitForFunction((c) => (window.solarbloom.sim.automation.count(c, 'wire') ?? 0) >= 20, ids.c, { timeout: 600000 }).catch(() => {});
     const after = await page.evaluate(({ a, b, c, asm }) => {
       const s = window.solarbloom.sim, au = s.automation;
       return { a: au.contents(a), b: au.contents(b), c: au.contents(c), powered: s.power.isPowered(s.machine(asm)), why: au.assemblerProblem(s.machine(asm)) ?? 'working' };
     }, ids);
     check(!after.a.copper && after.c.wire === 20, T(`in game time, couriers carried the Copper and the Assembler made Wire on grid power (${JSON.stringify(after)})`));
+    // the line from close by: photo mode frees the camera from bloombot (which steps out of the picture)
     await page.evaluate((id) => {
-      const g = window.solarbloom, m = g.sim.machine(id);
-      g.camera.glide(m.x + 1, 0, m.z + 1, 1.7);
+      const g = window.solarbloom, m = g.sim.machine(id), cam = g.camera;
+      g.photo.hideBot = true;
+      g.photo.enter();
+      cam.goal.set(m.x + m.size / 2, (cam.ground?.(m.x + m.size / 2, m.z + m.size / 2) ?? cam.goal.y) + 0.5, m.z + m.size / 2);
+      cam.zoomGoal = 2.6;
     }, ids.asm);
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(2500);
     await page.screenshot({ path: `${dir}/ui-assembler-line-${dev}.png` });
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      g.photo.exit();
+      g.photo.hideBot = false;
+    });
     check(errors.length === 0, T(`no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`));
     await page.context().close();
   }
