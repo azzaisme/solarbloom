@@ -114,6 +114,14 @@ try {
     if (dev === 'keys') await page.screenshot({ path: `${dir}/ui-title-slots.png` });
     await go(page, dev);
 
+    // ── E23.7.1 (#446): a new garden asks how its days go; take the game's own day (the first answer, focused) ──
+    await page.waitForSelector('#tYes');
+    check(/How should the days go\?/.test(await page.evaluate(() => document.querySelector('#tConfirmText').textContent)), T('a new garden asks how the days go'));
+    check(await page.evaluate(() => document.activeElement?.id === 'tYes' && /own day/.test(document.querySelector('#tYes').textContent) && /Follow my clock/.test(document.querySelector('#tAlt').textContent)), T("the game's own day is focused first, Follow my clock beside it"));
+    if (dev === 'keys') await page.screenshot({ path: `${dir}/ui-title-clock.png` });
+    check(await moveTo(page, '#tYes', dev), T("reach The game's own day"));
+    await go(page, dev);
+
     // ── the loading screen covers everything until the first view is complete ──
     await page.waitForSelector('#loading:not(.gone):not([hidden])');
     const seen = new Set();
@@ -138,6 +146,7 @@ try {
     });
     check(ready.s.models === 1 && ready.s.view === 1 && ready.pending === 0 && ready.loaded > 0, T(`the game faded in with its first view complete (${ready.loaded} chunks, ${ready.pending} pending)`));
     check(ready.device === (dev === 'pad' ? 'pad' : 'keys'), T(`the title's first input picked the glyph set (${ready.device})`));
+    check(await page.evaluate(() => window.solarbloom.sim.clock.real === false), T("the new garden runs on the game's own day"));
 
     // ── nothing pops in during the 5 s after the fade: two frames of the paused world match ──
     await page.waitForTimeout(600); // the fade itself
