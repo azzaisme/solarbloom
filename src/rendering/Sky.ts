@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { SKY } from '../data/sky';
+import { NIGHT_SKY, NIGHT_SKY_LIGHTS, SKY } from '../data/sky';
 
 /** sRGB hex → 0–1 components. */
 function rgb(hex: string): [number, number, number] {
@@ -68,6 +68,18 @@ export class Sky {
   private sunDir = new pc.Vec3(0, 1, 0);
   private time = 0;
   clarity = 0.4;
+  /** E23.7.1: how far into night the sky is (0 day … 1 deep night), set by DayNight */
+  night = 0;
+  /** E23.7.1: dawn and dusk warmth near the horizon (0 … 1) */
+  dusk = 0;
+  /** E23.7.2: overcast (0 clear … 1 heavy cloud), greys the sky and hides the sun */
+  overcast = 0;
+  /** E23.7.2: wind, 0 … 1 (the clouds drift faster) */
+  wind = 0;
+  private drift = 0;
+  private builtNight = -1;
+  private builtDusk = -1;
+  private builtOvercast = -1;
   reducedMotion = false;
   readonly layer: pc.Layer;
   readonly clearLayer: pc.Layer;
@@ -126,12 +138,23 @@ export class Sky {
     this.soft = new pc.Entity('sky-soft');
     this.soft.addComponent('render', { meshInstances: [new pc.MeshInstance(this.softMesh, skyMaterial(true))], castShadows: false, receiveShadows: false, layers: [this.layer.id] });
     this.root.addChild(this.soft);
+    // E23.7.5: the stars, under the clouds; hidden (no draw call) until night
+    this.starMesh = new pc.Mesh(device);
+    this.buildStars();
+    this.stars = new pc.Entity('sky-stars');
+    this.stars.addComponent('render', { meshInstances: [new pc.MeshInstance(this.starMesh, skyMaterial(true))], castShadows: false, receiveShadows: false, layers: [this.layer.id] });
+    this.stars.render!.meshInstances[0].cull = false;
+    this.stars.enabled = false;
+    this.root.addChild(this.stars);
     this.clouds = new pc.Entity('sky-clouds');
     this.root.addChild(this.clouds);
     this.clouds.addComponent('render', { meshInstances: [new pc.MeshInstance(this.cloudMesh, skyMaterial(true))], castShadows: false, receiveShadows: false, layers: [this.layer.id] });
     for (const mi of [...this.dome.render!.meshInstances, ...this.soft.render!.meshInstances, ...this.clouds.render!.meshInstances]) mi.cull = false; // the dome surrounds the camera
   }
 
+  private stars: pc.Entity;
+  private starMesh: pc.Mesh;
+  private starCols: { c: [number, number, number]; a: number }[] = [];
   private clouds: pc.Entity;
   private cloudMesh: pc.Mesh;
   private cloudCols: { lit: boolean; a: number }[] = [];
@@ -188,6 +211,42 @@ export class Sky {
     this.cloudMesh.update(pc.PRIMITIVE_TRIANGLES);
   }
 
+  /** E23.7.5: the stars: soft dots over the upper sky (seeded, so every night is the same sky). */
+  private buildStars() {
+    const S = NIGHT_SKY_LIGHTS.stars;
+    const pos: number[] = [];
+    const idx: number[] = [];
+    let seed = S.seed;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const lo = Math.sin((S.above * Math.PI) / 180);
+    for (let i = 0; i < S.count; i++) {
+      const y = lo + (1 - lo) * rnd(); // even over the cap of the sphere above `above`
+      const az = rnd() * Math.PI * 2;
+      const r = Math.sqrt(1 - y * y);
+      const d = new pc.Vec3(r * Math.sin(az), y, r * Math.cos(az));
+      const big = rnd() ** 3; // mostly small, a few bright ones
+      const c = rgb(S.colours[Math.floor(rnd() * S.colours.length)]);
+      const a = 0.45 + 0.55 * big;
+      this.fan(pos, idx, d, S.size[0] + (S.size[1] - S.size[0]) * big, 1, 1, 4, () => this.starCols.push({ c, a }), () => this.starCols.push({ c, a: 0 }));
+    }
+    this.starMesh.setPositions(pos);
+    this.starMesh.setColors32(new Array((pos.length / 3) * 4).fill(255));
+    this.starMesh.setIndices(idx);
+    this.starMesh.update(pc.PRIMITIVE_TRIANGLES);
+  }
+
+  /** How much the stars show: out as the daylight goes, hidden behind heavy cloud. */
+  private starShow(): number {
+    const from = NIGHT_SKY_LIGHTS.stars.from;
+    return smooth((this.night - from) / (1 - from)) * (1 - this.overcast);
+  }
+
+  /** How much of the moon's disc shows: deep night only (by then the key light is on the moon's side). */
+  private moonShow(): number {
+    const from = NIGHT_SKY_LIGHTS.moonFrom;
+    return smooth((this.night - from) / (1 - from)) * (1 - this.overcast * 0.9);
+  }
+
   /** The sun's glow and disc (rebuilt when the key light turns). */
   private buildSoft() {
     const pos: number[] = [];
@@ -203,19 +262,37 @@ export class Sky {
     this.softMesh.update(pc.PRIMITIVE_TRIANGLES);
   }
 
+  /** How much of the sun's disc and glow shows: none at night or under heavy cloud. */
+  private sunShow(): number {
+    return (1 - this.night) * (1 - this.overcast * 0.9);
+  }
+
   /** The haze colour now (scene fog and the horizon), as linear-ish 0–1 sRGB components. */
   hazeColour(): [number, number, number] {
-    return skyColour(SKY.haze, this.clarity);
+    return this.timeOfDay(skyColour(SKY.haze, this.clarity), 'haze');
+  }
+
+  /** E23.7.1 / E23.7.2: a day colour shifted for dusk, night and overcast. */
+  private timeOfDay(c: [number, number, number], band: 'haze' | 'glow' | 'upper' | 'zenith' | 'sun' | 'cloud'): [number, number, number] {
+    let out = c;
+    if (this.overcast > 0) {
+      const grey = band === 'cloud' ? 0.82 : band === 'zenith' ? 0.62 : 0.74;
+      const l = out[0] * 0.3 + out[1] * 0.55 + out[2] * 0.15;
+      out = mix(out, [l * 0.6 + grey * 0.4, l * 0.6 + grey * 0.4 + 0.01, l * 0.6 + grey * 0.4 + 0.03], this.overcast * 0.85);
+    }
+    if (this.dusk > 0 && band !== 'zenith') out = mix(out, rgb(NIGHT_SKY.dusk[band]), this.dusk * (band === 'upper' ? 0.35 : 0.7));
+    if (this.night > 0) out = mix(out, rgb(NIGHT_SKY.night[band]), this.night);
+    return out;
   }
 
   /** Sky colour in a direction (unit vector), for the dome's vertices. */
   private colourAt(d: [number, number, number], k: number): [number, number, number] {
     const el = Math.asin(Math.max(-1, Math.min(1, d[1]))) * (180 / Math.PI);
-    const haze = skyColour(SKY.haze, k);
+    const haze = this.timeOfDay(skyColour(SKY.haze, k), 'haze');
     if (el <= 0) return haze;
-    const glow = skyColour(SKY.glow, k);
-    const upper = skyColour(SKY.upper, k);
-    const zen = skyColour(SKY.zenith, k);
+    const glow = this.timeOfDay(skyColour(SKY.glow, k), 'glow');
+    const upper = this.timeOfDay(skyColour(SKY.upper, k), 'upper');
+    const zen = this.timeOfDay(skyColour(SKY.zenith, k), 'zenith');
     let c: [number, number, number];
     if (el < 4) c = mix(haze, glow, smooth(el / 4));
     else if (el < 25) c = mix(glow, upper, smooth((el - 4) / 21));
@@ -224,7 +301,7 @@ export class Sky {
     const s = this.sunDir;
     const cos = d[0] * s.x + d[1] * s.y + d[2] * s.z;
     const w = Math.pow(Math.max(0, cos), 6) * 0.55 + Math.pow(Math.max(0, cos), 2) * 0.15 * (1 - smooth(el / 40));
-    return mix(c, skyColour(SKY.sunGlow, k), Math.min(0.8, w));
+    return mix(c, this.timeOfDay(skyColour(SKY.sunGlow, k), 'sun'), Math.min(0.8, w) * this.sunShow());
   }
 
   private recolour() {
@@ -237,27 +314,40 @@ export class Sky {
     }
     this.domeMesh.setColors32(dc);
     this.domeMesh.update(pc.PRIMITIVE_TRIANGLES);
-    const sun = skyColour(SKY.sunCore, k);
-    const glow = skyColour(SKY.sunGlow, k);
+    // by deep night the disc is the moon: a pale core in a soft blue glow
+    const moon = this.moonShow();
+    const sun = mix(this.timeOfDay(skyColour(SKY.sunCore, k), 'sun'), rgb(NIGHT_SKY_LIGHTS.moon), moon);
+    const glow = this.timeOfDay(skyColour(SKY.sunGlow, k), 'sun');
     const sc: number[] = [];
-    // The sun fades behind the fog: weaker while the city is grey.
-    const sunA = 0.45 + 0.55 * k;
+    // The sun fades behind the fog: weaker while the city is grey (and gone under cloud).
+    const sunA = (0.45 + 0.55 * k) * Math.max(this.sunShow(), moon);
+    const starA = this.starShow();
+    this.stars.enabled = starA > 0.01;
+    if (this.stars.enabled) {
+      const st: number[] = [];
+      for (const v of this.starCols) st.push(b(v.c[0]), b(v.c[1]), b(v.c[2]), b(v.a * starA));
+      this.starMesh.setColors32(st);
+      this.starMesh.update(pc.PRIMITIVE_TRIANGLES);
+    }
     for (const v of this.softBase) {
       const c = v.col === 'sun' ? sun : glow;
       sc.push(b(c[0]), b(c[1]), b(c[2]), b(v.a * sunA));
     }
     this.softMesh.setColors32(sc);
     this.softMesh.update(pc.PRIMITIVE_TRIANGLES);
-    const lit = skyColour(SKY.cloudLit, k);
-    const shade = skyColour(SKY.cloudShade, k);
+    const lit = this.timeOfDay(skyColour(SKY.cloudLit, k), 'cloud');
+    const shade = this.timeOfDay(skyColour(SKY.cloudShade, k), 'cloud');
     const cc: number[] = [];
     for (const v of this.cloudCols) {
       const c = v.lit ? lit : shade;
-      cc.push(b(c[0]), b(c[1]), b(c[2]), b(v.a * (0.85 + 0.15 * (1 - k))));
+      cc.push(b(c[0]), b(c[1]), b(c[2]), b(Math.min(1, v.a * (0.85 + 0.15 * (1 - k)) * (1 + this.overcast * 0.6))));
     }
     this.cloudMesh.setColors32(cc);
     this.cloudMesh.update(pc.PRIMITIVE_TRIANGLES);
     this.builtClarity = k;
+    this.builtNight = this.night;
+    this.builtDusk = this.dusk;
+    this.builtOvercast = this.overcast;
   }
 
   /** Follow the camera; recolour when the progress tint or the light moves. */
@@ -269,11 +359,13 @@ export class Sky {
       this.buildSoft();
       this.builtClarity = -1;
     }
-    if (Math.abs(this.builtClarity - this.clarity) > 0.004) this.recolour();
+    if (Math.abs(this.builtClarity - this.clarity) > 0.004 || Math.abs(this.builtNight - this.night) > 0.004 || Math.abs(this.builtDusk - this.dusk) > 0.004 || Math.abs(this.builtOvercast - this.overcast) > 0.004) this.recolour();
     const R = farClip * 0.97;
     this.root.setPosition(cam.x, cam.y, cam.z);
     this.root.setLocalScale(R, R, R);
     // Clouds drift slowly around the horizon (a full turn takes about 40 minutes).
-    if (!this.reducedMotion) this.clouds.setLocalEulerAngles(0, (this.time * 0.15) % 360, 0);
+    // E23.7.2: wind hurries them along
+    this.drift += dt * 0.15 * (1 + this.wind * 5);
+    if (!this.reducedMotion) this.clouds.setLocalEulerAngles(0, this.drift % 360, 0);
   }
 }

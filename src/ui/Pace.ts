@@ -3,11 +3,8 @@ import type { Sim } from '../gameplay/Sim';
 type Suggestion = ReturnType<Sim['advisor']['suggest']>;
 
 /**
- * E19.4.3 (#262): the advisor's next step for the objective card, or nothing under the potter-about pace.
- *
- * The advisor is asked either way. Asking it is not free of effects: when it says "save up for X", drones leave
- * that price alone for a while (Advisor.savingFor, DroneSystem.payJob). Skipping the call under potter would
- * change how drones spend and so the game state; hiding the answer keeps the pace a presentation choice only.
+ * E19.4.3 (#262): the advisor's next step for the objective card, or nothing under the potter-about pace. The
+ * advisor is asked either way, so the pace stays a presentation choice only (E23.1.5: asking it has no effects).
  */
 export function advisorStep(sim: Sim, potter: boolean): Suggestion | undefined {
   const g = sim.advisor.suggest();

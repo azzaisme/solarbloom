@@ -27,6 +27,7 @@ export type Action =
   | 'rotate'
   | 'rotateBack'
   | 'removeMode'
+  | 'powerOverlay'
   | 'slot1'
   | 'slot2'
   | 'slot3'
@@ -39,6 +40,9 @@ export type Action =
   | 'backpack'
   | 'map'
   | 'harvest'
+  | 'eat'
+  | 'loadNext'
+  | 'loadPrev'
   | 'pinNext'
   | 'cancel'
   | 'menu'
@@ -47,7 +51,6 @@ export type Action =
   | 'nextTab'
   | 'debug'
   // Classic rules only (decision 7): old-city rules give these no default (E21 hides them).
-  | 'upgrades'
   | 'nextArea'
   | 'home';
 
@@ -72,9 +75,11 @@ export interface ActionDef {
   pad: boolean;
   /** only under classic rules */
   classic?: boolean;
+  /** E23.2.1: only under old-city rules (bloombot's charge) */
+  oldCity?: boolean;
 }
 
-const A = (id: Action, label: string, group: Group, context: Context, keys = true, pad = true, classic = false): ActionDef => ({ id, label, group, context, keys, pad, classic });
+const A = (id: Action, label: string, group: Group, context: Context, keys = true, pad = true, classic = false, oldCity = false): ActionDef => ({ id, label, group, context, keys, pad, classic, oldCity });
 
 /** Every action, in the order the rebinding screen lists them. */
 export const ACTIONS: readonly ActionDef[] = [
@@ -89,7 +94,10 @@ export const ACTIONS: readonly ActionDef[] = [
   A('recentre', 'Recentre the camera', 'move', 'world'),
   A('interact', 'Interact', 'act', 'world'),
   A('pulse', 'Pulse, use the tool, place', 'act', 'world'),
-  A('harvest', 'Harvest Sunlight', 'act', 'world'),
+  A('harvest', 'Harvest Sunlight', 'act', 'world', true, true, true),
+  A('eat', 'Eat a snack (recharge)', 'act', 'world', true, true, false, true),
+  A('loadNext', 'Pulse load: next', 'act', 'world', true, true, false, true),
+  A('loadPrev', 'Pulse load: previous', 'act', 'world', true, true, false, true),
   A('pinNext', 'Pin the next request', 'act', 'world'),
   A('nextArea', 'Go to the area that needs you', 'act', 'world', true, true, true),
   A('home', 'Back to the park', 'act', 'world', true, true, true),
@@ -98,6 +106,7 @@ export const ACTIONS: readonly ActionDef[] = [
   A('rotate', 'Turn the piece', 'build', 'build'),
   A('rotateBack', 'Turn the piece back', 'build', 'build'),
   A('removeMode', 'Remove mode', 'build', 'build'),
+  A('powerOverlay', 'Power view (in build mode)', 'build', 'build'),
   A('slot1', 'Hotbar slot 1', 'build', 'world'),
   A('slot2', 'Hotbar slot 2', 'build', 'world'),
   A('slot3', 'Hotbar slot 3', 'build', 'world'),
@@ -109,7 +118,6 @@ export const ACTIONS: readonly ActionDef[] = [
   A('slot9', 'Hotbar slot 9', 'build', 'world'),
   A('backpack', 'Backpack', 'menus', 'world'),
   A('map', 'Map', 'menus', 'world'),
-  A('upgrades', 'Upgrades', 'menus', 'world', true, true, true),
   A('photo', 'Photo mode', 'menus', 'world'),
   A('cancel', 'Back', 'menus', 'any'),
   A('menu', 'Pause and menu', 'menus', 'any'),
@@ -148,6 +156,7 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
     rotate: ['KeyR', 'Wheel'],
     rotateBack: [],
     removeMode: ['KeyX'],
+    powerOverlay: ['KeyO'],
     slot1: ['Digit1'],
     slot2: ['Digit2'],
     slot3: ['Digit3'],
@@ -160,6 +169,11 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
     backpack: ['Tab', 'KeyI'],
     map: ['KeyM'],
     harvest: ['KeyF'],
+    // E23.2.1: under old-city rules F eats instead (Harvest Sunlight is classic only)
+    eat: oldCity ? ['KeyF'] : [],
+    // E23.2.2: the pulse load wheel
+    loadNext: ['KeyV'],
+    loadPrev: ['KeyZ'],
     pinNext: ['KeyG'],
     cancel: [FIXED_KEY],
     menu: [FIXED_KEY],
@@ -167,11 +181,10 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
     prevTab: ['KeyQ'],
     nextTab: ['KeyE'],
     debug: ['F3'],
-    upgrades: ['KeyU'],
     nextArea: ['KeyN'],
     home: ['Home'],
   };
-  if (oldCity) for (const a of ACTIONS) if (a.classic) k[a.id] = [];
+  for (const a of ACTIONS) if (oldCity ? a.classic : a.oldCity) k[a.id] = [];
   return k;
 }
 
@@ -192,6 +205,7 @@ export function defaultPad(oldCity = false): Partial<Record<Action, number>> {
     rotate: 5,
     rotateBack: 4,
     removeMode: 7,
+    powerOverlay: 15, // d-pad right (Pin next request while walking)
     backpack: 12,
     map: 8,
     harvest: 14,
@@ -200,11 +214,14 @@ export function defaultPad(oldCity = false): Partial<Record<Action, number>> {
     prevTab: 4,
     nextTab: 5,
   };
-  if (oldCity) p.pinNext = 15;
-  else {
-    // Classic keeps a pad button for Upgrades. Every button is taken by the new map, so it shares d-pad right with
-    // Pin next request, which only exists under old-city rules.
-    p.upgrades = 15;
+  if (oldCity) {
+    p.pinNext = 15;
+    // E23.2.1: d-pad left eats instead of harvesting sunlight (classic only)
+    delete p.harvest;
+    p.eat = 14;
+    // E23.2.2: the bumpers turn the load wheel while walking (in build mode they turn the piece)
+    p.loadPrev = 4;
+    p.loadNext = 5;
   }
   return p;
 }

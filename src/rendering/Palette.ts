@@ -65,6 +65,8 @@ const ground = {
   shallows: ['#4f8592', '#4a7f8b', '#568b98'],
   surf: '#9fdcef',
   /** the slab under painted dead ground (GroundTex): each painting's average colour, for its sides and the far view */
+  /** the stone edge of dead paving where it stands above the earth beside it */
+  pavingKerb: '#a48a72',
   painted: { sand: ['#e2bf7e'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
   seaFoam: '#eaf8fb',
   /** restored ground that isn't lawn ('' = use the stage grass) */
@@ -255,6 +257,9 @@ const aqua = {
   mist: '#d8f4ff',
   pipe: '#5aa3c9',
   surface: '#7fd0f0',
+  /** E23.4.1: a drained bed (damp silt), and its darker wet rim at the waterline */
+  bed: '#5e4b39',
+  bedWet: '#3f3328',
   foam: '#a8ecff',
   teal: '#6fe3e0',
 };
@@ -432,6 +437,21 @@ const signal = {
   beaconPool: '#fff3a0',
   /** E19: the build hologram bloombot projects */
   holo: '#5fe8ff',
+  /** E23.3.4: the Power overlay. Each network gets one of `nets` (warm, bright, readable at night). */
+  power: {
+    // the biggest network is pure yellow (the owner's call: 100% yellow, like the machines' outline)
+    nets: ['#ffff00', '#6fe3ff', '#b6ff6a', '#ff9ed8', '#ffb15c', '#a9a2ff'],
+    dark: '#ff6b6b',
+    tripped: '#ff3b3b',
+    cell: '#8ff5c8',
+    cellBack: '#1d3640',
+    /** the Power view: powered electrical machines become holograms in pure yellow, RGB (255, 255, 0) (the owner's call) */
+    machineHolo: '#ffff00',
+    /** the network under the cursor, in the Power view: near white, so it stands out from the yellow */
+    focus: '#fff6d8',
+    /** the Power view's light: the world goes cool and grey under it, so the yellow grid pops */
+    viewLight: '#8c98ab',
+  },
 };
 
 /** Scene lights (Look 1 owns lighting; on its branch these move to src/data/look.ts). */
@@ -439,6 +459,11 @@ const light = {
   ambient: '#8a90a3',
   sun: '#ffe6bd',
   fill: '#b9d7ff',
+  /** E23.3.5: night lights, warm and low (data/lights.ts `tone`), and the insects that gather round them */
+  lamps: { warm: '#ffc46b', amber: '#ffa94d', rose: '#ff9fa8', cream: '#fff0c8', green: '#9dffb0' },
+  firefly: '#e9ff8a',
+  moth: '#f3eadb',
+  bulbOff: '#8a7e6c',
 };
 
 /**
@@ -512,6 +537,10 @@ const families = { cozy, retaining, stone, paving, ground, roof, lawn, flowers, 
 
 export const PALETTE = {
   ...families,
+  /** E23.7.1.3: night finds: a glowing plant's stems and buds, night salvage's scraps and its glint */
+  /** E23.7.2.2: the house's radio (the forecast) */
+  radio: { crate: '#9a7652', body: '#c9a074', grille: '#4b4741', dial: '#f3e2b8', dialGlow: '#ffcf7a' },
+  nightFind: { stem: '#4f7d5a', bud: '#c8ffe6', budGlow: '#7dffd0', scrap: '#8a8f96', glint: '#fff2c8', glintGlow: '#ffd98a', dewStem: '#d9d2c2', dewCap: '#9fb7c9', dewDrop: '#e8f6ff', glass: '#bfe3ef', moth: '#e9e4d8' },
   // ───── legacy names (pre-Look 2), kept as aliases ─────
   concrete: ['#9a9286', '#8f877b', '#a39b8f', '#958d81'],
   concreteDark: '#6b6358',
@@ -626,6 +655,15 @@ export const PALETTE = {
   bee: '#f2b630',
   hoverfly: '#d98a2b',
   insectDark: '#2b2620',
+  /** E23.2.2.2: the hummingbird hawk-moth rare plants draw */
+  mothBody: '#9a6a3e',
+  mothWing: '#e0a24a',
+  /** E23.2.2.3: the reveal ripple's ring, and the warmer ring on a journal page it found */
+  ripple: '#bff3ff',
+  ripplePage: '#fff3c4',
+  /** E23.2.2.3: a revealed buried find: freshly turned earth */
+  turnedEarth: '#7b5134',
+  turnedEarthDark: '#5d3b25',
   insectWing: '#eef6ff',
   leafDrift: ['#a8743c', '#8f9a3a', '#c98f3c'],
   petalFall: ['#ffd1e6', '#ffffff', '#ffb3d1'],

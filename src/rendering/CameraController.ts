@@ -52,24 +52,38 @@ export interface CameraSnapshot {
 }
 
 /**
- * E21.22 (§14): the exploration camera. The epic's zoom steps (close 2.4, normal 3.2 = today's, far 5.0) are
- * distances relative to today's view; this camera's zoom is the inverse (bigger is closer), so each step's zoom
- * is 3.2 × 3.2 / distance. Pitch 20°–60° (default 35°), 0.15 s follow smoothing, 1.5 tiles of look-ahead,
- * a drift back behind bloombot after 3 s of walking with no camera input.
+ * E21.22 (§14), rebuilt as a third-person camera: the exploration camera is a chase camera on a boom behind
+ * bloombot. The mouse (pointer lock) or the right stick swings it freely round bloombot and tilts it from a little
+ * below the shoulder (looking up at the skyline) to high above; bloombot sits in the lower middle of the frame,
+ * and the middle of the screen (the build crosshair) looks at the ground a few tiles past it.
+ *
+ * The zoom steps are boom lengths: `zoomSteps` keep the old zoom numbers (bigger is closer; 3.2 × 3.2 / distance)
+ * so the rest of the game reads zoom as before, and `boom` turns a step's distance into world units.
  */
 export const EXPLORE = {
-  pitchMin: 20,
-  pitchMax: 60,
-  pitch: 35,
+  /** degrees: below zero the camera is under bloombot's shoulder looking up; 70 is nearly overhead */
+  pitchMin: -15,
+  pitchMax: 70,
+  pitch: 16,
   distances: [2.4, 3.2, 5.0],
   zoomSteps: [(3.2 * 3.2) / 2.4, 3.2, (3.2 * 3.2) / 5.0],
+  /** world units of boom per step distance (the normal step is a boom of about 4.2 tiles) */
+  boom: 1.3,
+  /** the point the camera orbits and looks at: this high above bloombot's feet (world units) */
+  pivot: 1.05,
+  /** vertical field of view (degrees) */
+  fov: 62,
   smoothing: 0.15,
-  lead: 1.5,
-  recentreAfter: 3,
-  /** degrees a second the view drifts back behind bloombot */
-  recentreSpeed: 60,
+  /** look-ahead (tiles) toward where bloombot walks: a little, so it stays near the middle */
+  lead: 0.35,
+  /** seconds without camera input before the view starts swinging in behind a running bloombot */
+  recentreAfter: 0.8,
+  /** seconds of running before it does (a tap on a key doesn't swing it) */
+  recentreWalk: 0.4,
+  /** degrees a second the view swings back behind bloombot, at most */
+  recentreSpeed: 90,
   /** the camera stays at least this far above the ground under it */
-  clearance: 0.6,
+  clearance: 0.35,
 };
 
 export class CameraController {
@@ -112,6 +126,9 @@ export class CameraController {
   /** E21.22: the look-ahead (world units), eased */
   private lead = new pc.Vec3();
   private leadGoal = new pc.Vec3();
+  /** Third person: how far right of bloombot the camera looks over its shoulder (world units; build aiming) */
+  shoulderGoal = 0;
+  private shoulder = 0;
   /** E21.22: the ground's height under a point (world y), so the camera never ends below it */
   ground?: (x: number, z: number) => number;
 
@@ -225,6 +242,16 @@ export class CameraController {
   /** E21.22: tilts the view (degrees; positive looks down more), within 20°–60°. */
   pitchBy(degrees: number) {
     this.pitchGoal = pc.math.clamp(this.pitchGoal + degrees, EXPLORE.pitchMin, EXPLORE.pitchMax);
+  }
+
+  /** Third person: the mouse turns and tilts the view at once (degrees; positive pitch looks down more). */
+  look(yawDeg: number, pitchDeg: number) {
+    if (this.cinematic) return;
+    this.anchor = undefined;
+    this.yawGoal += yawDeg;
+    this.yaw = this.yawGoal;
+    this.pitchBy(pitchDeg);
+    this.explorePitch = this.pitchGoal;
   }
 
   /** E21.22: the look-ahead: where bloombot is walking (world units from it). */
@@ -436,6 +463,7 @@ export class CameraController {
       const e = this.reducedMotion ? 1 : 1 - Math.exp(-dt / EXPLORE.smoothing);
       this.explorePitch += (this.pitchGoal - this.explorePitch) * e;
       this.lead.lerp(this.lead, this.leadGoal, e);
+      this.shoulder += (this.shoulderGoal - this.shoulder) * (this.reducedMotion ? 1 : 1 - Math.exp(-dt / 0.25));
     }
     if (!this.cinematic) {
       const k = 1 - Math.exp(-dt * this.follow);
@@ -481,39 +509,62 @@ export class CameraController {
     }
   }
 
+  /**
+   * 0 at the city overview (min zoom) … 1 from the far third-person step in: how much of the chase camera the
+   * view is. The map (M) glides out to the overview through it, so the swing up from behind bloombot is smooth.
+   */
+  private chase(): number {
+    if (!this.explore) return 0;
+    const far = EXPLORE.zoomSteps[2];
+    return smooth(pc.math.clamp((this.zoom - this.minZoom) / Math.max(1e-3, far * 0.98 - this.minZoom), 0, 1));
+  }
+
   private apply() {
     const n = this.nearness();
     const k = smooth(pc.math.clamp((this.zoom - VIEW.nearZoom) / (VIEW.closeZoom - VIEW.nearZoom), 0, 1));
     this.pitch = VIEW.farPitch + (VIEW.nearPitch - VIEW.farPitch) * n + (VIEW.closePitch - VIEW.nearPitch) * k;
-    if (this.explore && !this.pitchOffset) this.pitch = this.explorePitch; // E21.22: the player's pitch
-    if (this.pitchOffset) this.pitch = pc.math.clamp(this.pitch + this.pitchOffset, 6, 80);
     this.fov = VIEW.farFov + (VIEW.nearFov - VIEW.farFov) * n + (VIEW.closeFov - VIEW.nearFov) * k;
     this.viewHeight = this.fitHeight() / this.zoom;
     this.dist = this.viewHeight / Math.tan((this.fov * Math.PI) / 360);
+    // Third person (bloombot): a boom behind bloombot at the player's pitch, blended out toward the overview.
+    const ch = this.chase();
+    let pivot = 0;
+    if (ch > 0) {
+      const boom = ((3.2 * 3.2) / this.zoom) * EXPLORE.boom;
+      this.pitch += (this.explorePitch - this.pitch) * ch;
+      this.fov += (EXPLORE.fov - this.fov) * ch;
+      this.dist += (boom - this.dist) * ch;
+      this.viewHeight = this.dist * Math.tan((this.fov * Math.PI) / 360);
+      pivot = EXPLORE.pivot * ch;
+    }
+    if (this.pitchOffset) this.pitch = pc.math.clamp(this.pitch + this.pitchOffset, -20, 80);
     const c = this.cam;
     c.fov = this.fov;
     // Clip planes hug the view: near just in front of the closest ground on screen (and anything tall on it),
     // far past the haze, so depth precision stays good from close-up to the city overview.
-    c.nearClip = Math.max(0.3, this.dist - this.viewHeight * 2.2 - 12);
+    c.nearClip = ch > 0.5 ? 0.12 : Math.max(0.3, this.dist - this.viewHeight * 2.2 - 12);
     // Just past the haze, no further: everything beyond is the haze colour, and a deeper far plane would draw
     // the city behind it. The sky dome and the skyline are a backdrop that fits itself inside (Look 4.7, 4.8).
     c.farClip = this.dist + this.hazeEnd + 10;
     const yr = (this.yaw * Math.PI) / 180;
-    const t = this.explore ? new pc.Vec3(this.target.x + this.lead.x, this.target.y, this.target.z + this.lead.z) : this.target;
-    // E21.22: the camera never ends below the ground (it tilts up over a rise instead of pushing in)
-    let pitch = this.pitch;
-    for (let i = 0; i < 40; i++) {
-      const pr = (pitch * Math.PI) / 180;
-      const x = t.x + this.dist * Math.cos(pr) * Math.sin(yr);
-      const z = t.z + this.dist * Math.cos(pr) * Math.cos(yr);
-      const y = t.y + this.dist * Math.sin(pr);
-      if (!this.explore || !this.ground || y >= this.ground(x, z) + EXPLORE.clearance || pitch >= 85) {
-        this.entity.setPosition(x, y, z);
-        break;
+    // Over the shoulder: the pivot slides along the camera's right, so bloombot stands left of the crosshair.
+    const sh = this.shoulder * ch;
+    const t = this.explore ? new pc.Vec3(this.target.x + this.lead.x * ch + Math.cos(yr) * sh, this.target.y + pivot, this.target.z + this.lead.z * ch - Math.sin(yr) * sh) : this.target;
+    const pr = (this.pitch * Math.PI) / 180;
+    let x = t.x + this.dist * Math.cos(pr) * Math.sin(yr);
+    let z = t.z + this.dist * Math.cos(pr) * Math.cos(yr);
+    let y = t.y + this.dist * Math.sin(pr);
+    if (this.explore && this.ground) {
+      // The camera never ends below the ground: looking up, or over a rise, the boom shortens toward the pivot
+      // until it clears it (the way a chase camera slides along the ground), and never goes under it.
+      for (let i = 0; i < 12 && y < this.ground(x, z) + EXPLORE.clearance; i++) {
+        x = t.x + (x - t.x) * 0.8;
+        z = t.z + (z - t.z) * 0.8;
+        y = t.y + (y - t.y) * 0.8;
       }
-      pitch += 2;
+      y = Math.max(y, this.ground(x, z) + EXPLORE.clearance);
     }
-    this.pitch = pitch;
+    this.entity.setPosition(x, y, z);
     this.entity.lookAt(t);
     this.markDirty();
   }
