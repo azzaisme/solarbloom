@@ -55,7 +55,7 @@ describe('E23.10.2: the E23 model list', () => {
   });
 
   it('batch costs match docs/art/e23-models.md', () => {
-    const cost: Record<Batch, number> = { A: 63, B1: 114, B2: 111, B3: 111, B4: 234, B5: 60, B6: 240 };
+    const cost: Record<Batch, number> = { A: 63, B1: 114, B2: 117, B3: 111, B4: 234, B5: 60, B6: 240 };
     for (const [b, c] of Object.entries(cost)) expect(batchCredits(b as Batch), b).toBe(c);
     const doc = readFileSync('docs/art/e23-models.md', 'utf8');
     expect(doc).toContain(`**${Object.values(cost).reduce((a, b) => a + b, 0)}**`);
@@ -82,6 +82,24 @@ describe('E23.10.2: the E23 model list', () => {
     for (const m of landed) {
       const far = glbTriangles(`${DIR}/${m.name}.lod1.glb`);
       expect(far, `${m.name}.lod1`).toBeLessThanOrEqual(Math.min(1000, Math.ceil(m.tris! / 2)));
+    }
+  });
+
+  it('the hand-built fences and trellis (#466) have all landed, within budget, with their moving parts', () => {
+    const built = E23_MODELS.filter((m) => m.route === 'built');
+    expect(built.length).toBe(16);
+    const nodeNames = (path: string) => {
+      const buf = readFileSync(path);
+      const gltf = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8')) as { nodes?: { name?: string }[] };
+      return (gltf.nodes ?? []).map((n) => n.name);
+    };
+    for (const m of built) {
+      expect(existsSync(`${DIR}/${m.name}.glb`), m.name).toBe(true);
+      expect(glbTriangles(`${DIR}/${m.name}.glb`), m.name).toBeLessThanOrEqual(m.tris!);
+      expect(glbTriangles(`${DIR}/${m.name}.lod1.glb`), `${m.name}.lod1`).toBeLessThanOrEqual(200);
+      const parts = nodeNames(`${DIR}/${m.name}.glb`);
+      if (m.name.endsWith('-gate')) expect(parts, `${m.name} swings its gate`).toContain('gate');
+      if (m.name.startsWith('fence-hedge')) expect(parts, `${m.name} sways its leaves`).toContain('leaves');
     }
   });
 });

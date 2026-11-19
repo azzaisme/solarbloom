@@ -95,8 +95,8 @@ Dead and worn looks come from the neglected-look shader (E20.6), not re-textures
 | bio-digester | Image | Machine 4k | A rounded ceramic dome on a timber base with a glass sight window (separate mesh, bubbles when fed), a feed hatch and a copper outlet to the grid. |
 | beehive | Text | Small machine 1.5k | A stacked timber hive with a cream ceramic roof, gold entrance plate and a landing board. Bees are procedural. |
 | mushroom-log | Text | Clutter 1k | A mossy fallen log with shelf mushrooms. Mushroom caps are separate so they can grow. |
-| bird-box | Text | Clutter 800 | A timber nest box with a cream roof and a round hole, on a short post. |
-| bat-box | Text | Clutter 800 | A tall narrow timber box with a slotted underside, on a post. |
+| bird-box | Image | Clutter 800 | A small honey timber nest box with a cream roof, a round hole and a perch peg, on a tall slim post with a flat foot (as e23-farm's bird box stands). Text prompts twice left off the post. |
+| bat-box | Image | Clutter 800 | A closed, tall, narrow box of dark weathered planks, no front hole, a cream roof and a slot along the bottom with a ridged landing board, high on a slim post. Text prompts twice made an open feeder. |
 | hedgehog-house | Text | Clutter 1k | A low domed timber-and-leaf shelter with an arched entrance. |
 | greenhouse | Image | Machine 5k | A small cream-framed glasshouse with gold ridge trim and opening roof vents (separate). Plants inside are procedural. Glasshouse Gardens unlock. |
 | watering-can | Text | Clutter 500 | A cream ceramic can with a gold rose. Held by bloombot and hung by the door. |
@@ -195,17 +195,17 @@ Prices are from `meshy-assets.md`'s routes as of 2026-10-12 (check https://docs.
 |---|---|---|---|
 | **A: the home loop** | charger (18), compost-bin (15), watering-can (15), bloombot clips (5 × 3) | 3 models, 5 clips | **63** |
 | B1: power and water | battery, wind-turbine, large-solar-array, pump, desalination-plant, sprinkler, feed-tank | 7 | 114 |
-| B2: farm | bio-digester, beehive, mushroom-log, bird-box, bat-box, hedgehog-house, greenhouse | 7 | 111 |
+| B2: farm | bio-digester, beehive, mushroom-log, bird-box, bat-box, hedgehog-house, greenhouse | 7 | 117 |
 | B3: crafting and automation | research-station, assembler, mulcher, hopper-composter, auto-feeder, seed-drill, forecast-board | 7 | 111 |
 | B4: animals | 13 animals | 13 | 234 |
 | B5: Keepers on benches | 10 Keepers × 2 clips × 3 | 20 clips | 60 |
 | B6: crops | crop-seedling and 15 crops | 16 | 240 |
-| **Total** | | **53 models, 25 clips** | **933** |
+| **Total** | | **53 models, 25 clips** | **939** |
 
 Crops first appear in Milestone A, so until B6 is approved the planters have no crop model. The owner may want B6
 folded into A (303 credits for A then).
 
-Batch A and B6 are done (303 credits), plus a lavender redo the owner approved on 19 Nov (15 credits). B1 is done (approved 19 Nov): 124 credits spent against 114 planned, because the large solar array failed twice on the text route before the image route worked; the owner gave standing permission for regenerations.
+Batch A and B6 are done (303 credits), plus a lavender redo the owner approved on 19 Nov (15 credits). B1 is done (approved 19 Nov): 124 credits spent against 114 planned, because the large solar array failed twice on the text route before the image route worked; the owner gave standing permission for regenerations. B2 is done (approved 19 Nov): 137 credits spent against 117 planned (the bird and bat boxes each missed twice on the text route before the image route).
 
 ## Getting each model into the game
 
@@ -239,6 +239,17 @@ Batch A and the crops (B6), approved by the owner on 18 Nov 2026: 303 credits. M
 | pump | 1,960 / 2,000 | 480 | Flywheel and pressure dial |
 | sprinkler | 587 / 600 | 147 | On a stone foot with its hose |
 | feed-tank | 1,469 / 1,500 | 359 | Copper tank, green sight glass |
+| **B2** (19 Nov) | | | |
+| bio-digester | 3,919 / 4,000 | 959 | Image route; cream dome on a brick ring, gold hatch, copper gas pipe |
+| greenhouse | 4,899 / 5,000 | 979 | Image route; timber frame, pale glass, brick footing, a roof vent |
+| beehive | 1,468 / 1,500 | 359 | Round kraft hive on legs, cream roof, landing board |
+| mushroom-log | 904 / 1,000 | 221 | Bark log with orange caps and moss |
+| hedgehog-house | 874 / 1,000 | 213 | Leaf-thatched mound with a cream doorway |
+| bird-box | 702 / 800 | 171 | Image route; on a post, gable roof, round hole |
+| bat-box | 794 / 800 | 194 | Image route; tall slatted box on a post, landing ramp |
+| **Fences and trellis** (#466, hand-built, no credits) | | | |
+| fence-<style>-run, -post, -gate | ≤ 800 | ≤ 200 | Built by `assets/tools/prop_models_fences.py` (`build_props.py`): five styles of salvaged materials (picket, willow hurdle, pipe rail, dry-stone wall, clipped hedge). A run spans one tile edge (x −0.5…0.5), a post sits on a tile corner, a gate's part `gate` swings about Z on its hinge (its origin). The hedge's part `leaves` is the one the wind sways. Decoration only. |
+| trellis | ≤ 800 | ≤ 200 | Two posts and a diamond lattice, 0.8 × 1.5 m, on a planter or farmland tile |
 
 Every model is finished by `assets/tools/meshy_finish.py` (Blender 5.0): real scale, pivot at the base centre,
 textures 512 (1024 for the charger and the big B1 machines), LOD1 by Decimate (a quarter, never over 1,000), a preview

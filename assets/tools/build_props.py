@@ -29,7 +29,8 @@ names = args[1:] or list(M.MODELS)
 
 # docs/art/meshy-assets.md budgets: (LOD0 max triangles, LOD1 max triangles; 0 = no far version)
 BUDGET = {"hero": (8000, 1000), "machine": (5000, 1000), "landmark": (8000, 1500), "obstacle": (1200, 300),
-          "clutter": (1500, 400), "planter": (800, 200), "skyline": (500, 0)}
+          "clutter": (1500, 400), "planter": (800, 200), "skyline": (500, 0),
+          "fence": (800, 200)}   # fences and the trellis (#466): one tile edge each, placed many times
 
 
 def reset():

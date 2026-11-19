@@ -61,5 +61,22 @@ large-solar-array: preview came out as an upright board; not refined
 large-solar-array preview (retry, owner OK) 01a1f07a-41d1-7134-b273-75c43064cd9e
 large-solar-array concept (image route) 01a1f085-b7e0-7525-a95c-b4029f9177d3
 large-solar-array image-to-3d 01a1f08e-16aa-728b-8992-002203ea13a8
+B2 (19 Nov, owner-approved):
+bio-digester concept 01a1f0d2-8e38-7482-871e-06314d14f8fa
+greenhouse concept 01a1f0d2-9a46-7180-8387-5ae268719178
+beehive preview 01a1f0d2-a3ca-725d-bd0f-eb8030ccbb1e
+mushroom-log preview 01a1f0d2-acae-773e-be94-6427d707b5f2
+bird-box preview 01a1f0d2-b75c-7583-b964-473baba08aa4
+bat-box preview 01a1f0d2-bf7c-7266-bb75-5a523624c8b2
+hedgehog-house preview 01a1f0d2-ca68-7796-b854-92807e03e65a
+bio-digester image-to-3d 01a1f0d7-41c9-74f5-8ec0-53ef5fd8959a
+greenhouse image-to-3d 01a1f0d7-4869-7169-9756-2b5015e460fe
+beehive refine 01a1f0d9-4403-73b8-878c-af072e263384
+mushroom-log refine 01a1f0d9-4d37-707e-b248-a4ffef9d2d74
+hedgehog-house refine 01a1f0d9-56b7-7058-aac4-e9e7fceb87ce
+bird-box preview (retry: first had no post) 01a1f0d9-5f46-72f4-a3e6-5b681a3aec84
+bat-box preview (retry: first was an open feeder) 01a1f0d9-6e51-70a9-bc8a-7ba50747034f
+bird-box (image route, after two text misses) concept 01a1f0da-9bab-757c-bc3d-c2939d2d3cce, image-to-3d 01a1f0dd-0704-7299-bbb7-b63911e475f1
+bat-box (image route, after two text misses) concept 01a1f0da-ba0c-7655-b0f0-95ffdeb24507, image-to-3d 01a1f0dd-0b3f-705c-98bc-01ea7a599438
 bloombot rig (G.1) 01a1e779-c5f4-7703-9e9d-27fb8eecfa24
 ```

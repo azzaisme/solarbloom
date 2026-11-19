@@ -5,7 +5,8 @@
  */
 
 /** How an object gets its art. */
-export type Route = 'text' | 'image' | 'reuse' | 'procedural';
+/** 'built': hand-built in Blender from code (assets/tools/build_props.py), no Meshy credits. */
+export type Route = 'text' | 'image' | 'reuse' | 'procedural' | 'built';
 /** The child issue it belongs to. */
 export type ModelGroup = 'power' | 'water' | 'farm' | 'crafting' | 'companions';
 /** The Meshy batch it is generated in (by milestone). Reused and procedural objects have none. */
@@ -25,6 +26,15 @@ export interface E23Model {
 
 /** Credits per route (Meshy prices as of 2026-10-12; see docs/art/old-city-models.md). */
 export const ROUTE_CREDITS = { text: 15, image: 18, clip: 3 } as const;
+
+/** The fence styles (#466), all salvaged materials. */
+export const FENCE_STYLES = {
+  picket: 'Salvaged-plank picket fence',
+  willow: 'Woven willow hurdle',
+  pipe: 'Scrap-metal and pipe rail',
+  stone: 'Low dry-stone wall',
+  hedge: 'Clipped hedge',
+} as const;
 
 export const E23_MODELS: E23Model[] = [
   // Power (#464)
@@ -51,13 +61,20 @@ export const E23_MODELS: E23Model[] = [
   { name: 'fish-pond', group: 'farm', route: 'procedural', what: 'Fish pond: stone rim and water follow its outline' },
   { name: 'mushroom-log', group: 'farm', route: 'text', tris: 1000, batch: 'B2', what: 'Mushroom log' },
   { name: 'worm-bin', group: 'farm', route: 'reuse', from: 'crate', what: 'Worm bin with a procedural soil top' },
-  { name: 'bird-box', group: 'farm', route: 'text', tris: 800, batch: 'B2', what: 'Wildlife home: bird box' },
-  { name: 'bat-box', group: 'farm', route: 'text', tris: 800, batch: 'B2', what: 'Wildlife home: bat box' },
+  { name: 'bird-box', group: 'farm', route: 'image', tris: 800, batch: 'B2', what: 'Wildlife home: bird box' },
+  { name: 'bat-box', group: 'farm', route: 'image', tris: 800, batch: 'B2', what: 'Wildlife home: bat box' },
   { name: 'hedgehog-house', group: 'farm', route: 'text', tris: 1000, batch: 'B2', what: 'Wildlife home: hedgehog house' },
   { name: 'greenhouse', group: 'farm', route: 'image', tris: 5000, batch: 'B2', what: 'Greenhouse (Glasshouse Gardens)' },
   { name: 'watering-can', group: 'farm', route: 'text', tris: 500, batch: 'A', what: 'Watering can' },
   { name: 'orchard-tree', group: 'farm', route: 'procedural', what: 'Orchard trees (TreeGen, procedural fruit)' },
-  { name: 'trellis', group: 'farm', route: 'procedural', what: 'Bean trellis lattice' },
+  { name: 'trellis', group: 'farm', route: 'built', tris: 800, what: 'Bean trellis: two posts and a diamond lattice, stands on a planter or farmland tile' },
+  // Fences (#466): decoration only, snapped along tile edges; each style has a run, a corner/end post and a gate
+  // whose part "gate" swings on its hinge (the part's origin). The hedge's part "leaves" sways in the wind.
+  ...(['picket', 'willow', 'pipe', 'stone', 'hedge'] as const).flatMap((style) =>
+    (['run', 'post', 'gate'] as const).map((piece): E23Model => ({
+      name: `fence-${style}-${piece}`, group: 'farm', route: 'built', tris: 800, what: `${FENCE_STYLES[style]}: ${piece}`,
+    })),
+  ),
   // Crops by stage (#466): one shared seedling, then each crop's plant; its fruit or flower heads are separate parts,
   // left off (and the plant scaled down) for the growing stage and shown at ripe. Wilting is a shader droop.
   { name: 'crop-seedling', group: 'farm', route: 'text', tris: 300, batch: 'B6', what: 'Every crop’s first stage' },
