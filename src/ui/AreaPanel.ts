@@ -15,7 +15,6 @@ export const AREA_SPECIALTY: Record<string, string> = {
   canal: 'Water channels: adds steady water, and Reservoir Gardens grow here.',
   market: 'Crowded with stalls: a bit of biomass and energy once cleared.',
   reservoir: 'Dry clay basins: the best water bonus, and Reservoir Gardens grow here.',
-  rooftops: 'An old building carries a rooftop garden-to-be: reach it with a Bloom Relay, then restore it. Its Core wakes the area.',
   grove: 'Leaf litter around an Elder Tree: blooms nearby charge its Canopy Burst, and it adds biomass.',
   beach: 'Sand and driftwood where the boat comes in. The Sea Lock across the canal wakes it.',
   downtown: 'Glass towers on a raised plateau around the Solar Spire, the tallest light in the city.',
@@ -100,16 +99,6 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     .map(([t, n]) => `${MACHINES[t as keyof typeof MACHINES]?.icon ?? '⚙️'} ${n} ${MACHINES[t as keyof typeof MACHINES]?.name ?? t}${n === 1 ? '' : 's'}`)
     .join(' · ');
   const wake = d.ready && landmarkId && !cleared && !parkAwake ? `<button class="buy" data-wake="${landmarkId}">✨ Wake the ${esc(a.landmarkName)}</button>` : '';
-  // City 10.7: the district this area belongs to, and its bloom.
-  const ds = id === PARK && !parkAwake ? undefined : s.districts.status(s.districts.districtOf(id));
-  const district = !ds
-    ? ''
-    : `<p class="stat" data-district-line="${esc(ds.id)}">🌸 District: ${esc(ds.name)} · ${ds.claimed ? 'bloomed' : `${Math.min(ds.awake, ds.need)}/${ds.need} neighbouring landmarks awake`}</p>` +
-      (ds.available
-        ? `<button class="buy" data-district="${esc(ds.id)}">🌸 Set off the district bloom</button>`
-        : ds.claimed
-          ? `<button class="mode" data-district="${esc(ds.id)}" data-replay="1" title="Plays it again; changes nothing">↻ Replay the district bloom</button>`
-          : '');
   const tag = a.authored ? ' · <b>a rare landmark</b>' : '';
   // Automation switches (revealed areas; no logistics, just what the drones do here).
   const mode = s.areas.mode(id) ?? '';
@@ -135,7 +124,6 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     `<p class="stat">Machines: ${machineText || 'none yet'}</p>` +
     oldCityShare(s, id) +
     (cultivating(s, id) ? `<p class="stat" data-cultivating="${esc(id)}">🚜 ${cultivating(s, id)} tile${cultivating(s, id) === 1 ? '' : 's'} being cultivated</p>` : '') +
-    district +
     switches +
     wake
   );

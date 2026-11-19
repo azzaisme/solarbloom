@@ -5,7 +5,7 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
-import { regionById } from '../src/core/OldCityLayout';
+import { wakeNextArea } from './helpers';
 
 function city(seed = 6) {
   const sim = new Sim(createInitialState(seed));
@@ -53,23 +53,7 @@ describe('Mega Pulse and scaled Overcharge (City 11.5)', () => {
     expect(first).toBe(TUNING.mega.baseTiles);
     // E23.1.1: the Old City is one fixed island, then the mainland past the causeway: the next area to wake is an
     // open one, else the region behind the nearest gate (opened here as a player would), else the mainland
-    const wakeNext = () => {
-      let id = sim.areas.nextGoal();
-      if (!id) {
-        const r = sim.areas.sealedAreas().map((a) => regionById(a)).find(Boolean);
-        if (r) {
-          sim.gates.open(r.gate.id, true);
-          id = r.id;
-        } else if (!sim.mainland.opened) {
-          // every region awake: the Great Bloom raises the causeway, and the mainland opens district by district
-          sim.state.salvage.tier = 5;
-          sim.mainland.open();
-          id = sim.areas.nextGoal();
-        }
-        if (!id) return false;
-      }
-      return sim.areas.clear(id, true);
-    };
+    const wakeNext = () => wakeNextArea(sim);
     for (let i = 0; i < 10; i++) expect(wakeNext()).toBe(true);
     expect(sim.restoration.megaBudget()).toBe(TUNING.mega.baseTiles + 10 * TUNING.mega.tilesPerArea);
     const toCap = Math.ceil((TUNING.mega.maxTiles - TUNING.mega.baseTiles) / TUNING.mega.tilesPerArea);

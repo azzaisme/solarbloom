@@ -8,11 +8,8 @@ import { Rng } from '../core/Rng';
 import type { GameState, MachineData, TileData } from '../core/types';
 import { BloomChainSystem } from './BloomChainSystem';
 import { BuildSystem } from './BuildSystem';
-import { CanalNetwork } from './CanalNetwork';
 import { RelaySystem } from './RelaySystem';
 import { PowerGrid } from './PowerGrid';
-import { RooftopClusters } from './RooftopClusters';
-import { DistrictSystem } from './DistrictSystem';
 import { DroneSystem } from './DroneSystem';
 import { DroneRoles } from './DroneRoles';
 import { Advisor } from './Advisor';
@@ -63,12 +60,9 @@ export class Sim {
   readonly metrics: Metrics;
   readonly log: DebugLog;
   readonly areas: AreaSystem;
-  readonly districts: DistrictSystem;
-  readonly canals: CanalNetwork;
   readonly relays: RelaySystem;
   /** E23.3: the power grid (networks of poles, sources, batteries and consumers). */
   readonly power: PowerGrid;
-  readonly clusters: RooftopClusters;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
   readonly ecosystem: EcosystemSystem;
   /** Look 6: living transitions (what each tile is visibly turning into). */
@@ -166,10 +160,8 @@ export class Sim {
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
     this.restoration = new RestorationSystem(this);
-    this.canals = new CanalNetwork(this);
     this.relays = new RelaySystem(this);
     this.power = new PowerGrid(this);
-    this.clusters = new RooftopClusters(this);
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
     this.drones = new DroneSystem(this);
@@ -179,7 +171,6 @@ export class Sim {
     this.advisor = new Advisor(this);
     this.progression = new ProgressionSystem(this);
     this.areas = new AreaSystem(this);
-    this.districts = new DistrictSystem(this);
     this.ecosystem = new EcosystemSystem(this);
     this.metrics = new Metrics(this);
     this.log = new DebugLog(this);

@@ -59,7 +59,6 @@ interface ChainRun {
   /** Corridor gardens that already passed the chain on (once each per chain). */
   corridorFired: Set<string>;
   /** City 10.3: Reservoir Gardens that sent or received a spill along a canal in this chain (once each). */
-  canalSpilled: Set<string>;
   /** City areas this chain touched (for the summary). */
   areas: Set<string>;
   mode: 'normal' | 'mega';
@@ -200,7 +199,6 @@ export class BloomChainSystem {
       relaysFired: new Set(),
       pollinatorBonus: new Map(),
       corridorFired: new Set(),
-      canalSpilled: new Set(),
       areas: new Set(),
       roofs: new Set([origin.roofId]),
       mode,
@@ -339,26 +337,6 @@ export class BloomChainSystem {
     run.visited.delete(origin.id);
     this.enqueue(run, { type: 'OVERFLOW', source: g.id, target: g.id, cause: 'overflow', depth: 0 }, 0);
     return true;
-  }
-
-  /**
-   * City 10.3: a garden on a canal network also spills at one other connected garden: the one with the most dry
-   * ground to water (then lowest id), travelling along the canal. Each garden sends and receives at most once per
-   * chain, and routed spills never route again, so a network can't loop.
-   */
-  private routeOverflow(run: ChainRun, g: MachineData, depth: number) {
-    const s = this.sim;
-    const net = s.canals.of(g);
-    if (!net || net.gardens.length < 2 || run.canalSpilled.has(g.id)) return;
-    const options = net.gardens.filter((o) => o.id !== g.id && !run.canalSpilled.has(o.id));
-    if (!options.length) return;
-    const score = new Map(options.map((o) => [o.id, this.overflowTargets(o, 99, run.visited).length]));
-    const to = options.sort((a, b) => score.get(b.id)! - score.get(a.id)! || (a.id < b.id ? -1 : 1))[0];
-    run.canalSpilled.add(g.id);
-    run.canalSpilled.add(to.id);
-    const path = s.canals.path(g, to);
-    s.bus.emit('canal.flow', { from: g.id, to: to.id, path, kind: 'overflow', chainId: run.id });
-    this.enqueue(run, { type: 'OVERFLOW', source: g.id, target: to.id, cause: 'overflow', depth: depth + 1 }, Math.min(2.5, 0.3 + path.length * 0.04));
   }
 
   /** The Elder Tree's ring filled outside a chain (its slow self-charge): release a Canopy Burst. */
@@ -746,7 +724,6 @@ export class BloomChainSystem {
           run.visited.add(t.id);
           this.enqueue(run, { type: t.ground === 'restored' ? 'GROW' : 'RESTORE', source: g.id, target: t.id, cause: 'overflow', depth: ev.depth + 1 }, 0.15 + i * 0.12);
         });
-        if (!routed) this.routeOverflow(run, g, ev.depth);
         return;
       }
       case 'CANOPY_BURST': {

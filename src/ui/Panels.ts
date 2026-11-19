@@ -27,8 +27,6 @@ export class Panels extends HudPart {
       if (t.closest('[data-close]')) this.cb.closeInspect();
       const w = t.closest<HTMLButtonElement>('[data-wake]');
       if (w && !w.disabled) this.cb.wake(w.dataset.wake!);
-      const db = t.closest<HTMLButtonElement>('[data-district]');
-      if (db && !db.disabled) this.cb.districtBloom(db.dataset.district!, db.dataset.replay === '1');
       const rl = t.closest<HTMLButtonElement>('[data-role]');
       if (rl && !rl.disabled) this.cb.chooseRole(rl.dataset.role!);
       const am = t.closest<HTMLButtonElement>('[data-area-mode]');

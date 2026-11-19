@@ -3,6 +3,7 @@ import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState } from '../src/core/GameState';
 import { Sim } from '../src/gameplay/Sim';
+import { wakeNextArea } from './helpers';
 
 describe('local playtest instrumentation (City 09.7)', () => {
   it('records the time to each area and summarises a session readably', () => {
@@ -12,7 +13,7 @@ describe('local playtest instrumentation (City 09.7)', () => {
     sim.areas.clear(PARK, true);
     for (let i = 0; i < 25; i++) {
       sim.advance(30);
-      sim.areas.clear(sim.areas.nextGoal()!, true);
+      expect(wakeNextArea(sim)).toBe(true); // E23.1.1: through the gates, as a player would
     }
     sim.state.stats.maxCombo = 87;
     sim.state.stats.catsFound = 4;

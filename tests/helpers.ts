@@ -5,6 +5,7 @@ import { Sim } from '../src/gameplay/Sim';
 import { MATERIAL_IDS, TIERS } from '../src/data/salvage';
 import { PARK } from '../src/core/Areas';
 import { REGIONS } from '../src/data/oldcity';
+import { regionById } from '../src/core/OldCityLayout';
 import type { MachineData } from '../src/core/types';
 
 /**
@@ -117,4 +118,25 @@ export function streetCross(sim: Sim) {
       const id = t && sim.areas.areaOf(t);
       if (id && sim.state.areas[id] && !sim.areas.sealed(id) && !id.startsWith('out_') && id !== 'sea') streetGarden(sim, col, z);
     }
+}
+
+/**
+ * Wakes the next area as a player would (E23.1.1: the Old City is one fixed island, then the mainland): an open
+ * one, else the region behind the nearest gate (opened), else the Great Bloom raises the causeway and the mainland
+ * opens district by district. False once nothing is left.
+ */
+export function wakeNextArea(sim: Sim): boolean {
+  let id = sim.areas.nextGoal();
+  if (!id) {
+    const r = sim.areas.sealedAreas().map((a) => regionById(a)).find(Boolean);
+    if (r) {
+      sim.gates.open(r.gate.id, true);
+      id = r.id;
+    } else if (!sim.mainland.opened) {
+      sim.state.salvage.tier = 5;
+      sim.mainland.open();
+      id = sim.areas.nextGoal();
+    }
+  }
+  return !!id && sim.areas.clear(id, true);
 }

@@ -28,21 +28,10 @@ export class AreaSystem {
   /** Restored / restorable per area, recounted only after a tile in the area changed. */
   private countCache = new Map<string, { restored: number; restorable: number; fullBloom: number; growable: number }>();
 
-  /** The landmark machine (a Core on the ground layer) of a revealed area, if placed. */
+  /** The landmark machine (a 2×2 Core on the ground) of a revealed area, if placed. */
   landmark(id: string) {
-    const [x, z] = this.landmarkCell(id);
-    const layer = this.landmarkLayer(id);
-    return this.sim.state.machines.find((m) => m.type === 'core' && m.roofId === layer && m.x === x && m.z === z);
-  }
-
-  /** City 12.1: a rooftop cluster's landmark is its roof's Core (standing right over the landmark cell). */
-  private landmarkLayer(id: string): string {
-    return this.map.rooftop(id) ? `roof:${id}` : GROUND;
-  }
-
-  private landmarkCell(id: string): [number, number] {
-    const plan = this.map.rooftop(id);
-    return plan ? plan.core : this.info(id).landmark;
+    const [x, z] = this.info(id).landmark;
+    return this.sim.state.machines.find((m) => m.type === 'core' && m.roofId === GROUND && m.x === x && m.z === z);
   }
 
   /** Every revealed area has its landmark (a 2×2 Core). Idempotent. E21.4: Old City backstreets have none. */
@@ -50,13 +39,11 @@ export class AreaSystem {
     if (this.info(id).noLandmark) return;
     if (this.landmark(id)) return;
     const s = this.sim;
-    if (this.map.rooftop(id)) s.clusters.ensure(id, this.map);
-    const [x, z] = this.landmarkCell(id);
-    const layer = this.landmarkLayer(id);
-    const m = { id: s.newId('m'), type: 'core' as const, roofId: layer, x, z, size: 2, boostUntil: 0, timer: 0, charge: 0 };
+    const [x, z] = this.info(id).landmark;
+    const m = { id: s.newId('m'), type: 'core' as const, roofId: GROUND, x, z, size: 2, boostUntil: 0, timer: 0, charge: 0 };
     s.state.machines.push(m);
     s.grid.indexMachine(m);
-    for (const t of s.grid.footprint(layer, x, z, 2)) if (t) t.occupantId = m.id;
+    for (const t of s.grid.footprint(GROUND, x, z, 2)) if (t) t.occupantId = m.id;
     this.countCache.delete(id);
   }
 

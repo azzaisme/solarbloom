@@ -386,14 +386,6 @@ export const TUNING = {
     } as Record<string, Partial<Record<'energy' | 'water' | 'biomass', number>>>,
   },
 
-  /** City 10.7: district-wide blooms (a district is one CITY_GEN.districtChunks square of chunks). */
-  district: {
-    minAwake: 4, // neighbouring awake landmarks (one connected group) needed in the district
-    seconds: 8, // presentation length (skippable)
-    reward: { energy: 150, water: 100, biomass: 300 },
-    rewardGrowth: 0.25, // each earlier district bloom adds this share to the next reward
-  },
-
   /** City 10.4: buildable Bloom Relays (any two within range link; range is measured in world space). */
   relay: {
     range: 16, // tiles between relays (+rangePerLevel per Relay Lens level)

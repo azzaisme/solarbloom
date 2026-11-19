@@ -37,8 +37,6 @@ export interface HudCallbacks {
   goHome(attention: boolean): void;
   skipCinematic(): void;
   closeInspect(): void;
-  /** City 10.7: set off (or replay) a district bloom. */
-  districtBloom(id: string, replay: boolean): void;
   /** Wake a city landmark (by machine id). */
   wake(machineId: string): void;
   /** Open an area's panel (from its label in the overview). */

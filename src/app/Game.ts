@@ -414,7 +414,6 @@ export class Game {
           this.selectTool('inspect');
           this.select(id);
         },
-        districtBloom: (id, replay) => this.playDistrictBloom(id, replay),
         openArea: (id) => this.openArea(id),
         setAreaMode: (id, mode) => {
           if (this.sim.areas.setMode(id, mode)) {
@@ -3138,13 +3137,7 @@ export class Game {
         const R = TUNING.neighbourhood.reservoir;
         const conds = s.state.machines.filter((x) => x.type === 'condenser' && x.roofId === m.roofId && distToFootprint(x.x, x.z, m.x, m.z, m.size) <= R.condenserRange).length;
         const dry = s.chains.overflowTargets(m, 99).length;
-        const net = s.canals.of(m);
-        const canal = net
-          ? `<p class="stat">🛶 On a canal: ${net.gardens.length} garden${net.gardens.length === 1 ? '' : 's'} · ${net.condensers.length} condenser${net.condensers.length === 1 ? '' : 's'} share its water</p><p>Condensers along the canal fill the emptiest basin on it, and when this basin overflows it also spills at the connected garden with the most dry ground (once per chain).</p>`
-          : m.roofId === GROUND
-            ? '<p>Build it beside clean canal water to join a canal network.</p>'
-            : '';
-        extra = canal + `<p class="stat">⛲ Basin ${Math.floor(m.charge ?? 0)}/${R.threshold} · ${conds} 💧 condenser${conds === 1 ? '' : 's'} within ${R.condenserRange} tiles fill it</p><p class="stat">🌱 ${dry} dry tile${dry === 1 ? '' : 's'} within ${R.radius} tiles (highlighted) · Overflow irrigates up to ${R.targets}</p><p>Each time a nearby Water Condenser fills its meter, the basin rises. Full → Overflow: the closest dry tiles burst into lush bloom (×${R.lushMult} 🌿 for ${R.lushSeconds} s).${conds ? '' : ' <b>Build a Water Condenser within 2 tiles to fill it.</b>'}</p>`;
+        extra = `<p class="stat">⛲ Basin ${Math.floor(m.charge ?? 0)}/${R.threshold} · ${conds} 💧 condenser${conds === 1 ? '' : 's'} within ${R.condenserRange} tiles fill it</p><p class="stat">🌱 ${dry} dry tile${dry === 1 ? '' : 's'} within ${R.radius} tiles (highlighted) · Overflow irrigates up to ${R.targets}</p><p>Each time a nearby Water Condenser fills its meter, the basin rises. Full → Overflow: the closest dry tiles burst into lush bloom (×${R.lushMult} 🌿 for ${R.lushSeconds} s).${conds ? '' : ' <b>Build a Water Condenser within 2 tiles to fill it.</b>'}</p>`;
         break;
       }
       case 'core': {
@@ -3218,20 +3211,10 @@ export class Game {
       if (!info.noLandmark) this.sfx.fanfare();
       this.save();
     });
-    // City 12.1: rooftop clusters appear with their area and come alive when a Bloom Relay reaches them.
+    // a raised layer added to the world gets its roof drawn
     b.on('layer.added', ({ layerId }) => {
       const l = s.grid.layer(layerId);
       if (l) this.grid.addRoof(l);
-    });
-    b.on('layer.unlocked', ({ layerId }) => {
-      const l = s.grid.layer(layerId);
-      if (!l?.cluster) return;
-      this.grid.clusterBuilding(l);
-      for (const t of s.grid.tilesOf(l.id)) this.grid.refresh(t, false);
-      const c = new pc.Vec3(l.origin[0] + l.width / 2, l.height + 0.3, l.origin[2] + l.depth / 2);
-      this.vfx.ring(c, '#9ff7ff', Math.max(l.width, l.depth) * 0.7, 1.0);
-      this.sfx.powerUp();
-      this.hud.toast(`📡 The relay reaches the rooftop!<small>${l.name}: restore its tiles and wake the Rooftop Core.</small>`, 'gold', 4);
     });
     b.on('area.ready', ({ areaId }) => {
       const lm = s.areas.landmark(areaId);
@@ -3520,12 +3503,6 @@ export class Game {
     });
     b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Surge ×${TUNING.cat.frenzyMult} for ${Math.round(seconds)}s`));
     b.on('harvest', () => this.sfx.coin());
-    b.on('rooftop.coreReady', () => {
-      this.machines.setCoreState('ready');
-      this.hud.toast(`✨ The Rooftop Core is humming!<small>Walk up and press ${this.hudKey('interact')} (or use the button) to awaken the building.</small>`, 'gold', 5);
-      this.sfx.chainEnd(10);
-    });
-    b.on('rooftop.coreRestored', () => this.playCoreSequence());
     // E21.6: the Old City's fountain tiers: tier 1 is the water returning (the old fountain sequence); later tiers a toast
     // E21.22: the first time a region's gate opens, the camera rises for 2 s over it (a setting; off with reduced motion)
     b.on('gate.opened', ({ region }) => {
@@ -3579,20 +3556,6 @@ export class Game {
       if (a && b2) this.vfx.arc(a, b2, PALETTE.water, 0.6);
       if (b2) this.vfx.burst(b2, 4, { up: 1, size: 0.04, speed: 0.4 });
     });
-    // City 10.3: water runs along the canal, tile by tile, from one machine to another.
-    b.on('canal.flow', ({ from, to, path, kind }) => {
-      const step = Math.min(0.04, 1.6 / Math.max(1, path.length));
-      path.forEach((id, i) => {
-        const t = s.grid.byTileId(id);
-        if (!t) return;
-        this.tileFx.flash(t, '#f2fdff', kind === 'overflow' ? 0.85 : 0.55, 0.55, i * step);
-        if (kind === 'overflow' && i % 3 === 0) this.tweens.add(0.01, () => {}, { delay: i * step, done: () => this.vfx.burst(this.tileVec(t), 3, { up: 1.2, size: 0.045, speed: 0.6 }) });
-      });
-      const a = this.posOf(from);
-      const b2 = this.posOf(to);
-      if (b2) this.tweens.add(0.01, () => {}, { delay: path.length * step, done: () => this.vfx.burst(b2, kind === 'overflow' ? 14 : 5, { up: 1.6, size: 0.05, speed: 0.8 }) });
-      if (a && !path.length && b2) this.vfx.arc(a, b2, PALETTE.water, 0.6);
-    });
     b.on('reservoir.overflow', ({ machineId }) => {
       const p = this.posOf(machineId);
       this.machines.splash(machineId);
@@ -3621,13 +3584,6 @@ export class Game {
       this.sfx.chainEnd(10);
       if ((s.state.progression.canopyBursts ?? 0) <= 1) this.hud.toast(`🌳 Canopy Burst!<small>The Elder Tree releases its charge.${gardens.length ? ` ${gardens.length} 🌸 garden${gardens.length > 1 ? 's' : ''} carried it further!` : ' 🌸 Gardens inside its reach would carry it further.'}</small>`, 'gold', 3.5);
       else this.hud.feed(`🌳 Canopy Burst${gardens.length ? ` · amplified by ${gardens.length} garden${gardens.length > 1 ? 's' : ''}` : ''}`);
-    });
-    b.on('district.ready', ({ districtId }) =>
-      this.hud.toast(`🌸 ${this.sim.districts.title(districtId)} is ready to bloom!<small>${TUNING.district.minAwake} neighbouring landmarks are awake. Open any of its areas to set off the district bloom.</small>`, 'gold', 5),
-    );
-    b.on('district.bloom', (e) => {
-      if (!e.replay) this.save(); // claimed before any presentation: a reload can never pay twice
-      this.runDistrictBloom(e.districtId, e.restored.length + e.lusher.length, e.reward, e.replay);
     });
   }
 
@@ -4012,79 +3968,6 @@ export class Game {
     const fresh = a.neighbours.filter((n) => s.areas.fog(n) === 'frontier').length;
     this.hud.toast(`🌫️ The fog lifts from the ${AREA_TYPES[a.type].name.toLowerCase()}!<small>${a.landmarkName} wakes${fresh ? ` · ${fresh} new area${fresh > 1 ? 's' : ''} emerge from the gloom` : ''}.</small>`, 'gold', 4.5);
     this.save();
-  }
-
-  // ───────────────────────── district blooms (City 10.7) ─────────────────────────
-
-  private playDistrictBloom(id: string, replay: boolean) {
-    if (this.cinematic) return;
-    if (replay) this.sim.districts.replay(id);
-    else this.sim.districts.bloom(id);
-  }
-
-  /**
-   * A district bloom on screen: the camera pulls back over the district, each awake landmark sends out a ring,
-   * a green wave rolls outward over its cleared areas, then the reward. Skippable; a replay changes nothing.
-   */
-  private runDistrictBloom(id: string, changed: number, reward: Partial<Record<'energy' | 'water' | 'biomass', Big>>, replay: boolean) {
-    const s = this.sim;
-    const at = (delay: number, fn: () => void) => this.tweens.add(0.01, () => {}, { delay, done: fn });
-    const awake = s.districts.members(id).filter((a) => s.areas.fog(a) === 'cleared');
-    if (!awake.length) return;
-    const name = s.districts.title(id);
-    this.cinematic = true;
-    this.select(undefined);
-    this.overlays.hideFrame();
-    this.overlays.hideGhost();
-    this.hud.hideTip();
-    this.hud.cinematic(true, replay ? `${name}: the district bloom` : `${name} blooms!`);
-    this.sfx.fanfare();
-    const lms = awake.map((a) => s.areas.info(a).landmark);
-    const cx = lms.reduce((a, l) => a + l[0] + 1, 0) / lms.length;
-    const cz = lms.reduce((a, l) => a + l[1] + 1, 0) / lms.length;
-    this.camera.focus(cx, 0, cz, Math.max(this.camera.minZoom, 0.3), 1.8);
-    // 1. Every awake landmark rings out, nearest the middle first.
-    lms.forEach((l, i) => {
-      const p = new pc.Vec3(l[0] + 1, 0.1, l[1] + 1);
-      at(0.6 + Math.min(1.6, Math.hypot(l[0] - cx, l[1] - cz) * 0.02) + i * 0.05, () => {
-        this.vfx.ring(p, i % 2 ? PALETTE.gold : PALETTE.coreGlow, 5, 1.1);
-        this.vfx.burst(new pc.Vec3(p.x, 1.5, p.z), 16, { up: 3, size: 0.08 });
-      });
-    });
-    // 2. The green wave: the ground re-renders lusher, area by area, outward from the middle.
-    awake.forEach((a) => {
-      const [ax, az] = s.areas.info(a).landmark;
-      at(2.4 + Math.min(2.6, Math.hypot(ax - cx, az - cz) * 0.03), () => {
-        if (!replay) this.chunks.markArea(a, true);
-        const tiles = s.areas.tiles(a);
-        for (let i = 0; i < tiles.length; i += 23) {
-          const t = tiles[i];
-          if (t.blocked || t.occupantId) continue;
-          this.tileFx.flash(t, '#38d94a', 0.5, 0.9, (i % 7) * 0.05);
-        }
-      });
-    });
-    // 3. Reward.
-    at(5.6, () => {
-      const c = new pc.Vec3(cx, 0.4, cz);
-      for (let k = 0; k < 4; k++) at(k * 0.2, () => this.vfx.ring(c, k % 2 ? PALETTE.gold : PALETTE.coreGlow, 10 + k * 6, 1.2));
-      this.vfx.burst(new pc.Vec3(cx, 3, cz), 60, { up: 5, speed: 3, size: 0.09, life: 1.6 });
-      this.camera.shake(0.1);
-      this.sfx.chainEnd(8);
-      if (!replay) (['biomass', 'water', 'energy'] as const).forEach((k, i) => reward[k] && at(i * 0.15, () => this.flyGain(k, reward[k]!)));
-    });
-    this.cinematicEnd = () => {
-      if (!this.cinematic) return;
-      this.cinematic = false;
-      this.hud.cinematic(false);
-      if (!replay) {
-        // A skip lands every tile at once.
-        for (const a of awake) this.chunks.markArea(a, true);
-        this.hud.toast(`🌸 ${name} is in full bloom!<small>${changed} tiles grew lusher · +${reward.biomass ?? 0}🌿 +${reward.water ?? 0}💧 +${reward.energy ?? 0}⚡. Your machines are just as you left them.</small>`, 'gold', 6);
-      }
-      this.save();
-    };
-    at(TUNING.district.seconds, () => this.cinematicEnd?.());
   }
 
   private lastBoostFeed = -99;
