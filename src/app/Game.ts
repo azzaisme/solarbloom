@@ -52,7 +52,7 @@ import { Overlays } from '../rendering/Overlays';
 import { PowerLines } from '../rendering/PowerLines';
 import { PowerOverlay } from '../rendering/PowerOverlay';
 import { LightVisuals } from '../rendering/LightVisuals';
-import { LIGHT } from '../data/lights';
+import { LIGHT, LIGHTING } from '../data/lights';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
 import { Skyline } from '../rendering/Skyline';
@@ -4358,6 +4358,9 @@ export class Game {
     const powerOn = this.powerView && this.building();
     this.powerOverlay.show(powerOn);
     this.powerOverlay.update(wdt, this.powerFocus);
+    // E23.7.5: lamps cast real light: fewer at once on the low tier, and they dim with the scene in the Power view
+    this.lightVisuals.maxCast = this.gfxTier === 'low' ? LIGHTING.cast.maxLow : LIGHTING.cast.max;
+    this.lightVisuals.share = this.dayNight.lightShare;
     this.lightVisuals.update(wdt, this.camera.entity.getPosition());
     // E23.3.4: in the Power view, powered electrical machines glow soft yellow and the rest of the world darkens
     this.machines.powerGlow(powerOn ? this.poweredMachines() : undefined, wdt);
@@ -4447,6 +4450,7 @@ export class Game {
     }
     this.dayNight.apply(this.lightMoment());
     this.look.rimShare = this.dayNight.rim;
+    this.look.night = 1 - this.dayNight.light;
     this.chunks.fogTint.copy(this.dayNight.cloudTint);
     this.chunks.tintFog();
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
