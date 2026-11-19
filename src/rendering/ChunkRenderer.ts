@@ -807,6 +807,12 @@ export class ChunkRenderer {
     }
     const [name, scale, turn] = ChunkRenderer.PROP_MODELS[prop] ?? ChunkRenderer.PROP_MODELS.stump;
     const rot = turn ? Math.floor(dhash(Math.floor(x), Math.floor(z), 211) * 4) * (Math.PI / 2) : 0;
+    if (prop === 'bench' && this.sim.oldCity) {
+      // E23.2.3: an old park bench is broken until mended: weathered, sagging and sunk a little into the ground
+      const bx = Math.floor(x);
+      const bz = Math.floor(z);
+      if (this.brokenBench(bx, bz)) return this.batch.add(name, x, y - 0.05, z, rot + 0.12, scale, scale * 0.82, scale, true);
+    }
     return this.batch.add(name, x, y, z, rot, scale, scale, scale, this.neglected);
   }
 
@@ -2591,10 +2597,36 @@ export class ChunkRenderer {
     }
   }
 
+  /** E23.2.3: an old park bench that has not been mended yet (old-city rules). */
+  private brokenBench(x: number, z: number): boolean {
+    if (!this.sim.oldCity) return false;
+    const bx = Math.floor(x);
+    const bz = Math.floor(z);
+    return !this.sim.rest.usable({ id: `bench:${bx}:${bz}`, x: bx, z: bz, kind: 'old', facing: 0 });
+  }
+
+  /**
+   * E23.2.3: what makes an old bench read as broken, over its sunken model: a seat slat fallen out onto the ground
+   * in front, a snapped-off foot lying by one end, moss on the seat and the back rail, and rust on the iron ends.
+   * Mending it (Rest.mend touches the tile) redraws it whole.
+   */
+  private benchDamage(b: Sink, x: number, y: number, z: number) {
+    const wood = PALETTE.wood.deep;
+    const moss = PALETTE.lawn.moss;
+    const rust = PALETTE.metal.rust;
+    b.add('box', wood, [x + 0.08, y + 0.02, z + 0.3], [0.6, 0.03, 0.07]); // the missing slat, on the ground
+    b.add('box', rust, [x + 0.4, y + 0.025, z + 0.2], [0.05, 0.05, 0.14]); // a snapped foot
+    b.add('box', moss, [x - 0.18, y + 0.19, z + 0.02], [0.26, 0.012, 0.18]); // moss on the seat
+    b.add('box', moss, [x + 0.12, y + 0.42, z - 0.14], [0.2, 0.02, 0.05]); // and along the back rail
+    b.add('box', rust, [x - 0.33, y + 0.1, z + 0.06], [0.055, 0.12, 0.12]); // rust on the iron ends
+    b.add('box', rust, [x + 0.33, y + 0.07, z - 0.04], [0.055, 0.08, 0.1]);
+  }
+
   private prop(b: Sink, prop: string, x: number, y: number, z: number, r: VRng) {
     if (this.propModel(prop, x, y, z)) {
       // the park bench keeps its little planter tree beside it
       if (prop === 'bench' && this.inPark) this.planterTree(b, x + 0.38, y, z + 0.32, this.level >= 3);
+      if (prop === 'bench' && this.brokenBench(x, z)) this.benchDamage(b, x, y, z);
       return;
     }
     switch (prop) {
