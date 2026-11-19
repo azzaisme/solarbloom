@@ -217,7 +217,26 @@ const ART: Record<string, (a: At) => void> = {
     put(a, 'sphere', P.glow.gold, 0, 0.36, 0, [0.3, 0.38, 0.26]);
     put(a, 'sphere', P.glow.gold, 0, 0.6, 0.02, 0.22);
   },
-  // E20.5 (#288): keepsakes from Lucky Cat finds
+  // E23.12.2 (#529): cat-only decorations, left by Lucky Cats
+  catbench: (a) => {
+    put(a, 'box', P.props.benchWood, 0, 0.26, 0, [0.78, 0.06, 0.28]);
+    put(a, 'box', P.props.benchWood, 0, 0.46, -0.12, [0.78, 0.2, 0.05]);
+    if (a.far) return;
+    for (const s of [-1, 1]) {
+      put(a, 'box', P.props.benchFrame, s * 0.32, 0.13, 0, [0.06, 0.26, 0.26]);
+      put(a, 'cone', P.props.benchWood, s * 0.26, 0.62, -0.12, [0.1, 0.12, 0.04]); // the ears on its back
+    }
+  },
+  catfountain: (a) => {
+    put(a, 'cylinder', P.stone.light, 0, 0.12, 0, [0.6, 0.24, 0.6]);
+    put(a, 'cylinder', C.waterShallow, 0, 0.245, 0, [0.5, 0.02, 0.5]);
+    if (a.far) return put(a, 'sphere', P.glow.gold, 0, 0.42, 0, [0.16, 0.24, 0.14]);
+    put(a, 'cylinder', P.stone.light, 0, 0.3, 0, [0.12, 0.14, 0.12]);
+    put(a, 'sphere', P.glow.gold, 0, 0.45, 0, [0.16, 0.2, 0.14]);
+    put(a, 'sphere', P.glow.gold, 0, 0.6, 0.02, 0.12);
+    for (const s of [-1, 1]) put(a, 'cone', P.glow.gold, s * 0.045, 0.69, 0.02, [0.05, 0.06, 0.04]);
+    put(a, 'cylinder', C.waterShallow, 0, 0.42, 0.12, [0.03, 0.3, 0.03]); // the spout's stream
+  },
   pawstones: (a) => {
     put(a, 'cylinder', P.stone.light, 0, 0.02, 0.08, [0.36, 0.04, 0.3]);
     if (a.far) return;
@@ -227,6 +246,7 @@ const ART: Record<string, (a: At) => void> = {
     put(a, 'box', P.stone.light, 0, 0.04, 0, [0.26, 0.08, 0.26]);
     put(a, 'box', P.glow.gold, 0, 0.22, 0, [0.17, 0.24, 0.17], 1);
     put(a, 'cone', P.glow.gold, 0, 0.4, 0, [0.26, 0.12, 0.26]);
+    if (!a.far) for (const s of [-1, 1]) put(a, 'cone', P.glow.gold, s * 0.07, 0.49, 0, [0.06, 0.08, 0.05]); // cat ears
   },
   rainbowbunting: (a) => {
     put(a, 'cylinder', P.wood.post, 0, 0.7, 0, [0.06, 1.4, 0.06]);

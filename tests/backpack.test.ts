@@ -29,7 +29,7 @@ describe('E22.6: the backpack', () => {
     const copper = itemCells(sim).find((c) => c.id === 'copper')!;
     expect(copper.label).toBe('Copper, 32 of 40 in backpack, 110 in store');
     expect([copper.count, copper.limit, copper.stored]).toEqual([32, 40, 110]);
-    expect(copper.from).toBe('Found in Mast Row');
+    expect(copper.from).toBe('Found in Mast Row and Observatory Hill'); // E23.8: copper piles lie in both
     expect(copper.next).toMatch(/Copper|needs|takes|asks/i);
     expect(itemCells(sim).map((c) => c.id)).toEqual(MATERIAL_IDS);
   });
@@ -99,7 +99,7 @@ describe('E22.6: the backpack', () => {
     sim.state.cat.found = 2;
     const text = JSON.stringify(collection(sim));
     for (const old of ['Lucky Harvest', 'Solar Surge', 'Mega Bloom', 'Drone Party', 'Jackpot', 'Golden Relay', "Cat's Garden", 'Fog Whisker']) expect(text).not.toContain(old);
-    expect(collection(sim).map((g) => g.title)).toEqual(['Lucky Cats', 'Keepsakes', 'Wildlife', 'Landmarks', 'Plots', 'Decorations']);
+    expect(collection(sim).map((g) => g.title)).toEqual(['Lucky Cats', 'Friends', 'Keepsakes', 'Wildlife', 'Landmarks', 'Plots', 'Decorations']);
     const words = [...collection(sim).flatMap((g) => [g.title, g.count, g.empty, ...g.rows.flatMap((r) => [r.name, r.detail])]), ...itemCells(sim).flatMap((c) => [c.label, c.from, c.next]), ...requestRows(sim).map((r) => r.text)];
     expect(words.filter((w) => bannedIn(w).length)).toEqual([]);
   });
