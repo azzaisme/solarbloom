@@ -53,6 +53,13 @@ export class LightVisuals {
   maxCast: number = LIGHTING.cast.max;
   /** the Power view's dim on the scene's lights (DayNight.lightShare): the lamps dim with them */
   share = 1;
+  /** E23.7.5: photo mode's own darkness (0 day … 1 night) when it sets its own time or weather; else the game's */
+  dark: number | undefined = undefined;
+
+  /** How brightly a light glows on screen: the game's glow, or at photo mode's own darkness. */
+  private glowOf(l: LitLight): number {
+    return this.dark === undefined ? l.glow : this.sim.lights.glowAt(l.key, l.def, this.dark);
+  }
   private bulbMesh = ball(8, 12);
   private group = -1;
   private insectGroup = -1;
@@ -196,7 +203,8 @@ export class LightVisuals {
       const v = this.views.get(l.key);
       if (!v) continue;
       v.light = l;
-      const step = l.glow < 0.02 ? 0 : Math.max(1, Math.round(l.glow * STEPS));
+      const lit = this.glowOf(l);
+      const step = lit < 0.02 ? 0 : Math.max(1, Math.round(lit * STEPS));
       if (step === v.step) continue;
       v.step = step;
       const on = step > 0;
@@ -222,7 +230,7 @@ export class LightVisuals {
     const C = LIGHTING.cast;
     const want: { pos: V3; h: number; power: number; tone: string; d: number }[] = [];
     for (const v of this.views.values()) {
-      const glow = v.light.glow;
+      const glow = this.glowOf(v.light);
       if (glow < 0.02) continue;
       for (const c of v.casts) want.push({ pos: c.pos, h: c.h, power: c.power * glow, tone: v.light.def.tone, d: cam ? dist2(c.pos, cam) : 0 });
     }

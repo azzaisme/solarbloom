@@ -72,7 +72,8 @@ export class UpgradeSystem {
 
   // ───────────── global effects ─────────────
   get broadExtra() {
-    return this.level('broadPulse');
+    // E23.6.2: the Wider pulse research upgrade, a tile further a level
+    return this.level('broadPulse') + (this.sim.research?.effect('pulseRadius') ?? 0);
   }
   get overchargeEvery() {
     const l = this.level('overcharge');
@@ -130,10 +131,12 @@ export class UpgradeSystem {
   }
   /** Drone Dash: ×1.5, ×2, ×3 … ×6 as fast overall (flight and rest), per hub. */
   droneSpeed(hub: MachineData | undefined) {
-    return DRONE_DASH[Math.min(DRONE_DASH.length - 1, this.levelOf(hub, 'droneSpeed'))] * (this.sim.landmarks?.helperSpeed() ?? 1); // E21.9: Clock Plaza
+    // E23.6.2: Quicker wings (research) on top
+    return DRONE_DASH[Math.min(DRONE_DASH.length - 1, this.levelOf(hub, 'droneSpeed'))] * (this.sim.landmarks?.helperSpeed() ?? 1) * (1 + (this.sim.research?.effect('droneSpeed') ?? 0)); // E21.9: Clock Plaza
   }
   droneRadius(hub: MachineData | undefined) {
-    return TUNING.drone.hubRadius + 2 * this.levelOf(hub, 'droneRadius') + (hub && tier3(hub) ? TUNING.super.megahub.radiusBonus : hub && tier2(hub) ? TUNING.merge.fleetRadiusBonus : 0);
+    // E23.6.2: Further wings (research) adds tiles
+    return TUNING.drone.hubRadius + (this.sim.research?.effect('droneRange') ?? 0) + 2 * this.levelOf(hub, 'droneRadius') + (hub && tier3(hub) ? TUNING.super.megahub.radiusBonus : hub && tier2(hub) ? TUNING.merge.fleetRadiusBonus : 0);
   }
   /** Extra free tiles a drone restores around each tile it restores (Drone Sweep). */
   droneSweep(hub: MachineData | undefined) {

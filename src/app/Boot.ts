@@ -104,6 +104,7 @@ export async function boot(canvas: HTMLCanvasElement) {
     remove: (slot) => new SaveService(undefined, slot).deleteSlot(),
     quit: desktopApi()?.quit,
     reducedMotion: !!settings.reducedMotion,
+    earlierVersion: (slot) => new SaveService(undefined, slot).fromEarlierVersion(),
     preferRealClock: () => !!settings.realClock,
     settingsOpen: () => !!screen?.isOpen,
     closeSettings: () => screen?.close(),

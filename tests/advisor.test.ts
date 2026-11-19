@@ -76,7 +76,7 @@ describe('objective advisor (City 14.1)', () => {
     expect(check(sim, 'low water').topic).toBe('water');
   });
 
-  it('under old-city rules, points at the next Keeper', () => {
+  it('points at the next Keeper', () => {
     const sim = new Sim(createInitialState(3));
     sim.state.progression.coreActivated = true;
     const g = check(sim, 'old city');

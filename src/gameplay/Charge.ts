@@ -65,7 +65,9 @@ export class ChargeSystem {
   cost(use: ChargeUse): number {
     const base = use === 'pulse' ? CHARGE.pulse : use === 'sprint' ? CHARGE.sprintPerSecond : (CHARGE.ability[use] ?? 0);
     const eff = this.sim.state.charge?.efficiency ?? 0;
-    return base * Math.pow(1 - CHARGE.efficiencyStep, eff);
+    // E23.6.2: "Longer stride" research takes a share off sprinting's charge
+    const stride = use === 'sprint' ? 1 - (this.sim.research?.effect('sprint') ?? 0) : 1;
+    return base * Math.pow(1 - CHARGE.efficiencyStep, eff) * stride;
   }
 
   /** May bloombot do this now? Anything is allowed with charge left, however little (it bottoms out at zero). */

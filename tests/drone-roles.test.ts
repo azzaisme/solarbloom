@@ -55,6 +55,14 @@ const green = (bloom: number) => (t: TileData) => {
   t.bloom = bloom;
   t.pollution = 0;
 };
+/**
+ * E23.4.1: a restored pond (rows of fresh water) by the hub, so Gardeners have real water to draw (they only work
+ * where water is in reach). Its tiles are in full bloom, so no drone grows them.
+ */
+function pond(sim: Sim, rows: number[], x0 = 8, x1 = 40) {
+  for (const z of rows) box(sim, x0, z, x1, z, (t) => Object.assign(t, { feature: 'water', ground: 'restored', bloom: TUNING.restore.maxBloom, pollution: 0 }));
+}
+
 const grey = (t: TileData) => {
   t.ground = 'polluted';
   t.bloom = 0;
@@ -139,6 +147,7 @@ describe('E18.1 role framework: unlocks, refits, switching', () => {
     const sim = city();
     const h = roleHub(sim, 20, 20, 'gardener');
     box(sim, 14, 14, 28, 28, green(1));
+    pond(sim, [17, 24]);
     const work: { role: DroneRole; droneId: string }[] = [];
     sim.bus.on('drone.roleWork', (e) => work.push(e));
     let d = sim.state.drones.find((x) => x.hubId === h.id)!;
@@ -155,6 +164,7 @@ describe('E18.1 role framework: unlocks, refits, switching', () => {
     const sim = city();
     const h = roleHub(sim, 20, 20, 'gardener');
     box(sim, 10, 10, 34, 34, green(1));
+    pond(sim, [17, 24]);
     const d = sim.state.drones.find((x) => x.hubId === h.id)!;
     for (let i = 0; i < 100 && d.mode !== 'flying'; i++) sim.tick();
     expect(d.mode).toBe('flying');
@@ -180,6 +190,7 @@ describe('E18.1 role framework: unlocks, refits, switching', () => {
     put(sim, 'motherTree', 24, 30);
     box(sim, 8, 8, 40, 19, grey);
     box(sim, 8, 22, 40, 40, green(1));
+    pond(sim, [24, 32]);
     const clash = watchReservations(sim);
     sim.advance(60);
     expect(clash).toEqual([]);
@@ -187,16 +198,21 @@ describe('E18.1 role framework: unlocks, refits, switching', () => {
 });
 
 describe('E18.2 Gardener', () => {
-  it('grows the target and 2 neighbours, and never restores', () => {
+  it('runs on real water only (drawn from the pond), grows the target and 2 neighbours, never restores', () => {
     const sim = city();
     roleHub(sim, 20, 20, 'gardener');
     box(sim, 12, 12, 30, 30, green(1));
     box(sim, 12, 12, 30, 13, grey); // grey ground in reach: a Gardener leaves it
+    pond(sim, [17, 24], 12, 30);
+    const water = sim.water.bodyAt(sim.grid.get(GROUND, 15, 24))!;
     const work: string[][] = [];
     sim.bus.on('drone.roleWork', (e) => e.role === 'gardener' && work.push(e.tileIds));
     sim.advance(60);
     expect(work.length).toBeGreaterThan(3);
     expect(work.filter((w) => w.length === 3).length).toBeGreaterThan(0);
+    expect(sim.water.levelOf(water.id)).toBeLessThan(1); // the watering comes out of the pond
+    // and only where water is in reach
+    for (const w of work) expect(sim.water.isWatered(sim.grid.byTileId(w[0])!)).toBe(true);
     let grey0 = 0;
     box(sim, 12, 12, 30, 13, (t) => t.ground === 'polluted' && grey0++);
     expect(grey0).toBeGreaterThan(0);
@@ -221,6 +237,7 @@ describe('E18.2 Gardener', () => {
     const h = roleHub(sim, 16, -32, 'gardener');
     (h.upg ??= {}).droneSweep = 2;
     box(sim, 8, -40, 26, -22, green(1));
+    pond(sim, [-36], 15, 18); // E23.4.1: a small pool by the hub, lawn all round it
     let most = 0;
     sim.bus.on('drone.roleWork', (e) => (most = Math.max(most, e.tileIds.length)));
     sim.advance(30);

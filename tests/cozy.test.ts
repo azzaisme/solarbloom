@@ -106,11 +106,10 @@ describe('E19.1.1 plot spots', () => {
 
 describe('E19.1.3 plot options', () => {
   it('every area type the world has offers at least three options, a shared set plus its own', () => {
-    // E23.1.1: the world is the park, the island's regions and the mainland's districts. None is a canal, so the
-    // canal-only plot options went (nothing here claims to cover a plot the world can't show).
+    // E23.1.1: the world is the park, the island's regions and the mainland's districts; the canal area type and its
+    // plot options went with the canals. No option is for an area the world can't show.
     const world = new Set<AreaType>(['park', ...REGIONS.map((r) => r.type), ...MAINLAND_TYPES.map((t) => t.type)]);
-    expect(world.has('canal')).toBe(false);
-    expect(PLOT_OPTIONS.some((o) => o.types?.includes('canal'))).toBe(false);
+    for (const o of PLOT_OPTIONS) for (const t of o.types ?? []) expect(world.has(t), `${o.id}: ${t}`).toBe(true);
     for (const t of world) {
       const opts = plotOptionsFor(t);
       expect(opts.length, t).toBeGreaterThanOrEqual(3 + 2); // four shared, at least one of its own
@@ -135,7 +134,7 @@ describe('E19.1.2 choosing a plot', () => {
     expect(cozy.choice(p.id)?.id).toBe('garden');
     expect(cozy.choose(p.id, 'orchard')).toBeUndefined();
     expect(cozy.choice(p.id)?.id).toBe('orchard');
-    expect(cozy.choose(p.id, 'mooring')).toBeDefined(); // a canal option
+    expect(cozy.choose(p.id, 'mooring')).toBeDefined(); // a beach option, not offered here
     expect(cozy.choose(p.id, 'cafe')).toMatch(/Unlocks/); // not earned yet
     expect(JSON.stringify(sim.state.salvage)).toBe(before); // never costs anything
     expect(cozy.solidAt(GROUND, p.x, p.z)).toBe(true); // the orchard is solid

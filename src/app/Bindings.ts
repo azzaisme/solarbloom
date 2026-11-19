@@ -40,6 +40,8 @@ export type Action =
   | 'backpack'
   | 'map'
   | 'eat'
+  | 'loadNext'
+  | 'loadPrev'
   | 'pinNext'
   | 'cancel'
   | 'menu'
@@ -86,6 +88,8 @@ export const ACTIONS: readonly ActionDef[] = [
   A('interact', 'Interact', 'act', 'world'),
   A('pulse', 'Pulse, use the tool, place', 'act', 'world'),
   A('eat', 'Eat a snack (recharge)', 'act', 'world'),
+  A('loadNext', 'Pulse load: next', 'act', 'world'),
+  A('loadPrev', 'Pulse load: previous', 'act', 'world'),
   A('pinNext', 'Pin the next request', 'act', 'world'),
   A('buildMenu', 'Build menu', 'build', 'world'),
   A('place', 'Place (in build mode)', 'build', 'build'),
@@ -155,6 +159,9 @@ export function defaultKeys(): Record<Action, string[]> {
     backpack: ['Tab', 'KeyI'],
     map: ['KeyM'],
     eat: ['KeyF'],
+    // E23.2.2: the pulse load wheel
+    loadNext: ['KeyV'],
+    loadPrev: ['KeyZ'],
     pinNext: ['KeyG'],
     cancel: [FIXED_KEY],
     menu: [FIXED_KEY],
@@ -193,6 +200,9 @@ export function defaultPad(): Partial<Record<Action, number>> {
     pinNext: 15,
   };
   p.eat = 14; // E23.2.1: d-pad left eats
+  // E23.2.2: the bumpers turn the load wheel while walking (in build mode they turn the piece)
+  p.loadPrev = 4;
+  p.loadNext = 5;
   return p;
 }
 

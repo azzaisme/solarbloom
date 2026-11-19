@@ -83,7 +83,8 @@ export function groundLevel(sim: Sim, m: Placed): number {
 const CLOUDY = new Set(['cloud', 'cloudy', 'overcast', 'rain', 'storm', 'fog']);
 /** Wind by weather kind when the weather gives no number: turbines turn only on windy days and in storms. */
 const WIND: Record<string, number> = { wind: 0.75, windy: 0.75, storm: 1 };
-const GLOOMY = new Set(['fog', 'storm']);
+/** weather that is dark enough for lights by day (also read by the renderer for photo mode's own weather) */
+export const GLOOMY = new Set(['fog', 'storm']);
 
 /** Daylight 0..1 from E23.7's day fraction (0 dawn, 2/3 dusk, 1 the next dawn), easing over a short twilight. */
 export function sunAt(f: number): number {

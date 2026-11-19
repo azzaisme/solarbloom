@@ -263,6 +263,24 @@ export class Lights {
     return this.glowNow(key, def);
   }
 
+  /**
+   * E23.7.5: how brightly a light would glow at darkness `dark`, for photo mode's own time of day (presentation
+   * only: it reads, and changes nothing). A light that is lit now keeps its level; one that is out by day is lit
+   * if it could be: a grid light whose network has a source or stored charge, a solar light with charge in its cell.
+   */
+  glowAt(key: string, def: LightDef, dark: number): number {
+    this.refresh();
+    if (dark <= 0) return 0;
+    if (def.power === 'glow') return dark * def.brightness;
+    const n = this.nodes.get(key);
+    if (!n) return 0;
+    if (this.darkness() > 0.02) return dark * this.sim.power.level(n) * def.brightness;
+    if (def.power === 'solar') return ((n as { charge?: number }).charge ?? 0) > 0 ? dark * def.brightness : 0;
+    const net = this.sim.power.networkOf(n);
+    const can = !!net && (net.sources.length > 0 || net.batteries.some((b) => this.sim.power.stored(b).stored > 0));
+    return can ? dark * def.brightness : 0;
+  }
+
   private glowNow(key: string, def: LightDef): number {
     const dark = this.darkness();
     if (dark <= 0) return 0;

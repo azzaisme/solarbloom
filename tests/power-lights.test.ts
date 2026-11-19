@@ -118,6 +118,32 @@ describe('E23.3.5 night lighting', () => {
     expect(glow(lamp)).toBeLessThan(0.05);
   });
 
+  it('E23.7.5: photo mode’s own night lights the lamps on screen, and the game is unchanged', () => {
+    const { sim, sky, put, light, run, glow } = world();
+    put('solar', 0, 0);
+    put('solar', 1, 0);
+    put('battery', 2, 0);
+    put('relay', 3, 0);
+    const lamp = light('lamppost', 5, 0);
+    const cut = light('lamppost', 30, 30); // on no grid
+    sky.f = 0.5; // the game's afternoon
+    run(30);
+    const before = JSON.stringify(sim.state);
+    expect(glow(lamp)).toBe(0);
+    // at photo mode's 02:00 (full dark) a lamp that could be lit is; one with no grid stays out
+    expect(sim.lights.glowAt(lamp, LIGHT.lamppost, 1)).toBeCloseTo(LIGHT.lamppost.brightness, 6);
+    expect(sim.lights.glowAt(cut, LIGHT.lamppost, 1)).toBe(0);
+    expect(sim.lights.glowAt(lamp, LIGHT.lamppost, 0)).toBe(0); // photo noon: out
+    expect(sim.lights.glowAt('nope', LIGHT.glowpod, 0.5)).toBeCloseTo(0.5 * LIGHT.glowpod.brightness, 6); // glow-pods need nothing
+    // reading it changed nothing in the game
+    expect(JSON.stringify(sim.state)).toBe(before);
+    expect(glow(lamp)).toBe(0);
+    // at the game's own night, the lamp's real level is kept
+    sky.f = 0.83;
+    run(30);
+    expect(sim.lights.glowAt(lamp, LIGHT.lamppost, sim.lights.darkness())).toBeCloseTo(glow(lamp), 6);
+  });
+
   it('come on in fog and storms, in the day too', () => {
     const { sim, sky, put, light, run, glow } = world();
     put('solar', 0, 0);

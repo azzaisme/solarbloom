@@ -94,9 +94,10 @@ export class PowerGrid {
   skyOverride?: () => PowerSky;
 
   constructor(private sim: Sim) {
-    this.register('relay', { pole: { range: (m, s) => s.relays.range(m as MachineData) } });
+    // E23.6.2: Longer lines and Clearer panels (research) stretch pole range and solar output
+    this.register('relay', { pole: { range: (m, s) => s.relays.range(m as MachineData) * (1 + (s.research?.effect('poleReach') ?? 0)) } });
     // E23.1.4 / #528: Solar Wings, blooms beside a panel and a Lucky Cat's Solar Surge make it feed the grid more
-    this.register('solar', { source: (m, s, sky) => POWER.solar.output * sky.solar * regionBoost(s, m) * solarBoost(s, m) * s.upgrades.solarMult(m as MachineData) });
+    this.register('solar', { source: (m, s, sky) => POWER.solar.output * sky.solar * regionBoost(s, m) * solarBoost(s, m) * s.upgrades.solarMult(m as MachineData) * (1 + (s.research?.effect('solarYield') ?? 0)) });
     this.register('battery', { battery: { capacity: () => POWER.battery.capacity * (sim.landmarks?.batteryMult() ?? 1), rate: POWER.battery.rate } });
     this.register('windTurbine', { source: (m, s, sky) => windOutput(s, m, sky) });
     // E23.3.3: helpers run on the grid.
@@ -266,7 +267,13 @@ export class PowerGrid {
   // ---- networks ----
 
   private capacityOf(m: PowerNode, b: NonNullable<PowerRole['battery']>): number {
-    return typeof b.capacity === 'function' ? b.capacity(m) : b.capacity;
+    const base = typeof b.capacity === 'function' ? b.capacity(m) : b.capacity;
+    return base * (1 + (this.sim.research?.effect('batteryStore') ?? 0)); // E23.6.2: Deeper batteries
+  }
+
+  /** E23.6.2: is any machine type a battery yet (so research can offer Deeper batteries)? */
+  hasBatteries(): boolean {
+    return [...this.roles.values()].some((r) => !!r.battery);
   }
 
   private centre(m: PowerNode): [number, number] {

@@ -418,6 +418,21 @@ export class SaveService {
     return this.handle(raw, json);
   }
 
+  /**
+   * E23.1.1: whether the save in this slot is from an earlier version (it would start fresh when loaded), without
+   * loading or clearing it. The title asks the new-garden question before a Load that would start fresh.
+   */
+  async fromEarlierVersion(): Promise<boolean> {
+    try {
+      const raw = this.storage?.getItem(this.key);
+      if (!raw) return false;
+      const s = JSON.parse(await SaveService.decode(raw)) as { version?: unknown };
+      return typeof s?.version === 'number' && s.version < SAVE_VERSION;
+    } catch {
+      return false;
+    }
+  }
+
   load(): GameState | undefined {
     return this.loadResult().state;
   }

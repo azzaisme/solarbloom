@@ -7,7 +7,7 @@ import { GROUND } from '../core/GameState';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { itemDef } from '../data/items';
 import { GATHER } from '../data/farm';
-import { CROPS, type CropId } from '../data/crops';
+import { crossName, CROPS, type CropId } from '../data/crops';
 import { planterHtml } from '../ui/PlanterPanel';
 import type { TileData } from '../core/types';
 import { flyUp, fountainHtml, OldCityPanel, SpeechBubble, storageAct, storageHtml, tradeHtml } from '../ui/OldCityPanel';
@@ -92,6 +92,11 @@ export class OldCityController {
     host.sim.bus.on('seeds.found', (e) => {
       const c = CROPS[e.crop as CropId];
       if (c) host.hud.toast(`${c.icon} ${c.name} seeds<small>Plant them in a planter.</small>`, '', 5);
+    });
+    // E23.6.2: a crossbreed found at a harvest
+    host.sim.bus.on('cross.found', (e) => {
+      const c = CROPS[e.a as CropId];
+      if (c) host.hud.toast(`${c.icon} ${crossName(e.a as CropId, e.b as CropId)}<small>A new cross. Plant it in a planter.</small>`, '', 5);
     });
     // E23.7.4: a pile coming back (slowly, or blown in by a storm) is redrawn at its new size
     host.sim.bus.on('pile.refilled', (e) => host.markTile(e.x, e.z));
@@ -284,7 +289,9 @@ export class OldCityController {
     this.panel.open(
       () => planterHtml(this.sim, m),
       (act, arg) => {
-        if (act === 'plant' && f.plant(m, arg as CropId)) {
+        // a crossbreed's arg is its two parents, 'a+b' (E23.6.2)
+        const [crop, cross] = (arg ?? '').split('+') as [CropId, CropId | undefined];
+        if (act === 'plant' && f.plant(m, crop, cross)) {
           this.host.sound('salvage', 'seeds');
           this.panel.close();
         } else if (act === 'harvest') {
@@ -308,7 +315,7 @@ export class OldCityController {
   }
 
   /**
-   * A click on a tile under old-city rules: a pile walks bloombot there and salvages it. True when handled.
+   * A click on a tile: a pile walks bloombot there and salvages it. True when handled.
    */
   click(tile: { roofId: string; x: number; z: number }): boolean {
     if (tile.roofId !== GROUND) return false;

@@ -18,7 +18,7 @@ export interface Objective {
 }
 
 /**
- * E21.8 / E21.12: the objective card under old-city rules. One request is pinned at a time: a Keeper's request
+ * E21.8 / E21.12: the objective card. One request is pinned at a time: a Keeper's request
  * (the first awake Keeper in map order), else the next fountain tier. The rest are listed in the backpack.
  */
 export function oldCityObjective(sim: Sim): Objective {

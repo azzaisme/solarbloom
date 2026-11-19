@@ -21,13 +21,13 @@ export interface PlacementCheck {
 export class BuildSystem {
   constructor(private sim: Sim) {}
 
-  /** E21.3: the old-city recipe for a machine (undefined: it can't be built under old-city rules). */
+  /** E21.3: the recipe for a machine (undefined: it can't be built). */
   recipe(type: BuildableType): MaterialCost | undefined {
     // E23.6.1: a machine with a crafting-table recipe is built from it (components and materials)
     return this.sim.crafting.machineRecipe(type)?.cost;
   }
 
-  /** E21.3: the fountain tier that unlocks a machine under old-city rules (99: a Keeper, research or a find opens it). */
+  /** E21.3: the fountain tier that unlocks a machine (99: a Keeper, research or a find opens it). */
   recipeTier(type: BuildableType): number {
     const u = this.sim.crafting.machineRecipe(type)?.unlock;
     return u && 'tier' in u ? u.tier : 99;

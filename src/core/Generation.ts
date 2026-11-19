@@ -140,7 +140,7 @@ function roadPlots(seed: number, cx: number, cz: number, area: AreaInfo): Buildi
   const lh = hashString('buildings');
   const [mx, mz] = area.landmark;
   const [lo, hi] = B.storeys[area.theme] ?? [1, 3];
-  const canal = canalRow(seed, cz) || area.type === 'canal';
+  const canal = canalRow(seed, cz);
   const H = CHUNK / 2;
   const clear = (x: number, z: number) => {
     const lz = z - cz * CHUNK;
@@ -210,7 +210,7 @@ function generateGround(seed: number, layer: LayerData, x: number, z: number): T
   // Generation 4 (City 16): the planned road network. Streets and arterials are road; lanes are paved footpaths;
   // a road over a canal is a bridge (still road).
   const onRoad = roadPlanFor(seed, 4).roadAt(x, z);
-  if ((canalRow(seed, cz) || area.type === 'canal') && (lz === 3 || lz === 4)) feature = 'water';
+  if (canalRow(seed, cz) && (lz === 3 || lz === 4)) feature = 'water';
   if (onRoad) feature = onRoad.tier === 'lane' ? 'paving' : 'road';
   const [mx, mz] = area.landmark;
   const nearLandmark = distToFootprintRaw(x, z, mx, mz, 2) <= CITY_GEN.landmarkClearance;
