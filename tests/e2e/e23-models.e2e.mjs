@@ -152,6 +152,41 @@ try {
   const gateParts = await page.evaluate((st) => st.map((s) => !!window.solarbloom.models.instantiate(`fence-${s}-gate`)?.findByName('gate')), STYLES);
   check(gateParts.every(Boolean), `every fence gate has its swinging part (${gateParts.join(', ')})`);
 
+  // 1g. farmland ground (#466): an irregular field in front of bloombot, a band of each state (dry, watered,
+  // fertilised from left to right), its edges fading into the ground; by day and by night
+  await page.evaluate(() => window.solarbloom.__e23?.destroy());
+  await page.evaluate(() => window.solarbloom.camera.zoomTo(0.9));
+  await page.waitForTimeout(2500);
+  const field = await page.evaluate(() => {
+    const g = window.solarbloom;
+    const p = g.bot.visuals.root.getPosition();
+    const f = g.app.root.findComponents('camera')[0].entity.forward;
+    const fl = Math.hypot(f.x, f.z) || 1;
+    const cx = Math.floor(p.x + (f.x / fl) * 4), cz = Math.floor(p.z + (f.z / fl) * 4);
+    const tiles = [];
+    for (let dz = -2; dz <= 2; dz++)
+      for (let dx = -4; dx <= 4; dx++) {
+        if ((dz === -2 && dx > 2) || (dz === 2 && dx < -2) || (dz === 2 && dx === 4)) continue; // a ragged outline
+        tiles.push({ x: cx + dx, z: cz + dz, y: p.y, state: dx < -1 ? 'dry' : dx < 2 ? 'watered' : 'fertilised' });
+      }
+    g.farmland.set(tiles);
+    return { n: tiles.length, parts: g.farmland.root.children.length };
+  });
+  check(field.n > 30 && field.parts === 3, `farmland draws a field in all three states (${field.n} tiles, ${field.parts} meshes)`);
+  for (const [when, hour] of [['day', 12], ['night', 0]]) {
+    await page.evaluate((hour) => {
+      const c = window.solarbloom.sim.clock;
+      c.now = () => new Date(2026, 10, 19, hour, 0);
+      c.real = true;
+    }, hour);
+    await page.waitForTimeout(3000);
+    await page.screenshot({ path: `${dir}/e23-farmland-${when}.png` });
+  }
+  await page.evaluate(() => {
+    window.solarbloom.sim.clock.real = false;
+    window.solarbloom.farmland.set([]);
+  });
+
   // 1f. batch B4: the animals, fed in from assets/raw/models/visitors/ (16 GLBs, as #544 loads them)
   const files = Object.fromEntries(ANIMALS.map((n) => [n, readFileSync(`assets/raw/models/visitors/${n}.glb`).toString('base64')]));
   const got = await page.evaluate(async (files) => {

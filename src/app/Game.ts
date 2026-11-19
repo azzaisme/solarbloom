@@ -40,6 +40,7 @@ import { Pollinators } from '../rendering/Pollinators';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
 import { WaterLevels } from '../rendering/WaterLevels';
+import { FarmlandView } from '../rendering/FarmlandArt';
 import { ChunkRenderer, MeshBuilder, SINK } from '../rendering/ChunkRenderer';
 import { MACHINE_MODELS } from '../rendering/MachineVisuals';
 import type { HoloShape } from '../rendering/Hologram';
@@ -203,6 +204,8 @@ export class Game {
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
   readonly chunks: ChunkRenderer;
+  /** #466: farmland ground (dry, watered, fertilised); empty until the farm's tilled fields (#517) give it tiles */
+  readonly farmland: FarmlandView;
   /** E23.4.1: water levels drawn on the water (the drained bed) */
   readonly waterLevels: WaterLevels;
   /** Look 6.12: living transitions (every tile change plays as a process). */
@@ -353,6 +356,7 @@ export class Game {
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.farmland = new FarmlandView(this.scene.world, this.app.graphicsDevice);
     this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice, (tiles) => {
       for (const t of tiles) this.chunks.markTile(t);
     });
