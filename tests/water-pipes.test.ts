@@ -105,6 +105,33 @@ describe('E23.4.2.1: reservoirs', () => {
     expect(back.water.levelOf(tankId(r))).toBeCloseTo(sim.water.levelOf(tankId(r)), 9);
   });
 
+  it("Cistern Basin's springs feed its pond, not a tank built there: no spring, no wake rush; rain still fills it", () => {
+    const { sim } = park();
+    // a 2×2 spot of dry basin floor in Cistern Basin
+    let spot: [number, number] | undefined;
+    for (let z = 37; z < 58 && !spot; z++)
+      for (let x = 37; x < 74 && !spot; x++) {
+        const f = sim.grid.footprint(GROUND, x, z, 2);
+        if (f.every((t) => t && !t.blocked && t.feature !== 'water' && t.feature !== 'building' && !t.occupantId && t.level === 0)) spot = [x, z];
+      }
+    expect(spot, 'basin floor for a tank').toBeDefined();
+    const r = put(sim, 'reservoir', spot![0], spot![1]);
+    const tank = sim.water.tank(r.id)!;
+    expect(tank.region).toBe('cistern');
+    expect(sim.water.dormant(tank)).toBe(false); // a tank never waits for the landmark
+    const pond = sim.water.springBodies('cistern')[0];
+    weather(sim, 'cloudy');
+    days(sim, 0.1);
+    sim.areas.clear('cistern', true); // the Old Cistern wakes: its pond's rush and springs start
+    for (let i = 0; i <= WATER_NET.wakeRush; i++) sim.water.tick(1);
+    days(sim, 2);
+    expect(sim.water.levelOf(pond.id)).toBe(1);
+    expect(sim.water.levelOf(tank.id)).toBe(0); // nothing for free
+    weather(sim, 'rain');
+    days(sim, 1);
+    expect(sim.water.levelOf(tank.id)).toBeGreaterThan(0); // open to the sky
+  });
+
   it("a reservoir taken down takes its level with it", () => {
     const { sim } = park();
     const r = put(sim, 'reservoir', 10, 2);
@@ -133,6 +160,12 @@ describe('E23.4.2.2: pumps and pipe placement', () => {
     put(sim, 'solar', 12, 4);
     expect(sim.water.pipes.layProblem(GROUND, 12, 4)).toMatch(/stands/);
     expect(sim.water.pipes.lift(10, 4)).toBe(true);
+    expect(pack.pipe).toBe(36);
+    // a save from before the crafting table had free pipe tiles: they are gone (no lay-free, lift-paid Pipes)
+    (sim.state.water as { pipeStock?: number }).pipeStock = 5;
+    lay(sim, [[10, 4]]);
+    expect(pack.pipe).toBe(35);
+    sim.water.pipes.lift(10, 4);
     expect(pack.pipe).toBe(36);
     // with no Pipes at hand, it says so
     const saved = pack.pipe;

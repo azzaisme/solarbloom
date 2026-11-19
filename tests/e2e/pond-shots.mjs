@@ -2,8 +2,10 @@
 // (default docs/review/ponds)
 //   1 dead-pond / 2 dead-pond-close: the park's pond as a new game finds it: dried, cracked silt, no tile grid
 //   3 draining: the pond restored and drained to 40%: the bed bared from the banks wears the same silt
+//   6 fade-full / 7 fade-half / 8 fade-empty: the same lush banks (bloom 4) by the pond full, at half the fade line
+//     (flowers closing) and empty (plain restored ground)
 //   4 cistern-asleep: Cistern Basin's pond before the Old Cistern wakes: a dry natural basin (banks, rocks)
-//   5 cistern-awake: woken and full: a natural pond with rounded banks, rocks and reeds, no tile grid
+//   5 cistern-awake: woken and full: a natural pond, its whole irregular outline in frame, banks, rocks and reeds
 // Also checks the advisor's "land is fading" line only where land actually fades.
 // Prints ✓/✗ checks and exits non-zero if any fails. Requires Playwright.
 import { mkdirSync } from 'node:fs';
@@ -40,6 +42,20 @@ const shot = async (name) => {
   console.log(`  ${out}/${name}.png`);
 };
 const run = (fn, arg) => page.evaluate(fn, arg);
+await page.addStyleTag({ content: '#hint, #intro, .toast, #toasts { display: none !important; }' });
+/** Frames a spot from above at a zoom and heading (bloombot's follow camera off), then waits for the chunks. */
+const frame = async (x, z, zoom, yaw = 0, ms = 8000) => {
+  await run(({ x, z, zoom, yaw }) => {
+    const g = window.solarbloom;
+    g.camera.bounds = { minX: -1e4, maxX: 1e4, minZ: -1e4, maxZ: 1e4 };
+    g.camera.minZoom = 0.12;
+    if (g.bot) g.bot.following = false;
+    g.camera.glide(x, 0, z, zoom);
+    g.camera.turnTo(yaw);
+    for (let i = 0; i < 300; i++) g.camera.update(0.05);
+  }, { x, z, zoom, yaw });
+  await settle(ms);
+};
 
 try {
   const pond = await run(() => {
@@ -57,8 +73,12 @@ try {
     return tiles;
   });
   check(pond.length > 3 && pond.every((t) => t.ground === 'polluted'), `the park's pond starts dead (${pond.length} tiles)`);
-  await settle(9000);
+  const cx = pond.reduce((a, t) => a + t.x + 0.5, 0) / pond.length;
+  const cz = pond.reduce((a, t) => a + t.z + 0.5, 0) / pond.length;
+  await settle(4000);
+  await frame(cx, cz, 1.3, 0, 9000);
   await shot('1-dead-pond');
+  await run(() => (window.solarbloom.bot.following = true));
   await run(() => window.solarbloom.bot.teleport('g', 2.5, 14.2));
   await settle(4000);
   await shot('2-dead-pond-close');
@@ -93,6 +113,51 @@ try {
   check(!fade.dead && fade.fade > 0 && fade.garden, `the advisor's fading line only where blooming land fades (${JSON.stringify(fade)})`);
   await run((id) => window.solarbloom.sim.water.fill(id, 1e9), id);
 
+  // 6–8: the same lush banks by the full pond, at half the fade line, and with the pond empty
+  const lush = await run(() => {
+    const g = window.solarbloom;
+    const s = g.sim;
+    const max = 4;
+    let n = 0;
+    for (let z = 5; z <= 16; z++)
+      for (let x = 3; x <= 11; x++) {
+        const t = s.grid.get('g', x, z);
+        if (!t || t.blocked || t.feature === 'water' || t.feature === 'building' || t.occupantId) continue;
+        Object.assign(t, { ground: 'restored', pollution: 0, bloom: max });
+        s.grid.touch(t);
+        n++;
+      }
+    g.chunks.markAll();
+    return n;
+  });
+  check(lush > 20, `lush banks round the pond (${lush} tiles at bloom 4)`);
+  await frame(cx + 3, cz, 1.1, 0, 9000);
+  const shown = (id) =>
+    run((id) => {
+      const s = window.solarbloom.sim;
+      const t = s.grid.get('g', 5, 11);
+      return { level: s.water.levelOf(id), bloom: t.bloom, shown: s.water.bloomShown(t) };
+    }, id);
+  const full = await shown(id);
+  check(full.level === 1 && full.shown === 4, `full pond: the bank shows its full bloom (${JSON.stringify(full)})`);
+  await shot('6-fade-full');
+  await run((id) => {
+    const s = window.solarbloom.sim;
+    const b = s.water.body(id);
+    s.water.draw(id, b.capacity * (1 - 0.175)); // half the fade line (35%)
+  }, id);
+  await page.waitForFunction(() => window.solarbloom.sim.water.takeFadeChanges().length === 0, null, { timeout: 60000 });
+  await settle(6000);
+  const half = await shown(id);
+  check(half.shown === 2 && half.bloom === 4, `half the fade line: flowers closing, two stages down, nothing lost (${JSON.stringify(half)})`);
+  await shot('7-fade-half');
+  await run((id) => window.solarbloom.sim.water.draw(id, 1e9), id);
+  await settle(6000);
+  const empty = await shown(id);
+  check(empty.shown === 1 && empty.bloom === 4, `empty: plain restored ground, the tile keeps its bloom (${JSON.stringify(empty)})`);
+  await shot('8-fade-empty');
+  await run((id) => window.solarbloom.sim.water.fill(id, 1e9), id);
+
   // 4: Cistern Basin, open but its landmark asleep: a dry natural basin
   const cistern = await run(() => {
     const g = window.solarbloom;
@@ -108,7 +173,7 @@ try {
     return { id: p.id, area, low: s.water.isLow(area) };
   });
   check(!cistern.low, 'no fading hint for the sleeping Cistern pond');
-  await settle(9000);
+  await frame(68.5, 47, 0.75, 0, 12000);
   await shot('4-cistern-asleep');
 
   // 5: woken: the pond fills
@@ -117,8 +182,10 @@ try {
     window.solarbloom.chunks.markAll();
   }, cistern.area);
   await page.waitForFunction((id) => window.solarbloom.sim.water.levelOf(id) >= 1, cistern.id, { timeout: 600000 });
-  await settle(5000);
+  await frame(68.5, 47, 0.75, 0, 8000);
   await shot('5-cistern-awake');
+  await frame(68.5, 47, 1.2, 30, 8000);
+  await shot('5-cistern-awake-close');
   check(errors.length === 0, `no page errors (${errors.slice(0, 3).join(' | ')})`);
 } catch (e) {
   console.log(`✗ crashed: ${e.message}`);

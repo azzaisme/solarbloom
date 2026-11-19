@@ -215,8 +215,8 @@ try {
   const c0 = await page.evaluate(() => window.solarbloom.sim.charge.value());
   check(await until(page, (c0) => window.solarbloom.sim.charge.value() > c0 + 2, c0), 'the powered pad charges bloombot while it meditates');
   await page.waitForTimeout(1500);
-  await close(page, 160, 5); // from in front: bloombot faces the pad
-  await shot(page, '15-meditate', 'meditating at a powered charger: cross-legged at the pad, eyes closed, the pad lit');
+  await close(page, 20, 5); // from in front: bloombot sits on the pad facing out the way it came
+  await shot(page, '15-meditate', 'meditating at a powered charger: cross-legged on the glowing pad, centred, eyes closed');
   await pad(page, PAD_B);
   check(await until(page, () => !window.solarbloom.sim.rest.sitting), 'pad B stands up from meditating');
   check(!(await menuOpen(page)), 'and does not open the pause menu');

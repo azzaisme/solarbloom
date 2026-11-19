@@ -488,8 +488,6 @@ export interface GameState {
     levels: Record<string, number>;
     /** E23.4.2.2: pipe tiles on the ground, `x,z`, sorted */
     pipes?: string[];
-    /** E23.4.2.2: pipe tiles already paid for (a Pipe lays 4) */
-    pipeStock?: number;
   };
   /** E23.2.3: old park benches mended, by id (`bench:x:z`). Optional, so no save version change. */
   rest?: { mended: string[] };

@@ -40,10 +40,11 @@ export const WATER_NET = {
   draw: { cultivatorPerTile: 2, gardenerPerTile: 1 },
   /**
    * E23.4.4: land around low water fades. Restored ground within `fadeReach` of a body below `fadeBelow` shows up to
-   * `fadeSteps` bloom stages less (lush → flowers → plain restored), more the emptier it is. Never below restored.
+   * `fadeSteps` bloom stages less, more the emptier it is: the whole bloom range (TUNING's maxBloom 4 down to 1), so
+   * at empty water even the lushest land shows plain restored ground and its flowers close. Never below restored.
    */
   fadeReach: 5,
-  fadeSteps: 2,
+  fadeSteps: 3,
   /** E23.4.2.1: a reservoir: what it holds, how fast a canal or pond on its bank fills it (share of capacity per game day) */
   reservoir: { capacity: 400, bankFillPerDay: 2, startLevel: 0 },
   /**
@@ -53,7 +54,6 @@ export const WATER_NET = {
   pump: { perDay: 1200, power: 3 },
   /** E23.4.2.3: a higher reservoir feeds a lower one down a pipe with no pump, this many units per game day */
   gravityPerDay: 600,
-  /** E23.4.2.2: one Pipe (1 Copper, 2 Clay, E23 design §6) lays this many pipe tiles */
   /** E23.6.1: one crafted Pipe (the crafting table makes 4 from 1 Copper and 2 Clay) lays one pipe tile */
   pipe: { cost: { pipe: 1 } },
   /** a tile is fed by a pipe when a fed pipe tile is within this many tiles (square reach) */

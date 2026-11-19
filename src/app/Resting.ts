@@ -81,18 +81,20 @@ export class Resting {
     const sx = Math.cos(facing);
     const sz = -Math.sin(facing);
     const friend = h.sim.rest.friends(b.x, b.z).find((id) => h.sim.keepers.visible(id));
-    const { out, along, friend: other } = REST.seat;
+    const { out, raise, friendOut, along, friend: other } = REST.seat;
     const side = friend ? along : 0;
     h.bot.seat = { x: cx + fx * out - sx * side, y: by, z: cz + fz * out - sz * side, facing };
-    h.bot.visuals.setPose('sit', REST.benchSeat);
+    h.bot.visuals.setPose('sit', REST.benchSeat + raise);
     // a Keeper who is a friend sits beside (only one already out and about: never in fog)
-    if (friend && h.keepers) h.keepers.beside = { id: friend, x: cx + fx * out + sx * other, y: by, z: cz + fz * out + sz * other, facing, seat: REST.benchSeat };
+    if (friend && h.keepers) h.keepers.beside = { id: friend, x: cx + fx * friendOut + sx * other, y: by, z: cz + fz * friendOut + sz * other, facing, seat: REST.benchSeat };
     this.calm();
   }
 
   /**
-   * E23.3.3: sits cross-legged at the edge of the charger in front, facing it, and meditates while the pad charges
-   * (sim.chargers: it charges while bloombot is docked there and the grid has power).
+   * E23.3.3: sits cross-legged on the charger in front, centred on the glowing pad and facing out the way bloombot
+   * came, and meditates while the pad charges (sim.chargers: it charges while bloombot is docked there and the grid
+   * has power). Bloombot's own place stays at the pad's edge (a machine's tile can't be walked onto): docked, and
+   * where it stands up again.
    */
   meditate(m: MachineData) {
     const h = this.h;
@@ -108,9 +110,10 @@ export class Resting {
     p.x = cx + (p.x - cx) * k;
     p.z = cz + (p.z - cz) * k;
     h.sim.bot = { roofId: p.roofId, x: p.x, z: p.z };
-    const facing = Math.atan2(cx - p.x, cz - p.z);
+    // seated on the pad's top, facing out toward the edge it came from
+    const facing = Math.atan2(p.x - cx, p.z - cz);
     p.facing = facing;
-    h.bot.seat = { x: p.x, y, z: p.z, facing };
+    h.bot.seat = { x: cx, y: y + REST.padTop, z: cz, facing };
     h.bot.visuals.setPose('meditate');
     this.calm();
   }
