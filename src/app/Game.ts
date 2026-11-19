@@ -102,6 +102,8 @@ import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
 import { padStick, PhotoMode } from './PhotoMode';
 import { PHOTO_FILTERS } from '../data/photo';
 import { sceneNow } from './PhotoScene';
+import { daylightAt } from '../gameplay/Clock';
+import { GLOOMY } from '../gameplay/PowerEnv';
 import { DayNight, type LightMoment } from '../rendering/DayNight';
 import { NightFindVisuals } from '../rendering/NightFindVisuals';
 import { NIGHT_FIND_GIVES } from '../data/time';
@@ -4426,15 +4428,21 @@ export class Game {
     // E23.7.5: lamps cast real light: fewer at once on the low tier, and they dim with the scene in the Power view
     this.lightVisuals.maxCast = this.gfxTier === 'low' ? LIGHTING.cast.maxLow : LIGHTING.cast.max;
     this.lightVisuals.share = this.dayNight.lightShare;
+    // E23.7.5: photo mode's own time or weather lights the lamps as that hour would (on screen only)
+    const ownScene = this.photo.lightOverride() !== undefined || this.photo.weatherOverride() !== undefined;
+    if (ownScene) {
+      const sc = sceneNow(this.sim, this.photo);
+      this.lightVisuals.dark = Math.max(1 - daylightAt(sc.f), GLOOMY.has(sc.weather) ? 1 : 0);
+    } else this.lightVisuals.dark = undefined;
     this.lightVisuals.update(wdt, this.camera.entity.getPosition());
-    // E23.3.4: in the Power view, powered electrical machines glow soft yellow and the rest of the world darkens
-    this.machines.powerGlow(powerOn ? this.poweredMachines() : undefined, wdt);
+    // E23.3.4: in the Power view, powered electrical machines become yellow holograms and the rest of the world darkens
+    this.machines.powerHolo(powerOn ? this.poweredMachines() : undefined, wdt);
     const D = POWER.view.darken;
-    const dimTo = powerOn ? D.night + (D.day - D.night) * this.dayNight.light : 0; // night is dark already
+    const dimTo = powerOn ? D.night + (D.day - D.night) * this.dayNight.light : 0;
     const k = Math.min(1, wdt / POWER.view.fade);
     this.dayNight.dim = Math.abs(dimTo - this.dayNight.dim) < 1e-3 ? dimTo : this.dayNight.dim + (dimTo - this.dayNight.dim) * k;
     this.powerOverlay.setBoost(this.dayNight.boost);
-    this.machines.setGlowBoost(this.dayNight.boost);
+    this.machines.setHoloBoost(this.dayNight.boost);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
     this.crops.update(dt);
     this.rings.update(this.camera.zoom, this.camera.target);
