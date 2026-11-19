@@ -59,6 +59,83 @@ async function moveTo(page, sel, dev) {
   console.log(`   moveTo ${sel}: stopped at ${await page.evaluate(() => document.activeElement?.id || document.activeElement?.tagName)}`);
   return false;
 }
+/**
+ * Takes a build from the build menu as a player does: Q (Y on the pad) opens it, the arrows / d-pad reach the card,
+ * Enter / A takes it. Returns the tray's size as it opened (it must be seen: the Old City hides the hotbar it sits in)
+ * and whether the build is in hand.
+ */
+async function pick(page, dev, tool) {
+  if (dev === 'pad') await pressPad(page, 3);
+  else await page.keyboard.press('KeyQ');
+  await page.waitForSelector('#buildTray.open', { timeout: 10000 }).catch(() => {});
+  const tray = await page.evaluate(() => {
+    const r = document.querySelector('#buildTray')?.getBoundingClientRect();
+    return r ? { w: Math.round(r.width), h: Math.round(r.height) } : { w: 0, h: 0 };
+  });
+  const ok = await moveTo(page, `#buildTray.open [data-tool="${tool}"]`, dev);
+  if (ok) await go(page, dev);
+  await page.waitForTimeout(300);
+  const inHand = ok && (await page.evaluate(() => window.solarbloom.hud.currentTool)) === tool;
+  return { tray, inHand };
+}
+
+/**
+ * Places what is in hand on (x, z) (a machine's corner, or a decoration's tile), aimed as in third person (#542):
+ * build mode places under the crosshair, which rests a little ahead of bloombot, so bloombot steps until the ghost
+ * sits on the spot (as a player walks the ghost over it), then Space or A places. The steps are moves to where
+ * bloombot stands next (walking is not under test here). Returns what the game said if nothing was placed.
+ */
+async function placeAt(page, dev, x, z) {
+  await page.waitForFunction(() => window.solarbloom.bot.visuals.busy !== 'assemble', null, { timeout: 90000 }).catch(() => {});
+  const aimed = await page.evaluate(async ({ x, z }) => {
+    const g = window.solarbloom;
+    const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+    const tool = g.hud.currentTool;
+    const machine = !tool.startsWith('decor:');
+    const size = machine ? ({ condenser: 1 }[tool] ?? 1) : 1;
+    const cx = x + size / 2, cz = z + size / 2;
+    const on = () => {
+      const p = g.crosshairPick();
+      if (!p) return { ok: false };
+      const a = machine ? g.sim.build.anchorFor(tool, p.fx, p.fz) : { x: Math.floor(p.fx), z: Math.floor(p.fz) };
+      return { ok: a.x === x && a.z === z, p };
+    };
+    for (const [dx, dz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+      const sx = cx + dx * 2, sz = cz + dz * 2;
+      g.bot.cancelWalk();
+      g.bot.teleport('g', sx, sz);
+      if (Math.hypot(g.bot.pose.x - sx, g.bot.pose.z - sz) < 0.05) break;
+    }
+    for (let i = 0; i < 12; i++) {
+      for (let f = 0; f < 3; f++) await frame();
+      const st = on();
+      if (st.ok) {
+        await frame();
+        if (on().ok) return true;
+        continue;
+      }
+      if (!st.p) break;
+      g.bot.cancelWalk();
+      g.bot.teleport('g', g.bot.pose.x + (cx - st.p.fx), g.bot.pose.z + (cz - st.p.fz));
+    }
+    return false;
+  }, { x, z });
+  if (!aimed) return 'the crosshair never rested on it';
+  await page.evaluate(() => {
+    const g = window.solarbloom;
+    window.__fails = [];
+    if (!g.hud.__failHook) {
+      const o = g.hud.showFail.bind(g.hud);
+      g.hud.showFail = (m, ...a) => (window.__fails.push(m), o(m, ...a));
+      g.hud.__failHook = true;
+    }
+  });
+  if (dev === 'pad') await pressPad(page, 0);
+  else await page.keyboard.press('Space');
+  await page.waitForTimeout(500);
+  return (await page.evaluate(() => window.__fails.join(' | '))) || undefined;
+}
+
 const go = (page, dev) => (dev === 'pad' ? pressPad(page, 0) : page.keyboard.press('Enter'));
 const nextTab = (page, dev) => (dev === 'pad' ? pressPad(page, 5) : page.keyboard.press('KeyE'));
 const back = (page, dev) => (dev === 'pad' ? pressPad(page, 1) : page.keyboard.press('Escape'));
@@ -97,6 +174,20 @@ try {
     const T = (s) => `E23.6 ${dev}: ${s}`;
     const prompt = await page.evaluate(() => window.solarbloom.interactTarget()?.id);
     check(prompt === 'craft:table', T(`the shed offers the crafting table (${prompt})`));
+    // the door in front of the shed keeps the house's own things: the radio by day (E23.7.2), the bed from dusk
+    const door = await page.evaluate(async () => {
+      const g = window.solarbloom;
+      g.bot.teleport('g', 4.5, 6.5);
+      g.bot.pose.facing = Math.PI;
+      await new Promise((r) => setTimeout(r, 300));
+      const id = g.interactTarget()?.id;
+      g.bot.teleport('g', 3.5, 5.5);
+      g.bot.pose.facing = Math.PI;
+      await new Promise((r) => setTimeout(r, 300));
+      return id;
+    });
+    check(door === 'house:radio' || door === 'house:sleep', T(`the door offers the radio or the bed (${door})`));
+    check((await page.evaluate(() => window.solarbloom.interactTarget()?.id)) === 'craft:table', T('back at the shed: the crafting table again'));
     await interact(page, dev);
     await page.waitForSelector('#craftScreen.open');
     check(await page.evaluate(() => window.solarbloom.paused), T('the workshop opens and the game pauses'));
@@ -152,38 +243,88 @@ try {
     {
     // a decoration is made once at the table (Make, on the Craft tab), then placed free from the build menu
     await page.evaluate(() => {
-      const g = window.solarbloom;
+      const g = window.solarbloom, s = g.sim;
+      s.inventory.add('sunCell', 1);
+      // open, restored ground west of the fountain to build on
+      for (let x = 6; x < 12; x++)
+        for (let z = 8; z < 13; z++) {
+          const t = s.grid.get('g', x, z);
+          if (!t || t.occupantId) continue;
+          t.blocked = false;
+          t.ground = 'restored';
+          t.pollution = 0;
+          t.bloom = 1;
+          s.grid.touch(t);
+          g.chunks.markTile(t);
+        }
       g.bot.teleport('g', 3.5, 5.5);
       g.bot.pose.facing = Math.PI;
     });
+    await page.waitForTimeout(300);
     await interact(page, dev);
     await page.waitForSelector('#craftScreen.open');
+    // the Water Condenser is on the table's machine list, with its recipe
+    const listed = await page.evaluate(() => [...document.querySelectorAll('#craftScreen .cr-machines li')].map((l) => l.getAttribute('aria-label')).find((l) => /^Water Condenser:/.test(l ?? '')));
+    check(/12 Scrap/.test(listed ?? '') && /6 Copper/.test(listed ?? '') && /2 Wire/.test(listed ?? ''), T(`the table lists the Water Condenser with its recipe ("${listed}")`));
     const planksBefore = await page.evaluate(() => window.solarbloom.sim.inventory.count('planks') + window.solarbloom.sim.inventory.stored('planks'));
     check(await moveTo(page, '#cr-decor-bench', dev), T('reach the bench under Decorations'));
     await go(page, dev);
     const made = await page.evaluate(() => ({ made: window.solarbloom.sim.crafting.decorMade('bench'), planks: window.solarbloom.sim.inventory.count('planks') + window.solarbloom.sim.inventory.stored('planks'), live: document.querySelector('#craftScreen .bp-live').textContent }));
     check(made.made && made.planks === planksBefore - 2, T(`make the bench once: 2 Planks (${JSON.stringify(made)})`));
     await page.screenshot({ path: `${dir}/ui-workshop-decor-${dev}.png` });
+    // E23.3.5 × E23.6.1: a night light is made at the table too (the Solar garden light: a Sun cell and a Scrap)
+    check(await moveTo(page, '#cr-decor-solarstake', dev), T('reach the Solar garden light under Decorations'));
+    await go(page, dev);
+    const light = await page.evaluate(() => ({ made: window.solarbloom.sim.crafting.decorMade('solarstake'), sunCells: window.solarbloom.sim.inventory.count('sunCell'), live: document.querySelector('#craftScreen .bp-live').textContent }));
+    check(light.made && light.sunCells === 0, T(`make the light: a Sun cell and a Scrap (${JSON.stringify(light)})`));
+    await page.evaluate(() => document.querySelector('#craftScreen .cr-decor li:last-child')?.scrollIntoView({ block: 'center' }));
+    await page.screenshot({ path: `${dir}/ui-workshop-light-${dev}.png` });
     await back(page, dev);
-    await page.waitForTimeout(200);
-    const dec = await page.evaluate(() => {
-      const g = window.solarbloom, s = g.sim;
-      const t = s.grid.get('g', 6, 7);
-      t.ground = 'restored';
-      t.pollution = 0;
-      s.grid.touch(t);
-      const have = () => s.inventory.count('planks') + s.inventory.stored('planks');
-      const before = have();
-      g.selectTool('decor:bench');
-      const hidden = document.querySelector('#hotbar [data-tool="decor:bench"]')?.hidden;
-      const why = g.cozy.canDecorate('bench', 'g', 6, 7) ?? g.cozy.placeDecor('bench', 0, 'g', 6, 7);
-      const why2 = g.cozy.canDecorate('bench', 'g', 6, 8);
-      const placed = have();
-      g.cozy.removeDecor('g', 6, 7);
-      g.selectTool('pulse');
-      return { why, why2, before, placed, hidden };
+    await page.waitForTimeout(300);
+    // the bench from the build menu: placing it is free
+    const have = () => page.evaluate(() => window.solarbloom.sim.inventory.count('planks') + window.solarbloom.sim.inventory.stored('planks'));
+    let p = await pick(page, dev, 'decor:bench');
+    check(p.tray.w > 0 && p.tray.h > 0, T(`${dev === 'pad' ? 'Y' : 'Q'} opens the build menu, and it is seen (${p.tray.w} × ${p.tray.h})`));
+    check(p.inHand, T('the bench is taken from the build menu'));
+    await page.screenshot({ path: `${dir}/ui-workshop-buildmenu-${dev}.png` });
+    const planks = await have();
+    let why = await placeAt(page, dev, 7, 9);
+    const bench = await page.evaluate(() => window.solarbloom.cozy.decorAt('g', 7, 9)?.kind);
+    check(bench === 'bench' && (await have()) === planks, T(`Space / A places the bench, free (${bench}${why ? `: ${why}` : ''})`));
+    // the light from the build menu
+    p = await pick(page, dev, 'decor:solarstake');
+    check(p.tray.w > 0 && p.inHand, T('the light is taken from the build menu'));
+    why = await placeAt(page, dev, 9, 9);
+    const lit = await page.evaluate(() => window.solarbloom.cozy.decorAt('g', 9, 9)?.kind);
+    check(lit === 'solarstake', T(`Space / A places the light (${lit}${why ? `: ${why}` : ''})`));
+    // a machine from its table recipe: the Water Condenser (12 Scrap, 6 Copper, 2 Wire), paid exactly where it is built
+    p = await pick(page, dev, 'condenser');
+    check(p.tray.w > 0 && p.inHand, T('the Water Condenser is taken from the build menu'));
+    const total = () =>
+      page.evaluate(() => {
+        const inv = window.solarbloom.sim.inventory;
+        return Object.fromEntries(['scrap', 'copper', 'wire'].map((k) => [k, inv.count(k) + inv.stored(k)]));
+      });
+    const before = await total();
+    why = await placeAt(page, dev, 8, 11);
+    const at = await page.evaluate(() => {
+      const m = window.solarbloom.sim.machinesOfType('condenser')[0];
+      return m && [m.x, m.z];
     });
-    check(!dec.why && dec.placed === dec.before && dec.hidden === false, T(`then the bench is placed free from the build menu (${JSON.stringify(dec)})`));
+    const paid = await total();
+    check(
+      !!at && paid.scrap === before.scrap - 12 && paid.copper === before.copper - 6 && paid.wire === before.wire - 2,
+      T(`Space / A builds the Water Condenser for exactly its recipe (${JSON.stringify({ at, before, paid, why })})`),
+    );
+    await back(page, dev); // nothing more to build: B / Esc puts it away
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      g.bot.cancelWalk();
+      g.bot.teleport('g', 8.5, 13.5);
+      g.bot.pose.facing = Math.PI;
+    });
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: `${dir}/ui-workshop-placed-${dev}.png` });
     }
     check(errors.length === 0, T(`no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`));
     await page.context().close();

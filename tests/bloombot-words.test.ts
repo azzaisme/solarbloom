@@ -28,7 +28,7 @@ function stripComments(src: string): string {
 
 describe('E20.2: bloombot wording', () => {
   it('the Old City\'s first-fifteen-minutes hints never say tap, click, rates or upgrades', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     for (let step = 0; step <= FIRST_STEPS; step++) {
       const line = oldCityHint(sim, step, (a) => (a === 'pulse' ? 'E' : 'Q')).text;
       expect(line, line).not.toMatch(OLD_CITY_WORD);
@@ -51,9 +51,9 @@ describe('E20.2: bloombot wording', () => {
 });
 
 /**
- * E22.10 (#348): plain words and few numbers. Every string written for old-city rules (src/ui/words.ts) and every
+ * E22.10 (#348): plain words and few numbers. Every string written for the game (src/ui/words.ts) and every
  * string on the new UI pieces is free of the words the epic keeps off the screen, and of "/" used as a rate.
- * Game text that passes through `plainWords` under old-city rules loses biomass, full bloom, rates and ×N.
+ * Game text that passes through `plainWords` loses biomass, full bloom, rates and ×N.
  */
 describe('E22.10: plain words', () => {
   const strings = (v: unknown, out: string[] = []): string[] => {
@@ -83,7 +83,7 @@ describe('E22.10: plain words', () => {
     expect(bad).toEqual([]);
   });
 
-  it('rewrites game text into plain words under old-city rules', async () => {
+  it('rewrites game text into plain words', async () => {
     const { plainWords, bannedIn } = await import('../src/ui/words');
     expect(plainWords('Spend biomass on machines')).toBe('Spend Greens on machines');
     expect(plainWords('Grow tiles to full bloom')).toBe('Grow tiles to in flower');

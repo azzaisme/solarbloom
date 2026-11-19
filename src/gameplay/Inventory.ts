@@ -1,4 +1,3 @@
-import { big } from '../core/Big';
 import { GROUND } from '../core/GameState';
 import { PARK } from '../core/Areas';
 import { distToFootprint } from '../core/Grid';
@@ -17,17 +16,12 @@ export interface BotAt {
 
 /**
  * E21.1 (§1, §2): what bloombot carries and the city's shared store. Whole numbers; the backpack has a stack
- * limit per material (from the fountain tier and the Pack Frame), the store none. Biomass stays a resource,
- * but recipes may ask for it, so `canPay` and `pay` read it too. Old-city rules only: under classic rules
- * there is no salvage state and every call here is inert.
+ * limit per material (from the fountain tier and the Pack Frame), the store none. E23.5.1: biomass, food,
+ * compost and fertiliser are items here like any material.
  */
 export class Inventory {
   constructor(private sim: Sim) {}
 
-  /** Old-city rules (the inventory exists)? */
-  get on(): boolean {
-    return !!this.sim.state.salvage;
-  }
 
   private get sv(): SalvageState {
     return this.sim.state.salvage!;
@@ -45,7 +39,6 @@ export class Inventory {
 
   /** The stack limit: 40, then 60, 80 and 120 at fountain tiers 2, 3 and 4; the Pack Frame adds 40. */
   stackLimit(): number {
-    if (!this.on) return 0;
     const tier = Math.min(PACK.stack.length - 1, this.sv.tier);
     return PACK.stack[tier] + (this.sv.blueprints.includes('packFrame') ? PACK.packFrame : 0) + (this.sim.research?.effect('backpack') ?? 0);
   }
@@ -62,7 +55,7 @@ export class Inventory {
 
   /** Puts units in the backpack; returns how many did not fit (they stay where they were). */
   add(m: ItemId, n: number): number {
-    if (!this.on || n <= 0) return n;
+    if (n <= 0) return n;
     const fit = Math.min(Math.floor(n), this.room(m));
     if (fit > 0) {
       this.set('pack', m, this.count(m) + fit);
@@ -75,7 +68,7 @@ export class Inventory {
 
   /** Takes units out of the backpack (all or nothing). */
   take(m: ItemId, n: number): boolean {
-    if (!this.on || n <= 0) return n <= 0;
+    if (n <= 0) return n <= 0;
     if (this.count(m) < n) return false;
     this.set('pack', m, this.count(m) - n);
     this.sim.bus.emit('pack.changed', { material: m, delta: -n });
@@ -88,15 +81,24 @@ export class Inventory {
 
   /** Puts units straight into the store (overflow from refunds). */
   addToStore(m: ItemId, n: number) {
-    if (!this.on || n <= 0) return;
+    if (n <= 0) return;
     this.set('store', m, this.stored(m) + Math.floor(n));
     this.sim.bus.emit('store.changed', { material: m, delta: Math.floor(n) });
+  }
+
+  /** Takes units straight out of the store (all or nothing): what machines and drones use from it (E23.6.3). */
+  takeFromStore(m: ItemId, n: number): boolean {
+    if (n <= 0) return true;
+    if (this.stored(m) < n) return false;
+    this.set('store', m, this.stored(m) - n);
+    this.sim.bus.emit('store.changed', { material: m, delta: -n });
+    return true;
   }
 
   /** Moves units from the backpack to the store (default: the whole stack). Returns how many moved. */
   deposit(m: ItemId, n = this.count(m)): number {
     const k = Math.min(Math.floor(n), this.count(m));
-    if (!this.on || k <= 0) return 0;
+    if (k <= 0) return 0;
     this.set('pack', m, this.count(m) - k);
     this.set('store', m, this.stored(m) + k);
     this.sim.bus.emit('pack.changed', { material: m, delta: -k });
@@ -114,7 +116,7 @@ export class Inventory {
   /** Moves units from the store to the backpack, as many as fit (default: a full stack). Returns how many moved. */
   withdraw(m: ItemId, n = this.stackLimit()): number {
     const k = Math.min(Math.floor(n), this.stored(m), this.room(m));
-    if (!this.on || k <= 0) return 0;
+    if (k <= 0) return 0;
     this.set('store', m, this.stored(m) - k);
     this.set('pack', m, this.count(m) + k);
     this.sim.bus.emit('store.changed', { material: m, delta: -k });
@@ -136,7 +138,7 @@ export class Inventory {
       if (id === PARK || (id && s.areas.fog(id) === 'cleared')) out.push(m);
     }
     for (const m of s.machinesOfType('chest')) out.push(m);
-    if (this.on && this.sv.house >= 1) {
+    if (this.sv.house >= 1) {
       const sh = PARK_SET.shed;
       out.push({ roofId: GROUND, x: sh.x, z: sh.z, size: sh.size });
     }
@@ -156,33 +158,25 @@ export class Inventory {
     return this.count(m) + (this.nearStore(at) ? this.stored(m) : 0);
   }
 
-  /** The first part of a cost that can't be paid here (a material id or 'biomass'), if any. */
-  shortfall(cost: MaterialCost, at: BotAt | undefined = this.sim.bot): ItemId | 'biomass' | undefined {
+  /** The first part of a cost that can't be paid here, if any. */
+  shortfall(cost: MaterialCost, at: BotAt | undefined = this.sim.bot): ItemId | undefined {
     const near = this.nearStore(at);
-    for (const [k, v] of Object.entries(cost) as [ItemId | 'biomass', number][]) {
+    for (const [k, v] of Object.entries(cost) as [ItemId, number][]) {
       if (!v) continue;
-      if (k === 'biomass') {
-        if (this.sim.econ.get('biomass').lt(v)) return 'biomass';
-        continue;
-      }
       if (this.count(k) + (near ? this.stored(k) : 0) < v) return k;
     }
     return undefined;
   }
 
   canPay(cost: MaterialCost, at: BotAt | undefined = this.sim.bot): boolean {
-    return this.on && !this.shortfall(cost, at);
+    return !this.shortfall(cost, at);
   }
 
   /** Pays a cost: from the backpack first, then from the store (only near a way into it). All or nothing. */
   pay(cost: MaterialCost, at: BotAt | undefined = this.sim.bot): boolean {
     if (!this.canPay(cost, at)) return false;
-    for (const [k, v] of Object.entries(cost) as [ItemId | 'biomass', number][]) {
+    for (const [k, v] of Object.entries(cost) as [ItemId, number][]) {
       if (!v) continue;
-      if (k === 'biomass') {
-        this.sim.econ.spend({ biomass: big(v) });
-        continue;
-      }
       const fromPack = Math.min(v, this.count(k));
       if (fromPack) this.take(k, fromPack);
       const rest = v - fromPack;
@@ -194,23 +188,15 @@ export class Inventory {
     return true;
   }
 
-  /** Gives a cost back (removing a machine): to the backpack, anything over a stack to the store. Biomass too. */
+  /** Gives a cost back (removing a machine): to the backpack, anything over a stack to the store. */
   refund(cost: MaterialCost) {
-    for (const [k, v] of Object.entries(cost) as [ItemId | 'biomass', number][]) {
-      if (!v) continue;
-      if (k === 'biomass') this.sim.econ.add('biomass', v);
-      else this.addToStore(k, this.add(k, v));
-    }
+    for (const [k, v] of Object.entries(cost) as [ItemId, number][]) if (v) this.addToStore(k, this.add(k, v));
   }
 
   /** "Copper 12/20" style label for a cost, part by part (for panels and the build tray). */
-  describe(cost: MaterialCost, at: BotAt | undefined = this.sim.bot): { id: ItemId | 'biomass'; name: string; icon: string; have: number; need: number }[] {
-    return (Object.entries(cost) as [ItemId | 'biomass', number][])
+  describe(cost: MaterialCost, at: BotAt | undefined = this.sim.bot): { id: ItemId; name: string; icon: string; have: number; need: number }[] {
+    return (Object.entries(cost) as [ItemId, number][])
       .filter(([, v]) => v)
-      .map(([k, v]) =>
-        k === 'biomass'
-          ? { id: k, name: 'Biomass', icon: '🌿', have: Math.floor(this.sim.econ.get('biomass').toNumber()), need: v }
-          : { id: k, name: itemDef(k).name, icon: itemDef(k).icon, have: this.available(k, at), need: v },
-      );
+      .map(([k, v]) => ({ id: k, name: itemDef(k).name, icon: itemDef(k).icon, have: this.available(k, at), need: v }));
   }
 }

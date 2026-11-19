@@ -62,7 +62,6 @@ export function neededNext(sim: Sim, m: MaterialId): string {
 }
 
 export function itemCells(sim: Sim): ItemCell[] {
-  if (!sim.oldCity) return [];
   const inv = sim.inventory;
   const limit = inv.stackLimit();
   return MATERIAL_IDS.map((id): ItemCell => {
@@ -78,7 +77,7 @@ export function itemCells(sim: Sim): ItemCell[] {
       limit,
       stored,
       label: seen ? `${name}, ${count} of ${limit} in backpack, ${stored} in store` : 'A material not found yet',
-      from: seen ? `Found in ${list(MATERIALS[id].home.slice(0, 3).map(regionName))}${MATERIALS[id].home.length > 3 ? ' and across the city' : ''}` : 'Somewhere in the city',
+      from: !seen ? 'Somewhere in the city' : MATERIALS[id].from ?? `Found in ${list(MATERIALS[id].home.slice(0, 3).map(regionName))}${MATERIALS[id].home.length > 3 ? ' and across the city' : ''}`,
       next: seen ? neededNext(sim, id) : '',
     };
   }).concat(componentCells(sim, limit));
@@ -123,7 +122,6 @@ const PIN = 'pin:';
 
 /** The pinned request: the player's choice while that Keeper still asks for something, else the first open one. */
 export function pinnedRequest(sim: Sim): { id: string; text: string } | undefined {
-  if (!sim.oldCity) return undefined;
   const open = sim.keepers.requests();
   const chosen = sim.state.salvage?.seen?.find((s) => s.startsWith(PIN))?.slice(PIN.length);
   return open.find((r) => r.id === chosen) ?? open[0];
@@ -147,7 +145,6 @@ export function pinNext(sim: Sim): RequestRow | undefined {
 }
 
 export function requestRows(sim: Sim): RequestRow[] {
-  if (!sim.oldCity) return [];
   const pin = pinnedRequest(sim);
   return sim.keepers.requests().map((r) => ({ id: r.id, keeper: sim.keepers.def(r.id).name, region: sim.keepers.region(r.id).name, text: r.text, pinned: r.id === pin?.id }));
 }
@@ -208,8 +205,8 @@ export function collection(sim: Sim): CollectionGroup[] {
   };
   // keepsakes: the ones Lucky Cats leave, and one per region
   const unlocked = new Set([...(cz?.decorUnlocked ?? []), ...(st.salvage?.items ?? []), ...(st.salvage?.caches ?? [])]);
-  const catKeeps = DECOR_OPTIONS.filter((o) => 'keepsake' in o.unlock).map((o) => ({ name: unlocked.has(o.id) ? o.name : 'Not found yet', detail: unlocked.has(o.id) ? o.blurb : 'A Lucky Cat keeps it for you', found: unlocked.has(o.id) }));
-  const regionKeeps = sim.oldCity ? KEEPSAKES.map((k) => ({ name: unlocked.has(k.id) ? k.name : 'Not found yet', detail: unlocked.has(k.id) ? `From ${regionName(k.region)}` : 'Hidden in a cache somewhere', found: unlocked.has(k.id) })) : [];
+  const catKeeps = DECOR_OPTIONS.filter((o) => 'keepsake' in o.unlock).map((o) => ({ name: unlocked.has(o.id) ? o.name : 'Not found yet', detail: unlocked.has(o.id) ? o.blurb : 'Still out there somewhere', found: unlocked.has(o.id) }));
+  const regionKeeps = KEEPSAKES.map((k) => ({ name: unlocked.has(k.id) ? k.name : 'Not found yet', detail: unlocked.has(k.id) ? `From ${regionName(k.region)}` : 'Hidden in a cache somewhere', found: unlocked.has(k.id) }));
   const keeps = [...catKeeps, ...regionKeeps];
   const fauna = Object.keys(st.fauna ?? {});
   const woken = sim.areas.revealed().filter((id) => sim.areas.fog(id) === 'cleared').map((id) => sim.areas.info(id));

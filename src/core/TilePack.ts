@@ -1,6 +1,6 @@
 import { CHUNK, generateTile } from './Generation';
 import type { Chunk } from './Grid';
-import type { GroundState, LayerData, RestoreSource, TileData, TileTransition, TransitionKind } from './types';
+import type { GroundState, LayerData, PlantKind, RestoreSource, TileData, TileTransition, TransitionKind } from './types';
 
 /**
  * Save encoding for one chunk: only what play changed. A chunk identical to generation packs to ''.
@@ -28,12 +28,15 @@ function unpackTr(s: string): TileTransition | undefined {
   if (g === '1') tr.g = 1;
   return tr;
 }
+/** E23.2.2: what a loaded pulse grew (the extras' eighth field). */
+const P2C: Record<PlantKind, string> = { meadow: 'm', rare: 'r', grove: 'g' };
+const C2P: Record<string, PlantKind> = { m: 'meadow', r: 'rare', g: 'grove' };
 const N = CHUNK * CHUNK;
 
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 
 function same(a: TileData, b: TileData) {
-  return a.ground === b.ground && a.bloom === b.bloom && Math.round(a.pollution) === b.pollution && !a.growthRemainingSec && !a.growSource && !a.lushUntil && !a.unblocked && !a.tr;
+  return a.ground === b.ground && a.bloom === b.bloom && Math.round(a.pollution) === b.pollution && !a.growthRemainingSec && !a.growSource && !a.lushUntil && !a.unblocked && !a.tr && !a.plant;
 }
 
 export function packChunk(c: Chunk, seed: number, layer: LayerData): string {
@@ -63,12 +66,26 @@ export function packChunk(c: Chunk, seed: number, layer: LayerData): string {
     b[i] = String(Math.max(0, Math.min(9, t.bloom)));
     const pv = Math.max(0, Math.min(1295, Math.round(t.pollution)));
     p[i] = pv < 36 ? '0' + pv.toString(36) : pv.toString(36);
-    if (t.growthRemainingSec || t.growSource || t.lushUntil || t.unblocked || t.tr)
+    if (t.growthRemainingSec || t.growSource || t.lushUntil || t.unblocked || t.tr || t.plant)
       extras.push(
-        `${i},${t.growthRemainingSec ? r3(t.growthRemainingSec) : ''},${t.growSource ? SOURCES.indexOf(t.growSource) : ''},${t.lushUntil ? r3(t.lushUntil) : ''},${t.unblocked ? 'u' : ''},${t.tr ? packTr(t.tr) : ''},${t.lushUntil && t.lushAt !== undefined ? r3(t.lushAt) : ''}`,
+        `${i},${t.growthRemainingSec ? r3(t.growthRemainingSec) : ''},${t.growSource ? SOURCES.indexOf(t.growSource) : ''},${t.lushUntil ? r3(t.lushUntil) : ''},${t.unblocked ? 'u' : ''},${t.tr ? packTr(t.tr) : ''},${t.lushUntil && t.lushAt !== undefined ? r3(t.lushAt) : ''}${t.plant ? `,${P2C[t.plant]}` : ''}`,
       );
   }
   return [g.join(''), b.join(''), p.join(''), '|', extras.join(';')].join('');
+}
+
+/** E23.2.2: what a loaded pulse grew, by tile index, in a packed chunk (without generating it). */
+export function plantsOf(packed: string): Map<number, PlantKind> {
+  const out = new Map<number, PlantKind>();
+  const bar = packed.indexOf('|', N * 4);
+  if (bar < 0) return out;
+  for (const e of packed.slice(bar + 1).split(';')) {
+    if (!e) continue;
+    const f = e.split(',');
+    const p = f[7] ? C2P[f[7]] : undefined;
+    if (p) out.set(Number(f[0]), p);
+  }
+  return out;
 }
 
 /** Restored tiles per bloom level (index 1..4) in a packed chunk, without generating it. */
@@ -107,11 +124,12 @@ export function unpackChunk(c: Chunk, packed: string) {
     t.lushUntil = undefined;
     t.lushAt = undefined;
     t.tr = undefined;
+    t.plant = undefined;
   }
   if (bar < 0) return;
   for (const e of packed.slice(bar + 1).split(';')) {
     if (!e) continue;
-    const [is, gs, ss, ls, us, trs, las] = e.split(',');
+    const [is, gs, ss, ls, us, trs, las, ps] = e.split(',');
     const t = c.tiles[Number(is)];
     if (!t) continue;
     if (gs) t.growthRemainingSec = Number(gs);
@@ -123,5 +141,6 @@ export function unpackChunk(c: Chunk, packed: string) {
     }
     if (trs) t.tr = unpackTr(trs);
     if (las && t.lushUntil) t.lushAt = Number(las);
+    if (ps && C2P[ps]) t.plant = C2P[ps];
   }
 }

@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
-import { big } from '../src/core/Big';
 import type { MachineData } from '../src/core/types';
 import { isMergeable } from '../src/data/machines';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
-import { fill, makeSim, PAD, rich } from './helpers';
+import { fill, makeSim, offGrid, PAD, rich } from './helpers';
 
 SaveService.clock = () => 0;
 const saver = new SaveService(undefined);
@@ -29,37 +28,24 @@ const doneOf = (m: MachineData) => m.cult?.done ?? 0;
 const restored = (sim: Sim) => sim.grid.tilesOf(PAD).filter((t) => t.z < 6 && t.ground === 'restored').length;
 
 describe('Look 6.8: the Cultivator (#177)', () => {
-  it('unlocks with a Drone Hub, is priced in biomass with an energy part, and does not merge', () => {
+  it('unlocks at its fountain tier (E21.3), is built from a recipe, and does not merge', () => {
     const sim = makeSim(9);
     expect(sim.build.isUnlocked('cultivator')).toBe(false);
-    rich(sim);
-    fill(sim, 0, 6, 7, 7, 'restored');
-    sim.build.place('droneHub', PAD, 4, 6);
+    rich(sim); // every buildable tier
     expect(sim.build.isUnlocked('cultivator')).toBe(true);
-    const c = sim.build.cost('cultivator');
-    expect(big(c.biomass!).gt(0) && big(c.energy!).gt(0)).toBe(true);
+    const r = sim.build.recipe('cultivator')!;
+    expect(Object.values(r).every((n) => (n ?? 0) > 0) && Object.keys(r).length > 0).toBe(true);
     expect(isMergeable('cultivator')).toBe(false);
   });
 
-  it('works dead ground near its dock with no player input, drawing energy instead of pulse costs', () => {
+  it('works dead ground near its dock with no player input', () => {
     const { sim, m } = setup();
-    let spentWater = 0;
-    let drawn = 0;
-    const spend = sim.econ.spend.bind(sim.econ);
-    sim.econ.spend = (c) => {
-      const ok = spend(c);
-      if (ok && c.energy && !c.water) drawn += big(c.energy).toNumber();
-      return ok;
-    };
     const mine: string[] = [];
     sim.bus.on('tile.restored', ({ tile, source }) => source === 'cultivator' && mine.push(tile.id));
-    sim.bus.on('drone.jobStarted', () => (spentWater = 1));
     sim.advance(60);
     expect(doneOf(m)).toBeGreaterThanOrEqual(4);
     expect(mine.length).toBe(doneOf(m));
     expect(restored(sim)).toBeGreaterThanOrEqual(doneOf(m));
-    expect(drawn).toBeGreaterThan(doneOf(m) * 1.5); // energy drawn while working (about 2.5 ⚡ a tile)
-    void spentWater;
   });
 
   it('its tiles take gameplay time: softening, then growth, with gameplay-flagged transitions', () => {
@@ -103,29 +89,6 @@ describe('Look 6.8: the Cultivator (#177)', () => {
     expect(mine.every((t) => t.bloom >= TUNING.cultivator.seedBloom)).toBe(true);
   });
 
-  it('energy upgrades are paid in energy, capped at machineCostMaxShare of the store', () => {
-    const { sim, m } = setup(5);
-    sim.state.caps.energy = big(100);
-    sim.state.resources.energy = big(100);
-    const def = sim.upgrades.all().find((u) => u.id === 'cultWidth')!;
-    m.upg = { cultWidth: 1 };
-    expect(sim.upgrades.cost(def, m).toNumber()).toBeLessThanOrEqual(100 * TUNING.machineCostMaxShare);
-    const b0 = sim.state.resources.biomass.toNumber();
-    expect(sim.upgrades.purchase('cultWidth', m.id)).toBe(true);
-    expect(sim.state.resources.biomass.toNumber()).toBe(b0);
-    expect(sim.state.resources.energy.toNumber()).toBeLessThan(100);
-  });
-
-  it('parks when the energy store is below the drones’ reserve', () => {
-    const { sim, m } = setup(6);
-    sim.state.resources.energy = big(sim.state.caps.energy.toNumber() * TUNING.drone.reserve * 0.5);
-    sim.production.markDirty();
-    for (const x of sim.state.machines) if (x.type === 'solar') x.starter = true;
-    sim.advance(10);
-    expect(m.cult!.units[0].parked).toBe(true);
-    expect(doneOf(m)).toBe(0);
-  });
-
   it('a tap knocks its tile along, within limits', () => {
     const { sim, m } = setup(7);
     sim.advance(3);
@@ -148,7 +111,7 @@ describe('Look 6.8: the Cultivator (#177)', () => {
     const { sim, m } = setup(8);
     sim.advance(4);
     const json = saver.serialize(sim.state);
-    const copy = new Sim(saver.deserialize(json)!);
+    const copy = offGrid(new Sim(saver.deserialize(json)!));
     expect(saver.serialize(copy.state)).toBe(json);
     const cm = copy.state.machines.find((x) => x.id === m.id)!;
     copy.advance(40);

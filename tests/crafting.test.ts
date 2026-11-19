@@ -3,8 +3,9 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { GroundState } from '../src/core/types';
 import { COMPONENT_IDS, COMPONENT_RECIPES, DECOR_RECIPES, MACHINE_RECIPES, type Unlock } from '../src/data/crafting';
 import { DECOR_OPTION } from '../src/data/cozy';
+import { LIGHTS } from '../src/data/lights';
 import { ITEM_DEFS } from '../src/data/items';
-import { MACHINES, OLD_CITY_BUILDABLE } from '../src/data/machines';
+import { BUILDABLE, MACHINES } from '../src/data/machines';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { PROJECTS } from '../src/data/research';
 import { Sim } from '../src/gameplay/Sim';
@@ -15,13 +16,13 @@ import { Cozy } from '../src/gameplay/Cozy';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const oldSim = () => {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = 1;
   sim.bot = NEAR;
   return sim;
 };
 const CACHES = new Set(REGIONS.flatMap((r) => r.caches.map((c) => c.id)));
-const realItem = (k: string) => k === 'biomass' || k in ITEM_DEFS;
+const realItem = (k: string) => k in ITEM_DEFS;
 /** Is an unlock somewhere a player can reach? */
 function reachable(u: Unlock): boolean {
   if ('home' in u) return true;
@@ -59,6 +60,8 @@ describe('E23.6.1: recipes in data', () => {
     const ids = MACHINE_RECIPES.map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const want of ['planterBox', 'compostBin', 'powerPole', 'charger', 'solar', 'windTurbine', 'chest', 'beehive', 'reservoir', 'pump', 'desalination', 'battery', 'bioDigester', 'drone', 'largeSolar', 'assembler']) expect(ids).toContain(want);
+    // planter boxes are Planks, so they open with Timber (Tide, Saltwind Beach); before that the farm is the ground
+    expect(MACHINE_RECIPES.find((r) => r.id === 'planterBox')).toMatchObject({ cost: { planks: 3 }, unlock: { keeper: 'saltwind' } });
     for (const r of MACHINE_RECIPES) {
       expect(Object.keys(r.cost).length, r.id).toBeGreaterThan(0);
       for (const k of Object.keys(r.cost)) expect(realItem(k), `${r.id}: ${k}`).toBe(true);
@@ -222,8 +225,39 @@ describe('E23.6.1: the crafting table', () => {
     expect(cozy.canDecorate('cratestack', GROUND, 12, 12)).toBeUndefined();
   });
 
+  it('E23.3.5: every night light is made at the table at its own cost, and only made ones can be placed', () => {
+    for (const l of LIGHTS) {
+      const r = DECOR_RECIPES.find((d) => d.id === l.id);
+      expect(r, l.id).toBeDefined();
+      expect(r!.cost, l.id).toEqual(l.cost);
+    }
+    expect(DECOR_RECIPES.find((d) => d.id === 'solarlamppost')).toEqual({ id: 'solarlamppost', cost: { scrap: 3, glassPane: 1, sunCell: 1 }, unlock: { find: 'c-mastRow-1' } });
+    const sim = oldSim();
+    const cozy = new Cozy(sim);
+    const t = sim.grid.get(GROUND, 12, 12)!;
+    t.ground = 'restored';
+    t.pollution = 0;
+    sim.grid.touch(t);
+    const open = (id: string) => cozy.decorChoices().find((c) => c.option.id === id)!.unlocked;
+    // a starting light is known at home, but not placed until it is made
+    expect(sim.crafting.decorProblem('solarstake')).toBe('Needs Sun cell');
+    expect(open('solarstake')).toBe(false);
+    // a found light: its cache alone no longer opens it (no fallback to the light's own unlock)
+    sim.state.salvage!.caches.push('c-mastRow-1');
+    expect(open('solarlamppost')).toBe(false);
+    expect(cozy.canDecorate('solarlamppost', GROUND, 12, 12)).toBe('Not made yet: it is made at the crafting table');
+    sim.inventory.add('scrap', 3);
+    sim.inventory.add('glassPane', 1);
+    sim.inventory.add('sunCell', 1);
+    expect(sim.crafting.makeDecor('solarlamppost')).toBe(true);
+    expect(open('solarlamppost')).toBe(true);
+    expect(cozy.canDecorate('solarlamppost', GROUND, 12, 12)).toBeUndefined();
+    // a researched light waits for its research, whatever else is done
+    expect(sim.crafting.decorProblem('fairylights')).toBe('🔒 Research');
+  });
+
   it('every machine is built from a crafting-table recipe', () => {
-    for (const t of OLD_CITY_BUILDABLE) {
+    for (const t of BUILDABLE) {
       expect(MACHINE_RECIPES.find((r) => r.builds === t), t).toBeDefined();
     }
   });

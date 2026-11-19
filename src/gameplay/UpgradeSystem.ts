@@ -7,30 +7,18 @@ const tier3 = (m: { tier?: number }) => tierOf(m) >= 3;
 const tierOutput = (m: { tier?: number; project?: { stage: number } }, t2: number) =>
   !isBuilt(m) ? 0 : tier3(m) ? TUNING.super.outputMult : tier2(m) ? t2 : 1;
 import { TUNING } from '../data/tuning';
-import { DRONE_DASH, powerMult, UPGRADE_BY_ID, UPGRADE_GROUPS, UPGRADES, type UpgradeDef, type UpgradeGroup } from '../data/upgrades';
-import { CAPPED, Economy, RES_ICON } from '../core/Economy';
-import { big, Decimal, fmt, type Big } from '../core/Big';
-import type { Cost, MachineData, ResourceKind } from '../core/types';
+import { DRONE_DASH, powerMult, UPGRADE_BY_ID, UPGRADES } from '../data/upgrades';
+import type { MachineData } from '../core/types';
 import type { Sim } from './Sim';
 
-export interface UpgradeStatus {
-  ok: boolean;
-  reason?: string;
-  /** The main part of the price (biomass unless `costKind` says otherwise): what "Upgrade all" sorts by. */
-  cost: Big;
-  /** E18.7: the whole price, every part ("Need …" names the first part that's short). */
-  price: Cost;
-  /** Per-machine upgrade without a machine ("Upgrade all"): the machine the next purchase goes to. */
-  machine?: MachineData;
-}
-
 /**
- * Upgrades. Global ones (pulse, soil, storage, fog, networks) have one level; per-machine ones (Phase 5 E12)
- * keep a level on each machine and are bought for one machine at a time, or for all of a type cheapest-first.
- * Every purchase is one atomic transaction: check, pay once, apply once.
+ * Upgrade effects. E23.1.5 removed the exponential upgrade drawer: nothing is bought here any more and no price
+ * grows. Levels are granted by whatever unlocks them (research, E23.6.2, through `grant`; a fountain ability for
+ * Hover) and every system reads its effect through the getters below. Global upgrades keep one level in
+ * `state.upgrades`; per-machine ones keep a level on each machine (`m.upg`).
  */
 export class UpgradeSystem {
-  /** Bumped by every purchase: systems that cache upgrade-dependent values (reach, networks) compare it. */
+  /** Bumped by every grant: systems that cache upgrade-dependent values (reach, networks) compare it. */
   version = 0;
 
   constructor(private sim: Sim) {}
@@ -54,187 +42,42 @@ export class UpgradeSystem {
     return best;
   }
 
-  /** Machines a per-machine upgrade can be bought for (the starter panel counts: it's the player's first). */
-  targets(def: UpgradeDef): MachineData[] {
-    return def.machine ? this.sim.machinesOfType(def.machine) : [];
-  }
-
   /**
-   * Next level's main price: baseCost × costMult^level (per machine for per-machine upgrades). Paid in biomass
-   * unless `costKind` says otherwise. `price` adds the E18.7 energy and water parts.
+   * The one way a level is added (research, E23.6.2). Free: whoever calls it has already paid. A per-machine
+   * upgrade goes to `machineId`, or to every machine of its type when none is given. Returns the new level
+   * (the highest, for a per-machine grant), or 0 when nothing changed (unknown id, maxed, no such machine).
    */
-  cost(def: UpgradeDef, m?: MachineData): Big {
-    const lvl = def.machine ? this.levelOf(m, def.id) : this.level(def.id);
-    const c = big(def.baseCost).mul(Decimal.pow(def.costMult, lvl)).ceil();
-    // Look 6.8: energy prices stay within reach of the store (never more than machineCostMaxShare of the cap).
-    if (def.costKind === 'energy') {
-      const cap = this.sim.econ.cap('energy');
-      return cap ? c.min(cap.mul(TUNING.machineCostMaxShare).floor().max(1)) : c;
-    }
-    return c;
-  }
-
-  /**
-   * E18.7: the whole price of the next level: the main part plus any energy or water part (base × mult^level),
-   * each capped at TUNING.machineCostMaxShare of its store so no level is ever out of reach.
-   */
-  price(def: UpgradeDef, m?: MachineData): Cost {
-    const out: Cost = { [def.costKind ?? 'biomass']: this.cost(def, m) };
-    if (!def.parts) return out;
-    const lvl = def.machine ? this.levelOf(m, def.id) : this.level(def.id);
-    for (const k of ['energy', 'water'] as const) {
-      const p = def.parts[k];
-      if (!p) continue;
-      let c = big(p.base).mul(Decimal.pow(p.mult, lvl)).ceil();
-      const cap = this.sim.econ.cap(k);
-      if (cap) c = c.min(cap.mul(TUNING.machineCostMaxShare).floor().max(1));
-      out[k] = Economy.part(out, k).add(c);
-    }
-    return out;
-  }
-
-  /**
-   * Can the next level be bought? For a per-machine upgrade without `m`, answers for "Upgrade all": the cheapest
-   * machine that isn't maxed.
-   */
-  status(def: UpgradeDef, m?: MachineData): UpgradeStatus {
-    const priced = (mm?: MachineData) => ({ cost: this.cost(def, mm), price: this.price(def, mm) });
-    if (def.available && !def.available(this.sim.state)) return { ok: false, reason: def.lockedReason, ...priced(m) };
-    if (def.machine && !m) {
-      // Cost depends only on level, so the cheapest machine is the lowest-level one (first built on ties).
-      const all = this.targets(def);
-      if (!all.length) return { ok: false, reason: def.lockedReason ?? 'Build one first', ...priced() };
-      let cheapest = all[0];
-      for (const t of all) if (this.levelOf(t, def.id) < this.levelOf(cheapest, def.id)) cheapest = t;
-      if (this.levelOf(cheapest, def.id) >= def.maxLevel) return { ok: false, reason: 'Maxed', ...priced(cheapest) };
-      return { ...this.status(def, cheapest), machine: cheapest };
-    }
-    const lvl = def.machine ? this.levelOf(m, def.id) : this.level(def.id);
-    const { cost, price } = priced(m);
-    if (lvl >= def.maxLevel) return { ok: false, reason: 'Maxed', cost, price };
-    if (def.machine && m?.type !== def.machine) return { ok: false, reason: 'Not for this machine', cost, price };
-    // The main part first, so a biomass-only upgrade reads exactly as before.
-    const main = def.costKind ?? 'biomass';
-    const short: ResourceKind | undefined = this.sim.econ.get(main).lt(cost) ? main : this.sim.econ.shortfall(price);
-    if (short) return { ok: false, reason: `Need ${fmt(Economy.part(price, short).ceil())} ${RES_ICON[short]}`, cost, price };
-    return { ok: true, cost, price, machine: m };
-  }
-
-  /**
-   * E18.7: the energy and water parts of the cheapest mixed-price upgrade whose main part is already paid for
-   * (bought or not yet). Drones leave these alone (DroneSystem.payJob), as they do a pending superstructure
-   * stage: otherwise they spend everything above their 25% reserve and a part above that could never fill.
-   * Each part is at most TUNING.machineCostMaxShare of its store. Worked out once per tick.
-   */
-  pendingParts(): Cost | undefined {
-    const t = this.sim.time;
-    if (this.pendingCache?.t === t) return this.pendingCache.cost;
-    let best: { main: Big; cost: Cost } | undefined;
-    for (const def of this.all()) {
-      if (!def.parts) continue;
-      const st = this.status(def);
-      if (!st.ok && !st.reason?.startsWith('Need ')) continue; // locked or maxed
-      if (this.sim.econ.get(def.costKind ?? 'biomass').lt(st.cost)) continue; // still saving for the main part
-      if (!best || st.cost.lt(best.main)) best = { main: st.cost, cost: { energy: st.price.energy, water: st.price.water } };
-    }
-    this.pendingCache = { t, cost: best?.cost };
-    return best?.cost;
-  }
-  private pendingCache?: { t: number; cost: Cost | undefined };
-
-  /** E18.7: which part of a status's price the player is short of (for marking it on the button), if any. */
-  short(st: UpgradeStatus): ResourceKind | undefined {
-    return st.ok || !st.reason?.startsWith('Need ') ? undefined : this.sim.econ.shortfall(st.price);
-  }
-
-  /**
-   * Buys one level. `machineId` picks the machine for a per-machine upgrade; without it the cheapest one is
-   * upgraded. Nothing changes unless the whole purchase goes through.
-   */
-  purchase(id: string, machineId?: string, bulk = false): boolean {
+  grant(id: string, machineId?: string): number {
     const def = UPGRADE_BY_ID[id];
-    if (!def || !this.all().includes(def)) return false;
-    const m = def.machine ? (machineId ? this.sim.machine(machineId) : undefined) : undefined;
-    if (def.machine && machineId && !m) return false; // stale button: the machine is gone
-    const st = this.status(def, m);
-    if (!st.ok) {
-      this.sim.bus.emit('action.failed', { reason: st.reason ?? 'Unavailable' });
-      return false;
-    }
-    if (!this.sim.econ.spend(st.price)) return false; // every part at once, or nothing
-    let lvl: number;
+    if (!def) return 0;
+    let lvl = 0;
     if (def.machine) {
-      const target = st.machine!;
-      target.upg ??= {};
-      lvl = target.upg[id] = (target.upg[id] ?? 0) + 1;
-    } else lvl = this.sim.state.upgrades[id] = this.level(id) + 1;
+      const targets = machineId ? [this.sim.machine(machineId)].filter((m): m is MachineData => m?.type === def.machine) : this.sim.machinesOfType(def.machine);
+      for (const m of targets) {
+        if (this.levelOf(m, id) >= def.maxLevel) continue;
+        m.upg ??= {};
+        lvl = Math.max(lvl, (m.upg[id] = this.levelOf(m, id) + 1));
+      }
+    } else if (this.level(id) < def.maxLevel) lvl = this.sim.state.upgrades[id] = this.level(id) + 1;
+    if (!lvl) return 0;
     this.version++;
-    if (id === 'seedVault') this.applyCaps();
-    this.sim.production.markDirty();
-    this.sim.bus.emit('upgrade.purchased', { id, level: lvl, machineId: st.machine?.id, bulk });
-    return true;
+    this.sim.bus.emit('upgrade.granted', { id, level: lvl, machineId });
+    return lvl;
   }
 
-  /** "Upgrade all": buys levels cheapest-first across every machine of the type while biomass lasts. */
-  purchaseAll(id: string, limit = 500): number {
-    const def = UPGRADE_BY_ID[id];
-    if (!def?.machine) return this.purchase(id) ? 1 : 0;
-    let n = 0;
-    while (n < limit) {
-      const st = this.status(def);
-      if (!st.ok || !st.machine) break;
-      if (!this.purchase(id, st.machine.id, true)) break;
-      n++;
-    }
-    if (n === 0) this.sim.bus.emit('action.failed', { reason: this.status(def).reason ?? 'Unavailable' });
-    else this.sim.bus.emit('upgrade.bulk', { id, count: n });
-    return n;
-  }
-
-  applyCaps() {
-    // Phase 4 E01.3 / Phase 5 E12: Seed Vault steps energy and water through storage tiers; cleared areas
-    // multiply the tier. Biomass has no cap.
-    const mult = 1 + (this.sim.areas?.storageBonus() ?? 0);
-    for (const k of CAPPED) {
-      const tiers = TUNING.storageTiers[k];
-      const tier = tiers[Math.min(tiers.length - 1, this.level('seedVault'))];
-      // E21.9: Cistern Basin doubles water storage, The Terraces energy storage
-      const lm = this.sim.landmarks?.capMult(k) ?? 1;
-      this.sim.state.caps[k] = big(this.sim.state.caps[k]).max(tier * mult * lm); // big(): tolerate a plain number from tooling
-    }
-  }
-
-  /** The upgrades that exist in this game. */
+  /** The upgrades that exist. */
   all() {
     return UPGRADES;
   }
 
-  /** Upgrades in drawer order: grouped by system, then as listed. */
-  grouped(): { group: UpgradeGroup; upgrades: UpgradeDef[] }[] {
-    const list = this.all();
-    return UPGRADE_GROUPS.map((group) => ({ group, upgrades: list.filter((d) => d.group === group) })).filter((g) => g.upgrades.length);
-  }
-
   // ───────────── global effects ─────────────
-  get pulseEnergyMult() {
-    return Math.pow(0.75, this.level('efficientPulse'));
-  }
   get broadExtra() {
     // E23.6.2: the Wider pulse research upgrade, a tile further a level
     return this.level('broadPulse') + (this.sim.research?.effect('pulseRadius') ?? 0);
   }
-  /** Phase 5 E12: the long-tail biomass engine: ×soilStep per level, against costs ×1.6, so every level takes
-   *  about the same time and income grows exponentially (with a slight drag, so it can't run away). */
-  get soilMult() {
-    return Math.pow(TUNING.upgradeCurve.soilStep, this.level('richSoil'));
-  }
   get overchargeEvery() {
     const l = this.level('overcharge');
     return l > 0 ? 7 - l : 0;
-  }
-  /** Phase 5 E12: seconds of steady biomass income each Harvest also pays. */
-  get harvestBurstSeconds() {
-    return TUNING.harvest.burstSeconds * this.level('harvestBurst');
   }
   /** Phase 5 E12: how many times one Pollinator Garden passes a chain on. */
   get pollinatorTriggers() {
@@ -250,13 +93,9 @@ export class UpgradeSystem {
   get wakeNeedMult() {
     return 1 - 0.1 * this.level('fogLantern');
   }
-  /** Lit Landmarks: multiplier on every cleared area's bonus income. */
-  get landmarkBonusMult() {
-    return 1 + 0.25 * this.level('landmarkLights');
-  }
 
   // ───────────── per-machine effects (Phase 5 E12) ─────────────
-  /** Solar Wings levels, times TUNING.merge.solarMult for a Solar Array (E13 tier 2). */
+  /** What a panel feeds the grid, relative to one plain panel: Solar Wings levels, times TUNING.merge.solarMult for a Solar Array (E13 tier 2). */
   solarMult(m: MachineData) {
     return powerMult(0.5, this.levelOf(m, 'solarArray')) * tierOutput(m, TUNING.merge.solarMult);
   }

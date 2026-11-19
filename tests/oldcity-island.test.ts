@@ -5,7 +5,7 @@ import { LANDING, PARK_SET, REGIONS } from '../src/data/oldcity';
 import { Sim } from '../src/gameplay/Sim';
 import { spawnPose, Walker } from '../src/gameplay/Walker';
 
-const oldSim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
+const oldSim = (seed = 7) => new Sim(createInitialState(seed));
 
 describe('E21.26 (data and the Landing, for Milestone A): the island', () => {
   it('every chunk outside the island, the coast band and the bay are unwalkable sea', () => {

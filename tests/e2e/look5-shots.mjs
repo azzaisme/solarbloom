@@ -1,6 +1,6 @@
 // Look 5: HUD screenshots for the before/after comparison with docs/reference/target-look.png.
 // `node tests/e2e/look5-shots.mjs <outDir> <prefix>` after `vite build`. Scenes: a busy desktop HUD (1280×800)
-// with a combo and its breakdown, the same on a phone (390×844), the upgrades drawer with an inspect panel,
+// with a combo and its breakdown, the same on a phone (390×844), an inspect panel,
 // settings, and a world event with the Lucky Cat panel.
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -25,11 +25,8 @@ async function open(w, h) {
   await page.evaluate(() => {
     const g = window.solarbloom;
     const s = g.sim;
-    const D = s.state.resources.energy.constructor;
     for (const t of s.areas.tiles('park').filter((t) => s.restoration.isEligible(t)).slice(0, 26)) s.restoration.complete(t, 'pulse');
-    s.state.resources.energy = new D(48);
-    s.state.resources.water = new D(28);
-    s.state.resources.biomass = new D(124);
+    for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) s.state.salvage.pack[m] = 12; // E23.1.4: a full backpack (no counters)
   });
   await page.waitForTimeout(1500);
   return page;
@@ -37,9 +34,7 @@ async function open(w, h) {
 async function busy(page) {
   await page.evaluate(() => {
     const h = window.solarbloom.hud;
-    // A real chain drives these; here we call the HUD with a chain's numbers.
-    h.combo(3, '+12🌿 earned');
-    h.chainBreakdown?.({ restored: 3, adjacent: 3, synergy: 3, relay: 0 });
+    // A real chain drives these; here we call the HUD with a chain's words (E23.1.4: no combo counter on the HUD)
     h.feed('🌸 Bloom chain ×3');
     h.toast('🌱 25 tiles restored!<small>+20🌿 · next reward at 40</small>', 'gold', 30);
   });
@@ -52,7 +47,6 @@ try {
     await page.screenshot({ path: `${out}/${prefix}-desktop.png` });
     await page.evaluate(() => {
       const g = window.solarbloom;
-      g.hud.toggleUpgrades(true);
       const m = g.sim.state.machines.find((m) => m.type !== 'core');
       if (m) g.select?.(m.id);
     });
@@ -60,7 +54,6 @@ try {
     await page.screenshot({ path: `${out}/${prefix}-desktop-drawers.png` });
     await page.evaluate(() => {
       const g = window.solarbloom;
-      g.hud.toggleUpgrades(false);
       g.select?.(undefined);
       g.settingsUi.open();
     });
@@ -69,7 +62,7 @@ try {
     await page.evaluate(() => {
       const g = window.solarbloom;
       g.settingsUi.close();
-      g.hud.catReward('Lucky Harvest', 'A full harvest of every resource, banked.');
+      g.hud.catReward('Lucky Harvest', 'A gift in your backpack: food, biomass and seeds');
     });
     await page.waitForTimeout(800);
     await page.screenshot({ path: `${out}/${prefix}-desktop-event.png` });

@@ -46,7 +46,7 @@ describe('E23.9.1: the maker\'s journal', () => {
   });
 
   it('a page stands on its post in the world, is read with Interact, and keeps through a save', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     const [p] = PARK_SET.pages;
     expect(setPieceAt(p.x, p.z)).toMatchObject({ kind: 'page', id: p.id });
     expect(sim.grid.get(GROUND, p.x, p.z)?.prop).toBe(`page:${p.id}`);
@@ -60,16 +60,31 @@ describe('E23.9.1: the maker\'s journal', () => {
   });
 
   it('a page in a region still under the clouds cannot be read yet', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     const pg = REGIONS.find((r) => r.id === 'glasshouse')!.pages[0];
     expect(sim.journal.pageAt(pg.x, pg.z)).toBeUndefined();
   });
 
   it('his last page comes with the Great Bloom', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     sim.bus.emit('fountain.tier', { tier: 4 });
     expect(sim.journal.found(LAST_PAGE)).toBe(false);
     sim.bus.emit('fountain.tier', { tier: 5 });
     expect(sim.journal.found(LAST_PAGE)).toBe(true);
+  });
+});
+
+describe('E23.9.1 follow-ups', () => {
+  it('his first note stands beside the way up from the beach steps, never across it', async () => {
+    const { Walker, spawnPose } = await import('../src/gameplay/Walker');
+    const sim = new Sim(createInitialState(7));
+    const [p] = PARK_SET.pages;
+    // the steps run x 6–9 at z 14–15: the two rows above them stay open
+    for (let x = 6; x <= 9; x++) for (const z of [12, 13]) expect(p.x === x && p.z === z, `post at ${x},${z}`).toBe(false);
+    const w = new Walker(sim);
+    const s = spawnPose(sim, w);
+    // up the beach and the steps to the fountain, and to the post's front
+    expect(w.path(GROUND, s.x, s.z, (x, z) => x === 8 && z === 10, { x: 8, z: 10 })).toBeDefined();
+    expect(w.path(GROUND, s.x, s.z, (x, z) => Math.abs(x - p.x) + Math.abs(z - p.z) === 1, { x: p.x, z: p.z })).toBeDefined();
   });
 });

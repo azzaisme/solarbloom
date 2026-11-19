@@ -303,7 +303,7 @@ export class Fauna {
 
   private assign(kind: Kind, slots: { key: string; home: { x: number; z: number }; y: number; rot?: number }[], opts: FaunaOptions) {
     const cap = TUNING.ecosystem.caps[opts.quality][kind];
-    // E21.24: every animal stands on its terrace (the offset is 0 on flat classic ground)
+    // E21.24: every animal stands on its terrace (the offset is 0 on flat ground)
     const g = this.sim.grid;
     const want = slots.slice(0, cap).map((s) => ({ ...s, y: s.y + g.groundOffset(GROUND, Math.floor(s.home.x), Math.floor(s.home.z)) }));
     const pool = want.length ? this.pool(kind, want.length) : this.pools[kind];
@@ -363,7 +363,8 @@ export class Fauna {
     if (eco.has('koi')) {
       if (pond && pond.x > rect.x0 - 2 && pond.x < rect.x1 + 2 && pond.z > rect.z0 - 2 && pond.z < rect.z1 + 2)
         for (let i = 0; i < 4; i++) koi.push({ key: `pond:${i}`, home: pond, y: y + Fauna.POND_Y + 0.012 });
-      const water = tilesIn(s, rect, (t) => t.ground === 'restored' && t.feature === 'water', 200).sort(near);
+      // only where the water still is: as a pond drains, its koi gather in the deeper middle (E23.4.1)
+      const water = tilesIn(s, rect, (t) => t.ground === 'restored' && t.feature === 'water' && s.water.covered(t), 200).sort(near);
       for (let i = 0; i < water.length; i += 3) koi.push({ key: `w:${water[i].x}:${water[i].z}`, home: { x: water[i].x + 0.5, z: water[i].z + 0.5 }, y: y - WATER.drop + 0.012 });
     }
     this.assign('koi', koi, opts);

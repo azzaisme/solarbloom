@@ -1,28 +1,33 @@
 import { describe, expect, it } from 'vitest';
+import { gameDays } from '../src/data/time';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { COMPONENT_RECIPES, DECOR_RECIPES, MACHINE_RECIPES } from '../src/data/crafting';
 import { ITEM_DEFS } from '../src/data/items';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { MATERIALS } from '../src/data/salvage';
 import { BRANCHES, PROJECTS, RESEARCH, RESEARCH_UPGRADES } from '../src/data/research';
+import { CHARGE } from '../src/data/charge';
 import { Sim } from '../src/gameplay/Sim';
+import type { MachineData } from '../src/core/types';
+import type { CropId } from '../src/data/crops';
+import { planterHtml } from '../src/ui/PlanterPanel';
 import { SaveService } from '../src/app/SaveService';
 import { projectMinutes, upgradeRows } from '../src/ui/CraftTable';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const CACHES = new Set(REGIONS.flatMap((r) => r.caches.map((c) => c.id)));
 const RECIPE_IDS = new Set([...COMPONENT_RECIPES, ...MACHINE_RECIPES, ...DECOR_RECIPES].map((r) => r.id));
-const realItem = (k: string) => k === 'biomass' || k in ITEM_DEFS;
+const realItem = (k: string) => k in ITEM_DEFS;
 
 /** A new old-city game with Pylon (Mast Row) awake: the station is there. */
 function station() {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = 1;
   sim.bot = NEAR;
   sim.state.salvage!.keepers.pylon = { step: 'request1' };
   return sim;
 }
-const DAY = RESEARCH.daySeconds;
+const DAY = gameDays(1);
 
 describe('E23.6.2: research in data', () => {
   it('each branch has at least three projects, and every project unlocks something real', () => {
@@ -32,7 +37,7 @@ describe('E23.6.2: research in data', () => {
     for (const p of PROJECTS) {
       const g = p.gives;
       if ('upgrade' in g) expect(RESEARCH_UPGRADES.some((u) => u.id === g.upgrade), p.id).toBe(true);
-      else if ('recipe' in g) expect(RECIPE_IDS.has(g.recipe), p.id).toBe(true);
+      else if ('recipes' in g) for (const id of g.recipes) expect(RECIPE_IDS.has(id), `${p.id}: ${id}`).toBe(true);
       else expect(g.station).toBe(2);
       for (const k of Object.keys(p.cost)) expect(realItem(k), `${p.id}: ${k}`).toBe(true);
       expect(p.days).toBeGreaterThan(0);
@@ -74,14 +79,14 @@ describe('E23.6.2: research in data', () => {
       const pid = r.unlock.research;
       const p = PROJECTS.find((x) => x.id === pid);
       expect(p, r.id).toBeDefined();
-      expect(p!.gives, r.id).toEqual({ recipe: r.id });
+      expect((p!.gives as { recipes?: string[] }).recipes, r.id).toContain(r.id);
     }
   });
 });
 
 describe('E23.6.2: the research station', { timeout: 60000 }, () => {
   it('is at home once the first Keeper wakes', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     expect(sim.research.on).toBe(false);
     expect(sim.research.finds()).toEqual([]);
     sim.state.salvage!.keepers.tide = { step: 'request1' };
@@ -191,15 +196,45 @@ describe('E23.6.2: the research station', { timeout: 60000 }, () => {
     expect(role(solar).source!(solar, sim, { solar: 1, wind: 0, night: false })).toBeCloseTo(out * 1.1, 6);
   });
 
+  it('the bloombot upgrades feed its charge (E23.2.1): battery cells, a gentler pulse and a longer stride', () => {
+    const sim = station();
+    sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
+    for (const m of ['batteryCell', 'wire', 'copper', 'gears', 'motor', 'sunstone'] as const) sim.inventory.addToStore(m, 60);
+    // Bigger charge: each battery cell makes a full charge bigger
+    const max = sim.charge.max;
+    expect(sim.research.upgrade('chargeCells')).toBe(1);
+    expect(sim.charge.max).toBe(max + CHARGE.cellCapacity);
+    expect(sim.research.upgrade('chargeCells')).toBe(2);
+    expect(sim.charge.max).toBe(max + 2 * CHARGE.cellCapacity);
+    // Gentler on charge: every pulse and ability costs a little less
+    const pulse = sim.charge.cost('pulse');
+    const pry = sim.charge.cost('pry');
+    expect(sim.research.upgrade('chargeEfficiency')).toBe(1);
+    expect(sim.charge.cost('pulse')).toBeCloseTo(pulse * (1 - CHARGE.efficiencyStep), 6);
+    expect(sim.charge.cost('pry')).toBeCloseTo(pry * (1 - CHARGE.efficiencyStep), 6);
+    // Longer stride: sprinting costs less (bloombot's sprint speed reads the same level, BotController)
+    const sprint = sim.charge.cost('sprint');
+    expect(sim.research.upgrade('sprint')).toBe(1);
+    expect(sim.charge.cost('sprint')).toBeCloseTo(sprint * (1 - 0.1), 6);
+    expect(sim.research.level('sprint') * RESEARCH.sprintSpeedPerLevel).toBeCloseTo(0.05, 6);
+    // and they survive a save, in the charge's own numbers
+    const loaded = new Sim(new SaveService().deserialize(new SaveService().serialize(sim.state))!);
+    expect(loaded.charge.max).toBe(max + 2 * CHARGE.cellCapacity);
+    expect(loaded.charge.cost('pulse')).toBeCloseTo(pulse * (1 - CHARGE.efficiencyStep), 6);
+  });
+
   it('an upgrade whose system has not landed yet is never offered', () => {
     const sim = station();
     sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
     const offered = sim.research.upgrades().map((u) => u.id);
-    // E23.4 water, E23.5 farm, E23.2.1 charge and E23.6.4 couriers are not in this game yet; no battery machine either
-    for (const id of ['pumpRate', 'reservoirSize', 'evaporation', 'compostSpeed', 'cropGrowth', 'crossbreed', 'chargeCells', 'chargeEfficiency', 'sprint', 'droneCarry', 'batteryStore'])
+    // E23.4 water, E23.5.3's compost bin and E23.6.4 couriers are not in this game yet
+    for (const id of ['pumpRate', 'reservoirSize', 'evaporation', 'compostSpeed', 'droneCarry'])
       expect(offered, id).not.toContain(id);
-    expect(sim.research.upgradeProblem('cropGrowth')).toBe('Not open yet');
-    for (const id of ['backpack', 'pulseRadius', 'poleReach', 'solarYield', 'droneRange', 'droneSpeed', 'droneThrift']) expect(offered, id).toContain(id);
+    expect(sim.research.upgradeProblem('compostSpeed')).toBe('Not open yet');
+    // E23.2.1's charge and E23.3's batteries are: their upgrades are offered
+    for (const id of ['backpack', 'pulseRadius', 'poleReach', 'solarYield', 'droneRange', 'droneSpeed', 'chargeCells', 'chargeEfficiency', 'sprint', 'batteryStore']) expect(offered, id).toContain(id);
+    // "Lighter drones" is read by E23.6.3's drone supply (#502), so it is offered with the drones
+    expect(offered).toContain('droneThrift');
   });
 
   it('crops and creatures found open projects', () => {
@@ -238,5 +273,110 @@ describe('E23.6.2: the research station', { timeout: 60000 }, () => {
   it('project times read in minutes of play', () => {
     expect(projectMinutes(0.1)).toBe(5);
     expect(projectMinutes(1)).toBe(48);
+  });
+});
+
+describe('E23.6.2: the farm reads research (E23.5.2 planters)', () => {
+  /** A planter on restored ground, Timber in (Tide awake), clear weather. */
+  function farm() {
+    const sim = station();
+    sim.state.salvage!.keepers.tide = { step: 'request1' };
+    sim.weather.forceForTest('sunny', 1e12);
+    // E23.4.1: planters wilt with no water in reach; these test research, so every bed is watered (the real
+    // wilting is covered by water-levels and the farm's own tests)
+    sim.water.isWatered = () => true;
+    sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
+    const at = (x: number, z: number): MachineData => {
+      const t = sim.grid.get(GROUND, x, z)!;
+      t.blocked = false;
+      t.feature = undefined;
+      t.ground = 'restored';
+      t.pollution = 0;
+      sim.grid.touch(t);
+      sim.inventory.addToStore('planks', 3);
+      const m = sim.build.place('planter', GROUND, x, z);
+      expect(m, `planter at ${x},${z}`).toBeDefined();
+      return m!;
+    };
+    const sow = (m: MachineData, crop: CropId, cross?: CropId) => {
+      if (!cross && !sim.farm.knows(crop)) (sim.state.salvage!.crops ??= []).push(crop);
+      sim.inventory.add('seeds', 1);
+      expect(sim.farm.plant(m, crop, cross), `${crop}${cross ? ` × ${cross}` : ''}`).toBe(true);
+    };
+    for (const k of ['seeds', 'clay', 'glassPane', 'sunstone'] as const) sim.inventory.addToStore(k, 60);
+    return { sim, at, sow };
+  }
+
+  it('Kind soil and Crossbreeds are offered once planters are in the game; Busy worms waits for the compost bin', () => {
+    const { sim } = farm();
+    const offered = sim.research.upgrades().map((u) => u.id);
+    expect(offered).toContain('cropGrowth');
+    expect(offered).toContain('crossbreed');
+    expect(offered).not.toContain('compostSpeed');
+  });
+
+  it('Kind soil: crops grow a little faster, every level', () => {
+    const { sim, at, sow } = farm();
+    const m = at(12, 16);
+    sow(m, 'radish');
+    const rate = sim.farm.look(m).rate;
+    expect(rate).toBeGreaterThan(0);
+    expect(sim.research.upgrade('cropGrowth')).toBe(1);
+    expect(sim.farm.look(m).rate).toBeCloseTo(rate * 1.1, 6);
+    expect(sim.research.upgrade('cropGrowth')).toBe(2);
+    expect(sim.farm.look(m).rate).toBeCloseTo(rate * 1.2, 6);
+  });
+
+  it('Crossbreeds: two different crops side by side give a seed that carries both crops\u2019 likes', () => {
+    const { sim, at, sow } = farm();
+    const a = at(12, 16);
+    const b = at(13, 16);
+    const far = at(20, 16);
+    sow(a, 'radish');
+    sow(b, 'lettuce');
+    sow(far, 'tomato');
+    const found: string[] = [];
+    sim.bus.on('cross.found', (e) => found.push(e.key));
+    // without the research a harvest beside lettuce is only a harvest
+    sim.state.salvage!.planters![a.id].grown = 1;
+    expect(sim.farm.harvest(a)).toBeDefined();
+    expect(found).toEqual([]);
+    expect(sim.research.upgrade('crossbreed')).toBe(1);
+    sow(a, 'radish');
+    sim.state.salvage!.planters![a.id].grown = 1;
+    sim.farm.harvest(a);
+    // the pair beside it crossed (the tomato three tiles away did not), once
+    expect(found).toEqual(['radish+lettuce']);
+    expect(sim.farm.crosses()).toEqual([['radish', 'lettuce']]);
+    sow(a, 'radish');
+    sim.state.salvage!.planters![a.id].grown = 1;
+    sim.farm.harvest(a);
+    expect(found).toEqual(['radish+lettuce']);
+    // planted with a plain Seed: it grows like a radish, with the lettuce's love of rain as well
+    sow(a, 'radish', 'lettuce');
+    expect(sim.farm.bed(a)).toMatchObject({ crop: 'radish', cross: 'lettuce' });
+    expect(planterHtml(sim, a)).toContain('Radish × Lettuce');
+    // either parent's likes all met is enough: the radish likes nothing, so dry weather costs it nothing
+    const dry = sim.farm.look(a);
+    expect(dry.unmet).toEqual([]);
+    expect(dry.rate).toBeCloseTo(sim.farm.look(b).rate * 2, 6); // lettuce alone wants rain (unmet: half speed)
+    // a cross only takes Seeds bloombot has found; an unknown pair can't be planted
+    sim.farm.harvest(a);
+    sim.state.salvage!.planters![a.id] = {};
+    sim.inventory.add('seeds', 1);
+    expect(sim.farm.plantProblem(a, 'radish', 'tomato')).toBe('No seeds for that yet');
+    // the empty bed's picker offers the cross
+    expect(planterHtml(sim, a)).toContain('data-arg="radish+lettuce"');
+    // and crosses found survive a save
+    const loaded = new Sim(new SaveService().deserialize(new SaveService().serialize(sim.state))!);
+    expect(loaded.farm.crosses()).toEqual([['radish', 'lettuce']]);
+  });
+
+  it('a cross needs only what both parents need: a moonflower crossed with a radish grows by day too', () => {
+    const { sim, at, sow } = farm();
+    const a = at(12, 16);
+    (sim.state.salvage!.crosses ??= []).push('radish+moonflower');
+    sow(a, 'radish', 'moonflower');
+    expect(sim.farm.look(a).resting).toBe(false);
   });
 });

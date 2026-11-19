@@ -49,7 +49,7 @@ try {
     const g = window.solarbloom;
     const s = g.sim;
     const st = s.state;
-    st.caps.energy = new (st.resources.energy.constructor)(1e9); st.caps.water = new (st.resources.energy.constructor)(1e9);
+    for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) st.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
     st.progression.coreActivated = true;
     s.areas.clear('park', true);
     for (let n = 1; n < AREAS; n++) {

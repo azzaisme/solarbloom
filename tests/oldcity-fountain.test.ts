@@ -4,14 +4,16 @@ import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MaterialId } from '../src/core/types';
 import { PARK_SET, REGIONS } from '../src/data/oldcity';
-import { PACK, RECIPES, TIERS } from '../src/data/salvage';
+import { PACK, TIERS } from '../src/data/salvage';
+import { MACHINE_RECIPES } from '../src/data/crafting';
+import { MACHINES } from '../src/data/machines';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
 const saver = new SaveService(undefined);
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const oldSim = (seed = 7) => {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   sim.bot = NEAR;
   return sim;
 };
@@ -80,8 +82,21 @@ describe('E21.6: the fountain', () => {
       expect(sim.fountain.tier, `tier ${tier}`).toBe(tier);
       expect(sim.state.salvage!.abilities).toEqual(abilities.slice(0, Math.min(4, tier)));
       expect(sim.inventory.stackLimit()).toBe(PACK.stack[tier]);
-      // E23.6.1: a machine with a crafting-table recipe unlocks from its Keeper, not the fountain
-      for (const [type, r] of Object.entries(RECIPES)) if (!sim.crafting.machineRecipe(type as 'solar')) expect(sim.build.isUnlocked(type as 'solar'), `${type} at ${tier}`).toBe(r!.tier <= tier);
+      // E23.6.1: every machine the fountain opens (a crafting-table recipe with a tier) opens at exactly its tier;
+      // the rest wait for a Keeper, research or a find, never for the fountain
+      for (const r of MACHINE_RECIPES) {
+        if (!r.builds) continue;
+        const at = sim.build.recipeTier(r.builds);
+        if ('tier' in r.unlock) expect(at, r.id).toBe(r.unlock.tier);
+        else expect(at, r.id).toBe(99);
+        if (at < 99) expect(sim.build.isUnlocked(r.builds), `${r.id} at ${tier}`).toBe(at <= tier);
+        else expect(sim.build.isUnlocked(r.builds), `${r.id} at ${tier}`).toBe(false);
+      }
+      // and the fountain says so: its list names every machine it opens at this tier, and only those
+      const named = MACHINE_RECIPES.filter((r) => r.builds && 'tier' in r.unlock).map((r) => ({ name: MACHINES[r.builds!].name, tier: (r.unlock as { tier: number }).tier }));
+      for (const m of named) expect(TIERS[tier - 1].gives.includes(m.name), `${m.name} listed at tier ${tier}`).toBe(m.tier === tier);
+      const keeperMachines = MACHINE_RECIPES.filter((r) => r.builds && !('tier' in r.unlock)).map((r) => MACHINES[r.builds!].name);
+      for (const n of keeperMachines) expect(TIERS[tier - 1].gives, `${n} is not the fountain's`).not.toContain(n);
     }
     expect(tiers).toEqual([1, 2, 3, 4, 5]);
   });
@@ -94,8 +109,6 @@ describe('E21.6: the fountain', () => {
     expect(sim.state.progression.coreActivated).toBe(true);
     expect(sim.areas.fog(PARK)).toBe('cleared');
     for (const id of ['mastRow', 'oldMarket', 'elderGrove']) expect(sim.areas.sealed(id), id).toBe(true);
-    // the classic fountain never runs in the Old City
-    expect(sim.progression.coreReady()).toBe(false);
   });
 
   it('tier 1 can be reached in a new game using only what the park holds', () => {
@@ -107,12 +120,11 @@ describe('E21.6: the fountain', () => {
     for (const p of PARK_SET.piles) while (sim.salvage.left(p.id) > 0) if (!sim.salvage.salvage(p.id)) break;
     expect(sim.fountain.remaining('scrap')).toBe(0);
     expect(sim.fountain.remaining('seeds')).toBe(0);
-    // restore the park by hand: pulse, wait for energy and water, repeat
+    // restore the park by hand: pulse, and when the charge runs out rest by the fountain (E23.1.4: a pulse costs only charge)
     for (let i = 0; i < 4000 && sim.areas.counts(PARK).restored < 60; i++) {
       const t = sim.areas.tiles(PARK).find((q) => sim.restoration.checkPulse(q).ok && q.ground !== 'restored');
       if (t) sim.restoration.pulse(t.id);
       sim.advance(1);
-      if (!sim.state.progression.coreActivated && sim.time % 20 < 1) sim.harvestSun();
     }
     sim.advance(2);
     expect(sim.fountain.tier).toBe(1);

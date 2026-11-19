@@ -1,9 +1,9 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState } from '../src/core/GameState';
 import { Sim } from '../src/gameplay/Sim';
+import { wakeNextArea } from './helpers';
 
 describe('local playtest instrumentation (City 09.7)', () => {
   it('records the time to each area and summarises a session readably', () => {
@@ -13,7 +13,7 @@ describe('local playtest instrumentation (City 09.7)', () => {
     sim.areas.clear(PARK, true);
     for (let i = 0; i < 25; i++) {
       sim.advance(30);
-      sim.areas.clear(sim.areas.nextGoal()!, true);
+      expect(wakeNextArea(sim)).toBe(true); // E23.1.1: through the gates, as a player would
     }
     sim.state.stats.maxCombo = 87;
     sim.state.stats.catsFound = 4;
@@ -40,41 +40,5 @@ describe('local playtest instrumentation (City 09.7)', () => {
     const copy = new Sim(saver.deserialize(saver.serialize(sim.state))!);
     expect(copy.state.stats.areaTimes).toEqual(sim.state.stats.areaTimes);
     expect(copy.metrics.summary()).toBe(sim.metrics.summary());
-  });
-});
-
-describe('incremental metrics (City 06.5)', () => {
-  it('stuck time counted incrementally matches checking every upgrade every tick', async () => {
-    const { createInitialState: create } = await import('../src/core/GameState');
-    const { Sim: S } = await import('../src/gameplay/Sim');
-    const { TUNING: T } = await import('../src/data/tuning');
-    const sim = new S(create(3));
-    let naive = 0;
-    const naiveTick = () => {
-      const s = sim;
-      const minPulse = T.pulse.prepared.energy * s.upgrades.pulseEnergyMult;
-      if (s.econ.get('energy').gte(minPulse) && s.econ.get('water').gte(1)) return;
-      if (s.time >= s.state.harvestReadyAt) return;
-      if (s.upgrades.all().some((u) => s.upgrades.status(u).ok)) return;
-      naive += T.simStep;
-    };
-    const st = sim.state;
-    for (let round = 0; round < 6; round++) {
-      // Broke, harvest cooling down: stuck until income buys something; sometimes an upgrade gets bought.
-      st.resources.energy = big(0);
-      st.resources.water = big(0);
-      st.resources.biomass = big(round * 15);
-      st.harvestReadyAt = sim.time + 40;
-      for (let i = 0; i < 300; i++) {
-        sim.tick();
-        naiveTick(); // same moment as Metrics.tick: after the tick's production
-        if (i === 150) {
-          const up = sim.upgrades.all().find((u) => sim.upgrades.status(u).ok);
-          if (up) sim.upgrades.purchase(up.id);
-        }
-      }
-    }
-    expect(st.stats.stuckSeconds).toBeGreaterThan(5);
-    expect(st.stats.stuckSeconds).toBeCloseTo(naive, 5);
   });
 });

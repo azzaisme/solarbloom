@@ -6,7 +6,7 @@ import { itemDef } from '../data/items';
 import type { Sim } from './Sim';
 
 /**
- * E21.5 (§6, §7): what is in the way. Under old-city rules a region opens because bloombot cleared its gate, never
+ * E21.5 (§6, §7): what is in the way. A region opens because bloombot cleared its gate, never
  * because something was bought. Gates open for good (`salvage.opened`):
  * - a barricade needs Pry (held Interact, 2 s);
  * - deep water needs Hover (Walker refuses gate water without it);
@@ -23,9 +23,6 @@ export class GateSystem {
     });
   }
 
-  get on(): boolean {
-    return !!this.sim.state.salvage;
-  }
 
   isOpen(id: string): boolean {
     return !!this.sim.state.salvage?.opened.includes(id);
@@ -48,25 +45,26 @@ export class GateSystem {
 
   /** Why a gate can't be opened now (its prompt), or undefined. */
   problem(g: GateDef): string | undefined {
-    if (!this.on) return 'Nothing to open here';
     if (this.isOpen(g.id)) return 'Already open';
     const n = g.needs;
     if (g.kind === 'lockBridge') return n.landmark && this.sim.areas.fog(n.landmark) === 'cleared' ? undefined : this.has('hover') ? undefined : g.blocked;
     if (n.repair) return this.sim.inventory.canPay(n.repair) ? undefined : `${g.blocked}${this.missing(n.repair)}`;
     if (n.ability && !this.has(n.ability)) return g.blocked;
+    // E23.2.1: abilities cost charge; at zero bloombot can't use them (it walks on, nothing is lost)
+    if (n.ability && !this.sim.charge.canUse(n.ability as 'pry')) return 'Out of charge. Eat something, rest or find a charger';
     return undefined;
   }
 
   private missing(cost: Record<string, number | undefined>): string {
     const m = this.sim.inventory.shortfall(cost);
-    return m && m !== 'biomass' ? ` (short of ${itemDef(m).name})` : '';
+    return m ? ` (short of ${itemDef(m).name})` : '';
   }
 
   /** Opens a gate for good. `free`: a reward (the lock bridge) — no check. */
   open(id: string, free = false): boolean {
     const s = this.sim;
     const r = REGIONS.find((q) => q.gate.id === id);
-    if (!r || !this.on || this.isOpen(id)) return false;
+    if (!r || this.isOpen(id)) return false;
     const g = r.gate;
     if (!free) {
       const why = this.problem(g);
@@ -75,6 +73,7 @@ export class GateSystem {
         return false;
       }
       if (g.needs.repair && !s.inventory.pay(g.needs.repair)) return false;
+      if (g.needs.ability) s.charge.use(g.needs.ability as 'pry');
     }
     s.state.salvage!.opened.push(id);
     // its rubble or bridge deck becomes open ground (saved as an entry fix)
@@ -100,7 +99,6 @@ export class GateSystem {
       if (st && !st.sealed) return;
       if (st) {
         st.sealed = undefined;
-        st.price = undefined;
         st.unlockedAt = s.time;
         st.revealedAt = s.time;
       } else s.state.areas[aid] = { fog: 'frontier', revealedAt: s.time, unlockedAt: s.time };

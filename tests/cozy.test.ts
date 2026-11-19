@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
-import { areaMapFor, PARK } from '../src/core/Areas';
+import { areaMapFor, PARK, SEA } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { generateTile } from '../src/core/Generation';
 import { distToFootprintRaw } from '../src/core/Footprint';
@@ -8,26 +8,33 @@ import { CHUNK } from '../src/core/Hash';
 import { plotAt, plotSpots } from '../src/core/Plots';
 import type { LayerData } from '../src/core/types';
 import { PLOT_GEN, PLOT_OPTIONS, plotOptionsFor } from '../src/data/cozy';
-import { AREA_TYPES, CITY_GEN, PARK_LAYOUT, type AreaType } from '../src/data/city';
+import { CITY_GEN, PARK_LAYOUT, type AreaType } from '../src/data/city';
 import { Cozy } from '../src/gameplay/Cozy';
 import { Sim } from '../src/gameplay/Sim';
-import { runBot } from './bots';
+import { runOldCityBot } from './oldcity-bot';
 import { drawPlot, PLOT_ART } from '../src/rendering/PlotArt';
 import { Walker } from '../src/gameplay/Walker';
+import { REGIONS } from '../src/data/oldcity';
+import { MAINLAND_TYPES } from '../src/data/mainland';
 
 const ground = (gen: number): LayerData => ({ id: GROUND, name: 'g', kind: 'ground', width: 0, depth: 0, height: 0, origin: [0, 0, 0], unlocked: true, preview: false, gen });
 
 /** The first n areas outward from the park (breadth-first over neighbours), for a seed and generation. */
+/** The first `n` areas outward from the park (E23.1.1: the Old City's, then the mainland's; the sea is no area). */
 function areas(seed: number, gen: number, n: number): string[] {
   const map = areaMapFor(seed, gen);
-  const out = [PARK];
-  const seen = new Set(out);
-  for (let i = 0; i < out.length && out.length < n; i++)
-    for (const nb of map.info(out[i]).neighbours)
-      if (!seen.has(nb) && out.length < n) {
+  const queue = [PARK];
+  const seen = new Set(queue);
+  const out: string[] = [];
+  const land = (id: string) => id !== SEA && !id.startsWith('out_');
+  for (let i = 0; i < queue.length && out.length < n; i++) {
+    if (land(queue[i])) out.push(queue[i]);
+    for (const nb of map.info(queue[i]).neighbours)
+      if (!seen.has(nb)) {
         seen.add(nb);
-        out.push(nb);
+        queue.push(nb);
       }
+  }
   return out;
 }
 
@@ -84,7 +91,10 @@ describe('E19.1.1 plot spots', () => {
     }
     // Nearly every area has room for the minimum; the few that don't are crowded with buildings.
     expect(short / list.length).toBeLessThan(0.03);
-    for (const t of Object.keys(AREA_TYPES) as AreaType[]) if (t !== 'rooftops' || byType.rooftops !== undefined) expect(byType[t] ?? 0, t).toBeGreaterThan(0);
+    // every type of area the world has (E23.1.1: the Old City and the mainland have no canal areas) offers plots
+    const present = new Set(list.map((id) => map.info(id).type));
+    expect(present.size).toBeGreaterThan(6);
+    for (const t of present) expect(byType[t] ?? 0, t).toBeGreaterThan(0);
   });
 
   it('the park has its two plots off the paths and the starting tiles', () => {
@@ -95,8 +105,12 @@ describe('E19.1.1 plot spots', () => {
 });
 
 describe('E19.1.3 plot options', () => {
-  it('every area type offers at least three options, a shared set plus its own', () => {
-    for (const t of Object.keys(AREA_TYPES) as AreaType[]) {
+  it('every area type the world has offers at least three options, a shared set plus its own', () => {
+    // E23.1.1: the world is the park, the island's regions and the mainland's districts; the canal area type and its
+    // plot options went with the canals. No option is for an area the world can't show.
+    const world = new Set<AreaType>(['park', ...REGIONS.map((r) => r.type), ...MAINLAND_TYPES.map((t) => t.type)]);
+    for (const o of PLOT_OPTIONS) for (const t of o.types ?? []) expect(world.has(t), `${o.id}: ${t}`).toBe(true);
+    for (const t of world) {
       const opts = plotOptionsFor(t);
       expect(opts.length, t).toBeGreaterThanOrEqual(3 + 2); // four shared, at least one of its own
       expect(opts.some((o) => o.types?.includes(t)), t).toBe(true);
@@ -115,14 +129,14 @@ describe('E19.1.2 choosing a plot', () => {
     sim.grid.get(GROUND, p.x, p.z);
     expect(cozy.choose(p.id, 'garden')).toMatch(/Restore/);
     restorePlot(sim, p);
-    const before = JSON.stringify(sim.state.resources);
+    const before = JSON.stringify(sim.state.salvage);
     expect(cozy.choose(p.id, 'garden')).toBeUndefined();
     expect(cozy.choice(p.id)?.id).toBe('garden');
     expect(cozy.choose(p.id, 'orchard')).toBeUndefined();
     expect(cozy.choice(p.id)?.id).toBe('orchard');
-    expect(cozy.choose(p.id, 'mooring')).toBeDefined(); // a canal option
+    expect(cozy.choose(p.id, 'mooring')).toBeDefined(); // a beach option, not offered here
     expect(cozy.choose(p.id, 'cafe')).toMatch(/Unlocks/); // not earned yet
-    expect(JSON.stringify(sim.state.resources)).toBe(before); // never costs anything
+    expect(JSON.stringify(sim.state.salvage)).toBe(before); // never costs anything
     expect(cozy.solidAt(GROUND, p.x, p.z)).toBe(true); // the orchard is solid
     expect(cozy.plotUnder(GROUND, p.x - 1, p.z - 1, 2)?.id).toBe(p.id);
     expect(cozy.choose(p.id, undefined)).toBeUndefined();
@@ -180,7 +194,7 @@ describe('E19.1.1 / E19.1.4 saves and unlocks', () => {
 });
 
 describe('E19.1.5 plots stay cosmetic', () => {
-  it('production, chains, milestones and biodiversity are identical whatever is chosen', { timeout: 240_000 }, () => {
+  it('the whole saved game, chains and biodiversity are identical whatever is chosen', { timeout: 240_000 }, () => {
     const saver = new SaveService(undefined);
     saver.now = () => 0;
     const strip = (s: string) => {
@@ -188,15 +202,35 @@ describe('E19.1.5 plots stay cosmetic', () => {
       delete o.cozy;
       return JSON.stringify(o);
     };
+    // E23.1.1: both runs finish the park's plots at the same moment (the bot itself restores other ground first),
+    // so the only difference between them is the looks chosen
+    const finishPlots = (sim: Sim) => {
+      if (sim.time < 30 || (sim as unknown as { __plots?: boolean }).__plots) return;
+      (sim as unknown as { __plots?: boolean }).__plots = true;
+      for (const p of new Cozy(sim).spots(PARK))
+        for (let j = 0; j < p.size; j++)
+          for (let i = 0; i < p.size; i++) {
+            const t = sim.grid.get(GROUND, p.x + i, p.z + j)!;
+            if (t.occupantId || t.blocked) continue;
+            t.ground = 'restored';
+            t.pollution = 0;
+            t.bloom = Math.max(1, t.bloom);
+            sim.grid.touch(t);
+          }
+    };
     let plainSim: Sim | undefined;
-    runBot({ seed: 11, minutes: 25, onSecond: (sim) => (plainSim = sim) });
+    runOldCityBot(11, 25, 'keeper', {
+      onSecond: (sim) => {
+        finishPlots(sim);
+        plainSim = sim;
+      },
+    });
     // The same bot, choosing a look for every plot the moment it's ready, changing them now and then.
     let n = 0;
     let chosenSim: Sim | undefined;
-    runBot({
-      seed: 11,
-      minutes: 25,
+    runOldCityBot(11, 25, 'keeper', {
       onSecond: (sim) => {
+        finishPlots(sim);
         chosenSim = sim;
         const cozy = ((sim as unknown as { __cozy?: Cozy }).__cozy ??= new Cozy(sim));
         cozy.checkUnlocks();

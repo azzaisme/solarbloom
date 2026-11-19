@@ -6,9 +6,9 @@ import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, KEEPSAKE_HINTS, PLOT_OPTION, pl
 import type { Sim } from './Sim';
 import type { DecorRecipe } from '../data/crafting';
 
-/** E23.6.1: a decoration's crafting recipe under old-city rules (made once at the table, then free to place). */
+/** E23.6.1: a decoration's crafting recipe (made once at the table, then free to place). */
 export function decorRecipe(sim: Sim, id: string): DecorRecipe | undefined {
-  return sim.oldCity ? sim.crafting.decor(id) : undefined;
+  return sim.crafting.decor(id);
 }
 
 /** Is a decoration open to place? Old-city decorations with a recipe once made at the table; the rest keep E19.2's. */
@@ -16,11 +16,6 @@ export function decorOpen(sim: Sim, o: DecorOption): boolean {
   const r = decorRecipe(sim, o.id);
   if (r) return sim.crafting.decorMade(o.id);
   return 'start' in o.unlock || !!sim.state.cozy?.decorUnlocked?.includes(o.id);
-}
-
-/** A decoration's cost for the build menu: none (made once at the table, then free). Kept for the slot label. */
-export function decorCostLabel(_sim: Sim, _id: string): string {
-  return '';
 }
 
 export interface DecorChoice {
@@ -135,6 +130,9 @@ export class Cozy {
     if ('start' in u) return true;
     if ('parkStage' in u) return this.sim.progression.parkStage() >= u.parkStage;
     if ('keepsake' in u) return this.keepsakeMet(u.keepsake);
+    if ('find' in u) return !!this.sim.state.salvage?.caches.includes(u.find);
+    // E23.6.2's research (`sim.research`); until it lands, research-only styles stay locked
+    if ('research' in u) return !!(this.sim as unknown as { research?: { done?: (id: string) => boolean } }).research?.done?.(u.research);
     return this.sim.areas.clearedCount() >= u.areas;
   }
 
@@ -161,6 +159,8 @@ export class Cozy {
     if ('start' in u) return '';
     if ('keepsake' in u) return KEEPSAKE_HINTS[u.keepsake];
     if ('parkStage' in u) return ['', 'the park’s paths are swept', 'the park’s benches are mended', 'the park’s lamps are lit', 'the fountain wakes'][u.parkStage] ?? 'the park grows';
+    if ('find' in u) return 'you find it in an old cache';
+    if ('research' in u) return 'Decor research';
     return `${u.areas} area${u.areas === 1 ? '' : 's'} cleared`;
   }
 
@@ -329,7 +329,6 @@ export class Cozy {
     s.decor = Object.fromEntries(Object.keys(decor).sort().map((k) => [k, decor[k]])); // sorted: byte-identical saves
     this.sim.grid.indexDecor(key);
     this.sim.grid.peek(roofId, x, z)!.occupantId = decorOccupant(key);
-    this.sim.production.markNear(roofId, x, z, 1);
     this.sim.cat.relocateIfBlocked();
     return undefined;
   }
@@ -344,7 +343,6 @@ export class Cozy {
     this.sim.grid.unindexDecor(d.key);
     const t = this.sim.grid.peek(roofId, x, z);
     if (t && t.occupantId === decorOccupant(d.key)) t.occupantId = undefined;
-    this.sim.production.markNear(roofId, x, z, 1);
     return d;
   }
 

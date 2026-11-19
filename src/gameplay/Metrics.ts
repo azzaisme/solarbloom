@@ -1,25 +1,14 @@
-import { machinesStamp } from '../core/GameState';
-import { big, type Big } from '../core/Big';
-import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
 /** Records the playtest numbers from the Round 2 plan into the save (shown in Settings). */
 export class Metrics {
   constructor(private sim: Sim) {
     const b = sim.bus;
-    b.on('upgrade.purchased', () => {
-      this.first('upgrade');
-      this.invalidate();
-    });
-    b.on('machine.built', ({ machine }) => {
-      this.first(machine.type);
-      this.invalidate();
-    });
-    for (const e of ['area.cleared', 'rooftop.coreRestored', 'district.bloom'] as const) b.on(e, () => this.invalidate());
+    b.on('upgrade.granted', () => this.first('upgrade'));
+    b.on('machine.built', ({ machine }) => this.first(machine.type));
     b.on('cat.found', () => this.first('cat'));
-    b.on('milestone.reached', ({ at }) => this.first(`park${at}`));
+    b.on('biomass.gathered', ({ by }) => by === 'bot' && this.first('gathered')); // E23.1.4: unlocks the Harvester
     b.on('tree.discharged', () => this.first('treePulse'));
-    b.on('rooftop.coreRestored', () => this.first('core'));
     b.on('area.cleared', ({ areaId }) => {
       if (areaId === 'park') return;
       (sim.state.stats.areaTimes ??= []).push(Math.round(sim.time));
@@ -70,38 +59,9 @@ export class Metrics {
     return lines.join('\n');
   }
 
-  /**
-   * "Unable to act": can't afford even a mossy-tile pulse, Harvest is cooling down, and nothing is buyable.
-   * Incremental (City 06.5): the cheapest buyable upgrade's cost is cached and re-derived only when something
-   * that changes it happens (a purchase, a build, an area cleared, storage growing), not by checking every
-   * upgrade every tick.
-   */
+  /** "Unable to act": out of charge, so no pulse (E23.1.4: charge is the only thing a pulse costs). */
   tick(dt: number) {
-    const s = this.sim;
-    const minPulse = TUNING.pulse.prepared.energy * s.upgrades.pulseEnergyMult;
-    if (s.econ.get('energy').gte(minPulse) && s.econ.get('water').gte(1)) return;
-    if (s.time >= s.state.harvestReadyAt) return;
-    if (this.cheapest === undefined || this.machinesSeen !== machinesStamp(s.state.machines)) this.recount();
-    if (s.econ.get('biomass').gte(this.cheapest!)) return;
-    s.state.stats.stuckSeconds += dt;
-  }
-
-  /** Cost of the cheapest upgrade that could be bought with enough biomass (Infinity if none). */
-  private cheapest?: Big;
-  private machinesSeen = -1;
-  private recount() {
-    const s = this.sim;
-    this.machinesSeen = machinesStamp(s.state.machines);
-    let min: Big | undefined;
-    for (const u of s.upgrades.all()) {
-      const st = s.upgrades.status(u);
-      // Buyable except for the price: every status reason other than "Need N 🌿" is a hard block.
-      if (st.ok || st.reason?.startsWith('Need ')) min = min ? min.min(st.cost) : big(st.cost);
-    }
-    this.cheapest = min ?? big('1e100000');
-  }
-  /** Something that may change which upgrades can be bought happened. */
-  invalidate() {
-    this.cheapest = undefined;
+    if (this.sim.charge.canUse('pulse')) return;
+    this.sim.state.stats.stuckSeconds += dt;
   }
 }

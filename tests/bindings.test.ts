@@ -21,9 +21,9 @@ const KEYS: [Action, string[]][] = [
   ['buildMenu', ['KeyQ']],
   ['rotate', ['KeyR', 'Wheel']],
   ['removeMode', ['KeyX']],
+  ['powerOverlay', ['KeyO']], // E23.3.4
   ['backpack', ['Tab', 'KeyI']],
   ['map', ['KeyM']],
-  ['harvest', ['KeyF']],
   ['pinNext', ['KeyG']],
   ['cancel', ['Escape']],
   ['menu', ['Escape']],
@@ -45,9 +45,9 @@ const PAD: [Action, number | undefined][] = [
   ['rotateBack', 4], // LB
   ['rotate', 5], // RB
   ['removeMode', 7], // right trigger
+  ['powerOverlay', 15], // E23.3.4: d-pad right in build mode
   ['backpack', 12], // d-pad up
   ['map', 8], // View
-  ['harvest', 14], // d-pad left
   ['cancel', 1], // B
   ['menu', 9], // Menu
   ['prevTab', 4],
@@ -56,12 +56,16 @@ const PAD: [Action, number | undefined][] = [
 ];
 
 describe('E22.1: the new button map', () => {
-  for (const oldCity of [false, true]) {
-    const rules = oldCity ? 'old-city rules' : 'classic rules';
-    it(`matches every keyboard and mouse default in the epic (${rules})`, () => {
-      const b = new Bindings(undefined, { oldCity });
+  {
+    it('matches every keyboard and mouse default in the epic', () => {
+      const b = new Bindings();
       for (const [a, k] of KEYS) expect(keys(b, a), a).toEqual(k);
       for (let i = 0; i < 9; i++) expect(keys(b, SLOTS[i])).toEqual([`Digit${i + 1}`]);
+      // E23.2.1: F eats a snack (bloombot's charge); E23.1.4: Harvest Sunlight is gone, not just unbound
+      expect(keys(b, 'eat')).toEqual(['KeyF']);
+      expect(ACTIONS.map((a) => a.id) as string[]).not.toContain('harvest');
+      expect(b.actionForCode('KeyF')).toBe('eat');
+      expect([keys(b, 'loadPrev'), keys(b, 'loadNext')]).toEqual([['KeyZ'], ['KeyV']]); // E23.2.2: the load wheel
     });
 
   it('a saved pad binding for an action that no longer exists is ignored (E23.1.2: Bloom Frenzy)', () => {
@@ -70,15 +74,29 @@ describe('E22.1: the new button map', () => {
     expect(Object.keys(b.pad)).not.toContain('frenzy');
   });
 
-    it(`matches every gamepad default in the epic (${rules})`, () => {
-      const b = new Bindings(undefined, { oldCity });
+  it('a saved Harvest binding is ignored: F and d-pad left eat (E23.1.4)', () => {
+    const b = new Bindings({ v: BINDINGS_VERSION, keys: { harvest: ['KeyH'] } as never, pad: { harvest: 14 } as never });
+    expect(b.actionForCode('KeyH')).toBeUndefined();
+    expect(Object.keys(b.keys)).not.toContain('harvest');
+    expect(Object.keys(b.pad)).not.toContain('harvest');
+    expect(b.actionForCode('KeyF')).toBe('eat');
+    expect(b.actionForButton(14)).toBe('eat');
+    expect(b.conflicts()).toEqual([]);
+  });
+
+    it('matches every gamepad default in the epic', () => {
+      const b = new Bindings();
       for (const [a, p] of PAD) expect(b.pad[a], a).toBe(p);
       for (const s of SLOTS) expect(b.pad[s]).toBeUndefined(); // the pad uses the build menu
-      expect(b.pad.pinNext).toBe(oldCity ? 15 : undefined); // d-pad right
+      expect(b.pad.pinNext).toBe(15); // d-pad right
+      expect(b.pad.eat).toBe(14); // d-pad left eats (E23.2.1)
+      expect(b.actionForButton(14)).toBe('eat');
+      expect(Object.keys(b.pad)).not.toContain('harvest');
+      expect([b.pad.loadPrev, b.pad.loadNext]).toEqual([4, 5]); // E23.2.2: the bumpers turn the load wheel
     });
 
-    it(`gives no two actions that can apply together the same input (${rules})`, () => {
-      expect(new Bindings(undefined, { oldCity }).conflicts()).toEqual([]);
+    it('gives no two actions that can apply together the same input', () => {
+      expect(new Bindings().conflicts()).toEqual([]);
     });
   }
 
@@ -98,19 +116,21 @@ describe('E22.1: the new button map', () => {
     expect(b.actionForButton(0, ['build', 'world', 'any'])).toBe('place');
     expect(b.actionForButton(7, ['build', 'world', 'any'])).toBe('removeMode');
     expect(b.actionForCode('KeyQ', ['panel', 'any'])).toBe('prevTab');
+    // E23.3.4: the Power view is O and d-pad right in build mode; walking, d-pad right still pins the next request
+    expect(b.actionForCode('KeyO', ['build', 'world', 'any'])).toBe('powerOverlay');
+    expect(b.actionForButton(15, ['build', 'world', 'any'])).toBe('powerOverlay');
+    expect(b.actionForButton(15, ['world', 'any'])).toBe('pinNext');
     expect(b.actionForCode('KeyE', ['panel', 'any'])).toBe('nextTab');
     expect(b.actionForButton(5, ['panel', 'any'])).toBe('nextTab');
   });
 
-  it('upgrades and next area keep their keys under classic rules and lose them under old-city rules', () => {
-    const classic = new Bindings();
-    expect([classic.label('upgrades'), classic.label('nextArea')]).toEqual(['U', 'N']);
-    expect(classic.pad.upgrades).toBe(15);
-    const old = new Bindings(undefined, { oldCity: true });
-    for (const a of ['upgrades', 'nextArea', 'home'] as Action[]) {
-      expect(old.keys[a], a).toEqual([]);
-      expect(old.pad[a], a).toBeUndefined();
-    }
+  it('E23.1.1: one map; the classic-only actions (next area, back to the park) are gone', () => {
+    const ids = ACTIONS.map((a) => a.id) as string[];
+    for (const a of ['nextArea', 'home', 'upgrades']) expect(ids, a).not.toContain(a);
+    // a saved binding for one of them is ignored
+    const b = new Bindings({ v: BINDINGS_VERSION, keys: { nextArea: ['KeyN'] } as never, pad: { home: 15 } as never });
+    expect(b.actionForCode('KeyN')).toBeUndefined();
+    expect(b.pad.pinNext).toBe(15);
   });
 
   it('lists every action on the rebinding screen, and every default is an action', () => {
@@ -125,13 +145,13 @@ describe('E22.1: the new button map', () => {
 
   it('keeps a rebound key through a reload (the saved settings round trip)', () => {
     const b = new Bindings();
-    b.setKey('harvest', 'KeyH');
+    b.setKey('eat', 'KeyH');
     b.setButton('backpack', 15);
     b.unbind('sprintToggle', 'pad');
     const saved = JSON.parse(JSON.stringify(b.save()));
     expect(saved.v).toBe(BINDINGS_VERSION);
     const reloaded = new Bindings(migrateBindings(saved).saved);
-    expect(reloaded.actionForCode('KeyH')).toBe('harvest');
+    expect(reloaded.actionForCode('KeyH')).toBe('eat');
     expect(reloaded.actionForButton(15)).toBe('backpack');
     expect(reloaded.pad.sprintToggle).toBeUndefined();
     expect(reloaded.conflicts()).toEqual([]);
@@ -139,8 +159,9 @@ describe('E22.1: the new button map', () => {
 
   it('the hotbar slots are ordinary actions: the number row can be rebound', () => {
     const b = new Bindings();
-    expect(b.bindKey('slot3', 'KeyZ')).toEqual({ ok: true, swapped: undefined });
-    expect(b.actionForCode('KeyZ')).toBe('slot3');
+    expect(b.actionForCode('KeyJ')).toBeUndefined(); // a free key (Z turns the load wheel since E23.2.2)
+    expect(b.bindKey('slot3', 'KeyJ')).toEqual({ ok: true, swapped: undefined });
+    expect(b.actionForCode('KeyJ')).toBe('slot3');
     expect(b.actionForCode('Digit3')).toBeUndefined();
   });
 

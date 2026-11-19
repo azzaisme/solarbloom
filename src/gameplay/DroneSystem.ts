@@ -1,8 +1,6 @@
-import { Economy } from '../core/Economy';
 import { GROUND, machinesStamp } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
-import { KINDS } from '../core/Economy';
-import type { Cost, DroneData, DroneRole, MachineData, TileData } from '../core/types';
+import type { DroneData, DroneRole, MachineData, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
@@ -302,30 +300,25 @@ export class DroneSystem {
     return best;
   }
 
-  /**
-   * Phase 4 E01: pays for a drone job unless that would take a store below the drone reserve (a share of its
-   * cap kept for the player's own taps). All-or-nothing, like any purchase.
-   */
-  payJob(cost: Cost): boolean {
-    const s = this.sim;
-    const saving = s.advisor.savingFor(); // Phase 5 E12: leave what the player is saving up for
-    const upgrade = s.upgrades.pendingParts(); // E18.7: and a drone upgrade's energy or water part
-    for (const k of KINDS) {
-      const p = Economy.part(cost, k);
-      const cap = s.econ.cap(k);
-      if (!cap || p.lte(0)) continue; // biomass is uncapped: no reserve to keep
-      let floor = cap.mul(TUNING.drone.reserve);
-      if (saving) floor = floor.max(Economy.part(saving, k).min(cap.mul(TUNING.machineCostMaxShare)));
-      if (upgrade) floor = floor.max(Economy.part(upgrade, k).min(cap.mul(TUNING.machineCostMaxShare)));
-      if (s.econ.get(k).sub(p).lt(floor.sub(1e-9))) return false;
-    }
-    return s.econ.spend(cost);
-  }
-
   /** Tiles per second (the old drone is slow and ignores upgrades). */
   speedOf(d: DroneData): number {
-    const v = d.old ? TUNING.drone.old.flySpeed : TUNING.drone.flySpeed * this.sim.upgrades.droneSpeed(this.sim.machine(d.hubId));
+    const v = (d.old ? TUNING.drone.old.flySpeed : TUNING.drone.flySpeed * this.sim.upgrades.droneSpeed(this.sim.machine(d.hubId))) * this.partyMult(d);
     return d.role === 'scout' ? v * TUNING.drone.roles.scout.speed : v; // E18.3: Scouts fly 1.5x as fast
+  }
+
+  /**
+   * E23.12 (#528) Drone Party: a drone whose hub is within reach of a Lucky Cat's party flies, works and rests
+   * ×`TUNING.cat.partyMult` as fast until it ends (1 otherwise).
+   */
+  partyMult(d: DroneData): number {
+    const s = this.sim;
+    const hub = s.machine(d.hubId);
+    if (!hub) return 1;
+    for (const b of s.state.buffs) {
+      if (b.type !== 'droneParty' || b.until <= s.time || b.at?.roofId !== hub.roofId) continue;
+      if (Math.hypot(b.at.x - (hub.x + hub.size / 2), b.at.z - (hub.z + hub.size / 2)) <= TUNING.cat.partyRadius) return TUNING.cat.partyMult;
+    }
+    return 1;
   }
 
   /** The old solar lamp the old drone lives by (the park's starter panel), if this game has one. */
@@ -358,17 +351,10 @@ export class DroneSystem {
       const hz = hub.z + hub.size / 2;
       if (Math.hypot(d.px - hx, d.pz - hz) > 0.05) d.mode = 'returning';
     };
-    if (role === 'harvester') {
-      // Harvesters stay by their hub; while a store is full they're at work (DroneRoles.tick converts the loss).
-      this.status.set(d.id, s.roles.harvesting() ? 'working' : 'napping');
-      home();
-      d.timer = TUNING.drone.retrySeconds;
-      return;
-    }
     const r = s.roles.start(d, hub, role);
     if (r !== 'started') {
-      this.status.set(d.id, r === 'broke' ? 'waitingEnergy' : 'napping');
-      if (r === 'none') home();
+      this.status.set(d.id, 'napping');
+      home();
       d.timer = TUNING.drone.retrySeconds;
       return;
     }
@@ -444,6 +430,16 @@ export class DroneSystem {
         case 'idle': {
           d.timer -= dt;
           if (d.timer > 0) break;
+          // E23.3.3: a hub off the grid (or shed when power runs short) sends no one out; its drones finish what
+          // they were doing, come home and wait there until the power is back.
+          if (!s.power.isPowered(hub)) {
+            this.status.set(d.id, 'waitingEnergy');
+            const hx = hub.x + hub.size / 2;
+            const hz = hub.z + hub.size / 2;
+            if (Math.hypot(d.px - hx, d.pz - hz) > 0.05) d.mode = 'returning';
+            d.timer = TUNING.drone.retrySeconds;
+            break;
+          }
           // E18: a hub with another role sends its drones on that role's job (Restorers carry on below, unchanged).
           const role = s.roles.roleFor(d, hub);
           // E23.6.3: a hub short of what this role runs on: the drone docks and waits (the old drone runs on sunlight)
@@ -468,12 +464,7 @@ export class DroneSystem {
             d.timer = TUNING.drone.retrySeconds;
             break;
           }
-          const cost = d.old ? {} : s.restoration.pulseCost(job); // the old drone runs on sunlight
-          if (!this.payJob(cost)) {
-            this.status.set(d.id, 'waitingEnergy');
-            d.timer = TUNING.drone.retrySeconds;
-            break;
-          }
+          // E23.1.4: a job costs no energy; the hub runs on the grid (above). E23.6.3: the role's water or biomass
           if (!d.old && !s.droneFuel.take(hub, 'restorer')) {
             this.status.set(d.id, 'docked');
             d.timer = TUNING.drone.retrySeconds;
@@ -524,7 +515,7 @@ export class DroneSystem {
           break;
         }
         case 'working': {
-          d.timer -= dt;
+          d.timer -= dt * this.partyMult(d);
           if (d.timer > 0) break;
           if (d.role) {
             // E18: the job this drone paid for, in the role it paid for it under (even if its hub switched since).
@@ -564,7 +555,7 @@ export class DroneSystem {
           break;
         }
         case 'cooldown': {
-          d.timer -= dt;
+          d.timer -= dt * this.partyMult(d);
           if (d.timer <= 0) {
             d.mode = 'idle';
             d.timer = 0;

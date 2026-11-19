@@ -10,7 +10,7 @@ import { SaveService } from '../src/app/SaveService';
 
 /** E22.6 (#343): the backpack screen's contents, from E21's real data. */
 function oldCity() {
-  const sim = new Sim(createInitialState(11, 'oldcity'));
+  const sim = new Sim(createInitialState(11));
   const sv = sim.state.salvage!;
   sv.pack.copper = 32;
   sv.store.copper = 110;
@@ -29,7 +29,7 @@ describe('E22.6: the backpack', () => {
     const copper = itemCells(sim).find((c) => c.id === 'copper')!;
     expect(copper.label).toBe('Copper, 32 of 40 in backpack, 110 in store');
     expect([copper.count, copper.limit, copper.stored]).toEqual([32, 40, 110]);
-    expect(copper.from).toBe('Found in Mast Row');
+    expect(copper.from).toBe('Found in Mast Row and Observatory Hill'); // E23.8: copper piles lie in both
     expect(copper.next).toMatch(/Copper|needs|takes|asks/i);
     expect(itemCells(sim).map((c) => c.id)).toEqual(MATERIAL_IDS);
   });
@@ -104,10 +104,9 @@ describe('E22.6: the backpack', () => {
     expect(words.filter((w) => bannedIn(w).length)).toEqual([]);
   });
 
-  it('a classic game has no materials or requests to show', () => {
-    const sim = new Sim(createInitialState(3, 'classic'));
-    expect(itemCells(sim)).toEqual([]);
-    expect(requestRows(sim)).toEqual([]);
-    expect(collection(sim).length).toBe(6);
+  it('a keepsake not found yet never hints at a Lucky Cat (they stay hidden)', () => {
+    const sim = oldCity();
+    const keeps = collection(sim).find((g) => g.title === 'Keepsakes')!;
+    for (const r of keeps.rows.filter((r) => !r.found)) expect(`${r.name} ${r.detail}`).not.toMatch(/cat/i);
   });
 });

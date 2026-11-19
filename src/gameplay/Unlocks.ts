@@ -13,7 +13,7 @@ export function sourceOpen(state: GameState, from: UnlockSource): boolean {
   return !!step && step !== 'asleep';
 }
 
-/** Is an unlock held? An id no region hands over (a classic machine, a typo) is treated as held, never as a lock. */
+/** Is an unlock held? An id no region hands over (a machine no region teaches, a typo) is treated as held, never as a lock. */
 export function isUnlocked(state: GameState, id: string): boolean {
   const from = unlockSource(id);
   return !from || sourceOpen(state, from);
