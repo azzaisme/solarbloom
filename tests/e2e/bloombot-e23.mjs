@@ -77,7 +77,7 @@ try {
     const s = window.solarbloom.sim;
     s.state.charge.value = 0.4;
     s.charge.use('pulse');
-    s.econ.spend({ biomass: s.econ.get('biomass') }); // nothing to eat
+    for (const k of Object.keys(s.state.salvage.pack)) delete s.state.salvage.pack[k]; // nothing to eat
   });
   check(await until(page, () => document.getElementById('chargeRow').classList.contains('empty')), 'at zero the meter goes grey');
   await shot(page, '03-charge-empty', 'out of charge: the grey meter at 0% and the one-time "Out of charge" note');
@@ -118,10 +118,13 @@ try {
   await page.evaluate(() => {
     const s = window.solarbloom.sim;
     s.state.charge.value = 10;
-    s.econ.add('biomass', 3);
+    s.state.salvage.pack.biomass = 3;
   });
   await key(page, 'KeyF');
-  check(await until(page, () => window.solarbloom.sim.charge.value() >= 15.9 && !window.solarbloom.sim.charge.eating), 'F eats a snack and the charge comes back');
+  check(
+    await until(page, () => window.solarbloom.sim.charge.value() >= 13.9 && !window.solarbloom.sim.charge.eating && window.solarbloom.sim.state.salvage.pack.biomass === 2),
+    'F eats a Biomass from the backpack and the charge comes back',
+  );
   await page.close();
 } finally {
   await browser.close();
