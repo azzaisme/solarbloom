@@ -40,7 +40,7 @@ try {
     await page.addInitScript(driver + '\ninstallVirtualPad(); window.padDriver = padDriver; window.installVirtualPad = installVirtualPad;');
     page.setDefaultTimeout(180000);
     // the scripted player knows the classic park (E22.9 brings an Old City run)
-    await page.goto('http://localhost:4211/?slot=1&rules=classic');
+    await page.goto('http://localhost:4211/?slot=1');
     await page.waitForFunction(() => window.solarbloom?.bot, null, { timeout: 180000 });
     const result = await page.evaluate(async () => {
       const g = window.solarbloom;

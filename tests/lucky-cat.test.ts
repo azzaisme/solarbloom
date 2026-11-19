@@ -46,13 +46,15 @@ describe('lucky cat', () => {
   it('pays exactly once; first reward is a Lucky Harvest', () => {
     const sim = makeSim();
     sim.cat.spawn();
-    const b0 = toNum(sim.state.resources.biomass);
+    // Biomass is a backpack item, so the harvest pays its water and energy (#528 reworks what each cat gives).
+    const paid = () => toNum(sim.state.resources.water) + toNum(sim.state.resources.energy);
+    const b0 = paid();
     const r = sim.cat.claim();
     expect(r?.type).toBe('luckyHarvest');
-    expect(toNum(sim.state.resources.biomass)).toBeGreaterThan(b0);
-    const b1 = toNum(sim.state.resources.biomass);
+    expect(paid()).toBeGreaterThan(b0);
+    const b1 = paid();
     expect(sim.cat.claim()).toBeUndefined();
-    expect(toNum(sim.state.resources.biomass)).toBe(b1);
+    expect(paid()).toBe(b1);
     expect(sim.state.cat.nextSpawnAt).toBeGreaterThan(sim.time);
   });
 

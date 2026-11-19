@@ -166,6 +166,9 @@ describe('bloom chain engine', () => {
   it('applies only the highest milestone, plus a small per-effect bonus', () => {
     const sim = makeSim();
     rich(sim);
+    // Biomass is a backpack item, so the counter takes no income. The bonus sum is still in the chain engine until
+    // E23.1.4 (#368) removes the counter: let the counter take it here so the sum stays checked.
+    sim.econ.noIncome = undefined;
     fill(sim, 0, 0, 7, 7, 'prepared');
     for (const x of [1, 3, 5, 7]) place(sim, 'pollinator', x, 4);
     for (const x of [2, 4, 6]) place(sim, 'solar', x, 5);
