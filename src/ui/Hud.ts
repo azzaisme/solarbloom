@@ -14,6 +14,7 @@ import { Panels } from './Panels';
 import { Backpack } from './Backpack';
 import { CraftTable } from './CraftTable';
 import { ChargeMeter } from './ChargeMeter';
+import { LoadWheel } from './LoadWheel';
 import type { SetProp } from './HudPart';
 import type { GlyphSetting, GlyphStyle } from './Glyphs';
 
@@ -166,6 +167,8 @@ export class Hud {
   readonly craft: CraftTable;
   /** E23.2.1: bloombot's charge, the only meter */
   readonly charge: ChargeMeter;
+  /** E23.2.2: the pulse load wheel */
+  readonly loadWheel: LoadWheel;
 
   constructor(
     readonly sim: Sim,
@@ -182,12 +185,14 @@ export class Hud {
     this.toasts = new Toasts(this);
     this.panels = new Panels(this);
     this.charge = new ChargeMeter(this);
+    this.loadWheel = new LoadWheel(this);
     this.root.innerHTML = iconize(this.template());
     this.bars.wire();
     this.objective.wire();
     this.hotbar.wire();
     this.panels.wire();
     this.charge.wire();
+    this.loadWheel.wire();
     this.wire();
     this.prompt = new Prompt(this.root);
     this.backpack = new Backpack(this.root, { sim: this.sim });
@@ -350,6 +355,7 @@ export class Hud {
   update(dt: number) {
     this.bars.update();
     this.charge.update(dt);
+    this.loadWheel.update(dt);
     this.hotbar.update();
     this.updateCatChip();
     this.panels.update(dt);

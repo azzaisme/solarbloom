@@ -18,6 +18,9 @@ import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
+import { LOAD_WHEEL, RIPPLE } from '../data/pulse';
+import { REST } from '../data/rest';
+import { Resting } from './Resting';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
@@ -101,6 +104,8 @@ import { calmHud, parseSettings, potterPace, SETTINGS_KEY } from './Settings';
 import { padStick, PhotoMode } from './PhotoMode';
 import { PHOTO_FILTERS } from '../data/photo';
 import { sceneNow } from './PhotoScene';
+import { daylightAt } from '../gameplay/Clock';
+import { GLOOMY } from '../gameplay/PowerEnv';
 import { DayNight, type LightMoment } from '../rendering/DayNight';
 import { NightFindVisuals } from '../rendering/NightFindVisuals';
 import { NIGHT_FIND_GIVES } from '../data/time';
@@ -294,6 +299,8 @@ export class Game {
   private oc?: OldCityController;
   /** E21.8: the Keepers (old-city rules) */
   private keepers?: KeeperVisuals;
+  /** E23.2.3: sitting on benches and meditating at chargers */
+  private resting?: Resting;
   private inspectTimer = 0;
   private cinematic = false;
   private specialtyToasted = new Set<string>();
@@ -347,7 +354,9 @@ export class Game {
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
-    this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice, (tiles) => {
+      for (const t of tiles) this.chunks.markTile(t);
+    });
     this.pipes = new PipeVisuals(this.sim, this.scene.world, this.app.graphicsDevice);
     this.transitions = new TransitionRenderer(this.sim);
     this.chunks.transitions = this.transitions;
@@ -536,9 +545,18 @@ export class Game {
         this.keepers = new KeeperVisuals(this.sim, this.scene.world, this.app);
         this.keepers.reducedMotion = !!this.settings.reducedMotion;
         this.oc = new OldCityController(this.oldCityHost());
+        this.resting = new Resting({
+          sim: this.sim, bot, camera: this.camera, hud: this.hud, sfx: this.sfx, keepers: this.keepers,
+          glyph: (a) => this.glyph(a),
+          showFail: (msg, at) => {
+            const sc = at ? this.botTileScreen(at) : undefined;
+            this.hud.showFail(msg, sc?.x, sc?.y);
+          },
+        });
         this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
         // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
         this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
+        this.sim.bus.on('buried.dug', (e) => this.hud.pickup(MATERIALS[e.material].name, e.n)); // E23.2.2.3
         this.sim.bus.on('biomass.gathered', (e) => this.hud.pickup(MATERIALS.biomass.name, e.got));
         this.sim.bus.on('planter.harvested', (e) => e.food > 0 && this.hud.pickup(MATERIALS.food.name, e.food));
       }
@@ -1318,6 +1336,7 @@ export class Game {
       if (!this.cinematic || this.photo.active) this.photo.action(a);
       return;
     }
+    if (this.resting?.action(a)) return; // E23.2.3: sitting: Interact or Back stands, Pulse runs time faster
     const slot = SLOTS.indexOf(a as (typeof SLOTS)[number]);
     if (slot >= 0) return this.useSlot(slot);
     switch (a) {
@@ -1336,6 +1355,11 @@ export class Game {
         return this.harvest();
       case 'eat':
         return this.eat();
+      case 'loadNext':
+      case 'loadPrev':
+        // E23.2.2: turn the pulse load wheel
+        this.sim.pulseLoad.step(a === 'loadNext' ? 1 : -1);
+        return this.hud.loadWheel.show();
       case 'backpack':
         this.hud.toggleBackpack();
         return this.syncPanelPause(); // paused from this very moment
@@ -1571,6 +1595,7 @@ export class Game {
     if (this.settingsUi.isOpen) this.settingsUi.close();
     else if (this.menu.isOpen) this.closeMenu();
     else if (this.oc?.escape()) void 0; // E21: an Old City panel or a hold
+    else if (this.resting?.active) this.resting.stand(); // E23.2.3: Back stands bloombot up before any menu
     else if (this.hud.trayOpen) this.hud.toggleTray(false);
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
     else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
@@ -1636,7 +1661,7 @@ export class Game {
   /** Bloombot: hold the camera at the close view's distance (E19.2: building no longer pulls it back). */
   private updateBotZoom() {
     const b = this.bot;
-    if (!b || this.cinematic) return;
+    if (!b || this.cinematic || this.resting?.active) return; // E23.2.3: sitting keeps its calm, wider view
     if (this.overviewOn && b.speed > 0.05) this.overviewOn = false; // walking leaves the overview
     if (this.overviewOn || !b.following) return; // the overview, or a camera-only fly-to, keeps its own zoom
     // E21.22: the chosen step; on a rooftop the view eases out to the far step
@@ -1828,6 +1853,19 @@ export class Game {
     const dist = Math.hypot(tile.x + 0.5 - b.pose.x, tile.z + 0.5 - b.pose.z);
     const occ = this.sim.occupant(tile);
     const dec = this.cozy.decorOf(tile.occupantId);
+    if (this.resting && !aim) out.push(...this.resting.candidates(tile, dist)); // E23.2.3: benches and chargers
+    // E23.2.2.3: a buried find the ripple revealed: dig it up
+    const buried = !aim && tile.roofId === GROUND ? this.sim.buried.known(tile.x, tile.z) : undefined;
+    if (buried) {
+      const room = this.sim.inventory.room(buried.material) > 0;
+      out.push({
+        kind: 'cache', id: buried.id, verb: 'Dig up', name: `buried ${MATERIALS[buried.material].name}`, distance: dist, at: tile,
+        refused: room ? undefined : 'Backpack full',
+        run: () => {
+          if (this.sim.buried.dig(tile.x, tile.z) > 0) this.bot?.visuals.play('interact');
+        },
+      });
+    }
     if (dec) {
       out.push({
         kind: 'decoration', id: `decor:${tile.occupantId}`, verb: 'Pick up', name: DECOR_OPTION[dec.kind]?.name ?? 'the decoration', distance: dist, at: tile,
@@ -1880,6 +1918,18 @@ export class Game {
       const g = NIGHT_FIND_GIVES[nf.kind];
       out.push({ kind: 'salvage', id: `night:${nf.id}`, verb: g.verb, name: g.name, distance: fd, at: front, refused: s.nightFinds.problem(nf.id), run: () => void s.nightFinds.take(nf.id) });
     }
+    // E23.6.1: the crafting table is in the house (the shed by the fountain) from the start. Facing the shed's walls
+    // uses the table (listed first, so it wins the tie); the door in front of it is for the radio and the bed.
+    const sh = PARK_SET.shed;
+    if (f.x >= sh.x && f.x < sh.x + sh.size && f.z >= sh.z && f.z < sh.z + sh.size)
+      out.push({
+        kind: 'door', id: 'craft:table', verb: 'Use', name: 'the crafting table', distance: fd, at: front, frame: { roofId: GROUND, x: sh.x, z: sh.z, size: sh.size },
+        run: () => {
+          this.oc?.panel.close();
+          this.hud.craft.open();
+          this.syncPanelPause();
+        },
+      });
     // the house: its radio's forecast by day, its bed from dusk
     if (this.atHouse(f) && s.weather.on && !s.clock.canSleep()) out.push({ kind: 'door', id: 'house:radio', verb: 'Listen to', name: 'the radio', distance: fd, at: front, run: () => this.listenToRadio() });
     if (this.atHouse(f) && s.clock.canSleep()) out.push({ kind: 'door', id: 'house:sleep', verb: 'Sleep', name: 'until morning', distance: fd, at: front, run: () => this.sleep() });
@@ -1905,17 +1955,6 @@ export class Game {
       const lk = s.farm.look(occ);
       out.push({ kind: 'machine', id: `planter:${occ.id}`, verb: lk.ripe ? 'Harvest' : lk.crop ? 'Tend' : 'Plant in', name: lk.ripe ? CROPS[lk.crop!].name : 'the planter', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.planter(occ) });
     }
-    // E23.6.1: the crafting table is in the house (the shed by the fountain) from the start
-    const sh = PARK_SET.shed;
-    if (f.x >= sh.x && f.x < sh.x + sh.size && f.z >= sh.z && f.z < sh.z + sh.size)
-      out.push({
-        kind: 'door', id: 'craft:table', verb: 'Use', name: 'the crafting table', distance: fd, at: front, frame: { roofId: GROUND, x: sh.x, z: sh.z, size: sh.size },
-        run: () => {
-          this.oc?.panel.close();
-          this.hud.craft.open();
-          this.syncPanelPause();
-        },
-      });
     // E23.5.1: flowered, restored ground in front can be clipped for biomass
     if (!pile && s.gather.canGather(front))
       out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });
@@ -1933,6 +1972,7 @@ export class Game {
 
   /** E22.2: the prompt for this frame: the Interact target (or why not), and Pulse when it also applies. */
   private promptModel(target: InteractTarget | undefined): PromptModel | undefined {
+    if (this.resting?.active) return this.resting.prompt();
     const b = this.bot!;
     if (this.building()) {
       const tool = this.hud.currentTool;
@@ -3478,6 +3518,24 @@ export class Game {
       this.camera.shake?.(0.25);
       this.hud.feed(`💥 Mega Pulse: up to ${budget} tiles bloom outward`);
     });
+    // E23.2.2.3: the reveal ripple: a wide soft ring, then what it found glows for a few seconds (never a cat:
+    // its targets come from the salvage data alone)
+    b.on('pulse.ripple', ({ tileId, targets }) => {
+      const t = s.grid.byTileId(tileId);
+      if (!t || !s.oldCity) return;
+      this.vfx.ring(this.tileVec(t), PALETTE[RIPPLE.tint], RIPPLE.radius, RIPPLE.ringSeconds);
+      for (const g of targets) {
+        const at = s.grid.get(GROUND, g.x, g.z);
+        if (!at) continue;
+        const d = Math.hypot(g.x - t.x, g.z - t.z);
+        const hex = PALETTE[RIPPLE.found[g.kind]];
+        for (let i = 0; i < RIPPLE.pings; i++)
+          this.tweens.add(0.01, () => {}, {
+            delay: RIPPLE.delayPerTile * d + i * (RIPPLE.seconds / RIPPLE.pings),
+            done: () => (this.vfx.ring(this.tileVec(at), hex, RIPPLE.pingRadius, RIPPLE.pingSeconds), this.vfx.sparkles(this.tileVec(at), RIPPLE.sparkles, true)),
+          });
+      }
+    });
     b.on('pulse.fired', ({ tileId, extra, overcharged }) => {
       const t = s.grid.byTileId(tileId);
       if (!t) return;
@@ -3731,6 +3789,16 @@ export class Game {
       f.chargeEmpty = Math.round(s.time);
       this.hud.toast(`Out of charge<small>Bloombot walks slower and can't pulse. Press ${this.hudKeys('eat')} to eat biomass or food, or rest.</small>`, '', 6);
     });
+    // E23.2.2.1: the load wheel is a new concept: one short introduction the first time bloombot carries something
+    // to load (the ring shows with it); after that the wheel and the chip show it
+    const introWheel = () => {
+      if (!s.pulseLoad.introDue()) return;
+      s.pulseLoad.introduced();
+      this.hud.loadWheel.show(LOAD_WHEEL.introSeconds);
+      this.hud.toast(`Bloombot can load its pulse<small>Press ${this.hudKeys('loadNext')} or ${this.hudKeys('loadPrev')} to choose what a pulse grows. Each loaded pulse uses one.</small>`, '', LOAD_WHEEL.introSeconds);
+    };
+    b.on('pack.changed', introWheel);
+    introWheel();
     b.on('rooftop.coreReady', () => {
       this.machines.setCoreState('ready');
       this.hud.toast(`✨ The Rooftop Core is humming!<small>Walk up and press ${this.hudKey('interact')} (or use the button) to awaken the building.</small>`, 'gold', 5);
@@ -4357,7 +4425,7 @@ export class Game {
   /** Runs simulation ticks within the frame budget: the frame's own time (E23.1: nothing owed is ever paid back). */
   private runSim(dt: number) {
     const t0 = performance.now();
-    runSimFrame(this.sim, this, dt, { pause: this.pause, speed: this.speed, step: TUNING.simStep, budgetMs: TUNING.frameSimBudgetMs });
+    runSimFrame(this.sim, this, dt, { pause: this.pause, speed: this.speed * (this.sim.rest.fast ? REST.fastTime : 1), step: TUNING.simStep, budgetMs: TUNING.frameSimBudgetMs });
     this.simMs = performance.now() - t0;
     this.simMsWorst = Math.max(this.simMsWorst, this.simMs);
   }
@@ -4365,12 +4433,16 @@ export class Game {
   /** this frame's dt (holds read it) */
   private frameDt = 0;
   private lastReal = 0;
-  /** Seconds of wall time since the last frame (the engine's dt is 0 while paused), at most a frame's worth. */
+  /**
+   * Seconds of wall time since the last frame (the engine's dt is 0 while paused). Not clamped to a frame's worth:
+   * the crafting table counts real seconds even when frames are slow, up to a second at a time (a long stall, such as
+   * a hidden window, doesn't finish a queue at once).
+   */
   private realDt(): number {
     const now = performance.now();
     const d = this.lastReal ? (now - this.lastReal) / 1000 : 0;
     this.lastReal = now;
-    return Math.min(d, TUNING.maxFrameDt);
+    return Math.min(d, 1);
   }
   private update(rawDt: number) {
     if (!this.pause.paused) this.lastReal = performance.now();
@@ -4409,15 +4481,21 @@ export class Game {
     // E23.7.5: lamps cast real light: fewer at once on the low tier, and they dim with the scene in the Power view
     this.lightVisuals.maxCast = this.gfxTier === 'low' ? LIGHTING.cast.maxLow : LIGHTING.cast.max;
     this.lightVisuals.share = this.dayNight.lightShare;
+    // E23.7.5: photo mode's own time or weather lights the lamps as that hour would (on screen only)
+    const ownScene = this.photo.lightOverride() !== undefined || this.photo.weatherOverride() !== undefined;
+    if (ownScene) {
+      const sc = sceneNow(this.sim, this.photo);
+      this.lightVisuals.dark = Math.max(1 - daylightAt(sc.f), GLOOMY.has(sc.weather) ? 1 : 0);
+    } else this.lightVisuals.dark = undefined;
     this.lightVisuals.update(wdt, this.camera.entity.getPosition());
-    // E23.3.4: in the Power view, powered electrical machines glow soft yellow and the rest of the world darkens
-    this.machines.powerGlow(powerOn ? this.poweredMachines() : undefined, wdt);
+    // E23.3.4: in the Power view, powered electrical machines become yellow holograms and the rest of the world darkens
+    this.machines.powerHolo(powerOn ? this.poweredMachines() : undefined, wdt);
     const D = POWER.view.darken;
-    const dimTo = powerOn ? D.night + (D.day - D.night) * this.dayNight.light : 0; // night is dark already
+    const dimTo = powerOn ? D.night + (D.day - D.night) * this.dayNight.light : 0;
     const k = Math.min(1, wdt / POWER.view.fade);
     this.dayNight.dim = Math.abs(dimTo - this.dayNight.dim) < 1e-3 ? dimTo : this.dayNight.dim + (dimTo - this.dayNight.dim) * k;
     this.powerOverlay.setBoost(this.dayNight.boost);
-    this.machines.setGlowBoost(this.dayNight.boost);
+    this.machines.setHoloBoost(this.dayNight.boost);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
     this.crops.update(dt);
     this.rings.update(this.camera.zoom, this.camera.target);
@@ -4481,6 +4559,7 @@ export class Game {
       this.updateExploreCamera(wdt);
       this.oc?.update(wdt);
       this.keepers?.update(wdt);
+      this.resting?.update(wdt);
       this.photo.update(dt);
       this.updateBotZoom();
       this.updateBotPreview();
