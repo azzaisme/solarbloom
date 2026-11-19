@@ -11,6 +11,7 @@ import { distToFootprint } from '../core/Grid';
 import type { DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
 import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
+import { GATHER } from '../data/farm';
 import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
@@ -239,9 +240,6 @@ export class Game {
   menu!: Menu;
   settingsUi!: SettingsScreen;
   private padFocus?: PadFocus;
-  /** City 06.5: simulated seconds still owed after a hitch or a hidden tab, run within the frame budget. */
-  catchUpDebt = 0;
-  private hiddenAt = 0;
   /** Simulation milliseconds spent in the last frame, and the worst since the counter was reset (perf harness). */
   simMs = 0;
   simMsWorst = 0;
@@ -518,6 +516,7 @@ export class Game {
         this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
         // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
         this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
+        this.sim.bus.on('biomass.gathered', (e) => this.hud.pickup(MATERIALS.biomass.name, e.got));
       }
       const focus = new PadFocus(this.hud.root);
       this.padFocus = focus;
@@ -576,20 +575,18 @@ export class Game {
     const unlock = () => this.sfx.unlock();
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
-    // E22.11: a hidden page or a window without focus pauses the game (setting, on by default): the time away
-    // is not counted. With the setting off, a hidden tab catches up on return as before (City 06.5).
+    // E22.11: a window without focus pauses the game (setting, on by default). E23.1: a hidden page always does,
+    // and the time away is never counted or caught up.
     const pauseOnBlur = () => this.settings.pauseOnBlur !== false;
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         this.saveNow();
+        // E23.1: a hidden page always waits, like a closed game; nothing is owed or paid back on return
+        this.pause.set('hidden');
         if (pauseOnBlur()) this.pause.set('blur');
-        else this.hiddenAt = performance.now();
       } else {
+        this.pause.clear('hidden');
         if (document.hasFocus()) this.pause.clear('blur');
-        if (this.hiddenAt) {
-          this.awayFor((performance.now() - this.hiddenAt) / 1000);
-          this.hiddenAt = 0;
-        }
       }
     });
     window.addEventListener('blur', () => pauseOnBlur() && this.pause.set('blur'));
@@ -1831,6 +1828,9 @@ export class Game {
       if (r && s.areas.fog(r.id) !== 'cleared') out.push({ kind: 'landmark', id: `lm:${occ.id}`, verb: 'Wake', name: `the ${r.landmark.name}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
       else if (s.inventory.accessPoints().some((p) => p.x === occ.x && p.z === occ.z && p.roofId === occ.roofId)) out.push({ kind: 'storage', id: `store:${occ.id}`, verb: 'Open', name: 'the store', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
     } else if (occ?.type === 'chest') out.push({ kind: 'storage', id: `chest:${occ.id}`, verb: 'Open', name: 'the chest', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+    // E23.5.1: flowered, restored ground in front can be clipped for biomass
+    if (!pile && s.gather.canGather(front))
+      out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });
     return out;
   }
 
@@ -1898,7 +1898,7 @@ export class Game {
         else if (name === 'deliver') this.sfx.coin();
         else if (name === 'pry') this.sfx.stage('crack');
         // a sound per material
-        else if (name === 'salvage') this.sfx.stage(({ scrap: 'thud', seeds: 'rustle', copper: 'hum', timber: 'creak', glass: 'crack', clay: 'thud', gears: 'grind', sunstone: 'hum' } as const)[material as 'scrap'] ?? 'thud');
+        else if (name === 'salvage') this.sfx.stage(({ biomass: 'rustle', scrap: 'thud', seeds: 'rustle', copper: 'hum', timber: 'creak', glass: 'crack', clay: 'thud', gears: 'grind', sunstone: 'hum' } as const)[material as 'scrap'] ?? 'thud');
         else this.sfx.click();
       },
       vista: (x: number, z: number, secs: number, done: (seen: string[]) => void) => this.vista(x, z, secs, done),
@@ -4179,25 +4179,10 @@ export class Game {
     }
   }
 
-  /**
-   * City 06.5: time passed without frames (a hidden tab, a long hitch) is owed to the simulation, up to a cap,
-   * and paid back a few milliseconds per frame so no frame stalls.
-   */
-  awayFor(seconds: number) {
-    if (!(seconds > 0)) return;
-    const C = TUNING.catchUp;
-    const was = this.catchUpDebt;
-    this.catchUpDebt = Math.min(C.maxSeconds, this.catchUpDebt + seconds);
-    if (was < C.toastFrom && this.catchUpDebt >= C.toastFrom) {
-      const m = Math.round(this.catchUpDebt / 60);
-      this.hud.toast(`⏩ Catching up${m >= 1 ? ` ${m} min` : ''}…<small>Your city kept growing while you were away.</small>`, '', 3);
-    }
-  }
-
-  /** Runs simulation ticks within the frame budget: the frame's own time first, then any catch-up owed. */
+  /** Runs simulation ticks within the frame budget: the frame's own time (E23.1: nothing owed is ever paid back). */
   private runSim(dt: number) {
     const t0 = performance.now();
-    runSimFrame(this.sim, this, dt, { pause: this.pause, speed: this.speed, step: TUNING.simStep, budgetMs: TUNING.catchUp.frameBudgetMs, maxCatchUp: TUNING.catchUp.maxSeconds });
+    runSimFrame(this.sim, this, dt, { pause: this.pause, speed: this.speed, step: TUNING.simStep, budgetMs: TUNING.frameSimBudgetMs });
     this.simMs = performance.now() - t0;
     this.simMsWorst = Math.max(this.simMsWorst, this.simMs);
   }
@@ -4216,7 +4201,6 @@ export class Game {
     this.syncPanelPause();
     const paused = this.pause.paused;
     if (!paused && !this.photo.frozen) {
-      if (rawDt > TUNING.maxFrameDt && !this.hiddenAt) this.awayFor(Math.min(rawDt, 30) - TUNING.maxFrameDt); // a hitch
       this.runSim(dt);
     }
     /** the world's own time: nothing moves while paused (the camera, streaming and the HUD still run) */
