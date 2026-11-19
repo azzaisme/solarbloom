@@ -683,7 +683,7 @@ export class DroneVisuals {
       // E23.6.3: docked for want of power, water or Biomass: it settles on its hub, still, under a dim glyph of what's missing
       const docked = d.mode === 'idle' && !d.old && (status === 'docked' || status === 'waitingEnergy');
       this.updateGlyph(d, v, hub, docked, status, dt, t);
-      const c = d.id === buddy && idle ? this.companion : undefined;
+      const c = d.id === buddy && idle && !docked ? this.companion : undefined; // a docked drone stays on its hub
       if (c) {
         // At bloombot's right shoulder and a little behind, so it never stands between the camera and bloombot.
         const f = c.facing;
