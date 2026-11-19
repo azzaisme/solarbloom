@@ -284,6 +284,9 @@ describe('E23.6.2: the farm reads research (E23.5.2 planters)', () => {
     const sim = station();
     sim.state.salvage!.keepers.tide = { step: 'request1' };
     sim.weather.forceForTest('sunny', 1e12);
+    // E23.4.1: planters wilt with no water in reach; these test research, so every bed is watered (the real
+    // wilting is covered by water-levels and the farm's own tests)
+    sim.water.isWatered = () => true;
     sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
     const at = (x: number, z: number): MachineData => {
       const t = sim.grid.get(GROUND, x, z)!;

@@ -498,6 +498,10 @@ export interface GameState {
    * production, chains, milestones or pacing). Optional and sparse, so no save version change.
    */
   cozy?: CozyState;
+  /** E23.4.1: water levels (share of capacity) of bodies that have changed, by body id `x,z`. Optional. */
+  water?: { levels: Record<string, number> };
+  /** E23.2.3: old park benches mended, by id (`bench:x:z`). Optional, so no save version change. */
+  rest?: { mended: string[] };
   /** E23.2.2.3: buried finds revealed (a mound shows) and dug up, by id (`bur:x:z`). Optional. */
   buried?: { known: string[]; dug: string[] };
   /** E23.2.2: what the pulse is loaded with (absent = nothing). Optional, so no save version change. */
