@@ -1689,7 +1689,10 @@ export class Game {
     if (!this.building()) return;
     this.waterView = !this.waterView;
     if (this.waterView && this.powerView) this.togglePowerView(); // one view at a time
-    if (this.waterView && !this.waterViewSeen) {
+    this.hud.buildBar.waterOn = this.waterView;
+    this.hud.buildBar.render(this.hud.currentTool);
+    // a new concept: one short introduction, once a save (the classic park has no salvage save: once a session)
+    if (this.waterView && (this.sim.state.salvage ? this.sim.salvage.see('tip:waterView') : !this.waterViewSeen)) {
       this.waterViewSeen = true;
       this.hud.toast('Water view: pumps, tanks and pipes holding water glow blue, with arrows the way it flows. Each pond and tank shows how full it is.', 'gold', 4.5);
     }
@@ -1704,7 +1707,7 @@ export class Game {
   private togglePowerView() {
     if (!this.building()) return;
     this.powerView = !this.powerView;
-    if (this.powerView) this.waterView = false; // one view at a time
+    if (this.powerView) this.waterView = this.hud.buildBar.waterOn = false; // one view at a time
     this.hud.buildBar.powerOn = this.powerView;
     this.hud.buildBar.render(this.hud.currentTool);
     // A new concept gets one short introduction, the first time only.

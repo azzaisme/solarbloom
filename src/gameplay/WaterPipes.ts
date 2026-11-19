@@ -370,10 +370,30 @@ export class WaterPipes {
   }
 
   /**
-   * E23.4.5: which way the water runs on each pipe tile carrying it: the sides (dx, dz) leading downstream, away from
-   * what feeds the line (a running pump or plant feeds every tile it reaches; a reservoir the tiles it feeds by
-   * gravity). Found by a walk out from the tiles next to each source; a tile's arrows point at neighbours one step
-   * further from every source.
+   * Reservoirs on a line that water is running into now: a running pump's line reaches them and they have room, or
+   * a higher reservoir with water runs down into them. Water goes into these, not out of them.
+   */
+  filling(net: PipeNet): Set<MachineData> {
+    const w = this.water;
+    const out = new Set<MachineData>();
+    const room = (t: MachineData) => w.levelOf(tankId(t)) < 1;
+    for (const p of net.pumps) {
+      if (!this.pumpLive(p)) continue;
+      const reach = this.reachOf(p, net);
+      for (const t of net.tanks) if (room(t) && this.touches(t, reach)) out.add(t);
+    }
+    for (const hi of net.tanks) {
+      if (w.amountOf(tankId(hi)) <= 0) continue;
+      for (const lo of this.downhill(hi, net)) if (room(lo)) out.add(lo);
+    }
+    return out;
+  }
+
+  /**
+   * E23.4.5: which way the water runs on each pipe tile carrying it: the sides (dx, dz) leading downstream. It starts
+   * at what pushes water into the line (a running pump or plant, and a reservoir with water that nothing is filling)
+   * and runs out from there; a tile's arrows point at neighbours one step further from every source, and a tile
+   * beside a reservoir being filled points into it (the pump's water, or a higher tank's, ends up there).
    */
   flow(): Map<string, [number, number][]> {
     const dist = new Map<string, number>();
@@ -383,9 +403,13 @@ export class WaterPipes {
       dist.set(k, 0);
       queue.push(k);
     };
+    const sinks: { m: MachineData; inNet: Set<string> }[] = [];
     for (const net of this.networks()) {
       const inNet = new Set(net.tiles);
-      for (const m of [...net.pumps.filter((q) => this.pumpLive(q)), ...net.tanks.filter((t) => this.water.amountOf(tankId(t)) > 0)])
+      const filling = this.filling(net);
+      for (const m of filling) sinks.push({ m, inNet });
+      const sources = [...net.pumps.filter((q) => this.pumpLive(q)), ...net.tanks.filter((t) => !filling.has(t) && this.water.amountOf(tankId(t)) > 0)];
+      for (const m of sources)
         for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size))
           if (t) for (const [dx, dz] of SIDES) if (inNet.has(pipeKey(t.x + dx, t.z + dz))) start(pipeKey(t.x + dx, t.z + dz));
     }
@@ -405,6 +429,19 @@ export class WaterPipes {
       const down = SIDES.filter(([dx, dz]) => dist.get(pipeKey(x + dx, z + dz)) === d + 1).map(([dx, dz]) => [dx, dz] as [number, number]);
       if (down.length) out.set(k, down);
     }
+    // the last tiles before a reservoir being filled point into it
+    for (const { m } of sinks)
+      for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size)) {
+        if (!t) continue;
+        for (const [dx, dz] of SIDES) {
+          const k = pipeKey(t.x + dx, t.z + dz);
+          if (!dist.has(k)) continue;
+          const into: [number, number] = [-dx || 0, -dz || 0];
+          const list = out.get(k) ?? [];
+          if (!list.some(([a, b]) => a === into[0] && b === into[1])) list.push(into);
+          out.set(k, list);
+        }
+      }
     return out;
   }
 

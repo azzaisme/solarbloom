@@ -63,6 +63,43 @@ describe('E23.4.5: the Water view', () => {
     expect(f2.get('6,4')).toBeUndefined();
   });
 
+  it('arrows follow the water: from a pump into the reservoir it fills, never back out of it', () => {
+    const sim = park();
+    put(sim, 'pump', 4, 11);
+    put(sim, 'solar', 5, 10);
+    for (let x = 5; x <= 9; x++) sim.water.pipes.lay(GROUND, x, 11);
+    const r = put(sim, 'reservoir', 10, 11); // at the end of the line (its west side touches 9,11)
+    sim.water.fill(tankId(r), 100); // a quarter full: it holds water, but the pump is filling it
+    for (let i = 0; i < 2; i++) {
+      sim.power.tick(1);
+      sim.water.tick(1);
+    }
+    const before = sim.water.levelOf(tankId(r));
+    sim.power.tick(1);
+    sim.water.tick(60);
+    expect(sim.water.levelOf(tankId(r))).toBeGreaterThan(before); // the water really goes into the tank
+    const flow = sim.water.pipes.flow();
+    for (let x = 5; x <= 9; x++) expect(flow.get(`${x},11`), `${x},11`).toEqual([[1, 0]]); // every arrow east, into it
+  });
+
+  it('arrows follow the water: from a high tank down into a lower one it fills', () => {
+    const sim = park();
+    const noPower = { ...sim.power.sky(), sun: 0, solar: 0, wind: 0 };
+    sim.power.skyOverride = () => noPower;
+    const hi = put(sim, 'reservoir', 14, 4);
+    for (const t of sim.grid.footprint(GROUND, 14, 4, 2)) t!.level = 2;
+    const lo = put(sim, 'reservoir', 6, 4);
+    sim.water.fill(tankId(hi), 400);
+    sim.water.fill(tankId(lo), 50); // the low one holds some: still the water runs into it, not out
+    for (let x = 8; x <= 13; x++) sim.water.pipes.lay(GROUND, x, 4);
+    sim.water.tick(1);
+    const before = sim.water.levelOf(tankId(lo));
+    sim.water.tick(60);
+    expect(sim.water.levelOf(tankId(lo))).toBeGreaterThan(before);
+    const flow = sim.water.pipes.flow();
+    for (let x = 8; x <= 13; x++) expect(flow.get(`${x},4`), `${x},4`).toEqual([[-1, 0]]); // every arrow west, downhill
+  });
+
   it('rings a dry planter red: none by the pond or beside a running pipe', () => {
     const sim = park();
     const byPond = put(sim, 'planter', 6, 12); // beside the park's pond

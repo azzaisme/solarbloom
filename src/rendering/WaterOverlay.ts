@@ -8,7 +8,7 @@ import { mat } from './Materials';
 import { PALETTE } from './Palette';
 
 /** Sizes (tiles): how high above the ground the view floats, the arrows, the level gauges. */
-const VIEW = { lift: 0.24, tile: 0.86, arrow: 0.22, gaugeH: 1.1, gaugeW: 0.16, ring: 0.42, reach: 40, every: 0.4 };
+const VIEW = { lift: 0.24, tile: 0.86, arrow: 0.22, gaugeH: 1.1, gaugeW: 0.16, ring: 0.62, reach: 40, every: 0.4 };
 
 /** Flat lists for one unlit mesh. */
 class Flat {
@@ -186,7 +186,7 @@ export class WaterOverlay {
     // dry planters (E23.5.2)
     for (const m of WaterOverlay.dryPlanters(this.sim)) {
       const c = m.size / 2;
-      warn.ring(m.x + c, this.y(m.x, m.z) - VIEW.lift + 0.06, m.z + c, VIEW.ring * m.size, 0.08);
+      warn.ring(m.x + c, this.y(m.x, m.z), m.z + c, VIEW.ring * m.size, 0.12); // at the overlay's height, outside the footprint: no model or flowers hide it
     }
     const parts: [Flat, string, number][] = [
       [wet, PALETTE.aqua.water, 0.55],

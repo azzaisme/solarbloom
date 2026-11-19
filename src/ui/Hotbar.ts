@@ -185,6 +185,9 @@ export class BuildBar extends HudPart {
   /** E23.3.4: the Power view's glyph, and whether it is on (the game sets it). */
   private powerGlyph = '';
   powerOn = false;
+  /** E23.4.5: the Water view's glyph, and whether it is on (the game sets it). */
+  private waterGlyph = '';
+  waterOn = false;
 
   static template(): string {
     return `<div id="buildbar" class="panel" role="toolbar" aria-label="Build hotbar" hidden></div>`;
@@ -199,6 +202,7 @@ export class BuildBar extends HudPart {
     if (!b) return;
     this.keys = (['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6', 'slot7', 'slot8', 'slot9'] as Action[]).map((a) => (b.keys[a][0] ? keyLabel(b.keys[a][0]) : ''));
     this.powerGlyph = actionGlyph(b, 'powerOverlay', style ?? 'keys');
+    this.waterGlyph = actionGlyph(b, 'waterOverlay', style ?? 'keys');
     this.last.delete('buildbar');
   }
 
@@ -220,6 +224,10 @@ export class BuildBar extends HudPart {
     const power = this.sim.power.networks().length
       ? `<div class="bslot power${this.powerOn ? ' on' : ''}" aria-label="Power view ${this.powerOn ? 'on' : 'off'}"><span class="key glyph">${this.powerGlyph}</span><span class="sl">Power</span></div>`
       : '';
-    this.set('buildbar', el, 'html', html + power);
+    // E23.4.5: the Water view toggle beside it (once the water network is handed over, Cistern Basin's Keeper)
+    const water = this.sim.water.unlocked('pipe')
+      ? `<div class="bslot power water${this.waterOn ? ' on' : ''}" aria-label="Water view ${this.waterOn ? 'on' : 'off'}"><span class="key glyph">${this.waterGlyph}</span><span class="sl">Water</span></div>`
+      : '';
+    this.set('buildbar', el, 'html', html + power + water);
   }
 }
