@@ -32,9 +32,8 @@ export class LoadWheel extends HudPart {
   update(dt: number) {
     if (!this.wheel || !this.chip) return;
     const pl = this.sim.pulseLoad;
-    const on = pl.on;
     this.shown = Math.max(0, this.shown - dt);
-    const open = on && this.shown > 0;
+    const open = this.shown > 0;
     if (this.wheel.hidden === open) this.wheel.hidden = !open;
     const choice = pl.choice;
     const def = pl.def;
@@ -48,7 +47,7 @@ export class LoadWheel extends HudPart {
           el.setAttribute('aria-checked', String(l.id === choice));
         }
       }
-    const chip = on && choice !== 'none';
+    const chip = choice !== 'none';
     if (this.chip.hidden === chip) this.chip.hidden = !chip;
     if (!chip) return;
     this.set('lc-ic', $(this.chip, '.lc-ic'), 'text', def.icon);

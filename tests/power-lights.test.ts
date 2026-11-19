@@ -17,7 +17,7 @@ SaveService.clock = () => 0;
  * `sky.kind` holds a weather (`forceForTest`).
  */
 function world() {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   const st = sim.state;
   const sky = {
     get f(): number {
@@ -70,7 +70,7 @@ describe('E23.3.5 night lighting', () => {
     }
     // E23.6.1 (#489): a light is made once at the crafting table, then placed free. Its recipe is known from home
     // (the starting set), a find, or Decor research; the light itself opens once it has been made.
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     sim.bot = { roofId: 'g', x: 8.5, z: 11.5 };
     const cozy = new Cozy(sim);
     const known = (id: string) => sim.crafting.unlocked(sim.crafting.decor(id)!.unlock);
@@ -325,7 +325,7 @@ describe('E23.3.5 night lighting', () => {
 
   it('an old save’s lamp posts and lanterns keep glowing: lamp posts become solar lamp posts, both start charged', () => {
     // A save from before night lighting: a lamp post and a lantern placed with no grid, and no `state.power`.
-    const old = createInitialState(7, 'oldcity');
+    const old = createInitialState(7);
     const post = decorKey(GROUND, 40, 40);
     const lantern = decorKey(GROUND, 44, 40);
     old.cozy = { decor: { [post]: 'lamppost@1', [lantern]: 'lantern' } };
@@ -355,7 +355,7 @@ describe('E23.3.5 night lighting', () => {
     expect(again.state.cozy!.decor![fresh]).toBe('lamppost');
     expect(again.state.cozy!.decor![post]).toBe('solarlamppost@1');
     // and a new game is marked at once, so its lamp posts are never carried over
-    const ng = new Sim(createInitialState(8, 'oldcity'));
+    const ng = new Sim(createInitialState(8));
     ng.state.cozy = { decor: { [fresh]: 'lamppost' } };
     expect(new Sim(saver.deserialize(saver.serialize(ng.state))!).state.cozy!.decor![fresh]).toBe('lamppost');
   });

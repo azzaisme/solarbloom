@@ -30,7 +30,7 @@ export function padDriver(game) {
   const WAKE = A; // Interact
   const PLACE = A; // in build mode
   const BUILD_MENU = 3;
-  const HARVEST = 14;
+  const EAT = 14;
   const DPAD = { up: 12, down: 13, left: 14, right: 15 };
   /** The park's build goals, in the order the objective card lists them. */
   const NEEDED = { solar: 'Solar Panel', condenser: 'Water Condenser', pollinator: 'Pollinator Garden', droneHub: 'Drone Hub', motherTree: 'Mother Tree' };
@@ -179,7 +179,7 @@ export function padDriver(game) {
       return st;
     }
     // Harvest sunlight whenever it's ready (free energy).
-    if (sim.state.harvestReadyAt <= sim.state.time && st.frames % 15 === 0 && !menuOpen()) press(HARVEST);
+    if (sim.charge.empty && st.frames % 15 === 0 && !menuOpen()) press(EAT); // E23.1.4: pad 14 eats (no harvest)
     if (!target || (target.kind === 'pulse' && !pulsable(sim.grid.get(bot.pose.roofId, target.face.x, target.face.z))) || st.frames % 90 === 0) target = pickTarget();
     if (!target) {
       still();

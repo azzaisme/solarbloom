@@ -5,7 +5,7 @@ import { DAY_SECONDS, gameDays } from '../src/data/time';
 import { WEATHER, WEATHER_KINDS, type WeatherKind } from '../src/data/weather';
 import { Sim } from '../src/gameplay/Sim';
 
-const oldSim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
+const oldSim = (seed = 7) => new Sim(createInitialState(seed));
 /** a sim whose weather is held at a kind (the E23.10 test hook) */
 function under(kind: WeatherKind, seed = 7) {
   const sim = oldSim(seed);
@@ -95,12 +95,6 @@ describe('E23.7.2.1: weather effects (every row in data)', () => {
     const clear = under('sunny');
     noon(clear);
     expect(clear.nightFinds.out().some((f) => f.when === 'fog')).toBe(false);
-  });
-
-  it('classic games have no weather', () => {
-    const sim = new Sim(createInitialState(7, 'classic'));
-    expect(sim.weather.kind()).toBe('sunny');
-    expect(sim.weather.solar()).toBe(1);
   });
 });
 

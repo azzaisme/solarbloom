@@ -176,7 +176,7 @@ try {
       await page.waitForTimeout(1500);
       await page.keyboard.up('KeyW');
     }
-    const before = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time, rules: window.solarbloom.sim.state.rules }));
+    const before = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time }));
     if (dev === 'pad') await pressPad(page, 9);
     else await page.keyboard.press('Escape');
     await page.waitForSelector('#menu.open');
@@ -188,7 +188,7 @@ try {
     else await page.keyboard.press('Space');
     await page.waitForSelector('#tPlay');
     const head = await page.evaluate(() => JSON.parse(localStorage.getItem('solarbloom.save.1.head')));
-    check(head && head.name === 'Garden 1' && head.rules === 'oldcity' && head.played >= 0 && !!head.region && !!head.step, T(`slot 1 has its header (${JSON.stringify(head)})`));
+    check(head && head.name === 'Garden 1' && head.version >= 8 && !head.rules && head.played >= 0 && !!head.region && !!head.step, T(`slot 1 has its header (${JSON.stringify(head)})`));
 
     // ── Load game: the slot's card; rename and delete ask first (keyboard run) ──
     if (dev === 'keys') {
@@ -220,8 +220,8 @@ try {
     check(await moveTo(page, '#tLoad1', dev), T('reach Load on slot 1'));
     await go(page, dev);
     await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
-    const after = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time, rules: window.solarbloom.sim.state.rules }));
-    check(after.seed === before.seed && after.time >= before.time && after.rules === before.rules, T(`Load brings back the same game (time ${before.time.toFixed(1)} → ${after.time.toFixed(1)})`));
+    const after = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time }));
+    check(after.seed === before.seed && after.time >= before.time, T(`Load brings back the same game (time ${before.time.toFixed(1)} → ${after.time.toFixed(1)})`));
 
     // ── delete asks first, then the slot is empty (keyboard run, from a fresh title) ──
     if (dev === 'keys') {

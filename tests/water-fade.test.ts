@@ -14,7 +14,7 @@ const DAY = WATER_NET.daySeconds;
 
 /** The park with its pond restored and full, and lush ground all round it. */
 function park() {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.areas.clear(PARK, true);
   const pond: TileData[] = [];
   const land: TileData[] = [];

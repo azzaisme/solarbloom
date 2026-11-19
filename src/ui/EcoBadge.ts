@@ -1,4 +1,3 @@
-import { fmt } from '../core/Big';
 import { FAUNA, FAUNA_INFO, faunaGoal, type FaunaId } from '../gameplay/Ecosystem';
 import type { Sim } from '../gameplay/Sim';
 import { ICONS } from './Icons';
@@ -46,8 +45,8 @@ export class EcoBadge {
     const b = this.sim.ecosystem.score();
     if (b.score === this.shown) return;
     this.shown = b.score;
-    this.num!.textContent = fmt(b.score);
-    this.el.title = `Biodiversity ${fmt(b.score)} · ${b.rank}`;
+    this.num!.textContent = String(Math.floor(b.score));
+    this.el.title = `Biodiversity ${Math.floor(b.score)} · ${b.rank}`;
   }
 
   /** A fauna kind arrived: a short toast and a little bounce on the chip. */
@@ -71,11 +70,11 @@ export class EcoBadge {
     const next = FAUNA.find((id) => !have.includes(id));
     const goal = next ? faunaGoal(next, eco.bio) : undefined;
     const lines = [
-      `tiles ${fmt(p.stages)} · tree species ${eco.bio.species} · ground kinds ${eco.bio.features} · landmarks ${eco.bio.landmarks} · superstructures ${eco.bio.supers}`,
+      `tiles ${Math.floor(p.stages)} · tree species ${eco.bio.species} · ground kinds ${eco.bio.features} · landmarks ${eco.bio.landmarks} · superstructures ${eco.bio.supers}`,
       have.length ? `living here: ${have.map((id) => FAUNA_INFO[id].icon).join(' ')}` : 'no creatures yet',
       next && goal ? `next: ${FAUNA_INFO[next].icon} ${FAUNA_INFO[next].name} at ${goal.need} ${goal.label} (${Math.min(goal.have, goal.need)}/${goal.need})` : 'every creature has arrived',
-      b.next ? `${b.next.rank} at ${fmt(b.next.at)}` : '',
+      b.next ? `${b.next.rank} at ${Math.floor(b.next.at)}` : '',
     ].filter(Boolean);
-    this.toast(`🌱 Biodiversity ${fmt(b.score)} · ${b.rank}<small>${lines.join('<br>')}</small>`, '', 6);
+    this.toast(`🌱 Biodiversity ${Math.floor(b.score)} · ${b.rank}<small>${lines.join('<br>')}</small>`, '', 6);
   }
 }

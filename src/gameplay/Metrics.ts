@@ -1,4 +1,3 @@
-import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
 /** Records the playtest numbers from the Round 2 plan into the save (shown in Settings). */
@@ -8,9 +7,8 @@ export class Metrics {
     b.on('upgrade.granted', () => this.first('upgrade'));
     b.on('machine.built', ({ machine }) => this.first(machine.type));
     b.on('cat.found', () => this.first('cat'));
-    b.on('milestone.reached', ({ at }) => this.first(`park${at}`));
+    b.on('biomass.gathered', ({ by }) => by === 'bot' && this.first('gathered')); // E23.1.4: unlocks the Harvester
     b.on('tree.discharged', () => this.first('treePulse'));
-    b.on('rooftop.coreRestored', () => this.first('core'));
     b.on('area.cleared', ({ areaId }) => {
       if (areaId === 'park') return;
       (sim.state.stats.areaTimes ??= []).push(Math.round(sim.time));
@@ -61,12 +59,9 @@ export class Metrics {
     return lines.join('\n');
   }
 
-  /** "Unable to act": can't afford even a mossy-tile pulse and Harvest is cooling down (nothing is bought any more). */
+  /** "Unable to act": out of charge, so no pulse (E23.1.4: charge is the only thing a pulse costs). */
   tick(dt: number) {
-    const s = this.sim;
-    const minPulse = TUNING.pulse.prepared.energy * s.upgrades.pulseEnergyMult;
-    if (s.econ.get('energy').gte(minPulse) && s.econ.get('water').gte(1)) return;
-    if (s.time >= s.state.harvestReadyAt) return;
-    s.state.stats.stuckSeconds += dt;
+    if (this.sim.charge.canUse('pulse')) return;
+    this.sim.state.stats.stuckSeconds += dt;
   }
 }
