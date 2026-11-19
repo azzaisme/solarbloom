@@ -55,7 +55,7 @@ export class GateSystem {
 
   private missing(cost: Record<string, number | undefined>): string {
     const m = this.sim.inventory.shortfall(cost);
-    return m && m !== 'biomass' ? ` (short of ${MATERIALS[m].name})` : '';
+    return m ? ` (short of ${MATERIALS[m].name})` : '';
   }
 
   /** Opens a gate for good. `free`: a reward (the lock bridge) — no check. */

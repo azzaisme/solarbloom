@@ -82,7 +82,7 @@ export class KeeperSystem {
     const cost = st.step === 'request1' ? d.request1 : st.step === 'landmark' ? d.landmark : undefined;
     if (!cost) return undefined;
     const out: MaterialCost = {};
-    for (const [k, v] of Object.entries(cost) as [MaterialId | 'biomass', number][]) {
+    for (const [k, v] of Object.entries(cost) as [MaterialId, number][]) {
       const left = v - ((st.given as Record<string, number> | undefined)?.[k] ?? 0);
       if (left > 0) out[k] = left;
     }
@@ -208,6 +208,6 @@ export class KeeperSystem {
 
 /** "8 Seeds and 20 Biomass" */
 export function costText(cost: MaterialCost): string {
-  const parts = (Object.entries(cost) as [MaterialId | 'biomass', number][]).filter(([, v]) => v > 0).map(([k, v]) => `${v} ${k === 'biomass' ? 'Biomass' : MATERIALS[k].name}`);
+  const parts = (Object.entries(cost) as [MaterialId, number][]).filter(([, v]) => v > 0).map(([k, v]) => `${v} ${MATERIALS[k].name}`);
   return parts.length <= 1 ? (parts[0] ?? 'nothing') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }

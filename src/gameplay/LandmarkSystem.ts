@@ -63,14 +63,7 @@ export class LandmarkSystem {
     const st = s.keepers.state(id);
     const given = { ...(st.given ?? {}) };
     let gave = false;
-    for (const [k, v] of Object.entries(s.keepers.wants(id) ?? {}) as [MaterialId | 'biomass', number][]) {
-      if (k === 'biomass') {
-        if (s.econ.get('biomass').gte(v) && s.inventory.pay({ biomass: v })) {
-          (given as Record<string, number>).biomass = v;
-          gave = true;
-        }
-        continue;
-      }
+    for (const [k, v] of Object.entries(s.keepers.wants(id) ?? {}) as [MaterialId, number][]) {
       const n = Math.min(v, s.inventory.available(k));
       if (n > 0 && s.inventory.pay({ [k]: n })) {
         given[k] = (given[k] ?? 0) + n;

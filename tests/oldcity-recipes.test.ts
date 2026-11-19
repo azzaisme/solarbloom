@@ -25,10 +25,7 @@ function ground(sim: Sim, x: number, z: number, g: GroundState = 'restored') {
 }
 /** Gives the backpack and store everything a recipe needs. */
 function stock(sim: Sim, type: BuildableType) {
-  for (const [k, v] of Object.entries(RECIPES[type]!.cost)) {
-    if (k === 'biomass') sim.state.resources.biomass = sim.state.resources.biomass.add(v!);
-    else sim.inventory.addToStore(k as 'scrap', v!);
-  }
+  for (const [k, v] of Object.entries(RECIPES[type]!.cost)) sim.inventory.addToStore(k as 'scrap', v!);
 }
 
 describe('E21.3: recipes', () => {
@@ -45,10 +42,7 @@ describe('E21.3: recipes', () => {
       const first = sim.build.place(type, GROUND, x, z);
       expect(first, type).toBeDefined();
       // the second costs the same (what is left is exactly one more recipe)
-      for (const [k, v] of Object.entries(RECIPES[type]!.cost)) {
-        if (k === 'biomass') expect(sim.econ.get('biomass').toNumber()).toBe(v);
-        else expect(sim.inventory.stored(k as 'scrap'), `${type} ${k}`).toBe(v);
-      }
+      for (const [k, v] of Object.entries(RECIPES[type]!.cost)) expect(sim.inventory.stored(k as 'scrap'), `${type} ${k}`).toBe(v);
       expect(sim.build.costLabel(type)).not.toMatch(/⚡|💧/);
     }
   });

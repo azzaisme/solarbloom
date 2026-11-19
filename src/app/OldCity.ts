@@ -5,6 +5,8 @@ import type { Hud } from '../ui/Hud';
 import type { MachineData, MaterialId } from '../core/types';
 import { GROUND } from '../core/GameState';
 import { MATERIALS, SALVAGE } from '../data/salvage';
+import { GATHER } from '../data/farm';
+import type { TileData } from '../core/types';
 import { flyUp, fountainHtml, OldCityPanel, SpeechBubble, storageAct, storageHtml, tradeHtml } from '../ui/OldCityPanel';
 import { PARK } from '../core/Areas';
 import { setPieceAt } from '../core/OldCityLayout';
@@ -69,6 +71,11 @@ export class OldCityController {
       flyUp(host.hud.root, `+${e.got} ${MATERIALS[e.material].icon} ${MATERIALS[e.material].name}`, sc.x, sc.y);
       host.sound('salvage', e.material);
       this.panel.refresh();
+    });
+    host.sim.bus.on('biomass.gathered', (e) => {
+      const sc = host.screenOf(e.x, e.z);
+      flyUp(host.hud.root, `+${e.got} ${MATERIALS.biomass.icon} ${MATERIALS.biomass.name}`, sc.x, sc.y);
+      host.sound('salvage', 'biomass');
     });
     // E23.7.4: a pile coming back (slowly, or blown in by a storm) is redrawn at its new size
     host.sim.bus.on('pile.refilled', (e) => host.markTile(e.x, e.z));
@@ -247,6 +254,17 @@ export class OldCityController {
       return;
     }
     this.startHold('salvage', SALVAGE.holdSeconds, () => this.sim.salvage.salvage(id), viaClick);
+  }
+
+  /** E23.5.1: clip restored ground for biomass: hold Interact 0.6 s, like salvaging. */
+  gatherHold(t: TileData) {
+    const why = this.sim.gather.problem(t);
+    if (why) {
+      const sc = this.host.screenOf(t.x, t.z);
+      this.host.hud.showFail(why, sc.x, sc.y);
+      return;
+    }
+    this.startHold('gather', GATHER.holdSeconds, () => this.sim.gather.gather(t));
   }
 
   /**

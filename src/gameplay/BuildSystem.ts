@@ -117,7 +117,7 @@ export class BuildSystem {
     if (!r) return undefined;
     const m = this.sim.inventory.shortfall(r);
     if (!m) return undefined;
-    if (m === 'biomass') return 'Needs more Biomass 🌿 — restored ground grows it';
+    if (m === 'biomass') return 'Needs more Biomass 🌿 — gather it from restored ground';
     return `Needs ${MATERIALS[m].name} ${MATERIALS[m].icon}${this.whereFrom(m)}`;
   }
 

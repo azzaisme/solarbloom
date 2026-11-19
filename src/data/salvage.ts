@@ -15,6 +15,8 @@ export interface MaterialDef {
   home: string[];
   /** a tint for its fly-ups and panel row */
   colour: string;
+  /** E23.5.1: where it comes from, for items that never lie in piles (the backpack says this instead of regions) */
+  from?: string;
 }
 
 export const MATERIALS: Record<MaterialId, MaterialDef> = {
@@ -26,12 +28,17 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
   clay: { id: 'clay', name: 'Clay', icon: '🏺', models: ['salvage-clay'], home: ['cistern'], colour: '#b97a5a' },
   gears: { id: 'gears', name: 'Gears', icon: '⚙️', models: ['salvage-gears'], home: ['clockPlaza'], colour: '#b8a26a' },
   sunstone: { id: 'sunstone', name: 'Sunstone', icon: '✨', models: ['salvage-sunstone'], home: ['terraces'], colour: '#f2c84a' },
+  // E23.5.1: farm items (data/farm). Never lying in piles: gathered from restored ground, grown or composted.
+  biomass: { id: 'biomass', name: 'Biomass', icon: '🌿', models: [], home: [], colour: '#94e46e', from: 'Gathered from restored ground' },
+  food: { id: 'food', name: 'Food', icon: '🥕', models: [], home: [], colour: '#f0a04a', from: 'Grown in planters' },
+  compost: { id: 'compost', name: 'Compost', icon: '🟫', models: [], home: [], colour: '#8a6a4a', from: 'Made in a compost bin' },
+  fertiliser: { id: 'fertiliser', name: 'Fertiliser', icon: '🧪', models: [], home: [], colour: '#c9b06a', from: 'Compost left to mature in a compost bin' },
 };
 
 export const MATERIAL_IDS = Object.keys(MATERIALS) as MaterialId[];
 
-/** A cost in materials (biomass may be part of a recipe: it stays a resource, read through Inventory.canPay). */
-export type MaterialCost = Partial<Record<MaterialId, number>> & { biomass?: number };
+/** A cost in materials. E23.5.1: biomass is a backpack item like any other, so a recipe's biomass is carried too. */
+export type MaterialCost = Partial<Record<MaterialId, number>>;
 
 // ───────────── §1 backpack ─────────────
 
