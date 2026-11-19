@@ -49,7 +49,6 @@ export class Resting {
   /** What Interact can do with the tile in front: mend or sit on a bench, meditate at a charger. */
   candidates(tile: TileData, distance: number): RestCandidate[] {
     const s = this.h.sim;
-    if (!s.oldCity) return [];
     const b = s.rest.benchAt(tile.x, tile.z);
     if (b) {
       if (s.rest.usable(b)) return [{ kind: 'bench', id: b.id, verb: 'Sit on', name: 'the bench', distance, at: tile, run: () => this.sitBench(b) }];

@@ -4,7 +4,7 @@ import { inOldCity, inRect, isSeaChunk, onJetty, regionOfChunk, regionWater, sea
 
 /**
  * E21.24 (§7 "Height"): the Old City's terraces. Every ground tile has a level 0–4 (one level is 1.2 tiles high),
- * a pure function of the cell (never saved), and only under old-city rules: classic ground stays flat.
+ * a pure function of the cell (never saved).
  *
  * Tiles stay flat: a ramp (one level over 3 tiles) or a stair (one level over 2) is the only way between levels
  * on foot (ladders and perches come with E21.7). A step between two tiles is allowed when the heights of their
@@ -123,7 +123,7 @@ export function heightAt(px: number, pz: number): number {
   return rampHeight(h, k);
 }
 
-/** World y offset of a height in levels (level 1 is drawn at the classic ground height). */
+/** World y offset of a height in levels (level 1 is drawn at the old flat ground height). */
 export function levelY(level: number): number {
   return (level - OLD_CITY.baseLevel) * OLD_CITY.levelHeight;
 }

@@ -9,7 +9,7 @@ const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 
 /** A park with restored, open ground round (10..30, 10..30), bloombot by the fountain. */
 function park() {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = 2;
   sim.bot = NEAR;
   for (let x = 10; x < 30; x++)

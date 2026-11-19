@@ -16,7 +16,6 @@ export interface RippleTarget {
 /**
  * E23.2.2 (#372): what the pulse carries. A quick wheel picks the load (nothing, seeds, a rare seed,
  * fertiliser); each pulse uses one unit of it, and when it runs out the pulse fires empty, so you're never stuck.
- * Old-city rules only: under classic rules every pulse is empty and nothing is used.
  *
  * The reveal ripple (E23.2.2.3) lists nearby salvage, unopened caches, unfound journal pages and buried seeds and salvage. It reads only
  * the salvage data (piles, caches, pages) and never the Lucky Cat system: no cat is ever a target, and nothing
@@ -25,13 +24,9 @@ export interface RippleTarget {
 export class PulseLoad {
   constructor(private sim: Sim) {}
 
-  get on(): boolean {
-    return this.sim.oldCity;
-  }
-
   /** The load chosen on the wheel. */
   get choice(): PulseLoadId {
-    return (this.on && this.sim.state.pulseLoad) || 'none';
+    return this.sim.state.pulseLoad || 'none';
   }
 
   get def(): PulseLoadDef {
@@ -39,7 +34,7 @@ export class PulseLoad {
   }
 
   choose(id: PulseLoadId) {
-    if (!this.on || !PULSE_LOAD[id]) return;
+    if (!PULSE_LOAD[id]) return;
     if (id === 'none') delete this.sim.state.pulseLoad;
     else this.sim.state.pulseLoad = id;
     this.sim.bus.emit('pulse.load', { load: id });
@@ -63,7 +58,7 @@ export class PulseLoad {
    * True while that introduction is still owed (`introduced()` marks it given).
    */
   introDue(): boolean {
-    return this.on && this.sim.state.stats.firsts.loadWheel === undefined && PULSE_LOADS.some((l) => l.item && this.carried(l) > 0);
+    return this.sim.state.stats.firsts.loadWheel === undefined && PULSE_LOADS.some((l) => l.item && this.carried(l) > 0);
   }
   introduced() {
     this.sim.state.stats.firsts.loadWheel = Math.round(this.sim.time);
@@ -93,7 +88,7 @@ export class PulseLoad {
   /** Every target the reveal ripple from tile `t` lights up, nearest first (pure). */
   ripple(t: Pick<TileData, 'roofId' | 'x' | 'z'>): RippleTarget[] {
     const sv = this.sim.state.salvage;
-    if (!this.on || !sv || t.roofId !== GROUND) return [];
+    if (!sv || t.roofId !== GROUND) return [];
     const r2 = RIPPLE.radius * RIPPLE.radius;
     const near = (x: number, z: number) => (x - t.x) ** 2 + (z - t.z) ** 2 <= r2;
     const out: RippleTarget[] = [];

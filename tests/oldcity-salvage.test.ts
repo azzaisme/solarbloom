@@ -11,7 +11,7 @@ import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
 const saver = new SaveService(undefined);
-const oldSim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
+const oldSim = (seed = 7) => new Sim(createInitialState(seed));
 const pile = (id: string) => PARK_SET.piles.find((p) => p.id === id)!;
 
 describe('E21.2: salvage piles', () => {
