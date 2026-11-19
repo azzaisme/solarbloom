@@ -6,6 +6,10 @@ import type { MachineData, MachineType } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
 import { tankId } from '../src/gameplay/WaterPipes';
 import { WaterOverlay } from '../src/rendering/WaterOverlay';
+import * as pc from 'playcanvas';
+import { PipeVisuals } from '../src/rendering/PipeVisuals';
+import { PALETTE } from '../src/rendering/Palette';
+import { POWER } from '../src/data/power';
 
 function park() {
   const sim = new Sim(createInitialState(7, 'oldcity'));
@@ -75,6 +79,78 @@ describe('E23.4.5: the Water view', () => {
     expect(sim.water.pipes.carries(11, 11)).toBe(true);
     expect(WaterOverlay.dryPlanters(sim)).toEqual([]);
     expect(byPond).toBeDefined();
+  });
+
+  it('turns water that runs or is held into blue holograms: a running pump, a filled tank, a working plant', () => {
+    const sim = park();
+    const pump = put(sim, 'pump', 4, 11); // on the pond's bank, but no power yet
+    const r = put(sim, 'reservoir', 10, 3);
+    const plant = put(sim, 'desalination', 12, 12, 2);
+    sim.water.tick(1); // the pump and the plant ask the grid for power
+    sim.water.draw(tankId(r), 1e9);
+    sim.water.draw(sim.water.plantTank(plant.id)!.id, 1e9);
+    sim.power.tick(1);
+    expect([...WaterOverlay.holoMachines(sim)]).toEqual([]); // an unpowered pump, an empty tank, a plant with nothing
+    put(sim, 'solar', 5, 10);
+    sim.power.tick(1);
+    sim.water.tick(1);
+    sim.power.tick(1);
+    expect(WaterOverlay.holoMachines(sim).has(pump.id)).toBe(true); // pushing water now
+    sim.water.fill(tankId(r), 50);
+    sim.water.fill(sim.water.plantTank(plant.id)!.id, 5);
+    const on = WaterOverlay.holoMachines(sim);
+    expect(on).toEqual(new Set([pump.id, r.id, plant.id]));
+    // the hologram blue is fully saturated, and the look is the Power view's (the owner's numbers)
+    const c = new pc.Color().fromString(PALETTE.signal.water.machineHolo);
+    expect(Math.min(c.r, c.g, c.b)).toBe(0);
+    expect(Math.max(c.r, c.g, c.b)).toBe(c.b);
+    expect(c.b).toBe(1);
+    expect(POWER.view.holo).toEqual({ opacity: 0.35, glow: 0.8 });
+  });
+
+  it('turns only the pipes that carry water into the hologram, and puts their own look back', () => {
+    const sim = park();
+    put(sim, 'pump', 4, 11);
+    put(sim, 'solar', 5, 10);
+    for (let x = 5; x <= 9; x++) sim.water.pipes.lay(GROUND, x, 11); // a running line
+    for (let x = 6; x <= 9; x++) sim.water.pipes.lay(GROUND, x, 4); // a dry one
+    for (let i = 0; i < 3; i++) {
+      sim.power.tick(1);
+      sim.water.tick(1);
+    }
+    const canvas = { width: 1, height: 1, getContext: () => null, addEventListener() {}, removeEventListener() {}, style: {} };
+    const device = new pc.NullGraphicsDevice(canvas as unknown as HTMLCanvasElement);
+    const app = new pc.AppBase(canvas as unknown as HTMLCanvasElement);
+    const opts = new pc.AppOptions();
+    opts.graphicsDevice = device;
+    opts.componentSystems = [pc.RenderComponentSystem];
+    app.init(opts);
+    const root = new pc.Entity('root', app);
+    app.root.addChild(root);
+    const pipes = new PipeVisuals(sim, root, device);
+    pipes.update(1);
+    const parts = () => root.findComponents('render').flatMap((r) => (r as pc.RenderComponent).meshInstances);
+    const body = () => (root.findByName('pipes') as pc.Entity).render!.meshInstances;
+    const own = body().map((mi) => mi.material);
+    expect(body().length).toBe(4); // carrying tube and trim, dry tube and trim
+    const holo = new pc.StandardMaterial();
+    pipes.holo(holo);
+    const shown = body().map((mi) => mi.material);
+    expect(shown.filter((m) => m === holo).length).toBe(2); // the carrying line only
+    expect(shown.slice(2)).toEqual(own.slice(2)); // the dry line keeps its look
+    expect((root.findByName('pipe-glass') as pc.Entity | null)?.enabled ?? false).toBe(false);
+    // a rebuild while the view is on (another pipe laid) keeps the hologram
+    sim.water.pipes.lay(GROUND, 10, 11);
+    for (let i = 0; i < 2; i++) {
+      sim.power.tick(1);
+      sim.water.tick(1);
+    }
+    pipes.update(1);
+    expect(body().filter((mi) => mi.material === holo).length).toBe(2);
+    pipes.holo(undefined);
+    expect(body().some((mi) => mi.material === holo)).toBe(false);
+    expect(parts().some((mi) => mi.material === holo)).toBe(false);
+    expect((root.findByName('pipe-glass') as pc.Entity).enabled).toBe(true);
   });
 
   it('is toggled in build mode on keyboard (V) and pad (d-pad left), clashing with nothing', () => {

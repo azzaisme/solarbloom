@@ -1688,9 +1688,10 @@ export class Game {
   toggleWaterView() {
     if (!this.building()) return;
     this.waterView = !this.waterView;
+    if (this.waterView && this.powerView) this.togglePowerView(); // one view at a time
     if (this.waterView && !this.waterViewSeen) {
       this.waterViewSeen = true;
-      this.hud.toast('Water view: pipes that carry water glow blue, with arrows the way it flows. Each pond and tank shows how full it is.', 'gold', 4.5);
+      this.hud.toast('Water view: pumps, tanks and pipes holding water glow blue, with arrows the way it flows. Each pond and tank shows how full it is.', 'gold', 4.5);
     }
   }
 
@@ -1703,6 +1704,7 @@ export class Game {
   private togglePowerView() {
     if (!this.building()) return;
     this.powerView = !this.powerView;
+    if (this.powerView) this.waterView = false; // one view at a time
     this.hud.buildBar.powerOn = this.powerView;
     this.hud.buildBar.render(this.hud.currentTool);
     // A new concept gets one short introduction, the first time only.
@@ -4629,8 +4631,12 @@ export class Game {
     this.lightVisuals.update(wdt, this.camera.entity.getPosition());
     // E23.3.4: in the Power view, powered electrical machines become yellow holograms and the rest of the world darkens
     this.machines.powerHolo(powerOn ? this.poweredMachines() : undefined, wdt);
+    // E23.4.5: in the Water view, pumps, tanks and pipes holding water become blue holograms, in the same dimmed world
+    const waterOn = this.waterView && this.building();
+    this.machines.waterHolo(waterOn ? WaterOverlay.holoMachines(this.sim) : undefined, wdt);
+    this.pipes.holo(waterOn ? this.machines.holoMat('water') : undefined);
     const D = POWER.view.darken;
-    const dimTo = powerOn ? D.night + (D.day - D.night) * this.dayNight.light : 0;
+    const dimTo = powerOn || waterOn ? D.night + (D.day - D.night) * this.dayNight.light : 0;
     const k = Math.min(1, wdt / POWER.view.fade);
     this.dayNight.dim = Math.abs(dimTo - this.dayNight.dim) < 1e-3 ? dimTo : this.dayNight.dim + (dimTo - this.dayNight.dim) * k;
     this.powerOverlay.setBoost(this.dayNight.boost);

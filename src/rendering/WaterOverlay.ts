@@ -109,6 +109,25 @@ export class WaterOverlay {
     });
   }
 
+  /**
+   * E23.4.5: machines the Water view turns into blue holograms: water that runs or is held. A pump pushing water
+   * (powered, on a bank with water), a reservoir holding some, and a desalination plant making or holding some.
+   */
+  static holoMachines(sim: Sim): Set<string> {
+    const w = sim.water;
+    const out = new Set<string>();
+    for (const m of sim.state.machines) {
+      if (m.type === 'reservoir') {
+        const b = w.tank(m.id);
+        if (b && w.amountOf(b.id) > 0) out.add(m.id);
+      } else if (m.type === 'desalination') {
+        const b = w.plantTank(m.id);
+        if ((b && w.amountOf(b.id) > 0) || w.pipes.powered(m)) out.add(m.id);
+      } else if (w.pipes.pumpSpec(m.type) && w.pipes.pumpLive(m)) out.add(m.id);
+    }
+    return out;
+  }
+
   private clear() {
     for (const c of [...this.root.children]) c.destroy();
     for (const m of this.meshes) m.destroy();

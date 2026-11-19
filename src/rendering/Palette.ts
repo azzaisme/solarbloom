@@ -455,6 +455,14 @@ const signal = {
     /** the Power view's light: the world goes cool and grey under it, so the yellow grid pops */
     viewLight: '#8c98ab',
   },
+  /** E23.4.5: the Water view */
+  water: {
+    /**
+     * water machines and pipes that hold or carry water become holograms in this blue: fully saturated, as the
+     * Power view's yellow is (pure #0000ff reads near black at 35% opacity, so a sky-leaning blue, RGB (0, 136, 255))
+     */
+    machineHolo: '#0088ff',
+  },
 };
 
 /** Scene lights (Look 1 owns lighting; on its branch these move to src/data/look.ts). */

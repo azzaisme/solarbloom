@@ -256,7 +256,23 @@ try {
     await settle(2500);
     check(await run(() => window.solarbloom.waterView), 'V turns the Water view on in build mode');
     check(await run(() => window.solarbloom.waterOverlay.visible), 'the Water view is drawn');
+    // E23.4.5: the running pump and the line it fills are blue holograms, in a dimmed world
+    const holo = await run(() => {
+      const g = window.solarbloom;
+      const pump = g.sim.machinesOfType('pump')[0];
+      return { parts: g.machines.holos.water.parts.size, pump: g.machines.holos.water.sig.split(',').includes(pump.id), pipes: g.pipes.wetParts.filter((mi) => mi.material === g.machines.holoMat('water')).length, dim: g.dayNight.dim };
+    });
+    check(holo.pump && holo.parts > 0 && holo.pipes > 0 && holo.dim > 0.5, `the pump and its line are blue holograms, the world dimmed (${JSON.stringify(holo)})`);
     await shot('7-overlay');
+    // one view at a time: the Power view (O) turns the Water view off, and its holograms with it
+    await page.keyboard.press('KeyO');
+    await settle(1500);
+    const swap = await run(() => ({ water: window.solarbloom.waterView, parts: window.solarbloom.machines.holos.water.parts.size, power: window.solarbloom.machines.holos.power.parts.size }));
+    check(!swap.water && swap.parts === 0 && swap.power > 0, `the Power view takes over: no blue left (${JSON.stringify(swap)})`);
+    await page.keyboard.press('KeyV');
+    await settle(1500);
+    const back = await run(() => ({ water: window.solarbloom.waterView, power: window.solarbloom.machines.holos.power.parts.size }));
+    check(back.water && back.power === 0, `V brings the Water view back and the yellow goes (${JSON.stringify(back)})`);
     await press(14);
     await page.waitForTimeout(500);
     check(!(await run(() => window.solarbloom.waterView)), 'd-pad left turns it off (pad)');
@@ -277,7 +293,19 @@ try {
     await settle(3000);
     await run(() => window.solarbloom.selectTool('pipe'));
     await settle(2500);
+    const tank = await run(() => {
+      const g = window.solarbloom;
+      const r = g.sim.machinesOfType('reservoir')[0];
+      return g.machines.holos.water.sig.split(',').includes(r.id);
+    });
+    check(tank, 'the terrace tank holding water is a blue hologram');
     await shot('7-overlay-gravity');
+    // the plant on the shore, making water, in the same blue
+    if (desal.spot) {
+      await run(({ x, z }) => window.solarbloom.bot.teleport('g', x + 1, z - 1.2), desal.spot);
+      await settle(3000);
+      await shot('7-overlay-desal');
+    }
   }
 } catch (e) {
   failures.push(String(e));
