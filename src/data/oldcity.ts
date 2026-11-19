@@ -204,7 +204,7 @@ export const REGIONS: RegionDef[] = [
     landmark: { kind: 'hall', name: 'Market Hall', x: 32, z: 14 },
     keeper: 'tally',
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
-    ponds: [{ x: 16, z: 9, w: 2, d: 3 }],
+    ponds: [{ x: 21, z: 9, w: 2, d: 3 }],
     seam: { name: 'the Glassworks', x: 40, z: 24 },
     gate: { id: 'g-oldMarket', kind: 'barricade', cells: [[16, 7], [16, 8]], needs: { ability: 'pry' }, blocked: 'Rubble blocks the way — needs Pry (fountain tier 1)' },
     patch: { name: 'The market square', x: 26, z: 18, w: 6, d: 4 },
@@ -455,7 +455,7 @@ export const REGIONS: RegionDef[] = [
     landmark: { kind: 'clock', name: 'Clock Tower', x: 64, z: 4 },
     keeper: 'tock',
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
-    ponds: [{ x: 49, z: 4, w: 2, d: 3 }],
+    ponds: [{ x: 53, z: 4, w: 2, d: 3 }],
     seam: { name: 'the Escapement', x: 72, z: -12 },
     gate: { id: 'g-clockPlaza', kind: 'lockBridge', cells: [[48, 7], [49, 7], [48, 8], [49, 8]], needs: { landmark: 'saltwind', ability: 'hover' }, blocked: 'The canal is too deep — the lock bridge rises when the Sea Lock wakes (or Hover)' },
     patch: { name: 'The plaza', x: 60, z: 12, w: 8, d: 4 },
@@ -631,7 +631,7 @@ export const REGIONS: RegionDef[] = [
     landmark: { kind: 'observatory', name: 'Sky Observatory', x: 60, z: -66 },
     keeper: 'vega',
     // E23.5.4.6: a small silted pond beside the Keeper's garden: it fills once restored, and waters the beds
-    ponds: [{ x: 33, z: -47, w: 2, d: 3 }],
+    ponds: [{ x: 33, z: -45, w: 2, d: 3 }],
     seam: { name: 'the Lens Grinders', x: 72, z: -40 },
     gate: { id: 'g-observatory', kind: 'cliff', cells: [[33, -48]], needs: { ability: 'glide' }, blocked: 'A cliff too high to climb — glide here from the edge of The Terraces (fountain tier 4)' },
     patch: { name: 'The hilltop', x: 56, z: -74, w: 6, d: 4 },

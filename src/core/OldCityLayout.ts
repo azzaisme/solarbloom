@@ -143,9 +143,9 @@ export function pondCell(x: number, z: number): boolean {
 }
 
 /** E23.5.4.6: a shallow pond beside a Keeper's garden (a silted bed until restored), from data/oldcity. */
-export function regionPond(x: number, z: number): boolean {
+export function regionPond(x: number, z: number, dry?: readonly string[]): boolean {
   const r = regionOfCell(x, z);
-  return !!r?.ponds?.some((q) => inRect(q, x, z));
+  return !!r?.ponds?.some((q) => inRect(q, x, z)) && !dry?.includes(r.id);
 }
 
 /** The region a chunk belongs to (undefined for the park, backstreets, the sea and anything outside). */

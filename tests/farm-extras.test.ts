@@ -6,13 +6,12 @@ import type { MachineData, MachineType } from '../src/core/types';
 import { COMPOST } from '../src/data/compost';
 import { CROP_IDS, CROPS, type CropId } from '../src/data/crops';
 import { DAY_SECONDS } from '../src/data/time';
-import { BEEHIVE, DIVERSITY, GARDEN_REQUESTS, HOMES, KEEPER_GARDEN, MUSHROOM_LOG, ORCHARD, WORM_BIN, type HomeKind } from '../src/data/farmExtras';
+import { BEEHIVE, DIVERSITY, FISH_POND, GARDEN_REQUESTS, HOMES, KEEPER_GARDEN, MUSHROOM_LOG, ORCHARD, WORM_BIN, type HomeKind } from '../src/data/farmExtras';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { DECOR_OPTION } from '../src/data/cozy';
 import { Cozy, decorOpen } from '../src/gameplay/Cozy';
 import { FARM_USES } from '../src/data/farm';
 import { CHARGE } from '../src/data/charge';
-import { WATER_NET } from '../src/data/water';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
@@ -104,6 +103,54 @@ describe('E23.5.4.1: beehives', () => {
 });
 
 describe('E23.5.4.2: fish ponds', () => {
+  it('#430: a pond kept filled by pipe, and its water piped on to a planter far from it (E23.4.2’s real pipes)', () => {
+    const sim = farm();
+    sim.state.salvage!.keepers.sluice = { step: 'request1' }; // pipes and reservoirs come from Cistern Basin's Keeper
+    sim.state.salvage!.pack = { ...(sim.state.salvage!.pack ?? {}), pipe: 40, clay: 40, scrap: 40 };
+    // the park's lawn row 4: no canal or pond within reach of these tiles
+    const pond = build(sim, 'fishPond', 6, 5);
+    expect(sim.water.bodyNear(sim.grid.get(GROUND, 6, 5)!, FISH_POND.waterReach)).toBeUndefined();
+    expect(sim.farmExtras.pondFilled(pond)).toBe(false);
+    // a full reservoir on higher ground feeds a pipe that runs past the pond and on along the row
+    const r: MachineData = { id: sim.newId('m'), type: 'reservoir', roofId: GROUND, x: 14, z: 4, size: 2, boostUntil: 0, timer: 0, charge: 0 };
+    sim.state.machines.push(r);
+    for (const t of sim.grid.footprint(GROUND, 14, 4, 2)) Object.assign(t!, { occupantId: r.id, level: 2 });
+    sim.grid.indexMachine(r);
+    sim.water.fill(`r:${r.id}`, 300);
+    for (let x = 6; x <= 13; x++) expect(sim.water.pipes.lay(GROUND, x, 4), `pipe ${x},4`).toBe(true);
+    sim.water.tick(60);
+    expect(sim.water.pipes.carries(6, 4)).toBe(true);
+    // the pipe beside it keeps the pond filled, and the pond drinks from it
+    expect(sim.farmExtras.pondFilled(pond)).toBe(true);
+    const tank = sim.water.levelOf(`r:${r.id}`);
+    run(sim, DAY_SECONDS);
+    expect(sim.water.levelOf(`r:${r.id}`)).toBeLessThan(tank);
+    // a planter six tiles off, beside the same run: the pond's water is piped to it, so it needs no fertiliser
+    ground(sim, 12, 3, 0, 1);
+    const p = build(sim, 'planter', 12, 3);
+    expect(Math.max(Math.abs(p.x - pond.x), Math.abs(p.z - pond.z))).toBeGreaterThan(FISH_POND.feedReach);
+    expect(sim.farmExtras.pipedTo(pond, p)).toBe(true);
+    expect(sim.farmExtras.pondFeeds(p)).toBe(true);
+    expect(sim.farm.fertilised(p)).toBe(true);
+    // lift the pipe between them: no longer piped
+    expect(sim.water.pipes.lift(9, 4)).toBe(true);
+    expect(sim.farmExtras.pipedTo(pond, p)).toBe(false);
+    expect(sim.farmExtras.pondFeeds(p)).toBe(false);
+  });
+
+  it('a wildlife home’s water habitat is fresh water only: a dead silted pond does not count, restored it does', () => {
+    const sim = farm();
+    ground(sim, 12, 16, 3, 1);
+    const box = build(sim, 'batBox', 12, 16);
+    const bed = sim.grid.get(GROUND, 14, 16)!;
+    Object.assign(bed, { feature: 'water', ground: 'polluted', pollution: 60, blocked: false });
+    sim.grid.touch(bed);
+    expect(sim.farmExtras.habitat(box, 'water')).toBe(false);
+    Object.assign(bed, { ground: 'restored', pollution: 0 });
+    sim.grid.touch(bed);
+    expect(sim.farmExtras.habitat(box, 'water')).toBe(true);
+  });
+
   it('done when: a planter fed from a fish pond needs no fertiliser', () => {
     const sim = farm();
     ground(sim, 12, 16, 3, 1);
@@ -435,6 +482,21 @@ describe('E23.5.4.6: Keeper gardens', () => {
     }
   });
 
+  it('no Keeper pond sits where bloombot arrives or crosses: 2+ tiles from gates, glide perches and landings, ladders and ramps', () => {
+    const hot: [number, number][] = [];
+    for (const r of REGIONS) {
+      for (const c of r.gate?.cells ?? []) hot.push(c as [number, number]);
+      for (const p of r.perches) hot.push([p.x, p.z], p.to);
+      for (const l of r.ladders) hot.push([l.x, l.z], l.to);
+      for (const q of r.ramps) for (let x = q.x; x < q.x + q.w; x++) for (let z = q.z; z < q.z + q.d; z++) hot.push([x, z]);
+    }
+    for (const r of REGIONS)
+      for (const q of r.ponds ?? [])
+        for (let x = q.x; x < q.x + q.w; x++)
+          for (let z = q.z; z < q.z + q.d; z++)
+            for (const [a, b] of hot) expect(Math.max(Math.abs(a - x), Math.abs(b - z)), `${r.id} pond ${x},${z} by ${a},${b}`).toBeGreaterThan(2);
+  });
+
   it('every Keeper’s garden has fresh water: a silted pond beside it fills once restored, and waters the garden', () => {
     for (const k of KEEPERS) {
       const sim = farm();
@@ -463,7 +525,6 @@ describe('E23.5.4.6: Keeper gardens', () => {
         expect(sim.water.dormant(body!)).toBe(false);
         // its springs fill it within the day (the wake's rush may have come before the pond was restored)
         for (let h = 0; h < 12; h++) sim.water.tick(DAY_SECONDS / 24);
-        expect(WATER_NET.springs.cistern! / 2).toBeGreaterThan(0.5);
       }
       expect(sim.water.levelOf(body!.id), `${k.name}'s pond level`).toBeGreaterThan(0.5);
       // a planter in the Keeper's garden is watered by it, with no rain
@@ -524,6 +585,38 @@ describe('E23.5.4.6: Keeper gardens', () => {
     for (const [key, v] of Object.entries(sim.build.recipe('planter')!)) sim.inventory.add(key as 'scrap', v!);
     sim.build.place('planter', GROUND, spot.x, spot.z);
     expect(sim.farmExtras.diversityIn(area)).toBe(before + DIVERSITY.perGarden);
+  });
+
+  it('an older save with something built on a Keeper pond’s spot: that pond stays dry land, nothing ends up under water', () => {
+    // a game from before the ponds: a planter and a decoration on two of the Keeper ponds' spots
+    const sim = farm();
+    const m = build(sim, 'planter', 12, 16);
+    const saver = new SaveService(undefined);
+    const json = JSON.parse(saver.serialize(sim.state));
+    const tock = REGIONS.find((r) => r.id === 'clockPlaza')!.ponds![0];
+    const vega = REGIONS.find((r) => r.id === 'observatory')!.ponds![0];
+    const old = json.machines.find((x: { id: string }) => x.id === m.id);
+    Object.assign(old, { x: tock.x + 1, z: tock.z + 1 });
+    (json.cozy ??= {}).decor = { ...(json.cozy.decor ?? {}), [`${GROUND}|${vega.x}|${vega.z + 2}`]: 'bench' };
+    const back = new Sim(saver.deserialize(JSON.stringify(json))!);
+    const ground = back.state.layers.find((l) => l.kind === 'ground')!;
+    expect(ground.dryPonds).toEqual(expect.arrayContaining(['clockPlaza', 'observatory']));
+    // both ponds are land: the planter stands on dry ground, and no water body is there
+    for (const q of [tock, vega])
+      for (let x = q.x; x < q.x + q.w; x++)
+        for (let z = q.z; z < q.z + q.d; z++) {
+          const t = back.grid.get(GROUND, x, z)!;
+          expect(t.feature, `${x},${z}`).not.toBe('water');
+          expect(back.water.bodyAt(t)).toBeUndefined();
+        }
+    expect(back.grid.get(GROUND, tock.x + 1, tock.z + 1)!.occupantId).toBe(m.id);
+    // every other Keeper's pond is still there
+    const tide = REGIONS.find((r) => r.id === 'saltwind')!.ponds![0];
+    expect(back.grid.get(GROUND, tide.x, tide.z)!.feature).toBe('water');
+    // and it stays so through the next save and load
+    const again = new Sim(saver.deserialize(saver.serialize(back.state))!);
+    expect(again.state.layers.find((l) => l.kind === 'ground')!.dryPonds).toEqual(ground.dryPonds);
+    expect(again.grid.get(GROUND, tock.x, tock.z)!.feature).not.toBe('water');
   });
 
   it('extras survive a save', () => {

@@ -7,19 +7,15 @@ import { WATER_NET } from '../data/water';
 import { BEEHIVE, DIVERSITY, FISH_POND, FLOWERING, GARDEN_REQUESTS, HOME, HOMES, KEEPER_GARDEN, MUSHROOM_LOG, ORCHARD, WORM_BIN, type GardenRequest, type GardenReward, type Habitat, type HomeKind } from '../data/farmExtras';
 import { machineStrengthAt } from '../core/RegionStrengths';
 import type { Sim } from './Sim';
+import type { PipeNet } from './WaterPipes';
+
+const SIDES = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
 
 /** The E23.5.4 machine types. */
 export const EXTRA_TYPES = ['beehive', 'fishPond', 'orchard', 'mushroomLog', 'wormBin', 'birdBox', 'batBox', 'hedgehogHouse', 'butterflyGarden'] as const satisfies readonly MachineType[];
 export type ExtraType = (typeof EXTRA_TYPES)[number];
 export const isExtra = (t: string): t is ExtraType => (EXTRA_TYPES as readonly string[]).includes(t);
 export const isHome = (t: string): t is HomeKind => t in HOMES;
-
-/** What the extras borrow from other sub-epics (optional until they land). */
-interface Hooks {
-  /** E23.4.2's pipes (#514): whether a pond's water reaches a planter by pipe */
-  water?: { pipeFeeds?(from: MachineData, to: MachineData): boolean };
-  keepers?: { tend?(id: string): void };
-}
 
 /**
  * E23.5.4 (#389, #429–#434): beyond planters. Each thing to tend plugs into an existing system:
@@ -42,10 +38,6 @@ export class FarmExtras {
 
   get on(): boolean {
     return !!this.sim.state.salvage;
-  }
-
-  private get hooks(): Hooks {
-    return this.sim as unknown as Hooks;
   }
 
   st(m: MachineData | string): ExtraState {
@@ -116,24 +108,51 @@ export class FarmExtras {
 
   // ───────────── E23.5.4.2 fish ponds ─────────────
 
-  /** E23.4.1: a pond is kept filled from the real water near it (a canal or pond within `waterReach` still holding water). */
+  /**
+   * E23.4: a pond is kept filled from the real water near it (a canal or pond within `waterReach` still holding
+   * water), or by a pipe carrying water beside it (E23.4.2).
+   */
   pondFilled(m: MachineData): boolean {
-    return this.pondLevel(m) > WATER_NET.dryBelow;
+    const t = this.sim.grid.get(m.roofId, m.x, m.z);
+    return this.pondLevel(m) > WATER_NET.dryBelow || (!!t && this.sim.water.pipes.feeds(t));
   }
 
-  /** 0…1: the level of the water that keeps a pond filled (the fullest body within `waterReach`). */
+  /** 0…1: the level of the water near a pond that keeps it filled (the fullest body within `waterReach`). */
   pondLevel(m: MachineData): number {
     const t = this.sim.grid.get(m.roofId, m.x, m.z);
     return t ? this.sim.water.wetness(t, FISH_POND.waterReach) : 0;
   }
 
-  /** Does a filled fish pond's water reach this planter (by E23.4 pipe once it lands, else within `feedReach`)? */
+  /** Does a filled fish pond's water reach this planter: within `feedReach`, or piped from it (E23.4.2)? */
   pondFeeds(planter: MachineData): boolean {
     for (const p of this.sim.machinesOfType('fishPond')) {
       if (!this.pondFilled(p)) continue;
-      const piped = this.hooks.water?.pipeFeeds?.(p, planter);
-      if (piped ?? Math.max(Math.abs(p.x - planter.x), Math.abs(p.z - planter.z)) <= FISH_POND.feedReach + p.size - 1) return true;
+      if (Math.max(Math.abs(p.x - planter.x), Math.abs(p.z - planter.z)) <= FISH_POND.feedReach + p.size - 1) return true;
+      if (this.pipedTo(p, planter)) return true;
     }
+    return false;
+  }
+
+  /**
+   * E23.4.2 (#430): a pond's water piped to a planter: a run of pipe that touches the pond also passes within
+   * `pipeReach` of the planter.
+   */
+  pipedTo(pond: MachineData, planter: MachineData): boolean {
+    if (pond.roofId !== GROUND || planter.roofId !== GROUND) return false;
+    const pipes = this.sim.water.pipes;
+    const runs = new Set<PipeNet>();
+    for (const t of this.sim.grid.footprint(pond.roofId, pond.x, pond.z, pond.size))
+      for (const [dx, dz] of SIDES) {
+        const net = t && pipes.netAt(t.x + dx, t.z + dz);
+        if (net) runs.add(net);
+      }
+    if (!runs.size) return false;
+    const R = WATER_NET.pipeReach;
+    for (const net of runs)
+      for (const k of net.tiles) {
+        const [x, z] = k.split(',').map(Number);
+        if (Math.max(Math.abs(x - planter.x), Math.abs(z - planter.z)) <= R + planter.size - 1) return true;
+      }
     return false;
   }
 
@@ -301,7 +320,8 @@ export class FarmExtras {
       case 'flowers':
         return this.flowersNear(m, HOME.reach) >= HOME.plants;
       case 'water':
-        return tiles.some((t) => t.feature === 'water') || this.machinesNear(m, HOME.reach, (o) => o.type === 'fishPond').length > 0;
+        // fresh water only: a canal or a restored pond (never a dead silted bed, the sea or the surf), or a fish pond
+        return tiles.some((t) => this.sim.water.isFresh(t)) || this.machinesNear(m, HOME.reach, (o) => o.type === 'fishPond').length > 0;
       case 'night':
         return this.isNight();
       case 'quiet':
@@ -385,7 +405,7 @@ export class FarmExtras {
     const sv = this.sim.state.salvage!;
     (sv.gardens ??= {})[keeper] = (sv.gardens[keeper] ?? 0) + 1;
     const given = this.give(req);
-    this.hooks.keepers?.tend?.(keeper);
+    this.sim.keepers.tend(keeper); // E23.9.2: a grown garden warms the Keeper's friendship
     this.sim.bus.emit('garden.fulfilled', { keeperId: keeper, crop, reward: given });
   }
 
@@ -505,8 +525,8 @@ export class FarmExtras {
       if (!t) continue;
       const want = (this.pondThirst.get(m.id) ?? 0) + FISH_POND.waterPerDay * days;
       const whole = Math.floor(want);
-      const b = whole > 0 ? this.sim.water.bodyNear(t, FISH_POND.waterReach) : undefined;
-      if (b) this.sim.water.draw(b.id, whole);
+      // from the water nearby, else through the pipe beside it (drawNear falls back to E23.4.2's pipes)
+      if (whole > 0) this.sim.water.drawNear(t, whole);
       this.pondThirst.set(m.id, want - whole);
     }
   }

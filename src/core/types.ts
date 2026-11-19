@@ -116,6 +116,11 @@ export interface LayerData {
   preview: boolean; // visible but not yet playable
   /** Ground generation version: 4 the city generator's ground, 5 the Old City (every game since E23.1.1). */
   gen?: number;
+  /**
+   * E23.5.4.6: regions whose Keeper pond stays dry land in this save: something the player built already stood on
+   * its spot when the ponds came (`Sim.dryOccupiedPonds`), so nothing they made ends up under water.
+   */
+  dryPonds?: string[];
   /** City 12.1: a generated rooftop uses this template's layout and look ('seed', 'reservoir' or 'canopy'). */
   template?: string;
   /** City 12.1: the city area whose rooftop cluster this is (such roofs are not part of the rooftop campaign). */

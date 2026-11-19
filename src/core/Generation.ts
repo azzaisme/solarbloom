@@ -320,7 +320,7 @@ function generateOldCity(seed: number, layer: LayerData, lh: number, x: number, 
   // the sea all round the island, the bay and the coast band: open water nothing crosses; canals: deep water
   if (area.id === SEA || area.id.startsWith('out_') || seaCell(x, z) || regionWater(x, z)) return stampOldCity(Object.assign(base, { feature: 'water' as TileFeature, blocked: true }));
   // E23.5.4.6: a Keeper's garden pond: a silted bed (dead, walkable) until restored, then fresh water
-  if (regionPond(x, z)) {
+  if (regionPond(x, z, layer.dryPonds)) {
     const lo = Math.max(pollutionMin, area.pollutionFloor);
     const pollution = Math.min(100, Math.round(lo + (Math.max(lo, pollutionMax) - lo) * tileRandom(seed, lh, x, z, 1)));
     return stampOldCity(Object.assign(base, { feature: 'water' as TileFeature, pollution }));

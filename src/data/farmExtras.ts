@@ -18,11 +18,11 @@ export const BEEHIVE = {
 
 /** E23.5.4.2 (#430): fish ponds. */
 export const FISH_POND = {
-  /** a pond stays filled while a canal or pond within this many tiles still holds water (E23.4.1 levels) */
+  /** a pond stays filled while a canal or pond within this many tiles still holds water (E23.4.1 levels), or a pipe beside it carries water (E23.4.2) */
   waterReach: 3,
   /** water a filled pond draws a game day (E23.4 units; a water tile holds 20) */
   waterPerDay: 6,
-  /** planters this pond's water reaches (by E23.4 pipe, or within this many tiles until pipes land) count as fertilised */
+  /** planters within this many tiles, or beside a pipe run that touches the pond (E23.4.2), count as fertilised */
   feedReach: 2,
 };
 

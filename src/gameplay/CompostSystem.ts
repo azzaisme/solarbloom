@@ -91,11 +91,9 @@ export class CompostSystem {
 
   /** E23.5.4.4: worm bins next door speed a bin up (twice as fast). Returns the speed multiplier. */
   speed(m: MachineData): number {
-    // worm bins are E23.5.4's (optional until the extras land)
-    const extras = (this.sim as unknown as { farmExtras?: { compostSpeed?(m: MachineData): number } }).farmExtras;
     // E23.6.2: compost research ('compostSpeed') speeds every bin
     const research = 1 + this.sim.research.effect('compostSpeed');
-    return (extras?.compostSpeed?.(m) ?? 1) * research;
+    return this.sim.farmExtras.compostSpeed(m) * research;
   }
 
   private tickBin(m: MachineData, days: number) {
