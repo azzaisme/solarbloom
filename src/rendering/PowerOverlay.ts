@@ -139,7 +139,12 @@ export class PowerOverlay {
     for (const c of [...this.root.children]) c.destroy();
     this.members = [];
     this.bars = [];
-    nets.forEach((n, i) => {
+    // Colours by size: the biggest network (by machines) is always yellow, like the machines' glow in this view;
+    // a separate network gets the next colour, so you can still tell which machines share a grid.
+    const machinesIn = (n: PowerNetwork) => n.members.filter((m) => !m.type.startsWith('light:')).length;
+    const rank = new Map([...nets].sort((a, b) => machinesIn(b) - machinesIn(a)).map((n, k) => [n, k]));
+    nets.forEach((n) => {
+      const i = rank.get(n)!;
       const line = this.lineMats[i % this.lineMats.length];
       for (const m of n.members) {
         const [x, y, z] = this.worldOf(m);
