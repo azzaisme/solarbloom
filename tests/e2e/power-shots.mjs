@@ -98,6 +98,14 @@ try {
     g.selectTool('battery');
     g.togglePowerView();
   });
+  // the Power view's dim eases in (slowly at headless frame rates): wait until it has settled
+  const settled = (on) => page.waitForFunction((on) => {
+    const d = window.solarbloom.dayNight.dim;
+    const prev = window.__dimPrev;
+    window.__dimPrev = d;
+    return on ? d > 0.45 && prev !== undefined && Math.abs(d - prev) < 1e-4 : d < 0.01;
+  }, on, { timeout: 60000, polling: 500 });
+  if (hasOverlay) await settled(true);
   if (hasOverlay) await shot('power-overlay', 8, 42, 1.0, 20);
   if (hasOverlay) console.log('  power view light', JSON.stringify(await page.evaluate(() => {
     const g = window.solarbloom;
@@ -195,6 +203,7 @@ try {
         g.selectTool('battery');
         if (!g.powerOverlay.visible) g.togglePowerView();
       });
+      await settled(true);
       const withOverlay = await shot('power-overlay-night', 8, 42, 1.0, 20, 4000);
       // the overlay's own cost: the same view, still building, with the view off
       await page.evaluate(() => window.solarbloom.togglePowerView());
