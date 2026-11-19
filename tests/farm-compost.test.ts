@@ -163,6 +163,8 @@ describe('E23.5.3: the Bio Digester', () => {
     sim.state.salvage!.tier = 4;
     // a stand-in for E23.3.3's charger (not on e23-integration yet): a chest drawing a charger's 6 W
     sim.power.register('chest', { consumer: { shed: 'charger', draw: 6 } });
+    // the power pole and the chest come from Mast Row's and Saltwind's Keepers (data/crafting)
+    for (const r of ['mastRow', 'saltwind']) sim.state.salvage!.keepers[KEEPERS.find((k) => k.region === r)!.id] = { step: 'settled' };
     const pole = build(sim, 'relay' as 'bioDigester', 12, 16);
     const dig = build(sim, 'bioDigester', 13, 16);
     const load = build(sim, 'chest' as 'bioDigester', 12, 17);
