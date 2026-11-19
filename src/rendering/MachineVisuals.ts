@@ -338,6 +338,17 @@ export class MachineVisuals {
   private glowing = new Map<pc.MeshInstance, pc.Material>();
   private glowSig = '';
   private glowIn = 0;
+  private glowBoost = 1;
+
+  /** Keeps the glow as bright while the Power view's dim lowers the exposure (DayNight.boost). */
+  setGlowBoost(b: number): void {
+    if (Math.abs(b - this.glowBoost) < 0.01) return;
+    this.glowBoost = b;
+    for (const t of this.glowTwins.values()) {
+      t.emissiveIntensity = POWER.view.glow * b;
+      t.update();
+    }
+  }
 
   /**
    * The Power view: the given machines (powered electrical ones) glow soft yellow, by swapping each part's material
@@ -404,7 +415,7 @@ export class MachineVisuals {
     if (m.emissiveMap || (e.r + e.g + e.b) * m.emissiveIntensity > 0.05) return undefined; // already glows
     t = m.clone() as pc.StandardMaterial;
     t.emissive = color(PALETTE.signal.power.machineGlow);
-    t.emissiveIntensity = POWER.view.glow;
+    t.emissiveIntensity = POWER.view.glow * this.glowBoost;
     t.update();
     this.glowTwins.set(m, t);
     return t;
