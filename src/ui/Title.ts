@@ -12,7 +12,9 @@ import { PadFocus } from './PadFocus';
  *   panel over the left third (owner, 18 Nov 2026). Play opens the three slots, each with its name, day, time played,
  *   the fountain's step and the last region: Load, Rename, Start over or Delete a garden, or Start one in an empty
  *   slot. Rename, Start over and Delete each ask first. A garden from an earlier version (E23.1.1) can't be loaded:
- *   its card says so calmly and offers Start fresh (no question: nothing playable is lost) or Delete.
+ *   its card says so calmly and offers Start fresh (no "are you sure": nothing playable is lost) or Delete. Start
+ *   fresh asks the day-clock question like any new garden, and so does a Load whose save turns out to be from an
+ *   earlier version under a current header (the question says why).
  *
  * Everything works with the keyboard (Tab, arrows, Enter, Esc) and the pad alone (the d-pad's focus ring, A,
  * B to go back). The title draws no 3D: it costs next to nothing, so it holds any frame limit.
@@ -21,6 +23,8 @@ export interface TitleHost {
   slots(): Promise<(SlotHeader | undefined)[]>;
   /** start a slot (fresh: clear it first) */
   start(slot: Slot, fresh: boolean, device: 'keys' | 'pad', realClock?: boolean): void;
+  /** E23.1.1: the slot's save is from an earlier version (its header can be current), so loading it starts fresh */
+  earlierVersion?(slot: Slot): Promise<boolean>;
   /** E23.7.1.2: Settings' "Follow my clock" on the title: the new-game question offers it first */
   preferRealClock?(): boolean;
   rename(slot: Slot, name: string): void;
@@ -193,7 +197,7 @@ export class Title {
         this.renaming = undefined;
         return this.render('tPlay');
       case 'loadSlot':
-        return this.host.start(slot, false, this.device);
+        return void this.load(slot);
       case 'fresh': // E23.1.1: an earlier version's garden starts a new one, which asks about the day clock like any new garden
         return this.askClock(slot);
       case 'start':
@@ -246,13 +250,22 @@ export class Title {
    * E23.7.1.2 (#446): a new garden asks how its days go: the game's own day (48 minutes of play), or the real clock
    * (only the sky, the light and solar follow it). Settings can switch it later.
    */
-  private askClock(slot: Slot) {
+  /**
+   * E23.1.1: Load. A save from an earlier version under a current header can't be told from the card, so a Load
+   * that would start fresh says so in the new-garden question, which it asks like every new garden.
+   */
+  private async load(slot: Slot) {
+    if (await this.host.earlierVersion?.(slot)) return this.askClock(slot, 'This garden grew in an earlier version of Solarbloom, so a new one starts here.');
+    this.host.start(slot, false, this.device);
+  }
+
+  private askClock(slot: Slot, why?: string) {
     const own = { label: "The game's own day", then: () => this.host.start(slot, true, this.device, false) };
     const real = { label: 'Follow my clock', then: () => this.host.start(slot, true, this.device, true) };
     const [first, second] = this.host.preferRealClock?.() ? [real, own] : [own, real];
     this.confirm = {
       text: 'How should the days go?',
-      detail: "The game's own day lasts 48 minutes of play. Following your clock, the sky and the sun keep your local time. Everything grows at the same pace either way, and Settings can switch it later.",
+      detail: `${why ? `${why} ` : ''}The game's own day lasts 48 minutes of play. Following your clock, the sky and the sun keep your local time. Everything grows at the same pace either way, and Settings can switch it later.`,
       yes: first.label,
       then: first.then,
       alt: second,

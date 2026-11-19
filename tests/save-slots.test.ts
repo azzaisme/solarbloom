@@ -112,4 +112,29 @@ describe('E22.12: save slots', () => {
     store.setItem(slotKey(3), await new SaveService(undefined).serializeCompressed({ ...sim.state, version: 3 } as typeof sim.state));
     expect(await service(store, 3).loadResultAsync()).toEqual({ scrapped: true });
   });
+
+  it('E23.1.1: the title can tell a save from an earlier version under a current header, without touching it', async () => {
+    const store = memory();
+    const sim = new Sim(createInitialState(12));
+    service(store, 1).save(sim.state);
+    // slot 2: a current header over an earlier version's save, plain; slot 3 the same, compressed
+    const old = { ...JSON.parse(new SaveService(undefined).serialize(sim.state)), version: SAVE_VERSION - 1 };
+    store.setItem(slotKey(2), JSON.stringify(old));
+    store.setItem(headerKey(2), JSON.stringify({ name: 'Garden 2', played: 60, step: 'The fountain is dry', region: 'The park', version: SAVE_VERSION, savedAt: 2 }));
+    store.setItem(slotKey(3), await new SaveService(undefined).serializeCompressed({ ...sim.state, version: 3 } as typeof sim.state));
+    store.setItem(headerKey(3), JSON.stringify({ name: 'Garden 3', played: 60, step: 'The fountain is dry', region: 'The park', version: SAVE_VERSION, savedAt: 3 }));
+    const heads = await service(store, 1).slots();
+    expect([heads[1]?.old, heads[2]?.old]).toEqual([false, false]); // the cards can't tell: their headers are current
+    expect(await service(store, 1).fromEarlierVersion()).toBe(false);
+    expect(await service(store, 2).fromEarlierVersion()).toBe(true);
+    expect(await service(store, 3).fromEarlierVersion()).toBe(true);
+    // an empty slot or an unreadable save is not "earlier": loading those goes its own way (new garden, backup)
+    store.removeItem(slotKey(3));
+    expect(await service(store, 3).fromEarlierVersion()).toBe(false);
+    store.setItem(slotKey(3), 'not a save');
+    expect(await service(store, 3).fromEarlierVersion()).toBe(false);
+    // asking changes nothing: the save is still there until a choice is made
+    expect(store.getItem(slotKey(2))).toBe(JSON.stringify(old));
+    expect(service(store, 2).loadResult()).toEqual({ scrapped: true });
+  });
 });
