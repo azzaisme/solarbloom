@@ -59,6 +59,8 @@ describe('E23.6.1: recipes in data', () => {
     const ids = MACHINE_RECIPES.map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const want of ['planterBox', 'compostBin', 'powerPole', 'charger', 'solar', 'windTurbine', 'chest', 'beehive', 'reservoir', 'pump', 'desalination', 'battery', 'bioDigester', 'drone', 'largeSolar', 'assembler']) expect(ids).toContain(want);
+    // planter boxes are Planks, so they open with Timber (Tide, Saltwind Beach); before that the farm is the ground
+    expect(MACHINE_RECIPES.find((r) => r.id === 'planterBox')).toMatchObject({ cost: { planks: 3 }, unlock: { keeper: 'saltwind' } });
     for (const r of MACHINE_RECIPES) {
       expect(Object.keys(r.cost).length, r.id).toBeGreaterThan(0);
       for (const k of Object.keys(r.cost)) expect(realItem(k), `${r.id}: ${k}`).toBe(true);
