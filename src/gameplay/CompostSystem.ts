@@ -4,22 +4,14 @@ import { DAY_SECONDS } from '../data/time';
 import { machineStrengthAt } from '../core/RegionStrengths';
 import type { Sim } from './Sim';
 
-/**
- * The parts of E23.3's grid (e23-power, `sim.power`) the digester uses. Optional until that lands: without a grid a
- * digester has nothing to feed, so it waits (fed, idle) and burns nothing.
- */
-interface PowerHook {
-  register?(type: string, def: { source: (m: MachineData) => number }): void;
-  networkOf?(m: MachineData): { demand: number; stored: number; capacity: number } | undefined;
-}
-
 export type DigesterMood = 'running' | 'idle' | 'empty';
 
 /**
  * E23.5.3 (#388): the end of the farm chain. A compost bin takes biomass and food scraps and rots them down into
  * compost over game days; compost left in the bin matures into fertiliser. A full bin just waits for bloombot.
- * The Bio Digester turns biomass into grid power, day or night, while fed: it burns only while its grid wants power
- * and an empty one just stops (nothing breaks). Old-city rules only. State lives in `salvage.bins` / `salvage.digesters`.
+ * The Bio Digester is a source on E23.3's grid (`sim.power`): it turns biomass into power, day or night, while fed.
+ * It burns only while its grid wants power (a draw, or a battery with room); off any grid it waits, fed, and an empty
+ * one just stops (nothing breaks). Old-city rules only. State lives in `salvage.bins` / `salvage.digesters`.
  */
 export class CompostSystem {
   private registered = false;
@@ -35,10 +27,6 @@ export class CompostSystem {
 
   get on(): boolean {
     return !!this.sim.state.salvage;
-  }
-
-  private get power(): PowerHook | undefined {
-    return (this.sim as unknown as { power?: PowerHook }).power;
   }
 
   // ───────────── compost bins ─────────────
@@ -164,7 +152,7 @@ export class CompostSystem {
 
   /** Does the digester's grid want power right now (something drawing, or a battery with room)? */
   private wanted(m: MachineData): boolean {
-    const net = this.power?.networkOf?.(m);
+    const net = this.sim.power.networkOf(m);
     return !!net && (net.demand > 1e-9 || net.stored < net.capacity - 1e-9);
   }
 
@@ -194,8 +182,9 @@ export class CompostSystem {
 
   tick(dt: number) {
     if (!this.on) return;
-    if (!this.registered && this.power?.register) {
-      this.power.register('bioDigester', { source: (m) => this.output(m) });
+    // registered on the first tick (the grid is built after the farm systems)
+    if (!this.registered) {
+      this.sim.power.register('bioDigester', { source: (m) => this.output(m as MachineData) });
       this.registered = true;
     }
     const days = dt / DAY_SECONDS;
