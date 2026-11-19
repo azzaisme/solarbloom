@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import type { MachineData } from '../src/core/types';
+import type { ItemId, MachineData } from '../src/core/types';
 import { AUTOMATION, HAND_JOBS } from '../src/data/automation';
 import { gameDays } from '../src/data/time';
 import { Sim } from '../src/gameplay/Sim';
@@ -247,5 +247,280 @@ describe('E23.6.5: the Assembler', () => {
     expect(sim.automation.setRecipe(asm, 'wire')).toBe(true);
     sim.state.salvage!.tier = 0;
     expect(sim.automation.setRecipe(asm, 'nonsense' as never)).toBe(false);
+  });
+});
+
+/** Every unit of an item in the world: crates, couriers' baskets, the backpack and the store (nothing may vanish). */
+function total(sim: Sim, item: ItemId): number {
+  let n = sim.inventory.count(item) + sim.inventory.stored(item);
+  for (const c of sim.automation.crates()) n += sim.automation.count(c.id, item);
+  for (const d of sim.state.drones) for (const b of d.cargo ?? []) if (b.item === item) n += b.n;
+  return n;
+}
+
+describe('E23.6.4 / E23.6.5: nothing is lost', () => {
+  function courierLine(drones = 1) {
+    const sim = park();
+    carryByHand(sim);
+    const hub = put(sim, 'droneHub', 18, 18, 2);
+    hub.role = 'courier';
+    (hub.roles ??= []).push('courier');
+    if (drones > 1) hub.upg = { secondDrone: drones - 1 };
+    const a = put(sim, 'crate', 14, 16);
+    const b = put(sim, 'crate', 22, 20);
+    return { sim, hub, a, b };
+  }
+  const flying = (sim: Sim) => sim.state.drones.find((d) => d.cargo?.length);
+  const until = (sim: Sim, ok: () => boolean, max = 600) => {
+    for (let t = 0; t < max && !ok(); t += 0.25) sim.advance(0.25);
+    return ok();
+  };
+
+  it('a courier hub taken down mid-trip: its basket goes back to its source crate', () => {
+    const { sim, hub, a } = courierLine();
+    sim.automation.put(a.id, 'scrap', 30);
+    sim.automation.addRoute(a.id, put(sim, 'crate', 22, 22).id, 'scrap');
+    expect(until(sim, () => !!flying(sim))).toBe(true);
+    const before = total(sim, 'scrap');
+    expect(sim.automation.count(a.id, 'scrap')).toBeLessThan(30);
+    expect(sim.build.remove(hub.id)).toBe(true);
+    expect(sim.state.drones.some((d) => d.hubId === hub.id)).toBe(false);
+    expect(total(sim, 'scrap')).toBe(before + (sim.build.recipe('droneHub')!.scrap ?? 0)); // and the hub's own recipe back
+    expect(sim.automation.count(a.id, 'scrap')).toBe(30);
+  });
+
+  it('a crate taken down while a basket is on its way to it: the basket goes back, its contents to bloombot', () => {
+    const { sim, a, b } = courierLine();
+    sim.automation.put(a.id, 'scrap', 30);
+    sim.automation.put(b.id, 'clay', 5);
+    sim.automation.addRoute(a.id, b.id, 'scrap');
+    expect(until(sim, () => !!flying(sim))).toBe(true);
+    const scrap = total(sim, 'scrap');
+    const clay = total(sim, 'clay');
+    sim.build.remove(b.id);
+    expect(flying(sim)).toBeUndefined();
+    expect(total(sim, 'scrap')).toBe(scrap);
+    expect(total(sim, 'clay')).toBe(clay);
+    expect(sim.automation.count(a.id, 'scrap')).toBe(30);
+  });
+
+  it('filled by hand while a basket was on its way: what does not fit goes back to the source, else the backpack', () => {
+    const { sim, a, b } = courierLine();
+    sim.automation.put(a.id, 'scrap', 10);
+    sim.automation.addRoute(a.id, b.id, 'scrap');
+    expect(until(sim, () => !!flying(sim))).toBe(true);
+    // the target fills up by hand, and so does the source: the basket has nowhere in either
+    sim.automation.put(b.id, 'clay', AUTOMATION.crate.capacity);
+    sim.automation.put(a.id, 'clay', AUTOMATION.crate.capacity);
+    const scrap = total(sim, 'scrap');
+    const held = sim.inventory.count('scrap') + sim.inventory.stored('scrap');
+    expect(until(sim, () => !flying(sim))).toBe(true);
+    expect(total(sim, 'scrap')).toBe(scrap);
+    expect(sim.inventory.count('scrap') + sim.inventory.stored('scrap')).toBe(held + 10);
+  });
+
+  it('two routes into one crate never book the same room', () => {
+    const { sim, hub, a, b } = courierLine(2);
+    const c = put(sim, 'crate', 15, 20);
+    expect(sim.automation.hubsFor({ from: c.id, to: b.id })).toEqual([hub]);
+    sim.automation.put(b.id, 'clay', AUTOMATION.crate.capacity - 12); // room for 12
+    sim.automation.put(a.id, 'scrap', 50);
+    sim.automation.put(c.id, 'copper', 50);
+    sim.automation.addRoute(a.id, b.id, 'scrap');
+    sim.automation.addRoute(c.id, b.id, 'copper');
+    const scrap = total(sim, 'scrap');
+    const copper = total(sim, 'copper');
+    let over = 0;
+    let both = false;
+    for (let t = 0; t < 300; t += 0.25) {
+      sim.advance(0.25);
+      over = Math.max(over, sim.automation.booked(b.id) - sim.automation.room(b.id));
+      both ||= sim.state.drones.filter((d) => d.route).length === 2;
+    }
+    expect(both).toBe(true); // both couriers were out at once
+    expect(over).toBe(0);
+    expect(sim.automation.room(b.id)).toBe(0);
+    expect(total(sim, 'scrap')).toBe(scrap);
+    expect(total(sim, 'copper')).toBe(copper);
+    expect(sim.inventory.count('scrap') + sim.inventory.count('copper')).toBe(0); // nothing had to spill
+  });
+
+  function shop() {
+    const sim = park();
+    const asm = put(sim, 'assembler', 16, 16, 2);
+    const inp = put(sim, 'crate', 15, 16);
+    const out = put(sim, 'crate', 19, 17);
+    return { sim, asm, inp, out };
+  }
+
+  it('choosing the same recipe mid-craft changes nothing; another one gives back what the craft took', () => {
+    const { sim, asm, inp } = shop();
+    sim.automation.setRecipe(asm, 'motor'); // 2 Gears and 1 Wire, 4 s
+    sim.automation.put(inp.id, 'gears', 2);
+    sim.automation.put(inp.id, 'wire', 1);
+    sim.advance(1);
+    const st = () => sim.state.salvage!.assemblers?.[asm.id];
+    expect(st()!.left).toBeGreaterThan(0);
+    expect(sim.automation.count(inp.id, 'gears')).toBe(0);
+    const left = st()!.left;
+    sim.automation.setRecipe(asm, 'motor');
+    expect(st()!.left).toBe(left);
+    sim.automation.setRecipe(asm, 'wire');
+    expect(st()!.left).toBeUndefined();
+    expect(sim.automation.count(inp.id, 'gears')).toBe(2);
+    expect(sim.automation.count(inp.id, 'wire')).toBe(1);
+    // and stopping it gives back too
+    sim.automation.setRecipe(asm, 'motor');
+    sim.advance(1);
+    expect(sim.automation.count(inp.id, 'gears')).toBe(0);
+    sim.automation.setRecipe(asm, undefined);
+    expect(sim.automation.count(inp.id, 'gears')).toBe(2);
+    expect(st()).toBeUndefined();
+  });
+
+  it('an Assembler taken down mid-craft gives back what the craft took', () => {
+    const { sim, asm, inp } = shop();
+    sim.automation.setRecipe(asm, 'motor');
+    sim.automation.put(inp.id, 'gears', 2);
+    sim.automation.put(inp.id, 'wire', 1);
+    sim.advance(1);
+    expect(sim.automation.count(inp.id, 'gears')).toBe(0);
+    sim.build.remove(asm.id);
+    expect(sim.automation.count(inp.id, 'gears')).toBe(2);
+    expect(sim.automation.count(inp.id, 'wire')).toBe(1);
+    expect(sim.state.salvage!.assemblers?.[asm.id]).toBeUndefined();
+  });
+
+  it('a craft whose output crate filled meanwhile puts what it made somewhere it is kept', () => {
+    const { sim, asm, inp, out } = shop();
+    sim.automation.setRecipe(asm, 'wire');
+    sim.automation.put(inp.id, 'copper', 2);
+    sim.advance(1);
+    sim.automation.put(out.id, 'clay', AUTOMATION.crate.capacity);
+    sim.automation.put(inp.id, 'clay', AUTOMATION.crate.capacity);
+    sim.advance(3);
+    expect(total(sim, 'wire')).toBe(2);
+  });
+});
+
+describe('E23.6.5: the Assembler, chosen by the player', () => {
+  it('the player chooses which crate beside it is its input and which its output', () => {
+    const sim = park();
+    const asm = put(sim, 'assembler', 16, 16, 2);
+    const near = put(sim, 'crate', 15, 16);
+    const mid = put(sim, 'crate', 19, 17);
+    const far = put(sim, 'crate', 16, 19);
+    expect(sim.automation.io(asm)).toEqual({ input: near, output: mid });
+    expect(sim.automation.setCrate(asm, 'input', far.id)).toBe(true);
+    expect(sim.automation.setCrate(asm, 'output', near.id)).toBe(true);
+    expect(sim.automation.io(asm)).toEqual({ input: far, output: near });
+    expect(sim.automation.setCrate(asm, 'input', put(sim, 'crate', 26, 26).id)).toBe(false); // not beside it
+    sim.automation.setRecipe(asm, 'planks');
+    sim.automation.put(far.id, 'timber', 1);
+    sim.automation.put(near.id, 'timber', 5); // not its input now
+    sim.advance(3);
+    expect(sim.automation.count(near.id, 'planks')).toBe(2);
+    expect(sim.automation.count(near.id, 'timber')).toBe(5);
+    // the panel's button steps through the crates beside it
+    expect(sim.automation.nextCrate(asm, 'output')).toBe(true);
+    expect(sim.automation.io(asm).output).not.toBe(near);
+  });
+
+  it('makes any item recipe the table knows (every component today)', () => {
+    const sim = park();
+    expect(sim.crafting.itemRecipes().map((r) => r.id)).toEqual(sim.crafting.components().map((r) => r.id));
+    const asm = put(sim, 'assembler', 16, 16, 2);
+    for (const r of sim.crafting.itemRecipes()) expect(sim.automation.setRecipe(asm, r.id), r.id).toBe(true);
+  });
+
+  it('draws its power only while it crafts', () => {
+    const sim = park();
+    const asm = put(sim, 'assembler', 16, 16, 2);
+    const inp = put(sim, 'crate', 15, 16);
+    sim.automation.setRecipe(asm, 'wire');
+    expect(sim.power.draw(asm)).toBe(0);
+    sim.automation.put(inp.id, 'copper', 2);
+    sim.advance(0.5);
+    expect(sim.power.draw(asm)).toBe(AUTOMATION.assembler.draw);
+    sim.advance(3);
+    expect(sim.power.draw(asm)).toBe(0);
+  });
+});
+
+describe('E23.6.4: building from supply crates', () => {
+  it('putting everything in the store at once counts as one job by hand', () => {
+    const sim = park();
+    sim.inventory.add('scrap', 3);
+    sim.inventory.add('copper', 3);
+    sim.inventory.add('clay', 3);
+    sim.inventory.depositAll();
+    expect(sim.automation.handCount('carry')).toBe(1);
+  });
+
+  it('a build takes from supply crates near bloombot after the backpack, before the store', () => {
+    const sim = park();
+    const sv = sim.state.salvage!;
+    sv.pack = { scrap: 4 };
+    sv.store = { scrap: 50, copper: 50, wire: 50 };
+    const crate = put(sim, 'crate', 24, 24);
+    sim.automation.put(crate.id, 'scrap', 20);
+    sim.automation.put(crate.id, 'copper', 6);
+    sim.automation.put(crate.id, 'wire', 2);
+    sim.bot = { roofId: GROUND, x: 25.5, z: 26.5 };
+    const store = sim.inventory.nearStore() ? 50 : 0;
+    expect(sim.inventory.available('scrap')).toBe(4 + 20 + store);
+    expect(sim.inventory.pay({ scrap: 12, copper: 6, wire: 2 })).toBe(true);
+    expect(sim.inventory.count('scrap')).toBe(0); // the backpack first
+    expect(sim.automation.count(crate.id, 'scrap')).toBe(12); // then the crate
+    expect(sim.automation.count(crate.id, 'copper')).toBe(0);
+    expect(sv.store.scrap).toBe(50); // the store untouched
+    // too far from the crate: it does not count
+    sim.bot = { roofId: GROUND, x: 24.5, z: 24.5 + AUTOMATION.build.crateReach + 3 };
+    expect(sim.inventory.available('scrap') - (sim.inventory.nearStore() ? 50 : 0)).toBe(0);
+  });
+
+  it('end to end: couriers and an Assembler keep a build site supplied, and it builds with nothing carried', () => {
+    const sim = park();
+    const sv = sim.state.salvage!;
+    carryByHand(sim);
+    sv.pack = {};
+    sv.store = {};
+    const asm = put(sim, 'assembler', 16, 16, 2);
+    const inp = put(sim, 'crate', 15, 16);
+    const out = put(sim, 'crate', 19, 17);
+    const hub = put(sim, 'droneHub', 17, 19, 2);
+    hub.role = 'courier';
+    (hub.roles ??= []).push('courier');
+    hub.upg = { secondDrone: 1 };
+    const supply = put(sim, 'crate', 13, 21);
+    const site = put(sim, 'crate', 22, 20);
+    sim.automation.put(supply.id, 'copper', 30);
+    sim.automation.put(supply.id, 'scrap', 40);
+    // Copper to the Assembler; its Wire to the site; Scrap and the rest of the Copper straight to the site
+    sim.automation.addRoute(supply.id, inp.id, 'copper');
+    sim.automation.addRoute(out.id, site.id, 'wire');
+    sim.automation.addRoute(supply.id, site.id, 'scrap');
+    sim.automation.setCrate(asm, 'input', inp.id);
+    sim.automation.setCrate(asm, 'output', out.id);
+    sim.automation.setRecipe(asm, 'wire');
+    sim.advance(gameDays(0.5));
+    expect(sim.automation.count(site.id, 'scrap')).toBe(40);
+    expect(sim.automation.count(site.id, 'wire')).toBeGreaterThanOrEqual(2);
+    // the condenser needs Copper as well: a route for it, and more Copper to the supply crate than the Assembler uses
+    sim.automation.removeRoute(sim.automation.routes().find((r) => r.to === inp.id)!.id);
+    sim.automation.put(supply.id, 'copper', 6);
+    sim.automation.setRouteItem(sim.automation.routes().find((r) => r.from === supply.id && r.to === site.id)!.id, 'all');
+    sim.advance(gameDays(0.2));
+    expect(sim.automation.count(site.id, 'copper')).toBeGreaterThanOrEqual(6);
+    // bloombot at the site with an empty backpack, the store empty: the Water Condenser (12 Scrap, 6 Copper, 2 Wire)
+    sim.bot = { roofId: GROUND, x: 23.5, z: 22.5 };
+    expect(sim.inventory.count('scrap') + sim.inventory.count('copper') + sim.inventory.count('wire')).toBe(0);
+    const before = { scrap: sim.automation.count(site.id, 'scrap'), copper: sim.automation.count(site.id, 'copper'), wire: sim.automation.count(site.id, 'wire') };
+    const spot = [[24, 22], [24, 23], [25, 22], [23, 24], [21, 22]].find(([x, z]) => sim.build.check('condenser', GROUND, x, z).ok);
+    expect(spot, sim.build.check('condenser', GROUND, 24, 22).reason).toBeDefined();
+    expect(sim.build.place('condenser', GROUND, spot![0], spot![1])).toBeDefined();
+    expect(sim.automation.count(site.id, 'scrap')).toBe(before.scrap - 12);
+    expect(sim.automation.count(site.id, 'copper')).toBe(before.copper - 6);
+    expect(sim.automation.count(site.id, 'wire')).toBe(before.wire - 2);
   });
 });

@@ -1,7 +1,7 @@
 import { distToFootprint } from '../core/Grid';
 import type { ComponentId, DroneData, ItemId, MachineData, SalvageState } from '../core/types';
 import { AUTOMATION, HAND_JOBS, type HandJob, type RouteItem } from '../data/automation';
-import { COMPONENT_RECIPES } from '../data/crafting';
+import type { ComponentRecipe } from '../data/crafting';
 import { ITEM_IDS, itemDef } from '../data/items';
 import type { Sim } from './Sim';
 
@@ -12,10 +12,13 @@ export interface Route {
   item: RouteItem;
 }
 
-/** E23.3's grid, as automation needs it. */
-interface PowerLike {
-  isPowered(m: MachineData): boolean;
-  register?(type: string, spec: { consumer: { shed: string; draw: number | ((m: MachineData) => number) } }): void;
+type Items = Partial<Record<ItemId, number>>;
+type AssemblerState = NonNullable<SalvageState['assemblers']>[string];
+/** Where something is (a machine, a drone, bloombot): for the nearest crate. */
+interface Spot {
+  roofId: string;
+  x: number;
+  z: number;
 }
 
 /**
@@ -23,33 +26,33 @@ interface PowerLike {
  * and drones; there are no conveyor belts.
  *
  * - Supply crates (#440) are boxes with their own contents, for machines and drones (a Storage Chest stays a way
- *   into the shared store, so nothing E21 gives is lost). Bloombot fills and empties them by hand.
+ *   into the shared store, so nothing E21 gives is lost). Bloombot fills and empties them by hand, and building takes
+ *   from crates near bloombot after the backpack (Inventory.pay), so a site couriers keep supplied builds by itself.
  * - Courier routes (#440): the player picks a source crate and a target crate (one item, or everything). A Drone Hub
- *   on the Courier role within reach of both flies them: it fetches a basket from the source and drops it in the
- *   target, on grid power, round after round, with nobody watching.
- * - The Assembler (#394) crafts any known component from the crate beside it (its input) into another crate beside
- *   it (its output), on grid power, at the crafting table's speed.
+ *   on the Courier role within reach of both flies them: it books room in the target, fetches a basket from the
+ *   source and drops it in the target, on grid power, round after round, with nobody watching.
+ * - The Assembler (#394) makes any item recipe the table knows from its input crate into its output crate (the
+ *   player chooses both among the crates beside it), on grid power, at the crafting table's speed.
  * - Each opens after its job has been done by hand a few times (`hand`, counted from the game's own events).
+ *
+ * Nothing is ever lost: a basket with nowhere to go, a craft stopped part way and a machine taken down all give
+ * their things back (`stash`: the nearest crate with room, then the backpack, then the store, which has no limit).
  *
  * The farm's automation (#441-#444: the Mulcher, hopper composter, feed tank, sprinklers, harvesters, seed drills and
  * the auto-feeder) will work the same way, from crates; it is not in this class yet.
  */
 export class Automation {
-  private registered = false;
-
   constructor(private sim: Sim) {
     // jobs done by hand, from the game's own events
     sim.bus.on('craft.done', () => this.did('craft'));
     sim.bus.on('store.moved', () => this.did('carry'));
-    sim.bus.on('machine.removed', ({ machine }) => this.forget(machine.id));
+    sim.bus.on('machine.removed', ({ machine }) => this.forget(machine));
+    // E23.3: the Assembler is a helper on the grid, drawing only while it crafts
+    sim.power.register('assembler', { consumer: { shed: 'helper', draw: (m) => (this.sv?.assemblers?.[m.id]?.left !== undefined ? AUTOMATION.assembler.draw : 0) } });
   }
 
   private get sv(): SalvageState | undefined {
     return this.sim.state.salvage;
-  }
-
-  private get power(): PowerLike | undefined {
-    return (this.sim as { power?: PowerLike }).power;
   }
 
   // ───────────── jobs done by hand ─────────────
@@ -86,7 +89,7 @@ export class Automation {
   }
 
   /** What a crate holds. */
-  contents(id: string): Partial<Record<ItemId, number>> {
+  contents(id: string): Items {
     return this.sv?.crates?.[id] ?? {};
   }
 
@@ -146,23 +149,51 @@ export class Automation {
     return k - left;
   }
 
-  /** A crate or Assembler taken down: its contents come back to bloombot (over a stack to the store); routes go. */
-  private forget(id: string) {
+  /** Supply crates on a spot's layer within `reach` tiles of it, nearest first. */
+  cratesNear(at: Spot, reach = AUTOMATION.build.crateReach, except?: string): MachineData[] {
+    const x = Math.floor(at.x);
+    const z = Math.floor(at.z);
+    const d = (c: MachineData) => distToFootprint(x, z, c.x, c.z, c.size);
+    return this.crates()
+      .filter((c) => c.id !== except && c.roofId === at.roofId && d(c) <= reach)
+      .sort((a, b) => d(a) - d(b) || (a.id < b.id ? -1 : 1));
+  }
+
+  /**
+   * Puts things somewhere they are kept, never lost: the first of `prefer` with room, then the nearest crate to
+   * `at` with room, then bloombot's backpack, then the store (which has no limit).
+   */
+  stash(item: ItemId, n: number, at?: Spot, prefer: string[] = []) {
+    let left = Math.floor(n);
+    for (const id of prefer) if (left > 0) left -= this.put(id, item, left);
+    if (left > 0 && at) for (const c of this.cratesNear(at, Infinity)) if (left > 0) left -= this.put(c.id, item, left);
+    if (left > 0) left = this.sim.inventory.add(item, left);
+    if (left > 0) this.sim.inventory.addToStore(item, left);
+  }
+
+  /** A crate or Assembler taken down: what it held comes back (a crate's to bloombot, a craft's to its crates); routes go. */
+  private forget(m: MachineData) {
     const sv = this.sv;
     if (!sv) return;
-    const c = sv.crates?.[id];
+    const c = sv.crates?.[m.id];
     if (c) {
-      for (const [item, n] of Object.entries(c) as [ItemId, number][]) this.sim.inventory.addToStore(item, this.sim.inventory.add(item, n));
-      delete sv.crates![id];
+      delete sv.crates![m.id];
       if (!Object.keys(sv.crates!).length) delete sv.crates;
+      for (const [item, n] of Object.entries(c) as [ItemId, number][]) this.stash(item, n);
     }
-    if (sv.routes?.some((r) => r.from === id || r.to === id)) {
-      sv.routes = sv.routes.filter((r) => r.from !== id && r.to !== id);
+    if (sv.routes?.some((r) => r.from === m.id || r.to === m.id)) {
+      const gone = new Set(sv.routes.filter((r) => r.from === m.id || r.to === m.id).map((r) => r.id));
+      // baskets on the way come back first (their source crate, if it still stands)
+      for (const d of this.sim.state.drones) if (d.route && gone.has(d.route)) this.dropCargo(d);
+      sv.routes = sv.routes.filter((r) => !gone.has(r.id));
       if (!sv.routes.length) delete sv.routes;
     }
-    if (sv.assemblers?.[id]) {
-      delete sv.assemblers[id];
-      if (!Object.keys(sv.assemblers).length) delete sv.assemblers;
+    const st = sv.assemblers?.[m.id];
+    if (st) {
+      // a craft part way: what it took goes back to its input crate (or the nearest crate, the backpack, the store)
+      this.refund(m, st);
+      delete sv.assemblers![m.id];
+      if (!Object.keys(sv.assemblers!).length) delete sv.assemblers;
     }
   }
 
@@ -221,9 +252,9 @@ export class Automation {
   removeRoute(id: string): boolean {
     const sv = this.sv;
     if (!sv?.routes?.some((r) => r.id === id)) return false;
+    for (const d of this.sim.state.drones) if (d.route === id) this.dropCargo(d);
     sv.routes = sv.routes.filter((r) => r.id !== id);
     if (!sv.routes.length) delete sv.routes;
-    for (const d of this.sim.state.drones) if (d.route === id) this.dropCargo(d);
     this.sim.bus.emit('route.changed', { id });
     return true;
   }
@@ -233,9 +264,20 @@ export class Automation {
     return AUTOMATION.route.carry + Math.round(this.sim.research?.effect('droneCarry') ?? 0);
   }
 
-  /** What a route would carry now: the items in its source crate it moves, while the target has room. */
-  private basketFor(r: Route): { item: ItemId; n: number }[] {
-    let left = Math.min(this.carry(), this.room(r.to));
+  /** Room in a crate already booked by couriers on their way to it (what they carry, or what they set out to fetch). */
+  booked(to: string, except?: DroneData): number {
+    let n = 0;
+    const into = new Set(this.routes().filter((r) => r.to === to).map((r) => r.id));
+    for (const d of this.sim.state.drones) {
+      if (d === except || !d.route || !into.has(d.route)) continue;
+      n += d.cargo ? d.cargo.reduce((a, b) => a + b.n, 0) : (d.reserve ?? 0);
+    }
+    return n;
+  }
+
+  /** What a route would carry now: the items in its source crate it moves, into room in the target nobody has booked. */
+  private basketFor(r: Route, d?: DroneData): { item: ItemId; n: number }[] {
+    let left = Math.min(this.carry(), this.room(r.to) - this.booked(r.to, d));
     const out: { item: ItemId; n: number }[] = [];
     const items = r.item === 'all' ? ITEM_IDS : [r.item];
     for (const item of items) {
@@ -249,23 +291,25 @@ export class Automation {
     return out;
   }
 
-  /** A route that one of this hub's couriers could fly now (its source has something its target has room for). */
+  /** A route that one of this hub's couriers could fly now (its source has something its target has unbooked room for). */
   routeFor(hub: MachineData, d: DroneData): Route | undefined {
     const busy = new Set(this.sim.state.drones.filter((x) => x !== d && x.route).map((x) => x.route));
-    return this.routes().find((r) => !busy.has(r.id) && this.hubsFor(r).includes(hub) && this.basketFor(r).length > 0);
+    return this.routes().find((r) => !busy.has(r.id) && this.hubsFor(r).includes(hub) && this.basketFor(r, d).length > 0);
   }
 
-  /** E18.4's courier, given a route: fly to fetch from the source crate. */
+  /** E18.4's courier, given a route: book room in the target, then fly to fetch from the source crate. */
   startRoute(d: DroneData, r: Route): void {
     d.role = 'courier';
     d.route = r.id;
     d.cargo = undefined;
+    d.reserve = this.basketFor(r, d).reduce((a, b) => a + b.n, 0);
     d.targetMachineId = r.from;
   }
 
   /**
-   * A courier on a route arrived: at the source it takes the basket and turns for the target; at the target it puts
-   * the basket in. Returns true while the trip goes on (the drone flies again), false when it is done.
+   * A courier on a route arrived: at the source it takes the basket (up to the room it booked) and turns for the
+   * target; at the target it puts the basket in. Returns true while the trip goes on (the drone flies again), false
+   * when it is done.
    */
   arrive(d: DroneData): boolean {
     const r = this.routes().find((q) => q.id === d.route);
@@ -274,8 +318,13 @@ export class Automation {
       return false;
     }
     if (!d.cargo) {
-      const basket = this.basketFor(r);
-      for (const b of basket) b.n = this.take(r.from, b.item, b.n);
+      let room = d.reserve ?? 0;
+      d.reserve = undefined;
+      const basket = this.basketFor(r, d);
+      for (const b of basket) {
+        b.n = this.take(r.from, b.item, Math.min(b.n, room));
+        room -= b.n;
+      }
       d.cargo = basket.filter((b) => b.n > 0);
       if (!d.cargo.length) {
         d.cargo = undefined;
@@ -285,10 +334,11 @@ export class Automation {
       d.targetMachineId = r.to;
       return true;
     }
+    const at = this.sim.machine(r.to);
     for (const b of d.cargo) {
       const put = this.put(r.to, b.item, b.n);
-      // no room after all: what didn't fit goes back where it came from
-      if (put < b.n) this.put(r.from, b.item, b.n - put);
+      // filled by hand since it set out: what didn't fit goes back to its source, else somewhere it is kept
+      if (put < b.n) this.stash(b.item, b.n - put, at, [r.from]);
     }
     this.sim.bus.emit('route.delivered', { id: r.id, items: d.cargo.reduce((a, b) => a + b.n, 0) });
     d.cargo = undefined;
@@ -296,15 +346,22 @@ export class Automation {
     return false;
   }
 
-  /** A trip cut short (its route removed): the basket goes back to its source crate, or to the store. */
-  private dropCargo(d: DroneData) {
+  /**
+   * A trip cut short (its route removed, a crate or its hub taken down): the basket goes back to its source crate,
+   * else the nearest crate with room, the backpack or the store. Nothing is lost.
+   */
+  dropCargo(d: DroneData) {
     const r = this.routes().find((q) => q.id === d.route);
-    for (const b of d.cargo ?? []) {
-      const back = r ? this.put(r.from, b.item, b.n) : 0;
-      if (back < b.n) this.sim.inventory.addToStore(b.item, b.n - back);
-    }
+    const at = this.sim.machine(d.hubId);
+    for (const b of d.cargo ?? []) this.stash(b.item, b.n, at ? { roofId: at.roofId, x: d.px, z: d.pz } : undefined, r ? [r.from] : []);
     d.cargo = undefined;
+    d.reserve = undefined;
     d.route = undefined;
+  }
+
+  /** A hub taken down: its couriers' baskets come back before the drones go. */
+  hubRemoved(hubId: string) {
+    for (const d of this.sim.state.drones) if (d.hubId === hubId && (d.cargo || d.route)) this.dropCargo(d);
   }
 
   // ───────────── the Assembler ─────────────
@@ -313,7 +370,24 @@ export class Automation {
     return this.sim.machinesOfType('assembler');
   }
 
-  /** The supply crates beside an Assembler, nearest first: the first is its input, the second its output. */
+  private stateOf(m: MachineData): AssemblerState | undefined {
+    return this.sv?.assemblers?.[m.id];
+  }
+
+  private ensureState(m: MachineData): AssemblerState {
+    const sv = this.sv!;
+    return ((sv.assemblers ??= {})[m.id] ??= {});
+  }
+
+  /** Drops an Assembler's entry once it holds nothing worth keeping (no recipe, no craft, no chosen crates). */
+  private tidy(m: MachineData) {
+    const sv = this.sv!;
+    const st = sv.assemblers?.[m.id];
+    if (st && !st.recipe && st.left === undefined && !st.input && !st.output) delete sv.assemblers![m.id];
+    if (sv.assemblers && !Object.keys(sv.assemblers).length) delete sv.assemblers;
+  }
+
+  /** The supply crates beside an Assembler, nearest first. */
   cratesBeside(m: MachineData): MachineData[] {
     const R = AUTOMATION.assembler.crateReach;
     return this.crates()
@@ -321,38 +395,83 @@ export class Automation {
       .sort((a, b) => distToFootprint(a.x, a.z, m.x, m.z, m.size) - distToFootprint(b.x, b.z, m.x, m.z, m.size) || (a.id < b.id ? -1 : 1));
   }
 
-  /** An Assembler's input and output crates (one crate can be both). */
+  /**
+   * An Assembler's input and output crates: the ones the player chose (while they stand beside it), else the nearest
+   * crate in and the next out (one crate can be both).
+   */
   io(m: MachineData): { input?: MachineData; output?: MachineData } {
     const c = this.cratesBeside(m);
-    return { input: c[0], output: c[1] ?? c[0] };
+    const st = this.stateOf(m);
+    const pick = (id: string | undefined) => c.find((x) => x.id === id);
+    const input = pick(st?.input) ?? c.find((x) => x.id !== st?.output) ?? c[0];
+    const output = pick(st?.output) ?? c.find((x) => x !== input) ?? input;
+    return { input, output };
+  }
+
+  /** The player chooses which crate beside an Assembler is its input or output (undefined: the nearest again). */
+  setCrate(m: MachineData, which: 'input' | 'output', crateId: string | undefined): boolean {
+    if (crateId && !this.cratesBeside(m).some((c) => c.id === crateId)) return false;
+    const st = this.ensureState(m);
+    st[which] = crateId;
+    if (!crateId) delete st[which];
+    this.tidy(m);
+    this.sim.bus.emit('assembler.changed', { id: m.id });
+    return true;
+  }
+
+  /** The next crate beside it for input or output (the panel's button steps through them). */
+  nextCrate(m: MachineData, which: 'input' | 'output'): boolean {
+    const c = this.cratesBeside(m);
+    if (!c.length) return false;
+    const now = this.io(m)[which];
+    const i = c.findIndex((x) => x === now);
+    return this.setCrate(m, which, c[(i + 1) % c.length].id);
   }
 
   recipeOf(m: MachineData): ComponentId | undefined {
-    return this.sv?.assemblers?.[m.id]?.recipe as ComponentId | undefined;
+    return this.stateOf(m)?.recipe as ComponentId | undefined;
   }
 
-  /** Sets what an Assembler makes (any component the table knows). */
+  private recipe(id: string | undefined): ComponentRecipe | undefined {
+    return id ? this.sim.crafting.itemRecipes().find((r) => r.id === id) : undefined;
+  }
+
+  /** A craft part way given back: what it took goes to its input crate, else the nearest crate, the backpack, the store. */
+  private refund(m: MachineData, st: AssemblerState) {
+    const taken = st.taken;
+    st.taken = undefined;
+    st.left = undefined;
+    if (!taken) return;
+    const input = this.io(m).input;
+    for (const [item, n] of Object.entries(taken) as [ItemId, number][]) this.stash(item, n, m, input ? [input.id] : []);
+  }
+
+  /**
+   * Sets what an Assembler makes (any item recipe the table knows). The same recipe again changes nothing; another
+   * one gives back what the craft in hand took first.
+   */
   setRecipe(m: MachineData, recipe: ComponentId | undefined): boolean {
-    if (recipe && !this.sim.crafting.components().some((r) => r.id === recipe)) return false;
-    const sv = this.sv!;
-    const all = (sv.assemblers ??= {});
-    if (recipe) all[m.id] = { recipe, left: undefined };
-    else delete all[m.id];
-    if (!Object.keys(all).length) delete sv.assemblers;
+    if (recipe && !this.recipe(recipe)) return false;
+    const st = this.stateOf(m);
+    if ((st?.recipe ?? undefined) === recipe) return true;
+    if (st) this.refund(m, st);
+    const s = this.ensureState(m);
+    if (recipe) s.recipe = recipe;
+    else delete s.recipe;
+    this.tidy(m);
     this.sim.bus.emit('assembler.changed', { id: m.id });
     return true;
   }
 
   /** Why an Assembler is idle now, if it is (nothing to make, no crates, short of inputs, no room, no power). */
   assemblerProblem(m: MachineData): string | undefined {
-    const recipe = this.recipeOf(m);
-    if (!recipe) return 'Choose what it makes';
+    const r = this.recipe(this.recipeOf(m));
+    if (!r) return 'Choose what it makes';
     const { input, output } = this.io(m);
     if (!input) return 'Put a supply crate beside it for what it uses';
-    const r = COMPONENT_RECIPES.find((q) => q.id === recipe)!;
-    for (const [k, v] of Object.entries(r.cost) as [ItemId, number][]) if (this.count(input.id, k) < v) return `Waiting for ${itemDef(k).name}`;
+    if (this.stateOf(m)?.left === undefined) for (const [k, v] of Object.entries(r.cost) as [ItemId, number][]) if (this.count(input.id, k) < v) return `Waiting for ${itemDef(k).name}`;
     if (output && this.room(output.id) < r.makes) return 'Its output crate is full';
-    if (this.power && !this.power.isPowered(m)) return 'Waiting for power';
+    if (!this.sim.power.isPowered(m)) return 'Waiting for power';
     return undefined;
   }
 
@@ -361,38 +480,33 @@ export class Automation {
     if (!all) return;
     for (const m of this.assemblers()) {
       const st = all[m.id];
-      if (!st?.recipe) continue;
-      const r = COMPONENT_RECIPES.find((q) => q.id === st.recipe);
-      if (!r) continue;
+      const r = this.recipe(st?.recipe);
+      if (!st || !r) continue;
       const { input, output } = this.io(m);
       if (st.left === undefined) {
-        // start a craft: take its inputs from the input crate
+        // start a craft: take its inputs from the input crate (kept on the craft until it is done)
         if (this.assemblerProblem(m)) continue;
-        for (const [k, v] of Object.entries(r.cost) as [ItemId, number][]) this.take(input!.id, k, v);
+        st.taken = {};
+        for (const [k, v] of Object.entries(r.cost) as [ItemId, number][]) st.taken[k] = this.take(input!.id, k, v);
         st.left = r.seconds / AUTOMATION.assembler.speed;
       }
-      if (this.power && !this.power.isPowered(m)) continue; // paused without power; carries on by itself
+      if (!this.sim.power.isPowered(m)) continue; // paused without power; carries on by itself
       st.left -= dt;
       if (st.left > 1e-9) continue;
       const out = output ?? input;
-      const put = out ? this.put(out.id, r.id, r.makes) : 0;
-      if (put < r.makes) this.sim.inventory.addToStore(r.id, r.makes - put);
+      this.stash(r.id, r.makes, m, out ? [out.id] : []);
       st.left = undefined;
+      st.taken = undefined;
       this.sim.bus.emit('assembler.made', { id: m.id, item: r.id, made: r.makes });
     }
   }
 
-  /** Is an Assembler crafting right now (for its grid draw and its look)? */
+  /** Is an Assembler crafting right now (for its look)? */
   working(m: MachineData): boolean {
-    const st = this.sv?.assemblers?.[m.id];
-    return st?.left !== undefined && (!this.power || this.power.isPowered(m));
+    return this.stateOf(m)?.left !== undefined && this.sim.power.isPowered(m);
   }
 
   tick(dt: number) {
-    if (!this.registered && this.power?.register) {
-      this.registered = true;
-      this.power.register('assembler', { consumer: { shed: 'helper', draw: (m: MachineData) => (this.sv?.assemblers?.[m.id]?.recipe ? AUTOMATION.assembler.draw : 0) } });
-    }
     this.tickAssemblers(dt);
   }
 }

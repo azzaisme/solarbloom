@@ -65,6 +65,14 @@ export class Crafting {
     return COMPONENT_RECIPES.filter((r) => this.unlocked(r.unlock));
   }
 
+  /**
+   * E23.6.5: every recipe known now that makes an item (what an Assembler can make). Today those are the
+   * components: a machine recipe builds a machine in the world and a decoration is made once, so neither is an item.
+   */
+  itemRecipes(): ComponentRecipe[] {
+    return this.components();
+  }
+
   /** E23.6.1: the recipe that builds a machine type (undefined: it keeps its E21.3 recipe). */
   machineRecipe(type: BuildableType): MachineRecipe | undefined {
     return MACHINE_RECIPES.find((r) => r.builds === type);

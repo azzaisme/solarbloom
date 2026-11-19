@@ -87,21 +87,27 @@ export class Inventory {
   }
 
   /** Moves units from the backpack to the store (default: the whole stack). Returns how many moved. */
-  deposit(m: ItemId, n = this.count(m)): number {
+  deposit(m: ItemId, n = this.count(m), hand = true): number {
     const k = Math.min(Math.floor(n), this.count(m));
     if (k <= 0) return 0;
     this.set('pack', m, this.count(m) - k);
     this.set('store', m, this.stored(m) + k);
     this.sim.bus.emit('pack.changed', { material: m, delta: -k });
     this.sim.bus.emit('store.changed', { material: m, delta: k });
-    this.sim.bus.emit('store.moved', { material: m, n: k }); // E23.6.4: carried by hand
+    if (hand) this.sim.bus.emit('store.moved', { material: m, n: k }); // E23.6.4: carried by hand
     return k;
   }
 
-  /** Every material in the backpack into the store. */
+  /** Every material in the backpack into the store (one trip by hand, however many kinds). */
   depositAll(): number {
     let n = 0;
-    for (const m of ITEM_IDS) n += this.deposit(m);
+    let first: ItemId | undefined;
+    for (const m of ITEM_IDS) {
+      const k = this.deposit(m, this.count(m), false);
+      if (k && !first) first = m;
+      n += k;
+    }
+    if (first) this.sim.bus.emit('store.moved', { material: first, n }); // E23.6.4: one job by hand
     return n;
   }
 
@@ -146,17 +152,29 @@ export class Inventory {
     return this.accessPoints().some((p) => p.roofId === at.roofId && distToFootprint(x, z, p.x, p.z, p.size) <= STORE.reach);
   }
 
-  /** What can go toward a cost of this material right now: the backpack, plus the store when near it. */
+  /** E23.6.4: supply crates within reach of a spot (nearest first): building takes from them after the backpack. */
+  private crates(at: BotAt | undefined): string[] {
+    return at ? (this.sim.automation?.cratesNear(at) ?? []).map((c) => c.id) : [];
+  }
+
+  private inCrates(m: ItemId, crates: string[]): number {
+    let n = 0;
+    for (const id of crates) n += this.sim.automation.count(id, m);
+    return n;
+  }
+
+  /** What can go toward a cost of this material right now: the backpack, supply crates near by, and the store when near it. */
   available(m: ItemId, at: BotAt | undefined = this.sim.bot): number {
-    return this.count(m) + (this.nearStore(at) ? this.stored(m) : 0);
+    return this.count(m) + this.inCrates(m, this.crates(at)) + (this.nearStore(at) ? this.stored(m) : 0);
   }
 
   /** The first part of a cost that can't be paid here, if any. */
   shortfall(cost: MaterialCost, at: BotAt | undefined = this.sim.bot): ItemId | undefined {
     const near = this.nearStore(at);
+    const crates = this.crates(at);
     for (const [k, v] of Object.entries(cost) as [ItemId, number][]) {
       if (!v) continue;
-      if (this.count(k) + (near ? this.stored(k) : 0) < v) return k;
+      if (this.count(k) + this.inCrates(k, crates) + (near ? this.stored(k) : 0) < v) return k;
     }
     return undefined;
   }
@@ -165,14 +183,19 @@ export class Inventory {
     return !this.shortfall(cost, at);
   }
 
-  /** Pays a cost: from the backpack first, then from the store (only near a way into it). All or nothing. */
+  /**
+   * Pays a cost: from the backpack first, then from supply crates near by (E23.6.4: a site couriers keep supplied
+   * builds by itself), then from the store (only near a way into it). All or nothing.
+   */
   pay(cost: MaterialCost, at: BotAt | undefined = this.sim.bot): boolean {
     if (!this.canPay(cost, at)) return false;
+    const crates = this.crates(at);
     for (const [k, v] of Object.entries(cost) as [ItemId, number][]) {
       if (!v) continue;
       const fromPack = Math.min(v, this.count(k));
       if (fromPack) this.take(k, fromPack);
-      const rest = v - fromPack;
+      let rest = v - fromPack;
+      for (const id of crates) if (rest > 0) rest -= this.sim.automation.take(id, k, rest);
       if (rest > 0) {
         this.set('store', k, this.stored(k) - rest);
         this.sim.bus.emit('store.changed', { material: k, delta: -rest });

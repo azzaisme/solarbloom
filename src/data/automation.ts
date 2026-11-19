@@ -38,6 +38,10 @@ export const AUTOMATION = {
     /** an input or output crate is one within this many tiles of the Assembler's edge */
     crateReach: 2,
   },
+  build: {
+    /** building (and the table) takes from supply crates within this many tiles of bloombot, after the backpack */
+    crateReach: 6,
+  },
 };
 
 /** What a route may carry: one item, or everything in the source crate ('all'). */

@@ -3463,9 +3463,13 @@ export class Game {
         const { input, output } = a.io(m);
         const recipe = a.recipeOf(m);
         const why = a.assemblerProblem(m);
-        const io = input ? `<p class="stat">🧺 Takes from ${crateName(s, input.id)} · puts in ${crateName(s, output!.id)}</p>` : '';
+        // the player chooses which crate beside it is its input and which its output (each button steps to the next)
+        const many = a.cratesBeside(m).length > 1;
+        const ioBtn = (which: 'input' | 'output', label: string, c: MachineData) =>
+          `<button class="role-btn" data-asm-io="${m.id}|${which}"${many ? '' : ' disabled'}><span class="rn">${label}</span><span class="rp">${esc(crateName(s, c.id))}</span></button>`;
+        const io = input ? `<p class="rh">Crates</p><div class="role-row">${ioBtn('input', 'Takes from', input)}${ioBtn('output', 'Puts in', output!)}</div>` : '';
         const picks = s.crafting
-          .components()
+          .itemRecipes()
           .map((r) => `<button class="role-btn${r.id === recipe ? ' on' : ''}" data-asm="${m.id}|${r.id}" aria-pressed="${r.id === recipe}"><span class="ri">${materialIcon(r.id, 22)}</span><span class="rn">${esc(itemDef(r.id).name)}</span></button>`)
           .join('');
         extra = `<p class="stat">${why ? esc(why) : `Making ${esc(itemDef(recipe!).name)}`}</p>${io}<p class="rh">What it makes</p><div class="role-row">${picks}${recipe ? `<button class="role-btn" data-asm="${m.id}|"><span class="rn">Stop</span></button>` : ''}</div>`;

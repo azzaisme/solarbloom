@@ -199,6 +199,8 @@ export interface DroneData {
   /** E23.6.4: a Courier on a route: the route, and what it carries to the route's target crate (none: going to fetch) */
   route?: string;
   cargo?: { item: import('./types').ItemId; n: number }[];
+  /** E23.6.4: units of room it booked in the route's target before fetching (no two baskets count on the same room) */
+  reserve?: number;
 }
 
 export type BuffType = 'solarFrenzy' | 'megaflower' | 'droneParty';
@@ -386,8 +388,11 @@ export interface SalvageState {
   routes?: { id: string; from: string; to: string; item: import('../data/automation').RouteItem }[];
   /** E23.6.4: how many times each job has been done by hand (it opens its automation) */
   hand?: Partial<Record<import('../data/automation').HandJob, number>>;
-  /** E23.6.5: each Assembler's recipe (a component id) and seconds left on the craft in hand */
-  assemblers?: Record<string, { recipe?: string; left?: number }>;
+  /**
+   * E23.6.5: each Assembler's recipe (an item id), seconds left on the craft in hand and what that craft took (given
+   * back if it is stopped), and the crates the player chose as its input and output
+   */
+  assemblers?: Record<string, { recipe?: string; left?: number; taken?: Partial<Record<ItemId, number>>; input?: string; output?: string }>;
   /** E23.6.2: the research station (finds analysed, projects done and running, upgrade levels bought) */
   research?: ResearchState;
   /** E23.5.2: each planter's bed, by machine id (absent = empty, no extras) */

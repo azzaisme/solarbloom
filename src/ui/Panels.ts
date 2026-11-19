@@ -36,6 +36,13 @@ export class Panels extends HudPart {
         const m = this.sim.machine(id);
         if (m) this.sim.automation.setRecipe(m, (recipe || undefined) as ComponentId | undefined);
       }
+      // E23.6.5: which crate beside it an Assembler takes from or puts in (steps through the crates beside it)
+      const io = t.closest<HTMLButtonElement>('[data-asm-io]');
+      if (io) {
+        const [id, which] = io.dataset.asmIo!.split('|');
+        const m = this.sim.machine(id);
+        if (m) this.sim.automation.nextCrate(m, which as 'input' | 'output');
+      }
       const am = t.closest<HTMLButtonElement>('[data-area-mode]');
       if (am) {
         const [id, mode] = am.dataset.areaMode!.split('|');

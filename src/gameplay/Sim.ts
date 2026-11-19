@@ -180,7 +180,6 @@ export class Sim {
     this.keepers = new KeeperSystem(this);
     this.crafting = new Crafting(this);
     this.research = new Research(this);
-    this.automation = new Automation(this);
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
     this.gather = new GatherSystem(this);
@@ -192,6 +191,7 @@ export class Sim {
     this.water = new WaterSystem(this);
     this.relays = new RelaySystem(this);
     this.power = new PowerGrid(this);
+    this.automation = new Automation(this); // E23.6.4: after the grid (the Assembler is a consumer)
     this.chargers = new ChargerSystem(this);
     this.lights = new Lights(this);
     this.chains = new BloomChainSystem(this);

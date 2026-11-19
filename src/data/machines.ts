@@ -157,7 +157,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     icon: '🛠️',
     size: 2,
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Makes the component you choose by itself, from the supply crate beside it into the next one, on grid power.',
+    blurb: 'Makes the component you choose by itself, from one supply crate beside it into another (you pick which), on grid power.',
   },
   core: {
     type: 'core',
