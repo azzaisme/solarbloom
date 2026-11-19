@@ -3,6 +3,7 @@ import type { CultivatorUnit, MachineData, TileData } from '../core/types';
 import { isBuilt } from '../data/machines';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
+import { WATER_NET } from '../data/water';
 
 const C = () => TUNING.cultivator;
 
@@ -128,7 +129,14 @@ export class CultivatorSystem {
     for (const m of docks) {
       this.ensureUnits(m);
       const sp = this.speed(m);
+      // E23.3.3: off the grid (or shed), the tillers drive home and park on the dock until the power is back.
+      const powered = s.power.isPowered(m);
       for (const u of m.cult!.units) {
+        if (!powered) {
+          u.parked = true;
+          this.drive(u, m.x + 0.5, m.z + 0.5, sp, dt);
+          continue;
+        }
         // drop tiles something else finished (a pulse, a chain) or that became unreachable
         for (const id of [...u.work]) {
           const t = s.grid.byTileId(id);
@@ -215,6 +223,8 @@ export class CultivatorSystem {
   private finished(m: MachineData, u: CultivatorUnit, t: TileData) {
     this.release(u, t.id);
     m.cult!.done++;
+    // E23.4.1: tilling drinks from the water nearby (the land around shows it when that runs low)
+    this.sim.water.drawNear(t, WATER_NET.draw.cultivatorPerTile);
     if (this.level(m, 'cultSeed') && t.bloom < C().seedBloom) {
       t.bloom = C().seedBloom;
       this.sim.transitions.bloom(t, t.bloom, true);

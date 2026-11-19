@@ -55,7 +55,7 @@ function gameplaySnapshot(sim: Sim) {
   });
 }
 
-const counts = (o: Partial<BioCounts>): BioCounts => ({ stages: [0, 0, 0, 0, 0], thrivingTrees: 0, species: 0, features: 0, water: 0, landmarks: 0, supers: 0, fountain: false, ...o });
+const counts = (o: Partial<BioCounts>): BioCounts => ({ stages: [0, 0, 0, 0, 0], thrivingTrees: 0, species: 0, features: 0, water: 0, landmarks: 0, supers: 0, fountain: false, pollinators: 0, rarePollinators: 0, ...o }) as BioCounts;
 
 describe('E16 biodiversity score', () => {
   it('is derived from stages, diversity, landmarks, superstructures and fauna, and ranks rise with it', () => {

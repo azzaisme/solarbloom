@@ -62,7 +62,7 @@ export const JOURNAL: JournalPage[] = [
     id: 'p-oldMarket-2',
     stage: 'ring1',
     title: 'Tally\'s ledger',
-    text: 'Tally counted everything the market ever sold. There was never a column for what we gave back. I have drawn one in. It is empty, for now.',
+    text: 'Tally counted everything the market ever sold. Today I drew a new column in its ledger, for what we give back. It is empty for now, but not for long.',
   },
   {
     id: 'p-saltwind-1',

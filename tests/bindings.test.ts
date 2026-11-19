@@ -21,9 +21,9 @@ const KEYS: [Action, string[]][] = [
   ['buildMenu', ['KeyQ']],
   ['rotate', ['KeyR', 'Wheel']],
   ['removeMode', ['KeyX']],
+  ['powerOverlay', ['KeyO']], // E23.3.4
   ['backpack', ['Tab', 'KeyI']],
   ['map', ['KeyM']],
-  ['harvest', ['KeyF']],
   ['pinNext', ['KeyG']],
   ['cancel', ['Escape']],
   ['menu', ['Escape']],
@@ -45,9 +45,9 @@ const PAD: [Action, number | undefined][] = [
   ['rotateBack', 4], // LB
   ['rotate', 5], // RB
   ['removeMode', 7], // right trigger
+  ['powerOverlay', 15], // E23.3.4: d-pad right in build mode
   ['backpack', 12], // d-pad up
   ['map', 8], // View
-  ['harvest', 14], // d-pad left
   ['cancel', 1], // B
   ['menu', 9], // Menu
   ['prevTab', 4],
@@ -62,6 +62,9 @@ describe('E22.1: the new button map', () => {
       const b = new Bindings(undefined, { oldCity });
       for (const [a, k] of KEYS) expect(keys(b, a), a).toEqual(k);
       for (let i = 0; i < 9; i++) expect(keys(b, SLOTS[i])).toEqual([`Digit${i + 1}`]);
+      // E23.2.1: F harvests sunlight under classic rules and eats a snack (bloombot's charge) under old-city rules
+      expect([keys(b, 'harvest'), keys(b, 'eat')]).toEqual(oldCity ? [[], ['KeyF']] : [['KeyF'], []]);
+      expect([keys(b, 'loadPrev'), keys(b, 'loadNext')]).toEqual(oldCity ? [['KeyZ'], ['KeyV']] : [[], []]);
     });
 
   it('a saved pad binding for an action that no longer exists is ignored (E23.1.2: Bloom Frenzy)', () => {
@@ -75,6 +78,8 @@ describe('E22.1: the new button map', () => {
       for (const [a, p] of PAD) expect(b.pad[a], a).toBe(p);
       for (const s of SLOTS) expect(b.pad[s]).toBeUndefined(); // the pad uses the build menu
       expect(b.pad.pinNext).toBe(oldCity ? 15 : undefined); // d-pad right
+      expect([b.pad.harvest, b.pad.eat]).toEqual(oldCity ? [undefined, 14] : [14, undefined]); // d-pad left
+      expect([b.pad.loadPrev, b.pad.loadNext]).toEqual(oldCity ? [4, 5] : [undefined, undefined]); // E23.2.2: the bumpers
     });
 
     it(`gives no two actions that can apply together the same input (${rules})`, () => {
@@ -98,6 +103,11 @@ describe('E22.1: the new button map', () => {
     expect(b.actionForButton(0, ['build', 'world', 'any'])).toBe('place');
     expect(b.actionForButton(7, ['build', 'world', 'any'])).toBe('removeMode');
     expect(b.actionForCode('KeyQ', ['panel', 'any'])).toBe('prevTab');
+    // E23.3.4: the Power view is O and d-pad right in build mode; walking, d-pad right still pins the next request
+    const oc = new Bindings(undefined, { oldCity: true });
+    expect(oc.actionForCode('KeyO', ['build', 'world', 'any'])).toBe('powerOverlay');
+    expect(oc.actionForButton(15, ['build', 'world', 'any'])).toBe('powerOverlay');
+    expect(oc.actionForButton(15, ['world', 'any'])).toBe('pinNext');
     expect(b.actionForCode('KeyE', ['panel', 'any'])).toBe('nextTab');
     expect(b.actionForButton(5, ['panel', 'any'])).toBe('nextTab');
   });

@@ -1,11 +1,11 @@
-import type { MaterialId } from '../core/types';
+import type { ItemId } from '../core/types';
 
 /**
  * E22.6 (#343): material icons for the backpack and the build menu. Each has its own shape as well as its own
  * colour (nothing is told by colour alone): a brick stack, a seed, a coil, a log, a pane, a pot, a cog, a star, a beam.
  * Inline SVG on a 32-unit grid; colours are classes styled from tokens (and a colour-safe set, E22.8).
  */
-const BODY: Record<MaterialId | 'biomass' | 'unknown', string> = {
+const BODY: Record<ItemId | 'biomass' | 'unknown', string> = {
   // Scrap: three stacked bricks
   scrap: `<rect x="4" y="18" width="11" height="8" rx="1.5"/><rect x="17" y="18" width="11" height="8" rx="1.5"/><rect x="10" y="8" width="12" height="8" rx="1.5"/>`,
   // Seeds: a seed with a sprout
@@ -26,6 +26,27 @@ const BODY: Record<MaterialId | 'biomass' | 'unknown', string> = {
   steel: `<path d="M5 4 H27 V10 H19.5 V22 H27 V28 H5 V22 H12.5 V10 H5 Z"/><path d="M8 7 H24" class="mi-line"/>`,
   // Greens (biomass): a leaf
   biomass: `<path d="M6 26 C4 12 14 4 28 4 C28 18 20 28 6 26 Z"/><path d="M7 25 C13 19 19 13 26 6" class="mi-line"/>`,
+  // E23.6.1 components, each its own shape too
+  // Wire: a spool with a loose end
+  wire: `<rect x="8" y="5" width="16" height="22" rx="3"/><path d="M8 11 H24 M8 16 H24 M8 21 H24" class="mi-line"/><path d="M24 24 C28 24 29 28 26 30" class="mi-line"/>`,
+  // Planks: two boards, one across the other
+  planks: `<rect x="3" y="8" width="26" height="7" rx="1.5"/><rect x="3" y="18" width="26" height="7" rx="1.5"/><path d="M8 11.5 H13 M18 21.5 H24" class="mi-line"/>`,
+  // Glass pane: a framed square with a glint
+  glassPane: `<rect x="5" y="5" width="22" height="22" rx="2"/><rect x="9" y="9" width="14" height="14" class="mi-hi"/><path d="M12 19 L19 12" class="mi-line"/>`,
+  // Pipe: an elbow
+  pipe: `<path d="M4 9 H20 C25 9 26 12 26 16 V28 H18 V18 C18 17 17 17 16 17 H4 Z"/><path d="M4 9 V17 M18 28 H26" class="mi-line"/>`,
+  // Motor: a body with a shaft and fins
+  motor: `<rect x="4" y="9" width="18" height="16" rx="3"/><rect x="22" y="15" width="7" height="4" class="mi-hi"/><path d="M9 9 V25 M13 9 V25 M17 9 V25" class="mi-line"/>`,
+  // Battery cell: a cell with a cap and a plus
+  batteryCell: `<rect x="8" y="7" width="16" height="22" rx="3"/><rect x="13" y="3" width="6" height="4" class="mi-hi"/><path d="M16 13 V21 M12 17 H20" class="mi-line"/>`,
+  // Sun cell: a gridded cell with a small sun
+  sunCell: `<rect x="3" y="9" width="26" height="18" rx="2"/><path d="M12 9 V27 M20 9 V27 M3 18 H29" class="mi-line"/><circle cx="25" cy="7" r="4" class="mi-hi"/>`,
+  // E23.5.1 Food: a carrot with its leaves
+  food: `<path d="M9 27 C7 25 9 20 13 15 L19 9 L23 13 L17 19 C12 23 11 29 9 27 Z"/><path d="M20 8 C19 4 21 2 23 2 M22 10 C25 8 28 9 30 11 M21 9 C24 5 27 5 28 6" class="mi-line"/><path d="M12 20 L15 21 M15 16 L17 18" class="mi-line"/>`,
+  // Compost: a heap with crumbs
+  compost: `<path d="M3 26 C5 16 11 10 16 10 C21 10 27 16 29 26 Z"/><circle cx="12" cy="19" r="1.6" class="mi-hi"/><circle cx="19" cy="16" r="1.4" class="mi-hi"/><circle cx="21" cy="22" r="1.6" class="mi-hi"/><path d="M16 10 C16 7 18 5 21 5" class="mi-line"/>`,
+  // Fertiliser: a tied sack with a drop on it
+  fertiliser: `<path d="M11 6 H21 L19 10 C26 13 27 24 23 28 H9 C5 24 6 13 13 10 Z"/><path d="M12 10 H20" class="mi-line"/><path d="M16 15 C18 18 19 20 19 21.5 a3 3 0 0 1 -6 0 C13 20 14 18 16 15 Z" class="mi-hi"/>`,
   // not found yet
   unknown: `<circle cx="16" cy="16" r="12" class="mi-ghost"/><path d="M12 13 a4 4 0 1 1 6 3.4 c-1.6 1 -2 1.8 -2 3.4" class="mi-line"/><circle cx="16" cy="24" r="1.4" class="mi-dot"/>`,
 };

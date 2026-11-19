@@ -12,6 +12,9 @@ import { BuildBar, Hotbar } from './Hotbar';
 import { Toasts } from './Toasts';
 import { Panels } from './Panels';
 import { Backpack } from './Backpack';
+import { CraftTable } from './CraftTable';
+import { ChargeMeter } from './ChargeMeter';
+import { LoadWheel } from './LoadWheel';
 import type { SetProp } from './HudPart';
 import type { GlyphSetting, GlyphStyle } from './Glyphs';
 
@@ -90,6 +93,8 @@ export interface Settings {
   invertY?: boolean;
   noRecentre?: boolean;
   noVistas?: boolean;
+  /** Third person: a click on the world captures the mouse to look around (on unless switched off) */
+  mouseLook?: boolean;
   /** Bloombot (G.16): rebound keys and gamepad buttons (only what differs from the default map). */
   keys?: SavedBindings['keys'];
   pad?: SavedBindings['pad'];
@@ -160,6 +165,12 @@ export class Hud {
   readonly panels: Panels;
   /** E22.6: the backpack screen (and the storage panel) */
   readonly backpack: Backpack;
+  /** E23.6.1: the crafting table */
+  readonly craft: CraftTable;
+  /** E23.2.1: bloombot's charge, the only meter */
+  readonly charge: ChargeMeter;
+  /** E23.2.2: the pulse load wheel */
+  readonly loadWheel: LoadWheel;
 
   constructor(
     readonly sim: Sim,
@@ -175,14 +186,24 @@ export class Hud {
     this.buildBar = new BuildBar(this);
     this.toasts = new Toasts(this);
     this.panels = new Panels(this);
+    this.charge = new ChargeMeter(this);
+    this.loadWheel = new LoadWheel(this);
     this.root.innerHTML = iconize(this.template());
+    // Third person: the build crosshair in the middle of the screen (shown while aiming a build: `.aiming`)
+    const xh = document.createElement('div');
+    xh.className = 'crosshair';
+    xh.setAttribute('aria-hidden', 'true');
+    this.root.appendChild(xh);
     this.bars.wire();
     this.objective.wire();
     this.hotbar.wire();
     this.panels.wire();
+    this.charge.wire();
+    this.loadWheel.wire();
     this.wire();
     this.prompt = new Prompt(this.root);
     this.backpack = new Backpack(this.root, { sim: this.sim });
+    this.craft = new CraftTable(this.root, { sim: this.sim });
   }
 
   private template() {
@@ -340,6 +361,8 @@ export class Hud {
 
   update(dt: number) {
     this.bars.update();
+    this.charge.update(dt);
+    this.loadWheel.update(dt);
     this.hotbar.update();
     this.updateCatChip();
     this.panels.update(dt);

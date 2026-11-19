@@ -5,9 +5,12 @@ import { allPiles } from '../src/core/OldCityLayout';
 import type { BuildableType, MachineData, MaterialId } from '../src/core/types';
 import { MACHINES } from '../src/data/machines';
 import { MAINLAND, MAINLAND_MACHINES, SALVAGE_FIELDS } from '../src/data/mainland';
-import { MATERIALS, RECIPES } from '../src/data/salvage';
+import { MATERIALS } from '../src/data/salvage';
+import { MACHINE_RECIPES } from '../src/data/crafting';
 import { Sim } from '../src/gameplay/Sim';
 import type { PowerHook, WaterHook } from '../src/gameplay/MainlandSystem';
+
+const RECIPE = (t: string) => MACHINE_RECIPES.find((r) => r.builds === t);
 
 /** E23.8.3.2 (#452): steel from the industrial ruins, and mainland-only machines with recipes. */
 
@@ -21,6 +24,7 @@ function bloomed() {
   sim.mainland.open();
   sim.areas.clear(landingArea(), true);
   for (const m of ['steel', 'copper', 'gears', 'clay', 'scrap'] as MaterialId[]) sim.inventory.add(m, 40);
+  for (const c of ['batteryCell', 'pipe', 'motor'] as const) sim.inventory.add(c, 10);
   return sim;
 }
 
@@ -75,9 +79,9 @@ describe('E23.8.3.2: steel', () => {
 describe('E23.8.3.2: mainland machines', () => {
   it('each has a steel recipe, after the Great Bloom', () => {
     for (const t of MACHS) {
-      expect(RECIPES[t], t).toBeDefined();
-      expect(RECIPES[t]!.cost.steel, t).toBeGreaterThan(0);
-      expect(RECIPES[t]!.tier).toBe(MAINLAND.opensAtTier);
+      expect(RECIPE(t), t).toBeDefined();
+      expect(RECIPE(t)!.cost.steel, t).toBeGreaterThan(0);
+      expect(RECIPE(t)!.unlock).toEqual({ tier: MAINLAND.opensAtTier });
       expect(MACHINES[t].mainlandOnly).toBe(true);
     }
   });
@@ -91,7 +95,7 @@ describe('E23.8.3.2: mainland machines', () => {
     }
     const m = sim.build.place('gridBattery', GROUND, x, z);
     expect(m?.type).toBe('gridBattery');
-    expect(sim.inventory.count('steel')).toBe(40 - RECIPES.gridBattery!.cost.steel!);
+    expect(sim.inventory.count('steel')).toBe(40 - RECIPE('gridBattery')!.cost.steel!);
   });
 
   it('joins the grid as storage and a pumping consumer, and the water network as a long-reach pump, when they exist', () => {

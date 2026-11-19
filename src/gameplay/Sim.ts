@@ -11,6 +11,8 @@ import { BuildSystem } from './BuildSystem';
 import { CanalNetwork } from './CanalNetwork';
 import { RelaySystem } from './RelaySystem';
 import { PowerGrid } from './PowerGrid';
+import { ChargerSystem } from './ChargerSystem';
+import { Lights } from './Lights';
 import { RooftopClusters } from './RooftopClusters';
 import { DistrictSystem } from './DistrictSystem';
 import { DroneSystem } from './DroneSystem';
@@ -36,8 +38,17 @@ import { JournalSystem } from './JournalSystem';
 import { KeeperSystem } from './KeeperSystem';
 import { MainlandSystem } from './MainlandSystem';
 import { LandmarkSystem } from './LandmarkSystem';
+import { WaterSystem } from './WaterSystem';
+import { Crafting } from './Crafting';
+import { Research } from './Research';
+import { ChargeSystem } from './Charge';
+import { PulseLoad } from './PulseLoad';
+import { RestSystem } from './Rest';
+import { BuriedSystem } from './Buried';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
+import { GatherSystem } from './GatherSystem';
+import { FarmSystem } from './FarmSystem';
 import { Weather } from './Weather';
 
 /**
@@ -67,6 +78,10 @@ export class Sim {
   readonly relays: RelaySystem;
   /** E23.3: the power grid (networks of poles, sources, batteries and consumers). */
   readonly power: PowerGrid;
+  /** E23.3.3: chargers (bloombot recharges on a powered pad). */
+  readonly chargers: ChargerSystem;
+  /** E23.3.5: night lights (decorations on the grid, solar or glow-pods). */
+  readonly lights: Lights;
   readonly clusters: RooftopClusters;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
   readonly ecosystem: EcosystemSystem;
@@ -90,12 +105,30 @@ export class Sim {
   readonly journal: JournalSystem;
   /** E21.9: waking landmarks and their lasting rewards (old-city rules). */
   readonly landmarks: LandmarkSystem;
+  /** E23.4.1: water levels of ponds, canals and reservoirs (`sim.water`). */
+  readonly water: WaterSystem;
+  /** E23.6.1: the crafting table (components; machine and decoration recipes). */
+  readonly crafting: Crafting;
+  /** E23.6.2: the research station (projects, and the upgrades they open). */
+  readonly research: Research;
+  /** E23.2.1: bloombot's charge, the only meter (old-city rules). */
+  readonly charge: ChargeSystem;
+  /** E23.2.2: what the pulse is loaded with, and its reveal ripple (old-city rules). */
+  readonly pulseLoad: PulseLoad;
+  /** E23.2.3: benches and meditating at chargers. */
+  readonly rest: RestSystem;
+  /** E23.2.2.3: seeds and salvage buried in open ground (the ripple reveals them). */
+  readonly buried: BuriedSystem;
   /** E23.7.1: the game-day clock (timers) and the light clock (sky, light, solar). See gameplay/Clock. */
   readonly clock: Clock;
   /** E23.7.1.3: finds that are out only at night. */
   readonly nightFinds: NightFinds;
   /** E23.7.2: the weather: one kind a game day, each with its effects (data/weather). See gameplay/Weather. */
   readonly weather: Weather;
+  /** E23.5.1: gathering biomass from restored ground (old-city rules). */
+  readonly gather: GatherSystem;
+  /** E23.5.2: planters and crops (old-city rules). */
+  readonly farm: FarmSystem;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -139,7 +172,21 @@ export class Sim {
       this.grid.chunkAt(layer, Number(cx), Number(cz));
     }
     this.econ = new Economy(state.resources, state.caps);
+    // E23.5.1: under old-city rules biomass is gathered into the backpack (GatherSystem), never earned as a counter
+    // and every biomass price (drone refits and jobs, the core, ...) is paid from the backpack and the store within reach
+    if (this.oldCity) {
+      this.econ.noIncome = new Set(['biomass']);
+      this.econ.items = {
+        kinds: new Set(['biomass']),
+        have: () => this.inventory.available('biomass'),
+        take: (_k, units) => this.inventory.pay({ biomass: units }),
+      };
+    }
     this.inventory = new Inventory(this);
+    this.charge = new ChargeSystem(this);
+    this.pulseLoad = new PulseLoad(this);
+    this.rest = new RestSystem(this);
+    this.buried = new BuriedSystem(this);
     this.landmarks = new LandmarkSystem(this);
     this.clock = new Clock(this);
     this.nightFinds = new NightFinds(this);
@@ -148,15 +195,22 @@ export class Sim {
     this.gates = new GateSystem(this);
     this.fountain = new FountainSystem(this);
     this.keepers = new KeeperSystem(this);
+    this.crafting = new Crafting(this);
+    this.research = new Research(this);
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
+    this.gather = new GatherSystem(this);
+    this.farm = new FarmSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
     this.restoration = new RestorationSystem(this);
     this.canals = new CanalNetwork(this);
+    this.water = new WaterSystem(this);
     this.relays = new RelaySystem(this);
     this.power = new PowerGrid(this);
+    this.chargers = new ChargerSystem(this);
+    this.lights = new Lights(this);
     this.clusters = new RooftopClusters(this);
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
@@ -264,7 +318,9 @@ export class Sim {
     const s = this.state;
     s.time += dt;
     s.buffs = s.buffs.filter((b) => b.until > s.time);
+    this.lights.tick(dt);
     this.power.tick(dt);
+    this.chargers.tick(dt);
     this.production.tick(dt);
     this.restoration.tick(dt);
     this.transitions.tick();
@@ -273,8 +329,14 @@ export class Sim {
     this.roles.tick(dt);
     this.cultivators.tick(dt);
     this.salvage.tick(dt);
+    this.water.tick(dt);
+    this.rest.tick(dt);
+    this.crafting.tick(dt);
+    this.research.tick(dt);
+    this.charge.tick(dt);
     this.clock.tick();
     this.weather.tick();
+    this.farm.tick(dt);
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();

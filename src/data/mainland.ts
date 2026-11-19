@@ -88,7 +88,7 @@ export const SALVAGE_FIELDS = {
 };
 
 /**
- * E23.8.3.2: the mainland-only machines, built from steel (recipes in data/salvage RECIPES). Starting values.
+ * E23.8.3.2: the mainland-only machines, built from steel (recipes on the crafting table, data/crafting MACHINE_RECIPES). Starting values.
  * The grid battery joins the power grid (E23.3, `sim.power`) as storage; the long-range pump joins it as a consumer
  * (shed with the pumps) and the water network (E23.4, `sim.water`) as a pump with a long reach.
  */

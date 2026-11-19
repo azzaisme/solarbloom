@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND, rulesOf } from '../src/core/GameState';
-import type { MaterialId } from '../src/core/types';
+import type { ItemId, MaterialId } from '../src/core/types';
 import { HOUSE, KEEPERS, PAGES, PARK_SET, REGIONS, BLUEPRINTS, KEEPSAKES } from '../src/data/oldcity';
-import { MATERIALS, RECIPES, TIERS, type MaterialCost } from '../src/data/salvage';
+import { MATERIALS, TIERS, type MaterialCost } from '../src/data/salvage';
+import { MACHINE_RECIPES } from '../src/data/crafting';
+import { ITEM_DEFS } from '../src/data/items';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
 const saver = new SaveService(undefined);
 
-/** Every material a cost names is a real material (biomass is a resource, allowed in recipes). */
+/** Every material a cost names is a real material (E23.5.1: biomass is one too). */
 function realMaterials(cost: MaterialCost) {
-  for (const k of Object.keys(cost)) if (k !== 'biomass') expect(MATERIALS[k as MaterialId], `material ${k}`).toBeDefined();
+  for (const k of Object.keys(cost)) expect(MATERIALS[k as MaterialId], `material ${k}`).toBeDefined();
   for (const v of Object.values(cost)) expect(v).toBeGreaterThan(0);
 }
 
@@ -53,7 +55,12 @@ describe('E21.0: two rule sets', () => {
 
 describe('E21.0: the data', () => {
   it('every recipe, tier delivery, request, landmark delivery and house level names real materials', () => {
-    for (const r of Object.values(RECIPES)) realMaterials(r!.cost);
+    // E23.6.1: machine recipes are on the crafting table: every part a real material or component
+    for (const r of MACHINE_RECIPES)
+      for (const [k, v] of Object.entries(r.cost)) {
+        expect(ITEM_DEFS[k as ItemId], `${r.id}: ${k}`).toBeDefined();
+        expect(v).toBeGreaterThan(0);
+      }
     for (const t of TIERS) realMaterials(t.delivery);
     for (const k of KEEPERS) {
       realMaterials(k.request1);

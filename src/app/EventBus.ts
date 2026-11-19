@@ -3,6 +3,21 @@ import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import type { BuffType, CatRewardType, CatVariant, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
+  /** E23.2.1: bloombot's charge ran out (the low-power walk); reached full; bloombot began eating one unit. */
+  'charge.empty': Record<string, never>;
+  'charge.full': { source: import('../gameplay/Charge').ChargeSource };
+  'charge.eat': { item: 'biomass' | 'food' };
+  /** E23.2.2: the wheel picked a load; a load just ran out (the next pulse fires empty); a pulse's reveal ripple. */
+  'pulse.load': { load: import('../data/pulse').PulseLoadId };
+  'pulse.loadEmpty': { load: import('../data/pulse').PulseLoadId };
+  /** E23.2.3: an old bench mended; bloombot sat down (on a bench, or to meditate at a charger); stood up. */
+  'bench.mended': { benchId: string; x: number; z: number };
+  'rest.sat': { kind: 'bench' | 'charger' };
+  'rest.stood': Record<string, never>;
+  /** E23.2.2.3: a buried find dug up */
+  'buried.dug': { id: string; material: import('../core/types').MaterialId; n: number; x: number; z: number };
+  'tile.planted': { tile: TileData; plant: import('../core/types').PlantKind };
+  'pulse.ripple': { tileId: string; targets: import('../gameplay/PulseLoad').RippleTarget[] };
   /** E23.7.1: the light clock crossed dawn or dusk (`day`: the game day). */
   'clock.dawn': { day: number };
   'clock.dusk': { day: number };
@@ -21,12 +36,35 @@ export interface GameEvents {
   /** E23.7.1.3: a night find was taken. */
   'night.found': { id: string; material: import('../core/types').MaterialId; n: number; x: number; z: number };
   /** E21.1: the backpack or the store changed (`material` unset = several at once). */
-  'pack.changed': { material?: import('../core/types').MaterialId; delta?: number };
-  'store.changed': { material?: import('../core/types').MaterialId; delta?: number };
+  'pack.changed': { material?: import('../core/types').ItemId; delta?: number };
+  'store.changed': { material?: import('../core/types').ItemId; delta?: number };
   /** E21.1: a stack is full; `left` units stayed where they were. */
-  'pack.full': { material: import('../core/types').MaterialId; left: number };
+  'pack.full': { material: import('../core/types').ItemId; left: number };
   /** E21.2: bloombot salvaged a pile (`got` units; `left` in the pile; 0 = it is gone). */
   'pile.salvaged': { pileId: string; material: import('../core/types').MaterialId; got: number; left: number; x: number; z: number };
+  /** E23.6.1: crafts queued at the crafting table (negative: cancelled), and one craft made. */
+  'craft.queued': { id: string; n: number };
+  'craft.done': { id: string; made: number };
+  /** E23.6.2: the research station: a find analysed, a project started or finished, an upgrade level bought. */
+  'research.analysed': { find: string };
+  'research.started': { id: string };
+  'research.done': { id: string };
+  'research.upgraded': { id: string; level: number };
+  /** E23.5.1: bloombot clipped restored ground for biomass (`got` units into the backpack). */
+  'biomass.gathered': { tileId: string; x: number; z: number; got: number };
+  /** E23.5.2: a planter's bed changed (planted, a new stage, fed, an extra, harvested). */
+  'planter.changed': { machineId: string };
+  'planter.ripe': { machineId: string; crop: string };
+  'planter.harvested': { machineId: string; crop: string; food: number; biomass: number; seeds: number };
+  /**
+   * E21.10 caches: one was opened (emitted by whoever opens caches; E23.5.2.3 listens for the seeds inside).
+   * Nothing opens caches yet: the E21.10 data lists them but no system emits this so far.
+   */
+  'cache.opened': { cacheId: string; x: number; z: number };
+  /** E23.5.2.3: a crop's seed packet found while exploring. */
+  'seeds.found': { crop: string; region: string };
+  /** E23.6.2: a crossbreed found at a harvest (data/crops crossKey and its two parents) */
+  'cross.found': { key: string; a: string; b: string };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
   /** E23.7.4: a pile gained units back (slowly over game days, or all at once in a storm); `left` units now. */
