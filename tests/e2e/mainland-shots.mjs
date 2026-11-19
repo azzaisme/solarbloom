@@ -101,6 +101,8 @@ try {
     if (at) { s.state.areas[at[2]] ??= { fog: 'frontier', revealedAt: 0 }; s.areas.clear(at[2], true); }
     // the two machines, on restored ground in the landing district
     for (const m of ['steel', 'copper', 'gears', 'clay']) s.inventory.add(m, 60);
+    // the recipes are on the crafting table: battery cells, pipe and motors made there (data/crafting MACHINE_RECIPES)
+    for (const c of ['batteryCell', 'pipe', 'motor']) s.inventory.add(c, 10);
     const built = [];
     for (const type of ['gridBattery', 'longPump']) {
       let done = false;
