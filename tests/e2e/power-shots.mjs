@@ -91,6 +91,25 @@ try {
   });
   await shot('power-day', 8, 42, 1.0, 20);
   await shot('power-day-close', 6, 41, 1.8, 20);
+  // E23.2.1's real charge meter: bloombot sits at the powered pad's edge and the meter fills
+  const dock = await page.evaluate(async () => {
+    const g = window.solarbloom;
+    const s = g.sim;
+    const pad = s.state.machines.find((m) => m.type === 'charger');
+    if (!pad || !s.charge?.on) return null;
+    s.state.charge = { value: 20 };
+    g.bot.teleport(pad.roofId, pad.x + 0.5, pad.z + pad.size + 0.3);
+    await new Promise((r) => setTimeout(r, 1500));
+    const t0 = s.state.time;
+    const v0 = s.charge.value();
+    await new Promise((r) => setTimeout(r, 5000));
+    return { docked: s.chargers.docked()?.id === pad.id, powered: s.power.isPowered(pad), from: v0, to: s.charge.value(), simSeconds: +(s.state.time - t0).toFixed(2), max: s.charge.max };
+  });
+  if (dock) {
+    console.log('  charger', JSON.stringify(dock));
+    if (!dock.docked || !dock.powered || !(dock.to > dock.from)) throw new Error('bloombot did not recharge at the pad');
+    await shot('charger-dock', 8, 42, 1.8, 20, 500);
+  }
   // The Power overlay in build mode (O / d-pad right), where it exists
   const hasOverlay = await page.evaluate(() => typeof window.solarbloom.togglePowerView === 'function');
   if (hasOverlay) await page.evaluate(() => {
