@@ -6,7 +6,7 @@ import { itemDef } from '../data/items';
 import type { Sim } from './Sim';
 
 /**
- * E21.5 (§6, §7): what is in the way. Under old-city rules a region opens because bloombot cleared its gate, never
+ * E21.5 (§6, §7): what is in the way. A region opens because bloombot cleared its gate, never
  * because something was bought. Gates open for good (`salvage.opened`):
  * - a barricade needs Pry (held Interact, 2 s);
  * - deep water needs Hover (Walker refuses gate water without it);

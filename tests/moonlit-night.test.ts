@@ -3,8 +3,13 @@ import * as pc from 'playcanvas';
 import { describe, expect, it } from 'vitest';
 import { LOOK } from '../src/data/look';
 import { DAY_LIGHT, NIGHT_SKY, NIGHT_SKY_LIGHTS } from '../src/data/sky';
-import { DAY } from '../src/data/time';
+import { DAY, DAY_SECONDS } from '../src/data/time';
 import { DayNight } from '../src/rendering/DayNight';
+import { Bindings } from '../src/app/Bindings';
+import { PhotoMode } from '../src/app/PhotoMode';
+import { sceneNow } from '../src/app/PhotoScene';
+import { createInitialState } from '../src/core/GameState';
+import { Sim } from '../src/gameplay/Sim';
 
 const rgb = (hex: string) => new pc.Color().fromString(hex);
 const lum = (c: pc.Color) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
@@ -97,5 +102,42 @@ describe('E23.7.5 moonlit nights', () => {
     expect(lum(rgb(NIGHT_SKY_LIGHTS.moon))).toBeGreaterThan(0.9);
     expect(NIGHT_SKY_LIGHTS.stars.count).toBeGreaterThan(100);
     expect(NIGHT_SKY_LIGHTS.stars.above).toBeGreaterThanOrEqual(15);
+  });
+
+  it('the game clock, “follow my clock” and photo mode’s time slider all give the same moonlit night', () => {
+    const { at } = rig();
+    const look = (f: number) => {
+      const m = at(f);
+      return { sun: m.sun.color.toString(false), i: m.sun.intensity, fill: m.fill.intensity, env: m.env, exposure: m.exposure, night: m.sky.night };
+    };
+    const want = look(MIDNIGHT);
+    // the game's own clock, wound to the middle of the night
+    const sim = new Sim(createInitialState(7));
+    (sim.state.clock ??= { offset: 0 } as never).offset += (MIDNIGHT - sim.clock.dayFraction()) * DAY_SECONDS;
+    expect(sceneNow(sim, undefined).f).toBeCloseTo(MIDNIGHT, 3);
+    expect(look(sceneNow(sim, undefined).f)).toEqual(want);
+    // “follow my clock”: the real clock at the same hour
+    const hour = (DAY.dawnHour + MIDNIGHT * 24) % 24;
+    sim.clock.now = () => new Date(2026, 10, 19, Math.floor(hour), Math.round((hour % 1) * 60), 0);
+    sim.clock.real = true;
+    expect(sceneNow(sim, undefined).f).toBeCloseTo(MIDNIGHT, 3);
+    expect(look(sceneNow(sim, undefined).f)).toEqual(want);
+    // photo mode's slider set to that hour, whatever the game's clock says (noon here)
+    sim.clock.now = () => new Date(2026, 10, 19, 14, 0, 0);
+    const photo = new PhotoMode(
+      { camera: { snapshot: () => ({}) as never, restore: () => {}, pitchOffset: 0, maxZoom: 4.2, held: false, zoomBy: () => {}, pan: () => {}, orbit: () => {}, recentre: () => {} }, setHudHidden: () => {}, setDof: () => {}, capture: () => {}, render: () => {}, clockHour: () => 14, setFilter: () => {} },
+      new Bindings(),
+    );
+    photo.enter();
+    photo.setHour(hour);
+    expect(sceneNow(sim, photo).f).toBeCloseTo(MIDNIGHT, 3);
+    expect(look(sceneNow(sim, photo).f)).toEqual(want);
+    // and the slider walks smoothly through dusk into the night and out at dawn: every hour is a real look
+    for (let h = 0; h < 24; h++) {
+      photo.setHour(h);
+      const m = at(sceneNow(sim, photo).f);
+      expect(m.exposure, `${h}:00`).toBeCloseTo(LOOK.exposure, 6);
+      if (sceneNow(sim, photo).f > DAY.dayShare + DAY.twilight) expect(m.sun.color.b, `${h}:00`).toBeGreaterThan(m.sun.color.r);
+    }
   });
 });

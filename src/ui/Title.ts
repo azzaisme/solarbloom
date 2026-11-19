@@ -61,7 +61,7 @@ export class Title {
     this.el.id = 'title';
     this.el.className = host.reducedMotion ? 'still' : '';
     document.body.appendChild(this.el);
-    this.focus = new PadFocus(this.el, ['#settings.open', '.t-confirm', '.t-panel']);
+    this.focus = new PadFocus(this.el, ['#settings.open', '.t-confirm', '.t-panel', '.t-menu']);
     this.el.addEventListener('click', (e) => this.click(e));
     window.addEventListener('keydown', this.onKey);
   }

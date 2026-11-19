@@ -65,6 +65,7 @@ describe('E22.1: the new button map', () => {
       expect(keys(b, 'eat')).toEqual(['KeyF']);
       expect(ACTIONS.map((a) => a.id) as string[]).not.toContain('harvest');
       expect(b.actionForCode('KeyF')).toBe('eat');
+      expect([keys(b, 'loadPrev'), keys(b, 'loadNext')]).toEqual([['KeyZ'], ['KeyV']]); // E23.2.2: the load wheel
     });
 
   it('a saved pad binding for an action that no longer exists is ignored (E23.1.2: Bloom Frenzy)', () => {
@@ -91,6 +92,7 @@ describe('E22.1: the new button map', () => {
       expect(b.pad.eat).toBe(14); // d-pad left eats (E23.2.1)
       expect(b.actionForButton(14)).toBe('eat');
       expect(Object.keys(b.pad)).not.toContain('harvest');
+      expect([b.pad.loadPrev, b.pad.loadNext]).toEqual([4, 5]); // E23.2.2: the bumpers turn the load wheel
     });
 
     it('gives no two actions that can apply together the same input', () => {
@@ -157,8 +159,9 @@ describe('E22.1: the new button map', () => {
 
   it('the hotbar slots are ordinary actions: the number row can be rebound', () => {
     const b = new Bindings();
-    expect(b.bindKey('slot3', 'KeyZ')).toEqual({ ok: true, swapped: undefined });
-    expect(b.actionForCode('KeyZ')).toBe('slot3');
+    expect(b.actionForCode('KeyJ')).toBeUndefined(); // a free key (Z turns the load wheel since E23.2.2)
+    expect(b.bindKey('slot3', 'KeyJ')).toEqual({ ok: true, swapped: undefined });
+    expect(b.actionForCode('KeyJ')).toBe('slot3');
     expect(b.actionForCode('Digit3')).toBeUndefined();
   });
 

@@ -107,7 +107,7 @@ export class Hotbar extends HudPart {
     // Hotbar costs
     for (const t of BUILDABLE) {
       const btn = $(this.root, `#hotbar [data-tool="${t}"]`);
-      // E21.3: under old-city rules the price is the recipe (material icons, have / need)
+      // E21.3: the price is the recipe (material icons, have / need)
       this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.costLabel(t));
       this.set(`hk-${t}`, btn, 'cls', s.build.affordable(t) ? '0' : '1', 'cant');
       const locked = !s.build.isUnlocked(t);

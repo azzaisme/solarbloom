@@ -80,7 +80,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     allowedGround: ['restored', 'prepared'],
     blurb: 'Water Condensers within 2 tiles fill its basin. When full it Overflows: up to 3 dry tiles nearby burst into lush bloom (×2 🌿 for a while).',
     hotkey: '8',
-    areaTypes: ['reservoir', 'canal'],
+    areaTypes: ['reservoir'],
   },
   relay: {
     type: 'relay',

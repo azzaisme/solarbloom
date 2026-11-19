@@ -1,5 +1,5 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
-/** `chest` exists only under old-city rules (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
+/** `chest`: the Old City's caches (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
 export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger'
   // E23.5.2: the farm
   | 'planter';
@@ -83,7 +83,12 @@ export interface TileData {
   level?: number;
   /** E21.24: the tile is part of a ramp or stair (generated) */
   ramp?: boolean;
+  /** E23.2.2: what a loaded pulse grew here (unset: plain grass and moss). Saved. */
+  plant?: PlantKind;
 }
+
+/** E23.2.2: what grows from a pulse's load: a wildflower meadow (seeds), a region's rare plants, a grove (fertiliser). */
+export type PlantKind = 'meadow' | 'rare' | 'grove';
 
 /**
  * A layer is one continuous grid surface. The ground is unbounded (an endless city, generated on demand);
@@ -301,7 +306,7 @@ export interface AreaState {
    * the area behaves exactly as hidden fog (nothing can be walked, restored or built). Absent on older saves.
    */
   sealed?: boolean;
-  /** E21.9: tiles in this area bloombot restored itself (old-city rules: helpers wait until it has done its share) */
+  /** E21.9: tiles in this area bloombot restored itself (helpers wait until it has done its share) */
   byBot?: number;
   /** sim time the player unlocked it */
   unlockedAt?: number;
@@ -336,7 +341,7 @@ export interface KeeperState {
 }
 
 /**
- * E21: everything the Old City adds to a save. Present only under old-city rules; each part belongs to its own
+ * E21: everything the Old City adds to a save. Each part belongs to its own
  * ticket (E21.1 pack and store, E21.2 piles, E21.5 opened gates, E21.6 tier, E21.8 keepers, …).
  */
 export interface SalvageState {
@@ -380,18 +385,36 @@ export interface SalvageState {
   decorMade?: string[];
   /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
   clipped?: Record<string, number>;
+  /** E23.6.2: the research station (finds analysed, projects done and running, upgrade levels bought) */
+  research?: ResearchState;
   /** E23.5.2: each planter's bed, by machine id (absent = empty, no extras) */
   planters?: Record<string, PlanterState>;
   /** E23.5.2.3: crops whose seeds have been found (data/crops CropId), in the order found */
   crops?: string[];
+  /** E23.6.2: crossbreeds found (data/crops crossKey, e.g. 'radish+lettuce'), in the order found */
+  crosses?: string[];
   /** E23.5.2.3: gathers counted toward each region's next seed packet, by region id */
   seedFinds?: Record<string, number>;
+}
+
+/** E23.6.2: what the research station keeps. */
+export interface ResearchState {
+  /** finds looked at (keys such as 'material:copper', 'keeper:mastRow', 'tech:c-mastRow-1') */
+  analysed: string[];
+  /** projects finished, in order */
+  done: string[];
+  /** projects on the bench: seconds of powered work left */
+  running: { id: string; left: number }[];
+  /** upgrade levels bought at the crafting table */
+  levels: Record<string, number>;
 }
 
 /** E23.5.2: one planter box. */
 export interface PlanterState {
   /** the crop growing (data/crops CropId); absent = empty */
   crop?: string;
+  /** E23.6.2: a crossbreed's second parent (it grows like `crop`, with both parents' likes) */
+  cross?: string;
   /** growth so far, in game days at full rate (ripe at the crop's `days`) */
   grown?: number;
   /** fed with fertiliser (until the next harvest) */
@@ -445,13 +468,21 @@ export interface GameState {
    * production, chains, milestones or pacing). Optional and sparse, so no save version change.
    */
   cozy?: CozyState;
+  /** E23.4.1: water levels (share of capacity) of bodies that have changed, by body id `x,z`. Optional. */
+  water?: { levels: Record<string, number> };
+  /** E23.2.3: old park benches mended, by id (`bench:x:z`). Optional, so no save version change. */
+  rest?: { mended: string[] };
+  /** E23.2.2.3: buried finds revealed (a mound shows) and dug up, by id (`bur:x:z`). Optional. */
+  buried?: { known: string[]; dug: string[] };
+  /** E23.2.2: what the pulse is loaded with (absent = nothing). Optional, so no save version change. */
+  pulseLoad?: 'none' | 'seeds' | 'rare' | 'fertiliser';
   /** E23.3.5: stored energy of grid nodes that are not machines (solar garden lights), by node id. Optional. */
   power?: {
     cells?: Record<string, number>;
     /** E23.3.5: set once lights placed before night lighting have been carried over (see Lights.carryOver) */
     lights?: number;
   };
-  /** E23.2.1: bloombot's charge (old-city rules; absent = full). Optional, so no save version change. */
+  /** E23.2.1: bloombot's charge (absent = full). Optional, so no save version change. */
   charge?: ChargeState;
   /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
   clock?: ClockState;

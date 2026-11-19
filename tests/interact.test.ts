@@ -33,7 +33,7 @@ describe('E22.2: what Interact acts on', () => {
   });
 
   it('the priority matches the epic, top to bottom', () => {
-    expect([...PRIORITY]).toEqual(['cat', 'keeper', 'salvage', 'cache', 'gate', 'door', 'storage', 'landmark', 'machine', 'decoration', 'plot']);
+    expect([...PRIORITY]).toEqual(['cat', 'keeper', 'salvage', 'cache', 'gate', 'door', 'storage', 'bench', 'landmark', 'machine', 'decoration', 'plot']);
   });
 
   it('holds can be switched to a single press', () => {

@@ -152,11 +152,33 @@ function strict(name: Probe['name'], path: string, need: string[], what: (o: Obj
   };
 }
 
-/** E23.4 (#358): water. Land near empty water fades to plain restored ground and greens again on refill. */
-export const WATER = strict('water', 'water', ['isDry'], (o, sim) => {
-  const dry = () => sim.areas.tiles(PARK).filter((t) => t.ground === 'restored' && call(o, 'isDry', t) === true);
-  return { dark: () => dry().slice(0, 5).map((t) => `tile ${t.x},${t.z} dry`), unrecovered: () => dry().slice(0, 5).map((t) => `tile ${t.x},${t.z} still dry`) };
-});
+/**
+ * E23.4 (#358, landed: E23.4.1 #491): water. Land near empty water goes dry (on E23.4.4, it fades to plain restored
+ * ground) and is watered again on refill. The water's piece of the scene: the park's pond restored (a silted bed
+ * holds no water until it is). The drain empties every body and holds a dry spell (E23.7.2's weather, sunny: no rain
+ * to refill it, as the power drain holds the night); the refill fills them and lets the weather go again.
+ */
+export const WATER: Probe = {
+  name: 'water',
+  present: (sim) => !!(sim as unknown as { water?: unknown }).water,
+  bind: (sim) => {
+    for (const t of sim.areas.tiles(PARK)) if (t.feature === 'water' && !t.blocked) setGround(sim, t, 'restored');
+    const w = sim.water;
+    const dry = () => sim.areas.tiles(PARK).filter((t) => t.ground === 'restored' && w.isDry(t)).slice(0, 5).map((t) => `tile ${t.x},${t.z} dry`);
+    return {
+      drain: () => {
+        sim.weather.forceForTest('sunny', Infinity);
+        w.drainForTest();
+      },
+      refill: () => {
+        sim.weather.forceForTest('sunny', 0); // the weather runs free again
+        w.refillForTest();
+      },
+      dark: dry,
+      unrecovered: dry,
+    };
+  },
+};
 
 /** E23.2.1 (#371): bloombot's charge. At zero: a low-power walk, never stranded, nothing lost. */
 export const CHARGE = strict('charge', 'charge', ['value', 'canWalk'], (o) => ({

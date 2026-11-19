@@ -129,7 +129,7 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
   );
 }
 
-/** E21.9: under old-city rules a region shows bloombot's share until helpers may join in. */
+/** E21.9: a region shows bloombot's share until helpers may join in. */
 function oldCityShare(s: Sim, id: string): string {
   if (id === PARK || s.areas.info(id).noLandmark || s.areas.fog(id) === 'cleared') return '';
   const have = s.state.areas[id]?.byBot ?? 0;
