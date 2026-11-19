@@ -4,7 +4,8 @@ import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { TileData } from '../src/core/types';
 import { PARK_SET, REGIONS } from '../src/data/oldcity';
-import { PULSE_LOAD, RARE_PLANTS, RIPPLE } from '../src/data/pulse';
+import { LOAD_WHEEL, PULSE_LOAD, RARE_PLANTS, RIPPLE } from '../src/data/pulse';
+import { RECIPES } from '../src/data/salvage';
 import { faunaGoal } from '../src/gameplay/Ecosystem';
 import { CAT_ANCHORS } from '../src/data/templates';
 import { TUNING } from '../src/data/tuning';
@@ -29,6 +30,32 @@ const deadTiles = (sim: Sim, n: number): TileData[] => {
   return out;
 };
 const grown = (sim: Sim) => sim.advance(TUNING.pulse.growSeconds + 2);
+/**
+ * A dead tile `t` with a Pollinator Garden built beside it and dead ground all round: a pulse on `t` sets off a
+ * real chain (the garden spreads the bloom to its neighbours). `avoid`: keep well clear of these tiles.
+ */
+function gardenSpot(sim: Sim, avoid: TileData[] = []): { t: TileData; garden: TileData } {
+  const dead = sim.areas.tiles(PARK).filter((q) => q.ground === 'polluted' && !q.blocked && !q.occupantId && sim.restoration.checkPulse(q).ok);
+  const open = (x: number, z: number) => dead.some((o) => o.x === x && o.z === z);
+  const t = dead.find((q) => [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [1, 1], [1, -1]].every(([dx, dz]) => open(q.x + dx, q.z + dz)) && avoid.every((a) => Math.hypot(a.x - q.x, a.z - q.z) > 8))!;
+  expect(t, 'an open dead spot for a garden').toBeTruthy();
+  const garden = sim.grid.get(GROUND, t.x + 1, t.z)!;
+  garden.ground = 'prepared';
+  garden.pollution = 0;
+  sim.grid.touch(garden);
+  sim.state.salvage!.tier = Math.max(sim.state.salvage!.tier ?? 0, RECIPES.pollinator!.tier ?? 0); // the garden is unlocked
+  for (const [k, n] of Object.entries(RECIPES.pollinator!.cost)) pack(sim)[k] = (pack(sim)[k] ?? 0) + (n as number);
+  expect(sim.build.place('pollinator', GROUND, garden.x, garden.z), 'the garden is built').toBeTruthy();
+  return { t, garden };
+}
+/** Everything restored and grown from here on, in order. */
+function watch(sim: Sim) {
+  const restored: { tile: TileData; source: string; chainId: number }[] = [];
+  const grownTiles: TileData[] = [];
+  sim.bus.on('tile.restored', (e) => restored.push({ tile: e.tile, source: e.source, chainId: e.chainId }));
+  sim.bus.on('tile.nurtured', (e) => grownTiles.push(e.tile));
+  return { restored, grown: grownTiles };
+}
 
 describe('E23.2.2.1: the load wheel and its cost', () => {
   it('turns through nothing, seeds, rare seed and fertiliser; classic rules have no load', () => {
@@ -65,6 +92,20 @@ describe('E23.2.2.1: the load wheel and its cost', () => {
     expect(sim.restoration.pulse(b.id)).toBe(true);
     expect(b.plant).toBeUndefined();
     expect(sim.pulseLoad.choice).toBe('seeds'); // the wheel keeps its choice for when seeds come back
+  });
+  it('the wheel is introduced once: the first time bloombot carries something to load', () => {
+    const sim = oldSim();
+    for (const k of Object.keys(pack(sim))) delete pack(sim)[k];
+    expect(sim.pulseLoad.introDue()).toBe(false); // nothing to load yet: nothing to explain
+    sim.inventory.add('seeds', 1);
+    expect(sim.pulseLoad.introDue()).toBe(true);
+    sim.pulseLoad.introduced();
+    expect(sim.pulseLoad.introDue()).toBe(false); // once only
+    const saver = new SaveService(undefined);
+    const back = new Sim(saver.deserialize(saver.serialize(sim.state))!);
+    expect(back.pulseLoad.introDue()).toBe(false); // and not again after a reload
+    expect(new Sim(createInitialState(7)).pulseLoad.introDue()).toBe(false); // classic rules: no wheel
+    expect(LOAD_WHEEL.introSeconds).toBeGreaterThan(LOAD_WHEEL.showSeconds);
   });
 });
 
@@ -104,27 +145,81 @@ describe('E23.2.2.2: what grows from each load', () => {
     expect([pack(sim).seeds, pack(sim).rareSeed, pack(sim).fertiliser]).toEqual([4, 4, 4]);
   });
 
-  it('the footprint grows what the pulse carried too, and chained tiles grow it', () => {
+  it('the footprint grows what the pulse carried too, and the chain a loaded pulse sets off grows it', () => {
     const sim = oldSim();
-    const [t] = deadTiles(sim, 1);
+    const { t } = gardenSpot(sim);
+    const seen = watch(sim);
     sim.inventory.add('seeds', 2);
     sim.pulseLoad.choose('seeds');
     const fp = sim.restoration.footprint(t).map((f) => f.tile);
-    sim.restoration.pulse(t.id);
+    expect(sim.restoration.pulse(t.id)).toBe(true);
     for (const nb of fp) expect(nb.plant).toBe('meadow');
-    // a chain a seeds pulse set off (chain 42): every tile it restores or grows becomes a meadow
-    grown(sim);
-    (sim.restoration as unknown as { rememberChainPlant(id: number, k: string): void }).rememberChainPlant(42, 'meadow');
-    const [dead] = deadTiles(sim, 1);
-    sim.restoration.complete(dead, 'chain', 42);
-    expect(dead.plant).toBe('meadow');
-    const lawn = sim.areas.tiles(PARK).find((x) => x.ground === 'restored' && !x.plant && x.bloom < TUNING.restore.maxBloom)!;
-    sim.restoration.grow(lawn, 42);
-    expect(lawn.plant).toBe('meadow');
-    // another chain (not loaded) grows plain grass
-    const [plain] = deadTiles(sim, 1);
-    sim.restoration.complete(plain, 'chain', 43);
-    expect(plain.plant).toBeUndefined();
+    sim.advance(TUNING.pulse.growSeconds + 8);
+    // the garden beside it spread the bloom: every tile the chain restored is a meadow too
+    const chained = seen.restored.filter((e) => e.source === 'pollinate');
+    expect(chained.length).toBeGreaterThan(0);
+    for (const e of chained) expect(e.tile.plant, `${e.tile.x},${e.tile.z}`).toBe('meadow');
+    for (const e of chained) expect(e.tile.bloom).toBe(PULSE_LOAD.seeds.bloom);
+    expect(pack(sim).seeds).toBe(1); // one unit, however far the chain ran
+    // the chain is let go once it has ended
+    expect(sim.restoration.plantedChains).toBe(0);
+    // a pulse with nothing loaded grows plain grass, chain and all
+    const sim2 = oldSim();
+    const spot2 = gardenSpot(sim2);
+    const seen2 = watch(sim2);
+    sim2.restoration.pulse(spot2.t.id);
+    sim2.advance(TUNING.pulse.growSeconds + 8);
+    expect(seen2.restored.filter((e) => e.source === 'pollinate').length).toBeGreaterThan(0);
+    for (const e of seen2.restored) expect(e.tile.plant).toBeUndefined();
+  });
+
+  it('a loaded pulse on living ground grows the load there, reaches further with fertiliser, and its chain carries it', () => {
+    const sim = oldSim();
+    const { t } = gardenSpot(sim);
+    // the tile is already alive (plain grass)
+    sim.restoration.complete(t, 'drone', undefined, true);
+    expect([t.ground, t.bloom, t.plant]).toEqual(['restored', 1, undefined]);
+    const seen = watch(sim);
+    pack(sim).fertiliser = 2;
+    sim.pulseLoad.choose('fertiliser');
+    const reach = sim.restoration.footprint(t, false, PULSE_LOAD.fertiliser).map((f) => f.tile);
+    expect(reach.length).toBeGreaterThan(0);
+    expect(sim.restoration.pulse(t.id)).toBe(true);
+    expect(t.plant).toBe('grove');
+    expect(t.bloom).toBe(PULSE_LOAD.fertiliser.bloom); // full bloom at once, not one level
+    for (const nb of reach) expect(nb.plant).toBe('grove'); // the extra reach restores the dead ground round it
+    sim.advance(TUNING.pulse.growSeconds + 8);
+    for (const nb of reach) {
+      expect(nb.ground).toBe('restored');
+      expect(nb.bloom).toBeGreaterThanOrEqual(PULSE_LOAD.fertiliser.bloom); // full bloom (the chain may lift it further)
+    }
+    const chained = [...seen.restored.filter((e) => e.source === 'pollinate').map((e) => e.tile), ...seen.grown.filter((x) => x.id !== t.id)];
+    expect(chained.length).toBeGreaterThan(0);
+    for (const c of chained) expect(c.plant, `${c.x},${c.z}`).toBe('grove');
+    expect(pack(sim).fertiliser).toBe(1);
+  });
+
+  it('a Mega Pulse grows its load too: where it lands and everything its wave restores', () => {
+    for (const start of ['dead', 'living'] as const) {
+      const sim = oldSim();
+      const [t] = deadTiles(sim, 1);
+      if (start === 'living') sim.restoration.complete(t, 'drone', undefined, true);
+      sim.state.progression.coreActivated = true; // the fountain is awake: the Mega Pulse charges
+      sim.state.progression.megaCharge = TUNING.mega.charge;
+      expect(sim.restoration.megaReady()).toBe(true);
+      const seen = watch(sim);
+      sim.inventory.add('seeds', 3);
+      sim.pulseLoad.choose('seeds');
+      expect(sim.restoration.pulse(t.id)).toBe(true);
+      expect(sim.restoration.megaReady()).toBe(false); // released
+      sim.advance(20);
+      const wave = seen.restored.filter((e) => e.source === 'mega');
+      expect(wave.length, start).toBeGreaterThan(3);
+      for (const e of wave) expect(e.tile.plant, `${start} ${e.tile.x},${e.tile.z}`).toBe('meadow');
+      expect(t.plant, start).toBe('meadow');
+      expect(t.bloom, start).toBeGreaterThanOrEqual(PULSE_LOAD.seeds.bloom);
+      expect(pack(sim).seeds, start).toBe(2); // one unit used, and it grew something
+    }
   });
 
   it('what grew is saved', () => {
@@ -282,16 +377,26 @@ describe('E23.2.2.2: rare plants and chains', () => {
 
   it('every running chain keeps its plant (no cap) until it ends; what it grew survives a reload', () => {
     const sim = oldSim();
-    const remember = (sim.restoration as unknown as { rememberChainPlant(id: number, k: string): void }).rememberChainPlant.bind(sim.restoration);
-    for (let id = 1; id <= 200; id++) remember(id, id % 2 ? 'rare' : 'meadow');
-    expect(sim.restoration.plantedChains).toBe(200); // nothing dropped
-    const [dead] = deadTiles(sim, 1);
-    sim.restoration.complete(dead, 'chain', 1); // the oldest still grows its plant
-    expect(dead.plant).toBe('rare');
-    sim.bus.emit('chain.ended', { chainId: 1 } as never);
-    expect(sim.restoration.plantedChains).toBe(199);
+    sim.inventory.add('seeds', 40);
+    sim.pulseLoad.choose('seeds');
+    // several loaded pulses at once, far apart, and one beside a garden: all their chains run together
+    const { t } = gardenSpot(sim);
+    const seen = watch(sim);
+    const fired = deadTiles(sim, 8).filter((q) => Math.hypot(q.x - t.x, q.z - t.z) > 8 && sim.restoration.pulse(q.id));
+    expect(fired.length).toBeGreaterThanOrEqual(2);
+    sim.restoration.pulse(t.id);
+    let most = 0;
+    for (let i = 0; i < 80; i++) {
+      sim.advance(0.25);
+      most = Math.max(most, sim.restoration.plantedChains);
+    }
+    expect(most).toBeGreaterThan(0); // a running chain is remembered
+    const chained = seen.restored.filter((e) => e.source === 'pollinate');
+    expect(chained.length).toBeGreaterThan(0);
+    for (const e of seen.restored.filter((x) => x.source !== 'drone')) expect(e.tile.plant, `${e.tile.x},${e.tile.z}`).toBe('meadow'); // none dropped
+    expect(sim.restoration.plantedChains).toBe(0); // all ended: nothing kept
     const saver = new SaveService(undefined);
     const back = new Sim(saver.deserialize(saver.serialize(sim.state))!);
-    expect(back.grid.get(GROUND, dead.x, dead.z)!.plant).toBe('rare'); // what grew is on the tile
+    for (const e of chained) expect(back.grid.get(GROUND, e.tile.x, e.tile.z)!.plant).toBe('meadow'); // what grew is on the tile
   });
 });

@@ -16,7 +16,7 @@ import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
-import { RIPPLE } from '../data/pulse';
+import { LOAD_WHEEL, RIPPLE } from '../data/pulse';
 import { REST } from '../data/rest';
 import { Resting } from './Resting';
 import { UPGRADE_BY_ID } from '../data/upgrades';
@@ -3359,14 +3359,17 @@ export class Game {
     b.on('pulse.ripple', ({ tileId, targets }) => {
       const t = s.grid.byTileId(tileId);
       if (!t || !s.oldCity) return;
-      this.vfx.ring(this.tileVec(t), '#bff3ff', RIPPLE.radius, 0.9);
+      this.vfx.ring(this.tileVec(t), PALETTE[RIPPLE.tint], RIPPLE.radius, RIPPLE.ringSeconds);
       for (const g of targets) {
         const at = s.grid.get(GROUND, g.x, g.z);
         if (!at) continue;
         const d = Math.hypot(g.x - t.x, g.z - t.z);
-        const hex = g.kind === 'page' ? '#fff3c4' : g.kind === 'cache' ? PALETTE.gold : '#bff3ff';
-        for (let i = 0; i < 3; i++)
-          this.tweens.add(0.01, () => {}, { delay: 0.06 * d + i * (RIPPLE.seconds / 3), done: () => (this.vfx.ring(this.tileVec(at), hex, 0.7, 0.9), this.vfx.sparkles(this.tileVec(at), 5, true)) });
+        const hex = PALETTE[RIPPLE.found[g.kind]];
+        for (let i = 0; i < RIPPLE.pings; i++)
+          this.tweens.add(0.01, () => {}, {
+            delay: RIPPLE.delayPerTile * d + i * (RIPPLE.seconds / RIPPLE.pings),
+            done: () => (this.vfx.ring(this.tileVec(at), hex, RIPPLE.pingRadius, RIPPLE.pingSeconds), this.vfx.sparkles(this.tileVec(at), RIPPLE.sparkles, true)),
+          });
       }
     });
     b.on('pulse.fired', ({ tileId, extra, overcharged }) => {
@@ -3622,6 +3625,16 @@ export class Game {
       f.chargeEmpty = Math.round(s.time);
       this.hud.toast(`Out of charge<small>Bloombot walks slower and can't pulse. Press ${this.hudKeys('eat')} to eat biomass or food, or rest.</small>`, '', 6);
     });
+    // E23.2.2.1: the load wheel is a new concept: one short introduction the first time bloombot carries something
+    // to load (the ring shows with it); after that the wheel and the chip show it
+    const introWheel = () => {
+      if (!s.pulseLoad.introDue()) return;
+      s.pulseLoad.introduced();
+      this.hud.loadWheel.show(LOAD_WHEEL.introSeconds);
+      this.hud.toast(`Bloombot can load its pulse<small>Press ${this.hudKeys('loadNext')} or ${this.hudKeys('loadPrev')} to choose what a pulse grows. Each loaded pulse uses one.</small>`, '', LOAD_WHEEL.introSeconds);
+    };
+    b.on('pack.changed', introWheel);
+    introWheel();
     b.on('rooftop.coreReady', () => {
       this.machines.setCoreState('ready');
       this.hud.toast(`✨ The Rooftop Core is humming!<small>Walk up and press ${this.hudKey('interact')} (or use the button) to awaken the building.</small>`, 'gold', 5);

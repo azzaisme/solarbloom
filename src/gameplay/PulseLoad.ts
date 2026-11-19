@@ -58,6 +58,17 @@ export class PulseLoad {
     return pack?.[def.item] ?? 0;
   }
 
+  /**
+   * The load wheel is a new idea, so it is introduced once: the first time bloombot carries anything it can load.
+   * True while that introduction is still owed (`introduced()` marks it given).
+   */
+  introDue(): boolean {
+    return this.on && this.sim.state.stats.firsts.loadWheel === undefined && PULSE_LOADS.some((l) => l.item && this.carried(l) > 0);
+  }
+  introduced() {
+    this.sim.state.stats.firsts.loadWheel = Math.round(this.sim.time);
+  }
+
   /** What the next pulse will carry: the chosen load if one is carried, else nothing. */
   next(): PulseLoadDef {
     const d = this.def;
