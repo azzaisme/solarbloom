@@ -159,6 +159,44 @@ describe('E23.6.3: what drones run on', () => {
     expect(sim.power.draw(hub)).toBe(DRONE_SUPPLY.restorer.power + DRONE_SUPPLY.scout.power);
   });
 
+  it('a Gardener job takes exactly one job\'s worth of water from the world: its hub\'s draw is what it pours', () => {
+    const { sim, hub, pond } = hubSim();
+    hub.role = 'gardener';
+    (hub.roles ??= []).push('gardener');
+    sim.areas.clear(sim.areas.areaOf(hub)!, true); // helpers may work there
+    // young lawn round the hub, by the pond (watered), for the Gardeners to grow
+    for (let x = 17; x < 26; x++)
+      for (let z = 16; z < 21 + DRONE_HUB.waterReach; z++) {
+        const t = sim.grid.get(GROUND, x, z);
+        if (t && !t.occupantId && t.feature !== 'water' && !t.blocked) Object.assign(t, { ground: 'restored', bloom: 0.5, pollution: 0 });
+      }
+    // every unit leaving any water in the world, and every job set out on
+    const w = sim.water;
+    const draw = w.draw.bind(w);
+    let drawn = 0;
+    w.draw = (id: string, units: number) => {
+      const got = draw(id, units);
+      drawn += got;
+      return got;
+    };
+    const take = sim.droneFuel.take.bind(sim.droneFuel);
+    let jobs = 0;
+    sim.droneFuel.take = (m, role) => {
+      const ok = take(m, role);
+      if (ok) jobs++;
+      return ok;
+    };
+    w.sky = () => ({ fill: 0, evap: 0 }); // no rain or sun on the pond: only what is drawn moves it
+    const before = w.amountOf(pond.id);
+    sim.state.drones = [];
+    for (let t = 0; t < 120; t += 0.25) sim.advance(0.25);
+    const done = sim.state.drones.filter((d) => d.hubId === hub.id).reduce((n, d) => n + (d.jobs ?? 0), 0);
+    expect(done).toBeGreaterThan(0); // they watered
+    expect(jobs).toBeGreaterThanOrEqual(done);
+    expect(drawn).toBeCloseTo(jobs * DRONE_SUPPLY.gardener.water!, 6); // one job's worth each, nothing more
+    expect(before - w.amountOf(pond.id)).toBeCloseTo(drawn, 6); // and the pond shows no other draw
+  });
+
   it('a hub draws from the best water in reach that still has a job\'s worth, not the nearest', () => {
     const { sim, hub, pond, drain } = hubSim();
     // a second pond along the hub's west edge of reach (its own body)
