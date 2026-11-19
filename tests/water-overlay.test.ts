@@ -102,6 +102,7 @@ describe('E23.4.5: the Water view', () => {
 
   it('arrows follow the water: a pump line into a full tank never points back at the pump', () => {
     const sim = park();
+    sim.weather.forceForTest('cloudy', Infinity); // (a sunny day's evaporation would have the pump topping the tank up)
     const pump = put(sim, 'pump', 4, 11);
     put(sim, 'solar', 5, 10);
     for (let x = 5; x <= 9; x++) sim.water.pipes.lay(GROUND, x, 11);
@@ -113,15 +114,69 @@ describe('E23.4.5: the Water view', () => {
     }
     expect(sim.water.levelOf(tankId(r))).toBe(1);
     expect(sim.water.pipes.carries(5, 11)).toBe(true);
-    const flow = sim.water.pipes.flow();
-    for (let x = 5; x <= 9; x++) expect(flow.get(`${x},11`) ?? [], `${x},11`).not.toContainEqual([-1, 0]); // never west, at the pump
-    // and with a step up on the line the pump still runs, its arrows run east from it, and still none come back
+    // the pump is idle (its tank is full and feeds the whole line), and the full tank is held, not a source: the
+    // line is wet but its water stands still, so no arrows at all (and so none back at the pump)
+    expect(sim.water.pipes.pumping.has(pump.id)).toBe(false);
+    expect([...sim.water.pipes.flow().keys()].filter((k) => k.endsWith(',11'))).toEqual([]);
+    // water is drawn from the line: the tank has room, the pump runs, and every arrow runs east, into the tank
+    expect(sim.water.drawNear(sim.grid.get(GROUND, 8, 10)!, 40)).toBe(40);
+    sim.power.tick(1);
+    sim.water.tick(1);
+    expect(sim.water.pipes.pumping.has(pump.id)).toBe(true);
+    const f1 = sim.water.pipes.flow();
+    for (let x = 5; x <= 9; x++) expect(f1.get(`${x},11`), `${x},11`).toEqual([[1, 0]]);
+    // with the tank full again and a step up on the line the pump keeps running for the stretch the tank can't
+    // reach: arrows east from the pump to the end of the line, none into the full tank, none back
+    sim.water.fill(tankId(r), 1e9);
     sim.grid.get(GROUND, 6, 11)!.level = 2;
     sim.water.tick(1);
     expect(sim.water.pipes.pumping.has(pump.id)).toBe(true);
     const f2 = sim.water.pipes.flow();
-    expect(f2.get('5,11')).toEqual([[1, 0]]);
-    for (let x = 5; x <= 9; x++) expect(f2.get(`${x},11`) ?? [], `${x},11`).not.toContainEqual([-1, 0]);
+    for (let x = 5; x <= 8; x++) expect(f2.get(`${x},11`), `${x},11`).toEqual([[1, 0]]);
+    expect(f2.get('9,11')).toBeUndefined(); // the end of the line: the tank beyond is full, nothing goes in
+  });
+
+  it('a dark pump drives nothing: a tank on its line feeding it by gravity shows its arrows', () => {
+    const sim = park();
+    const noPower = { ...sim.power.sky(), sun: 0, solar: 0, wind: 0 };
+    sim.power.skyOverride = () => noPower;
+    const pump = put(sim, 'pump', 4, 11); // on the pond's bank (which has water), but dark
+    for (let x = 5; x <= 9; x++) sim.water.pipes.lay(GROUND, x, 11);
+    const r = put(sim, 'reservoir', 10, 11);
+    sim.water.fill(tankId(r), 200);
+    sim.power.tick(1);
+    sim.water.tick(1);
+    sim.power.tick(1);
+    expect(sim.water.pipes.powered(pump)).toBe(false);
+    expect(sim.water.pipes.carries(5, 11)).toBe(true); // the tank feeds the level line by gravity
+    const flow = sim.water.pipes.flow();
+    for (let x = 6; x <= 9; x++) expect(flow.get(`${x},11`), `${x},11`).toEqual([[-1, 0]]); // west, away from the tank
+    expect(flow.get('5,11')).toBeUndefined(); // the last tile, by the dark pump
+  });
+
+  it('a full plant standing idle moves no water: no hologram and no arrows; drawn from, both come back', () => {
+    const sim = park();
+    const plant = put(sim, 'desalination', 12, 12, 2);
+    put(sim, 'solar', 14, 12); // touching it: on power
+    for (let x = 8; x <= 11; x++) sim.water.pipes.lay(GROUND, x, 12); // its line, west
+    sim.water.fill(sim.water.plantTank(plant.id)!.id, 1e9); // full
+    for (let i = 0; i < 2; i++) {
+      sim.power.tick(1);
+      sim.water.tick(1);
+    }
+    expect(sim.water.pipes.powered(plant)).toBe(true);
+    expect(sim.water.desalinating.has(plant.id)).toBe(false); // idle: full, nowhere for its water to go
+    expect(sim.water.pipes.carries(11, 12)).toBe(true); // (the line still holds its water)
+    expect(WaterOverlay.holoMachines(sim).has(plant.id)).toBe(false);
+    expect([...sim.water.pipes.flow().keys()].filter((k) => k.endsWith(',12'))).toEqual([]);
+    // water drawn from the line: room in its tank, it works again, and its water runs west along the line
+    expect(sim.water.drawNear(sim.grid.get(GROUND, 9, 13)!, 10)).toBe(10);
+    sim.power.tick(1);
+    sim.water.tick(1);
+    expect(sim.water.desalinating.has(plant.id)).toBe(true);
+    expect(WaterOverlay.holoMachines(sim).has(plant.id)).toBe(true);
+    const flow = sim.water.pipes.flow();
+    for (let x = 9; x <= 11; x++) expect(flow.get(`${x},12`), `${x},12`).toEqual([[-1, 0]]);
   });
 
   it("arrows from a tank respect the height it can feed: never up a step it can't climb", () => {

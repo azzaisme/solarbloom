@@ -121,10 +121,9 @@ export class WaterOverlay {
         const b = w.tank(m.id);
         if (b && w.amountOf(b.id) > 0) out.add(m.id);
       } else if (m.type === 'desalination') {
-        // working: making water (on power) or letting out what it made, while its water has somewhere to go. A full
-        // plant with nowhere for water to go stands idle, powered or not, and shows idle: no hologram.
-        const b = w.plantTank(m.id);
-        if (w.desalinating.has(m.id) && (w.pipes.powered(m) || (!!b && w.amountOf(b.id) > 0))) out.add(m.id);
+        // moving water: holding what it made while that has somewhere to go (the same rule as its arrows). A full
+        // plant with nowhere for water to go stands idle, powered or not, and shows idle: no hologram, no arrows.
+        if (w.pipes.moving(m)) out.add(m.id);
       } else if (w.pipes.pumpSpec(m.type) && w.pipes.pumpLive(m)) out.add(m.id);
     }
     return out;

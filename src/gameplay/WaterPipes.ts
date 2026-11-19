@@ -258,6 +258,22 @@ export class WaterPipes {
   }
 
   /**
+   * E23.4.5: is this pump or plant moving water now (what the Water view draws: its hologram, and arrows out of it)?
+   * A pump: live. A plant: holding water it made while that water has somewhere to go (`sim.water.desalinating`);
+   * a full plant standing idle holds water but moves none.
+   */
+  moving(m: MachineData): boolean {
+    return this.pumpLive(m) && (m.type !== 'desalination' || this.water.desalinating.has(m.id));
+  }
+
+  /** Does this pump drive its line (moving water, or powered with water to push but idle because its tanks are full)? */
+  private drives(m: MachineData): boolean {
+    if (m.type === 'desalination') return this.moving(m);
+    const src = this.pumpSource(m);
+    return !!src && this.water.amountOf(src.id) > 0 && this.powered(m);
+  }
+
+  /**
    * Has this pump's water somewhere to go? A reservoir in its reach with room, or a stretch of its line that its
    * full reservoirs can't feed by gravity (a line with no reservoir: all of it, since what draws on it takes the
    * pump's water). Like the desalination plant, a pump whose tanks are full and already feed its whole line stands
@@ -449,15 +465,11 @@ export class WaterPipes {
     for (const net of this.networks()) {
       const filling = this.filling(net);
       sinks.push(...filling);
-      const live = net.pumps.filter((q) => this.pumpLive(q));
-      for (const p of live) spread(p, this.reachOf(p, net));
-      // pumps with water to push, live or idle (an idle one's tanks are full): their line is theirs, not a tank's
-      const pushers = net.pumps.filter((q) => {
-        const src = this.pumpSource(q);
-        return !!src && this.water.amountOf(src.id) > 0;
-      });
+      for (const p of net.pumps) if (this.moving(p)) spread(p, this.reachOf(p, net));
+      // pumps that drive their line (moving water, or idle because its tanks are full): the line is theirs, not a
+      // tank's. A dark pump drives nothing, so a tank on its line feeding it by gravity is a source as usual.
       const pumped = new Set<string>();
-      for (const p of pushers) for (const k of this.reachOf(p, net)) pumped.add(k);
+      for (const p of net.pumps) if (this.drives(p)) for (const k of this.reachOf(p, net)) pumped.add(k);
       for (const t of net.tanks) {
         if (filling.has(t) || this.water.amountOf(tankId(t)) <= 0 || this.touches(t, pumped)) continue;
         spread(t, new Set(this.gravityTiles(t, net)));
