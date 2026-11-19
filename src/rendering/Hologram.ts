@@ -36,7 +36,8 @@ const BEAM_NORMALS = new Float32Array(12 * 3).map((_, i) => (i % 3 === 1 ? 1 : 0
 
 const TONES: Record<HoloTone, string> = { ok: PALETTE.signal.holo, bad: PALETTE.signal.bad };
 
-function holoMaterial(hex: string, opacity: number, emissive: number, additive = true): pc.StandardMaterial {
+/** The hologram look (unlit, see-through, no depth write): the build preview's, and the Power view's machines. */
+export function holoMaterial(hex: string, opacity: number, emissive: number, additive = true): pc.StandardMaterial {
   const m = new pc.StandardMaterial();
   const c = color(hex);
   m.diffuse.set(0, 0, 0);
