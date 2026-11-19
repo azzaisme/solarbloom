@@ -1525,6 +1525,7 @@ export class Game {
   /** The captured mouse moved: the view turns and tilts at once (a mouse wants no easing). */
   private mouseLook(dx: number, dy: number) {
     if (!this.bot || this.cinematic || this.photo?.active) return;
+    this.bot.lastInput = 'keys'; // looking with the mouse: prompts show keys again
     const k = Game.MOUSE_DEG;
     this.camera.look(-dx * k.yaw * this.camFactor('x'), dy * k.pitch * this.camFactor('y'));
     this.camIdle = 0;
