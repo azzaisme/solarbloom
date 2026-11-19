@@ -21,6 +21,7 @@ const KEYS: [Action, string[]][] = [
   ['buildMenu', ['KeyQ']],
   ['rotate', ['KeyR', 'Wheel']],
   ['removeMode', ['KeyX']],
+  ['powerOverlay', ['KeyO']], // E23.3.4
   ['backpack', ['Tab', 'KeyI']],
   ['map', ['KeyM']],
   ['pinNext', ['KeyG']],
@@ -44,6 +45,7 @@ const PAD: [Action, number | undefined][] = [
   ['rotateBack', 4], // LB
   ['rotate', 5], // RB
   ['removeMode', 7], // right trigger
+  ['powerOverlay', 15], // E23.3.4: d-pad right in build mode
   ['backpack', 12], // d-pad up
   ['map', 8], // View
   ['cancel', 1], // B
@@ -101,6 +103,11 @@ describe('E22.1: the new button map', () => {
     expect(b.actionForButton(0, ['build', 'world', 'any'])).toBe('place');
     expect(b.actionForButton(7, ['build', 'world', 'any'])).toBe('removeMode');
     expect(b.actionForCode('KeyQ', ['panel', 'any'])).toBe('prevTab');
+    // E23.3.4: the Power view is O and d-pad right in build mode; walking, d-pad right still pins the next request
+    const oc = new Bindings(undefined, { oldCity: true });
+    expect(oc.actionForCode('KeyO', ['build', 'world', 'any'])).toBe('powerOverlay');
+    expect(oc.actionForButton(15, ['build', 'world', 'any'])).toBe('powerOverlay');
+    expect(oc.actionForButton(15, ['world', 'any'])).toBe('pinNext');
     expect(b.actionForCode('KeyE', ['panel', 'any'])).toBe('nextTab');
     expect(b.actionForButton(5, ['panel', 'any'])).toBe('nextTab');
   });

@@ -119,6 +119,49 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     blurb: 'A way into the city’s shared store: open it to put things away or take them out.',
     oldCity: true,
   },
+  // E23.5.2: a planter box (old-city rules only): crops grow in it over game days.
+  planter: {
+    type: 'planter',
+    name: 'Planter',
+    icon: '🟫',
+    size: 1,
+    cost: {},
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'A raised bed: plant seeds in it, keep it watered and harvest food.',
+    oldCity: true,
+  },
+  // E23.3.2: the grid's storage and its weather power (old-city rules only).
+  battery: {
+    type: 'battery',
+    name: 'Battery',
+    icon: '🔋',
+    size: 1,
+    cost: {},
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Stores what the grid has spare and gives it back after dark.',
+    oldCity: true,
+  },
+  windTurbine: {
+    type: 'windTurbine',
+    name: 'Wind Turbine',
+    icon: '🌬',
+    size: 1,
+    cost: {},
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Turns on windy days and in storms. It catches more wind on high ground.',
+    oldCity: true,
+  },
+  // E23.3.3: bloombot sits on it to recharge from the grid.
+  charger: {
+    type: 'charger',
+    name: 'Charger',
+    icon: '🔌',
+    size: 1,
+    cost: {},
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'A pad on the grid. Sit on it and bloombot fills up fast.',
+    oldCity: true,
+  },
   core: {
     type: 'core',
     name: 'Rooftop Core',
@@ -131,8 +174,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
 };
 
 export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
-/** E21.3: the old-city build list (the classic list plus the Storage Chest; E23.7.4 dropped the Reclaimer). */
-export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'pollinator', 'droneHub', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+/** E21.3: the old-city build list (the classic list plus the Storage Chest and the Planter; E23.7.4 dropped the Reclaimer; E23.3 adds the grid). */
+export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

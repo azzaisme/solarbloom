@@ -149,6 +149,9 @@ const BODIES = {
   burst: P('M12 2l2 5 5-2-2 5 5 2-5 2 2 5-5-2-2 5-2-5-5 2 2-5-5-2 5-2-2-5 5 2z', 'orange') + C(12, 12, 3.4, 'sun'),
   // Machines and the city
   fountain: P('M3.5 15h17l-2 5h-13z', 'stone') + L('M12 15V7M12 7c-3 0-5 3-5.5 6.5M12 7c3 0 5 3 5.5 6.5', '#2ba0e0', 1.6) + P('M12 2.6c-1.2 1.8-2 2.8-2 3.8a2 2 0 0 0 4 0c0-1-.8-2-2-3.8z', 'water'),
+  battery: R(6, 5, 12, 16, 2, 'steel') + R(9.5, 3, 5, 2.4, .8, 'dark') + R(8.4, 13, 7.2, 5.6, 1, 'leaf') + R(8.4, 8.8, 7.2, 3, 1, 'leaf'),
+  charger: E(12, 18.5, 8.5, 3, 'cream') + E(12, 18, 6, 1.8, 'gold') + L('M12 17V8', '#3a2a1a', 1.8) + P('M13.6 2.5 9.4 9.2h3l-1.6 5.3 4.6-7h-3.2z', 'sun'),
+  windTurbine: L('M12 11.5V21.5M9 21.5h6', '#3a2a1a', 1.8) + P('M12 10.5 10.6 2.5c1.6-.6 2.8-.6 2.8 2z', 'cream') + P('M12.6 11.6l7.2 3.6c-.4 1.6-1.4 2.2-3 1.4z', 'cream') + P('M11.4 11.6 5 16.8c-1.2-1.2-1.2-2.4.2-3.4z', 'cream') + C(12, 11, 1.6, 'gold'),
   relay: L('M8.5 21l3.5-8.5 3.5 8.5M9.6 18.2h4.8', '#3a2a1a', 1.6) + P('M4.2 8.8a7.6 7.6 0 0 0 11.3 6.4L7.6 4.2a7.6 7.6 0 0 0-3.4 4.6z', 'steel') + L('M15 4a5 5 0 0 1 5 5M15 7a2 2 0 0 1 2 2', '#f2a91e', 1.6),
   drone: C(12, 13, 7, 'cream') + E(12, 13.4, 4.8, 2.8, 'dark') + `<ellipse cx="10.2" cy="13.4" rx="1.1" ry="1.3" fill="#8fe9ff"/><ellipse cx="13.8" cy="13.4" rx="1.1" ry="1.3" fill="#8fe9ff"/>` + L('M12 6V4.6', '#3a2a1a', 1.4) + P('M12 4.8c0-2 1.6-3.2 3.8-3 0 2-1.6 3.2-3.8 3z', 'leaf'),
   rocket: P('M12 2.5c3 2.2 4.4 5.6 4.4 9.6l-1.6 4.4H9.2l-1.6-4.4c0-4 1.4-7.4 4.4-9.6z', 'steel') + C(12, 9.4, 1.9, 'water') + P('M9.6 17h4.8L12 21.6z', 'orange') + P('M7.6 12.1 4.8 15.6l3.4.6zM16.4 12.1l2.8 3.5-3.4.6z', 'red'),
@@ -239,6 +242,10 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   relay: 'relay',
   cultivator: 'carrot', // the tiller: its tray slot showed 'undefined' without one
   chest: 'parcel', // E21.1
+  planter: 'garden', // E23.5.2
+  battery: 'battery', // E23.3.2
+  windTurbine: 'windTurbine', // E23.3.2
+  charger: 'charger', // E23.3.3
   core: 'sparkle',
 };
 
@@ -262,7 +269,7 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '☀': 'sun', '🌞': 'sun', '🔆': 'sun', '🌙': 'moon', '🌈': 'rainbow', '🌊': 'wave', '🌫': 'fog', '🌧': 'rain', '🌟': 'star', '💥': 'burst',
   '🦋': 'butterfly', '🐦': 'bird', '🐟': 'fish', '🐱': 'cat', '🐾': 'paw', '🤖': 'robot',
   '⛲': 'fountain', '📡': 'relay', '🛰': 'satellite', '🛸': 'drone', '🚀': 'rocket', '💠': 'crystal', '🏺': 'vase', '🏢': 'building', '🏙': 'building', '🗼': 'building',
-  '🛣': 'road', '🛤': 'road', '🛶': 'boat', '🧺': 'basket', '🔭': 'telescope', '📦': 'parcel', '🏮': 'lantern', '🏗': 'crane',
+  '🛣': 'road', '🛤': 'road', '🛶': 'boat', '🧺': 'basket', '🔭': 'telescope', '📦': 'parcel', '🏮': 'lantern', '🔋': 'battery', '🌬': 'windTurbine', '🔦': 'bulb', '🔌': 'charger', '🏗': 'crane',
   '🔒': 'lock', '🔓': 'lock', '✅': 'check', '⬜': 'box', '⏳': 'hourglass', '🔗': 'link', '🔀': 'merge', '🔁': 'repeat', '⬆': 'up', '⚠': 'warning', '❔': 'question',
   '📋': 'clipboard', '🧹': 'broom', '🪑': 'bench', '💡': 'bulb', '💰': 'coins', '🧩': 'puzzle', '👑': 'crown', '🧠': 'brain', '🕸': 'web', '✋': 'hand',
   '⚙': 'settings', '🔧': 'wrench', '▶': 'play', '⏸': 'pause', '⏩': 'fastForward', '⏭': 'fastForward',
@@ -273,6 +280,8 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   // E19.2 decorations.
   '🌷': 'flower', '🎏': 'rainbow', '🛢': 'vase',
   '🪨': 'restore', '🧱': 'restore', '🟫': 'garden', '🍃': 'biomass', '🚜': 'build', '🔱': 'build', '🧭': 'telescope',
+  // E23.6.1 components.
+  '➰': 'link', '🪵': 'build', '🔲': 'glasshouse', '🚰': 'water', '🌀': 'settings',
   // E23.5.1 farm items (food is the carrot, compost the garden bed above).
   '🧪': 'sparkle',
 };
