@@ -41,3 +41,18 @@
 
 /* E21.12: the intro card speaks of the Old City under old-city rules, of the park and fog otherwise */
 #hud[data-rules="oldcity"] #intro [data-rules="classic"], #hud:not([data-rules="oldcity"]) #intro [data-rules="oldcity"] { display: none; }
+
+/* E23.2.1: bloombot's charge, the only meter (old-city rules). Calm when full, warm when low, grey at zero. */
+#chargeRow { grid-template-columns: 24px auto 1fr; cursor: default; transition: opacity .6s, border-color .3s; }
+#chargeRow.off { display: none; }
+#chargeRow .ic { color: var(--gold-hi); }
+#chargeRow .pct { justify-self: end; font: 700 15px var(--font-display); font-variant-numeric: tabular-nums; color: var(--text-strong); }
+#chargeRow .bar i { background: linear-gradient(90deg, #6fd3c4, #c9f7a8); }
+#chargeRow.low { border-color: var(--gold); }
+#chargeRow.low .bar i { background: var(--energy-bar); }
+#chargeRow.low .ic { animation: charge-low 1.6s ease-in-out infinite; }
+#chargeRow.empty { border-color: var(--edge-soft); }
+#chargeRow.empty .ic, #chargeRow.empty .pct { color: var(--text-soft); }
+#chargeRow.eating .bar i { box-shadow: 0 0 8px #c9f7a8; }
+#chargeRow.calm { opacity: .35; }
+@keyframes charge-low { 50% { opacity: .45; } }

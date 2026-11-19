@@ -40,6 +40,7 @@ export type Action =
   | 'backpack'
   | 'map'
   | 'harvest'
+  | 'eat'
   | 'pinNext'
   | 'cancel'
   | 'menu'
@@ -72,9 +73,11 @@ export interface ActionDef {
   pad: boolean;
   /** only under classic rules */
   classic?: boolean;
+  /** E23.2.1: only under old-city rules (bloombot's charge) */
+  oldCity?: boolean;
 }
 
-const A = (id: Action, label: string, group: Group, context: Context, keys = true, pad = true, classic = false): ActionDef => ({ id, label, group, context, keys, pad, classic });
+const A = (id: Action, label: string, group: Group, context: Context, keys = true, pad = true, classic = false, oldCity = false): ActionDef => ({ id, label, group, context, keys, pad, classic, oldCity });
 
 /** Every action, in the order the rebinding screen lists them. */
 export const ACTIONS: readonly ActionDef[] = [
@@ -89,7 +92,8 @@ export const ACTIONS: readonly ActionDef[] = [
   A('recentre', 'Recentre the camera', 'move', 'world'),
   A('interact', 'Interact', 'act', 'world'),
   A('pulse', 'Pulse, use the tool, place', 'act', 'world'),
-  A('harvest', 'Harvest Sunlight', 'act', 'world'),
+  A('harvest', 'Harvest Sunlight', 'act', 'world', true, true, true),
+  A('eat', 'Eat a snack (recharge)', 'act', 'world', true, true, false, true),
   A('pinNext', 'Pin the next request', 'act', 'world'),
   A('nextArea', 'Go to the area that needs you', 'act', 'world', true, true, true),
   A('home', 'Back to the park', 'act', 'world', true, true, true),
@@ -161,6 +165,8 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
     backpack: ['Tab', 'KeyI'],
     map: ['KeyM'],
     harvest: ['KeyF'],
+    // E23.2.1: under old-city rules F eats instead (Harvest Sunlight is classic only)
+    eat: oldCity ? ['KeyF'] : [],
     pinNext: ['KeyG'],
     cancel: [FIXED_KEY],
     menu: [FIXED_KEY],
@@ -171,7 +177,7 @@ export function defaultKeys(oldCity = false): Record<Action, string[]> {
     nextArea: ['KeyN'],
     home: ['Home'],
   };
-  if (oldCity) for (const a of ACTIONS) if (a.classic) k[a.id] = [];
+  for (const a of ACTIONS) if (oldCity ? a.classic : a.oldCity) k[a.id] = [];
   return k;
 }
 
@@ -201,7 +207,12 @@ export function defaultPad(oldCity = false): Partial<Record<Action, number>> {
     prevTab: 4,
     nextTab: 5,
   };
-  if (oldCity) p.pinNext = 15;
+  if (oldCity) {
+    p.pinNext = 15;
+    // E23.2.1: d-pad left eats instead of harvesting sunlight (classic only)
+    delete p.harvest;
+    p.eat = 14;
+  }
   return p;
 }
 
