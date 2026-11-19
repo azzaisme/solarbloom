@@ -202,6 +202,8 @@ describe('E16 cosmetic fauna (planning side; the renderer animates what it retur
     let n = 0;
     for (const t of parkTiles(sim)) if (n < 40 && sim.build.place('solar', GROUND, t.x, t.z)) n++;
     expect(n).toBeGreaterThan(20);
+    expect(catSpots(sim, VIEW, 50)).toEqual([]); // E23.12.3: no cat of any kind before the first Lucky Cat is found
+    sim.state.cat.found = 1;
     const spots = catSpots(sim, VIEW, 50);
     expect(spots.length).toBeGreaterThan(0);
     expect(catSpots(sim, VIEW, 3).length).toBeLessThanOrEqual(3);

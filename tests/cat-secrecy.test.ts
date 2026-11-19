@@ -163,6 +163,43 @@ describe('E23.12.3: the cats stay hidden until one is found (audit)', () => {
     expect(visitorSlots(sim, rect).filter((v) => v.kind === 'cats').length).toBeGreaterThan(0);
   });
 
+  it('cat timing runs on game time: the next cat waits through a pause, and hours away bring no catch-up', () => {
+    const saver = new SaveService(undefined);
+    const sim = hidingCat(5);
+    sim.cat.claim();
+    const wait = sim.state.cat.nextSpawnAt - sim.time;
+    expect(wait).toBeGreaterThanOrEqual(TUNING.cat.laterMin);
+    // a paused game doesn't step the sim: the wall clock moving changes nothing
+    const before = JSON.stringify(sim.state.cat);
+    SaveService.clock = () => 10 * 3600 * 1000;
+    sim.cat.tick();
+    expect(JSON.stringify(sim.state.cat)).toBe(before);
+    // saved, then loaded ten hours later: the same game time, the same wait, no cat waiting from the time away
+    SaveService.clock = () => 0;
+    const json = saver.serialize(sim.state);
+    SaveService.clock = () => 10 * 3600 * 1000;
+    const back = new Sim(saver.deserialize(json)!);
+    expect(back.time).toBe(sim.time);
+    expect(back.state.cat.nextSpawnAt - back.time).toBe(wait);
+    back.advance(1);
+    expect(back.state.cat.active).toBeUndefined();
+    // a cat hiding across that reload has hidden for game time only (its reward's hidden-time bonus too)
+    expect(back.cat.spawn()).toBe(true);
+    const spot = back.state.cat.active!;
+    const json2 = saver.serialize(back.state);
+    SaveService.clock = () => 30 * 3600 * 1000;
+    const later = new Sim(saver.deserialize(json2)!);
+    expect(later.time - later.state.cat.active!.spawnedAt).toBe(back.time - spot.spawnedAt);
+    // played on: the next cat comes once the game time has passed, not before
+    later.state.cat.active = undefined;
+    later.state.cat.nextSpawnAt = later.time + 30;
+    for (let i = 0; i < 29; i++) later.advance(1);
+    expect(later.state.cat.active).toBeUndefined();
+    for (let i = 0; i < 12 && !later.state.cat.active; i++) later.advance(1);
+    expect(later.state.cat.active).toBeDefined();
+    SaveService.clock = () => 0;
+  });
+
   it('every string in src/ that names a cat is one only a found cat (or the cat itself) shows', { timeout: 60_000 }, () => {
     // file → how many such strings it holds, and why each is safe. A new one fails here until it is gated and listed.
     const ALLOWED: Record<string, { n: number; why: string }> = {
