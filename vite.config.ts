@@ -27,7 +27,7 @@ const QUICK = [
   // E23.8.3: the mainland
   'mainland',
   // E23.9: the story
-  'journal',
+  'journal', 'keepers-friends', 'keepers-arcs', 'keepers-tally', 'keepers-crops',
   // E23.4: the water network
   'water-levels',
   // E23.5: the farm
