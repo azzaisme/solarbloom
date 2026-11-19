@@ -29,6 +29,8 @@ export type PostSpec = Pick<TierSpec, 'post' | 'bloom' | 'ssao' | 'dof' | 'sampl
 export class PostFx {
   frame?: pc.CameraFrame;
   private clearWas?: pc.Color;
+  private bloomOn = false;
+  private night = 0;
 
   constructor(
     private app: pc.AppBase,
@@ -60,7 +62,8 @@ export class PostFx {
     f.rendering.toneMapping = LOOK.toneMapping;
     f.rendering.samples = spec.samples;
     const B = LOOK.bloom;
-    f.bloom.intensity = spec.bloom ? B.intensity : 0;
+    this.bloomOn = spec.bloom;
+    f.bloom.intensity = this.bloomIntensity();
     f.bloom.threshold = B.threshold;
     f.bloom.blurLevel = B.blurLevel;
     const A = LOOK.ssao;
@@ -78,6 +81,18 @@ export class PostFx {
     f.dof.blurRings = D.blurRings;
     f.dof.blurRingPoints = D.blurRingPoints;
     f.update();
+  }
+
+  private bloomIntensity(): number {
+    const B = LOOK.bloom;
+    return this.bloomOn ? B.intensity * (1 + (B.night - 1) * this.night) : 0;
+  }
+
+  /** E23.7.5: how far into night it is (0 … 1): bloom grows toward LOOK.bloom.night by deep night. */
+  setNight(n: number) {
+    if (Math.abs(n - this.night) < 0.005) return;
+    this.night = n;
+    if (this.frame) this.frame.bloom.intensity = this.bloomIntensity();
   }
 
   /**

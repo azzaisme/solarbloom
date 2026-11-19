@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import { LOOK } from '../data/look';
+import { DAY_LIGHT } from '../data/sky';
 import { color } from './Materials';
 import type { Tweens } from './Tween';
 
@@ -98,9 +99,11 @@ export class SceneBuilder {
     const device = this.app.graphicsDevice;
     const E = LOOK.env;
     const N = 32;
-    const zen = color(E.zenith).linear();
-    const hor = color(E.horizon).linear();
-    const gnd = color(E.ground).linear();
+    const NC = DAY_LIGHT.envNightColours;
+    const n = this.envNight;
+    const zen = new pc.Color().lerp(color(E.zenith).linear(), color(NC.zenith).linear(), n);
+    const hor = new pc.Color().lerp(color(E.horizon).linear(), color(NC.horizon).linear(), n);
+    const gnd = new pc.Color().lerp(color(E.ground).linear(), color(NC.ground).linear(), n);
     const levels: Uint8Array[] = [];
     const dir = new pc.Vec3();
     const mix = (a: pc.Color, b: pc.Color, t: number, k: number) => [a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t].map((v) => v * k);
@@ -132,6 +135,7 @@ export class SceneBuilder {
         }
       levels.push(px);
     }
+    const keep = this.envAtlas ? this.app.scene.skyboxIntensity : undefined; // DayNight's, on a re-bake
     this.envSource?.destroy();
     this.envAtlas?.destroy();
     const cube = new pc.Texture(device, {
@@ -152,9 +156,21 @@ export class SceneBuilder {
     this.envAtlas = pc.EnvLighting.generateAtlas(lighting, { size: 512 });
     const scene = this.app.scene;
     scene.envAtlas = this.envAtlas;
-    scene.skyboxIntensity = E.intensity;
+    if (keep === undefined) scene.skyboxIntensity = E.intensity;
     // Ambient comes from the environment now; the old flat ambient stays black so it doesn't add on top.
     scene.ambientLight = new pc.Color(0, 0, 0);
+  }
+
+  /** E23.7.5: how far into night the ambient environment is (0 day … 1 night), in DAY_LIGHT.envSteps steps. */
+  private envNight = 0;
+
+  /** Shift the ambient environment toward night's colours; re-bakes only when it crosses a step. */
+  setEnvNight(night: number) {
+    const steps = DAY_LIGHT.envSteps;
+    const n = Math.round(Math.min(1, Math.max(0, night)) * steps) / steps;
+    if (n === this.envNight) return;
+    this.envNight = n;
+    this.buildEnvironment();
   }
 
   update(_dt: number) {}

@@ -13,6 +13,7 @@ import type { DroneRole, LayerData, MachineData, ResourceKind, TileData } from '
 import { MACHINES, machineIcon, machineName } from '../data/machines';
 import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
 import { GATHER } from '../data/farm';
+import { CROPS } from '../data/crops';
 import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
@@ -39,6 +40,7 @@ import { MACHINE_MODELS } from '../rendering/MachineVisuals';
 import type { HoloShape } from '../rendering/Hologram';
 import { TransitionRenderer } from '../rendering/transitions/TransitionRenderer';
 import { CultivatorVisuals } from '../rendering/CultivatorVisuals';
+import { CropVisuals } from '../rendering/CropVisuals';
 import { ProgressRings } from '../rendering/transitions/ProgressRings';
 import { areaPanelHtml } from '../ui/AreaPanel';
 import { upgradeHighlights } from '../gameplay/UpgradeEffects';
@@ -50,7 +52,7 @@ import { Overlays } from '../rendering/Overlays';
 import { PowerLines } from '../rendering/PowerLines';
 import { PowerOverlay } from '../rendering/PowerOverlay';
 import { LightVisuals } from '../rendering/LightVisuals';
-import { LIGHT } from '../data/lights';
+import { LIGHT, LIGHTING } from '../data/lights';
 import { SceneBuilder, SLAB_TOP } from '../rendering/SceneBuilder';
 import { Sky } from '../rendering/Sky';
 import { Skyline } from '../rendering/Skyline';
@@ -197,6 +199,8 @@ export class Game {
   readonly transitions: TransitionRenderer;
   /** Look 6.9: Cultivator tillers. */
   readonly tillers: CultivatorVisuals;
+  /** E23.5.2: what grows in each planter. */
+  readonly crops: CropVisuals;
   /** E23.3: the grid's cables. */
   readonly powerLines: PowerLines;
   /** E23.3.4: the Power overlay (build mode). */
@@ -375,6 +379,7 @@ export class Game {
     this.cat = new CatVisuals(this.sim, this.scene.world, this.tweens);
     this.vfx = new Vfx(this.scene.world, this.app.graphicsDevice);
     this.tillers = new CultivatorVisuals(this.sim, this.scene.world, this.vfx);
+    this.crops = new CropVisuals(this.sim, this.scene.world);
     this.powerLines = new PowerLines(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData));
     this.lightVisuals = new LightVisuals(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
     this.powerOverlay = new PowerOverlay(this.sim, this.scene.world, (m) => this.machines.worldOf(m as MachineData), this.app.batcher ?? undefined);
@@ -527,6 +532,7 @@ export class Game {
         // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
         this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
         this.sim.bus.on('biomass.gathered', (e) => this.hud.pickup(MATERIALS.biomass.name, e.got));
+        this.sim.bus.on('planter.harvested', (e) => e.food > 0 && this.hud.pickup(MATERIALS.food.name, e.food));
       }
       const focus = new PadFocus(this.hud.root);
       this.padFocus = focus;
@@ -966,6 +972,7 @@ export class Game {
     this.closeMenu();
     this.hud.toggleTray(false);
     this.hud.toggleBackpack(false);
+    this.hud.craft.close();
     this.hud.closePlotPicker();
     if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
   }
@@ -973,7 +980,7 @@ export class Game {
   /** E22.11: a full-screen panel pauses the game while it is open (also called the moment one closes, so the next
    *  key press already reaches the game, however slow the frame). */
   private syncPanelPause() {
-    this.pause.set('panel', this.hud.backpackOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
+    this.pause.set('panel', this.hud.backpackOpen || this.hud.craft.isOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
   }
 
   private openMenu() {
@@ -1358,6 +1365,7 @@ export class Game {
   private panelTab(dir: number) {
     if (this.settingsUi.isOpen) this.settingsUi.tab(dir, true);
     else if (this.hud.backpack.isOpen) this.hud.backpack.tab(dir, true);
+    else if (this.hud.craft.isOpen) this.hud.craft.tab(dir, true);
   }
 
   /** E22.1: the input contexts in effect now (Bindings: an open panel, build mode, or walking). */
@@ -1369,7 +1377,7 @@ export class Game {
   /** A panel or menu that takes the input is open. */
   private panelOpen(): boolean {
     const h = this.hud;
-    return h.modalOpen || h.backpackOpen || h.plotPickerOpen || h.trayOpen || !!this.oc?.panel.isOpen;
+    return h.modalOpen || h.backpackOpen || h.craft.isOpen || h.plotPickerOpen || h.trayOpen || !!this.oc?.panel.isOpen;
   }
 
   /** The action a key (or mouse input) means now. With a panel open, the key that opened it closes it again. */
@@ -1558,6 +1566,7 @@ export class Game {
     else if (this.hud.trayOpen) this.hud.toggleTray(false);
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
     else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
+    else if (this.hud.craft.isOpen) this.hud.craft.close();
     else if (this.selected) this.select(undefined);
     else if (this.bot?.walking) this.bot.cancelWalk();
     else if (this.hud.currentTool !== 'pulse') this.selectTool('pulse');
@@ -1863,6 +1872,18 @@ export class Game {
       const g = NIGHT_FIND_GIVES[nf.kind];
       out.push({ kind: 'salvage', id: `night:${nf.id}`, verb: g.verb, name: g.name, distance: fd, at: front, refused: s.nightFinds.problem(nf.id), run: () => void s.nightFinds.take(nf.id) });
     }
+    // E23.6.1: the crafting table is in the house (the shed by the fountain) from the start. Facing the shed's walls
+    // uses the table (listed first, so it wins the tie); the door in front of it is for the radio and the bed.
+    const sh = PARK_SET.shed;
+    if (f.x >= sh.x && f.x < sh.x + sh.size && f.z >= sh.z && f.z < sh.z + sh.size)
+      out.push({
+        kind: 'door', id: 'craft:table', verb: 'Use', name: 'the crafting table', distance: fd, at: front, frame: { roofId: GROUND, x: sh.x, z: sh.z, size: sh.size },
+        run: () => {
+          this.oc?.panel.close();
+          this.hud.craft.open();
+          this.syncPanelPause();
+        },
+      });
     // the house: its radio's forecast by day, its bed from dusk
     if (this.atHouse(f) && s.weather.on && !s.clock.canSleep()) out.push({ kind: 'door', id: 'house:radio', verb: 'Listen to', name: 'the radio', distance: fd, at: front, run: () => this.listenToRadio() });
     if (this.atHouse(f) && s.clock.canSleep()) out.push({ kind: 'door', id: 'house:sleep', verb: 'Sleep', name: 'until morning', distance: fd, at: front, run: () => this.sleep() });
@@ -1883,6 +1904,11 @@ export class Game {
       if (r && s.areas.fog(r.id) !== 'cleared') out.push({ kind: 'landmark', id: `lm:${occ.id}`, verb: 'Wake', name: `the ${r.landmark.name}`, distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
       else if (s.inventory.accessPoints().some((p) => p.x === occ.x && p.z === occ.z && p.roofId === occ.roofId)) out.push({ kind: 'storage', id: `store:${occ.id}`, verb: 'Open', name: 'the store', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
     } else if (occ?.type === 'chest') out.push({ kind: 'storage', id: `chest:${occ.id}`, verb: 'Open', name: 'the chest', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run });
+    // E23.5.2: a planter: Harvest when ripe, otherwise Plant in or Tend it
+    if (occ?.type === 'planter') {
+      const lk = s.farm.look(occ);
+      out.push({ kind: 'machine', id: `planter:${occ.id}`, verb: lk.ripe ? 'Harvest' : lk.crop ? 'Tend' : 'Plant in', name: lk.ripe ? CROPS[lk.crop!].name : 'the planter', distance: fd, at: front, frame: { roofId: occ.roofId, x: occ.x, z: occ.z, size: occ.size }, run: () => oc.planter(occ) });
+    }
     // E23.5.1: flowered, restored ground in front can be clipped for biomass
     if (!pile && s.gather.canGather(front))
       out.push({ kind: 'salvage', id: `gather:${front.id}`, verb: 'Gather', name: 'clippings', distance: fd, at: front, ocHold: GATHER.holdSeconds, refused: s.gather.problem(front), run: () => oc.gatherHold(front) });
@@ -4288,7 +4314,20 @@ export class Game {
 
   /** this frame's dt (holds read it) */
   private frameDt = 0;
+  private lastReal = 0;
+  /**
+   * Seconds of wall time since the last frame (the engine's dt is 0 while paused). Not clamped to a frame's worth:
+   * the crafting table counts real seconds even when frames are slow, up to a second at a time (a long stall, such as
+   * a hidden window, doesn't finish a queue at once).
+   */
+  private realDt(): number {
+    const now = performance.now();
+    const d = this.lastReal ? (now - this.lastReal) / 1000 : 0;
+    this.lastReal = now;
+    return Math.min(d, 1);
+  }
   private update(rawDt: number) {
+    if (!this.pause.paused) this.lastReal = performance.now();
     const dt = Math.min(rawDt, TUNING.maxFrameDt);
     this.frameDt = dt;
     this.clock += dt;
@@ -4299,6 +4338,8 @@ export class Game {
     // E22.11: a full-screen panel (the backpack, Settings) pauses the game while it is open.
     this.syncPanelPause();
     const paused = this.pause.paused;
+    // E23.6.1: the table keeps working while its panel holds the game paused (the engine's clock is stopped then)
+    this.hud.craft.update(paused ? this.realDt() : dt, paused);
     if (!paused && !this.photo.frozen) {
       this.runSim(dt);
     }
@@ -4319,6 +4360,9 @@ export class Game {
     const powerOn = this.powerView && this.building();
     this.powerOverlay.show(powerOn);
     this.powerOverlay.update(wdt, this.powerFocus);
+    // E23.7.5: lamps cast real light: fewer at once on the low tier, and they dim with the scene in the Power view
+    this.lightVisuals.maxCast = this.gfxTier === 'low' ? LIGHTING.cast.maxLow : LIGHTING.cast.max;
+    this.lightVisuals.share = this.dayNight.lightShare;
     this.lightVisuals.update(wdt, this.camera.entity.getPosition());
     // E23.3.4: in the Power view, powered electrical machines glow soft yellow and the rest of the world darkens
     this.machines.powerGlow(powerOn ? this.poweredMachines() : undefined, wdt);
@@ -4329,6 +4373,7 @@ export class Game {
     this.powerOverlay.setBoost(this.dayNight.boost);
     this.machines.setGlowBoost(this.dayNight.boost);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
+    this.crops.update(dt);
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.
     if (!this.paused && this.camera.zoom > 0.9) {
@@ -4407,6 +4452,7 @@ export class Game {
     }
     this.dayNight.apply(this.lightMoment());
     this.look.rimShare = this.dayNight.rim;
+    this.look.night = 1 - this.dayNight.light;
     this.chunks.fogTint.copy(this.dayNight.cloudTint);
     this.chunks.tintFog();
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
