@@ -283,9 +283,8 @@ function make(parent: pc.Entity, kind: string): Actor {
   };
   let parts: pc.Entity[] = [];
   switch (kind) {
-    case 'butterfly':
-    case 'swallowtail': {
-      const [a, b] = kind === 'butterfly' ? [f.butterflyBlue, f.breast] : [f.swallowtail[0], f.swallowtail[2]];
+    case 'butterfly': {
+      const [a, b] = [f.butterflyBlue, f.breast];
       body.setLocalScale(1.4, 1.4, 1.4);
       vshape(body, 'capsule', f.swallowtail[1], { pos: [0, 0.02, 0], scale: [0.008, 0.035, 0.008], rot: [90, 0, 0] });
       parts = wings(body, a, 0.045, 0.022, 0.04, true);
@@ -350,24 +349,48 @@ function make(parent: pc.Entity, kind: string): Actor {
       parts = [head];
       break;
     }
-    case 'fox':
-    case 'fawn': {
-      const [coat, light, dark] = kind === 'fox' ? f.fox : f.fawn;
-      const s = kind === 'fox' ? 1.6 : 1.5;
-      body.setLocalScale(s, s, s);
-      // the fox curls up (low, round); the fawn lies down with its legs tucked under
+    case 'fox': {
+      const [coat, light, dark] = f.fox;
+      body.setLocalScale(1.6, 1.6, 1.6);
+      // curled up, low and round, its brush wrapped round
       vshape(body, 'sphere', coat, { pos: [0, 0.045, 0], scale: [0.09, 0.055, 0.12] });
       vshape(body, 'sphere', light, { pos: [0, 0.035, 0.03], scale: [0.06, 0.035, 0.07] });
       const head = group(body, 'head', [0, 0.09, 0.09]);
       vshape(head, 'sphere', coat, { scale: [0.045, 0.045, 0.05] });
       vshape(head, 'cone', coat, { pos: [0, -0.008, 0.05], scale: [0.025, 0.05, 0.022], rot: [90, 0, 0] });
       vshape(head, 'sphere', dark, { pos: [0, -0.008, 0.075], scale: 0.009 });
-      for (const sd of [-1, 1]) vshape(head, kind === 'fox' ? 'cone' : 'capsule', kind === 'fox' ? coat : light, { pos: [sd * 0.025, 0.045, -0.01], scale: kind === 'fox' ? [0.016, 0.035, 0.012] : [0.012, 0.04, 0.008], rot: [0, 0, sd * (kind === 'fox' ? 12 : 50)] });
+      for (const sd of [-1, 1]) vshape(head, 'cone', coat, { pos: [sd * 0.025, 0.045, -0.01], scale: [0.016, 0.035, 0.012], rot: [0, 0, sd * 12] });
       eyes(head, 0.018, 0.012, 0.035, 0.007);
-      if (kind === 'fox') {
-        vshape(body, 'capsule', coat, { pos: [0.06, 0.04, -0.09], scale: [0.04, 0.12, 0.04], rot: [80, 0, 60] }); // the brush, wrapped round
-        vshape(body, 'sphere', light, { pos: [0.11, 0.04, -0.03], scale: 0.025 });
-      } else for (let i = 0; i < 5; i++) vshape(body, 'sphere', light, { pos: [Math.sin(i * 2.4) * 0.05, 0.075, -0.05 + i * 0.025], scale: 0.01 }); // dappled back
+      vshape(body, 'capsule', coat, { pos: [0.06, 0.04, -0.09], scale: [0.04, 0.12, 0.04], rot: [80, 0, 60] });
+      vshape(body, 'sphere', light, { pos: [0.11, 0.04, -0.03], scale: 0.025 });
+      parts = [head];
+      break;
+    }
+    case 'badger': {
+      const [coat, stripe, dark] = f.badger;
+      body.setLocalScale(1.5, 1.5, 1.5);
+      // low and broad, a white-striped face
+      vshape(body, 'sphere', coat, { pos: [0, 0.045, 0], scale: [0.1, 0.06, 0.15] });
+      for (const sd of [-1, 1]) vshape(body, 'capsule', dark, { pos: [sd * 0.035, 0.015, 0.03], scale: [0.02, 0.03, 0.02] });
+      const head = group(body, 'head', [0, 0.055, 0.085]);
+      vshape(head, 'cone', stripe, { scale: [0.05, 0.08, 0.045], rot: [90, 0, 0] });
+      for (const sd of [-1, 1]) vshape(head, 'box', dark, { pos: [sd * 0.012, 0.012, 0.005], scale: [0.01, 0.012, 0.06], rot: [0, sd * 8, 0] });
+      vshape(head, 'sphere', dark, { pos: [0, 0, 0.04], scale: 0.01 });
+      parts = [head];
+      break;
+    }
+    case 'heron': {
+      const [coat, light, beak] = f.heron;
+      body.setLocalScale(1.5, 1.5, 1.5);
+      // tall and still on its long legs, the neck tucked in an S
+      for (const sd of [-1, 1]) vshape(body, 'capsule', beak, { pos: [sd * 0.012, 0.06, 0], scale: [0.008, 0.12, 0.008] });
+      vshape(body, 'sphere', coat, { pos: [0, 0.15, -0.01], scale: [0.06, 0.065, 0.11] });
+      vshape(body, 'capsule', light, { pos: [0, 0.2, 0.04], scale: [0.025, 0.07, 0.025], rot: [20, 0, 0] });
+      const head = group(body, 'head', [0, 0.24, 0.055]);
+      vshape(head, 'sphere', light, { scale: [0.03, 0.028, 0.035] });
+      vshape(head, 'cone', beak, { pos: [0, -0.002, 0.04], scale: [0.01, 0.05, 0.01], rot: [90, 0, 0] });
+      vshape(head, 'box', f.magpie[0], { pos: [0, 0.008, -0.02], scale: [0.005, 0.005, 0.04] }); // the crest
+      eyes(head, 0.013, 0.006, 0.012, 0.005);
       parts = [head];
       break;
     }

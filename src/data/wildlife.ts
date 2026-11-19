@@ -87,8 +87,8 @@ export const VISITORS: VisitorDef[] = [
   { id: 'owl', name: 'Owl', icon: '🦉', from: 'thriving', perches: ['head', 'perchNear'], flies: true, night: true, size: 0.1 },
   { id: 'otter', name: 'Otter', icon: '🦦', from: 'thriving', perches: ['beside', 'sniff'], size: 0.13 },
   { id: 'kingfisher', name: 'Kingfisher', icon: '🐦', from: 'rare', perches: ['shoulderR', 'perchNear'], flies: true, rare: true, size: 0.06 },
-  { id: 'fawn', name: 'Red deer fawn', icon: '🦌', from: 'rare', perches: ['beside', 'perchNear'], rare: true, size: 0.22 },
-  { id: 'swallowtail', name: 'Swallowtail', icon: '🦋', from: 'rare', perches: ['nest', 'landOn', 'passBy'], flies: true, rare: true, size: 0.06 },
+  { id: 'badger', name: 'Badger', icon: '🦡', from: 'rare', perches: ['beside', 'sniff'], rare: true, size: 0.15 },
+  { id: 'heron', name: 'Grey heron', icon: '🪶', from: 'rare', perches: ['perchNear'], flies: true, rare: true, size: 0.2 },
 ];
 
 /**
@@ -109,8 +109,8 @@ export const VISITOR_LOOK: Record<string, { length: number; turn?: number; lift?
   owl: { length: 0.2 },
   otter: { length: 0.36 },
   kingfisher: { length: 0.14 },
-  fawn: { length: 0.42 },
-  swallowtail: { length: 0.1 },
+  badger: { length: 0.34 },
+  heron: { length: 0.5 },
 };
 
 /** E23.2.4.2: how many come over while bloombot sits, and their timing. */

@@ -430,7 +430,8 @@ const fauna = {
   otter: ['#6e4f39', '#c8ab8a', '#2b2b33'],
   magpie: ['#24242b', '#f4efe6', '#3a5aa8'],
   kingfisher: ['#2f8fc9', '#e87a2f', '#f4efe6'],
-  fawn: ['#b5774a', '#f4efe6', '#3b2e28'],
+  badger: ['#6b6b70', '#f4efe6', '#24242b'],
+  heron: ['#9aa3ad', '#f4efe6', '#e2b23a'],
   swallowtail: ['#f2d24a', '#2b2b33', '#3a6fd1'],
   bumble: ['#f2b630', '#2b2620', '#eef6ff'],
 };
