@@ -6,6 +6,7 @@ import { actionGlyph, type GlyphStyle, type PadStyle, padName } from './Glyphs';
 import { ICONS, iconize, MACHINE_ICONS, plain } from './Icons';
 import { $, esc, HudPart } from './HudPart';
 import { decorType, machineTool, type Tool } from './Hud';
+import { decorOpen } from '../gameplay/Cozy';
 
 /**
  * E22.5 (#342): the classic hotbar (Inspect, Pulse, the build tray, Harvest, Upgrades).
@@ -119,9 +120,8 @@ export class Hotbar extends HudPart {
       if (locked) this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.lockLabel(t));
     }
     // E19.2: a decoration's slot appears once it's earned
-    const earned = s.state.cozy?.decorUnlocked;
     for (const o of DECOR_OPTIONS) {
-      const on = 'start' in o.unlock || !!earned?.includes(o.id);
+      const on = decorOpen(s, o);
       if (this.last.get(`dc-${o.id}`) === String(on)) continue;
       this.last.set(`dc-${o.id}`, String(on));
       $(this.root, `#hotbar [data-tool="decor:${o.id}"]`).hidden = !on;

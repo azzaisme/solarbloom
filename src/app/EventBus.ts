@@ -25,12 +25,15 @@ export interface GameEvents {
   /** E23.7.1.3: a night find was taken. */
   'night.found': { id: string; material: import('../core/types').MaterialId; n: number; x: number; z: number };
   /** E21.1: the backpack or the store changed (`material` unset = several at once). */
-  'pack.changed': { material?: import('../core/types').MaterialId; delta?: number };
-  'store.changed': { material?: import('../core/types').MaterialId; delta?: number };
+  'pack.changed': { material?: import('../core/types').ItemId; delta?: number };
+  'store.changed': { material?: import('../core/types').ItemId; delta?: number };
   /** E21.1: a stack is full; `left` units stayed where they were. */
-  'pack.full': { material: import('../core/types').MaterialId; left: number };
+  'pack.full': { material: import('../core/types').ItemId; left: number };
   /** E21.2: bloombot salvaged a pile (`got` units; `left` in the pile; 0 = it is gone). */
   'pile.salvaged': { pileId: string; material: import('../core/types').MaterialId; got: number; left: number; x: number; z: number };
+  /** E23.6.1: crafts queued at the crafting table (negative: cancelled), and one craft made. */
+  'craft.queued': { id: string; n: number };
+  'craft.done': { id: string; made: number };
   /** E23.5.1: bloombot clipped restored ground for biomass (`got` units into the backpack). */
   'biomass.gathered': { tileId: string; x: number; z: number; got: number };
   /** E21.3: a machine was taken down (its recipe refunded). */
