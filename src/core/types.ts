@@ -5,7 +5,8 @@ export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'm
   | 'planter'
   // E23.4.2: the water network
   | 'reservoir'
-  | 'pump';
+  | 'pump'
+  | 'desalination';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type RestoreSource =
   | 'pulse'

@@ -6,7 +6,7 @@ import type { WeatherKind } from '../data/weather';
 import { KEEPERS, REGIONS, type RegionId } from '../data/oldcity';
 import { WATER_NET } from '../data/water';
 import type { Sim } from './Sim';
-import { SEA_ID, tankId, WaterPipes, type PumpSpec } from './WaterPipes';
+import { plantId, SEA_ID, tankId, WaterPipes, type PumpSpec } from './WaterPipes';
 
 /**
  * A body of fresh water: one connected stretch of water tiles (a pond, a canal, a basin). Its id is its anchor
@@ -152,6 +152,7 @@ export class WaterSystem {
   body(id: string): WaterBody | undefined {
     if (id === SEA_ID) return SEA;
     if (id.startsWith('r:')) return this.tank(id.slice(2));
+    if (id.startsWith('d:')) return this.plantTank(id.slice(2));
     const hit = this.bodies.get(id);
     if (hit) return hit;
     const [x, z] = id.split(',').map(Number);
@@ -159,7 +160,9 @@ export class WaterSystem {
     return b?.id === id ? b : undefined;
   }
 
+  /** reservoirs' water by machine id (desalination plants keep their own map, `plantTanks`, so one never clears the other) */
   private tanks = new Map<string, WaterBody>();
+  private plantTanks = new Map<string, WaterBody>();
 
   /** E23.4.2.1: a reservoir's water, by its machine id (undefined once it is taken down). */
   tank(machineId: string): WaterBody | undefined {
@@ -183,6 +186,38 @@ export class WaterSystem {
     return this.sim.machinesOfType('reservoir').flatMap((m) => this.tank(m.id) ?? []);
   }
 
+  /** E23.4.3: does this land tile touch the sea (the open sea, the bay or the surf; 8 neighbours)? */
+  onShore(t: TileData): boolean {
+    if (t.roofId !== GROUND) return false;
+    for (let dz = -1; dz <= 1; dz++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const n = this.sim.grid.get(GROUND, t.x + dx, t.z + dz);
+        if (n?.feature === 'water' && (seaCell(n.x, n.z) || surfCell(n.x, n.z))) return true;
+      }
+    return false;
+  }
+
+  /** E23.4.3: a desalination plant's fresh-water tank (its id is `d:<machine id>`). */
+  plantTank(machineId: string): WaterBody | undefined {
+    const m = this.sim.machine(machineId);
+    if (!m || m.type !== 'desalination') {
+      this.plantTanks.delete(machineId);
+      return undefined;
+    }
+    let b = this.plantTanks.get(machineId);
+    if (b?.reservoir !== m) {
+      const tiles = new Set(this.sim.grid.footprint(m.roofId, m.x, m.z, m.size).flatMap((t) => (t ? [t.id] : [])));
+      b = { id: plantId(m), tiles, capacity: WATER_NET.desal.tank, reservoir: m };
+      this.plantTanks.set(machineId, b);
+    }
+    return b;
+  }
+
+  /** Every desalination plant's tank. */
+  plants(): WaterBody[] {
+    return this.sim.machinesOfType('desalination').flatMap((m) => this.plantTank(m.id) ?? []);
+  }
+
   /**
    * E23.8.3: makes another sub-epic's machine type a pump (the mainland's Long-range Pump): the bank rule, the pipe
    * feed (within `reach` pipe steps), `flow` units per game day, and the grid draw `power`.
@@ -193,7 +228,7 @@ export class WaterSystem {
 
   /** E23.4.2: the region unlock (E23.8.2, Cistern Basin) a water machine needs, if it is one. */
   unlockFor(type: BuildableType): WaterUnlock | undefined {
-    return type === 'reservoir' ? 'reservoir' : type === 'pump' ? 'pump' : undefined;
+    return type === 'reservoir' ? 'reservoir' : type === 'pump' ? 'pump' : type === 'desalination' ? 'desalinationPlant' : undefined;
   }
 
   /** Has bloombot been handed this part of the water network? (Classic rules: always.) */
@@ -214,26 +249,16 @@ export class WaterSystem {
   /** E23.4.2: why a water machine can't stand here (undefined: it can). Called by the build check. */
   placeProblem(type: BuildableType, roofId: string, x: number, z: number): string | undefined {
     const pump = this.pipes.pumpSpec(type);
-    if (!pump && type !== 'reservoir') return undefined;
-    const size = type === 'reservoir' ? 2 : (pump?.size ?? 1);
+    if (!pump && type !== 'reservoir' && type !== 'desalination') return undefined;
+    const size = pump?.size ?? 2;
     const foot = this.sim.grid.footprint(roofId, x, z, size);
     if (foot.some((t) => t?.feature === 'water')) return 'Not in the water: on its bank';
     if (type === 'reservoir') return undefined;
+    if (type === 'desalination') return foot.some((t) => t && this.onShore(t)) ? undefined : 'A desalination plant stands on the shore, beside the sea';
     if (roofId !== GROUND) return 'A pump stands on the ground, on the bank of a pond or canal';
     for (const t of foot) if (t && this.bodyNear(t, 1)) return undefined;
     if (pump?.sea) return foot.some((t) => t && this.onShore(t)) ? undefined : 'It stands on the shore, or on the bank of a pond or canal';
     return 'A pump stands on the bank of a pond or canal';
-  }
-
-  /** E23.4.3: does this land tile touch the sea (the open sea, the bay or the surf; 8 neighbours)? */
-  onShore(t: TileData): boolean {
-    if (t.roofId !== GROUND) return false;
-    for (let dz = -1; dz <= 1; dz++)
-      for (let dx = -1; dx <= 1; dx++) {
-        const n = this.sim.grid.get(GROUND, t.x + dx, t.z + dz);
-        if (n?.feature === 'water' && (seaCell(n.x, n.z) || surfCell(n.x, n.z))) return true;
-      }
-    return false;
   }
 
   /** The nearest body (by square distance, then fullest) within `reach` tiles of a tile. */
@@ -320,7 +345,7 @@ export class WaterSystem {
     if (id === SEA_ID) return 1;
     const saved = this.save.levels[id];
     if (saved !== undefined) return saved;
-    if (id.startsWith('r:')) return WATER_NET.reservoir.startLevel;
+    if (id.startsWith('r:') || id.startsWith('d:')) return WATER_NET.reservoir.startLevel;
     const b = this.bodies.get(id) ?? this.body(id);
     return b ? this.startOf(b) : 1;
   }
@@ -418,7 +443,7 @@ export class WaterSystem {
     for (const id of Object.keys(this.save.levels).sort()) {
       const b = this.body(id);
       if (b) out.push(b);
-      else if (id.startsWith('r:') && !this.sim.machine(id.slice(2))) delete this.save.levels[id]; // taken down
+      else if ((id.startsWith('r:') || id.startsWith('d:')) && !this.sim.machine(id.slice(2))) delete this.save.levels[id]; // taken down
     }
     return out;
   }
@@ -810,6 +835,7 @@ export class WaterSystem {
     const { fill, evap } = this.sky();
     for (const b of this.known()) {
       if (this.dormant(b)) continue;
+      if (b.reservoir?.type === 'desalination') continue; // a closed tank: no rain, no sun
       let lv = this.levelOf(b.id);
       const before = lv;
       lv += (fill + this.springOf(b)) * days + this.rushOf(b, span);
@@ -824,7 +850,35 @@ export class WaterSystem {
       if (!src) continue;
       this.fill(r.id, this.draw(src.id, Math.min(room, WATER_NET.reservoir.bankFillPerDay * r.capacity * days)));
     }
+    this.pipes.registerPower();
+    this.desalinate(days);
     this.pipes.tick(days);
+  }
+
+  /**
+   * Plants asking the grid for power this step: only while their water has somewhere to go (room in the tank, or
+   * in the pond or canal on its bank). A full tank on a line nothing draws from sits idle and draws nothing; as soon
+   * as the pipes take from it, it has room again and runs.
+   */
+  readonly desalinating = new Set<string>();
+
+  /**
+   * E23.4.3: each plant on power fills its tank from the sea, in any weather, then empties it into a pond or canal
+   * on its bank. The pipes it touches take from the tank like a pump's line (WaterPipes).
+   */
+  private desalinate(days: number) {
+    this.desalinating.clear();
+    for (const t of this.plants()) {
+      const m = t.reservoir!;
+      const bank = this.bankOf(m);
+      const room = (1 - this.levelOf(t.id)) * t.capacity;
+      const outlet = bank ? (1 - this.levelOf(bank.id)) * bank.capacity : 0;
+      if (room <= 1e-9 && outlet <= 1e-9) continue; // full, and nowhere for more to go: idle, no power
+      this.desalinating.add(m.id);
+      if (this.pipes.powered(m)) this.fill(t.id, WATER_NET.desal.perDay * days);
+      // what it has made runs out into its bank's pond or canal with or without power
+      if (bank) this.fill(bank.id, this.draw(t.id, outlet));
+    }
   }
 
   /** The pond or canal on a reservoir's bank (touching its footprint), if any. */

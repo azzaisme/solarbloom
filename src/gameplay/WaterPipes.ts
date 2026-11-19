@@ -171,7 +171,7 @@ export class WaterPipes {
     for (const [dx, dz] of SIDES) {
       const t = this.sim.grid.peek(GROUND, x + dx, z + dz);
       const m = t && this.sim.occupant(t);
-      if (m && (this.pumpTypes.has(m.type) || m.type === 'reservoir')) out.push({ m, dx, dz });
+      if (m && (this.pumpTypes.has(m.type) || m.type === 'reservoir' || m.type === 'desalination')) out.push({ m, dx, dz });
     }
     return out;
   }
@@ -204,7 +204,7 @@ export class WaterPipes {
         for (const { m } of this.machineLinks(x, z)) {
           if (seen.has(m.id)) continue;
           seen.add(m.id);
-          (m.type === 'reservoir' ? net.tanks : net.pumps).push(m);
+          (m.type === 'reservoir' ? net.tanks : net.pumps).push(m); // a desalination plant pushes like a pump
         }
       }
       net.tiles.sort();
@@ -222,8 +222,14 @@ export class WaterPipes {
     return this.byTile.get(pipeKey(x, z));
   }
 
-  /** The pond or canal a pump stands on the bank of. */
+  /** The networks a machine's footprint touches. */
+  netsOf(m: MachineData): PipeNet[] {
+    return this.networks().filter((n) => n.pumps.includes(m) || n.tanks.includes(m));
+  }
+
+  /** The water a pump pushes: the pond or canal it stands on the bank of (a desalination plant: its own tank). */
   pumpSource(m: MachineData): WaterBody | undefined {
+    if (m.type === 'desalination') return this.water.plantTank(m.id);
     const foot = this.sim.grid.footprint(m.roofId, m.x, m.z, m.size);
     for (const t of foot) {
       const b = t && this.water.bodyNear(t, 1);
@@ -238,8 +244,16 @@ export class WaterPipes {
     return this.sim.power.isPowered(m);
   }
 
-  /** Would this pump push water now (it wants to run, as of the last water step, and it is powered)? */
+  /**
+   * Would this pump push water now? A pump: it wants to run (as of the last water step) and it is powered. A
+   * desalination plant: it holds water it has made, which it lets out with or without power (its tank drains by
+   * itself; it needs power only to make more, through sim.water).
+   */
   pumpLive(m: MachineData): boolean {
+    if (m.type === 'desalination') {
+      const b = this.pumpSource(m);
+      return !!b && this.water.amountOf(b.id) > 0;
+    }
     return this.pumping.has(m.id) && this.powered(m);
   }
 
@@ -322,9 +336,10 @@ export class WaterPipes {
       // pumps fill the reservoirs on their line (uphill or not)
       for (const p of net.pumps) {
         const src = this.pumpSource(p);
-        if (src && w.amountOf(src.id) > 0 && this.wanted(p, net)) this.pumping.add(p.id);
+        if (src && w.amountOf(src.id) > 0 && p.type !== 'desalination' && this.wanted(p, net)) this.pumping.add(p.id); // (a plant asks through sim.water)
         if (!this.pumpLive(p)) continue;
-        const spec = this.pumpTypes.get(p.type)!;
+        // a desalination plant pushes what it has made at its own rate (its tank limits it)
+        const spec = this.pumpTypes.get(p.type) ?? { reach: Infinity, flow: WATER_NET.desal.perDay };
         let budget = spec.flow * days;
         const inReach = this.reachOf(p, net);
         const tanks = net.tanks.filter((t) => w.levelOf(tankId(t)) < 1 && this.touches(t, inReach));
@@ -459,10 +474,17 @@ export class WaterPipes {
       this.registered.add(type);
       power.register(type, { consumer: { shed: 'pump', draw: (m) => (this.pumping.has(m.id) ? (spec.power ?? WATER_NET.pump.power) : 0) } });
     }
+    // E23.4.3: the desalination plant, a heavy load, shed with the pumps
+    if (!this.registered.has('desalination')) {
+      this.registered.add('desalination');
+      power.register('desalination', { consumer: { shed: 'pump', draw: (m) => (this.water.desalinating.has(m.id) ? WATER_NET.desal.power : 0) } });
+    }
   }
 }
 
 /** A reservoir's water body id. */
 export const tankId = (m: MachineData) => `r:${m.id}`;
+/** A desalination plant's tank id. */
+export const plantId = (m: MachineData) => `d:${m.id}`;
 /** The sea, as a body a sea pump (PumpSpec.sea) draws from: never runs dry, never saved. */
 export const SEA_ID = 'sea';

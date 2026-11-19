@@ -52,6 +52,12 @@ export const WATER_NET = {
    * units per game day into reservoirs on the line, uphill or across any distance. Grid power (E23.3) it draws.
    */
   pump: { perDay: 1200, power: 3 },
+  /**
+   * E23.4.3: the desalination plant. On a shoreline, on grid power and in any weather, it turns sea water into fresh
+   * water into its own small tank (`tank` units), and from there into a pond or canal on its bank or the pipes it
+   * touches. A heavy load on the grid (`power`, against a pump's 3).
+   */
+  desal: { perDay: 2400, tank: 120, power: 12 },
   /** E23.4.2.3: a higher reservoir feeds a lower one down a pipe with no pump, this many units per game day */
   gravityPerDay: 600,
   /** E23.6.1: one crafted Pipe (the crafting table makes 4 from 1 Copper and 2 Clay) lays one pipe tile */
