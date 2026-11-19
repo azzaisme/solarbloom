@@ -38,14 +38,11 @@ export function compostHtml(sim: Sim, m: MachineData): string {
 /** E23.5.3: the Bio Digester's panel: how it is doing, in words, and Feed. */
 export function digesterHtml(sim: Sim, m: MachineData): string {
   const mood = sim.compost.mood(m);
-  const hasGrid = !!(sim as unknown as { power?: unknown }).power;
   const state =
     mood === 'running'
       ? 'Running: it is powering its grid.'
       : mood === 'idle'
-        ? hasGrid
-          ? 'Fed and waiting: nothing on its grid needs power right now.'
-          : 'Fed and waiting for a grid to power.'
+        ? 'Fed and waiting: its grid has all the power it needs right now.'
         : 'Empty, so it has stopped. Feed it biomass to start it.';
   return `<h2>⚡ Bio Digester</h2>
     <p>${state}</p>
