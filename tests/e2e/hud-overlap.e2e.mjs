@@ -45,7 +45,7 @@ try {
       // Look 5.5: a big chain's combo panel with its breakdown is on screen while we measure.
       await page.evaluate(() => {
         const h = window.solarbloom.hud;
-        h.combo(24, '+40🌿 earned');
+        h.combo(24);
         h.chainBreakdown({ restored: 8, adjacent: 9, synergy: 5, relay: 2 });
       });
       await page.waitForTimeout(500);

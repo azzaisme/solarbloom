@@ -222,28 +222,9 @@ export class AreaSystem {
       st.fog = 'thinning';
       this.sim.bus.emit('area.fogChanged', { areaId: id, fog: 'thinning' });
     }
-    this.checkSteps(id);
     this.checkReady(id);
   }
 
-  /**
-   * Phase 5 E12: rewarded steps at 25 / 50 / 75% of the tiles a landmark needs (not the park: it has its own
-   * milestones). Marked paid before paying, so a reload can never pay twice; unique restored tiles only.
-   */
-  checkSteps(id: string) {
-    const st = this.sim.state.areas[id];
-    if (!st || id === PARK || st.fog === 'cleared') return;
-    const A = TUNING.areaSteps;
-    const share = this.counts(id).restored / this.need(id);
-    const s = this.sim;
-    while ((st.steps ?? 0) < A.at.length && share >= A.at[st.steps ?? 0]) {
-      const step = st.steps ?? 0;
-      st.steps = step + 1;
-      const bio = s.production.rates(true).biomass.mul(A.incomeSeconds[step]).max(A.min);
-      const credited = { biomass: s.econ.add('biomass', bio), energy: s.econ.add('energy', A.energy), water: s.econ.add('water', A.water) };
-      s.bus.emit('area.step', { areaId: id, step: step + 1, share: A.at[step], credited });
-    }
-  }
   private announced = new Set<string>();
 
   /** Wakes an area's landmark: clears its fog (claimed once, before anything else) and reveals its neighbours. */
@@ -258,10 +239,8 @@ export class AreaSystem {
     st.fog = 'cleared';
     st.clearedAt = s.time;
     this.typeCache = undefined;
-    s.upgrades.applyCaps();
     s.bus.emit('area.cleared', { areaId: id });
     for (const nb of this.info(id).neighbours) this.reveal(nb);
-    // No production re-sum: tile rates don't depend on fog, and the area bonus is read live by rates().
     return true;
   }
 
@@ -307,34 +286,6 @@ export class AreaSystem {
 
   clearedCount(): number {
     return Object.values(this.clearedByType()).reduce((a, b) => a + b, 0);
-  }
-
-  /** Permanent income from cleared areas (soft-scaled per type). */
-  bonusIncome(): { energy: number; water: number; biomass: number } {
-    // Cached until the cleared set or Lit Landmarks changes (asked every tick by production).
-    const types = this.clearedByType();
-    const mult = this.sim.upgrades.landmarkBonusMult;
-    if (this.bonusCache && this.bonusCache.types === types && this.bonusCache.mult === mult) return this.bonusCache.out;
-    const out = this.computeBonus();
-    this.bonusCache = { types, mult, out };
-    return out;
-  }
-  private bonusCache?: { types: Record<string, number>; mult: number; out: { energy: number; water: number; biomass: number } };
-
-  private computeBonus(): { energy: number; water: number; biomass: number } {
-    const out = { energy: 0, water: 0, biomass: 0 };
-    const C = TUNING.city;
-    for (const [type, n] of Object.entries(this.clearedByType())) {
-      const b = C.bonuses[type] ?? {};
-      const k = Math.pow(n, C.bonusExponent) * this.sim.upgrades.landmarkBonusMult;
-      for (const r of ['energy', 'water', 'biomass'] as const) out[r] += (b[r] ?? 0) * k;
-    }
-    return out;
-  }
-
-  /** Extra storage share from cleared areas (diminishing). */
-  storageBonus(): number {
-    return TUNING.city.storagePerArea * Math.pow(this.clearedCount(), TUNING.city.storageExponent);
   }
 
   /** An area's automation switch (undefined = normal). */

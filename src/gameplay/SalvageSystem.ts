@@ -100,7 +100,6 @@ export class SalvageSystem {
     t.unblocked = true;
     this.sim.transitions.unblock(t);
     this.sim.grid.touch(t);
-    this.sim.production.markNear(GROUND, t.x, t.z, 1);
   }
 
   /** Loose units still lying in piles of a material, optionally only in one region ('park' for the park). */
@@ -146,7 +145,6 @@ export class SalvageSystem {
     delete t.unblocked;
     delete t.tr;
     this.sim.grid.touch(t);
-    this.sim.production.markNear(GROUND, t.x, t.z, 1);
   }
 
   /**

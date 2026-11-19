@@ -61,8 +61,10 @@ describe('E22.1: the new button map', () => {
       const b = new Bindings();
       for (const [a, k] of KEYS) expect(keys(b, a), a).toEqual(k);
       for (let i = 0; i < 9; i++) expect(keys(b, SLOTS[i])).toEqual([`Digit${i + 1}`]);
-      // E23.2.1: F eats a snack (bloombot's charge); Harvest Sunlight has no key
-      expect([keys(b, 'harvest'), keys(b, 'eat')]).toEqual([[], ['KeyF']]);
+      // E23.2.1: F eats a snack (bloombot's charge); E23.1.4: Harvest Sunlight is gone, not just unbound
+      expect(keys(b, 'eat')).toEqual(['KeyF']);
+      expect(ACTIONS.map((a) => a.id) as string[]).not.toContain('harvest');
+      expect(b.actionForCode('KeyF')).toBe('eat');
     });
 
   it('a saved pad binding for an action that no longer exists is ignored (E23.1.2: Bloom Frenzy)', () => {
@@ -71,12 +73,24 @@ describe('E22.1: the new button map', () => {
     expect(Object.keys(b.pad)).not.toContain('frenzy');
   });
 
+  it('a saved Harvest binding is ignored: F and d-pad left eat (E23.1.4)', () => {
+    const b = new Bindings({ v: BINDINGS_VERSION, keys: { harvest: ['KeyH'] } as never, pad: { harvest: 14 } as never });
+    expect(b.actionForCode('KeyH')).toBeUndefined();
+    expect(Object.keys(b.keys)).not.toContain('harvest');
+    expect(Object.keys(b.pad)).not.toContain('harvest');
+    expect(b.actionForCode('KeyF')).toBe('eat');
+    expect(b.actionForButton(14)).toBe('eat');
+    expect(b.conflicts()).toEqual([]);
+  });
+
     it('matches every gamepad default in the epic', () => {
       const b = new Bindings();
       for (const [a, p] of PAD) expect(b.pad[a], a).toBe(p);
       for (const s of SLOTS) expect(b.pad[s]).toBeUndefined(); // the pad uses the build menu
       expect(b.pad.pinNext).toBe(15); // d-pad right
-      expect([b.pad.harvest, b.pad.eat]).toEqual([undefined, 14]); // d-pad left eats (E23.2.1)
+      expect(b.pad.eat).toBe(14); // d-pad left eats (E23.2.1)
+      expect(b.actionForButton(14)).toBe('eat');
+      expect(Object.keys(b.pad)).not.toContain('harvest');
     });
 
     it('gives no two actions that can apply together the same input', () => {
@@ -129,13 +143,13 @@ describe('E22.1: the new button map', () => {
 
   it('keeps a rebound key through a reload (the saved settings round trip)', () => {
     const b = new Bindings();
-    b.setKey('harvest', 'KeyH');
+    b.setKey('eat', 'KeyH');
     b.setButton('backpack', 15);
     b.unbind('sprintToggle', 'pad');
     const saved = JSON.parse(JSON.stringify(b.save()));
     expect(saved.v).toBe(BINDINGS_VERSION);
     const reloaded = new Bindings(migrateBindings(saved).saved);
-    expect(reloaded.actionForCode('KeyH')).toBe('harvest');
+    expect(reloaded.actionForCode('KeyH')).toBe('eat');
     expect(reloaded.actionForButton(15)).toBe('backpack');
     expect(reloaded.pad.sprintToggle).toBeUndefined();
     expect(reloaded.conflicts()).toEqual([]);

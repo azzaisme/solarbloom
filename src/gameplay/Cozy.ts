@@ -305,7 +305,6 @@ export class Cozy {
     s.decor = Object.fromEntries(Object.keys(decor).sort().map((k) => [k, decor[k]])); // sorted: byte-identical saves
     this.sim.grid.indexDecor(key);
     this.sim.grid.peek(roofId, x, z)!.occupantId = decorOccupant(key);
-    this.sim.production.markNear(roofId, x, z, 1);
     this.sim.cat.relocateIfBlocked();
     return undefined;
   }
@@ -320,7 +319,6 @@ export class Cozy {
     this.sim.grid.unindexDecor(d.key);
     const t = this.sim.grid.peek(roofId, x, z);
     if (t && t.occupantId === decorOccupant(d.key)) t.occupantId = undefined;
-    this.sim.production.markNear(roofId, x, z, 1);
     return d;
   }
 

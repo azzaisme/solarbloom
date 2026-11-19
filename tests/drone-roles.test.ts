@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
-import { big, toNum } from '../src/core/Big';
 import { PARK } from '../src/core/Areas';
-import { Economy } from '../src/core/Economy';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import type { Cost, DroneRole, MachineData, TileData } from '../src/core/types';
+import type { DroneRole, MachineData, TileData } from '../src/core/types';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
 import { offGrid, openIsland } from './helpers';
@@ -13,10 +11,7 @@ import { offGrid, openIsland } from './helpers';
 
 function city(seed = 6) {
   const sim = new Sim(createInitialState(seed));
-  const st = sim.state;
-  st.caps.energy = big(1e7); st.caps.water = big(1e7);
-  st.resources.energy = big(1e7); st.resources.water = big(1e7); st.resources.biomass = big(1e7);
-  st.progression.coreActivated = true;
+  sim.state.progression.coreActivated = true;
   // E23.1.1: the island open (the park, Saltwind and every region beyond), so helpers may work anywhere near home
   return openIsland(sim);
 }
@@ -33,7 +28,6 @@ function put(sim: Sim, type: MachineData['type'], x: number, z: number, size = t
   sim.grid.indexMachine(m);
   for (const c of cells) c!.occupantId = m.id;
   if (type === 'droneHub') sim.drones.spawn(m);
-  sim.production.markDirty();
   return m;
 }
 
@@ -67,18 +61,6 @@ const grey = (t: TileData) => {
   t.pollution = 60;
 };
 
-/** Every price paid through payJob, by the role of the drone that paid it. */
-function spyPayments(sim: Sim) {
-  const paid: Cost[] = [];
-  const pay = sim.drones.payJob.bind(sim.drones);
-  sim.drones.payJob = (c: Cost) => {
-    const ok = pay(c);
-    if (ok && Object.keys(c).length) paid.push(c); // the old drone pays nothing (sunlight)
-    return ok;
-  };
-  return paid;
-}
-
 /** No two drones share a tile or machine target, checked every tick. */
 function watchReservations(sim: Sim) {
   const clash: string[] = [];
@@ -105,12 +87,13 @@ describe('E18.1 role framework: unlocks, refits, switching', () => {
     expect(sim.roles.lockedReason('scout')).toMatch(/gate/);
     expect(sim.roles.lockedReason('courier')).toMatch(/Mother Tree|Relay/);
     expect(sim.roles.lockedReason('spark')).toMatch(/3 Pollinator/);
-    expect(sim.roles.lockedReason('harvester')).toMatch(/full stores/);
+    expect(sim.roles.lockedReason('harvester')).toMatch(/Gather biomass by hand/);
     const c = city();
     put(c, 'condenser', 40, 40);
     put(c, 'motherTree', 44, 40);
     for (let i = 0; i < 3; i++) put(c, 'pollinator', 50 + 2 * i, 40);
-    for (const r of ['gardener', 'courier', 'spark'] as const) expect(c.roles.lockedReason(r), r).toBeUndefined();
+    c.state.stats.firsts.gathered = c.time; // E23.1.4: the Harvester unlocks after the first hand gather
+    for (const r of ['gardener', 'courier', 'spark', 'harvester'] as const) expect(c.roles.lockedReason(r), r).toBeUndefined();
   });
 
   it('a refit charges once, all or nothing; owned roles switch free; a stale button changes nothing', () => {
@@ -118,44 +101,38 @@ describe('E18.1 role framework: unlocks, refits, switching', () => {
     put(sim, 'condenser', 40, 40);
     const h = put(sim, 'droneHub', 20, 20);
     const price = sim.roles.refitPrice(h, 'gardener');
-    expect(price).toEqual({ biomass: big(60), water: 20 });
-    // Short of water: nothing spent, role unchanged.
-    sim.state.resources.water = big(5);
-    // E23.5.1: biomass is paid from what bloombot carries (and the store within reach)
+    expect(price).toBe(60);
+    // E23.1.4/E23.5.1: biomass is paid from what bloombot carries (and the store within reach)
     const bio = () => sim.inventory.available('biomass');
-    const before = bio();
+    // Short of biomass: nothing spent, role unchanged.
+    sim.state.salvage.pack.biomass = 5;
+    expect(bio()).toBeLessThan(price);
+    expect(sim.roles.check(h.id, 'gardener')).toEqual({ ok: false, reason: `Needs ${price} Biomass`, price });
+    const short = bio();
     expect(sim.roles.choose(h.id, 'gardener')).toBe(false);
     expect(h.role).toBeUndefined();
-    expect(bio()).toBe(before);
+    expect(h.roles).toBeUndefined();
+    expect(bio()).toBe(short);
     // Enough: pays exactly the price, once.
-    sim.state.resources.water = big(1000);
+    sim.state.salvage.pack.biomass = 100;
+    const before = bio();
     expect(sim.roles.choose(h.id, 'gardener')).toBe(true);
     expect(h.role).toBe('gardener');
     expect(h.roles).toEqual(['gardener']);
     expect(bio()).toBe(before - 60);
-    expect(toNum(sim.state.resources.water)).toBe(980);
+    expect(sim.roles.refitPrice(h, 'gardener')).toBe(0); // owned
     // Back to Restorer and back again: free (owned), nothing refunded.
     expect(sim.roles.choose(h.id, 'restorer')).toBe(true);
     expect(h.role).toBeUndefined();
     expect(sim.roles.choose(h.id, 'gardener')).toBe(true);
     expect(bio()).toBe(before - 60);
-    expect(toNum(sim.state.resources.water)).toBe(980);
     // E23.1.5: the next hub's refit costs the same (no price grows with purchases).
     const h2 = put(sim, 'droneHub', 30, 20);
-    expect(sim.roles.refitPrice(h2, 'gardener')).toEqual({ biomass: big(60), water: 20 });
+    expect(sim.roles.refitPrice(h2, 'gardener')).toBe(60);
     // Stale: the hub is gone.
     sim.state.machines = sim.state.machines.filter((m) => m !== h2);
     expect(sim.roles.choose(h2.id, 'gardener')).toBe(false);
     expect(bio()).toBe(before - 60);
-  });
-
-  it('every refit fits the starting stores (60% rule)', () => {
-    const sim = new Sim(createInitialState(1));
-    const h = put(sim, 'droneHub', 3, 3);
-    for (const role of ['gardener', 'scout', 'courier', 'spark', 'harvester'] as const) {
-      const p = sim.roles.refitPrice(h, role);
-      for (const k of ['energy', 'water'] as const) expect(Economy.part(p, k).toNumber(), `${role} ${k}`).toBeLessThanOrEqual(toNum(sim.state.caps[k]) * TUNING.machineCostMaxShare);
-    }
   });
 
   it('a drone finishes the job it paid for after its hub switches role', () => {
@@ -210,21 +187,16 @@ describe('E18.1 role framework: unlocks, refits, switching', () => {
 });
 
 describe('E18.2 Gardener', () => {
-  it('runs on water only, grows the target and 2 neighbours, and never restores', () => {
+  it('grows the target and 2 neighbours, and never restores', () => {
     const sim = city();
     roleHub(sim, 20, 20, 'gardener');
     box(sim, 12, 12, 30, 30, green(1));
     box(sim, 12, 12, 30, 13, grey); // grey ground in reach: a Gardener leaves it
-    const paid = spyPayments(sim);
     const work: string[][] = [];
     sim.bus.on('drone.roleWork', (e) => e.role === 'gardener' && work.push(e.tileIds));
     sim.advance(60);
     expect(work.length).toBeGreaterThan(3);
     expect(work.filter((w) => w.length === 3).length).toBeGreaterThan(0);
-    for (const c of paid) {
-      expect(Economy.part(c, 'energy').toNumber()).toBe(0);
-      expect([2, 3, 5]).toContain(Economy.part(c, 'water').toNumber());
-    }
     let grey0 = 0;
     box(sim, 12, 12, 30, 13, (t) => t.ground === 'polluted' && grey0++);
     expect(grey0).toBeGreaterThan(0);
@@ -261,10 +233,7 @@ describe('E18.3 Scout', () => {
   /** A park with one revealed area beside it in fog, and a Scout hub near their edge. */
   function frontier() {
     const sim = offGrid(new Sim(createInitialState(8)));
-    const st = sim.state;
-    st.caps.energy = big(1e7); st.caps.water = big(1e7);
-    st.resources.energy = big(1e7); st.resources.water = big(1e7); st.resources.biomass = big(1e7);
-    st.progression.coreActivated = true;
+    sim.state.progression.coreActivated = true;
     sim.areas.clear(PARK, true);
     // E23.1.1: Saltwind, beside the park and still in fog; helpers work there once bloombot has done its share (E21.9)
     const id = sim.areas.nextGoal()!;
@@ -293,19 +262,6 @@ describe('E18.3 Scout', () => {
     expect(fast).toBe(true);
     // The first jobs are in the fogged area, not the cleared park.
     expect(sim.areas.areaOf(sim.grid.byTileId(hits[0])!)).toBe(area);
-  });
-
-  it('pays the restore cost plus 1 ⚡ for every 4 tiles past the base radius', () => {
-    const sim = city();
-    const h = put(sim, 'droneHub', 20, 20);
-    const near = sim.grid.get(GROUND, 24, 20)!; // 3 tiles from the footprint: no surcharge
-    const far = sim.grid.get(GROUND, 35, 20)!; // 14 tiles: 8 past the base radius → +2 ⚡
-    grey(near);
-    grey(far);
-    const pulse = (t: TileData) => Economy.part(sim.restoration.pulseCost(t), 'energy').toNumber();
-    expect(Economy.part(sim.roles.scoutCost(h, near), 'energy').toNumber()).toBe(pulse(near));
-    expect(Economy.part(sim.roles.scoutCost(h, far), 'energy').toNumber()).toBeCloseTo(pulse(far) + 2, 9);
-    expect(Economy.part(sim.roles.scoutCost(h, far), 'water').toNumber()).toBe(Economy.part(sim.restoration.pulseCost(far), 'water').toNumber());
   });
 
   it('a Scout working near a hidden Lucky Cat never hints it (E20.1: bloombot finds cats)', () => {
@@ -338,7 +294,7 @@ describe('E18.3 Scout', () => {
 });
 
 describe('E18.4 Courier', () => {
-  it('delivers to each machine at most once per 8 s, priced by what the machine runs on', () => {
+  it('delivers to each machine at most once per 8 s', () => {
     const sim = city();
     const h = roleHub(sim, 20, 20, 'courier');
     (h.upg ??= {}).secondDrone = 4;
@@ -346,7 +302,6 @@ describe('E18.4 Courier', () => {
     const panel = put(sim, 'solar', 20, 24);
     const cond = put(sim, 'condenser', 17, 20);
     box(sim, 8, 8, 34, 34, green(TUNING.restore.maxBloom)); // nothing else to do
-    const paid = spyPayments(sim);
     const at = new Map<string, number[]>();
     sim.bus.on('drone.roleWork', (e) => {
       for (const id of e.machineIds) at.set(id, [...(at.get(id) ?? []), sim.time]);
@@ -357,8 +312,6 @@ describe('E18.4 Courier', () => {
       expect(ts.length, m.type).toBeGreaterThan(0);
       for (let i = 1; i < ts.length; i++) expect(ts[i] - ts[i - 1], m.type).toBeGreaterThanOrEqual(TUNING.drone.roles.courier.everySeconds - 1e-6);
     }
-    const kinds = paid.map((c) => `${Economy.part(c, 'energy').toNumber()}/${Economy.part(c, 'water').toNumber()}`);
-    for (const k of kinds) expect(['0/4', '4/0', '0/3', '6/0']).toContain(k);
   });
 
   it('a Mother Tree charged full by Couriers waits for its normal release path', () => {
@@ -400,20 +353,52 @@ describe('E18.6 Spark and Harvester', () => {
     expect(sim.state.stats.bigChains?.player ?? 0).toBe(before); // never counted as the player's
   });
 
-  it('a Harvester never pays out more than it collects, and only while a store is full', () => {
+  it('a Harvester flies to flowered ground in reach, clips it and carries the biomass to the store', () => {
     const sim = city();
-    sim.state.caps.energy = big(50);
-    sim.state.resources.energy = big(50);
-    for (let i = 0; i < 6; i++) put(sim, 'solar', 30 + i, 30);
+    sim.state.stats.firsts.gathered = sim.time;
     const h = roleHub(sim, 20, 20, 'harvester');
     (h.upg ??= {}).secondDrone = 2;
+    box(sim, 8, 8, 34, 34, green(3)); // flowered: something to gather
     const b0 = sim.inventory.stored('biomass');
-    sim.advance(60);
-    expect(sim.roles.harvest.collected).toBeGreaterThan(0);
-    expect(sim.roles.harvest.paid).toBeLessThanOrEqual(sim.roles.harvest.collected * (1 - TUNING.drone.roles.harvester.keep) * TUNING.drone.roles.harvester.rate + 1e-9);
-    expect(sim.inventory.stored('biomass')).toBe(b0 + sim.roles.harvest.paid); // delivered to the store, whole units
-    expect(sim.roles.harvest.paid).toBeGreaterThan(0);
-    expect(sim.roles.lostSeconds).toBeGreaterThan(TUNING.drone.roles.harvester.unlockLostSeconds - 5);
+    const pack0 = sim.inventory.count('biomass');
+    const gathered: { tileId: string; got: number; by: string }[] = [];
+    sim.bus.on('biomass.gathered', (e) => gathered.push(e));
+    const work: string[] = [];
+    sim.bus.on('drone.roleWork', (e) => e.role === 'harvester' && work.push(...e.tileIds));
+    const d = sim.state.drones.find((x) => x.hubId === h.id)!;
+    let flew = false;
+    for (let i = 0; i < 600; i++) {
+      sim.tick();
+      if (d.role === 'harvester' && d.mode === 'flying') flew = true;
+    }
+    expect(flew).toBe(true);
+    expect(work.length).toBeGreaterThan(0);
+    expect(gathered.length).toBe(work.length);
+    for (const g of gathered) expect(g.by).toBe('drone');
+    expect(gathered.map((g) => g.tileId).sort()).toEqual([...work].sort());
+    const got = gathered.reduce((n, g) => n + g.got, 0);
+    expect(got).toBeGreaterThan(0);
+    expect(sim.inventory.stored('biomass')).toBe(b0 + got); // into the store...
+    expect(sim.inventory.count('biomass')).toBe(pack0); // ...not bloombot's backpack
+    // a clipped tile stays restored but can't be gathered again until it regrows
+    for (const id of work) {
+      const t = sim.grid.byTileId(id)!;
+      expect(t.ground).toBe('restored');
+      expect(sim.gather.canGather(t)).toBe(false);
+    }
+  });
+
+  it('a Harvester naps when nothing in reach has flowered', () => {
+    const sim = city();
+    sim.state.stats.firsts.gathered = sim.time;
+    const h = roleHub(sim, 20, 20, 'harvester');
+    box(sim, 8, 8, 34, 34, (t) => ((t.x + t.z) % 2 ? grey(t) : green(1)(t))); // bloom 1: not flowered yet
+    let clipped = 0;
+    sim.bus.on('biomass.gathered', () => clipped++);
+    sim.advance(20);
+    const d = sim.state.drones.find((x) => x.hubId === h.id)!;
+    expect(sim.drones.statusOf(d)).toBe('napping');
+    expect(clipped).toBe(0);
   });
 });
 

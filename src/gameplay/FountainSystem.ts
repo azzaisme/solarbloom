@@ -111,7 +111,6 @@ export class FountainSystem {
       p.coreActivated = true;
       p.coreActivatedAt = s.time;
       s.areas.clear(PARK, true);
-      s.production.markDirty();
     }
     s.bus.emit('fountain.tier', { tier: t.tier });
   }

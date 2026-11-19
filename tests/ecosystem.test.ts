@@ -36,12 +36,11 @@ function setBloom(sim: Sim, t: TileData, bloom: number) {
   sim.grid.touch(t);
 }
 
-/** What the economy, the map and the stats look like (everything a cosmetic system must never change). */
+/** What the backpack, the map and the stats look like (everything a cosmetic system must never change). */
 function gameplaySnapshot(sim: Sim) {
   const s = sim.state;
   return JSON.stringify({
-    resources: s.resources,
-    caps: s.caps,
+    salvage: s.salvage,
     machines: s.machines,
     drones: s.drones,
     stats: s.stats,
@@ -169,7 +168,7 @@ describe('E16 fauna unlocks', () => {
     expect(again).toEqual([]);
   });
 
-  it('unlocking and counting never change resources, tiles, machines or stats', () => {
+  it('unlocking and counting never change the backpack, tiles, machines or stats', () => {
     const sim = freshSim();
     for (const t of parkTiles(sim)) setBloom(sim, t, 4);
     sim.state.progression.coreActivated = true;
@@ -199,10 +198,6 @@ describe('E16 cosmetic fauna (planning side; the renderer animates what it retur
   it('sleeping cats lie inside a machine footprint, away from every place a Lucky Cat can sit, within the cap', () => {
     const sim = freshSim();
     for (const t of parkTiles(sim)) setBloom(sim, t, 3);
-    const s = sim.state;
-    for (const k of ['energy', 'water', 'biomass'] as const) s.resources[k] = s.resources[k].add(1e9);
-    s.caps.energy = s.caps.energy.add(1e9);
-    s.caps.water = s.caps.water.add(1e9);
     unlockAll(sim); // E23.1.1: panels unlock at their fountain tier and are paid with their recipe
     let n = 0;
     for (const t of parkTiles(sim)) if (n < 40 && sim.build.place('solar', GROUND, t.x, t.z)) n++;
@@ -224,12 +219,14 @@ describe('E16 cosmetic fauna (planning side; the renderer animates what it retur
     expect(catSpots(sim, VIEW, 50)).toEqual(spots); // seeded: the same cats every time
   });
 
-  it('planning fauna for many frames never changes resources, tiles, machines or stats', () => {
+  it('planning fauna for many frames never changes the backpack, tiles, machines or stats', () => {
     const sim = freshSim();
     for (const t of parkTiles(sim)) setBloom(sim, t, 4);
     sim.state.progression.coreActivated = true;
-    for (const k of ['energy', 'water', 'biomass'] as const) sim.state.resources[k] = sim.state.resources[k].add(1e6);
-    for (const t of parkTiles(sim).slice(0, 12)) sim.build.place('condenser', GROUND, t.x, t.z);
+    unlockAll(sim); // E23.1.4: condensers are paid with their recipe from a full backpack
+    let placed = 0;
+    for (const t of parkTiles(sim).slice(0, 12)) if (sim.build.place('condenser', GROUND, t.x, t.z)) placed++;
+    expect(placed).toBeGreaterThan(0);
     sim.ecosystem.refresh(true);
     const before = gameplaySnapshot(sim);
     for (let i = 0; i < 300; i++) {
@@ -252,9 +249,12 @@ describe('E16 cosmetic fauna (planning side; the renderer animates what it retur
   it('machines show active effects only while they really run', () => {
     const sim = freshSim();
     const solar = sim.state.machines.find((m) => m.type === 'solar')!;
-    sim.state.resources.energy = sim.state.caps.energy; // full store: the panel's output is going nowhere
+    // E23.1.4: a panel runs while it shines into the grid: not at night, yes on a clear day
+    sim.power.skyOverride = () => ({ sun: 0, solar: 0, cloudy: false, wind: 0, dark: 1 });
+    expect(sim.power.output(solar)).toBe(0);
     expect(machineRunning(sim, solar)).toBe(false);
-    sim.state.resources.energy = sim.state.caps.energy.mul(0.5);
+    sim.power.skyOverride = () => ({ sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 });
+    expect(sim.power.output(solar)).toBeGreaterThan(0);
     expect(machineRunning(sim, solar)).toBe(true);
     // a superstructure under construction never runs
     expect(machineRunning(sim, { ...solar, tier: 3, project: { stage: 1, costs: [] } })).toBe(false);

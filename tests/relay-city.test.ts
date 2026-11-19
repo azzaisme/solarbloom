@@ -1,4 +1,3 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
@@ -13,9 +12,6 @@ import { openIsland } from './helpers';
 /** The open island, rich (tests make their own patch mossy, so blooms have somewhere to go). */
 function city(seed = 6) {
   const sim = new Sim(createInitialState(seed));
-  const st = sim.state;
-  st.caps.energy = big(1e7); st.caps.water = big(1e7);
-  st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
   // E23.1.1: the island open (every gate, every landmark awake)
   return openIsland(sim);
 }

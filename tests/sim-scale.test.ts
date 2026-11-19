@@ -1,4 +1,3 @@
-import { big } from '../src/core/Big';
 import { unlockAll } from './helpers';
 import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
@@ -8,9 +7,6 @@ import { CHUNK } from '../src/core/Hash';
 describe('simulation at city scale (City 06)', () => {
   it('ticks never scan the whole world: no per-tick full-tile or full-chunk sweeps', () => {
     const sim = new Sim(createInitialState(3));
-    const st = sim.state;
-    st.caps.energy = big(1e6); st.caps.water = big(1e6);
-    st.resources.energy = big(1e5); st.resources.water = big(1e5); st.resources.biomass = big(1e5);
     for (let cz = -4; cz <= 4; cz++) for (let cx = -4; cx <= 4; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
     unlockAll(sim);
     sim.advance(1); // warm-up (first full sum is allowed)
@@ -53,9 +49,6 @@ describe('active-region ticking (City 06.1)', () => {
 
   it('only chunks with something happening are active, and they leave the set when they go quiet', () => {
     const sim = new Sim(createInitialState(4));
-    const st = sim.state;
-    st.caps.energy = big(1e6); st.caps.water = big(1e6);
-    st.resources.energy = big(1e5); st.resources.water = big(1e5); st.resources.biomass = big(1e5);
     sim.advance(1);
     const base = sim.activeChunks();
     // A pulse away from home (on Saltwind Beach, open from the start): its chunk is active while the tile grows,

@@ -109,7 +109,7 @@ describe('the combo panel breakdown (Look 5.5)', () => {
     let last: { combo: number; sum: number } | undefined;
     sim.bus.on('chain.event', ({ event, combo }) => {
       const b = summary.breakdown(event.chainId);
-      if (!b || event.type === 'REWARD') return;
+      if (!b) return;
       last = { combo, sum: b.restored + b.adjacent + b.synergy + b.relay };
       expect(last.sum).toBe(combo);
       checked++;

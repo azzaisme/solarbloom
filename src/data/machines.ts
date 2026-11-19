@@ -1,12 +1,11 @@
 import { TUNING } from './tuning';
-import type { BuildableType, Cost, GroundState, MachineType } from '../core/types';
+import type { BuildableType, GroundState, MachineType } from '../core/types';
 
 export interface MachineDef {
   type: MachineType;
   name: string;
   icon: string;
   size: number;
-  cost: Cost;
   allowedGround: GroundState[];
   blurb: string;
   hotkey?: string;
@@ -25,9 +24,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Solar Panel',
     icon: '☀️',
     size: 1,
-    cost: { biomass: 20 },
     allowedGround: ['restored', 'prepared'],
-    blurb: '+1.2 energy/s. Blooms next to it double its output for 5 s.',
+    blurb: 'Feeds the grid in sunlight. A bloom beside it makes it shine twice as bright for a few seconds.',
     hotkey: '3',
   },
   condenser: {
@@ -35,9 +33,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Water Condenser',
     icon: '💧',
     size: 1,
-    cost: { biomass: 35, energy: 12 },
     allowedGround: ['restored', 'prepared'],
-    blurb: '+1 water/s. Its charge meter fills, then it waters the dry soil beside it into bloom, starting a chain.',
+    blurb: 'Its charge meter fills, then it waters the dry soil beside it into bloom, starting a chain.',
     hotkey: '4',
   },
   pollinator: {
@@ -45,9 +42,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Pollinator Garden',
     icon: '🌸',
     size: 1,
-    cost: { biomass: 50, water: 12 },
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Doubles biomass nearby. Restorations inside its zone spread to mossy neighbours: Bloom Chains!',
+    blurb: 'Restorations inside its zone spread to mossy neighbours: Bloom Chains!',
     hotkey: '5',
   },
   droneHub: {
@@ -55,9 +51,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Drone Hub',
     icon: '🛸',
     size: 2,
-    cost: { biomass: 80, energy: 30 }, // Phase 4 E01.1: fits the starting store (was 110 🌿 / 35 ⚡)
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Launches a little drone that restores tiles within 3 tiles of the hub, paying the usual pulse cost.',
+    blurb: 'Launches a little drone that restores tiles within 3 tiles of the hub. It runs on the grid.',
     hotkey: '6',
   },
   motherTree: {
@@ -65,7 +60,6 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Mother Tree',
     icon: '🌳',
     size: 2,
-    cost: { biomass: 90, water: 30 }, // Phase 4 E01.1: fits the starting store (was 170 🌿 / 40 💧)
     allowedGround: ['restored', 'prepared'],
     blurb: 'Every restoration within 2 tiles charges it. At full charge it releases a Bloom Pulse that restores and grows everything around it.',
     hotkey: '7',
@@ -76,9 +70,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Reservoir Garden',
     icon: '⛲',
     size: 1,
-    cost: { biomass: 60, water: 20 },
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Water Condensers within 2 tiles fill its basin. When full it Overflows: up to 3 dry tiles nearby burst into lush bloom (×2 🌿 for a while).',
+    blurb: 'Water Condensers within 2 tiles fill its basin. When full it Overflows: up to 3 dry tiles nearby burst into lush bloom.',
     hotkey: '8',
     areaTypes: ['reservoir', 'canal'],
   },
@@ -87,7 +80,6 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Bloom Relay',
     icon: '📡',
     size: 1,
-    cost: { biomass: 90, energy: 40 },
     allowedGround: ['restored', 'prepared'],
     blurb: 'Links with every other relay in range. A bloom right beside it sends a pulse to each linked relay, which blooms the ground there (once per link per chain, then it recharges).',
     hotkey: '9',
@@ -99,9 +91,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Cultivator',
     icon: '🚜',
     size: 1,
-    cost: { biomass: 140, energy: 30 },
     allowedGround: ['restored', 'prepared'],
-    blurb: `A solar tiller: drives over dead ground within ${TUNING.cultivator.radius} tiles of its dock and slowly breaks it into bloom on its own, for energy instead of pulses.`,
+    blurb: `A solar tiller: drives over dead ground within ${TUNING.cultivator.radius} tiles of its dock and slowly breaks it into bloom on its own, on power from the grid.`,
     hotkey: '0',
     unlock: { needs: 'droneHub', label: 'Build a Drone Hub to unlock' },
     cityOnly: true,
@@ -112,7 +103,6 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Storage Chest',
     icon: '📦',
     size: 1,
-    cost: {},
     allowedGround: ['restored', 'prepared', 'polluted'],
     blurb: 'A way into the city’s shared store: open it to put things away or take them out.',
   },
@@ -122,7 +112,6 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Battery',
     icon: '🔋',
     size: 1,
-    cost: {},
     allowedGround: ['restored', 'prepared'],
     blurb: 'Stores what the grid has spare and gives it back after dark.',
   },
@@ -131,7 +120,6 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Wind Turbine',
     icon: '🌬',
     size: 1,
-    cost: {},
     allowedGround: ['restored', 'prepared'],
     blurb: 'Turns on windy days and in storms. It catches more wind on high ground.',
   },
@@ -141,7 +129,6 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Charger',
     icon: '🔌',
     size: 1,
-    cost: {},
     allowedGround: ['restored', 'prepared'],
     blurb: 'A pad on the grid. Sit on it and bloombot fills up fast.',
   },
@@ -150,7 +137,6 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Rooftop Core',
     icon: '✨',
     size: 2,
-    cost: {},
     allowedGround: ['polluted', 'prepared', 'restored'],
     blurb: 'An ancient bloom engine. Awaken it to restore the whole building.',
   },

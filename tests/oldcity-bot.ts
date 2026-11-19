@@ -225,9 +225,9 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
       }
     }
     if (!did) {
-      // nothing to do right now: harvest sunlight if it's ready, else wait a moment for energy and water
-      if (sim.time >= sim.state.harvestReadyAt && sim.econ.get('energy').lt(10)) {
-        sim.harvestSun();
+      // nothing to do right now: out of charge, eat something carried (E23.1.4: charge is all a pulse costs), else wait
+      const ate = sim.charge.empty ? sim.charge.eat() : 'none';
+      if (ate !== 'none' && ate !== 'full' && ate !== 'busy') {
         pass(ACT.think);
       } else {
         pass(1);

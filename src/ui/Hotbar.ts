@@ -34,15 +34,12 @@ export class Hotbar extends HudPart {
       ),
       `<button class="slot decor" data-tool="remove" aria-label="Remove or move a decoration"><span class="si">🧹</span><span class="sl">Remove</span><span class="sc">or move</span></button>`,
       `</div>`,
-      `<span class="sep"></span>`,
-      `<button class="slot" id="harvestBtn" aria-label="Harvest sunlight (H)"><span class="key">H</span><span class="si">${ICONS.harvest}</span><span class="sl">Harvest</span><span class="sc">+${TUNING.harvest.energy}⚡</span><span class="cd"></span></button>`,
     ].join('');
   }
 
   wire() {
     const r = this.root;
     r.querySelectorAll<HTMLButtonElement>('#hotbar [data-tool]').forEach((b) => b.addEventListener('click', () => this.cb.selectTool(b.dataset.tool as Tool)));
-    $(r, '#harvestBtn').addEventListener('click', () => this.cb.harvest());
     $(r, '#buildToggle').addEventListener('click', () => this.toggleTray());
   }
 
@@ -91,7 +88,6 @@ export class Hotbar extends HudPart {
       ['[data-tool="inspect"]', 'interact', '1'],
       ['[data-tool="pulse"]', 'pulse', '2'],
       ['#buildToggle', 'buildMenu', 'B'],
-      ['#harvestBtn', 'harvest', 'H'],
     ];
     for (const [sel, action, cursor] of slots) {
       const el = this.root.querySelector<HTMLElement>(`#hotbar ${sel} .key`);
@@ -137,11 +133,6 @@ export class Hotbar extends HudPart {
     const pb = $(this.root, '[data-tool="pulse"]');
     this.set('megaFill', pb, 'style', mf.toFixed(2), '--mega');
     this.set('megaOn', pb, 'cls', mega ? '1' : '0', 'mega');
-    const cd = Math.max(0, s.state.harvestReadyAt - s.time);
-    const hb = $(this.root, '#harvestBtn');
-    this.set('hcd', $(hb, '.cd'), 'html', '');
-    ($(hb, '.cd') as HTMLElement).style.transform = `scaleY(${cd / TUNING.harvest.cooldown})`;
-    this.set('hsc', $(hb, '.sc'), 'text', cd > 0 ? `${Math.ceil(cd)}s` : `+${TUNING.harvest.energy}⚡`);
   }
 }
 

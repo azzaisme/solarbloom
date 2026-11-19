@@ -1,4 +1,4 @@
-import type { BuildableType, Cost, GroundState, MachineData } from '../core/types';
+import type { BuildableType, GroundState, MachineData } from '../core/types';
 import { MACHINES, machineName } from '../data/machines';
 import { AREA_TYPES, type AreaType } from '../data/city';
 import { GROUND, machinesRemoved } from '../core/GameState';
@@ -13,8 +13,7 @@ export const DECOR_IN_WAY = 'A decoration is here: remove it first';
 export interface PlacementCheck {
   ok: boolean;
   reason?: string;
-  cost: Cost;
-  /** true when the spot is fine and only resources are missing */
+  /** true when the spot is fine and only materials are missing */
   spotOk: boolean;
 }
 
@@ -135,8 +134,7 @@ export class BuildSystem {
   check(type: BuildableType, roofId: string, x: number, z: number): PlacementCheck {
     const s = this.sim;
     const def = MACHINES[type];
-    const cost: Cost = {};
-    const fail = (reason: string, spotOk = false): PlacementCheck => ({ ok: false, reason, cost, spotOk });
+    const fail = (reason: string, spotOk = false): PlacementCheck => ({ ok: false, reason, spotOk });
     const recipe = this.recipe(type);
     if (!recipe) return fail(`${def.name} is not built in the Old City`);
     if (!this.isUnlocked(type)) return fail(`Unlocks at fountain tier ${this.recipeTier(type)}`);
@@ -150,7 +148,7 @@ export class BuildSystem {
     const why = this.footprintProblem(roofId, x, z, def.size, def.allowedGround);
     if (why) return fail(why);
     if (!s.inventory.canPay(recipe)) return fail(this.missingLabel(type) ?? 'Missing materials', true);
-    return { ok: true, cost, spotOk: true };
+    return { ok: true, spotOk: true };
   }
 
   /**
@@ -168,8 +166,6 @@ export class BuildSystem {
     s.state.machines = s.state.machines.filter((q) => q.id !== m.id);
     machinesRemoved();
     if (recipe) s.inventory.refund(recipe);
-    s.production.markNear(m.roofId, m.x, m.z, m.size);
-    s.production.markDirty();
     s.bus.emit('machine.removed', { machine: m });
     return true;
   }
@@ -189,7 +185,6 @@ export class BuildSystem {
     s.state.machines.push(m);
     for (const c of s.grid.footprint(roofId, x, z, def.size)) if (c) c.occupantId = m.id;
     s.grid.indexMachine(m);
-    s.production.markNear(roofId, x, z, def.size);
     s.bus.emit('machine.built', { machine: m });
     s.cat.relocateIfBlocked(); // the Lucky Cat never blocks a build: it hops to another nook
     if (type === 'droneHub') s.drones.spawn(m); // more drones (upgrade) are topped up by DroneSystem

@@ -1,4 +1,3 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
@@ -17,6 +16,8 @@ function check(sim: Sim, label: string) {
   // E23.1.5: every hint belongs to the new loop, and none speaks of buying, upgrades or saving up.
   expect(TOPICS, label).toContain(g.topic);
   expect(g.text, label).not.toMatch(/upgrade|afford|save up|saving|buy|price/i);
+  // E23.1.4: no energy, water or biomass counters left to speak of (charge is the only meter)
+  expect(`${g.text} ${g.label}`, label).not.toMatch(/energy|biomass|harvest|storage|\bfull\b/i);
   const a = g.action;
   // Every suggestion is achievable now (or is an honest wait).
   if (a.kind === 'wake') {
@@ -113,11 +114,9 @@ describe('objective advisor (City 14.1)', () => {
             if (rng.next() < 0.6) sim.areas.clear(id);
           }
         }
-        const st = sim.state.resources;
-        st.energy = big(rng.next() < 0.3 ? 0 : rng.next() * 200);
-        st.water = big(rng.next() < 0.3 ? 0 : rng.next() * 50);
-        st.biomass = big(rng.next() < 0.3 ? 0 : rng.next() * 500);
-        sim.state.harvestReadyAt = rng.next() < 0.5 ? sim.time + rng.range(1, 30) : 0;
+        // E23.1.4: the charge and the backpack are what's left to run short of
+        sim.state.charge = { ...sim.state.charge, value: rng.next() < 0.3 ? 0 : rng.next() * sim.charge.max };
+        sim.state.salvage.pack.biomass = rng.next() < 0.3 ? 0 : Math.floor(rng.next() * 40);
         sim.advance(rng.range(0.1, 3));
         check(sim, `seed ${seed} step ${i}`);
       }
@@ -136,13 +135,10 @@ describe('objective advisor (City 14.1)', () => {
 
   // E23.1.5: the cozy guarantee no-stall gave the classic advisor, rewritten for the Old City. A player who does
   // nothing but what the advisor says (walk there, then the one obvious action) wakes the fountain, starting from
-  // a new game with nothing at all in the bank.
-  it('a fresh game with nothing in the bank reaches fountain tier 1 by following the advisor alone', { timeout: 120_000 }, () => {
+  // a new game with nothing at all in the backpack.
+  it('a fresh game with nothing in the backpack reaches fountain tier 1 by following the advisor alone', { timeout: 120_000 }, () => {
     const sim = new Sim(createInitialState(9));
-    const st = sim.state;
-    st.resources.energy = big(0);
-    st.resources.water = big(0);
-    st.resources.biomass = big(0);
+    expect(Object.values(sim.state.salvage.pack).every((n) => !n)).toBe(true);
     const [fx, fz] = sim.areas.info(PARK).landmark;
     const fountain = sim.areas.landmark(PARK)!;
     const seen = new Set<string>();

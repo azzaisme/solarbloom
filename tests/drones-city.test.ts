@@ -1,4 +1,3 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { TUNING } from '../src/data/tuning';
 import { PARK } from '../src/core/Areas';
@@ -10,14 +9,12 @@ import { offGrid, openIsland } from './helpers';
 function city(seed = 6) {
   const sim = new Sim(createInitialState(seed));
   const st = sim.state;
-  st.caps.energy = big(1e7); st.caps.water = big(1e7);
-  st.resources.energy = big(1e7); st.resources.water = big(1e7); st.resources.biomass = big(1e7); // full: drones keep a reserve of the cap
   st.progression.coreActivated = true;
   // E23.1.1: the island open (the park, Saltwind and every region beyond)
   return openIsland(sim);
 }
 
-/** Inserts a hub directly (costs grow per copy; these tests are about drones). */
+/** Inserts a hub directly (these tests are about drones, not building). */
 function hub(sim: Sim, x: number, z: number): MachineData {
   const cells = sim.grid.footprint(GROUND, x, z, 2);
   for (const c of cells) {
@@ -72,8 +69,6 @@ describe('drone networks (City 11)', () => {
   it('drones prefer restoring at the fog’s edge', () => {
     const sim = offGrid(new Sim(createInitialState(8)));
     const st = sim.state;
-    st.caps.energy = big(1e7); st.caps.water = big(1e7);
-    st.resources.energy = big(1e7); st.resources.water = big(1e7); st.resources.biomass = big(1e7); // full: drones keep a reserve of the cap
     st.progression.coreActivated = true;
     for (const t of sim.areas.tiles(PARK)) if (!t.blocked && !t.occupantId) {
       t.ground = 'restored';
@@ -124,8 +119,6 @@ describe('far-away drones as work rates (City 11.4)', () => {
     const { Sim: S } = await import('../src/gameplay/Sim');
     const sim = offGrid(new S(create(seed)));
     const st = sim.state;
-    st.caps.energy = big(1e7); st.caps.water = big(1e7);
-    st.resources.energy = big(1e7); st.resources.water = big(1e7); st.resources.biomass = big(1e7); // full: drones keep a reserve of the cap
     st.progression.coreActivated = true;
     for (let cz = -3; cz <= 3; cz++) for (let cx = -3; cx <= 3; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
     let n = 0;

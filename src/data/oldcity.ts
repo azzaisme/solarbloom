@@ -640,7 +640,7 @@ export const KEEPERS: KeeperDef[] = [
   },
   {
     id: 'sluice', name: 'Sluice', region: 'cistern', x: 38, z: 37, tint: '#6a8fb0', prop: 'dry-drain',
-    request1: { gears: 12 }, landmark: { clay: 30, copper: 15 }, reward: 'waterCap', rewardText: 'Water storage doubled',
+    request1: { gears: 12 }, landmark: { clay: 30, copper: 15 }, reward: 'waterCap', rewardText: 'Water Condensers fill twice as fast',
     say: {
       asleep: ['A robot on the rim of a dry basin.'],
       stirred: ['Water? No… five of anything, then.'],
@@ -666,7 +666,7 @@ export const KEEPERS: KeeperDef[] = [
   },
   {
     id: 'gable', name: 'Gable', region: 'terraces', x: 10, z: -36, tint: '#b07a8a', prop: 'planter-trough',
-    request1: { clay: 15 }, landmark: { sunstone: 30, gears: 15 }, reward: 'energyCap', rewardText: 'Energy storage doubled',
+    request1: { clay: 15 }, landmark: { sunstone: 30, gears: 15 }, reward: 'energyCap', rewardText: 'Batteries hold twice as much',
     say: {
       asleep: ['A robot asleep against a chimney.'],
       stirred: ['Up here? Five of anything and I will wake.'],

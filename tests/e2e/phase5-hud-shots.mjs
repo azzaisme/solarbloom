@@ -20,10 +20,8 @@ try {
     if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
     await page.evaluate(() => {
       const s = window.solarbloom.sim;
-      const D = s.state.resources.energy.constructor;
       for (const t of s.areas.tiles('park').filter((t) => s.restoration.isEligible(t)).slice(0, 19)) s.restoration.complete(t, 'pulse');
-      s.state.resources.biomass = new D('1.234e15');
-      s.state.resources.energy = new D(s.state.caps.energy);
+      for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) s.state.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
     });
     await page.waitForTimeout(25000); // let the ledger warm up (20 s window)
     const rects = await page.evaluate(() => ['#res', '#obj', '#hotbar', '#hint', '#chips', '#toasts'].map((sel) => { const e = document.querySelector(sel); if (!e) return `${sel}: none`; const r = e.getBoundingClientRect(); const vis = getComputedStyle(e).display !== 'none' && r.width > 0; return `${sel} ${Math.round(r.width)}×${Math.round(r.height)}${vis ? '' : ' (hidden)'}`; }).join('  '));

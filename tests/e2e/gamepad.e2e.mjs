@@ -1,7 +1,7 @@
 // Bloombot (G.7): a new game played to waking the park fountain with only a virtual gamepad: no mouse or
 // keyboard events at all. The scripted player (tests/e2e/gamepad-driver.js) reads the game state to choose
 // where to go and acts through navigator.getGamepads(): the stick to walk and turn, X to pulse, Y and the d-pad
-// to pick a machine from the build menu, A to place it, A (Interact) to wake the fountain, the d-pad to harvest.
+// to pick a machine from the build menu, A to place it, A (Interact) to wake the fountain, pad 14 to eat.
 //
 // To finish in seconds, the page's frames are stepped by the script (30 per simulated second) rather than
 // waiting for real time; every frame still reads the pad exactly as in play.

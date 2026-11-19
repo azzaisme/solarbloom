@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import { Economy, KINDS } from '../src/core/Economy';
-import type { BuildableType, Cost, MachineData } from '../src/core/types';
+import type { BuildableType, MachineData } from '../src/core/types';
 import { BUILDABLE } from '../src/data/machines';
 import { REGIONS } from '../src/data/oldcity';
 import { UPGRADES } from '../src/data/upgrades';
@@ -14,8 +13,6 @@ import { fill, makeSim, PAD, rich } from './helpers';
  * price, and a machine or a refit costs the same however many were bought before.
  */
 describe('E23.1.5: no price grows with purchases', () => {
-  const same = (a: Cost, b: Cost) => KINDS.every((k) => Economy.part(a, k).eq(Economy.part(b, k)));
-
   it('every machine pays the same recipe for the tenth copy as for the first', () => {
     const sim = makeSim();
     rich(sim);
@@ -44,18 +41,19 @@ describe('E23.1.5: no price grows with purchases', () => {
     const b = hub(9);
     const p0 = sim.roles.refitPrice(b, 'scout');
     a.roles = ['scout'];
-    expect(same(sim.roles.refitPrice(b, 'scout'), p0)).toBe(true);
+    expect(sim.roles.refitPrice(b, 'scout')).toBe(p0);
   });
 
   it('upgrades carry no price at all, and research grants levels through one interface', () => {
     for (const u of UPGRADES) for (const k of ['baseCost', 'costMult', 'costKind', 'parts']) expect(u, `${u.id}.${k}`).not.toHaveProperty(k);
     const sim = new Sim(createInitialState(2));
-    const before = sim.state.resources.biomass.toString();
-    expect(sim.upgrades.grant('efficientPulse')).toBe(1);
-    expect(sim.upgrades.level('efficientPulse')).toBe(1);
-    expect(sim.state.resources.biomass.toString()).toBe(before); // granted, not bought
-    for (let i = 0; i < 5; i++) sim.upgrades.grant('efficientPulse');
-    expect(sim.upgrades.level('efficientPulse')).toBe(3); // its last level
+    sim.state.salvage.pack.biomass = 50;
+    const before = JSON.stringify(sim.state.salvage.pack);
+    expect(sim.upgrades.grant('broadPulse')).toBe(1);
+    expect(sim.upgrades.level('broadPulse')).toBe(1);
+    expect(JSON.stringify(sim.state.salvage.pack)).toBe(before); // granted, not bought
+    for (let i = 0; i < 8; i++) sim.upgrades.grant('broadPulse');
+    expect(sim.upgrades.level('broadPulse')).toBe(4); // its last level
   });
 
   it('fog is never bought: sealed regions open by their gates and have no price', () => {

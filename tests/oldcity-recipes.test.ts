@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { big } from '../src/core/Big';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { BuildableType, GroundState } from '../src/core/types';
 import { BUILDABLE, MACHINES } from '../src/data/machines';
@@ -32,7 +31,6 @@ describe('E21.3: recipes', () => {
   it('each recipe is paid exactly, with no price growth, and the tray never shows a classic price', () => {
     for (const type of Object.keys(RECIPES) as BuildableType[]) {
       const sim = oldSim();
-      sim.state.resources.biomass = big(0);
       const x = 12;
       const z = 12;
       ground(sim, x, z);

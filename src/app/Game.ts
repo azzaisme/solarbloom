@@ -1,15 +1,13 @@
 import { POWER } from '../data/power';
-import { big, fmt, type Big } from '../core/Big';
 import { HOME } from '../gameplay/ProgressionSystem';
 import * as pc from 'playcanvas';
 import { BIRD_VOICES, Sfx } from '../audio/Sfx';
 import { treeSpot, treeStage } from '../rendering/TreePlacement';
-import { formatCost, formatPriceHtml, RES_ICON } from '../core/Economy';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
-import type { DroneRole, LayerData, MachineData, ResourceKind, TileData } from '../core/types';
+import type { DroneRole, LayerData, MachineData, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
 import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
 import { GATHER } from '../data/farm';
@@ -21,6 +19,7 @@ import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
 import { Sim } from '../gameplay/Sim';
+import { inSurge } from '../gameplay/PowerEnv';
 import { Butterflies } from '../rendering/Butterflies';
 import { Birds } from '../rendering/Birds';
 import { Clouds } from '../rendering/Clouds';
@@ -66,7 +65,6 @@ import type { GfxTier } from '../data/look';
 import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
-import { FlyText } from '../ui/Fly';
 import { decorType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
 import { BOT } from '../gameplay/Walker';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
@@ -226,7 +224,6 @@ export class Game {
   readonly vfx: Vfx;
   readonly overlays: Overlays;
   readonly hud: Hud;
-  readonly fly: FlyText;
   readonly sfx = new Sfx();
   settings: Settings;
 
@@ -408,7 +405,6 @@ export class Game {
       this.sim,
       {
         selectTool: (t) => this.selectTool(t),
-        harvest: () => this.harvest(),
         chooseRole: (key) => {
           const [hubId, role, slot, index] = key.split('|');
           if (slot === 'drone') this.sim.roles.chooseForDrone(hubId, Number(index), role === '-' ? undefined : (role as DroneRole));
@@ -451,7 +447,6 @@ export class Game {
       },
       this.settings,
     );
-    this.fly = new FlyText(this.hud.root);
     this.createMenu();
     // E22.10: the walking view is stripped to the place: plain words, two gauges, one objective.
     document.body.classList.add('oldcity');
@@ -511,7 +506,7 @@ export class Game {
       this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
       // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
       this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
-      this.sim.bus.on('biomass.gathered', (e) => this.hud.pickup(MATERIALS.biomass.name, e.got));
+      this.sim.bus.on('biomass.gathered', (e) => e.by === 'bot' && this.hud.pickup(MATERIALS.biomass.name, e.got));
       const focus = new PadFocus(this.hud.root);
       this.padFocus = focus;
       bot.padCapture = (i) => {
@@ -768,7 +763,7 @@ export class Game {
     this.hud.setUiScale(s.uiScale ?? 100);
     // Phase 5 E16's fauna caps (TUNING.ecosystem.caps) follow the graphics tier.
     this.faunaTier = this.gfxTier;
-    this.tileFx.reducedMotion = this.birds.reducedMotion = this.clouds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = this.fly.reducedMotion = rm;
+    this.tileFx.reducedMotion = this.birds.reducedMotion = this.clouds.reducedMotion = this.butterflies.reducedMotion = this.grid.reducedMotion = this.machines.reducedMotion = this.drones.reducedMotion = this.cat.reducedMotion = this.camera.reducedMotion = rm;
     if (this.chunks) this.chunks.reducedMotion = rm;
     if (this.overlays) this.overlays.holo.reducedMotion = rm;
     if (this.lightVisuals) this.lightVisuals.reducedMotion = rm;
@@ -1211,17 +1206,6 @@ export class Game {
     else if (r === 'none') this.hud.showFail('Nothing to eat. Biomass or food recharges bloombot');
   }
 
-  private harvest() {
-    if (this.sim.harvestSun()) {
-      const starter = this.sim.state.machines.find((m) => m.type === 'solar');
-      if (starter) {
-        const p = this.machines.worldOf(starter);
-        this.vfx.burst(new pc.Vec3(p[0], p[1] + 0.4, p[2]), 14, { up: 3, size: 0.07 });
-        this.vfx.ring(new pc.Vec3(p[0], p[1], p[2]), PALETTE.gold, 1.4);
-      }
-    }
-  }
-
   private wireKeys() {
     window.addEventListener('keyup', (e) => this.heldKeys.delete(e.code));
     window.addEventListener('blur', () => this.heldKeys.clear());
@@ -1270,7 +1254,6 @@ export class Game {
       const k = e.key.toLowerCase();
       const map: Record<string, Tool> = { '1': 'inspect', '2': 'pulse', '3': 'solar', '4': 'condenser', '5': 'pollinator', '6': 'droneHub', '7': 'motherTree', '8': 'reservoirGarden', '9': 'relay', '0': 'cultivator' };
       if (map[k]) this.selectTool(map[k]);
-      else if (k === 'h') this.harvest();
       else if (k === 'f') this.focusNextArea();
       else if (k === 'home') this.focusArea(PARK);
       else if (k === 'b') this.hud.toggleTray();
@@ -1304,8 +1287,6 @@ export class Game {
         return this.escape(true);
       case 'menu':
         return this.toggleMenu();
-      case 'harvest':
-        return this.harvest();
       case 'eat':
         return this.eat();
       case 'backpack':
@@ -1759,9 +1740,7 @@ export class Game {
         kind: 'cat', id: `cat:${id}`, verb: 'Say hello', name: '', distance: d,
         run: () => {
           b.pose.facing = Math.atan2(v.x - wx, v.z - wz);
-          this.claimingCat = id;
           this.sim.cat.claim(id);
-          this.claimingCat = undefined;
           b.visuals.play('cheer');
         },
       });
@@ -2026,9 +2005,7 @@ export class Game {
       const v = this.cat.targetWorld(catId) ?? new pc.Vec3(b.world()[0], 0, b.world()[2]);
       const l = this.sim.grid.layer(b.pose.roofId)!;
       const claim = () => {
-        this.claimingCat = catId;
         this.sim.cat.claim(catId);
-        this.claimingCat = undefined;
         b.visuals.play('cheer');
       };
       if (!b.goTo(b.pose.roofId, Math.floor(v.x - l.origin[0]), Math.floor(v.z - l.origin[2]), 1, claim)) this.hud.showFail("Bloombot can't reach that cat from here", x, y);
@@ -2538,7 +2515,7 @@ export class Game {
       this.hud.showTip(
         x,
         y,
-        `<b>${def.icon} ${def.name}</b>${def.blurb}<br>${chk.ok ? `<span class="ok">${this.press('E')} to build · ${formatCost(chk.cost)}</span>` : `<span class="bad">${chk.reason}</span>`}`,
+        `<b>${def.icon} ${def.name}</b>${def.blurb}<br>${chk.ok ? `<span class="ok">${this.press('E')} to build</span>` : `<span class="bad">${chk.reason}</span>`}`,
       );
       return;
     }
@@ -2579,10 +2556,7 @@ export class Game {
     else if (!this.selected) this.overlays.hideRadius();
     if (this.sim.salvage.describe(t)) action = '';
     else if (chk.ok) action = `<span class="ok">${t.ground === 'restored' ? 'Pulse to help it flower' : 'Pulse to bring it back'}</span>`;
-    else if (chk.ok) {
-      const verb = t.ground === 'restored' ? `Nurture → ${BLOOM_NAMES[t.bloom + 1]}` : this.sim.restoration.nextIsOvercharged() ? '🌟 Overcharged pulse' : 'Pulse';
-      action = `<span class="ok">${verb}: ${formatCost(chk.cost)}${fp.length ? ` · restores ${fp.length + 1} tiles` : ''}</span>`;
-    } else if (chk.reason && !maxed) action = `<span class="bad">${chk.reason}</span>`;
+    else if (chk.reason && !maxed) action = `<span class="bad">${chk.reason}</span>`;
     this.hud.showTip(x, y, `<b>${this.tileTitle(t)}</b>${this.tileDetail(t)}${action ? '<br>' + action : ''}${this.plotLine(t.roofId, t)}`);
   }
 
@@ -2989,9 +2963,7 @@ export class Game {
     if (button !== 0) return;
     const catId = this.catHit(x, y);
     if (catId) {
-      this.claimingCat = catId;
       this.sim.cat.claim(catId);
-      this.claimingCat = undefined;
       return;
     }
     const droneId = this.droneHit(x, y);
@@ -3135,7 +3107,7 @@ export class Game {
       scout: 'pushing back the fog',
       courier: 'delivering charge',
       spark: 'sparking a chain',
-      harvester: 'harvesting lost income',
+      harvester: 'gathering biomass for the store',
     };
     const idle: Record<DroneRole, string> = {
       restorer: 'napping — nothing to do in range',
@@ -3143,9 +3115,9 @@ export class Game {
       scout: 'napping — nothing left to restore in reach',
       courier: 'napping — no machine needs charge yet',
       spark: 'resting — one chain per 30 s, or no garden cluster in reach',
-      harvester: 'resting — no store is full',
+      harvester: 'napping — nothing in reach has flowered',
     };
-    const wait = role === 'gardener' || role === 'courier' ? 'waiting for water 💧 or energy ⚡' : 'waiting for energy ⚡';
+    const wait = 'waiting at home — its hub has no power'; // E23.3.3: the only wait is the grid
     return status === 'working' ? work[role] : status === 'travelling' ? 'flying to a job' : status === 'napping' ? idle[role] : wait;
   }
 
@@ -3161,7 +3133,7 @@ export class Game {
         const st = r.check(m.id, role, slot);
         const owned = r.owns(m, role);
         const on = role === current;
-        const note = on ? 'In use' : owned ? 'Owned' : st.reason && !st.reason.startsWith('Need ') ? esc(st.reason) : formatPriceHtml(st.price, s.econ.shortfall(st.price));
+        const note = on ? 'In use' : owned ? 'Owned' : st.reason && !st.reason.startsWith('Needs ') ? esc(st.reason) : `<span class="${st.ok ? '' : 'short'}">${st.price} Biomass</span>`;
         return `<button class="role-btn${on ? ' on' : ''}" data-role="${m.id}|${role}|${slot}" ${on || (!owned && !st.ok) ? 'disabled' : ''} aria-pressed="${on}" title="${esc(ROLE_INFO[role].job)}"><span class="ri">${ROLE_INFO[role].icon}</span><span class="rn">${ROLE_INFO[role].name}</span><span class="rp">${note}</span></button>`;
       }).join('');
     const tier = m.tier ?? 1;
@@ -3195,16 +3167,17 @@ export class Game {
     let extra = '';
     switch (m.type) {
       case 'solar': {
-        const out = s.production.solarOutput(m);
+        // E23.1.4: in words (no rates); what it makes goes into the grid
+        const shining = s.power.output(m) > 0;
         const boosted = m.boostUntil > s.time;
-        extra = `<p class="stat">⚡ ${out.toFixed(1)} energy/s${boosted ? ' · 🌸 bloom boost!' : ''}${s.production.surgeActive() ? ` · 🐱 Solar Surge ×${TUNING.cat.frenzyMult}` : ''}</p><p>Restore tiles right next to it for a 5 s ×2 boost.</p>`;
+        extra = `<p class="stat">${shining ? 'Shining into the grid' : 'Resting until the sun is up'}${boosted ? ' · a bloom beside it makes it shine brighter' : ''}${inSurge(s, m) ? ' · the Lucky Cat’s sunshine' : ''}</p><p>Restore tiles right next to it and it shines brighter for a few seconds.</p>`;
         break;
       }
       case 'condenser': {
         const near = s.grid.tilesNear(m, TUNING.condenser.radius);
         const mossy = near.filter((t) => t.ground === 'prepared').length;
         const pct = Math.round(((m.charge ?? 0) / TUNING.condenser.threshold) * 100);
-        extra = `<p class="stat">💧 +${s.upgrades.waterMult(m)} water/s</p><p class="stat">🌧️ Watering charge ${pct}% · ${mossy} dry tile${mossy === 1 ? '' : 's'} beside it</p><p>When full, it waters the dry soil next to it into bloom and starts a chain. ${mossy ? '' : 'Pulse a neighbour so moss appears beside it.'}</p>`;
+        extra = `<p class="stat">🌧️ Watering charge ${pct}% · ${mossy} dry tile${mossy === 1 ? '' : 's'} beside it</p><p>When full, it waters the dry soil next to it into bloom and starts a chain. ${mossy ? '' : 'Pulse a neighbour so moss appears beside it.'}</p>`;
         break;
       }
       case 'pollinator': {
@@ -3240,7 +3213,7 @@ export class Game {
         const R = TUNING.neighbourhood.reservoir;
         const conds = s.state.machines.filter((x) => x.type === 'condenser' && x.roofId === m.roofId && distToFootprint(x.x, x.z, m.x, m.z, m.size) <= R.condenserRange).length;
         const dry = s.chains.overflowTargets(m, 99).length;
-        extra = `<p class="stat">⛲ Basin ${Math.floor(m.charge ?? 0)}/${R.threshold} · ${conds} 💧 condenser${conds === 1 ? '' : 's'} within ${R.condenserRange} tiles fill it</p><p class="stat">🌱 ${dry} dry tile${dry === 1 ? '' : 's'} within ${R.radius} tiles (highlighted) · Overflow irrigates up to ${R.targets}</p><p>Each time a nearby Water Condenser fills its meter, the basin rises. Full → Overflow: the closest dry tiles burst into lush bloom (×${R.lushMult} 🌿 for ${R.lushSeconds} s).${conds ? '' : ' <b>Build a Water Condenser within 2 tiles to fill it.</b>'}</p>`;
+        extra = `<p class="stat">⛲ Basin ${Math.floor(m.charge ?? 0)}/${R.threshold} · ${conds} 💧 condenser${conds === 1 ? '' : 's'} within ${R.condenserRange} tiles fill it</p><p class="stat">🌱 ${dry} dry tile${dry === 1 ? '' : 's'} within ${R.radius} tiles (highlighted) · Overflow irrigates up to ${R.targets}</p><p>Each time a nearby Water Condenser fills its meter, the basin rises. Full → Overflow: the closest dry tiles burst into lush bloom.${conds ? '' : ' <b>Build a Water Condenser within 2 tiles to fill it.</b>'}</p>`;
         break;
       }
       case 'core': {
@@ -3255,34 +3228,9 @@ export class Game {
 
   // ───────────────────────── events → presentation ─────────────────────────
 
-  private tileScreen(tileId: string): { x: number; y: number } | undefined {
-    const t = this.sim.grid.byTileId(tileId);
-    if (!t) return undefined;
-    const [x, y, z] = this.sim.grid.tileWorld(t);
-    // Behind the camera or far off screen: the number flies from the default spot instead.
-    const s = this.camera.onScreen(new pc.Vec3(x, y + 0.3, z), 0);
-    return s && { x: s.x, y: s.y };
-  }
-
   private tileVec(t: TileData, up = SLAB_TOP): pc.Vec3 {
     const [x, y, z] = this.sim.grid.tileWorld(t);
     return new pc.Vec3(x, y + up, z);
-  }
-
-  /** Gains waiting to fly, per resource: big chains coalesce into a few numbers instead of hundreds. */
-  private flyPending = new Map<ResourceKind, { amount: Big; at: number }>();
-
-  private flyGain(kind: ResourceKind, amount: Big, from?: { x: number; y: number }) {
-    const now = performance.now();
-    const p = this.flyPending.get(kind) ?? { amount: big(0), at: -1e9 };
-    p.amount = p.amount.add(amount);
-    this.flyPending.set(kind, p);
-    if (now - p.at < 120) return; // the next one carries the sum
-    p.at = now;
-    const total = p.amount;
-    p.amount = big(0);
-    const src = from ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-    this.fly.spawn(kind, total, src, this.hud.resourceRect(kind), () => this.hud.flashResource(kind, 'flash'));
   }
 
   private wireEvents() {
@@ -3437,24 +3385,6 @@ export class Game {
       this.vfx.ring(this.tileVec(tile), PALETTE.pink, 0.9, 0.5);
       this.sfx.at(p, (q) => q.nurture(level));
     });
-    b.on('resource.gain', ({ kind, amount, tileId, reason }) => {
-      if (amount.lt(0.05)) return;
-      let from = tileId ? this.tileScreen(tileId) : undefined;
-      if (!from && reason === 'cat') {
-        const c = this.cat.targetWorld(this.claimingCat) ?? this.lastCatPos;
-        const sp = c && this.camera.onScreen(c, 0);
-        if (sp) from = { x: sp.x, y: sp.y };
-      }
-      if (!from && reason === 'harvest') {
-        const panel = s.state.machines.find((m) => m.type === 'solar');
-        if (panel) {
-          const w = this.machines.worldOf(panel);
-          const sp = this.camera.onScreen(new pc.Vec3(w[0], w[1] + 0.6, w[2]), 0);
-          if (sp) from = { x: sp.x, y: sp.y };
-        }
-      }
-      this.flyGain(kind, amount, from);
-    });
     b.on('machine.built', ({ machine }) => {
       this.machines.add(machine, true);
       for (const t of s.grid.footprint(machine.roofId, machine.x, machine.z, machine.size)) if (t) this.grid.refresh(t, false);
@@ -3495,18 +3425,17 @@ export class Game {
       this.sfx.chainEnd(10);
       if (!s.state.stats.firsts.treePulse || s.state.stats.firsts.treePulse === Math.round(s.time)) this.hud.toast('🌳 Mother Tree Bloom Pulse!<small>Everything around it bursts into life.</small>', 'gold', 3);
     });
-    b.on('chain.ended', ({ chainId, combo, bonus, total, milestonePct, energy, crossings, areas }) => {
+    b.on('chain.ended', ({ chainId, combo, crossings, areas }) => {
       if (areas >= 3) this.hud.feed(`🌸 Bloom chain ×${combo} swept ${areas} areas`);
       if (areas >= 6 && !potterPace(this.settings)) this.hud.toast(`🌸 A city-wide bloom! ×${combo}<small>It swept across ${areas} areas.</small>`, 'gold', 3);
       this.tileFx.release(`chain${chainId}`);
       if (crossings > 0) this.hud.feed(`📡 Chain crossed ${crossings} Bloom Relay link${crossings > 1 ? 's' : ''}`);
       if (combo < 2) return;
-      const ms = milestonePct ? ` · ×${combo >= 20 ? 20 : combo >= 10 ? 10 : 5} milestone +${Math.round(milestonePct * 100)}%` : '';
-      this.hud.combo(combo, `+${fmt(total)}🌿${energy.gte(1) ? ` +${fmt(energy)}⚡` : ''} earned${ms}`);
-      this.hud.feed(`🌸 Bloom chain ×${combo}${bonus.gte(1) ? ` · +${fmt(bonus)}🌿 bonus` : ''}`);
+      this.hud.combo(combo);
+      this.hud.feed(`🌸 Bloom chain ×${combo}`);
       this.sfx.chainEnd(combo);
       if (combo >= 5 && !potterPace(this.settings)) {
-        this.hud.toast(`🌸 BLOOM CHAIN ×${combo}!${bonus ? `<small>Chain bonus +${bonus} 🌿${ms}</small>` : ''}`, 'gold', 2.6);
+        this.hud.toast(`🌸 BLOOM CHAIN ×${combo}!`, 'gold', 2.6);
         this.camera.shake(0.04);
       }
     });
@@ -3525,26 +3454,6 @@ export class Game {
       if (ft) this.grid.shake(ft);
       this.hud.showFail(reason, this.pointer.x, this.pointer.y);
       this.sfx.error();
-      if (reason.includes('⚡')) {
-        this.hud.flashResource('energy', 'short');
-        if (s.state.time >= s.state.harvestReadyAt) this.hud.nudge('#harvestBtn', 5);
-      }
-      if (reason.includes('💧')) this.hud.flashResource('water', 'short');
-      if (reason.includes('🌿')) this.hud.flashResource('biomass', 'short');
-    });
-    b.on('area.step', ({ areaId, step, share, credited }) => {
-      const a = s.areas.info(areaId);
-      const got = (['biomass', 'energy', 'water'] as const).filter((k) => credited[k]?.gte(1)).map((k) => `+${fmt(credited[k]!)}${RES_ICON[k]}`).join(' ');
-      this.hud.toast(`🌱 ${a.landmarkName}: ${Math.round(share * 100)}% of the way<small>${got}${step < TUNING.areaSteps.at.length ? '' : ' · the landmark is close'}</small>`, 'gold', 2.4);
-      this.sfx.powerUp();
-      this.hud.flashResource('biomass', 'flash');
-    });
-    b.on('milestone.reached', ({ at, credited, next }) => {
-      const icons = { energy: '⚡', water: '💧', biomass: '🌿' } as const;
-      const got = (Object.entries(credited) as [keyof typeof icons, Big][]).filter(([, v]) => v.gte(1)).map(([k, v]) => `+${fmt(v)}${icons[k]}`).join(' ');
-      this.hud.toast(`🌱 ${at} tiles restored!<small>${got || 'Storage was full'}${next ? ` · next reward at ${next}` : ''}</small>`, 'gold', 2.6);
-      this.sfx.powerUp();
-      this.hud.flashResource('biomass', 'flash');
     });
     b.on('upgrade.granted', ({ id, level, machineId }) => {
       if (id === 'droneSpeed') this.drones.restyle();
@@ -3577,7 +3486,6 @@ export class Game {
       const p = id ? this.cat.targetWorld(id) : undefined;
       const rare = variant === 'golden' || variant === 'rainbow';
       if (p) {
-        this.lastCatPos = p.clone();
         const soft = this.cat.softSparkle;
         this.vfx.burst(p, soft ? 12 : rare ? 60 : 40, { up: soft ? 2 : 4, speed: soft ? 1 : 2, size: soft ? 0.05 : 0.07, life: soft ? 1 : 1.4 });
         this.vfx.ring(p, PALETTE.gold, soft ? 0.9 : 1.6, 0.8);
@@ -3591,7 +3499,7 @@ export class Game {
       const label = variant === 'rainbow' ? '🌈 RAINBOW CAT FOUND!' : variant === 'golden' ? '👑 GOLDEN CAT FOUND!' : '🐱 LUCKY CAT FOUND!';
       this.hud.toast(label, 'cat', 2.4);
       const kind = variant === 'rainbow' ? 'Rainbow Cat: ' : variant === 'golden' ? 'Golden Cat: ' : '';
-      this.hud.catReward(`${kind}${CAT_REWARD_NAMES[reward]}${extras ? ` + ${extras} saved-up harvest${extras > 1 ? 's' : ''}` : ''}`, summary);
+      this.hud.catReward(`${kind}${CAT_REWARD_NAMES[reward]}${extras ? ' + saved-up gifts' : ''}`, summary);
       this.save();
     });
     b.on('cat.moved', ({ catId }) => {
@@ -3599,13 +3507,7 @@ export class Game {
       if (spot) this.cat.show(spot, true);
       this.save();
     });
-    b.on('cat.goldenRelay', () => {
-      this.hud.feed(
-        `🐱✨ Golden Relay: your next green corridor hop blooms ${this.sim.state.relayBonus} extra tiles`,
-      );
-    });
-    b.on('buff.started', ({ seconds }) => this.hud.feed(`☀️ Solar Surge ×${TUNING.cat.frenzyMult} for ${Math.round(seconds)}s`));
-    b.on('harvest', () => this.sfx.coin());
+    b.on('cat.goldenRelay', () => this.machines.refreshUpgrades());
     // E23.2.1: the charge is a new concept: one short introduction the first time it runs out, then the meter shows it
     b.on('charge.empty', () => {
       const f = s.state.stats.firsts;
@@ -3716,9 +3618,6 @@ export class Game {
     this.save();
   }
 
-  private lastCatPos?: pc.Vec3;
-  /** Phase 5 E15: the cat being claimed right now (its rewards fly from it). */
-  private claimingCat?: string;
   /** World position of a tile or machine id (chain sources/targets can be either). */
   private posOf(id: string | undefined, _towardRoof?: string): pc.Vec3 | undefined {
     if (!id) return undefined;

@@ -1,4 +1,3 @@
-import { toNum } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService, type StorageLike } from '../src/app/SaveService';
 import { Sim } from '../src/gameplay/Sim';
@@ -46,8 +45,8 @@ describe('lucky cat', () => {
   it('pays exactly once; first reward is a Lucky Harvest', () => {
     const sim = makeSim();
     sim.cat.spawn();
-    // Biomass is a backpack item, so the harvest pays its water and energy (#528 reworks what each cat gives).
-    const paid = () => toNum(sim.state.resources.water) + toNum(sim.state.resources.energy);
+    // E23.12 (#528): a Lucky Harvest is a gift into the backpack (food, biomass and the region's own material)
+    const paid = () => sim.inventory.count('food') + sim.inventory.count('biomass') + sim.inventory.count('seeds') + sim.inventory.stored('food');
     const b0 = paid();
     const r = sim.cat.claim();
     expect(r?.type).toBe('luckyHarvest');
@@ -69,7 +68,7 @@ describe('lucky cat', () => {
     expect(sim.cat.candidates().map((a) => a.id)).toEqual(['park-bench']);
   });
 
-  it('rewards never push resources out of range', { timeout: 60000 }, () => {
+  it('rewards never leave a backpack over its stack limit, and party speed-ups end', { timeout: 60000 }, () => {
     for (let seed = 1; seed < 40; seed++) {
       const sim = makeSim(seed);
       rich(sim);
@@ -77,14 +76,14 @@ describe('lucky cat', () => {
       sim.build.place('droneHub', 'r1', 2, 2);
       sim.state.cat.found = 1; // skip the guaranteed first reward
       sim.cat.spawn();
+      const before = { ...sim.state.salvage!.pack };
       sim.cat.claim();
       sim.advance(TUNING.cat.partyMaxSeconds + 1); // Phase 5 E15: rarer cats party longer, never past the cap
-      for (const k of ['energy', 'water', 'biomass'] as const) {
-        expect(toNum(sim.state.resources[k])).toBeGreaterThanOrEqual(0);
-        const cap = sim.econ.cap(k);
-        if (cap) expect(toNum(sim.state.resources[k])).toBeLessThanOrEqual(toNum(cap) + 1e-9);
-      }
-      expect(sim.state.drones.filter((d) => !d.old).length).toBe(1); // party drones expired (the park's old drone stays)
+      // E23.12 (#528): a gift fills the backpack up to its stack limit and the rest waits in the store
+      const pack = sim.state.salvage!.pack as Record<string, number>;
+      for (const [m, n] of Object.entries(pack)) expect(n, m).toBeLessThanOrEqual(Math.max((before as Record<string, number>)[m] ?? 0, sim.inventory.stackLimit()));
+      for (const d of sim.state.drones) expect(sim.drones.partyMult(d)).toBe(1); // every party is over
+      expect(sim.state.drones.filter((d) => !d.old).length).toBe(1); // a party adds no drones (the park's old drone stays)
     }
   });
 
@@ -169,7 +168,7 @@ describe('lucky cat', () => {
       sim.bus.on('cat.found', (e) => (summary = e.summary));
       sim.cat.claim();
       expect(summary).toMatch(/JACKPOT/);
-      const kinds = [/🌿/, /Solar ×3/, /Mega Bloom|already blooming/, /party drones/].filter((r) => r.test(summary)).length;
+      const kinds = [/A gift in your backpack/, /Charge full/, /A Mega Bloom!/, /drones nearby work faster/, /relay turns gold/, /garden blooms/, /fog thins/].filter((r) => r.test(summary)).length;
       expect(kinds).toBeGreaterThanOrEqual(2);
     }
   });

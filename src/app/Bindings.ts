@@ -39,7 +39,6 @@ export type Action =
   | 'slot9'
   | 'backpack'
   | 'map'
-  | 'harvest'
   | 'eat'
   | 'pinNext'
   | 'cancel'
@@ -70,11 +69,9 @@ export interface ActionDef {
   keys: boolean;
   /** can be put on a pad button (movement and look are the sticks) */
   pad: boolean;
-  /** E23.2.1: no default binding and not listed: Harvest Sunlight, which goes with the counters in E23.1.4 */
-  retired?: boolean;
 }
 
-const A = (id: Action, label: string, group: Group, context: Context, keys = true, pad = true, retired = false): ActionDef => ({ id, label, group, context, keys, pad, retired });
+const A = (id: Action, label: string, group: Group, context: Context, keys = true, pad = true): ActionDef => ({ id, label, group, context, keys, pad });
 
 /** Every action, in the order the rebinding screen lists them. */
 export const ACTIONS: readonly ActionDef[] = [
@@ -89,7 +86,6 @@ export const ACTIONS: readonly ActionDef[] = [
   A('recentre', 'Recentre the camera', 'move', 'world'),
   A('interact', 'Interact', 'act', 'world'),
   A('pulse', 'Pulse, use the tool, place', 'act', 'world'),
-  A('harvest', 'Harvest Sunlight', 'act', 'world', true, true, true),
   A('eat', 'Eat a snack (recharge)', 'act', 'world'),
   A('pinNext', 'Pin the next request', 'act', 'world'),
   A('buildMenu', 'Build menu', 'build', 'world'),
@@ -159,8 +155,6 @@ export function defaultKeys(): Record<Action, string[]> {
     slot9: ['Digit9'],
     backpack: ['Tab', 'KeyI'],
     map: ['KeyM'],
-    harvest: ['KeyF'],
-    // E23.2.1: F eats (Harvest Sunlight is retired; it goes in E23.1.4)
     eat: ['KeyF'],
     pinNext: ['KeyG'],
     cancel: [FIXED_KEY],
@@ -170,7 +164,6 @@ export function defaultKeys(): Record<Action, string[]> {
     nextTab: ['KeyE'],
     debug: ['F3'],
   };
-  for (const a of ACTIONS) if (a.retired) k[a.id] = [];
   return k;
 }
 
@@ -194,16 +187,13 @@ export function defaultPad(): Partial<Record<Action, number>> {
     powerOverlay: 15, // d-pad right (Pin next request while walking)
     backpack: 12,
     map: 8,
-    harvest: 14,
     cancel: 1,
     menu: 9,
     prevTab: 4,
     nextTab: 5,
     pinNext: 15,
   };
-  // E23.2.1: d-pad left eats (Harvest Sunlight has no button any more)
-  delete p.harvest;
-  p.eat = 14;
+  p.eat = 14; // E23.2.1: d-pad left eats
   return p;
 }
 

@@ -40,7 +40,6 @@
     "shots:decor": "vite build && node tests/e2e/decor-shots.mjs"
   },
   "dependencies": {
-    "break_infinity.js": "2.2.0",
     "playcanvas": "^2.23.0"
   },
   "devDependencies": {

@@ -9,7 +9,7 @@ const env = (globalThis as { process?: { env: Record<string, string | undefined>
  * A new test file joins the full suite automatically; add it here too if it is fast and core.
  */
 const QUICK = [
-  'smoke', 'advisor', 'grid', 'big', 'world', 'economy', 'placement', 'save-storage', 'save-v4', 'area-switches',
+  'smoke', 'advisor', 'grid', 'world', 'economy', 'placement', 'save-storage', 'save-v4', 'area-switches',
   'area-panel', 'upgrades-city', 'feedback-phase4', 'playtest-metrics',
   'relay-city', 'no-growing-prices', 'look', 'palette-lint', 'icons', 'hud-contrast', 'look3-budget', 'roads', 'drone-roles',
   'bloombot-walk', 'bindings', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glyphs', 'rebind', 'save-slots', 'backpack', 'charge',
@@ -27,6 +27,8 @@ const QUICK = [
   'journal',
   // E23.5: the farm
   'farm-items',
+  // E23.12: the Lucky Cat's rewards in the new loop (E23.1.4's one-meter check is tests/e2e/hud-one-meter.e2e.mjs)
+  'lucky-cat-rewards',
   // E23.10: the proof
   'e23-gentle-failure',
 ].map((name) => `tests/${name}.test.ts`);

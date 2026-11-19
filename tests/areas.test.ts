@@ -1,4 +1,3 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { AreaMap, PARK } from '../src/core/Areas';
@@ -13,9 +12,6 @@ function city(seed = 4) {
   const g = sim.grid.layer(GROUND)!;
   g.unlocked = true;
   g.preview = false;
-  const s = sim.state;
-  s.caps.energy = big(1e6); s.caps.water = big(1e6);
-  s.resources.energy = big(1e5); s.resources.water = big(1e5); s.resources.biomass = big(1e5);
   return sim;
 }
 

@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
-import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
 import { regionById } from '../src/core/OldCityLayout';
 import { AREA_SPECIALTY, areaPanelData, areaPanelHtml } from '../src/ui/AreaPanel';
@@ -26,7 +25,7 @@ function restore(sim: Sim, id: string, n: number) {
 }
 
 describe('area panel (City 14.2)', () => {
-  it('shows type, specialty, live fog progress, the checklist, the bonus and machines', () => {
+  it('shows type, specialty, live fog progress, the checklist and machines, and no income bonus (E23.1.4)', () => {
     const sim = city();
     const id = sim.areas.nextGoal()!;
     const lm = sim.areas.landmark(id)!;
@@ -38,7 +37,8 @@ describe('area panel (City 14.2)', () => {
     let html = areaPanelHtml(sim, id, lm.id);
     expect(html).toContain(AREA_SPECIALTY[a.type]);
     expect(html).toContain(`Restore ${d.need} tiles (0/${d.need})`);
-    expect(html).toContain('Bonus once clear');
+    const NO_COUNTERS = /Bonus|\/min|⚡|💧|energy|biomass/i; // E23.1.4: no counters for an area to add to
+    expect(html).not.toMatch(NO_COUNTERS);
     expect(html).toContain('Machines: none yet');
     expect(html).not.toContain('data-wake');
 
@@ -56,7 +56,7 @@ describe('area panel (City 14.2)', () => {
     expect(areaPanelData(sim, id).machines).toEqual({ solar: 1 });
     expect(areaPanelHtml(sim, id, lm.id)).toContain('1 Solar Panel');
 
-    // Ready: the wake button appears; cleared: the bonus is its share of the type's total.
+    // Ready: the wake button appears; cleared: the panel says so.
     restore(sim, id, 999);
     expect(areaPanelHtml(sim, id, lm.id)).not.toContain('data-wake'); // E21.9: not before its Keeper asks
     sim.state.salvage.keepers[regionById(id)!.keeper] = { step: 'landmark' };
@@ -65,11 +65,8 @@ describe('area panel (City 14.2)', () => {
     html = areaPanelHtml(sim, id, lm.id);
     expect(html).toContain('🌫️ Clear');
     expect(html).not.toContain('data-wake');
-    // the first area of its type: its share is the type's whole bonus (a beach has none)
-    const bonus = areaPanelData(sim, id).bonus;
-    const per = TUNING.city.bonuses[a.type] ?? {};
-    expect(Object.keys(bonus).filter((k) => bonus[k as 'energy']).sort()).toEqual(Object.keys(per).sort());
-    for (const [k, v] of Object.entries(per)) expect(bonus[k as 'energy']).toBeCloseTo(v * 60, 1);
+    expect(html).not.toMatch(NO_COUNTERS);
+    expect(Object.keys(areaPanelData(sim, id))).not.toContain('bonus');
   });
 
   it('the park lists its fountain tiers (E21.6), ticked as they are reached', () => {

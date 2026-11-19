@@ -1,4 +1,3 @@
-import { toNum } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import type { ChainEvent } from '../src/gameplay/BloomChainSystem';
 import { Sim } from '../src/gameplay/Sim';
@@ -15,9 +14,9 @@ function place(sim: Sim, type: Parameters<Sim['build']['place']>[0], x: number, 
 
 function collect(sim: Sim) {
   const events: ChainEvent[] = [];
-  const ended: { combo: number; bonus: number; total: number; milestonePct: number }[] = [];
+  const ended: { combo: number }[] = [];
   sim.bus.on('chain.event', (e) => events.push(e.event));
-  sim.bus.on('chain.ended', (e) => ended.push({ combo: e.combo, bonus: toNum(e.bonus), total: toNum(e.total), milestonePct: e.milestonePct }));
+  sim.bus.on('chain.ended', (e) => ended.push({ combo: e.combo }));
   return { events, ended };
 }
 
@@ -54,7 +53,7 @@ describe('bloom chain engine', () => {
     expect(events.filter((e) => e.type === 'POLLINATE')).toHaveLength(0);
   });
 
-  it('a solar panel bursts once per chain however many neighbours bloom', () => {
+  it('a solar panel bursts once per chain however many neighbours bloom, shining brighter into the grid', () => {
     const sim = makeSim();
     rich(sim);
     fill(sim, 0, 0, 7, 7, 'prepared');
@@ -65,7 +64,12 @@ describe('bloom chain engine', () => {
     sim.restoration.complete(sim.grid.get('r1', 5, 4)!, 'pulse');
     sim.advance(4);
     expect(events.filter((e) => e.type === 'PRODUCE_ENERGY' && e.target === solar.id)).toHaveLength(1);
-    expect(solar.boostUntil).toBeGreaterThan(0);
+    expect(solar.boostUntil).toBeGreaterThan(sim.time);
+    // E23.1.4: the burst is grid output, not a counter: the panel gives more while it shines
+    const day = { sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 };
+    const shining = sim.power.output(solar, day);
+    solar.boostUntil = 0;
+    expect(shining).toBeGreaterThan(sim.power.output(solar, day));
   });
 
   it('Mother Tree charges from nearby restorations, pulses at full charge, and never recharges from its own pulse', () => {
@@ -113,8 +117,6 @@ describe('bloom chain engine', () => {
     sim.restoration.complete(sim.grid.get('r1', 0, 4)!, 'pulse');
     sim.advance(6);
     expect(Math.max(...ended.map((e) => e.combo))).toBeGreaterThanOrEqual(10);
-    const big = ended.find((e) => e.combo >= 10)!;
-    expect(big.milestonePct).toBeGreaterThanOrEqual(0.25);
   });
 
   it('cyclic machine layouts always terminate under the caps, with no tile transitioning twice in a chain', () => {
@@ -161,24 +163,6 @@ describe('bloom chain engine', () => {
     const b = run(build());
     expect(a.events).toEqual(b.events);
     expect(a.state).toBe(b.state);
-  });
-
-  it('applies only the highest milestone, plus a small per-effect bonus', () => {
-    const sim = makeSim();
-    rich(sim);
-    // Biomass is a backpack item, so the counter takes no income. The bonus sum is still in the chain engine until
-    // E23.1.4 (#368) removes the counter: let the counter take it here so the sum stays checked.
-    sim.econ.noIncome = undefined;
-    fill(sim, 0, 0, 7, 7, 'prepared');
-    for (const x of [1, 3, 5, 7]) place(sim, 'pollinator', x, 4);
-    for (const x of [2, 4, 6]) place(sim, 'solar', x, 5);
-    const { ended } = collect(sim);
-    sim.restoration.complete(sim.grid.get('r1', 0, 4)!, 'pulse');
-    sim.advance(6);
-    const e = ended.reduce((a, b) => (b.combo > a.combo ? b : a));
-    const pct = [...TUNING.chain.milestones].reverse().find((m) => e.combo >= m.effects)!.pct;
-    expect(e.milestonePct).toBe(pct);
-    expect(e.bonus).toBeGreaterThan(TUNING.chain.perEffectBiomass * e.combo - 0.01);
   });
 
   it('mega bloom is bounded by its budget and may break concrete', () => {

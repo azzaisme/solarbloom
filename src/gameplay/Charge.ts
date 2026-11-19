@@ -9,7 +9,7 @@ import type { Sim } from './Sim';
 /** What costs charge. */
 export type ChargeUse = 'pulse' | 'sprint' | 'pry' | 'hover' | 'climb' | 'glide';
 /** Where charge comes back from (E23.3's chargers call `recharge(amount, 'charger')`). */
-export type ChargeSource = 'eat' | 'charger' | 'bench' | 'home' | 'sleep' | 'other';
+export type ChargeSource = 'eat' | 'charger' | 'bench' | 'home' | 'sleep' | 'cat' | 'other';
 
 /**
  * E23.2.1 (#371): bloombot's charge, the only meter on screen.

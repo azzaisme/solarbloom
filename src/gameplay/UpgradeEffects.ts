@@ -28,7 +28,6 @@ export function upgradeHighlights(sim: Sim, id: string): Spot[] {
       .filter((m): m is MachineData => !!m)
       .map(at);
   switch (id) {
-    case 'efficientPulse':
     case 'broadPulse':
     case 'overcharge': {
       // The pulse itself: the next region's open ground, or the park's (E23.1.1: with every open region awake and
@@ -38,13 +37,9 @@ export function upgradeHighlights(sim: Sim, id: string): Spot[] {
       return open.length ? open : landmarks(true).slice(0, 6);
     }
     case 'solarArray':
-    case 'harvestBurst': // Harvest gathers at the solar panels
       return of('solar');
     case 'chainHops':
       return of('pollinator').length ? of('pollinator') : of('solar');
-    case 'richSoil':
-    case 'seedVault':
-      return of('core').slice(0, 1).concat(landmarks(true)).slice(0, 8);
     case 'droneSpeed':
     case 'droneRadius':
     case 'chainIntel':
@@ -79,8 +74,6 @@ export function upgradeHighlights(sim: Sim, id: string): Spot[] {
         .map(at);
       return [...landmarks(false), ...behind].slice(0, 8);
     }
-    case 'landmarkLights':
-      return landmarks(true);
     case 'hover': {
       // bloombot's own ability: it shows on bloombot (where it stands, else the Landing)
       const b = s.bot ?? { roofId: GROUND, x: LANDING.spawn[0], z: LANDING.spawn[1] };

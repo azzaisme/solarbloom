@@ -1,13 +1,11 @@
 import type { AreaMode } from '../core/types';
-import { big, fmt } from '../core/Big';
-import type { BuildableType, MachineData, ResourceKind } from '../core/types';
+import type { BuildableType, MachineData } from '../core/types';
 import { MACHINES } from '../data/machines';
 import type { Sim } from '../gameplay/Sim';
 import { ICONS, LOGO_MARK, hasEmoji, iconize, installIconDefs, plain } from './Icons';
 import { Prompt } from './Prompt';
 import { plainWords } from './words';
 import { ObjectiveCard } from './ObjectiveCard';
-import { Bars } from './Bars';
 import { BuildBar, Hotbar } from './Hotbar';
 import { Toasts } from './Toasts';
 import { Panels } from './Panels';
@@ -27,7 +25,6 @@ export const machineTool = (t: Tool): t is BuildableType => t in MACHINES;
 
 export interface HudCallbacks {
   selectTool(t: Tool): void;
-  harvest(): void;
   /** E18: `hubId|role|slot` (slot 2 on a Fleet Hub), or `hubId|role|drone|index` for a Megahub drone. */
   chooseRole(key: string): void;
   /** Phase 5 E15: the 🐾 chip: show where a hinted cat hides. */
@@ -131,7 +128,7 @@ function esc(s: string) {
  * DOM HUD. Reads sim state each frame (cheaply, with change detection); never mutates the sim directly.
  *
  * E22.5 (#342): the shell over the HUD's parts, laid out as the epic's table: the objective card top left
- * (ObjectiveCard), energy and water top right (Bars), the minimap bottom left, the prompt at the bottom centre
+ * (ObjectiveCard), bloombot's charge top right (ChargeMeter: the only meter, E23.1.4), the minimap bottom left, the prompt at the bottom centre
  * with the build hotbar above it while build mode is open (Prompt, Hotbar), toasts bottom right (Toasts), and
  * the panels it opens (Panels). Its public methods are the game's single way in, and pass on to the parts.
  */
@@ -147,7 +144,6 @@ export class Hud {
   settings: Settings;
   /** E22.2: the one prompt at the bottom centre */
   readonly prompt: Prompt;
-  readonly bars: Bars;
   readonly objective: ObjectiveCard;
   readonly hotbar: Hotbar;
   /** E22.5: the build hotbar (slots 1–9), above the prompt while build mode is open */
@@ -167,7 +163,6 @@ export class Hud {
     this.settings = settings;
     this.root = document.getElementById('hud')!;
     installIconDefs();
-    this.bars = new Bars(this);
     this.objective = new ObjectiveCard(this);
     this.hotbar = new Hotbar(this);
     this.buildBar = new BuildBar(this);
@@ -175,7 +170,6 @@ export class Hud {
     this.panels = new Panels(this);
     this.charge = new ChargeMeter(this);
     this.root.innerHTML = iconize(this.template());
-    this.bars.wire();
     this.objective.wire();
     this.hotbar.wire();
     this.panels.wire();
@@ -188,7 +182,7 @@ export class Hud {
   private template() {
     return `
       <div id="logo" role="img" aria-label="Solarbloom">${LOGO_MARK}<span class="wm">Solarbloom</span></div>
-      <div id="res" role="group" aria-label="Resources">${Bars.template()}</div>
+      <div id="res" role="group" aria-label="Charge"></div>
       <div id="resInfo" class="panel" role="status" hidden></div>
       <div id="obj" class="panel" role="region" aria-label="Objective">
         <div class="ohead">
@@ -324,15 +318,8 @@ export class Hud {
   machineHtml(m: MachineData, extra: string): string {
     return this.panels.machineHtml(m, extra);
   }
-  resourceRect(kind: ResourceKind): DOMRect {
-    return this.bars.resourceRect(kind);
-  }
-  flashResource(kind: ResourceKind, cls: 'flash' | 'short' | 'bump') {
-    this.bars.flashResource(kind, cls);
-  }
 
   update(dt: number) {
-    this.bars.update();
     this.charge.update(dt);
     this.hotbar.update();
     this.updateCatChip();
@@ -416,7 +403,7 @@ export class Hud {
       ['Utility Synergy', b.synergy],
       ['Relay Links', b.relay],
     ];
-    this.set('comboParts', $(this.root, '#comboParts'), 'html', lines.filter(([, v]) => v > 0).map(([k, v]) => `<li><span>+ ${k}</span><b>+${fmt(big(v))}</b></li>`).join(''));
+    this.set('comboParts', $(this.root, '#comboParts'), 'html', lines.filter(([, v]) => v > 0).map(([k, v]) => `<li><span>+ ${k}</span><b>+${v}</b></li>`).join(''));
   }
 
   private sparkle(tier: number) {
