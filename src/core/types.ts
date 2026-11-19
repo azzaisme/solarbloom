@@ -86,7 +86,12 @@ export interface TileData {
   level?: number;
   /** E21.24: the tile is part of a ramp or stair (generated) */
   ramp?: boolean;
+  /** E23.2.2: what a loaded pulse grew here (unset: plain grass and moss). Saved. */
+  plant?: PlantKind;
 }
+
+/** E23.2.2: what grows from a pulse's load: a wildflower meadow (seeds), a region's rare plants, a grove (fertiliser). */
+export type PlantKind = 'meadow' | 'rare' | 'grove';
 
 /**
  * A layer is one continuous grid surface. The ground is unbounded (an endless city, generated on demand);
@@ -489,6 +494,14 @@ export interface GameState {
    * production, chains, milestones or pacing). Optional and sparse, so no save version change.
    */
   cozy?: CozyState;
+  /** E23.4.1: water levels (share of capacity) of bodies that have changed, by body id `x,z`. Optional. */
+  water?: { levels: Record<string, number> };
+  /** E23.2.3: old park benches mended, by id (`bench:x:z`). Optional, so no save version change. */
+  rest?: { mended: string[] };
+  /** E23.2.2.3: buried finds revealed (a mound shows) and dug up, by id (`bur:x:z`). Optional. */
+  buried?: { known: string[]; dug: string[] };
+  /** E23.2.2: what the pulse is loaded with (absent = nothing). Optional, so no save version change. */
+  pulseLoad?: 'none' | 'seeds' | 'rare' | 'fertiliser';
   /** E23.3.5: stored energy of grid nodes that are not machines (solar garden lights), by node id. Optional. */
   power?: {
     cells?: Record<string, number>;

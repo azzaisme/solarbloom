@@ -105,6 +105,13 @@ html, body {
 #boot.gone { opacity: 0; }
 #hud { position: fixed; inset: 0; pointer-events: none; }
 #hud > * { pointer-events: auto; }
+/* Third person: the build crosshair, only while a build is in hand */
+#hud > .crosshair { position: fixed; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; pointer-events: none; display: none; }
+#hud.aiming > .crosshair { display: block; }
+#hud > .crosshair::before, #hud > .crosshair::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45); border-radius: 1px; }
+#hud > .crosshair::before { left: 10px; top: 2px; width: 2px; height: 18px; }
+#hud > .crosshair::after { top: 10px; left: 2px; height: 2px; width: 18px; }
+#hud.mouse-look { cursor: none; }
 h2, h3, h4 { font-family: var(--font-display); font-weight: 600; letter-spacing: .01em; }
 
 /* Base surfaces */

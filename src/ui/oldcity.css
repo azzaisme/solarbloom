@@ -48,7 +48,7 @@
 #chargeRow .ic { color: var(--gold-hi); }
 #chargeRow .pct { justify-self: end; font: 700 15px var(--font-display); font-variant-numeric: tabular-nums; color: var(--text-strong); }
 #chargeRow .bar i { background: linear-gradient(90deg, #6fd3c4, #c9f7a8); }
-#chargeRow.low { border-color: var(--gold); }
+#chargeRow.low { border-color: var(--gold); box-shadow: var(--shadow), 0 0 0 1px var(--gold), 0 0 14px rgba(247, 181, 42, .55); }
 #chargeRow.low .bar i { background: var(--energy-bar); }
 #chargeRow.low .ic { animation: charge-low 1.6s ease-in-out infinite; }
 #chargeRow.empty { border-color: var(--edge-soft); }
@@ -56,3 +56,23 @@
 #chargeRow.eating .bar i { box-shadow: 0 0 8px #c9f7a8; }
 #chargeRow.calm { opacity: .35; }
 @keyframes charge-low { 50% { opacity: .45; } }
+
+/* E23.2.2: the pulse load wheel (a ring above the prompt for a moment) and the load chip under the charge */
+#loadWheel { position: absolute; left: 50%; bottom: calc(150px + var(--safe-b)); width: 0; height: 0; pointer-events: none; z-index: 6; }
+#loadWheel .lw-opt { position: absolute; width: 74px; height: 74px; margin: -37px 0 0 -37px; border-radius: 50%; display: grid; place-items: center; align-content: center; gap: 1px;
+  background: var(--glass-strong); border: 1px solid var(--edge-soft); box-shadow: var(--shadow-sm); color: var(--text);
+  transform: rotate(calc(var(--i) * 90deg - 90deg)) translate(64px) rotate(calc(var(--i) * -90deg + 90deg)); transition: transform .2s, border-color .2s, opacity .2s; animation: lw-in .18s ease-out; }
+#loadWheel .lw-ic { font-size: 24px; line-height: 1; }
+#loadWheel .lw-nm { font: 600 11px var(--font-display); white-space: nowrap; }
+#loadWheel .lw-opt.on { border-color: var(--gold); box-shadow: var(--shadow-sm), 0 0 14px var(--gold-glow-soft); transform: rotate(calc(var(--i) * 90deg - 90deg)) translate(64px) rotate(calc(var(--i) * -90deg + 90deg)) scale(1.14); }
+#loadWheel .lw-opt.out { opacity: .45; }
+@keyframes lw-in { from { opacity: 0; } }
+#loadChip { display: flex; align-items: center; gap: 6px; align-self: flex-start; padding: 4px 12px 4px 8px; border-radius: 999px; font: 600 13px var(--font-display); color: var(--text-strong); }
+#loadChip[hidden] { display: none; }
+#loadChip.out { opacity: .5; }
+#loadWheel .lw-ic .icon { width: 26px; height: 26px; }
+#loadChip .lc-ic .icon { width: 18px; height: 18px; }
+
+/* E23.2.3: sitting on a bench or meditating: the HUD fades away, only the prompt (and toasts) stay */
+#hud > * { transition: opacity .8s; }
+body.resting #hud > :not(#prompt):not(#toasts):not(#cine) { opacity: 0 !important; pointer-events: none !important; }

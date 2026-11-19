@@ -1,4 +1,5 @@
 import { big } from '../core/Big';
+import { WATER_NET } from '../data/water';
 import { PARK } from '../core/Areas';
 import { Economy } from '../core/Economy';
 import { GROUND } from '../core/GameState';
@@ -14,7 +15,7 @@ import type { Sim } from './Sim';
  * TUNING.drone.roles. The Restorer is today's drone and runs DroneSystem's own code path untouched, so a game
  * where every hub stays a Restorer plays (and saves) exactly as before E18.
  *
- * - Gardener: grows a restored tile and 2 neighbours one stage, paying only the target's nurture water.
+ * - Gardener: grows a restored tile and 2 neighbours one stage where real water is near, drawing it (E23.4.1).
  * - Scout: restores at the fog's edge from 1.5× the reach, paying +1 ⚡ per 4 tiles flown past the base radius.
  * - Courier: takes charge to machines (Mother Tree, solar panel, relay, condenser, Reservoir Garden).
  * - Spark (P1): starts one Bloom Chain from a garden cluster, at most once per hub per 30 s.
@@ -209,7 +210,8 @@ export class DroneRoles {
   start(d: DroneData, hub: MachineData, role: DroneRole): 'none' | 'broke' | 'started' {
     switch (role) {
       case 'gardener':
-        return this.startTile(d, this.gardenTarget(d, hub), (t) => ({ water: Economy.part(this.sim.restoration.pulseCost(t), 'water') }), role);
+        // E23.4.1: a Gardener only waters where there is real water nearby and draws it (see complete); no counter
+        return this.startTile(d, this.gardenTarget(d, hub), () => ({}), role);
       case 'scout':
         return this.startTile(d, this.scoutTarget(d, hub), (t) => this.scoutCost(hub, t), role);
       case 'courier':
@@ -259,6 +261,8 @@ export class DroneRoles {
           s.restoration.grow(g, undefined, 'auto', true);
           tileIds.push(g.id);
         }
+        // E23.4.1: the watering comes out of the water nearby
+        s.water.drawNear(t, WATER_NET.draw.gardenerPerTile * tileIds.length);
         done = true;
       }
     } else if (role === 'scout') {
@@ -318,7 +322,7 @@ export class DroneRoles {
       let best: TileData | undefined;
       let bestD = Infinity;
       for (const t of tiles) {
-        if (!this.growable(t) || s.drones.isReserved(t.id)) continue;
+        if (!this.growable(t) || s.drones.isReserved(t.id) || !s.water.isWatered(t)) continue;
         const mode = t.roofId === GROUND ? s.areas.mode(s.areas.areaOf(t)) : undefined;
         if (mode === 'off') continue;
         const dx = t.x + 0.5 - d.px;
@@ -622,9 +626,9 @@ export class DroneRoles {
     if (role === 'gardener') {
       const t = this.gardenTarget(d, hub);
       if (!t) return 'none';
-      if (!s.drones.payJob({ water: Economy.part(s.restoration.pulseCost(t), 'water') })) return 'broke';
       const all = [t, ...this.gardenNeighbours(t, hub)];
       for (const g of all) s.restoration.grow(g, undefined, 'auto', true);
+      s.water.drawNear(t, WATER_NET.draw.gardenerPerTile * all.length); // E23.4.1
       return { restored: 0, grown: all.length };
     }
     if (role === 'scout') {

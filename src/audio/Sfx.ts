@@ -291,9 +291,18 @@ export class Sfx {
     this.setMusic(this.music);
   }
 
+  /** E23.2.3: while bloombot sits, the music swells by this share (0 = its usual level) */
+  private swellBy = 0;
+
+  /** E23.2.3: let the music swell (sitting on a bench) or settle back. Slow, so it never jumps. */
+  swell(by: number) {
+    this.swellBy = Math.max(0, by);
+    if (this.musicGain && this.ctx && this.music) this.musicGain.gain.setTargetAtTime(0.22 * this.musicVolume * (1 + this.swellBy), this.ctx.currentTime, 1.5);
+  }
+
   setMusic(on: boolean) {
     this.music = on;
-    if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(on ? 0.22 * this.musicVolume : 0, this.ctx.currentTime, 0.2);
+    if (this.musicGain && this.ctx) this.musicGain.gain.setTargetAtTime(on ? 0.22 * this.musicVolume * (1 + this.swellBy) : 0, this.ctx.currentTime, 0.2);
     this.playBeds('music', on);
   }
 

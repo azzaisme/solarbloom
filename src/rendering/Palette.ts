@@ -65,6 +65,8 @@ const ground = {
   shallows: ['#4f8592', '#4a7f8b', '#568b98'],
   surf: '#9fdcef',
   /** the slab under painted dead ground (GroundTex): each painting's average colour, for its sides and the far view */
+  /** the stone edge of dead paving where it stands above the earth beside it */
+  pavingKerb: '#a48a72',
   painted: { sand: ['#e2bf7e'], 'dead-earth': ['#b06e4a'], 'dead-paving': ['#d2bfa8'] } as Record<string, string[]>,
   seaFoam: '#eaf8fb',
   /** restored ground that isn't lawn ('' = use the stage grass) */
@@ -255,6 +257,9 @@ const aqua = {
   mist: '#d8f4ff',
   pipe: '#5aa3c9',
   surface: '#7fd0f0',
+  /** E23.4.1: a drained bed (damp silt), and its darker wet rim at the waterline */
+  bed: '#5e4b39',
+  bedWet: '#3f3328',
   foam: '#a8ecff',
   teal: '#6fe3e0',
 };
@@ -650,6 +655,15 @@ export const PALETTE = {
   bee: '#f2b630',
   hoverfly: '#d98a2b',
   insectDark: '#2b2620',
+  /** E23.2.2.2: the hummingbird hawk-moth rare plants draw */
+  mothBody: '#9a6a3e',
+  mothWing: '#e0a24a',
+  /** E23.2.2.3: the reveal ripple's ring, and the warmer ring on a journal page it found */
+  ripple: '#bff3ff',
+  ripplePage: '#fff3c4',
+  /** E23.2.2.3: a revealed buried find: freshly turned earth */
+  turnedEarth: '#7b5134',
+  turnedEarthDark: '#5d3b25',
   insectWing: '#eef6ff',
   leafDrift: ['#a8743c', '#8f9a3a', '#c98f3c'],
   petalFall: ['#ffd1e6', '#ffffff', '#ffb3d1'],
