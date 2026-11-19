@@ -117,6 +117,24 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     allowedGround: ['restored', 'prepared'],
     blurb: 'A raised bed: plant seeds in it, keep it watered and harvest food.',
   },
+  // E23.5.3: biomass and food scraps rot down into compost, then fertiliser.
+  compostBin: {
+    type: 'compostBin',
+    name: 'Compost Bin',
+    icon: '🟫',
+    size: 1,
+    allowedGround: ['restored', 'prepared', 'polluted'],
+    blurb: 'Fill it with biomass and food scraps: they rot down into compost, and compost left inside becomes fertiliser.',
+  },
+  // E23.5.3: biomass into grid power, day or night, while fed.
+  bioDigester: {
+    type: 'bioDigester',
+    name: 'Bio Digester',
+    icon: '⚡',
+    size: 1,
+    allowedGround: ['restored', 'prepared', 'polluted'],
+    blurb: 'Feed it biomass and it powers its grid, day or night. When it runs empty it simply stops.',
+  },
   // E23.3.2: the grid's storage and its weather power.
   battery: {
     type: 'battery',
@@ -153,6 +171,31 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     blurb: 'A grid-scale battery: stores a whole network’s sun and wind for the night. Mainland only.',
     mainlandOnly: true,
   },
+  // E23.4.2: the water network's storage and its pump (crafting-table recipes: data/crafting).
+  reservoir: {
+    type: 'reservoir',
+    name: 'Reservoir',
+    icon: '🛢',
+    size: 2,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Stores water. Rain fills it, and so does a canal or pond on its bank, or a pipe from a pump. Up high, it feeds the pipes below on its own.',
+  },
+  desalination: {
+    type: 'desalination',
+    name: 'Desalination Plant',
+    icon: '🌊',
+    size: 2,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Built on the shore. Turns the sea into fresh water on grid power, in any weather, into a pond or canal beside it or the pipes it touches. A heavy load on the grid.',
+  },
+  pump: {
+    type: 'pump',
+    name: 'Pump',
+    icon: '⛲',
+    size: 1,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'Stands on the bank of a pond or canal and pushes its water along the pipes it touches, uphill or far away. Runs on grid power.',
+  },
   core: {
     type: 'core',
     name: 'Rooftop Core',
@@ -163,8 +206,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
   },
 };
 
-/** E21.3: what can be built (E23.1.1: one list, the Old City's; E23.7.4 dropped the Reclaimer; E23.3 adds the grid; E23.5.2 the Planter). */
-export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+/** E21.3: what can be built (E23.1.1: one list, the Old City's; E23.7.4 dropped the Reclaimer; E23.3 adds the grid; E23.5.2 the Planter; E23.4 the water). */
+export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'compostBin', 'bioDigester', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoir', 'pump', 'desalination', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

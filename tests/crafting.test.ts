@@ -179,8 +179,8 @@ describe('E23.6.1: the crafting table', () => {
     expect(wire.problem).toBeUndefined();
     expect(wire.label).toBe('Wire, makes 2 from 2 Copper, 0 at hand');
     expect(rows.find((r) => r.id === 'motor')!.problem).toBeDefined();
-    // at fountain tier 1 the table knows the Water Condenser; each Keeper adds its machines
-    expect(machineRows(sim).map((m) => m.id)).toEqual(['condenser']);
+    // at fountain tier 1 the table knows the home kit (the compost bin, E23.5.3) and the Water Condenser; each Keeper adds its machines
+    expect(machineRows(sim).map((m) => m.id)).toEqual(['compostBin', 'condenser']);
     for (const k of KEEPERS) sim.state.salvage!.keepers[k.id] = { step: 'settled' };
     expect(machineRows(sim).map((m) => m.id)).toEqual(MACHINE_RECIPES.filter((r) => r.builds && sim.crafting.unlocked(r.unlock)).map((r) => r.id));
     expect(machineRows(sim).map((m) => m.id)).toContain('solar');

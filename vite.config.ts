@@ -29,9 +29,9 @@ const QUICK = [
   // E23.9: the story
   'journal', 'keepers-friends', 'keepers-arcs', 'keepers-tally', 'keepers-crops',
   // E23.4: the water network
-  'water-levels',
+  'water-levels', 'water-fade', 'water-pipes', 'water-desal',
   // E23.5: the farm
-  'farm-items', 'farm-planters',
+  'farm-items', 'farm-planters', 'farm-compost',
   // E23.12: the Lucky Cat's rewards in the new loop (E23.1.4's one-meter check is tests/e2e/hud-one-meter.e2e.mjs)
   'lucky-cat-rewards', 'cat-decor',
   // E23.10: the proof
