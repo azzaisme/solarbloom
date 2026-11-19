@@ -119,8 +119,9 @@ try {
     const s = g.sim;
     const max = 4;
     let n = 0;
-    for (let z = 5; z <= 16; z++)
-      for (let x = 3; x <= 11; x++) {
+    // every bank round the pond, the park's west edge included (x 0…2), so no dead ground shows beside it
+    for (let z = 3; z <= 16; z++)
+      for (let x = 0; x <= 12; x++) {
         const t = s.grid.get('g', x, z);
         if (!t || t.blocked || t.feature === 'water' || t.feature === 'building' || t.occupantId) continue;
         Object.assign(t, { ground: 'restored', pollution: 0, bloom: max });
@@ -132,6 +133,13 @@ try {
   });
   check(lush > 20, `lush banks round the pond (${lush} tiles at bloom 4)`);
   await frame(cx + 3, cz + 1, 2, 0, 9000);
+  /** waits until the chunks round the pond are rebuilt (headless frames are slow: a rebuild can lag a shot by seconds) */
+  const rebuilt = async () => {
+    const ok = await page.waitForFunction(() => window.solarbloom.chunks.pendingNear({ x: 6, z: 10 }, 24) === 0, null, { timeout: 90000 }).then(() => true, () => false);
+    await settle(1500);
+    return ok;
+  };
+  check(await rebuilt(), 'the lush banks are drawn before the full-pond shot');
   const shown = (id) =>
     run((id) => {
       const s = window.solarbloom.sim;
@@ -150,11 +158,13 @@ try {
   await settle(6000);
   const half = await shown(id);
   check(half.shown === 2 && half.bloom === 4, `half the fade line: flowers closing, two stages down, nothing lost (${JSON.stringify(half)})`);
+  await rebuilt();
   await shot('7-fade-half');
   await run((id) => window.solarbloom.sim.water.draw(id, 1e9), id);
   await settle(6000);
   const empty = await shown(id);
   check(empty.shown === 1 && empty.bloom === 4, `empty: plain restored ground, the tile keeps its bloom (${JSON.stringify(empty)})`);
+  await rebuilt();
   await shot('8-fade-empty');
   await run((id) => window.solarbloom.sim.water.fill(id, 1e9), id);
 
