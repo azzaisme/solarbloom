@@ -42,6 +42,48 @@ class Geo {
     }
   }
 
+  /**
+   * A tube between any two points (a run down a stair or ramp, sloping with it). Its rings stand square to the run,
+   * so a sloped stretch reads as one straight pipe.
+   */
+  slope(ax: number, ay: number, az: number, bx: number, by: number, bz: number, r: number, sides = PIPE.sides) {
+    const len = Math.hypot(bx - ax, by - ay, bz - az);
+    if (len < 1e-6) return;
+    const d = [(bx - ax) / len, (by - ay) / len, (bz - az) / len];
+    // side: level and square to the run; up: square to both (the run is never vertical here)
+    let sx = -d[2];
+    let sz = d[0];
+    const sl = Math.hypot(sx, sz) || 1;
+    sx /= sl;
+    sz /= sl;
+    const ux = -sz * d[1];
+    const uy = sz * d[0] - sx * d[2];
+    const uz = sx * d[1];
+    const base = this.pos.length / 3;
+    for (let i = 0; i <= sides; i++) {
+      const t = (i / sides) * Math.PI * 2;
+      const c = Math.cos(t);
+      const s = Math.sin(t);
+      const ox = c * ux + s * sx;
+      const oy = c * uy;
+      const oz = c * uz + s * sz;
+      this.pos.push(ax + ox * r, ay + oy * r, az + oz * r, bx + ox * r, by + oy * r, bz + oz * r);
+      this.nrm.push(ox, oy, oz, ox, oy, oz);
+    }
+    // wound so the outside faces out: check the first quad's face against its ring's outward offset
+    const p = this.pos;
+    const A = base * 3;
+    const e1 = [p[A + 3] - p[A], p[A + 4] - p[A + 1], p[A + 5] - p[A + 2]];
+    const e2 = [p[A + 6] - p[A], p[A + 7] - p[A + 1], p[A + 8] - p[A + 2]];
+    const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    const out = n[0] * this.nrm[A] + n[1] * this.nrm[A + 1] + n[2] * this.nrm[A + 2] > 0;
+    for (let i = 0; i < sides; i++) {
+      const q = base + i * 2;
+      if (out) this.idx.push(q, q + 1, q + 2, q + 1, q + 3, q + 2);
+      else this.idx.push(q, q + 2, q + 1, q + 1, q + 2, q + 3);
+    }
+  }
+
   /** A short upright drum (a joint at a corner or junction, or a cap). */
   drum(x: number, z: number, y0: number, y1: number, r: number, sides = PIPE.sides) {
     const base = this.pos.length / 3;
@@ -96,6 +138,64 @@ class Geo {
     return m;
   }
 }
+
+/** Where a point lies on a stair or ramp: its ramp, how many treads a tile of it has, and how far up it (0…1). */
+function onRamp(px: number, pz: number) {
+  const x = Math.floor(px);
+  const z = Math.floor(pz);
+  const hit = rampAt(x, z);
+  if (!hit) return undefined;
+  const steps = hit.ramp.kind === 'stair' ? 2 : 3;
+  const fx = px - x;
+  const fz = pz - z;
+  const u = hit.ramp.dir === 's' ? fz : hit.ramp.dir === 'n' ? 1 - fz : hit.ramp.dir === 'e' ? fx : 1 - fx;
+  return { hit, steps, u, f: (hit.i + u) / hit.n };
+}
+
+/** The top of what lies under a point (world y): a terrace tile's slab, or the tread of a stair's or ramp's step. */
+export function pipeSurface(sim: Sim, px: number, pz: number): number {
+  const base = sim.grid.layer(GROUND)!.height;
+  const t = sim.grid.peek(GROUND, Math.floor(px), Math.floor(pz));
+  const on = t?.ramp ? onRamp(px, pz) : undefined;
+  if (on) {
+    // drawn as `steps` treads from its low end to its high end (ChunkRenderer.terrace), coping on top
+    const { hit, steps, u } = on;
+    const k = Math.min(steps - 1, Math.max(0, Math.floor(u * steps)));
+    const lv = hit.ramp.from + ((hit.ramp.to - hit.ramp.from) * (hit.i + (k + 0.5) / steps)) / hit.n;
+    return base + levelY(lv) + PIPE.treadTop;
+  }
+  return base + levelY(t?.level ?? 1) + SLAB_TOP;
+}
+
+/**
+ * The pipe's centre over a point. On flat ground and across a stair: `clear` above what lies under it. Along a stair
+ * or ramp: one straight slope, the way a pipe runs down real steps, that just clears the nosing of every tread (the
+ * line through the treads' middles, raised half a step) and levels off to meet the ground at the top. At the foot it
+ * meets the ground with one short drop (drawn where the tiles meet).
+ */
+export function pipeHeight(sim: Sim, px: number, pz: number): number {
+  const t = sim.grid.peek(GROUND, Math.floor(px), Math.floor(pz));
+  const on = t?.ramp ? onRamp(px, pz) : undefined;
+  if (!on) return pipeSurface(sim, px, pz) + PIPE.clear + PIPE.r;
+  const { hit, steps, f } = on;
+  const { from, to } = hit.ramp;
+  const base = sim.grid.layer(GROUND)!.height;
+  const half = 0.5 / (steps * hit.n); // half a tread, as a share of the whole ramp
+  const lv = from + (to - from) * (f + (to > from ? half : -half));
+  const hi = Math.max(from, to);
+  // at the top it meets the ground there: never above the higher of that ground and the top tread
+  const cap = Math.max(levelY(hi) + SLAB_TOP, levelY(hi - Math.abs(to - from) * half) + PIPE.treadTop);
+  return base + Math.min(levelY(lv) + PIPE.treadTop, cap) + PIPE.clear + PIPE.r;
+}
+
+/** Does a run from (ax, az) toward (bx, bz) go up or down a stair or ramp (not across it)? */
+function alongRamp(px: number, pz: number, alongX: boolean): boolean {
+  const on = onRamp(px, pz);
+  return !!on && (on.hit.ramp.dir === 'e' || on.hit.ramp.dir === 'w') === alongX;
+}
+
+/** Pipe sizes, for the tests. */
+export const PIPE_SIZE = PIPE;
 
 /**
  * E23.4.2.2 (#424): pipes in the world. Each pipe tile is a pale-blue tube from its middle to every side it joins
@@ -157,57 +257,34 @@ export class PipeVisuals {
     }
   }
 
-  /** The top of what lies under a point (world y): a terrace tile's slab, or the tread of a stair's or ramp's step. */
   private surface(px: number, pz: number): number {
-    const x = Math.floor(px);
-    const z = Math.floor(pz);
-    const base = this.sim.grid.layer(GROUND)!.height;
-    const t = this.sim.grid.peek(GROUND, x, z);
-    const hit = t?.ramp ? rampAt(x, z) : undefined;
-    if (hit) {
-      // drawn as `steps` treads from its low end to its high end (ChunkRenderer.terrace), coping on top
-      const steps = hit.ramp.kind === 'stair' ? 2 : 3;
-      const fx = px - x;
-      const fz = pz - z;
-      const u = hit.ramp.dir === 's' ? fz : hit.ramp.dir === 'n' ? 1 - fz : hit.ramp.dir === 'e' ? fx : 1 - fx;
-      const k = Math.min(steps - 1, Math.max(0, Math.floor(u * steps)));
-      const lv = hit.ramp.from + ((hit.ramp.to - hit.ramp.from) * (hit.i + (k + 0.5) / steps)) / hit.n;
-      return base + levelY(lv) + PIPE.treadTop;
-    }
-    return base + levelY(t?.level ?? 1) + SLAB_TOP;
+    return pipeSurface(this.sim, px, pz);
   }
 
-  /** The pipe's centre over a point: `clear` above what lies under it. */
   private pipeY(px: number, pz: number): number {
-    return this.surface(px, pz) + PIPE.clear + PIPE.r;
+    return pipeHeight(this.sim, px, pz);
   }
 
   /**
-   * A half-run from a tile's middle (a) to its edge (b), cut where the ground under it steps (a stair's or a ramp's
-   * treads along the run), each piece at its own height.
+   * A half-run from a tile's middle (a) to its edge (b) as straight stretches, each with its height at both ends:
+   * one level stretch, or (up or down a stair or ramp) a few that follow its slope. Heights are read just inside the
+   * tile (its edge belongs to the next one).
    */
-  private pieces(x: number, z: number, ax: number, az: number, bx: number, bz: number): { a: [number, number]; b: [number, number]; y: number }[] {
-    const cuts = [0, 1];
-    const t = this.sim.grid.peek(GROUND, x, z);
-    const hit = t?.ramp ? rampAt(x, z) : undefined;
+  private pieces(x: number, z: number, ax: number, az: number, bx: number, bz: number): { a: [number, number]; b: [number, number]; ya: number; yb: number; sloped: boolean }[] {
     const alongX = Math.abs(bx - ax) > Math.abs(bz - az);
-    if (hit && (hit.ramp.dir === 'e' || hit.ramp.dir === 'w') === alongX) {
-      const steps = hit.ramp.kind === 'stair' ? 2 : 3;
-      const a = alongX ? ax : az;
-      const b = alongX ? bx : bz;
-      const start = alongX ? x : z;
-      for (let j = 1; j < steps; j++) {
-        const c = start + j / steps;
-        const f = (c - a) / (b - a);
-        if (f > 1e-6 && f < 1 - 1e-6) cuts.push(f);
-      }
+    const inside = (px: number, pz: number): [number, number] => [Math.min(x + 1 - 1e-4, Math.max(x + 1e-4, px)), Math.min(z + 1 - 1e-4, Math.max(z + 1e-4, pz))];
+    const yAt = (px: number, pz: number) => this.pipeY(...inside(px, pz));
+    if (!this.sim.grid.peek(GROUND, x, z)?.ramp || !alongRamp(...inside(ax, az), alongX)) {
+      const y = yAt((ax + bx) / 2, (az + bz) / 2);
+      return [{ a: [ax, az], b: [bx, bz], ya: y, yb: y, sloped: false }];
     }
-    cuts.sort((p, q) => p - q);
-    const out: { a: [number, number]; b: [number, number]; y: number }[] = [];
-    for (let i = 0; i + 1 < cuts.length; i++) {
-      const pa: [number, number] = [ax + (bx - ax) * cuts[i], az + (bz - az) * cuts[i]];
-      const pb: [number, number] = [ax + (bx - ax) * cuts[i + 1], az + (bz - az) * cuts[i + 1]];
-      out.push({ a: pa, b: pb, y: this.pipeY((pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2) });
+    // the slope can level off part-way (the top of a flight): a few stretches follow it closely
+    const N = 4;
+    const out: { a: [number, number]; b: [number, number]; ya: number; yb: number; sloped: boolean }[] = [];
+    for (let i = 0; i < N; i++) {
+      const pa: [number, number] = [ax + ((bx - ax) * i) / N, az + ((bz - az) * i) / N];
+      const pb: [number, number] = [ax + ((bx - ax) * (i + 1)) / N, az + ((bz - az) * (i + 1)) / N];
+      out.push({ a: pa, b: pb, ya: yAt(pa[0], pa[1]), yb: yAt(pb[0], pb[1]), sloped: true });
     }
     return out;
   }
@@ -239,24 +316,22 @@ export class PipeVisuals {
       const sides: [number, number][] = [...p.links(x, z).map(([nx, nz]) => [nx - x, nz - z] as [number, number]), ...p.machineLinks(x, z).map((l) => [l.dx, l.dz] as [number, number])];
       const atMiddle: number[] = [];
       for (const [dx, dz] of sides) {
-        // from the middle to the tile's edge, following the ground's steps
+        // from the middle to the tile's edge: level, or sloping with a stair or ramp as one straight pipe
         const run = this.pieces(x, z, cx, cz, cx + dx * 0.5, cz + dz * 0.5);
-        atMiddle.push(run[0].y);
-        run.forEach((s, i) => {
-          tube.tube(s.a[0], s.a[1], s.b[0], s.b[1], s.y, PIPE.r);
-          // a little stick holding it up, in the middle of each stretch
-          const mx = (s.a[0] + s.b[0]) / 2;
-          const mz = (s.a[1] + s.b[1]) / 2;
+        atMiddle.push(run[0].ya);
+        for (const s of run) {
+          if (s.sloped) tube.slope(s.a[0], s.ya, s.a[1], s.b[0], s.yb, s.b[1], PIPE.r);
+          else tube.tube(s.a[0], s.a[1], s.b[0], s.b[1], s.ya, PIPE.r);
+        }
+        // a little stick holding it up, in the middle of the half-run
+        {
+          const mx = cx + dx * 0.25;
+          const mz = cz + dz * 0.25;
           const ground = this.surface(mx, mz);
-          const top = s.y - PIPE.r;
+          const top = this.pipeY(mx, mz) - PIPE.r;
           trim.box(mx, (ground + top) / 2, mz, PIPE.stick, top - ground, PIPE.stick);
           trim.box(mx, ground + 0.008, mz, PIPE.foot, 0.016, PIPE.foot);
-          const next = run[i + 1];
-          if (next && Math.abs(next.y - s.y) > 1e-4) {
-            const up = next.y > s.y ? 1 : -1; // along the run toward the higher piece
-            this.riser(tube, trim, s.b[0], s.b[1], dx * up, dz * up, Math.min(s.y, next.y), Math.max(s.y, next.y));
-          }
-        });
+        }
         // where it meets a neighbouring pipe on lower ground (a terrace wall, a step at the tile's edge): the higher
         // tile draws the upright between the two
         const last = run[run.length - 1];
@@ -264,11 +339,14 @@ export class PipeVisuals {
           const ex = cx + dx * 0.5;
           const ez = cz + dz * 0.5;
           const ny = this.pipeY(ex + dx * 0.01, ez + dz * 0.01);
-          if (ny < last.y - 1e-4) this.riser(tube, trim, ex, ez, -dx, -dz, ny, last.y);
+          if (ny < last.yb - 1e-4) this.riser(tube, trim, ex, ez, -dx, -dz, ny, last.yb);
         }
-        const fx = cx + dx * 0.47;
-        const fz = cz + dz * 0.47;
-        trim.tube(fx - dx * PIPE.flangeLen * 0.5, fz - dz * PIPE.flangeLen * 0.5, fx + dx * PIPE.flangeLen * 0.5, fz + dz * PIPE.flangeLen * 0.5, last.y, PIPE.flange);
+        // a flange where tiles join (none along a slope: rings stacked down a flight read as clutter)
+        if (!last.sloped) {
+          const fx = cx + dx * 0.47;
+          const fz = cz + dz * 0.47;
+          trim.tube(fx - dx * PIPE.flangeLen * 0.5, fz - dz * PIPE.flangeLen * 0.5, fx + dx * PIPE.flangeLen * 0.5, fz + dz * PIPE.flangeLen * 0.5, last.yb, PIPE.flange);
+        }
       }
       if (!atMiddle.length) {
         // a lone tile: a capped stub on its stick
@@ -339,7 +417,7 @@ export class PipeVisuals {
     const cx = x + 0.5;
     const cz = z + 0.5;
     const sides: [number, number][] = [...p.links(x, z).map(([nx, nz]) => [nx - x, nz - z] as [number, number]), ...p.machineLinks(x, z).map((l) => [l.dx, l.dz] as [number, number])];
-    const ys = sides.map(([dx, dz]) => this.pieces(x, z, cx, cz, cx + dx * 0.5, cz + dz * 0.5)[0].y);
+    const ys = sides.map(([dx, dz]) => this.pieces(x, z, cx, cz, cx + dx * 0.5, cz + dz * 0.5)[0].ya);
     return ys.length ? ys : [this.pipeY(cx, cz)];
   }
 
