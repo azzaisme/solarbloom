@@ -279,6 +279,8 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   // E19.2 decorations.
   '🌷': 'flower', '🎏': 'rainbow', '🛢': 'vase',
   '🪨': 'restore', '🧱': 'restore', '🟫': 'garden', '🍃': 'biomass', '🚜': 'build', '🔱': 'build', '🧭': 'telescope',
+  // E23.6.1 components.
+  '➰': 'link', '🪵': 'build', '🔲': 'glasshouse', '🚰': 'water', '🌀': 'settings',
   // E23.5.1 farm items (food is the carrot, compost the garden bed above).
   '🧪': 'sparkle',
 };

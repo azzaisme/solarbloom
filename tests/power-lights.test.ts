@@ -68,16 +68,25 @@ describe('E23.3.5 night lighting', () => {
       if (l.power === 'solar') expect(l.cost.sunCell, l.id).toBeGreaterThan(0);
       if (l.power === 'grid') expect((l.cost.wire ?? 0) + (l.cost.glassPane ?? 0), l.id).toBeGreaterThan(0);
     }
+    // E23.6.1 (#489): a light is made once at the crafting table, then placed free. Its recipe is known from home
+    // (the starting set), a find, or Decor research; the light itself opens once it has been made.
     const sim = new Sim(createInitialState(7, 'oldcity'));
+    sim.bot = { roofId: 'g', x: 8.5, z: 11.5 };
     const cozy = new Cozy(sim);
-    expect(cozy.isDecorUnlocked(DECOR_OPTION.festoon)).toBe(true);
-    expect(cozy.isDecorUnlocked(DECOR_OPTION.lamppost)).toBe(false);
-    // a find unlocks its style; research styles wait for E23.6.2's sim.research
+    const known = (id: string) => sim.crafting.unlocked(sim.crafting.decor(id)!.unlock);
+    expect(known('festoon')).toBe(true);
+    expect(cozy.isDecorUnlocked(DECOR_OPTION.festoon)).toBe(false);
+    sim.inventory.add('wire', 2);
+    sim.inventory.add('glassPane', 1);
+    expect(sim.crafting.makeDecor('festoon')).toBe(true);
+    expect(cozy.checkDecorUnlocks().map((o) => o.id)).toContain('festoon');
+    expect(known('lamppost')).toBe(false);
     sim.state.salvage!.caches.push('c-mastRow-1');
-    expect(cozy.checkDecorUnlocks().map((o) => o.id)).toContain('lamppost');
-    expect(cozy.isDecorUnlocked(DECOR_OPTION.uplight)).toBe(false);
+    expect(known('lamppost')).toBe(true);
+    expect(cozy.isDecorUnlocked(DECOR_OPTION.lamppost)).toBe(false); // known, not made yet
+    expect(known('uplight')).toBe(false);
     (sim as unknown as { research: unknown }).research = { done: (id: string) => id === 'dc-lights' };
-    expect(cozy.checkDecorUnlocks().map((o) => o.id)).toEqual(expect.arrayContaining(['uplight', 'fairylights', 'tablelight']));
+    for (const id of ['uplight', 'fairylights', 'tablelight']) expect(known(id), id).toBe(true);
   });
 
   it('grid lights come on by themselves at dusk, fading in, and go off at dawn', () => {
