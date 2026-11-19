@@ -117,6 +117,17 @@ const ART: Record<string, (a: At) => void> = {
     put(a, 'cylinder', P.metal.dark, 0, 0.47, 0, [0.07, 0.94, 0.07]);
     put(a, 'sphere', L.bulbOff, 0, 1.02, 0, 0.2); // E23.3.5: lit by LightVisuals at dusk (data/lights bulbY)
   },
+  solarlamppost: (a) => {
+    if (!model(a, 'lamp-post', 0, 0, 0.48)) {
+      put(a, 'cylinder', P.metal.dark, 0, 0.47, 0, [0.07, 0.94, 0.07]);
+      put(a, 'sphere', L.bulbOff, 0, 1.02, 0, 0.2);
+    }
+    if (a.far) return;
+    // its own little sun panel, tilted on a short arm above the lamp
+    put(a, 'box', P.metal.dark, 0, 1.3, 0, [0.03, 0.2, 0.03]);
+    put(a, 'box', P.metal.dark, 0, 1.4, 0, [0.3, 0.015, 0.24]);
+    put(a, 'box', P.solar.panel, 0, 1.41, 0, [0.27, 0.015, 0.21]);
+  },
   // ───── E23.3.5 night lights (data/lights.ts). The glowing parts are LightVisuals', drawn dark here. ─────
   pathlight: (a) => {
     if (model(a, 'bollard', 0, 0, 0.42)) return;

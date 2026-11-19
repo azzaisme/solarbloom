@@ -426,7 +426,11 @@ export interface GameState {
    */
   cozy?: CozyState;
   /** E23.3.5: stored energy of grid nodes that are not machines (solar garden lights), by node id. Optional. */
-  power?: { cells?: Record<string, number> };
+  power?: {
+    cells?: Record<string, number>;
+    /** E23.3.5: set once lights placed before night lighting have been carried over (see Lights.carryOver) */
+    lights?: number;
+  };
   /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
   clock?: ClockState;
 }

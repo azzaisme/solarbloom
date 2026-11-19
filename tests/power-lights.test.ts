@@ -287,4 +287,41 @@ describe('E23.3.5 night lighting', () => {
     expect(glow(lamp)).toBeGreaterThan(0.75);
     expect(LIGHTING.fadeSeconds).toBeGreaterThan(0);
   });
+
+  it('an old save’s lamp posts and lanterns keep glowing: lamp posts become solar lamp posts, both start charged', () => {
+    // A save from before night lighting: a lamp post and a lantern placed with no grid, and no `state.power`.
+    const old = createInitialState(7, 'oldcity');
+    const post = decorKey(GROUND, 40, 40);
+    const lantern = decorKey(GROUND, 44, 40);
+    old.cozy = { decor: { [post]: 'lamppost@1', [lantern]: 'lantern' } };
+    delete old.power;
+    const saver = new SaveService(undefined);
+    const sim = new Sim(saver.deserialize(saver.serialize(old))!);
+    expect(sim.state.cozy!.decor![post]).toBe('solarlamppost@1'); // the turn is kept
+    expect(LIGHT.solarlamppost.power).toBe('solar');
+    expect(sim.lights.nodeOf(post)!.charge).toBe(LIGHTING.solar.capacity);
+    expect(sim.lights.nodeOf(lantern)!.charge).toBe(LIGHTING.solar.capacity);
+    // the first night: both glow, with no pole anywhere
+    sim.weather.forceForTest('sunny', 1e9);
+    const st = sim.state;
+    for (let i = 0; i < 30; i++) {
+      (st.clock ??= { offset: 0 }).offset = 0.85 * POWER.daySeconds - st.time;
+      st.time += 1;
+      sim.lights.tick(1);
+      sim.power.tick(1);
+    }
+    const g = (k: string) => sim.lights.all().find((l) => l.key === k)!.glow;
+    expect(g(post)).toBeGreaterThan(0.5 * LIGHT.solarlamppost.brightness);
+    expect(g(lantern)).toBeGreaterThan(0.5 * LIGHT.lantern.brightness);
+    // Carried over once: a lamp post placed after loading follows the new rules (a grid lamp), through a save too.
+    const fresh = decorKey(GROUND, 48, 40);
+    st.cozy!.decor![fresh] = 'lamppost';
+    const again = new Sim(saver.deserialize(saver.serialize(st))!);
+    expect(again.state.cozy!.decor![fresh]).toBe('lamppost');
+    expect(again.state.cozy!.decor![post]).toBe('solarlamppost@1');
+    // and a new game is marked at once, so its lamp posts are never carried over
+    const ng = new Sim(createInitialState(8, 'oldcity'));
+    ng.state.cozy = { decor: { [fresh]: 'lamppost' } };
+    expect(new Sim(saver.deserialize(saver.serialize(ng.state))!).state.cozy!.decor![fresh]).toBe('lamppost');
+  });
 });

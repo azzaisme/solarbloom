@@ -157,7 +157,7 @@ export class LightVisuals {
       const base = this.tileTop(l.roofId, l.x, l.z);
       const [ox, oz] = turn(l.rot, def.id === 'porchlight' ? 0 : def.id === 'tablelight' ? 0.08 : 0, def.id === 'porchlight' ? -0.1 : def.id === 'tablelight' ? 0.04 : 0);
       at = [base[0] + ox, base[1] + def.bulbY, base[2] + oz];
-      const size = def.id === 'lamppost' ? 0.2 : def.id === 'uplight' ? 0.14 : def.id === 'glowpod' ? 0.09 : 0.13;
+      const size = def.id === 'lamppost' || def.id === 'solarlamppost' ? 0.2 : def.id === 'uplight' ? 0.14 : def.id === 'glowpod' ? 0.09 : 0.13;
       if (def.id === 'glowpod') {
         // five little glowing pods on the plant's stems
         for (let i = 0; i < 5; i++) {
@@ -166,7 +166,7 @@ export class LightVisuals {
         }
       } else parts.push(this.part(g, this.bulbMesh, at, def.id === 'uplight' ? [size, 0.03, size] : size));
       // a soft pool of light on the ground (an uplight's is larger: it washes what stands beside it)
-      const r = (def.id === 'uplight' ? 1.4 : def.id === 'lamppost' ? 1.9 : 1.0) * def.brightness;
+      const r = (def.id === 'uplight' ? 1.4 : def.id === 'lamppost' || def.id === 'solarlamppost' ? 1.9 : 1.0) * def.brightness;
       halo = this.part(g, this.haloMesh, [base[0] + ox, base[1] + 0.03, base[2] + oz], [r, 1, r]);
     }
     for (const e of [...parts, ...(halo ? [halo] : [])]) e.enabled = false;

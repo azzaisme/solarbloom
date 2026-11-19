@@ -53,6 +53,8 @@ export const LIGHTS: LightDef[] = [
   { id: 'glasslanterns', name: 'Glass lanterns', icon: '🏮', blurb: 'Old glass lanterns hanging from the lines.', power: 'grid', line: true, brightness: 0.85, bulbY: 0, spacing: 3, tone: 'amber', solid: false, draw: 0.08, cost: { wire: 1, glassPane: 2 }, unlock: { find: 'c-mastRow-2' } },
   // Free-standing
   { id: 'lamppost', name: 'Lamp post', icon: '💡', blurb: 'An old iron street lamp, on the grid.', power: 'grid', brightness: 1, bulbY: 1.02, tone: 'warm', solid: true, draw: 0.5, cost: { scrap: 3, wire: 1, glassPane: 1 }, unlock: { find: 'c-mastRow-1' } },
+  // Old saves' lamp posts become this (they were placed before lamp posts needed a pole), so nothing goes dark.
+  { id: 'solarlamppost', name: 'Solar lamp post', icon: '🔆', blurb: 'An old iron street lamp with a little sun panel on top. It needs no grid.', power: 'solar', brightness: 0.8, bulbY: 1.02, tone: 'warm', solid: true, cost: { scrap: 3, glassPane: 1, sunCell: 1 }, unlock: { find: 'c-mastRow-1' } },
   { id: 'pathlight', name: 'Path light', icon: '💡', blurb: 'A low bollard light for the edge of a path, on the grid.', power: 'grid', brightness: 0.8, bulbY: 0.36, tone: 'warm', solid: true, draw: 0.2, cost: { scrap: 2, wire: 1, glassPane: 1 }, unlock: { start: true } },
   { id: 'lantern', name: 'Garden lantern', icon: '🏮', blurb: 'A little lantern with its own sun cell. It needs no grid.', power: 'solar', brightness: 0.6, bulbY: 0.22, tone: 'amber', solid: false, cost: { glassPane: 1, scrap: 1, sunCell: 1 }, unlock: { start: true } },
   { id: 'solarstake', name: 'Solar garden light', icon: '🔆', blurb: 'A stake light with a tiny panel on top. It needs no grid.', power: 'solar', brightness: 0.5, bulbY: 0.3, tone: 'cream', solid: false, cost: { sunCell: 1, scrap: 1 }, unlock: { start: true } },
@@ -76,4 +78,7 @@ export const LIGHTING = {
   poleReach: 1.6,
   /** fireflies and moths: how many lights near the view gather them, and how many each */
   insects: { lights: 12, perLight: 3 },
+  /** Lights placed before E23.3.5 (old saves): lamp posts become solar lamp posts, and they and lanterns start with
+   * a full battery, so nothing the player built goes dark on its first night. */
+  legacy: { lamppost: 'solarlamppost', charged: ['lantern', 'solarlamppost'] },
 };

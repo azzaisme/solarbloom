@@ -1,4 +1,4 @@
-import { parseDecorKey, decoration } from '../core/Decor';
+import { parseDecorKey, decoration, decorValue } from '../core/Decor';
 import { GROUND } from '../core/GameState';
 import type { MachineData } from '../core/types';
 import { POWER } from '../data/power';
@@ -59,6 +59,33 @@ export class Lights {
       }
     }
     sim.power.addNodes(() => [...this.nodes.values()]);
+    this.carryOver();
+  }
+
+  /**
+   * A save from before night lighting has lamp posts and lanterns that were placed with no power rules. Lamp posts
+   * now need a pole and lanterns a charged sun cell, so neither would light. Best for the player: nothing they built
+   * stops working. Lamp posts become solar lamp posts (a little panel of their own), and those and lanterns start with
+   * a full battery. Runs once per save; a new game is marked at once, so lamp posts placed later follow the new rules.
+   */
+  private carryOver(): void {
+    const st = this.sim.state;
+    if (st.power?.lights) return;
+    const decor = st.cozy?.decor;
+    const L = LIGHTING.legacy;
+    if (decor) {
+      for (const [k, v] of Object.entries(decor)) {
+        const d = decoration(k, v);
+        if (!d) continue;
+        let kind = d.kind;
+        if (kind === 'lamppost') {
+          kind = L.lamppost;
+          decor[k] = decorValue(kind, d.rot);
+        }
+        if (L.charged.includes(kind)) ((st.power ??= {}).cells ??= {})[k] = LIGHTING.solar.capacity;
+      }
+    }
+    (st.power ??= {}).lights = 1;
   }
 
   /** The definition of a light decoration kind, if it is one. */
