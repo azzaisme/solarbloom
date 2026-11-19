@@ -205,7 +205,7 @@ export interface Buff {
   at?: { roofId: string; x: number; z: number };
 }
 
-export type CatRewardType = 'luckyHarvest' | 'solarFrenzy' | 'megaBloom' | 'droneParty' | 'jackpot' | 'goldenRelay' | 'catsGarden' | 'fogWhisker';
+export type CatRewardType = 'luckyHarvest' | 'solarFrenzy' | 'megaBloom' | 'droneParty' | 'jackpot' | 'goldenRelay' | 'catsGarden' | 'fogWhisker' | 'ripeAround';
 
 /** Phase 5 E15: how rare a cat is (rolled when it appears, saved with it). */
 export type CatVariant = 'standard' | 'golden' | 'rainbow';
@@ -331,6 +331,14 @@ export interface KeeperState {
   pulsed?: boolean;
   /** what has been handed over toward the current delivery (request 1 or the landmark) */
   given?: Partial<Record<MaterialId, number>>;
+  /** E23.9.2: settled only: gifts it liked so far (FRIENDSHIP.giftsToFriend makes a friend) */
+  hearts?: number;
+  /** E23.9.2: sim time of the last gift it took (one a game day) */
+  giftedAt?: number;
+  /** E23.9.2: how many times a friend has chatted (which line comes next) */
+  chats?: number;
+  /** E23.9.2: the tile it is off to tend; `at` is when it finishes, set once it gets there */
+  tending?: { x: number; z: number; at?: number };
 }
 
 /**
@@ -386,6 +394,8 @@ export interface SalvageState {
   crops?: string[];
   /** E23.6.2: crossbreeds found (data/crops crossKey, e.g. 'radish+lettuce'), in the order found */
   crosses?: string[];
+  /** E23.9.2: crops kept for the Keepers, by crop id (one from each harvest, up to FRIENDSHIP.basketMax) */
+  basket?: Record<string, number>;
   /** E23.5.2.3: gathers counted toward each region's next seed packet, by region id */
   seedFinds?: Record<string, number>;
 }

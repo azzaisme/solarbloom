@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FRIENDSHIP } from '../src/data/keepers';
 import { SaveService } from '../src/app/SaveService';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
@@ -75,8 +76,11 @@ describe('E23.2.3: benches', () => {
     for (const k of KEEPERS.slice(0, 2)) delete sim.state.areas[k.region];
     expect(sim.rest.friends(KEEPERS[1].x, KEEPERS[1].z)).toEqual([]);
     for (const k of KEEPERS.slice(0, 2)) sim.state.areas[k.region] = { fog: 'cleared', revealedAt: 0 };
+    // E23.9.2: settled is not yet a friend; three gifts it loves make one
+    expect(sim.rest.friends(KEEPERS[1].x, KEEPERS[1].z)).toEqual([]);
+    for (const k of KEEPERS.slice(0, 2)) sim.state.salvage!.keepers[k.id] = { step: 'settled', hearts: FRIENDSHIP.giftsToFriend };
     expect(sim.rest.friends(KEEPERS[1].x, KEEPERS[1].z)).toEqual([KEEPERS[1].id, KEEPERS[0].id]);
-    // E23.9.2's friendship decides once it is on the sim (three gifts after settling): only true friends
+    // only true friends (isFriend decides)
     (sim.keepers as unknown as { isFriend(id: string): boolean }).isFriend = (id) => id === KEEPERS[0].id;
     expect(sim.rest.friends(KEEPERS[1].x, KEEPERS[1].z)).toEqual([KEEPERS[0].id]);
   });

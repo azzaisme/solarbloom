@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { regionOfCell } from '../src/core/OldCityLayout';
 import type { MaterialId } from '../src/core/types';
@@ -152,6 +152,9 @@ describe('E23.8 (#327–#329): every region has salvage piles of its own', () =>
       for (const [x, z] of r.gate.cells) s.add(`${x},${z}`);
       for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) s.add(`${r.landmark.x + i},${r.landmark.z + j}`).add(`${r.seam.x + i},${r.seam.z + j}`);
       for (let j = 0; j < r.patch.d; j++) for (let i = 0; i < r.patch.w; i++) s.add(`${r.patch.x + i},${r.patch.z + j}`);
+      // a ladder's or perch's foot and its top, and every ramp cell (as the placement script keeps clear)
+      for (const l of [...r.ladders, ...r.perches]) s.add(`${l.x},${l.z}`).add(`${l.to[0]},${l.to[1]}`);
+      for (const rp of r.ramps) for (let j = 0; j < rp.d; j++) for (let i = 0; i < rp.w; i++) s.add(`${rp.x + i},${rp.z + j}`);
       return s;
     };
     for (const r of REGIONS) {
@@ -187,6 +190,54 @@ describe('E23.8 (#327–#329): every region has salvage piles of its own', () =>
       // the piles never cut off the Keeper's region: its caches, pages, lookout and patch are still reached
       for (const c of [...r.caches, ...r.pages, r.lookout]) if (regionOfCell(c.x, c.z)?.id === r.id) expect(beside(c.x, c.z), `${r.id} ${c.id}`).toBe(true);
     }
+  });
+
+  it('every pile stands on open ground: the cell under it is walkable, off roads, ramps and water, and reached from the Keeper', async () => {
+    // a pile stamps its cell as an obstacle, so the ground beneath it is read from the same world without the
+    // regions' piles (fresh modules: the set-piece index is built from the data the first time it is asked)
+    const want = REGIONS.map((r) => ({ id: r.id, piles: [...r.piles] }));
+    vi.resetModules();
+    const oc = await import('../src/data/oldcity');
+    for (const r of oc.REGIONS) r.piles = [];
+    const { createInitialState: fresh, GROUND: G0 } = await import('../src/core/GameState');
+    const { Sim: BareSim } = await import('../src/gameplay/Sim');
+    const { Walker: BareWalker } = await import('../src/gameplay/Walker');
+    const sim = new BareSim(fresh(7));
+    sim.state.salvage!.abilities = ['pry', 'hover', 'climb', 'glide'];
+    for (const r of oc.REGIONS) sim.state.areas[r.id] = { fog: 'thinning', revealedAt: 0 };
+    for (const r of oc.REGIONS)
+      for (const [x, z] of r.gate.cells) {
+        const t = sim.grid.get(G0, x, z)!;
+        t.blocked = false;
+        t.unblocked = true;
+      }
+    const w = new BareWalker(sim);
+    const bad: string[] = [];
+    for (const { id, piles } of want) {
+      if (!piles.length) continue;
+      const k = oc.KEEPERS.find((q) => q.region === id)!;
+      const seen = new Set<string>([`${k.x},${k.z}`]);
+      const queue: [number, number][] = [[k.x, k.z]];
+      while (queue.length) {
+        const [x, z] = queue.shift()!;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx;
+          const nz = z + dz;
+          const key = `${nx},${nz}`;
+          if (seen.has(key) || Math.max(Math.abs(nx - k.x), Math.abs(nz - k.z)) > 96 || !w.walkable(G0, nx, nz) || !w.stepOk(G0, x, z, nx, nz)) continue;
+          seen.add(key);
+          queue.push([nx, nz]);
+        }
+      }
+      for (const p of piles) {
+        const t = sim.grid.get(G0, p.x, p.z)!;
+        if (!w.walkable(G0, p.x, p.z)) bad.push(`${p.id}: its cell is not walkable ground (${t.feature ?? 'blocked'})`);
+        else if (t.feature === 'road' || t.feature === 'water' || t.ramp) bad.push(`${p.id}: on a ${t.ramp ? 'ramp' : t.feature}`);
+        else if (!seen.has(`${p.x},${p.z}`)) bad.push(`${p.id}: its cell is not reached on foot from ${k.name}`);
+      }
+    }
+    vi.resetModules();
+    expect(bad).toEqual([]);
   });
 });
 
