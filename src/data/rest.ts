@@ -12,12 +12,16 @@ export const REST = {
   /** the calm view turns this many degrees a second round bloombot */
   orbitDegPerSecond: 2.5,
   /**
-   * Where bloombot and a friend sit on a bench (world units from its middle): `out` forward of the seat's middle,
-   * bloombot `along` to one end when a friend joins, the friend `friend` to the other end.
+   * Where bloombot and a friend sit on a bench (world units from its middle): bloombot `out` forward of the seat's
+   * middle (back, toward the backrest: its round body rests over the slats, feet at the front edge) and `raise`
+   * above the plain seated height (the body's underside sits below its hips), the friend `friendOut`; bloombot
+   * `along` to one end when a friend joins, the friend `friend` to the other end.
    */
-  seat: { out: 0.04, along: 0.2, friend: 0.24 },
+  seat: { out: -0.1, raise: 0.04, friendOut: 0.04, along: 0.2, friend: 0.24 },
   /** meditating: bloombot sits this far out from the charger pad's edge (inside the pad's reach, POWER.charger) */
   padGap: 0.35,
+  /** meditating: bloombot sits this high on the charger pad (its glowing top, MachineVisuals.charger, plus a hair) */
+  padTop: 0.11,
   /** the music swells to this share above its level while sitting */
   musicSwell: 0.6,
   /**
