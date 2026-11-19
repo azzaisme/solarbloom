@@ -224,6 +224,47 @@ describe('E23.4.2.2: pumps and pipe placement', () => {
     expect(sim.water.pipes.carries(9, 11)).toBe(false);
   });
 
+  it("a sea pump (E23.8.3, PumpSpec.sea) may stand on the shore and draws from the sea, which never runs dry", () => {
+    const { sim } = park();
+    sim.water.registerPump('seaPump', { reach: Infinity, flow: 2 * WATER_NET.pump.perDay, power: 6, sea: true });
+    const open = (t: ReturnType<typeof tile> | undefined) =>
+      !!t && t.feature !== 'water' && !t.blocked && !t.occupantId && t.feature !== 'building' && sim.areas.fog(sim.areas.map.areaOfCell(t.x, t.z)) !== 'hidden';
+    // a shore tile by the Landing with no fresh water near, three tiles of land inland of it and two beside them
+    let spot: { x: number; z: number } | undefined;
+    for (let z = 47; z >= 30 && !spot; z--)
+      for (let x = 2; x <= 26 && !spot; x++) {
+        const t = sim.grid.get(GROUND, x, z);
+        if (!open(t) || !sim.water.onShore(t!) || sim.water.bodyNear(t!, 1)) continue;
+        if ([1, 2, 3].every((k) => open(sim.grid.get(GROUND, x, z - k)) && !sim.water.onShore(sim.grid.get(GROUND, x, z - k)!)) && open(sim.grid.get(GROUND, x + 1, z - 1)) && open(sim.grid.get(GROUND, x + 1, z - 2)))
+          spot = { x, z };
+      }
+    expect(spot).toBeDefined();
+    const { x, z } = spot!;
+    for (const k of [0, 1, 2, 3]) Object.assign(tile(sim, x, z - k), { ground: 'restored', pollution: 0 });
+    for (const k of [1, 2]) Object.assign(tile(sim, x + 1, z - k), { ground: 'restored', pollution: 0 });
+    // the shore is no bank for an ordinary pump; a sea pump stands there
+    expect(sim.water.placeProblem('pump', GROUND, x, z)).toMatch(/bank/);
+    expect(sim.water.placeProblem('seaPump' as BuildableType, GROUND, x, z)).toBeUndefined();
+    expect(sim.water.placeProblem('seaPump' as BuildableType, GROUND, x, z - 3)).toMatch(/shore/);
+    const sp = put(sim, 'seaPump' as MachineType, x, z, 1);
+    put(sim, 'solar', x + 1, z - 1);
+    put(sim, 'solar', x + 1, z - 2); // two panels carry its 6
+    lay(sim, [[x, z - 1], [x, z - 2], [x, z - 3]]);
+    sim.power.tick(1);
+    days(sim, 0.02);
+    sim.power.tick(1);
+    days(sim, 0.02);
+    expect(sim.water.pipes.pumpSource(sp)?.id).toBe('sea');
+    expect(powered(sim, sp)).toBe(true);
+    expect(sim.power.draw(sp)).toBe(6);
+    expect(sim.water.pipes.carries(x, z - 3)).toBe(true);
+    // a planter's worth of water a day for a long while: the sea never runs dry, and nothing about it is saved
+    const end = tile(sim, x + 1, z - 3);
+    for (let i = 0; i < 200; i++) expect(sim.water.pipes.drawAt(end, 50)).toBe(50);
+    expect(sim.water.levelOf('sea')).toBe(1);
+    expect(sim.state.water?.levels.sea).toBeUndefined();
+  });
+
   it('a pump pushes water uphill into a higher reservoir, and stops without power', () => {
     const { sim, pond } = park();
     const pump = put(sim, 'pump', 4, 11);

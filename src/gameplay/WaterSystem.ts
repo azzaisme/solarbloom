@@ -6,7 +6,7 @@ import type { WeatherKind } from '../data/weather';
 import { KEEPERS, REGIONS, type RegionId } from '../data/oldcity';
 import { WATER_NET } from '../data/water';
 import type { Sim } from './Sim';
-import { tankId, WaterPipes, type PumpSpec } from './WaterPipes';
+import { SEA_ID, tankId, WaterPipes, type PumpSpec } from './WaterPipes';
 
 /**
  * A body of fresh water: one connected stretch of water tiles (a pond, a canal, a basin). Its id is its anchor
@@ -31,6 +31,9 @@ export type WaterUnlock = 'reservoir' | 'pump' | 'pipe' | 'gravityFeed' | 'desal
 export interface WaterSave {
   levels: Record<string, number>;
 }
+
+/** The sea as a body (E23.8.3's sea pumps draw from it): no tiles of its own, bottomless. */
+const SEA: WaterBody = { id: SEA_ID, tiles: new Set(), capacity: Infinity };
 
 /** Each region's water rectangles (its canals and ponds), by region. */
 const REGION_WATER = new Map(REGIONS.filter((r) => r.water?.length).map((r) => [r.id, r.water!]));
@@ -108,6 +111,7 @@ export class WaterSystem {
 
   /** The body with this id (its anchor `x,z`, or a reservoir's `r:<machine id>`). */
   body(id: string): WaterBody | undefined {
+    if (id === SEA_ID) return SEA;
     if (id.startsWith('r:')) return this.tank(id.slice(2));
     const hit = this.bodies.get(id);
     if (hit) return hit;
@@ -178,7 +182,19 @@ export class WaterSystem {
     if (type === 'reservoir') return undefined;
     if (roofId !== GROUND) return 'A pump stands on the ground, on the bank of a pond or canal';
     for (const t of foot) if (t && this.bodyNear(t, 1)) return undefined;
+    if (pump?.sea) return foot.some((t) => t && this.onShore(t)) ? undefined : 'It stands on the shore, or on the bank of a pond or canal';
     return 'A pump stands on the bank of a pond or canal';
+  }
+
+  /** E23.4.3: does this land tile touch the sea (the open sea, the bay or the surf; 8 neighbours)? */
+  onShore(t: TileData): boolean {
+    if (t.roofId !== GROUND || !this.sim.oldCity) return false;
+    for (let dz = -1; dz <= 1; dz++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const n = this.sim.grid.get(GROUND, t.x + dx, t.z + dz);
+        if (n?.feature === 'water' && (seaCell(n.x, n.z) || surfCell(n.x, n.z))) return true;
+      }
+    return false;
   }
 
   /** The nearest body (by square distance, then fullest) within `reach` tiles of a tile. */
@@ -267,6 +283,7 @@ export class WaterSystem {
 
   /** 0…1: how full a body is. */
   levelOf(id: string): number {
+    if (id === SEA_ID) return 1;
     const saved = this.save.levels[id];
     if (saved !== undefined) return saved;
     if (id.startsWith('r:')) return WATER_NET.reservoir.startLevel;
@@ -276,6 +293,7 @@ export class WaterSystem {
 
   /** Units a body holds. */
   amountOf(id: string): number {
+    if (id === SEA_ID) return Infinity;
     const b = this.body(id);
     return b ? this.levelOf(id) * b.capacity : 0;
   }
@@ -289,6 +307,7 @@ export class WaterSystem {
 
   /** Takes up to `units` from a body; returns what it got. */
   draw(id: string, units: number): number {
+    if (id === SEA_ID) return Math.max(0, units); // the sea never runs dry
     const b = this.body(id);
     if (!b || units <= 0) return 0;
     const have = this.levelOf(id) * b.capacity;
@@ -309,6 +328,7 @@ export class WaterSystem {
 
   /** Adds up to `units` to a body; returns what fitted. */
   fill(id: string, units: number): number {
+    if (id === SEA_ID) return 0;
     const b = this.body(id);
     if (!b || units <= 0) return 0;
     const have = this.levelOf(id) * b.capacity;

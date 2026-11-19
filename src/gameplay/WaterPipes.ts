@@ -32,6 +32,11 @@ export interface PumpSpec {
   flow: number;
   power?: number;
   size?: number;
+  /**
+   * E23.8.3: it has its own filter, so it may also stand on the sea's shore and draw from the sea (which never runs
+   * dry). Beside a pond or canal it still draws from that.
+   */
+  sea?: boolean;
 }
 
 /** One connected run of pipe and the pumps and reservoirs it touches. */
@@ -224,10 +229,12 @@ export class WaterPipes {
 
   /** The pond or canal a pump stands on the bank of. */
   pumpSource(m: MachineData): WaterBody | undefined {
-    for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size)) {
+    const foot = this.sim.grid.footprint(m.roofId, m.x, m.z, m.size);
+    for (const t of foot) {
       const b = t && this.water.bodyNear(t, 1);
       if (b) return b;
     }
+    if (this.pumpTypes.get(m.type)?.sea && foot.some((t) => t && this.water.onShore(t))) return this.water.body(SEA_ID);
     return undefined;
   }
 
@@ -448,3 +455,5 @@ export class WaterPipes {
 
 /** A reservoir's water body id. */
 export const tankId = (m: MachineData) => `r:${m.id}`;
+/** The sea, as a body a sea pump (PumpSpec.sea) draws from: never runs dry, never saved. */
+export const SEA_ID = 'sea';
