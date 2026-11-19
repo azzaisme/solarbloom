@@ -67,7 +67,8 @@ async function place(page, dev, x, z) {
   const aimed = await page.evaluate(async ({ x, z }) => {
     const g = window.solarbloom;
     const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
-    const size = { crate: 1, assembler: 2 }[g.hud.currentTool] ?? 1;
+    if (!['crate', 'assembler'].includes(g.hud.currentTool)) return { ok: false, why: `${g.hud.currentTool} in hand` };
+    const size = { crate: 1, assembler: 2 }[g.hud.currentTool];
     const cx = x + size / 2, cz = z + size / 2;
     const on = () => {
       const p = g.crosshairPick();
@@ -221,6 +222,8 @@ try {
     check(hubTarget === `m:${hubId}`, T(`facing the hub, Interact offers to look at it (${hubTarget})`));
     await interact(page, dev);
     await page.waitForSelector('#inspect.open', { timeout: 10000 }).catch(() => {});
+    // the panel takes the focus as it opens (the keyboard's arrows then move in it, as the d-pad does)
+    if (dev === 'keys') await page.waitForFunction(() => document.querySelector('#inspect.open')?.contains(document.activeElement), null, { timeout: 15000 }).catch(() => {});
     check(await moveTo(page, `[data-role="${hubId}|courier|1"]`, dev), T('Interact on the hub opens its panel; reach the Courier role there'));
     await page.screenshot({ path: `${dir}/ui-hub-courier-${dev}.png` });
     await go(page, dev);

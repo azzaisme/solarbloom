@@ -745,6 +745,9 @@ body.oldcity #obj .ohead { display: block; }
 #buildbar .bslot.power .key svg { height: 22px; width: auto; }
 /* Old-city rules: no hotbar on the walking view, so the prompt, the toasts and the build hotbar sit lower. */
 body.oldcity #hotbar { display: none !important; }
+/* E23.6.4: the build menu (Q, or Y on the pad) still opens over the walking view: the hotbar shows only its tray */
+body.oldcity #hotbar:has(#buildTray.open) { display: flex !important; background: none; border-color: transparent; box-shadow: none; padding: 0; min-height: 0; }
+body.oldcity #hotbar:has(#buildTray.open) > :not(#buildTray) { display: none; }
 body.oldcity #prompt { bottom: calc(16px + var(--safe-b)); }
 body.oldcity #toasts { bottom: calc(14px + var(--safe-b)); }
 body.oldcity #buildbar { bottom: calc(74px + var(--safe-b)); }

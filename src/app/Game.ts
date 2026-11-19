@@ -1817,7 +1817,16 @@ export class Game {
    * hub's roles, an Assembler's recipe) as the d-pad and A do; Esc closes it and the arrows walk again.
    */
   private focusPanelForKeys() {
-    if (this.bot?.lastInput !== 'pad') requestAnimationFrame(() => this.padFocus?.button(13));
+    if (this.bot?.lastInput === 'pad') return;
+    // the panel draws with the HUD's next update: try for a few frames until its first control takes the focus
+    let tries = 10;
+    const go = () => {
+      const el = document.querySelector('#inspect.open');
+      if (el?.contains(document.activeElement)) return;
+      if (el?.querySelector('button:not([disabled])')) this.padFocus?.button(13);
+      else if (--tries > 0) requestAnimationFrame(go);
+    };
+    requestAnimationFrame(go);
   }
 
   /** Bloombot (G.4): E / A: the current tool on the tile in front (Inspect pulses; build tools build). */
