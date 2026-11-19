@@ -372,6 +372,71 @@ describe('E23.4.2.2: pumps and pipe placement', () => {
   });
 });
 
+describe('E23.4.2.2: a pump draws power only while its water has somewhere to go', () => {
+  it('full tanks that feed its whole line: the pump idles and draws nothing; it starts again once they are drawn from', () => {
+    const { sim, pond } = park();
+    const pump = put(sim, 'pump', 4, 11);
+    powerUp(sim);
+    const r = put(sim, 'reservoir', 9, 12);
+    lay(sim, run(5, 9, 11)); // level lawn: the tank, once full, feeds all of it by gravity
+    sim.power.tick(1);
+    days(sim, 0.02);
+    expect(sim.water.pipes.pumping.has(pump.id)).toBe(true); // room in the tank: it asks for power
+    sim.power.tick(1);
+    expect(sim.power.draw(pump)).toBeGreaterThan(0);
+    // the tank fills up
+    for (let i = 0; i < 40 && sim.water.levelOf(tankId(r)) < 1; i++) {
+      sim.water.fill(pond.id, pond.capacity);
+      days(sim, 0.05);
+    }
+    expect(sim.water.levelOf(tankId(r))).toBe(1);
+    days(sim, 0.02);
+    sim.power.tick(1);
+    expect(sim.water.pipes.pumping.has(pump.id)).toBe(false); // nowhere for water to go
+    expect(sim.power.draw(pump)).toBe(0); // asks the grid for nothing
+    expect(sim.water.pipes.pumpLive(pump)).toBe(false);
+    // the line is still wet: the full tank feeds it, so the planters along it lose nothing
+    expect(sim.water.pipes.carries(5, 11)).toBe(true);
+    const pondNow = sim.water.levelOf(pond.id);
+    days(sim, 0.1);
+    expect(sim.water.levelOf(pond.id)).toBe(pondNow); // nothing pumped
+    // water is drawn from the line: the tank has room again, so the pump starts again and draws power
+    expect(sim.water.drawNear(tile(sim, 8, 10), 40)).toBe(40);
+    expect(sim.water.levelOf(tankId(r))).toBeLessThan(1);
+    days(sim, 0.02);
+    sim.power.tick(1);
+    expect(sim.water.pipes.pumping.has(pump.id)).toBe(true);
+    expect(sim.power.draw(pump)).toBeGreaterThan(0);
+  });
+
+  it('a full tank below a stretch of line it cannot feed by gravity: the pump keeps running for that stretch', () => {
+    const { sim, pond } = park();
+    const pump = put(sim, 'pump', 4, 11);
+    powerUp(sim);
+    const r = put(sim, 'reservoir', 9, 12);
+    lay(sim, run(5, 9, 11));
+    tile(sim, 6, 11).level = 2; // a step up between the pump and the tank: the tank's water can't climb it
+    sim.water.fill(tankId(r), WATER_NET.reservoir.capacity);
+    sim.water.fill(pond.id, pond.capacity);
+    days(sim, 0.02);
+    sim.power.tick(1);
+    expect(sim.water.levelOf(tankId(r))).toBe(1);
+    expect(sim.water.pipes.pumping.has(pump.id)).toBe(true);
+    expect(sim.power.draw(pump)).toBeGreaterThan(0);
+  });
+
+  it('a line with no reservoir is a direct feed: the pump runs while it has water', () => {
+    const { sim } = park();
+    const pump = put(sim, 'pump', 4, 11);
+    powerUp(sim);
+    lay(sim, run(5, 9, 11));
+    sim.power.tick(1);
+    days(sim, 0.02);
+    expect(sim.water.pipes.pumping.has(pump.id)).toBe(true);
+    expect(sim.water.pipes.carries(9, 11)).toBe(true);
+  });
+});
+
 describe('E23.4.2.3: gravity feeds', () => {
   it('gravity feeds come with the reservoirs in Cistern Basin: before Sluice wakes, nothing is handed over', () => {
     const { sim } = park();
