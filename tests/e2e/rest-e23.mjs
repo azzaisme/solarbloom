@@ -106,6 +106,12 @@ try {
   await shot(page, '11-bench-sitting', 'sitting on the bench: the calm, wider view turning slowly, the HUD gone, only the prompt; legs bent along the seat, hips on it');
   await close(page, 30, 5);
   await shot(page, '11b-bench-sitting-close', 'close up: bloombot seated on the bench, thighs along the seat and shins hanging');
+  // from behind and from the side (a camera yaw of 0 looks at a bench facing 0 from the front)
+  const benchYaw = await page.evaluate(() => (window.solarbloom.sim.rest.sitting.bench.facing * 180) / Math.PI);
+  await close(page, benchYaw + 180, 7);
+  await shot(page, '11d-bench-sitting-behind', 'from behind: the backrest in front of bloombot\'s backpack (it sits in front of the backrest, not through it)');
+  await close(page, benchYaw + 270, 7);
+  await shot(page, '11e-bench-sitting-side', 'from the side: the body on the seat\'s front slats, its backpack against the backrest, the legs forward');
   // the cheer guard: a standing gesture while seated is refused, and bloombot stays down on the seat
   const guard = await page.evaluate(async () => {
     const g = window.solarbloom;

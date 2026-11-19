@@ -795,6 +795,9 @@ export class ChunkRenderer {
     stump: ['stump', 0.85, true],
   };
 
+  /** how far right of a bench model's centre its planter tree stands: past the seat's end (the model is ~0.9 wide) */
+  static readonly PLANTER_BESIDE = 0.64;
+
   private propModel(prop: string, x: number, y: number, z: number): boolean {
     if (!this.batch) return false;
     if (prop === 'bandstand') {
@@ -2608,7 +2611,8 @@ export class ChunkRenderer {
   private prop(b: Sink, prop: string, x: number, y: number, z: number, r: VRng) {
     if (this.propModel(prop, x, y, z)) {
       // the park bench keeps its little planter tree beside it
-      if (prop === 'bench' && this.inPark) this.planterTree(b, x + 0.38, y, z + 0.32, this.level >= 3);
+      // (beside the bench's right end, clear of the seat: it used to stand in the seat's front corner)
+      if (prop === 'bench' && this.inPark) this.planterTree(b, x + ChunkRenderer.PLANTER_BESIDE, y, z - 0.04, this.level >= 3);
       if (prop === 'bench' && this.brokenBench(x, z)) this.benchDamage(b, x, y, z);
       return;
     }

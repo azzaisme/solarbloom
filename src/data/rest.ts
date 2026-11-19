@@ -9,15 +9,23 @@ export const REST = {
   fastTime: 4,
   /** the calm view: the camera eases out to this zoom (1 = the usual follow) */
   calmZoom: 0.55,
+  /**
+   * E23.2.4: while sitting the player may zoom in this close (beyond the usual close step, 4.3), to look at the
+   * animals that come to visit; standing puts the usual limit back
+   */
+  visitZoom: 7,
   /** the calm view turns this many degrees a second round bloombot */
   orbitDegPerSecond: 2.5,
   /**
-   * Where bloombot and a friend sit on a bench (world units from its middle): bloombot `out` forward of the seat's
-   * middle (back, toward the backrest: its round body rests over the slats, feet at the front edge) and `raise`
-   * above the plain seated height (the body's underside sits below its hips), the friend `friendOut`; bloombot
-   * `along` to one end when a friend joins, the friend `friend` to the other end.
+   * Where bloombot and a friend sit on a bench (world units from its middle): bloombot `out` forward of the bench's
+   * middle and `raise` above the plain seated height, the friend `friendOut`; bloombot `along` to one end when a
+   * friend joins, the friend `friend` to the other end. Bloombot's round body (about 0.48 across, its backpack
+   * behind) is deeper than the seat (0.29: from the backrest's face, 0.13 behind the middle, to the front edge,
+   * 0.16 ahead of it), so it sits forward with its backpack against the backrest and its underside on the front
+   * slats; any further back and it sits through the backrest, any lower and through the seat (checked from all
+   * four sides: tests/e2e/rest-e23.mjs shots 11, 11d, 11e).
    */
-  seat: { out: -0.1, raise: 0.04, friendOut: 0.04, along: 0.2, friend: 0.24 },
+  seat: { out: 0.16, raise: 0.1, friendOut: 0.04, along: 0.2, friend: 0.24 },
   /** meditating: bloombot sits this far out from the charger pad's edge (inside the pad's reach, POWER.charger) */
   padGap: 0.35,
   /** meditating: bloombot sits this high on the charger pad (its glowing top, MachineVisuals.charger, plus a hair) */
