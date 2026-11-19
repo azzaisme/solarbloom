@@ -4258,6 +4258,8 @@ export class Game {
     const dimTo = powerOn ? POWER.view.darken : 0;
     const k = Math.min(1, wdt / POWER.view.fade);
     this.dayNight.dim = Math.abs(dimTo - this.dayNight.dim) < 1e-3 ? dimTo : this.dayNight.dim + (dimTo - this.dayNight.dim) * k;
+    this.powerOverlay.setBoost(this.dayNight.boost);
+    this.machines.setGlowBoost(this.dayNight.boost);
     this.tillers.update(paused || this.photo.frozen ? 0 : dt);
     this.rings.update(this.camera.zoom, this.camera.target);
     // Look 6.10: a working tiller near the view hums.

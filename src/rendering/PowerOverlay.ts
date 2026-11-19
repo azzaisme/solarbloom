@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 import type { MachineData } from '../core/types';
 import type { PowerNetwork } from '../gameplay/PowerGrid';
 import type { Sim } from '../gameplay/Sim';
-import { mat, PALETTE } from './Materials';
+import { PALETTE, uniqueMat } from './Materials';
 import { bezier, part, ring, tube } from './MachineParts';
 import { cableY } from './PowerLines';
 import { group, shape } from './Shapes';
@@ -41,6 +41,13 @@ export class PowerOverlay {
    * change), so a big grid costs a few draw calls, not one per frame and line. Battery bars move and stay
    * unbatched. */
   private group = -1;
+  /** every material the overlay draws with and its own emissive, so `setBoost` can keep them bright */
+  private glowMats: { m: pc.StandardMaterial; base: number }[] = [];
+  private lineMats: pc.StandardMaterial[];
+  private redMat: pc.StandardMaterial;
+  private cellMat: pc.StandardMaterial;
+  private cellBackMat: pc.StandardMaterial;
+  private boost = 1;
 
   constructor(
     private sim: Sim,
@@ -53,7 +60,22 @@ export class PowerOverlay {
     this.device = pc.AppBase.getApplication()!.graphicsDevice;
     this.netMats = P.nets.map((c) => glowMaterial(c));
     this.darkMat = glowMaterial(P.dark);
+    this.lineMats = P.nets.map((c) => uniqueMat(c, { unlit: true }));
+    this.redMat = uniqueMat(P.tripped, { unlit: true });
+    this.cellMat = uniqueMat(P.cell, { unlit: true });
+    this.cellBackMat = uniqueMat(P.cellBack, { unlit: true });
+    for (const m of [...this.netMats, this.darkMat, ...this.lineMats, this.redMat, this.cellMat, this.cellBackMat]) this.glowMats.push({ m, base: m.emissiveIntensity });
     if (batcher) this.group = batcher.addGroup('powerOverlay', false, 10000).id;
+  }
+
+  /** Keeps the overlay as bright while the Power view's dim lowers the exposure (DayNight.boost). */
+  setBoost(b: number): void {
+    if (Math.abs(b - this.boost) < 0.01) return;
+    this.boost = b;
+    for (const g of this.glowMats) {
+      g.m.emissiveIntensity = g.base * b;
+      g.m.update();
+    }
   }
 
   get visible(): boolean {
@@ -118,8 +140,7 @@ export class PowerOverlay {
     this.members = [];
     this.bars = [];
     nets.forEach((n, i) => {
-      const glow = P.nets[i % P.nets.length];
-      const line = mat(glow, { unlit: true });
+      const line = this.lineMats[i % this.lineMats.length];
       for (const m of n.members) {
         const [x, y, z] = this.worldOf(m);
         const e = group(this.root, 'pframe', [x, y + 0.04, z]);
@@ -132,7 +153,7 @@ export class PowerOverlay {
       for (const [p, m] of n.feeds) this.glowCable(p, m, line, 0.022);
     });
     // Poles lightning tripped: a red ring at the foot (they are on no network until reset).
-    const red = mat(P.tripped, { unlit: true });
+    const red = this.redMat;
     for (const m of this.sim.state.machines) {
       if (!this.sim.power.isTripped(m)) continue;
       const [x, y, z] = this.worldOf(m);
@@ -156,8 +177,8 @@ export class PowerOverlay {
   private bar(m: MachineData, x: number, y: number, z: number) {
     const g = group(this.root, 'pbar', [x, y + 1.45, z]);
     g.setLocalEulerAngles(0, 45, 0);
-    shape(g, 'box', mat(P.cellBack, { unlit: true }), { pos: [0, 0, -0.01], scale: [0.24, 0.8, 0.02] });
-    const fill = shape(g, 'box', mat(P.cell, { unlit: true }), { pos: [0, 0, 0.001], scale: [0.16, 0.7, 0.16] });
+    shape(g, 'box', this.cellBackMat, { pos: [0, 0, -0.01], scale: [0.24, 0.8, 0.02] });
+    const fill = shape(g, 'box', this.cellMat, { pos: [0, 0, 0.001], scale: [0.16, 0.7, 0.16] });
     this.bars.push({ m, fill });
   }
 
