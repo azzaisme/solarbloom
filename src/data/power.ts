@@ -40,9 +40,10 @@ export const POWER = {
   /** Helpers on the grid (E23.3.3, old-city rules): their draw while they stand. */
   helper: { droneHub: 4, cultivator: 4 },
   /** E23.3.4 the Power view: powered electrical machines glow soft yellow (`glow`, emissive intensity) while the
-   * rest of the world darkens (`darken`: the share of the exposure taken away; the glows make up for it), easing
-   * over `fade` s */
-  view: { glow: 0.22, darken: 0.6, fade: 0.3 },
+   * rest of the world darkens (`darken`: the share of the exposure taken away, by day and by night; the glows make up
+   * for it), easing over `fade` s. Day needs the deeper cut: the Neutral tone map squeezes bright sunlit ground into
+   * its shoulder, where halving the exposure barely shows. */
+  view: { glow: 0.22, darken: { day: 0.85, night: 0.5 }, fade: 0.3 },
   /** Starting draws per shed class (consumers may override with their own draw). */
   draw: { lamp: 0.5, pump: 3, helper: 4, charger: 6 } satisfies Record<ShedClass, number>,
 };
