@@ -184,6 +184,11 @@ export class BloomChainSystem {
     return this.queue.length;
   }
 
+  /** Is this chain still running? (A chain that never grew anything ends quietly, with no `chain.ended`.) */
+  running(chainId: number): boolean {
+    return this.runs.has(chainId);
+  }
+
   private newRun(origin: TileData, mode: ChainRun['mode'] = 'normal', budget = Infinity, starter: ChainStarter = 'auto'): ChainRun {
     const run: ChainRun = {
       starter,

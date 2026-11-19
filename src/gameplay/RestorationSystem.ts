@@ -100,13 +100,25 @@ export class RestorationSystem {
     const ripple = this.sim.pulseLoad.ripple(t);
     this.sim.buried.reveal(ripple.filter((g) => g.kind === 'buried')); // found: a mound marks each until it is dug up
     this.sim.bus.emit('pulse.ripple', { tileId, targets: ripple });
-    if (this.megaReady()) return this.releaseMega(t);
+    if (this.megaReady()) return this.releaseMega(t, load);
     this.chargeMega();
     if (t.ground === 'restored') {
+      // a loaded pulse on living ground: it grows the load there, the chain it sets off carries the load, and a
+      // load with extra reach (fertiliser) restores the dead ground round it too
       if (load.plant) this.plant(t, load.plant);
+      this.carrying = load.plant;
       this.grow(t, undefined, 'player');
+      this.carrying = undefined;
       this.boostNeighbours(t);
-      this.sim.bus.emit('pulse.fired', { tileId, extra: [], overcharged: false });
+      const extra: string[] = [];
+      if (load.plant && load.extraReach > 0) {
+        for (const { tile: nb, d } of this.footprint(t, false, load)) {
+          this.plant(nb, load.plant);
+          this.beginGrowth(nb, 'broad', TUNING.pulse.growSeconds + Math.min(1.2, 0.12 * d + 0.01 * extra.length));
+          extra.push(nb.id);
+        }
+      }
+      this.sim.bus.emit('pulse.fired', { tileId, extra, overcharged: false });
       return true;
     }
     if (load.plant) this.plant(t, load.plant);
@@ -199,10 +211,16 @@ export class RestorationSystem {
     if (p.megaCharge >= TUNING.mega.charge && was < TUNING.mega.charge) this.sim.bus.emit('mega.ready', {});
   }
 
-  private releaseMega(t: TileData): boolean {
+  /** E23.2.2: a loaded Mega Pulse grows its load where it lands, and everything its wave restores grows it too. */
+  private releaseMega(t: TileData, load: PulseLoadDef = PULSE_LOAD.none): boolean {
     this.sim.state.progression.megaCharge = 0;
     this.boostNeighbours(t);
-    this.sim.chains.startMegaPulse(t, this.megaBudget());
+    if (load.plant && t.ground === 'restored') {
+      this.plant(t, load.plant);
+      this.raiseBloom(t, load.bloom);
+    }
+    const id = this.sim.chains.startMegaPulse(t, this.megaBudget());
+    if (load.plant && id >= 0) this.rememberChainPlant(id, load.plant);
     this.sim.bus.emit('pulse.fired', { tileId: t.id, extra: [], overcharged: true });
     return true;
   }
@@ -211,7 +229,8 @@ export class RestorationSystem {
   grow(t: TileData, chainId?: number, starter: 'player' | 'auto' = 'auto', quiet = false) {
     if (t.ground !== 'restored' || t.bloom >= TUNING.restore.maxBloom) return;
     this.chainPlantOn(t, chainId);
-    t.bloom = Math.min(TUNING.restore.maxBloom, t.bloom + 1);
+    // one bloom level, or straight to what its plant grows at (a grove: full bloom)
+    t.bloom = Math.min(TUNING.restore.maxBloom, Math.max(t.bloom + 1, this.plantDef(t).bloom));
     this.sim.transitions.bloom(t, t.bloom, starter === 'auto' || quiet);
     this.sim.grid.touch(t);
     const b = this.sim.econ.add('biomass', TUNING.restore.nurtureBiomass * this.sim.upgrades.soilMult);
@@ -219,7 +238,20 @@ export class RestorationSystem {
     this.sim.bus.emit('tile.nurtured', { tile: t, level: t.bloom, auto: starter === 'auto' });
     if (quiet) return;
     const id = this.sim.chains.onGrown(t, chainId, starter);
+    if (this.carrying && id >= 0) this.rememberChainPlant(id, this.carrying); // the chain carries the pulse's load
     this.sim.chains.addReward(id, b);
+  }
+
+  /** the plant of the loaded pulse being fired right now (its chain is told to carry it) */
+  private carrying?: PlantKind;
+
+  /** Lifts a living tile's bloom to at least `to` (what a plant grows at), with its bloom transition. */
+  private raiseBloom(t: TileData, to: number) {
+    const b = Math.min(TUNING.restore.maxBloom, to);
+    if (t.ground !== 'restored' || t.bloom >= b) return;
+    t.bloom = b;
+    this.sim.transitions.bloom(t, t.bloom, false);
+    this.sim.grid.touch(t);
   }
 
   // ───────────── E23.2.2: what grows ─────────────
@@ -237,21 +269,22 @@ export class RestorationSystem {
   }
 
   /**
-   * Chains a loaded pulse set off grow what it carried, for as long as each chain runs: every chain is remembered
-   * until it ends (no cap), then let go. Chains themselves are never saved (a reload ends them), and what they
-   * grew is saved on each tile (`TileData.plant`), so a reload keeps every plant that grew and loses nothing.
+   * Chains a loaded pulse set off grow what it carried, for as long as each chain runs: every running chain is
+   * remembered (no cap), and let go once it has ended. (A chain that grew nothing ends without a `chain.ended`
+   * event, so the list is checked against the chains still running.) Chains themselves are never saved (a reload
+   * ends them); what they grew is saved on each tile (`TileData.plant`), so a reload loses no plant.
    */
   private chainPlants = new Map<number, PlantKind>();
-  private chainWatch = false;
   private rememberChainPlant(id: number, kind: PlantKind) {
-    if (!this.chainWatch) {
-      this.chainWatch = true;
-      this.sim.bus.on('chain.ended', ({ chainId }) => this.chainPlants.delete(chainId));
-    }
-    this.chainPlants.set(id, kind);
+    this.forgetEndedChains();
+    if (this.sim.chains.running(id)) this.chainPlants.set(id, kind);
+  }
+  private forgetEndedChains() {
+    for (const id of this.chainPlants.keys()) if (!this.sim.chains.running(id)) this.chainPlants.delete(id);
   }
   /** Chains still running with a load's plant (tests). */
   get plantedChains(): number {
+    this.forgetEndedChains();
     return this.chainPlants.size;
   }
   private chainPlantOn(t: TileData, chainId?: number) {
