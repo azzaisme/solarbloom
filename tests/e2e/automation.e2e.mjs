@@ -24,6 +24,7 @@ const server = process.env.BASE_URL ? undefined : await preview({ preview: { por
 const base = process.env.BASE_URL ?? `http://localhost:${port}`;
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
+const innerHeightThird = (size) => Math.round(size.frame[1] / 4); // "about a third": at least a quarter of the height
 const check = (ok, what) => {
   console.log(`${ok ? '✓' : '✗'} ${what}`);
   if (!ok) failures.push(what);
@@ -315,7 +316,8 @@ try {
       const cAt = spot('crate', [[m.x + 2, m.z + 2], [m.x + 3, m.z], [m.x + 2, m.z - 1], [m.x - 1, m.z + 2]]);
       const C = cAt && s.build.place('crate', 'g', cAt[0], cAt[1]);
       let n = 0;
-      for (const [x, z] of [[m.x + 2, m.z], [m.x + 2, m.z + 1], [m.x, m.z + 2], [m.x + 1, m.z + 2], [m.x + 1, m.z - 1], [m.x, m.z - 1]]) if (n < 2 && free('solar', x, z) && s.build.place('solar', 'g', x, z)) n++;
+      // behind it first (north), so they never stand over its tray at the front
+      for (const [x, z] of [[m.x, m.z - 1], [m.x + 1, m.z - 1], [m.x + 2, m.z], [m.x + 2, m.z + 1], [m.x, m.z + 2], [m.x + 1, m.z + 2]]) if (n < 2 && free('solar', x, z) && s.build.place('solar', 'g', x, z)) n++;
       return { a: a?.id, b: B?.id, c: C?.id, asm: m?.id, panels: n };
     });
     check(ids.b && ids.c && ids.panels === 2, T(`two crates beside the Assembler, and two solar panels (${JSON.stringify(ids)})`));
@@ -396,15 +398,16 @@ try {
       }
     }, ids);
     await page.keyboard.press('KeyC'); // recentre the camera behind bloombot
+    // wait for a courier half way along the route; on a timeout the check says so and the shot is skipped
     const flying = await page
       .waitForFunction(
         () => {
           const g = window.solarbloom;
           const d = g.sim.state.drones.find((x) => x.cargo?.length);
           if (!d) return false;
-          const a = g.sim.machine(g.sim.automation.routes()[0].from);
-          const b = g.sim.machine(g.sim.automation.routes()[0].to);
-          // halfway or so between the two crates
+          const r = g.sim.automation.routes()[0];
+          const a = g.sim.machine(r.from);
+          const b = g.sim.machine(r.to);
           const t = Math.hypot(d.px - (a.x + 0.5), d.pz - (a.z + 0.5)) / Math.hypot(b.x - a.x, b.z - a.z);
           if (!(t > 0.3 && t < 0.75)) return false;
           // caught mid-flight: photo mode (E19.4.1) freezes the game there and frees the camera from bloombot
@@ -418,28 +421,47 @@ try {
         { timeout: 240000, polling: 'raf' },
       )
       .then((h) => h.jsonValue())
-      .catch(() => undefined);
-    check(!!flying, T(`a courier is seen flying a basket from crate A toward crate B (${JSON.stringify(flying)})`));
-    // the camera on the courier, close, bloombot out of the picture; its basket shows what it carries
-    const framed = await page.evaluate((id) => {
-      const g = window.solarbloom, cam = g.camera;
-      const v = g.drones.views.get(id);
-      const p = v.root.getPosition();
-      cam.goal.set(p.x, p.y - 0.3, p.z);
-      cam.zoomGoal = cam.maxZoom;
-      cam.follow = 6;
-      return { basket: !!v.basket?.root.enabled, item: v.basket?.item, bot: g.bot.visible ?? null, frozen: g.photo.frozen ?? g.photo.freeze };
-    }, flying?.id);
-    await page.waitForTimeout(2500);
-    check(framed.basket && framed.item === 'copper', T(`the courier carries a basket heaped with Copper (${JSON.stringify(framed)})`));
-    await page.screenshot({ path: `${dir}/ui-courier-flying-${dev}.png` });
-    await page.evaluate(() => {
-      const g = window.solarbloom;
-      g.photo.freeze = false;
-      g.photo.exit();
-      g.photo.hideBot = false;
-      g.photo.clean = false;
-    });
+      .catch((e) => ({ timeout: String(e.message ?? e).slice(0, 80) }));
+    check(!!flying?.id, T(`a courier is caught half way from crate A to crate B, carrying (${JSON.stringify(flying)})`));
+    try {
+      if (flying?.id) {
+        // close on the courier: a short boom straight at it (no lead, no shoulder), a little above, drone and basket big
+        const framed = await page.evaluate((id) => {
+          const g = window.solarbloom, cam = g.camera;
+          const v = g.drones.views.get(id);
+          const p = v.root.getPosition();
+          cam.maxZoom = 9;
+          cam.zoomGoal = 9;
+          cam.zoom = 9;
+          cam.follow = 8;
+          cam.pitchGoal = 14;
+          cam.shoulderGoal = 0;
+          cam.leadGoal?.set(0, 0, 0);
+          cam.goal.set(p.x, p.y - 1.05 - 0.15, p.z); // the chase camera's pivot sits 1.05 above its goal
+          cam.target.copy(cam.goal);
+          return { basket: !!v.basket?.root.enabled, item: v.basket?.item, frozen: !!g.photo.freeze };
+        }, flying.id);
+        await page.waitForTimeout(2500);
+        // how big it is on screen: the drone's top to its basket's bottom
+        const size = await page.evaluate((id) => {
+          const g = window.solarbloom, v = g.drones.views.get(id), c = g.camera.cam;
+          const p = v.root.getPosition();
+          const top = c.worldToScreen(new p.constructor(p.x, p.y + 0.3, p.z));
+          const bottom = c.worldToScreen(new p.constructor(p.x, p.y - 0.5, p.z));
+          return { px: Math.round(Math.abs(bottom.y - top.y)), x: Math.round(top.x), frame: [innerWidth, innerHeight] };
+        }, flying.id);
+        check(framed.basket && framed.item === 'copper' && size.px >= innerHeightThird(size), T(`close on the courier and its basket heaped with Copper: ${size.px} px tall of ${size.frame[1]} (${JSON.stringify(framed)})`));
+        await page.screenshot({ path: `${dir}/ui-courier-flying-${dev}.png` });
+      }
+    } finally {
+      await page.evaluate(() => {
+        const g = window.solarbloom;
+        g.photo.freeze = false;
+        g.photo.exit();
+        g.photo.hideBot = false;
+        g.photo.clean = false;
+      });
+    }
     await page.waitForFunction((c) => (window.solarbloom.sim.automation.count(c, 'wire') ?? 0) >= 20, ids.c, { timeout: 600000 }).catch(() => {});
     const after = await page.evaluate(({ a, b, c, asm }) => {
       const s = window.solarbloom.sim, au = s.automation;
@@ -453,24 +475,27 @@ try {
       g.photo.clean = true;
       g.photo.enter();
     });
-    await page.waitForTimeout(300);
-    await page.evaluate((id) => {
-      const g = window.solarbloom, m = g.sim.machine(id), cam = g.camera;
-      // the chase camera looks a little past its goal: set the goal a step toward the camera so the line sits mid-frame
-      const yr = (cam.yaw * Math.PI) / 180, back = 2.2;
-      const x = m.x + m.size / 2 + Math.sin(yr) * back, z = m.z + m.size / 2 + Math.cos(yr) * back;
-      cam.goal.set(x, (cam.ground?.(m.x + m.size / 2, m.z + m.size / 2) ?? cam.goal.y) + 0.5, z);
-      cam.zoomGoal = 4.2; // bigger is closer
-      cam.follow = 6;
-    }, ids.asm);
-    await page.waitForTimeout(2500);
-    await page.screenshot({ path: `${dir}/ui-assembler-line-${dev}.png` });
-    await page.evaluate(() => {
-      const g = window.solarbloom;
-      g.photo.exit();
-      g.photo.hideBot = false;
-      g.photo.clean = false;
-    });
+    try {
+      await page.waitForTimeout(300);
+      await page.evaluate((id) => {
+        const g = window.solarbloom, m = g.sim.machine(id), cam = g.camera;
+        // the chase camera looks a little past its goal: set the goal a step toward the camera so the line sits mid-frame
+        const yr = (cam.yaw * Math.PI) / 180, back = 2.2;
+        const x = m.x + m.size / 2 + Math.sin(yr) * back, z = m.z + m.size / 2 + Math.cos(yr) * back;
+        cam.goal.set(x, (cam.ground?.(m.x + m.size / 2, m.z + m.size / 2) ?? cam.goal.y) + 0.5, z);
+        cam.zoomGoal = 4.2; // bigger is closer
+        cam.follow = 6;
+      }, ids.asm);
+      await page.waitForTimeout(2500);
+      await page.screenshot({ path: `${dir}/ui-assembler-line-${dev}.png` });
+    } finally {
+      await page.evaluate(() => {
+        const g = window.solarbloom;
+        g.photo.exit();
+        g.photo.hideBot = false;
+        g.photo.clean = false;
+      });
+    }
     check(errors.length === 0, T(`no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`));
     await page.context().close();
   }
