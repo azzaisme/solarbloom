@@ -150,8 +150,10 @@ try {
     await page.waitForTimeout(300);
     await page.evaluate(({ x, z }) => {
       const cam = window.solarbloom.camera;
-      cam.goal.set(x, (cam.ground?.(x, z) ?? cam.goal.y) + 0.6, z);
-      cam.zoomGoal = 4.2; // bigger is closer
+      // the chase camera looks a little past its goal: set the goal a step toward the camera so the hub sits mid-frame
+      const yr = (cam.yaw * Math.PI) / 180, back = 2.2;
+      cam.goal.set(x + Math.sin(yr) * back, (cam.ground?.(x, z) ?? cam.goal.y) + 0.6, z + Math.cos(yr) * back);
+      cam.zoomGoal = 4.6; // bigger is closer
       cam.follow = 6;
     }, { x, z });
   });

@@ -700,7 +700,7 @@ export class DroneVisuals {
       const dz = tz - v.z;
       v.x += dx * k;
       v.z += dz * k;
-      const baseY = c ? c.y + 1.15 : w[1] + (docked ? 0.42 : d.mode === 'working' ? 0.55 : idle ? 1.05 : 0.9);
+      const baseY = c ? c.y + 1.15 : w[1] + (docked ? 1.05 : d.mode === 'working' ? 0.55 : idle ? 1.05 : 0.9);
       v.y += (baseY - v.y) * (1 - Math.exp(-dt * 5));
       // Hover bob: softer and slower asleep, livelier in a Frenzy; a short hop on a finished restore.
       const bobAmp = BOB.amp * (docked ? 0 : napping ? 0.45 : 1) * motion;
