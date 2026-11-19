@@ -391,16 +391,20 @@ describe('E23.5.2.3: seeds from exploring', () => {
 
   it('emptying a pile (the real salvage) finds the region’s next packet at once', () => {
     const sim = farm();
-    sim.areas.fog = () => 'cleared'; // the way to the Old Market is open
-    const pile = REGIONS.find((r) => r.id === 'oldMarket')!.piles[0];
+    sim.areas.fog = () => 'cleared'; // the way there is open
+    // a region that still has its own piles (E23.7.4 moved most piles out of the region data)
+    const region = REGIONS.find((r) => r.piles.length > 0 && (CROP_HOMES[r.id] ?? []).length > 0)!;
+    expect(region, 'a region with piles').toBeDefined();
+    const pile = region.piles[0];
+    const crop = CROP_HOMES[region.id][0];
     let takes = 0;
     while (sim.salvage.left(pile.id) > 0 && takes++ < 50) {
-      expect(sim.farm.knows('tomato')).toBe(false); // not until it's empty
+      expect(sim.farm.knows(crop)).toBe(false); // not until it's empty
       sim.inventory.depositAll(); // room in the backpack
       expect(sim.salvage.salvage(pile.id)).toBeGreaterThan(0);
     }
     expect(sim.salvage.left(pile.id)).toBe(0);
-    expect(sim.farm.knows('tomato')).toBe(true);
+    expect(sim.farm.knows(crop)).toBe(true);
   });
 
   it('reading a journal page post for the first time is a find like a cache: its region’s packet, then plain Seeds', () => {
