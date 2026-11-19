@@ -86,6 +86,8 @@ export class KeeperVisuals {
     const v: KeeperView = { def, root, body, standIn: true, x: def.x + 0.5, z: def.z + 0.5, wait: 2, facing: Math.PI, waveUntil: 0 };
     const own = KEEPER_URLS[`../../assets/raw/models/final/keeper-${def.id}.glb`];
     v.standIn = !own;
+    // in the map before loading: a model already in the cache calls back at once, before make() returns
+    this.views.set(def.id, v);
     this.app.assets.loadFromUrl(own ?? STAND_IN_URL, 'container', (err, asset) => {
       if (err || !asset || !this.views.has(def.id)) return;
       const res = asset.resource as pc.ContainerResource;
@@ -182,7 +184,7 @@ export class KeeperVisuals {
         if (v) v.root.enabled = false;
         continue;
       }
-      if (!v) this.views.set(def.id, (v = this.make(def)));
+      if (!v) v = this.make(def);
       v.root.enabled = true;
       const step = k.step(def.id);
       const seat = v.root.findByName('seat') as pc.Entity | null;

@@ -61,12 +61,13 @@ const before = (page, x, z) =>
     g.bot.pose.z = z + 1.6;
     g.bot.pose.facing = Math.PI;
   }, { x, z });
-/** Close in on the tile from a little to the side. */
+/** Close in from a little to the side: the close zoom step when standing, the calm view's zoom when sitting. */
 const close = (page, yaw = 20, zoom = 6) =>
   page.evaluate(({ yaw, zoom }) => {
     const g = window.solarbloom;
     g.camera.turnTo(yaw, true);
-    g.camera.jumpZoom(zoom);
+    if (g.sim.rest.sitting) g.camera.jumpZoom(zoom);
+    else g.zoomStep = 0;
   }, { yaw, zoom });
 
 try {
@@ -89,13 +90,15 @@ try {
   const bench = { x: 10, z: 6 };
   await before(page, bench.x, bench.z);
   check(await until(page, () => /Mend/.test(document.getElementById('prompt')?.innerText ?? '')), 'facing an old bench, the prompt offers to mend it');
-  await close(page);
+  await close(page, 35);
   await shot(page, '10-bench-broken', 'an old park bench before mending: sunk and sagging, a slat fallen out onto the ground, a snapped foot, moss on the seat and rust on the iron ends');
   await key(page, 'KeyE');
   check(await until(page, (b) => window.solarbloom.sim.rest.usable(window.solarbloom.sim.rest.benchAt(b.x, b.z)), bench), 'E mends it for 3 Scrap');
+  await close(page, 35);
   await shot(page, '10b-bench-mended', 'the same bench mended: whole again');
 
   // ── sitting with the gamepad: A sits, B stands (never the pause menu) ──
+  await page.evaluate(() => (window.solarbloom.zoomStep = 1));
   await pad(page, PAD_A);
   check(await until(page, () => window.solarbloom.sim.rest.sitting?.kind === 'bench'), 'pad A sits on the mended bench');
   check(await until(page, () => document.body.classList.contains('resting')), 'the HUD fades away while sitting');
@@ -212,7 +215,7 @@ try {
   const c0 = await page.evaluate(() => window.solarbloom.sim.charge.value());
   check(await until(page, (c0) => window.solarbloom.sim.charge.value() > c0 + 2, c0), 'the powered pad charges bloombot while it meditates');
   await page.waitForTimeout(1500);
-  await close(page, 30, 5);
+  await close(page, 160, 5); // from in front: bloombot faces the pad
   await shot(page, '15-meditate', 'meditating at a powered charger: cross-legged at the pad, eyes closed, the pad lit');
   await pad(page, PAD_B);
   check(await until(page, () => !window.solarbloom.sim.rest.sitting), 'pad B stands up from meditating');
