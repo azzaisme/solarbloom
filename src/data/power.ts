@@ -39,6 +39,9 @@ export const POWER = {
   charger: { rate: 6, reach: 0.75 }, // reach: how close to the pad's edge bloombot sits (tiles)
   /** Helpers on the grid (E23.3.3, old-city rules): their draw while they stand. */
   helper: { droneHub: 4, cultivator: 4 },
+  /** E23.3.4 the Power view: powered electrical machines glow soft yellow (`glow`, emissive intensity) while the
+   * rest of the world darkens (`darken`: the share of the sun, fill and sky light taken away), easing over `fade` s */
+  view: { glow: 0.45, darken: 0.72, fade: 0.3 },
   /** Starting draws per shed class (consumers may override with their own draw). */
   draw: { lamp: 0.5, pump: 3, helper: 4, charger: 6 } satisfies Record<ShedClass, number>,
 };

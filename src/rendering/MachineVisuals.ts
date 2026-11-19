@@ -332,6 +332,84 @@ export class MachineVisuals {
   static readonly BATCH_REGION = 64;
   private batchGroups = new Map<string, number>();
 
+  // ───── E23.3.4 the Power view's glow ─────
+  /** each material's soft-yellow twin (shared, so batches still merge) */
+  private glowTwins = new Map<pc.Material, pc.StandardMaterial>();
+  private glowing = new Map<pc.MeshInstance, pc.Material>();
+  private glowSig = '';
+  private glowIn = 0;
+
+  /**
+   * The Power view: the given machines (powered electrical ones) glow soft yellow, by swapping each part's material
+   * for a twin with a yellow emissive. Parts that already glow keep theirs. Batches are re-made only for regions
+   * that changed. Pass undefined to put every material back. Cheap to call every frame (it re-checks 4× a second,
+   * so parts rebuilt meanwhile, an upgrade or a model arriving, pick it up).
+   */
+  powerGlow(ids: Set<string> | undefined, dt: number): void {
+    const dirty = new Set<number>();
+    const mark = (mi: pc.MeshInstance) => {
+      const g = (mi.node as pc.Entity | null)?.render?.batchGroupId;
+      if (g !== undefined && g >= 0) dirty.add(g);
+    };
+    if (!ids) {
+      if (!this.glowing.size) return;
+      for (const [mi, orig] of this.glowing) {
+        if (this.glowTwins.get(orig) === mi.material) mi.material = orig; // unless something swapped it since
+        mark(mi);
+      }
+      this.glowing.clear();
+      this.glowSig = '';
+    } else {
+      const sig = [...ids].sort().join(',');
+      this.glowIn -= dt;
+      if (sig === this.glowSig && this.glowIn > 0) return;
+      this.glowSig = sig;
+      this.glowIn = 0.25;
+      const twins = new Set(this.glowTwins.values());
+      const want = new Set<pc.MeshInstance>();
+      for (const v of this.views.values()) {
+        if (!ids.has(v.m.id)) continue;
+        for (const r of v.root.findComponents('render') as pc.RenderComponent[]) {
+          for (const mi of r.meshInstances) {
+            const cur = mi.material;
+            if (!cur) continue;
+            if (twins.has(cur as pc.StandardMaterial)) {
+              want.add(mi);
+              continue;
+            }
+            const twin = this.twinOf(cur);
+            if (!twin) continue;
+            this.glowing.set(mi, cur);
+            mi.material = twin;
+            want.add(mi);
+            mark(mi);
+          }
+        }
+      }
+      for (const [mi, orig] of this.glowing) {
+        if (want.has(mi)) continue;
+        if (this.glowTwins.get(orig) === mi.material) mi.material = orig;
+        this.glowing.delete(mi);
+        mark(mi);
+      }
+    }
+    if (this.batcher) for (const g of dirty) this.batcher.markGroupDirty(g);
+  }
+
+  private twinOf(m: pc.Material): pc.StandardMaterial | undefined {
+    if (!(m instanceof pc.StandardMaterial)) return undefined;
+    let t = this.glowTwins.get(m);
+    if (t) return t;
+    const e = m.emissive;
+    if (m.emissiveMap || (e.r + e.g + e.b) * m.emissiveIntensity > 0.05) return undefined; // already glows
+    t = m.clone() as pc.StandardMaterial;
+    t.emissive = color(PALETTE.signal.power.machineGlow);
+    t.emissiveIntensity = POWER.view.glow;
+    t.update();
+    this.glowTwins.set(m, t);
+    return t;
+  }
+
   private batchGroupFor(m: MachineData): number | undefined {
     if (!this.batcher || m.roofId !== GROUND) return undefined;
     const R = MachineVisuals.BATCH_REGION;
