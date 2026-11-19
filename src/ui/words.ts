@@ -109,7 +109,6 @@ export const TIPS: readonly string[] = [
   'Turn a piece in build mode before you place it.',
   'Walk up to a landmark that hums and wake it.',
   'Helpers keep working the ground you have restored.',
-  'Paw prints mean something small is hiding nearby.',
   'The game pauses while the menu or the backpack is open.',
   'Every key and button can be changed in Settings.',
   'Settings can make the text bigger and the colours stronger.',

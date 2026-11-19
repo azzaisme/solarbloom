@@ -146,9 +146,20 @@ export class LuckyCatSystem {
     return this.spots().find((c) => c.id === catId);
   }
 
-  /** Phase 5 E15: hiding long enough to leave paw prints (a gentle hint; nothing is lost by ignoring it). */
+  /**
+   * E23.12.3 (#530, epic rule 8): has bloombot found a cat yet? Until it has, nothing shows, names or hints at one:
+   * no paw prints, meows, tooltips, wildlife cats, stats or collection entries. Finding the first one is the surprise.
+   */
+  get known(): boolean {
+    return this.sim.state.cat.found > 0;
+  }
+
+  /**
+   * Phase 5 E15: hiding long enough to leave paw prints (a gentle hint; nothing is lost by ignoring it). E23.12.3:
+   * never before the first cat is found.
+   */
   hinted(spot: CatSpot): boolean {
-    return this.sim.time - spot.spawnedAt >= TUNING.cat.hintAfter; // E20.1: drones never hint a cat
+    return this.known && this.sim.time - spot.spawnedAt >= TUNING.cat.hintAfter; // E20.1: drones never hint a cat
   }
 
   /** Phase 5 E15: a new cat's id and rarity. The very first cat is always a standard one (onboarding). */

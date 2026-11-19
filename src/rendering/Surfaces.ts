@@ -387,7 +387,7 @@ export function obstacleClutter(c: DressCtx, t: TileData, x: number, z: number, 
 
 /**
  * A building's facades: ivy hanging from the parapet down the two faces the camera sees (dry and sparse in the
- * fog, lush and flowering once clear), wall clutter (AC units, copper pipes, a niche with a lucky cat, a painted
+ * fog, lush and flowering once clear), wall clutter (AC units, copper pipes, a niche with a vase of flowers, a painted
  * leaf mural), and a bevelled coping on the parapet.
  */
 export function buildingDressing(c: DressCtx, p: BuildingPlot, h: number, H: number, alive: boolean) {

@@ -201,7 +201,7 @@ export function collection(sim: Sim): CollectionGroup[] {
     title: 'Lucky Cats',
     count: `${st.cat.found} found`,
     rows: [...where].map(([name, n]) => ({ name: `In ${name}`, detail: n === 1 ? 'One cat found' : `${n} cats found`, found: true })),
-    empty: 'Wander the city. Paw prints mean a cat is close.',
+    empty: '',
   };
   // keepsakes: the ones Lucky Cats leave, and one per region
   const unlocked = new Set([...(cz?.decorUnlocked ?? []), ...(st.salvage?.items ?? []), ...(st.salvage?.caches ?? [])]);
@@ -218,7 +218,8 @@ export function collection(sim: Sim): CollectionGroup[] {
   const decor = DECOR_OPTIONS.filter((o) => 'start' in o.unlock || cz?.decorUnlocked?.includes(o.id));
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   return [
-    cats,
+    // E23.12.3 (epic rule 8): the Lucky Cats group appears with the first find (before that it would give them away)
+    ...(sim.cat.known ? [cats] : []),
     { title: 'Keepsakes', count: `${keeps.filter((k) => k.found).length} of ${keeps.length}`, rows: keeps, empty: '' },
     { title: 'Wildlife', count: `${fauna.length} kinds`, rows: fauna.map((f) => ({ name: cap(f), detail: 'Lives in your gardens', found: true })), empty: 'Wildlife arrives as gardens grow.' },
     { title: 'Landmarks', count: `${woken.length} awake`, rows: woken.map((a) => ({ name: a.region ? (REGIONS.find((r) => r.id === a.region)?.landmark.name ?? a.landmarkName) : a.landmarkName, detail: a.region ? `In ${regionName(a.region)}` : 'Awake', found: true })), empty: 'Bring a place back to life to wake its landmark.' },

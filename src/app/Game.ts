@@ -2545,6 +2545,7 @@ export class Game {
     for (const c of s.cat.spots()) {
       const a = s.cat.anchor(c.anchorId);
       if (!a || a.roofId !== t.roofId) continue;
+      if (!s.cat.hinted(c)) continue; // E23.12.3: never before the first find, nor before its paw prints show
       if (Math.hypot(a.pos[0] - (t.x + 0.5), a.pos[2] - (t.z + 0.5)) <= 4) return '<br><span class="ok">🐾 Faint paw prints… a cat is hiding very close.</span>';
     }
     return '';
@@ -4430,7 +4431,8 @@ export class Game {
       // Phase 5 E15: paw prints appear beside a cat that has been hiding a while.
       for (const c of this.sim.cat.spots()) this.cat.setHint(c.id, this.sim.cat.hinted(c));
       this.meowTimer -= dt;
-      if (this.meowTimer <= 0) {
+      // E23.12.3: the hint meow waits for the first find (the first cat is a surprise)
+      if (this.meowTimer <= 0 && this.sim.cat.known) {
         this.meowTimer = 30 + Math.random() * 20;
         const spots = this.sim.cat.spots();
         // The hint meow comes from where a cat actually hides, so a listener can turn toward it.
