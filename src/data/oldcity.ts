@@ -111,7 +111,7 @@ export interface RegionDef {
   /** E21.7: ladders (Climb) and perches (Glide, with their landing cell) */
   ladders: { x: number; z: number; to: [number, number] }[];
   perches: { x: number; z: number; to: [number, number] }[];
-  /** loose piles (Milestone A lays out the park and Mast Row; the others land with E21.14–E21.16) */
+  /** loose piles (Milestone A lays out the park and Mast Row, E23.1.4 Old Market's glass; the others land with E21.14–E21.16) */
   piles: PileDef[];
   /** the region's main street: a road from its gate (cells, two wide, for generation) */
   roads: CellRect[];
@@ -201,7 +201,16 @@ export const REGIONS: RegionDef[] = [
     ramps: [],
     ladders: [],
     perches: [],
-    piles: [],
+    // E23.1.4 (#536): the market's glass, so Tally's Solar Panel can be made once Tally wakes (glass panes): two
+    // just past the barricade, two along the market road, two by the Glassworks. They refill like every pile (E23.7.4).
+    piles: [
+      P('om-g1', 22, 5, 'glass', 'medium', 'salvage-glass'),
+      P('om-g2', 27, 11, 'glass', 'small', 'salvage-glass'),
+      P('om-g3', 36, 10, 'glass', 'medium', 'salvage-glass'),
+      P('om-g4', 44, 4, 'glass', 'small', 'salvage-glass'),
+      P('om-g5', 40, 22, 'glass', 'large', 'salvage-glass'),
+      P('om-g6', 35, 25, 'glass', 'small', 'salvage-glass'),
+    ],
     roads: [{ x: 16, z: 7, w: 32, d: 2 }],
   },
   {
