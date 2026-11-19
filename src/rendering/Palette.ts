@@ -317,6 +317,8 @@ const building = {
 
 /** Park props: benches, gazebo, stalls, lamps. */
 const props = {
+  /** E23.8: an old paper lantern on a dead street, faded to brick */
+  lanternFaded: '#a7684e',
   benchWood: '#b98a63',
   benchFrame: '#5a4a3e',
   benchRotten: '#6e5a48',

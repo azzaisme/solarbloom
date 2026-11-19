@@ -1,6 +1,6 @@
 import { GROUND } from '../core/GameState';
 import { regionById, setPieceAt } from '../core/OldCityLayout';
-import type { GateDef, RegionDef } from '../data/oldcity';
+import type { GateDef, GlideDef, RegionDef } from '../data/oldcity';
 import { REGIONS } from '../data/oldcity';
 import { itemDef } from '../data/items';
 import type { Sim } from './Sim';
@@ -53,6 +53,31 @@ export class GateSystem {
     // E23.2.1: abilities cost charge; at zero bloombot can't use them (it walks on, nothing is lost)
     if (n.ability && !this.sim.charge.canUse(n.ability as 'pry')) return 'Out of charge. Eat something, rest or find a charger';
     return undefined;
+  }
+
+  /** E23.8 (#329): the glide perch on a cell, if any. */
+  glideAt(x: number, z: number): GlideDef | undefined {
+    const sp = setPieceAt(x, z);
+    return sp?.kind === 'glide' ? sp.glide : undefined;
+  }
+
+  /** E23.8 (#329): why bloombot can't glide from a perch now (its prompt), or undefined. */
+  glideProblem(): string | undefined {
+    if (!this.has('glide')) return 'A perch for gliding — needs Glide (fountain tier 4)';
+    if (!this.sim.charge.canUse('glide')) return 'Out of charge. Eat something, rest or find a charger';
+    return undefined;
+  }
+
+  /** E23.8 (#329): takes off from a perch (the charge is used now; the bot flies to `g.to`). */
+  glide(g: GlideDef): boolean {
+    if (!this.glideAt(g.x, g.z)) return false;
+    const why = this.glideProblem();
+    if (why) {
+      this.sim.bus.emit('action.failed', { reason: why });
+      return false;
+    }
+    this.sim.charge.use('glide');
+    return true;
   }
 
   private missing(cost: Record<string, number | undefined>): string {

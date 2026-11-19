@@ -78,6 +78,62 @@ export interface PileDef {
   model: string;
 }
 
+/**
+ * E23.8 (#327–#329): a region's dressing: old things left where they stood, so each region is its own place. Drawn,
+ * never collected (no salvage model is used, so nothing here looks like a pile). Every one blocks its cell except
+ * tram rails, which lie in the road. Laid out by scripts/place-region-dressing.ts.
+ */
+export type DressKind =
+  | 'tram-rails' | 'cable-pole' | 'banner-pole' | 'bollard' | 'copper-pipe' | 'lamp-post'
+  | 'market-stall' | 'lantern-string' | 'barrel' | 'mooring-post' | 'boat' | 'stump-ring' | 'fallen-trunk'
+  | 'planter-bed' | 'planter-trough' | 'cracked-pillar' | 'dry-drain' | 'clockwork-heap' | 'bench' | 'ac-unit' | 'vent';
+
+export interface DressDef {
+  kind: DressKind;
+  x: number;
+  z: number;
+  /** quarter turns (0–3): which way it faces */
+  turn: number;
+}
+
+/** How each kind of dressing is drawn: its model (unset: built from shapes) and scale; `walk`: lies flat, walked over. */
+export const DRESS: Record<DressKind, { model?: string; scale: number; walk?: boolean; what: string }> = {
+  'tram-rails': { scale: 1, walk: true, what: 'Old tram lines run here' },
+  'cable-pole': { scale: 1, what: 'A leaning pole with its cable hanging down' },
+  'banner-pole': { model: 'banner-pole', scale: 0.5, what: 'An old banner pole' },
+  bollard: { model: 'bollard', scale: 0.66, what: 'An old bollard' },
+  'copper-pipe': { model: 'copper-pipe', scale: 0.55, what: 'A run of old pipe' },
+  'lamp-post': { model: 'lamp-post', scale: 0.44, what: 'A dead street lamp' },
+  'market-stall': { model: 'market-stall', scale: 0.54, what: 'An empty market stall' },
+  'lantern-string': { scale: 1, what: 'A string of old lanterns between two poles' },
+  barrel: { model: 'barrel', scale: 0.62, what: 'An old barrel' },
+  'mooring-post': { model: 'mooring-post', scale: 0.62, what: 'A mooring post' },
+  boat: { model: 'boat', scale: 0.55, what: 'A boat pulled up on the sand' },
+  'stump-ring': { scale: 1, what: 'A ring of old stumps where a tree stood' },
+  'fallen-trunk': { scale: 1, what: 'A fallen trunk' },
+  'planter-bed': { model: 'planter-bed', scale: 0.85, what: 'An old nursery bed' },
+  'planter-trough': { model: 'planter-trough', scale: 0.5, what: 'An old planter' },
+  'cracked-pillar': { model: 'cracked-pillar', scale: 0.55, what: 'A cracked pillar' },
+  'dry-drain': { model: 'dry-drain', scale: 0.8, what: 'A dry drain' },
+  'clockwork-heap': { scale: 1, what: 'A heap of rusted clockwork' },
+  bench: { model: 'bench', scale: 0.58, what: 'An old bench' },
+  'ac-unit': { model: 'ac-unit', scale: 0.5, what: 'An old air-conditioning unit' },
+  vent: { model: 'vent', scale: 0.5, what: 'A rusty vent' },
+};
+
+/**
+ * E23.8 (#329): an optional glide back toward the park: a perch on a far region's high ground and where bloombot
+ * lands, lower down and nearer the fountain. Glide (fountain tier 4) and a little charge; a shortcut, never needed.
+ * Picked by scripts/place-glides.ts.
+ */
+export interface GlideDef {
+  id: string;
+  x: number;
+  z: number;
+  /** the landing cell */
+  to: [number, number];
+}
+
 export interface SpotDef {
   id: string;
   x: number;
@@ -116,6 +172,10 @@ export interface RegionDef {
    * rich material (#327–#329). Laid on open, reachable ground by scripts/place-region-piles.ts; respawning per E23.7.4.
    */
   piles: PileDef[];
+  /** E23.8: 6–10 dressing props (DRESS), and tram rails in Mast Row's road */
+  dressing: DressDef[];
+  /** E23.8 (#329): optional glides back toward the park, from this region's high ground */
+  glides: GlideDef[];
   /** the region's main street: a road from its gate (cells, two wide, for generation) */
   roads: CellRect[];
   /** deep water inside the region (a canal: never walked, until Hover; level 0) */
@@ -123,6 +183,7 @@ export interface RegionDef {
 }
 
 const P = (id: string, x: number, z: number, material: MaterialId, size: PileSize, model: string): PileDef => ({ id, x, z, material, size, model });
+const D = (kind: DressKind, x: number, z: number, turn: number): DressDef => ({ kind, x, z, turn });
 
 export const REGIONS: RegionDef[] = [
   {
@@ -172,6 +233,21 @@ export const REGIONS: RegionDef[] = [
       P('mr-s6', 19, -10, 'scrap', 'small', 'rubble-pile'),
       P('mr-s7', 5, -29, 'scrap', 'small', 'stone-block'),
     ],
+    dressing: [
+      D('tram-rails', 20, -17, 0),
+      D('tram-rails', 21, -17, 0),
+      D('tram-rails', 22, -17, 0),
+      D('tram-rails', 23, -17, 0),
+      D('cable-pole', 6, -31, 0),
+      D('cable-pole', 30, -18, 1),
+      D('cable-pole', 9, -22, 2),
+      D('banner-pole', 1, -18, 1),
+      D('banner-pole', 18, -18, 1),
+      D('bollard', 6, -15, 0),
+      D('bollard', 9, -27, 2),
+      D('copper-pipe', 24, -31, 3),
+    ],
+    glides: [],
     roads: [
       { x: 7, z: -32, w: 2, d: 32 },
       { x: 0, z: -17, w: 32, d: 2 },
@@ -225,6 +301,17 @@ export const REGIONS: RegionDef[] = [
       P('om-s6', 22, 20, 'scrap', 'small', 'crate'),
       P('om-s7', 38, 31, 'scrap', 'small', 'stone-block'),
     ],
+    dressing: [
+      D('market-stall', 46, 25, 1),
+      D('market-stall', 46, 9, 1),
+      D('market-stall', 39, 17, 0),
+      D('lantern-string', 37, 1, 2),
+      D('lantern-string', 21, 30, 1),
+      D('lantern-string', 33, 25, 2),
+      D('barrel', 40, 31, 1),
+      D('barrel', 34, 9, 1),
+    ],
+    glides: [],
     roads: [{ x: 16, z: 7, w: 32, d: 2 }],
   },
   {
@@ -281,6 +368,17 @@ export const REGIONS: RegionDef[] = [
       P('sw-u3', 0, 21, 'sunstone', 'small', 'salvage-sunstone'),
       P('sw-u4', -10, 26, 'sunstone', 'small', 'salvage-sunstone'),
     ],
+    dressing: [
+      D('mooring-post', -15, 44, 1),
+      D('mooring-post', -1, 44, 2),
+      D('mooring-post', 12, 44, 1),
+      D('mooring-post', -4, 33, 0),
+      D('boat', -4, 16, 0),
+      D('boat', -4, 26, 0),
+      D('barrel', -15, 20, 3),
+      D('bollard', -15, 32, 3),
+    ],
+    glides: [],
     roads: [],
     water: [{ x: -3, z: 16, w: 2, d: 32 }],
   },
@@ -335,6 +433,17 @@ export const REGIONS: RegionDef[] = [
       P('eg-s6', -26, 6, 'scrap', 'small', 'crate'),
       P('eg-s7', -22, 14, 'scrap', 'small', 'stone-block'),
     ],
+    dressing: [
+      D('stump-ring', -29, -15, 0),
+      D('stump-ring', -31, 1, 2),
+      D('stump-ring', -16, -12, 0),
+      D('fallen-trunk', -27, 14, 1),
+      D('fallen-trunk', -1, -13, 2),
+      D('fallen-trunk', -21, -1, 2),
+      D('planter-bed', -8, -7, 3),
+      D('cracked-pillar', -27, -7, 2),
+    ],
+    glides: [],
     roads: [{ x: -32, z: 7, w: 32, d: 2 }],
   },
   {
@@ -393,6 +502,17 @@ export const REGIONS: RegionDef[] = [
       P('cb-s6', 57, 39, 'scrap', 'small', 'rubble-pile'),
       P('cb-s7', 63, 39, 'scrap', 'small', 'rubble-pile'),
     ],
+    dressing: [
+      D('dry-drain', 72, 52, 2),
+      D('dry-drain', 65, 40, 1),
+      D('dry-drain', 32, 55, 2),
+      D('dry-drain', 63, 49, 0),
+      D('cracked-pillar', 55, 62, 3),
+      D('cracked-pillar', 78, 37, 1),
+      D('copper-pipe', 43, 60, 1),
+      D('copper-pipe', 66, 61, 1),
+    ],
+    glides: [],
     roads: [],
     // E23.4.1: the spring-fed pond east of the island (dry until the Old Cistern wakes and its springs run)
     water: [{ x: 64, z: 41, w: 8, d: 12 }],
@@ -446,6 +566,17 @@ export const REGIONS: RegionDef[] = [
       P('cp-s6', 75, 21, 'scrap', 'small', 'rubble-pile'),
       P('cp-s7', 61, 1, 'scrap', 'small', 'crate'),
     ],
+    dressing: [
+      D('clockwork-heap', 78, -12, 2),
+      D('clockwork-heap', 76, 30, 2),
+      D('clockwork-heap', 78, 5, 1),
+      D('clockwork-heap', 75, 17, 0),
+      D('cracked-pillar', 57, -15, 2),
+      D('cracked-pillar', 60, 30, 2),
+      D('bench', 69, -5, 0),
+      D('lamp-post', 66, 22, 0),
+    ],
+    glides: [],
     roads: [],
   },
   {
@@ -497,6 +628,17 @@ export const REGIONS: RegionDef[] = [
       P('te-s6', 1, -44, 'scrap', 'small', 'crate'),
       P('te-s7', 23, -41, 'scrap', 'small', 'stone-block'),
     ],
+    dressing: [
+      D('ac-unit', -16, -58, 2),
+      D('ac-unit', 30, -60, 2),
+      D('ac-unit', -2, -63, 1),
+      D('vent', -16, -42, 2),
+      D('vent', 11, -63, 0),
+      D('vent', -7, -51, 2),
+      D('planter-trough', 30, -46, 0),
+      D('planter-trough', 20, -56, 0),
+    ],
+    glides: [],
     roads: [],
   },
   {
@@ -564,6 +706,19 @@ export const REGIONS: RegionDef[] = [
       P('gh-s5', -47, -2, 'scrap', 'small', 'crate'),
       P('gh-s6', -47, 3, 'scrap', 'small', 'crate'),
       P('gh-s7', -52, 6, 'scrap', 'small', 'stone-block'),
+    ],
+    dressing: [
+      D('planter-bed', -58, -32, 2),
+      D('planter-bed', -40, -32, 0),
+      D('planter-bed', -63, -16, 3),
+      D('planter-trough', -63, -3, 2),
+      D('planter-trough', -61, 14, 3),
+      D('cracked-pillar', -50, -17, 3),
+      D('bench', -36, -20, 0),
+      D('lamp-post', -49, -27, 0),
+    ],
+    glides: [
+      { id: 'gl-glasshouse', x: -34, z: 9, to: [-10, 9] }, // to Elder Grove
     ],
     roads: [],
   },
@@ -634,6 +789,19 @@ export const REGIONS: RegionDef[] = [
       P('ob-s6', 42, -40, 'scrap', 'small', 'rubble-pile'),
       P('ob-s7', 50, -79, 'scrap', 'small', 'stone-block'),
     ],
+    dressing: [
+      D('cracked-pillar', 76, -79, 3),
+      D('cracked-pillar', 78, -52, 2),
+      D('cracked-pillar', 57, -78, 1),
+      D('bench', 74, -34, 0),
+      D('bench', 65, -63, 2),
+      D('lamp-post', 38, -79, 1),
+      D('lamp-post', 65, -46, 1),
+      D('banner-pole', 78, -66, 0),
+    ],
+    glides: [
+      { id: 'gl-observatory', x: 36, z: -34, to: [26, -13] }, // to Mast Row
+    ],
     roads: [],
   },
   {
@@ -687,6 +855,19 @@ export const REGIONS: RegionDef[] = [
       P('sh-s5', -34, -82, 'scrap', 'small', 'stone-block'),
       P('sh-s6', -44, -69, 'scrap', 'small', 'crate'),
       P('sh-s7', -28, -61, 'scrap', 'small', 'stone-block'),
+    ],
+    dressing: [
+      D('ac-unit', -75, -92, 3),
+      D('ac-unit', -45, -92, 1),
+      D('vent', -79, -59, 2),
+      D('vent', -18, -90, 0),
+      D('lamp-post', -25, -73, 0),
+      D('lamp-post', -22, -61, 2),
+      D('bollard', -25, -83, 0),
+      D('bollard', -25, -53, 0),
+    ],
+    glides: [
+      { id: 'gl-spire', x: -19, z: -34, to: [-13, -11] }, // to Elder Grove
     ],
     roads: [{ x: -24, z: -96, w: 2, d: 64 }],
   },

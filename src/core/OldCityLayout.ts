@@ -1,5 +1,5 @@
 import { isMainlandCell, mainlandPileAt, mainlandPileById, mainlandShore, onCauseway } from './Mainland';
-import { COAST, KEEPERS, LANDING, OLD_CITY, PARK_SET, REGIONS, type GateDef, type KeeperDef, type PileDef, type RegionDef, type RegionId } from '../data/oldcity';
+import { COAST, KEEPERS, LANDING, OLD_CITY, PARK_SET, REGIONS, type DressDef, type GateDef, type GlideDef, type KeeperDef, type PileDef, type RegionDef, type RegionId } from '../data/oldcity';
 
 /**
  * E21: the Old City's fixed layout as lookups, built once from data/oldcity (pure, no seed: the Old City is the
@@ -14,6 +14,8 @@ export type SetPiece =
   | { kind: 'cache'; id: string; region: RegionId }
   | { kind: 'page'; id: string; region?: RegionId }
   | { kind: 'lookout'; id: string; region: RegionId }
+  | { kind: 'dress'; dress: DressDef }
+  | { kind: 'glide'; glide: GlideDef; region: RegionDef }
   | { kind: 'shed' };
 
 const key = (x: number, z: number) => `${x},${z}`;
@@ -37,6 +39,8 @@ function build() {
       put(p.x, p.z, { kind: 'pile', pile: p });
       piles.set(p.id, p);
     }
+    for (const d of r.dressing) put(d.x, d.z, { kind: 'dress', dress: d });
+    for (const g of r.glides) put(g.x, g.z, { kind: 'glide', glide: g, region: r });
     for (const [x, z] of r.gate.cells) put(x, z, { kind: 'gate', gate: r.gate, region: r });
     for (const c of r.caches) put(c.x, c.z, { kind: 'cache', id: c.id, region: r.id });
     for (const c of r.pages) put(c.x, c.z, { kind: 'page', id: c.id, region: r.id });

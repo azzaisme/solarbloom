@@ -15,7 +15,7 @@ import { GATHER } from '../data/farm';
 import { CROPS } from '../data/crops';
 import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
-import { seaCell, setPieceAt } from '../core/OldCityLayout';
+import { regionOfCell, seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
 import { LOAD_WHEEL, RIPPLE } from '../data/pulse';
 import { REST } from '../data/rest';
@@ -1969,6 +1969,17 @@ export class Game {
     if (page) out.push({ kind: 'cache', id: `page:${page}`, verb: 'Read', name: s.journal.found(page) ? 'the page again' : 'the page', distance: fd, at: front, run });
     const sp = setPieceAt(f.x, f.z);
     if (sp?.kind === 'lookout') out.push({ kind: 'gate', id: `lookout:${sp.id}`, verb: 'Look out', name: '', distance: fd, at: front, run });
+    // E23.8 (#329): a glide perch: Glide back toward the park
+    const glide = s.gates.glideAt(f.x, f.z);
+    if (glide) {
+      const where = regionOfCell(glide.to[0], glide.to[1]);
+      out.push({
+        kind: 'gate', id: `glide:${glide.id}`, verb: 'Glide', name: where ? `to ${where.name}` : 'down', distance: fd, at: front, refused: s.gates.glideProblem(),
+        run: () => {
+          if (s.gates.glide(glide)) b.glideTo(glide.to[0] + 0.5, glide.to[1] + 0.5);
+        },
+      });
+    }
     const gate = s.gates.gateAt(f.x, f.z);
     if (gate) out.push({ kind: 'gate', id: `gate:${gate.id}`, verb: gate.kind === 'barricade' ? 'Pry' : 'Repair', name: '', distance: fd, at: front, ocHold: gate.kind === 'barricade' ? SALVAGE.pryHoldSeconds : undefined, refused: s.gates.problem(gate), run });
     if (occ?.type === 'core' && s.areas.areaOf(occ) === PARK)

@@ -2,6 +2,8 @@
 //   node tests/e2e/oldcity-shots.mjs park     the park's salvage piles at all three sizes, the Landing (E21.2, E21.26)
 //   node tests/e2e/oldcity-shots.mjs city     the Old City overview and a close-up of each region type, beach included (E21.4)
 //   node tests/e2e/oldcity-shots.mjs height   the park steps and beach, the embankment, the sea from the fountain (E21.24)
+//   node tests/e2e/oldcity-shots.mjs regions  each region dead, then restored, framed on its dressing (E23.8; REGIONS=a,b picks some)
+//   node tests/e2e/oldcity-shots.mjs skyline  each region's landmark, seen from the fountain (E23.8)
 // `npm run shots:park` and `npm run shots:city` run the matching section after the classic shots.
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -100,6 +102,83 @@ try {
     await shot('oldcity-height-cistern-basin', 56, 46, 0.55, 20);
     // the view from Observatory Hill, the highest ground, back over the city
     await shot('oldcity-height-from-observatory-hill', 64, -66, 0.35, 225);
+  }
+  if (section === 'regions' || section === 'skyline') {
+    // E23.8 (#327–#329): every region open, every landmark standing (dormant), the park restored round the fountain
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      const s = g.sim;
+      s.state.salvage.tier = 4;
+      s.state.salvage.abilities = ['pry', 'hover', 'climb', 'glide'];
+      s.areas.clear('park', true);
+      for (let cz = -6; cz <= 6; cz++)
+        for (let cx = -6; cx <= 6; cx++) {
+          const id = s.areas.map.areaOfChunk(cx, cz);
+          if (id !== 'sea' && id !== 'park' && !id.startsWith('out_')) s.state.areas[id] = { fog: 'thinning', revealedAt: 0 };
+        }
+      g.chunks.markAll();
+      g.cloudWall?.sync?.();
+    });
+  }
+  if (section === 'regions') {
+    // each region dead, then restored, framed on its dressing (data/oldcity `dressing`)
+    const ids = process.env.REGIONS?.split(',') ?? ['mastRow', 'oldMarket', 'saltwind', 'elderGrove', 'cistern', 'clockPlaza', 'terraces', 'glasshouse', 'observatory', 'spireHeights'];
+    for (const id of ids) {
+      const at = await page.evaluate((id) => {
+        const s = window.solarbloom.sim;
+        // the region's dressing cells, read off the ground (each tile carries `dress:<kind>:<turn>`)
+        const cells = [];
+        for (let z = -110; z < 110; z++)
+          for (let x = -110; x < 110; x++) {
+            const t = s.grid.peek('g', x, z);
+            if (t?.prop?.startsWith('dress:') && s.areas.map.areaOfCell(x, z) === id) cells.push([x, z]);
+          }
+        if (!cells.length) return null;
+        const cx = cells.reduce((a, c) => a + c[0], 0) / cells.length;
+        const cz = cells.reduce((a, c) => a + c[1], 0) / cells.length;
+        // the dressed cell nearest the middle: the camera looks there (the middle itself may be off the region)
+        cells.sort((a, b) => Math.hypot(a[0] - cx, a[1] - cz) - Math.hypot(b[0] - cx, b[1] - cz));
+        // a close look: the prop built from shapes if the region has one (they have no model to fall back on)
+        const shaped = ['tram-rails', 'cable-pole', 'lantern-string', 'stump-ring', 'fallen-trunk', 'clockwork-heap'];
+        const close = cells.find((c) => shaped.includes(s.grid.peek('g', c[0], c[1]).prop.split(':')[1])) ?? cells[0];
+        return { x: cells[0][0] + 0.5, z: cells[0][1] + 0.5, n: cells.length, close: [close[0] + 0.5, close[1] + 0.5] };
+      }, id);
+      if (!at) {
+        failed = true;
+        console.log(`  ✗ ${id} has no dressing on the ground`);
+        continue;
+      }
+      await shot(`region-${id}-dead`, at.x, at.z, 0.75, 20, 10000);
+      await shot(`region-${id}-close`, at.close[0], at.close[1], 1.8, 20, 6000);
+      // restored: the region's fog lifted and every open tile of it restored, flowering a little
+      await page.evaluate((id) => {
+        const g = window.solarbloom;
+        const s = g.sim;
+        s.areas.clear(id, true);
+        for (const t of s.areas.tiles(id)) {
+          if (t.blocked || t.occupantId || t.feature === 'water') continue;
+          s.restoration.complete(t, 'pulse', undefined, true);
+          t.bloom = Math.max(t.bloom, 2);
+          s.grid.touch(t);
+        }
+        g.chunks.markAll();
+      }, id);
+      await shot(`region-${id}-restored`, at.x, at.z, 0.75, 20, 30000);
+    }
+  }
+  if (section === 'skyline') {
+    // each landmark from the fountain: the camera stands at the fountain and turns to face it
+    // each region's landmark cell (data/oldcity REGIONS[].landmark)
+    const LANDMARKS = [
+      ['mastRow', 18, -26], ['oldMarket', 32, 14], ['saltwind', -6, 40], ['elderGrove', -20, -4], ['cistern', 56, 48],
+      ['clockPlaza', 64, 4], ['terraces', 6, -52], ['glasshouse', -50, -10], ['observatory', 60, -66], ['spireHeights', -50, -66],
+    ];
+    const F = [8.5, 8.5]; // the fountain
+    for (const [id, x, z] of LANDMARKS) {
+      // yaw 0 looks north (−z), 180 south (+z), 90 west (−x): turn to face the landmark from the fountain
+      const yaw = ((Math.atan2(-(x + 1 - F[0]), -(z + 1 - F[1])) * 180) / Math.PI + 360) % 360;
+      await shot(`skyline-${id}`, F[0], F[1], 1.7, Math.round(yaw), 10000); // the low, near view: the horizon shows
+    }
   }
   if (section === 'keepers') {
     // E21.8: a sleeping Keeper (Tide, on the open beach), the same Keeper awake and speaking, and the Pylon settled

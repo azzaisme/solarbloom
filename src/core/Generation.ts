@@ -8,7 +8,7 @@ import { roadPlanFor } from './RoadPlan';
 import { coastSand, inRect, isSeaChunk, onJetty, regionById, regionWater, seaCell, setPieceAt } from './OldCityLayout';
 import { rampAt, tileLevel } from './Height';
 import { causewayBroken, onCauseway } from './Mainland';
-import { OLD_CITY } from '../data/oldcity';
+import { DRESS, OLD_CITY } from '../data/oldcity';
 import { CHUNK, hashString, tileId, tileRandom } from './Hash';
 import type { GroundState, LayerData, TileData } from './types';
 
@@ -52,6 +52,10 @@ export function stampOldCity(t: TileData): TileData {
   if (!p) return t;
   if (p.kind === 'pile') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `pile:${p.pile.id}` });
   if (p.kind === 'keeper') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `keeper:${p.keeper.id}` });
+  // E23.8: a region's dressing: blocks its cell (tram rails lie in the road and are walked over)
+  if (p.kind === 'dress') return Object.assign(t, { blocked: !DRESS[p.dress.kind].walk, prop: `dress:${p.dress.kind}:${p.dress.turn}` });
+  // E23.8 (#329): a glide perch on the region's high ground
+  if (p.kind === 'glide') return Object.assign(t, { blocked: true, prop: `glide:${p.glide.id}` });
   if (p.kind === 'shed') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: 'shed' });
   // E21.24: a lookout: a bench and a telescope on a terrace's edge
   if (p.kind === 'lookout') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `lookout:${p.id}` });

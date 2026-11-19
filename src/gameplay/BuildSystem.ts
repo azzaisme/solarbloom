@@ -4,6 +4,7 @@ import { AREA_TYPES, type AreaType } from '../data/city';
 import { GROUND, machinesRemoved } from '../core/GameState';
 import { MATERIALS, STORE, type MaterialCost } from '../data/salvage';
 import { regionById } from '../core/OldCityLayout';
+import { DRESS, type DressKind } from '../data/oldcity';
 import type { MaterialId } from '../core/types';
 import { isMaterial, itemDef } from '../data/items';
 import type { Sim } from './Sim';
@@ -80,6 +81,8 @@ export class BuildSystem {
       if (!c) continue;
       if (!s.areas.isClear(c) && !s.areas.canTouch(c)) return 'Lost in the fog — clear the ground here first';
       if (c.blocked) return 'A rusty vent is in the way';
+      // E23.8: walked-over dressing (old tram lines) can't be built on either
+      if (c.prop?.startsWith('dress:')) return DRESS[c.prop.split(':')[1] as DressKind]?.what ?? 'Something old is in the way';
       if (c.occupantId) {
         const m = s.occupant(c);
         return m ? `${machineName(m)} is already here` : DECOR_IN_WAY; // E19.2: a decoration (free and instant to remove)

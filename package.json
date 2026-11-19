@@ -20,7 +20,7 @@
     "test:e2e": "vite build && node tests/e2e/picking.e2e.mjs && node tests/e2e/picking-oldcity.e2e.mjs && node tests/e2e/oldcity-drawcalls.e2e.mjs && node tests/e2e/oldcity-camera.e2e.mjs && node tests/e2e/area-panel.e2e.mjs && node tests/e2e/overview.e2e.mjs && node tests/e2e/hud-overlap.e2e.mjs && node tests/e2e/camera.e2e.mjs",
     "test:perf:browser": "vite build && node tests/perf/browser.perf.mjs",
     "test:leak": "vite build && node tests/perf/leak.perf.mjs",
-    "shots:city": "vite build && node tests/e2e/city-shots.mjs && node tests/e2e/oldcity-shots.mjs city && node tests/e2e/oldcity-shots.mjs height",
+    "shots:city": "vite build && node tests/e2e/city-shots.mjs && node tests/e2e/oldcity-shots.mjs city && node tests/e2e/oldcity-shots.mjs height && node tests/e2e/oldcity-shots.mjs regions && node tests/e2e/oldcity-shots.mjs skyline",
     "shots:park": "vite build && node tests/e2e/park-shots.mjs && node tests/e2e/oldcity-shots.mjs park",
     "shots:look3": "vite build && node tests/e2e/look3-shots.mjs",
     "shots:roads": "vite build && node tests/e2e/road-shots.mjs",

@@ -69,6 +69,9 @@ function place(r: RegionDef) {
   for (const l of [...r.ladders, ...r.perches]) { mark(l.x, l.z); mark(l.to[0], l.to[1]); }
   for (const rp of r.ramps) mark(rp.x, rp.z, rp.w, rp.d);
   for (const p of r.piles) mark(p.x, p.z, 1, 1, 2);
+  // and the region's dressing and glide perches (E23.8)
+  for (const d of r.dressing) mark(d.x, d.z);
+  for (const g of r.glides) mark(g.x, g.z, 1, 1, 2);
   // reachable ground from beside the Keeper, on foot (round the coast and over opened gates too)
   const seen = new Set<string>();
   const queue: [number, number][] = [];

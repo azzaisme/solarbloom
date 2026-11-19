@@ -42,6 +42,8 @@ export class BotController {
   private held = new Set<string>();
   private padPrev: boolean[] = [];
   private walk?: Walk;
+  /** E23.8 (#329): gliding from a perch: an arc through the air to the landing cell */
+  private flight?: { fromX: number; fromZ: number; toX: number; toZ: number; fromY: number; toY: number; t: number; dur: number };
   /** G.13: riding a rooftop lift: rising (or sinking) in place, then stepping off on the other layer */
   private lift?: { roofId: string; x: number; z: number; fromY: number; toY: number; t: number; dur: number };
   /** world speed this frame */
@@ -108,6 +110,13 @@ export class BotController {
       const k = Math.min(1, this.lift.t / this.lift.dur);
       y = this.lift.fromY + (this.lift.toY - this.lift.fromY) * (k * k * (3 - 2 * k));
     }
+    if (this.flight) {
+      // a glide: from the perch's height down to the landing's, lifted on an arc that rises early and sinks slowly
+      const f = this.flight;
+      const k = Math.min(1, f.t / f.dur);
+      const len = Math.hypot(f.toX - f.fromX, f.toZ - f.fromZ);
+      y = f.fromY + (f.toY - f.fromY) * k + Math.sin(Math.PI * Math.sqrt(k)) * Math.min(3, 0.6 + len * 0.08);
+    }
     return [l.origin[0] + this.pose.x, y, l.origin[2] + this.pose.z];
   }
 
@@ -131,7 +140,23 @@ export class BotController {
   }
 
   get riding(): boolean {
-    return !!this.lift;
+    return !!this.lift || !!this.flight;
+  }
+
+  /**
+   * E23.8 (#329): glide from where bloombot stands to (x, z) on the same layer: a few seconds through the air on an
+   * arc, the camera following, then a soft landing. Walking is ignored until it lands.
+   */
+  glideTo(x: number, z: number) {
+    if (this.lift || this.flight) return;
+    this.walk = undefined;
+    const fromY = this.world()[1];
+    const l = this.sim.grid.layer(this.pose.roofId)!;
+    const toY = l.origin[1] + l.height + SLAB_TOP + (this.sim.grid.terraced(this.pose.roofId) ? levelY(heightAt(x, z)) : 0);
+    const len = Math.hypot(x - this.pose.x, z - this.pose.z);
+    this.pose.facing = Math.atan2(x - this.pose.x, z - this.pose.z);
+    this.flight = { fromX: this.pose.x, fromZ: this.pose.z, toX: x, toZ: z, fromY, toY, t: 0, dur: this.visuals.reducedMotion ? 0.6 : Math.min(4, 1 + len * 0.1) };
+    this.following = true;
   }
 
   /** The cell in front, which every tool acts on. */
@@ -212,6 +237,26 @@ export class BotController {
       iy += pad.y;
     }
     const mag = Math.min(1, Math.hypot(ix, iy));
+    if (this.flight) {
+      const f = this.flight;
+      f.t += dt;
+      if (f.t >= f.dur) {
+        this.flight = undefined;
+        this.teleport(this.pose.roofId, f.toX, f.toZ);
+        this.visuals.play('cheer');
+      } else {
+        // the pose moves with the flight (the camera and the streamed chunks follow it); it isn't walked
+        const k = f.t / f.dur;
+        this.pose.x = f.fromX + (f.toX - f.fromX) * k;
+        this.pose.z = f.fromZ + (f.toZ - f.fromZ) * k;
+        const [x, y, z] = this.world();
+        this.visuals.place(x, y, z, this.pose.facing);
+        this.visuals.setMotion(0, false);
+        this.visuals.update(dt);
+        this.follow(x, y, z);
+        return;
+      }
+    }
     if (this.lift) {
       this.lift.t += dt;
       if (this.lift.t >= this.lift.dur) {

@@ -17,7 +17,7 @@ import { onJetty, pileById, seaCell, setPieceAt, surfCell } from '../core/OldCit
 import { addGroundFan, addGroundQuad, addGroundStrip, emptyGroundTexGeo, GROUND_TEXTURES, groundTexFor, groundTexMaterial, groundTexMesh, type GroundTexGeo, type GroundTexName } from './GroundTex';
 import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
-import { GATE_MODELS, LANDING, PARK_SET } from '../data/oldcity';
+import { DRESS, GATE_MODELS, LANDING, PARK_SET, type DressKind } from '../data/oldcity';
 import { MATERIALS, SALVAGE } from '../data/salvage';
 import { drawPlot } from './PlotArt';
 import { drawDecor } from './DecorArt';
@@ -882,12 +882,146 @@ export class ChunkRenderer {
   }
 
   /**
+   * E23.8 (#327–#329): a region's dressing (data/oldcity DRESS): its model, turned to face its way, or built from
+   * shapes for the kinds no model draws (rails, a cable pole, a lantern string, a stump ring, a fallen trunk, a heap
+   * of clockwork). Weathered and dark while the ground is dead; moss, and lit lanterns, once it is restored.
+   */
+  private dressing(b: Sink, t: TileData, prop: string, x: number, y: number, z: number): boolean {
+    const [, kind, turnText] = prop.split(':');
+    const def = DRESS[kind as DressKind];
+    if (!def) return false;
+    const turn = Number(turnText) || 0;
+    const alive = t.ground === 'restored';
+    if (def.model) {
+      const model = oldCityModel(def.model);
+      if (model && this.batch?.add(model, x, y, z, (turn * Math.PI) / 2, def.scale, def.scale, def.scale, this.neglected)) return true;
+    }
+    // along: the dressing's long axis (east–west for turns 0 and 2, north–south for 1 and 3)
+    const ew = turn % 2 === 0;
+    const at = (u: number, v: number): [number, number] => (ew ? [x + u, z + v] : [x + v, z + u]);
+    const size = (lu: number, h: number, lv: number): [number, number, number] => (ew ? [lu, h, lv] : [lv, h, lu]);
+    const box = (hex: string, u: number, py: number, v: number, lu: number, h: number, lv: number, glow = 0) => {
+      const [px, pz] = at(u, v);
+      b.add('box', hex, [px, py, pz], size(lu, h, lv), glow);
+    };
+    const W = PALETTE.wood;
+    const M = PALETTE.metal;
+    const moss = PALETTE.lawn.moss;
+    const sgn = turn >= 2 ? -1 : 1;
+    switch (kind as DressKind) {
+      case 'tram-rails': {
+        // two rusted rails in the road, on worn sleepers
+        for (const v of [-0.3, 0.3]) box(M.rust, 0, y + 0.02, v, 1, 0.04, 0.07);
+        for (const u of [-0.33, 0, 0.33]) box(W.deep, u, y + 0.005, 0, 0.12, 0.02, 0.86);
+        return true;
+      }
+      case 'cable-pole': {
+        // a wooden pole leaning a little, its crossarm, and the cable hanging down to the ground
+        for (let i = 0; i < 4; i++) box(W.post, -0.25 * sgn + i * 0.04 * sgn, y + 0.25 + i * 0.5, 0, 0.13, 0.52, 0.13);
+        box(W.deep, -0.1 * sgn, y + 2.0, 0, 0.12, 0.08, 0.6);
+        for (const v of [-0.26, 0.26]) box(PALETTE.stone.light, -0.1 * sgn, y + 2.07, v, 0.06, 0.07, 0.06);
+        for (let i = 0; i < 8; i++) {
+          const k = i / 7;
+          box(M.dark, -0.1 * sgn + k * 0.55 * sgn, y + 2.0 - 1.95 * k * k, 0.26, 0.05, 0.05, 0.05);
+        }
+        if (alive) box(moss, -0.25 * sgn, y + 0.1, 0, 0.17, 0.2, 0.17);
+        return true;
+      }
+      case 'lantern-string': {
+        // two posts and a sagging string of paper lanterns: faded and dark while dead, softly lit once restored
+        for (const u of [-0.42, 0.42]) box(W.post, u, y + 0.75, 0, 0.08, 1.5, 0.08);
+        for (let i = 0; i <= 8; i++) {
+          const k = i / 8;
+          box(M.dark, -0.42 + k * 0.84, y + 1.45 - 0.35 * Math.sin(k * Math.PI), 0, 0.12, 0.02, 0.02);
+        }
+        const paper = alive ? PALETTE.glow.amber : PALETTE.props.lanternFaded;
+        for (const k of [0.25, 0.5, 0.75]) {
+          const [px, pz] = at(-0.42 + k * 0.84, 0);
+          b.add('sphere', paper, [px, y + 1.3 - 0.35 * Math.sin(k * Math.PI), pz], [0.16, 0.2, 0.16], alive ? 0.6 : 0);
+        }
+        return true;
+      }
+      case 'stump-ring': {
+        // the ring of stumps where an old tree's suckers grew, round a patch of bare earth (moss once restored)
+        b.add('cylinder', alive ? moss : W.dark, [x, y + 0.01, z], [0.7, 0.02, 0.7]);
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + turn;
+          const h = 0.12 + ((t.variant >> i) % 4) * 0.05;
+          b.add('cylinder', W.trunk, [x + Math.cos(a) * 0.32, y + h / 2, z + Math.sin(a) * 0.32], [0.15, h, 0.15]);
+          b.add('cylinder', W.pale, [x + Math.cos(a) * 0.32, y + h + 0.005, z + Math.sin(a) * 0.32], [0.12, 0.01, 0.12]);
+        }
+        return true;
+      }
+      case 'fallen-trunk': {
+        // a round trunk lying along its axis (stretched spheres), its root plate standing up at one end as a disc,
+        // a snapped branch, and moss along its top once restored
+        const log = (u: number, len: number, d: number, hex: string) => {
+          const [px, pz] = at(u, 0);
+          b.add('sphere', hex, [px, y + d / 2, pz], size(len, d, d));
+        };
+        log(0.08 * sgn, 0.95, 0.34, W.trunk);
+        log(0.3 * sgn, 0.5, 0.3, W.bark);
+        const [rx, rz] = at(-0.4 * sgn, 0);
+        b.add('sphere', W.dark, [rx, y + 0.3, rz], size(0.12, 0.62, 0.62));
+        // the sawn end, pale wood
+        const [ex, ez] = at(0.55 * sgn, 0);
+        b.add('sphere', W.pale, [ex, y + 0.17, ez], size(0.04, 0.26, 0.26));
+        box(W.trunk, 0.18 * sgn, y + 0.42, 0.1, 0.07, 0.24, 0.07);
+        if (alive) box(moss, 0.05 * sgn, y + 0.34, 0, 0.5, 0.03, 0.16);
+        return true;
+      }
+      case 'clockwork-heap': {
+        // a fallen clock face leaning on a mound of rubble, rusted gears heaped against it
+        b.add('sphere', M.drain, [x, y + 0.1, z], [0.95, 0.3, 0.85]);
+        const [fx, fz] = at(-0.12 * sgn, -0.12);
+        b.add('sphere', PALETTE.stone.cream, [fx, y + 0.42, fz], size(0.1, 0.62, 0.62));
+        b.add('sphere', M.bronze, [fx, y + 0.42, fz], size(0.06, 0.68, 0.68));
+        box(M.dark, -0.07 * sgn, y + 0.5, -0.12, 0.03, 0.22, 0.04);
+        box(M.dark, -0.07 * sgn, y + 0.42, -0.04, 0.03, 0.04, 0.16);
+        // a gear: a flat disc with teeth round its rim and an axle through it
+        const gear = (hex: string, gx: number, gy: number, gz: number, d: number) => {
+          b.add('cylinder', hex, [gx, gy, gz], [d, 0.07, d]);
+          for (let i = 0; i < 8; i++) {
+            const a = (i / 8) * Math.PI * 2;
+            b.add('box', hex, [gx + Math.cos(a) * d * 0.52, gy, gz + Math.sin(a) * d * 0.52], [0.08, 0.06, 0.08]);
+          }
+          b.add('cylinder', M.iron, [gx, gy + 0.03, gz], [0.07, 0.12, 0.07]);
+        };
+        gear(M.rust, x + 0.22 * sgn, y + 0.26, z + 0.18, 0.5);
+        gear(M.bronze, x + 0.1, y + 0.36, z + 0.3, 0.32);
+        gear(M.rust, x - 0.28, y + 0.16, z + 0.28, 0.28);
+        if (alive) box(moss, 0.2, y + 0.22, -0.32, 0.34, 0.04, 0.16);
+        return true;
+      }
+      default: {
+        // a model that hasn't loaded: a weathered stone block of about its size
+        b.add('box', PALETTE.stone.mid, [x, y + 0.25, z], [0.5, 0.5, 0.5]);
+        return true;
+      }
+    }
+  }
+
+  /**
    * E21.2: the Old City's set pieces on their tile. A salvage pile is its material's model in three sizes,
    * shrinking as it empties; a barricade is a heap of rubble across the avenue; the ruined shed is drawn once
    * from its corner tile; a Keeper stands on bare ground (KeeperVisuals draws it). True when handled.
    */
   private oldCityProp(b: Sink, t: TileData, x: number, y: number, z: number): boolean {
     const prop = t.prop!;
+    if (prop.startsWith('dress:')) return this.dressing(b, t, prop, x, y, z);
+    if (prop.startsWith('glide:')) {
+      // E23.8 (#329): a glide perch (the cliff gate's model, one cell across), turned toward where bloombot lands
+      const sp = setPieceAt(t.x, t.z);
+      if (sp?.kind !== 'glide') return true;
+      const rot = Math.atan2(sp.glide.to[0] - t.x, sp.glide.to[1] - t.z);
+      const model = oldCityModel('glide-perch');
+      const sc = 1 / (GATE_LENGTH['glide-perch'] ?? 1.2);
+      if (!model || !this.batch?.add(model, x, y, z, rot, sc, sc, sc, this.neglected)) {
+        b.add('box', PALETTE.wood.post, [x, y + 0.5, z], [0.16, 1, 0.16]);
+        b.add('box', PALETTE.wood.mid, [x, y + 1.02, z], [0.7, 0.06, 0.4]);
+      }
+      return true;
+    }
     if (prop.startsWith('pile:')) {
       const pile = pileById(prop.slice(5));
       if (!pile) return false;
@@ -1553,6 +1687,19 @@ export class ChunkRenderer {
       }
       this.sink = b;
       this.oldCityProp(b, t, x, h + 0.08, z);
+      return;
+    }
+    // E23.8: walked-over dressing (tram rails in the road): the tile as it is, then the rails on top
+    if (!t.blocked && t.prop?.startsWith('dress:')) {
+      const prop = t.prop;
+      t.prop = undefined;
+      try {
+        this.tile(b, t, h);
+      } finally {
+        t.prop = prop;
+      }
+      this.sink = b;
+      this.dressing(b, t, prop, x, h + 0.08, z);
       return;
     }
     const f = t.feature ?? 'lawn';
