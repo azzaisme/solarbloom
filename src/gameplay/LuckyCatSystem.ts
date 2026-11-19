@@ -1,6 +1,6 @@
 import { fmt } from '../core/Big';
 import { HOME } from './ProgressionSystem';
-import type { CatRewardType, CatSpot, CatVariant, MachineData, TileData } from '../core/types';
+import type { CatRewardType, CatSpot, CatVariant, MachineData } from '../core/types';
 import { hashString, tileRandom } from '../core/Hash';
 
 const CAT_SALT = hashString('lucky-cat');
@@ -23,8 +23,6 @@ export const CAT_REWARD_NAMES: Record<CatRewardType, string> = {
   droneParty: 'Drone Party',
   jackpot: 'JACKPOT',
   goldenRelay: 'Golden Relay',
-  catsGarden: "Cat's Garden",
-  fogWhisker: 'Fog Whisker',
 };
 
 /** How an anchor looks from the current camera: on screen, off screen (reachable by panning) or under the HUD. */
@@ -243,74 +241,6 @@ export class LuckyCatSystem {
     return true;
   }
 
-  /**
-   * Cat's Garden: a small cluster of dead or plain tiles on one playable rooftop (rng-chosen, deterministic),
-   * grown outward from a seed tile.
-   */
-  catsGardenTiles(): TileData[] {
-    const s = this.sim;
-    const ok = (t: TileData) => !t.occupantId && !t.blocked && !s.isCoreTile(t) && (s.restoration.isEligible(t) || (t.ground === 'restored' && t.bloom < 2));
-    let seeds: TileData[];
-    if (this.city()) {
-      // In the city: one of the player's cleared areas (away from the park when possible). Never fog.
-      const areas = s.areas.revealed().filter((id) => s.areas.fog(id) === 'cleared' && s.areas.tiles(id).some(ok));
-      if (!areas.length) return [];
-      const away = areas.filter((id) => id !== PARK);
-      const pool = away.length ? away : areas;
-      const id = pool[Math.floor(this.sim.rng.next() * pool.length)];
-      seeds = s.areas.tiles(id).filter(ok);
-    } else return [];
-    const start = seeds[Math.floor(this.sim.rng.next() * seeds.length)];
-    const home = s.areas.areaOf(start);
-    const out: TileData[] = [start];
-    const seen = new Set([start.id]);
-    for (let i = 0; i < out.length && out.length < TUNING.cat.catsGardenTiles; i++) {
-      for (const n of s.grid.neighbors(out[i])) {
-        if (seen.has(n.id) || !ok(n) || s.areas.areaOf(n) !== home) continue;
-        seen.add(n.id);
-        out.push(n);
-        if (out.length >= TUNING.cat.catsGardenTiles) break;
-      }
-    }
-    return out;
-  }
-
-  /**
-   * Fog Whisker: up to N tiles of the next fogged area, grown outward from its fog edge in order, so each
-   * restoration opens the next (the cat never skips the fog's rules, it just walks them quickly).
-   */
-  fogWhiskerTiles(): TileData[] {
-    const s = this.sim;
-    if (!s.grid.isPlayable(GROUND) || !s.state.progression.coreActivated) return [];
-    const id = s.areas.nextGoal();
-    if (!id || s.areas.fog(id) === 'cleared') return [];
-    const out: TileData[] = [];
-    const seen = new Set<string>();
-    const queue = s.areas.entryTiles(id).slice(0, 2);
-    for (const t of queue) seen.add(t.id);
-    const cap = this.fogWhiskerCap(id);
-    while (queue.length && out.length < cap) {
-      const t = queue.shift()!;
-      out.push(t);
-      for (const n of s.grid.neighbors(t)) {
-        if (seen.has(n.id) || n.blocked || n.occupantId || n.ground === 'restored' || s.areas.areaOf(n) !== id) continue;
-        seen.add(n.id);
-        queue.push(n);
-      }
-    }
-    return out;
-  }
-
-  /**
-   * How many tiles a Fog Whisker restores in an area: more in harder (further) areas, but never enough to reach
-   * its wake requirement on its own (the last tiles are always the player's).
-   */
-  fogWhiskerCap(id: string): number {
-    const s = this.sim;
-    const scaled = Math.round(TUNING.cat.fogWhiskerTiles * Math.min(2, s.areas.info(id).difficulty));
-    return Math.max(0, Math.min(scaled, s.areas.need(id) - s.areas.counts(id).restored - 1));
-  }
-
   /** Golden Relay's extra corridor blooms: grows with the city, capped. */
   goldenCorridorTiles(): number {
     return Math.min(TUNING.cat.goldenCorridorMax, TUNING.cat.goldenCorridorTiles + Math.floor(this.sim.areas.clearedCount() / 10));
@@ -368,16 +298,12 @@ export class LuckyCatSystem {
 
   /**
    * Golden Relay needs a way to send it (a built bridge, or in the city a green corridor of street gardens)
-   * and no unspent one; Cat's Garden needs somewhere new to bloom. Never useless.
+   * and no unspent one. Never useless.
    */
   goldenRelayAvailable() {
     const s = this.sim;
     if (s.state.relayBonus > 0) return false;
     return s.state.machines.some((m) => s.chains.isCorridor(m) && s.chains.corridorNext(m).length > 0);
-  }
-
-  catsGardenAvailable() {
-    return this.catsGardenTiles().length > 0;
   }
 
   /** The drone hub a Drone Party launches from: in the city, the hub nearest the fog the player is pushing into. */
@@ -401,8 +327,6 @@ export class LuckyCatSystem {
       ['droneParty', hasHub ? w.droneParty : 0],
       ['jackpot', w.jackpot],
       ['goldenRelay', this.goldenRelayAvailable() ? w.goldenRelay : 0],
-      ['catsGarden', this.catsGardenAvailable() ? w.catsGarden : 0],
-      ['fogWhisker', this.fogWhiskerTiles().length ? w.fogWhisker : 0],
     ];
     const total = table.reduce((a, [, x]) => a + x, 0);
     let r = this.sim.rng.next() * total;
@@ -500,19 +424,6 @@ export class LuckyCatSystem {
           : `Your next cross-roof chain sends +${TUNING.cat.goldenRelayExtra} extra remote bloom`,
       );
     };
-    const garden = () => {
-      const tiles = this.catsGardenTiles();
-      if (!tiles.length || !s.chains.startCatGarden(tiles)) return harvest();
-      const area = s.areas.areaOf(tiles[0]);
-      const where = area ? `the ${AREA_TYPES[s.areas.info(area).type].name.toLowerCase()}` : s.grid.roof(tiles[0].roofId)!.name;
-      parts.push(`A little garden blooms in ${where} (${tiles.length} tiles)`);
-    };
-    const whisker = () => {
-      const tiles = this.fogWhiskerTiles();
-      if (!tiles.length || !s.chains.startCatGarden(tiles)) return harvest();
-      const a = s.areas.info(s.areas.areaOf(tiles[0])!);
-      parts.push(`The fog thins over the ${AREA_TYPES[a.type].name.toLowerCase()} (${tiles.length} tiles)`);
-    };
     switch (type) {
       case 'luckyHarvest':
         harvest();
@@ -529,18 +440,11 @@ export class LuckyCatSystem {
       case 'goldenRelay':
         golden();
         break;
-      case 'catsGarden':
-        garden();
-        break;
-      case 'fogWhisker':
-        whisker();
-        break;
       case 'jackpot': {
         // Two different compatible rewards together.
         const pool: (() => void)[] = [harvest, frenzy, mega];
         if (s.state.machines.some((m) => m.type === 'droneHub')) pool.push(party);
         if (this.goldenRelayAvailable()) pool.push(golden);
-        if (this.catsGardenAvailable()) pool.push(garden);
         const i = Math.floor(s.rng.next() * pool.length);
         let j = Math.floor(s.rng.next() * (pool.length - 1));
         if (j >= i) j++;

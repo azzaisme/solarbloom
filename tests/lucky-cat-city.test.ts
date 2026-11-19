@@ -6,6 +6,7 @@ import { createInitialState, GROUND, isRestorable } from '../src/core/GameState'
 import { TUNING } from '../src/data/tuning';
 import type { MachineData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
+import { wakeNextArea } from './helpers';
 
 type Applier = { apply(t: string, mult: number, hidden: number): string };
 const saver = new SaveService(undefined);
@@ -15,8 +16,10 @@ function grownCity(seed: number, n: number) {
   const sim = new Sim(createInitialState(seed));
   sim.state.progression.coreActivated = true;
   sim.areas.clear(PARK, true);
+  // E23.1.1: through the gates (and on to the mainland), as a player would
   for (let i = 0; i < n; i++) {
-    const id = sim.areas.nextGoal()!;
+    const id = sim.areas.nextGoal() ?? (wakeNextArea(sim), undefined);
+    if (!id) continue;
     for (const t of sim.areas.tiles(id)) {
       if (!isRestorable(t, sim.state.machines) || t.ground === 'restored') continue;
       t.ground = 'restored';
@@ -24,7 +27,7 @@ function grownCity(seed: number, n: number) {
       t.pollution = 0;
       sim.grid.touch(t);
     }
-    sim.areas.clear(id);
+    sim.areas.clear(id, true);
   }
   return sim;
 }
@@ -73,21 +76,6 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     expect(copy.cat.claim()).toBeUndefined();
   });
 
-  it('Fog Whisker restores the next fogged area from its edge inward, within the fog rules and its cap', () => {
-    const before = new Sim(createInitialState(3));
-    expect(before.cat.fogWhiskerTiles()).toEqual([]); // not before the fountain
-    const sim = grownCity(3, 2);
-    const id = sim.areas.nextGoal()!;
-    const tiles = sim.cat.fogWhiskerTiles();
-    expect(tiles.length).toBeGreaterThan(3);
-    expect(tiles.length).toBeLessThanOrEqual(sim.cat.fogWhiskerCap(id));
-    for (const t of tiles) expect(sim.areas.areaOf(t)).toBe(id);
-    const summary = (sim.cat as unknown as Applier).apply('fogWhisker', 1, 0);
-    expect(summary).toMatch(/fog thins/);
-    sim.advance(5);
-    for (const t of tiles) expect(t.ground).toBe('restored');
-  });
-
   /** Every changed ground tile sits in a cleared or thinning area, never in fog. */
   function watchFog(sim: Sim) {
     const bad: string[] = [];
@@ -100,23 +88,6 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     });
     return bad;
   }
-
-  it("Cat's Garden blooms inside one cleared area away from the park", () => {
-    const sim = grownCity(5, 4);
-    expect(sim.cat.catsGardenAvailable()).toBe(true);
-    for (let i = 0; i < 20; i++) {
-      const tiles = sim.cat.catsGardenTiles();
-      expect(tiles.length).toBeGreaterThan(0);
-      const area = sim.areas.areaOf(tiles[0])!;
-      expect(area).not.toBe(PARK);
-      expect(sim.areas.fog(area)).toBe('cleared');
-      for (const t of tiles) expect(sim.areas.areaOf(t)).toBe(area);
-    }
-    const bad = watchFog(sim);
-    expect((sim.cat as unknown as Applier).apply('catsGarden', 1, 0)).toMatch(/garden blooms in the /);
-    sim.advance(5);
-    expect(bad).toEqual([]);
-  });
 
   it('Golden Relay rides a green corridor: the next hop blooms extra tiles, then it is spent', () => {
     const sim = grownCity(6, 3);
@@ -179,32 +150,7 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     expect(bad).toEqual([]);
   });
 
-  it('city-scale rewards are capped: Fog Whisker never wakes an area alone, Golden Corridor tops out', { timeout: 60000 }, () => {
-    const sim = grownCity(21, 2);
-    const id = sim.areas.nextGoal()!;
-    // Nearly ready: the whisker may only take it to one tile short.
-    const need = sim.areas.need(id);
-    const fillTo = (n: number) => {
-      for (const t of sim.areas.tiles(id)) {
-        if (sim.areas.counts(id).restored >= n) break;
-        if (!isRestorable(t, sim.state.machines) || t.ground === 'restored') continue;
-        t.ground = 'restored';
-        t.bloom = 1;
-        sim.grid.touch(t);
-      }
-    };
-    fillTo(need - 4);
-    expect(sim.areas.counts(id).restored).toBe(need - 4);
-    expect(sim.cat.fogWhiskerCap(id)).toBe(3);
-    expect(sim.cat.fogWhiskerTiles().length).toBeLessThanOrEqual(3);
-    (sim.cat as unknown as Applier).apply('fogWhisker', 1, 0);
-    sim.advance(5);
-    expect(sim.areas.counts(id).restored).toBeLessThanOrEqual(need - 1);
-    expect(sim.areas.ready(id)).toBe(false);
-    // One tile short of ready: no Fog Whisker at all (it would be useless), so it degrades to a harvest.
-    fillTo(need - 1);
-    expect(sim.cat.fogWhiskerTiles()).toEqual([]);
-    expect((sim.cat as unknown as Applier).apply('fogWhisker', 1, 0)).toMatch(/🌿/);
+  it('the Golden Corridor bonus grows with the city and tops out', { timeout: 60000 }, () => {
     // A huge city: the corridor bonus is capped.
     const big = grownCity(22, 150);
     expect(big.cat.goldenCorridorTiles()).toBe(TUNING.cat.goldenCorridorMax);

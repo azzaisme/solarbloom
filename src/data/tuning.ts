@@ -291,8 +291,7 @@ export const TUNING = {
     frenzyMult: 3,
     megaBloomTiles: 8,
     dronePartySeconds: 45,
-    weights: { luckyHarvest: 40, solarFrenzy: 25, megaBloom: 20, droneParty: 12, jackpot: 3, goldenRelay: 14, catsGarden: 14, fogWhisker: 18 },
-    fogWhiskerTiles: 10, // Fog Whisker: tiles of the next fogged area restored from its edge, capped
+    weights: { luckyHarvest: 40, solarFrenzy: 25, megaBloom: 20, droneParty: 12, jackpot: 3, goldenRelay: 14 },
     goldenRelayExtra: 1, // Golden Relay: extra remote blooms on the next crossing
     goldenCorridorTiles: 5, // Golden Relay in the city: extra blooms on the next green corridor hop…
     goldenCorridorMax: 12, // …+1 per 10 cleared areas, up to this
@@ -302,7 +301,6 @@ export const TUNING = {
     preferWithin: 40,
     /** On screen but further than this from bloombot (tiles) counts as out of sight: small, hazy, behind things. */
     inViewTiles: 12,
-    catsGardenTiles: 6, // Cat's Garden: tiles restored (and decorated) on a random unlocked roof
     /**
      * Phase 5 E15: rarer cats (rolled when one appears, 80 / 18 / 2). `mult` scales the reward (harvest seconds,
      * buff and party time, Mega Bloom size); a Rainbow Cat also gives two different rewards. The first cat is
