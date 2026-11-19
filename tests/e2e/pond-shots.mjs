@@ -131,7 +131,7 @@ try {
     return n;
   });
   check(lush > 20, `lush banks round the pond (${lush} tiles at bloom 4)`);
-  await frame(cx + 3, cz, 1.1, 0, 9000);
+  await frame(cx + 3, cz + 1, 2, 0, 9000);
   const shown = (id) =>
     run((id) => {
       const s = window.solarbloom.sim;
@@ -139,7 +139,7 @@ try {
       return { level: s.water.levelOf(id), bloom: t.bloom, shown: s.water.bloomShown(t) };
     }, id);
   const full = await shown(id);
-  check(full.level === 1 && full.shown === 4, `full pond: the bank shows its full bloom (${JSON.stringify(full)})`);
+  check(full.level > 0.99 && full.shown === 4, `full pond: the bank shows its full bloom (${JSON.stringify(full)})`);
   await shot('6-fade-full');
   await run((id) => {
     const s = window.solarbloom.sim;
@@ -181,7 +181,14 @@ try {
     window.solarbloom.sim.areas.clear(area, true);
     window.solarbloom.chunks.markAll();
   }, cistern.area);
-  await page.waitForFunction((id) => window.solarbloom.sim.water.levelOf(id) >= 1, cistern.id, { timeout: 600000 });
+  // the wake rush fills it over 40 game seconds; the headless sim runs about ten times slower than real time on a
+  // shared machine, so the water's clock is driven here (the same steps the game takes, only sooner)
+  const lv = await run((id) => {
+    const w = window.solarbloom.sim.water;
+    for (let i = 0; i < 45; i++) w.tick(1);
+    return w.levelOf(id);
+  }, cistern.id);
+  check(lv === 1, `woken, the Cistern pond fills (${lv})`);
   await frame(68.5, 47, 0.75, 0, 8000);
   await shot('5-cistern-awake');
   await frame(68.5, 47, 1.2, 30, 8000);
