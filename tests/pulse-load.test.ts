@@ -5,7 +5,7 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { TileData } from '../src/core/types';
 import { PARK_SET, REGIONS } from '../src/data/oldcity';
 import { LOAD_WHEEL, PULSE_LOAD, RARE_PLANTS, RIPPLE } from '../src/data/pulse';
-import { RECIPES } from '../src/data/salvage';
+import { MACHINE_RECIPES } from '../src/data/crafting';
 import { faunaGoal } from '../src/gameplay/Ecosystem';
 import { CAT_ANCHORS } from '../src/data/templates';
 import { TUNING } from '../src/data/tuning';
@@ -43,8 +43,9 @@ function gardenSpot(sim: Sim, avoid: TileData[] = []): { t: TileData; garden: Ti
   garden.ground = 'prepared';
   garden.pollution = 0;
   sim.grid.touch(garden);
-  sim.state.salvage!.tier = Math.max(sim.state.salvage!.tier ?? 0, RECIPES.pollinator!.tier ?? 0); // the garden is unlocked
-  for (const [k, n] of Object.entries(RECIPES.pollinator!.cost)) pack(sim)[k] = (pack(sim)[k] ?? 0) + (n as number);
+  const recipe = MACHINE_RECIPES.find((r) => r.id === 'pollinator')!;
+  sim.state.salvage!.tier = Math.max(sim.state.salvage!.tier ?? 0, ('tier' in recipe.unlock ? recipe.unlock.tier : 0)); // the garden is unlocked
+  for (const [k, n] of Object.entries(recipe.cost)) pack(sim)[k] = (pack(sim)[k] ?? 0) + (n as number);
   expect(sim.build.place('pollinator', GROUND, garden.x, garden.z), 'the garden is built').toBeTruthy();
   return { t, garden };
 }
