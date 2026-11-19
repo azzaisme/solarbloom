@@ -318,10 +318,11 @@ export class FarmSystem {
     const inv = this.sim.inventory;
     for (const k of ['food', 'biomass', 'seeds'] as const) if (got[k] > 0) inv.addToStore(k, inv.add(k, got[k]));
     const st = this.bed(m);
-    this.findCross(m, lk.crop, st.cross as CropId | undefined);
     this.write(m, { trellis: st.trellis, flooded: st.flooded });
     this.sim.bus.emit('planter.harvested', { machineId: m.id, crop: lk.crop, ...got });
     this.sim.bus.emit('planter.changed', { machineId: m.id });
+    // E23.6.2: after the harvest's own news, so a cross found is the last word (the calm HUD shows one toast)
+    this.findCross(m, lk.crop, st.cross as CropId | undefined);
     return got;
   }
 
