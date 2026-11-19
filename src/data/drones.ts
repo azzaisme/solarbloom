@@ -1,13 +1,14 @@
 // E23.6.3 (#392): what drones run on, by role. All data, no rules: the numbers are starting values for tuning.
-// Each role draws from its hub: power from the grid (E23.3) while it works, and per job some water from a pipe or
-// water beside the hub (E23.4) or some biomass from a Storage chest beside it (E23.5's item; the store, until then).
+// Each role draws from its hub: power from the grid (E23.3) while a drone is out working (none while it naps or
+// waits), and per job some water from water beside the hub (E23.4) or some Biomass from the store through a Storage
+// chest beside it (E23.5's item). Lighter drones (research) makes each of these a fraction of itself.
 
 import type { DroneRole } from '../core/types';
 
 export interface DroneSupply {
   /** grid power each working drone of this role draws (watts, as E23.3's consumers count them) */
   power: number;
-  /** water units drawn per job from water within reach of the hub (a pipe or a body) */
+  /** water units drawn per job from the fullest body of water within reach of the hub */
   water?: number;
   /** biomass taken per job from the store, through a Storage chest beside the hub */
   biomass?: number;

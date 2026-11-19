@@ -8,11 +8,16 @@ export type Shortage = 'power' | 'water' | 'biomass';
 
 /**
  * E23.6.3 (#392): what drones run on. Each role draws from its hub (data/drones DRONE_SUPPLY):
- * - grid power (`sim.power`, E23.3): a hub is a helper on the grid, drawing each of its drones' role power while it
- *   stands (`draw`, which the grid reads), so a short grid sheds the hub as a whole and it stays off until power is back;
- * - water per job, from the nearest pond, canal or reservoir within `DRONE_HUB.waterReach` of the hub (`sim.water`,
- *   E23.4), which goes down as it is drawn;
+ * - grid power (`sim.power`, E23.3): a hub is a helper on the grid, drawing its role's power for each drone out
+ *   working (`draw`, which the grid reads; a hub whose drones nap or wait draws nothing). A drone sets out only when
+ *   the grid has room for its draw at the hub (`headroom`), so a short grid keeps it home instead of shedding the hub
+ *   mid-job, over and over;
+ * - water per job, from the fullest pond, canal or reservoir within `DRONE_HUB.waterReach` of the hub that still
+ *   holds a job's worth (`sim.water`, E23.4), which goes down as it is drawn;
  * - Biomass per job, from the store (E23.5's item) through a Storage chest beside the hub.
+ * Lighter drones (research) cuts every role's draw by its share. Water is drawn in fractions; Biomass is whole
+ * items, so each hub keeps the part of an item it has paid ahead (`m.fuelCredit`) and pays a whole one only when
+ * that runs out: at 0.7 a job, ten jobs take seven.
  * A hub short of something its role needs lets its drones finish the job in hand, then dock and wait; they start
  * again by themselves once it is back. Roles that don't need what ran short carry on. The old park drone runs on
  * sunlight and needs nothing.
@@ -20,13 +25,12 @@ export type Shortage = 'power' | 'water' | 'biomass';
 export class DroneFuel {
   constructor(private sim: Sim) {}
 
-  /** What a role draws now: its data, less Lighter drones (research, E23.6.2), never below one unit a job. */
+  /** What a role draws now: its data, less Lighter drones (research, E23.6.2): fractions, paid as above. */
   supply(role: DroneRole | 'cultivator'): DroneSupply {
     const base = DRONE_SUPPLY[role];
     const k = 1 - Math.min(0.9, this.sim.research.effect('droneThrift'));
     if (k >= 1) return base;
-    const less = (n: number | undefined) => (n ? Math.max(1, Math.round(n * k)) : n);
-    return { power: base.power * k, water: less(base.water), biomass: less(base.biomass) };
+    return { power: base.power * k, water: base.water && base.water * k, biomass: base.biomass && base.biomass * k };
   }
 
   /** What a role needs from its hub. */
@@ -40,11 +44,30 @@ export class DroneFuel {
     return this.sim.grid.get(hub.roofId, Math.floor(hub.x + hub.size / 2), Math.floor(hub.z + hub.size / 2));
   }
 
-  /** The water a hub draws from: the nearest body within reach holding more than a trickle, if any. */
+  /**
+   * The water a hub draws from: of the bodies within reach of its middle, the fullest that still holds `units`
+   * (a dry pond a tile closer never hides a full canal further off).
+   */
   waterBeside(hub: MachineData, units: number): string | undefined {
     const t = this.hubTile(hub);
-    const b = t && this.sim.water.bodyNear(t, DRONE_HUB.waterReach);
-    return b && this.sim.water.amountOf(b.id) >= units ? b.id : undefined;
+    if (!t) return undefined;
+    const R = DRONE_HUB.waterReach;
+    const w = this.sim.water;
+    let best: string | undefined;
+    let most = units - 1e-9;
+    const seen = new Set<string>();
+    for (let dz = -R; dz <= R; dz++)
+      for (let dx = -R; dx <= R; dx++) {
+        const b = w.bodyAt(this.sim.grid.get(t.roofId, t.x + dx, t.z + dz));
+        if (!b || seen.has(b.id)) continue;
+        seen.add(b.id);
+        const n = w.amountOf(b.id);
+        if (n >= most) {
+          most = n;
+          best = b.id;
+        }
+      }
+    return best;
   }
 
   /** A Storage chest within reach of a hub (its way into the store), if any. */
@@ -54,12 +77,21 @@ export class DroneFuel {
     return this.sim.machinesOfType('chest').find((c) => c.roofId === hub.roofId && distToFootprint(cx, cz, c.x, c.z, c.size) <= DRONE_HUB.chestReach + hub.size / 2);
   }
 
+  /** Whole Biomass items a hub pays for its next job (none while it has paid that far ahead). */
+  biomassDue(hub: MachineData, role: DroneRole | 'cultivator'): number {
+    const c = this.supply(role).biomass ?? 0;
+    if (!c) return 0;
+    return Math.max(0, Math.ceil(c - (hub.fuelCredit ?? 0) - 1e-9));
+  }
+
   /** What a hub is short of for a role's next job, if anything (the first thing missing). */
   short(hub: MachineData, role: DroneRole | 'cultivator'): Shortage | undefined {
     const s = this.supply(role);
-    if (!this.sim.power.isPowered(hub)) return 'power';
+    const p = this.sim.power;
+    // off the grid, shed, or no room on its line for one more drone at work
+    if (!p.isPowered(hub) || p.headroom(hub) + 1e-9 < p.draw(hub) + s.power) return 'power';
     if (s.water && !this.waterBeside(hub, s.water)) return 'water';
-    if (s.biomass && (!this.chestBeside(hub) || this.sim.inventory.stored('biomass') < s.biomass)) return 'biomass';
+    if (s.biomass && (!this.chestBeside(hub) || this.sim.inventory.stored('biomass') < this.biomassDue(hub, role))) return 'biomass';
     return undefined;
   }
 
@@ -70,19 +102,29 @@ export class DroneFuel {
   take(hub: MachineData, role: DroneRole | 'cultivator'): boolean {
     if (this.short(hub, role)) return false;
     const s = this.supply(role);
-    if (s.biomass && !this.sim.inventory.takeFromStore('biomass', s.biomass)) return false;
+    if (s.biomass) {
+      const due = this.biomassDue(hub, role);
+      if (!this.sim.inventory.takeFromStore('biomass', due)) return false;
+      const credit = (hub.fuelCredit ?? 0) + due - s.biomass;
+      hub.fuelCredit = credit > 1e-9 ? credit : undefined;
+    }
     if (s.water) this.sim.water.draw(this.waterBeside(hub, s.water)!, s.water);
     return true;
   }
 
+  /** Is a drone out working (flying to a job, at it, or on its way home), so drawing its hub's power? */
+  private working(d: { mode: string }): boolean {
+    return d.mode !== 'idle' && d.mode !== 'cooldown';
+  }
+
   /**
-   * Power a hub draws (W): each of its drones' role power while it stands, or each tiller's for a Cultivator dock.
+   * Power a hub draws (W): its role's power for each drone out working, or each tiller at work for a Cultivator dock.
    * The grid reads this (PowerGrid registers hubs and docks as helpers).
    */
   draw(hub: MachineData): number {
-    if (hub.type === 'cultivator') return (hub.cult?.units.length ?? 0) * this.supply('cultivator').power;
+    if (hub.type === 'cultivator') return (hub.cult?.units ?? []).filter((u) => u.work.length && !u.parked).length * this.supply('cultivator').power;
     let w = 0;
-    for (const d of this.sim.state.drones) if (d.hubId === hub.id && !d.old) w += this.supply(d.role ?? this.sim.roles.roleOf(hub)).power;
+    for (const d of this.sim.state.drones) if (d.hubId === hub.id && !d.old && this.working(d)) w += this.supply(d.role ?? this.sim.roles.roleOf(hub)).power;
     return w;
   }
 }

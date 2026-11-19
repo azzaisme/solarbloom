@@ -86,6 +86,8 @@ export class PowerGrid {
   private dirty = true;
   /** Served fraction per consumer id from the last solve (1 = fully on). */
   private servedFrac = new Map<string, number>();
+  /** E23.6.3: power left on its network when each consumer's turn came in the last solve (W). */
+  private leftAt = new Map<string, number>();
   /** Eased level per consumer id. */
   private eased = new Map<string, number>();
   private solved = false;
@@ -182,6 +184,16 @@ export class PowerGrid {
   }
 
   /** Does this machine have the power it needs? Always true for machines the grid does not power. */
+  /**
+   * E23.6.3: the power its network had left for a consumer when its turn came (W): what it may draw before it would
+   * be shed. 0 off the grid; Infinity for machines the grid does not power.
+   */
+  headroom(m: PowerNode | undefined): number {
+    if (!m || !this.roleOf(m)?.consumer) return Infinity;
+    this.fresh();
+    return this.leftAt.get(m.id) ?? 0;
+  }
+
   isPowered(m: PowerNode | undefined): boolean {
     if (!m || !this.roleOf(m)?.consumer) return true;
     this.fresh();
@@ -399,6 +411,7 @@ export class PowerGrid {
     const rank = (m: PowerNode) => KEEP_ORDER.indexOf(this.roles.get(m.type)!.consumer!.shed);
     for (const n of this.nets) n.consumers.sort((a, b) => rank(a) - rank(b) || byId(a, b));
     for (const id of [...this.servedFrac.keys()]) if (!this.netOf.has(id)) this.servedFrac.delete(id);
+    for (const id of [...this.leftAt.keys()]) if (!this.netOf.has(id)) this.leftAt.delete(id);
     for (const id of [...this.eased.keys()]) if (!this.netOf.has(id)) this.eased.delete(id);
   }
 
@@ -426,6 +439,7 @@ export class PowerGrid {
     let served = 0;
     let blocked = false;
     for (const c of n.consumers) {
+      this.leftAt.set(c.id, blocked ? 0 : left);
       const role = this.roles.get(c.type)!.consumer!;
       const want = this.draw(c, sky);
       demand += want;

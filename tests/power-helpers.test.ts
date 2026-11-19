@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { CHARGE } from '../src/data/charge';
+import { DRONE_SUPPLY } from '../src/data/drones';
 import { POWER } from '../src/data/power';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -91,15 +92,51 @@ describe('E23.3.3 chargers', () => {
     hub.role = 'scout'; // E23.6.3: a hub draws by its drones' roles; a Scout's is the most (4 W)
     (hub.roles ??= []).push('scout');
     put(sim, 'solar', 29, 30);
-    put(sim, 'solar', 29, 31); // 8 W: the charger (6) fits, the Scout hub (4) does not
+    put(sim, 'solar', 29, 31); // 8 W: the charger (6) fits, a Scout at work (4) does not
     sim.bot = { roofId: GROUND, x: 30.5, z: 30.5 };
     sim.advance(1);
     expect(sim.power.isPowered(pad)).toBe(true);
-    expect(sim.power.isPowered(hub)).toBe(false);
-    // bloombot steps off: the charger idles and the hub comes back by itself
+    // E23.6.3: the hub draws only for drones at work, so it sends none out while there is no room for one
+    expect(sim.droneFuel.short(hub, 'scout')).toBe('power');
+    sim.advance(5);
+    const mine = () => sim.state.drones.filter((d) => d.hubId === hub.id);
+    expect(mine().length).toBeGreaterThan(0);
+    for (const d of mine()) expect(sim.drones.statusOf(d)).toBe('waitingEnergy');
+    expect(sim.power.draw(hub)).toBe(0);
+    // bloombot steps off: the charger idles and the hub sends its Scouts out by itself
     sim.bot = { roofId: GROUND, x: 40.5, z: 40.5 };
     sim.advance(1);
-    expect(sim.power.isPowered(hub)).toBe(true);
+    expect(sim.droneFuel.short(hub, 'scout')).toBeUndefined();
+  });
+});
+
+describe('E23.6.3 drones on a real grid', () => {
+  it('a hub sends out only as many drones as the grid has room for at its turn, and draws only for them', () => {
+    const sim = oldCity();
+    const hub = put(sim, 'droneHub', 30, 30, 2);
+    hub.role = 'scout';
+    (hub.roles ??= []).push('scout');
+    put(sim, 'solar', 29, 30);
+    put(sim, 'solar', 29, 31);
+    put(sim, 'solar', 29, 32); // 12 W at noon: room for three Scouts at 4 W, not four
+    sim.power.tick(1);
+    const each = DRONE_SUPPLY.scout.power;
+    expect(sim.power.headroom(hub)).toBeCloseTo(12, 6);
+    sim.state.drones = [];
+    for (let i = 0; i < 3; i++) {
+      expect(sim.droneFuel.short(hub, 'scout'), `drone ${i}`).toBeUndefined();
+      sim.state.drones.push({ id: `d${i}`, hubId: hub.id, role: 'scout', mode: 'flying', px: 31, pz: 30, timer: 0 } as never);
+      sim.power.tick(0.1);
+      expect(sim.power.draw(hub)).toBe(each * (i + 1));
+      expect(sim.power.isPowered(hub)).toBe(true);
+    }
+    // a fourth would not fit: it waits at home, and the three out keep their power
+    expect(sim.droneFuel.short(hub, 'scout')).toBe('power');
+    // one comes home and naps: room again
+    (sim.state.drones[0] as { mode: string }).mode = 'idle';
+    sim.power.tick(0.1);
+    expect(sim.power.draw(hub)).toBe(each * 2);
+    expect(sim.droneFuel.short(hub, 'scout')).toBeUndefined();
   });
 });
 

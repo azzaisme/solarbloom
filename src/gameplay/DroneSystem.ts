@@ -442,9 +442,11 @@ export class DroneSystem {
           }
           // E18: a hub with another role sends its drones on that role's job (Restorers carry on below, unchanged).
           const role = s.roles.roleFor(d, hub);
-          // E23.6.3: a hub short of what this role runs on: the drone docks and waits (the old drone runs on sunlight)
-          if (!d.old && s.droneFuel.short(hub, role)) {
-            this.status.set(d.id, 'docked');
+          // E23.6.3: a hub short of what this role runs on: the drone docks and waits (the old drone runs on sunlight).
+          // No room on the grid for one more drone at work reads as waiting for power, like a hub off the grid.
+          const missing = d.old ? undefined : s.droneFuel.short(hub, role);
+          if (missing) {
+            this.status.set(d.id, missing === 'power' ? 'waitingEnergy' : 'docked');
             const hx = hub.x + hub.size / 2;
             const hz = hub.z + hub.size / 2;
             if (Math.hypot(d.px - hx, d.pz - hz) > 0.05) d.mode = 'returning';
