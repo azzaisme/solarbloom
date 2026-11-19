@@ -9,7 +9,7 @@ import type { Sim } from './Sim';
  */
 export class ChargerSystem {
   constructor(private sim: Sim) {
-    sim.power.register('charger', { consumer: { shed: 'charger', draw: (m) => (this.charging(m) ? POWER.draw.charger : 0) } });
+    sim.power.register('charger', { consumer: { shed: 'charger', draw: (m) => (this.charging(m as MachineData) ? POWER.draw.charger : 0) } });
   }
 
   /** Bloombot is full (always, where there is no charge: the classic game). */

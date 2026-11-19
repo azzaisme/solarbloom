@@ -428,6 +428,12 @@ export interface GameState {
    * production, chains, milestones or pacing). Optional and sparse, so no save version change.
    */
   cozy?: CozyState;
+  /** E23.3.5: stored energy of grid nodes that are not machines (solar garden lights), by node id. Optional. */
+  power?: {
+    cells?: Record<string, number>;
+    /** E23.3.5: set once lights placed before night lighting have been carried over (see Lights.carryOver) */
+    lights?: number;
+  };
   /** E23.2.1: bloombot's charge (old-city rules; absent = full). Optional, so no save version change. */
   charge?: ChargeState;
   /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
@@ -470,4 +476,6 @@ export interface CozyState {
   decor?: Record<string, string>;
   /** E19.2.2: decorations earned so far, in the order they unlocked (ones open from the start aren't listed) */
   decorUnlocked?: string[];
+  /** E23.3.5: line lights hung on power poles, pole machine id → light id (data/lights) */
+  poleLights?: Record<string, string>;
 }

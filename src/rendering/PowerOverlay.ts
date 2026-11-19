@@ -1,6 +1,5 @@
 import * as pc from 'playcanvas';
-import type { MachineData } from '../core/types';
-import type { PowerNetwork } from '../gameplay/PowerGrid';
+import type { PowerNetwork, PowerNode } from '../gameplay/PowerGrid';
 import type { Sim } from '../gameplay/Sim';
 import { PALETTE, uniqueMat } from './Materials';
 import { bezier, part, ring, tube } from './MachineParts';
@@ -11,8 +10,11 @@ import { POWER } from '../data/power';
 
 const P = PALETTE.signal.power;
 
+/** E23.3.5's lights are grid nodes too (`light:<kind>`). */
+const isLight = (m: PowerNode) => m.type.startsWith('light:');
+
 interface MemberView {
-  m: MachineData;
+  m: PowerNode;
   frame: pc.MeshInstance;
   net: number;
   network: PowerNetwork;
@@ -23,7 +25,7 @@ interface LineView {
   network: PowerNetwork;
 }
 interface BarView {
-  m: MachineData;
+  m: PowerNode;
   fill: pc.Entity;
 }
 
@@ -64,7 +66,7 @@ export class PowerOverlay {
   constructor(
     private sim: Sim,
     parent: pc.Entity,
-    private worldOf: (m: MachineData) => [number, number, number],
+    private worldOf: (m: PowerNode) => [number, number, number],
     private batcher?: pc.BatchManager,
   ) {
     this.root = group(parent, 'powerOverlay');
@@ -175,13 +177,16 @@ export class PowerOverlay {
       for (const m of n.members) {
         const [x, y, z] = this.worldOf(m);
         const e = group(this.root, 'pframe', [x, y + 0.04, z]);
-        const mi = new pc.MeshInstance(glowTileMesh(this.device, m.size + 0.2), this.netMats[i % this.netMats.length]);
+        // A light gets a small glowing dot, not a tile frame and no line, so the machines and the grid's shape read
+        // first; you can still see which lights a network powers (or that one has none, in red).
+        const size = isLight(m) ? 0.4 : m.size + 0.2;
+        const mi = new pc.MeshInstance(glowTileMesh(this.device, size), this.netMats[i % this.netMats.length]);
         e.addComponent('render', { meshInstances: [mi], castShadows: false, receiveShadows: false });
         this.members.push({ m, frame: mi, net: i, network: n });
         if (this.sim.power.roleOf(m)?.battery) this.bar(m, x, y, z);
       }
       for (const [a, b] of n.links) this.lines.push({ mi: this.glowCable(a, b, line, 0.045), net: i, network: n });
-      for (const [p, m] of n.feeds) this.lines.push({ mi: this.glowCable(p, m, line, 0.022), net: i, network: n });
+      for (const [p, m] of n.feeds) if (!isLight(m)) this.lines.push({ mi: this.glowCable(p, m, line, 0.022), net: i, network: n });
     });
     // Poles lightning tripped: a red ring at the foot (they are on no network until reset).
     const red = this.redMat;
@@ -205,7 +210,7 @@ export class PowerOverlay {
   }
 
   /** A battery's level bar, standing above it and facing the camera (which looks from +x +z). */
-  private bar(m: MachineData, x: number, y: number, z: number) {
+  private bar(m: PowerNode, x: number, y: number, z: number) {
     const g = group(this.root, 'pbar', [x, y + 1.45, z]);
     g.setLocalEulerAngles(0, 45, 0);
     shape(g, 'box', this.cellBackMat, { pos: [0, 0, -0.01], scale: [0.24, 0.8, 0.02] });
@@ -213,7 +218,7 @@ export class PowerOverlay {
     this.bars.push({ m, fill });
   }
 
-  private glowCable(a: MachineData, b: MachineData, m: pc.Material, r: number): pc.MeshInstance {
+  private glowCable(a: PowerNode, b: PowerNode, m: pc.Material, r: number): pc.MeshInstance {
     const pa = this.worldOf(a);
     const pb = this.worldOf(b);
     const A: [number, number, number] = [pa[0], pa[1] + cableY(a), pa[2]];

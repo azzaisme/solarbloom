@@ -82,16 +82,74 @@ try {
     return out;
   });
   console.log('built', JSON.stringify(built));
+  // a sunny midday for the day shots (E23.7's clock and weather, where they exist)
+  await page.evaluate(() => {
+    const s = window.solarbloom.sim;
+    if (!s.clock?.gameSeconds) return;
+    s.weather?.forceForTest?.('sunny', 1e9);
+    (s.state.clock ??= { offset: 0 }).offset += (0.33 - s.clock.dayFraction()) * 2880;
+  });
   await shot('power-day', 8, 42, 1.0, 20);
   await shot('power-day-close', 6, 41, 1.8, 20);
+  // E23.2.1's real charge meter: bloombot sits at the powered pad's edge and the meter fills
+  const dock = await page.evaluate(async () => {
+    const g = window.solarbloom;
+    const s = g.sim;
+    const pad = s.state.machines.find((m) => m.type === 'charger');
+    if (!pad || !s.charge?.on) return null;
+    s.state.charge = { value: 20 };
+    g.bot.teleport(pad.roofId, pad.x + 0.5, pad.z + pad.size + 0.3);
+    await new Promise((r) => setTimeout(r, 1500));
+    const t0 = s.state.time;
+    const v0 = s.charge.value();
+    await new Promise((r) => setTimeout(r, 5000));
+    return { docked: s.chargers.docked()?.id === pad.id, powered: s.power.isPowered(pad), from: v0, to: s.charge.value(), simSeconds: +(s.state.time - t0).toFixed(2), max: s.charge.max };
+  });
+  if (dock) {
+    console.log('  charger', JSON.stringify(dock));
+    if (!dock.docked || !dock.powered || !(dock.to > dock.from)) throw new Error('bloombot did not recharge at the pad');
+    await shot('charger-dock', 8, 42, 1.8, 20, 500);
+  }
   // The Power overlay in build mode (O / d-pad right), where it exists
   const hasOverlay = await page.evaluate(() => typeof window.solarbloom.togglePowerView === 'function');
   if (hasOverlay) await page.evaluate(() => {
     const g = window.solarbloom;
     g.selectTool('battery');
     g.togglePowerView();
+    // The hover preview sets the Power view's focus every frame (from bloombot's cursor here). Hold it still, so the
+    // plain shots have no focus and the focus shot has exactly the one set below.
+    g.previewAt = () => {};
+    g.powerFocus = undefined;
   });
+  // the Power view's dim eases in (slowly at headless frame rates): wait until it has settled
+  const settled = (on) => page.waitForFunction((on) => {
+    const d = window.solarbloom.dayNight.dim;
+    const prev = window.__dimPrev;
+    window.__dimPrev = d;
+    return on ? d > 0.45 && prev !== undefined && Math.abs(d - prev) < 1e-4 : d < 0.01;
+  }, on, { timeout: 60000, polling: 500 });
+  if (hasOverlay) await settled(true);
   if (hasOverlay) await shot('power-overlay', 8, 42, 1.0, 20);
+  // the network under the cursor lights up (aimed a tile off the pole line, not on it)
+  if (hasOverlay) {
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      const a = g.sim.machine('m8');
+      g.powerFocus = { roofId: a.roofId, x: 8.5, z: 41.6 };
+    });
+    await page.waitForTimeout(800);
+    console.log('  focus', JSON.stringify(await page.evaluate(() => {
+      const g = window.solarbloom;
+      const n = g.sim.power.networkNear(g.powerFocus.roofId, g.powerFocus.x, g.powerFocus.z, 1.2);
+      return { network: n?.id, machines: n?.members.length };
+    })));
+    await shot('power-overlay-focus', 8, 42, 1.0, 20);
+    await page.evaluate(() => (window.solarbloom.powerFocus = undefined));
+  }
+  if (hasOverlay) console.log('  power view light', JSON.stringify(await page.evaluate(() => {
+    const g = window.solarbloom;
+    return { dim: g.dayNight.dim, sun: g.scene.sun.light.intensity, fill: g.scene.fill.light.intensity, sky: g.app.scene.skyboxIntensity, exposure: g.app.scene.exposure };
+  })));
   // Lightning trips a pole: what it carried goes dark (red frames), the pole gets a red ring
   const tripped = await page.evaluate(() => {
     const g = window.solarbloom;
@@ -144,13 +202,18 @@ try {
       return { n };
     });
     console.log('lights placed', JSON.stringify(placed));
-    // A stand-in clock when E23.7's isn't here; with it, its own time of day. The scene is dimmed by hand without it.
+    // E23.7's real clock (its day/night renderer darkens the scene); a stand-in clock and a hand-dimmed scene without it.
     const night = async (f) =>
       page.evaluate((f) => {
         const g = window.solarbloom;
         const s = g.sim;
-        if (!s.clock?.setTime) s.clock = { dayFraction: () => f };
-        else s.clock.setTime(f);
+        if (s.clock?.gameSeconds) {
+          s.weather?.forceForTest?.('sunny', 1e9);
+          const st = s.state;
+          (st.clock ??= { offset: 0 }).offset += (f - s.clock.dayFraction()) * 2880;
+          return;
+        }
+        s.clock = { dayFraction: () => f };
         const app = g.app;
         const k = Math.max(0, Math.min(1, (f - 0.6) / 0.12));
         clearInterval(window.__dim);
@@ -165,13 +228,33 @@ try {
         dim();
         window.__dim = setInterval(dim, 100);
       }, f);
-    await night(0.66);
+    await night(0.68);
     await shot('lights-dusk', 7, 41, 1.2, 20, 8000);
     await night(0.85);
     await page.waitForTimeout(8000);
     const dcNight = await shot('lights-night', 7, 41, 1.2, 20, 8000);
     await shot('lights-night-close', 5, 41, 2.2, 20, 4000);
     await shot('lights-night-lines', 9, 40, 1.6, 0, 4000);
+    // the Power overlay at night (it must read clearly in the dark)
+    if (hasOverlay) {
+      await page.evaluate(() => {
+        const g = window.solarbloom;
+        g.selectTool('battery');
+        if (!g.powerOverlay.visible) g.togglePowerView();
+      });
+      await settled(true);
+      const withOverlay = await shot('power-overlay-night', 8, 42, 1.0, 20, 4000);
+      // the overlay's own cost: the same view, still building, with the view off
+      await page.evaluate(() => window.solarbloom.togglePowerView());
+      await page.waitForTimeout(1500);
+      const without = await page.evaluate(() => window.solarbloom.app.stats.drawCalls.total);
+      const ov = await page.evaluate(() => {
+        const o = window.solarbloom.powerOverlay;
+        return { ...o.summary(), batchGroup: o.group };
+      });
+      console.log(`  overlay at night: ${withOverlay} draw calls with it, ${without} without (+${withOverlay - without})`, JSON.stringify(ov));
+      await page.evaluate(() => window.solarbloom.selectTool('pulse'));
+    }
     const stats = await page.evaluate(() => window.solarbloom.lightVisuals.stats());
     console.log('night', JSON.stringify(stats), 'draw calls', dcNight);
   }

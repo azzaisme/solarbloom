@@ -1,6 +1,5 @@
 import * as pc from 'playcanvas';
-import type { MachineData } from '../core/types';
-import type { PowerNetwork } from '../gameplay/PowerGrid';
+import type { PowerNetwork, PowerNode } from '../gameplay/PowerGrid';
 import type { Sim } from '../gameplay/Sim';
 import { mat, PALETTE } from './Materials';
 import { bezier, part, tube } from './MachineParts';
@@ -41,7 +40,7 @@ export class PowerLines {
   constructor(
     private sim: Sim,
     parent: pc.Entity,
-    private worldOf: (m: MachineData) => [number, number, number],
+    private worldOf: (m: PowerNode) => [number, number, number],
   ) {
     this.root = group(parent, 'powerLines');
   }
@@ -54,11 +53,12 @@ export class PowerLines {
     const line = mat(PALETTE.grille, { gloss: 0.4 });
     for (const n of nets) {
       for (const [a, b] of n.links) this.cable(a, b, line, 0.022, 0.08);
-      for (const [p, m] of n.feeds) this.cable(p, m, line, 0.012, 0.12);
+      // Lights are wired underground (no web of drop cables over a lit path); the Power overlay still shows them.
+      for (const [p, m] of n.feeds) if (!m.type.startsWith('light:')) this.cable(p, m, line, 0.012, 0.12);
     }
   }
 
-  private cable(a: MachineData, b: MachineData, m: pc.Material, r: number, sagPerTile: number) {
+  private cable(a: PowerNode, b: PowerNode, m: pc.Material, r: number, sagPerTile: number) {
     const pa = this.worldOf(a);
     const pb = this.worldOf(b);
     const A = anchorOf(a, pa, pb);

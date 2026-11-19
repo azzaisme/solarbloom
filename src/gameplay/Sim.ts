@@ -12,6 +12,7 @@ import { CanalNetwork } from './CanalNetwork';
 import { RelaySystem } from './RelaySystem';
 import { PowerGrid } from './PowerGrid';
 import { ChargerSystem } from './ChargerSystem';
+import { Lights } from './Lights';
 import { RooftopClusters } from './RooftopClusters';
 import { DistrictSystem } from './DistrictSystem';
 import { DroneSystem } from './DroneSystem';
@@ -72,6 +73,8 @@ export class Sim {
   readonly power: PowerGrid;
   /** E23.3.3: chargers (bloombot recharges on a powered pad). */
   readonly chargers: ChargerSystem;
+  /** E23.3.5: night lights (decorations on the grid, solar or glow-pods). */
+  readonly lights: Lights;
   readonly clusters: RooftopClusters;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
   readonly ecosystem: EcosystemSystem;
@@ -179,6 +182,7 @@ export class Sim {
     this.relays = new RelaySystem(this);
     this.power = new PowerGrid(this);
     this.chargers = new ChargerSystem(this);
+    this.lights = new Lights(this);
     this.clusters = new RooftopClusters(this);
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
@@ -285,6 +289,7 @@ export class Sim {
     const s = this.state;
     s.time += dt;
     s.buffs = s.buffs.filter((b) => b.until > s.time);
+    this.lights.tick(dt);
     this.power.tick(dt);
     this.chargers.tick(dt);
     this.production.tick(dt);

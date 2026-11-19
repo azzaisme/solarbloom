@@ -4,6 +4,9 @@ import type { MachineData } from '../core/types';
 import { POWER } from '../data/power';
 import type { Sim } from './Sim';
 
+/** Where something on the grid stands. */
+type Placed = Pick<MachineData, 'id' | 'roofId' | 'x' | 'z'>;
+
 /**
  * E23.3: what the grid needs to know about the sky. This is the ONE place power reads time of day and weather.
  *
@@ -54,7 +57,7 @@ export function regionBoost(sim: Sim, m: Pick<MachineData, 'roofId' | 'x' | 'z'>
 }
 
 /** How high a machine stands, in terrace levels (rooftops count as high ground). */
-export function groundLevel(sim: Sim, m: MachineData): number {
+export function groundLevel(sim: Sim, m: Placed): number {
   if (m.roofId !== GROUND) return POWER.wind.roofLevel;
   return sim.grid.get(GROUND, m.x, m.z)?.level ?? 0;
 }
