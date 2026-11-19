@@ -122,11 +122,13 @@ async function open(dev) {
         g.chunks.markTile(t);
       }
     for (const type of ['crate', 'crate', 'crate', 'assembler', 'droneHub'])
-      for (const [k, v] of Object.entries(s.build.recipe(type))) if (k !== 'biomass') s.inventory.addToStore(k, (s.inventory.stored(k) ?? 0) + v);
+      for (const [k, v] of Object.entries(s.build.recipe(type))) if (k !== 'biomass') s.inventory.add(k, v);
     s.inventory.add('copper', 40);
+    const why = s.build.check('droneHub', 'g', 15, 13);
     const hub = s.build.place('droneHub', 'g', 15, 13);
-    if (hub) s.roles.choose(hub.id, 'courier', 1);
-  });
+    if (hub && !s.roles.choose(hub.id, 'courier', 1)) return s.roles.check(hub.id, 'courier', 1);
+    return hub ? undefined : why;
+  }).then((why) => why && console.log(`   hub not placed: ${JSON.stringify(why)}`));
   await page.waitForTimeout(600);
   return { page, errors };
 }
@@ -142,6 +144,7 @@ try {
     await place(page, dev, 10, 14);
     await page.evaluate(() => window.solarbloom.selectTool('assembler'));
     await place(page, dev, 20, 12);
+    console.log('   asm check at 20,12:', await page.evaluate(() => JSON.stringify(window.solarbloom.sim.build.check('assembler', 'g', 20, 12))));
     await page.evaluate(() => window.solarbloom.selectTool('pulse'));
     const built = await page.evaluate(() => {
       const s = window.solarbloom.sim;
