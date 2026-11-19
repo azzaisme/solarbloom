@@ -650,6 +650,15 @@ export const PALETTE = {
   bee: '#f2b630',
   hoverfly: '#d98a2b',
   insectDark: '#2b2620',
+  /** E23.2.2.2: the hummingbird hawk-moth rare plants draw */
+  mothBody: '#9a6a3e',
+  mothWing: '#e0a24a',
+  /** E23.2.2.3: the reveal ripple's ring, and the warmer ring on a journal page it found */
+  ripple: '#bff3ff',
+  ripplePage: '#fff3c4',
+  /** E23.2.2.3: a revealed buried find: freshly turned earth */
+  turnedEarth: '#7b5134',
+  turnedEarthDark: '#5d3b25',
   insectWing: '#eef6ff',
   leafDrift: ['#a8743c', '#8f9a3a', '#c98f3c'],
   petalFall: ['#ffd1e6', '#ffffff', '#ffb3d1'],

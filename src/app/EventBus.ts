@@ -7,6 +7,13 @@ export interface GameEvents {
   'charge.empty': Record<string, never>;
   'charge.full': { source: import('../gameplay/Charge').ChargeSource };
   'charge.eat': { item: 'biomass' | 'food' };
+  /** E23.2.2: the wheel picked a load; a load just ran out (the next pulse fires empty); a pulse's reveal ripple. */
+  'pulse.load': { load: import('../data/pulse').PulseLoadId };
+  'pulse.loadEmpty': { load: import('../data/pulse').PulseLoadId };
+  /** E23.2.2.3: a buried find dug up */
+  'buried.dug': { id: string; material: import('../core/types').MaterialId; n: number; x: number; z: number };
+  'tile.planted': { tile: TileData; plant: import('../core/types').PlantKind };
+  'pulse.ripple': { tileId: string; targets: import('../gameplay/PulseLoad').RippleTarget[] };
   /** E23.7.1: the light clock crossed dawn or dusk (`day`: the game day). */
   'clock.dawn': { day: number };
   'clock.dusk': { day: number };

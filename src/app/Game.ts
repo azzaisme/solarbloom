@@ -18,6 +18,7 @@ import { EXPLORE } from '../rendering/CameraController';
 import { OLD_CITY, PARK_SET, REGIONS } from '../data/oldcity';
 import { seaCell, setPieceAt } from '../core/OldCityLayout';
 import { TUNING } from '../data/tuning';
+import { LOAD_WHEEL, RIPPLE } from '../data/pulse';
 import { UPGRADE_BY_ID } from '../data/upgrades';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import { CAT_REWARD_NAMES } from '../gameplay/LuckyCatSystem';
@@ -533,6 +534,7 @@ export class Game {
         this.oc.holdToAct = this.settings.holdToAct !== false; // E22.2: holds can be a single press
         // E22.5: material pick-ups stack in one toast at the bottom right ("+3 Copper", then "+6 Copper")
         this.sim.bus.on('pile.salvaged', (e) => this.hud.pickup(MATERIALS[e.material].name, e.got));
+        this.sim.bus.on('buried.dug', (e) => this.hud.pickup(MATERIALS[e.material].name, e.n)); // E23.2.2.3
         this.sim.bus.on('biomass.gathered', (e) => this.hud.pickup(MATERIALS.biomass.name, e.got));
         this.sim.bus.on('planter.harvested', (e) => e.food > 0 && this.hud.pickup(MATERIALS.food.name, e.food));
       }
@@ -1330,6 +1332,11 @@ export class Game {
         return this.harvest();
       case 'eat':
         return this.eat();
+      case 'loadNext':
+      case 'loadPrev':
+        // E23.2.2: turn the pulse load wheel
+        this.sim.pulseLoad.step(a === 'loadNext' ? 1 : -1);
+        return this.hud.loadWheel.show();
       case 'backpack':
         this.hud.toggleBackpack();
         return this.syncPanelPause(); // paused from this very moment
@@ -1822,6 +1829,18 @@ export class Game {
     const dist = Math.hypot(tile.x + 0.5 - b.pose.x, tile.z + 0.5 - b.pose.z);
     const occ = this.sim.occupant(tile);
     const dec = this.cozy.decorOf(tile.occupantId);
+    // E23.2.2.3: a buried find the ripple revealed: dig it up
+    const buried = !aim && tile.roofId === GROUND ? this.sim.buried.known(tile.x, tile.z) : undefined;
+    if (buried) {
+      const room = this.sim.inventory.room(buried.material) > 0;
+      out.push({
+        kind: 'cache', id: buried.id, verb: 'Dig up', name: `buried ${MATERIALS[buried.material].name}`, distance: dist, at: tile,
+        refused: room ? undefined : 'Backpack full',
+        run: () => {
+          if (this.sim.buried.dig(tile.x, tile.z) > 0) this.bot?.visuals.play('interact');
+        },
+      });
+    }
     if (dec) {
       out.push({
         kind: 'decoration', id: `decor:${tile.occupantId}`, verb: 'Pick up', name: DECOR_OPTION[dec.kind]?.name ?? 'the decoration', distance: dist, at: tile,
@@ -3430,6 +3449,24 @@ export class Game {
       this.camera.shake?.(0.25);
       this.hud.feed(`💥 Mega Pulse: up to ${budget} tiles bloom outward`);
     });
+    // E23.2.2.3: the reveal ripple: a wide soft ring, then what it found glows for a few seconds (never a cat:
+    // its targets come from the salvage data alone)
+    b.on('pulse.ripple', ({ tileId, targets }) => {
+      const t = s.grid.byTileId(tileId);
+      if (!t || !s.oldCity) return;
+      this.vfx.ring(this.tileVec(t), PALETTE[RIPPLE.tint], RIPPLE.radius, RIPPLE.ringSeconds);
+      for (const g of targets) {
+        const at = s.grid.get(GROUND, g.x, g.z);
+        if (!at) continue;
+        const d = Math.hypot(g.x - t.x, g.z - t.z);
+        const hex = PALETTE[RIPPLE.found[g.kind]];
+        for (let i = 0; i < RIPPLE.pings; i++)
+          this.tweens.add(0.01, () => {}, {
+            delay: RIPPLE.delayPerTile * d + i * (RIPPLE.seconds / RIPPLE.pings),
+            done: () => (this.vfx.ring(this.tileVec(at), hex, RIPPLE.pingRadius, RIPPLE.pingSeconds), this.vfx.sparkles(this.tileVec(at), RIPPLE.sparkles, true)),
+          });
+      }
+    });
     b.on('pulse.fired', ({ tileId, extra, overcharged }) => {
       const t = s.grid.byTileId(tileId);
       if (!t) return;
@@ -3683,6 +3720,16 @@ export class Game {
       f.chargeEmpty = Math.round(s.time);
       this.hud.toast(`Out of charge<small>Bloombot walks slower and can't pulse. Press ${this.hudKeys('eat')} to eat biomass or food, or rest.</small>`, '', 6);
     });
+    // E23.2.2.1: the load wheel is a new concept: one short introduction the first time bloombot carries something
+    // to load (the ring shows with it); after that the wheel and the chip show it
+    const introWheel = () => {
+      if (!s.pulseLoad.introDue()) return;
+      s.pulseLoad.introduced();
+      this.hud.loadWheel.show(LOAD_WHEEL.introSeconds);
+      this.hud.toast(`Bloombot can load its pulse<small>Press ${this.hudKeys('loadNext')} or ${this.hudKeys('loadPrev')} to choose what a pulse grows. Each loaded pulse uses one.</small>`, '', LOAD_WHEEL.introSeconds);
+    };
+    b.on('pack.changed', introWheel);
+    introWheel();
     b.on('rooftop.coreReady', () => {
       this.machines.setCoreState('ready');
       this.hud.toast(`✨ The Rooftop Core is humming!<small>Walk up and press ${this.hudKey('interact')} (or use the button) to awaken the building.</small>`, 'gold', 5);
