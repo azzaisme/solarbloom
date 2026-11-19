@@ -18,7 +18,7 @@ const QUICK = [
   // E23.7: time, weather and salvage
   'clock', 'timers', 'photo-scene', 'weather',
   // E23.3: the power grid
-  'power-grid', 'power-helpers', 'power-lights',
+  'power-grid', 'power-helpers', 'power-lights', 'moonlit-night',
   // E23.8: regions and the mainland
   'region-strengths', 'region-unlocks-e23',
   // E23.8.3: the mainland

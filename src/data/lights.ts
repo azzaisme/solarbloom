@@ -67,6 +67,15 @@ export const LIGHTS: LightDef[] = [
 export const LIGHT: Record<string, LightDef> = Object.fromEntries(LIGHTS.map((l) => [l.id, l]));
 
 export const LIGHTING = {
+  /**
+   * E23.7.5: the light lamps really cast. Each lit lamp is a point light at its bulb with inverse-square falloff
+   * and no shadows. `strength` is the light on the ground right under a full-brightness lamp (the sun's is LOOK's
+   * 3.4), `range` how far it reaches in tiles, `minHeight` the lowest a light shines from (a ground light's pool
+   * would be a pinprick otherwise) and `refHeight` the height above which a lamp stops getting stronger to keep its
+   * pool as bright. `max` real lights at once go to the lit lamps nearest the view (`maxLow` on the low graphics
+   * tier). Line lights get one real light per `lineEvery` tiles of bulbs, at `linePower`; glow-pods glow faintly.
+   */
+  cast: { strength: 2.6, range: 4.5, minHeight: 0.55, refHeight: 1.4, max: 48, maxLow: 24, lineEvery: 2.2, linePower: 0.7, glowPower: 0.5 },
   /** seconds a light takes to fade in at dusk (or out at dawn), on top of the sky's own twilight */
   fadeSeconds: 4,
   /** a solar light: its panel at full sun (W), its battery (W·s) and its lamp's draw (W) */
