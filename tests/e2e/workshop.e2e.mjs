@@ -97,6 +97,20 @@ try {
     const T = (s) => `E23.6 ${dev}: ${s}`;
     const prompt = await page.evaluate(() => window.solarbloom.interactTarget()?.id);
     check(prompt === 'craft:table', T(`the shed offers the crafting table (${prompt})`));
+    // the door in front of the shed keeps the house's own things: the radio by day (E23.7.2), the bed from dusk
+    const door = await page.evaluate(async () => {
+      const g = window.solarbloom;
+      g.bot.teleport('g', 4.5, 6.5);
+      g.bot.pose.facing = Math.PI;
+      await new Promise((r) => setTimeout(r, 300));
+      const id = g.interactTarget()?.id;
+      g.bot.teleport('g', 3.5, 5.5);
+      g.bot.pose.facing = Math.PI;
+      await new Promise((r) => setTimeout(r, 300));
+      return id;
+    });
+    check(door === 'house:radio' || door === 'house:sleep', T(`the door offers the radio or the bed (${door})`));
+    check((await page.evaluate(() => window.solarbloom.interactTarget()?.id)) === 'craft:table', T('back at the shed: the crafting table again'));
     await interact(page, dev);
     await page.waitForSelector('#craftScreen.open');
     check(await page.evaluate(() => window.solarbloom.paused), T('the workshop opens and the game pauses'));
