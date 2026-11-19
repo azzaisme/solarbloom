@@ -4,7 +4,7 @@ import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { TileData } from '../src/core/types';
 import { PARK_SET, REGIONS } from '../src/data/oldcity';
-import { PULSE_LOAD, RARE_PLANTS, RIPPLE } from '../src/data/pulse';
+import { LOAD_WHEEL, PULSE_LOAD, RARE_PLANTS, RIPPLE } from '../src/data/pulse';
 import { RECIPES } from '../src/data/salvage';
 import { faunaGoal } from '../src/gameplay/Ecosystem';
 import { CAT_ANCHORS } from '../src/data/templates';
@@ -92,6 +92,20 @@ describe('E23.2.2.1: the load wheel and its cost', () => {
     expect(sim.restoration.pulse(b.id)).toBe(true);
     expect(b.plant).toBeUndefined();
     expect(sim.pulseLoad.choice).toBe('seeds'); // the wheel keeps its choice for when seeds come back
+  });
+  it('the wheel is introduced once: the first time bloombot carries something to load', () => {
+    const sim = oldSim();
+    for (const k of Object.keys(pack(sim))) delete pack(sim)[k];
+    expect(sim.pulseLoad.introDue()).toBe(false); // nothing to load yet: nothing to explain
+    sim.inventory.add('seeds', 1);
+    expect(sim.pulseLoad.introDue()).toBe(true);
+    sim.pulseLoad.introduced();
+    expect(sim.pulseLoad.introDue()).toBe(false); // once only
+    const saver = new SaveService(undefined);
+    const back = new Sim(saver.deserialize(saver.serialize(sim.state))!);
+    expect(back.pulseLoad.introDue()).toBe(false); // and not again after a reload
+    expect(new Sim(createInitialState(7)).pulseLoad.introDue()).toBe(false); // classic rules: no wheel
+    expect(LOAD_WHEEL.introSeconds).toBeGreaterThan(LOAD_WHEEL.showSeconds);
   });
 });
 

@@ -139,21 +139,47 @@ try {
     s.econ.add('energy', 1e5);
     s.econ.add('water', 1e5);
   });
+  // the first time bloombot carries something to load, the wheel introduces itself once
+  check(await until(page, () => window.solarbloom.sim.state.stats.firsts.loadWheel !== undefined && !document.getElementById('loadWheel').hidden), 'carrying seeds for the first time shows the wheel and its one-time note');
+  const note = await page.evaluate(() => document.getElementById('toasts')?.innerText.replace(/\s+/g, ' ') ?? '');
+  check(/load its pulse/.test(note), `the note says what the wheel is for: "${note}"`);
+  await shot(page, '02-load-wheel-intro', 'the one-time introduction: the load wheel shows with a short note the first time bloombot carries something to load');
   await key(page, 'KeyV');
   check((await page.evaluate(() => window.solarbloom.sim.pulseLoad.choice)) === 'seeds', 'V turns the wheel to Seeds');
   await shot(page, '03-load-wheel', 'the load wheel above the prompt: Seeds lit; the chip under the charge says Seeds');
   await key(page, 'KeyZ');
   check((await page.evaluate(() => window.solarbloom.sim.pulseLoad.choice)) === 'none', 'Z turns it back to Nothing');
 
+  // a still view for a screenshot: no milestone camera move, the load wheel put away, the toasts gone
+  const settled = async (page) => {
+    for (let i = 0; i < 6; i++) if (await until(page, () => window.solarbloom.chunks.pending === 0 && window.solarbloom.sim.transitions.liveCount === 0)) break; // the ground is redrawn (slow in software)
+    await until(page, () => !window.solarbloom.camera.cinematic && document.getElementById('loadWheel').hidden && !document.getElementById('toasts')?.innerText.trim());
+    await page.waitForTimeout(3000);
+  };
+
   // ── E23.2.2.2: pulse with each load, by Space on the tile in front ──
   const grown = await page.evaluate(async () => {
     const g = window.solarbloom;
     const s = g.sim;
-    const dead = s.areas.tiles('park').filter((t) => t.ground === 'polluted' && !t.blocked && !t.occupantId && s.restoration.checkPulse(t).ok);
-    // well inside the park (not along the railing), with open dead ground in front to look across
+    // soil, not paving: plants grow on open ground
+    const dead = s.areas.tiles('park').filter((t) => t.ground === 'polluted' && t.feature !== 'paving' && !t.blocked && !t.occupantId && s.restoration.checkPulse(t).ok);
+    // three plots 4 apart in open dead ground, with nothing standing between them and the camera (which looks
+    // from the +z side) or behind them, where bloombot stands
     const open = (x, z) => dead.some((o) => o.x === x && o.z === z);
-    const row = dead.find((t) => t.z >= 4 && [0, 6, 12].every((dx) => open(t.x + dx, t.z) && open(t.x + dx, t.z + 2)));
-    return row ? [0, 6, 12].map((dx) => ({ x: row.x + dx, z: row.z })) : [];
+    const walk = (x, z) => { const q = s.grid.get('g', x, z); return !!q && !q.blocked && !q.occupantId; };
+    // well inside the park: three more rows of park ground on the camera's side, and level with it
+    const park = new Set(s.areas.tiles('park').map((q) => `${q.x},${q.z}`));
+    const inner = (t) => [0, 4, 8].every((dx) => [-3, 1, 2, 3].every((dz) => park.has(`${t.x + dx},${t.z + dz}`) && s.grid.get('g', t.x + dx, t.z + dz)?.level === t.level));
+    // must have: the three plots, a place to stand in front of each, and bloombot's spot behind the middle one
+    const usable = (t) => [0, 4, 8].every((dx) => open(t.x + dx, t.z) && walk(t.x + dx, t.z + 1)) && [1, -1, 2, -2].some((dx) => walk(t.x + 4 + dx, t.z - 1)) && inner(t);
+    // best: nothing standing round the row (no pergola, bandstand or bench in the way), then the most open soil
+    const score = (t) => {
+      let n = 0;
+      for (let x = -3; x <= 11; x++) for (let z = -4; z <= 6; z++) n += open(t.x + x, t.z + z) ? 1 : walk(t.x + x, t.z + z) ? 0 : -6;
+      return n;
+    };
+    const row = dead.filter(usable).sort((a, b) => score(b) - score(a))[0];
+    return row ? [0, 4, 8].map((dx) => ({ x: row.x + dx, z: row.z })) : [];
   });
   check(grown.length === 3, 'three dead park tiles in a row to pulse');
   const loads = ['seeds', 'rare', 'fertiliser'];
@@ -175,23 +201,36 @@ try {
     }
   }
   // let the restore transitions play out (the plants are drawn once a tile has finished turning)
-  await until(page, (cs) => cs.every((c) => { const t = window.solarbloom.sim.grid.get('g', c.x, c.z); return t?.ground === 'restored' && !t.tr; }), grown);
+  // (game time: on a slow machine the game's clock runs well behind the wall clock, so wait on the tiles, for as long as it takes)
+  let turned = false;
+  for (let i = 0; i < 6 && !turned; i++) turned = await until(page, (cs) => cs.every((c) => { const t = window.solarbloom.sim.grid.get('g', c.x, c.z); return t?.ground === 'restored' && !t.tr; }), grown);
+  check(turned, 'the three plots finished turning');
   const plants = await page.evaluate((cs) => cs.map((c) => window.solarbloom.sim.grid.get('g', c.x, c.z)?.plant ?? 'none'), grown);
   check(plants.join() === 'meadow,rare,grove', `each load grew its own plant: ${plants.join(', ')}`);
   const left = await page.evaluate(() => ({ ...window.solarbloom.sim.state.salvage.pack }));
   check(left.seeds === 5 && left.rareSeed === 1 && left.fertiliser === 1, 'each pulse used one unit of its load');
   await page.evaluate((c) => {
     const g = window.solarbloom;
-    // bloombot just in front of the middle plot, looking at the row: the camera follows it, the plots left to right
+    // bloombot stands behind the middle plot, looking at the camera, so nothing hides the three plots in front of
+    // it: left to right, the meadow, the rare flowers and the grove
     g.bot.following = true;
-    g.bot.teleport('g', c.x, c.z + 3);
-    g.bot.pose.x = c.x + 0.5;
-    g.bot.pose.z = c.z + 3.5;
-    g.bot.pose.facing = Math.PI;
+    // (side-on, so the tile it aims at is behind the row, and with nothing loaded)
+    g.sim.pulseLoad.choose('none');
+    // just behind the row, beside the middle plot, facing the camera: the view (which leads where bloombot faces)
+    // centres on the row, from the far zoom so all three fit
+    const free = (x, z) => { const q = g.sim.grid.get('g', x, z); return !!q && !q.blocked && !q.occupantId; };
+    const dx = [1, -1, 2, -2].find((d) => free(c.x + d, c.z - 1)) ?? 1;
+    g.bot.teleport('g', c.x + dx, c.z - 1);
+    g.bot.pose.x = c.x + dx + 0.5;
+    g.bot.pose.z = c.z - 0.5;
+    g.bot.pose.facing = 0;
     g.camera.turnTo(0, true);
+    g.zoomStep = 2;
   }, grown[1]);
-  await page.waitForTimeout(3500);
-  await shot(page, '04-loads-grown', "what each load grew around bloombot: a white wildflower meadow (seeds), the region's pink rare flowers, and a young tree in flowering shrubs over a bigger patch (fertiliser)");
+  await settled(page);
+  await shot(page, '04-loads-grown', "the three results in a row in front of bloombot, left to right: a white wildflower meadow (seeds), the region's pink rare flowers (rare seed), and a young tree in flowering shrubs over a bigger patch (fertiliser)");
+
+  await page.evaluate(() => (window.solarbloom.zoomStep = 1));
 
   // ── E23.2.2.3: the ripple reveals a buried find; a mound shows; Interact digs it up ──
   const dug = await page.evaluate(() => {
@@ -223,14 +262,18 @@ try {
         g.bot.pose.facing = Math.atan2(-dx, -dz);
         const fr = g.bot.front();
         if (fr.x === f.x && fr.z === f.z) {
-          g.camera.turnTo(45, true);
+          // from the side, close in: bloombot and the mound together
+          g.camera.turnTo((Math.atan2(-dx, -dz) * 180) / Math.PI + 90, true);
+          g.zoomStep = 0; // the close view
           return true;
         }
       }
       return false;
     }, f);
     check(faced, 'bloombot stands facing the mound');
-    await shot(page, '05-buried-mound', `a revealed buried find (${f.material}): a mound of turned earth with a sprout; the prompt says Dig up`);
+    await settled(page);
+    await shot(page, '05-buried-mound', `bloombot facing a revealed buried find (${f.material}): a mound of turned earth with a sprout; the prompt says Dig up`);
+    const view = await page.evaluate(() => ({ yaw: window.solarbloom.camera.heading, x: window.solarbloom.bot.pose.x, z: window.solarbloom.bot.pose.z }));
     const prompt = await page.evaluate(() => document.getElementById('prompt')?.innerText ?? '');
     check(/Dig up/.test(prompt), `the prompt offers to dig: "${prompt.replace(/\s+/g, ' ')}"`);
     const before = await page.evaluate((m) => window.solarbloom.sim.inventory.count(m), f.material);
@@ -239,8 +282,10 @@ try {
     const after = await page.evaluate((m) => window.solarbloom.sim.inventory.count(m), f.material);
     check(after === before + f.n, `E dug it up: ${f.material} ${before} → ${after}`);
     check(!(await page.evaluate((f) => !!window.solarbloom.sim.buried.known(f.x, f.z), f)), 'the find is no longer there to dig');
-    await page.waitForTimeout(2500); // the chunk redraws without the mound (slow software rendering)
-    await shot(page, '06-buried-dug', 'dug up: the mound is gone and the ground is plain again (the seeds went into the backpack)');
+    await settled(page); // the chunk redraws without the mound (slow software rendering)
+    const view2 = await page.evaluate(() => ({ yaw: window.solarbloom.camera.heading, x: window.solarbloom.bot.pose.x, z: window.solarbloom.bot.pose.z }));
+    check(view2.yaw === view.yaw && Math.hypot(view2.x - view.x, view2.z - view.z) < 0.05, 'the same view as before digging');
+    await shot(page, '06-buried-dug', 'the same view after digging: the mound is gone and the ground is plain again');
   }
   await page.close();
 } finally {

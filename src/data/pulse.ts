@@ -42,6 +42,25 @@ export const RIPPLE = {
   radius: 7,
   /** how long what it found stays lit, seconds */
   seconds: 4,
+  /** the wide ring from the pulsed tile: how long it takes to spread, seconds */
+  ringSeconds: 0.9,
+  /** each thing found: how many times it rings while lit, how wide (tiles), and the delay per tile of distance */
+  pings: 3,
+  pingRadius: 0.7,
+  pingSeconds: 0.9,
+  delayPerTile: 0.06,
+  sparkles: 5,
+  /** the colours, as PALETTE names: the ripple itself, and what it found by kind */
+  tint: 'ripple',
+  found: { salvage: 'ripple', buried: 'ripple', cache: 'gold', page: 'ripplePage' },
+} as const;
+
+/** E23.2.2.1: the load wheel on screen. */
+export const LOAD_WHEEL = {
+  /** seconds the ring stays up after the wheel turns */
+  showSeconds: 1.6,
+  /** the one-time introduction, the first time bloombot carries something to load: the ring and its note stay this long */
+  introSeconds: 7,
 } as const;
 
 /** Each region's rare plants (the look of a rare-seed pulse there); unlisted regions use `default`. */

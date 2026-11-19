@@ -1,4 +1,4 @@
-import { PULSE_LOADS } from '../data/pulse';
+import { LOAD_WHEEL, PULSE_LOADS } from '../data/pulse';
 import { $, HudPart, esc } from './HudPart';
 import { iconize } from './Icons';
 
@@ -24,9 +24,9 @@ export class LoadWheel extends HudPart {
     this.chip = $(this.root, '#loadChip');
   }
 
-  /** The wheel turned: show the ring for a moment. */
-  show() {
-    this.shown = 1.6;
+  /** The wheel turned: show the ring for a moment (longer for its one-time introduction). */
+  show(seconds: number = LOAD_WHEEL.showSeconds) {
+    this.shown = Math.max(this.shown, seconds);
   }
 
   update(dt: number) {
