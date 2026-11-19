@@ -57,6 +57,8 @@ export function padDriver(game) {
     pad.axes[3] = 0;
   };
   let target; // { stand: {x, z}, face: {x, z}, kind }
+  /** the path to the target's stand, from bloombot's pathfinder (refreshed every second) */
+  let route;
   let nudge = 0;
   let lastPulseAt = -99;
   const st = { pulses: 0, woke: false, frames: 0, interacts: 0 };
@@ -187,10 +189,17 @@ export function padDriver(game) {
     const cx = target.stand.x + 0.5, cz = target.stand.z + 0.5;
     const d = Math.hypot(cx - p.x, cz - p.z);
     if (d > 0.18) {
-      // Walk straight there; if a wall is in the way, slide around it by aiming a little to the side.
+      // Walk there along the path bloombot's own pathfinder finds (a player walks round what's in the way: the
+      // machines it builds land wherever the crosshair put them); straight on for the last cell.
+      if (!route || route.to !== target || st.frames % 30 === 0) {
+        const goal = (x, z) => x === target.stand.x && z === target.stand.z;
+        route = { to: target, path: walk.path(p.roofId, p.x, p.z, goal, target.stand) ?? [] };
+      }
+      while (route.path.length && Math.hypot(route.path[0].x - p.x, route.path[0].z - p.z) < 0.3) route.path.shift();
+      const next = route.path.length > 1 ? route.path[0] : { x: cx, z: cz };
       const side = (st.frames >> 6) % 2 ? 1 : -1;
       const blocked = bot.speed < 0.2 && st.frames > 30;
-      const ax = cx - p.x, az = cz - p.z;
+      const ax = next.x - p.x, az = next.z - p.z;
       stick(blocked ? ax - az * side : ax, blocked ? az + ax * side : az, Math.min(1, 0.35 + d));
       nudge = 0;
       return st;
