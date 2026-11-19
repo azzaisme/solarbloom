@@ -304,6 +304,7 @@ export class Sim {
     this.clock.tick();
     this.weather.tick();
     this.farm.tick(dt);
+    this.keepers.tick(dt); // E23.9.2: settled Keepers tend their regions
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();
