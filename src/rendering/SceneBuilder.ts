@@ -146,7 +146,10 @@ export class SceneBuilder {
     const lighting = pc.EnvLighting.generateLightingSource(cube, { size: 32 });
     cube.destroy();
     this.envSource = lighting;
-    this.envAtlas = pc.EnvLighting.generateAtlas(lighting, { size: 128 });
+    // 512: the size PlayCanvas lays the atlas out for. Smaller, its roughest reflection levels shrink to a few
+    // pixels with a fraction of a pixel of seam padding, and the reflection map's wrap seam bleeds into a
+    // lighter band down the middle of the screen whenever the camera looks along a world axis.
+    this.envAtlas = pc.EnvLighting.generateAtlas(lighting, { size: 512 });
     const scene = this.app.scene;
     scene.envAtlas = this.envAtlas;
     scene.skyboxIntensity = E.intensity;
