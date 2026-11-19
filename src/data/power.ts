@@ -1,3 +1,4 @@
+import { CHARGE } from './charge';
 import { DAY_SECONDS } from './time';
 /**
  * E23.3: the power grid's starting values (tuning lives here, not in code).
@@ -35,6 +36,11 @@ export const POWER = {
   fallbackWind: 0,
   /** Battery (E23.3.2.1): stores surplus and covers deficits, up to `rate` either way. */
   battery: { capacity: 6000, rate: 20 }, // a night (~0.4 day, 1150 s) of a pump and a lamp is ~4600 W·s
+  /** Charger (E23.3.3): bloombot's charge per second while it sits on a powered pad (CHARGE.meditatePerSecond is 6). */
+  // rate: E23.2.1's meditating rate (data/charge); reach: how close to the pad's edge bloombot sits (tiles)
+  charger: { rate: CHARGE.meditatePerSecond, reach: 0.75 },
+  /** Helpers on the grid (E23.3.3, old-city rules): their draw while they stand. */
+  helper: { droneHub: 4, cultivator: 4 },
   /** Starting draws per shed class (consumers may override with their own draw). */
   draw: { lamp: 0.5, pump: 3, helper: 4, charger: 6 } satisfies Record<ShedClass, number>,
 };

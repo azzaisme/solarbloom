@@ -1,6 +1,6 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
 /** `chest` exists only under old-city rules (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
-export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine';
+export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
 /** Plain per-resource numbers (tuning tables, small per-second coefficients). */
