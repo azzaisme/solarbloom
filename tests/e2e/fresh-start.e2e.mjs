@@ -58,7 +58,7 @@ try {
     await Promise.all([page.waitForNavigation({ timeout: 60_000 }).catch(() => {}), page.click(target)]);
     await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 180_000 });
     await page.waitForTimeout(1500);
-    const st = await page.evaluate(() => ({ rules: window.solarbloom.sim.state.rules, version: window.solarbloom.sim.state.version, time: window.solarbloom.sim.state.time, oldCity: window.solarbloom.sim.oldCity, toasts: [...document.querySelectorAll('#toasts *, .toast')].map((t) => t.textContent).join(' | ') }));
+    const st = await page.evaluate(() => ({ version: window.solarbloom.sim.state.version, time: window.solarbloom.sim.state.time, oldCity: !!window.solarbloom.sim.state.salvage && !('rules' in window.solarbloom.sim.state), toasts: [...document.querySelectorAll('#toasts *, .toast')].map((t) => t.textContent).join(' | ') }));
     check(st.oldCity && st.version === 8 && st.time < 60, `${run}: a new Old City game (version ${st.version}, ${st.time.toFixed(1)} s in)`);
     if (run === 'load') check(/Starting fresh/.test(st.toasts) && /earlier version/.test(st.toasts), `load: one calm note says it starts fresh ("${st.toasts}")`);
     else check(!/Starting fresh/.test(st.toasts), 'title: no note after choosing Start fresh (the card already said it)');

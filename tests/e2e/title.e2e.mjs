@@ -167,7 +167,7 @@ try {
       await page.waitForTimeout(1500);
       await page.keyboard.up('KeyW');
     }
-    const before = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time, rules: window.solarbloom.sim.state.rules }));
+    const before = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time }));
     if (dev === 'pad') await pressPad(page, 9);
     else await page.keyboard.press('Escape');
     await page.waitForSelector('#menu.open');
@@ -211,8 +211,8 @@ try {
     check(await moveTo(page, '#tLoad1', dev), T('reach Load on slot 1'));
     await go(page, dev);
     await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
-    const after = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time, rules: window.solarbloom.sim.state.rules }));
-    check(after.seed === before.seed && after.time >= before.time && after.rules === before.rules, T(`Load brings back the same game (time ${before.time.toFixed(1)} → ${after.time.toFixed(1)})`));
+    const after = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time }));
+    check(after.seed === before.seed && after.time >= before.time, T(`Load brings back the same game (time ${before.time.toFixed(1)} → ${after.time.toFixed(1)})`));
 
     // ── delete asks first, then the slot is empty (keyboard run, from a fresh title) ──
     if (dev === 'keys') {

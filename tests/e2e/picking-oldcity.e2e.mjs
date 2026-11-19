@@ -30,13 +30,13 @@ try {
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
-  const rules = await page.evaluate(() => {
+  const old = await page.evaluate(() => {
     const s = window.solarbloom.sim;
     s.state.areas.mastRow = { fog: 'thinning', revealedAt: 0 };
     window.solarbloom.chunks.markAll();
-    return s.state.rules;
+    return !!s.state.salvage;
   });
-  if (rules !== 'oldcity') throw new Error('expected an Old City');
+  if (!old) throw new Error('expected an Old City');
   for (const [fx, fz] of SPOTS)
     for (const zoom of ZOOMS) {
       const res = await page.evaluate(
