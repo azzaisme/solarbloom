@@ -101,23 +101,3 @@ describe('readable huge chains (City 10.6)', () => {
   });
 });
 
-describe('the combo panel breakdown (Look 5.5)', () => {
-  it("a chain's restored / adjacent / synergy / relay lines add up to its combo", () => {
-    const sim = bigChainCity();
-    const summary = new ChainSummary(sim);
-    let checked = 0;
-    let last: { combo: number; sum: number } | undefined;
-    sim.bus.on('chain.event', ({ event, combo }) => {
-      const b = summary.breakdown(event.chainId);
-      if (!b) return;
-      last = { combo, sum: b.restored + b.adjacent + b.synergy + b.relay };
-      expect(last.sum).toBe(combo);
-      checked++;
-    });
-    sim.restoration.complete(sim.grid.get(GROUND, CROSS.start[0], CROSS.start[1])!, 'pulse');
-    for (let i = 0; i < 600 && sim.chains.activeRuns > 0; i++) sim.advance(0.1);
-    expect(checked).toBeGreaterThan(40);
-    expect(last!.combo).toBeGreaterThan(40);
-    expect(summary.breakdown(1)).toBeUndefined(); // forgotten once the chain ends
-  });
-});

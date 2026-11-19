@@ -3639,7 +3639,6 @@ export class Game {
       this.tileFx.release(`chain${chainId}`);
       if (crossings > 0) this.hud.feed(`📡 Chain crossed ${crossings} Bloom Relay link${crossings > 1 ? 's' : ''}`);
       if (combo < 2) return;
-      this.hud.combo(combo);
       this.hud.feed(`🌸 Bloom chain ×${combo}`);
       this.sfx.chainEnd(combo);
       if (combo >= 5 && !potterPace(this.settings)) {
@@ -3865,7 +3864,6 @@ export class Game {
     if (this.summaryAt <= 0) {
       this.summaryAt = 0.25;
       this.hud.chainAreas(tr && tr.total >= 12 && tr.perArea.size > 1 ? this.chainSummary.lines(tr) : []);
-      if (tr) this.hud.chainBreakdown(this.chainSummary.breakdown(tr.chainId)); // Look 5.5: the combo panel's lines
     }
     if (!tr || tr.total < 20 || this.frontAt > 0 || this.settings.reducedMotion) return;
     this.frontAt = 0.3;
@@ -3890,7 +3888,6 @@ export class Game {
         this.tileFx.flash(t, combo >= 100 ? '#ff5fb8' : '#ffb81f', 0.45, 0.9);
         this.sfx.at(this.tileVec(t), (q) => q.bloom(combo));
       }
-      if (combo >= 2) this.hud.combo(combo);
       return;
     }
     const targetRoof = s.grid.byTileId(ev.target)?.roofId;
@@ -3906,7 +3903,6 @@ export class Game {
         if (t) this.tileFx.flash(t, wave, 0.45, 0.9);
         if (from && to && ev.cause !== 'motherTree' && ev.cause !== 'canopy')
           this.vfx.arc(from, to, ev.cause === 'overflow' ? PALETTE.water : ev.cause === 'relay' ? PALETTE.coreGlow : combo >= 5 ? PALETTE.pink : PALETTE.flowerCore, 0.5);
-        if (combo >= 2) this.hud.combo(combo);
         this.sfx.at(t && this.tileVec(t), (q) => q.bloom(combo));
         break;
       }
@@ -3915,7 +3911,6 @@ export class Game {
           this.vfx.arc(from, to, '#7fe07a', 0.7);
           this.vfx.burst(to, 8, { up: 1.6, size: 0.05 });
         }
-        if (combo >= 2) this.hud.combo(combo);
         break;
       case 'POLLINATE':
         if (from && to) {
@@ -3925,7 +3920,6 @@ export class Game {
         break;
       case 'PRODUCE_ENERGY':
         if (from && to) this.vfx.arc(from, to, PALETTE.gold, 0.5);
-        if (combo >= 2) this.hud.combo(combo);
         break;
       case 'PRODUCE_WATER':
         if (to) this.vfx.ring(to, PALETTE.water, 1.4, 0.6);
@@ -3940,7 +3934,6 @@ export class Game {
         const arrive = this.posOf(dest?.id);
         if (arrive) this.vfx.burst(new pc.Vec3(arrive.x, arrive.y + 1, arrive.z), 16, { up: 2.5, size: 0.07 });
         this.sfx.chainEnd(Math.min(10, 3 + combo));
-        if (combo >= 2) this.hud.combo(combo);
         break;
       }
       default:

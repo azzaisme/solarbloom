@@ -144,7 +144,6 @@ export class Hud {
   readonly root: HTMLElement;
   /** the last value written per key (`set` skips unchanged writes) */
   readonly last = new Map<string, string>();
-  private comboTimer = 0;
   settings: Settings;
   /** E22.2: the one prompt at the bottom centre */
   readonly prompt: Prompt;
@@ -199,7 +198,6 @@ export class Hud {
     return `
       <div id="logo" role="img" aria-label="Solarbloom">${LOGO_MARK}<span class="wm">Solarbloom</span></div>
       <div id="res" role="group" aria-label="Charge"></div>
-      <div id="resInfo" class="panel" role="status" hidden></div>
       <div id="obj" class="panel" role="region" aria-label="Objective">
         <div class="ohead">
           <span class="oic" aria-hidden="true">${ICONS.biomass}</span>
@@ -220,7 +218,7 @@ export class Hud {
         <button class="rbtn qbtn" id="catBtn" aria-label="Lucky Cat garden" title="Lucky Cat garden" hidden>${ICONS.garden}<span class="qn" id="catCount">0</span></button>
         <button class="rbtn qbtn" id="pawBtn" aria-label="Paw prints: which way a hiding cat went" title="Paw prints: a Lucky Cat is hiding. Which way do they lead?" hidden>${ICONS.paw}<span class="qn" id="pawCount">0</span></button>
       </div>
-      <div id="combo"><div id="comboFx" aria-hidden="true"></div><div class="big" id="comboBig" role="status" aria-label="Bloom chain combo"><span class="cic">${ICONS.biomass}</span><span class="cl">Combo</span> <span class="cx">×0</span></div><div class="cbody panel"><ul id="comboParts"></ul><div class="total" id="comboTotal"></div><div id="chainAreas"></div></div><div id="feed"></div></div>
+      <div id="combo"><div class="cbody panel"><div id="chainAreas"></div></div><div id="feed"></div></div>
       <div id="hotbar" class="panel">${Hotbar.template()}</div>
       ${BuildBar.template()}
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
@@ -342,16 +340,6 @@ export class Hud {
     this.updateCatChip();
     this.panels.update(dt);
     this.objective.update();
-    if (this.comboTimer > 0) {
-      this.comboTimer -= dt;
-      if (this.comboTimer <= 0) {
-        $(this.root, '#comboBig').classList.remove('on');
-        $(this.root, '#combo').classList.remove('on');
-        this.comboTier = 0;
-        this.set('comboParts', $(this.root, '#comboParts'), 'html', '');
-        $(this.root, '#comboTotal').classList.remove('on');
-      }
-    }
   }
 
   /** Writes a value to the DOM only when it changed since the last write under that key. */
@@ -387,57 +375,6 @@ export class Hud {
   /** E22.10: game text in plain words, no rates. */
   words(text: string): string {
     return plainWords(text);
-  }
-
-  private comboTier = 0;
-  combo(n: number, total?: string) {
-    const el = $(this.root, '#comboBig');
-    $(el, '.cx').textContent = `×${n}`;
-    el.classList.add('on');
-    $(this.root, '#combo').classList.add('on');
-    // E19.4.3: the potter-about pace keeps chains gentle: one quiet tier, no sparkle burst or pop.
-    const tier = this.settings.potter ? 1 : n >= 10 ? 3 : n >= 5 ? 2 : 1;
-    el.classList.toggle('tier2', tier === 2);
-    el.classList.toggle('tier3', tier === 3);
-    // Look 5.5: sparkles burst around the panel when the chain reaches a new tier.
-    if (tier > this.comboTier && tier > 1) this.sparkle(tier);
-    this.comboTier = tier;
-    el.classList.remove('pop');
-    void el.offsetWidth;
-    if (!this.settings.potter) el.classList.add('pop');
-    const tot = $(this.root, '#comboTotal');
-    tot.innerHTML = iconize(esc(total ?? ''));
-    tot.classList.toggle('on', !!total);
-    this.comboTimer = total ? 3.2 : 2.2;
-  }
-
-  /** Look 5.5: the combo panel's contribution lines, from the running chain (ChainSummary.breakdown). */
-  chainBreakdown(b?: { restored: number; adjacent: number; synergy: number; relay: number }) {
-    if (!b) return;
-    const lines: [string, number][] = [
-      ['Restored Tiles', b.restored],
-      ['Adjacent Blooms', b.adjacent],
-      ['Utility Synergy', b.synergy],
-      ['Relay Links', b.relay],
-    ];
-    this.set('comboParts', $(this.root, '#comboParts'), 'html', lines.filter(([, v]) => v > 0).map(([k, v]) => `<li><span>+ ${k}</span><b>+${v}</b></li>`).join(''));
-  }
-
-  private sparkle(tier: number) {
-    if (document.body.classList.contains('reduced') || this.settings.lowVfx) return;
-    const box = $(this.root, '#comboFx');
-    const n = tier === 3 ? 12 : 7;
-    for (let i = 0; i < n; i++) {
-      const s = document.createElement('i');
-      const a = (i / n) * Math.PI * 2 + Math.random() * 0.5;
-      const d = 40 + Math.random() * 50;
-      s.style.setProperty('--dx', `${Math.round(Math.cos(a) * d)}px`);
-      s.style.setProperty('--dy', `${Math.round(Math.sin(a) * d * 0.6)}px`);
-      s.style.animationDelay = `${Math.round(Math.random() * 120)}ms`;
-      s.className = tier === 3 ? 'pink' : '';
-      box.appendChild(s);
-      setTimeout(() => s.remove(), 1000);
-    }
   }
 
   /** City 10.6: the running chain's per-area summary under the combo (empty hides it). */

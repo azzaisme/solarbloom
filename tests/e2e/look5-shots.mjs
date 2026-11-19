@@ -34,9 +34,7 @@ async function open(w, h) {
 async function busy(page) {
   await page.evaluate(() => {
     const h = window.solarbloom.hud;
-    // A real chain drives these; here we call the HUD with a chain's numbers.
-    h.combo(3);
-    h.chainBreakdown?.({ restored: 3, adjacent: 3, synergy: 3, relay: 0 });
+    // A real chain drives these; here we call the HUD with a chain's words (E23.1.4: no combo counter on the HUD)
     h.feed('🌸 Bloom chain ×3');
     h.toast('🌱 25 tiles restored!<small>+20🌿 · next reward at 40</small>', 'gold', 30);
   });

@@ -257,7 +257,7 @@ describe('E16 cosmetic fauna (planning side; the renderer animates what it retur
     expect(sim.power.output(solar)).toBeGreaterThan(0);
     expect(machineRunning(sim, solar)).toBe(true);
     // a superstructure under construction never runs
-    expect(machineRunning(sim, { ...solar, tier: 3, project: { stage: 1, costs: [] } })).toBe(false);
+    expect(machineRunning(sim, { ...solar, tier: 3, project: { stage: 1 } })).toBe(false);
   });
 });
 

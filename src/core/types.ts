@@ -4,9 +4,6 @@ export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'm
   // E23.5.2: the farm
   | 'planter';
 export type BuildableType = Exclude<MachineType, 'core'>;
-export type ResourceKind = 'energy' | 'water' | 'biomass';
-/** Plain per-resource numbers (tuning tables, small per-second coefficients). */
-export type Resources = Record<ResourceKind, number>;
 export type RestoreSource =
   | 'pulse'
   | 'broad'
@@ -132,9 +129,9 @@ export interface MachineData {
   tier?: number;
   /**
    * Phase 5 E14: a superstructure under construction. `stage` = stages paid (1 foundation, 2 assembly,
-   * 3 activation = built); `costs` = the three stage prices locked at placement (Decimal strings).
+   * 3 activation = built). E23.1.4: its counter prices went with the counters.
    */
-  project?: { stage: number; costs: Partial<Record<ResourceKind, string>>[] };
+  project?: { stage: number };
   /** Phase 5 E14: a superstructure's ability: charge (events), uses, automation switch. */
   ability?: { charge: number; used: number; auto?: boolean };
   /** E23.3: a power pole tripped by lightning (it carries nothing until bloombot resets it with one press). */
