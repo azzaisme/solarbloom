@@ -12,7 +12,7 @@ const HOUR = DAY / 24;
 const weather = (sim: Sim, kind: WeatherKind) => sim.weather.forceForTest(kind, Infinity);
 
 function city() {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.areas.clear(PARK, true);
   sim.state.salvage!.keepers.sluice = { step: 'request1' }; // Cistern Basin's unlocks held (E23.8.2)
   weather(sim, 'sunny');

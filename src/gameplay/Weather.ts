@@ -8,16 +8,13 @@ interface PowerLike {
   trip?(rng: Rng): string | undefined;
 }
 
-/** Neutral weather: classic rules have none. */
-const CALM: WeatherEffects = { ...WEATHER.sunny, planterDrying: 1, evaporation: 0 };
-
 /**
  * E23.7.2 (#396): the weather. One kind per game day, picked at dawn from the seed and the day number, so it never
  * depends on what the player did and the forecast (`forecast()`, tomorrow's) is always right. Every effect is a row
  * in data/weather; systems read the share they care about (`solar()`, `wind()`, `rain()`, `bloomSpeed()`, ...).
  * Nothing the weather does ever destroys anything: a storm's lightning can only trip a power pole.
  *
- * Read through `sim.weather`. Only under old-city rules; classic games have calm, sunny days.
+ * Read through `sim.weather`.
  */
 export class Weather {
   private forced?: { kind: WeatherKind; until: number };
@@ -29,13 +26,9 @@ export class Weather {
 
   constructor(private sim: Sim) {}
 
-  get on(): boolean {
-    return this.sim.oldCity;
-  }
 
   /** The weather on a game day (deterministic: the seed and the day). */
   kindOn(day: number): WeatherKind {
-    if (!this.on) return 'sunny';
     if (day <= 1) return WEATHER_RULES.firstDay;
     const raw = rawKind(this.sim.state.seed, day);
     if (raw === 'storm' && (day < WEATHER_RULES.noStormBeforeDay || rawKind(this.sim.state.seed, day - 1) === 'storm')) return 'rain';
@@ -55,7 +48,7 @@ export class Weather {
 
   /** The whole row of effects now. */
   effects(): WeatherEffects {
-    return this.on ? WEATHER[this.kind()] : CALM;
+    return WEATHER[this.kind()];
   }
 
   /** Solar share (folded into `sim.clock.solarFactor()`). */
@@ -85,7 +78,7 @@ export class Weather {
 
   /** The weather's name ("Rain"). */
   label(): string {
-    return this.on ? WEATHER_WORDS[this.kind()].name : '';
+    return WEATHER_WORDS[this.kind()].name;
   }
 
   /** Test hook (E23.10): hold a weather for some seconds of sim time. */
@@ -104,7 +97,6 @@ export class Weather {
 
   /** Per sim step: a new day's weather (and a storm blowing in), lightning at its times. */
   tick() {
-    if (!this.on) return;
     const s = this.sim;
     const day = s.clock.gameDay();
     const kind = this.kind();

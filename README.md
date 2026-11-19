@@ -6,7 +6,7 @@ Built with **PlayCanvas Engine 2 + TypeScript + Vite**. The camera is a perspect
 
 **Direction (E23, Nov 2026):** Solarbloom is becoming a cozy sandbox with the idle layer gone: bloombot restores a foggy island with power, water, a small farm, crafting and research, for its wildlife. The design is [docs/E23_LIVING_WORLD.md](docs/E23_LIVING_WORLD.md); it overrides E21 where they disagree.
 
-**Direction (E21, Nov 2026):** new games play under the Old City rules: a fixed city of nine regions to explore, salvage and restore by hand. The design is [docs/E21_OLD_CITY.md](docs/E21_OLD_CITY.md); saves from before it keep the classic rules (`?rules=classic` starts a classic game).
+**Direction (E21, Nov 2026):** every game is the Old City: a fixed city of nine regions to explore, salvage and restore by hand. The design is [docs/E21_OLD_CITY.md](docs/E21_OLD_CITY.md). There is one rule set (E23.1.1); a save from an earlier version starts fresh.
 
 ![The park, early on](docs/park.png)
 

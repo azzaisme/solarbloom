@@ -814,7 +814,7 @@ export class ChunkRenderer {
     }
     const [name, scale, turn] = ChunkRenderer.PROP_MODELS[prop] ?? ChunkRenderer.PROP_MODELS.stump;
     const rot = turn ? Math.floor(dhash(Math.floor(x), Math.floor(z), 211) * 4) * (Math.PI / 2) : 0;
-    if (prop === 'bench' && this.sim.oldCity) {
+    if (prop === 'bench') {
       // E23.2.3: an old park bench is broken until mended: weathered, sagging and sunk a little into the ground
       const bx = Math.floor(x);
       const bz = Math.floor(z);
@@ -1027,7 +1027,7 @@ export class ChunkRenderer {
     const area = s.areas.map.areaOfChunk(v.cx, v.cz);
     this.areaType = s.areas.info(area).type;
     const gen = s.grid.layer(GROUND)?.gen ?? 1;
-    this.roads = gen >= 4 ? roadPlanFor(s.grid.seed, gen) : undefined;
+    this.roads = roadPlanFor(s.grid.seed, gen);
     const fog = s.areas.fog(area);
     v.sunk = fog === 'hidden';
     const city = s.grid.layer(GROUND)!.height;
@@ -2613,9 +2613,8 @@ export class ChunkRenderer {
     }
   }
 
-  /** E23.2.3: an old park bench that has not been mended yet (old-city rules). */
+  /** E23.2.3: an old park bench that has not been mended yet. */
   private brokenBench(x: number, z: number): boolean {
-    if (!this.sim.oldCity) return false;
     const bx = Math.floor(x);
     const bz = Math.floor(z);
     return !this.sim.rest.usable({ id: `bench:${bx}:${bz}`, x: bx, z: bz, kind: 'old', facing: 0 });
@@ -2749,15 +2748,9 @@ export class ChunkRenderer {
     const fog = s.areas.fog(id);
     if (fog === 'cleared') return 0;
     if (fog === 'hidden') return 1; // hidden and sealed areas: a solid wall of fog (owner, 18 Nov 2026)
-    // An open Old City region has no fog left: it is restored anywhere (E21.5), so a sheet over every dead tile
-    // only washed the whole region out to a white haze. Its dead ground reads by colour instead.
-    if (s.oldCity) return 0;
-    const t = s.grid.peek(GROUND, x, z);
-    if (!t) return s.areas.density(id);
-    if (t.ground === 'restored' || t.ground === 'growing') return 0;
-    if (id === 'park') return 0;
-    if (s.areas.canTouch(t)) return 0.4;
-    return 0.5 + 0.5 * s.areas.density(id);
+    // An open region has no fog left: it is restored anywhere (E21.5), so a sheet over every dead tile only washed
+    // the whole region out to a white haze. Its dead ground reads by colour instead.
+    return 0;
   }
 
   private buildFog(v: ChunkView) {

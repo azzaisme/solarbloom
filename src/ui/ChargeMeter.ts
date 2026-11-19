@@ -4,7 +4,7 @@ import { $, HudPart } from './HudPart';
 const BATTERY = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="16" height="10" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="19.5" y="10" width="2" height="4" rx="1" fill="currentColor"/><path d="M12 8.6 8.6 12.6h2.8l-1 2.8 3.4-4h-2.8z" fill="currentColor"/></svg>`;
 
 /**
- * E23.2.1 (#371): bloombot's charge, the only meter on screen (old-city rules). A pill at the top of the
+ * E23.2.1 (#371): bloombot's charge, the only meter on screen. A pill at the top of the
  * resource strip: a battery, a bar and the charge as a percentage. Calm when full (it fades after a few seconds
  * unchanged), warm when low, and the bar dims to the low-power walk's grey at zero.
  */
@@ -33,8 +33,7 @@ export class ChargeMeter extends HudPart {
     const el = this.el;
     if (!el) return;
     const c = this.sim.charge;
-    this.set('ch-on', el, 'cls', c.on ? '0' : '1', 'off');
-    if (!c.on) return;
+    this.set('ch-on', el, 'cls', '0', 'off');
     const pct = Math.round(c.share * 100);
     this.set('ch-pct', $(el, '.pct'), 'text', `${pct}%`);
     this.set('ch-bar', $(el, '.bar i'), 'width', `${Math.max(0, Math.min(100, c.share * 100)).toFixed(1)}%`);

@@ -14,7 +14,7 @@ const DAY = WATER_NET.daySeconds;
 const region = (id: string) => REGIONS.find((r) => r.id === id)!;
 
 function city(seed = 7) {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   sim.areas.clear(PARK, true);
   return sim;
 }
