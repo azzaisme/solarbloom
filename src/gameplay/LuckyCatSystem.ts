@@ -7,6 +7,7 @@ import { PARK } from '../core/Areas';
 import { GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
 import { CAT_ANCHORS, type CatAnchor } from '../data/templates';
+import { CAT_DECOR, CAT_DECOR_OF_VARIANT, DECOR_OPTION } from '../data/cozy';
 import { TUNING } from '../data/tuning';
 import { MATERIALS } from '../data/salvage';
 import { regionOfCell } from '../core/OldCityLayout';
@@ -34,6 +35,7 @@ export const CAT_REWARD_NAMES: Record<CatRewardType, string> = {
   goldenRelay: 'Golden Relay',
   catsGarden: "Cat's Garden",
   fogWhisker: 'Fog Whisker',
+  ripeAround: 'Ripe All Around',
 };
 
 /** How an anchor looks from the current camera: on screen, off screen (reachable by panning) or under the HUD. */
@@ -425,6 +427,34 @@ export class LuckyCatSystem {
     return out;
   }
 
+  /**
+   * E23.12.2 (#529) Ripe all around: the planters within `TUNING.cat.ripeRadius` tiles of bloombot (of the cat when
+   * there is no bloombot, as in the bots) with a crop still growing. Empty: the reward is never rolled.
+   */
+  ripeTargets(at?: CatAt): MachineData[] {
+    const s = this.sim;
+    const b = s.bot ?? s.state.bot; // live where the game sets it, else the last saved spot
+    const from = b ? { roofId: b.roofId, x: b.x, z: b.z } : at;
+    return s.farm.planters().filter((m) => {
+      if (!s.farm.bed(m).crop || s.farm.look(m).ripe) return false;
+      return !from || (m.roofId === from.roofId && Math.hypot(m.x + m.size / 2 - from.x, m.z + m.size / 2 - from.z) <= TUNING.cat.ripeRadius);
+    });
+  }
+
+  /**
+   * E23.12.2 (#529): the cat-only decoration this cat leaves: a Golden or Rainbow Cat its own piece while bloombot
+   * doesn't have it, otherwise the next missing one in order (the rarer cats' pieces last). Undefined once bloombot
+   * has them all: from then on a cat gives only its reward.
+   */
+  nextDecor(variant: CatVariant = 'standard'): string | undefined {
+    const left = CAT_DECOR.filter((id) => !this.sim.crafting.decorMade(id));
+    if (!left.length) return undefined;
+    const own = CAT_DECOR_OF_VARIANT[variant];
+    if (own && left.includes(own)) return own;
+    const rare = new Set(Object.values(CAT_DECOR_OF_VARIANT));
+    return left.find((id) => !rare.has(id)) ?? left[0];
+  }
+
   rollReward(at?: CatAt): CatRewardType {
     const w = TUNING.cat.weights;
     const table: [CatRewardType, number][] = [
@@ -436,6 +466,7 @@ export class LuckyCatSystem {
       ['goldenRelay', this.goldenRelayAvailable(at) ? w.goldenRelay : 0],
       ['catsGarden', this.catsGardenAvailable() ? w.catsGarden : 0],
       ['fogWhisker', this.fogWhiskerTiles().length ? w.fogWhisker : 0],
+      ['ripeAround', this.ripeTargets(at).length ? w.ripeAround : 0],
     ];
     const total = table.reduce((a, [, x]) => a + x, 0);
     let r = this.sim.rng.next() * total;
@@ -476,6 +507,9 @@ export class LuckyCatSystem {
     const extras = regular ? (c.stash ?? 0) : 0;
     for (let i = 0; i < extras; i++) parts.push(this.apply('luckyHarvest', 1, at));
     if (regular) c.stash = 0;
+    // E23.12.2 (#529): every cat also leaves a cat-only decoration until bloombot has them all
+    const decor = this.nextDecor(variant);
+    if (decor && s.crafting.giveDecor(decor)) parts.push(`${DECOR_OPTION[decor].icon} ${DECOR_OPTION[decor].name} to place in your gardens`);
     const summary = parts.join(' · ');
     c.lastReward = type;
     c.log = [...(c.log ?? []), { anchorId: spot.anchorId, reward: type, at: s.time, variant }];
@@ -566,6 +600,15 @@ export class LuckyCatSystem {
       parts.push(`The fog thins over the ${AREA_TYPES[a.type].name.toLowerCase()}`);
       return true;
     };
+    const ripe = (fallback = true): boolean => {
+      const n = this.ripeTargets(at).filter((m) => s.farm.ripenNow(m)).length;
+      if (!n) {
+        if (fallback) harvest(); // nothing growing nearby any more
+        return false;
+      }
+      parts.push(n === 1 ? 'The planter nearby ripens at once' : 'The planters nearby ripen all at once');
+      return true;
+    };
     switch (type) {
       case 'luckyHarvest':
         harvest();
@@ -588,10 +631,13 @@ export class LuckyCatSystem {
       case 'fogWhisker':
         whisker();
         break;
+      case 'ripeAround':
+        ripe();
+        break;
       case 'jackpot': {
         // Two different rewards from the pool, in a random order; one that can't act here is skipped, never doubled
         // into a second gift (the gift and the surge always act, so there are always two).
-        const pool: ((fallback?: boolean) => boolean)[] = [() => (harvest(), true), () => (surge(), true), mega, party, golden, garden, whisker];
+        const pool: ((fallback?: boolean) => boolean)[] = [() => (harvest(), true), () => (surge(), true), mega, party, golden, garden, whisker, ripe];
         for (let i = pool.length - 1; i > 0; i--) {
           const j = Math.floor(s.rng.next() * (i + 1));
           [pool[i], pool[j]] = [pool[j], pool[i]];

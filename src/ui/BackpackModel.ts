@@ -211,7 +211,11 @@ export function collection(sim: Sim): CollectionGroup[] {
   };
   // keepsakes: the ones Lucky Cats leave, and one per region
   const unlocked = new Set([...(cz?.decorUnlocked ?? []), ...(st.salvage?.items ?? []), ...(st.salvage?.caches ?? [])]);
-  const catKeeps = DECOR_OPTIONS.filter((o) => 'keepsake' in o.unlock).map((o) => ({ name: unlocked.has(o.id) ? o.name : 'Not found yet', detail: unlocked.has(o.id) ? o.blurb : 'Still out there somewhere', found: unlocked.has(o.id) }));
+  // E23.12.2: a cat-only decoration is the Lucky Cat's gift: found once a cat has left it (it comes made)
+  const catKeeps = DECOR_OPTIONS.filter((o) => 'cat' in o.unlock).map((o) => {
+    const found = unlocked.has(o.id) || sim.crafting.decorMade(o.id);
+    return { name: found ? o.name : 'Not found yet', detail: found ? o.blurb : 'Still out there somewhere', found };
+  });
   const regionKeeps = KEEPSAKES.map((k) => ({ name: unlocked.has(k.id) ? k.name : 'Not found yet', detail: unlocked.has(k.id) ? `From ${regionName(k.region)}` : 'One day, a friend will give you this', found: unlocked.has(k.id) }));
   const keeps = [...catKeeps, ...regionKeeps];
   const fauna = Object.keys(st.fauna ?? {});

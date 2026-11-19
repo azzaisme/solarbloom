@@ -203,7 +203,7 @@ export interface Buff {
   at?: { roofId: string; x: number; z: number };
 }
 
-export type CatRewardType = 'luckyHarvest' | 'solarFrenzy' | 'megaBloom' | 'droneParty' | 'jackpot' | 'goldenRelay' | 'catsGarden' | 'fogWhisker';
+export type CatRewardType = 'luckyHarvest' | 'solarFrenzy' | 'megaBloom' | 'droneParty' | 'jackpot' | 'goldenRelay' | 'catsGarden' | 'fogWhisker' | 'ripeAround';
 
 /** Phase 5 E15: how rare a cat is (rolled when it appears, saved with it). */
 export type CatVariant = 'standard' | 'golden' | 'rainbow';
