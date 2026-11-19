@@ -33,7 +33,8 @@ export const DIVERSITY = {
 
 /**
  * Where on (or beside) bloombot a visitor settles. The ones on bloombot follow its rig (VISIT_POINTS): head and
- * nest on the head, the shoulders, the lap (the hips, forward), landOn on a forearm.
+ * nest on the head, the shoulders (of its big round head: its own are under it), the lap (the hips, forward),
+ * landOn on a forearm.
  */
 export type Perch = 'passBy' | 'landOn' | 'perchNear' | 'sniff' | 'head' | 'shoulderL' | 'shoulderR' | 'beside' | 'lap' | 'nest';
 
@@ -89,6 +90,8 @@ export const VISITORS: VisitorDef[] = [
   { id: 'kingfisher', name: 'Kingfisher', icon: '🐦', from: 'rare', perches: ['shoulderR', 'perchNear'], flies: true, rare: true, size: 0.06 },
   { id: 'badger', name: 'Badger', icon: '🦡', from: 'rare', perches: ['beside', 'sniff'], rare: true, size: 0.15 },
   { id: 'heron', name: 'Grey heron', icon: '🪶', from: 'rare', perches: ['perchNear'], flies: true, rare: true, size: 0.2 },
+  { id: 'fawn', name: 'Red deer fawn', icon: '🦌', from: 'rare', perches: ['beside', 'perchNear'], rare: true, size: 0.2 },
+  { id: 'swallowtail', name: 'Swallowtail', icon: '🦋', from: 'rare', perches: ['nest', 'landOn', 'passBy'], flies: true, rare: true, size: 0.06 },
 ];
 
 /**
@@ -104,13 +107,15 @@ export const VISITOR_LOOK: Record<string, { length: number; turn?: number; lift?
   hedgehog: { length: 0.2 },
   squirrel: { length: 0.22 },
   magpie: { length: 0.24 },
-  fox: { length: 0.36 },
+  fox: { length: 0.32 },
   frog: { length: 0.12 },
   owl: { length: 0.2 },
-  otter: { length: 0.36 },
+  otter: { length: 0.32 },
   kingfisher: { length: 0.14 },
-  badger: { length: 0.34 },
+  badger: { length: 0.3 },
   heron: { length: 0.5 },
+  fawn: { length: 0.32 },
+  swallowtail: { length: 0.1 },
 };
 
 /** E23.2.4.2: how many come over while bloombot sits, and their timing. */
@@ -136,20 +141,23 @@ export const VISIT = {
 /**
  * Where each perch is, relative to bloombot. `bone`: the rig bone it rides (head, shoulders, hips, forearm); the
  * offset is in bloombot's own space (x to its left, y up, z forward), in world units. Without the rig (the
- * stand-in) the `fallback` offset from bloombot's feet is used. `clear`: how far the perch point sits from the
- * body's surface, so a visitor no bigger than that never sinks into bloombot (tests/wildlife.test.ts checks it).
+ * stand-in) the `fallback` offset from bloombot's feet is used. For the perches on bloombot this is only where an
+ * animal starts looking: it rests on bloombot's real surface there (Visitors, SkinSurface.restOn), so it neither
+ * floats above it nor sinks into it (tests/e2e/wildlife-e23.mjs measures it, at every tier, on a bench and a pad).
  */
-export const VISIT_POINTS: Record<Perch, { bone?: string; offset: [number, number, number]; fallback: [number, number, number]; clear: number }> = {
-  head: { bone: 'head_end', offset: [0, 0.03, -0.02], fallback: [0, 0.78, 0], clear: 0.12 },
-  nest: { bone: 'head_end', offset: [0, 0.03, 0.02], fallback: [0, 0.8, 0], clear: 0.12 },
-  shoulderL: { bone: 'LeftShoulder', offset: [0.07, 0.11, 0], fallback: [0.17, 0.5, 0], clear: 0.1 },
-  shoulderR: { bone: 'RightShoulder', offset: [-0.07, 0.11, 0], fallback: [-0.17, 0.5, 0], clear: 0.1 },
-  lap: { bone: 'Hips', offset: [0, 0.07, 0.15], fallback: [0, 0.32, 0.16], clear: 0.07 },
-  landOn: { bone: 'LeftForeArm', offset: [0, 0.05, 0], fallback: [0.2, 0.38, 0.06], clear: 0.06 },
-  // beside bloombot on its right: up on the bench seat when it is free, else on the ground (a friend Keeper sits on
-  // bloombot's left, on the seat). Back 0.14: the seat's middle, as bloombot sits forward on it (REST.seat.out 0.16)
-  beside: { offset: [-0.42, 0, -0.14], fallback: [-0.42, 0, -0.14], clear: 0.24 },
-  sniff: { offset: [0.12, 0, 0.5], fallback: [0.12, 0, 0.5], clear: 0.3 },
-  perchNear: { offset: [-0.9, 0, 0.6], fallback: [-0.9, 0, 0.6], clear: 0.6 },
-  passBy: { offset: [0, 0.6, 0.7], fallback: [0, 0.6, 0.7], clear: 0.5 },
+export const VISIT_POINTS: Record<Perch, { bone?: string; offset: [number, number, number]; fallback: [number, number, number] }> = {
+  head: { bone: 'head_end', offset: [0, 0.03, -0.02], fallback: [0, 0.78, 0] },
+  nest: { bone: 'head_end', offset: [0, 0.03, 0.02], fallback: [0, 0.8, 0] },
+  // bloombot's big round head overhangs its own shoulders (no room under it), so a bird sits on the shoulders of its
+  // head instead, either side of the sprout, where it shows from the front
+  shoulderL: { bone: 'head_end', offset: [0.13, -0.06, 0.02], fallback: [0.13, 0.72, 0.02] },
+  shoulderR: { bone: 'head_end', offset: [-0.13, -0.06, 0.02], fallback: [-0.13, 0.72, 0.02] },
+  lap: { bone: 'Hips', offset: [0, 0.07, 0.15], fallback: [0, 0.32, 0.16] },
+  landOn: { bone: 'LeftForeArm', offset: [0, 0.05, 0], fallback: [0.2, 0.38, 0.06] },
+  // on the ground at bloombot's right, in front of where it sits (on a bench with room, the seat's free end instead:
+  // Resting.benchSpot); kept off a charger's pad
+  beside: { offset: [-0.42, 0, 0.25], fallback: [-0.42, 0, 0.25] },
+  sniff: { offset: [0.12, 0, 0.5], fallback: [0.12, 0, 0.5] },
+  perchNear: { offset: [-0.9, 0, 0.6], fallback: [-0.9, 0, 0.6] },
+  passBy: { offset: [0, 0.6, 0.7], fallback: [0, 0.6, 0.7] },
 };

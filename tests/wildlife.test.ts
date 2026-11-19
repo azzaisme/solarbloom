@@ -3,9 +3,9 @@ import { collection } from '../src/ui/BackpackModel';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
-import { createInitialState } from '../src/core/GameState';
-import type { PlantKind, TileData } from '../src/core/types';
-import { DIVERSITY, ON_BOT, PERCH_FROM, TIERS, VISIT, VISIT_POINTS, VISITORS, type DiversityTier, type Perch } from '../src/data/wildlife';
+import { createInitialState, GROUND } from '../src/core/GameState';
+import type { MachineData, PlantKind, TileData } from '../src/core/types';
+import { DIVERSITY, ON_BOT, PERCH_FROM, TIERS, VISIT, VISITORS, type DiversityTier } from '../src/data/wildlife';
 import { Sim } from '../src/gameplay/Sim';
 import { planVisits, tierOf } from '../src/gameplay/Wildlife';
 import { treeSpot } from '../src/rendering/TreePlacement';
@@ -204,20 +204,39 @@ describe('E23.2.4.2: visits scale with diversity', () => {
     expect(sim.state.wildlife!.sits).toBe(6);
   });
 
-  it("at a charger too: visitors come while bloombot meditates", () => {
-    const sim = parkAt('lively');
-    const m = sim.state.machines.find((x) => sim.areas.areaOf(x) === PARK)!; // any park machine stands in for a charger
-    sim.rest.meditate(m);
-    expect(sim.wildlife.area).toBe(PARK);
-    expect(sim.wildlife.visits.length).toBeGreaterThan(0);
-  });
-
-  it('visitors on bloombot are small enough for their perch: nothing sinks into its body', () => {
-    for (const v of VISITORS)
-      for (const p of v.perches) {
-        if (!ON_BOT.includes(p) && p !== 'beside') continue;
-        expect(v.size, `${v.id} at ${p}`).toBeLessThanOrEqual(VISIT_POINTS[p as Perch].clear);
-      }
+  it('at a real charger too: visitors come while bloombot meditates, as many as on a bench at the same tier', () => {
+    for (const tier of ['lively', 'thriving'] as const) {
+      const sim = parkAt(tier);
+      sim.power.skyOverride = () => ({ sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 });
+      // a charger on the grid in the park, powered by a panel either side (as the build system leaves them)
+      const spot = sim.areas.tiles(PARK).find((t) => [-1, 0, 1].every((dx) => { const n = sim.grid.get(GROUND, t.x + dx, t.z); return !!n && !n.blocked && !n.occupantId && !n.prop && n.feature !== 'water'; }))!;
+      const put = (type: string, x: number, z: number) => {
+        const t = sim.grid.get(GROUND, x, z)!;
+        const m = { id: sim.newId('m'), type, roofId: GROUND, x, z, size: 1, boostUntil: 0, timer: 0, charge: 0 } as unknown as MachineData;
+        sim.state.machines.push(m);
+        t.occupantId = m.id;
+        sim.grid.indexMachine(m);
+        return m;
+      };
+      put('solar', spot.x - 1, spot.z);
+      put('solar', spot.x + 1, spot.z);
+      const pad = put('charger', spot.x, spot.z);
+      expect(sim.power.roleOf(pad), "the charger's role on the grid").toBeTruthy();
+      sim.bot = { roofId: GROUND, x: spot.x + 0.5, z: spot.z + 1.35 }; // at the pad's edge, as Resting seats it
+      expect(sim.rest.meditate(pad)).toBe(true);
+      expect(sim.chargers.docked()?.id).toBe(pad.id);
+      expect(sim.wildlife.area).toBe(PARK);
+      expect(sim.wildlife.diversity(PARK).tier).toBe(tier);
+      // the same park, sat on its bench instead (the first sitting in both): the same visitors come
+      const twin = parkAt(tier);
+      const b = parkBench(twin);
+      twin.inventory.add('scrap', 3);
+      twin.rest.mend(b);
+      twin.rest.sitOnBench(b);
+      const plan = (s: Sim) => s.wildlife.visits.map((v) => `${v.id}@${v.perch}`);
+      expect(plan(sim).length).toBeGreaterThan(0);
+      expect(plan(sim)).toEqual(plan(twin));
+    }
   });
 
   it('no visitor is a cat, and wildlife never reads the Lucky Cat system', () => {

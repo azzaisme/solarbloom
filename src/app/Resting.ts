@@ -81,14 +81,21 @@ export class Resting {
     const sx = Math.cos(facing);
     const sz = -Math.sin(facing);
     const friend = h.sim.rest.friends(b.x, b.z).find((id) => h.sim.keepers.visible(id));
-    const { out, raise, friendOut, along, friend: other } = REST.seat;
-    const side = friend ? along : 0;
+    // E23.2.4: an animal coming to curl up beside bloombot (sim.wildlife planned it as bloombot sat) gets the seat's
+    // free end, unless a friend Keeper has it
+    const visitor = !friend && h.sim.wildlife.visits.some((v) => v.perch === 'beside');
+    const { out, raise, friendOut, along, friend: other, visitorOut, visitorAlong } = REST.seat;
+    const side = friend || visitor ? along : 0;
     h.bot.seat = { x: cx + fx * out - sx * side, y: by, z: cz + fz * out - sz * side, facing };
     h.bot.visuals.setPose('sit', REST.benchSeat + raise);
     // a Keeper who is a friend sits beside (only one already out and about: never in fog)
     if (friend && h.keepers) h.keepers.beside = { id: friend, x: cx + fx * friendOut + sx * other, y: by, z: cz + fz * friendOut + sz * other, facing, seat: REST.benchSeat };
+    this.benchSpot = visitor ? { x: cx + fx * visitorOut + sx * visitorAlong, y: by + REST.benchSeat, z: cz + fz * visitorOut + sz * visitorAlong } : undefined;
     this.calm();
   }
+
+  /** E23.2.4: on a bench, the seat's free end where an animal beside bloombot settles (undefined: no room, or not sitting). */
+  benchSpot?: { x: number; y: number; z: number };
 
   /**
    * E23.3.3: sits cross-legged on the charger in front, centred on the glowing pad and facing out the way bloombot
@@ -138,6 +145,7 @@ export class Resting {
     const h = this.h;
     if (!h.bot.seat && !this.before) return;
     h.bot.seat = undefined;
+    this.benchSpot = undefined;
     h.bot.visuals.setPose(undefined);
     if (h.keepers) h.keepers.beside = undefined;
     document.body.classList.remove('resting');

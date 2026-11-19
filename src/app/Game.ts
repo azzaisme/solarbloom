@@ -4512,12 +4512,52 @@ export class Game {
     if (!this.visitors || !b) return;
     const [, by] = b.world();
     const r = this.sim.rest.sitting;
+    const pad = r?.kind === 'charger' ? this.sim.machine(r.machineId) : undefined;
+    // a frog on its knees: it keeps its legs still
+    b.visuals.lapFull = this.sim.wildlife.visits.some((v) => v.perch === 'lap' && this.sim.time >= v.arrive - 1 && (v.leave === undefined || this.sim.time < v.leave));
+    // the bench under it: its footprint (REST.benchFoot, about its tile's middle), turned with it
+    let bench: { x0: number; x1: number; z0: number; z1: number } | undefined;
+    if (r?.kind === 'bench') {
+      const { along, back, front } = REST.benchFoot;
+      const c = Math.cos(r.bench.facing);
+      const s = Math.sin(r.bench.facing);
+      const xs: number[] = [];
+      const zs: number[] = [];
+      for (const u of [-along, along])
+        for (const w of [-back, front]) {
+          xs.push(r.bench.x + 0.5 + u * c + w * s);
+          zs.push(r.bench.z + 0.5 - u * s + w * c);
+        }
+      bench = { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) };
+    }
+    // and its solid parts (or the pad's), in the world, for the animals on bloombot to keep out of too
+    const solids: { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number }[] = [];
+    if (r?.kind === 'bench') {
+      const c = Math.cos(r.bench.facing);
+      const s = Math.sin(r.bench.facing);
+      for (const part of REST.benchSolids) {
+        const xs: number[] = [];
+        const zs: number[] = [];
+        for (const u of part.x)
+          for (const w of part.z) {
+            xs.push(r.bench.x + 0.5 + u * c + w * s);
+            zs.push(r.bench.z + 0.5 - u * s + w * c);
+          }
+        solids.push({ x0: Math.min(...xs), x1: Math.max(...xs), y0: by + part.y[0], y1: by + part.y[1], z0: Math.min(...zs), z1: Math.max(...zs) });
+      }
+    } else if (pad) solids.push({ x0: pad.x, x1: pad.x + pad.size, y0: by, y1: by + 0.1, z0: pad.z, z1: pad.z + pad.size });
     this.visitors.update(dt, this.sim.time, this.sim.wildlife.visits, {
       point: (p, out) => b.visuals.visitPoint(p, out),
       facing: b.pose.facing,
       groundY: () => by,
-      // up on the seat beside bloombot, unless a friend Keeper is sitting there
-      seatY: r?.kind === 'bench' && !this.resting?.friend ? by + REST.benchSeat : undefined,
+      surface: () => b.visuals.surface(),
+      corners: () => b.visuals.corners(),
+      bones: () => b.visuals.skinBones(),
+      // up on the seat beside bloombot when there is room (Resting keeps the free end for it)
+      benchSpot: r?.kind === 'bench' ? this.resting?.benchSpot : undefined,
+      // what it sits on (the charger's pad, the bench), which animals on the ground keep off
+      raised: pad ? { x0: pad.x, x1: pad.x + pad.size, z0: pad.z, z1: pad.z + pad.size } : bench,
+      solids,
       reducedMotion: !!this.settings.reducedMotion,
     });
   }

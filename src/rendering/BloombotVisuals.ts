@@ -3,6 +3,7 @@ import { color, PALETTE } from './Materials';
 import { BOT_CLIPS, REST, seatLift } from '../data/rest';
 import { VISIT_POINTS, type Perch } from '../data/wildlife';
 import { foldLegs, hipsAbove, SEAT_HIPS, swingShins, type SeatKind } from './SeatPose';
+import { surfaceTriangles } from './SkinSurface';
 
 /**
  * Bloombot (#234, G.10 + G.1): the player character, and the game's first skinned model. The GLB comes from
@@ -52,6 +53,10 @@ export class BloombotVisuals {
   private faceUntil = 0;
   private blinkAt = 3;
   reducedMotion = false;
+  /** something is sitting in its lap: it keeps its legs still (they settle over a second or so) */
+  lapFull = false;
+  private legs = 1;
+  private legsAt = 0;
   /** true once the real model is drawn */
   loaded = false;
   /** the model's holder (the seated poses move it) */
@@ -217,6 +222,43 @@ export class BloombotVisuals {
     return out.copy(bone ? bone.getPosition() : this.root.getPosition()).add(this.pointTmp);
   }
 
+  private surfaceAt = -1;
+  private surfacePts: number[] = [];
+  private cornerPts: number[] = [];
+
+  /**
+   * E23.2.4: bloombot's surface as drawn right now (SkinSurface: its triangles, skinned on the CPU, 9 numbers each in
+   * world space), for visitors to rest on. Read at most once a frame; empty until the model has loaded.
+   */
+  surface(): readonly number[] {
+    if (!this.model) return [];
+    if (this.surfaceAt !== this.clock) {
+      this.surfaceAt = this.clock;
+      this.surfacePts.length = 0;
+      this.cornerPts.length = 0;
+      surfaceTriangles(this.model, this.surfacePts, this.cornerPts);
+    }
+    return this.surfacePts;
+  }
+  /** Its vertices as drawn right now (each once, x, y, z triples), from the same skinning as surface(). */
+  corners(): readonly number[] {
+    this.surface();
+    return this.cornerPts;
+  }
+
+  private rig?: readonly pc.GraphNode[];
+  /** The bones its skin hangs from (an animal resting on it rides the one nearest where it touches). */
+  skinBones(): readonly pc.GraphNode[] {
+    if (!this.model) return [];
+    if (!this.rig) {
+      const all = new Set<pc.GraphNode>();
+      for (const r of this.model.findComponents('render') as pc.RenderComponent[]) for (const mi of r.meshInstances) for (const b of mi.skinInstance?.bones ?? []) all.add(b);
+      this.rig = [...all];
+    }
+    return this.rig;
+  }
+
+
   /** A one-shot clip by name (the sitting transitions), back to the loop afterwards. */
   private oneShot(name: string) {
     const anim = this.model?.anim;
@@ -249,12 +291,18 @@ export class BloombotVisuals {
     if (anim && !this.action) anim.speed = this.pose === 'meditate' ? 0.6 : 0.8; // slow, calm breathing
   }
 
-  /** On a bench: its little legs swing, one forward as the other goes back, now livelier, now nearly still. */
+  /**
+   * On a bench: its little legs swing, one forward as the other goes back, now livelier, now nearly still; and still
+   * while something sits in its lap (a frog on its knees).
+   */
   private swingLegs() {
     if (!this.model || this.reducedMotion) return;
     const s = REST.legSwing;
+    const dt = Math.min(0.1, Math.max(0, this.clock - this.legsAt));
+    this.legsAt = this.clock;
+    this.legs += ((this.lapFull ? 0 : 1) - this.legs) * Math.min(1, dt * s.settle);
     const drift = 0.5 - 0.5 * Math.cos((this.clock * Math.PI * 2) / s.driftSeconds);
-    const deg = s.degrees * (s.calmest + (1 - s.calmest) * drift) * Math.sin(this.clock * Math.PI * 2 * s.perSecond);
+    const deg = this.legs * s.degrees * (s.calmest + (1 - s.calmest) * drift) * Math.sin(this.clock * Math.PI * 2 * s.perSecond);
     swingShins(this.model, this.root, deg, -deg);
   }
 

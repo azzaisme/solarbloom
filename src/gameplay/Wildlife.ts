@@ -166,8 +166,7 @@ export class WildlifeSystem {
   }
 
   private night(): boolean {
-    const c = this.sim.clock as unknown as { gameIsDay?(): boolean };
-    return c.gameIsDay ? !c.gameIsDay() : false;
+    return !this.sim.clock.gameIsDay();
   }
 
   /** Visitors near bloombot right now (arrived and not yet gone). */

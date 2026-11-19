@@ -210,6 +210,7 @@ const BODIES = {
   owl: P('M5.5 9.5C5.5 5 8 3.5 12 3.5S18.5 5 18.5 9.5V16c0 3-3 5-6.5 5s-6.5-2-6.5-5z', 'wood') + C(9.2, 9.8, 2.6, 'cream') + C(14.8, 9.8, 2.6, 'cream') + C(9.2, 9.8, 1, 'dark') + C(14.8, 9.8, 1, 'dark') + P('M11 12.4h2L12 14.4z', 'gold') + L('M9.4 16.4l1.2.8M13.4 17.2l1.2-.8', '#3a2a1a', 1.2),
   otter: P('M3.5 18c2-1.6 3-4.6 4.4-7.4C9.6 7 12 5.6 15 5.8c3.6.2 5.6 2.6 5.4 5.4-.2 2.6-2.4 4-5 4-2.2 0-3.2 1.4-4.4 3.4-1.4 2-4.6 1.8-7.5-.6z', 'wood') + C(17, 9.6, .7, 'dark') + C(20.2, 11.2, .8, 'dark') + L('M19 13.2l2.6.6M19 14.2l2.2 1.2', '#3a2a1a', 1.1),
   badger: P('M3 16c0-4 3.6-7 8.4-7H15l6 4.5c.6.5.4 1.4-.4 1.6L16 16.4c-.8 2-2.6 3.1-5 3.1H6.4C4.4 19.5 3 18 3 16z', 'stone') + P('M15 9l6 4.5c.6.5.4 1.4-.4 1.6L16 16.4c-.4-2.6-.8-5-1-7.4z', 'cream') + L('M16.4 10.6l2.8 2.6', '#3a2a1a', 1.4) + C(21, 14.2, .7, 'dark'),
+  fawn: P('M7 10.5h8.4c1.4 0 2.2 1 2.2 2.2v1.6c0 1-.8 1.8-1.8 1.8H8.6c-1.8 0-3-1.2-3-2.8v-.4c0-1.4.6-2.4 1.4-2.4z', 'orange') + L('M8 16v4.5M10.6 16v4.5M14.2 16v4.5M16.4 16v4.5', '#3a2a1a', 1.5) + P('M15 10.5 16.2 5c.2-1 1.2-1.6 2.2-1.4l2.2.6c.6.2.6 1 0 1.4l-2 1.2L18 10.5z', 'orange') + C(9.2, 12.6, .6, 'cream') + C(12.2, 13, .6, 'cream') + C(18.6, 5.4, .5, 'dark'),
   heron: L('M10 21v-6M12.6 21v-6', '#3a2a1a', 1.3) + P('M6 13c0-2.6 2.4-4 5.4-4H15c.8 0 1.4.8 1 1.6L14 15H9c-1.8 0-3-.8-3-2z', 'steel') + L('M14.6 9.4c-.4-2 .4-3.6 2-4.2', '#3a2a1a', 1.6) + P('M16.4 4.4l5.6 1-5.2 1.4z', 'gold') + C(16.6, 5, .4, 'dark'),
   // Drone roles (E18; used by the role picker and over drones)
   roleRestorer: P('M12 8l8.5 4.6L12 17.2 3.5 12.6z', 'leaf') + P('M3.5 12.6v2.2l8.5 4.6 8.5-4.6v-2.2L12 17.2z', 'wood') + P(sparkle(12, 5, 4.2), 'gold'),
@@ -294,7 +295,7 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   // E23.5.1 farm items (food is the carrot, compost the garden bed above).
   '🧪': 'sparkle',
   // E23.2.4 visitors (the magpie's 🐦‍⬛ is the bird, by its base emoji).
-  '🐝': 'bee', '🦔': 'hedgehog', '🐿': 'squirrel', '🦊': 'fox', '🦉': 'owl', '🦦': 'otter', '🦡': 'badger', '🪶': 'heron',
+  '🐝': 'bee', '🦔': 'hedgehog', '🐿': 'squirrel', '🦊': 'fox', '🦉': 'owl', '🦦': 'otter', '🦡': 'badger', '🪶': 'heron', '🦌': 'fawn',
 };
 
 /** Emoji (with optional variation selector / ZWJ sequences). */
