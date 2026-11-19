@@ -3,7 +3,8 @@ import type { GroundState, LayerData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
 import { MATERIAL_IDS, TIERS } from '../src/data/salvage';
 import { PARK } from '../src/core/Areas';
-import { REGIONS } from '../src/data/oldcity';
+import { KEEPERS, REGIONS } from '../src/data/oldcity';
+import { ITEM_DEFS } from '../src/data/items';
 import { regionById } from '../src/core/OldCityLayout';
 import type { MachineData } from '../src/core/types';
 
@@ -38,6 +39,9 @@ export function unlockAll(sim: Sim, plenty = 9999) {
   sv.tier = Math.max(sv.tier, 4);
   for (const t of TIERS.slice(0, 4)) if (t.ability && !sv.abilities.includes(t.ability)) sv.abilities.push(t.ability);
   for (const m of MATERIAL_IDS) sv.pack[m] = plenty;
+  // E23.6.1: machines are built from crafting-table recipes that unlock from the Keepers, and cost components
+  for (const k of KEEPERS) if (!sv.keepers[k.id] || sv.keepers[k.id].step === 'asleep') sv.keepers[k.id] = { step: 'settled' };
+  for (const id of Object.keys(ITEM_DEFS) as (keyof typeof ITEM_DEFS)[]) if (!(id in sv.pack)) (sv.pack as Record<string, number>)[id] = plenty;
   offGrid(sim);
 }
 

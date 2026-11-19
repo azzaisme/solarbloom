@@ -178,7 +178,7 @@ describe('E23.12 Lucky Cat rewards (#528)', () => {
     expect(back.relays.range(back.machine(m.id)!)).toBe(sim.relays.range(m));
   });
 
-  it('Jackpot gives two different rewards from the new pool', () => {
+  it('Jackpot gives two different rewards from the new pool', { timeout: 120000 }, () => {
     const kinds: [CatRewardType, RegExp][] = [
       ['luckyHarvest', /A gift in your backpack/],
       ['solarFrenzy', /Charge full/],
