@@ -409,6 +409,7 @@ try {
           if (!(t > 0.3 && t < 0.75)) return false;
           // caught mid-flight: photo mode (E19.4.1) freezes the game there and frees the camera from bloombot
           g.photo.hideBot = true;
+          g.photo.clean = true; // nothing but the picture: no controls bar
           g.photo.enter();
           g.photo.freeze = true;
           return { id: d.id, px: d.px, pz: d.pz, cargo: d.cargo };
@@ -436,6 +437,7 @@ try {
       g.photo.freeze = false;
       g.photo.exit();
       g.photo.hideBot = false;
+      g.photo.clean = false;
     });
     await page.waitForFunction((c) => (window.solarbloom.sim.automation.count(c, 'wire') ?? 0) >= 20, ids.c, { timeout: 600000 }).catch(() => {});
     const after = await page.evaluate(({ a, b, c, asm }) => {
@@ -444,10 +446,15 @@ try {
     }, ids);
     check(!after.a.copper && after.c.wire === 20, T(`in game time, couriers carried the Copper and the Assembler made Wire on grid power (${JSON.stringify(after)})`));
     // the line from close by: photo mode frees the camera from bloombot (which steps out of the picture)
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      g.photo.hideBot = true;
+      g.photo.clean = true;
+      g.photo.enter();
+    });
+    await page.waitForTimeout(300);
     await page.evaluate((id) => {
       const g = window.solarbloom, m = g.sim.machine(id), cam = g.camera;
-      g.photo.hideBot = true;
-      g.photo.enter();
       cam.goal.set(m.x + m.size / 2, (cam.ground?.(m.x + m.size / 2, m.z + m.size / 2) ?? cam.goal.y) + 0.5, m.z + m.size / 2);
       cam.zoomGoal = 2.6;
     }, ids.asm);
@@ -457,6 +464,7 @@ try {
       const g = window.solarbloom;
       g.photo.exit();
       g.photo.hideBot = false;
+      g.photo.clean = false;
     });
     check(errors.length === 0, T(`no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`));
     await page.context().close();
