@@ -3,6 +3,10 @@ import type { ChainEvent } from '../gameplay/BloomChainSystem';
 import type { BuffType, CatRewardType, CatVariant, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
+  /** E23.2.1: bloombot's charge ran out (the low-power walk); reached full; bloombot began eating one unit. */
+  'charge.empty': Record<string, never>;
+  'charge.full': { source: import('../gameplay/Charge').ChargeSource };
+  'charge.eat': { item: 'biomass' | 'food' };
   /** E23.7.1: the light clock crossed dawn or dusk (`day`: the game day). */
   'clock.dawn': { day: number };
   'clock.dusk': { day: number };
@@ -21,12 +25,17 @@ export interface GameEvents {
   /** E23.7.1.3: a night find was taken. */
   'night.found': { id: string; material: import('../core/types').MaterialId; n: number; x: number; z: number };
   /** E21.1: the backpack or the store changed (`material` unset = several at once). */
-  'pack.changed': { material?: import('../core/types').MaterialId; delta?: number };
-  'store.changed': { material?: import('../core/types').MaterialId; delta?: number };
+  'pack.changed': { material?: import('../core/types').ItemId; delta?: number };
+  'store.changed': { material?: import('../core/types').ItemId; delta?: number };
   /** E21.1: a stack is full; `left` units stayed where they were. */
-  'pack.full': { material: import('../core/types').MaterialId; left: number };
+  'pack.full': { material: import('../core/types').ItemId; left: number };
   /** E21.2: bloombot salvaged a pile (`got` units; `left` in the pile; 0 = it is gone). */
   'pile.salvaged': { pileId: string; material: import('../core/types').MaterialId; got: number; left: number; x: number; z: number };
+  /** E23.6.1: crafts queued at the crafting table (negative: cancelled), and one craft made. */
+  'craft.queued': { id: string; n: number };
+  'craft.done': { id: string; made: number };
+  /** E23.5.1: bloombot clipped restored ground for biomass (`got` units into the backpack). */
+  'biomass.gathered': { tileId: string; x: number; z: number; got: number };
   /** E21.3: a machine was taken down (its recipe refunded). */
   'machine.removed': { machine: MachineData };
   /** E23.7.4: a pile gained units back (slowly over game days, or all at once in a storm); `left` units now. */

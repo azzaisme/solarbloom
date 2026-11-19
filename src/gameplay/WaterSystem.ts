@@ -435,21 +435,48 @@ export class WaterSystem {
     return { fill: WATER_NET.rainShare * wx.rain(), evap: wx.effects().evaporation };
   }
 
+  /**
+   * E23.1.5's advisor: is this area short of water? True when a body with water in the area is below `fadeBelow`
+   * (its land fading). Only bodies whose level has moved (or that start low, like Cistern Basin's) are looked at.
+   */
+  isLow(areaId: string): boolean {
+    const map = this.sim.areas.map;
+    for (const b of this.live()) {
+      if (this.levelOf(b.id) >= WATER_NET.fadeBelow) continue;
+      for (const id of b.tiles) {
+        const t = this.sim.grid.byTileId(id);
+        if (t && map.areaOfCell(t.x, t.z) === areaId) return true;
+      }
+    }
+    return false;
+  }
+
   // ───────────── hooks for the gentle-failure suite (E23.10) ─────────────
 
-  /** Every body this session knows of, empty. */
+  /** Every body in the areas bloombot has seen (and any this session has looked at), empty. */
   drainForTest() {
-    for (const b of new Set([...this.bodies.values(), ...this.live()])) this.draw(b.id, b.capacity);
+    for (const b of this.allSeen()) this.draw(b.id, b.capacity);
   }
 
-  /** Every body this session knows of, full. */
+  /** Every body in the areas bloombot has seen (and any this session has looked at), full. */
   refillForTest() {
-    for (const b of new Set([...this.bodies.values(), ...this.live()])) this.fill(b.id, b.capacity);
+    for (const b of this.allSeen()) this.fill(b.id, b.capacity);
   }
 
-  /** No water within reach that still holds any. */
+  private allSeen(): Set<WaterBody> {
+    const out = new Set<WaterBody>([...this.bodies.values(), ...this.live()]);
+    for (const id of Object.keys(this.sim.state.areas))
+      for (const t of this.sim.areas.tiles(id)) {
+        const b = this.bodyAt(t);
+        if (b) out.add(b);
+      }
+    return out;
+  }
+
+  /** Land that lives off water and has none: a body within reach, but none in reach still holds any (land with no
+   * water near it never depended on water, so it is never dry). */
   isDry(t: TileData): boolean {
-    return !this.isWatered(t);
+    return !!this.bodyNear(t) && !this.isWatered(t);
   }
 
   /** Spring flow for a body (share of capacity per game day). */

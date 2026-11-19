@@ -19,6 +19,14 @@ export class Economy {
   readonly lost: Amounts = { energy: new Decimal(0), water: new Decimal(0), biomass: new Decimal(0) };
   /** Told about income lost to a full store. */
   onOverflow?: (kind: CappedKind, amount: Decimal) => void;
+  /** E23.5.1: counters that earn nothing (old-city biomass is a gathered backpack item, not a counter). */
+  noIncome?: ReadonlySet<ResourceKind>;
+  /**
+   * E23.5.1: resources held as backpack items instead of counters (old-city biomass). Their balance is what bloombot
+   * can reach (the backpack, plus the store within reach), and spending takes whole units from there, so every
+   * biomass price (drone refits and jobs, the core, ...) is paid from what was gathered.
+   */
+  items?: { kinds: ReadonlySet<ResourceKind>; have(kind: ResourceKind): number; take(kind: ResourceKind, units: number): boolean };
 
   constructor(
     private res: Amounts,
@@ -26,6 +34,7 @@ export class Economy {
   ) {}
 
   get(kind: ResourceKind): Decimal {
+    if (this.items?.kinds.has(kind)) return big(this.items.have(kind));
     return this.res[kind];
   }
 
@@ -48,6 +57,7 @@ export class Economy {
 
   /** `cost ≤ balance`, with a hair of tolerance for fractional per-tick income. */
   private covers(k: ResourceKind, p: Decimal): boolean {
+    if (this.items?.kinds.has(k)) return p.lte(0) || Math.ceil(p.toNumber() - 1e-9) <= this.items.have(k);
     return p.lte(this.res[k].add(1e-9));
   }
 
@@ -73,7 +83,8 @@ export class Economy {
     for (const k of KINDS) {
       const p = Economy.part(cost, k);
       if (p.lte(0)) continue;
-      this.res[k] = this.res[k].sub(p).max(ZERO);
+      if (this.items?.kinds.has(k)) this.items.take(k, Math.ceil(p.toNumber() - 1e-9));
+      else this.res[k] = this.res[k].sub(p).max(ZERO);
       this.spent[k] = this.spent[k].add(p);
     }
     return true;
@@ -82,7 +93,7 @@ export class Economy {
   /** Adds income; energy and water stop at their cap. Returns the amount actually banked. */
   add(kind: ResourceKind, amount: BigLike): Decimal {
     const a = big(amount);
-    if (a.lte(0)) return ZERO;
+    if (a.lte(0) || this.noIncome?.has(kind)) return ZERO;
     const before = this.res[kind];
     const cap = this.cap(kind);
     if (!cap) {

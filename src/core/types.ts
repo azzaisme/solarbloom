@@ -1,6 +1,6 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
 /** `chest` exists only under old-city rules (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
-export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest';
+export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type ResourceKind = 'energy' | 'water' | 'biomass';
 /** Plain per-resource numbers (tuning tables, small per-second coefficients). */
@@ -322,7 +322,12 @@ export interface LinkState {
 export type Rules = 'oldcity' | 'classic';
 
 /** E21 §1: the eight materials. */
-export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone';
+/** E23.5.1: biomass, food, compost and fertiliser are backpack items too (data/farm). */
+export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser';
+/** E23.6.1 (#390): components made at the crafting table (data in src/data/crafting.ts). */
+export type ComponentId = 'wire' | 'planks' | 'glassPane' | 'pipe' | 'motor' | 'batteryCell' | 'sunCell';
+/** E23.6.1: anything the backpack and the store hold (materials and components; see src/data/items.ts). */
+export type ItemId = MaterialId | ComponentId;
 /** E21 §6: bloombot's abilities, one per fountain tier 1–4. */
 export type AbilityId = 'pry' | 'hover' | 'climb' | 'glide';
 /** E21 §8: where a Keeper is in its story. Woken (pulsed and handed 5 of anything) goes straight to request1. */
@@ -342,9 +347,9 @@ export interface KeeperState {
  */
 export interface SalvageState {
   /** E21.1: what bloombot carries (whole numbers, a stack limit per material) */
-  pack: Partial<Record<MaterialId, number>>;
+  pack: Partial<Record<ItemId, number>>;
   /** E21.1: the city's shared, unlimited store */
-  store: Partial<Record<MaterialId, number>>;
+  store: Partial<Record<ItemId, number>>;
   /** E21.2: units left in each pile bloombot has touched (pile id → left); untouched piles are full */
   piles: Record<string, number>;
   /** E21.5: gates opened for good (barricades pried, bridges repaired), by gate id */
@@ -375,6 +380,12 @@ export interface SalvageState {
   rewards?: string[];
   /** E21.12: lookouts and vistas already seen, beacons spotted (presentation, but saved so they play once) */
   seen?: string[];
+  /** E23.6.1: the crafting table's queue (recipe id, crafts left, seconds left on the one in hand) */
+  craft?: { id: string; n: number; left: number }[];
+  /** E23.6.1: decorations made at the crafting table (each once; placing copies after that is free) */
+  decorMade?: string[];
+  /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
+  clipped?: Record<string, number>;
 }
 
 export interface GameState {
@@ -427,6 +438,14 @@ export interface GameState {
   cozy?: CozyState;
   /** E23.4.1: water levels (share of capacity) of bodies that have changed, by body id `x,z`. Optional. */
   water?: { levels: Record<string, number> };
+  /** E23.3.5: stored energy of grid nodes that are not machines (solar garden lights), by node id. Optional. */
+  power?: {
+    cells?: Record<string, number>;
+    /** E23.3.5: set once lights placed before night lighting have been carried over (see Lights.carryOver) */
+    lights?: number;
+  };
+  /** E23.2.1: bloombot's charge (old-city rules; absent = full). Optional, so no save version change. */
+  charge?: ChargeState;
   /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
   clock?: ClockState;
 }
@@ -440,6 +459,16 @@ export interface ClockState {
   offset: number;
   real?: boolean;
   nights?: Record<string, number>;
+}
+
+/** E23.2.1 (#371): bloombot's charge. */
+export interface ChargeState {
+  /** the charge now, 0 to the full charge */
+  value: number;
+  /** E23.6.2 research: battery cells fitted (each makes a full charge bigger) */
+  cells?: number;
+  /** E23.6.2 research: efficiency steps (each makes every cost a little smaller) */
+  efficiency?: number;
 }
 
 /** E19: what the player chose for the look of their city. */
@@ -457,4 +486,6 @@ export interface CozyState {
   decor?: Record<string, string>;
   /** E19.2.2: decorations earned so far, in the order they unlocked (ones open from the start aren't listed) */
   decorUnlocked?: string[];
+  /** E23.3.5: line lights hung on power poles, pole machine id → light id (data/lights) */
+  poleLights?: Record<string, string>;
 }
