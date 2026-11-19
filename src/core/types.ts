@@ -101,7 +101,7 @@ export interface LayerData {
   origin: [number, number, number];
   unlocked: boolean;
   preview: boolean; // visible but not yet playable
-  /** Ground generation version: 2 adds buildings, 3 rooftop clusters. Saves keep the version they began with. */
+  /** Ground generation version: 4 the city generator's ground, 5 the Old City (every game since E23.1.1). */
   gen?: number;
   /** City 12.1: a generated rooftop uses this template's layout and look ('seed', 'reservoir' or 'canopy'). */
   template?: string;

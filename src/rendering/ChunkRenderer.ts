@@ -999,7 +999,7 @@ export class ChunkRenderer {
     const area = s.areas.map.areaOfChunk(v.cx, v.cz);
     this.areaType = s.areas.info(area).type;
     const gen = s.grid.layer(GROUND)?.gen ?? 1;
-    this.roads = gen >= 4 ? roadPlanFor(s.grid.seed, gen) : undefined;
+    this.roads = roadPlanFor(s.grid.seed, gen);
     const fog = s.areas.fog(area);
     v.sunk = fog === 'hidden';
     const city = s.grid.layer(GROUND)!.height;

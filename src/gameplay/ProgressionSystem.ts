@@ -1,3 +1,4 @@
+import { TIERS } from '../data/salvage';
 import type { Big } from '../core/Big';
 import { PARK } from '../core/Areas';
 import { isRestorable } from '../core/GameState';
@@ -5,6 +6,10 @@ import type { BuildableType, TileData } from '../core/types';
 import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 import { oldCityStep } from '../ui/OldCityGuide';
+
+
+/** Fountain tier 1's park tiles: the park's art stages count toward it. */
+const PARK_GOAL = TIERS[0].needs.parkTiles ?? 60;
 
 /** The player's starting area (the park in the city). */
 export const HOME = 'home';
@@ -48,9 +53,9 @@ export class ProgressionSystem {
    * swept), 2 at 50% (benches repaired), 3 at 75% (lamps relit, trees leaf out, bunting). Presentation only.
    */
   parkStage(): number {
-    // E21.6: the park cheers up toward tier 1's 60 tiles, and is awake from tier 1
+    // E21.6: the park cheers up toward fountain tier 1's park tiles, and is awake from tier 1
     if ((this.sim.state.salvage.tier ?? 0) >= 1) return 4;
-    return Math.min(3, Math.floor((this.sim.areas.counts(PARK).restored / 60) * 4 + 1e-9));
+    return Math.min(3, Math.floor((this.sim.areas.counts(PARK).restored / PARK_GOAL) * 4 + 1e-9));
   }
 
   private computeStep(): number {

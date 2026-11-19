@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createInitialState, GROUND } from '../src/core/GameState';
+import { createInitialState, GROUND, GROUND_GEN } from '../src/core/GameState';
+import { Grid } from '../src/core/Grid';
 import { canStep, heightAt, levelAt, rampAt } from '../src/core/Height';
 import { pickTerraced } from '../src/core/Picking';
 import { KEEPERS, PARK_SET, REGIONS } from '../src/data/oldcity';
@@ -20,13 +21,14 @@ function openMastRow(sim: Sim) {
 }
 
 describe('E21.24: terraces', () => {
-  it('levels are the same for every seed, and classic ground has none', () => {
+  it('levels are the same for every seed, and the city generator’s own ground has none', () => {
     const a = oldSim(1);
     const b = oldSim(99);
     for (let z = -32; z < 32; z += 2) for (let x = -16; x < 32; x += 2) expect(a.grid.get(GROUND, x, z)!.level).toBe(b.grid.get(GROUND, x, z)!.level);
-    const classic = new Sim(createInitialState(1));
-    expect(classic.grid.get(GROUND, 3, 3)!.level).toBeUndefined();
-    expect(classic.grid.terraced(GROUND)).toBe(false);
+    // E23.1.1: every game is the Old City; the generation-4 ground it is laid over has no terraces of its own
+    const flat = new Grid(1, createInitialState(1).layers.map((l) => ({ ...l, gen: GROUND_GEN })));
+    expect(flat.get(GROUND, 3, 3)!.level).toBeUndefined();
+    expect(flat.terraced(GROUND)).toBe(false);
   });
 
   it('the park is a low rise with steps down to the beach; Mast Row has its embankment', () => {

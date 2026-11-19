@@ -2,7 +2,7 @@ import { AREA_TYPES, CITY_GEN, PARK_LAYOUT, parkPath, type TileFeature } from '.
 import { ROOF_TEMPLATES } from '../data/templates';
 import { TUNING } from '../data/tuning';
 import { areaMapFor, genKey, PARK, SEA, type AreaInfo } from './Areas';
-import { canalRow, roadCol, roadRow } from './Arterials';
+import { canalRow } from './Arterials';
 import { distToFootprintRaw } from './Footprint';
 import { roadPlanFor } from './RoadPlan';
 import { coastSand, inRect, isSeaChunk, onJetty, regionById, regionWater, seaCell, setPieceAt } from './OldCityLayout';
@@ -13,7 +13,7 @@ import { CHUNK, hashString, tileId, tileRandom } from './Hash';
 import type { GroundState, LayerData, TileData } from './types';
 
 export { CHUNK, hashString, tileId, tileRandom };
-export { canalRow, roadCol, roadRow };
+export { canalRow };
 
 const inList = (list: readonly (readonly [number, number])[] | undefined, x: number, z: number) => !!list && list.some(([a, b]) => a === x && b === z);
 /** The starting state of one tile, before any play. `undefined` outside a bounded layer. */
@@ -110,10 +110,10 @@ export interface BuildingPlot {
 const plotCache = new Map<string, BuildingPlot[]>();
 
 /**
- * The buildings of one ground chunk (generation 2): at most one per quarter, on the quarter's outer corner,
- * never on roads, canals, footpaths or near the landmark, and never in the park. A pure function of the seed.
+ * The buildings of one ground chunk: the Old City's own (generation 5), else the city generator's along its roads
+ * (generation 4), never in the park. A pure function of the seed.
  */
-export function buildingPlots(seed: number, cx: number, cz: number, gen = 2): BuildingPlot[] {
+export function buildingPlots(seed: number, cx: number, cz: number, gen = 4): BuildingPlot[] {
   const key = `${seed}|${cx}|${cz}|${genKey(gen)}`;
   const hit = plotCache.get(key);
   if (hit) return hit;
@@ -121,38 +121,7 @@ export function buildingPlots(seed: number, cx: number, cz: number, gen = 2): Bu
   const map = areaMapFor(seed, gen);
   const area = map.info(map.areaOfChunk(cx, cz));
   if (genKey(gen) === 5) out.push(...oldCityPlots(seed, cx, cz, area));
-  else if (area.id !== PARK && gen >= 4) out.push(...roadPlots(seed, cx, cz, area));
-  else if (area.id !== PARK) {
-    const B = CITY_GEN.buildings;
-    const lh = hashString('buildings');
-    const road = { row: roadRow(seed, cz), col: roadCol(seed, cx), canal: canalRow(seed, cz) || area.type === 'canal' };
-    const path = area.type === 'park' || area.type === 'plaza';
-    const [mx, mz] = area.landmark;
-    const [lo, hi] = B.storeys[area.theme] ?? [1, 3];
-    for (const [qx, qz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
-      const r = (salt: number) => tileRandom(seed, lh, cx * 2 + qx, cz * 2 + qz, salt);
-      if (r(1) >= (B.chance[area.type] ?? 0)) continue;
-      const w = 2 + Math.floor(r(2) * 3);
-      const d = 2 + Math.floor(r(3) * 3);
-      // Outer corner of the quarter (quarters are 0–6 and 9–15, leaving room for the road cross).
-      const lx0 = qx === 0 ? 0 : CHUNK - w;
-      const lz0 = qz === 0 ? 0 : CHUNK - d;
-      const x = cx * CHUNK + lx0;
-      const z = cz * CHUNK + lz0;
-      let ok = true;
-      for (let lz = lz0; lz < lz0 + d && ok; lz++)
-        for (let lx = lx0; lx < lx0 + w && ok; lx++) {
-          if (road.row && (lz === 7 || lz === 8)) ok = false;
-          if (road.col && (lx === 7 || lx === 8)) ok = false;
-          if (road.canal && (lz === 3 || lz === 4)) ok = false;
-          if (path && (lx === 3 || lz === 12)) ok = false;
-          if (distToFootprintRaw(cx * CHUNK + lx, cz * CHUNK + lz, mx, mz, 2) <= CITY_GEN.landmarkClearance + 1) ok = false;
-          if (map.underRoof(area.id, cx * CHUNK + lx, cz * CHUNK + lz)) ok = false; // the cluster's own building
-        }
-      if (!ok) continue;
-      out.push({ x, z, w, d, storeys: lo + Math.floor(r(4) * (hi - lo + 1)), style: Math.floor(r(5) * 10) });
-    }
-  }
+  else if (area.id !== PARK) out.push(...roadPlots(seed, cx, cz, area));
   if (plotCache.size > 4096) plotCache.clear();
   plotCache.set(key, out);
   return out;
@@ -232,34 +201,21 @@ function generateGround(seed: number, layer: LayerData, x: number, z: number): T
   const map = areaMapFor(seed, layer.gen ?? 1);
   const cx = Math.floor(x / CHUNK);
   const cz = Math.floor(z / CHUNK);
-  const lx = x - cx * CHUNK;
   const lz = z - cz * CHUNK;
   const area = map.info(map.areaOfChunk(cx, cz));
   if (area.id === PARK) return generatePark(seed, lh, x, z, layer.gen ?? 1);
   if (genKey(layer.gen ?? 1) === 5) return generateOldCity(seed, layer, lh, x, z, area);
   const def = AREA_TYPES[area.type];
   let feature: TileFeature = def.ground;
-  const park = area.id === PARK;
-  const gen = layer.gen ?? 1;
   // Generation 4 (City 16): the planned road network. Streets and arterials are road; lanes are paved footpaths;
-  // a road over a canal is a bridge (still road). Older generations keep their row/column lattice and footpaths.
-  const onRoad = gen >= 4 ? roadPlanFor(seed, 4).roadAt(x, z) : undefined;
-  if (gen >= 4) {
-    if ((canalRow(seed, cz) || area.type === 'canal') && (lz === 3 || lz === 4)) feature = 'water';
-    if (onRoad) feature = onRoad.tier === 'lane' ? 'paving' : 'road';
-  } else {
-    // Footpaths cross parkland and plazas through the landmark chunk.
-    if ((area.type === 'park' || area.type === 'plaza') && (lx === 3 || lz === 12)) feature = 'paving';
-    if (!park) {
-      if (roadRow(seed, cz) && (lz === 7 || lz === 8)) feature = 'road';
-      if (roadCol(seed, cx) && (lx === 7 || lx === 8)) feature = 'road';
-      if ((canalRow(seed, cz) || area.type === 'canal') && (lz === 3 || lz === 4)) feature = 'water';
-    }
-  }
+  // a road over a canal is a bridge (still road).
+  const onRoad = roadPlanFor(seed, 4).roadAt(x, z);
+  if ((canalRow(seed, cz) || area.type === 'canal') && (lz === 3 || lz === 4)) feature = 'water';
+  if (onRoad) feature = onRoad.tier === 'lane' ? 'paving' : 'road';
   const [mx, mz] = area.landmark;
   const nearLandmark = distToFootprintRaw(x, z, mx, mz, 2) <= CITY_GEN.landmarkClearance;
-  // Generation 3: a rooftop cluster's ground under its roof is the building that holds it up.
-  const building = ((layer.gen ?? 1) >= 2 && !!buildingAt(seed, x, z, layer.gen ?? 1)) || ((layer.gen ?? 1) >= 3 && feature !== 'road' && feature !== 'water' && map.underRoof(area.id, x, z)); // roads and canals run on underneath
+  // A rooftop's ground under its roof is the building that holds it up.
+  const building = !!buildingAt(seed, x, z, layer.gen ?? 4) || (feature !== 'road' && feature !== 'water' && map.underRoof(area.id, x, z)); // roads and canals run on underneath
   const blocked = building || (!nearLandmark && !onRoad && feature !== 'road' && feature !== 'water' && tileRandom(seed, lh, x, z, 5) < def.obstacles);
   if (building) feature = 'building';
   else if (blocked) feature = 'obstacle';
