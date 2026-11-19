@@ -68,6 +68,7 @@ export class WaterSystem {
     // A tile that joins or leaves the water (a pond restored a tile further, a tile filled in) changes the bodies
     // around it; anything else on a water tile (its bloom, say) does not.
     sim.grid.touchListeners.push((t) => {
+      this.landRev++;
       if (!this.byTile.size) return;
       const was = this.byTile.has(t.id);
       if (was === this.isFresh(t)) return;
@@ -323,6 +324,18 @@ export class WaterSystem {
    */
   private fadeAtVersion = -1;
   private fadeAtShape = -1;
+  /** the spring regions still asleep when the fade map was built (waking one changes what fades) */
+  private fadeAtSleep = '';
+
+  /** Spring regions whose landmark still sleeps (their water is dormant), as a key. */
+  private sleepKey(): string {
+    if (!this.sim.oldCity || !WATER_NET.springsNeedLandmark) return '';
+    return (Object.keys(WATER_NET.springs) as RegionId[]).filter((r) => this.sim.areas.fog(r) !== 'cleared').join();
+  }
+
+  private fadeStale(): boolean {
+    return this.fadeAtVersion !== this.version || this.fadeAtShape !== this.shapeRev || this.fadeAtSleep !== this.sleepKey();
+  }
   private changesVersion = -1;
   private changesShape = -1;
 
@@ -338,7 +351,7 @@ export class WaterSystem {
    * water within `fadeReach` never fades: it never depended on it. The fullest body in reach decides.
    */
   fadeAt(t: TileData): number {
-    if (this.fadeAtVersion !== this.version || this.fadeAtShape !== this.shapeRev) this.refreshFade();
+    if (this.fadeStale()) this.refreshFade();
     return this.fadeMap.size ? (this.fadeMap.get(t.id) ?? 0) : 0;
   }
 
@@ -357,6 +370,7 @@ export class WaterSystem {
     const low: WaterBody[] = [];
     let key = '';
     for (const b of this.live()) {
+      if (this.dormant(b)) continue; // the dry Cistern pond is its landmark's story: its land doesn't fade for it
       const s = WaterSystem.fadeSteps(this.levelOf(b.id));
       if (!s) continue;
       low.push(b);
@@ -368,6 +382,7 @@ export class WaterSystem {
   private refreshFade() {
     this.fadeAtVersion = this.version;
     this.fadeAtShape = this.shapeRev;
+    this.fadeAtSleep = this.sleepKey();
     const { key, low } = this.fadeState();
     if (key === this.fadeKey) return;
     this.fadeKey = key;
@@ -474,21 +489,35 @@ export class WaterSystem {
   }
 
   /**
-   * E23.1.5's advisor: is this area short of water? True when a body with water in the area is below `fadeBelow`
-   * (its land fading). Only areas the player has seen count (the advisor never hints at unseen places), and a
-   * body still waiting for its landmark (the dry Cistern pond) is the landmark's story, not a shortage.
+   * E23.1.5's advisor: is this area short of water? True only where its land actually shows a fade (restored,
+   * blooming ground in reach of water below `fadeBelow`). Only areas the player has seen count (the advisor never
+   * hints at unseen places), and a body still waiting for its landmark (the dry Cistern pond) fades nothing.
    */
   isLow(areaId: string): boolean {
     if (this.sim.areas.fog(areaId) === 'hidden') return false;
+    return this.fadingAreas().has(areaId);
+  }
+
+  private fading?: { version: number; shape: number; land: number; sleep: string; areas: Set<string> };
+  /** bumped on every tile change (a tile restored or bloomed changes which land shows a fade) */
+  private landRev = 0;
+
+  /**
+   * Areas where land actually shows a fade now (E23.4.4): restored ground with some bloom on it, in reach of low
+   * water. Low water with no such land beside it (a canal through dead streets) is not a hint worth giving.
+   */
+  private fadingAreas(): Set<string> {
+    if (this.fadeStale()) this.refreshFade();
+    const f = this.fading;
+    if (f && f.version === this.version && f.shape === this.shapeRev && f.land === this.landRev && f.sleep === this.fadeAtSleep) return f.areas;
+    const areas = new Set<string>();
     const map = this.sim.areas.map;
-    for (const b of this.live()) {
-      if (this.dormant(b) || this.levelOf(b.id) >= WATER_NET.fadeBelow) continue;
-      for (const id of b.tiles) {
-        const t = this.sim.grid.byTileId(id);
-        if (t && map.areaOfCell(t.x, t.z) === areaId) return true;
-      }
+    for (const id of this.fadeMap.keys()) {
+      const t = this.sim.grid.byTileId(id);
+      if (t && t.ground === 'restored' && t.bloom > 1) areas.add(map.areaOfCell(t.x, t.z));
     }
-    return false;
+    this.fading = { version: this.version, shape: this.shapeRev, land: this.landRev, sleep: this.fadeAtSleep, areas };
+    return areas;
   }
 
   // ───────────── hooks for the gentle-failure suite (E23.10) ─────────────

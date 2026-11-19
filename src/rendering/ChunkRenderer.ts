@@ -13,7 +13,7 @@ import { PALETTE } from './Materials';
 import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { plotsInChunk, type PlotSpot } from '../core/Plots';
-import { onJetty, pileById, seaCell, setPieceAt, surfCell } from '../core/OldCityLayout';
+import { onJetty, pileById, pondCell, seaCell, setPieceAt, surfCell } from '../core/OldCityLayout';
 import { addGroundFan, addGroundQuad, addGroundStrip, emptyGroundTexGeo, GROUND_TEXTURES, groundTexFor, groundTexMaterial, groundTexMesh, type GroundTexGeo, type GroundTexName } from './GroundTex';
 import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
@@ -1112,7 +1112,13 @@ export class ChunkRenderer {
       if (!v.far && fog !== 'hidden') this.pathCorners(b, t, th, gtex);
       if (!v.far && this.isWater(t)) {
         this.poolBanks(b, t, th, gtex);
-        if (t.ground === 'restored' && fog !== 'hidden') this.poolSurface(pool, t, th);
+        // a natural pond's water (the Cistern's) shows whenever it holds any: its level draws the bared bed on top
+        if ((t.ground === 'restored' || pondCell(t.x, t.z)) && fog !== 'hidden') this.poolSurface(pool, t, th);
+        // a dead pond's bed: dried, cracked silt painted across the whole pond (no tile grid)
+        if (this.siltBed(t)) {
+          const k = Math.round(255 * (1 - 0.3 * b.grey));
+          addGroundQuad(gtex[GROUND_TEXTURES.indexOf('silt-bed')], 'silt-bed', t.x, t.z, th + 0.08 - WATER.drop + 0.002, [k, k, k]);
+        }
       }
       // painted ground over each dead Old City tile's slab (sand on the beach, dry earth elsewhere)
       // (not the jetty: its tiles are paving underneath, but its wooden deck is the model's)
@@ -1584,6 +1590,8 @@ export class ChunkRenderer {
       if (t.variant % 4 === 1) b.add('box', PALETTE.paving.grout, [x + r.range(-0.3, 0.3), h - WATER.drop, z + r.range(-0.3, 0.3)], [0.3, 0.1, 0.24]);
       return;
     }
+    // a natural pond in a region (the Cistern's): a pool, with banks, not open water
+    if (f === 'water' && t.blocked && pondCell(t.x, t.z)) return this.waterTile(b, t, h, x, z, r);
     // E21.4: the Old City's open sea: deep water, never restored
     if (t.blocked && f === 'water') {
       const sea = PALETTE.ground.sea;
@@ -1839,8 +1847,14 @@ export class ChunkRenderer {
   /** Fog of the area being built (bank colours are greyed like the tile they copy). */
   private fog = 'cleared';
 
+  /** A pool whose banks grow reeds and moss: restored, or a natural pond once its region is awake (cleared). */
+  private poolAlive(t: TileData): boolean {
+    return t.ground === 'restored' || (pondCell(t.x, t.z) && this.fog === 'cleared');
+  }
+
+  /** A pool tile: shallow water, or a region's natural pond (deep, but drawn as a pool). */
   private isWater(t: TileData | undefined): t is TileData {
-    return !!t && !t.blocked && !t.occupantId && t.feature === 'water';
+    return !!t && !t.occupantId && t.feature === 'water' && (!t.blocked || pondCell(t.x, t.z));
   }
 
   /** The colour of a tile's top, as `tile` draws it (pool banks borrow it from the neighbouring tile). */
@@ -1878,22 +1892,23 @@ export class ChunkRenderer {
    * A pool tile's surface: water below ground level (a silted bed when polluted, clear with lily pads once
    * restored). Its banks are `poolBanks`.
    */
+  /** A dead shallow pond tile: its bed wears the painted silt (`silt-bed`). Not the surf, not deep water. */
+  private siltBed(t: TileData): boolean {
+    return t.ground === 'polluted' && (!t.blocked || pondCell(t.x, t.z)) && !(t.level !== undefined && surfCell(t.x, t.z));
+  }
+
   private waterTile(b: Sink, t: TileData, h: number, x: number, z: number, r: VRng) {
     const surf = h + 0.08 - WATER.drop;
     // the beach's surf is shallow sea, murky while dead: never the dried-out canal bed
     const shallows = t.level !== undefined && t.ground !== 'restored' && surfCell(t.x, t.z);
-    const hex = shallows ? PALETTE.ground.shallows[t.variant % PALETTE.ground.shallows.length] : t.ground === 'restored' ? ALIVE.water : t.ground === 'polluted' ? DEAD.water[t.variant % DEAD.water.length] : PALETTE.ground.wetSoil;
+    // a dead pond's slab is one colour, the painted silt's own (its top wears the silt texture: see `siltBed`)
+    const hex = shallows ? PALETTE.ground.shallows[t.variant % PALETTE.ground.shallows.length] : t.ground === 'restored' ? ALIVE.water : t.ground === 'polluted' ? PALETTE.aqua.bed : PALETTE.ground.wetSoil;
     this.slab(b, hex, [x, surf - 0.04, z], [1, 0.08, 1]);
     if (shallows) {
       if (t.variant % 4 === 0) b.add('box', PALETTE.ground.seaFoam, [x + r.range(-0.3, 0.3), surf + 0.004, z + r.range(-0.3, 0.3)], [r.range(0.2, 0.45), 0.006, 0.05]);
       return;
     }
-    if (t.ground === 'polluted') {
-      // a dried-out, silted bed: dark mud and the odd bit of rubbish
-      b.add('box', PALETTE.ground.scum, [x + r.range(-0.1, 0.1), surf + 0.004, z + r.range(-0.1, 0.1)], [0.5, 0.008, 0.36]);
-      if (t.variant % 3 === 0) b.add('box', PALETTE.paving.crack, [x + r.range(-0.2, 0.2), surf + 0.012, z + r.range(-0.2, 0.2)], [0.3, 0.02, 0.05]);
-      return;
-    }
+    if (t.ground === 'polluted') return; // a dried-out, silted bed: the painted silt does the rest
     if (t.ground !== 'restored') return;
     // clear water (its surface is `poolSurface`): lily pads, and lotus flowers as it blooms. As a pond drains they
     // ride down with it: none where its bed now shows (E23.4.1).
@@ -2023,7 +2038,7 @@ export class ChunkRenderer {
       const k = hash01(t.x * 2 + sx, t.z * 2 + sz, 91);
       const px = cx - sx * R * 0.3;
       const pz = cz - sz * R * 0.3;
-      const alive = t.ground === 'restored';
+      const alive = this.poolAlive(t);
       if (k < 0.4) {
         b.add('sphere', PALETTE.stone.pebble, [px, top + 0.04, pz], [0.2, 0.14, 0.17]);
         b.add('sphere', PALETTE.stone.grey, [px + sx * 0.12, top + 0.03, pz - sz * 0.1], [0.13, 0.1, 0.12]);
@@ -2051,8 +2066,8 @@ export class ChunkRenderer {
       if (k < 0.3) {
         b.add('sphere', k < 0.15 ? PALETTE.stone.pebble : PALETTE.stone.grey, [ex0, surf + 0.05, ez0], [0.24, 0.2, 0.2]);
         b.add('sphere', PALETTE.stone.warm, [ex0 + (dz ? 0.16 : 0), surf + 0.03, ez0 + (dx ? 0.16 : 0)], [0.14, 0.12, 0.13]);
-        if (t.ground === 'restored') b.add('sphere', PALETTE.leaf.light, [ex0, surf + 0.14, ez0], [0.15, 0.04, 0.12]);
-      } else if (k < 0.5 && t.ground === 'restored')
+        if (this.poolAlive(t)) b.add('sphere', PALETTE.leaf.light, [ex0, surf + 0.14, ez0], [0.15, 0.04, 0.12]);
+      } else if (k < 0.5 && this.poolAlive(t))
         for (let j = 0; j < 4; j++) {
           const ht = 0.26 + 0.07 * j;
           const rx = ex0 + (dz ? (j - 1.5) * 0.07 : (j % 2) * 0.05);

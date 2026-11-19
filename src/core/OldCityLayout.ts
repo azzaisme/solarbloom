@@ -121,6 +121,12 @@ export function regionWater(x: number, z: number): boolean {
   return !!r?.water?.some((q) => inRect(q, x, z));
 }
 
+/** Deep water inside a region that is a natural pond (the Cistern's), drawn as a pool, not open water. */
+export function pondCell(x: number, z: number): boolean {
+  const r = regionOfCell(x, z);
+  return !!r?.water?.some((q) => q.pond && inRect(q, x, z));
+}
+
 /** The region a chunk belongs to (undefined for the park, backstreets, the sea and anything outside). */
 export function regionOfChunk(cx: number, cz: number): RegionDef | undefined {
   for (const r of REGIONS) if (cx >= r.chunks.x0 && cx <= r.chunks.x1 && cz >= r.chunks.z0 && cz <= r.chunks.z1) return r;

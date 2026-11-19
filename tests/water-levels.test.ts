@@ -29,6 +29,21 @@ const canalTile = (sim: Sim) => {
   const q = region('saltwind').water![0];
   return sim.grid.get(GROUND, q.x, q.z)!;
 };
+/** Restores a few blooming land tiles on the bank beside a water tile (the land that fades); returns one. */
+const garden = (sim: Sim, w: TileData): TileData => {
+  let first: TileData | undefined;
+  for (let dz = -3; dz <= 3; dz++)
+    for (let dx = -3; dx <= 3; dx++) {
+      const t = sim.grid.get(GROUND, w.x + dx, w.z + dz);
+      if (!t || t.feature === 'water' || t.blocked) continue;
+      Object.assign(t, { ground: 'restored', pollution: 0, bloom: 3 });
+      delete t.occupantId;
+      sim.grid.touch(t);
+      first ??= t;
+    }
+  expect(first, 'land beside the water').toBeDefined();
+  return first!;
+};
 const pondTile = (sim: Sim) => {
   const q = region('cistern').water![0];
   return sim.grid.get(GROUND, q.x, q.z)!;
@@ -332,16 +347,19 @@ describe('E23.4.1: water levels (sim.water)', () => {
     expect(area).not.toBe(other);
     weather(sim, 'cloudy');
     sim.areas.clear(area, true); // seen
+    garden(sim, t); // blooming land on the canal's bank (it is what fades)
     expect(sim.water.isLow(area)).toBe(false); // full
     sim.water.draw(b.id, b.capacity * (1 - WATER_NET.fadeBelow) - 1); // just above the line
     expect(sim.water.isLow(area)).toBe(false);
     sim.water.draw(b.id, 2);
     expect(sim.water.isLow(area)).toBe(true);
-    expect(sim.water.isLow(PARK)).toBe(false);
+    expect(sim.water.isLow(other)).toBe(false); // far from it
     sim.water.fill(b.id, b.capacity);
     expect(sim.water.isLow(area)).toBe(false);
     // Cistern Basin's pond starts dry, but that is its landmark's story, not a shortage (and unseen at first)
     expect(sim.water.isLow(other)).toBe(false);
+    garden(sim, pondTile(sim));
+    expect(sim.water.isLow(other)).toBe(false); // even with a garden beside it, while the Old Cistern sleeps
     sim.areas.clear(other, true); // seen, and the Old Cistern wakes
     const pond = sim.water.bodyAt(pondTile(sim))!;
     expect(sim.water.isLow(other)).toBe(sim.water.levelOf(pond.id) < WATER_NET.fadeBelow);
@@ -349,11 +367,25 @@ describe('E23.4.1: water levels (sim.water)', () => {
     expect(sim.water.isLow(other)).toBe(true);
   });
 
+  it('low water beside dead ground is no hint: only land that actually fades is', () => {
+    const sim = city();
+    const t = canalTile(sim);
+    const b = sim.water.bodyAt(t)!;
+    const area = sim.areas.map.areaOfCell(t.x, t.z);
+    sim.areas.clear(area, true);
+    sim.water.draw(b.id, b.capacity);
+    expect(sim.water.isLow(area)).toBe(false); // nothing restored by it: nothing to fade
+    const bank = garden(sim, t);
+    expect(sim.water.fadeAt(bank)).toBeGreaterThan(0);
+    expect(sim.water.isLow(area)).toBe(true);
+  });
+
   it('the advisor never hints at an area the player has not seen (still behind the clouds)', () => {
     const sim = city();
     const t = canalTile(sim);
     const b = sim.water.bodyAt(t)!;
     const area = sim.areas.map.areaOfCell(t.x, t.z);
+    garden(sim, t);
     sim.state.areas[area].sealed = true; // behind the clouds, as before its gate opens
     expect(sim.areas.fog(area)).toBe('hidden');
     sim.water.draw(b.id, b.capacity);
