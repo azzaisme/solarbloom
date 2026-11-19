@@ -194,8 +194,8 @@ export class Title {
         return this.render('tPlay');
       case 'loadSlot':
         return this.host.start(slot, false, this.device);
-      case 'fresh': // E23.1.1: an earlier version's garden
-        return this.host.start(slot, true, this.device);
+      case 'fresh': // E23.1.1: an earlier version's garden starts a new one, which asks about the day clock like any new garden
+        return this.askClock(slot);
       case 'start':
         if (!this.heads[slot - 1]) return this.askClock(slot);
         this.confirm = { text: `Start a new garden in ${this.heads[slot - 1]!.name}? The garden saved there will be replaced.`, yes: 'Start a new garden', then: () => this.askClock(slot) };

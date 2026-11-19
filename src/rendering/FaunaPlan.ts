@@ -252,7 +252,6 @@ export const PLOT_VISITORS: Record<string, VisitorKind[]> = {
   stalls: ['pigeons', 'pigeons'],
   splash: ['pigeons'],
   mooring: ['ducks', 'ducks'],
-  boathouse: ['ducks'],
   reeds: ['ducks', 'frogs'],
   dipping: ['frogs', 'frogs'],
   hut: ['squirrels'],

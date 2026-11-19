@@ -4,7 +4,7 @@ import { Sim } from '../src/gameplay/Sim';
 import { MATERIAL_IDS, TIERS } from '../src/data/salvage';
 import { PARK } from '../src/core/Areas';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
-import { ITEM_DEFS } from '../src/data/items';
+import { ITEM_IDS } from '../src/data/items';
 import { regionById } from '../src/core/OldCityLayout';
 import type { MachineData } from '../src/core/types';
 
@@ -41,7 +41,7 @@ export function unlockAll(sim: Sim, plenty = 9999) {
   for (const m of MATERIAL_IDS) sv.pack[m] = plenty;
   // E23.6.1: machines are built from crafting-table recipes that unlock from the Keepers, and cost components
   for (const k of KEEPERS) if (!sv.keepers[k.id] || sv.keepers[k.id].step === 'asleep') sv.keepers[k.id] = { step: 'settled' };
-  for (const id of Object.keys(ITEM_DEFS) as (keyof typeof ITEM_DEFS)[]) if (!(id in sv.pack)) (sv.pack as Record<string, number>)[id] = plenty;
+  for (const id of ITEM_IDS) if (!(id in sv.pack)) (sv.pack as Record<string, number>)[id] = plenty;
   offGrid(sim);
 }
 
@@ -138,17 +138,26 @@ export function streetCross(sim: Sim) {
  * opens district by district. False once nothing is left.
  */
 export function wakeNextArea(sim: Sim): boolean {
-  let id = sim.areas.nextGoal();
-  if (!id) {
-    const r = sim.areas.sealedAreas().map((a) => regionById(a)).find(Boolean);
-    if (r) {
-      sim.gates.open(r.gate.id, true);
-      id = r.id;
-    } else if (!sim.mainland.opened) {
-      sim.state.salvage.tier = 5;
-      sim.mainland.open();
-      id = sim.areas.nextGoal();
-    }
-  }
+  const id = openNextGoal(sim);
   return !!id && sim.areas.clear(id, true);
+}
+
+/**
+ * The next area to wake, opening the way to it first when there is none: the next sealed region's gate, then the
+ * mainland (E23.1.1). Clears nothing. Undefined only when nothing is left anywhere.
+ */
+export function openNextGoal(sim: Sim): string | undefined {
+  const id = sim.areas.nextGoal();
+  if (id) return id;
+  const r = sim.areas.sealedAreas().map((a) => regionById(a)).find(Boolean);
+  if (r) {
+    sim.gates.open(r.gate.id, true);
+    return sim.areas.nextGoal() ?? r.id;
+  }
+  if (!sim.mainland.opened) {
+    sim.state.salvage.tier = 5;
+    sim.mainland.open();
+    return sim.areas.nextGoal();
+  }
+  return undefined;
 }

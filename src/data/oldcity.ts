@@ -18,7 +18,7 @@ export const OLD_CITY = {
   seaMaxX: 1,
   /** E21.24: one terrace level is this many tiles high */
   levelHeight: 1.2,
-  /** the level everything is measured from (drawn at the classic ground height) */
+  /** the level everything is measured from (drawn at the old flat ground height) */
   baseLevel: 1,
   /** the sea and canals */
   seaLevel: 0,

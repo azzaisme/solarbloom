@@ -47,7 +47,6 @@ export type Action =
   | 'prevTab'
   | 'nextTab'
   | 'debug'
-  // Classic rules only (decision 7): old-city rules give these no default (E21 hides them).
 ;
 
 export type Context = 'world' | 'build' | 'panel' | 'any';

@@ -8,12 +8,14 @@ import { CHUNK } from '../src/core/Hash';
 import { plotAt, plotSpots } from '../src/core/Plots';
 import type { LayerData } from '../src/core/types';
 import { PLOT_GEN, PLOT_OPTIONS, plotOptionsFor } from '../src/data/cozy';
-import { AREA_TYPES, CITY_GEN, PARK_LAYOUT, type AreaType } from '../src/data/city';
+import { CITY_GEN, PARK_LAYOUT, type AreaType } from '../src/data/city';
 import { Cozy } from '../src/gameplay/Cozy';
 import { Sim } from '../src/gameplay/Sim';
 import { runOldCityBot } from './oldcity-bot';
 import { drawPlot, PLOT_ART } from '../src/rendering/PlotArt';
 import { Walker } from '../src/gameplay/Walker';
+import { REGIONS } from '../src/data/oldcity';
+import { MAINLAND_TYPES } from '../src/data/mainland';
 
 const ground = (gen: number): LayerData => ({ id: GROUND, name: 'g', kind: 'ground', width: 0, depth: 0, height: 0, origin: [0, 0, 0], unlocked: true, preview: false, gen });
 
@@ -103,8 +105,13 @@ describe('E19.1.1 plot spots', () => {
 });
 
 describe('E19.1.3 plot options', () => {
-  it('every area type offers at least three options, a shared set plus its own', () => {
-    for (const t of Object.keys(AREA_TYPES) as AreaType[]) {
+  it('every area type the world has offers at least three options, a shared set plus its own', () => {
+    // E23.1.1: the world is the park, the island's regions and the mainland's districts. None is a canal, so the
+    // canal-only plot options went (nothing here claims to cover a plot the world can't show).
+    const world = new Set<AreaType>(['park', ...REGIONS.map((r) => r.type), ...MAINLAND_TYPES.map((t) => t.type)]);
+    expect(world.has('canal')).toBe(false);
+    expect(PLOT_OPTIONS.some((o) => o.types?.includes('canal'))).toBe(false);
+    for (const t of world) {
       const opts = plotOptionsFor(t);
       expect(opts.length, t).toBeGreaterThanOrEqual(3 + 2); // four shared, at least one of its own
       expect(opts.some((o) => o.types?.includes(t)), t).toBe(true);

@@ -9,9 +9,8 @@ import { decorType, machineTool, type Tool } from './Hud';
 import { decorOpen } from '../gameplay/Cozy';
 
 /**
- * E22.5 (#342): the classic hotbar (Inspect, Pulse, the build tray, Harvest, Upgrades).
- * Under old-city rules it is not on the walking view: the build hotbar (slots 1–9, BuildBar) shows above the
- * prompt only while build mode is open.
+ * E22.5 (#342): the hotbar's buttons (Inspect, Pulse, the build tray, Harvest, Upgrades). It is not on the walking
+ * view: the build hotbar (slots 1–9, BuildBar) shows above the prompt only while build mode is open.
  */
 export class Hotbar extends HudPart {
   private tool: Tool = 'pulse';

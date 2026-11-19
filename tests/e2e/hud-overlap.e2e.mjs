@@ -30,14 +30,18 @@ try {
       s.state.progression.coreActivated = true;
       s.areas.clear('park', true);
       // E23.1.1: areas open through gates now; clear what the gates allow (nextGoal is undefined past a closed gate)
+      let last = 'park';
       for (let i = 0; i < 6; i++) {
         const id = s.areas.nextGoal();
-        if (id) s.areas.clear(id, true);
+        if (!id) break;
+        s.areas.clear(id, true);
+        last = id;
       }
       // Busy HUD: an area panel, a toast, a hint.
       g.hud.toast('✨ A busy moment<small>Checking nothing overlaps.</small>', 'gold', 30);
-      const lm = s.areas.landmark(s.areas.nextGoal());
-      g.select?.(lm.id);
+      // the next goal's landmark, or the last woken area's when every open area is awake
+      const lm = s.areas.landmark(s.areas.nextGoal() ?? last);
+      if (lm) g.select?.(lm.id);
     });
     for (const [zname, zoom] of [['near', 1.6], ['mid', 0.8], ['far', 0.24]]) {
       await page.evaluate((zoom) => {

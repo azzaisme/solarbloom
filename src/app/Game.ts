@@ -670,7 +670,7 @@ export class Game {
 
   /**
    * E21.12: the Old City's sea is heard from the nearest open water (the bay south of the park, and all round the
-   * island): louder near the shore, from its direction. Classic games have no sea.
+   * island): louder near the shore, from its direction.
    */
   private placeSea() {
     const f = this.camera.target;

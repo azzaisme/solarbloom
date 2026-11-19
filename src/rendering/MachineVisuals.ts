@@ -1850,8 +1850,14 @@ export class MachineVisuals {
       for (let i = 0; i < lvl; i++) part(ex, ring(24, 5), mat(PALETTE.relayGlow, { emissive: PALETTE.relayGlow, emissiveIntensity: 0.8, opacity: 0.8 }), { pos: [0, 1.02 + i * 0.12, 0], scale: [0.5 + i * 0.1, 0.05, 0.5 + i * 0.1] });
       // E23.12 (#528): a Lucky Cat's Golden Relay wears a gold crown and a gold lamp (it carries power further)
       if (v.m.golden) {
-        part(ex, ring(24, 5), mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1.1 }), { pos: [0, 1.2, 0], scale: [0.34, 0.07, 0.34] });
-        part(ex, ball(5, 8), mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1.8 }), { pos: [0, 1.36, 0], scale: 0.08 });
+        // metal gold with a low warm glow (the golden cat's gold): a bright gold emissive washes out to cream
+        const crownGold = mat(PALETTE.gold, { metal: 0.8, gloss: 0.9, emissive: PALETTE.trim.goldGlow, emissiveIntensity: 0.35 });
+        part(ex, ring(24, 5), crownGold, { pos: [0, 1.2, 0], scale: [0.42, 0.1, 0.42] });
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          part(ex, ball(4, 6), crownGold, { pos: [Math.cos(a) * 0.4, 1.3, Math.sin(a) * 0.4], scale: [0.06, 0.12, 0.06] });
+        }
+        part(ex, ball(5, 8), mat(PALETTE.trim.amber, { emissive: PALETTE.trim.amber, emissiveIntensity: 0.9 }), { pos: [0, 1.42, 0], scale: 0.12 });
       }
     }
   }

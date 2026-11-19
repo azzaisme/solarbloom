@@ -7,7 +7,7 @@ import { TUNING } from '../src/data/tuning';
 import type { CatAt } from '../src/gameplay/LuckyCatSystem';
 import type { PowerSky } from '../src/gameplay/PowerEnv';
 import { Sim } from '../src/gameplay/Sim';
-import { fill, makeSim, PAD, rich, wakeNextArea } from './helpers';
+import { fill, makeSim, openNextGoal, PAD, rich } from './helpers';
 
 /**
  * E23.12 (#528): every Lucky Cat reward pays out in the E23 loop (the backpack, charge, the grid, drones, restored
@@ -33,9 +33,11 @@ function grownCity(seed: number, n: number) {
   const sim = new Sim(createInitialState(seed));
   sim.state.progression.coreActivated = true;
   sim.areas.clear(PARK, true);
-  for (let i = 0; i < n; i++) {
-    const id = sim.areas.nextGoal() ?? (wakeNextArea(sim), undefined);
-    if (!id) continue;
+  let grown = 0;
+  while (grown < n) {
+    // the next area, opening its region's gate (or the mainland) first when the open ones are done
+    const id = openNextGoal(sim);
+    if (!id) break;
     for (const t of sim.areas.tiles(id)) {
       if (!isRestorable(t, sim.state.machines) || t.ground === 'restored') continue;
       t.ground = 'restored';
@@ -43,8 +45,10 @@ function grownCity(seed: number, n: number) {
       t.pollution = 0;
       sim.grid.touch(t);
     }
-    sim.areas.clear(id, true);
+    if (!sim.areas.clear(id, true)) break; // asserted below: every area asked for grows
+    grown++;
   }
+  expect(grown).toBe(n);
   return sim;
 }
 

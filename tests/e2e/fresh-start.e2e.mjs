@@ -44,6 +44,14 @@ try {
       },
       [oldSave, oldHead, sneakyHead, run],
     );
+    // every toast the page shows, as it appears: a toast lives a few seconds of wall time, which a slow software-GL
+    // page can outlast between two checks, so the checks read this log, not what is on screen at that moment
+    await page.addInitScript(() => {
+      window.__toasts = [];
+      new MutationObserver((ms) => {
+        for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && n.parentElement?.id === 'toasts') window.__toasts.push(n.textContent);
+      }).observe(document, { childList: true, subtree: true });
+    });
     await page.goto(URL_);
     await page.waitForSelector('#tPress', { timeout: 60_000 });
     await page.keyboard.press('Space');
@@ -55,13 +63,24 @@ try {
     check(!(await page.$('#tRename1')), `${run}: an old garden can't be renamed or loaded, only started fresh or deleted`);
     await page.screenshot({ path: `${dir}/fresh-start-${run}-title.png` });
     const target = run === 'title' ? '#tLoad1' : '#tLoad2';
-    await Promise.all([page.waitForNavigation({ timeout: 60_000 }).catch(() => {}), page.click(target)]);
+    if (run === 'title') {
+      // Start fresh is a new garden: it asks about the day clock first, like any new garden (E23.7.1)
+      await page.click(target);
+      await page.waitForSelector('#tConfirmText', { timeout: 30_000 });
+      const q = await page.evaluate(() => document.querySelector('#tConfirmText').textContent);
+      check(/How should the days go/.test(q) && !!(await page.$('#tAlt')), `title: Start fresh asks the day-clock question ("${q}")`);
+      await Promise.all([page.waitForNavigation({ timeout: 60_000 }).catch(() => {}), page.click('#tYes')]);
+    } else await Promise.all([page.waitForNavigation({ timeout: 60_000 }).catch(() => {}), page.click(target)]);
     await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 180_000 });
-    await page.waitForTimeout(1500);
-    const st = await page.evaluate(() => ({ version: window.solarbloom.sim.state.version, time: window.solarbloom.sim.state.time, oldCity: !!window.solarbloom.sim.state.salvage && !('rules' in window.solarbloom.sim.state), toasts: [...document.querySelectorAll('#toasts *, .toast')].map((t) => t.textContent).join(' | ') }));
+    // the opening notes come a moment after the fade (later on a loaded machine): wait for the note, or long
+    // enough that one would have shown
+    if (run === 'load') await page.waitForFunction(() => window.__toasts.some((t) => /Starting fresh/.test(t)), null, { timeout: 20_000 }).catch(() => {});
+    else await page.waitForTimeout(4000);
+    const st = await page.evaluate(() => ({ version: window.solarbloom.sim.state.version, time: window.solarbloom.sim.state.time, oldCity: !!window.solarbloom.sim.state.salvage && !('rules' in window.solarbloom.sim.state), toasts: window.__toasts }));
     check(st.oldCity && st.version === 8 && st.time < 60, `${run}: a new Old City game (version ${st.version}, ${st.time.toFixed(1)} s in)`);
-    if (run === 'load') check(/Starting fresh/.test(st.toasts) && /earlier version/.test(st.toasts), `load: one calm note says it starts fresh ("${st.toasts}")`);
-    else check(!/Starting fresh/.test(st.toasts), 'title: no note after choosing Start fresh (the card already said it)');
+    const notes = st.toasts.filter((t) => /Starting fresh/.test(t));
+    if (run === 'load') check(notes.length === 1 && /earlier version/.test(notes[0]), `load: one calm note says it starts fresh ("${st.toasts.join(' | ')}")`);
+    else check(notes.length === 0, `title: no note after choosing Start fresh (the card already said it) ("${st.toasts.join(' | ')}")`);
     await page.screenshot({ path: `${dir}/fresh-start-${run}-game.png` });
     check(errors.length === 0, `${run}: no errors (${errors.join(' / ')})`);
     await page.close();
