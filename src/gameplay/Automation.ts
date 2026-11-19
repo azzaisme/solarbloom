@@ -31,8 +31,8 @@ interface PowerLike {
  *   it (its output), on grid power, at the crafting table's speed.
  * - Each opens after its job has been done by hand a few times (`hand`, counted from the game's own events).
  *
- * The farm's automation (the Mulcher, hopper composter, feed tank, sprinklers, harvesters, seed drills and the
- * auto-feeder) works the same way and lands with E23.5's items and E23.4's pipes.
+ * The farm's automation (#441-#444: the Mulcher, hopper composter, feed tank, sprinklers, harvesters, seed drills and
+ * the auto-feeder) will work the same way, from crates; it is not in this class yet.
  */
 export class Automation {
   private registered = false;
@@ -72,6 +72,11 @@ export class Automation {
   /** Has a job been done by hand enough times to hand it over? */
   handDone(job: HandJob): boolean {
     return this.handCount(job) >= HAND_JOBS[job].times;
+  }
+
+  /** E23.6.2: courier routes read research's Bigger baskets (`carry()`), so the station offers it once they open. */
+  get researchReady(): boolean {
+    return !!this.sv && this.handDone('carry');
   }
 
   // ───────────── supply crates ─────────────

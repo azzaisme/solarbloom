@@ -15,8 +15,9 @@ const dir = process.env.SHOTS_DIR ?? 'docs/review';
 mkdirSync(dir, { recursive: true });
 const driver = readFileSync(new URL('./gamepad-driver.js', import.meta.url), 'utf8').replace(/^export /gm, '');
 const PAD = driver + '\ninstallVirtualPad(); window.padDriver = padDriver; window.installVirtualPad = installVirtualPad;';
-const server = process.env.BASE_URL ? undefined : await preview({ preview: { port: 4241, strictPort: true }, logLevel: 'silent' });
-const base = process.env.BASE_URL ?? 'http://localhost:4241';
+const port = Number(process.env.PORT ?? 4241);
+const server = process.env.BASE_URL ? undefined : await preview({ preview: { port, strictPort: true }, logLevel: 'silent' });
+const base = process.env.BASE_URL ?? `http://localhost:${port}`;
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
 const check = (ok, what) => {
@@ -38,8 +39,11 @@ async function pressPad(page, b) {
 
 /** Bloombot stands beside (x, z), facing it (the first free side). */
 async function stand(page, x, z) {
+  // the last build's assembly animation ends first (bloombot can't act while it plays)
+  await page.waitForFunction(() => window.solarbloom.bot.visuals.busy !== 'assemble', null, { timeout: 90000 }).catch(() => {});
   await page.evaluate(({ x, z }) => {
     const g = window.solarbloom;
+    g.bot.cancelWalk();
     for (const [dx, dz, f] of [[0, 1.1, Math.PI], [0, -1.1, 0], [1.1, 0, -Math.PI / 2], [-1.1, 0, Math.PI / 2]]) {
       const t = g.sim.grid.get('g', Math.floor(x + 0.5 + dx), Math.floor(z + 0.5 + dz));
       if (!t || t.occupantId || t.blocked) continue;
@@ -49,7 +53,7 @@ async function stand(page, x, z) {
       if (fr.x === x && fr.z === z) return;
     }
   }, { x, z });
-  await page.waitForFunction(() => window.solarbloom.bot.visuals.busy !== 'assemble', null, { timeout: 90000 }).catch(() => {});
+  await page.waitForTimeout(300);
 }
 
 /** Places what is in hand at (x, z): Space on the keyboard, A on the pad. */
@@ -86,6 +90,7 @@ async function moveTo(page, sel, dev) {
 }
 const go = (page, dev) => (dev === 'pad' ? pressPad(page, 0) : page.keyboard.press('Enter'));
 const back = (page, dev) => (dev === 'pad' ? pressPad(page, 1) : page.keyboard.press('Escape'));
+const act = (page, dev) => (dev === 'pad' ? pressPad(page, 2) : page.keyboard.press('Space'));
 const interact = (page, dev) => (dev === 'pad' ? pressPad(page, 0) : page.keyboard.press('KeyE'));
 
 async function open(dev) {
@@ -98,7 +103,7 @@ async function open(dev) {
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
   // An Old City game further in: things carried to the store and components made by hand (so crates, couriers and the
   // Assembler are open), the Spire Heights Keeper met, the park restored round (6..26, 8..24), materials in the
-  // store, and a Drone Hub on the Courier role by the fountain. The grid is a stand-in that is always on (E23.3's
+  // store, and a Drone Hub on the Courier role on the park's open ground west of the fountain (x < 16: east of it is the plinth's edge). The grid is a stand-in that is always on (E23.3's
   // poles are not laid in a test).
   await page.evaluate(() => {
     const g = window.solarbloom;
@@ -124,10 +129,13 @@ async function open(dev) {
     for (const type of ['crate', 'crate', 'crate', 'assembler', 'droneHub'])
       for (const [k, v] of Object.entries(s.build.recipe(type))) if (k !== 'biomass') s.inventory.add(k, v);
     s.inventory.add('copper', 40);
-    const why = s.build.check('droneHub', 'g', 15, 13);
-    const hub = s.build.place('droneHub', 'g', 15, 13);
-    if (hub && !s.roles.choose(hub.id, 'courier', 1)) return s.roles.check(hub.id, 'courier', 1);
-    return hub ? undefined : why;
+    // the hub's refit to a new role (E18) is paid from the Energy and Water gauges and, in the Old City, Biomass from
+    // the backpack: the Courier's 80 fits once the Roomier backpack research has two levels (stacks of 80)
+    for (const k of ['energy', 'water']) s.econ.add(k, 200);
+    sv.research = { analysed: [], done: [], running: [], levels: { backpack: 2 } };
+    s.inventory.add('biomass', 80);
+    const why = s.build.check('droneHub', 'g', 10, 10);
+    return s.build.place('droneHub', 'g', 10, 10) ? undefined : why;
   }).then((why) => why && console.log(`   hub not placed: ${JSON.stringify(why)}`));
   await page.waitForTimeout(600);
   return { page, errors };
@@ -137,14 +145,35 @@ try {
   for (const dev of (process.env.DEVS ?? 'keys,pad').split(',')) {
     const { page, errors } = await open(dev);
     const T = (s) => `E23.6.4 ${dev}: ${s}`;
+    // the hub's panel: the Courier role is open (things were carried by hand); pick it with the arrows / d-pad
+    // (bloombot acts on the hub, Space or X, and its panel opens)
+    const hubAt = await page.evaluate(() => {
+      const m = window.solarbloom.sim.machinesOfType('droneHub')[0];
+      return m && { id: m.id, x: m.x, z: m.z };
+    });
+    const hubId = hubAt?.id;
+    await stand(page, hubAt.x, hubAt.z);
+    await act(page, dev);
+    await page.waitForSelector('#inspect.open', { timeout: 10000 }).catch(() => {});
+    check(await moveTo(page, `[data-role="${hubId}|courier|1"]`, dev), T('acting on the hub opens its panel; reach the Courier role there'));
+    await page.screenshot({ path: `${dir}/ui-hub-courier-${dev}.png` });
+    await go(page, dev);
+    await page.waitForTimeout(200);
+    await back(page, dev);
+    await page.waitForTimeout(200);
+    check(await page.evaluate(() => !document.querySelector('#inspect.open')), T('Esc / B closes the hub panel'));
     const hub = await page.evaluate(() => window.solarbloom.sim.machinesOfType('droneHub').map((m) => ({ id: m.id, x: m.x, z: m.z, role: window.solarbloom.sim.roles.roleOf(m) }))[0]);
     check(hub?.role === 'courier', T(`a Drone Hub on the Courier role (${JSON.stringify(hub)})`));
     // set down a crate (A) and an Assembler from the build menu
     await page.evaluate(() => window.solarbloom.selectTool('crate'));
-    await place(page, dev, 10, 14);
+    // crate A on the first level tile west of the hub (the park's steps and slopes are not level)
+    const aAt = await page.evaluate(() => {
+      const s = window.solarbloom.sim;
+      return [[8, 14], [7, 13], [8, 13], [9, 14], [7, 12], [8, 12], [11, 13], [12, 13]].find(([x, z]) => s.build.check('crate', 'g', x, z).ok);
+    });
+    await place(page, dev, aAt[0], aAt[1]);
     await page.evaluate(() => window.solarbloom.selectTool('assembler'));
-    await place(page, dev, 20, 12);
-    console.log('   asm check at 20,12:', await page.evaluate(() => JSON.stringify(window.solarbloom.sim.build.check('assembler', 'g', 20, 12))));
+    await place(page, dev, 12, 16);
     await page.evaluate(() => window.solarbloom.selectTool('pulse'));
     const built = await page.evaluate(() => {
       const s = window.solarbloom.sim;
@@ -201,7 +230,12 @@ try {
     await page.waitForTimeout(200);
     check(await page.evaluate(() => !window.solarbloom.hud.crate.isOpen && !window.solarbloom.paused), T('Esc / B closes it and the game runs again'));
     // the Assembler: make Wire, from its inspect panel
-    await page.evaluate((id) => window.solarbloom.select(id), ids.asm);
+    const asmAt = await page.evaluate((id) => {
+      const m = window.solarbloom.sim.machine(id);
+      return { x: m.x, z: m.z };
+    }, ids.asm);
+    await stand(page, asmAt.x, asmAt.z);
+    await act(page, dev);
     await page.waitForSelector('#inspect.open', { timeout: 10000 }).catch(() => {});
     const wireBtn = `[data-asm="${ids.asm}|wire"]`;
     check(await moveTo(page, wireBtn, dev), T('reach Wire in the Assembler panel'));
@@ -211,7 +245,7 @@ try {
     await page.evaluate(() => {
       const g = window.solarbloom;
       g.bot.following = false;
-      g.camera.glide(16, 0, 14, 1.2);
+      g.camera.glide(11, 0, 14, 1.2);
     });
     await page.waitForFunction((id) => window.solarbloom.sim.state.drones.some((d) => d.route), ids.a, { timeout: 60000 }).catch(() => {});
     await page.waitForTimeout(1500);

@@ -1282,9 +1282,17 @@ export class Game {
         const dpad: Record<string, number> = { ArrowUp: 12, ArrowDown: 13, ArrowLeft: 14, ArrowRight: 15 };
         // (on a tab, left and right change tab; up and down still leave the tab row)
         const onTab = !!(e.target as HTMLElement)?.closest?.('[role=tablist]') && (e.code === 'ArrowLeft' || e.code === 'ArrowRight');
-        if (this.panelOpen() && dpad[e.code] !== undefined && this.padFocus && !onTab) {
+        // E23.6.4: a machine's panel (a hub's roles, an Assembler's recipe) takes the arrows once its focus is in it
+        const inInspect = !!this.selected && !!(document.activeElement as HTMLElement | null)?.closest?.('#inspect.open');
+        if ((this.panelOpen() || inInspect) && dpad[e.code] !== undefined && this.padFocus && !onTab) {
           e.preventDefault();
           this.padFocus.button(dpad[e.code]);
+          return;
+        }
+        // and Enter presses its focused button, as A does (the panel redraws as the world runs)
+        if (inInspect && (e.code === 'Enter' || e.code === 'NumpadEnter') && this.padFocus) {
+          e.preventDefault();
+          this.padFocus.button(0);
           return;
         }
         const a = this.resolveKey(e.code);
@@ -1719,7 +1727,11 @@ export class Game {
     this.bot.following = true;
     const tool = this.hud.currentTool === 'inspect' ? 'pulse' : this.hud.currentTool;
     const sc = aim ?? this.botTileScreen(p.tile);
-    this.botAnim(this.actAt(p, sc.x, sc.y, tool, false));
+    const r = this.actAt(p, sc.x, sc.y, tool, false);
+    this.botAnim(r);
+    // E23.6.4: a machine's panel opened from the keyboard takes the focus, so the arrows reach its choices (as the
+    // d-pad does); Esc closes it and the arrows walk again
+    if (r === 'select' && this.bot.lastInput !== 'pad') requestAnimationFrame(() => this.padFocus?.button(13));
     this.botPreviewKey = '';
     this.buildKey = '';
   }

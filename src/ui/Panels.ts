@@ -160,7 +160,12 @@ export class Panels extends HudPart {
     }
     el.classList.add('open');
     this.root.classList.add('inspecting');
+    // the panel redraws as the world runs (a drone's status, a craft's progress): the button in focus keeps it, so
+    // the arrow keys and the d-pad don't lose their place (E23.6.4: a hub's roles, an Assembler's recipe)
+    const a = document.activeElement as HTMLElement | null;
+    const key = a && a !== el && el.contains(a) ? focusKey(a) : undefined;
     this.set('inspect', el, 'html', html);
+    if (key && !el.contains(document.activeElement)) el.querySelector<HTMLElement>(key)?.focus({ focusVisible: true } as FocusOptions);
   }
 
   machineHtml(m: MachineData, extra: string): string {
@@ -189,4 +194,11 @@ export class Panels extends HudPart {
       this.failTimer -= dt;
       if (this.failTimer <= 0) $(this.root, '#fail').style.display = 'none';
     }  }
+}
+
+/** A selector that finds the same control after a redraw: its id, or its first data-* attribute. */
+function focusKey(e: HTMLElement): string | undefined {
+  if (e.id) return `#${CSS.escape(e.id)}`;
+  const d = [...e.attributes].find((x) => x.name.startsWith('data-'));
+  return d ? `[${d.name}="${CSS.escape(d.value)}"]` : undefined;
 }

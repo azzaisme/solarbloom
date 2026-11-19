@@ -4,24 +4,17 @@
 
 import type { ItemId } from '../core/types';
 
-/** A job done by hand that, done a few times, opens its automation. */
-export type HandJob = 'carry' | 'craft' | 'gather' | 'compost' | 'water' | 'harvest' | 'feed';
+/**
+ * A job done by hand that, done a few times, opens its automation. The farm's jobs (gathering, harvesting, composting,
+ * watering, feeding a digester) join this list with their machines (#441-#444).
+ */
+export type HandJob = 'carry' | 'craft';
 
 export const HAND_JOBS: Record<HandJob, { name: string; times: number }> = {
   /** putting things in the store, or taking them out, at a way into it */
   carry: { name: 'Move things to and from the store', times: 8 },
   /** a component made at the crafting table */
   craft: { name: 'Make components at the crafting table', times: 12 },
-  /** E23.5: biomass gathered from restored ground */
-  gather: { name: 'Gather biomass by hand', times: 10 },
-  /** E23.5: a compost bin filled and emptied */
-  compost: { name: 'Fill and empty a compost bin', times: 4 },
-  /** E23.5 / E23.4: a planter watered */
-  water: { name: 'Water planters by hand', times: 10 },
-  /** E23.5: a crop harvested */
-  harvest: { name: 'Harvest crops by hand', times: 10 },
-  /** E23.5: a Bio Digester fed */
-  feed: { name: 'Feed a Bio Digester by hand', times: 4 },
 };
 
 export const AUTOMATION = {

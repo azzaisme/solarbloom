@@ -170,11 +170,21 @@ describe('E23.6.4: courier routes', () => {
     expect(sim.automation.count(b.id, 'scrap')).toBe(40);
   });
 
-  it('Bigger baskets (research) carry more a trip', () => {
-    const { sim } = line();
+  it('Bigger baskets (research) is offered once couriers open, and each level bought carries 5 more a trip', () => {
+    const sim = park();
+    sim.state.salvage!.research = { analysed: [], done: ['dr-carry'], running: [], levels: {} };
+    // the Baskets project is done, but nothing has been carried by hand yet: no couriers, so no upgrade for them
+    expect(sim.research.upgrades().map((u) => u.id)).not.toContain('droneCarry');
+    carryByHand(sim);
+    expect(sim.research.upgrades().map((u) => u.id)).toContain('droneCarry');
     const base = sim.automation.carry();
-    sim.state.salvage!.research = { analysed: [], done: [], running: [], levels: { droneCarry: 2 } };
-    expect(sim.automation.carry()).toBe(base + 2);
+    expect(base).toBe(AUTOMATION.route.carry);
+    sim.inventory.add('planks', 16);
+    sim.inventory.add('wire', 4);
+    expect(sim.research.upgrade('droneCarry')).toBe(1);
+    expect(sim.automation.carry()).toBe(base + 5);
+    expect(sim.research.upgrade('droneCarry')).toBe(2);
+    expect(sim.automation.carry()).toBe(base + 10);
   });
 });
 
