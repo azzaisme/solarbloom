@@ -107,6 +107,16 @@ try {
   }, on, { timeout: 60000, polling: 500 });
   if (hasOverlay) await settled(true);
   if (hasOverlay) await shot('power-overlay', 8, 42, 1.0, 20);
+  // the network under the cursor lights up (aimed a tile off the pole line, not on it)
+  if (hasOverlay) {
+    await page.evaluate(() => {
+      const g = window.solarbloom;
+      const a = g.sim.machine('m8');
+      g.powerFocus = { roofId: a.roofId, x: 8.5, z: 41.6 };
+    });
+    await shot('power-overlay-focus', 8, 42, 1.0, 20);
+    await page.evaluate(() => (window.solarbloom.powerFocus = undefined));
+  }
   if (hasOverlay) console.log('  power view light', JSON.stringify(await page.evaluate(() => {
     const g = window.solarbloom;
     return { dim: g.dayNight.dim, sun: g.scene.sun.light.intensity, fill: g.scene.fill.light.intensity, sky: g.app.scene.skyboxIntensity, exposure: g.app.scene.exposure };

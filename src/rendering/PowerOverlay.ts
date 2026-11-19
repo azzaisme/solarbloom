@@ -5,7 +5,8 @@ import { PALETTE, uniqueMat } from './Materials';
 import { bezier, part, ring, tube } from './MachineParts';
 import { cableY } from './PowerLines';
 import { group, shape } from './Shapes';
-import { glowMaterial, glowTileMesh } from './TileFx';
+import { GLOW_INTENSITY, glowMaterial, glowTileMesh } from './TileFx';
+import { POWER } from '../data/power';
 
 const P = PALETTE.signal.power;
 
@@ -16,6 +17,12 @@ interface MemberView {
   m: PowerNode;
   frame: pc.MeshInstance;
   net: number;
+  network: PowerNetwork;
+}
+interface LineView {
+  mi: pc.MeshInstance;
+  net: number;
+  network: PowerNetwork;
 }
 interface BarView {
   m: PowerNode;
@@ -33,6 +40,11 @@ export class PowerOverlay {
   private root: pc.Entity;
   private seen?: PowerNetwork[];
   private members: MemberView[] = [];
+  private lines: LineView[] = [];
+  /** the network under the cursor (highlighted) */
+  private focus?: PowerNetwork;
+  private focusMat: pc.StandardMaterial;
+  private focusLineMat: pc.StandardMaterial;
   private bars: BarView[] = [];
   private refreshIn = 0;
   private device: pc.GraphicsDevice;
@@ -62,11 +74,13 @@ export class PowerOverlay {
     this.device = pc.AppBase.getApplication()!.graphicsDevice;
     this.netMats = P.nets.map((c) => glowMaterial(c));
     this.darkMat = glowMaterial(P.dark);
+    this.focusMat = glowMaterial(P.focus, GLOW_INTENSITY * 1.4);
+    this.focusLineMat = uniqueMat(P.focus, { unlit: true, emissiveIntensity: 1.6 });
     this.lineMats = P.nets.map((c) => uniqueMat(c, { unlit: true }));
     this.redMat = uniqueMat(P.tripped, { unlit: true });
     this.cellMat = uniqueMat(P.cell, { unlit: true });
     this.cellBackMat = uniqueMat(P.cellBack, { unlit: true });
-    for (const m of [...this.netMats, this.darkMat, ...this.lineMats, this.redMat, this.cellMat, this.cellBackMat]) this.glowMats.push({ m, base: m.emissiveIntensity });
+    for (const m of [...this.netMats, this.darkMat, this.focusMat, this.focusLineMat, ...this.lineMats, this.redMat, this.cellMat, this.cellBackMat]) this.glowMats.push({ m, base: m.emissiveIntensity });
     if (batcher) this.group = batcher.addGroup('powerOverlay', false, 10000).id;
   }
 
@@ -95,20 +109,31 @@ export class PowerOverlay {
     }
   }
 
-  update(dt: number): void {
+  /** `focus`: where the cursor is (tile coordinates on a roof); the network near it is highlighted. */
+  update(dt: number, focus?: { roofId: string; x: number; z: number }): void {
     if (!this.on) return;
     const nets = this.sim.power.networks();
     if (nets !== this.seen) this.rebuild(nets);
+    const near = focus ? this.sim.power.networkNear(focus.roofId, focus.x, focus.z, POWER.view.focus) : undefined;
+    const focusMoved = near !== this.focus;
+    this.focus = near;
     this.refreshIn -= dt;
-    if (this.refreshIn > 0) return;
-    this.refreshIn = 0.25;
+    if (this.refreshIn > 0 && !focusMoved) return;
+    if (this.refreshIn <= 0) this.refreshIn = 0.25;
     let changed = false;
     for (const v of this.members) {
       const role = this.sim.power.roleOf(v.m);
       const dark = !!role?.consumer && !this.sim.power.isPowered(v.m);
-      const want = dark ? this.darkMat : this.netMats[v.net % this.netMats.length];
+      const want = dark ? this.darkMat : v.network === near ? this.focusMat : this.netMats[v.net % this.netMats.length];
       if (v.frame.material !== want) {
         v.frame.material = want;
+        changed = true;
+      }
+    }
+    for (const l of this.lines) {
+      const want = l.network === near ? this.focusLineMat : this.lineMats[l.net % this.lineMats.length];
+      if (l.mi.material !== want) {
+        l.mi.material = want;
         changed = true;
       }
     }
@@ -140,6 +165,7 @@ export class PowerOverlay {
     this.seen = nets;
     for (const c of [...this.root.children]) c.destroy();
     this.members = [];
+    this.lines = [];
     this.bars = [];
     // Colours by size: the biggest network (by machines) is always yellow, like the machines' glow in this view;
     // a separate network gets the next colour, so you can still tell which machines share a grid.
@@ -156,11 +182,11 @@ export class PowerOverlay {
         const size = isLight(m) ? 0.4 : m.size + 0.2;
         const mi = new pc.MeshInstance(glowTileMesh(this.device, size), this.netMats[i % this.netMats.length]);
         e.addComponent('render', { meshInstances: [mi], castShadows: false, receiveShadows: false });
-        this.members.push({ m, frame: mi, net: i });
+        this.members.push({ m, frame: mi, net: i, network: n });
         if (this.sim.power.roleOf(m)?.battery) this.bar(m, x, y, z);
       }
-      for (const [a, b] of n.links) this.glowCable(a, b, line, 0.045);
-      for (const [p, m] of n.feeds) if (!isLight(m)) this.glowCable(p, m, line, 0.022);
+      for (const [a, b] of n.links) this.lines.push({ mi: this.glowCable(a, b, line, 0.045), net: i, network: n });
+      for (const [p, m] of n.feeds) if (!isLight(m)) this.lines.push({ mi: this.glowCable(p, m, line, 0.022), net: i, network: n });
     });
     // Poles lightning tripped: a red ring at the foot (they are on no network until reset).
     const red = this.redMat;
@@ -192,7 +218,7 @@ export class PowerOverlay {
     this.bars.push({ m, fill });
   }
 
-  private glowCable(a: PowerNode, b: PowerNode, m: pc.Material, r: number) {
+  private glowCable(a: PowerNode, b: PowerNode, m: pc.Material, r: number): pc.MeshInstance {
     const pa = this.worldOf(a);
     const pb = this.worldOf(b);
     const A: [number, number, number] = [pa[0], pa[1] + cableY(a), pa[2]];
@@ -201,6 +227,6 @@ export class PowerOverlay {
     const sag = Math.min(1.2, len * (r > 0.03 ? 0.08 : 0.12));
     const mid: [number, number, number] = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2 - sag * 2, (A[2] + B[2]) / 2];
     const key = `powerGlow|${A.map((v) => v.toFixed(2)).join(',')}|${B.map((v) => v.toFixed(2)).join(',')}|${r}`;
-    part(this.root, tube(key, bezier(A, mid, B, Math.max(6, Math.ceil(len))), r, { sides: 5 }), m, {});
+    return part(this.root, tube(key, bezier(A, mid, B, Math.max(6, Math.ceil(len))), r, { sides: 5 }), m, {}).render!.meshInstances[0];
   }
 }

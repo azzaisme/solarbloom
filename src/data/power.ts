@@ -46,7 +46,8 @@ export const POWER = {
    * glows make up for the exposure only (emissive ignores the lights). Either alone barely shows by day: the Neutral
    * tone map and the display's gamma keep a sixth of the light looking bright.
    */
-  view: { glow: 0.4, darken: { day: 1, night: 0.6 }, light: 0.22, exposure: 0.45, fade: 0.3 },
+  /** `focus`: how near (tiles) the cursor must be to a network's machine or line for the view to highlight it */
+  view: { focus: 1.2, glow: 0.4, darken: { day: 1, night: 0.6 }, light: 0.22, exposure: 0.45, fade: 0.3 },
   /** Starting draws per shed class (consumers may override with their own draw). */
   draw: { lamp: 0.5, pump: 3, helper: 4, charger: 6 } satisfies Record<ShedClass, number>,
 };

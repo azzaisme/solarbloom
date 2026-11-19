@@ -1569,6 +1569,8 @@ export class Game {
     }
   }
   private powerViewSeen = false;
+  /** where the pointer (or bloombot's cursor) is, for the Power view's highlight */
+  private powerFocus?: { roofId: string; x: number; z: number };
   /** Machines on the grid that have power now: sources, batteries, poles and fed consumers (a dark one stays dark). */
   private poweredMachines(): Set<string> {
     const out = new Set<string>();
@@ -2507,6 +2509,7 @@ export class Game {
   }
 
   private previewAt(p: Pick | undefined, x: number, y: number) {
+    this.powerFocus = p ? { roofId: p.roofId, x: p.fx, z: p.fz } : undefined; // E23.3.4: the Power view highlights the network here
     if (this.hud.plotPickerOpen) return; // the picker's hologram owns the preview while it's open
     const tool = this.hud.currentTool;
     if (!p || !p.tile) {
@@ -4294,7 +4297,7 @@ export class Game {
     this.powerLines.update();
     const powerOn = this.powerView && this.building();
     this.powerOverlay.show(powerOn);
-    this.powerOverlay.update(wdt);
+    this.powerOverlay.update(wdt, this.powerFocus);
     this.lightVisuals.update(wdt, this.camera.entity.getPosition());
     // E23.3.4: in the Power view, powered electrical machines glow soft yellow and the rest of the world darkens
     this.machines.powerGlow(powerOn ? this.poweredMachines() : undefined, wdt);
