@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
-import { createInitialState, GROUND, rulesOf } from '../src/core/GameState';
+import { createInitialState, OLD_CITY_GEN } from '../src/core/GameState';
 import type { ItemId, MaterialId } from '../src/core/types';
 import { HOUSE, KEEPERS, PAGES, PARK_SET, REGIONS, BLUEPRINTS, KEEPSAKES } from '../src/data/oldcity';
 import { MATERIALS, TIERS, type MaterialCost } from '../src/data/salvage';
@@ -17,38 +17,22 @@ function realMaterials(cost: MaterialCost) {
   for (const v of Object.values(cost)) expect(v).toBeGreaterThan(0);
 }
 
-describe('E21.0: two rule sets', () => {
-  it('a new Old City game is oldcity; createInitialState defaults to classic with no rules field at all', () => {
-    const old = createInitialState(7, 'oldcity');
-    expect(old.rules).toBe('oldcity');
-    expect(old.salvage).toBeDefined();
-    const classic = createInitialState(7);
-    expect('rules' in classic).toBe(false);
-    expect('salvage' in classic).toBe(false);
-    expect(rulesOf(classic)).toBe('classic');
-    expect(new Sim(createInitialState(7, 'oldcity')).oldCity).toBe(true);
+describe('E23.1.1: one rule set', () => {
+  it('every new game is the Old City: salvage state, the Old City ground, the beach open; no rules field', () => {
+    const st = createInitialState(7);
+    expect(st.salvage).toBeDefined();
+    expect('rules' in st).toBe(false);
+    expect(st.layers[0].gen).toBe(OLD_CITY_GEN);
+    expect(st.areas.saltwind?.fog).toBe('thinning');
   });
 
-  it('a save made before E21 (no rules) loads as classic and re-saves byte-identically', () => {
-    const sim = new Sim(createInitialState(11));
-    for (let i = 0; i < 200; i++) sim.tick();
-    const t = sim.grid.get(GROUND, 6, 5)!;
-    sim.restoration.pulse(t.id);
+  it('a save keeps its salvage state through a round trip, byte for byte', () => {
+    const sim = new Sim(createInitialState(21));
+    sim.state.salvage.pack.scrap = 7;
     for (let i = 0; i < 100; i++) sim.tick();
-    const before = saver.serialize(sim.state);
-    expect(before.includes('"rules"')).toBe(false);
-    const loaded = saver.deserialize(before)!;
-    expect(rulesOf(loaded)).toBe('classic');
-    expect(saver.serialize(new Sim(loaded).state)).toBe(before);
-  });
-
-  it('an Old City save keeps its rules and salvage state through a round trip', () => {
-    const sim = new Sim(createInitialState(21, 'oldcity'));
-    sim.state.salvage!.pack.scrap = 7;
     const json = saver.serialize(sim.state);
     const loaded = saver.deserialize(json)!;
-    expect(loaded.rules).toBe('oldcity');
-    expect(loaded.salvage!.pack.scrap).toBe(7);
+    expect(loaded.salvage.pack.scrap).toBe(7);
     expect(saver.serialize(new Sim(loaded).state)).toBe(json);
   });
 });

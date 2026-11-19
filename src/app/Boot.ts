@@ -80,6 +80,7 @@ export async function boot(canvas: HTMLCanvasElement) {
       await frame();
     }
     await loading.done(500);
+    game.shown();
   };
 
   const slotQ = Number(q.get('slot'));
@@ -103,6 +104,7 @@ export async function boot(canvas: HTMLCanvasElement) {
     remove: (slot) => new SaveService(undefined, slot).deleteSlot(),
     quit: desktopApi()?.quit,
     reducedMotion: !!settings.reducedMotion,
+    earlierVersion: (slot) => new SaveService(undefined, slot).fromEarlierVersion(),
     preferRealClock: () => !!settings.realClock,
     settingsOpen: () => !!screen?.isOpen,
     closeSettings: () => screen?.close(),
@@ -110,7 +112,7 @@ export async function boot(canvas: HTMLCanvasElement) {
     settings: (parent, back) => {
       onBack = back;
       const mig = migrateBindings(settings.keys || settings.pad ? { v: settings.bindingsV, keys: settings.keys, pad: settings.pad } : undefined);
-      const bindings = new Bindings(mig.saved, { oldCity: true });
+      const bindings = new Bindings(mig.saved);
       screen ??= new SettingsScreen(parent, {
         settings,
         set: (k, v) => {

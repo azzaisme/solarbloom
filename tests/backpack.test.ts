@@ -10,7 +10,7 @@ import { SaveService } from '../src/app/SaveService';
 
 /** E22.6 (#343): the backpack screen's contents, from E21's real data. */
 function oldCity() {
-  const sim = new Sim(createInitialState(11, 'oldcity'));
+  const sim = new Sim(createInitialState(11));
   const sv = sim.state.salvage!;
   sv.pack.copper = 32;
   sv.store.copper = 110;
@@ -108,12 +108,5 @@ describe('E22.6: the backpack', () => {
     const sim = oldCity();
     const keeps = collection(sim).find((g) => g.title === 'Keepsakes')!;
     for (const r of keeps.rows.filter((r) => !r.found)) expect(`${r.name} ${r.detail}`).not.toMatch(/cat/i);
-  });
-
-  it('a classic game has no materials or requests to show', () => {
-    const sim = new Sim(createInitialState(3, 'classic'));
-    expect(itemCells(sim)).toEqual([]);
-    expect(requestRows(sim)).toEqual([]);
-    expect(collection(sim).length).toBe(6);
   });
 });

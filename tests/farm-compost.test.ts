@@ -12,7 +12,7 @@ import type { PowerSky } from '../src/gameplay/PowerEnv';
 SaveService.clock = () => 0;
 
 function farm(): Sim {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = 2;
   sim.bot = { roofId: GROUND, x: 8.5, z: 11.5 };
   // the digester's recipe is handed over by Clock Plaza's Keeper (data/crafting)
@@ -117,7 +117,12 @@ describe('E23.5.3: the compost bin', () => {
   it('E23.6.2: the real "Busy worms" research speeds every bin, level by level', () => {
     const sim = farm();
     const m = build(sim, 'compostBin', 12, 16);
+    // ready because the bin's recipe is open; a locked recipe would hide Busy worms
     expect(sim.compost.researchReady).toBe(true);
+    const was = MACHINE_RECIPES.find((r) => r.builds === 'compostBin')!.unlock;
+    MACHINE_RECIPES.find((r) => r.builds === 'compostBin')!.unlock = { tier: 99 };
+    expect(sim.compost.researchReady).toBe(false);
+    MACHINE_RECIPES.find((r) => r.builds === 'compostBin')!.unlock = was;
     const offered = () => sim.research.upgrades().map((u) => u.id);
     expect(offered()).not.toContain('compostSpeed'); // not until "Worm notes" is researched
     // Seeds are found, analysed at the station, and "Worm notes" runs on the bench to the end

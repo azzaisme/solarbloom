@@ -18,9 +18,9 @@ export type DigesterMood = 'running' | 'idle' | 'empty';
 export class CompostSystem {
   private registered = false;
 
-  /** E23.6.2: compost research reads this before it offers 'compostSpeed' (the bins exist, so it is ready). */
+  /** E23.6.2: the station offers Busy worms ('compostSpeed') once the compost bin's recipe is open (data/crafting), since bins read it. */
   get researchReady(): boolean {
-    return true;
+    return this.on && this.sim.build.isUnlocked('compostBin');
   }
 
   constructor(private sim: Sim) {
@@ -91,10 +91,11 @@ export class CompostSystem {
 
   /** E23.5.4.4: worm bins next door speed a bin up (twice as fast). Returns the speed multiplier. */
   speed(m: MachineData): number {
-    const sim = this.sim as unknown as { farmExtras?: { compostSpeed?(m: MachineData): number }; research?: { effect(id: string): number } };
+    // worm bins are E23.5.4's (optional until the extras land)
+    const extras = (this.sim as unknown as { farmExtras?: { compostSpeed?(m: MachineData): number } }).farmExtras;
     // E23.6.2: compost research ('compostSpeed') speeds every bin
-    const research = 1 + (sim.research?.effect('compostSpeed') ?? 0);
-    return (sim.farmExtras?.compostSpeed?.(m) ?? 1) * research;
+    const research = 1 + this.sim.research.effect('compostSpeed');
+    return (extras?.compostSpeed?.(m) ?? 1) * research;
   }
 
   private tickBin(m: MachineData, days: number) {

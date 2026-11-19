@@ -1,4 +1,3 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
@@ -10,8 +9,6 @@ import { Sim } from '../src/gameplay/Sim';
 function setup(seed = 8) {
   const sim = new Sim(createInitialState(seed));
   const st = sim.state;
-  st.caps.energy = big(1e7); st.caps.water = big(1e7);
-  st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
   st.progression.coreActivated = true;
   sim.areas.clear(PARK, true);
   return sim;
@@ -77,11 +74,32 @@ describe('area automation switches (City 11.3)', () => {
     mixPark(sim);
     // A hub two tiles inside the park from its fog edge, its drone hovering on the far side: normally it
     // finishes the dead park tiles around it first.
-    const edge = sim.areas.entryTiles(sim.areas.nextGoal()!).find((t) => t.z === -1 && t.x >= 4 && t.x <= 12) ?? sim.areas.entryTiles(sim.areas.nextGoal()!)[0];
-    const hub = hubAt(sim, edge.x, edge.z + 3);
+    // E23.1.1: in the Old City the frontier is Saltwind, and helpers work there once bloombot has done its share (E21.9)
+    const goal = sim.areas.nextGoal()!;
+    sim.state.areas[goal].byBot = sim.areas.shareTarget(goal);
+    // a fog-edge tile with open park ground running three tiles straight in from it
+    const D = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
+    const parkFree = (x: number, z: number) => {
+      const t = sim.grid.get(GROUND, x, z);
+      return !!t && !t.blocked && !t.occupantId && sim.areas.areaOf(t) === PARK;
+    };
+    let edge: { x: number; z: number } | undefined;
+    let dir: readonly [number, number] = [0, 1];
+    for (const t of sim.areas.entryTiles(goal)) {
+      const d = D.find(([dx, dz]) => [1, 2, 3, 4, 5].every((k) => parkFree(t.x + dx * k, t.z + dz * k) && parkFree(t.x + dx * k + Math.abs(dz), t.z + dz * k + Math.abs(dx))));
+      if (d) {
+        edge = t;
+        dir = d;
+        break;
+      }
+    }
+    expect(edge).toBeDefined();
+    // the 2×2 hub three tiles in (its corner toward the park when walking north or west)
+    const hub = hubAt(sim, edge!.x + dir[0] * (dir[0] < 0 ? 4 : 3), edge!.z + dir[1] * (dir[1] < 0 ? 4 : 3));
     for (const t of sim.grid.footprint(GROUND, hub.x, hub.z, 2)) if (t) t.occupantId = hub.id;
     const d = drone(hub);
-    d.pz = hub.z + 2.5;
+    d.px = hub.x + 1 + dir[0] * 1.5;
+    d.pz = hub.z + 1 + dir[1] * 1.5;
     const inFog = (t: { roofId: string; x: number; z: number }) => sim.areas.fog(sim.areas.areaOf(t)!) !== 'cleared';
     expect(inFog(sim.drones.findJob(d)!)).toBe(false);
     sim.areas.setMode(PARK, 'frontier');

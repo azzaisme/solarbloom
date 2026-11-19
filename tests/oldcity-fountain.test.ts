@@ -13,7 +13,7 @@ SaveService.clock = () => 0;
 const saver = new SaveService(undefined);
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const oldSim = (seed = 7) => {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   sim.bot = NEAR;
   return sim;
 };
@@ -109,8 +109,6 @@ describe('E21.6: the fountain', () => {
     expect(sim.state.progression.coreActivated).toBe(true);
     expect(sim.areas.fog(PARK)).toBe('cleared');
     for (const id of ['mastRow', 'oldMarket', 'elderGrove']) expect(sim.areas.sealed(id), id).toBe(true);
-    // the classic fountain never runs in the Old City
-    expect(sim.progression.coreReady()).toBe(false);
   });
 
   it('tier 1 can be reached in a new game using only what the park holds', () => {
@@ -122,12 +120,11 @@ describe('E21.6: the fountain', () => {
     for (const p of PARK_SET.piles) while (sim.salvage.left(p.id) > 0) if (!sim.salvage.salvage(p.id)) break;
     expect(sim.fountain.remaining('scrap')).toBe(0);
     expect(sim.fountain.remaining('seeds')).toBe(0);
-    // restore the park by hand: pulse, wait for energy and water, repeat
+    // restore the park by hand: pulse, and when the charge runs out rest by the fountain (E23.1.4: a pulse costs only charge)
     for (let i = 0; i < 4000 && sim.areas.counts(PARK).restored < 60; i++) {
       const t = sim.areas.tiles(PARK).find((q) => sim.restoration.checkPulse(q).ok && q.ground !== 'restored');
       if (t) sim.restoration.pulse(t.id);
       sim.advance(1);
-      if (!sim.state.progression.coreActivated && sim.time % 20 < 1) sim.harvestSun();
     }
     sim.advance(2);
     expect(sim.fountain.tier).toBe(1);

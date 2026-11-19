@@ -1,10 +1,10 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { Rng } from '../src/core/Rng';
 import { Sim } from '../src/gameplay/Sim';
+import { regionById } from '../src/core/OldCityLayout';
 import { objectiveSentence } from '../src/ui/ObjectiveCard';
 
 const TOPICS = ['charge', 'grid', 'water', 'farm', 'keeper', 'restore'];
@@ -16,6 +16,8 @@ function check(sim: Sim, label: string) {
   // E23.1.5: every hint belongs to the new loop, and none speaks of buying, upgrades or saving up.
   expect(TOPICS, label).toContain(g.topic);
   expect(g.text, label).not.toMatch(/upgrade|afford|save up|saving|buy|price/i);
+  // E23.1.4: no energy, water or biomass counters left to speak of (charge is the only meter)
+  expect(`${g.text} ${g.label}`, label).not.toMatch(/energy|biomass|harvest|storage|\bfull\b/i);
   const a = g.action;
   // Every suggestion is achievable now (or is an honest wait).
   if (a.kind === 'wake') {
@@ -49,6 +51,9 @@ describe('objective advisor (City 14.1)', () => {
     sim.areas.clear(PARK, true);
     const id = sim.areas.nextGoal()!;
     restoreArea(sim, id);
+    // E21.9: a region's landmark wakes once half of it is restored and its Keeper has asked for it
+    sim.state.salvage.keepers[regionById(id)!.keeper] = { step: 'landmark' };
+    expect(sim.areas.ready(id)).toBe(true);
     const g = check(sim, 'ready');
     expect(g.action).toEqual({ kind: 'wake', machineId: sim.areas.landmark(id)!.id });
   });
@@ -71,8 +76,8 @@ describe('objective advisor (City 14.1)', () => {
     expect(check(sim, 'low water').topic).toBe('water');
   });
 
-  it('under old-city rules, points at the next Keeper', () => {
-    const sim = new Sim(createInitialState(3, 'oldcity'));
+  it('points at the next Keeper', () => {
+    const sim = new Sim(createInitialState(3));
     sim.state.progression.coreActivated = true;
     const g = check(sim, 'old city');
     expect(['keeper', 'restore']).toContain(g.topic);
@@ -109,11 +114,9 @@ describe('objective advisor (City 14.1)', () => {
             if (rng.next() < 0.6) sim.areas.clear(id);
           }
         }
-        const st = sim.state.resources;
-        st.energy = big(rng.next() < 0.3 ? 0 : rng.next() * 200);
-        st.water = big(rng.next() < 0.3 ? 0 : rng.next() * 50);
-        st.biomass = big(rng.next() < 0.3 ? 0 : rng.next() * 500);
-        sim.state.harvestReadyAt = rng.next() < 0.5 ? sim.time + rng.range(1, 30) : 0;
+        // E23.1.4: the charge and the backpack are what's left to run short of
+        sim.state.charge = { ...sim.state.charge, value: rng.next() < 0.3 ? 0 : rng.next() * sim.charge.max };
+        sim.state.salvage.pack.biomass = rng.next() < 0.3 ? 0 : Math.floor(rng.next() * 40);
         sim.advance(rng.range(0.1, 3));
         check(sim, `seed ${seed} step ${i}`);
       }
@@ -122,8 +125,8 @@ describe('objective advisor (City 14.1)', () => {
 
   it('names the nearest frontier', () => {
     const sim = new Sim(createInitialState(5));
-    expect(sim.advisor.nearestFrontier()).toBeUndefined();
-    sim.state.progression.coreActivated = true;
+    // E23.1.1: the Old City opens with the park and the first region (Saltwind) in view, nothing else
+    expect(sim.advisor.nearestFrontier()?.areaId).toBe('saltwind');
     sim.areas.clear(PARK, true);
     const f = sim.advisor.nearestFrontier()!;
     expect(sim.areas.fog(f.areaId)).not.toBe('cleared');
@@ -132,13 +135,10 @@ describe('objective advisor (City 14.1)', () => {
 
   // E23.1.5: the cozy guarantee no-stall gave the classic advisor, rewritten for the Old City. A player who does
   // nothing but what the advisor says (walk there, then the one obvious action) wakes the fountain, starting from
-  // a new game with nothing at all in the bank.
-  it('a fresh game with nothing in the bank reaches fountain tier 1 by following the advisor alone', { timeout: 120_000 }, () => {
-    const sim = new Sim(createInitialState(9, 'oldcity'));
-    const st = sim.state;
-    st.resources.energy = big(0);
-    st.resources.water = big(0);
-    st.resources.biomass = big(0);
+  // a new game with nothing at all in the backpack.
+  it('a fresh game with nothing in the backpack reaches fountain tier 1 by following the advisor alone', { timeout: 120_000 }, () => {
+    const sim = new Sim(createInitialState(9));
+    expect(Object.values(sim.state.salvage.pack).every((n) => !n)).toBe(true);
     const [fx, fz] = sim.areas.info(PARK).landmark;
     const fountain = sim.areas.landmark(PARK)!;
     const seen = new Set<string>();
@@ -168,7 +168,7 @@ describe('objective advisor (City 14.1)', () => {
   });
 
   it('speaks through the objective sentence: a shortage in the loop first, the next step once the fountain is done', () => {
-    const sim = new Sim(createInitialState(4, 'oldcity'));
+    const sim = new Sim(createInitialState(4));
     expect(objectiveSentence(sim).text).toMatch(/fountain/); // a new game: the fountain wants Scrap and Seeds
     (sim as unknown as Record<string, unknown>).charge = { low: true, share: 0.1 };
     expect(objectiveSentence(sim).text).toMatch(/running low/);

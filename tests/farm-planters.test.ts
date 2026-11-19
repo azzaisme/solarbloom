@@ -11,7 +11,7 @@ SaveService.clock = () => 0;
 
 /** A fresh old-city game at fountain tier 1, with stock for building. */
 function farm(seed = 7): Sim {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   sim.state.salvage!.tier = 1;
   sim.bot = { roofId: GROUND, x: 8.5, z: 11.5 }; // by the fountain (a way into the store)
   pond(sim); // E23.4.1: real water, in reach of every bed these tests build

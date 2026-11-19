@@ -1,12 +1,11 @@
 import { TUNING } from './tuning';
-import type { BuildableType, Cost, GroundState, MachineType } from '../core/types';
+import type { BuildableType, GroundState, MachineType } from '../core/types';
 
 export interface MachineDef {
   type: MachineType;
   name: string;
   icon: string;
   size: number;
-  cost: Cost;
   allowedGround: GroundState[];
   blurb: string;
   hotkey?: string;
@@ -17,8 +16,6 @@ export interface MachineDef {
   areaTypes?: string[];
   /** Only in the endless city (not the rooftop campaign). */
   cityOnly?: boolean;
-  /** E21: only under old-city rules. */
-  oldCity?: boolean;
 }
 
 export const MACHINES: Record<MachineType, MachineDef> = {
@@ -27,9 +24,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Solar Panel',
     icon: '☀️',
     size: 1,
-    cost: { biomass: 20 },
     allowedGround: ['restored', 'prepared'],
-    blurb: '+1.2 energy/s. Blooms next to it double its output for 5 s.',
+    blurb: 'Feeds the grid in sunlight. A bloom beside it makes it shine twice as bright for a few seconds.',
     hotkey: '3',
   },
   condenser: {
@@ -37,9 +33,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Water Condenser',
     icon: '💧',
     size: 1,
-    cost: { biomass: 35, energy: 12 },
     allowedGround: ['restored', 'prepared'],
-    blurb: '+1 water/s. Its charge meter fills, then it waters the dry soil beside it into bloom, starting a chain.',
+    blurb: 'Its charge meter fills, then it waters the dry soil beside it into bloom, starting a chain.',
     hotkey: '4',
   },
   pollinator: {
@@ -47,9 +42,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Pollinator Garden',
     icon: '🌸',
     size: 1,
-    cost: { biomass: 50, water: 12 },
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Doubles biomass nearby. Restorations inside its zone spread to mossy neighbours: Bloom Chains!',
+    blurb: 'Restorations inside its zone spread to mossy neighbours: Bloom Chains!',
     hotkey: '5',
   },
   droneHub: {
@@ -57,9 +51,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Drone Hub',
     icon: '🛸',
     size: 2,
-    cost: { biomass: 80, energy: 30 }, // Phase 4 E01.1: fits the starting store (was 110 🌿 / 35 ⚡)
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Launches a little drone that restores tiles within 3 tiles of the hub, paying the usual pulse cost.',
+    blurb: 'Launches a little drone that restores tiles within 3 tiles of the hub. It runs on the grid.',
     hotkey: '6',
   },
   motherTree: {
@@ -67,7 +60,6 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Mother Tree',
     icon: '🌳',
     size: 2,
-    cost: { biomass: 90, water: 30 }, // Phase 4 E01.1: fits the starting store (was 170 🌿 / 40 💧)
     allowedGround: ['restored', 'prepared'],
     blurb: 'Every restoration within 2 tiles charges it. At full charge it releases a Bloom Pulse that restores and grows everything around it.',
     hotkey: '7',
@@ -78,18 +70,16 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Reservoir Garden',
     icon: '⛲',
     size: 1,
-    cost: { biomass: 60, water: 20 },
     allowedGround: ['restored', 'prepared'],
-    blurb: 'Water Condensers within 2 tiles fill its basin. When full it Overflows: up to 3 dry tiles nearby burst into lush bloom (×2 🌿 for a while).',
+    blurb: 'Water Condensers within 2 tiles fill its basin. When full it Overflows: up to 3 dry tiles nearby burst into lush bloom.',
     hotkey: '8',
-    areaTypes: ['reservoir', 'canal'],
+    areaTypes: ['reservoir'],
   },
   relay: {
     type: 'relay',
     name: 'Bloom Relay',
     icon: '📡',
     size: 1,
-    cost: { biomass: 90, energy: 40 },
     allowedGround: ['restored', 'prepared'],
     blurb: 'Links with every other relay in range. A bloom right beside it sends a pulse to each linked relay, which blooms the ground there (once per link per chain, then it recharges).',
     hotkey: '9',
@@ -101,34 +91,29 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Cultivator',
     icon: '🚜',
     size: 1,
-    cost: { biomass: 140, energy: 30 },
     allowedGround: ['restored', 'prepared'],
-    blurb: `A solar tiller: drives over dead ground within ${TUNING.cultivator.radius} tiles of its dock and slowly breaks it into bloom on its own, for energy instead of pulses.`,
+    blurb: `A solar tiller: drives over dead ground within ${TUNING.cultivator.radius} tiles of its dock and slowly breaks it into bloom on its own, on power from the grid.`,
     hotkey: '0',
     unlock: { needs: 'droneHub', label: 'Build a Drone Hub to unlock' },
     cityOnly: true,
   },
-  // E21.1: a way into the city's store (old-city rules only; never in the classic build list).
+  // E21.1: a way into the city's store (placed by the world, never in the build list).
   chest: {
     type: 'chest',
     name: 'Storage Chest',
     icon: '📦',
     size: 1,
-    cost: {},
     allowedGround: ['restored', 'prepared', 'polluted'],
     blurb: 'A way into the city’s shared store: open it to put things away or take them out.',
-    oldCity: true,
   },
-  // E23.5.2: a planter box (old-city rules only): crops grow in it over game days.
+  // E23.5.2: a planter box: crops grow in it over game days.
   planter: {
     type: 'planter',
     name: 'Planter',
     icon: '🟫',
     size: 1,
-    cost: {},
     allowedGround: ['restored', 'prepared'],
     blurb: 'A raised bed: plant seeds in it, keep it watered and harvest food.',
-    oldCity: true,
   },
   // E23.5.3: biomass and food scraps rot down into compost, then fertiliser.
   compostBin: {
@@ -136,10 +121,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Compost Bin',
     icon: '🟫',
     size: 1,
-    cost: {},
     allowedGround: ['restored', 'prepared', 'polluted'],
     blurb: 'Fill it with biomass and food scraps: they rot down into compost, and compost left inside becomes fertiliser.',
-    oldCity: true,
   },
   // E23.5.3: biomass into grid power, day or night, while fed.
   bioDigester: {
@@ -147,31 +130,25 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Bio Digester',
     icon: '⚡',
     size: 1,
-    cost: {},
     allowedGround: ['restored', 'prepared', 'polluted'],
     blurb: 'Feed it biomass and it powers its grid, day or night. When it runs empty it simply stops.',
-    oldCity: true,
   },
-  // E23.3.2: the grid's storage and its weather power (old-city rules only).
+  // E23.3.2: the grid's storage and its weather power.
   battery: {
     type: 'battery',
     name: 'Battery',
     icon: '🔋',
     size: 1,
-    cost: {},
     allowedGround: ['restored', 'prepared'],
     blurb: 'Stores what the grid has spare and gives it back after dark.',
-    oldCity: true,
   },
   windTurbine: {
     type: 'windTurbine',
     name: 'Wind Turbine',
     icon: '🌬',
     size: 1,
-    cost: {},
     allowedGround: ['restored', 'prepared'],
     blurb: 'Turns on windy days and in storms. It catches more wind on high ground.',
-    oldCity: true,
   },
   // E23.3.3: bloombot sits on it to recharge from the grid.
   charger: {
@@ -179,25 +156,21 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     name: 'Charger',
     icon: '🔌',
     size: 1,
-    cost: {},
     allowedGround: ['restored', 'prepared'],
     blurb: 'A pad on the grid. Sit on it and bloombot fills up fast.',
-    oldCity: true,
   },
   core: {
     type: 'core',
     name: 'Rooftop Core',
     icon: '✨',
     size: 2,
-    cost: {},
     allowedGround: ['polluted', 'prepared', 'restored'],
     blurb: 'An ancient bloom engine. Awaken it to restore the whole building.',
   },
 };
 
-export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
-/** E21.3: the old-city build list (the classic list plus the Storage Chest and the Planter; E23.7.4 dropped the Reclaimer; E23.3 adds the grid). */
-export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'compostBin', 'bioDigester', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+/** E21.3: what can be built (E23.1.1: one list, the Old City's; E23.7.4 dropped the Reclaimer; E23.3 adds the grid; E23.5.2 the Planter). */
+export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'compostBin', 'bioDigester', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

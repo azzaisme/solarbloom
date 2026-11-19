@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
-import { big } from '../src/core/Big';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
@@ -11,15 +10,11 @@ const saver = new SaveService(undefined);
 const MAST = REGIONS[0];
 
 function mastRow(seed = 7) {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   sim.state.salvage!.tier = 2;
   sim.state.salvage!.abilities.push('pry', 'hover');
   sim.areas.clear('park', true);
   sim.gates.open('g-mastRow');
-  sim.state.caps.energy = big(1e6);
-  sim.state.caps.water = big(1e6);
-  sim.state.resources.energy = big(1e6);
-  sim.state.resources.water = big(1e6);
   return sim;
 }
 /** A Drone Hub standing in Mast Row, placed as a save would hold it. */
@@ -46,19 +41,6 @@ function hub(sim: Sim, x = 12, z = -12): MachineData {
     sim.grid.indexMachine(p);
   }
   return m;
-}
-/** The cap the store would have without a reward (the reward is put back after). */
-function capWithout(sim: Sim, k: 'water' | 'energy', reward: string): number {
-  const rewards = sim.state.salvage!.rewards!;
-  const keep = [...rewards];
-  sim.state.salvage!.rewards = rewards.filter((r) => r !== reward);
-  const was = sim.state.caps[k];
-  sim.state.caps[k] = big(0);
-  sim.upgrades.applyCaps();
-  const v = sim.state.caps[k].toNumber();
-  sim.state.salvage!.rewards = keep;
-  sim.state.caps[k] = was;
-  return v;
 }
 const mastRestored = (sim: Sim) => sim.areas.counts('mastRow').restored;
 
@@ -134,7 +116,6 @@ describe('E21.9: bloombot first', () => {
       for (const [k, v] of Object.entries(KEEPERS.find((q) => q.id === r.keeper)!.landmark)) sim.inventory.addToStore(k as 'scrap', v!), sim.inventory.withdraw(k as 'scrap', v!);
       expect(sim.landmarks.interact(region), region).toBe('woke');
     };
-    const waterBefore = sim.state.caps.water.toNumber();
     // Mast Row: every landmark beacon on the minimap
     wake('mastRow');
     expect(sim.landmarks.has('beacons')).toBe(true);
@@ -152,26 +133,18 @@ describe('E21.9: bloombot first', () => {
     const seeds = sim.inventory.count('seeds');
     sim.salvage.salvage('pk-e1');
     expect(sim.inventory.count('seeds') - seeds).toBe(6);
-    // Cistern Basin: water storage doubled
-    void waterBefore;
-    sim.state.caps.water = big(0); // caps only grow: start from the store's own size
-    sim.upgrades.applyCaps();
-    const w1 = sim.state.caps.water.toNumber();
+    // Cistern Basin: Water Condensers fill twice as fast (E23.1.4: no water store left to double)
+    expect(sim.landmarks.condenserMult()).toBe(1);
     wake('cistern');
-    expect(sim.state.caps.water.toNumber()).toBeGreaterThan(w1);
-    expect(capWithout(sim, 'water', 'waterCap')).toBeCloseTo(sim.state.caps.water.toNumber() / 2, 6);
+    expect(sim.landmarks.condenserMult()).toBe(2);
     // Clock Plaza: helpers 25% faster
     const h = sim.upgrades.droneSpeed(undefined);
     wake('clockPlaza');
     expect(sim.upgrades.droneSpeed(undefined)).toBeCloseTo(h * 1.25, 6);
-    // The Terraces: energy storage doubled
-    sim.state.caps.energy = big(0);
-    sim.upgrades.applyCaps();
-    const e1 = sim.state.caps.energy.toNumber();
+    // The Terraces: batteries hold twice as much (E23.1.4: the grid's batteries, not an energy counter)
+    expect(sim.landmarks.batteryMult()).toBe(1);
     wake('terraces');
-    expect(sim.state.caps.energy.toNumber()).toBeGreaterThan(e1);
-    expect(capWithout(sim, 'energy', 'energyCap')).toBeCloseTo(sim.state.caps.energy.toNumber() / 2, 6);
-    expect(sim.landmarks.capMult('energy')).toBe(2);
+    expect(sim.landmarks.batteryMult()).toBe(2);
     // Glasshouse Gardens: the Heart Seed; Observatory Hill: the Star Lens (and caches on the map); Spire Heights: lifts
     wake('glasshouse');
     expect(sim.state.salvage!.items).toContain('heartSeed');

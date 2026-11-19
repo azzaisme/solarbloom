@@ -1,4 +1,3 @@
-import { big } from '../../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../../src/app/SaveService';
 import { createInitialState, GROUND } from '../../src/core/GameState';
@@ -110,9 +109,6 @@ describe('performance: simulation at city scale (City 06.6)', () => {
   for (const mixed of [false, true])
   it(`a 0.1 s step with 10k restored tiles, 300 machines and 30 drones stays under 2 ms${mixed ? ' (mixed drone roles)' : ''}`, () => {
     const sim = new Sim(createInitialState(5));
-    const st = sim.state;
-    st.caps.energy = big(1e9); st.caps.water = big(1e9);
-    st.resources.energy = big(1e8); st.resources.water = big(1e8); st.resources.biomass = big(1e8);
     // ~40 chunks of city around the park, mostly restored.
     let restored = 0;
     for (let cz = -3; cz <= 3; cz++)
@@ -128,8 +124,8 @@ describe('performance: simulation at city scale (City 06.6)', () => {
         }
       }
     for (let cz = -3; cz <= 3; cz++) for (let cx = -3; cx <= 3; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
-    // 300 machines spread around (solar, condensers, gardens) + 30 drone hubs, inserted directly: machine costs
-    // grow ×1.5 per copy, and this measures the simulation, not the economy.
+    // 300 machines spread around (solar, condensers, gardens) + 30 drone hubs, inserted directly: this measures
+    // the simulation, not building.
     const types = ['solar', 'condenser', 'pollinator'] as const;
     let n = 0;
     const add = (type: MachineData['type'], x: number, z: number, size: number) => {
@@ -160,7 +156,6 @@ describe('performance: simulation at city scale (City 06.6)', () => {
           if (hub) hubs++;
         }
       }
-    sim.production.markDirty();
     for (let i = 0; i < 50; i++) sim.tick();
     const steps = 300;
     const t0 = performance.now();
@@ -177,8 +172,6 @@ describe('performance: active-region ticking (City 06.1)', () => {
   it('a 1,000-area world with 5 active chunks ticks in under 0.3 ms', () => {
     const sim = new Sim(createInitialState(8));
     const st = sim.state;
-    st.caps.energy = big(1e9); st.caps.water = big(1e9);
-    st.resources.energy = big(1e8); st.resources.water = big(1e8); st.resources.biomass = big(1e8);
     st.progression.coreActivated = true;
     // Clear 1,000 areas ring by ring.
     const ids: string[] = [];
@@ -220,7 +213,6 @@ describe('performance: active-region ticking (City 06.1)', () => {
         if (!t.blocked && !t.occupantId && t.ground !== 'restored') sim.restoration.pulse(t.id);
       }
     }
-    sim.production.markDirty();
     for (let i = 0; i < 20; i++) sim.tick();
     const active = sim.activeChunks().size;
     const steps = 400;

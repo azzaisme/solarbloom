@@ -1,7 +1,6 @@
 // Look 5.2: no emoji reach the screen. Game strings may still use emoji as placeholders, but every one of them
 // must map to a drawn icon, and the HUD's iconize() must leave no emoji behind (text or attributes).
 import { describe, expect, it } from 'vitest';
-import { formatCost } from '../src/core/Economy';
 import indexHtml from '../index.html?raw';
 import { EMOJI_ICONS, EMOJI_RE, FAVICON_SVG, ICONS, PAINTED, ROLE_ICONS, hasEmoji, iconize, plain } from '../src/ui/Icons';
 
@@ -48,13 +47,6 @@ describe('Look 5.2 icon set', () => {
 
   it('E18 role icons are in the set', () => {
     for (const r of ['restorer', 'gardener', 'scout', 'courier', 'spark', 'harvester']) expect(ICONS[ROLE_ICONS[r]], r).toBeTruthy();
-  });
-
-  it('a three-resource price renders as three icons side by side', () => {
-    const html = iconize(formatCost({ biomass: 25, energy: 10, water: 5 }));
-    expect(hasEmoji(html)).toBe(false);
-    expect(html.match(/<img/g)!.length).toBe(3);
-    expect(html.replace(/<img[^>]*>/g, '·')).toBe('10· 5· 25·');
   });
 
   it('the favicon is the logo mark (Look 5.3)', () => {

@@ -1,0 +1,109 @@
+// E23.1.1 (#365): a garden from an earlier version starts fresh, calmly. Two old saves sit in the slots: slot 1 with
+// an old header (the title marks it "Earlier version" and offers Start fresh), slot 2 with a current header over an
+// old save. Every way into a fresh garden from the title asks the day-clock question, like any new garden: Start
+// fresh on slot 1, and Load on slot 2 (whose question says why it starts fresh). Started with no title (?slot=2), the
+// game says so in one gentle line instead. All end in a new Old City game, with no errors on the console. Screenshots go to docs/review/fresh-start-*.png. Run after `vite build`.
+import { mkdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { preview } from 'vite';
+
+const require = createRequire(import.meta.url);
+const { chromium } = require('playwright');
+const dir = process.env.SHOTS_DIR ?? 'docs/review';
+mkdirSync(dir, { recursive: true });
+const URL_ = 'http://localhost:4241/';
+const server = await preview({ preview: { port: 4241, strictPort: true }, logLevel: 'silent' });
+const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const failures = [];
+const check = (ok, what) => {
+  console.log(`${ok ? '✓' : '✗'} ${what}`);
+  if (!ok) failures.push(what);
+};
+
+// A minimal save from the classic idle game (v7) and its pre-E23 header.
+const oldSave = JSON.stringify({ version: 7, seed: 42, rules: 'classic', time: 900, layers: [], machines: [], resources: { energy: '120', water: '40', biomass: '5e9' } });
+const oldHead = JSON.stringify({ name: 'Garden 1', played: 900, step: 'The fountain is awake', region: 'The park', rules: 'classic', savedAt: 1 });
+const sneakyHead = JSON.stringify({ name: 'Garden 2', played: 60, step: 'The fountain is dry', region: 'The park', version: 8, savedAt: 2 });
+
+try {
+  for (const run of ['title', 'load', 'url']) {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+    await page.addInitScript(
+      ([s, h1, h2, run]) => {
+        if (sessionStorage.getItem('seeded')) return;
+        sessionStorage.setItem('seeded', '1');
+        localStorage.clear();
+        localStorage.setItem('solarbloom.save.1', s);
+        localStorage.setItem('solarbloom.save.1.head', h1);
+        if (run !== 'title') {
+          localStorage.setItem('solarbloom.save.2', s);
+          localStorage.setItem('solarbloom.save.2.head', h2);
+        }
+      },
+      [oldSave, oldHead, sneakyHead, run],
+    );
+    // every toast the page shows, as it appears: a toast lives a few seconds of wall time, which a slow software-GL
+    // page can outlast between two checks, so the checks read this log, not what is on screen at that moment
+    await page.addInitScript(() => {
+      window.__toasts = [];
+      new MutationObserver((ms) => {
+        for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && n.parentElement?.id === 'toasts') window.__toasts.push(n.textContent);
+      }).observe(document, { childList: true, subtree: true });
+    });
+    if (run === 'url') {
+      // no title: the game starts slot 2 straight away, finds the earlier version's save and says so once
+      await page.goto(`${URL_}?slot=2`, { waitUntil: 'domcontentloaded', timeout: 120_000 }); // the game loads at once: wait for it below
+      await finish(page, run, errors);
+      continue;
+    }
+    await page.goto(URL_);
+    await page.waitForSelector('#tPress', { timeout: 60_000 });
+    await page.keyboard.press('Space');
+    await page.waitForSelector('#tPlay');
+    await page.click('#tPlay');
+    await page.waitForSelector('#tLoad1');
+    const card = await page.evaluate(() => document.querySelector('#tLoad1').closest('.t-slot').textContent);
+    check(/Earlier version/.test(card) && /starts fresh/.test(card) && /Start fresh/.test(card), `${run}: slot 1 says it is from an earlier version and offers Start fresh ("${card.trim().replace(/\s+/g, ' ')}")`);
+    check(!(await page.$('#tRename1')), `${run}: an old garden can't be renamed or loaded, only started fresh or deleted`);
+    await page.screenshot({ path: `${dir}/fresh-start-${run}-title.png` });
+    // Start fresh (slot 1) and Load (slot 2, an old save under a current header) are both a new garden: each asks
+    // about the day clock first, like any new garden (E23.7.1); Load's question says why it starts fresh
+    await page.click(run === 'title' ? '#tLoad1' : '#tLoad2');
+    await page.waitForSelector('#tConfirmText', { timeout: 30_000 });
+    const q = await page.evaluate(() => ({ text: document.querySelector('#tConfirmText').textContent, all: document.querySelector('#tConfirmText').parentElement.textContent }));
+    check(/How should the days go/.test(q.text) && !!(await page.$('#tAlt')), `${run}: ${run === 'title' ? 'Start fresh' : 'Load'} asks the day-clock question ("${q.text}")`);
+    if (run === 'load') check(/earlier version/.test(q.all) && /new one starts here/.test(q.all), `load: the question says the garden is from an earlier version ("${q.all.trim().replace(/\s+/g, ' ')}")`);
+    await page.screenshot({ path: `${dir}/fresh-start-${run}-question.png` });
+    // the save is only dropped once a choice is made: it is still there while the question is open
+    check(await page.evaluate((n) => !!localStorage.getItem(`solarbloom.save.${n}`), run === 'title' ? 1 : 2), `${run}: the question changes nothing until it is answered`);
+    await Promise.all([page.waitForNavigation({ timeout: 60_000 }).catch(() => {}), page.click('#tYes')]);
+    await finish(page, run, errors);
+  }
+} finally {
+  await browser.close();
+  server.httpServer.close();
+}
+if (failures.length) {
+  console.error(`${failures.length} check(s) failed`);
+  process.exit(1);
+}
+console.log('fresh start: all checks passed');
+
+async function finish(page, run, errors) {
+  await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 180_000 });
+  // the opening notes come a moment after the fade (later on a loaded machine): wait for the note, or long
+  // enough that one would have shown
+  if (run === 'url') await page.waitForFunction(() => window.__toasts.some((t) => /Starting fresh/.test(t)), null, { timeout: 20_000 }).catch(() => {});
+  else await page.waitForTimeout(4000);
+  const st = await page.evaluate(() => ({ version: window.solarbloom.sim.state.version, time: window.solarbloom.sim.state.time, oldCity: !!window.solarbloom.sim.state.salvage && !('rules' in window.solarbloom.sim.state), toasts: window.__toasts }));
+  check(st.oldCity && st.version === 8 && st.time < 60, `${run}: a new Old City game (version ${st.version}, ${st.time.toFixed(1)} s in)`);
+  const notes = st.toasts.filter((t) => /Starting fresh/.test(t));
+  if (run === 'url') check(notes.length === 1 && /earlier version/.test(notes[0]), `url: one calm note says it starts fresh ("${st.toasts.join(' | ')}")`);
+  else check(notes.length === 0, `${run}: no note in the game (the title already said it) ("${st.toasts.join(' | ')}")`);
+  await page.screenshot({ path: `${dir}/fresh-start-${run}-game.png` });
+  check(errors.length === 0, `${run}: no errors (${errors.join(' / ')})`);
+  await page.close();
+}
