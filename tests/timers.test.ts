@@ -115,6 +115,7 @@ describe('E23.7.1.1: every timer counts in game days', () => {
       sim.clock.real = real;
       sim.state.salvage!.tier = 1;
       sim.weather.forceForTest('sunny', 1e12);
+      sim.water.isWatered = () => true; // this is about the clock: the bed is watered (E23.4's own tests cover water)
       const t = sim.grid.get(GROUND, 12, 16)!;
       t.blocked = false;
       t.feature = undefined;
