@@ -11,6 +11,9 @@ describe('E22.4: rebinding', () => {
     expect(b.bindKey('recentre', 'Mouse1').ok).toBe(true);
     expect(b.actionForCode('Mouse4')).toBe('photo');
     expect(b.bindButton('photo', 13).ok).toBe(false); // d-pad down is Zoom camera: a clash, not a silent steal
+    // every pad button has a job by default (d-pad right pins the next request): free one, then bind it
+    expect(b.bindButton('backpack', 15)).toEqual({ ok: false, reason: 'clash', other: 'pinNext' });
+    expect(b.unbind('pinNext', 'pad').ok).toBe(true);
     expect(b.bindButton('backpack', 15).ok).toBe(true);
     expect(b.conflicts()).toEqual([]);
   });

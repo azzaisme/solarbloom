@@ -5,6 +5,7 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
+import { regionById } from '../src/core/OldCityLayout';
 
 function city(seed = 6) {
   const sim = new Sim(createInitialState(seed));
@@ -50,9 +51,30 @@ describe('Mega Pulse and scaled Overcharge (City 11.5)', () => {
     const sim = city();
     const first = sim.restoration.megaBudget();
     expect(first).toBe(TUNING.mega.baseTiles);
-    for (let i = 0; i < 10; i++) sim.areas.clear(sim.areas.nextGoal()!, true);
+    // E23.1.1: the Old City is one fixed island, then the mainland past the causeway: the next area to wake is an
+    // open one, else the region behind the nearest gate (opened here as a player would), else the mainland
+    const wakeNext = () => {
+      let id = sim.areas.nextGoal();
+      if (!id) {
+        const r = sim.areas.sealedAreas().map((a) => regionById(a)).find(Boolean);
+        if (r) {
+          sim.gates.open(r.gate.id, true);
+          id = r.id;
+        } else if (!sim.mainland.opened) {
+          // every region awake: the Great Bloom raises the causeway, and the mainland opens district by district
+          sim.state.salvage.tier = 5;
+          sim.mainland.open();
+          id = sim.areas.nextGoal();
+        }
+        if (!id) return false;
+      }
+      return sim.areas.clear(id, true);
+    };
+    for (let i = 0; i < 10; i++) expect(wakeNext()).toBe(true);
     expect(sim.restoration.megaBudget()).toBe(TUNING.mega.baseTiles + 10 * TUNING.mega.tilesPerArea);
-    for (let i = 0; i < 200; i++) sim.areas.clear(sim.areas.nextGoal()!, true);
+    const toCap = Math.ceil((TUNING.mega.maxTiles - TUNING.mega.baseTiles) / TUNING.mega.tilesPerArea);
+    while (sim.areas.clearedCount() < toCap + 5 && wakeNext());
+    expect(sim.areas.clearedCount()).toBeGreaterThan(toCap);
     expect(sim.restoration.megaBudget()).toBe(TUNING.mega.maxTiles);
   });
 

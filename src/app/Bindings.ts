@@ -188,8 +188,8 @@ export function defaultPad(): Partial<Record<Action, number>> {
     menu: 9,
     prevTab: 4,
     nextTab: 5,
+    pinNext: 15,
   };
-  p.pinNext = 15;
   return p;
 }
 
