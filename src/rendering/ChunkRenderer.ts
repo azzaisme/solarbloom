@@ -1075,6 +1075,7 @@ export class ChunkRenderer {
       areaAt: (x, z) => map.areaOfCell(x, z),
       slab: (hex, p, sc) => self.slab(self.sink, hex, p, sc),
       model: (name, x, y, z, rot, sx, sy, sz) => !!self.batch?.add(name, x, y, z, rot, sx, sy, sz),
+      bloom: (t) => s.water.bloomShown(t), // E23.4.4: the lawn's colour fades with low water too
     };
     // E19.1.5: this chunk's plots and their looks (decided before the tiles, which stay flat under a chosen plot)
     this.plotCells.clear();
@@ -1284,7 +1285,7 @@ export class ChunkRenderer {
     if ((t.feature ?? 'lawn') === 'water') return false;
     const spot = treeSpot(t, this.areaType);
     if (!spot) return false;
-    const stage = treeStage(t);
+    const stage = treeStage(t, this.sim.water.bloomShown(t)); // E23.4.4: trees fade with low water
     if (!stage) return false;
     if (this.growing.has(t.id)) return true;
     // Look 3.7: close-up trees at near zoom on High; the single-clump version at mid zoom and below
@@ -1316,7 +1317,7 @@ export class ChunkRenderer {
     const view = this.views.get(chunkKey(GROUND, Math.floor(t.x / CHUNK), Math.floor(t.z / CHUNK)));
     if (!view || view.far) return;
     const spot = treeSpot(t, this.sim.areas.info(this.sim.areas.areaOf(t)!).type);
-    const stage = treeStage(t);
+    const stage = treeStage(t, this.sim.water.bloomShown(t));
     if (!spot || !stage || (t.feature ?? 'lawn') === 'water') return;
     const old = this.growing.get(t.id);
     old?.e.destroy();

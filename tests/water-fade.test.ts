@@ -6,6 +6,12 @@ import { WATER_NET } from '../src/data/water';
 import { Sim } from '../src/gameplay/Sim';
 import { WaterSystem } from '../src/gameplay/WaterSystem';
 import { TUNING } from '../src/data/tuning';
+import * as pc from 'playcanvas';
+import { turfTop, type DressCtx } from '../src/rendering/Surfaces';
+import { treeStage } from '../src/rendering/TreePlacement';
+import { Butterflies } from '../src/rendering/Butterflies';
+import { Pollinators } from '../src/rendering/Pollinators';
+import { initLowPoly } from '../src/rendering/Shapes';
 
 /** the lushest bloom (the land starts there: the fade has to take all of it back to plain restored ground) */
 const LUSH = TUNING.restore.maxBloom;
@@ -175,6 +181,73 @@ describe('E23.4.4: land fades around low water', () => {
     sim.water.fill(body.id, 1); // a level changes: the next read refreshes once
     for (const t of land) sim.water.bloomShown(t);
     expect(builds).toBe(1);
+  });
+
+  it("the lawn, trees, butterflies and pollinators all show the faded stage, not the tile's own", () => {
+    const { sim, land, body } = park();
+    const banks = near(sim, land, body.id).filter((t) => !t.occupantId);
+    expect(banks.length).toBeGreaterThan(0);
+    /** the lawn's corner colours for a tile, with the ground's bloom read through `bloom` (or the tile's own) */
+    const turf = (t: TileData, bloom?: (t: TileData) => number, clone = false) => {
+      let out: number[] = [];
+      const peek = (x: number, z: number) => {
+        const n = sim.grid.get(GROUND, x, z);
+        return n && clone ? { ...n, bloom: sim.water.bloomShown(n) } : n;
+      };
+      const c = { b: { grey: 0, add() {}, addGeo() {}, quad: (_p: number[], cols: number[]) => (out = cols) }, fb: { add() {} }, dens: 1, lod: 1, area: PARK, areaType: 'park', level: 4, peek, areaAt: () => PARK, bloom } as unknown as DressCtx;
+      turfTop(c, clone ? peek(t.x, t.z)! : t, 0.2);
+      return out;
+    };
+    const lush = banks.map((t) => turf(t, (n) => sim.water.bloomShown(n)));
+    sim.weather.forceForTest('sunny', Infinity);
+    sim.water.draw(body.id, body.capacity);
+    for (let i = 0; i < 24; i++) sim.water.tick(DAY / 24);
+    expect(banks.every((t) => sim.water.bloomShown(t) === 1 && t.bloom === LUSH)).toBe(true);
+    // the lawn: its colour is the faded stage's (the same as ground really at that stage), no longer the lush one
+    banks.forEach((t, i) => {
+      const faded = turf(t, (n) => sim.water.bloomShown(n));
+      expect(faded).toEqual(turf(t, undefined, true));
+      expect(faded).not.toEqual(lush[i]);
+      expect(turf(t)).toEqual(lush[i]); // (read straight from the tile it would still be lush: the bug this fixes)
+    });
+    // trees: the stage drawn is the faded one
+    for (const t of banks) {
+      expect(treeStage(t)).toBe(LUSH);
+      expect(treeStage(t, sim.water.bloomShown(t))).toBe(1);
+    }
+    // butterflies and pollinators: the faded banks are no longer flowers to visit
+    const rect = { x0: -4, x1: 20, z0: -4, z1: 20 };
+    // a headless PlayCanvas app (the insects build their meshes on it)
+    const canvas = { width: 1, height: 1, getContext: () => null, addEventListener() {}, removeEventListener() {}, style: {} };
+    const app = new pc.AppBase(canvas as unknown as HTMLCanvasElement);
+    const opts = new pc.AppOptions();
+    opts.graphicsDevice = new pc.NullGraphicsDevice(canvas as unknown as HTMLCanvasElement);
+    opts.componentSystems = [pc.RenderComponentSystem];
+    app.init(opts);
+    initLowPoly(opts.graphicsDevice);
+    const root = () => {
+      const e = new pc.Entity('root', app);
+      app.root.addChild(e);
+      return e;
+    };
+    const ids = new Set(banks.map((t) => t.id));
+    const fly = new Butterflies(sim, root());
+    const garden = (fly as unknown as { gardenTiles(r: typeof rect): TileData[] }).gardenTiles(rect);
+    expect(garden.some((t) => ids.has(t.id))).toBe(false);
+    const pol = new Pollinators(sim, root());
+    pol.update(0.1, rect);
+    expect((pol as unknown as { flowers: TileData[] }).flowers.some((t) => ids.has(t.id))).toBe(false);
+    // refilled, they come back: lush lawn, grown trees, flowers visited again
+    sim.weather.forceForTest('rain', Infinity);
+    for (let i = 0; i < 12; i++) sim.water.tick(DAY / 24);
+    banks.forEach((t, i) => expect(turf(t, (n) => sim.water.bloomShown(n))).toEqual(lush[i]));
+    expect(banks.every((t) => treeStage(t, sim.water.bloomShown(t)) === LUSH)).toBe(true);
+    const garden2 = (fly as unknown as { gardenTiles(r: typeof rect): TileData[] }).gardenTiles(rect);
+    const pol2 = new Pollinators(sim, root());
+    pol2.update(0.1, rect);
+    const flowers2 = (pol2 as unknown as { flowers: TileData[] }).flowers;
+    expect(garden2.some((t) => ids.has(t.id)) || flowers2.some((t) => ids.has(t.id))).toBe(true);
+    app.destroy();
   });
 
   it('reports the areas to repaint only when a body crosses a fade step', () => {

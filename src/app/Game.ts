@@ -738,7 +738,7 @@ export class Game {
       for (let tx = Math.floor(f.x - R); tx <= f.x + R; tx++) {
         const t = this.sim.grid.get(GROUND, tx, tz);
         if (!t || t.feature === 'water') continue;
-        const stage = treeStage(t);
+        const stage = treeStage(t, this.sim.water.bloomShown(t)); // E23.4.4: a faded tree sheds like its stage
         if (!stage || stage < 2) continue;
         const area = this.sim.areas.areaOf(t);
         const spot = area ? treeSpot(t, this.sim.areas.info(area).type) : undefined;
