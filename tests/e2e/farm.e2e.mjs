@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const out = process.argv[2] ?? 'docs/review/farm';
 mkdirSync(out, { recursive: true });
-const server = await preview({ preview: { port: 4251, strictPort: true }, logLevel: 'silent' });
+const server = await preview({ preview: { port: 4254, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
 const errors = [];
@@ -24,8 +24,8 @@ page.on('pageerror', (e) => errors.push(String(e)));
 let shot = 0;
 const snap = async (name) => {
   await page.waitForTimeout(700);
-  const path = `${out}/${String(++shot).padStart(2, '0')}-${name}.png`;
-  await page.screenshot({ path, timeout: 180_000 }); // swiftshader on a busy machine is slow
+  const path = `${out}/${String(++shot).padStart(2, '0')}-${name}.jpg`;
+  await page.screenshot({ path, type: 'jpeg', quality: 80, timeout: 180_000 }); // swiftshader on a busy machine is slow
   console.log(`  📷 ${path}`);
 };
 /** Runs a function in the page with the game (`g`) and sim (`s`) in scope. */
@@ -35,12 +35,6 @@ const panel = () => page.evaluate(() => (document.querySelector('#ocPanel.open')
 const pressE = async () => {
   await page.keyboard.press('KeyE');
   await page.waitForTimeout(500);
-};
-const holdE = async () => {
-  await page.keyboard.down('KeyE');
-  await page.waitForTimeout(1100);
-  await page.keyboard.up('KeyE');
-  await page.waitForTimeout(400);
 };
 const closePanel = async () => {
   await page.keyboard.press('Escape');
@@ -81,7 +75,7 @@ const days = (n) =>
   );
 
 try {
-  await page.goto('http://localhost:4251/?slot=1&new=1', { waitUntil: 'commit' });
+  await page.goto('http://localhost:4254/?slot=1&new=1', { waitUntil: 'commit' });
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 900_000 });
   await page.waitForTimeout(2000);
   check(errors.length === 0, 'the game loads without errors');
@@ -97,7 +91,7 @@ try {
         for (let dz = -r; dz <= r; dz++) {
           if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
           const t = s.grid.get('g', bx + dx, bz + dz);
-          if (t && !t.blocked && !t.occupantId && t.feature !== 'water' && (t.level ?? 0) === level && !s.salvage.pileAt(bx + dx, bz + dz)) open.push([bx + dx, bz + dz]);
+          if (t && !t.blocked && !t.occupantId && t.feature !== 'water' && (t.level ?? 0) === level && ![[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([ex, ez]) => s.salvage.pileAt(bx + dx + ex, bz + dz + ez))) open.push([bx + dx, bz + dz]);
         }
     for (const [x, z] of open) {
       const t = s.grid.get('g', x, z);
@@ -106,8 +100,9 @@ try {
       s.grid.touch(t);
     }
     s.state.salvage.tier = 3;
-    s.state.salvage.keepers.moss = { step: 'request1' };
-    s.state.salvage.keepers.tock = { step: 'request1' };
+    // the Keepers whose crafting-table recipes the farm uses: Tide (planters, bird box), Moss (hive, fruit tree),
+    // Tock (digester), Fern (mushroom log)
+    for (const id of ['tide', 'moss', 'tock', 'fern']) s.state.salvage.keepers[id] = { step: 'request1' };
     s.state.salvage.recipes = ['wormBin', 'fishPond', 'butterflyGarden', 'batBox'];
     for (const [k, v] of Object.entries({ scrap: 40, timber: 40, seeds: 30, biomass: 10, clay: 20, gears: 10, food: 6, compost: 3 })) s.inventory.add(k, v);
     return { at: [bx, bz], open };
@@ -121,14 +116,18 @@ try {
   check(/Gather clippings/.test(await prompt()), `the prompt offers "Gather clippings" (${await prompt()})`);
   await snap('gather-prompt');
   const before = await game((g, s) => s.inventory.count('biomass'));
-  await holdE();
+  // held like a player holds it, until the hold completes (slow software-rendered frames stretch it; 8 s at most)
+  await page.keyboard.down('KeyE');
+  for (let k = 0; k < 16 && (await game((g, s) => s.inventory.count('biomass'))) === before; k++) await page.waitForTimeout(500);
+  await page.keyboard.up('KeyE');
+  await page.waitForTimeout(400);
   const after = await game((g, s) => s.inventory.count('biomass'));
   check(after > before, `holding Interact gathers biomass (${before} → ${after})`);
   await snap('gathered');
 
   // ── E23.5.2: a planter, planted with the real panel ──
   const placed = await game((g, s, spots) => {
-    for (const [k, v] of Object.entries({ biomass: 30, seeds: 10, timber: 20, scrap: 20, compost: 3 })) s.inventory.add(k, v);
+    for (const [k, v] of Object.entries({ biomass: 30, seeds: 10, planks: 40, scrap: 20, clay: 10, motor: 2, compost: 3 })) s.inventory.add(k, v);
     const want = ['planter', 'planter', 'compostBin', 'bioDigester', 'beehive', 'orchard', 'mushroomLog', 'birdBox', 'butterflyGarden', 'wormBin'];
     const got = {};
     let i = 2;
@@ -161,7 +160,7 @@ try {
   await snap('radish-flowering');
   // no water: it wilts and waits
   await game((g, s) => {
-    s.water = { isWatered: () => false };
+    s.water = { isWatered: () => false, isLow: () => false };
   });
   await page.waitForTimeout(4000); // the crop visuals re-check twice a game second; frames are slow under swiftshader
   const wilt = await game((g, s, id) => s.farm.look(s.machine(id)), p.id);
@@ -171,7 +170,11 @@ try {
     delete s.water;
   });
   await days(0.4);
-  check(/Harvest Radish/.test(await prompt()), `ripe: the prompt says "Harvest Radish" (${await prompt()})`);
+  // grow on until ripe (likes unmet slow it: half rate per unmet like), at most two more days
+  for (let k = 0; k < 8 && !(await game((g, s, id) => s.farm.look(s.machine(id)).ripe, p.id)); k++) await days(0.25);
+  const lk = await game((g, s, id) => s.farm.look(s.machine(id)), p.id);
+  await page.waitForTimeout(1500);
+  check(lk.ripe && /Harvest Radish/.test(await prompt()), `ripe: the prompt says "Harvest Radish" (${await prompt()}; progress ${lk.progress.toFixed(2)}, rate ${lk.rate.toFixed(2)})`);
   await snap('radish-ripe');
   const food0 = await game((g, s) => s.inventory.count('food'));
   await pressE();
@@ -184,8 +187,10 @@ try {
   await face(bin.x, bin.z);
   await pressE();
   check(/Compost bin/.test(await panel()), 'Interact opens the compost bin');
-  await page.locator('#ocPanel button[data-act=fill][data-arg=biomass]').click();
+  // food first (the bin holds 30 parts, and the backpack's biomass alone would fill it)
   await page.locator('#ocPanel button[data-act=fill][data-arg=food]').click();
+  await page.waitForTimeout(300);
+  await page.locator('#ocPanel button[data-act=fill][data-arg=biomass]').click();
   await page.waitForTimeout(300);
   await snap('compost-filled-panel');
   await closePanel();
@@ -234,7 +239,7 @@ try {
     await page.locator('#ocPanel button[data-act=inoculate]').click().catch(() => {});
     await closePanel();
     await game((g, s) => {
-      s.state.salvage.weather = { kind: 'mist', until: 1e9 };
+      s.weather.forceForTest('fog', 1e9);
     });
     await days(0.6);
     await snap('mushroom-log');
@@ -264,8 +269,7 @@ try {
           const t = s.grid.get('g', x, z);
           if (!t || t.blocked || t.occupantId || t.feature === 'water') continue;
           s.restoration.complete(t, 'pulse');
-          s.inventory.add('scrap', 6);
-          s.inventory.add('biomass', 4);
+          s.inventory.add('planks', 3); // the Planter box's table recipe
           const m = s.build.place('planter', 'g', x, z);
           if (m) return { id: m.id, x, z, keeper: s.farmExtras.gardenOf(m) };
         }
