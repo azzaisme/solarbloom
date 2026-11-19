@@ -368,7 +368,7 @@ export class Game {
       if (lines[stage]) this.hud.toast(lines[stage], 'gold', 4);
       this.vfx.ring(new pc.Vec3(8, 0.3, 8), PALETTE.gold, 6, 1.0);
     };
-    this.grid.streaming = this.city; // City 07 (#8): rooftop clusters stream with the view
+    this.grid.streaming = this.city; // City 07 (#8): the city's chunks stream with the view
     this.grid.build();
     this.machines = new MachineVisuals(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     // City 07 (#8): in the city, machine models stream with the view; a landmark streaming in takes its area's state.
