@@ -44,6 +44,7 @@ import { ChargeSystem } from './Charge';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
+import { FarmSystem } from './FarmSystem';
 import { Weather } from './Weather';
 
 /**
@@ -114,6 +115,8 @@ export class Sim {
   readonly weather: Weather;
   /** E23.5.1: gathering biomass from restored ground (old-city rules). */
   readonly gather: GatherSystem;
+  /** E23.5.2: planters and crops (old-city rules). */
+  readonly farm: FarmSystem;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -182,6 +185,7 @@ export class Sim {
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
     this.gather = new GatherSystem(this);
+    this.farm = new FarmSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
@@ -313,6 +317,7 @@ export class Sim {
     this.charge.tick(dt);
     this.clock.tick();
     this.weather.tick();
+    this.farm.tick(dt);
     this.cat.tick();
     this.progression.tick();
     this.fountain.tick();
