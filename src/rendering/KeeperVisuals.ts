@@ -1,8 +1,7 @@
 import * as pc from 'playcanvas';
 import { foldLegs, hipsAbove, SEAT_HIPS } from './SeatPose';
 import { GROUND } from '../core/GameState';
-import { canStep } from '../core/Height';
-import { inRect } from '../core/OldCityLayout';
+import { KEEPER_HELP } from '../data/keepers';
 import { KEEPERS, MODEL_NAMES, type KeeperDef } from '../data/oldcity';
 import type { Sim } from '../gameplay/Sim';
 import { MODELS, oldCityModel } from './Models';
@@ -27,11 +26,9 @@ interface KeeperView {
   standIn: boolean;
   /** the Keeper's prop (set down while it sits beside bloombot) */
   prop?: pc.Entity;
-  /** where it stands now (cells), and where it walks to when settled */
+  /** where it is drawn: the sim's pose (KeeperSystem.pose) */
   x: number;
   z: number;
-  to?: { x: number; z: number };
-  wait: number;
   facing: number;
   waveUntil: number;
   clip?: string;
@@ -83,7 +80,7 @@ export class KeeperVisuals {
     const body = new pc.Entity('body');
     root.addChild(body);
     this.root.addChild(root);
-    const v: KeeperView = { def, root, body, standIn: true, x: def.x + 0.5, z: def.z + 0.5, wait: 2, facing: Math.PI, waveUntil: 0 };
+    const v: KeeperView = { def, root, body, standIn: true, x: def.x + 0.5, z: def.z + 0.5, facing: Math.PI, waveUntil: 0 };
     const own = KEEPER_URLS[`../../assets/raw/models/final/keeper-${def.id}.glb`];
     v.standIn = !own;
     // in the map before loading: a model already in the cache calls back at once, before make() returns
@@ -152,27 +149,6 @@ export class KeeperVisuals {
     anim.baseLayer?.transition(want, 0.25);
   }
 
-  /** A settled Keeper's next step on restored ground of its own region (a slow random walk, never off a cliff). */
-  private nextStep(v: KeeperView): { x: number; z: number } | undefined {
-    const g = this.sim.grid;
-    const cx = Math.floor(v.x);
-    const cz = Math.floor(v.z);
-    const region = this.sim.keepers.region(v.def.id);
-    const opts: { x: number; z: number }[] = [];
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const x = cx + dx;
-      const z = cz + dz;
-      const t = g.peek(GROUND, x, z);
-      if (!t || t.blocked || t.occupantId || t.ground !== 'restored' || t.feature === 'water') continue;
-      if (Math.abs(x - v.def.x) + Math.abs(z - v.def.z) > 8) continue;
-      if (!inRect({ x: region.chunks.x0 * 16, z: region.chunks.z0 * 16, w: (region.chunks.x1 - region.chunks.x0 + 1) * 16, d: (region.chunks.z1 - region.chunks.z0 + 1) * 16 }, x, z)) continue;
-      if (!canStep(cx, cz, x, z)) continue;
-      opts.push({ x: x + 0.5, z: z + 0.5 });
-    }
-    if (!opts.length) return undefined;
-    return opts[Math.floor((Math.sin(this.clock * 12.9898 + v.def.x * 78.233) * 0.5 + 0.5) * opts.length) % opts.length];
-  }
-
   /** Per frame. `night`: settled Keepers doze (E21.20's day and night tells the game when). */
   update(dt: number, night = false) {
     this.clock += dt;
@@ -199,35 +175,21 @@ export class KeeperVisuals {
         v.body.setLocalEulerAngles(0, 0, 0);
         v.body.setLocalPosition(0, dozing && !v.standIn ? SEAT.height : 0, 0);
         const waving = this.clock < v.waveUntil && !this.reducedMotion;
-        if (step === 'settled' && !waving) {
-          if (night) this.play(v, 'sleep');
-          else {
-            // wander
-            if (!v.to) {
-              v.wait -= dt;
-              if (v.wait <= 0) {
-                v.to = this.nextStep(v);
-                v.wait = 1.5 + (Math.sin(this.clock + def.z) * 0.5 + 0.5) * 3;
-              }
-              this.play(v, 'idle');
-            } else {
-              const dx = v.to.x - v.x;
-              const dz = v.to.z - v.z;
-              const d = Math.hypot(dx, dz);
-              const sp = 0.7 * dt;
-              if (d <= sp) {
-                v.x = v.to.x;
-                v.z = v.to.z;
-                v.to = undefined;
-              } else {
-                v.x += (dx / d) * sp;
-                v.z += (dz / d) * sp;
-                v.facing = Math.atan2(dx, dz);
-              }
-              this.play(v, 'walk');
-            }
-          }
-        } else this.play(v, waving ? 'wave' : 'idle', waving ? 'interact' : 'idle');
+        // E23.9.2: where it is and what it is doing come from the sim (KeeperSystem.pose: it wanders its region,
+        // walks home when bloombot is near, walks to a tile and works it), so it is talked to where it is drawn
+        const p = k.pose(def.id);
+        v.x = p.x;
+        v.z = p.z;
+        v.facing = p.facing;
+        if (!waving && !(step === 'settled' && night)) {
+          if (p.doing === 'walk') this.play(v, 'walk');
+          else if (p.doing === 'tend') {
+            // tending: leaning over its tile, working the soil (a bob on top of whatever clip it has)
+            this.play(v, 'interact', 'idle');
+            if (!this.reducedMotion) v.body.setLocalEulerAngles(KEEPER_HELP.tendLean + Math.sin(this.clock * 6) * KEEPER_HELP.tendBob, 0, 0);
+          } else this.play(v, 'idle');
+        } else if (step === 'settled' && night && !waving) this.play(v, 'sleep');
+        else this.play(v, waving ? 'wave' : 'idle', waving ? 'interact' : 'idle');
       }
       const b = this.beside?.id === def.id ? this.beside : undefined;
       if (b) {
