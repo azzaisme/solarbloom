@@ -61,7 +61,7 @@ class Flat {
  *   water flows (away from the pumps, plants and reservoirs that feed it);
  * - a level gauge standing in every pond, canal, reservoir and desalination tank near bloombot (dark frame, aqua as
  *   high as it is full);
- * - a red ring round every planter that is dry (E23.5's planters; none until they land).
+ * - a red ring round every planter that is dry (E23.5.2's planters: no water in reach).
  * Rebuilt a few times a second while it is on; nothing while it is off.
  */
 export class WaterOverlay {
@@ -99,6 +99,14 @@ export class WaterOverlay {
     if (this.acc < VIEW.every) return;
     this.acc = 0;
     this.build(at);
+  }
+
+  /** Planters with no water in reach (a pond, a canal or a running pipe): the view rings them red. */
+  static dryPlanters(sim: Sim): MachineData[] {
+    return sim.machinesOfType('planter').filter((m) => {
+      const t = sim.grid.peek(m.roofId, m.x, m.z);
+      return !!t && !sim.water.isWatered(t);
+    });
   }
 
   private clear() {
@@ -156,10 +164,8 @@ export class WaterOverlay {
       frame.box(spot.x, base, spot.z, VIEW.gaugeW + 0.06, VIEW.gaugeH + 0.06);
       if (lv > 0.005) fill.box(spot.x, base + 0.03, spot.z, VIEW.gaugeW + 0.08, (VIEW.gaugeH - 0.02) * lv);
     }
-    // dry planters (E23.5)
-    for (const m of this.sim.machinesOfType('planter' as MachineData['type'])) {
-      const t = this.sim.grid.peek(m.roofId, m.x, m.z);
-      if (!t || w.isWatered(t)) continue;
+    // dry planters (E23.5.2)
+    for (const m of WaterOverlay.dryPlanters(this.sim)) {
       const c = m.size / 2;
       warn.ring(m.x + c, this.y(m.x, m.z) - VIEW.lift + 0.06, m.z + c, VIEW.ring * m.size, 0.08);
     }

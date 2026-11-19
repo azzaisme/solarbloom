@@ -5,12 +5,13 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData, MachineType } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
 import { tankId } from '../src/gameplay/WaterPipes';
+import { WaterOverlay } from '../src/rendering/WaterOverlay';
 
 function park() {
   const sim = new Sim(createInitialState(7, 'oldcity'));
   sim.areas.clear(PARK, true);
   sim.state.salvage!.keepers.sluice = { step: 'request1' };
-  sim.state.salvage!.pack = { pipe: 40 }; // crafted Pipes (E23.6.1), one a tile
+  sim.state.salvage!.pack = { pipe: 60 }; // crafted Pipes (E23.6.1), one a tile
   for (let z = 0; z < 16; z++)
     for (let x = 0; x < 16; x++) {
       const t = sim.grid.get(GROUND, x, z)!;
@@ -58,6 +59,24 @@ describe('E23.4.5: the Water view', () => {
     expect(f2.get('6,4')).toBeUndefined();
   });
 
+  it('rings a dry planter red: none by the pond or beside a running pipe', () => {
+    const sim = park();
+    const byPond = put(sim, 'planter', 6, 12); // beside the park's pond
+    const far = put(sim, 'planter', 12, 11); // 8 tiles east of the pond: nothing in reach
+    expect(WaterOverlay.dryPlanters(sim)).toEqual([far]);
+    // a pump on the pond and a line out to the far planter: watered now
+    put(sim, 'pump', 4, 11);
+    put(sim, 'solar', 5, 10);
+    for (let x = 5; x <= 11; x++) expect(sim.water.pipes.lay(GROUND, x, 11), `pipe at ${x},11`).toBe(true);
+    for (let i = 0; i < 3; i++) {
+      sim.power.tick(1);
+      sim.water.tick(1);
+    }
+    expect(sim.water.pipes.carries(11, 11)).toBe(true);
+    expect(WaterOverlay.dryPlanters(sim)).toEqual([]);
+    expect(byPond).toBeDefined();
+  });
+
   it('is toggled in build mode on keyboard (V) and pad (d-pad left), clashing with nothing', () => {
     for (const oldCity of [false, true]) {
       expect(defaultKeys(oldCity).waterOverlay).toEqual(['KeyV']);
@@ -66,7 +85,8 @@ describe('E23.4.5: the Water view', () => {
       expect(b.conflicts()).toEqual([]);
       expect(b.actionForButton(14, ['build', 'world', 'any'])).toBe('waterOverlay');
       expect(b.actionForCode('KeyV', ['build', 'world', 'any'])).toBe('waterOverlay');
-      expect(b.actionForCode('KeyV', ['world', 'any'])).toBeUndefined(); // walking: V does nothing
+      // walking, V is the pulse's own (E23.2.2 loads the next seed): the Water view never takes it there
+      expect(b.actionForCode('KeyV', ['world', 'any'])).not.toBe('waterOverlay');
     }
   });
 });

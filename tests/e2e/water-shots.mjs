@@ -194,11 +194,15 @@ try {
   });
   check(grav.r && grav.laid, `terrace reservoir built and pipe laid down the stairs (${JSON.stringify(grav)})`);
   await page.waitForFunction(() => window.solarbloom.sim.water.pipes.carries(27, -18), null, { timeout: 120000 });
-  await settle(4000);
+  // waking Mast Row's landmark plays its camera cinematic: wait for the camera to come back to bloombot
+  await page.waitForFunction(() => !window.solarbloom.cinematic, null, { timeout: 240000 });
+  await run(() => window.solarbloom.bot.teleport('g', 26.5, -22.6));
+  await settle(5000);
   check(await run(() => window.solarbloom.sim.water.isWatered(window.solarbloom.sim.grid.get('g', 28, -17))), 'the street below the terrace is fed by gravity');
   await shot('5-gravity-tank');
-  await run(() => window.solarbloom.bot.teleport('g', 28.5, -17.5));
-  await settle(3000);
+  // beside the pipe where it runs down the stairs (it sits 10 cm over each tread on small sticks)
+  await run(() => window.solarbloom.bot.teleport('g', 28.6, -19.2));
+  await settle(4000);
   await shot('5-gravity-stairs');
 
   // 6: a desalination plant on the Landing's shore
@@ -259,9 +263,15 @@ try {
     await press(14);
     await page.waitForTimeout(500);
     check(await run(() => window.solarbloom.waterView), 'd-pad left turns it back on (pad)');
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(600);
-    check(!(await run(() => window.solarbloom.waterOverlay.visible)), 'out of build mode the Water view is hidden');
+    // Esc closes the build tray first, then puts the Pipe tool away (out of build mode)
+    for (let i = 0; i < 3 && (await run(() => window.solarbloom.hud.currentTool)) !== 'pulse'; i++) {
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(600);
+    }
+    check((await run(() => window.solarbloom.hud.currentTool)) === 'pulse', 'Esc leaves build mode');
+    // the view follows on the next drawn frame (headless frames are slow): wait for it, up to 10 s
+    const hidden = await page.waitForFunction(() => !window.solarbloom.waterOverlay.visible, null, { timeout: 10000 }).then(() => true, () => false);
+    check(hidden, 'out of build mode the Water view is hidden');
     // the view over the terrace's gravity line and tank
     await run(() => window.solarbloom.bot.teleport('g', 26.5, -22.6));
     await settle(3000);
