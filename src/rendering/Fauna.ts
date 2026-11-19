@@ -397,7 +397,7 @@ export class Fauna {
     // the lighting epic's bloom picks them up; scene light and grading are left to that epic.
     const flies: { key: string; home: { x: number; z: number }; y: number }[] = [];
     if (opts.fireflies && !opts.reducedMotion) {
-      const lush = tilesIn(s, rect, (t) => t.ground === 'restored' && s.water.bloomShown(t) >= 3 && t.feature !== 'water', 160) // E23.4.4: faded by low water.sort(near);
+      const lush = tilesIn(s, rect, (t) => t.ground === 'restored' && s.water.bloomShown(t) >= 3 && t.feature !== 'water', 160).sort(near); // E23.4.4: faded by low water
       for (let i = 0; i < lush.length; i += 4) flies.push({ key: `f:${lush[i].x}:${lush[i].z}`, home: { x: lush[i].x + 0.5, z: lush[i].z + 0.5 }, y: y + 0.35 });
     }
     this.assign('fireflies', flies, opts);
