@@ -30,7 +30,7 @@ const QUICK = [
   // E23.4: the water network
   'water-levels',
   // E23.5: the farm
-  'farm-items',
+  'farm-items', 'farm-planters',
   // E23.10: the proof
   'e23-gentle-failure',
 ].map((name) => `tests/${name}.test.ts`);
