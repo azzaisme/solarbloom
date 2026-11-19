@@ -13,7 +13,7 @@ SaveService.clock = () => 0;
 const saver = new SaveService(undefined);
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const oldSim = (seed = 7) => {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   sim.bot = NEAR;
   return sim;
 };
@@ -109,8 +109,6 @@ describe('E21.6: the fountain', () => {
     expect(sim.state.progression.coreActivated).toBe(true);
     expect(sim.areas.fog(PARK)).toBe('cleared');
     for (const id of ['mastRow', 'oldMarket', 'elderGrove']) expect(sim.areas.sealed(id), id).toBe(true);
-    // the classic fountain never runs in the Old City
-    expect(sim.progression.coreReady()).toBe(false);
   });
 
   it('tier 1 can be reached in a new game using only what the park holds', () => {

@@ -10,7 +10,7 @@ import type { Sim } from './Sim';
 
 /**
  * What the farm borrows from other sub-epics, each optional until it lands: watering from E23.4 (`sim.water`) and
- * the weather from E23.7.2 (`sim.weather`; classic games have calm sunny days).
+ * the weather from E23.7.2 (`sim.weather`).
  * Without water every planter is watered. Day and night come from E23.7.1's game clock (`sim.clock`).
  */
 type At = { roofId: string; x: number; z: number };

@@ -172,7 +172,6 @@ export class OldCityController {
    * nothing else).
    */
   interact(front: { x: number; z: number }, occupant?: MachineData): boolean {
-    if (!this.sim.oldCity) return false;
     const onGround = this.host.bot.pose.roofId === GROUND;
     const pile = onGround ? this.sim.salvage.pileAt(front.x, front.z) : undefined;
     if (pile) {
@@ -258,7 +257,7 @@ export class OldCityController {
    * does nothing else).
    */
   pulse(front: { x: number; z: number }): boolean {
-    if (!this.sim.oldCity || this.host.bot.pose.roofId !== GROUND) return false;
+    if (this.host.bot.pose.roofId !== GROUND) return false;
     const keeper = this.sim.keepers.at(front.x, front.z);
     if (!keeper || !this.sim.keepers.visible(keeper.id)) return false;
     if (!this.sim.keepers.pulse(keeper.id)) this.sim.keepers.interact(keeper.id);
@@ -315,10 +314,10 @@ export class OldCityController {
   }
 
   /**
-   * A click on a tile under old-city rules: a pile walks bloombot there and salvages it. True when handled.
+   * A click on a tile: a pile walks bloombot there and salvages it. True when handled.
    */
   click(tile: { roofId: string; x: number; z: number }): boolean {
-    if (!this.sim.oldCity || tile.roofId !== GROUND) return false;
+    if (tile.roofId !== GROUND) return false;
     const pile = this.sim.salvage.pileAt(tile.x, tile.z);
     if (!pile) return false;
     const b = this.host.bot;

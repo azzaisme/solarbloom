@@ -40,18 +40,29 @@ export interface OldCityBotReport {
    * spent at zero, and seconds stranded (at zero and unable to walk: must stay 0).
    */
   charge?: { min: number; atZero: number; stranded: number };
+  /** the game as the bot left it */
+  sim: Sim;
+}
+
+export interface OldCityBotOptions {
+  /** called once on the new game before the bot plays (e.g. to switch a sim mode on) */
+  setup?: (sim: Sim) => void;
+  /** called once per simulated second, after that second's ticks (measurements, or what the HUD does each second) */
+  onSecond?: (sim: Sim) => void;
 }
 
 const ACT = { salvage: SALVAGE.holdSeconds + 0.5, pulse: 0.7, interact: 0.6, build: 1.2, pry: SALVAGE.pryHoldSeconds + 0.4, think: 0.4 };
 
-export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'keeper' = 'keeper'): OldCityBotReport {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'keeper' = 'keeper', opts: OldCityBotOptions = {}): OldCityBotReport {
+  const sim = new Sim(createInitialState(seed));
+  opts.setup?.(sim);
   const w = new Walker(sim);
   const pose: BotPose = spawnPose(sim, w);
   const firsts: Record<string, number> = {};
   const hints: string[] = [];
   const steps: number[] = [];
   let walked = 0;
+  let lastSecond = 0;
   let idle = 0;
   let longestIdle = 0;
   /** E23.2.1: times bloombot ran out of charge and walked home to rest */
@@ -72,6 +83,10 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
     for (let i = 0; i < n; i++) {
       sim.tick();
       record();
+      if (opts.onSecond && Math.floor(sim.time) > lastSecond) {
+        lastSecond = Math.floor(sim.time);
+        opts.onSecond(sim);
+      }
       if (charge) {
         const c = chargeNow() ?? 0;
         charge.min = Math.min(charge.min, c);
@@ -227,7 +242,7 @@ export function runOldCityBot(seed: number, maxMinutes = 20, until: 'tier1' | 'k
   record();
   const solar = sim.state.machines.find((m) => m.type === 'solar' && !m.starter);
   const grid = sim.power ? { onNetwork: !!solar && !!sim.power.networkOf(solar), supply: (solar && sim.power.networkOf(solar)?.supply) || 0 } : undefined;
-  return { seed, firsts, hints, steps, longestIdle, walked, time: sim.time, charge, grid, restedAtHome };
+  return { seed, firsts, hints, steps, longestIdle, walked, time: sim.time, charge, grid, restedAtHome, sim };
 
   function affordableNear(): boolean {
     return !!nearestPulse();

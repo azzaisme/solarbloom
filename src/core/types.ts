@@ -1,5 +1,5 @@
 export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
-/** `chest` exists only under old-city rules (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
+/** `chest`: the Old City's caches (E21.1). (E21.2's `reclaimer` was dropped in E23.7.4.) */
 export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger'
   // E23.5.2: the farm
   | 'planter';
@@ -108,7 +108,7 @@ export interface LayerData {
   origin: [number, number, number];
   unlocked: boolean;
   preview: boolean; // visible but not yet playable
-  /** Ground generation version: 2 adds buildings, 3 rooftop clusters. Saves keep the version they began with. */
+  /** Ground generation version: 4 the city generator's ground, 5 the Old City (every game since E23.1.1). */
   gen?: number;
   /** City 12.1: a generated rooftop uses this template's layout and look ('seed', 'reservoir' or 'canopy'). */
   template?: string;
@@ -306,7 +306,7 @@ export interface AreaState {
    * the area behaves exactly as hidden fog (nothing can be walked, restored or built). Absent on older saves.
    */
   sealed?: boolean;
-  /** E21.9: tiles in this area bloombot restored itself (old-city rules: helpers wait until it has done its share) */
+  /** E21.9: tiles in this area bloombot restored itself (helpers wait until it has done its share) */
   byBot?: number;
   /** sim time the player unlocked it */
   unlockedAt?: number;
@@ -319,14 +319,6 @@ export interface LinkState {
   readyAt: number;
   crossings: number;
 }
-
-/**
- * E21 (#312): which rules a game plays by. 'oldcity' is the Old City (docs/E21_OLD_CITY.md): a fixed map of nine
- * regions, materials salvaged by hand, fountain tiers. 'classic' is the endless idle city every game before E21
- * played. A save without the field is classic (the field is never written for classic, so those saves stay
- * byte-identical).
- */
-export type Rules = 'oldcity' | 'classic';
 
 /** E21 §1: the eight materials. */
 /** E23.5.1: biomass, food, compost and fertiliser are backpack items too (data/farm). */
@@ -349,7 +341,7 @@ export interface KeeperState {
 }
 
 /**
- * E21: everything the Old City adds to a save. Present only under old-city rules; each part belongs to its own
+ * E21: everything the Old City adds to a save. Each part belongs to its own
  * ticket (E21.1 pack and store, E21.2 piles, E21.5 opened gates, E21.6 tier, E21.8 keepers, …).
  */
 export interface SalvageState {
@@ -434,10 +426,8 @@ export interface PlanterState {
 
 export interface GameState {
   version: number;
-  /** E21: the rule set (absent = classic). Read it through `rulesOf`. */
-  rules?: Rules;
-  /** E21: Old City state (old-city rules only). */
-  salvage?: SalvageState;
+  /** E21: the Old City's own state (E23.1.1: every game has it: one rule set). */
+  salvage: SalvageState;
   seed: number;
   rngState: number;
   time: number;
@@ -465,8 +455,6 @@ export interface GameState {
   stats: Stats;
   /** Phase 4 E01: wall-clock time (ms since 1970) this state was last saved. */
   savedAt?: number;
-  /** City 10.7: district blooms claimed, by district id (sim time). Optional: older saves have none. */
-  districts?: Record<string, number>;
   /** Phase 5 E16: fauna that has arrived, by kind (sim time). Cosmetic; optional, so no save version change. */
   fauna?: Partial<Record<'butterflies' | 'birds' | 'koi' | 'robots', number>>;
   /**
@@ -494,7 +482,7 @@ export interface GameState {
     /** E23.3.5: set once lights placed before night lighting have been carried over (see Lights.carryOver) */
     lights?: number;
   };
-  /** E23.2.1: bloombot's charge (old-city rules; absent = full). Optional, so no save version change. */
+  /** E23.2.1: bloombot's charge (absent = full). Optional, so no save version change. */
   charge?: ChargeState;
   /** E23.7.1: the game-day clock (optional: a save without it starts on day 1's morning, in the game's own day) */
   clock?: ClockState;

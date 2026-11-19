@@ -67,8 +67,7 @@ const byId = (a: PowerNode, b: PowerNode) => idNum(a) - idNum(b) || (a.id < b.id
 const KEEP_ORDER = [...SHED_ORDER].reverse(); // served first = shed last
 
 /**
- * E23.3.1: the power grid (`sim.power`). Machines join networks through poles in range (flood fill, like
- * `CanalNetwork`), or by touching. Each tick a network sums its supply, serves its consumers from the most
+ * E23.3.1: the power grid (`sim.power`). Machines join networks through poles in range (flood fill), or by touching. Each tick a network sums its supply, serves its consumers from the most
  * important (chargers) to the least (lamps), covers any deficit from its batteries and stores any surplus.
  * When short, consumers go dark one at a time in shed order and come back by themselves. Deterministic and
  * headless; networks are cached until a machine is built or removed (or `invalidate()` is called).
@@ -100,11 +99,9 @@ export class PowerGrid {
     this.register('solar', { source: (m, s, sky) => POWER.solar.output * sky.solar * regionBoost(s, m) * (1 + (s.research?.effect('solarYield') ?? 0)) });
     this.register('battery', { battery: { capacity: POWER.battery.capacity, rate: POWER.battery.rate } });
     this.register('windTurbine', { source: (m, s, sky) => windOutput(s, m, sky) });
-    // E23.3.3: helpers run on the grid (old-city rules only; the classic game keeps its energy economy).
-    if (sim.oldCity) {
-      this.register('droneHub', { consumer: { shed: 'helper', draw: POWER.helper.droneHub } });
-      this.register('cultivator', { consumer: { shed: 'helper', draw: POWER.helper.cultivator } });
-    }
+    // E23.3.3: helpers run on the grid.
+    this.register('droneHub', { consumer: { shed: 'helper', draw: POWER.helper.droneHub } });
+    this.register('cultivator', { consumer: { shed: 'helper', draw: POWER.helper.cultivator } });
   }
 
   private providers: (() => readonly PowerNode[])[] = [];

@@ -53,12 +53,12 @@ export interface RooftopPlan {
   core: [number, number];
 }
 
-/** Generations that change the area layout: 2, 3 (rooftop clusters), 4 (roads: landmarks clear of arterials), 5 (E21: the Old City). */
-export const genKey = (gen: number) => (gen >= 5 ? 5 : gen >= 4 ? 4 : gen >= 3 ? 3 : 2);
+/** Generations with their own area layout: 4 (the city generator: roads, landmarks clear of arterials) and 5 (E21: the Old City). */
+export const genKey = (gen: number) => (gen >= 5 ? 5 : 4); // E23.1.1: generations 2–3 went with the old saves
 
 /** Shared map per seed and ground generation (generation and the area system use the same cache). */
 const MAPS = new Map<string, AreaMap>();
-export function areaMapFor(seed: number, gen = 2): AreaMap {
+export function areaMapFor(seed: number, gen = 4): AreaMap {
   const key = `${seed}|${genKey(gen)}`;
   let m = MAPS.get(key);
   if (!m) {
@@ -97,8 +97,8 @@ export class AreaMap {
 
   constructor(
     readonly seed: number,
-    /** ground generation version: 3 places rooftop clusters */
-    readonly gen = 2,
+    /** ground generation version (4: the city generator; the Old City has its own map) */
+    readonly gen = 4,
   ) {}
 
   /**
@@ -112,7 +112,7 @@ export class AreaMap {
     const hit = this.byChunk.get(key);
     if (hit) return hit;
     const raw = this.rawArea(cx, cz);
-    const id = this.gen >= 4 ? (this.pieces(raw).adopt.get(key) ?? raw) : raw;
+    const id = this.pieces(raw).adopt.get(key) ?? raw;
     this.byChunk.set(key, id);
     return id;
   }
@@ -220,7 +220,7 @@ export class AreaMap {
       const sz = Number(szs);
       chunks = [];
       // A seed's chunks lie within its own super-cell's neighbourhood (plus one chunk for adopted pieces, gen 4).
-      const m = this.gen >= 4 ? 1 : 0;
+      const m = 1;
       for (let cz = (sz - 1) * SUPER - m; cz < (sz + 2) * SUPER + m; cz++)
         for (let cx = (sx - 1) * SUPER - m; cx < (sx + 2) * SUPER + m; cx++) if (this.areaOfChunk(cx, cz) === id) chunks.push([cx, cz]);
     }
@@ -236,14 +236,14 @@ export class AreaMap {
     const [lcx, lcz] = chunks.reduce((b, c) => ((c[0] + 0.5 - mx) ** 2 + (c[1] + 0.5 - mz) ** 2 < (b[0] + 0.5 - mx) ** 2 + (b[1] + 0.5 - mz) ** 2 ? c : b), chunks[0] ?? [0, 0]);
     const off = id === PARK ? [7, 7] : [5 + Math.floor(tileRandom(this.seed, salt, lcx, lcz, 31) * 5), 5 + Math.floor(tileRandom(this.seed, salt, lcx, lcz, 32) * 5)];
     // Generation 4: keep the landmark and its clearance off any arterial crossing its chunk.
-    if (this.gen >= 4 && id !== PARK) this.clearOfArterials(lcx, lcz, off);
+    if (id !== PARK) this.clearOfArterials(lcx, lcz, off);
     const distance = Math.round(Math.hypot(mx - 0.5, mz - 0.5));
     const theme = this.theme(lcx, lcz);
     let type = this.typeOf(id, [...nb].sort(), theme);
     const authored = this.authoredLandmark(id, distance);
-    // Generation 3: a few streets, plazas and markets carry a rooftop cluster instead.
+    // A few streets, plazas and markets carry a rooftop instead.
     const RT = CITY_GEN.rooftops;
-    if (this.gen >= 3 && !authored && distance >= RT.minDistance && RT.from.includes(type) && tileRandom(this.seed, salt, hashString(id), 0, 71) < RT.chance && (this.gen < 4 || this.roofClear(id, lcx, lcz, off))) {
+    if (!authored && distance >= RT.minDistance && RT.from.includes(type) && tileRandom(this.seed, salt, hashString(id), 0, 71) < RT.chance && this.roofClear(id, lcx, lcz, off)) {
       type = 'rooftops';
       // The roof must fit inside the landmark's chunk: nudge the landmark so its Core can stand over it.
       const t = ROOF_TEMPLATES[this.templateOf(id)];

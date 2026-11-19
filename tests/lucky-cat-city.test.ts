@@ -4,19 +4,26 @@ import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND, isRestorable } from '../src/core/GameState';
 import { TUNING } from '../src/data/tuning';
+import { AREA_TYPES } from '../src/data/city';
 import type { MachineData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
+import { openNextGoal } from './helpers';
 
 type Applier = { apply(t: string, mult: number, hidden: number): string };
 const saver = new SaveService(undefined);
 
-/** The fountain is awake and `n` areas are cleared (directly, like a very fast player). */
+/**
+ * The fountain is awake and `n` areas besides the park are restored and cleared (directly, like a very fast player),
+ * through the gates and on to the mainland as a player would. Every one of the `n` really is restored.
+ */
 function grownCity(seed: number, n: number) {
   const sim = new Sim(createInitialState(seed));
   sim.state.progression.coreActivated = true;
   sim.areas.clear(PARK, true);
-  for (let i = 0; i < n; i++) {
-    const id = sim.areas.nextGoal()!;
+  const grown: string[] = [];
+  while (grown.length < n) {
+    const id = openNextGoal(sim);
+    if (!id) break; // nothing left anywhere (the caller's assertion says so)
     for (const t of sim.areas.tiles(id)) {
       if (!isRestorable(t, sim.state.machines) || t.ground === 'restored') continue;
       t.ground = 'restored';
@@ -24,8 +31,10 @@ function grownCity(seed: number, n: number) {
       t.pollution = 0;
       sim.grid.touch(t);
     }
-    sim.areas.clear(id);
+    if (!sim.areas.clear(id, true)) throw new Error(`area ${id} would not clear`);
+    grown.push(id);
   }
+  expect(grown.length, 'areas grown').toBe(n);
   return sim;
 }
 
@@ -211,8 +220,13 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     expect(new Sim(createInitialState(22)).cat.goldenCorridorTiles()).toBe(TUNING.cat.goldenCorridorTiles);
   });
 
-  it('the discovery log groups finds by area type and stays short in a huge city', { timeout: 120000 }, () => {
+  // ~50 s alone (500 restored areas, 300 claims, Mega Blooms among them); over 200 s while the full suite runs in
+  // parallel on a shared machine, so the timeout stays generous
+  it('the discovery log groups finds by area type and stays short in a huge city', { timeout: 400000 }, () => {
     const sim = grownCity(23, 500);
+    // really 500 restored areas besides the park (through the gates and onto the mainland)
+    const restored = sim.areas.revealed().filter((id) => id !== PARK && sim.areas.fog(id) === 'cleared' && sim.areas.counts(id).restored > 0);
+    expect(restored.length).toBeGreaterThanOrEqual(500);
     sim.state.cat.found = 1;
     for (let i = 0; i < 300; i++) {
       sim.state.cat.active = undefined;
@@ -221,7 +235,8 @@ describe('Lucky Cat in the endless city (City 13)', () => {
     }
     const d = sim.cat.discoveries();
     expect(d.anchors).toEqual([]);
-    expect(d.byType.length).toBeLessThanOrEqual(8); // one line per area type, however many areas
+    expect(d.byType.length).toBeLessThanOrEqual(Object.keys(AREA_TYPES).length); // one line per area type (ten since the Old City's beach and downtown), however many areas
+    expect(new Set(d.byType.map((t) => t.type)).size).toBe(d.byType.length);
     expect(d.byType.reduce((a, t) => a + t.cats, 0)).toBe(300);
     expect(d.byType.filter((t) => t.cats > 0).length).toBeGreaterThan(3);
     for (const t of d.byType) expect(t.kinds).toBeLessThanOrEqual(t.totalKinds);

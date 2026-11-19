@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { big } from '../src/core/Big';
-import { formatCost } from '../src/core/Economy';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { BuildableType, GroundState } from '../src/core/types';
-import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE } from '../src/data/machines';
+import { BUILDABLE, MACHINES } from '../src/data/machines';
 import { TIERS } from '../src/data/salvage';
 import { MACHINE_RECIPES } from '../src/data/crafting';
 import { KEEPERS } from '../src/data/oldcity';
@@ -11,7 +10,7 @@ import { Sim } from '../src/gameplay/Sim';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const oldSim = (tier = 4) => {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = tier;
   sim.bot = NEAR;
   return sim;
@@ -115,15 +114,8 @@ describe('E21.3: recipes', () => {
   });
 
   it('E23.7.4: the Reclaimer is gone: not in the build list, no recipe, no tier gives it', () => {
-    expect(OLD_CITY_BUILDABLE as string[]).not.toContain('reclaimer');
+    expect(BUILDABLE as string[]).not.toContain('reclaimer');
     expect(MACHINE_RECIPES.map((r) => r.id)).not.toContain('reclaimer');
     expect(TIERS.flatMap((t) => t.gives).join(' ')).not.toMatch(/Reclaimer/);
-  });
-
-  it('classic costs are untouched', () => {
-    const classic = new Sim(createInitialState(7));
-    expect(classic.build.costLabel('solar')).toBe(formatCost(classic.build.cost('solar')));
-    expect(classic.build.isUnlocked('chest')).toBe(false);
-    expect(classic.build.cost('droneHub')).toEqual({ biomass: big(80), energy: big(30) });
   });
 });

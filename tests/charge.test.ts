@@ -9,7 +9,7 @@ import { Sim } from '../src/gameplay/Sim';
 import { BOT, spawnPose, Walker } from '../src/gameplay/Walker';
 
 SaveService.clock = () => 0;
-const oldSim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
+const oldSim = (seed = 7) => new Sim(createInitialState(seed));
 /** A dead park tile bloombot can pulse (energy and water topped up so only the charge decides). */
 const pulseable = (sim: Sim, n = 1): TileData[] => {
   sim.econ.add('energy', 1e6);
@@ -24,13 +24,13 @@ const pulseable = (sim: Sim, n = 1): TileData[] => {
 };
 
 describe('E23.2.1: bloombot\'s charge', () => {
-  it('is off under classic rules: always full, nothing costs charge', () => {
+  it('every game has a charge: it starts full and a pulse costs some (E23.1.1: one rule set)', () => {
     const sim = new Sim(createInitialState(7));
-    expect(sim.charge.on).toBe(false);
-    expect(sim.charge.use('pulse')).toBe(true);
     expect(sim.charge.value()).toBe(CHARGE.max);
-    expect(sim.state.charge).toBeUndefined();
+    expect(sim.charge.use('pulse')).toBe(true);
+    expect(sim.charge.value()).toBeLessThan(CHARGE.max);
   });
+
 
   it('a full charge lasts about 10 minutes of active play (the data\'s profile)', () => {
     const sim = oldSim();

@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
-import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
 
 function rich(sim: Sim) {
@@ -42,7 +41,8 @@ describe('upgrade effects in the city (City 14.4; E23.1.5: granted, never bought
     const id = sim.areas.nextGoal()!;
     const before = sim.areas.need(id);
     expect(sim.upgrades.grant('fogLantern')).toBeGreaterThan(0);
-    expect(sim.areas.need(id)).toBe(Math.ceil(Math.min(sim.areas.counts(id).restorable * TUNING.city.clearShare, TUNING.city.clearCap * sim.areas.info(id).difficulty) * 0.9));
+    // E21.9 / E23.1.1: a region wakes at half its restorable tiles; a Lantern level takes 10% off that
+    expect(sim.areas.need(id)).toBe(Math.max(1, Math.ceil((sim.areas.counts(id).restorable / 2) * 0.9)));
     expect(sim.areas.need(id)).toBeLessThan(before);
   });
 });

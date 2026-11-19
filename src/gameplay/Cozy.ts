@@ -6,9 +6,9 @@ import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, KEEPSAKE_HINTS, PLOT_OPTION, pl
 import type { Sim } from './Sim';
 import type { DecorRecipe } from '../data/crafting';
 
-/** E23.6.1: a decoration's crafting recipe under old-city rules (made once at the table, then free to place). */
+/** E23.6.1: a decoration's crafting recipe (made once at the table, then free to place). */
 export function decorRecipe(sim: Sim, id: string): DecorRecipe | undefined {
-  return sim.oldCity ? sim.crafting.decor(id) : undefined;
+  return sim.crafting.decor(id);
 }
 
 /** Is a decoration open to place? Old-city decorations with a recipe once made at the table; the rest keep E19.2's. */

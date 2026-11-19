@@ -232,7 +232,7 @@ export function crops(sim: Sim): { id: string; crop: Obj }[] {
  * a few machines standing. Each probe's `bind` adds its own system's pieces (the power scene, ponds, planters).
  */
 export function homeScene(seed: number): Sim {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   const salvage = sim.state.salvage!;
   salvage.tier = 2;
   salvage.abilities.push('pry', 'hover');

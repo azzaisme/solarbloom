@@ -51,8 +51,8 @@ interface WeatherLike {
  * A source's region strength multiplier (E23.8.1): about 1.5× for a matching machine in its region (wind on
  * Saltwind more), from E23.8's `machineStrengthAt`. Old-city ground only.
  */
-export function regionBoost(sim: Sim, m: Pick<MachineData, 'roofId' | 'x' | 'z'> & { type: string }): number {
-  if (m.roofId !== GROUND || !sim.oldCity) return 1;
+export function regionBoost(_sim: Sim, m: Pick<MachineData, 'roofId' | 'x' | 'z'> & { type: string }): number {
+  if (m.roofId !== GROUND) return 1;
   return machineStrengthAt(m.type, m.x, m.z);
 }
 

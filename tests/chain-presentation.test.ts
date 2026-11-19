@@ -1,27 +1,13 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
-import type { MachineData } from '../src/core/types';
+import { CROSS, openIsland, streetCross } from './helpers';
 import { Sim } from '../src/gameplay/Sim';
 import { bloomVoice, ChainSummary, VfxBudget } from '../src/ui/ChainSummary';
 
+/** E23.1.1: the whole island open, with a cross of street corridors over it (see helpers' CROSS). */
 function bigChainCity() {
-  const sim = new Sim(createInitialState(11));
-  const st = sim.state;
-  st.caps.energy = big(1e7); st.caps.water = big(1e7);
-  st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
-  for (let cz = -8; cz <= 8; cz++) for (let cx = -8; cx <= 8; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
-  const garden = (x: number, z: number) => {
-    const t = sim.grid.get(GROUND, x, z)!;
-    t.blocked = false;
-    t.feature = 'paving';
-    const m: MachineData = { id: sim.newId('m'), type: 'pollinator', roofId: GROUND, x, z, size: 1, boostUntil: 0, timer: 0, charge: 0 };
-    st.machines.push(m);
-    sim.grid.indexMachine(m);
-    t.occupantId = m.id;
-  };
-  for (let x = -125; x <= 125; x += 5) garden(x, -40);
-  for (let z = -125; z <= 125; z += 5) if (z !== -40) garden(-100, z);
+  const sim = openIsland(new Sim(createInitialState(11)));
+  streetCross(sim);
   return sim;
 }
 
@@ -38,7 +24,7 @@ describe('readable huge chains (City 10.6)', () => {
     });
     let biggest = 0;
     sim.bus.on('chain.ended', ({ combo }) => (biggest = Math.max(biggest, combo)));
-    sim.restoration.complete(sim.grid.get(GROUND, -101, -40)!, 'pulse');
+    sim.restoration.complete(sim.grid.get(GROUND, CROSS.start[0], CROSS.start[1])!, 'pulse');
     let peak = 0;
     for (let i = 0; i < 600 && sim.chains.activeRuns > 0; i++) {
       sim.advance(0.1);
@@ -73,7 +59,7 @@ describe('readable huge chains (City 10.6)', () => {
       if (lastBloom) raw.push(Math.hypot(t.x - lastBloom[0], t.z - lastBloom[1]));
       lastBloom = [t.x, t.z];
     });
-    sim.restoration.complete(sim.grid.get(GROUND, -101, -40)!, 'pulse');
+    sim.restoration.complete(sim.grid.get(GROUND, CROSS.start[0], CROSS.start[1])!, 'pulse');
     for (let i = 0; i < 300 && sim.chains.activeRuns > 0; i++) {
       sim.advance(0.1);
       const tr = summary.biggest();
@@ -128,7 +114,7 @@ describe('the combo panel breakdown (Look 5.5)', () => {
       expect(last.sum).toBe(combo);
       checked++;
     });
-    sim.restoration.complete(sim.grid.get(GROUND, -101, -40)!, 'pulse');
+    sim.restoration.complete(sim.grid.get(GROUND, CROSS.start[0], CROSS.start[1])!, 'pulse');
     for (let i = 0; i < 600 && sim.chains.activeRuns > 0; i++) sim.advance(0.1);
     expect(checked).toBeGreaterThan(40);
     expect(last!.combo).toBeGreaterThan(40);

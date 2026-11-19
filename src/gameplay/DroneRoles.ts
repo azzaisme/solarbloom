@@ -92,9 +92,8 @@ export class DroneRoles {
         if (!s.state.progression.coreActivated && s.progression.fullBloomCount(HOME) < R.gardener.unlockFullBloom) return `Grow ${R.gardener.unlockFullBloom} tiles to full bloom first`;
         return undefined;
       case 'scout':
-        // First when an area next to the park is in fog; after that, while any revealed area still has fog
-        // (once its neighbours clear, the frontier moves out: the role must not lock again).
-        return s.areas.revealed().some((id) => id !== PARK && s.areas.fog(id) !== 'cleared') || this.anyOwns('scout') ? undefined : 'Wake the fountain to reveal the fog first';
+        // While any open area still has fog (Saltwind, from the start); once a hub owns it, it never locks again.
+        return s.areas.revealed().some((id) => id !== PARK && s.areas.fog(id) !== 'cleared') || this.anyOwns('scout') ? undefined : 'No fog to scout: open a gate to the next region first';
       case 'courier':
         return has('motherTree') || has('relay') ? undefined : 'Build a Mother Tree or a Bloom Relay first';
       case 'spark':
@@ -593,10 +592,18 @@ export class DroneRoles {
     const paid = collected * (1 - H.keep) * H.rate;
     this.harvest.collected += collected;
     if (paid > 0) {
-      const got = s.econ.add('biomass', paid);
-      this.harvest.paid += got.toNumber();
+      // E23.5.1 / E23.1.1: biomass is a gathered item, so the Harvester delivers whole units to the store at the shed
+      this.harvestOwed += paid;
+      const units = Math.floor(this.harvestOwed);
+      if (units > 0) {
+        this.harvestOwed -= units;
+        s.inventory.addToStore('biomass', units);
+        this.harvest.paid += units;
+      }
     }
   }
+  /** Biomass collected but not yet a whole unit. */
+  private harvestOwed = 0;
 
   /** Is a Harvester at work right now (a store full and losing income)? */
   harvesting(): boolean {

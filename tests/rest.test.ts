@@ -9,7 +9,7 @@ import { BOT_CLIPS, REST, seatLift } from '../src/data/rest';
 import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
-const oldSim = () => new Sim(createInitialState(7, 'oldcity'));
+const oldSim = () => new Sim(createInitialState(7));
 /** The park's old benches (generated props). */
 const parkBenches = (sim: Sim) => [[3, 6], [10, 6], [5, 9], [9, 10]].map(([x, z]) => sim.rest.benchAt(x, z)!);
 

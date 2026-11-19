@@ -18,7 +18,7 @@ export interface Objective {
 }
 
 /**
- * E21.8 / E21.12: the objective card under old-city rules. One request is pinned at a time: a Keeper's request
+ * E21.8 / E21.12: the objective card. One request is pinned at a time: a Keeper's request
  * (the first awake Keeper in map order), else the next fountain tier. The rest are listed in the backpack.
  */
 export function oldCityObjective(sim: Sim): Objective {
@@ -72,7 +72,7 @@ export function otherRequests(sim: Sim): string[] {
 /**
  * E21.12 (§16): the first fifteen minutes, as the hint line shows them (one step at a time, never skipped:
  * ProgressionSystem advances the step by one at most per tick). Actions are named through `keyFor` (bloombot's key
- * or pad button); no step speaks of clicks, taps, rates or upgrades.
+ * or pad button); no step speaks of clicks, taps, rates or upgrades. After the last step: the advisor (E23.1.5).
  */
 export const FIRST_STEPS = 9;
 
@@ -102,10 +102,9 @@ export function oldCityHint(sim: Sim, step: number, keyFor: (a: 'pulse' | 'inter
       const k = r ? sim.keepers.def(r.keeper) : undefined;
       return { text: k ? `A robot sleeps in ${r!.name}: pulse ${k.name}, then hand it 5 of anything` : 'A robot sleeps behind each barricade: wake one' };
     }
-    default: {
-      const p = sim.keepers.pinned();
-      return { text: p ? p.text : 'Explore, salvage and restore: the city is yours to bring back.' };
-    }
+    default:
+      // E23.1.5: after the first fifteen minutes the hint line carries the advisor's next step in the loop
+      return { text: sim.advisor.suggest().text };
   }
 }
 

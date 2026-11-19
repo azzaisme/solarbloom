@@ -13,7 +13,7 @@ import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
 const oldSim = (seed = 7) => {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   sim.econ.add('energy', 1e6);
   sim.econ.add('water', 1e6);
   return sim;
@@ -59,7 +59,7 @@ function watch(sim: Sim) {
 }
 
 describe('E23.2.2.1: the load wheel and its cost', () => {
-  it('turns through nothing, seeds, rare seed and fertiliser; classic rules have no load', () => {
+  it('turns through nothing, seeds, rare seed and fertiliser', () => {
     const sim = oldSim();
     expect(sim.pulseLoad.choice).toBe('none');
     const seen: string[] = [];
@@ -70,9 +70,6 @@ describe('E23.2.2.1: the load wheel and its cost', () => {
     expect(seen).toEqual(['seeds', 'rare', 'fertiliser', 'none']);
     sim.pulseLoad.step(-1);
     expect(sim.pulseLoad.choice).toBe('fertiliser');
-    const classic = new Sim(createInitialState(7));
-    classic.pulseLoad.choose('seeds');
-    expect(classic.pulseLoad.choice).toBe('none');
   });
 
   it('a pulse uses a little charge plus one unit of its load; when the load runs out it fires empty', () => {
@@ -105,7 +102,6 @@ describe('E23.2.2.1: the load wheel and its cost', () => {
     const saver = new SaveService(undefined);
     const back = new Sim(saver.deserialize(saver.serialize(sim.state))!);
     expect(back.pulseLoad.introDue()).toBe(false); // and not again after a reload
-    expect(new Sim(createInitialState(7)).pulseLoad.introDue()).toBe(false); // classic rules: no wheel
     expect(LOAD_WHEEL.introSeconds).toBeGreaterThan(LOAD_WHEEL.showSeconds);
   });
 });
@@ -318,10 +314,6 @@ describe('E23.2.2.3: buried seeds and salvage', () => {
     const saver = new SaveService(undefined);
     const back = new Sim(saver.deserialize(saver.serialize(sim.state))!);
     expect(back.buried.at(f.x, f.z)).toBeUndefined();
-  });
-
-  it('none under classic rules', () => {
-    expect(new Sim(createInitialState(7)).buried.near(8, 8, 40)).toEqual([]);
   });
 });
 

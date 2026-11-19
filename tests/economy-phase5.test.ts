@@ -4,18 +4,26 @@ import { createInitialState, GROUND } from '../src/core/GameState';
 import { PARK } from '../src/core/Areas';
 import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
+import { regionById } from '../src/core/OldCityLayout';
 import { fill, makeSim, PAD, rich } from './helpers';
 
 
 describe('Phase 5 E12: uncapped biomass', () => {
-  it('biomass passes 100 and keeps growing; a full energy store still caps', () => {
+  // E23.5.1 / E23.1.1: biomass is gathered into the backpack in stacks, so no store ever caps it (and the old
+  // counter no longer grows); a full energy store still caps
+  it('biomass is never capped by a store; a full energy store still caps', () => {
     const sim = new Sim(createInitialState(4));
     sim.state.resources.biomass = big(99);
     sim.econ.add('biomass', 1e6);
-    expect(toNum(sim.state.resources.biomass)).toBeCloseTo(1e6 + 99, 6);
+    expect(toNum(sim.state.resources.biomass)).toBe(99); // the counter is gone from play
+    expect(sim.econ.cap('biomass')).toBeUndefined();
+    expect(sim.econ.isFull('biomass')).toBe(false);
+    // a backpack stack has a limit, the store at the shed has none: past 100 and still growing
+    expect(sim.inventory.add('biomass', sim.inventory.stackLimit())).toBe(0);
+    sim.inventory.addToStore('biomass', 1e6);
+    expect(sim.inventory.stored('biomass')).toBe(1e6);
     sim.econ.add('energy', 1e6);
     expect(sim.econ.isFull('energy')).toBe(true);
-    expect(sim.econ.isFull('biomass')).toBe(false);
   });
 
   it('Seed Vault still grows energy and water, never biomass', () => {
@@ -85,6 +93,9 @@ describe('Phase 5 E12: smaller goals and no specialty stall', () => {
     }
     const c = sim.areas.counts(id);
     expect(c.restored).toBe(c.restorable);
+    // E21.9: and once its Keeper asks for the landmark (no material or specialty stall on top)
+    expect(sim.areas.ready(id)).toBe(false);
+    sim.state.salvage.keepers[regionById(id)!.keeper] = { step: 'landmark' };
     expect(sim.areas.ready(id)).toBe(true);
     void GROUND;
   });

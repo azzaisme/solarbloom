@@ -283,6 +283,7 @@ describe('E23.3.2 sources and storage', () => {
     const { sim, put } = world();
     sim.power.skyOverride = undefined;
     const t = put('windTurbine', 0, 0);
+    sim.grid.get(GROUND, 0, 0)!.level = 0; // flat ground (the island's park stands a terrace up)
     // No weather system: calm, the turbine stands still.
     (sim as unknown as { weather: unknown }).weather = undefined;
     expect(sim.power.output(t)).toBe(0);
@@ -304,7 +305,7 @@ describe('E23.3.2 sources and storage', () => {
   });
 
   it('a turbine in a windy region makes more (E23.8 region strengths), and solar only in sunny ones', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     sim.power.skyOverride = () => ({ sun: 1, solar: 1, cloudy: false, wind: 1, dark: 0 });
     // find a ground cell where E23.8 gives wind turbines a strength, and one where it gives none
     let strong: [number, number] | undefined;

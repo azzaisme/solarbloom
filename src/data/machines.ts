@@ -17,8 +17,6 @@ export interface MachineDef {
   areaTypes?: string[];
   /** Only in the endless city (not the rooftop campaign). */
   cityOnly?: boolean;
-  /** E21: only under old-city rules. */
-  oldCity?: boolean;
 }
 
 export const MACHINES: Record<MachineType, MachineDef> = {
@@ -82,7 +80,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     allowedGround: ['restored', 'prepared'],
     blurb: 'Water Condensers within 2 tiles fill its basin. When full it Overflows: up to 3 dry tiles nearby burst into lush bloom (×2 🌿 for a while).',
     hotkey: '8',
-    areaTypes: ['reservoir', 'canal'],
+    areaTypes: ['reservoir'],
   },
   relay: {
     type: 'relay',
@@ -108,7 +106,7 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     unlock: { needs: 'droneHub', label: 'Build a Drone Hub to unlock' },
     cityOnly: true,
   },
-  // E21.1: a way into the city's store (old-city rules only; never in the classic build list).
+  // E21.1: a way into the city's store (placed by the world, never in the build list).
   chest: {
     type: 'chest',
     name: 'Storage Chest',
@@ -117,9 +115,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     cost: {},
     allowedGround: ['restored', 'prepared', 'polluted'],
     blurb: 'A way into the city’s shared store: open it to put things away or take them out.',
-    oldCity: true,
   },
-  // E23.5.2: a planter box (old-city rules only): crops grow in it over game days.
+  // E23.5.2: a planter box: crops grow in it over game days.
   planter: {
     type: 'planter',
     name: 'Planter',
@@ -128,9 +125,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     cost: {},
     allowedGround: ['restored', 'prepared'],
     blurb: 'A raised bed: plant seeds in it, keep it watered and harvest food.',
-    oldCity: true,
   },
-  // E23.3.2: the grid's storage and its weather power (old-city rules only).
+  // E23.3.2: the grid's storage and its weather power.
   battery: {
     type: 'battery',
     name: 'Battery',
@@ -139,7 +135,6 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     cost: {},
     allowedGround: ['restored', 'prepared'],
     blurb: 'Stores what the grid has spare and gives it back after dark.',
-    oldCity: true,
   },
   windTurbine: {
     type: 'windTurbine',
@@ -149,7 +144,6 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     cost: {},
     allowedGround: ['restored', 'prepared'],
     blurb: 'Turns on windy days and in storms. It catches more wind on high ground.',
-    oldCity: true,
   },
   // E23.3.3: bloombot sits on it to recharge from the grid.
   charger: {
@@ -160,7 +154,6 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     cost: {},
     allowedGround: ['restored', 'prepared'],
     blurb: 'A pad on the grid. Sit on it and bloombot fills up fast.',
-    oldCity: true,
   },
   core: {
     type: 'core',
@@ -173,9 +166,8 @@ export const MACHINES: Record<MachineType, MachineDef> = {
   },
 };
 
-export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator'];
-/** E21.3: the old-city build list (the classic list plus the Storage Chest and the Planter; E23.7.4 dropped the Reclaimer; E23.3 adds the grid). */
-export const OLD_CITY_BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
+/** E21.3: what can be built (E23.1.1: one list, the Old City's; E23.7.4 dropped the Reclaimer; E23.3 adds the grid; E23.5.2 the Planter). */
+export const BUILDABLE: BuildableType[] = ['solar', 'condenser', 'chest', 'planter', 'battery', 'charger', 'pollinator', 'droneHub', 'windTurbine', 'reservoirGarden', 'motherTree', 'relay', 'cultivator'];
 
 /**
  * Phase 5 E13: machines that merge. Three edge-connected tier-1 machines of one type become one tier 2 on the

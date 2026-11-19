@@ -13,10 +13,6 @@ import type { Sim } from './Sim';
 export class GatherSystem {
   constructor(private sim: Sim) {}
 
-  get on(): boolean {
-    return !!this.sim.state.salvage;
-  }
-
   /**
    * Biomass one gather of this tile gives (0: nothing to clip). E23.2.2: what a loaded pulse grew there gives more
    * (a meadow x1.5, a grove x2: PULSE_LOAD's `biomass`). E23.7.2: windy days shake more loose.
@@ -36,7 +32,7 @@ export class GatherSystem {
 
   /** Is there anything to gather on this tile (restored, flowered, open, not clipped)? */
   canGather(t: TileData | undefined): t is TileData {
-    if (!this.on || !t || t.roofId !== GROUND) return false;
+    if (!t || t.roofId !== GROUND) return false;
     if (t.blocked || t.occupantId) return false;
     return this.yieldOf(t) > 0 && this.regrowsAt(t) === undefined;
   }

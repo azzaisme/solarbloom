@@ -37,14 +37,12 @@ const AROUND = [
   [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1],
 ] as const;
 
-/** Is a world cell on a canal lane (rows 3–4 of a canal row's chunks, or any canal area's chunks)? */
-export function canalCell(plan: RoadPlan, x: number, z: number): boolean {
+/** Is a world cell on a canal lane (rows 3–4 of a canal row's chunks)? */
+export function canalCell(plan: RoadPlan, _x: number, z: number): boolean {
   const cz = Math.floor(z / CHUNK);
   const lz = z - cz * CHUNK;
   if (lz !== 3 && lz !== 4) return false;
-  if (canalRow(plan.seed, cz)) return true;
-  const id = plan.map.areaOfCell(x, z);
-  return id !== PARK && plan.map.info(id).type === 'canal';
+  return canalRow(plan.seed, cz);
 }
 
 /** Smooth value noise in 0–1 (for curving lanes). */

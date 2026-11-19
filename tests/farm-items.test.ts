@@ -11,7 +11,7 @@ import { TUNING } from '../src/data/tuning';
 import { MATERIAL_ICON_IDS } from '../src/ui/MaterialIcons';
 
 SaveService.clock = () => 0;
-const oldSim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
+const oldSim = (seed = 7) => new Sim(createInitialState(seed));
 
 /** An open ground tile near the park, restored to a bloom. */
 function restored(sim: Sim, bloom: number, x = 10, z = 14): TileData {
@@ -37,7 +37,7 @@ describe('E23.5.1: farm items', () => {
     }
   });
 
-  it('biomass no longer grows as a counter under old-city rules (classic still earns it)', () => {
+  it('biomass no longer grows as a counter (E23.1.1: in every game)', () => {
     const sim = oldSim();
     const before = sim.econ.get('biomass').toNumber();
     const t = restored(sim, 1);
@@ -45,10 +45,11 @@ describe('E23.5.1: farm items', () => {
     sim.econ.add('biomass', 50);
     sim.advance(30);
     expect(sim.econ.get('biomass').toNumber()).toBe(before);
-    const classic = new Sim(createInitialState(7));
-    const c0 = classic.econ.get('biomass').toNumber();
-    classic.econ.add('biomass', 50);
-    expect(classic.econ.get('biomass').toNumber()).toBe(c0 + 50);
+    // E23.1.1: one rule set: energy and water still count (until E23.1.4), biomass never does
+    const e0 = sim.econ.get('energy').toNumber();
+    sim.state.caps.energy = big(1e6);
+    sim.econ.add('energy', 50);
+    expect(sim.econ.get('energy').toNumber()).toBe(e0 + 50);
   });
 
   it('biomass prices (a drone refit) are paid from the backpack and the store within reach, never a frozen counter', () => {
@@ -75,10 +76,9 @@ describe('E23.5.1: farm items', () => {
     expect(sim.roles.choose(hub.id, 'gardener')).toBe(true);
     expect(sim.inventory.count('biomass') + sim.inventory.stored('biomass')).toBe(30); // the refit took exactly its price
     expect(sim.inventory.count('biomass')).toBe(0); // the backpack is spent first
-    // classic rules still pay from the counter
-    const classic = new Sim(createInitialState(7));
-    classic.econ.add('biomass', 5);
-    expect(classic.econ.spend({ biomass: 5 })).toBe(true);
+    // more than was gathered can't be paid, whatever the old counter says
+    sim.state.resources.biomass = big(10_000);
+    expect(sim.econ.spend({ biomass: sim.inventory.available('biomass') + 1 })).toBe(false);
   });
 
   it('a game day is 48 minutes of play', () => {

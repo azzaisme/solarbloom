@@ -9,15 +9,11 @@ import type { Sim } from './Sim';
  * `salvage.delivered`) plus an "also needs" condition (park tiles restored, or landmarks awake). When both are done
  * the fountain advances: it grants the tier's ability, unlocks its recipes (BuildSystem reads the tier), raises the
  * stack limit (Inventory reads the tier) and emits `fountain.tier`. Tier 1 wakes the park (water returns): the
- * park clears and the ring-1 regions appear, still sealed behind their barricades. Old-city rules only; classic
- * games keep ProgressionSystem's fountain.
+ * park clears and the ring-1 regions appear, still sealed behind their barricades.
  */
 export class FountainSystem {
   constructor(private sim: Sim) {}
 
-  get on(): boolean {
-    return !!this.sim.state.salvage;
-  }
 
   get tier(): number {
     return this.sim.state.salvage?.tier ?? 0;
@@ -66,7 +62,7 @@ export class FountainSystem {
 
   canAdvance(): boolean {
     const t = this.next();
-    return !!t && this.on && this.delivered() && this.condition(t).done;
+    return !!t && this.delivered() && this.condition(t).done;
   }
 
   /**
@@ -75,7 +71,7 @@ export class FountainSystem {
    */
   deliver(m: MaterialId, n = Infinity): number {
     const s = this.sim;
-    if (!this.on || !this.next()) return 0;
+    if (!this.next()) return 0;
     const k = Math.min(n, this.remaining(m), s.inventory.available(m));
     if (k <= 0) return 0;
     if (!s.inventory.pay({ [m]: k })) return 0;
@@ -122,6 +118,6 @@ export class FountainSystem {
 
   /** Per tick: a tier whose delivery is in waits for its condition. Cheap: only checks a finished delivery. */
   tick() {
-    if (this.on && this.next() && this.delivered() && this.condition().done) this.advance();
+    if (this.next() && this.delivered() && this.condition().done) this.advance();
   }
 }

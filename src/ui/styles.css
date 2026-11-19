@@ -205,8 +205,6 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 #obj .tools { display: flex; flex-wrap: wrap; gap: 6px; }
 #obj .tools:has(> :not([hidden])) { margin-top: 8px; }
 #obj.nudge { animation: nudge 1.6s ease-in-out infinite; }
-#coreBtn { display: none; width: 100%; margin-top: 8px; padding: 10px; border-radius: 12px; font: 600 15px var(--font-display); color: var(--ink-dark); background: var(--btn-gold); animation: glow 1.4s infinite; }
-#coreBtn.show { display: block; }
 @keyframes glow { 0% { box-shadow: 0 0 0 0 var(--gold-ring); } 100% { box-shadow: 0 0 0 14px var(--gold-ring-0); } }
 
 /* Combo (left, under the resources) */
@@ -701,9 +699,9 @@ body.paused.no-blur canvas#app, body.reduced.paused canvas#app { filter: brightn
 .menu-saved { min-height: 20px; margin: 10px 0 0; font-size: 16px; color: var(--good); text-align: center; }
 #settings { z-index: 12; }
 
-/* ───────── E22.10: plain words, few numbers (old-city rules) ───────── */
+/* ───────── E22.10: plain words, few numbers ───────── */
 body.oldcity #logo, body.oldcity #quick, body.oldcity #combo, body.oldcity #hint,
-body.oldcity #obj .olab, body.oldcity #obj .ock, body.oldcity #obj .otog, body.oldcity #objNext, body.oldcity #objMore, body.oldcity #objAct, body.oldcity #coreBtn,
+body.oldcity #obj .olab, body.oldcity #obj .ock, body.oldcity #obj .otog, body.oldcity #objNext, body.oldcity #objMore, body.oldcity #objAct,
 body.oldcity #obj .oic, body.oldcity .res-row[data-res=biomass], body.oldcity .res-row .rate, body.oldcity #resInfo { display: none !important; }
 body.oldcity:not(.details) .res-row .val { display: none; }
 body.oldcity #obj h3 { font: 600 18px/1.3 var(--font-display); }

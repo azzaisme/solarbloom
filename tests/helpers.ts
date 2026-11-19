@@ -2,6 +2,12 @@ import { big } from '../src/core/Big';
 import { createInitialState, GROUND, placeFixed } from '../src/core/GameState';
 import type { GroundState, LayerData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
+import { MATERIAL_IDS, TIERS } from '../src/data/salvage';
+import { PARK } from '../src/core/Areas';
+import { KEEPERS, REGIONS } from '../src/data/oldcity';
+import { ITEM_IDS } from '../src/data/items';
+import { regionById } from '../src/core/OldCityLayout';
+import type { MachineData } from '../src/core/types';
 
 /**
  * Mechanics tests run on a small bounded test layer (`PAD`, 8×8, laid out like the Seed rooftop template:
@@ -23,6 +29,34 @@ export function rich(sim: Sim) {
   const s = sim.state;
   s.caps.energy = big(10000); s.caps.water = big(10000);
   s.resources.energy = big(5000); s.resources.water = big(5000); s.resources.biomass = big(5000);
+  unlockAll(sim);
+}
+
+/**
+ * E23.1.1: every game plays by the Old City's rules, where a machine unlocks at its fountain tier and is paid with
+ * its recipe. Mechanics tests open every buildable tier (4: tier 5 is the Great Bloom) and fill the backpack, so a
+ * placement only fails for the reason a test is about.
+ */
+export function unlockAll(sim: Sim, plenty = 9999) {
+  const sv = sim.state.salvage!;
+  sv.tier = Math.max(sv.tier, 4);
+  for (const t of TIERS.slice(0, 4)) if (t.ability && !sv.abilities.includes(t.ability)) sv.abilities.push(t.ability);
+  for (const m of MATERIAL_IDS) sv.pack[m] = plenty;
+  // E23.6.1: machines are built from crafting-table recipes that unlock from the Keepers, and cost components
+  for (const k of KEEPERS) if (!sv.keepers[k.id] || sv.keepers[k.id].step === 'asleep') sv.keepers[k.id] = { step: 'settled' };
+  for (const id of ITEM_IDS) if (!(id in sv.pack)) (sv.pack as Record<string, number>)[id] = plenty;
+  offGrid(sim);
+}
+
+/**
+ * E23.3.3: Drone Hubs and Cultivators run on the power grid. Mechanics tests are about what a helper does once it
+ * runs, so here helpers need no line (tests/power-helpers.test.ts covers helpers on and off the grid). A sim
+ * loaded from a save is a new sim: call this on it too.
+ */
+export function offGrid<S extends Sim>(sim: S): S {
+  sim.power.register('droneHub', { consumer: undefined });
+  sim.power.register('cultivator', { consumer: undefined });
+  return sim;
 }
 
 export function setGround(sim: Sim, x: number, z: number, g: GroundState, roof = PAD) {
@@ -51,3 +85,83 @@ export function ground(sim: Sim, roof: string, x: number, z: number, g: GroundSt
 }
 
 export { GROUND };
+
+/**
+ * E23.1.1: the whole island open, for tests about the world at scale (chains, drones, walking): every ability, the
+ * fountain awake, every region's gate open and its landmark woken, bloombot's share done in every backstreet. The Old City is one fixed world, so the places
+ * below are the same in every game.
+ */
+export function openIsland(sim: Sim): Sim {
+  unlockAll(sim);
+  sim.state.progression.coreActivated = true;
+  sim.areas.clear(PARK, true);
+  for (const r of REGIONS) {
+    sim.gates.open(r.gate.id, true);
+    if (sim.areas.fog(r.id) !== 'hidden') sim.areas.clear(r.id, true);
+  }
+  // backstreets have no landmark to wake: bloombot has done its share there, so helpers and chains may work (E21.9)
+  for (const id of sim.areas.revealed()) if (sim.areas.fog(id) !== 'cleared') sim.state.areas[id].byBot = sim.areas.shareTarget(id);
+  return sim;
+}
+
+/** A street garden (a Pollinator on paving), inserted directly: these tests measure chains, not building. */
+export function streetGarden(sim: Sim, x: number, z: number, street = true): MachineData {
+  const t = sim.grid.get(GROUND, x, z)!;
+  t.blocked = false;
+  if (street) t.feature = 'paving';
+  const m: MachineData = { id: sim.newId('m'), type: 'pollinator', roofId: GROUND, x, z, size: 1, boostUntil: 0, timer: 0, charge: 0 };
+  sim.state.machines.push(m);
+  sim.grid.indexMachine(m);
+  t.occupantId = m.id;
+  return m;
+}
+
+/**
+ * The island's longest crossing: row z = -30 runs x -80…79 through eight areas (Glasshouse Row, the Mast Row and
+ * six backstreets) and column x = 32 runs z -96…79 through six more (the Old Market, the Cistern, the Observatory
+ * and three backstreets). `streetCross` lines both with street gardens five tiles apart; a pulse at `start`, beside
+ * the crossing, sets the chain off down all four arms (a chain stops growing at TUNING.chain.maxDepth, ~20 gardens).
+ */
+export const CROSS = { row: -30, col: 32, start: [31, -30] as const };
+
+export function streetCross(sim: Sim) {
+  for (let x = -78; x <= 79; x += 5) streetGarden(sim, x, CROSS.row);
+  // the column, and a second one (x = -28) on the row's west arm, so the chain fans out within its depth
+  for (const col of [CROSS.col, -28])
+    for (let z = -95; z <= 79; z += 5) {
+      if (z === CROSS.row) continue;
+      const t = sim.grid.get(GROUND, col, z);
+      const id = t && sim.areas.areaOf(t);
+      if (id && sim.state.areas[id] && !sim.areas.sealed(id) && !id.startsWith('out_') && id !== 'sea') streetGarden(sim, col, z);
+    }
+}
+
+/**
+ * Wakes the next area as a player would (E23.1.1: the Old City is one fixed island, then the mainland): an open
+ * one, else the region behind the nearest gate (opened), else the Great Bloom raises the causeway and the mainland
+ * opens district by district. False once nothing is left.
+ */
+export function wakeNextArea(sim: Sim): boolean {
+  const id = openNextGoal(sim);
+  return !!id && sim.areas.clear(id, true);
+}
+
+/**
+ * The next area to wake, opening the way to it first when there is none: the next sealed region's gate, then the
+ * mainland (E23.1.1). Clears nothing. Undefined only when nothing is left anywhere.
+ */
+export function openNextGoal(sim: Sim): string | undefined {
+  const id = sim.areas.nextGoal();
+  if (id) return id;
+  const r = sim.areas.sealedAreas().map((a) => regionById(a)).find(Boolean);
+  if (r) {
+    sim.gates.open(r.gate.id, true);
+    return sim.areas.nextGoal() ?? r.id;
+  }
+  if (!sim.mainland.opened) {
+    sim.state.salvage.tier = 5;
+    sim.mainland.open();
+    return sim.areas.nextGoal();
+  }
+  return undefined;
+}

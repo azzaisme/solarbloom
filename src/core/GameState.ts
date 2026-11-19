@@ -2,15 +2,16 @@ import { PARK_LAYOUT } from '../data/city';
 import { TUNING } from '../data/tuning';
 import { Rng } from './Rng';
 import { amounts, caps } from './Economy';
-import type { GameState, LayerData, MachineData, Rules, SalvageState, TileData } from './types';
+import type { GameState, LayerData, MachineData, SalvageState, TileData } from './types';
 
 /**
  * v1 Round 1 · v2 Round 2 · v3 Phase 3 · v4 the endless city (chunked world, tile deltas) · v5 Phase 5: big-number
  * resources, uncapped biomass, per-machine upgrades · v6 Phase 5: E13/E14 machine tiers, merges, cores and superstructure projects, E15 world events, cat ids and rarities. Older saves
  * are scrapped with a notice (no players yet, so no migration, as agreed) · v7 Look 6: tile transitions in the
- * chunk extras (a new column layout), the Cultivator.
+ * chunk extras (a new column layout), the Cultivator · v8 E23.1.1: one rule set (the Old City) and no idle layer.
+ * Every older save starts fresh with a calm note, no conversion (the owner is the only player).
  */
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 /** Id of the endless ground layer (the city). */
 export const GROUND = 'g';
@@ -18,16 +19,11 @@ export const GROUND = 'g';
 /** The current ground generation version (new games). */
 export const GROUND_GEN = 4;
 
-/** E21: the Old City's ground generation (old-city rules only; classic games keep GROUND_GEN). */
+/** E21: the Old City's ground generation (laid over GROUND_GEN's city ground). */
 export const OLD_CITY_GEN = 5;
 
 export function groundLayer(playable = true, gen = GROUND_GEN): LayerData {
   return { id: GROUND, name: 'The City', kind: 'ground', width: 0, depth: 0, height: playable ? 0 : -40, origin: [0, 0, 0], unlocked: playable, preview: !playable, gen };
-}
-
-/** E21: a game's rule set (a save without one is classic). */
-export function rulesOf(state: Pick<GameState, 'rules'>): Rules {
-  return state.rules ?? 'classic';
 }
 
 /** E21: a new Old City's salvage state (nothing carried, nothing found). */
@@ -42,33 +38,29 @@ export function placeFixed(state: Pick<GameState, 'machines' | 'nextId'>, roofId
   return m;
 }
 
-/**
- * A new game. `rules` defaults to classic so every older caller (tests, tools) keeps today's game unchanged and
- * byte-identical; the player's "New game" asks for 'oldcity' (E21). A classic state has no `rules` key at all.
- */
-export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0, rules: Rules = 'classic'): GameState {
+/** A new game: the Old City (E23.1.1: the one rule set). */
+export function createInitialState(seed = (Math.random() * 2 ** 32) >>> 0): GameState {
   const holder = { machines: [] as MachineData[], nextId: 1 };
   placeFixed(holder, GROUND, 'solar', PARK_LAYOUT.starterSolar[0], PARK_LAYOUT.starterSolar[1], 1, true);
-  const old = rules === 'oldcity';
   return {
     version: SAVE_VERSION,
-    ...(old ? { rules, salvage: newSalvage() } : {}),
+    salvage: newSalvage(),
     seed,
     rngState: new Rng(seed).state,
     time: 0,
     nextId: holder.nextId,
     resources: amounts(TUNING.start.resources),
     caps: caps(TUNING.start.caps),
-    layers: [groundLayer(true, old ? OLD_CITY_GEN : GROUND_GEN)],
+    layers: [groundLayer(true, OLD_CITY_GEN)],
     machines: holder.machines,
     drones: [],
     upgrades: {},
     buffs: [],
     harvestReadyAt: 0,
     links: {},
-    // The park is home: its fog thins as you restore it, with no edge rule. E21.26: in the Old City the boat lands on
-    // Saltwind Beach, so the beach is open from the start too.
-    areas: old ? { park: { fog: 'thinning', revealedAt: 0 }, saltwind: { fog: 'thinning', revealedAt: 0 } } : { park: { fog: 'thinning', revealedAt: 0 } },
+    // The park is home: its fog thins as you restore it. E21.26: the boat lands on Saltwind Beach, so the beach is
+    // open from the start too.
+    areas: { park: { fog: 'thinning', revealedAt: 0 }, saltwind: { fog: 'thinning', revealedAt: 0 } },
     relayBonus: 0,
     cat: { nextSpawnAt: -1, found: 0, stash: 0, firstSpawned: false, log: [], invasion: [], seq: 0, claimed: [] },
     progression: {

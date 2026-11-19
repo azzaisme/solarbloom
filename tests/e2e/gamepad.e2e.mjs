@@ -40,7 +40,7 @@ try {
     await page.addInitScript(driver + '\ninstallVirtualPad(); window.padDriver = padDriver; window.installVirtualPad = installVirtualPad;');
     page.setDefaultTimeout(180000);
     // the scripted player knows the classic park (E22.9 brings an Old City run)
-    await page.goto('http://localhost:4211/?slot=1&rules=classic');
+    await page.goto('http://localhost:4211/?slot=1');
     await page.waitForFunction(() => window.solarbloom?.bot, null, { timeout: 180000 });
     // the player takes the pad once the loading screen has gone (the HUD is hidden until then)
     await page.waitForFunction(() => !document.body.classList.contains('loading-on'), null, { timeout: 300000 });

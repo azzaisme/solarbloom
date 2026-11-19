@@ -23,9 +23,6 @@ export class SalvageSystem {
     sim.bus.on('weather.storm', () => this.blowIn());
   }
 
-  get on(): boolean {
-    return !!this.sim.state.salvage;
-  }
 
   /** Units a pile starts with. */
   size(p: PileDef): number {
@@ -35,13 +32,12 @@ export class SalvageSystem {
   /** Units left in a pile. */
   left(id: string): number {
     const p = pileById(id);
-    if (!p || !this.on) return 0;
+    if (!p) return 0;
     return this.sim.state.salvage!.piles[id] ?? this.size(p);
   }
 
   /** The pile standing on a ground cell (with something left), if any. */
   pileAt(x: number, z: number): PileDef | undefined {
-    if (!this.on) return undefined;
     const sp = setPieceAt(x, z);
     return sp?.kind === 'pile' && this.left(sp.pile.id) > 0 ? sp.pile : undefined;
   }
@@ -49,7 +45,7 @@ export class SalvageSystem {
   /** Why a pile can't be salvaged now (undefined: it can). */
   problem(id: string): string | undefined {
     const p = pileById(id);
-    if (!p || !this.on) return 'Nothing to salvage here';
+    if (!p) return 'Nothing to salvage here';
     if (this.left(id) <= 0) return 'Nothing left here';
     const area = this.sim.areas.map.areaOfCell(p.x, p.z);
     if (this.sim.areas.fog(area) === 'hidden') return 'Lost in the cloud — open the way here first';
@@ -158,7 +154,6 @@ export class SalvageSystem {
    * over `SALVAGE.refillDays` game days of play. An emptied pile comes back once its tile is free.
    */
   tick(_dt: number) {
-    if (!this.on) return;
     const s = this.sim;
     if (s.state.time < this.checkAt) return;
     this.checkAt = s.state.time + SALVAGE.refillCheckSeconds;
@@ -196,7 +191,6 @@ export class SalvageSystem {
 
   /** E23.7.2.3 / E23.7.4: a storm blows fresh salvage in: every pile that can stand is full at once. */
   blowIn(): number {
-    if (!this.on) return 0;
     const s = this.sim;
     let n = 0;
     for (const id of Object.keys(s.state.salvage!.piles)) {
@@ -233,7 +227,7 @@ export class SalvageSystem {
    * Names actions, never keys (E22 owns prompts).
    */
   describe(t: TileData): { title: string; detail: string } | undefined {
-    if (!this.on || t.roofId !== GROUND) return undefined;
+    if (t.roofId !== GROUND) return undefined;
     const sp = setPieceAt(t.x, t.z);
     if (t.blocked && t.feature === 'water' && !sp) return { title: 'The sea', detail: 'Open water: nothing crosses it.' };
     if (!sp) return undefined;

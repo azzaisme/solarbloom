@@ -10,7 +10,6 @@ export class Metrics {
     b.on('cat.found', () => this.first('cat'));
     b.on('milestone.reached', ({ at }) => this.first(`park${at}`));
     b.on('tree.discharged', () => this.first('treePulse'));
-    b.on('rooftop.coreRestored', () => this.first('core'));
     b.on('area.cleared', ({ areaId }) => {
       if (areaId === 'park') return;
       (sim.state.stats.areaTimes ??= []).push(Math.round(sim.time));

@@ -6,7 +6,7 @@ import { Sim } from '../src/gameplay/Sim';
 
 SaveService.clock = () => 0;
 const saver = new SaveService(undefined);
-const oldSim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
+const oldSim = (seed = 7) => new Sim(createInitialState(seed));
 /** Beside the fountain (a way into the store), and far from any. */
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const FAR = { roofId: GROUND, x: 8.5, z: -40.5 };
@@ -102,11 +102,4 @@ describe('E21.1: saving', () => {
     expect(saver.serialize(back.state)).toBe(json);
   });
 
-  it('nothing changes under classic rules', () => {
-    const sim = new Sim(createInitialState(7));
-    expect(sim.inventory.on).toBe(false);
-    expect(sim.inventory.add('scrap', 5)).toBe(5);
-    expect(sim.inventory.canPay({ scrap: 1 }, NEAR)).toBe(false);
-    expect('salvage' in sim.state).toBe(false);
-  });
 });

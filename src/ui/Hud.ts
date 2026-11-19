@@ -32,7 +32,6 @@ export interface HudCallbacks {
   harvest(): void;
   /** E18: `hubId|role|slot` (slot 2 on a Fleet Hub), or `hubId|role|drone|index` for a Megahub drone. */
   chooseRole(key: string): void;
-  activateCore(): void;
   /** Phase 5 E15: the 🐾 chip: show where a hinted cat hides. */
   findCat(): void;
   /** E20.2 (#285): the key or pad button bound to an action, as the player last used them (for hint text). */
@@ -41,8 +40,6 @@ export interface HudCallbacks {
   goHome(attention: boolean): void;
   skipCinematic(): void;
   closeInspect(): void;
-  /** City 10.7: set off (or replay) a district bloom. */
-  districtBloom(id: string, replay: boolean): void;
   /** Wake a city landmark (by machine id). */
   wake(machineId: string): void;
   /** Open an area's panel (from its label in the overview). */
@@ -154,8 +151,6 @@ export class Hud {
   settings: Settings;
   /** E22.2: the one prompt at the bottom centre */
   readonly prompt: Prompt;
-  /** E22.10: old-city rules: plain words, two gauges, one objective sentence (Game sets it from the rules) */
-  oldCity = false;
   readonly bars: Bars;
   readonly objective: ObjectiveCard;
   readonly hotbar: Hotbar;
@@ -225,7 +220,6 @@ export class Hud {
           <ul id="objList"></ul>
         </div>
         <div id="objAct"></div>
-        <button id="coreBtn">✨ Awaken the Core</button>
       </div>
       <div id="quick" role="toolbar" aria-label="Quick actions">
         <button class="rbtn qbtn" id="homeBtn" aria-label="Home: fly to the park (Home)" title="Home (Home key)">${ICONS.home}<span class="qbadge" aria-hidden="true"></span></button>
@@ -233,7 +227,7 @@ export class Hud {
         <button class="rbtn qbtn" id="pawBtn" aria-label="Paw prints: which way a hiding cat went" title="Paw prints: a Lucky Cat is hiding. Which way do they lead?" hidden>${ICONS.paw}<span class="qn" id="pawCount">0</span></button>
       </div>
       <div id="combo"><div id="comboFx" aria-hidden="true"></div><div class="big" id="comboBig" role="status" aria-label="Bloom chain combo"><span class="cic">${ICONS.biomass}</span><span class="cl">Combo</span> <span class="cx">×0</span></div><div class="cbody panel"><ul id="comboParts"></ul><div class="total" id="comboTotal"></div><div id="chainAreas"></div></div><div id="feed"></div></div>
-      <div id="hotbar" class="panel">${Hotbar.template(this.sim.oldCity)}</div>
+      <div id="hotbar" class="panel">${Hotbar.template()}</div>
       ${BuildBar.template()}
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
       <div id="toasts" role="status" aria-live="polite"></div>
@@ -241,17 +235,11 @@ export class Hud {
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
       <div id="intro" hidden><div class="panel card-intro">
         <h2>${LOGO_MARK}<span>Welcome to Solarbloom</span></h2>
-        <p data-rules="classic">This old park is dead and grey, and the city around it is lost in a gloomy fog. Bring it back to life.</p>
-        <p data-rules="oldcity">The fog came and the island city emptied. A small boat has brought you, bloombot, from the mainland to bring it back to life.</p>
-        <ol data-rules="oldcity">
+        <p>The fog came and the island city emptied. A small boat has brought you, bloombot, from the mainland to bring it back to life.</p>
+        <ol>
           <li><b>Salvage what lies around</b>: Scrap, Seeds and more, by hand. Tidied ground can be restored.</li>
           <li><b>Pulse dead ground back to life</b>, and bring the fountain what it asks for. Each delivery gives you a new way to move.</li>
           <li><b>Clear the way</b> into the city's regions and wake the robot who sleeps in each.</li>
-        </ol>
-        <ol data-rules="classic">
-          <li><b>Walk up to a grey tile and pulse it</b> to restore it. Each pulse uses a little ⚡ energy and 💧 water, which refill on their own.</li>
-          <li><b>Green tiles grow 🌿 biomass.</b> Spend it on machines. Pulse a green tile again to grow flowers.</li>
-          <li><b>Goal:</b> wake the dry fountain. Then the fog starts to lift. The objective is in the top-left corner.</li>
         </ol>
         <button id="introGo">Start restoring ✨</button>
       </div></div>
@@ -409,9 +397,9 @@ export class Hud {
     return this.modalCheck();
   }
 
-  /** E22.10: game text in the words of the rules in play (old-city rules: plain words, no rates). */
+  /** E22.10: game text in plain words, no rates. */
   words(text: string): string {
-    return this.oldCity ? plainWords(text) : text;
+    return plainWords(text);
   }
 
   private comboTier = 0;

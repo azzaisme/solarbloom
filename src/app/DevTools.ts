@@ -163,15 +163,13 @@ export function installDevTools(game: Game) {
     roads(radius = 12) {
       const old = document.getElementById('sb-road-debug');
       if (old) return void old.remove(), 'road overview hidden';
-      const gen = game.sim.grid.layer(GROUND)?.gen ?? 1;
-      if (gen < 4) return `this save is ground generation ${gen}: roads are the old row/column lattice`;
       const canvas = document.createElement('canvas');
       canvas.id = 'sb-road-debug';
       canvas.style.cssText = 'position:fixed;inset:8px;z-index:9999;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);margin:auto;border:2px solid #222;background:#000;image-rendering:pixelated;cursor:pointer';
       canvas.title = 'City 16 road overview: click to close';
       canvas.onclick = () => canvas.remove();
       const t = game.camera.target;
-      drawRoadOverview(canvas.getContext('2d')!, roadPlanFor(game.sim.state.seed, gen), Math.floor(t.x / 16), Math.floor(t.z / 16), radius);
+      drawRoadOverview(canvas.getContext('2d')!, roadPlanFor(game.sim.state.seed, game.sim.grid.layer(GROUND)?.gen ?? 4), Math.floor(t.x / 16), Math.floor(t.z / 16), radius);
       document.body.appendChild(canvas);
       return 'road overview shown (click it, or call sbDev.roads() again, to close)';
     },

@@ -1,20 +1,17 @@
-import { machinesStamp, rulesOf } from '../core/GameState';
+import { machinesStamp } from '../core/GameState';
 import { decorOccupant, parseDecorKey } from '../core/Decor';
 import { EventBus } from '../app/EventBus';
 import { Economy } from '../core/Economy';
 import { Grid } from '../core/Grid';
 import { hasGrowth, unpackChunk } from '../core/TilePack';
 import { Rng } from '../core/Rng';
-import type { GameState, MachineData, Rules, TileData } from '../core/types';
+import type { GameState, MachineData, TileData } from '../core/types';
 import { BloomChainSystem } from './BloomChainSystem';
 import { BuildSystem } from './BuildSystem';
-import { CanalNetwork } from './CanalNetwork';
 import { RelaySystem } from './RelaySystem';
 import { PowerGrid } from './PowerGrid';
 import { ChargerSystem } from './ChargerSystem';
 import { Lights } from './Lights';
-import { RooftopClusters } from './RooftopClusters';
-import { DistrictSystem } from './DistrictSystem';
 import { DroneSystem } from './DroneSystem';
 import { DroneRoles } from './DroneRoles';
 import { Advisor } from './Advisor';
@@ -73,8 +70,6 @@ export class Sim {
   readonly metrics: Metrics;
   readonly log: DebugLog;
   readonly areas: AreaSystem;
-  readonly districts: DistrictSystem;
-  readonly canals: CanalNetwork;
   readonly relays: RelaySystem;
   /** E23.3: the power grid (networks of poles, sources, batteries and consumers). */
   readonly power: PowerGrid;
@@ -82,28 +77,27 @@ export class Sim {
   readonly chargers: ChargerSystem;
   /** E23.3.5: night lights (decorations on the grid, solar or glow-pods). */
   readonly lights: Lights;
-  readonly clusters: RooftopClusters;
   /** Phase 5 E16: biodiversity and fauna unlocks (cosmetic). */
   readonly ecosystem: EcosystemSystem;
   /** Look 6: living transitions (what each tile is visibly turning into). */
   readonly transitions: Transitions;
   /** Look 6.8: Cultivators (solar tillers). */
   readonly cultivators: CultivatorSystem;
-  /** E21.1: the backpack and the store (old-city rules). */
+  /** E21.1: the backpack and the store. */
   readonly inventory: Inventory;
-  /** E21.2 / E23.7.4: salvage piles, refilling over game days and in storms (old-city rules). */
+  /** E21.2 / E23.7.4: salvage piles, refilling over game days and in storms. */
   readonly salvage: SalvageSystem;
-  /** E21.5: gates (old-city rules). */
+  /** E21.5: gates. */
   readonly gates: GateSystem;
-  /** E21.6: the fountain's tiers and deliveries (old-city rules). */
+  /** E21.6: the fountain's tiers and deliveries. */
   readonly fountain: FountainSystem;
-  /** E21.8: the Keepers and their requests (old-city rules). */
+  /** E21.8: the Keepers and their requests. */
   readonly keepers: KeeperSystem;
   /** E23.8.3: the causeway and the endless mainland. */
   readonly mainland: MainlandSystem;
   /** E23.9.1: the maker's journal (pages on posts, his last page at the Great Bloom). */
   readonly journal: JournalSystem;
-  /** E21.9: waking landmarks and their lasting rewards (old-city rules). */
+  /** E21.9: waking landmarks and their lasting rewards. */
   readonly landmarks: LandmarkSystem;
   /** E23.4.1: water levels of ponds, canals and reservoirs (`sim.water`). */
   readonly water: WaterSystem;
@@ -111,9 +105,9 @@ export class Sim {
   readonly crafting: Crafting;
   /** E23.6.2: the research station (projects, and the upgrades they open). */
   readonly research: Research;
-  /** E23.2.1: bloombot's charge, the only meter (old-city rules). */
+  /** E23.2.1: bloombot's charge, the only meter. */
   readonly charge: ChargeSystem;
-  /** E23.2.2: what the pulse is loaded with, and its reveal ripple (old-city rules). */
+  /** E23.2.2: what the pulse is loaded with, and its reveal ripple. */
   readonly pulseLoad: PulseLoad;
   /** E23.2.3: benches and meditating at chargers. */
   readonly rest: RestSystem;
@@ -125,9 +119,9 @@ export class Sim {
   readonly nightFinds: NightFinds;
   /** E23.7.2: the weather: one kind a game day, each with its effects (data/weather). See gameplay/Weather. */
   readonly weather: Weather;
-  /** E23.5.1: gathering biomass from restored ground (old-city rules). */
+  /** E23.5.1: gathering biomass from restored ground. */
   readonly gather: GatherSystem;
-  /** E23.5.2: planters and crops (old-city rules). */
+  /** E23.5.2: planters and crops. */
   readonly farm: FarmSystem;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
@@ -172,16 +166,14 @@ export class Sim {
       this.grid.chunkAt(layer, Number(cx), Number(cz));
     }
     this.econ = new Economy(state.resources, state.caps);
-    // E23.5.1: under old-city rules biomass is gathered into the backpack (GatherSystem), never earned as a counter
-    // and every biomass price (drone refits and jobs, the core, ...) is paid from the backpack and the store within reach
-    if (this.oldCity) {
-      this.econ.noIncome = new Set(['biomass']);
-      this.econ.items = {
-        kinds: new Set(['biomass']),
-        have: () => this.inventory.available('biomass'),
-        take: (_k, units) => this.inventory.pay({ biomass: units }),
-      };
-    }
+    // E23.5.1: biomass is gathered into the backpack (GatherSystem), never earned as a counter, and every biomass
+    // price (drone refits and jobs, the core, ...) is paid from the backpack and the store within reach
+    this.econ.noIncome = new Set(['biomass']);
+    this.econ.items = {
+      kinds: new Set(['biomass']),
+      have: () => this.inventory.available('biomass'),
+      take: (_k, units) => this.inventory.pay({ biomass: units }),
+    };
     this.inventory = new Inventory(this);
     this.charge = new ChargeSystem(this);
     this.pulseLoad = new PulseLoad(this);
@@ -205,13 +197,11 @@ export class Sim {
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
     this.restoration = new RestorationSystem(this);
-    this.canals = new CanalNetwork(this);
     this.water = new WaterSystem(this);
     this.relays = new RelaySystem(this);
     this.power = new PowerGrid(this);
     this.chargers = new ChargerSystem(this);
     this.lights = new Lights(this);
-    this.clusters = new RooftopClusters(this);
     this.chains = new BloomChainSystem(this);
     this.build = new BuildSystem(this);
     this.drones = new DroneSystem(this);
@@ -221,7 +211,6 @@ export class Sim {
     this.advisor = new Advisor(this);
     this.progression = new ProgressionSystem(this);
     this.areas = new AreaSystem(this);
-    this.districts = new DistrictSystem(this);
     this.ecosystem = new EcosystemSystem(this);
     this.metrics = new Metrics(this);
     this.log = new DebugLog(this);
@@ -233,16 +222,6 @@ export class Sim {
 
   get time() {
     return this.state.time;
-  }
-
-  /** E21: the rule set, from the state (never from the URL). */
-  get rules(): Rules {
-    return rulesOf(this.state);
-  }
-
-  /** E21: playing under old-city rules? */
-  get oldCity(): boolean {
-    return this.state.rules === 'oldcity';
   }
 
   newId(prefix: string) {

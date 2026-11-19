@@ -39,10 +39,7 @@ export class DebugLog {
     b.on('mega.ready', () => this.push('mega.ready'));
     b.on('milestone.reached', ({ at }) => this.push('milestone', { id: `park${at}` }));
     b.on('area.step', ({ areaId, step }) => this.push('milestone', { id: `${areaId}:step${step}` }));
-    b.on('rooftop.coreReady', () => this.push('milestone', { id: 'fountainReady' }));
-    b.on('rooftop.coreRestored', () => this.push('milestone', { id: 'fountain' }));
     b.on('area.cleared', ({ areaId }) => this.push('milestone', { id: `area:${areaId}` }));
-    b.on('district.bloom', ({ districtId }) => this.push('milestone', { id: `district:${districtId}` }));
     b.on('action.failed', ({ reason }) => this.push('action.failed', { reason }));
   }
 

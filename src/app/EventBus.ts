@@ -114,7 +114,6 @@ export interface GameEvents {
   /** City 12.1: a rooftop cluster's roof was added to the world, or became reachable. */
   'layer.added': { layerId: string };
   'layer.unlocked': { layerId: string };
-  'canal.flow': { from: string; to: string; path: string[]; kind: 'fill' | 'overflow'; chainId?: number };
   'canopy.burst': { machineId: string; radius: number; gardens: string[] };
   'tree.discharged': { machineId: string };
   'solar.boost': { machineId: string };
@@ -136,8 +135,6 @@ export interface GameEvents {
   'cat.goldenRelay': Record<string, never>;
   'buff.started': { type: BuffType; seconds: number };
   'harvest': { amount: Big };
-  'rooftop.coreReady': Record<string, never>;
-  'rooftop.coreRestored': Record<string, never>;
   'tutorial.step': { step: number };
   /** Phase 4 E04.3: a park milestone was reached and paid (once). */
   /** Phase 5 E12: a rewarded step on the way to an area's landmark (25 / 50 / 75% of the tiles it needs). */
@@ -151,10 +148,8 @@ export interface GameEvents {
   'area.cleared': { areaId: string };
   /** City 09.1: progress on an area's specialty action. */
   'area.specialty': { areaId: string; have: number; need: number; met: boolean };
-  'district.ready': { districtId: string };
   /** Phase 5 E16: a fauna kind arrived (once per save; cosmetic). */
   'fauna.unlocked': { id: 'butterflies' | 'birds' | 'koi' | 'robots' };
-  'district.bloom': { districtId: string; restored: string[]; lusher: string[]; reward: Partial<Record<ResourceKind, Big>>; replay: boolean };
 }
 
 type Handler<T> = (payload: T) => void;

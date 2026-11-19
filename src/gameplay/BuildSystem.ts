@@ -1,5 +1,3 @@
-import { CAPPED, formatCost, scaleCost } from '../core/Economy';
-import { big } from '../core/Big';
 import type { BuildableType, Cost, GroundState, MachineData } from '../core/types';
 import { MACHINES, machineName } from '../data/machines';
 import { AREA_TYPES, type AreaType } from '../data/city';
@@ -7,7 +5,6 @@ import { GROUND, machinesRemoved } from '../core/GameState';
 import { MATERIALS, STORE, type MaterialCost } from '../data/salvage';
 import { regionById } from '../core/OldCityLayout';
 import type { MaterialId } from '../core/types';
-import { TUNING } from '../data/tuning';
 import { isMaterial, itemDef } from '../data/items';
 import type { Sim } from './Sim';
 
@@ -25,50 +22,29 @@ export interface PlacementCheck {
 export class BuildSystem {
   constructor(private sim: Sim) {}
 
-  /** E21.3: the old-city recipe for a machine (undefined: it can't be built under old-city rules). */
+  /** E21.3: the recipe for a machine (undefined: it can't be built). */
   recipe(type: BuildableType): MaterialCost | undefined {
     // E23.6.1: a machine with a crafting-table recipe is built from it (components and materials)
     return this.sim.crafting.machineRecipe(type)?.cost;
   }
 
-  /** E21.3: the fountain tier that unlocks a machine under old-city rules (99: a Keeper, research or a find opens it). */
+  /** E21.3: the fountain tier that unlocks a machine (99: a Keeper, research or a find opens it). */
   recipeTier(type: BuildableType): number {
     const u = this.sim.crafting.machineRecipe(type)?.unlock;
     return u && 'tier' in u ? u.tier : 99;
   }
 
+  /** E21.3: a machine is locked until its fountain tier, and nothing else (E23.1.1: the one rule set). */
   isUnlocked(type: BuildableType) {
-    const def = MACHINES[type];
-    // E21.3: under old-city rules a machine is locked until its recipe is known (a fountain tier, a Keeper, ...).
-    if (this.sim.oldCity) {
-      // E23.6.1: every Old City machine is built from its crafting-table recipe and unlocks where it says
-      const cr = this.sim.crafting.machineRecipe(type);
-      return !!cr && this.sim.crafting.unlocked(cr.unlock);
-    }
-    if (def.oldCity) return false;
-    const u = def.unlock;
-    if (u && !this.sim.state.machines.some((m) => m.type === u.needs)) return false;
-    if (def.cityOnly && !this.sim.grid.isPlayable(GROUND)) return false;
-    if (def.roofs) {
-      const onRoof = def.roofs.some((id) => this.sim.grid.isPlayable(id));
-      // In the city, a specialty piece unlocks once an area of its type is revealed.
-      const inCity = !!def.areaTypes && this.sim.grid.isPlayable(GROUND) && this.sim.areas.revealed().some((id) => def.areaTypes!.includes(this.sim.areas.info(id).type));
-      if (!onRoof && !inCity) return false;
-    }
-    return true;
+    // E23.6.1: every machine is built from its crafting-table recipe and unlocks where it says
+    const cr = this.sim.crafting.machineRecipe(type);
+    return !!cr && this.sim.crafting.unlocked(cr.unlock);
   }
 
   /** Short reason a machine is still locked (hotbar label). */
   lockLabel(type: BuildableType): string {
-    const def = MACHINES[type];
-    if (this.sim.oldCity) {
-      const cr = this.sim.crafting.machineRecipe(type);
-      return cr ? this.sim.crafting.unlockLabel(cr.unlock) : `🔒 Fountain tier ${this.recipeTier(type)}`;
-    }
-    if (def.unlock && !this.sim.state.machines.some((m) => m.type === def.unlock!.needs)) return `🔒 ${MACHINES[def.unlock.needs].name}`;
-    if (def.roofs && this.sim.grid.isPlayable(GROUND) && def.areaTypes) return `🔒 ${def.areaTypes.map((t) => AREA_TYPES[t as AreaType].name).join(' / ')}`;
-    if (def.roofs) return `🔒 ${def.roofs.map((id) => this.sim.grid.roof(id)?.name ?? id).join(', ')}`;
-    return '';
+    const cr = this.sim.crafting.machineRecipe(type);
+    return cr ? this.sim.crafting.unlockLabel(cr.unlock) : `🔒 Fountain tier ${this.recipeTier(type)}`;
   }
 
   /** Copies of a type standing now (a merged machine counts once). */
@@ -92,20 +68,6 @@ export class BuildSystem {
       for (const m of this.sim.state.machines) if (!m.starter && m.type !== 'core') st.built[m.type] = (st.built[m.type] ?? 0) + 1;
     }
     return st.built;
-  }
-
-  /**
-   * A machine's price: the same for every copy (E23.1.5: no price grows with purchases). The energy and water
-   * parts never pass TUNING.machineCostMaxShare of their store, so a price is always reachable.
-   */
-  cost(type: BuildableType): Cost {
-    const cost = scaleCost(MACHINES[type].cost, 1);
-    for (const k of CAPPED) {
-      const cap = this.sim.econ.cap(k);
-      const v = cost[k];
-      if (v !== undefined && cap) cost[k] = big(v).min(cap.mul(TUNING.machineCostMaxShare).floor());
-    }
-    return cost;
   }
 
   /** Why a footprint can't be built on (edge, fog, vent, occupied, drone target, growing, wrong ground), if it can't. */
@@ -136,12 +98,8 @@ export class BuildSystem {
     return { x: Math.floor(fx - size / 2 + 0.5), z: Math.floor(fz - size / 2 + 0.5) };
   }
 
-  /**
-   * E21.3: the price as text for the tray: classic costs as today; old-city recipes as material icons with
-   * have / need (the store counts near a way into it).
-   */
+  /** E21.3: the recipe as text for the tray: material icons with have / need (the store counts near a way into it). */
   costLabel(type: BuildableType): string {
-    if (!this.sim.oldCity) return formatCost(this.cost(type));
     const r = this.recipe(type);
     if (!r) return '';
     return this.sim.inventory
@@ -150,9 +108,8 @@ export class BuildSystem {
       .join(' ');
   }
 
-  /** Can the price be paid right now (old-city: the recipe, from the pack and the store within reach)? */
+  /** Can the recipe be paid right now (from the pack and the store within reach)? */
   affordable(type: BuildableType): boolean {
-    if (!this.sim.oldCity) return this.sim.econ.canAfford(this.cost(type));
     const r = this.recipe(type);
     return !!r && this.sim.inventory.canPay(r);
   }
@@ -182,28 +139,8 @@ export class BuildSystem {
     return MATERIALS[m].home.includes('park') ? ' — the park' : '';
   }
 
+  /** E21.3: placement: the tier lock, the recipe, the chest limit. */
   check(type: BuildableType, roofId: string, x: number, z: number): PlacementCheck {
-    const s = this.sim;
-    if (s.oldCity) return this.checkOldCity(type, roofId, x, z);
-    const def = MACHINES[type];
-    const cost = this.cost(type);
-    const fail = (reason: string): PlacementCheck => ({ ok: false, reason, cost, spotOk: false });
-    if (def.unlock && !s.state.machines.some((m) => m.type === def.unlock!.needs)) return fail(def.unlock.label);
-    if (def.cityOnly && !s.grid.isPlayable(GROUND)) return fail('Only in the city');
-    const roof = s.grid.roof(roofId);
-    if (!roof || !roof.unlocked || roof.preview) return fail('This rooftop is not reachable yet');
-    if (roofId === GROUND && def.areaTypes) {
-      const t = AREA_TYPES[s.areas.info(s.areas.map.areaOfCell(x, z)).type];
-      if (!def.areaTypes.includes(t.type)) return fail(`Only grows in a ${def.areaTypes.map((a) => AREA_TYPES[a as AreaType].name.toLowerCase()).join(' or ')} area`);
-    } else if (def.roofs && !def.roofs.includes(roofId)) return fail(`Only grows on ${def.roofs.map((id) => s.grid.roof(id)?.name ?? id).join(', ')}`);
-    const why = this.footprintProblem(roofId, x, z, def.size, def.allowedGround);
-    if (why) return fail(why);
-    if (!s.econ.canAfford(cost)) return { ok: false, reason: `Need ${formatCost(cost)}`, cost, spotOk: true };
-    return { ok: true, cost, spotOk: true };
-  }
-
-  /** E21.3: placement under old-city rules: tier lock, the recipe, the chest limit. */
-  private checkOldCity(type: BuildableType, roofId: string, x: number, z: number): PlacementCheck {
     const s = this.sim;
     const def = MACHINES[type];
     const cost: Cost = {};
@@ -228,13 +165,13 @@ export class BuildSystem {
   }
 
   /**
-   * E21.3: removes a machine the player built (old-city rules): the whole recipe comes back, to the backpack
-   * and anything over a stack to the store. False for landmarks, the starter panel or under classic rules.
+   * E21.3: removes a machine the player built: the whole recipe comes back, to the backpack
+   * and anything over a stack to the store. False for landmarks and the starter panel.
    */
   remove(id: string): boolean {
     const s = this.sim;
     const m = s.machine(id);
-    if (!s.oldCity || !m || m.type === 'core' || m.starter) return false;
+    if (!m || m.type === 'core' || m.starter) return false;
     const recipe = this.recipe(m.type as BuildableType);
     for (const t of s.grid.footprint(m.roofId, m.x, m.z, m.size)) if (t && t.occupantId === m.id) t.occupantId = undefined;
     s.grid.unindexMachine(m);
@@ -255,8 +192,7 @@ export class BuildSystem {
       s.bus.emit('action.failed', { reason: chk.reason! });
       return undefined;
     }
-    if (s.oldCity) s.inventory.pay(this.recipe(type)!);
-    else s.econ.spend(chk.cost);
+    s.inventory.pay(this.recipe(type)!);
     const built = this.ensureBuiltCounts();
     built[type] = (built[type] ?? 0) + 1;
     const def = MACHINES[type];

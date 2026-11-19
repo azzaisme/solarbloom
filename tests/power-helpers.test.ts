@@ -21,7 +21,7 @@ function put(sim: Sim, type: MachineData['type'], x: number, z: number, size = 1
 }
 
 function oldCity() {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = 2;
   sim.state.resources.energy = big(1e6);
   // Clear noon: these tests are about chargers and helpers, not E23.7's sky (a new game starts at 07:30, when
@@ -143,12 +143,6 @@ describe('E23.3.3 powered helpers', () => {
       expect(['idle', 'returning']).toContain(d.mode);
       expect(sim.drones.statusOf(d)).toBe('waitingEnergy');
     }
-  });
-
-  it('helpers stay unpowered-proof in the classic game (no grid there)', () => {
-    const sim = new Sim(createInitialState(7));
-    const hub = put(sim, 'droneHub', 30, 30, 2);
-    expect(sim.power.isPowered(hub)).toBe(true);
   });
 
   it('a Cultivator off the grid parks its tillers on the dock', () => {

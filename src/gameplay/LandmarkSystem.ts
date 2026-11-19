@@ -22,9 +22,6 @@ export const REWARD_EFFECT = {
 export class LandmarkSystem {
   constructor(private sim: Sim) {}
 
-  get on(): boolean {
-    return !!this.sim.state.salvage;
-  }
 
   /** Lasting rewards in effect. */
   has(r: RewardId): boolean {
@@ -39,7 +36,7 @@ export class LandmarkSystem {
   /** Why a landmark can't be woken now (undefined: hand over the delivery). */
   problem(regionId: string): string | undefined {
     const r = regionById(regionId);
-    if (!r || !this.on) return 'Nothing to wake here';
+    if (!r) return 'Nothing to wake here';
     const a = this.sim.areas;
     if (a.fog(r.id) === 'cleared') return `The ${r.landmark.name} is awake`;
     const need = a.need(r.id);

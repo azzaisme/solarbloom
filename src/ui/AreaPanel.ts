@@ -1,5 +1,5 @@
+import { TIERS } from '../data/salvage';
 import { PARK } from '../core/Areas';
-import { formatCost } from '../core/Economy';
 import { AREA_TYPES } from '../data/city';
 import { MACHINES } from '../data/machines';
 import { TUNING } from '../data/tuning';
@@ -15,8 +15,9 @@ export const AREA_SPECIALTY: Record<string, string> = {
   canal: 'Water channels: adds steady water, and Reservoir Gardens grow here.',
   market: 'Crowded with stalls: a bit of biomass and energy once cleared.',
   reservoir: 'Dry clay basins: the best water bonus, and Reservoir Gardens grow here.',
-  rooftops: 'An old building carries a rooftop garden-to-be: reach it with a Bloom Relay, then restore it. Its Core wakes the area.',
   grove: 'Leaf litter around an Elder Tree: blooms nearby charge its Canopy Burst, and it adds biomass.',
+  beach: 'Sand and driftwood where the boat comes in. The Sea Lock across the canal wakes it.',
+  downtown: 'Glass towers on a raised plateau around the Solar Spire, the tallest light in the city.',
 };
 
 const RES = { energy: '⚡', water: '💧', biomass: '🌿' } as const;
@@ -57,7 +58,7 @@ export function areaPanelData(sim: Sim, id: string): AreaPanelData {
     fog,
     restored: c.restored,
     need,
-    ready: id === PARK ? s.progression.coreReady() : s.areas.ready(id),
+    ready: id !== PARK && s.areas.ready(id),
     bonus,
     machines,
   };
@@ -77,14 +78,12 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
   const fogName: Record<string, string> = { hidden: 'Hidden in fog', frontier: 'Thick fog', thinning: 'Thinning fog', cleared: 'Clear' };
   const pct = Math.min(100, Math.round((d.restored / Math.max(1, d.need)) * 100));
   const cleared = d.fog === 'cleared';
-  const parkAwake = id === PARK && s.state.progression.coreActivated;
+  const parkAwake = id === PARK && s.state.salvage.tier >= 1; // E21.6: the fountain wakes at tier 1
   let checklist: string;
   if (id === PARK) {
-    checklist = s.progression
-      .requirements()
-      .map((r) => `<li>${r.done || parkAwake ? '✅' : '⬜'} ${r.label}</li>`)
-      .concat(`<li>${parkAwake ? '✅' : '⬜'} Wake the ${esc(a.landmarkName)} (${formatCost(TUNING.core.cost)})</li>`)
-      .join('');
+    // E21.6: the fountain wakes tier by tier, from what bloombot brings it
+    const tier = s.state.salvage.tier;
+    checklist = TIERS.map((t) => `<li>${tier >= t.tier ? '✅' : '⬜'} Fountain tier ${t.tier}: ${esc(t.name)}</li>`).join('');
   } else {
     const steps = [
       { done: d.fog !== 'hidden', label: 'Revealed next to clear ground' },
@@ -100,16 +99,6 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     .map(([t, n]) => `${MACHINES[t as keyof typeof MACHINES]?.icon ?? '⚙️'} ${n} ${MACHINES[t as keyof typeof MACHINES]?.name ?? t}${n === 1 ? '' : 's'}`)
     .join(' · ');
   const wake = d.ready && landmarkId && !cleared && !parkAwake ? `<button class="buy" data-wake="${landmarkId}">✨ Wake the ${esc(a.landmarkName)}</button>` : '';
-  // City 10.7: the district this area belongs to, and its bloom.
-  const ds = id === PARK && !parkAwake ? undefined : s.districts.status(s.districts.districtOf(id));
-  const district = !ds
-    ? ''
-    : `<p class="stat" data-district-line="${esc(ds.id)}">🌸 District: ${esc(ds.name)} · ${ds.claimed ? 'bloomed' : `${Math.min(ds.awake, ds.need)}/${ds.need} neighbouring landmarks awake`}</p>` +
-      (ds.available
-        ? `<button class="buy" data-district="${esc(ds.id)}">🌸 Set off the district bloom</button>`
-        : ds.claimed
-          ? `<button class="mode" data-district="${esc(ds.id)}" data-replay="1" title="Plays it again; changes nothing">↻ Replay the district bloom</button>`
-          : '');
   const tag = a.authored ? ' · <b>a rare landmark</b>' : '';
   // Automation switches (revealed areas; no logistics, just what the drones do here).
   const mode = s.areas.mode(id) ?? '';
@@ -135,15 +124,14 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
     `<p class="stat">Machines: ${machineText || 'none yet'}</p>` +
     oldCityShare(s, id) +
     (cultivating(s, id) ? `<p class="stat" data-cultivating="${esc(id)}">🚜 ${cultivating(s, id)} tile${cultivating(s, id) === 1 ? '' : 's'} being cultivated</p>` : '') +
-    district +
     switches +
     wake
   );
 }
 
-/** E21.9: under old-city rules a region shows bloombot's share until helpers may join in. */
+/** E21.9: a region shows bloombot's share until helpers may join in. */
 function oldCityShare(s: Sim, id: string): string {
-  if (!s.oldCity || id === PARK || s.areas.info(id).noLandmark || s.areas.fog(id) === 'cleared') return '';
+  if (id === PARK || s.areas.info(id).noLandmark || s.areas.fog(id) === 'cleared') return '';
   const have = s.state.areas[id]?.byBot ?? 0;
   const need = s.areas.shareTarget(id);
   return s.areas.shareMet(id) ? `<p class="stat" data-share="${esc(id)}">🛸 Helpers can work here</p>` : `<p class="stat" data-share="${esc(id)}">🤖 Your share: ${Math.min(have, need)} / ${need}</p>`;

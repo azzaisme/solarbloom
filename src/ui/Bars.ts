@@ -1,10 +1,9 @@
-import { type Big, fmt, toNum } from '../core/Big';
+import { fmt, toNum } from '../core/Big';
 import { KINDS } from '../core/Economy';
 import type { ResourceKind } from '../core/types';
 import { TUNING } from '../data/tuning';
 import { ICONS } from './Icons';
 import { $, HudPart } from './HudPart';
-import { hudWidth, toHud } from './UiScale';
 import { RESOURCE_NAME } from './words';
 
 export const RES_META: Record<ResourceKind, { icon: string; name: string; color: string }> = {
@@ -14,9 +13,8 @@ export const RES_META: Record<ResourceKind, { icon: string; name: string; color:
 };
 
 /**
- * E22.5 (#342): the energy and water bars (top right). Under classic rules all three resources with their
- * figures and net rates (tap one for where its numbers come from); under old-city rules two small gauges, icon
- * and bar, that fade out when full and unchanged (E22.10). Biomass is not on the walking view there.
+ * E22.5 (#342): the energy and water gauges (top right): two small gauges, icon and bar, that fade out when full
+ * and unchanged (E22.10). Biomass is a backpack item, not on the walking view. (E23.1.4 removes both gauges.)
  */
 export class Bars extends HudPart {
   static template(): string {
@@ -34,47 +32,9 @@ export class Bars extends HudPart {
   /** E22.10: when each gauge last changed, and its last value (gauges fade out when full and unchanged) */
   private gaugeAt: Record<string, { v: number; at: number }> = {};
 
-  wire() {
-    const r = this.root;
-    // Phase 5 E12: tap a resource for where its numbers come from (tap again, or elsewhere, to close).
-    $(r, '#res').addEventListener('click', (e) => {
-      if (this.hud.oldCity) return; // E22.10: numbers live in panels under old-city rules
-      const row = (e.target as HTMLElement).closest<HTMLElement>('[data-res]');
-      const k = row?.dataset.res as ResourceKind | undefined;
-      this.resInfo = k && this.resInfo !== k ? k : undefined;
-      const box = $(r, '#resInfo');
-      box.hidden = !this.resInfo;
-      if (this.resInfo) {
-        this.last.delete('resInfo');
-        const rect = row!.getBoundingClientRect();
-        box.style.top = `${Math.round(toHud(rect.bottom) + 6)}px`;
-        box.style.left = `${Math.round(Math.max(8, Math.min(hudWidth() - 248, toHud(rect.left))))}px`;
-        box.innerHTML = this.resourceBreakdown(this.resInfo);
-      }
-    });
-    // Any tap outside the resource strip closes it (it never sits over the game).
-    document.addEventListener('pointerdown', (e) => {
-      if (!this.resInfo || (e.target as HTMLElement).closest?.('#res')) return;
-      this.resInfo = undefined;
-      $(r, '#resInfo').hidden = true;
-    });
-  }
+  wire() {}
 
   /** Spending totals sampled about once a second of sim time (Phase 4 E01.2). */
-  /** Phase 5 E12: the resource whose breakdown popover is open (tap a resource cell). */
-  private resInfo?: ResourceKind;
-
-  /** Where a resource's numbers come from right now (popover and tooltip). */
-  private resourceBreakdown(k: ResourceKind, plain = false): string {
-    const s = this.sim;
-    const pm = (x: Big) => `${fmt(x.mul(60), 1)}/min`;
-    const c = s.econ.cap(k);
-    const lines: [string, string][] = [['Producing', pm(s.production.rates()[k])]];
-    lines.push(['Stored', c ? `${fmt(s.econ.get(k))} / ${fmt(c)}` : `${fmt(s.econ.get(k))} (no limit)`]);
-    if (plain) return `${RES_META[k].name}: ${lines.map(([a, b]) => `${a} ${b}`).join(' · ')}`;
-    return `<b>${RES_META[k].icon} ${RES_META[k].name}</b>${lines.map(([a, b]) => `<div><span>${a}</span><span>${b}</span></div>`).join('')}`;
-  }
-
   resourceRect(kind: ResourceKind): DOMRect {
     return $(this.root, `[data-res="${kind}"] .ic`).getBoundingClientRect();
   }
@@ -117,17 +77,16 @@ export class Bars extends HudPart {
       const sign = net.lt(0) ? '−' : '+';
       const rateTxt = `${sign}${fmt(net.abs(), 1)}/min`; // "· full" comes from the .full class
       this.set(`r-${k}`, $(row, '.rate'), 'html', `${rateTxt}${boost}`);
-      this.set(`t-${k}`, row, 'title', this.settings.showNumbers && !this.hud.oldCity ? this.resourceBreakdown(k, true) : this.hud.oldCity ? RESOURCE_NAME[k] : RES_META[k].name);
+      this.set(`t-${k}`, row, 'title', RESOURCE_NAME[k]);
       this.set(`b-${k}`, $(row, '.bar i'), 'width', c ? `${Math.round(Math.min(1, toNum(v) / Math.max(1e-9, toNum(c))) * 100)}%` : '100%');
       this.set(`f-${k}`, row, 'cls', full ? '1' : '0', 'full');
     }
-    if (this.resInfo) this.set('resInfo', $(this.root, '#resInfo'), 'html', this.resourceBreakdown(this.resInfo));
-    if (this.hud.oldCity) this.updateGauges();
+    this.updateGauges();
   }
 
   /**
-   * E22.10: under old-city rules energy and water are two small gauges that fade out when full and unchanged for
-   * 5 s and come back when they change or drop under a quarter.
+   * E22.10: energy and water are two small gauges that fade out when full and unchanged for 5 s and come back when
+   * they change or drop under a quarter.
    */
   private updateGauges() {
     const now = performance.now();

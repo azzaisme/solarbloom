@@ -12,10 +12,10 @@ export class ChargerSystem {
     sim.power.register('charger', { consumer: { shed: 'charger', draw: (m) => (this.charging(m as MachineData) ? POWER.draw.charger : 0) } });
   }
 
-  /** Bloombot is full (always, where there is no charge: the classic game). */
+  /** Bloombot is full. */
   private full(): boolean {
     const c = this.sim.charge;
-    return !c.on || c.value() >= c.max - 1e-6;
+    return c.value() >= c.max - 1e-6;
   }
 
   /**

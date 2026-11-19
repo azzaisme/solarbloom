@@ -1,5 +1,6 @@
 import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
+import { KEEPERS } from '../src/data/oldcity';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
@@ -8,16 +9,16 @@ import { TUNING } from '../src/data/tuning';
 import type { ChainEvent } from '../src/gameplay/BloomChainSystem';
 import { relayLinkId } from '../src/gameplay/RelaySystem';
 import { Sim } from '../src/gameplay/Sim';
+import { openIsland } from './helpers';
 
-/** A cleared block of city around the park, everything mossy (so blooms have somewhere to go), rich. */
+/** The open island, rich (tests make their own patch mossy, so blooms have somewhere to go). */
 function city(seed = 6) {
   const sim = new Sim(createInitialState(seed));
   const st = sim.state;
   st.caps.energy = big(1e7); st.caps.water = big(1e7);
   st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
-  st.progression.coreActivated = true;
-  for (let cz = -3; cz <= 3; cz++) for (let cx = -3; cx <= 3; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
-  return sim;
+  // E23.1.1: the island open (every gate, every landmark awake)
+  return openIsland(sim);
 }
 
 function mossy(sim: Sim, x0: number, z0: number, x1: number, z1: number) {
@@ -144,11 +145,13 @@ describe('buildable Bloom Relays (City 10.4)', () => {
 
   it('a ring of 10 relays: one chain fires every link at most once, travels the ring and ends', () => {
     const sim = city(4);
-    mossy(sim, -40, -40, 40, 40);
+    // E23.1.1: round the Mast Row, north of the park (every tile of the ring on the open island)
+    const [cx, cz] = [16, -30];
+    mossy(sim, cx - 40, cz - 40, cx + 40, cz + 40);
     const ring: MachineData[] = [];
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2;
-      ring.push(relay(sim, Math.round(Math.cos(a) * 24), Math.round(Math.sin(a) * 24)));
+      ring.push(relay(sim, cx + Math.round(Math.cos(a) * 24), cz + Math.round(Math.sin(a) * 24)));
     }
     // Neighbours in the ring are ~15 apart (in range); across the ring they aren't.
     for (let i = 0; i < 10; i++) expect(sim.relays.linked(ring[i]).map((m) => m.id)).toContain(ring[(i + 1) % 10].id);
@@ -165,13 +168,17 @@ describe('buildable Bloom Relays (City 10.4)', () => {
     expect(c.ended).toHaveLength(1);
   });
 
-  it('placement: city only, after a Drone Hub, on restored or mossy ground; cooldowns survive a reload', () => {
+  it('placement: once Mast Row’s Keeper is awake, on restored or mossy ground; cooldowns survive a reload', () => {
     const sim = city();
     mossy(sim, -6, -6, 6, 6);
-    expect(sim.build.check('relay', GROUND, 2, 2).reason).toMatch(/Drone Hub/);
-    const hub: MachineData = { id: sim.newId('m'), type: 'droneHub', roofId: GROUND, x: -5, z: -5, size: 2, boostUntil: 0, timer: 0, charge: 0 };
-    sim.state.machines.push(hub);
-    sim.grid.indexMachine(hub);
+    // E23.6.1: one rule set: the Relay is the power pole, made from its crafting recipe, which Mast Row's Keeper
+    // teaches (not after a Drone Hub, and no longer at a fountain tier).
+    const keeper = KEEPERS.find((k) => k.region === 'mastRow')!;
+    const awake = sim.state.salvage.keepers[keeper.id];
+    sim.state.salvage.keepers[keeper.id] = { step: 'asleep' };
+    expect(sim.build.check('relay', GROUND, 2, 2).ok).toBe(false);
+    expect(sim.build.check('relay', GROUND, 2, 2).reason).toMatch(/Mast Row/);
+    sim.state.salvage.keepers[keeper.id] = awake;
     expect(sim.build.check('relay', GROUND, 2, 2).ok).toBe(true);
     const polluted = sim.areas.tiles(PARK).find((t) => t.ground === 'polluted' && !t.blocked && !t.occupantId);
     if (polluted) expect(sim.build.check('relay', GROUND, polluted.x, polluted.z).ok).toBe(false);
