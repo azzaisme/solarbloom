@@ -15,8 +15,6 @@ export interface RoofTemplate {
   prepared: [number, number][];
   /** roof-local cell of its Core (the area's landmark) */
   core: [number, number];
-  /** tougher dead ground (clay, roots): pulse costs are multiplied */
-  pulseCostMult?: number;
 }
 
 export const ROOF_TEMPLATES: Record<string, RoofTemplate> = {
@@ -39,7 +37,6 @@ export const ROOF_TEMPLATES: Record<string, RoofTemplate> = {
     blocked: [[7, 0], [0, 0]],
     prepared: [[0, 6], [1, 7]],
     core: [5, 2],
-    pulseCostMult: 2,
   },
   canopy: {
     id: 'canopy',
@@ -50,7 +47,6 @@ export const ROOF_TEMPLATES: Record<string, RoofTemplate> = {
     blocked: [[0, 0], [1, 7]],
     prepared: [[9, 2], [8, 1]],
     core: [4, 3],
-    pulseCostMult: 2,
   },
 };
 

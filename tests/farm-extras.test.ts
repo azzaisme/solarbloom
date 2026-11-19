@@ -17,7 +17,7 @@ import { Sim } from '../src/gameplay/Sim';
 SaveService.clock = () => 0;
 
 function farm(): Sim {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = 3;
   // E23.8.2: Moss (Elder Grove) hands over beehives and orchards
   sim.state.salvage!.keepers.moss = { step: 'request1' };
@@ -68,7 +68,7 @@ function run(sim: Sim, seconds: number) {
 
 describe('E23.8.2: beehives and orchards come from Elder Grove', () => {
   it('locked until Moss wakes, with a reason that names Moss', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     sim.state.salvage!.tier = 5;
     ground(sim, 12, 16, 0, 1);
     for (const t of ['beehive', 'orchard'] as const) {

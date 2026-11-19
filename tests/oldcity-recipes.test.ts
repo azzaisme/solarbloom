@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { big } from '../src/core/Big';
-import { formatCost } from '../src/core/Economy';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { BuildableType, GroundState } from '../src/core/types';
-import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE } from '../src/data/machines';
+import { BUILDABLE, MACHINES } from '../src/data/machines';
 import { TIERS } from '../src/data/salvage';
 import { MACHINE_RECIPES } from '../src/data/crafting';
 import { KEEPERS } from '../src/data/oldcity';
@@ -12,7 +10,7 @@ import { Sim } from '../src/gameplay/Sim';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const oldSim = (tier = 4) => {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = tier;
   sim.bot = NEAR;
   return sim;
@@ -41,7 +39,6 @@ describe('E21.3: recipes', () => {
     for (const type of MACHINE_RECIPES.flatMap((r) => (r.builds ? [r.builds] : []))) {
       const sim = oldSim();
       wakeKeepers(sim);
-      sim.state.resources.biomass = big(0);
       sim.state.salvage!.recipes = [...KEEPER_RECIPES]; // E23.5.4.6: these recipes come from Keeper gardens (tested there)
       const x = 12;
       const z = 12;
@@ -59,7 +56,10 @@ describe('E21.3: recipes', () => {
 
   it('machines are locked until their fountain tier', () => {
     const sim = oldSim(0);
-    for (const t of BUILDABLE) expect(sim.build.isUnlocked(t), t).toBe(false);
+    // E23.5.3: the compost bin is a home recipe, open from the start
+    const home = (t: BuildableType) => MACHINE_RECIPES.some((r) => r.builds === t && 'home' in r.unlock);
+    expect(sim.build.isUnlocked('compostBin')).toBe(true);
+    for (const t of BUILDABLE) if (!home(t)) expect(sim.build.isUnlocked(t), t).toBe(false);
     sim.state.salvage!.tier = 1;
     // E23.6.1: the Solar panel and the Storage chest come from Keepers now (crafting-table recipes)
     expect(sim.build.isUnlocked('solar')).toBe(false);
@@ -117,15 +117,8 @@ describe('E21.3: recipes', () => {
   });
 
   it('E23.7.4: the Reclaimer is gone: not in the build list, no recipe, no tier gives it', () => {
-    expect(OLD_CITY_BUILDABLE as string[]).not.toContain('reclaimer');
+    expect(BUILDABLE as string[]).not.toContain('reclaimer');
     expect(MACHINE_RECIPES.map((r) => r.id)).not.toContain('reclaimer');
     expect(TIERS.flatMap((t) => t.gives).join(' ')).not.toMatch(/Reclaimer/);
-  });
-
-  it('classic costs are untouched', () => {
-    const classic = new Sim(createInitialState(7));
-    expect(classic.build.costLabel('solar')).toBe(formatCost(classic.build.cost('solar')));
-    expect(classic.build.isUnlocked('chest')).toBe(false);
-    expect(classic.build.cost('droneHub')).toEqual({ biomass: big(80), energy: big(30) });
   });
 });

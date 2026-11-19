@@ -92,7 +92,7 @@ try {
     const g = window.solarbloom, s = g.sim;
     const t = s.grid.get('g', b.x, b.z);
     t.ground = 'prepared'; t.pollution = 0; s.grid.touch(t);
-    s.state.resources.energy = s.state.caps.energy; s.state.resources.water = s.state.caps.water;
+    s.charge.refillForTest(); // E23.1.4: charge is the only meter
     s.restoration.pulse(t.id);
     const tr = t.tr;
     s.advance(1); // the sim restores it (0.8 s) while the visual is still early in the sequence

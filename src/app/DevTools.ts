@@ -1,4 +1,3 @@
-import { big } from '../core/Big';
 import { createInitialState, GROUND } from '../core/GameState';
 import { PARK } from '../core/Areas';
 import { Sim } from '../gameplay/Sim';
@@ -6,6 +5,7 @@ import type { Game } from './Game';
 import type { FaceName } from '../rendering/DroneVisuals';
 import type { CatVariant, TransitionKind } from '../core/types';
 import { TUNING } from '../data/tuning';
+import { MATERIAL_IDS, TIERS } from '../data/salvage';
 import { roadPlanFor } from '../core/RoadPlan';
 import { drawRoadOverview } from './RoadDebug';
 
@@ -17,7 +17,6 @@ import { drawRoadOverview } from './RoadDebug';
  *   sbDev.preset('screenshot') a fresh park in the Phase 4 screenshot's economy (reloads)
  *   sbDev.simulate(120)        run 120 s of simulation now (accelerated)
  *   sbDev.log()                the local event log (sim time, event, small numbers)
- *   sbDev.overflow()           income lost to full storage so far
  *   sbDev.cat('golden')        hide a cat now (standard, golden or rainbow) somewhere in view
  *   sbDev.face('excited')      show one drone expression on every drone (no argument: back to normal)
  *   sbDev.tr.scrub(x, z, 0.4)  freeze ground tile (x, z)'s transition at 40 % (sbDev.tr.scrub() releases it)
@@ -29,13 +28,12 @@ import { drawRoadOverview } from './RoadDebug';
  *   sbDev.roads(12)            toggle the City 16 road-network overview, 12 chunks round the camera
  *   sbDev.water(14)            restore the water tiles within 14 tiles of the view (to hear the 3D brook)
  */
-export type PresetName = 'fresh' | 'screenshot' | 'rich' | 'wealthy';
+export type PresetName = 'fresh' | 'screenshot' | 'rich';
 
 export const PRESETS: Record<PresetName, string> = {
   fresh: 'A brand-new park.',
-  screenshot: 'The Phase 4 screenshot: 19 park tiles restored, energy 60/60, water 40/40, biomass 24/100.',
-  rich: 'A fresh park with large stores, for testing builds and upgrades.',
-  wealthy: 'A fresh park with 1e15 biomass: for checking big-number display and long-tail upgrades.',
+  screenshot: 'The Phase 4 screenshot: 19 park tiles restored around the fountain.',
+  rich: 'A fresh park with every buildable tier open and a full backpack, for testing builds.',
 };
 
 /** Builds a preset's starting state headlessly (also used by tests). */
@@ -49,17 +47,12 @@ export function presetSim(name: PresetName, seed: number): Sim {
       .filter((t) => sim.restoration.isEligible(t))
       .sort((a, b) => Math.abs(a.x - fx) + Math.abs(a.z - fz) - (Math.abs(b.x - fx) + Math.abs(b.z - fz)) || a.z - b.z || a.x - b.x);
     for (const t of tiles.slice(0, 19)) sim.restoration.complete(t, 'pulse');
-    s.resources.energy = s.caps.energy;
-    s.resources.water = s.caps.water;
-    s.resources.biomass = big(24);
   } else if (name === 'rich') {
-    s.caps.energy = big(5000);
-    s.caps.water = big(5000);
-    s.resources.energy = big(4000);
-    s.resources.water = big(4000);
-    s.resources.biomass = big(4000);
-  } else if (name === 'wealthy') {
-    s.resources.biomass = big('1e15');
+    // E23.1.4: no counters to fill; machines unlock at their fountain tier and are paid with their recipe
+    const sv = s.salvage;
+    sv.tier = Math.max(sv.tier, 4);
+    for (const t of TIERS.slice(0, 4)) if (t.ability && !sv.abilities.includes(t.ability)) sv.abilities.push(t.ability);
+    for (const m of MATERIAL_IDS) sv.pack[m] = 999;
   }
   void GROUND;
   return sim;
@@ -123,9 +116,6 @@ export function installDevTools(game: Game) {
       }
       return `${n} water tiles restored around ${f.x.toFixed(1)}, ${f.z.toFixed(1)}`;
     },
-    overflow() {
-      return game.sim.log.overflow;
-    },
     /** Look 6.12: the transition scrubber and time-scale. */
     tr: {
       scrub(x?: number, z?: number, p = 0.5) {
@@ -163,15 +153,13 @@ export function installDevTools(game: Game) {
     roads(radius = 12) {
       const old = document.getElementById('sb-road-debug');
       if (old) return void old.remove(), 'road overview hidden';
-      const gen = game.sim.grid.layer(GROUND)?.gen ?? 1;
-      if (gen < 4) return `this save is ground generation ${gen}: roads are the old row/column lattice`;
       const canvas = document.createElement('canvas');
       canvas.id = 'sb-road-debug';
       canvas.style.cssText = 'position:fixed;inset:8px;z-index:9999;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);margin:auto;border:2px solid #222;background:#000;image-rendering:pixelated;cursor:pointer';
       canvas.title = 'City 16 road overview: click to close';
       canvas.onclick = () => canvas.remove();
       const t = game.camera.target;
-      drawRoadOverview(canvas.getContext('2d')!, roadPlanFor(game.sim.state.seed, gen), Math.floor(t.x / 16), Math.floor(t.z / 16), radius);
+      drawRoadOverview(canvas.getContext('2d')!, roadPlanFor(game.sim.state.seed, game.sim.grid.layer(GROUND)?.gen ?? 4), Math.floor(t.x / 16), Math.floor(t.z / 16), radius);
       document.body.appendChild(canvas);
       return 'road overview shown (click it, or call sbDev.roads() again, to close)';
     },

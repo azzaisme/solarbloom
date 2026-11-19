@@ -130,7 +130,7 @@ describe('E23.8.2: what each region unlocks', () => {
   });
 
   it("a new game holds Home's unlocks; a region's arrive when its Keeper wakes", () => {
-    const st = createInitialState(7, 'oldcity');
+    const st = createInitialState(7);
     expect(heldUnlocks(st)).toEqual(REGION_UNLOCKS.home.map((u) => u.id));
     expect(isUnlocked(st, 'craftingTable')).toBe(true);
     expect(isUnlocked(st, 'pump')).toBe(false);
@@ -143,7 +143,7 @@ describe('E23.8.2: what each region unlocks', () => {
   });
 
   it('an unlock waits for its hard needs before it is usable', () => {
-    const st = createInitialState(7, 'oldcity');
+    const st = createInitialState(7);
     st.salvage!.keepers.tock = { step: 'settled' };
     expect(isUsable(st, 'mulcher')).toBe(true);
     expect(isUnlocked(st, 'powerPole')).toBe(false);

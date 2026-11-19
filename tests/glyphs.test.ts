@@ -10,8 +10,8 @@ const label = (svg: string) => /aria-label="([^"]+)"/.exec(svg)?.[1];
 
 describe('E22.3: glyphs', () => {
   it("renders every action's glyph in all four sets, none missing", () => {
-    for (const oldCity of [false, true]) {
-      const b = new Bindings(undefined, { oldCity });
+    {
+      const b = new Bindings();
       for (const style of STYLES)
         for (const a of ACTIONS) {
           const bound = style === 'keys' ? b.keys[a.id].length > 0 : b.pad[a.id] !== undefined;

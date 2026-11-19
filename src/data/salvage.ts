@@ -152,7 +152,7 @@ export const WORKBENCH = {
   groups: { pulse: 'copper', machines: 'gears', drones: 'glass', storage: 'timber', networks: 'sunstone', fog: 'clay' } as Record<string, MaterialId>,
 };
 
-/** Lucky Cat rewards under old-city rules: units of the local material by variant. */
+/** Lucky Cat rewards: units of the local material by variant. */
 export const CAT_REWARD = { standard: 10, golden: 25, rainbow: 60 };
 
 /** §3: Tally's trade once the Market Hall is awake. */

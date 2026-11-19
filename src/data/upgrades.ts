@@ -32,13 +32,6 @@ export const fmtMult = (x: number) => (x < 10 ? String(Math.round(x * 100) / 100
 
 export const UPGRADES: UpgradeDef[] = [
   {
-    id: 'efficientPulse',
-    name: 'Efficient Pulse',
-    icon: '⚡',
-    maxLevel: 3,
-    describe: () => 'Pulse energy cost −25%',
-  },
-  {
     // Bloombot's sprint, one level: hold the sprint key to hover a little off the ground and move faster
     // (BOT.sprint instead of BOT.walk). Read by BotController. Fountain tier 2's Hover ability counts too (BotController).
     id: 'hover',
@@ -53,7 +46,7 @@ export const UPGRADES: UpgradeDef[] = [
     name: 'Solar Wings',
     icon: '☀️',
     maxLevel: Infinity,
-    describe: (n) => `This panel's output ×${fmtMult(powerMult(0.5, n))} (from ×${fmtMult(powerMult(0.5, n - 1))}); doubles every 10 levels`,
+    describe: (n) => `This panel feeds the grid ×${fmtMult(powerMult(0.5, n))} (from ×${fmtMult(powerMult(0.5, n - 1))}); doubles every 10 levels`,
   },
   {
     id: 'broadPulse',
@@ -64,23 +57,6 @@ export const UPGRADES: UpgradeDef[] = [
       const t = TUNING.pulseTiers[n];
       const tiles = [1, 9, 25, 69, 161][n];
       return `${t.name}: each pulse restores up to ${tiles} tiles around it for free`;
-    },
-  },
-  {
-    id: 'richSoil',
-    name: 'Rich Soil',
-    icon: '🌱',
-    maxLevel: Infinity, // the long-tail biomass multiplier
-    describe: (n) => `Every restored tile's biomass ×${fmtMult(TUNING.upgradeCurve.soilStep ** n)} (from ×${fmtMult(TUNING.upgradeCurve.soilStep ** (n - 1))})`,
-  },
-  {
-    id: 'seedVault',
-    name: 'Seed Vault',
-    icon: '🏺',
-    maxLevel: 4,
-    describe: (n) => {
-      const t = TUNING.storageTiers;
-      return `Storage ⚡ ${t.energy[n - 1]}→${t.energy[n]} · 💧 ${t.water[n - 1]}→${t.water[n]} (biomass has no limit)`;
     },
   },
   {
@@ -121,13 +97,6 @@ export const UPGRADES: UpgradeDef[] = [
     icon: '🌟',
     maxLevel: 3,
     describe: (n) => `Every ${7 - n}th pulse is Overcharged: it restores everything within 2 tiles`,
-  },
-  {
-    id: 'harvestBurst',
-    name: 'Harvest Burst',
-    icon: '🌾',
-    maxLevel: 5,
-    describe: (n) => `Harvest Sunlight also gathers ${TUNING.harvest.burstSeconds * n} s of your steady biomass income`,
   },
   {
     id: 'chainHops',
@@ -197,13 +166,6 @@ export const UPGRADES: UpgradeDef[] = [
     icon: '🏮',
     maxLevel: 3,
     describe: (n) => `Landmarks wake with ${10 * n}% fewer tiles restored`,
-  },
-  {
-    id: 'landmarkLights',
-    name: 'Lit Landmarks',
-    icon: '🗼',
-    maxLevel: Infinity, // Phase 5 E12: grows with the city
-    describe: (n) => `Every cleared area's bonus +${25 * n}% (from +${25 * (n - 1)}%)`,
   },
   // Look 6.8: the Cultivator's own upgrades (per machine). Width and speed are paid in energy (it runs on sun),
   // the seed mix, routing and a second tiller in biomass.

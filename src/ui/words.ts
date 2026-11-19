@@ -1,13 +1,13 @@
 /**
- * E22.10 (#348): plain words and few numbers. Every player-facing string written for old-city rules lives here,
+ * E22.10 (#348): plain words and few numbers. Every player-facing string written for the game lives here,
  * with the list of words the screen does not use under them (docs/E22_CONTROLS_UI.md, "Plain words, few
- * numbers"). tests/bloombot-words.test.ts scans these strings, and the HUD's text under old-city rules, for them.
+ * numbers"). tests/bloombot-words.test.ts scans these strings, and the HUD's text, for them.
  *
  * Writing rules: a verb and a thing a new player already knows; no abbreviations; a region or Keeper by name;
  * one sentence per card or toast. A count only for things gathered or restored by hand, as "12 of 20".
  */
 
-/** Words (and patterns) never on screen under old-city rules, each with what to say instead where there is one. */
+/** Words (and patterns) never on screen, each with what to say instead where there is one. */
 export const BANNED: readonly { word: string; re: RegExp; instead?: string }[] = [
   { word: 'rate', re: /\brates?\b/i },
   { word: '/min', re: /\/\s*min\b/i },
@@ -44,7 +44,7 @@ export function bannedIn(text: string): string[] {
 export const RATE_SLASH = /[+−-]?\d[\d.,]*\s*[kKmMbB]?\s*(?:[a-zA-Z]+\s*)?\/\s*(min|s|sec|second|minute|h|hour)\b/;
 
 /**
- * Rewrites game text for old-city rules where a plain word exists (biomass → Greens, full bloom → in flower) and
+ * Rewrites game text where a plain word exists (biomass → Greens, full bloom → in flower) and
  * drops rates and multipliers ("+71/min", "×3"). Text that would still need a banned word is left for E21 to
  * hide (Frenzy, tiers, merges belong to classic play).
  */
@@ -59,7 +59,7 @@ export function plainWords(text: string): string {
     .trim();
 }
 
-/** The resources' names on screen under old-city rules (biomass is "Greens"). */
+/** The resources' names on screen (biomass is "Greens"). */
 export const RESOURCE_NAME = { energy: 'Energy', water: 'Water', biomass: 'Greens' } as const;
 
 /** Old-city strings: the objective card, the gauges, the prompt's refusals, the menu and the loading tips. */

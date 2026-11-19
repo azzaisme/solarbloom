@@ -1,5 +1,5 @@
 // City 14.5: no HUD overlap on phone and desktop at near, mid and far zoom, with the busiest HUD we can make
-// (objective with a suggestion, an open area panel, a hint, toasts and a chain counter). Screenshots go to
+// (an objective, an open area panel, a hint and a toast). Screenshots go to
 // docs/review/hud-*.png.
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -29,11 +29,19 @@ try {
       const s = g.sim;
       s.state.progression.coreActivated = true;
       s.areas.clear('park', true);
-      for (let i = 0; i < 6; i++) s.areas.clear(s.areas.nextGoal(), true);
+      // E23.1.1: areas open through gates now; clear what the gates allow (nextGoal is undefined past a closed gate)
+      let last = 'park';
+      for (let i = 0; i < 6; i++) {
+        const id = s.areas.nextGoal();
+        if (!id) break;
+        s.areas.clear(id, true);
+        last = id;
+      }
       // Busy HUD: an area panel, a toast, a hint.
       g.hud.toast('✨ A busy moment<small>Checking nothing overlaps.</small>', 'gold', 30);
-      const lm = s.areas.landmark(s.areas.nextGoal());
-      g.select?.(lm.id);
+      // the next goal's landmark, or the last woken area's when every open area is awake
+      const lm = s.areas.landmark(s.areas.nextGoal() ?? last);
+      if (lm) g.select?.(lm.id);
     });
     for (const [zname, zoom] of [['near', 1.6], ['mid', 0.8], ['far', 0.24]]) {
       await page.evaluate((zoom) => {
@@ -42,13 +50,6 @@ try {
         for (let i = 0; i < 300; i++) g.camera.update(0.05);
       }, zoom);
       await page.waitForTimeout(2000);
-      // Look 5.5: a big chain's combo panel with its breakdown is on screen while we measure.
-      await page.evaluate(() => {
-        const h = window.solarbloom.hud;
-        h.combo(24, '+40🌿 earned');
-        h.chainBreakdown({ restored: 8, adjacent: 9, synergy: 5, relay: 2 });
-      });
-      await page.waitForTimeout(500);
       const rects = await page.evaluate((PANELS) => {
         const out = [];
         for (const sel of PANELS) {
@@ -86,17 +87,6 @@ try {
         console.error(`  ✗ ${name} ${zname}: ${a.sel} runs off screen`);
       }
       await page.screenshot({ path: `${dir}/hud-${name}-${zname}.png` });
-    }
-    // The action button is always visible on the phone.
-    const act = await page.evaluate(() => {
-      const b = document.querySelector('#objAct button');
-      if (!b) return 'none';
-      const r = b.getBoundingClientRect();
-      return r.width > 10 && r.bottom <= innerHeight && r.top >= 0 ? 'ok' : 'hidden';
-    });
-    if (act !== 'ok') {
-      fails++;
-      console.error(`  ✗ ${name}: the objective's action button is ${act}`);
     }
     await page.close();
   }

@@ -56,19 +56,18 @@ export const PLOT_OPTIONS: PlotOption[] = [
   // Particular to an area type.
   { id: 'arbour', name: 'Rose arbour', icon: '🌹', blurb: 'An arch of climbing roses over a seat.', types: ['park'], solid: true, unlock: { parkStage: 2 } },
   { id: 'meadow', name: 'Wildflower meadow', icon: '🌼', blurb: 'Long grass and poppies, left to grow.', types: ['park', 'grove'], solid: false, unlock: { start: true } },
-  { id: 'parklet', name: 'Parklet', icon: '🪴', blurb: 'A bench in a ring of planters, where a car once parked.', types: ['street', 'rooftops'], solid: true, unlock: { start: true } },
+  { id: 'parklet', name: 'Parklet', icon: '🪴', blurb: 'A bench in a ring of planters, where a car once parked.', types: ['street', 'rooftops', 'downtown'], solid: true, unlock: { start: true } },
   { id: 'bikes', name: 'Bike stand', icon: '🚲', blurb: 'A rack of hoops and two bikes.', types: ['street'], solid: true, unlock: { areas: 4 } },
   { id: 'splash', name: 'Splash pool', icon: '💦', blurb: 'A shallow round pool with a spout.', types: ['plaza'], solid: false, unlock: { start: true } },
   { id: 'bandstand', name: 'Music corner', icon: '🎻', blurb: 'A small round stage with bunting.', types: ['plaza'], solid: true, unlock: { areas: 3 } },
-  { id: 'mooring', name: 'Mooring', icon: '🛶', blurb: 'A plank deck with a little boat tied up.', types: ['canal'], solid: false, nearWater: true, unlock: { start: true } },
-  { id: 'boathouse', name: 'Boat rack', icon: '🚣', blurb: 'Canoes stacked on a rack.', types: ['canal'], solid: true, unlock: { areas: 3 } },
+  { id: 'mooring', name: 'Mooring', icon: '🛶', blurb: 'A plank deck with a little boat tied up.', types: ['beach'], solid: false, nearWater: true, unlock: { start: true } },
   { id: 'stalls', name: 'Stall row', icon: '🧺', blurb: 'Two striped stalls of fruit and flowers.', types: ['market'], solid: true, unlock: { start: true } },
   { id: 'crates', name: 'Crate garden', icon: '📦', blurb: 'Old crates turned into planters.', types: ['market'], solid: false, unlock: { areas: 2 } },
   { id: 'reeds', name: 'Reed bed', icon: '🌾', blurb: 'Reeds and irises in shallow water.', types: ['reservoir'], solid: false, unlock: { start: true } },
   { id: 'dipping', name: 'Dipping pond', icon: '🐸', blurb: 'A small pond with a pier for looking in.', types: ['reservoir'], solid: false, unlock: { areas: 3 } },
-  { id: 'picnic', name: 'Picnic glade', icon: '🧺', blurb: 'A blanket, a basket and two logs to sit on.', types: ['grove'], solid: false, unlock: { start: true } },
+  { id: 'picnic', name: 'Picnic glade', icon: '🧺', blurb: 'A blanket, a basket and two logs to sit on.', types: ['grove', 'beach'], solid: false, unlock: { start: true } },
   { id: 'hut', name: 'Forest hut', icon: '🛖', blurb: 'A tiny hut of branches and moss.', types: ['grove'], solid: true, unlock: { areas: 4 } },
-  { id: 'greenhouse', name: 'Glasshouse', icon: '🪟', blurb: 'A small glasshouse full of seedlings.', types: ['rooftops'], solid: true, unlock: { areas: 2 } },
+  { id: 'greenhouse', name: 'Glasshouse', icon: '🪟', blurb: 'A small glasshouse full of seedlings.', types: ['rooftops', 'downtown'], solid: true, unlock: { areas: 2 } },
 ];
 
 export const PLOT_OPTION: Record<string, PlotOption> = Object.fromEntries(PLOT_OPTIONS.map((o) => [o.id, o]));

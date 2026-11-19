@@ -12,7 +12,7 @@ import type { PowerSky } from '../src/gameplay/PowerEnv';
 SaveService.clock = () => 0;
 
 function farm(): Sim {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = 2;
   // E23.8.2: Tock (Clock Plaza) hands over the Bio Digester; the compost bin is home kit
   sim.state.salvage!.keepers.tock = { step: 'request1' };
@@ -46,7 +46,7 @@ function run(sim: Sim, seconds: number) {
 
 describe('E23.8.2: unlocks', () => {
   it('the compost bin is home kit from the start; the Bio Digester waits for Tock in Clock Plaza', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     expect(sim.build.isUnlocked('compostBin')).toBe(true);
     expect(sim.build.isUnlocked('planter')).toBe(false); // planters open with Timber (Tide, Saltwind)
     expect(sim.build.isUnlocked('bioDigester')).toBe(false);
@@ -130,7 +130,12 @@ describe('E23.5.3: the compost bin', () => {
   it('E23.6.2: the real "Busy worms" research speeds every bin, level by level', () => {
     const sim = farm();
     const m = build(sim, 'compostBin', 12, 16);
+    // ready because the bin's recipe is open; a locked recipe would hide Busy worms
     expect(sim.compost.researchReady).toBe(true);
+    const was = MACHINE_RECIPES.find((r) => r.builds === 'compostBin')!.unlock;
+    MACHINE_RECIPES.find((r) => r.builds === 'compostBin')!.unlock = { tier: 99 };
+    expect(sim.compost.researchReady).toBe(false);
+    MACHINE_RECIPES.find((r) => r.builds === 'compostBin')!.unlock = was;
     const offered = () => sim.research.upgrades().map((u) => u.id);
     expect(offered()).not.toContain('compostSpeed'); // not until "Worm notes" is researched
     // Seeds are found, analysed at the station, and "Worm notes" runs on the bench to the end
