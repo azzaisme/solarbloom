@@ -427,6 +427,7 @@ try {
       const p = v.root.getPosition();
       cam.goal.set(p.x, p.y - 0.3, p.z);
       cam.zoomGoal = cam.maxZoom;
+      cam.follow = 6;
       return { basket: !!v.basket?.root.enabled, item: v.basket?.item, bot: g.bot.visible ?? null, frozen: g.photo.frozen ?? g.photo.freeze };
     }, flying?.id);
     await page.waitForTimeout(2500);
@@ -456,7 +457,8 @@ try {
     await page.evaluate((id) => {
       const g = window.solarbloom, m = g.sim.machine(id), cam = g.camera;
       cam.goal.set(m.x + m.size / 2, (cam.ground?.(m.x + m.size / 2, m.z + m.size / 2) ?? cam.goal.y) + 0.5, m.z + m.size / 2);
-      cam.zoomGoal = 2.6;
+      cam.zoomGoal = 4.2; // bigger is closer
+      cam.follow = 6;
     }, ids.asm);
     await page.waitForTimeout(2500);
     await page.screenshot({ path: `${dir}/ui-assembler-line-${dev}.png` });
