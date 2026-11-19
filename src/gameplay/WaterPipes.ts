@@ -413,36 +413,54 @@ export class WaterPipes {
 
   /**
    * E23.4.5: which way the water runs on each pipe tile carrying it: the sides (dx, dz) leading downstream. It starts
-   * at what pushes water into the line (a running pump or plant, and a reservoir with water that nothing is filling)
-   * and runs out from there; a tile's arrows point at neighbours one step further from every source, and a tile
-   * beside a reservoir being filled points into it (the pump's water, or a higher tank's, ends up there).
+   * at what pushes water into the line and runs out from there, each source only as far as its water really goes:
+   * - a running pump or plant, along its reach;
+   * - a reservoir with water, down its gravity tiles only (never up a step it can't climb), and only where nothing
+   *   fills it and no pump that has water to push stands on its line (a full tank on a pump's line is held there,
+   *   not a source: arrows never run from it back at the pump).
+   * A tile's arrows point at neighbours one step further from the nearest source, and a tile beside a reservoir
+   * being filled points into it (the pump's water, or a higher tank's, ends up there).
    */
   flow(): Map<string, [number, number][]> {
     const dist = new Map<string, number>();
-    const queue: string[] = [];
-    const start = (k: string) => {
-      if (!this.fed.has(k) || dist.has(k)) return;
-      dist.set(k, 0);
-      queue.push(k);
+    /** the distances from one source, through the tiles its water can reach, merged into `dist` (nearest wins) */
+    const spread = (m: MachineData, allowed: Set<string>) => {
+      const mine = new Map<string, number>();
+      const queue: string[] = [];
+      for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size))
+        if (t)
+          for (const [dx, dz] of SIDES) {
+            const k = pipeKey(t.x + dx, t.z + dz);
+            if (allowed.has(k) && this.fed.has(k) && !mine.has(k)) mine.set(k, 0), queue.push(k);
+          }
+      for (let i = 0; i < queue.length; i++) {
+        const [x, z] = parse(queue[i]);
+        const d = mine.get(queue[i])!;
+        for (const [dx, dz] of SIDES) {
+          const k = pipeKey(x + dx, z + dz);
+          if (!allowed.has(k) || !this.fed.has(k) || mine.has(k)) continue;
+          mine.set(k, d + 1);
+          queue.push(k);
+        }
+      }
+      for (const [k, d] of mine) if (!(dist.get(k)! <= d)) dist.set(k, d);
     };
-    const sinks: { m: MachineData; inNet: Set<string> }[] = [];
+    const sinks: MachineData[] = [];
     for (const net of this.networks()) {
-      const inNet = new Set(net.tiles);
       const filling = this.filling(net);
-      for (const m of filling) sinks.push({ m, inNet });
-      const sources = [...net.pumps.filter((q) => this.pumpLive(q)), ...net.tanks.filter((t) => !filling.has(t) && this.water.amountOf(tankId(t)) > 0)];
-      for (const m of sources)
-        for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size))
-          if (t) for (const [dx, dz] of SIDES) if (inNet.has(pipeKey(t.x + dx, t.z + dz))) start(pipeKey(t.x + dx, t.z + dz));
-    }
-    for (let i = 0; i < queue.length; i++) {
-      const [x, z] = parse(queue[i]);
-      const d = dist.get(queue[i])!;
-      for (const [dx, dz] of SIDES) {
-        const k = pipeKey(x + dx, z + dz);
-        if (!this.fed.has(k) || dist.has(k)) continue;
-        dist.set(k, d + 1);
-        queue.push(k);
+      sinks.push(...filling);
+      const live = net.pumps.filter((q) => this.pumpLive(q));
+      for (const p of live) spread(p, this.reachOf(p, net));
+      // pumps with water to push, live or idle (an idle one's tanks are full): their line is theirs, not a tank's
+      const pushers = net.pumps.filter((q) => {
+        const src = this.pumpSource(q);
+        return !!src && this.water.amountOf(src.id) > 0;
+      });
+      const pumped = new Set<string>();
+      for (const p of pushers) for (const k of this.reachOf(p, net)) pumped.add(k);
+      for (const t of net.tanks) {
+        if (filling.has(t) || this.water.amountOf(tankId(t)) <= 0 || this.touches(t, pumped)) continue;
+        spread(t, new Set(this.gravityTiles(t, net)));
       }
     }
     const out = new Map<string, [number, number][]>();
@@ -452,7 +470,7 @@ export class WaterPipes {
       if (down.length) out.set(k, down);
     }
     // the last tiles before a reservoir being filled point into it
-    for (const { m } of sinks)
+    for (const m of sinks)
       for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size)) {
         if (!t) continue;
         for (const [dx, dz] of SIDES) {

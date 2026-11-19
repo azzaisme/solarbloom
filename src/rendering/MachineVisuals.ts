@@ -10,9 +10,6 @@ import { group, shape, vshape, type ShapeOpts } from './Shapes';
 import { TUNING } from '../data/tuning';
 import { POWER } from '../data/power';
 import { holoMaterial } from './Hologram';
-
-/** The views that turn machines into holograms (one colour each). */
-export type HoloView = 'power' | 'water';
 import { POLE_ARM } from './PowerLines';
 import { SLAB_TOP } from './SceneBuilder';
 import { ease, type Tweens } from './Tween';
@@ -24,6 +21,9 @@ import { arcPath, ball, bezier, dome, latheAuto, matOf, part, rbox, rcyl, ring, 
 import { cultivatorDock } from './CultivatorVisuals';
 import { plantId, tankId } from '../gameplay/WaterPipes';
 import { oldCityModel, MODELS } from './Models';
+
+/** The views that turn machines into holograms (one colour each). */
+export type HoloView = 'power' | 'water';
 
 interface MachineView {
   /** E21.6: how full the Old City fountain may get (a trickle at tier 1) */

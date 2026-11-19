@@ -100,6 +100,50 @@ describe('E23.4.5: the Water view', () => {
     for (let x = 8; x <= 13; x++) expect(flow.get(`${x},4`), `${x},4`).toEqual([[-1, 0]]); // every arrow west, downhill
   });
 
+  it('arrows follow the water: a pump line into a full tank never points back at the pump', () => {
+    const sim = park();
+    const pump = put(sim, 'pump', 4, 11);
+    put(sim, 'solar', 5, 10);
+    for (let x = 5; x <= 9; x++) sim.water.pipes.lay(GROUND, x, 11);
+    const r = put(sim, 'reservoir', 10, 11);
+    sim.water.fill(tankId(r), 1e9); // full
+    for (let i = 0; i < 3; i++) {
+      sim.power.tick(1);
+      sim.water.tick(1);
+    }
+    expect(sim.water.levelOf(tankId(r))).toBe(1);
+    expect(sim.water.pipes.carries(5, 11)).toBe(true);
+    const flow = sim.water.pipes.flow();
+    for (let x = 5; x <= 9; x++) expect(flow.get(`${x},11`) ?? [], `${x},11`).not.toContainEqual([-1, 0]); // never west, at the pump
+    // and with a step up on the line the pump still runs, its arrows run east from it, and still none come back
+    sim.grid.get(GROUND, 6, 11)!.level = 2;
+    sim.water.tick(1);
+    expect(sim.water.pipes.pumping.has(pump.id)).toBe(true);
+    const f2 = sim.water.pipes.flow();
+    expect(f2.get('5,11')).toEqual([[1, 0]]);
+    for (let x = 5; x <= 9; x++) expect(f2.get(`${x},11`) ?? [], `${x},11`).not.toContainEqual([-1, 0]);
+  });
+
+  it("arrows from a tank respect the height it can feed: never up a step it can't climb", () => {
+    const sim = park();
+    const noPower = { ...sim.power.sky(), sun: 0, solar: 0, wind: 0 };
+    sim.power.skyOverride = () => noPower;
+    const lo = put(sim, 'reservoir', 6, 4); // a full tank on low ground, west
+    sim.water.fill(tankId(lo), 1e9);
+    const hi = put(sim, 'reservoir', 14, 4); // a tank with water on a terrace two levels up, east
+    for (const t of sim.grid.footprint(GROUND, 14, 4, 2)) t!.level = 3;
+    sim.water.fill(tankId(hi), 200);
+    for (let x = 8; x <= 13; x++) sim.water.pipes.lay(GROUND, x, 4);
+    for (let x = 10; x <= 13; x++) sim.grid.get(GROUND, x, 4)!.level = 3; // the line climbs to the terrace at x 10
+    sim.water.tick(1);
+    expect(sim.water.levelOf(tankId(lo))).toBe(1); // full: not being filled, so it is a source too
+    const flow = sim.water.pipes.flow();
+    // the low tank's water can't climb: from the foot of the step on, no arrow points east, up toward the high tank
+    for (let x = 9; x <= 13; x++) expect(flow.get(`${x},4`) ?? [], `${x},4`).not.toContainEqual([1, 0]);
+    // on the terrace the high tank's water runs west, down toward the step
+    for (let x = 11; x <= 13; x++) expect(flow.get(`${x},4`), `${x},4`).toEqual([[-1, 0]]);
+  });
+
   it('rings a dry planter red: none by the pond or beside a running pipe', () => {
     const sim = park();
     const byPond = put(sim, 'planter', 6, 12); // beside the park's pond
@@ -121,6 +165,7 @@ describe('E23.4.5: the Water view', () => {
   it('turns water that runs or is held into blue holograms: a running pump, a filled tank, a working plant', () => {
     const sim = park();
     const pump = put(sim, 'pump', 4, 11); // on the pond's bank, but no power yet
+    for (let x = 5; x <= 7; x++) sim.water.pipes.lay(GROUND, x, 11); // its line (a pump with no line has nowhere to push)
     const r = put(sim, 'reservoir', 10, 3);
     const plant = put(sim, 'desalination', 12, 12, 2);
     sim.water.tick(1); // the pump and the plant ask the grid for power
@@ -137,6 +182,19 @@ describe('E23.4.5: the Water view', () => {
     sim.water.fill(sim.water.plantTank(plant.id)!.id, 5);
     const on = WaterOverlay.holoMachines(sim);
     expect(on).toEqual(new Set([pump.id, r.id, plant.id]));
+    // a powered plant standing idle (full, nowhere for its water to go) shows idle: no hologram
+    put(sim, 'solar', 14, 12); // touching the plant: it is on power
+    sim.water.fill(sim.water.plantTank(plant.id)!.id, 1e9);
+    sim.power.tick(1);
+    sim.water.tick(1);
+    sim.power.tick(1);
+    expect(sim.water.pipes.powered(plant)).toBe(true);
+    expect(sim.water.desalinating.has(plant.id)).toBe(false);
+    expect(WaterOverlay.holoMachines(sim).has(plant.id)).toBe(false);
+    // drawn from, it has room again and works: blue again
+    sim.water.draw(sim.water.plantTank(plant.id)!.id, 20);
+    sim.water.tick(1);
+    expect(WaterOverlay.holoMachines(sim).has(plant.id)).toBe(true);
     // the hologram blue is fully saturated, and the look is the Power view's (the owner's numbers)
     const c = new pc.Color().fromString(PALETTE.signal.water.machineHolo);
     expect(Math.min(c.r, c.g, c.b)).toBe(0);
