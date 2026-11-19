@@ -29,7 +29,11 @@ try {
       const s = g.sim;
       s.state.progression.coreActivated = true;
       s.areas.clear('park', true);
-      for (let i = 0; i < 6; i++) s.areas.clear(s.areas.nextGoal(), true);
+      // E23.1.1: areas open through gates now; clear what the gates allow (nextGoal is undefined past a closed gate)
+      for (let i = 0; i < 6; i++) {
+        const id = s.areas.nextGoal();
+        if (id) s.areas.clear(id, true);
+      }
       // Busy HUD: an area panel, a toast, a hint.
       g.hud.toast('✨ A busy moment<small>Checking nothing overlaps.</small>', 'gold', 30);
       const lm = s.areas.landmark(s.areas.nextGoal());
