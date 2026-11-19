@@ -15,7 +15,8 @@ const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=sw
 let failed = false;
 const QUICK = !!process.env.QUICK; // one size, midnight only: for tuning
 const SIZES = [
-  { name: 'desktop', width: 1920, height: 1080, query: '' },
+  // desktop on the high tier: headless auto-detects the low one, which has no bloom
+  { name: 'desktop', width: 1920, height: 1080, query: '&gfx=high' },
   { name: 'deck', width: 1280, height: 800, query: '&gfx=deck' },
 ];
 const TIMES = { dusk: 0.662, midnight: 0.83, dawn: 0.996 };
@@ -32,16 +33,16 @@ try {
     await page.waitForFunction(() => !!window.solarbloom && !!window.solarbloom.sim);
     await page.waitForTimeout(4000);
     await page.addStyleTag({ content: '#hint, #intro, .toast, #toasts { display: none !important; }' });
-    const shot = async (name, x, z, zoom, yaw = 0, wait = 5000) => {
-      await page.evaluate(({ x, z, zoom, yaw }) => {
+    // The game's own camera: bloombot stands at (x, z) and the camera follows it at the game's zoom, as a player
+    // sees it (only the yaw is turned, as a player can).
+    const shot = async (name, x, z, yaw = 0, wait = 5000) => {
+      await page.evaluate(({ x, z, yaw }) => {
         const g = window.solarbloom;
-        g.camera.bounds = { minX: -1e4, maxX: 1e4, minZ: -1e4, maxZ: 1e4 };
-        g.camera.minZoom = 0.12;
-        if (g.bot) g.bot.following = false;
-        g.camera.glide(x, 0, z, zoom);
+        g.bot.teleport('g', x, z);
+        g.bot.following = true;
         g.camera.turnTo(yaw);
         for (let i = 0; i < 300; i++) g.camera.update(0.05);
-      }, { x, z, zoom, yaw });
+      }, { x, z, yaw });
       await page.waitForTimeout(wait);
       const file = `${dir}/${name}-${size.name}.png`;
       const png = await page.screenshot({ path: file });
@@ -94,9 +95,11 @@ try {
       put('droneHub', 13, 42, 2);
       s.build.check = check;
       s.inventory.pay = pay;
-      g.bot.teleport('g', 7, 45);
       const cz = (s.state.cozy ??= {});
       cz.decorUnlocked = [...(cz.decorUnlocked ?? []), 'lamppost', 'uplight', 'porchlight', 'tablelight', 'fairylights', 'paperlanterns', 'glasslanterns'];
+      // E23.6.1 (#489): a light opens once it has been made at the crafting table
+      s.state.salvage.decorMade = [...new Set([...(s.state.salvage.decorMade ?? []), ...cz.decorUnlocked, 'festoon', 'pathlight', 'lantern', 'solarstake', 'glowpod', 'solarlamppost'])].sort();
+      g.cozy.checkDecorUnlocks();
       const kinds = ['lamppost', 'pathlight', 'lantern', 'solarstake', 'glowpod', 'uplight', 'tablelight', 'porchlight'];
       let n = 0;
       for (let z = 36; z <= 47 && n < 24; z++)
@@ -127,26 +130,17 @@ try {
         const s = window.solarbloom.sim;
         s.weather.forceForTest(weather, 1e9);
         (s.state.clock ??= { offset: 0 }).offset += (f - s.clock.dayFraction()) * 2880;
-      }, { f, weather }).then(() =>
-        // the lamps fade in over a few game seconds; headless frames are slow, so wait until they have
-        page.waitForFunction(() => {
-          const s = window.solarbloom.sim;
-          return Math.abs(s.lights.darkness() - s.power.sky().dark) < 0.02;
-        }, null, { timeout: 120_000 }),
-      );
+        // the lamps fade in over a few game seconds, which headless frames take minutes to play: skip the fade
+        // (power-lights.test covers it) and set them straight to how dark it is now
+        s.lights.dark = s.power.sky().dark;
+      }, { f, weather });
     await at(0.3, 'sunny');
-    const noon = await shot('noon-clear', 7, 41, 1.2, 20, 8000);
+    const noon = await shot('noon-clear', 7, 42, 20, 8000);
     for (const weather of QUICK ? ['sunny'] : ['sunny', 'rain']) {
       const w = weather === 'sunny' ? 'clear' : 'rain';
       for (const [name, f] of Object.entries(TIMES).filter(([n]) => !QUICK || n === 'midnight')) {
         await at(f, weather);
-        const mean = await shot(`${name}-${w}`, 7, 41, 1.2, 20, 8000);
-        if (name === 'midnight')
-          console.log('    lamps', JSON.stringify(await page.evaluate(() => {
-            const g = window.solarbloom;
-            const lights = g.app.root.findComponents('light').filter((l) => l.entity.name === 'lamp-light' && l.entity.enabled);
-            return { share: g.lightVisuals.share, glows: g.sim.lights.all().slice(0, 6).map((l) => [l.def.id, +l.glow.toFixed(2)]), stats: g.lightVisuals.stats(), clustered: g.app.scene.clusteredLightingEnabled, sample: lights.slice(0, 3).map((l) => ({ i: +l.intensity.toFixed(3), r: +l.range.toFixed(2), p: l.entity.getPosition().toArray().map((v) => +v.toFixed(2)), layers: l.layers })) };
-          })));
+        const mean = await shot(`${name}-${w}`, 7, 42, 20, 8000);
         if (name !== 'midnight') continue;
         const share = lum(mean) / lum(noon);
         console.log(`    midnight is ${(share * 100).toFixed(0)}% as bright as noon; blue − red = ${mean[2] - mean[0]}`);
@@ -158,15 +152,14 @@ try {
       }
     }
     await at(TIMES.midnight, 'sunny');
-    await shot('midnight-wide', 7, 41, 0.45, 20, 6000);
-    await shot('midnight-close', 7, 44, 2.4, 20, 5000);
+    await shot('midnight-lamps', 4, 39, 200, 6000);
     // the Power view on the moonlit night: the grid must still stand out
     await page.evaluate(() => {
       const g = window.solarbloom;
       g.selectTool('battery');
       if (!g.powerOverlay.visible) g.togglePowerView();
     });
-    await shot('midnight-power-view', 8, 42, 1.0, 20, 6000);
+    await shot('midnight-power-view', 8, 43, 20, 6000);
     await page.evaluate(() => {
       const g = window.solarbloom;
       g.togglePowerView();

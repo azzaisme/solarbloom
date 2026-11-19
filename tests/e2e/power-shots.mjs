@@ -173,6 +173,9 @@ try {
       const s = g.sim;
       const cz = (s.state.cozy ??= {});
       cz.decorUnlocked = [...(cz.decorUnlocked ?? []), 'lamppost', 'uplight', 'porchlight', 'tablelight', 'fairylights', 'paperlanterns', 'glasslanterns'];
+      // E23.6.1 (#489): a light opens once it has been made at the crafting table
+      s.state.salvage.decorMade = [...new Set([...(s.state.salvage.decorMade ?? []), ...cz.decorUnlocked, 'festoon', 'pathlight', 'lantern', 'solarstake', 'glowpod', 'solarlamppost'])].sort();
+      g.cozy.checkDecorUnlocks();
       const kinds = ['lamppost', 'pathlight', 'lantern', 'solarstake', 'glowpod', 'uplight', 'tablelight', 'porchlight'];
       let n = 0;
       for (let z = 36; z <= 47 && n < 40; z++)

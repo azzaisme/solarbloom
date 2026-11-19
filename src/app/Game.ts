@@ -4435,6 +4435,7 @@ export class Game {
     }
     this.dayNight.apply(this.lightMoment());
     this.look.rimShare = this.dayNight.rim;
+    this.look.night = 1 - this.dayNight.light;
     this.chunks.fogTint.copy(this.dayNight.cloudTint);
     this.chunks.tintFog();
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);

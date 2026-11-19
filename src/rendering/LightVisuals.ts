@@ -3,7 +3,7 @@ import type { LitLight } from '../gameplay/Lights';
 import type { PowerNode } from '../gameplay/PowerGrid';
 import type { Sim } from '../gameplay/Sim';
 import { LIGHTING } from '../data/lights';
-import { color, PALETTE } from './Materials';
+import { color, glow, PALETTE } from './Materials';
 import { ball } from './MachineParts';
 import { cableY } from './PowerLines';
 import { SLAB_TOP } from './SceneBuilder';
@@ -103,7 +103,9 @@ export class LightVisuals {
     m.useFog = tone === 'moth';
     if (tone !== 'moth') {
       m.emissive = color(hex);
-      m.emissiveIntensity = 0.35 + 1.0 * (step / STEPS);
+      // bulbs are glows (into the bloom range); insects stay soft
+      const [lo, hi] = LIGHTING.bulb.glow;
+      m.emissiveIntensity = tone === 'firefly' ? 0.35 + step / STEPS : glow(lo + (hi - lo) * (step / STEPS));
     }
     m.update();
     this.mats.set(key, m);
@@ -162,7 +164,7 @@ export class LightVisuals {
       const base = this.tileTop(l.roofId, l.x, l.z);
       const [ox, oz] = turn(l.rot, def.id === 'porchlight' ? 0 : def.id === 'tablelight' ? 0.08 : 0, def.id === 'porchlight' ? -0.1 : def.id === 'tablelight' ? 0.04 : 0);
       at = [base[0] + ox, base[1] + def.bulbY, base[2] + oz];
-      const size = def.id === 'lamppost' || def.id === 'solarlamppost' ? 0.2 : def.id === 'uplight' ? 0.14 : def.id === 'glowpod' ? 0.09 : 0.13;
+      const size = (def.id === 'lamppost' || def.id === 'solarlamppost' ? 0.2 : def.id === 'uplight' ? 0.14 : def.id === 'glowpod' ? 0.09 : 0.13) * LIGHTING.bulb.cover;
       if (def.id === 'glowpod') {
         // five little glowing pods on the plant's stems
         for (let i = 0; i < 5; i++) {
@@ -242,9 +244,7 @@ export class LightVisuals {
       if (!col) this.toneCol.set(w.tone, (col = color(L.lamps[w.tone as keyof typeof L.lamps])));
       light.color = col;
       light.range = C.range * (0.6 + 0.4 * Math.min(1, w.power)) + w.h;
-      // inverse-square falloff (PlayCanvas: 16 / d²): set so the ground right under the lamp gets `strength`
-      const h = Math.min(w.h, C.refHeight);
-      light.intensity = ((C.strength * w.power * h * h) / 16) * this.share;
+      light.intensity = C.intensity * w.power * this.share;
     });
   }
 
