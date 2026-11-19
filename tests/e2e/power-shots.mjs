@@ -191,7 +191,16 @@ try {
         g.selectTool('battery');
         if (!g.powerOverlay.visible) g.togglePowerView();
       });
-      await shot('power-overlay-night', 8, 42, 1.0, 20, 4000);
+      const withOverlay = await shot('power-overlay-night', 8, 42, 1.0, 20, 4000);
+      // the overlay's own cost: the same view, still building, with the view off
+      await page.evaluate(() => window.solarbloom.togglePowerView());
+      await page.waitForTimeout(1500);
+      const without = await page.evaluate(() => window.solarbloom.app.stats.drawCalls.total);
+      const ov = await page.evaluate(() => {
+        const o = window.solarbloom.powerOverlay;
+        return { ...o.summary(), batchGroup: o.group };
+      });
+      console.log(`  overlay at night: ${withOverlay} draw calls with it, ${without} without (+${withOverlay - without})`, JSON.stringify(ov));
       await page.evaluate(() => window.solarbloom.selectTool('pulse'));
     }
     const stats = await page.evaluate(() => window.solarbloom.lightVisuals.stats());

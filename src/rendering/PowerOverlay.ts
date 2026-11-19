@@ -9,6 +9,9 @@ import { glowMaterial, glowTileMesh } from './TileFx';
 
 const P = PALETTE.signal.power;
 
+/** E23.3.5's lights are grid nodes too (`light:<kind>`). */
+const isLight = (m: PowerNode) => m.type.startsWith('light:');
+
 interface MemberView {
   m: PowerNode;
   frame: pc.MeshInstance;
@@ -122,13 +125,16 @@ export class PowerOverlay {
       for (const m of n.members) {
         const [x, y, z] = this.worldOf(m);
         const e = group(this.root, 'pframe', [x, y + 0.04, z]);
-        const mi = new pc.MeshInstance(glowTileMesh(this.device, m.size + 0.2), this.netMats[i % this.netMats.length]);
+        // A light gets a small glowing dot, not a tile frame and no line, so the machines and the grid's shape read
+        // first; you can still see which lights a network powers (or that one has none, in red).
+        const size = isLight(m) ? 0.4 : m.size + 0.2;
+        const mi = new pc.MeshInstance(glowTileMesh(this.device, size), this.netMats[i % this.netMats.length]);
         e.addComponent('render', { meshInstances: [mi], castShadows: false, receiveShadows: false });
         this.members.push({ m, frame: mi, net: i });
         if (this.sim.power.roleOf(m)?.battery) this.bar(m, x, y, z);
       }
       for (const [a, b] of n.links) this.glowCable(a, b, line, 0.045);
-      for (const [p, m] of n.feeds) this.glowCable(p, m, line, 0.022);
+      for (const [p, m] of n.feeds) if (!isLight(m)) this.glowCable(p, m, line, 0.022);
     });
     // Poles lightning tripped: a red ring at the foot (they are on no network until reset).
     const red = mat(P.tripped, { unlit: true });
