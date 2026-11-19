@@ -327,7 +327,8 @@ export interface LinkState {
 export type Rules = 'oldcity' | 'classic';
 
 /** E21 §1: the eight materials. */
-export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone';
+/** E23.5.1: biomass, food, compost and fertiliser are backpack items too (data/farm). */
+export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser';
 /** E21 §6: bloombot's abilities, one per fountain tier 1–4. */
 export type AbilityId = 'pry' | 'hover' | 'climb' | 'glide';
 /** E21 §8: where a Keeper is in its story. Woken (pulsed and handed 5 of anything) goes straight to request1. */
@@ -380,6 +381,8 @@ export interface SalvageState {
   rewards?: string[];
   /** E21.12: lookouts and vistas already seen, beacons spotted (presentation, but saved so they play once) */
   seen?: string[];
+  /** E23.5.1: restored tiles clipped for biomass, by tile id → sim time they can be gathered again */
+  clipped?: Record<string, number>;
 }
 
 export interface GameState {

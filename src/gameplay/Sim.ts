@@ -42,6 +42,7 @@ import { RestSystem } from './Rest';
 import { BuriedSystem } from './Buried';
 import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
+import { GatherSystem } from './GatherSystem';
 import { Weather } from './Weather';
 
 /**
@@ -108,6 +109,8 @@ export class Sim {
   readonly nightFinds: NightFinds;
   /** E23.7.2: the weather: one kind a game day, each with its effects (data/weather). See gameplay/Weather. */
   readonly weather: Weather;
+  /** E23.5.1: gathering biomass from restored ground (old-city rules). */
+  readonly gather: GatherSystem;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -151,6 +154,16 @@ export class Sim {
       this.grid.chunkAt(layer, Number(cx), Number(cz));
     }
     this.econ = new Economy(state.resources, state.caps);
+    // E23.5.1: under old-city rules biomass is gathered into the backpack (GatherSystem), never earned as a counter
+    // and every biomass price (drone refits and jobs, the core, ...) is paid from the backpack and the store within reach
+    if (this.oldCity) {
+      this.econ.noIncome = new Set(['biomass']);
+      this.econ.items = {
+        kinds: new Set(['biomass']),
+        have: () => this.inventory.available('biomass'),
+        take: (_k, units) => this.inventory.pay({ biomass: units }),
+      };
+    }
     this.inventory = new Inventory(this);
     this.charge = new ChargeSystem(this);
     this.pulseLoad = new PulseLoad(this);
@@ -166,6 +179,7 @@ export class Sim {
     this.keepers = new KeeperSystem(this);
     this.mainland = new MainlandSystem(this);
     this.journal = new JournalSystem(this);
+    this.gather = new GatherSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);

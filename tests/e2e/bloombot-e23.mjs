@@ -81,7 +81,7 @@ try {
     const s = window.solarbloom.sim;
     s.state.charge.value = 0.4;
     s.charge.use('pulse');
-    s.econ.spend({ biomass: s.econ.get('biomass') }); // nothing to eat
+    for (const k of Object.keys(s.state.salvage.pack)) delete s.state.salvage.pack[k]; // nothing to eat
   });
   check(await until(page, () => document.getElementById('chargeRow').classList.contains('empty')), 'at zero the meter goes grey');
   await shot(page, '03-charge-empty', 'out of charge: the grey meter at 0% and the one-time "Out of charge" note');
@@ -122,10 +122,13 @@ try {
   await page.evaluate(() => {
     const s = window.solarbloom.sim;
     s.state.charge.value = 10;
-    s.econ.add('biomass', 3);
+    s.state.salvage.pack.biomass = 3;
   });
   await key(page, 'KeyF');
-  check(await until(page, () => window.solarbloom.sim.charge.value() >= 15.9 && !window.solarbloom.sim.charge.eating), 'F eats a snack and the charge comes back');
+  check(
+    await until(page, () => window.solarbloom.sim.charge.value() >= 13.9 && !window.solarbloom.sim.charge.eating && window.solarbloom.sim.state.salvage.pack.biomass === 2),
+    'F eats a Biomass from the backpack and the charge comes back',
+  );
   // ── E23.2.2.1: the load wheel on the keyboard ──
   await page.evaluate(() => {
     const s = window.solarbloom.sim;
@@ -147,7 +150,9 @@ try {
     const g = window.solarbloom;
     const s = g.sim;
     const dead = s.areas.tiles('park').filter((t) => t.ground === 'polluted' && !t.blocked && !t.occupantId && s.restoration.checkPulse(t).ok);
-    const row = dead.find((t) => [0, 6, 12].every((dx) => dead.some((o) => o.x === t.x + dx && o.z === t.z)));
+    // well inside the park (not along the railing), with open dead ground in front to look across
+    const open = (x, z) => dead.some((o) => o.x === x && o.z === z);
+    const row = dead.find((t) => t.z >= 4 && [0, 6, 12].every((dx) => open(t.x + dx, t.z) && open(t.x + dx, t.z + 2)));
     return row ? [0, 6, 12].map((dx) => ({ x: row.x + dx, z: row.z })) : [];
   });
   check(grown.length === 3, 'three dead park tiles in a row to pulse');
@@ -177,13 +182,16 @@ try {
   check(left.seeds === 5 && left.rareSeed === 1 && left.fertiliser === 1, 'each pulse used one unit of its load');
   await page.evaluate((c) => {
     const g = window.solarbloom;
-    g.bot.teleport('g', c.x, c.z + 8); // out of the way, behind the camera
-    g.camera.turnTo(0, true); // looking along the row's normal: the three plots left to right
-    g.bot.following = false;
-    g.camera.focus(c.x + 0.5, 0, c.z + 0.5, 1.1, 0.01);
+    // bloombot just in front of the middle plot, looking at the row: the camera follows it, the plots left to right
+    g.bot.following = true;
+    g.bot.teleport('g', c.x, c.z + 3);
+    g.bot.pose.x = c.x + 0.5;
+    g.bot.pose.z = c.z + 3.5;
+    g.bot.pose.facing = Math.PI;
+    g.camera.turnTo(0, true);
   }, grown[1]);
-  await page.waitForTimeout(2500);
-  await shot(page, '04-loads-grown', 'left to right: a wildflower meadow (seeds), the region\'s rare flowers, a young tree in shrubs over a bigger patch (fertiliser)');
+  await page.waitForTimeout(3500);
+  await shot(page, '04-loads-grown', "what each load grew around bloombot: a white wildflower meadow (seeds), the region's pink rare flowers, and a young tree in flowering shrubs over a bigger patch (fertiliser)");
 
   // ── E23.2.2.3: the ripple reveals a buried find; a mound shows; Interact digs it up ──
   const dug = await page.evaluate(() => {
@@ -230,7 +238,9 @@ try {
     await page.waitForTimeout(400);
     const after = await page.evaluate((m) => window.solarbloom.sim.inventory.count(m), f.material);
     check(after === before + f.n, `E dug it up: ${f.material} ${before} → ${after}`);
-    await shot(page, '06-buried-dug', 'dug up: the mound is gone and a pick-up toast shows');
+    check(!(await page.evaluate((f) => !!window.solarbloom.sim.buried.known(f.x, f.z), f)), 'the find is no longer there to dig');
+    await page.waitForTimeout(2500); // the chunk redraws without the mound (slow software rendering)
+    await shot(page, '06-buried-dug', 'dug up: the mound is gone and the ground is plain again (the seeds went into the backpack)');
   }
   // ── E23.2.3: benches ──
   const bench = { x: 10, z: 6 };

@@ -104,6 +104,12 @@ describe('E22.6: the backpack', () => {
     expect(words.filter((w) => bannedIn(w).length)).toEqual([]);
   });
 
+  it('a keepsake not found yet never hints at a Lucky Cat (they stay hidden)', () => {
+    const sim = oldCity();
+    const keeps = collection(sim).find((g) => g.title === 'Keepsakes')!;
+    for (const r of keeps.rows.filter((r) => !r.found)) expect(`${r.name} ${r.detail}`).not.toMatch(/cat/i);
+  });
+
   it('a classic game has no materials or requests to show', () => {
     const sim = new Sim(createInitialState(3, 'classic'));
     expect(itemCells(sim)).toEqual([]);

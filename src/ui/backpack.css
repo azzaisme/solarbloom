@@ -3,6 +3,7 @@
 :root {
   --mat-scrap: #b9aea2; --mat-seeds: #9ed06a; --mat-copper: #e0915c; --mat-timber: #c08a56;
   --mat-glass: #9adfe8; --mat-clay: #d08e6c; --mat-gears: #d2bc7c; --mat-sunstone: #f6d256; --mat-greens: #94e46e;
+  --mat-food: #f2a24c; --mat-compost: #9c7552; --mat-fertiliser: #d8c27a;
 }
 svg.mi { flex: none; display: block; }
 svg.mi > * { stroke: var(--glyph-ink-dark); stroke-width: 1.2; stroke-linejoin: round; }
@@ -20,6 +21,9 @@ svg.mi-clay { fill: var(--mat-clay); }
 svg.mi-gears { fill: var(--mat-gears); }
 svg.mi-sunstone { fill: var(--mat-sunstone); }
 svg.mi-biomass { fill: var(--mat-greens); }
+svg.mi-food { fill: var(--mat-food); }
+svg.mi-compost { fill: var(--mat-compost); }
+svg.mi-fertiliser { fill: var(--mat-fertiliser); }
 svg.mi-unknown .mi-ghost { fill: var(--glass-hi-2); stroke: var(--text-soft); stroke-dasharray: 3 3; }
 svg.mi-unknown .mi-line { stroke: var(--text-strong); }
 
