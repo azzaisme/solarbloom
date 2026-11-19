@@ -441,6 +441,10 @@ const signal = {
     cellBack: '#1d3640',
     /** the Power view: powered electrical machines glow this soft yellow */
     machineGlow: '#ffd75e',
+    /** the network under the cursor, in the Power view: near white, so it stands out from the yellow */
+    focus: '#fff6d8',
+    /** the Power view's light: the world goes cool and grey under it, so the yellow grid pops */
+    viewLight: '#8c98ab',
   },
 };
 

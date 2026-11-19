@@ -5,7 +5,7 @@ import { DAY_LIGHT } from '../data/sky';
 import { DAY } from '../data/time';
 import { daylightAt, sunHeightAt } from '../gameplay/Clock';
 import { tintClouds } from './Clouds';
-import { color } from './Materials';
+import { color, PALETTE } from './Materials';
 import type { SceneBuilder } from './SceneBuilder';
 import type { Sky } from './Sky';
 
@@ -44,6 +44,7 @@ export class DayNight {
   private fd = new pc.Vec3();
   private tmp = new pc.Color();
   private fillCol = new pc.Color();
+  private viewLight = color(PALETTE.signal.power.viewLight);
   /** the unlit clouds' and fog sheets' tint now (warm at dusk, dim blue at night) */
   readonly cloudTint = new pc.Color(1, 1, 1);
   /** the rim light's share now (LookController multiplies by it) */
@@ -116,6 +117,8 @@ export class DayNight {
     const warm = 1 - smooth(h / 0.45);
     this.tmp.lerp(this.base.sun, this.base.low, warm);
     this.tmp.lerp(this.base.moon, this.tmp, day);
+    // the Power view: the light goes cool and grey as it dims, so the world reads muted and the yellow grid pops
+    if (this.dim > 0) this.tmp.lerp(this.tmp, this.viewLight, this.dim);
     sunLight.color = this.tmp.clone();
     // under cloud the sun all but goes: soft, shadowless light from the sky instead
     const sunI = LOOK.sun.intensity * lerp(L.moonShare, 1, day) * (1 - oc * 0.88);
@@ -125,7 +128,9 @@ export class DayNight {
     const fill = this.scene.fill.light!;
     this.fd.set(-this.dir.x, -0.75, -this.dir.z).normalize();
     this.scene.fill.setRotation(this.q.setFromDirections(pc.Vec3.DOWN, this.fd));
-    fill.color = this.fillCol.lerp(this.base.fillNight, this.base.fill, day).clone();
+    this.fillCol.lerp(this.base.fillNight, this.base.fill, day);
+    if (this.dim > 0) this.fillCol.lerp(this.fillCol, this.viewLight, this.dim);
+    fill.color = this.fillCol.clone();
     fill.intensity = LOOK.fill.intensity * lerp(L.fillNight, 1, day) * (1 + oc * 0.6) * keep;
     this.app.scene.skyboxIntensity = LOOK.env.intensity * lerp(L.envNight, 1, day) * (1 - oc * 0.1) * keep;
     this.rim = lerp(L.rimNight, 1, day) * (1 - oc * 0.5);

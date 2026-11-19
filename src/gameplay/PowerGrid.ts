@@ -121,6 +121,40 @@ export class PowerGrid {
     return this.nets;
   }
 
+  /**
+   * E23.3.4: the network at a point (tile coordinates on a roof), with a margin: the one with a member, a pole line or
+   * a drop cable nearest the point, if within `reach` tiles. The Power view highlights it, so the player needn't aim
+   * at a thin line exactly.
+   */
+  networkNear(roofId: string, x: number, z: number, reach: number): PowerNetwork | undefined {
+    const c = (m: MachineData): [number, number] => [m.x + m.size / 2, m.z + m.size / 2];
+    const toSeg = (a: MachineData, b: MachineData) => {
+      const [ax, az] = c(a);
+      const [bx, bz] = c(b);
+      const dx = bx - ax;
+      const dz = bz - az;
+      const L = dx * dx + dz * dz;
+      const t = L > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L)) : 0;
+      return Math.hypot(x - (ax + dx * t), z - (az + dz * t));
+    };
+    let best: PowerNetwork | undefined;
+    let bestD = reach;
+    for (const n of this.networks()) {
+      for (const m of n.members) {
+        if (m.roofId !== roofId) continue;
+        // a machine: distance to its footprint's edge (0 inside)
+        const d = Math.hypot(Math.max(m.x - x, 0, x - (m.x + m.size)), Math.max(m.z - z, 0, z - (m.z + m.size)));
+        if (d <= bestD) [best, bestD] = [n, d];
+      }
+      for (const [a, b] of [...n.links, ...n.feeds]) {
+        if (a.roofId !== roofId || b.roofId !== roofId) continue;
+        const d = toSeg(a, b);
+        if (d <= bestD) [best, bestD] = [n, d];
+      }
+    }
+    return best;
+  }
+
   networkOf(m: MachineData | undefined): PowerNetwork | undefined {
     if (!m) return undefined;
     this.fresh();
