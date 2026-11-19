@@ -555,7 +555,7 @@ export class Game {
             this.hud.showFail(msg, sc?.x, sc?.y);
           },
         });
-        this.visitors = new Visitors(this.scene.world);
+        this.visitors = new Visitors(this.scene.world, this.app);
         // E23.2.4.3: a kind that has never visited before goes in the log (Backpack → Collection → Visitors)
         this.sim.bus.on('wildlife.logged', (e) => {
           if (!e.first) return;

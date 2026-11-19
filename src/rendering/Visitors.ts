@@ -1,25 +1,48 @@
 import * as pc from 'playcanvas';
-import { VISIT, VISITORS, type Perch } from '../data/wildlife';
+import { VISIT, VISITOR_LOOK, VISITORS, type Perch } from '../data/wildlife';
 import type { Visit } from '../gameplay/Wildlife';
 import { PALETTE } from './Materials';
 import { group, vshape } from './Shapes';
+
+/** E23.10 batch B4: each visitor's own model, by id (assets/raw/models/visitors/<id>.glb). */
+const MODEL_URLS = import.meta.glob('../../assets/raw/models/visitors/*.glb', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+const modelUrl = (kind: string) => MODEL_URLS[`../../assets/raw/models/visitors/${kind}.glb`];
 
 /**
  * E23.2.4.2 (#415): the animals that come over while bloombot sits. Each flies or walks in from a few tiles away,
  * settles where its visit says (on bloombot's head, shoulders, lap or arm, beside it, sniffing in front, perched
  * nearby, or just passing), breathes or flutters there, and leaves when bloombot stands.
  *
- * Primitive placeholders at gameplay scale, in the style of the other fauna (Fauna.ts): `parts` animate (wings, or
- * the head). Pooled per kind (made the first time one comes, parked when gone); nothing here writes the sim.
+ * Each kind loads its own model (E23.10 batch B4), sized from VISITOR_LOOK and playing its clips where it has them
+ * (a flight or walk clip on the way, an idle once settled); without clips the whole model bobs, flutters or
+ * breathes. A primitive placeholder in the style of the other fauna (Fauna.ts) stands in until the model has
+ * loaded, and for good if a kind has none or it fails to load: its `parts` animate (wings, or the head). Pooled
+ * per kind (made the first time one comes, parked when gone); nothing here writes the sim.
  */
 interface Actor {
   kind: string;
   root: pc.Entity;
+  /** the primitive placeholder (hidden once the model is in) */
+  body: pc.Entity;
   /** wings (fliers) or a head (walkers), animated while settled */
   parts: pc.Entity[];
   flies: boolean;
   used: boolean;
+  /** the loaded model, its holder (moved for the procedural motion), and its clips */
+  model?: { holder: pc.Entity; entity: pc.Entity; clips: { move?: string; idle?: string }; lift: number; clip?: string };
 }
+
+/** Clip names a model may carry, best first: on the way in, and settled. */
+const MOVE_CLIPS = ['fly', 'flying', 'flap', 'walk', 'walking', 'hop', 'run', 'move'];
+const IDLE_CLIPS = ['idle', 'perch', 'sit', 'rest', 'breathe', 'stand', 'look'];
+const pickClip = (names: string[], want: string[]) => {
+  const low = names.map((n) => n.toLowerCase());
+  for (const w of want) {
+    const i = low.findIndex((n) => n === w || n.endsWith(`|${w}`) || n.includes(w));
+    if (i >= 0) return names[i];
+  }
+  return undefined;
+};
 
 /** What the renderer needs to know about bloombot right now. */
 export interface VisitHost {
@@ -46,8 +69,51 @@ export class Visitors {
   private tmp = new pc.Vec3();
   private from = new pc.Vec3();
 
-  constructor(parent: pc.Entity) {
+  constructor(parent: pc.Entity, private app?: pc.AppBase) {
     parent.addChild(this.root);
+  }
+
+  /** Whether a kind is drawn with its own model (loaded), for tests and the review shots. */
+  modelled(kind: string): boolean {
+    return this.pool.some((a) => a.kind === kind && !!a.model);
+  }
+
+  /** Loads a kind's own model into an actor; the placeholder is hidden once it is in. */
+  private load(a: Actor) {
+    const url = modelUrl(a.kind);
+    if (!url || !this.app) return;
+    this.app.assets.loadFromUrl(url, 'container', (err, asset) => {
+      if (err || !asset || !a.root.parent) return; // (the visitors were torn down meanwhile)
+      const res = asset.resource as pc.ContainerResource;
+      const look = VISITOR_LOOK[a.kind] ?? { length: 0.2 };
+      const holder = new pc.Entity('model-holder');
+      const fit = new pc.Entity('model-fit');
+      const e = res.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
+      fit.addChild(e);
+      holder.addChild(fit);
+      // measure it unscaled at the origin: scale its longest side to `length`, centre it over its feet
+      const box = bounds(e, fit);
+      if (!box) return void e.destroy();
+      const size = box.halfExtents;
+      const longest = 2 * Math.max(size.x, size.y, size.z) || 1;
+      const s = look.length / longest;
+      fit.setLocalScale(s, s, s);
+      fit.setLocalPosition(-box.center.x * s, -(box.center.y - size.y) * s, -box.center.z * s);
+      if (look.turn) holder.setLocalEulerAngles(0, look.turn, 0);
+      const names: string[] = [];
+      if (res.animations?.length) {
+        e.addComponent('anim', { activate: true });
+        for (const an of res.animations) {
+          const track = an.resource as pc.AnimTrack;
+          e.anim!.assignAnimation(track.name, track, undefined, 1, true);
+          names.push(track.name);
+        }
+      }
+      const clips = { move: pickClip(names, MOVE_CLIPS), idle: pickClip(names, IDLE_CLIPS) ?? names[0] };
+      a.root.addChild(holder);
+      a.body.enabled = false;
+      a.model = { holder, entity: e, clips, lift: look.lift ?? 0 };
+    });
   }
 
   /** Per frame: place every visit's animal. `now` is sim time (visits are timed in it). */
@@ -135,6 +201,32 @@ export class Visitors {
 
   private animate(a: Actor, moving: boolean, still: boolean) {
     const t = this.clock;
+    const m = a.model;
+    if (m) {
+      // its own clips where it has them; else the whole model bobs in flight, flutters or breathes once settled
+      const want = moving ? (m.clips.move ?? m.clips.idle) : m.clips.idle;
+      const anim = m.entity.anim;
+      if (anim && want && m.clip !== want) {
+        anim.baseLayer?.transition(want, 0.2);
+        m.clip = want;
+      }
+      if (anim) anim.speed = still ? 0 : 1;
+      const clipped = !!(anim && want);
+      let y = m.lift;
+      let pitch = 0;
+      let breathe = 1;
+      if (!still && !clipped) {
+        if (a.flies && moving) y += Math.sin(t * 22) * 0.012;
+        else if (a.flies) pitch = Math.max(0, Math.sin(t * 2.3)) ** 8 * -8; // a little flick now and then
+        else if (moving) y += Math.abs(Math.sin(t * 9)) * 0.015;
+        else breathe = 1 + Math.sin(t * 2.2) * 0.025;
+      }
+      m.holder.setLocalPosition(0, y, 0);
+      const turn = VISITOR_LOOK[a.kind]?.turn ?? 0;
+      m.holder.setLocalEulerAngles(pitch, turn, 0);
+      m.holder.setLocalScale(1, breathe, 1);
+      return;
+    }
     if (a.flies) {
       // wings beat in flight, and fold and flick now and then once settled
       const beat = still ? 0 : moving ? Math.sin(t * 28) * 55 : Math.max(0, Math.sin(t * 2.3)) ** 8 * 35;
@@ -152,6 +244,7 @@ export class Visitors {
     if (!a) {
       a = make(this.root, kind);
       this.pool.push(a);
+      this.load(a);
     }
     a.used = true;
     return a;
@@ -305,5 +398,18 @@ function make(parent: pc.Entity, kind: string): Actor {
     }
   }
   root.enabled = false;
-  return { kind, root, parts, flies: !!def.flies, used: false };
+  return { kind, root, body, parts, flies: !!def.flies, used: false };
+}
+
+/** The bounds of every mesh under `e`, in `space`'s frame (`space` and `e` freshly built, not yet in the scene). */
+function bounds(e: pc.Entity, space: pc.Entity): pc.BoundingBox | undefined {
+  space.syncHierarchy();
+  let box: pc.BoundingBox | undefined;
+  for (const r of e.findComponents('render') as pc.RenderComponent[])
+    for (const mi of r.meshInstances) {
+      const b = mi.aabb;
+      if (!box) box = new pc.BoundingBox(b.center.clone(), b.halfExtents.clone());
+      else box.add(b);
+    }
+  return box;
 }

@@ -91,6 +91,28 @@ export const VISITORS: VisitorDef[] = [
   { id: 'swallowtail', name: 'Swallowtail', icon: '🦋', from: 'rare', perches: ['nest', 'landOn', 'passBy'], flies: true, rare: true, size: 0.06 },
 ];
 
+/**
+ * E23.10 (batch B4): how each visitor's own model is drawn (assets/raw/models/visitors/<id>.glb; the primitive
+ * placeholder stands in for any kind without one). `length`: its longest side in world units (the model is scaled
+ * to it, centred over its feet); `turn`: degrees to turn it so it faces +z like the placeholders; `lift`: raised by
+ * this (world units), for one that should hover over its perch.
+ */
+export const VISITOR_LOOK: Record<string, { length: number; turn?: number; lift?: number }> = {
+  butterfly: { length: 0.09 },
+  songbird: { length: 0.15 },
+  bumblebee: { length: 0.06 },
+  hedgehog: { length: 0.2 },
+  squirrel: { length: 0.22 },
+  magpie: { length: 0.24 },
+  fox: { length: 0.36 },
+  frog: { length: 0.12 },
+  owl: { length: 0.2 },
+  otter: { length: 0.36 },
+  kingfisher: { length: 0.14 },
+  fawn: { length: 0.42 },
+  swallowtail: { length: 0.1 },
+};
+
 /** E23.2.4.2: how many come over while bloombot sits, and their timing. */
 export const VISIT = {
   /** how many visit, by tier (one after another, a few seconds apart) */
