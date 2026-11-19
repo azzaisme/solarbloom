@@ -150,7 +150,9 @@ try {
     const g = window.solarbloom;
     const s = g.sim;
     const dead = s.areas.tiles('park').filter((t) => t.ground === 'polluted' && !t.blocked && !t.occupantId && s.restoration.checkPulse(t).ok);
-    const row = dead.find((t) => [0, 6, 12].every((dx) => dead.some((o) => o.x === t.x + dx && o.z === t.z)));
+    // well inside the park (not along the railing), with open dead ground in front to look across
+    const open = (x, z) => dead.some((o) => o.x === x && o.z === z);
+    const row = dead.find((t) => t.z >= 4 && [0, 6, 12].every((dx) => open(t.x + dx, t.z) && open(t.x + dx, t.z + 2)));
     return row ? [0, 6, 12].map((dx) => ({ x: row.x + dx, z: row.z })) : [];
   });
   check(grown.length === 3, 'three dead park tiles in a row to pulse');
@@ -189,7 +191,7 @@ try {
     g.camera.turnTo(0, true);
   }, grown[1]);
   await page.waitForTimeout(3500);
-  await shot(page, '04-loads-grown', 'left to right: a wildflower meadow (seeds), the region\'s rare flowers, a young tree in shrubs over a bigger patch (fertiliser)');
+  await shot(page, '04-loads-grown', "what each load grew around bloombot: a white wildflower meadow (seeds), the region's pink rare flowers, and a young tree in flowering shrubs over a bigger patch (fertiliser)");
 
   // ── E23.2.2.3: the ripple reveals a buried find; a mound shows; Interact digs it up ──
   const dug = await page.evaluate(() => {
@@ -236,7 +238,9 @@ try {
     await page.waitForTimeout(400);
     const after = await page.evaluate((m) => window.solarbloom.sim.inventory.count(m), f.material);
     check(after === before + f.n, `E dug it up: ${f.material} ${before} → ${after}`);
-    await shot(page, '06-buried-dug', 'dug up: the mound is gone and a pick-up toast shows');
+    check(!(await page.evaluate((f) => !!window.solarbloom.sim.buried.known(f.x, f.z), f)), 'the find is no longer there to dig');
+    await page.waitForTimeout(2500); // the chunk redraws without the mound (slow software rendering)
+    await shot(page, '06-buried-dug', 'dug up: the mound is gone and the ground is plain again (the seeds went into the backpack)');
   }
   await page.close();
 } finally {
