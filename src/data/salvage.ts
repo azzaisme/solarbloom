@@ -27,7 +27,7 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
   glass: { id: 'glass', name: 'Glass', icon: '🪟', models: ['salvage-glass'], home: ['oldMarket', 'glasshouse'], colour: '#8fd0d8' },
   clay: { id: 'clay', name: 'Clay', icon: '🏺', models: ['salvage-clay'], home: ['cistern', 'elderGrove'], colour: '#b97a5a' },
   gears: { id: 'gears', name: 'Gears', icon: '⚙️', models: ['salvage-gears'], home: ['clockPlaza', 'spireHeights'], colour: '#b8a26a' },
-  sunstone: { id: 'sunstone', name: 'Sunstone', icon: '✨', models: ['salvage-sunstone'], home: ['terraces', 'observatory'], colour: '#f2c84a' },
+  sunstone: { id: 'sunstone', name: 'Sunstone', icon: '✨', models: ['salvage-sunstone'], home: ['terraces', 'observatory', 'saltwind'], colour: '#f2c84a' },
   // E23.5.1: farm items (data/farm). Never lying in piles: gathered from restored ground, grown or composted.
   biomass: { id: 'biomass', name: 'Biomass', icon: '🌿', models: [], home: [], colour: '#94e46e', from: 'Gathered from restored ground' },
   food: { id: 'food', name: 'Food', icon: '🥕', models: [], home: [], colour: '#f0a04a', from: 'Grown in planters' },
@@ -151,7 +151,7 @@ export const WORKBENCH = {
   groups: { pulse: 'copper', machines: 'gears', drones: 'glass', storage: 'timber', networks: 'sunstone', fog: 'clay' } as Record<string, MaterialId>,
 };
 
-/** Lucky Cat rewards under old-city rules: units of the local material by variant. */
+/** Lucky Cat rewards: units of the local material by variant. */
 export const CAT_REWARD = { standard: 10, golden: 25, rainbow: 60 };
 
 /** §3: Tally's trade once the Market Hall is awake. */

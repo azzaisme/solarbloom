@@ -1,31 +1,10 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
+import { PARK } from '../src/core/Areas';
+import { CROSS, openIsland, streetCross, streetGarden as garden } from './helpers';
 import type { ChainEvent } from '../src/gameplay/BloomChainSystem';
 import { Sim } from '../src/gameplay/Sim';
-
-/** A city with a cleared region around the park (fog lifted), so chains can run free. */
-function openCity(seed = 9, r = 4) {
-  const sim = new Sim(createInitialState(seed));
-  const st = sim.state;
-  st.caps.energy = big(1e7); st.caps.water = big(1e7);
-  st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
-  for (let cz = -r; cz <= r; cz++) for (let cx = -r; cx <= r; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
-  return sim;
-}
-
-/** Inserts a garden directly (costs grow per copy; these tests measure chains, not the economy). */
-function garden(sim: Sim, x: number, z: number, street = false) {
-  const t = sim.grid.get(GROUND, x, z)!;
-  t.blocked = false;
-  if (street) t.feature = 'paving';
-  const m: MachineData = { id: sim.newId('m'), type: 'pollinator', roofId: GROUND, x, z, size: 1, boostUntil: 0, timer: 0, charge: 0 };
-  sim.state.machines.push(m);
-  sim.grid.indexMachine(m);
-  t.occupantId = m.id;
-  return m;
-}
 
 function collect(sim: Sim) {
   const events: ChainEvent[] = [];
@@ -37,14 +16,19 @@ function collect(sim: Sim) {
 
 describe('massive blooms (City 10)', () => {
   it('chains cross area borders on the ground, and stop at hidden fog', () => {
-    const sim = openCity(5, 1);
-    // A row of gardens along z = 20 crossing from cleared areas into hidden ones further east.
+    // E23.1.1: a new game with the fountain awake: the park and Saltwind are open, the Mast Row north of the park is
+    // still sealed behind its gate (hidden). A column of gardens at x = 4 runs from Saltwind up through the park into it.
+    const sim = new Sim(createInitialState(5));
+    sim.areas.clear(PARK, true);
+    expect(sim.areas.fog('mastRow')).toBe('hidden');
+    sim.state.areas.saltwind.byBot = sim.areas.shareTarget('saltwind'); // E21.9: chains help where bloombot did its share
     const row: MachineData[] = [];
-    for (let x = 4; x < 120; x += 2) row.push(garden(sim, x, 20));
+    for (let z = 46; z > -40; z -= 2) if (!sim.grid.get(GROUND, 4, z)?.occupantId) row.push(garden(sim, 4, z, false));
     const { events } = collect(sim);
-    sim.restoration.complete(sim.grid.get(GROUND, 3, 20)!, 'pulse');
+    sim.restoration.complete(sim.grid.get(GROUND, 4, 47)!, 'pulse');
     sim.advance(20);
-    const touched = events.filter((e) => e.type === 'RESTORE' || e.type === 'GROW').map((e) => sim.grid.byTileId(e.target)!);
+    // off paving, gardens pollinate (a POLLINATE arc, then the restore or grow); every tile the chain changed counts
+    const touched = events.filter((e) => e.type === 'RESTORE' || e.type === 'GROW' || e.type === 'POLLINATE').map((e) => sim.grid.byTileId(e.target)!);
     const areas = new Set(touched.map((t) => sim.areas.areaOf(t)));
     expect(areas.size).toBeGreaterThanOrEqual(2);
     for (const t of touched) expect(sim.areas.fog(sim.areas.areaOf(t)!)).not.toBe('hidden');
@@ -52,10 +36,10 @@ describe('massive blooms (City 10)', () => {
 
   it('a green corridor of street gardens carries a chain end to end, once per garden', () => {
     const run = () => {
-      const sim = openCity(7, 2);
-      const gardens = Array.from({ length: 10 }, (_, i) => garden(sim, -20 + i * 5, 6, true));
+      const sim = openIsland(new Sim(createInitialState(7)));
+      const gardens = Array.from({ length: 10 }, (_, i) => garden(sim, -60 + i * 5, CROSS.row, true));
       const { events, ended } = collect(sim);
-      sim.restoration.complete(sim.grid.get(GROUND, -21, 6)!, 'pulse');
+      sim.restoration.complete(sim.grid.get(GROUND, -61, CROSS.row)!, 'pulse');
       sim.advance(30);
       return { sim, gardens, events, ended };
     };
@@ -73,14 +57,13 @@ describe('massive blooms (City 10)', () => {
   });
 
   it('a ×200+ chain sweeps a dozen areas, terminates and pays once', () => {
-    const sim = openCity(11, 8);
-    // A cross of street corridors through the city, branching from a square near the start.
-    for (let x = -125; x <= 125; x += 5) garden(sim, x, -40, true);
-    for (let z = -125; z <= 125; z += 5) if (z !== -40) garden(sim, -100, z, true);
+    const sim = openIsland(new Sim(createInitialState(11)));
+    // A cross of street corridors over the island (the row and the column cross at x = 32)
+    streetCross(sim);
     const { ended } = collect(sim);
     let paid = 0;
     sim.bus.on('chain.ended', () => paid++);
-    sim.restoration.complete(sim.grid.get(GROUND, -101, -40)!, 'pulse');
+    sim.restoration.complete(sim.grid.get(GROUND, CROSS.start[0], CROSS.start[1])!, 'pulse');
     sim.advance(60);
     expect(sim.chains.activeRuns).toBe(0);
     expect(sim.chains.pendingSteps).toBe(0);

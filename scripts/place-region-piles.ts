@@ -12,10 +12,16 @@ import type { MaterialId } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
 import { Walker } from '../src/gameplay/Walker';
 
-/** What each region gets: piles of its rich material(s) by size, and Scrap. Numbers from #327–#329. */
+/**
+ * What each region holds in all: piles of its rich material(s) by size, and Scrap. Numbers from #327–#329.
+ * Piles already in the region's data count toward these, so the script only lays what is missing.
+ */
 const PLAN: Partial<Record<string, { mats: [MaterialId, Record<PileSize, number>][]; scrap: Record<PileSize, number>; prefix: string }>> = {
   // ring 1: 120 of its material (2 large, 4 medium, 4 small), about 80 Scrap (1 large, 3 medium, 3 small = 78)
-  saltwind: { prefix: 'sw', mats: [['timber', { large: 2, medium: 4, small: 4 }]], scrap: { large: 1, medium: 3, small: 2 } }, // + the existing small sw-s1
+  // E23.1.4's six glass piles (om-g1..om-g6) count toward the 120
+  oldMarket: { prefix: 'om', mats: [['glass', { large: 3, medium: 2, small: 4 }]], scrap: { large: 1, medium: 3, small: 3 } },
+  // and sunstone pebbles in the tide line (30): sun cells for the lights known from the start, and Fern's 15 by tier 2
+  saltwind: { prefix: 'sw', mats: [['timber', { large: 2, medium: 4, small: 4 }], ['sunstone', { large: 0, medium: 1, small: 3 }]], scrap: { large: 1, medium: 3, small: 3 } },
   // and a little clay in the grove's soil, so pots and troughs can be made before Cistern Basin (30)
   elderGrove: { prefix: 'eg', mats: [['seeds', { large: 2, medium: 4, small: 4 }], ['clay', { large: 0, medium: 1, small: 3 }]], scrap: { large: 1, medium: 3, small: 3 } },
   // ring 2: 160 of its material (3 large, 5 medium, 5 small = 162)
@@ -31,7 +37,7 @@ const PLAN: Partial<Record<string, { mats: [MaterialId, Record<PileSize, number>
 const SCRAP_MODELS = ['rubble-pile', 'crate', 'stone-block'];
 const SIZES: PileSize[] = ['large', 'medium', 'small'];
 
-const sim = new Sim(createInitialState(7, 'oldcity'));
+const sim = new Sim(createInitialState(7));
 sim.state.salvage!.abilities = ['pry', 'hover', 'climb', 'glide'];
 for (const r of REGIONS) sim.state.areas[r.id] = { fog: 'thinning', revealedAt: 0 };
 // every gate open (barricades pried, the bridge mended): piles go anywhere a player can walk by the end
@@ -93,10 +99,13 @@ function place(r: RegionDef) {
   }
   cands.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
   const want: [MaterialId, PileSize][] = [];
-  for (const [m, n] of plan.mats) for (const s of SIZES) for (let i = 0; i < n[s]; i++) want.push([m, s]);
-  for (const s of SIZES) for (let i = 0; i < plan.scrap[s]; i++) want.push(['scrap', s]);
+  const have = (m: MaterialId, s: PileSize) => r.piles.filter((p) => p.material === m && p.size === s).length;
+  for (const [m, n] of [...plan.mats, ['scrap', plan.scrap] as [MaterialId, Record<PileSize, number>]])
+    for (const s of SIZES) for (let i = have(m, s); i < n[s]; i++) want.push([m, s]);
   // farthest-point sampling: each pile as far as it can be from the Keeper and every pile so far (≥ 3 cells)
-  const chosen: [number, number][] = [];
+  // the region's existing piles count as already chosen: new ones spread out from them too
+  const chosen: [number, number][] = r.piles.map((p) => [p.x, p.z]);
+  const before = chosen.length;
   const far = (x: number, z: number) => Math.min(Math.hypot(x - keeper.x, z - keeper.z) * 0.6, ...chosen.map(([a, b]) => Math.max(Math.abs(x - a), Math.abs(z - b))));
   for (let i = 0; i < want.length; i++) {
     let best: [number, number] | undefined;
@@ -106,19 +115,20 @@ function place(r: RegionDef) {
       const d = far(c[0], c[1]);
       if (d > bestD) { bestD = d; best = c; }
     }
-    if (!best) { console.log(`// ${r.id}: ran out of room after ${chosen.length} of ${want.length} (${cands.length} candidates)`); break; }
+    if (!best) { console.log(`// ${r.id}: ran out of room after ${chosen.length - before} of ${want.length} (${cands.length} candidates)`); break; }
     chosen.push(best);
   }
   const counters: Record<string, number> = {};
-  const lines = chosen.map(([x, z], i) => {
+  const lines = chosen.slice(before).map(([x, z], i) => {
     const [m, s] = want[i];
     const tag = ({ scrap: 's', seeds: 'e', sunstone: 'u' } as Record<string, string>)[m] ?? m[0];
-    const n = (counters[tag] = (counters[tag] ?? 0) + 1) + (m === 'scrap' ? r.piles.filter((p) => p.material === 'scrap').length : 0);
+    // numbered on from the region's existing piles of that material (om-g7 after om-g1..om-g6)
+    const n = (counters[tag] = (counters[tag] ?? 0) + 1) + r.piles.filter((p) => p.material === m).length;
     const models = m === 'scrap' ? SCRAP_MODELS : MATERIALS[m].models;
     const model = models[(((x * 7 + z * 3) % models.length) + models.length) % models.length];
     return `      P('${plan.prefix}-${tag}${n}', ${x}, ${z}, '${m}', '${s}', '${model}'),`;
   });
-  console.log(`// ${r.id}: ${cands.length} candidate cells, ${chosen.length} piles`);
+  console.log(`// ${r.id}: ${cands.length} candidate cells, ${chosen.length - before} new piles`);
   console.log(lines.join('\n'));
 }
 

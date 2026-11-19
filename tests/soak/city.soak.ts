@@ -1,4 +1,3 @@
-import { big, toNum } from '../../src/core/Big';
 /**
  * City 15.1: headless soak. Generates and simulates a 1,000-area city over 6 hours of game time and fails on
  * any violation: memory, save size, tick time, determinism, unreachable frontiers or stalls.
@@ -44,14 +43,12 @@ function insert(sim: Sim, type: MachineType, x: number, z: number) {
   sim.state.machines.push(m);
   sim.grid.indexMachine(m);
   t.occupantId = m.id;
-  sim.production.markNear(GROUND, x, z);
 }
 
 /** A deterministic "very fast player": clears the next goal (or a random frontier), builds a little, finds cats. */
 async function play(seed: number, areas: number, hours: number, check: boolean) {
   const sim = new Sim(createInitialState(seed));
   const st = sim.state;
-  st.caps.energy = big(1e9); st.caps.water = big(1e9);
   st.progression.coreActivated = true;
   sim.areas.clear(PARK, true);
   const ticks: number[] = [];
@@ -99,7 +96,6 @@ async function play(seed: number, areas: number, hours: number, check: boolean) 
       const goal = sim.areas.nextGoal();
       const t = goal ? sim.areas.entryTiles(goal)[0] : undefined;
       if (t) {
-        st.resources.energy = big(1e5); st.resources.water = big(1e5);
         sim.restoration.pulse(t.id);
       }
     }
@@ -113,7 +109,6 @@ async function play(seed: number, areas: number, hours: number, check: boolean) 
         ['transitions', () => sim.transitions.tick()],
         ['chains', () => sim.chains.tick()],
         ['drones', () => sim.drones.tick(step)],
-        ['roles', () => sim.roles.tick(step)],
         ['cultivators', () => sim.cultivators.tick(step)],
         ['cat', () => sim.cat.tick()],
         ['prog', () => sim.progression.tick()],
@@ -170,10 +165,6 @@ describe('soak: the endless city (City 15.1)', () => {
     expect(mean).toBeLessThan(LIMITS.tickMeanMs);
     expect(p99).toBeLessThan(LIMITS.tickP99Ms);
     expect(worst).toBeLessThan(LIMITS.tickWorstMs);
-    // Incremental production bookkeeping agrees with a full re-sum.
-    const live = toNum(sim.production.rates().biomass);
-    sim.production.markDirty();
-    expect(toNum(sim.production.rates().biomass)).toBeCloseTo(live, 3);
     expect(saveMB).toBeLessThan(LIMITS.saveMB);
     // E19.1.5 / E19.2.3 (#251, #255): the same city with every plot chosen and the decoration cap placed still saves
     // inside the limit (cozy state is written by the game, so it is added here directly).

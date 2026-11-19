@@ -20,7 +20,8 @@ export class RelaySystem {
   /** Phase 5 E12: Relay Lens is bought per relay. A relay reaches this far. */
   range(m?: MachineData): number {
     const lvl = m ? this.sim.upgrades.relayLens(m) : this.sim.upgrades.maxLevelOf('relayLens');
-    return TUNING.relay.range + TUNING.relay.rangePerLevel * lvl;
+    // E23.12 (#528): a Lucky Cat's Golden Relay carries power further
+    return TUNING.relay.range + TUNING.relay.rangePerLevel * lvl + (m?.golden ? TUNING.cat.goldenRelayRange : 0);
   }
 
   /** Blooms around the far relay per crossing (its own lens). */

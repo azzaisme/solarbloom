@@ -133,7 +133,7 @@ describe('E23.8 (#327–#329): every region has salvage piles of its own', () =>
   });
 
   it('every pile stands in its region, on its own cell, clear of the set pieces, and is reached on foot from the Keeper', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     sim.state.salvage!.abilities = ['pry', 'hover', 'climb', 'glide'];
     for (const r of REGIONS) sim.state.areas[r.id] = { fog: 'thinning', revealedAt: 0 };
     // every gate opened, as by the time a player has every ability (barricades pried, the bridge mended)
@@ -222,6 +222,35 @@ describe('E23.8: the whole game from piles alone (no finds, no Lucky Cats, no tr
     }
     expect(steps.join(' → '), 'progression').toContain('tier 5');
     expect([...woken].sort()).toEqual(REGIONS.map((r) => r.id).sort());
+  });
+
+  /** Units lying in piles in the park and these regions (biomass: restored ground, never short). */
+  const unitsIn = (regions: Set<RegionId>, m: MaterialId) =>
+    m === 'biomass' ? Infinity : unitsOf(PARK_SET.piles, m) + REGIONS.filter((r) => regions.has(r.id)).reduce((a, r) => a + unitsOf(r.piles, m), 0);
+
+  it('every Keeper request (the first ask and the landmark) can be gathered from piles the moment its region opens', () => {
+    const short: string[] = [];
+    for (const k of KEEPERS) {
+      // the earliest fountain tier at which bloombot can surely walk to the Keeper (abilities alone)
+      const at = firstTier((g) => g.has(k.region));
+      if (at === undefined) {
+        short.push(`${k.name}: ${k.region} is never reached`);
+        continue;
+      }
+      const reach = G(at);
+      for (const [what, cost] of [['asks', k.request1], ['landmark', k.landmark]] as const)
+        for (const [m, n] of Object.entries(cost) as [MaterialId, number][])
+          if (unitsIn(reach, m) < n) short.push(`${k.name} ${what} ${n} ${m} at tier ${at}: piles hold ${unitsIn(reach, m)}`);
+    }
+    expect(short).toEqual([]);
+  });
+
+  it('every fountain delivery can be gathered from piles reachable before that step', () => {
+    for (const t of TIERS) {
+      const reach = G(t.tier - 1);
+      for (const [m, n] of Object.entries(t.delivery) as [MaterialId, number][])
+        expect(unitsIn(reach, m), `tier ${t.tier} needs ${n} ${m}`).toBeGreaterThanOrEqual(n);
+    }
   });
 
   /** Every recipe whose materials can't be gathered from piles by the time it unlocks: [what, tier, missing]. */

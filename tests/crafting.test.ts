@@ -5,7 +5,7 @@ import { COMPONENT_IDS, COMPONENT_RECIPES, DECOR_RECIPES, MACHINE_RECIPES, type 
 import { DECOR_OPTION } from '../src/data/cozy';
 import { LIGHTS } from '../src/data/lights';
 import { ITEM_DEFS } from '../src/data/items';
-import { MACHINES, OLD_CITY_BUILDABLE } from '../src/data/machines';
+import { BUILDABLE, MACHINES } from '../src/data/machines';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { PROJECTS } from '../src/data/research';
 import { Sim } from '../src/gameplay/Sim';
@@ -16,7 +16,7 @@ import { Cozy } from '../src/gameplay/Cozy';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const oldSim = () => {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = 1;
   sim.bot = NEAR;
   return sim;
@@ -257,7 +257,7 @@ describe('E23.6.1: the crafting table', () => {
   });
 
   it('every machine is built from a crafting-table recipe', () => {
-    for (const t of OLD_CITY_BUILDABLE) {
+    for (const t of BUILDABLE) {
       expect(MACHINE_RECIPES.find((r) => r.builds === t), t).toBeDefined();
     }
   });

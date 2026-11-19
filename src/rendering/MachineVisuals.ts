@@ -4,6 +4,7 @@ import { GROUND } from '../core/GameState';
 import { CHUNK } from '../core/Hash';
 import { chunkKey } from '../core/Grid';
 import type { Sim } from '../gameplay/Sim';
+import { inSurge } from '../gameplay/PowerEnv';
 import { color, glow, mat, PALETTE, uniqueMat } from './Materials';
 import { group, shape, vshape, type ShapeOpts } from './Shapes';
 import { TUNING } from '../data/tuning';
@@ -1721,14 +1722,14 @@ export class MachineVisuals {
     // Superstructures carry their own model: no tier-1 extras (a placed Core keeps its machines' upgrade levels, and
     // a Megaflower has no base panel list, so refreshing one used to crash here).
     if (v.super) return;
-    const L = (id: string) => Math.min(6, id === 'richSoil' ? u.level(id) : u.levelOf(v.m, id));
+    const L = (id: string) => Math.min(6, u.levelOf(v.m, id));
     const key =
       v.m.type === 'solar' ? `${L('solarArray')}`
       : v.m.type === 'droneHub' ? `${L('droneSpeed')}|${L('secondDrone')}|${L('droneSweep')}|${L('droneRadius')}`
-      : v.m.type === 'pollinator' ? `${L('pollinatorReach')}|${L('richSoil')}`
+      : v.m.type === 'pollinator' ? `${L('pollinatorReach')}`
       : v.m.type === 'condenser' ? `${L('waterBloom')}`
       : v.m.type === 'motherTree' ? `${L('treeResonance')}`
-      : v.m.type === 'relay' ? `${L('relayLens')}`
+      : v.m.type === 'relay' ? `${L('relayLens')}|${v.m.golden ? 1 : 0}`
       : '';
     if (key === v.vkey) return;
     v.vkey = key;
@@ -1797,13 +1798,6 @@ export class MachineVisuals {
         const a = (i / (lvl * 4)) * Math.PI * 2;
         part(ex, ball(4, 8), mat(PALETTE.flower[i % 5]), { pos: [Math.cos(a) * 0.46, 0.3, Math.sin(a) * 0.46], scale: [0.11, 0.07, 0.11] });
       }
-      // Rich Soil: the bed spills over with taller blooms.
-      for (let i = 0; i < Math.min(6, L('richSoil')); i++) {
-        const a = i * 1.05 + 0.4;
-        const h = 0.34 + (i % 3) * 0.06;
-        part(ex, rod(), mat(PALETTE.stem), { pos: [Math.cos(a) * 0.3, 0.27 + h / 2, Math.sin(a) * 0.3], scale: [0.02, h, 0.02] });
-        part(ex, ball(4, 8), mat(i % 2 ? PALETTE.bloomPale : PALETTE.flower[(i + 2) % 5]), { pos: [Math.cos(a) * 0.3, 0.27 + h, Math.sin(a) * 0.3], scale: [0.13, 0.08, 0.13] });
-      }
     } else if (v.m.type === 'condenser') {
       // Water Bloom: an extra little tank per level around the plinth and a ring of mist beads.
       const lvl = L('waterBloom');
@@ -1838,6 +1832,17 @@ export class MachineVisuals {
     } else if (v.m.type === 'relay') {
       const lvl = L('relayLens');
       for (let i = 0; i < lvl; i++) part(ex, ring(24, 5), mat(PALETTE.relayGlow, { emissive: PALETTE.relayGlow, emissiveIntensity: 0.8, opacity: 0.8 }), { pos: [0, 1.02 + i * 0.12, 0], scale: [0.5 + i * 0.1, 0.05, 0.5 + i * 0.1] });
+      // E23.12 (#528): a Lucky Cat's Golden Relay wears a gold crown and a gold lamp (it carries power further)
+      if (v.m.golden) {
+        // metal gold with a low warm glow (the golden cat's gold): a bright gold emissive washes out to cream
+        const crownGold = mat(PALETTE.gold, { metal: 0.8, gloss: 0.9, emissive: PALETTE.trim.goldGlow, emissiveIntensity: 0.35 });
+        part(ex, ring(24, 5), crownGold, { pos: [0, 1.2, 0], scale: [0.42, 0.1, 0.42] });
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          part(ex, ball(4, 6), crownGold, { pos: [Math.cos(a) * 0.4, 1.3, Math.sin(a) * 0.4], scale: [0.06, 0.12, 0.06] });
+        }
+        part(ex, ball(5, 8), mat(PALETTE.trim.amber, { emissive: PALETTE.trim.amber, emissiveIntensity: 0.9 }), { pos: [0, 1.42, 0], scale: 0.12 });
+      }
     }
   }
 
@@ -2057,7 +2062,7 @@ export class MachineVisuals {
       }
       switch (v.m.type) {
         case 'solar': {
-          const boosted = v.m.boostUntil > now || this.sim.production.surgeActive();
+          const boosted = v.m.boostUntil > now || inSurge(this.sim, v.m);
           const m = boosted ? panelBoost() : panelMat();
           for (const p of v.panel!) if (p.render && p.render.material !== m) p.render.material = m;
           if (!rm && v.spin[0]) v.spin[0].setLocalEulerAngles(28 + Math.sin(t * 0.25 + v.m.x) * 5, 45 + Math.sin(t * 0.18 + v.m.z) * 14, 0);

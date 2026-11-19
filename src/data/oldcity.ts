@@ -18,7 +18,7 @@ export const OLD_CITY = {
   seaMaxX: 1,
   /** E21.24: one terrace level is this many tiles high */
   levelHeight: 1.2,
-  /** the level everything is measured from (drawn at the classic ground height) */
+  /** the level everything is measured from (drawn at the old flat ground height) */
   baseLevel: 1,
   /** the sea and canals */
   seaLevel: 0,
@@ -204,7 +204,27 @@ export const REGIONS: RegionDef[] = [
     ramps: [],
     ladders: [],
     perches: [],
-    piles: [],
+    // E23.1.4 (#536): the market's glass, so Tally's Solar Panel can be made once Tally wakes (glass panes): two
+    // just past the barricade, two along the market road, two by the Glassworks. They refill like every pile (E23.7.4).
+    piles: [
+      P('om-g1', 22, 5, 'glass', 'medium', 'salvage-glass'),
+      P('om-g2', 27, 11, 'glass', 'small', 'salvage-glass'),
+      P('om-g3', 36, 10, 'glass', 'medium', 'salvage-glass'),
+      P('om-g4', 44, 4, 'glass', 'small', 'salvage-glass'),
+      P('om-g5', 40, 22, 'glass', 'large', 'salvage-glass'),
+      P('om-g6', 35, 25, 'glass', 'small', 'salvage-glass'),
+      // E23.8: built on E23.1.4's six, to the ring's 120 Glass, and 78 Scrap (scripts/place-region-piles.ts)
+      P('om-g7', 16, 30, 'glass', 'large', 'salvage-glass'),
+      P('om-g8', 35, 1, 'glass', 'large', 'salvage-glass'),
+      P('om-g9', 25, 26, 'glass', 'small', 'salvage-glass'),
+      P('om-s1', 44, 12, 'scrap', 'large', 'stone-block'),
+      P('om-s2', 45, 30, 'scrap', 'medium', 'rubble-pile'),
+      P('om-s3', 33, 18, 'scrap', 'medium', 'rubble-pile'),
+      P('om-s4', 16, 21, 'scrap', 'medium', 'crate'),
+      P('om-s5', 28, 3, 'scrap', 'small', 'crate'),
+      P('om-s6', 22, 20, 'scrap', 'small', 'crate'),
+      P('om-s7', 38, 31, 'scrap', 'small', 'stone-block'),
+    ],
     roads: [{ x: 16, z: 7, w: 32, d: 2 }],
   },
   {
@@ -255,6 +275,11 @@ export const REGIONS: RegionDef[] = [
       P('sw-s5', 0, 16, 'scrap', 'medium', 'rubble-pile'),
       P('sw-s6', -15, 22, 'scrap', 'small', 'rubble-pile'),
       P('sw-s7', 15, 28, 'scrap', 'small', 'rubble-pile'),
+      // sunstone pebbles in the tide line: sun cells for the first lights, and Fern's 15 before the roofs open
+      P('sw-u1', 8, 29, 'sunstone', 'medium', 'salvage-sunstone'),
+      P('sw-u2', -10, 21, 'sunstone', 'small', 'salvage-sunstone'),
+      P('sw-u3', 0, 21, 'sunstone', 'small', 'salvage-sunstone'),
+      P('sw-u4', -10, 26, 'sunstone', 'small', 'salvage-sunstone'),
     ],
     roads: [],
     water: [{ x: -3, z: 16, w: 2, d: 32 }],
@@ -847,7 +872,7 @@ export const KEEPERS: KeeperDef[] = [
   },
   {
     id: 'sluice', name: 'Sluice', region: 'cistern', x: 38, z: 37, tint: '#6a8fb0', prop: 'dry-drain',
-    request1: { gears: 12 }, landmark: { clay: 30, copper: 15 }, reward: 'waterCap', rewardText: 'Water storage doubled',
+    request1: { gears: 12 }, landmark: { clay: 30, copper: 15 }, reward: 'waterCap', rewardText: 'Water Condensers fill twice as fast',
     say: {
       asleep: ['A robot on the rim of a dry basin.'],
       stirred: ['Water? No… five of anything, then.'],
@@ -873,7 +898,7 @@ export const KEEPERS: KeeperDef[] = [
   },
   {
     id: 'gable', name: 'Gable', region: 'terraces', x: 10, z: -36, tint: '#b07a8a', prop: 'planter-trough',
-    request1: { clay: 15 }, landmark: { sunstone: 30, gears: 15 }, reward: 'energyCap', rewardText: 'Energy storage doubled',
+    request1: { clay: 15 }, landmark: { sunstone: 30, gears: 15 }, reward: 'energyCap', rewardText: 'Batteries hold twice as much',
     say: {
       asleep: ['A robot asleep against a chimney.'],
       stirred: ['Up here? Five of anything and I will wake.'],

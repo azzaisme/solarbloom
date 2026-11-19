@@ -60,7 +60,7 @@ export class PhotoBar {
       `<button data-photo="pulse">Save picture${k('pulse')}</button>` +
       tog('interact', 'Hide bloombot', s.hideBot) +
       tog('buildMenu', 'Freeze the garden', s.freeze) +
-      tog('harvest', 'Depth of field', s.dof) +
+      tog('eat', 'Depth of field', s.dof) +
       this.sceneHtml(s, k) +
       `<button data-photo="backpack">Hide this bar${k('backpack')}</button>` +
       `<button data-photo="cancel">Leave${k('cancel')}</button>` +
