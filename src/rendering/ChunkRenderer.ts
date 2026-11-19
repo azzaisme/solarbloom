@@ -14,7 +14,7 @@ import { flowerAt, grassTone } from './Palette';
 import { lowGeometry, vertexColourMaterial, type VPrim } from './Shapes';
 import { plotsInChunk, type PlotSpot } from '../core/Plots';
 import { onJetty, pileById, seaCell, setPieceAt, surfCell } from '../core/OldCityLayout';
-import { addGroundQuad, emptyGroundTexGeo, GROUND_TEXTURES, groundTexFor, groundTexMaterial, groundTexMesh, type GroundTexName } from './GroundTex';
+import { addGroundFan, addGroundQuad, addGroundStrip, emptyGroundTexGeo, GROUND_TEXTURES, groundTexFor, groundTexMaterial, groundTexMesh, type GroundTexGeo, type GroundTexName } from './GroundTex';
 import { oldCityModel } from './Models';
 import { edgeHeight, levelAt, levelY, rampAt } from '../core/Height';
 import { GATE_MODELS, LANDING, PARK_SET } from '../data/oldcity';
@@ -350,6 +350,11 @@ const EDGE_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
  * the white border along the curve.
  */
 const PATH_CURVE = { radius: 0.5, arc: 6, lift: 0.052, liftDead: 0.012, border: 0.07 };
+/**
+ * Dead paving stands a little above the earth beside it: how far its painted top is raised (a stone lip shows along
+ * its edges and curves), and the soft contact shadow on the ground beside the lip (width in tiles, darkest tint).
+ */
+const PAVING_RAISE = { lift: 0.03, shadow: 0.13, dark: 0.58 };
 /** City 16.6: the four sides of a road tile and their piece-mask bits (RoadPlan.pieceAt). */
 const ROAD_SIDES = [
   [1, 0, 1],
@@ -1095,9 +1100,9 @@ export class ChunkRenderer {
           areaEdges(this.ctx, t, th + 0.08);
         }
       }
-      if (!v.far && fog !== 'hidden') this.pathCorners(b, t, th);
+      if (!v.far && fog !== 'hidden') this.pathCorners(b, t, th, gtex);
       if (!v.far && this.isWater(t)) {
-        this.poolBanks(b, t, th);
+        this.poolBanks(b, t, th, gtex);
         if (t.ground === 'restored' && fog !== 'hidden') this.poolSurface(pool, t, th);
       }
       // painted ground over each dead Old City tile's slab (sand on the beach, dry earth elsewhere)
@@ -1105,7 +1110,8 @@ export class ChunkRenderer {
       const gt = !v.far && t.level !== undefined && !t.occupantId && t.ground === 'polluted' && !onJetty(t.x, t.z) ? this.paintedGround(t) : undefined;
       if (gt) {
         const k = Math.round(255 * (1 - 0.3 * b.grey));
-        addGroundQuad(gtex[GROUND_TEXTURES.indexOf(gt)], gt, t.x, t.z, th + 0.086, [k, k, k]);
+        if (this.raisedPaving(t)) this.pavedTop(b, t, th, gtex, k);
+        else addGroundQuad(gtex[GROUND_TEXTURES.indexOf(gt)], gt, t.x, t.z, th + 0.086, [k, k, k]);
       }
       yield; // a tile done: `update` decides whether this frame has time for the next
     }
@@ -1674,14 +1680,89 @@ export class ChunkRenderer {
     return f === 'lawn' || f === 'litter' || f === 'clay';
   }
 
+  /** The painted texture a tile's top wears now (dead, unoccupied Old City ground), if any. */
+  private paintedTop(t: TileData | undefined): GroundTexName | undefined {
+    return t && t.level !== undefined && !t.occupantId && t.ground === 'polluted' && !onJetty(t.x, t.z) ? this.paintedGround(t) : undefined;
+  }
+
+  /** Dead painted paving: it stands a little above the earth beside it. */
+  private raisedPaving(t: TileData | undefined): boolean {
+    return !!t && this.isPath(t) && this.paintedTop(t) === 'dead-paving';
+  }
+
+  /**
+   * A dead paved tile's painted top, raised a little above the earth: rounded where a corner is cut back against
+   * soft ground (as `pathCorners` cuts it), with a stone lip down every side and curve that meets lower ground and
+   * a soft contact shadow painted on the earth beside the lip, so the paving reads as standing higher.
+   */
+  private pavedTop(b: MeshBuilder, t: TileData, h: number, gtex: GroundTexGeo[], k: number) {
+    const g = this.sim.grid;
+    const cx = t.x + 0.5;
+    const cz = t.z + 0.5;
+    const R = PATH_CURVE.radius;
+    const yTop = h + 0.086 + PAVING_RAISE.lift;
+    const yBot = h + 0.08;
+    const at = (dx: number, dz: number) => g.peek(t.roofId, t.x + dx, t.z + dz);
+    const level = (n: TileData | undefined) => !!n && n.level === t.level;
+    const ring: [number, number][] = [];
+    /** per ring segment (from its point to the next): the lower ground it meets, a curve or not; undefined: none */
+    const low: ({ n?: TileData; curve: boolean } | undefined)[] = [];
+    for (let i = 0; i < 4; i++) {
+      const [sx, sz] = CORNERS[i];
+      const xFirst = i % 2 === 0; // the ring runs from the x side round to the z side at this corner, or back
+      const nx = at(sx, 0);
+      const nz = at(0, sz);
+      if (this.isSoft(nx) && this.isSoft(nz)) {
+        for (let j = 0; j < PATH_CURVE.arc; j++) {
+          const a = ((xFirst ? j : PATH_CURVE.arc - j) / PATH_CURVE.arc) * (Math.PI / 2);
+          ring.push([cx + sx * R * Math.cos(a), cz + sz * R * Math.sin(a)]);
+          low.push({ n: nx, curve: true });
+        }
+        continue;
+      }
+      const side = (n: TileData | undefined) => (this.raisedPaving(n) && level(n) ? undefined : { n, curve: false });
+      ring.push(xFirst ? [cx + sx * 0.5, cz] : [cx, cz + sz * 0.5]);
+      low.push(side(xFirst ? nx : nz));
+      ring.push([cx + sx * 0.5, cz + sz * 0.5]);
+      low.push(side(xFirst ? nz : nx));
+    }
+    const geo = gtex[GROUND_TEXTURES.indexOf('dead-paving')];
+    addGroundFan(geo, 'dead-paving', [cx, cz], [...ring, ring[0]], yTop, [k, k, k]);
+    const dark = Math.round(k * PAVING_RAISE.dark);
+    for (let i = 0; i < ring.length; i++) {
+      const e = low[i];
+      if (!e) continue;
+      const p = ring[i];
+      const q = ring[(i + 1) % ring.length];
+      // outward: away from the tile's centre
+      let nx = q[1] - p[1];
+      let nz = -(q[0] - p[0]);
+      const len = Math.hypot(nx, nz) || 1;
+      nx /= len;
+      nz /= len;
+      if (nx * ((p[0] + q[0]) / 2 - cx) + nz * ((p[1] + q[1]) / 2 - cz) < 0) [nx, nz] = [-nx, -nz];
+      const N: V3 = [nx, 0, nz];
+      b.tri(PALETTE.ground.pavingKerb, [p[0], yTop, p[1]], [q[0], yTop, q[1]], [q[0], yBot, q[1]], N);
+      b.tri(PALETTE.ground.pavingKerb, [p[0], yTop, p[1]], [q[0], yBot, q[1]], [p[0], yBot, p[1]], N);
+      // the lip's shadow on the painted earth beside it (level with this tile)
+      const name = level(e.n) ? this.paintedTop(e.n) : undefined;
+      if (!name || name === 'dead-paving') continue;
+      const w = PAVING_RAISE.shadow;
+      // along a curve the band fans out from the tile's centre, so its pieces meet without gaps
+      const out = (pt: [number, number]): [number, number] => (e.curve ? [pt[0] + ((pt[0] - cx) / R) * w, pt[1] + ((pt[1] - cz) / R) * w] : [pt[0] + nx * w, pt[1] + nz * w]);
+      addGroundStrip(gtex[GROUND_TEXTURES.indexOf(name)], name, [p, q], [out(p), out(q)], h + (e.curve ? 0.1 : 0.09), [dark, dark, dark], [k, k, k]);
+    }
+  }
+
   /**
    * Paths are laid on square tiles; this rounds them. Where a paved tile turns an outer corner against soft ground,
    * the corner is cut back to a quarter circle and the ground beyond grows into it; where soft ground sits in the
    * crook of a path, the paving fills its corner the same way. Stepped runs of tiles then read as one winding path
    * and a blocky disc as a round plaza. Each piece takes the colour of the tile it extends, at that tile's state,
-   * and restored paving keeps its white border along the curve.
+   * and restored paving keeps its white border along the curve. Dead painted ground (GroundTex) carries its painting
+   * on over the piece, so the corner blends into the tile it extends.
    */
-  private pathCorners(b: MeshBuilder, t: TileData, h: number) {
+  private pathCorners(b: MeshBuilder, t: TileData, h: number, gtex?: GroundTexGeo[]) {
     const paved = this.isPath(t);
     if (!paved && !this.isSoft(t)) return;
     const g = this.sim.grid;
@@ -1708,9 +1789,24 @@ export class ChunkRenderer {
         }
         return out;
       };
-      const y = top + (alive ? PATH_CURVE.lift : PATH_CURVE.liftDead);
+      // dead paving filling a corner stands as high as the paving it extends (its side is the stone lip)
+      const raised = !paved && this.raisedPaving(from);
+      const y = raised ? top + 0.002 + PAVING_RAISE.lift : top + (alive ? PATH_CURVE.lift : PATH_CURVE.liftDead);
       b.grey = this.greyOf(from);
-      b.prism(this.topColour(from), [cx, cz], rim(R), false, y, top - 0.02);
+      b.prism(raised ? PALETTE.ground.pavingKerb : this.topColour(from), [cx, cz], rim(R), false, y, top - 0.02);
+      // the same painted ground as the tile it extends (as `build` lays it over that tile's slab)
+      const gt = gtex ? this.paintedTop(from) : undefined;
+      if (gt) {
+        const k = Math.round(255 * (1 - 0.3 * b.grey));
+        addGroundFan(gtex![GROUND_TEXTURES.indexOf(gt)], gt, [cx, cz], rim(R), y + 0.004, [k, k, k]);
+      }
+      // the lip's contact shadow on this tile's own earth, inside the curve
+      const own = raised && gtex ? this.paintedTop(t) : undefined;
+      if (own) {
+        const k = Math.round(255 * (1 - 0.3 * keep));
+        const d = Math.round(k * PAVING_RAISE.dark);
+        addGroundStrip(gtex![GROUND_TEXTURES.indexOf(own)], own, rim(R), rim(R - PAVING_RAISE.shadow), top + 0.01, [d, d, d], [k, k, k]);
+      }
       b.grey = keep;
       if (!alive) continue;
       // the white border follows the curve, on the paved side of it
@@ -1748,6 +1844,9 @@ export class ChunkRenderer {
     if (t.ground === 'restored') return f === 'paving' ? this.slabTone(t) : f === 'road' ? PALETTE.paving.roadAlive : grassTone(stage, t.x, t.z);
     if (t.ground === 'growing') return PALETTE.ground.growing;
     if (t.ground === 'prepared') return PALETTE.ground.prepared;
+    // dead painted ground: the painting's own colour, so walls and banks cut from it match the top beside them
+    const painted = t.ground === 'polluted' ? paintedDead(t) : undefined;
+    if (painted) return painted[t.variant % painted.length];
     if (f === 'paving' && this.inPark && this.level >= 1) return PALETTE.paving.swept;
     return t.pollution > 80 ? dead[(t.variant + 1) % dead.length] : dead[t.variant % dead.length];
   }
@@ -1877,7 +1976,7 @@ export class ChunkRenderer {
    * bank of that material in each outer corner, wider where the pool carries on behind the tile, with the odd rock
    * or clump of reeds on it.
    */
-  private poolBanks(b: MeshBuilder, t: TileData, h: number) {
+  private poolBanks(b: MeshBuilder, t: TileData, h: number, gtex?: GroundTexGeo[]) {
     const g = this.sim.grid;
     const x = t.x + 0.5;
     const z = t.z + 0.5;
@@ -1901,7 +2000,14 @@ export class ChunkRenderer {
       b.grey = this.greyOf(land);
       const cx = x + sx * 0.5;
       const cz = z + sz * 0.5;
-      b.prism(this.topColour(land), [cx, cz], this.arc(cx, cz, sx, sz, R), false, top, foot);
+      // the bank carries on the land's painted ground (and stands as high as raised paving does)
+      const lgt = gtex ? this.paintedTop(land) : undefined;
+      const bankTop = top + (this.raisedPaving(land) ? PAVING_RAISE.lift : 0);
+      b.prism(lgt === 'dead-paving' ? PALETTE.ground.pavingKerb : this.topColour(land), [cx, cz], this.arc(cx, cz, sx, sz, R), false, bankTop, foot);
+      if (lgt) {
+        const k = Math.round(255 * (1 - 0.3 * b.grey));
+        addGroundFan(gtex![GROUND_TEXTURES.indexOf(lgt)], lgt, [cx, cz], this.arc(cx, cz, sx, sz, R), bankTop + 0.006, [k, k, k]);
+      }
       b.grey = keep;
       const k = hash01(t.x * 2 + sx, t.z * 2 + sz, 91);
       const px = cx - sx * R * 0.3;
