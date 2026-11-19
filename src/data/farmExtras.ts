@@ -18,7 +18,7 @@ export const BEEHIVE = {
 
 /** E23.5.4.2 (#430): fish ponds. */
 export const FISH_POND = {
-  /** a pond needs water from the network within this many tiles to stay filled (E23.4) */
+  /** a pond stays filled while a canal or pond within this many tiles still holds water (E23.4.1 levels) */
   waterReach: 3,
   /** water a filled pond draws a game day (E23.4 units; a water tile holds 20) */
   waterPerDay: 6,

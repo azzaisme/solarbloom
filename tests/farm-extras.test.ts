@@ -111,11 +111,27 @@ describe('E23.5.4.2: fish ponds', () => {
     sim.inventory.add('seeds', 1);
     sim.farm.plant(p, 'pumpkin');
     expect(sim.farm.look(p).unmet).toContain('fertiliser');
+    // E23.4.1: real water three tiles from the pond keeps it filled
+    for (const z of [16, 17]) {
+      const t = sim.grid.get(GROUND, 8, z)!;
+      Object.assign(t, { blocked: false, feature: 'water', ground: 'restored', pollution: 0 });
+      sim.grid.touch(t);
+    }
     const pond = build(sim, 'fishPond', 11, 16);
+    const body = sim.water.bodyAt(sim.grid.get(GROUND, 8, 16))!;
+    expect(sim.farmExtras.pondFilled(pond)).toBe(true);
+    expect(sim.farmExtras.pondLevel(pond)).toBe(1);
     expect(sim.farm.look(p).unmet).not.toContain('fertiliser');
-    // a pond left dry (no water near it, once E23.4's network is there) feeds nothing
-    (sim as unknown as { water: unknown }).water = { isWatered: (t: MachineData) => t.id !== pond.id };
+    // the pond drinks from that water each game day (its real level falls)
+    run(sim, DAY_SECONDS / 2);
+    expect(sim.water.amountOf(body.id)).toBeLessThan(body.capacity);
+    // that water run dry: the pond is low and feeds nothing; filled again, it feeds again
+    sim.water.draw(body.id, body.capacity);
+    expect(sim.farmExtras.pondFilled(pond)).toBe(false);
+    expect(sim.farmExtras.pondLevel(pond)).toBe(0);
     expect(sim.farm.look(p).unmet).toContain('fertiliser');
+    sim.water.fill(body.id, body.capacity);
+    expect(sim.farm.look(p).unmet).not.toContain('fertiliser');
   });
 });
 
@@ -311,7 +327,9 @@ function fulfil(sim: Sim, keeperId: string, crop: CropId, learn = true) {
   if (learn && !sim.farm.knows(crop)) (sim.state.salvage!.crops ??= []).push(crop);
   sim.inventory.add('seeds', 1);
   expect(sim.farm.plant(p, crop)).toBe(true);
-  sim.weather.forceForTest('sunny', 1e9);
+  // E23.4.1: the bed drinks the map's own water where some reaches it; elsewhere it waits for rain, as in play
+  const bed = sim.grid.get(GROUND, p.x, p.z)!;
+  sim.weather.forceForTest(sim.water.isWatered(bed) ? 'sunny' : 'rain', 1e9);
   run(sim, (CROPS[crop].days + 1) * 4 * DAY_SECONDS);
   expect(sim.farm.look(p).ripe, `${crop} ripe`).toBe(true);
   sim.farm.harvest(p);
@@ -349,6 +367,13 @@ describe('E23.5.4.6: Keeper gardens', () => {
     ground(sim, k.x + 2, k.z, 1, 1);
     const p = build(sim, 'planter', k.x + 2, k.z);
     expect(sim.farmExtras.gardenOf(p)).toBe('tally');
+    // a real little pond two tiles from the bed, so it drinks on the dry days (E23.4.1)
+    for (const dz of [0, 1]) {
+      const t = sim.grid.get(GROUND, k.x + 4, k.z + dz)!;
+      Object.assign(t, { blocked: false, feature: 'water', ground: 'restored', pollution: 0 });
+      sim.grid.touch(t);
+    }
+    expect(sim.farm.isWatered(p)).toBe(true);
     expect(sim.farmExtras.request('tally')!.crop).toBe('tomato');
     const fulfilled: string[] = [];
     sim.bus.on('garden.fulfilled', (e) => fulfilled.push(e.crop));

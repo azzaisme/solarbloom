@@ -14,16 +14,50 @@ function farm(seed = 7): Sim {
   const sim = new Sim(createInitialState(seed, 'oldcity'));
   sim.state.salvage!.tier = 1;
   sim.bot = { roofId: GROUND, x: 8.5, z: 11.5 }; // by the fountain (a way into the store)
-  // growth is tested here with every bed watered; the tests about water set their own (tests/water-levels has the real one)
-  (sim as unknown as { water: unknown }).water = { isWatered: () => true };
+  pond(sim); // E23.4.1: real water, in reach of every bed these tests build
   return sim;
 }
+
+/** A real little pond (restored shallow water, so a fresh body for sim.water) within reach of the beds used here. */
+const POND = [[15, 15], [16, 15], [15, 16], [16, 16], [15, 17], [16, 17]] as const;
+function pond(sim: Sim) {
+  for (const [x, z] of POND) {
+    const t = sim.grid.get(GROUND, x, z)!;
+    t.blocked = false;
+    t.feature = 'water';
+    t.ground = 'restored';
+    t.pollution = 0;
+    sim.grid.touch(t);
+  }
+}
+const pondBody = (sim: Sim) => sim.water.bodyAt(sim.grid.get(GROUND, POND[0][0], POND[0][1]))!;
+/**
+ * Digs a small real pond two tiles from a bed (outside the ground its planter cleared, and not beside it, so it is
+ * not running water), for beds built away from the pond above. Tries each side until the bed is really watered.
+ */
+function wet(sim: Sim, m: MachineData) {
+  const bed = sim.grid.get(GROUND, m.x, m.z)!;
+  for (const [dx, dz] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) {
+    if (sim.water.isWatered(bed)) return;
+    for (const k of [0, 1]) {
+      const t = sim.grid.get(GROUND, m.x + dx + (dz ? k : 0), m.z + dz + (dx ? k : 0));
+      if (!t || t.occupantId) continue;
+      Object.assign(t, { blocked: false, feature: 'water', ground: 'restored', pollution: 0 });
+      sim.grid.touch(t);
+    }
+  }
+  expect(sim.water.isWatered(bed), `real water by the bed at ${m.x},${m.z}`).toBe(true);
+}
+/** Empties the pond (the real level), or fills it back up. */
+const drain = (sim: Sim) => sim.water.draw(pondBody(sim).id, pondBody(sim).capacity);
+const refill = (sim: Sim) => sim.water.fill(pondBody(sim).id, pondBody(sim).capacity);
 
 /** Restored open ground, then a planter on it. */
 function planter(sim: Sim, x: number, z: number): MachineData {
   for (let dx = -1; dx <= 1; dx++)
     for (let dz = -1; dz <= 1; dz++) {
       const t = sim.grid.get(GROUND, x + dx, z + dz)!;
+      if ((dx || dz) && POND.some(([px, pz]) => px === t.x && pz === t.z)) continue; // the pond stays
       t.blocked = false;
       t.feature = undefined;
       t.ground = 'restored';
@@ -88,50 +122,103 @@ describe('E23.5.2.1: planter growth', () => {
     expect(sim.farm.bed(m).crop).toBeUndefined();
   });
 
-  it('without water a crop wilts: growth pauses, and it never dies', () => {
+  it('a bed drinks from the real water near it: when that runs dry it wilts gently (never dies), and perks up once refilled', () => {
     const sim = farm();
     const m = planter(sim, 12, 16);
     sow(sim, m, 'radish');
     sim.weather.forceForTest('sunny', 1e9); // dry days for certain (rain would water the bed)
-    let wet = true;
-    (sim as unknown as { water: { isWatered(): boolean } }).water = { isWatered: () => wet };
+    expect(sim.farm.isWatered(m)).toBe(true);
+    expect(sim.farm.thirst(m)).toBeUndefined();
     grow(sim, DAY_SECONDS / 4);
     const grown = sim.farm.bed(m).grown!;
-    wet = false;
+    expect(grown).toBeGreaterThan(0);
+    // the pond runs dry (its real level): the bed wilts, waits, and keeps its crop and its progress
+    drain(sim);
+    expect(sim.water.levelOf(pondBody(sim).id)).toBe(0);
     expect(sim.farm.look(m).wilting).toBe(true);
+    expect(sim.farm.look(m).rate).toBe(0);
+    expect(sim.farm.thirst(m)).toBe('low');
     grow(sim, DAY_SECONDS * 3); // three dry days
     expect(sim.farm.bed(m).grown).toBe(grown);
     expect(sim.farm.bed(m).crop).toBe('radish');
-    wet = true;
+    // filled again: it grows on from where it stopped, and ripens
+    refill(sim);
     expect(sim.farm.look(m).wilting).toBe(false);
     grow(sim, DAY_SECONDS);
     expect(sim.farm.look(m).ripe).toBe(true);
   });
 
-  it('a growing bed draws water from the network near it (E23.4), and none when the sky waters it', () => {
+  it('E23.4.4 (#384): a pond drained with the whole game running: no tile near it drops below restored, nothing planted is lost', () => {
+    const sim = farm();
+    const beds = [planter(sim, 12, 16), planter(sim, 13, 16), planter(sim, 14, 19)];
+    for (const m of beds) sow(sim, m, 'radish');
+    sim.weather.forceForTest('sunny', 1e9);
+    sim.advance(60); // settle, with every system ticking
+    // the land within four tiles of the pond (its water's reach and a margin)
+    const land = () => {
+      const out = [];
+      for (let x = 11; x <= 20; x++) for (let z = 11; z <= 21; z++) {
+        const t = sim.grid.get(GROUND, x, z);
+        if (t && t.feature !== 'water') out.push(t);
+      }
+      return out;
+    };
+    const restoredBefore = land().filter((t) => t.ground === 'restored').map((t) => t.id);
+    expect(restoredBefore.length).toBeGreaterThan(20);
+    drain(sim);
+    const grown = beds.map((m) => sim.farm.bed(m).grown);
+    sim.advance(DAY_SECONDS / 4); // a quarter of a dry game day with the whole sim running
+    expect(sim.water.levelOf(pondBody(sim).id)).toBeLessThan(0.08);
+    // no tile went back below restored, every planter and crop is still there, waiting
+    const after = new Map(land().map((t) => [t.id, t.ground]));
+    for (const id of restoredBefore) expect(after.get(id), id).toBe('restored');
+    beds.forEach((m, i) => {
+      expect(sim.state.machines).toContain(m);
+      expect(sim.farm.bed(m).crop).toBe('radish');
+      expect(sim.farm.bed(m).grown).toBe(grown[i]);
+      expect(sim.farm.look(m).wilting).toBe(true);
+    });
+    // refilled, they grow on
+    refill(sim);
+    sim.advance(120);
+    beds.forEach((m, i) => expect(sim.farm.bed(m).grown!).toBeGreaterThan(grown[i]!));
+  });
+
+  it('a bed with no water within reach is thirsty, and its panel says why', () => {
+    const sim = farm();
+    const m = planter(sim, 12, 25); // eight tiles from the pond
+    sow(sim, m, 'radish');
+    sim.weather.forceForTest('sunny', 1e9);
+    expect(sim.farm.look(m).wilting).toBe(true);
+    expect(sim.farm.thirst(m)).toBe('none');
+  });
+
+  it('a growing bed draws its water from the real pond near it, and none when the sky waters it', () => {
     const sim = farm();
     const m = planter(sim, 12, 16);
     sow(sim, m, 'radish');
-    let drawn = 0;
-    let dry = 1;
-    const hooks = sim as unknown as { water: unknown; weather: unknown };
-    hooks.water = { isWatered: () => true, drawNear: (_t: unknown, n: number) => ((drawn += n), n) };
-    hooks.weather = { kind: () => 'sunny', effects: () => ({ planterDrying: dry }) };
+    const id = pondBody(sim).id;
+    sim.weather.forceForTest('sunny', 1e9);
+    expect(sim.weather.effects().planterDrying).toBeGreaterThan(0);
+    let before = sim.water.amountOf(id);
     grow(sim, DAY_SECONDS / 2);
-    // whole units only (a fraction carries over), so half a day draws 2 units give or take the last fraction
-    expect(drawn).toBeGreaterThanOrEqual(PLANTER.waterPerDay / 2 - 1);
-    expect(drawn).toBeLessThanOrEqual(PLANTER.waterPerDay / 2);
-    drawn = 0;
-    dry = 0;
+    // whole units only (a fraction carries over), so half a day draws about half a day's drink
+    const want = (PLANTER.waterPerDay * sim.weather.effects().planterDrying) / 2;
+    const drawn = before - sim.water.amountOf(id);
+    expect(drawn).toBeGreaterThanOrEqual(want - 1);
+    expect(drawn).toBeLessThanOrEqual(want + 1e-9);
+    sim.weather.forceForTest('rain', 1e9); // the sky waters it (planterDrying 0)
+    expect(sim.weather.effects().planterDrying).toBe(0);
+    before = sim.water.amountOf(id);
     grow(sim, DAY_SECONDS / 4);
-    expect(drawn).toBe(0);
+    expect(sim.water.amountOf(id)).toBe(before);
   });
 
   it('reads E23.7’s weather: storms rain and blow, fog is neither sunny nor wet', () => {
     const sim = farm();
     const m = planter(sim, 12, 16);
     sow(sim, m, 'radish');
-    (sim as unknown as { water: { isWatered(): boolean } }).water = { isWatered: () => false };
+    drain(sim); // only the sky can water it
     at(sim, 0.2); // morning
     sim.weather.forceForTest('storm', 1e9);
     expect(sim.farm.weather()).toBe('storm');
@@ -151,7 +238,7 @@ describe('E23.5.2.1: planter growth', () => {
     const sim = farm();
     const m = planter(sim, 12, 16);
     sow(sim, m, 'radish');
-    (sim as unknown as { water: { isWatered(): boolean } }).water = { isWatered: () => false };
+    drain(sim);
     expect(sim.farm.look(m).wilting).toBe(true);
     sim.weather.forceForTest('rain', 1e12);
     expect(sim.farm.look(m).wilting).toBe(false);
@@ -206,6 +293,7 @@ describe('E23.5.2.2: every crop’s likes change its growth', () => {
   function growth(crop: CropId, like: Like, on: boolean, at?: { x: number; z: number }): number {
     const sim = farm();
     const m = planter(sim, at?.x ?? 12, at?.z ?? 16);
+    if (at) wet(sim, m);
     const def = CROPS[crop];
     sow(sim, m, crop);
     for (const l of [...def.likes, ...def.needs]) if (l !== like) set[l](sim, m, true);
@@ -291,6 +379,7 @@ describe('E23.5.2.2: every crop’s likes change its growth', () => {
     const here = sim.farm.look(m).rate;
     const grove = regionCell(sim, 'elderGrove');
     const g = planter(sim, grove.x, grove.z);
+    wet(sim, g);
     sow(sim, g, 'radish');
     expect(sim.farm.look(g).rate).toBeCloseTo(here * 1.5);
   });

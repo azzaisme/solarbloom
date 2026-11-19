@@ -3,6 +3,7 @@ import { keeperById } from '../core/OldCityLayout';
 import type { ExtraState, MachineData, MachineType } from '../core/types';
 import { CROP_IDS, CROPS, type CropId } from '../data/crops';
 import { DAY_SECONDS } from '../data/time';
+import { WATER_NET } from '../data/water';
 import { BEEHIVE, DIVERSITY, FISH_POND, FLOWERING, GARDEN_REQUESTS, HOME, HOMES, KEEPER_GARDEN, MUSHROOM_LOG, ORCHARD, WORM_BIN, type GardenRequest, type GardenReward, type Habitat, type HomeKind } from '../data/farmExtras';
 import { machineStrengthAt } from '../core/RegionStrengths';
 import type { Sim } from './Sim';
@@ -15,7 +16,8 @@ export const isHome = (t: string): t is HomeKind => t in HOMES;
 
 /** What the extras borrow from other sub-epics (optional until they land). */
 interface Hooks {
-  water?: { isWatered?(t: { roofId: string; x: number; z: number }): boolean; drawNear?(t: { roofId: string; x: number; z: number }, n: number): number; pipeFeeds?(from: MachineData, to: MachineData): boolean };
+  /** E23.4.2's pipes (#514): whether a pond's water reaches a planter by pipe */
+  water?: { pipeFeeds?(from: MachineData, to: MachineData): boolean };
   keepers?: { tend?(id: string): void };
 }
 
@@ -114,9 +116,15 @@ export class FarmExtras {
 
   // ───────────── E23.5.4.2 fish ponds ─────────────
 
-  /** A pond is kept filled from the water network near it (every pond counts as filled until E23.4 lands). */
+  /** E23.4.1: a pond is kept filled from the real water near it (a canal or pond within `waterReach` still holding water). */
   pondFilled(m: MachineData): boolean {
-    return this.hooks.water?.isWatered?.(m) ?? true;
+    return this.pondLevel(m) > WATER_NET.dryBelow;
+  }
+
+  /** 0…1: the level of the water that keeps a pond filled (the fullest body within `waterReach`). */
+  pondLevel(m: MachineData): number {
+    const t = this.sim.grid.get(m.roofId, m.x, m.z);
+    return t ? this.sim.water.wetness(t, FISH_POND.waterReach) : 0;
   }
 
   /** Does a filled fish pond's water reach this planter (by E23.4 pipe once it lands, else within `feedReach`)? */
@@ -492,12 +500,13 @@ export class FarmExtras {
   /** Ponds drink from the network to stay filled (fractions carried over, not saved). */
   private pondThirst = new Map<string, number>();
   private tickPonds(days: number) {
-    const w = this.hooks.water;
-    if (!w?.drawNear) return;
     for (const m of this.sim.machinesOfType('fishPond')) {
+      const t = this.sim.grid.get(m.roofId, m.x, m.z);
+      if (!t) continue;
       const want = (this.pondThirst.get(m.id) ?? 0) + FISH_POND.waterPerDay * days;
       const whole = Math.floor(want);
-      if (whole > 0) w.drawNear(m, whole);
+      const b = whole > 0 ? this.sim.water.bodyNear(t, FISH_POND.waterReach) : undefined;
+      if (b) this.sim.water.draw(b.id, whole);
       this.pondThirst.set(m.id, want - whole);
     }
   }

@@ -63,7 +63,9 @@ export function planterHtml(sim: Sim, m: MachineData): string {
   const mood = lk.ripe
     ? 'Ripe and ready to harvest.'
     : lk.wilting
-      ? 'Thirsty: it is wilting and waiting for water.'
+      ? f.thirst(m) === 'none'
+        ? 'Thirsty: no water reaches it here. Beds drink from a canal or pond close by, or from the rain.'
+        : 'Thirsty: its water has run low. It is wilting and will perk up once the water fills again.'
       : lk.resting
         ? `Resting: it only grows with ${needs.map((n) => LIKE_WORDS[n]).join(' and ')}.`
         : lk.unmet.length

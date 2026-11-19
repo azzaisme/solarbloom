@@ -32,6 +32,15 @@ const snap = async (name) => {
 /** Runs a function in the page with the game (`g`) and sim (`s`) in scope. */
 const game = (fn, arg) => page.evaluate(({ src, arg }) => new Function('g', 's', 'arg', `return (${src})(g, s, arg)`)(window.solarbloom, window.solarbloom.sim, arg), { src: fn.toString(), arg });
 const prompt = () => page.evaluate(() => document.querySelector('#prompt, .prompt')?.innerText.replace(/\s+/g, ' ').trim() ?? '');
+/** The prompt once it matches (frames can stall for seconds under software rendering on a busy machine): up to 15 s. */
+const promptFor = async (re) => {
+  for (let k = 0; k < 30; k++) {
+    const t = await prompt();
+    if (re.test(t)) return t;
+    await page.waitForTimeout(500);
+  }
+  return prompt();
+};
 const panel = () => page.evaluate(() => (document.querySelector('#ocPanel.open') ? document.querySelector('#ocPanel')?.innerText.replace(/\s+/g, ' ').trim() : ''));
 const pressE = async () => {
   await page.keyboard.press('KeyE');
@@ -141,7 +150,7 @@ try {
 
   // ── fill the bin from its panel ──
   await face(built.bin.x, built.bin.z);
-  check(/compost bin/i.test(await prompt()), `the prompt offers the compost bin (${await prompt()})`);
+  check(/compost bin/i.test(await promptFor(/compost bin/i)), `the prompt offers the compost bin (${await prompt()})`);
   await pressE();
   check(/Compost Bin/i.test(await panel()), 'the compost bin panel opens');
   await page.click('#ocPanel [data-act="fill"][data-arg="biomass"]');

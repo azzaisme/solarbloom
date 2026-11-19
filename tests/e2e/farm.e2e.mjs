@@ -31,6 +31,16 @@ const snap = async (name) => {
 /** Runs a function in the page with the game (`g`) and sim (`s`) in scope. */
 const game = (fn, arg) => page.evaluate(({ src, arg }) => new Function('g', 's', 'arg', `return (${src})(g, s, arg)`)(window.solarbloom, window.solarbloom.sim, arg), { src: fn.toString(), arg });
 const prompt = () => page.evaluate(() => document.querySelector('#prompt, .prompt')?.innerText.replace(/\s+/g, ' ').trim() ?? '');
+/** The prompt once it matches (frames can stall for seconds under software rendering on a busy machine, leaving the
+ * last target's prompt up): waits up to 15 s, then gives whatever is shown. */
+const promptFor = async (re) => {
+  for (let k = 0; k < 30; k++) {
+    const t = await prompt();
+    if (re.test(t)) return t;
+    await page.waitForTimeout(500);
+  }
+  return prompt();
+};
 const panel = () => page.evaluate(() => (document.querySelector('#ocPanel.open') ? document.querySelector('#ocPanel')?.innerText.replace(/\s+/g, ' ').trim() : ''));
 const pressE = async () => {
   await page.keyboard.press('KeyE');
@@ -41,7 +51,7 @@ const closePanel = async () => {
   await page.waitForTimeout(300);
 };
 /** Stands bloombot on a tile facing a neighbouring one (a machine or ground), and waits for the prompt to settle. */
-const face = async (x, z) => {
+const face = async (x, z, tries = 3) => {
   const ok = await game(
     (g, s, { x, z }) => {
       for (const [dx, dz, facing] of [[0, 1, Math.PI], [0, -1, 0], [1, 0, -Math.PI / 2], [-1, 0, Math.PI / 2]]) {
@@ -50,6 +60,7 @@ const face = async (x, z) => {
         g.bot.pose.x = x + dx + 0.5;
         g.bot.pose.z = z + dz + 0.5;
         g.bot.pose.facing = facing;
+        g.bot.walk = undefined; // a click that fell through a closing panel would walk it off the spot
         return true;
       }
       return false;
@@ -57,8 +68,21 @@ const face = async (x, z) => {
     { x, z },
   );
   await page.waitForTimeout(900);
+  // something early in a fresh game (the opening walk) can still move bloombot: set it again until it stays put
+  const f = ok && (await game((g) => g.bot.front()));
+  if (ok && (f.x !== x || f.z !== z) && tries > 0) {
+    console.log(`  (bloombot moved off its spot, facing ${f.x},${f.z}; setting it again)`);
+    return face(x, z, tries - 1);
+  }
   return ok;
 };
+/** Moves the game clock on to the next mid-morning, so a shot is in daylight (the farm itself is not ticked). */
+const morning = () =>
+  game((g, s) => {
+    const t = s.state.time;
+    const f = s.clock.gameDayFraction();
+    s.state.time = t + ((((0.3 - f) % 1) + 1) % 1) * 2880;
+  });
 /** Passes some game days for the farm systems (the rest of the world is left alone). */
 const days = (n) =>
   game(
@@ -79,6 +103,7 @@ try {
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 900_000 });
   await page.waitForTimeout(2000);
   check(errors.length === 0, 'the game loads without errors');
+  await game((g, s) => s.pulseLoad.introduced()); // seen in an earlier session: no introduction mid-test
 
   // The scene: a patch of restored, flowering ground around bloombot's start, a farm laid out on it, and materials.
   const lay = await game((g, s) => {
@@ -107,13 +132,17 @@ try {
     for (const [k, v] of Object.entries({ scrap: 40, timber: 40, seeds: 30, biomass: 10, clay: 20, gears: 10, food: 6, compost: 3 })) s.inventory.add(k, v);
     return { at: [bx, bz], open };
   });
+  // the load wheel's one-time introduction was seen already (it would sit over every shot)
+  await game((g) => {
+    g.hud.loadWheel.shown = 0;
+  });
   check(lay.open.length >= 24, `restored a patch of ${lay.open.length} open tiles beside bloombot`);
   const spots = lay.open;
 
   // ── E23.5.1: gather clippings with a real hold of Interact ──
   const [gx, gz] = spots[0];
   await face(gx, gz);
-  check(/Gather clippings/.test(await prompt()), `the prompt offers "Gather clippings" (${await prompt()})`);
+  check(/Gather clippings/.test(await promptFor(/Gather clippings/)), `the prompt offers "Gather clippings" (${await prompt()})`);
   await snap('gather-prompt');
   const before = await game((g, s) => s.inventory.count('biomass'));
   // held like a player holds it, until the hold completes (slow software-rendered frames stretch it; 8 s at most)
@@ -130,6 +159,29 @@ try {
     for (const [k, v] of Object.entries({ biomass: 30, seeds: 10, planks: 40, scrap: 20, clay: 10, motor: 2, compost: 3 })) s.inventory.add(k, v);
     const want = ['planter', 'planter', 'compostBin', 'bioDigester', 'beehive', 'orchard', 'mushroomLog', 'birdBox', 'butterflyGarden', 'wormBin'];
     const got = {};
+    // E23.4.1: the first planter goes by real fresh water (a canal or pond within reach), searching out from bloombot;
+    // only the ground round it is restored to set the scene
+    const bx = Math.floor(g.bot.pose.x);
+    const bz = Math.floor(g.bot.pose.z);
+    search: for (let r = 1; r <= 60; r++)
+      for (let dx = -r; dx <= r; dx++)
+        for (const dz of Math.abs(dx) === r ? [...Array(2 * r + 1).keys()].map((k) => k - r) : [-r, r]) {
+          const t = s.grid.get('g', bx + dx, bz + dz);
+          if (!t || t.blocked || t.occupantId || t.feature === 'water' || s.salvage.pileAt(t.x, t.z)) continue;
+          const b = s.water.bodyNear(t);
+          if (!b || s.water.levelOf(b.id) < 0.5) continue;
+          for (let ex = -1; ex <= 1; ex++)
+            for (let ez = -1; ez <= 1; ez++) {
+              const u = s.grid.get('g', t.x + ex, t.z + ez);
+              if (u && !u.blocked && u.feature !== 'water' && !u.occupantId) s.restoration.complete(u, 'pulse');
+            }
+          const m = s.build.place('planter', 'g', t.x, t.z);
+          if (m) {
+            got.planter = [{ id: m.id, x: t.x, z: t.z }];
+            want.shift();
+            break search;
+          }
+        }
     let i = 2;
     for (const type of want) {
       for (; i < spots.length; i += 2) {
@@ -147,7 +199,7 @@ try {
   check(!!placed.planter?.length && !!placed.compostBin && !!placed.bioDigester, `built the farm: ${Object.keys(placed).join(', ')}`);
   const p = placed.planter[0];
   await face(p.x, p.z);
-  check(/Plant in the planter/.test(await prompt()), `the prompt offers "Plant in the planter" (${await prompt()})`);
+  check(/Plant in the planter/.test(await promptFor(/Plant in the planter/)), `the prompt offers "Plant in the planter" (${await prompt()})`);
   await pressE();
   check(/empty planter/i.test(await panel()), 'Interact opens the planter panel');
   await snap('planter-panel');
@@ -158,23 +210,42 @@ try {
   await snap('radish-sprouts');
   await days(0.5);
   await snap('radish-flowering');
-  // no water: it wilts and waits
-  await game((g, s) => {
-    s.water = { isWatered: () => false, isLow: () => false };
-  });
+  // ── E23.4.1: real water. A dry spell, then the canal it drinks from runs dry: it wilts and waits ──
+  const drank = await game((g, s, id) => {
+    const m = s.machine(id);
+    const t = s.grid.get('g', m.x, m.z);
+    const b = s.water.bodyNear(t);
+    s.weather.forceForTest('sunny', 1e9); // no rain to water it
+    return { watered: s.farm.isWatered(m), body: b?.id, level: b ? s.water.levelOf(b.id) : 0 };
+  }, p.id);
+  check(drank.watered && !!drank.body, `the bed drinks from real water nearby (${drank.body}, level ${drank.level.toFixed(2)})`);
+  await game((g, s, b) => void s.water.draw(b, 1e9), drank.body);
   await page.waitForTimeout(4000); // the crop visuals re-check twice a game second; frames are slow under swiftshader
-  const wilt = await game((g, s, id) => s.farm.look(s.machine(id)), p.id);
-  check(wilt.wilting && !wilt.ripe, 'without water the radish wilts and stops');
-  await snap('radish-wilting');
-  await game((g, s) => {
-    delete s.water;
-  });
+  const wilt = await game((g, s, { id, b }) => ({ ...s.farm.look(s.machine(id)), level: s.water.levelOf(b) }), { id: p.id, b: drank.body });
+  check(wilt.wilting && !wilt.ripe && wilt.level < 0.08, `its water run dry (level ${wilt.level.toFixed(2)}), the radish wilts and stops`);
+  await days(1); // a whole dry day: it waits, it never dies
+  const waited = await game((g, s, id) => ({ crop: s.farm.bed(id).crop, grown: s.farm.bed(id).grown, wilting: s.farm.look(s.machine(id)).wilting }), p.id);
+  check(waited.crop === 'radish' && waited.wilting, 'a dry day later it is still there, wilting and waiting');
+  await morning();
+  await face(p.x, p.z);
+  await page.waitForTimeout(3000);
+  await snap('radish-wilting'); // drooping by the drained canal
+  await pressE();
+  check(/water has run low/.test(await panel()), `the panel says its water has run low (${(await panel()).slice(0, 90)})`);
+  await snap('radish-wilting-panel');
+  await closePanel();
+  // the water comes back: it perks up and grows on
+  await game((g, s, b) => void s.water.fill(b, 1e9), drank.body);
+  await page.waitForTimeout(4000);
+  const perked = await game((g, s, id) => s.farm.look(s.machine(id)), p.id);
+  check(!perked.wilting && perked.rate > 0, `refilled, it perks up and grows again (rate ${perked.rate.toFixed(2)})`);
+  await snap('radish-recovered'); // green again by the full canal
   await days(0.4);
   // grow on until ripe (likes unmet slow it: half rate per unmet like), at most two more days
   for (let k = 0; k < 8 && !(await game((g, s, id) => s.farm.look(s.machine(id)).ripe, p.id)); k++) await days(0.25);
   const lk = await game((g, s, id) => s.farm.look(s.machine(id)), p.id);
   await page.waitForTimeout(1500);
-  check(lk.ripe && /Harvest Radish/.test(await prompt()), `ripe: the prompt says "Harvest Radish" (${await prompt()}; progress ${lk.progress.toFixed(2)}, rate ${lk.rate.toFixed(2)})`);
+  check(lk.ripe && /Harvest Radish/.test(await promptFor(/Harvest Radish/)), `ripe: the prompt says "Harvest Radish" (${await prompt()}; progress ${lk.progress.toFixed(2)}, rate ${lk.rate.toFixed(2)})`);
   await snap('radish-ripe');
   const food0 = await game((g, s) => s.inventory.count('food'));
   await pressE();
@@ -219,7 +290,7 @@ try {
   await days(3.2);
   if (placed.beehive) {
     await face(placed.beehive[0].x, placed.beehive[0].z);
-    check(/Harvest the Beehive/.test(await prompt()), `bees settled by the flowers and made honey (${await prompt()})`);
+    check(/Harvest the Beehive/.test(await promptFor(/Harvest the Beehive/)), `bees settled by the flowers and made honey (${await prompt()})`);
     await snap('beehive');
     await pressE();
     await page.locator('#ocPanel button[data-act=honey]').click();
@@ -229,7 +300,7 @@ try {
   }
   if (placed.orchard) {
     await face(placed.orchard[0].x, placed.orchard[0].z);
-    check(/Harvest the Fruit Tree/.test(await prompt()), `the fruit tree has fruit (${await prompt()})`);
+    check(/Harvest the Fruit Tree/.test(await promptFor(/Harvest the Fruit Tree/)), `the fruit tree has fruit (${await prompt()})`);
     await snap('fruit-tree');
   }
   if (placed.mushroomLog) {
@@ -297,6 +368,7 @@ try {
         s.farm.plant(s.machine(id), 'seaKale');
       }, garden.id);
     }
+    await game((g, s) => void s.weather.forceForTest('rain', 1e9)); // no fresh water by the beach: the rain waters it
     await days(4);
     await pressE();
     await page.waitForTimeout(500);
