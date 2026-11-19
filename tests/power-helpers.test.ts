@@ -2,6 +2,7 @@ import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
+import { CHARGE } from '../src/data/charge';
 import { POWER } from '../src/data/power';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -29,48 +30,48 @@ function oldCity() {
   return sim;
 }
 
-/** A stand-in for E23.2.1's `sim.charge`. */
-function fakeCharge(sim: Sim, value = 20, max = 100) {
-  const c = {
-    value,
-    max,
-    got: 0,
-    get share() {
-      return c.value / c.max;
+/**
+ * E23.2.1's real charge meter (`sim.charge`), set to a level. `got()` is what has come back since: nothing else
+ * recharges here (no meal, and these pads are far from home's trickle), which the first test checks.
+ */
+function charge(sim: Sim, value = 20) {
+  sim.state.charge = { value };
+  const sources: string[] = [];
+  sim.bus.on('charge.full', (e: { source: string }) => sources.push(e.source));
+  return {
+    get value() {
+      return sim.charge.value();
     },
-    recharge(n: number, source: string) {
-      expect(source).toBe('charger');
-      c.got += n;
-      c.value = Math.min(c.max, c.value + n);
-    },
+    max: sim.charge.max,
+    got: () => sim.charge.value() - value,
+    sources,
   };
-  (sim as unknown as { charge: typeof c }).charge = c;
-  return c;
 }
 
 describe('E23.3.3 chargers', () => {
   it('bloombot on a powered charger refills fast; off it, or with no power, nothing', () => {
     const sim = oldCity();
-    const c = fakeCharge(sim);
+    const c = charge(sim);
     const pad = put(sim, 'charger', 30, 30);
     sim.bot = { roofId: GROUND, x: 32.5, z: 32.5 }; // a step away from it
     sim.advance(2);
-    expect(c.got).toBe(0);
+    expect(c.got()).toBe(0);
     sim.bot = { roofId: GROUND, x: 30.5, z: 31.5 }; // sitting at the pad's edge (its tile can't be walked onto)
     expect(sim.chargers.docked()).toBe(pad);
     sim.advance(2);
-    expect(c.got).toBe(0); // no power: a lone pad
+    expect(c.got()).toBe(0); // no power: a lone pad
     expect(sim.power.isPowered(pad)).toBe(false);
     put(sim, 'solar', 31, 30);
     put(sim, 'solar', 29, 30);
     sim.advance(2);
-    expect(c.got).toBeCloseTo(POWER.charger.rate * 2, 1);
+    expect(c.got()).toBeCloseTo(POWER.charger.rate * 2, 1);
+    expect(POWER.charger.rate).toBe(CHARGE.meditatePerSecond);
     expect(sim.power.networkOf(pad)!.served).toBe(POWER.draw.charger);
   });
 
   it('draws nothing while nobody sits on it, or once bloombot is full', () => {
     const sim = oldCity();
-    const c = fakeCharge(sim, 99);
+    const c = charge(sim, sim.charge.max - 1);
     const pad = put(sim, 'charger', 30, 30);
     put(sim, 'solar', 31, 30);
     put(sim, 'solar', 29, 30);
@@ -78,14 +79,15 @@ describe('E23.3.3 chargers', () => {
     expect(sim.power.networkOf(pad)!.demand).toBe(0);
     sim.bot = { roofId: GROUND, x: 30.5, z: 30.5 };
     sim.advance(1);
-    expect(c.value).toBe(100);
+    expect(c.value).toBe(c.max);
+    expect(c.sources).toEqual(['charger']); // the real meter says where the fill came from
     sim.advance(1);
     expect(sim.power.networkOf(pad)!.demand).toBe(0);
   });
 
   it('is shed last: on a short grid the drone hub goes dark before the charger', () => {
     const sim = oldCity();
-    fakeCharge(sim);
+    charge(sim);
     const pad = put(sim, 'charger', 30, 30);
     const hub = put(sim, 'droneHub', 31, 30, 2);
     put(sim, 'solar', 29, 30);
@@ -104,7 +106,7 @@ describe('E23.3.3 chargers', () => {
 describe('E23.3.3 powered helpers', () => {
   it('extending poles into a new region lets bloombot recharge there and switches its helpers on', () => {
     const sim = oldCity();
-    const c = fakeCharge(sim);
+    const c = charge(sim);
     // home: panels and a pole
     put(sim, 'solar', 0, 0);
     put(sim, 'solar', 1, 0);
@@ -117,7 +119,7 @@ describe('E23.3.3 powered helpers', () => {
     sim.advance(1);
     expect(sim.power.isPowered(pad)).toBe(false);
     expect(sim.power.isPowered(hub)).toBe(false);
-    expect(c.got).toBe(0);
+    expect(c.got()).toBe(0);
     // a line of poles out to them
     const step = Math.floor(sim.relays.range());
     for (let x = 3 + step; x < 50; x += step) put(sim, 'relay', x, 2);
@@ -126,7 +128,7 @@ describe('E23.3.3 powered helpers', () => {
     expect(sim.power.networkOf(pad)).toBe(sim.power.networkOf(hub));
     expect(sim.power.isPowered(pad)).toBe(true);
     expect(sim.power.isPowered(hub)).toBe(true);
-    expect(c.got).toBeGreaterThan(0);
+    expect(c.got()).toBeGreaterThan(0);
   });
 
   it('a drone hub off the grid sends nobody out and says it is waiting for power', () => {
