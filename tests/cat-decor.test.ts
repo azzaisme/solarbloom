@@ -201,7 +201,7 @@ describe('E23.12.2: cat-only decorations', () => {
 describe('E23.12.2: Ripe all around', () => {
   it('ripens every growing crop in the planters near bloombot at once, and none further away', () => {
     const sim = city(14);
-    sim.water.isWatered = () => true; // keep the real water system; only beds count as watered
+    sim.water.isWatered = () => true; // every bed watered; the rest of the water system stays real (E23.4.2 checks a build against it)
     const near = [planter(sim, 12, 16), planter(sim, 15, 16)];
     const far = planter(sim, 12 + TUNING.cat.ripeRadius + 8, 16);
     for (const m of [...near, far]) sow(sim, m, 'pumpkin');
@@ -222,7 +222,7 @@ describe('E23.12.2: Ripe all around', () => {
 
   it('is offered only once there are planters with something growing near bloombot', () => {
     const sim = city(15);
-    sim.water.isWatered = () => true; // keep the real water system; only beds count as watered
+    sim.water.isWatered = () => true; // every bed watered; the rest of the water system stays real (E23.4.2 checks a build against it)
     const rolls = (n = 400) => {
       const seen = new Set<string>();
       for (let i = 0; i < n; i++) seen.add(sim.cat.rollReward());
@@ -241,7 +241,7 @@ describe('E23.12.2: Ripe all around', () => {
 
   it('found through a real cat: the reward ripens the planter, and its words carry no number', () => {
     const sim = city(16);
-    sim.water.isWatered = () => true; // keep the real water system; only beds count as watered
+    sim.water.isWatered = () => true; // every bed watered; the rest of the water system stays real (E23.4.2 checks a build against it)
     const m = planter(sim, 12, 16);
     sow(sim, m);
     sim.bot = { roofId: GROUND, x: 13.5, z: 18.5 };

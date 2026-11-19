@@ -163,7 +163,7 @@ export class Pollinators {
     if (this.recount <= 0) {
       this.recount = 1;
       const on = this.enabled && !!rect;
-      this.flowers = on ? tilesIn(this.sim, rect!, (t) => t.ground === 'restored' && (t.bloom >= 3 || !!t.plant) && !t.occupantId && t.feature !== 'water' && t.feature !== 'paving', 80) : [];
+      this.flowers = on ? tilesIn(this.sim, rect!, (t) => t.ground === 'restored' && (this.sim.water.bloomShown(t) >= 3 || !!t.plant) && !t.occupantId && t.feature !== 'water' && t.feature !== 'paving', 80) : [];
       this.pull = this.flowers.reduce((a, t) => a + (t.plant ? PULSE_LOAD[PLANT_LOAD[t.plant]].pollinators : 0), 0);
       this.rare = this.flowers.filter((t) => t.plant === 'rare');
       this.paving = on ? tilesIn(this.sim, rect!, (t) => t.ground === 'restored' && t.feature === 'paving' && !t.blocked, 60) : [];
@@ -171,9 +171,9 @@ export class Pollinators {
       // grown trees (saplings drop nothing): cherries shed petals, other broadleaves the odd leaf, pines nothing
       const crowns: Crown[] = [];
       if (on)
-        for (const t of tilesIn(this.sim, rect!, (t) => (treeStage(t) ?? 0) >= 2, 120)) {
+        for (const t of tilesIn(this.sim, rect!, (t) => (treeStage(t, this.sim.water.bloomShown(t)) ?? 0) >= 2, 120)) {
           const spot = treeSpot(t, type(t));
-          if (spot && spot.species !== 'pine') crowns.push({ t, spot, stage: treeStage(t)! });
+          if (spot && spot.species !== 'pine') crowns.push({ t, spot, stage: treeStage(t, this.sim.water.bloomShown(t))! }); // E23.4.4: faded by low water
         }
       this.cherries = crowns.filter((c) => c.spot.species === 'cherry').slice(0, 24);
       this.broadleaves = crowns.filter((c) => c.spot.species !== 'cherry').slice(0, 24);
