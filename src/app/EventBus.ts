@@ -1,12 +1,22 @@
-import type { Big } from '../core/Big';
 import type { ChainEvent } from '../gameplay/BloomChainSystem';
-import type { BuffType, CatRewardType, CatVariant, MachineData, ResourceKind, RestoreSource, TileData } from '../core/types';
+import type { BuffType, CatRewardType, CatVariant, MachineData, RestoreSource, TileData } from '../core/types';
 
 export interface GameEvents {
   /** E23.2.1: bloombot's charge ran out (the low-power walk); reached full; bloombot began eating one unit. */
   'charge.empty': Record<string, never>;
   'charge.full': { source: import('../gameplay/Charge').ChargeSource };
   'charge.eat': { item: 'biomass' | 'food' };
+  /** E23.2.2: the wheel picked a load; a load just ran out (the next pulse fires empty); a pulse's reveal ripple. */
+  'pulse.load': { load: import('../data/pulse').PulseLoadId };
+  'pulse.loadEmpty': { load: import('../data/pulse').PulseLoadId };
+  /** E23.2.3: an old bench mended; bloombot sat down (on a bench, or to meditate at a charger); stood up. */
+  'bench.mended': { benchId: string; x: number; z: number };
+  'rest.sat': { kind: 'bench' | 'charger' };
+  'rest.stood': Record<string, never>;
+  /** E23.2.2.3: a buried find dug up */
+  'buried.dug': { id: string; material: import('../core/types').MaterialId; n: number; x: number; z: number };
+  'tile.planted': { tile: TileData; plant: import('../core/types').PlantKind };
+  'pulse.ripple': { tileId: string; targets: import('../gameplay/PulseLoad').RippleTarget[] };
   /** E23.7.1: the light clock crossed dawn or dusk (`day`: the game day). */
   'clock.dawn': { day: number };
   'clock.dusk': { day: number };
@@ -40,7 +50,7 @@ export interface GameEvents {
   'research.done': { id: string };
   'research.upgraded': { id: string; level: number };
   /** E23.5.1: bloombot clipped restored ground for biomass (`got` units into the backpack). */
-  'biomass.gathered': { tileId: string; x: number; z: number; got: number };
+  'biomass.gathered': { tileId: string; x: number; z: number; got: number; by: 'bot' | 'drone' };
   /** E23.5.2: a planter's bed changed (planted, a new stage, fed, an extra, harvested). */
   'planter.changed': { machineId: string };
   'planter.ripe': { machineId: string; crop: string };
@@ -71,7 +81,7 @@ export interface GameEvents {
   /** E21.9: a region's landmark woke (by bloombot's own delivery). */
   'landmark.woken': { region: string };
   'tile.restoring': { tile: TileData; source: RestoreSource };
-  'tile.restored': { tile: TileData; source: RestoreSource; chainId: number; biomass: Big };
+  'tile.restored': { tile: TileData; source: RestoreSource; chainId: number };
   'tile.prepared': { tile: TileData };
   'tile.softened': { tile: TileData };
   'tile.nurtured': { tile: TileData; level: number; auto?: boolean };
@@ -81,13 +91,11 @@ export interface GameEvents {
   'tile.knocked': { tile: TileData };
   /** Look 6: a tile's transition changed without a state change (a delayed wave, a Cultivator phase). */
   'tile.transition': { tile: TileData };
-  'resource.gain': { kind: ResourceKind; amount: Big; tileId?: string; reason?: string };
-  'resource.full': { kind: ResourceKind };
   'machine.built': { machine: MachineData };
   'chain.started': { chainId: number; originTileId: string };
   'chain.event': { event: ChainEvent; combo: number };
   'chain.fastForward': { chainId: number };
-  'chain.ended': { chainId: number; combo: number; bonus: Big; total: Big; milestonePct: number; energy: Big; roofs: string[]; crossings: number; areas: number; areaIds?: string[]; starter: 'player' | 'auto' };
+  'chain.ended': { chainId: number; combo: number; roofs: string[]; crossings: number; areas: number; areaIds?: string[]; starter: 'player' | 'auto' };
   'mega.released': { tileId: string; budget: number };
   'mega.ready': Record<string, never>;
   'area.modeChanged': { areaId: string; mode: 'bloom' | 'frontier' | 'off' | undefined };
@@ -103,7 +111,6 @@ export interface GameEvents {
   /** City 12.1: a rooftop cluster's roof was added to the world, or became reachable. */
   'layer.added': { layerId: string };
   'layer.unlocked': { layerId: string };
-  'canal.flow': { from: string; to: string; path: string[]; kind: 'fill' | 'overflow'; chainId?: number };
   'canopy.burst': { machineId: string; radius: number; gardens: string[] };
   'tree.discharged': { machineId: string };
   'solar.boost': { machineId: string };
@@ -122,16 +129,9 @@ export interface GameEvents {
   'cat.spawned': { anchorId: string; catId?: string; variant?: CatVariant; invasion?: boolean };
   'cat.found': { anchorId: string; reward: CatRewardType; summary: string; extras: number; catId?: string; variant?: CatVariant; rewards?: CatRewardType[] };
   'cat.moved': { from: string; anchorId: string; catId?: string };
-  'cat.goldenRelay': Record<string, never>;
+  'cat.goldenRelay': { machineId: string };
   'buff.started': { type: BuffType; seconds: number };
-  'harvest': { amount: Big };
-  'rooftop.coreReady': Record<string, never>;
-  'rooftop.coreRestored': Record<string, never>;
   'tutorial.step': { step: number };
-  /** Phase 4 E04.3: a park milestone was reached and paid (once). */
-  /** Phase 5 E12: a rewarded step on the way to an area's landmark (25 / 50 / 75% of the tiles it needs). */
-  'area.step': { areaId: string; step: number; share: number; credited: Partial<Record<ResourceKind, Big>> };
-  'milestone.reached': { at: number; credited: Partial<Record<ResourceKind, Big>>; next?: number };
   'area.revealed': { areaId: string };
   /** region unlocks: the player paid to lift a sealed area's fog */
   'area.unlocked': { areaId: string };
@@ -140,10 +140,8 @@ export interface GameEvents {
   'area.cleared': { areaId: string };
   /** City 09.1: progress on an area's specialty action. */
   'area.specialty': { areaId: string; have: number; need: number; met: boolean };
-  'district.ready': { districtId: string };
   /** Phase 5 E16: a fauna kind arrived (once per save; cosmetic). */
   'fauna.unlocked': { id: 'butterflies' | 'birds' | 'koi' | 'robots' };
-  'district.bloom': { districtId: string; restored: string[]; lusher: string[]; reward: Partial<Record<ResourceKind, Big>>; replay: boolean };
 }
 
 type Handler<T> = (payload: T) => void;

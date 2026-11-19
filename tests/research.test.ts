@@ -21,7 +21,7 @@ const realItem = (k: string) => k in ITEM_DEFS;
 
 /** A new old-city game with Pylon (Mast Row) awake: the station is there. */
 function station() {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = 1;
   sim.bot = NEAR;
   sim.state.salvage!.keepers.pylon = { step: 'request1' };
@@ -86,7 +86,7 @@ describe('E23.6.2: research in data', () => {
 
 describe('E23.6.2: the research station', { timeout: 60000 }, () => {
   it('is at home once the first Keeper wakes', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     expect(sim.research.on).toBe(false);
     expect(sim.research.finds()).toEqual([]);
     sim.state.salvage!.keepers.tide = { step: 'request1' };
@@ -282,6 +282,9 @@ describe('E23.6.2: the farm reads research (E23.5.2 planters)', () => {
     const sim = station();
     sim.state.salvage!.keepers.tide = { step: 'request1' };
     sim.weather.forceForTest('sunny', 1e12);
+    // E23.4.1: planters wilt with no water in reach; these test research, so every bed is watered (the real
+    // wilting is covered by water-levels and the farm's own tests)
+    sim.water.isWatered = () => true;
     sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
     const at = (x: number, z: number): MachineData => {
       const t = sim.grid.get(GROUND, x, z)!;

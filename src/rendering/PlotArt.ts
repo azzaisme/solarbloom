@@ -232,14 +232,6 @@ const ART: Record<string, (a: At) => void> = {
     h.add('sphere', pick(C.boat, a.v), [cx, y + 0.16, cz - 0.7], [1.3, 0.24, 0.38]); // a hull lying along the deck
     h.add('box', C.canvasWhite, [cx, y + 0.25, cz - 0.7], [0.5, 0.03, 0.2]);
   },
-  boathouse: (a) => {
-    const { h, y, cx, cz } = a;
-    for (const s of [-1, 1]) for (const t of [-1, 1]) h.add('box', C.deckDark, [cx + s * 0.7, y + 0.45, cz + t * 0.4], [0.06, 0.9, 0.06]);
-    for (let k = 0; k < 3; k++) {
-      h.add('box', C.deckDark, [cx, y + 0.25 + k * 0.28, cz], [1.5, 0.04, 0.9]);
-      h.add('sphere', pick(C.boat, a.v + k), [cx, y + 0.33 + k * 0.28, cz], [1.4, 0.16, 0.26]);
-    }
-  },
   stalls: (a) => {
     stall(a, a.cx - 0.45, a.cz - 0.4, 0);
     stall(a, a.cx + 0.45, a.cz + 0.4, 1);

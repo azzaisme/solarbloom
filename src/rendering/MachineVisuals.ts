@@ -4,10 +4,12 @@ import { GROUND } from '../core/GameState';
 import { CHUNK } from '../core/Hash';
 import { chunkKey } from '../core/Grid';
 import type { Sim } from '../gameplay/Sim';
+import { inSurge } from '../gameplay/PowerEnv';
 import { color, glow, mat, PALETTE, uniqueMat } from './Materials';
 import { group, shape, vshape, type ShapeOpts } from './Shapes';
 import { TUNING } from '../data/tuning';
 import { POWER } from '../data/power';
+import { holoMaterial } from './Hologram';
 import { POLE_ARM } from './PowerLines';
 import { SLAB_TOP } from './SceneBuilder';
 import { ease, type Tweens } from './Tween';
@@ -334,51 +336,53 @@ export class MachineVisuals {
   static readonly BATCH_REGION = 64;
   private batchGroups = new Map<string, number>();
 
-  // ───── E23.3.4 the Power view's glow ─────
-  /** each material's soft-yellow twin (shared, so batches still merge) */
-  private glowTwins = new Map<pc.Material, pc.StandardMaterial>();
-  private glowing = new Map<pc.MeshInstance, pc.Material>();
-  private glowSig = '';
-  private glowIn = 0;
-  private glowBoost = 1;
+  // ───── E23.3.4 the Power view: powered machines become yellow holograms ─────
+  private holoMat?: pc.StandardMaterial;
+  /** each part shown as a hologram, and the material it had */
+  private holo = new Map<pc.MeshInstance, pc.Material>();
+  private holoSig = '';
+  private holoIn = 0;
+  private holoBoost = 1;
 
-  /** Keeps the glow as bright while the Power view's dim lowers the exposure (DayNight.boost). */
-  setGlowBoost(b: number): void {
-    if (Math.abs(b - this.glowBoost) < 0.01) return;
-    this.glowBoost = b;
-    for (const t of this.glowTwins.values()) {
-      t.emissiveIntensity = POWER.view.glow * b;
-      t.update();
+  /** Keeps the hologram as bright while the Power view's dim lowers the exposure (DayNight.boost). */
+  setHoloBoost(b: number): void {
+    if (Math.abs(b - this.holoBoost) < 0.01) return;
+    this.holoBoost = b;
+    if (this.holoMat) {
+      this.holoMat.emissiveIntensity = POWER.view.holo.glow * b;
+      this.holoMat.update();
     }
   }
 
   /**
-   * The Power view: the given machines (powered electrical ones) glow soft yellow, by swapping each part's material
-   * for a twin with a yellow emissive. Parts that already glow keep theirs. Batches are re-made only for regions
-   * that changed. Pass undefined to put every material back. Cheap to call every frame (it re-checks 4× a second,
-   * so parts rebuilt meanwhile, an upgrade or a model arriving, pick it up).
+   * The Power view: the given machines (powered electrical ones) become holograms in pure yellow (the build
+   * preview's hologram look, Hologram.ts; the owner's call). Every part's material is swapped for one shared
+   * hologram material, so batches still merge; only regions that changed are re-batched. Pass undefined to put every
+   * material back. Cheap to call every frame: it re-checks 4× a second, so parts rebuilt meanwhile (an upgrade, a
+   * model arriving) pick it up.
    */
-  powerGlow(ids: Set<string> | undefined, dt: number): void {
+  powerHolo(ids: Set<string> | undefined, dt: number): void {
     const dirty = new Set<number>();
     const mark = (mi: pc.MeshInstance) => {
       const g = (mi.node as pc.Entity | null)?.render?.batchGroupId;
       if (g !== undefined && g >= 0) dirty.add(g);
     };
     if (!ids) {
-      if (!this.glowing.size) return;
-      for (const [mi, orig] of this.glowing) {
-        if (this.glowTwins.get(orig) === mi.material) mi.material = orig; // unless something swapped it since
+      if (!this.holo.size) return;
+      for (const [mi, orig] of this.holo) {
+        if (mi.material === this.holoMat) mi.material = orig; // unless something swapped it since
         mark(mi);
       }
-      this.glowing.clear();
-      this.glowSig = '';
+      this.holo.clear();
+      this.holoSig = '';
     } else {
       const sig = [...ids].sort().join(',');
-      this.glowIn -= dt;
-      if (sig === this.glowSig && this.glowIn > 0) return;
-      this.glowSig = sig;
-      this.glowIn = 0.25;
-      const twins = new Set(this.glowTwins.values());
+      this.holoIn -= dt;
+      if (sig === this.holoSig && this.holoIn > 0) return;
+      this.holoSig = sig;
+      this.holoIn = 0.25;
+      const V = POWER.view.holo;
+      this.holoMat ??= holoMaterial(PALETTE.signal.power.machineHolo, V.opacity, V.glow * this.holoBoost, false);
       const want = new Set<pc.MeshInstance>();
       for (const v of this.views.values()) {
         if (!ids.has(v.m.id)) continue;
@@ -386,41 +390,22 @@ export class MachineVisuals {
           for (const mi of r.meshInstances) {
             const cur = mi.material;
             if (!cur) continue;
-            if (twins.has(cur as pc.StandardMaterial)) {
-              want.add(mi);
-              continue;
-            }
-            const twin = this.twinOf(cur);
-            if (!twin) continue;
-            this.glowing.set(mi, cur);
-            mi.material = twin;
             want.add(mi);
+            if (cur === this.holoMat) continue;
+            this.holo.set(mi, cur);
+            mi.material = this.holoMat;
             mark(mi);
           }
         }
       }
-      for (const [mi, orig] of this.glowing) {
+      for (const [mi, orig] of this.holo) {
         if (want.has(mi)) continue;
-        if (this.glowTwins.get(orig) === mi.material) mi.material = orig;
-        this.glowing.delete(mi);
+        if (mi.material === this.holoMat) mi.material = orig;
+        this.holo.delete(mi);
         mark(mi);
       }
     }
     if (this.batcher) for (const g of dirty) this.batcher.markGroupDirty(g);
-  }
-
-  private twinOf(m: pc.Material): pc.StandardMaterial | undefined {
-    if (!(m instanceof pc.StandardMaterial)) return undefined;
-    let t = this.glowTwins.get(m);
-    if (t) return t;
-    const e = m.emissive;
-    if (m.emissiveMap || (e.r + e.g + e.b) * m.emissiveIntensity > 0.05) return undefined; // already glows
-    t = m.clone() as pc.StandardMaterial;
-    t.emissive = color(PALETTE.signal.power.machineGlow);
-    t.emissiveIntensity = POWER.view.glow * this.glowBoost;
-    t.update();
-    this.glowTwins.set(m, t);
-    return t;
   }
 
   private batchGroupFor(m: MachineData): number | undefined {
@@ -1737,14 +1722,14 @@ export class MachineVisuals {
     // Superstructures carry their own model: no tier-1 extras (a placed Core keeps its machines' upgrade levels, and
     // a Megaflower has no base panel list, so refreshing one used to crash here).
     if (v.super) return;
-    const L = (id: string) => Math.min(6, id === 'richSoil' ? u.level(id) : u.levelOf(v.m, id));
+    const L = (id: string) => Math.min(6, u.levelOf(v.m, id));
     const key =
       v.m.type === 'solar' ? `${L('solarArray')}`
       : v.m.type === 'droneHub' ? `${L('droneSpeed')}|${L('secondDrone')}|${L('droneSweep')}|${L('droneRadius')}`
-      : v.m.type === 'pollinator' ? `${L('pollinatorReach')}|${L('richSoil')}`
+      : v.m.type === 'pollinator' ? `${L('pollinatorReach')}`
       : v.m.type === 'condenser' ? `${L('waterBloom')}`
       : v.m.type === 'motherTree' ? `${L('treeResonance')}`
-      : v.m.type === 'relay' ? `${L('relayLens')}`
+      : v.m.type === 'relay' ? `${L('relayLens')}|${v.m.golden ? 1 : 0}`
       : '';
     if (key === v.vkey) return;
     v.vkey = key;
@@ -1813,13 +1798,6 @@ export class MachineVisuals {
         const a = (i / (lvl * 4)) * Math.PI * 2;
         part(ex, ball(4, 8), mat(PALETTE.flower[i % 5]), { pos: [Math.cos(a) * 0.46, 0.3, Math.sin(a) * 0.46], scale: [0.11, 0.07, 0.11] });
       }
-      // Rich Soil: the bed spills over with taller blooms.
-      for (let i = 0; i < Math.min(6, L('richSoil')); i++) {
-        const a = i * 1.05 + 0.4;
-        const h = 0.34 + (i % 3) * 0.06;
-        part(ex, rod(), mat(PALETTE.stem), { pos: [Math.cos(a) * 0.3, 0.27 + h / 2, Math.sin(a) * 0.3], scale: [0.02, h, 0.02] });
-        part(ex, ball(4, 8), mat(i % 2 ? PALETTE.bloomPale : PALETTE.flower[(i + 2) % 5]), { pos: [Math.cos(a) * 0.3, 0.27 + h, Math.sin(a) * 0.3], scale: [0.13, 0.08, 0.13] });
-      }
     } else if (v.m.type === 'condenser') {
       // Water Bloom: an extra little tank per level around the plinth and a ring of mist beads.
       const lvl = L('waterBloom');
@@ -1854,6 +1832,17 @@ export class MachineVisuals {
     } else if (v.m.type === 'relay') {
       const lvl = L('relayLens');
       for (let i = 0; i < lvl; i++) part(ex, ring(24, 5), mat(PALETTE.relayGlow, { emissive: PALETTE.relayGlow, emissiveIntensity: 0.8, opacity: 0.8 }), { pos: [0, 1.02 + i * 0.12, 0], scale: [0.5 + i * 0.1, 0.05, 0.5 + i * 0.1] });
+      // E23.12 (#528): a Lucky Cat's Golden Relay wears a gold crown and a gold lamp (it carries power further)
+      if (v.m.golden) {
+        // metal gold with a low warm glow (the golden cat's gold): a bright gold emissive washes out to cream
+        const crownGold = mat(PALETTE.gold, { metal: 0.8, gloss: 0.9, emissive: PALETTE.trim.goldGlow, emissiveIntensity: 0.35 });
+        part(ex, ring(24, 5), crownGold, { pos: [0, 1.2, 0], scale: [0.42, 0.1, 0.42] });
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          part(ex, ball(4, 6), crownGold, { pos: [Math.cos(a) * 0.4, 1.3, Math.sin(a) * 0.4], scale: [0.06, 0.12, 0.06] });
+        }
+        part(ex, ball(5, 8), mat(PALETTE.trim.amber, { emissive: PALETTE.trim.amber, emissiveIntensity: 0.9 }), { pos: [0, 1.42, 0], scale: 0.12 });
+      }
     }
   }
 
@@ -2073,7 +2062,7 @@ export class MachineVisuals {
       }
       switch (v.m.type) {
         case 'solar': {
-          const boosted = v.m.boostUntil > now || this.sim.production.surgeActive();
+          const boosted = v.m.boostUntil > now || inSurge(this.sim, v.m);
           const m = boosted ? panelBoost() : panelMat();
           for (const p of v.panel!) if (p.render && p.render.material !== m) p.render.material = m;
           if (!rm && v.spin[0]) v.spin[0].setLocalEulerAngles(28 + Math.sin(t * 0.25 + v.m.x) * 5, 45 + Math.sin(t * 0.18 + v.m.z) * 14, 0);

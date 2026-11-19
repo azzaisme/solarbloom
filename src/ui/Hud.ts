@@ -1,19 +1,18 @@
 import type { AreaMode } from '../core/types';
-import { big, fmt } from '../core/Big';
-import type { BuildableType, MachineData, ResourceKind } from '../core/types';
+import type { BuildableType, MachineData } from '../core/types';
 import { MACHINES } from '../data/machines';
 import type { Sim } from '../gameplay/Sim';
 import { ICONS, LOGO_MARK, hasEmoji, iconize, installIconDefs, plain } from './Icons';
 import { Prompt } from './Prompt';
 import { plainWords } from './words';
 import { ObjectiveCard } from './ObjectiveCard';
-import { Bars } from './Bars';
 import { BuildBar, Hotbar } from './Hotbar';
 import { Toasts } from './Toasts';
 import { Panels } from './Panels';
 import { Backpack } from './Backpack';
 import { CraftTable } from './CraftTable';
 import { ChargeMeter } from './ChargeMeter';
+import { LoadWheel } from './LoadWheel';
 import type { SetProp } from './HudPart';
 import type { GlyphSetting, GlyphStyle } from './Glyphs';
 
@@ -28,10 +27,8 @@ export const machineTool = (t: Tool): t is BuildableType => t in MACHINES;
 
 export interface HudCallbacks {
   selectTool(t: Tool): void;
-  harvest(): void;
   /** E18: `hubId|role|slot` (slot 2 on a Fleet Hub), or `hubId|role|drone|index` for a Megahub drone. */
   chooseRole(key: string): void;
-  activateCore(): void;
   /** Phase 5 E15: the 🐾 chip: show where a hinted cat hides. */
   findCat(): void;
   /** E20.2 (#285): the key or pad button bound to an action, as the player last used them (for hint text). */
@@ -40,8 +37,6 @@ export interface HudCallbacks {
   goHome(attention: boolean): void;
   skipCinematic(): void;
   closeInspect(): void;
-  /** City 10.7: set off (or replay) a district bloom. */
-  districtBloom(id: string, replay: boolean): void;
   /** Wake a city landmark (by machine id). */
   wake(machineId: string): void;
   /** Open an area's panel (from its label in the overview). */
@@ -92,6 +87,8 @@ export interface Settings {
   invertY?: boolean;
   noRecentre?: boolean;
   noVistas?: boolean;
+  /** Third person: a click on the world captures the mouse to look around (on unless switched off) */
+  mouseLook?: boolean;
   /** Bloombot (G.16): rebound keys and gamepad buttons (only what differs from the default map). */
   keys?: SavedBindings['keys'];
   pad?: SavedBindings['pad'];
@@ -135,7 +132,7 @@ function esc(s: string) {
  * DOM HUD. Reads sim state each frame (cheaply, with change detection); never mutates the sim directly.
  *
  * E22.5 (#342): the shell over the HUD's parts, laid out as the epic's table: the objective card top left
- * (ObjectiveCard), energy and water top right (Bars), the minimap bottom left, the prompt at the bottom centre
+ * (ObjectiveCard), bloombot's charge top right (ChargeMeter: the only meter, E23.1.4), the minimap bottom left, the prompt at the bottom centre
  * with the build hotbar above it while build mode is open (Prompt, Hotbar), toasts bottom right (Toasts), and
  * the panels it opens (Panels). Its public methods are the game's single way in, and pass on to the parts.
  */
@@ -147,13 +144,9 @@ export class Hud {
   readonly root: HTMLElement;
   /** the last value written per key (`set` skips unchanged writes) */
   readonly last = new Map<string, string>();
-  private comboTimer = 0;
   settings: Settings;
   /** E22.2: the one prompt at the bottom centre */
   readonly prompt: Prompt;
-  /** E22.10: old-city rules: plain words, two gauges, one objective sentence (Game sets it from the rules) */
-  oldCity = false;
-  readonly bars: Bars;
   readonly objective: ObjectiveCard;
   readonly hotbar: Hotbar;
   /** E22.5: the build hotbar (slots 1–9), above the prompt while build mode is open */
@@ -166,6 +159,8 @@ export class Hud {
   readonly craft: CraftTable;
   /** E23.2.1: bloombot's charge, the only meter */
   readonly charge: ChargeMeter;
+  /** E23.2.2: the pulse load wheel */
+  readonly loadWheel: LoadWheel;
 
   constructor(
     readonly sim: Sim,
@@ -175,19 +170,24 @@ export class Hud {
     this.settings = settings;
     this.root = document.getElementById('hud')!;
     installIconDefs();
-    this.bars = new Bars(this);
     this.objective = new ObjectiveCard(this);
     this.hotbar = new Hotbar(this);
     this.buildBar = new BuildBar(this);
     this.toasts = new Toasts(this);
     this.panels = new Panels(this);
     this.charge = new ChargeMeter(this);
+    this.loadWheel = new LoadWheel(this);
     this.root.innerHTML = iconize(this.template());
-    this.bars.wire();
+    // Third person: the build crosshair in the middle of the screen (shown while aiming a build: `.aiming`)
+    const xh = document.createElement('div');
+    xh.className = 'crosshair';
+    xh.setAttribute('aria-hidden', 'true');
+    this.root.appendChild(xh);
     this.objective.wire();
     this.hotbar.wire();
     this.panels.wire();
     this.charge.wire();
+    this.loadWheel.wire();
     this.wire();
     this.prompt = new Prompt(this.root);
     this.backpack = new Backpack(this.root, { sim: this.sim });
@@ -197,8 +197,7 @@ export class Hud {
   private template() {
     return `
       <div id="logo" role="img" aria-label="Solarbloom">${LOGO_MARK}<span class="wm">Solarbloom</span></div>
-      <div id="res" role="group" aria-label="Resources">${Bars.template()}</div>
-      <div id="resInfo" class="panel" role="status" hidden></div>
+      <div id="res" role="group" aria-label="Charge"></div>
       <div id="obj" class="panel" role="region" aria-label="Objective">
         <div class="ohead">
           <span class="oic" aria-hidden="true">${ICONS.biomass}</span>
@@ -213,15 +212,14 @@ export class Hud {
           <ul id="objList"></ul>
         </div>
         <div id="objAct"></div>
-        <button id="coreBtn">✨ Awaken the Core</button>
       </div>
       <div id="quick" role="toolbar" aria-label="Quick actions">
         <button class="rbtn qbtn" id="homeBtn" aria-label="Home: fly to the park (Home)" title="Home (Home key)">${ICONS.home}<span class="qbadge" aria-hidden="true"></span></button>
         <button class="rbtn qbtn" id="catBtn" aria-label="Lucky Cat garden" title="Lucky Cat garden" hidden>${ICONS.garden}<span class="qn" id="catCount">0</span></button>
         <button class="rbtn qbtn" id="pawBtn" aria-label="Paw prints: which way a hiding cat went" title="Paw prints: a Lucky Cat is hiding. Which way do they lead?" hidden>${ICONS.paw}<span class="qn" id="pawCount">0</span></button>
       </div>
-      <div id="combo"><div id="comboFx" aria-hidden="true"></div><div class="big" id="comboBig" role="status" aria-label="Bloom chain combo"><span class="cic">${ICONS.biomass}</span><span class="cl">Combo</span> <span class="cx">×0</span></div><div class="cbody panel"><ul id="comboParts"></ul><div class="total" id="comboTotal"></div><div id="chainAreas"></div></div><div id="feed"></div></div>
-      <div id="hotbar" class="panel">${Hotbar.template(this.sim.oldCity)}</div>
+      <div id="combo"><div class="cbody panel"><div id="chainAreas"></div></div><div id="feed"></div></div>
+      <div id="hotbar" class="panel">${Hotbar.template()}</div>
       ${BuildBar.template()}
       <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
       <div id="toasts" role="status" aria-live="polite"></div>
@@ -229,17 +227,11 @@ export class Hud {
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
       <div id="intro" hidden><div class="panel card-intro">
         <h2>${LOGO_MARK}<span>Welcome to Solarbloom</span></h2>
-        <p data-rules="classic">This old park is dead and grey, and the city around it is lost in a gloomy fog. Bring it back to life.</p>
-        <p data-rules="oldcity">The fog came and the island city emptied. A small boat has brought you, bloombot, from the mainland to bring it back to life.</p>
-        <ol data-rules="oldcity">
+        <p>The fog came and the island city emptied. A small boat has brought you, bloombot, from the mainland to bring it back to life.</p>
+        <ol>
           <li><b>Salvage what lies around</b>: Scrap, Seeds and more, by hand. Tidied ground can be restored.</li>
           <li><b>Pulse dead ground back to life</b>, and bring the fountain what it asks for. Each delivery gives you a new way to move.</li>
           <li><b>Clear the way</b> into the city's regions and wake the robot who sleeps in each.</li>
-        </ol>
-        <ol data-rules="classic">
-          <li><b>Walk up to a grey tile and pulse it</b> to restore it. Each pulse uses a little ⚡ energy and 💧 water, which refill on their own.</li>
-          <li><b>Green tiles grow 🌿 biomass.</b> Spend it on machines. Pulse a green tile again to grow flowers.</li>
-          <li><b>Goal:</b> wake the dry fountain. Then the fog starts to lift. The objective is in the top-left corner.</li>
         </ol>
         <button id="introGo">Start restoring ✨</button>
       </div></div>
@@ -340,30 +332,14 @@ export class Hud {
   machineHtml(m: MachineData, extra: string): string {
     return this.panels.machineHtml(m, extra);
   }
-  resourceRect(kind: ResourceKind): DOMRect {
-    return this.bars.resourceRect(kind);
-  }
-  flashResource(kind: ResourceKind, cls: 'flash' | 'short' | 'bump') {
-    this.bars.flashResource(kind, cls);
-  }
 
   update(dt: number) {
-    this.bars.update();
     this.charge.update(dt);
+    this.loadWheel.update(dt);
     this.hotbar.update();
     this.updateCatChip();
     this.panels.update(dt);
     this.objective.update();
-    if (this.comboTimer > 0) {
-      this.comboTimer -= dt;
-      if (this.comboTimer <= 0) {
-        $(this.root, '#comboBig').classList.remove('on');
-        $(this.root, '#combo').classList.remove('on');
-        this.comboTier = 0;
-        this.set('comboParts', $(this.root, '#comboParts'), 'html', '');
-        $(this.root, '#comboTotal').classList.remove('on');
-      }
-    }
   }
 
   /** Writes a value to the DOM only when it changed since the last write under that key. */
@@ -396,60 +372,9 @@ export class Hud {
     return this.modalCheck();
   }
 
-  /** E22.10: game text in the words of the rules in play (old-city rules: plain words, no rates). */
+  /** E22.10: game text in plain words, no rates. */
   words(text: string): string {
-    return this.oldCity ? plainWords(text) : text;
-  }
-
-  private comboTier = 0;
-  combo(n: number, total?: string) {
-    const el = $(this.root, '#comboBig');
-    $(el, '.cx').textContent = `×${n}`;
-    el.classList.add('on');
-    $(this.root, '#combo').classList.add('on');
-    // E19.4.3: the potter-about pace keeps chains gentle: one quiet tier, no sparkle burst or pop.
-    const tier = this.settings.potter ? 1 : n >= 10 ? 3 : n >= 5 ? 2 : 1;
-    el.classList.toggle('tier2', tier === 2);
-    el.classList.toggle('tier3', tier === 3);
-    // Look 5.5: sparkles burst around the panel when the chain reaches a new tier.
-    if (tier > this.comboTier && tier > 1) this.sparkle(tier);
-    this.comboTier = tier;
-    el.classList.remove('pop');
-    void el.offsetWidth;
-    if (!this.settings.potter) el.classList.add('pop');
-    const tot = $(this.root, '#comboTotal');
-    tot.innerHTML = iconize(esc(total ?? ''));
-    tot.classList.toggle('on', !!total);
-    this.comboTimer = total ? 3.2 : 2.2;
-  }
-
-  /** Look 5.5: the combo panel's contribution lines, from the running chain (ChainSummary.breakdown). */
-  chainBreakdown(b?: { restored: number; adjacent: number; synergy: number; relay: number }) {
-    if (!b) return;
-    const lines: [string, number][] = [
-      ['Restored Tiles', b.restored],
-      ['Adjacent Blooms', b.adjacent],
-      ['Utility Synergy', b.synergy],
-      ['Relay Links', b.relay],
-    ];
-    this.set('comboParts', $(this.root, '#comboParts'), 'html', lines.filter(([, v]) => v > 0).map(([k, v]) => `<li><span>+ ${k}</span><b>+${fmt(big(v))}</b></li>`).join(''));
-  }
-
-  private sparkle(tier: number) {
-    if (document.body.classList.contains('reduced') || this.settings.lowVfx) return;
-    const box = $(this.root, '#comboFx');
-    const n = tier === 3 ? 12 : 7;
-    for (let i = 0; i < n; i++) {
-      const s = document.createElement('i');
-      const a = (i / n) * Math.PI * 2 + Math.random() * 0.5;
-      const d = 40 + Math.random() * 50;
-      s.style.setProperty('--dx', `${Math.round(Math.cos(a) * d)}px`);
-      s.style.setProperty('--dy', `${Math.round(Math.sin(a) * d * 0.6)}px`);
-      s.style.animationDelay = `${Math.round(Math.random() * 120)}ms`;
-      s.className = tier === 3 ? 'pink' : '';
-      box.appendChild(s);
-      setTimeout(() => s.remove(), 1000);
-    }
+    return plainWords(text);
   }
 
   /** City 10.6: the running chain's per-area summary under the combo (empty hides it). */

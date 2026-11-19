@@ -2,6 +2,7 @@ import { GROUND } from '../core/GameState';
 import { machineStrengthAt } from '../core/RegionStrengths';
 import type { MachineData } from '../core/types';
 import { POWER } from '../data/power';
+import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
 /** Where something on the grid stands. */
@@ -51,9 +52,26 @@ interface WeatherLike {
  * A source's region strength multiplier (E23.8.1): about 1.5× for a matching machine in its region (wind on
  * Saltwind more), from E23.8's `machineStrengthAt`. Old-city ground only.
  */
-export function regionBoost(sim: Sim, m: Pick<MachineData, 'roofId' | 'x' | 'z'> & { type: string }): number {
-  if (m.roofId !== GROUND || !sim.oldCity) return 1;
+export function regionBoost(_sim: Sim, m: Pick<MachineData, 'roofId' | 'x' | 'z'> & { type: string }): number {
+  if (m.roofId !== GROUND) return 1;
   return machineStrengthAt(m.type, m.x, m.z);
+}
+
+/** E23.12 (#528): is a panel inside a Lucky Cat's Solar Surge right now? (within its reach of where the cat was) */
+export function inSurge(sim: Sim, m: Pick<MachineData, 'roofId' | 'x' | 'z'>): boolean {
+  for (const b of sim.state.buffs)
+    if (b.type === 'solarFrenzy' && b.until > sim.time && b.at?.roofId === m.roofId && Math.hypot(b.at.x - m.x, b.at.z - m.z) <= TUNING.cat.surgeRadius) return true;
+  return false;
+}
+
+/**
+ * A panel's extra shine: ×2 for a few seconds after a bloom beside it (a chain's PRODUCE_ENERGY, E23.1.4), and ×3
+ * inside a Lucky Cat's Solar Surge (#528). Both feed the grid, never a counter.
+ */
+export function solarBoost(sim: Sim, m: Pick<MachineData, 'roofId' | 'x' | 'z'> & { boostUntil?: number }): number {
+  let k = (m.boostUntil ?? 0) > sim.time ? TUNING.solarBloomBoost.mult : 1;
+  if (inSurge(sim, m)) k *= TUNING.cat.surgeShine;
+  return k;
 }
 
 /** How high a machine stands, in terrace levels (rooftops count as high ground). */
@@ -65,7 +83,8 @@ export function groundLevel(sim: Sim, m: Placed): number {
 const CLOUDY = new Set(['cloud', 'cloudy', 'overcast', 'rain', 'storm', 'fog']);
 /** Wind by weather kind when the weather gives no number: turbines turn only on windy days and in storms. */
 const WIND: Record<string, number> = { wind: 0.75, windy: 0.75, storm: 1 };
-const GLOOMY = new Set(['fog', 'storm']);
+/** weather that is dark enough for lights by day (also read by the renderer for photo mode's own weather) */
+export const GLOOMY = new Set(['fog', 'storm']);
 
 /** Daylight 0..1 from E23.7's day fraction (0 dawn, 2/3 dusk, 1 the next dawn), easing over a short twilight. */
 export function sunAt(f: number): number {

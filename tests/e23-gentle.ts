@@ -1,5 +1,4 @@
 import { SaveService } from '../src/app/SaveService';
-import { big } from '../src/core/Big';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { GroundState, MachineData, TileData } from '../src/core/types';
 import { PARK } from '../src/core/Areas';
@@ -152,11 +151,33 @@ function strict(name: Probe['name'], path: string, need: string[], what: (o: Obj
   };
 }
 
-/** E23.4 (#358): water. Land near empty water fades to plain restored ground and greens again on refill. */
-export const WATER = strict('water', 'water', ['isDry'], (o, sim) => {
-  const dry = () => sim.areas.tiles(PARK).filter((t) => t.ground === 'restored' && call(o, 'isDry', t) === true);
-  return { dark: () => dry().slice(0, 5).map((t) => `tile ${t.x},${t.z} dry`), unrecovered: () => dry().slice(0, 5).map((t) => `tile ${t.x},${t.z} still dry`) };
-});
+/**
+ * E23.4 (#358, landed: E23.4.1 #491): water. Land near empty water goes dry (on E23.4.4, it fades to plain restored
+ * ground) and is watered again on refill. The water's piece of the scene: the park's pond restored (a silted bed
+ * holds no water until it is). The drain empties every body and holds a dry spell (E23.7.2's weather, sunny: no rain
+ * to refill it, as the power drain holds the night); the refill fills them and lets the weather go again.
+ */
+export const WATER: Probe = {
+  name: 'water',
+  present: (sim) => !!(sim as unknown as { water?: unknown }).water,
+  bind: (sim) => {
+    for (const t of sim.areas.tiles(PARK)) if (t.feature === 'water' && !t.blocked) setGround(sim, t, 'restored');
+    const w = sim.water;
+    const dry = () => sim.areas.tiles(PARK).filter((t) => t.ground === 'restored' && w.isDry(t)).slice(0, 5).map((t) => `tile ${t.x},${t.z} dry`);
+    return {
+      drain: () => {
+        sim.weather.forceForTest('sunny', Infinity);
+        w.drainForTest();
+      },
+      refill: () => {
+        sim.weather.forceForTest('sunny', 0); // the weather runs free again
+        w.refillForTest();
+      },
+      dark: dry,
+      unrecovered: dry,
+    };
+  },
+};
 
 /** E23.2.1 (#371): bloombot's charge. At zero: a low-power walk, never stranded, nothing lost. */
 export const CHARGE = strict('charge', 'charge', ['value', 'canWalk'], (o) => ({
@@ -210,16 +231,12 @@ export function crops(sim: Sim): { id: string; crop: Obj }[] {
  * a few machines standing. Each probe's `bind` adds its own system's pieces (the power scene, ponds, planters).
  */
 export function homeScene(seed: number): Sim {
-  const sim = new Sim(createInitialState(seed, 'oldcity'));
+  const sim = new Sim(createInitialState(seed));
   const salvage = sim.state.salvage!;
   salvage.tier = 2;
   salvage.abilities.push('pry', 'hover');
   sim.areas.clear(PARK, true);
   sim.gates.open('g-mastRow');
-  for (const k of ['energy', 'water'] as const) {
-    sim.state.caps[k] = big(1e6);
-    sim.state.resources[k] = big(1e6);
-  }
   // Mast Row part-way: a strip prepared, a strip growing, a strip restored.
   const mast = sim.areas.tiles('mastRow').filter((t) => !t.blocked && !t.occupantId);
   mast.slice(0, 30).forEach((t) => setGround(sim, t, 'prepared'));

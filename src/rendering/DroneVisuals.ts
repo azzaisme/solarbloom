@@ -191,7 +191,7 @@ export class DroneVisuals {
     bus.on('chain.event', (e) => {
       if (milestones.has(e.combo)) this.cheerAll();
     });
-    bus.on('milestone.reached', () => this.cheerAll());
+    bus.on('fountain.tier', () => this.cheerAll()); // E23.1.4: a fountain delivery takes the old park milestones' cheer
     bus.on('cat.found', () => this.cheerAll(true));
   }
 
