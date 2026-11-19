@@ -450,6 +450,21 @@ export class WaterPipes {
     return this.fedNear(t).length > 0;
   }
 
+  /** E23.6.3: how much water the pipes beside a tile could give now (every body feeding them, counted once). */
+  availableAt(t: TileData): number {
+    const seen = new Set<string>();
+    let n = 0;
+    for (const k of this.fedNear(t)) {
+      const [x, z] = parse(k);
+      for (const s of this.sources(x, z))
+        if (!seen.has(s.body)) {
+          seen.add(s.body);
+          n += this.water.amountOf(s.body);
+        }
+    }
+    return n;
+  }
+
   /** Takes up to `units` through the nearest pipe carrying water: from its pumps' water first, then its reservoirs. */
   drawAt(t: TileData, units: number): number {
     let got = 0;

@@ -1,3 +1,4 @@
+import { GROUND } from '../core/GameState';
 import { distToFootprint } from '../core/Grid';
 import type { DroneRole, MachineData, TileData } from '../core/types';
 import { DRONE_HUB, DRONE_SUPPLY, type DroneSupply } from '../data/drones';
@@ -13,7 +14,8 @@ export type Shortage = 'power' | 'water' | 'biomass';
  *   the grid has room for its draw at the hub (`headroom`), so a short grid keeps it home instead of shedding the hub
  *   mid-job, over and over;
  * - water per job, from the fullest pond, canal or reservoir within `DRONE_HUB.waterReach` of the hub that still
- *   holds a job's worth (`sim.water`, E23.4), which goes down as it is drawn;
+ *   holds a job's worth (`sim.water`, E23.4), which goes down as it is drawn; with none, through a pipe carrying
+ *   water beside the hub (E23.4.2: its pump's pond or its reservoir);
  * - Biomass per job, from the store (E23.5's item) through a Storage chest beside the hub.
  * Lighter drones (research) cuts every role's draw by its share. Water is drawn in fractions; Biomass is whole
  * items, so each hub keeps the part of an item it has paid ahead (`m.fuelCredit`) and pays a whole one only when
@@ -70,6 +72,18 @@ export class DroneFuel {
     return best;
   }
 
+  /** A footprint tile of a hub with a pipe carrying a job's worth of water beside it (E23.4.2), if any. */
+  pipeBeside(hub: MachineData, units: number): TileData | undefined {
+    if (hub.roofId !== GROUND) return undefined;
+    const pipes = this.sim.water.pipes;
+    for (let dz = 0; dz < hub.size; dz++)
+      for (let dx = 0; dx < hub.size; dx++) {
+        const t = this.sim.grid.get(hub.roofId, hub.x + dx, hub.z + dz);
+        if (t && pipes.feeds(t) && pipes.availableAt(t) + 1e-9 >= units) return t;
+      }
+    return undefined;
+  }
+
   /** A Storage chest within reach of a hub (its way into the store), if any. */
   chestBeside(hub: MachineData): MachineData | undefined {
     const cx = Math.floor(hub.x + hub.size / 2);
@@ -90,7 +104,7 @@ export class DroneFuel {
     const p = this.sim.power;
     // off the grid, shed, or no room on its line for one more drone at work
     if (!p.isPowered(hub) || p.headroom(hub) + 1e-9 < p.draw(hub) + s.power) return 'power';
-    if (s.water && !this.waterBeside(hub, s.water)) return 'water';
+    if (s.water && !this.waterBeside(hub, s.water) && !this.pipeBeside(hub, s.water)) return 'water';
     if (s.biomass && (!this.chestBeside(hub) || this.sim.inventory.stored('biomass') < this.biomassDue(hub, role))) return 'biomass';
     return undefined;
   }
@@ -108,7 +122,11 @@ export class DroneFuel {
       const credit = (hub.fuelCredit ?? 0) + due - s.biomass;
       hub.fuelCredit = credit > 1e-9 ? credit : undefined;
     }
-    if (s.water) this.sim.water.draw(this.waterBeside(hub, s.water)!, s.water);
+    if (s.water) {
+      const body = this.waterBeside(hub, s.water);
+      if (body) this.sim.water.draw(body, s.water);
+      else this.sim.water.pipes.drawAt(this.pipeBeside(hub, s.water)!, s.water);
+    }
     return true;
   }
 

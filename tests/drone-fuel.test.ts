@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { DroneData, DroneRole, MachineData } from '../src/core/types';
 import { DRONE_HUB, DRONE_SUPPLY } from '../src/data/drones';
+import { WATER_NET } from '../src/data/water';
 import { Sim } from '../src/gameplay/Sim';
 
 /**
@@ -244,5 +246,56 @@ describe('E23.6.3: what drones run on', () => {
     expect(sim.droneFuel.take(hub, 'restorer')).toBe(true); // pays 1: 1.3 - 0.7 = 0.6 ahead
     expect(hub.fuelCredit).toBeCloseTo(0.6, 6);
     expect(sim.droneFuel.biomassDue(hub, 'restorer')).toBe(1);
+  });
+});
+
+describe('E23.6.3 x E23.4.2: water through a pipe', () => {
+  it('a hub away from open water draws its Gardeners\' water through a pipe carrying water beside it', () => {
+    // the park's pond, a powered pump on its bank, and a pipe run east to a hub far from the pond (as tests/water-pipes)
+    const sim = new Sim(createInitialState(7));
+    sim.areas.clear(PARK, true);
+    sim.state.salvage!.tier = 2;
+    for (let z = 0; z < 16; z++)
+      for (let x = 0; x < 16; x++) {
+        const t = sim.grid.get(GROUND, x, z)!;
+        if (t.feature === 'water' && !t.blocked) {
+          t.ground = 'restored';
+          sim.grid.touch(t);
+        }
+      }
+    sim.state.salvage!.keepers.sluice = { step: 'request1' }; // the Keeper that opens pipes (as tests/water-pipes)
+    sim.state.salvage!.pack = { pipe: 40 };
+    const noon = { ...sim.power.sky(), sun: 1, solar: 1 };
+    sim.power.skyOverride = () => noon;
+    const put = (type: MachineData['type'], x: number, z: number, size = 1) => {
+      const m: MachineData = { id: sim.newId('m'), type, roofId: GROUND, x, z, size, boostUntil: 0, timer: 0, charge: 0 };
+      sim.state.machines.push(m);
+      for (const t of sim.grid.footprint(GROUND, x, z, size)) if (t) t.occupantId = m.id;
+      sim.grid.indexMachine(m);
+      return m;
+    };
+    const pond = sim.water.body('1,10')!;
+    put('pump', 4, 11); // on the pond's bank
+    put('solar', 5, 10); // touching it: the grid powers it
+    for (let x = 5; x <= 11; x++) expect(sim.water.pipes.lay(GROUND, x, 11)).toBe(true);
+    const hub = put('droneHub', 12, 10, 2); // the pipe's end (11, 11) touches it; the pond is far beyond its reach
+    hub.role = 'gardener';
+    // the hub's own power stood in (as above); the pump's is the real grid
+    const isPowered = sim.power.isPowered.bind(sim.power);
+    const headroom = sim.power.headroom.bind(sim.power);
+    Object.assign(sim.power, { isPowered: (m: MachineData) => m === hub || isPowered(m), headroom: (m: MachineData) => (m === hub ? Infinity : headroom(m)) });
+    sim.power.tick(1);
+    for (let i = 0; i < 4; i++) sim.water.tick(WATER_NET.daySeconds / 48);
+    expect(sim.droneFuel.waterBeside(hub, 2)).toBeUndefined(); // no open water in reach
+    expect(sim.water.pipes.carries(11, 11)).toBe(true);
+    expect(sim.droneFuel.short(hub, 'gardener')).toBeUndefined();
+    const before = sim.water.amountOf(pond.id);
+    expect(sim.droneFuel.take(hub, 'gardener')).toBe(true);
+    expect(sim.water.amountOf(pond.id)).toBeCloseTo(before - DRONE_SUPPLY.gardener.water!, 6); // from the pond, through the pipe
+    // the pond runs dry: the pipe carries nothing and the Gardeners dock
+    sim.water.draw(pond.id, sim.water.amountOf(pond.id));
+    sim.water.pipes.refreshFed();
+    expect(sim.droneFuel.short(hub, 'gardener')).toBe('water');
+    expect(sim.droneFuel.take(hub, 'gardener')).toBe(false);
   });
 });
