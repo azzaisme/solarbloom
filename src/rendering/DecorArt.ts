@@ -56,6 +56,9 @@ function model(a: At, name: string, dx: number, dz: number, scale: number, extra
 
 /** A short sagging string of bulbs (a line light's look in hand). */
 function lineSample(a: At, hex: string, size: number, n: number) {
+  // far away, half the bulbs and never more than four, spread along the same curve: the string still reads, inside
+  // the far-art budget (under 400 triangles)
+  if (a.far) n = Math.min(4, Math.ceil(n / 2));
   for (let i = 0; i < n; i++) {
     const t = n > 1 ? i / (n - 1) : 0.5;
     put(a, 'sphere', hex, -0.4 + 0.8 * t, 0.9 - Math.sin(t * Math.PI) * 0.15, 0, size);

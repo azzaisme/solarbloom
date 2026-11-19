@@ -13,9 +13,8 @@ export const RES_META: Record<ResourceKind, { icon: string; name: string; color:
 };
 
 /**
- * E22.5 (#342): the energy and water bars (top right). Under classic rules all three resources with their
- * figures and net rates (tap one for where its numbers come from); under old-city rules two small gauges, icon
- * and bar, that fade out when full and unchanged (E22.10). Biomass is not on the walking view there.
+ * E22.5 (#342): the energy and water gauges (top right): two small gauges, icon and bar, that fade out when full
+ * and unchanged (E22.10). Biomass is a backpack item, not on the walking view. (E23.1.4 removes both gauges.)
  */
 export class Bars extends HudPart {
   static template(): string {
@@ -86,8 +85,8 @@ export class Bars extends HudPart {
   }
 
   /**
-   * E22.10: under old-city rules energy and water are two small gauges that fade out when full and unchanged for
-   * 5 s and come back when they change or drop under a quarter.
+   * E22.10: energy and water are two small gauges that fade out when full and unchanged for 5 s and come back when
+   * they change or drop under a quarter.
    */
   private updateGauges() {
     const now = performance.now();

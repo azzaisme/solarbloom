@@ -4,6 +4,19 @@ import { plotAt, plotById, plotSpots, type PlotSpot } from '../core/Plots';
 import type { CozyState } from '../core/types';
 import { DECOR_GEN, DECOR_OPTION, DECOR_OPTIONS, KEEPSAKE_HINTS, PLOT_OPTION, plotOptionsFor, type CozyUnlock, type DecorOption, type Keepsake, type PlotOption } from '../data/cozy';
 import type { Sim } from './Sim';
+import type { DecorRecipe } from '../data/crafting';
+
+/** E23.6.1: a decoration's crafting recipe (made once at the table, then free to place). */
+export function decorRecipe(sim: Sim, id: string): DecorRecipe | undefined {
+  return sim.crafting.decor(id);
+}
+
+/** Is a decoration open to place? Old-city decorations with a recipe once made at the table; the rest keep E19.2's. */
+export function decorOpen(sim: Sim, o: DecorOption): boolean {
+  const r = decorRecipe(sim, o.id);
+  if (r) return sim.crafting.decorMade(o.id);
+  return 'start' in o.unlock || !!sim.state.cozy?.decorUnlocked?.includes(o.id);
+}
 
 export interface DecorChoice {
   option: DecorOption;
@@ -252,19 +265,30 @@ export class Cozy {
   }
 
   isDecorUnlocked(o: DecorOption): boolean {
-    return 'start' in o.unlock || !!this.st?.decorUnlocked?.includes(o.id);
+    return decorOpen(this.sim, o);
+  }
+
+  /** What a locked decoration waits for. */
+  private decorHint(o: DecorOption): string {
+    const r = decorRecipe(this.sim, o.id);
+    if (r && this.sim.crafting.unlocked(r.unlock)) return 'it is made at the crafting table';
+    return r ? this.sim.crafting.unlockLabel(r.unlock).replace('🔒 ', '') : this.hint(o.unlock);
   }
 
   /** The tray's list: every decoration, unlocked or with what it waits for (keepsakes only once earned). */
   decorChoices(): DecorChoice[] {
-    return DECOR_OPTIONS.map((o) => ({ option: o, unlocked: this.isDecorUnlocked(o), hint: this.isDecorUnlocked(o) ? undefined : this.hint(o.unlock) }));
+    return DECOR_OPTIONS.map((o) => ({ option: o, unlocked: this.isDecorUnlocked(o), hint: this.isDecorUnlocked(o) ? undefined : this.decorHint(o) }));
   }
 
   /** Unlocks every decoration whose milestone has been met, once each (saved). Returns the new ones. */
   checkDecorUnlocks(): DecorOption[] {
     const out: DecorOption[] = [];
     for (const o of DECOR_OPTIONS) {
-      if (this.isDecorUnlocked(o) || !this.met(o.unlock)) continue;
+      const r = decorRecipe(this.sim, o.id);
+      if (r) {
+        // E23.6.1: made at the table: announced once (the build menu has it now)
+        if (!this.sim.crafting.decorMade(o.id) || this.st?.decorUnlocked?.includes(o.id)) continue;
+      } else if (this.isDecorUnlocked(o) || !this.met(o.unlock)) continue;
       (this.write().decorUnlocked ??= []).push(o.id);
       out.push(o);
     }
@@ -279,7 +303,7 @@ export class Cozy {
   canDecorate(kind: string, roofId: string, x: number, z: number): string | undefined {
     const o = DECOR_OPTION[kind];
     if (!o) return 'There is no such decoration';
-    if (!this.isDecorUnlocked(o)) return `Unlocks when ${this.hint(o.unlock)}`;
+    if (!this.isDecorUnlocked(o)) return decorRecipe(this.sim, o.id) ? `Not made yet: ${this.decorHint(o)}` : `Unlocks when ${this.hint(o.unlock)}`;
     if (this.groundOnly && roofId !== GROUND) return 'Decorations go on the city’s ground for now';
     if (this.decorCount() >= DECOR_GEN.max) return `The city holds ${DECOR_GEN.max} decorations at most: remove one first`;
     const t = this.sim.grid.peek(roofId, x, z); // never loads a chunk (the sim decides that)

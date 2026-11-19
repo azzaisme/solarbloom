@@ -6,7 +6,7 @@ import { bindMessage } from '../src/ui/ControlsTable';
 describe('E22.4: rebinding', () => {
   it('binds a key, a mouse button, the wheel and a pad button', () => {
     const b = new Bindings();
-    expect(b.bindKey('harvest', 'KeyH')).toEqual({ ok: true, swapped: undefined });
+    expect(b.bindKey('eat', 'KeyH')).toEqual({ ok: true, swapped: undefined });
     expect(b.bindKey('photo', 'Mouse4').ok).toBe(true);
     expect(b.bindKey('recentre', 'Mouse1').ok).toBe(true);
     expect(b.actionForCode('Mouse4')).toBe('photo');
@@ -53,17 +53,17 @@ describe('E22.4: rebinding', () => {
     expect(b.bindButton('interact', 9, true).ok).toBe(false); // not even by swapping
     expect([b.keys.menu, b.pad.menu]).toEqual([['Escape'], 9]);
     // Everything else can be cleared.
-    expect(b.unbind('harvest', 'key').ok).toBe(true);
-    expect(b.keys.harvest).toEqual([]);
+    expect(b.unbind('eat', 'key').ok).toBe(true);
+    expect(b.keys.eat).toEqual([]);
   });
 
   it('resets each column to the defaults on its own', () => {
     const b = new Bindings();
-    b.bindKey('harvest', 'KeyH', true);
-    b.bindButton('harvest', 15, true);
+    b.bindKey('eat', 'KeyH', true);
+    b.bindButton('eat', 15, true);
     b.reset('keys');
     expect(b.keys).toEqual(defaultKeys());
-    expect(b.pad.harvest).toBe(15); // the pad column keeps its change
+    expect(b.pad.eat).toBe(15); // the pad column keeps its change
     b.reset('pad');
     expect(b.pad).toEqual(defaultPad());
   });

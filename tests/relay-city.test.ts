@@ -1,5 +1,6 @@
 import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
+import { KEEPERS } from '../src/data/oldcity';
 import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
@@ -167,15 +168,17 @@ describe('buildable Bloom Relays (City 10.4)', () => {
     expect(c.ended).toHaveLength(1);
   });
 
-  it('placement: from fountain tier 1, on restored or mossy ground; cooldowns survive a reload', () => {
+  it('placement: once Mast Row’s Keeper is awake, on restored or mossy ground; cooldowns survive a reload', () => {
     const sim = city();
     mossy(sim, -6, -6, 6, 6);
-    // E23.1.1: one rule set: the Relay unlocks with its recipe at its fountain tier (E21.3), not after a Drone Hub.
-    // E23.3.2.3: Relays are the grid's poles, so that is tier 1, with the first panels.
-    const tier = sim.state.salvage.tier;
-    sim.state.salvage.tier = 0;
-    expect(sim.build.check('relay', GROUND, 2, 2).reason).toMatch(/fountain tier 1/i);
-    sim.state.salvage.tier = tier;
+    // E23.6.1: one rule set: the Relay is the power pole, made from its crafting recipe, which Mast Row's Keeper
+    // teaches (not after a Drone Hub, and no longer at a fountain tier).
+    const keeper = KEEPERS.find((k) => k.region === 'mastRow')!;
+    const awake = sim.state.salvage.keepers[keeper.id];
+    sim.state.salvage.keepers[keeper.id] = { step: 'asleep' };
+    expect(sim.build.check('relay', GROUND, 2, 2).ok).toBe(false);
+    expect(sim.build.check('relay', GROUND, 2, 2).reason).toMatch(/Mast Row/);
+    sim.state.salvage.keepers[keeper.id] = awake;
     expect(sim.build.check('relay', GROUND, 2, 2).ok).toBe(true);
     const polluted = sim.areas.tiles(PARK).find((t) => t.ground === 'polluted' && !t.blocked && !t.occupantId);
     if (polluted) expect(sim.build.check('relay', GROUND, polluted.x, polluted.z).ok).toBe(false);

@@ -13,10 +13,11 @@ import type { Sim } from './Sim';
 export class GatherSystem {
   constructor(private sim: Sim) {}
 
-  /** Biomass one gather of this tile gives (0: nothing to clip). */
+  /** Biomass one gather of this tile gives (0: nothing to clip). E23.7.2: windy days shake more loose. */
   yieldOf(t: TileData): number {
     if (t.ground !== 'restored' || t.bloom < GATHER.minBloom) return 0;
-    return GATHER.base + (t.bloom - GATHER.minBloom) * GATHER.perBloom;
+    const bonus = (this.sim as unknown as { weather?: { effects?(): { gatherBonus?: number } } }).weather?.effects?.().gatherBonus ?? 1;
+    return Math.round((GATHER.base + (t.bloom - GATHER.minBloom) * GATHER.perBloom) * bonus);
   }
 
   /** Sim time a clipped tile can be gathered again (undefined: it isn't clipped). */
