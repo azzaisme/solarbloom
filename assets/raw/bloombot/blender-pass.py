@@ -6,7 +6,10 @@ cyan, leaves, pack), pairs the triangles into quads inside each part, makes the 
 for the face frames, and fits the human clips to a big-headed robot. The vertices never move, so Meshy's skin
 weights and UVs carry over untouched. Writes the GLB, a .blend beside it, and a check sheet.
 
-    blender -b -P blender-pass.py -- bloombot-meshy.glb bloombot.glb preview-fixed.png
+    blender -b -P blender-pass.py -- bloombot-meshy.glb bloombot.glb preview-fixed.png [extra-clips.glb]
+
+The optional fourth file is more Meshy clips on the same rig (E23: meditate, sit-down, sit, stand-up, doze); its
+animations are renamed by EXTRA_CLIPS and rebuilt like the rest.
 
 Never remesh here (voxel remesh + Quadriflow hung Blender and froze the PC). Run with a time limit."""
 import bpy, bmesh, sys, os, math, mathutils
@@ -21,10 +24,29 @@ KEEP_UV_ISLANDS = False  # True: never join two triangles across a seam of Meshy
 
 def P(*a): print(*a, flush=True)
 
-src, out, sheet = (os.path.abspath(a) for a in sys.argv[sys.argv.index('--') + 1:][:3])
+_args = sys.argv[sys.argv.index('--') + 1:]
+src, out, sheet = (os.path.abspath(a) for a in _args[:3])
+extra = os.path.abspath(_args[3]) if len(_args) > 3 else None
+# E23 (#468, docs/art/e23-models.md): Meshy preset clips added on the same rig, and their names in the game
+EXTRA_CLIPS = {'Sit_Cross_Legged_on_Floor': 'meditate', 'Stand_to_Sit_Transition_M': 'sit-down', 'Chair_Sit_Idle_M': 'sit',
+               'Sit_to_Stand_Transition_M': 'stand-up', 'Sit_and_Doze_Off': 'doze'}
+SITTING = ('sit-down', 'sit', 'stand-up', 'doze')   # on a bench: feet flat and on the ground every frame
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=src)
 arm = next(o for o in bpy.data.objects if o.type == 'ARMATURE')
+if extra:
+    keep = set(bpy.data.objects)
+    had = set(bpy.data.actions)
+    bpy.ops.import_scene.gltf(filepath=extra)
+    for a in set(bpy.data.actions) - had:
+        name = next((v for k, v in EXTRA_CLIPS.items() if a.name.startswith(k)), None)
+        if name is None:
+            bpy.data.actions.remove(a)
+        else:
+            a.name = name; a.use_fake_user = True
+    for o in set(bpy.data.objects) - keep:
+        bpy.data.objects.remove(o)
+    P('EXTRA CLIPS', sorted(a.name for a in bpy.data.actions if a.name in EXTRA_CLIPS.values()))
 for o in [o for o in bpy.data.objects if o.type == 'MESH' and o.name != 'char1']:
     bpy.data.objects.remove(o)  # the importer's bone-shape helper
 mesh = next(o for o in bpy.data.objects if o.type == 'MESH')
@@ -374,6 +396,11 @@ P('VISOR faces', picked)
 acts = {a.name: a for a in bpy.data.actions}
 LEGS = ('LeftUpLeg', 'RightUpLeg')
 # Pulse and assemble: a human bow tips the oversized head to the floor. Keep a third of the lean.
+# E23: a human leaning forward to sit down (or dozing off) tips the big head at the floor too. Same third of the lean.
+for n in SITTING:
+    if n in acts:
+        damp(acts[n], ['Hips'], 0.35, compensate=LEGS)
+        damp(acts[n], ['Spine02', 'Spine01', 'Spine', 'neck', 'Head'], 0.35)
 for n in ('pulse', 'assemble'):
     damp(acts[n], ['Hips'], 0.35, compensate=LEGS)
     damp(acts[n], ['Spine02', 'Spine01', 'Spine', 'neck', 'Head'], 0.35)
@@ -572,7 +599,7 @@ SAME = {'Spine02': 'Spine', 'Spine01': 'Spine', 'LeftShoulder': 'Spine', 'RightS
         'neck': 'Head', 'head_end': 'Head', 'headfront': 'Head', 'LeftToeBase': 'LeftFoot', 'RightToeBase': 'RightFoot'}
 # The shoes are rigid, so they stay flat on the floor (turning only left and right). Meshy's crouch pointed the
 # feet straight down like a dancer on tiptoe, which with bloombot's big boots looked like standing on a stick.
-FLAT_FEET = ('idle', 'pulse', 'assemble', 'interact', 'cheer')
+FLAT_FEET = ('idle', 'pulse', 'assemble', 'interact', 'cheer') + SITTING
 def yaw_only(q):
     return Q((q.w, 0, 0, q.z)).normalized()
 # Meshy's crouch also tangles the legs (it even starts with them folded). In assemble the feet stay planted
@@ -706,6 +733,15 @@ for n, each in (('idle', False), ('walk', True)):
 # about 6 cm under the floor. Lift any frame whose lowest point is below the ground.
 for n in ('pulse', 'assemble', 'interact', 'cheer'):
     P('%s: lowest point was %.1f mm, now %.1f mm' % ((n.upper(),) + tuple(1000 * x for x in ground(acts[n], True, lift_only=True)[::2])))
+# E23: sitting on the floor (meditate) or a bench (the rest) touches the ground on every frame, never sinks or floats
+for n in ('meditate',) + SITTING:
+    if n in acts:
+        P('%s: lowest point was %.1f to %.1f mm, now %.1f to %.1f mm' % ((n.upper(),) + tuple(1000 * x for x in ground(acts[n], True))))
+if 'sit' in acts:   # the game seats bloombot so its hips sit at this height above the bench's feet
+    ad_ = arm.animation_data; ad_.action = acts['sit']; ad_.action_slot = acts['sit'].slots[0]
+    bpy.context.scene.frame_set(int(acts['sit'].frame_range[0]))
+    P('SIT seat height: hips %.3f m above the ground' % (arm.matrix_world @ arm.pose.bones['Hips'].head).z)
+    ad_.action = None
 P('HOVER: lowest point was %.1f to %.1f mm, now %.1f to %.1f mm above the ground' % tuple(1000 * x for x in ground(ha, False, clearance=HOVER_Z)))
 ad_ = arm.animation_data; ad_.action = wa; ad_.action_slot = wa.slots[0]
 foot = lambda: (arm.matrix_world @ arm.pose.bones['LeftFoot'].head).y
@@ -750,7 +786,8 @@ def shot(yaw):
 arm.data.pose_position = 'REST'
 for yaw in (0, 40, 90, 140, 180, 270): shot(yaw)
 arm.data.pose_position = 'POSE'
-for n in ('pulse', 'assemble', 'cheer', 'idle', 'walk', 'hover'):
+for n in ('pulse', 'assemble', 'cheer', 'idle', 'walk', 'hover', 'meditate', 'sit-down', 'sit', 'stand-up', 'doze'):
+    if n not in acts: continue
     a = acts[n]; ad.action = a; ad.action_slot = a.slots[0]
     f0, f1 = a.frame_range
     for t in (0.3, 0.5, 0.7):

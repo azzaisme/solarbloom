@@ -41,6 +41,7 @@ import { Pollinators } from '../rendering/Pollinators';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
 import { WaterLevels } from '../rendering/WaterLevels';
+import { FarmlandView } from '../rendering/FarmlandArt';
 import { PipeVisuals } from '../rendering/PipeVisuals';
 import { WaterOverlay } from '../rendering/WaterOverlay';
 import { ChunkRenderer, MeshBuilder, SINK } from '../rendering/ChunkRenderer';
@@ -211,6 +212,8 @@ export class Game {
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
   readonly chunks: ChunkRenderer;
+  /** #466: farmland ground (dry, watered, fertilised); empty until the farm's tilled fields (#517) give it tiles */
+  readonly farmland: FarmlandView;
   /** E23.4.1: water levels drawn on the water (the drained bed) */
   readonly waterLevels: WaterLevels;
   /** E23.4.2: pipe runs */
@@ -363,6 +366,7 @@ export class Game {
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.farmland = new FarmlandView(this.scene.world, this.app.graphicsDevice);
     this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice, (tiles) => {
       for (const t of tiles) this.chunks.markTile(t);
     });
@@ -4748,7 +4752,6 @@ export class Game {
     this.pollinators.quality = quality;
     this.pollinators.update(wdt, near);
     this.birds.resident = eco.has('birds');
-    this.clouds.happy = eco.has('birds'); // the sky wakes up with the songbirds: sleepy faces on a couple of clouds
     this.birds.update(wdt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
     this.fauna.update(wdt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: this.settings.fireflies !== false && !this.settings.highContrast && this.dayNight.light < 0.5, fog: WEATHER[this.weatherLook().kind].fogFinds });
     this.nightFindVisuals.reducedMotion = this.settings.reducedMotion;
