@@ -23,7 +23,7 @@ try {
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom && !!window.solarbloom.sim);
   await page.waitForTimeout(4000);
-  await page.addStyleTag({ content: '#hint, #intro, .toast, #toasts { display: none !important; }' });
+  await page.addStyleTag({ content: '.toast, #toasts { display: none !important; }' });
   const shot = async (name, x, z, zoom, yaw = 0, wait = 5000) => {
     await page.evaluate(({ x, z, zoom, yaw }) => {
       const g = window.solarbloom;

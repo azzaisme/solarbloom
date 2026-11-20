@@ -1,5 +1,5 @@
 // E23.1.5 (#369): no upgrade drawer and no prices in the walking view, and the advisor speaking through the one
-// objective line. A new game in the built build: the hotbar has no Upgrades button, U opens nothing, no buy
+// objective line. A new game in the built build: the build bar and the dock have no Upgrades button, U opens nothing, no buy
 // button exists anywhere; the objective names what the fountain wants; when bloombot runs low (a stand-in for
 // E23.2's charge, same shape) the line says so, then goes back. Screenshots go to docs/review/advisor-*.png.
 // Run after `vite build`.

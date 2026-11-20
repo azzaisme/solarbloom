@@ -19,7 +19,6 @@ try {
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
   await page.waitForTimeout(1000);
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
   // Restore the whole park; stages mixed by position so every stage shows (1 sapling … 4 Radiant).
   await page.evaluate(() => {
     const g = window.solarbloom;

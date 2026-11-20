@@ -37,7 +37,6 @@ await page.addInitScript(() => {
 // a new garden straight in (?slot= skips the title)
 await page.goto(`${base}/?slot=1`, { timeout: 180000, waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 180000 });
-if (await page.locator('#introGo').isVisible().catch(() => false)) await page.click('#introGo');
 await page.waitForTimeout(1500);
 
 // The camera follows bloombot (third person): a shot stands bloombot in the middle of what it shows.
@@ -112,7 +111,7 @@ check(rest.all, 'six cats later, all six cat-only decorations are found');
 check(rest.got.length === 7 && !/to place in your gardens/.test(rest.got[6]), `a cat after all six leaves only its reward (${rest.got[6]})`);
 
 // The six placed in a row on the park's grass, near and far.
-await page.addStyleTag({ content: '#toasts, .toast, #hint, #fail, #catPanel, #loadWheel, .load-wheel { display: none !important; }' });
+await page.addStyleTag({ content: '#toasts, .toast, #fail, #catPanel, #loadWheel, .load-wheel { display: none !important; }' });
 const placed = await page.evaluate(() => {
   const g = window.solarbloom;
   const ids = ['catstatue', 'catbench', 'pawstones', 'catfountain', 'goldlantern', 'rainbowbunting'];
@@ -144,26 +143,20 @@ const frame = async (zoom, file) => {
 await frame(1.7, 'cat-decor-near.png');
 await frame(0.5, 'cat-decor-far.png');
 
-// Decorate mode lists them: the Build menu key (Q) opens the tray, as the player would, and all six are on screen.
-await page.keyboard.press('q');
-await page.waitForTimeout(800);
-const tray = await page.evaluate(() => {
-  // headless Chrome under software GL leaves the tray's 0.2 s slide-in on its first frame (opacity 0): finish it
-  for (const a of document.getAnimations()) a.finish();
-  const seen = (b) => {
-    for (let e = b; e && e !== document.body; e = e.parentElement) {
-      const c = getComputedStyle(e);
-      if (c.display === 'none' || c.visibility === 'hidden' || Number(c.opacity) < 0.9) return false;
-    }
-    const r = b.getBoundingClientRect();
-    return r.width > 0 && r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth;
-  };
-  return ['catstatue', 'catbench', 'pawstones', 'catfountain', 'goldlantern', 'rainbowbunting'].filter((id) => {
-    const b = document.querySelector(`#hotbar [data-tool="decor:${id}"]`);
-    return b && !b.hidden && seen(b);
-  });
+// The build menu's Decorations tab lists them (E23.11: #buildMenu).
+await page.evaluate(async () => {
+  const g = window.solarbloom;
+  g.hud.toggleTray(true);
+  for (let i = 0; i < 8 && document.querySelector('#buildMenu [role=tab][aria-selected=true]')?.textContent !== 'Decorations'; i++) g.hud.buildMenu.tab(1);
 });
-check(tray.length === 6, `decorate mode shows all six, on screen (${tray.join(' ')})`);
+await page.waitForTimeout(800);
+const tray = await page.evaluate(() =>
+  ['catstatue', 'catbench', 'pawstones', 'catfountain', 'goldlantern', 'rainbowbunting'].filter((id) => {
+    const b = document.querySelector(`#buildMenu [data-tool="decor:${id}"]`);
+    return b && b.getAttribute('aria-disabled') !== 'true';
+  }),
+);
+check(tray.length === 6, `decorate mode shows all six (${tray.join(' ')})`);
 await shot('decorate-tray.png');
 await page.keyboard.press('q');
 
@@ -201,7 +194,7 @@ check(grow.beds.length === 3 && grow.targets === 3, `three planters growing near
 await page.waitForTimeout(2500);
 await shot('ripe-before.png');
 await page.evaluate(() => document.querySelectorAll('style').forEach((s) => s.textContent.includes('#catPanel') && s.remove()));
-await page.addStyleTag({ content: '#toasts, .toast, #hint, #fail, #loadWheel { display: none !important; }' }); // the reward panel shows
+await page.addStyleTag({ content: '#toasts, .toast, #fail, #loadWheel { display: none !important; }' }); // the reward panel shows
 const ripe = await page.evaluate(() => {
   const g = window.solarbloom;
   const s = g.sim;

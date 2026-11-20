@@ -64,17 +64,24 @@ export function padDriver(game) {
   const st = { pulses: 0, woke: false, frames: 0, interacts: 0 };
 
   /** The build menu is open (the interim tray, or E22.7's menu). */
-  const menuOpen = () => !!document.querySelector('#buildTray.open, #buildMenu.open');
+  const menuOpen = () => !!document.querySelector('#buildMenu.open');
+  let tabTries = 0;
   /** Walks the build menu's focus ring toward a card with the d-pad (as a player would), then takes it with A. */
   function chooseCard(type) {
-    const card = document.querySelector(`#buildTray.open [data-tool="${type}"], #buildMenu.open [data-tool="${type}"]`);
-    if (!card) return false;
+    const card = document.querySelector(`#buildMenu.open [data-tool="${type}"]`);
+    if (!card) {
+      // E23.11: the card is on another tab: RB to the next one (as a player would), giving up after a full round
+      if (!menuOpen() || tabTries++ >= 8) return false;
+      press(5);
+      return true;
+    }
+    tabTries = 0;
     const cur = document.activeElement;
     if (cur === card) {
       press(A);
       return true;
     }
-    if (!cur || !cur.closest?.('#buildTray, #buildMenu')) {
+    if (!cur || !cur.closest?.('#buildMenu')) {
       press(DPAD.right); // the first press lands the focus ring on the menu
       return true;
     }
@@ -165,7 +172,7 @@ export function padDriver(game) {
       pad.buttons[b].value = 0;
     }
     release = [];
-    if (game.hud.introOpen || game.hud.modalOpen) {
+    if (game.hud.modalOpen) {
       press(1); // B closes whatever is in the way
       return st;
     }

@@ -296,12 +296,14 @@ describe('E23.4.5: the Water view', () => {
     expect((root.findByName('pipe-glass') as pc.Entity).enabled).toBe(true);
   });
 
-  it('is toggled in build mode on keyboard (V) and pad (d-pad left), clashing with nothing', () => {
+  it('is toggled in build mode on keyboard (V); on a pad d-pad up steps the view (E23.11), clashing with nothing', () => {
     expect(defaultKeys().waterOverlay).toEqual(['KeyV']);
-    expect(defaultPad().waterOverlay).toBe(14);
+    expect(defaultPad().waterOverlay).toBeUndefined();
+    expect(defaultPad().viewCycle).toBe(12);
     const b = new Bindings();
     expect(b.conflicts()).toEqual([]);
-    expect(b.actionForButton(14, ['build', 'world', 'any'])).toBe('waterOverlay');
+    expect(b.actionForButton(12, ['build', 'world', 'any'])).toBe('viewCycle');
+    expect(b.actionForButton(14, ['build', 'world', 'any'])).toBe('slotPrev');
     expect(b.actionForCode('KeyV', ['build', 'world', 'any'])).toBe('waterOverlay');
     // walking, V is the pulse's own (E23.2.2 loads the next seed): the Water view never takes it there
     expect(b.actionForCode('KeyV', ['world', 'any'])).not.toBe('waterOverlay');

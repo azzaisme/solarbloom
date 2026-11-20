@@ -41,7 +41,7 @@ function scan() {
   const rows = [...document.querySelectorAll('#res > *')].filter(shown).map((el) => el.id || el.className);
   const old = ['#bars', '.bar-energy', '.bar-water', '#harvestBtn', '[data-res="energy"]', '[data-res="water"]', '[data-res="biomass"]'].filter((s) => document.querySelector(s));
   // The HUD's own text (menus the player opens on purpose, like the backpack, list items, not meters)
-  const hudText = [...document.querySelectorAll('#hud > *, #res, #obj, #hotbar, #hint, #toasts, #combo, #chips, #feed, #quick, #inspect')]
+  const hudText = [...document.querySelectorAll('#hud > *, #res, #obj, #buildbar, #toasts, #dock, #inspect')]
     .filter(shown)
     .map((el) => el.innerText)
     .join('\n');
@@ -96,7 +96,6 @@ try {
       }, numbers);
       await page.goto('http://localhost:4243/?slot=1', { timeout: 180_000, waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 180_000 });
-      if (await page.locator('#introGo').isVisible().catch(() => false)) await page.click('#introGo');
       await page.waitForTimeout(1500);
       const tag = `${name}${numbers ? ' (numbers on)' : ''}`;
       for (const phase of ['fresh', 'busy']) {

@@ -61,7 +61,6 @@ try {
   await page.goto(`${URL0}?slot=1&new=1`);
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
   await page.evaluate(() => window.solarbloom.pause.clear('blur'));
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
 
   // ── E23.2.1: the charge meter: full, low and empty ──
   const meter = () => page.evaluate(() => document.getElementById('chargeRow').innerText.replace(/\s+/g, ' ').trim());
