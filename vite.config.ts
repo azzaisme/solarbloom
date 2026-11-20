@@ -25,7 +25,7 @@ const QUICK = [
   // E23.8: regions and the mainland
   'region-strengths', 'region-unlocks-e23',
   // E23.8.3: the mainland
-  'mainland',
+  'mainland', 'mainland-steel',
   // E23.9: the story
   'journal', 'keepers-friends', 'keepers-arcs', 'keepers-tally', 'keepers-crops',
   // E23.4: the water network

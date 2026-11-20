@@ -79,7 +79,7 @@ export function itemCells(sim: Sim): ItemCell[] {
       limit,
       stored,
       label: seen ? `${name}, ${count} of ${limit} in backpack, ${stored} in store` : 'A material not found yet',
-      from: !seen ? 'Somewhere in the city' : MATERIALS[id].from ?? `Found in ${list(MATERIALS[id].home.slice(0, 3).map(regionName))}${MATERIALS[id].home.length > 3 ? ' and across the city' : ''}`,
+      from: !seen ? 'Somewhere in the city' : MATERIALS[id].from ?? (MATERIALS[id].place ? `Found in ${MATERIALS[id].place}` : undefined) ?? `Found in ${list(MATERIALS[id].home.slice(0, 3).map(regionName))}${MATERIALS[id].home.length > 3 ? ' and across the city' : ''}`,
       next: seen ? neededNext(sim, id) : '',
     };
   }).concat(componentCells(sim, limit));
