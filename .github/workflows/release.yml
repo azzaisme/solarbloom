@@ -59,3 +59,46 @@ jobs:
       - name: Note when the itch.io upload is skipped
         if: env.BUTLER_API_KEY == '' || env.ITCH_TARGET == ''
         run: echo "::notice::BUTLER_API_KEY or ITCH_TARGET not set; zip built as an artifact only."
+
+  # The Steam Deck build: the same game wrapped with Electron as a Linux AppImage, pushed to itch.io's
+  # "linux-steamdeck" channel (itch.io tags it as a Linux download from the channel name). The upload holds the
+  # AppImage and add-to-steam.sh; docs/STEAM_DECK.md has the install steps.
+  steamdeck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+      ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Work out the version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - run: npm run build
+      - name: Package the AppImage
+        run: npx electron-builder --linux AppImage --x64 --publish never
+      - name: Gather the Steam Deck upload
+        run: |
+          mkdir -p itch-deck
+          cp release/*.AppImage tools/steamdeck/add-to-steam.sh itch-deck/
+          chmod +x itch-deck/*.AppImage itch-deck/add-to-steam.sh
+          ls -l itch-deck
+      - uses: actions/upload-artifact@v4
+        with:
+          name: solar-bloom-steamdeck-${{ steps.version.outputs.version }}
+          path: itch-deck/
+          if-no-files-found: error
+      - name: Push to itch.io with butler
+        if: env.BUTLER_API_KEY != '' && env.ITCH_TARGET != ''
+        run: |
+          curl -fsSL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q butler.zip -d butler && chmod +x butler/butler
+          ./butler/butler push itch-deck "$ITCH_TARGET:linux-steamdeck" --userversion "${{ steps.version.outputs.version }}"
+      - name: Note when the itch.io upload is skipped
+        if: env.BUTLER_API_KEY == '' || env.ITCH_TARGET == ''
+        run: echo "::notice::BUTLER_API_KEY or ITCH_TARGET not set; Steam Deck build kept as an artifact only."
