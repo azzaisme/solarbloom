@@ -152,13 +152,21 @@ try {
             // #565: the slots fit inside the dock (they can't run past its edge, where the box check can't see them)
             fits: bar.scrollWidth <= bar.clientWidth + 1 && items.every((r) => r.left >= dock.left - 0.5 && r.right <= dock.right + 0.5),
             aside: getComputedStyle(document.querySelector('#minimap')).visibility === 'hidden',
+            tight: bar.classList.contains('tight'),
+            // #599: the piece's tooltip stays clear of the prompt (with its cost chips), Stop building and the dock
+            tipClear: (() => {
+              const tip = document.querySelector('#tip');
+              const t = tip && getComputedStyle(tip).display !== 'none' ? tip.getBoundingClientRect() : undefined;
+              if (!t || !t.width) return true;
+              return ['#prompt', '#buildStop', '#buildbar'].every((s) => { const r = document.querySelector(s)?.getBoundingClientRect(); return !r || !r.width || t.right <= r.left || t.left >= r.right || t.bottom <= r.top || t.top >= r.bottom; });
+            })(),
             // the prompt and Stop building stay above it
             above: ['#prompt', '#buildStop'].every((s) => { const e = document.querySelector(s); const r = e?.getBoundingClientRect(); return !r || !r.height || r.bottom <= dock.top + 0.5; }),
           };
         });
-        // (above 100% the dock may run out of room: then it draws tighter and a name ends in …, never breaks; on the
-        // smaller screen at 150% the minimap steps aside while building and the dock takes the width)
-        check(row.tops < 1 && row.heights < 1 && row.keyTops < 1 && row.inside && !row.lines.length && row.clear && row.onScreen && row.fits && row.above && (scale > 100 || !row.cut.length), `${tag} keys at ${scale}%: the dock is one even row, clear of the minimap ${JSON.stringify(row)}`);
+        // (above 100% the dock may run out of room: then it draws tighter, and on the smaller screen at 150% the
+        // minimap steps aside while building and the dock takes the width; #599: its names stay whole throughout)
+        check(row.tops < 1 && row.heights < 1 && row.keyTops < 1 && row.inside && !row.lines.length && row.clear && row.onScreen && row.fits && row.above && row.tipClear && !row.cut.length, `${tag} keys at ${scale}%: the dock is one even row, clear of the minimap ${JSON.stringify(row)}`);
         await page.screenshot({ path: `${out}/build-dock-${tag}-${scale}.png`, clip: await page.evaluate(() => { const r = document.querySelector('#buildbar').getBoundingClientRect(); return { x: Math.max(0, r.left - 12), y: Math.max(0, r.top - 70), width: Math.min(innerWidth, r.width + 24), height: r.height + 82 }; }) });
       }
       await page.evaluate(() => window.solarbloom.hud.setUiScale(100));

@@ -348,6 +348,7 @@ export class Hud {
     // viewport units inside a zoomed HUD are zoomed too: panels divide by this to stay on screen
     this.root.style.setProperty('--ui-zoom', String(ui.scale));
     this.buildBar?.place(); // #565: at once, not on its next check (up to 0.4 s with the dock off screen)
+    this.panels?.replaceTip(); // #599: and the tip, clear of the moved prompt and dock
   }
 
   /** E22.11: the menu or Settings is open (the game sets how it knows). */
