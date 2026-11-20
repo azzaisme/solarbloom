@@ -307,6 +307,8 @@ try {
     await page.waitForFunction(() => window.solarbloom.waterOverlay.visible && window.solarbloom.machines.holos.water.parts.size > 0, null, { timeout: 15000 }).catch(() => {});
     await settle(1000);
     check(await run(() => window.solarbloom.waterOverlay.visible), 'the Water view is drawn');
+    // the world dims over `POWER.view.fade` s of game time; slow headless frames take longer: wait for it, up to 10 s
+    await page.waitForFunction(() => window.solarbloom.dayNight.dim > 0.5, null, { timeout: 10000 }).catch(() => {});
     // E23.4.5: the running pump and the line it fills are blue holograms, in a dimmed world
     const holo = await run(() => {
       const g = window.solarbloom;
