@@ -4790,7 +4790,7 @@ export class Game {
       const s = this.loadSteps();
       const ready = s.models === 1 && s.view === 1;
       // #596: once the view is complete, every shader it could need is compiled behind the loading screen
-      if (ready && this.warmup.state === 'idle') this.warmup.start(this.app.root, this.chunks.warmupSamples(), [pc.LAYERID_WORLD]);
+      if (ready && this.warmup.state === 'idle') this.warmup.start(this.app.root, [...this.chunks.warmupSamples(), ...(this.models?.warmupSamples() ?? [])], [pc.LAYERID_WORLD]);
       this.warmup.update();
       this.readyFrames = ready ? this.readyFrames + 1 : 0;
     }

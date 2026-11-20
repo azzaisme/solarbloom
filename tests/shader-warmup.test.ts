@@ -67,20 +67,24 @@ describe('#596: shaders warm behind the loading screen', () => {
     a.destroy();
   });
 
-  it('samples of materials made on demand draw unculled, then go with their meshes', () => {
+  it('samples of materials made on demand draw unculled; its own meshes go after, a shared one stays', () => {
     const { a, cam, world, box } = app();
-    const mesh = box();
-    const mats = [new pc.StandardMaterial(), new pc.StandardMaterial()];
+    const mine = box();
+    const shared = box(); // a model library's cached part: other entities instantiate it later
+    const mats = [new pc.StandardMaterial(), new pc.StandardMaterial(), new pc.StandardMaterial()];
     const w = new ShaderWarmup(a, cam);
-    w.start(a.root, [[mesh, mats[0]], [mesh, mats[1]]], [pc.LAYERID_WORLD]);
-    const samples = [...world.meshInstancesSet].filter((m) => m.mesh === mesh);
+    w.start(a.root, [{ mesh: mine, material: mats[0], own: true }, { mesh: mine, material: mats[1], own: true }, { mesh: shared, material: mats[2] }], [pc.LAYERID_WORLD]);
+    const samples = [...world.meshInstancesSet].filter((m) => m.mesh === mine || m.mesh === shared);
     expect(samples.map((m) => m.material)).toEqual(mats);
-    expect(samples.every((m) => m.cull === false)).toBe(true);
-    expect(w.warming).toBe(2);
+    expect(samples.every((m) => m.cull === false && m.castShadow)).toBe(true);
+    expect(w.warming).toBe(3);
     w.finish();
-    expect([...world.meshInstancesSet].some((m) => m.mesh === mesh)).toBe(false);
+    expect([...world.meshInstancesSet].some((m) => m.mesh === mine || m.mesh === shared)).toBe(false);
+    expect([...world.shadowCastersSet].some((m) => m.mesh === mine || m.mesh === shared)).toBe(false);
     expect(a.root.findByName('shader-warmup')).toBeNull();
     expect(w.warming).toBe(0);
+    expect(mine.vertexBuffer).toBeFalsy(); // destroyed
+    expect(shared.vertexBuffer).toBeTruthy(); // still there for the library
     a.destroy();
   });
 

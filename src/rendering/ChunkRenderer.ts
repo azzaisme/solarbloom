@@ -32,6 +32,7 @@ import { SOLID_SINK, SolidCollector, SolidIndex } from '../core/Solids';
 import { WATER, poolMaterial, updatePool } from './Water';
 import { TrMeshBuilder } from './transitions/TrMeshBuilder';
 import { transitionMaterial } from './transitions/TransitionMaterial';
+import type { WarmupSample } from './ShaderWarmup';
 import { chunkBuilders, type ChunkHost, type GeoSink, type Sink, type TransitionRenderer } from './transitions/TransitionRenderer';
 
 /** Small seeded RNG for decoration placement (looks only). */
@@ -1126,16 +1127,16 @@ export class ChunkRenderer {
    * thins, a pool once it holds water, the growth transitions on a first pulse), in the same vertex layout, so the
    * loading screen can compile their shaders before play.
    */
-  warmupSamples(): [pc.Mesh, pc.Material][] {
+  warmupSamples(): WarmupSample[] {
     const b = new MeshBuilder();
     b.add('box', '#ffffff', [0, 0, 0], 0.05);
     const tb = new TrMeshBuilder();
     tb.add('box', '#ffffff', [0, 0, 0], 0.05);
     const plain = b.build(this.device)!;
     return [
-      [plain, towerMaterial()],
-      [plain, poolMaterial(this.device)],
-      [tb.build(this.device)!, transitionMaterial()],
+      { mesh: plain, material: towerMaterial(), own: true },
+      { mesh: plain, material: poolMaterial(this.device) },
+      { mesh: tb.build(this.device)!, material: transitionMaterial(), own: true },
     ];
   }
 

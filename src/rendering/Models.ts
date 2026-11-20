@@ -1,3 +1,4 @@
+import type { WarmupSample } from './ShaderWarmup';
 import * as pc from 'playcanvas';
 import { SOLID_SINK, type GeoBounds } from '../core/Solids';
 import { MODEL_NAMES } from '../data/oldcity';
@@ -363,6 +364,24 @@ export class ModelLibrary {
    * instead of one per palette material (up to 14). For models that are placed whole (machines, landmarks); models
    * with moving parts found by name use `instantiate`.
    */
+  /**
+   * #596: one part per material and vertex layout across every loaded model, near and far, in its living look (a
+   * new game draws most props neglected; waking an area turns them alive, which would compile their shaders then).
+   */
+  warmupSamples(): WarmupSample[] {
+    const seen = new Set<string>();
+    const out: WarmupSample[] = [];
+    for (const name of this.models.keys())
+      for (const far of [false, true])
+        for (const part of this.batchParts(name, far)) {
+          const key = `${part.material.id}|${part.mesh.vertexBuffer?.format.renderingHashString ?? ''}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push({ mesh: part.mesh, material: part.material });
+        }
+    return out;
+  }
+
   instantiateMerged(name: string, shadows = true): pc.Entity | undefined {
     const parts = this.batchParts(name);
     if (!parts.length) return undefined;
