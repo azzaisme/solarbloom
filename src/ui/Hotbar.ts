@@ -1,49 +1,24 @@
-import { DECOR_OPTION, DECOR_OPTIONS } from '../data/cozy';
-import { BUILDABLE, MACHINES } from '../data/machines';
-import { WATER_NET } from '../data/water';
-import { TUNING } from '../data/tuning';
-import { type Action, type Bindings, keyLabel } from '../app/Bindings';
-import { actionGlyph, type GlyphStyle, type PadStyle, padName } from './Glyphs';
-import { ICONS, iconize, MACHINE_ICONS, plain } from './Icons';
+import { type Action, type Bindings, SLOTS } from '../app/Bindings';
+import { actionGlyph, type GlyphStyle } from './Glyphs';
+import { ICONS } from './Icons';
 import { $, esc, HudPart } from './HudPart';
-import { decorType, machineTool, type Tool } from './Hud';
-import { decorOpen } from '../gameplay/Cozy';
+import type { Tool } from './Hud';
+import { buildItem, HOTBAR_DEFAULT } from './BuildCatalog';
+import { BuildMenu } from './BuildMenu';
 
 /**
- * E22.5 (#342): the hotbar's buttons (Inspect, Pulse, the build tray, Harvest, Upgrades). It is not on the walking
- * view: the build hotbar (slots 1–9, BuildBar) shows above the prompt only while build mode is open.
+ * The tool in bloombot's hands and the build menu's door. E23.11 retired the classic hotbar (the Pulse dome, Inspect,
+ * Harvest, the Build toggle and its tray): walking has no hotbar, build mode has the build dock (BuildBar), and the
+ * build menu (BuildMenu, #344) is a sheet of its own. What the game still asks of "the hotbar" (the current tool,
+ * setTool, the menu open or shut) lives here.
  */
 export class Hotbar extends HudPart {
   private tool: Tool = 'pulse';
-
-  static template(): string {
-    return [
-      `<button class="slot" data-tool="inspect" aria-label="Inspect tool (1)"><span class="key">1</span><span class="si">${ICONS.inspect}</span><span class="sl">Inspect</span><span class="sc">&nbsp;</span></button>`,
-      `<button class="slot" data-tool="pulse" aria-label="Restoration Pulse (2)"><span class="key">2</span><span class="si">${ICONS.pulse}</span><span class="sl"><span class="long">Restoration </span>Pulse</span><span class="sc"></span></button>`,
-      `<span class="sep"></span>`,
-      `<button class="slot" id="buildToggle" aria-label="Build menu (B)" aria-expanded="false"><span class="key">B</span><span class="si">${ICONS.build}</span><span class="sl">Build</span><span class="sc"></span></button>`,
-      `<div id="buildTray">`,
-      // E21.3: the Storage Chest has no number key: the build menu reaches it
-      ...BUILDABLE.map(
-        (t) =>
-          `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name}${MACHINES[t].hotkey ? ` (${MACHINES[t].hotkey})` : ''}"><span class="key">${MACHINES[t].hotkey ?? ''}</span><span class="si">${ICONS[MACHINE_ICONS[t]]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
-      ),
-      // E23.4.2.2: the pipe, laid tile by tile
-      `<button class="slot" data-tool="pipe" aria-label="Lay pipe"><span class="key"></span><span class="si">${ICONS.pipe}</span><span class="sl">Pipe</span><span class="sc"></span></button>`,
-      // E19.2: decorations, free once earned, and the remove tool
-      `<span class="tray-break" aria-hidden="true"></span>`,
-      ...DECOR_OPTIONS.map(
-        (o) => `<button class="slot decor" data-tool="decor:${o.id}" hidden aria-label="Place a ${esc(plain(o.name))}" title="${esc(plain(o.blurb))}"><span class="si">${o.icon}</span><span class="sl">${esc(o.name)}</span><span class="sc">${o.solid ? '' : 'walk over'}</span></button>`,
-      ),
-      `<button class="slot decor" data-tool="remove" aria-label="Remove or move a decoration"><span class="si">🧹</span><span class="sl">Remove</span><span class="sc">or move</span></button>`,
-      `</div>`,
-    ].join('');
-  }
+  readonly menu = new BuildMenu(this.hud);
 
   wire() {
-    const r = this.root;
-    r.querySelectorAll<HTMLButtonElement>('#hotbar [data-tool]').forEach((b) => b.addEventListener('click', () => this.cb.selectTool(b.dataset.tool as Tool)));
-    $(r, '#buildToggle').addEventListener('click', () => this.toggleTray());
+    this.menu.wire();
+    this.hud.buildBar.wire();
   }
 
   get currentTool() {
@@ -52,137 +27,69 @@ export class Hotbar extends HudPart {
 
   setTool(t: Tool) {
     this.tool = t;
-    this.root.querySelectorAll<HTMLElement>('[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === t));
-    const building = t !== 'pulse' && t !== 'inspect';
-    const tg = $(this.root, '#buildToggle');
-    tg.classList.toggle('active', building);
-    const dk = decorType(t);
-    const dec = dk ? DECOR_OPTION[dk] : undefined;
-    const def = machineTool(t) ? MACHINES[t] : undefined;
-    $(tg, '.si').innerHTML = machineTool(t) ? ICONS[MACHINE_ICONS[t]] : dec ? iconize(dec.icon) : t === 'remove' ? iconize('🧹') : ICONS.build;
-    $(tg, '.sl').textContent = def ? def.name.replace('Water ', '').replace('Pollinator ', '') : dec ? dec.name : t === 'remove' ? 'Remove' : 'Build';
-    this.toggleTray(false);
+    this.menu.close();
     this.hud.buildBar.render(t);
   }
 
-  /** The Build tray: machines and their costs pop up above the hotbar (Phase 4 E02.2: all screen sizes). */
+  /** The build menu (Q, or Y on the pad), open or shut. */
   toggleTray(open?: boolean) {
-    const tray = $(this.root, '#buildTray');
-    const o = open ?? !tray.classList.contains('open');
-    tray.classList.toggle('open', o);
-    $(this.root, '#buildToggle').setAttribute('aria-expanded', String(o));
-    // A closed menu keeps no focus: the pad's A and the keyboard's Space go back to the game, not to a hidden card.
-    const a = document.activeElement as HTMLElement | null;
-    if (!o && a && $(this.root, '#hotbar').contains(a)) a.blur();
+    const o = open ?? !this.menu.isOpen;
+    if (o) this.menu.open(this.tool);
+    else this.menu.close();
   }
 
   get trayOpen() {
-    return $(this.root, '#buildTray').classList.contains('open');
+    return this.menu.isOpen;
   }
 
-  /**
-   * Bloombot (G.16, G.7): the hotbar's key badges from the bindings, or gamepad buttons when the pad was used
-   * last. Without bindings, the cursor map.
-   */
-  /** E22.3: the badges follow the glyph set in use (a key, or the pad button's name in that pad's family). */
+  /** E22.3: the menu's and the dock's glyphs follow the device in use and the bindings. */
   setKeyMap(style: GlyphStyle | undefined, b?: Bindings) {
-    const mode = style === undefined ? undefined : style === 'keys' ? 'keys' : 'pad';
-    const slots: [string, Action, string][] = [
-      ['[data-tool="inspect"]', 'interact', '1'],
-      ['[data-tool="pulse"]', 'pulse', '2'],
-      ['#buildToggle', 'buildMenu', 'B'],
-    ];
-    for (const [sel, action, cursor] of slots) {
-      const el = this.root.querySelector<HTMLElement>(`#hotbar ${sel} .key`);
-      if (!el) continue;
-      // E22.1: a badge shows a keyboard key (the mouse buttons are too long for it)
-      const key = b?.keys[action].find((c) => !c.startsWith('Mouse') && c !== 'Wheel');
-      el.textContent = !b || !mode ? cursor : mode === 'pad' ? padShort(style as PadStyle, b.pad[action]) : key ? keyLabel(key) : '';
-    }
-    this.root.classList.toggle('pad-keys', mode === 'pad');
+    this.menu.setKeys(style, b);
   }
 
   update() {
-    const s = this.sim;
-    // Hotbar costs
-    for (const t of BUILDABLE) {
-      const btn = $(this.root, `#hotbar [data-tool="${t}"]`);
-      // E21.3: the price is the recipe (material icons, have / need)
-      this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.costLabel(t));
-      this.set(`hk-${t}`, btn, 'cls', s.build.affordable(t) ? '0' : '1', 'cant');
-      const locked = !s.build.isUnlocked(t);
-      this.set(`hl-${t}`, btn, 'cls', locked ? '1' : '0', 'locked');
-      // A rooftop's specialty piece only appears once that rooftop is reachable.
-      const roofOnly = MACHINES[t].roofs;
-      btn.hidden = !!roofOnly && !s.build.isUnlocked(t);
-      if (locked) this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.lockLabel(t));
-    }
-    // E23.4.2.2: the pipe's slot: what's left of the last Pipe, or its price; it unlocks with the pump
-    const pipeBtn = this.root.querySelector<HTMLElement>('#hotbar [data-tool="pipe"]');
-    if (pipeBtn) {
-      const p = s.water.pipes;
-      const locked = !s.water.unlocked('pipe');
-      this.set('hc-pipe', $(pipeBtn, '.sc'), 'text', locked ? s.water.lockLabel() : p.costText());
-      this.set('hk-pipe', pipeBtn, 'cls', s.inventory.canPay(WATER_NET.pipe.cost) ? '0' : '1', 'cant');
-      this.set('hl-pipe', pipeBtn, 'cls', locked ? '1' : '0', 'locked');
-    }
-    // E19.2: a decoration's slot appears once it's earned
-    for (const o of DECOR_OPTIONS) {
-      const on = decorOpen(s, o);
-      if (this.last.get(`dc-${o.id}`) === String(on)) continue;
-      this.last.set(`dc-${o.id}`, String(on));
-      $(this.root, `#hotbar [data-tool="decor:${o.id}"]`).hidden = !on;
-    }
-    // Overcharge countdown on the Pulse button
-    const every = s.upgrades.overchargeEvery;
-    const pc0 = s.state.progression.pulseCharge ?? 0;
-    const mega = s.restoration.megaReady();
-    const pulseSc = mega ? '💥 MEGA next!' : every ? (pc0 === every - 1 ? '🌟 next!' : '●'.repeat(pc0) + '○'.repeat(every - pc0)) : '';
-    this.set('pulseSc', $(this.root, '[data-tool="pulse"] .sc'), 'text', pulseSc);
-    // Mega Pulse meter: a fill along the bottom of the Pulse button.
-    const mf = s.state.progression.coreActivated ? Math.min(1, (s.state.progression.megaCharge ?? 0) / TUNING.mega.charge) : 0;
-    const pb = $(this.root, '[data-tool="pulse"]');
-    this.set('megaFill', pb, 'style', mf.toFixed(2), '--mega');
-    this.set('megaOn', pb, 'cls', mega ? '1' : '0', 'mega');
+    this.hud.buildBar.update();
   }
 }
 
-/** A short gamepad label for the small hotbar badges. */
-function padShort(style: PadStyle, button: number | undefined): string {
-  const arrows: Record<number, string> = { 12: '↑', 13: '↓', 14: '←', 15: '→' };
-  return button === undefined ? '' : (arrows[button] ?? padName(style, button));
-}
+export { HOTBAR_DEFAULT };
 
-/** E22.1 / E22.7: the build hotbar's default contents (slots 1–9): the machines in the old number-row order. */
-export const HOTBAR_DEFAULT: readonly string[] = ['solar', 'condenser', 'pollinator', 'droneHub', 'motherTree', 'reservoirGarden', 'relay', 'cultivator', ''];
-
-/** A tool's icon and short name, for the build hotbar and the build menu. */
-export function toolFace(t: string): { icon: string; name: string } | undefined {
-  if (!t) return undefined;
-  if (t === 'remove') return { icon: '🧹', name: 'Remove' };
-  const d = decorType(t as Tool);
-  if (d) return DECOR_OPTION[d] ? { icon: DECOR_OPTION[d].icon, name: DECOR_OPTION[d].name } : undefined;
-  if (machineTool(t as Tool)) return { icon: ICONS[MACHINE_ICONS[t as keyof typeof MACHINE_ICONS]] ?? MACHINES[t as keyof typeof MACHINES].icon, name: MACHINES[t as keyof typeof MACHINES].name };
-  return undefined;
-}
+/** The view shown in build mode: none, the Power view or the Water view (one at a time). */
+export type BuildView = 'off' | 'power' | 'water';
 
 /**
- * E22.5 (#342): the build hotbar: slots 1–9 (keyboard; the pad uses the build menu), above the prompt while
- * build mode is open, with the piece in hand lit. What each slot holds is a setting (E22.7 pins cards to it).
+ * E23.11: the build dock, a paper pill at the bottom centre while something is in hand to build (Build.dc.html,
+ * BuildPad.dc.html). Left the view control (Water [V] and Power [O] on the keyboard; one "View" button on d-pad up
+ * on a pad), then slots 1–9 (the piece in hand raised with a leaf ring, empty ones dashed, locked ones dimmed with a
+ * lock; keyboard keys under them, or the d-pad's left and right at the row's ends on a pad), then Remove and All
+ * builds. "Stop building" sits above its right end. Every glyph comes from the bindings, so rebinding shows.
  */
 export class BuildBar extends HudPart {
-  private keys: string[] = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
-  /** E23.3.4: the Power view's glyph, and whether it is on (the game sets it). */
-  private powerGlyph = '';
+  private style: GlyphStyle = 'keys';
+  private b?: Bindings;
+  /** E23.3.4: the Power view is on (the game sets it). */
   powerOn = false;
-  /** E23.4.5: the Water view's glyph, and whether it is on (the game sets it). */
-  private waterGlyph = '';
+  /** E23.4.5: the Water view is on (the game sets it). */
   waterOn = false;
+  private tool: Tool = 'pulse';
 
   static template(): string {
-    return `<div id="buildbar" class="panel" role="toolbar" aria-label="Build hotbar" hidden></div>`;
+    return (
+      `<nav id="buildbar" class="bdock" aria-label="Build hotbar" hidden></nav>` +
+      `<div id="buildStop" class="bstop" hidden><span class="bstop-g" aria-hidden="true"></span><span>Stop building</span></div>`
+    );
   }
 
+  wire() {
+    $(this.root, '#buildbar').addEventListener('click', (e) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-slot], [data-act]');
+      if (!el) return;
+      if (el.dataset.slot !== undefined) this.cb.buildAct(SLOTS[Number(el.dataset.slot)]);
+      else this.cb.buildAct(el.dataset.act as Action);
+    });
+  }
+
+  /** What slots 1–9 hold (tool ids; '' is empty). */
   slots(): string[] {
     const h = this.settings.hotbar ?? HOTBAR_DEFAULT;
     return Array.from({ length: 9 }, (_, i) => h[i] ?? '');
@@ -190,34 +97,104 @@ export class BuildBar extends HudPart {
 
   setKeys(style: GlyphStyle | undefined, b?: Bindings) {
     if (!b) return;
-    this.keys = (['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6', 'slot7', 'slot8', 'slot9'] as Action[]).map((a) => (b.keys[a][0] ? keyLabel(b.keys[a][0]) : ''));
-    this.powerGlyph = actionGlyph(b, 'powerOverlay', style ?? 'keys');
-    this.waterGlyph = actionGlyph(b, 'waterOverlay', style ?? 'keys');
+    this.style = style ?? 'keys';
+    this.b = b;
     this.last.delete('buildbar');
+    this.render(this.tool);
   }
 
-  /** Shows the bar while something is in hand to build (or remove), with that slot lit. */
+  /** The views there is something to show for: the grid once one stands, the water once the pipes are handed over. */
+  views(): BuildView[] {
+    const v: BuildView[] = ['off'];
+    if (this.sim.power.networks().length) v.push('power');
+    if (this.sim.water.unlocked('pipe')) v.push('water');
+    return v;
+  }
+
+  get view(): BuildView {
+    return this.powerOn ? 'power' : this.waterOn ? 'water' : 'off';
+  }
+
+  /** E23.11: d-pad up: the next view (off, Power, Water, off), skipping one there is nothing to show for. */
+  nextView(): BuildView {
+    const v = this.views();
+    return v[(v.indexOf(this.view) + 1) % v.length] ?? 'off';
+  }
+
+  /** A slot that can go in hand: something there, and unlocked. */
+  private usable(t: string): boolean {
+    const it = buildItem(this.sim, t);
+    return !!it && !it.locked;
+  }
+
+  /** E23.11: d-pad left / right: the next usable slot from the one in hand (wrapping), or undefined if none. */
+  step(dir: 1 | -1, from: Tool = this.tool): Tool | undefined {
+    const s = this.slots();
+    const at = s.indexOf(from);
+    for (let k = 1; k <= 9; k++) {
+      const i = (((at < 0 ? (dir > 0 ? -1 : 0) : at) + dir * k) % 9 + 9) % 9;
+      if (s[i] && s[i] !== from && this.usable(s[i])) return s[i] as Tool;
+    }
+    return undefined;
+  }
+
+  private glyph(a: Action): string {
+    return this.b ? actionGlyph(this.b, a, this.style) : '';
+  }
+
+  /** Shows the dock while something is in hand to build (or remove), with that slot lit. */
   render(tool: Tool) {
+    this.tool = tool;
     const el = $(this.root, '#buildbar');
+    const stop = $(this.root, '#buildStop');
     const building = tool !== 'pulse' && tool !== 'inspect';
     el.hidden = !building;
+    stop.hidden = !building;
     document.body.classList.toggle('building', building);
     if (!building) return;
-    const html = this.slots()
+    const pad = this.style !== 'keys';
+    this.set('bstop-g', $(stop, '.bstop-g'), 'html', pad ? this.glyph('cancel') : this.b ? actionGlyph(this.b, 'menu', 'keys') : '');
+    const mode = (act: Action, icon: string, label: string, on: boolean, cls: string, aria: string) =>
+      `<button class="bmode ${cls}${on ? ' on' : ''}" data-act="${act}" aria-pressed="${on}" aria-label="${esc(aria)}"><span class="round" aria-hidden="true">${icon}</span><span class="bl">${esc(label)}</span><span class="bg" aria-hidden="true">${this.glyph(act)}</span></button>`;
+    const views = this.views();
+    let left = '';
+    if (pad) {
+      // one button on d-pad up: off, Power, Water
+      const v = this.view;
+      const name = v === 'power' ? 'Power' : v === 'water' ? 'Water' : 'off';
+      const icon = v === 'power' ? ICONS.energy : v === 'water' ? ICONS.water : ICONS.inspect;
+      if (views.length > 1) left = mode('viewCycle', icon, `View: ${name}`, v !== 'off', `view ${v}`, `Change the view, now ${v === 'off' ? 'off' : `the ${name} view`}`);
+    } else {
+      if (views.includes('water')) left += mode('waterOverlay', ICONS.water, 'Water', this.waterOn, 'water', `Water view ${this.waterOn ? 'on' : 'off'}`);
+      if (views.includes('power')) left += mode('powerOverlay', ICONS.energy, 'Power', this.powerOn, 'power', `Power view ${this.powerOn ? 'on' : 'off'}`);
+    }
+    const slots = this.slots()
       .map((t, i) => {
-        const f = toolFace(t);
-        const locked = machineTool(t as Tool) && !this.sim.build.isUnlocked(t as never);
-        return `<div class="bslot${t === tool ? ' on' : ''}${f ? '' : ' empty'}${locked ? ' locked' : ''}" aria-label="${f ? `Slot ${i + 1}: ${esc(f.name)}` : `Slot ${i + 1}: empty`}"><span class="key">${esc(this.keys[i] ?? '')}</span>${f ? `<span class="si">${f.icon}</span><span class="sl">${esc(f.name)}</span>` : ''}</div>`;
+        const it = buildItem(this.sim, t);
+        const key = pad ? '' : `<span class="bg" aria-hidden="true">${this.glyph(SLOTS[i])}</span>`;
+        if (!it) return `<button class="bslot empty" data-slot="${i}" aria-label="Slot ${i + 1}: empty"><span class="bl">Empty</span>${key}</button>`;
+        const on = t === tool;
+        const tip = `Slot ${i + 1}: ${it.name}${it.locked ? `, locked: ${it.lockText}` : ''}`;
+        return `<button class="bslot${on ? ' on' : ''}${it.locked ? ' locked' : ''}${` t-${it.tab}`}" data-slot="${i}" aria-label="${esc(tip)}" aria-pressed="${on}" title="${esc(tip)}"><span class="si" aria-hidden="true">${it.locked ? ICONS.lock : it.icon}</span><span class="bl">${esc(it.short)}</span>${key}</button>`;
       })
       .join('');
-    // E23.3.4: the Power view toggle sits at the end of the bar (once there is a grid to show)
-    const power = this.sim.power.networks().length
-      ? `<div class="bslot power${this.powerOn ? ' on' : ''}" aria-label="Power view ${this.powerOn ? 'on' : 'off'}"><span class="key glyph">${this.powerGlyph}</span><span class="sl">Power</span></div>`
-      : '';
-    // E23.4.5: the Water view toggle beside it (once the water network is handed over, Cistern Basin's Keeper)
-    const water = this.sim.water.unlocked('pipe')
-      ? `<div class="bslot power water${this.waterOn ? ' on' : ''}" aria-label="Water view ${this.waterOn ? 'on' : 'off'}"><span class="key glyph">${this.waterGlyph}</span><span class="sl">Water</span></div>`
-      : '';
-    this.set('buildbar', el, 'html', html + power + water);
+    const edge = (a: Action) => (pad ? `<span class="bedge" aria-hidden="true">${this.glyph(a)}</span>` : '');
+    const right = mode('removeMode', ICONS.broom, 'Remove', tool === 'remove', 'remove', `Remove ${tool === 'remove' ? 'on' : 'off'}`) + mode('buildMenu', ICONS.build, 'All builds', false, 'all', 'All builds: the build menu');
+    const html = `${left}${left ? '<span class="vsep" aria-hidden="true"></span>' : ''}${edge('slotPrev')}${slots}${edge('slotNext')}<span class="vsep" aria-hidden="true"></span>${right}`;
+    el.classList.toggle('pad', pad);
+    this.set('buildbar', el, 'html', html);
+  }
+
+  /** Locks and unlocks show as they change (cheap: compared before the DOM is touched). */
+  private checkedAt = 0;
+  update() {
+    if (this.tool === 'pulse' || this.tool === 'inspect') return;
+    const now = performance.now();
+    if (now - this.checkedAt < 400) return;
+    this.checkedAt = now;
+    const key = this.slots().map((t) => `${t}:${buildItem(this.sim, t)?.locked ? 1 : 0}`).join() + this.views().join();
+    if (this.last.get('bb-state') === key) return;
+    this.last.set('bb-state', key);
+    this.render(this.tool);
   }
 }

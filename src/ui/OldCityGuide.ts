@@ -49,14 +49,14 @@ export function oldCityObjective(sim: Sim): Objective {
   if (t) {
     const list = (Object.entries(t.delivery) as [MaterialId | 'biomass', number][])
       .filter(([k]) => k !== 'biomass')
-      .map(([k, v]) => ({ label: `${MATERIALS[k as MaterialId].name} ${Math.min(v, f.given(k as MaterialId))}/${v}`, done: f.remaining(k as MaterialId) === 0 }));
+      .map(([k, v]) => ({ label: `${MATERIALS[k as MaterialId].name} ${Math.min(v, f.given(k as MaterialId))} of ${v}`, done: f.remaining(k as MaterialId) === 0 }));
     const c = f.condition(t);
-    list.push({ label: `${c.label} ${Math.min(c.have, c.need)}/${c.need}`, done: c.done });
+    list.push({ label: `${c.label} ${Math.min(c.have, c.need)} of ${c.need}`, done: c.done });
     const missing = list.find((q) => !q.done);
     const total = list.length;
     return {
-      title: `⛲ Fountain tier ${t.tier}: ${t.name}`,
-      pct: `${list.filter((q) => q.done).length}/${total} ready`,
+      title: `⛲ Fountain step ${t.tier}: ${t.name}`,
+      pct: `${list.filter((q) => q.done).length} of ${total} ready`,
       bar: list.filter((q) => q.done).length / total,
       list,
       next: missing ? `Next: ${missing.label}` : 'Next: the fountain is ready',
@@ -85,11 +85,11 @@ export function oldCityHint(sim: Sim, step: number, keyFor: (a: 'pulse' | 'inter
     case 0:
       return { text: `You've landed! Salvage the pile in front of you: hold ${keyFor('interact')} 🧱` };
     case 1:
-      return { text: `Walk up the steps to the park and pulse dead ground with ${keyFor('pulse')} · ${Math.min(4, restored)}/4` };
+      return { text: `Walk up the steps to the park and pulse dead ground with ${keyFor('pulse')} · ${Math.min(4, restored)} of 4` };
     case 2:
       return { text: 'The fountain wants 🌱 Seeds: look for the broken pots in the park' };
     case 3:
-      return { text: `Restore the park around the fountain · ${Math.min(60, park)}/60`, target: '#obj' };
+      return { text: `Restore the park around the fountain · ${Math.min(60, park)} of 60`, target: '#obj' };
     case 4: {
       const s = sim.fountain.remaining('scrap');
       const e = sim.fountain.remaining('seeds');
@@ -160,7 +160,7 @@ function panelHint(sim: Sim, keyFor: (a: 'pulse' | 'interact') => string): { tex
     return { text: `Salvage ${what}${home ? ` in ${home.name}` : ''} for the ☀️ Solar Panel` };
   }
   if (need.craft.length) return { text: `Make ${need.craft.map((c) => `${itemDef(c).icon} ${itemDef(c).name}`).join(' and ')} at the crafting table in the shed, for the ☀️ Solar Panel` };
-  return { text: 'Build a ☀️ Solar Panel from the build menu', target: '#buildToggle' };
+  return { text: 'Build a ☀️ Solar Panel from the build menu' };
 }
 
 /** Which first-fifteen-minutes step the game is on: the first not yet done (ProgressionSystem moves one at a time). */

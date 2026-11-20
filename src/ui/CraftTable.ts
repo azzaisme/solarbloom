@@ -8,6 +8,7 @@ import { findKey } from '../gameplay/Research';
 import { gameDays } from '../data/time';
 import type { Sim } from '../gameplay/Sim';
 import { materialIcon } from './MaterialIcons';
+import { type BarItem, glyph, icon, setBar, tabEnd, wireBar } from './PanelShell';
 import './craft.css';
 
 /**
@@ -109,11 +110,14 @@ export function machineRows(sim: Sim): { id: string; name: string; parts: CostPa
     });
 }
 
+const TAB_ICON: Record<CraftTabId, string> = { craft: 'hammer', upgrade: 'spark', research: 'book' };
+
 export class CraftTable {
   readonly el: HTMLElement;
   private body: HTMLElement;
   private tabs: HTMLElement;
   private live: HTMLElement;
+  private foot: HTMLElement;
   current: CraftTabId = 'craft';
   private sel?: ComponentId;
   private selProject?: string;
@@ -129,15 +133,27 @@ export class CraftTable {
     this.el.setAttribute('aria-modal', 'true');
     this.el.setAttribute('aria-labelledby', 'crTitle');
     this.el.innerHTML =
-      `<div class="panel screen-card bp-card"><header class="screen-head"><h2 id="crTitle">Crafting table</h2><button class="screen-back" data-back>Back</button></header>` +
-      `<div class="tabs" role="tablist" aria-label="Crafting table">${CRAFT_TABS.map((t) => `<button role="tab" id="crtab-${t.id}" data-tab="${t.id}" aria-controls="crBody" aria-selected="false" tabindex="-1">${t.label}</button>`).join('')}</div>` +
-      `<div class="screen-body bp-body" id="crBody" role="tabpanel"></div><p class="bp-live" role="status" aria-live="polite"></p></div>`;
+      `<div class="panel sheet bp-card"><header class="sheet-head"><span class="pn-badge sun">${icon('hammer')}</span><h2 id="crTitle">Crafting table</h2><span class="sheet-sub">Paused</span><span class="grow"></span><button class="pn-btn ghost sheet-back" data-back>${glyph('back')}Back</button></header>` +
+      `<div class="sheet-tabs">${tabEnd(-1)}<div role="tablist" aria-label="Crafting table">${CRAFT_TABS.map((t) => `<button role="tab" id="crtab-${t.id}" data-tab="${t.id}" aria-controls="crBody" aria-selected="false" tabindex="-1">${icon(TAB_ICON[t.id])}${t.label}</button>`).join('')}</div>${tabEnd(1)}</div>` +
+      `<div class="sheet-body bp-body" id="crBody" role="tabpanel"></div>` +
+      `<footer class="sheet-foot"><p class="bp-live" role="status" aria-live="polite"></p><span class="pn-acts"></span></footer></div>`;
     parent.appendChild(this.el);
     this.body = this.el.querySelector<HTMLElement>('#crBody')!;
-    this.tabs = this.el.querySelector<HTMLElement>('.tabs')!;
+    this.tabs = this.el.querySelector<HTMLElement>('[role=tablist]')!;
     this.live = this.el.querySelector<HTMLElement>('.bp-live')!;
+    this.foot = this.el.querySelector<HTMLElement>('.sheet-foot')!;
     this.el.hidden = true;
     this.el.querySelector('[data-back]')!.addEventListener('click', () => this.close());
+    wireBar(this.el, (p) => {
+      if (p === 'prev' || p === 'next' || p === 'tabs') {
+        this.tab(p === 'prev' ? -1 : 1, true);
+        return true;
+      }
+      if (p === 'back') {
+        this.close();
+        return true;
+      }
+    });
     this.tabs.addEventListener('click', (e) => {
       const t = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]');
       if (t) this.show(t.dataset.tab as CraftTabId, true);
@@ -205,6 +221,8 @@ export class CraftTable {
     if (!this.tabsNow().some((t) => t.id === tab)) tab = 'craft';
     this.current = tab;
     this.el.querySelector('#crTitle')!.textContent = this.host.sim.research.on ? 'Workshop' : 'Crafting table';
+    const many = this.tabsNow().length > 1;
+    for (const e of this.el.querySelectorAll<HTMLElement>('.pn-tab-end')) e.hidden = !many;
     for (const b of this.tabs.querySelectorAll<HTMLElement>('[data-tab]')) {
       b.hidden = !this.tabsNow().some((t) => t.id === b.dataset.tab);
       const on = b.dataset.tab === tab;
@@ -214,6 +232,16 @@ export class CraftTable {
     }
     this.body.setAttribute('aria-labelledby', `crtab-${tab}`);
     this.body.innerHTML = this[tab]();
+    this.bar();
+  }
+
+  /** The action bar: what Enter / A does on this tab, the tab buttons and Back. */
+  private bar() {
+    const choose: Record<CraftTabId, string> = { craft: 'Choose', upgrade: 'Upgrade', research: 'Choose' };
+    const items: BarItem[] = [{ press: 'choose', label: choose[this.current] }];
+    if (this.tabsNow().length > 1) items.push({ press: 'tabs', label: 'Change tab' });
+    items.push({ press: 'back', label: 'Back to the world' });
+    setBar(this.foot, items);
   }
 
   /** Redraws the open tab, keeping the focus on the same control. */
@@ -246,38 +274,38 @@ export class CraftTable {
   private craft(): string {
     const sim = this.host.sim;
     const rows = componentRows(sim);
-    if (!rows.length) return `<p class="bp-empty">Nothing to make yet.</p>`;
+    if (!rows.length) return `<p class="pn-empty bp-empty">Nothing to make yet.</p>`;
     if (!this.sel || !rows.some((r) => r.id === this.sel)) this.sel = rows[0].id;
     const grid = rows
       .map(
         (r) =>
-          `<button class="bp-cell${r.problem ? ' cr-short' : ''}" role="option" id="crc-${r.id}" data-comp="${r.id}" aria-selected="${r.id === this.sel}" aria-label="${esc(r.label)}">` +
-          `${materialIcon(r.id, 40)}<span class="bp-name">${esc(r.name)}</span><span class="bp-count">${r.have}</span></button>`,
+          `<button class="pn-cell bp-cell${r.problem ? ' cr-short' : ''}" role="option" id="crc-${r.id}" data-comp="${r.id}" aria-selected="${r.id === this.sel}" aria-label="${esc(r.label)}">` +
+          `${materialIcon(r.id, 40)}<span class="bp-name">${esc(r.name)}</span><span class="pn-n bp-count">${r.have} at hand</span></button>`,
       )
       .join('');
     const machines = machineRows(sim);
     const mlist = machines.length
-      ? `<h3 class="set-h">Machines</h3><ul class="cr-machines">${machines
+      ? `<h3 class="pn-label">Machines</h3><ul class="cr-machines">${machines
           .map((m) => `<li tabindex="0" class="${m.ready ? '' : 'cr-short'}" aria-label="${esc(`${m.name}: ${costText(m.parts)}`)}"><b>${esc(m.name)}</b> ${this.partsHtml(m.parts)}</li>`)
           .join('')}</ul>`
       : '';
     const decor = decorRows(sim);
     const dlist = decor.length
-      ? `<h3 class="set-h">Decorations</h3><ul class="cr-machines cr-decor">${decor
+      ? `<h3 class="pn-label">Decorations</h3><ul class="cr-machines cr-decor">${decor
           .map(
             (d) =>
               `<li class="${d.made ? 'cr-made' : d.problem ? 'cr-short' : ''}"><b>${esc(d.name)}</b> ${d.made ? '<span class="cr-note">Made</span>' : this.partsHtml(d.parts)}` +
-              (d.made ? '' : `<button id="cr-decor-${d.id}" data-decor="${d.id}" aria-label="${esc(`Make the ${d.name}, once: ${costText(d.parts)}. Placing it is free after that.`)}" ${d.problem ? 'aria-disabled="true"' : ''}>Make</button>`) +
+              (d.made ? '' : `<button class="pn-btn small" id="cr-decor-${d.id}" data-decor="${d.id}" aria-label="${esc(`Make the ${d.name}, once: ${costText(d.parts)}. Placing it is free after that.`)}" ${d.problem ? 'aria-disabled="true"' : ''}>Make</button>`) +
               `</li>`,
           )
           .join('')}</ul>`
       : '';
-    return `<div class="bp-split"><div><h3 class="set-h">Components</h3><div class="bp-grid" role="listbox" aria-label="Components" aria-orientation="horizontal">${grid}</div>${mlist}${dlist}</div><div class="bp-detail" id="crDetail">${this.detail()}</div></div>`;
+    return `<div class="pn-split"><div class="pn-main"><h3 class="pn-label">Components</h3><div class="pn-cells bp-grid" role="listbox" aria-label="Components" aria-orientation="horizontal">${grid}</div>${mlist}${dlist}</div><aside class="pn-detail bp-detail" id="crDetail">${this.detail()}</aside></div>`;
   }
 
   private partsHtml(parts: CostPart[]): string {
     return `<span class="cr-parts">${parts
-      .map((p) => `<span class="cr-part${p.have >= p.need ? '' : ' cr-miss'}">${materialIcon(p.id, 20)} ${p.need} ${esc(p.name)}${p.have >= p.need ? '' : ` <small>(${p.have})</small>`}</span>`)
+      .map((p) => `<span class="pn-chip cr-part ${p.have >= p.need ? 'ok' : 'need cr-miss'}">${materialIcon(p.id, 20)}${p.have >= p.need ? `${p.need} ${esc(p.name)}` : `${Math.min(p.have, p.need)} of ${p.need} ${esc(p.name)}`}</span>`)
       .join('')}</span>`;
   }
 
@@ -285,22 +313,22 @@ export class CraftTable {
     const sim = this.host.sim;
     const r = componentRows(sim).find((x) => x.id === this.sel);
     if (!r) return '';
-    const btn = (n: number) => `<button id="cr-make-${n}" data-make="${n}" aria-label="${esc(`Make ${r.name} ${n === 1 ? 'once' : `${n} times`}`)}" ${r.problem ? 'aria-disabled="true"' : ''}>Make ${n === 1 ? '1' : n}</button>`;
+    const btn = (n: number) => `<button class="pn-btn${n === 1 ? ' primary' : ''}" id="cr-make-${n}" data-make="${n}" aria-label="${esc(`Make ${r.name} ${n === 1 ? 'once' : `${n} times`}`)}" ${r.problem ? 'aria-disabled="true"' : ''}>Make ${n === 1 ? '1' : n}</button>`;
     const q = sim.crafting.queue();
     const queue = q.length
       ? `<h4>On the table</h4><ul class="cr-queue">${q
           .map(
             (j, i) =>
-              `<li>${materialIcon(j.id as ComponentId, 24)} <span>${esc(itemDef(j.id as ItemId).name)} × ${j.n}</span>${i === 0 ? `<span class="cr-bar" aria-hidden="true"><i style="width:${Math.round((sim.crafting.progress() ?? 0) * 100)}%"></i></span>` : ''}<button id="cr-cancel-${i}" data-cancel="${i}" aria-label="${esc(`Stop making ${itemDef(j.id as ItemId).name}, and take back what it used`)}">Stop</button></li>`,
+              `<li>${materialIcon(j.id as ComponentId, 24)} <span>${j.n} ${esc(itemDef(j.id as ItemId).name)}</span>${i === 0 ? `<span class="cr-bar pn-bar" aria-hidden="true"><i style="width:${Math.round((sim.crafting.progress() ?? 0) * 100)}%"></i></span>` : ''}<button class="pn-btn small" id="cr-cancel-${i}" data-cancel="${i}" aria-label="${esc(`Stop making ${itemDef(j.id as ItemId).name}, and take back what it used`)}">Stop</button></li>`,
           )
           .join('')}</ul>`
       : '';
     return (
-      `<h3>${materialIcon(r.id, 28)} ${esc(r.name)}</h3>` +
-      `<dl><dt>Makes</dt><dd>${r.makes}</dd><dt>At hand</dt><dd>${r.have}</dd></dl>` +
+      `<h3><span class="pn-tile">${materialIcon(r.id, 40)}</span>${esc(r.name)}</h3>` +
+      `<dl><dt>Each one makes</dt><dd>${r.makes}</dd><dt>At hand</dt><dd>${r.have}</dd></dl>` +
       `<h4>Needs</h4>${this.partsHtml(r.parts)}` +
-      `<div class="bp-moves" role="group" aria-label="Make">${btn(1)}${btn(5)}</div>` +
-      (r.problem ? `<p class="bp-note">${esc(r.problem)}</p>` : '') +
+      `<div class="pn-moves cr-make" role="group" aria-label="Make">${btn(1)}${btn(5)}</div>` +
+      (r.problem ? `<p class="pn-note bp-note">${esc(r.problem)}</p>` : '') +
       queue
     );
   }
@@ -315,7 +343,7 @@ export class CraftTable {
 
   private upgrade(): string {
     const rows = upgradeRows(this.host.sim);
-    if (!rows.length) return `<p class="bp-empty">Nothing to upgrade yet.</p>`;
+    if (!rows.length) return `<p class="pn-empty bp-empty">Nothing to upgrade yet.</p>`;
     return `<ul class="cr-upgrades">${rows
       .map((u) => {
         const pips = Array.from({ length: u.max }, (_, i) => `<i class="${i < u.level ? 'on' : ''}"></i>`).join('');
@@ -323,7 +351,7 @@ export class CraftTable {
         return (
           `<li><div class="cr-uhead"><b>${esc(u.name)}</b><span class="cr-pips" aria-hidden="true">${pips}</span></div><span class="cr-each">${esc(u.each)}</span>` +
           (full ? '' : this.partsHtml(u.parts)) +
-          `<button id="cr-up-${u.id}" data-upgrade="${u.id}" aria-label="${esc(full ? `${u.name}, all ${u.max} levels` : `Upgrade ${u.name} to level ${u.level + 1} of ${u.max}: ${costText(u.parts)}`)}" ${u.problem ? 'aria-disabled="true"' : ''}>${full ? 'Done' : `Level ${u.level + 1}`}</button></li>`
+          `<button class="pn-btn small${full ? '' : ' primary'}" id="cr-up-${u.id}" data-upgrade="${u.id}" aria-label="${esc(full ? `${u.name}, all ${u.max} levels` : `Upgrade ${u.name} to level ${u.level + 1} of ${u.max}: ${costText(u.parts)}`)}" ${u.problem ? 'aria-disabled="true"' : ''}>${full ? 'Done' : `Level ${u.level + 1}`}</button></li>`
         );
       })
       .join('')}</ul>`;
@@ -338,26 +366,26 @@ export class CraftTable {
     const open = r.open();
     if (!this.selProject || !open.some((p) => p.id === this.selProject)) this.selProject = open[0]?.id;
     const findList = finds.length
-      ? `<h3 class="set-h">New finds</h3><div class="bp-moves rs-finds">${finds.map((f, i) => `<button id="rs-find-${i}" data-find="${esc(findKey(f))}" aria-label="${esc(`Look closely at ${r.findName(f)}`)}">${esc(r.findName(f))}</button>`).join('')}</div>`
+      ? `<h3 class="pn-label">New finds</h3><div class="pn-moves rs-finds">${finds.map((f, i) => `<button class="pn-btn small" id="rs-find-${i}" data-find="${esc(findKey(f))}" aria-label="${esc(`Look closely at ${r.findName(f)}`)}">${esc(r.findName(f))}</button>`).join('')}</div>`
       : '';
     const powered = r.powered();
     const benchList = bench.length
-      ? `<h3 class="set-h">On the bench</h3><ul class="cr-queue">${bench
+      ? `<h3 class="pn-label">On the bench</h3><ul class="cr-queue">${bench
           .map(
             (b) =>
-              `<li><span>${esc(b.project.name)}</span><span class="cr-bar rs-bar${powered ? '' : ' rs-off'}" aria-hidden="true"><i style="width:${Math.round(b.progress * 100)}%"></i></span><button id="rs-stop-${b.project.id}" data-stop="${b.project.id}" aria-label="${esc(`Stop ${b.project.name}, and take back what it used`)}">Stop</button></li>`,
+              `<li><span>${esc(b.project.name)}</span><span class="cr-bar pn-bar rs-bar${powered ? '' : ' rs-off'}" aria-hidden="true"><i style="width:${Math.round(b.progress * 100)}%"></i></span><button class="pn-btn small" id="rs-stop-${b.project.id}" data-stop="${b.project.id}" aria-label="${esc(`Stop ${b.project.name}, and take back what it used`)}">Stop</button></li>`,
           )
-          .join('')}</ul>${powered ? '' : '<p class="bp-note">Waiting for power.</p>'}`
+          .join('')}</ul>${powered ? '' : '<p class="pn-note bp-note">Waiting for power.</p>'}`
       : '';
     const groups = BRANCHES.map((br) => {
       const ps = open.filter((p) => p.branch === br.id);
       if (!ps.length) return '';
-      return `<h4>${esc(br.name)}</h4><div class="rs-projects" role="listbox" aria-label="${esc(br.name)} projects">${ps
+      return `<h4 class="rs-branch">${esc(br.name)}</h4><div class="rs-projects" role="listbox" aria-label="${esc(br.name)} projects">${ps
         .map((p) => `<button class="bp-req" role="option" id="rs-p-${p.id}" data-project="${p.id}" aria-selected="${p.id === this.selProject}"><b>${esc(p.name)}</b></button>`)
         .join('')}</div>`;
     }).join('');
-    const empty = !finds.length && !bench.length && !open.length ? `<p class="bp-empty">Nothing to look into yet. New things turn up out in the city.</p>` : '';
-    return `<div class="bp-split"><div>${findList}${benchList}${groups ? `<h3 class="set-h">Projects</h3>${groups}` : ''}${empty}</div><div class="bp-detail" id="rsDetail">${this.projectDetail()}</div></div>`;
+    const empty = !finds.length && !bench.length && !open.length ? `<p class="pn-empty bp-empty">Nothing to look into yet. New things turn up out in the city.</p>` : '';
+    return `<div class="pn-split"><div class="pn-main">${findList}${benchList}${groups ? `<h3 class="pn-label">Projects</h3>${groups}` : ''}${empty}</div><aside class="pn-detail bp-detail" id="rsDetail">${this.projectDetail()}</aside></div>`;
   }
 
   private projectDetail(): string {
@@ -366,11 +394,11 @@ export class CraftTable {
     if (!p || !r.open().includes(p)) return '';
     const problem = r.problem(p.id);
     return (
-      `<h3>${esc(p.name)}</h3><p>${esc(p.about)}</p>` +
+      `<h3><span class="pn-badge sky">${icon('book')}</span>${esc(p.name)}</h3><p>${esc(p.about)}</p>` +
       `<dl><dt>Takes</dt><dd>About ${projectMinutes(p.days)} minutes</dd></dl>` +
       `<h4>Needs</h4>${this.partsHtml(costParts(this.host.sim, p.cost))}` +
-      `<div class="bp-moves"><button id="rs-start" data-start="${p.id}" aria-label="${esc(`Start ${p.name}`)}" ${problem ? 'aria-disabled="true"' : ''}>Start</button></div>` +
-      (problem ? `<p class="bp-note">${esc(problem)}</p>` : '')
+      `<div class="pn-moves"><button class="pn-btn primary" id="rs-start" data-start="${p.id}" aria-label="${esc(`Start ${p.name}`)}" ${problem ? 'aria-disabled="true"' : ''}>Start</button></div>` +
+      (problem ? `<p class="pn-note bp-note">${esc(problem)}</p>` : '')
     );
   }
 

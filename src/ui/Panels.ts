@@ -4,24 +4,22 @@ import { ICONS, iconize } from './Icons';
 import { $, esc, HudPart } from './HudPart';
 import { hudHeight, hudWidth, toHud } from './UiScale';
 import type { PlotPickerHandlers, PlotPickerModel } from './Hud';
+import { barHtml, fillGlyphs, setPanelGlyphs, wireBar } from './PanelShell';
 
 /**
- * E22.5 (#342): the panels the HUD opens over the world: the plot picker, a machine's inspect panel, the Lucky Cat's reward card, the welcome card,
- * the hover tooltip and the "can't do that" note, and the classic quick chips (home, cats, paw prints).
+ * E22.5 (#342): the panels the HUD opens over the world: the plot picker, a machine's inspect panel, the Lucky Cat's
+ * reward card, the hover tooltip and the "can't do that" note.
+ *
+ * E23.11 (Sunlit Glass): #inspect and the plot picker are machine cards docked on the right (the world stays in
+ * view), each ending in an action bar with the device's glyphs. This part also keeps every panel's glyphs on the
+ * device in hand (`setPanelGlyphs`, from the HUD's glyph set and bindings, checked each frame).
  */
 export class Panels extends HudPart {
   private failTimer = 0;
 
   wire() {
     const r = this.root;
-    $(r, '#catBtn').addEventListener('click', () => this.hud.backpack.open('collection'));
-    $(r, '#pawBtn').addEventListener('click', () => this.cb.findCat());
-    $(r, '#homeBtn').addEventListener('click', () => this.cb.goHome($(r, '#homeBtn').classList.contains('ready')));
     $(r, '#catPanel button').addEventListener('click', () => ($(r, '#catPanel').hidden = true));
-    $(r, '#introGo').addEventListener('click', () => {
-      $(r, '#intro').hidden = true;
-      this.sim.state.progression.introSeen = true;
-    });
     $(r, '#inspect').addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
       if (t.closest('[data-close]')) this.cb.closeInspect();
@@ -36,6 +34,28 @@ export class Panels extends HudPart {
       }
     });
     $(r, '#plotPicker h2 button').addEventListener('click', () => this.closePlotPicker());
+    // the machine cards: docked right, an action bar at the foot
+    const insp = $(r, '#inspect');
+    insp.classList.add('side');
+    insp.setAttribute('role', 'region');
+    insp.setAttribute('aria-label', 'Details');
+    wireBar(insp);
+    const pp = $(r, '#plotPicker');
+    pp.classList.remove('drawer');
+    pp.classList.add('side');
+    pp.setAttribute('role', 'dialog');
+    const foot = document.createElement('footer');
+    foot.className = 'sheet-foot';
+    foot.innerHTML = `<span class="pn-acts">${barHtml([
+      { press: 'choose', label: 'Choose' },
+      { press: 'back', label: 'Back' },
+    ])}</span>`;
+    pp.appendChild(foot);
+    wireBar(pp, (p) => {
+      if (p !== 'back') return false;
+      this.closePlotPicker();
+      return true;
+    });
   }
 
   private catPanelTimer?: number;
@@ -46,14 +66,6 @@ export class Panels extends HudPart {
     p.hidden = false;
     window.clearTimeout(this.catPanelTimer);
     this.catPanelTimer = window.setTimeout(() => (p.hidden = true), 16000);
-  }
-
-  showIntro() {
-    $(this.root, '#intro').hidden = false;
-  }
-
-  get introOpen() {
-    return !$(this.root, '#intro').hidden;
   }
 
   private picker?: PlotPickerHandlers;
@@ -69,9 +81,9 @@ export class Panels extends HudPart {
     $(this.root, '#ppSub').textContent = m.sub;
     const rows = m.choices.map((c) => {
       const tag = c.solid ? 'Solid' : 'Walk over it';
-      if (!c.unlocked) return `<div class="card pp-opt locked"><span class="ci">${c.icon}</span><span class="cn">${esc(c.name)}</span><span class="cd2">Unlocks when ${esc(c.hint ?? '')}</span></div>`;
+      if (!c.unlocked) return `<div class="pp-opt locked"><span class="ci">${c.icon}</span><span class="cn">${esc(c.name)}</span><span class="cd2">Unlocks when ${esc(c.hint ?? '')}</span></div>`;
       const on = c.id === m.current;
-      return `<button class="card pp-opt${on ? ' on' : ''}" data-opt="${c.id}" aria-pressed="${on}"><span class="ci">${c.icon}</span><span class="cn">${esc(c.name)}${c.fresh ? '<em class="pp-new">New</em>' : ''}${on ? '<em>Chosen</em>' : ''}</span><span class="cd2">${esc(c.blurb)} <i>${tag}</i></span></button>`;
+      return `<button class="pp-opt${on ? ' on' : ''}" data-opt="${c.id}" aria-pressed="${on}"><span class="ci">${c.icon}</span><span class="cn">${esc(c.name)}${c.fresh ? '<em class="pp-new">New</em>' : ''}${on ? '<em>Chosen</em>' : ''}</span><span class="cd2">${esc(c.blurb)} <i>${tag}</i></span></button>`;
     });
     if (m.current) rows.push('<button class="pp-clear" data-opt="">Clear the plot</button>');
     const list = $(this.root, '#ppList');
@@ -106,7 +118,7 @@ export class Panels extends HudPart {
     const s = this.sim.state.stats;
     const avg = s.chains ? (s.chainEffects / s.chains).toFixed(1) : '—';
     return iconize(
-      `<p class="set-stats">Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Average: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b></p>` +
+      `<p class="set-stats">Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Biggest chain: <b>${s.maxCombo} blooms</b> · Blooms in an average chain: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b></p>` +
         `<details class="set-timings"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre></details>`,
     );
   }
@@ -151,7 +163,13 @@ export class Panels extends HudPart {
     }
     el.classList.add('open');
     this.root.classList.add('inspecting');
-    this.set('inspect', el, 'html', html);
+    // a card's buttons (wake, the drones' modes, a role) are chosen with Enter / A; Esc / B closes it
+    const acts = /<button(?![^>]*data-close)/.test(html) ? [{ press: 'choose' as const, label: 'Choose' }] : [];
+    const bar = barHtml([...acts, { press: 'back', label: 'Close' }]);
+    const full = `<div class="side-body">${html}</div><footer class="sheet-foot"><span class="pn-acts">${bar}</span></footer>`;
+    if (this.last.get('inspect') === full) return;
+    this.set('inspect', el, 'html', full);
+    fillGlyphs(el);
   }
 
   machineHtml(m: MachineData, extra: string): string {
@@ -161,21 +179,21 @@ export class Panels extends HudPart {
     const t2 = tier === 2 ? TIER2[m.type] : undefined;
     const name = t3?.name ?? t2?.name ?? def.name;
     const icon = t3?.icon ?? t2?.icon ?? def.icon;
-    const blurb = t3 ? `Superstructure (nine machines in one): ${t3.blurb}.` : t2 ? `Tier 2 (three merged): ${t2.blurb}. ${def.blurb}` : def.blurb;
+    const blurb = t3 ? `Superstructure (nine machines in one): ${t3.blurb}.` : t2 ? `Three merged into one: ${t2.blurb}. ${def.blurb}` : def.blurb;
     return `<h4><span>${icon} ${esc(name)}${m.starter ? ' <small class="dim">(old)</small>' : ''}</span><button data-close aria-label="Close">×</button></h4><p>${esc(blurb)}</p>${extra}`;
   }
 
-  update(dt: number) {
-    const s = this.sim;
-    const cats = s.state.cat.found;
-    this.set('catCount', $(this.root, '#catCount'), 'text', String(cats));
-    if (cats > 0) $(this.root, '#catBtn').hidden = false;
-    // Look 5.9: the house shows a badge while a landmark (or the fountain) is ready to wake; a tap then flies there.
-    const wakeReady = s.areas.revealed().some((id) => s.areas.fog(id) !== 'cleared' && s.areas.ready(id));
-    const homeB = $(this.root, '#homeBtn');
-    this.set('homeReady', homeB, 'cls', wakeReady ? '1' : '0', 'ready');
-    this.set('homeTitle', homeB, 'title', wakeReady ? 'A landmark is ready to wake: look at it from above' : 'Home (Home key)');
+  private glyphKey = '';
 
+  update(dt: number) {
+    // every panel's glyphs follow the device in hand and the bindings (Back, the tab buttons)
+    const st = this.hud.glyphStyle;
+    const b = this.hud.bindings;
+    const key = `${st}|${b ? `${b.keys.prevTab}|${b.keys.nextTab}|${b.pad.prevTab}|${b.pad.nextTab}|${b.pad.cancel}|${b.pad.menu}` : ''}`;
+    if (key !== this.glyphKey) {
+      this.glyphKey = key;
+      setPanelGlyphs(st, b);
+    }
     if (this.failTimer > 0) {
       this.failTimer -= dt;
       if (this.failTimer <= 0) $(this.root, '#fail').style.display = 'none';

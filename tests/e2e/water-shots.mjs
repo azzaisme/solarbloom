@@ -141,12 +141,14 @@ try {
   await page.keyboard.press('KeyQ');
   await page.waitForTimeout(800);
   const tray = await run(() => {
-    const t = document.querySelector('#buildTray');
+    // E23.11: the build menu sheet; the water pieces sit on its Water tab
+    const t = document.querySelector('#buildMenu');
+    for (let i = 0; i < 8 && document.querySelector('#buildMenu [role=tab][aria-selected=true]')?.textContent !== 'Water'; i++) window.solarbloom.hud.buildMenu.tab(1);
     const vis = (sel) => {
       const e = document.querySelector(sel);
       return !!e && e.getBoundingClientRect().width > 0;
     };
-    return { open: t?.classList.contains('open'), reservoir: vis('#buildTray [data-tool="reservoir"]'), pump: vis('#buildTray [data-tool="pump"]'), desal: vis('#buildTray [data-tool="desalination"]'), pipe: vis('#buildTray [data-tool="pipe"]') };
+    return { open: t?.classList.contains('open'), reservoir: vis('#buildMenu [data-tool="reservoir"]'), pump: vis('#buildMenu [data-tool="pump"]'), desal: vis('#buildMenu [data-tool="desalination"]'), pipe: vis('#buildMenu [data-tool="pipe"]') };
   });
   check(tray.open && tray.reservoir && tray.pump && tray.pipe, `the build menu shows the water pieces (${JSON.stringify(tray)})`);
   await shot('3-build-menu');
@@ -290,7 +292,10 @@ try {
     await frame(9.5, 8.5, 0.9, 0);
     await page.keyboard.press('KeyQ');
     await page.waitForTimeout(400);
-    await page.click('#buildTray [data-tool="pipe"]');
+    await run(() => {
+      for (let i = 0; i < 8 && !document.querySelector('#buildMenu [data-tool="pipe"]'); i++) window.solarbloom.hud.buildMenu.tab(1);
+    });
+    await page.dblclick('#buildMenu [data-tool="pipe"]'); // E23.11: a click selects, a double click takes it
     await page.waitForTimeout(400);
     await page.keyboard.press('KeyV');
     await settle(2500);
@@ -309,8 +314,8 @@ try {
     await shot('7-overlay');
     // the build bar shows the Water view's slot, lit, with its key; the first-time line is saved with the game
     const bar = await run(() => {
-      const el = document.querySelector('#buildbar .bslot.water');
-      return { slot: !!el, on: !!el?.classList.contains('on'), key: !!el?.querySelector('.key')?.innerHTML.trim(), label: el?.querySelector('.sl')?.textContent.trim(), saved: window.solarbloom.sim.state.salvage.seen?.includes('tip:waterView') };
+      const el = document.querySelector('#buildbar .bmode.water');
+      return { slot: !!el, on: !!el?.classList.contains('on'), key: !!el?.querySelector('.bg')?.innerHTML.trim(), label: el?.querySelector('.bl')?.textContent.trim(), saved: window.solarbloom.sim.state.salvage.seen?.includes('tip:waterView') };
     });
     check(bar.slot && bar.on && bar.key && bar.label === 'Water' && bar.saved, `the build bar's Water slot, lit, with its key; the first-time line saved (${JSON.stringify(bar)})`);
     // the dry planter's red ring, closer

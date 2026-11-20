@@ -1,5 +1,5 @@
 // City 14.5: no HUD overlap on phone and desktop at near, mid and far zoom, with the busiest HUD we can make
-// (an objective, an open area panel, a hint and a toast). Screenshots go to
+// (an objective, an open area panel and a toast; E23.11: with the minimap, the prompt and the shortcut dock). Screenshots go to
 // docs/review/hud-*.png.
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -11,7 +11,7 @@ mkdirSync(dir, { recursive: true });
 const server = await preview({ preview: { port: 4197, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 let fails = 0;
-const PANELS = ['#res', '#obj', '#hotbar', '#hint', '#inspect', '#toasts', '#catPanel', '#combo', '#chips', '#quick'];
+const PANELS = ['#res', '#obj', '#hotbar', '#inspect', '#toasts', '#catPanel', '#minimap', '#prompt', '#dock'];
 try {
   for (const [name, w, h] of [['phone', 390, 844], ['desktop', 1280, 800]]) {
     const page = await browser.newPage({ viewport: { width: w, height: h } });
@@ -37,7 +37,7 @@ try {
         s.areas.clear(id, true);
         last = id;
       }
-      // Busy HUD: an area panel, a toast, a hint.
+      // Busy HUD: an area panel and a toast.
       g.hud.toast('✨ A busy moment<small>Checking nothing overlaps.</small>', 'gold', 30);
       // the next goal's landmark, or the last woken area's when every open area is awake
       const lm = s.areas.landmark(s.areas.nextGoal() ?? last);

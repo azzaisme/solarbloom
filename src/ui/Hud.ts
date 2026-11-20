@@ -2,7 +2,7 @@ import type { AreaMode } from '../core/types';
 import type { BuildableType, MachineData } from '../core/types';
 import { MACHINES } from '../data/machines';
 import type { Sim } from '../gameplay/Sim';
-import { ICONS, LOGO_MARK, hasEmoji, iconize, installIconDefs, plain } from './Icons';
+import { ICONS, hasEmoji, iconize, installIconDefs, plain } from './Icons';
 import { Prompt } from './Prompt';
 import { plainWords } from './words';
 import { ObjectiveCard } from './ObjectiveCard';
@@ -13,6 +13,7 @@ import { Backpack } from './Backpack';
 import { CraftTable } from './CraftTable';
 import { ChargeMeter } from './ChargeMeter';
 import { LoadWheel } from './LoadWheel';
+import { Dock, type DockAction } from './Dock';
 import type { SetProp } from './HudPart';
 import type { GlyphSetting, GlyphStyle } from './Glyphs';
 
@@ -29,12 +30,15 @@ export interface HudCallbacks {
   selectTool(t: Tool): void;
   /** E18: `hubId|role|slot` (slot 2 on a Fleet Hub), or `hubId|role|drone|index` for a Megahub drone. */
   chooseRole(key: string): void;
-  /** Phase 5 E15: the 🐾 chip: show where a hinted cat hides. */
-  findCat(): void;
   /** E20.2 (#285): the key or pad button bound to an action, as the player last used them (for hint text). */
   keyFor(a: Action): string;
-  /** Look 5.9: the house button: the park, or (when something is ready) the next area that needs attention. */
-  goHome(attention: boolean): void;
+  /** E23.11: a shortcut dock button was clicked: open the backpack, the map or the pause menu (as its button does). */
+  dock(a: DockAction): void;
+  /** E23.11: a build dock or build menu button was clicked: the action its button stands for (a slot, a view, Remove,
+   *  the build menu, Back). */
+  buildAct(a: Action): void;
+  /** E23.11 (#344): the build menu pinned something: what hotbar slots 1–9 hold now (saved with the settings). */
+  setHotbar(slots: string[]): void;
   skipCinematic(): void;
   closeInspect(): void;
   /** Wake a city landmark (by machine id). */
@@ -131,10 +135,11 @@ function esc(s: string) {
 /**
  * DOM HUD. Reads sim state each frame (cheaply, with change detection); never mutates the sim directly.
  *
- * E22.5 (#342): the shell over the HUD's parts, laid out as the epic's table: the objective card top left
- * (ObjectiveCard), bloombot's charge top right (ChargeMeter: the only meter, E23.1.4), the minimap bottom left, the prompt at the bottom centre
- * with the build hotbar above it while build mode is open (Prompt, Hotbar), toasts bottom right (Toasts), and
- * the panels it opens (Panels). Its public methods are the game's single way in, and pass on to the parts.
+ * E22.5 (#342) / E23.11: the shell over the HUD's parts, laid out as the Sunlit Glass walking board
+ * (docs/art/ui-sunlit-glass/Walk.dc.html, styled by hud.css): the objective card top left (ObjectiveCard), bloombot's
+ * charge top right (ChargeMeter: the only meter, E23.1.4), the painted minimap bottom left, the prompt at the bottom
+ * centre with the build hotbar above it while build mode is open (Prompt, Hotbar), toasts bottom right (Toasts) over
+ * the shortcut dock (Dock), and the panels it opens (Panels). Its public methods are the game's single way in, and pass on to the parts.
  */
 export class Hud {
   /** Look 1.11: the graphics tier in effect (shown next to Auto in Settings). */
@@ -161,6 +166,11 @@ export class Hud {
   readonly charge: ChargeMeter;
   /** E23.2.2: the pulse load wheel */
   readonly loadWheel: LoadWheel;
+  /** E23.11: the shortcut dock (Backpack, Map, Menu), bottom right */
+  readonly dock: Dock;
+  /** E23.11: the button pictures in use and the bindings they name (set by setKeyMap; the charge's Eat hint and the dock read them) */
+  glyphStyle: GlyphStyle = 'keys';
+  bindings?: Bindings;
 
   constructor(
     readonly sim: Sim,
@@ -177,17 +187,18 @@ export class Hud {
     this.panels = new Panels(this);
     this.charge = new ChargeMeter(this);
     this.loadWheel = new LoadWheel(this);
+    this.dock = new Dock(this);
     this.root.innerHTML = iconize(this.template());
     // Third person: the build crosshair in the middle of the screen (shown while aiming a build: `.aiming`)
     const xh = document.createElement('div');
     xh.className = 'crosshair';
     xh.setAttribute('aria-hidden', 'true');
     this.root.appendChild(xh);
-    this.objective.wire();
     this.hotbar.wire();
     this.panels.wire();
     this.charge.wire();
     this.loadWheel.wire();
+    this.dock.wire();
     this.wire();
     this.prompt = new Prompt(this.root);
     this.backpack = new Backpack(this.root, { sim: this.sim });
@@ -196,45 +207,12 @@ export class Hud {
 
   private template() {
     return `
-      <div id="logo" role="img" aria-label="Solarbloom">${LOGO_MARK}<span class="wm">Solarbloom</span></div>
       <div id="res" role="group" aria-label="Charge"></div>
-      <div id="obj" class="panel" role="region" aria-label="Objective">
-        <div class="ohead">
-          <span class="oic" aria-hidden="true">${ICONS.biomass}</span>
-          <div class="otx"><span class="olab">Objective</span><h3 id="objTitle">Wake the fountain</h3></div>
-          <span class="ock" id="objCheck" role="img" aria-label="Not done yet"></span>
-          <button class="otog" id="objToggle" aria-expanded="false" aria-controls="objMore" aria-label="Show objective details" title="Details"><i></i></button>
-        </div>
-        <div class="next" id="objNext"></div>
-        <div id="objMore">
-          <div class="pct" id="objPct">0% restored</div>
-          <div class="pbar"><i id="objBar" style="width:0%"></i></div>
-          <ul id="objList"></ul>
-        </div>
-        <div id="objAct"></div>
-      </div>
-      <div id="quick" role="toolbar" aria-label="Quick actions">
-        <button class="rbtn qbtn" id="homeBtn" aria-label="Home: fly to the park (Home)" title="Home (Home key)">${ICONS.home}<span class="qbadge" aria-hidden="true"></span></button>
-        <button class="rbtn qbtn" id="catBtn" aria-label="Lucky Cat garden" title="Lucky Cat garden" hidden>${ICONS.garden}<span class="qn" id="catCount">0</span></button>
-        <button class="rbtn qbtn" id="pawBtn" aria-label="Paw prints: which way a hiding cat went" title="Paw prints: a Lucky Cat is hiding. Which way do they lead?" hidden>${ICONS.paw}<span class="qn" id="pawCount">0</span></button>
-      </div>
-      <div id="combo"><div class="cbody panel"><div id="chainAreas"></div></div><div id="feed"></div></div>
-      <div id="hotbar" class="panel">${Hotbar.template()}</div>
+      ${ObjectiveCard.template()}
       ${BuildBar.template()}
-      <div id="hint" class="panel hide"><span id="hintText"></span><button aria-label="Dismiss hint">×</button></div>
       <div id="toasts" role="status" aria-live="polite"></div>
       <div id="saveLeaf" role="img" aria-label="Saved">${ICONS.biomass}</div>
       <div id="catPanel" class="panel" hidden><button aria-label="Dismiss">×</button><div id="catPanelBody"></div></div>
-      <div id="intro" hidden><div class="panel card-intro">
-        <h2>${LOGO_MARK}<span>Welcome to Solarbloom</span></h2>
-        <p>The fog came and the island city emptied. A small boat has brought you, bloombot, from the mainland to bring it back to life.</p>
-        <ol>
-          <li><b>Salvage what lies around</b>: Scrap, Seeds and more, by hand. Tidied ground can be restored.</li>
-          <li><b>Pulse dead ground back to life</b>, and bring the fountain what it asks for. Each delivery gives you a new way to move.</li>
-          <li><b>Clear the way</b> into the city's regions and wake the robot who sleeps in each.</li>
-        </ol>
-        <button id="introGo">Start restoring ✨</button>
-      </div></div>
       <div id="tip" class="panel"></div>
       <div id="fail"></div>
       <div id="plotPicker" class="drawer panel" aria-label="Plot picker"><h2><span id="ppTitle">Plot</span> <button aria-label="Close plot picker">×</button></h2><p id="ppSub" class="pp-sub"></p><div id="ppList"></div></div>
@@ -275,17 +253,8 @@ export class Hud {
   pickup(name: string, n: number) {
     this.toasts.pickup(name, n);
   }
-  feed(text: string) {
-    this.toasts.feed(text);
-  }
   catReward(title: string, detail: string) {
     this.panels.catReward(title, detail);
-  }
-  showIntro() {
-    this.panels.showIntro();
-  }
-  get introOpen() {
-    return this.panels.introOpen;
   }
   nudge(sel: string, secs = 4) {
     this.objective.nudge(sel, secs);
@@ -302,10 +271,20 @@ export class Hud {
   get trayOpen() {
     return this.hotbar.trayOpen;
   }
+  /** E23.11 (#344): the build menu sheet (its tabs, Pin to a slot, Back). */
+  get buildMenu() {
+    return this.hotbar.menu;
+  }
   setKeyMap(style: GlyphStyle | undefined, b?: Bindings) {
     this.hotbar.setKeyMap(style, b);
     this.buildBar.setKeys(style, b);
+    // E23.11: the charge's Eat hint and the dock draw their pictures from these (they redraw when either changes)
+    this.glyphStyle = style ?? 'keys';
+    if (b) this.bindings = b;
+    this.keyMapVersion++;
   }
+  /** bumped by every setKeyMap (a rebind keeps the same Bindings object, so parts compare this) */
+  keyMapVersion = 0;
   /** E22.6: the backpack screen (Tab / I, d-pad up). */
   toggleBackpack(open = !this.backpack.isOpen) {
     if (open) this.backpack.open();
@@ -337,9 +316,9 @@ export class Hud {
     this.charge.update(dt);
     this.loadWheel.update(dt);
     this.hotbar.update();
-    this.updateCatChip();
     this.panels.update(dt);
     this.objective.update();
+    this.dock.update(dt);
   }
 
   /** Writes a value to the DOM only when it changed since the last write under that key. */
@@ -375,11 +354,6 @@ export class Hud {
   /** E22.10: game text in plain words, no rates. */
   words(text: string): string {
     return plainWords(text);
-  }
-
-  /** City 10.6: the running chain's per-area summary under the combo (empty hides it). */
-  chainAreas(lines: string[]) {
-    this.set('chainAreas', $(this.root, '#chainAreas'), 'html', lines.map((l) => `<div>${esc(l)}</div>`).join(''));
   }
 
   cinematic(on: boolean, title = '') {
@@ -421,23 +395,16 @@ export class Hud {
 
   /** Rectangles the Lucky Cat must never hide under. */
   blockedRects(): DOMRect[] {
-    const extra = [...this.root.querySelectorAll<HTMLElement>('#minimap:not([hidden])')].map((e) => e.getBoundingClientRect());
-    return ['#logo', '#res', '#obj', '#hotbar', '#hint', '#combo', '#quick', '#prompt'].map((s) => $(this.root, s).getBoundingClientRect()).concat(extra);
+    return ['#res', '#obj', '#buildbar:not([hidden])', '#prompt', '#dock', '#minimap:not([hidden])']
+      .map((s) => this.root.querySelector<HTMLElement>(s))
+      .filter((e): e is HTMLElement => !!e)
+      .map((e) => e.getBoundingClientRect());
   }
 
   setDebug(text: string | null) {
     const el = $(this.root, '#fps');
     el.classList.toggle('on', text !== null);
     if (text !== null) el.textContent = text;
-  }
-
-  /** Phase 5 E15: the paw chip once a cat has been hiding a while. */
-  private updateCatChip() {
-    const s = this.sim;
-    const hinted = s.cat.spots().filter((c) => s.cat.hinted(c)).length;
-    const paw = $(this.root, '#pawBtn');
-    if (paw.hidden !== !hinted) paw.hidden = !hinted;
-    this.set('pawN', $(this.root, '#pawCount'), 'text', String(hinted));
   }
 
 }

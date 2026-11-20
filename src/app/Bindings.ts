@@ -29,6 +29,10 @@ export type Action =
   | 'removeMode'
   | 'waterOverlay'
   | 'powerOverlay'
+  | 'viewCycle'
+  | 'slotPrev'
+  | 'slotNext'
+  | 'pinSlot'
   | 'slot1'
   | 'slot2'
   | 'slot3'
@@ -99,6 +103,10 @@ export const ACTIONS: readonly ActionDef[] = [
   A('removeMode', 'Remove mode', 'build', 'build'),
   A('waterOverlay', 'Water view (in build mode)', 'build', 'build'),
   A('powerOverlay', 'Power view (in build mode)', 'build', 'build'),
+  // E23.11: the pad's build dock: d-pad up changes the view, left and right walk the hotbar slots
+  A('viewCycle', 'Change the view', 'build', 'build'),
+  A('slotPrev', 'Previous build slot', 'build', 'build'),
+  A('slotNext', 'Next build slot', 'build', 'build'),
   A('slot1', 'Hotbar slot 1', 'build', 'world'),
   A('slot2', 'Hotbar slot 2', 'build', 'world'),
   A('slot3', 'Hotbar slot 3', 'build', 'world'),
@@ -108,6 +116,8 @@ export const ACTIONS: readonly ActionDef[] = [
   A('slot7', 'Hotbar slot 7', 'build', 'world'),
   A('slot8', 'Hotbar slot 8', 'build', 'world'),
   A('slot9', 'Hotbar slot 9', 'build', 'world'),
+  // E23.11 (#344): in the build menu, pin the piece shown to a hotbar slot
+  A('pinSlot', 'Pin to a hotbar slot', 'build', 'panel'),
   A('backpack', 'Backpack', 'menus', 'world'),
   A('map', 'Map', 'menus', 'world'),
   A('photo', 'Photo mode', 'menus', 'world'),
@@ -126,7 +136,11 @@ export const FIXED_KEY = 'Escape';
 /** The pad's Menu button always opens the menu (it can't be unbound or moved). */
 export const FIXED_PAD: Partial<Record<Action, number>> = { menu: 9 };
 
-/** Saved bindings carry this version; older ones are reset once, with a notice (decision 6). */
+/**
+ * Saved bindings carry this version; older ones are reset once, with a notice (decision 6). Bump it only when a
+ * saved map can no longer be read: a save holds just what differs from the defaults, so new or moved defaults
+ * reach everyone who never rebound them without a bump (E23.11 kept 2 when the d-pad got its build-mode jobs).
+ */
 export const BINDINGS_VERSION = 2;
 
 /** The keyboard defaults from the epic's table. */
@@ -150,6 +164,11 @@ export function defaultKeys(): Record<Action, string[]> {
     removeMode: ['KeyX'],
     waterOverlay: ['KeyV'],
     powerOverlay: ['KeyO'],
+    // E23.11: the pad's d-pad jobs in build mode (keys can be given to them in Settings)
+    viewCycle: [],
+    slotPrev: [],
+    slotNext: [],
+    pinSlot: ['KeyP'],
     slot1: ['Digit1'],
     slot2: ['Digit2'],
     slot3: ['Digit3'],
@@ -193,8 +212,12 @@ export function defaultPad(): Partial<Record<Action, number>> {
     rotate: 5,
     rotateBack: 4,
     removeMode: 7,
-    waterOverlay: 14, // d-pad left (Harvest / Eat while walking)
-    powerOverlay: 15, // d-pad right (Pin next request while walking)
+    // E23.11: in build mode d-pad up changes the view (off, Power, Water) and left / right walk the hotbar slots;
+    // walking, the same buttons open the backpack, eat and pin the next request. Water and Power views stay V / O.
+    viewCycle: 12,
+    slotPrev: 14,
+    slotNext: 15,
+    pinSlot: 3, // Y in the build menu
     backpack: 12,
     map: 8,
     cancel: 1,
@@ -284,6 +307,14 @@ export class Bindings {
       if (!ACTIONS.some((x) => x.id === a)) continue; // an action that no longer exists (E23.1.2: Bloom Frenzy)
       if (b === null || b === undefined) delete this.pad[a as Action];
       else this.pad[a as Action] = b;
+    }
+    // E23.11: a default added after a player rebound something never takes that player's input: when a new
+    // default lands on a button or key the save gave to another action (where both apply), the new one starts
+    // unbound instead. No version bump is needed: saves hold only what differs from the defaults.
+    for (const a of ACTIONS) {
+      const b = this.pad[a.id];
+      if (b !== undefined && !(saved?.pad && a.id in saved.pad) && ACTIONS.some((o) => o.id !== a.id && saved?.pad?.[o.id] === b && contextsMeet(a.context, o.context))) delete this.pad[a.id];
+      if (!saved?.keys?.[a.id]) this.keys[a.id] = this.keys[a.id].filter((c) => !ACTIONS.some((o) => o.id !== a.id && saved?.keys?.[o.id]?.includes(c) && contextsMeet(a.context, o.context)));
     }
     // The fixed inputs are always where they belong, whatever a save says.
     this.keys.cancel = [FIXED_KEY];

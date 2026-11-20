@@ -16,9 +16,9 @@ mkdirSync(dir, { recursive: true });
 const server = await preview({ preview: { port: 4198, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 /** Everything that can be on the walking view. */
-const PARTS = ['#res', '#obj', '#hotbar', '#hint', '#toasts', '#quick', '#prompt', '#minimap', '#buildbar', '#combo'];
-/** Old-city rules: plain walking shows these and nothing else (the epic's table). */
-const FIVE = new Set(['#obj', '#res', '#minimap', '#prompt', '#toasts']);
+const PARTS = ['#res', '#obj', '#hotbar', '#toasts', '#prompt', '#minimap', '#buildbar', '#dock'];
+/** Old-city rules: plain walking shows these and nothing else (the epic's table), and E23.11's quiet shortcut dock. */
+const FIVE = new Set(['#obj', '#res', '#minimap', '#prompt', '#toasts', '#dock']);
 const SIZES = [
   [1280, 800],
   [1920, 1080],
@@ -84,7 +84,7 @@ try {
         await page.waitForTimeout(1500);
         const rects = await visibleRects(page, PARTS);
         const issues = overlaps(rects, w, h);
-        for (const r of rects) if (!FIVE.has(r.sel)) issues.push(`${r.sel} is on the walking view (only the five parts may be)`);
+        for (const r of rects) if (!FIVE.has(r.sel)) issues.push(`${r.sel} is on the walking view (only the five parts and the dock may be)`);
         // Look 5.2: no emoji on screen (game strings carry them; the HUD draws icons instead).
         const emoji = await page.evaluate(() => {
           const t = document.getElementById('hud').innerText;

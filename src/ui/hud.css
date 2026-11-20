@@ -1,0 +1,191 @@
+/* ───────── E23.11: Sunlit Glass, the calm walking HUD ─────────
+   The design boards: docs/art/ui-sunlit-glass/Walk.dc.html (keyboard) and WalkPad.dc.html (gamepad, low charge,
+   the load wheel). Five calm parts while walking: the objective (top left), charge, the only meter (top right),
+   the painted minimap with the clock and weather (bottom left), one prompt (bottom centre), toasts (bottom right),
+   and under the toasts a quiet shortcut dock (Backpack, Map, Menu with their button pictures).
+   Every colour is a token from the first :root of styles.css. Text in cards is 16 px or more. */
+
+/* ── the paper card every walking part is made of ── */
+#hud .sg-card {
+  background: var(--paper-a);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--card-lift);
+  backdrop-filter: blur(10px) saturate(1.15);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  color: var(--ink);
+  font-family: var(--font-ui);
+}
+/* the leaf badge: an icon in a leaf-shaped tile (round with one sharp corner), the system's signature shape */
+#hud .sg-badge { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 50% 50% 50% 6px; background: var(--leaf-soft); color: var(--leaf-ink); }
+#hud .sg-badge.sun { background: var(--sun-soft); color: var(--sun-ink); }
+#hud .sg-badge.sky { background: var(--sky-soft); color: var(--sky-ink); }
+#hud .sg-badge.clay { background: var(--clay-soft); color: var(--clay-ink); }
+#hud .sg-badge.sm { width: 32px; height: 32px; }
+/* a bar: a paper well with a rounded fill */
+#hud .sg-bar { position: relative; display: block; height: 12px; border-radius: 999px; background: var(--paper-3); overflow: hidden; box-shadow: var(--well); }
+#hud .sg-bar > i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 999px; background: var(--leaf-bar); transition: width .3s; }
+
+/* ── stroke icons drawn as masks, coloured by currentColor ── */
+#hud .sg-ic { display: inline-block; width: 22px; height: 22px; flex: none; background: currentColor; -webkit-mask: var(--i) center / contain no-repeat; mask: var(--i) center / contain no-repeat; }
+#hud .sg-ic.s { width: 18px; height: 18px; }
+#hud .sg-ic.l { width: 28px; height: 28px; }
+.i-pin { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z'/%3E%3Ccircle cx='12' cy='10' r='2.3'/%3E%3C/svg%3E"); }
+.i-cell { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2.5' y='7' width='16' height='10' rx='3'/%3E%3Cpath d='M21.5 10.5v3M11.5 9l-2.5 3.5h3L9.5 15'/%3E%3C/svg%3E"); }
+.i-pack { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.5 7V5.5a3.5 3.5 0 0 1 7 0V7M5 10.5A3.5 3.5 0 0 1 8.5 7h7a3.5 3.5 0 0 1 3.5 3.5V19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2zM9 14h6v3H9z'/%3E%3C/svg%3E"); }
+.i-map { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6.5l6-2.5 6 2.5 6-2.5v13.5l-6 2.5-6-2.5-6 2.5zM9 4v13.5M15 6.5V20'/%3E%3C/svg%3E"); }
+.i-menu { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M5 7h14M5 12h14M5 17h14'/%3E%3C/svg%3E"); }
+.i-heart { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linejoin='round'%3E%3Cpath d='M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.3a4.2 4.2 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z'/%3E%3C/svg%3E"); }
+.i-drop { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linejoin='round'%3E%3Cpath d='M12 3c3 4 6.5 7.5 6.5 11.5a6.5 6.5 0 0 1-13 0C5.5 10.5 9 7 12 3z'/%3E%3C/svg%3E"); }
+.i-sprout { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21v-8M12 13c0-4-3-6.5-7.5-6.5 0 4 3 6.5 7.5 6.5zM12 11c0-4 3-6.5 7.5-6.5 0 4-3 6.5-7.5 6.5z'/%3E%3C/svg%3E"); }
+.i-spark { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linejoin='round'%3E%3Cpath d='M12 3l2 6.5 6.5 2.5-6.5 2.5L12 21l-2-6.5L3.5 12 10 9.5z'/%3E%3C/svg%3E"); }
+/* the weather on the minimap's rim */
+.i-sun { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3Cpath d='M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8'/%3E%3C/svg%3E"); }
+.i-moon { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linejoin='round'%3E%3Cpath d='M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z'/%3E%3C/svg%3E"); }
+.i-cloud { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linejoin='round'%3E%3Cpath d='M7 18.5h10a4 4 0 0 0 .4-8 5.5 5.5 0 0 0-10.6-1.2A4.6 4.6 0 0 0 7 18.5z'/%3E%3C/svg%3E"); }
+.i-rain { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 14.5h10a3.8 3.8 0 0 0 .4-7.6 5.3 5.3 0 0 0-10.2-1.1A4.4 4.4 0 0 0 7 14.5zM8.5 17.5l-1 3M12.5 17.5l-1 3M16.5 17.5l-1 3'/%3E%3C/svg%3E"); }
+.i-storm { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 14.5h10a3.8 3.8 0 0 0 .4-7.6 5.3 5.3 0 0 0-10.2-1.1A4.4 4.4 0 0 0 7 14.5zM12.5 16l-2 3.5h3l-2 3'/%3E%3C/svg%3E"); }
+.i-wind { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M3 9h11a3 3 0 1 0-3-3M3 15h15a3 3 0 1 1-3 3M3 12h7'/%3E%3C/svg%3E"); }
+.i-fog { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M4 8h12M7 12h13M4 16h12M8 20h9'/%3E%3C/svg%3E"); }
+
+/* ── 1. the objective card (top left) ── */
+#obj { position: absolute; left: calc(18px + var(--safe-l)); top: calc(18px + var(--safe-t)); width: 380px; max-width: calc(100vw / var(--ui-zoom, 1) - 314px); padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start; }
+#obj .otx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+#obj h3 { margin: 0; font: 900 18px/1.3 var(--font-ui); letter-spacing: 0; color: var(--ink); overflow-wrap: anywhere; }
+#obj h3 .icon { display: none; } /* the badge leads; a glyph in the goal would repeat it */
+#obj .oprog { display: flex; align-items: center; gap: 10px; }
+#obj .oprog[hidden] { display: none; }
+#obj .oprog .sg-bar { flex: 1; }
+#obj .oprog .ocn { font: 800 16px var(--font-ui); color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#obj.nudge { animation: nudge 1.6s ease-in-out infinite; }
+
+/* ── 2. charge (top right): the only meter. Calm when full, amber ring when low, grey at zero ── */
+#res { position: absolute; top: calc(18px + var(--safe-t)); right: calc(18px + var(--safe-r)); width: 248px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+#chargeRow { width: 100%; padding: 10px 14px 12px; cursor: default; transition: opacity .6s, box-shadow .3s; }
+#chargeRow .ch-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+#chargeRow .nm { flex: 1; font: 800 17px var(--font-ui); color: var(--ink); }
+#chargeRow .pct { font: 800 16px var(--font-ui); color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#chargeRow .sg-bar { height: 14px; }
+#chargeRow .sg-bar > i { background: var(--sun-bar); transition: width .2s; }
+#chargeRow .ch-eat { display: none; align-items: center; gap: 8px; margin-top: 10px; font: 800 16px var(--font-ui); color: var(--ink); }
+#chargeRow .ch-eat .ch-g { display: inline-grid; place-items: center; height: 30px; }
+#chargeRow.can-eat .ch-eat { display: flex; }
+#chargeRow.low { box-shadow: var(--ring-low), var(--card-lift); }
+#chargeRow.low .pct { color: var(--sun-ink); }
+#chargeRow.low .sg-bar > i { background: var(--low-bar); }
+#chargeRow.low .sg-badge { animation: charge-low 1.6s ease-in-out infinite; }
+#chargeRow.empty .sg-badge { background: var(--paper-3); color: var(--ink-2); }
+#chargeRow.empty .pct { color: var(--ink-2); }
+#chargeRow.eating .sg-bar > i { background: var(--leaf-bar); }
+#chargeRow.calm { opacity: .35; }
+@keyframes charge-low { 50% { opacity: .5; } }
+/* the pulse load chip under the charge ("Seeds loaded"), unless the load is nothing */
+#loadChip { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px 0 8px; border-radius: 999px; background: var(--paper-a); box-shadow: var(--shadow-sm); font: 800 16px var(--font-ui); color: var(--ink); white-space: nowrap; }
+#loadChip[hidden] { display: none; }
+#loadChip.out { opacity: .6; }
+#loadChip .lc-ic { display: inline-grid; place-items: center; }
+#loadChip .lc-ic .icon { width: 20px; height: 20px; }
+
+/* ── 3. the painted minimap (bottom left): a white rim, north up, the clock and weather on the rim ── */
+#minimap { position: absolute; left: calc(18px + var(--safe-l)); bottom: calc(22px + var(--safe-b)); width: 196px; height: 196px; padding: 9px; border-radius: 50%; background: var(--mm-rim); box-shadow: var(--mm-rim-shadow); pointer-events: none; }
+#minimap[hidden] { display: none; }
+#minimap .mm-disc { position: relative; width: 178px; height: 178px; border-radius: 50%; overflow: hidden; background: var(--mm-fog); isolation: isolate; }
+#minimap .mm-disc::after { content: ''; position: absolute; inset: 0; border-radius: 50%; box-shadow: var(--mm-disc-edge); pointer-events: none; }
+#minimap .mm-map { position: absolute; left: 0; top: 0; display: block; transform-origin: 0 0; will-change: transform; }
+#minimap .mm-bot { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; overflow: visible; }
+#minimap .mm-bot .mm-a1 { stop-color: var(--mm-arrow); }
+#minimap .mm-bot .mm-a2 { stop-color: var(--mm-arrow-2); }
+#minimap .mm-bot .mm-fill { stroke: var(--mm-ring); }
+#minimap .mm-bot .mm-ink { stroke: var(--mm-arrow-ink); }
+#minimap .mm-shadow { position: absolute; left: 50%; top: 50%; width: 26px; height: 12px; margin: -2px 0 0 -13px; border-radius: 50%; background: var(--mm-shadow); }
+#minimap .mm-n { position: absolute; left: 50%; top: -15px; transform: translateX(-50%); width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--mm-rim); border: 2.5px solid var(--ink); box-shadow: var(--shadow-sm); font: 900 17px/1 var(--font-ui); color: var(--ink); }
+#minimap .mm-rim { position: absolute; left: 50%; bottom: -14px; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--paper); box-shadow: var(--shadow-sm); font: 800 16px var(--font-ui); color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#minimap .mm-rim[hidden] { display: none; }
+#minimap .mm-wx { color: var(--sun-ink); }
+#minimap .mm-wx.i-cloud, #minimap .mm-wx.i-rain, #minimap .mm-wx.i-fog, #minimap .mm-wx.i-wind { color: var(--sky-ink); }
+#minimap .mm-wx.i-storm { color: var(--clay-ink); }
+#minimap .mm-wx.i-moon { color: var(--sky-ink); }
+
+/* ── 4. the one prompt (bottom centre): a paper pill, the button's picture in front, a hold ring round it ── */
+#prompt { position: absolute; left: 50%; bottom: calc(26px + var(--safe-b)); transform: translateX(-50%); z-index: 4; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: calc(100vw / var(--ui-zoom, 1) - 560px); }
+#prompt[hidden] { display: none; }
+#prompt .pr-main { display: flex; align-items: center; gap: 12px; min-height: 54px; max-width: 100%; padding: 6px 22px 6px 10px; border-radius: 999px; font: 900 20px/1.2 var(--font-ui); color: var(--ink); }
+#prompt .pr-sub { display: flex; align-items: center; gap: 10px; min-height: 40px; max-width: 100%; padding: 4px 16px 4px 7px; border-radius: 999px; font: 800 16px/1.2 var(--font-ui); color: var(--ink); }
+#prompt .pr-text { min-width: 0; }
+#prompt .pr-glyph { position: relative; display: inline-grid; place-items: center; flex: none; min-width: 40px; height: 30px; }
+#prompt .pr-sub .pr-glyph { transform: scale(.85); }
+#prompt .pr-glyph svg.glyph { width: 40px; height: 30px; }
+/* a hold: the picture sits in a ring that fills leaf green while the button is held */
+#prompt .pr-glyph.pr-hold { width: 44px; min-width: 44px; height: 44px; border-radius: 50%; }
+#prompt .pr-ring { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(var(--leaf) calc(var(--p, 0) * 360deg), var(--paper-3) 0); }
+#prompt .pr-ring::before { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--paper); }
+#prompt .pr-hold svg.glyph { position: relative; width: 32px; height: 24px; }
+#prompt .pr-hold kbd { position: relative; }
+/* refused: clay, and the reason after the verb */
+#prompt .pr-refused { background: var(--clay-soft); border-color: var(--clay); }
+#prompt .pr-refused .pr-glyph { opacity: .6; }
+#prompt .pr-refused .pr-text { color: var(--ink-2); }
+#prompt .pr-why { font: 800 16px var(--font-ui); color: var(--clay-ink); white-space: nowrap; }
+#prompt kbd { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 8px; border-radius: var(--r-key); background: var(--key-bg); border: 1.5px solid var(--key-edge); border-bottom-width: 3px; font: 900 15px/1 var(--font-ui); color: var(--key-ink); }
+body.photo #prompt { display: none; }
+
+/* ── 5. toasts (bottom right, above the dock): paper cards, newest at the bottom ── */
+#toasts { position: absolute; right: calc(18px + var(--safe-r)); bottom: calc(112px + var(--safe-b)); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
+#toasts .toast { display: flex; align-items: center; gap: 12px; max-width: 260px; min-height: 52px; padding: 10px 18px 10px 10px; border-radius: 26px; font: 800 16px/1.3 var(--font-ui); color: var(--ink); animation: sg-toast-in .35s cubic-bezier(.2, 1.6, .4, 1); transition: opacity .5s, transform .5s; }
+#toasts .toast .tb { min-width: 0; }
+#toasts .toast small { display: block; margin-top: 2px; font: 700 16px/1.3 var(--font-ui); color: var(--ink-2); }
+#toasts .toast .icon { width: 1.25em; height: 1.25em; vertical-align: -.28em; }
+#toasts .toast small .icon { width: 1.1em; height: 1.1em; vertical-align: -.22em; }
+#toasts .toast.gold .sg-badge { background: var(--sun-soft); color: var(--sun-ink); }
+#toasts .toast.cat .sg-badge { background: var(--clay-soft); color: var(--clay-ink); }
+#toasts .toast .sg-badge .mi { width: 20px; height: 20px; }
+@keyframes sg-toast-in { from { transform: translateY(16px) scale(.94); opacity: 0; } }
+
+/* ── 6. the pulse load wheel: four round paper cards above the prompt for a moment ── */
+#loadWheel { position: absolute; left: 50%; bottom: calc(265px + var(--safe-b)); width: 0; height: 0; pointer-events: none; z-index: 6; }
+#loadWheel[hidden] { display: none; }
+#loadWheel .lw-opt { position: absolute; left: -45px; top: -45px; width: 90px; height: 90px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 0 6px; text-align: center; font: 800 16px/1.1 var(--font-ui); color: var(--ink); transition: transform .2s, opacity .2s, box-shadow .2s; animation: lw-in .18s ease-out; }
+#loadWheel .lw-opt[data-load="none"] { transform: translateY(-70px); }
+#loadWheel .lw-opt[data-load="seeds"] { transform: translateX(105px); }
+#loadWheel .lw-opt[data-load="rare"] { transform: translateY(70px); }
+#loadWheel .lw-opt[data-load="fertiliser"] { transform: translateX(-105px); }
+#loadWheel .lw-ic { display: grid; place-items: center; line-height: 1; }
+#loadWheel .lw-ic .icon { width: 26px; height: 26px; }
+#loadWheel .lw-opt.on { font-weight: 900; box-shadow: var(--focus-ring); z-index: 1; }
+#loadWheel .lw-opt.out { opacity: .55; }
+@keyframes lw-in { from { opacity: 0; } }
+
+/* ── 7. the shortcut dock (bottom right): a reminder of the buttons, clickable too ── */
+#dock { position: absolute; right: calc(18px + var(--safe-r)); bottom: calc(18px + var(--safe-b)); display: flex; gap: 12px; }
+#dock .dk { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0; border: 0; background: none; font: inherit; color: var(--ink); cursor: pointer; }
+#dock .dk .round { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; opacity: .82; transition: opacity .2s, transform .2s; }
+#dock .dk:hover .round, #dock .dk:focus-visible .round { opacity: 1; transform: translateY(-2px); }
+#dock .dk:focus-visible { outline: none; }
+#dock .dk:focus-visible .round { box-shadow: var(--focus-ring); }
+#dock .dk .dk-g { display: grid; place-items: center; height: 26px; opacity: .9; }
+#dock .dk .dk-g svg.glyph { width: 35px; height: 26px; }
+#dock .dk .dot { position: absolute; right: 2px; top: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--bloom); box-shadow: 0 0 0 2.5px var(--paper); }
+#dock .dk .dot[hidden] { display: none; }
+
+/* ── narrow windows (phones are not supported yet, but nothing may overlap): a slimmer charge card, the toasts
+   above the minimap, and no dock (it reminds keyboard and pad players of their buttons) ── */
+@media (max-width: 640px) {
+  #res { width: 150px; }
+  #chargeRow .nm { display: none; }
+  #obj { max-width: calc(100vw / var(--ui-zoom, 1) - 204px); padding: 12px; }
+  #obj h3 { font-size: 16px; }
+  #toasts { bottom: calc(250px + var(--safe-b)); }
+  #dock { display: none; }
+  #prompt { max-width: calc(100vw / var(--ui-zoom, 1) - 36px); bottom: calc(250px + var(--safe-b)); }
+}
+
+/* ── high contrast: solid paper, ink outlines, no soft ink ── */
+body.contrast #hud { --ink-2: var(--ink); --line: var(--ink); }
+body.contrast #hud .sg-card, body.contrast #loadChip, body.contrast #minimap .mm-rim { background: var(--paper); border: 2px solid var(--ink); backdrop-filter: none; -webkit-backdrop-filter: none; }
+body.contrast #dock .dk .round { opacity: 1; }
+body.contrast #hud .sg-bar { outline: 1.5px solid var(--ink); }
+/* solid glass (low tier, fewer effects) and touch screens: no live blur */
+body.solid-glass #hud .sg-card { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--paper); }
+@media (hover: none) {
+  #hud .sg-card { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--paper); }
+}

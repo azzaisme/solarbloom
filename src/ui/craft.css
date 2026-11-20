@@ -1,38 +1,41 @@
-/* E23.6.1: the crafting table. It shares the backpack's panel, grid and detail styles (backpack.css). */
+/* E23.6.1, E23.11 (Sunlit Glass): the crafting table, a centre sheet. panels.css draws the shell, the cells and the
+   detail column; this file the table's own lists (machines, decorations, the queue, upgrades, research). */
 #craftScreen { z-index: 11; }
-#craftScreen .panel.bp-card { width: min(980px, calc(96vw / var(--ui-zoom, 1))); height: min(680px, calc(92vh / var(--ui-zoom, 1))); max-height: none; }
-#craftScreen .set-h { margin: 4px 0 8px; font: 600 18px var(--font-display); color: var(--gold); }
-#craftScreen .bp-cell.cr-short .bp-count { color: var(--text-soft); }
-.cr-parts { display: flex; flex-wrap: wrap; gap: 4px 12px; }
-.cr-part { display: inline-flex; align-items: center; gap: 4px; font: 700 16px var(--font-ui); color: var(--text-strong); }
-.cr-part.cr-miss { color: var(--text-soft); }
-.cr-part small { font-size: 16px; }
-.cr-machines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.cr-machines li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 12px; border-radius: 12px; background: var(--glass-hi); border: 1px solid var(--edge-soft); }
-.cr-machines li b { font: 600 16px var(--font-display); color: var(--text-strong); min-width: 9em; }
-.cr-machines li.cr-short b { color: var(--text); }
-.cr-queue { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.cr-queue li { display: flex; align-items: center; gap: 8px; font: 700 16px var(--font-ui); color: var(--text-strong); }
-.cr-queue li button { margin-left: auto; min-height: 36px; padding: 2px 12px; border-radius: 10px; font: 600 16px var(--font-display); background: var(--glass-hi); border: 1px solid var(--edge); color: var(--text-strong); }
-.cr-bar { flex: 1; height: 8px; border-radius: 4px; background: var(--glass-sunk); border: 1px solid var(--edge-soft); overflow: hidden; }
-.cr-bar > i { display: block; height: 100%; background: var(--good); }
-.cr-upgrades { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.cr-upgrades li { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--glass-hi); border: 1px solid var(--edge-soft); }
-.cr-uhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.cr-uhead b { font: 600 17px var(--font-display); color: var(--text-strong); }
-.cr-each { font: 700 16px var(--font-ui); color: var(--text); }
-.cr-pips { display: inline-flex; gap: 4px; }
-.cr-pips i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--edge); background: transparent; }
-.cr-pips i.on { background: var(--gold); border-color: var(--gold); }
-.cr-upgrades button { align-self: flex-start; min-height: 40px; padding: 4px 14px; border-radius: 12px; font: 600 16px var(--font-display); background: var(--glass-hi-2); border: 1px solid var(--edge); color: var(--text-strong); }
-.cr-upgrades button[aria-disabled=true] { color: var(--text-dim); border-color: var(--edge-soft); background: var(--btn-off); }
-.rs-projects { display: flex; flex-direction: column; gap: 6px; }
-.rs-projects .bp-req { grid-template-columns: 1fr; }
-.rs-projects .bp-req[aria-selected=true] { border-color: var(--edge-strong); background: var(--glass-hi-2); }
-.rs-bar.rs-off > i { background: var(--text-soft); }
-#craftScreen .tabs [hidden] { display: none; }
-@media (max-width: 900px) { .cr-upgrades { grid-template-columns: 1fr; } }
+#craftScreen .bp-cell.cr-short .bp-count { color: var(--ink-2); }
+#craftScreen .bp-cell .bp-name { font: 800 16px/1.2 var(--font-ui); }
+#craftScreen .pn-main > .pn-label:not(:first-child) { margin-top: 6px; }
+#craftScreen .bp-detail { overflow-y: auto; }
 #craftScreen .bp-detail:empty { display: none; }
-.cr-decor li button { margin-left: auto; min-height: 36px; padding: 2px 12px; border-radius: 10px; font: 600 16px var(--font-display); background: var(--glass-hi-2); border: 1px solid var(--edge); color: var(--text-strong); }
-.cr-decor li button[aria-disabled=true] { color: var(--text-dim); border-color: var(--edge-soft); background: var(--btn-off); }
-.cr-decor li.cr-made b, .cr-note { color: var(--good); }
+.cr-parts { display: flex; flex-wrap: wrap; gap: 6px; }
+.cr-part svg.mi { width: 20px; height: 20px; }
+.cr-make .pn-btn { flex: 1; }
+.cr-machines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cr-machines li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-height: 56px; padding: 8px 14px; border-radius: var(--r-tile); background: var(--paper-2); border: 1.5px solid transparent; }
+.cr-machines li b { min-width: 9em; font: 900 16px var(--font-ui); color: var(--ink); }
+.cr-machines li.cr-short b { color: var(--ink); }
+.cr-decor li .pn-btn { margin-left: auto; }
+.cr-decor li.cr-made b, .cr-note { color: var(--leaf-ink); }
+.cr-note { font: 800 16px var(--font-ui); }
+.cr-queue { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cr-queue li { display: flex; align-items: center; gap: 10px; font: 800 16px var(--font-ui); color: var(--ink); }
+.cr-queue li .pn-btn { margin-left: auto; }
+.cr-bar { flex: 1; min-width: 60px; }
+.cr-bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--biomass-bar); }
+.rs-bar.rs-off > i { background: var(--ink-3); }
+.cr-upgrades { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.cr-upgrades li { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: var(--r-tile); background: var(--paper-2); }
+.cr-uhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cr-uhead b { font: 900 18px var(--font-ui); color: var(--ink); }
+.cr-each { font: 700 16px/1.4 var(--font-ui); color: var(--ink-2); }
+.cr-pips { display: inline-flex; gap: 5px; }
+.cr-pips i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line-2); background: transparent; }
+.cr-pips i.on { background: var(--sun); border-color: var(--sun-edge); }
+.cr-upgrades .pn-btn { align-self: flex-start; }
+.rs-branch { margin: 6px 0 0; font: 900 16px var(--font-ui); color: var(--ink); }
+.rs-projects { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.rs-projects .bp-req { display: flex; min-height: 52px; padding: 8px 14px; }
+.rs-projects .bp-req[aria-selected=true] { background: var(--key-bg); border-color: var(--line-2); }
+#craftScreen .sheet-tabs [hidden] { display: none; }
+@container sheet (max-width: 900px) {
+  .cr-upgrades, .rs-projects { grid-template-columns: 1fr; }
+}

@@ -223,7 +223,8 @@ try {
     const after = await page.evaluate(() => ({ seed: window.solarbloom.sim.state.seed, time: window.solarbloom.sim.state.time }));
     check(after.seed === before.seed && after.time >= before.time, T(`Load brings back the same game (time ${before.time.toFixed(1)} → ${after.time.toFixed(1)})`));
 
-    // ── delete asks first, then the slot is empty (keyboard run, from a fresh title) ──
+    // ── E23.11: delete opens the are-you-sure dialog: "Keep my garden" first, the delete only on a one-second hold
+    //    (keyboard run, from a fresh title) ──
     if (dev === 'keys') {
       await page.goto(`${URL_}?title=1`);
       await page.waitForSelector('#tPress');
@@ -232,15 +233,66 @@ try {
       await moveTo(page, '#tPlay', dev);
       await go(page, dev);
       await page.waitForSelector('#tDelete1');
+      const saved = () => page.evaluate(() => !!localStorage.getItem('solarbloom.save.1'));
+      const dialog = () => page.evaluate(() => { const d = document.querySelector('[role=alertdialog]'); return d ? { title: d.querySelector('h2').textContent, focus: document.activeElement?.className ?? '' } : undefined; });
       await moveTo(page, '#tDelete1', dev);
       await go(page, dev);
-      await page.waitForSelector('#tYes');
-      check(/Delete Saltwind\? This can't be undone\./.test(await page.evaluate(() => document.querySelector('#tConfirmText').textContent)), T('deleting asks first'));
-      await moveTo(page, '#tYes', dev);
+      await page.waitForSelector('[role=alertdialog]');
+      const d = await dialog();
+      check(d?.title === 'Delete Saltwind?' && /cf-keep/.test(d.focus), T(`deleting asks first, with Keep my garden focused (${JSON.stringify(d)})`));
+      await page.screenshot({ path: `${dir}/ui-title-confirm.png` });
+      await page.keyboard.press('Enter'); // a quick Enter keeps the garden
+      await page.waitForSelector('[role=alertdialog]', { state: 'detached' });
+      check((await saved()) && (await page.evaluate(() => document.activeElement?.id)) === 'tDelete1', T('a quick Enter keeps the garden and goes back to Delete'));
       await go(page, dev);
+      await page.waitForSelector('[role=alertdialog]');
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('[role=alertdialog]', { state: 'detached' });
+      check((await saved()) && !!(await page.$('#tLoad1')), T('Esc backs out of the dialog, the garden kept'));
+      await go(page, dev);
+      await page.waitForSelector('[role=alertdialog]');
+      check(await moveTo(page, '.cf-go', dev), T('reach Hold to delete'));
+      await page.keyboard.down('Enter');
+      await page.waitForTimeout(350);
+      await page.keyboard.up('Enter');
+      await page.waitForTimeout(200);
+      check((await saved()) && !!(await page.$('[role=alertdialog]')), T('letting go early does nothing'));
+      await page.keyboard.down('Enter');
+      await page.waitForTimeout(1400);
+      await page.keyboard.up('Enter');
       await page.waitForFunction(() => !localStorage.getItem('solarbloom.save.1') && !localStorage.getItem('solarbloom.save.1.head'));
       await page.waitForSelector('#tStart1');
-      check(await page.evaluate(() => !document.querySelector('#tLoad1')), T('the slot is deleted and is empty again'));
+      check(await page.evaluate(() => !document.querySelector('#tLoad1') && !document.querySelector('[role=alertdialog]')), T('a one-second hold deletes it, and the slot is empty again'));
+    }
+
+    // ── E23.11: Start over on the pad: A on the dialog keeps; holding A on Hold to start over asks how the days go ──
+    if (dev === 'pad') {
+      await page.goto(`${URL_}?title=1`);
+      await page.waitForSelector('#tPress');
+      await pressPad(page, 0);
+      await page.waitForSelector('#tPlay');
+      await moveTo(page, '#tPlay', dev);
+      await go(page, dev);
+      await page.waitForSelector('#tStart1');
+      check(await page.evaluate(() => document.activeElement?.id === 'tLoad1' && !!document.querySelector('.t-slot.latest #tLoad1')), T('the gardens open on Carry on of the last-played garden'));
+      await moveTo(page, '#tStart1', dev);
+      await go(page, dev);
+      await page.waitForSelector('[role=alertdialog]');
+      check(/^Start .+ over\?$/.test(await page.evaluate(() => document.querySelector('[role=alertdialog] h2').textContent)), T('Start over asks first'));
+      await pressPad(page, 0); // A on Keep my garden
+      await page.waitForSelector('[role=alertdialog]', { state: 'detached' });
+      check(await page.evaluate(() => !!localStorage.getItem('solarbloom.save.1') && document.activeElement?.id === 'tStart1'), T('a quick A keeps the garden'));
+      await go(page, dev);
+      await page.waitForSelector('[role=alertdialog]');
+      check(await moveTo(page, '.cf-go', dev), T('reach Hold to start over with the d-pad'));
+      await page.evaluate(() => { window.__pad.buttons[0].pressed = true; window.__pad.buttons[0].value = 1; });
+      await page.waitForTimeout(1400);
+      await page.evaluate(() => { window.__pad.buttons[0].pressed = false; window.__pad.buttons[0].value = 0; });
+      await page.waitForSelector('#tConfirmText');
+      check(/How should the days go\?/.test(await page.evaluate(() => document.querySelector('#tConfirmText').textContent)), T('holding A starts the garden over: it asks how the days go'));
+      await pressPad(page, 1); // B: back out before anything is cleared
+      await page.waitForSelector('#tConfirmText', { state: 'detached' });
+      check(await page.evaluate(() => !!localStorage.getItem('solarbloom.save.1')), T('B backs out of the question, the garden still there'));
     }
     check(!errors.length, T(`no page errors ${errors.join(' | ')}`));
     await page.close();

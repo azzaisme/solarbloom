@@ -1,0 +1,34 @@
+/* E23.11: the are-you-sure dialog (src/ui/Confirm.ts), after docs/art/ui-sunlit-glass/Confirm.dc.html.
+   Every colour from the Sunlit Glass tokens in styles.css. */
+.cf-veil { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: var(--scrim); font-family: var(--font-ui); color: var(--ink); }
+.cf { position: relative; width: min(520px, 100%); max-height: calc(100% - 8px); overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 28px 30px 0; text-align: center; border-radius: 24px; background: var(--paper-a); border: 1px solid var(--line); box-shadow: var(--shadow), var(--inner-glow); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
+.cf-badge { display: grid; place-items: center; width: 64px; height: 64px; flex: none; border-radius: 50% 50% 50% 6px; background: var(--clay-soft); color: var(--clay-ink); }
+.cf-ic, .cf-heart { display: inline-block; flex: none; background: currentColor; -webkit-mask: var(--i) center / contain no-repeat; mask: var(--i) center / contain no-repeat; }
+.cf-ic { width: 28px; height: 28px; --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5'/%3E%3C/svg%3E"); }
+.cf-heart { width: 22px; height: 22px; --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linejoin='round'%3E%3Cpath d='M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.3a4.2 4.2 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z'/%3E%3C/svg%3E"); }
+.cf-title { margin: 0; font: 900 26px/1.2 var(--font-ui); letter-spacing: -.01em; color: var(--ink); }
+.cf-what { width: 100%; display: flex; gap: 14px; align-items: center; padding: 12px 14px; border-radius: var(--r-tile); background: var(--paper-2); text-align: left; }
+.cf-what p { margin: 0; font: 800 16px/1.45 var(--font-ui); color: var(--ink-2); }
+.cf-what b { font-weight: 900; color: var(--ink); }
+.cf-pic { width: 84px; height: 56px; flex: none; border-radius: 10px; background-color: var(--paper-3); background-position: center; background-size: cover; background-repeat: no-repeat; }
+.cf-body { margin: 0; font: 700 16px/1.4 var(--font-ui); color: var(--ink-2); }
+.cf-choices { width: 100%; display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.cf-choices button { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; padding: 0 18px; border-radius: var(--r-tile); font: 800 17px var(--font-ui); }
+.cf-keep { min-height: 56px !important; font-size: 18px !important; background: var(--leaf-btn); border: 1.5px solid var(--leaf-btn-2); color: var(--on); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .14); }
+.cf-keep:hover { background: var(--leaf-btn-2); }
+.cf-go { background: var(--clay-soft); border: 1.5px solid var(--clay); color: var(--clay-ink); touch-action: none; -webkit-user-select: none; user-select: none; }
+.cf-go:hover, .cf-go.holding { border-color: var(--clay-ink); }
+.cf-choices button:focus-visible { outline: none; box-shadow: var(--focus-ring); position: relative; z-index: 1; }
+/* the hold ring: fills clockwise while held (--p is set each frame); the button's glyph sits in its middle */
+.cf-ring { position: relative; display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 50%; background: conic-gradient(var(--clay) 0 var(--p, 0%), var(--paper-3) 0); }
+.cf-ring::before { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--clay-soft); }
+.cf-ring > * { position: relative; }
+.cf-ring svg.glyph { width: 24px; height: 20px; }
+.cf-sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.cf-foot { align-self: stretch; margin: 10px -30px 0; display: flex; justify-content: flex-end; align-items: center; gap: 22px; padding: 12px 22px; border-top: 1px solid var(--line); background: var(--paper-2); }
+.cf-act { display: inline-flex; align-items: center; gap: 8px; font: 800 16px var(--font-ui); color: var(--ink); white-space: nowrap; }
+.cf-act svg.glyph { height: 28px; width: auto; }
+
+body.contrast .cf { background: var(--paper); border: 2px solid var(--ink); backdrop-filter: none; -webkit-backdrop-filter: none; }
+body.contrast .cf-go { border-width: 2.5px; border-color: var(--clay-ink); }
+body.contrast .cf-what, body.contrast .cf-foot { border: 1.5px solid var(--ink-2); }

@@ -144,13 +144,17 @@ const frame = async (zoom, file) => {
 await frame(1.7, 'cat-decor-near.png');
 await frame(0.5, 'cat-decor-far.png');
 
-// Decorate mode lists them.
-await page.evaluate(() => window.solarbloom.hud.toggleTray(true));
+// The build menu's Decorations tab lists them (E23.11: #buildMenu).
+await page.evaluate(async () => {
+  const g = window.solarbloom;
+  g.hud.toggleTray(true);
+  for (let i = 0; i < 8 && document.querySelector('#buildMenu [role=tab][aria-selected=true]')?.textContent !== 'Decorations'; i++) g.hud.buildMenu.tab(1);
+});
 await page.waitForTimeout(800);
 const tray = await page.evaluate(() =>
   ['catstatue', 'catbench', 'pawstones', 'catfountain', 'goldlantern', 'rainbowbunting'].filter((id) => {
-    const b = document.querySelector(`#hotbar [data-tool="decor:${id}"]`);
-    return b && !b.hidden;
+    const b = document.querySelector(`#buildMenu [data-tool="decor:${id}"]`);
+    return b && b.getAttribute('aria-disabled') !== 'true';
   }),
 );
 check(tray.length === 6, `decorate mode shows all six (${tray.join(' ')})`);

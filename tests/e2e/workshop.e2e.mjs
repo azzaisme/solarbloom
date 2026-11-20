@@ -67,12 +67,17 @@ async function moveTo(page, sel, dev) {
 async function pick(page, dev, tool) {
   if (dev === 'pad') await pressPad(page, 3);
   else await page.keyboard.press('KeyQ');
-  await page.waitForSelector('#buildTray.open', { timeout: 10000 }).catch(() => {});
+  await page.waitForSelector('#buildMenu.open', { timeout: 10000 }).catch(() => {});
   const tray = await page.evaluate(() => {
-    const r = document.querySelector('#buildTray')?.getBoundingClientRect();
+    const r = document.querySelector('#buildMenu .bm-sheet')?.getBoundingClientRect();
     return r ? { w: Math.round(r.width), h: Math.round(r.height) } : { w: 0, h: 0 };
   });
-  const ok = await moveTo(page, `#buildTray.open [data-tool="${tool}"]`, dev);
+  // E23.11: the build menu has tabs: RB / E until the card's tab is showing
+  for (let i = 0; i < 8 && !(await page.evaluate((t) => !!document.querySelector(`#buildMenu.open [data-tool="${t}"]`), tool)); i++) {
+    if (dev === 'pad') await pressPad(page, 5);
+    else await page.keyboard.press('KeyE');
+  }
+  const ok = await moveTo(page, `#buildMenu.open [data-tool="${tool}"]`, dev);
   if (ok) await go(page, dev);
   await page.waitForTimeout(300);
   const inHand = ok && (await page.evaluate(() => window.solarbloom.hud.currentTool)) === tool;

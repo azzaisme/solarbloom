@@ -67,8 +67,12 @@ const frame = async (zoom, file) => {
 await frame(1.5, 'decor-near.png');
 await frame(0.42, 'decor-far.png');
 
-// The Build tray with its Decorate row.
-await page.evaluate(() => window.solarbloom.hud.toggleTray(true));
+// The build menu on its Decorations tab (E23.11: #buildMenu).
+await page.evaluate(async () => {
+  const g = window.solarbloom;
+  g.hud.toggleTray(true);
+  for (let i = 0; i < 8 && document.querySelector('#buildMenu [role=tab][aria-selected=true]')?.textContent !== 'Decorations'; i++) g.hud.buildMenu.tab(1);
+});
 await page.waitForTimeout(600);
 await page.screenshot({ path: `${out}/tray.png` });
 await page.evaluate(() => window.solarbloom.hud.toggleTray(false));

@@ -1,5 +1,6 @@
 import type { Settings } from './Hud';
 import type { Bindings } from '../app/Bindings';
+import { type BarItem, glyph, icon, setBar, tabEnd, wireBar } from './PanelShell';
 
 /**
  * E22.11 (#349): Settings as one screen with tabs (Game, Controls, Display, Sound, Accessibility), the same from
@@ -9,6 +10,10 @@ import type { Bindings } from '../app/Bindings';
  * Every control is a real button, checkbox, slider or list, reachable with the keyboard (Tab, arrows) and the
  * pad (the d-pad's focus ring, A to press, LB / RB or Q / E for tabs, B to go back), with a visible focus ring
  * and a label a screen reader reads.
+ *
+ * E23.11 (Sunlit Glass): a centre sheet: the gear badge and title, the tabs with the bumper pictures at their ends,
+ * the body, and the action bar ("Enter Change  Q E Change tab  Esc Back", or the pad's buttons). Settings ›
+ * Controls shows a banner above the bar while it waits for a new key (`#ctlListen`).
  */
 export type SettingsTab = 'game' | 'controls' | 'display' | 'sound' | 'access';
 export const SETTINGS_TABS: readonly { id: SettingsTab; label: string }[] = [
@@ -51,6 +56,7 @@ export class SettingsScreen {
   readonly el: HTMLElement;
   private body: HTMLElement;
   private tabs: HTMLElement;
+  private foot: HTMLElement;
   current: SettingsTab = 'game';
 
   constructor(
@@ -64,13 +70,26 @@ export class SettingsScreen {
     this.el.setAttribute('aria-modal', 'true');
     this.el.setAttribute('aria-labelledby', 'settingsTitle');
     this.el.innerHTML =
-      `<div class="panel screen-card"><header class="screen-head"><h2 id="settingsTitle">Settings</h2><button class="screen-back" data-back aria-label="Back">Back</button></header>` +
-      `<div class="tabs" role="tablist" aria-label="Settings sections">${SETTINGS_TABS.map((t) => `<button role="tab" id="stab-${t.id}" data-tab="${t.id}" aria-controls="settingsBody" aria-selected="false" tabindex="-1">${t.label}</button>`).join('')}</div>` +
-      `<div class="screen-body" id="settingsBody" role="tabpanel"></div></div>`;
+      `<div class="panel sheet screen-card"><header class="sheet-head"><span class="pn-badge">${icon('gear')}</span><h2 id="settingsTitle">Settings</h2><span class="grow"></span><button class="pn-btn ghost sheet-back" data-back aria-label="Back">${glyph('back')}Back</button></header>` +
+      `<div class="sheet-tabs">${tabEnd(-1)}<div role="tablist" aria-label="Settings sections">${SETTINGS_TABS.map((t) => `<button role="tab" id="stab-${t.id}" data-tab="${t.id}" aria-controls="settingsBody" aria-selected="false" tabindex="-1">${t.label}</button>`).join('')}</div>${tabEnd(1)}</div>` +
+      `<div class="sheet-body" id="settingsBody" role="tabpanel"></div>` +
+      `<div class="ctl-listen" id="ctlListen" role="status" aria-live="assertive" hidden></div>` +
+      `<footer class="sheet-foot"><span class="pn-foot-live"></span><span class="pn-acts"></span></footer></div>`;
     parent.appendChild(this.el);
     this.body = this.el.querySelector<HTMLElement>('#settingsBody')!;
-    this.tabs = this.el.querySelector<HTMLElement>('.tabs')!;
+    this.tabs = this.el.querySelector<HTMLElement>('[role=tablist]')!;
+    this.foot = this.el.querySelector<HTMLElement>('.sheet-foot')!;
     this.el.querySelector('[data-back]')!.addEventListener('click', () => this.close());
+    wireBar(this.el, (p) => {
+      if (p === 'prev' || p === 'next' || p === 'tabs') {
+        this.tab(p === 'prev' ? -1 : 1, true);
+        return true;
+      }
+      if (p === 'back' && this.el.querySelector('#ctlListen')?.hasAttribute('hidden')) {
+        this.close();
+        return true;
+      }
+    });
     this.tabs.addEventListener('click', (e) => {
       const t = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]');
       if (t) this.show(t.dataset.tab as SettingsTab, true);
@@ -128,12 +147,26 @@ export class SettingsScreen {
       if (on && focusTab) b.focus({ focusVisible: true } as FocusOptions);
     }
     this.body.setAttribute('aria-labelledby', `stab-${tab}`);
+    const listen = this.el.querySelector<HTMLElement>('#ctlListen');
+    if (listen) listen.hidden = true;
+    this.body.scrollTop = 0;
+    this.bar();
     if (tab === 'controls' && this.host.controls) {
       this.body.innerHTML = '';
       this.host.controls(this.body);
       return;
     }
     this.body.innerHTML = this.host.rows(tab).map((r) => this.row(r)).join('');
+  }
+
+  /** The action bar: Enter / A changes the setting in focus, the tab buttons, Back. */
+  private bar() {
+    const items: BarItem[] = [
+      { press: 'choose', label: 'Change' },
+      { press: 'tabs', label: 'Change tab' },
+      { press: 'back', label: 'Back' },
+    ];
+    setBar(this.foot, items);
   }
 
   /** Redraws the open tab, keeping the focus on the same control where it can. */
@@ -152,14 +185,14 @@ export class SettingsScreen {
       case 'html':
         return r.html;
       case 'button':
-        return `<div class="set-row"><button id="set-btn-${r.id}" data-btn="${r.id}" class="${r.danger ? 'danger' : ''}">${esc(r.label)}</button></div>`;
+        return `<div class="set-row set-actions"><button id="set-btn-${r.id}" data-btn="${r.id}" class="pn-btn${r.danger ? ' danger' : ''}">${esc(r.label)}</button></div>`;
       case 'check': {
         const on = r.defaultOn ? s[r.key] !== false : !!s[r.key];
         return `<label class="set-row" for="set-${r.key}"><span>${esc(r.label)}${r.hint ? `<small>${esc(r.hint)}</small>` : ''}</span><input type="checkbox" id="set-${r.key}" data-key="${r.key}" ${on ? 'checked' : ''}></label>`;
       }
       case 'range': {
         const v = Number(s[r.key] ?? r.fallback);
-        return `<label class="set-row" for="set-${r.key}"><span>${esc(r.label)}</span><input type="range" id="set-${r.key}" data-key="${r.key}" min="${r.min}" max="${r.max}" step="${r.step}" value="${v}" aria-valuetext="${v}${r.unit ?? ''}"></label>`;
+        return `<label class="set-row" for="set-${r.key}"><span>${esc(r.label)}</span><span class="set-range"><input type="range" id="set-${r.key}" data-key="${r.key}" min="${r.min}" max="${r.max}" step="${r.step}" value="${v}" aria-valuetext="${v}${r.unit ?? ''}"><output for="set-${r.key}" aria-hidden="true">${v}${r.unit === ' percent' ? '%' : ''}</output></span></label>`;
       }
       case 'select': {
         const v = String(s[r.key] ?? r.fallback);
@@ -175,6 +208,8 @@ export class SettingsScreen {
     else if (t instanceof HTMLInputElement && t.type === 'range') {
       this.host.set(key, Number(t.value));
       t.setAttribute('aria-valuetext', t.value);
+      const out = t.parentElement?.querySelector('output');
+      if (out) out.textContent = `${t.value}${out.textContent?.endsWith('%') ? '%' : ''}`;
     } else if (t instanceof HTMLSelectElement) this.host.set(key, t.dataset.num ? Number(t.value) : t.value);
   }
 }

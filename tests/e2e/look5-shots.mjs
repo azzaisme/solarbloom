@@ -34,8 +34,7 @@ async function open(w, h) {
 async function busy(page) {
   await page.evaluate(() => {
     const h = window.solarbloom.hud;
-    // A real chain drives these; here we call the HUD with a chain's words (E23.1.4: no combo counter on the HUD)
-    h.feed('🌸 Bloom chain ×3');
+    // a toast, as a busy moment shows one (E23.11: the chain feed is gone with the classic HUD)
     h.toast('🌱 25 tiles restored!<small>+20🌿 · next reward at 40</small>', 'gold', 30);
   });
   await page.waitForTimeout(500);
@@ -72,7 +71,7 @@ try {
     const page = await open(390, 844);
     await busy(page);
     await page.screenshot({ path: `${out}/${prefix}-phone.png` });
-    await page.click('#buildToggle');
+    await page.evaluate(() => window.solarbloom.hud.toggleTray(true)); // E23.11: the build menu sheet
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${out}/${prefix}-phone-tray.png` });
     await page.close();
