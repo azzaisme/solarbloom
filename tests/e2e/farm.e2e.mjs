@@ -31,13 +31,16 @@ const snap = async (name) => {
 /** Runs a function in the page with the game (`g`) and sim (`s`) in scope. */
 const game = (fn, arg) => page.evaluate(({ src, arg }) => new Function('g', 's', 'arg', `return (${src})(g, s, arg)`)(window.solarbloom, window.solarbloom.sim, arg), { src: fn.toString(), arg });
 const prompt = () => page.evaluate(() => document.querySelector('#prompt, .prompt')?.innerText.replace(/\s+/g, ' ').trim() ?? '');
-/** The prompt once it matches (frames can stall for seconds under software rendering on a busy machine, leaving the
- * last target's prompt up): waits up to 15 s, then gives whatever is shown. */
+/** #571: the prompt as the next drawn frame leaves it. The game sets it once a frame, and frames can stall for 15 s
+ * here (software rendering on a busy machine), so a plain read can still show the last target's prompt. */
+const framePrompt = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(document.querySelector('#prompt, .prompt')?.innerText.replace(/\s+/g, ' ').trim() ?? '')))));
+/** The prompt once a drawn frame shows it matching: waits up to 60 s, then gives whatever is shown. */
 const promptFor = async (re, reface) => {
-  for (let k = 0; k < 30; k++) {
-    const t = await prompt();
+  const until = Date.now() + 60000;
+  for (let k = 0; Date.now() < until; k++) {
+    const t = await framePrompt();
     if (re.test(t)) return t;
-    // #571: bloombot can settle facing something else in reach (the jetty's crate): stand and face the target again
+    // something early in a fresh game can still turn bloombot: stand it on its spot facing the target again
     if (reface && k % 4 === 3) await reface();
     await page.waitForTimeout(500);
   }
@@ -151,7 +154,13 @@ try {
   const spots = lay.open;
 
   // ── E23.5.1: gather clippings with a real hold of Interact ──
-  const [gx, gz] = spots[0];
+  // #571: Interact acts on what is right in front first (#581): gather where no salvage pile (the jetty's crate) is near
+  // bloombot's spot, so a turn on the spot can't put a pile in front of it
+  const clear = await game((g, s, { spots }) => spots.findIndex(([x, z]) => {
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) if (s.salvage.pileAt(x + dx, z + dz)) return false;
+    return true;
+  }), { spots });
+  const [gx, gz] = spots[Math.max(0, clear)];
   await face(gx, gz);
   check(/Gather clippings/.test(await promptFor(/Gather clippings/, () => face(gx, gz, 1))), `the prompt offers "Gather clippings" (${await prompt()})`);
   await snap('gather-prompt');
