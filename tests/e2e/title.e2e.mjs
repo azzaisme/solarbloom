@@ -142,8 +142,8 @@ try {
       const g = window.solarbloom;
       g.pause.clear('blur');
       const s = g.loadSteps();
-      // E23.2.6: third person fades in once the ground round bloombot (two chunks out) is drawn, as loadSteps waits
-      // for; the hazy distance streams in while playing
+      // E23.2.6 / #561: third person fades in once the ground round bloombot (two chunks out) is drawn, then the rest
+      // of the opening view (at most 8 s more), as loadSteps waits for
       return { s, pending: g.chunks.pendingNear(g.camera.target, 32), far: g.chunks.pending, loaded: g.chunks.loadedCount, device: g.bot.lastInput };
     });
     check(ready.s.models === 1 && ready.s.view === 1 && ready.pending === 0 && ready.loaded > 0, T(`the game faded in with the ground round bloombot complete (${ready.loaded} chunks, ${ready.pending} near and ${ready.far} in all still to draw)`));
