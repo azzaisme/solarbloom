@@ -929,6 +929,9 @@ export class Game {
   /** the device the title screen was driven with (it picks the first glyph set) */
   private startDevice: 'keys' | 'pad' = 'keys';
   private readyFrames = 0;
+  /** #561: when the ground round bloombot was first complete; the rest of the view gets at most VIEW_WAIT ms more */
+  private nearDoneAt = 0;
+  static VIEW_WAIT = 8000;
   private builtAt = performance.now();
 
   /**
@@ -951,13 +954,19 @@ export class Game {
     // no models to wait for (?models=classic), or they never arrive: don't hold the game for ever
     const modelsDone = !m || m.ready || !useModels() || performance.now() - this.builtAt > 30000;
     const loaded = this.chunks.loadedCount;
-    // Third person looks out to the horizon: the loading screen waits for the ground round bloombot (two chunks
-    // out); the hazy distance streams in while playing.
-    const pending = this.bot ? this.chunks.pendingNear(this.camera.target, CHUNK * 2) : this.chunks.pending;
-    const view = loaded ? (loaded - pending) / loaded : 0;
+    // Third person looks out to the horizon: the ground round bloombot (two chunks out) comes first, then
+    // #561: every chunk in the opening view, so nothing in sight is rebuilt (a far-detail barrel turning into a
+    // near-detail sack) just after the fade. A slow machine waits at most VIEW_WAIT for the rest.
+    const near = this.bot ? this.chunks.pendingNear(this.camera.target, CHUNK * 2) : this.chunks.pending;
+    const all = this.chunks.pending;
     // the camera has settled on bloombot (its opening zoom is over), so the view that fades in is the view that stays
     const settled = Math.abs(this.camera.zoom - this.camera.zoomTarget) < 0.02;
-    const viewDone = modelsDone && loaded > 0 && pending === 0 && settled;
+    const nearDone = modelsDone && loaded > 0 && near === 0 && settled;
+    if (!nearDone) this.nearDoneAt = 0;
+    else if (!this.nearDoneAt) this.nearDoneAt = performance.now();
+    const viewDone = nearDone && (all === 0 || performance.now() - this.nearDoneAt > Game.VIEW_WAIT);
+    // the bar: the ground round bloombot fills the first 60%, the rest of the view the last 40% (never steps back)
+    const view = !loaded ? 0 : nearDone ? 0.6 + 0.4 * ((loaded - all) / loaded) : 0.6 * ((loaded - near) / loaded);
     return { models: modelsDone ? 1 : Math.min(0.99, (m?.loaded.size ?? 0) / total), world: 1, view: viewDone ? 1 : Math.min(0.99, view * (modelsDone ? 1 : 0.5)), shaders: Math.min(1, this.readyFrames / 4) };
   }
 
