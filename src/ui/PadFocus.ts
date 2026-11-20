@@ -4,7 +4,7 @@
  * direction), A presses the focused one, and B is left to Cancel (which closes the panel). With no panel open
  * the d-pad keeps its game actions (E23.11: in build mode d-pad left and right walk the build dock's slots).
  */
-const PANELS = ['#settings.open', '#bpScreen.open', '#craftScreen.open', '#menu.open', '#ocPanel.open', '#catPanel:not([hidden])', '#plotPicker.open', '#buildMenu.open', '#inspect.open'] as const;
+const PANELS = ['#settings.open', '#bpScreen.open', '#craftScreen.open', '#crateScreen.open', '#menu.open', '#ocPanel.open', '#catPanel:not([hidden])', '#plotPicker.open', '#buildMenu.open', '#inspect.open'] as const;
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]';
 const DIRS: Partial<Record<number, [number, number]>> = { 12: [0, -1], 13: [0, 1], 14: [-1, 0], 15: [1, 0] };
 

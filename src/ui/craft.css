@@ -39,3 +39,12 @@
 @container sheet (max-width: 900px) {
   .cr-upgrades, .rs-projects { grid-template-columns: 1fr; }
 }
+/* E23.6.4: a supply crate's panel (the backpack's grid and moves, its courier routes below), on Sunlit Glass */
+#crateScreen { z-index: 11; }
+#crateScreen .panel.bp-card { width: min(980px, calc(96vw / var(--ui-zoom, 1))); height: min(680px, calc(92vh / var(--ui-zoom, 1))); max-height: none; }
+#crateScreen .set-h { margin: 16px 0 8px; font: 900 18px var(--font-ui); color: var(--ink); }
+.ct-routes li button { min-height: 40px; padding: 2px 14px; border-radius: 999px; font: 800 16px var(--font-ui); background: var(--key-bg); border: 1.5px solid var(--line-2); color: var(--ink); }
+.ct-routes li button:last-of-type { margin-left: auto; }
+.ct-routes .ct-warn { flex-basis: 100%; font: 700 16px var(--font-ui); color: var(--ink-2); }
+.ct-send { flex-wrap: wrap; margin-top: 8px; }
+.ct-send small { font: 700 16px var(--font-ui); color: var(--ink-2); margin-left: 4px; }

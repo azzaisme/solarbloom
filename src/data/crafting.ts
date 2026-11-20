@@ -19,8 +19,18 @@ export type ItemCost = Partial<Record<ItemId, number>>;
  * - `find`: a cache opened, by cache id (data/oldcity caches)
  * - `tier`: a step of the fountain (E21.6), for the Old City's own machines
  * - `cat`: E23.12.2 (#529), a cat-only decoration, known once a Lucky Cat has left it (it comes made)
+ * - `hand`: a job done by hand enough times (E23.6.4's automation; data/automation HAND_JOBS)
+ * - `all`: every one of several (the Assembler: its Keeper, and crafting by hand)
  */
-export type Unlock = { home: true } | { keeper: RegionId } | { research: string } | { find: string } | { tier: number } | { cat: string };
+export type Unlock =
+  | { home: true }
+  | { keeper: RegionId }
+  | { research: string }
+  | { find: string }
+  | { tier: number }
+  | { cat: string }
+  | { hand: import('./automation').HandJob }
+  | { all: Unlock[] };
 
 export interface ComponentDef {
   id: ComponentId;
@@ -95,7 +105,9 @@ export const MACHINE_RECIPES: MachineRecipe[] = [
   { id: 'bioDigester', name: 'Bio Digester', cost: { scrap: 10, motor: 2, clay: 4 }, unlock: { keeper: 'clockPlaza' }, builds: 'bioDigester' },
   { id: 'drone', name: 'Drone', cost: { motor: 1, wire: 2, glassPane: 1 }, unlock: { keeper: 'clockPlaza' }, owner: 'E23.6.3' },
   { id: 'largeSolar', name: 'Large solar array', cost: { sunCell: 4, scrap: 6, wire: 2 }, unlock: { keeper: 'observatory' }, owner: 'unassigned: no sub-epic builds it yet (raised with the coordinator)' },
-  { id: 'assembler', name: 'Assembler', cost: { motor: 4, gears: 10, glassPane: 6 }, unlock: { keeper: 'spireHeights' }, owner: 'E23.6.5' },
+  { id: 'assembler', name: 'Assembler', cost: { motor: 4, gears: 10, glassPane: 6 }, unlock: { all: [{ keeper: 'spireHeights' }, { hand: 'craft' }] }, builds: 'assembler' },
+  // E23.6.4: a box for automation, once things have been carried to and from the store by hand a few times
+  { id: 'crate', name: 'Supply crate', cost: { planks: 3, wire: 1 }, unlock: { hand: 'carry' }, builds: 'crate' },
   // The Old City's own machines (E21.3), on the table too: one way to build everything. They keep the fountain step
   // that opened them, and their recipes move onto components where one fits.
   // no Pipe: Pipe needs Clay (tier 2), and the condenser opens at tier 1, so it is buildable the day it opens

@@ -12,6 +12,7 @@ import { Panels } from './Panels';
 import { Backpack } from './Backpack';
 import { CraftTable } from './CraftTable';
 import { ChargeMeter } from './ChargeMeter';
+import { CratePanel } from './CratePanel';
 import { LoadWheel } from './LoadWheel';
 import { Dock, type DockAction } from './Dock';
 import type { SetProp } from './HudPart';
@@ -164,6 +165,8 @@ export class Hud {
   readonly craft: CraftTable;
   /** E23.2.1: bloombot's charge, the only meter */
   readonly charge: ChargeMeter;
+  /** E23.6.4: a supply crate's panel */
+  readonly crate: CratePanel;
   /** E23.2.2: the pulse load wheel */
   readonly loadWheel: LoadWheel;
   /** E23.11: the shortcut dock (Backpack, Map, Menu), bottom right */
@@ -203,6 +206,7 @@ export class Hud {
     this.prompt = new Prompt(this.root);
     this.backpack = new Backpack(this.root, { sim: this.sim });
     this.craft = new CraftTable(this.root, { sim: this.sim });
+    this.crate = new CratePanel(this.root, { sim: this.sim });
   }
 
   private template() {
