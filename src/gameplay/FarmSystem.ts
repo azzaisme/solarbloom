@@ -9,13 +9,13 @@ import { machineStrengthAt } from '../core/RegionStrengths';
 import type { Sim } from './Sim';
 
 /**
- * What the farm borrows from other sub-epics, each optional until it lands: watering from E23.4 (`sim.water`) and
- * the weather from E23.7.2 (`sim.weather`).
- * Without water every planter is watered. Day and night come from E23.7.1's game clock (`sim.clock`).
+ * Water is E23.4.1's real levels (`sim.water`): a bed drinks from the canal or pond within reach, wilts while that
+ * runs dry and grows on once it fills again; rain waters every bed. Weather is E23.7.2's (`sim.weather`), day and
+ * night E23.7.1's game clock (`sim.clock`). Only E23.4.2's pipes (`isRunning`, #514) are still optional.
  */
 type At = { roofId: string; x: number; z: number };
 interface FarmHooks {
-  water?: { isWatered?(t: At): boolean; isRunning?(t: At): boolean; drawNear?(t: At, units: number): number };
+  water?: { isRunning?(t: At): boolean };
 }
 
 /** Why a planter is (or isn't) growing right now, for tests, tooltips and the crop visuals. */
@@ -121,7 +121,15 @@ export class FarmSystem {
 
   isWatered(m: MachineData): boolean {
     if (this.sky().rain > 0) return true; // rain and storms water every planter
-    return this.hooks.water?.isWatered?.(m) ?? true;
+    const t = this.sim.grid.get(m.roofId, m.x, m.z);
+    return !!t && this.sim.water.isWatered(t);
+  }
+
+  /** Why a dry bed is dry, for its panel: no water within reach at all, or its water has run low. */
+  thirst(m: MachineData): 'none' | 'low' | undefined {
+    if (this.isWatered(m)) return undefined;
+    const t = this.sim.grid.get(m.roofId, m.x, m.z);
+    return t && this.sim.water.bodyNear(t) ? 'low' : 'none';
   }
 
   /**
@@ -143,17 +151,17 @@ export class FarmSystem {
   }
 
   /** Water drunk but not yet drawn from the network, per planter (fractions of a unit; not saved). */
-  private thirst = new Map<string, number>();
+  private drunk = new Map<string, number>();
 
   /** E23.4: a growing bed drinks from the water near it (the sky waters it in rain: planterDrying 0). */
   private drink(m: MachineData, days: number) {
-    const w = this.hooks.water;
-    if (!w?.drawNear) return;
+    const t = this.sim.grid.get(m.roofId, m.x, m.z);
+    if (!t) return;
     const drying = this.sky().planterDrying;
-    const want = (this.thirst.get(m.id) ?? 0) + PLANTER.waterPerDay * drying * days;
+    const want = (this.drunk.get(m.id) ?? 0) + PLANTER.waterPerDay * drying * days;
     const whole = Math.floor(want);
-    if (whole > 0) w.drawNear(m, whole);
-    this.thirst.set(m.id, want - whole);
+    if (whole > 0) this.sim.water.drawNear(t, whole);
+    this.drunk.set(m.id, want - whole);
   }
 
   /** Is something tall beside the planter (a machine, a building, a blocked tile)? */

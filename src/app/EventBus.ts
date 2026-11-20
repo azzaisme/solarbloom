@@ -55,6 +55,8 @@ export interface GameEvents {
   'planter.changed': { machineId: string };
   'planter.ripe': { machineId: string; crop: string };
   'planter.harvested': { machineId: string; crop: string; food: number; biomass: number; seeds: number };
+  /** E23.5.3: a compost bin or Bio Digester changed (filled, made something, emptied). */
+  'farm.machine': { machineId: string };
   /**
    * E21.10 caches: one was opened (emitted by whoever opens caches; E23.5.2.3 listens for the seeds inside).
    * Nothing opens caches yet: the E21.10 data lists them but no system emits this so far.

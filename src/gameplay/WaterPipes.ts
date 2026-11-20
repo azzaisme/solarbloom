@@ -171,7 +171,7 @@ export class WaterPipes {
     for (const [dx, dz] of SIDES) {
       const t = this.sim.grid.peek(GROUND, x + dx, z + dz);
       const m = t && this.sim.occupant(t);
-      if (m && (this.pumpTypes.has(m.type) || m.type === 'reservoir')) out.push({ m, dx, dz });
+      if (m && (this.pumpTypes.has(m.type) || m.type === 'reservoir' || m.type === 'desalination')) out.push({ m, dx, dz });
     }
     return out;
   }
@@ -204,7 +204,7 @@ export class WaterPipes {
         for (const { m } of this.machineLinks(x, z)) {
           if (seen.has(m.id)) continue;
           seen.add(m.id);
-          (m.type === 'reservoir' ? net.tanks : net.pumps).push(m);
+          (m.type === 'reservoir' ? net.tanks : net.pumps).push(m); // a desalination plant pushes like a pump
         }
       }
       net.tiles.sort();
@@ -222,8 +222,14 @@ export class WaterPipes {
     return this.byTile.get(pipeKey(x, z));
   }
 
-  /** The pond or canal a pump stands on the bank of. */
+  /** The networks a machine's footprint touches. */
+  netsOf(m: MachineData): PipeNet[] {
+    return this.networks().filter((n) => n.pumps.includes(m) || n.tanks.includes(m));
+  }
+
+  /** The water a pump pushes: the pond or canal it stands on the bank of (a desalination plant: its own tank). */
   pumpSource(m: MachineData): WaterBody | undefined {
+    if (m.type === 'desalination') return this.water.plantTank(m.id);
     const foot = this.sim.grid.footprint(m.roofId, m.x, m.z, m.size);
     for (const t of foot) {
       const b = t && this.water.bodyNear(t, 1);
@@ -238,9 +244,33 @@ export class WaterPipes {
     return this.sim.power.isPowered(m);
   }
 
-  /** Would this pump push water now (it wants to run, as of the last water step, and it is powered)? */
+  /**
+   * Would this pump push water now? A pump: it wants to run (as of the last water step) and it is powered. A
+   * desalination plant: it holds water it has made, which it lets out with or without power (its tank drains by
+   * itself; it needs power only to make more, through sim.water).
+   */
   pumpLive(m: MachineData): boolean {
+    if (m.type === 'desalination') {
+      const b = this.pumpSource(m);
+      return !!b && this.water.amountOf(b.id) > 0;
+    }
     return this.pumping.has(m.id) && this.powered(m);
+  }
+
+  /**
+   * E23.4.5: is this pump or plant moving water now (what the Water view draws: its hologram, and arrows out of it)?
+   * A pump: live. A plant: holding water it made while that water has somewhere to go (`sim.water.desalinating`);
+   * a full plant standing idle holds water but moves none.
+   */
+  moving(m: MachineData): boolean {
+    return this.pumpLive(m) && (m.type !== 'desalination' || this.water.desalinating.has(m.id));
+  }
+
+  /** Does this pump drive its line (moving water, or powered with water to push but idle because its tanks are full)? */
+  private drives(m: MachineData): boolean {
+    if (m.type === 'desalination') return this.moving(m);
+    const src = this.pumpSource(m);
+    return !!src && this.water.amountOf(src.id) > 0 && this.powered(m);
   }
 
   /**
@@ -322,9 +352,10 @@ export class WaterPipes {
       // pumps fill the reservoirs on their line (uphill or not)
       for (const p of net.pumps) {
         const src = this.pumpSource(p);
-        if (src && w.amountOf(src.id) > 0 && this.wanted(p, net)) this.pumping.add(p.id);
+        if (src && w.amountOf(src.id) > 0 && p.type !== 'desalination' && this.wanted(p, net)) this.pumping.add(p.id); // (a plant asks through sim.water)
         if (!this.pumpLive(p)) continue;
-        const spec = this.pumpTypes.get(p.type)!;
+        // a desalination plant pushes what it has made at its own rate (its tank limits it)
+        const spec = this.pumpTypes.get(p.type) ?? { reach: Infinity, flow: WATER_NET.desal.perDay };
         let budget = spec.flow * days;
         const inReach = this.reachOf(p, net);
         const tanks = net.tanks.filter((t) => w.levelOf(tankId(t)) < 1 && this.touches(t, inReach));
@@ -374,6 +405,96 @@ export class WaterPipes {
         for (const k of this.gravityTiles(t, net)) add(k, { kind: 'tank', body: tankId(t), machine: t.id });
       }
     }
+  }
+
+  /**
+   * Reservoirs on a line that water is running into now: a running pump's line reaches them and they have room, or
+   * a higher reservoir with water runs down into them. Water goes into these, not out of them.
+   */
+  filling(net: PipeNet): Set<MachineData> {
+    const w = this.water;
+    const out = new Set<MachineData>();
+    const room = (t: MachineData) => w.levelOf(tankId(t)) < 1;
+    for (const p of net.pumps) {
+      if (!this.pumpLive(p)) continue;
+      const reach = this.reachOf(p, net);
+      for (const t of net.tanks) if (room(t) && this.touches(t, reach)) out.add(t);
+    }
+    for (const hi of net.tanks) {
+      if (w.amountOf(tankId(hi)) <= 0) continue;
+      for (const lo of this.downhill(hi, net)) if (room(lo)) out.add(lo);
+    }
+    return out;
+  }
+
+  /**
+   * E23.4.5: which way the water runs on each pipe tile carrying it: the sides (dx, dz) leading downstream. It starts
+   * at what pushes water into the line and runs out from there, each source only as far as its water really goes:
+   * - a running pump or plant, along its reach;
+   * - a reservoir with water, down its gravity tiles only (never up a step it can't climb), and only where nothing
+   *   fills it and no pump that has water to push stands on its line (a full tank on a pump's line is held there,
+   *   not a source: arrows never run from it back at the pump).
+   * A tile's arrows point at neighbours one step further from the nearest source, and a tile beside a reservoir
+   * being filled points into it (the pump's water, or a higher tank's, ends up there).
+   */
+  flow(): Map<string, [number, number][]> {
+    const dist = new Map<string, number>();
+    /** the distances from one source, through the tiles its water can reach, merged into `dist` (nearest wins) */
+    const spread = (m: MachineData, allowed: Set<string>) => {
+      const mine = new Map<string, number>();
+      const queue: string[] = [];
+      for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size))
+        if (t)
+          for (const [dx, dz] of SIDES) {
+            const k = pipeKey(t.x + dx, t.z + dz);
+            if (allowed.has(k) && this.fed.has(k) && !mine.has(k)) mine.set(k, 0), queue.push(k);
+          }
+      for (let i = 0; i < queue.length; i++) {
+        const [x, z] = parse(queue[i]);
+        const d = mine.get(queue[i])!;
+        for (const [dx, dz] of SIDES) {
+          const k = pipeKey(x + dx, z + dz);
+          if (!allowed.has(k) || !this.fed.has(k) || mine.has(k)) continue;
+          mine.set(k, d + 1);
+          queue.push(k);
+        }
+      }
+      for (const [k, d] of mine) if (!(dist.get(k)! <= d)) dist.set(k, d);
+    };
+    const sinks: MachineData[] = [];
+    for (const net of this.networks()) {
+      const filling = this.filling(net);
+      sinks.push(...filling);
+      for (const p of net.pumps) if (this.moving(p)) spread(p, this.reachOf(p, net));
+      // pumps that drive their line (moving water, or idle because its tanks are full): the line is theirs, not a
+      // tank's. A dark pump drives nothing, so a tank on its line feeding it by gravity is a source as usual.
+      const pumped = new Set<string>();
+      for (const p of net.pumps) if (this.drives(p)) for (const k of this.reachOf(p, net)) pumped.add(k);
+      for (const t of net.tanks) {
+        if (filling.has(t) || this.water.amountOf(tankId(t)) <= 0 || this.touches(t, pumped)) continue;
+        spread(t, new Set(this.gravityTiles(t, net)));
+      }
+    }
+    const out = new Map<string, [number, number][]>();
+    for (const [k, d] of dist) {
+      const [x, z] = parse(k);
+      const down = SIDES.filter(([dx, dz]) => dist.get(pipeKey(x + dx, z + dz)) === d + 1).map(([dx, dz]) => [dx, dz] as [number, number]);
+      if (down.length) out.set(k, down);
+    }
+    // the last tiles before a reservoir being filled point into it
+    for (const m of sinks)
+      for (const t of this.sim.grid.footprint(m.roofId, m.x, m.z, m.size)) {
+        if (!t) continue;
+        for (const [dx, dz] of SIDES) {
+          const k = pipeKey(t.x + dx, t.z + dz);
+          if (!dist.has(k)) continue;
+          const into: [number, number] = [-dx || 0, -dz || 0];
+          const list = out.get(k) ?? [];
+          if (!list.some(([a, b]) => a === into[0] && b === into[1])) list.push(into);
+          out.set(k, list);
+        }
+      }
+    return out;
   }
 
   /** The pipe tiles a pump feeds: its whole line, or (a pump with a reach) those within that many steps of it. */
@@ -459,10 +580,17 @@ export class WaterPipes {
       this.registered.add(type);
       power.register(type, { consumer: { shed: 'pump', draw: (m) => (this.pumping.has(m.id) ? (spec.power ?? WATER_NET.pump.power) : 0) } });
     }
+    // E23.4.3: the desalination plant, a heavy load, shed with the pumps
+    if (!this.registered.has('desalination')) {
+      this.registered.add('desalination');
+      power.register('desalination', { consumer: { shed: 'pump', draw: (m) => (this.water.desalinating.has(m.id) ? WATER_NET.desal.power : 0) } });
+    }
   }
 }
 
 /** A reservoir's water body id. */
 export const tankId = (m: MachineData) => `r:${m.id}`;
+/** A desalination plant's tank id. */
+export const plantId = (m: MachineData) => `d:${m.id}`;
 /** The sea, as a body a sea pump (PumpSpec.sea) draws from: never runs dry, never saved. */
 export const SEA_ID = 'sea';

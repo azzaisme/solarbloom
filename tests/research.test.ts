@@ -227,10 +227,12 @@ describe('E23.6.2: the research station', { timeout: 60000 }, () => {
     const sim = station();
     sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
     const offered = sim.research.upgrades().map((u) => u.id);
-    // E23.4 water and E23.5.3's compost bin are not in this game yet; E23.6.4's couriers wait for things carried by hand
-    for (const id of ['pumpRate', 'reservoirSize', 'evaporation', 'compostSpeed', 'droneCarry'])
+    // E23.4 water is not in this game yet; E23.6.4's couriers wait for things carried by hand
+    for (const id of ['pumpRate', 'reservoirSize', 'evaporation', 'droneCarry'])
       expect(offered, id).not.toContain(id);
-    expect(sim.research.upgradeProblem('compostSpeed')).toBe('Not open yet');
+    expect(sim.research.upgradeProblem('pumpRate')).toBe('Not open yet');
+    // E23.5.3's compost bin is: Busy worms is offered (its real effect is tested in farm-compost)
+    expect(offered).toContain('compostSpeed');
     // E23.2.1's charge and E23.3's batteries are: their upgrades are offered
     for (const id of ['backpack', 'pulseRadius', 'poleReach', 'solarYield', 'droneRange', 'droneSpeed', 'chargeCells', 'chargeEfficiency', 'sprint', 'batteryStore']) expect(offered, id).toContain(id);
     // "Lighter drones" waits for E23.6.3's reader (#502), so it is not in the data yet
@@ -307,12 +309,12 @@ describe('E23.6.2: the farm reads research (E23.5.2 planters)', () => {
     return { sim, at, sow };
   }
 
-  it('Kind soil and Crossbreeds are offered once planters are in the game; Busy worms waits for the compost bin', () => {
+  it('Kind soil, Crossbreeds and Busy worms are offered now planters and compost bins are in the game', () => {
     const { sim } = farm();
     const offered = sim.research.upgrades().map((u) => u.id);
     expect(offered).toContain('cropGrowth');
     expect(offered).toContain('crossbreed');
-    expect(offered).not.toContain('compostSpeed');
+    expect(offered).toContain('compostSpeed');
   });
 
   it('Kind soil: crops grow a little faster, every level', () => {

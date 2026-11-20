@@ -193,6 +193,7 @@ const BODIES = {
   // E23.4.2: the water network
   reservoir: R(4, 7, 16, 13, 2.4, 'stone') + R(5.6, 11, 12.8, 7.4, 1.4, 'water') + L('M4 7h16M7.5 4.5v2.5M16.5 4.5v2.5', '#fff', 1.4),
   pump: R(7, 9, 10, 11, 2, 'steel') + C(12, 14.5, 2.6, 'water') + L('M12 9V4.5M12 4.5h5.5M4 20.5h16', '#fff', 1.6) + P('M18 3.4c-.8 1.2-1.3 1.9-1.3 2.6a1.3 1.3 0 0 0 2.6 0c0-.7-.5-1.4-1.3-2.6z', 'water'),
+  desalination: P('M3.5 20.5h17v-7l-4-3-4 3v-3l-4-3-5 4z', 'stone') + R(15.5, 5, 3, 9, 1.2, 'water') + L('M2 21.5c2-1.2 4 1.2 6 0s4 1.2 6 0 4 1.2 6 0', '#2ba0e0', 1.5),
   pipe: L('M3.5 9h9.5a3.5 3.5 0 0 1 3.5 3.5V21', '#5aa3c9', 4.6) + L('M3.5 9h9.5a3.5 3.5 0 0 1 3.5 3.5V21', '#9fe3f5', 1.4) + R(2.5, 6.6, 2.6, 4.8, 0.6, 'steel') + R(14.2, 18.5, 4.6, 2.6, 0.6, 'steel'),
   crate: R(4, 6, 16, 14, 1.8, 'wood') + L('M4 11h16M12 6v14', '#3a2a1a', 1.2) + P('M4 6l2.4-2.5h11.2L20 6z', 'wood'),
   // E19: plot options
@@ -247,6 +248,8 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   cultivator: 'carrot', // the tiller: its tray slot showed 'undefined' without one
   chest: 'parcel', // E21.1
   planter: 'garden', // E23.5.2
+  compostBin: 'basket', // E23.5.3
+  bioDigester: 'energy', // E23.5.3
   battery: 'battery', // E23.3.2
   windTurbine: 'windTurbine', // E23.3.2
   charger: 'charger', // E23.3.3
@@ -254,6 +257,7 @@ export const MACHINE_ICONS: Record<string, IconName> = {
   pump: 'pump', // E23.4.2
   crate: 'basket', // E23.6.4
   assembler: 'settings', // E23.6.5
+  desalination: 'desalination', // E23.4.3
   core: 'sparkle',
 };
 

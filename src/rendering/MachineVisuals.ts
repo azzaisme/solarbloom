@@ -19,8 +19,12 @@ import { treeGeo } from './TreeGen';
 import { machineRunning } from './FaunaPlan';
 import { arcPath, ball, bezier, dome, latheAuto, matOf, part, rbox, rcyl, ring, setMat, tube } from './MachineParts';
 import { cultivatorDock } from './CultivatorVisuals';
-import { tankId } from '../gameplay/WaterPipes';
+import { compostBinBody, digesterBody } from './FarmBodies';
+import { plantId, tankId } from '../gameplay/WaterPipes';
 import { oldCityModel, MODELS } from './Models';
+
+/** The views that turn machines into holograms (one colour each). */
+export type HoloView = 'power' | 'water';
 
 interface MachineView {
   /** E21.6: how full the Old City fountain may get (a trickle at tier 1) */
@@ -99,6 +103,10 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   planter: ['planter-bed', 0.9],
   // E23.6.4: the supply crate is the old city's crate (the Assembler is built from parts below until its own model)
   crate: ['crate', 0.85],
+  // E23.5.3: E23.10's hand-built bin (1 m cube, scaled to its tile) and digester; the procedural bodies stand in
+  // until their files are in assets/raw/models/final (MODELS loads whatever is there)
+  compostBin: ['compost-bin', 0.82],
+  bioDigester: ['bio-digester', 0.8],
 };
 /** The Mother Tree's collar model: its scale (the planter fits the procedural ring, radius 0.85) and planter top (model metres). */
 const MotherCollar = { scale: 1.12, top: 0.84 };
@@ -346,21 +354,22 @@ export class MachineVisuals {
   static readonly BATCH_REGION = 64;
   private batchGroups = new Map<string, number>();
 
-  // ───── E23.3.4 the Power view: powered machines become yellow holograms ─────
-  private holoMat?: pc.StandardMaterial;
-  /** each part shown as a hologram, and the material it had */
-  private holo = new Map<pc.MeshInstance, pc.Material>();
-  private holoSig = '';
-  private holoIn = 0;
+  // ───── E23.3.4 / E23.4.5 the Power and Water views: machines become holograms ─────
+  /** one channel per view: its shared hologram material, each part shown with it (and the material it had) */
+  private holos: Record<HoloView, { mat?: pc.StandardMaterial; parts: Map<pc.MeshInstance, pc.Material>; sig: string; in: number }> = {
+    power: { parts: new Map(), sig: '', in: 0 },
+    water: { parts: new Map(), sig: '', in: 0 },
+  };
   private holoBoost = 1;
 
-  /** Keeps the hologram as bright while the Power view's dim lowers the exposure (DayNight.boost). */
+  /** Keeps the holograms as bright while a view's dim lowers the exposure (DayNight.boost). */
   setHoloBoost(b: number): void {
     if (Math.abs(b - this.holoBoost) < 0.01) return;
     this.holoBoost = b;
-    if (this.holoMat) {
-      this.holoMat.emissiveIntensity = POWER.view.holo.glow * b;
-      this.holoMat.update();
+    for (const ch of Object.values(this.holos)) {
+      if (!ch.mat) continue;
+      ch.mat.emissiveIntensity = POWER.view.holo.glow * b;
+      ch.mat.update();
     }
   }
 
@@ -372,27 +381,44 @@ export class MachineVisuals {
    * model arriving) pick it up.
    */
   powerHolo(ids: Set<string> | undefined, dt: number): void {
+    this.holoView('power', ids, dt);
+  }
+
+  /** E23.4.5 the Water view: the given machines (water that runs or is held) become blue holograms, as `powerHolo`. */
+  waterHolo(ids: Set<string> | undefined, dt: number): void {
+    this.holoView('water', ids, dt);
+  }
+
+  /** A view's one hologram material (made on first use), for other parts to wear (the Water view's pipes). */
+  holoMat(view: HoloView): pc.StandardMaterial {
+    const ch = this.holos[view];
+    const V = POWER.view.holo; // one hologram look for both views (the owner's numbers)
+    const hex = view === 'power' ? PALETTE.signal.power.machineHolo : PALETTE.signal.water.machineHolo;
+    return (ch.mat ??= holoMaterial(hex, V.opacity, V.glow * this.holoBoost, false));
+  }
+
+  private holoView(view: HoloView, ids: Set<string> | undefined, dt: number): void {
+    const ch = this.holos[view];
     const dirty = new Set<number>();
     const mark = (mi: pc.MeshInstance) => {
       const g = (mi.node as pc.Entity | null)?.render?.batchGroupId;
       if (g !== undefined && g >= 0) dirty.add(g);
     };
     if (!ids) {
-      if (!this.holo.size) return;
-      for (const [mi, orig] of this.holo) {
-        if (mi.material === this.holoMat) mi.material = orig; // unless something swapped it since
+      if (!ch.parts.size) return;
+      for (const [mi, orig] of ch.parts) {
+        if (mi.material === ch.mat) mi.material = orig; // unless something swapped it since
         mark(mi);
       }
-      this.holo.clear();
-      this.holoSig = '';
+      ch.parts.clear();
+      ch.sig = '';
     } else {
       const sig = [...ids].sort().join(',');
-      this.holoIn -= dt;
-      if (sig === this.holoSig && this.holoIn > 0) return;
-      this.holoSig = sig;
-      this.holoIn = 0.25;
-      const V = POWER.view.holo;
-      this.holoMat ??= holoMaterial(PALETTE.signal.power.machineHolo, V.opacity, V.glow * this.holoBoost, false);
+      ch.in -= dt;
+      if (sig === ch.sig && ch.in > 0) return;
+      ch.sig = sig;
+      ch.in = 0.25;
+      const hm = this.holoMat(view);
       const want = new Set<pc.MeshInstance>();
       for (const v of this.views.values()) {
         if (!ids.has(v.m.id)) continue;
@@ -401,17 +427,17 @@ export class MachineVisuals {
             const cur = mi.material;
             if (!cur) continue;
             want.add(mi);
-            if (cur === this.holoMat) continue;
-            this.holo.set(mi, cur);
-            mi.material = this.holoMat;
+            if (cur === hm) continue;
+            ch.parts.set(mi, cur);
+            mi.material = hm;
             mark(mi);
           }
         }
       }
-      for (const [mi, orig] of this.holo) {
+      for (const [mi, orig] of ch.parts) {
         if (want.has(mi)) continue;
-        if (mi.material === this.holoMat) mi.material = orig;
-        this.holo.delete(mi);
+        if (mi.material === ch.mat) mi.material = orig;
+        ch.parts.delete(mi);
         mark(mi);
       }
     }
@@ -654,11 +680,20 @@ export class MachineVisuals {
       case 'cultivator': // Look 6.9: the dock (its tillers are drawn by CultivatorVisuals)
         cultivatorDock(v.body);
         break;
+      case 'compostBin': // E23.5.3 (its heap is drawn by CropVisuals)
+        compostBinBody(v.body);
+        break;
+      case 'bioDigester': // E23.5.3 (its glow is drawn by CropVisuals)
+        digesterBody(v.body);
+        break;
       case 'reservoir': // E23.4.2.1
         this.waterTank(v);
         break;
       case 'pump': // E23.4.2.2
         this.pump(v);
+        break;
+      case 'desalination': // E23.4.3
+        this.desalination(v);
         break;
       case 'battery':
         this.battery(v);
@@ -1666,6 +1701,47 @@ export class MachineVisuals {
   }
 
   /**
+   * E23.4.3 Desalination Plant: a cream plant house with a pitched roof on a stone footing filling its 2×2 plot. Two
+   * tall glass columns beside it hold its fresh water (blue, as high as its tank is full); a slatted fan on the roof
+   * turns while it runs on grid power; a pale-blue intake pipe drops toward the sea at the back; gold trim and a lamp
+   * (aqua while running, dark without power).
+   */
+  private desalination(v: MachineView) {
+    const b = v.body;
+    part(b, rbox(1.8, 0.1, 1.8, 0.04), creamSeam(), { pos: [0, 0.05, 0], shadow: true });
+    // the house (toward the back), its roof and trim
+    const house = group(b, 'house', [-0.25, 0, -0.25]);
+    house.setLocalEulerAngles(0, 45, 0);
+    part(house, rbox(0.9, 0.62, 0.7, 0.07), cream(), { pos: [0, 0.41, 0], shadow: true });
+    part(house, rbox(0.92, 0.03, 0.72, 0.012), gold(), { pos: [0, 0.73, 0] });
+    for (const sx of [-1, 1]) part(house, rbox(0.98, 0.04, 0.42, 0.015), cream(), { pos: [0, 0.86, sx * 0.17], rot: [sx * 32, 0, 0], shadow: true });
+    part(house, rbox(0.26, 0.36, 0.02, 0.03), darkMetal(), { pos: [0, 0.3, 0.36] }); // the door
+    // the roof fan (turns while running)
+    const fan = group(house, 'fan', [0, 1.02, 0]);
+    part(house, rcyl(0.07, 0.9, 1.0, 0.01, 0.01, 10), metal(), {});
+    for (let i = 0; i < 4; i++) part(fan, rbox(0.34, 0.012, 0.07, 0.006), metal(), { rot: [0, i * 45, 0] });
+    part(fan, ball(6, 8), gold(), { scale: [0.06, 0.04, 0.06] });
+    v.spin.push(fan);
+    v.turn = 0;
+    // two glass columns of fresh water (toward the front, where the camera looks from)
+    v.rings = [];
+    for (const [x, z] of [
+      [0.55, 0.1],
+      [0.1, 0.55],
+    ] as const) {
+      part(b, rcyl(0.17, 0.1, 0.16, 0.02, 0.01, 14), cream(), { pos: [x, 0, z] });
+      v.rings.push(part(b, rcyl(0.13, 0, 0.78, 0.01, 0.01, 14), waterGlow(), { pos: [x, 0.16, z] }));
+      part(b, rcyl(0.15, 0.16, 0.96, 0.02, 0.02, 14), glassMat(), { pos: [x, 0, z] });
+      part(b, rcyl(0.17, 0.96, 1.02, 0.02, 0.01, 14), gold(), { pos: [x, 0, z] });
+    }
+    // the intake pipe at the back, dropping to the ground toward the sea
+    part(b, rcyl(0.07, 0.05, 0.7, 0.01, 0.01, 10), mat(PALETTE.aqua.pipe, { gloss: 0.6, metal: 0.2 }), { pos: [-0.72, 0, -0.72] });
+    part(b, rcyl(0.09, 0.66, 0.74, 0.01, 0.01, 10), cream(), { pos: [-0.72, 0, -0.72] });
+    v.light = part(b, ball(5, 8), pumpOff(), { pos: [0.32, 0.62, 0.32], scale: 0.06 });
+    bolts(b, [[-0.82, 0.1, 0.82], [0.82, 0.1, 0.82], [0.82, 0.1, -0.82], [-0.82, 0.1, -0.82]], 0.03, gold());
+  }
+
+  /**
    * E23.3.2.1 Battery: a squat cream cabinet on a bevelled plinth with a glass front. Behind the glass a stack of
    * four cells lights up mint from the bottom as it fills (the stored share, read from the grid); terminals and a
    * cable on top, a gold trim band.
@@ -2253,6 +2329,22 @@ export class MachineVisuals {
           g.setLocalScale(1, Math.max(0.001, lv), 1);
           g.setLocalPosition(0, TANK.gauge0 + (TANK.gauge1 - TANK.gauge0) * lv * 0.5, 0);
           if (!rm && lv > 0.01) v.water!.setLocalEulerAngles(0, t * 4, 0);
+          break;
+        }
+        case 'desalination': {
+          // E23.4.3: the columns show its fresh-water tank; the roof fan turns while it runs on power
+          const lv = this.sim.water.levelOf(plantId(v.m));
+          for (const c of v.rings ?? []) {
+            c.enabled = lv > 0.01;
+            c.setLocalScale(1, Math.max(0.001, lv), 1);
+          }
+          const on = this.sim.water.desalinating.has(v.m.id) && this.sim.water.pipes.powered(v.m);
+          if (on && !rm) {
+            v.turn = ((v.turn ?? 0) + dt * 300) % 360;
+            v.spin[0]?.setLocalEulerAngles(0, v.turn, 0);
+          }
+          const want = on ? pumpOn() : pumpOff();
+          if (matOf(v.light!) !== want) setMat(v.light!, want);
           break;
         }
         case 'pump': {
