@@ -6,9 +6,18 @@
  *
  * "Seen" is measured on the frame itself: the game renders a pick pass (rendering/SightPicker) and counts the screen
  * pixels where the frontmost thing drawn is the cat. Anything the player can't see through hides it at its real
- * shape and height: buildings, towers, landmarks, trees, ruins, walls, props, machines, the fog. This module is the
- * pure part: the screen box to read, the count, and how much is enough.
+ * shape and height: buildings, towers, landmarks, trees, ruins, walls, props, machines. Where the GPU pick can't run
+ * (WebGPU reads back only asynchronously), a CPU ray march estimates the same number against the solid things'
+ * real shapes as drawn (core/Solids: the chunk builder records them), so a canopy or a tree crown can overhang a
+ * cat and still be seen under (cpuSeenPixels). This module is the pure part: the screen box to read, the count, the ray march, and how
+ * much is enough.
  */
+
+export interface P3 {
+  x: number;
+  y: number;
+  z: number;
+}
 
 export const CAT_SIGHT = {
   /**
@@ -18,8 +27,20 @@ export const CAT_SIGHT = {
   minPixels: 100,
   /** the pick pass runs at this fraction of the screen's resolution (each pick pixel stands for 1/scale² pixels) */
   scale: 0.5,
-  /** a result is reused for this long (s): the pointer and the prompt ask every frame */
+  /** a result is reused for this long (s) even while things move: a walking view re-measures at most this often */
   cacheSeconds: 0.25,
+  /** a result from an unchanged view is reused up to this long (s): things that move on their own (drones) */
+  maxAgeSeconds: 2,
+  /** the pointer counts as near a cat within its tap radius plus this (screen px): it is measured before it's under the pointer */
+  pointerMarginPx: 24,
+  /** CPU ray march: the cat's height (world units: the Lucky Cat model as drawn) */
+  catHeight: 0.32,
+  /** CPU ray march: how much of the square on the cat's screen height its silhouette fills */
+  fill: 0.65,
+  /** CPU ray march: how finely a line of sight is walked (world units) */
+  step: 0.08,
+  /** CPU ray march: the stretch beside the cat that isn't checked (its own nook: the bench or ledge it tucks into) */
+  skipNear: 0.3,
 };
 
 export interface ScreenBox {
@@ -61,4 +82,50 @@ export function toScreenPixels(pickPixels: number, scale = CAT_SIGHT.scale): num
 /** Seen: at least `CAT_SIGHT.minPixels` screen pixels of the cat show. */
 export function seenEnough(screenPixels: number): boolean {
   return screenPixels >= CAT_SIGHT.minPixels;
+}
+
+/**
+ * The points on a cat the CPU ray march looks at: low, middle and high on its middle line, and its two sides at
+ * mid-height (`right` is the camera's right, flat).
+ */
+export function catSamples(base: P3, height: number, right: { x: number; z: number }): P3[] {
+  const len = Math.hypot(right.x, right.z) || 1;
+  const rx = right.x / len;
+  const rz = right.z / len;
+  const side = height * 0.35;
+  return [
+    { x: base.x, y: base.y + height * 0.2, z: base.z },
+    { x: base.x, y: base.y + height * 0.5, z: base.z },
+    { x: base.x, y: base.y + height * 0.85, z: base.z },
+    { x: base.x - rx * side, y: base.y + height * 0.5, z: base.z - rz * side },
+    { x: base.x + rx * side, y: base.y + height * 0.5, z: base.z + rz * side },
+  ];
+}
+
+/**
+ * Is the line from `eye` to `p` clear? `solidAt(x, y, z)` says whether a point is inside something solid (the
+ * ground, a roof, a tree's crown, a ruin, a wall, a machine). Walked from the point out (its own nook, the first
+ * `skipNear`, aside); blocked at the first solid point.
+ */
+export function rayClear(eye: P3, p: P3, solidAt: (x: number, y: number, z: number) => boolean): boolean {
+  const dx = eye.x - p.x;
+  const dy = eye.y - p.y;
+  const dz = eye.z - p.z;
+  const len = Math.hypot(dx, dy, dz);
+  if (len < 1e-6) return true;
+  for (let s = CAT_SIGHT.skipNear; s < len; s += CAT_SIGHT.step) {
+    const f = s / len;
+    if (solidAt(p.x + dx * f, p.y + dy * f, p.z + dz * f)) return false;
+  }
+  return true;
+}
+
+/**
+ * The CPU estimate of a cat's seen screen pixels, the same measure as the GPU pick's: the share of its sample points
+ * with a clear line to the eye, times its silhouette's area on screen (`heightPx`: its height there, px).
+ */
+export function cpuSeenPixels(eye: P3, samples: P3[], heightPx: number, solidAt: (x: number, y: number, z: number) => boolean): number {
+  if (!samples.length || heightPx <= 0) return 0;
+  const clear = samples.filter((p) => rayClear(eye, p, solidAt)).length;
+  return (clear / samples.length) * heightPx * heightPx * CAT_SIGHT.fill;
 }

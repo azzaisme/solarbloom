@@ -7,7 +7,8 @@ import { treeSpot, treeStage } from '../rendering/TreePlacement';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
-import { CAT_SIGHT, seenEnough } from '../core/CatSight';
+import { CAT_SIGHT, catSamples, cpuSeenPixels, seenEnough } from '../core/CatSight';
+import type { Box } from '../core/Solids';
 import { SightPicker } from '../rendering/SightPicker';
 import { distToFootprint } from '../core/Grid';
 import type { DroneRole, LayerData, MachineData, TileData } from '../core/types';
@@ -2512,45 +2513,194 @@ export class Game {
   get sight(): SightPicker {
     return (this.sightPicker ??= new SightPicker(this.app, () => this.camera.cam));
   }
-  private catSeenAt = new Map<string, { at: number; seen: boolean }>();
+  /** each hiding cat's last sight result, with the poses it was measured from */
+  private catSeenAt = new Map<string, { key: string; at: number; frame: number; seen: boolean; px: number }>();
+  /** drawn frames so far (counted after each one): a result taken or confirmed on the latest drawn frame answers until the next */
+  private sightFrame = 0;
+  /** cats something asked about whose result was out of date: measured after the next frame */
+  private catSightAsked = new Set<string>();
 
   /**
-   * E23.12.3 (#530): could the player spot this cat by eye? Enough of it is drawn in front of everything else on
-   * this frame (core/CatSight): anything the player can't see through hides it, at its real shape and height, and a
-   * cat a few pixels across is too small to make out. Cached briefly (the pointer and the prompt ask every frame).
-   * Public for the e2e.
+   * E23.12.3 (#530): could the player spot this cat by eye? Enough of it is drawn in front of everything else
+   * (core/CatSight): anything the player can't see through hides it, at its real shape and height, and a cat a few
+   * pixels across is too small to make out. Answers from the last measure while it's fresh (sightFresh); otherwise
+   * "not yet" (false: never a hint by mistake), and the cat is measured after the next frame. Public for the e2e.
    */
   catVisible(id: string): boolean {
     const hit = this.catSeenAt.get(id);
-    if (hit && performance.now() - hit.at < CAT_SIGHT.cacheSeconds * 1000) return hit.seen;
-    // not measured yet (or a while ago): measure now, outside the frame (a click, a key, the e2e)
-    return this.measureCat(id);
-  }
-
-  private measureCat(id: string): boolean {
-    const root = this.cat.rootOf(id);
-    const seen = !!root && seenEnough(this.sight.visiblePixels(root));
-    this.catSeenAt.set(id, { at: performance.now(), seen });
-    return seen;
+    // taken on the frame just drawn (however long that frame took), or still fresh
+    if (hit && (hit.frame === this.sightFrame || this.sightFresh(id, hit))) return hit.seen;
+    this.catSightAsked.add(id);
+    return false;
   }
 
   /**
-   * After each frame is drawn (never mid-update, when the scene is half moved): the hiding cats are measured again,
-   * at most every CAT_SIGHT.cacheSeconds, and only before the first find (afterwards nothing asks).
+   * Everything a sight result depends on that moves: the camera's eye and aim, the cat, bloombot (it can stand in
+   * the way) and the screen size. Rounded so a still view keeps one key.
    */
-  private measureCatsAfterFrame() {
-    if (this.sim.cat.known) return;
-    const now = performance.now();
-    for (const id of this.cat.ids()) {
-      const hit = this.catSeenAt.get(id);
-      if (!hit || now - hit.at >= CAT_SIGHT.cacheSeconds * 1000 * 0.8) this.measureCat(id);
-    }
+  private sightKey(id: string): string {
+    const e = this.camera.cam.entity;
+    const p = e.getPosition();
+    const f = e.forward;
+    const c = this.cat.rootOf(id)?.getPosition();
+    const b = this.bot?.world();
+    const canvas = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+    const r = (v: number, k = 100) => Math.round(v * k);
+    return [r(p.x), r(p.y), r(p.z), r(f.x, 1000), r(f.y, 1000), r(f.z, 1000), c ? `${r(c.x)},${r(c.y)},${r(c.z)}` : '-', b ? `${r(b[0], 20)},${r(b[2], 20)}` : '-', canvas.clientWidth, canvas.clientHeight].join(' ');
   }
 
-  /** How many screen pixels of a cat the player can see right now (for the e2e). */
+  /**
+   * Still good: younger than CAT_SIGHT.cacheSeconds whatever moved (so a walking view re-measures at most that
+   * often), or measured from the same poses and younger than CAT_SIGHT.maxAgeSeconds (a still view isn't measured
+   * again; the cap is for things that move on their own: drones, a chunk rebuilt).
+   */
+  private sightFresh(id: string, hit: { key: string; at: number }): boolean {
+    const age = performance.now() - hit.at;
+    return age < CAT_SIGHT.cacheSeconds * 1000 || (age < CAT_SIGHT.maxAgeSeconds * 1000 && hit.key === this.sightKey(id));
+  }
+
+  /**
+   * The cats worth measuring now: before the first find only, never while paused, and only a cat the pointer is near
+   * (on its projected spot, within the tap radius and a margin) or that bloombot could greet, or that something just
+   * asked about. Of those, only the ones whose last result is out of date.
+   */
+  private catsToMeasure(): string[] {
+    if (this.sim.cat.known || this.paused) return [];
+    const out: string[] = [];
+    const ptr = this.pointer.inside && (!this.bot || this.overviewOn) ? this.pointer : undefined;
+    const reach = Math.max(20, 0.26 / this.camera.worldPerPixel()) + CAT_SIGHT.pointerMarginPx;
+    const bw = this.bot?.world();
+    for (const id of this.cat.ids()) {
+      const v = this.cat.targetWorld(id);
+      if (!v) continue;
+      let wanted = this.catSightAsked.has(id);
+      if (!wanted && bw) wanted = Math.hypot(v.x - bw[0], v.z - bw[2]) < BOT_REACH + 0.6;
+      if (!wanted && ptr) {
+        const sc = this.camera.onScreen(v, 0);
+        wanted = !!sc && Math.hypot(sc.x - ptr.x, sc.y - ptr.y) <= reach;
+      }
+      if (!wanted) continue;
+      const hit = this.catSeenAt.get(id);
+      if (!hit || !this.sightFresh(id, hit)) out.push(id);
+      else hit.frame = this.sightFrame; // still good on this frame: it answers until the next one, however long that takes
+    }
+    this.catSightAsked.clear();
+    return out;
+  }
+
+  /** Measures cats now, together: one GPU pick for all of them, or the CPU ray march where the GPU pick can't run. */
+  private measureCats(ids: string[]): Map<string, number> {
+    const roots = new Map<string, pc.Entity>();
+    for (const id of ids) {
+      const r = this.cat.rootOf(id);
+      if (r) roots.set(id, r);
+    }
+    const px = (roots.size ? this.sight.measure(roots) : undefined) ?? new Map(ids.map((id) => [id, this.catSeenPixelsCpu(id)]));
+    const now = performance.now();
+    for (const id of ids) {
+      const n = px.get(id) ?? 0;
+      this.catSeenAt.set(id, { key: this.sightKey(id), at: now, frame: this.sightFrame, seen: seenEnough(n), px: n });
+    }
+    return px;
+  }
+
+  /**
+   * After each frame is drawn (never mid-update, when the scene is half moved): the cats worth measuring
+   * (catsToMeasure) share one pick. Nothing runs while no cat is near the pointer or bloombot, while paused, or once
+   * a cat has been found.
+   */
+  private measureCatsAfterFrame() {
+    this.sightFrame++;
+    const ids = this.catsToMeasure();
+    if (ids.length) this.measureCats(ids);
+  }
+
+  /** How many screen pixels of a cat the player can see right now, measured at once (for the e2e). */
   catSeenPixels(id: string): number {
+    return this.measureCats([id]).get(id) ?? 0;
+  }
+
+  /** The CPU ray march's estimate of a cat's seen pixels (core/CatSight), for where the GPU pick can't run. */
+  catSeenPixelsCpu(id: string): number {
     const root = this.cat.rootOf(id);
-    return root ? this.sight.visiblePixels(root) : 0;
+    const v = this.cat.targetWorld(id);
+    if (!root || !v) return 0;
+    const cam = this.camera.cam;
+    const eye = cam.entity.getPosition();
+    const base = root.getPosition();
+    const top = new pc.Vec3(base.x, base.y + CAT_SIGHT.catHeight, base.z);
+    const a = this.camera.onScreen(new pc.Vec3(base.x, base.y, base.z), 0);
+    const b = this.camera.onScreen(top, 0);
+    if (!a || !b) return 0;
+    const right = cam.entity.right;
+    return cpuSeenPixels(
+      { x: eye.x, y: eye.y, z: eye.z },
+      catSamples({ x: base.x, y: base.y, z: base.z }, CAT_SIGHT.catHeight, { x: right.x, z: right.z }),
+      Math.abs(a.y - b.y),
+      (x, y, z) => this.solidAt(x, y, z),
+    );
+  }
+
+  /**
+   * E23.12.3 (#530): is a world point inside something solid the player can't see through? For the CPU line of
+   * sight: the ground as drawn (terraces, sunk fog), a rooftop's block, what the ground chunks drew solid (recorded
+   * as they were built: buildings, towers, trees, ruins and piles, gates, walls and rails, props, decorations,
+   * pergolas; core/Solids), and machines and landmarks at their models' bounds as placed.
+   */
+  solidAt(x: number, y: number, z: number): boolean {
+    if (y < this.groundY(x, z)) return true;
+    for (const l of this.sim.grid.allLayers) {
+      if (l.kind !== 'raised' || !l.unlocked) continue;
+      const lx = x - l.origin[0];
+      const lz = z - l.origin[2];
+      if (lx >= 0 && lz >= 0 && lx < l.width && lz < l.depth && y < l.origin[1] + l.height + SLAB_TOP) return true;
+    }
+    if (this.chunks.solids.at(x, y, z)) return true;
+    const t = this.sim.grid.peek(GROUND, Math.floor(x), Math.floor(z));
+    if (t?.occupantId) {
+      const b = this.machineBox(t.occupantId);
+      if (b && x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1 && z >= b.z0 && z <= b.z1) return true;
+    }
+    return false;
+  }
+
+  /**
+   * E23.12.3 (#530): what stands on a ground tile, from the map alone (the e2e picks its "something in the way"
+   * views with it, and the debug readout names it): a building, a grown tree (stage 3+), a ruin (a salvage pile, a
+   * gate's rubble, a cracked pillar or stump) or a landmark.
+   */
+  standingAt(x: number, z: number): 'building' | 'tree' | 'ruin' | 'landmark' | undefined {
+    const t = this.sim.grid.peek(GROUND, x, z);
+    if (!t) return undefined;
+    if (t.feature === 'building') return 'building';
+    if (t.occupantId) return this.sim.occupant(t)?.type === 'core' ? 'landmark' : undefined;
+    if (t.blocked) return t.prop && (/^(pile|gate):/.test(t.prop) || t.prop === 'pillar' || t.prop === 'stump') ? 'ruin' : undefined;
+    const spot = treeSpot(t, this.sim.areas.info(this.sim.areas.map.areaOfCell(x, z)).type);
+    const stage = treeStage(t);
+    return spot && stage && stage >= 3 ? 'tree' : undefined;
+  }
+
+  /** A machine's (or landmark's) bounds as drawn, from its model's meshes (batched or not); cached a second. */
+  private machineBoxes = new Map<string, { at: number; box?: Box }>();
+  private machineBox(id: string): Box | undefined {
+    const now = performance.now();
+    const hit = this.machineBoxes.get(id);
+    if (hit && now - hit.at < 1000) return hit.box;
+    const v = this.machines.view(id);
+    let box: Box | undefined;
+    if (v) {
+      for (const r of v.root.findComponents('render') as pc.RenderComponent[]) {
+        if (!r.entity.enabled) continue;
+        for (const mi of r.meshInstances) {
+          const lo = mi.aabb.getMin();
+          const hi = mi.aabb.getMax();
+          if (!box) box = { x0: lo.x, y0: lo.y, z0: lo.z, x1: hi.x, y1: hi.y, z1: hi.z };
+          else box = { x0: Math.min(box.x0, lo.x), y0: Math.min(box.y0, lo.y), z0: Math.min(box.z0, lo.z), x1: Math.max(box.x1, hi.x), y1: Math.max(box.y1, hi.y), z1: Math.max(box.z1, hi.z) };
+        }
+      }
+    }
+    this.machineBoxes.set(id, { at: now, box });
+    return box;
   }
 
   /**
@@ -2565,11 +2715,10 @@ export class Game {
     for (const id of this.cat.ids()) {
       const p = this.cat.targetWorld(id);
       if (!p) continue;
-      if (!this.sim.cat.known && !this.catVisible(id)) continue;
       const s = this.camera.onScreen(p);
       if (!s) continue;
       const d = Math.hypot(s.x - x, s.y - y);
-      if (d <= bestD) {
+      if (d <= bestD && (this.sim.cat.known || this.catVisible(id))) {
         best = id;
         bestD = d;
       }

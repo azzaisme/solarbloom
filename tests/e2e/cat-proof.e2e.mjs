@@ -55,10 +55,11 @@ const CAT_WORD = /\b(cats?|kitt(?:y|en|ens)|kitties|meows?|mews?|paws?|pawprints
 const addView = () =>
   page.evaluate(() => {
     const g = window.solarbloom;
-    window.view = (x, z, yaw = g.camera.heading, zoom = 2) => {
+    window.view = (x, z, yaw = g.camera.heading, zoom = 2, tilt = 0) => {
       const yr = (yaw * Math.PI) / 180;
       g.overviewOn = true;
       g.camera.turnTo(yaw, true);
+      g.camera.pitchOffset = tilt; // a player's tilt (0: the camera's own pitch)
       // just beyond the spot; if that cell is taken, nearer the camera side instead (still within reach)
       for (const k of [0.8, 0.6, -0.8]) {
         g.bot.teleport('g', x - Math.sin(yr) * k, z - Math.cos(yr) * k);
@@ -220,7 +221,7 @@ try {
    */
   const pointAtCat = async (view, file) => {
     if (view) {
-      await page.evaluate((v) => window.view(v.x, v.z, v.yaw, v.zoom), view);
+      await page.evaluate((v) => window.view(v.x, v.z, v.yaw, v.zoom, v.tilt ?? 0), view);
       await settle(); // the follow camera settles
     }
     const at = await page.evaluate(() => {
@@ -643,11 +644,14 @@ try {
   await page.close();
   await load();
   check(await page.evaluate(() => window.solarbloom.sim.state.cat.found === 0 && !window.solarbloom.sim.cat.known), 'a new game: no cat found yet');
-  // ── 6. a cat behind a building, in a new game (no cat found yet) ──
-  // The park has no building close enough, so two more areas are grown and cleared first (as the audit's unit
-  // fixture does): their city nooks sit among the buildings. The view is chosen from the map, not from catVisible:
-  // a hiding spot and a building tile near it, the camera turned so the building is on the line to the cat. A depth
-  // pick then says what is drawn at the cat's spot: it must be that building, in front of the cat.
+  // ── 6. a cat behind something solid, in a new game (no cat found yet) ──
+  // A building, a grown tree, a ruin and a landmark each hide a cat. The park has too few of them close to its
+  // hiding spots, so two more areas are grown and cleared and the park blooms in full (so trees are grown): their
+  // city nooks sit among buildings, trees and ruins. Each view is chosen from the map, not from the sight check: a
+  // hiding spot and a tile near it where that thing stands (Game.standingAt), the camera turned so it is on the line
+  // to the cat (a lower tilt is tried too, as a player would tilt to look past). A depth pick then says what is
+  // drawn at the cat's spot: it must be that thing, in front of the cat. Then the GPU sight and the CPU fallback
+  // (core/CatSight cpuSeenPixels, what WebGPU uses) must both find the cat hidden.
   await addView();
   const pairs = await page.evaluate(() => {
     const g = window.solarbloom;
@@ -657,13 +661,21 @@ try {
       const id = s.areas.nextGoal();
       if (!id) break;
       for (const t of s.areas.tiles(id)) {
-        if (t.blocked || t.occupantId || t.feature === 'water' || t.ground === 'restored') continue;
+        if (t.blocked || t.occupantId || t.feature === 'water') continue;
         t.ground = 'restored';
         t.pollution = 0;
-        t.bloom = 1;
+        t.bloom = 4;
         s.grid.touch(t);
       }
       s.areas.clear(id, true);
+    }
+    // the park in full bloom too: its trees grown beside its own hiding spots
+    for (const t of s.areas.tiles('park')) {
+      if (t.blocked || t.occupantId || t.feature === 'water') continue;
+      t.ground = 'restored';
+      t.pollution = 0;
+      t.bloom = 4;
+      s.grid.touch(t);
     }
     g.chunks.markAll();
     s.state.cat.active = undefined;
@@ -671,66 +683,92 @@ try {
     // default) while the spot is chosen and the cat hides, so the pick doesn't depend on where the camera was
     window.__anchorView = s.cat.anchorView;
     s.cat.anchorView = () => 'offscreen';
-    const out = [];
+    const near = { building: [1.5, 5], tree: [1.2, 4], ruin: [1, 4], landmark: [1.5, 5] };
+    const out = { building: [], tree: [], ruin: [], landmark: [] };
     for (const a of s.cat.candidates()) {
       const [cx, cy, cz] = a.pos;
       for (let dx = -5; dx <= 5; dx++)
         for (let dz = -5; dz <= 5; dz++) {
-          const t = s.grid.get('g', Math.floor(cx) + dx, Math.floor(cz) + dz); // generates the chunk if need be
-          if (t?.feature !== 'building') continue;
-          const d = Math.hypot(t.x + 0.5 - cx, t.z + 0.5 - cz);
-          if (d < 1.5 || d > 5) continue;
-          out.push({ anchor: a.id, cx, cy, cz, bx: t.x, bz: t.z, d, yaw: (Math.atan2(t.x + 0.5 - cx, t.z + 0.5 - cz) * 180) / Math.PI });
+          const x = Math.floor(cx) + dx;
+          const z = Math.floor(cz) + dz;
+          s.grid.get('g', x, z); // generates the chunk if need be
+          const kind = g.standingAt(x, z);
+          if (!kind) continue;
+          const d = Math.hypot(x + 0.5 - cx, z + 0.5 - cz);
+          if (d < near[kind][0] || d > near[kind][1]) continue;
+          out[kind].push({ kind, anchor: a.id, cx, cy, cz, bx: x, bz: z, d, yaw: (Math.atan2(x + 0.5 - cx, z + 0.5 - cz) * 180) / Math.PI });
         }
     }
-    return out.sort((p, q) => p.d - q.d);
+    for (const k of Object.keys(out)) out[k].sort((p, q) => p.d - q.d);
+    return out;
   });
   await page.waitForTimeout(2500); // the grown areas draw
-  let behind;
-  const tries = [];
-  for (const p of pairs.slice(0, 40)) {
-    await page.evaluate((p) => {
-      const s = window.solarbloom.sim;
-      if (s.state.cat.active?.anchorId === p.anchor) return;
-      s.state.cat.active = undefined;
-      s.cat.spawn(p.anchor);
-    }, p);
-    check(await page.evaluate((p) => window.solarbloom.sim.state.cat.active?.anchorId === p.anchor, p), `a cat hides at ${p.anchor}`);
-    await page.waitForTimeout(300); // the cat's model goes in on the next frame
-    await page.evaluate((p) => window.view(p.cx, p.cz, p.yaw, 1.6), p);
-    await settle();
-    let drawn;
-    for (let n = 0; n < 3 && !drawn; n++) {
-      if (n) {
-        await page.evaluate((p) => window.view(p.cx, p.cz, p.yaw, 1.6), p);
-        await settle();
+  /**
+   * What is drawn frontmost across the cat's screen box, from depth picks at five points (its middle and four points
+   * around it): covering the cat means being in front of all of it, not only its middle.
+   */
+  const drawnAtCat = () =>
+    page.evaluate(async () => {
+      const g = window.solarbloom;
+      const id = g.sim.state.cat.active.id;
+      const box = g.sight.box(g.cat.rootOf(id));
+      if (!box) return undefined;
+      const out = [];
+      for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.3], [0.75, 0.3], [0.25, 0.75], [0.75, 0.75]]) {
+        const pick = await g.sight.at(box.x + box.w * fx, box.y + box.h * fy);
+        const p = pick.point;
+        // `rise`: how far above the ground there the point is (on the thing itself, not the bare ground of its tile)
+        out.push({ path: pick.path, point: p, kind: p && g.standingAt(Math.floor(p.x), Math.floor(p.z)), rise: p ? p.y - g.groundY(p.x, p.z) : 0 });
       }
-      drawn = await page.evaluate(async () => {
-        const g = window.solarbloom;
-        const id = g.sim.state.cat.active.id;
-        const sc = g.camera.onScreen(g.cat.targetWorld(id), 0);
-        if (!sc) return undefined;
-        const pick = await g.sight.at(sc.x, sc.y);
-        const t = pick.point && g.sim.grid.peek('g', Math.floor(pick.point.x), Math.floor(pick.point.z));
-        return { path: pick.path, point: pick.point, tile: t && { x: t.x, z: t.z, feature: t.feature } };
-      });
+      return out;
+    });
+  for (const kind of ['building', 'tree', 'ruin', 'landmark']) {
+    let behind;
+    const tries = [];
+    for (const p of pairs[kind].slice(0, 14)) {
+      await page.evaluate((p) => {
+        const s = window.solarbloom.sim;
+        if (s.state.cat.active?.anchorId === p.anchor) return;
+        s.state.cat.active = undefined;
+        s.cat.spawn(p.anchor);
+      }, p);
+      if (!(await page.evaluate((p) => window.solarbloom.sim.state.cat.active?.anchorId === p.anchor, p))) {
+        tries.push(`${p.anchor}: no cat hid there`);
+        continue;
+      }
+      await page.waitForTimeout(300); // the cat's model goes in on the next frame
+      for (const [zoom, tilt] of [[1.6, 0], [1.6, -14], [2.4, -14], [1.6, -22]]) {
+        let drawn;
+        for (let n = 0; n < 2 && !drawn; n++) {
+          await page.evaluate(([p, zoom, tilt]) => window.view(p.cx, p.cz, p.yaw, zoom, tilt), [p, zoom, tilt]);
+          await settle();
+          drawn = await drawnAtCat();
+        }
+        // at every point: that thing (for a tree, its crown spreading past its own tile), in front of the cat
+        const on = (d) => !!d.point && (d.kind === kind || (kind === 'tree' && Math.hypot(d.point.x - p.bx - 0.5, d.point.z - p.bz - 0.5) < 1.5)) && d.rise > 0.05 && !d.path.some((n) => /cat/i.test(n));
+        tries.push(`${p.anchor}@${p.bx},${p.bz} z${zoom} t${tilt}: ${drawn ? drawn.map((d) => (on(d) ? kind : d.path.some((n) => /cat/i.test(n)) ? 'cat' : d.kind ?? 'ground')).join('/') : 'off screen'}`);
+        if (drawn && drawn.every(on)) {
+          behind = { p, drawn, zoom, tilt };
+          break;
+        }
+      }
+      if (behind) break;
     }
-    tries.push(`${p.anchor}@${p.bx},${p.bz}: ${drawn ? `${drawn.tile?.feature ?? 'no tile'} ${drawn.tile ? `${drawn.tile.x},${drawn.tile.z}` : ''} y${drawn.point ? (drawn.point.y - p.cy).toFixed(2) : '?'} ${drawn.path.slice(0, 2).join('<')}` : 'off screen'}`);
-    if (drawn?.tile?.feature === 'building' && drawn.point.y > p.cy + 0.2) {
-      behind = { p, drawn };
-      break;
-    }
+    check(!!behind, `a hiding spot with a ${kind} on the line to it, from the map (${behind ? `${behind.p.anchor}, the ${kind} at ${behind.p.bx},${behind.p.bz}, heading ${behind.p.yaw.toFixed(0)}°, tilt ${behind.tilt}` : `none of ${pairs[kind].length} pairs: ${tries.join(' | ')}`})`);
+    if (!behind) continue;
+    const { p, drawn, zoom, tilt } = behind;
+    check(true, `depth picks across the cat's screen box: the ${kind} is drawn in front at all five points, ${Math.min(...drawn.map((d) => d.rise)).toFixed(2)}+ above the ground there (${drawn[0].path.slice(0, 3).join(' < ')})`);
+    const hiddenCat = await pointAtCat({ x: p.cx, z: p.cz, yaw: p.yaw, zoom, tilt }, `1-pointer-behind-${kind}.png`);
+    const cpu = await page.evaluate(() => window.solarbloom.catSeenPixelsCpu(window.solarbloom.sim.state.cat.active.id));
+    check(!!hiddenCat && !hiddenCat.visible && hiddenCat.px < 100, `behind the ${kind}: the cat is not seen (${hiddenCat?.px} px of it drawn)`);
+    check(cpu < 100, `behind the ${kind}: the CPU fallback (WebGPU's) doesn't see it either (${cpu.toFixed(0)} px)`);
+    check(!!hiddenCat && !CAT_WORD.test(hiddenCat.tip), `behind the ${kind}: the pointer on its spot says nothing of a cat (${flat(hiddenCat?.tip ?? '')})`);
+    check(!!hiddenCat && hiddenCat.botDist < 1.6 && !/Say hello/.test(hiddenCat.prompt), `behind the ${kind}: bloombot right beside it doesn't offer "Say hello" (${flat(hiddenCat?.prompt ?? '')})`);
   }
-  await page.evaluate(() => (window.solarbloom.sim.cat.anchorView = window.__anchorView));
-  check(!!behind, `a hiding spot with a building on the line to it, from the map (${behind ? `${behind.p.anchor}, the building at ${behind.p.bx},${behind.p.bz}, heading ${behind.p.yaw.toFixed(0)}°` : `none of ${pairs.length} pairs: ${tries.join(' | ')}`})`);
-  if (behind) {
-    const { p, drawn } = behind;
-    check(!drawn.path.some((n) => /cat/i.test(n)), `the depth pick at the cat's spot: a building tile (${drawn.tile.x},${drawn.tile.z}) drawn ${(drawn.point.y - p.cy).toFixed(2)} above the cat (${drawn.path.slice(0, 3).join(' < ')})`);
-    const hiddenCat = await pointAtCat({ x: p.cx, z: p.cz, yaw: p.yaw, zoom: 1.6 }, '1-pointer-behind-building.png');
-    check(!!hiddenCat && !hiddenCat.visible && hiddenCat.px < 100, `behind the building: the cat is not seen (${hiddenCat?.px} px of it drawn)`);
-    check(!!hiddenCat && !CAT_WORD.test(hiddenCat.tip), `behind the building: the pointer on its spot says nothing of a cat (${flat(hiddenCat?.tip ?? '')})`);
-    check(!!hiddenCat && hiddenCat.botDist < 1.6 && !/Say hello/.test(hiddenCat.prompt), `behind the building: bloombot right beside it doesn't offer "Say hello" (${flat(hiddenCat?.prompt ?? '')})`);
-  }
+  await page.evaluate(() => {
+    window.solarbloom.sim.cat.anchorView = window.__anchorView;
+    window.solarbloom.camera.pitchOffset = 0;
+  });
   check(errors.length === 0, `no page errors ${errors.join(' | ')}`);
 } finally {
   console.log(failed ? `cat proof: ${failed} check(s) failed` : 'cat proof: all checks passed');
