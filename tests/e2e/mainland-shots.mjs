@@ -1,5 +1,5 @@
 // E23.8.3.1: review shots of the Long Causeway and the mainland (a new old-city game) into docs/review/mainland-*.png.
-//   node tests/e2e/mainland-shots.mjs     (after `vite build`; SHOTS_DIR overrides the folder)
+//   node tests/e2e/mainland-shots.mjs     (after `vite build --mode mainland`: the mainland is closed for players; SHOTS_DIR overrides the folder)
 // Before the Great Bloom: the broken causeway and the mainland under cloud. After: the causeway raised, the landing
 // district and its neighbours out of the cloud, a salvage field close up. Fails on any page error.
 import { createRequire } from 'node:module';
@@ -23,7 +23,7 @@ try {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.setDefaultTimeout(240_000);
-  await page.goto('http://localhost:4199/?slot=1&gfx=deck');
+  await page.goto('http://localhost:4199/?slot=1&gfx=deck&mainland=1');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom?.sim);

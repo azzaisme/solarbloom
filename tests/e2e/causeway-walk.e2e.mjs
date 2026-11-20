@@ -1,5 +1,5 @@
 // E23.8.3.1 (#451): bloombot walks the Long Causeway, in the real game (headless Chromium).
-//   node tests/e2e/causeway-walk.e2e.mjs     (after `vite build`; SHOTS_DIR overrides the screenshot folder)
+//   node tests/e2e/causeway-walk.e2e.mjs     (after `vite build --mode mainland`: the mainland is closed for players; SHOTS_DIR overrides the screenshot folder)
 // Before the Great Bloom there is no way across: the broken middle is open sea and bloombot's path-finder finds no
 // route to the mainland. After it, bloombot walks from the island end, down the ramp onto the raised sea-level
 // middle, up the far ramp and onto the mainland's landing district. Screenshots of the walk go to
@@ -29,7 +29,7 @@ try {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.setDefaultTimeout(240_000);
-  await page.goto('http://localhost:4198/?slot=1&gfx=deck');
+  await page.goto('http://localhost:4198/?slot=1&gfx=deck&mainland=1');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom?.sim && !!window.solarbloom?.bot);

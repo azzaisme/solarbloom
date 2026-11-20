@@ -4,7 +4,8 @@ import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MaterialId } from '../src/core/types';
 import { PARK_SET, REGIONS } from '../src/data/oldcity';
-import { PACK, TIERS } from '../src/data/salvage';
+import { PACK, TIERS, tierGives } from '../src/data/salvage';
+import { islandRecipe } from '../src/gameplay/Crafting';
 import { MACHINE_RECIPES } from '../src/data/crafting';
 import { MACHINES } from '../src/data/machines';
 import { Sim } from '../src/gameplay/Sim';
@@ -85,7 +86,7 @@ describe('E21.6: the fountain', () => {
       // E23.6.1: every machine the fountain opens (a crafting-table recipe with a tier) opens at exactly its tier;
       // the rest wait for a Keeper, research or a find, never for the fountain
       for (const r of MACHINE_RECIPES) {
-        if (!r.builds) continue;
+        if (!r.builds || !islandRecipe(r)) continue; // island release: mainland-only recipes are hidden (tests/island-release)
         const at = sim.build.recipeTier(r.builds);
         if ('tier' in r.unlock) expect(at, r.id).toBe(r.unlock.tier);
         else expect(at, r.id).toBe(99);
@@ -93,8 +94,8 @@ describe('E21.6: the fountain', () => {
         else expect(sim.build.isUnlocked(r.builds), `${r.id} at ${tier}`).toBe('home' in r.unlock); // home kit: from the start
       }
       // and the fountain says so: its list names every machine it opens at this tier, and only those
-      const named = MACHINE_RECIPES.filter((r) => r.builds && 'tier' in r.unlock).map((r) => ({ name: MACHINES[r.builds!].name, tier: (r.unlock as { tier: number }).tier }));
-      for (const m of named) expect(TIERS[tier - 1].gives.includes(m.name), `${m.name} listed at tier ${tier}`).toBe(m.tier === tier);
+      const named = MACHINE_RECIPES.filter((r) => r.builds && islandRecipe(r) && 'tier' in r.unlock).map((r) => ({ name: MACHINES[r.builds!].name, tier: (r.unlock as { tier: number }).tier }));
+      for (const m of named) expect(tierGives(TIERS[tier - 1]).includes(m.name), `${m.name} listed at tier ${tier}`).toBe(m.tier === tier);
       const keeperMachines = MACHINE_RECIPES.filter((r) => r.builds && !('tier' in r.unlock)).map((r) => MACHINES[r.builds!].name);
       for (const n of keeperMachines) expect(TIERS[tier - 1].gives, `${n} is not the fountain's`).not.toContain(n);
     }

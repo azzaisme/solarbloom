@@ -3,7 +3,7 @@ import { createInitialState } from '../src/core/GameState';
 import { Sim } from '../src/gameplay/Sim';
 import { MATERIAL_IDS } from '../src/data/salvage';
 import { PAGES } from '../src/data/oldcity';
-import { blueprintRows, collection, itemCells, journalPages, pinNext, pinnedRequest, pinRequest, requestRows, TABS } from '../src/ui/BackpackModel';
+import { visibleMaterials, blueprintRows, collection, itemCells, journalPages, pinNext, pinnedRequest, pinRequest, requestRows, TABS } from '../src/ui/BackpackModel';
 import { materialIcon, MATERIAL_ICON_IDS } from '../src/ui/MaterialIcons';
 import { bannedIn } from '../src/ui/words';
 import { SaveService } from '../src/app/SaveService';
@@ -31,7 +31,7 @@ describe('E22.6: the backpack', () => {
     expect([copper.count, copper.limit, copper.stored]).toEqual([32, 40, 110]);
     expect(copper.from).toBe('Found in Mast Row and Observatory Hill'); // E23.8: copper piles lie in both
     expect(copper.next).toMatch(/Copper|needs|takes|asks/i);
-    expect(itemCells(sim).map((c) => c.id)).toEqual(MATERIAL_IDS);
+    expect(itemCells(sim).map((c) => c.id)).toEqual(visibleMaterials()); // every material (Steel once the mainland opens)
   });
 
   it('keeps a material not found yet to itself', () => {

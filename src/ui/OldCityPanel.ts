@@ -1,5 +1,5 @@
 import type { MaterialId } from '../core/types';
-import { MATERIALS, MATERIAL_IDS } from '../data/salvage';
+import { MATERIALS, MATERIAL_IDS, tierGives, visibleMaterials } from '../data/salvage';
 import { giftLabel } from '../gameplay/KeeperSystem';
 import type { Sim } from '../gameplay/Sim';
 import { iconize } from './Icons';
@@ -210,7 +210,7 @@ export function fountainHtml(sim: Sim): string {
     cardHead({ icon: '⛲', title: 'The fountain', mood: `Step ${t.tier}: ${t.name}`, badge: 'sky', choose: 'Give' }) +
     `<div class="oc-content"><h3 class="pn-label">Bring</h3><ul class="oc-needs">${rows}` +
     `<li class="oc-need${c.done ? ' done' : ''}">${icon('sprout')}<span class="grow">${escHtml(c.label)}</span><span class="pn-chip ${c.done ? 'ok' : 'need'}">${c.done ? icon('check', 's') : ''}${Math.min(c.have, c.need)} of ${c.need}</span></li></ul>` +
-    `<h3 class="pn-label">It brings</h3><ul class="oc-gives">${t.gives.map((g) => `<li>${icon('spark', 's')}${escHtml(g)}</li>`).join('')}</ul>` +
+    `<h3 class="pn-label">It brings</h3><ul class="oc-gives">${tierGives(t).map((g) => `<li>${icon('spark', 's')}${escHtml(g)}</li>`).join('')}</ul>` +
     `<div class="oc-row"><button class="pn-btn primary" data-act="giveAll" ${canGive ? '' : 'disabled'}>Give all I have</button><button class="pn-btn" data-act="storage">${icon('pack', 's')}Storage</button></div></div>`
   );
 }
@@ -249,7 +249,7 @@ export class SpeechBubble {
 /** HTML of Tally's trade panel: 3 of one material for 1 of another. */
 export function tradeHtml(sim: Sim, give: MaterialId | undefined): string {
   const can = sim.landmarks.tradable();
-  const gives = MATERIAL_IDS.map(
+  const gives = visibleMaterials().map(
     (m) => `<button data-act="give" data-arg="${m}" ${can.includes(m) ? '' : 'disabled'} class="pn-cell oc-mat${give === m ? ' on' : ''}" aria-pressed="${give === m}">${materialIcon(m, 30)}<span>${MATERIALS[m].name}</span></button>`,
   ).join('');
   const gets = sim.landmarks.tradeTargets().filter((m) => m !== give)

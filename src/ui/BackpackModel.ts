@@ -6,8 +6,10 @@ import { KEEPER_STORIES } from '../data/keepers';
 import { BLUEPRINTS, ITEMS, KEEPERS, KEEPSAKES, PAGES, REGIONS } from '../data/oldcity';
 import { DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
 import { MACHINES } from '../data/machines';
-import { MATERIAL_IDS, MATERIALS } from '../data/salvage';
+import { MATERIALS, visibleMaterials } from '../data/salvage';
 import { itemDef } from '../data/items';
+
+export { visibleMaterials };
 import type { Sim } from '../gameplay/Sim';
 
 /**
@@ -66,7 +68,7 @@ export function neededNext(sim: Sim, m: MaterialId): string {
 export function itemCells(sim: Sim): ItemCell[] {
   const inv = sim.inventory;
   const limit = inv.stackLimit();
-  return MATERIAL_IDS.map((id): ItemCell => {
+  return visibleMaterials().map((id): ItemCell => {
     const seen = materialSeen(sim, id);
     const count = inv.count(id);
     const stored = inv.stored(id);
