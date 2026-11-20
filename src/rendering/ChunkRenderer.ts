@@ -1129,9 +1129,9 @@ export class ChunkRenderer {
    */
   warmupSamples(): WarmupSample[] {
     const b = new MeshBuilder();
-    b.add('box', '#ffffff', [0, 0, 0], 0.05);
+    b.add('box', PALETTE.stone.white, [0, 0, 0], 0.05); // the colour doesn't matter: only the layout does
     const tb = new TrMeshBuilder();
-    tb.add('box', '#ffffff', [0, 0, 0], 0.05);
+    tb.add('box', PALETTE.stone.white, [0, 0, 0], 0.05);
     const plain = b.build(this.device)!;
     return [
       { mesh: plain, material: towerMaterial(), own: true },
