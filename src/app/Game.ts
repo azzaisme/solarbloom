@@ -131,7 +131,7 @@ import { AUTOMATION } from '../data/automation';
 import { itemDef } from '../data/items';
 import { pinNext } from '../ui/BackpackModel';
 import { LOOK } from '../data/look';
-import { poolReflectOn, setPoolReflect } from '../rendering/Water';
+import { poolReflectOn, setPoolNight, setPoolReflect } from '../rendering/Water';
 
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Thriving (full bloom)', 'Radiant'];
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -932,7 +932,6 @@ export class Game {
   /** #561: when the ground round bloombot was first complete; the rest of the view gets at most VIEW_WAIT ms more */
   private nearDoneAt = 0;
   static VIEW_WAIT = 8000;
-  private builtAt = performance.now();
 
   /**
    * E22.12: how far the game is from a complete first view, as the loading screen's real steps: the models, the
@@ -951,8 +950,9 @@ export class Game {
   loadSteps(): LoadSteps {
     const m = this.models;
     const total = Math.max(1, ModelLibrary.names().length);
-    // no models to wait for (?models=classic), or they never arrive: don't hold the game for ever
-    const modelsDone = !m || m.ready || !useModels() || performance.now() - this.builtAt > 30000;
+    // #567: wait for every model still arriving, however slow (a second game in the same browser is slower); stop
+    // waiting only when none is needed (?models=classic) or the rest are stuck (nothing has finished for a while)
+    const modelsDone = !m || !useModels() || m.waitOver();
     const loaded = this.chunks.loadedCount;
     // Third person looks out to the horizon: the ground round bloombot (two chunks out) comes first, then
     // #561: every chunk in the opening view, so nothing in sight is rebuilt (a far-detail barrel turning into a
@@ -4832,6 +4832,8 @@ export class Game {
     this.chunks.fogTint.copy(this.dayNight.cloudTint);
     this.chunks.tintFog();
     // owner (E23 polish): High graphics gives the ponds a soft sky reflection and a sun / moon glint; live with the setting
+    // #563: night water darkens to moonlit navy on every tier
+    setPoolNight(1 - this.dayNight.daylight);
     if (poolReflectOn(this.gfxTier, this.deck)) {
       const sun = this.scene.sun;
       const { low, high } = this.sky.reflectColours();
