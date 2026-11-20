@@ -90,10 +90,14 @@ try {
       check(await page.evaluate(() => window.solarbloom.paused), `${tag} keys: the build menu pauses the game`);
       // the menu, keyboard: on the Power tab with the Solar Panel shown
       for (let i = 0; i < 8 && !(await page.evaluate(() => !!document.querySelector('#bm-solar'))); i++) await page.keyboard.press('KeyE');
-      await page.click('#bm-solar');
+      // a click selects a card; a click on the card already shown builds it (the second click), so only click it
+      // to show it when the tab opened on another
+      if (!(await page.evaluate(() => document.querySelector('#bm-solar')?.classList.contains('sel')))) await page.click('#bm-solar');
       await page.waitForTimeout(300);
+      check(await page.evaluate(() => !!document.querySelector('#buildMenu.open') && document.querySelector('#bm-solar')?.classList.contains('sel')), `${tag} keys: the Solar Panel is shown and the menu stays open`);
       await page.screenshot({ path: `${out}/build-menu-keys-${tag}.png` });
-      check(await onScreen(page, '#buildMenu .bm-sheet'), `${tag} keys: the build menu fits the screen`);
+      const sheetBox = await page.evaluate(() => { const r = document.querySelector('#buildMenu .bm-sheet')?.getBoundingClientRect(); return r ? `${[r.left, r.top, r.right, r.bottom].map(Math.round).join(',')} in ${innerWidth}x${innerHeight}` : 'none'; });
+      check(await onScreen(page, '#buildMenu .bm-sheet'), `${tag} keys: the build menu fits the screen (${sheetBox})`);
       const small = await smallText(page, '#buildMenu', 16);
       check(small.length === 0, `${tag} keys: the build menu's text is 16 px or more ${small.slice(0, 4).join(', ')}`);
       // pin it to slot 9 with P then 9, then take it with a second click
@@ -102,10 +106,13 @@ try {
       await page.waitForTimeout(200);
       const pinned = await page.evaluate(() => window.solarbloom.settings.hotbar?.[8]);
       check(pinned === 'solar', `${tag} keys: P then 9 pins the Solar Panel to slot 9 (${pinned})`);
+      const solars = () => page.evaluate(() => window.solarbloom.sim.state.machines.filter((m) => m.type === 'solar').length);
+      const before = await solars();
       await page.dblclick('#bm-solar');
       await page.waitForTimeout(300);
       const held = await page.evaluate(() => ({ tool: window.solarbloom.hud.currentTool, open: window.solarbloom.hud.trayOpen }));
       check(held.tool === 'solar' && !held.open, `${tag} keys: a double click takes it in hand and closes the menu (${JSON.stringify(held)})`);
+      check((await solars()) === before, `${tag} keys: the double click's second click doesn't fall through and build in the world`);
       // a grid to show: a panel and a battery placed beside the fountain
       await page.evaluate(() => {
         const g = window.solarbloom;
@@ -120,6 +127,34 @@ try {
       await page.waitForTimeout(1800);
       await page.screenshot({ path: `${out}/build-keys-${tag}.png` });
       check(await onScreen(page, '#buildbar'), `${tag} keys: the build dock fits the screen`);
+      // one tidy row: every slot and mode button the same height from the same top, every key badge on one line
+      // inside the dock, and no name broken or cut short (the owner's two lines across the dock)
+      for (const scale of [100, 125]) {
+        await page.evaluate((s) => window.solarbloom.hud.setUiScale(s), scale);
+        await page.waitForTimeout(900); // the dock finds its place within 400 ms of a size change
+        const row = await page.evaluate(() => {
+          const dock = document.querySelector('#buildbar').getBoundingClientRect();
+          const mm = document.querySelector('#minimap').getBoundingClientRect();
+          const items = [...document.querySelectorAll('#buildbar .bslot, #buildbar .bmode')].map((e) => e.getBoundingClientRect());
+          const keys = [...document.querySelectorAll('#buildbar .bg')].map((e) => e.getBoundingClientRect());
+          const names = [...document.querySelectorAll('#buildbar .bl')];
+          const spread = (v) => Math.max(...v) - Math.min(...v);
+          return {
+            tops: spread(items.map((r) => r.top)),
+            heights: spread(items.map((r) => r.height)),
+            keyTops: spread(keys.map((r) => r.top)),
+            inside: [...items, ...keys].every((r) => r.top >= dock.top - 0.5 && r.bottom <= dock.bottom + 0.5),
+            lines: names.filter((e) => e.getClientRects().length !== 1 || e.scrollHeight > e.clientHeight + 1).map((e) => e.textContent),
+            clear: dock.left >= mm.right - 0.5 || dock.bottom <= mm.top + 0.5,
+            onScreen: dock.left >= 0 && dock.right <= innerWidth + 0.5,
+            cut: names.filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.textContent),
+          };
+        });
+        // (at 125% on the smaller screen the dock may run out of room: then a name ends in …, never breaks)
+        check(row.tops < 1 && row.heights < 1 && row.keyTops < 1 && row.inside && !row.lines.length && row.clear && row.onScreen && (scale > 100 || !row.cut.length), `${tag} keys at ${scale}%: the dock is one even row, clear of the minimap ${JSON.stringify(row)}`);
+        await page.screenshot({ path: `${out}/build-dock-${tag}-${scale}.png`, clip: await page.evaluate(() => { const r = document.querySelector('#buildbar').getBoundingClientRect(); return { x: Math.max(0, r.left - 12), y: Math.max(0, r.top - 70), width: Math.min(innerWidth, r.width + 24), height: r.height + 82 }; }) });
+      }
+      await page.evaluate(() => window.solarbloom.hud.setUiScale(100));
       const dsmall = await smallText(page, '#buildbar', 14);
       check(dsmall.length === 0, `${tag} keys: the dock's labels are 14 px or more ${dsmall.slice(0, 4).join(', ')}`);
       const dock = await page.evaluate(() => ({
@@ -149,17 +184,17 @@ try {
       for (let i = 0; i < 8 && (await page.evaluate(() => document.querySelector('#buildMenu [role=tab][aria-selected=true]')?.textContent)) !== 'Power'; i++) await pressPad(page, 5);
       await page.waitForTimeout(300);
       await page.screenshot({ path: `${out}/build-menu-pad-${tag}.png` });
-      // pin the Bench to slot 1 with Y, then take it with A
-      for (let i = 0; i < 8 && (await page.evaluate(() => document.querySelector('#buildMenu [role=tab][aria-selected=true]')?.textContent)) !== 'Decorations'; i++) await pressPad(page, 5);
+      // pin the piece shown on the Power tab (the Solar Panel: a new garden can build it; the decorations are made at
+      // the table first) to slot 1 with X (Y opens and closes the menu itself), then take it with A
       const bench = await page.evaluate(() => document.activeElement?.dataset?.tool);
-      await pressPad(page, 3); // Y: pick a slot
+      await pressPad(page, 2); // X: pick a slot
       await page.waitForTimeout(200);
       await page.screenshot({ path: `${out}/build-menu-pin-pad-${tag}.png` });
       if (await page.evaluate(() => Number(document.activeElement?.dataset?.pin) >= 5)) await pressPad(page, 12); // the top row
       for (let i = 0; i < 6; i++) await pressPad(page, 14); // along it to slot 1
       await pressPad(page, 0); // A: pin here
       const s0 = await page.evaluate(() => window.solarbloom.settings.hotbar?.[0]);
-      check(s0 === bench, `${tag} pad: Y then A pins ${bench} to slot 1 (${s0})`);
+      check(s0 === bench, `${tag} pad: X then A pins ${bench} to slot 1 (${s0})`);
       await pressPad(page, 0); // A: take it
       await page.waitForTimeout(400);
       const tool = await page.evaluate(() => window.solarbloom.hud.currentTool);

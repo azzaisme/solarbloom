@@ -186,6 +186,8 @@ body.contrast #dock .dk .round { opacity: 1; }
 body.contrast #hud .sg-bar { outline: 1.5px solid var(--ink); }
 /* solid glass (low tier, fewer effects) and touch screens: no live blur */
 body.solid-glass #hud .sg-card { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--paper); }
+/* one live blur at a time: under an open sheet (the game pauses) the walking cards drop theirs; the sheet's veil frosts */
+body.paused #hud .sg-card { backdrop-filter: none; -webkit-backdrop-filter: none; }
 @media (hover: none) {
   #hud .sg-card { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--paper); }
 }

@@ -142,9 +142,11 @@ try {
       const g = window.solarbloom;
       g.pause.clear('blur');
       const s = g.loadSteps();
-      return { s, pending: g.chunks.pending, loaded: g.chunks.loadedCount, device: g.bot.lastInput };
+      // E23.2.6: third person fades in once the ground round bloombot (two chunks out) is drawn, as loadSteps waits
+      // for; the hazy distance streams in while playing
+      return { s, pending: g.chunks.pendingNear(g.camera.target, 32), far: g.chunks.pending, loaded: g.chunks.loadedCount, device: g.bot.lastInput };
     });
-    check(ready.s.models === 1 && ready.s.view === 1 && ready.pending === 0 && ready.loaded > 0, T(`the game faded in with its first view complete (${ready.loaded} chunks, ${ready.pending} pending)`));
+    check(ready.s.models === 1 && ready.s.view === 1 && ready.pending === 0 && ready.loaded > 0, T(`the game faded in with the ground round bloombot complete (${ready.loaded} chunks, ${ready.pending} near and ${ready.far} in all still to draw)`));
     check(ready.device === (dev === 'pad' ? 'pad' : 'keys'), T(`the title's first input picked the glyph set (${ready.device})`));
     check(await page.evaluate(() => window.solarbloom.sim.clock.real === false), T("the new garden runs on the game's own day"));
 

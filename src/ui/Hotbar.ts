@@ -183,6 +183,27 @@ export class BuildBar extends HudPart {
     const html = `${left}${left ? '<span class="vsep" aria-hidden="true"></span>' : ''}${edge('slotPrev')}${slots}${edge('slotNext')}<span class="vsep" aria-hidden="true"></span>${right}`;
     el.classList.toggle('pad', pad);
     this.set('buildbar', el, 'html', html);
+    this.place();
+  }
+
+  /**
+   * The dock sits centred on the screen; where that would run it under the minimap (bottom left) it moves to the
+   * right of it, and where even that is too narrow it fills the room there (its names then end in …). In the HUD's
+   * own pixels, so the 125 and 150% sizes work out the same.
+   */
+  private place() {
+    const el = $(this.root, '#buildbar');
+    if (el.hidden) return;
+    const gap = 16;
+    const mm = this.root.querySelector<HTMLElement>('#minimap');
+    const vw = this.root.clientWidth;
+    const from = mm && !mm.hidden && mm.offsetWidth ? mm.offsetLeft + mm.offsetWidth + gap : gap;
+    const room = Math.max(200, vw - from - gap);
+    if (el.style.maxWidth !== `${room}px`) el.style.maxWidth = `${room}px`;
+    const w = el.offsetWidth;
+    const left = `${Math.round(Math.max(from, Math.min((vw - w) / 2, vw - gap - w)))}px`;
+    if (el.style.left !== left) el.style.left = left;
+    if (el.style.transform !== 'none') el.style.transform = 'none';
   }
 
   /** Locks and unlocks show as they change (cheap: compared before the DOM is touched). */
@@ -192,6 +213,7 @@ export class BuildBar extends HudPart {
     const now = performance.now();
     if (now - this.checkedAt < 400) return;
     this.checkedAt = now;
+    this.place(); // the window or the HUD size may have changed
     const key = this.slots().map((t) => `${t}:${buildItem(this.sim, t)?.locked ? 1 : 0}`).join() + this.views().join();
     if (this.last.get('bb-state') === key) return;
     this.last.set('bb-state', key);

@@ -106,20 +106,21 @@ try {
       await page.keyboard.up('KeyW');
       await page.evaluate(() => window.solarbloom.hud.pickup('Copper', 3));
       await page.waitForTimeout(800);
+      // the toast's words are read before the shot (a shot under software GL can outlast the toast's 2.6 s)
+      const toast = await page.evaluate(() => document.querySelector('#toasts')?.innerText.trim());
       await page.screenshot({ path: `${out}/walk-keys-${tag}.png` });
       const parts = await page.evaluate(() => ({
         obj: document.querySelector('#objTitle')?.textContent,
         charge: document.querySelector('#chargeRow')?.innerText.replace(/\s+/g, ' ').trim(),
         prompt: document.querySelector('#prompt')?.innerText.replace(/\s+/g, ' ').trim(),
         rim: document.querySelector('#minimap .mm-rim')?.innerText,
-        toast: document.querySelector('#toasts')?.innerText.trim(),
         dock: [...document.querySelectorAll('#dock [data-dock]')].map((b) => b.getAttribute('aria-label')),
         keyGlyph: document.querySelector('#dock [data-dock="backpack"] svg')?.getAttribute('aria-label'),
       }));
       console.log('  ', JSON.stringify(parts));
       check(!!parts.obj && /Charge 100%/.test(parts.charge ?? ''), `${tag} keys: the objective and Charge 100%`);
       check(/^\d\d:\d\d( · \w+)?$/.test(parts.rim ?? ''), `${tag} keys: the clock and the weather on the minimap's rim (${parts.rim})`);
-      check(parts.toast === '+3 Copper', `${tag} keys: the pick-up toast (${parts.toast})`);
+      check(toast === '+3 Copper', `${tag} keys: the pick-up toast (${toast})`);
       check(parts.dock.length === 3 && /key$/.test(parts.keyGlyph ?? ''), `${tag} keys: the dock's three buttons with key pictures (${parts.dock.join(', ')})`);
       const small = await smallText(page, 16);
       check(small.length === 0, `${tag} keys: the walking HUD's text is 16 px or more ${small.slice(0, 6).join(', ')}`);
@@ -146,15 +147,16 @@ try {
         const s = window.solarbloom.sim;
         s.state.salvage.keepers.pylon = { step: 'request1' };
       });
-      await page.waitForTimeout(1200);
-      const dot = await page.evaluate(() => !document.querySelector('#dock .dot')?.hidden);
+      // the dock looks twice a second of game time: slow software-GL frames stretch that, so wait for it (up to 10 s)
+      const dot = await page.waitForFunction(() => !document.querySelector('#dock .dot')?.hidden, null, { timeout: 10000 }).then(() => true, () => false);
       check(dot, `${tag} keys: a new request puts the dot on the backpack`);
       await page.screenshot({ path: `${out}/walk-keys-${tag}-request.png` });
       await page.click('#dock [data-dock="backpack"]');
-      await page.waitForTimeout(1000);
+      // opening it is looked at on the next frame: the dot goes while the backpack is open, and stays gone after
+      const cleared = await page.waitForFunction(() => window.solarbloom.hud.backpackOpen && !!document.querySelector('#dock .dot')?.hidden, null, { timeout: 10000 }).then(() => true, () => false);
       await page.evaluate(() => window.solarbloom.closeAll());
       await page.waitForTimeout(800);
-      check(await page.evaluate(() => !!document.querySelector('#dock .dot')?.hidden), `${tag} keys: opening the backpack clears the dot`);
+      check(cleared && (await page.evaluate(() => !!document.querySelector('#dock .dot')?.hidden)), `${tag} keys: opening the backpack clears the dot`);
       check(!errors.length, `${tag} keys: no page errors ${errors.join(' | ')}`);
       await page.close();
     }
