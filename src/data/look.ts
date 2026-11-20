@@ -8,6 +8,12 @@ export type GfxTier = 'low' | 'medium' | 'high';
 // See docs/art/rendering.md for the pipeline these numbers are tuned against.
 
 export const LOOK = {
+  /**
+   * Look 4.8's distant skyline (`Skyline.ts`): switched off on 20 Nov 2026 (owner). The Old City is an island with
+   * real ruins around it; the backdrop towers floated at the horizon with nothing under them and stayed cream-white
+   * at night. Set true to bring them back.
+   */
+  skyline: false,
   /** Look 1.2: the golden-hour key light. Elevation above the horizon and compass direction it shines toward. */
   sun: {
     color: '#ffe6bf',

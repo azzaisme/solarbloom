@@ -210,7 +210,8 @@ export class Game {
   private nightFindVisuals!: NightFindVisuals;
   /** E23.7.2: rain, storms, fog and wind on screen */
   private weatherVisuals!: WeatherVisuals;
-  private skyline!: Skyline;
+  /** Look 4.8: the distant skyline, when LOOK.skyline is on (off since 20 Nov 2026) */
+  private skyline?: Skyline;
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
   readonly chunks: ChunkRenderer;
@@ -361,7 +362,7 @@ export class Game {
     this.sky = new Sky(this.app, this.scene.sun);
     this.camera.cam.layers = [this.sky.layer.id, this.sky.clearLayer.id, ...this.camera.cam.layers];
     // Look 4.8: the distant terraced city behind the play area (in the sky's layer, drawn before the world).
-    this.skyline = new Skyline(this.app, this.sky.layer, this.scene.sun.up);
+    if (LOOK.skyline) this.skyline = new Skyline(this.app, this.sky.layer, this.scene.sun.up);
     this.look = new LookController(this.app, this.scene, this.camera);
     this.dayNight = new DayNight(this.app, this.scene, this.sky);
     this.look.atmosphere.isLit = (x, z) => this.sim.grid.get(GROUND, x, z)?.ground === 'restored';
@@ -423,7 +424,7 @@ export class Game {
     this.models = models;
     models.onReady = () => {
       this.chunks.markAll();
-      this.skyline.useModels(models);
+      this.skyline?.useModels(models);
       this.machines.rebuildAll();
       this.tillers.rebuildAll();
       this.cat.rebuildAll();
@@ -4820,9 +4821,11 @@ export class Game {
     this.chunks.fogTint.copy(this.dayNight.cloudTint);
     this.chunks.tintFog();
     this.sky.update(wdt, this.camera.entity.getPosition(), this.camera.cam.farClip);
-    this.skyline.clarity = this.sky.clarity;
-    this.skyline.reducedMotion = this.settings.reducedMotion;
-    this.skyline.update(wdt, this.camera.target, this.camera.entity.getPosition(), this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
+    if (this.skyline) {
+      this.skyline.clarity = this.sky.clarity;
+      this.skyline.reducedMotion = this.settings.reducedMotion;
+      this.skyline.update(wdt, this.camera.target, this.camera.entity.getPosition(), this.camera.dist, this.camera.nearness(), this.camera.yaw, this.camera.hazeEnd, this.camera.cam.farClip);
+    }
     this.syncView();
     {
       const c = this.camera;
