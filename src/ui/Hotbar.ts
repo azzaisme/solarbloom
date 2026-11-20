@@ -179,7 +179,7 @@ export class BuildBar extends HudPart {
       })
       .join('');
     const edge = (a: Action) => (pad ? `<span class="bedge" aria-hidden="true">${this.glyph(a)}</span>` : '');
-    const right = mode('removeMode', ICONS.broom, 'Remove', tool === 'remove', 'remove', `Remove ${tool === 'remove' ? 'on' : 'off'}`) + mode('buildMenu', ICONS.build, 'All builds', false, 'all', 'All builds: the build menu');
+    const right = mode('removeMode', ICONS.broom, 'Remove', tool === 'remove', 'remove', `Remove ${tool === 'remove' ? 'on' : 'off'}`) + mode('buildMenu', ICONS.build, 'All', false, 'all', 'All builds: the build menu');
     const html = `${left}${left ? '<span class="vsep" aria-hidden="true"></span>' : ''}${edge('slotPrev')}${slots}${edge('slotNext')}<span class="vsep" aria-hidden="true"></span>${right}`;
     el.classList.toggle('pad', pad);
     this.set('buildbar', el, 'html', html);
@@ -188,9 +188,9 @@ export class BuildBar extends HudPart {
 
   /**
    * The dock sits centred on the screen; where that would run it under the minimap (bottom left) it moves to the
-   * right of it. #565: where its slots don't fit there, it draws tighter (narrower slots, names end in …), and where
-   * even that doesn't fit (a big UI scale on a small screen) the minimap steps aside while building and the dock takes
-   * the whole width. In the HUD's own pixels (measured on screen and divided by the HUD's zoom: offset sizes inside a
+   * right of it. #565: where its slots don't fit there, it draws tighter (narrower slots and gaps), and where even
+   * that doesn't fit (a big UI scale on a small screen) the minimap steps aside while building and the dock takes the
+   * whole width. #599: a layout fits only with every name whole (none cut short with …); only the last resort may cut. In the HUD's own pixels (measured on screen and divided by the HUD's zoom: offset sizes inside a
    * zoomed HUD don't agree between browsers).
    */
   place() {
@@ -208,7 +208,7 @@ export class BuildBar extends HudPart {
     let pick = tries[tries.length - 1];
     for (const t of tries) {
       this.layout(el, vw, gap, t);
-      if (el.scrollWidth <= el.clientWidth + 1) {
+      if (el.scrollWidth <= el.clientWidth + 1 && !namesCut(el)) {
         pick = t;
         break;
       }
@@ -242,4 +242,10 @@ export class BuildBar extends HudPart {
     this.last.set('bb-state', key);
     this.render(this.tool);
   }
+}
+
+/** #599: a name on the dock cut short (ending in …) */
+function namesCut(el: HTMLElement): boolean {
+  for (const n of el.querySelectorAll<HTMLElement>('.bl')) if (n.scrollWidth > n.clientWidth + 1) return true;
+  return false;
 }
