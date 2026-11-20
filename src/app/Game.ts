@@ -131,7 +131,7 @@ import { AUTOMATION } from '../data/automation';
 import { itemDef } from '../data/items';
 import { pinNext } from '../ui/BackpackModel';
 import { LOOK } from '../data/look';
-import { poolReflectOn, setPoolReflect } from '../rendering/Water';
+import { poolReflectOn, setPoolNight, setPoolReflect } from '../rendering/Water';
 
 const BLOOM_NAMES = ['', 'Fresh grass', 'Wildflowers', 'Thriving (full bloom)', 'Radiant'];
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -4832,6 +4832,8 @@ export class Game {
     this.chunks.fogTint.copy(this.dayNight.cloudTint);
     this.chunks.tintFog();
     // owner (E23 polish): High graphics gives the ponds a soft sky reflection and a sun / moon glint; live with the setting
+    // #563: night water darkens to moonlit navy on every tier
+    setPoolNight(1 - this.dayNight.daylight);
     if (poolReflectOn(this.gfxTier, this.deck)) {
       const sun = this.scene.sun;
       const { low, high } = this.sky.reflectColours();
