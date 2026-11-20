@@ -38,6 +38,7 @@ import { WaterSystem } from './WaterSystem';
 import { Crafting } from './Crafting';
 import { Research } from './Research';
 import { ChargeSystem } from './Charge';
+import { Automation } from './Automation';
 import { PulseLoad } from './PulseLoad';
 import { RestSystem } from './Rest';
 import { BuriedSystem } from './Buried';
@@ -106,6 +107,8 @@ export class Sim {
   readonly research: Research;
   /** E23.2.1: bloombot's charge, the only meter. */
   readonly charge: ChargeSystem;
+  /** E23.6.4 / E23.6.5: supply crates, courier routes and jobs done by hand, the Assembler. */
+  readonly automation: Automation;
   /** E23.2.2: what the pulse is loaded with, and its reveal ripple. */
   readonly pulseLoad: PulseLoad;
   /** E23.2.3: benches and meditating at chargers. */
@@ -192,6 +195,7 @@ export class Sim {
     this.water = new WaterSystem(this);
     this.relays = new RelaySystem(this);
     this.power = new PowerGrid(this);
+    this.automation = new Automation(this); // E23.6.4: after the grid (the Assembler is a consumer)
     this.chargers = new ChargerSystem(this);
     this.lights = new Lights(this);
     this.chains = new BloomChainSystem(this);
@@ -300,6 +304,7 @@ export class Sim {
     this.water.tick(dt);
     this.rest.tick(dt);
     this.crafting.tick(dt);
+    this.automation.tick(dt);
     this.research.tick(dt);
     this.charge.tick(dt);
     this.clock.tick();

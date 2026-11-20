@@ -88,6 +88,8 @@ export class DroneRoles {
         // While any open area still has fog (Saltwind, from the start); once a hub owns it, it never locks again.
         return s.areas.revealed().some((id) => id !== PARK && s.areas.fog(id) !== 'cleared') || this.anyOwns('scout') ? undefined : 'No fog to scout: open a gate to the next region first';
       case 'courier':
+        // E23.6.4: couriers open once things have been carried to and from the store by hand
+        if (s.automation?.handDone('carry')) return undefined;
         return has('motherTree') || has('relay') ? undefined : 'Build a Mother Tree or a Bloom Relay first';
       case 'spark':
         return has('pollinator', R.spark.unlockGardens) ? undefined : `Build ${R.spark.unlockGardens} Pollinator Gardens first`;
@@ -457,6 +459,12 @@ export class DroneRoles {
   }
 
   private startCourier(d: DroneData, hub: MachineData): 'none' | 'started' {
+    // E23.6.4: routes the player set come first (they run on the hub's grid power)
+    const route = this.sim.automation?.routeFor(hub, d);
+    if (route) {
+      this.sim.automation.startRoute(d, route);
+      return 'started';
+    }
     const m = this.courierCandidates(d, hub)[0];
     if (!m) return 'none';
     d.role = 'courier';
