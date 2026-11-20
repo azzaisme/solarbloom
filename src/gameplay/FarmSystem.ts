@@ -198,7 +198,7 @@ export class FarmSystem {
   /** Fed with fertiliser, beans growing next door, or water from a fish pond (E23.5.4.2). */
   fertilised(m: MachineData): boolean {
     if (this.bed(m).fed) return true;
-    if (this.sim.farmExtras?.pondFeeds(m)) return true;
+    if (this.sim.farmExtras.pondFeeds(m)) return true;
     return this.near(m, PLANTER.beansReach, (o) => o.type === 'planter' && this.bed(o).crop === 'beans');
   }
 
@@ -261,7 +261,7 @@ export class FarmSystem {
       // a crop that likes fertiliser (data/crops) gets it through that like, not the general boost as well
       if (!def.likes.includes('fertiliser') && this.fertilised(m)) rate *= PLANTER.fertilisedBoost;
       if (this.pollinated(m)) rate *= PLANTER.pollinatorBoost;
-      rate *= this.sim.farmExtras?.cropBoost(m) ?? 1; // E23.5.4.1: settled beehives in reach
+      rate *= this.sim.farmExtras.cropBoost(m); // E23.5.4.1: settled beehives in reach
       rate *= machineStrengthAt('planter', m.x, m.z); // E23.8.1: fertile soil (Elder Grove) grows faster
       rate *= 1 + (this.sim.research?.effect('cropGrowth') ?? 0); // E23.6.2: Kind soil (research)
     }

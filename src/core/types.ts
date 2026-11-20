@@ -121,6 +121,8 @@ export interface LayerData {
    * its spot when the ponds came (`Sim.dryOccupiedPonds`), so nothing they made ends up under water.
    */
   dryPonds?: string[];
+  /** E23.5.4.6: the check above has run for this save (once, on the first load after the ponds came; never again) */
+  pondsChecked?: boolean;
   /** City 12.1: a generated rooftop uses this template's layout and look ('seed', 'reservoir' or 'canopy'). */
   template?: string;
   /** City 12.1: the city area whose rooftop cluster this is (such roofs are not part of the rooftop campaign). */

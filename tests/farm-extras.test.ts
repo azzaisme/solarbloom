@@ -426,15 +426,11 @@ describe('E23.5.4.6: Keeper gardens', () => {
     const sim = farm();
     const k = keeperById('tally')!;
     sim.state.salvage!.keepers.tally = { step: 'request1' };
-    ground(sim, k.x + 2, k.z, 1, 1);
-    const p = build(sim, 'planter', k.x + 2, k.z);
+    ground(sim, k.x, k.z + 2, 0, 1);
+    const p = build(sim, 'planter', k.x, k.z + 2);
     expect(sim.farmExtras.gardenOf(p)).toBe('tally');
-    // a real little pond two tiles from the bed, so it drinks on the dry days (E23.4.1)
-    for (const dz of [0, 1]) {
-      const t = sim.grid.get(GROUND, k.x + 4, k.z + dz)!;
-      Object.assign(t, { blocked: false, feature: 'water', ground: 'restored', pollution: 0 });
-      sim.grid.touch(t);
-    }
+    // Tally's own pond, restored, two tiles from the bed: it drinks there on the dry days (E23.4.1)
+    for (const t of pondTiles(sim, 'tally')) sim.restoration.complete(t, 'pulse');
     expect(sim.farm.isWatered(p)).toBe(true);
     expect(sim.farmExtras.request('tally')!.crop).toBe('tomato');
     const fulfilled: string[] = [];
@@ -595,6 +591,10 @@ describe('E23.5.4.6: Keeper gardens', () => {
     const json = JSON.parse(saver.serialize(sim.state));
     const tock = REGIONS.find((r) => r.id === 'clockPlaza')!.ponds![0];
     const vega = REGIONS.find((r) => r.id === 'observatory')!.ponds![0];
+    // a save from before the ponds: its ground layer was never checked for them
+    const layer = json.layers.find((l: { kind: string }) => l.kind === 'ground');
+    delete layer.pondsChecked;
+    delete layer.dryPonds;
     const old = json.machines.find((x: { id: string }) => x.id === m.id);
     Object.assign(old, { x: tock.x + 1, z: tock.z + 1 });
     (json.cozy ??= {}).decor = { ...(json.cozy.decor ?? {}), [`${GROUND}|${vega.x}|${vega.z + 2}`]: 'bench' };
@@ -617,6 +617,39 @@ describe('E23.5.4.6: Keeper gardens', () => {
     const again = new Sim(saver.deserialize(saver.serialize(back.state))!);
     expect(again.state.layers.find((l) => l.kind === 'ground')!.dryPonds).toEqual(ground.dryPonds);
     expect(again.grid.get(GROUND, tock.x, tock.z)!.feature).not.toBe('water');
+  });
+
+  it('nothing can be built in a Keeper’s pond (machines or decorations); beside it is fine, and a later load keeps the pond', () => {
+    const sim = farm();
+    sim.state.salvage!.keepers.tide = { step: 'request1' };
+    gardenSpot(sim, 'tide'); // opens Saltwind and restores Tide's rock pool
+    const pool = REGIONS.find((r) => r.id === 'saltwind')!.ponds![0];
+    const t = sim.grid.get(GROUND, pool.x, pool.z)!;
+    expect(sim.water.bodyAt(t)).toBeDefined();
+    for (const type of ['planter', 'fishPond'] as const) {
+      for (const [k, v] of Object.entries(sim.build.recipe(type) ?? {})) sim.inventory.addToStore(k as 'scrap', v!);
+      expect(sim.build.check(type, GROUND, pool.x, pool.z).reason, type).toMatch(/Keeper’s pond/);
+      expect(sim.build.place(type, GROUND, pool.x, pool.z), type).toBeUndefined();
+    }
+    expect(sim.build.footprintProblem(GROUND, pool.x, pool.z, 1, ['restored'])).toMatch(/Keeper’s pond/); // decorations ask this too
+    // beside it: allowed (a planter by the pool is Tide's garden)
+    const side = { x: pool.x + pool.w, z: pool.z + 1 };
+    const beside = sim.grid.get(GROUND, side.x, side.z)!;
+    sim.restoration.complete(beside, 'pulse');
+    expect(sim.build.check('planter', GROUND, side.x, side.z).reason ?? 'ok').not.toMatch(/Keeper’s pond/);
+    // save and load after the refused attempts: the pond is still water, and this save is never dried out again
+    const saver = new SaveService(undefined);
+    const back = new Sim(saver.deserialize(saver.serialize(sim.state))!);
+    const ground = back.state.layers.find((l) => l.kind === 'ground')!;
+    expect(ground.pondsChecked).toBe(true);
+    expect(ground.dryPonds ?? []).toEqual([]);
+    expect(back.grid.get(GROUND, pool.x, pool.z)!.feature).toBe('water');
+    // even something written onto a pond after the first check (an edited save) never turns the pond to land
+    const json = JSON.parse(saver.serialize(back.state));
+    json.cozy = { ...(json.cozy ?? {}), decor: { [`${GROUND}|${pool.x}|${pool.z + 1}`]: 'bench' } };
+    const later = new Sim(saver.deserialize(JSON.stringify(json))!);
+    expect(later.state.layers.find((l) => l.kind === 'ground')!.dryPonds ?? []).toEqual([]);
+    expect(later.grid.get(GROUND, pool.x, pool.z)!.feature).toBe('water');
   });
 
   it('extras survive a save', () => {

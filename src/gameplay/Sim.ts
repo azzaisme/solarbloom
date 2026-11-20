@@ -330,13 +330,14 @@ export class Sim {
 }
 
 /**
- * E23.5.4.6: the Keeper ponds came after some games began. A pond whose spot already holds something the player built
- * (a machine or a decoration) stays dry land in that save (`dryPonds` on the ground layer), and its Keeper's garden is
+ * E23.5.4.6: the Keeper ponds came after some games began. On a save's first load since then (never again), a pond
+ * whose spot already holds something the player built (a machine or a decoration) stays dry land in that save (`dryPonds` on the ground layer), and its Keeper's garden is
  * watered by rain or pipes as any other. Nothing the player made ends up under water.
  */
 export function dryOccupiedPonds(state: GameState) {
   const ground = state.layers.find((l) => l.kind === 'ground');
-  if (!ground) return;
+  if (!ground || ground.pondsChecked) return; // once per save: later builds can't stand on a pond (BuildSystem)
+  ground.pondsChecked = true;
   const cells: { x: number; z: number }[] = [];
   for (const m of state.machines) if (m.roofId === ground.id) for (let dx = 0; dx < m.size; dx++) for (let dz = 0; dz < m.size; dz++) cells.push({ x: m.x + dx, z: m.z + dz });
   for (const k of Object.keys(state.cozy?.decor ?? {})) {
