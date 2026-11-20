@@ -42,6 +42,7 @@ describe('E21.3: recipes', () => {
       const z = 12;
       ground(sim, x, z);
       if (MACHINES[type].areaTypes) continue; // needs its area type (the Reservoir Garden)
+      if (MACHINES[type].mainlandOnly) continue; // only past the causeway: paid exactly in tests/mainland-steel
       if (type === 'pump' || type === 'desalination') continue; // on a bank / the shore only: paid exactly in tests/water-*.test.ts
       if (sim.water.unlockFor(type)) sim.state.salvage!.keepers.sluice = { step: 'request1' }; // E23.4: Cistern Basin's unlocks
       stock(sim, type);
@@ -56,7 +57,10 @@ describe('E21.3: recipes', () => {
 
   it('machines are locked until their fountain tier', () => {
     const sim = oldSim(0);
-    for (const t of BUILDABLE) expect(sim.build.isUnlocked(t), t).toBe(false);
+    // E23.5.3: the compost bin is a home recipe, open from the start
+    const home = (t: BuildableType) => MACHINE_RECIPES.some((r) => r.builds === t && 'home' in r.unlock);
+    expect(sim.build.isUnlocked('compostBin')).toBe(true);
+    for (const t of BUILDABLE) if (!home(t)) expect(sim.build.isUnlocked(t), t).toBe(false);
     sim.state.salvage!.tier = 1;
     // E23.6.1: the Solar panel and the Storage chest come from Keepers now (crafting-table recipes)
     expect(sim.build.isUnlocked('solar')).toBe(false);

@@ -3,10 +3,15 @@ export type GroundState = 'polluted' | 'prepared' | 'growing' | 'restored';
 export type MachineType = 'solar' | 'condenser' | 'pollinator' | 'droneHub' | 'motherTree' | 'reservoirGarden' | 'relay' | 'cultivator' | 'core' | 'chest' | 'battery' | 'windTurbine' | 'charger'
   // E23.5.2: the farm
   | 'planter'
+  // E23.5.3: the end of the farm chain
+  | 'compostBin'
+  | 'bioDigester'
   // E23.4.2: the water network
   | 'reservoir'
   | 'pump'
-  | 'desalination';
+  | 'desalination'
+  // E23.8.3.2: the mainland's big machines
+  | 'gridBattery';
 export type BuildableType = Exclude<MachineType, 'core'>;
 export type RestoreSource =
   | 'pulse'
@@ -317,7 +322,9 @@ export interface LinkState {
 
 /** E21 §1: the eight materials. */
 /** E23.5.1: biomass, food, compost and fertiliser are backpack items too (data/farm). */
-export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser';
+export type MaterialId = 'scrap' | 'seeds' | 'copper' | 'timber' | 'glass' | 'clay' | 'gears' | 'sunstone' | 'biomass' | 'food' | 'compost' | 'fertiliser'
+  // E23.8.3.2: from the mainland's industrial ruins only
+  | 'steel';
 /** E23.6.1 (#390): components made at the crafting table (data in src/data/crafting.ts). */
 export type ComponentId = 'wire' | 'planks' | 'glassPane' | 'pipe' | 'motor' | 'batteryCell' | 'sunCell';
 /** E23.6.1: anything the backpack and the store hold (materials and components; see src/data/items.ts). */
@@ -400,6 +407,21 @@ export interface SalvageState {
   basket?: Record<string, number>;
   /** E23.5.2.3: gathers counted toward each region's next seed packet, by region id */
   seedFinds?: Record<string, number>;
+  /** E23.5.3: each compost bin's contents, by machine id */
+  bins?: Record<string, BinState>;
+  /** E23.5.3: biomass in each Bio Digester's hopper, by machine id */
+  digesters?: Record<string, number>;
+}
+
+/** E23.5.3: what is in a compost bin (feed in feed units; progress in game days). */
+export interface BinState {
+  feed?: number;
+  /** days toward the next compost */
+  work?: number;
+  compost?: number;
+  /** days the oldest compost has matured */
+  ripen?: number;
+  fertiliser?: number;
 }
 
 /** E23.6.2: what the research station keeps. */

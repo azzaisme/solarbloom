@@ -46,6 +46,7 @@ import { Clock } from './Clock';
 import { NightFinds } from './NightFinds';
 import { GatherSystem } from './GatherSystem';
 import { FarmSystem } from './FarmSystem';
+import { CompostSystem } from './CompostSystem';
 import { Weather } from './Weather';
 
 /**
@@ -124,6 +125,8 @@ export class Sim {
   readonly gather: GatherSystem;
   /** E23.5.2: planters and crops. */
   readonly farm: FarmSystem;
+  /** E23.5.3: compost bins and Bio Digesters (old-city rules). */
+  readonly compost: CompostSystem;
   /**
    * E21.1: where bloombot stands right now (the game sets it every frame; bots and tests set it themselves).
    * Never saved. Rules that depend on bloombot's position (paying from the store within reach) read it.
@@ -185,6 +188,7 @@ export class Sim {
     this.journal = new JournalSystem(this);
     this.gather = new GatherSystem(this);
     this.farm = new FarmSystem(this);
+    this.compost = new CompostSystem(this);
     this.rng = new Rng(state.rngState);
     this.upgrades = new UpgradeSystem(this);
     this.production = new ProductionSystem(this);
@@ -208,6 +212,7 @@ export class Sim {
     this.log = new DebugLog(this);
     this.restoration.adoptGrowing();
     for (const c of this.grid.loadedChunks()) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
+    this.mainland.wire(); // E23.8.3.2: after every system (the grid and water network) is built
   }
 
   get time() {
@@ -304,6 +309,7 @@ export class Sim {
     this.clock.tick();
     this.weather.tick();
     this.farm.tick(dt);
+    this.compost.tick(dt);
     this.keepers.tick(dt); // E23.9.2: settled Keepers tend their regions
     this.cat.tick();
     this.progression.tick();
