@@ -41,6 +41,7 @@ import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
 import { WaterLevels } from '../rendering/WaterLevels';
 import { PipeVisuals } from '../rendering/PipeVisuals';
+import { WaterOverlay } from '../rendering/WaterOverlay';
 import { ChunkRenderer, MeshBuilder, SINK } from '../rendering/ChunkRenderer';
 import { MACHINE_MODELS } from '../rendering/MachineVisuals';
 import type { HoloShape } from '../rendering/Hologram';
@@ -204,6 +205,8 @@ export class Game {
   readonly waterLevels: WaterLevels;
   /** E23.4.2: pipe runs */
   readonly pipes: PipeVisuals;
+  /** E23.4.5: the Water view (build mode) */
+  readonly waterOverlay: WaterOverlay;
   /** Look 6.12: living transitions (every tile change plays as a process). */
   readonly transitions: TransitionRenderer;
   /** Look 6.9: Cultivator tillers. */
@@ -354,6 +357,7 @@ export class Game {
       for (const t of tiles) this.chunks.markTile(t);
     });
     this.pipes = new PipeVisuals(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.waterOverlay = new WaterOverlay(this.sim, this.scene.world, this.app.graphicsDevice);
     this.transitions = new TransitionRenderer(this.sim);
     this.chunks.transitions = this.transitions;
     this.cozy = new Cozy(this.sim);
@@ -1346,6 +1350,8 @@ export class Game {
         return this.turnBuild(a === 'rotate' ? 1 : -1);
       case 'removeMode':
         return this.selectTool(this.hud.currentTool === 'remove' ? 'pulse' : 'remove');
+      case 'waterOverlay':
+        return this.toggleWaterView();
       case 'powerOverlay':
         return this.togglePowerView();
       case 'map':
@@ -1641,6 +1647,23 @@ export class Game {
     this.syncPanelPause();
   }
 
+  /** E23.4.5: the Water view is on (shown while building; it stays on for the next time you build). */
+  waterView = false;
+  private waterViewSeen = false;
+  /** E23.4.5: V / d-pad left in build mode. A new concept: one short introduction, the first time only. */
+  toggleWaterView() {
+    if (!this.building()) return;
+    this.waterView = !this.waterView;
+    if (this.waterView && this.powerView) this.togglePowerView(); // one view at a time
+    this.hud.buildBar.waterOn = this.waterView;
+    this.hud.buildBar.render(this.hud.currentTool);
+    // a new concept: one short introduction, once a save (the classic park has no salvage save: once a session)
+    if (this.waterView && (this.sim.state.salvage ? this.sim.salvage.see('tip:waterView') : !this.waterViewSeen)) {
+      this.waterViewSeen = true;
+      this.hud.toast('Water view: pumps, tanks and pipes holding water glow blue, with arrows the way it flows. Each pond and tank shows how full it is.', 'gold', 4.5);
+    }
+  }
+
   /** E19.2: build mode is having something in hand to build or remove (a machine, a core, a decoration, remove). */
   private building(t: Tool = this.hud.currentTool): boolean {
     return !!this.bot && t !== 'inspect' && t !== 'pulse';
@@ -1650,6 +1673,7 @@ export class Game {
   private togglePowerView() {
     if (!this.building()) return;
     this.powerView = !this.powerView;
+    if (this.powerView) this.waterView = this.hud.buildBar.waterOn = false; // one view at a time
     this.hud.buildBar.powerOn = this.powerView;
     this.hud.buildBar.render(this.hud.currentTool);
     // A new concept gets one short introduction, the first time only.
@@ -4370,8 +4394,12 @@ export class Game {
     this.lightVisuals.update(wdt, this.camera.entity.getPosition());
     // E23.3.4: in the Power view, powered electrical machines become yellow holograms and the rest of the world darkens
     this.machines.powerHolo(powerOn ? this.poweredMachines() : undefined, wdt);
+    // E23.4.5: in the Water view, pumps, tanks and pipes holding water become blue holograms, in the same dimmed world
+    const waterOn = this.waterView && this.building();
+    this.machines.waterHolo(waterOn ? WaterOverlay.holoMachines(this.sim) : undefined, wdt);
+    this.pipes.holo(waterOn ? this.machines.holoMat('water') : undefined);
     const D = POWER.view.darken;
-    const dimTo = powerOn ? D.night + (D.day - D.night) * this.dayNight.light : 0;
+    const dimTo = powerOn || waterOn ? D.night + (D.day - D.night) * this.dayNight.light : 0;
     const k = Math.min(1, wdt / POWER.view.fade);
     this.dayNight.dim = Math.abs(dimTo - this.dayNight.dim) < 1e-3 ? dimTo : this.dayNight.dim + (dimTo - this.dayNight.dim) * k;
     this.powerOverlay.setBoost(this.dayNight.boost);
@@ -4433,6 +4461,8 @@ export class Game {
     this.overlays.update(dt);
     this.waterLevels.update();
     this.pipes.update(dt);
+    this.waterOverlay.visible = this.waterView && this.building();
+    if (this.bot) this.waterOverlay.update(dt, this.bot.pose);
     for (const r of this.sim.water.takeFadeChanges()) this.chunks.markRect(...r); // E23.4.4: land around low water
     if (this.bot) {
       this.bot.update(wdt); // still reads the pad (the menu's focus ring), but nothing moves

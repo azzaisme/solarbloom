@@ -16,6 +16,8 @@ export interface MachineDef {
   areaTypes?: string[];
   /** Only in the endless city (not the rooftop campaign). */
   cityOnly?: boolean;
+  /** E23.8.3.2: only buildable on the mainland. */
+  mainlandOnly?: boolean;
 }
 
 export const MACHINES: Record<MachineType, MachineDef> = {
@@ -231,6 +233,16 @@ export const MACHINES: Record<MachineType, MachineDef> = {
     size: 1,
     allowedGround: ['restored', 'prepared'],
     blurb: 'A pad on the grid. Sit on it and bloombot fills up fast.',
+  },
+  // E23.8.3.2: the mainland's big machines (behaviour in gameplay/MainlandSystem, numbers in data/mainland)
+  gridBattery: {
+    type: 'gridBattery',
+    name: 'Grid Battery',
+    icon: '🔋',
+    size: 2,
+    allowedGround: ['restored', 'prepared'],
+    blurb: 'A grid-scale battery: stores a whole network’s sun and wind for the night. Mainland only.',
+    mainlandOnly: true,
   },
   // E23.4.2: the water network's storage and its pump (crafting-table recipes: data/crafting).
   reservoir: {

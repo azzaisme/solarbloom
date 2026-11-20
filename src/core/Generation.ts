@@ -7,7 +7,7 @@ import { distToFootprintRaw } from './Footprint';
 import { roadPlanFor } from './RoadPlan';
 import { coastSand, inRect, isSeaChunk, onJetty, regionById, regionPond, regionWater, seaCell, setPieceAt } from './OldCityLayout';
 import { rampAt, tileLevel } from './Height';
-import { causewayBroken, onCauseway } from './Mainland';
+import { causewayBroken, mainlandWater, onCauseway } from './Mainland';
 import { OLD_CITY } from '../data/oldcity';
 import { CHUNK, hashString, tileId, tileRandom } from './Hash';
 import type { GroundState, LayerData, TileData } from './types';
@@ -52,6 +52,12 @@ export function stampOldCity(t: TileData): TileData {
   if (!p) return t;
   if (p.kind === 'pile') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: `pile:${p.pile.id}` });
   if (p.kind === 'keeper') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `keeper:${p.keeper.id}` });
+  // E23.8.3.2: the industrial ruins round a steel field: frames and gantry legs block, stains are on the ground
+  if (p.kind === 'ruin') {
+    const q = p.ruin;
+    const solid = q.kind !== 'stain';
+    return Object.assign(t, { blocked: solid || t.blocked, feature: solid ? 'obstacle' : t.feature, prop: `ruin:${q.kind}:${q.turn}:${q.part ?? ''}:${q.span ?? 0}` });
+  }
   if (p.kind === 'shed') return Object.assign(t, { blocked: true, feature: 'obstacle', prop: 'shed' });
   // E21.24: a lookout: a bench and a telescope on a terrace's edge
   if (p.kind === 'lookout') return Object.assign(t, { blocked: true, feature: t.feature === 'water' ? 'paving' : t.feature, prop: `lookout:${p.id}` });
@@ -318,7 +324,7 @@ function generateOldCity(seed: number, layer: LayerData, lh: number, x: number, 
     return stampOldCity(Object.assign(base, { feature: 'road' as TileFeature, blocked: broken, prop: broken ? 'causeway-broken' : undefined, pollution: pollutionMax }));
   }
   // the sea all round the island, the bay and the coast band: open water nothing crosses; canals: deep water
-  if (area.id === SEA || area.id.startsWith('out_') || seaCell(x, z) || regionWater(x, z)) return stampOldCity(Object.assign(base, { feature: 'water' as TileFeature, blocked: true }));
+  if (area.id === SEA || area.id.startsWith('out_') || seaCell(x, z) || regionWater(x, z) || mainlandWater(x, z)) return stampOldCity(Object.assign(base, { feature: 'water' as TileFeature, blocked: true }));
   // E23.5.4.6: a Keeper's garden pond: a silted bed (dead, walkable) until restored, then fresh water
   if (regionPond(x, z, layer.dryPonds)) {
     const lo = Math.max(pollutionMin, area.pollutionFloor);

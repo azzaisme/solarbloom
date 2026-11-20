@@ -246,7 +246,8 @@ describe('E23.4.4: land fades around low water', () => {
     const pol2 = new Pollinators(sim, root());
     pol2.update(0.1, rect);
     const flowers2 = (pol2 as unknown as { flowers: TileData[] }).flowers;
-    expect(garden2.some((t) => ids.has(t.id)) || flowers2.some((t) => ids.has(t.id))).toBe(true);
+    expect(garden2.some((t) => ids.has(t.id))).toBe(true); // butterflies visit again
+    expect(flowers2.some((t) => ids.has(t.id))).toBe(true); // and pollinators
     app.destroy();
   });
 

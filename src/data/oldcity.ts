@@ -1112,6 +1112,9 @@ export const MODEL_NAMES: Record<string, { standIn: string; what: string }> = {
   'sea-cliff': { standIn: 'skyline-cliff', what: 'Close-range sea cliffs in the north' },
   // machines
   'storage-chest': { standIn: 'crate', what: 'The Storage Chest' },
+  // E23.8.3.2: the mainland's steel and its big machines (E23.10.2 makes the real models)
+  'salvage-steel': { standIn: 'procedural', what: 'A heap of steel girders from the industrial ruins' },
+  'grid-battery': { standIn: 'storage-chest', what: 'The Grid Battery: a grid-scale battery bank (2 × 2)' },
   // salvage piles (Scrap stays rubble-pile, crate, stone-block; Seeds stays broken-pot, stump)
   'salvage-copper': { standIn: 'copper-pipe', what: 'A Copper pile' },
   'salvage-driftwood': { standIn: 'barrel', what: 'A Timber (driftwood) pile' },

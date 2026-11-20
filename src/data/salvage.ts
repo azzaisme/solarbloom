@@ -15,8 +15,12 @@ export interface MaterialDef {
   home: string[];
   /** a tint for its fly-ups and panel row */
   colour: string;
+  /** E23.8.3.2: found only on the mainland (and never traded for on the island) */
+  mainlandOnly?: boolean;
   /** E23.5.1: where it comes from, for items that never lie in piles (the backpack says this instead of regions) */
   from?: string;
+  /** E23.8.3.2: where it lies when that is not an Old City region, in world words ("Found in …", "Needs Steel — …") */
+  place?: string;
 }
 
 export const MATERIALS: Record<MaterialId, MaterialDef> = {
@@ -28,6 +32,8 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
   clay: { id: 'clay', name: 'Clay', icon: '🏺', models: ['salvage-clay'], home: ['cistern', 'elderGrove'], colour: '#b97a5a' },
   gears: { id: 'gears', name: 'Gears', icon: '⚙️', models: ['salvage-gears'], home: ['clockPlaza', 'spireHeights'], colour: '#b8a26a' },
   sunstone: { id: 'sunstone', name: 'Sunstone', icon: '✨', models: ['salvage-sunstone'], home: ['terraces', 'observatory', 'saltwind'], colour: '#f2c84a' },
+  // E23.8.3.2: steel, from the mainland's industrial ruins only
+  steel: { id: 'steel', name: 'Steel', icon: '🔩', models: ['salvage-steel'], home: [], colour: '#8d9aa5', mainlandOnly: true, place: 'the industrial ruins past the causeway' },
   // E23.5.1: farm items (data/farm). Never lying in piles: gathered from restored ground, grown or composted.
   biomass: { id: 'biomass', name: 'Biomass', icon: '🌿', models: [], home: [], colour: '#94e46e', from: 'Gathered from restored ground' },
   food: { id: 'food', name: 'Food', icon: '🥕', models: [], home: [], colour: '#f0a04a', from: 'Grown in planters' },
@@ -132,7 +138,7 @@ export const TIERS: TierDef[] = [
   { tier: 2, name: 'The pump turns', needs: { landmarks: 2 }, delivery: { copper: 30, timber: 30, glass: 20 }, ability: 'hover', gives: ['Hover', 'Pollinator Garden', 'Drone Hub', 'Stacks of 60'], look: 'flowing' },
   { tier: 3, name: 'The garden climbs', needs: { landmarks: 4 }, delivery: { clay: 40, gears: 30, seeds: 40 }, ability: 'climb', gives: ['Climb', 'Reservoir Garden', 'Mother Tree', 'Stacks of 80'], look: 'lit' },
   { tier: 4, name: 'Light on the roofs', needs: { landmarks: 6 }, delivery: { sunstone: 40, copper: 60, gears: 40 }, ability: 'glide', gives: ['Glide', 'Cultivator', 'Stacks of 120'], look: 'lit' },
-  { tier: 5, name: 'The Great Bloom', needs: { landmarks: 10 }, delivery: { sunstone: 80, glass: 80, seeds: 80 }, items: ['heartSeed', 'starLens'], gives: ['The Great Bloom'], look: 'bloom' },
+  { tier: 5, name: 'The Great Bloom', needs: { landmarks: 10 }, delivery: { sunstone: 80, glass: 80, seeds: 80 }, items: ['heartSeed', 'starLens'], gives: ['The Great Bloom', 'Grid Battery'], look: 'bloom' },
 ];
 
 export const ABILITIES: Record<AbilityId, { name: string; blurb: string }> = {

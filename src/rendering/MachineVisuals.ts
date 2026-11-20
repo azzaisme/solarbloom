@@ -23,6 +23,9 @@ import { batBoxBody, beehiveBody, birdBoxBody, butterflyGardenBody, compostBinBo
 import { plantId, tankId } from '../gameplay/WaterPipes';
 import { oldCityModel, MODELS } from './Models';
 
+/** The views that turn machines into holograms (one colour each). */
+export type HoloView = 'power' | 'water';
+
 interface MachineView {
   /** E21.6: how full the Old City fountain may get (a trickle at tier 1) */
   fountainCap?: number;
@@ -96,6 +99,8 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   chest: ['storage-chest', 1.0],
   // E23.5.2: the planter box (its crop is drawn by CropVisuals)
   planter: ['planter-bed', 0.9],
+  // E23.8.3.2: the Grid Battery is drawn (gridBattery below) until E23.10.2's grid-battery model lands; its only
+  // stand-in was the Storage Chest, which read as a chest. Add ['grid-battery', 2.0] here with the file.
   // E23.5.3: E23.10's hand-built bin (1 m cube, scaled to its tile) and digester; the procedural bodies stand in
   // until their files are in assets/raw/models/final (MODELS loads whatever is there)
   compostBin: ['compost-bin', 0.82],
@@ -353,21 +358,22 @@ export class MachineVisuals {
   static readonly BATCH_REGION = 64;
   private batchGroups = new Map<string, number>();
 
-  // ───── E23.3.4 the Power view: powered machines become yellow holograms ─────
-  private holoMat?: pc.StandardMaterial;
-  /** each part shown as a hologram, and the material it had */
-  private holo = new Map<pc.MeshInstance, pc.Material>();
-  private holoSig = '';
-  private holoIn = 0;
+  // ───── E23.3.4 / E23.4.5 the Power and Water views: machines become holograms ─────
+  /** one channel per view: its shared hologram material, each part shown with it (and the material it had) */
+  private holos: Record<HoloView, { mat?: pc.StandardMaterial; parts: Map<pc.MeshInstance, pc.Material>; sig: string; in: number }> = {
+    power: { parts: new Map(), sig: '', in: 0 },
+    water: { parts: new Map(), sig: '', in: 0 },
+  };
   private holoBoost = 1;
 
-  /** Keeps the hologram as bright while the Power view's dim lowers the exposure (DayNight.boost). */
+  /** Keeps the holograms as bright while a view's dim lowers the exposure (DayNight.boost). */
   setHoloBoost(b: number): void {
     if (Math.abs(b - this.holoBoost) < 0.01) return;
     this.holoBoost = b;
-    if (this.holoMat) {
-      this.holoMat.emissiveIntensity = POWER.view.holo.glow * b;
-      this.holoMat.update();
+    for (const ch of Object.values(this.holos)) {
+      if (!ch.mat) continue;
+      ch.mat.emissiveIntensity = POWER.view.holo.glow * b;
+      ch.mat.update();
     }
   }
 
@@ -379,27 +385,44 @@ export class MachineVisuals {
    * model arriving) pick it up.
    */
   powerHolo(ids: Set<string> | undefined, dt: number): void {
+    this.holoView('power', ids, dt);
+  }
+
+  /** E23.4.5 the Water view: the given machines (water that runs or is held) become blue holograms, as `powerHolo`. */
+  waterHolo(ids: Set<string> | undefined, dt: number): void {
+    this.holoView('water', ids, dt);
+  }
+
+  /** A view's one hologram material (made on first use), for other parts to wear (the Water view's pipes). */
+  holoMat(view: HoloView): pc.StandardMaterial {
+    const ch = this.holos[view];
+    const V = POWER.view.holo; // one hologram look for both views (the owner's numbers)
+    const hex = view === 'power' ? PALETTE.signal.power.machineHolo : PALETTE.signal.water.machineHolo;
+    return (ch.mat ??= holoMaterial(hex, V.opacity, V.glow * this.holoBoost, false));
+  }
+
+  private holoView(view: HoloView, ids: Set<string> | undefined, dt: number): void {
+    const ch = this.holos[view];
     const dirty = new Set<number>();
     const mark = (mi: pc.MeshInstance) => {
       const g = (mi.node as pc.Entity | null)?.render?.batchGroupId;
       if (g !== undefined && g >= 0) dirty.add(g);
     };
     if (!ids) {
-      if (!this.holo.size) return;
-      for (const [mi, orig] of this.holo) {
-        if (mi.material === this.holoMat) mi.material = orig; // unless something swapped it since
+      if (!ch.parts.size) return;
+      for (const [mi, orig] of ch.parts) {
+        if (mi.material === ch.mat) mi.material = orig; // unless something swapped it since
         mark(mi);
       }
-      this.holo.clear();
-      this.holoSig = '';
+      ch.parts.clear();
+      ch.sig = '';
     } else {
       const sig = [...ids].sort().join(',');
-      this.holoIn -= dt;
-      if (sig === this.holoSig && this.holoIn > 0) return;
-      this.holoSig = sig;
-      this.holoIn = 0.25;
-      const V = POWER.view.holo;
-      this.holoMat ??= holoMaterial(PALETTE.signal.power.machineHolo, V.opacity, V.glow * this.holoBoost, false);
+      ch.in -= dt;
+      if (sig === ch.sig && ch.in > 0) return;
+      ch.sig = sig;
+      ch.in = 0.25;
+      const hm = this.holoMat(view);
       const want = new Set<pc.MeshInstance>();
       for (const v of this.views.values()) {
         if (!ids.has(v.m.id)) continue;
@@ -408,17 +431,17 @@ export class MachineVisuals {
             const cur = mi.material;
             if (!cur) continue;
             want.add(mi);
-            if (cur === this.holoMat) continue;
-            this.holo.set(mi, cur);
-            mi.material = this.holoMat;
+            if (cur === hm) continue;
+            ch.parts.set(mi, cur);
+            mi.material = hm;
             mark(mi);
           }
         }
       }
-      for (const [mi, orig] of this.holo) {
+      for (const [mi, orig] of ch.parts) {
         if (want.has(mi)) continue;
-        if (mi.material === this.holoMat) mi.material = orig;
-        this.holo.delete(mi);
+        if (mi.material === ch.mat) mi.material = orig;
+        ch.parts.delete(mi);
         mark(mi);
       }
     }
@@ -706,6 +729,9 @@ export class MachineVisuals {
         break;
       case 'battery':
         this.battery(v);
+        break;
+      case 'gridBattery':
+        this.gridBattery(v);
         break;
       case 'windTurbine':
         this.windTurbine(v);
@@ -1775,6 +1801,41 @@ export class MachineVisuals {
   }
 
   /**
+   * E23.8.3.2 Grid Battery (2 × 2, mainland only): the island battery grown to a bank. Four tall cream cabinets on
+   * one bevelled plinth, each with a glass front over a column of cells; the cells light mint along the whole bank as
+   * it fills (read from the grid, like the battery). A gold-trimmed busbar joins their terminals over the top, a
+   * steel walkway rail runs along the front and a status light sits on the end.
+   */
+  private gridBattery(v: MachineView) {
+    const b = group(v.body, 'bank');
+    b.setLocalEulerAngles(0, 45, 0); // its glass faces the camera
+    part(b, rbox(1.82, 0.1, 1.3, 0.04), creamSeam(), { pos: [0, 0.05, 0], shadow: true });
+    part(b, rbox(1.7, 0.03, 1.18, 0.01), darkMetal(), { pos: [0, 0.11, 0] });
+    v.orbs = [];
+    const cells = 5;
+    for (let c = 0; c < 4; c++) {
+      const cab = group(b, 'cabinet', [-0.63 + c * 0.42, 0.12, -0.05]);
+      part(cab, rbox(0.38, 1.1, 0.78, 0.05), cream(), { pos: [0, 0.55, 0], shadow: true });
+      part(cab, rbox(0.385, 0.025, 0.785, 0.008), gold(), { pos: [0, 1.06, 0] });
+      part(cab, rbox(0.385, 0.016, 0.785, 0.006), creamSeam(), { pos: [0, 0.2, 0] });
+      const face = group(cab, 'face', [0, 0, 0.395]);
+      part(face, rbox(0.26, 0.78, 0.02, 0.02), darkMetal(), { pos: [0, 0.6, 0] });
+      for (let i = 0; i < cells; i++) v.orbs.push(part(face, rbox(0.2, 0.11, 0.03, 0.02), cellOff(), { pos: [0, 0.3 + i * 0.145, 0.01] }));
+      part(face, rbox(0.26, 0.78, 0.01, 0.02), glassMat(), { pos: [0, 0.6, 0.03] });
+      // a terminal on top of each cabinet
+      part(cab, rcyl(0.04, 1.1, 1.18, 0.01, 0.005, 10), c % 2 ? darkMetal() : gold(), { pos: [0, 0, -0.2] });
+    }
+    // cells fill along the bank bottom row first, so a half-full bank reads level across its four cabinets
+    v.orbs = Array.from({ length: cells * 4 }, (_, i) => v.orbs![(i % 4) * cells + Math.floor(i / 4)]);
+    // the busbar over the terminals, and a walkway rail along the front
+    part(b, rbox(1.36, 0.05, 0.07, 0.02), gold(), { pos: [0, 1.3, -0.25] });
+    for (const x of [-0.84, 0.84]) part(b, rbox(0.04, 0.42, 0.04, 0.01), metal(), { pos: [x, 0.33, 0.55] });
+    part(b, rbox(1.72, 0.035, 0.035, 0.01), metal(), { pos: [0, 0.54, 0.55] });
+    bolts(b, [[-0.8, 0.12, 0.6], [0.8, 0.12, 0.6], [-0.8, 0.12, -0.6], [0.8, 0.12, -0.6]], 0.035, gold());
+    v.light = part(b, ball(5, 8), mat(PALETTE.gold, { emissive: PALETTE.gold, emissiveIntensity: 1 }), { pos: [0.86, 1.0, 0.3], scale: 0.05 });
+  }
+
+  /**
    * E23.3.2.2 Wind Turbine: a slender cream mast on a round base, a rounded nacelle with a gold band and three
    * long cream blades on a hub that turn with the turbine's output (still when there is no wind).
    */
@@ -2320,7 +2381,8 @@ export class MachineVisuals {
           if (matOf(v.light!) !== want) setMat(v.light!, want);
           break;
         }
-        case 'battery': {
+        case 'battery':
+        case 'gridBattery': {
           // The cells fill from the bottom with the stored share.
           const { stored, capacity } = this.sim.power.stored(v.m);
           const lit = capacity > 0 ? Math.ceil((stored / capacity) * v.orbs!.length - 0.05) : 0;

@@ -215,6 +215,7 @@ export class Sim {
     this.log = new DebugLog(this);
     this.restoration.adoptGrowing();
     for (const c of this.grid.loadedChunks()) for (const t of c.tiles) if (t?.tr) this.transitions.adopt(t);
+    this.mainland.wire(); // E23.8.3.2: after every system (the grid and water network) is built
   }
 
   get time() {

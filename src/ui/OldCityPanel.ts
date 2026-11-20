@@ -184,7 +184,7 @@ export class SpeechBubble {
 export function tradeHtml(sim: Sim, give: MaterialId | undefined): string {
   const can = sim.landmarks.tradable();
   const gives = MATERIAL_IDS.map((m) => `<button data-act="give" data-arg="${m}" ${can.includes(m) ? '' : 'disabled'} class="${give === m ? 'on' : ''}">${MATERIALS[m].icon} ${MATERIALS[m].name}${give === m ? ' ✓' : ''}</button>`).join('');
-  const gets = MATERIAL_IDS.filter((m) => m !== give).map((m) => `<button data-act="get" data-arg="${m}" ${give ? '' : 'disabled'}>${MATERIALS[m].icon} ${MATERIALS[m].name}</button>`).join('');
+  const gets = sim.landmarks.tradeTargets().filter((m) => m !== give).map((m) => `<button data-act="get" data-arg="${m}" ${give ? '' : 'disabled'}>${MATERIALS[m].icon} ${MATERIALS[m].name}</button>`).join('');
   // E23.9.2: when bloombot carries something Tally loves, it can be given as a gift (a choice, never a surprise)
   const gift = sim.keepers.giftFor('tally');
   const label = giftLabel(gift ?? '');

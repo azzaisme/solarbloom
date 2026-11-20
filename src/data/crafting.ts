@@ -118,6 +118,9 @@ export const MACHINE_RECIPES: MachineRecipe[] = [
   // E23.5.3: a landmark tree wants fertiliser
   { id: 'motherTree', name: 'Mother Tree', cost: { seeds: 30, clay: 20, biomass: 100, fertiliser: 4 }, unlock: { tier: 3 }, builds: 'motherTree' },
   { id: 'cultivator', name: 'Cultivator', cost: { scrap: 20, motor: 2, gears: 10, planks: 4 }, unlock: { tier: 4 }, builds: 'cultivator' },
+  // E23.8.3.2: the mainland's machines, after the Great Bloom, built mostly from steel (data/mainland MAINLAND_MACHINES).
+  // A grid battery is a stack of battery cells.
+  { id: 'gridBattery', name: 'Grid Battery', cost: { steel: 30, batteryCell: 6, gears: 10 }, unlock: { tier: 5 }, builds: 'gridBattery' },
 ];
 
 export interface DecorRecipe {
