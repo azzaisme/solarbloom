@@ -52,6 +52,8 @@ export const BUILD_TAB: Record<BuildableType | 'pipe', BuildTabId> = {
   cultivator: 'machines',
   droneHub: 'machines',
   chest: 'storage',
+  crate: 'storage',
+  assembler: 'machines',
 };
 
 /** One plain line about each piece (the menu's detail pane): what it does for you, no numbers. */
@@ -76,6 +78,8 @@ const LINES: Record<BuildableType | 'pipe', string> = {
   cultivator: 'A solar tiller that slowly breaks the dead ground near its dock into bloom on its own.',
   droneHub: 'Sends out a little drone that restores the ground near the hub, on power from the grid.',
   chest: 'A way into the city’s shared store: open it to put things away or take them out.',
+  crate: 'Holds what couriers carry. Builds nearby take from it, and you choose where it sends things.',
+  assembler: 'Makes a recipe on its own from the crates you give it, while bloombot is away.',
 };
 
 /** Names a 74-pixel dock slot has room for (the menu and the prompt use the full name). */
@@ -90,6 +94,7 @@ const SHORT: Partial<Record<BuildableType, string>> = {
   bioDigester: 'Digester',
   compostBin: 'Compost',
   chest: 'Chest',
+  crate: 'Crate',
   motherTree: 'Tree',
 };
 
