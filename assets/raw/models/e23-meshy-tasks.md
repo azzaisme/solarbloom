@@ -113,3 +113,20 @@ swallowtail image-to-3d 01a1f38c-2059-72be-abab-984a15eb7a82
 fawn image-to-3d 01a1f38c-2650-73fe-be4e-474dd1a94765
 bloombot rig (G.1) 01a1e779-c5f4-7703-9e9d-27fb8eecfa24
 ```
+B3 (20 Nov, owner-approved):
+research-station concept 01a1f679-2c38-70d3-8560-d1e855b418b7
+assembler concept 01a1f679-432d-7149-8c1b-fb8e4ab95929
+mulcher preview 01a1f679-57c1-75f2-824e-9efa2e566b4b
+hopper-composter preview 01a1f679-625b-7084-b845-d415b558ea6f
+auto-feeder preview 01a1f679-6e56-7289-b263-0355eea465ce
+seed-drill preview 01a1f679-77e9-7115-9f9b-2fecf64b129c
+forecast-board preview 01a1f679-8161-7579-9780-4bda708e52fe
+research-station image-to-3d 01a1f67a-6040-7622-99d1-f95372505f7b
+assembler image-to-3d 01a1f67a-63e5-762e-92bd-140ea31a7552
+seed-drill: first preview a tangle; retried (owner OK)
+seed-drill preview (retry) 01a1f67e-017c-71b9-a75c-9d1d3275da26
+mulcher refine 01a1f67e-0b82-701f-9808-f95f689dd21b
+hopper-composter refine 01a1f67e-1618-71cc-addf-23b2d925ce26
+auto-feeder refine 01a1f67e-1f63-7228-b752-e2f40eaf2b26
+forecast-board refine 01a1f67e-298f-7555-badd-0cd54e6010e7
+seed-drill refine 01a1f682-a444-72e2-8f91-c31b0e06b0cf

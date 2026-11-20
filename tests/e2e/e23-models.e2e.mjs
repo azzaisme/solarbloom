@@ -19,6 +19,10 @@ const STYLES = ['picket', 'willow', 'pipe', 'stone', 'hedge'];
 const FENCES = [...STYLES.flatMap((s) => ['run', 'post', 'gate'].map((p) => `fence-${s}-${p}`)), 'trellis'];
 // B4: the animals live in assets/raw/models/visitors/ (the wildlife visitors load them, #544); fed in by hand here
 const ANIMALS = ['fox', 'hedgehog', 'squirrel', 'otter', 'owl', 'magpie', 'frog', 'bumblebee', 'songbird', 'koi', 'heron', 'badger', 'kingfisher', 'butterfly', 'swallowtail', 'fawn'];
+const B3 = ['research-station', 'assembler', 'mulcher', 'hopper-composter', 'auto-feeder', 'seed-drill', 'forecast-board'];
+// B5: the ten Keepers, with bloombot's sitting clips retargeted onto their own rigs (assets/tools/retarget_keeper_clips.mjs)
+const KEEPERS = ['atlas', 'fern', 'gable', 'moss', 'pylon', 'sluice', 'tally', 'tide', 'tock', 'vega'].map((k) => `keeper-${k}`);
+const KEEPER_CLIPS = 'idle,sit,sit-down,sleep,stand-up,wave';
 const CLIPS = ['meditate', 'sit-down', 'sit', 'stand-up', 'doze'];
 const server = await preview({ preview: { port: 4251, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -37,7 +41,7 @@ try {
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'));
   await page.waitForFunction(() => window.solarbloom.models?.ready);
 
-  const loaded = await page.evaluate((names) => names.map((n) => [n, window.solarbloom.models.has(n)]), [...MACHINES, ...B1, ...B2, ...FENCES, ...CROPS]);
+  const loaded = await page.evaluate((names) => names.map((n) => [n, window.solarbloom.models.has(n)]), [...MACHINES, ...B1, ...B2, ...B3, ...FENCES, ...CROPS]);
   for (const [n, ok] of loaded) check(ok, `model ${n} loaded in the game`);
 
   // Bloombot by the fountain, the park restored round it, the camera close (near zoom, the default angle).
@@ -127,6 +131,18 @@ try {
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${dir}/e23-models-farm-big.png` });
 
+  // 1d'. batch B3 (crafting and automation): research station and assembler pulled back, the small ones close in
+  await layout([{ away: 2.6, gap: 2.2, items: ['research-station', 'assembler', 'forecast-board'].map((name) => ({ name })) }]);
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `${dir}/e23-models-crafting-big.png` });
+  await page.evaluate(() => window.solarbloom.camera.zoomTo(window.solarbloom.camera.minZoom));
+  await page.waitForTimeout(2500);
+  await layout([{ away: 1.4, gap: 1.15, items: ['mulcher', 'hopper-composter', 'seed-drill', 'auto-feeder'].map((name) => ({ name })) }]);
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `${dir}/e23-models-crafting.png` });
+  await page.evaluate(() => window.solarbloom.camera.zoomTo(1.2));
+  await page.waitForTimeout(2500);
+
   // 1e. the fences (#466): each style a short run along tile edges (post, run, gate opened 70°, run, post), the
   // trellis beside them, by day and by night (the clock pinned to noon, then to midnight)
   const fenceRows = STYLES.map((st, r) => ({
@@ -212,6 +228,38 @@ try {
     await layout([{ away: 1.6, gap: 0.85, items: set.map((name) => ({ name, animal: true, clip: k ? 'sit' : 'idle' })) }]);
     await page.waitForTimeout(2000);
     await page.screenshot({ path: `${dir}/e23-models-animals-${k + 1}.png` });
+  }
+
+  // 1h. batch B5: the Keepers on benches. Each Keeper file loaded as the game loads it (KeeperVisuals), its clips
+  // checked, then five at a time sat on a park bench in the retargeted `sit`, and one mid `sit-down`
+  const keeperFiles = Object.fromEntries(KEEPERS.map((n) => [n, readFileSync(`assets/raw/models/final/${n}.glb`).toString('base64')]));
+  const gotK = await page.evaluate(async (files) => {
+    const g = window.solarbloom;
+    await Promise.all(Object.entries(files).map(([n, b64]) => new Promise((done) => {
+      const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bin], { type: 'model/gltf-binary' }));
+      g.app.assets.loadFromUrlAndFilename(url, `${n}.glb`, 'container', (err, asset) => {
+        if (!err && asset) g.__animals[n] = asset;
+        done();
+      });
+    })));
+    return Object.keys(files).map((n) => [n, g.__animals[n] ? g.__animals[n].resource.animations.map((c) => c.resource?.name ?? c.name).sort().join(',') : '']);
+  }, keeperFiles);
+  for (const [n, c] of gotK) check(c === KEEPER_CLIPS, `${n} loads with its clips (${c})`);
+  for (const [k, set] of [KEEPERS.slice(0, 5), KEEPERS.slice(5)].entries()) {
+    const at = (i) => (i - 2) * 1.0;
+    await layout([
+      {
+        away: 1.7,
+        gap: 1,
+        items: set.flatMap((name, i) => [
+          { name: 'bench', at: at(i), scale: 0.58 }, // as the park draws benches (ChunkRenderer)
+          { name, animal: true, clip: k === 1 && i === 4 ? 'sit-down' : 'sit', at: at(i), scale: 0.95 }, // KeeperVisuals' MODEL_SCALE
+        ]),
+      },
+    ]);
+    await page.waitForTimeout(k === 1 ? 2200 : 3000);
+    await page.screenshot({ path: `${dir}/e23-models-keepers-sit-${k + 1}.png` });
   }
 
   // 2. crops: ripe (back row) and growing (front row: fruit hidden, scaled down) in two sets of eight

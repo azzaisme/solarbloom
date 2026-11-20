@@ -9,7 +9,7 @@ import { clamp01, makeNoise, mix, rng, smooth, type RGB } from './GroundTex';
  *  - `watered`: darker and damp, water lying in the furrow bottoms, a slight sheen (a glossier material)
  *  - `fertilised`: rich dark soil with flecks of compost and straw, and more moss
  *
- * The base is the palette's tilled soil `#5f4733` with moss dots (docs/art/palette.md). The furrows run along world X
+ * The base is the palette's tilled soil (`PALETTE.ground` prepared plot) with moss dots (docs/art/palette.md). The furrows run along world X
  * (4 a metre) and the texture is laid in world space like the other painted ground (GroundTex), so a field runs
  * on with no seams between tiles. Where a side of a tile is not farmland the soil fades into the ground around it over
  * a ragged band, so a field reads as one patch rather than squares.

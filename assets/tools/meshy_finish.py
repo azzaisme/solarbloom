@@ -13,6 +13,12 @@
 - `crop-faces`: the same, but each face is sorted by its own colour (flowers or grain heads fused to their stems).
   Add `pale=S,V` for a model whose flowers are pale tints close to its leaves (moonflower 0.35,0.65; mint 0.25,0.65).
 - `leafy`: a crop with nothing to hide (seedling, lettuce, watercress): one `plant` object, no split.
+- `part=NAME:x0,x1,y0,y1,z0,z1[:pivot]` (machines, repeatable): every loose piece of the finished mesh whose centre
+  lies in that box (metres, after scaling: x across, y depth with the front at -y, z up from the base) becomes its
+  own object NAME, so the game can turn or hide it (a rotor, a drum, a weathervane). Its origin is its pivot:
+  `base` (default: centre of its footprint, at its bottom), `centre`, or `x,y,z` in metres.
+- `extra=script.py` (machines): runs that script after the split, with `obj`, `parts`, `name` and `bpy` in scope,
+  for hand-built parts Meshy cannot make (the assembler's arms behind real glass). It appends to `parts`.
 - Writes <name>.glb, <name>.lod1.glb (Decimate to a quarter, at least 150 triangles) and <name>.png, a preview
   from the game camera (pitch 40°, yaw 45°).
 """
@@ -30,7 +36,15 @@ from model_io import base_color_image, load  # noqa: E402
 
 argv = sys.argv[sys.argv.index("--") + 1:]
 src, out_dir, name, size_m, axis, tris, tex = argv[:7]
-mode = argv[7] if len(argv) > 7 else ""
+mode = argv[7] if len(argv) > 7 and "=" not in argv[7] else ""
+SPLITS = []  # (name, box, pivot)
+for a in argv[7:]:
+    if a.startswith("part="):
+        bits = a[5:].split(":")
+        box = [float(x) for x in bits[1].split(",")]
+        piv = bits[2] if len(bits) > 2 else "base"
+        SPLITS.append((bits[0], box, piv))
+EXTRA = next((a[6:] for a in argv[7:] if a.startswith("extra=")), None)
 # optional `pale=S,V`: a per-model cutoff measured on its albedo; faces under saturation S and at or over value V are
 # flowers (moonflower's cream trumpets, mint's lilac tips sit too close to their leaves for the general rule)
 pale = next((tuple(float(x) for x in a[5:].split(",")) for a in argv[8:] if a.startswith("pale=")), None)
@@ -167,6 +181,76 @@ if crop:
 else:
     obj.name = "plant" if mode == "leafy" else name
 
+
+def loose_islands(o):
+    """Face-index lists, one per loose piece (flood fill over shared vertices)."""
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    bm.faces.ensure_lookup_table()
+    seen, out = set(), []
+    for f in bm.faces:
+        if f.index in seen:
+            continue
+        stack, isl = [f], []
+        seen.add(f.index)
+        while stack:
+            g = stack.pop()
+            isl.append(g.index)
+            for v in g.verts:
+                for n in v.link_faces:
+                    if n.index not in seen:
+                        seen.add(n.index)
+                        stack.append(n)
+        out.append(isl)
+    bm.free()
+    return out
+
+
+def split_part(o, pname, box, piv):
+    """Moves the loose pieces whose centre is in `box` to a new object `pname`, origin at its pivot."""
+    me = o.data
+    take = set()
+    for isl in loose_islands(o):
+        vs = {vi for fi in isl for vi in me.polygons[fi].vertices}
+        c = sum((me.vertices[vi].co for vi in vs), Vector()) / len(vs)
+        lo_, hi_ = Vector((box[0], box[2], box[4])), Vector((box[1], box[3], box[5]))
+        if lo_.x <= c.x <= hi_.x and lo_.y <= c.y <= hi_.y and lo_.z <= c.z <= hi_.z:
+            take.update(isl)
+    if not take or len(take) == len(me.polygons):
+        raise SystemExit(f"part {pname}: the box {box} takes {len(take)} of {len(me.polygons)} faces")
+    bpy.ops.object.select_all(action="DESELECT")
+    o.select_set(True)
+    bpy.context.view_layer.objects.active = o
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="DESELECT")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    for p in me.polygons:
+        p.select = p.index in take
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.separate(type="SELECTED")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    new = [x for x in bpy.context.selected_objects if x is not o][0]
+    new.name = pname
+    new.data.name = pname
+    a, b = bounds(new)
+    if piv == "centre":
+        at = (a + b) / 2
+    elif piv == "base":
+        at = Vector(((a.x + b.x) / 2, (a.y + b.y) / 2, a.z))
+    else:
+        at = Vector([float(x) for x in piv.split(",")])
+    for v in new.data.vertices:
+        v.co -= at
+    new.location = at
+    print("PART", pname, len(new.data.polygons), "faces, pivot", tuple(round(x, 3) for x in at))
+    return new
+
+
+for pname, box, piv in SPLITS:
+    parts.append(split_part(obj, pname, box, piv))
+if EXTRA:
+    exec(compile(open(EXTRA).read(), EXTRA, "exec"), {"obj": obj, "parts": parts, "name": name, "bpy": bpy, "Vector": Vector, "bounds": bounds, "tex": tex, "tris": tris, "decimate": decimate, "tri_count": tri_count})
+
 os.makedirs(out_dir, exist_ok=True)
 
 
@@ -179,21 +263,29 @@ def export(path, objs):
 
 export(os.path.join(out_dir, f"{name}.glb"), parts)
 lod0 = sum(tri_count(o) for o in parts)
-print("LOD0", name, lod0, "tris", "fruit" if len(parts) > 1 else "")
+print("LOD0", name, lod0, "tris", " ".join(o.name for o in parts))
 
 # LOD1 on copies
 copies = []
+# the far copies keep the near parts' names (the game finds a moving part by name at every distance), so the near
+# ones step aside while the copies are named and exported
+near_names = [o.name for o in parts]
 for o in parts:
+    o.name = o.name + "~near"
+for o, nm in zip(parts, near_names):
     c = o.copy()
     c.data = o.data.copy()
     bpy.context.scene.collection.objects.link(c)
     # a quarter of the near version, never over the machine class's far budget (1,000; docs/art/meshy-assets.md)
     decimate(c, max(150 // len(parts), min(tri_count(o) // 4, 1000 // len(parts))))
+    c.name = nm
     copies.append(c)
 export(os.path.join(out_dir, f"{name}.lod1.glb"), copies)
 print("LOD1", name, sum(tri_count(o) for o in copies))
 for c in copies:
     bpy.data.objects.remove(c)
+for o, nm in zip(parts, near_names):
+    o.name = nm
 
 # preview from the game camera
 scene = bpy.context.scene
@@ -230,9 +322,16 @@ scene.camera = cam
 scene.render.filepath = os.path.join(out_dir, f"{name}.png")
 bpy.ops.render.render(write_still=True)
 print("PREVIEW", scene.render.filepath)
-if len(parts) > 1:
+if crop and len(parts) > 1:
     # the growing stage: the plant without its fruit (a check image, next to the preview)
     parts[1].hide_render = True
     scene.render.filepath = os.path.join(out_dir, f"{name}.growing.png")
     bpy.ops.render.render(write_still=True)
+    print("PREVIEW", scene.render.filepath)
+if SPLITS:
+    # a check image of what each box took: the split parts alone, the body hidden
+    obj.hide_render = True
+    scene.render.filepath = os.path.join(out_dir, f"{name}.parts.png")
+    bpy.ops.render.render(write_still=True)
+    obj.hide_render = False
     print("PREVIEW", scene.render.filepath)

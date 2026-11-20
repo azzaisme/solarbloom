@@ -194,8 +194,10 @@ Two clips are keyed by hand in Blender (no credits): `eat` (a one-shot bite, for
 shoulder, lap) for animals to perch on; they are empties added in the same Blender pass.
 
 ### Keepers on benches (E23.2.3)
-Keepers who are friends sit beside bloombot. Each of the 10 Keepers gets `sit-down` (57) and `sit` (33); standing
-up plays `sit-down` in reverse.
+Keepers who are friends sit beside bloombot. Each of the 10 Keepers gets `sit-down`, `sit` and `stand-up`. They
+were planned as Meshy clips (20 × 3 credits), but the Keepers were rigged by the same auto-rigger as bloombot (the
+same 24 joints, the same names), so bloombot's own chair clips are retargeted onto each Keeper's rig instead, for
+nothing: `assets/tools/retarget_keeper_clips.mjs` (see "What has been made").
 
 ## Batches and cost
 
@@ -209,14 +211,14 @@ Prices are from `meshy-assets.md`'s routes as of 2026-10-12 (check https://docs.
 | B2: farm | bio-digester, beehive, mushroom-log, bird-box, bat-box, hedgehog-house, greenhouse | 7 | 117 |
 | B3: crafting and automation | research-station, assembler, mulcher, hopper-composter, auto-feeder, seed-drill, forecast-board | 7 | 111 |
 | B4: animals | 16 animals (the owner added butterfly, swallowtail and fawn on 19 Nov) | 16 | 288 |
-| B5: Keepers on benches | 10 Keepers × 2 clips × 3 | 20 clips | 60 |
+| B5: Keepers on benches | bloombot's `sit-down`, `sit` and `stand-up` retargeted onto the 10 Keepers (no Meshy) | 30 clips | 0 |
 | B6: crops | crop-seedling and 15 crops | 16 | 240 |
-| **Total** | | **56 models, 25 clips** | **993** |
+| **Total** | | **56 models, 35 clips** | **933** |
 
 Crops first appear in Milestone A, so until B6 is approved the planters have no crop model. The owner may want B6
 folded into A (303 credits for A then).
 
-Batch A and B6 are done (303 credits), plus a lavender redo the owner approved on 19 Nov (15 credits). B1 is done (approved 19 Nov): 124 credits spent against 114 planned, because the large solar array failed twice on the text route before the image route worked; the owner gave standing permission for regenerations. B2 is done (approved 19 Nov): 137 credits spent against 117 planned (the bird and bat boxes each missed twice on the text route before the image route). B4 is done (approved 19 Nov, "both lists combined": the doc's 13 and the wildlife visitors of #544, 16 animals): 288 credits, as planned, with no redos.
+Batch A and B6 are done (303 credits), plus a lavender redo the owner approved on 19 Nov (15 credits). B1 is done (approved 19 Nov): 124 credits spent against 114 planned, because the large solar array failed twice on the text route before the image route worked; the owner gave standing permission for regenerations. B2 is done (approved 19 Nov): 137 credits spent against 117 planned (the bird and bat boxes each missed twice on the text route before the image route). B4 is done (approved 19 Nov, "both lists combined": the doc's 13 and the wildlife visitors of #544, 16 animals): 288 credits, as planned, with no redos. B3 is done (approved 20 Nov): 116 credits spent against 111 planned (the seed drill's first text preview was a tangle and was made again, 5). B5 is done (approved 20 Nov) at no cost: retargeted, not generated.
 
 ## Getting each model into the game
 
@@ -279,12 +281,37 @@ Batch A and the crops (B6), approved by the owner on 18 Nov 2026: 303 credits. M
 | butterfly | 481 / 600 | 147 | |
 | swallowtail | 584 / 600 | 147 | |
 | fawn | 2,449 / 2,500 | 599 | |
+| **B3** (20 Nov) | | | Finished by `meshy_finish.py` with real sizes; the moving parts split out with its `part=` boxes (below). |
+| research-station | 3,919 / 4,000 | 959 | Image route; a honey-timber desk with ceramic drawers, a brass microscope, seed jars, a glass dome with a seedling, the open notebook and a gold lamp. 1.6 m wide. |
+| assembler | 4,403 / 5,000 | 410 | Image route; a cream cabinet, 1.9 m. Meshy painted its window opaque and lost the arms, so `assets/tools/meshy_extra_assembler.py` cuts the window along its gold frame into a see-through `glass` part (alpha 0.15), sets an inward-facing room behind it (`inside`) with a ceramic work `plate`, and hangs two gold arms, `arm-left` and `arm-right`, from its ceiling, each with its origin at its shoulder so the game swings them. |
+| mulcher | 1,935 / 2,000 | 473 | A wheeled ceramic hopper. Its drum (`drum`, origin at its centre) spins about its long (x) axis. 1 m long. |
+| hopper-composter | 1,470 / 1,500 | 359 | Reads as a tall timber barrel with a hopper on top, a gold crank and feet. 1.3 m. |
+| auto-feeder | 798 / 800 | 195 | A copper canister with a gold timer dial, 0.4 m, to sit on the Bio Digester's hatch. |
+| seed-drill | 1,470 / 1,500 | 358 | A timber seed cart on two spoked wheels with a push handle. The first text preview was a tangle; made again. The copper tubes and discs did not come through: it reads as a seed cart. 1.2 m. |
+| forecast-board | 980 / 1,000 | 239 | A blank slate-green board under a little timber roof, on a post; the weather is drawn in code. Its gold cockerel weathervane (`vane`, origin at its foot) turns about z. 1.8 m. |
+| **B5** (20 Nov), the 10 Keepers | as before | as before | `sit-down`, `sit` and `stand-up` added to every `keeper-<id>.glb` and its `.lod1.glb` by `assets/tools/retarget_keeper_clips.mjs`: bloombot's clips retargeted through world space (each bone turned from its rest pose as bloombot's turns from its own), the leg bones first laid along bloombot's (a few Keepers' legs splay at rest) so a seated Keeper's thighs are level and its shins hang straight, and the hips' travel scaled by leg length. No Meshy credits. `tests/e23-models.test.ts` poses each one halfway through `sit` and checks it; `npm run test:e23models` sets them on park benches in the game (`docs/review/e23-models-keepers-sit-*.png`) and the B3 machines beside bloombot; those renders wait for the final pass (owner, 20 Nov: no renders before it). `KeeperVisuals` still bends the legs by hand (`SeatPose`); switching it to these clips is the next step there. |
 
 Every model is finished by `assets/tools/meshy_finish.py` (Blender 5.0): real scale, pivot at the base centre,
 textures 512 (1024 for the charger and the big B1 machines), LOD1 by Decimate (a quarter, never over 1,000), a preview
 from the game camera. For crops it sorts the
 fruit, pods, heads and flowers into a `fruit` node: the game hides it and scales the plant down for the growing
 stage.
+
+B3's arguments (`name size axis tris tex [options]`), so they can be finished again from the raw downloads:
+
+```
+research-station 1.6 w 4000 1024
+assembler 1.9 h 5000 1024 extra=assets/tools/meshy_extra_assembler.py
+mulcher 1.0 w 2000 512 part=drum:-0.52,-0.02,-0.4,0.4,0.0,0.55:centre
+hopper-composter 1.3 h 1500 512
+auto-feeder 0.4 h 800 512
+seed-drill 1.2 w 1500 512
+forecast-board 1.8 h 1000 512 part=vane:-0.3,0.25,-0.06,0.06,1.48,1.85:base
+```
+
+The B1 and B2 machines were finished before `part=` existed, as one mesh each: the wind turbine's rotor, the pump's
+flywheel, the sprinkler head, the digester's sight window and the greenhouse vents are not yet their own parts. They
+can be split the same way from their raw downloads when their systems want to turn them.
 
 **Known limits, for the owner:**
 - **crop-lavender** first came out as a grey spiky mound with no purple spikes. The owner approved a redo (15 credits, 19 Nov). The new one has chunky violet spikes, 1,051 triangles; its growing stage keeps the leaves and soil base on bare stems (a couple of spike tips are fused on and stay).

@@ -108,7 +108,9 @@ export const E23_MODELS: E23Model[] = [
 /** Animation clips from `meshy_animate` (3 credits each), by batch. Hand-keyed Blender clips cost nothing. */
 export const E23_CLIPS: { name: string; batch: Batch; count: number; what: string }[] = [
   { name: 'bloombot', batch: 'A', count: 5, what: 'meditate, sit-down, sit, stand-up, doze' },
-  { name: 'keepers', batch: 'B5', count: 20, what: 'each of 10 Keepers: sit-down and sit' },
+  // B5 needs no Meshy actions: bloombot's own chair clips are retargeted onto the Keepers' matching rigs
+  // (assets/tools/retarget_keeper_clips.mjs), so it costs nothing
+  { name: 'keepers', batch: 'B5', count: 0, what: 'each of 10 Keepers: sit-down, sit and stand-up, retargeted from bloombot' },
 ];
 
 /**

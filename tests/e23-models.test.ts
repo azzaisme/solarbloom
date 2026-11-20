@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { batchCredits, E23_MODELS, type Batch } from '../src/data/e23models';
+import { dir, Skeleton } from './helpers/gltfPose';
 
 /**
  * E23.10.2 (#406, #464–#468): the E23 model list. Reused models must exist; names are unique; every new model has a
@@ -58,7 +59,7 @@ describe('E23.10.2: the E23 model list', () => {
   });
 
   it('batch costs match docs/art/e23-models.md', () => {
-    const cost: Record<Batch, number> = { A: 63, B1: 114, B2: 117, B3: 111, B4: 288, B5: 60, B6: 240 };
+    const cost: Record<Batch, number> = { A: 63, B1: 114, B2: 117, B3: 111, B4: 288, B5: 0, B6: 240 };
     for (const [b, c] of Object.entries(cost)) expect(batchCredits(b as Batch), b).toBe(c);
     const doc = readFileSync('docs/art/e23-models.md', 'utf8');
     expect(doc).toContain(`**${Object.values(cost).reduce((a, b) => a + b, 0)}**`);
@@ -103,6 +104,55 @@ describe('E23.10.2: the E23 model list', () => {
       const parts = nodeNames(`${DIR}/${m.name}.glb`);
       if (m.name.endsWith('-gate')) expect(parts, `${m.name} swings its gate`).toContain('gate');
       if (m.name.startsWith('fence-hedge')) expect(parts, `${m.name} sways its leaves`).toContain('leaves');
+    }
+  });
+
+  it('batch B3 (#467) has landed with its moving parts split out: drum, weathervane, the assembler’s arms and glass', () => {
+    const b3 = E23_MODELS.filter((m) => m.batch === 'B3');
+    expect(b3.map((m) => m.name).sort()).toEqual(['assembler', 'auto-feeder', 'forecast-board', 'hopper-composter', 'mulcher', 'research-station', 'seed-drill']);
+    for (const m of b3) expect(existsSync(`${DIR}/${m.name}.glb`), m.name).toBe(true);
+    const gltf = (name: string) => {
+      const buf = readFileSync(`${DIR}/${name}.glb`);
+      return JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8')) as { nodes: { name?: string }[]; materials: { name?: string; alphaMode?: string }[] };
+    };
+    const parts: Record<string, string[]> = { mulcher: ['drum'], 'forecast-board': ['vane'], assembler: ['arm-left', 'arm-right', 'glass', 'inside', 'plate'] };
+    for (const [n, want] of Object.entries(parts)) {
+      const names = gltf(n).nodes.map((x) => x.name);
+      for (const p of want) expect(names, `${n} has its part ${p}`).toContain(p);
+      // the far version keeps them too, so they turn at every distance
+      const far = readFileSync(`${DIR}/${n}.lod1.glb`);
+      const farNames = (JSON.parse(far.subarray(20, 20 + far.readUInt32LE(12)).toString('utf8')) as { nodes: { name?: string }[] }).nodes.map((x) => x.name);
+      for (const p of want) expect(farNames, `${n}.lod1 has its part ${p}`).toContain(p);
+    }
+    // the assembler's window is see-through, so its arms show
+    expect(gltf('assembler').materials.find((x) => x.name === 'assembler-glass')?.alphaMode).toBe('BLEND');
+  });
+
+  it('batch B5 (#468): every Keeper, near and far, has bloombot’s sitting clips retargeted onto its own rig', () => {
+    const keepers = ['atlas', 'fern', 'gable', 'moss', 'pylon', 'sluice', 'tally', 'tide', 'tock', 'vega'];
+    const bot = new Skeleton('assets/raw/bloombot/bloombot.glb');
+    for (const k of keepers) {
+      for (const f of [`${DIR}/keeper-${k}.glb`, `${DIR}/keeper-${k}.lod1.glb`]) {
+        const s = new Skeleton(f);
+        expect(s.clips().sort(), f).toEqual(['idle', 'sit', 'sit-down', 'sleep', 'stand-up', 'wave']);
+        for (const c of ['sit-down', 'sit', 'stand-up']) {
+          expect(s.rotatedJoints(c).length, `${f} ${c} turns every joint`).toBe(s.joints.length);
+          expect(s.clipLength(c), `${f} ${c} runs as long as bloombot's`).toBeCloseTo(bot.clipLength(c), 1);
+        }
+        // seated, halfway through `sit`: hips down, thighs level, shins hanging, head up, as bloombot's
+        const rest = s.pose();
+        const p = s.pose('sit', s.clipLength('sit') / 2);
+        const hipDrop = 1 - (p.Hips[1] - p.LeftToeBase[1]) / (rest.Hips[1] - rest.LeftToeBase[1]);
+        expect(hipDrop, `${f}: the hips come down`).toBeGreaterThan(0.12);
+        for (const side of ['Left', 'Right']) {
+          expect(Math.abs(dir(p, `${side}UpLeg`, `${side}Leg`)[1]), `${f}: ${side} thigh level`).toBeLessThan(0.3);
+          expect(dir(p, `${side}Leg`, `${side}Foot`)[1], `${f}: ${side} shin hangs`).toBeLessThan(-0.85);
+        }
+        expect(dir(p, 'Hips', 'Head')[1], `${f}: sits up`).toBeGreaterThan(0.7);
+        // and stands again at the end of `stand-up`
+        const up = s.pose('stand-up', s.clipLength('stand-up'));
+        expect(dir(up, 'LeftUpLeg', 'LeftLeg')[1], `${f}: stands at the end of stand-up`).toBeLessThan(-0.85);
+      }
     }
   });
 
