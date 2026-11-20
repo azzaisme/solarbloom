@@ -268,8 +268,8 @@ body.paused.no-blur canvas#app, body.reduced.paused canvas#app { filter: brightn
 /* ───────── E22.3: button glyphs (src/ui/Glyphs.ts) ───────── */
 svg.glyph { display: block; overflow: visible; flex: none; }
 svg.glyph text { font-family: var(--font-ui); font-weight: 800; dominant-baseline: auto; }
-svg.glyph .g-cap { fill: var(--glass-hi-2); stroke: var(--edge-strong); stroke-width: 1.6; }
-svg.glyph .g-cap-edge { fill: var(--edge-soft); }
+svg.glyph .g-cap { fill: var(--key-bg); stroke: var(--key-edge); stroke-width: 1.6; }
+svg.glyph .g-cap-edge { fill: var(--key-edge); }
 svg.glyph .g-ink { fill: var(--text-strong); }
 svg.glyph .g-ink-fill { fill: var(--text-strong); }
 svg.glyph .g-lit { fill: var(--gold); stroke: var(--edge-strong); stroke-width: 1.2; }

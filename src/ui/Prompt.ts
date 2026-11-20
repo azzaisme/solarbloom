@@ -15,6 +15,8 @@ export interface PromptModel {
   refused?: string;
   /** the Pulse line under it, when Pulse also does something here */
   pulse?: { glyph: string; text: string };
+  /** E23.11: what it costs, as chips on the second line ("2 of 2 Timber"; ok = you have enough) */
+  chips?: { text: string; ok: boolean }[];
 }
 
 export class Prompt {
@@ -59,6 +61,8 @@ export function promptHtml(m: PromptModel): string {
   const glyph = `<span class="pr-glyph${m.hold ? ' pr-hold' : ''}">${m.hold ? '<i class="pr-ring" aria-hidden="true"></i>' : ''}${m.glyph}</span>`;
   const words = `${m.hold ? 'Hold ' : ''}${esc(m.text)}`;
   const main = m.refused ? `<div class="pr-main pr-refused sg-card">${glyph}<span class="pr-text">${words}</span><span class="pr-why">${esc(m.refused)}</span></div>` : `<div class="pr-main sg-card">${glyph}<span class="pr-text">${words}</span></div>`;
-  const pulse = m.pulse ? `<div class="pr-sub sg-card"><span class="pr-glyph">${m.pulse.glyph}</span><span class="pr-text">${esc(m.pulse.text)}</span></div>` : '';
+  const chips = (m.chips ?? []).map((c) => `<span class="pr-chip ${c.ok ? 'ok' : 'need'}">${esc(c.text)}</span>`).join('');
+  const lead = m.pulse ? `<span class="pr-glyph">${m.pulse.glyph}</span><span class="pr-text">${esc(m.pulse.text)}</span>` : '';
+  const pulse = lead || chips ? `<div class="pr-sub sg-card">${lead}${chips}</div>` : '';
   return main + pulse;
 }

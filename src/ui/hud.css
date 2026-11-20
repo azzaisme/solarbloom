@@ -189,3 +189,8 @@ body.solid-glass #hud .sg-card { backdrop-filter: none; -webkit-backdrop-filter:
 @media (hover: none) {
   #hud .sg-card { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--paper); }
 }
+
+/* E23.11: the build prompt's recipe chips (leaf when you have enough, clay when short; the words carry it too) */
+#prompt .pr-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border-radius: 999px; font: 800 15px/1 var(--font-ui); white-space: nowrap; }
+#prompt .pr-chip.ok { background: var(--leaf-soft); color: var(--leaf-ink); }
+#prompt .pr-chip.need { background: var(--clay-soft); color: var(--clay-ink); }

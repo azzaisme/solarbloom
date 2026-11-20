@@ -64,7 +64,7 @@ export class Confirm {
   private onKeyUp = (e: KeyboardEvent) => this.keyUp(e);
   private onBlur = () => this.release();
 
-  constructor(private spec: ConfirmSpec) {
+  constructor(spec: ConfirmSpec) {
     this.holdMs = spec.holdMs ?? 1000;
     this.result = new Promise((r) => (this.settle = r));
     const n = ++seq;

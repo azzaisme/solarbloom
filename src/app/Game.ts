@@ -74,6 +74,7 @@ import type { GfxTier } from '../data/look';
 import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
+import { buildItem, costWords } from '../ui/BuildCatalog';
 import { decorType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
 import { BOT } from '../gameplay/Walker';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
@@ -2114,7 +2115,9 @@ export class Game {
     const text = dk ? `Place the ${name}` : tool === 'pipe' ? 'Lay a pipe' : `Build ${/^[AEIOU]/i.test(name) ? 'an' : 'a'} ${name}`;
     // a decoration turns: the turn buttons (back, then forward) under it
     const turn = dk ? { glyph: this.glyph('rotateBack') + this.glyph('rotate'), text: 'Turn' } : undefined;
-    return { glyph, text, pulse: turn };
+    // E23.11: the recipe as chips ("2 of 2 Timber": leaf when you have it, clay when short)
+    const chips = (buildItem(this.sim, tool)?.cost ?? []).map((c) => ({ text: costWords(c), ok: c.have >= c.need }));
+    return { glyph, text, pulse: turn, chips };
   }
 
   /** E21: what the Old City controller borrows from the game. */
