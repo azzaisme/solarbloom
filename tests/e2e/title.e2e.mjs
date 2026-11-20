@@ -15,12 +15,45 @@ const driver = readFileSync(new URL('./gamepad-driver.js', import.meta.url), 'ut
 const PAD = driver + '\ninstallVirtualPad(); window.padDriver = padDriver; window.installVirtualPad = installVirtualPad;';
 const URL_ = 'http://localhost:4233/';
 const server = await preview({ preview: { port: 4233, strictPort: true }, logLevel: 'silent' });
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ args: process.env.GPU ? ['--use-gl=angle', '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const failures = [];
 const check = (ok, what) => {
   console.log(`${ok ? '✓' : '✗'} ${what}`);
   if (!ok) failures.push(what);
 };
+
+/**
+ * #585: SLOW=<rate> runs the title's hold-to-confirm steps on a CPU slowed that many times (Chromium's throttling),
+ * as on a busy machine: the hold counts frames of real time, at most 250 ms each, so a slow page takes longer to fill.
+ */
+async function slowDown(page) {
+  if (!process.env.SLOW) return;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.SLOW) });
+}
+
+/**
+ * #585: holds a hold-to-confirm button as a player does, watching the ring: down until `done` is true (at most
+ * `ms`), then up. Not a fixed time: the dialog counts frames of real time (at most 250 ms each) and a window blur
+ * counts as letting go, so a fixed press on a slow or busy page could end before the ring filled and leave the
+ * script waiting on a result that never came. When it doesn't confirm, it prints the dialog as it stands.
+ */
+async function holdToConfirm(page, down, up, done, ms = 8000) {
+  await down();
+  const ok = await page.waitForFunction(done, null, { timeout: ms }).then(
+    () => true,
+    () => false,
+  );
+  if (!ok) {
+    const was = await page.evaluate(() => {
+      const g = document.querySelector('.cf-go');
+      return { dialog: !!g, ring: g?.querySelector('.cf-ring')?.style.getPropertyValue('--p') || '0', label: g?.textContent ?? '', armed: !!g?.classList.contains('armed'), holding: !!g?.classList.contains('holding'), focus: document.activeElement?.className ?? '', windowFocus: document.hasFocus() };
+    });
+    console.log(`   the hold didn't confirm in ${ms / 1000} s: ${JSON.stringify(was)}`);
+  }
+  await up();
+  return ok;
+}
 
 /** How different two screenshots are: the share of bytes that differ by more than a little (PNG decoded in the page). */
 async function frameDiff(page, a, b) {
@@ -230,6 +263,7 @@ try {
     if (dev === 'keys') {
       await page.goto(`${URL_}?title=1`);
       await page.waitForSelector('#tPress');
+      await slowDown(page);
       await page.keyboard.press('Space');
       await page.waitForSelector('#tPlay');
       await moveTo(page, '#tPlay', dev);
@@ -259,18 +293,21 @@ try {
       await page.keyboard.up('Enter');
       await page.waitForTimeout(200);
       check((await saved()) && !!(await page.$('[role=alertdialog]')), T('letting go early does nothing'));
-      await page.keyboard.down('Enter');
-      await page.waitForTimeout(1400);
-      await page.keyboard.up('Enter');
-      await page.waitForFunction(() => !localStorage.getItem('solarbloom.save.1') && !localStorage.getItem('solarbloom.save.1.head'));
-      await page.waitForSelector('#tStart1');
-      check(await page.evaluate(() => !document.querySelector('#tLoad1') && !document.querySelector('[role=alertdialog]')), T('a one-second hold deletes it, and the slot is empty again'));
+      const deleted = await holdToConfirm(
+        page,
+        () => page.keyboard.down('Enter'),
+        () => page.keyboard.up('Enter'),
+        () => !localStorage.getItem('solarbloom.save.1') && !localStorage.getItem('solarbloom.save.1.head'),
+      );
+      if (deleted) await page.waitForSelector('#tStart1');
+      check(deleted && (await page.evaluate(() => !document.querySelector('#tLoad1') && !document.querySelector('[role=alertdialog]'))), T('a one-second hold deletes it, and the slot is empty again'));
     }
 
     // ── E23.11: Start over on the pad: A on the dialog keeps; holding A on Hold to start over asks how the days go ──
     if (dev === 'pad') {
       await page.goto(`${URL_}?title=1`);
       await page.waitForSelector('#tPress');
+      await slowDown(page);
       await pressPad(page, 0);
       await page.waitForSelector('#tPlay');
       await moveTo(page, '#tPlay', dev);
@@ -287,12 +324,14 @@ try {
       await go(page, dev);
       await page.waitForSelector('[role=alertdialog]');
       check(await moveTo(page, '.cf-go', dev), T('reach Hold to start over with the d-pad'));
-      await page.evaluate(() => { window.__pad.buttons[0].pressed = true; window.__pad.buttons[0].value = 1; });
-      await page.waitForTimeout(1400);
-      await page.evaluate(() => { window.__pad.buttons[0].pressed = false; window.__pad.buttons[0].value = 0; });
-      await page.waitForSelector('#tConfirmText');
-      check(/How should the days go\?/.test(await page.evaluate(() => document.querySelector('#tConfirmText').textContent)), T('holding A starts the garden over: it asks how the days go'));
-      await pressPad(page, 1); // B: back out before anything is cleared
+      const asked = await holdToConfirm(
+        page,
+        () => page.evaluate(() => { window.__pad.buttons[0].pressed = true; window.__pad.buttons[0].value = 1; }),
+        () => page.evaluate(() => { window.__pad.buttons[0].pressed = false; window.__pad.buttons[0].value = 0; }),
+        () => /How should the days go\?/.test(document.querySelector('#tConfirmText')?.textContent ?? ''),
+      );
+      check(asked, T('holding A starts the garden over: it asks how the days go'));
+      if (asked) await pressPad(page, 1); // B: back out before anything is cleared
       await page.waitForSelector('#tConfirmText', { state: 'detached' });
       check(await page.evaluate(() => !!localStorage.getItem('solarbloom.save.1')), T('B backs out of the question, the garden still there'));
     }
@@ -300,10 +339,12 @@ try {
     await page.close();
   }
 } finally {
-  await browser.close();
+  // a clean exit: closing the browser can hang in software GL
+  await Promise.race([browser.close(), new Promise((r) => setTimeout(r, 15000))]).catch(() => {});
   server.httpServer.close();
 }
 if (failures.length) {
   console.error(`${failures.length} failed`);
   process.exit(1);
 }
+process.exit(0);
