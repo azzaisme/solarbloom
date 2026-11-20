@@ -86,6 +86,32 @@ export function surfaceTriangles(entity: pc.Entity, out: number[] = [], corners?
   return out;
 }
 
+/**
+ * For each vertex surfaceTriangles puts into `corners` (in the same order), whether `bones` (by name) carry at least
+ * `share` of it: 1 if so, 0 if not. The skin never changes, so this is worked out once per model.
+ */
+export function vertexOnBones(entity: pc.Entity, bones: (name: string) => boolean, share: number): Uint8Array {
+  const out: number[] = [];
+  for (const r of entity.findComponents('render') as pc.RenderComponent[]) {
+    if (!r.enabled || !r.entity.enabled) continue;
+    for (const mi of r.meshInstances) {
+      const mesh = mi.mesh;
+      const prim = mesh?.primitive?.[pc.RENDERSTYLE_SOLID];
+      if (!mesh || !prim || prim.type !== pc.PRIMITIVE_TRIANGLES) continue;
+      const u = unpack(mesh);
+      if (!u) continue;
+      const skin = mi.skinInstance;
+      const on = skin ? skin.bones.map((b) => bones(b.name)) : [];
+      for (let i = 0; i < u.n; i++) {
+        let carried = 0;
+        if (u.w && u.ix) for (let k = 0; k < 4; k++) if (on[u.ix[i * 4 + k]]) carried += u.w[i * 4 + k];
+        out.push(carried >= share ? 1 : 0);
+      }
+    }
+  }
+  return Uint8Array.from(out);
+}
+
 /** A mesh's vertex data read out once into plain arrays (the buffer never changes; reading it is the slow part). */
 interface Unpacked {
   n: number;

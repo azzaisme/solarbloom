@@ -3,7 +3,7 @@ import { color, PALETTE } from './Materials';
 import { BOT_CLIPS, REST, seatLift } from '../data/rest';
 import { VISIT_POINTS, type Perch } from '../data/wildlife';
 import { foldLegs, hipsAbove, SEAT_HIPS, swingShins, type SeatKind } from './SeatPose';
-import { surfaceTriangles } from './SkinSurface';
+import { surfaceTriangles, vertexOnBones } from './SkinSurface';
 
 /**
  * Bloombot (#234, G.10 + G.1): the player character, and the game's first skinned model. The GLB comes from
@@ -21,6 +21,8 @@ export const FACES = ['happy', 'surprised', 'wink', 'blink'] as const;
 export type BotFace = (typeof FACES)[number];
 /** Model metres -> world units (1 tile = 1 m). A touch under a tile tall, like the mock beside a bench. */
 const SCALE = 0.95;
+/** the bones its shins and feet hang from (not its thighs, the UpLeg bones) */
+const HANGING = /^(Left|Right)(Leg|Foot|ToeBase|Toe_End)/;
 /**
  * Walk clip speed at which the feet match the ground: world units per second at anim speed 1. The toddler
  * waddle from the Blender pass (0.479 m/s, which it prints, times SCALE). Hover has no feet on the ground, so it
@@ -36,6 +38,30 @@ const PALM = new pc.Vec3(0.06, 0.46, 0.34);
 export type BotLoop = 'idle' | 'walk' | 'hover' | 'sit' | 'meditate';
 export type BotAction = 'pulse' | 'assemble' | 'interact' | 'cheer';
 const LOOPS: readonly string[] = ['idle', 'walk', 'hover', 'sit', 'meditate', 'doze'];
+
+/**
+ * A box in a bench's (or pad's) own frame: about `cx, cz` in the world, turned by `facing` (radians, as the bench
+ * is: its +z is ahead); `x` across and `z` ahead in that frame, `y` in the world.
+ */
+export interface SeatBox {
+  cx: number;
+  cz: number;
+  facing: number;
+  x: readonly number[];
+  y: readonly number[];
+  z: readonly number[];
+}
+
+/** A world point's distance ahead (`z`) in the box's own frame, if it is within the box across and ahead. */
+function inBox(b: SeatBox, x: number, z: number): number | undefined {
+  const c = Math.cos(b.facing);
+  const s = Math.sin(b.facing);
+  const dx = x - b.cx;
+  const dz = z - b.cz;
+  const u = dx * c - dz * s;
+  const w = dx * s + dz * c;
+  return u > b.x[0] && u < b.x[1] && w > b.z[0] && w < b.z[1] ? w : undefined;
+}
 
 export class BloombotVisuals {
   /** placed at bloombot's feet, turned to its facing */
@@ -55,6 +81,17 @@ export class BloombotVisuals {
   reducedMotion = false;
   /** something is sitting in its lap: it keeps its legs still (they settle over a second or so) */
   lapFull = false;
+  /**
+   * While it sits: what it sits on (the bench's seat, the charger's pad) and what its back keeps out of (the
+   * backrest), as boxes in their own frame (SeatBox: about `cx, cz`, turned by `facing` as the bench is). Bloombot settles onto the one and out of the other from its real skinned surface (settle()).
+   */
+  restingOn?: SeatBox;
+  keepOutOf?: SeatBox;
+  private settleUp = 0;
+  private settleOut = 0;
+  private wantUp = 0;
+  private wantOut = 0;
+  private settleAt = -1;
   private legs = 1;
   private legsAt = 0;
   /** true once the real model is drawn */
@@ -191,6 +228,12 @@ export class BloombotVisuals {
     const was = this.pose;
     this.pose = pose;
     this.seat = seat;
+    if (pose !== was) {
+      this.settleUp = this.wantUp = 0;
+      this.settleOut = this.wantOut = 0;
+      this.settleAt = -1;
+      this.posedAt = this.clock;
+    }
     if (pose === 'meditate') this.setFace('blink', 1e9);
     else if (this.face === 'blink') this.setFace('happy');
     if (pose === 'sit' && this.clips.has(BOT_CLIPS.sitDown)) this.oneShot(BOT_CLIPS.sitDown);
@@ -275,21 +318,78 @@ export class BloombotVisuals {
     if (this.pose === 'sit') {
       // with the sit clip the hips come down to the seat's height; without it (the model has no sitting clips yet,
       // #482) the legs are bent by hand: thighs along the seat, shins hanging, the hips resting on the seat
-      if (clip(BOT_CLIPS.sit)) h?.setLocalPosition(0, seatLift(this.seat, SCALE), -0.12);
-      else h?.setLocalPosition(0, this.fold('sit') + this.seat, -0.12);
-      h?.setLocalEulerAngles(0, 0, 0);
+      // bend and swing the legs first: it settles onto the seat as drawn (the clip alone has it standing)
+      const y = clip(BOT_CLIPS.sit) ? seatLift(this.seat, SCALE) : this.fold('sit') + this.seat;
       this.swingLegs();
+      this.settle();
+      h?.setLocalPosition(0, y + this.settleUp, -0.12 + this.settleOut);
+      h?.setLocalEulerAngles(0, 0, 0);
       this.standIn?.setLocalPosition(0, 0.4 + this.seat, -0.1);
     } else if (this.pose === 'meditate') {
       // the clip sits cross-legged on the ground; without it the legs are crossed by hand, settled low, breathing
       const breathe = this.reducedMotion ? 0 : Math.sin(this.clock * 1.6) * 0.012;
-      h?.setLocalPosition(0, clip(BOT_CLIPS.meditate) ? 0 : this.fold('meditate') + breathe, 0);
+      const y = clip(BOT_CLIPS.meditate) ? 0 : this.fold('meditate') + breathe;
+      this.settle();
+      h?.setLocalPosition(0, y + this.settleUp, 0);
       h?.setLocalEulerAngles(0, 0, 0);
       this.standIn?.setLocalPosition(0, 0.26, 0);
     }
     const anim = this.model?.anim;
     if (anim && !this.action) anim.speed = this.pose === 'meditate' ? 0.6 : 0.8; // slow, calm breathing
   }
+
+  /**
+   * Sitting: settles onto what it sits on from its real skinned surface as drawn (after the legs are bent and
+   * swung; REST.settle). Every so often it measures the lowest of it over the seat (or pad), not counting its shins
+   * and feet on a bench (they hang over the front edge and swing), and whether its back is in the backrest or a shin
+   * in the seat's slab; then eases up or down so that lowest point rests on the top, and forward just clear. Not
+   * while a clip into the pose plays, nor in its first moments (it is still bending into the pose).
+   */
+  private settle() {
+    const k = REST.settle;
+    if (!this.model || !this.restingOn) {
+      this.settleUp = this.wantUp = 0;
+      this.settleOut = this.wantOut = 0;
+      return;
+    }
+    // as drawn last frame: moved by what was applied then
+    const drawnUp = this.settleUp;
+    const drawnOut = this.settleOut;
+    const dt = Math.min(0.1, Math.max(0, this.clock - this.settledAt));
+    this.settledAt = this.clock;
+    const ease = Math.min(1, dt * k.ease);
+    this.settleUp += (this.wantUp - this.settleUp) * ease;
+    this.settleOut += (this.wantOut - this.settleOut) * ease;
+    // not while it is still getting into the pose (its legs straight down under it as it bends)
+    if (this.action || this.clock - this.posedAt < k.after || this.clock - this.settleAt < k.every) return;
+    this.settleAt = this.clock;
+    const pts = this.corners();
+    // on a bench its shins and feet hang over the front edge: they don't rest on the seat (cross-legged on the pad,
+    // they do)
+    const hang = this.pose === 'sit' ? (this.hanging ??= vertexOnBones(this.model, (n) => HANGING.test(n), REST.settle.hangShare)) : undefined;
+    const s = this.restingOn;
+    let low = Infinity;
+    // and how far forward (the seat's +z: bloombot faces the way the bench does) it must come for its back to be out
+    // of the backrest and its shins clear of the seat's front edge
+    let push = 0;
+    const b = this.keepOutOf;
+    for (let v = 0, i = 0; i < pts.length; v++, i += 3) {
+      const y = pts[i + 1];
+      const w = inBox(s, pts[i], pts[i + 2]);
+      if (w !== undefined && !hang?.[v]) low = Math.min(low, y);
+      else if (w !== undefined && y > s.y[0] && y < s.y[1] - k.gap) push = Math.max(push, s.z[1] - w + k.gap); // a shin in the seat's slab (under it is open)
+      if (b && y > b.y[0] && y < b.y[1]) {
+        const bw = inBox(b, pts[i], pts[i + 2]);
+        if (bw !== undefined) push = Math.max(push, b.z[1] - bw + k.gap);
+      }
+    }
+    const clamp = (v: number) => Math.max(-k.most, Math.min(k.most, v));
+    if (Number.isFinite(low)) this.wantUp = clamp(drawnUp + s.y[1] + k.gap - low);
+    if (push > 0) this.wantOut = clamp(drawnOut + push);
+  }
+  private hanging?: Uint8Array;
+  private settledAt = 0;
+  private posedAt = 0;
 
   /**
    * On a bench: its little legs swing, one forward as the other goes back, now livelier, now nearly still; and still

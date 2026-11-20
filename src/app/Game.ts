@@ -4546,6 +4546,16 @@ export class Game {
         solids.push({ x0: Math.min(...xs), x1: Math.max(...xs), y0: by + part.y[0], y1: by + part.y[1], z0: Math.min(...zs), z1: Math.max(...zs) });
       }
     } else if (pad) solids.push({ x0: pad.x, x1: pad.x + pad.size, y0: by, y1: by + 0.1, z0: pad.z, z1: pad.z + pad.size });
+    // bloombot settles onto the seat (out of the backrest) or the pad, from its real surface
+    if (r?.kind === 'bench') {
+      const at = { cx: r.bench.x + 0.5, cz: r.bench.z + 0.5, facing: r.bench.facing };
+      const [seat, back] = REST.benchSolids;
+      b.visuals.restingOn = { ...at, x: seat.x, z: seat.z, y: [by + seat.y[0], by + seat.y[1]] };
+      b.visuals.keepOutOf = { ...at, x: back.x, z: back.z, y: [by + back.y[0], by + back.y[1]] };
+    } else if (pad) {
+      b.visuals.restingOn = { cx: pad.x, cz: pad.z, facing: 0, x: [0, pad.size], z: [0, pad.size], y: [by, by + 0.1] };
+      b.visuals.keepOutOf = undefined;
+    } else b.visuals.restingOn = b.visuals.keepOutOf = undefined;
     this.visitors.update(dt, this.sim.time, this.sim.wildlife.visits, {
       point: (p, out) => b.visuals.visitPoint(p, out),
       facing: b.pose.facing,

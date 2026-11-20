@@ -185,6 +185,8 @@ const measure = (page, seat) =>
       const over = body.filter((p) => p[0] > sb.min[0] && p[0] < sb.max[0] && p[2] > sb.min[2] && p[2] < sb.max[2]);
       const low = over.length ? Math.min(...over.map((p) => p[1])) - surface.top : NaN;
       botIn.push(`lowest over the ${surface.name} ${low.toFixed(3)} from its top`);
+      // sitting on it, not floating over it: its underside within a centimetre of the top
+      const botTouches = low > -0.008 && low < 0.012;
       for (const a of g.visitors.root.children) {
         if (!a.enabled) continue;
         const kind = a.name.replace('visitor-', '');
@@ -241,7 +243,7 @@ const measure = (page, seat) =>
       const bb = P.box(g.bot.visuals.model);
       const mid = [0, 1, 2].map((k) => (bb.min[k] + bb.max[k]) / 2);
       const sane = !!P.insideMesh(skin, [mid[0], bb.min[1] + (bb.max[1] - bb.min[1]) * 0.35, mid[2]]) && !P.insideMesh(skin, [mid[0], bb.max[1] + 0.05, mid[2]]);
-      return { sane, botIn, botClear, rows, plan: s.wildlife.visits.map((v) => `${v.id}@${v.perch}`) };
+      return { sane, botIn, botClear, botTouches, low, rows, plan: s.wildlife.visits.map((v) => `${v.id}@${v.perch}`) };
     },
     { seat, parts: benchParts },
   );
@@ -412,6 +414,7 @@ try {
       const m = await measure(page, { kind: where, groundY });
       check(m.sane, `${name} at the ${where}: the inside test reads bloombot's faces the right way (its middle inside, over its head outside)`);
       check(m.botClear, `${name} at the ${where}: bloombot clear of the ${where === 'bench' ? 'seat and backrest' : 'pad'} (its points inside: ${m.botIn.join(', ')})`);
+      check(m.botTouches, `${name} at the ${where}: bloombot sits on the ${where === 'bench' ? 'seat' : 'pad'}, not over it (its underside ${m.low.toFixed(3)} from the top)`);
       for (const r of m.rows)
         check(r.ok, `${name} at the ${where}: ${r.kind}@${r.perch} sits on ${r.on}${r.into ? `, ${r.intoText}` : ''}${r.inSolid.length ? `, inside the ${r.inSolid.map(([k, c, b]) => `${k} (${c}; ${b})`).join(', ')}` : ''}${r.ok ? '' : r.why}`);
       if (tier !== 'bare') {

@@ -18,17 +18,17 @@ export const REST = {
   orbitDegPerSecond: 2.5,
   /**
    * Where bloombot and a friend sit on a bench (world units from its middle): bloombot `out` forward of the bench's
-   * middle and `raise` above the plain seated height, the friend `friendOut`; bloombot `along` to one end when a
+   * middle and `raise` above the plain seated height (0: it then settles onto the seat from its real surface, `settle`), the friend `friendOut`; bloombot `along` to one end when a
    * friend joins, the friend `friend` to the other end. An animal coming to sit beside it (E23.2.4, when no friend
    * has the place) takes the other end too: `visitorAlong` along, `visitorOut` forward, facing out (a long one further
    * forward still, so its back end stays off the backrest's face, `backFace` behind the middle); one longer than
    * `depth` would hang off the seat, so it settles on the ground beside the bench. Bloombot's round body (about 0.48 across, its backpack
    * behind) is deeper than the seat (0.29: from the backrest's face, 0.13 behind the middle, to the front edge,
-   * 0.16 ahead of it), so it sits forward with its backpack against the backrest and its underside on the front
-   * slats; any further back and it sits through the backrest, any lower and through the seat (checked from all
-   * four sides: tests/e2e/rest-e23.mjs shots 11, 11d, 11e).
+   * 0.16 ahead of it), so it sits forward, its underside on the front slats and its shins over the front edge
+   * (`settle` brings it forward just clear of the backrest and of the seat's edge; seen from all four sides in
+   * tests/e2e/rest-e23.mjs shots 11, 11d, 11e).
    */
-  seat: { out: 0.19, raise: 0.155, friendOut: 0.04, along: 0.14, friend: 0.24, visitorOut: 0.1, visitorAlong: 0.25, backFace: 0.125, depth: 0.3 },
+  seat: { out: 0.19, raise: 0, friendOut: 0.04, along: 0.14, friend: 0.24, visitorOut: 0.1, visitorAlong: 0.25, backFace: 0.125, depth: 0.3 },
   /**
    * The bench's footprint about its tile's middle (bench.glb at 0.58: its iron ends `along` each way, the backrest
    * `back` behind, the seat's front edge `front` ahead), which animals on the ground keep off.
@@ -60,6 +60,15 @@ export const REST = {
    * in its lap (the swing dies away at `settle` a second).
    */
   legSwing: { degrees: 26, perSecond: 0.75, driftSeconds: 11, calmest: 0.2, settle: 3 },
+  /**
+   * Sitting, bloombot settles onto what it sits on (the seat, the pad) from its real skinned surface
+   * (BloombotVisuals.settle), so its underside touches it rather than floating over it or sinking in: measured every
+   * `every` seconds (from `after` seconds into the pose, once it has bent into it), resting `gap` above it (on a
+   * bench its body and thighs do; its shins and feet hang over the front edge: anything they carry `hangShare` of,
+   * the knees too, which bob as the legs swing), and forward just far enough that nothing of its back is in the
+   * backrest and no shin is in the seat's slab. It eases there at `ease` a second, never more than `most` from where the pose put it.
+   */
+  settle: { every: 0.5, after: 1.2, hangShare: 0.15, gap: 0.003, ease: 6, most: 0.2 },
   /** the music swells to this share above its level while sitting */
   musicSwell: 0.6,
   /**
