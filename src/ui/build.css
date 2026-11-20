@@ -11,10 +11,11 @@
 #buildbar .vsep { width: 1px; align-self: stretch; margin: 6px 0 -8px; background: var(--line); flex: none; }
 
 /* a slot: icon and name; the key under it */
-#buildbar .bslot { position: relative; flex: 0 1 74px; min-width: 54px; height: 76px; padding: 4px 3px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 0; border-radius: 16px; background: var(--paper-2); font-weight: 800; font-size: 14px; line-height: 1.05; transition: transform .14s, box-shadow .14s, background .14s; }
+#buildbar .bslot { position: relative; flex: 0 1 auto; min-width: 64px; height: 76px; padding: 4px 8px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 0; border-radius: 16px; background: var(--paper-2); font-weight: 800; font-size: 14px; line-height: 1.05; transition: transform .14s, box-shadow .14s, background .14s; }
 #buildbar .bslot .si { display: grid; place-items: center; width: 30px; height: 30px; flex: none; }
 #buildbar .bslot .si .icon, #buildbar .bslot .si svg { width: 30px; height: 30px; display: block; }
-#buildbar .bslot .bl { max-width: 100%; text-align: center; overflow-wrap: anywhere; hyphens: auto; }
+/* a slot is as wide as its name; a name never breaks (only if the dock runs out of room does it end in …) */
+#buildbar .bslot .bl { max-width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #buildbar .bslot:hover { background: var(--paper-3); }
 #buildbar .bslot.on { background: var(--key-bg); box-shadow: 0 0 0 3px var(--leaf), 0 8px 18px var(--leaf-glow); transform: translateY(-6px); }
 #buildbar .bslot.empty { background: transparent; border: 2px dashed var(--line-2); color: var(--ink-3); font-weight: 700; }
@@ -167,3 +168,7 @@ body.reduced #buildMenu .bm-sheet { animation: none; }
 @media (max-height: 560px) {
   #buildMenu .bm-card { min-height: 92px; }
 }
+
+/* One live blur at a time: while a sheet is open (the game pauses under it) the dock under its veil drops its own
+   blur (stacked live blurs cost every frame on a Deck or a weak GPU, and under software GL stalled for minutes). */
+body.paused #buildbar { backdrop-filter: none; -webkit-backdrop-filter: none; }

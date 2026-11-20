@@ -6,6 +6,9 @@ import { $, esc, HudPart } from './HudPart';
 import type { Tool } from './Hud';
 import { materialIcon } from './MaterialIcons';
 
+/** E23.11: how long after a mouse click takes a piece the world ignores the mouse (the rest of a double click). */
+const SWALLOW_MS = 450;
+
 /**
  * E23.11 (#344): the build menu (BuildMenu.dc.html). Q, or Y on the pad, opens a sheet "Build" over the paused
  * world: tabs (LB / RB, Q / E) for the kinds of thing there are, a grid of cells (a locked one says who to wake),
@@ -335,15 +338,35 @@ export class BuildMenu extends HudPart {
     if (d?.dataset.do === 'pin') return this.startPin();
     if (d?.dataset.do === 'take') {
       if (this.picking) return this.pin(this.pinAt);
-      return this.take();
+      this.take();
+      if (e.detail > 0 && !this.isOpen) this.swallowFollowUp();
+      return;
     }
     const c = t.closest<HTMLElement>('[data-tool]');
     if (!c) return;
     const tool = c.dataset.tool as Tool;
     // The keyboard and the pad press a cell (no pointer: detail 0): that builds it. A mouse click selects it, and a
     // second click (or a double click) on the one already shown builds it.
-    if (e.detail === 0 || this.downSel === tool) this.take();
-    else this.select(tool);
+    if (e.detail === 0 || this.downSel === tool) {
+      this.take();
+      if (e.detail > 0 && !this.isOpen) this.swallowFollowUp();
+    } else this.select(tool);
     this.downSel = undefined;
+  }
+
+  /**
+   * A mouse click that takes a piece closes the menu under the pointer: the rest of that double click (or a quick
+   * second click) must not fall through to the world, where it would build the piece at once wherever the pointer is.
+   */
+  private swallowFollowUp() {
+    const stop = (e: Event) => {
+      e.stopPropagation();
+      e.preventDefault();
+    };
+    const evs = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'dblclick'];
+    for (const ev of evs) window.addEventListener(ev, stop, true);
+    setTimeout(() => {
+      for (const ev of evs) window.removeEventListener(ev, stop, true);
+    }, SWALLOW_MS);
   }
 }

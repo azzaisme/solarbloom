@@ -90,10 +90,14 @@ try {
       check(await page.evaluate(() => window.solarbloom.paused), `${tag} keys: the build menu pauses the game`);
       // the menu, keyboard: on the Power tab with the Solar Panel shown
       for (let i = 0; i < 8 && !(await page.evaluate(() => !!document.querySelector('#bm-solar'))); i++) await page.keyboard.press('KeyE');
-      await page.click('#bm-solar');
+      // a click selects a card; a click on the card already shown builds it (the second click), so only click it
+      // to show it when the tab opened on another
+      if (!(await page.evaluate(() => document.querySelector('#bm-solar')?.classList.contains('sel')))) await page.click('#bm-solar');
       await page.waitForTimeout(300);
+      check(await page.evaluate(() => !!document.querySelector('#buildMenu.open') && document.querySelector('#bm-solar')?.classList.contains('sel')), `${tag} keys: the Solar Panel is shown and the menu stays open`);
       await page.screenshot({ path: `${out}/build-menu-keys-${tag}.png` });
-      check(await onScreen(page, '#buildMenu .bm-sheet'), `${tag} keys: the build menu fits the screen`);
+      const sheetBox = await page.evaluate(() => { const r = document.querySelector('#buildMenu .bm-sheet')?.getBoundingClientRect(); return r ? `${[r.left, r.top, r.right, r.bottom].map(Math.round).join(',')} in ${innerWidth}x${innerHeight}` : 'none'; });
+      check(await onScreen(page, '#buildMenu .bm-sheet'), `${tag} keys: the build menu fits the screen (${sheetBox})`);
       const small = await smallText(page, '#buildMenu', 16);
       check(small.length === 0, `${tag} keys: the build menu's text is 16 px or more ${small.slice(0, 4).join(', ')}`);
       // pin it to slot 9 with P then 9, then take it with a second click
@@ -102,10 +106,13 @@ try {
       await page.waitForTimeout(200);
       const pinned = await page.evaluate(() => window.solarbloom.settings.hotbar?.[8]);
       check(pinned === 'solar', `${tag} keys: P then 9 pins the Solar Panel to slot 9 (${pinned})`);
+      const solars = () => page.evaluate(() => window.solarbloom.sim.state.machines.filter((m) => m.type === 'solar').length);
+      const before = await solars();
       await page.dblclick('#bm-solar');
       await page.waitForTimeout(300);
       const held = await page.evaluate(() => ({ tool: window.solarbloom.hud.currentTool, open: window.solarbloom.hud.trayOpen }));
       check(held.tool === 'solar' && !held.open, `${tag} keys: a double click takes it in hand and closes the menu (${JSON.stringify(held)})`);
+      check((await solars()) === before, `${tag} keys: the double click's second click doesn't fall through and build in the world`);
       // a grid to show: a panel and a battery placed beside the fountain
       await page.evaluate(() => {
         const g = window.solarbloom;
