@@ -127,15 +127,28 @@ export class Walker {
     return Math.hypot(p.x - x0, p.z - z0);
   }
 
-  /** The cell bloombot acts on: the neighbour of its own cell in the facing direction (8 ways). */
+  /**
+   * The cell bloombot acts on (Interact, Pulse): the first cell a ray from where bloombot really stands, along its
+   * facing, enters. Depth decides, not the facing rounded to 8 ways: standing near a cell's edge, the cell right in
+   * front of bloombot's face wins over a diagonal one further off. When the ray leaves through (nearly) a corner,
+   * within `Walker.CORNER` tiles of travel, it's the diagonal cell.
+   */
   front(p: BotPose): { x: number; z: number } {
     const s = Math.sin(p.facing);
     const c = Math.cos(p.facing);
-    const k = Math.cos(Math.PI / 8); // within 22.5° of an axis it's straight ahead, else diagonal
-    const dx = Math.abs(s) >= k ? Math.sign(s) : Math.abs(c) >= k ? 0 : Math.sign(s);
-    const dz = Math.abs(c) >= k ? Math.sign(c) : Math.abs(s) >= k ? 0 : Math.sign(c);
-    return { x: Math.floor(p.x) + dx, z: Math.floor(p.z) + dz };
+    const cx = Math.floor(p.x);
+    const cz = Math.floor(p.z);
+    // how far along the ray it crosses into the next column (x) and the next row (z)
+    const tx = Math.abs(s) < 1e-9 ? Infinity : (s > 0 ? cx + 1 - p.x : p.x - cx) / Math.abs(s);
+    const tz = Math.abs(c) < 1e-9 ? Infinity : (c > 0 ? cz + 1 - p.z : p.z - cz) / Math.abs(c);
+    const dx = Math.sign(s);
+    const dz = Math.sign(c);
+    if (Math.abs(tx - tz) <= Walker.CORNER) return { x: cx + dx, z: cz + dz };
+    return tx < tz ? { x: cx + dx, z: cz } : { x: cx, z: cz + dz };
   }
+
+  /** Ray crossings this close together (in tiles) count as leaving through the corner: the diagonal cell. */
+  static CORNER = 0.12;
 
   /**
    * Puts bloombot somewhere legal: where it is if that fits, else the nearest walkable cell centre (searching
