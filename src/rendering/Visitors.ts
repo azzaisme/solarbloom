@@ -4,6 +4,7 @@ import { VISIT, VISITOR_LOOK, VISITORS, type Perch } from '../data/wildlife';
 import type { Visit } from '../gameplay/Wildlife';
 import { PALETTE } from './Materials';
 import { group, vshape } from './Shapes';
+import { clipsFor, loops, visitorPhase, type VisitorPhase } from './VisitorClips';
 import { anyInside, type Footprint, restOn, Surface, surfacePoints, surfaceTriangles } from './SkinSurface';
 
 /** E23.10 batch B4: each visitor's own model, by id (assets/raw/models/visitors/<id>.glb). */
@@ -38,7 +39,9 @@ interface Actor {
   model?: {
     holder: pc.Entity;
     entity: pc.Entity;
-    clips: { move?: string; idle?: string };
+    /** its clip for each phase (VisitorClips), and how long its climb onto a perch lasts (seconds; 0 for none) */
+    clips: Record<VisitorPhase, string | undefined>;
+    climbFor: number;
     lift: number;
     clip?: string;
   };
@@ -80,17 +83,6 @@ interface Rest {
   local: pc.Vec3;
 }
 
-/** Clip names a model may carry, best first: on the way in, and settled. */
-const MOVE_CLIPS = ['fly', 'flying', 'flap', 'walk', 'walking', 'hop', 'run', 'move'];
-const IDLE_CLIPS = ['idle', 'perch', 'sit', 'rest', 'breathe', 'stand', 'look'];
-const pickClip = (names: string[], want: string[]) => {
-  const low = names.map((n) => n.toLowerCase());
-  for (const w of want) {
-    const i = low.findIndex((n) => n === w || n.endsWith(`|${w}`) || n.includes(w));
-    if (i >= 0) return names[i];
-  }
-  return undefined;
-};
 
 /** What the renderer needs to know about bloombot right now. */
 export interface VisitHost {
@@ -198,22 +190,17 @@ export class Visitors {
       fit.setLocalScale(s, s, s);
       fit.setLocalPosition(-box.center.x * s, -(box.center.y - size.y) * s, -box.center.z * s);
       if (look.turn) holder.setLocalEulerAngles(0, look.turn, 0);
-      const names: string[] = [];
-      if (res.animations?.length) {
+      // its clips (B4: idle, follow, sit, climb), each to its phase (VisitorClips); only the climb plays once
+      const tracks = (res.animations ?? []).map((an) => an.resource as pc.AnimTrack);
+      const clips = clipsFor(tracks.map((t) => t.name));
+      if (tracks.length) {
         e.addComponent('anim', { activate: true });
-        for (const an of res.animations) {
-          const track = an.resource as pc.AnimTrack;
-          e.anim!.assignAnimation(track.name, track, undefined, 1, true);
-          names.push(track.name);
-        }
+        for (const t of tracks) e.anim!.assignAnimation(t.name, t, undefined, 1, loops(t.name, clips));
       }
-      const clips = {
-        move: pickClip(names, MOVE_CLIPS),
-        idle: pickClip(names, IDLE_CLIPS) ?? names[0],
-      };
+      const climb = clips.climb !== clips.move ? tracks.find((t) => t.name === clips.climb) : undefined;
       a.root.addChild(holder);
       a.body.enabled = false;
-      a.model = { holder, entity: e, clips, lift: look.lift ?? 0 };
+      a.model = { holder, entity: e, clips, climbFor: climb ? Math.min(climb.duration, VISIT.climbMax) : 0, lift: look.lift ?? 0 };
       // centred over its feet; turned a quarter (look.turn), its sides swap
       const [hx, hz] = Math.abs(Math.sin(((look.turn ?? 0) * Math.PI) / 180)) > 0.7 ? [size.z * s, size.x * s] : [size.x * s, size.z * s];
       a.shape = undefined;
@@ -311,7 +298,9 @@ export class Visitors {
     }
     a.root.setPosition(p);
     a.root.setEulerAngles(0, (heading * 180) / Math.PI, 0);
-    this.animate(a, moving, h.reducedMotion, !moving && ON_BOT.includes(v.perch));
+    const leaving = v.leave !== undefined && now >= v.leave;
+    const phase = visitorPhase({ moving, leaving, perch: v.perch, toGo: v.arrive - now, climbFor: a.model?.climbFor ?? 0 });
+    this.animate(a, moving, h.reducedMotion, !moving && ON_BOT.includes(v.perch), phase);
   }
 
   /** Where a visit settles: its perch, spread out a little when several share one. */
@@ -531,15 +520,15 @@ export class Visitors {
     return facing;
   }
 
-  private animate(a: Actor, moving: boolean, still: boolean, snug = false) {
+  private animate(a: Actor, moving: boolean, still: boolean, snug = false, phase: VisitorPhase = moving ? 'move' : 'idle') {
     const t = this.clock;
     const m = a.model;
     if (m) {
       // its own clips where it has them; else the whole model bobs in flight, flutters or breathes once settled
-      const want = moving ? (m.clips.move ?? m.clips.idle) : m.clips.idle;
+      const want = m.clips[phase];
       const anim = m.entity.anim;
       if (anim && want && m.clip !== want) {
-        anim.baseLayer?.transition(want, 0.2);
+        anim.baseLayer?.transition(want, phase === 'climb' ? 0.1 : 0.2);
         m.clip = want;
       }
       if (anim) anim.speed = still ? 0 : 1;
