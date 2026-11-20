@@ -12,7 +12,7 @@ import { WATER } from '../Water';
 /** Something primitives can be added to (the chunk renderer's static builder, or a transition builder). */
 export interface Sink {
   /** `glow` (0–1, Look 1.9): emissive via vertex alpha in the static chunk mesh; transition meshes ignore it. */
-  add(type: 'box' | 'sphere' | 'cylinder' | 'cone' | 'capsule' | 'sphereHi', hex: string, p: [number, number, number], s: [number, number, number] | number, glow?: number): void;
+  add(type: 'box' | 'sphere' | 'cylinder' | 'cone' | 'capsule' | 'sphereHi' | 'disc', hex: string, p: [number, number, number], s: [number, number, number] | number, glow?: number): void;
   grey: number;
   /** a tip colour for the next primitives' upper vertices (grass tufts); '' = none */
   tip?: string;
@@ -36,6 +36,8 @@ export interface ChunkHost {
   /** Look 3.8 (#135): draws one tile's area-edge dressing (rail, ivy, banners, clutter) into `sink` */
   edges(sink: Sink, t: TileData, h: number): void;
   slabCap?: (hex: string, p: [number, number, number], s: [number, number, number]) => void;
+  /** E23.13: draws the tile's ground slab into `sink` (as a box, or rounded off where it pokes out into water) */
+  slab?(sink: Sink, hex: string, p: [number, number, number], s: [number, number, number]): void;
 }
 
 const NULL_SINK: Sink & GeoSink = { add() {}, grey: 0 };
@@ -325,7 +327,8 @@ export class TransitionRenderer {
       lushAt: lush ? (t.lushAt ?? lush - TUNING.neighbourhood.reservoir.lushSeconds) : 0,
       lushUntil: lush,
     };
-    sb.add('box', to.hex, to.p, to.s);
+    if (host.slab) host.slab(sb, to.hex, to.p, to.s);
+    else sb.add('box', to.hex, to.p, to.s);
     sb.surf = undefined;
     return end;
   }
