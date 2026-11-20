@@ -1283,6 +1283,9 @@ export class ChunkRenderer {
         }
       }
       if (!v.far && fog !== 'hidden') this.pathCorners(b, t, th, gtex);
+      // E23.13: ground poking out into water is rounded off (its slab, in `slabInto`): the water fills the corner
+      const cut = v.far ? undefined : this.landCuts(t);
+      if (cut) this.cutWater(b, t, th, cut, pool, gtex);
       if (!v.far && this.isWater(t)) {
         this.poolBanks(b, t, th, gtex);
         // a natural pond's water (the Cistern's) shows whenever it holds any: its level draws the bared bed on top
@@ -1298,7 +1301,9 @@ export class ChunkRenderer {
       const gt = !v.far && t.level !== undefined && !t.occupantId && t.ground === 'polluted' && !this.overWater(t) ? this.paintedGround(t) : undefined;
       if (gt) {
         const k = Math.round(255 * (1 - 0.3 * b.grey));
+        const cut = this.landCuts(t);
         if (this.raisedPaving(t)) this.pavedTop(b, t, th, gtex, k);
+        else if (cut) addGroundFan(gtex[GROUND_TEXTURES.indexOf(gt)], gt, [t.x + 0.5, t.z + 0.5], this.cutRing(t, cut), th + 0.086, [k, k, k]);
         else addGroundQuad(gtex[GROUND_TEXTURES.indexOf(gt)], gt, t.x, t.z, th + 0.086, [k, k, k]);
       }
       // E23.8.3.2: a rust stain in the industrial ruins, laid over the ground (and its pavers, when they are raised)
@@ -1403,6 +1408,7 @@ export class ChunkRenderer {
   /** Far level of detail: one coloured slab per tile, with a bump for full bloom. */
   private farTile(b: Sink, t: TileData, h: number) {
     this.sink = b;
+    this.cutNow = undefined; // far off, ground stays square
     const f = t.feature ?? 'lawn';
     const dead = paintedDead(t) ?? DEAD[f] ?? DEAD.lawn;
     const stage = Math.max(1, Math.min(4, this.sim.water.bloomShown(t) || 1)); // E23.4.4: fades by low water
@@ -1689,7 +1695,110 @@ export class ChunkRenderer {
   /** A tile's ground slab: drawn by the living surface when transitions are on, else straight into the chunk. */
   private slab(b: Sink, hex: string, p: [number, number, number], s: [number, number, number]) {
     if (this.slabCap) this.slabCap(hex, p, s);
-    else b.add('box', hex, p, s);
+    else this.slabInto(b, hex, p, s);
+  }
+
+  /** E23.13: the tile being drawn, and the radius of each of its corners (CORNERS order) rounded off into water. */
+  private cutNow?: { x: number; z: number; r: number[] };
+
+  /**
+   * E23.13: a tile's ground slab into `sink`. Where the tile pokes out into water (water on both sides of a corner and
+   * across it), that corner is rounded off: the slab is laid as a cross of boxes with a smooth disc in each rounded
+   * corner (a hair lower, so where it runs under the boxes they win), and square pieces in the others.
+   */
+  private slabInto(sink: Sink, hex: string, p: [number, number, number], s: [number, number, number]) {
+    const c = this.cutNow;
+    if (!c || s[0] !== 1 || s[2] !== 1 || p[0] !== c.x + 0.5 || p[2] !== c.z + 0.5) return sink.add('box', hex, p, s);
+    const R = WATER.fillet;
+    const [x, y, z] = p;
+    sink.add('box', hex, p, [1, s[1], 1 - 2 * R]);
+    sink.add('box', hex, [x, y, z - 0.5 + R / 2], [1 - 2 * R, s[1], R]);
+    sink.add('box', hex, [x, y, z + 0.5 - R / 2], [1 - 2 * R, s[1], R]);
+    CORNERS.forEach(([sx, sz], i) => {
+      if (c.r[i]) sink.add('disc', hex, [x + sx * (0.5 - R), y - 0.001, z + sz * (0.5 - R)], [2 * R, s[1], 2 * R]);
+      else sink.add('box', hex, [x + sx * (0.5 - R / 2), y, z + sz * (0.5 - R / 2)], [R, s[1], R]);
+    });
+  }
+
+  /**
+   * E23.13: the radius of each corner of a land tile (CORNERS order) that pokes out into water, rounded off as a
+   * pool's inside corners are (water on both sides of the corner and across it, at the same level). Undefined when
+   * none is (and for water, decks over water, ramps and raised paving, which keep their square shapes).
+   */
+  private landCuts(t: TileData): number[] | undefined {
+    if (t.feature === 'water' || t.ramp || this.overWater(t) || this.raisedPaving(t)) return undefined;
+    const g = this.sim.grid;
+    const wet = (dx: number, dz: number) => {
+      const n = g.peek(t.roofId, t.x + dx, t.z + dz);
+      return !!n && n.level === t.level && this.bankless(n);
+    };
+    const r = CORNERS.map(([sx, sz]) => (wet(sx, 0) && wet(0, sz) && wet(sx, sz) ? WATER.fillet : 0));
+    return r.some((k) => k) ? r : undefined;
+  }
+
+  /** E23.13: a land tile's outline, closed, its corners rounded where `landCuts` says (round the tile in CORNERS order). */
+  private cutRing(t: TileData, cut: number[]): [number, number][] {
+    const ring: [number, number][] = [];
+    CORNERS.forEach(([sx, sz], i) => {
+      const cx = t.x + 0.5 + sx * 0.5;
+      const cz = t.z + 0.5 + sz * 0.5;
+      if (!cut[i]) {
+        ring.push([cx, cz]);
+        return;
+      }
+      // the arc runs from the corner's x edge round to its z edge: going round in CORNERS order, the even corners are
+      // reached along their x edge, the odd ones along their z edge
+      const arc = this.arc(cx, cz, sx, sz, cut[i]);
+      ring.push(...(i % 2 ? arc.reverse() : arc));
+    });
+    ring.push(ring[0]);
+    return ring;
+  }
+
+  /**
+   * E23.13: under each rounded corner of a land tile, the water it opens onto: a corner square of the water across
+   * the corner (its slab, a clear pool's surface, or a dead pond's silt).
+   */
+  private cutWater(b: MeshBuilder, t: TileData, th: number, cut: number[], pool: PoolGeo, gtex: GroundTexGeo[]) {
+    const g = this.sim.grid;
+    const keep = b.grey;
+    CORNERS.forEach(([sx, sz], i) => {
+      const R = cut[i];
+      const n = R ? g.peek(t.roofId, t.x + sx, t.z + sz) : undefined;
+      if (!n) return;
+      const x0 = sx > 0 ? t.x + 1 - R : t.x;
+      const z0 = sz > 0 ? t.z + 1 - R : t.z;
+      const surf = th + 0.08 - WATER.drop;
+      b.grey = this.greyOf(n);
+      b.add('box', this.waterHex(n), [x0 + R / 2, surf - 0.04, z0 + R / 2], [R, 0.08, R]);
+      const sq: [number, number][] = [[x0, z0], [x0 + R, z0], [x0 + R, z0 + R], [x0, z0 + R]];
+      if (this.isWater(n) && this.siltBed(n)) {
+        const k = Math.round(255 * (1 - 0.3 * b.grey));
+        addGroundFan(gtex[GROUND_TEXTURES.indexOf('silt-bed')], 'silt-bed', sq[0], sq.slice(1), surf + 0.002, [k, k, k]);
+      }
+      // a clear pool's surface carries on into the corner, at its bank (pale shallows and foam)
+      if (this.isWater(n) && (n.ground === 'restored' || pondCell(n.x, n.z)) && this.fog !== 'hidden') {
+        const shallow = lin(PALETTE.aqua.foam).map((v) => Math.round(v * 255));
+        const base = pool.pos.length / 3;
+        for (const [px, pz] of sq) {
+          pool.pos.push(px, surf + 0.003, pz);
+          pool.col.push(shallow[0], shallow[1], shallow[2], 0);
+        }
+        pool.idx.push(base, base + 3, base + 1, base + 1, base + 3, base + 2);
+      }
+    });
+    b.grey = keep;
+  }
+
+  /** E23.13: the colour a water tile's slab is drawn in (as `tile` and `waterTile` draw it). */
+  private waterHex(n: TileData): string {
+    const v = n.variant;
+    if (this.overWater(n) || (n.blocked && !pondCell(n.x, n.z))) {
+      const sea = shallowSea(n.x, n.z) || (n.level !== undefined && (regionWater(n.x, n.z) || onJetty(n.x, n.z)) && inSurfBand(n.x, n.z)) ? PALETTE.ground.shallows : PALETTE.ground.sea;
+      return sea[v % sea.length];
+    }
+    if (n.level !== undefined && n.ground !== 'restored' && surfCell(n.x, n.z)) return PALETTE.ground.shallows[v % PALETTE.ground.shallows.length];
+    return n.ground === 'restored' || this.livePond(n) ? ALIVE.water : n.ground === 'polluted' ? PALETTE.aqua.bed : PALETTE.ground.wetSoil;
   }
 
   private readonly host: ChunkHost = (() => {
@@ -1714,6 +1823,7 @@ export class ChunkRenderer {
       get slabCap() {
         return self.slabCap;
       },
+      slab: (sink: Sink, hex: string, p: [number, number, number], s: [number, number, number]) => self.slabInto(sink, hex, p, s),
       set slabCap(v) {
         self.slabCap = v;
       },
@@ -1723,6 +1833,8 @@ export class ChunkRenderer {
 
   private tile(b: Sink, t: TileData, h: number) {
     this.sink = b;
+    const cut = this.landCuts(t);
+    this.cutNow = cut && { x: t.x, z: t.z, r: cut };
     const x = t.x + 0.5;
     const z = t.z + 0.5;
     // E23.7.4: a salvage pile blown back onto ground bloombot restored sits on that ground (never on a dead slab)
@@ -1793,7 +1905,7 @@ export class ChunkRenderer {
     if (t.blocked) {
       // Look 2.5: once its area is alive, an obstacle stands on a clean stone plinth instead of dead ground.
       if (t.feature !== 'building' && this.level >= 4) {
-        b.add('box', PALETTE.paving.grout, [x, h - 0.004, z], [1, 0.152, 1]);
+        this.slabInto(b, PALETTE.paving.grout, [x, h - 0.004, z], [1, 0.152, 1]);
         this.slab(b, PALETTE.stone.light, [x, h + 0.02, z], [0.9, 0.2, 0.9]);
       } else this.slab(b, dead[t.variant % dead.length], [x, h, z], [1, 0.16, 1]);
       if (t.feature === 'building') return;
@@ -2290,7 +2402,9 @@ export class ChunkRenderer {
         }
       b.grey = this.greyOf(n);
       const hex = this.topColour(n);
-      const reach = [-1, 1].map((e) => 0.5 - radius[CORNERS.findIndex((c) => c[0] === (dx || e) && c[1] === (dz || e))]);
+      // (and short of the land's own corner where that is rounded off into the water)
+      const ncut = this.landCuts(n);
+      const reach = [-1, 1].map((e) => 0.5 - Math.max(radius[CORNERS.findIndex((c) => c[0] === (dx || e) && c[1] === (dz || e))], ncut?.[CORNERS.findIndex((c) => c[0] === (dx ? -dx : e) && c[1] === (dz ? -dz : e))] ?? 0));
       const ex = x + dx * 0.497;
       const ez = z + dz * 0.497;
       const a: V3 = dx ? [ex, top, z - reach[0]] : [x - reach[0], top, ez];
