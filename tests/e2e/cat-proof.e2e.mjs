@@ -36,7 +36,6 @@ const load = async () => {
   });
   await page.goto(`${base}/?slot=1`, { timeout: 180000, waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 180000 });
-  if (await page.locator('#introGo').isVisible().catch(() => false)) await page.click('#introGo');
   await page.waitForTimeout(1500);
 };
 let failed = 0;
@@ -618,12 +617,17 @@ try {
     document.querySelector('#catPanel')?.classList.remove('open');
     window.aim(9, 16, 1.4);
   });
-  await page.keyboard.press('q'); // the Build menu key (Q) opens the tray, as the player would
+  await page.keyboard.press('q'); // the Build menu key (Q) opens the build menu, as the player would
   await page.waitForTimeout(900);
+  // E23.11: the decorations have their own tab in #buildMenu
+  await page.evaluate(() => {
+    for (let i = 0; i < 8 && document.querySelector('#buildMenu [role=tab][aria-selected=true]')?.textContent?.trim() !== 'Decorations'; i++) window.solarbloom.hud.buildMenu.tab(1);
+  });
+  await page.waitForTimeout(300);
   const tray = await page.evaluate(() => {
     // headless Chrome under software GL leaves the tray's 0.2 s slide-in on its first frame (opacity 0): finish it
     for (const a of document.getAnimations()) a.finish();
-    const open = document.querySelector('#buildTray')?.classList.contains('open');
+    const open = document.querySelector('#buildMenu')?.classList.contains('open');
     const seen = (b) => {
       for (let e = b; e && e !== document.body; e = e.parentElement) {
         const c = getComputedStyle(e);
@@ -633,7 +637,7 @@ try {
       return r.width > 0 && r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth;
     };
     const shown = ['catstatue', 'catbench', 'pawstones', 'catfountain', 'goldlantern', 'rainbowbunting'].filter((id) => {
-      const b = document.querySelector(`#hotbar [data-tool="decor:${id}"]`);
+      const b = document.querySelector(`#buildMenu [data-tool="decor:${id}"]`);
       return b && !b.hidden && seen(b);
     });
     return { open, shown };

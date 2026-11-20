@@ -1,10 +1,14 @@
 import type { Action } from '../app/Bindings';
 import type { PhotoState } from '../app/PhotoMode';
 import { PHOTO_FILTERS, PHOTO_WEATHER_NAMES } from '../data/photo';
+import { fillGlyphs, glyph, icon } from './PanelShell';
 
 /**
  * E19.4.1 (#260): photo mode's controls bar, outside the HUD (which photo mode hides). The saved picture is the
  * canvas alone, so the bar never shows in it. Buttons send the same actions as the keys and pad buttons.
+ *
+ * E23.11 (Sunlit Glass): a paper card in three rows (the picture, the scene, leaving), each button showing the
+ * picture of its key or pad button for the device in hand.
  */
 export class PhotoBar {
   readonly el: HTMLElement;
@@ -47,28 +51,30 @@ export class PhotoBar {
       this.shown = undefined;
       return;
     }
+    // the button's key or pad button, drawn for the device in hand (none when the action has no button)
     const k = (a: Action) => {
       const l = this.keyFor(a);
-      return l && l !== '—' ? ` <kbd>${l}</kbd>` : '';
+      return l && l !== '—' ? glyph(a) : '';
     };
     const tog = (a: Action, label: string, on: boolean) => `<button data-photo="${a}" aria-pressed="${on}">${label}${k(a)}</button>`;
     const pad = this.keyFor('up') === '—'; // the pad moves and zooms with its sticks
     const move = pad ? 'left stick' : `${this.keyFor('up')}${this.keyFor('left')}${this.keyFor('down')}${this.keyFor('right')}`;
     const zoom = pad ? 'right stick' : 'the mouse wheel';
     const html =
-      `<span class="pb-title">Photo mode</span>` +
-      `<button data-photo="pulse">Save picture${k('pulse')}</button>` +
+      `<div class="pb-row"><span class="pb-title"><span class="pn-badge sky" aria-hidden="true">${icon('camera')}</span>Photo mode</span>` +
+      `<button data-photo="pulse">${icon('camera', 's')}Save picture${k('pulse')}</button>` +
       tog('interact', 'Hide bloombot', s.hideBot) +
       tog('buildMenu', 'Freeze the garden', s.freeze) +
       tog('eat', 'Depth of field', s.dof) +
-      this.sceneHtml(s, k) +
-      `<button data-photo="backpack">Hide this bar${k('backpack')}</button>` +
-      `<button data-photo="cancel">Leave${k('cancel')}</button>` +
-      `<span class="pb-help">Move ${move} · zoom ${zoom} · tilt ${this.keyFor('rotateBack')} ${this.keyFor('rotate')} · turn with a right-button drag or the right stick</span>`;
+      `</div><div class="pb-row">${this.sceneHtml(s, k)}</div>` +
+      `<div class="pb-row"><button data-photo="backpack">Hide this bar${k('backpack')}</button>` +
+      `<button data-photo="cancel">${icon('door', 's')}Leave${k('cancel')}</button></div>` +
+      `<p class="pb-help">Move ${move} · zoom ${zoom} · tilt ${this.keyFor('rotateBack')} ${this.keyFor('rotate')} · turn with a right-button drag or the right stick</p>`;
     if (html !== this.shown) {
       const focused = document.activeElement?.closest?.('#photoBar') ? (document.activeElement as HTMLElement).dataset : undefined;
       this.el.innerHTML = html;
       this.shown = html;
+      fillGlyphs(this.el);
       // keep the slider (or button) in hand while it redraws under a drag or a press
       if (focused?.photoHour !== undefined) this.el.querySelector<HTMLElement>('[data-photo-hour]')?.focus();
       else if (focused?.photo) this.el.querySelector<HTMLElement>(`[data-photo="${focused.photo}"]`)?.focus();

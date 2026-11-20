@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Bindings, defaultKeys, defaultPad } from '../src/app/Bindings';
+import { ACTION, ACTIONS, Bindings, defaultKeys, defaultPad } from '../src/app/Bindings';
 import { bindMessage } from '../src/ui/ControlsTable';
 
 /** E22.4 (#341): rebind everything. */
@@ -67,5 +67,16 @@ describe('E22.4: rebinding', () => {
     b.reset('pad');
     expect(b.pad).toEqual(defaultPad());
   });
-});
 
+  it('E23.11: the build dock pad controls are listed in plain words, and can go on keys too', () => {
+    const build = ACTIONS.filter((a) => a.group === 'build').map((a) => a.label);
+    expect(build).toEqual(expect.arrayContaining(['Previous build slot', 'Next build slot', 'Change the view', 'Pin to a hotbar slot']));
+    expect([ACTION.slotPrev.keys, ACTION.slotNext.keys, ACTION.viewCycle.keys]).toEqual([true, true, true]);
+    const b = new Bindings();
+    expect(b.bindKey('slotNext', 'KeyT')).toEqual({ ok: true, swapped: undefined });
+    expect(b.actionForCode('KeyT', ['build', 'world', 'any'])).toBe('slotNext');
+    // d-pad left in build mode is taken by Previous build slot: binding Turn the piece there asks first
+    expect(b.bindButton('rotate', 14)).toEqual({ ok: false, reason: 'clash', other: 'slotPrev' });
+    expect(b.conflicts()).toEqual([]);
+  });
+});

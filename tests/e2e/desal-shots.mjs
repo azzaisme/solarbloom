@@ -32,7 +32,7 @@ await page.evaluate(() => localStorage.clear());
 await page.reload();
 await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 240000 });
 await page.evaluate(() => window.solarbloom.pause.clear('blur'));
-await page.addStyleTag({ content: '#hint, #intro, .toast, #toasts { display: none !important; }' });
+await page.addStyleTag({ content: '.toast, #toasts { display: none !important; }' });
 
 async function settle(ms = 2500) {
   await page.waitForFunction(() => document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 240000 });

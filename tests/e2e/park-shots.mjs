@@ -11,7 +11,6 @@ await page.goto('http://localhost:4193/?slot=1');
 await page.evaluate(() => localStorage.clear());
 await page.reload();
 await page.waitForFunction(() => !!window.solarbloom);
-if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
 await page.addStyleTag({ content: '#hud .toast, #toasts, .toast { display: none !important; }' });
 for (const stage of [0, 1, 2, 3, 4]) {
   await page.evaluate((stage) => {

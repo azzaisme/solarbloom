@@ -12,7 +12,7 @@ function bigChainCity() {
 }
 
 describe('readable huge chains (City 10.6)', () => {
-  it('a ×200+ chain is summarised per area with a running total, the area the wave is in first', () => {
+  it('a 200+ bloom chain is summarised per area with a running total, the area the wave is in first', () => {
     const sim = bigChainCity();
     const summary = new ChainSummary(sim);
     let blooms = 0;
@@ -40,7 +40,7 @@ describe('readable huge chains (City 10.6)', () => {
     // At most three areas named, then the running total.
     expect(snapshot!.lines.length).toBeLessThanOrEqual(4);
     expect(snapshot!.lines[snapshot!.lines.length - 1]).toBe(`40 blooms across ${snapshot!.areas} areas`);
-    expect(snapshot!.lines[0]).toMatch(/×\d+$/);
+    expect(snapshot!.lines[0]).toMatch(/ · \d+ blooms?$/);
     // Finished chains are forgotten.
     expect(summary.tracks.size).toBe(0);
     expect(blooms).toBeGreaterThan(40);

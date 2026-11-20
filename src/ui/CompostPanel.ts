@@ -1,10 +1,16 @@
 import type { MachineData } from '../core/types';
 import { COMPOST, DIGESTER } from '../data/compost';
 import type { Sim } from '../gameplay/Sim';
+import { materialIcon, type MaterialIconId } from './MaterialIcons';
+import { cardHead } from './OldCityPanel';
+import { icon } from './PanelShell';
 
 /**
  * E23.5.3: the compost bin's panel (opened with Interact). What it holds, in words and small counts, and the actions:
- * put biomass or food in, take fertiliser or compost out, put carried compost back to mature.
+ * put Greens or food in, take fertiliser or compost out, put carried compost back to mature.
+ *
+ * E23.11 (Sunlit Glass): a machine card docked right: how it is doing heads the card, then what is ready to take
+ * (counts only for what is gathered by hand), "Put in" and "Take".
  */
 export function compostHtml(sim: Sim, m: MachineData): string {
   const st = sim.compost.bin(m);
@@ -19,20 +25,21 @@ export function compostHtml(sim: Sim, m: MachineData): string {
       ? 'Rotting down nicely.'
       : compost
         ? 'Maturing into fertiliser.'
-        : 'Waiting for biomass and food scraps.';
+        : 'Waiting for Greens and food scraps.';
   const room = sim.compost.room(m);
-  return `<h2>🟫 Compost bin</h2>
-    <p>${state}</p>
-    <div class="oc-need"><span>Ready to take</span><span>${fert} Fertiliser · ${compost} Compost</span></div>
-    <h3>Put in</h3><div class="oc-row">
-      <button data-act="fill" data-arg="biomass" ${inv.count('biomass') && room >= 1 ? '' : 'disabled'}>🌿 All my Biomass</button>
-      <button data-act="fill" data-arg="food" ${inv.count('food') && room >= COMPOST.foodWorth ? '' : 'disabled'}>🥕 All my Food</button>
-      <button data-act="return" ${inv.count('compost') && !full ? '' : 'disabled'}>🟫 My Compost, to mature</button>
-    </div>
-    <h3>Take</h3><div class="oc-row">
-      <button data-act="take" data-arg="fertiliser" ${fert ? '' : 'disabled'}>🧪 Fertiliser</button>
-      <button data-act="take" data-arg="compost" ${compost ? '' : 'disabled'}>🟫 Compost</button>
-    </div>`;
+  const btn = (act: string, arg: string, mat: MaterialIconId, label: string, ok: boolean) => `<button class="pn-btn oc-mat-btn" data-act="${act}"${arg ? ` data-arg="${arg}"` : ''} ${ok ? '' : 'disabled'}>${materialIcon(mat, 24)}${label}</button>`;
+  return (
+    cardHead({ icon: materialIcon('compost', 30), title: 'Compost Bin', mood: state, tone: full ? 'leaf' : '', badge: 'sun' }) +
+    `<div class="oc-content"><div class="oc-tile"><h3 class="pn-label">Ready to take</h3><ul class="pn-chips"><li class="pn-chip">${materialIcon('fertiliser', 20)}${fert} Fertiliser</li><li class="pn-chip">${materialIcon('compost', 20)}${compost} Compost</li></ul></div>` +
+    `<h3 class="pn-label">Put in</h3><div class="oc-row oc-col">` +
+    btn('fill', 'biomass', 'biomass', 'All my Greens', !!inv.count('biomass') && room >= 1) +
+    btn('fill', 'food', 'food', 'All my Food', !!inv.count('food') && room >= COMPOST.foodWorth) +
+    btn('return', '', 'compost', 'My Compost, to mature', !!inv.count('compost') && !full) +
+    `</div><h3 class="pn-label">Take</h3><div class="oc-row">` +
+    btn('take', 'fertiliser', 'fertiliser', 'Fertiliser', fert > 0) +
+    btn('take', 'compost', 'compost', 'Compost', compost > 0) +
+    `</div></div>`
+  );
 }
 
 /** E23.5.3: the Bio Digester's panel: how it is doing, in words, and Feed. */
@@ -43,8 +50,12 @@ export function digesterHtml(sim: Sim, m: MachineData): string {
       ? 'Running: it is powering its grid.'
       : mood === 'idle'
         ? 'Fed and waiting: its grid has all the power it needs right now.'
-        : 'Empty, so it has stopped. Feed it biomass to start it.';
-  return `<h2>⚡ Bio Digester</h2>
-    <p>${state}</p>
-    <div class="oc-row"><button data-act="feed" ${sim.inventory.count('biomass') && sim.compost.fuel(m) < DIGESTER.capacity - 1e-9 ? '' : 'disabled'}>${sim.compost.fuel(m) >= DIGESTER.capacity - 1e-9 ? 'The hopper is full' : '🌿 Feed it Biomass'}</button></div>`;
+        : 'Empty, so it has stopped. Feed it Greens to start it.';
+  const full = sim.compost.fuel(m) >= DIGESTER.capacity - 1e-9;
+  const ok = !!sim.inventory.count('biomass') && !full;
+  return (
+    cardHead({ icon: icon('bolt', 'l'), title: 'Bio Digester', mood: state, tone: mood === 'running' ? 'leaf' : mood === 'idle' ? '' : 'clay', badge: 'sun', choose: 'Feed' }) +
+    `<div class="oc-content"><div class="oc-tile"><div class="pn-bar sun" aria-hidden="true"><i style="width:${Math.round(Math.min(1, sim.compost.fuel(m) / DIGESTER.capacity) * 100)}%"></i></div><p class="pn-note">${full ? 'The hopper is full.' : 'It turns Greens into power for its grid, day and night.'}</p></div>` +
+    `<div class="oc-row"><button class="pn-btn primary oc-mat-btn" data-act="feed" ${ok ? '' : 'disabled'}>${materialIcon('biomass', 24)}${full ? 'The hopper is full' : 'Feed it Greens'}</button></div></div>`
+  );
 }

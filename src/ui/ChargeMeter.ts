@@ -1,28 +1,33 @@
+import { CHARGE } from '../data/charge';
+import { actionGlyph } from './Glyphs';
 import { $, HudPart } from './HudPart';
 
-/** SVG battery with a bolt (inherits currentColor). */
-const BATTERY = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="16" height="10" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="19.5" y="10" width="2" height="4" rx="1" fill="currentColor"/><path d="M12 8.6 8.6 12.6h2.8l-1 2.8 3.4-4h-2.8z" fill="currentColor"/></svg>`;
-
 /**
- * E23.2.1 (#371): bloombot's charge, the only meter on screen. A pill at the top of the
- * resource strip: a battery, a bar and the charge as a percentage. Calm when full (it fades after a few seconds
- * unchanged), warm when low, and the bar dims to the low-power walk's grey at zero.
+ * E23.2.1 (#371) / E23.11: bloombot's charge, the only meter on screen. A paper card top right
+ * (docs/art/ui-sunlit-glass/Walk.dc.html): a sun badge with a battery, "Charge", the percentage and a sun bar. Calm
+ * when full (it fades after a few seconds unchanged); low, it gets an amber ring, reads "Low · 18%", the bar turns
+ * orange and, when something edible is carried, the Eat button's picture shows under it (WalkPad.dc.html). At zero
+ * the badge goes grey.
  */
 export class ChargeMeter extends HudPart {
   private el?: HTMLElement;
   private lastV = -1;
   private still = 0;
+  private glyphAt = -1;
 
   static template(): string {
-    return `<div class="res-row panel charge-row" id="chargeRow" data-res="charge" role="meter" aria-label="Charge" aria-valuemin="0" aria-valuemax="100">
-      <span class="ic" aria-hidden="true">${BATTERY}</span>
-      <span class="nm">Charge</span>
-      <span class="pct">100%</span>
-      <span class="bar"><i></i></span>
+    return `<div class="sg-card charge-row" id="chargeRow" data-res="charge" role="meter" aria-label="Charge" aria-valuemin="0" aria-valuemax="100">
+      <div class="ch-head">
+        <span class="sg-badge sun sm" aria-hidden="true"><span class="sg-ic s i-cell"></span></span>
+        <span class="nm">Charge</span>
+        <span class="pct">100%</span>
+      </div>
+      <span class="sg-bar" aria-hidden="true"><i></i></span>
+      <div class="ch-eat"><span class="ch-g"></span><span>Eat</span></div>
     </div>`;
   }
 
-  /** Puts the meter at the top of the resource strip (Hud.ts calls this once). */
+  /** Puts the meter at the top of the charge column (Hud.ts calls this once). */
   wire() {
     const res = $(this.root, '#res');
     res.insertAdjacentHTML('afterbegin', ChargeMeter.template());
@@ -33,19 +38,27 @@ export class ChargeMeter extends HudPart {
     const el = this.el;
     if (!el) return;
     const c = this.sim.charge;
-    this.set('ch-on', el, 'cls', '0', 'off');
     const pct = Math.round(c.share * 100);
-    this.set('ch-pct', $(el, '.pct'), 'text', `${pct}%`);
-    this.set('ch-bar', $(el, '.bar i'), 'width', `${Math.max(0, Math.min(100, c.share * 100)).toFixed(1)}%`);
+    const low = c.low && !c.empty;
+    this.set('ch-pct', $(el, '.pct'), 'text', low ? `Low · ${pct}%` : `${pct}%`);
+    this.set('ch-bar', $(el, '.sg-bar i'), 'width', `${Math.max(0, Math.min(100, c.share * 100)).toFixed(1)}%`);
     this.set('ch-aria', el, 'title', `Charge ${pct}%`);
-    if (this.last.get('ch-val') !== String(pct)) {
-      this.last.set('ch-val', String(pct));
+    if (this.last.get('ch-val') !== `${pct}${low}`) {
+      this.last.set('ch-val', `${pct}${low}`);
       el.setAttribute('aria-valuenow', String(pct));
+      el.setAttribute('aria-valuetext', low ? `Low, ${pct} percent` : `${pct} percent`);
     }
-    this.set('ch-low', el, 'cls', c.low && !c.empty ? '1' : '0', 'low');
+    this.set('ch-low', el, 'cls', low ? '1' : '0', 'low');
     this.set('ch-empty', el, 'cls', c.empty ? '1' : '0', 'empty');
     this.set('ch-eat', el, 'cls', c.eating ? '1' : '0', 'eating');
-    // calm when full: fades out after 5 s unchanged, back the moment it changes
+    // running low with something to eat: the Eat button's picture, in the set the player is using
+    const canEat = (low || c.empty) && !c.eating && CHARGE.edibles.some((e) => c.carried(e.id) > 0);
+    this.set('ch-caneat', el, 'cls', canEat ? '1' : '0', 'can-eat');
+    if (canEat && this.glyphAt !== this.hud.keyMapVersion && this.hud.bindings) {
+      this.glyphAt = this.hud.keyMapVersion;
+      $(el, '.ch-g').innerHTML = actionGlyph(this.hud.bindings, 'eat', this.hud.glyphStyle);
+    }
+    // calm when full: fades after 5 s unchanged, back the moment it changes
     const v = c.value();
     this.still = Math.abs(v - this.lastV) < 1e-6 ? this.still + dt : 0;
     this.lastV = v;

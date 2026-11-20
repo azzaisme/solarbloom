@@ -28,8 +28,7 @@ try {
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom?.sim);
-  await page.addStyleTag({ content: '#hint, #intro, .toast, #toasts { display: none !important; }' });
-  await page.evaluate(() => document.querySelector('#introGo')?.click());
+  await page.addStyleTag({ content: '.toast, #toasts { display: none !important; }' });
   for (const id of REGIONS) {
     const at = await page.evaluate((id) => {
       const g = window.solarbloom;

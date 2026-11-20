@@ -43,8 +43,6 @@ try {
       byType[type] ??= s.areas.info(id).landmark;
     }
     byType.park = s.areas.info('park').landmark;
-    document.querySelector('#hint')?.remove();
-    document.querySelector('#intro')?.setAttribute('hidden', '');
     g.chunks.markAll?.();
     return byType;
   });

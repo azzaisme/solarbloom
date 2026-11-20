@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Backpack, keyboard and mouse</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="sb.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="screen" style="width: 1280px; height: 800px">
+  <div class="veil"></div>
+  <section class="card sheet" role="dialog" aria-label="Backpack">
+    <header class="sheet-head">
+      <div class="badge"><span class="ic i-pack"></span></div>
+      <h2 class="h1" style="margin: 0">Backpack</h2>
+      <span class="small soft">Paused</span>
+      <span class="grow"></span>
+      <button class="btn ghost" style="min-height: 40px"><span class="g wide">Esc</span>Back</button>
+    </header>
+    <div class="sheet-tabs tabs" role="tablist">
+      <span class="g">Q</span>
+      <span class="tab on"><span class="ic i-pack"></span>Items</span>
+      <span class="tab"><span class="ic i-list"></span>Requests<span class="dot" style="position: static; margin-left: 2px"></span></span>
+      <span class="tab"><span class="ic i-book"></span>Journal</span>
+      <span class="tab"><span class="ic i-star"></span>Collection</span>
+      <span class="tab">Blueprints</span>
+      <span class="g">E</span>
+    </div>
+    <div class="sheet-body">
+      <div class="grow" style="display: flex; flex-direction: column; gap: 14px">
+        <div class="cells">
+          <button class="cell" style="border: 0; font: inherit"><span class="mat m-scrap" style="width: 36px; height: 36px"></span>Scrap<span class="n">32 of 40</span></button>
+          <button class="cell" style="border: 0; font: inherit"><span class="mat m-seeds" style="width: 36px; height: 36px"></span>Seeds<span class="n">11 of 40</span></button>
+          <button class="cell sel focus" style="border: 0; font: inherit"><span class="mat m-copper" style="width: 36px; height: 36px; border-width: 8px"></span>Copper<span class="n">7 of 40</span></button>
+          <button class="cell" style="border: 0; font: inherit"><span class="mat m-timber" style="width: 36px; height: 36px"></span>Timber<span class="n">14 of 40</span></button>
+          <button class="cell" style="border: 0; font: inherit"><span class="mat m-glass" style="width: 36px; height: 36px"></span>Glass<span class="n">3 of 40</span></button>
+          <button class="cell" style="border: 0; font: inherit"><span class="mat m-greens" style="width: 36px; height: 36px"></span>Greens<span class="n">22 of 40</span></button>
+          <button class="cell" style="border: 0; font: inherit"><span class="mat m-food" style="width: 36px; height: 36px"></span>Food<span class="n">5 of 40</span></button>
+          <button class="cell" style="border: 0; font: inherit"><span class="mat m-compost" style="width: 36px; height: 36px"></span>Compost<span class="n">2 of 40</span></button>
+          <button class="cell" style="border: 0; font: inherit"><span class="mat m-clay" style="width: 36px; height: 36px"></span>Clay<span class="n">0 of 40</span></button>
+          <button class="cell" style="border: 0; font: inherit; color: #7b8574"><span class="mat m-unknown" style="width: 36px; height: 36px"></span>Not found yet</button>
+        </div>
+        <div class="label">One of a kind</div>
+        <div class="row" style="gap: 10px"><span class="chip"><span class="ic s i-book"></span>Page 7: The pump house</span><span class="chip"><span class="ic s i-sun"></span>Rare seed</span></div>
+      </div>
+      <aside class="detail">
+        <div class="row"><div class="tile" style="width: 64px; height: 64px; display: grid; place-items: center; background: #fff"><span class="mat m-copper" style="width: 40px; height: 40px; border-width: 9px"></span></div><div><div class="h2">Copper</div><div class="small soft">7 with you · 24 in the store</div></div></div>
+        <div class="label">Where it comes from</div>
+        <p class="body" style="margin: 0">Scrap piles in Pipeworks, and old wiring you pry from the ruins.</p>
+        <div class="label">Needed next</div>
+        <div class="row" style="gap: 8px; flex-wrap: wrap"><span class="chip"><span class="ic s i-solar"></span>Solar Panel</span><span class="chip"><span class="ic s i-bolt"></span>Power Pole</span></div>
+        <span class="grow"></span>
+        <div class="small soft">Stand by the fountain or a chest to move things to the store.</div>
+      </aside>
+    </div>
+    <footer class="sheet-foot acts">
+      <span class="act"><span class="g wide">Enter</span>Choose</span>
+      <span class="act"><span class="g">Q</span><span class="g">E</span>Change tab</span>
+      <span class="act"><span class="g wide">Esc</span>Back to the world</span>
+    </footer>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

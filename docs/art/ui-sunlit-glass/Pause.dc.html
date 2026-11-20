@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pause menu, gamepad</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="sb.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="screen" style="width: 1280px; height: 800px">
+  <div class="veil"></div>
+  <section class="card" role="dialog" aria-label="Menu" style="position: absolute; left: 0; top: 0; bottom: 0; width: 440px; border-radius: 0 28px 28px 0; padding: 40px 36px 28px; display: flex; flex-direction: column; gap: 22px">
+    <div class="row" style="gap: 14px">
+      <div class="badge" style="width: 56px; height: 56px"><span class="ic l i-leaf"></span></div>
+      <div><div class="label">Paused</div><div class="h1">Hillside garden</div></div>
+    </div>
+    <div class="tile" style="padding: 12px 14px; display: flex; flex-direction: column; gap: 4px">
+      <div class="body">Cistern Basin</div>
+      <div class="small soft">Day 4 · 07:34 · played 3 hours 12 minutes</div>
+    </div>
+    <nav style="display: flex; flex-direction: column; gap: 8px" aria-label="Menu">
+      <button class="btn primary focus" style="justify-content: flex-start; min-height: 54px"><span class="ic i-play"></span>Resume</button>
+      <button class="btn" style="justify-content: flex-start"><span class="ic i-pack"></span>Backpack</button>
+      <button class="btn" style="justify-content: flex-start"><span class="ic i-map"></span>Map</button>
+      <button class="btn" style="justify-content: flex-start"><span class="ic i-camera"></span>Photo mode</button>
+      <button class="btn" style="justify-content: flex-start"><span class="ic i-gear"></span>Settings</button>
+      <button class="btn" style="justify-content: flex-start"><span class="ic i-save"></span>Save now</button>
+      <button class="btn" style="justify-content: flex-start"><span class="ic i-door"></span>Quit to title</button>
+    </nav>
+    <span class="grow"></span>
+    <div class="acts"><span class="act"><span class="g pad pa">A</span>Choose</span><span class="act"><span class="g pad pb">B</span>Resume</span></div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

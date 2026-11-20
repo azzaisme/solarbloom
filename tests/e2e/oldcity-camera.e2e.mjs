@@ -59,7 +59,6 @@ try {
   // auto-recentre: turn the view, walk; no drift before 3 s, a drift back after
   await page.evaluate(() => {
     const g = window.solarbloom;
-    document.querySelector('#introGo')?.click();
     g.bot.teleport('g', 8.5, 34.5);
     g.bot.pose.facing = Math.PI;
     g.camTurn(90, 0);

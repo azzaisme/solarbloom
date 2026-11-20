@@ -95,6 +95,13 @@ export const VISITORS: VisitorDef[] = [
 ];
 
 /**
+ * E23.10 batch B4: visitors drawn with their placeholder on purpose (no model of their own). Every other visitor has
+ * its model at assets/raw/models/visitors/<id>.glb (tests/visitor-models.test.ts holds both to that). The batch's
+ * koi is for the ponds, not a visitor, so it is not shipped here.
+ */
+export const PLACEHOLDER_ONLY: readonly string[] = [];
+
+/**
  * E23.10 (batch B4): how each visitor's own model is drawn (assets/raw/models/visitors/<id>.glb; the primitive
  * placeholder stands in for any kind without one). `length`: its longest side in world units (the model is scaled
  * to it, centred over its feet); `turn`: degrees to turn it so it faces +z like the placeholders; `lift`: raised by
@@ -130,6 +137,8 @@ export const VISIT = {
   /** seconds to fly or walk in, and to leave once bloombot stands */
   approach: 2.4,
   leave: 1.6,
+  /** the climb up onto a perch on bloombot (a B4 model's `climb` clip) plays over at most this many seconds at the end of the way in */
+  climbMax: 0.9,
   /** how far away they come from (world units) */
   from: 5,
   /** a passer-by is gone again after this many seconds */

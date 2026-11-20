@@ -315,7 +315,6 @@ describe('E23.12.3: the cats stay hidden until one is found (audit)', () => {
         'cat.goldenRelay': KEY,
         "Bloombot can't reach that cat from here": 'a click on the cat itself, and before the first find only on one the player can really see (catVisible, core/CatSight)',
         '<b>🐱 …is that a cat?</b>Go and say hello!': 'the pointer on the cat itself, and before the first find only on one the player can really see (catVisible, core/CatSight)',
-        '🐾 Paw prints lead ': 'the paw chip: only when hinted(), never before the first find',
         '<br><span class="ok">🐾 Faint paw prints… a cat is hiding very close.</span>': 'pawHint: only when hinted(), never before the first find',
         ' · the Lucky Cat’s sunshine': 'a solar panel inside a Solar Surge, which only a found cat gives',
         '🌈 RAINBOW CAT FOUND!': 'the found toast',
@@ -367,15 +366,9 @@ describe('E23.12.3: the cats stay hidden until one is found (audit)', () => {
       'src/rendering/DroneVisuals.ts': { 'cat.found': KEY },
       'src/rendering/Fauna.ts': { cats: KEY },
       'src/rendering/FaunaPlan.ts': { cats: KEY },
+      'src/ui/BuildCatalog.ts': { cat: KEY },
       'src/ui/BackpackModel.ts': { cat: KEY, 'Lucky Cats': `the collection group: ${FOUND}`, ' cats found': `the collection group: ${FOUND}`, 'One cat found': `the collection group: ${FOUND}` },
-      'src/ui/EcoBadge.ts': { cat: KEY },
-      'src/ui/Hud.ts': {
-        cat: KEY,
-        '<span class="qbadge" aria-hidden="true"></span></button>\n        <button class="rbtn qbtn" id="catBtn" aria-label="Lucky Cat garden" title="Lucky Cat garden" hidden>':
-          `the garden button, built hidden: ${FOUND}`,
-        '<span class="qn" id="catCount">0</span></button>\n        <button class="rbtn qbtn" id="pawBtn" aria-label="Paw prints: which way a hiding cat went" title="Paw prints: a Lucky Cat is hiding. Which way do they lead?" hidden>':
-          'the paw chip, built hidden: shown only when hinted()',
-      },
+      'src/ui/Hud.ts': { cat: KEY },
       'src/ui/Icons.ts': { cat: KEY, paw: KEY, '🐱': 'the icon set: drawn only where a string above uses it', '🐾': 'the icon set: drawn only where a string above uses it' },
       'src/ui/Panels.ts': { ' · Lucky Cats: <b>': 'Settings › Game: only when sim.cat.known' },
       'src/ui/Toasts.ts': { cat: KEY },

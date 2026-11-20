@@ -45,7 +45,12 @@ const PAD: [Action, number | undefined][] = [
   ['rotateBack', 4], // LB
   ['rotate', 5], // RB
   ['removeMode', 7], // right trigger
-  ['powerOverlay', 15], // E23.3.4: d-pad right in build mode
+  ['powerOverlay', undefined], // E23.11: O on the keyboard; the pad's d-pad up changes the view instead
+  ['waterOverlay', undefined],
+  ['viewCycle', 12], // E23.11: d-pad up in build mode: off, Power, Water
+  ['slotPrev', 14], // d-pad left in build mode
+  ['slotNext', 15], // d-pad right in build mode
+  ['pinSlot', 2], // X in the build menu (Y opens and closes it)
   ['backpack', 12], // d-pad up
   ['map', 8], // View
   ['cancel', 1], // B
@@ -116,10 +121,25 @@ describe('E22.1: the new button map', () => {
     expect(b.actionForButton(0, ['build', 'world', 'any'])).toBe('place');
     expect(b.actionForButton(7, ['build', 'world', 'any'])).toBe('removeMode');
     expect(b.actionForCode('KeyQ', ['panel', 'any'])).toBe('prevTab');
-    // E23.3.4: the Power view is O and d-pad right in build mode; walking, d-pad right still pins the next request
+    // E23.3.4 / E23.4.5: the Power and Water views are O and V in build mode
     expect(b.actionForCode('KeyO', ['build', 'world', 'any'])).toBe('powerOverlay');
-    expect(b.actionForButton(15, ['build', 'world', 'any'])).toBe('powerOverlay');
+    expect(b.actionForCode('KeyV', ['build', 'world', 'any'])).toBe('waterOverlay');
+    // E23.11: in build mode the d-pad walks the hotbar (left / right) and changes the view (up); walking, the same
+    // buttons eat, pin the next request and open the backpack
+    expect(b.actionForButton(14, ['build', 'world', 'any'])).toBe('slotPrev');
+    expect(b.actionForButton(15, ['build', 'world', 'any'])).toBe('slotNext');
+    expect(b.actionForButton(12, ['build', 'world', 'any'])).toBe('viewCycle');
+    expect(b.actionForButton(14, ['world', 'any'])).toBe('eat');
     expect(b.actionForButton(15, ['world', 'any'])).toBe('pinNext');
+    expect(b.actionForButton(12, ['world', 'any'])).toBe('backpack');
+    // the build menu: Y pins to a slot, P on the keyboard; walking, Y opens the menu and P takes a photo
+    expect(b.actionForButton(2, ['panel', 'any'])).toBe('pinSlot');
+    // Y is free in a panel, so the build menu's own button closes it again
+    expect(b.actionForButton(3, ['panel', 'any'])).toBeUndefined();
+    expect(b.actionForButton(3, ['world', 'any'])).toBe('buildMenu');
+    expect(b.actionForCode('KeyP', ['panel', 'any'])).toBe('pinSlot');
+    expect(b.actionForButton(3, ['world', 'any'])).toBe('buildMenu');
+    expect(b.actionForCode('KeyP', ['world', 'any'])).toBe('photo');
     expect(b.actionForCode('KeyE', ['panel', 'any'])).toBe('nextTab');
     expect(b.actionForButton(5, ['panel', 'any'])).toBe('nextTab');
   });
@@ -163,6 +183,33 @@ describe('E22.1: the new button map', () => {
     expect(b.bindKey('slot3', 'KeyJ')).toEqual({ ok: true, swapped: undefined });
     expect(b.actionForCode('KeyJ')).toBe('slot3');
     expect(b.actionForCode('Digit3')).toBeUndefined();
+  });
+
+  it('E23.11: the new build-mode defaults reach a player with custom binds, with no reset', () => {
+    // a map saved before E23.11 (same version): Eat moved to H, the view toggles left where they were (no entry)
+    const before = { v: BINDINGS_VERSION, keys: { eat: ['KeyH'] }, pad: {} };
+    const m = migrateBindings(before);
+    expect(m.reset).toBe(false);
+    const b = new Bindings(m.saved);
+    expect(b.keys.eat).toEqual(['KeyH']); // the custom key is kept
+    expect([b.pad.slotPrev, b.pad.slotNext, b.pad.viewCycle]).toEqual([14, 15, 12]);
+    expect([b.pad.waterOverlay, b.pad.powerOverlay]).toEqual([undefined, undefined]);
+    expect(b.conflicts()).toEqual([]);
+  });
+
+  it('E23.11: a new default never takes a button the player gave to another action', () => {
+    // a player who put Turn the piece on d-pad left keeps it there; Previous build slot starts unbound
+    const b = new Bindings({ v: BINDINGS_VERSION, pad: { rotate: 14 } });
+    expect(b.actionForButton(14, ['build', 'world', 'any'])).toBe('rotate');
+    expect(b.pad.slotPrev).toBeUndefined();
+    expect(b.conflicts()).toEqual([]);
+    // and so it stays after a save and a reload
+    const again = new Bindings(JSON.parse(JSON.stringify(b.save())));
+    expect([again.pad.rotate, again.pad.slotPrev]).toEqual([14, undefined]);
+    // a key works the same way: the Water view moved to P in build mode, Pin to a slot (a menu key) is unaffected
+    const k = new Bindings({ v: BINDINGS_VERSION, keys: { waterOverlay: ['KeyP'] } });
+    expect(k.keys.pinSlot).toEqual(['KeyP']);
+    expect(k.conflicts()).toEqual([]);
   });
 
   it('resets bindings saved before the new map once, and says so', () => {

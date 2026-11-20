@@ -1,11 +1,11 @@
-import { $, esc, HudPart } from './HudPart';
+import { $, HudPart } from './HudPart';
 import type { Sim } from '../gameplay/Sim';
 import type { Suggestion } from '../gameplay/Advisor';
 import { WORDS } from './words';
 import { pinnedRequest as pinnedKeeper } from './BackpackModel';
 import { MATERIALS } from '../data/salvage';
 import type { MaterialId } from '../core/types';
-import { oldCityHint, oldCityObjective as oldCityCard } from './OldCityGuide';
+import { oldCityHint } from './OldCityGuide';
 
 /**
  * E22.10 (#348) / E22.5 (#342): the objective card (top left). It is one plain sentence about a thing and a place:
@@ -16,6 +16,10 @@ export interface Objective {
   text: string;
   /** "12 of 20", only for things done by hand */
   count?: string;
+  /** how far along the count is, 0..1 (the card's thin bar) */
+  progress?: number;
+  /** the advisor's topic when the advisor speaks (a 'charge' shortage turns the badge to sun) */
+  topic?: Suggestion['topic'];
 }
 
 /** E23.1.5: the advisor's topics that come before any request: a shortage in the loop the player should see now. */
@@ -28,49 +32,47 @@ const URGENT = new Set<Suggestion['topic']>(['charge', 'grid', 'water', 'farm'])
  */
 export function objectiveSentence(sim: Sim, advice: Suggestion | undefined = sim.advisor.suggest()): Objective {
   const W = WORDS.objective;
-  if (advice && URGENT.has(advice.topic)) return { text: advice.text };
+  if (advice && URGENT.has(advice.topic)) return { text: advice.text, topic: advice.topic };
   // E21.8: the pinned Keeper request (with a count only while its patch is restored by hand)
   const pinned = pinnedKeeper(sim); // E22.6: the request the player pinned, else the first open one
   if (pinned) {
     const step = sim.keepers.step(pinned.id);
     const p = step === 'request2' ? sim.keepers.patch(pinned.id) : undefined;
-    return { text: pinned.text, count: p ? W.count(Math.min(p.restored, p.total), p.total) : undefined };
+    return { text: pinned.text, count: p ? W.count(Math.min(p.restored, p.total), p.total) : undefined, progress: p && p.total > 0 ? Math.min(p.restored, p.total) / p.total : undefined };
   }
   // E21.6: the fountain's next step, by its name: what it still wants, then its own condition
   const f = sim.fountain;
   const t = f.next();
-  if (!t) return { text: advice?.text ?? W.explore };
+  if (!t) return { text: advice?.text ?? W.explore, topic: advice?.topic };
   const want = (Object.keys(t.delivery) as (MaterialId | 'biomass')[])
     .map((k) => [k, k === 'biomass' ? t.delivery[k]! : f.remaining(k as MaterialId)] as const)
     .filter(([, n]) => n > 0)
     .map(([k, n]) => `${n} ${k === 'biomass' ? 'Greens' : MATERIALS[k as MaterialId].name}`);
   if (want.length) return { text: `Bring ${want.length > 1 ? `${want.slice(0, -1).join(', ')} and ${want[want.length - 1]}` : want[0]} to the fountain` };
   const c = f.condition(t);
-  if (!c.done) return { text: c.label, count: W.count(Math.min(c.have, c.need), c.need) };
+  if (!c.done) return { text: c.label, count: W.count(Math.min(c.have, c.need), c.need), progress: c.need > 0 ? Math.min(c.have, c.need) / c.need : 0 };
   return { text: `${t.name}: the fountain is ready` };
 }
 
 /**
- * E22.5 (#342): the objective card, with the hint strip under it. The card pins one request (a Keeper's, else the
- * next fountain tier); the hint strip walks the first fifteen minutes, then carries the advisor's next step (E23.1.5).
+ * E22.5 (#342) / E23.11: the objective card, top left (docs/art/ui-sunlit-glass/Walk.dc.html): a leaf badge with a
+ * pin, the goal in one plain sentence and, when it counts things done by hand, a thin bar and "12 of 20". A shortage
+ * of charge turns the badge to sun with a battery (WalkPad.dc.html). The card also carries the nudge glow (the first
+ * steps point at it, and the game can nudge a control for a moment).
  */
 export class ObjectiveCard extends HudPart {
-  private hintDismissedStep = -1;
   private advice?: Suggestion;
+  private hintTarget = '';
   private adviceAt = -Infinity;
 
-  wire() {
-    const r = this.root;
-    $(r, '#hint button').addEventListener('click', () => {
-      this.hintDismissedStep = this.sim.state.progression.tutorialStep;
-      $(r, '#hint').classList.add('hide');
-    });
-    $(r, '#objToggle').addEventListener('click', () => {
-      const open = $(r, '#obj').classList.toggle('expanded');
-      const t = $(r, '#objToggle');
-      t.setAttribute('aria-expanded', String(open));
-      t.setAttribute('aria-label', open ? 'Hide objective details' : 'Show objective details');
-    });
+  static template(): string {
+    return `<div id="obj" class="sg-card" role="region" aria-label="Objective">
+      <span class="sg-badge" id="objBadge" aria-hidden="true"><span class="sg-ic i-pin"></span></span>
+      <div class="otx">
+        <h3 id="objTitle">Wake the fountain</h3>
+        <div class="oprog" id="objProg" hidden><span class="sg-bar" aria-hidden="true"><i id="objBar"></i></span><span class="ocn" id="objCount"></span></div>
+      </div>
+    </div>`;
   }
 
   private nudgeUntil = 0;
@@ -84,44 +86,37 @@ export class ObjectiveCard extends HudPart {
 
   update() {
     const s = this.sim;
-    // E21.8 / E21.12: one pinned request (a Keeper's, else the next fountain step)
-    const ocard = oldCityCard(s);
-    this.set('objTitle', $(this.root, '#objTitle'), 'text', ocard.title);
-    this.set('objPct', $(this.root, '#objPct'), 'text', ocard.pct);
-    this.set('objBar', $(this.root, '#objBar'), 'width', `${Math.round(ocard.bar * 100)}%`);
-    this.set('objList', $(this.root, '#objList'), 'html', ocard.list.map((r) => `<li class="${r.done ? 'done' : ''}"><span class="ck">${r.done ? '✓' : ''}</span>${esc(r.label)}</li>`).join(''));
-    this.set('objAct', $(this.root, '#objAct'), 'html', '');
-    // Look 5.8: the card's checkbox ticks (with a flourish) once the current goal is ready to complete.
-    this.set('objDone', $(this.root, '#obj'), 'cls', ocard.done ? '1' : '0', 'done');
-    this.set('objDoneLabel', $(this.root, '#objCheck'), 'title', ocard.done ? 'Ready: complete it now' : 'Not done yet');
-    $(this.root, '#objCheck').setAttribute('aria-label', ocard.done ? 'Ready to complete' : 'Not done yet');
-    // E22.10: the plain sentence (E23.1.5: the advisor is asked at most twice a second; it scans tiles)
+    // E22.10: the plain sentence (E23.1.5: the advisor is asked at most twice a second; it scans tiles). The first
+    // steps' guide is asked as often, for the control it points at.
     const now = performance.now();
     if (now - this.adviceAt > 500) {
       this.adviceAt = now;
       this.advice = s.advisor.suggest();
+      this.hintTarget = oldCityHint(s, s.state.progression.tutorialStep, (a) => this.cb.keyFor(a)).target ?? '';
     }
     const o = objectiveSentence(s, this.advice);
-    this.set('objTitle', $(this.root, '#objTitle'), 'html', `${esc(o.text)}${o.count ? ` <span class="ocount">${esc(o.count)}</span>` : ''}`);
-
-    // Hint: the first fifteen minutes, then the advisor (E21.12, E23.1.5)
-    const step = s.state.progression.tutorialStep;
-    const hint = $(this.root, '#hint');
-    const h = oldCityHint(s, step, (a) => this.cb.keyFor(a));
-    const showHint = this.settings.hints && !this.settings.potter && step !== this.hintDismissedStep && !this.hud.introOpen;
-    this.set('hintText', $(this.root, '#hintText'), 'text', h.text);
-    this.set('hintShow', hint, 'cls', showHint ? '0' : '1', 'hide');
-    // Glow the control the hint talks about (or a temporary nudge). On phones, machine cards live in the Build tray.
-    let target = this.settings.potter ? '' : performance.now() < this.nudgeUntil ? this.nudgeSel : this.settings.hints ? (h.target ?? '') : '';
-    const tray = $(this.root, '#buildTray');
-    if (target.startsWith('#buildTray') && !tray.classList.contains('open')) target = '#buildToggle';
+    const r = this.root;
+    this.set('objTitle', $(r, '#objTitle'), 'text', o.text);
+    const prog = $(r, '#objProg');
+    if (prog.hidden !== !o.count) prog.hidden = !o.count;
+    if (o.count) {
+      this.set('objCount', $(r, '#objCount'), 'text', o.count);
+      this.set('objBar', $(r, '#objBar'), 'width', `${Math.round(Math.max(0, Math.min(1, o.progress ?? 0)) * 100)}%`);
+    }
+    // charge running low: the sun badge with a battery
+    const low = o.topic === 'charge';
+    if (this.last.get('objBadge') !== String(low)) {
+      this.last.set('objBadge', String(low));
+      const badge = $(r, '#objBadge');
+      badge.classList.toggle('sun', low);
+      badge.innerHTML = `<span class="sg-ic ${low ? 'i-cell' : 'i-pin'}"></span>`;
+    }
+    // Glow the control the first steps talk about (or a temporary nudge).
+    const target = this.settings.potter ? '' : now < this.nudgeUntil ? this.nudgeSel : this.settings.hints ? this.hintTarget : '';
     if (this.last.get('nudgeTarget') !== target) {
-      this.root.querySelectorAll('.nudge').forEach((e) => e.classList.remove('nudge'));
-      if (target) this.root.querySelector(target)?.classList.add('nudge');
+      r.querySelectorAll('.nudge').forEach((e) => e.classList.remove('nudge'));
+      if (target) r.querySelector(target)?.classList.add('nudge');
       this.last.set('nudgeTarget', target);
     }
-    // "Next:" line (visible on phones, where the checklist is collapsed). "Next:" is dropped on phones (CSS).
-    const nextText = ocard.next;
-    this.set('objNext', $(this.root, '#objNext'), 'html', nextText.startsWith('Next: ') ? `<span class="nx">Next: </span>${esc(nextText.slice(6))}` : esc(nextText));
   }
 }

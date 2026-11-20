@@ -93,7 +93,7 @@ describe('E21.8: Keepers', () => {
 
   it('one request is pinned in the objective card; the rest wait in the list', () => {
     const sim = mastRowOpen();
-    expect(oldCityObjective(sim).title).toMatch(/Fountain tier 2/);
+    expect(oldCityObjective(sim).title).toMatch(/Fountain step 2/);
     sim.keepers.pulse('pylon');
     sim.inventory.add('scrap', 5);
     sim.keepers.interact('pylon');

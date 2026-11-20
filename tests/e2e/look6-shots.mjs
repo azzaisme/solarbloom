@@ -23,12 +23,11 @@ try {
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
   await page.waitForTimeout(1000);
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
   // A small living patch in the park to work from; HUD hidden so the ground shows.
   const base = await page.evaluate(() => {
     const g = window.solarbloom;
     const s = g.sim;
-    document.querySelectorAll('#hud, .hud, #toolbar, #topbar, #side, #feed, #toasts').forEach((e) => (e.style.visibility = 'hidden'));
+    document.querySelectorAll('#hud, .hud, #toolbar, #topbar, #side, #toasts').forEach((e) => (e.style.visibility = 'hidden'));
     const [fx, fz] = s.areas.info('park').landmark;
     const free = s.areas.tiles('park').filter((t) => s.restoration.isEligible(t) && !t.occupantId && (t.feature ?? 'lawn') === 'lawn');
     free.sort((a, b) => Math.hypot(a.x - fx - 6, a.z - fz) - Math.hypot(b.x - fx - 6, b.z - fz));
