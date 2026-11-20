@@ -127,6 +127,30 @@ try {
       await page.waitForTimeout(1800);
       await page.screenshot({ path: `${out}/build-keys-${tag}.png` });
       check(await onScreen(page, '#buildbar'), `${tag} keys: the build dock fits the screen`);
+      // one tidy row: every slot and mode button the same height from the same top, every key badge on one line
+      // inside the dock, and no name broken or cut short (the owner's two lines across the dock)
+      for (const scale of [100, 125]) {
+        await page.evaluate((s) => window.solarbloom.hud.setUiScale(s), scale);
+        await page.waitForTimeout(300);
+        const row = await page.evaluate(() => {
+          const dock = document.querySelector('#buildbar').getBoundingClientRect();
+          const items = [...document.querySelectorAll('#buildbar .bslot, #buildbar .bmode')].map((e) => e.getBoundingClientRect());
+          const keys = [...document.querySelectorAll('#buildbar .bg')].map((e) => e.getBoundingClientRect());
+          const names = [...document.querySelectorAll('#buildbar .bl')];
+          const spread = (v) => Math.max(...v) - Math.min(...v);
+          return {
+            tops: spread(items.map((r) => r.top)),
+            heights: spread(items.map((r) => r.height)),
+            keyTops: spread(keys.map((r) => r.top)),
+            inside: [...items, ...keys].every((r) => r.top >= dock.top - 0.5 && r.bottom <= dock.bottom + 0.5),
+            lines: names.filter((e) => e.getClientRects().length !== 1 || e.getBoundingClientRect().height > 19).map((e) => e.textContent),
+            cut: names.filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.textContent),
+          };
+        });
+        check(row.tops < 1 && row.heights < 1 && row.keyTops < 1 && row.inside && !row.lines.length && (scale > 100 || !row.cut.length), `${tag} keys at ${scale}%: the dock is one even row ${JSON.stringify(row)}`);
+        await page.screenshot({ path: `${out}/build-dock-${tag}-${scale}.png`, clip: await page.evaluate(() => { const r = document.querySelector('#buildbar').getBoundingClientRect(); return { x: Math.max(0, r.left - 12), y: Math.max(0, r.top - 70), width: Math.min(innerWidth, r.width + 24), height: r.height + 82 }; }) });
+      }
+      await page.evaluate(() => window.solarbloom.hud.setUiScale(100));
       const dsmall = await smallText(page, '#buildbar', 14);
       check(dsmall.length === 0, `${tag} keys: the dock's labels are 14 px or more ${dsmall.slice(0, 4).join(', ')}`);
       const dock = await page.evaluate(() => ({
@@ -156,17 +180,17 @@ try {
       for (let i = 0; i < 8 && (await page.evaluate(() => document.querySelector('#buildMenu [role=tab][aria-selected=true]')?.textContent)) !== 'Power'; i++) await pressPad(page, 5);
       await page.waitForTimeout(300);
       await page.screenshot({ path: `${out}/build-menu-pad-${tag}.png` });
-      // pin the Bench to slot 1 with Y, then take it with A
+      // pin the Bench to slot 1 with X (Y opens and closes the menu itself), then take it with A
       for (let i = 0; i < 8 && (await page.evaluate(() => document.querySelector('#buildMenu [role=tab][aria-selected=true]')?.textContent)) !== 'Decorations'; i++) await pressPad(page, 5);
       const bench = await page.evaluate(() => document.activeElement?.dataset?.tool);
-      await pressPad(page, 3); // Y: pick a slot
+      await pressPad(page, 2); // X: pick a slot
       await page.waitForTimeout(200);
       await page.screenshot({ path: `${out}/build-menu-pin-pad-${tag}.png` });
       if (await page.evaluate(() => Number(document.activeElement?.dataset?.pin) >= 5)) await pressPad(page, 12); // the top row
       for (let i = 0; i < 6; i++) await pressPad(page, 14); // along it to slot 1
       await pressPad(page, 0); // A: pin here
       const s0 = await page.evaluate(() => window.solarbloom.settings.hotbar?.[0]);
-      check(s0 === bench, `${tag} pad: Y then A pins ${bench} to slot 1 (${s0})`);
+      check(s0 === bench, `${tag} pad: X then A pins ${bench} to slot 1 (${s0})`);
       await pressPad(page, 0); // A: take it
       await page.waitForTimeout(400);
       const tool = await page.evaluate(() => window.solarbloom.hud.currentTool);
