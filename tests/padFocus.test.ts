@@ -79,6 +79,7 @@ function buildMenu(picking: boolean) {
   const menu = new El('menu', { x: 80, y: 60, w: 1120, h: 680 });
   menu.fixed = true; // #buildMenu is position: fixed
   const head = new El('head').add(btn('backTop', 1080, 80, 90, 40));
+  const tabs = new El('tabs').add(...['machines', 'power', 'water', 'farm', 'storage', 'decorations'].map((t, i) => btn(`tab-${t}`, 140 + i * 105, 135, 95, 40)));
   const cards = new El('cards').add(btn('card-cultivator', 100, 200, 150, 112), btn('card-hub', 260, 200, 150, 112), btn('card-assembler', 420, 200, 150, 112));
   const pick = new El('pick');
   if (picking) {
@@ -87,7 +88,7 @@ function buildMenu(picking: boolean) {
   }
   const detail = new El('detail', { x: 800, y: 180, w: 380, h: 470 }).add(pick);
   const foot = new El('foot').add(btn('build', 900, 690, 110, 40), btn('backFoot', 1080, 690, 90, 40));
-  menu.add(head, cards, detail, foot);
+  menu.add(head, tabs, cards, detail, foot);
   root.add(menu);
   const by = (n: string) => root.all().find((e) => e.name === n)!;
   return { focus: new PadFocus(root as unknown as HTMLElement, ['#buildMenu.open']), by };
@@ -154,5 +155,35 @@ describe('#564: the slot picker keeps the d-pad on its slots', () => {
     by('build').focus();
     focus.button(LEFT);
     expect(doc.activeElement?.name).not.toBe('build');
+  });
+});
+
+describe('#573: Up and Down from a Back button reach the menu, not the other Back button', () => {
+  it('Down from the top Back goes into the menu (the tab row, then the cards), never to the bottom bar', () => {
+    const { focus, by } = buildMenu(false);
+    by('backTop').focus();
+    focus.button(13);
+    expect(doc.activeElement?.name).toMatch(/^tab-/);
+    focus.button(13);
+    expect(doc.activeElement?.name).toMatch(/^card-/);
+  });
+
+  it('Up from the bottom Back goes to the cards above it', () => {
+    const { focus, by } = buildMenu(false);
+    by('backFoot').focus();
+    focus.button(UP);
+    expect(doc.activeElement?.name).toMatch(/^card-/);
+  });
+
+  it('a table keeps its column: down goes to the next row in the same column, not a nearer one beside it', () => {
+    const root = new El('hud');
+    const menu = new El('menu', { x: 0, y: 0, w: 800, h: 600 });
+    // two columns of rows 60 apart; the right column's rows sit a little higher (nearer) than the left's
+    menu.add(btn('l1', 0, 0, 200, 40), btn('l2', 0, 60, 200, 40), btn('r1', 300, 0, 200, 40), btn('r2', 300, 40, 200, 40));
+    root.add(menu);
+    const focus = new PadFocus(root as unknown as HTMLElement, ['#buildMenu.open']);
+    root.all().find((e) => e.name === 'l1')!.focus();
+    focus.button(13);
+    expect(doc.activeElement?.name).toBe('l2');
   });
 });
