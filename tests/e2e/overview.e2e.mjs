@@ -13,7 +13,6 @@ try {
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
-  if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
   const ids = await page.evaluate(() => {
     const g = window.solarbloom;
     const s = g.sim;
@@ -25,7 +24,6 @@ try {
       s.areas.clear(id, true);
       out.push(id);
     }
-    document.querySelector('#hint')?.remove();
     return out;
   });
   const overview = () =>

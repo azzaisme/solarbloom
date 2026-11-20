@@ -1,4 +1,7 @@
 import './ui/styles.css';
+import './ui/hud.css';
+import './ui/build.css';
+import './ui/panels.css';
 import './ui/title.css';
 import { boot } from './app/Boot';
 

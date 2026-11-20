@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Build and decorate, gamepad</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="sb.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&amp;display=swap">
+<style>
+body{margin:0}
+.ghost{position:absolute;left:548px;top:350px;width:190px;height:120px}
+.turn{position:absolute;display:flex;align-items:center;gap:6px;font:900 15px Nunito,sans-serif;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.55)}
+.edge{display:flex;flex-direction:column;align-items:center;gap:4px;font:800 13px Nunito,sans-serif;color:#4c5947}
+.inset{position:absolute;left:18px;top:96px;width:330px;padding:14px 16px;border-radius:18px;display:flex;flex-direction:column;gap:10px}
+.mini{display:flex;align-items:center;gap:10px;padding:8px 14px 8px 8px;border-radius:999px;background:#fffcf3;box-shadow:0 2px 8px rgba(70,50,10,.14);font:900 16px Nunito,sans-serif}
+</style>
+</helmet>
+<div class="screen" style="width: 1280px; height: 800px">
+
+  <!-- the bench in hand: a green ghost on the grid, snapped -->
+  <svg class="ghost" viewBox="0 0 190 120" aria-hidden="true">
+    <ellipse cx="95" cy="92" rx="88" ry="24" fill="rgba(143,220,95,.28)" stroke="#8fdc5f" stroke-width="3" stroke-dasharray="8 6"></ellipse>
+    <g fill="rgba(226,242,212,.75)" stroke="#29722a" stroke-width="3" stroke-linejoin="round">
+      <path d="M30 40h130v14H30z"></path>
+      <path d="M26 60h138v12H26z"></path>
+      <path d="M38 72v22M152 72v22M44 54v6M146 54v6"></path>
+    </g>
+  </svg>
+  <div class="turn" style="left: 470px; top: 400px"><span class="g bumper">LB</span>↺</div>
+  <div class="turn" style="left: 752px; top: 400px">↻<span class="g bumper">RB</span></div>
+
+  <section class="card hud-charge" aria-label="Charge 86 percent">
+    <div class="row" style="gap: 10px; margin-bottom: 8px">
+      <div class="badge sun sm"><span class="ic s i-cell"></span></div>
+      <span class="h3 grow">Charge</span>
+      <span class="small soft">86%</span>
+    </div>
+    <div class="bar sun" style="height: 14px"><i style="width: 86%"></i></div>
+  </section>
+
+  <!-- what changes when you aim at something already placed -->
+  <aside class="card inset" aria-label="When you aim at a placed decoration">
+    <div class="label">Aim at one you placed</div>
+    <div class="mini"><span class="g pad pa">A</span>Pick up the Bird bath</div>
+    <div class="small soft" style="line-height: 1.4">It goes back in your hand to move. With Remove on, it glows clay and <b>A</b> puts it back in the store.</div>
+    <div class="mini" style="background: #fbe2d7; color: #a23d1c"><span class="g pad pa">A</span>Remove the Bird bath</div>
+  </aside>
+
+  <div class="prompt" style="bottom: 150px" role="status">
+    <div class="main card"><span class="g pad pa">A</span>Place the Bench</div>
+    <div class="sub card" style="padding-right: 8px"><span class="g bumper">LB</span><span class="g bumper">RB</span>Turn<span style="width: 10px"></span><span class="chip ok"><span class="mat m-timber" style="width: 16px; height: 16px"></span>2 of 2 Timber</span></div>
+  </div>
+
+  <nav class="card bdock" aria-label="Build hotbar">
+    <div class="mode"><span class="round"><span class="ic i-map"></span></span>View: off<span class="g dpad up" style="height: 24px; width: 24px"></span></div>
+    <span class="vsep"></span>
+    <div class="edge"><span class="g dpad left" style="height: 26px; width: 26px"></span></div>
+    <div class="bslot on"><span class="ic l i-heart" style="color: #a23d1c"></span>Bench</div>
+    <div class="bslot"><span class="ic l i-sprout" style="color: #29722a"></span>Flower pot</div>
+    <div class="bslot"><span class="ic l i-star" style="color: #875800"></span>Flowers</div>
+    <div class="bslot"><span class="ic l i-drop" style="color: #1a5e8b"></span>Bird bath</div>
+    <div class="bslot"><span class="ic l i-leaf" style="color: #29722a"></span>Topiary</div>
+    <div class="bslot"><span class="ic l i-solar" style="color: #875800"></span>Solar</div>
+    <div class="bslot empty">Empty</div>
+    <div class="edge"><span class="g dpad right" style="height: 26px; width: 26px"></span></div>
+    <span class="vsep"></span>
+    <div class="mode"><span class="round"><span class="ic i-remove" style="color: #a23d1c"></span></span>Remove<span class="g bumper" style="height: 24px">RT</span></div>
+    <div class="mode"><span class="round"><span class="ic i-hammer"></span></span>All builds<span class="g pad py" style="height: 24px; width: 24px">Y</span></div>
+  </nav>
+  <div class="acts on-scene" style="position: absolute; right: 22px; bottom: 132px"><span class="act"><span class="g pad pb">B</span>Stop building</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

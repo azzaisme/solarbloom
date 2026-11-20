@@ -33,8 +33,7 @@ try {
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom?.sim && !!window.solarbloom?.bot);
-  await page.addStyleTag({ content: '#hint, #intro, .toast, #toasts { display: none !important; }' });
-  await page.evaluate(() => document.querySelector('#introGo')?.click());
+  await page.addStyleTag({ content: '.toast, #toasts { display: none !important; }' });
 
   // the island end of the causeway, and a spot on the landing district past its far end
   const ends = await page.evaluate(() => {

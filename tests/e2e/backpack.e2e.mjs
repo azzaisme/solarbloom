@@ -157,6 +157,8 @@ try {
       await page.waitForSelector('#buildMenu.open');
       await page.screenshot({ path: `${dir}/ui-build-machines-${dev}.png` });
       await axe(page, '#buildMenu', B('Machines'));
+      // E23.11: the Solar Panel is on the Power tab
+      for (let i = 0; i < 8 && !(await page.evaluate(() => !!document.querySelector('#bm-solar'))); i++) await nextTab(page, dev);
       check(await moveTo(page, '#bm-solar', dev), B('reach the Solar Panel card'));
       await go(page, dev);
       await page.waitForFunction(() => window.solarbloom.hud.currentTool === 'solar' && !document.querySelector('#buildMenu.open'));
@@ -175,8 +177,8 @@ try {
       await page.waitForTimeout(300);
       await openMenu();
       await page.waitForSelector('#buildMenu.open');
-      await nextTab(page, dev); // Storage
-      await nextTab(page, dev); // Decorations
+      // E23.11: RB / E until the Decorations tab (the menu opens on the tab used last)
+      for (let i = 0; i < 8 && (await page.evaluate(() => document.querySelector('#buildMenu [role=tab][aria-selected=true]')?.textContent)) !== 'Decorations'; i++) await nextTab(page, dev);
       await page.waitForFunction(() => document.querySelector('#buildMenu [role=tab][aria-selected=true]')?.textContent === 'Decorations');
       await page.screenshot({ path: `${dir}/ui-build-decorations-${dev}.png` });
       await axe(page, '#buildMenu', B('Decorations'));

@@ -116,7 +116,6 @@ try {
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'commit' });
   await page.waitForFunction(() => !!window.solarbloom, null, { timeout: READY_MS });
-  if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
 
   phase('page ready');
   // 1. Build a big city: the soak's fast player clears AREAS areas and builds a few machines in each.

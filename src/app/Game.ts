@@ -34,7 +34,6 @@ import { Birds } from '../rendering/Birds';
 import { Clouds } from '../rendering/Clouds';
 import { CloudWall } from '../rendering/CloudWall';
 import { Fauna } from '../rendering/Fauna';
-import { EcoBadge } from '../ui/EcoBadge';
 import { createModels } from '../rendering/Models';
 import { CameraController } from '../rendering/CameraController';
 import { setLeafTier, setTreeCursor } from '../rendering/Foliage';
@@ -43,6 +42,7 @@ import { Pollinators } from '../rendering/Pollinators';
 import { CatVisuals } from '../rendering/CatVisuals';
 import { DroneVisuals } from '../rendering/DroneVisuals';
 import { WaterLevels } from '../rendering/WaterLevels';
+import { FarmlandView } from '../rendering/FarmlandArt';
 import { PipeVisuals } from '../rendering/PipeVisuals';
 import { WaterOverlay } from '../rendering/WaterOverlay';
 import { ChunkRenderer, MeshBuilder, SINK } from '../rendering/ChunkRenderer';
@@ -70,6 +70,7 @@ import { CLOSE_VIEW_REACH, HAZE } from '../data/sky';
 import { droneTapRadius, pickDrone, pickLayers, pickTerraced } from '../core/Picking';
 import { heightAt, levelY } from '../core/Height';
 import { ChainSummary, VfxBudget } from '../ui/ChainSummary';
+import { FAUNA_INFO } from '../gameplay/Ecosystem';
 import { relayLinkId } from '../gameplay/RelaySystem';
 import { initLowPoly } from '../rendering/Shapes';
 import { LookController } from '../rendering/LookController';
@@ -78,6 +79,7 @@ import type { GfxTier } from '../data/look';
 import { TileFx } from '../rendering/TileFx';
 import { Tweens } from '../rendering/Tween';
 import { Vfx } from '../rendering/Vfx';
+import { buildItem, costWords } from '../ui/BuildCatalog';
 import { decorType, Hud, machineTool, type Settings, type Tool } from '../ui/Hud';
 import { BOT } from '../gameplay/Walker';
 import { ROLE_INFO, ROLES } from '../gameplay/DroneRoles';
@@ -211,6 +213,8 @@ export class Game {
   readonly grid: GridRenderer;
   /** The city ground (streamed chunk meshes + fog). */
   readonly chunks: ChunkRenderer;
+  /** #466: farmland ground (dry, watered, fertilised); empty until the farm's tilled fields (#517) give it tiles */
+  readonly farmland: FarmlandView;
   /** E23.4.1: water levels drawn on the water (the drained bed) */
   readonly waterLevels: WaterLevels;
   /** E23.4.2: pipe runs */
@@ -245,7 +249,6 @@ export class Game {
   private cloudWall: CloudWall;
   /** Phase 5 E16: cosmetic fauna (koi, robots, songbirds, sleeping cats, fireflies) and the biodiversity chip. */
   readonly fauna: Fauna;
-  private eco!: EcoBadge;
   /**
    * Phase 5 E16: fauna caps tier (TUNING.ecosystem.caps). Hook for the graphics quality-tier selector (Look 1
    * lighting epic); until it sets this, "Fewer particles" means low and everything else high.
@@ -320,7 +323,6 @@ export class Game {
   private meowTimer = 35;
   private restoreSoundIdx = 0;
   private lastRestoreSound = 0;
-  private solarFeedAt = new Map<string, number>();
   private fpsAcc = { t: 0, n: 0, fps: 0 };
   private clock = 0;
   private slowFor = 0;
@@ -365,6 +367,7 @@ export class Game {
     this.syncView();
     this.grid = new GridRenderer(this.sim, this.scene.world, this.tweens, this.app.batcher ?? undefined);
     this.chunks = new ChunkRenderer(this.sim, this.scene.world, this.app.graphicsDevice);
+    this.farmland = new FarmlandView(this.scene.world, this.app.graphicsDevice);
     this.waterLevels = new WaterLevels(this.sim, this.scene.world, this.app.graphicsDevice, (tiles) => {
       for (const t of tiles) this.chunks.markTile(t);
     });
@@ -452,9 +455,14 @@ export class Game {
           else this.sim.roles.choose(hubId, role as DroneRole, Number(slot) || 1);
           this.renderInspect();
         },
-        findCat: () => this.findCat(),
         keyFor: (a) => this.hudKey(a),
-        goHome: (attention) => (attention ? this.focusNextArea() : this.focusArea(PARK)),
+        // E23.11: the build dock's and the build menu's buttons do what their bound input does
+        buildAct: (a) => this.doAction(a),
+        setHotbar: (h) => {
+          this.setSetting('hotbar', [...h]);
+          this.hud.buildBar.render(this.hud.currentTool);
+        },
+        dock: (a) => this.doAction(a), // E23.11: the shortcut dock does what its button does
         skipCinematic: () => this.skipCinematic(),
         closeInspect: () => this.select(undefined),
         inspectAt: (id) => {
@@ -491,7 +499,6 @@ export class Game {
     this.createMenu();
     // E22.10: the walking view is stripped to the place: plain words, two gauges, one objective.
     document.body.classList.add('oldcity');
-    this.eco = new EcoBadge(this.sim, (h, k, t) => this.hud.toast(h, k, t));
     this.hud.setTool('pulse');
     this.applySettings();
 
@@ -787,7 +794,7 @@ export class Game {
     this.setSetting('sound', this.settings.sound);
   }
 
-  private setSetting(k: keyof Settings, v: boolean | string | number) {
+  private setSetting(k: keyof Settings, v: boolean | string | number | string[]) {
     (this.settings as unknown as Record<string, unknown>)[k] = v;
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...this.settings, speed: undefined, realClock: this.titleRealClock }));
@@ -974,7 +981,17 @@ export class Game {
         if (this.menu.isOpen) this.menu.focus('settings');
       },
     });
-    this.menu = new Menu(this.hud.root, { desktop: !!desktopApi()?.quit, header: () => this.menuHeader(), choose: (i) => this.menuChoose(i) });
+    this.menu = new Menu(this.hud.root, {
+      desktop: !!desktopApi()?.quit,
+      header: () => this.menuHeader(),
+      choose: (i) => this.menuChoose(i),
+      // E23.11: Quit to title saves first; it asks only when that save can't be written (storage full or off)
+      unsaved: () => {
+        if (this.resetting) return false;
+        this.bot?.save();
+        return !this.saver.save(this.sim.state);
+      },
+    });
     this.hud.modalCheck = () => this.menu.isOpen || this.settingsUi.isOpen;
   }
 
@@ -1023,7 +1040,7 @@ export class Game {
   /** E22.11: a full-screen panel pauses the game while it is open (also called the moment one closes, so the next
    *  key press already reaches the game, however slow the frame). */
   private syncPanelPause() {
-    this.pause.set('panel', this.hud.backpackOpen || this.hud.craft.isOpen || this.hud.crate.isOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
+    this.pause.set('panel', this.hud.backpackOpen || this.hud.craft.isOpen || this.hud.crate.isOpen || this.hud.trayOpen || this.settingsUi.isOpen || !!this.oc?.panel.isOpen);
   }
 
   private openMenu() {
@@ -1102,7 +1119,9 @@ export class Game {
   }
 
   private menuHeader(): MenuHeader {
-    return { name: this.saveName, region: this.regionName(), day: this.sim.clock.gameDay(), played: this.sim.time };
+    const c = this.sim.clock;
+    const time = `${String(c.hour()).padStart(2, '0')}:${String(c.minute()).padStart(2, '0')}`;
+    return { name: this.saveName, region: this.regionName(), day: c.gameDay(), time, played: this.sim.time };
   }
 
   /** E22.12 names saves; until a slot has a name, this. */
@@ -1359,7 +1378,20 @@ export class Game {
       case 'interact':
         return this.botInteract();
       case 'buildMenu':
-        return this.hud.toggleTray();
+        this.hud.toggleTray();
+        return this.syncPanelPause(); // E23.11: the build menu pauses like the other sheets
+      case 'pinSlot':
+        if (this.hud.trayOpen) this.hud.buildMenu.startPin();
+        return;
+      case 'slotPrev':
+      case 'slotNext': {
+        // E23.11: d-pad left / right in build mode: the next usable hotbar slot goes in hand
+        const t = this.hud.buildBar.step(a === 'slotNext' ? 1 : -1, this.hud.currentTool);
+        if (t && this.building()) this.selectTool(t);
+        return;
+      }
+      case 'viewCycle':
+        return this.cycleView();
       case 'cancel':
         return this.escape(true);
       case 'menu':
@@ -1407,6 +1439,7 @@ export class Game {
     if (this.settingsUi.isOpen) this.settingsUi.tab(dir, true);
     else if (this.hud.backpack.isOpen) this.hud.backpack.tab(dir, true);
     else if (this.hud.craft.isOpen) this.hud.craft.tab(dir, true);
+    else if (this.hud.trayOpen) this.hud.buildMenu.tab(dir);
   }
 
   /** E22.1: the input contexts in effect now (Bindings: an open panel, build mode, or walking). */
@@ -1665,7 +1698,7 @@ export class Game {
     else if (this.menu.isOpen) this.closeMenu();
     else if (this.oc?.escape()) void 0; // E21: an Old City panel or a hold
     else if (this.resting?.active) this.resting.stand(); // E23.2.3: Back stands bloombot up before any menu
-    else if (this.hud.trayOpen) this.hud.toggleTray(false);
+    else if (this.hud.trayOpen) this.hud.buildMenu.back(); // E23.11: the slot picker first, then the menu
     else if (this.hud.plotPickerOpen) this.hud.closePlotPicker();
     else if (this.hud.backpackOpen) this.hud.toggleBackpack(false);
     else if (this.hud.craft.isOpen) this.hud.craft.close();
@@ -1680,7 +1713,7 @@ export class Game {
   /** E23.4.5: the Water view is on (shown while building; it stays on for the next time you build). */
   waterView = false;
   private waterViewSeen = false;
-  /** E23.4.5: V / d-pad left in build mode. A new concept: one short introduction, the first time only. */
+  /** E23.4.5: V in build mode (d-pad up on a pad cycles the views, E23.11). A new concept: one short introduction, the first time only. */
   toggleWaterView() {
     if (!this.building()) return;
     this.waterView = !this.waterView;
@@ -1713,6 +1746,17 @@ export class Game {
     }
   }
   private powerViewSeen = false;
+  /** E23.11: d-pad up in build mode: off, the Power view, the Water view, off (skipping one with nothing to show). */
+  private cycleView() {
+    if (!this.building()) return;
+    const v = this.hud.buildBar.nextView();
+    if (v === 'power' && !this.powerView) return this.togglePowerView();
+    if (v === 'water' && !this.waterView) return this.toggleWaterView();
+    if (v === 'off') {
+      if (this.powerView) this.togglePowerView();
+      if (this.waterView) this.toggleWaterView();
+    }
+  }
   /** where the pointer (or bloombot's cursor) is, for the Power view's highlight */
   private powerFocus?: { roofId: string; x: number; z: number };
   /** Machines on the grid that have power now: sources, batteries, poles and fed consumers (a dark one stays dark). */
@@ -2103,12 +2147,7 @@ export class Game {
   private promptModel(target: InteractTarget | undefined): PromptModel | undefined {
     if (this.resting?.active) return this.resting.prompt();
     const b = this.bot!;
-    if (this.building()) {
-      const tool = this.hud.currentTool;
-      const dk = decorType(tool);
-      const what = dk ? `Place ${DECOR_OPTION[dk]?.name ?? 'it'}` : tool === 'remove' ? 'Remove' : tool === 'pipe' ? 'Lay a pipe' : machineTool(tool) ? `Build the ${MACHINES[tool].name}` : '';
-      return what ? { glyph: this.glyph(this.glyphs.style !== 'keys' ? 'place' : 'pulse'), text: what } : undefined;
-    }
+    if (this.building()) return this.buildPrompt();
     const f = b.front();
     const t = this.sim.grid.get(b.pose.roofId, f.x, f.z);
     const chk = t && !t.occupantId ? this.sim.restoration.checkPulse(t) : undefined;
@@ -2124,6 +2163,35 @@ export class Game {
       refused: target.refused,
       pulse,
     };
+  }
+
+  /**
+   * E23.11: the prompt in build mode (Build.dc.html, BuildPad.dc.html): "Build a Solar Panel", "Place the Bench" with
+   * "Turn" and the turn buttons under it; aimed at a decoration already placed, "Pick up the Bird bath"; with Remove
+   * on, "Remove the Bird bath" (or the machine or pipe there).
+   */
+  private buildPrompt(): PromptModel | undefined {
+    const tool = this.hud.currentTool;
+    const glyph = this.glyph(this.glyphs.style !== 'keys' ? 'place' : 'pulse');
+    const t = this.buildAim().p?.tile;
+    const dec = t ? this.cozy.decorOf(t.occupantId) : undefined;
+    const decName = dec ? (DECOR_OPTION[dec.kind]?.name ?? 'decoration') : undefined;
+    if (tool === 'remove') {
+      const occ = t && !dec ? this.sim.occupant(t) : undefined;
+      const lights = occ ? this.sim.lights.onPole(occ) : undefined;
+      const name = decName ?? (lights ? (DECOR_OPTION[lights]?.name ?? 'lights') : occ && occ.type !== 'core' && !occ.starter ? machineName(occ) : t && t.roofId === GROUND && !t.occupantId && this.sim.water.pipes.has(t.x, t.z) ? 'pipe' : undefined);
+      return { glyph, text: name ? `Remove the ${name}` : 'Remove' };
+    }
+    const dk = decorType(tool);
+    if (dk && decName) return { glyph, text: `Pick up the ${decName}` };
+    const name = dk ? DECOR_OPTION[dk]?.name : tool === 'pipe' ? 'pipe' : machineTool(tool) ? MACHINES[tool].name : undefined;
+    if (!name) return undefined;
+    const text = dk ? `Place the ${name}` : tool === 'pipe' ? 'Lay a pipe' : `Build ${/^[AEIOU]/i.test(name) ? 'an' : 'a'} ${name}`;
+    // a decoration turns: the turn buttons (back, then forward) under it
+    const turn = dk ? { glyph: this.glyph('rotateBack') + this.glyph('rotate'), text: 'Turn' } : undefined;
+    // E23.11: the recipe as chips ("2 of 2 Timber": leaf when you have it, clay when short)
+    const chips = (buildItem(this.sim, tool)?.cost ?? []).map((c) => ({ text: costWords(c), ok: c.have >= c.need }));
+    return { glyph, text, pulse: turn, chips };
   }
 
   /** E21: what the Old City controller borrows from the game. */
@@ -2781,23 +2849,6 @@ export class Game {
       }
     }
     return best;
-  }
-
-  /**
-   * The 🐾 chip. E20.1 (#284): the cat has to be found, so the chip never moves the camera: it says which way the
-   * paw prints lead from bloombot (or the view), and what the cat hides beside. The meow already comes from there.
-   */
-  private findCat() {
-    const s = this.sim;
-    const spot = s.cat
-      .spots()
-      .filter((c) => s.cat.hinted(c))
-      .sort((a, b) => a.spawnedAt - b.spawnedAt)[0];
-    const a = spot && s.cat.anchor(spot.anchorId);
-    if (!spot || !a) return;
-    const p = this.cat.anchorWorld(a);
-    const [fx, , fz] = this.bot ? this.bot.world() : [this.camera.target.x, 0, this.camera.target.z];
-    this.hud.feed(`🐾 Paw prints lead ${compass(p.x - fx, p.z - fz)}, ${a.hint}…`);
   }
 
   /** Phase 5 E15 (inspect): a cat hiding within a few tiles leaves a note on the tile tooltip. */
@@ -3488,6 +3539,8 @@ export class Game {
     }
     const t = p.tile;
     const dk = decorType(tool);
+    // E23.11: a decoration in hand, aimed at one already placed: that one comes back into bloombot's hands to move
+    if (dk && this.cozy.decorOf(t.occupantId)) return this.removeDecorAt(p, x, y, true);
     if (dk) return this.placeDecorAt(p, x, y, dk);
     if (tool === 'remove') return this.removeDecorAt(p, x, y, false);
     if (tool === 'pipe') return this.layPipeAt(p, x, y);
@@ -3802,7 +3855,11 @@ export class Game {
       this.onAreaCleared(areaId);
       this.cloudWall.sync(); // the newly sealed neighbours get their walls
     });
-    b.on('fauna.unlocked', ({ id }) => this.eco?.arrived(id)); // Phase 5 E16 (cosmetic; pays nothing)
+    b.on('fauna.unlocked', ({ id }) => {
+      // Phase 5 E16 (cosmetic; pays nothing): a creature kind arrives
+      const f = FAUNA_INFO[id];
+      this.hud.toast(`${f.icon} ${f.name} have arrived!<small>${f.line}</small>`, 'gold', 4.5);
+    });
     // City 09.1: the landmark's specialty action is done (the wake itself has its own toast once ready).
     b.on('area.specialty', ({ areaId, met }) => {
       if (!met || s.areas.ready(areaId) || this.specialtyToasted.has(areaId)) return;
@@ -3828,11 +3885,10 @@ export class Game {
       this.hud.toast('💥 Mega Pulse charged!<small>Your next pulse sets off a city-scale bloom from that tile.</small>', 'gold', 4);
       this.hud.nudge('[data-tool="pulse"]', 4);
     });
-    b.on('mega.released', ({ tileId, budget }) => {
+    b.on('mega.released', ({ tileId }) => {
       const t = s.grid.byTileId(tileId);
       if (t) for (let i = 0; i < 4; i++) this.tweens.add(0.01, () => {}, { delay: i * 0.18, done: () => this.vfx.ring(this.tileVec(t), i % 2 ? PALETTE.gold : PALETTE.coreGlow, 3 + i * 3, 1.1) });
       this.camera.shake?.(0.25);
-      this.hud.feed(`💥 Mega Pulse: up to ${budget} tiles bloom outward`);
     });
     // E23.2.2.3: the reveal ripple: a wide soft ring, then what it found glows for a few seconds (never a cat:
     // its targets come from the salvage data alone)
@@ -3868,7 +3924,6 @@ export class Game {
       this.vfx.burst(p, 30, { up: 3.5, speed: 2.2, size: 0.07 });
       this.camera.shake(0.07);
       this.sfx.chainEnd(5);
-      this.hud.feed('🌟 OVERCHARGE! Everything within 2 tiles blooms');
     });
     b.on('tile.restored', ({ tile, source }) => {
       this.grid.refresh(tile, true);
@@ -3956,7 +4011,6 @@ export class Game {
       if (o) this.tileFx.hold(`chain${chainId}`, o);
     });
     b.on('chain.event', ({ event: ev, combo }) => this.presentChainEvent(ev, combo));
-    b.on('chain.fastForward', () => this.hud.feed('⏩ Huge chain! Fast-forwarding the rest…'));
     b.on('tree.discharged', ({ machineId }) => {
       const m = s.machine(machineId);
       if (!m) return;
@@ -3969,13 +4023,10 @@ export class Game {
       this.sfx.chainEnd(10);
       if (!s.state.stats.firsts.treePulse || s.state.stats.firsts.treePulse === Math.round(s.time)) this.hud.toast('🌳 Mother Tree Bloom Pulse!<small>Everything around it bursts into life.</small>', 'gold', 3);
     });
-    b.on('chain.ended', ({ chainId, combo, crossings, areas }) => {
-      if (areas >= 3) this.hud.feed(`🌸 Bloom chain ×${combo} swept ${areas} areas`);
+    b.on('chain.ended', ({ chainId, combo, areas }) => {
       if (areas >= 6 && !potterPace(this.settings)) this.hud.toast(`🌸 A city-wide bloom! ×${combo}<small>It swept across ${areas} areas.</small>`, 'gold', 3);
       this.tileFx.release(`chain${chainId}`);
-      if (crossings > 0) this.hud.feed(`📡 Chain crossed ${crossings} Bloom Relay link${crossings > 1 ? 's' : ''}`);
       if (combo < 2) return;
-      this.hud.feed(`🌸 Bloom chain ×${combo}`);
       this.sfx.chainEnd(combo);
       if (combo >= 5 && !potterPace(this.settings)) {
         this.hud.toast(`🌸 BLOOM CHAIN ×${combo}!`, 'gold', 2.6);
@@ -3987,10 +4038,6 @@ export class Game {
       if (!m) return;
       const w = this.machines.worldOf(m);
       this.vfx.ring(new pc.Vec3(w[0], w[1] + 0.3, w[2]), PALETTE.gold, 0.7, 0.5);
-      if ((this.solarFeedAt.get(machineId) ?? -99) < this.clock - 4) {
-        this.solarFeedAt.set(machineId, this.clock);
-        this.hud.feed('☀️ Blooming neighbour — solar ×2 for 5s');
-      }
     });
     b.on('action.failed', ({ reason, tileId }) => {
       const ft = tileId ? s.grid.byTileId(tileId) : undefined;
@@ -4109,10 +4156,6 @@ export class Game {
       if (!m) return;
       const w = this.machines.worldOf(m);
       this.vfx.ring(new pc.Vec3(w[0], w[1] + 0.05, w[2]), '#6ff3ff', 0.9 * m.size, 0.5);
-      if (this.clock - this.lastBoostFeed > 6) {
-        this.lastBoostFeed = this.clock;
-        this.hud.feed(`⚡ Pulse boost: ${MACHINES[m.type].name} — its next trigger gets +1`);
-      }
       if (this.selected === machineId) this.inspectTimer = 0;
     });
     b.on('machine.boostUsed', ({ machineId }) => {
@@ -4138,7 +4181,6 @@ export class Game {
       this.sfx.at(p, (q) => q.pulse());
       this.camera.shake(0.04);
       if ((s.state.progression.overflows ?? 0) <= 1) this.hud.toast(`⛲ Reservoir Overflow!<small>Water spills into the dry planters: they bloom lush (×${TUNING.neighbourhood.reservoir.lushMult} 🌿 for a while).</small>`, 'gold', 3.5);
-      else this.hud.feed('⛲ Overflow! Dry tiles burst into lush bloom');
     });
     b.on('canopy.burst', ({ machineId, radius, gardens }) => {
       const p = this.posOf(machineId);
@@ -4155,7 +4197,6 @@ export class Game {
       this.camera.shake(0.09);
       this.sfx.chainEnd(10);
       if ((s.state.progression.canopyBursts ?? 0) <= 1) this.hud.toast(`🌳 Canopy Burst!<small>The Elder Tree releases its charge.${gardens.length ? ` ${gardens.length} 🌸 garden${gardens.length > 1 ? 's' : ''} carried it further!` : ' 🌸 Gardens inside its reach would carry it further.'}</small>`, 'gold', 3.5);
-      else this.hud.feed(`🌳 Canopy Burst${gardens.length ? ` · amplified by ${gardens.length} garden${gardens.length > 1 ? 's' : ''}` : ''}`);
     });
   }
 
@@ -4197,17 +4238,11 @@ export class Game {
   private vfxBudget = new VfxBudget(18);
   private frameNo = 0;
   private frontAt = 0;
-  private summaryAt = 0;
 
   /** Wave front ring and per-area summary lines for the biggest running chain (throttled). */
   private updateChainPresentation(dt: number) {
     this.frontAt -= dt;
-    this.summaryAt -= dt;
     const tr = this.chainSummary.biggest();
-    if (this.summaryAt <= 0) {
-      this.summaryAt = 0.25;
-      this.hud.chainAreas(tr && tr.total >= 12 && tr.perArea.size > 1 ? this.chainSummary.lines(tr) : []);
-    }
     if (!tr || tr.total < 20 || this.frontAt > 0 || this.settings.reducedMotion) return;
     this.frontAt = 0.3;
     this.vfx.ring(new pc.Vec3(tr.fx, 0.12, tr.fz), tr.total >= 100 ? '#ff5fb8' : '#ffd25e', 3.2, 0.6);
@@ -4451,7 +4486,7 @@ export class Game {
   /** Labels over revealed city areas: a ready landmark always; names and progress when zoomed out. */
   private updateAreaLabels() {
     const s = this.sim;
-    const show = this.city && !this.cinematic && !this.hud.introOpen;
+    const show = this.city && !this.cinematic;
     const zoomedOut = this.camera.zoom < 0.6;
     const live = new Set<string>();
     if (show) {
@@ -4533,7 +4568,6 @@ export class Game {
     this.save();
   }
 
-  private lastBoostFeed = -99;
   private boostPulseT = 0;
   /** A soft cyan ring keeps pulsing on machines your taps have boosted. */
   /** Why a raised layer can't be played yet (city rooftops wait for a Bloom Relay). */
@@ -4725,12 +4759,10 @@ export class Game {
     this.pollinators.quality = quality;
     this.pollinators.update(wdt, near);
     this.birds.resident = eco.has('birds');
-    this.clouds.happy = eco.has('birds'); // the sky wakes up with the songbirds: sleepy faces on a couple of clouds
     this.birds.update(wdt, this.camera.goalPoint, this.sim.progression.parkStage() >= 2 || this.birds.resident);
     this.fauna.update(wdt, near, { quality, reducedMotion: this.settings.reducedMotion, fireflies: this.settings.fireflies !== false && !this.settings.highContrast && this.dayNight.light < 0.5, fog: WEATHER[this.weatherLook().kind].fogFinds });
     this.nightFindVisuals.reducedMotion = this.settings.reducedMotion;
     this.nightFindVisuals.update(wdt);
-    this.eco?.update(wdt);
     this.tileFx.update(wdt);
     this.frameNo++;
     if (this.readyFrames < 4) {
@@ -4741,7 +4773,7 @@ export class Game {
     if (!this.cinematic) this.checkCozyUnlocks();
     this.vfx.update(wdt);
     // First-tile beacon until the player restores something.
-    if (this.sim.state.progression.tutorialStep === 0 && !this.hud.introOpen && !this.cinematic && !this.photo.active) {
+    if (this.sim.state.progression.tutorialStep === 0 && !this.cinematic && !this.photo.active) {
       const tiles = this.sim.progression.tilesFor(HOME);
       const t = tiles.find((x) => x.ground === 'prepared' && !x.occupantId) ?? tiles.find((x) => x.ground === 'polluted' && !x.blocked && !x.occupantId);
       if (t) this.overlays.showBeacon(t.roofId, t.x, t.z);
@@ -4856,12 +4888,4 @@ export class Game {
 /** E22.11: what the desktop (Steam Deck) build's preload offers the page, if anything. */
 export function desktopApi(): { quit?: () => void; onPower?: (cb: (state: 'suspend' | 'resume') => void) => void; deck?: boolean } | undefined {
   return (globalThis as { solarbloomDesktop?: { quit?: () => void; onPower?: (cb: (state: 'suspend' | 'resume') => void) => void; deck?: boolean } }).solarbloomDesktop;
-}
-
-/** E20.1: a rough direction in words, north up as on the minimap (north is -z, east is +x). */
-export function compass(dx: number, dz: number): string {
-  if (Math.hypot(dx, dz) < 2) return 'right here';
-  const names = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
-  const deg = (Math.atan2(dx, -dz) * 180) / Math.PI;
-  return names[((Math.round(deg / 45) % 8) + 8) % 8];
 }

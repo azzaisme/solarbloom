@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { headerKey, SAVE_KEY, SaveService, slotKey, type Slot } from '../src/app/SaveService';
+import { dayPartAt, headerKey, SAVE_KEY, SaveService, slotKey, type Slot, type SlotHeader } from '../src/app/SaveService';
+import { holdProgress } from '../src/ui/Confirm';
+import { dayText, factsLine, fountainText } from '../src/ui/Title';
 import { createInitialState, SAVE_VERSION } from '../src/core/GameState';
 import { TIERS } from '../src/data/salvage';
 import { Sim } from '../src/gameplay/Sim';
@@ -136,5 +138,52 @@ describe('E22.12: save slots', () => {
     // asking changes nothing: the save is still there until a choice is made
     expect(store.getItem(slotKey(2))).toBe(JSON.stringify(old));
     expect(service(store, 2).loadResult()).toEqual({ scrapped: true });
+  });
+});
+
+/** E23.11 (Sunlit Glass): what a slot card and the are-you-sure dialog say about a garden. */
+describe('E23.11: the gardens screen', () => {
+  it('the header carries the fountain steps done and the time of day it was left at', () => {
+    const store = memory();
+    const sim = new Sim(createInitialState(5));
+    sim.state.salvage!.tier = 2;
+    const s = service(store, 1);
+    s.save(sim.state);
+    const h = s.readHeader()!;
+    expect(h.steps).toBe(2);
+    expect(['morning', 'afternoon', 'evening', 'night']).toContain(h.daypart);
+    // a new game starts on a fresh morning
+    s.save(new Sim(createInitialState(6)).state);
+    expect(s.readHeader()!.daypart).toBe('morning');
+  });
+
+  it('names the parts of the day by the clock', () => {
+    expect([6, 11.9, 12, 16.9, 17, 20.9, 21, 2].map(dayPartAt)).toEqual(['morning', 'morning', 'afternoon', 'afternoon', 'evening', 'evening', 'night', 'night']);
+  });
+
+  it('says the fountain as "Step 3 of 5", and the day with its time of day', () => {
+    expect(fountainText({ steps: 0, step: 'The fountain is dry' })).toBe('Step 1 of 5');
+    expect(fountainText({ steps: 2, step: 'Fountain: The pump turns' })).toBe('Step 3 of 5');
+    expect(fountainText({ steps: 5, step: 'Fountain: The Great Bloom' })).toBe('All 5 steps done');
+    // a header from before E23.11 keeps its words
+    expect(fountainText({ step: 'Fountain: Water returns' })).toBe('Water returns');
+    expect(dayText({ day: 14, daypart: 'morning' })).toBe('14 · morning');
+    expect(dayText({ day: 3 })).toBe('3');
+    expect(dayText({})).toBeUndefined();
+  });
+
+  it('sums a garden up in one line for the are-you-sure dialog, in plain words', () => {
+    const h: SlotHeader = { name: 'Hillside garden', day: 14, played: 6 * 3600 + 20 * 60, step: 'Fountain: The pump turns', steps: 2, region: 'Tram stop', savedAt: 1 };
+    expect(factsLine(h)).toBe('Day 14 · 6 hours 20 minutes played · Fountain step 3 of 5');
+    expect(factsLine({ ...h, old: true })).toBe('From an earlier version of Solarbloom');
+    for (const line of [factsLine(h), fountainText(h), dayText(h)!]) expect(line).not.toMatch(/\b(rate|cap|tier|combo|multiplier|buff|biomass|node|seam)\b|\/min|\d\s*\/\s*\d/i);
+  });
+
+  it('the destructive choice fills over a one-second hold, and only a full hold finishes it', () => {
+    expect(holdProgress(0, 1000)).toBe(0);
+    expect(holdProgress(350, 1000)).toBeCloseTo(0.35);
+    expect(holdProgress(999, 1000)).toBeLessThan(1);
+    expect(holdProgress(1000, 1000)).toBe(1);
+    expect(holdProgress(5000, 1000)).toBe(1);
   });
 });

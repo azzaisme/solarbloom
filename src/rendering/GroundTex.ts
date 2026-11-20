@@ -31,13 +31,13 @@ function urlOf(name: GroundTexName): string | undefined {
 
 // ───────────── painting ─────────────
 
-function rng(seed: number) {
+export function rng(seed: number) {
   let s = seed >>> 0;
   return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
 }
 
 /** Periodic value noise: `p` lattice cells across the texture, smooth, 0…1. */
-function makeNoise(seed: number) {
+export function makeNoise(seed: number) {
   const R = rng(seed);
   const perm = new Float32Array(4096);
   for (let i = 0; i < 4096; i++) perm[i] = R();
@@ -52,10 +52,10 @@ function makeNoise(seed: number) {
   };
 }
 
-type RGB = [number, number, number];
-const mix = (a: RGB, b: RGB, k: number): RGB => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
-const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
-const smooth = (a: number, b: number, x: number) => {
+export type RGB = [number, number, number];
+export const mix = (a: RGB, b: RGB, k: number): RGB => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+export const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
+export const smooth = (a: number, b: number, x: number) => {
   const t = clamp01((x - a) / (b - a));
   return t * t * (3 - 2 * t);
 };

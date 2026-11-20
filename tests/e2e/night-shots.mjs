@@ -33,7 +33,7 @@ try {
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom && !!window.solarbloom.sim);
     await page.waitForTimeout(4000);
-    await page.addStyleTag({ content: '#hint, #intro, .toast, #toasts { display: none !important; }' });
+    await page.addStyleTag({ content: '.toast, #toasts { display: none !important; }' });
     // The game's own camera: bloombot stands at (x, z) and the camera follows it at the game's zoom, as a player
     // sees it (only the yaw is turned, as a player can).
     const shot = async (name, x, z, yaw = 0, wait = 5000) => {

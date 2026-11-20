@@ -3,6 +3,7 @@ import { HOMES, MUSHROOM_LOG, WORM_BIN, type Habitat, type HomeKind } from '../d
 import { MACHINES } from '../data/machines';
 import { isHome } from '../gameplay/FarmExtras';
 import type { Sim } from '../gameplay/Sim';
+import { cardHead } from './OldCityPanel';
 
 /** Short words for a habitat a home still lacks. */
 const LACKS: Record<Habitat, string> = {
@@ -23,23 +24,25 @@ export function extraHtml(sim: Sim, m: MachineData): string {
   const st = x.st(m);
   const name = MACHINES[m.type].name;
   const icon = MACHINES[m.type].icon;
-  const row = (buttons: string) => `<div class="oc-row">${buttons}</div>`;
+  // E23.12 HUD reskin: the shared card head (icon, title, how it is doing), then its actions
+  const row = (buttons: string) => `<div class="oc-row">${buttons.replace(/<button /g, '<button class="pn-btn" ')}</div>`;
+  const card = (title: string, mood: string, body = '') => cardHead({ icon, title, mood }) + `<div class="oc-content">${body}</div>`;
   switch (m.type) {
     case 'beehive': {
       const settled = x.hiveSettled(m);
       const ready = Math.floor(st.ready ?? 0);
       const say = !settled ? 'Empty: bees will settle once flowers or herbs grow nearby.' : ready ? 'Busy, and heavy with honey.' : 'Busy: the bees are making honey and visiting the crops around it.';
-      return `<h2>${icon} ${name}</h2><p>${say}</p>${row(`<button data-act="honey" ${ready ? '' : 'disabled'}>🍯 Take the honey${ready ? ` · ${ready}` : ''}</button>`)}`;
+      return card(name, say, row(`<button data-act="honey" ${ready ? '' : 'disabled'}>🍯 Take the honey${ready ? ` · ${ready}` : ''}</button>`));
     }
     case 'fishPond': {
       const say = x.pondFilled(m) ? 'Full and lively. Its water feeds the planters it reaches.' : 'Low: it needs water nearby to stay filled.';
-      return `<h2>${icon} ${name}</h2><p>${say}</p>`;
+      return card(name, say);
     }
     case 'orchard': {
       const ready = x.fruitReady(m);
       const over = x.overgrown(m);
       const say = (st.age ?? 0) < 0.01 ? 'Just planted.' : ready ? 'Ripe fruit hangs from it.' : (st.crops ?? 0) === 0 ? 'Growing: it will fruit in a few days.' : 'Growing its next fruit.';
-      return `<h2>${icon} ${name}</h2><p>${say}${over ? ' It is getting overgrown.' : ''}</p>${row(`<button data-act="pick" ${ready ? '' : 'disabled'}>🍎 Pick the fruit</button><button data-act="prune" ${over ? '' : 'disabled'}>🪵 Prune it</button>`)}`;
+      return card(name, `${say}${over ? ' It is getting overgrown.' : ''}`, row(`<button data-act="pick" ${ready ? '' : 'disabled'}>🍎 Pick the fruit</button><button data-act="prune" ${over ? '' : 'disabled'}>🪵 Prune it</button>`));
     }
     case 'mushroomLog': {
       const ready = (st.ready ?? 0) >= 1;
@@ -53,14 +56,14 @@ export function extraHtml(sim: Sim, m: MachineData): string {
             : x.logGrowing(m)
               ? 'Mushrooms are coming up.'
               : 'Resting: mushrooms grow at night and in fog.';
-      return `<h2>${icon} ${name}</h2><p>${say}</p>${row(`<button data-act="mushrooms" ${ready ? '' : 'disabled'}>🍄 Pick the mushrooms</button><button data-act="inoculate" ${spent && sim.inventory.available('compost') >= MUSHROOM_LOG.compost ? '' : 'disabled'}>🟫 Feed it Compost</button>`)}`;
+      return card(name, say, row(`<button data-act="mushrooms" ${ready ? '' : 'disabled'}>🍄 Pick the mushrooms</button><button data-act="inoculate" ${spent && sim.inventory.available('compost') >= MUSHROOM_LOG.compost ? '' : 'disabled'}>🟫 Feed it Compost</button>`));
     }
     case 'wormBin': {
       const fed = (st.fed ?? 0) > 0;
       const say = fed ? 'Wriggling away: the compost bins beside it work twice as fast.' : 'Hungry: feed the worms scraps.';
       const full = (st.fed ?? 0) + WORM_BIN.feedDays > WORM_BIN.maxDays + 1e-9;
       const can = sim.inventory.count('food') >= WORM_BIN.feedCost || sim.inventory.count('biomass') >= WORM_BIN.feedCost;
-      return `<h2>${icon} ${name}</h2><p>${say}</p>${row(`<button data-act="worms" ${!full && can ? '' : 'disabled'}>${full ? 'The worms are full' : '🥕 Feed the worms scraps'}</button>`)}`;
+      return card(name, say, row(`<button data-act="worms" ${!full && can ? '' : 'disabled'}>${full ? 'The worms are full' : '🥕 Feed the worms scraps'}</button>`));
     }
   }
   if (isHome(m.type)) {
@@ -73,7 +76,7 @@ export function extraHtml(sim: Sim, m: MachineData): string {
       : lacks.length
         ? `Empty: ${def.creature.toLowerCase()} want ${lacks.map((h) => LACKS[h]).join(' and ')}.`
         : `Empty for now: ${def.creature.toLowerCase()} will find it soon.`;
-    return `<h2>${icon} ${def.name}</h2><p>${say}</p>`;
+    return card(def.name, say);
   }
-  return `<h2>${icon} ${name}</h2>`;
+  return card(name, '');
 }

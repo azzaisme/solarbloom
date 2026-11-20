@@ -109,7 +109,8 @@ export const MACHINE_MODELS: Record<string, [string, number]> = {
   // until their files are in assets/raw/models/final (MODELS loads whatever is there)
   compostBin: ['compost-bin', 0.82],
   bioDigester: ['bio-digester', 0.8],
-  // E23.5.4: E23.10's models, used once their files land (the procedural bodies stand in until then)
+  // E23.5.4: E23.10's models, used once their files are in assets/raw/models/final (today they wait in pending/, so
+  // the procedural bodies draw them)
   beehive: ['beehive', 0.8],
   mushroomLog: ['mushroom-log', 0.8],
   birdBox: ['bird-box', 0.9],

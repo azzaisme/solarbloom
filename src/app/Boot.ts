@@ -106,6 +106,7 @@ export async function boot(canvas: HTMLCanvasElement) {
     reducedMotion: !!settings.reducedMotion,
     earlierVersion: (slot) => new SaveService(undefined, slot).fromEarlierVersion(),
     preferRealClock: () => !!settings.realClock,
+    padStyle,
     settingsOpen: () => !!screen?.isOpen,
     closeSettings: () => screen?.close(),
     settingsTab: (dir) => screen?.tab(dir, true),

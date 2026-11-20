@@ -3,9 +3,10 @@ import { $, HudPart, esc } from './HudPart';
 import { iconize } from './Icons';
 
 /**
- * E23.2.2.1 (#411): the pulse load wheel. Turning it (V / Z, or the bumpers) shows the four loads in a ring above
- * the prompt for a moment, the chosen one lit and any not carried dimmed (a pulse with it fires empty). The rest
- * of the time a small chip beside the charge shows the load, unless it is nothing. No counts: the backpack has those.
+ * E23.2.2.1 (#411) / E23.11: the pulse load wheel. Turning it (V / Z, or the bumpers) shows the four loads as round
+ * paper cards in a ring above the prompt for a moment (docs/art/ui-sunlit-glass/WalkPad.dc.html), the chosen one in
+ * the leaf focus ring and any not carried dimmed (a pulse with it fires empty). The rest of the time a small chip
+ * under the charge says what is loaded ("Seeds loaded"), unless it is nothing. No counts: the backpack has those.
  */
 export class LoadWheel extends HudPart {
   private wheel?: HTMLElement;
@@ -16,10 +17,10 @@ export class LoadWheel extends HudPart {
     this.root.insertAdjacentHTML(
       'beforeend',
       iconize(`<div id="loadWheel" role="radiogroup" aria-label="Pulse load" hidden>${PULSE_LOADS.map(
-        (l, i) => `<div class="lw-opt" role="radio" data-load="${l.id}" style="--i:${i}"><span class="lw-ic">${l.icon}</span><span class="lw-nm">${esc(l.name)}</span></div>`,
+        (l) => `<div class="lw-opt sg-card" role="radio" data-load="${l.id}"><span class="lw-ic">${l.icon}</span><span class="lw-nm">${esc(l.name)}</span></div>`,
       ).join('')}</div>`),
     );
-    $(this.root, '#res').insertAdjacentHTML('beforeend', `<div id="loadChip" class="panel" role="status" aria-label="Pulse load" hidden><span class="lc-ic"></span><span class="lc-nm"></span></div>`);
+    $(this.root, '#res').insertAdjacentHTML('beforeend', `<div id="loadChip" role="status" aria-label="Pulse load" hidden><span class="lc-ic"></span><span class="lc-nm"></span></div>`);
     this.wheel = $(this.root, '#loadWheel');
     this.chip = $(this.root, '#loadChip');
   }
@@ -51,7 +52,7 @@ export class LoadWheel extends HudPart {
     if (this.chip.hidden === chip) this.chip.hidden = !chip;
     if (!chip) return;
     this.set('lc-ic', $(this.chip, '.lc-ic'), 'text', def.icon);
-    this.set('lc-nm', $(this.chip, '.lc-nm'), 'text', def.name);
+    this.set('lc-nm', $(this.chip, '.lc-nm'), 'text', `${def.name} loaded`);
     this.set('lc-out', this.chip, 'cls', pl.carried(def) > 0 ? '0' : '1', 'out');
   }
 }

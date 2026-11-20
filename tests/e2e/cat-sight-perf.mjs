@@ -11,7 +11,6 @@ page.on('pageerror', (e) => console.log('PAGEERR', String(e)));
 await page.addInitScript(() => { if (sessionStorage.getItem('s')) return; sessionStorage.setItem('s', '1'); localStorage.clear(); });
 await page.goto('http://localhost:4394/?slot=1', { timeout: 180000 });
 await page.waitForFunction(() => window.solarbloom?.bot && document.querySelector('#loading')?.classList.contains('gone'), null, { timeout: 180000 });
-if (await page.locator('#introGo').isVisible().catch(() => false)) await page.click('#introGo');
 await page.waitForTimeout(3000);
 const cat = await page.evaluate(() => {
   const g = window.solarbloom, s = g.sim;
