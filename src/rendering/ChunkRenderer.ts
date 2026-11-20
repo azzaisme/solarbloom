@@ -1352,7 +1352,6 @@ export class ChunkRenderer {
     this.sink = b;
     for (const t of v.towers ?? []) for (const e of t.entities) e.destroy();
     v.towers = towers.length ? towers : undefined;
-    this.solids.setChunk(v.key, solids.boxes);
     // Look 4.9: retaining-wall facades where the revealed city drops to an unrevealed (sunk) neighbour.
     if (!v.sunk) {
       const alive = fog === 'cleared' || this.inPark;
@@ -1360,6 +1359,8 @@ export class ChunkRenderer {
       for (const [dx, dz] of EDGE_DIRS)
         if (s.areas.fog(s.areas.map.areaOfChunk(v.cx + dx, v.cz + dz)) === 'hidden') this.facade(b, v, dx, dz, city, alive, !!v.far);
     }
+    // E23.12.3: everything this build drew solid, the facades included, into the per-tile index
+    this.solids.setChunk(v.key, solids.boxes);
     v.ground = this.setMesh(v.ground, `chunk-${v.key}`, b.build(this.device), vertexColourMaterial(), !v.far); // far chunks: no shadow pass (invisible at that distance, halves their draw calls)
     v.trees = this.setMesh(v.trees, `trees-${v.key}`, fb.build(this.device), foliageMaterial(), !v.far);
     this.treeTris.set(v.key, fb.tris);

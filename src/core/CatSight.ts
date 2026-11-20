@@ -8,8 +8,8 @@
  * pixels where the frontmost thing drawn is the cat. Anything the player can't see through hides it at its real
  * shape and height: buildings, towers, landmarks, trees, ruins, walls, props, machines. Where the GPU pick can't run
  * (WebGPU reads back only asynchronously), a CPU ray march estimates the same number against the solid things'
- * real shapes as drawn (core/Solids: the chunk builder records them), so a canopy or a tree crown can overhang a
- * cat and still be seen under (cpuSeenPixels). This module is the pure part: the screen box to read, the count, the ray march, and how
+ * real shapes as drawn (core/Solids: the chunk builder records them; a tree as a thin trunk and its crown from the
+ * crown's real bottom), so a canopy or a tree crown can overhang a cat and still be seen under (cpuSeenPixels). This module is the pure part: the screen box to read, the count, the ray march, and how
  * much is enough.
  */
 
@@ -128,4 +128,91 @@ export function cpuSeenPixels(eye: P3, samples: P3[], heightPx: number, solidAt:
   if (!samples.length || heightPx <= 0) return 0;
   const clear = samples.filter((p) => rayClear(eye, p, solidAt)).length;
   return (clear / samples.length) * heightPx * heightPx * CAT_SIGHT.fill;
+}
+
+/** One cat's last sight result, with the poses it was measured from (`key`). */
+export interface SightEntry {
+  key: string;
+  /** when it was measured (ms, the schedule's clock) */
+  at: number;
+  /** the drawn frame it was taken or last confirmed on */
+  frame: number;
+  seen: boolean;
+  px: number;
+}
+
+/** What the game knows after a frame: whether a cat was ever found, whether it's paused, and the hiding cats. */
+export interface SightFrame {
+  known: boolean;
+  paused: boolean;
+  cats: Iterable<string>;
+  /** is this cat worth measuring now: the pointer near it, or bloombot could greet it (asked lazily, only when needed) */
+  wanted(id: string): boolean;
+}
+
+/**
+ * When the sight pick runs (pure, so the number of pick renders can be counted). Before the first find only, never
+ * while paused, and only for cats worth measuring (the pointer or bloombot near, or something just asked) whose last
+ * result is out of date: all of them in ONE measure call (one pick render). A result is fresh while younger than
+ * CAT_SIGHT.cacheSeconds, or while its poses (`key`) are unchanged and it is younger than CAT_SIGHT.maxAgeSeconds;
+ * one taken or confirmed on the frame just drawn answers until the next frame, however long that frame takes.
+ */
+export class SightSchedule {
+  /** drawn frames so far (counted after each one) */
+  frame = 0;
+  private entries = new Map<string, SightEntry>();
+  private asked = new Set<string>();
+
+  constructor(
+    /** the poses a cat's sight depends on (camera, cat, bloombot, screen), rounded so a still view keeps one key */
+    private key: (id: string) => string,
+    /** the clock results age by (ms): real time, passed in by the renderer (the simulation never reads it) */
+    private now: () => number,
+  ) {}
+
+  /** Could the player see this cat, as last measured? "Not yet" (false) when out of date: measured after the next frame. */
+  visible(id: string): boolean {
+    const hit = this.entries.get(id);
+    if (hit && (hit.frame === this.frame || this.fresh(id, hit))) return hit.seen;
+    this.asked.add(id);
+    return false;
+  }
+
+  /** The last result for a cat (for tests and the debug readout). */
+  entry(id: string): SightEntry | undefined {
+    return this.entries.get(id);
+  }
+
+  private fresh(id: string, hit: SightEntry): boolean {
+    const age = this.now() - hit.at;
+    return age < CAT_SIGHT.cacheSeconds * 1000 || (age < CAT_SIGHT.maxAgeSeconds * 1000 && hit.key === this.key(id));
+  }
+
+  /** After each drawn frame: measures the cats worth measuring, together (one `measure` call), or none. Returns their ids. */
+  afterFrame(f: SightFrame, measure: (ids: string[]) => ReadonlyMap<string, number>): string[] {
+    this.frame++;
+    if (f.known || f.paused) {
+      this.asked.clear();
+      return [];
+    }
+    const out: string[] = [];
+    for (const id of f.cats) {
+      if (!this.asked.has(id) && !f.wanted(id)) continue;
+      const hit = this.entries.get(id);
+      if (!hit || !this.fresh(id, hit)) out.push(id);
+      else hit.frame = this.frame; // still good on this frame: it answers until the next one
+    }
+    this.asked.clear();
+    if (out.length) this.record(out, measure(out));
+    return out;
+  }
+
+  /** Stores measured results (seen-pixel counts by cat) as of now. */
+  record(ids: string[], px: ReadonlyMap<string, number>) {
+    const at = this.now();
+    for (const id of ids) {
+      const n = px.get(id) ?? 0;
+      this.entries.set(id, { key: this.key(id), at, frame: this.frame, seen: seenEnough(n), px: n });
+    }
+  }
 }

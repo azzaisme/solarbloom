@@ -7,7 +7,7 @@ import { treeSpot, treeStage } from '../rendering/TreePlacement';
 import { PARK } from '../core/Areas';
 import { createInitialState, GROUND } from '../core/GameState';
 import { AREA_TYPES } from '../data/city';
-import { CAT_SIGHT, catSamples, cpuSeenPixels, seenEnough } from '../core/CatSight';
+import { CAT_SIGHT, SightSchedule, catSamples, cpuSeenPixels } from '../core/CatSight';
 import type { Box } from '../core/Solids';
 import { SightPicker } from '../rendering/SightPicker';
 import { distToFootprint } from '../core/Grid';
@@ -2589,25 +2589,20 @@ export class Game {
   get sight(): SightPicker {
     return (this.sightPicker ??= new SightPicker(this.app, () => this.camera.cam));
   }
-  /** each hiding cat's last sight result, with the poses it was measured from */
-  private catSeenAt = new Map<string, { key: string; at: number; frame: number; seen: boolean; px: number }>();
-  /** drawn frames so far (counted after each one): a result taken or confirmed on the latest drawn frame answers until the next */
-  private sightFrame = 0;
-  /** cats something asked about whose result was out of date: measured after the next frame */
-  private catSightAsked = new Set<string>();
+  /** when the sight pick runs, and each hiding cat's last result (core/CatSight SightSchedule) */
+  readonly sightSchedule = new SightSchedule(
+    (id) => this.sightKey(id),
+    () => performance.now(),
+  );
 
   /**
    * E23.12.3 (#530): could the player spot this cat by eye? Enough of it is drawn in front of everything else
    * (core/CatSight): anything the player can't see through hides it, at its real shape and height, and a cat a few
-   * pixels across is too small to make out. Answers from the last measure while it's fresh (sightFresh); otherwise
-   * "not yet" (false: never a hint by mistake), and the cat is measured after the next frame. Public for the e2e.
+   * pixels across is too small to make out. Answers from the last measure while it's fresh; otherwise "not yet"
+   * (false: never a hint by mistake), and the cat is measured after the next frame. Public for the e2e.
    */
   catVisible(id: string): boolean {
-    const hit = this.catSeenAt.get(id);
-    // taken on the frame just drawn (however long that frame took), or still fresh
-    if (hit && (hit.frame === this.sightFrame || this.sightFresh(id, hit))) return hit.seen;
-    this.catSightAsked.add(id);
-    return false;
+    return this.sightSchedule.visible(id);
   }
 
   /**
@@ -2625,75 +2620,42 @@ export class Game {
     return [r(p.x), r(p.y), r(p.z), r(f.x, 1000), r(f.y, 1000), r(f.z, 1000), c ? `${r(c.x)},${r(c.y)},${r(c.z)}` : '-', b ? `${r(b[0], 20)},${r(b[2], 20)}` : '-', canvas.clientWidth, canvas.clientHeight].join(' ');
   }
 
-  /**
-   * Still good: younger than CAT_SIGHT.cacheSeconds whatever moved (so a walking view re-measures at most that
-   * often), or measured from the same poses and younger than CAT_SIGHT.maxAgeSeconds (a still view isn't measured
-   * again; the cap is for things that move on their own: drones, a chunk rebuilt).
-   */
-  private sightFresh(id: string, hit: { key: string; at: number }): boolean {
-    const age = performance.now() - hit.at;
-    return age < CAT_SIGHT.cacheSeconds * 1000 || (age < CAT_SIGHT.maxAgeSeconds * 1000 && hit.key === this.sightKey(id));
-  }
-
-  /**
-   * The cats worth measuring now: before the first find only, never while paused, and only a cat the pointer is near
-   * (on its projected spot, within the tap radius and a margin) or that bloombot could greet, or that something just
-   * asked about. Of those, only the ones whose last result is out of date.
-   */
-  private catsToMeasure(): string[] {
-    if (this.sim.cat.known || this.paused) return [];
-    const out: string[] = [];
-    const ptr = this.pointer.inside && (!this.bot || this.overviewOn) ? this.pointer : undefined;
-    const reach = Math.max(20, 0.26 / this.camera.worldPerPixel()) + CAT_SIGHT.pointerMarginPx;
+  /** A cat worth measuring now: the pointer near it (on its projected spot, within the tap radius and a margin), or bloombot could greet it. */
+  private catSightWanted(id: string): boolean {
+    const v = this.cat.targetWorld(id);
+    if (!v) return false;
     const bw = this.bot?.world();
-    for (const id of this.cat.ids()) {
-      const v = this.cat.targetWorld(id);
-      if (!v) continue;
-      let wanted = this.catSightAsked.has(id);
-      if (!wanted && bw) wanted = Math.hypot(v.x - bw[0], v.z - bw[2]) < BOT_REACH + 0.6;
-      if (!wanted && ptr) {
-        const sc = this.camera.onScreen(v, 0);
-        wanted = !!sc && Math.hypot(sc.x - ptr.x, sc.y - ptr.y) <= reach;
-      }
-      if (!wanted) continue;
-      const hit = this.catSeenAt.get(id);
-      if (!hit || !this.sightFresh(id, hit)) out.push(id);
-      else hit.frame = this.sightFrame; // still good on this frame: it answers until the next one, however long that takes
-    }
-    this.catSightAsked.clear();
-    return out;
+    if (bw && Math.hypot(v.x - bw[0], v.z - bw[2]) < BOT_REACH + 0.6) return true;
+    if (!this.pointer.inside || (this.bot && !this.overviewOn)) return false;
+    const reach = Math.max(20, 0.26 / this.camera.worldPerPixel()) + CAT_SIGHT.pointerMarginPx;
+    const sc = this.camera.onScreen(v, 0);
+    return !!sc && Math.hypot(sc.x - this.pointer.x, sc.y - this.pointer.y) <= reach;
   }
 
-  /** Measures cats now, together: one GPU pick for all of them, or the CPU ray march where the GPU pick can't run. */
-  private measureCats(ids: string[]): Map<string, number> {
+  /** Seen pixels for cats, measured now and together: one GPU pick for all of them, or the CPU ray march where the GPU pick can't run. */
+  private measureCatPixels(ids: string[]): Map<string, number> {
     const roots = new Map<string, pc.Entity>();
     for (const id of ids) {
       const r = this.cat.rootOf(id);
       if (r) roots.set(id, r);
     }
-    const px = (roots.size ? this.sight.measure(roots) : undefined) ?? new Map(ids.map((id) => [id, this.catSeenPixelsCpu(id)]));
-    const now = performance.now();
-    for (const id of ids) {
-      const n = px.get(id) ?? 0;
-      this.catSeenAt.set(id, { key: this.sightKey(id), at: now, frame: this.sightFrame, seen: seenEnough(n), px: n });
-    }
-    return px;
+    return (roots.size ? this.sight.measure(roots) : undefined) ?? new Map(ids.map((id) => [id, this.catSeenPixelsCpu(id)]));
   }
 
   /**
-   * After each frame is drawn (never mid-update, when the scene is half moved): the cats worth measuring
-   * (catsToMeasure) share one pick. Nothing runs while no cat is near the pointer or bloombot, while paused, or once
-   * a cat has been found.
+   * After each frame is drawn (never mid-update, when the scene is half moved): the cats worth measuring share one
+   * pick (core/CatSight SightSchedule). Nothing runs while no cat is near the pointer or bloombot, while paused, or
+   * once a cat has been found.
    */
   private measureCatsAfterFrame() {
-    this.sightFrame++;
-    const ids = this.catsToMeasure();
-    if (ids.length) this.measureCats(ids);
+    this.sightSchedule.afterFrame({ known: this.sim.cat.known, paused: this.paused, cats: this.cat.ids(), wanted: (id) => this.catSightWanted(id) }, (ids) => this.measureCatPixels(ids));
   }
 
   /** How many screen pixels of a cat the player can see right now, measured at once (for the e2e). */
   catSeenPixels(id: string): number {
-    return this.measureCats([id]).get(id) ?? 0;
+    const px = this.measureCatPixels([id]);
+    this.sightSchedule.record([id], px);
+    return px.get(id) ?? 0;
   }
 
   /** The CPU ray march's estimate of a cat's seen pixels (core/CatSight), for where the GPU pick can't run. */

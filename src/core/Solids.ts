@@ -22,6 +22,11 @@ export const SOLIDS = {
   minWidth: 0.08,
   /** foliage (trees, shrubs, vines) counts only from this tall: flowers and grass tufts don't hide a cat */
   minFoliage: 0.3,
+  /**
+   * or reach this far below the ground (a retaining wall down to a sunk neighbour's ground, Look 4.9): ground slabs
+   * (0.16 thick) don't
+   */
+  minDrop: 0.3,
 };
 
 /** A geometry's extent about its own origin: the furthest any vertex is from the vertical axis, and its height range. */
@@ -44,6 +49,29 @@ export function geoBounds(pos: ArrayLike<number>, stride: number): GeoBounds {
   return y1 >= y0 ? { r, y0, y1 } : { r: 0, y0: 0, y1: 0 };
 }
 
+/**
+ * A tree's (or shrub's) shape as two parts: its trunk, a thin post from its foot to where the crown starts, and its
+ * crown, from its real bottom up. So a cat sitting under a crown, beside the trunk, can be seen from below its edge.
+ * The crown starts at the lowest vertex reaching out past `spread` of the widest reach; a shrub with leaves to the
+ * ground has no trunk part.
+ */
+export interface FoliageShape {
+  crown: GeoBounds;
+  trunk?: GeoBounds;
+}
+
+export function foliageShape(pos: ArrayLike<number>, stride: number, spread = 0.35): FoliageShape {
+  const all = geoBounds(pos, stride);
+  if (all.r <= 0) return { crown: all };
+  let bottom = all.y1;
+  for (let i = 0; i + 2 < pos.length; i += stride) if (Math.hypot(pos[i], pos[i + 2]) > all.r * spread) bottom = Math.min(bottom, pos[i + 1]);
+  // leaves (nearly) to the ground: one part
+  if (bottom - all.y0 < 0.1 * (all.y1 - all.y0)) return { crown: all };
+  let tr = 0;
+  for (let i = 0; i + 2 < pos.length; i += stride) if (pos[i + 1] < bottom) tr = Math.max(tr, Math.hypot(pos[i], pos[i + 2]));
+  return { crown: { r: all.r, y0: bottom, y1: all.y1 }, trunk: { r: tr, y0: all.y0, y1: bottom } };
+}
+
 /** Collects one chunk's solid boxes while it is built. `floor`: the ground top there (world y). */
 export class SolidCollector {
   readonly boxes: Box[] = [];
@@ -61,6 +89,17 @@ export class SolidCollector {
     this.push({ x0: x - r, y0: y + b.y0 * scale, z0: z - r, x1: x + r, y1: y + b.y1 * scale, z1: z + r }, foliage ? SOLIDS.minFoliage : SOLIDS.minRise);
   }
 
+  /**
+   * A tree or shrub at (x, y, z), uniform `scale`: its crown from its real bottom, counted when it rises
+   * SOLIDS.minFoliage above the ground (flowers and grass don't), and its trunk as a thin post below it.
+   */
+  foliage(f: FoliageShape, x: number, y: number, z: number, scale: number) {
+    const before = this.boxes.length;
+    this.geo(f.crown, x, y, z, scale, true);
+    // a trunk only for a crown that counted (a flower's stalk isn't a post)
+    if (f.trunk && this.boxes.length > before) this.geo(f.trunk, x, y, z, scale);
+  }
+
   /** A model placed with its own (x, z) half-extent `r` and height range, scaled per axis. */
   model(b: GeoBounds, x: number, y: number, z: number, sx: number, sy: number, sz: number) {
     const r = b.r * Math.max(sx, sz);
@@ -73,7 +112,7 @@ export class SolidCollector {
   }
 
   private push(b: Box, rise: number) {
-    if (b.y1 - this.floor < rise) return;
+    if (b.y1 - this.floor < rise && this.floor - b.y0 < SOLIDS.minDrop) return;
     if (Math.max(b.x1 - b.x0, b.z1 - b.z0) < SOLIDS.minWidth) return;
     this.boxes.push(b);
   }

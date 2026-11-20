@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { CAT_SIGHT, catSamples, cpuSeenPixels, rayClear, seenEnough, type P3 } from '../src/core/CatSight';
-import { SOLIDS, SolidCollector, SolidIndex, geoBounds, type GeoBounds } from '../src/core/Solids';
+import { SOLIDS, SOLID_SINK, SolidCollector, SolidIndex, foliageShape, geoBounds, type GeoBounds } from '../src/core/Solids';
 import { treeGeo } from '../src/rendering/TreeGen';
+import { ChunkRenderer, MeshBuilder, SINK } from '../src/rendering/ChunkRenderer';
+import { CHUNK } from '../src/core/Hash';
 
 /**
  * E23.12.3 (#530): the CPU line of sight, used where the GPU sight pick can't run (WebGPU). The world's solids are
@@ -64,10 +66,11 @@ describe('the CPU line of sight (where the GPU sight pick cannot run)', () => {
     c.prim([5, GROUND - 0.08, 5], [1, 0.16, 1]); // a ground slab: no rise
     c.prim([5, GROUND + 0.05, 5], [0.4, 0.1, 0.4]); // a kerb, lower than SOLIDS.minRise
     c.prim([5, GROUND + 0.6, 5], [0.04, 1.2, 0.04]); // a thin pole
-    c.geo(geoBounds(treeGeo('oak', 4, 0, 1).pos, 4), 5, GROUND, 5, 1, true); // a full oak
-    c.geo({ r: 0.1, y0: 0, y1: 0.2 }, 6, GROUND, 6, 1, true); // a flower: foliage under SOLIDS.minFoliage
+    c.foliage(foliageShape(treeGeo('oak', 4, 0, 1).pos, 4), 5, GROUND, 5, 1); // a full oak: its crown and its trunk
+    c.foliage({ crown: { r: 0.1, y0: 0.1, y1: 0.2 }, trunk: { r: 0.02, y0: 0, y1: 0.1 } }, 6, GROUND, 6, 1); // a flower: under SOLIDS.minFoliage, stalk and all
     c.prim([7, GROUND + 0.5, 7], [1, 1, 1]); // a crate
-    expect(c.boxes.length).toBe(2);
+    c.prim([8, GROUND - 0.4, 8], [4, 0.8, 0.4]); // a retaining wall down to a sunk neighbour: its top at the ground, reaching SOLIDS.minDrop below
+    expect(c.boxes.length).toBe(4);
     expect(SOLIDS.minRise).toBeLessThan(CAT_SIGHT.catHeight);
   });
 
@@ -101,14 +104,48 @@ describe('the CPU line of sight (where the GPU sight pick cannot run)', () => {
     expect(seenEnough(seen(cat, world((c) => c.prim([cat.x - 2.5, GROUND + 0.42, cat.z], [1.6, 0.84, 1.6]))))).toBe(true);
   });
 
+  /** the game's own oak, full grown (stage 4), as the foliage builder records it */
+  const oakShape = () => foliageShape(treeGeo('oak', 4, 0, 1).pos, 4);
+
+  it("a tree is recorded as a thin trunk and its crown from the crown's real bottom", () => {
+    const g = treeGeo('oak', 4, 0, 1);
+    const all = geoBounds(g.pos, 4);
+    const f = oakShape();
+    expect(f.trunk).toBeDefined();
+    expect(f.crown.y1).toBe(all.y1);
+    expect(f.crown.r).toBe(all.r);
+    expect(f.trunk!.y0).toBe(all.y0);
+    expect(f.trunk!.y1).toBe(f.crown.y0);
+    expect(f.trunk!.r).toBeLessThan(all.r * 0.35); // a trunk, not the crown's width
+    expect(f.crown.y0 * 1.7).toBeGreaterThan(CAT_SIGHT.catHeight); // a big oak's crown starts above a cat
+    // every vertex well out from the trunk is in the crown's height range
+    for (let i = 0; i < g.pos.length; i += 4) if (Math.hypot(g.pos[i], g.pos[i + 2]) > all.r * 0.35) expect(g.pos[i + 1]).toBeGreaterThanOrEqual(f.crown.y0);
+  });
+
   it("a tree's crown in the way hides the cat (the game's own oak, full grown, at a big specimen's scale)", () => {
-    const oak = geoBounds(treeGeo('oak', 4, 0, 1).pos, 4);
-    expect(oak.y1 * 1.7).toBeGreaterThan(1.5); // a big tree stands well over a cat
-    const tree = world((c) => c.geo(oak, cat.x - 1.6, GROUND, cat.z, 1.7, true));
+    const oak = oakShape();
+    expect(oak.crown.y1 * 1.7).toBeGreaterThan(1.5); // a big tree stands well over a cat
+    const tree = world((c) => c.foliage(oak, cat.x - 1.6, GROUND, cat.z, 1.7));
     expect(seenEnough(seen(cat, tree))).toBe(false);
     // a sapling (stage 1) doesn't hide a cat standing past it
-    const sapling = world((c) => c.geo(geoBounds(treeGeo('oak', 1, 0, 1).pos, 4), cat.x - 1.6, GROUND, cat.z, 1, true));
+    const sapling = world((c) => c.foliage(foliageShape(treeGeo('oak', 1, 0, 1).pos, 4), cat.x - 1.6, GROUND, cat.z, 1));
     expect(seenEnough(seen(cat, sapling))).toBe(true);
+  });
+
+  it("a cat under a tree's crown, beside its trunk, is seen from below the crown's edge and hidden from above", () => {
+    const oak = oakShape();
+    const sc = 1.7;
+    // the tree stands half a crown's reach to the cat's side: the cat is under the crown, clear of the trunk
+    const tz = cat.z - oak.crown.r * sc * 0.5;
+    expect(Math.abs(cat.z - tz)).toBeLessThan(oak.crown.r * sc);
+    expect(Math.abs(cat.z - tz)).toBeGreaterThan(oak.trunk!.r * sc + 0.15);
+    const tree = world((c) => c.foliage(oak, cat.x, GROUND, tz, sc));
+    const low = eyeFrom(cat, 9, 0.5); // a low view, under the crown's edge
+    expect(seenEnough(seen(cat, tree, low))).toBe(true);
+    expect(seen(cat, tree, { x: cat.x - 0.5, y: cat.y + 9, z: cat.z })).toBe(0); // from almost overhead: the crown
+    // as one box from the ground to the crown's top the same cat would always count as hidden
+    const solidTree = world((c) => c.geo(geoBounds(treeGeo('oak', 4, 0, 1).pos, 4), cat.x, GROUND, tz, sc, true));
+    expect(seenEnough(seen(cat, solidTree, low))).toBe(false);
   });
 
   it('a ruin in the way hides the cat: a cracked pillar and a large salvage pile, at their real model sizes', () => {
@@ -144,5 +181,33 @@ describe('the CPU line of sight (where the GPU sight pick cannot run)', () => {
   it("the cat's own nook (the bench or ledge it tucks into) doesn't count as in the way", () => {
     const nook = world((c) => c.prim([cat.x - 0.1, GROUND + 0.2, cat.z], [0.2, 0.4, 0.6])); // within CAT_SIGHT.skipNear
     expect(rayClear(eyeFrom(cat), { ...cat, y: cat.y + 0.1 }, nook)).toBe(true);
+  });
+
+  it('a retaining wall where the city drops to a sunk neighbour is indexed (drawn after the rest of the chunk)', () => {
+    // the chunk's own facade drawing (ChunkRenderer.facade, Look 4.9), recorded as it draws, then indexed
+    const city = 0;
+    const floor = city + 0.08;
+    const c = new SolidCollector(floor);
+    SOLID_SINK.current = c;
+    try {
+      const facade = (ChunkRenderer.prototype as unknown as { facade: (...a: unknown[]) => void }).facade;
+      facade.call({}, new MeshBuilder(), { cx: 0, cz: 0, key: '0,0' }, 1, 0, city, true, false); // the +x edge drops away
+    } finally {
+      SOLID_SINK.current = undefined;
+    }
+    const index = new SolidIndex();
+    index.setChunk('0,0', c.boxes);
+    const wallX = CHUNK - 0.2; // the wall's middle, just inside the chunk's +x edge
+    expect(index.at(wallX, floor - SINK / 2, CHUNK / 2)).toBe(true);
+    // a cat on the sunk neighbour's ground, right at the foot of the wall, seen from the terrace's side: hidden
+    const solidAt = (x: number, y: number, z: number) => y < floor - SINK || index.at(x, y, z); // only the wall stands between
+    const low: P3 = { x: CHUNK + 0.3, y: floor - SINK, z: CHUNK / 2 };
+    expect(seen(low, solidAt, { x: low.x - 7, y: floor + 0.6, z: low.z })).toBe(0);
+    // and in ChunkRenderer the chunk's boxes go into the index only after its facades are drawn
+    const src = readFileSync('src/rendering/ChunkRenderer.ts', 'utf8');
+    const lastFacade = src.lastIndexOf('this.facade(');
+    const indexed = src.indexOf('this.solids.setChunk(v.key, solids.boxes)');
+    expect(lastFacade).toBeGreaterThan(0);
+    expect(indexed).toBeGreaterThan(lastFacade);
   });
 });

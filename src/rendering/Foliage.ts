@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { SOLID_SINK, geoBounds, type GeoBounds } from '../core/Solids';
+import { SOLID_SINK, foliageShape, geoBounds, type FoliageShape, type GeoBounds } from '../core/Solids';
 import type { TreeGeo } from './TreeGen';
 
 /**
@@ -272,6 +272,14 @@ export function foliageBounds(g: TreeGeo): GeoBounds {
   return b;
 }
 
+const FOLIAGE_SHAPES = new WeakMap<TreeGeo, FoliageShape>();
+/** E23.12.3: a tree or shrub geometry as trunk and crown (core/Solids foliageShape), worked out once per geometry. */
+export function foliageShapeOf(g: TreeGeo): FoliageShape {
+  let f = FOLIAGE_SHAPES.get(g);
+  if (!f) FOLIAGE_SHAPES.set(g, (f = foliageShape(g.pos, 4)));
+  return f;
+}
+
 export class FoliageBuilder {
   private pos = new Grow(new Float32Array(1 << 14));
   private nrm = new Grow(new Float32Array(1 << 14));
@@ -284,7 +292,7 @@ export class FoliageBuilder {
 
   add(g: TreeGeo, x: number, y: number, z: number, rotY: number, scale: number) {
     // E23.12.3: a tree or shrub tall enough to hide a cat, for the CPU line of sight
-    if (SOLID_SINK.current) SOLID_SINK.current.geo(foliageBounds(g), x, y, z, scale, true);
+    if (SOLID_SINK.current) SOLID_SINK.current.foliage(foliageShapeOf(g), x, y, z, scale);
     const nv = g.pos.length / 4;
     const base = this.pos.n / 4;
     this.pos.reserve(nv * 4);
