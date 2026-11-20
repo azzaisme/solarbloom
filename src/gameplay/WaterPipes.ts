@@ -556,15 +556,32 @@ export class WaterPipes {
     return this.fedNear(t).length > 0;
   }
 
+  /** E23.6.3: how much water the pipes beside a tile could give now (every body feeding them, counted once). */
+  availableAt(t: TileData): number {
+    const seen = new Set<string>();
+    let n = 0;
+    for (const k of this.fedNear(t)) {
+      const [x, z] = parse(k);
+      for (const s of this.sources(x, z))
+        if (!seen.has(s.body)) {
+          seen.add(s.body);
+          n += this.water.amountOf(s.body);
+        }
+    }
+    return n;
+  }
+
   /** Takes up to `units` through the nearest pipe carrying water: from its pumps' water first, then its reservoirs. */
-  drawAt(t: TileData, units: number): number {
+  drawAt(t: TileData, units: number, taken?: [string, number][]): number {
     let got = 0;
     for (const k of this.fedNear(t)) {
       const [x, z] = parse(k);
       const srcs = [...this.sources(x, z)].sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'pump' ? -1 : 1));
       for (const s of srcs) {
         if (got >= units) return got;
-        got += this.water.draw(s.body, units - got);
+        const n = this.water.draw(s.body, units - got);
+        if (n > 0) taken?.push([s.body, n]); // E23.6.3: what came from where, so a short draw can be put back
+        got += n;
       }
       if (got >= units) return got;
     }

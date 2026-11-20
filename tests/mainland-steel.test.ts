@@ -216,6 +216,8 @@ describe('E23.8.3.2: mainland machines', () => {
     put('solar', x + 1, 1, 1);
     const bat = put('gridBattery', x + 2, 0);
     const hub = put('droneHub', x + 4, 0);
+    // E23.6.3: a hub draws only for its drones at work, so one is out working all day and night
+    sim.state.drones = [{ id: 'd1', hubId: hub.id, role: 'restorer', mode: 'working', px: x + 5, pz: 1, timer: 0 } as never];
     const net = sim.power.networkOf(sun)!;
     expect(sim.power.networkOf(bat)).toBe(net);
     expect(net.batteries).toContain(bat);

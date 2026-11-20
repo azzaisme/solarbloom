@@ -24,7 +24,7 @@ function park() {
       sim.grid.touch(t);
     }
   // the real grid (E23.3) stays; these machines stand on a powered network (no poles laid in a test)
-  Object.assign(sim.power, { isPowered: () => true });
+  Object.assign(sim.power, { isPowered: () => true, headroom: () => Infinity }); // E23.6.3: and room on the line for every drone out
   return sim;
 }
 
@@ -163,7 +163,7 @@ describe('E23.6.4: courier routes', () => {
   it('a courier hub without power docks and waits (E23.6.3), then flies again', () => {
     const { sim, a, b } = line();
     let on = false;
-    Object.assign(sim.power, { isPowered: () => on });
+    Object.assign(sim.power, { isPowered: () => on, headroom: () => (on ? Infinity : 0) });
     sim.automation.put(a.id, 'scrap', 40);
     sim.automation.addRoute(a.id, b.id);
     sim.advance(120);
@@ -216,7 +216,7 @@ describe('E23.6.5: the Assembler', () => {
   it('pauses without grid power and carries on by itself', () => {
     const { sim, asm, inp, out } = shop();
     let on = false;
-    Object.assign(sim.power, { isPowered: () => on });
+    Object.assign(sim.power, { isPowered: () => on, headroom: () => (on ? Infinity : 0) });
     sim.automation.setRecipe(asm, 'planks');
     sim.automation.put(inp.id, 'timber', 4);
     sim.advance(10);
@@ -590,7 +590,7 @@ describe('E23.6.4 / E23.6.5: nothing is lost (review 2)', () => {
     const saver = new SaveService(undefined);
     const reload = () => {
       const l = new Sim(saver.deserialize(saver.serialize(sim.state))!);
-      Object.assign(l.power, { isPowered: () => true });
+      Object.assign(l.power, { isPowered: () => true, headroom: () => Infinity });
       l.bot = NEAR;
       return l;
     };

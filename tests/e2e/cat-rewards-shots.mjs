@@ -144,18 +144,28 @@ const frame = async (zoom, file) => {
 await frame(1.7, 'cat-decor-near.png');
 await frame(0.5, 'cat-decor-far.png');
 
-// Decorate mode lists them.
-await page.evaluate(() => window.solarbloom.hud.toggleTray(true));
+// Decorate mode lists them: the Build menu key (Q) opens the tray, as the player would, and all six are on screen.
+await page.keyboard.press('q');
 await page.waitForTimeout(800);
-const tray = await page.evaluate(() =>
-  ['catstatue', 'catbench', 'pawstones', 'catfountain', 'goldlantern', 'rainbowbunting'].filter((id) => {
+const tray = await page.evaluate(() => {
+  // headless Chrome under software GL leaves the tray's 0.2 s slide-in on its first frame (opacity 0): finish it
+  for (const a of document.getAnimations()) a.finish();
+  const seen = (b) => {
+    for (let e = b; e && e !== document.body; e = e.parentElement) {
+      const c = getComputedStyle(e);
+      if (c.display === 'none' || c.visibility === 'hidden' || Number(c.opacity) < 0.9) return false;
+    }
+    const r = b.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth;
+  };
+  return ['catstatue', 'catbench', 'pawstones', 'catfountain', 'goldlantern', 'rainbowbunting'].filter((id) => {
     const b = document.querySelector(`#hotbar [data-tool="decor:${id}"]`);
-    return b && !b.hidden;
-  }),
-);
-check(tray.length === 6, `decorate mode shows all six (${tray.join(' ')})`);
+    return b && !b.hidden && seen(b);
+  });
+});
+check(tray.length === 6, `decorate mode shows all six, on screen (${tray.join(' ')})`);
 await shot('decorate-tray.png');
-await page.evaluate(() => window.solarbloom.hud.toggleTray(false));
+await page.keyboard.press('q');
 
 // Ripe all around: three planters growing beside bloombot, then a cat.
 const grow = await page.evaluate(() => {

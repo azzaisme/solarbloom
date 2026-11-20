@@ -339,7 +339,7 @@ describe('E23.4.1: water levels (sim.water)', () => {
     expect(back.water.tracked().map((x) => x.id)).toEqual([b.id]);
   });
 
-  it('Gardener drones and Cultivators draw from the water near their work', () => {
+  it("finishing a Gardener or tiller job takes no more water: the job's water is drawn by its hub as it sets out (E23.6.3)", () => {
     const sim = city();
     const pond: TileData[] = [];
     for (let z = 0; z < 16; z++)
@@ -359,16 +359,18 @@ describe('E23.4.1: water levels (sim.water)', () => {
     Object.assign(t, { ground: 'restored', pollution: 0, bloom: 1, blocked: false });
     delete t.occupantId;
     sim.grid.touch(t);
+    const before = sim.water.levelOf(b.id);
+    const bloom = t.bloom;
     sim.roles.complete({ id: 'd-test', hubId: 'none' } as never, { role: 'gardener', tileId: t.id });
+    expect(t.bloom).toBeGreaterThan(bloom); // it watered the tile
     const afterGardener = sim.water.levelOf(b.id);
-    expect(afterGardener).toBeLessThan(1);
-    expect(afterGardener).toBeGreaterThan(0.9);
+    expect(afterGardener).toBe(before); // with the water it carried, not more from the pond
     // a tiller finishing a tile beside the pond
     const dock = { id: 'cv-test', type: 'cultivator', roofId: GROUND, x: 30, z: 30, size: 1, cult: { done: 0, units: [] } };
     const unit = { work: [t.id] };
     (sim.cultivators as unknown as { finished: (m: unknown, u: unknown, t: TileData) => void }).finished(dock, unit, t);
     expect(dock.cult.done).toBe(1);
-    expect(sim.water.levelOf(b.id)).toBeCloseTo(afterGardener - WATER_NET.draw.cultivatorPerTile / b.capacity, 9);
+    expect(sim.water.levelOf(b.id)).toBe(afterGardener);
   });
   it("tells E23.1.5's advisor which area is short of water (a body there below the fade line), and only that one", () => {
     const sim = city();

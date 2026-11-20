@@ -120,7 +120,7 @@ export class Panels extends HudPart {
     const s = this.sim.state.stats;
     const avg = s.chains ? (s.chainEffects / s.chains).toFixed(1) : '—';
     return iconize(
-      `<p class="set-stats">Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Average: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b></p>` +
+      `<p class="set-stats">Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Best: <b>×${s.maxCombo}</b> · Average: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b>${this.sim.cat.known ? ` · Lucky Cats: <b>${s.catsFound}</b>` : ''}</p>` + // E23.12.3: no cat line before one is found
         `<details class="set-timings"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre></details>`,
     );
   }
