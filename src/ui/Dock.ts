@@ -25,6 +25,8 @@ export class Dock extends HudPart {
   private seen?: Set<string>;
   private t = 0;
   private fresh = false;
+  /** whether the backpack was open at the last look (opening or closing it is looked at at once) */
+  private wasOpen = false;
 
   static template(): string {
     return `<nav id="dock" aria-label="Shortcuts">${ITEMS.map(
@@ -62,13 +64,16 @@ export class Dock extends HudPart {
       this.label();
     }
     // a new request: asked since the backpack (where the requests live) was last open
+    // (twice a second, and at once when the backpack opens or closes: a quick look in it clears the dot)
+    const open = this.hud.backpack.isOpen;
     this.t -= dt;
-    if (this.t > 0) return;
+    if (this.t > 0 && open === this.wasOpen) return;
     this.t = 0.5;
+    this.wasOpen = open;
     const k = this.sim.keepers;
     const asks = k.requests().map((r) => `${r.id}:${k.step(r.id)}`);
     if (!this.seen) this.seen = new Set(asks); // what was asked before this session counts as seen
-    if (this.hud.backpack.isOpen) for (const a of asks) this.seen.add(a);
+    if (open) for (const a of asks) this.seen.add(a);
     const fresh = asks.some((a) => !this.seen!.has(a));
     if (fresh !== this.fresh) {
       this.fresh = fresh;

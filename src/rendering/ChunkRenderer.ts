@@ -2032,7 +2032,8 @@ export class ChunkRenderer {
       const xFirst = i % 2 === 0; // the ring runs from the x side round to the z side at this corner, or back
       const nx = at(sx, 0);
       const nz = at(0, sz);
-      if (this.isSoft(nx) && this.isSoft(nz)) {
+      // (rounded only where both sides are at this height: over a drop the corner stays square, like the wall under it)
+      if (this.isSoft(nx) && this.isSoft(nz) && level(nx) && level(nz)) {
         for (let j = 0; j < PATH_CURVE.arc; j++) {
           const a = ((xFirst ? j : PATH_CURVE.arc - j) / PATH_CURVE.arc) * (Math.PI / 2);
           ring.push([cx + sx * R * Math.cos(a), cz + sz * R * Math.sin(a)]);
@@ -2092,8 +2093,11 @@ export class ChunkRenderer {
     for (const [sx, sz] of CORNERS) {
       const nx = g.peek(t.roofId, t.x + sx, t.z);
       const nz = g.peek(t.roofId, t.x, t.z + sz);
-      // both sides of the corner must be the other kind of ground
+      // both sides of the corner must be the other kind of ground, at this tile's height: where either side drops (a
+      // terrace's wall, a step) the corner stays square, as the wall under it is (a curve on top would leave the
+      // wall's square corner poking out under it)
       if (paved ? !this.isSoft(nx) || !this.isSoft(nz) : !this.isPath(nx) || !this.isPath(nz)) continue;
+      if (nx!.level !== t.level || nz!.level !== t.level) continue;
       const from = nx!; // the tile whose ground spreads into this corner
       const alive = t.ground === 'restored' && from.ground === 'restored' && nz!.ground === 'restored';
       const cx = t.x + 0.5 + sx * 0.5;

@@ -194,7 +194,9 @@ export class Confirm {
 
   private tick = (now: number) => {
     if (this.closed) return;
-    const dt = Math.min(100, now - this.last);
+    // the hold runs on real time down to 4 frames a second (a slow device's hold takes no longer); a longer stall
+    // can't fill it in one jump
+    const dt = Math.min(250, now - this.last);
     this.last = now;
     // the pad's A: a fresh press while the destructive button has the focus
     const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [];

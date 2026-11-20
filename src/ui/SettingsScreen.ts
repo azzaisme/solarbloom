@@ -32,6 +32,8 @@ export type Row =
   | { kind: 'range'; key: SettingKey; label: string; min: number; max: number; step: number; fallback: number; unit?: string }
   | { kind: 'select'; key: SettingKey; label: string; options: [string, string][]; fallback: string; numeric?: boolean }
   | { kind: 'button'; id: string; label: string; danger?: boolean }
+  /** a checkbox for something that isn't a saved setting (full screen): it shows `get()` and calls `set` */
+  | { kind: 'toggle'; id: string; label: string; hint?: string; get(): boolean; set(on: boolean): void }
   | { kind: 'html'; html: string }
   | { kind: 'heading'; label: string };
 
@@ -186,6 +188,10 @@ export class SettingsScreen {
         return r.html;
       case 'button':
         return `<div class="set-row set-actions"><button id="set-btn-${r.id}" data-btn="${r.id}" class="pn-btn${r.danger ? ' danger' : ''}">${esc(r.label)}</button></div>`;
+      case 'toggle': {
+        this.toggles.set(r.id, r);
+        return `<label class="set-row" for="set-${r.id}"><span>${esc(r.label)}${r.hint ? `<small>${esc(r.hint)}</small>` : ''}</span><input type="checkbox" id="set-${r.id}" data-toggle="${r.id}" ${r.get() ? 'checked' : ''}></label>`;
+      }
       case 'check': {
         const on = r.defaultOn ? s[r.key] !== false : !!s[r.key];
         return `<label class="set-row" for="set-${r.key}"><span>${esc(r.label)}${r.hint ? `<small>${esc(r.hint)}</small>` : ''}</span><input type="checkbox" id="set-${r.key}" data-key="${r.key}" ${on ? 'checked' : ''}></label>`;
@@ -201,7 +207,15 @@ export class SettingsScreen {
     }
   }
 
+  /** the toggle rows drawn last, by id */
+  private toggles = new Map<string, Extract<Row, { kind: 'toggle' }>>();
+
   private changed(t: HTMLElement) {
+    const tg = t.dataset.toggle ? this.toggles.get(t.dataset.toggle) : undefined;
+    if (tg && t instanceof HTMLInputElement) {
+      tg.set(t.checked);
+      return;
+    }
     const key = t.dataset.key as SettingKey | undefined;
     if (!key) return;
     if (t instanceof HTMLInputElement && t.type === 'checkbox') this.host.set(key, t.checked);
