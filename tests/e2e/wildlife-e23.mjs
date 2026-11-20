@@ -375,6 +375,27 @@ try {
   }, bench);
   check(!!charger.id && charger.area === 'park', `a real charger built in the park (${charger.x}, ${charger.z}), powered by two panels`);
 
+  /**
+   * Sits (or meditates) with E or pad A once the prompt offers it (on a slow machine the game may not have caught up
+   * with the teleport yet), pressing again once if the first press did not take. If it still does not sit, says why
+   * (what the prompt offered, and whether the game was paused, in a cinematic or behind a panel) rather than going on
+   * to measure a bloombot that is standing.
+   */
+  const press = async (how, kind, words) => {
+    for (let i = 0; i < 2; i++) {
+      await until(page, (w) => (document.getElementById('prompt')?.innerText ?? '').includes(w), words, 20000);
+      if (how === 'pad') await pad(page, PAD.A);
+      else await key(page, 'KeyE');
+      if (await until(page, (k) => window.solarbloom.sim.rest.sitting?.kind === k, kind, 30000)) return true;
+    }
+    const why = await page.evaluate(() => {
+      const g = window.solarbloom;
+      const f = g.bot.front?.();
+      return { prompt: document.getElementById('prompt')?.innerText ?? '(none)', paused: g.paused, cinematic: g.cinematic, modal: g.hud.modalOpen, pose: g.bot.pose, front: f };
+    });
+    notes.push(`could not ${kind === 'bench' ? 'sit on the bench' : 'meditate at the charger'} with ${how}: ${JSON.stringify(why)}`);
+    return false;
+  };
   const sitBench = async (how) => {
     await page.evaluate((b) => {
       const g = window.solarbloom;
@@ -382,10 +403,7 @@ try {
       g.bot.teleport('g', b.x, b.z + 1);
       Object.assign(g.bot.pose, { x: b.x + 0.5, z: b.z + 1.6, facing: Math.PI });
     }, bench);
-    await page.waitForTimeout(700);
-    if (how === 'pad') await pad(page, PAD.A);
-    else await key(page, 'KeyE');
-    return until(page, () => window.solarbloom.sim.rest.sitting?.kind === 'bench');
+    return press(how, 'bench', 'Sit on');
   };
   const sitCharger = async (how) => {
     await page.evaluate((c) => {
@@ -394,10 +412,7 @@ try {
       g.bot.teleport('g', c.x, c.z + 1);
       Object.assign(g.bot.pose, { x: c.x + 0.5, z: c.z + 1.6, facing: Math.PI });
     }, charger);
-    await page.waitForTimeout(700);
-    if (how === 'pad') await pad(page, PAD.A);
-    else await key(page, 'KeyE');
-    return until(page, () => window.solarbloom.sim.rest.sitting?.kind === 'charger');
+    return press(how, 'charger', 'Meditate');
   };
   const stand = async (how) => {
     if (how === 'pad') await pad(page, PAD.B);
@@ -422,11 +437,15 @@ try {
     for (const [where, how] of [['bench', tier === 'lively' || tier === 'rare' ? 'pad' : 'key'], ['charger', tier === 'variety' || tier === 'thriving' ? 'pad' : 'key']]) {
       const sat = where === 'bench' ? await sitBench(how) : await sitCharger(how);
       check(sat, `${name}: ${how === 'pad' ? 'pad A' : 'E'} ${where === 'bench' ? 'sits on the bench' : 'meditates at the charger'}`);
+      if (!sat) continue; // (why is in the notes; nothing to measure with bloombot standing)
       const ok = await settle(page);
       const plan = await page.evaluate(() => window.solarbloom.sim.wildlife.visits.map((v) => `${v.id}@${v.perch}`));
       counts[`${tier}/${where}`] = plan.length;
       check(ok, `${name} at the ${where}: ${plan.length ? plan.join(', ') : 'nobody came'}`);
       if (tier === 'bare') check(plan.every((p) => p.endsWith('@passBy')), `${name}: at most a butterfly passing by`);
+      const still = await page.evaluate((k) => window.solarbloom.sim.rest.sitting?.kind === k, where);
+      check(still, `${name} at the ${where}: still ${where === 'bench' ? 'sitting' : 'meditating'} once the animals have settled`);
+      if (!still) continue;
       const groundY = await page.evaluate((c) => window.solarbloom.groundY(c.x + 0.5, c.z + 0.5), charger);
       const m = await measure(page, { kind: where, groundY });
       check(m.sane, `${name} at the ${where}: the inside test reads bloombot's faces the right way (its middle inside, over its head outside)`);
