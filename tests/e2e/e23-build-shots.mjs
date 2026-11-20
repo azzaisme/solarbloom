@@ -131,9 +131,10 @@ try {
       // inside the dock, and no name broken or cut short (the owner's two lines across the dock)
       for (const scale of [100, 125]) {
         await page.evaluate((s) => window.solarbloom.hud.setUiScale(s), scale);
-        await page.waitForTimeout(300);
+        await page.waitForTimeout(900); // the dock finds its place within 400 ms of a size change
         const row = await page.evaluate(() => {
           const dock = document.querySelector('#buildbar').getBoundingClientRect();
+          const mm = document.querySelector('#minimap').getBoundingClientRect();
           const items = [...document.querySelectorAll('#buildbar .bslot, #buildbar .bmode')].map((e) => e.getBoundingClientRect());
           const keys = [...document.querySelectorAll('#buildbar .bg')].map((e) => e.getBoundingClientRect());
           const names = [...document.querySelectorAll('#buildbar .bl')];
@@ -143,11 +144,14 @@ try {
             heights: spread(items.map((r) => r.height)),
             keyTops: spread(keys.map((r) => r.top)),
             inside: [...items, ...keys].every((r) => r.top >= dock.top - 0.5 && r.bottom <= dock.bottom + 0.5),
-            lines: names.filter((e) => e.getClientRects().length !== 1 || e.getBoundingClientRect().height > 19).map((e) => e.textContent),
+            lines: names.filter((e) => e.getClientRects().length !== 1 || e.scrollHeight > e.clientHeight + 1).map((e) => e.textContent),
+            clear: dock.left >= mm.right - 0.5 || dock.bottom <= mm.top + 0.5,
+            onScreen: dock.left >= 0 && dock.right <= innerWidth + 0.5,
             cut: names.filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.textContent),
           };
         });
-        check(row.tops < 1 && row.heights < 1 && row.keyTops < 1 && row.inside && !row.lines.length && (scale > 100 || !row.cut.length), `${tag} keys at ${scale}%: the dock is one even row ${JSON.stringify(row)}`);
+        // (at 125% on the smaller screen the dock may run out of room: then a name ends in …, never breaks)
+        check(row.tops < 1 && row.heights < 1 && row.keyTops < 1 && row.inside && !row.lines.length && row.clear && row.onScreen && (scale > 100 || !row.cut.length), `${tag} keys at ${scale}%: the dock is one even row, clear of the minimap ${JSON.stringify(row)}`);
         await page.screenshot({ path: `${out}/build-dock-${tag}-${scale}.png`, clip: await page.evaluate(() => { const r = document.querySelector('#buildbar').getBoundingClientRect(); return { x: Math.max(0, r.left - 12), y: Math.max(0, r.top - 70), width: Math.min(innerWidth, r.width + 24), height: r.height + 82 }; }) });
       }
       await page.evaluate(() => window.solarbloom.hud.setUiScale(100));
@@ -180,8 +184,8 @@ try {
       for (let i = 0; i < 8 && (await page.evaluate(() => document.querySelector('#buildMenu [role=tab][aria-selected=true]')?.textContent)) !== 'Power'; i++) await pressPad(page, 5);
       await page.waitForTimeout(300);
       await page.screenshot({ path: `${out}/build-menu-pad-${tag}.png` });
-      // pin the Bench to slot 1 with X (Y opens and closes the menu itself), then take it with A
-      for (let i = 0; i < 8 && (await page.evaluate(() => document.querySelector('#buildMenu [role=tab][aria-selected=true]')?.textContent)) !== 'Decorations'; i++) await pressPad(page, 5);
+      // pin the piece shown on the Power tab (the Solar Panel: a new garden can build it; the decorations are made at
+      // the table first) to slot 1 with X (Y opens and closes the menu itself), then take it with A
       const bench = await page.evaluate(() => document.activeElement?.dataset?.tool);
       await pressPad(page, 2); // X: pick a slot
       await page.waitForTimeout(200);
