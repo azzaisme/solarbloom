@@ -10,6 +10,7 @@ import * as pc from 'playcanvas';
 import { PipeVisuals } from '../src/rendering/PipeVisuals';
 import { PALETTE } from '../src/rendering/Palette';
 import { POWER } from '../src/data/power';
+import { headlessApp } from './helpers';
 
 function park() {
   const sim = new Sim(createInitialState(7));
@@ -268,15 +269,7 @@ describe('E23.4.5: the Water view', () => {
       sim.power.tick(1);
       sim.water.tick(1);
     }
-    const canvas = { width: 1, height: 1, getContext: () => null, addEventListener() {}, removeEventListener() {}, style: {} };
-    const device = new pc.NullGraphicsDevice(canvas as unknown as HTMLCanvasElement);
-    const app = new pc.AppBase(canvas as unknown as HTMLCanvasElement);
-    const opts = new pc.AppOptions();
-    opts.graphicsDevice = device;
-    opts.componentSystems = [pc.RenderComponentSystem];
-    app.init(opts);
-    const root = new pc.Entity('root', app);
-    app.root.addChild(root);
+    const { device, root } = headlessApp();
     const pipes = new PipeVisuals(sim, root, device);
     pipes.update(1);
     const parts = () => root.findComponents('render').flatMap((r) => (r as pc.RenderComponent).meshInstances);
