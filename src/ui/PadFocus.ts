@@ -24,13 +24,13 @@ export class PadFocus {
   panel(): HTMLElement | undefined {
     for (const sel of this.panels) {
       const el = this.root.querySelector<HTMLElement>(sel);
-      if (el && el.offsetParent !== null) return el;
+      if (el && shown(el)) return el;
     }
     return undefined;
   }
 
   private items(panel: HTMLElement): HTMLElement[] {
-    return [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((e) => e.offsetParent !== null && e.getBoundingClientRect().width > 0);
+    return [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((e) => shown(e) && e.getBoundingClientRect().width > 0);
   }
 
   /**
@@ -48,7 +48,7 @@ export class PadFocus {
         items[0]?.focus({ focusVisible: true } as FocusOptions);
         return true;
       }
-      const next = this.nearest(cur, items, dir);
+      const next = this.nearest(cur, trapped(cur, items), dir);
       if (next) {
         next.focus({ focusVisible: true } as FocusOptions);
         next.scrollIntoView({ block: 'nearest' });
@@ -71,8 +71,8 @@ export class PadFocus {
     const a = from.getBoundingClientRect();
     const ax = a.left + a.width / 2;
     const ay = a.top + a.height / 2;
-    let best: HTMLElement | undefined;
-    let bestScore = Infinity;
+    type C = { e: HTMLElement; along: number; across: number; band: boolean };
+    const cands: C[] = [];
     for (const e of items) {
       if (e === from) continue;
       const b = e.getBoundingClientRect();
@@ -81,15 +81,50 @@ export class PadFocus {
       const along = vx * dx + vy * dy;
       if (along <= 2) continue;
       const across = Math.abs(vx * dy - vy * dx);
-      // E22.4: in a table, left and right stay on the row (and up and down in the column) when anything does:
-      // something in the same band beats anything off it, however near.
       const band = dx ? b.top < a.bottom - 2 && b.bottom > a.top + 2 : b.left < a.right - 2 && b.right > a.left + 2;
-      const score = band ? along : along + across * 2.5 + 10000;
+      cands.push({ e, along, across, band });
+    }
+    if (!cands.length) return undefined;
+    const near = Math.min(...cands.map((c) => c.along));
+    const bandNear = Math.min(...cands.filter((c) => c.band).map((c) => c.along));
+    // E22.4: in a table, left and right stay on the row (and up and down in the column) when anything does:
+    // something in the same band beats anything off it, however near.
+    // #573: ...within reach (about three of the focused control). A Back button in the top bar has another one far
+    // below it in the bottom bar; that one must not beat the tabs and cards in between, so past reach the move goes
+    // to the nearest row (or column) instead, to the one in it closest across.
+    const size = dx ? a.width : a.height;
+    const reach = Math.max(120, size * 3);
+    if (bandNear !== Infinity && bandNear - near > reach) {
+      const line = cands.filter((c) => c.along <= near + Math.max(16, size / 2));
+      return line.reduce((m, c) => (c.across < m.across ? c : m)).e;
+    }
+    let best: HTMLElement | undefined;
+    let bestScore = Infinity;
+    for (const c of cands) {
+      const score = c.band ? c.along : c.along + c.across * 2.5 + 10000;
       if (score < bestScore) {
         bestScore = score;
-        best = e;
+        best = c.e;
       }
     }
     return best;
   }
+}
+
+/**
+ * #564: a group marked `data-pad-trap` (the build menu's slot picker) keeps the d-pad among its own buttons: a press
+ * past its edge stays put instead of landing on something outside, where A would do something else (take the
+ * piece instead of pinning it). B leaves the group as usual.
+ */
+export function trapped(cur: HTMLElement, items: readonly HTMLElement[]): HTMLElement[] {
+  const trap = cur.closest('[data-pad-trap]');
+  return trap ? items.filter((e) => trap.contains(e)) : [...items];
+}
+
+/**
+ * #564: on screen (laid out, not display: none). Not `offsetParent`, which is always null for a position: fixed
+ * element: the build menu is one, so the d-pad, the arrow keys and A never reached it.
+ */
+function shown(e: HTMLElement): boolean {
+  return !e.hidden && e.getClientRects().length > 0;
 }

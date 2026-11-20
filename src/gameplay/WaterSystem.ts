@@ -86,7 +86,12 @@ export class WaterSystem {
       if (!this.byTile.size) return;
       const was = this.byTile.has(t.id);
       if (was === this.isFresh(t)) return;
-      if (!was && !SIDES.some(([dx, dz]) => this.byTile.has(sim.grid.peek(GROUND, t.x + dx, t.z + dz)?.id ?? ''))) return;
+      if (!was && !SIDES.some(([dx, dz]) => this.byTile.has(sim.grid.peek(GROUND, t.x + dx, t.z + dz)?.id ?? ''))) {
+        // a new pond away from all water (a Keeper's pond restored, #574): no body changes shape, but it is fresh
+        // water now, and the land in its reach must stop fading for a drained neighbour
+        this.shapeRev++;
+        return;
+      }
       this.forget();
     });
   }
@@ -521,7 +526,10 @@ export class WaterSystem {
     this.fadeAtVersion = this.version;
     this.fadeAtShape = this.shapeRev;
     this.fadeAtSleep = this.sleepKey();
-    const { key, low } = this.fadeState();
+    const state = this.fadeState();
+    const low = state.low;
+    // a shape change can bring fuller water into a low body's reach (a pond restored beside it, #574): rebuild then too
+    const key = `${this.shapeRev}|${state.key}`;
     if (key === this.fadeKey) return;
     this.fadeKey = key;
     this.fadeMap.clear();
