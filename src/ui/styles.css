@@ -24,8 +24,11 @@
   /* Ink */
   --ink: #1f2a1c;
   --ink-2: #4c5947;
-  --ink-3: #6f7a68;
+  --ink-3: #5a6553;
   --on: #ffffff;
+  /* the title screen's frosted strip and the note over the painting */
+  --veil-strip: rgba(255, 252, 243, .7);
+  --note-bg: rgba(31, 42, 28, .75);
   /* The four meanings */
   --leaf: #3d9a3a;
   --leaf-ink: #29722a;
@@ -125,7 +128,7 @@
   --text: #1f2a1c;
   --text-strong: #1f2a1c;
   --text-soft: #4c5947;
-  --text-dim: #6f7a68;      /* disabled labels (3:1) */
+  --text-dim: #5a6553;      /* quiet and disabled labels (AA on every paper) */
   --gold: #7a4f00;
   --gold-hi: #6e4700;
   --gold-deep: #c98a10;
@@ -262,8 +265,6 @@ body.photo #hud { display: none; }
 body.paused canvas#app { filter: brightness(.55) blur(4px); transition: filter .25s; }
 body.paused.no-blur canvas#app, body.reduced.paused canvas#app { filter: brightness(.55); }
 
-
-/* Old-city rules: no hotbar on the walking view, so the prompt and the toasts sit lower (build.css moves the prompt over the build dock). */
 
 /* ───────── E22.3: button glyphs (src/ui/Glyphs.ts) ───────── */
 svg.glyph { display: block; overflow: visible; flex: none; }

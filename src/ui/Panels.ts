@@ -132,7 +132,7 @@ export class Panels extends HudPart {
     const s = this.sim.state.stats;
     const avg = s.chains ? (s.chainEffects / s.chains).toFixed(1) : '—';
     return iconize(
-      `<p class="set-stats">Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Biggest chain: <b>${s.maxCombo} blooms</b> · Blooms in an average chain: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b> · Lucky Cats: <b>${s.catsFound}</b></p>` +
+      `<p class="set-stats">Tiles restored: <b>${s.tilesRestored}</b> · Bloom chains: <b>${s.chains}</b> · Biggest chain: <b>${s.maxCombo} blooms</b> · Blooms in an average chain: <b>${avg}</b><br>Drone jobs: <b>${s.droneJobs}</b>${s.catsFound > 0 ? ` · Lucky Cats: <b>${s.catsFound}</b>` : ''}</p>` +
         `<details class="set-timings"><summary>Playtest timings</summary><pre class="ptime">${esc(this.sim.metrics.summary())}</pre></details>`,
     );
   }

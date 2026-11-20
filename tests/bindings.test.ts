@@ -50,7 +50,7 @@ const PAD: [Action, number | undefined][] = [
   ['viewCycle', 12], // E23.11: d-pad up in build mode: off, Power, Water
   ['slotPrev', 14], // d-pad left in build mode
   ['slotNext', 15], // d-pad right in build mode
-  ['pinSlot', 3], // Y in the build menu
+  ['pinSlot', 2], // X in the build menu (Y opens and closes it)
   ['backpack', 12], // d-pad up
   ['map', 8], // View
   ['cancel', 1], // B
@@ -133,7 +133,10 @@ describe('E22.1: the new button map', () => {
     expect(b.actionForButton(15, ['world', 'any'])).toBe('pinNext');
     expect(b.actionForButton(12, ['world', 'any'])).toBe('backpack');
     // the build menu: Y pins to a slot, P on the keyboard; walking, Y opens the menu and P takes a photo
-    expect(b.actionForButton(3, ['panel', 'any'])).toBe('pinSlot');
+    expect(b.actionForButton(2, ['panel', 'any'])).toBe('pinSlot');
+    // Y is free in a panel, so the build menu's own button closes it again
+    expect(b.actionForButton(3, ['panel', 'any'])).toBeUndefined();
+    expect(b.actionForButton(3, ['world', 'any'])).toBe('buildMenu');
     expect(b.actionForCode('KeyP', ['panel', 'any'])).toBe('pinSlot');
     expect(b.actionForButton(3, ['world', 'any'])).toBe('buildMenu');
     expect(b.actionForCode('KeyP', ['world', 'any'])).toBe('photo');

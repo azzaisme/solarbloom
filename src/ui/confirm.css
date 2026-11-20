@@ -18,6 +18,7 @@
 .cf-keep:hover { background: var(--leaf-btn-2); }
 .cf-go { background: var(--clay-soft); border: 1.5px solid var(--clay); color: var(--clay-ink); touch-action: none; -webkit-user-select: none; user-select: none; }
 .cf-go:hover, .cf-go.holding { border-color: var(--clay-ink); }
+.cf-go.armed { border-color: var(--clay-ink); box-shadow: 0 0 0 3px var(--clay-soft), 0 0 0 5px var(--clay); }
 .cf-choices button:focus-visible { outline: none; box-shadow: var(--focus-ring); position: relative; z-index: 1; }
 /* the hold ring: fills clockwise while held (--p is set each frame); the button's glyph sits in its middle */
 .cf-ring { position: relative; display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 50%; background: conic-gradient(var(--clay) 0 var(--p, 0%), var(--paper-3) 0); }

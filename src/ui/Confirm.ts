@@ -40,6 +40,9 @@ export interface ConfirmSpec {
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 let seq = 0;
 
+/** How long a first press keeps the destructive button armed for a second press (ms). */
+const ARM_MS = 4000;
+
 /** The hold in progress, 0 … 1, after `ms` held of `holdMs`. */
 export function holdProgress(ms: number, holdMs: number): number {
   return Math.max(0, Math.min(1, ms / Math.max(1, holdMs)));
@@ -56,6 +59,10 @@ export class Confirm {
   /** what is holding the destructive button down now */
   private held = { key: false, pointer: false, pad: false };
   private heldMs = 0;
+  /** a short press arms the destructive button: a second press within ARM_MS confirms (hold OR press twice) */
+  private armedUntil = 0;
+  private label!: HTMLElement;
+  private goText = '';
   private last = 0;
   private raf = 0;
   private padA = true; // treat A as down at first: the press that opened the dialog must be let go before it counts
@@ -80,8 +87,8 @@ export class Confirm {
       `<p id="cfBody${n}" class="cf-body">${esc(spec.body)}</p>` +
       `<div class="cf-choices">` +
       `<button type="button" class="cf-keep" data-cf="keep"><span class="cf-heart" aria-hidden="true"></span>${esc(spec.keep)}</button>` +
-      `<button type="button" class="cf-go" data-cf="go" aria-describedby="cfHow${n}"><span class="cf-ring" aria-hidden="true">${glyph('Enter', 0)}</span><span>${esc(spec.go)}</span></button>` +
-      `<p id="cfHow${n}" class="cf-sr">Press and hold for a second. Letting go early does nothing.</p>` +
+      `<button type="button" class="cf-go" data-cf="go" aria-describedby="cfHow${n}"><span class="cf-ring" aria-hidden="true">${glyph('Enter', 0)}</span><span class="cf-go-label">${esc(spec.go)}</span></button>` +
+      `<p id="cfHow${n}" class="cf-sr">Press and hold for a second, or press it twice.</p>` +
       `</div>` +
       `<footer class="cf-foot"><span class="cf-act">${glyph('Enter', 0)}Choose</span><span class="cf-act">${glyph('Escape', 1)}${esc(spec.keep)}</span></footer>` +
       `</section>`;
@@ -89,8 +96,10 @@ export class Confirm {
     this.keepBtn = this.el.querySelector<HTMLButtonElement>('.cf-keep')!;
     this.goBtn = this.el.querySelector<HTMLButtonElement>('.cf-go')!;
     this.ring = this.el.querySelector<HTMLElement>('.cf-ring')!;
+    this.label = this.el.querySelector<HTMLElement>('.cf-go-label')!;
+    this.goText = spec.go;
     this.keepBtn.addEventListener('click', () => this.close(false));
-    // the destructive button never acts on a click: only a hold finishes it
+    // a click never acts at once: a hold finishes it, or a second press (the release is read in tick)
     this.goBtn.addEventListener('click', (e) => e.preventDefault());
     this.goBtn.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
@@ -140,8 +149,17 @@ export class Confirm {
 
   private flip(to?: HTMLButtonElement) {
     const next = to ?? (document.activeElement === this.keepBtn ? this.goBtn : this.keepBtn);
-    if (next !== this.goBtn) this.release();
+    if (next !== this.goBtn) {
+      this.release();
+      this.disarm();
+    }
     next.focus({ focusVisible: true } as FocusOptions);
+  }
+
+  private disarm() {
+    this.armedUntil = 0;
+    this.goBtn.classList.remove('armed');
+    this.label.textContent = this.goText;
   }
 
   private release() {
@@ -186,6 +204,13 @@ export class Confirm {
     if (!a) this.held.pad = false;
     this.padA = a;
     const holding = this.held.key || this.held.pointer || this.held.pad;
+    // a press let go before the hold filled: the first arms the button, a second (within ARM_MS) confirms
+    if (!holding && this.heldMs > 0) {
+      if (now < this.armedUntil) return this.close(true);
+      this.armedUntil = now + ARM_MS;
+      this.goBtn.classList.add('armed');
+      this.label.textContent = `Press again: ${this.goText}`;
+    } else if (this.armedUntil && now >= this.armedUntil && !holding) this.disarm();
     this.heldMs = holding ? this.heldMs + dt : 0;
     const p = holdProgress(this.heldMs, this.holdMs);
     this.ring.style.setProperty('--p', `${(p * 100).toFixed(1)}%`);

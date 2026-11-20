@@ -98,4 +98,24 @@ describe('HUD text contrast on glass (Look 5.11)', () => {
     expect(T['btn-gold']).toBe('linear-gradient(180deg, #ffd65c, #f3b22a)');
     expect(T['btn-green']).toBe('linear-gradient(180deg, #2c8237, #236b2c)');
   });
+  it('every ink reads on every paper it sits on (E23.11: cards, tiles, chips, the quiet labels)', () => {
+    const rows: string[] = [];
+    for (const ink of ['ink', 'ink-2', 'ink-3', 'text-dim', 'leaf-ink', 'sun-ink', 'sky-ink', 'clay-ink'])
+      for (const bg of ['paper', 'paper-2', 'paper-3']) {
+        const r = ratio(parse(T[ink], T), parse(T[bg], T));
+        if (r < 4.5) rows.push(`${ink} on ${bg}: ${r.toFixed(2)}`);
+      }
+    for (const ink of ['ink', 'ink-2', 'ink-3'])
+      for (const bg of ['leaf-soft', 'sun-soft', 'sky-soft', 'clay-soft']) {
+        const r = ratio(parse(T[ink], T), parse(T[bg], T));
+        if (r < 4.5) rows.push(`${ink} on ${bg}: ${r.toFixed(2)}`);
+      }
+    expect(rows).toEqual([]);
+  });
+  it('the title screen: the ink on its frosted strip and the white note on its pill, over any painting', () => {
+    for (const scene of [WHITE, BLACK]) {
+      expect(ratio(parse(T.ink, T), over(parse(T['veil-strip'], T), scene))).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(parse(T.on, T), over(parse(T['note-bg'], T), scene))).toBeGreaterThanOrEqual(4.5);
+    }
+  });
 });

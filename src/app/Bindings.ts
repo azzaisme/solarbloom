@@ -217,7 +217,7 @@ export function defaultPad(): Partial<Record<Action, number>> {
     viewCycle: 12,
     slotPrev: 14,
     slotNext: 15,
-    pinSlot: 3, // Y in the build menu
+    pinSlot: 2, // X in the build menu (Y stays the build menu's own toggle: it closes it again)
     backpack: 12,
     map: 8,
     cancel: 1,

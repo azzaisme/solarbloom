@@ -446,7 +446,7 @@ export class Game {
         // E23.11: the build dock's and the build menu's buttons do what their bound input does
         buildAct: (a) => this.doAction(a),
         setHotbar: (h) => {
-          this.setSetting('hotbar', h as unknown as string);
+          this.setSetting('hotbar', [...h]);
           this.hud.buildBar.render(this.hud.currentTool);
         },
         dock: (a) => this.doAction(a), // E23.11: the shortcut dock does what its button does
@@ -773,7 +773,7 @@ export class Game {
     this.setSetting('sound', this.settings.sound);
   }
 
-  private setSetting(k: keyof Settings, v: boolean | string | number) {
+  private setSetting(k: keyof Settings, v: boolean | string | number | string[]) {
     (this.settings as unknown as Record<string, unknown>)[k] = v;
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...this.settings, speed: undefined, realClock: this.titleRealClock }));

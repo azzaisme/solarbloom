@@ -35,11 +35,11 @@ body.reduced #splash .sp-logo { animation: none; }
 @keyframes titleTurn { from { transform: translateX(-4%) scale(1.04); } to { transform: translateX(4%) scale(1.09); } }
 #title.still .t-art, body.reduced #title .t-art { animation: none; transform: none; inset: 0; }
 /* the left third: a frosted pale strip over the painting, the badge, the wordmark and the menu in its middle */
-#title .t-side { position: absolute; left: 0; top: 0; bottom: 0; width: 33.333%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 44px; padding: 32px 16px; background: rgba(var(--glass-rgb), .42); backdrop-filter: blur(14px) saturate(1.1); -webkit-backdrop-filter: blur(14px) saturate(1.1); border-right: 1px solid var(--white-ring); }
+#title .t-side { position: absolute; left: 0; top: 0; bottom: 0; width: 33.333%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 44px; padding: 32px 16px; background: var(--veil-strip); backdrop-filter: blur(14px) saturate(1.1); -webkit-backdrop-filter: blur(14px) saturate(1.1); border-right: 1px solid var(--white-ring); }
 #title .t-brand { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
 #title .t-logo { margin: 0; font: 700 56px/1 var(--font-logo); letter-spacing: .01em; color: var(--ink); }
 #title .t-tagline { margin: 0; font: 700 17px/1.4 var(--font-ui); color: var(--ink); }
-#title .t-note { position: absolute; right: 20px; bottom: 16px; margin: 0; font: 800 16px var(--font-ui); color: var(--on); text-shadow: 0 1px 3px var(--text-shade), 0 0 8px var(--text-shade); }
+#title .t-note { position: absolute; right: 20px; bottom: 16px; margin: 0; font: 800 16px var(--font-ui); color: var(--on); background: var(--note-bg); padding: 4px 12px; border-radius: 999px; text-shadow: 0 1px 3px var(--text-shade), 0 0 8px var(--text-shade); }
 .t-menu { display: flex; flex-direction: column; gap: 12px; width: min(280px, 100%); }
 .t-press { min-height: 56px; padding: 0 28px; border-radius: 999px; font: 800 20px var(--font-ui); background: var(--paper); border: 1.5px solid var(--line-2); color: var(--ink); box-shadow: var(--shadow); animation: pressPulse 2.2s ease-in-out infinite; }
 @keyframes pressPulse { 50% { box-shadow: var(--shadow), var(--glow-green); } }

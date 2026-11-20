@@ -112,9 +112,7 @@ export class ObjectiveCard extends HudPart {
       badge.innerHTML = `<span class="sg-ic ${low ? 'i-cell' : 'i-pin'}"></span>`;
     }
     // Glow the control the first steps talk about (or a temporary nudge).
-    let target = this.settings.potter ? '' : now < this.nudgeUntil ? this.nudgeSel : this.settings.hints ? this.hintTarget : '';
-    const tray = r.querySelector('#buildTray');
-    if (target.startsWith('#buildTray') && tray && !tray.classList.contains('open')) target = '#buildToggle';
+    const target = this.settings.potter ? '' : now < this.nudgeUntil ? this.nudgeSel : this.settings.hints ? this.hintTarget : '';
     if (this.last.get('nudgeTarget') !== target) {
       r.querySelectorAll('.nudge').forEach((e) => e.classList.remove('nudge'));
       if (target) r.querySelector(target)?.classList.add('nudge');
