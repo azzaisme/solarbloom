@@ -4665,6 +4665,7 @@ export class Game {
       // what it sits on (the charger's pad, the bench), which animals on the ground keep off
       raised: pad ? { x0: pad.x, x1: pad.x + pad.size, z0: pad.z, z1: pad.z + pad.size } : bench,
       solids,
+      posing: !!r && b.visuals.busy !== undefined, // (sitting: only the clip into the pose; gestures wait)
       reducedMotion: !!this.settings.reducedMotion,
     });
   }

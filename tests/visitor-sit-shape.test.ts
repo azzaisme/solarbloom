@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as pc from 'playcanvas';
-import { belowFeet, sittingShape } from '../src/rendering/Visitors';
+import { belowFeet, sittingShape, Visitors, type VisitHost } from '../src/rendering/Visitors';
+import type { Visit } from '../src/gameplay/Wildlife';
 
 /**
  * #576: an animal resting on bloombot is fitted with its shape as it sits (its sit clip, across the loop), not as it
@@ -82,5 +83,29 @@ describe('#576: an animal on bloombot rests as it sits', () => {
     expect(belowFeet([0, 0.1, 0, 0, -0.031, 0.02, 0.01, 0.2, 0])).toBeCloseTo(0.031, 9);
     expect(belowFeet([0, 0, 0, 0, 0.05, 0])).toBe(0);
     expect(belowFeet([])).toBe(0);
+  });
+});
+
+describe('#576: an animal on bloombot looks for its place once bloombot is in its pose', () => {
+  it('not while bloombot is still sitting down (its arms on their way); then it does', () => {
+    const app = headless();
+    const vis = new Visitors(app.root);
+    const inner = vis as unknown as {
+      restFor(a: unknown, v: Visit, anchor: pc.Vec3, h: VisitHost): pc.Vec3;
+      rests: Map<Visit, { found: boolean; job?: unknown }>;
+    };
+    // a flat square of bloombot under the perch, and a small animal
+    const tris = [-0.2, 0.5, -0.2, -0.2, 0.5, 0.2, 0.2, 0.5, 0.2, -0.2, 0.5, -0.2, 0.2, 0.5, 0.2, 0.2, 0.5, -0.2];
+    const a = { shape: [0, 0, 0, 0.01, 0, 0.01], foot: { x0: -0.01, x1: 0.01, z0: -0.01, z1: 0.01, h: 0.02, r: 0.014 } };
+    const visit = { id: 'bumblebee', perch: 'landOn' } as unknown as Visit;
+    const host = (posing: boolean): VisitHost => ({ point: (_p, out) => out.set(0, 0.5, 0), facing: 0, groundY: () => 0, surface: () => tris, corners: () => [], bones: () => [], posing, reducedMotion: false });
+    const d = inner.restFor(a, visit, new pc.Vec3(0, 0.5, 0), host(true));
+    expect([d.x, d.y, d.z]).toEqual([0, 0, 0]);
+    expect(inner.rests.get(visit)?.job).toBeUndefined();
+    expect(inner.rests.get(visit)?.found).toBe(false);
+    // in its pose: it looks (a little each frame) until it has found its place
+    for (let i = 0; i < 400 && !inner.rests.get(visit)?.found; i++) inner.restFor(a, visit, new pc.Vec3(0, 0.5, 0), host(false));
+    expect(inner.rests.get(visit)?.found).toBe(true);
+    app.destroy();
   });
 });

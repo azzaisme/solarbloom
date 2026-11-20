@@ -86,6 +86,9 @@ export class BloombotVisuals {
   private measured: number[] = [];
   private legs = 1;
   private legsAt = 0;
+  /** how far the left shin is swung now (degrees; the right one the other way), and the most it swings now */
+  private swung = 0;
+  private swingMost = 0;
   /** true once the real model is drawn */
   loaded = false;
   /** the model's holder (the seated poses move it) */
@@ -406,6 +409,24 @@ export class BloombotVisuals {
    * forward for nothing of its back to be in the backrest and no shin in the seat's slab.
    */
   private measure(): { up: number; out: number } {
+    // #576: on a bench, at both ends of its liveliest leg swing too (the knees right at the seat's front lip dip into
+    // it as the shins swing; a look at the swing as it happens to be could miss that, and it would settle too far back)
+    const most = this.pose === 'sit' && this.model && !this.reducedMotion ? this.swingMost : 0;
+    if (!most) return this.measureNow();
+    const m = this.measureNow();
+    for (const to of [most, -most]) {
+      const by = to - this.swung;
+      swingShins(this.model!, this.root, by, -by);
+      const n = this.measureNow();
+      swingShins(this.model!, this.root, -by, by); // (back as drawn: the same turn about the same axis, undone)
+      m.up = Math.max(m.up, n.up);
+      m.out = Math.max(m.out, n.out);
+    }
+    return m;
+  }
+
+  /** One look at itself exactly as drawn now (measure). */
+  private measureNow(): { up: number; out: number } {
     const k = REST.settle;
     const pts = this.measured;
     pts.length = 0;
@@ -441,6 +462,8 @@ export class BloombotVisuals {
     const drift = 0.5 - 0.5 * Math.cos((this.clock * Math.PI * 2) / s.driftSeconds);
     const deg = this.legs * s.degrees * (s.calmest + (1 - s.calmest) * drift) * Math.sin(this.clock * Math.PI * 2 * s.perSecond);
     swingShins(this.model, this.root, deg, -deg);
+    this.swung = deg;
+    this.swingMost = this.legs * s.degrees;
   }
 
   /**

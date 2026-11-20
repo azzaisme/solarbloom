@@ -157,14 +157,34 @@ const underside = (page, under) =>
     const g = window.solarbloom;
     const P = window.__probe;
     const lows = [];
+    // and the lowest look: where that point is (from the box's middle), and bloombot then (its settle, the clip's
+    // time, what it is doing), so a dip says what dipped
+    let worst;
+    const v = g.bot.visuals;
     const end = performance.now() + 11000;
     while (performance.now() < end) {
       await new Promise((r) => requestAnimationFrame(() => r()));
-      const over = P.points(g.bot.visuals.model).filter((p) => p[0] > box.min[0] && p[0] < box.max[0] && p[2] > box.min[2] && p[2] < box.max[2] && p[1] > box.min[1]);
-      if (over.length) lows.push(Math.min(...over.map((p) => p[1])) - top);
+      const over = P.points(v.model).filter((p) => p[0] > box.min[0] && p[0] < box.max[0] && p[2] > box.min[2] && p[2] < box.max[2] && p[1] > box.min[1]);
+      if (over.length) {
+        const p = over.reduce((a, b) => (b[1] < a[1] ? b : a));
+        const low = p[1] - top;
+        lows.push(low);
+        if (!worst || low < worst.low) {
+          const layer = v.model.anim?.baseLayer;
+          worst = {
+            low: +low.toFixed(3),
+            at: [p[0] - (box.min[0] + box.max[0]) / 2, p[2] - (box.min[2] + box.max[2]) / 2].map((n) => +n.toFixed(3)),
+            settle: [v.settleUp, v.settleOut].map((n) => +n.toFixed(3)),
+            state: v.settling,
+            clip: layer ? `${layer.activeState}@${layer.activeStateCurrentTime?.toFixed(2)}` : '-',
+            busy: v.busy ?? null,
+            pose: v.pose,
+          };
+        }
+      }
       await new Promise((r) => setTimeout(r, 150));
     }
-    return lows;
+    return { lows, worst };
   }, under);
 
 const measure = (page, seat) =>
@@ -457,10 +477,11 @@ try {
       check(m.botClear, `${name} at the ${where}: bloombot clear of the ${where === 'bench' ? 'seat and backrest' : 'pad'} (its points inside: ${m.botIn.join(', ')})`);
       // sitting on it, not floating over it, all through a breath and a leg swing: never into it, and down to within
       // a centimetre of its top
-      const lows = await underside(page, m.under);
+      const { lows, worst } = await underside(page, m.under);
       const lo = Math.min(...lows);
       const hi = Math.max(...lows);
-      check(lows.length >= 25 && lo > -0.008 && lo < 0.012, `${name} at the ${where}: bloombot sits on the ${where === 'bench' ? 'seat' : 'pad'} through a whole breath (its underside ${lo.toFixed(3)}..${hi.toFixed(3)} from the top over ${lows.length} looks)`);
+      const onIt = lows.length >= 25 && lo > -0.008 && lo < 0.012;
+      check(onIt, `${name} at the ${where}: bloombot sits on the ${where === 'bench' ? 'seat' : 'pad'} through a whole breath (its underside ${lo.toFixed(3)}..${hi.toFixed(3)} from the top over ${lows.length} looks)${onIt ? '' : ` [lowest look: ${JSON.stringify(worst)}]`}`);
       for (const r of m.rows)
         check(r.ok, `${name} at the ${where}: ${r.kind}@${r.perch} sits on ${r.on}${r.into ? `, ${r.intoText}` : ''}${r.inSolid.length ? `, inside the ${r.inSolid.map(([k, c, b]) => `${k} (${c}; ${b})`).join(', ')}` : ''}${r.ok ? '' : r.why}`);
       if (tier !== 'bare') {
