@@ -22,6 +22,11 @@
 #buildbar .bg { grid-row: 3; display: grid; place-items: center; height: 24px; }
 /* a slot: icon and name, its key under them, all on the tile */
 #buildbar .bslot { position: relative; flex: 0 1 auto; border: 0; border-radius: 16px; background: var(--paper-2); transition: box-shadow .14s, background .14s; }
+/* #565: tight, where the room beside the minimap is short (a big UI scale on a small screen): narrower slots, names end in … */
+#buildbar.tight { gap: 6px; padding: 10px 10px; }
+#buildbar.tight .bslot, #buildbar.tight .bmode { min-width: 50px; padding: 6px 4px; }
+/* #565: where even that doesn't fit beside it, the minimap steps aside while building and the dock takes the width */
+body.building #hud.dock-wide #minimap { visibility: hidden; }
 #buildbar .bslot .si { display: grid; place-items: center; width: 30px; height: 30px; }
 #buildbar .bslot .si .icon, #buildbar .bslot .si svg { width: 30px; height: 30px; display: block; }
 /* a slot is as wide as its name; a name never breaks (only if the dock runs out of room does it end in …) */
