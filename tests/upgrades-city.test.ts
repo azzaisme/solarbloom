@@ -1,16 +1,8 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
-import { TUNING } from '../src/data/tuning';
 import { Sim } from '../src/gameplay/Sim';
-
-function rich(sim: Sim) {
-  const st = sim.state;
-  st.caps.energy = big(1e7); st.caps.water = big(1e7);
-  st.resources.energy = big(1e6); st.resources.water = big(1e6); st.resources.biomass = big(1e6);
-}
 
 function insert(sim: Sim, type: MachineData['type'], x: number, z: number, size = 1) {
   const m: MachineData = { id: sim.newId('m'), type, roofId: GROUND, x, z, size, boostUntil: 0, timer: 0, charge: 0 };
@@ -22,7 +14,6 @@ function insert(sim: Sim, type: MachineData['type'], x: number, z: number, size 
 describe('upgrade effects in the city (City 14.4; E23.1.5: granted, never bought)', () => {
   it('Green Corridors reach further, Drone Mesh links hubs further apart, Fog Lanterns lower wake needs', () => {
     const sim = new Sim(createInitialState(4));
-    rich(sim);
     sim.state.progression.coreActivated = true;
     sim.areas.clear(PARK, true);
     // Corridors: two street gardens 8 apart only link after an upgrade.
@@ -42,7 +33,8 @@ describe('upgrade effects in the city (City 14.4; E23.1.5: granted, never bought
     const id = sim.areas.nextGoal()!;
     const before = sim.areas.need(id);
     expect(sim.upgrades.grant('fogLantern')).toBeGreaterThan(0);
-    expect(sim.areas.need(id)).toBe(Math.ceil(Math.min(sim.areas.counts(id).restorable * TUNING.city.clearShare, TUNING.city.clearCap * sim.areas.info(id).difficulty) * 0.9));
+    // E21.9 / E23.1.1: a region wakes at half its restorable tiles; a Lantern level takes 10% off that
+    expect(sim.areas.need(id)).toBe(Math.max(1, Math.ceil((sim.areas.counts(id).restorable / 2) * 0.9)));
     expect(sim.areas.need(id)).toBeLessThan(before);
   });
 });

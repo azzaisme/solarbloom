@@ -47,6 +47,8 @@ export interface DressCtx {
    * while it isn't loaded (or for hidden ground): the caller then draws its procedural version.
    */
   model?(name: string, x: number, y: number, z: number, rotY: number, sx: number, sy?: number, sz?: number): boolean;
+  /** E23.4.4: the bloom stage a tile shows (its own, less any fade from low water nearby). Defaults to `t.bloom`. */
+  bloom?(t: TileData): number;
 }
 
 /**
@@ -111,7 +113,7 @@ export const STAGE_GRASS: string[][] = PALETTE.stageGrass;
 /** One of a palette list by a (possibly negative) variant: lists differ in length now that Look 2 owns them. */
 const pick = (a: string[], v: number) => a[((v % a.length) + a.length) % a.length];
 const isTurf = (t: TileData | undefined) => !!t && t.ground === 'restored' && !t.blocked && (t.feature ?? 'lawn') !== 'paving' && (t.feature ?? 'lawn') !== 'water' && (t.feature ?? 'lawn') !== 'road';
-const turfColour = (t: TileData) => lin(pick(STAGE_GRASS[Math.max(1, Math.min(4, t.bloom || 1))], t.variant));
+const turfColour = (t: TileData, bloom = t.bloom) => lin(pick(STAGE_GRASS[Math.max(1, Math.min(4, bloom || 1))], t.variant));
 
 /**
  * A restored lawn's top: one quad whose corner colours average the turf of the (up to) four tiles meeting there,
@@ -126,13 +128,13 @@ export function turfTop(c: DressCtx, t: TileData, top: number) {
     for (const [ox, oz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) {
       const n2 = ox === 0 && oz === 0 && cx === 0 && cz === 0 ? t : c.peek(t.x + cx + ox, t.z + cz + oz);
       if (!n2 || !isTurf(n2) || c.areaAt(n2.x, n2.z) !== c.area) continue;
-      const k = turfColour(n2);
+      const k = turfColour(n2, c.bloom?.(n2));
       r += k[0];
       g += k[1];
       b += k[2];
       n++;
     }
-    const k = n ? [r / n, g / n, b / n] : turfColour(t);
+    const k = n ? [r / n, g / n, b / n] : turfColour(t, c.bloom?.(t));
     // a soft mottling across the lawn, a few tiles wide
     // Phase 6: with no blades shading it, the bare turf is a touch deeper, and the light / dark patches are stronger
     // so a big lawn reads as soft sunlit and shaded areas rather than one flat green
@@ -387,7 +389,7 @@ export function obstacleClutter(c: DressCtx, t: TileData, x: number, z: number, 
 
 /**
  * A building's facades: ivy hanging from the parapet down the two faces the camera sees (dry and sparse in the
- * fog, lush and flowering once clear), wall clutter (AC units, copper pipes, a niche with a lucky cat, a painted
+ * fog, lush and flowering once clear), wall clutter (AC units, copper pipes, a niche with a vase of flowers, a painted
  * leaf mural), and a bevelled coping on the parapet.
  */
 export function buildingDressing(c: DressCtx, p: BuildingPlot, h: number, H: number, alive: boolean) {

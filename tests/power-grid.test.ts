@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { big } from '../src/core/Big';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { POWER } from '../src/data/power';
@@ -283,6 +282,7 @@ describe('E23.3.2 sources and storage', () => {
     const { sim, put } = world();
     sim.power.skyOverride = undefined;
     const t = put('windTurbine', 0, 0);
+    sim.grid.get(GROUND, 0, 0)!.level = 0; // flat ground (the island's park stands a terrace up)
     // No weather system: calm, the turbine stands still.
     (sim as unknown as { weather: unknown }).weather = undefined;
     expect(sim.power.output(t)).toBe(0);
@@ -304,7 +304,7 @@ describe('E23.3.2 sources and storage', () => {
   });
 
   it('a turbine in a windy region makes more (E23.8 region strengths), and solar only in sunny ones', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     sim.power.skyOverride = () => ({ sun: 1, solar: 1, cloudy: false, wind: 1, dark: 0 });
     // find a ground cell where E23.8 gives wind turbines a strength, and one where it gives none
     let strong: [number, number] | undefined;
@@ -395,11 +395,6 @@ describe('E23.3.2.3 relays are poles and still carry Bloom Chains', () => {
   it('a chain crosses a relay link that is also carrying power, and blooms the ground round the far pole', () => {
     const sim = new Sim(createInitialState(6));
     const st = sim.state;
-    st.caps.energy = big(1e7);
-    st.caps.water = big(1e7);
-    st.resources.energy = big(1e6);
-    st.resources.water = big(1e6);
-    st.resources.biomass = big(1e6);
     st.progression.coreActivated = true;
     // the chunks the two poles and their blooms use (x −20…20, z −4…4)
     for (let cz = -1; cz <= 0; cz++) for (let cx = -2; cx <= 1; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);

@@ -1,23 +1,20 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { TUNING } from '../src/data/tuning';
 import { PARK } from '../src/core/Areas';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { Sim } from '../src/gameplay/Sim';
+import { offGrid, openIsland } from './helpers';
 
-function city(seed = 6, r = 3) {
+function city(seed = 6) {
   const sim = new Sim(createInitialState(seed));
   const st = sim.state;
-  st.caps.energy = big(1e7); st.caps.water = big(1e7);
-  st.resources.energy = big(1e7); st.resources.water = big(1e7); st.resources.biomass = big(1e7); // full: drones keep a reserve of the cap
   st.progression.coreActivated = true;
-  sim.areas.clear(PARK, true);
-  for (let cz = -r; cz <= r; cz++) for (let cx = -r; cx <= r; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
-  return sim;
+  // E23.1.1: the island open (the park, Saltwind and every region beyond)
+  return openIsland(sim);
 }
 
-/** Inserts a hub directly (costs grow per copy; these tests are about drones). */
+/** Inserts a hub directly (these tests are about drones, not building). */
 function hub(sim: Sim, x: number, z: number): MachineData {
   const cells = sim.grid.footprint(GROUND, x, z, 2);
   for (const c of cells) {
@@ -70,10 +67,8 @@ describe('drone networks (City 11)', () => {
   });
 
   it('drones prefer restoring at the fog’s edge', () => {
-    const sim = new Sim(createInitialState(8));
+    const sim = offGrid(new Sim(createInitialState(8)));
     const st = sim.state;
-    st.caps.energy = big(1e7); st.caps.water = big(1e7);
-    st.resources.energy = big(1e7); st.resources.water = big(1e7); st.resources.biomass = big(1e7); // full: drones keep a reserve of the cap
     st.progression.coreActivated = true;
     for (const t of sim.areas.tiles(PARK)) if (!t.blocked && !t.occupantId) {
       t.ground = 'restored';
@@ -81,8 +76,10 @@ describe('drone networks (City 11)', () => {
       sim.grid.touch(t);
     }
     sim.areas.clear(PARK, true);
-    // A hub near the park's edge: frontier tiles beyond the edge are its first jobs.
-    hub(sim, 13, 7);
+    // E23.1.1: Saltwind, south of the park, is the fog; helpers work there once bloombot has done its share (E21.9)
+    sim.state.areas.saltwind.byBot = sim.areas.shareTarget('saltwind');
+    // A hub near the park's edge: fog tiles beyond the edge are its first jobs.
+    hub(sim, 8, 11);
     const first: string[] = [];
     sim.bus.on('drone.jobStarted', ({ droneId, tileId }) => !st.drones.find((d) => d.id === droneId)?.old && first.length < 3 && first.push(tileId));
     sim.advance(20);
@@ -94,7 +91,7 @@ describe('drone networks (City 11)', () => {
   });
 
   it('soak: 50 hubs never target fog, blocked, finished or double-booked tiles', { timeout: 60000 }, () => {
-    const sim = city(13, 4);
+    const sim = city(13);
     let n = 0;
     for (let z = -56; z <= 56 && n < 50; z += 16) for (let x = -56; x <= 56 && n < 50; x += 14) {
       hub(sim, x, z);
@@ -120,10 +117,8 @@ describe('far-away drones as work rates (City 11.4)', () => {
   async function fleet(seed = 21) {
     const { createInitialState: create, GROUND: G } = await import('../src/core/GameState');
     const { Sim: S } = await import('../src/gameplay/Sim');
-    const sim = new S(create(seed));
+    const sim = offGrid(new S(create(seed)));
     const st = sim.state;
-    st.caps.energy = big(1e7); st.caps.water = big(1e7);
-    st.resources.energy = big(1e7); st.resources.water = big(1e7); st.resources.biomass = big(1e7); // full: drones keep a reserve of the cap
     st.progression.coreActivated = true;
     for (let cz = -3; cz <= 3; cz++) for (let cx = -3; cx <= 3; cx++) sim.areas.clear(sim.areas.map.areaOfChunk(cx, cz), true);
     let n = 0;

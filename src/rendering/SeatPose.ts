@@ -67,6 +67,22 @@ export function foldLegs(rig: pc.GraphNode, facer: pc.GraphNode, kind: SeatKind)
   return true;
 }
 
+const AX = new pc.Vec3();
+
+/**
+ * Swings the shins of a seated `rig` (the feet follow): each turns about the character's side axis by its angle in
+ * degrees (positive kicks the foot forward). Run after the legs are posed (the clip or foldLegs).
+ */
+export function swingShins(rig: pc.GraphNode, facer: pc.GraphNode, leftDeg: number, rightDeg: number) {
+  AX.copy(facer.right);
+  for (const [side, deg] of [['Left', leftDeg], ['Right', rightDeg]] as const) {
+    const shin = bone(rig, `${side}Leg`);
+    if (!shin || !deg) continue;
+    Q.setFromAxisAngle(AX, -deg);
+    shin.setRotation(R.copy(Q).mul(shin.getRotation()));
+  }
+}
+
 /** How high the rig's hips joint is above `base` (world units): lower the model by this to sit it down. */
 export function hipsAbove(rig: pc.GraphNode, base: pc.GraphNode): number {
   const h = bone(rig, 'Hips');

@@ -18,8 +18,19 @@ export type ItemCost = Partial<Record<ItemId, number>>;
  * - `research`: a finished research project (E23.6.2), by project id
  * - `find`: a cache opened, by cache id (data/oldcity caches)
  * - `tier`: a step of the fountain (E21.6), for the Old City's own machines
+ * - `cat`: E23.12.2 (#529), a cat-only decoration, known once a Lucky Cat has left it (it comes made)
+ * - `hand`: a job done by hand enough times (E23.6.4's automation; data/automation HAND_JOBS)
+ * - `all`: every one of several (the Assembler: its Keeper, and crafting by hand)
  */
-export type Unlock = { home: true } | { keeper: RegionId } | { research: string } | { find: string } | { tier: number };
+export type Unlock =
+  | { home: true }
+  | { keeper: RegionId }
+  | { research: string }
+  | { find: string }
+  | { tier: number }
+  | { cat: string }
+  | { hand: import('./automation').HandJob }
+  | { all: Unlock[] };
 
 export interface ComponentDef {
   id: ComponentId;
@@ -79,7 +90,7 @@ export interface MachineRecipe {
 export const MACHINE_RECIPES: MachineRecipe[] = [
   // the owner's call: planter boxes open when Timber does (Tide, Saltwind Beach); until then the farm is gathering
   { id: 'planterBox', name: 'Planter box', cost: { planks: 3 }, unlock: { keeper: 'saltwind' }, builds: 'planter' },
-  { id: 'compostBin', name: 'Compost bin', cost: { planks: 4, scrap: 2 }, unlock: { home: true }, owner: 'E23.5' },
+  { id: 'compostBin', name: 'Compost bin', cost: { planks: 4, scrap: 2 }, unlock: { home: true }, builds: 'compostBin' },
   // E23.3 (#422): Bloom Relays are the grid's poles, so the power pole builds one
   { id: 'powerPole', name: 'Power pole', cost: { planks: 1, wire: 1 }, unlock: { keeper: 'mastRow' }, builds: 'relay' },
   { id: 'charger', name: 'Charger', cost: { scrap: 4, wire: 2 }, unlock: { keeper: 'mastRow' }, builds: 'charger' },
@@ -87,14 +98,16 @@ export const MACHINE_RECIPES: MachineRecipe[] = [
   { id: 'windTurbine', name: 'Wind turbine', cost: { planks: 6, scrap: 4, wire: 2 }, unlock: { keeper: 'saltwind' }, builds: 'windTurbine' },
   { id: 'chest', name: 'Storage chest', cost: { planks: 4, scrap: 2 }, unlock: { keeper: 'saltwind' }, builds: 'chest' },
   { id: 'beehive', name: 'Beehive', cost: { planks: 4, seeds: 2 }, unlock: { keeper: 'elderGrove' }, owner: 'E23.5' },
-  { id: 'reservoir', name: 'Reservoir', cost: { clay: 10, scrap: 4 }, unlock: { keeper: 'cistern' }, owner: 'E23.4' },
-  { id: 'pump', name: 'Pump', cost: { scrap: 6, wire: 2, clay: 2 }, unlock: { keeper: 'cistern' }, owner: 'E23.4' },
-  { id: 'desalination', name: 'Desalination plant', cost: { scrap: 10, pipe: 4, glassPane: 4, wire: 2 }, unlock: { keeper: 'cistern' }, owner: 'E23.4' },
+  { id: 'reservoir', name: 'Reservoir', cost: { clay: 10, scrap: 4 }, unlock: { keeper: 'cistern' }, builds: 'reservoir', owner: 'E23.4' },
+  { id: 'pump', name: 'Pump', cost: { scrap: 6, wire: 2, clay: 2 }, unlock: { keeper: 'cistern' }, builds: 'pump', owner: 'E23.4' },
+  { id: 'desalination', name: 'Desalination plant', cost: { scrap: 10, pipe: 4, glassPane: 4, wire: 2 }, unlock: { keeper: 'cistern' }, builds: 'desalination', owner: 'E23.4' },
   { id: 'battery', name: 'Battery', cost: { batteryCell: 4 }, unlock: { keeper: 'clockPlaza' }, builds: 'battery' },
-  { id: 'bioDigester', name: 'Bio Digester', cost: { scrap: 10, motor: 2, clay: 4 }, unlock: { keeper: 'clockPlaza' }, owner: 'E23.5' },
+  { id: 'bioDigester', name: 'Bio Digester', cost: { scrap: 10, motor: 2, clay: 4 }, unlock: { keeper: 'clockPlaza' }, builds: 'bioDigester' },
   { id: 'drone', name: 'Drone', cost: { motor: 1, wire: 2, glassPane: 1 }, unlock: { keeper: 'clockPlaza' }, owner: 'E23.6.3' },
   { id: 'largeSolar', name: 'Large solar array', cost: { sunCell: 4, scrap: 6, wire: 2 }, unlock: { keeper: 'observatory' }, owner: 'unassigned: no sub-epic builds it yet (raised with the coordinator)' },
-  { id: 'assembler', name: 'Assembler', cost: { motor: 4, gears: 10, glassPane: 6 }, unlock: { keeper: 'spireHeights' }, owner: 'E23.6.5' },
+  { id: 'assembler', name: 'Assembler', cost: { motor: 4, gears: 10, glassPane: 6 }, unlock: { all: [{ keeper: 'spireHeights' }, { hand: 'craft' }] }, builds: 'assembler' },
+  // E23.6.4: a box for automation, once things have been carried to and from the store by hand a few times
+  { id: 'crate', name: 'Supply crate', cost: { planks: 3, wire: 1 }, unlock: { hand: 'carry' }, builds: 'crate' },
   // The Old City's own machines (E21.3), on the table too: one way to build everything. They keep the fountain step
   // that opened them, and their recipes move onto components where one fits.
   // no Pipe: Pipe needs Clay (tier 2), and the condenser opens at tier 1, so it is buildable the day it opens
@@ -102,8 +115,12 @@ export const MACHINE_RECIPES: MachineRecipe[] = [
   { id: 'pollinator', name: 'Pollinator Garden', cost: { seeds: 10, planks: 3, biomass: 20 }, unlock: { tier: 2 }, builds: 'pollinator' },
   { id: 'droneHub', name: 'Drone Hub', cost: { scrap: 12, motor: 1, wire: 4, glassPane: 2 }, unlock: { tier: 2 }, builds: 'droneHub' },
   { id: 'reservoirGarden', name: 'Reservoir Garden', cost: { clay: 15, seeds: 10, biomass: 30 }, unlock: { tier: 3 }, builds: 'reservoirGarden' },
-  { id: 'motherTree', name: 'Mother Tree', cost: { seeds: 30, clay: 20, biomass: 100 }, unlock: { tier: 3 }, builds: 'motherTree' },
+  // E23.5.3: a landmark tree wants fertiliser
+  { id: 'motherTree', name: 'Mother Tree', cost: { seeds: 30, clay: 20, biomass: 100, fertiliser: 4 }, unlock: { tier: 3 }, builds: 'motherTree' },
   { id: 'cultivator', name: 'Cultivator', cost: { scrap: 20, motor: 2, gears: 10, planks: 4 }, unlock: { tier: 4 }, builds: 'cultivator' },
+  // E23.8.3.2: the mainland's machines, after the Great Bloom, built mostly from steel (data/mainland MAINLAND_MACHINES).
+  // A grid battery is a stack of battery cells.
+  { id: 'gridBattery', name: 'Grid Battery', cost: { steel: 30, batteryCell: 6, gears: 10 }, unlock: { tier: 5 }, builds: 'gridBattery' },
 ];
 
 export interface DecorRecipe {
@@ -130,6 +147,14 @@ export const DECOR_RECIPES: DecorRecipe[] = [
   { id: 'barrel', cost: { planks: 2, seeds: 1 }, unlock: { find: 'c-saltwind-2' } },
   { id: 'rug', cost: { seeds: 2 }, unlock: { find: 'c-oldMarket-2' } },
   { id: 'topiary', cost: { seeds: 3, clay: 1 }, unlock: { research: 'dc-topiary' } },
+  // E23.12.2 (#529): the cat-only decorations. A Lucky Cat leaves each one made (free to place); from then on its
+  // recipe is on the table like any other (made once, so it reads as made).
+  { id: 'catstatue', cost: { clay: 4, scrap: 2 }, unlock: { cat: 'catstatue' } },
+  { id: 'catbench', cost: { planks: 3, scrap: 1 }, unlock: { cat: 'catbench' } },
+  { id: 'pawstones', cost: { scrap: 3, clay: 1 }, unlock: { cat: 'pawstones' } },
+  { id: 'catfountain', cost: { clay: 5, pipe: 1 }, unlock: { cat: 'catfountain' } },
+  { id: 'goldlantern', cost: { scrap: 2, glassPane: 1 }, unlock: { cat: 'goldlantern' } },
+  { id: 'rainbowbunting', cost: { planks: 1, seeds: 3 }, unlock: { cat: 'rainbowbunting' } },
   // E23.3.5: every night light (data/lights) is made here too, at its own cost, known where its data says
   ...LIGHTS.map((l) => ({ id: l.id, cost: l.cost, unlock: lightUnlock(l) })),
 ];

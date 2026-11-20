@@ -6,12 +6,11 @@ import { FARM_ITEMS, GATHER } from '../src/data/farm';
 import { DAY_SECONDS, gameDays } from '../src/data/time';
 import { MATERIALS } from '../src/data/salvage';
 import { Sim } from '../src/gameplay/Sim';
-import { big } from '../src/core/Big';
 import { TUNING } from '../src/data/tuning';
 import { MATERIAL_ICON_IDS } from '../src/ui/MaterialIcons';
 
 SaveService.clock = () => 0;
-const oldSim = (seed = 7) => new Sim(createInitialState(seed, 'oldcity'));
+const oldSim = (seed = 7) => new Sim(createInitialState(seed));
 
 /** An open ground tile near the park, restored to a bloom. */
 function restored(sim: Sim, bloom: number, x = 10, z = 14): TileData {
@@ -37,48 +36,29 @@ describe('E23.5.1: farm items', () => {
     }
   });
 
-  it('biomass no longer grows as a counter under old-city rules (classic still earns it)', () => {
+  it('biomass prices (a drone refit) are paid from the backpack and the store within reach', () => {
     const sim = oldSim();
-    const before = sim.econ.get('biomass').toNumber();
-    const t = restored(sim, 1);
-    sim.restoration.grow(t, undefined, 'player', true);
-    sim.econ.add('biomass', 50);
-    sim.advance(30);
-    expect(sim.econ.get('biomass').toNumber()).toBe(before);
-    const classic = new Sim(createInitialState(7));
-    const c0 = classic.econ.get('biomass').toNumber();
-    classic.econ.add('biomass', 50);
-    expect(classic.econ.get('biomass').toNumber()).toBe(c0 + 50);
-  });
-
-  it('biomass prices (a drone refit) are paid from the backpack and the store within reach, never a frozen counter', () => {
-    const sim = oldSim();
-    sim.state.caps.energy = big(1000);
-    sim.state.caps.water = big(1000);
-    sim.econ.add('energy', 500);
-    sim.econ.add('water', 500);
     const hub = { id: 'hub1', type: 'droneHub' as const, roofId: GROUND, x: 4, z: 4, size: 2, boostUntil: 0, timer: 0, charge: 0 };
     sim.state.machines.push(hub);
     sim.roles.lockedReason = () => undefined;
-    const price = TUNING.drone.roles.refit.gardener.biomass;
-    // the old counter holds plenty, but it no longer pays for anything
-    sim.state.resources.biomass = big(10_000);
-    expect(sim.econ.get('biomass').toNumber()).toBe(0);
+    const price = TUNING.drone.roles.refit.gardener!;
+    expect(price).toBeGreaterThan(0);
+    // nothing gathered yet: the refit can't be paid
     expect(sim.roles.check(hub.id, 'gardener').ok).toBe(false);
-    expect(sim.roles.check(hub.id, 'gardener').reason).toMatch(/🌿/);
+    expect(sim.roles.check(hub.id, 'gardener').reason).toBe(`Needs ${price} Biomass`);
+    expect(sim.roles.choose(hub.id, 'gardener')).toBe(false);
     // gathered biomass pays: part from the backpack, the rest from the store
     sim.inventory.add('biomass', 30);
     sim.inventory.addToStore('biomass', price);
     const ap = sim.inventory.accessPoints()[0];
     sim.bot = { roofId: ap.roofId, x: ap.x, z: ap.z }; // bloombot beside the store
-    expect(sim.econ.get('biomass').toNumber()).toBe(sim.inventory.available('biomass'));
+    expect(sim.inventory.available('biomass')).toBe(30 + price);
     expect(sim.roles.choose(hub.id, 'gardener')).toBe(true);
     expect(sim.inventory.count('biomass') + sim.inventory.stored('biomass')).toBe(30); // the refit took exactly its price
     expect(sim.inventory.count('biomass')).toBe(0); // the backpack is spent first
-    // classic rules still pay from the counter
-    const classic = new Sim(createInitialState(7));
-    classic.econ.add('biomass', 5);
-    expect(classic.econ.spend({ biomass: 5 })).toBe(true);
+    // more than was gathered can't be paid
+    expect(sim.inventory.pay({ biomass: sim.inventory.available('biomass') + 1 })).toBe(false);
+    expect(sim.inventory.count('biomass') + sim.inventory.stored('biomass')).toBe(30);
   });
 
   it('a game day is 48 minutes of play', () => {

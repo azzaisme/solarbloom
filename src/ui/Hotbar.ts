@@ -1,5 +1,6 @@
 import { DECOR_OPTION, DECOR_OPTIONS } from '../data/cozy';
-import { BUILDABLE, MACHINES, OLD_CITY_BUILDABLE } from '../data/machines';
+import { BUILDABLE, MACHINES } from '../data/machines';
+import { WATER_NET } from '../data/water';
 import { TUNING } from '../data/tuning';
 import { type Action, type Bindings, keyLabel } from '../app/Bindings';
 import { actionGlyph, type GlyphStyle, type PadStyle, padName } from './Glyphs';
@@ -9,25 +10,26 @@ import { decorType, machineTool, type Tool } from './Hud';
 import { decorOpen } from '../gameplay/Cozy';
 
 /**
- * E22.5 (#342): the classic hotbar (Inspect, Pulse, the build tray, Harvest, Upgrades).
- * Under old-city rules it is not on the walking view: the build hotbar (slots 1–9, BuildBar) shows above the
- * prompt only while build mode is open.
+ * E22.5 (#342): the hotbar's buttons (Inspect, Pulse, the build tray, Harvest, Upgrades). It is not on the walking
+ * view: the build hotbar (slots 1–9, BuildBar) shows above the prompt only while build mode is open.
  */
 export class Hotbar extends HudPart {
   private tool: Tool = 'pulse';
 
-  static template(oldCity = false): string {
+  static template(): string {
     return [
       `<button class="slot" data-tool="inspect" aria-label="Inspect tool (1)"><span class="key">1</span><span class="si">${ICONS.inspect}</span><span class="sl">Inspect</span><span class="sc">&nbsp;</span></button>`,
       `<button class="slot" data-tool="pulse" aria-label="Restoration Pulse (2)"><span class="key">2</span><span class="si">${ICONS.pulse}</span><span class="sl"><span class="long">Restoration </span>Pulse</span><span class="sc"></span></button>`,
       `<span class="sep"></span>`,
       `<button class="slot" id="buildToggle" aria-label="Build menu (B)" aria-expanded="false"><span class="key">B</span><span class="si">${ICONS.build}</span><span class="sl">Build</span><span class="sc"></span></button>`,
       `<div id="buildTray">`,
-      // E21.3: the Old City adds the Storage Chest (no number keys: the build menu reaches them)
-      ...(oldCity ? OLD_CITY_BUILDABLE : BUILDABLE).map(
+      // E21.3: the Storage Chest has no number key: the build menu reaches it
+      ...BUILDABLE.map(
         (t) =>
           `<button class="slot" data-tool="${t}" aria-label="Build ${MACHINES[t].name}${MACHINES[t].hotkey ? ` (${MACHINES[t].hotkey})` : ''}"><span class="key">${MACHINES[t].hotkey ?? ''}</span><span class="si">${ICONS[MACHINE_ICONS[t]]}</span><span class="sl">${MACHINES[t].name.replace('Water ', '').replace('Pollinator ', '')}</span><span class="sc"></span></button>`,
       ),
+      // E23.4.2.2: the pipe, laid tile by tile
+      `<button class="slot" data-tool="pipe" aria-label="Lay pipe"><span class="key"></span><span class="si">${ICONS.pipe}</span><span class="sl">Pipe</span><span class="sc"></span></button>`,
       // E19.2: decorations, free once earned, and the remove tool
       `<span class="tray-break" aria-hidden="true"></span>`,
       ...DECOR_OPTIONS.map(
@@ -35,15 +37,12 @@ export class Hotbar extends HudPart {
       ),
       `<button class="slot decor" data-tool="remove" aria-label="Remove or move a decoration"><span class="si">🧹</span><span class="sl">Remove</span><span class="sc">or move</span></button>`,
       `</div>`,
-      `<span class="sep"></span>`,
-      `<button class="slot" id="harvestBtn" aria-label="Harvest sunlight (H)"><span class="key">H</span><span class="si">${ICONS.harvest}</span><span class="sl">Harvest</span><span class="sc">+${TUNING.harvest.energy}⚡</span><span class="cd"></span></button>`,
     ].join('');
   }
 
   wire() {
     const r = this.root;
     r.querySelectorAll<HTMLButtonElement>('#hotbar [data-tool]').forEach((b) => b.addEventListener('click', () => this.cb.selectTool(b.dataset.tool as Tool)));
-    $(r, '#harvestBtn').addEventListener('click', () => this.cb.harvest());
     $(r, '#buildToggle').addEventListener('click', () => this.toggleTray());
   }
 
@@ -92,7 +91,6 @@ export class Hotbar extends HudPart {
       ['[data-tool="inspect"]', 'interact', '1'],
       ['[data-tool="pulse"]', 'pulse', '2'],
       ['#buildToggle', 'buildMenu', 'B'],
-      ['#harvestBtn', 'harvest', 'H'],
     ];
     for (const [sel, action, cursor] of slots) {
       const el = this.root.querySelector<HTMLElement>(`#hotbar ${sel} .key`);
@@ -107,9 +105,9 @@ export class Hotbar extends HudPart {
   update() {
     const s = this.sim;
     // Hotbar costs
-    for (const t of s.oldCity ? OLD_CITY_BUILDABLE : BUILDABLE) {
+    for (const t of BUILDABLE) {
       const btn = $(this.root, `#hotbar [data-tool="${t}"]`);
-      // E21.3: under old-city rules the price is the recipe (material icons, have / need)
+      // E21.3: the price is the recipe (material icons, have / need)
       this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.costLabel(t));
       this.set(`hk-${t}`, btn, 'cls', s.build.affordable(t) ? '0' : '1', 'cant');
       const locked = !s.build.isUnlocked(t);
@@ -118,6 +116,15 @@ export class Hotbar extends HudPart {
       const roofOnly = MACHINES[t].roofs;
       btn.hidden = !!roofOnly && !s.build.isUnlocked(t);
       if (locked) this.set(`hc-${t}`, $(btn, '.sc'), 'text', s.build.lockLabel(t));
+    }
+    // E23.4.2.2: the pipe's slot: what's left of the last Pipe, or its price; it unlocks with the pump
+    const pipeBtn = this.root.querySelector<HTMLElement>('#hotbar [data-tool="pipe"]');
+    if (pipeBtn) {
+      const p = s.water.pipes;
+      const locked = !s.water.unlocked('pipe');
+      this.set('hc-pipe', $(pipeBtn, '.sc'), 'text', locked ? s.water.lockLabel() : p.costText());
+      this.set('hk-pipe', pipeBtn, 'cls', s.inventory.canPay(WATER_NET.pipe.cost) ? '0' : '1', 'cant');
+      this.set('hl-pipe', pipeBtn, 'cls', locked ? '1' : '0', 'locked');
     }
     // E19.2: a decoration's slot appears once it's earned
     for (const o of DECOR_OPTIONS) {
@@ -137,11 +144,6 @@ export class Hotbar extends HudPart {
     const pb = $(this.root, '[data-tool="pulse"]');
     this.set('megaFill', pb, 'style', mf.toFixed(2), '--mega');
     this.set('megaOn', pb, 'cls', mega ? '1' : '0', 'mega');
-    const cd = Math.max(0, s.state.harvestReadyAt - s.time);
-    const hb = $(this.root, '#harvestBtn');
-    this.set('hcd', $(hb, '.cd'), 'html', '');
-    ($(hb, '.cd') as HTMLElement).style.transform = `scaleY(${cd / TUNING.harvest.cooldown})`;
-    this.set('hsc', $(hb, '.sc'), 'text', cd > 0 ? `${Math.ceil(cd)}s` : `+${TUNING.harvest.energy}⚡`);
   }
 }
 
@@ -173,6 +175,9 @@ export class BuildBar extends HudPart {
   /** E23.3.4: the Power view's glyph, and whether it is on (the game sets it). */
   private powerGlyph = '';
   powerOn = false;
+  /** E23.4.5: the Water view's glyph, and whether it is on (the game sets it). */
+  private waterGlyph = '';
+  waterOn = false;
 
   static template(): string {
     return `<div id="buildbar" class="panel" role="toolbar" aria-label="Build hotbar" hidden></div>`;
@@ -187,6 +192,7 @@ export class BuildBar extends HudPart {
     if (!b) return;
     this.keys = (['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6', 'slot7', 'slot8', 'slot9'] as Action[]).map((a) => (b.keys[a][0] ? keyLabel(b.keys[a][0]) : ''));
     this.powerGlyph = actionGlyph(b, 'powerOverlay', style ?? 'keys');
+    this.waterGlyph = actionGlyph(b, 'waterOverlay', style ?? 'keys');
     this.last.delete('buildbar');
   }
 
@@ -208,6 +214,10 @@ export class BuildBar extends HudPart {
     const power = this.sim.power.networks().length
       ? `<div class="bslot power${this.powerOn ? ' on' : ''}" aria-label="Power view ${this.powerOn ? 'on' : 'off'}"><span class="key glyph">${this.powerGlyph}</span><span class="sl">Power</span></div>`
       : '';
-    this.set('buildbar', el, 'html', html + power);
+    // E23.4.5: the Water view toggle beside it (once the water network is handed over, Cistern Basin's Keeper)
+    const water = this.sim.water.unlocked('pipe')
+      ? `<div class="bslot power water${this.waterOn ? ' on' : ''}" aria-label="Water view ${this.waterOn ? 'on' : 'off'}"><span class="key glyph">${this.waterGlyph}</span><span class="sl">Water</span></div>`
+      : '';
+    this.set('buildbar', el, 'html', html + power + water);
   }
 }

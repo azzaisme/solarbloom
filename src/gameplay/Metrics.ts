@@ -1,4 +1,3 @@
-import { TUNING } from '../data/tuning';
 import type { Sim } from './Sim';
 
 /** Records the playtest numbers from the Round 2 plan into the save (shown in Settings). */
@@ -8,9 +7,8 @@ export class Metrics {
     b.on('upgrade.granted', () => this.first('upgrade'));
     b.on('machine.built', ({ machine }) => this.first(machine.type));
     b.on('cat.found', () => this.first('cat'));
-    b.on('milestone.reached', ({ at }) => this.first(`park${at}`));
+    b.on('biomass.gathered', ({ by }) => by === 'bot' && this.first('gathered')); // E23.1.4: unlocks the Harvester
     b.on('tree.discharged', () => this.first('treePulse'));
-    b.on('rooftop.coreRestored', () => this.first('core'));
     b.on('area.cleared', ({ areaId }) => {
       if (areaId === 'park') return;
       (sim.state.stats.areaTimes ??= []).push(Math.round(sim.time));
@@ -48,25 +46,27 @@ export class Metrics {
       `Areas cleared ${times.length} · ${hours > 0.05 ? (times.length / hours).toFixed(1) : '—'} per hour · fastest ${gaps.length ? mmss(Math.min(...gaps)) : '—'} · slowest ${gaps.length ? mmss(Math.max(...gaps)) : '—'}`,
       `Time to each area: ${times.length ? times.slice(0, 20).map((t, i) => `#${i + 1} ${mmss(t)}`).join(', ') + (times.length > 20 ? ` … #${times.length} ${mmss(times[times.length - 1])}` : '') : '—'}`,
       `Biggest chain ×${st.maxCombo} · chains ${st.chains} · big chains by you ${st.bigChains?.player ?? 0} / automation ${st.bigChains?.auto ?? 0}`,
-      `Lucky Cats found ${st.catsFound} · first ${mmss(f.cat)}${(() => {
-        // Phase 5 E15: rarer cats.
-        const log = s.state.cat.log ?? [];
-        const g = log.filter((e) => e.variant === 'golden').length;
-        const r = log.filter((e) => e.variant === 'rainbow').length;
-        return g || r ? ` · golden ${g} · rainbow ${r}` : '';
-      })()}`,
+      // E23.12.3: no cat line before one is found (Settings › Game shows these timings)
+      ...(s.cat.known
+        ? [
+          `Lucky Cats found ${st.catsFound} · first ${mmss(f.cat)}${(() => {
+            // Phase 5 E15: rarer cats.
+            const log = s.state.cat.log ?? [];
+            const g = log.filter((e) => e.variant === 'golden').length;
+            const r = log.filter((e) => e.variant === 'rainbow').length;
+            return g || r ? ` · golden ${g} · rainbow ${r}` : '';
+          })()}`,
+          ]
+        : []),
       `First upgrade ${mmss(f.upgrade)} · Drone Hub ${mmss(f.droneHub)} · Mother Tree ${mmss(f.motherTree)}`,
       `Time with nothing to do ${Math.round(st.stuckSeconds)} s`,
     ];
     return lines.join('\n');
   }
 
-  /** "Unable to act": can't afford even a mossy-tile pulse and Harvest is cooling down (nothing is bought any more). */
+  /** "Unable to act": out of charge, so no pulse (E23.1.4: charge is the only thing a pulse costs). */
   tick(dt: number) {
-    const s = this.sim;
-    const minPulse = TUNING.pulse.prepared.energy * s.upgrades.pulseEnergyMult;
-    if (s.econ.get('energy').gte(minPulse) && s.econ.get('water').gte(1)) return;
-    if (s.time >= s.state.harvestReadyAt) return;
-    s.state.stats.stuckSeconds += dt;
+    if (this.sim.charge.canUse('pulse')) return;
+    this.sim.state.stats.stuckSeconds += dt;
   }
 }

@@ -2,6 +2,7 @@ import type { BuildableType, ComponentId, SalvageState } from '../core/types';
 import { COMPONENT_RECIPES, CRAFT, DECOR_RECIPES, MACHINE_RECIPES, type ComponentRecipe, type DecorRecipe, type MachineRecipe, type Unlock } from '../data/crafting';
 import { KEEPERS, REGIONS } from '../data/oldcity';
 import { itemDef } from '../data/items';
+import { HAND_JOBS } from '../data/automation';
 import type { Sim } from './Sim';
 
 /**
@@ -11,7 +12,8 @@ import type { Sim } from './Sim';
  * craft makes goes to the backpack, anything over a stack to the store. Machines are paid for where they are
  * built (build mode reads `machineRecipe`), and removing one gives everything back.
  *
- * Unlocks: from the start (`home`), when a region's Keeper wakes, from research (E23.6.2) or from a cache.
+ * Unlocks: from the start (`home`), when a region's Keeper wakes, from research (E23.6.2), from a cache, or (E23.12.2)
+ * a cat-only decoration a Lucky Cat left.
  */
 export class Crafting {
   constructor(private sim: Sim) {}
@@ -32,6 +34,9 @@ export class Crafting {
     }
     if ('research' in u) return this.sim.research.done(u.research);
     if ('tier' in u) return sv.tier >= u.tier;
+    if ('cat' in u) return !!sv.decorMade?.includes(u.cat); // E23.12.2: a Lucky Cat left it
+    if ('hand' in u) return !!this.sim.automation?.handDone(u.hand);
+    if ('all' in u) return u.all.every((x) => this.unlocked(x));
     return sv.caches.includes(u.find);
   }
 
@@ -45,6 +50,11 @@ export class Crafting {
     }
     if ('research' in u) return '🔒 Research';
     if ('tier' in u) return `🔒 Fountain tier ${u.tier}`;
+    if ('hand' in u) {
+      const job = HAND_JOBS[u.hand];
+      return `🔒 ${job.name} (${this.sim.automation?.handCount(u.hand) ?? 0} of ${job.times})`;
+    }
+    if ('all' in u) return this.unlockLabel(u.all.find((x) => !this.unlocked(x)) ?? u.all[0]);
     return '🔒 Not found yet';
   }
 
@@ -55,6 +65,14 @@ export class Crafting {
   /** The component recipes known now, in table order. */
   components(): ComponentRecipe[] {
     return COMPONENT_RECIPES.filter((r) => this.unlocked(r.unlock));
+  }
+
+  /**
+   * E23.6.5: every recipe known now that makes an item (what an Assembler can make). Today those are the
+   * components: a machine recipe builds a machine in the world and a decoration is made once, so neither is an item.
+   */
+  itemRecipes(): ComponentRecipe[] {
+    return this.components();
   }
 
   /** E23.6.1: the recipe that builds a machine type (undefined: it keeps its E21.3 recipe). */
@@ -90,6 +108,17 @@ export class Crafting {
     const short = this.sim.inventory.shortfall(r.cost);
     if (short) return `Needs ${itemDef(short).name}`;
     return undefined;
+  }
+
+  /**
+   * E23.12.2 (#529): a Lucky Cat leaves a decoration made (nothing paid): it is bloombot's for good, free to place,
+   * and its recipe reads as made on the table. False when it was made already.
+   */
+  giveDecor(id: string): boolean {
+    const sv = this.sv;
+    if (!sv || !this.decor(id) || this.decorMade(id)) return false;
+    sv.decorMade = [...(sv.decorMade ?? []), id].sort();
+    return true;
   }
 
   /** Makes a decoration once (pays its recipe); it is bloombot's for good. True when made. */

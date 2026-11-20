@@ -26,17 +26,12 @@ const OPEN = new Set(['lawn', 'clay', 'litter', 'sand', 'paving', 'road']);
 export class BuriedSystem {
   constructor(private sim: Sim) {}
 
-  get on(): boolean {
-    return this.sim.oldCity;
-  }
-
   private get st(): { known: string[]; dug: string[] } {
     return (this.sim.state.buried ??= { known: [], dug: [] });
   }
 
   /** The find buried at a ground tile, if any and not dug up yet. */
   at(x: number, z: number): BuriedFind | undefined {
-    if (!this.on) return undefined;
     if (tileRandom(this.sim.state.seed, SALT, x, z) >= 1 / BURIED.oneIn) return undefined;
     if (CAT_CELLS.has(`${x},${z}`)) return undefined;
     const t = this.sim.grid.get(GROUND, x, z);
@@ -53,7 +48,6 @@ export class BuriedSystem {
 
   /** Every find within `radius` tiles (Euclidean) of a cell, nearest first. */
   near(x: number, z: number, radius: number): BuriedFind[] {
-    if (!this.on) return [];
     const out: BuriedFind[] = [];
     const R = Math.ceil(radius);
     for (let dz = -R; dz <= R; dz++)

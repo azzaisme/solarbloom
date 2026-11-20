@@ -21,7 +21,7 @@ const realItem = (k: string) => k in ITEM_DEFS;
 
 /** A new old-city game with Pylon (Mast Row) awake: the station is there. */
 function station() {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = 1;
   sim.bot = NEAR;
   sim.state.salvage!.keepers.pylon = { step: 'request1' };
@@ -86,7 +86,7 @@ describe('E23.6.2: research in data', () => {
 
 describe('E23.6.2: the research station', { timeout: 60000 }, () => {
   it('is at home once the first Keeper wakes', () => {
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     expect(sim.research.on).toBe(false);
     expect(sim.research.finds()).toEqual([]);
     sim.state.salvage!.keepers.tide = { step: 'request1' };
@@ -227,14 +227,16 @@ describe('E23.6.2: the research station', { timeout: 60000 }, () => {
     const sim = station();
     sim.state.salvage!.research = { analysed: [], done: PROJECTS.map((p) => p.id), running: [], levels: {} };
     const offered = sim.research.upgrades().map((u) => u.id);
-    // E23.4 water, E23.5.3's compost bin and E23.6.4 couriers are not in this game yet
-    for (const id of ['pumpRate', 'reservoirSize', 'evaporation', 'compostSpeed', 'droneCarry'])
+    // E23.4 water is not in this game yet; E23.6.4's couriers wait for things carried by hand
+    for (const id of ['pumpRate', 'reservoirSize', 'evaporation', 'droneCarry'])
       expect(offered, id).not.toContain(id);
-    expect(sim.research.upgradeProblem('compostSpeed')).toBe('Not open yet');
+    expect(sim.research.upgradeProblem('pumpRate')).toBe('Not open yet');
+    // E23.5.3's compost bin is: Busy worms is offered (its real effect is tested in farm-compost)
+    expect(offered).toContain('compostSpeed');
     // E23.2.1's charge and E23.3's batteries are: their upgrades are offered
     for (const id of ['backpack', 'pulseRadius', 'poleReach', 'solarYield', 'droneRange', 'droneSpeed', 'chargeCells', 'chargeEfficiency', 'sprint', 'batteryStore']) expect(offered, id).toContain(id);
-    // "Lighter drones" waits for E23.6.3's reader (#502), so it is not in the data yet
-    expect(RESEARCH_UPGRADES.map((u) => u.id)).not.toContain('droneThrift');
+    // "Lighter drones" is read by E23.6.3's drone supply (#502), so it is offered with the drones
+    expect(offered).toContain('droneThrift');
   });
 
   it('crops and creatures found open projects', () => {
@@ -307,12 +309,12 @@ describe('E23.6.2: the farm reads research (E23.5.2 planters)', () => {
     return { sim, at, sow };
   }
 
-  it('Kind soil and Crossbreeds are offered once planters are in the game; Busy worms waits for the compost bin', () => {
+  it('Kind soil, Crossbreeds and Busy worms are offered now planters and compost bins are in the game', () => {
     const { sim } = farm();
     const offered = sim.research.upgrades().map((u) => u.id);
     expect(offered).toContain('cropGrowth');
     expect(offered).toContain('crossbreed');
-    expect(offered).not.toContain('compostSpeed');
+    expect(offered).toContain('compostSpeed');
   });
 
   it('Kind soil: crops grow a little faster, every level', () => {

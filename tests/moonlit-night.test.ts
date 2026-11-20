@@ -112,7 +112,7 @@ describe('E23.7.5 moonlit nights', () => {
     };
     const want = look(MIDNIGHT);
     // the game's own clock, wound to the middle of the night
-    const sim = new Sim(createInitialState(7, 'oldcity'));
+    const sim = new Sim(createInitialState(7));
     (sim.state.clock ??= { offset: 0 } as never).offset += (MIDNIGHT - sim.clock.dayFraction()) * DAY_SECONDS;
     expect(sceneNow(sim, undefined).f).toBeCloseTo(MIDNIGHT, 3);
     expect(look(sceneNow(sim, undefined).f)).toEqual(want);
@@ -126,7 +126,7 @@ describe('E23.7.5 moonlit nights', () => {
     sim.clock.now = () => new Date(2026, 10, 19, 14, 0, 0);
     const photo = new PhotoMode(
       { camera: { snapshot: () => ({}) as never, restore: () => {}, pitchOffset: 0, maxZoom: 4.2, held: false, zoomBy: () => {}, pan: () => {}, orbit: () => {}, recentre: () => {} }, setHudHidden: () => {}, setDof: () => {}, capture: () => {}, render: () => {}, clockHour: () => 14, setFilter: () => {} },
-      new Bindings(undefined, { oldCity: true }),
+      new Bindings(),
     );
     photo.enter();
     photo.setHour(hour);

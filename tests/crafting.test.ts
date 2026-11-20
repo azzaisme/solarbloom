@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { GroundState } from '../src/core/types';
 import { COMPONENT_IDS, COMPONENT_RECIPES, DECOR_RECIPES, MACHINE_RECIPES, type Unlock } from '../src/data/crafting';
-import { DECOR_OPTION } from '../src/data/cozy';
+import { CAT_DECOR, DECOR_OPTION } from '../src/data/cozy';
 import { LIGHTS } from '../src/data/lights';
 import { ITEM_DEFS } from '../src/data/items';
-import { MACHINES, OLD_CITY_BUILDABLE } from '../src/data/machines';
+import { BUILDABLE, MACHINES } from '../src/data/machines';
 import { KEEPERS, REGIONS } from '../src/data/oldcity';
 import { PROJECTS } from '../src/data/research';
+import { HAND_JOBS } from '../src/data/automation';
 import { Sim } from '../src/gameplay/Sim';
 import { SaveService } from '../src/app/SaveService';
 import { componentRows, machineRows } from '../src/ui/CraftTable';
@@ -16,7 +17,7 @@ import { Cozy } from '../src/gameplay/Cozy';
 
 const NEAR = { roofId: GROUND, x: 8.5, z: 11.5 };
 const oldSim = () => {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = 1;
   sim.bot = NEAR;
   return sim;
@@ -29,6 +30,9 @@ function reachable(u: Unlock): boolean {
   if ('keeper' in u) return KEEPERS.some((k) => k.region === u.keeper);
   if ('find' in u) return CACHES.has(u.find);
   if ('tier' in u) return u.tier >= 1 && u.tier <= 5;
+  if ('cat' in u) return CAT_DECOR.includes(u.cat); // E23.12.2: a cat-only decoration (a Lucky Cat leaves it)
+  if ('hand' in u) return u.hand in HAND_JOBS; // E23.6.4: a job done by hand
+  if ('all' in u) return u.all.every(reachable);
   return PROJECTS.some((p) => p.id === u.research); // E23.6.2: a real project
 }
 
@@ -178,8 +182,8 @@ describe('E23.6.1: the crafting table', () => {
     expect(wire.problem).toBeUndefined();
     expect(wire.label).toBe('Wire, makes 2 from 2 Copper, 0 at hand');
     expect(rows.find((r) => r.id === 'motor')!.problem).toBeDefined();
-    // at fountain tier 1 the table knows the Water Condenser; each Keeper adds its machines
-    expect(machineRows(sim).map((m) => m.id)).toEqual(['condenser']);
+    // at fountain tier 1 the table knows the home kit (the compost bin, E23.5.3) and the Water Condenser; each Keeper adds its machines
+    expect(machineRows(sim).map((m) => m.id)).toEqual(['compostBin', 'condenser']);
     for (const k of KEEPERS) sim.state.salvage!.keepers[k.id] = { step: 'settled' };
     expect(machineRows(sim).map((m) => m.id)).toEqual(MACHINE_RECIPES.filter((r) => r.builds && sim.crafting.unlocked(r.unlock)).map((r) => r.id));
     expect(machineRows(sim).map((m) => m.id)).toContain('solar');
@@ -257,7 +261,7 @@ describe('E23.6.1: the crafting table', () => {
   });
 
   it('every machine is built from a crafting-table recipe', () => {
-    for (const t of OLD_CITY_BUILDABLE) {
+    for (const t of BUILDABLE) {
       expect(MACHINE_RECIPES.find((r) => r.builds === t), t).toBeDefined();
     }
   });

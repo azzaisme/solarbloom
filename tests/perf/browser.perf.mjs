@@ -124,7 +124,7 @@ try {
     const g = window.solarbloom;
     const s = g.sim;
     const st = s.state;
-    st.caps.energy = new (st.resources.energy.constructor)(1e9); st.caps.water = new (st.resources.energy.constructor)(1e9);
+    for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) st.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
     st.progression.coreActivated = true;
     s.areas.clear('park', true);
     const insert = (type, t) => {
@@ -374,7 +374,7 @@ try {
     const g = window.solarbloom;
     const s = g.sim;
     const st = s.state;
-    st.resources.energy = new (st.resources.energy.constructor)(1e6); st.resources.water = new (st.resources.energy.constructor)(1e6); st.resources.biomass = new (st.resources.energy.constructor)(1e6);
+    for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) st.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
     const cleared = new Set(s.areas.revealed().filter((id) => s.areas.fog(id) === 'cleared'));
     const ok = (x, z) => {
       const t = s.grid.get('g', x, z);
@@ -446,9 +446,7 @@ try {
       const g = window.solarbloom;
       const s = g.sim;
       if (!s.transitions) return { skipped: true };
-      const B = s.state.resources.energy.constructor;
-      s.state.resources.energy = new B(1e6);
-      s.state.caps.energy = new B(1e6);
+      for (const m of ['scrap','seeds','copper','timber','glass','clay','gears','sunstone','biomass','food']) s.state.salvage.pack[m] = 999; // E23.1.4: a full backpack (no counters)
       for (let x = row.from; x <= row.from + row.len; x++)
         for (let dz = -27; dz <= 27; dz++) {
           const t = s.grid.get('g', x, row.z + dz);

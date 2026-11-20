@@ -1,4 +1,3 @@
-import { toNum } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { SaveService } from '../src/app/SaveService';
 
@@ -127,28 +126,24 @@ describe('save v4: compression (City 02.4)', () => {
   });
 });
 
-describe('save v4: lazy city chunks keep producing', () => {
-  it('income right after loading matches before saving (estimated until chunks load, then exact)', async () => {
-    const { createInitialState, GROUND: G } = await import('../src/core/GameState');
-    const sim = new Sim(createInitialState(21));
-    for (let cx = 2; cx < 6; cx++) {
-      const c = sim.grid.chunkAt(G, cx, 3)!;
-      for (const t of c.tiles) {
-        if (!t || t.blocked) continue;
-        t.ground = 'restored';
-        t.bloom = 1 + (t.variant % 3);
-        t.pollution = 0;
-        sim.grid.touch(t);
-      }
-    }
-    sim.production.markDirty();
-    const before = toNum(sim.production.rates().biomass);
-    const copy = new Sim(saver.deserialize(saver.serialize(sim.state))!);
-    expect(copy.grid.loadedChunks(G).length).toBeLessThan(sim.grid.loadedChunks(G).length); // lazy
-    const est = toNum(copy.production.rates().biomass);
-    expect(est).toBeGreaterThan(before * 0.9);
-    expect(est).toBeLessThan(before * 1.1);
-    for (let cx = 2; cx < 6; cx++) copy.grid.chunkAt(G, cx, 3);
-    expect(toNum(copy.production.rates().biomass)).toBeCloseTo(before, 6);
+describe('save v4: the old counters are dropped (E23.1.4)', () => {
+  it('a save written with energy, water and biomass counters loads without them, and saves the same game', () => {
+    const sim = makeSim(22);
+    rich(sim);
+    fill(sim, 1, 1, 4, 4, 'restored');
+    const json = saver.serialize(sim.state);
+    const old = JSON.parse(json) as Record<string, unknown>;
+    old.resources = { energy: '1e5', water: '250', biomass: '4.2e3' };
+    old.caps = { energy: '1e6', water: '1e4' };
+    old.harvestReadyAt = 123;
+    old.relayBonus = 2;
+    const loaded = saver.deserialize(JSON.stringify(old))!;
+    expect(loaded).toBeDefined();
+    for (const k of ['resources', 'caps', 'harvestReadyAt', 'relayBonus']) expect(k in loaded, k).toBe(false);
+    // the rest of the game is untouched: it saves exactly as the save it came from
+    expect(saver.serialize(loaded)).toBe(json);
+    const back = new Sim(loaded);
+    expect(back.progression.restoredCount('r1')).toBe(sim.progression.restoredCount('r1'));
+    expect(back.inventory.count('scrap')).toBe(sim.inventory.count('scrap'));
   });
 });

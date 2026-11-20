@@ -3,6 +3,7 @@ import { SaveService } from '../src/app/SaveService';
 import { PARK } from '../src/core/Areas';
 import { createInitialState } from '../src/core/GameState';
 import { Sim } from '../src/gameplay/Sim';
+import { wakeNextArea } from './helpers';
 
 describe('local playtest instrumentation (City 09.7)', () => {
   it('records the time to each area and summarises a session readably', () => {
@@ -12,10 +13,11 @@ describe('local playtest instrumentation (City 09.7)', () => {
     sim.areas.clear(PARK, true);
     for (let i = 0; i < 25; i++) {
       sim.advance(30);
-      sim.areas.clear(sim.areas.nextGoal()!, true);
+      expect(wakeNextArea(sim)).toBe(true); // E23.1.1: through the gates, as a player would
     }
     sim.state.stats.maxCombo = 87;
     sim.state.stats.catsFound = 4;
+    sim.state.cat.found = 4; // E23.12.3: the timings name cats only once one is found
     const times = sim.state.stats.areaTimes!;
     expect(times).toHaveLength(25);
     expect(times[1] - times[0]).toBe(30);

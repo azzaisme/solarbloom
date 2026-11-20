@@ -32,13 +32,6 @@ export interface ArterialRun {
 
 const NET = hashString('network');
 
-/** Generations 2–3: is there a road (or canal) along this chunk row / column? Two tiles wide, seeded per row/column. */
-export function roadRow(seed: number, cz: number) {
-  return tileRandom(seed, NET, 0, cz, 1) < CITY_GEN.roadChance;
-}
-export function roadCol(seed: number, cx: number) {
-  return tileRandom(seed, NET, cx, 0, 2) < CITY_GEN.roadChance;
-}
 /** A canal along this chunk row (lanes 3–4), every generation. */
 export function canalRow(seed: number, cz: number) {
   return tileRandom(seed, NET, 0, cz, 3) < CITY_GEN.canalChance;

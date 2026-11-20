@@ -213,7 +213,7 @@ export class Research {
 
   /** Is an upgrade's system in the game (so a level bought does something)? */
   systemReady(needs: UpgradeSystemId): boolean {
-    const s = this.sim as unknown as { charge?: unknown; power?: { hasBatteries?(): boolean }; water?: unknown; farm?: { researchReady?: boolean }; compost?: { researchReady?: boolean }; couriers?: unknown };
+    const s = this.sim as unknown as { charge?: unknown; power?: { hasBatteries?(): boolean }; water?: unknown; farm?: { researchReady?: boolean }; compost?: { researchReady?: boolean }; automation?: { researchReady?: boolean } };
     switch (needs) {
       case 'always':
       case 'drones':
@@ -231,7 +231,7 @@ export class Research {
       case 'compost':
         return !!s.compost?.researchReady; // E23.5.3 (#509): the compost bin reads Busy worms
       case 'couriers':
-        return !!s.couriers;
+        return !!s.automation?.researchReady; // E23.6.4: courier routes (Automation.carry)
     }
   }
 

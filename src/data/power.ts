@@ -39,8 +39,6 @@ export const POWER = {
   /** Charger (E23.3.3): bloombot's charge per second while it sits on a powered pad (CHARGE.meditatePerSecond is 6). */
   // rate: E23.2.1's meditating rate (data/charge); reach: how close to the pad's edge bloombot sits (tiles)
   charger: { rate: CHARGE.meditatePerSecond, reach: 0.75 },
-  /** Helpers on the grid (E23.3.3, old-city rules): their draw while they stand. */
-  helper: { droneHub: 4, cultivator: 4 },
   /**
    * E23.3.4 the Power view: powered electrical machines become pure-yellow holograms (the build preview's look;
    * `holo` is its opacity and emissive glow); `frame` is the width of the network's frame under each machine, a share of the build frame's, and `cable`

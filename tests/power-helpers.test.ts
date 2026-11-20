@@ -1,8 +1,8 @@
-import { big } from '../src/core/Big';
 import { describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import type { MachineData } from '../src/core/types';
 import { CHARGE } from '../src/data/charge';
+import { DRONE_SUPPLY } from '../src/data/drones';
 import { POWER } from '../src/data/power';
 import { Sim } from '../src/gameplay/Sim';
 
@@ -21,9 +21,8 @@ function put(sim: Sim, type: MachineData['type'], x: number, z: number, size = 1
 }
 
 function oldCity() {
-  const sim = new Sim(createInitialState(7, 'oldcity'));
+  const sim = new Sim(createInitialState(7));
   sim.state.salvage!.tier = 2;
-  sim.state.resources.energy = big(1e6);
   // Clear noon: these tests are about chargers and helpers, not E23.7's sky (a new game starts at 07:30, when
   // panels are still waking up).
   sim.power.skyOverride = () => ({ sun: 1, solar: 1, cloudy: false, wind: 0, dark: 0 });
@@ -90,16 +89,134 @@ describe('E23.3.3 chargers', () => {
     charge(sim);
     const pad = put(sim, 'charger', 30, 30);
     const hub = put(sim, 'droneHub', 31, 30, 2);
+    hub.role = 'scout'; // E23.6.3: a hub draws by its drones' roles; a Scout's is the most (4 W)
+    (hub.roles ??= []).push('scout');
     put(sim, 'solar', 29, 30);
-    put(sim, 'solar', 29, 31); // 8 W: the charger (6) fits, the hub (4) does not
+    put(sim, 'solar', 29, 31); // 8 W: the charger (6) fits, a Scout at work (4) does not
     sim.bot = { roofId: GROUND, x: 30.5, z: 30.5 };
     sim.advance(1);
     expect(sim.power.isPowered(pad)).toBe(true);
-    expect(sim.power.isPowered(hub)).toBe(false);
-    // bloombot steps off: the charger idles and the hub comes back by itself
+    // E23.6.3: the hub draws only for drones at work, so it sends none out while there is no room for one
+    expect(sim.droneFuel.short(hub, 'scout')).toBe('power');
+    sim.advance(5);
+    const mine = () => sim.state.drones.filter((d) => d.hubId === hub.id);
+    expect(mine().length).toBeGreaterThan(0);
+    for (const d of mine()) expect(sim.drones.statusOf(d)).toBe('waitingEnergy');
+    expect(sim.power.draw(hub)).toBe(0);
+    // bloombot steps off: the charger idles and the hub sends its Scouts out by itself
     sim.bot = { roofId: GROUND, x: 40.5, z: 40.5 };
     sim.advance(1);
-    expect(sim.power.isPowered(hub)).toBe(true);
+    expect(sim.droneFuel.short(hub, 'scout')).toBeUndefined();
+  });
+});
+
+describe('E23.6.3 drones on a real grid', () => {
+  it('a hub sends out only as many drones as the grid has room for at its turn, and draws only for them', () => {
+    const sim = oldCity();
+    const hub = put(sim, 'droneHub', 30, 30, 2);
+    hub.role = 'scout';
+    (hub.roles ??= []).push('scout');
+    put(sim, 'solar', 29, 30);
+    put(sim, 'solar', 29, 31);
+    put(sim, 'solar', 29, 32); // 12 W at noon: room for three Scouts at 4 W, not four
+    sim.power.tick(1);
+    const each = DRONE_SUPPLY.scout.power;
+    expect(sim.power.headroom(hub)).toBeCloseTo(12, 6);
+    sim.state.drones = [];
+    for (let i = 0; i < 3; i++) {
+      expect(sim.droneFuel.short(hub, 'scout'), `drone ${i}`).toBeUndefined();
+      sim.state.drones.push({ id: `d${i}`, hubId: hub.id, role: 'scout', mode: 'flying', px: 31, pz: 30, timer: 0 } as never);
+      sim.power.tick(0.1);
+      expect(sim.power.draw(hub)).toBe(each * (i + 1));
+      expect(sim.power.isPowered(hub)).toBe(true);
+    }
+    // a fourth would not fit: it waits at home, and the three out keep their power
+    expect(sim.droneFuel.short(hub, 'scout')).toBe('power');
+    // one comes home and naps: room again
+    (sim.state.drones[0] as { mode: string }).mode = 'idle';
+    sim.power.tick(0.1);
+    expect(sim.power.draw(hub)).toBe(each * 2);
+    expect(sim.droneFuel.short(hub, 'scout')).toBeUndefined();
+  });
+});
+
+describe('E23.6.3 several hubs on one line', () => {
+  /** Scout hubs (4 W a drone at work) side by side on one line of `panels` solar panels (4 W each at noon). */
+  function line(hubs: number, panels: number) {
+    const sim = oldCity();
+    const hs: MachineData[] = [];
+    for (let i = 0; i < hubs; i++) {
+      const h = put(sim, 'droneHub', 30 + i * 2, 30, 2);
+      h.role = 'scout';
+      (h.roles ??= []).push('scout');
+      hs.push(h);
+    }
+    for (let i = 0; i < panels; i++) put(sim, 'solar', 29, 30 + i);
+    sim.state.drones = [];
+    sim.power.tick(1);
+    return { sim, hs };
+  }
+  /** A drone of this hub sets out, as the drone system does: the hub pays for the job, then the drone is out. */
+  function launch(sim: Sim, hub: MachineData): boolean {
+    if (!sim.droneFuel.take(hub, 'scout')) return false;
+    sim.state.drones.push({ id: sim.newId('d'), hubId: hub.id, role: 'scout', mode: 'flying', px: hub.x + 1, pz: hub.z + 1, timer: 0, jobs: 0 } as never);
+    return true;
+  }
+  const out = (sim: Sim) => sim.state.drones.length * DRONE_SUPPLY.scout.power;
+
+  it('within one tick, launches from two hubs never book the same room', () => {
+    const { sim, hs } = line(2, 3); // 12 W: room for three Scouts at work
+    expect(sim.power.headroom(hs[0])).toBeCloseTo(12, 6);
+    // both hubs try in turn, again and again, before the grid solves again
+    let ok = 0;
+    for (let i = 0; i < 4; i++) for (const h of hs) if (launch(sim, h)) ok++;
+    expect(ok).toBe(3);
+    expect(sim.power.headroom(hs[0])).toBeCloseTo(0, 6);
+    expect(sim.power.headroom(hs[1])).toBeCloseTo(0, 6);
+    // the grid solves: everything out is powered, nothing is shed
+    sim.power.tick(1);
+    for (const h of hs) expect(sim.power.isPowered(h)).toBe(true);
+    expect(out(sim)).toBeLessThanOrEqual(12 + 1e-9);
+  });
+
+  it('a new launch never sheds a busy hub, whichever hub comes first in the shed order', () => {
+    for (const hubs of [2, 3]) {
+      const { sim, hs } = line(hubs, 3);
+      // the last hub (last in the shed order) is busy first: two Scouts out
+      const busy = hs[hs.length - 1];
+      expect(launch(sim, busy)).toBe(true);
+      expect(launch(sim, busy)).toBe(true);
+      sim.power.tick(1);
+      expect(sim.power.isPowered(busy)).toBe(true);
+      // what is truly free is what is left after those two, for every hub on the line
+      for (const h of hs) expect(sim.power.headroom(h), `${hubs} hubs`).toBeCloseTo(4, 6);
+      // an earlier hub launches into the 4 W left, and no more
+      expect(launch(sim, hs[0])).toBe(true);
+      for (const h of hs) expect(launch(sim, h), `${hubs} hubs: full`).toBe(false);
+      sim.power.tick(1);
+      for (const h of hs) expect(sim.power.isPowered(h), `${hubs} hubs`).toBe(true); // the busy hub is still on
+      expect(out(sim)).toBe(12);
+      // one Scout home: its room comes back on the next solve, for any hub
+      (sim.state.drones[0] as { mode: string }).mode = 'idle';
+      sim.power.tick(1);
+      expect(sim.power.headroom(hs[1])).toBeCloseTo(4, 6);
+    }
+  });
+
+  it('in the game: three Scout hubs on a short line never shed one another over a minute of launches', () => {
+    const { sim, hs } = line(3, 3);
+    // the hubs' area opened, so the Scouts have its dead ground in reach to work
+    sim.areas.clear(sim.areas.areaOf(hs[0])!, true);
+    let shed = 0;
+    let most = 0;
+    for (let t = 0; t < 60; t += 0.25) {
+      sim.advance(0.25);
+      for (const h of hs) if (sim.power.draw(h) > 0 && !sim.power.isPowered(h)) shed++;
+      most = Math.max(most, sim.state.drones.filter((d) => hs.some((h) => h.id === d.hubId) && d.mode !== 'idle' && d.mode !== 'cooldown').length);
+    }
+    expect(shed).toBe(0);
+    expect(most).toBeGreaterThan(0); // they did go out
+    expect(most).toBeLessThanOrEqual(3);
   });
 });
 
@@ -143,12 +260,6 @@ describe('E23.3.3 powered helpers', () => {
       expect(['idle', 'returning']).toContain(d.mode);
       expect(sim.drones.statusOf(d)).toBe('waitingEnergy');
     }
-  });
-
-  it('helpers stay unpowered-proof in the classic game (no grid there)', () => {
-    const sim = new Sim(createInitialState(7));
-    const hub = put(sim, 'droneHub', 30, 30, 2);
-    expect(sim.power.isPowered(hub)).toBe(true);
   });
 
   it('a Cultivator off the grid parks its tillers on the dock', () => {

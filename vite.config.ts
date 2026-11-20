@@ -9,15 +9,14 @@ const env = (globalThis as { process?: { env: Record<string, string | undefined>
  * A new test file joins the full suite automatically; add it here too if it is fast and core.
  */
 const QUICK = [
-  'smoke', 'advisor', 'grid', 'big', 'world', 'economy', 'placement', 'save-storage', 'save-v4', 'area-switches',
-  'area-panel', 'upgrades-city', 'feedback-phase4', 'playtest-metrics', 'canal-network', 'district-bloom',
-  'rooftop-clusters', 'relay-city', 'no-growing-prices', 'look', 'palette-lint', 'icons', 'hud-contrast', 'look3-budget', 'roads', 'drone-roles',
-  'bloombot-walk', 'bindings', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glyphs', 'rebind', 'save-slots', 'backpack', 'charge', 'pulse-load', 'rest', 'e23-models', 'farmland-art',
+  'smoke', 'advisor', 'grid', 'world', 'economy', 'placement', 'save-storage', 'save-v4', 'area-switches',
+  'area-panel', 'upgrades-city', 'feedback-phase4', 'playtest-metrics',
+  'relay-city', 'no-growing-prices', 'look', 'palette-lint', 'icons', 'hud-contrast', 'look3-budget', 'roads', 'drone-roles',
+  'bloombot-walk', 'bindings', 'deck', 'framing', 'interact', 'pause', 'bloombot-words', 'glyphs', 'rebind', 'save-slots', 'backpack', 'charge', 'pulse-load', 'rest', 'wildlife', 'seatbox', 'e23-models', 'farmland-art',
   // E21: the Old City
-  'oldcity-data', 'oldcity-inventory', 'oldcity-salvage', 'oldcity-recipes', 'oldcity-map', 'oldcity-height', 'oldcity-island', 'oldcity-gates', 'oldcity-fountain', 'oldcity-models', 'oldcity-keepers', 'oldcity-bloombot-first',
+  'oldcity-data', 'oldcity-inventory', 'oldcity-salvage', 'oldcity-recipes', 'oldcity-map', 'oldcity-height', 'oldcity-island', 'oldcity-gates', 'oldcity-fountain', 'oldcity-panel', 'oldcity-models', 'oldcity-keepers', 'oldcity-bloombot-first',
   // E23: a living world
-  'crafting', 'research',
-  'crafting',
+  'crafting', 'research', 'drone-fuel', 'automation',
   // E23.7: time, weather and salvage
   'clock', 'timers', 'photo-scene', 'weather',
   // E23.3: the power grid
@@ -25,13 +24,15 @@ const QUICK = [
   // E23.8: regions and the mainland
   'region-strengths', 'region-unlocks-e23',
   // E23.8.3: the mainland
-  'mainland',
+  'mainland', 'mainland-steel',
   // E23.9: the story
-  'journal',
+  'journal', 'keepers-friends', 'keepers-arcs', 'keepers-tally', 'keepers-crops',
   // E23.4: the water network
-  'water-levels',
+  'water-levels', 'water-fade', 'water-pipes', 'water-desal', 'water-overlay', 'pipe-visuals', 'pipe-visuals-west',
   // E23.5: the farm
-  'farm-items', 'farm-planters',
+  'farm-items', 'farm-planters', 'farm-compost',
+  // E23.12: the Lucky Cat's rewards in the new loop (E23.1.4's one-meter check is tests/e2e/hud-one-meter.e2e.mjs)
+  'lucky-cat-rewards', 'cat-decor', 'cat-secrecy', 'picker-internals', 'cat-sight-cpu', 'cat-sight-schedule',
   // E23.10: the proof
   'e23-gentle-failure',
 ].map((name) => `tests/${name}.test.ts`);
