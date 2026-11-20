@@ -113,6 +113,12 @@ export interface VisitHost {
   solids?: readonly { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number }[];
   /** sitting on a bench with room beside it: the free end of the seat, where an animal beside bloombot settles */
   benchSpot?: { x: number; y: number; z: number };
+  /**
+   * #576: bloombot is still getting into its pose (the sit-down clip, 4.7 s): its arms and knees are on their way, so
+   * where an animal rests on it is looked for only once it is there (else a bee could settle where an arm was going
+   * past, and stay)
+   */
+  posing?: boolean;
   reducedMotion: boolean;
 }
 
@@ -460,7 +466,8 @@ export class Visitors {
     // between fits: riding the bone it rests on
     if (r.found && r.tick === tick) return this.ride(r, anchor);
     if (!r.found) {
-      // still looking: a little more of the look this frame
+      // still looking: a little more of the look this frame (not before bloombot is in its pose)
+      if (!r.job && h.posing) return r.d;
       if (!r.job) {
         const bot = this.botSurface(h);
         if (!bot) return r.d;
