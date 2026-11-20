@@ -205,7 +205,8 @@ describe('E23.6.3 several hubs on one line', () => {
 
   it('in the game: three Scout hubs on a short line never shed one another over a minute of launches', () => {
     const { sim, hs } = line(3, 3);
-    // fog edges in reach for the Scouts to push back (the park beside the Old City's fog)
+    // the hubs' area opened, so the Scouts have its dead ground in reach to work
+    sim.areas.clear(sim.areas.areaOf(hs[0])!, true);
     let shed = 0;
     let most = 0;
     for (let t = 0; t < 60; t += 0.25) {
