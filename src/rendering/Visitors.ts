@@ -47,6 +47,8 @@ interface Actor {
     /** its clip for each phase (VisitorClips), and how long its climb onto a perch lasts (seconds; 0 for none) */
     clips: Record<VisitorPhase, string | undefined>;
     climbFor: number;
+    /** how long its sit clip lasts (seconds; 0 for none): its shape is taken across it (sittingShape) */
+    sitFor: number;
     lift: number;
     clip?: string;
   };
@@ -55,6 +57,8 @@ interface Actor {
    * model), and `r` its reach from the root across the ground
    */
   foot: Footprint & { r: number };
+  /** how far its sitting shape reaches under its root (sittingShape): sitting beside bloombot, it is lifted by this */
+  below?: number;
   /** some of its own vertices, in its own frame (facing +z, feet at 0), to check it rests on bloombot, not in it */
   shape?: number[];
   /** its own faces, in the same frame, so nothing of bloombot pokes into it either (an antenna, the leaf on its head) */
@@ -120,9 +124,10 @@ const ON_GROUND: readonly Perch[] = ['beside', 'sniff', 'perchNear'];
  * it is every `fitEvery` seconds as bloombot breathes and sways; down until it touches, then `above` up again (a hair
  * over). Bloombot's corners within `near` of the perch, and down to `below` under the animal, are checked against it.
  * A place costs its distance from the anchor, `behindCost` more for each unit behind bloombot (hidden from the
- * front), `gapCost` for each unit its underside is off bloombot, and `turnCost` to sit turned.
+ * front), `gapCost` for each unit its underside is off bloombot, and `turnCost` to sit turned. Its shape is its sit
+ * clip looked at `poses` times across the loop, the same corner in each merged within 1/`poseGrid` (sittingShape).
  */
-const SETTLE = { step: 0.004, steps: 15, points: 240, fitEvery: 0.5, lift: 0.01, above: 0.005, gapCost: 20, behindCost: 6, turnCost: 0.1, near: 0.45, below: 0.35, budgetMs: 1.5, fine: [0, 0.0125, -0.0125, 0.025, -0.025] };
+const SETTLE = { step: 0.004, steps: 15, points: 240, fitEvery: 0.5, lift: 0.01, above: 0.005, gapCost: 20, behindCost: 6, turnCost: 0.1, near: 0.45, below: 0.35, budgetMs: 1.5, poses: 4, poseGrid: 250, fine: [0, 0.0125, -0.0125, 0.025, -0.025] };
 /**
  * How far an animal on bloombot may move from its perch's anchor to find a place to rest (world units), and how far
  * down: near first, then further, then turned a quarter either way (a tall bird has no room on the shoulder
@@ -203,9 +208,10 @@ export class Visitors {
         for (const t of tracks) e.anim!.assignAnimation(t.name, t, undefined, 1, loops(t.name, clips));
       }
       const climb = clips.climb !== clips.move ? tracks.find((t) => t.name === clips.climb) : undefined;
+      const sit = tracks.find((t) => t.name === clips.sit);
       a.root.addChild(holder);
       a.body.enabled = false;
-      a.model = { holder, entity: e, clips, climbFor: climb ? Math.min(climb.duration, VISIT.climbMax) : 0, lift: look.lift ?? 0 };
+      a.model = { holder, entity: e, clips, climbFor: climb ? Math.min(climb.duration, VISIT.climbMax) : 0, sitFor: sit?.duration ?? 0, lift: look.lift ?? 0 };
       // centred over its feet; turned a quarter (look.turn), its sides swap
       const [hx, hz] = Math.abs(Math.sin(((look.turn ?? 0) * Math.PI) / 180)) > 0.7 ? [size.z * s, size.x * s] : [size.x * s, size.z * s];
       a.shape = undefined;
@@ -253,10 +259,11 @@ export class Visitors {
       // at rest: wings level, head ahead (it may be mid-beat on its way in)
       for (const part of a.parts) part.setLocalEulerAngles(0, 0, 0);
       if (a.flies && FOLDS.includes(a.kind)) for (const w of a.parts.slice(0, 2)) w.setLocalScale(WING_FOLD, 1, 1); // landed, wings folded
-      const all = ownShape(a.root);
+      const { pts: all, tris } = sittingShape(a);
       if (all.length) a.foot = footOf(all); // every vertex, so a tail tip or an ear counts
+      a.below = belowFeet(all);
       a.shape = thin(all, SETTLE.points);
-      a.faces = new Surface(toOwnFrame(surfaceTriangles(a.root), a.root));
+      a.faces = new Surface(toOwnFrame(tris, a.root));
     }
     // a long one (an otter, a fawn) does not fit on the seat facing out: on the ground beside the bench instead
     const onSeat = !!h.benchSpot && a.foot.z1 - a.foot.z0 <= REST.seat.depth;
@@ -268,6 +275,9 @@ export class Visitors {
       target.x += Math.sin(h.facing) * push;
       target.z += Math.cos(h.facing) * push;
     } else if (ON_GROUND.includes(v.perch) && !(v.perch === 'beside' && onSeat)) keepOff(target, a.foot.r, h.raised); // (its reach: however it turns)
+    // #576: sitting beside bloombot (its sit clip; the others there stand in their idle) on the ground or the seat,
+    // not into it: an otter's sit pose tucks its legs under its root
+    if (v.perch === 'beside') target.y += a.below ?? 0;
     // where it comes from (and goes back to): VISIT.from away, in the visit's own direction
     const fx = target.x + Math.cos(v.from) * VISIT.from;
     const fz = target.z + Math.sin(v.from) * VISIT.from;
@@ -1001,20 +1011,56 @@ function bounds(e: pc.Entity, space: pc.Entity): pc.BoundingBox | undefined {
 }
 
 /** An actor's own vertices (each corner once), in its own frame (facing +z, its root at the origin), as x, y, z triples. */
-function ownShape(root: pc.Entity): number[] {
+function ownShape(root: pc.Entity, out: number[] = [], seen = new Set<string>(), grid = 500): number[] {
   const world = surfacePoints(root);
   const inv = new pc.Mat4().copy(root.getWorldTransform()).invert();
-  const out: number[] = [];
-  const seen = new Set<string>();
   const v = new pc.Vec3();
   for (let i = 0; i < world.length; i += 3) {
     inv.transformPoint(v.set(world[i], world[i + 1], world[i + 2]), v);
-    const key = `${Math.round(v.x * 500)},${Math.round(v.y * 500)},${Math.round(v.z * 500)}`; // the same corner, shared by faces
+    const key = `${Math.round(v.x * grid)},${Math.round(v.y * grid)},${Math.round(v.z * grid)}`; // the same corner, shared by faces
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(v.x, v.y, v.z);
   }
   return out;
+}
+
+/**
+ * #576: an animal's shape (its vertices, and its faces) as it rests on bloombot: posed in its sit clip, looked at
+ * across the whole loop (SETTLE.poses times) and put together, so wherever its breath or a tail flick takes it,
+ * nothing of it dips into bloombot. (Taken from whatever it was drawn in when it was first placed, a bird's shape
+ * was its flight: legs tucked up, so sitting, its feet and belly sank in.) Back to its phase's clip after
+ * (animate() picks it again). A placeholder, or a model without a sit clip, as it is drawn now.
+ */
+export function sittingShape(a: Pick<Actor, 'root' | 'model'>): { pts: number[]; tris: number[] } {
+  const pts: number[] = [];
+  const tris: number[] = [];
+  const m = a.model;
+  const anim = m?.entity.anim;
+  const layer = anim?.baseLayer;
+  if (!m || !anim || !layer || !m.clips.sit || !m.sitFor) {
+    ownShape(a.root, pts);
+    surfaceTriangles(a.root, tris);
+    return { pts, tris };
+  }
+  const seen = new Set<string>();
+  for (let i = 0; i < SETTLE.poses; i++) {
+    layer.transition(m.clips.sit, 0);
+    layer.activeStateCurrentTime = (m.sitFor * i) / SETTLE.poses;
+    anim.update(0);
+    // the same corner in each pose, once (within a few millimetres: the breath barely moves most of it)
+    ownShape(a.root, pts, seen, SETTLE.poseGrid);
+    surfaceTriangles(a.root, tris);
+  }
+  m.clip = undefined;
+  return { pts, tris };
+}
+
+/** How far below its root (y 0) the lowest of the points (x, y, z triples) is; 0 if none is. */
+export function belowFeet(pts: readonly number[]): number {
+  let low = 0;
+  for (let i = 1; i < pts.length; i += 3) low = Math.min(low, pts[i]);
+  return low < 0 ? -low : 0;
 }
 
 /** The shape stood at (x, y, z) turned to `heading` (the walker's convention), into `out`. */

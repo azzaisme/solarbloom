@@ -134,20 +134,25 @@ async function place(page, dev, x, z) {
 
 /** Moves the focus onto an element with the d-pad or the arrow keys, as a player would. */
 async function moveTo(page, sel, dev) {
+  // #573: a press that lands somewhere already visited twice (a ping-pong between two buttons) tries the other axis
+  const seen = new Map();
   for (let i = 0; i < 80; i++) {
-    const dir = await page.evaluate((sel) => {
+    let { dir, at, side } = await page.evaluate((sel) => {
       const t = document.querySelector(sel);
       const c = document.activeElement;
-      if (!t) return 'missing';
-      if (c === t) return 'here';
-      if (!c || c === document.body) return 'down';
-      if (c.closest('[role=tablist]')) return 'down'; // E23.11: off the build menu's tabs, down into its cells
+      if (!t) return { dir: 'missing' };
+      if (c === t) return { dir: 'here' };
+      const at = c?.id || c?.dataset?.tool || c?.textContent?.trim().slice(0, 24) || c?.tagName;
+      if (!c || c === document.body) return { dir: 'down', at };
+      if (c.closest('[role=tablist]')) return { dir: 'down', at }; // E23.11: off the build menu's tabs, down into its cells
       const a = c.getBoundingClientRect(), b = t.getBoundingClientRect();
       const dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + b.height / 2 - (a.top + a.height / 2);
-      return Math.abs(dy) > 6 ? (dy > 0 ? 'down' : 'up') : dx > 0 ? 'right' : 'left';
+      return { dir: Math.abs(dy) > 6 ? (dy > 0 ? 'down' : 'up') : dx > 0 ? 'right' : 'left', at, side: dx > 0 ? 'right' : 'left' };
     }, sel);
     if (dir === 'here') return true;
     if (dir === 'missing') break;
+    seen.set(at, (seen.get(at) ?? 0) + 1);
+    if (seen.get(at) > 2 && (dir === 'up' || dir === 'down')) dir = side ?? 'left';
     if (dev === 'pad') await pressPad(page, { up: 12, down: 13, left: 14, right: 15 }[dir]);
     else await page.keyboard.press({ up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' }[dir]);
     await page.waitForTimeout(30);
@@ -388,6 +393,27 @@ try {
     check(await moveTo(page, wireBtn, dev), T('reach Wire in the Assembler panel'));
     await go(page, dev);
     check(await page.evaluate((id) => window.solarbloom.sim.automation.recipeOf(window.solarbloom.sim.machine(id)), ids.asm) === 'wire', T('the Assembler makes Wire'));
+    // #594: each crate button reads its name and its crate a line each, at every interface size (not a letter a line)
+    for (const pct of [100, 125, 150]) {
+      await page.evaluate((pct) => window.solarbloom.hud.setUiScale(pct), pct);
+      await page.waitForTimeout(150);
+      const lines = await page.evaluate((id) => {
+        // the lines a text is set on: its line boxes' distinct tops (whatever the zoom)
+        const count = (e) => {
+          const r = document.createRange();
+          r.selectNodeContents(e);
+          return new Set([...r.getClientRects()].map((b) => Math.round(b.top))).size;
+        };
+        return [...document.querySelectorAll(`[data-asm-io^="${id}|"]`)].map((b) => {
+          const [n, p] = [b.querySelector('.rn'), b.querySelector('.rp')];
+          return `${n.textContent} ${p.textContent}: ${count(n)} + ${count(p)} lines${p.getBoundingClientRect().top >= n.getBoundingClientRect().bottom - 1 ? ', stacked' : ''}`;
+        });
+      }, ids.asm);
+      check(lines.length === 2 && lines.every((l) => /: 1 \+ 1 lines, stacked$/.test(l)), T(`at ${pct}%, the crate buttons read a line each: ${lines.join('; ')}`));
+      if (pct !== 100) await page.screenshot({ path: `${dir}/ui-assembler-${dev}-${pct}.png` });
+    }
+    await page.evaluate(() => window.solarbloom.hud.setUiScale(100));
+    await page.waitForTimeout(150);
     await page.screenshot({ path: `${dir}/ui-assembler-${dev}.png` });
     await back(page, dev);
     await page.waitForTimeout(200);

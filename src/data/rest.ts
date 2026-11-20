@@ -49,10 +49,11 @@ export const REST = {
   padGap: 0.35,
   /**
    * meditating: bloombot's root sits this high above the ground on the charger pad (the pad's glowing top is at 0.1,
-   * MachineVisuals.charger; the cross-legged clip's lowest point dips to about 0.065 under the root as it breathes, measured from its
-   * skinned surface in tests/e2e/wildlife-e23.mjs)
+   * MachineVisuals.charger). #576: the cross-legged clip (#482) sits on its root, its lowest point right at it as it
+   * breathes (measured from its skinned surface on the GPU: at 0.175 it floated 7.2 cm over the pad until it had
+   * settled), so a hair over the top; `settle` takes it the rest of the way.
    */
-  padTop: 0.175,
+  padTop: 0.103,
   /**
    * On a bench bloombot swings its little legs, one forward as the other goes back: up to `degrees` each way at
    * `perSecond` swings a second, the swing growing and settling every `driftSeconds` so it now and then nearly
@@ -65,13 +66,20 @@ export const REST = {
    * (BloombotVisuals.settle), so its underside touches it rather than floating over it or sinking in. From `after`
    * seconds into the pose (once it has bent into it) it takes a first look and eases there (`ease` a second, for
    * `easeFor` seconds); then, holding still, it looks every `watchEvery` seconds across `cycle` seconds (a whole
-   * breath: the by-hand breathing is 2π/1.6, about 3.9 s; a leg swing is 1/0.75 s) and comes up by the most any look
+   * breath and leg swing: the by-hand breathing is 2π/1.6, about 3.9 s; a leg swing is 1/0.75 s, and it grows and
+   * calms over legSwing.driftSeconds, 11 s; #576: watched for less, a lively swing it missed took a knee off the seat's
+   * front lip, or a shin back into it, after it had settled) and comes up by the most any look
    * needed, so it never dips in between; it watches again until that is within a `hair`, at most `passes` times, then
    * holds. It rests `gap` above the top (on a bench its body and thighs do; its shins and feet hang over the front
    * edge: anything they carry `hangShare` of, the knees too), and comes forward just far enough that nothing of its
    * back is in the backrest and no shin is in the seat's slab; never more than `most` from where the pose put it.
+   * #576: on a bench it starts `bench.up` higher and `bench.out` further forward than the sit clip's hips put it
+   * (`seatLift`; hips are not its underside, and its backpack needs room before the backrest), about where it has
+   * always settled (measured on the GPU: 0.068 to 0.075 up, 0.153 to 0.17 out), so it is on the seat as it sits down
+   * (the sit-down clip takes 4.7 s, before any look) and the looks only fine-tune it; a little short of it, as it
+   * only ever comes forward.
    */
-  settle: { after: 1.2, ease: 6, easeFor: 0.8, cycle: 4.5, watchEvery: 0.15, hair: 0.002, passes: 3, hangShare: 0.15, gap: 0.003, most: 0.2 },
+  settle: { after: 1.2, ease: 6, easeFor: 0.8, cycle: 11, watchEvery: 0.15, hair: 0.002, passes: 3, hangShare: 0.15, gap: 0.003, most: 0.2, bench: { up: 0.07, out: 0.15 } },
   /** the music swells to this share above its level while sitting */
   musicSwell: 0.6,
   /**

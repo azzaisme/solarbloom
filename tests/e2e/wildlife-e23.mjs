@@ -146,14 +146,15 @@ const grow = (page, tier) =>
 /** Every settled animal, measured against bloombot's real surface, the bench or the pad; one row per animal. */
 /**
  * Bloombot's underside over the seat or pad (`under`: the box and its top, from measure) across a whole breathing and
- * leg-swing cycle (REST.settle.cycle, 4.5 s), looked at every 150 ms: its lowest point there, less the top, each time.
+ * leg-swing cycle (REST.settle.cycle, 11 s: the swing grows and calms over that), looked at every 150 ms: its lowest
+ * point there, less the top, each time.
  */
 const underside = (page, under) =>
   page.evaluate(async ({ box, top }) => {
     const g = window.solarbloom;
     const P = window.__probe;
     const lows = [];
-    const end = performance.now() + 4500;
+    const end = performance.now() + 11000;
     while (performance.now() < end) {
       await new Promise((r) => requestAnimationFrame(() => r()));
       const over = P.points(g.bot.visuals.model).filter((p) => p[0] > box.min[0] && p[0] < box.max[0] && p[2] > box.min[2] && p[2] < box.max[2] && p[1] > box.min[1]);
@@ -273,7 +274,8 @@ const settle = (page) =>
     () => {
       const w = window.solarbloom.sim.wildlife;
       const now = window.solarbloom.sim.time;
-      return w.visits.every((v) => now >= v.arrive + 1.2 && (v.perch !== 'passBy' || now >= v.leave + 2));
+      // and bloombot has sat down (the clip into the pose takes a few seconds) and settled onto the seat or pad
+      return window.solarbloom.bot.visuals.settled && w.visits.every((v) => now >= v.arrive + 1.2 && (v.perch !== 'passBy' || now >= v.leave + 2));
     },
     undefined,
     180000,
@@ -455,7 +457,7 @@ try {
       const lows = await underside(page, m.under);
       const lo = Math.min(...lows);
       const hi = Math.max(...lows);
-      check(lows.length >= 10 && lo > -0.008 && lo < 0.012, `${name} at the ${where}: bloombot sits on the ${where === 'bench' ? 'seat' : 'pad'} through a whole breath (its underside ${lo.toFixed(3)}..${hi.toFixed(3)} from the top over ${lows.length} looks)`);
+      check(lows.length >= 25 && lo > -0.008 && lo < 0.012, `${name} at the ${where}: bloombot sits on the ${where === 'bench' ? 'seat' : 'pad'} through a whole breath (its underside ${lo.toFixed(3)}..${hi.toFixed(3)} from the top over ${lows.length} looks)`);
       for (const r of m.rows)
         check(r.ok, `${name} at the ${where}: ${r.kind}@${r.perch} sits on ${r.on}${r.into ? `, ${r.intoText}` : ''}${r.inSolid.length ? `, inside the ${r.inSolid.map(([k, c, b]) => `${k} (${c}; ${b})`).join(', ')}` : ''}${r.ok ? '' : r.why}`);
       if (tier !== 'bare') {
