@@ -7,8 +7,13 @@ import { group, vshape } from './Shapes';
 import { clipsFor, loops, visitorPhase, type VisitorPhase } from './VisitorClips';
 import { anyInside, type Footprint, restOn, Surface, surfacePoints, surfaceTriangles } from './SkinSurface';
 
-/** E23.10 batch B4: each visitor's own model, by id (assets/raw/models/visitors/<id>.glb). */
-const MODEL_URLS = import.meta.glob('../../assets/raw/models/visitors/*.glb', {
+/**
+ * E23.10 batch B4: each visitor's own model, by id (assets/raw/models/visitors/<id>.glb). Only the visitors' own
+ * main models are named here (the folder also holds the batch's koi, which is for the ponds, and each animal's LOD
+ * and texture files), so nothing else goes in the build. The list must match VISITORS less PLACEHOLDER_ONLY
+ * (tests/visitor-models.test.ts holds them to it); a glob can't be built from data, so it is written out.
+ */
+const MODEL_URLS = import.meta.glob('../../assets/raw/models/visitors/{badger,bumblebee,butterfly,fawn,fox,frog,hedgehog,heron,kingfisher,magpie,otter,owl,songbird,squirrel,swallowtail}.glb', {
   query: '?url',
   import: 'default',
   eager: true,

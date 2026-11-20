@@ -24,12 +24,19 @@ describe('visitor models', () => {
     }
   });
 
-  it('no model ships for anything that is not a visitor (the koi is for the ponds)', () => {
-    const ids = VISITORS.map((v) => v.id);
-    const glbs = readdirSync(DIR).filter((f) => f.endsWith('.glb'));
-    for (const f of glbs) expect(ids, `${f} is not a visitor`).toContain(f.replace(/\.glb$/, ''));
-    expect(glbs).not.toContain('koi.glb');
-    expect(readdirSync(DIR).filter((f) => !f.endsWith('.glb'))).toEqual([]); // (no LOD or texture side files)
+  it('the loader takes exactly the visitors own main models: not the koi, nor any LOD or texture file', () => {
+    const src = readFileSync('src/rendering/Visitors.ts', 'utf8');
+    const m = src.match(/import\.meta\.glob\('\.\.\/\.\.\/assets\/raw\/models\/visitors\/\{([^}]+)\}\.glb'/);
+    expect(m, 'the visitor model glob names its ids').not.toBeNull();
+    const loaded = m![1].split(',').map((x) => x.trim());
+    const want = VISITORS.map((v) => v.id).filter((id) => !PLACEHOLDER_ONLY.includes(id));
+    expect([...loaded].sort()).toEqual([...want].sort());
+    expect(loaded).not.toContain('koi');
+    // the folder may hold more (the koi, LOD and texture files from the art batch); none of it is loaded
+    for (const f of readdirSync(DIR)) {
+      const id = f.replace(/\.glb$/, '');
+      if (!f.endsWith('.glb') || f.includes('.lod') || !VISITORS.some((v) => v.id === id)) expect(loaded, `${f} is not loaded`).not.toContain(id);
+    }
   });
 
   it('each model is rigged and has the clips the visitors play: idle, follow, sit and climb', () => {
