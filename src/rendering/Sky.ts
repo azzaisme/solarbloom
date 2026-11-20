@@ -272,6 +272,15 @@ export class Sky {
     return this.timeOfDay(skyColour(SKY.haze, this.clarity), 'haze');
   }
 
+  /** The High-tier water reflection: the sky low over the horizon and higher up, for the time of day (0–1 sRGB). */
+  reflectColours(): { low: [number, number, number]; high: [number, number, number] } {
+    const k = this.clarity;
+    const glow = this.timeOfDay(skyColour(SKY.glow, k), 'glow');
+    const upper = this.timeOfDay(skyColour(SKY.upper, k), 'upper');
+    const zen = this.timeOfDay(skyColour(SKY.zenith, k), 'zenith');
+    return { low: mix(glow, upper, 0.35), high: mix(upper, zen, 0.6) };
+  }
+
   /** E23.7.1 / E23.7.2: a day colour shifted for dusk, night and overcast. */
   private timeOfDay(c: [number, number, number], band: 'haze' | 'glow' | 'upper' | 'zenith' | 'sun' | 'cloud'): [number, number, number] {
     let out = c;

@@ -1314,7 +1314,7 @@ export class ChunkRenderer {
       yield; // a tile done: `update` decides whether this frame has time for the next
     }
     // From here to the end is one step: buildings, then every mesh of the chunk swaps in together.
-    v.water = this.setMesh(v.water, `water-${v.key}`, this.poolMesh(pool), poolMaterial(), false);
+    v.water = this.setMesh(v.water, `water-${v.key}`, this.poolMesh(pool), poolMaterial(this.device), false);
     v.gtex = GROUND_TEXTURES.map((name, i) => this.setMesh(v.gtex?.[i], `ground-${name}-${v.key}`, groundTexMesh(this.device, gtex[i]), groundTexMaterial(this.device, name), false));
     if (this.inPark && !v.far) {
       b.grey = fb.grey = 0;
