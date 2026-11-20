@@ -856,6 +856,12 @@ export const COAST: Record<'north' | 'south' | 'east' | 'west', { kind: CoastKin
 export const LANDING = {
   /** 3 × 4 tiles: the jetty model at half size, so its planks and rope posts suit bloombot (0.85 m) */
   jetty: { x: 7, z: 45, w: 3, d: 4 } as CellRect,
+  /**
+   * The jetty model's turn about +Y. The model runs 8 m along its +X, with the rope rail across its +X end; −π/2 sends
+   * that end south (+z), out to sea, so the open end meets the beach and its side ropes run along the walkway's edges
+   * (at π/2 it was backwards: the end rail crossed the planks at the beach, where bloombot starts).
+   */
+  jettyYaw: -Math.PI / 2,
   spawn: [8.5, 45.5] as [number, number],
   /** radians, 0 = +z (south): π faces north, up the beach to the park */
   facing: Math.PI,

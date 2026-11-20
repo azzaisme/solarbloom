@@ -34,7 +34,7 @@ const QUICK = [
   // E23.12: the Lucky Cat's rewards in the new loop (E23.1.4's one-meter check is tests/e2e/hud-one-meter.e2e.mjs)
   'lucky-cat-rewards', 'cat-decor', 'cat-secrecy', 'picker-internals', 'cat-sight-cpu', 'cat-sight-schedule',
   // E23.10: the proof
-  'e23-gentle-failure',
+  'e23-gentle-failure', 'jetty-ropes',
 ].map((name) => `tests/${name}.test.ts`);
 
 export default defineConfig(({ mode }) => ({

@@ -1858,13 +1858,13 @@ export class ChunkRenderer {
       const model = oldCityModel('jetty');
       if (model === 'jetty') {
         // the model (8 m long along +X, 5.2 m wide, 4.2 m from its posts' feet to the deck) at half size, turned along
-        // the jetty, deck at the beach
+        // the jetty (its end rail out to sea), deck at the beach
         const sc = J.d / 8;
         // water under the planks: the shallow surf where the jetty starts, open sea further out
         const under = surfCell(t.x, t.z) || !seaCell(t.x, t.z + 1) ? PALETTE.ground.shallows : PALETTE.ground.sea;
         this.slab(b, under[t.variant % under.length], [x, h + 0.04 - WATER.drop, z], [1, 0.08, 1]);
         // its deck is 1.7 m up the model (the rope posts rise above it), so that height goes at the beach, not the top
-        if (t.x === J.x && t.z === J.z) this.batch?.add('jetty', J.x + J.w / 2, h + 0.08 - JETTY_DECK * sc, J.z + J.d / 2, Math.PI / 2, sc, sc, sc);
+        if (t.x === J.x && t.z === J.z) this.batch?.add('jetty', J.x + J.w / 2, h + 0.08 - JETTY_DECK * sc, J.z + J.d / 2, LANDING.jettyYaw, sc, sc, sc);
         return;
       }
       const sea = PALETTE.ground.sea;
