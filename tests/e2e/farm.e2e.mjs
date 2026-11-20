@@ -33,15 +33,26 @@ const game = (fn, arg) => page.evaluate(({ src, arg }) => new Function('g', 's',
 const prompt = () => page.evaluate(() => document.querySelector('#prompt, .prompt')?.innerText.replace(/\s+/g, ' ').trim() ?? '');
 /** The prompt once it matches (frames can stall for seconds under software rendering on a busy machine, leaving the
  * last target's prompt up): waits up to 15 s, then gives whatever is shown. */
-const promptFor = async (re) => {
+const promptFor = async (re, reface) => {
   for (let k = 0; k < 30; k++) {
     const t = await prompt();
     if (re.test(t)) return t;
+    // #571: bloombot can settle facing something else in reach (the jetty's crate): stand and face the target again
+    if (reface && k % 4 === 3) await reface();
     await page.waitForTimeout(500);
   }
   return prompt();
 };
 const panel = () => page.evaluate(() => (document.querySelector('#ocPanel.open') ? document.querySelector('#ocPanel')?.innerText.replace(/\s+/g, ' ').trim() : ''));
+/** #571: the open panel's text once it matches (it opens on a later drawn frame): waits up to 10 s. */
+const panelFor = async (re) => {
+  for (let k = 0; k < 20; k++) {
+    const t = await panel();
+    if (re.test(t)) return t;
+    await page.waitForTimeout(500);
+  }
+  return panel();
+};
 const pressE = async () => {
   await page.keyboard.press('KeyE');
   await page.waitForTimeout(500);
@@ -142,7 +153,7 @@ try {
   // ── E23.5.1: gather clippings with a real hold of Interact ──
   const [gx, gz] = spots[0];
   await face(gx, gz);
-  check(/Gather clippings/.test(await promptFor(/Gather clippings/)), `the prompt offers "Gather clippings" (${await prompt()})`);
+  check(/Gather clippings/.test(await promptFor(/Gather clippings/, () => face(gx, gz, 1))), `the prompt offers "Gather clippings" (${await prompt()})`);
   await snap('gather-prompt');
   const before = await game((g, s) => s.inventory.count('biomass'));
   // held like a player holds it, until the hold completes (slow software-rendered frames stretch it; 8 s at most)
@@ -201,7 +212,7 @@ try {
   await face(p.x, p.z);
   check(/Plant in the planter/.test(await promptFor(/Plant in the planter/)), `the prompt offers "Plant in the planter" (${await prompt()})`);
   await pressE();
-  check(/empty planter/i.test(await panel()), 'Interact opens the planter panel');
+  check(/empty planter/i.test(await panelFor(/empty planter/i)), 'Interact opens the planter panel');
   await snap('planter-panel');
   await page.locator('#ocPanel button[data-act=plant][data-arg=radish]').click();
   await page.waitForTimeout(400);
@@ -231,7 +242,7 @@ try {
   await page.waitForTimeout(3000);
   await snap('radish-wilting'); // drooping by the drained canal
   await pressE();
-  check(/water has run low/.test(await panel()), `the panel says its water has run low (${(await panel()).slice(0, 90)})`);
+  check(/water has run low/.test(await panelFor(/water has run low/)), `the panel says its water has run low (${(await panel()).slice(0, 90)})`);
   await snap('radish-wilting-panel');
   await closePanel();
   // the water comes back: it perks up and grows on
@@ -257,7 +268,8 @@ try {
   const bin = placed.compostBin[0];
   await face(bin.x, bin.z);
   await pressE();
-  check(/Compost bin/.test(await panel()), 'Interact opens the compost bin');
+  const binPanel = await panelFor(/Compost bin/i); // the HUD reskin's card title is "Compost Bin"
+  check(/Compost bin/i.test(binPanel), `Interact opens the compost bin (${binPanel.slice(0, 60)})`);
   // food first (the bin holds 30 parts, and the backpack's biomass alone would fill it)
   await page.locator('#ocPanel button[data-act=fill][data-arg=food]').click();
   await page.waitForTimeout(300);
@@ -281,7 +293,7 @@ try {
   await pressE();
   await page.locator('#ocPanel button[data-act=feed]').click();
   await page.waitForTimeout(300);
-  check(/Fed|Running/.test(await panel()), `the digester takes biomass (${await panel()})`);
+  check(/Fed|Running/.test(await panelFor(/Fed|Running/)), `the digester takes biomass (${await panel()})`);
   await snap('digester-panel');
   await closePanel();
   await snap('digester');
@@ -374,7 +386,7 @@ try {
     await face(garden.x, garden.z);
     await snap('keeper-asks');
     await pressE();
-    check(/Tide's garden/.test(await panel()), `the planter panel shows Tide’s request (${(await panel()).slice(0, 80)})`);
+    check(/Tide's garden/.test(await panelFor(/Tide's garden/)), `the planter panel shows Tide’s request (${(await panel()).slice(0, 80)})`);
     await snap('keeper-garden-panel');
     await page.locator('#ocPanel button[data-act=plant][data-arg=seaKale]').click().catch(async () => {
       await game((g, s, id) => {
