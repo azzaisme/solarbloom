@@ -191,6 +191,9 @@ function partsOf(container: pc.ContainerResource): ModelPart[] {
   return out;
 }
 
+/** #567: the loading screen stops waiting for models only after this long with no file finishing (stuck requests). */
+export const MODEL_STALL_MS = 45000;
+
 export class ModelLibrary {
   private models = new Map<string, Loaded>();
   /** every model that finished loading (near version at least) */
@@ -198,8 +201,26 @@ export class ModelLibrary {
   /** called once, when every model has loaded or failed */
   onReady?: () => void;
   ready = false;
+  /** #567: files that failed to load (the game keeps the procedural look for these) */
+  readonly failed = new Set<string>();
+  /** #567: when a file last finished (loaded or failed), or when loading began */
+  lastProgress: number;
 
-  constructor(private app: pc.AppBase) {}
+  constructor(
+    private app: pc.AppBase,
+    private now: () => number = () => performance.now(),
+  ) {
+    this.lastProgress = now();
+  }
+
+  /**
+   * #567: is the loading screen done waiting for models? Once every file has loaded or failed, yes. While files are
+   * still arriving it keeps waiting however slow they are (a second game in the same browser can take well over 30 s
+   * on a slow GPU); it gives up only when nothing has finished for `stallMs`, i.e. the rest are truly stuck.
+   */
+  waitOver(stallMs = MODEL_STALL_MS): boolean {
+    return this.ready || this.now() - this.lastProgress > stallMs;
+  }
 
   /** Names of all models on disk. */
   static names(): string[] {
@@ -213,7 +234,9 @@ export class ModelLibrary {
     if (!useModels()) return;
     const files = Object.entries(URLS);
     let pending = files.length;
+    this.lastProgress = this.now();
     const done = () => {
+      this.lastProgress = this.now();
       if (--pending > 0) return;
       this.ready = true;
       this.onReady?.();
@@ -223,8 +246,10 @@ export class ModelLibrary {
       const far = file.endsWith('.lod1');
       const name = far ? file.slice(0, -5) : file;
       this.app.assets.loadFromUrl(url, 'container', (err, asset) => {
-        if (err || !asset) console.warn(`Model ${file} failed to load; keeping the procedural look.`, err);
-        else {
+        if (err || !asset) {
+          console.warn(`Model ${file} failed to load; keeping the procedural look.`, err);
+          this.failed.add(file);
+        } else {
           const m: Loaded = this.models.get(name) ?? { parts: [[], []], merged: [undefined, undefined] };
           const res = asset.resource as pc.ContainerResource;
           shareTextures(res);
