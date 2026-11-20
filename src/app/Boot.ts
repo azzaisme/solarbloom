@@ -1,4 +1,5 @@
 import { Bindings, migrateBindings } from './Bindings';
+import { MAINLAND } from '../data/mainland';
 import { desktopApi, Game } from './Game';
 import { SaveService, type Slot, SLOT_COUNT } from './SaveService';
 import { parseSettings, SETTINGS_KEY } from './Settings';
@@ -51,6 +52,8 @@ const done = (s: LoadSteps) => s.models >= 1 && s.world >= 1 && s.view >= 1 && s
 
 export async function boot(canvas: HTMLCanvasElement) {
   const q = new URLSearchParams(location.search);
+  // island release: the mainland is closed (a future update); ?mainland=1 opens it for tests and review shots
+  if (q.get('mainland') === '1') MAINLAND.open = true;
   const settings = loadSettings();
   applyTitleLook(settings);
   installIconDefs();

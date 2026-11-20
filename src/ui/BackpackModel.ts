@@ -8,6 +8,10 @@ import { DECOR_OPTIONS, PLOT_OPTIONS } from '../data/cozy';
 import { MACHINES } from '../data/machines';
 import { MATERIAL_IDS, MATERIALS } from '../data/salvage';
 import { itemDef } from '../data/items';
+import { MAINLAND } from '../data/mainland';
+
+/** The backpack's materials: the mainland's own (Steel) only once the mainland is open (island release). */
+export const visibleMaterials = (): MaterialId[] => MATERIAL_IDS.filter((m) => MAINLAND.open || !MATERIALS[m].mainlandOnly);
 import type { Sim } from '../gameplay/Sim';
 
 /**
@@ -66,7 +70,7 @@ export function neededNext(sim: Sim, m: MaterialId): string {
 export function itemCells(sim: Sim): ItemCell[] {
   const inv = sim.inventory;
   const limit = inv.stackLimit();
-  return MATERIAL_IDS.map((id): ItemCell => {
+  return visibleMaterials().map((id): ItemCell => {
     const seen = materialSeen(sim, id);
     const count = inv.count(id);
     const stored = inv.stored(id);

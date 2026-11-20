@@ -7,6 +7,13 @@ import type { AreaType } from './city';
 import type { PileSize } from './salvage';
 
 export const MAINLAND = {
+  /**
+   * Is the mainland open to play? False for the island release: the mainland is a future update. Its code and data
+   * stay in place, unreachable: bloombot turns back at the causeway ("More coming soon"), the Great Bloom raises the
+   * causeway but reveals nothing past it, and mainland-only recipes and materials (the Grid Battery, Steel) are hidden.
+   * The update flips this. (`?mainland=1` opens it for tests and review shots.)
+   */
+  open: false,
   /** every chunk with x ≥ this is mainland (the chunks between it and the island are sea), for ever east, north and south */
   minChunkX: 9,
   /** a mainland district (one area: one fog, one restoration) is this many chunks square */
@@ -55,6 +62,18 @@ export const MAINLAND_WATER = {
     park: { chance: 0.6, centre: [16, 28] as [number, number], radius: 2.2 },
     grove: { chance: 0.3, centre: [15, 28] as [number, number], radius: 1.8 },
   } as Partial<Record<AreaType, { chance: number; rect?: [number, number, number, number]; centre?: [number, number]; radius?: number }>>,
+};
+
+/** Island release: what bloombot does at the closed causeway (while `MAINLAND.open` is false). */
+export const MAINLAND_CLOSED = {
+  title: 'The mainland is still waking up.',
+  detail: 'More coming soon.',
+  /** how long the card stays (s) */
+  seconds: 4,
+  /** at most one card (and one turn back) in this many seconds */
+  cooldown: 6,
+  /** how far back towards the island bloombot walks (cells) */
+  backCells: 2,
 };
 
 /**

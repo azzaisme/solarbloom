@@ -4,6 +4,8 @@ import { SLAB_TOP } from '../core/Picking';
 import type { Sim } from '../gameplay/Sim';
 import { BOT, type BotPose, spawnPose, Walker } from '../gameplay/Walker';
 import { heightAt, levelY } from '../core/Height';
+import { mainlandClosedAt } from '../core/Mainland';
+import { GROUND } from '../core/GameState';
 import type { Action, Bindings } from './Bindings';
 import { RESEARCH } from '../data/research';
 import { CHARGE } from '../data/charge';
@@ -58,6 +60,8 @@ export class BotController {
   onTurn?: (degrees: number) => void;
   /** a gamepad button was pressed (the game resolves it to an action for the context in effect) */
   onPad?: (button: number) => void;
+  /** Island release: bloombot walked into the closed causeway (the cell it was heading for); the game turns it back. */
+  onMainlandClosed?: (x: number, z: number) => void;
   /** Third person: aiming a build, bloombot faces the way the camera looks and strafes instead of turning */
   strafe = false;
   /** E22.1: sprint switched on by the toggle (left stick click); it ends when bloombot stops */
@@ -306,6 +310,12 @@ export class BotController {
         if (this.walk.stuckFor > 0.6) this.walk = undefined; // something moved into the way
       }
       if (moved > 0.001) this.following = true;
+      // island release: walking into the closed causeway (keys, pad or a path) turns bloombot back
+      if (p.roofId === GROUND && this.onMainlandClosed) {
+        const ax = Math.floor(p.x + dirX * 0.75);
+        const az = Math.floor(p.z + dirZ * 0.75);
+        if (mainlandClosedAt(ax, az)) this.onMainlandClosed(ax, az);
+      }
     }
     this.speed = dt > 0 ? moved / dt : 0;
     if (this.sprinting && moved > 0.001) {

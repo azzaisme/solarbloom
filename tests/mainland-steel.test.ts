@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createInitialState, GROUND } from '../src/core/GameState';
 import { chunkPiles, chunkRuins, landingArea, mainlandType, mainlandAreaOfChunk, mainlandWater } from '../src/core/Mainland';
 import { canStep } from '../src/core/Height';
@@ -10,6 +10,14 @@ import { MATERIALS } from '../src/data/salvage';
 import { MACHINE_RECIPES } from '../src/data/crafting';
 import { Sim } from '../src/gameplay/Sim';
 import { itemCells } from '../src/ui/BackpackModel';
+
+// the mainland is closed for the island release (a future update); these tests are about the mainland itself
+beforeAll(() => {
+  MAINLAND.open = true;
+});
+afterAll(() => {
+  MAINLAND.open = false;
+});
 
 const RECIPE = (t: string) => MACHINE_RECIPES.find((r) => r.builds === t);
 

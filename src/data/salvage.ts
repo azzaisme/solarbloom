@@ -3,6 +3,8 @@
 // recipes only change if the pacing bot (§19) fails.
 
 import type { AbilityId, ItemId, MaterialId } from '../core/types';
+import { MACHINES } from './machines';
+import { MAINLAND } from './mainland';
 
 export interface MaterialDef {
   id: MaterialId;
@@ -162,3 +164,12 @@ export const CAT_REWARD = { standard: 10, golden: 25, rainbow: 60 };
 
 /** §3: Tally's trade once the Market Hall is awake. */
 export const TRADE = { give: 3, get: 1 };
+
+/**
+ * Island release: what a fountain tier brings, as the player reads it. A mainland-only machine (the Grid Battery)
+ * is left out until the mainland opens (data/mainland `MAINLAND.open`).
+ */
+export function tierGives(t: TierDef): string[] {
+  if (MAINLAND.open) return t.gives;
+  return t.gives.filter((g) => !Object.values(MACHINES).some((m) => m.mainlandOnly && m.name === g));
+}

@@ -10,7 +10,8 @@ import { AREA_TYPES } from '../data/city';
 import { distToFootprint } from '../core/Grid';
 import type { DroneRole, LayerData, MachineData, TileData } from '../core/types';
 import { MACHINES, machineIcon, machineName } from '../data/machines';
-import { MATERIALS, SALVAGE, TIERS } from '../data/salvage';
+import { MATERIALS, SALVAGE, TIERS, tierGives } from '../data/salvage';
+import { MAINLAND_CLOSED } from '../data/mainland';
 import { GATHER } from '../data/farm';
 import { CROPS } from '../data/crops';
 import { EXPLORE } from '../rendering/CameraController';
@@ -527,6 +528,18 @@ export class Game {
         if (!this.padListener) return;
         this.padListener(i);
         this.swallowPad = i;
+      };
+      // Island release: the mainland is a future update (data/mainland MAINLAND.open). Walking onto the causeway turns
+      // bloombot back towards the island, and a card says so in the world's own words.
+      let turnedAt = -Infinity;
+      bot.onMainlandClosed = (ax) => {
+        const now = performance.now();
+        if (now - turnedAt < MAINLAND_CLOSED.cooldown * 1000) return;
+        turnedAt = now;
+        const p = bot.pose;
+        const away = ax >= Math.floor(p.x) ? -1 : 1;
+        bot.goTo(p.roofId, Math.floor(p.x) + away * MAINLAND_CLOSED.backCells, Math.floor(p.z), 1, undefined, true);
+        this.hud.toast(`${MAINLAND_CLOSED.title}<small>${MAINLAND_CLOSED.detail}</small>`, 'gold', MAINLAND_CLOSED.seconds);
       };
       this.keepers = new KeeperVisuals(this.sim, this.scene.world, this.app);
       this.keepers.reducedMotion = !!this.settings.reducedMotion;
@@ -3826,7 +3839,7 @@ export class Game {
       this.celebrateTier(tier);
       if (tier === 1) return this.playCoreSequence();
       const t = TIERS[tier - 1];
-      this.hud.toast(`⛲ ${t.name}!<small>${t.gives.join(' · ')}</small>`, 'gold', 6);
+      this.hud.toast(`⛲ ${t.name}!<small>${tierGives(t).join(' · ')}</small>`, 'gold', 6);
       this.sfx.fanfare();
       this.save();
     });

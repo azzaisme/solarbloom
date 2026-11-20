@@ -1,5 +1,5 @@
 import type { MaterialId } from '../core/types';
-import { MATERIALS, MATERIAL_IDS } from '../data/salvage';
+import { MATERIALS, MATERIAL_IDS, tierGives } from '../data/salvage';
 import { giftLabel } from '../gameplay/KeeperSystem';
 import type { Sim } from '../gameplay/Sim';
 import { iconize } from './Icons';
@@ -145,7 +145,7 @@ export function fountainHtml(sim: Sim): string {
   return `<h2>⛲ Tier ${t.tier}: ${escHtml(t.name)}</h2>
     <h3>Bring</h3>${rows}
     <div class="oc-need ${c.done ? 'done' : ''}"><span>${escHtml(c.label)}</span><span>${Math.min(c.have, c.need)}/${c.need}${c.done ? ' ✅' : ''}</span></div>
-    <h3>It brings</h3><p class="oc-soft">${t.gives.map(escHtml).join(' · ')}</p>
+    <h3>It brings</h3><p class="oc-soft">${tierGives(t).map(escHtml).join(' · ')}</p>
     <div class="oc-row"><button data-act="giveAll" ${canGive ? '' : 'disabled'}>Give all I have</button><button data-act="storage">Storage</button></div>`;
 }
 

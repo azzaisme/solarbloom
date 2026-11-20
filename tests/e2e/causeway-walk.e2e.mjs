@@ -29,7 +29,7 @@ try {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.setDefaultTimeout(240_000);
-  await page.goto('http://localhost:4198/?slot=1&gfx=deck');
+  await page.goto('http://localhost:4198/?slot=1&gfx=deck&mainland=1');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom?.sim && !!window.solarbloom?.bot);
