@@ -289,6 +289,8 @@ export const EMOJI_ICONS: Record<string, IconName> = {
   '🚣': 'boat', '🐸': 'frog', '🛖': 'hut', '🪟': 'glasshouse',
   // E19.2 decorations.
   '🌷': 'flower', '🎏': 'rainbow', '🛢': 'vase',
+  // E23.8.3.2: the mainland's steel (its machines' 🔋 and 🚰 are mapped above and below)
+  '🔩': 'wrench',
   '🪨': 'restore', '🧱': 'restore', '🟫': 'garden', '🍃': 'biomass', '🚜': 'build', '🔱': 'build', '🧭': 'telescope',
   // E23.6.1 components.
   '➰': 'link', '🪵': 'build', '🔲': 'glasshouse', '🚰': 'water', '🌀': 'settings',

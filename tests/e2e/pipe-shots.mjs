@@ -177,18 +177,26 @@ try {
   check(await run(() => window.solarbloom.sim.water.pipes.carries(27, -18)), 'the pipe carries water down the stairs');
   check(await run(() => window.solarbloom.sim.water.isWatered(window.solarbloom.sim.grid.get('g', 28, -17))), 'the street below the terrace is fed by gravity, with no power');
   /** bloombot's own follow camera, close in (no clouds, which only show zoomed out), from a spot on the terrace */
+  // Under load the follow camera sometimes settles far out (clouds) or before the chunks are in: try again, with the
+  // zoom set close at once, until it frames bloombot close in.
   const follow = async (x, z, yaw) => {
-    await run(({ x, z, yaw }) => {
-      const g = window.solarbloom;
-      g.bot.following = true;
-      g.bot.teleport('g', x, z);
-      g.camera.turnTo(yaw);
-    }, { x, z, yaw });
-    await settle(5000);
-    return run(() => {
-      const g = window.solarbloom;
-      return { zoom: g.camera.zoom, clouds: g.scene.world.findByName('clouds')?.enabled ?? false };
-    });
+    let v;
+    for (let i = 0; i < 4; i++) {
+      await run(({ x, z, yaw, i }) => {
+        const g = window.solarbloom;
+        g.bot.following = true;
+        g.bot.teleport('g', x, z);
+        g.camera.turnTo(yaw, i > 0);
+        if (i > 0) g.camera.jumpZoom(1.85);
+      }, { x, z, yaw, i });
+      await settle(5000 + i * 3000);
+      v = await run(() => {
+        const g = window.solarbloom;
+        return { zoom: g.camera.zoom, clouds: g.scene.world.findByName('clouds')?.enabled ?? false };
+      });
+      if (!v.clouds && v.zoom > 1.5) return v;
+    }
+    return v;
   };
   // The grid is switched off on purpose here (water runs down with no power), so the park's pump is really dark and
   // the guide card says so: right, but not what these two shots are about. It is hidden for them, then shown again.
@@ -207,6 +215,10 @@ try {
   const v5 = await follow(27.5, -16.2, 0);
   check(!v5.clouds, `the stairs shot is close, with no clouds in it (${JSON.stringify(v5)})`);
   await shot('5-gravity-stairs');
+  // close, from the side of the flight: the pipe runs down it as one straight slope, one bend at the foot
+  const v6 = await follow(29.6, -20.6, 90);
+  check(!v6.clouds, `the close stairs shot has no clouds in it (${JSON.stringify(v6)})`);
+  await shot('6-stairs-close');
   await card(true);
 } catch (e) {
   failures.push(String(e));

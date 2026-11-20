@@ -252,7 +252,7 @@ export function tradeHtml(sim: Sim, give: MaterialId | undefined): string {
   const gives = MATERIAL_IDS.map(
     (m) => `<button data-act="give" data-arg="${m}" ${can.includes(m) ? '' : 'disabled'} class="pn-cell oc-mat${give === m ? ' on' : ''}" aria-pressed="${give === m}">${materialIcon(m, 30)}<span>${MATERIALS[m].name}</span></button>`,
   ).join('');
-  const gets = MATERIAL_IDS.filter((m) => m !== give)
+  const gets = sim.landmarks.tradeTargets().filter((m) => m !== give)
     .map((m) => `<button data-act="get" data-arg="${m}" ${give ? '' : 'disabled'} class="pn-cell oc-mat">${materialIcon(m, 30)}<span>${MATERIALS[m].name}</span></button>`)
     .join('');
   // E23.9.2: when bloombot carries something Tally loves, it can be given as a gift (a choice, never a surprise)
