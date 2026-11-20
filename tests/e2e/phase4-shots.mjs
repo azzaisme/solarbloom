@@ -19,8 +19,7 @@ try {
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     await page.waitForFunction(() => !!window.solarbloom);
-    if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
-    await page.addStyleTag({ content: '#toasts, #hint { display: none !important; }' });
+    await page.addStyleTag({ content: '#toasts { display: none !important; }' });
     const shot = async (label, fn) => {
       await page.evaluate(fn);
       await page.evaluate(() => {

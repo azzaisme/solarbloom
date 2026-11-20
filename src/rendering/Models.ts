@@ -14,7 +14,14 @@ import { MODEL_NAMES } from '../data/oldcity';
  * - `ModelLibrary.instantiate`: one entity, for landmarks, machines and the cat (moving parts stay their own nodes).
  * Until a model has loaded (or with `?models=classic`), callers keep their procedural look.
  */
-const URLS = import.meta.glob('../../assets/raw/models/final/*.glb', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+/**
+ * Every file here is fetched before the loading screen ends, so only what the game draws lives in `final`. Models made
+ * but not drawn yet wait in assets/raw/models/pending (committed, never fetched) until their system wires them in:
+ * move the file here and add its MACHINE_MODELS entry in the same change. The Keepers are left out: KeeperVisuals
+ * loads each one's own rigged file when that Keeper is first shown (and only the near version), so they are not
+ * fetched twice.
+ */
+const URLS = import.meta.glob(['../../assets/raw/models/final/*.glb', '!../../assets/raw/models/final/keeper-*.glb'], { query: '?url', import: 'default', eager: true }) as Record<string, string>;
 
 export const useModels = () => typeof location === 'undefined' || new URLSearchParams(location.search).get('models') !== 'classic';
 

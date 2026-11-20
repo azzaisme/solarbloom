@@ -109,8 +109,7 @@ for (const key of pick(process.env.LOOK_SCENES, SCENES)) {
   }
   if (!booted) throw new Error(`${key}: game did not boot`);
   await page.waitForLoadState('networkidle');
-  await page.addStyleTag({ content: '#hud, #toasts, .toast, #intro, #boot, #tip, .tip, #labels, .area-label { display: none !important; }' });
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
+  await page.addStyleTag({ content: '#hud, #toasts, .toast, #boot, #tip, .tip, #labels, .area-label { display: none !important; }' });
   const render = (on) => page.evaluate((on) => (window.solarbloom.app.autoRender = on), on);
   await render(false);
   await page.clock.runFor(500);

@@ -75,7 +75,6 @@ async function shoot(sceneKey, sizeKey) {
   await page.goto(`http://localhost:${PORT}/${query ? query + '&' : '?'}slot=1`);
   await page.waitForFunction(() => !!window.solarbloom, null, { timeout: 60000 });
   await page.waitForLoadState('networkidle');
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
   await page.evaluate(`(() => { const g = window.solarbloom; ${scene.setup} })()`);
   await page.waitForTimeout(scene.wait);
   const stats = await page.evaluate(() => {

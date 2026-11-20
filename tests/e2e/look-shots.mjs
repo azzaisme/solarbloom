@@ -210,8 +210,7 @@ async function shoot(sceneKey, sizeKey) {
   if (!booted) throw new Error(`${sceneKey}/${sizeKey}: game did not boot`);
   // Let every asset finish loading (real time, clock still frozen) before anything moves.
   await page.waitForLoadState('networkidle');
-  await page.addStyleTag({ content: '#hud, #toasts, .toast, #intro, #boot, #tip, .tip, #labels, .area-label { display: none !important; }' });
-  if ((await page.locator('#introGo').count()) && (await page.locator('#introGo').isVisible())) await page.click('#introGo');
+  await page.addStyleTag({ content: '#hud, #toasts, .toast, #boot, #tip, .tip, #labels, .area-label { display: none !important; }' });
   // Settling only needs the update loop; skip rendering until the last frames (SwiftShader frames are slow).
   const render = (on) => page.evaluate((on) => (window.solarbloom.app.autoRender = on), on);
   await render(false);

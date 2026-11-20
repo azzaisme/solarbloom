@@ -20,7 +20,7 @@ export interface ChainTrack {
 
 /**
  * City 10.6: readable huge chains. Follows every running chain from its events: blooms per area (for
- * "Canal ×37" summaries and a running total) and a smoothed wave front position. Pure bookkeeping, no
+ * "Canal · 37 blooms" summaries and a running total) and a smoothed wave front position. Pure bookkeeping, no
  * rendering, so it is tested headless.
  */
 export class ChainSummary {
@@ -57,13 +57,13 @@ export class ChainSummary {
     return best;
   }
 
-  /** "🛶 Canal ×37" for one area. */
+  /** "🛶 Canal · 37 blooms" for one area. */
   areaLabel(area: string, n: number): string {
-    if (area === PARK) return `🌳 The Park ×${n}`;
+    if (area === PARK) return `🌳 The Park · ${blooms(n)}`;
     const info = this.sim.grid.isPlayable('g') && /^a-?\d+_-?\d+_\d$/.test(area) ? this.sim.areas.info(area) : undefined;
-    if (!info) return `🏙️ ${this.sim.grid.roof(area)?.name ?? area} ×${n}`;
+    if (!info) return `🏙️ ${this.sim.grid.roof(area)?.name ?? area} · ${blooms(n)}`;
     const def = AREA_TYPES[info.type];
-    return `${def.icon} ${def.name} ×${n}`;
+    return `${def.icon} ${def.name} · ${blooms(n)}`;
   }
 
   /**
@@ -111,3 +111,5 @@ export class VfxBudget {
     return true;
   }
 }
+
+const blooms = (n: number) => `${n} bloom${n === 1 ? '' : 's'}`;

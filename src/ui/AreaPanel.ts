@@ -9,7 +9,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 /** What each area type is good for, in plain language. */
 export const AREA_SPECIALTY: Record<string, string> = {
-  park: 'Lawns that flower into biomass to gather. Home.',
+  park: 'Lawns that flower into Greens to gather. Home.',
   street: 'Long paved runs: street gardens here pass chains along green corridors.',
   plaza: 'Open paving that soaks up sun, with room for corridors.',
   canal: 'Water channels, where Reservoir Gardens grow.',
@@ -64,18 +64,19 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
   const def = AREA_TYPES[a.type];
   const d = areaPanelData(sim, id);
   const fogName: Record<string, string> = { hidden: 'Hidden in fog', frontier: 'Thick fog', thinning: 'Thinning fog', cleared: 'Clear' };
+  const title = (name: string) => `<span class="pn-badge">${def.icon}</span><span class="ap-name">${esc(name)}</span>`;
   const pct = Math.min(100, Math.round((d.restored / Math.max(1, d.need)) * 100));
   const cleared = d.fog === 'cleared';
   const parkAwake = id === PARK && s.state.salvage.tier >= 1; // E21.6: the fountain wakes at tier 1
   let checklist: string;
   if (id === PARK) {
-    // E21.6: the fountain wakes tier by tier, from what bloombot brings it
-    const tier = s.state.salvage.tier;
-    checklist = TIERS.map((t) => `<li>${tier >= t.tier ? '✅' : '⬜'} Fountain tier ${t.tier}: ${esc(t.name)}</li>`).join('');
+    // E21.6: the fountain wakes step by step, from what bloombot brings it
+    const step = s.state.salvage.tier;
+    checklist = TIERS.map((t) => `<li>${step >= t.tier ? '✅' : '⬜'} Fountain step ${t.tier}: ${esc(t.name)}</li>`).join('');
   } else {
     const steps = [
       { done: d.fog !== 'hidden', label: 'Revealed next to clear ground' },
-      { done: cleared || d.restored >= d.need, label: `Restore ${d.need} tiles (${Math.min(d.restored, d.need)}/${d.need})` },
+      { done: cleared || d.restored >= d.need, label: `Restore ${d.need} tiles (${Math.min(d.restored, d.need)} of ${d.need})` },
       { done: cleared, label: `Wake the ${esc(a.landmarkName)}` },
     ];
     checklist = steps.map((x) => `<li>${x.done ? '✅' : '⬜'} ${x.label}</li>`).join('');
@@ -90,7 +91,7 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
   const modes: [string, string, string][] = [
     ['', '⚙️ Normal', 'Drones work wherever is best'],
     ['bloom', '🌸 Keep blooming', 'Drones nurture this area first'],
-    ['frontier', '🌫️ Focus the frontier', "This area's drones push into the fog"],
+    ['frontier', '🌫️ Push into the fog', "This area's drones push into the fog"],
     ['off', '✋ Leave alone', 'Drones skip this area'],
   ];
   const switches = s.state.areas[id]
@@ -99,12 +100,12 @@ export function areaPanelHtml(sim: Sim, id: string, landmarkId?: string): string
         .join('')}</div>`
     : '';
   return (
-    `<h4><span>${def.icon} ${esc(d.name)}</span><button data-close aria-label="Close">×</button></h4>` +
+    `<h4><span>${title(d.name)}</span><button data-close aria-label="Close">×</button></h4>` +
     `<p class="stat" data-area-panel="${esc(id)}">${esc(a.landmarkName)} · ${a.distance} block${a.distance === 1 ? '' : 's'} from the park${tag}</p>` +
     `<p class="blurb">${esc(AREA_SPECIALTY[a.type] ?? '')}</p>` +
     `<p class="stat">🌫️ ${cleared || parkAwake ? 'Clear' : `${fogName[d.fog]} · ${pct}%`}</p>` +
     (cleared || parkAwake ? '' : `<div class="bar"><i style="width:${pct}%"></i></div>`) +
-    `<ul style="margin:6px 0;padding-left:18px;font-size:12.5px;list-style:none">${checklist}</ul>` +
+    `<ul class="ap-steps">${checklist}</ul>` +
     `<p class="stat">Machines: ${machineText || 'none yet'}</p>` +
     oldCityShare(s, id) +
     (cultivating(s, id) ? `<p class="stat" data-cultivating="${esc(id)}">🚜 ${cultivating(s, id)} tile${cultivating(s, id) === 1 ? '' : 's'} being cultivated</p>` : '') +
@@ -118,5 +119,5 @@ function oldCityShare(s: Sim, id: string): string {
   if (id === PARK || s.areas.info(id).noLandmark || s.areas.fog(id) === 'cleared') return '';
   const have = s.state.areas[id]?.byBot ?? 0;
   const need = s.areas.shareTarget(id);
-  return s.areas.shareMet(id) ? `<p class="stat" data-share="${esc(id)}">🛸 Helpers can work here</p>` : `<p class="stat" data-share="${esc(id)}">🤖 Your share: ${Math.min(have, need)} / ${need}</p>`;
+  return s.areas.shareMet(id) ? `<p class="stat" data-share="${esc(id)}">🛸 Helpers can work here</p>` : `<p class="stat" data-share="${esc(id)}">🤖 Your share: ${Math.min(have, need)} of ${need}</p>`;
 }

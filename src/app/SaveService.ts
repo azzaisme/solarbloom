@@ -3,7 +3,7 @@ import type { Grid } from '../core/Grid';
 import { packChunk } from '../core/TilePack';
 import type { GameState } from '../core/types';
 import { TIERS } from '../data/salvage';
-import { gameDayOf } from '../gameplay/Clock';
+import { clockHours, gameDayOf, gameFraction, realFraction } from '../gameplay/Clock';
 import { migrateSave } from '../core/SaveMigrations';
 
 /** The single save from before E22.12; it moves to slot 1 the first time the game starts. */
@@ -25,6 +25,10 @@ export interface SlotHeader {
   played: number;
   /** the fountain's step, in words */
   step: string;
+  /** E23.11: the fountain's steps done (0 … 5), so the title can say "Step 3 of 5"; missing on older headers */
+  steps?: number;
+  /** E23.11: the time of day when it was saved (morning, afternoon, evening, night); missing on older headers */
+  daypart?: DayPart;
   /** the region bloombot was last in */
   region: string;
   /** SAVE_VERSION when written (E23.1.1); missing on headers from before it */
@@ -32,6 +36,15 @@ export interface SlotHeader {
   /** E23.1.1: the save is from an earlier version and starts fresh (worked out when the slots are listed) */
   old?: boolean;
   savedAt: number;
+}
+/** E23.11: the time of day a garden was left at, as the title's slot card says it. */
+export type DayPart = 'morning' | 'afternoon' | 'evening' | 'night';
+/** The part of the day at a clock hour (0 … 24). */
+export function dayPartAt(hours: number): DayPart {
+  if (hours >= 5 && hours < 12) return 'morning';
+  if (hours >= 12 && hours < 17) return 'afternoon';
+  if (hours >= 17 && hours < 21) return 'evening';
+  return 'night';
 }
 /** Prefix of a gzip-compressed, base64 save. Anything else is plain JSON. */
 const Z = 'SB4z:';
@@ -183,6 +196,8 @@ export class SaveService {
       day: gameDayOf(state),
       played: Math.round(state.time ?? 0),
       step,
+      steps: Math.min(TIERS.length, tier),
+      daypart: dayPartAt(clockHours(state.clock?.real ? realFraction(new Date(this.now())) : gameFraction(state))),
       region: prev?.region ?? 'The park',
       version: SAVE_VERSION,
       ...this.headerExtra?.(),

@@ -13,7 +13,6 @@ try {
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.waitForFunction(() => !!window.solarbloom);
-  if (await page.locator('#introGo').isVisible()) await page.click('#introGo');
   const id = await page.evaluate(() => {
     const g = window.solarbloom;
     g.sim.state.progression.coreActivated = true;

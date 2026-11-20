@@ -141,6 +141,7 @@ async function moveTo(page, sel, dev) {
       if (!t) return 'missing';
       if (c === t) return 'here';
       if (!c || c === document.body) return 'down';
+      if (c.closest('[role=tablist]')) return 'down'; // E23.11: off the build menu's tabs, down into its cells
       const a = c.getBoundingClientRect(), b = t.getBoundingClientRect();
       const dx = b.left + b.width / 2 - (a.left + a.width / 2), dy = b.top + b.height / 2 - (a.top + a.height / 2);
       return Math.abs(dy) > 6 ? (dy > 0 ? 'down' : 'up') : dx > 0 ? 'right' : 'left';
@@ -158,8 +159,13 @@ async function moveTo(page, sel, dev) {
 async function pick(page, dev, tool) {
   if (dev === 'pad') await pressPad(page, 3);
   else await page.keyboard.press('KeyQ');
-  await page.waitForSelector('#buildTray.open', { timeout: 10000 }).catch(() => {});
-  const ok = await moveTo(page, `#buildTray.open [data-tool="${tool}"]`, dev);
+  await page.waitForSelector('#buildMenu.open', { timeout: 10000 }).catch(() => {});
+  // E23.11: the build menu has tabs: RB / E until the card's tab is showing
+  for (let i = 0; i < 8 && !(await page.evaluate((t) => !!document.querySelector(`#buildMenu.open [data-tool="${t}"]`), tool)); i++) {
+    if (dev === 'pad') await pressPad(page, 5);
+    else await page.keyboard.press('KeyE');
+  }
+  const ok = await moveTo(page, `#buildMenu.open [data-tool="${tool}"]`, dev);
   if (ok) await go(page, dev);
   await page.waitForTimeout(300);
   return ok && (await page.evaluate(() => window.solarbloom.hud.currentTool)) === tool;

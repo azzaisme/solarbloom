@@ -2,7 +2,8 @@ import { TIPS } from './words';
 
 /**
  * E22.12 (#350): the loading screen. A painted still of the city, bloombot walking on the spot (a CSS sprite, no
- * 3D; still with reduced motion), a progress bar fed by real steps, and one plain tip. It covers start-up,
+ * 3D; still with reduced motion), a progress bar fed by real steps, and one plain tip. E23.11: Sunlit Glass, the
+ * step, the leaf bar and the tip on one paper card with bloombot walking on top of it. It covers start-up,
  * loading a slot, a new game and quitting to the title, and fades only when the first view is complete (the
  * ground, models and textures round bloombot), never sooner than 0.5 s after it appeared.
  */
@@ -73,9 +74,11 @@ export class Loading {
     this.el.setAttribute('role', 'status');
     this.el.innerHTML =
       `<div class="ld-art" aria-hidden="true"></div>` +
+      `<div class="ld-foot">` +
       `<div class="ld-bot" aria-hidden="true">${BLOOMBOT_SVG}</div>` +
-      `<div class="ld-foot"><div class="ld-bar" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>` +
-      `<p class="ld-line">Unpacking the city</p><p class="ld-tip">${tip.replace(/[&<>"]/g, '')}</p></div>`;
+      `<div class="ld-head"><div class="t-badge" aria-hidden="true"><span class="t-ic t-ic-leaf"></span></div><p class="ld-line">Unpacking the city</p></div>` +
+      `<div class="ld-bar" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>` +
+      `<p class="ld-tip"><b>Tip</b>${tip.replace(/[&<>"]/g, '')}</p></div>`;
     if (!this.el.parentElement) document.body.appendChild(this.el);
     this.bar = this.el.querySelector<HTMLElement>('.ld-bar')!;
     this.line = this.el.querySelector<HTMLElement>('.ld-line')!;

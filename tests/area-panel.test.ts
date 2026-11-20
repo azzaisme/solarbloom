@@ -36,7 +36,7 @@ describe('area panel (City 14.2)', () => {
     expect(d.need).toBe(sim.areas.need(id));
     let html = areaPanelHtml(sim, id, lm.id);
     expect(html).toContain(AREA_SPECIALTY[a.type]);
-    expect(html).toContain(`Restore ${d.need} tiles (0/${d.need})`);
+    expect(html).toContain(`Restore ${d.need} tiles (0 of ${d.need})`);
     const NO_COUNTERS = /Bonus|\/min|⚡|💧|energy|biomass/i; // E23.1.4: no counters for an area to add to
     expect(html).not.toMatch(NO_COUNTERS);
     expect(html).toContain('Machines: none yet');
@@ -46,7 +46,7 @@ describe('area panel (City 14.2)', () => {
     restore(sim, id, 10);
     d = areaPanelData(sim, id);
     expect(d.restored).toBe(10);
-    expect(areaPanelHtml(sim, id, lm.id)).toContain(`(10/${d.need})`);
+    expect(areaPanelHtml(sim, id, lm.id)).toContain(`(10 of ${d.need})`);
 
     // A machine inside it is listed.
     const spot = sim.areas.tiles(id).find((t) => t.ground === 'restored' && !t.occupantId)!;
@@ -69,13 +69,13 @@ describe('area panel (City 14.2)', () => {
     expect(Object.keys(areaPanelData(sim, id))).not.toContain('bonus');
   });
 
-  it('the park lists its fountain tiers (E21.6), ticked as they are reached', () => {
+  it('the park lists its fountain steps (E21.6), ticked as they are reached', () => {
     const sim = new Sim(createInitialState(4));
     let html = areaPanelHtml(sim, PARK, sim.areas.landmark(PARK)?.id);
-    for (const t of TIERS) expect(html).toContain(`⬜ Fountain tier ${t.tier}: ${t.name}`);
+    for (const t of TIERS) expect(html).toContain(`⬜ Fountain step ${t.tier}: ${t.name}`);
     sim.state.salvage.tier = 2;
     html = areaPanelHtml(sim, PARK, sim.areas.landmark(PARK)?.id);
-    expect(html).toContain(`✅ Fountain tier 2: ${TIERS[1].name}`);
-    expect(html).toContain(`⬜ Fountain tier 3: ${TIERS[2].name}`);
+    expect(html).toContain(`✅ Fountain step 2: ${TIERS[1].name}`);
+    expect(html).toContain(`⬜ Fountain step 3: ${TIERS[2].name}`);
   });
 });
